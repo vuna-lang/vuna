@@ -31,7 +31,7 @@
       #   checks.bootstrap-selfhost 种子编译当前源码 → stage 2 并运行（守不变量）
       #   checks.fixed-point        stage 2 与 stage 3 行为一致
       #   packages.vunax / checks.vunax-selfhost  外部编译器兜底（发版时重新生成种子）
-      # 目前只有 stage 0（vunax）可构建。
+      # 目前可构建 stage 0（vunax），以及 M4b 的 vuna-run（自解释器编译产物）。
       packages = forAllSystems (
         system:
         let
@@ -51,14 +51,15 @@
             allowSubstitutes = false;
 
             # 只把 vunax 需要的文件拷进 Nix store：vunax 源码，以及测试要读取的
-            # 自解释器源码 app/interp.vuna；app/、lib/、test/ 里的其他 vuna
-            # 源码属于自举阶段，不是 vunax 的构建输入。
+            # 自解释器源码 app/interp.vuna 与 CLI 驱动 app/run.vuna；app/、lib/、
+            # test/ 里的其他 vuna 源码属于自举阶段，不是 vunax 的构建输入。
             src = lib.fileset.toSource {
               root = ./.;
               fileset = lib.fileset.unions [
                 ./dune-workspace
                 ./vunax
                 ./app/interp.vuna
+                ./app/run.vuna
               ];
             };
 
@@ -71,10 +72,38 @@
               mainProgram = "vunax";
             };
           };
+
+          # M4b：把 vuna 自解释器（app/interp.vuna，去掉 demo main）与
+          # app/run.vuna 的 CLI 入口拼接，用 vunax 编译成独立二进制。
+          # 它从命令行读 .vuna 文件并解释执行。
+          vuna-run =
+            pkgs.runCommand "vuna-run-0.1.0"
+              {
+                nativeBuildInputs = [
+                  pkgs.ocaml
+                  pkgs.binutils
+                  pkgs.gcc
+                ];
+                allowSubstitutes = false;
+
+                meta = {
+                  description = "vuna interpreter compiled to OCaml (M4b)";
+                  license = lib.licenses.mit;
+                  mainProgram = "vuna-run";
+                };
+              }
+              ''
+                mkdir -p "$out/bin"
+                sed '/^main = interpret demo$/d' ${./app/interp.vuna} > program.vuna
+                cat ${./app/run.vuna} >> program.vuna
+                ${vunax}/bin/vunax compile --no-print program.vuna > program.ml
+                ocamlopt -w -a -o "$out/bin/vuna-run" program.ml
+              '';
         in
         {
           default = vunax;
           inherit vunax;
+          vuna-run = vuna-run;
         }
       );
 
@@ -118,6 +147,7 @@
 
       checks = forAllSystems (system: {
         inherit (self.packages.${system}) vunax;
+        vuna-run = self.packages.${system}.vuna-run;
       });
 
       # nixfmt-tree 让不带参数的 `nix fmt` 也能格式化整个目录

@@ -9,9 +9,9 @@ let run args file =
   let program = Vunax.Parser.parse_file file in
   print_endline (Vunax.Eval.show (Vunax.Eval.run_with_args args program))
 
-let compile file =
+let compile ?(print_result = true) file =
   let program = Vunax.Parser.parse_file file in
-  print_string (Vunax.Codegen.generate program)
+  print_string (Vunax.Codegen.generate ~print_result program)
 
 let handle file action =
   try action () with
@@ -43,4 +43,6 @@ let () =
   | _ :: "parse" :: [ file ] -> handle file (fun () -> parse file)
   | _ :: "run" :: file :: args -> handle file (fun () -> run args file)
   | _ :: "compile" :: [ file ] -> handle file (fun () -> compile file)
+  | _ :: "compile" :: [ "--no-print"; file ] ->
+      handle file (fun () -> compile ~print_result:false file)
   | _ -> usage ()

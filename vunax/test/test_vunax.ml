@@ -136,6 +136,12 @@ let run_self source =
   in
   Vunax.Eval.run_string driver
 
+let run_driver_path = Filename.concat repo_root "app/run.vuna"
+let run_driver_decls = lazy (Vunax.Parser.parse_file run_driver_path)
+
+(* The interpreter plus app/run.vuna's file-reading entry point. *)
+let driver_program = lazy (Lazy.force interp_decls @ Lazy.force run_driver_decls)
+
 let selfhost_tests =
   sorted_files "corpus/run" ".vuna"
   |> List.map (fun file ->
@@ -161,25 +167,32 @@ let ocamlopt_available =
 
 let codegen_dir = "_codegen_tmp"
 
-let compile_and_run ?(args = []) ~tag program =
+let build_binary ?(print_result = true) ~tag program =
   if not (Lazy.force ocamlopt_available) then
     failwith "ocamlopt is required for the codegen tests but was not found";
-  let source = Vunax.Codegen.generate program in
+  let source = Vunax.Codegen.generate ~print_result program in
   if Sys.command ("mkdir -p " ^ codegen_dir) <> 0 then
     failwith ("cannot create " ^ codegen_dir);
   let base = Filename.concat codegen_dir tag in
-  let ml = base ^ ".ml" and exe = base ^ ".exe" and out = base ^ ".out" in
+  let ml = base ^ ".ml" and exe = base ^ ".exe" in
   let channel = open_out ml in
   output_string channel source;
   close_out channel;
   if Sys.command (Printf.sprintf "ocamlopt -w -a -o %s %s" exe ml) <> 0 then
     failwith ("ocamlopt failed for " ^ tag);
+  exe
+
+let run_binary ?(args = []) exe =
+  let out = exe ^ ".out" in
   let quoted_args =
     String.concat "" (List.map (fun arg -> " " ^ Filename.quote arg) args)
   in
   if Sys.command (Printf.sprintf "./%s%s > %s" exe quoted_args out) <> 0 then
-    failwith ("generated program failed for " ^ tag);
+    failwith ("generated program failed: " ^ exe);
   String.trim (read_file out)
+
+let compile_and_run ?(args = []) ~tag program =
+  run_binary ~args (build_binary ~tag program)
 
 let compile_tests =
   sorted_files "corpus/run" ".vuna"
@@ -199,6 +212,26 @@ let compile_self_test =
       let expected = Vunax.Eval.show (Vunax.Eval.run program) in
       let actual = compile_and_run ~tag:"self_interpreter" program in
       Alcotest.(check string) "self compile" expected actual)
+
+(* M4b: the interpreter plus app/run.vuna compiled to a native binary with
+   [print_result:false]. app/run.vuna prints the interpreted result itself, so
+   the binary behaves like `vunax run <file>` (raw [show], one newline). *)
+
+let compiled_interpreter_test =
+  Alcotest.test_case "compiled interpreter runs corpus files" `Quick (fun () ->
+      let exe =
+        build_binary ~print_result:false ~tag:"compiled_interpreter"
+          (Lazy.force driver_program)
+      in
+      sorted_files "corpus/run" ".vuna"
+      |> List.iter (fun file ->
+          let path = Filename.concat "corpus/run" file in
+          let program = Vunax.Parser.parse_file path in
+          let expected = Vunax.Eval.show (Vunax.Eval.run program) in
+          let actual = run_binary ~args:[ path ] exe in
+          Alcotest.(check string) file expected actual);
+      Alcotest.(check string)
+        "usage" "usage: vuna-run <file.vuna>" (run_binary exe))
 
 let expect_codegen_error name source =
   Alcotest.test_case name `Quick (fun () ->
@@ -330,6 +363,7 @@ let () =
       ("self application", [ self_application_test ]);
       ("codegen", compile_tests);
       ("codegen self", [ compile_self_test ]);
+      ("m4b compiled interpreter", [ compiled_interpreter_test ]);
       ("codegen error", codegen_error_tests);
       ("io", eval_io_tests);
       ("io codegen", codegen_io_tests);

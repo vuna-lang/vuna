@@ -493,7 +493,7 @@ let gen_function state env (name, clauses) =
     in
     wrap 0
 
-let generate (program : program) : string =
+let generate ?(print_result = true) (program : program) : string =
   let functions = group_functions program in
   let ctors = collect_ctors program in
   let function_arities =
@@ -534,5 +534,8 @@ let generate (program : program) : string =
       functions
   in
   Buffer.add_string buffer (String.concat "\n" rec_bindings);
-  Buffer.add_string buffer "\nlet () = print_endline (show_value (v_main ()))\n";
+  if print_result then
+    Buffer.add_string buffer
+      "\nlet () = print_endline (show_value (v_main ()))\n"
+  else Buffer.add_string buffer "\nlet () = ignore (v_main ())\n";
   Buffer.contents buffer

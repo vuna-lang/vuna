@@ -59,16 +59,16 @@ git add bootstrap/ && git commit
 
 ```text
 .
-├── flake.nix             # Nix：构建 vunax、开发环境；后续加 stage1/stage2
+├── flake.nix             # Nix：构建 vunax / vuna-run、开发环境；后续加 stage1/stage2
 ├── flake.lock
 ├── dune-workspace        # dune 工作区根；vunax/ 是唯一的 dune 项目
 ├── vunax/                # 外部编译器（OCaml）
 │   ├── dune-project
 │   ├── vunax.opam
-│   ├── lib/              # token / lexer / ast / parser / eval（后续加 typecheck / codegen）
+│   ├── lib/              # token / lexer / ast / parser / eval / codegen（后续加 typecheck）
 │   ├── bin/              # 可执行文件 vunax
-│   └── test/             # alcotest + corpus/ 解析语料与 golden
-├── app/                  # 自举：vuna 写的 CLI 入口（.vuna）
+│   └── test/             # alcotest + corpus/ 解析与运行语料
+├── app/                  # 自举：vuna 写的自解释器 interp.vuna 与 CLI 驱动 run.vuna
 ├── lib/                  # 自举：vuna 写的编译器库（.vuna）
 ├── test/                 # 自举：vuna 写的测试（.vuna）
 ├── bootstrap/            # 自举种子（stage 1），提交入库；当前为空占位
@@ -219,20 +219,41 @@ ocamlopt -o program program.ml && ./program
 - IO 内建在生成程序里也实现了（`readFile` / `writeFile` / `print` / `getArgs`），
   语义与解释器一致；`getArgs` 返回编译产物自己的命令行参数；
 - 编译期检查：`main` 必须存在且零参数、未绑定变量、子句 arity 不一致、
-  构造器/函数重名都会报 `codegen error`。
+  构造器/函数重名都会报 `codegen error`；
+- `vunax compile --no-print`（`Codegen.generate ~print_result:false`）只求值
+  `main`、不自动打印结果，适合自己用 `print` / `writeFile` 做 IO 的 CLI 程序。
 
-验证（89 个测试，`nix build` 的 checkPhase 全跑）：
+验证（90 个测试，`nix build` 的 checkPhase 全跑）：
 
 - **codegen 差分**：`corpus/run/` 的 15 个程序逐个生成 OCaml、用 `ocamlopt` 编译、
   运行，stdout 与解释器的 `show` 结果一致；
 - **codegen self**：把自解释器 `app/interp.vuna` 用 codegen 编译成 OCaml 可执行文件，
-  运行结果与解释执行一致（M4b 的预演）；
+  运行结果与解释执行一致；
 - **codegen error**：3 个非法程序必须在 codegen 阶段报错；
 - **IO**：`getArgs` / `writeFile` + `readFile` 往返 / `readFile` 失败 / `print`
-  在解释器、codegen 产物和自解释器三条路径上分别验证。
+  在解释器、codegen 产物和自解释器三条路径上分别验证；
+- **M4b**：`app/interp.vuna` + `app/run.vuna` 组合后编译的二进制解释 corpus 全部
+  15 个程序，输出与 `vunax run` 一致。
 
 限制：生成代码是单文件、动态值表示，性能与错误信息暂未优化；多模块 codegen 随
 M5 模块系统一起做。
+
+## M4b：vuna-run（编译出的解释器二进制）
+
+[app/run.vuna](app/run.vuna) 是 CLI 入口：从 `getArgs` 取文件路径，`readFile` 读源码，
+调用自解释器的 `interpret`，用 `print` 原样输出结果。把 `app/interp.vuna`（去掉 demo
+`main`）与 `app/run.vuna` 拼接后，用 `vunax compile --no-print` 编译成独立二进制：
+
+```console
+nix build .#vuna-run
+./result/bin/vuna-run vunax/test/corpus/run/12_fact.vuna
+# 120
+```
+
+- 输出语义与 `vunax run <file>` 一致（`show` + 换行）；无参数时打印 usage；
+- 产物是原生 OCaml 可执行文件（解释器被编译后的结果），不依赖 vunax 或解释循环；
+- 组合目前是构建期文本拼接（`sed` 去掉 interp 的 demo main 再 `cat`），因为还没有
+  模块系统；M5 会换成真正的编译单元。
 
 ## Nix
 

@@ -8,6 +8,10 @@
 
 exception Error of string
 
-val generate : Ast.program -> string
-(** Render a complete OCaml program (ending in a newline) that prints the [show]
-    representation of [main]'s value on stdout. *)
+val generate : ?print_result:bool -> Ast.program -> string
+(** Render a complete OCaml program (ending in a newline).
+
+    With [print_result] (the default), the program prints the [show]
+    representation of [main]'s value on stdout. With [print_result:false] the
+    program only evaluates [main] and is expected to do its own IO (e.g. via
+    [print]/[writeFile]); useful for CLI tools. *)
