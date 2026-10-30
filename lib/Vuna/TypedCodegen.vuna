@@ -886,6 +886,9 @@ indentWidth depth = if depth > 12 then 24 else depth * 2
 
 emitStr str acc = append (reverse (strUnpack str)) acc
 
+trimTrailing Nil = Nil
+trimTrailing (Cons c rest) = if c == 32 then trimTrailing rest else Cons c rest
+
 -- prev 记录上一个输出的字符（0 = 行首），用来识别 in/else 关键字边界。
 formatChars Nil col depth inStr escaped prev acc = acc
 formatChars (Cons c rest) col depth inStr escaped prev acc =
@@ -896,7 +899,7 @@ formatChars (Cons c rest) col depth inStr escaped prev acc =
     else if c == 10 then formatChars rest 0 depth True False c (Cons c acc)
     else formatChars rest (col + 1) depth True False c (Cons c acc)
   else if c == 34 then formatChars rest (col + 1) depth True False c (Cons c acc)
-  else if c == 10 then formatChars rest 0 depth False False c (Cons c acc)
+  else if c == 10 then formatChars rest 0 depth False False c (Cons c (trimTrailing acc))
   else if c == 40 then formatChars rest (col + 1) (depth + 1) False False c (Cons c acc)
   else if c == 41 then formatChars rest (col + 1) (if depth > 0 then depth - 1 else 0) False False c (Cons c acc)
   else if prev == 32 && c == 105 then
@@ -909,14 +912,14 @@ formatChars (Cons c rest) col depth inStr escaped prev acc =
     case rest of
       Cons 108 (Cons 115 (Cons 101 (Cons 32 rest2))) =>
         let width = indentWidth depth
-        in formatChars rest2 (width + 5) depth False False 32 (emitStr ("\n" ++ indentSpaces width ++ "else ") acc)
+        in formatChars rest2 (width + 5) depth False False 32 (emitStr ("\n" ++ indentSpaces width ++ "else ") (trimTrailing acc))
       _ => formatChars rest (col + 1) depth False False c (Cons c acc)
   else if c == 32 && col > 100 then
     let width = indentWidth depth
-    in formatChars rest width depth False False 32 (emitStr ("\n" ++ indentSpaces width) acc)
+    in formatChars rest width depth False False 32 (emitStr ("\n" ++ indentSpaces width) (trimTrailing acc))
   else formatChars rest (col + 1) depth False False c (Cons c acc)
 
-formatOutput s = strPack (reverse (formatChars (strUnpack s) 0 0 False False 0 Nil))
+formatOutput s = strPack (reverse (trimTrailing (formatChars (strUnpack s) 0 0 False False 0 Nil)))
 
 -- 长字符串按真实换行输出（OCaml 字符串字面量允许换行），避免几 KB 的单行字面量。
 typedString s =

@@ -2,7 +2,7 @@
 let bi_add a b = a + b
 let bi_sub a b = a - b
 let bi_mul a b = a * b
-let bi_div a b = if b = 0 then failwith "division by zero" 
+let bi_div a b = if b = 0 then failwith "division by zero"
 else a / b
 let bi_eq a b = a = b
 let bi_neq a b = a <> b
@@ -27,7 +27,7 @@ let bi_str_length a = String.length a
 let bi_str_unpack s =
   let rec go i acc =
     if i < 0 then acc
-    
+
 else go (i - 1) (Char.code s.[i] :: acc)
   in
   go (String.length s - 1) []
@@ -57,11 +57,11 @@ let bi_print s = print_string s; flush stdout; String.length s
 let bi_get_args () =
   let argv = Sys.argv in
   let n = Array.length argv in
-  if n <= 1 then [] 
+  if n <= 1 then []
 else Array.to_list (Array.sub argv 1 (n - 1))
-let show_ctor name args = if args = [] then name 
+let show_ctor name args = if args = [] then name
 else "(" ^ name ^ " " ^ String.concat " " args ^ ")"
-let show_vbool b = if b then "True" 
+let show_vbool b = if b then "True"
 else "False"
 let show_vstring s =
   let buf = Buffer.create 16 in
@@ -69,15 +69,15 @@ let show_vstring s =
   String.iter (fun c ->
     let n = Char.code c in
     if n = 34 then Buffer.add_string buf (String.make 1 (Char.chr 92) ^ String.make 1 (Char.chr 34))
-    
+
   else if n = 92 then Buffer.add_string buf (String.make 1 (Char.chr 92) ^ String.make 1 (Char.chr 92))
-    
+
   else if n = 10 then Buffer.add_string buf (String.make 1 (Char.chr 92) ^ "n")
-    
+
   else if n = 9 then Buffer.add_string buf (String.make 1 (Char.chr 92) ^ "t")
-    
+
   else if n = 13 then Buffer.add_string buf (String.make 1 (Char.chr 92) ^ "r")
-    
+
   else Buffer.add_char buf c) s;
   Buffer.add_char buf (Char.chr 34);
   Buffer.contents buf
@@ -364,7 +364,7 @@ let v_Vuna_dTypedCodegen_dshowParamMap = fun params -> v_Vuna_dTypedCodegen_dsho
 
 let rec v_Vuna_dTypedCodegen_dlookupParam = fun a0 a1 -> match (a0, a1) with
   | (name, []) -> C_Vuna_dBase_dNothing
-  | (name, (C_Vuna_dBase_dPair (n, v)) :: (rest)) -> if bi_eq n name then C_Vuna_dBase_dJust (v) 
+  | (name, (C_Vuna_dBase_dPair (n, v)) :: (rest)) -> if bi_eq n name then C_Vuna_dBase_dJust (v)
 else v_Vuna_dTypedCodegen_dlookupParam name rest
 
 let rec v_Vuna_dTypedCodegen_ddataDecls = fun decls -> (match decls with
@@ -376,7 +376,7 @@ let rec v_Vuna_dTypedCodegen_ddataDecls = fun decls -> (match decls with
 let rec v_Vuna_dTypedCodegen_dlookupData = fun decls name -> (match decls with
   | [] -> C_Vuna_dBase_dNothing
   | (d) :: (rest) -> (match d with
-  | C_Vuna_dAst_dDData (dn, ps, cs) -> if bi_eq_str dn name then C_Vuna_dBase_dJust (d) 
+  | C_Vuna_dAst_dDData (dn, ps, cs) -> if bi_eq_str dn name then C_Vuna_dBase_dJust (d)
     else v_Vuna_dTypedCodegen_dlookupData rest name
   | _ -> v_Vuna_dTypedCodegen_dlookupData rest name))
 
@@ -398,7 +398,7 @@ let rec v_Vuna_dTypedCodegen_dsplitArrows = fun expr -> (match expr with
     b)
   | _ -> [])
 
-let rec v_Vuna_dTypedCodegen_drange = fun i n -> if bi_ge_int i n then [] 
+let rec v_Vuna_dTypedCodegen_drange = fun i n -> if bi_ge_int i n then []
 else (i) :: (v_Vuna_dTypedCodegen_drange (bi_add i 1) n)
 
 let rec v_Vuna_dTypedCodegen_dparamVarsAt = fun a0 a1 -> match (a0, a1) with
@@ -487,7 +487,7 @@ let v_Vuna_dTypedCodegen_disVarPattern = fun p -> (match p with
 let rec v_Vuna_dTypedCodegen_dallVarPatterns = fun a0 -> match a0 with
   | ([]) -> true
   | ((p) :: (rest)) -> (if (v_Vuna_dTypedCodegen_disVarPattern p) then (v_Vuna_dTypedCodegen_dallVarPatterns
-    rest) 
+    rest)
   else false)
 
 let v_Vuna_dTypedCodegen_ddeclFunName = fun d -> (match d with
@@ -496,12 +496,12 @@ let v_Vuna_dTypedCodegen_ddeclFunName = fun d -> (match d with
 
 let rec v_Vuna_dTypedCodegen_dfilterNames = fun pred names -> (match names with
   | [] -> []
-  | (n) :: (rest) -> if pred n then (n) :: (v_Vuna_dTypedCodegen_dfilterNames pred rest) 
+  | (n) :: (rest) -> if pred n then (n) :: (v_Vuna_dTypedCodegen_dfilterNames pred rest)
   else v_Vuna_dTypedCodegen_dfilterNames pred rest)
 
 let rec v_Vuna_dTypedCodegen_dneighborsOf = fun adj name -> (match adj with
   | [] -> []
-  | (C_Vuna_dBase_dPair (n, ns)) :: (rest) -> if bi_eq_str n name then ns 
+  | (C_Vuna_dBase_dPair (n, ns)) :: (rest) -> if bi_eq_str n name then ns
   else v_Vuna_dTypedCodegen_dneighborsOf rest name)
 
 let v_Vuna_dTypedCodegen_druntimeCodeTyped = "
@@ -583,19 +583,24 @@ let rec show_vlist (show_elem : 'a -> string) (v : 'a list) : string =
   | x :: xs -> \"(Cons \" ^ show_elem x ^ \" \" ^ show_vlist show_elem xs ^ \")\"
 "
 
-let v_Vuna_dTypedCodegen_dindentWidth = fun depth -> if bi_gt_int depth 12 then 24 
+let v_Vuna_dTypedCodegen_dindentWidth = fun depth -> if bi_gt_int depth 12 then 24
 else bi_mul depth 2
 
-let v_Vuna_dTypedCodegen_dpadCode = fun c -> if bi_lt_int c 10 then (("00") ^ (bi_str_from_int c)) 
-else if bi_lt_int c 100 then (("0") ^ (bi_str_from_int c)) 
+let rec v_Vuna_dTypedCodegen_dtrimTrailing = fun a0 -> match a0 with
+  | ([]) -> []
+  | ((c) :: (rest)) -> if bi_eq_int c 32 then v_Vuna_dTypedCodegen_dtrimTrailing rest
+else (c) :: (rest)
+
+let v_Vuna_dTypedCodegen_dpadCode = fun c -> if bi_lt_int c 10 then (("00") ^ (bi_str_from_int c))
+else if bi_lt_int c 100 then (("0") ^ (bi_str_from_int c))
 else bi_str_from_int c
 
-let v_Vuna_dTypedCodegen_descapeChar = fun c -> if bi_eq_int c 34 then "\\\"" 
-else if bi_eq_int c 92 then "\\\\" 
-else if bi_eq_int c 10 then "\n" 
-else if bi_eq_int c 9 then "\t" 
-else if bi_lt_int c 32 then (("\\") ^ (v_Vuna_dTypedCodegen_dpadCode c)) 
-else if bi_gt_int c 126 then (("\\") ^ (v_Vuna_dTypedCodegen_dpadCode c)) 
+let v_Vuna_dTypedCodegen_descapeChar = fun c -> if bi_eq_int c 34 then "\\\""
+else if bi_eq_int c 92 then "\\\\"
+else if bi_eq_int c 10 then "\n"
+else if bi_eq_int c 9 then "\t"
+else if bi_lt_int c 32 then (("\\") ^ (v_Vuna_dTypedCodegen_dpadCode c))
+else if bi_gt_int c 126 then (("\\") ^ (v_Vuna_dTypedCodegen_dpadCode c))
 else bi_str_pack ((c) :: ([]))
 
 let rec v_Vuna_dTypedCodegen_descapeLong = fun a0 -> match a0 with
@@ -604,15 +609,15 @@ let rec v_Vuna_dTypedCodegen_descapeLong = fun a0 -> match a0 with
 
 let rec v_Vuna_dTypecheck_dlookupSubst = fun a0 a1 -> match (a0, a1) with
   | (i, []) -> C_Vuna_dBase_dNothing
-  | (i, (C_Vuna_dBase_dPair (j, t)) :: (rest)) -> if bi_eq i j then C_Vuna_dBase_dJust (t) 
+  | (i, (C_Vuna_dBase_dPair (j, t)) :: (rest)) -> if bi_eq i j then C_Vuna_dBase_dJust (t)
 else v_Vuna_dTypecheck_dlookupSubst i rest
 
 let rec v_Vuna_dTypecheck_dmemInt = fun a0 a1 -> match (a0, a1) with
   | (i, []) -> false
-  | (i, (x) :: (rest)) -> if bi_eq i x then true 
+  | (i, (x) :: (rest)) -> if bi_eq i x then true
 else v_Vuna_dTypecheck_dmemInt i rest
 
-let v_Vuna_dTypecheck_daddUnique = fun x xs -> if v_Vuna_dTypecheck_dmemInt x xs then xs 
+let v_Vuna_dTypecheck_daddUnique = fun x xs -> if v_Vuna_dTypecheck_dmemInt x xs then xs
 else (x) :: (xs)
 
 let rec v_Vuna_dTypecheck_dunionInts = fun a0 a1 -> match (a0, a1) with
@@ -686,12 +691,12 @@ let rec v_Vuna_dTypecheck_dfreeVarsEnv = fun a0 -> match a0 with
 
 let v_Vuna_dTypecheck_disLowerName = fun name -> (match bi_str_unpack name with
   | [] -> false
-  | (c) :: (rest) -> (if (bi_ge_int c 97) then (bi_le_int c 122) 
+  | (c) :: (rest) -> (if (bi_ge_int c 97) then (bi_le_int c 122)
     else false))
 
 let rec v_Vuna_dTypecheck_dlookupTyVar = fun a0 a1 -> match (a0, a1) with
   | (name, []) -> C_Vuna_dBase_dNothing
-  | (name, (C_Vuna_dBase_dPair (n, ty)) :: (rest)) -> if bi_eq n name then C_Vuna_dBase_dJust (ty) 
+  | (name, (C_Vuna_dBase_dPair (n, ty)) :: (rest)) -> if bi_eq n name then C_Vuna_dBase_dJust (ty)
 else v_Vuna_dTypecheck_dlookupTyVar name rest
 
 let rec v_Vuna_dTypecheck_dvarIds = fun a0 -> match a0 with
@@ -761,20 +766,20 @@ let v_Vuna_dTypecheck_dbuiltinSchemes = fun () -> (C_Vuna_dBase_dPair ("+", C_Vu
                         ("getArgs", C_Vuna_dTypecheck_dScheme ([], v_Vuna_dTypecheck_dlistOf v_Vuna_dTypecheck_dstrTy)))
                         :: ([])))))))))))))))))))))
 
-let v_Vuna_dTypecheck_dintCmpName = fun name -> if bi_eq_str name "==" then "bi_eq_int" 
-else if bi_eq_str name "/=" then "bi_neq_int" 
-else if bi_eq_str name "<" then "bi_lt_int" 
-else if bi_eq_str name "<=" then "bi_le_int" 
-else if bi_eq_str name ">" then "bi_gt_int" 
-else if bi_eq_str name ">=" then "bi_ge_int" 
+let v_Vuna_dTypecheck_dintCmpName = fun name -> if bi_eq_str name "==" then "bi_eq_int"
+else if bi_eq_str name "/=" then "bi_neq_int"
+else if bi_eq_str name "<" then "bi_lt_int"
+else if bi_eq_str name "<=" then "bi_le_int"
+else if bi_eq_str name ">" then "bi_gt_int"
+else if bi_eq_str name ">=" then "bi_ge_int"
 else name
 
-let v_Vuna_dTypecheck_dstrCmpName = fun name -> if bi_eq_str name "==" then "bi_eq_str" 
-else if bi_eq_str name "/=" then "bi_neq_str" 
+let v_Vuna_dTypecheck_dstrCmpName = fun name -> if bi_eq_str name "==" then "bi_eq_str"
+else if bi_eq_str name "/=" then "bi_neq_str"
 else name
 
-let v_Vuna_dTypecheck_dboolCmpName = fun name -> if bi_eq_str name "==" then "bi_eq_bool" 
-else if bi_eq_str name "/=" then "bi_neq_bool" 
+let v_Vuna_dTypecheck_dboolCmpName = fun name -> if bi_eq_str name "==" then "bi_eq_bool"
+else if bi_eq_str name "/=" then "bi_neq_bool"
 else name
 
 let v_Vuna_dTypecheck_dfirstArgTy = fun argTys -> (match argTys with
@@ -782,24 +787,24 @@ let v_Vuna_dTypecheck_dfirstArgTy = fun argTys -> (match argTys with
   | [] -> C_Vuna_dTypecheck_dTCon ("", []))
 
 let v_Vuna_dTypecheck_disCmpName = fun name -> (if ((if ((if ((if ((if (bi_eq_str name "==") then true
-                  
-                  else (bi_eq_str name "/="))) then true 
-              else (bi_eq_str name "<"))) then true 
-          else (bi_eq_str name "<="))) then true 
-      else (bi_eq_str name ">"))) then true 
+
+                  else (bi_eq_str name "/="))) then true
+              else (bi_eq_str name "<"))) then true
+          else (bi_eq_str name "<="))) then true
+      else (bi_eq_str name ">"))) then true
   else (bi_eq_str name ">="))
 
 let v_Vuna_dTypecheck_delabAppExpr = fun fn fnElab args argTys argEls -> (match fn with
   | C_Vuna_dAst_dEVar (name) -> (match args with
   | (_) :: ((_) :: ([])) -> if v_Vuna_dTypecheck_disCmpName name then C_Vuna_dTypecheck_dXECmp (name,
-      argEls, v_Vuna_dTypecheck_dfirstArgTy argTys) 
+      argEls, v_Vuna_dTypecheck_dfirstArgTy argTys)
     else C_Vuna_dTypecheck_dXEApp (fnElab, argEls)
   | _ -> C_Vuna_dTypecheck_dXEApp (fnElab, argEls))
   | _ -> C_Vuna_dTypecheck_dXEApp (fnElab, argEls))
 
 let rec v_Vuna_dTypecheck_dlookupLocal = fun a0 a1 -> match (a0, a1) with
   | (name, []) -> C_Vuna_dBase_dNothing
-  | (name, (C_Vuna_dBase_dPair (n, ty)) :: (rest)) -> if bi_eq n name then C_Vuna_dBase_dJust (ty) 
+  | (name, (C_Vuna_dBase_dPair (n, ty)) :: (rest)) -> if bi_eq n name then C_Vuna_dBase_dJust (ty)
 else v_Vuna_dTypecheck_dlookupLocal name rest
 
 let rec v_Vuna_dTypecheck_dlookupScheme = fun a0 a1 -> match (a0, a1) with
@@ -841,13 +846,13 @@ let v_Vuna_dTypecheck_ddeclFunName = fun d -> (match d with
 let rec v_Vuna_dTypecheck_dupdateScheme = fun name sch env -> (match env with
   | [] -> []
   | (C_Vuna_dBase_dPair (n, s)) :: (rest) -> if bi_eq n name then (C_Vuna_dBase_dPair (n, sch)) :: (rest)
-  
+
   else (C_Vuna_dBase_dPair (n, s)) :: (v_Vuna_dTypecheck_dupdateScheme name sch rest))
 
 let rec v_Vuna_dTypecheck_dfreeVarsEnvExcept = fun name env -> (match env with
   | [] -> []
   | (C_Vuna_dBase_dPair (n, sch)) :: (rest) -> if bi_eq n name then v_Vuna_dTypecheck_dfreeVarsEnvExcept
-  name rest 
+  name rest
   else v_Vuna_dTypecheck_dunionInts (v_Vuna_dTypecheck_dfreeVarsScheme sch) (v_Vuna_dTypecheck_dfreeVarsEnvExcept
     name rest))
 
@@ -857,7 +862,7 @@ let v_Vuna_dTypecheck_dsubstOf = fun a0 -> match a0 with
 let rec v_Vuna_dTypecheck_dreplaceElab = fun a0 a1 a2 -> match (a0, a1, a2) with
   | (name, clauses, []) -> []
   | (name, clauses, (C_Vuna_dBase_dPair (n, old)) :: (rest)) -> if bi_eq_str n name then (C_Vuna_dBase_dPair
-  (n, clauses)) :: (rest) 
+  (n, clauses)) :: (rest)
 else (C_Vuna_dBase_dPair (n, old)) :: (v_Vuna_dTypecheck_dreplaceElab name clauses rest)
 
 let v_Vuna_dTypecheck_dcollectData = fun decls -> C_Vuna_dBase_dPair (v_Vuna_dTypecheck_ddeclDataNames
@@ -1080,7 +1085,7 @@ let v_Vuna_dCodegen_dbuiltinInfos = (C_Vuna_dCodegen_dBuiltinInfo ("+", "bi_add"
 let rec v_Vuna_dCodegen_dfindBuiltin = fun a0 a1 -> match (a0, a1) with
   | (name, []) -> C_Vuna_dBase_dNothing
   | (name, (C_Vuna_dCodegen_dBuiltinInfo (vname, ocname, arity, body)) :: (rest)) -> if bi_eq_str vname
-name then C_Vuna_dBase_dJust (C_Vuna_dCodegen_dBuiltinInfo (vname, ocname, arity, body)) 
+name then C_Vuna_dBase_dJust (C_Vuna_dCodegen_dBuiltinInfo (vname, ocname, arity, body))
 else v_Vuna_dCodegen_dfindBuiltin name rest
 
 let rec v_Vuna_dCodegen_djoinList = fun a0 a1 -> match (a0, a1) with
@@ -1097,25 +1102,25 @@ let v_Vuna_dCodegen_dheadOf = fun a0 -> match a0 with
 
 let rec v_Vuna_dCodegen_dnthList = fun a0 a1 -> match (a0, a1) with
   | (n, []) -> ""
-  | (n, (x) :: (rest)) -> if bi_eq_int n 0 then x 
+  | (n, (x) :: (rest)) -> if bi_eq_int n 0 then x
 else v_Vuna_dCodegen_dnthList (bi_sub n 1) rest
 
-let v_Vuna_dCodegen_dsanitizeChar = fun c -> if bi_eq_int c 46 then (95) :: ((100) :: ([])) 
-else if bi_eq_int c 95 then (95) :: ((117) :: ([])) 
-else if bi_eq_int c 39 then (95) :: ((112) :: ([])) 
+let v_Vuna_dCodegen_dsanitizeChar = fun c -> if bi_eq_int c 46 then (95) :: ((100) :: ([]))
+else if bi_eq_int c 95 then (95) :: ((117) :: ([]))
+else if bi_eq_int c 39 then (95) :: ((112) :: ([]))
 else (c) :: ([])
 
-let v_Vuna_dCodegen_dpad3 = fun s -> if bi_eq_int (bi_str_length s) 1 then (("00") ^ (s)) 
-else if bi_eq_int (bi_str_length s) 2 then (("0") ^ (s)) 
+let v_Vuna_dCodegen_dpad3 = fun s -> if bi_eq_int (bi_str_length s) 1 then (("00") ^ (s))
+else if bi_eq_int (bi_str_length s) 2 then (("0") ^ (s))
 else s
 
-let v_Vuna_dCodegen_descapeChar = fun c -> if bi_eq_int c 34 then (92) :: ((34) :: ([])) 
-else if bi_eq_int c 92 then (92) :: ((92) :: ([])) 
-else if bi_eq_int c 10 then (92) :: ((110) :: ([])) 
-else if bi_eq_int c 9 then (92) :: ((116) :: ([])) 
-else if bi_eq_int c 13 then (92) :: ((114) :: ([])) 
-else if (if (bi_ge_int c 32) then (bi_le_int c 126) 
-  else false) then (c) :: ([]) 
+let v_Vuna_dCodegen_descapeChar = fun c -> if bi_eq_int c 34 then (92) :: ((34) :: ([]))
+else if bi_eq_int c 92 then (92) :: ((92) :: ([]))
+else if bi_eq_int c 10 then (92) :: ((110) :: ([]))
+else if bi_eq_int c 9 then (92) :: ((116) :: ([]))
+else if bi_eq_int c 13 then (92) :: ((114) :: ([]))
+else if (if (bi_ge_int c 32) then (bi_le_int c 126)
+  else false) then (c) :: ([])
 else bi_str_unpack ((("\\") ^ (v_Vuna_dCodegen_dpad3 (bi_str_from_int c))))
 
 let rec v_Vuna_dCodegen_dcgApplyFold = fun a0 a1 -> match (a0, a1) with
@@ -1127,12 +1132,12 @@ let rec v_Vuna_dCodegen_dcgApplyFold = fun a0 a1 -> match (a0, a1) with
           (let vuna_cat4' = ("))") in
             String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'; vuna_cat3'; vuna_cat4'])))))) rest
 
-let rec v_Vuna_dCodegen_dmakeParamsFrom = fun i n -> if bi_gt_int i n then [] 
+let rec v_Vuna_dCodegen_dmakeParamsFrom = fun i n -> if bi_gt_int i n then []
 else ((("a") ^ (bi_str_from_int i))) :: (v_Vuna_dCodegen_dmakeParamsFrom (bi_add i 1) n)
 
 let v_Vuna_dCodegen_dmakeParams = fun n -> v_Vuna_dCodegen_dmakeParamsFrom 1 n
 
-let rec v_Vuna_dCodegen_dmakeCtorParamsFrom = fun i n -> if bi_gt_int i n then [] 
+let rec v_Vuna_dCodegen_dmakeCtorParamsFrom = fun i n -> if bi_gt_int i n then []
 else ((("c") ^ (bi_str_from_int i))) :: (v_Vuna_dCodegen_dmakeCtorParamsFrom (bi_add i 1) n)
 
 let v_Vuna_dCodegen_dmakeCtorParams = fun n -> v_Vuna_dCodegen_dmakeCtorParamsFrom 1 n
@@ -1150,7 +1155,7 @@ let v_Vuna_dEval_dstringArg = fun v -> (match v with
   | C_Vuna_dEval_dVStr (s) -> C_Vuna_dBase_dOk (s)
   | _ -> C_Vuna_dBase_dErr ("expected a String argument"))
 
-let v_Vuna_dEval_dvbool = fun b -> if b then C_Vuna_dEval_dVCon ("True", []) 
+let v_Vuna_dEval_dvbool = fun b -> if b then C_Vuna_dEval_dVCon ("True", [])
 else C_Vuna_dEval_dVCon ("False", [])
 
 let rec v_Vuna_dEval_dcharsToValue = fun a0 -> match a0 with
@@ -1201,11 +1206,11 @@ let v_Vuna_dEval_dorBuiltin = fun args -> (match args with
 
 let rec v_Vuna_dEval_dshowStringChars = fun a0 -> match a0 with
   | ([]) -> ""
-  | ((c) :: (rest)) -> if bi_eq_int c 34 then (("\\\"") ^ (v_Vuna_dEval_dshowStringChars rest)) 
-else if bi_eq_int c 92 then (("\\\\") ^ (v_Vuna_dEval_dshowStringChars rest)) 
-else if bi_eq_int c 10 then (("\\n") ^ (v_Vuna_dEval_dshowStringChars rest)) 
-else if bi_eq_int c 9 then (("\\t") ^ (v_Vuna_dEval_dshowStringChars rest)) 
-else if bi_eq_int c 13 then (("\\r") ^ (v_Vuna_dEval_dshowStringChars rest)) 
+  | ((c) :: (rest)) -> if bi_eq_int c 34 then (("\\\"") ^ (v_Vuna_dEval_dshowStringChars rest))
+else if bi_eq_int c 92 then (("\\\\") ^ (v_Vuna_dEval_dshowStringChars rest))
+else if bi_eq_int c 10 then (("\\n") ^ (v_Vuna_dEval_dshowStringChars rest))
+else if bi_eq_int c 9 then (("\\t") ^ (v_Vuna_dEval_dshowStringChars rest))
+else if bi_eq_int c 13 then (("\\r") ^ (v_Vuna_dEval_dshowStringChars rest))
 else ((bi_str_pack ((c) :: ([]))) ^ (v_Vuna_dEval_dshowStringChars rest))
 
 let v_Vuna_dEval_dshowString = fun s -> (let vuna_cat0' = ("\"") in
@@ -1213,12 +1218,12 @@ let v_Vuna_dEval_dshowString = fun s -> (let vuna_cat0' = ("\"") in
     (let vuna_cat2' = ("\"") in
       String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'])))
 
-let v_Vuna_dLoader_disGlobalCtor = fun name -> (if ((if ((if (bi_eq_str name "True") then true 
-          else (bi_eq_str name "False"))) then true 
-      else (bi_eq_str name "Cons"))) then true 
+let v_Vuna_dLoader_disGlobalCtor = fun name -> (if ((if ((if (bi_eq_str name "True") then true
+          else (bi_eq_str name "False"))) then true
+      else (bi_eq_str name "Cons"))) then true
   else (bi_eq_str name "Nil"))
 
-let v_Vuna_dLoader_dmangle = fun prefix name -> if bi_eq_str prefix "" then name 
+let v_Vuna_dLoader_dmangle = fun prefix name -> if bi_eq_str prefix "" then name
 else (let vuna_cat0' = (prefix) in
   (let vuna_cat1' = (".") in
     (let vuna_cat2' = (name) in
@@ -1243,16 +1248,16 @@ let rec v_Vuna_dLoader_dimportAliases = fun imports -> (match imports with
 let rec v_Vuna_dLoader_dopenModuleNames = fun imports -> (match imports with
   | [] -> []
   | (imp) :: (rest) -> if v_Vuna_dLoader_dimportIsQualified imp then v_Vuna_dLoader_dopenModuleNames rest
-  
+
   else (v_Vuna_dLoader_dimportName imp) :: (v_Vuna_dLoader_dopenModuleNames rest))
 
 let rec v_Vuna_dLoader_dfindImportPrefix = fun imports prefix -> (match imports with
   | [] -> C_Vuna_dBase_dNothing
   | (imp) :: (rest) -> if bi_eq_str (v_Vuna_dLoader_dimportName imp) prefix then C_Vuna_dBase_dJust (v_Vuna_dLoader_dimportName
-    imp) 
+    imp)
   else (match v_Vuna_dLoader_dimportAlias imp with
   | C_Vuna_dBase_dJust (alias) -> if bi_eq_str alias prefix then C_Vuna_dBase_dJust (v_Vuna_dLoader_dimportName
-      imp) 
+      imp)
     else v_Vuna_dLoader_dfindImportPrefix rest prefix
   | C_Vuna_dBase_dNothing -> v_Vuna_dLoader_dfindImportPrefix rest prefix))
 
@@ -1267,7 +1272,7 @@ let rec v_Vuna_dLoader_djoinNames = fun a0 -> match a0 with
 let rec v_Vuna_dLoader_dfindModule = fun modules name -> (match modules with
   | [] -> C_Vuna_dBase_dNothing
   | (C_Vuna_dLoader_dModule (mname, imports, decls, exports)) :: (rest) -> if bi_eq_str mname name then
-  C_Vuna_dBase_dJust (C_Vuna_dLoader_dModule (mname, imports, decls, exports)) 
+  C_Vuna_dBase_dJust (C_Vuna_dLoader_dModule (mname, imports, decls, exports))
   else v_Vuna_dLoader_dfindModule rest name)
 
 let v_Vuna_dLoader_dmoduleDecls = fun modules name -> (match v_Vuna_dLoader_dfindModule modules name with
@@ -1353,18 +1358,18 @@ let v_Vuna_dParser_datKw = fun st k -> (match v_Vuna_dParser_dpeekTok st with
 
 let v_Vuna_dParser_dcanContinue = fun st blockCol -> (match v_Vuna_dParser_dpeekPos st with
   | C_Vuna_dLexer_dPos (line, col) -> (match v_Vuna_dParser_dlastPos st with
-  | C_Vuna_dLexer_dPos (lastLine, lastCol) -> (if (bi_eq_int line lastLine) then true 
+  | C_Vuna_dLexer_dPos (lastLine, lastCol) -> (if (bi_eq_int line lastLine) then true
       else (bi_gt_int col blockCol))))
 
 let v_Vuna_dParser_dexpectSym = fun st s -> (match v_Vuna_dParser_dpeekTok st with
   | C_Vuna_dLexer_dPTok (C_Vuna_dLexer_dTSym (x), p) -> if bi_eq_str x s then C_Vuna_dBase_dOk (C_Vuna_dBase_dPair
-    (0, v_Vuna_dParser_dadvance st)) 
+    (0, v_Vuna_dParser_dadvance st))
   else C_Vuna_dBase_dErr ((("expected ") ^ (s)))
   | _ -> C_Vuna_dBase_dErr ((("expected ") ^ (s))))
 
 let v_Vuna_dParser_dexpectKw = fun st k -> (match v_Vuna_dParser_dpeekTok st with
   | C_Vuna_dLexer_dPTok (C_Vuna_dLexer_dTKw (x), p) -> if bi_eq_str x k then C_Vuna_dBase_dOk (C_Vuna_dBase_dPair
-    (0, v_Vuna_dParser_dadvance st)) 
+    (0, v_Vuna_dParser_dadvance st))
   else C_Vuna_dBase_dErr ((("expected ") ^ (k)))
   | _ -> C_Vuna_dBase_dErr ((("expected ") ^ (k))))
 
@@ -1374,7 +1379,7 @@ let v_Vuna_dParser_dexpectIdent = fun st -> (match v_Vuna_dParser_dpeekTok st wi
   | _ -> C_Vuna_dBase_dErr ("expected identifier"))
 
 let v_Vuna_dParser_dupperFirst = fun s -> (match bi_str_unpack s with
-  | (c) :: (rest) -> (if (bi_ge_int c 65) then (bi_le_int c 90) 
+  | (c) :: (rest) -> (if (bi_ge_int c 65) then (bi_le_int c 90)
     else false)
   | [] -> false)
 
@@ -1431,12 +1436,12 @@ let v_Vuna_dParser_dterminatesExpression = fun tok -> (match tok with
   | C_Vuna_dLexer_dPTok (C_Vuna_dLexer_dTKw ("then"), p) -> true
   | _ -> false)
 
-let v_Vuna_dParser_dbadCaseIndent = fun st altCol -> if v_Vuna_dParser_disEof st then false 
+let v_Vuna_dParser_dbadCaseIndent = fun st altCol -> if v_Vuna_dParser_disEof st then false
 else (match v_Vuna_dParser_dpeekPos st with
   | C_Vuna_dLexer_dPos (line, col) -> if bi_gt_int col altCol then (match v_Vuna_dParser_dterminatesExpression
     (v_Vuna_dParser_dpeekTok st) with
   | true -> false
-  | false -> true) 
+  | false -> true)
   else false)
 
 let rec v_Vuna_dParser_dfoldCons = fun a0 -> match a0 with
@@ -1453,83 +1458,83 @@ let v_Vuna_dLexer_dadvanceChar = fun a0 a1 -> match (a0, a1) with
 
 else C_Vuna_dLexer_dPos (line, bi_add col 1)
 
-let v_Vuna_dLexer_disUpperChar = fun c -> (if (bi_ge_int c 65) then (bi_le_int c 90) 
+let v_Vuna_dLexer_disUpperChar = fun c -> (if (bi_ge_int c 65) then (bi_le_int c 90)
   else false)
 
-let v_Vuna_dLexer_disLowerChar = fun c -> (if (bi_ge_int c 97) then (bi_le_int c 122) 
+let v_Vuna_dLexer_disLowerChar = fun c -> (if (bi_ge_int c 97) then (bi_le_int c 122)
   else false)
 
 let v_Vuna_dLoader_disLowerTypeName = fun name -> (match bi_str_unpack name with
   | [] -> false
   | (c) :: (rest) -> v_Vuna_dLexer_disLowerChar c)
 
-let v_Vuna_dLexer_disIdentStart = fun c -> (if ((if (v_Vuna_dLexer_disUpperChar c) then true 
-      else (v_Vuna_dLexer_disLowerChar c))) then true 
+let v_Vuna_dLexer_disIdentStart = fun c -> (if ((if (v_Vuna_dLexer_disUpperChar c) then true
+      else (v_Vuna_dLexer_disLowerChar c))) then true
   else (bi_eq_int c 95))
 
-let v_Vuna_dLexer_disDigit = fun c -> (if (bi_ge_int c 48) then (bi_le_int c 57) 
+let v_Vuna_dLexer_disDigit = fun c -> (if (bi_ge_int c 48) then (bi_le_int c 57)
   else false)
 
 let rec v_Vuna_dLoader_dallIdentChars = fun chars -> (match chars with
   | [] -> true
-  | (c) :: (rest) -> if (if (v_Vuna_dLexer_disIdentStart c) then true 
-    else (v_Vuna_dLexer_disDigit c)) then v_Vuna_dLoader_dallIdentChars rest 
+  | (c) :: (rest) -> if (if (v_Vuna_dLexer_disIdentStart c) then true
+    else (v_Vuna_dLexer_disDigit c)) then v_Vuna_dLoader_dallIdentChars rest
   else false)
 
 let v_Vuna_dLoader_dvalidSegment = fun seg -> (match bi_str_unpack seg with
   | [] -> false
-  | (c) :: (rest) -> (if (v_Vuna_dLexer_disUpperChar c) then (v_Vuna_dLoader_dallIdentChars rest) 
+  | (c) :: (rest) -> (if (v_Vuna_dLexer_disUpperChar c) then (v_Vuna_dLoader_dallIdentChars rest)
     else false))
 
 let rec v_Vuna_dLoader_dallSegmentsValid = fun segs -> (match segs with
   | [] -> false
   | (seg) :: (rest) -> if v_Vuna_dLoader_dvalidSegment seg then (match rest with
   | [] -> true
-  | _ -> v_Vuna_dLoader_dallSegmentsValid rest) 
+  | _ -> v_Vuna_dLoader_dallSegmentsValid rest)
   else false)
 
-let v_Vuna_dLexer_disIdentChar = fun c -> (if ((if (v_Vuna_dLexer_disIdentStart c) then true 
-      else (v_Vuna_dLexer_disDigit c))) then true 
+let v_Vuna_dLexer_disIdentChar = fun c -> (if ((if (v_Vuna_dLexer_disIdentStart c) then true
+      else (v_Vuna_dLexer_disDigit c))) then true
   else (bi_eq_int c 39))
 
-let v_Vuna_dLexer_disSpace = fun c -> (if ((if ((if (bi_eq_int c 32) then true 
-          else (bi_eq_int c 9))) then true 
-      else (bi_eq_int c 10))) then true 
+let v_Vuna_dLexer_disSpace = fun c -> (if ((if ((if (bi_eq_int c 32) then true
+          else (bi_eq_int c 9))) then true
+      else (bi_eq_int c 10))) then true
   else (bi_eq_int c 13))
 
 let v_Vuna_dLexer_disOpChar = fun c -> (if ((if ((if ((if ((if ((if ((if ((if ((if ((if ((if ((if ((if
-                        ((if ((if ((if ((if (bi_eq_int c 33) then true 
-                        else (bi_eq_int c 36))) then true 
-                        else (bi_eq_int c 37))) then true 
-                        else (bi_eq_int c 38))) then true 
-                        else (bi_eq_int c 42))) then true 
-                        else (bi_eq_int c 43))) then true 
-                        else (bi_eq_int c 45))) then true 
-                        else (bi_eq_int c 47))) then true 
-                        else (bi_eq_int c 60))) then true 
-                        else (bi_eq_int c 61))) then true 
-                        else (bi_eq_int c 62))) then true 
-                        else (bi_eq_int c 63))) then true 
-                      else (bi_eq_int c 64))) then true 
-                  else (bi_eq_int c 92))) then true 
-              else (bi_eq_int c 94))) then true 
-          else (bi_eq_int c 124))) then true 
-      else (bi_eq_int c 126))) then true 
+                        ((if ((if ((if ((if (bi_eq_int c 33) then true
+                        else (bi_eq_int c 36))) then true
+                        else (bi_eq_int c 37))) then true
+                        else (bi_eq_int c 38))) then true
+                        else (bi_eq_int c 42))) then true
+                        else (bi_eq_int c 43))) then true
+                        else (bi_eq_int c 45))) then true
+                        else (bi_eq_int c 47))) then true
+                        else (bi_eq_int c 60))) then true
+                        else (bi_eq_int c 61))) then true
+                        else (bi_eq_int c 62))) then true
+                        else (bi_eq_int c 63))) then true
+                      else (bi_eq_int c 64))) then true
+                  else (bi_eq_int c 92))) then true
+              else (bi_eq_int c 94))) then true
+          else (bi_eq_int c 124))) then true
+      else (bi_eq_int c 126))) then true
   else (bi_eq_int c 58))
 
 let v_Vuna_dLexer_disKeyword = fun s -> (if ((if ((if ((if ((if ((if ((if ((if ((if ((if ((if ((if (bi_eq_str
-                        s "data") then true 
-                        else (bi_eq_str s "case"))) then true 
-                        else (bi_eq_str s "of"))) then true 
-                        else (bi_eq_str s "let"))) then true 
-                        else (bi_eq_str s "in"))) then true 
-                        else (bi_eq_str s "if"))) then true 
-                        else (bi_eq_str s "then"))) then true 
-                      else (bi_eq_str s "else"))) then true 
-                  else (bi_eq_str s "where"))) then true 
-              else (bi_eq_str s "Type"))) then true 
-          else (bi_eq_str s "import"))) then true 
-      else (bi_eq_str s "qualified"))) then true 
+                        s "data") then true
+                        else (bi_eq_str s "case"))) then true
+                        else (bi_eq_str s "of"))) then true
+                        else (bi_eq_str s "let"))) then true
+                        else (bi_eq_str s "in"))) then true
+                        else (bi_eq_str s "if"))) then true
+                        else (bi_eq_str s "then"))) then true
+                      else (bi_eq_str s "else"))) then true
+                  else (bi_eq_str s "where"))) then true
+              else (bi_eq_str s "Type"))) then true
+          else (bi_eq_str s "import"))) then true
+      else (bi_eq_str s "qualified"))) then true
   else (bi_eq_str s "as"))
 
 let v_Vuna_dLexer_dclassifyIdent = fun s -> if v_Vuna_dLexer_disKeyword s then C_Vuna_dLexer_dTKw (s)
@@ -1539,20 +1544,20 @@ else C_Vuna_dLexer_dTIdent (s)
 let rec v_Vuna_dLexer_dskipLineComment = fun a0 -> match a0 with
   | (C_Vuna_dLexer_dChars ([], p)) -> C_Vuna_dLexer_dChars ([], p)
   | (C_Vuna_dLexer_dChars ((c) :: (rest), p)) -> if bi_eq_int c 10 then C_Vuna_dLexer_dChars ((c) :: (rest),
-  p) 
+  p)
 else v_Vuna_dLexer_dskipLineComment (C_Vuna_dLexer_dChars (rest, v_Vuna_dLexer_dadvanceChar c p))
 
 let rec v_Vuna_dLexer_dskipBlockComment = fun depth cs -> (match cs with
   | C_Vuna_dLexer_dChars ([], p) -> C_Vuna_dBase_dErr ("unterminated block comment")
   | C_Vuna_dLexer_dChars ((c) :: (rest), p) -> (match rest with
-  | (c2) :: (rest2) -> if (if (bi_eq_int c 123) then (bi_eq_int c2 45) 
+  | (c2) :: (rest2) -> if (if (bi_eq_int c 123) then (bi_eq_int c2 45)
       else false) then v_Vuna_dLexer_dskipBlockComment (bi_add depth 1) (C_Vuna_dLexer_dChars (rest2,
-        v_Vuna_dLexer_dadvanceChar c2 (v_Vuna_dLexer_dadvanceChar c p))) 
-    else if (if (bi_eq_int c 45) then (bi_eq_int c2 125) 
+        v_Vuna_dLexer_dadvanceChar c2 (v_Vuna_dLexer_dadvanceChar c p)))
+    else if (if (bi_eq_int c 45) then (bi_eq_int c2 125)
       else false) then if bi_eq_int depth 1 then C_Vuna_dBase_dOk (C_Vuna_dLexer_dChars (rest2, v_Vuna_dLexer_dadvanceChar
-        c2 (v_Vuna_dLexer_dadvanceChar c p))) 
+        c2 (v_Vuna_dLexer_dadvanceChar c p)))
     else v_Vuna_dLexer_dskipBlockComment (bi_sub depth 1) (C_Vuna_dLexer_dChars (rest2, v_Vuna_dLexer_dadvanceChar
-        c2 (v_Vuna_dLexer_dadvanceChar c p))) 
+        c2 (v_Vuna_dLexer_dadvanceChar c p)))
     else v_Vuna_dLexer_dskipBlockComment depth (C_Vuna_dLexer_dChars (rest, v_Vuna_dLexer_dadvanceChar
         c p))
   | [] -> v_Vuna_dLexer_dskipBlockComment depth (C_Vuna_dLexer_dChars (rest, v_Vuna_dLexer_dadvanceChar
@@ -1561,30 +1566,30 @@ let rec v_Vuna_dLexer_dskipBlockComment = fun depth cs -> (match cs with
 let rec v_Vuna_dLexer_dskipTrivia = fun cs -> (match cs with
   | C_Vuna_dLexer_dChars ([], p) -> C_Vuna_dBase_dOk (cs)
   | C_Vuna_dLexer_dChars ((c) :: (rest), p) -> if v_Vuna_dLexer_disSpace c then v_Vuna_dLexer_dskipTrivia
-  (C_Vuna_dLexer_dChars (rest, v_Vuna_dLexer_dadvanceChar c p)) 
+  (C_Vuna_dLexer_dChars (rest, v_Vuna_dLexer_dadvanceChar c p))
   else (match rest with
-  | (c2) :: (rest2) -> if (if (bi_eq_int c 45) then (bi_eq_int c2 45) 
+  | (c2) :: (rest2) -> if (if (bi_eq_int c 45) then (bi_eq_int c2 45)
       else false) then v_Vuna_dLexer_dskipTrivia (v_Vuna_dLexer_dskipLineComment (C_Vuna_dLexer_dChars
-        (rest, v_Vuna_dLexer_dadvanceChar c p))) 
-    else if (if (bi_eq_int c 123) then (bi_eq_int c2 45) 
+        (rest, v_Vuna_dLexer_dadvanceChar c p)))
+    else if (if (bi_eq_int c 123) then (bi_eq_int c2 45)
       else false) then (match v_Vuna_dLexer_dskipBlockComment 1 (C_Vuna_dLexer_dChars (rest, v_Vuna_dLexer_dadvanceChar
           c p)) with
   | C_Vuna_dBase_dErr (e) -> C_Vuna_dBase_dErr (e)
-  | C_Vuna_dBase_dOk (cs2) -> v_Vuna_dLexer_dskipTrivia cs2) 
+  | C_Vuna_dBase_dOk (cs2) -> v_Vuna_dLexer_dskipTrivia cs2)
     else C_Vuna_dBase_dOk (cs)
   | [] -> C_Vuna_dBase_dOk (cs)))
 
 let rec v_Vuna_dLexer_dcollectInt = fun a0 a1 -> match (a0, a1) with
   | (C_Vuna_dLexer_dChars ([], p), acc) -> C_Vuna_dBase_dPair (acc, C_Vuna_dLexer_dChars ([], p))
   | (C_Vuna_dLexer_dChars ((c) :: (rest), p), acc) -> if v_Vuna_dLexer_disDigit c then v_Vuna_dLexer_dcollectInt
-(C_Vuna_dLexer_dChars (rest, v_Vuna_dLexer_dadvanceChar c p)) (bi_add (bi_mul acc 10) (bi_sub c 48)) 
+(C_Vuna_dLexer_dChars (rest, v_Vuna_dLexer_dadvanceChar c p)) (bi_add (bi_mul acc 10) (bi_sub c 48))
 else C_Vuna_dBase_dPair (acc, C_Vuna_dLexer_dChars ((c) :: (rest), p))
 
 let rec v_Vuna_dAst_dcollectClauses = fun a0 a1 -> match (a0, a1) with
   | ([], name) -> []
   | ((d) :: (rest), name) -> (match d with
   | C_Vuna_dAst_dDFun (n, pats, body) -> if bi_eq_str n name then (C_Vuna_dBase_dPair (pats, body)) ::
-  (v_Vuna_dAst_dcollectClauses rest name) 
+  (v_Vuna_dAst_dcollectClauses rest name)
   else v_Vuna_dAst_dcollectClauses rest name
   | _ -> v_Vuna_dAst_dcollectClauses rest name)
 
@@ -1612,7 +1617,7 @@ let rec v_Vuna_dCodegen_dctorPairs = fun a0 -> match a0 with
 let rec v_Vuna_dAst_dlookupCtorArity = fun name ctors -> (match ctors with
   | [] -> C_Vuna_dBase_dNothing
   | (c) :: (rest) -> if bi_eq_str (v_Vuna_dAst_dctorName c) name then C_Vuna_dBase_dJust (v_Vuna_dAst_dctorArityOf
-    c) 
+    c)
   else v_Vuna_dAst_dlookupCtorArity name rest)
 
 let rec v_Vuna_dAst_dctorArity = fun name decls -> (match decls with
@@ -1647,7 +1652,7 @@ let rec v_Vuna_dTypedCodegen_dconcatFlatten = fun e -> (match e with
 let rec v_Vuna_dCodegen_daddClause = fun a0 a1 a2 -> match (a0, a1, a2) with
   | (name, clause, []) -> (C_Vuna_dBase_dPair (name, (clause) :: ([]))) :: ([])
   | (name, clause, (C_Vuna_dBase_dPair (gname, clauses)) :: (rest)) -> if bi_eq_str gname name then (C_Vuna_dBase_dPair
-  (gname, v_Vuna_dBase_dappend clauses ((clause) :: ([])))) :: (rest) 
+  (gname, v_Vuna_dBase_dappend clauses ((clause) :: ([])))) :: (rest)
 else (C_Vuna_dBase_dPair (gname, clauses)) :: (v_Vuna_dCodegen_daddClause name clause rest)
 
 let rec v_Vuna_dCodegen_dgroupFunctionsLoop = fun a0 a1 -> match (a0, a1) with
@@ -1679,14 +1684,14 @@ let rec v_Vuna_dLexer_dcollectIdent = fun a0 a1 -> match (a0, a1) with
   | (C_Vuna_dLexer_dChars ([], p), acc) -> C_Vuna_dBase_dPair (bi_str_pack (v_Vuna_dBase_dreverse acc),
   C_Vuna_dLexer_dChars ([], p))
   | (C_Vuna_dLexer_dChars ((c) :: (rest), p), acc) -> if v_Vuna_dLexer_disIdentChar c then v_Vuna_dLexer_dcollectIdent
-(C_Vuna_dLexer_dChars (rest, v_Vuna_dLexer_dadvanceChar c p)) ((c) :: (acc)) 
+(C_Vuna_dLexer_dChars (rest, v_Vuna_dLexer_dadvanceChar c p)) ((c) :: (acc))
 else if bi_eq_int c 46 then (match rest with
   | (c2) :: (rest2) -> if v_Vuna_dLexer_disIdentStart c2 then v_Vuna_dLexer_dcollectIdent (C_Vuna_dLexer_dChars
-    (rest, v_Vuna_dLexer_dadvanceChar c p)) ((c) :: (acc)) 
+    (rest, v_Vuna_dLexer_dadvanceChar c p)) ((c) :: (acc))
   else C_Vuna_dBase_dPair (bi_str_pack (v_Vuna_dBase_dreverse acc), C_Vuna_dLexer_dChars ((c) :: (rest),
       p))
   | [] -> C_Vuna_dBase_dPair (bi_str_pack (v_Vuna_dBase_dreverse acc), C_Vuna_dLexer_dChars ((c) :: (rest),
-      p))) 
+      p)))
 else C_Vuna_dBase_dPair (bi_str_pack (v_Vuna_dBase_dreverse acc), C_Vuna_dLexer_dChars ((c) :: (rest),
     p))
 
@@ -1694,7 +1699,7 @@ let rec v_Vuna_dLexer_dcollectOp = fun a0 a1 -> match (a0, a1) with
   | (C_Vuna_dLexer_dChars ([], p), acc) -> C_Vuna_dBase_dPair (bi_str_pack (v_Vuna_dBase_dreverse acc),
   C_Vuna_dLexer_dChars ([], p))
   | (C_Vuna_dLexer_dChars ((c) :: (rest), p), acc) -> if v_Vuna_dLexer_disOpChar c then v_Vuna_dLexer_dcollectOp
-(C_Vuna_dLexer_dChars (rest, v_Vuna_dLexer_dadvanceChar c p)) ((c) :: (acc)) 
+(C_Vuna_dLexer_dChars (rest, v_Vuna_dLexer_dadvanceChar c p)) ((c) :: (acc))
 else C_Vuna_dBase_dPair (bi_str_pack (v_Vuna_dBase_dreverse acc), C_Vuna_dLexer_dChars ((c) :: (rest),
     p))
 
@@ -1703,24 +1708,24 @@ let rec v_Vuna_dLexer_dscanString = fun a0 a1 -> match (a0, a1) with
   | (C_Vuna_dLexer_dChars ((c) :: (rest), p), acc) -> if bi_eq_int c 34 then C_Vuna_dBase_dOk (C_Vuna_dBase_dPair
   (bi_str_pack (v_Vuna_dBase_dreverse acc), C_Vuna_dLexer_dChars (rest, v_Vuna_dLexer_dadvanceChar c p)))
 
-else if bi_eq_int c 10 then C_Vuna_dBase_dErr ("unterminated string literal") 
+else if bi_eq_int c 10 then C_Vuna_dBase_dErr ("unterminated string literal")
 else if bi_eq_int c 92 then v_Vuna_dLexer_dscanEscape (C_Vuna_dLexer_dChars (rest, v_Vuna_dLexer_dadvanceChar
-    c p)) acc 
+    c p)) acc
 else v_Vuna_dLexer_dscanString (C_Vuna_dLexer_dChars (rest, v_Vuna_dLexer_dadvanceChar c p)) ((c) :: (acc))
 and v_Vuna_dLexer_dscanEscape = fun a0 a1 -> match (a0, a1) with
   | (C_Vuna_dLexer_dChars ([], p), acc) -> C_Vuna_dBase_dErr ("unterminated string literal")
   | (C_Vuna_dLexer_dChars ((c) :: (rest), p), acc) -> if bi_eq_int c 110 then v_Vuna_dLexer_dscanString
-(C_Vuna_dLexer_dChars (rest, v_Vuna_dLexer_dadvanceChar c p)) ((10) :: (acc)) 
+(C_Vuna_dLexer_dChars (rest, v_Vuna_dLexer_dadvanceChar c p)) ((10) :: (acc))
 else if bi_eq_int c 116 then v_Vuna_dLexer_dscanString (C_Vuna_dLexer_dChars (rest, v_Vuna_dLexer_dadvanceChar
-    c p)) ((9) :: (acc)) 
+    c p)) ((9) :: (acc))
 else if bi_eq_int c 114 then v_Vuna_dLexer_dscanString (C_Vuna_dLexer_dChars (rest, v_Vuna_dLexer_dadvanceChar
-    c p)) ((13) :: (acc)) 
+    c p)) ((13) :: (acc))
 else if bi_eq_int c 34 then v_Vuna_dLexer_dscanString (C_Vuna_dLexer_dChars (rest, v_Vuna_dLexer_dadvanceChar
-    c p)) ((34) :: (acc)) 
+    c p)) ((34) :: (acc))
 else if bi_eq_int c 92 then v_Vuna_dLexer_dscanString (C_Vuna_dLexer_dChars (rest, v_Vuna_dLexer_dadvanceChar
-    c p)) ((92) :: (acc)) 
+    c p)) ((92) :: (acc))
 else if bi_eq_int c 39 then v_Vuna_dLexer_dscanString (C_Vuna_dLexer_dChars (rest, v_Vuna_dLexer_dadvanceChar
-    c p)) ((39) :: (acc)) 
+    c p)) ((39) :: (acc))
 else C_Vuna_dBase_dErr ("unknown escape sequence")
 
 let rec v_Vuna_dLexer_dlexChars = fun cs -> (match v_Vuna_dLexer_dskipTrivia cs with
@@ -1734,35 +1739,35 @@ and v_Vuna_dLexer_dlexToken = fun c rest p -> if v_Vuna_dLexer_disIdentStart c t
   | C_Vuna_dBase_dPair (name, cs2) -> (match v_Vuna_dLexer_dlexChars cs2 with
   | C_Vuna_dBase_dErr (e) -> C_Vuna_dBase_dErr (e)
   | C_Vuna_dBase_dOk (toks) -> C_Vuna_dBase_dOk ((C_Vuna_dLexer_dPTok (v_Vuna_dLexer_dclassifyIdent name,
-          p)) :: (toks)))) 
+          p)) :: (toks))))
 else if v_Vuna_dLexer_disDigit c then (match v_Vuna_dLexer_dcollectInt (C_Vuna_dLexer_dChars (rest, v_Vuna_dLexer_dadvanceChar
       c p)) (bi_sub c 48) with
   | C_Vuna_dBase_dPair (n, cs2) -> (match v_Vuna_dLexer_dlexChars cs2 with
   | C_Vuna_dBase_dErr (e) -> C_Vuna_dBase_dErr (e)
   | C_Vuna_dBase_dOk (toks) -> C_Vuna_dBase_dOk ((C_Vuna_dLexer_dPTok (C_Vuna_dLexer_dTInt (n), p)) ::
-      (toks)))) 
+      (toks))))
 else if bi_eq_int c 34 then (match v_Vuna_dLexer_dscanString (C_Vuna_dLexer_dChars (rest, v_Vuna_dLexer_dadvanceChar
       c p)) [] with
   | C_Vuna_dBase_dErr (e) -> C_Vuna_dBase_dErr (e)
   | C_Vuna_dBase_dOk (C_Vuna_dBase_dPair (s, cs2)) -> (match v_Vuna_dLexer_dlexChars cs2 with
   | C_Vuna_dBase_dErr (e) -> C_Vuna_dBase_dErr (e)
   | C_Vuna_dBase_dOk (toks) -> C_Vuna_dBase_dOk ((C_Vuna_dLexer_dPTok (C_Vuna_dLexer_dTStr (s), p)) ::
-      (toks)))) 
-else if (if ((if ((if ((if (bi_eq_int c 40) then true 
-              else (bi_eq_int c 41))) then true 
-          else (bi_eq_int c 91))) then true 
-      else (bi_eq_int c 93))) then true 
+      (toks))))
+else if (if ((if ((if ((if (bi_eq_int c 40) then true
+              else (bi_eq_int c 41))) then true
+          else (bi_eq_int c 91))) then true
+      else (bi_eq_int c 93))) then true
   else (bi_eq_int c 44)) then (match v_Vuna_dLexer_dlexChars (C_Vuna_dLexer_dChars (rest, v_Vuna_dLexer_dadvanceChar
       c p)) with
   | C_Vuna_dBase_dErr (e) -> C_Vuna_dBase_dErr (e)
   | C_Vuna_dBase_dOk (toks) -> C_Vuna_dBase_dOk ((C_Vuna_dLexer_dPTok (C_Vuna_dLexer_dTSym (bi_str_pack
-          ((c) :: ([]))), p)) :: (toks))) 
+          ((c) :: ([]))), p)) :: (toks)))
 else if v_Vuna_dLexer_disOpChar c then (match v_Vuna_dLexer_dcollectOp (C_Vuna_dLexer_dChars (rest, v_Vuna_dLexer_dadvanceChar
       c p)) ((c) :: ([])) with
   | C_Vuna_dBase_dPair (op, cs2) -> (match v_Vuna_dLexer_dlexChars cs2 with
   | C_Vuna_dBase_dErr (e) -> C_Vuna_dBase_dErr (e)
   | C_Vuna_dBase_dOk (toks) -> C_Vuna_dBase_dOk ((C_Vuna_dLexer_dPTok (C_Vuna_dLexer_dTSym (op), p)) ::
-      (toks)))) 
+      (toks))))
 else C_Vuna_dBase_dErr ("unexpected character")
 
 let v_Vuna_dLexer_dlexSource = fun source -> v_Vuna_dLexer_dlexChars (C_Vuna_dLexer_dChars (bi_str_unpack
@@ -1775,7 +1780,7 @@ let rec v_Vuna_dBase_dlength = fun a0 -> match a0 with
 let rec v_Vuna_dCodegen_dcheckArities = fun a0 a1 a2 -> match (a0, a1, a2) with
   | (name, expected, []) -> C_Vuna_dBase_dOk (expected)
   | (name, expected, (C_Vuna_dBase_dPair (pats, body)) :: (rest)) -> if bi_eq_int (v_Vuna_dBase_dlength
-  pats) expected then v_Vuna_dCodegen_dcheckArities name expected rest 
+  pats) expected then v_Vuna_dCodegen_dcheckArities name expected rest
 else C_Vuna_dBase_dErr ((let vuna_cat0' = ("clauses for ") in
     (let vuna_cat1' = (name) in
       (let vuna_cat2' = (" have different arities") in
@@ -1795,7 +1800,7 @@ let v_Vuna_dEval_dapplyCtor = fun decls name args arg -> (match v_Vuna_dAst_dcto
   ((let vuna_cat0' = ("constructor ") in
       (let vuna_cat1' = (name) in
         (let vuna_cat2' = (" cannot take more arguments") in
-          String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'])))) 
+          String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2']))))
   else C_Vuna_dBase_dOk (C_Vuna_dEval_dVCon (name, v_Vuna_dBase_dappend args ((arg) :: ([])))))
 
 let rec v_Vuna_dEval_dmatchPatterns = fun a0 a1 -> match (a0, a1) with
@@ -1810,17 +1815,17 @@ and v_Vuna_dEval_dmatchPattern = fun p v -> (match p with
   | C_Vuna_dAst_dPWild -> C_Vuna_dBase_dJust ([])
   | C_Vuna_dAst_dPVar (name) -> C_Vuna_dBase_dJust ((C_Vuna_dBase_dPair (name, v)) :: ([]))
   | C_Vuna_dAst_dPInt (n) -> (match v with
-  | C_Vuna_dEval_dVInt (m) -> if bi_eq_int n m then C_Vuna_dBase_dJust ([]) 
+  | C_Vuna_dEval_dVInt (m) -> if bi_eq_int n m then C_Vuna_dBase_dJust ([])
     else C_Vuna_dBase_dNothing
   | _ -> C_Vuna_dBase_dNothing)
   | C_Vuna_dAst_dPStr (s) -> (match v with
-  | C_Vuna_dEval_dVStr (t) -> if bi_eq_str s t then C_Vuna_dBase_dJust ([]) 
+  | C_Vuna_dEval_dVStr (t) -> if bi_eq_str s t then C_Vuna_dBase_dJust ([])
     else C_Vuna_dBase_dNothing
   | _ -> C_Vuna_dBase_dNothing)
   | C_Vuna_dAst_dPCon (name, pats) -> (match v with
   | C_Vuna_dEval_dVCon (vname, vargs) -> if (if (bi_eq_str name vname) then (bi_eq_int (v_Vuna_dBase_dlength
-          pats) (v_Vuna_dBase_dlength vargs)) 
-      else false) then v_Vuna_dEval_dmatchPatterns pats vargs 
+          pats) (v_Vuna_dBase_dlength vargs))
+      else false) then v_Vuna_dEval_dmatchPatterns pats vargs
     else C_Vuna_dBase_dNothing
   | _ -> C_Vuna_dBase_dNothing))
 
@@ -1851,30 +1856,30 @@ let rec v_Vuna_dTypedCodegen_dformatChars = fun a0 a1 a2 a3 a4 a5 a6 -> match (a
   a6) with
   | ([], col, depth, inStr, escaped, prev, acc) -> acc
   | ((c) :: (rest), col, depth, inStr, escaped, prev, acc) -> if inStr then if escaped then v_Vuna_dTypedCodegen_dformatChars
-rest (bi_add col 1) depth true false c ((c) :: (acc)) 
+rest (bi_add col 1) depth true false c ((c) :: (acc))
 else if bi_eq_int c 92 then v_Vuna_dTypedCodegen_dformatChars rest (bi_add col 1) depth true true c ((c)
-  :: (acc)) 
+  :: (acc))
 else if bi_eq_int c 34 then v_Vuna_dTypedCodegen_dformatChars rest (bi_add col 1) depth false false c
-((c) :: (acc)) 
+((c) :: (acc))
 else if bi_eq_int c 10 then v_Vuna_dTypedCodegen_dformatChars rest 0 depth true false c ((c) :: (acc))
 
-else v_Vuna_dTypedCodegen_dformatChars rest (bi_add col 1) depth true false c ((c) :: (acc)) 
+else v_Vuna_dTypedCodegen_dformatChars rest (bi_add col 1) depth true false c ((c) :: (acc))
 else if bi_eq_int c 34 then v_Vuna_dTypedCodegen_dformatChars rest (bi_add col 1) depth true false c ((c)
-  :: (acc)) 
-else if bi_eq_int c 10 then v_Vuna_dTypedCodegen_dformatChars rest 0 depth false false c ((c) :: (acc))
-
+  :: (acc))
+else if bi_eq_int c 10 then v_Vuna_dTypedCodegen_dformatChars rest 0 depth false false c ((c) :: (v_Vuna_dTypedCodegen_dtrimTrailing
+    acc))
 else if bi_eq_int c 40 then v_Vuna_dTypedCodegen_dformatChars rest (bi_add col 1) (bi_add depth 1) false
-false c ((c) :: (acc)) 
+false c ((c) :: (acc))
 else if bi_eq_int c 41 then v_Vuna_dTypedCodegen_dformatChars rest (bi_add col 1) (if bi_gt_int depth
-  0 then bi_sub depth 1 
-  else 0) false false c ((c) :: (acc)) 
-else if (if (bi_eq_int prev 32) then (bi_eq_int c 105) 
+  0 then bi_sub depth 1
+  else 0) false false c ((c) :: (acc))
+else if (if (bi_eq_int prev 32) then (bi_eq_int c 105)
   else false) then (match rest with
   | (110) :: ((32) :: (rest2)) -> (let width = v_Vuna_dTypedCodegen_dindentWidth depth in
     v_Vuna_dTypedCodegen_dformatChars rest2 (bi_add width 2) depth false false 32 (v_Vuna_dTypedCodegen_demitStr
       ((("in\n") ^ (v_Vuna_dTypedCodegen_dindentSpaces width))) acc))
-  | _ -> v_Vuna_dTypedCodegen_dformatChars rest (bi_add col 1) depth false false c ((c) :: (acc))) 
-else if (if (bi_eq_int prev 32) then (bi_eq_int c 101) 
+  | _ -> v_Vuna_dTypedCodegen_dformatChars rest (bi_add col 1) depth false false c ((c) :: (acc)))
+else if (if (bi_eq_int prev 32) then (bi_eq_int c 101)
   else false) then (match rest with
   | (108) :: ((115) :: ((101) :: ((32) :: (rest2)))) -> (let width = v_Vuna_dTypedCodegen_dindentWidth
     depth in
@@ -1882,16 +1887,17 @@ else if (if (bi_eq_int prev 32) then (bi_eq_int c 101)
       ((let vuna_cat0' = ("\n") in
           (let vuna_cat1' = (v_Vuna_dTypedCodegen_dindentSpaces width) in
             (let vuna_cat2' = ("else ") in
-              String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'])))) acc))
-  | _ -> v_Vuna_dTypedCodegen_dformatChars rest (bi_add col 1) depth false false c ((c) :: (acc))) 
-else if (if (bi_eq_int c 32) then (bi_gt_int col 100) 
+              String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'])))) (v_Vuna_dTypedCodegen_dtrimTrailing
+        acc)))
+  | _ -> v_Vuna_dTypedCodegen_dformatChars rest (bi_add col 1) depth false false c ((c) :: (acc)))
+else if (if (bi_eq_int c 32) then (bi_gt_int col 100)
   else false) then (let width = v_Vuna_dTypedCodegen_dindentWidth depth in
   v_Vuna_dTypedCodegen_dformatChars rest width depth false false 32 (v_Vuna_dTypedCodegen_demitStr ((("\n")
-        ^ (v_Vuna_dTypedCodegen_dindentSpaces width))) acc)) 
+        ^ (v_Vuna_dTypedCodegen_dindentSpaces width))) (v_Vuna_dTypedCodegen_dtrimTrailing acc)))
 else v_Vuna_dTypedCodegen_dformatChars rest (bi_add col 1) depth false false c ((c) :: (acc))
 
-let v_Vuna_dTypedCodegen_dformatOutput = fun s -> bi_str_pack (v_Vuna_dBase_dreverse (v_Vuna_dTypedCodegen_dformatChars
-    (bi_str_unpack s) 0 0 false false 0 []))
+let v_Vuna_dTypedCodegen_dformatOutput = fun s -> bi_str_pack (v_Vuna_dBase_dreverse (v_Vuna_dTypedCodegen_dtrimTrailing
+    (v_Vuna_dTypedCodegen_dformatChars (bi_str_unpack s) 0 0 false false 0 [])))
 
 let rec v_Vuna_dTypecheck_dresolveTy = fun s ty -> (match ty with
   | C_Vuna_dTypecheck_dTVar (i) -> (match v_Vuna_dTypecheck_dlookupSubst i s with
@@ -1905,11 +1911,11 @@ let rec v_Vuna_dTypecheck_dresolveTy = fun s ty -> (match ty with
 let rec v_Vuna_dTypecheck_doccursIn = fun i s ty -> (match v_Vuna_dTypecheck_dresolveTy s ty with
   | C_Vuna_dTypecheck_dTVar (j) -> bi_eq_int i j
   | C_Vuna_dTypecheck_dTCon (n, args) -> v_Vuna_dTypecheck_doccursInArgs i s args
-  | C_Vuna_dTypecheck_dTFun (a, b) -> (if (v_Vuna_dTypecheck_doccursIn i s a) then true 
+  | C_Vuna_dTypecheck_dTFun (a, b) -> (if (v_Vuna_dTypecheck_doccursIn i s a) then true
     else (v_Vuna_dTypecheck_doccursIn i s b)))
 and v_Vuna_dTypecheck_doccursInArgs = fun a0 a1 a2 -> match (a0, a1, a2) with
   | (i, s, []) -> false
-  | (i, s, (ty) :: (rest)) -> (if (v_Vuna_dTypecheck_doccursIn i s ty) then true 
+  | (i, s, (ty) :: (rest)) -> (if (v_Vuna_dTypecheck_doccursIn i s ty) then true
   else (v_Vuna_dTypecheck_doccursInArgs i s rest))
 
 let rec v_Vuna_dTypecheck_drenameTy = fun mapping ty -> (match ty with
@@ -1981,7 +1987,7 @@ let v_Vuna_dEval_dstr2 = fun args f -> (match args with
 
 let v_Vuna_dEval_ddivideBuiltin = fun args -> (match args with
   | (a) :: ((b) :: ([])) -> v_Vuna_dBase_dandThen (v_Vuna_dEval_dintArg a) (fun x -> v_Vuna_dBase_dandThen
-    (v_Vuna_dEval_dintArg b) (fun y -> if bi_eq_int y 0 then C_Vuna_dBase_dErr ("division by zero") 
+    (v_Vuna_dEval_dintArg b) (fun y -> if bi_eq_int y 0 then C_Vuna_dBase_dErr ("division by zero")
       else C_Vuna_dBase_dOk (C_Vuna_dEval_dVInt (bi_div x y))))
   | _ -> C_Vuna_dBase_dErr ("bad arguments for /"))
 
@@ -2033,7 +2039,7 @@ let v_Vuna_dEval_dcallBuiltin = fun name args -> (match name with
 let v_Vuna_dEval_devalGlobalNonFun = fun decls name -> (match v_Vuna_dAst_dctorArity name decls with
   | C_Vuna_dBase_dJust (arity) -> C_Vuna_dBase_dOk (C_Vuna_dEval_dVCon (name, []))
   | C_Vuna_dBase_dNothing -> (match v_Vuna_dBuiltins_dbuiltinArity name with
-  | C_Vuna_dBase_dJust (arity) -> if bi_eq_int arity 0 then v_Vuna_dEval_dcallBuiltin name [] 
+  | C_Vuna_dBase_dJust (arity) -> if bi_eq_int arity 0 then v_Vuna_dEval_dcallBuiltin name []
     else C_Vuna_dBase_dOk (C_Vuna_dEval_dVBuiltin (name, []))
   | C_Vuna_dBase_dNothing -> C_Vuna_dBase_dErr ((("unbound variable: ") ^ (name)))))
 
@@ -2042,8 +2048,8 @@ let v_Vuna_dEval_dapplyBuiltin = fun decls name args arg -> (match v_Vuna_dBuilt
   | C_Vuna_dBase_dNothing -> C_Vuna_dBase_dErr ((("unknown builtin: ") ^ (name)))
   | C_Vuna_dBase_dJust (arity) -> (let args2 = v_Vuna_dBase_dappend args ((arg) :: ([])) in
     if bi_lt_int (v_Vuna_dBase_dlength args2) arity then C_Vuna_dBase_dOk (C_Vuna_dEval_dVBuiltin (name,
-        args2)) 
-    else if bi_eq_int (v_Vuna_dBase_dlength args2) arity then v_Vuna_dEval_dcallBuiltin name args2 
+        args2))
+    else if bi_eq_int (v_Vuna_dBase_dlength args2) arity then v_Vuna_dEval_dcallBuiltin name args2
     else C_Vuna_dBase_dErr ((("too many arguments for builtin ") ^ (name)))))
 
 let v_Vuna_dBase_dstep = fun r k -> (match r with
@@ -2054,18 +2060,18 @@ let v_Vuna_dParser_dparseImportAlias = fun st isQualified -> v_Vuna_dBase_dstep 
   st) (fun name st1 -> if v_Vuna_dParser_datKw st1 "as" then v_Vuna_dBase_dstep (v_Vuna_dParser_dexpectKw
     st1 "as") (fun _u st2 -> v_Vuna_dBase_dstep (v_Vuna_dParser_dexpectIdent st2) (fun alias st3 -> C_Vuna_dBase_dOk
       (C_Vuna_dBase_dPair (C_Vuna_dAst_dImport (name, isQualified, C_Vuna_dBase_dJust (alias)), st3))))
-  
+
   else C_Vuna_dBase_dOk (C_Vuna_dBase_dPair (C_Vuna_dAst_dImport (name, isQualified, C_Vuna_dBase_dNothing),
       st1)))
 
 let v_Vuna_dParser_dparseImportSpec = fun st -> v_Vuna_dBase_dstep (v_Vuna_dParser_dexpectKw st "import")
 (fun _u st1 -> if v_Vuna_dParser_datKw st1 "qualified" then v_Vuna_dBase_dstep (v_Vuna_dParser_dexpectKw
-    st1 "qualified") (fun _u st2 -> v_Vuna_dParser_dparseImportAlias st2 true) 
+    st1 "qualified") (fun _u st2 -> v_Vuna_dParser_dparseImportAlias st2 true)
   else v_Vuna_dParser_dparseImportAlias st1 false)
 
 let rec v_Vuna_dParser_dparseImports = fun st -> if v_Vuna_dParser_datKw st "import" then v_Vuna_dBase_dstep
 (v_Vuna_dParser_dparseImportSpec st) (fun imp st1 -> v_Vuna_dBase_dstep (v_Vuna_dParser_dparseImports
-    st1) (fun rest st2 -> C_Vuna_dBase_dOk (C_Vuna_dBase_dPair ((imp) :: (rest), st2)))) 
+    st1) (fun rest st2 -> C_Vuna_dBase_dOk (C_Vuna_dBase_dPair ((imp) :: (rest), st2))))
 else C_Vuna_dBase_dOk (C_Vuna_dBase_dPair ([], st))
 
 let rec v_Vuna_dParser_dparseParams = fun st -> (match v_Vuna_dParser_dpeekTok st with
@@ -2076,34 +2082,34 @@ let rec v_Vuna_dParser_dparseParams = fun st -> (match v_Vuna_dParser_dpeekTok s
 
 let rec v_Vuna_dParser_dparseLambdaParams = fun st acc -> if v_Vuna_dParser_datSym st "," then v_Vuna_dBase_dstep
 (v_Vuna_dParser_dexpectIdent (v_Vuna_dParser_dadvance st)) (fun name st1 -> v_Vuna_dParser_dparseLambdaParams
-  st1 (v_Vuna_dBase_dappend acc ((name) :: ([])))) 
+  st1 (v_Vuna_dBase_dappend acc ((name) :: ([]))))
 else C_Vuna_dBase_dOk (C_Vuna_dBase_dPair (acc, st))
 
 let rec v_Vuna_dParser_dparsePatternSingle = fun st blockCol -> v_Vuna_dParser_dparsePatternCons st blockCol
 and v_Vuna_dParser_dparsePatternCons = fun st blockCol -> v_Vuna_dBase_dstep (v_Vuna_dParser_dparsePatternHead
   st blockCol) (fun lhs st1 -> if (if (v_Vuna_dParser_datSym st1 "::") then (v_Vuna_dParser_dcanContinue
-      st1 blockCol) 
+      st1 blockCol)
     else false) then v_Vuna_dBase_dstep (v_Vuna_dParser_dparsePatternCons (v_Vuna_dParser_dadvance st1)
     blockCol) (fun rhs st2 -> C_Vuna_dBase_dOk (C_Vuna_dBase_dPair (C_Vuna_dAst_dPCon ("Cons", (lhs) ::
-          ((rhs) :: ([]))), st2))) 
+          ((rhs) :: ([]))), st2)))
   else C_Vuna_dBase_dOk (C_Vuna_dBase_dPair (lhs, st1)))
 and v_Vuna_dParser_dparsePatternHead = fun st blockCol -> (match v_Vuna_dParser_dpeekTok st with
   | C_Vuna_dLexer_dPTok (C_Vuna_dLexer_dTIdent (name), p) -> if v_Vuna_dParser_dupperFirst name then v_Vuna_dBase_dstep
   (v_Vuna_dParser_dparsePatternAtoms (v_Vuna_dParser_dadvance st) blockCol) (fun args st1 -> C_Vuna_dBase_dOk
-    (C_Vuna_dBase_dPair (C_Vuna_dAst_dPCon (name, args), st1))) 
+    (C_Vuna_dBase_dPair (C_Vuna_dAst_dPCon (name, args), st1)))
   else v_Vuna_dParser_dparsePatternAtom st blockCol
   | _ -> v_Vuna_dParser_dparsePatternAtom st blockCol)
 and v_Vuna_dParser_dparsePatternAtoms = fun st blockCol -> if (if (v_Vuna_dParser_dstartsPatternAtom st)
-  then (v_Vuna_dParser_dcanContinue st blockCol) 
+  then (v_Vuna_dParser_dcanContinue st blockCol)
   else false) then v_Vuna_dBase_dstep (v_Vuna_dParser_dparsePatternAtom st blockCol) (fun pat st1 -> v_Vuna_dBase_dstep
   (v_Vuna_dParser_dparsePatternAtoms st1 blockCol) (fun rest st2 -> C_Vuna_dBase_dOk (C_Vuna_dBase_dPair
-      ((pat) :: (rest), st2)))) 
+      ((pat) :: (rest), st2))))
 else C_Vuna_dBase_dOk (C_Vuna_dBase_dPair ([], st))
 and v_Vuna_dParser_dparsePatternAtom = fun st blockCol -> (match v_Vuna_dParser_dpeekTok st with
   | C_Vuna_dLexer_dPTok (C_Vuna_dLexer_dTIdent ("_"), p) -> C_Vuna_dBase_dOk (C_Vuna_dBase_dPair (C_Vuna_dAst_dPWild,
       v_Vuna_dParser_dadvance st))
   | C_Vuna_dLexer_dPTok (C_Vuna_dLexer_dTIdent (name), p) -> if v_Vuna_dParser_dupperFirst name then C_Vuna_dBase_dOk
-  (C_Vuna_dBase_dPair (C_Vuna_dAst_dPCon (name, []), v_Vuna_dParser_dadvance st)) 
+  (C_Vuna_dBase_dPair (C_Vuna_dAst_dPCon (name, []), v_Vuna_dParser_dadvance st))
   else C_Vuna_dBase_dOk (C_Vuna_dBase_dPair (C_Vuna_dAst_dPVar (name), v_Vuna_dParser_dadvance st))
   | C_Vuna_dLexer_dPTok (C_Vuna_dLexer_dTInt (n), p) -> C_Vuna_dBase_dOk (C_Vuna_dBase_dPair (C_Vuna_dAst_dPInt
       (n), v_Vuna_dParser_dadvance st))
@@ -2116,38 +2122,38 @@ and v_Vuna_dParser_dparsePatternAtom = fun st blockCol -> (match v_Vuna_dParser_
   | _ -> C_Vuna_dBase_dErr ("expected pattern"))
 and v_Vuna_dParser_dparseListPattern = fun st blockCol -> v_Vuna_dBase_dstep (v_Vuna_dParser_dexpectSym
   st "[") (fun _u st1 -> if v_Vuna_dParser_datSym st1 "]" then C_Vuna_dBase_dOk (C_Vuna_dBase_dPair (C_Vuna_dAst_dPCon
-      ("Nil", []), v_Vuna_dParser_dadvance st1)) 
+      ("Nil", []), v_Vuna_dParser_dadvance st1))
   else v_Vuna_dBase_dstep (v_Vuna_dParser_dparseListPatternElems st1 blockCol) (fun pats st2 -> C_Vuna_dBase_dOk
     (C_Vuna_dBase_dPair (v_Vuna_dParser_dfoldPCon pats, st2))))
 and v_Vuna_dParser_dparseListPatternElems = fun st blockCol -> v_Vuna_dBase_dstep (v_Vuna_dParser_dparsePatternSingle
   st blockCol) (fun pat st1 -> if v_Vuna_dParser_datSym st1 "," then v_Vuna_dBase_dstep (v_Vuna_dParser_dparseListPatternElems
     (v_Vuna_dParser_dadvance st1) blockCol) (fun rest st2 -> C_Vuna_dBase_dOk (C_Vuna_dBase_dPair ((pat)
-        :: (rest), st2))) 
+        :: (rest), st2)))
   else if v_Vuna_dParser_datSym st1 "]" then C_Vuna_dBase_dOk (C_Vuna_dBase_dPair ((pat) :: ([]), v_Vuna_dParser_dadvance
-      st1)) 
+      st1))
   else C_Vuna_dBase_dErr ("expected , or ]"))
 
 let rec v_Vuna_dParser_dparseClausePatterns = fun st blockCol -> if (if (v_Vuna_dParser_dstartsPatternAtom
-    st) then (v_Vuna_dParser_dcanContinue st blockCol) 
+    st) then (v_Vuna_dParser_dcanContinue st blockCol)
   else false) then v_Vuna_dBase_dstep (v_Vuna_dParser_dparsePatternAtom st blockCol) (fun pat st1 -> v_Vuna_dBase_dstep
   (v_Vuna_dParser_dparseClausePatterns st1 blockCol) (fun rest st2 -> C_Vuna_dBase_dOk (C_Vuna_dBase_dPair
-      ((pat) :: (rest), st2)))) 
+      ((pat) :: (rest), st2))))
 else C_Vuna_dBase_dOk (C_Vuna_dBase_dPair ([], st))
 
 let rec v_Vuna_dParser_dparseExpr = fun st blockCol minPrec -> if v_Vuna_dParser_disEof st then C_Vuna_dBase_dErr
-("unexpected end of input") 
+("unexpected end of input")
 else if v_Vuna_dParser_dcanContinue st blockCol then v_Vuna_dBase_dstep (v_Vuna_dParser_dparseLhs st blockCol)
-(fun lhs st1 -> v_Vuna_dParser_dparseInfix st1 blockCol minPrec lhs) 
+(fun lhs st1 -> v_Vuna_dParser_dparseInfix st1 blockCol minPrec lhs)
 else C_Vuna_dBase_dErr ("expression is not indented enough")
 and v_Vuna_dParser_dparseInfix = fun st blockCol minPrec lhs -> (match v_Vuna_dParser_dpeekTok st with
   | C_Vuna_dLexer_dPTok (C_Vuna_dLexer_dTSym (op), p) -> (match v_Vuna_dParser_dinfixInfo op with
   | C_Vuna_dBase_dJust (C_Vuna_dBase_dPair (prec, assoc)) -> if (if (bi_ge_int prec minPrec) then (v_Vuna_dParser_dcanContinue
-        st blockCol) 
-      else false) then (let rhsPrec = if bi_eq_int assoc 0 then bi_add prec 1 
+        st blockCol)
+      else false) then (let rhsPrec = if bi_eq_int assoc 0 then bi_add prec 1
       else prec in
       v_Vuna_dBase_dstep (v_Vuna_dParser_dparseExpr (v_Vuna_dParser_dadvance st) blockCol rhsPrec) (fun
         rhs st2 -> v_Vuna_dParser_dparseInfix st2 blockCol minPrec (C_Vuna_dAst_dEApp (v_Vuna_dParser_dopExpr
-            op, (lhs) :: ((rhs) :: ([])))))) 
+            op, (lhs) :: ((rhs) :: ([]))))))
     else C_Vuna_dBase_dOk (C_Vuna_dBase_dPair (lhs, st))
   | C_Vuna_dBase_dNothing -> C_Vuna_dBase_dOk (C_Vuna_dBase_dPair (lhs, st)))
   | _ -> C_Vuna_dBase_dOk (C_Vuna_dBase_dPair (lhs, st)))
@@ -2163,10 +2169,10 @@ and v_Vuna_dParser_dparseApplication = fun st blockCol -> v_Vuna_dBase_dstep (v_
   | [] -> C_Vuna_dBase_dOk (C_Vuna_dBase_dPair (first, st2))
   | _ -> C_Vuna_dBase_dOk (C_Vuna_dBase_dPair (C_Vuna_dAst_dEApp (first, args), st2)))))
 and v_Vuna_dParser_dparseArgs = fun st blockCol -> if (if (v_Vuna_dParser_dstartsAtom st) then (v_Vuna_dParser_dcanContinue
-    st blockCol) 
+    st blockCol)
   else false) then v_Vuna_dBase_dstep (v_Vuna_dParser_dparseAtom st blockCol) (fun arg st1 -> v_Vuna_dBase_dstep
   (v_Vuna_dParser_dparseArgs st1 blockCol) (fun rest st2 -> C_Vuna_dBase_dOk (C_Vuna_dBase_dPair ((arg)
-        :: (rest), st2)))) 
+        :: (rest), st2))))
 else C_Vuna_dBase_dOk (C_Vuna_dBase_dPair ([], st))
 and v_Vuna_dParser_dparseAtom = fun st blockCol -> (match v_Vuna_dParser_dpeekTok st with
   | C_Vuna_dLexer_dPTok (C_Vuna_dLexer_dTIdent (name), p) -> C_Vuna_dBase_dOk (C_Vuna_dBase_dPair (C_Vuna_dAst_dEVar
@@ -2184,15 +2190,15 @@ and v_Vuna_dParser_dparseAtom = fun st blockCol -> (match v_Vuna_dParser_dpeekTo
   | _ -> C_Vuna_dBase_dErr ("expected expression"))
 and v_Vuna_dParser_dparseListExpr = fun st blockCol -> v_Vuna_dBase_dstep (v_Vuna_dParser_dexpectSym st
   "[") (fun _u st1 -> if v_Vuna_dParser_datSym st1 "]" then C_Vuna_dBase_dOk (C_Vuna_dBase_dPair (C_Vuna_dAst_dEVar
-      ("Nil"), v_Vuna_dParser_dadvance st1)) 
+      ("Nil"), v_Vuna_dParser_dadvance st1))
   else v_Vuna_dBase_dstep (v_Vuna_dParser_dparseListExprElems st1 blockCol) (fun elems st2 -> C_Vuna_dBase_dOk
     (C_Vuna_dBase_dPair (v_Vuna_dParser_dfoldCons elems, st2))))
 and v_Vuna_dParser_dparseListExprElems = fun st blockCol -> v_Vuna_dBase_dstep (v_Vuna_dParser_dparseExpr
   st blockCol 0) (fun e st1 -> if v_Vuna_dParser_datSym st1 "," then v_Vuna_dBase_dstep (v_Vuna_dParser_dparseListExprElems
     (v_Vuna_dParser_dadvance st1) blockCol) (fun rest st2 -> C_Vuna_dBase_dOk (C_Vuna_dBase_dPair ((e)
-        :: (rest), st2))) 
+        :: (rest), st2)))
   else if v_Vuna_dParser_datSym st1 "]" then C_Vuna_dBase_dOk (C_Vuna_dBase_dPair ((e) :: ([]), v_Vuna_dParser_dadvance
-      st1)) 
+      st1))
   else C_Vuna_dBase_dErr ("expected , or ]"))
 and v_Vuna_dParser_dparseLambda = fun st blockCol -> v_Vuna_dBase_dstep (v_Vuna_dParser_dexpectSym st
   "\\") (fun _u st1 -> v_Vuna_dBase_dstep (v_Vuna_dParser_dexpectIdent st1) (fun first st2 -> v_Vuna_dBase_dstep
@@ -2205,21 +2211,21 @@ and v_Vuna_dParser_dparseLet = fun st blockCol -> v_Vuna_dBase_dstep (v_Vuna_dPa
         blockCol 0) (fun body st4 -> C_Vuna_dBase_dOk (C_Vuna_dBase_dPair (C_Vuna_dAst_dELet (binds, body),
             st4))))))
 and v_Vuna_dParser_dparseLetBindings = fun st blockCol -> if v_Vuna_dParser_disEof st then C_Vuna_dBase_dErr
-("expected a let binding") 
-else if v_Vuna_dParser_datKw st "in" then C_Vuna_dBase_dErr ("expected a let binding") 
+("expected a let binding")
+else if v_Vuna_dParser_datKw st "in" then C_Vuna_dBase_dErr ("expected a let binding")
 else (match v_Vuna_dParser_dpeekPos st with
   | C_Vuna_dLexer_dPos (line, col) -> if bi_le_int col blockCol then C_Vuna_dBase_dErr ("let binding is not indented enough")
-  
+
   else v_Vuna_dParser_dparseLetBindingsAt st col)
 and v_Vuna_dParser_dparseLetBindingsAt = fun st declCol -> if v_Vuna_dParser_disEof st then C_Vuna_dBase_dOk
-(C_Vuna_dBase_dPair ([], st)) 
-else if v_Vuna_dParser_datKw st "in" then C_Vuna_dBase_dOk (C_Vuna_dBase_dPair ([], st)) 
+(C_Vuna_dBase_dPair ([], st))
+else if v_Vuna_dParser_datKw st "in" then C_Vuna_dBase_dOk (C_Vuna_dBase_dPair ([], st))
 else (match v_Vuna_dParser_dpeekPos st with
   | C_Vuna_dLexer_dPos (line, col) -> if bi_eq_int col declCol then v_Vuna_dBase_dstep (v_Vuna_dParser_dparsePatternSingle
     st declCol) (fun pat st1 -> v_Vuna_dBase_dstep (v_Vuna_dParser_dexpectSym st1 "=") (fun _u st2 ->
       v_Vuna_dBase_dstep (v_Vuna_dParser_dparseExpr st2 declCol 0) (fun value st3 -> v_Vuna_dBase_dstep
         (v_Vuna_dParser_dparseLetBindingsAt st3 declCol) (fun rest st4 -> C_Vuna_dBase_dOk (C_Vuna_dBase_dPair
-            ((C_Vuna_dBase_dPair (pat, value)) :: (rest), st4)))))) 
+            ((C_Vuna_dBase_dPair (pat, value)) :: (rest), st4))))))
   else C_Vuna_dBase_dOk (C_Vuna_dBase_dPair ([], st)))
 and v_Vuna_dParser_dparseCase = fun st blockCol -> v_Vuna_dBase_dstep (v_Vuna_dParser_dexpectKw st "case")
 (fun _u st1 -> v_Vuna_dBase_dstep (v_Vuna_dParser_dparseExpr st1 blockCol 0) (fun scrut st2 -> v_Vuna_dBase_dstep
@@ -2227,23 +2233,23 @@ and v_Vuna_dParser_dparseCase = fun st blockCol -> v_Vuna_dBase_dstep (v_Vuna_dP
         st3 blockCol) (fun alts st4 -> C_Vuna_dBase_dOk (C_Vuna_dBase_dPair (C_Vuna_dAst_dECase (scrut,
               alts), st4))))))
 and v_Vuna_dParser_dparseCaseAlts = fun st blockCol -> if v_Vuna_dParser_disEof st then C_Vuna_dBase_dErr
-("case expression needs an alternative") 
+("case expression needs an alternative")
 else (match v_Vuna_dParser_dpeekPos st with
   | C_Vuna_dLexer_dPos (line, col) -> if bi_le_int col blockCol then C_Vuna_dBase_dErr ("case alternative is not indented enough")
-  
+
   else v_Vuna_dBase_dstep (v_Vuna_dParser_dparseAltList st col) (fun alts st2 -> if v_Vuna_dParser_dbadCaseIndent
-    st2 col then C_Vuna_dBase_dErr ("unexpected indentation after case alternative") 
+    st2 col then C_Vuna_dBase_dErr ("unexpected indentation after case alternative")
     else (match alts with
   | [] -> C_Vuna_dBase_dErr ("case expression needs an alternative")
   | _ -> C_Vuna_dBase_dOk (C_Vuna_dBase_dPair (alts, st2)))))
 and v_Vuna_dParser_dparseAltList = fun st altCol -> if v_Vuna_dParser_disEof st then C_Vuna_dBase_dOk
-(C_Vuna_dBase_dPair ([], st)) 
+(C_Vuna_dBase_dPair ([], st))
 else (match v_Vuna_dParser_dpeekPos st with
   | C_Vuna_dLexer_dPos (line, col) -> if bi_eq_int col altCol then v_Vuna_dBase_dstep (v_Vuna_dParser_dparsePatternSingle
     st altCol) (fun pat st1 -> v_Vuna_dBase_dstep (v_Vuna_dParser_dexpectSym st1 "=>") (fun _u st2 ->
       v_Vuna_dBase_dstep (v_Vuna_dParser_dparseExpr st2 altCol 0) (fun body st3 -> v_Vuna_dBase_dstep
         (v_Vuna_dParser_dparseAltList st3 altCol) (fun rest st4 -> C_Vuna_dBase_dOk (C_Vuna_dBase_dPair
-            ((C_Vuna_dBase_dPair (pat, body)) :: (rest), st4)))))) 
+            ((C_Vuna_dBase_dPair (pat, body)) :: (rest), st4))))))
   else C_Vuna_dBase_dOk (C_Vuna_dBase_dPair ([], st)))
 and v_Vuna_dParser_dparseIf = fun st blockCol -> v_Vuna_dBase_dstep (v_Vuna_dParser_dexpectKw st "if")
 (fun _u st1 -> v_Vuna_dBase_dstep (v_Vuna_dParser_dparseExpr st1 blockCol 0) (fun cond st2 -> v_Vuna_dBase_dstep
@@ -2262,21 +2268,21 @@ let v_Vuna_dParser_dparseClause = fun st blockCol name -> v_Vuna_dBase_dstep (v_
         (C_Vuna_dAst_dDFun (name, pats, body), st3)))))
 
 let rec v_Vuna_dParser_dparseCtorList = fun st ctorCol -> if v_Vuna_dParser_disEof st then C_Vuna_dBase_dOk
-(C_Vuna_dBase_dPair ([], st)) 
+(C_Vuna_dBase_dPair ([], st))
 else (match v_Vuna_dParser_dpeekPos st with
   | C_Vuna_dLexer_dPos (line, col) -> if bi_eq_int col ctorCol then v_Vuna_dBase_dstep (v_Vuna_dParser_dexpectIdent
     st) (fun name st1 -> v_Vuna_dBase_dstep (v_Vuna_dParser_dexpectSym st1 ":") (fun _u st2 -> v_Vuna_dBase_dstep
       (v_Vuna_dParser_dparseExpr st2 ctorCol 0) (fun ty st3 -> v_Vuna_dBase_dstep (v_Vuna_dParser_dparseCtorList
           st3 ctorCol) (fun rest st4 -> C_Vuna_dBase_dOk (C_Vuna_dBase_dPair ((C_Vuna_dAst_dCtor (name,
-                  ty, v_Vuna_dParser_dcountArrows ty)) :: (rest), st4)))))) 
-  else if bi_gt_int col ctorCol then C_Vuna_dBase_dErr ("unexpected indentation in data block") 
+                  ty, v_Vuna_dParser_dcountArrows ty)) :: (rest), st4))))))
+  else if bi_gt_int col ctorCol then C_Vuna_dBase_dErr ("unexpected indentation in data block")
   else C_Vuna_dBase_dOk (C_Vuna_dBase_dPair ([], st)))
 
 let v_Vuna_dParser_dparseCtors = fun st blockCol -> if v_Vuna_dParser_disEof st then C_Vuna_dBase_dOk
-(C_Vuna_dBase_dPair ([], st)) 
+(C_Vuna_dBase_dPair ([], st))
 else (match v_Vuna_dParser_dpeekPos st with
   | C_Vuna_dLexer_dPos (line, col) -> if bi_gt_int col blockCol then v_Vuna_dParser_dparseCtorList st
-  col 
+  col
   else C_Vuna_dBase_dOk (C_Vuna_dBase_dPair ([], st)))
 
 let v_Vuna_dParser_dparseData = fun st blockCol -> v_Vuna_dBase_dstep (v_Vuna_dParser_dexpectKw st "data")
@@ -2290,25 +2296,25 @@ let v_Vuna_dParser_dparseData = fun st blockCol -> v_Vuna_dBase_dstep (v_Vuna_dP
 let v_Vuna_dParser_dparseDecl = fun st blockCol -> (match v_Vuna_dParser_dpeekTok st with
   | C_Vuna_dLexer_dPTok (C_Vuna_dLexer_dTKw ("data"), p) -> v_Vuna_dParser_dparseData st blockCol
   | C_Vuna_dLexer_dPTok (C_Vuna_dLexer_dTIdent (name), p) -> (let st1 = v_Vuna_dParser_dadvance st in
-    if v_Vuna_dParser_datSym st1 ":" then v_Vuna_dParser_dparseSignature st1 blockCol name 
+    if v_Vuna_dParser_datSym st1 ":" then v_Vuna_dParser_dparseSignature st1 blockCol name
     else v_Vuna_dParser_dparseClause st1 blockCol name)
   | _ -> C_Vuna_dBase_dErr ("expected a top-level declaration"))
 
 let rec v_Vuna_dParser_dparseDecls = fun st blockCol -> if v_Vuna_dParser_disEof st then C_Vuna_dBase_dOk
-(C_Vuna_dBase_dPair ([], st)) 
+(C_Vuna_dBase_dPair ([], st))
 else (match v_Vuna_dParser_dpeekPos st with
   | C_Vuna_dLexer_dPos (line, col) -> if bi_eq_int col blockCol then v_Vuna_dBase_dstep (v_Vuna_dParser_dparseDecl
     st blockCol) (fun decl st1 -> v_Vuna_dBase_dstep (v_Vuna_dParser_dparseDecls st1 blockCol) (fun rest
-      st2 -> C_Vuna_dBase_dOk (C_Vuna_dBase_dPair ((decl) :: (rest), st2)))) 
+      st2 -> C_Vuna_dBase_dOk (C_Vuna_dBase_dPair ((decl) :: (rest), st2))))
   else C_Vuna_dBase_dErr ((("expected a declaration at column ") ^ (bi_str_from_int blockCol))))
 
 let v_Vuna_dParser_dparseProgram = fun st -> v_Vuna_dBase_dstep (v_Vuna_dParser_dparseImports st) (fun
   imports st1 -> if v_Vuna_dParser_disEof st1 then C_Vuna_dBase_dOk (C_Vuna_dBase_dPair (imports, []))
-  
+
   else (match v_Vuna_dParser_dpeekPos st1 with
   | C_Vuna_dLexer_dPos (line, col) -> v_Vuna_dBase_dstep (v_Vuna_dParser_dparseDecls st1 col) (fun decls
       st2 -> if v_Vuna_dParser_disEof st2 then C_Vuna_dBase_dOk (C_Vuna_dBase_dPair (imports, decls))
-      
+
       else C_Vuna_dBase_dErr ("expected end of input"))))
 
 let v_Vuna_dParser_dparseSource = fun source -> v_Vuna_dBase_dandThen (v_Vuna_dLexer_dlexSource source)
@@ -2412,7 +2418,7 @@ let v_Vuna_dTypedCodegen_dtypedString = fun s -> if bi_gt_int (bi_str_length s) 
   (let vuna_cat1' = (v_Vuna_dTypedCodegen_djoinWith "" (v_Vuna_dTypedCodegen_descapeLong (bi_str_unpack
           s))) in
     (let vuna_cat2' = ("\"") in
-      String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2']))) 
+      String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'])))
 else v_Vuna_dCodegen_docamlString s
 
 let v_Vuna_dCodegen_dpconPattern = fun a0 a1 -> match (a0, a1) with
@@ -2433,7 +2439,7 @@ let rec v_Vuna_dCodegen_dwrapFun = fun name params matchCode k -> if bi_eq_int k
     (let vuna_cat2' = (" -> ") in
       (let vuna_cat3' = (matchCode) in
         (let vuna_cat4' = (")") in
-          String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'; vuna_cat3'; vuna_cat4']))))) 
+          String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'; vuna_cat3'; vuna_cat4'])))))
 else (let vuna_cat0' = ("(fun ") in
   (let vuna_cat1' = (v_Vuna_dCodegen_dnthList k params) in
     (let vuna_cat2' = (" -> VFun (") in
@@ -2450,7 +2456,7 @@ let rec v_Vuna_dCodegen_dwrapCtor = fun name params body k -> if bi_eq_int k (bi
     (let vuna_cat2' = (" -> ") in
       (let vuna_cat3' = (body) in
         (let vuna_cat4' = (")") in
-          String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'; vuna_cat3'; vuna_cat4']))))) 
+          String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'; vuna_cat3'; vuna_cat4'])))))
 else (let vuna_cat0' = ("(fun ") in
   (let vuna_cat1' = (v_Vuna_dCodegen_dnthList k params) in
     (let vuna_cat2' = (" -> VFun (") in
@@ -2462,7 +2468,7 @@ else (let vuna_cat0' = ("(fun ") in
               vuna_cat6'])))))))
 
 let v_Vuna_dCodegen_dgenCtor = fun a0 -> match a0 with
-  | (C_Vuna_dBase_dPair (name, arity)) -> if bi_eq_int arity 0 then C_Vuna_dBase_dOk ("") 
+  | (C_Vuna_dBase_dPair (name, arity)) -> if bi_eq_int arity 0 then C_Vuna_dBase_dOk ("")
 else (let params = v_Vuna_dCodegen_dmakeCtorParams arity in
   (let body = (let vuna_cat0' = ("VCon (") in
       (let vuna_cat1' = (v_Vuna_dCodegen_docamlString name) in
@@ -2490,13 +2496,13 @@ let rec v_Vuna_dCodegen_dgenBuiltinDef = fun a0 -> match a0 with
       (let vuna_cat2' = (" = fun () -> ") in
         (let vuna_cat3' = (body) in
           (let vuna_cat4' = ("\n") in
-            String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'; vuna_cat3'; vuna_cat4']))))) 
+            String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'; vuna_cat3'; vuna_cat4'])))))
   else if bi_eq_int arity 1 then (let vuna_cat0' = ("let ") in
     (let vuna_cat1' = (ocname) in
       (let vuna_cat2' = (" = fun a -> ") in
         (let vuna_cat3' = (body) in
           (let vuna_cat4' = ("\n") in
-            String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'; vuna_cat3'; vuna_cat4']))))) 
+            String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'; vuna_cat3'; vuna_cat4'])))))
   else (let vuna_cat0' = ("let ") in
     (let vuna_cat1' = (ocname) in
       (let vuna_cat2' = (" = fun a -> VFun (") in
@@ -2522,18 +2528,18 @@ let v_Vuna_dLoader_dtypeExportsOf = fun modules name -> v_Vuna_dAst_dtypeNamesOf
 
 let rec v_Vuna_dBase_dmemName = fun a0 a1 -> match (a0, a1) with
   | (name, []) -> false
-  | (name, (x) :: (rest)) -> if bi_eq_str x name then true 
+  | (name, (x) :: (rest)) -> if bi_eq_str x name then true
 else v_Vuna_dBase_dmemName name rest
 
 let rec v_Vuna_dTypedCodegen_dallPureExpr = fun a0 a1 a2 -> match (a0, a1, a2) with
   | (decls, seen, []) -> true
   | (decls, seen, (e) :: (rest)) -> (if (v_Vuna_dTypedCodegen_dpureExpr decls seen e) then (v_Vuna_dTypedCodegen_dallPureExpr
-    decls seen rest) 
+    decls seen rest)
   else false)
 and v_Vuna_dTypedCodegen_dpureExpr = fun decls seen e -> (match e with
   | C_Vuna_dAst_dEInt (n) -> true
   | C_Vuna_dAst_dEStr (s) -> true
-  | C_Vuna_dAst_dEVar (name) -> if v_Vuna_dBase_dmemName name seen then false 
+  | C_Vuna_dAst_dEVar (name) -> if v_Vuna_dBase_dmemName name seen then false
   else (match v_Vuna_dAst_dctorArity name decls with
   | C_Vuna_dBase_dJust (0) -> true
   | _ -> (match v_Vuna_dTypedCodegen_dzeroArgBody decls name with
@@ -2556,12 +2562,12 @@ let v_Vuna_dTypedCodegen_disPureZeroArg = fun decls name -> (match v_Vuna_dTyped
   | C_Vuna_dBase_dNothing -> false)
 
 let v_Vuna_dTypedCodegen_disAtomicExpr = fun decls env e -> (match e with
-  | C_Vuna_dAst_dEVar (name) -> if v_Vuna_dBase_dmemName name env then true 
+  | C_Vuna_dAst_dEVar (name) -> if v_Vuna_dBase_dmemName name env then true
   else (match v_Vuna_dAst_dctorArity name decls with
-  | C_Vuna_dBase_dJust (arity) -> if bi_eq_int arity 0 then true 
+  | C_Vuna_dBase_dJust (arity) -> if bi_eq_int arity 0 then true
     else false
   | C_Vuna_dBase_dNothing -> (match v_Vuna_dTypedCodegen_dbuiltinName name with
-  | C_Vuna_dBase_dJust (ref) -> if bi_eq_str name "getArgs" then false 
+  | C_Vuna_dBase_dJust (ref) -> if bi_eq_str name "getArgs" then false
       else true
   | C_Vuna_dBase_dNothing -> (match v_Vuna_dAst_dfunArity name decls with
   | C_Vuna_dBase_dJust (0) -> v_Vuna_dTypedCodegen_disPureZeroArg decls name
@@ -2572,7 +2578,7 @@ let v_Vuna_dTypedCodegen_disAtomicExpr = fun decls env e -> (match e with
   | _ -> false)
 
 let v_Vuna_dTypedCodegen_dformatArg = fun decls env e code -> if v_Vuna_dTypedCodegen_disAtomicExpr decls
-env e then code 
+env e then code
 else (let vuna_cat0' = ("(") in
   (let vuna_cat1' = (code) in
     (let vuna_cat2' = (")") in
@@ -2587,7 +2593,7 @@ let rec v_Vuna_dTypedCodegen_dapplyArgs = fun a0 a1 a2 a3 -> match (a0, a1, a2, 
   | (decls, env, _, _) -> ""
 
 let v_Vuna_dTypedCodegen_dgenAppAware = fun decls env fn args fCode argCodes -> (let head = if v_Vuna_dTypedCodegen_disAtomicExpr
-  decls env fn then fCode 
+  decls env fn then fCode
   else (let vuna_cat0' = ("(") in
     (let vuna_cat1' = (fCode) in
       (let vuna_cat2' = (")") in
@@ -2595,26 +2601,26 @@ let v_Vuna_dTypedCodegen_dgenAppAware = fun decls env fn args fCode argCodes -> 
   ((head) ^ (v_Vuna_dTypedCodegen_dapplyArgs decls env argCodes args)))
 
 let v_Vuna_dTypedCodegen_dzeroArgRef = fun decls name -> if v_Vuna_dTypedCodegen_disPureZeroArg decls
-name then v_Vuna_dTypedCodegen_dvalueName name 
+name then v_Vuna_dTypedCodegen_dvalueName name
 else ((v_Vuna_dTypedCodegen_dvalueName name) ^ (" ()"))
 
 let rec v_Vuna_dTypedCodegen_duniqueNames = fun a0 -> match a0 with
   | ([]) -> []
-  | ((name) :: (rest)) -> if bi_eq_str name "" then v_Vuna_dTypedCodegen_duniqueNames rest 
-else if v_Vuna_dBase_dmemName name rest then v_Vuna_dTypedCodegen_duniqueNames rest 
+  | ((name) :: (rest)) -> if bi_eq_str name "" then v_Vuna_dTypedCodegen_duniqueNames rest
+else if v_Vuna_dBase_dmemName name rest then v_Vuna_dTypedCodegen_duniqueNames rest
 else (name) :: (v_Vuna_dTypedCodegen_duniqueNames rest)
 
 let v_Vuna_dTypedCodegen_dfunctionNames = fun decls -> v_Vuna_dTypedCodegen_duniqueNames (v_Vuna_dBase_dmap
   v_Vuna_dTypedCodegen_ddeclFunName decls)
 
-let v_Vuna_dTypedCodegen_dnotIn = fun name names -> if v_Vuna_dBase_dmemName name names then false 
+let v_Vuna_dTypedCodegen_dnotIn = fun name names -> if v_Vuna_dBase_dmemName name names then false
 else true
 
 let rec v_Vuna_dTypedCodegen_ddependentsOf = fun a0 a1 -> match (a0, a1) with
   | (name, []) -> []
   | (name, (C_Vuna_dBase_dPair (n, ns)) :: (rest)) -> (let dep = v_Vuna_dTypedCodegen_ddependentsOf name
   rest in
-  if v_Vuna_dBase_dmemName name ns then (n) :: (dep) 
+  if v_Vuna_dBase_dmemName name ns then (n) :: (dep)
   else dep)
 
 let v_Vuna_dTypedCodegen_dreverseAdj = fun names adj -> v_Vuna_dBase_dmap (fun n -> C_Vuna_dBase_dPair
@@ -2623,7 +2629,7 @@ let v_Vuna_dTypedCodegen_dreverseAdj = fun names adj -> v_Vuna_dBase_dmap (fun n
 let rec v_Vuna_dTypedCodegen_dfoldNeighborsPost = fun a0 a1 a2 a3 -> match (a0, a1, a2, a3) with
   | (adj, [], visited, order) -> C_Vuna_dBase_dPair (visited, order)
   | (adj, (m) :: (rest), visited, order) -> if v_Vuna_dBase_dmemName m visited then v_Vuna_dTypedCodegen_dfoldNeighborsPost
-adj rest visited order 
+adj rest visited order
 else (match v_Vuna_dTypedCodegen_ddfsPost adj m ((m) :: (visited)) order with
   | C_Vuna_dBase_dPair (visited2, order2) -> v_Vuna_dTypedCodegen_dfoldNeighborsPost adj rest visited2
   order2)
@@ -2634,14 +2640,14 @@ and v_Vuna_dTypedCodegen_ddfsPost = fun adj n visited order -> (match v_Vuna_dTy
 let rec v_Vuna_dTypedCodegen_dpostOrder = fun adj nodes visited order -> (match nodes with
   | [] -> C_Vuna_dBase_dPair (visited, order)
   | (n) :: (rest) -> if v_Vuna_dBase_dmemName n visited then v_Vuna_dTypedCodegen_dpostOrder adj rest
-  visited order 
+  visited order
   else (match v_Vuna_dTypedCodegen_ddfsPost adj n ((n) :: (visited)) order with
   | C_Vuna_dBase_dPair (visited2, order2) -> v_Vuna_dTypedCodegen_dpostOrder adj rest visited2 order2))
 
 let rec v_Vuna_dTypedCodegen_dfoldNeighborsCollect = fun a0 a1 a2 a3 -> match (a0, a1, a2, a3) with
   | (revAdj, [], visited, comp) -> C_Vuna_dBase_dPair (visited, comp)
   | (revAdj, (m) :: (rest), visited, comp) -> if v_Vuna_dBase_dmemName m visited then v_Vuna_dTypedCodegen_dfoldNeighborsCollect
-revAdj rest visited comp 
+revAdj rest visited comp
 else (match v_Vuna_dTypedCodegen_ddfsCollect revAdj m ((m) :: (visited)) comp with
   | C_Vuna_dBase_dPair (visited2, comp2) -> v_Vuna_dTypedCodegen_dfoldNeighborsCollect revAdj rest visited2
   comp2)
@@ -2652,20 +2658,20 @@ and v_Vuna_dTypedCodegen_ddfsCollect = fun revAdj n visited comp -> (match v_Vun
 let rec v_Vuna_dTypedCodegen_dcollectComps = fun revAdj nodes visited comps -> (match nodes with
   | [] -> comps
   | (n) :: (rest) -> if v_Vuna_dBase_dmemName n visited then v_Vuna_dTypedCodegen_dcollectComps revAdj
-  rest visited comps 
+  rest visited comps
   else (match v_Vuna_dTypedCodegen_ddfsCollect revAdj n ((n) :: (visited)) [] with
   | C_Vuna_dBase_dPair (visited2, comp) -> v_Vuna_dTypedCodegen_dcollectComps revAdj rest visited2 ((comp)
       :: (comps))))
 
 let rec v_Vuna_dTypedCodegen_dcomponentOf = fun a0 a1 -> match (a0, a1) with
   | ([], name) -> C_Vuna_dBase_dNothing
-  | ((g) :: (rest), name) -> if v_Vuna_dBase_dmemName name g then C_Vuna_dBase_dJust (g) 
+  | ((g) :: (rest), name) -> if v_Vuna_dBase_dmemName name g then C_Vuna_dBase_dJust (g)
 else v_Vuna_dTypedCodegen_dcomponentOf rest name
 
 let rec v_Vuna_dTypedCodegen_dgroupsFromCompsGo = fun a0 a1 a2 a3 -> match (a0, a1, a2, a3) with
   | (comps, allNames, [], emitted) -> []
   | (comps, allNames, (n) :: (rest), emitted) -> if v_Vuna_dBase_dmemName n emitted then v_Vuna_dTypedCodegen_dgroupsFromCompsGo
-comps allNames rest emitted 
+comps allNames rest emitted
 else (match v_Vuna_dTypedCodegen_dcomponentOf comps n with
   | C_Vuna_dBase_dJust (g) -> (v_Vuna_dTypedCodegen_dfilterNames (fun m -> v_Vuna_dBase_dmemName m g)
     allNames) :: (v_Vuna_dTypedCodegen_dgroupsFromCompsGo comps allNames rest (v_Vuna_dBase_dappend g
@@ -2682,7 +2688,7 @@ let v_Vuna_dTypedCodegen_dgroupDeps = fun adj group -> v_Vuna_dTypedCodegen_dfil
 let rec v_Vuna_dTypedCodegen_dallIn = fun names allowed -> (match names with
   | [] -> true
   | (n) :: (rest) -> if v_Vuna_dBase_dmemName n allowed then v_Vuna_dTypedCodegen_dallIn rest allowed
-  
+
   else false)
 
 let v_Vuna_dTypedCodegen_dgroupReady = fun adj group emitted -> v_Vuna_dTypedCodegen_dallIn (v_Vuna_dTypedCodegen_dgroupDeps
@@ -2691,7 +2697,7 @@ let v_Vuna_dTypedCodegen_dgroupReady = fun adj group emitted -> v_Vuna_dTypedCod
 let rec v_Vuna_dTypedCodegen_dpickReadyAcc = fun a0 a1 a2 a3 -> match (a0, a1, a2, a3) with
   | (adj, [], before, emitted) -> C_Vuna_dBase_dNothing
   | (adj, (g) :: (rest), before, emitted) -> if v_Vuna_dTypedCodegen_dgroupReady adj g emitted then C_Vuna_dBase_dJust
-(C_Vuna_dBase_dPair (g, v_Vuna_dBase_dappend (v_Vuna_dBase_dreverse before) rest)) 
+(C_Vuna_dBase_dPair (g, v_Vuna_dBase_dappend (v_Vuna_dBase_dreverse before) rest))
 else v_Vuna_dTypedCodegen_dpickReadyAcc adj rest ((g) :: (before)) emitted
 
 let v_Vuna_dTypedCodegen_dpickReady = fun adj groups emitted -> v_Vuna_dTypedCodegen_dpickReadyAcc adj
@@ -2759,9 +2765,9 @@ else (let vuna_cat0' = (body) in
         String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'; vuna_cat3']))))
 
 let v_Vuna_dTypecheck_dknownTypeName = fun typeNames name -> (if ((if ((if (v_Vuna_dBase_dmemName name
-            typeNames) then true 
-          else (bi_eq_str name "Int"))) then true 
-      else (bi_eq_str name "String"))) then true 
+            typeNames) then true
+          else (bi_eq_str name "Int"))) then true
+      else (bi_eq_str name "String"))) then true
   else (bi_eq_str name "Bool"))
 
 let rec v_Vuna_dTypecheck_dconvertTypes = fun a0 a1 a2 a3 -> match (a0, a1, a2, a3) with
@@ -2775,12 +2781,12 @@ let rec v_Vuna_dTypecheck_dconvertTypes = fun a0 a1 a2 a3 -> match (a0, a1, a2, 
           (C_Vuna_dBase_dPair ((ty) :: (tys), vars2), st2))))))
 and v_Vuna_dTypecheck_dconvertType = fun typeNames vars st expr -> (match expr with
   | C_Vuna_dAst_dEVar (name) -> if v_Vuna_dTypecheck_dknownTypeName typeNames name then C_Vuna_dBase_dOk
-  (C_Vuna_dBase_dPair (C_Vuna_dBase_dPair (C_Vuna_dTypecheck_dTCon (name, []), vars), st)) 
+  (C_Vuna_dBase_dPair (C_Vuna_dBase_dPair (C_Vuna_dTypecheck_dTCon (name, []), vars), st))
   else if v_Vuna_dTypecheck_disLowerName name then (match v_Vuna_dTypecheck_dlookupTyVar name vars with
   | C_Vuna_dBase_dJust (ty) -> C_Vuna_dBase_dOk (C_Vuna_dBase_dPair (C_Vuna_dBase_dPair (ty, vars), st))
   | C_Vuna_dBase_dNothing -> (match v_Vuna_dTypecheck_dfreshTy st with
   | C_Vuna_dBase_dPair (ty, st2) -> C_Vuna_dBase_dOk (C_Vuna_dBase_dPair (C_Vuna_dBase_dPair (ty, (C_Vuna_dBase_dPair
-              (name, ty)) :: (vars)), st2)))) 
+              (name, ty)) :: (vars)), st2))))
   else C_Vuna_dBase_dErr ((("unknown type: ") ^ (name)))
   | C_Vuna_dAst_dEApp (fn, args) -> (match fn with
   | C_Vuna_dAst_dEVar ("->") -> (match args with
@@ -2794,7 +2800,7 @@ and v_Vuna_dTypecheck_dconvertType = fun typeNames vars st expr -> (match expr w
   | C_Vuna_dAst_dEVar (name) -> if v_Vuna_dTypecheck_dknownTypeName typeNames name then v_Vuna_dBase_dandThen
     (v_Vuna_dTypecheck_dconvertTypes typeNames vars args st) (fun pc -> (match pc with
   | C_Vuna_dBase_dPair (C_Vuna_dBase_dPair (tys, vars1), st1) -> C_Vuna_dBase_dOk (C_Vuna_dBase_dPair
-          (C_Vuna_dBase_dPair (C_Vuna_dTypecheck_dTCon (name, tys), vars1), st1)))) 
+          (C_Vuna_dBase_dPair (C_Vuna_dTypecheck_dTCon (name, tys), vars1), st1))))
     else C_Vuna_dBase_dErr ((("unknown type constructor: ") ^ (name)))
   | _ -> C_Vuna_dBase_dErr ("invalid type application"))
   | _ -> C_Vuna_dBase_dErr ("invalid type expression"))
@@ -2846,15 +2852,15 @@ let rec v_Vuna_dTypecheck_dcollectCtors = fun a0 a1 a2 -> match (a0, a1, a2) wit
 
 let rec v_Vuna_dTypecheck_duniqueNames = fun a0 -> match a0 with
   | ([]) -> []
-  | ((name) :: (rest)) -> if bi_eq_str name "" then v_Vuna_dTypecheck_duniqueNames rest 
-else if v_Vuna_dBase_dmemName name rest then v_Vuna_dTypecheck_duniqueNames rest 
+  | ((name) :: (rest)) -> if bi_eq_str name "" then v_Vuna_dTypecheck_duniqueNames rest
+else if v_Vuna_dBase_dmemName name rest then v_Vuna_dTypecheck_duniqueNames rest
 else (name) :: (v_Vuna_dTypecheck_duniqueNames rest)
 
 let v_Vuna_dTypecheck_dfunctionNames = fun decls -> v_Vuna_dTypecheck_duniqueNames (v_Vuna_dBase_dmap
   v_Vuna_dTypecheck_ddeclFunName decls)
 
 let v_Vuna_dCodegen_dgenVar = fun decls scope name -> if v_Vuna_dBase_dmemName name scope then C_Vuna_dBase_dOk
-((("x_") ^ (v_Vuna_dCodegen_dsanitizeName name))) 
+((("x_") ^ (v_Vuna_dCodegen_dsanitizeName name)))
 else (match v_Vuna_dAst_dfunArity name decls with
   | C_Vuna_dBase_dJust (0) -> C_Vuna_dBase_dOk ((let vuna_cat0' = ("v_") in
       (let vuna_cat1' = (v_Vuna_dCodegen_dsanitizeName name) in
@@ -2879,7 +2885,7 @@ else (match v_Vuna_dAst_dfunArity name decls with
                 String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'; vuna_cat3'; vuna_cat4']))))))
   | C_Vuna_dBase_dNothing -> (match v_Vuna_dCodegen_dfindBuiltin name v_Vuna_dCodegen_dbuiltinInfos with
   | C_Vuna_dBase_dJust (C_Vuna_dCodegen_dBuiltinInfo (vname, ocname, arity, body)) -> if bi_eq_int arity
-      0 then C_Vuna_dBase_dOk (((ocname) ^ (" ()"))) 
+      0 then C_Vuna_dBase_dOk (((ocname) ^ (" ()")))
       else C_Vuna_dBase_dOk ((let vuna_cat0' = ("VFun (") in
           (let vuna_cat1' = (v_Vuna_dCodegen_docamlString name) in
             (let vuna_cat2' = (", ") in
@@ -2890,13 +2896,13 @@ else (match v_Vuna_dAst_dfunArity name decls with
 
 let rec v_Vuna_dLoader_dhasDuplicateName = fun a0 -> match a0 with
   | ([]) -> false
-  | ((x) :: (rest)) -> if v_Vuna_dBase_dmemName x rest then true 
+  | ((x) :: (rest)) -> if v_Vuna_dBase_dmemName x rest then true
 else v_Vuna_dLoader_dhasDuplicateName rest
 
 let rec v_Vuna_dLoader_dmodulesExportingFrom = fun modules names name -> (match names with
   | [] -> []
   | (m) :: (rest) -> if v_Vuna_dBase_dmemName name (v_Vuna_dLoader_dexportsOf modules m) then (m) :: (v_Vuna_dLoader_dmodulesExportingFrom
-    modules rest name) 
+    modules rest name)
   else v_Vuna_dLoader_dmodulesExportingFrom modules rest name)
 
 let v_Vuna_dLoader_dmodulesExporting = fun modules imports name -> v_Vuna_dLoader_dmodulesExportingFrom
@@ -2905,7 +2911,7 @@ modules (v_Vuna_dLoader_dopenModuleNames imports) name
 let rec v_Vuna_dLoader_dmodulesExportingCtorFrom = fun modules names name -> (match names with
   | [] -> []
   | (m) :: (rest) -> if v_Vuna_dBase_dmemName name (v_Vuna_dLoader_dmoduleCtors modules m) then (m) ::
-  (v_Vuna_dLoader_dmodulesExportingCtorFrom modules rest name) 
+  (v_Vuna_dLoader_dmodulesExportingCtorFrom modules rest name)
   else v_Vuna_dLoader_dmodulesExportingCtorFrom modules rest name)
 
 let v_Vuna_dLoader_dmodulesExportingCtor = fun modules imports name -> v_Vuna_dLoader_dmodulesExportingCtorFrom
@@ -2914,7 +2920,7 @@ modules (v_Vuna_dLoader_dopenModuleNames imports) name
 let rec v_Vuna_dLoader_dmodulesExportingTypeFrom = fun modules names name -> (match names with
   | [] -> []
   | (m) :: (rest) -> if v_Vuna_dBase_dmemName name (v_Vuna_dLoader_dtypeExportsOf modules m) then (m)
-  :: (v_Vuna_dLoader_dmodulesExportingTypeFrom modules rest name) 
+  :: (v_Vuna_dLoader_dmodulesExportingTypeFrom modules rest name)
   else v_Vuna_dLoader_dmodulesExportingTypeFrom modules rest name)
 
 let v_Vuna_dLoader_dmodulesExportingType = fun modules imports name -> v_Vuna_dLoader_dmodulesExportingTypeFrom
@@ -2922,7 +2928,7 @@ modules (v_Vuna_dLoader_dopenModuleNames imports) name
 
 let rec v_Vuna_dBase_dlookupPair = fun a0 a1 -> match (a0, a1) with
   | (name, []) -> C_Vuna_dBase_dNothing
-  | (name, (C_Vuna_dBase_dPair (k, v)) :: (rest)) -> if bi_eq_str k name then C_Vuna_dBase_dJust (v) 
+  | (name, (C_Vuna_dBase_dPair (k, v)) :: (rest)) -> if bi_eq_str k name then C_Vuna_dBase_dJust (v)
 else v_Vuna_dBase_dlookupPair name rest
 
 let rec v_Vuna_dTypecheck_drebuildDecls = fun a0 a1 -> match (a0, a1) with
@@ -2944,7 +2950,7 @@ and v_Vuna_dEval_devalVar = fun decls env name -> (match v_Vuna_dBase_dlookupPai
   | C_Vuna_dBase_dJust (v) -> v_Vuna_dEval_dforceValue decls v
   | C_Vuna_dBase_dNothing -> v_Vuna_dEval_devalGlobal decls name)
 and v_Vuna_dEval_devalGlobal = fun decls name -> (match v_Vuna_dAst_dfunArity name decls with
-  | C_Vuna_dBase_dJust (arity) -> if bi_eq_int arity 0 then v_Vuna_dEval_dcallFunction decls name [] 
+  | C_Vuna_dBase_dJust (arity) -> if bi_eq_int arity 0 then v_Vuna_dEval_dcallFunction decls name []
   else C_Vuna_dBase_dOk (C_Vuna_dEval_dVFun (name, []))
   | C_Vuna_dBase_dNothing -> v_Vuna_dEval_devalGlobalNonFun decls name)
 and v_Vuna_dEval_devalExpr = fun decls env expr -> (match expr with
@@ -3014,9 +3020,9 @@ and v_Vuna_dEval_dapplyFun = fun decls name bound arg -> (match v_Vuna_dAst_dfun
   | C_Vuna_dBase_dNothing -> C_Vuna_dBase_dErr ((("unknown function: ") ^ (name)))
   | C_Vuna_dBase_dJust (arity) -> (let bound2 = v_Vuna_dBase_dappend bound ((arg) :: ([])) in
     if bi_lt_int (v_Vuna_dBase_dlength bound2) arity then C_Vuna_dBase_dOk (C_Vuna_dEval_dVFun (name,
-        bound2)) 
+        bound2))
     else if bi_eq_int (v_Vuna_dBase_dlength bound2) arity then v_Vuna_dEval_dcallFunction decls name bound2
-    
+
     else C_Vuna_dBase_dErr ((("too many arguments for ") ^ (name)))))
 and v_Vuna_dEval_dapplyLambda = fun decls params body env arg -> (match params with
   | [] -> C_Vuna_dBase_dErr ("lambda has no parameters")
@@ -3028,7 +3034,7 @@ and v_Vuna_dEval_dcallFunction = fun decls name args -> v_Vuna_dEval_dtryClauses
 and v_Vuna_dEval_dtryClauses = fun a0 a1 a2 a3 -> match (a0, a1, a2, a3) with
   | (decls, name, [], args) -> C_Vuna_dBase_dErr ((("no matching clause for ") ^ (name)))
   | (decls, name, (C_Vuna_dBase_dPair (pats, body)) :: (rest), args) -> if bi_eq_int (v_Vuna_dBase_dlength
-  pats) (v_Vuna_dBase_dlength args) then v_Vuna_dEval_dtryMatch decls name pats body rest args 
+  pats) (v_Vuna_dBase_dlength args) then v_Vuna_dEval_dtryMatch decls name pats body rest args
 else v_Vuna_dEval_dtryClauses decls name rest args
 and v_Vuna_dEval_dtryMatch = fun decls name pats body rest args -> (match v_Vuna_dEval_dmatchPatterns
   pats args with
@@ -3038,7 +3044,7 @@ and v_Vuna_dEval_dtryMatch = fun decls name pats body rest args -> (match v_Vuna
 let v_Vuna_dEval_dinterpretMain = fun decls -> (match v_Vuna_dAst_dfunArity "main" decls with
   | C_Vuna_dBase_dNothing -> C_Vuna_dBase_dErr ("no `main` definition")
   | C_Vuna_dBase_dJust (arity) -> if bi_eq_int arity 0 then v_Vuna_dEval_dcallFunction decls "main" []
-  
+
   else C_Vuna_dBase_dErr ("`main` must be a nullary definition"))
 
 let v_Vuna_dBase_dfirstOf = fun a0 -> match a0 with
@@ -3064,18 +3070,18 @@ and v_Vuna_dTypedCodegen_dgenCall = fun decls env fn args -> v_Vuna_dBase_dandTh
     -> C_Vuna_dBase_dOk (v_Vuna_dTypedCodegen_dgenAppAware decls env fn args f as2)))
 and v_Vuna_dTypedCodegen_dgenExpr = fun decls env expr -> (match expr with
   | C_Vuna_dAst_dEVar (name) -> if v_Vuna_dBase_dmemName name env then C_Vuna_dBase_dOk (v_Vuna_dCodegen_dsanitizeName
-    name) 
+    name)
   else (match v_Vuna_dAst_dctorArity name decls with
-  | C_Vuna_dBase_dJust (arity) -> if bi_eq_str name "Nil" then C_Vuna_dBase_dOk ("[]") 
-    else if bi_eq_str name "True" then C_Vuna_dBase_dOk ("true") 
-    else if bi_eq_str name "False" then C_Vuna_dBase_dOk ("false") 
-    else if bi_eq_int arity 0 then C_Vuna_dBase_dOk (v_Vuna_dTypedCodegen_dctorNameOf name) 
+  | C_Vuna_dBase_dJust (arity) -> if bi_eq_str name "Nil" then C_Vuna_dBase_dOk ("[]")
+    else if bi_eq_str name "True" then C_Vuna_dBase_dOk ("true")
+    else if bi_eq_str name "False" then C_Vuna_dBase_dOk ("false")
+    else if bi_eq_int arity 0 then C_Vuna_dBase_dOk (v_Vuna_dTypedCodegen_dctorNameOf name)
     else C_Vuna_dBase_dErr ((let vuna_cat0' = ("typed codegen: constructor ") in
         (let vuna_cat1' = (name) in
           (let vuna_cat2' = (" used without arguments") in
             String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2']))))
   | C_Vuna_dBase_dNothing -> (match v_Vuna_dTypedCodegen_dbuiltinName name with
-  | C_Vuna_dBase_dJust (ref) -> if bi_eq_str name "getArgs" then C_Vuna_dBase_dOk ("bi_get_args ()") 
+  | C_Vuna_dBase_dJust (ref) -> if bi_eq_str name "getArgs" then C_Vuna_dBase_dOk ("bi_get_args ()")
       else C_Vuna_dBase_dOk (ref)
   | C_Vuna_dBase_dNothing -> (match v_Vuna_dAst_dfunArity name decls with
   | C_Vuna_dBase_dJust (0) -> C_Vuna_dBase_dOk (v_Vuna_dTypedCodegen_dzeroArgRef decls name)
@@ -3085,13 +3091,13 @@ and v_Vuna_dTypedCodegen_dgenExpr = fun decls env expr -> (match expr with
   | C_Vuna_dAst_dEStr (s) -> C_Vuna_dBase_dOk (v_Vuna_dTypedCodegen_dtypedString s)
   | C_Vuna_dAst_dEApp (fn, args) -> (match fn with
   | C_Vuna_dAst_dEVar (name) -> (match v_Vuna_dAst_dctorArity name decls with
-  | C_Vuna_dBase_dJust (arity) -> if (if ((if (bi_eq_str name "Nil") then true 
-            else (bi_eq_str name "True"))) then true 
+  | C_Vuna_dBase_dJust (arity) -> if (if ((if (bi_eq_str name "Nil") then true
+            else (bi_eq_str name "True"))) then true
         else (bi_eq_str name "False")) then C_Vuna_dBase_dErr ((let vuna_cat0' = ("typed codegen: constructor ")
           in
           (let vuna_cat1' = (name) in
             (let vuna_cat2' = (" cannot take arguments") in
-              String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'])))) 
+              String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2']))))
       else if bi_eq_str name "Cons" then (match args with
   | (h) :: ((t) :: ([])) -> v_Vuna_dBase_dandThen (v_Vuna_dTypedCodegen_dgenExpr decls env h) (fun ph
           -> v_Vuna_dBase_dandThen (v_Vuna_dTypedCodegen_dgenExpr decls env t) (fun pt -> C_Vuna_dBase_dOk
@@ -3101,7 +3107,7 @@ and v_Vuna_dTypedCodegen_dgenExpr = fun decls env expr -> (match expr with
                     (let vuna_cat3' = (pt) in
                       (let vuna_cat4' = (")") in
                         String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'; vuna_cat3'; vuna_cat4']))))))))
-  | _ -> C_Vuna_dBase_dErr ("typed codegen: Cons arity")) 
+  | _ -> C_Vuna_dBase_dErr ("typed codegen: Cons arity"))
       else if bi_eq_int (v_Vuna_dBase_dlength args) arity then v_Vuna_dBase_dandThen (v_Vuna_dTypedCodegen_dgenArgs
         decls env args) (fun as2 -> (match as2 with
   | (a) :: ([]) -> C_Vuna_dBase_dOk ((let vuna_cat0' = (v_Vuna_dTypedCodegen_dctorNameOf name) in
@@ -3113,7 +3119,7 @@ and v_Vuna_dTypedCodegen_dgenExpr = fun decls env expr -> (match expr with
               (let vuna_cat1' = (" (") in
                 (let vuna_cat2' = (v_Vuna_dTypedCodegen_djoinWith ", " as2) in
                   (let vuna_cat3' = (")") in
-                    String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'; vuna_cat3']))))))) 
+                    String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'; vuna_cat3'])))))))
       else C_Vuna_dBase_dErr ((("typed codegen: partial constructor ") ^ (name)))
   | C_Vuna_dBase_dNothing -> if bi_eq_str name "&&" then (match args with
   | (a) :: ((b) :: ([])) -> v_Vuna_dBase_dandThen (v_Vuna_dTypedCodegen_dgenExpr decls env a) (fun ga
@@ -3124,7 +3130,7 @@ and v_Vuna_dTypedCodegen_dgenExpr = fun decls env expr -> (match expr with
                     (let vuna_cat3' = (gb) in
                       (let vuna_cat4' = (") else false)") in
                         String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'; vuna_cat3'; vuna_cat4']))))))))
-  | _ -> v_Vuna_dTypedCodegen_dgenCall decls env fn args) 
+  | _ -> v_Vuna_dTypedCodegen_dgenCall decls env fn args)
       else if bi_eq_str name "||" then (match args with
   | (a) :: ((b) :: ([])) -> v_Vuna_dBase_dandThen (v_Vuna_dTypedCodegen_dgenExpr decls env a) (fun ga
           -> v_Vuna_dBase_dandThen (v_Vuna_dTypedCodegen_dgenExpr decls env b) (fun gb -> C_Vuna_dBase_dOk
@@ -3134,7 +3140,7 @@ and v_Vuna_dTypedCodegen_dgenExpr = fun decls env expr -> (match expr with
                     (let vuna_cat3' = (gb) in
                       (let vuna_cat4' = ("))") in
                         String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'; vuna_cat3'; vuna_cat4']))))))))
-  | _ -> v_Vuna_dTypedCodegen_dgenCall decls env fn args) 
+  | _ -> v_Vuna_dTypedCodegen_dgenCall decls env fn args)
       else if bi_eq_str name "++" then (match args with
   | (_) :: ((_) :: ([])) -> (match v_Vuna_dTypedCodegen_dfoldStringLiterals (v_Vuna_dTypedCodegen_dconcatFlatten
             expr) with
@@ -3148,7 +3154,7 @@ and v_Vuna_dTypedCodegen_dgenExpr = fun decls env expr -> (match expr with
                         (let vuna_cat4' = ("))") in
                         String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'; vuna_cat3'; vuna_cat4']))))))))
   | pieces -> v_Vuna_dTypedCodegen_dgenConcatN decls env pieces)
-  | _ -> v_Vuna_dTypedCodegen_dgenCall decls env fn args) 
+  | _ -> v_Vuna_dTypedCodegen_dgenCall decls env fn args)
       else v_Vuna_dTypedCodegen_dgenCall decls env fn args)
   | _ -> v_Vuna_dTypedCodegen_dgenCall decls env fn args)
   | C_Vuna_dAst_dELam (params, body) -> (let env2 = v_Vuna_dBase_dappend params env in
@@ -3219,9 +3225,9 @@ let v_Vuna_dTypedCodegen_dgenFunction = fun decls name -> (match v_Vuna_dAst_dfu
   | C_Vuna_dBase_dJust (arity) -> (match v_Vuna_dAst_dclausesFor decls name with
   | [] -> C_Vuna_dBase_dErr ((("typed codegen: no clauses for ") ^ (name)))
   | (C_Vuna_dBase_dPair (pats, body)) :: ([]) -> if bi_eq_int arity 0 then if v_Vuna_dTypedCodegen_disPureZeroArg
-    decls name then v_Vuna_dTypedCodegen_dgenExpr decls [] body 
+    decls name then v_Vuna_dTypedCodegen_dgenExpr decls [] body
     else v_Vuna_dBase_dandThen (v_Vuna_dTypedCodegen_dgenExpr decls [] body) (fun b -> C_Vuna_dBase_dOk
-      ((("fun () -> ") ^ (b)))) 
+      ((("fun () -> ") ^ (b))))
     else if v_Vuna_dTypedCodegen_dallVarPatterns pats then v_Vuna_dBase_dandThen (v_Vuna_dTypedCodegen_dgenExpr
       decls (v_Vuna_dBase_dconcatMap v_Vuna_dTypedCodegen_dpatVars pats) body) (fun b -> C_Vuna_dBase_dOk
       ((let vuna_cat0' = ("fun ") in
@@ -3229,11 +3235,11 @@ let v_Vuna_dTypedCodegen_dgenFunction = fun decls name -> (match v_Vuna_dAst_dfu
                 pats)) in
             (let vuna_cat2' = (" -> ") in
               (let vuna_cat3' = (b) in
-                String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'; vuna_cat3'])))))) 
+                String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'; vuna_cat3']))))))
     else v_Vuna_dBase_dandThen (v_Vuna_dTypedCodegen_dmapResult (v_Vuna_dTypedCodegen_dgenClause decls
         []) (v_Vuna_dAst_dclausesFor decls name)) (fun arms -> (let params = v_Vuna_dTypedCodegen_dgenParams
         arity in
-        (let matched = if bi_eq_int arity 1 then "a0" 
+        (let matched = if bi_eq_int arity 1 then "a0"
           else (let vuna_cat0' = ("(") in
             (let vuna_cat1' = (v_Vuna_dTypedCodegen_djoinWith ", " params) in
               (let vuna_cat2' = (")") in
@@ -3249,7 +3255,7 @@ let v_Vuna_dTypedCodegen_dgenFunction = fun decls name -> (match v_Vuna_dAst_dfu
   | (first) :: (rest) -> v_Vuna_dBase_dandThen (v_Vuna_dTypedCodegen_dmapResult (v_Vuna_dTypedCodegen_dgenClause
         decls []) (v_Vuna_dAst_dclausesFor decls name)) (fun arms -> (let params = v_Vuna_dTypedCodegen_dgenParams
         arity in
-        (let matched = if bi_eq_int arity 1 then "a0" 
+        (let matched = if bi_eq_int arity 1 then "a0"
           else (let vuna_cat0' = ("(") in
             (let vuna_cat1' = (v_Vuna_dTypedCodegen_djoinWith ", " params) in
               (let vuna_cat2' = (")") in
@@ -3272,7 +3278,7 @@ let v_Vuna_dTypedCodegen_dgenGroupDef = fun decls name -> v_Vuna_dBase_dandThen 
 
 let v_Vuna_dTypedCodegen_dgenGroup = fun decls group -> v_Vuna_dBase_dandThen (v_Vuna_dTypedCodegen_dmapResult
   (v_Vuna_dTypedCodegen_dgenGroupDef decls) group) (fun defs -> C_Vuna_dBase_dOk (((if v_Vuna_dTypedCodegen_dgroupNeedsRec
-        decls group then "let rec " 
+        decls group then "let rec "
         else "let ") ^ (v_Vuna_dTypedCodegen_djoinWith "\nand " defs))))
 
 let v_Vuna_dTypedCodegen_dgenTop = fun decls -> (match v_Vuna_dTypedCodegen_dfunctionNames decls with
@@ -3295,7 +3301,7 @@ let v_Vuna_dTypecheck_dhasSig = fun name sigs -> v_Vuna_dBase_dmemName name (v_V
 let rec v_Vuna_dTypecheck_dseedPlaceholders = fun a0 a1 a2 -> match (a0, a1, a2) with
   | ([], sigs, st) -> C_Vuna_dBase_dPair ([], st)
   | ((name) :: (rest), sigs, st) -> if v_Vuna_dTypecheck_dhasSig name sigs then v_Vuna_dTypecheck_dseedPlaceholders
-rest sigs st 
+rest sigs st
 else (match v_Vuna_dTypecheck_dfreshTy st with
   | C_Vuna_dBase_dPair (ty, st1) -> (match v_Vuna_dTypecheck_dseedPlaceholders rest sigs st1 with
   | C_Vuna_dBase_dPair (ps, st2) -> C_Vuna_dBase_dPair ((C_Vuna_dBase_dPair (name, C_Vuna_dTypecheck_dScheme
@@ -3304,7 +3310,7 @@ else (match v_Vuna_dTypecheck_dfreshTy st with
 let rec v_Vuna_dCodegen_dvalidateCtors = fun a0 -> match a0 with
   | ([]) -> C_Vuna_dBase_dOk ([])
   | ((C_Vuna_dBase_dPair (name, arity)) :: (rest)) -> if v_Vuna_dBase_dmemName name (v_Vuna_dBase_dmap
-  v_Vuna_dBase_dfirstOf rest) then C_Vuna_dBase_dErr ((("duplicate constructor: ") ^ (name))) 
+  v_Vuna_dBase_dfirstOf rest) then C_Vuna_dBase_dErr ((("duplicate constructor: ") ^ (name)))
 else v_Vuna_dCodegen_dvalidateCtors rest
 
 let rec v_Vuna_dLoader_dcheckImportAliases = fun label moduleNames aliases -> (match aliases with
@@ -3314,22 +3320,22 @@ let rec v_Vuna_dLoader_dcheckImportAliases = fun label moduleNames aliases -> (m
       in
       (let vuna_cat1' = (": duplicate module alias ") in
         (let vuna_cat2' = (alias) in
-          String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'])))) 
+          String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2']))))
   else if v_Vuna_dBase_dmemName alias moduleNames then if bi_eq_str alias m then v_Vuna_dLoader_dcheckImportAliases
-  label moduleNames rest 
+  label moduleNames rest
   else C_Vuna_dBase_dErr ((let vuna_cat0' = (label) in
       (let vuna_cat1' = (": module alias ") in
         (let vuna_cat2' = (alias) in
           (let vuna_cat3' = (" conflicts with an imported module") in
-            String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'; vuna_cat3']))))) 
-  else v_Vuna_dLoader_dcheckImportAliases label moduleNames rest 
+            String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'; vuna_cat3'])))))
+  else v_Vuna_dLoader_dcheckImportAliases label moduleNames rest
   else C_Vuna_dBase_dErr ((let vuna_cat0' = (label) in
       (let vuna_cat1' = (": invalid module alias ") in
         (let vuna_cat2' = (alias) in
           String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'])))))
 
 let v_Vuna_dLoader_dvalidateImports = fun label imports -> if v_Vuna_dLoader_dhasDuplicateName (v_Vuna_dLoader_dimportModuleNames
-  imports) then C_Vuna_dBase_dErr (((label) ^ (": duplicate import"))) 
+  imports) then C_Vuna_dBase_dErr (((label) ^ (": duplicate import")))
 else v_Vuna_dLoader_dcheckImportAliases label (v_Vuna_dLoader_dimportModuleNames imports) (v_Vuna_dLoader_dimportAliases
   imports)
 
@@ -3449,7 +3455,7 @@ let rec v_Vuna_dCodegen_dgenBranches = fun a0 a1 a2 -> match (a0, a1, a2) with
   | (decls, arity, []) -> C_Vuna_dBase_dOk ([])
   | (decls, arity, (C_Vuna_dBase_dPair (pats, body)) :: (rest)) -> v_Vuna_dBase_dandThen (v_Vuna_dBase_dtraverse
   v_Vuna_dCodegen_dgenPattern pats) (fun parts -> (let patternCode = if bi_eq_int arity 1 then v_Vuna_dCodegen_dheadOf
-    (v_Vuna_dBase_dmap v_Vuna_dBase_dfirstOf parts) 
+    (v_Vuna_dBase_dmap v_Vuna_dBase_dfirstOf parts)
     else (let vuna_cat0' = ("(") in
       (let vuna_cat1' = (v_Vuna_dCodegen_djoinList ", " (v_Vuna_dBase_dmap v_Vuna_dBase_dfirstOf parts))
         in
@@ -3473,9 +3479,9 @@ let v_Vuna_dCodegen_dgenFunction = fun decls name clauses -> v_Vuna_dBase_dandTh
       decls [] body) (fun b -> C_Vuna_dBase_dOk ((let vuna_cat0' = ("(fun () -> ") in
           (let vuna_cat1' = (b) in
             (let vuna_cat2' = (")") in
-              String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2']))))) 
+              String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'])))))
     else (let params = v_Vuna_dCodegen_dmakeParams arity in
-      (let scrutinee = if bi_eq_int arity 1 then v_Vuna_dCodegen_dheadOf params 
+      (let scrutinee = if bi_eq_int arity 1 then v_Vuna_dCodegen_dheadOf params
         else (let vuna_cat0' = ("(") in
           (let vuna_cat1' = (v_Vuna_dCodegen_djoinList ", " params) in
             (let vuna_cat2' = (")") in
@@ -3500,7 +3506,7 @@ let rec v_Vuna_dCodegen_dgenFunctions = fun a0 a1 -> match (a0, a1) with
 
 let rec v_Vuna_dCodegen_drenderRecsFrom = fun a0 a1 -> match (a0, a1) with
   | ([], index) -> ""
-  | ((f) :: (rest), index) -> (let prefix = if bi_eq_int index 0 then "let rec " 
+  | ((f) :: (rest), index) -> (let prefix = if bi_eq_int index 0 then "let rec "
   else "and " in
   (let vuna_cat0' = (prefix) in
     (let vuna_cat1' = ("v_") in
@@ -3524,7 +3530,7 @@ let v_Vuna_dCodegen_dgenerateProgram = fun decls printResult -> (match v_Vuna_dC
                   (let vuna_cat2' = (v_Vuna_dCodegen_dgenBuiltinDef v_Vuna_dCodegen_dbuiltinInfos) in
                     (let vuna_cat3' = (v_Vuna_dCodegen_drenderRecsFrom defs 0) in
                       (let vuna_cat4' = (if printResult then "let () = print_endline (show_value (v_main ()))\n"
-                        
+
                         else "let () = ignore (v_main ())\n") in
                         String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'; vuna_cat3'; vuna_cat4']))))))))
   | C_Vuna_dBase_dJust (arity) -> C_Vuna_dBase_dErr ("`main` must be a nullary definition")
@@ -3532,7 +3538,7 @@ let v_Vuna_dCodegen_dgenerateProgram = fun decls printResult -> (match v_Vuna_dC
 
 let rec v_Vuna_dBase_dmemChar = fun c chars -> (match chars with
   | [] -> false
-  | (x) :: (rest) -> if bi_eq_int x c then true 
+  | (x) :: (rest) -> if bi_eq_int x c then true
   else v_Vuna_dBase_dmemChar c rest)
 
 let v_Vuna_dBase_dcontainsDot = fun s -> v_Vuna_dBase_dmemChar 46 (bi_str_unpack s)
@@ -3541,21 +3547,21 @@ let v_Vuna_dLoader_dcheckBinder = fun label name -> if v_Vuna_dBase_dcontainsDot
 ((let vuna_cat0' = (label) in
     (let vuna_cat1' = (": invalid variable name ") in
       (let vuna_cat2' = (name) in
-        String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'])))) 
+        String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2']))))
 else C_Vuna_dBase_dOk (name)
 
 let v_Vuna_dLoader_dcheckTopName = fun label name -> if v_Vuna_dBase_dcontainsDot name then C_Vuna_dBase_dErr
 ((let vuna_cat0' = (label) in
     (let vuna_cat1' = (": invalid top-level name ") in
       (let vuna_cat2' = (name) in
-        String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'])))) 
+        String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2']))))
 else C_Vuna_dBase_dOk (name)
 
 let v_Vuna_dLoader_dresolveTopName = fun label prefix name -> v_Vuna_dBase_dandThen (v_Vuna_dLoader_dcheckTopName
   label name) (fun _u -> C_Vuna_dBase_dOk (v_Vuna_dLoader_dmangle prefix name))
 
 let v_Vuna_dLoader_dresolveCtorDecl = fun label prefix ctor -> if v_Vuna_dLoader_disGlobalCtor ctor then
-C_Vuna_dBase_dOk (ctor) 
+C_Vuna_dBase_dOk (ctor)
 else v_Vuna_dBase_dandThen (v_Vuna_dLoader_dcheckTopName label ctor) (fun _u -> C_Vuna_dBase_dOk (v_Vuna_dLoader_dmangle
     prefix ctor))
 
@@ -3565,7 +3571,7 @@ let v_Vuna_dLoader_dresolveTypeTopName = fun label prefix name -> v_Vuna_dBase_d
 let rec v_Vuna_dBase_dsplitCharsOnDot = fun chars acc seg -> (match chars with
   | [] -> v_Vuna_dBase_dreverse ((bi_str_pack (v_Vuna_dBase_dreverse seg)) :: (acc))
   | (c) :: (rest) -> if bi_eq_int c 46 then v_Vuna_dBase_dsplitCharsOnDot rest ((bi_str_pack (v_Vuna_dBase_dreverse
-        seg)) :: (acc)) [] 
+        seg)) :: (acc)) []
   else v_Vuna_dBase_dsplitCharsOnDot rest acc ((c) :: (seg)))
 
 let v_Vuna_dBase_dsplitOnDot = fun s -> v_Vuna_dBase_dsplitCharsOnDot (bi_str_unpack s) [] []
@@ -3591,17 +3597,17 @@ let rec v_Vuna_dTypedCodegen_dnonSpecialData = fun decls -> (match v_Vuna_dTyped
   | [] -> []
   | (d) :: (rest) -> (match d with
   | C_Vuna_dAst_dDData (name, params, ctors) -> if (if (v_Vuna_dTypedCodegen_disBoolName name) then true
-      
-      else (v_Vuna_dTypedCodegen_disListName name)) then v_Vuna_dTypedCodegen_dnonSpecialData rest 
+
+      else (v_Vuna_dTypedCodegen_disListName name)) then v_Vuna_dTypedCodegen_dnonSpecialData rest
     else (d) :: (v_Vuna_dTypedCodegen_dnonSpecialData rest)
   | _ -> v_Vuna_dTypedCodegen_dnonSpecialData rest))
 
 let rec v_Vuna_dTypedCodegen_docamlType = fun decls params expr -> (match expr with
-  | C_Vuna_dAst_dEVar (name) -> if bi_eq_str name "Int" then C_Vuna_dBase_dOk ("int") 
-  else if bi_eq_str name "String" then C_Vuna_dBase_dOk ("string") 
-  else if v_Vuna_dTypedCodegen_disBoolName name then C_Vuna_dBase_dOk ("bool") 
+  | C_Vuna_dAst_dEVar (name) -> if bi_eq_str name "Int" then C_Vuna_dBase_dOk ("int")
+  else if bi_eq_str name "String" then C_Vuna_dBase_dOk ("string")
+  else if v_Vuna_dTypedCodegen_disBoolName name then C_Vuna_dBase_dOk ("bool")
   else if v_Vuna_dTypedCodegen_disListName name then C_Vuna_dBase_dErr ("List type needs an argument")
-  
+
   else (match v_Vuna_dTypedCodegen_dlookupParam name params with
   | C_Vuna_dBase_dJust (ty) -> C_Vuna_dBase_dOk (ty)
   | C_Vuna_dBase_dNothing -> (match v_Vuna_dTypedCodegen_dlookupData decls name with
@@ -3624,7 +3630,7 @@ let rec v_Vuna_dTypedCodegen_docamlType = fun decls params expr -> (match expr w
             (let vuna_cat1' = (ta) in
               (let vuna_cat2' = (") list") in
                 String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'])))))
-  | _ -> C_Vuna_dBase_dErr ("typed codegen: invalid List type")) 
+  | _ -> C_Vuna_dBase_dErr ("typed codegen: invalid List type"))
     else (match v_Vuna_dTypedCodegen_dlookupData decls name with
   | C_Vuna_dBase_dNothing -> C_Vuna_dBase_dErr ((("typed codegen: unknown type constructor ") ^ (name)))
   | C_Vuna_dBase_dJust (d) -> v_Vuna_dBase_dandThen (v_Vuna_dTypedCodegen_dmapResult (v_Vuna_dTypedCodegen_docamlType
@@ -3674,11 +3680,11 @@ let v_Vuna_dTypedCodegen_dgenTypeDecls = fun decls -> (match v_Vuna_dTypedCodege
             String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2']))))))
 
 let rec v_Vuna_dTypedCodegen_dshowForType = fun decls params expr -> (match expr with
-  | C_Vuna_dAst_dEVar (name) -> if bi_eq_str name "Int" then C_Vuna_dBase_dOk ("string_of_int") 
-  else if bi_eq_str name "String" then C_Vuna_dBase_dOk ("show_vstring") 
-  else if v_Vuna_dTypedCodegen_disBoolName name then C_Vuna_dBase_dOk ("show_vbool") 
+  | C_Vuna_dAst_dEVar (name) -> if bi_eq_str name "Int" then C_Vuna_dBase_dOk ("string_of_int")
+  else if bi_eq_str name "String" then C_Vuna_dBase_dOk ("show_vstring")
+  else if v_Vuna_dTypedCodegen_disBoolName name then C_Vuna_dBase_dOk ("show_vbool")
   else if v_Vuna_dTypedCodegen_disListName name then C_Vuna_dBase_dErr ("typed codegen: List type needs an argument")
-  
+
   else (match v_Vuna_dTypedCodegen_dlookupParam name params with
   | C_Vuna_dBase_dJust (s) -> C_Vuna_dBase_dOk (s)
   | C_Vuna_dBase_dNothing -> (match v_Vuna_dTypedCodegen_dlookupData decls name with
@@ -3693,7 +3699,7 @@ let rec v_Vuna_dTypedCodegen_dshowForType = fun decls params expr -> (match expr
             (let vuna_cat1' = (sa) in
               (let vuna_cat2' = (") x ^ \" \" ^ go xs ^ \")\" in go v)") in
                 String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'])))))
-  | _ -> C_Vuna_dBase_dErr ("typed codegen: invalid List show type")) 
+  | _ -> C_Vuna_dBase_dErr ("typed codegen: invalid List show type"))
     else (match v_Vuna_dTypedCodegen_dlookupData decls name with
   | C_Vuna_dBase_dJust (d) -> v_Vuna_dBase_dandThen (v_Vuna_dTypedCodegen_dmapResult (v_Vuna_dTypedCodegen_dshowForType
           decls params) args) (fun ss -> C_Vuna_dBase_dOk ((let vuna_cat0' = ("(") in
@@ -3710,9 +3716,9 @@ let rec v_Vuna_dTypedCodegen_dshowForTy = fun decls ty -> (match ty with
   | C_Vuna_dTypecheck_dTVar (i) -> C_Vuna_dBase_dOk ("(fun _ -> \"<value>\")")
   | C_Vuna_dTypecheck_dTFun (a, b) -> C_Vuna_dBase_dOk ("(fun _ -> \"<function>\")")
   | C_Vuna_dTypecheck_dTCon (name, args) -> if bi_eq_str name "Int" then C_Vuna_dBase_dOk ("string_of_int")
-  
-  else if bi_eq_str name "String" then C_Vuna_dBase_dOk ("show_vstring") 
-  else if v_Vuna_dTypedCodegen_disBoolName name then C_Vuna_dBase_dOk ("show_vbool") 
+
+  else if bi_eq_str name "String" then C_Vuna_dBase_dOk ("show_vstring")
+  else if v_Vuna_dTypedCodegen_disBoolName name then C_Vuna_dBase_dOk ("show_vbool")
   else if v_Vuna_dTypedCodegen_disListName name then (match args with
   | (a) :: ([]) -> v_Vuna_dBase_dandThen (v_Vuna_dTypedCodegen_dshowForTy decls a) (fun sa -> C_Vuna_dBase_dOk
       ((let vuna_cat0' = ("(fun v -> let rec go = function [] -> \"Nil\" | x :: xs -> \"(Cons \" ^ (")
@@ -3720,7 +3726,7 @@ let rec v_Vuna_dTypedCodegen_dshowForTy = fun decls ty -> (match ty with
           (let vuna_cat1' = (sa) in
             (let vuna_cat2' = (") x ^ \" \" ^ go xs ^ \")\" in go v)") in
               String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'])))))
-  | _ -> C_Vuna_dBase_dErr ("typed codegen: main List type must have one argument")) 
+  | _ -> C_Vuna_dBase_dErr ("typed codegen: main List type must have one argument"))
   else v_Vuna_dBase_dandThen (v_Vuna_dTypedCodegen_dmapResult (v_Vuna_dTypedCodegen_dshowForTy decls)
     args) (fun ss -> C_Vuna_dBase_dOk ((let vuna_cat0' = ("(") in
         (let vuna_cat1' = (v_Vuna_dTypedCodegen_dshowNameOf name) in
@@ -3819,11 +3825,11 @@ let v_Vuna_dTypecheck_dshortTyName = fun name -> (match v_Vuna_dBase_dsplitLastD
 
 let v_Vuna_dTypecheck_dspecializeCmp = fun name ty -> (match ty with
   | C_Vuna_dTypecheck_dTCon (n, args) -> if bi_eq_str (v_Vuna_dTypecheck_dshortTyName n) "Int" then v_Vuna_dTypecheck_dintCmpName
-  name 
+  name
   else if bi_eq_str (v_Vuna_dTypecheck_dshortTyName n) "String" then v_Vuna_dTypecheck_dstrCmpName name
-  
+
   else if bi_eq_str (v_Vuna_dTypecheck_dshortTyName n) "Bool" then v_Vuna_dTypecheck_dboolCmpName name
-  
+
   else name
   | _ -> name)
 
@@ -3861,8 +3867,8 @@ let rec v_Vuna_dTypecheck_dlowerClauses = fun a0 a1 -> match (a0, a1) with
   subst rest)
 
 let v_Vuna_dTypecheck_dsameBuiltinTy = fun a b -> (let sa = v_Vuna_dTypecheck_dshortTyName a in
-  (if ((if (bi_eq_str sa "Bool") then true 
-        else (bi_eq_str sa "List"))) then (bi_eq_str sa (v_Vuna_dTypecheck_dshortTyName b)) 
+  (if ((if (bi_eq_str sa "Bool") then true
+        else (bi_eq_str sa "List"))) then (bi_eq_str sa (v_Vuna_dTypecheck_dshortTyName b))
     else false))
 
 let rec v_Vuna_dTypecheck_dunifyLists = fun a0 a1 a2 -> match (a0, a1, a2) with
@@ -3876,18 +3882,18 @@ and v_Vuna_dTypecheck_dunify = fun a b st -> (match st with
   | ra -> (match v_Vuna_dTypecheck_dresolveTy s b with
   | rb -> (match ra with
   | C_Vuna_dTypecheck_dTVar (i) -> (match rb with
-  | C_Vuna_dTypecheck_dTVar (j) -> if bi_eq_int i j then C_Vuna_dBase_dOk (st) 
+  | C_Vuna_dTypecheck_dTVar (j) -> if bi_eq_int i j then C_Vuna_dBase_dOk (st)
           else v_Vuna_dTypecheck_dbindVar i rb st
   | _ -> if v_Vuna_dTypecheck_doccursIn i s rb then C_Vuna_dBase_dErr ((("occurs check: ") ^ (v_Vuna_dTypecheck_dshowTy
-                rb))) 
+                rb)))
           else v_Vuna_dTypecheck_dbindVar i rb st)
   | C_Vuna_dTypecheck_dTCon (tn, xs) -> (match rb with
   | C_Vuna_dTypecheck_dTVar (j) -> if v_Vuna_dTypecheck_doccursIn j s ra then C_Vuna_dBase_dErr ((("occurs check: ")
-              ^ (v_Vuna_dTypecheck_dshowTy ra))) 
+              ^ (v_Vuna_dTypecheck_dshowTy ra)))
           else v_Vuna_dTypecheck_dbindVar j ra st
-  | C_Vuna_dTypecheck_dTCon (tn2, ys) -> if (if (bi_eq_str tn tn2) then true 
+  | C_Vuna_dTypecheck_dTCon (tn2, ys) -> if (if (bi_eq_str tn tn2) then true
             else (v_Vuna_dTypecheck_dsameBuiltinTy tn tn2)) then v_Vuna_dTypecheck_dunifyLists xs ys st
-          
+
           else C_Vuna_dBase_dErr ((let vuna_cat0' = ("type mismatch: ") in
               (let vuna_cat1' = (v_Vuna_dTypecheck_dshowTy ra) in
                 (let vuna_cat2' = (" vs ") in
@@ -3900,7 +3906,7 @@ and v_Vuna_dTypecheck_dunify = fun a b st -> (match st with
                     String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'; vuna_cat3']))))))
   | C_Vuna_dTypecheck_dTFun (x, y) -> (match rb with
   | C_Vuna_dTypecheck_dTVar (j) -> if v_Vuna_dTypecheck_doccursIn j s ra then C_Vuna_dBase_dErr ((("occurs check: ")
-              ^ (v_Vuna_dTypecheck_dshowTy ra))) 
+              ^ (v_Vuna_dTypecheck_dshowTy ra)))
           else v_Vuna_dTypecheck_dbindVar j ra st
   | C_Vuna_dTypecheck_dTFun (x2, y2) -> v_Vuna_dBase_dandThen (v_Vuna_dTypecheck_dunify x x2 st) (fun
             st2 -> v_Vuna_dTypecheck_dunify y y2 st2)
@@ -3930,7 +3936,7 @@ and v_Vuna_dTypecheck_dinferPattern = fun globals locals st pat expected -> (mat
   | C_Vuna_dBase_dPair (ctorTy, st1) -> (let argTys = v_Vuna_dTypecheck_dfunArgs ctorTy in
         if bi_eq_int (v_Vuna_dBase_dlength pats) (v_Vuna_dBase_dlength argTys) then v_Vuna_dBase_dandThen
         (v_Vuna_dTypecheck_dunify expected (v_Vuna_dTypecheck_dfunResult ctorTy) st1) (fun st2 -> v_Vuna_dTypecheck_dinferPatterns
-          globals locals pats argTys st2) 
+          globals locals pats argTys st2)
         else C_Vuna_dBase_dErr ((let vuna_cat0' = ("constructor ") in
             (let vuna_cat1' = (name) in
               (let vuna_cat2' = (" expects ") in
@@ -4068,7 +4074,7 @@ let v_Vuna_dTypecheck_dcheckFunction = fun globals decls sigs name st -> (match 
   | C_Vuna_dBase_dOk (st3) -> (let elabClauses = v_Vuna_dTypecheck_dlowerClauses (v_Vuna_dTypecheck_dsubstOf
             st3) clauseEls in
           if v_Vuna_dTypecheck_dhasSig name sigs then C_Vuna_dBase_dOk (C_Vuna_dBase_dPair (elabClauses,
-              C_Vuna_dBase_dPair (globals, st3))) 
+              C_Vuna_dBase_dPair (globals, st3)))
           else (let resolved = v_Vuna_dTypecheck_dresolveTy (v_Vuna_dTypecheck_dsubstOf st3) inferred
             in
             (let scheme = C_Vuna_dTypecheck_dScheme (v_Vuna_dTypecheck_ddiffInts (v_Vuna_dTypecheck_dfreeVarsTy
@@ -4168,9 +4174,9 @@ let v_Vuna_dLoader_dresolveQualified = fun modules label imports name -> (match 
             (let vuna_cat2' = (prefix) in
               (let vuna_cat3' = (" is not imported") in
                 String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'; vuna_cat3'])))))
-  | C_Vuna_dBase_dJust (m) -> if v_Vuna_dLoader_disGlobalCtor base then C_Vuna_dBase_dOk (base) 
+  | C_Vuna_dBase_dJust (m) -> if v_Vuna_dLoader_disGlobalCtor base then C_Vuna_dBase_dOk (base)
       else if v_Vuna_dBase_dmemName base (v_Vuna_dLoader_dexportsOf modules m) then C_Vuna_dBase_dOk (v_Vuna_dLoader_dmangle
-        m base) 
+        m base)
       else C_Vuna_dBase_dErr ((let vuna_cat0' = (label) in
           (let vuna_cat1' = (": ") in
             (let vuna_cat2' = (base) in
@@ -4179,12 +4185,12 @@ let v_Vuna_dLoader_dresolveQualified = fun modules label imports name -> (match 
                   String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'; vuna_cat3'; vuna_cat4'])))))))))
 
 let v_Vuna_dLoader_dresolveGlobal = fun modules label prefix own imports scope name -> if v_Vuna_dBase_dmemName
-name scope then C_Vuna_dBase_dOk (name) 
-else if v_Vuna_dLoader_disGlobalCtor name then C_Vuna_dBase_dOk (name) 
+name scope then C_Vuna_dBase_dOk (name)
+else if v_Vuna_dLoader_disGlobalCtor name then C_Vuna_dBase_dOk (name)
 else if v_Vuna_dBase_dcontainsDot name then v_Vuna_dLoader_dresolveQualified modules label imports name
 
-else if v_Vuna_dBase_dmemName name own then C_Vuna_dBase_dOk (v_Vuna_dLoader_dmangle prefix name) 
-else if v_Vuna_dLoader_disBuiltinName name then C_Vuna_dBase_dOk (name) 
+else if v_Vuna_dBase_dmemName name own then C_Vuna_dBase_dOk (v_Vuna_dLoader_dmangle prefix name)
+else if v_Vuna_dLoader_disBuiltinName name then C_Vuna_dBase_dOk (name)
 else (match v_Vuna_dLoader_dmodulesExporting modules imports name with
   | [] -> C_Vuna_dBase_dErr ((let vuna_cat0' = (label) in
       (let vuna_cat1' = (": unbound variable ") in
@@ -4200,7 +4206,7 @@ else (match v_Vuna_dLoader_dmodulesExporting modules imports name with
                 String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'; vuna_cat3'; vuna_cat4'; vuna_cat5']))))))))
 
 let v_Vuna_dLoader_dresolveCtor = fun modules label prefix ownCtors imports name -> if v_Vuna_dLoader_disGlobalCtor
-name then C_Vuna_dBase_dOk (name) 
+name then C_Vuna_dBase_dOk (name)
 else if v_Vuna_dBase_dcontainsDot name then v_Vuna_dLoader_dresolveQualified modules label imports name
 
 else if v_Vuna_dBase_dmemName name ownCtors then C_Vuna_dBase_dOk (v_Vuna_dLoader_dmangle prefix name)
@@ -4278,12 +4284,12 @@ and v_Vuna_dLoader_dresolveExpr = fun modules label prefix own ownCtors imports 
           (c2, t2, e2))))))
 
 let v_Vuna_dLoader_dresolveTypeName = fun modules label prefix ownTypes imports name -> if (if ((if ((if
-          ((if (bi_eq_str name "Int") then true 
-              else (bi_eq_str name "String"))) then true 
-          else (bi_eq_str name "Bool"))) then true 
-      else (bi_eq_str name "Type"))) then true 
-  else (bi_eq_str name "->")) then C_Vuna_dBase_dOk (name) 
-else if v_Vuna_dLoader_disLowerTypeName name then C_Vuna_dBase_dOk (name) 
+          ((if (bi_eq_str name "Int") then true
+              else (bi_eq_str name "String"))) then true
+          else (bi_eq_str name "Bool"))) then true
+      else (bi_eq_str name "Type"))) then true
+  else (bi_eq_str name "->")) then C_Vuna_dBase_dOk (name)
+else if v_Vuna_dLoader_disLowerTypeName name then C_Vuna_dBase_dOk (name)
 else if v_Vuna_dBase_dcontainsDot name then (match v_Vuna_dBase_dsplitLastDot (v_Vuna_dBase_dsplitOnDot
     name) with
   | C_Vuna_dBase_dPair (revPrefix, base) -> (let typePrefix = v_Vuna_dBase_djoinDots revPrefix in
@@ -4294,7 +4300,7 @@ else if v_Vuna_dBase_dcontainsDot name then (match v_Vuna_dBase_dsplitLastDot (v
               (let vuna_cat3' = (" is not imported") in
                 String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'; vuna_cat3'])))))
   | C_Vuna_dBase_dJust (m) -> if v_Vuna_dBase_dmemName base (v_Vuna_dLoader_dtypeExportsOf modules m)
-      then C_Vuna_dBase_dOk (v_Vuna_dLoader_dmangle m base) 
+      then C_Vuna_dBase_dOk (v_Vuna_dLoader_dmangle m base)
       else C_Vuna_dBase_dErr ((let vuna_cat0' = (label) in
           (let vuna_cat1' = (": type ") in
             (let vuna_cat2' = (base) in
@@ -4400,13 +4406,13 @@ and v_Vuna_dLoader_dloadModule = fun root modules stack name -> (match v_Vuna_dL
   name with
   | C_Vuna_dBase_dJust (m) -> C_Vuna_dBase_dOk (modules)
   | C_Vuna_dBase_dNothing -> if v_Vuna_dBase_dmemName name stack then C_Vuna_dBase_dErr ((("import cycle: ")
-      ^ (v_Vuna_dLoader_dshowCycle name stack))) 
+      ^ (v_Vuna_dLoader_dshowCycle name stack)))
   else if v_Vuna_dLoader_dvalidModuleName name then v_Vuna_dBase_dandThen (v_Vuna_dParser_dparseSource
     (bi_read_file (v_Vuna_dLoader_dmodulePath root name))) (fun p -> (match p with
   | C_Vuna_dBase_dPair (imports, decls) -> v_Vuna_dBase_dandThen (v_Vuna_dLoader_dvalidateImports name
         imports) (fun _u -> v_Vuna_dBase_dandThen (v_Vuna_dLoader_dloadAll root modules ((name) :: (stack))
           imports) (fun modules2 -> C_Vuna_dBase_dOk ((C_Vuna_dLoader_dModule (name, imports, decls, v_Vuna_dAst_dtopNames
-                decls)) :: (modules2)))))) 
+                decls)) :: (modules2))))))
   else C_Vuna_dBase_dErr ((("invalid module name: ") ^ (name))))
 
 let v_Vuna_dLoader_dloadProgram = fun root entry -> v_Vuna_dBase_dandThen (v_Vuna_dParser_dparseSource
@@ -4436,8 +4442,8 @@ let v_Vuna_dInterp_dcompileFileTyped = fun root entry printResult -> v_Vuna_dBas
       printResult)))
 
 let v_emit = fun printResult typeCheck typed root entry rest -> (let result = if typed then v_Vuna_dInterp_dcompileFileTyped
-  root entry printResult 
-  else if typeCheck then v_Vuna_dInterp_dcompileFileChecked root entry printResult 
+  root entry printResult
+  else if typeCheck then v_Vuna_dInterp_dcompileFileChecked root entry printResult
   else v_Vuna_dInterp_dcompileFile root entry printResult in
   (match result with
   | C_Vuna_dBase_dOk (code) -> (match rest with
@@ -4453,13 +4459,13 @@ let v_emit = fun printResult typeCheck typed root entry rest -> (let result = if
 
 let rec v_dispatch = fun printResult typeCheck typed root args -> (match args with
   | [] -> v_emitUsage ()
-  | (a) :: (rest) -> if bi_eq_str a "--no-print" then v_dispatch false typeCheck typed root rest 
-  else if bi_eq_str a "--no-typecheck" then v_dispatch printResult false false root rest 
-  else if bi_eq_str a "--typecheck" then v_dispatch printResult true typed root rest 
-  else if bi_eq_str a "--typed" then v_dispatch printResult true true root rest 
+  | (a) :: (rest) -> if bi_eq_str a "--no-print" then v_dispatch false typeCheck typed root rest
+  else if bi_eq_str a "--no-typecheck" then v_dispatch printResult false false root rest
+  else if bi_eq_str a "--typecheck" then v_dispatch printResult true typed root rest
+  else if bi_eq_str a "--typed" then v_dispatch printResult true true root rest
   else if bi_eq_str a "--root" then (match rest with
   | (dir) :: (rest2) -> v_dispatch printResult typeCheck typed dir rest2
-  | [] -> v_emitUsage ()) 
+  | [] -> v_emitUsage ())
   else v_emit printResult typeCheck typed root a rest)
 
 let v_main = fun () -> v_dispatch true true true "lib" (bi_get_args ())
