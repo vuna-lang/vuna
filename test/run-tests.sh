@@ -2,8 +2,8 @@
 # vuna 原生测试：只用 vuna / vuna-boot 驱动。
 #
 # 环境变量（默认取 PATH 中的同名命令）：
-#   VUNA        当前编译器（stage 2）
-#   VUNA_BOOT   种子编译器（stage 1）
+#   VUNA        当前编译器（stage 1）
+#   VUNA_BOOT   种子编译器（stage 0）
 #   OCAMLOPT    OCaml 编译器，默认 ocamlopt
 set -u
 

@@ -11,8 +11,8 @@ M6 完成后删除；需要查看历史可从 git log 找到。
 
 | 工具 | 作用 |
 | --- | --- |
-| `vuna-boot` | stage 1：从 `bootstrap/stage1.ml` 构建的种子二进制 |
-| `vuna` | stage 2：`vuna-boot` 编译当前 `lib/` + `app/Main.vuna` 得到，当前编译器 |
+| `vuna-boot` | stage 0：从 `bootstrap/seed.ml` 构建的种子二进制 |
+| `vuna` | stage 1：`vuna-boot` 编译当前 `lib/` + `app/Main.vuna` 得到，当前编译器 |
 
 `vuna` 统一了原来的编译器与解释器入口：
 
@@ -27,13 +27,13 @@ vuna help
 `vuna-interp` 二进制。
 
 ```text
-bootstrap/stage1.ml（提交入库的 OCaml 种子）──ocamlopt──▶ vuna-boot
+bootstrap/seed.ml（提交入库的 OCaml 信任锚点种子）──ocamlopt──▶ vuna-boot
   │  vuna-boot 编译当前 lib/ + app/Main.vuna
   ▼
-stage2.ml ──ocamlopt──▶ vuna（当前编译器）
+stage1.ml ──ocamlopt──▶ vuna（当前编译器）
   │  vuna 再编译同一份源码
   ▼
-stage3.ml；stage2 == stage3 即 fixed point
+stage2.ml；stage1 == stage2 即 fixed point
 ```
 
 ## 种子策略
@@ -44,10 +44,10 @@ stage3.ml；stage2 == stage3 即 fixed point
 
 - 种子**不需要**与源码同步：日常修改 `lib/`、`app/`、`test/` 不重新生成种子；
 - 种子只通过 **seed rotation** 更新：用当前 `vuna-boot` 编译当前编译器源码，把生成的
-  `stage2.ml` 提交为新种子；
+  `stage1.ml` 提交为新种子；
 - 种子比源码旧是正常状态，但必须始终保持“能编译当前源码”的能力；
 - CI 用 `checks.bootstrap-selfhost` 守这条不变量：用种子编译当前源码，构建出
-  stage 2 / stage 3 并校验字节一致；`checks.fixed-point` 与它同一派生；
+  stage 1 / stage 2 并校验字节一致；`checks.fixed-point` 与它同一派生；
 - 如果新特性会让源码超出旧种子能编译的语法子集，必须先把特性实现成旧语法可编译的
   形式，rotate 种子后再在编译器源码里使用新语法；
 - `bootstrap/` 下所有文件都是生成物，禁止手改。
@@ -56,7 +56,7 @@ stage3.ml；stage2 == stage3 即 fixed point
 
 ```console
 # 前提：当前源码能被当前种子编译（nix flake check 通过）
-vuna --typed --no-print --root lib --root app app/Main.vuna bootstrap/stage1.ml
+vuna --typed --no-print --root lib --root app app/Main.vuna bootstrap/seed.ml
 nix flake check            # 新种子能编译当前源码，且 fixed point 成立
 git diff bootstrap/        # 确认变化可解释
 git add bootstrap/ && git commit
@@ -91,7 +91,7 @@ git add bootstrap/ && git commit
 ├── test/
 │   ├── run-tests.sh      # vuna 原生测试（只用 vuna / vuna-boot）
 │   └── corpus/           # run / run_err / err / modules / lint / fix 语料与 golden
-├── bootstrap/stage1.ml   # 自举种子（stage 1），提交入库，由 vuna-boot 轮换生成
+├── bootstrap/seed.ml     # 自举信任锚点种子（非 stage），提交入库，由 vuna-boot 轮换生成
 ├── .gitattributes        # 把 bootstrap/** 标记为 generated
 └── README.md
 ```
@@ -245,8 +245,8 @@ Nix 侧：
 - `checks.vuna-tests`：在沙箱里跑上述原生测试；
 - `checks.vuna-typecheck`：用当前编译器类型检查自己的源码；
 - `checks.vuna-lint`：对 `lib/Vuna/*.vuna` 与 `app/*.vuna` 跑 `vuna lint`，要求零 finding；
-- `checks.bootstrap-selfhost`：种子编译当前源码得到 stage 2，stage 2 再编译得到
-  stage 3，`cmp` 两者，并抽查 `12_fact` → `120`；
+- `checks.bootstrap-selfhost`：种子编译当前源码得到 stage 1，stage 1 再编译得到
+  stage 2，`cmp` 两者，并抽查 `12_fact` → `120`；
 - `checks.fixed-point`：与 `bootstrap-selfhost` 同一派生。
 
 ## 开发
@@ -260,14 +260,14 @@ VUNA_BOOT=$PWD/result-boot/bin/vuna-boot \
 sh test/run-tests.sh
 ```
 
-devShell 提供 `ocaml` / `ocamlopt` 工具链和 `vuna-boot`；stage2 的 `vuna` 不进
+devShell 提供 `ocaml` / `ocamlopt` 工具链和 `vuna-boot`；stage 1 的 `vuna` 不进
 devShell，避免种子失效时连 shell 都进不去。
 
 ## 性能基准（手动）
 
 `nix run .#bench` 是**手动**性能基准，用来在优化前后快速测量收益；不是 CI check，
-结果依赖机器，不参与 `nix flake check`。默认测量 `vuna`（stage 2），
-`--compiler boot` 改测 `vuna-boot`（stage 1 种子）。
+结果依赖机器，不参与 `nix flake check`。默认测量 `vuna`（stage 1），
+`--compiler boot` 改测 `vuna-boot`（stage 0 种子）。
 
 ```console
 nix run .#bench -- --quick                 # 快速冒烟（runs=1）
@@ -278,7 +278,7 @@ nix run .#bench -- --compiler boot         # 改测 seed 编译器
 nix run .#bench -- --with-tests            # 额外跑全部 checks
 ```
 
-报告包含：构建性能（ocamlopt 构建 seed/stage2 的时间）、编译性能（seed/vuna 自编译、
+报告包含：构建性能（ocamlopt 构建 seed/stage1 的时间）、编译性能（seed/vuna 自编译、
 corpus 批量编译、tiny 程序、typed 与 `--no-typecheck` 路径）、编译吞吐、
 生成产物的 bytes/lines/最长行/超长行/行尾空白、codegen 健康度计数
 （`let rec`、`String.concat ""`、`bi_eq_int/_str/_bool`、零参 rec thunk）、
@@ -289,8 +289,8 @@ corpus 批量编译、tiny 程序、typed 与 `--no-typecheck` 路径）、编�
 ## Nix
 
 ```console
-nix build             # 默认 = vuna（stage 2 当前编译器）
-nix build .#vuna-boot # stage 1 种子二进制
+nix build             # 默认 = vuna（stage 1 当前编译器）
+nix build .#vuna-boot # stage 0 种子二进制
 nix flake check       # vuna-tests / vuna-typecheck / vuna-lint / bootstrap-selfhost
 nix fmt               # nixfmt-tree 格式化 .nix
 ```
@@ -298,7 +298,7 @@ nix fmt               # nixfmt-tree 格式化 .nix
 ## 限制与路线
 
 - 类型检查与原生 OCaml typed codegen 已默认开启；M8 完成 typed 自举，
-  `bootstrap/stage1.ml` 由 typed 编译器轮换；dynamic codegen 保留为
+  `bootstrap/seed.ml` 由 typed 编译器轮换；dynamic codegen 保留为
   `--no-typecheck` 的测试/调试回退路径；
 - M8c 完成 codegen 性能与输出质量收尾：Kosaraju SCC、类型特化比较、`&&`/`||`
   短路、`++` 折叠与线性拼接、零参纯值 hoist、pretty printer；自举 codegen
@@ -321,7 +321,7 @@ nix fmt               # nixfmt-tree 格式化 .nix
 - M1：解析器；M2：解释器；M3a/M3b：AST 与源码级自解释器；
 - M4a：codegen（vuna → OCaml）；M4b：自解释器编译成独立二进制；
 - M5：模块系统（文件=模块、import、flatten）；
-- M6：用 vuna 写 codegen，种子入库，stage2/stage3 fixed point；
+- M6：用 vuna 写 codegen，种子入库，stage1/stage2 fixed point；
 - M6 之后：种子轮换为 vuna 生成，P2 把测试迁移到 vuna 原生 harness；
 - M7：HM 类型检查；M8a/M8b：原生 OCaml typed codegen 与 typed 自举；
 - M8c：codegen 性能与输出质量收尾（SCC、比较特化、短路、拼接、pretty printer），
