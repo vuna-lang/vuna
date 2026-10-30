@@ -95,6 +95,65 @@ let version_tests =
         Alcotest.(check string) "version" "0.1.0" Vunax.Version.version);
   ]
 
+(* Self-interpreter: the vuna program in app/interp.vuna consumes the
+   S-expression AST produced by [vunax parse]. Tests build a driver program
+   in memory: all interpreter declarations except its demo [main], followed by
+   [main = interpret <sexp>]. *)
+
+let rec find_repo_root dir =
+  let has_interp = Sys.file_exists (Filename.concat dir "app/interp.vuna") in
+  let has_workspace = Sys.file_exists (Filename.concat dir "dune-workspace") in
+  if has_interp && has_workspace then Some dir
+  else
+    let parent = Filename.dirname dir in
+    if parent = dir then None else find_repo_root parent
+
+let repo_root =
+  match find_repo_root (Sys.getcwd ()) with
+  | Some root -> root
+  | None -> failwith "cannot locate repository root (app/interp.vuna)"
+
+let interp_program =
+  lazy (Vunax.Parser.parse_file (Filename.concat repo_root "app/interp.vuna"))
+
+let interp_decls =
+  lazy
+    (List.filter
+       (function
+         | Vunax.Ast.DFun ("main", _, _) -> false
+         | _ -> true)
+       (Lazy.force interp_program))
+
+let run_self source =
+  let driver =
+    Lazy.force interp_decls
+    @ [
+        Vunax.Ast.DFun
+          ( "main",
+            [],
+            Vunax.Ast.EApp
+              (Vunax.Ast.EVar "interpret", [ Vunax.Ast.EStr source ]) );
+      ]
+  in
+  Vunax.Eval.run_string driver
+
+let selfhost_tests =
+  sorted_files "corpus/run" ".vuna"
+  |> List.map (fun file ->
+      Alcotest.test_case file `Quick (fun () ->
+          let path = Filename.concat "corpus/run" file in
+          let program = Vunax.Parser.parse_file path in
+          let expected = Vunax.Eval.show (Vunax.Eval.run program) in
+          let actual = run_self (Vunax.Ast.sexp_of_program program) in
+          Alcotest.(check string) file expected actual))
+
+let self_application_test =
+  Alcotest.test_case "interprets its own AST" `Quick (fun () ->
+      let program = Lazy.force interp_program in
+      let expected = Vunax.Eval.show (Vunax.Eval.run program) in
+      let actual = run_self (Vunax.Ast.sexp_of_program program) in
+      Alcotest.(check string) "self" expected actual)
+
 let () =
   Alcotest.run "vunax"
     [
@@ -103,4 +162,6 @@ let () =
       ("parse error", error_tests);
       ("run", run_tests);
       ("run error", run_error_tests);
+      ("selfhost", selfhost_tests);
+      ("self application", [ self_application_test ]);
     ]

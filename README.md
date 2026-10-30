@@ -86,11 +86,14 @@ dune 项目在 `vunax/`；因此 `app/`、`lib/`、`test/` 里的 `.vuna` 文件
 nix develop
 dune build            # 在仓库根通过 dune-workspace 构建 vunax
 dune runtest
-dune exec vunax
+vunax --version       # devShell 里直接可用（devShell 内的 vunax 跳过包测试）
+vunax run vunax/test/corpus/run/12_fact.vuna
 dune fmt
 ```
 
-也可以 `cd vunax && dune build`。
+也可以 `cd vunax && dune build`。devShell 里放的 vunax 用 `doCheck = false`
+构建，避免“测试失败 → devShell 建不出来 → 没法调试”的死循环；测试由
+`nix build` / `nix flake check` 运行。
 
 ## 解析器（core-v0，M1）
 
@@ -118,7 +121,7 @@ dune exec vunax -- --version
 - `vunax/test/corpus/err/*.vuna` + 同名 `.err`（错误位置与信息 golden）；
 - 改语料或解析器后运行 `vunax/test/update-golden.sh` 重新生成 golden，再 review diff。
 
-尚未实现（后续里程碑）：类型检查（core-v0 先不检查类型）、自解释器（M3）、
+尚未实现（后续里程碑）：类型检查（core-v0 先不检查类型）、源码级自解释（M3b）、
 `where` / `do` / 隐式参数 / 依赖类型 / 模块系统。
 
 ## 求值器（core-v0，M2）
@@ -131,7 +134,7 @@ dune exec vunax -- --version
 - `main` 必须是零参数定义，`vunax run` 求值 `main` 并用 `show` 打印结果；
 - 内建：`+ - * /`、`== /= < <= > >=`（Int/String/Int 比较）、`&& ||`、
   `++`（String 拼接）、`strLength`、`strUnpack`（String → List Int）、
-  `strPack`（List Int → String）；
+  `strPack`（List Int → String）、`strFromInt`（Int → String）；
 - `if` / `&&` / `||` / 比较结果的布尔值约定为构造器 `True` / `False`
   （与 Idris2 一致）；程序需要自己声明 `data Bool` 才能对它们做模式匹配。
 
@@ -148,6 +151,31 @@ dune exec vunax -- run vunax/test/corpus/run/03_data_case.vuna
 
 限制：没有 IO（只能通过 `main` 的返回值观察结果）、没有类型检查，
 运行时错误信息暂时不带源码位置（AST 还没有 span）。
+
+## 自解释器（M3a，AST 级）
+
+[app/interp.vuna](app/interp.vuna) 是用 vuna 写的自解释器，被 vunax 解释执行：
+
+- 输入是 `vunax parse` 输出的 `(program ...)` S-expression（同一套 core-v0 AST）；
+- 内部实现：S-expression reader → AST 转换 → call-by-value 求值器 → `show`，
+  以及和 vunax 一致的内建运算（含 Bool/List/String 的表示转换）；
+- `main` 约定与 vunax 相同：`vunax run app/interp.vuna` 会解释内置的 demo 程序；
+- 错误统一返回 `error: ...` 字符串。
+
+```console
+vunax run app/interp.vuna
+# "42"
+```
+
+验证方式（62 个测试，`nix build` 的 checkPhase 全跑）：
+
+- **差分测试**：对 `corpus/run/` 的每个程序，先用 vunax 直接跑得到结果，
+  再把该程序的 AST 交给 vuna 自解释器跑，两边 `show` 结果必须一致；
+- **self application**：把自解释器自己的 AST 交给它自己解释，结果与直接运行一致
+  （说明当前语言子集已经能承载整个解释器）。
+
+限制：这一版解释的是 **AST**，还不是源码；用 vuna 重写 lexer/parser
+（源码级自解释，M3b）是下一步。运行时错误没有源码位置。
 
 ## Nix
 

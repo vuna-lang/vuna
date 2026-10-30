@@ -65,6 +65,13 @@ let starts_pattern_atom st =
   | Sym "(" | Sym "[" -> true
   | _ -> false
 
+(* Tokens that may follow the last [case] alternative without being part of
+   the enclosing block, e.g. a closing paren on the same line. *)
+let terminates_expression = function
+  | Sym (")" | "]" | ",") -> true
+  | Kw ("else" | "in" | "then") -> true
+  | _ -> false
+
 let infix_info = function
   | "->" -> Some (1, `Right)
   | "||" -> Some (2, `Left)
@@ -252,8 +259,11 @@ and parse_case st ~block_col =
     let body = parse_expr st ~block_col:alt_col ~min_prec:0 in
     alts := (pat, body) :: !alts
   done;
-  if (not (is_eof st)) && (peek_pos st).col > alt_col then
-    error st "unexpected indentation after case alternative";
+  if
+    (not (is_eof st))
+    && (peek_pos st).col > alt_col
+    && not (terminates_expression (peek_tok st))
+  then error st "unexpected indentation after case alternative";
   if !alts = [] then error st "case expression needs an alternative";
   Ast.ECase (scrutinee, List.rev !alts)
 

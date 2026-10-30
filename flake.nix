@@ -50,13 +50,15 @@
             # 直接本地构建；依赖（ocaml、dune 等）仍照常走缓存替换。
             allowSubstitutes = false;
 
-            # 只把 vunax 需要的文件拷进 Nix store；app/、lib/、test/
-            # 是 vuna 源码，属于自举阶段，不是 vunax 的构建输入。
+            # 只把 vunax 需要的文件拷进 Nix store：vunax 源码，以及测试要读取的
+            # 自解释器源码 app/interp.vuna；app/、lib/、test/ 里的其他 vuna
+            # 源码属于自举阶段，不是 vunax 的构建输入。
             src = lib.fileset.toSource {
               root = ./.;
               fileset = lib.fileset.unions [
                 ./dune-workspace
                 ./vunax
+                ./app/interp.vuna
               ];
             };
 
@@ -81,20 +83,31 @@
         let
           pkgs = nixpkgs.legacyPackages.${system};
           ocamlPackages = pkgs.ocamlPackages;
+
+          # devShell 只需要能运行 vunax，不需要每次进入都跑包测试；
+          # 测试由 nix build / nix flake check 负责。这样也避免
+          # “测试失败 → devShell 构建失败 → 无法进 shell 调试”的死循环。
+          vunax-dev = self.packages.${system}.vunax.overrideAttrs (_: {
+            doCheck = false;
+          });
         in
         {
           default = pkgs.mkShell {
             # 复用包构建里的 OCaml / dune / findlib。
             inputsFrom = [ self.packages.${system}.vunax ];
 
-            packages = with ocamlPackages; [
+            packages = [
+              # 把 vunax 本身暴露到 devShell 里，直接可用 `vunax` 命令。
+              vunax-dev
+            ]
+            ++ (with ocamlPackages; [
               alcotest
               merlin
               ocaml-lsp
               ocamlformat
               odoc
               utop
-            ];
+            ]);
 
             shellHook = ''
               echo "vuna dev shell — OCaml $(ocaml -version), Dune $(dune --version)"

@@ -40,13 +40,14 @@ let builtin_names =
     "strLength";
     "strUnpack";
     "strPack";
+    "strFromInt";
   ]
 
 let builtin_arity = function
   | "+" | "-" | "*" | "/" | "==" | "/=" | "<" | "<=" | ">" | ">=" | "&&" | "||"
   | "++" ->
       2
-  | "strLength" | "strUnpack" | "strPack" -> 1
+  | "strLength" | "strUnpack" | "strPack" | "strFromInt" -> 1
   | name -> error ("unknown builtin: " ^ name)
 
 let string_to_list s =
@@ -285,6 +286,7 @@ and call_builtin name args =
   | "strLength", [ a ] -> VInt (String.length (string_arg a))
   | "strUnpack", [ a ] -> string_to_list (string_arg a)
   | "strPack", [ a ] -> VStr (list_to_string a)
+  | "strFromInt", [ a ] -> VStr (string_of_int (int_arg a))
   | _ -> error ("bad arguments for builtin " ^ name)
 
 let rec show = function
@@ -306,3 +308,9 @@ let run (program : program) : value =
       | Some 0 -> call_function ctx "main" []
       | _ -> error "`main` must be a nullary definition")
   | Some _ -> error "`main` must be defined by clauses"
+
+let run_string (program : program) : string =
+  match run program with
+  | VStr s -> s
+  | value ->
+      error ("`main` did not evaluate to a String (got " ^ show value ^ ")")
