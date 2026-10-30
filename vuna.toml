@@ -1,0 +1,11 @@
+# vuna 仓库自身是一个 workspace（Cargo 风格：根目录同时是包）。
+[package]
+name = "vuna"
+version = "0.1.0"
+edition = "2026"
+
+[workspace]
+members = ["stdlib"]
+
+[dependencies]
+vuna-stdlib = "stdlib"

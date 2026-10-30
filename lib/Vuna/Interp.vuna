@@ -1,8 +1,9 @@
-module Vuna.Interp (effectiveRoots, interpretFile, compileFile, compileFileChecked, compileFileTyped, checkFile) where
+module Vuna.Interp (effectiveRoots, interpretFile, compileFile, compileFileChecked, compileFileTyped, checkFile, interpretFileIn, compileFileIn, compileFileCheckedIn, compileFileTypedIn, checkFileIn) where
 
 -- Vuna.Interp：对外 facade（解释器/编译器入口）。
 
 import Vuna.Base
+import Vuna.Pkg
 import Vuna.Ast
 import Vuna.Parser
 import Vuna.Loader
@@ -22,7 +23,8 @@ interpret source =
             Nil => runDecls decls
             _ => "error: imports are only supported by interpretFile"
 
-effectiveRoots Nil = Cons "lib" Nil
+-- 默认模块根：编译器自身仓库布局（lib/ + stdlib/）。
+effectiveRoots Nil = Cons (rawRoot "lib") (Cons (rawRoot "stdlib") Nil)
 effectiveRoots roots = roots
 
 -- M10.5：使用记录/trait/deriving 的程序必须先经过类型检查与降级；
@@ -89,8 +91,10 @@ exprNeedsElab e =
       if exprNeedsElab scrut then True else altsNeedElab alts
     EIf c t el sp => if exprNeedsElab c then True else if exprNeedsElab t then True else exprNeedsElab el
 
-interpretFile roots entry =
-  case loadProgram roots entry of
+interpretFile roots entry = interpretFileIn "" roots entry
+
+interpretFileIn entryPkg roots entry =
+  case loadProgram roots entryPkg entry of
     Err e => "error: " ++ e
     Ok decls =>
       if programNeedsElab decls then
@@ -99,27 +103,35 @@ interpretFile roots entry =
           Ok (Pair globals elabDecls) => runDecls elabDecls
       else runDecls decls
 
-compileFile roots entry printResult =
-  andThen (loadProgram roots entry) (\decls =>
+compileFile roots entry printResult = compileFileIn "" roots entry printResult
+
+compileFileIn entryPkg roots entry printResult =
+  andThen (loadProgram roots entryPkg entry) (\decls =>
     if programNeedsElab decls then
       andThen (checkProgramInfoElab decls) (\p => generateProgram (secondOf p) printResult)
     else generateProgram decls printResult)
 
-compileFileChecked roots entry printResult =
-  andThen (loadProgram roots entry) (\decls =>
+compileFileChecked roots entry printResult = compileFileCheckedIn "" roots entry printResult
+
+compileFileCheckedIn entryPkg roots entry printResult =
+  andThen (loadProgram roots entryPkg entry) (\decls =>
     if programNeedsElab decls then
       andThen (checkProgramInfoElab decls) (\p => generateProgram (secondOf p) printResult)
     else andThen (checkProgram decls) (\_ => generateProgram decls printResult))
 
-compileFileTyped roots entry printResult =
-  andThen (loadProgram roots entry) (\decls =>
+compileFileTyped roots entry printResult = compileFileTypedIn "" roots entry printResult
+
+compileFileTypedIn entryPkg roots entry printResult =
+  andThen (loadProgram roots entryPkg entry) (\decls =>
     andThen (checkProgramInfoElab decls) (\p =>
       case p of
         Pair globals elabDecls => generateProgramTyped elabDecls globals printResult))
 
 -- 诊断：typecheck + 穷尽性/冗余警告（非致命）。返回警告列表。
-checkFile roots entry =
-  case loadProgram roots entry of
+checkFile roots entry = checkFileIn "" roots entry
+
+checkFileIn entryPkg roots entry =
+  case loadProgram roots entryPkg entry of
     Err e => Err e
     Ok decls =>
       if programNeedsElab decls then

@@ -1,0 +1,51 @@
+-- stdlib：Maybe 消除函数 + Result 组合子。
+import Vuna.Maybe
+import Vuna.Result
+import Vuna.List
+import Vuna.Pair
+
+showBool : Bool -> String
+showBool b = if b then "True" else "False"
+
+showMaybeInt : Maybe Int -> String
+showMaybeInt m =
+  case m of
+    Nothing => "Nothing"
+    Just x => "Just " ++ strFromInt x
+
+showResultInt : Result Int -> String
+showResultInt r =
+  case r of
+    Ok x => "Ok " ++ strFromInt x
+    Err e => "Err " ++ e
+
+showResultIntList : Result (List Int) -> String
+showResultIntList r =
+  case r of
+    Ok xs => "Ok " ++ showIntList xs
+    Err e => "Err " ++ e
+
+showIntList : List Int -> String
+showIntList Nil = "[]"
+showIntList (Cons x xs) = "[" ++ strFromInt x ++ showIntTail xs
+
+showIntTail : List Int -> String
+showIntTail Nil = "]"
+showIntTail (Cons x xs) = "," ++ strFromInt x ++ showIntTail xs
+
+safeHalf : Int -> Result Int
+safeHalf n = if n / 2 * 2 == n then Ok (n / 2) else Err "odd"
+
+main : String
+main =
+  "fm=" ++ strFromInt (fromMaybe 0 (Just 5)) ++ "," ++ strFromInt (fromMaybe 7 Nothing)
+    ++ " maybe=" ++ maybe "none" (\x => x) (Just "hi")
+    ++ " just=" ++ showBool (isJust (Just 1)) ++ "/" ++ showBool (isNothing Nothing)
+    ++ " map=" ++ showMaybeInt (mapJust (\x => x * 3) (Just 2))
+    ++ " tr=" ++ showResultIntList (traverse safeHalf (Cons 2 (Cons 4 Nil)))
+    ++ " tre=" ++ showResultIntList (traverse safeHalf (Cons 2 (Cons 3 Nil)))
+    ++ " and=" ++ showResultInt (andThen (Ok 3) (\x => Ok (x + 1)))
+    ++ " step=" ++ showResultInt (step (Ok (Pair 2 3)) (\a, b => Ok (a * b)))
+    ++ " mr=" ++ showResultInt (mapResult (\x => x * 2) (Ok 3))
+    ++ " me=" ++ showResultInt (mapError (\e => e ++ "!") (Err "bad"))
+    ++ " wd=" ++ strFromInt (withDefault 0 (Err "x"))

@@ -1,0 +1,50 @@
+data Tree : Type where
+  Leaf : Tree
+  Node : Tree -> Int -> Tree -> Tree
+
+record Seg where
+  start : Int
+  finish : Int
+
+mkSeg : Int -> Int -> Seg
+mkSeg a b = Seg { start = a, finish = b }
+
+shrink : Seg -> Seg
+shrink s = { s | finish = s.finish - 1 }
+
+nestedUpd : Seg -> Int -> Seg
+nestedUpd s n = { { s | start = n } | finish = n }
+
+treeSum : Tree -> Int
+treeSum t = case t of
+  Leaf => 0
+  Node l v r => treeSum l + v + treeSum r
+
+useCaseArg : Int -> Int
+useCaseArg n = (\x => x + 1) (case n of
+  0 => 1
+  _ => 2)
+
+choose : Bool -> Int -> Int
+choose b n =
+  if b then
+    let m = n + 1
+    in m
+  else
+    case n of
+      0 => 0
+      _ => 1
+
+bodyCase : Int -> Int
+bodyCase n = case n of
+    0 => base
+    _ => n + base
+  where
+    base = 1
+
+bindChain = (\a => a) >>= (\b => b)
+
+seqChain = (\a => a) >> (\b => b)
+
+main : Int
+main = treeSum (Node Leaf 3 Leaf) + (shrink (mkSeg 1 5)).start + bodyCase 2

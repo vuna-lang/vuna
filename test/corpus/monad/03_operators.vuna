@@ -1,0 +1,31 @@
+-- M11：`>>=` 与 `>>` 是 do 的派生（bind / bind+ignore）。
+trait Monad m where
+  bind : m a -> (a -> m b) -> m b
+  pure : a -> m a
+
+data Maybe a : Type where
+  Nothing : Maybe a
+  Just : a -> Maybe a
+
+instance Monad Maybe where
+  bind m f = case m of
+    Nothing => Nothing
+    Just x => f x
+  pure x = Just x
+
+step1 : Maybe Int
+step1 = Just 1 >>= (\x => pure (x + 41))
+
+step2 : Maybe Int
+step2 = Nothing >> Just 9
+
+step3 : Maybe Int
+step3 = (Just 1 >>= (\x => pure (x + 1))) >> pure 7
+
+showMaybe : Maybe Int -> String
+showMaybe m = case m of
+  Nothing => "Nothing"
+  Just n => "Just " ++ strFromInt n
+
+main : String
+main = showMaybe step1 ++ " " ++ showMaybe step2 ++ " " ++ showMaybe step3

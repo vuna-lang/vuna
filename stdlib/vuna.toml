@@ -1,0 +1,20 @@
+# vuna-stdlib：标准库包（编译器与用户程序的第一个依赖）。
+[package]
+name = "vuna-stdlib"
+version = "0.1.0"
+edition = "2026"
+
+[export]
+modules = [
+  "Vuna",
+  "Vuna.Pair",
+  "Vuna.Bool",
+  "Vuna.List",
+  "Vuna.Maybe",
+  "Vuna.Result",
+  "Vuna.String",
+  "Vuna.Sort",
+  "Vuna.Map",
+  "Vuna.Monad",
+  "Vuna.IO"
+]

@@ -1,0 +1,4 @@
+import Vuna.Hello
+
+main : String
+main = if hello == "hello" then "" else "hello mismatch"

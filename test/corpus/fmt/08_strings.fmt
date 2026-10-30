@@ -1,0 +1,14 @@
+quote : String
+quote = "say \"hi\""
+
+backslash : String
+backslash = "a\\b"
+
+newline : String
+newline = "line1\nline2"
+
+tab : String
+tab = "a\tb"
+
+main : String
+main = quote ++ backslash ++ newline ++ tab

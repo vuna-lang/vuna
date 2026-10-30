@@ -1,0 +1,18 @@
+f : Int -> Int
+f x = g x where
+  g y = y + h y
+  h y = y * 2
+
+classify : Int -> String
+classify n = helper n where
+  helper m = case m of
+    0 => "zero"
+    _ => if m < 0 then "neg" else "pos"
+
+outer : Int -> Int
+outer x = y + 1 where
+  y = x * base
+  base = 10
+
+main : Int
+main = f 3 + outer 2

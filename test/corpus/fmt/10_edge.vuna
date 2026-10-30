@@ -1,0 +1,26 @@
+f : Int -> Int
+f x = x + 1
+
+g : Int -> Int -> Int
+g a b = a - (b - 1)
+
+h : Int -> Int
+h x = (f x + 2) * 3
+
+listBuild : Int -> List Int
+listBuild n = n :: 1 :: 2 :: []
+
+listLit : List Int
+listLit = [1, 2, 3]
+
+listOfList : List (List Int)
+listOfList = [[1], [2, 3]]
+
+twice : (Int -> Int) -> Int -> Int
+twice fn x = fn (fn x)
+
+applyOn : Int -> Int
+applyOn n = twice (\a => a + n) n
+
+main : Int
+main = h (g 3 2) + applyOn 2

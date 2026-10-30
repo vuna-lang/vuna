@@ -1,0 +1,26 @@
+-- stdlib：`>>=` / `>>` 运算符使用 stdlib Monad bind（Maybe / List 实例）。
+import Vuna.Monad
+import Vuna.Maybe
+import Vuna.List
+
+showMaybe : Maybe Int -> String
+showMaybe m =
+  case m of
+    Nothing => "Nothing"
+    Just n => "Just " ++ strFromInt n
+
+sum : List Int -> Int
+sum Nil = 0
+sum (Cons x xs) = x + sum xs
+
+step1 : Maybe Int
+step1 = Just 1 >>= (\x => pure (x + 41))
+
+step2 : Maybe Int
+step2 = Nothing >> Just 9
+
+listy : List Int
+listy = Cons 1 (Cons 2 Nil) >>= (\x => Cons (x * 10) (Cons (x * 100) Nil))
+
+main : String
+main = showMaybe step1 ++ "/" ++ showMaybe step2 ++ "/" ++ strFromInt (sum listy)

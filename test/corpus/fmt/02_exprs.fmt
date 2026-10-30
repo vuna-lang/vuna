@@ -1,0 +1,17 @@
+double : Int -> Int
+double x = x * 2
+
+pick : Bool -> Int -> Int -> Int
+pick b x y = if b then x else y
+
+compute : Int -> Int
+compute n =
+  let
+    a = n + 1
+    b = a * 2
+  in case a of
+    0 => b
+    _ => pick (a == b) a b
+
+main : Int
+main = compute (double 3) + (2 + 3) * 4

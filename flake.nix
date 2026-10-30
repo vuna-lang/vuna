@@ -36,7 +36,7 @@
       #     → vuna 再编译同一份源码 → stage2.ml；stage1 == stage2 即 fixed point
       #
       # 种子通过 seed rotation 更新：
-      #   vuna-boot --root lib --root app --no-print app/Main.vuna bootstrap/seed.ml
+      #   vuna-boot --root lib --root stdlib/lib --root app --no-print app/Main.vuna bootstrap/seed.ml
       # 不变量：当前入库种子必须能编译当前源码（checks.bootstrap-selfhost 守）。
       packages = forAllSystems (
         system:
@@ -84,8 +84,9 @@
               ''
                 mkdir -p "$out/bin"
                 cp -r ${./lib} lib
+                cp -r ${./stdlib} stdlib
                 cp -r ${./app} app
-                ${vuna-boot}/bin/vuna-boot --root lib --root app --no-print app/Main.vuna stage1.ml
+                ${vuna-boot}/bin/vuna-boot --root lib --root stdlib/lib --root app --no-print app/Main.vuna stage1.ml
                 ocamlopt -g -w -a+39 -warn-error +39 -o "$out/bin/vuna" stage1.ml
               '';
 
@@ -141,12 +142,13 @@
               }
               ''
                 cp -r ${./lib} lib
+                cp -r ${./stdlib} stdlib
                 cp -r ${./app} app
                 # 种子编译当前源码 → stage 1（当前编译器）
-                ${vuna-boot}/bin/vuna-boot --root lib --root app --no-print app/Main.vuna stage1.ml
+                ${vuna-boot}/bin/vuna-boot --root lib --root stdlib/lib --root app --no-print app/Main.vuna stage1.ml
                 ocamlopt -g -w -a+39 -warn-error +39 -o stage1 stage1.ml
                 # stage 1 再编译同一份源码 → stage 2；两者必须字节一致
-                ./stage1 --root lib --root app --no-print app/Main.vuna stage2.ml
+                ./stage1 --root lib --root stdlib/lib --root app --no-print app/Main.vuna stage2.ml
                 cmp stage1.ml stage2.ml
                 # 行为抽查：当前编译器编译并运行一个程序
                 cp ${./test/corpus/run/12_fact.vuna} fact.vuna
@@ -164,7 +166,7 @@
               }
               ''
                 mkdir -p "$out"
-                ${vuna}/bin/vuna --typecheck --no-print --root ${./lib} --root ${./app} ${./app/Main.vuna} "$out/self.ml"
+                ${vuna}/bin/vuna --typecheck --no-print --root ${./lib} --root ${./stdlib/lib} --root ${./app} ${./app/Main.vuna} "$out/self.ml"
                 touch "$out/ok"
               '';
 
@@ -176,7 +178,40 @@
               }
               ''
                 mkdir -p "$out"
-                ${vuna}/bin/vuna lint ${./lib/Vuna}/*.vuna ${./app}/*.vuna
+                ${vuna}/bin/vuna lint ${./lib/Vuna}/*.vuna ${./stdlib/lib/Vuna}/*.vuna ${./stdlib/lib}/*.vuna ${./app}/*.vuna
+                touch "$out/ok"
+              '';
+
+          # M11.5 包管理：在 Nix 沙箱内用 package 模式构建多包示例并验证可复现。
+          vuna-package =
+            pkgs.runCommand "vuna-package"
+              {
+                allowSubstitutes = false;
+                nativeBuildInputs = ocamlToolsFn system;
+              }
+              ''
+                mkdir -p "$out"
+                cp -r ${./lib} lib
+                cp -r ${./stdlib} stdlib
+                cp -r ${./app} app
+                cp -r ${./examples} examples
+                cp ${./vuna.toml} vuna.toml
+                chmod -R u+w .
+                # 多包示例：workspace 根包 + 成员依赖包 + stdlib 路径依赖
+                ${vuna}/bin/vuna build examples/multi "$out/multi.ml"
+                ocamlopt -g -w -a+39 -warn-error +39 -o "$out/multi" "$out/multi.ml"
+                test "$("$out/multi")" = '"hi hi hi|n2 n1"'
+                # 包内测试运行器
+                ${vuna}/bin/vuna test examples/multi >"$out/test.log"
+                grep -q "1 passed, 0 failed" "$out/test.log"
+                # 格式化检查与文档生成
+                ${vuna}/bin/vuna fmt --check examples/multi
+                ${vuna}/bin/vuna doc examples/multi/greet "$out/api.md"
+                grep -q "## Greet" "$out/api.md"
+                # 仓库自身（编译器包）也走 package 模式构建
+                ${vuna}/bin/vuna build . "$out/self.ml"
+                ocamlopt -g -w -a+39 -warn-error +39 -o "$out/self" "$out/self.ml"
+                "$out/self" help | grep -q usage
                 touch "$out/ok"
               '';
 
@@ -189,6 +224,7 @@
               }
               ''
                 cp -r ${./test} test
+                cp -r ${./stdlib} stdlib
                 cd test
                 VUNA=${vuna}/bin/vuna \
                 VUNA_BOOT=${vuna-boot}/bin/vuna-boot \
@@ -201,6 +237,7 @@
           bootstrap-selfhost = bootstrap-selfhost;
           fixed-point = bootstrap-selfhost;
           vuna-tests = vuna-tests;
+          vuna-package = vuna-package;
           vuna-typecheck = vuna-typecheck;
           vuna-lint = vuna-lint;
         }

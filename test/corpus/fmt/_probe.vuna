@@ -1,0 +1,48 @@
+-- fmt 测试探针：读文件 → formatSource；mode: fmt/check/write。
+-- 由 check.sh 用当前编译器编译（不是测试输入，文件名以下划线开头）。
+import qualified Vuna.Base as B
+import Vuna.Fmt
+import Vuna.Parser
+
+data Bool : Type where
+  False : Bool
+  True : Bool
+
+data List a : Type where
+  Nil : List a
+  Cons : a -> List a -> List a
+
+main = exit (run (getArgs))
+
+run args =
+  case args of
+    Cons "fmt" (Cons path Nil) => runFmt path
+    Cons "check" (Cons path Nil) => runCheck path
+    Cons "write" (Cons path (Cons out Nil)) => runWrite path out
+    _ => let _ = print "usage: probe (fmt|check|write) file [out]\n" in 2
+
+fail path msg = let _ = print (path ++ ": " ++ msg ++ "\n") in 1
+
+runFmt path =
+  case formatSource (readFile path) of
+    B.Err e => fail path ("format error: " ++ e)
+    B.Ok out => let _ = print out in 0
+
+runCheck path =
+  let source = readFile path
+  in case formatSource source of
+       B.Err e => fail path ("format error: " ++ e)
+       B.Ok out1 =>
+         case parseSource path out1 of
+           B.Err e => fail path ("reparse error: " ++ e)
+           B.Ok parsed =>
+             case formatSource out1 of
+               B.Err e => fail path ("reformat error: " ++ e)
+               B.Ok out2 =>
+                 if out1 == out2 then 0
+                 else fail path ("not idempotent\n--- first ---\n" ++ out1 ++ "--- second ---\n" ++ out2)
+
+runWrite path out =
+  case formatSource (readFile path) of
+    B.Err e => fail path ("format error: " ++ e)
+    B.Ok formatted => let _ = writeFile out formatted in 0

@@ -1,0 +1,29 @@
+-- 仅格式化 golden：do 需要 Monad 实例，这里只验证格式化（不参与语义测试）。
+data Maybe : Type where
+  Nothing : Maybe
+  Just : Int -> Maybe
+
+data Color : Type where
+  Red : Color
+  Blue : Color
+
+trait Pretty a where
+  pretty : a -> String
+
+showIt : Color -> String
+showIt c = case c of
+  Red => "red"
+  Blue => "blue"
+
+instance Pretty Color where
+  pretty c = helper c where
+    helper x = "c:" ++ showIt x
+
+runM : Int -> Maybe
+runM n = run n where
+  run x = do
+    y <- Just x
+    Just y
+
+main : String
+main = pretty Red

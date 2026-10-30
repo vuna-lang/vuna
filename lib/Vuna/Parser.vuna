@@ -1,4 +1,4 @@
-module Vuna.Parser (parseSource) where
+module Vuna.Parser (parseSource, parseExpressionSource) where
 
 -- vuna 源码 parser：offside layout，返回 AST 与 imports。
 
@@ -42,6 +42,14 @@ isEof st =
   case peekTok st of
     PTok TEof p => True
     _ => False
+
+-- 让下一个 token 视作「与上一 token 同一行」：do 语句块里新起一行的裸表达式
+-- 需要这一点，否则首 token 会被 canContinue 判成缩进不足。
+toksOf (PState file toks last) = toks
+
+sameLineState st =
+  case peekPos st of
+    Pos line col => PState (fileOf st) (toksOf st) (Pos line 0)
 
 atSym st s =
   case peekTok st of
@@ -127,10 +135,18 @@ infixInfo "-" = Just (Pair 6 0)
 infixInfo "*" = Just (Pair 7 0)
 infixInfo "/" = Just (Pair 7 0)
 infixInfo "::" = Just (Pair 8 1)
+infixInfo ">>=" = Just (Pair 1 1)
+infixInfo ">>" = Just (Pair 1 0)
 infixInfo _ = Nothing
 
 opExpr "::" sp = EVar "Cons" sp
+opExpr ">>=" sp = EVar "bind" sp
 opExpr op sp = EVar op sp
+
+-- `>>` 是 do 的派生：`a >> b` = `bind a (\_ -> b)`。
+mkInfixExpr ">>" lhs rhs sp =
+  EApp (EVar "bind" sp) (Cons lhs (Cons (ELam (Cons "vuna_seq_ignore" Nil) rhs sp) Nil)) sp
+mkInfixExpr op lhs rhs sp = EApp (opExpr op sp) (Cons lhs (Cons rhs Nil)) sp
 
 countArrows e =
   case e of
@@ -161,6 +177,13 @@ badCaseIndent st altCol =
 parseSource file source =
   andThen (lexSource source) (\toks =>
     andThen (parseSourceFile (PState file toks (Pos 1 0))) (\p => Ok (firstOf p)))
+
+-- 单表达式解析（REPL / 工具用）：整段输入必须恰好是一个表达式。
+parseExpressionSource : String -> Result Expr
+parseExpressionSource source =
+  andThen (lexSource source) (\toks =>
+    step (parseExpr (PState "<expr>" toks (Pos 1 0)) 0 0) (\e, st =>
+      if isEof st then Ok e else Err "expected end of expression"))
 
 -- 可选模块头（M10）：`module M (导出项, ...) where`；列表省略 = 导出全部。
 parseSourceFile st =
@@ -526,7 +549,7 @@ parseInfix st blockCol minPrec lhs =
           if prec >= minPrec && canContinue st blockCol then
             let rhsPrec = if assoc == 0 then prec + 1 else prec
             in step (parseExpr (advance st) blockCol rhsPrec) (\rhs, st2 =>
-                 parseInfix st2 blockCol minPrec (EApp (opExpr op (spanOf st st2)) (Cons lhs (Cons rhs Nil)) (spanOf st st2)))
+                 parseInfix st2 blockCol minPrec (mkInfixExpr op lhs rhs (spanOf st st2)))
           else Ok (Pair lhs st)
         Nothing => Ok (Pair lhs st)
     _ => Ok (Pair lhs st)
@@ -537,6 +560,7 @@ parseLhs st blockCol =
     PTok (TKw "let") p => parseLet st blockCol
     PTok (TKw "case") p => parseCase st blockCol
     PTok (TKw "if") p => parseIf st blockCol
+    PTok (TKw "do") p => parseDo st blockCol
     _ => parseApplication st blockCol
 
 parseApplication st blockCol =
@@ -721,6 +745,52 @@ parseIf st blockCol =
           step (expectKw st4 "else") (\_, st5 =>
             step (parseExpr st5 blockCol 0) (\no, st6 =>
               Ok (Pair (EIf cond yes no (spanOf st st6)) st6)))))))
+
+-- do 块（M11）：`do` + 缩进对齐的语句，语句是 `pat <- expr` 或裸表达式；
+-- 最后一条必须是裸表达式（do 本身不引入 pure，最后表达式即块结果）。
+parseDo st blockCol =
+  step (expectKw st "do") (\_, st1 =>
+    if isEof st1 then Err "do block needs at least one statement"
+    else
+      case peekPos st1 of
+        Pos line col =>
+          if col <= blockCol then Err "do block statement is not indented enough"
+          else
+            step (parseDoStmts st1 col Nil) (\stmts, st2 =>
+              case reverse stmts of
+                Cons (DExpr lastExpr lastSp) rest =>
+                  Ok (Pair (EDo stmts (spanOf st st2)) st2)
+                _ => Err "do block must end with an expression"))
+
+parseDoStmts st stmtCol acc =
+  if isEof st then Ok (Pair (reverse acc) st)
+  else
+    case peekPos st of
+      Pos line col =>
+        if col < stmtCol then Ok (Pair (reverse acc) st)
+        else if col > stmtCol then Err "unexpected indentation in do block"
+        else
+          step (parseDoStmt st stmtCol) (\stmt, st1 =>
+            case peekPos st1 of
+              Pos line2 col2 =>
+                if isEof st1 then Ok (Pair (reverse (Cons stmt acc)) st1)
+                else if col2 < stmtCol then Ok (Pair (reverse (Cons stmt acc)) st1)
+                else if col2 > stmtCol then Err "unexpected indentation in do block"
+                else parseDoStmts st1 stmtCol (Cons stmt acc))
+
+parseDoStmt st stmtCol =
+  case parsePatternSingle st stmtCol of
+    Ok (Pair pat st1) =>
+      if atSym st1 "<-" then
+        step (expectSym st1 "<-") (\_, st2 =>
+          step (parseExpr st2 stmtCol 0) (\e, st3 =>
+            Ok (Pair (DBind pat e (spanOf st st3)) st3)))
+      else parseDoExprStmt st stmtCol
+    Err _ => parseDoExprStmt st stmtCol
+
+parseDoExprStmt st stmtCol =
+  step (parseExpr (sameLineState st) stmtCol 0) (\e, st1 =>
+    Ok (Pair (DExpr e (spanOf st st1)) st1))
 
 parsePatternSingle st blockCol = parsePatternCons st blockCol
 

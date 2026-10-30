@@ -43,6 +43,7 @@ isKeyword s =
   || s == "import" || s == "module"
   || s == "qualified" || s == "as"
   || s == "record" || s == "trait" || s == "instance" || s == "deriving"
+  || s == "do"
 
 classifyIdent s = if isKeyword s then TKw s else TIdent s
 

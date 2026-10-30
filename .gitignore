@@ -49,3 +49,8 @@ _scratch/
 
 /.local/
 .vscode/
+
+# vuna 生成物（package / 工具链输出）
+Main.ml
+docs/api.md
+examples/**/main

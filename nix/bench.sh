@@ -257,7 +257,7 @@ VUNA_BIN=$WORK/vuna
 STAGE2=$WORK/stage2.ml
 
 measure seed_build ocamlopt -g -w -a+39 -warn-error +39 -o "$SEED_BIN" bootstrap/seed.ml
-measure seed_compile "$SEED_BIN" --root lib --root app --no-print app/Main.vuna "$STAGE1"
+measure seed_compile "$SEED_BIN" --root lib --root stdlib/lib --root app --no-print app/Main.vuna "$STAGE1"
 measure stage1_build ocamlopt -g -w -a+39 -warn-error +39 -o "$VUNA_BIN" "$STAGE1"
 
 if [ "$COMPILER" = vuna ]; then
@@ -268,13 +268,13 @@ else
   SELF_OUT=$STAGE1
 fi
 
-measure compiler_self_compile "$SELF_BIN" --root lib --root app --no-print app/Main.vuna "$SELF_OUT"
+measure compiler_self_compile "$SELF_BIN" --root lib --root stdlib/lib --root app --no-print app/Main.vuna "$SELF_OUT"
 
 printf 'main = 40 + 2\n' >tiny.vuna
-measure tiny_compile "$SELF_BIN" --root lib --root app --no-print tiny.vuna "$WORK/tiny.ml"
+measure tiny_compile "$SELF_BIN" --root lib --root stdlib/lib --root app --no-print tiny.vuna "$WORK/tiny.ml"
 
 if [ "$WITH_DYNAMIC" = 1 ]; then
-  measure dynamic_self_compile "$SELF_BIN" --no-typecheck --root lib --root app --no-print app/Main.vuna "$WORK/dyn.ml"
+  measure dynamic_self_compile "$SELF_BIN" --no-typecheck --root lib --root stdlib/lib --root app --no-print app/Main.vuna "$WORK/dyn.ml"
 fi
 
 # ---- corpus 批量编译（单次计时，内部循环） --------------------------------
@@ -286,7 +286,7 @@ mkdir -p "$CORPUS_OUT"
 : >"$CORPUS_FAIL"
 for f in test/corpus/run/*.vuna; do
   out="$CORPUS_OUT/$(basename "$f" .vuna).ml"
-  if ! "$CORPUS_BIN" --root lib --root app --no-print "$f" "$out" >>"$CORPUS_LOG" 2>&1; then
+  if ! "$CORPUS_BIN" --root lib --root stdlib/lib --root app --no-print "$f" "$out" >>"$CORPUS_LOG" 2>&1; then
     printf '%s\n' "$f" >>"$CORPUS_FAIL"
   fi
 done

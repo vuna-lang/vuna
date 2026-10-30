@@ -1,0 +1,15 @@
+-- stdlib：包门面 `import Vuna` 覆盖多个模块（List/Sort/Map/String/Monad/IO）。
+import Vuna
+
+sum : List Int -> Int
+sum Nil = 0
+sum (Cons x xs) = x + sum xs
+
+main : String
+main =
+  let xs = fmap (\x => x + 1) (Cons 1 (Cons 2 Nil))
+  in bool "False" "True" (mem 2 xs) ++ "/"
+       ++ strFromInt (sum (mergeSort (Cons 3 (Cons 1 (Cons 2 Nil))))) ++ "/"
+       ++ join "-" (map (\x => strFromInt x) xs) ++ "/"
+       ++ strFromInt (fromMaybe 0 (lookup "a" (insert "a" 7 empty))) ++ "/"
+       ++ strFromInt (runIO (printIO "p"))

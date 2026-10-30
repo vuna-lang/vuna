@@ -1,0 +1,11 @@
+f : Int -> Int
+f x = g x where
+  g y = y + h y
+  h y = y * 2
+
+self : Int -> Int
+self n = go n where
+  go y = if y == 0 then 1 else y * go (y - 1)
+
+main : Int
+main = f 5 + self 3

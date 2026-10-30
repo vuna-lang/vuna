@@ -581,6 +581,179 @@ for dir in corpus/traits/9[0-9]_*/; do
   fi
 done
 
+# 26) do / Monad / 高阶 kind（M11）：正例三路径；错误例三路径都失败、含片段、不写输出文件
+for file in corpus/monad/[01][0-9]_*.vuna; do
+  base=${file%.vuna}
+  expected=$(cat "$base.out")
+  actual=$("$VUNA" interp "$file" 2>&1)
+  check_eq "$file (monad interp)" "$expected" "$actual"
+  rm -f "$tmp/monad_dyn.ml" "$tmp/monad_dyn.exe"
+  if ! mon_out=$("$VUNA" --no-typecheck "$file" "$tmp/monad_dyn.ml" 2>&1); then
+    bad "$file (monad dynamic codegen)" "exit 0" "$mon_out"
+  elif [ -n "$mon_out" ]; then
+    bad "$file (monad dynamic codegen output)" "" "$mon_out"
+  elif ! "$OCAMLOPT" -w -a -o "$tmp/monad_dyn.exe" "$tmp/monad_dyn.ml" >"$tmp/monad_dyn.log" 2>&1; then
+    bad "$file (monad dynamic ocamlopt)" "" "$(cat "$tmp/monad_dyn.log")"
+  else
+    actual=$("$tmp/monad_dyn.exe" 2>&1)
+    check_eq "$file (monad dynamic run)" "$expected" "$actual"
+  fi
+  rm -f "$tmp/monad_typed.ml" "$tmp/monad_typed.exe"
+  if ! mon_out=$("$VUNA" --typed "$file" "$tmp/monad_typed.ml" 2>&1); then
+    bad "$file (monad typed codegen)" "exit 0" "$mon_out"
+  elif [ -n "$mon_out" ]; then
+    bad "$file (monad typed codegen output)" "" "$mon_out"
+  elif ! "$OCAMLOPT" -w -a -o "$tmp/monad_typed.exe" "$tmp/monad_typed.ml" >"$tmp/monad_typed.log" 2>&1; then
+    bad "$file (monad typed ocamlopt)" "" "$(cat "$tmp/monad_typed.log")"
+  else
+    actual=$("$tmp/monad_typed.exe" 2>&1)
+    check_eq "$file (monad typed run)" "$expected" "$actual"
+  fi
+done
+
+for file in corpus/monad/9[0-9]_*.vuna; do
+  fragment=$(cat "${file%.vuna}.err")
+  actual=$("$VUNA" interp "$file" 2>&1)
+  check_contains "$file (monad interp error)" "$actual" "$fragment"
+  "$VUNA" interp "$file" >/dev/null 2>&1
+  mon_code=$?
+  if [ "$mon_code" -ne 0 ]; then ok; else bad "$file (monad interp error exit)" "non-zero" "$mon_code"; fi
+  rm -f "$tmp/monad_err.ml"
+  actual=$("$VUNA" --no-typecheck "$file" "$tmp/monad_err.ml" 2>&1)
+  mon_code=$?
+  check_contains "$file (monad dynamic error)" "$actual" "$fragment"
+  if [ "$mon_code" -ne 0 ]; then ok; else bad "$file (monad dynamic error exit)" "non-zero" "$mon_code"; fi
+  if [ -e "$tmp/monad_err.ml" ]; then
+    bad "$file (monad dynamic no output file)" "absent" "present"
+  else
+    ok
+  fi
+  rm -f "$tmp/monad_err_typed.ml"
+  actual=$("$VUNA" --typed "$file" "$tmp/monad_err_typed.ml" 2>&1)
+  mon_code=$?
+  check_contains "$file (monad typed error)" "$actual" "$fragment"
+  if [ "$mon_code" -ne 0 ]; then ok; else bad "$file (monad typed error exit)" "non-zero" "$mon_code"; fi
+  if [ -e "$tmp/monad_err_typed.ml" ]; then
+    bad "$file (monad typed no output file)" "absent" "present"
+  else
+    ok
+  fi
+done
+
+# 27) stdlib（M11）：正例三路径（--root ../stdlib）；错误例三路径都失败、含片段、不写输出文件
+for file in corpus/stdlib/[01][0-9]_*.vuna; do
+  base=${file%.vuna}
+  expected=$(cat "$base.out")
+  actual=$("$VUNA" interp --root ../stdlib/lib "$file" 2>&1)
+  check_eq "$file (stdlib interp)" "$expected" "$actual"
+  rm -f "$tmp/stdlib_dyn.ml" "$tmp/stdlib_dyn.exe"
+  if ! std_out=$("$VUNA" --no-typecheck --root ../stdlib/lib "$file" "$tmp/stdlib_dyn.ml" 2>&1); then
+    bad "$file (stdlib dynamic codegen)" "exit 0" "$std_out"
+  elif [ -n "$std_out" ]; then
+    bad "$file (stdlib dynamic codegen output)" "" "$std_out"
+  elif ! "$OCAMLOPT" -w -a -o "$tmp/stdlib_dyn.exe" "$tmp/stdlib_dyn.ml" >"$tmp/stdlib_dyn.log" 2>&1; then
+    bad "$file (stdlib dynamic ocamlopt)" "" "$(cat "$tmp/stdlib_dyn.log")"
+  else
+    actual=$("$tmp/stdlib_dyn.exe" 2>&1)
+    check_eq "$file (stdlib dynamic run)" "$expected" "$actual"
+  fi
+  rm -f "$tmp/stdlib_typed.ml" "$tmp/stdlib_typed.exe"
+  if ! std_out=$("$VUNA" --typed --root ../stdlib/lib "$file" "$tmp/stdlib_typed.ml" 2>&1); then
+    bad "$file (stdlib typed codegen)" "exit 0" "$std_out"
+  elif [ -n "$std_out" ]; then
+    bad "$file (stdlib typed codegen output)" "" "$std_out"
+  elif ! "$OCAMLOPT" -w -a -o "$tmp/stdlib_typed.exe" "$tmp/stdlib_typed.ml" >"$tmp/stdlib_typed.log" 2>&1; then
+    bad "$file (stdlib typed ocamlopt)" "" "$(cat "$tmp/stdlib_typed.log")"
+  else
+    actual=$("$tmp/stdlib_typed.exe" 2>&1)
+    check_eq "$file (stdlib typed run)" "$expected" "$actual"
+  fi
+done
+
+for file in corpus/stdlib/9[0-9]_*.vuna; do
+  fragment=$(cat "${file%.vuna}.err")
+  actual=$("$VUNA" interp --root ../stdlib/lib "$file" 2>&1)
+  check_contains "$file (stdlib interp error)" "$actual" "$fragment"
+  "$VUNA" interp --root ../stdlib/lib "$file" >/dev/null 2>&1
+  std_code=$?
+  if [ "$std_code" -ne 0 ]; then ok; else bad "$file (stdlib interp error exit)" "non-zero" "$std_code"; fi
+  rm -f "$tmp/stdlib_err.ml"
+  actual=$("$VUNA" --no-typecheck --root ../stdlib/lib "$file" "$tmp/stdlib_err.ml" 2>&1)
+  std_code=$?
+  check_contains "$file (stdlib dynamic error)" "$actual" "$fragment"
+  if [ "$std_code" -ne 0 ]; then ok; else bad "$file (stdlib dynamic error exit)" "non-zero" "$std_code"; fi
+  if [ -e "$tmp/stdlib_err.ml" ]; then
+    bad "$file (stdlib dynamic no output file)" "absent" "present"
+  else
+    ok
+  fi
+  rm -f "$tmp/stdlib_err_typed.ml"
+  actual=$("$VUNA" --typed --root ../stdlib/lib "$file" "$tmp/stdlib_err_typed.ml" 2>&1)
+  std_code=$?
+  check_contains "$file (stdlib typed error)" "$actual" "$fragment"
+  if [ "$std_code" -ne 0 ]; then ok; else bad "$file (stdlib typed error exit)" "non-zero" "$std_code"; fi
+  if [ -e "$tmp/stdlib_err_typed.ml" ]; then
+    bad "$file (stdlib typed no output file)" "absent" "present"
+  else
+    ok
+  fi
+done
+
+# 28) 包模式（M11.5）：workspace + 依赖包 + [export] + app/Main.vuna 入口
+#     正例：vuna build 生成 → ocamlopt → 运行比对 golden；vuna test 运行 test/*.vuna
+for dir in corpus/packages/[01][0-9]_*/; do
+  dir=${dir%/}
+  expected=$(cat "$dir/expected.out")
+  rm -f "$tmp/pkg.ml" "$tmp/pkg.exe"
+  if ! pkg_out=$("$VUNA" build "$dir" "$tmp/pkg.ml" 2>&1); then
+    bad "$dir (package build)" "exit 0" "$pkg_out"
+  elif ! "$OCAMLOPT" -w -a -o "$tmp/pkg.exe" "$tmp/pkg.ml" >"$tmp/pkg.log" 2>&1; then
+    bad "$dir (package ocamlopt)" "" "$(cat "$tmp/pkg.log")"
+  else
+    actual=$("$tmp/pkg.exe" 2>&1)
+    check_eq "$dir (package run)" "$expected" "$actual"
+  fi
+  test_out=$("$VUNA" test "$dir" 2>&1)
+  check_contains "$dir (package test)" "$test_out" "1 passed, 0 failed"
+done
+
+# 29) 包模式错误：缺依赖 / 依赖环 / 隐藏模块（[export] 限制）→ 非 0、含片段、不写产物
+for dir in corpus/packages/9[0-9]_*/; do
+  dir=${dir%/}
+  fragment=$(cat "$dir/expected.err")
+  rm -f "$tmp/pkg_err.ml"
+  actual=$("$VUNA" build "$dir" "$tmp/pkg_err.ml" 2>&1)
+  pkg_code=$?
+  check_contains "$dir (package error)" "$actual" "$fragment"
+  if [ "$pkg_code" -ne 0 ]; then ok; else bad "$dir (package error exit)" "non-zero" "$pkg_code"; fi
+  if [ -e "$tmp/pkg_err.ml" ]; then
+    bad "$dir (package no output file)" "absent" "present"
+  else
+    ok
+  fi
+done
+
+# 30) fmt（M11.5）：格式化后仍可编译且输出不变；fmt 幂等
+for file in corpus/run/01_arithmetic.vuna corpus/run/03_data_case.vuna corpus/monad/01_do_maybe.vuna corpus/traits/03_deriving_show_eq_enum.vuna; do
+  expected=$(cat "${file%.vuna}.out")
+  cp "$file" "$tmp/fmt_src.vuna"
+  "$VUNA" fmt "$tmp/fmt_src.vuna" >/dev/null 2>&1
+  actual=$("$VUNA" interp "$tmp/fmt_src.vuna" 2>&1)
+  check_eq "$file (fmt interp)" "$expected" "$actual"
+  "$VUNA" fmt --check "$tmp/fmt_src.vuna" >/dev/null 2>&1
+  fmt_code=$?
+  check_eq "$file (fmt idempotent)" "0" "$fmt_code"
+done
+
+# 31) doc / repl 冒烟
+"$VUNA" doc corpus/packages/01_workspace "$tmp/api.md" >/dev/null 2>&1
+check_eq "vuna doc exit" "0" "$?"
+check_contains "vuna doc content" "$(cat "$tmp/api.md" 2>/dev/null)" "## Vuna.Hello"
+repl_out=$(printf 'x = 1 + 1\nx + 40\n:q\n' | "$VUNA" repl 2>&1)
+check_contains "vuna repl eval" "$repl_out" "42"
+printf ':q\n' | "$VUNA" repl >/dev/null 2>&1
+check_eq "vuna repl exit" "0" "$?"
+
 if [ "$fail" -ne 0 ]; then
   printf '%s passed, %s failed\n' "$pass" "$fail"
   exit 1

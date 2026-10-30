@@ -1,4 +1,4 @@
-module Vuna.Loader (loadProgram) where
+module Vuna.Loader (loadProgram, loadProgramRaw) where
 
 -- Vuna.Loader：模块加载、名字解析与 flatten。
 
@@ -7,9 +7,10 @@ import Vuna.Ast
 import Vuna.Lexer
 import Vuna.Parser
 import Vuna.Builtins
+import Vuna.Pkg
 
 data Module : Type where
-  Module : String -> List Import -> List Decl -> List ExportEntry -> Module
+  Module : String -> String -> List Import -> List Decl -> List ExportEntry -> Module
 
 -- 模块导出表（M10）。每条是「本模块公开名 → 定义处带模块前缀的名字」。
 -- kind 用字符串区分两套命名空间：val（函数/值）、ctor（构造器）、type（类型名）。
@@ -119,14 +120,14 @@ _joinNames (Cons x rest) = x ++ ", " ++ _joinNames rest
 
 moduleDecls modules name =
   case findModule modules name of
-    Just (Module mname imports decls exports) => decls
+    Just (Module mname mpkg imports decls exports) => decls
     Nothing => Nil
 
 moduleCtors modules name = ctorsOf (moduleDecls modules name)
 
 exportsOf modules name =
   case findModule modules name of
-    Just (Module mname imports decls exports) => exports
+    Just (Module mname mpkg imports decls exports) => exports
     Nothing => Nil
 
 entryKind : ExportEntry -> String
@@ -203,25 +204,49 @@ unifyEntryPairs label kindLabel name (Cons p rest) =
       (label ++ ": ambiguous " ++ kindLabel ++ " " ++ name ++ " (imported from "
      ++ _joinNames (map firstOf (Cons p rest)) ++ "); qualify it")
 
-modulePath root name = root ++ "/" ++ joinSlashes (splitOnDot name) ++ ".vuna"
+modulePath root name = rootDir root ++ "/" ++ joinSlashes (splitOnDot name) ++ ".vuna"
 
-collectModuleFiles Nil name acc = reverse acc
-collectModuleFiles (Cons root rest) name acc =
-  let path = modulePath root name
-  in if fileExists path then collectModuleFiles rest name (Cons path acc)
-     else collectModuleFiles rest name acc
+-- 当前导入方所在包能否看到该 root 中的模块：同包永远可见；跨包只认 [export] 列表。
+rootAllows : String -> Root -> String -> Bool
+rootAllows importerPkg root name =
+  case rootExports root of
+    Nothing => True
+    Just mods => rootName root == importerPkg || memName name mods
 
-findModuleFile roots name =
-  case collectModuleFiles roots name Nil of
-    Nil => Err ("module " ++ name ++ " not found (roots: " ++ _joinNames roots ++ ")")
-    Cons path Nil => Ok path
-    paths => Err ("ambiguous module " ++ name ++ " (found in: " ++ _joinNames paths ++ ")")
+collectModuleFiles : List Root -> String -> String -> List (Pair String Root) -> List String -> Pair (List (Pair String Root)) (List String)
+collectModuleFiles roots name importerPkg allowed hidden =
+  case roots of
+    Nil => Pair (reverse allowed) (reverse hidden)
+    Cons root rest =>
+      let path = modulePath root name
+      in if fileExists path then
+           if rootAllows importerPkg root name then
+             collectModuleFiles rest name importerPkg (Cons (Pair path root) allowed) hidden
+           else collectModuleFiles rest name importerPkg allowed (Cons (rootName root) hidden)
+         else collectModuleFiles rest name importerPkg allowed hidden
+
+_joinRootDirs roots = _joinNames (map rootDir roots)
+
+candidateDir : Pair String Root -> String
+candidateDir candidate = rootDir (secondOf candidate)
+
+findModuleFile : List Root -> String -> String -> Result (Pair String Root)
+findModuleFile roots name importerPkg =
+  case collectModuleFiles roots name importerPkg Nil Nil of
+    Pair allowed hidden =>
+      case allowed of
+        Nil =>
+          case hidden of
+            Nil => Err ("module " ++ name ++ " not found (roots: " ++ _joinRootDirs roots ++ ")")
+            pkgs => Err ("module " ++ name ++ " is not exported by package " ++ _joinNames hidden)
+        Cons only Nil => Ok only
+        candidates => Err ("ambiguous module " ++ name ++ " (found in: " ++ _joinNames (map candidateDir allowed) ++ ")")
 
 findModule modules name =
   case modules of
     Nil => Nothing
-    Cons (Module mname imports decls exports) rest =>
-      if mname == name then Just (Module mname imports decls exports) else findModule rest name
+    Cons (Module mname mpkg imports decls exports) rest =>
+      if mname == name then Just (Module mname mpkg imports decls exports) else findModule rest name
 
 isBuiltinName name =
   case builtinArity name of
@@ -463,6 +488,28 @@ resolveExpr modules label prefix own ownCtors imports scope expr =
         case resolveGlobal modules label prefix own imports scope name of
           Err e => Err (label ++ ": unknown instance name " ++ name ++ " (@" ++ name ++ ")")
           Ok n2 => Ok (EInstSel m2 n2 sp))
+    EDo stmts sp =>
+      andThen (desugarDo stmts) (\e =>
+        resolveExpr modules label prefix own ownCtors imports scope e)
+
+-- do（M11）在这里 desugar 成 bind/pure 的普通应用，后续类型检查与 codegen 无需认识 do。
+-- 最后一条裸表达式即块结果（`do e` = `e`）；裸语句用 `bind e (\_ -> rest)` 顺序化。
+desugarDo Nil = Err "do block needs at least one statement"
+desugarDo (Cons (DExpr e sp) Nil) = Ok e
+desugarDo (Cons (DExpr e sp) rest) =
+  andThen (desugarDo rest) (\tail =>
+    Ok (EApp (EVar "bind" sp)
+          (Cons e (Cons (ELam (Cons "vuna_do_ignore" Nil) tail sp) Nil)) sp))
+desugarDo (Cons (DBind (PVar name psp) e sp) rest) =
+  andThen (desugarDo rest) (\tail =>
+    Ok (EApp (EVar "bind" sp)
+          (Cons e (Cons (ELam (Cons name Nil) tail sp) Nil)) sp))
+desugarDo (Cons (DBind (PWild psp) e sp) rest) =
+  andThen (desugarDo rest) (\tail =>
+    Ok (EApp (EVar "bind" sp)
+          (Cons e (Cons (ELam (Cons "vuna_do_ignore" Nil) tail sp) Nil)) sp))
+desugarDo (Cons (DBind pat e sp) rest) =
+  Err "do bind pattern must be a variable or _"
 
 resolveFieldValue modules label prefix own ownCtors imports scope (Pair fname value) =
   andThen (resolveExpr modules label prefix own ownCtors imports scope value) (\v =>
@@ -592,7 +639,7 @@ resolveEntry modules imports decls =
 resolveModules modules =
   case modules of
     Nil => Ok Nil
-    Cons (Module name imports decls exports) rest =>
+    Cons (Module name mpkg imports decls exports) rest =>
       andThen (resolveProgram modules name name (topNames decls) (ctorsOf decls) (typeNamesOf decls) imports decls) (\d1 =>
         andThen (resolveModules rest) (\d2 => Ok (append d1 d2)))
 
@@ -761,7 +808,7 @@ isRecordTarget modules decls prefix target =
       in if m == prefix then isRecordDecl base decls
          else
            case findModule modules m of
-             Just (Module mname imports dcs exports) => isRecordDecl base dcs
+             Just (Module mname mpkg mimports dcs exports) => isRecordDecl base dcs
              Nothing => False
 
 isRecordDecl dname decls =
@@ -951,31 +998,34 @@ computeExports modules prefix hdr imports decls =
 
 showCycle name stack = joinArrows (reverse (Cons name stack))
 
-loadAll roots modules stack imports =
+loadAll roots importerPkg modules stack imports =
   case imports of
     Nil => Ok modules
     Cons imp rest =>
-      andThen (loadModule roots modules stack (importName imp)) (\modules2 =>
-        loadAll roots modules2 stack rest)
+      andThen (loadModule roots importerPkg modules stack (importName imp)) (\modules2 =>
+        loadAll roots importerPkg modules2 stack rest)
 
-loadModule roots modules stack name =
+loadModule roots importerPkg modules stack name =
   case findModule modules name of
     Just m => Ok modules
     Nothing =>
       if memName name stack then Err ("import cycle: " ++ showCycle name stack)
       else if validModuleName name then
-        andThen (findModuleFile roots name) (\path =>
-          andThen (parseSource path (readFile path)) (\src =>
-            case src of
-              Source hdr imports decls =>
-                andThen (validateModuleHeader name hdr) (\_ =>
-                  andThen (validateImports name imports) (\_ =>
-                    andThen (loadAll roots modules (Cons name stack) imports) (\modules2 =>
-                      andThen (computeExports modules2 name hdr imports decls) (\exports =>
-                        Ok (Cons (Module name imports decls exports) modules2)))))))
+        andThen (findModuleFile roots name importerPkg) (\found =>
+          let path = firstOf found
+          in let root = secondOf found
+             in andThen (parseSource path (readFile path)) (\src =>
+                  case src of
+                    Source hdr imports decls =>
+                      andThen (validateModuleHeader name hdr) (\_ =>
+                        andThen (validateImports name imports) (\_ =>
+                          andThen (loadAll roots (rootName root) modules (Cons name stack) imports) (\modules2 =>
+                            andThen (computeExports modules2 name hdr imports decls) (\exports =>
+                              Ok (Cons (Module name (rootName root) imports decls exports) modules2)))))))
       else Err ("invalid module name: " ++ name)
 
-loadProgram roots entry =
+-- 包模式入口：entryPkg 是入口文件所属包（决定同包/跨包导出可见性）。
+loadProgram roots entryPkg entry =
   if fileExists entry then
     andThen (parseSource entry (readFile entry)) (\src =>
       case src of
@@ -985,11 +1035,14 @@ loadProgram roots entry =
               Err ("module header is not allowed in entry file (" ++ entry ++ ")")
             Nothing =>
               andThen (validateImports "<entry>" imports) (\_ =>
-                andThen (loadAll roots Nil Nil imports) (\modules =>
+                andThen (loadAll roots entryPkg Nil Nil imports) (\modules =>
                   andThen (resolveEntry modules imports decls) (\entryDecls =>
                     andThen (resolveModules modules) (\moduleDecls =>
                       Ok (append entryDecls moduleDecls))))))
   else Err ("entry file not found: " ++ entry)
+
+-- 原始 --root DIR 模式：所有根同属空包名，不限制导出。
+loadProgramRaw roots entry = loadProgram (map rawRoot roots) "" entry
 
 tyShape ty =
   case ty of
@@ -1001,3 +1054,4 @@ tyShape ty =
     ELet bs b _ _ => "let"
     ECase s alts _ => "case"
     EIf c t e _ => "if"
+    EDo stmts _ => "do"

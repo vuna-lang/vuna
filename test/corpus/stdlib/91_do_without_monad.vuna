@@ -1,0 +1,5 @@
+-- stdlib 反例：没有 import Vuna.Monad 时 do 的 bind 不可见。
+main : Int
+main = do
+  x <- 1
+  x

@@ -1,4 +1,4 @@
-module Vuna.Typecheck (TVar, TCon, TFun, Scheme, lookupScheme, checkProgramInfoElab, checkProgramInfo, checkProgram, exhaustiveWarnings) where
+module Vuna.Typecheck (TVar, TCon, TFun, TApp, Scheme, lookupScheme, checkProgramInfoElab, checkProgramInfo, checkProgram, exhaustiveWarnings) where
 
 -- Vuna.Typecheck：core-v0 的 Hindley-Milner 风格类型检查。
 -- M7b 先覆盖单文件程序与显式顶层签名；模块类型名解析与自检在 M7c 处理。
@@ -11,6 +11,9 @@ data Ty : Type where
   TVar : Int -> Ty
   TCon : String -> List Ty -> Ty
   TFun : Ty -> Ty -> Ty
+  -- 高阶 kind（M11）：类型变量当作类型构造器应用，如 `m a`。head 通常是 TVar；
+  -- resolveTy 会把 head 已解析成 TCon 的 TApp 归一化回 TCon。
+  TApp : Ty -> List Ty -> Ty
 
 -- scheme：量化类型变量、trait 约束（trait 名 + 类型）、类型。
 -- M10.5c：泛型（裸类型变量）trait 约束通过方法函数参数穿参（字典扁平化）。
@@ -95,6 +98,10 @@ resolveTy s ty =
         Nothing => ty
     TCon n args => TCon n (map (resolveTy s) args)
     TFun a b => TFun (resolveTy s a) (resolveTy s b)
+    TApp head args =>
+      case resolveTy s head of
+        TCon n hargs => resolveTy s (TCon n (append hargs (map (resolveTy s) args)))
+        head2 => TApp head2 (map (resolveTy s) args)
 
 occursIn : Int -> List (Pair Int Ty) -> Ty -> Bool
 occursIn i s ty =
@@ -102,6 +109,7 @@ occursIn i s ty =
     TVar j => i == j
     TCon n args => occursInArgs i s args
     TFun a b => occursIn i s a || occursIn i s b
+    TApp head args => occursIn i s head || occursInArgs i s args
 
 occursInArgs i s Nil = False
 occursInArgs i s (Cons ty rest) = occursIn i s ty || occursInArgs i s rest
@@ -113,6 +121,7 @@ showTy ty =
     TCon n Nil => n
     TCon n args => "(" ++ n ++ " " ++ showTyArgs args ++ ")"
     TFun a b => "(" ++ showTy a ++ " -> " ++ showTy b ++ ")"
+    TApp head args => "(" ++ showTy head ++ " " ++ showTyArgs args ++ ")"
 
 showTyArgs Nil = ""
 showTyArgs (Cons ty Nil) = showTy ty
@@ -138,35 +147,46 @@ unifyLists (Cons a ar) (Cons b br) st =
 unifyLists _ _ st = Err "type mismatch: different number of arguments"
 
 unify : Ty -> Ty -> TC -> Result TC
-unify a b (TC n s typeNames records cons methods tctx) =
-  case resolveTy s a of
-    ra =>
-      case resolveTy s b of
-        rb =>
-          case ra of
-            TVar i =>
-              case rb of
-                TVar j =>
-                  if i == j then Ok (TC n s typeNames records cons methods tctx) else bindVar i rb (TC n s typeNames records cons methods tctx)
-                _ =>
-                  if occursIn i s rb then Err ("occurs check: " ++ showTy rb)
-                  else bindVar i rb (TC n s typeNames records cons methods tctx)
-            TCon tn xs =>
-              case rb of
-                TVar j =>
-                  if occursIn j s ra then Err ("occurs check: " ++ showTy ra)
-                  else bindVar j ra (TC n s typeNames records cons methods tctx)
-                TCon tn2 ys =>
-                  if tn == tn2 || sameBuiltinTy tn tn2 then unifyLists xs ys (TC n s typeNames records cons methods tctx)
-                  else Err ("type mismatch: expected " ++ showTy rb ++ " but got " ++ showTy ra)
-                _ => Err ("type mismatch: expected " ++ showTy rb ++ " but got " ++ showTy ra)
-            TFun x y =>
-              case rb of
-                TVar j =>
-                  if occursIn j s ra then Err ("occurs check: " ++ showTy ra)
-                  else bindVar j ra (TC n s typeNames records cons methods tctx)
-                TFun x2 y2 => andThen (unify x x2 (TC n s typeNames records cons methods tctx)) (\st2 => unify y y2 st2)
-                _ => Err ("type mismatch: expected " ++ showTy rb ++ " but got " ++ showTy ra)
+unify a b st =
+  case resolveTy (substOf st) a of
+    ra => case resolveTy (substOf st) b of
+            rb => unifyResolved ra rb st
+
+unifyResolved ra rb st =
+  case ra of
+    TVar i =>
+      case rb of
+        TVar j =>
+          if i == j then Ok st else bindVar i rb st
+        _ =>
+          if occursIn i (substOf st) rb then Err ("occurs check: " ++ showTy rb)
+          else bindVar i rb st
+    TCon tn xs =>
+      case rb of
+        TVar j =>
+          if occursIn j (substOf st) ra then Err ("occurs check: " ++ showTy ra)
+          else bindVar j ra st
+        TCon tn2 ys =>
+          if tn == tn2 || sameBuiltinTy tn tn2 then unifyLists xs ys st
+          else Err ("type mismatch: expected " ++ showTy rb ++ " but got " ++ showTy ra)
+        TApp h ys =>
+          andThen (unify (TCon tn Nil) h st) (\st2 => unifyLists xs ys st2)
+        _ => Err ("type mismatch: expected " ++ showTy rb ++ " but got " ++ showTy ra)
+    TFun x y =>
+      case rb of
+        TVar j =>
+          if occursIn j (substOf st) ra then Err ("occurs check: " ++ showTy ra)
+          else bindVar j ra st
+        TFun x2 y2 => andThen (unify x x2 st) (\st2 => unify y y2 st2)
+        _ => Err ("type mismatch: expected " ++ showTy rb ++ " but got " ++ showTy ra)
+    TApp h xs =>
+      case rb of
+        TVar j =>
+          if occursIn j (substOf st) ra then Err ("occurs check: " ++ showTy ra)
+          else bindVar j ra st
+        TApp h2 ys => andThen (unify h h2 st) (\st2 => unifyLists xs ys st2)
+        TCon tn2 ys => andThen (unify h (TCon tn2 Nil) st) (\st2 => unifyLists xs ys st2)
+        _ => Err ("type mismatch: expected " ++ showTy rb ++ " but got " ++ showTy ra)
 
 instantiateVars Nil st = Pair Nil st
 instantiateVars (Cons q rest) st =
@@ -183,6 +203,7 @@ renameTy mapping ty =
         Nothing => ty
     TCon n args => TCon n (map (renameTy mapping) args)
     TFun a b => TFun (renameTy mapping a) (renameTy mapping b)
+    TApp head args => TApp (renameTy mapping head) (map (renameTy mapping) args)
 
 instantiateFull : TC -> Scheme -> Pair (Pair Ty (List (Pair String Ty))) TC
 instantiateFull st (Scheme qs cons ty) =
@@ -202,6 +223,7 @@ freeVarsTy ty =
     TVar i => Cons i Nil
     TCon n args => freeVarsArgs args
     TFun a b => unionInts (freeVarsTy a) (freeVarsTy b)
+    TApp head args => unionInts (freeVarsTy head) (freeVarsArgs args)
 
 freeVarsArgs Nil = Nil
 freeVarsArgs (Cons ty rest) = unionInts (freeVarsTy ty) (freeVarsArgs rest)
@@ -270,6 +292,19 @@ convertType typeNames vars st expr =
             andThen (convertTypes typeNames vars args st) (\pc =>
               case pc of
                 Pair (Pair tys vars1) st1 => Ok (Pair (Pair (TCon name tys) vars1) st1))
+          else if isLowerName name then
+            -- M11：类型变量可以当类型构造器应用（`m a`），得到 TApp。
+            case lookupTyVar name vars of
+              Just ty =>
+                andThen (convertTypes typeNames vars args st) (\pc =>
+                  case pc of
+                    Pair (Pair tys vars1) st1 => Ok (Pair (Pair (TApp ty tys) vars1) st1))
+              Nothing =>
+                case freshTy st of
+                  Pair ty st2 =>
+                    andThen (convertTypes typeNames (Cons (Pair name ty) vars) args st2) (\pc =>
+                      case pc of
+                        Pair (Pair tys vars1) st3 => Ok (Pair (Pair (TApp ty tys) vars1) st3))
           else Err ("unknown type constructor: " ++ name)
         _ => Err "invalid type application"
     _ => Err "invalid type expression"
@@ -391,6 +426,11 @@ builtinSchemes =
   , Pair "writeFile" (mkScheme Nil (fun2 strTy strTy intTy))
   , Pair "print" (mkScheme Nil (TFun strTy intTy))
   , Pair "getArgs" (mkScheme Nil (listOf strTy))
+  , Pair "readLine" (mkScheme Nil strTy)
+  , Pair "readDir" (mkScheme Nil (TFun strTy (listOf strTy)))
+  , Pair "isDirectory" (mkScheme Nil (TFun strTy boolTy))
+  , Pair "makeDir" (mkScheme Nil (TFun strTy intTy))
+  , Pair "removeFile" (mkScheme Nil (TFun strTy intTy))
   , Pair "fileExists" (mkScheme Nil (TFun strTy boolTy))
   , Pair "exit" (mkScheme Nil (TFun intTy intTy))
   ]
@@ -484,7 +524,10 @@ listNeqExpr tctx elemTy =
            in ELam (Cons a (Cons b Nil)) (EIf cond boolFalseExpr boolTrueExpr tcNoSpan) tcNoSpan
 
 traitMethodExpr tctx ty tr key =
-  if freeVarsTy ty /= Nil then
+  if traitArityOf tctx tr > 0 then
+    -- 高阶 kind trait：按 head 类型构造器静态派发（携带类型参数也能派发）。
+    andThen (concreteMethodName tctx ty tr key) (\fn => Ok (EVar fn tcNoSpan))
+  else if freeVarsTy ty /= Nil then
     case genericMethodName tr key of
       Just fn => Ok (EVar fn tcNoSpan)
       Nothing => Err ("trait method " ++ key ++ " used at a polymorphic type (only Eq/Ord have a generic fallback in M10.5)")
@@ -497,8 +540,24 @@ traitMethodExpr tctx ty tr key =
           _ => andThen (concreteMethodName tctx ty tr key) (\fn => Ok (EVar fn tcNoSpan))
       _ => andThen (concreteMethodName tctx ty tr key) (\fn => Ok (EVar fn tcNoSpan))
 
+-- 高阶 kind 的实例 head 是类型构造器本身（无参数）；按短名匹配候选类型。
+headCtorMatches patternTy ty =
+  case patternTy of
+    TCon pn pargs =>
+      if pargs == Nil then
+        case ty of
+          TCon tn targs => shortTyName pn == shortTyName tn
+          TApp head args =>
+            case head of
+              TCon tn hargs => shortTyName pn == shortTyName tn
+              _ => False
+          _ => False
+      else tyMatchesPattern patternTy ty
+    _ => tyMatchesPattern patternTy ty
+
 concreteMethodName tctx ty tr key =
-  case findDefaultInst tr ty (traitCtxInsts tctx) of
+  let arity = traitArityOf tctx tr
+  in case findDefaultInst arity tr ty (traitCtxInsts tctx) of
     Just inst =>
       case lookupImpl (lastSeg key) (instImpls inst) of
         Just fn => Ok fn
@@ -529,6 +588,16 @@ traitMethodKeys tctx tr =
 
 isDictTrait tr = tr /= "Eq" && tr /= "Ord"
 
+-- 约束 head 的类型变量：`TVar v` 与高阶 kind 的 `TApp (TVar v) args` 都归到 v。
+headVarOf ty =
+  case ty of
+    TVar v => Just v
+    TApp head args =>
+      case head of
+        TVar v => Just v
+        _ => Nothing
+    _ => Nothing
+
 needsHave need needs = memName need needs
 
 addNeed : String -> Ty -> List (Pair String Ty) -> List (Pair String Ty)
@@ -547,9 +616,9 @@ collectNeedsFromExpr subst tctx needs expr =
   case expr of
     XEMethod tr key paramTy sp =>
       if isDictTrait tr then
-        case resolveTy subst paramTy of
-          TVar v => addNeed tr (TVar v) needs
-          other => needs
+        case headVarOf (resolveTy subst paramTy) of
+          Just v => addNeed tr (TVar v) needs
+          Nothing => needs
       else needs
     XEFun name cons sp => foldNeeds subst tctx needs cons
     XEVar n sp => needs
@@ -586,9 +655,9 @@ foldNeeds subst tctx needs Nil = needs
 
 foldNeeds subst tctx needs (Cons (Pair tr ty) rest) =
   if isDictTrait tr then
-    case resolveTy subst ty of
-      TVar v => foldNeeds subst tctx (addNeed tr (TVar v) needs) rest
-      other => foldNeeds subst tctx needs rest
+    case headVarOf (resolveTy subst ty) of
+      Just v => foldNeeds subst tctx (addNeed tr (TVar v) needs) rest
+      Nothing => foldNeeds subst tctx needs rest
   else foldNeeds subst tctx needs rest
 
 collectNeedsClauses : List (Pair Int Ty) -> TraitCtx -> List (Pair (List Pat) EExpr) -> List (Pair String Ty)
@@ -609,9 +678,9 @@ dictParamsFor tctx needs =
 dictParamsForGo tctx Nil acc idx = reverse acc
 
 dictParamsForGo tctx (Cons (Pair tr ty) rest) acc idx =
-  case ty of
-    TVar v => dictParamsForMethods tctx tr v (traitMethodKeys tctx tr) acc idx rest
-    other => dictParamsForGo tctx rest acc idx
+  case headVarOf ty of
+    Just v => dictParamsForMethods tctx tr v (traitMethodKeys tctx tr) acc idx rest
+    Nothing => dictParamsForGo tctx rest acc idx
 
 dictParamsForMethods tctx tr v Nil acc idx rest = dictParamsForGo tctx rest acc idx
 
@@ -631,12 +700,12 @@ findDictParam params tr v key =
 dictMethodExpr : TraitCtx -> List (Pair Int Ty) -> List DictParam -> String -> String -> Ty -> Result Expr
 dictMethodExpr tctx subst params tr key paramTy =
   let ty = resolveTy subst paramTy
-  in case ty of
-       TVar v =>
+  in case headVarOf ty of
+       Just v =>
          case findDictParam params tr v (lastSeg key) of
            Just p => Ok (EVar p tcNoSpan)
            Nothing => traitMethodExpr tctx ty tr key
-       other => traitMethodExpr tctx ty tr key
+       Nothing => traitMethodExpr tctx ty tr key
 
 dictArgsFor : TraitCtx -> List (Pair Int Ty) -> List DictParam -> List (Pair String Ty) -> List Expr
 dictArgsFor tctx subst params cons =
@@ -1489,11 +1558,11 @@ funLoc name decls =
 filterNeeds genVars Nil = Nil
 
 filterNeeds genVars (Cons (Pair tr ty) rest) =
-  case ty of
-    TVar v =>
+  case headVarOf ty of
+    Just v =>
       if memInt v genVars then Cons (Pair tr ty) (filterNeeds genVars rest)
       else filterNeeds genVars rest
-    other => filterNeeds genVars rest
+    Nothing => filterNeeds genVars rest
 
 checkFunctionOnce globals decls sigs name st =
   case lookupScheme name globals of
@@ -1624,8 +1693,9 @@ renderTyExpr ty =
 data TraitMethodInfo : Type where
   TraitMethodInfo : String -> Scheme -> Expr -> TraitMethodInfo
 
+-- TraitDecl：trait 名、类型参数名、参数 kind 元数（0 = `*`，n = `* -> ... -> *`）、方法。
 data TraitDecl : Type where
-  TraitDecl : String -> String -> List TraitMethodInfo -> TraitDecl
+  TraitDecl : String -> String -> Int -> List TraitMethodInfo -> TraitDecl
 
 data TraitMethodRef : Type where
   TraitMethodRef : String -> String -> Scheme -> Int -> TraitMethodRef
@@ -1636,11 +1706,18 @@ data TraitInst : Type where
 data TraitCtx : Type where
   TraitCtx : List TraitDecl -> List TraitInst -> List String -> List String -> List TraitMethodRef -> TraitCtx
 
-traitDeclName (TraitDecl n p ms) = n
+traitDeclName (TraitDecl n p a ms) = n
 
-traitDeclParam (TraitDecl n p ms) = p
+traitDeclParam (TraitDecl n p a ms) = p
 
-traitDeclMethods (TraitDecl n p ms) = ms
+traitDeclArity (TraitDecl n p a ms) = a
+
+traitDeclMethods (TraitDecl n p a ms) = ms
+
+traitArityOf tctx tr =
+  case lookupTraitDecl tr (traitCtxDecls tctx) of
+    Just td => traitDeclArity td
+    Nothing => 0
 
 methodInfoName (TraitMethodInfo n s t) = n
 
@@ -1668,8 +1745,8 @@ traitCtxRefs (TraitCtx ds is sup eqsup refs) = refs
 
 lookupTraitDecl name Nil = Nothing
 
-lookupTraitDecl name (Cons (TraitDecl n p ms) rest) =
-  if n == name then Just (TraitDecl n p ms) else lookupTraitDecl name rest
+lookupTraitDecl name (Cons (TraitDecl n p a ms) rest) =
+  if n == name then Just (TraitDecl n p a ms) else lookupTraitDecl name rest
 
 lookupMethodRef name Nil = Nothing
 
@@ -1699,6 +1776,10 @@ tyMatchesPattern pattern ty =
       case ty of
         TFun x y => tyMatchesPattern a x && tyMatchesPattern b y
         _ => False
+    TApp head args =>
+      case ty of
+        TApp head2 args2 => tyMatchesPattern head head2 && tyListMatches args args2
+        _ => False
 
 tyListMatches Nil Nil = True
 
@@ -1707,14 +1788,19 @@ tyListMatches (Cons p ps) (Cons t ts) =
 
 tyListMatches _ _ = False
 
-findDefaultInst tr ty Nil = Nothing
+-- arity > 0 的 trait（高阶 kind）：实例 head 是类型构造器本身，按 head 短名匹配。
+findDefaultInst arity tr ty Nil = Nothing
 
-findDefaultInst tr ty (Cons inst rest) =
+findDefaultInst arity tr ty (Cons inst rest) =
   case instNameOf inst of
     Nothing =>
-      if instTraitName inst == tr && tyMatchesPattern (instHeadTy inst) ty then Just inst
-      else findDefaultInst tr ty rest
-    Just _ => findDefaultInst tr ty rest
+      if instTraitName inst == tr && instHeadMatches arity (instHeadTy inst) ty then Just inst
+      else findDefaultInst arity tr ty rest
+    Just _ => findDefaultInst arity tr ty rest
+
+instHeadMatches arity headTy ty =
+  if arity > 0 then headCtorMatches headTy ty
+  else tyMatchesPattern headTy ty
 
 tyEqual a b =
   case a of
@@ -1730,6 +1816,10 @@ tyEqual a b =
       case b of
         TFun x2 y2 => tyEqual x x2 && tyEqual y y2
         _ => False
+    TApp h xs =>
+      case b of
+        TApp h2 ys => tyEqual h h2 && tyListEqual xs ys
+        _ => False
 
 tyListEqual Nil Nil = True
 
@@ -1744,7 +1834,7 @@ builtinA = EVar "a" tcNoSpan
 builtinArrow a b = EApp (EVar "->" tcNoSpan) (Cons a (Cons b Nil)) tcNoSpan
 
 builtinShowTrait =
-  TraitDecl "Show" "a"
+  TraitDecl "Show" "a" 0
     (Cons
       (TraitMethodInfo "show"
         (mkScheme (Cons 0 Nil) (TFun (TVar 0) strTy))
@@ -1752,7 +1842,7 @@ builtinShowTrait =
       Nil)
 
 builtinEqTrait =
-  TraitDecl "Eq" "a"
+  TraitDecl "Eq" "a" 0
     (Cons
       (TraitMethodInfo "eq"
         (mkScheme (Cons 0 Nil) (TFun (TVar 0) (TFun (TVar 0) boolTy)))
@@ -1764,7 +1854,7 @@ builtinEqTrait =
         Nil))
 
 builtinOrdTrait =
-  TraitDecl "Ord" "a"
+  TraitDecl "Ord" "a" 0
     (Cons
       (TraitMethodInfo "lt"
         (mkScheme (Cons 0 Nil) (TFun (TVar 0) (TFun (TVar 0) boolTy)))
@@ -1813,8 +1903,34 @@ methodRefForName name refs =
         Just (Pair tr key) => lookupMethodRef key refs
         Nothing => Nothing
 
+-- trait 参数固定用 TVar 0 表示；临时 TC 的 fresh 编号从 1 开始，避免与参数 0 撞号。
 traitMethodScheme typeNames paramName sigTy =
-  convertType typeNames (Cons (Pair paramName (TVar 0)) Nil) (TC 0 Nil typeNames Nil Nil Nil (TraitCtx Nil Nil Nil Nil Nil)) sigTy
+  convertType typeNames (Cons (Pair paramName (TVar 0)) Nil) (TC 1 Nil typeNames Nil Nil Nil (TraitCtx Nil Nil Nil Nil Nil)) sigTy
+
+-- trait 类型参数的 kind 元数：方法签名里 `p a b ...` 的最大应用参数个数（0 = `*`）。
+tyExprParamArity paramName ty =
+  case ty of
+    EApp (EVar n sp) args _ =>
+      if n == paramName then length args else tyListParamArity paramName args
+    EApp f args _ => maxInt (tyExprParamArity paramName f) (tyListParamArity paramName args)
+    _ => 0
+
+tyListParamArity paramName Nil = 0
+
+tyListParamArity paramName (Cons ty rest) =
+  maxInt (tyExprParamArity paramName ty) (tyListParamArity paramName rest)
+
+maxInt a b = if a > b then a else b
+
+traitParamArityCheck paramName Nil arity = Pair arity Nothing
+
+traitParamArityCheck paramName (Cons (Pair mname sigTy) rest) arity =
+  case traitParamArityCheck paramName rest arity of
+    Pair arity2 conflict =>
+      let a = tyExprParamArity paramName sigTy
+      in if a == 0 || a == arity2 then Pair arity2 conflict
+         else if arity2 == 0 then Pair a conflict
+         else Pair arity2 (Just a)
 
 collectTraitDecls typeNames decls = collectTraitDeclsGo typeNames decls builtinTraitDecls builtinMethodRefs
 
@@ -1828,10 +1944,16 @@ collectTraitDeclsGo typeNames (Cons d rest) acc refs =
           if memName tname (map traitDeclName acc) then
             Err (showSpanLoc sp ++ ": duplicate trait " ++ tname)
           else
-            case traitMethodInfos typeNames tname p methods Nil Nil sp of
-              Err e => Err e
-              Ok (Pair infos newRefs) =>
-                collectTraitDeclsGo typeNames rest (append acc (Cons (TraitDecl tname p infos) Nil)) (append refs newRefs)
+            case traitParamArityCheck p methods 0 of
+              Pair arity conflict =>
+                case conflict of
+                  Just other =>
+                    Err (showSpanLoc sp ++ ": trait " ++ tname ++ " uses its type parameter both as a type and as a type constructor")
+                  Nothing =>
+                    case traitMethodInfos typeNames tname p methods Nil Nil sp of
+                      Err e => Err e
+                      Ok (Pair infos newRefs) =>
+                        collectTraitDeclsGo typeNames rest (append acc (Cons (TraitDecl tname p arity infos) Nil)) (append refs newRefs)
         _ => Err (showSpanLoc sp ++ ": trait " ++ tname ++ " must have exactly one type parameter")
     _ => collectTraitDeclsGo typeNames rest acc refs
 
@@ -2176,11 +2298,21 @@ tyOuterTypeName ty =
     TCon n args => n
     _ => ""
 
-collectUserInstances typeNames traitDecls decls = collectUserInstancesGo typeNames traitDecls decls Nil Nil
+-- 类型构造器的 kind 元数（data/record 的参数个数；内建与未知类型按 0 处理）。
+typeArityOf decls name =
+  case decls of
+    Nil => 0
+    Cons d rest =>
+      case d of
+        DData dn params ctors derivings sp => if dn == name then length params else typeArityOf rest name
+        DRecord dn params fields derivings sp => if dn == name then length params else typeArityOf rest name
+        _ => typeArityOf rest name
 
-collectUserInstancesGo typeNames traitDecls Nil insts declsOut = Ok (Pair (reverse insts) (reverse declsOut))
+collectUserInstances typeNames traitDecls decls = collectUserInstancesGo typeNames traitDecls decls decls Nil Nil
 
-collectUserInstancesGo typeNames traitDecls (Cons d rest) insts declsOut =
+collectUserInstancesGo typeNames traitDecls allDecls Nil insts declsOut = Ok (Pair (reverse insts) (reverse declsOut))
+
+collectUserInstancesGo typeNames traitDecls allDecls (Cons d rest) insts declsOut =
   case d of
     DInstance iname isDefault headExpr methods sp =>
       case instanceHeadParts headExpr of
@@ -2192,25 +2324,37 @@ collectUserInstancesGo typeNames traitDecls (Cons d rest) insts declsOut =
               case convertType typeNames Nil (TC 0 Nil typeNames Nil Nil Nil (TraitCtx Nil Nil Nil Nil Nil)) headTyExpr of
                 Err e => Err (showSpanLoc sp ++ ": in instance head: " ++ e)
                 Ok (Pair (Pair headTy vars) st) =>
-                  if vars == Nil then
+                  if traitDeclArity traitDecl > 0 then
+                    case headTyExpr of
+                      EVar tcName sp2 =>
+                        if typeArityOf allDecls tcName == traitDeclArity traitDecl then
+                          finishInstanceKinded typeNames traitDecls allDecls traitDecl traitName iname isDefault headTyExpr headTy methods sp insts declsOut rest
+                        else
+                          Err (showSpanLoc sp ++ ": instance head " ++ shortTyName tcName ++ " has kind * but trait " ++ traitName ++ " expects a type constructor of arity " ++ strFromInt (traitDeclArity traitDecl))
+                      _ => Err (showSpanLoc sp ++ ": instance head for higher-kinded trait must be a type constructor name")
+                  else if vars == Nil then
                     case iname of
                       Just internalName =>
                         if isDefault then
                           if orphanAllowed (modulePrefixOf internalName) traitName headTy then
-                            finishInstance typeNames traitDecls traitDecl traitName iname isDefault headTyExpr headTy methods sp insts declsOut rest
+                            finishInstance typeNames traitDecls allDecls traitDecl traitName iname isDefault headTyExpr headTy methods sp insts declsOut rest
                           else
                             Err (showSpanLoc sp ++ ": orphan default instance " ++ traitName ++ " " ++ tyOuterTypeName headTy ++ "; name it with `as`")
-                        else finishInstance typeNames traitDecls traitDecl traitName iname isDefault headTyExpr headTy methods sp insts declsOut rest
-                      Nothing => finishInstance typeNames traitDecls traitDecl traitName iname isDefault headTyExpr headTy methods sp insts declsOut rest
+                        else finishInstance typeNames traitDecls allDecls traitDecl traitName iname isDefault headTyExpr headTy methods sp insts declsOut rest
+                      Nothing => finishInstance typeNames traitDecls allDecls traitDecl traitName iname isDefault headTyExpr headTy methods sp insts declsOut rest
                   else Err (showSpanLoc sp ++ ": instance head must be a concrete type")
-    _ => collectUserInstancesGo typeNames traitDecls rest insts declsOut
+    _ => collectUserInstancesGo typeNames traitDecls allDecls rest insts declsOut
 
-finishInstance typeNames traitDecls traitDecl traitName iname isDefault headTyExpr headTy methods sp insts declsOut rest =
+finishInstanceKinded typeNames traitDecls allDecls traitDecl traitName iname isDefault headTyExpr headTy methods sp insts declsOut rest =
+  let headTy2 = TCon (tyOuterTypeName headTy) Nil
+  in finishInstance typeNames traitDecls allDecls traitDecl traitName iname isDefault headTyExpr headTy2 methods sp insts declsOut rest
+
+finishInstance typeNames traitDecls allDecls traitDecl traitName iname isDefault headTyExpr headTy methods sp insts declsOut rest =
   let instKey = instKeyOf isDefault iname headTyExpr
   in case instanceImpls typeNames traitDecl headTyExpr methods instKey sp of
        Err e => Err e
        Ok (Pair impls newDecls) =>
-         collectUserInstancesGo typeNames traitDecls rest
+         collectUserInstancesGo typeNames traitDecls allDecls rest
            (Cons (TraitInst traitName (instanceNameFor isDefault iname) headTy impls) insts)
            (append newDecls declsOut)
 

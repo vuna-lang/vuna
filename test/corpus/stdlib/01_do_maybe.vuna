@@ -1,0 +1,24 @@
+-- stdlib：do 语法 + Maybe 的 Monad 实例（bind/pure）。
+import Vuna.Monad
+import Vuna.Maybe
+
+showMaybe : Maybe Int -> String
+showMaybe m =
+  case m of
+    Nothing => "Nothing"
+    Just n => "Just " ++ strFromInt n
+
+add : Maybe Int
+add = do
+  x <- Just 1
+  y <- Just 2
+  pure (x + y)
+
+bail : Maybe Int
+bail = do
+  x <- Just 10
+  y <- Nothing
+  pure (x + y)
+
+main : String
+main = showMaybe add ++ "/" ++ showMaybe bail

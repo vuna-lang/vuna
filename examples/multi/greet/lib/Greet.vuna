@@ -1,0 +1,13 @@
+module Greet (greeting, shout) where
+
+import Vuna.List
+import Vuna.String
+
+greeting : Int -> String
+greeting n = join " " (repeatText n "hi")
+
+repeatText : Int -> String -> List String
+repeatText n s = if n <= 0 then [] else s :: repeatText (n - 1) s
+
+shout : String -> String
+shout s = s ++ "!"

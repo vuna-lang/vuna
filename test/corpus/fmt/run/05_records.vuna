@@ -1,0 +1,13 @@
+record Point where
+  x : Int
+  y : Int
+deriving (Show, Eq)
+
+p : Point
+p = Point { x = 1, y = 2 }
+
+q : Point
+q = { p | y = 40 }
+
+main : Int
+main = q.x + q.y

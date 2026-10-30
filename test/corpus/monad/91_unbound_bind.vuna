@@ -1,0 +1,5 @@
+-- M11 反例：没有 Monad trait/import 时 do 里的 bind 不可见。
+main : Int
+main = do
+  x <- 1
+  x

@@ -1,0 +1,14 @@
+data Nat : Type where
+  Z : Nat
+  S : Nat -> Nat
+
+plus : Nat -> Nat -> Nat
+plus Z y = y
+plus (S x) y = S (plus x y)
+
+toInt : Nat -> Int
+toInt Z = 0
+toInt (S x) = 1 + toInt x
+
+main : Int
+main = toInt (plus (S (S Z)) (S Z)) + 40

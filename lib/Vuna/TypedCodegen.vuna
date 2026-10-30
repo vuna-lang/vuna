@@ -194,6 +194,10 @@ showForTy decls ty =
   case ty of
     TVar i => Ok "(fun _ -> \"<value>\")"
     TFun a b => Ok "(fun _ -> \"<function>\")"
+    TApp head args =>
+      case head of
+        TCon n hargs => showForTy decls (TCon n (append hargs args))
+        _ => Err "typed codegen: main type has an unresolved type constructor"
     TCon name args =>
       if name == "Int" then Ok "string_of_int"
       else if name == "String" then Ok "show_vstring"
@@ -302,7 +306,7 @@ isAtomicExpr decls env e =
           Just arity => if arity == 0 then True else False
           Nothing =>
             case builtinName name of
-              Just ref => if name == "getArgs" then False else True
+              Just ref => if name == "getArgs" || name == "readLine" then False else True
               Nothing =>
                 case funArity name decls of
                   Just 0 => isPureZeroArg decls name
@@ -452,6 +456,11 @@ builtinName "readFile" = Just "bi_read_file"
 builtinName "writeFile" = Just "bi_write_file"
 builtinName "print" = Just "bi_print"
 builtinName "getArgs" = Just "bi_get_args"
+builtinName "readLine" = Just "bi_read_line"
+builtinName "readDir" = Just "bi_read_dir"
+builtinName "isDirectory" = Just "bi_is_directory"
+builtinName "makeDir" = Just "bi_make_dir"
+builtinName "removeFile" = Just "bi_remove_file"
 builtinName "fileExists" = Just "bi_file_exists"
 builtinName "exit" = Just "bi_exit"
 builtinName _ = Nothing
@@ -472,7 +481,10 @@ genExpr decls env expr =
           Nothing =>
             case builtinName name of
               Just ref =>
-                if name == "getArgs" then Ok "bi_get_args ()" else Ok ref
+                case name of
+                  "getArgs" => Ok "bi_get_args ()"
+                  "readLine" => Ok "bi_read_line ()"
+                  _ => Ok ref
               Nothing =>
                 case funArity name decls of
                   Just 0 => Ok (zeroArgRef decls name)
@@ -884,6 +896,11 @@ runtimePrelude =
   , Pair "bi_file_exists" "let bi_file_exists path = Sys.file_exists path\n"
   , Pair "bi_exit" "let bi_exit n = exit n\n"
   , Pair "bi_get_args" "let bi_get_args () =\n  let argv = Sys.argv in\n  let n = Array.length argv in\n  if n <= 1 then [] else Array.to_list (Array.sub argv 1 (n - 1))\n"
+  , Pair "bi_read_line" "let bi_read_line () = try input_line stdin with End_of_file -> \"\"\n"
+  , Pair "bi_read_dir" "let bi_read_dir path =\n  try List.sort compare (Array.to_list (Sys.readdir path))\n  with Sys_error msg -> failwith (\"readDir: \" ^ msg)\n"
+  , Pair "bi_is_directory" "let bi_is_directory path =\n  try Sys.is_directory path with Sys_error msg -> failwith (\"isDirectory: \" ^ msg)\n"
+  , Pair "bi_make_dir" "let bi_make_dir path =\n  try (if Sys.file_exists path then 0 else (Sys.mkdir path 0o755; 0))\n  with Sys_error msg -> failwith (\"makeDir: \" ^ msg)\n"
+  , Pair "bi_remove_file" "let bi_remove_file path =\n  try (if Sys.file_exists path then (Sys.remove path; 0) else 0)\n  with Sys_error msg -> failwith (\"removeFile: \" ^ msg)\n"
   , Pair "show_ctor" "let show_ctor name args = if args = [] then name else \"(\" ^ name ^ \" \" ^ String.concat \" \" args ^ \")\"\n"
   , Pair "show_vbool" "let show_vbool b = if b then \"True\" else \"False\"\n"
   , Pair "show_vstring" "let show_vstring s =\n  let buf = Buffer.create 16 in\n  Buffer.add_char buf (Char.chr 34);\n  String.iter (fun c ->\n    let n = Char.code c in\n    if n = 34 then Buffer.add_string buf (String.make 1 (Char.chr 92) ^ String.make 1 (Char.chr 34))\n    else if n = 92 then Buffer.add_string buf (String.make 1 (Char.chr 92) ^ String.make 1 (Char.chr 92))\n    else if n = 10 then Buffer.add_string buf (String.make 1 (Char.chr 92) ^ \"n\")\n    else if n = 9 then Buffer.add_string buf (String.make 1 (Char.chr 92) ^ \"t\")\n    else if n = 13 then Buffer.add_string buf (String.make 1 (Char.chr 92) ^ \"r\")\n    else Buffer.add_char buf c) s;\n  Buffer.add_char buf (Char.chr 34);\n  Buffer.contents buf\n"

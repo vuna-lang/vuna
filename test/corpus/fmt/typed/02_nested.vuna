@@ -1,0 +1,28 @@
+data Bool : Type where
+  False : Bool
+  True : Bool
+
+data List a : Type where
+  Nil : List a
+  Cons : a -> List a -> List a
+
+data Pair a b : Type where
+  Pair : a -> b -> Pair a b
+
+data Maybe : Type where
+  Nothing : Maybe
+  Just : Int -> Maybe
+
+lookup : List (Pair String Int) -> String -> Maybe
+lookup Nil key = Nothing
+lookup (Cons (Pair k v) rest) key =
+  if k == key then Just v else lookup rest key
+
+sumAll : List Int -> Int
+sumAll Nil = 0
+sumAll (Cons x xs) = x + sumAll xs
+
+main : Int
+main = case lookup [Pair "a" 1, Pair "b" 2] "b" of
+  Nothing => 0
+  Just v => v + sumAll [1, 2, 3]

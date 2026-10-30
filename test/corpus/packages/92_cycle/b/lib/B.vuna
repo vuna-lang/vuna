@@ -1,0 +1,4 @@
+module B (bValue) where
+
+bValue : String
+bValue = "b"

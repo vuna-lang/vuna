@@ -1,0 +1,53 @@
+module Vuna.IO (IO, runIO, pureIO, bindIO, fmapIO, printIO, printlnIO, readFileIO, writeFileIO, getArgsIO, exitIO) where
+
+-- Vuna.IO：抽象 IO 类型（M11-C）。
+-- 表示是「世界令牌 Int -> a」的函数；构造器 MkIO 私有，跨模块只能通过 API 使用。
+-- Functor/Monad 实例让 `do` / `>>=` / `>>` 可以直接用于 IO。
+
+import Vuna.List
+import Vuna.Monad
+
+data IO a : Type where
+  MkIO : (Int -> a) -> IO a
+
+-- 用一个初始世界令牌运行 IO 动作，拿到最终结果。
+runIO : IO a -> a
+runIO (MkIO f) = f 0
+
+pureIO : a -> IO a
+pureIO x = MkIO (\w => x)
+
+bindIO : IO a -> (a -> IO b) -> IO b
+bindIO (MkIO f) k =
+  MkIO (\w => case k (f w) of
+                MkIO g => g w)
+
+fmapIO : (a -> b) -> IO a -> IO b
+fmapIO f (MkIO g) = MkIO (\w => f (g w))
+
+-- 输出字符串，返回打印长度（与内建 print 一致）。
+printIO : String -> IO Int
+printIO s = MkIO (\w => print s)
+
+-- 输出字符串并换行。
+printlnIO : String -> IO Int
+printlnIO s = printIO (s ++ "\n")
+
+readFileIO : String -> IO String
+readFileIO path = MkIO (\w => readFile path)
+
+writeFileIO : String -> String -> IO Int
+writeFileIO path contents = MkIO (\w => writeFile path contents)
+
+getArgsIO : IO (List String)
+getArgsIO = MkIO (\w => getArgs)
+
+exitIO : Int -> IO Int
+exitIO code = MkIO (\w => exit code)
+
+instance Functor IO where
+  fmap f io = fmapIO f io
+
+instance Monad IO where
+  bind io k = bindIO io k
+  pure x = pureIO x

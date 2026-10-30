@@ -1,0 +1,8 @@
+twice : (Int -> Int) -> Int -> Int
+twice f x = f (f x)
+
+main : Int
+main =
+  let base = 10
+      step = \x => x + base
+  in twice step 0

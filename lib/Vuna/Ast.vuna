@@ -1,4 +1,4 @@
-module Vuna.Ast (Pat, PVar, PWild, PCon, PInt, PStr, PRecord, Expr, EVar, EInt, EStr, ELam, EApp, ELet, ECase, EIf, EField, ERecord, ERecUpdate, EInstSel, Ctor, Field, Decl, DData, DSig, DFun, DRecord, DTrait, DInstance, XBare, XTypeAll, XModule, ModDecl, Source, patSpan, exprSpan, declSpan, ctorSpan, fieldSpan, fieldName, fieldType, Import, importSpan, exportItemSpan, clausesFor, funArity, ctorName, ctorType, ctorArityOf, ctorArity, declNames, topNames, ctorsOf, typeNamesOf, declDerivings) where
+module Vuna.Ast (Pat, PVar, PWild, PCon, PInt, PStr, PRecord, Expr, EVar, EInt, EStr, ELam, EApp, ELet, ECase, EIf, EField, ERecord, ERecUpdate, EInstSel, EDo, DoStmt, DBind, DExpr, doStmtSpan, doStmtExpr, Ctor, Field, Decl, DData, DSig, DFun, DRecord, DTrait, DInstance, XBare, XTypeAll, XModule, ModDecl, Source, patSpan, exprSpan, declSpan, ctorSpan, fieldSpan, fieldName, fieldType, Import, importSpan, exportItemSpan, clausesFor, funArity, ctorName, ctorType, ctorArityOf, ctorArity, declNames, topNames, ctorsOf, typeNamesOf, declDerivings) where
 
 -- Vuna.Ast：core-v0/M10.5 的语法类型与 AST 辅助函数。
 
@@ -29,6 +29,12 @@ data Expr : Type where
   ERecord : String -> List (Pair String Expr) -> Span -> Expr
   ERecUpdate : Expr -> List (Pair String Expr) -> Span -> Expr
   EInstSel : Expr -> String -> Span -> Expr
+  EDo : List DoStmt -> Span -> Expr
+
+-- do 语句（M11）：`pat <- expr` 或裸表达式；最后一条必须是裸表达式。
+data DoStmt : Type where
+  DBind : Pat -> Expr -> Span -> DoStmt
+  DExpr : Expr -> Span -> DoStmt
 
 data Ctor : Type where
   Ctor : String -> Expr -> Int -> Span -> Ctor
@@ -80,6 +86,17 @@ exprSpan expr =
     ERecord name fields sp => sp
     ERecUpdate base fields sp => sp
     EInstSel meth name sp => sp
+    EDo stmts sp => sp
+
+doStmtSpan stmt =
+  case stmt of
+    DBind pat expr sp => sp
+    DExpr expr sp => sp
+
+doStmtExpr stmt =
+  case stmt of
+    DBind pat expr sp => expr
+    DExpr expr sp => expr
 
 declSpan decl =
   case decl of

@@ -1,0 +1,4 @@
+module Vuna.Hello (hello) where
+
+hello : String
+hello = "hello"

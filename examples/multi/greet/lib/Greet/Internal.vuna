@@ -1,0 +1,4 @@
+module Greet.Internal (internalWord) where
+
+internalWord : String
+internalWord = "internal"

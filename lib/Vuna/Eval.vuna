@@ -478,6 +478,23 @@ callBuiltin name args sp =
         Cons a Nil => andThen (stringArg sp a) (\s => Ok (VInt (print s)))
         _ => errAt sp "bad arguments for print"
     "getArgs" => Ok (strListToValue getArgs)
+    "readLine" => Ok (VStr readLine)
+    "readDir" =>
+      case args of
+        Cons a Nil => andThen (stringArg sp a) (\s => Ok (strListToValue (readDir s)))
+        _ => errAt sp "bad arguments for readDir"
+    "isDirectory" =>
+      case args of
+        Cons a Nil => andThen (stringArg sp a) (\s => Ok (vbool (isDirectory s)))
+        _ => errAt sp "bad arguments for isDirectory"
+    "makeDir" =>
+      case args of
+        Cons a Nil => andThen (stringArg sp a) (\s => Ok (VInt (makeDir s)))
+        _ => errAt sp "bad arguments for makeDir"
+    "removeFile" =>
+      case args of
+        Cons a Nil => andThen (stringArg sp a) (\s => Ok (VInt (removeFile s)))
+        _ => errAt sp "bad arguments for removeFile"
     "fileExists" =>
       case args of
         Cons a Nil => andThen (stringArg sp a) (\s => Ok (vbool (fileExists s)))

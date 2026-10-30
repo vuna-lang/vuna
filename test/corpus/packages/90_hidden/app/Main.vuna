@@ -1,0 +1,5 @@
+import Dep
+import Dep.Hidden
+
+main : String
+main = depText ++ hiddenText

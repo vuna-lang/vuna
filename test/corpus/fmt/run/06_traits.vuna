@@ -1,0 +1,18 @@
+data Color : Type where
+  Red : Color
+  Blue : Color
+deriving (Show, Eq)
+
+trait Pretty a where
+  pretty : a -> String
+
+instance Pretty Color where
+  pretty c = case c of
+    Red => "red"
+    Blue => "blue"
+
+instance Pretty Color as fancy where
+  pretty c = "FANCY"
+
+main : String
+main = pretty Red ++ "/" ++ pretty @fancy Blue ++ "/" ++ show Red

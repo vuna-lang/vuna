@@ -1,0 +1,5 @@
+import Vuna.Hello
+import Dep
+
+main : String
+main = hello ++ "/" ++ depText
