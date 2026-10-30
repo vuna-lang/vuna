@@ -118,8 +118,6 @@
             packages = ocamlToolsFn system ++ [
               # 种子编译器：手动检查“当前种子能编译当前源码”。
               self.packages.${system}.vuna-boot
-              # 手动性能基准（等价于 nix run .#bench）。
-              self.packages.${system}.vuna-bench
             ];
 
             shellHook = ''
