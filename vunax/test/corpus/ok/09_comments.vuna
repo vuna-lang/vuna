@@ -1,9 +1,0 @@
--- 行注释
-{- 块注释
-   {- 嵌套注释 -}
--}
-id : a -> a
-id x = x
-
-lit : String
-lit = "line\nquote\"tab\t"

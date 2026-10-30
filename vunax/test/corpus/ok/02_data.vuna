@@ -1,7 +1,0 @@
-data Nat : Type where
-  Z : Nat
-  S : Nat -> Nat
-
-data List a : Type where
-  Nil : List a
-  Cons : a -> List a -> List a

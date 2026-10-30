@@ -1,5 +1,0 @@
-max : Nat -> Nat -> Nat
-max x y =
-  if x < y
-    then y
-    else x

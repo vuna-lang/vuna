@@ -67,17 +67,16 @@ git add bootstrap/ && git commit
 ├── flake.nix             # Nix：vunax / vuna-boot / vuna / vuna-interp、开发环境
 ├── flake.lock
 ├── dune-workspace        # dune 工作区根；vunax/ 是唯一的 dune 项目
-├── vunax/                # 外部编译器（OCaml）
+├── vunax/                # 归档的 stage 0 实现（OCaml，冻结）
 │   ├── dune-project
 │   ├── vunax.opam
 │   ├── lib/              # token / lexer / ast / parser / loader / eval / codegen
-│   ├── bin/              # 可执行文件 vunax
-│   └── test/             # alcotest + corpus/ 解析、运行、模块语料
+│   └── bin/              # 归档的 vunax
 ├── lib/                  # vuna 模块根：Vuna/Interp.vuna（自解释器）等，模块名由
 │                         # 路径决定（lib/Vuna/Parser.vuna ⇔ Vuna.Parser）
 ├── app/                  # vuna 入口：compile.vuna（vuna 编译器 CLI）、interp.vuna（vuna-interp）
-├── test/                 # 自举：vuna 写的测试（.vuna）
-├── bootstrap/stage1.ml   # 自举种子（stage 1），提交入库，由 vunax 生成
+├── test/                 # vuna 原生测试：corpus/ + run-tests.sh（不依赖 vunax）
+├── bootstrap/stage1.ml   # 自举种子（stage 1），提交入库，由 vuna-boot 轮换生成
 ├── .ocamlformat
 └── README.md
 ```
@@ -86,25 +85,35 @@ git add bootstrap/ && git commit
 dune 项目在 `vunax/`；因此 `app/`、`lib/`、`test/` 里的 `.vuna` 文件不会被 dune
 当成 OCaml 源码扫描，也不会进入 vunax 的构建输入。
 
-## 开发（vunax，OCaml）
+## 开发与测试
+
+日常 vuna 开发不再需要 vunax：
 
 ```console
 nix develop
-dune build            # 在仓库根通过 dune-workspace 构建 vunax
-dune runtest
-vunax --version       # devShell 里直接可用（devShell 内的 vunax 跳过包测试）
-vunax run vunax/test/corpus/run/12_fact.vuna
-vunax run lib/Vuna/Interp.vuna          # 运行自解释器 demo
-vunax run --root lib app/interp.vuna --root lib lib/Vuna/Interp.vuna
-vuna-boot --root lib --no-print app/compile.vuna /tmp/stage2.ml  # 手动试种子
-dune fmt
+nix build .#vuna --out-link result-vuna
+nix build .#vuna-boot --out-link result-boot
+nix build .#vuna-interp --out-link result-interp
+VUNA=$PWD/result-vuna/bin/vuna \
+VUNA_BOOT=$PWD/result-boot/bin/vuna-boot \
+VUNA_INTERP=$PWD/result-interp/bin/vuna-interp \
+sh test/run-tests.sh
 ```
 
-也可以 `cd vunax && dune build`。devShell 里放的 vunax 用 `doCheck = false`
-构建，避免“测试失败 → devShell 建不出来 → 没法调试”的死循环；测试由
-`nix build` / `nix flake check` 运行。`vuna-boot` 是从入库种子固定构建的，
-不依赖当前源码，适合手动验证种子不变量；stage2 的 `vuna` 不进 devShell，
-避免种子失效时连 shell 都进不去。
+`test/run-tests.sh` 是 vuna 原生测试（74 checks）：
+
+- `corpus/run/*.vuna`：`vuna-interp` 输出与 `.out` golden 比对；`vuna` 编译→`ocamlopt`→运行再比对；
+- `corpus/modules/0*`：模块夹具的解释器与编译器结果；
+- `corpus/modules/9*`：缺失模块/循环/未限定名等错误信息；
+- `corpus/err/*.vuna`、`corpus/run_err/*.vuna`：解析/求值错误片段；
+- `vuna-boot` 编译 `12_fact` 的种子冒烟。
+
+CI 用 `nix flake check` 跑 `checks.vuna-tests`、`checks.bootstrap-selfhost`、
+`checks.fixed-point`；它们只用种子与 vuna，不构建 vunax。
+
+devShell 仍暴露归档的 `vunax`（`nix build .#vunax`）用于历史命令与审计；
+`dune build` / `dune fmt` 只针对归档的 OCaml 代码。vuna 源码的格式化由
+编辑器/手工维护，不经过 OCaml 工具链。
 
 ## 解析器（core-v0，M1）
 
@@ -122,15 +131,15 @@ dune fmt
   （`-> || && == /= < <= > >= ++ + - * / ::`）。
 
 ```console
-dune exec vunax -- parse vunax/test/corpus/ok/06_list_sugar.vuna
+dune exec vunax -- parse test/corpus/run/03_data_case.vuna
 dune exec vunax -- --version
 ```
 
 语法语料：
 
-- `vunax/test/corpus/ok/*.vuna` + 同名 `.sexp`（AST golden）；
-- `vunax/test/corpus/err/*.vuna` + 同名 `.err`（错误位置与信息 golden）；
-- 改语料或解析器后运行 `vunax/test/update-golden.sh` 重新生成 golden，再 review diff。
+- AST golden（`.sexp`）随归档的 vunax 一起退役，不再维护；
+- `test/corpus/err/*.vuna` + 同名 `.err`（错误位置与信息 golden）；
+- 改语料或解析器后运行 `test/run-tests.sh` 直接比对；修改语料后手工更新 golden 并 review diff。
 
 尚未实现（后续里程碑）：类型检查（core-v0 先不检查类型）、typed codegen、
 种子入库、`where` / `do` / 隐式参数 / 依赖类型。
@@ -151,15 +160,15 @@ dune exec vunax -- --version
   （与 Idris2 一致）；程序需要自己声明 `data Bool` 才能对它们做模式匹配。
 
 ```console
-dune exec vunax -- run vunax/test/corpus/run/03_data_case.vuna
+dune exec vunax -- run test/corpus/run/03_data_case.vuna
 # (S (S (S (S Z))))
 ```
 
 求值语料：
 
-- `vunax/test/corpus/run/*.vuna` + 同名 `.out`（`main` 求值结果 golden）；
-- `vunax/test/corpus/run_err/*.vuna` + 同名 `.err`（运行时错误信息 golden）；
-- 与解析 golden 一起由 `vunax/test/update-golden.sh` 重新生成。
+- `test/corpus/run/*.vuna` + 同名 `.out`（`main` 求值结果 golden）；
+- `test/corpus/run_err/*.vuna` + 同名 `.err`（运行时错误信息 golden）；
+- golden 由 `test/run-tests.sh` 比对；修改语料后需手工更新。
 
 限制：没有类型检查，运行时错误信息暂时不带源码位置（AST 还没有 span）。
 
@@ -202,7 +211,7 @@ vunax run lib/Vuna/Interp.vuna
 # "42"
 ```
 
-验证（104 个测试，`nix build` 的 checkPhase 全跑）：
+验证（历史：归档 vunax 的 alcotest；现由 `test/run-tests.sh` 的原生测试覆盖）：
 
 - **差分测试**：`corpus/run/` 的 15 个程序，vunax 直接跑 vs vuna 自解释器读同一份
   源码跑，两边 `show` 结果必须一致；
@@ -219,7 +228,7 @@ vunax run lib/Vuna/Interp.vuna
 [codegen.ml](vunax/lib/codegen.ml) 把 core-v0 程序翻译成可编译的 OCaml 源码：
 
 ```console
-vunax compile vunax/test/corpus/run/01_arithmetic.vuna > program.ml
+vunax compile test/corpus/run/01_arithmetic.vuna > program.ml
 ocamlopt -o program program.ml && ./program
 # 7
 ```
@@ -239,7 +248,7 @@ ocamlopt -o program program.ml && ./program
 - `vunax compile --no-print`（`Codegen.generate ~print_result:false`）只求值
   `main`、不自动打印结果，适合自己用 `print` / `writeFile` 做 IO 的 CLI 程序。
 
-验证（104 个测试，`nix build` 的 checkPhase 全跑）：
+验证（历史：归档 vunax 的 alcotest；现由 `test/run-tests.sh` 的原生测试覆盖）：
 
 - **codegen 差分**：`corpus/run/` 的 15 个程序逐个生成 OCaml、用 `ocamlopt` 编译、
   运行，stdout 与解释器的 `show` 结果一致；
@@ -263,10 +272,10 @@ ocamlopt -o program program.ml && ./program
 
 ```console
 nix build .#vuna-interp
-./result/bin/vuna-interp vunax/test/corpus/run/12_fact.vuna
+./result/bin/vuna-interp test/corpus/run/12_fact.vuna
 # 120
-./result/bin/vuna-interp --root vunax/test/corpus/modules/02_data/lib \
-  vunax/test/corpus/modules/02_data/app/Main.vuna
+./result/bin/vuna-interp --root test/corpus/modules/02_data/lib \
+  test/corpus/modules/02_data/app/Main.vuna
 # 6
 ```
 
@@ -298,7 +307,7 @@ vunax run --root lib app/interp.vuna  <args...>
 vunax compile --root lib app/interp.vuna
 ```
 
-测试夹具 `vunax/test/corpus/modules/` 覆盖：跨模块函数/数据/构造器、嵌套 import，
+测试夹具 `test/corpus/modules/` 覆盖：跨模块函数/数据/构造器、嵌套 import，
 以及缺失模块、循环导入、未限定跨模块引用、未导出名字、非法模块名等错误。
 
 ## M6：自举编译器与种子
@@ -332,7 +341,7 @@ ocamlopt -w -a -o /tmp/stage2 /tmp/stage2.ml
 cmp /tmp/stage2.ml /tmp/stage3.ml      # fixed point
 ```
 
-验证：105 个测试（含 vuna codegen 对 corpus 与模块夹具的生成→编译→运行）；
+验证：原生测试 `test/run-tests.sh`（74 checks：corpus/模块的解释器与编译器、错误语料、种子冒烟）；
 `checks.bootstrap-selfhost` 用种子构建 stage 2、校验 stage2/stage3 字节一致，
 并编译运行一个程序（`12_fact` → 120）；`checks.fixed-point` 与它同一派生。
 
@@ -345,7 +354,7 @@ cmp /tmp/stage2.ml /tmp/stage3.ml      # fixed point
 nix build             # 默认 = vuna（stage 2 当前编译器）
 nix build .#vuna-boot # stage 1 种子二进制
 nix build .#vuna-interp
-nix flake check       # 构建 packages + checks（含 bootstrap-selfhost / fixed-point）
+nix flake check       # packages + checks（vuna-tests / bootstrap-selfhost / fixed-point）
 nix build .#vunax     # 归档的 stage 0（frozen，不进 checks/默认路径）
 nix fmt               # nixfmt-tree 格式化 .nix
 ```
@@ -358,14 +367,16 @@ nix fmt               # nixfmt-tree 格式化 .nix
   用于差分测试；
 - `packages.vunax`（stage 0）：**已冻结归档**，不参与默认构建与 checks，也不随
   vuna 新特性更新；仅保留作历史/审计/从零重建参考；
+- `checks.vuna-tests`：只通过 `vuna`/`vuna-boot`/`vuna-interp` 跑原生测试；
 - `checks.bootstrap-selfhost` / `checks.fixed-point`：种子编译当前源码得到 stage 2，
   stage 2 再编译得到 stage 3，`cmp` 两者并抽查运行结果，守住
   「种子必须能编译当前源码」与 fixed point。
 
 种子轮换流程见上面「自举链」一节；`bootstrap/` 下文件仍是生成物，禁止手改。
 
-注意：vuna-facing 测试目前仍在 `vunax/test/` 下（用 vunax 的 parser/eval 驱动），
-这是 P2（测试 harness 迁移）要处理的事项；构建链已经与 vunax 解耦。
+P2 已完成：vuna-facing 测试已迁到 `test/run-tests.sh`，用 `vuna-interp`/`vuna`
+驱动并比对 golden；`vunax` 不再带测试，构建/CI/测试都不依赖它。归档实现仅保留
+用于历史对照与审计，可随时删除而不影响自举。
 
 ## 依赖管理
 
@@ -386,8 +397,7 @@ nix fmt               # nixfmt-tree 格式化 .nix
 - `bootstrap/` 是提交入库的生成物：不要手改；日常改 vuna 源码不需要重新生成种子，
   但必须保证种子能编译当前源码（`checks.bootstrap-selfhost`）。
 - `nix build` 默认构建 `vuna`（stage 2）；`nix build .#vunax` 构建归档的 stage 0。
-- vuna codegen 的 runtime 前导代码由 `vunax/test/gen-runtime-vuna.sh` 从
-  `vunax/lib/codegen.ml` 生成并嵌在 `lib/Vuna/Interp.vuna`，两边有测试保证同步；
-  该脚本属于归档工具链，测试迁移后可一并移走。
+- vuna codegen 的 runtime 前导代码已固化在 `lib/Vuna/Interp.vuna` 的
+  `runtimeCode`，是唯一实现；归档 vunax 的 runtime 不再与之同步。
 - devShell 仍暴露归档的 `vunax` 供现有测试 harness 使用；`nix flake check` 已不构建
   它。P2 完成测试迁移后，`vunax` 可彻底移出 devShell 甚至删除。

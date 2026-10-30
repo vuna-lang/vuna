@@ -64,7 +64,6 @@
 
             # 冻结：不再与 vuna 语法同步，测试不进入构建/检查路径。
             doCheck = false;
-            checkInputs = [ ocamlPackages.alcotest ];
 
             meta = {
               description = "vunax — archived stage 0 compiler (frozen, not used by bootstrap)";
@@ -162,31 +161,25 @@
           pkgs = nixpkgs.legacyPackages.${system};
           ocamlPackages = pkgs.ocamlPackages;
 
-          # devShell 只需要能运行 vunax / vuna-boot，不需要每次进入都跑包测试；
-          # 测试由 nix build / nix flake check 负责。这样也避免
-          # “测试失败 → devShell 构建失败 → 无法进 shell 调试”的死循环。
-          vunax-dev = self.packages.${system}.vunax.overrideAttrs (_: {
-            doCheck = false;
-          });
-
+          # devShell 提供工具链、种子编译器，以及归档的 vunax（仅供历史/审计）。
+          # stage2 的 vuna 不进 devShell：种子失效时也要能进 shell 调试。
+          #
           # vuna-boot 是从入库 bootstrap/stage1.ml 固定构建的，不依赖当前源码
-          # 能否编译、也不跑测试，放进 devShell 很便宜。stage2 的 vuna 不进
-          # devShell：种子失效时也要能进 shell 调试。
+          # 能否编译、也不跑测试，放进 devShell 很便宜。
           vuna-boot = self.packages.${system}.vuna-boot;
         in
         {
           default = pkgs.mkShell {
-            # 复用包构建里的 OCaml / dune / findlib。
+            # 复用归档 vunax 包构建里的 OCaml / dune / findlib 工具链。
             inputsFrom = [ self.packages.${system}.vunax ];
 
             packages = [
-              # 把 vunax 本身暴露到 devShell 里，直接可用 `vunax` 命令。
-              vunax-dev
+              # 归档的 stage 0 实现：仅供历史对照/审计，不参与构建与 CI。
+              self.packages.${system}.vunax
               # 种子编译器：手动检查“当前种子能编译当前源码”。
               vuna-boot
             ]
             ++ (with ocamlPackages; [
-              alcotest
               merlin
               ocaml-lsp
               ocamlformat
@@ -205,7 +198,7 @@
         system:
         let
           pkgs = nixpkgs.legacyPackages.${system};
-          inherit (self.packages.${system}) vuna-boot;
+          inherit (self.packages.${system}) vuna-boot vuna vuna-interp;
           bootstrap-selfhost =
             pkgs.runCommand "vuna-bootstrap-selfhost"
               {
@@ -226,18 +219,39 @@
                 ./stage2 --root lib --no-print app/compile.vuna stage3.ml
                 cmp stage2.ml stage3.ml
                 # 行为抽查：当前编译器编译并运行一个程序
-                cp ${./vunax/test/corpus/run/12_fact.vuna} fact.vuna
+                cp ${./test/corpus/run/12_fact.vuna} fact.vuna
                 ./stage2 --root lib fact.vuna fact.ml
                 ocamlopt -w -a -o fact fact.ml
                 test "$(./fact)" = "120"
                 touch "$out"
               '';
+
+          # 原生测试：只用 vuna / vuna-boot / vuna-interp，不经过 vunax。
+          vuna-tests =
+            pkgs.runCommand "vuna-tests"
+              {
+                nativeBuildInputs = [
+                  pkgs.ocaml
+                  pkgs.binutils
+                  pkgs.gcc
+                ];
+              }
+              ''
+                cp -r ${./test} test
+                cd test
+                VUNA=${vuna}/bin/vuna \
+                VUNA_BOOT=${vuna-boot}/bin/vuna-boot \
+                VUNA_INTERP=${vuna-interp}/bin/vuna-interp \
+                sh run-tests.sh
+                touch "$out"
+              '';
         in
         {
           # vunax 已冻结归档，不再进入 checks；构建/自举链只用种子与 vuna。
-          inherit (self.packages.${system}) vuna vuna-interp;
+          inherit vuna vuna-interp;
           bootstrap-selfhost = bootstrap-selfhost;
           fixed-point = bootstrap-selfhost;
+          vuna-tests = vuna-tests;
         }
       );
 

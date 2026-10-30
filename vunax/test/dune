@@ -1,5 +1,0 @@
-(test
- (name test_vunax)
- (libraries vunax alcotest)
- (deps
-  (source_tree corpus)))
