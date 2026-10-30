@@ -35,10 +35,8 @@ prepareSplit dir =
                        in let flat = append entryDecls (concatMap moduleDeclsOf modules)
                           in case checkProgramInfoElabOwners flat of
                                Err e => Err e
-                               Ok p =>
-                                 case p of
-                                   Pair (Pair globals elabDecls) owners =>
-                                     Ok (SplitInput modules entryDecls elabDecls globals owners)
+                               Ok (Pair (Pair globals elabDecls) owners) =>
+                                 Ok (SplitInput modules entryDecls elabDecls globals owners)
 
 -- 生成 split 文件；成功后写盘并生成 build.sh。返回写出的源码文件数。
 buildSplit : String -> String -> Result Int

@@ -1063,12 +1063,10 @@ loadProject roots entryPkg entry =
 
 -- 返回逐模块已解析（未 flatten）的声明，供 M12 分离编译使用。
 resolveProject : Project -> Result (Pair (List Decl) (List Module))
-resolveProject parts =
-  case parts of
-    Project decls imports modules =>
-      andThen (resolveEntry modules imports decls) (\entryDecls =>
-        andThen (resolveModulesKeep modules) (\modules2 =>
-          Ok (Pair entryDecls modules2)))
+resolveProject (Project decls imports modules) =
+  andThen (resolveEntry modules imports decls) (\entryDecls =>
+    andThen (resolveModulesKeep modules) (\modules2 =>
+      Ok (Pair entryDecls modules2)))
 
 resolveModulesKeep Nil = Ok Nil
 

@@ -761,6 +761,39 @@ VUNA="$VUNA" OCAMLOPT="$OCAMLOPT" sh corpus/fmt/check.sh >"$tmp/fmt_check.log" 2
 fmt_code=$?
 if [ "$fmt_code" -eq 0 ]; then ok; else bad "fmt corpus" "exit 0" "$(tail -3 "$tmp/fmt_check.log")"; fi
 
+# 33) M12 分离编译：逐模块生成 → build.sh 增量编译 → 输出与单文件一致
+split_dir=$tmp/splitpkg
+pkg=corpus/packages/01_workspace
+rm -rf "$split_dir"
+mkdir -p "$split_dir"
+if ! split_out=$("$VUNA" build --split "$split_dir" "$pkg" 2>&1); then
+  bad "split generate" "exit 0" "$split_out"
+elif [ ! -f "$split_dir/build.sh" ]; then
+  bad "split build.sh" "present" "missing"
+else
+  ok
+  ( cd "$split_dir" && sh build.sh prog ) >"$tmp/split_build.log" 2>&1
+  check_eq "split build exit" "0" "$?"
+  actual=$("$split_dir/prog" 2>&1)
+  check_eq "split run" "$(cat "$pkg/expected.out")" "$actual"
+  # 无改动时增量构建不重编任何模块（只链接）
+  ( cd "$split_dir" && sh build.sh prog ) >"$tmp/split_noop.log" 2>&1
+  if grep -q '^compile ' "$tmp/split_noop.log"; then
+    bad "split incremental noop" "no compile lines" "$(cat "$tmp/split_noop.log")"
+  else
+    ok
+  fi
+  # 改动一个模块 → 只重编它（以及依赖它的入口）
+  touch "$split_dir/Vuna_dHello.ml"
+  ( cd "$split_dir" && sh build.sh prog ) >"$tmp/split_inc.log" 2>&1
+  check_contains "split incremental module" "$(cat "$tmp/split_inc.log")" "compile Vuna_dHello"
+  if grep -q '^compile Vuna_runtime' "$tmp/split_inc.log"; then
+    bad "split incremental runtime untouched" "no runtime compile" "$(cat "$tmp/split_inc.log")"
+  else
+    ok
+  fi
+fi
+
 if [ "$fail" -ne 0 ]; then
   printf '%s passed, %s failed\n' "$pass" "$fail"
   exit 1

@@ -18,7 +18,7 @@ usage() {
 usage: vuna-bench [options]
 
 手动测量 vuna 的构建/编译性能与生成产物尺寸。默认测量 vuna（stage 1）；
-加 --compiler boot 测量 vuna-boot（stage 0 种子）。请在仓库根目录运行。
+加 --compiler boot 测量 vuna-seed（stage 0 多文件种子）。请在仓库根目录运行。
 
 options:
   --compiler vuna|boot   被测编译器（默认 vuna）
@@ -116,12 +116,12 @@ case $RUNS in
 esac
 case $COMPILER in
   vuna|stage1) COMPILER=vuna ;;
-  boot|vuna-boot|stage0) COMPILER=boot ;;
+  boot|vuna-seed|vuna-boot|stage0) COMPILER=boot ;;
   *) die "--compiler must be vuna or boot" ;;
 esac
 
 REPO=$PWD
-[ -f "$REPO/bootstrap/seed.ml" ] || die "run from the repo root (bootstrap/seed.ml not found)"
+[ -f "$REPO/seed/build.sh" ] || die "run from the repo root (seed/build.sh not found)"
 [ -f "$REPO/app/Main.vuna" ] || die "run from the repo root (app/Main.vuna not found)"
 [ -d "$REPO/lib/Vuna" ] || die "run from the repo root (lib/Vuna not found)"
 command -v ocamlopt >/dev/null 2>&1 || die "ocamlopt not found (use: nix run .#bench)"
@@ -157,7 +157,7 @@ NPROC=$(getconf _NPROCESSORS_ONLN 2>/dev/null || printf 'unknown')
 OCAMLOPT_VERSION=$(ocamlopt -version 2>/dev/null || printf 'unknown')
 FLAMBDA=$(ocamlopt -config 2>/dev/null | awk -F': *' '$1 == "flambda" { print $2 }' || true)
 [ -n "$FLAMBDA" ] || FLAMBDA=unknown
-SEED_SHA=$(sha256sum bootstrap/seed.ml | awk '{ print $1 }')
+SEED_SHA=$(find seed -type f | LC_ALL=C sort | xargs sha256sum | sha256sum | awk '{ print $1 }')
 SRC_LINES=$(cat lib/Vuna/*.vuna app/*.vuna | wc -l | tr -d ' ')
 SRC_BYTES=$(cat lib/Vuna/*.vuna app/*.vuna | wc -c | tr -d ' ')
 
@@ -185,7 +185,7 @@ fi
 
 # ---- 工作副本 ------------------------------------------------------------
 mkdir -p "$WORK/src"
-cp -r lib app bootstrap "$WORK/src/"
+cp -r lib app stdlib seed vuna.toml "$WORK/src/"
 if [ "$WITH_TESTS" = 1 ]; then
   cp -r test "$WORK/src/"
 else
@@ -251,24 +251,27 @@ measure() {
 }
 
 # ---- 构建 ----------------------------------------------------------------
-SEED_BIN=$WORK/vuna-boot
-STAGE1=$WORK/stage1.ml
+SEED_BIN=$WORK/vuna-seed
+STAGE1_SRC=$WORK/stage1src
+STAGE1_BUILD=$WORK/stage1build
 VUNA_BIN=$WORK/vuna
-STAGE2=$WORK/stage2.ml
+SELF_OUT_SRC=$WORK/selfsrc
 
-measure seed_build ocamlopt -g -w -a+39 -warn-error +39 -o "$SEED_BIN" bootstrap/seed.ml
-measure seed_compile "$SEED_BIN" --root lib --root stdlib/lib --root app --no-print app/Main.vuna "$STAGE1"
-measure stage1_build ocamlopt -g -w -a+39 -warn-error +39 -o "$VUNA_BIN" "$STAGE1"
+measure seed_build sh seed/build.sh "$SEED_BIN"
+measure seed_compile "$SEED_BIN" build --split "$STAGE1_SRC" .
+cp -r "$STAGE1_SRC" "$STAGE1_BUILD"
+measure stage1_build sh "$STAGE1_BUILD/build.sh" "$VUNA_BIN"
 
 if [ "$COMPILER" = vuna ]; then
   SELF_BIN=$VUNA_BIN
-  SELF_OUT=$STAGE2
 else
   SELF_BIN=$SEED_BIN
-  SELF_OUT=$STAGE1
 fi
 
-measure compiler_self_compile "$SELF_BIN" --root lib --root stdlib/lib --root app --no-print app/Main.vuna "$SELF_OUT"
+measure compiler_self_compile "$SELF_BIN" build --split "$SELF_OUT_SRC" .
+cat "$SELF_OUT_SRC"/*.ml >"$WORK/self_concat.ml"
+cat "$STAGE1_SRC"/*.ml >"$WORK/stage1_concat.ml"
+cat seed/*.ml >"$WORK/seed_concat.ml"
 
 printf 'main = 40 + 2\n' >tiny.vuna
 measure tiny_compile "$SELF_BIN" --root lib --root stdlib/lib --root app --no-print tiny.vuna "$WORK/tiny.ml"
@@ -331,16 +334,16 @@ collect_stats() {
   COUNT["${key}_rec_zero_arg"]=$(grep -cE '^let rec [A-Za-z0-9_]+ = fun \(\) ->' "$f" || true)
 }
 
-collect_stats seed bootstrap/seed.ml
-collect_stats stage1 "$STAGE1"
-collect_stats self "$SELF_OUT"
+collect_stats seed "$WORK/seed_concat.ml"
+collect_stats stage1 "$WORK/stage1_concat.ml"
+collect_stats self "$WORK/self_concat.ml"
 collect_stats tiny "$WORK/tiny.ml"
 if [ "$WITH_DYNAMIC" = 1 ]; then collect_stats dyn "$WORK/dyn.ml"; fi
 
 # ---- 状态 ----------------------------------------------------------------
 FIXED_POINT=skipped
 if [ "$COMPILER" = vuna ]; then
-  if cmp -s "$STAGE1" "$STAGE2"; then
+  if diff -r "$STAGE1_SRC" "$SELF_OUT_SRC" >/dev/null 2>&1; then
     FIXED_POINT=true
   else
     FIXED_POINT=false
@@ -348,12 +351,12 @@ if [ "$COMPILER" = vuna ]; then
   fi
 fi
 SEED_MATCHES=false
-if cmp -s bootstrap/seed.ml "$STAGE1"; then SEED_MATCHES=true; fi
+if diff -r seed "$STAGE1_SRC" >/dev/null 2>&1; then SEED_MATCHES=true; fi
 
 TESTS=skipped
 TESTS_SUMMARY=""
 if [ "$WITH_TESTS" = 1 ]; then
-  if ( cd test && VUNA=$VUNA_BIN VUNA_BOOT=$SEED_BIN OCAMLOPT=ocamlopt sh run-tests.sh ) >"$WORK/tests.log" 2>&1; then
+  if ( cd test && VUNA=$VUNA_BIN VUNA_SEED=$SEED_BIN OCAMLOPT=ocamlopt sh run-tests.sh ) >"$WORK/tests.log" 2>&1; then
     TESTS=ok
   else
     TESTS=fail

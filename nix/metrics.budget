@@ -1,12 +1,12 @@
 # codegen 机器无关指标预算（M12 回归门槛；超预算 = CI 失败）。
-# 单位：bytes/lines/maxline/longlines/letrec/strcat/eqint/zeroarg/ctorcount 上限。
-# 有意改变 codegen 后，用 `vuna build . out.ml && sh nix/metrics.sh out.ml` 复测并更新本文件。
-bytes 950000
-lines 15300
-maxline 400
-longlines 3200
-letrec 570
+# 指标聚合自分离编译（`vuna build --split`）的源码文件集。
+# 有意改变 codegen 后，用 `vuna build --split out . && sh nix/metrics.sh out` 复测并更新本文件。
+bytes 965000
+lines 10500
+maxline 8000
+longlines 2650
+letrec 600
 strcat 390
 eqint 40
 zeroarg 40
-ctorcount 1900
+ctorcount 2000
