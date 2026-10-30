@@ -70,7 +70,7 @@ git add bootstrap/ && git commit
 │       ├── Builtins.vuna # 内建函数名字与元数（Loader/Eval 共用）
 │       ├── Eval.vuna     # 值表示、内建函数、求值器与 show
 │       ├── Loader.vuna   # import 图、名字解析、flatten（含模块规则）
-│       ├── Typecheck.vuna # HM 类型检查（M7b）
+│       ├── Typecheck.vuna # HM 类型检查（M7）
 │       ├── Codegen.vuna  # flatten 后的 AST → OCaml
 │       └── Interp.vuna   # 对外 facade（interpret/interpretFile/compileFile）
 ├── app/
@@ -149,8 +149,8 @@ git add bootstrap/ && git commit
 - `lib/Vuna/Interp.vuna`：facade，只暴露 `interpret`/`interpretFile`/`compileFile`；
 - 模块内部通过 import 自动 open 使用非限定名，只有 import 行写模块全名；
 - 顶层类型签名紧贴其第一个函数子句，签名与实现之间不留空行；顶层声明之间用一个空行分隔；
-- [app/Compile.vuna](app/Compile.vuna)：`vuna [--no-print] [--typecheck] [--root DIR] <entry.vuna> [out.ml]`；
-  `--typecheck` 先跑 M7b 类型检查（M7c 后设为默认）；
+- [app/Compile.vuna](app/Compile.vuna)：`vuna [--no-print] [--no-typecheck] [--root DIR] <entry.vuna> [out.ml]`；
+  默认先跑类型检查；`--no-typecheck` 可跳过（专测 codegen 负例时用）；
   `--no-print` 表示生成的程序不自动打印 `main` 的结果（用于编译自己做 IO 的 CLI）；
 - [app/Interp.vuna](app/Interp.vuna)：`vuna-interp [--root DIR] <file.vuna>`，把
   `interpretFile` 的字符串结果原样打印。
@@ -196,6 +196,7 @@ sh test/run-tests.sh          # 需要 PATH 中有三个二进制
 Nix 侧：
 
 - `checks.vuna-tests`：在沙箱里跑上述原生测试；
+- `checks.vuna-typecheck`：用当前编译器类型检查自己的源码；
 - `checks.bootstrap-selfhost`：种子编译当前源码得到 stage 2，stage 2 再编译得到
   stage 3，`cmp` 两者，并抽查 `12_fact` → `120`；
 - `checks.fixed-point`：与 `bootstrap-selfhost` 同一派生。
@@ -228,8 +229,8 @@ nix fmt               # nixfmt-tree 格式化 .nix
 
 ## 限制与路线
 
-- 类型检查目前是 opt-in（`--typecheck`），要求顶层显式签名；模块类型名解析已完成
-  （M7c-1）；无签名顶层推断已完成，编译器源码自检仍待完成（M7c-2）；typed codegen 在 M8；
+- 类型检查已默认开启；模块类型名解析、无签名顶层推断与编译器源码自检（M7c）已完成，
+  typed codegen 在 M8；
 - 生成代码是单文件、动态 value 表示，性能与错误信息暂未优化；
 - 运行时错误没有源码位置；`where` / `do` / 隐式参数 / 依赖类型未实现；
 - IO 失败（如 `readFile` 缺失文件）会抛宿主异常；编译器 CLI 没有 `exit` 内建，

@@ -191,6 +191,9 @@ charsToValue (Cons c rest) = VCon "Cons" (Cons (VInt c) (Cons (charsToValue rest
 
 stringToValue s = charsToValue (strUnpack s)
 
+strListToValue Nil = VCon "Nil" Nil
+strListToValue (Cons s rest) = VCon "Cons" (Cons (VStr s) (Cons (strListToValue rest) Nil))
+
 valueToChars v =
   case v of
     VCon "Nil" Nil => Ok Nil
@@ -298,7 +301,7 @@ callBuiltin name args =
     case args of
       Cons a Nil => andThen (stringArg a) (\s => Ok (VInt (print s)))
       _ => Err "bad arguments for print"
-  else if name == "getArgs" then Ok (map (\s => VStr s) getArgs)
+  else if name == "getArgs" then Ok (strListToValue getArgs)
   else Err ("unknown builtin: " ++ name)
 
 displayName name =

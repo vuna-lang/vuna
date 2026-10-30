@@ -163,6 +163,18 @@
                 touch "$out"
               '';
 
+          # 类型检查自检：当前编译器必须能类型检查自己的源码。
+          vuna-typecheck =
+            pkgs.runCommand "vuna-typecheck"
+              {
+                allowSubstitutes = false;
+              }
+              ''
+                mkdir -p "$out"
+                ${vuna}/bin/vuna --typecheck --no-print --root ${./lib} ${./app/Compile.vuna} "$out/self.ml"
+                touch "$out/ok"
+              '';
+
           # 原生测试：只用种子、vuna 与 vuna-interp。
           vuna-tests =
             pkgs.runCommand "vuna-tests"
@@ -185,6 +197,7 @@
           bootstrap-selfhost = bootstrap-selfhost;
           fixed-point = bootstrap-selfhost;
           vuna-tests = vuna-tests;
+          vuna-typecheck = vuna-typecheck;
         }
       );
 

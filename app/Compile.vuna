@@ -1,18 +1,19 @@
 -- vuna-compile：用 vuna 写的编译器 CLI。
--- 用法：vuna-compile [--no-print] [--typecheck] [--root DIR] <entry.vuna> [out.ml]
+-- 用法：vuna-compile [--no-print] [--no-typecheck] [--root DIR] <entry.vuna> [out.ml]
 -- 不传 out.ml 时把生成的 OCaml 打到 stdout。
 import Vuna.Base
 import Vuna.Interp
 
-usage = "usage: vuna [--no-print] [--typecheck] [--root DIR] <entry.vuna> [out.ml]"
+usage = "usage: vuna [--no-print] [--no-typecheck] [--root DIR] <entry.vuna> [out.ml]"
 
-main = dispatch True False "lib" getArgs
+main = dispatch True True "lib" getArgs
 
 dispatch printResult typeCheck root args =
   case args of
     Nil => emitUsage
     Cons a rest =>
       if a == "--no-print" then dispatch False typeCheck root rest
+      else if a == "--no-typecheck" then dispatch printResult False root rest
       else if a == "--typecheck" then dispatch printResult True root rest
       else if a == "--root" then
         case rest of

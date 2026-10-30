@@ -20,20 +20,26 @@ data Bool : Type where
   False : Bool
   True : Bool
 
+append : List a -> List a -> List a
 append Nil ys = ys
 append (Cons x xs) ys = Cons x (append xs ys)
 
+reverseOnto : List a -> List a -> List a
 reverseOnto Nil acc = acc
 reverseOnto (Cons x xs) acc = reverseOnto xs (Cons x acc)
 
+reverse : List a -> List a
 reverse xs = reverseOnto xs Nil
 
+length : List a -> Int
 length Nil = 0
 length (Cons x xs) = 1 + length xs
 
+map : (a -> b) -> List a -> List b
 map f Nil = Nil
 map f (Cons x xs) = Cons (f x) (map f xs)
 
+traverse : (a -> Result b) -> List a -> Result (List b)
 traverse f Nil = Ok Nil
 traverse f (Cons x xs) =
   case f x of
@@ -43,11 +49,13 @@ traverse f (Cons x xs) =
         Err e => Err e
         Ok ys => Ok (Cons y ys)
 
+andThen : Result a -> (a -> Result b) -> Result b
 andThen r f =
   case r of
     Ok x => f x
     Err e => Err e
 
+step : Result (Pair a b) -> (a -> b -> Result c) -> Result c
 step r k =
   case r of
     Ok p =>
@@ -56,30 +64,39 @@ step r k =
     Err e => Err e
 
 
+concatMap : (a -> List b) -> List a -> List b
 concatMap f Nil = Nil
 concatMap f (Cons x rest) = append (f x) (concatMap f rest)
 
+memName : String -> List String -> Bool
 memName name Nil = False
 memName name (Cons x rest) = if x == name then True else memName name rest
 
+lookupPair : String -> List (Pair String v) -> Maybe v
 lookupPair name Nil = Nothing
 lookupPair name (Cons p rest) =
   case p of
     Pair k v => if k == name then Just v else lookupPair name rest
 
+firstOf : Pair a b -> a
 firstOf p = case p of Pair a b => a
 
+secondOf : Pair a b -> b
 secondOf p = case p of Pair a b => b
 
+memChar : Int -> List Int -> Bool
 memChar c chars =
   case chars of
     Nil => False
     Cons x rest => if x == c then True else memChar c rest
 
+containsDot : String -> Bool
 containsDot s = memChar 46 (strUnpack s)
 
+splitOnDot : String -> List String
 splitOnDot s = splitCharsOnDot (strUnpack s) Nil Nil
 
+splitCharsOnDot : List Int -> List String -> List Int -> List String
 splitCharsOnDot chars acc seg =
   case chars of
     Nil => reverse (Cons (strPack (reverse seg)) acc)
@@ -87,19 +104,23 @@ splitCharsOnDot chars acc seg =
       if c == 46 then splitCharsOnDot rest (Cons (strPack (reverse seg)) acc) Nil
       else splitCharsOnDot rest acc (Cons c seg)
 
+splitLastDot : List String -> Pair (List String) String
 splitLastDot parts =
   case reverse parts of
     Nil => Pair Nil ""
     Cons last rest => Pair (reverse rest) last
 
+joinDots : List String -> String
 joinDots Nil = ""
 joinDots (Cons x Nil) = x
 joinDots (Cons x rest) = x ++ "." ++ joinDots rest
 
+joinSlashes : List String -> String
 joinSlashes Nil = ""
 joinSlashes (Cons x Nil) = x
 joinSlashes (Cons x rest) = x ++ "/" ++ joinSlashes rest
 
+joinArrows : List String -> String
 joinArrows Nil = ""
 joinArrows (Cons x Nil) = x
 joinArrows (Cons x rest) = x ++ " -> " ++ joinArrows rest

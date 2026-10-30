@@ -119,7 +119,7 @@ for file in corpus/run_err/*.vuna; do
 done
 
 # 6) 编译器专属错误：clause 元数不一致（解释器不检查，编译器要报）
-arity_out=$("$VUNA" corpus/run_err/08_clause_arity.vuna "$tmp/arity.ml" 2>&1 || true)
+arity_out=$("$VUNA" --no-typecheck corpus/run_err/08_clause_arity.vuna "$tmp/arity.ml" 2>&1 || true)
 check_contains "08_clause_arity (compiler error)" "$arity_out" "clauses for f have different arities"
 
 # 7) 类型检查通过的程序：--typecheck 编译、运行、比对 golden

@@ -85,7 +85,9 @@ bindVar i ty st =
 unifyLists : List Ty -> List Ty -> TC -> Result TC
 unifyLists Nil Nil st = Ok st
 unifyLists (Cons a ar) (Cons b br) st =
-  andThen (unify a b st) (\st2 => unifyLists ar br st2)
+  case unify a b st of
+    Err e => Err e
+    Ok st2 => unifyLists ar br st2
 unifyLists _ _ st = Err "type mismatch: different number of arguments"
 
 unify : Ty -> Ty -> TC -> Result TC
