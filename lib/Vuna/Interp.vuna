@@ -362,7 +362,7 @@ showStringChars (Cons c rest) =
 -- ---------------------------------------------------------------
 
 data Module : Type where
-  Module : String -> List String -> List Decl -> List String -> Module
+  Module : String -> List Import -> List Decl -> List String -> Module
 
 
 memChar c chars =
@@ -448,6 +448,105 @@ isGlobalCtor name =
 
 mangle prefix name = if prefix == "" then name else prefix ++ "." ++ name
 
+importName imp =
+  case imp of
+    Vuna.Ast.Import name isQualified alias => name
+
+importIsQualified imp =
+  case imp of
+    Vuna.Ast.Import name isQualified alias => isQualified
+
+importAlias imp =
+  case imp of
+    Vuna.Ast.Import name isQualified alias => alias
+
+importModuleNames imports = Vuna.Ast.map importName imports
+
+hasDuplicateName Nil = False
+hasDuplicateName (Cons x rest) =
+  if Vuna.Ast.memName x rest then True else hasDuplicateName rest
+
+importAliases imports =
+  case imports of
+    Nil => Nil
+    Cons imp rest =>
+      case importAlias imp of
+        Vuna.Ast.Nothing => importAliases rest
+        Vuna.Ast.Just alias => Cons (Vuna.Ast.Pair alias (importName imp)) (importAliases rest)
+
+checkImportAliases label moduleNames aliases =
+  case aliases of
+    Nil => Vuna.Ast.Ok Nil
+    Cons p rest =>
+      case p of
+        Vuna.Ast.Pair alias m =>
+          if validSegment alias then
+            if Vuna.Ast.memName alias (Vuna.Ast.map firstOf rest) then
+              Vuna.Ast.Err (label ++ ": duplicate module alias " ++ alias)
+            else if Vuna.Ast.memName alias moduleNames then
+              if alias == m then checkImportAliases label moduleNames rest
+              else Vuna.Ast.Err (label ++ ": module alias " ++ alias ++ " conflicts with an imported module")
+            else checkImportAliases label moduleNames rest
+          else Vuna.Ast.Err (label ++ ": invalid module alias " ++ alias)
+
+validateImports label imports =
+  if hasDuplicateName (importModuleNames imports) then
+    Vuna.Ast.Err (label ++ ": duplicate import")
+  else checkImportAliases label (importModuleNames imports) (importAliases imports)
+
+openModuleNames imports =
+  case imports of
+    Nil => Nil
+    Cons imp rest =>
+      if importIsQualified imp then openModuleNames rest
+      else Cons (importName imp) (openModuleNames rest)
+
+findImportPrefix imports prefix =
+  case imports of
+    Nil => Vuna.Ast.Nothing
+    Cons imp rest =>
+      if importName imp == prefix then Vuna.Ast.Just (importName imp)
+      else
+        case importAlias imp of
+          Vuna.Ast.Just alias =>
+            if alias == prefix then Vuna.Ast.Just (importName imp) else findImportPrefix rest prefix
+          Vuna.Ast.Nothing => findImportPrefix rest prefix
+
+joinNames Nil = ""
+joinNames (Cons x Nil) = x
+joinNames (Cons x rest) = x ++ ", " ++ joinNames rest
+
+moduleDecls modules name =
+  case findModule modules name of
+    Vuna.Ast.Just m =>
+      case m of
+        Module mname imports decls exports => decls
+    Vuna.Ast.Nothing => Nil
+
+moduleCtors modules name = ctorsOf (moduleDecls modules name)
+
+modulesExportingFrom modules names name =
+  case names of
+    Nil => Nil
+    Cons m rest =>
+      if Vuna.Ast.memName name (exportsOf modules m) then
+        Cons m (modulesExportingFrom modules rest name)
+      else modulesExportingFrom modules rest name
+
+modulesExporting modules imports name =
+  modulesExportingFrom modules (openModuleNames imports) name
+
+modulesExportingCtorFrom modules names name =
+  case names of
+    Nil => Nil
+    Cons m rest =>
+      if Vuna.Ast.memName name (moduleCtors modules m) then
+        Cons m (modulesExportingCtorFrom modules rest name)
+      else modulesExportingCtorFrom modules rest name
+
+modulesExportingCtor modules imports name =
+  modulesExportingCtorFrom modules (openModuleNames imports) name
+
 modulePath root name = root ++ "/" ++ joinSlashes (splitOnDot name) ++ ".vuna"
 
 findModule modules name =
@@ -472,11 +571,12 @@ resolveQualified modules label imports name =
   case splitLastDot (splitOnDot name) of
     Vuna.Ast.Pair revPrefix base =>
       let prefix = joinDots revPrefix
-      in if Vuna.Ast.memName prefix imports then
-           if isGlobalCtor base then Vuna.Ast.Ok base
-           else if Vuna.Ast.memName base (exportsOf modules prefix) then Vuna.Ast.Ok name
-           else Vuna.Ast.Err (label ++ ": " ++ base ++ " is not exported by " ++ prefix)
-         else Vuna.Ast.Err (label ++ ": module " ++ prefix ++ " is not imported")
+      in case findImportPrefix imports prefix of
+           Vuna.Ast.Nothing => Vuna.Ast.Err (label ++ ": module " ++ prefix ++ " is not imported")
+           Vuna.Ast.Just m =>
+             if isGlobalCtor base then Vuna.Ast.Ok base
+             else if Vuna.Ast.memName base (exportsOf modules m) then Vuna.Ast.Ok (mangle m base)
+             else Vuna.Ast.Err (label ++ ": " ++ base ++ " is not exported by " ++ m)
 
 resolveGlobal modules label prefix own imports scope name =
   if Vuna.Ast.memName name scope then Vuna.Ast.Ok name
@@ -484,13 +584,21 @@ resolveGlobal modules label prefix own imports scope name =
   else if containsDot name then resolveQualified modules label imports name
   else if Vuna.Ast.memName name own then Vuna.Ast.Ok (mangle prefix name)
   else if isBuiltinName name then Vuna.Ast.Ok name
-  else Vuna.Ast.Err (label ++ ": unbound variable " ++ name)
+  else
+    case modulesExporting modules imports name of
+      Nil => Vuna.Ast.Err (label ++ ": unbound variable " ++ name)
+      Cons m Nil => Vuna.Ast.Ok (mangle m name)
+      ms => Vuna.Ast.Err (label ++ ": ambiguous name " ++ name ++ " (imported from " ++ joinNames ms ++ "); qualify it")
 
 resolveCtor modules label prefix ownCtors imports name =
   if isGlobalCtor name then Vuna.Ast.Ok name
   else if containsDot name then resolveQualified modules label imports name
   else if Vuna.Ast.memName name ownCtors then Vuna.Ast.Ok (mangle prefix name)
-  else Vuna.Ast.Err (label ++ ": unknown constructor " ++ name)
+  else
+    case modulesExportingCtor modules imports name of
+      Nil => Vuna.Ast.Err (label ++ ": unknown constructor " ++ name)
+      Cons m Nil => Vuna.Ast.Ok (mangle m name)
+      ms => Vuna.Ast.Err (label ++ ": ambiguous constructor " ++ name ++ " (imported from " ++ joinNames ms ++ "); qualify it")
 
 checkBinder label name =
   if containsDot name then Vuna.Ast.Err (label ++ ": invalid variable name " ++ name)
@@ -613,8 +721,8 @@ showCycle name stack = joinArrows (Vuna.Ast.reverse (Cons name stack))
 loadAll root modules stack imports =
   case imports of
     Nil => Vuna.Ast.Ok modules
-    Cons name rest =>
-      Vuna.Ast.andThen (loadModule root modules stack name) (\modules2 =>
+    Cons imp rest =>
+      Vuna.Ast.andThen (loadModule root modules stack (importName imp)) (\modules2 =>
         loadAll root modules2 stack rest)
 
 loadModule root modules stack name =
@@ -626,18 +734,20 @@ loadModule root modules stack name =
         Vuna.Ast.andThen (Vuna.Parser.parseSource (readFile (modulePath root name))) (\p =>
           case p of
             Vuna.Ast.Pair imports decls =>
-              Vuna.Ast.andThen (loadAll root modules (Cons name stack) imports) (\modules2 =>
-                Vuna.Ast.Ok (Cons (Module name imports decls (topNames decls)) modules2)))
+              Vuna.Ast.andThen (validateImports name imports) (\_ =>
+                Vuna.Ast.andThen (loadAll root modules (Cons name stack) imports) (\modules2 =>
+                  Vuna.Ast.Ok (Cons (Module name imports decls (topNames decls)) modules2))))
       else Vuna.Ast.Err ("invalid module name: " ++ name)
 
 loadProgram root entry =
   Vuna.Ast.andThen (Vuna.Parser.parseSource (readFile entry)) (\p =>
     case p of
       Vuna.Ast.Pair imports decls =>
-        Vuna.Ast.andThen (loadAll root Nil Nil imports) (\modules =>
-          Vuna.Ast.andThen (resolveEntry modules imports decls) (\entryDecls =>
-            Vuna.Ast.andThen (resolveModules modules) (\moduleDecls =>
-              Vuna.Ast.Ok (Vuna.Ast.append entryDecls moduleDecls)))))
+        Vuna.Ast.andThen (validateImports "<entry>" imports) (\_ =>
+          Vuna.Ast.andThen (loadAll root Nil Nil imports) (\modules =>
+            Vuna.Ast.andThen (resolveEntry modules imports decls) (\entryDecls =>
+              Vuna.Ast.andThen (resolveModules modules) (\moduleDecls =>
+                Vuna.Ast.Ok (Vuna.Ast.append entryDecls moduleDecls))))))
 
 runDecls decls =
   case interpretMain decls of

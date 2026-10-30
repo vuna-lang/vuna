@@ -1,0 +1,4 @@
+import A as B
+import B
+
+main = 1

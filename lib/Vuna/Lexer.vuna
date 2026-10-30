@@ -42,6 +42,7 @@ isKeyword s =
   s == "data" || s == "case" || s == "of" || s == "let" || s == "in" || s == "if"
   || s == "then" || s == "else" || s == "where" || s == "Type"
   || s == "import"
+  || s == "qualified" || s == "as"
 
 classifyIdent s = if isKeyword s then TKw s else TIdent s
 

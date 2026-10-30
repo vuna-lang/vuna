@@ -102,9 +102,23 @@ git add bootstrap/ && git commit
   ⇔ 模块 `Vuna.Parser`；
 - 路径段必须匹配 `[A-Z][A-Za-z0-9_]*`，路径/文件名与模块名**精确一致**，没有大小写映射；
 - 入口文件可以在 `lib/` 外（如 `app/compile.vuna`），它本身不是模块；
-- `import` 只能在文件顶部，是**直接依赖**；循环导入是硬错误；
-- 跨模块引用必须**全限定**（`Vuna.Parser.parseSource`、`Vuna.List.Cons`）；
-  本模块名字与内建名不加限定；
+- `import` 只能在文件顶部，是**直接依赖**；循环导入、重复 import、重复 alias 都是硬错误；
+- import 的四种形式：
+
+  ```vuna
+  import Vuna.Ast              -- 依赖 + 自动 open：EVar 可直接用
+  import qualified Vuna.Ast    -- 只依赖：必须写 Vuna.Ast.EVar
+  import Vuna.Parser as P      -- 依赖 + open，并可用 P.parseSource
+  import qualified Vuna.Lexer as L  -- 只依赖，并可用 L.PTok
+  ```
+
+  alias 只是额外的限定前缀，原全名仍然可用；alias 必须是单个大写段、全文件唯一，
+  且不能与另一个被 import 的模块名冲突；
+- 非限定名的查找顺序：局部绑定 → 全局构造器 → 本模块顶层定义 → builtin →
+  已自动 open 的 import 导出。两个 open import 导出同名时，裸名报歧义，写全名或
+  alias 即可消歧；
+- 限定名用**完整模块名**或 alias，永远不会歧义；注意 import 只算直接依赖，**不传递**：
+  A import B，C import A 看不到 B 的名字；
 - v0 所有顶层声明默认导出；`True` / `False` / `Cons` / `Nil` 不参与模块前缀；
 - loader 解析 import 图、做名字解析后 **flatten** 成一个 program（内部名字带模块前缀，
   如 `Vuna.Parser.parse`），解释器与 codegen 复用同一份实现；`show` 只显示最后一段，
@@ -144,7 +158,7 @@ type value =
 
 ## 测试
 
-`test/run-tests.sh` 是 vuna 原生测试（74 checks），只用 `vuna` / `vuna-boot` /
+`test/run-tests.sh` 是 vuna 原生测试（96 checks），只用 `vuna` / `vuna-boot` /
 `vuna-interp`，不依赖任何外部编译器：
 
 ```console

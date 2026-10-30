@@ -141,12 +141,25 @@ badCaseIndent st altCol =
 parseSource source =
   Vuna.Ast.andThen (Vuna.Lexer.lexSource source) (\toks => parseProgram (PState toks (Vuna.Lexer.Pos 1 0)))
 
+parseImportSpec st =
+  Vuna.Ast.step (expectKw st "import") (\_, st1 =>
+    if atKw st1 "qualified" then
+      Vuna.Ast.step (expectKw st1 "qualified") (\_, st2 => parseImportAlias st2 True)
+    else parseImportAlias st1 False)
+
+parseImportAlias st isQualified =
+  Vuna.Ast.step (expectIdent st) (\name, st1 =>
+    if atKw st1 "as" then
+      Vuna.Ast.step (expectKw st1 "as") (\_, st2 =>
+        Vuna.Ast.step (expectIdent st2) (\alias, st3 =>
+          Vuna.Ast.Ok (Vuna.Ast.Pair (Vuna.Ast.Import name isQualified (Vuna.Ast.Just alias)) st3)))
+    else Vuna.Ast.Ok (Vuna.Ast.Pair (Vuna.Ast.Import name isQualified Vuna.Ast.Nothing) st1))
+
 parseImports st =
   if atKw st "import" then
-    Vuna.Ast.step (expectKw st "import") (\_, st1 =>
-      Vuna.Ast.step (expectIdent st1) (\name, st2 =>
-        Vuna.Ast.step (parseImports st2) (\rest, st3 =>
-          Vuna.Ast.Ok (Vuna.Ast.Pair (Cons name rest) st3))))
+    Vuna.Ast.step (parseImportSpec st) (\imp, st1 =>
+      Vuna.Ast.step (parseImports st1) (\rest, st2 =>
+        Vuna.Ast.Ok (Vuna.Ast.Pair (Cons imp rest) st2)))
   else Vuna.Ast.Ok (Vuna.Ast.Pair Nil st)
 
 parseProgram st =

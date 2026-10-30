@@ -39,6 +39,9 @@ data Decl : Type where
   DSig : String -> Expr -> Decl
   DFun : String -> List Pat -> Expr -> Decl
 
+data Import : Type where
+  Import : String -> Bool -> Maybe String -> Import
+
 data Bool : Type where
   False : Bool
   True : Bool

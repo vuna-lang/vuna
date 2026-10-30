@@ -1,0 +1,6 @@
+import Vuna.Nat
+
+main =
+  case S Z of
+    S x => 1
+    Z => 0

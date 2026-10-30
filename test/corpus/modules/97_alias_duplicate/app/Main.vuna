@@ -1,0 +1,4 @@
+import A as M
+import B as M
+
+main = M.foo 1
