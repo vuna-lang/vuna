@@ -43,26 +43,18 @@ clausesFor decls name = collectClauses decls name
 funArity name decls =
   case clausesFor decls name of
     Nil => Nothing
-    Cons c rest =>
-      case c of
-        Pair pats body => Just (length pats)
+    Cons (Pair pats body) _ => Just (length pats)
 
-ctorName c =
-  case c of
-    Ctor name ty arity => name
+ctorName (Ctor name ty arity) = name
 
-ctorType c =
-  case c of
-    Ctor name ty arity => ty
+ctorType (Ctor name ty arity) = ty
 
 typeArity ty =
   case ty of
     EApp (EVar "->") (Cons x (Cons rest Nil)) => 1 + typeArity rest
     _ => 0
 
-ctorArityOf c =
-  case c of
-    Ctor name ty arity => arity
+ctorArityOf (Ctor name ty arity) = arity
 
 lookupCtorArity name ctors =
   case ctors of

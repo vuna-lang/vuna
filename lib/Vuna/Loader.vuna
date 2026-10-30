@@ -41,17 +41,11 @@ isGlobalCtor name =
 
 mangle prefix name = if prefix == "" then name else prefix ++ "." ++ name
 
-importName imp =
-  case imp of
-    Import name isQualified alias => name
+importName (Import name isQualified alias) = name
 
-importIsQualified imp =
-  case imp of
-    Import name isQualified alias => isQualified
+importIsQualified (Import name isQualified alias) = isQualified
 
-importAlias imp =
-  case imp of
-    Import name isQualified alias => alias
+importAlias (Import name isQualified alias) = alias
 
 importModuleNames imports = map importName imports
 
@@ -70,17 +64,15 @@ importAliases imports =
 checkImportAliases label moduleNames aliases =
   case aliases of
     Nil => Ok Nil
-    Cons p rest =>
-      case p of
-        Pair alias m =>
-          if validSegment alias then
-            if memName alias (map firstOf rest) then
-              Err (label ++ ": duplicate module alias " ++ alias)
-            else if memName alias moduleNames then
-              if alias == m then checkImportAliases label moduleNames rest
-              else Err (label ++ ": module alias " ++ alias ++ " conflicts with an imported module")
-            else checkImportAliases label moduleNames rest
-          else Err (label ++ ": invalid module alias " ++ alias)
+    Cons (Pair alias m) rest =>
+      if validSegment alias then
+        if memName alias (map firstOf rest) then
+          Err (label ++ ": duplicate module alias " ++ alias)
+        else if memName alias moduleNames then
+          if alias == m then checkImportAliases label moduleNames rest
+          else Err (label ++ ": module alias " ++ alias ++ " conflicts with an imported module")
+        else checkImportAliases label moduleNames rest
+      else Err (label ++ ": invalid module alias " ++ alias)
 
 validateImports label imports =
   if hasDuplicateName (importModuleNames imports) then
@@ -111,9 +103,7 @@ joinNames (Cons x rest) = x ++ ", " ++ joinNames rest
 
 moduleDecls modules name =
   case findModule modules name of
-    Just m =>
-      case m of
-        Module mname imports decls exports => decls
+    Just (Module mname imports decls exports) => decls
     Nothing => Nil
 
 moduleCtors modules name = ctorsOf (moduleDecls modules name)
@@ -145,14 +135,12 @@ modulePath root name = root ++ "/" ++ joinSlashes (splitOnDot name) ++ ".vuna"
 findModule modules name =
   case modules of
     Nil => Nothing
-    Cons m rest =>
-      case m of
-        Module mname imports decls exports =>
-          if mname == name then Just m else findModule rest name
+    Cons (Module mname imports decls exports) rest =>
+      if mname == name then Just (Module mname imports decls exports) else findModule rest name
 
 exportsOf modules name =
   case findModule modules name of
-    Just m => case m of Module mname imports decls exports => exports
+    Just (Module mname imports decls exports) => exports
     Nothing => Nil
 
 isBuiltinName name =
@@ -217,31 +205,27 @@ resolvePattern modules label prefix ownCtors imports pat =
         andThen (traverse (resolvePattern modules label prefix ownCtors imports) pats) (\parts =>
           Ok (Pair (PCon name2 (map firstOf parts)) (concatMap secondOf parts))))
 
-resolveAlt modules label prefix own ownCtors imports scope alt =
-  case alt of
-    Pair pat body =>
-      andThen (resolvePattern modules label prefix ownCtors imports pat) (\p =>
-        case p of
-          Pair pat2 bound =>
-            andThen (resolveExpr modules label prefix own ownCtors imports (append bound scope) body) (\body2 =>
-              Ok (Pair pat2 body2)))
+resolveAlt modules label prefix own ownCtors imports scope (Pair pat body) =
+  andThen (resolvePattern modules label prefix ownCtors imports pat) (\p =>
+    case p of
+      Pair pat2 bound =>
+        andThen (resolveExpr modules label prefix own ownCtors imports (append bound scope) body) (\body2 =>
+          Ok (Pair pat2 body2)))
 
 resolveLet modules label prefix own ownCtors imports scope binds body =
   case binds of
     Nil =>
       andThen (resolveExpr modules label prefix own ownCtors imports scope body) (\b =>
         Ok (Pair Nil b))
-    Cons b rest =>
-      case b of
-        Pair pat value =>
-          andThen (resolveExpr modules label prefix own ownCtors imports scope value) (\value2 =>
-            andThen (resolvePattern modules label prefix ownCtors imports pat) (\p =>
-              case p of
-                Pair pat2 bound =>
-                  andThen (resolveLet modules label prefix own ownCtors imports (append bound scope) rest body) (\r =>
-                    case r of
-                      Pair binds2 body2 =>
-                        Ok (Pair (Cons (Pair pat2 value2) binds2) body2))))
+    Cons (Pair pat value) rest =>
+      andThen (resolveExpr modules label prefix own ownCtors imports scope value) (\value2 =>
+        andThen (resolvePattern modules label prefix ownCtors imports pat) (\p =>
+          case p of
+            Pair pat2 bound =>
+              andThen (resolveLet modules label prefix own ownCtors imports (append bound scope) rest body) (\r =>
+                case r of
+                  Pair binds2 body2 =>
+                    Ok (Pair (Cons (Pair pat2 value2) binds2) body2))))
 
 resolveExpr modules label prefix own ownCtors imports scope expr =
   case expr of
@@ -326,12 +310,10 @@ resolveTypeExpr modules label prefix ownTypes imports ty =
 resolveTypeTopName label prefix name =
   andThen (checkTopName label name) (\_ => Ok (mangle prefix name))
 
-resolveCtorSpec modules label prefix ownTypes imports c =
-  case c of
-    Ctor ctor ty arity =>
-      andThen (resolveCtorDecl label prefix ctor) (\c2 =>
-        andThen (resolveTypeExpr modules label prefix ownTypes imports ty) (\ty2 =>
-          Ok (Ctor c2 ty2 arity)))
+resolveCtorSpec modules label prefix ownTypes imports (Ctor ctor ty arity) =
+  andThen (resolveCtorDecl label prefix ctor) (\c2 =>
+    andThen (resolveTypeExpr modules label prefix ownTypes imports ty) (\ty2 =>
+      Ok (Ctor c2 ty2 arity)))
 
 resolveDecl modules label prefix own ownCtors ownTypes imports d =
   case d of
@@ -358,11 +340,9 @@ resolveEntry modules imports decls =
 resolveModules modules =
   case modules of
     Nil => Ok Nil
-    Cons m rest =>
-      case m of
-        Module name imports decls exports =>
-          andThen (resolveProgram modules name name exports (ctorsOf decls) (typeNamesOf decls) imports decls) (\d1 =>
-            andThen (resolveModules rest) (\d2 => Ok (append d1 d2)))
+    Cons (Module name imports decls exports) rest =>
+      andThen (resolveProgram modules name name exports (ctorsOf decls) (typeNamesOf decls) imports decls) (\d1 =>
+        andThen (resolveModules rest) (\d2 => Ok (append d1 d2)))
 
 showCycle name stack = joinArrows (reverse (Cons name stack))
 

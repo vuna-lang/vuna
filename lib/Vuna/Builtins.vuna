@@ -2,27 +2,25 @@
 
 import Vuna.Base
 
-builtinArity name =
-  if name == "+" then Just 2
-  else if name == "-" then Just 2
-  else if name == "*" then Just 2
-  else if name == "/" then Just 2
-  else if name == "==" then Just 2
-  else if name == "/=" then Just 2
-  else if name == "<" then Just 2
-  else if name == "<=" then Just 2
-  else if name == ">" then Just 2
-  else if name == ">=" then Just 2
-  else if name == "&&" then Just 2
-  else if name == "||" then Just 2
-  else if name == "++" then Just 2
-  else if name == "strLength" then Just 1
-  else if name == "strUnpack" then Just 1
-  else if name == "strPack" then Just 1
-  else if name == "strFromInt" then Just 1
-  else if name == "readFile" then Just 1
-  else if name == "writeFile" then Just 2
-  else if name == "print" then Just 1
-  else if name == "getArgs" then Just 0
-  else Nothing
-
+builtinArity "+" = Just 2
+builtinArity "-" = Just 2
+builtinArity "*" = Just 2
+builtinArity "/" = Just 2
+builtinArity "==" = Just 2
+builtinArity "/=" = Just 2
+builtinArity "<" = Just 2
+builtinArity "<=" = Just 2
+builtinArity ">" = Just 2
+builtinArity ">=" = Just 2
+builtinArity "&&" = Just 2
+builtinArity "||" = Just 2
+builtinArity "++" = Just 2
+builtinArity "strLength" = Just 1
+builtinArity "strUnpack" = Just 1
+builtinArity "strPack" = Just 1
+builtinArity "strFromInt" = Just 1
+builtinArity "readFile" = Just 1
+builtinArity "writeFile" = Just 2
+builtinArity "print" = Just 1
+builtinArity "getArgs" = Just 0
+builtinArity _ = Nothing

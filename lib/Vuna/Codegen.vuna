@@ -36,10 +36,8 @@ builtinInfos =
   ]
 
 findBuiltin name Nil = Nothing
-findBuiltin name (Cons b rest) =
-  case b of
-    BuiltinInfo vname ocname arity body =>
-      if vname == name then Just b else findBuiltin name rest
+findBuiltin name (Cons (BuiltinInfo vname ocname arity body) rest) =
+  if vname == name then Just (BuiltinInfo vname ocname arity body) else findBuiltin name rest
 
 joinList sep Nil = ""
 joinList sep (Cons x Nil) = x
@@ -91,12 +89,9 @@ genVar decls scope name =
              ++ ")")
           Nothing =>
             case findBuiltin name builtinInfos of
-              Just b =>
-                case b of
-                  BuiltinInfo vname ocname arity body =>
-                    if arity == 0 then Ok (ocname ++ " ()")
-                    else
-                      Ok ("VFun (" ++ ocamlString name ++ ", " ++ ocname ++ ")")
+              Just (BuiltinInfo vname ocname arity body) =>
+                if arity == 0 then Ok (ocname ++ " ()")
+                else Ok ("VFun (" ++ ocamlString name ++ ", " ++ ocname ++ ")")
               Nothing => Err ("unbound variable: " ++ name)
 
 pconPattern name Nil = "VCon (" ++ ocamlString name ++ ", [])"
@@ -122,14 +117,12 @@ genLambda decls scope params body =
       andThen (genLambda decls (Cons p scope) rest body) (\inner =>
         Ok ("VFun (\"\", fun x_" ++ sanitizeName p ++ " -> " ++ inner ++ ")"))
 
-genAlt decls scope alt =
-  case alt of
-    Pair pat body =>
-      andThen (genPattern pat) (\p =>
-        case p of
-          Pair patCode bound =>
-            andThen (genExpr decls (append bound scope) body) (\bodyCode =>
-              Ok ("| " ++ patCode ++ " -> " ++ bodyCode)))
+genAlt decls scope (Pair pat body) =
+  andThen (genPattern pat) (\p =>
+    case p of
+      Pair patCode bound =>
+        andThen (genExpr decls (append bound scope) body) (\bodyCode =>
+          Ok ("| " ++ patCode ++ " -> " ++ bodyCode)))
 
 genCase decls scope scrut alts =
   andThen (genExpr decls scope scrut) (\scrutCode =>
@@ -142,17 +135,15 @@ genCase decls scope scrut alts =
 genLet decls scope binds body =
   case binds of
     Nil => genExpr decls scope body
-    Cons b rest =>
-      case b of
-        Pair pat value =>
-          andThen (genExpr decls scope value) (\valueCode =>
-            andThen (genPattern pat) (\p =>
-              case p of
-                Pair patCode bound =>
-                  andThen (genLet decls (append bound scope) rest body) (\bodyCode =>
-                    Ok
-                      ("(let " ++ patCode ++ " = (" ++ valueCode ++ ") in "
-                      ++ bodyCode ++ ")"))))
+    Cons (Pair pat value) rest =>
+      andThen (genExpr decls scope value) (\valueCode =>
+        andThen (genPattern pat) (\p =>
+          case p of
+            Pair patCode bound =>
+              andThen (genLet decls (append bound scope) rest body) (\bodyCode =>
+                Ok
+                  ("(let " ++ patCode ++ " = (" ++ valueCode ++ ") in "
+                  ++ bodyCode ++ ")"))))
 
 cgApplyFold acc Nil = acc
 cgApplyFold acc (Cons a rest) =
@@ -190,24 +181,18 @@ groupFunctionsLoop (Cons d rest) groups =
     _ => groupFunctionsLoop rest groups
 
 addClause name clause Nil = Cons (Pair name (Cons clause Nil)) Nil
-addClause name clause (Cons g rest) =
-  case g of
-    Pair gname clauses =>
-      if gname == name then
-        Cons (Pair gname (append clauses (Cons clause Nil))) rest
-      else Cons g (addClause name clause rest)
+addClause name clause (Cons (Pair gname clauses) rest) =
+  if gname == name then
+    Cons (Pair gname (append clauses (Cons clause Nil))) rest
+  else Cons (Pair gname clauses) (addClause name clause rest)
 
 arityOf name Nil = Err ("function " ++ name ++ " has no clauses")
-arityOf name (Cons c rest) =
-  case c of
-    Pair pats body => checkArities name (length pats) rest
+arityOf name (Cons (Pair pats body) rest) = checkArities name (length pats) rest
 
 checkArities name expected Nil = Ok expected
-checkArities name expected (Cons c rest) =
-  case c of
-    Pair pats body =>
-      if length pats == expected then checkArities name expected rest
-      else Err ("clauses for " ++ name ++ " have different arities")
+checkArities name expected (Cons (Pair pats body) rest) =
+  if length pats == expected then checkArities name expected rest
+  else Err ("clauses for " ++ name ++ " have different arities")
 
 ctorPairs Nil = Nil
 ctorPairs (Cons c rest) =
@@ -220,21 +205,17 @@ allCtors (Cons d rest) =
     _ => allCtors rest
 
 validateCtors Nil = Ok Nil
-validateCtors (Cons c rest) =
-  case c of
-    Pair name arity =>
-      if memName name (map firstOf rest) then
-        Err ("duplicate constructor: " ++ name)
-      else validateCtors rest
+validateCtors (Cons (Pair name arity) rest) =
+  if memName name (map firstOf rest) then
+    Err ("duplicate constructor: " ++ name)
+  else validateCtors rest
 
 checkNoCtorFun Nil decls = Ok Nil
-checkNoCtorFun (Cons g rest) decls =
-  case g of
-    Pair name clauses =>
-      case ctorArity name decls of
-        Just arity =>
-          Err ("name is both a constructor and a function: " ++ name)
-        Nothing => checkNoCtorFun rest decls
+checkNoCtorFun (Cons (Pair name clauses) rest) decls =
+  case ctorArity name decls of
+    Just arity =>
+      Err ("name is both a constructor and a function: " ++ name)
+    Nothing => checkNoCtorFun rest decls
 
 makeParams n = makeParamsFrom 1 n
 
@@ -249,25 +230,21 @@ makeCtorParamsFrom i n =
   else Cons ("c" ++ strFromInt i) (makeCtorParamsFrom (i + 1) n)
 
 genBranches decls arity Nil = Ok Nil
-genBranches decls arity (Cons c rest) =
-  case c of
-    Pair pats body =>
-      andThen (traverse genPattern pats) (\parts =>
-        let patternCode = if arity == 1 then headOf (map firstOf parts) else "(" ++ joinList ", " (map firstOf parts) ++ ")"
-        in andThen (genExpr decls (concatMap secondOf parts) body) (\b =>
-             andThen (genBranches decls arity rest) (\restBranches =>
-               Ok (Cons ("| " ++ patternCode ++ " -> " ++ b) restBranches))))
+genBranches decls arity (Cons (Pair pats body) rest) =
+  andThen (traverse genPattern pats) (\parts =>
+    let patternCode = if arity == 1 then headOf (map firstOf parts) else "(" ++ joinList ", " (map firstOf parts) ++ ")"
+    in andThen (genExpr decls (concatMap secondOf parts) body) (\b =>
+         andThen (genBranches decls arity rest) (\restBranches =>
+           Ok (Cons ("| " ++ patternCode ++ " -> " ++ b) restBranches))))
 
 genFunction decls name clauses =
   andThen (arityOf name clauses) (\arity =>
     case clauses of
       Nil => Err ("function " ++ name ++ " has no clauses")
-      Cons first rest =>
+      Cons (Pair pats body) _ =>
         if arity == 0 then
-          case first of
-            Pair pats body =>
-              andThen (genExpr decls Nil body) (\b =>
-                Ok ("(fun () -> " ++ b ++ ")"))
+          andThen (genExpr decls Nil body) (\b =>
+            Ok ("(fun () -> " ++ b ++ ")"))
         else
           let params = makeParams arity in
           let scrutinee = if arity == 1 then headOf params else "(" ++ joinList ", " params ++ ")"
@@ -282,16 +259,14 @@ wrapFun name params matchCode k =
     "(fun " ++ nthList k params ++ " -> VFun (" ++ ocamlString name ++ ", "
     ++ wrapFun name params matchCode (k + 1) ++ "))"
 
-genCtor c =
-  case c of
-    Pair name arity =>
-      if arity == 0 then Ok ""
-      else
-        let params = makeCtorParams arity in
-        let body = "VCon (" ++ ocamlString name ++ ", [" ++ joinList "; " params ++ "])"
-        in Ok
-             ("let mk_" ++ sanitizeName name ++ " = "
-             ++ wrapCtor name params body 0 ++ "\n")
+genCtor (Pair name arity) =
+  if arity == 0 then Ok ""
+  else
+    let params = makeCtorParams arity in
+    let body = "VCon (" ++ ocamlString name ++ ", [" ++ joinList "; " params ++ "])"
+    in Ok
+         ("let mk_" ++ sanitizeName name ++ " = "
+         ++ wrapCtor name params body 0 ++ "\n")
 
 wrapCtor name params body k =
   if k == length params - 1 then
@@ -306,19 +281,15 @@ genCtorDefs (Cons c rest) =
     andThen (genCtorDefs rest) (\restDefs => Ok (def ++ restDefs)))
 
 genBuiltinDef Nil = ""
-genBuiltinDef (Cons b rest) =
-  case b of
-    BuiltinInfo vname ocname arity body =>
-      let def = if arity == 0 then "let " ++ ocname ++ " = fun () -> " ++ body ++ "\n" else if arity == 1 then "let " ++ ocname ++ " = fun a -> " ++ body ++ "\n" else "let " ++ ocname ++ " = fun a -> VFun (" ++ ocamlString vname ++ ", fun b -> " ++ body ++ ")\n"
-      in def ++ genBuiltinDef rest
+genBuiltinDef (Cons (BuiltinInfo vname ocname arity body) rest) =
+  let def = if arity == 0 then "let " ++ ocname ++ " = fun () -> " ++ body ++ "\n" else if arity == 1 then "let " ++ ocname ++ " = fun a -> " ++ body ++ "\n" else "let " ++ ocname ++ " = fun a -> VFun (" ++ ocamlString vname ++ ", fun b -> " ++ body ++ ")\n"
+  in def ++ genBuiltinDef rest
 
 genFunctions decls Nil = Ok Nil
-genFunctions decls (Cons g rest) =
-  case g of
-    Pair name clauses =>
-      andThen (genFunction decls name clauses) (\def =>
-        andThen (genFunctions decls rest) (\defs =>
-          Ok (Cons (Pair name def) defs)))
+genFunctions decls (Cons (Pair name clauses) rest) =
+  andThen (genFunction decls name clauses) (\def =>
+    andThen (genFunctions decls rest) (\defs =>
+      Ok (Cons (Pair name def) defs)))
 
 renderRecsFrom Nil index = ""
 renderRecsFrom (Cons f rest) index =

@@ -145,12 +145,10 @@ lexToken c rest p =
   else if c == 34 then
     case scanString (Chars rest (advanceChar c p)) Nil of
       Err e => Err e
-      Ok p2 =>
-        case p2 of
-          Pair s cs2 =>
-            case lexChars cs2 of
-              Err e => Err e
-              Ok toks => Ok (Cons (PTok (TStr s) p) toks)
+      Ok (Pair s cs2) =>
+        case lexChars cs2 of
+          Err e => Err e
+          Ok toks => Ok (Cons (PTok (TStr s) p) toks)
   else if c == 40 || c == 41 || c == 91 || c == 93 || c == 44 then
     case lexChars (Chars rest (advanceChar c p)) of
       Err e => Err e

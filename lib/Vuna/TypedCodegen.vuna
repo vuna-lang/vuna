@@ -41,9 +41,8 @@ showParamMapAt (Cons p rest) i = Cons (Pair p (showParamVar i)) (showParamMapAt 
 showParamMap params = showParamMapAt params 0
 
 lookupParam name Nil = Nothing
-lookupParam name (Cons p rest) =
-  case p of
-    Pair n v => if n == name then Just v else lookupParam name rest
+lookupParam name (Cons (Pair n v) rest) =
+  if n == name then Just v else lookupParam name rest
 
 dataDecls decls =
   case decls of
@@ -127,11 +126,9 @@ genParams n = map (\i => "a" ++ strFromInt i) (range 0 n)
 
 range i n = if i >= n then Nil else Cons i (range (i + 1) n)
 
-genData decls d =
-  case d of
-    DData name params ctors =>
-      andThen (mapResult (genCtor decls (paramMap params)) ctors) (\cs =>
-        Ok ("  " ++ dataPrefix params ++ typeNameOf name ++ " =\n    " ++ joinWith "\n  | " cs))
+genData decls (DData name params ctors) =
+  andThen (mapResult (genCtor decls (paramMap params)) ctors) (\cs =>
+    Ok ("  " ++ dataPrefix params ++ typeNameOf name ++ " =\n    " ++ joinWith "\n  | " cs))
 
 dataPrefix params =
   case params of
@@ -144,15 +141,13 @@ paramVarsAt (Cons p rest) i = Cons (paramVar i) (paramVarsAt rest (i + 1))
 
 paramVars params = paramVarsAt params 0
 
-genCtor decls pmap c =
-  case c of
-    Ctor name ty arity =>
-      case splitArrows ty of
-        Nil => Ok (ctorNameOf name)
-        Cons only Nil => andThen (ocamlType decls pmap only) (\t => Ok (ctorNameOf name ++ " of (" ++ t ++ ")"))
-        fields =>
-          andThen (mapResult (ocamlType decls pmap) fields) (\ts =>
-            Ok (ctorNameOf name ++ " of " ++ joinWith " * " (map (\t => "(" ++ t ++ ")") ts)))
+genCtor decls pmap (Ctor name ty arity) =
+  case splitArrows ty of
+    Nil => Ok (ctorNameOf name)
+    Cons only Nil => andThen (ocamlType decls pmap only) (\t => Ok (ctorNameOf name ++ " of (" ++ t ++ ")"))
+    fields =>
+      andThen (mapResult (ocamlType decls pmap) fields) (\ts =>
+        Ok (ctorNameOf name ++ " of " ++ joinWith " * " (map (\t => "(" ++ t ++ ")") ts)))
 
 genTypeDecls decls =
   case nonSpecialData decls of
@@ -217,9 +212,7 @@ genShowFields decls pmap (Cons f fs) (Cons v vs) =
     andThen (genShowFields decls pmap fs vs) (\ss =>
       Ok (Cons ("(" ++ s ++ ") " ++ v) ss)))
 
-genShowCtor decls pmap c =
-  case c of
-    Ctor name ty arity => genShowCtorWith decls pmap name (splitArrows ty)
+genShowCtor decls pmap (Ctor name ty arity) = genShowCtorWith decls pmap name (splitArrows ty)
 
 genShowCtorWith decls pmap name fields =
   andThen (genShowFields decls pmap fields (fieldVars (length fields))) (\shows =>
@@ -228,9 +221,8 @@ genShowCtorWith decls pmap name fields =
       Cons v Nil => Ok ("  | " ++ ctorNameOf name ++ " " ++ v ++ " -> show_ctor " ++ ocamlString (lastName name) ++ " [" ++ joinWith "; " shows ++ "]")
       vars => Ok ("  | " ++ ctorNameOf name ++ " (" ++ joinWith ", " vars ++ ") -> show_ctor " ++ ocamlString (lastName name) ++ " [" ++ joinWith "; " shows ++ "]"))
 
-genShowFunc decls d =
-  case d of
-    DData name params ctors => genShowFuncWith decls (showParamMap params) params name ctors
+genShowFunc decls (DData name params ctors) =
+  genShowFuncWith decls (showParamMap params) params name ctors
 
 genShowFuncWith : List Decl -> List (Pair String String) -> List String -> String -> List Ctor -> Result String
 genShowFuncWith decls pmap params name ctors =
@@ -251,9 +243,7 @@ showAnnotation params name =
   in joinWith " " vars ++ ". "
     ++ joinWith " -> " (append (map (\v => "(" ++ v ++ " -> string)") vars) (Cons (appType vars (typeNameOf name)) (Cons "string" Nil)))
 
-pairSecond p =
-  case p of
-    Pair _ v => v
+pairSecond (Pair _ v) = v
 
 genShowDecls decls =
   case nonSpecialData decls of
@@ -270,21 +260,22 @@ genPat pat =
     PInt n => Ok (strFromInt n)
     PStr s => Ok (ocamlString s)
     PCon name pats =>
-      if name == "Nil" then Ok "[]"
-      else if name == "True" then Ok "true"
-      else if name == "False" then Ok "false"
-      else if name == "Cons" then
-        case pats of
-          Cons h (Cons t Nil) =>
-            andThen (genPat h) (\ph =>
-              andThen (genPat t) (\pt => Ok ("(" ++ ph ++ ") :: (" ++ pt ++ ")")))
-          _ => Err "typed codegen: Cons pattern arity"
-      else
-        andThen (mapResult genPat pats) (\ps =>
-          case ps of
-            Nil => Ok (ctorNameOf name)
-            Cons p Nil => Ok (ctorNameOf name ++ " " ++ "(" ++ p ++ ")")
-            _ => Ok (ctorNameOf name ++ " (" ++ joinWith ", " ps ++ ")"))
+      case name of
+        "Nil" => Ok "[]"
+        "True" => Ok "true"
+        "False" => Ok "false"
+        "Cons" =>
+          case pats of
+            Cons h (Cons t Nil) =>
+              andThen (genPat h) (\ph =>
+                andThen (genPat t) (\pt => Ok ("(" ++ ph ++ ") :: (" ++ pt ++ ")")))
+            _ => Err "typed codegen: Cons pattern arity"
+        _ =>
+          andThen (mapResult genPat pats) (\ps =>
+            case ps of
+              Nil => Ok (ctorNameOf name)
+              Cons p Nil => Ok (ctorNameOf name ++ " " ++ "(" ++ p ++ ")")
+              _ => Ok (ctorNameOf name ++ " (" ++ joinWith ", " ps ++ ")"))
 
 patVars pat =
   case pat of
@@ -300,29 +291,28 @@ genArgs decls env args =
 
 genApp f args = "(" ++ f ++ ") " ++ joinWith " " (map (\a => "(" ++ a ++ ")") args)
 
-builtinName name =
-  if name == "+" then Just "bi_add"
-  else if name == "-" then Just "bi_sub"
-  else if name == "*" then Just "bi_mul"
-  else if name == "/" then Just "bi_div"
-  else if name == "==" then Just "bi_eq"
-  else if name == "/=" then Just "bi_neq"
-  else if name == "<" then Just "bi_lt"
-  else if name == "<=" then Just "bi_le"
-  else if name == ">" then Just "bi_gt"
-  else if name == ">=" then Just "bi_ge"
-  else if name == "&&" then Just "bi_and"
-  else if name == "||" then Just "bi_or"
-  else if name == "++" then Just "bi_concat"
-  else if name == "strLength" then Just "bi_str_length"
-  else if name == "strUnpack" then Just "bi_str_unpack"
-  else if name == "strPack" then Just "bi_str_pack"
-  else if name == "strFromInt" then Just "bi_str_from_int"
-  else if name == "readFile" then Just "bi_read_file"
-  else if name == "writeFile" then Just "bi_write_file"
-  else if name == "print" then Just "bi_print"
-  else if name == "getArgs" then Just "bi_get_args"
-  else Nothing
+builtinName "+" = Just "bi_add"
+builtinName "-" = Just "bi_sub"
+builtinName "*" = Just "bi_mul"
+builtinName "/" = Just "bi_div"
+builtinName "==" = Just "bi_eq"
+builtinName "/=" = Just "bi_neq"
+builtinName "<" = Just "bi_lt"
+builtinName "<=" = Just "bi_le"
+builtinName ">" = Just "bi_gt"
+builtinName ">=" = Just "bi_ge"
+builtinName "&&" = Just "bi_and"
+builtinName "||" = Just "bi_or"
+builtinName "++" = Just "bi_concat"
+builtinName "strLength" = Just "bi_str_length"
+builtinName "strUnpack" = Just "bi_str_unpack"
+builtinName "strPack" = Just "bi_str_pack"
+builtinName "strFromInt" = Just "bi_str_from_int"
+builtinName "readFile" = Just "bi_read_file"
+builtinName "writeFile" = Just "bi_write_file"
+builtinName "print" = Just "bi_print"
+builtinName "getArgs" = Just "bi_get_args"
+builtinName _ = Nothing
 
 genExpr : List Decl -> List String -> Expr -> Result String
 genExpr decls env expr =
@@ -391,30 +381,24 @@ genExpr decls env expr =
             Ok ("if " ++ gc ++ " then " ++ gt ++ " else " ++ ge))))
 
 genAlt : List Decl -> List String -> Pair Pat Expr -> Result String
-genAlt decls env alt =
-  case alt of
-    Pair pat body =>
-      andThen (genPat pat) (\p =>
-        andThen (genExpr decls (append (patVars pat) env) body) (\b =>
-          Ok ("  | " ++ p ++ " -> " ++ b)))
+genAlt decls env (Pair pat body) =
+  andThen (genPat pat) (\p =>
+    andThen (genExpr decls (append (patVars pat) env) body) (\b =>
+      Ok ("  | " ++ p ++ " -> " ++ b)))
 
 genBinds : List Decl -> List String -> List (Pair Pat Expr) -> Expr -> Result String
 genBinds decls env Nil body = genExpr decls env body
-genBinds decls env (Cons b rest) body =
-  case b of
-    Pair pat value =>
-      andThen (genPat pat) (\p =>
-        andThen (genExpr decls env value) (\v =>
-          andThen (genBinds decls (append (patVars pat) env) rest body) (\r =>
-            Ok ("let " ++ p ++ " = " ++ v ++ " in " ++ r))))
+genBinds decls env (Cons (Pair pat value) rest) body =
+  andThen (genPat pat) (\p =>
+    andThen (genExpr decls env value) (\v =>
+      andThen (genBinds decls (append (patVars pat) env) rest body) (\r =>
+        Ok ("let " ++ p ++ " = " ++ v ++ " in " ++ r))))
 
 genClause : List Decl -> List String -> Pair (List Pat) Expr -> Result String
-genClause decls env clause =
-  case clause of
-    Pair pats body =>
-      andThen (mapResult genPat pats) (\ps =>
-        andThen (genExpr decls (append (concatMap patVars pats) env) body) (\b =>
-          Ok ("  | (" ++ joinWith ", " ps ++ ") -> " ++ b)))
+genClause decls env (Pair pats body) =
+  andThen (mapResult genPat pats) (\ps =>
+    andThen (genExpr decls (append (concatMap patVars pats) env) body) (\b =>
+      Ok ("  | (" ++ joinWith ", " ps ++ ") -> " ++ b)))
 
 genFunction : List Decl -> String -> Result String
 genFunction decls name =
@@ -461,9 +445,8 @@ neighborsOf : List (Pair String (List String)) -> String -> List String
 neighborsOf adj name =
   case adj of
     Nil => Nil
-    Cons p rest =>
-      case p of
-        Pair n ns => if n == name then ns else neighborsOf rest name
+    Cons (Pair n ns) rest =>
+      if n == name then ns else neighborsOf rest name
 
 reachable : List (Pair String (List String)) -> String -> List String
 reachable adj start = dfsReach adj (Cons start Nil) Nil
@@ -533,9 +516,7 @@ genFunctionRefs decls name =
   uniqueNames (concatMap clauseRefs (clausesFor decls name))
 
 clauseRefs : Pair (List Pat) Expr -> List String
-clauseRefs clause =
-  case clause of
-    Pair pats body => exprRefs body
+clauseRefs (Pair pats body) = exprRefs body
 
 exprRefs : Expr -> List String
 exprRefs expr =
@@ -550,14 +531,10 @@ exprRefs expr =
     EIf c t e => unionNames (exprRefs c) (unionNames (exprRefs t) (exprRefs e))
 
 bindRefs : Pair Pat Expr -> List String
-bindRefs b =
-  case b of
-    Pair pat value => exprRefs value
+bindRefs (Pair pat value) = exprRefs value
 
 altRefs : Pair Pat Expr -> List String
-altRefs a =
-  case a of
-    Pair pat body => exprRefs body
+altRefs (Pair pat body) = exprRefs body
 
 unionNames : List String -> List String -> List String
 unionNames Nil ys = ys
@@ -650,17 +627,15 @@ runtimeCodeTyped =
 generateProgramTyped decls globals printResult =
   case lookupScheme "main" globals of
     Nothing => Err "typed codegen: no main definition"
-    Just sch =>
-      case sch of
-        Scheme qs ty =>
-          case ty of
-            TFun a b => Err "typed codegen: main must be zero-arity"
-            _ =>
-              andThen (showForTy decls ty) (\showMain =>
-                andThen (genTypeDecls decls) (\types =>
-                  andThen (genShowDecls decls) (\shows =>
-                    andThen (genTop decls) (\tops =>
-                      let output = runtimeCodeTyped ++ "\n" ++ types ++ "\n" ++ shows ++ "\n" ++ tops
-                      in if printResult then
-                           Ok (output ++ "let () = print_endline (" ++ showMain ++ " (" ++ valueName "main" ++ " ()))\n")
-                         else Ok (output ++ "let () = ignore (" ++ valueName "main" ++ " ())\n")))))
+    Just (Scheme qs ty) =>
+      case ty of
+        TFun a b => Err "typed codegen: main must be zero-arity"
+        _ =>
+          andThen (showForTy decls ty) (\showMain =>
+            andThen (genTypeDecls decls) (\types =>
+              andThen (genShowDecls decls) (\shows =>
+                andThen (genTop decls) (\tops =>
+                  let output = runtimeCodeTyped ++ "\n" ++ types ++ "\n" ++ shows ++ "\n" ++ tops
+                  in if printResult then
+                       Ok (output ++ "let () = print_endline (" ++ showMain ++ " (" ++ valueName "main" ++ " ()))\n")
+                     else Ok (output ++ "let () = ignore (" ++ valueName "main" ++ " ())\n")))))

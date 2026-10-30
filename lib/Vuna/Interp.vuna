@@ -11,12 +11,10 @@ import Vuna.TypedCodegen
 interpret source =
   case parseSource source of
     Err e => "error: " ++ e
-    Ok p =>
-      case p of
-        Pair imports decls =>
-          case imports of
-            Nil => runDecls decls
-            _ => "error: imports are only supported by interpretFile"
+    Ok (Pair imports decls) =>
+      case imports of
+        Nil => runDecls decls
+        _ => "error: imports are only supported by interpretFile"
 
 interpretFile root entry =
   case loadProgram root entry of

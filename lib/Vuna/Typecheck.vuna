@@ -20,9 +20,8 @@ data TC : Type where
 -- ---------------------------------------------------------------
 
 lookupSubst i Nil = Nothing
-lookupSubst i (Cons p rest) =
-  case p of
-    Pair j t => if i == j then Just t else lookupSubst i rest
+lookupSubst i (Cons (Pair j t) rest) =
+  if i == j then Just t else lookupSubst i rest
 
 memInt i Nil = False
 memInt i (Cons x rest) = if i == x then True else memInt i rest
@@ -68,9 +67,7 @@ showTyArgs (Cons ty Nil) = showTy ty
 showTyArgs (Cons ty rest) = showTy ty ++ " " ++ showTyArgs rest
 
 nextVar : TC -> Pair Int TC
-nextVar st =
-  case st of
-    TC n s => Pair n (TC (n + 1) s)
+nextVar (TC n s) = Pair n (TC (n + 1) s)
 
 freshTy : TC -> Pair Ty TC
 freshTy st =
@@ -78,9 +75,7 @@ freshTy st =
     Pair n st2 => Pair (TVar n) st2
 
 bindVar : Int -> Ty -> TC -> Result TC
-bindVar i ty st =
-  case st of
-    TC n s => Ok (TC n (Cons (Pair i ty) s))
+bindVar i ty (TC n s) = Ok (TC n (Cons (Pair i ty) s))
 
 unifyLists : List Ty -> List Ty -> TC -> Result TC
 unifyLists Nil Nil st = Ok st
@@ -140,11 +135,9 @@ renameTy mapping ty =
     TFun a b => TFun (renameTy mapping a) (renameTy mapping b)
 
 instantiate : TC -> Scheme -> Pair Ty TC
-instantiate st sch =
-  case sch of
-    Scheme qs ty =>
-      case instantiateVars qs st of
-        Pair mapping st2 => Pair (renameTy mapping ty) st2
+instantiate st (Scheme qs ty) =
+  case instantiateVars qs st of
+    Pair mapping st2 => Pair (renameTy mapping ty) st2
 
 freeVarsTy ty =
   case ty of
@@ -155,14 +148,11 @@ freeVarsTy ty =
 freeVarsArgs Nil = Nil
 freeVarsArgs (Cons ty rest) = unionInts (freeVarsTy ty) (freeVarsArgs rest)
 
-freeVarsScheme sch =
-  case sch of
-    Scheme qs ty => diffInts (freeVarsTy ty) qs
+freeVarsScheme (Scheme qs ty) = diffInts (freeVarsTy ty) qs
 
 freeVarsEnv Nil = Nil
-freeVarsEnv (Cons p rest) =
-  case p of
-    Pair n sch => unionInts (freeVarsScheme sch) (freeVarsEnv rest)
+freeVarsEnv (Cons (Pair n sch) rest) =
+  unionInts (freeVarsScheme sch) (freeVarsEnv rest)
 
 -- ---------------------------------------------------------------
 -- 类型表达式 → Ty
@@ -174,9 +164,8 @@ isLowerName name =
     Cons c rest => c >= 97 && c <= 122
 
 lookupTyVar name Nil = Nothing
-lookupTyVar name (Cons p rest) =
-  case p of
-    Pair n ty => if n == name then Just ty else lookupTyVar name rest
+lookupTyVar name (Cons (Pair n ty) rest) =
+  if n == name then Just ty else lookupTyVar name rest
 
 knownTypeName typeNames name =
   memName name typeNames || name == "Int" || name == "String" || name == "Bool"
@@ -225,12 +214,10 @@ convertType typeNames vars st expr =
     _ => Err "invalid type expression"
 
 varIds Nil = Nil
-varIds (Cons p rest) =
-  case p of
-    Pair n ty =>
-      case ty of
-        TVar i => Cons i (varIds rest)
-        _ => varIds rest
+varIds (Cons (Pair n ty) rest) =
+  case ty of
+    TVar i => Cons i (varIds rest)
+    _ => varIds rest
 
 schemeOfSig typeNames ty st =
   andThen (convertType typeNames Nil st ty) (\p =>
@@ -244,15 +231,13 @@ seedVars (Cons name rest) st =
       case seedVars rest st1 of
         Pair vars st2 => Pair (Cons (Pair name ty) vars) st2
 
-schemeOfCtor typeNames params st ctor =
-  case ctor of
-    Ctor name ty arity =>
-      case seedVars params st of
-        Pair vars st1 =>
-          andThen (convertType typeNames vars st1 ty) (\p =>
-            case p of
-              Pair (Pair ty2 vars2) st2 =>
-                Ok (Pair (Pair name (Scheme (varIds vars2) ty2)) st2))
+schemeOfCtor typeNames params st (Ctor name ty arity) =
+  case seedVars params st of
+    Pair vars st1 =>
+      andThen (convertType typeNames vars st1 ty) (\p =>
+        case p of
+          Pair (Pair ty2 vars2) st2 =>
+            Ok (Pair (Pair name (Scheme (varIds vars2) ty2)) st2))
 
 -- ---------------------------------------------------------------
 -- 收集声明：数据类型名、签名、构造器 scheme
@@ -337,14 +322,12 @@ builtinSchemes =
 -- ---------------------------------------------------------------
 
 lookupLocal name Nil = Nothing
-lookupLocal name (Cons p rest) =
-  case p of
-    Pair n ty => if n == name then Just ty else lookupLocal name rest
+lookupLocal name (Cons (Pair n ty) rest) =
+  if n == name then Just ty else lookupLocal name rest
 
 lookupScheme name Nil = Nothing
-lookupScheme name (Cons p rest) =
-  case p of
-    Pair n sch => if n == name then Just sch else lookupScheme name rest
+lookupScheme name (Cons (Pair n sch) rest) =
+  if n == name then Just sch else lookupScheme name rest
 
 funArgs ty =
   case ty of
@@ -409,33 +392,29 @@ seedLocals (Cons name rest) locals st =
         Pair tys (Pair locals2 st2) => Pair (Cons ty tys) (Pair locals2 st2)
 
 inferBinds globals locals Nil st = Ok (Pair locals st)
-inferBinds globals locals (Cons b rest) st =
-  case b of
-    Pair pat value =>
-      andThen (inferExpr globals locals st value) (\pv =>
-        case pv of
-          Pair valueTy st1 =>
-            andThen (inferPattern globals locals st1 pat valueTy) (\pp =>
-              case pp of
-                Pair locals2 st2 => inferBinds globals locals2 rest st2))
+inferBinds globals locals (Cons (Pair pat value) rest) st =
+  andThen (inferExpr globals locals st value) (\pv =>
+    case pv of
+      Pair valueTy st1 =>
+        andThen (inferPattern globals locals st1 pat valueTy) (\pp =>
+          case pp of
+            Pair locals2 st2 => inferBinds globals locals2 rest st2))
 
 inferAlts globals locals scrutTy Nil st = Err "empty case"
-inferAlts globals locals scrutTy (Cons alt rest) st =
-  case alt of
-    Pair pat body =>
-      andThen (inferPattern globals locals st pat scrutTy) (\pp =>
-        case pp of
-          Pair locals2 st1 =>
-            andThen (inferExpr globals locals2 st1 body) (\pb =>
-              case pb of
-                Pair bodyTy st2 =>
-                  case rest of
-                    Nil => Ok (Pair bodyTy st2)
-                    _ =>
-                      andThen (inferAlts globals locals scrutTy rest st2) (\pr =>
-                        case pr of
-                          Pair restTy st3 =>
-                            andThen (unify bodyTy restTy st3) (\st4 => Ok (Pair bodyTy st4)))))
+inferAlts globals locals scrutTy (Cons (Pair pat body) rest) st =
+  andThen (inferPattern globals locals st pat scrutTy) (\pp =>
+    case pp of
+      Pair locals2 st1 =>
+        andThen (inferExpr globals locals2 st1 body) (\pb =>
+          case pb of
+            Pair bodyTy st2 =>
+              case rest of
+                Nil => Ok (Pair bodyTy st2)
+                _ =>
+                  andThen (inferAlts globals locals scrutTy rest st2) (\pr =>
+                    case pr of
+                      Pair restTy st3 =>
+                        andThen (unify bodyTy restTy st3) (\st4 => Ok (Pair bodyTy st4)))))
 
 inferExpr globals locals st expr =
   case expr of
@@ -481,17 +460,15 @@ inferExpr globals locals st expr =
                         Pair elseTy st4 =>
                           andThen (unify thenTy elseTy st4) (\st5 => Ok (Pair thenTy st5))))))
 
-inferClause globals st clause =
-  case clause of
-    Pair pats body =>
-      case seedPatTypes pats st of
-        Pair paramTys st1 =>
-          andThen (inferPatterns globals Nil pats paramTys st1) (\pp =>
-            case pp of
-              Pair locals2 st2 =>
-                andThen (inferExpr globals locals2 st2 body) (\pb =>
-                  case pb of
-                    Pair bodyTy st3 => Ok (Pair (foldFun paramTys bodyTy) st3)))
+inferClause globals st (Pair pats body) =
+  case seedPatTypes pats st of
+    Pair paramTys st1 =>
+      andThen (inferPatterns globals Nil pats paramTys st1) (\pp =>
+        case pp of
+          Pair locals2 st2 =>
+            andThen (inferExpr globals locals2 st2 body) (\pb =>
+              case pb of
+                Pair bodyTy st3 => Ok (Pair (foldFun paramTys bodyTy) st3)))
 
 inferClauses globals Nil st = Err "function has no clauses"
 inferClauses globals (Cons clause rest) st =
@@ -533,22 +510,17 @@ seedPlaceholders (Cons name rest) sigs st =
 updateScheme name sch env =
   case env of
     Nil => Nil
-    Cons p rest =>
-      case p of
-        Pair n s => if n == name then Cons (Pair n sch) rest else Cons (Pair n s) (updateScheme name sch rest)
+    Cons (Pair n s) rest =>
+      if n == name then Cons (Pair n sch) rest else Cons (Pair n s) (updateScheme name sch rest)
 
 freeVarsEnvExcept name env =
   case env of
     Nil => Nil
-    Cons p rest =>
-      case p of
-        Pair n sch =>
-          if n == name then freeVarsEnvExcept name rest
-          else unionInts (freeVarsScheme sch) (freeVarsEnvExcept name rest)
+    Cons (Pair n sch) rest =>
+      if n == name then freeVarsEnvExcept name rest
+      else unionInts (freeVarsScheme sch) (freeVarsEnvExcept name rest)
 
-substOf st =
-  case st of
-    TC n s => s
+substOf (TC n s) = s
 
 checkFunction globals decls sigs name st =
   case lookupScheme name globals of
@@ -603,13 +575,10 @@ sameBuiltinTy a b =
   let sa = shortTyName a
   in (sa == "Bool" || sa == "List") && sa == shortTyName b
 
-finalizeScheme subst sch =
-  case sch of
-    Scheme qs ty => Scheme qs (resolveTy subst ty)
+finalizeScheme subst (Scheme qs ty) = Scheme qs (resolveTy subst ty)
 
 finalizeGlobals subst globals =
   case globals of
     Nil => Nil
-    Cons p rest =>
-      case p of
-        Pair name sch => Cons (Pair name (finalizeScheme subst sch)) (finalizeGlobals subst rest)
+    Cons (Pair name sch) rest =>
+      Cons (Pair name (finalizeScheme subst sch)) (finalizeGlobals subst rest)

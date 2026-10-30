@@ -65,24 +65,20 @@ evalLet decls env binds body =
   andThen (evalBindings decls env binds) (\env2 => evalExpr decls env2 body)
 
 evalBindings decls env Nil = Ok env
-evalBindings decls env (Cons b rest) =
-  case b of
-    Pair pat valueExpr =>
-      andThen (evalExpr decls env valueExpr) (\v =>
-        case matchPattern pat v of
-          Nothing => Err "let pattern match failure"
-          Just bs => evalBindings decls (append bs env) rest)
+evalBindings decls env (Cons (Pair pat valueExpr) rest) =
+  andThen (evalExpr decls env valueExpr) (\v =>
+    case matchPattern pat v of
+      Nothing => Err "let pattern match failure"
+      Just bs => evalBindings decls (append bs env) rest)
 
 evalCase decls env scrut alts =
   andThen (evalExpr decls env scrut) (\v => chooseAlt decls env v alts)
 
 chooseAlt decls env v Nil = Err "case pattern match failure"
-chooseAlt decls env v (Cons alt rest) =
-  case alt of
-    Pair pat body =>
-      case matchPattern pat v of
-        Nothing => chooseAlt decls env v rest
-        Just bs => evalExpr decls (append bs env) body
+chooseAlt decls env v (Cons (Pair pat body) rest) =
+  case matchPattern pat v of
+    Nothing => chooseAlt decls env v rest
+    Just bs => evalExpr decls (append bs env) body
 
 evalIf decls env c t e =
   andThen (evalExpr decls env c) (\cv =>
@@ -133,11 +129,9 @@ applyBuiltin decls name args arg =
 callFunction decls name args = tryClauses decls name (clausesFor decls name) args
 
 tryClauses decls name Nil args = Err ("no matching clause for " ++ name)
-tryClauses decls name (Cons c rest) args =
-  case c of
-    Pair pats body =>
-      if length pats == length args then tryMatch decls name pats body rest args
-      else tryClauses decls name rest args
+tryClauses decls name (Cons (Pair pats body) rest) args =
+  if length pats == length args then tryMatch decls name pats body rest args
+  else tryClauses decls name rest args
 
 tryMatch decls name pats body rest args =
   case matchPatterns pats args of
@@ -258,51 +252,52 @@ orBuiltin args =
     _ => Err "bad arguments for ||"
 
 callBuiltin name args =
-  if name == "+" then int2 args (\x, y => Ok (VInt (x + y)))
-  else if name == "-" then int2 args (\x, y => Ok (VInt (x - y)))
-  else if name == "*" then int2 args (\x, y => Ok (VInt (x * y)))
-  else if name == "/" then divideBuiltin args
-  else if name == "==" then eqBuiltin args
-  else if name == "/=" then neqBuiltin args
-  else if name == "<" then int2 args (\x, y => Ok (vbool (x < y)))
-  else if name == "<=" then int2 args (\x, y => Ok (vbool (x <= y)))
-  else if name == ">" then int2 args (\x, y => Ok (vbool (x > y)))
-  else if name == ">=" then int2 args (\x, y => Ok (vbool (x >= y)))
-  else if name == "&&" then andBuiltin args
-  else if name == "||" then orBuiltin args
-  else if name == "++" then str2 args (\x, y => Ok (VStr (x ++ y)))
-  else if name == "strLength" then
-    case args of
-      Cons a Nil => andThen (stringArg a) (\s => Ok (VInt (strLength s)))
-      _ => Err "bad arguments for strLength"
-  else if name == "strUnpack" then
-    case args of
-      Cons a Nil => andThen (stringArg a) (\s => Ok (stringToValue s))
-      _ => Err "bad arguments for strUnpack"
-  else if name == "strPack" then
-    case args of
-      Cons a Nil => andThen (valueToChars a) (\cs => Ok (VStr (strPack cs)))
-      _ => Err "bad arguments for strPack"
-  else if name == "strFromInt" then
-    case args of
-      Cons a Nil => andThen (intArg a) (\n => Ok (VStr (strFromInt n)))
-      _ => Err "bad arguments for strFromInt"
-  else if name == "readFile" then
-    case args of
-      Cons a Nil => andThen (stringArg a) (\s => Ok (VStr (readFile s)))
-      _ => Err "bad arguments for readFile"
-  else if name == "writeFile" then
-    case args of
-      Cons a (Cons b Nil) =>
-        andThen (stringArg a) (\path =>
-          andThen (stringArg b) (\s => Ok (VInt (writeFile path s))))
-      _ => Err "bad arguments for writeFile"
-  else if name == "print" then
-    case args of
-      Cons a Nil => andThen (stringArg a) (\s => Ok (VInt (print s)))
-      _ => Err "bad arguments for print"
-  else if name == "getArgs" then Ok (strListToValue getArgs)
-  else Err ("unknown builtin: " ++ name)
+  case name of
+    "+" => int2 args (\x, y => Ok (VInt (x + y)))
+    "-" => int2 args (\x, y => Ok (VInt (x - y)))
+    "*" => int2 args (\x, y => Ok (VInt (x * y)))
+    "/" => divideBuiltin args
+    "==" => eqBuiltin args
+    "/=" => neqBuiltin args
+    "<" => int2 args (\x, y => Ok (vbool (x < y)))
+    "<=" => int2 args (\x, y => Ok (vbool (x <= y)))
+    ">" => int2 args (\x, y => Ok (vbool (x > y)))
+    ">=" => int2 args (\x, y => Ok (vbool (x >= y)))
+    "&&" => andBuiltin args
+    "||" => orBuiltin args
+    "++" => str2 args (\x, y => Ok (VStr (x ++ y)))
+    "strLength" =>
+      case args of
+        Cons a Nil => andThen (stringArg a) (\s => Ok (VInt (strLength s)))
+        _ => Err "bad arguments for strLength"
+    "strUnpack" =>
+      case args of
+        Cons a Nil => andThen (stringArg a) (\s => Ok (stringToValue s))
+        _ => Err "bad arguments for strUnpack"
+    "strPack" =>
+      case args of
+        Cons a Nil => andThen (valueToChars a) (\cs => Ok (VStr (strPack cs)))
+        _ => Err "bad arguments for strPack"
+    "strFromInt" =>
+      case args of
+        Cons a Nil => andThen (intArg a) (\n => Ok (VStr (strFromInt n)))
+        _ => Err "bad arguments for strFromInt"
+    "readFile" =>
+      case args of
+        Cons a Nil => andThen (stringArg a) (\s => Ok (VStr (readFile s)))
+        _ => Err "bad arguments for readFile"
+    "writeFile" =>
+      case args of
+        Cons a (Cons b Nil) =>
+          andThen (stringArg a) (\path =>
+            andThen (stringArg b) (\s => Ok (VInt (writeFile path s))))
+        _ => Err "bad arguments for writeFile"
+    "print" =>
+      case args of
+        Cons a Nil => andThen (stringArg a) (\s => Ok (VInt (print s)))
+        _ => Err "bad arguments for print"
+    "getArgs" => Ok (strListToValue getArgs)
+    _ => Err ("unknown builtin: " ++ name)
 
 displayName name =
   case splitLastDot (splitOnDot name) of
