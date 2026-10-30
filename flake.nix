@@ -46,6 +46,9 @@
 
           ocamlTools = ocamlToolsFn (system);
 
+          # 手动性能基准（`nix run .#bench`）；不进 checks。
+          vuna-bench = import ./nix/bench.nix { inherit pkgs ocamlTools; };
+
           # stage 1：提交入库的种子，直接 ocamlopt 构建。
           vuna-boot =
             pkgs.runCommand "vuna-boot-0.1.0"
@@ -89,10 +92,21 @@
         in
         {
           default = vuna;
-          inherit vuna-boot;
+          inherit vuna-boot vuna-bench;
           vuna = vuna;
         }
       );
+
+      apps = forAllSystems (system: {
+        # 手动性能基准：nix run .#bench -- [--compiler boot] [--runs N] ...
+        bench = {
+          type = "app";
+          program = "${self.packages.${system}.vuna-bench}/bin/vuna-bench";
+          meta = {
+            description = "手动 vuna 性能基准（构建/编译/产物尺寸）";
+          };
+        };
+      });
 
       devShells = forAllSystems (
         system:
@@ -104,6 +118,8 @@
             packages = ocamlToolsFn system ++ [
               # 种子编译器：手动检查“当前种子能编译当前源码”。
               self.packages.${system}.vuna-boot
+              # 手动性能基准（等价于 nix run .#bench）。
+              self.packages.${system}.vuna-bench
             ];
 
             shellHook = ''

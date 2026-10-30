@@ -263,6 +263,29 @@ sh test/run-tests.sh
 devShell 提供 `ocaml` / `ocamlopt` 工具链和 `vuna-boot`；stage2 的 `vuna` 不进
 devShell，避免种子失效时连 shell 都进不去。
 
+## 性能基准（手动）
+
+`nix run .#bench` 是**手动**性能基准，用来在优化前后快速测量收益；不是 CI check，
+结果依赖机器，不参与 `nix flake check`。默认测量 `vuna`（stage 2），
+`--compiler boot` 改测 `vuna-boot`（stage 1 种子）。
+
+```console
+nix run .#bench -- --quick                 # 快速冒烟（runs=1）
+nix run .#bench -- --runs 5 --save .local/bench/base.json
+# 修改代码后与基线对比：
+nix run .#bench -- --baseline .local/bench/base.json
+nix run .#bench -- --compiler boot         # 改测 seed 编译器
+nix run .#bench -- --with-tests            # 额外跑全部 checks
+```
+
+报告包含：构建性能（ocamlopt 构建 seed/stage2 的时间）、编译性能（seed/vuna 自编译、
+corpus 批量编译、tiny 程序、typed 与 `--no-typecheck` 路径）、编译吞吐、
+生成产物的 bytes/lines/最长行/超长行/行尾空白、codegen 健康度计数
+（`let rec`、`String.concat ""`、`bi_eq_int/_str/_bool`、零参 rec thunk）、
+以及 fixed point / seed 一致性 / 可选 tests 状态。`--json` 输出机器可读报告，
+`--baseline` 输出与历史报告的 delta。所有中间产物写入临时目录（`TMPDIR` 可覆盖），
+不会写入仓库。
+
 ## Nix
 
 ```console
@@ -280,8 +303,8 @@ nix fmt               # nixfmt-tree 格式化 .nix
 - M8c 完成 codegen 性能与输出质量收尾：Kosaraju SCC、类型特化比较、`&&`/`||`
   短路、`++` 折叠与线性拼接、零参纯值 hoist、pretty printer；自举 codegen
   从 ~12s 降到 ~2s 量级；构建加 `-g` 并对 warning 39（unused rec）设 warn-error；
-- typed codegen 仍生成单文件 OCaml，runtime prelude 未按需裁剪；运行时错误
-  没有源码位置；
+- typed codegen 仍生成单文件 OCaml；小程序的 runtime prelude 会按需裁剪，
+  大程序保持完整 prelude；运行时错误没有源码位置；
 - `where` / `do` / 隐式参数 / 依赖类型未实现；
 - `vuna lint` 首批规则是保守子集：lambda 体内的冗余 `case` 不报告（vuna 的 lambda
   参数只有变量名，不能写模式）；只处理从行首 `if` 起始的规范布局（整条 if 链写在
