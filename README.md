@@ -494,7 +494,7 @@ type value =
 
 ## 测试
 
-`test/run-tests.sh` 是 vuna 原生测试（699 checks），用 `vuna` / `vuna-seed` 驱动，
+`test/run-tests.sh` 是 vuna 原生测试（704 checks），用 `vuna` / `vuna-seed` 驱动，
 不依赖外部 vuna 实现；但运行测试需要 OCaml 编译器（`ocamlopt`）作为代码生成后端：
 
 ```console
