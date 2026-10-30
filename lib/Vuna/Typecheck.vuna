@@ -14,8 +14,37 @@ data Ty : Type where
 data Scheme : Type where
   Scheme : List Int -> Ty -> Scheme
 
+-- M10.5 记录声明信息：类型名、参数名、字段（名+类型表达式）、deriving 列表。
+data RecordInfo : Type where
+  RecordInfo : String -> List String -> List (Pair String Expr) -> List String -> RecordInfo
+
+-- 延迟求解的记录约束：字段访问 / 更新需要 base 的类型确定后才能消歧。
+data RecConstraint : Type where
+  FieldCon : Ty -> String -> Ty -> Span -> RecConstraint
+  UpdateCon : Ty -> String -> Ty -> Span -> RecConstraint
+
+-- M10.5 trait：方法信息（短名、scheme、原始类型表达式供 instance/deriving 生成签名）。
+data TraitMethodInfo : Type where
+  TraitMethodInfo : String -> Scheme -> Expr -> TraitMethodInfo
+
+data TraitDecl : Type where
+  TraitDecl : String -> List TraitMethodInfo -> TraitDecl
+
+-- 方法查找表：key（loader 解析后的方法名）、trait、方法 scheme。
+data TraitMethodRef : Type where
+  TraitMethodRef : String -> String -> Scheme -> TraitMethodRef
+
+-- 实例：trait、命名实例名（Nothing=default）、head 类型、方法短名 → 实现函数名。
+data TraitInst : Type where
+  TraitInst : String -> Maybe String -> Ty -> List (Pair String String) -> TraitInst
+
+data TraitCtx : Type where
+  TraitCtx : List TraitDecl -> List TraitInst -> TraitCtx
+
+-- 推断状态：下一个类型变量编号、substitution、类型名表、记录表、待求解记录约束、
+-- 方法表 + trait 上下文（M10.5 静态派发）。
 data TC : Type where
-  TC : Int -> List (Pair Int Ty) -> TC
+  TC : Int -> List (Pair Int Ty) -> List String -> List RecordInfo -> List RecConstraint -> List TraitMethodRef -> TraitCtx -> TC
 
 -- 推断阶段产出的 annotated 表达式：比较运算应用暂存操作数类型（Ty），
 -- 待子句与顶层签名 unify 完成后，再用最终 substitution 决定合成 builtin 名。
@@ -30,6 +59,10 @@ data EExpr : Type where
   XELet : List (Pair Pat EExpr) -> EExpr -> Bool -> Span -> EExpr
   XECase : EExpr -> Ty -> List (Pair Pat EExpr) -> Span -> EExpr
   XEIf : EExpr -> EExpr -> EExpr -> Span -> EExpr
+  XEField : EExpr -> String -> Ty -> Span -> EExpr
+  XERecUpdate : EExpr -> Ty -> List (Pair String EExpr) -> Span -> EExpr
+  XEMethod : String -> String -> Ty -> Span -> EExpr
+  XEMethodInst : String -> String -> String -> Ty -> Span -> EExpr
 
 eeSpan e =
   case e of
@@ -42,6 +75,10 @@ eeSpan e =
     XELet bs b _ sp => sp
     XECase s ty a sp => sp
     XEIf c t e sp => sp
+    XEField b f ty sp => sp
+    XERecUpdate b ty fs sp => sp
+    XEMethod tr meth ty sp => sp
+    XEMethodInst tr meth inst ty sp => sp
 
 -- ---------------------------------------------------------------
 -- 基础工具
@@ -95,7 +132,7 @@ showTyArgs (Cons ty Nil) = showTy ty
 showTyArgs (Cons ty rest) = showTy ty ++ " " ++ showTyArgs rest
 
 nextVar : TC -> Pair Int TC
-nextVar (TC n s) = Pair n (TC (n + 1) s)
+nextVar (TC n s typeNames records cons methods tctx) = Pair n (TC (n + 1) s typeNames records cons methods tctx)
 
 freshTy : TC -> Pair Ty TC
 freshTy st =
@@ -103,7 +140,7 @@ freshTy st =
     Pair n st2 => Pair (TVar n) st2
 
 bindVar : Int -> Ty -> TC -> Result TC
-bindVar i ty (TC n s) = Ok (TC n (Cons (Pair i ty) s))
+bindVar i ty (TC n s typeNames records cons methods tctx) = Ok (TC n (Cons (Pair i ty) s) typeNames records cons methods tctx)
 
 unifyLists : List Ty -> List Ty -> TC -> Result TC
 unifyLists Nil Nil st = Ok st
@@ -114,7 +151,7 @@ unifyLists (Cons a ar) (Cons b br) st =
 unifyLists _ _ st = Err "type mismatch: different number of arguments"
 
 unify : Ty -> Ty -> TC -> Result TC
-unify a b (TC n s) =
+unify a b (TC n s typeNames records cons methods tctx) =
   case resolveTy s a of
     ra =>
       case resolveTy s b of
@@ -123,25 +160,25 @@ unify a b (TC n s) =
             TVar i =>
               case rb of
                 TVar j =>
-                  if i == j then Ok (TC n s) else bindVar i rb (TC n s)
+                  if i == j then Ok (TC n s typeNames records cons methods tctx) else bindVar i rb (TC n s typeNames records cons methods tctx)
                 _ =>
                   if occursIn i s rb then Err ("occurs check: " ++ showTy rb)
-                  else bindVar i rb (TC n s)
+                  else bindVar i rb (TC n s typeNames records cons methods tctx)
             TCon tn xs =>
               case rb of
                 TVar j =>
                   if occursIn j s ra then Err ("occurs check: " ++ showTy ra)
-                  else bindVar j ra (TC n s)
+                  else bindVar j ra (TC n s typeNames records cons methods tctx)
                 TCon tn2 ys =>
-                  if tn == tn2 || sameBuiltinTy tn tn2 then unifyLists xs ys (TC n s)
+                  if tn == tn2 || sameBuiltinTy tn tn2 then unifyLists xs ys (TC n s typeNames records cons methods tctx)
                   else Err ("type mismatch: expected " ++ showTy rb ++ " but got " ++ showTy ra)
                 _ => Err ("type mismatch: expected " ++ showTy rb ++ " but got " ++ showTy ra)
             TFun x y =>
               case rb of
                 TVar j =>
                   if occursIn j s ra then Err ("occurs check: " ++ showTy ra)
-                  else bindVar j ra (TC n s)
-                TFun x2 y2 => andThen (unify x x2 (TC n s)) (\st2 => unify y y2 st2)
+                  else bindVar j ra (TC n s typeNames records cons methods tctx)
+                TFun x2 y2 => andThen (unify x x2 (TC n s typeNames records cons methods tctx)) (\st2 => unify y y2 st2)
                 _ => Err ("type mismatch: expected " ++ showTy rb ++ " but got " ++ showTy ra)
 
 instantiateVars Nil st = Pair Nil st
@@ -272,7 +309,7 @@ schemeOfCtor typeNames params st (Ctor name ty arity _) =
 declDataNames Nil = Nil
 declDataNames (Cons d rest) =
   case d of
-    DData name params ctors _ => Cons name (declDataNames rest)
+    DData name params ctors _ _ => Cons name (declDataNames rest)
     _ => declDataNames rest
 
 collectSigs typeNames Nil st = Ok (Pair Nil st)
@@ -289,7 +326,7 @@ collectSigs typeNames (Cons d rest) st =
 collectCtors typeNames Nil st = Ok (Pair Nil st)
 collectCtors typeNames (Cons d rest) st =
   case d of
-    DData name params ctors _ =>
+    DData name params ctors _ _ =>
       andThen (collectCtorList typeNames params ctors st) (\p =>
         case p of
           Pair newCtors st1 =>
@@ -398,26 +435,327 @@ elabAppExpr fn fnElab args argTys argEls sp =
         _ => XEApp fnElab argEls sp
     _ => XEApp fnElab argEls sp
 
-lowerExpr subst expr =
+-- 记录字段降级用的临时模式变量（只在生成的一小段 case 内可见）。
+recFieldVarsAt i n = if i >= n then Nil else Cons ("vuna_rf" ++ strFromInt i) (recFieldVarsAt (i + 1) n)
+
+recFieldVars n = recFieldVarsAt 0 n
+
+nthNameAt i Nil = ""
+
+nthNameAt i (Cons x rest) = if i == 0 then x else nthNameAt (i - 1) rest
+
+nthName i vars = nthNameAt i vars
+
+recFieldCount Nil = 0
+
+recFieldCount (Cons (Pair n t) rest) = 1 + recFieldCount rest
+
+-- `e.f` → `case e of R v0 .. vn => vk`；base 只求值一次。
+lowerFieldAccess subst typeNames records base fname baseTy sp =
+  case resolveTy subst baseTy of
+    TCon rname args =>
+      case lookupRecord rname records of
+        Nothing => EInt 0 sp
+        Just (RecordInfo rname2 params fdefs derivings) =>
+          case fieldIndex fname fdefs of
+            Nothing => EInt 0 sp
+            Just k =>
+              let n = recFieldCount fdefs
+              in let names = recFieldVars n
+                 in let pats = map (\nm => PVar nm sp) names
+                    in ECase (lowerExpr subst typeNames records base)
+                         (Cons (Pair (PCon rname pats sp) (EVar (nthName k names) sp)) Nil) sp
+    _ => EInt 0 sp
+
+recUpdateArgs subst typeNames records fields provided vars i sp =
+  case fields of
+    Nil => Nil
+    Cons (Pair fname fty) rest =>
+      case lookupProvided fname provided of
+        Just e =>
+          Cons (lowerExpr subst typeNames records e)
+               (recUpdateArgs subst typeNames records rest provided vars (i + 1) sp)
+        Nothing =>
+          Cons (EVar (nthName i vars) sp)
+               (recUpdateArgs subst typeNames records rest provided vars (i + 1) sp)
+
+-- `{e | f = v}` → `case e of R v0 .. vn => R (v / vi) ...`
+lowerRecUpdate subst typeNames records base baseTy fields sp =
+  case resolveTy subst baseTy of
+    TCon rname args =>
+      case lookupRecord rname records of
+        Nothing => EInt 0 sp
+        Just (RecordInfo rname2 params fdefs derivings) =>
+          let n = recFieldCount fdefs
+          in let names = recFieldVars n
+             in let pats = map (\nm => PVar nm sp) names
+                in let args2 = recUpdateArgs subst typeNames records fdefs fields names 0 sp
+                   in ECase (lowerExpr subst typeNames records base)
+                        (Cons (Pair (PCon rname pats sp) (EApp (EVar rname sp) args2 sp)) Nil) sp
+    _ => EInt 0 sp
+
+lowerExpr subst typeNames records expr =
   case expr of
     XEVar name sp => EVar name sp
     XEInt n sp => EInt n sp
     XEStr s sp => EStr s sp
-    XELam params body sp => ELam params (lowerExpr subst body) sp
-    XEApp fn args sp => EApp (lowerExpr subst fn) (map (lowerExpr subst) args) sp
-    XECmp name args ty sp => EApp (EVar (specializeCmp name (resolveTy subst ty)) sp) (map (lowerExpr subst) args) sp
-    XELet binds body rec_ sp => ELet (map (lowerBind subst) binds) (lowerExpr subst body) rec_ sp
-    XECase scrut ty alts sp => ECase (lowerExpr subst scrut) (map (lowerAlt subst) alts) sp
-    XEIf c t e sp => EIf (lowerExpr subst c) (lowerExpr subst t) (lowerExpr subst e) sp
+    XELam params body sp => ELam params (lowerExpr subst typeNames records body) sp
+    XEApp fn args sp =>
+      EApp (lowerExpr subst typeNames records fn) (map (lowerExpr subst typeNames records) args) sp
+    XECmp name args ty sp =>
+      EApp (EVar (specializeCmp name (resolveTy subst ty)) sp)
+           (map (lowerExpr subst typeNames records) args) sp
+    XELet binds body rec_ sp =>
+      ELet (map (lowerBind subst typeNames records) binds) (lowerExpr subst typeNames records body) rec_ sp
+    XECase scrut ty alts sp =>
+      ECase (lowerExpr subst typeNames records scrut) (map (lowerAlt subst typeNames records) alts) sp
+    XEIf c t e sp =>
+      EIf (lowerExpr subst typeNames records c) (lowerExpr subst typeNames records t)
+          (lowerExpr subst typeNames records e) sp
+    XEField base fname baseTy sp =>
+      lowerFieldAccess subst typeNames records base fname baseTy sp
+    XERecUpdate base baseTy fields sp =>
+      lowerRecUpdate subst typeNames records base baseTy fields sp
 
-lowerBind subst (Pair pat value) = Pair pat (lowerExpr subst value)
+lowerBind subst typeNames records (Pair pat value) =
+  Pair pat (lowerExpr subst typeNames records value)
 
-lowerAlt subst (Pair pat body) = Pair pat (lowerExpr subst body)
+lowerAlt subst typeNames records (Pair pat body) =
+  Pair pat (lowerExpr subst typeNames records body)
 
-lowerClause subst (Pair pats body) = Pair pats (lowerExpr subst body)
+lowerClause subst typeNames records (Pair pats body) =
+  Pair pats (lowerExpr subst typeNames records body)
 
-lowerClauses subst Nil = Nil
-lowerClauses subst (Cons clause rest) = Cons (lowerClause subst clause) (lowerClauses subst rest)
+lowerClauses subst typeNames records Nil = Nil
+
+lowerClauses subst typeNames records (Cons clause rest) =
+  Cons (lowerClause subst typeNames records clause) (lowerClauses subst typeNames records rest)
+
+-- ---------------------------------------------------------------
+-- 记录（M10.5）：声明抽取、语法降级、延迟约束求解、lower
+-- ---------------------------------------------------------------
+
+recordsOf (TC n s typeNames records cons methods tctx) = records
+
+typeNamesOfTC (TC n s typeNames records cons methods tctx) = typeNames
+
+constraintsOfTC (TC n s typeNames records cons methods tctx) = cons
+
+addRecConstraint c (TC n s typeNames records cons methods tctx) = TC n s typeNames records (Cons c cons) methods tctx
+
+clearRecConstraints (TC n s typeNames records cons methods tctx) = TC n s typeNames records Nil methods tctx
+
+lookupRecord name Nil = Nothing
+
+lookupRecord name (Cons (RecordInfo rname params fields derivings) rest) =
+  if rname == name then Just (RecordInfo rname params fields derivings)
+  else lookupRecord name rest
+
+zipParamTys Nil Nil = Nil
+
+zipParamTys (Cons p ps) (Cons t ts) = Cons (Pair p t) (zipParamTys ps ts)
+
+freshParamTys Nil st = Pair Nil st
+
+freshParamTys (Cons p ps) st =
+  case freshTy st of
+    Pair ty st1 =>
+      case freshParamTys ps st1 of
+        Pair tys st2 => Pair (Cons ty tys) st2
+
+fieldNamesOf Nil = Nil
+
+fieldNamesOf (Cons (Pair n t) rest) = Cons n (fieldNamesOf rest)
+
+fieldIndexAt fname Nil i = Nothing
+
+fieldIndexAt fname (Cons (Pair n t) rest) i =
+  if n == fname then Just i else fieldIndexAt fname rest (i + 1)
+
+fieldIndex fname fields = fieldIndexAt fname fields 0
+
+lookupProvided : String -> List (Pair String a) -> Maybe a
+lookupProvided fname Nil = Nothing
+
+lookupProvided fname (Cons (Pair n e) rest) =
+  if n == fname then Just e else lookupProvided fname rest
+
+hasDuplicateFieldNames : List (Pair String a) -> Bool
+hasDuplicateFieldNames Nil = False
+
+hasDuplicateFieldNames (Cons (Pair n e) rest) =
+  case lookupProvided n rest of
+    Just _ => True
+    Nothing => hasDuplicateFieldNames rest
+
+missingFieldMsg sp fname = showSpanLoc sp ++ ": missing field " ++ fname
+
+unknownFieldMsg sp fname = showSpanLoc sp ++ ": unknown field " ++ fname
+
+duplicateFieldMsg sp = showSpanLoc sp ++ ": duplicate field"
+
+hasUnknownFields fieldNames Nil = False
+
+hasUnknownFields fieldNames (Cons (Pair n v) rest) =
+  if memName n fieldNames then hasUnknownFields fieldNames rest else True
+
+firstUnknownFieldMsg sp fieldNames Nil = unknownFieldMsg sp ""
+
+firstUnknownFieldMsg sp fieldNames (Cons (Pair n v) rest) =
+  if memName n fieldNames then firstUnknownFieldMsg sp fieldNames rest
+  else unknownFieldMsg sp n
+
+checkProvidedFields fieldNames Nil sp = Ok Nil
+
+checkProvidedFields fieldNames (Cons (Pair n v) rest) sp =
+  if memName n fieldNames then checkProvidedFields fieldNames rest sp
+  else Err (unknownFieldMsg sp n)
+
+-- 记录声明抽取：DRecord 记住 RecordInfo，并降级成单构造器 DData。
+extractRecords Nil = Pair Nil Nil
+
+extractRecords (Cons d rest) =
+  case extractRecords rest of
+    Pair recs ds =>
+      case d of
+        DRecord dname params fields derivings sp =>
+          let info = RecordInfo dname params (map recordFieldPair fields) derivings
+          in Pair (Cons info recs) (Cons (recordDeclToData d) ds)
+        _ => Pair recs (Cons d ds)
+
+recordFieldPair (Field fname ty sp) = Pair fname ty
+
+recordParamNames Nil = Nil
+
+recordParamNames (Cons p rest) = Cons p (recordParamNames rest)
+
+recordParamVarExprs params sp = map (\p => EVar p sp) params
+
+recordCtorFieldExprs fields = map fieldType fields
+
+recordRetType dname params sp = EApp (EVar dname sp) (recordParamVarExprs (recordParamNames params) sp) sp
+
+recordArrowType Nil ret sp = ret
+
+recordArrowType (Cons f fs) ret sp =
+  EApp (EVar "->" sp) (Cons (fieldType f) (Cons (recordArrowType fs ret sp) Nil)) sp
+
+recordDeclToData (DRecord dname params fields derivings sp) =
+  DData dname params
+    (Cons (Ctor dname (recordArrowType fields (recordRetType dname params sp) sp) (length fields) sp) Nil)
+    derivings sp
+
+-- 记录语法降级：构造 → 构造器应用；记录模式 → 构造器模式（按声明顺序补 PWild）。
+desugarRecords : List RecordInfo -> List Decl -> Result (List Decl)
+desugarRecords records decls = traverse (desugarRecordDecl records) decls
+
+desugarRecordDecl : List RecordInfo -> Decl -> Result Decl
+desugarRecordDecl records d =
+  case d of
+    DFun name pats body sp =>
+      andThen (traverse (desugarPattern records) pats) (\pats2 =>
+        andThen (desugarExpr records body) (\body2 => Ok (DFun name pats2 body2 sp)))
+    DData name params ctors derivings sp => Ok d
+    DRecord name params fields derivings sp => Ok d
+    DTrait name params methods sp => Ok d
+    DInstance iname isDefault head methods sp =>
+      andThen (traverse (desugarRecordDecl records) methods) (\ms => Ok (DInstance iname isDefault head ms sp))
+    DSig name ty sp => Ok d
+
+desugarPattern records pat =
+  case pat of
+    PWild sp => Ok (PWild sp)
+    PVar n sp => Ok (PVar n sp)
+    PInt n sp => Ok (PInt n sp)
+    PStr s sp => Ok (PStr s sp)
+    PCon name pats sp =>
+      andThen (traverse (desugarPattern records) pats) (\ps => Ok (PCon name ps sp))
+    PRecord name fields sp =>
+      case lookupRecord name records of
+        Nothing => Err (showSpanLoc sp ++ ": unknown record: " ++ name)
+        Just (RecordInfo rname params fdefs derivings) =>
+          if hasDuplicateFieldNames fields then Err (duplicateFieldMsg sp)
+          else if hasUnknownFields (fieldNamesOf fdefs) fields then
+            Err (firstUnknownFieldMsg sp (fieldNamesOf fdefs) fields)
+          else
+            andThen (desugarRecordPatternFields records fdefs fields sp) (\ps =>
+              Ok (PCon rname ps sp))
+
+desugarRecordPatternFields records Nil provided sp = Ok Nil
+
+desugarRecordPatternFields records (Cons (Pair fname fty) rest) provided sp =
+  case lookupProvided fname provided of
+    Nothing =>
+      andThen (desugarRecordPatternFields records rest provided sp) (\ps =>
+        Ok (Cons (PWild sp) ps))
+    Just p =>
+      andThen (desugarPattern records p) (\p2 =>
+        andThen (desugarRecordPatternFields records rest provided sp) (\ps =>
+          Ok (Cons p2 ps)))
+
+desugarExpr : List RecordInfo -> Expr -> Result Expr
+desugarExpr records e =
+  case e of
+    EVar n sp => Ok e
+    EInt n sp => Ok e
+    EStr s sp => Ok e
+    ELam ps b sp =>
+      andThen (desugarExpr records b) (\b2 => Ok (ELam ps b2 sp))
+    EApp f args sp =>
+      andThen (desugarExpr records f) (\f2 =>
+        andThen (traverse (desugarExpr records) args) (\a2 => Ok (EApp f2 a2 sp)))
+    ELet binds body rec_ sp =>
+      andThen (traverse (desugarBind records) binds) (\b2 =>
+        andThen (desugarExpr records body) (\body2 => Ok (ELet b2 body2 rec_ sp)))
+    ECase scrut alts sp =>
+      andThen (desugarExpr records scrut) (\s2 =>
+        andThen (traverse (desugarAlt records) alts) (\a2 => Ok (ECase s2 a2 sp)))
+    EIf c t el sp =>
+      andThen (desugarExpr records c) (\c2 =>
+        andThen (desugarExpr records t) (\t2 =>
+          andThen (desugarExpr records el) (\e2 => Ok (EIf c2 t2 e2 sp))))
+    EField base fname sp =>
+      andThen (desugarExpr records base) (\b => Ok (EField b fname sp))
+    ERecord name fields sp =>
+      case lookupRecord name records of
+        Nothing => Err (showSpanLoc sp ++ ": unknown record: " ++ name)
+        Just (RecordInfo rname params fdefs derivings) =>
+          if hasDuplicateFieldNames fields then Err (duplicateFieldMsg sp)
+          else if hasUnknownFields (fieldNamesOf fdefs) fields then
+            Err (firstUnknownFieldMsg sp (fieldNamesOf fdefs) fields)
+          else
+            andThen (desugarRecordValues records fdefs fields sp) (\vs =>
+              Ok (EApp (EVar rname sp) vs sp))
+    ERecUpdate base fields sp =>
+      andThen (desugarExpr records base) (\b =>
+        andThen (traverse (desugarFieldValue records) fields) (\fs => Ok (ERecUpdate b fs sp)))
+    EInstSel m n sp =>
+      andThen (desugarExpr records m) (\m2 => Ok (EInstSel m2 n sp))
+
+desugarRecordValues : List RecordInfo -> List (Pair String Expr) -> List (Pair String Expr) -> Span -> Result (List Expr)
+desugarRecordValues records Nil provided sp = Ok Nil
+
+desugarRecordValues records (Cons (Pair fname fty) rest) provided sp =
+  case lookupProvided fname provided of
+    Nothing => Err (missingFieldMsg sp fname)
+    Just v =>
+      andThen (desugarExpr records v) (\v2 =>
+        andThen (desugarRecordValues records rest provided sp) (\vs =>
+          Ok (Cons v2 vs)))
+
+desugarFieldValue : List RecordInfo -> Pair String Expr -> Result (Pair String Expr)
+desugarFieldValue records (Pair fname v) =
+  andThen (desugarExpr records v) (\v2 => Ok (Pair fname v2))
+
+desugarBind : List RecordInfo -> Pair Pat Expr -> Result (Pair Pat Expr)
+desugarBind records (Pair pat value) =
+  andThen (desugarPattern records pat) (\p2 =>
+    andThen (desugarExpr records value) (\v2 => Ok (Pair p2 v2)))
+
+desugarAlt : List RecordInfo -> Pair Pat Expr -> Result (Pair Pat Expr)
+desugarAlt records (Pair pat body) =
+  andThen (desugarPattern records pat) (\p2 =>
+    andThen (desugarExpr records body) (\b2 => Ok (Pair p2 b2)))
 
 -- ---------------------------------------------------------------
 -- 环境查询与推断
@@ -624,6 +962,101 @@ inferExpr globals locals st expr =
                         Pair (Pair elseTy elseElab) st4 =>
                           andThen (unify thenTy elseTy st4) (\st5 =>
                             Ok (Pair (Pair thenTy (XEIf condElab thenElab elseElab sp)) st5))))))
+    EField base fname sp =>
+      andThen (inferExpr globals locals st base) (\pb =>
+        case pb of
+          Pair (Pair baseTy baseElab) st1 =>
+            case freshTy st1 of
+              Pair resTy st2 =>
+                Ok (Pair (Pair resTy (XEField baseElab fname baseTy sp))
+                      (addRecConstraint (FieldCon baseTy fname resTy sp) st2)))
+    ERecUpdate base fields sp =>
+      andThen (inferExpr globals locals st base) (\pb =>
+        case pb of
+          Pair (Pair baseTy baseElab) st1 =>
+            if hasDuplicateFieldNames fields then Err (duplicateFieldMsg sp)
+            else
+              andThen (inferUpdateValues globals locals baseTy sp fields st1) (\p =>
+                case p of
+                  Pair vals st2 =>
+                    Ok (Pair (Pair baseTy (XERecUpdate baseElab baseTy vals sp)) st2)))
+    ERecord rname fields sp => Err (showSpanLoc sp ++ ": internal: record expression should be desugared before inference")
+    EInstSel meth iname sp => Err (showSpanLoc sp ++ ": trait method selection is not implemented yet (M10.5 Phase T)")
+
+inferUpdateValues globals locals baseTy sp Nil st = Ok (Pair Nil st)
+
+inferUpdateValues globals locals baseTy sp (Cons (Pair fname e) rest) st =
+  andThen (inferExpr globals locals st e) (\p =>
+    case p of
+      Pair (Pair vty velab) st1 =>
+        andThen (inferUpdateValues globals locals baseTy sp rest st1) (\r =>
+          case r of
+            Pair vs st2 =>
+              Ok (Pair (Cons (Pair fname velab) vs)
+                    (addRecConstraint (UpdateCon baseTy fname vty sp) st2))))
+
+tcNoSpan = Span "" 0 0 0 0
+
+nthFieldTy i Nil = EInt 0 tcNoSpan
+
+nthFieldTy i (Cons (Pair n t) rest) = if i == 0 then t else nthFieldTy (i - 1) rest
+
+-- 延迟记录约束求解：逐个尝试；全部求解后清空 TC 中的约束列表。
+solveRecConstraints typeNames records cons st =
+  case solveRecPass typeNames records cons st Nil of
+    Err e => Err e
+    Ok (Pair remaining st2) =>
+      case remaining of
+        Nil => Ok (clearRecConstraints st2)
+        _ =>
+          if length remaining == length cons then
+            Err (recConstraintFailMsg remaining)
+          else solveRecConstraints typeNames records remaining st2
+
+recConstraintFailMsg Nil = "cannot resolve record type; add a type signature"
+
+recConstraintFailMsg (Cons c rest) =
+  case c of
+    FieldCon baseTy fname resTy sp =>
+      showSpanLoc sp ++ ": cannot resolve record type for field access ." ++ fname
+      ++ "; add a type signature"
+    UpdateCon baseTy fname valTy sp =>
+      showSpanLoc sp ++ ": cannot resolve record type for record update {" ++ fname
+      ++ " = ...}; add a type signature"
+
+solveRecPass typeNames records Nil st acc = Ok (Pair (reverse acc) st)
+
+solveRecPass typeNames records (Cons c rest) st acc =
+  case solveOneConstraint typeNames records c st of
+    Err e => Err e
+    Ok (Pair solved st1) =>
+      case solved of
+        True => solveRecPass typeNames records rest st1 acc
+        False => solveRecPass typeNames records rest st1 (Cons c acc)
+
+solveOneConstraint typeNames records c st =
+  case c of
+    FieldCon baseTy fname targetTy sp =>
+      solveFieldConstraint typeNames records baseTy fname targetTy sp st
+    UpdateCon baseTy fname valTy sp =>
+      solveFieldConstraint typeNames records baseTy fname valTy sp st
+
+solveFieldConstraint typeNames records baseTy fname targetTy sp st =
+  case resolveTy (substOf st) baseTy of
+    TVar i => Ok (Pair False st)
+    TCon rname args =>
+      case lookupRecord rname records of
+        Nothing => Err (showSpanLoc sp ++ ": not a record type: " ++ rname)
+        Just (RecordInfo rname2 params fdefs derivings) =>
+          case fieldIndex fname fdefs of
+            Nothing =>
+              Err (showSpanLoc sp ++ ": unknown field " ++ fname ++ " for record " ++ rname)
+            Just k =>
+              andThen (convertType typeNames (zipParamTys params args) st (nthFieldTy k fdefs)) (\p =>
+                case p of
+                  Pair (Pair fty vars) st1 =>
+                    andThen (unify targetTy fty st1) (\st2 => Ok (Pair True st2)))
+    _ => Err (showSpanLoc sp ++ ": not a record type in field access/update")
 
 inferClause globals st (Pair pats body) =
   case seedPatTypes pats st of
@@ -687,7 +1120,7 @@ freeVarsEnvExcept name env =
       if n == name then freeVarsEnvExcept name rest
       else unionInts (freeVarsScheme sch) (freeVarsEnvExcept name rest)
 
-substOf (TC n s) = s
+substOf (TC n s typeNames records cons methods tctx) = s
 
 -- 类型错误的源码位置：取函数第一个子句体的 span（诊断）。
 funLoc name decls =
@@ -709,13 +1142,16 @@ checkFunction globals decls sigs name st =
               case unify inferred expected st2 of
                 Err e => Err (funLoc name decls ++ "in " ++ name ++ ": " ++ e)
                 Ok st3 =>
-                  let elabClauses = lowerClauses (substOf st3) clauseEls
-                  in if hasSig name sigs then Ok (Pair elabClauses (Pair globals st3))
-                     else
-                       let resolved = resolveTy (substOf st3) inferred
-                       in
-                         let scheme = Scheme (diffInts (freeVarsTy resolved) (freeVarsEnvExcept name globals)) resolved
-                         in Ok (Pair elabClauses (Pair (updateScheme name scheme globals) st3))
+                  andThen
+                    (solveRecConstraints (typeNamesOfTC st3) (recordsOf st3) (constraintsOfTC st3) st3)
+                    (\st4 =>
+                      let elabClauses = lowerClauses (substOf st4) (typeNamesOfTC st4) (recordsOf st4) clauseEls
+                      in if hasSig name sigs then Ok (Pair elabClauses (Pair globals st4))
+                         else
+                           let resolved = resolveTy (substOf st4) inferred
+                           in
+                             let scheme = Scheme (diffInts (freeVarsTy resolved) (freeVarsEnvExcept name globals)) resolved
+                             in Ok (Pair elabClauses (Pair (updateScheme name scheme globals) st4)))
 
 checkFunctions globals decls sigs Nil st elabMap = Ok (Pair (reverse elabMap) (Pair globals st))
 checkFunctions globals decls sigs (Cons name rest) st elabMap =
@@ -739,21 +1175,34 @@ replaceElab name clauses (Cons (Pair n old) rest) =
   if n == name then Cons (Pair n clauses) rest
   else Cons (Pair n old) (replaceElab name clauses rest)
 
-checkProgramInfoElab decls =
-  case collectData decls of
-    Pair typeNames dataDecls =>
-      case collectSigs typeNames decls (TC 0 Nil) of
-        Err e => Err e
-        Ok (Pair sigs st1) =>
-          case collectCtors typeNames decls st1 of
+-- M10.5b（trait）实现中：当前先保持记录/旧程序路径不变。
+prepareTraits decls = Ok (Pair (TraitCtx Nil Nil) decls)
+
+traitMethodRefs (TraitCtx decls insts) = Nil
+
+checkProgramInfoElab decls0 =
+  case prepareTraits decls0 of
+    Err e => Err e
+    Ok (Pair tctx declsA) =>
+      case extractRecords declsA of
+        Pair records decls1 =>
+          case desugarRecords records decls1 of
             Err e => Err e
-            Ok (Pair ctors st2) =>
-              case seedPlaceholders (functionNames decls) sigs st2 of
-                Pair placeholders st3 =>
-                  case checkFunctions (append builtinSchemes (append ctors (append sigs placeholders))) decls sigs (functionNames decls) st3 Nil of
+            Ok decls2 =>
+              case collectData decls2 of
+                Pair typeNames dataDecls =>
+                  case collectSigs typeNames decls2 (TC 0 Nil typeNames records Nil Nil tctx) of
                     Err e => Err e
-                    Ok (Pair elabMap (Pair globals st4)) =>
-                      Ok (Pair (finalizeGlobals (substOf st4) globals) (rebuildDecls decls elabMap))
+                    Ok (Pair sigs st1) =>
+                      case collectCtors typeNames decls2 st1 of
+                        Err e => Err e
+                        Ok (Pair ctors st2) =>
+                          case seedPlaceholders (functionNames decls2) sigs st2 of
+                            Pair placeholders st3 =>
+                              case checkFunctions (append builtinSchemes (append ctors (append sigs placeholders))) decls2 sigs (functionNames decls2) st3 Nil of
+                                Err e => Err e
+                                Ok (Pair elabMap (Pair globals st4)) =>
+                                  Ok (Pair (finalizeGlobals (substOf st4) globals) (rebuildDecls decls2 elabMap))
 
 checkProgramInfo decls =
   andThen (checkProgramInfoElab decls) (\p => Ok (firstOf p))
@@ -793,7 +1242,7 @@ exprWarnings globals decls locals e =
     EInt n sp => Nil
     EStr s sp => Nil
     ELam ps body sp =>
-      case inferExpr globals locals (TC 0 Nil) e of
+      case inferExpr globals locals (TC 0 Nil Nil Nil Nil Nil (TraitCtx Nil Nil)) e of
         Ok (Pair (Pair ty _) _) =>
           let pty = flattenFun ty
           in exprWarnings globals decls (append (zipLocals ps pty) locals) body
@@ -816,7 +1265,7 @@ letLocals globals locals (Cons (Pair pat value) rest) =
   in append patTys (letLocals globals locals rest)
 
 patternLocals globals locals pat value =
-  case inferExpr globals locals (TC 0 Nil) value of
+  case inferExpr globals locals (TC 0 Nil Nil Nil Nil Nil (TraitCtx Nil Nil)) value of
     Ok (Pair (Pair ty _) _) => patVarsTy pat ty
     Err _ => Nil
 
@@ -834,7 +1283,7 @@ bindWarnings globals decls (Pair pat value) =
     _ => Cons (showSpanLoc (patSpan pat) ++ ": non-exhaustive let pattern") Nil
 
 caseWarnings globals decls locals scrut alts sp =
-  case inferExpr globals locals (TC 0 Nil) scrut of
+  case inferExpr globals locals (TC 0 Nil Nil Nil Nil Nil (TraitCtx Nil Nil)) scrut of
     Err _ => Nil
     Ok (Pair (Pair ty _) _) =>
       let ctors = tyCtorNames decls ty
@@ -883,7 +1332,7 @@ tyCtorNames decls ty =
 ctorNamesOf Nil name = Nil
 ctorNamesOf (Cons d rest) name =
   case d of
-    DData dn params ctors _ =>
+    DData dn params ctors _ _ =>
       if dn == name then map ctorName ctors else ctorNamesOf rest name
     _ => ctorNamesOf rest name
 

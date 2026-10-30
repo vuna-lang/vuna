@@ -1,0 +1,8 @@
+import Vuna.Point
+
+sum : Point -> Int
+sum p = case p of
+  Point { x = a, y = b } => a + b
+
+main : Int
+main = sum (Point { x = 40, y = 2 }) + sum (Vuna.Point.mk 0 0)

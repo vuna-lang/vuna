@@ -287,6 +287,18 @@ divideBuiltin sp args =
           if y == 0 then errAt sp "division by zero" else Ok (VInt (x / y))))
     _ => errAt sp "bad arguments for /"
 
+boolEqValue a b =
+  case a of
+    VCon "True" Nil =>
+      case b of
+        VCon "True" Nil => True
+        _ => False
+    VCon "False" Nil =>
+      case b of
+        VCon "False" Nil => True
+        _ => False
+    _ => False
+
 eqBuiltin sp args =
   case args of
     Cons (VInt a) (Cons (VInt b) Nil) => Ok (vbool (a == b))
@@ -337,6 +349,28 @@ callBuiltin name args sp =
     "<=" => int2 sp args (\x, y => Ok (vbool (x <= y)))
     ">" => int2 sp args (\x, y => Ok (vbool (x > y)))
     ">=" => int2 sp args (\x, y => Ok (vbool (x >= y)))
+    "bi_eq_int" => eqBuiltin sp args
+    "bi_neq_int" => neqBuiltin sp args
+    "bi_lt_int" => int2 sp args (\x, y => Ok (vbool (x < y)))
+    "bi_le_int" => int2 sp args (\x, y => Ok (vbool (x <= y)))
+    "bi_gt_int" => int2 sp args (\x, y => Ok (vbool (x > y)))
+    "bi_ge_int" => int2 sp args (\x, y => Ok (vbool (x >= y)))
+    "bi_eq_str" => eqBuiltin sp args
+    "bi_neq_str" => neqBuiltin sp args
+    "bi_eq_bool" =>
+      case args of
+        Cons (VCon "True" Nil) (Cons (VCon "True" Nil) Nil) => Ok (vbool True)
+        Cons (VCon "False" Nil) (Cons (VCon "False" Nil) Nil) => Ok (vbool True)
+        Cons (VCon "True" Nil) (Cons (VCon "False" Nil) Nil) => Ok (vbool False)
+        Cons (VCon "False" Nil) (Cons (VCon "True" Nil) Nil) => Ok (vbool False)
+        _ => errAt sp "bad arguments for bi_eq_bool"
+    "bi_neq_bool" =>
+      case args of
+        Cons (VCon "True" Nil) (Cons (VCon "False" Nil) Nil) => Ok (vbool True)
+        Cons (VCon "False" Nil) (Cons (VCon "True" Nil) Nil) => Ok (vbool True)
+        Cons (VCon "True" Nil) (Cons (VCon "True" Nil) Nil) => Ok (vbool False)
+        Cons (VCon "False" Nil) (Cons (VCon "False" Nil) Nil) => Ok (vbool False)
+        _ => errAt sp "bad arguments for bi_neq_bool"
     "&&" => andBuiltin sp args
     "||" => orBuiltin sp args
     "++" => str2 sp args (\x, y => Ok (VStr (x ++ y)))

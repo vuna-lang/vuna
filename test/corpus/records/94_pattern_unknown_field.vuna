@@ -1,0 +1,10 @@
+record Point where
+  x : Int
+  y : Int
+
+f : Point -> Int
+f p = case p of
+  Point { x = a, z = b } => a
+
+main : Int
+main = f (Point { x = 1, y = 2 })

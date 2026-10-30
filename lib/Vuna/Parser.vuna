@@ -252,6 +252,9 @@ parseDecls st blockCol =
 parseDecl st blockCol =
   case peekTok st of
     PTok (TKw "data") p => parseData st blockCol p
+    PTok (TKw "record") p => parseRecord st blockCol p
+    PTok (TKw "trait") p => parseTrait st blockCol p
+    PTok (TKw "instance") p => parseInstance st blockCol p
     PTok (TIdent name) p =>
       let st1 = advance st
       in if atSym st1 ":" then parseSignature st1 blockCol name p
@@ -347,7 +350,137 @@ parseData st blockCol kwPos =
           step (parseExpr st4 blockCol 0) (\ty, st5 =>
             step (expectKw st5 "where") (\_, st6 =>
               step (parseCtors st6 blockCol) (\ctors, st7 =>
-                Ok (Pair (DData name params ctors (Span (fileOf st) (posLine kwPos) (posCol kwPos) (posLine (lastPos st7)) (posCol (lastPos st7)))) st7))))))))
+                step (parseDeriving st7) (\derivings, st8 =>
+                  Ok (Pair (DData name params ctors derivings (Span (fileOf st) (posLine kwPos) (posCol kwPos) (posLine (lastPos st8)) (posCol (lastPos st8)))) st8)))))))))
+
+-- 记录声明（M10.5）：`record Name params where` + 缩进字段 `f : Ty`，可跟 deriving。
+parseRecord st blockCol kwPos =
+  step (expectKw st "record") (\_, st1 =>
+    step (expectIdent st1) (\name, st2 =>
+      step (parseParams st2) (\params, st3 =>
+        step (expectKw st3 "where") (\_, st4 =>
+          step (parseFields st4 blockCol) (\fields, st5 =>
+            step (parseDeriving st5) (\derivings, st6 =>
+              Ok (Pair (DRecord name params fields derivings (Span (fileOf st) (posLine kwPos) (posCol kwPos) (posLine (lastPos st6)) (posCol (lastPos st6)))) st6)))))))
+
+parseFields st blockCol =
+  if isEof st then Ok (Pair Nil st)
+  else
+    case peekPos st of
+      Pos line col =>
+        if col > blockCol then parseFieldList st col
+        else Ok (Pair Nil st)
+
+parseFieldList st fieldCol =
+  if isEof st then Ok (Pair Nil st)
+  else
+    case peekPos st of
+      Pos line col =>
+        if col == fieldCol then
+          step (expectIdent st) (\name, st1 =>
+            step (expectSym st1 ":") (\_, st2 =>
+              step (parseExpr st2 fieldCol 0) (\ty, st3 =>
+                step (parseFieldList st3 fieldCol) (\rest, st4 =>
+                  Ok (Pair (Cons (Field name ty (spanOf st st3)) rest) st4)))))
+        else if col > fieldCol then Err "unexpected indentation in record block"
+        else Ok (Pair Nil st)
+
+-- deriving (TraitA, TraitB)；可出现在 data/record 的构造器/字段块之后。
+parseDeriving st =
+  if atKw st "deriving" then
+    step (expectKw st "deriving") (\_, st1 =>
+      step (expectSym st1 "(") (\_, st2 =>
+        if atSym st2 ")" then Ok (Pair Nil (advance st2))
+        else step (parseDerivingNames st2) (\names, st3 => Ok (Pair names st3))))
+  else Ok (Pair Nil st)
+
+parseDerivingNames st =
+  step (expectIdent st) (\name, st1 =>
+    if atSym st1 "," then
+      step (parseDerivingNames (advance st1)) (\rest, st2 =>
+        Ok (Pair (Cons name rest) st2))
+    else
+      step (expectSym st1 ")") (\_, st2 => Ok (Pair (Cons name Nil) st2)))
+
+-- trait 声明（M10.5）：`trait Name params where` + 缩进方法签名 `m : Ty`。
+parseTrait st blockCol kwPos =
+  step (expectKw st "trait") (\_, st1 =>
+    step (expectIdent st1) (\name, st2 =>
+      step (parseParams st2) (\params, st3 =>
+        step (expectKw st3 "where") (\_, st4 =>
+          step (parseMethodSigs st4 blockCol) (\methods, st5 =>
+            Ok (Pair (DTrait name params methods (Span (fileOf st) (posLine kwPos) (posCol kwPos) (posLine (lastPos st5)) (posCol (lastPos st5)))) st5))))))
+
+parseMethodSigs st blockCol =
+  if isEof st then Ok (Pair Nil st)
+  else
+    case peekPos st of
+      Pos line col =>
+        if col > blockCol then parseMethodSigList st col
+        else Ok (Pair Nil st)
+
+parseMethodSigList st methodCol =
+  if isEof st then Ok (Pair Nil st)
+  else
+    case peekPos st of
+      Pos line col =>
+        if col == methodCol then
+          step (expectIdent st) (\name, st1 =>
+            step (expectSym st1 ":") (\_, st2 =>
+              step (parseExpr st2 methodCol 0) (\ty, st3 =>
+                step (parseMethodSigList st3 methodCol) (\rest, st4 =>
+                  Ok (Pair (Cons (Pair name ty) rest) st4)))))
+        else if col > methodCol then Err "unexpected indentation in trait block"
+        else Ok (Pair Nil st)
+
+-- instance 声明（M10.5）：`instance Head [as name] where` + 缩进方法定义。
+parseInstance st blockCol kwPos =
+  step (expectKw st "instance") (\_, st1 =>
+    step (parseExpr st1 blockCol 0) (\head, st2 =>
+      step (parseInstanceName st2) (\name, st3 =>
+        step (expectKw st3 "where") (\_, st4 =>
+          step (parseInstanceBody st4 blockCol) (\methods, st5 =>
+            let isDefault = instanceIsDefault name
+            in Ok (Pair (DInstance name isDefault head methods (Span (fileOf st) (posLine kwPos) (posCol kwPos) (posLine (lastPos st5)) (posCol (lastPos st5)))) st5))))))
+
+instanceIsDefault name =
+  case name of
+    Nothing => True
+    Just _ => False
+
+parseInstanceName st =
+  if atKw st "as" then
+    step (expectKw st "as") (\_, st1 =>
+      step (expectIdent st1) (\name, st2 => Ok (Pair (Just name) st2)))
+  else Ok (Pair Nothing st)
+
+parseInstanceBody st blockCol =
+  if isEof st then Ok (Pair Nil st)
+  else
+    case peekPos st of
+      Pos line col =>
+        if col > blockCol then parseInstanceDeclList st col
+        else Ok (Pair Nil st)
+
+parseInstanceDeclList st declCol =
+  if isEof st then Ok (Pair Nil st)
+  else
+    case peekPos st of
+      Pos line col =>
+        if col == declCol then
+          step (parseInstanceDecl st declCol) (\decl, st1 =>
+            step (parseInstanceDeclList st1 declCol) (\rest, st2 =>
+              Ok (Pair (Cons decl rest) st2)))
+        else if col > declCol then Err "unexpected indentation in instance block"
+        else Ok (Pair Nil st)
+
+parseInstanceDecl st blockCol =
+  case peekTok st of
+    PTok (TIdent name) p =>
+      let st1 = advance st
+      in if atSym st1 ":" then parseSignature st1 blockCol name p
+         else parseClause st1 blockCol name p
+    _ => Err "expected an instance method"
 
 parseParams st =
   case peekTok st of
@@ -408,10 +541,23 @@ parseLhs st blockCol =
 
 parseApplication st blockCol =
   step (parseAtom st blockCol) (\first, st1 =>
-    step (parseArgs st1 blockCol) (\args, st2 =>
-      case args of
-        Nil => Ok (Pair first st2)
-        _ => Ok (Pair (EApp first args (spanOf st st2)) st2)))
+    step (parseInstanceSelector st1 blockCol first) (\first2, st2 =>
+      step (parseArgs st2 blockCol) (\args, st3 =>
+        case args of
+          Nil => Ok (Pair first2 st3)
+          _ => Ok (Pair (EApp first2 args (spanOf st st3)) st3))))
+
+-- `method @instance`：显式命名实例选择（M10.5）。
+parseInstanceSelector st blockCol first =
+  if atSym st "@" then
+    step (expectSym st "@") (\_, st1 =>
+      step (expectIdent st1) (\name, st2 =>
+        Ok (Pair (EInstSel first name (spanFromExpr first st2)) st2)))
+  else Ok (Pair first st)
+
+spanFromExpr e st2 =
+  let sp = exprSpan e
+  in Span (spanFile sp) (spanStartLine sp) (spanStartCol sp) (posLine (lastPos st2)) (posCol (lastPos st2))
 
 parseArgs st blockCol =
   if startsAtom st && canContinue st blockCol then
@@ -421,8 +567,25 @@ parseArgs st blockCol =
   else Ok (Pair Nil st)
 
 parseAtom st blockCol =
+  step (parseAtomBase st blockCol) (\base, st1 => parseFieldSuffix st1 blockCol base)
+
+-- 字段访问后缀：`e.f` / `(e).f`；`p.x` 因 lexer 合成单 token 由 loader 拆分。
+parseFieldSuffix st blockCol base =
+  if atSym st "." then
+    step (expectSym st ".") (\_, st1 =>
+      step (expectIdent st1) (\fname, st2 =>
+        parseFieldSuffix st2 blockCol (EField base fname (spanFromExpr base st2))))
+  else Ok (Pair base st)
+
+parseAtomBase st blockCol =
   case peekTok st of
-    PTok (TIdent name) p => Ok (Pair (EVar name (spanOf st (advance st))) (advance st))
+    PTok (TIdent name) p =>
+      let st1 = advance st
+      in if atSym st1 "{" then
+           step (expectSym st1 "{") (\_, st1b =>
+             step (parseRecordAssignments st1b blockCol) (\fields, st2 =>
+               Ok (Pair (ERecord name fields (spanOf st st2)) st2)))
+         else Ok (Pair (EVar name (spanOf st st1)) st1)
     PTok (TInt n) p => Ok (Pair (EInt n (spanOf st (advance st))) (advance st))
     PTok (TStr s) p => Ok (Pair (EStr s (spanOf st (advance st))) (advance st))
     PTok (TKw "Type") p => Ok (Pair (EVar "Type" (spanOf st (advance st))) (advance st))
@@ -430,7 +593,29 @@ parseAtom st blockCol =
       step (parseExpr (advance st) blockCol 0) (\inner, st1 =>
         step (expectSym st1 ")") (\_, st2 => Ok (Pair inner st2)))
     PTok (TSym "[") p => parseListExpr st blockCol
+    PTok (TSym "{") p =>
+      step (expectSym st "{") (\_, st1 =>
+        step (parseExpr st1 blockCol 0) (\base, st2 =>
+          step (expectSym st2 "|") (\_, st3 =>
+            step (parseRecordAssignments st3 blockCol) (\fields, st4 =>
+              Ok (Pair (ERecUpdate base fields (spanOf st st4)) st4)))))
     _ => Err "expected expression"
+
+-- `{ f = e, ... }`：构造与更新的公共字段列表（进入时已在 `{` 之后）。
+parseRecordAssignments st blockCol =
+  if atSym st "}" then Ok (Pair Nil (advance st))
+  else step (parseRecordAssignList st blockCol) (\fs, st1 => Ok (Pair fs st1))
+
+parseRecordAssignList st blockCol =
+  step (expectIdent st) (\fname, st1 =>
+    step (expectSym st1 "=") (\_, st2 =>
+      step (parseExpr st2 blockCol 0) (\value, st3 =>
+        if atSym st3 "," then
+          step (parseRecordAssignList (advance st3) blockCol) (\rest, st4 =>
+            Ok (Pair (Cons (Pair fname value) rest) st4))
+        else
+          step (expectSym st3 "}") (\_, st4 =>
+            Ok (Pair (Cons (Pair fname value) Nil) st4)))))
 
 parseListExpr st blockCol =
   step (expectSym st "[") (\_, st1 =>
@@ -549,11 +734,40 @@ parsePatternCons st blockCol =
 parsePatternHead st blockCol =
   case peekTok st of
     PTok (TIdent name) p =>
-      if ctorPatternStart name then
-        step (parsePatternAtoms (advance st) blockCol) (\args, st1 =>
-          Ok (Pair (PCon name args (spanOf st st1)) st1))
-      else parsePatternAtom st blockCol
+      let st1 = advance st
+      in if ctorPatternStart name && atSym st1 "{" then
+           step (parseRecordPatternFields st1 blockCol) (\fields, st2 =>
+             Ok (Pair (PRecord name fields (spanOf st st2)) st2))
+         else if ctorPatternStart name then
+           step (parsePatternAtoms st1 blockCol) (\args, st2 =>
+             Ok (Pair (PCon name args (spanOf st st2)) st2))
+         else parsePatternAtom st blockCol
     _ => parsePatternAtom st blockCol
+
+parseRecordPatternFields st blockCol =
+  step (expectSym st "{") (\_, st1 => parseRecordPatternList st1 blockCol)
+
+parseRecordPatternList st blockCol =
+  if atSym st "}" then Ok (Pair Nil (advance st))
+  else
+    step (parseRecordPatternField st blockCol) (\f, st1 =>
+      if atSym st1 "," then
+        step (parseRecordPatternList (advance st1) blockCol) (\rest, st2 =>
+          Ok (Pair (Cons f rest) st2))
+      else
+        step (expectSym st1 "}") (\_, st2 => Ok (Pair (Cons f Nil) st2)))
+
+parseRecordPatternField st blockCol =
+  case peekTok st of
+    PTok (TIdent fname) p =>
+      let st1 = advance st
+      in if atSym st1 "=" then
+           step (expectSym st1 "=") (\_, st2 =>
+             step (parsePatternSingle st2 blockCol) (\pat, st3 =>
+               Ok (Pair (Pair fname pat) st3)))
+         else
+           Ok (Pair (Pair fname (PVar fname (Span (fileOf st) (posLine p) (posCol p) (posLine p) (posCol p)))) st1)
+    _ => Err "expected a record field pattern"
 
 parsePatternAtoms st blockCol =
   if startsPatternAtom st && canContinue st blockCol then

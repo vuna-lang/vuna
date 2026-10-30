@@ -219,6 +219,13 @@ isBuiltinName name =
     Just arity => True
     Nothing => False
 
+isBuiltinTraitName name =
+  name == "Show" || name == "Eq" || name == "Ord"
+
+isPreludeTraitMethod name =
+  name == "show" || name == "eq" || name == "neq"
+  || name == "lt" || name == "le" || name == "gt" || name == "ge"
+
 resolveQualified modules label imports name =
   case splitLastDot (splitOnDot name) of
     Pair revPrefix base =>
@@ -246,12 +253,62 @@ resolveQualifiedCtor modules label imports name =
                  Just e => Ok (entryTarget e)
                  Nothing => Err (label ++ ": constructor " ++ base ++ " is not exported by " ++ m)
 
+-- 带点表达式的解析（M10.5）：先按「最长可解析模块前缀」尝试限定名/限定值+字段链，
+-- 否则按「变量/顶层名 + 字段链」处理。`p.x`、`M.point.x`、`Vuna.Parser.parseSource` 都走这里。
+resolveDottedExpr modules label prefix own imports scope name sp =
+  case splitOnDot name of
+    Nil => Err (label ++ ": invalid dotted name " ++ name)
+    Cons head rest =>
+      if memName head scope then Ok (foldFieldChain (EVar head sp) rest sp)
+      else
+        andThen (resolveQualifiedPath modules label imports (splitOnDot name) (length (splitOnDot name)) sp) (\q =>
+          case q of
+            Just e => Ok e
+            Nothing =>
+              if memName head own then Ok (foldFieldChain (EVar (mangle prefix head) sp) rest sp)
+              else if isBuiltinName head then Ok (foldFieldChain (EVar head sp) rest sp)
+              else if startsUpperName head then
+                Err (label ++ ": module " ++ head ++ " is not imported")
+              else andThen (resolveGlobal modules label prefix own imports scope head) (\n =>
+                     Ok (foldFieldChain (EVar n sp) rest sp)))
+
+foldFieldChain base Nil sp = base
+
+foldFieldChain base (Cons f rest) sp = foldFieldChain (EField base f sp) rest sp
+
+takeSegs n Nil = Nil
+takeSegs n (Cons x rest) = if n <= 0 then Nil else Cons x (takeSegs (n - 1) rest)
+
+dropSegs n Nil = Nil
+dropSegs n (Cons x rest) = if n <= 0 then Cons x rest else dropSegs (n - 1) rest
+
+resolveQualifiedPath modules label imports segs n sp =
+  if n <= 1 then Ok Nothing
+  else
+    case findImportPrefix imports (joinDots (takeSegs (n - 1) segs)) of
+      Just m =>
+        case dropSegs (n - 1) segs of
+          Cons member Nil =>
+            if isGlobalCtor member then Ok (Just (EVar member sp))
+            else
+              case findExportValue (exportsOf modules m) member of
+                Just e => Ok (Just (EVar (entryTarget e) sp))
+                Nothing => Err (label ++ ": " ++ member ++ " is not exported by " ++ m)
+          Cons member rest =>
+            case findExportValue (exportsOf modules m) member of
+              Just e => Ok (Just (foldFieldChain (EVar (entryTarget e) sp) rest sp))
+              Nothing => Err (label ++ ": " ++ member ++ " is not exported by " ++ m)
+          Nil => Ok Nothing
+      Nothing => resolveQualifiedPath modules label imports segs (n - 1) sp
+
 resolveGlobal modules label prefix own imports scope name =
   if memName name scope then Ok name
   else if isGlobalCtor name then Ok name
   else if containsDot name then resolveQualified modules label imports name
   else if memName name own then Ok (mangle prefix name)
   else if isBuiltinName name then Ok name
+  else if isBuiltinTraitName name then Ok name
+  else if isPreludeTraitMethod name then Ok name
   else
     case modulesExportingValue modules imports name of
       Nil => Err (label ++ ": unbound variable " ++ name ++ suggest name (append own scope))
@@ -292,6 +349,15 @@ resolvePattern modules label prefix ownCtors imports pat =
       andThen (resolveCtor modules label prefix ownCtors imports name) (\name2 =>
         andThen (traverse (resolvePattern modules label prefix ownCtors imports) pats) (\parts =>
           Ok (Pair (PCon name2 (map firstOf parts) sp) (concatMap secondOf parts))))
+    PRecord name fields sp =>
+      andThen (resolveCtor modules label prefix ownCtors imports name) (\name2 =>
+        andThen (traverse (resolveRecordPatternField modules label prefix ownCtors imports) fields) (\parts =>
+          Ok (Pair (PRecord name2 (map firstOf parts) sp) (concatMap secondOf parts))))
+
+resolveRecordPatternField modules label prefix ownCtors imports (Pair fname pat) =
+  andThen (resolvePattern modules label prefix ownCtors imports pat) (\p =>
+    case p of
+      Pair pat2 bound => Ok (Pair (Pair fname pat2) bound))
 
 resolveAlt modules label prefix own ownCtors imports scope (Pair pat body) =
   andThen (resolvePattern modules label prefix ownCtors imports pat) (\p =>
@@ -347,8 +413,8 @@ resolveRecValues modules label prefix own ownCtors imports scope (Cons (Pair pat
 resolveExpr modules label prefix own ownCtors imports scope expr =
   case expr of
     EVar name sp =>
-      andThen (resolveGlobal modules label prefix own imports scope name) (\n =>
-        Ok (EVar n sp))
+      if containsDot name then resolveDottedExpr modules label prefix own imports scope name sp
+      else andThen (resolveGlobal modules label prefix own imports scope name) (\n => Ok (EVar n sp))
     EInt n sp => Ok (EInt n sp)
     EStr s sp => Ok (EStr s sp)
     ELam params body sp =>
@@ -372,6 +438,25 @@ resolveExpr modules label prefix own ownCtors imports scope expr =
         andThen (resolveExpr modules label prefix own ownCtors imports scope t) (\t2 =>
           andThen (resolveExpr modules label prefix own ownCtors imports scope e) (\e2 =>
             Ok (EIf c2 t2 e2 sp))))
+    EField base fname sp =>
+      andThen (resolveExpr modules label prefix own ownCtors imports scope base) (\b =>
+        Ok (EField b fname sp))
+    ERecord name fields sp =>
+      andThen (resolveCtor modules label prefix ownCtors imports name) (\name2 =>
+        andThen (traverse (resolveFieldValue modules label prefix own ownCtors imports scope) fields) (\fs =>
+          Ok (ERecord name2 fs sp)))
+    ERecUpdate base fields sp =>
+      andThen (resolveExpr modules label prefix own ownCtors imports scope base) (\b =>
+        andThen (traverse (resolveFieldValue modules label prefix own ownCtors imports scope) fields) (\fs =>
+          Ok (ERecUpdate b fs sp)))
+    EInstSel meth name sp =>
+      andThen (resolveExpr modules label prefix own ownCtors imports scope meth) (\m2 =>
+        andThen (resolveGlobal modules label prefix own imports scope name) (\n2 =>
+          Ok (EInstSel m2 n2 sp)))
+
+resolveFieldValue modules label prefix own ownCtors imports scope (Pair fname value) =
+  andThen (resolveExpr modules label prefix own ownCtors imports scope value) (\v =>
+    Ok (Pair fname v))
 
 resolveCtorDecl label prefix ctor =
   if isGlobalCtor ctor then Ok ctor
@@ -382,9 +467,15 @@ isLowerTypeName name =
     Nil => False
     Cons c rest => isLowerChar c
 
+startsUpperName name =
+  case strUnpack name of
+    Nil => False
+    Cons c rest => c >= 65 && c <= 90
+
 resolveTypeName modules label prefix ownTypes imports name =
   if name == "Int" || name == "String" || name == "Bool" || name == "Type" || name == "->" then
     Ok name
+  else if isBuiltinTraitName name then Ok name
   else if isLowerTypeName name then Ok name
   else if containsDot name then
     case splitLastDot (splitOnDot name) of
@@ -422,10 +513,27 @@ resolveCtorSpec modules label prefix ownTypes imports (Ctor ctor ty arity sp) =
 
 resolveDecl modules label prefix own ownCtors ownTypes imports d =
   case d of
-    DData dname params ctors sp =>
+    DData dname params ctors derivings sp =>
       andThen (resolveTypeTopName label prefix dname) (\dn =>
         andThen (traverse (resolveCtorSpec modules label prefix ownTypes imports) ctors) (\ctors2 =>
-          Ok (DData dn params ctors2 sp)))
+          andThen (traverse (resolveTypeName modules label prefix ownTypes imports) derivings) (\ds2 =>
+            Ok (DData dn params ctors2 ds2 sp))))
+    DRecord dname params fields derivings sp =>
+      andThen (resolveTypeTopName label prefix dname) (\dn =>
+        andThen (traverse (resolveRecordField modules label prefix ownTypes imports) fields) (\fields2 =>
+          andThen (traverse (resolveTypeName modules label prefix ownTypes imports) derivings) (\ds2 =>
+            Ok (DRecord dn params fields2 ds2 sp))))
+    DTrait tname params methods sp =>
+      andThen (resolveTypeTopName label prefix tname) (\tn =>
+        andThen (traverse (resolveTraitMethod modules label prefix ownTypes imports) methods) (\ms =>
+          Ok (DTrait tn params ms sp)))
+    DInstance iname isDefault head methods sp =>
+      andThen (resolveInstanceName label prefix iname) (\in2 =>
+        andThen (resolveTypeExpr modules label prefix ownTypes imports head) (\head2 =>
+          andThen
+            (traverse
+              (resolveInstanceMethod modules label prefix own ownCtors ownTypes imports) methods)
+            (\ms => Ok (DInstance in2 isDefault head2 ms sp))))
     DSig name ty sp =>
       andThen (resolveTopName label prefix name) (\n =>
         andThen (resolveTypeExpr modules label prefix ownTypes imports ty) (\ty2 =>
@@ -435,6 +543,35 @@ resolveDecl modules label prefix own ownCtors ownTypes imports d =
         andThen (traverse (resolvePattern modules label prefix ownCtors imports) pats) (\parts =>
           andThen (resolveExpr modules label prefix own ownCtors imports (concatMap secondOf parts) body) (\b =>
             Ok (DFun n (map firstOf parts) b sp))))
+
+resolveRecordField modules label prefix ownTypes imports (Field fname ty sp) =
+  andThen (checkBinder label fname) (\_ =>
+    andThen (resolveTypeExpr modules label prefix ownTypes imports ty) (\ty2 =>
+      Ok (Field fname ty2 sp)))
+
+resolveTraitMethod modules label prefix ownTypes imports (Pair mname ty) =
+  andThen (resolveTopName label prefix mname) (\n =>
+    andThen (resolveTypeExpr modules label prefix ownTypes imports ty) (\ty2 =>
+      Ok (Pair n ty2)))
+
+-- 未命名实例（default）没有公开名字；给一个模块内私有的内部名字，便于校验孤儿规则。
+resolveInstanceName label prefix Nothing = Ok (Just (mangle prefix "#default"))
+
+resolveInstanceName label prefix (Just name) =
+  andThen (resolveTopName label prefix name) (\n => Ok (Just n))
+
+resolveInstanceMethod modules label prefix own ownCtors ownTypes imports d =
+  case d of
+    DSig name ty sp =>
+      andThen (checkTopName label name) (\_ =>
+        andThen (resolveTypeExpr modules label prefix ownTypes imports ty) (\ty2 =>
+          Ok (DSig name ty2 sp)))
+    DFun name pats body sp =>
+      andThen (checkTopName label name) (\_ =>
+        andThen (traverse (resolvePattern modules label prefix ownCtors imports) pats) (\parts =>
+          andThen (resolveExpr modules label prefix own ownCtors imports (concatMap secondOf parts) body) (\b =>
+            Ok (DFun name (map firstOf parts) b sp))))
+    _ => Err (label ++ ": instance body may only contain method signatures/definitions")
 
 resolveProgram modules label prefix own ownCtors ownTypes imports decls =
   traverse (resolveDecl modules label prefix own ownCtors ownTypes imports) decls
@@ -459,13 +596,19 @@ privateExportMsg prefix sp name =
   prefix ++ ": " ++ showSpanLoc sp ++ ": cannot export private name " ++ name
   ++ " (names starting with _ are module-private)"
 
+-- 本模块里与导出相关的「数据类型」信息：类型名 + 公开构造器名列表。
+-- data / record / trait 都按同一套 T / T(..) 规则导出（trait 的方法是它的「构造器」）。
 findOwnData name decls =
   case decls of
     Nil => Nothing
     Cons d rest =>
       case d of
-        DData dname params ctors sp =>
-          if dname == name then Just (Pair dname ctors) else findOwnData name rest
+        DData dname params ctors derivings sp =>
+          if dname == name then Just (Pair dname (map ctorName ctors)) else findOwnData name rest
+        DRecord dname params fields derivings sp =>
+          if dname == name then Just (Pair dname (Cons dname Nil)) else findOwnData name rest
+        DTrait tname params methods sp =>
+          if tname == name then Just (Pair tname (map firstOf methods)) else findOwnData name rest
         _ => findOwnData name rest
 
 findOwnFn name decls =
@@ -483,25 +626,37 @@ findCtorNamed name ctors =
     Cons c rest =>
       if ctorName c == name then Just (ctorName c) else findCtorNamed name rest
 
+findMethodNamed name methods =
+  case methods of
+    Nil => Nothing
+    Cons (Pair mname ty) rest =>
+      if mname == name then Just mname else findMethodNamed name rest
+
 findOwnCtorName name decls =
   case decls of
     Nil => Nothing
     Cons d rest =>
       case d of
-        DData dname params ctors sp =>
+        DData dname params ctors derivings sp =>
           case findCtorNamed name ctors of
             Just cname => Just (Pair dname cname)
             Nothing => findOwnCtorName name rest
+        DRecord dname params fields derivings sp =>
+          if dname == name then Just (Pair dname dname) else findOwnCtorName name rest
+        DTrait tname params methods sp =>
+          case findMethodNamed name methods of
+            Just mname => Just (Pair tname mname)
+            Nothing => findOwnCtorName name rest
         _ => findOwnCtorName name rest
 
-ownCtorEntries prefix dname ctors =
-  case ctors of
+ownCtorEntries prefix dname names =
+  case names of
     Nil => Nil
-    Cons c rest =>
-      if isPrivateName (ctorName c) then ownCtorEntries prefix dname rest
+    Cons cname rest =>
+      if isPrivateName cname then ownCtorEntries prefix dname rest
       else
         Cons
-          (ExportEntry "ctor" (ctorName c) (mangle prefix (ctorName c)) (mangle prefix dname))
+          (ExportEntry "ctor" cname (mangle prefix cname) (mangle prefix dname))
           (ownCtorEntries prefix dname rest)
 
 -- 从某模块的导出表里取某数据类型的构造器条目：重导出 `T(..)` 时只重新公开
@@ -516,12 +671,32 @@ ctorEntriesOfType typeTarget entries =
 
 declImplicitExports prefix d =
   case d of
-    DData dname params ctors sp =>
+    DData dname params ctors derivings sp =>
       if isPrivateName dname then Nil
       else
         Cons
           (ExportEntry "type" dname (mangle prefix dname) "")
-          (ownCtorEntries prefix dname ctors)
+          (ownCtorEntries prefix dname (map ctorName ctors))
+    DRecord dname params fields derivings sp =>
+      if isPrivateName dname then Nil
+      else
+        Cons
+          (ExportEntry "type" dname (mangle prefix dname) "")
+          (ownCtorEntries prefix dname (Cons dname Nil))
+    DTrait tname params methods sp =>
+      if isPrivateName tname then Nil
+      else
+        Cons
+          (ExportEntry "type" tname (mangle prefix tname) "")
+          (ownCtorEntries prefix tname (map firstOf methods))
+    DInstance iname isDefault head methods sp =>
+      if isDefault then Nil
+      else
+        case iname of
+          Nothing => Nil
+          Just name =>
+            if isPrivateName name then Nil
+            else Cons (ExportEntry "val" name (mangle prefix name) "") Nil
     DSig name ty sp =>
       if isPrivateName name then Nil
       else Cons (ExportEntry "val" name (mangle prefix name) "") Nil
@@ -539,13 +714,49 @@ dedupeImplicitExports (Cons e rest) =
   if hasSamePublicKind e rest then dedupeImplicitExports rest
   else Cons e (dedupeImplicitExports rest)
 
+refKind (ExportRef k tgt parent) = k
+
+refTarget (ExportRef k tgt parent) = tgt
+
+-- 裸名导出时，若名字是 **record 类型** 且与其同名构造器 target 相同，只导出类型、
+-- 不导出构造器：抽象记录必须写 T(..) 才公开构造器。（普通 data 里 ctor 与类型同名
+-- 的情形保持 v0 语义：裸名两者都导出。）
+typeRefDominates modules decls prefix tr vr =
+  case tr of
+    Just (ExportRef tk tt tp) =>
+      case vr of
+        Just (ExportRef vk vt vp) =>
+          if tk == "type" && vk == "ctor" && tt == vt then isRecordTarget modules decls prefix tt
+          else False
+        Nothing => False
+    Nothing => False
+
+isRecordTarget modules decls prefix target =
+  case splitLastDot (splitOnDot target) of
+    Pair revPrefix base =>
+      let m = joinDots revPrefix
+      in if m == prefix then isRecordDecl base decls
+         else
+           case findModule modules m of
+             Just (Module mname imports dcs exports) => isRecordDecl base dcs
+             Nothing => False
+
+isRecordDecl dname decls =
+  case decls of
+    Nil => False
+    Cons d rest =>
+      case d of
+        DRecord dn params fields derivings sp =>
+          if dn == dname then True else isRecordDecl dname rest
+        _ => isRecordDecl dname rest
+
 refEntryList pub Nothing = Nil
 
 refEntryList pub (Just (ExportRef k tgt parent)) = Cons (ExportEntry k pub tgt parent) Nil
 
 ownOrImportedTypeRef modules prefix decls imports name =
   case findOwnData name decls of
-    Just (Pair dname ctors) => Ok (Just (ExportRef "type" (mangle prefix dname) ""))
+    Just (Pair dname ctorNames) => Ok (Just (ExportRef "type" (mangle prefix dname) ""))
     Nothing =>
       case modulesExportingType modules imports name of
         Nil => Ok Nothing
@@ -589,7 +800,9 @@ exportBare modules prefix decls imports name sp =
                   Just _ =>
                     case vr of
                       Nothing => Ok (refEntryList name tr)
-                      Just _ => Ok (append (refEntryList name tr) (refEntryList name vr))))
+                      Just _ =>
+                        if typeRefDominates modules decls prefix tr vr then Ok (refEntryList name tr)
+                        else Ok (append (refEntryList name tr) (refEntryList name vr))))
         _ =>
           let mprefix = joinDots revPrefix
           in case findImportPrefix imports mprefix of
@@ -621,11 +834,11 @@ exportTypeAll modules prefix decls imports name sp =
           if isPrivateName name then Err (privateExportMsg prefix sp name)
           else
             case findOwnData name decls of
-              Just (Pair dname ctors) =>
+              Just (Pair dname ctorNames) =>
                 Ok
                   (Cons
                     (ExportEntry "type" name (mangle prefix dname) "")
-                    (ownCtorEntries prefix dname ctors))
+                    (ownCtorEntries prefix dname ctorNames))
               Nothing =>
                 case modulesExportingType modules imports name of
                   Nil =>

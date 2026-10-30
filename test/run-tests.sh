@@ -379,6 +379,107 @@ if [ "$m9_check_code" -ne 0 ]; then ok; else bad "m9 check type err exit" "non-z
 m9_compile_code=$?
 if [ "$m9_compile_code" -ne 0 ]; then ok; else bad "m9 compile type err exit" "non-zero" "$m9_compile_code"; fi
 
+# 18) 记录正例（M10.5 Phase R）：interp / 动态 codegen / typed codegen 三路径
+for file in corpus/records/0*.vuna; do
+  base=${file%.vuna}
+  expected=$(cat "$base.out")
+  actual=$("$VUNA" interp "$file" 2>&1)
+  check_eq "$file (record interp)" "$expected" "$actual"
+  rm -f "$tmp/rec_dyn.ml" "$tmp/rec_dyn.exe"
+  if ! rec_out=$("$VUNA" --no-typecheck "$file" "$tmp/rec_dyn.ml" 2>&1); then
+    bad "$file (record dynamic codegen)" "exit 0" "$rec_out"
+  elif [ -n "$rec_out" ]; then
+    bad "$file (record dynamic codegen output)" "" "$rec_out"
+  elif ! "$OCAMLOPT" -w -a -o "$tmp/rec_dyn.exe" "$tmp/rec_dyn.ml" >"$tmp/rec_dyn.log" 2>&1; then
+    bad "$file (record dynamic ocamlopt)" "" "$(cat "$tmp/rec_dyn.log")"
+  else
+    actual=$("$tmp/rec_dyn.exe" 2>&1)
+    check_eq "$file (record dynamic run)" "$expected" "$actual"
+  fi
+  rm -f "$tmp/rec_typed.ml" "$tmp/rec_typed.exe"
+  if ! rec_out=$("$VUNA" --typed "$file" "$tmp/rec_typed.ml" 2>&1); then
+    bad "$file (record typed codegen)" "exit 0" "$rec_out"
+  elif [ -n "$rec_out" ]; then
+    bad "$file (record typed codegen output)" "" "$rec_out"
+  elif ! "$OCAMLOPT" -w -a -o "$tmp/rec_typed.exe" "$tmp/rec_typed.ml" >"$tmp/rec_typed.log" 2>&1; then
+    bad "$file (record typed ocamlopt)" "" "$(cat "$tmp/rec_typed.log")"
+  else
+    actual=$("$tmp/rec_typed.exe" 2>&1)
+    check_eq "$file (record typed run)" "$expected" "$actual"
+  fi
+done
+
+# 19) 记录错误（M10.5 Phase R）：interp / 动态 / typed 三路径都失败、含片段、不写输出文件
+for file in corpus/records/9*.vuna; do
+  fragment=$(cat "${file%.vuna}.err")
+  actual=$("$VUNA" interp "$file" 2>&1)
+  check_contains "$file (record interp error)" "$actual" "$fragment"
+  "$VUNA" interp "$file" >/dev/null 2>&1
+  rec_code=$?
+  if [ "$rec_code" -ne 0 ]; then ok; else bad "$file (record interp error exit)" "non-zero" "$rec_code"; fi
+  rm -f "$tmp/rec_err.ml"
+  actual=$("$VUNA" --no-typecheck "$file" "$tmp/rec_err.ml" 2>&1)
+  rec_code=$?
+  check_contains "$file (record dynamic error)" "$actual" "$fragment"
+  if [ "$rec_code" -ne 0 ]; then ok; else bad "$file (record dynamic error exit)" "non-zero" "$rec_code"; fi
+  if [ -e "$tmp/rec_err.ml" ]; then
+    bad "$file (record dynamic no output file)" "absent" "present"
+  else
+    ok
+  fi
+  rm -f "$tmp/rec_err_typed.ml"
+  actual=$("$VUNA" --typed "$file" "$tmp/rec_err_typed.ml" 2>&1)
+  rec_code=$?
+  check_contains "$file (record typed error)" "$actual" "$fragment"
+  if [ "$rec_code" -ne 0 ]; then ok; else bad "$file (record typed error exit)" "non-zero" "$rec_code"; fi
+  if [ -e "$tmp/rec_err_typed.ml" ]; then
+    bad "$file (record typed no output file)" "absent" "present"
+  else
+    ok
+  fi
+done
+
+# 20) 跨模块记录正例：导出 Point(..) 可构造/模式匹配；导出 Point 保持抽象（三路径）
+for dir in corpus/records/0*_*/; do
+  dir=${dir%/}
+  expected=$(cat "$dir/expected.out")
+  actual=$("$VUNA" interp --root "$dir/lib" --root "$dir/app" "$dir/app/Main.vuna" 2>&1)
+  check_eq "$dir (record module interp)" "$expected" "$actual"
+  compile_and_run_roots "$dir (record module dynamic)" "$VUNA" "$dir/app/Main.vuna" "$expected" --no-typecheck --root "$dir/lib" --root "$dir/app"
+  compile_and_run_roots "$dir (record module typed)" "$VUNA" "$dir/app/Main.vuna" "$expected" --typed --root "$dir/lib" --root "$dir/app"
+done
+
+# 21) 跨模块记录错误：抽象记录的构造器不可见（三路径都失败、含片段、不写输出文件）
+for dir in corpus/records/9*_*/; do
+  dir=${dir%/}
+  fragment=$(cat "$dir/expected.err")
+  actual=$("$VUNA" interp --root "$dir/lib" --root "$dir/app" "$dir/app/Main.vuna" 2>&1)
+  check_contains "$dir (record module interp error)" "$actual" "$fragment"
+  "$VUNA" interp --root "$dir/lib" --root "$dir/app" "$dir/app/Main.vuna" >/dev/null 2>&1
+  rec_code=$?
+  if [ "$rec_code" -ne 0 ]; then ok; else bad "$dir (record module interp error exit)" "non-zero" "$rec_code"; fi
+  rm -f "$tmp/rec_mod_err.ml"
+  actual=$("$VUNA" --no-typecheck --root "$dir/lib" --root "$dir/app" "$dir/app/Main.vuna" "$tmp/rec_mod_err.ml" 2>&1)
+  rec_code=$?
+  check_contains "$dir (record module dynamic error)" "$actual" "$fragment"
+  if [ "$rec_code" -ne 0 ]; then ok; else bad "$dir (record module dynamic error exit)" "non-zero" "$rec_code"; fi
+  if [ -e "$tmp/rec_mod_err.ml" ]; then
+    bad "$dir (record module dynamic no output file)" "absent" "present"
+  else
+    ok
+  fi
+  rm -f "$tmp/rec_mod_err_typed.ml"
+  actual=$("$VUNA" --typed --root "$dir/lib" --root "$dir/app" "$dir/app/Main.vuna" "$tmp/rec_mod_err_typed.ml" 2>&1)
+  rec_code=$?
+  check_contains "$dir (record module typed error)" "$actual" "$fragment"
+  if [ "$rec_code" -ne 0 ]; then ok; else bad "$dir (record module typed error exit)" "non-zero" "$rec_code"; fi
+  if [ -e "$tmp/rec_mod_err_typed.ml" ]; then
+    bad "$dir (record module typed no output file)" "absent" "present"
+  else
+    ok
+  fi
+done
+
 if [ "$fail" -ne 0 ]; then
   printf '%s passed, %s failed\n' "$pass" "$fail"
   exit 1

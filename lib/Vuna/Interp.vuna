@@ -25,18 +25,91 @@ interpret source =
 effectiveRoots Nil = Cons "lib" Nil
 effectiveRoots roots = roots
 
+-- M10.5：使用记录/trait/deriving 的程序必须先经过类型检查与降级；
+-- 旧程序保持原 legacy 路径（interp/--no-typecheck 仍不类型检查）。
+programNeedsElab Nil = False
+
+programNeedsElab (Cons d rest) =
+  case d of
+    DRecord name params fields derivings sp => True
+    DTrait name params methods sp => True
+    DInstance iname isDefault head methods sp => True
+    DData name params ctors derivings sp =>
+      case derivings of
+        Nil => programNeedsElab rest
+        _ => True
+    DFun name pats body sp =>
+      if patsNeedElab pats then True
+      else if exprNeedsElab body then True
+      else programNeedsElab rest
+    DSig name ty sp => programNeedsElab rest
+
+patsNeedElab Nil = False
+
+patsNeedElab (Cons p rest) = if patNeedsElab p then True else patsNeedElab rest
+
+patNeedsElab p =
+  case p of
+    PRecord name fields sp => True
+    PCon name pats sp => patsNeedElab pats
+    _ => False
+
+argsNeedElab Nil = False
+
+argsNeedElab (Cons e rest) = if exprNeedsElab e then True else argsNeedElab rest
+
+bindsNeedElab Nil = False
+
+bindsNeedElab (Cons (Pair pat value) rest) =
+  if patNeedsElab pat then True
+  else if exprNeedsElab value then True
+  else bindsNeedElab rest
+
+altsNeedElab Nil = False
+
+altsNeedElab (Cons (Pair pat body) rest) =
+  if patNeedsElab pat then True
+  else if exprNeedsElab body then True
+  else altsNeedElab rest
+
+exprNeedsElab e =
+  case e of
+    EField base fname sp => True
+    ERecord name fields sp => True
+    ERecUpdate base fields sp => True
+    EInstSel meth iname sp => True
+    EVar name sp => False
+    EInt n sp => False
+    EStr s sp => False
+    ELam ps body sp => exprNeedsElab body
+    EApp fn args sp => if exprNeedsElab fn then True else argsNeedElab args
+    ELet binds body rec_ sp =>
+      if bindsNeedElab binds then True else exprNeedsElab body
+    ECase scrut alts sp =>
+      if exprNeedsElab scrut then True else altsNeedElab alts
+    EIf c t el sp => if exprNeedsElab c then True else if exprNeedsElab t then True else exprNeedsElab el
+
 interpretFile roots entry =
   case loadProgram roots entry of
     Err e => "error: " ++ e
-    Ok decls => runDecls decls
+    Ok decls =>
+      if programNeedsElab decls then
+        case checkProgramInfoElab decls of
+          Err e => "error: " ++ e
+          Ok (Pair globals elabDecls) => runDecls elabDecls
+      else runDecls decls
 
 compileFile roots entry printResult =
   andThen (loadProgram roots entry) (\decls =>
-    case decls of ds => generateProgram ds printResult)
+    if programNeedsElab decls then
+      andThen (checkProgramInfoElab decls) (\p => generateProgram (secondOf p) printResult)
+    else generateProgram decls printResult)
 
 compileFileChecked roots entry printResult =
   andThen (loadProgram roots entry) (\decls =>
-    andThen (checkProgram decls) (\_ => generateProgram decls printResult))
+    if programNeedsElab decls then
+      andThen (checkProgramInfoElab decls) (\p => generateProgram (secondOf p) printResult)
+    else andThen (checkProgram decls) (\_ => generateProgram decls printResult))
 
 compileFileTyped roots entry printResult =
   andThen (loadProgram roots entry) (\decls =>
@@ -49,6 +122,11 @@ checkFile roots entry =
   case loadProgram roots entry of
     Err e => Err e
     Ok decls =>
-      case checkProgramInfo decls of
-        Err e => Err e
-        Ok _ => Ok (exhaustiveWarnings decls)
+      if programNeedsElab decls then
+        case checkProgramInfoElab decls of
+          Err e => Err e
+          Ok (Pair globals elabDecls) => Ok (exhaustiveWarnings elabDecls)
+      else
+        case checkProgramInfo decls of
+          Err e => Err e
+          Ok _ => Ok (exhaustiveWarnings decls)

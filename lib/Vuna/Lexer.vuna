@@ -42,6 +42,7 @@ isKeyword s =
   || s == "then" || s == "else" || s == "where" || s == "Type"
   || s == "import" || s == "module"
   || s == "qualified" || s == "as"
+  || s == "record" || s == "trait" || s == "instance" || s == "deriving"
 
 classifyIdent s = if isKeyword s then TKw s else TIdent s
 
@@ -148,7 +149,7 @@ lexToken c rest p =
         case lexChars cs2 of
           Err e => Err e
           Ok toks => Ok (Cons (PTok (TStr s) p) toks)
-  else if c == 40 || c == 41 || c == 91 || c == 93 || c == 44 then
+  else if c == 40 || c == 41 || c == 91 || c == 93 || c == 44 || c == 123 || c == 125 then
     case lexChars (Chars rest (advanceChar c p)) of
       Err e => Err e
       Ok toks => Ok (Cons (PTok (TSym (strPack (Cons c Nil))) p) toks)

@@ -51,7 +51,7 @@ dataDecls decls =
     Nil => Nil
     Cons d rest =>
       case d of
-        DData name params ctors _ => Cons d (dataDecls rest)
+        DData name params ctors _ _ => Cons d (dataDecls rest)
         _ => dataDecls rest
 
 nonSpecialData decls =
@@ -59,7 +59,7 @@ nonSpecialData decls =
     Nil => Nil
     Cons d rest =>
       case d of
-        DData name params ctors _ =>
+        DData name params ctors _ _ =>
           if isBoolName name || isListName name then nonSpecialData rest
           else Cons d (nonSpecialData rest)
         _ => nonSpecialData rest
@@ -69,7 +69,7 @@ lookupData decls name =
     Nil => Nothing
     Cons d rest =>
       case d of
-        DData dn ps cs _ => if dn == name then Just d else lookupData rest name
+        DData dn ps cs _ _ => if dn == name then Just d else lookupData rest name
         _ => lookupData rest name
 
 mapResult f Nil = Ok Nil
@@ -128,7 +128,7 @@ genParams n = map (\i => "a" ++ strFromInt i) (range 0 n)
 
 range i n = if i >= n then Nil else Cons i (range (i + 1) n)
 
-genData decls (DData name params ctors _) =
+genData decls (DData name params ctors _ _) =
   andThen (mapResult (genCtor decls (paramMap params)) ctors) (\cs =>
     Ok ("  " ++ dataPrefix params ++ typeNameOf name ++ " =\n    " ++ joinWith "\n  | " cs))
 
@@ -223,7 +223,7 @@ genShowCtorWith decls pmap name fields =
       Cons v Nil => Ok ("  | " ++ ctorNameOf name ++ " " ++ v ++ " -> show_ctor " ++ ocamlString (lastName name) ++ " [" ++ joinWith "; " shows ++ "]")
       vars => Ok ("  | " ++ ctorNameOf name ++ " (" ++ joinWith ", " vars ++ ") -> show_ctor " ++ ocamlString (lastName name) ++ " [" ++ joinWith "; " shows ++ "]"))
 
-genShowFunc decls (DData name params ctors _) =
+genShowFunc decls (DData name params ctors _ _) =
   genShowFuncWith decls (showParamMap params) params name ctors
 
 genShowFuncWith : List Decl -> List (Pair String String) -> List String -> String -> List Ctor -> Result String

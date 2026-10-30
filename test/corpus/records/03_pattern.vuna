@@ -1,0 +1,18 @@
+record Point where
+  x : Int
+  y : Int
+
+sumAll : Point -> Int
+sumAll p = case p of
+  Point { x = a, y = b } => a + b
+
+sumX : Point -> Int
+sumX p = case p of
+  Point { x } => x
+
+sumY : Point -> Int
+sumY p = case p of
+  Point { y = b } => b
+
+main : Int
+main = sumAll (Point { x = 20, y = 10 }) + sumX (Point { x = 10, y = 0 }) + sumY (Point { x = 0, y = 2 })

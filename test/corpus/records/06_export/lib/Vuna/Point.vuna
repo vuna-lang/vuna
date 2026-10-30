@@ -1,0 +1,8 @@
+module Vuna.Point (Point(..), mk) where
+
+record Point where
+  x : Int
+  y : Int
+
+mk : Int -> Int -> Point
+mk a b = Point { x = a, y = b }

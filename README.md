@@ -184,17 +184,55 @@ git add bootstrap/ && git commit
   如 `Vuna.Parser.parse`），解释器与 codegen 复用同一份实现；`show` 只显示最后一段，
   所以输出与单文件程序一致。
 
+### 记录类型（M10.5）
+
+- 声明：`record Point where` 后跟缩进的字段列表，字段写作 `x : Int`；记录可以参数化
+  （`record Pair a b where`），记录类型名同时是它的构造器名；
+- 构造、访问、更新与模式：
+
+  ```vuna
+  record Point where
+    x : Int
+    y : Int
+
+  p : Point
+  p = Point { y = 2, x = 1 }         -- 字段顺序任意，但必须给全
+
+  q : Point
+  q = { p | x = 3 }                  -- 字段更新，可一次更新多个字段
+
+  sum : Point -> Int
+  sum p = case p of
+    Point { x = a, y = b } => a + b  -- 可省略字段（省略 = 通配）
+
+  onlyX : Point -> Int
+  onlyX p = case p of
+    Point { x } => x                 -- pun：等价于 Point { x = x }
+  ```
+
+  字段访问写作 `p.x`，支持链式（如 `s.start.x`）；
+- 实现上记录在类型检查阶段降级为单构造器 `data`：构造 = 构造器应用，字段访问/更新 =
+  内联 `case`，所以解释器、动态 codegen（`--no-typecheck`）与 typed codegen 行为一致；
+- 字段访问/更新的 base 类型必须可推断；推断不出时报
+  `cannot resolve record type ... add a type signature`，给函数参数补类型签名即可；
+- 导出遵循模块规则：`T` 只导出记录类型（构造器隐藏，跨模块不能构造/模式匹配，即抽象），
+  `T(..)` 才公开记录构造器；
+- 错误：缺字段（`missing field`）、重复字段（`duplicate field`）、未知字段
+  （`unknown field`）、对非记录做字段访问/更新（`not a record type`）；
+- 限制：`deriving` 属于 Phase T，尚未实现；记录字段访问/更新在 base 类型未定时报错。
+
 ## 编译器实现
 
 - `lib/Vuna/Base.vuna`：Result/Maybe/List/Pair/Bool、列表/Result 辅助函数与
   `splitOnDot`/`splitLastDot` 等字符串工具；
-- `lib/Vuna/Ast.vuna`：语法类型（Pat/Expr/Decl/Import/模块头）与 AST helper
-  （`funArity`/`ctorArity`/`topNames`/`ctorsOf` 等），依赖 Base；
+- `lib/Vuna/Ast.vuna`：语法类型（Pat/Expr/Decl/Import/模块头、导出项与记录字段）与
+  AST helper（`funArity`/`ctorArity`/`topNames`/`ctorsOf` 等），依赖 Base；
 - `lib/Vuna/Lexer.vuna`：词法分析，token 带行列位置；
-- `lib/Vuna/Parser.vuna`：offside layout parser，输出模块头、AST 与 imports；
+- `lib/Vuna/Parser.vuna`：offside layout parser，输出模块头、记录声明、AST 与 imports；
 - `lib/Vuna/Builtins.vuna`：内建函数名字与元数，Loader 与 Eval 共用；
 - `lib/Vuna/Eval.vuna`：值表示、内建函数、call-by-value 求值器与 `show`；
-- `lib/Vuna/Loader.vuna`：import 图、模块头/模块名校验、模块导出表、名字解析与 flatten
+- `lib/Vuna/Loader.vuna`：import 图、模块头/模块名校验、模块导出表（含记录的
+  `T` / `T(..)` 构造器规则）、名字解析与 flatten
   （`loadProgram roots entry`，模块根是有序列表，逐根用 `fileExists` 探测，
   跨根同名模块报歧义）；
 - `lib/Vuna/Typecheck.vuna`：HM 风格类型检查（Ty/Scheme、unify、构造器 scheme、
@@ -254,7 +292,7 @@ type value =
 
 ## 测试
 
-`test/run-tests.sh` 是 vuna 原生测试（369 checks），用 `vuna` / `vuna-boot` 驱动，
+`test/run-tests.sh` 是 vuna 原生测试（449 checks），用 `vuna` / `vuna-boot` 驱动，
 不依赖外部 vuna 实现；但运行测试需要 OCaml 编译器（`ocamlopt`）作为代码生成后端：
 
 ```console
@@ -276,6 +314,10 @@ sh test/run-tests.sh          # 需要 PATH 中有 vuna 与 vuna-boot
   跨根歧义、循环导入、未限定引用/未导入、同名不同定义歧义、未导出名字、非法模块名、
   别名冲突、import 不传递；错误用例在 interp / 动态 codegen（`--no-typecheck`）/
   typed codegen 三条路径都要求错误片段、不写输出文件；typed 路径同时断言非 0 退出；
+- `corpus/records/` 记录（M10.5a）：01–05 正例在 interp / 动态 codegen / typed codegen
+  三路径比对 golden；90–95 错误例三路径都要求错误片段与非 0 退出，动态/typed 还要求
+  不写输出文件；跨模块正例 `0*_*/`（`Point(..)` 可构造/模式匹配，`Point` 保持抽象）、
+  跨模块错误 `9*_*/`（抽象记录构造器不可见）同样覆盖三路径；
 - `corpus/err/*.vuna`、`corpus/run_err/*.vuna`：解析/求值错误片段；
 - `corpus/type_ok`、`corpus/type_err`：单文件类型检查正/反例；
 - `corpus/type_modules/0*`、`9*`：跨模块类型检查正/反例；

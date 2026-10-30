@@ -1,0 +1,9 @@
+record Point where
+  x : Int
+  y : Int
+
+p : Point
+p = Point { x = 1, x = 2, y = 3 }
+
+main : Int
+main = 0

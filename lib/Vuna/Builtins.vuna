@@ -17,6 +17,16 @@ builtinArity ">=" = Just 2
 builtinArity "&&" = Just 2
 builtinArity "||" = Just 2
 builtinArity "++" = Just 2
+builtinArity "bi_eq_int" = Just 2
+builtinArity "bi_neq_int" = Just 2
+builtinArity "bi_lt_int" = Just 2
+builtinArity "bi_le_int" = Just 2
+builtinArity "bi_gt_int" = Just 2
+builtinArity "bi_ge_int" = Just 2
+builtinArity "bi_eq_str" = Just 2
+builtinArity "bi_neq_str" = Just 2
+builtinArity "bi_eq_bool" = Just 2
+builtinArity "bi_neq_bool" = Just 2
 builtinArity "strLength" = Just 1
 builtinArity "strUnpack" = Just 1
 builtinArity "strPack" = Just 1
