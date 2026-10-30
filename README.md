@@ -100,6 +100,8 @@ git add bootstrap/ && git commit
 - 内建：`+ - * /`、`== /= < <= > >=`、`&& ||`、`++`、`strLength`、`strUnpack`、
   `strPack`、`strFromInt`，以及 IO 内建 `readFile` / `writeFile` / `print` /
   `getArgs`；
+- `&&` / `||` 短路求值：先求左操作数，左侧能决定结果时不求值右侧（解释器与
+  两种 codegen 一致）；
 - 布尔值与列表约定：`True` / `False` / `Cons` / `Nil` 是内建相邻的全局构造器；
   程序需要自己声明 `data Bool` / `data List` 才能对它们做模式匹配。
 
@@ -161,8 +163,13 @@ git add bootstrap/ && git commit
 
 ### codegen 的表示
 
-生成代码不使用解释循环：vuna 函数编译成柯里化 OCaml 函数，构造器编译成闭包构造器
-（`mk_Cons` 等），模式匹配编译成 OCaml `match`。值统一为动态表示：
+有两种 codegen，默认走 typed：
+
+- `TypedCodegen`（默认，`--typed`）：用类型信息生成原生 OCaml 类型与代码——用户
+  `data` 编译成 OCaml 变体、`Int/String/Bool/List` 映射到原生类型、`case` 编译成
+  OCaml `match`、构造器直接构造变体，没有动态 `value` 包装；
+- `Codegen`（`--no-typecheck` 回退）：值统一为动态表示，生成程序入口打印
+  `show_value main`：
 
 ```ocaml
 type value =
@@ -172,11 +179,24 @@ type value =
   | VFun of string * (value -> value)
 ```
 
-- 生成程序入口打印 `show_value main`，格式与解释器一致；
-- IO 内建在生成程序里有对应实现，语义与解释器一致；
-- 编译期检查：`main` 存在且零参数、未绑定变量、子句 arity 不一致、构造器/函数重名；
-- 生成结果是**单个 OCaml 文件**（loader 先 flatten），性能与错误信息暂未优化；
-- runtime 前导代码固化在 `Codegen.vuna` 的 `runtimeCode`，是唯一实现。
+两种路径都只用 OCaml 标准库，不依赖解释循环。typed codegen 的代码质量优化：
+
+- **依赖分组**：用 Kosaraju SCC 一次正向 + 一次反向 DFS 求出函数依赖分量，
+  `genTop` 复杂度从 O(V²·reach) 降到 O(V+E)（自举 codegen 从 ~12s 降到 ~0.2s）；
+  非自递归单函数用 `let`，互递归分量才用 `let rec ... and ...`；
+- **比较运算符特化**：`==` `/=` `<` `<=` `>` `>=` 按操作数类型改写为
+  `bi_eq_int` / `bi_eq_str` / `bi_eq_bool` / `bi_*_int` 等单态 helper，
+  避免多态 `caml_equal` / `caml_less_than`（多态函数里的比较仍保留通用 `bi_eq`）；
+- **短路**：`a && b` / `a || b` 生成 OCaml `if`，左侧能决定结果时不求值右侧；
+  解释器与动态 codegen 同样短路；
+- **字符串拼接**：同层 `++` 链编译期折叠相邻字面量，3 段以上生成按序求值的
+  `let` 绑定 + `String.concat "" [...]`（线性时间，不再是右嵌套 `^`）；
+- **输出收尾**：单子句全变量模式直接生成 `fun x y -> ...`（省 match/元组）、
+  原子实参省略括号、零参纯值 hoist 成普通 `let`（每次引用不再重建值）；
+- **可读性**：生成代码经过轻量 pretty printer（按 `in`/`else`/行宽断行），
+  长字符串按真实换行输出，避免几 KB 的单行；
+- 生成结果仍是**单个 OCaml 文件**（loader 先 flatten）；runtime 前导代码分别在
+  `Codegen.vuna` 的 `runtimeCode` 与 `TypedCodegen.vuna` 的 `runtimeCodeTyped`。
 
 ## 测试
 
@@ -238,8 +258,12 @@ nix fmt               # nixfmt-tree 格式化 .nix
 - 类型检查与原生 OCaml typed codegen 已默认开启；M8 完成 typed 自举，
   `bootstrap/stage1.ml` 由 typed 编译器轮换；dynamic codegen 保留为
   `--no-typecheck` 的测试/调试回退路径；
-- typed codegen 生成单文件 OCaml；性能与错误信息暂未优化；
-- 运行时错误没有源码位置；`where` / `do` / 隐式参数 / 依赖类型未实现；
+- M8c 完成 codegen 性能与输出质量收尾：Kosaraju SCC、类型特化比较、`&&`/`||`
+  短路、`++` 折叠与线性拼接、零参纯值 hoist、pretty printer；自举 codegen
+  从 ~12s 降到 ~2s 量级；构建加 `-g` 并对 warning 39（unused rec）设 warn-error；
+- typed codegen 仍生成单文件 OCaml，runtime prelude 未按需裁剪；运行时错误
+  没有源码位置；
+- `where` / `do` / 隐式参数 / 依赖类型未实现；
 - IO 失败（如 `readFile` 缺失文件）会抛宿主异常；编译器 CLI 没有 `exit` 内建，
   编译错误时退出码仍可能是 0，只通过 stdout 的 `error: ...` 判断；
 - 种子轮换是手动流程（发版/不兼容变更时）；
@@ -252,4 +276,7 @@ nix fmt               # nixfmt-tree 格式化 .nix
 - M5：模块系统（文件=模块、import、flatten）；
 - M6：用 vuna 写 codegen，种子入库，stage2/stage3 fixed point；
 - M6 之后：种子轮换为 vuna 生成，P2 把测试迁移到 vuna 原生 harness；
+- M7：HM 类型检查；M8a/M8b：原生 OCaml typed codegen 与 typed 自举；
+- M8c：codegen 性能与输出质量收尾（SCC、比较特化、短路、拼接、pretty printer），
+  种子随之轮换；
 - 早期 OCaml 外部编译器 `vunax` 已完成使命并删除。

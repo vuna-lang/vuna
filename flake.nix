@@ -62,7 +62,7 @@
               ''
                 mkdir -p "$out/bin"
                 cp ${./bootstrap/stage1.ml} stage1.ml
-                ocamlopt -w -a -o "$out/bin/vuna-boot" stage1.ml
+                ocamlopt -g -w -a+39 -warn-error +39 -o "$out/bin/vuna-boot" stage1.ml
               '';
 
           # stage 2：用入库种子编译当前源码得到的当前编译器。
@@ -83,7 +83,7 @@
                 cp -r ${./lib} lib
                 cp ${./app/Compile.vuna} app/Compile.vuna
                 ${vuna-boot}/bin/vuna-boot --root lib --no-print app/Compile.vuna stage2.ml
-                ocamlopt -w -a -o "$out/bin/vuna" stage2.ml
+                ocamlopt -g -w -a+39 -warn-error +39 -o "$out/bin/vuna" stage2.ml
               '';
 
           # 解释器（自解释器编译产物）：读 .vuna 文件解释执行，用于差分测试。
@@ -104,7 +104,7 @@
                 cp -r ${./lib} lib
                 cp ${./app/Interp.vuna} app/Interp.vuna
                 ${vuna}/bin/vuna --no-print --root lib app/Interp.vuna program.ml
-                ocamlopt -w -a -o "$out/bin/vuna-interp" program.ml
+                ocamlopt -g -w -a+39 -warn-error +39 -o "$out/bin/vuna-interp" program.ml
               '';
         in
         {
@@ -151,14 +151,14 @@
                 cp ${./app/Compile.vuna} app/Compile.vuna
                 # 种子编译当前源码 → stage 2（当前编译器）
                 ${vuna-boot}/bin/vuna-boot --root lib --no-print app/Compile.vuna stage2.ml
-                ocamlopt -w -a -o stage2 stage2.ml
+                ocamlopt -g -w -a+39 -warn-error +39 -o stage2 stage2.ml
                 # stage 2 再编译同一份源码 → stage 3；两者必须字节一致
                 ./stage2 --root lib --no-print app/Compile.vuna stage3.ml
                 cmp stage2.ml stage3.ml
                 # 行为抽查：当前编译器编译并运行一个程序
                 cp ${./test/corpus/run/12_fact.vuna} fact.vuna
                 ./stage2 --root lib fact.vuna fact.ml
-                ocamlopt -w -a -o fact fact.ml
+                ocamlopt -g -w -a+39 -warn-error +39 -o fact fact.ml
                 test "$(./fact)" = "120"
                 touch "$out"
               '';

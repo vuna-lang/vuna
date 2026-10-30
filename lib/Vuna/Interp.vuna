@@ -35,5 +35,6 @@ compileFileChecked root entry printResult =
 
 compileFileTyped root entry printResult =
   andThen (loadProgram root entry) (\decls =>
-    andThen (checkProgramInfo decls) (\globals =>
-      generateProgramTyped decls globals printResult))
+    andThen (checkProgramInfoElab decls) (\p =>
+      case p of
+        Pair globals elabDecls => generateProgramTyped elabDecls globals printResult))

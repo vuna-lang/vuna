@@ -15,6 +15,19 @@ data Scheme : Type where
 data TC : Type where
   TC : Int -> List (Pair Int Ty) -> TC
 
+-- 推断阶段产出的 annotated 表达式：比较运算应用暂存操作数类型（Ty），
+-- 待子句与顶层签名 unify 完成后，再用最终 substitution 决定合成 builtin 名。
+data EExpr : Type where
+  XEVar : String -> EExpr
+  XEInt : Int -> EExpr
+  XEStr : String -> EExpr
+  XELam : List String -> EExpr -> EExpr
+  XEApp : EExpr -> List EExpr -> EExpr
+  XECmp : String -> List EExpr -> Ty -> EExpr
+  XELet : List (Pair Pat EExpr) -> EExpr -> EExpr
+  XECase : EExpr -> List (Pair Pat EExpr) -> EExpr
+  XEIf : EExpr -> EExpr -> EExpr -> EExpr
+
 -- ---------------------------------------------------------------
 -- 基础工具
 -- ---------------------------------------------------------------
@@ -318,6 +331,77 @@ builtinSchemes =
   ]
 
 -- ---------------------------------------------------------------
+-- 比较运算符的 typed elaboration：按操作数 unify 后的类型改写合成 builtin 名
+-- ---------------------------------------------------------------
+
+intCmpName name =
+  if name == "==" then "bi_eq_int"
+  else if name == "/=" then "bi_neq_int"
+  else if name == "<" then "bi_lt_int"
+  else if name == "<=" then "bi_le_int"
+  else if name == ">" then "bi_gt_int"
+  else if name == ">=" then "bi_ge_int"
+  else name
+
+strCmpName name =
+  if name == "==" then "bi_eq_str"
+  else if name == "/=" then "bi_neq_str"
+  else name
+
+boolCmpName name =
+  if name == "==" then "bi_eq_bool"
+  else if name == "/=" then "bi_neq_bool"
+  else name
+
+specializeCmp name ty =
+  case ty of
+    TCon n args =>
+      if shortTyName n == "Int" then intCmpName name
+      else if shortTyName n == "String" then strCmpName name
+      else if shortTyName n == "Bool" then boolCmpName name
+      else name
+    _ => name
+
+firstArgTy argTys =
+  case argTys of
+    Cons ty rest => ty
+    Nil => TCon "" Nil
+
+isCmpName name =
+  name == "==" || name == "/=" || name == "<" || name == "<=" || name == ">" || name == ">="
+
+elabAppExpr fn fnElab args argTys argEls =
+  case fn of
+    EVar name =>
+      case args of
+        Cons _ (Cons _ Nil) =>
+          if isCmpName name then XECmp name argEls (firstArgTy argTys)
+          else XEApp fnElab argEls
+        _ => XEApp fnElab argEls
+    _ => XEApp fnElab argEls
+
+lowerExpr subst expr =
+  case expr of
+    XEVar name => EVar name
+    XEInt n => EInt n
+    XEStr s => EStr s
+    XELam params body => ELam params (lowerExpr subst body)
+    XEApp fn args => EApp (lowerExpr subst fn) (map (lowerExpr subst) args)
+    XECmp name args ty => EApp (EVar (specializeCmp name (resolveTy subst ty))) (map (lowerExpr subst) args)
+    XELet binds body => ELet (map (lowerBind subst) binds) (lowerExpr subst body)
+    XECase scrut alts => ECase (lowerExpr subst scrut) (map (lowerAlt subst) alts)
+    XEIf c t e => EIf (lowerExpr subst c) (lowerExpr subst t) (lowerExpr subst e)
+
+lowerBind subst (Pair pat value) = Pair pat (lowerExpr subst value)
+
+lowerAlt subst (Pair pat body) = Pair pat (lowerExpr subst body)
+
+lowerClause subst (Pair pats body) = Pair pats (lowerExpr subst body)
+
+lowerClauses subst Nil = Nil
+lowerClauses subst (Cons clause rest) = Cons (lowerClause subst clause) (lowerClauses subst rest)
+
+-- ---------------------------------------------------------------
 -- 环境查询与推断
 -- ---------------------------------------------------------------
 
@@ -374,15 +458,18 @@ inferPattern globals locals st pat expected =
                      inferPatterns globals locals pats argTys st2)
                  else Err ("constructor " ++ name ++ " expects " ++ strFromInt (length argTys) ++ " arguments")
 
-inferArgs globals locals fnTy Nil st = Ok (Pair fnTy st)
+inferArgs globals locals fnTy Nil st = Ok (Pair Nil (Pair Nil (Pair fnTy st)))
 inferArgs globals locals fnTy (Cons arg rest) st =
   andThen (inferExpr globals locals st arg) (\pa =>
     case pa of
-      Pair argTy st1 =>
+      Pair (Pair argTy argElab) st1 =>
         case freshTy st1 of
           Pair resTy st2 =>
             andThen (unify fnTy (TFun argTy resTy) st2) (\st3 =>
-              inferArgs globals locals resTy rest st3))
+              andThen (inferArgs globals locals resTy rest st3) (\pr =>
+                case pr of
+                  Pair argTys (Pair argEls (Pair finalTy st4)) =>
+                    Ok (Pair (Cons argTy argTys) (Pair (Cons argElab argEls) (Pair finalTy st4))))))
 
 seedLocals Nil locals st = Pair Nil (Pair locals st)
 seedLocals (Cons name rest) locals st =
@@ -391,14 +478,18 @@ seedLocals (Cons name rest) locals st =
       case seedLocals rest (Cons (Pair name ty) locals) st1 of
         Pair tys (Pair locals2 st2) => Pair (Cons ty tys) (Pair locals2 st2)
 
-inferBinds globals locals Nil st = Ok (Pair locals st)
+inferBinds globals locals Nil st = Ok (Pair Nil (Pair locals st))
 inferBinds globals locals (Cons (Pair pat value) rest) st =
   andThen (inferExpr globals locals st value) (\pv =>
     case pv of
-      Pair valueTy st1 =>
+      Pair (Pair valueTy valueElab) st1 =>
         andThen (inferPattern globals locals st1 pat valueTy) (\pp =>
           case pp of
-            Pair locals2 st2 => inferBinds globals locals2 rest st2))
+            Pair locals2 st2 =>
+              andThen (inferBinds globals locals2 rest st2) (\pr =>
+                case pr of
+                  Pair bindEls (Pair locals3 st3) =>
+                    Ok (Pair (Cons (Pair pat valueElab) bindEls) (Pair locals3 st3)))))
 
 inferAlts globals locals scrutTy Nil st = Err "empty case"
 inferAlts globals locals scrutTy (Cons (Pair pat body) rest) st =
@@ -407,58 +498,73 @@ inferAlts globals locals scrutTy (Cons (Pair pat body) rest) st =
       Pair locals2 st1 =>
         andThen (inferExpr globals locals2 st1 body) (\pb =>
           case pb of
-            Pair bodyTy st2 =>
+            Pair (Pair bodyTy bodyElab) st2 =>
               case rest of
-                Nil => Ok (Pair bodyTy st2)
+                Nil => Ok (Pair (Cons (Pair pat bodyElab) Nil) (Pair bodyTy st2))
                 _ =>
                   andThen (inferAlts globals locals scrutTy rest st2) (\pr =>
                     case pr of
-                      Pair restTy st3 =>
-                        andThen (unify bodyTy restTy st3) (\st4 => Ok (Pair bodyTy st4)))))
+                      Pair altsElab (Pair restTy st3) =>
+                        andThen (unify bodyTy restTy st3) (\st4 =>
+                          Ok (Pair (Cons (Pair pat bodyElab) altsElab) (Pair bodyTy st4))))))
 
 inferExpr globals locals st expr =
   case expr of
     EVar name =>
       case lookupLocal name locals of
-        Just ty => Ok (Pair ty st)
+        Just ty => Ok (Pair (Pair ty (XEVar name)) st)
         Nothing =>
           case lookupScheme name globals of
             Just sch =>
               case instantiate st sch of
-                Pair ty st2 => Ok (Pair ty st2)
+                Pair ty st2 => Ok (Pair (Pair ty (XEVar name)) st2)
             Nothing => Err ("unbound variable: " ++ name)
-    EInt n => Ok (Pair intTy st)
-    EStr s => Ok (Pair strTy st)
+    EInt n => Ok (Pair (Pair intTy (XEInt n)) st)
+    EStr s => Ok (Pair (Pair strTy (XEStr s)) st)
     EApp fn args =>
       andThen (inferExpr globals locals st fn) (\pf =>
         case pf of
-          Pair fnTy st1 => inferArgs globals locals fnTy args st1)
+          Pair (Pair fnTy fnElab) st1 =>
+            andThen (inferArgs globals locals fnTy args st1) (\pr =>
+              case pr of
+                Pair argTys (Pair argEls (Pair resTy st2)) =>
+                  Ok (Pair (Pair resTy (elabAppExpr fn fnElab args argTys argEls)) st2)))
     ELam params body =>
       case seedLocals params locals st of
         Pair paramTys (Pair locals2 st1) =>
           andThen (inferExpr globals locals2 st1 body) (\pb =>
             case pb of
-              Pair bodyTy st2 => Ok (Pair (foldFun paramTys bodyTy) st2))
+              Pair (Pair bodyTy bodyElab) st2 =>
+                Ok (Pair (Pair (foldFun paramTys bodyTy) (XELam params bodyElab)) st2))
     ELet binds body =>
       andThen (inferBinds globals locals binds st) (\pb =>
         case pb of
-          Pair locals2 st1 => inferExpr globals locals2 st1 body)
+          Pair bindEls (Pair locals2 st1) =>
+            andThen (inferExpr globals locals2 st1 body) (\pr =>
+              case pr of
+                Pair (Pair bodyTy bodyElab) st2 =>
+                  Ok (Pair (Pair bodyTy (XELet bindEls bodyElab)) st2)))
     ECase scrut alts =>
       andThen (inferExpr globals locals st scrut) (\ps =>
         case ps of
-          Pair scrutTy st1 => inferAlts globals locals scrutTy alts st1)
+          Pair (Pair scrutTy scrutElab) st1 =>
+            andThen (inferAlts globals locals scrutTy alts st1) (\pr =>
+              case pr of
+                Pair altsElab (Pair bodyTy st2) =>
+                  Ok (Pair (Pair bodyTy (XECase scrutElab altsElab)) st2)))
     EIf c t e =>
       andThen (inferExpr globals locals st c) (\pc =>
         case pc of
-          Pair condTy st1 =>
+          Pair (Pair condTy condElab) st1 =>
             andThen (unify condTy boolTy st1) (\st2 =>
               andThen (inferExpr globals locals st2 t) (\pt =>
                 case pt of
-                  Pair thenTy st3 =>
+                  Pair (Pair thenTy thenElab) st3 =>
                     andThen (inferExpr globals locals st3 e) (\pe =>
                       case pe of
-                        Pair elseTy st4 =>
-                          andThen (unify thenTy elseTy st4) (\st5 => Ok (Pair thenTy st5))))))
+                        Pair (Pair elseTy elseElab) st4 =>
+                          andThen (unify thenTy elseTy st4) (\st5 =>
+                            Ok (Pair (Pair thenTy (XEIf condElab thenElab elseElab)) st5))))))
 
 inferClause globals st (Pair pats body) =
   case seedPatTypes pats st of
@@ -468,20 +574,22 @@ inferClause globals st (Pair pats body) =
           Pair locals2 st2 =>
             andThen (inferExpr globals locals2 st2 body) (\pb =>
               case pb of
-                Pair bodyTy st3 => Ok (Pair (foldFun paramTys bodyTy) st3)))
+                Pair (Pair bodyTy bodyElab) st3 =>
+                  Ok (Pair (Pair (foldFun paramTys bodyTy) (Pair pats bodyElab)) st3)))
 
 inferClauses globals Nil st = Err "function has no clauses"
 inferClauses globals (Cons clause rest) st =
   andThen (inferClause globals st clause) (\pc =>
     case pc of
-      Pair ty st1 =>
+      Pair (Pair ty clauseElab) st1 =>
         case rest of
-          Nil => Ok (Pair ty st1)
+          Nil => Ok (Pair (Cons clauseElab Nil) (Pair ty st1))
           _ =>
             andThen (inferClauses globals rest st1) (\pr =>
               case pr of
-                Pair restTy st2 =>
-                  andThen (unify ty restTy st2) (\st3 => Ok (Pair ty st3))))
+                Pair clauseEls (Pair restTy st2) =>
+                  andThen (unify ty restTy st2) (\st3 =>
+                    Ok (Pair (Cons clauseElab clauseEls) (Pair ty st3)))))
 
 functionNames decls = uniqueNames (map declFunName decls)
 
@@ -530,24 +638,41 @@ checkFunction globals decls sigs name st =
         Pair expected st1 =>
           case inferClauses globals (clausesFor decls name) st1 of
             Err e => Err ("in " ++ name ++ ": " ++ e)
-            Ok (Pair inferred st2) =>
+            Ok (Pair clauseEls (Pair inferred st2)) =>
               case unify inferred expected st2 of
                 Err e => Err ("in " ++ name ++ ": " ++ e)
                 Ok st3 =>
-                  if hasSig name sigs then Ok (Pair globals st3)
-                  else
-                    let resolved = resolveTy (substOf st3) inferred
-                    in
-                      let scheme = Scheme (diffInts (freeVarsTy resolved) (freeVarsEnvExcept name globals)) resolved
-                      in Ok (Pair (updateScheme name scheme globals) st3)
+                  let elabClauses = lowerClauses (substOf st3) clauseEls
+                  in if hasSig name sigs then Ok (Pair elabClauses (Pair globals st3))
+                     else
+                       let resolved = resolveTy (substOf st3) inferred
+                       in
+                         let scheme = Scheme (diffInts (freeVarsTy resolved) (freeVarsEnvExcept name globals)) resolved
+                         in Ok (Pair elabClauses (Pair (updateScheme name scheme globals) st3))
 
-checkFunctions globals decls sigs Nil st = Ok (Pair globals st)
-checkFunctions globals decls sigs (Cons name rest) st =
+checkFunctions globals decls sigs Nil st elabMap = Ok (Pair (reverse elabMap) (Pair globals st))
+checkFunctions globals decls sigs (Cons name rest) st elabMap =
   andThen (checkFunction globals decls sigs name st) (\p =>
     case p of
-      Pair globals2 st1 => checkFunctions globals2 decls sigs rest st1)
+      Pair clauseEls (Pair globals2 st1) =>
+        checkFunctions globals2 decls sigs rest st1 (Cons (Pair name clauseEls) elabMap))
 
-checkProgramInfo decls =
+rebuildDecls Nil elabMap = Nil
+rebuildDecls (Cons d rest) elabMap =
+  case d of
+    DFun name pats body =>
+      case lookupPair name elabMap of
+        Just (Cons (Pair pats2 body2) restElab) =>
+          Cons (DFun name pats2 body2) (rebuildDecls rest (replaceElab name restElab elabMap))
+        _ => Cons d (rebuildDecls rest elabMap)
+    _ => Cons d (rebuildDecls rest elabMap)
+
+replaceElab name clauses Nil = Nil
+replaceElab name clauses (Cons (Pair n old) rest) =
+  if n == name then Cons (Pair n clauses) rest
+  else Cons (Pair n old) (replaceElab name clauses rest)
+
+checkProgramInfoElab decls =
   case collectData decls of
     Pair typeNames dataDecls =>
       case collectSigs typeNames decls (TC 0 Nil) of
@@ -558,9 +683,13 @@ checkProgramInfo decls =
             Ok (Pair ctors st2) =>
               case seedPlaceholders (functionNames decls) sigs st2 of
                 Pair placeholders st3 =>
-                  case checkFunctions (append builtinSchemes (append ctors (append sigs placeholders))) decls sigs (functionNames decls) st3 of
+                  case checkFunctions (append builtinSchemes (append ctors (append sigs placeholders))) decls sigs (functionNames decls) st3 Nil of
                     Err e => Err e
-                    Ok (Pair globals st4) => Ok (finalizeGlobals (substOf st4) globals)
+                    Ok (Pair elabMap (Pair globals st4)) =>
+                      Ok (Pair (finalizeGlobals (substOf st4) globals) (rebuildDecls decls elabMap))
+
+checkProgramInfo decls =
+  andThen (checkProgramInfoElab decls) (\p => Ok (firstOf p))
 
 checkProgram decls =
   andThen (checkProgramInfo decls) (\_ => Ok Nil)

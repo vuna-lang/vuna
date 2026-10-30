@@ -53,8 +53,44 @@ evalExpr decls env expr =
     ECase scrut alts => evalCase decls env scrut alts
     EIf c t e => evalIf decls env c t e
 
+-- `&&` / `||` 短路求值：先求值左操作数，必要时才求值右操作数。
+-- 左操作数非 Bool 报 "expected a Bool"；右操作数仅在需要时求值并检查。
 evalApp decls env fn args =
+  case fn of
+    EVar "&&" =>
+      case args of
+        Cons a (Cons b Nil) => evalAndShort decls env a b
+        _ => evalApply decls env fn args
+    EVar "||" =>
+      case args of
+        Cons a (Cons b Nil) => evalOrShort decls env a b
+        _ => evalApply decls env fn args
+    _ => evalApply decls env fn args
+
+evalApply decls env fn args =
   andThen (evalExpr decls env fn) (\fv => foldApply decls env fv args)
+
+expectBoolValue v =
+  case v of
+    VCon "True" Nil => Ok v
+    VCon "False" Nil => Ok v
+    _ => Err "expected a Bool"
+
+evalAndShort decls env a b =
+  andThen (evalExpr decls env a) (\av =>
+    case av of
+      VCon "False" Nil => Ok av
+      VCon "True" Nil =>
+        andThen (evalExpr decls env b) (\bv => expectBoolValue bv)
+      _ => Err "expected a Bool")
+
+evalOrShort decls env a b =
+  andThen (evalExpr decls env a) (\av =>
+    case av of
+      VCon "True" Nil => Ok av
+      VCon "False" Nil =>
+        andThen (evalExpr decls env b) (\bv => expectBoolValue bv)
+      _ => Err "expected a Bool")
 
 foldApply decls env fv Nil = Ok fv
 foldApply decls env fv (Cons arg rest) =
