@@ -121,8 +121,8 @@ dune exec vunax -- --version
 - `vunax/test/corpus/err/*.vuna` + 同名 `.err`（错误位置与信息 golden）；
 - 改语料或解析器后运行 `vunax/test/update-golden.sh` 重新生成 golden，再 review diff。
 
-尚未实现（后续里程碑）：类型检查（core-v0 先不检查类型）、codegen（vuna → OCaml）
-与种子入库、`where` / `do` / 隐式参数 / 依赖类型 / 模块系统。
+尚未实现（后续里程碑）：类型检查（core-v0 先不检查类型）、typed codegen、
+模块/命名空间/导入、种子入库、`where` / `do` / 隐式参数 / 依赖类型。
 
 ## 求值器（core-v0，M2）
 
@@ -178,6 +178,38 @@ vunax run app/interp.vuna
 
 限制：`where` / `do` / 隐式参数 / 依赖类型 / 模块系统仍未实现；错误没有源码位置；
 未做性能优化（self application 全程走解释器，秒级）。
+
+## Codegen（core-v0，M4a）
+
+[codegen.ml](vunax/lib/codegen.ml) 把 core-v0 程序翻译成可编译的 OCaml 源码：
+
+```console
+vunax compile vunax/test/corpus/run/01_arithmetic.vuna > program.ml
+ocamlopt -o program program.ml && ./program
+# 7
+```
+
+实现方式：
+
+- 生成程序里没有解释循环：vuna 函数编译成柯里化 OCaml 函数，构造器编译成闭包
+  构造器（`mk_Cons` 等），模式匹配编译成 OCaml `match`，`case`/`let`/`if` 也都是
+  原生控制流；
+- 值统一用动态表示 `VInt` / `VStr` / `VCon (name, args)` / `VFun (name, fn)`，
+  因为 core-v0 还没有类型系统；typed codegen 等类型检查之后再做；
+- 生成程序入口打印 `show_value main`，格式与 `vunax run` 的输出完全一致；
+- 编译期检查：`main` 必须存在且零参数、未绑定变量、子句 arity 不一致、
+  构造器/函数重名都会报 `codegen error`。
+
+验证（81 个测试，`nix build` 的 checkPhase 全跑）：
+
+- **codegen 差分**：`corpus/run/` 的 15 个程序逐个生成 OCaml、用 `ocamlopt` 编译、
+  运行，stdout 与解释器的 `show` 结果一致；
+- **codegen self**：把自解释器 `app/interp.vuna` 用 codegen 编译成 OCaml 可执行文件，
+  运行结果与解释执行一致（M4b 的预演）；
+- **codegen error**：3 个非法程序必须在 codegen 阶段报错。
+
+限制：生成代码是单文件、动态值表示，性能与错误信息暂未优化；多模块 codegen 随
+M5 模块系统一起做。
 
 ## Nix
 

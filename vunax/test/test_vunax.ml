@@ -153,6 +153,69 @@ let self_application_test =
       let actual = run_self (Lazy.force interp_source) in
       Alcotest.(check string) "self" expected actual)
 
+(* Code generation: render vuna to OCaml, build it with ocamlopt, run it and
+   compare its stdout with the interpreter's [show] result. *)
+
+let ocamlopt_available =
+  lazy (Sys.command "command -v ocamlopt > /dev/null 2>&1" = 0)
+
+let codegen_dir = "_codegen_tmp"
+
+let compile_and_run ~tag program =
+  if not (Lazy.force ocamlopt_available) then
+    failwith "ocamlopt is required for the codegen tests but was not found";
+  let source = Vunax.Codegen.generate program in
+  if Sys.command ("mkdir -p " ^ codegen_dir) <> 0 then
+    failwith ("cannot create " ^ codegen_dir);
+  let base = Filename.concat codegen_dir tag in
+  let ml = base ^ ".ml" and exe = base ^ ".exe" and out = base ^ ".out" in
+  let channel = open_out ml in
+  output_string channel source;
+  close_out channel;
+  if Sys.command (Printf.sprintf "ocamlopt -w -a -o %s %s" exe ml) <> 0 then
+    failwith ("ocamlopt failed for " ^ tag);
+  if Sys.command (Printf.sprintf "./%s > %s" exe out) <> 0 then
+    failwith ("generated program failed for " ^ tag);
+  String.trim (read_file out)
+
+let compile_tests =
+  sorted_files "corpus/run" ".vuna"
+  |> List.map (fun file ->
+      Alcotest.test_case file `Quick (fun () ->
+          let path = Filename.concat "corpus/run" file in
+          let program = Vunax.Parser.parse_file path in
+          let expected = Vunax.Eval.show (Vunax.Eval.run program) in
+          let actual =
+            compile_and_run ~tag:(Filename.remove_extension file) program
+          in
+          Alcotest.(check string) file expected actual))
+
+let compile_self_test =
+  Alcotest.test_case "compiles its own interpreter" `Quick (fun () ->
+      let program = Lazy.force interp_program in
+      let expected = Vunax.Eval.show (Vunax.Eval.run program) in
+      let actual = compile_and_run ~tag:"self_interpreter" program in
+      Alcotest.(check string) "self compile" expected actual)
+
+let expect_codegen_error name source =
+  Alcotest.test_case name `Quick (fun () ->
+      let program = Vunax.Parser.parse_program source in
+      match
+        try
+          ignore (Vunax.Codegen.generate program);
+          None
+        with Vunax.Codegen.Error message -> Some message
+      with
+      | Some _ -> ()
+      | None -> Alcotest.fail ("expected a codegen error: " ^ name))
+
+let codegen_error_tests =
+  [
+    expect_codegen_error "missing main" "x = 1";
+    expect_codegen_error "unbound variable" "main = nope 1";
+    expect_codegen_error "clause arity mismatch" "f x = x\nf x y = y\nmain = 0";
+  ]
+
 let () =
   Alcotest.run "vunax"
     [
@@ -163,4 +226,7 @@ let () =
       ("run error", run_error_tests);
       ("selfhost", selfhost_tests);
       ("self application", [ self_application_test ]);
+      ("codegen", compile_tests);
+      ("codegen self", [ compile_self_test ]);
+      ("codegen error", codegen_error_tests);
     ]
