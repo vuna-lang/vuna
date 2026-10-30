@@ -143,7 +143,8 @@ git add bootstrap/ && git commit
 - `lib/Vuna/Loader.vuna`：import 图、模块名校验、名字解析与 flatten
   （`loadProgram root entry`）；
 - `lib/Vuna/Typecheck.vuna`：HM 风格类型检查（Ty/Scheme、unify、构造器 scheme、
-  表达式/模式推断、显式签名校验）；
+  表达式/模式推断、显式签名校验）；loader 会把 DSig/构造器类型里的类型名解析成
+  模块内全名（open/qualified/alias 都支持），因此跨模块类型检查可用；
 - `lib/Vuna/Codegen.vuna`：把 flatten 后的 program 翻译成 OCaml；
 - `lib/Vuna/Interp.vuna`：facade，只暴露 `interpret`/`interpretFile`/`compileFile`；
 - 模块内部通过 import 自动 open 使用非限定名，只有 import 行写模块全名；
@@ -174,7 +175,7 @@ type value =
 
 ## 测试
 
-`test/run-tests.sh` 是 vuna 原生测试（104 checks），只用 `vuna` / `vuna-boot` /
+`test/run-tests.sh` 是 vuna 原生测试（107 checks），只用 `vuna` / `vuna-boot` /
 `vuna-interp`，不依赖任何外部编译器：
 
 ```console
@@ -187,6 +188,8 @@ sh test/run-tests.sh          # 需要 PATH 中有三个二进制
 - `corpus/modules/0*`：跨模块函数/数据/嵌套 import 的解释器与编译器结果；
 - `corpus/modules/9*`：缺失模块、循环导入、未限定引用、未导出名字、非法模块名；
 - `corpus/err/*.vuna`、`corpus/run_err/*.vuna`：解析/求值错误片段；
+- `corpus/type_ok`、`corpus/type_err`：单文件类型检查正/反例；
+- `corpus/type_modules/0*`、`9*`：跨模块类型检查正/反例；
 - `vuna-boot` 编译 `12_fact` 的种子冒烟。
 
 Nix 侧：
@@ -224,8 +227,8 @@ nix fmt               # nixfmt-tree 格式化 .nix
 
 ## 限制与路线
 
-- 类型检查目前是 opt-in（`--typecheck`），覆盖单文件、要求顶层签名；模块类型名解析与
-  编译器自检在 M7c；typed codegen 在 M8；
+- 类型检查目前是 opt-in（`--typecheck`），要求顶层显式签名；模块类型名解析已完成
+  （M7c-1），编译器源码自检与无签名顶层推断留到 M7c-2；typed codegen 在 M8；
 - 生成代码是单文件、动态 value 表示，性能与错误信息暂未优化；
 - 运行时错误没有源码位置；`where` / `do` / 隐式参数 / 依赖类型未实现；
 - IO 失败（如 `readFile` 缺失文件）会抛宿主异常；编译器 CLI 没有 `exit` 内建，

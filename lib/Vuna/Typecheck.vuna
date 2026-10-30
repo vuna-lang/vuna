@@ -235,7 +235,7 @@ seedVars (Cons name rest) st =
 
 schemeOfCtor typeNames params st ctor =
   case ctor of
-    Ctor name ty =>
+    Ctor name ty arity =>
       case seedVars params st of
         Pair vars st1 =>
           andThen (convertType typeNames vars st1 ty) (\p =>

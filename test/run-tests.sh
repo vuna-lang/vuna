@@ -151,7 +151,35 @@ for file in corpus/type_err/*.vuna; do
   fi
 done
 
-# 9) 种子冒烟：vuna-boot 编译一个程序并运行
+# 9) 跨模块类型检查正例：导入模块后用其类型与构造器
+for dir in corpus/type_modules/0*; do
+  rm -f "$tmp/tm.ml" "$tmp/tm.exe"
+  if ! tm_out=$("$VUNA" --typecheck --root "$dir/lib" "$dir/app/Main.vuna" "$tmp/tm.ml" 2>&1); then
+    bad "$dir (module typecheck)" "exit 0" "$tm_out"
+  elif [ -n "$tm_out" ]; then
+    bad "$dir (module typecheck output)" "" "$tm_out"
+  elif ! "$OCAMLOPT" -w -a -o "$tmp/tm.exe" "$tmp/tm.ml" >"$tmp/tm.log" 2>&1; then
+    bad "$dir (module typed ocamlopt)" "" "$(cat "$tmp/tm.log")"
+  else
+    actual=$("$tmp/tm.exe" 2>&1)
+    check_eq "$dir (module typed run)" "$(cat "$dir/expected.out")" "$actual"
+  fi
+done
+
+# 10) 跨模块类型错误
+for dir in corpus/type_modules/9*; do
+  fragment=$(cat "$dir/expected.err")
+  rm -f "$tmp/tm_err.ml"
+  actual=$("$VUNA" --typecheck --root "$dir/lib" "$dir/app/Main.vuna" "$tmp/tm_err.ml" 2>&1 || true)
+  check_contains "$dir (module type error)" "$actual" "$fragment"
+  if [ -e "$tmp/tm_err.ml" ]; then
+    bad "$dir (no output file)" "absent" "present"
+  else
+    ok
+  fi
+done
+
+# 11) 种子冒烟：vuna-boot 编译一个程序并运行
 fact=corpus/run/12_fact.vuna
 compile_and_run "$fact (vuna-boot)" "$VUNA_BOOT" "." "$fact" "$(cat "${fact%.vuna}.out")"
 

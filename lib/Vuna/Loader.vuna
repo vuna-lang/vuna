@@ -276,29 +276,84 @@ resolveCtorDecl label prefix ctor =
   if isGlobalCtor ctor then Ok ctor
   else andThen (checkTopName label ctor) (\_ => Ok (mangle prefix ctor))
 
-resolveCtorSpec label prefix c =
-  case c of
-    Ctor ctor ty =>
-      andThen (resolveCtorDecl label prefix ctor) (\c2 => Ok (Ctor c2 ty))
+isLowerTypeName name =
+  case strUnpack name of
+    Nil => False
+    Cons c rest => isLowerChar c
 
-resolveDecl modules label prefix own ownCtors imports d =
+typeExportsOf modules name = typeNamesOf (moduleDecls modules name)
+
+modulesExportingTypeFrom modules names name =
+  case names of
+    Nil => Nil
+    Cons m rest =>
+      if memName name (typeExportsOf modules m) then
+        Cons m (modulesExportingTypeFrom modules rest name)
+      else modulesExportingTypeFrom modules rest name
+
+modulesExportingType modules imports name =
+  modulesExportingTypeFrom modules (openModuleNames imports) name
+
+resolveTypeName modules label prefix ownTypes imports name =
+  if name == "Int" || name == "String" || name == "Bool" || name == "Type" || name == "->" then
+    Ok name
+  else if isLowerTypeName name then Ok name
+  else if containsDot name then
+    case splitLastDot (splitOnDot name) of
+      Pair revPrefix base =>
+        let typePrefix = joinDots revPrefix
+        in case findImportPrefix imports typePrefix of
+             Nothing => Err (label ++ ": module " ++ typePrefix ++ " is not imported")
+             Just m =>
+               if memName base (typeExportsOf modules m) then Ok (mangle m base)
+               else Err (label ++ ": type " ++ base ++ " is not exported by " ++ m)
+  else if memName name ownTypes then Ok (mangle prefix name)
+  else
+    case modulesExportingType modules imports name of
+      Nil => Err (label ++ ": unknown type " ++ name)
+      Cons m Nil => Ok (mangle m name)
+      ms => Err (label ++ ": ambiguous type " ++ name ++ " (imported from " ++ joinNames ms ++ ")")
+
+resolveTypeExpr modules label prefix ownTypes imports ty =
+  case ty of
+    EVar name => andThen (resolveTypeName modules label prefix ownTypes imports name) (\n => Ok (EVar n))
+    EApp fn args =>
+      andThen (resolveTypeExpr modules label prefix ownTypes imports fn) (\fn2 =>
+        andThen (traverse (resolveTypeExpr modules label prefix ownTypes imports) args) (\args2 =>
+          Ok (EApp fn2 args2)))
+    _ => Err (label ++ ": invalid type expression (" ++ tyShape ty ++ ")")
+
+resolveTypeTopName label prefix name =
+  andThen (checkTopName label name) (\_ => Ok (mangle prefix name))
+
+resolveCtorSpec modules label prefix ownTypes imports c =
+  case c of
+    Ctor ctor ty arity =>
+      andThen (resolveCtorDecl label prefix ctor) (\c2 =>
+        andThen (resolveTypeExpr modules label prefix ownTypes imports ty) (\ty2 =>
+          Ok (Ctor c2 ty2 arity)))
+
+resolveDecl modules label prefix own ownCtors ownTypes imports d =
   case d of
     DData dname params ctors =>
-      andThen (traverse (resolveCtorSpec label prefix) ctors) (\ctors2 =>
-        Ok (DData dname params ctors2))
+      andThen (resolveTypeTopName label prefix dname) (\dn =>
+        andThen (traverse (resolveCtorSpec modules label prefix ownTypes imports) ctors) (\ctors2 =>
+          Ok (DData dn params ctors2)))
     DSig name ty =>
-      andThen (resolveTopName label prefix name) (\n => Ok (DSig n ty))
+      andThen (resolveTopName label prefix name) (\n =>
+        andThen (resolveTypeExpr modules label prefix ownTypes imports ty) (\ty2 =>
+          Ok (DSig n ty2)))
     DFun name pats body =>
       andThen (resolveTopName label prefix name) (\n =>
         andThen (traverse (resolvePattern modules label prefix ownCtors imports) pats) (\parts =>
           andThen (resolveExpr modules label prefix own ownCtors imports (concatMap secondOf parts) body) (\b =>
             Ok (DFun n (map firstOf parts) b))))
 
-resolveProgram modules label prefix own ownCtors imports decls =
-  traverse (resolveDecl modules label prefix own ownCtors imports) decls
+resolveProgram modules label prefix own ownCtors ownTypes imports decls =
+  traverse (resolveDecl modules label prefix own ownCtors ownTypes imports) decls
 
 resolveEntry modules imports decls =
-  resolveProgram modules "<entry>" "" (topNames decls) (ctorsOf decls) imports decls
+  resolveProgram modules "<entry>" "" (topNames decls) (ctorsOf decls) (typeNamesOf decls) imports decls
 
 resolveModules modules =
   case modules of
@@ -306,7 +361,7 @@ resolveModules modules =
     Cons m rest =>
       case m of
         Module name imports decls exports =>
-          andThen (resolveProgram modules name name exports (ctorsOf decls) imports decls) (\d1 =>
+          andThen (resolveProgram modules name name exports (ctorsOf decls) (typeNamesOf decls) imports decls) (\d1 =>
             andThen (resolveModules rest) (\d2 => Ok (append d1 d2)))
 
 showCycle name stack = joinArrows (reverse (Cons name stack))
@@ -341,3 +396,14 @@ loadProgram root entry =
             andThen (resolveEntry modules imports decls) (\entryDecls =>
               andThen (resolveModules modules) (\moduleDecls =>
                 Ok (append entryDecls moduleDecls))))))
+
+tyShape ty =
+  case ty of
+    EVar n => "var " ++ n
+    EApp f a => "app"
+    EInt n => "int"
+    EStr s => "str"
+    ELam ps b => "lam"
+    ELet bs b => "let"
+    ECase s alts => "case"
+    EIf c t e => "if"

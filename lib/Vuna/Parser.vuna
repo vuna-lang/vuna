@@ -113,6 +113,11 @@ infixInfo op =
 
 opExpr op = if op == "::" then EVar "Cons" else EVar op
 
+countArrows e =
+  case e of
+    EApp (EVar "->") (Cons x (Cons rest Nil)) => 1 + countArrows rest
+    _ => 0
+
 terminatesExpression tok =
   case tok of
     PTok (TSym ")") p => True
@@ -240,7 +245,7 @@ parseCtorList st ctorCol =
             step (expectSym st1 ":") (\_, st2 =>
               step (parseExpr st2 ctorCol 0) (\ty, st3 =>
                 step (parseCtorList st3 ctorCol) (\rest, st4 =>
-                  Ok (Pair (Cons (Ctor name ty) rest) st4)))))
+                  Ok (Pair (Cons (Ctor name ty (countArrows ty)) rest) st4)))))
         else if col > ctorCol then Err "unexpected indentation in data block"
         else Ok (Pair Nil st)
 

@@ -1,0 +1,4 @@
+import Vuna.Nat
+
+main : String
+main = S Z

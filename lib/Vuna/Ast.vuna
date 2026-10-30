@@ -20,7 +20,7 @@ data Expr : Type where
   EIf : Expr -> Expr -> Expr -> Expr
 
 data Ctor : Type where
-  Ctor : String -> Expr -> Ctor
+  Ctor : String -> Expr -> Int -> Ctor
 
 data Decl : Type where
   DData : String -> List String -> List Ctor -> Decl
@@ -49,18 +49,20 @@ funArity name decls =
 
 ctorName c =
   case c of
-    Ctor name ty => name
+    Ctor name ty arity => name
 
 ctorType c =
   case c of
-    Ctor name ty => ty
+    Ctor name ty arity => ty
 
 typeArity ty =
   case ty of
     EApp (EVar "->") (Cons x (Cons rest Nil)) => 1 + typeArity rest
     _ => 0
 
-ctorArityOf c = typeArity (ctorType c)
+ctorArityOf c =
+  case c of
+    Ctor name ty arity => arity
 
 lookupCtorArity name ctors =
   case ctors of
@@ -93,3 +95,10 @@ declCtors d =
     _ => Nil
 
 ctorsOf decls = concatMap declCtors decls
+
+declTypeNames d =
+  case d of
+    DData name params ctors => Cons name Nil
+    _ => Nil
+
+typeNamesOf decls = concatMap declTypeNames decls
