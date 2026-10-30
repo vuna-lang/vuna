@@ -62,11 +62,14 @@ git add bootstrap/ && git commit
 ├── flake.lock
 ├── lib/                  # vuna 模块根（模块名由路径精确决定）
 │   └── Vuna/
-│       ├── Ast.vuna      # 共享类型：Result/Maybe/List/Pair、AST
+│       ├── Base.vuna     # Result/Maybe/List/Pair/Bool、通用 helper、字符串工具
+│       ├── Ast.vuna      # 语法类型（Pat/Expr/Decl/Import）与 AST helper
 │       ├── Lexer.vuna    # 词法分析（token + 位置）
 │       ├── Parser.vuna   # offside layout parser → AST/imports
-│       ├── Interp.vuna   # 求值器、模块 loader、对外 facade
-│       └── Codegen.vuna  # flatten 后的 AST → OCaml
+│       ├── Eval.vuna     # 值表示、内建函数、求值器与 show
+│       ├── Loader.vuna   # import 图、名字解析、flatten（含模块规则）
+│       ├── Codegen.vuna  # flatten 后的 AST → OCaml
+│       └── Interp.vuna   # 对外 facade（interpret/interpretFile/compileFile）
 ├── app/
 │   ├── compile.vuna      # 编译器 CLI（vuna）
 │   └── interp.vuna       # 解释器 CLI（vuna-interp）
@@ -126,12 +129,18 @@ git add bootstrap/ && git commit
 
 ## 编译器实现
 
-- `lib/Vuna/Ast.vuna`：Result/Maybe/List/Pair、AST 与通用列表/Result 辅助函数；
+- `lib/Vuna/Base.vuna`：Result/Maybe/List/Pair/Bool、列表/Result 辅助函数与
+  `splitOnDot`/`splitLastDot` 等字符串工具；
+- `lib/Vuna/Ast.vuna`：语法类型（Pat/Expr/Decl/Import）与 AST helper
+  （`funArity`/`ctorArity`/`topNames`/`ctorsOf` 等），依赖 Base；
 - `lib/Vuna/Lexer.vuna`：词法分析，token 带行列位置；
 - `lib/Vuna/Parser.vuna`：offside layout parser，输出 AST 与 imports；
-- `lib/Vuna/Interp.vuna`：求值器、模块 loader（`loadProgram`：import 图、循环检测、
-  名字解析、flatten）与对外 facade；
+- `lib/Vuna/Eval.vuna`：值表示、内建函数、call-by-value 求值器与 `show`；
+- `lib/Vuna/Loader.vuna`：import 图、模块名校验、名字解析与 flatten
+  （`loadProgram root entry`）；
 - `lib/Vuna/Codegen.vuna`：把 flatten 后的 program 翻译成 OCaml；
+- `lib/Vuna/Interp.vuna`：facade，只暴露 `interpret`/`interpretFile`/`compileFile`；
+- 模块内部通过 import 自动 open 使用非限定名，只有 import 行写模块全名；
 - [app/compile.vuna](app/compile.vuna)：`vuna [--no-print] [--root DIR] <entry.vuna> [out.ml]`；
   `--no-print` 表示生成的程序不自动打印 `main` 的结果（用于编译自己做 IO 的 CLI）；
 - [app/interp.vuna](app/interp.vuna)：`vuna-interp [--root DIR] <file.vuna>`，把

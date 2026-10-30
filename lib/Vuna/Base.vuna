@@ -1,0 +1,105 @@
+-- Vuna.Base：语言通用类型、列表/Result 辅助函数与字符串工具。
+
+data Result a : Type where
+  Ok : a -> Result a
+  Err : String -> Result a
+
+data Maybe a : Type where
+  Nothing : Maybe a
+  Just : a -> Maybe a
+
+data List a : Type where
+  Nil : List a
+  Cons : a -> List a -> List a
+
+data Pair a b : Type where
+  Pair : a -> b -> Pair a b
+
+
+data Bool : Type where
+  False : Bool
+  True : Bool
+
+append Nil ys = ys
+append (Cons x xs) ys = Cons x (append xs ys)
+
+reverseOnto Nil acc = acc
+reverseOnto (Cons x xs) acc = reverseOnto xs (Cons x acc)
+
+reverse xs = reverseOnto xs Nil
+
+length Nil = 0
+length (Cons x xs) = 1 + length xs
+
+map f Nil = Nil
+map f (Cons x xs) = Cons (f x) (map f xs)
+
+traverse f Nil = Ok Nil
+traverse f (Cons x xs) =
+  case f x of
+    Err e => Err e
+    Ok y =>
+      case traverse f xs of
+        Err e => Err e
+        Ok ys => Ok (Cons y ys)
+
+andThen r f =
+  case r of
+    Ok x => f x
+    Err e => Err e
+
+step r k =
+  case r of
+    Ok p =>
+      case p of
+        Pair x st => k x st
+    Err e => Err e
+
+
+concatMap f Nil = Nil
+concatMap f (Cons x rest) = append (f x) (concatMap f rest)
+
+memName name Nil = False
+memName name (Cons x rest) = if x == name then True else memName name rest
+
+lookupPair name Nil = Nothing
+lookupPair name (Cons p rest) =
+  case p of
+    Pair k v => if k == name then Just v else lookupPair name rest
+
+firstOf p = case p of Pair a b => a
+
+secondOf p = case p of Pair a b => b
+
+memChar c chars =
+  case chars of
+    Nil => False
+    Cons x rest => if x == c then True else memChar c rest
+
+containsDot s = memChar 46 (strUnpack s)
+
+splitOnDot s = splitCharsOnDot (strUnpack s) Nil Nil
+
+splitCharsOnDot chars acc seg =
+  case chars of
+    Nil => reverse (Cons (strPack (reverse seg)) acc)
+    Cons c rest =>
+      if c == 46 then splitCharsOnDot rest (Cons (strPack (reverse seg)) acc) Nil
+      else splitCharsOnDot rest acc (Cons c seg)
+
+splitLastDot parts =
+  case reverse parts of
+    Nil => Pair Nil ""
+    Cons last rest => Pair (reverse rest) last
+
+joinDots Nil = ""
+joinDots (Cons x Nil) = x
+joinDots (Cons x rest) = x ++ "." ++ joinDots rest
+
+joinSlashes Nil = ""
+joinSlashes (Cons x Nil) = x
+joinSlashes (Cons x rest) = x ++ "/" ++ joinSlashes rest
+
+joinArrows Nil = ""
+joinArrows (Cons x Nil) = x
+joinArrows (Cons x rest) = x ++ " -> " ++ joinArrows rest

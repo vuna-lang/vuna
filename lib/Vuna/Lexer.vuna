@@ -1,6 +1,6 @@
 -- vuna 源码 lexer：字符游标、token 与 pos。
 
-import Vuna.Ast
+import Vuna.Base
 
 data Pos : Type where
   Pos : Int -> Int -> Pos

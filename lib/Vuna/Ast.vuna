@@ -1,21 +1,6 @@
--- Vuna 的共享基础：Result/Maybe/List/Pair、AST 类型，
--- 以及列表/Result/声明相关的通用辅助函数。
+-- Vuna.Ast：core-v0 的语法类型与 AST 辅助函数。
 
-data Result a : Type where
-  Ok : a -> Result a
-  Err : String -> Result a
-
-data Maybe a : Type where
-  Nothing : Maybe a
-  Just : a -> Maybe a
-
-data List a : Type where
-  Nil : List a
-  Cons : a -> List a -> List a
-
-data Pair a b : Type where
-  Pair : a -> b -> Pair a b
-
+import Vuna.Base
 
 data Pat : Type where
   PVar : String -> Pat
@@ -41,58 +26,6 @@ data Decl : Type where
 
 data Import : Type where
   Import : String -> Bool -> Maybe String -> Import
-
-data Bool : Type where
-  False : Bool
-  True : Bool
-
-
-append Nil ys = ys
-append (Cons x xs) ys = Cons x (append xs ys)
-
-reverseOnto Nil acc = acc
-reverseOnto (Cons x xs) acc = reverseOnto xs (Cons x acc)
-
-reverse xs = reverseOnto xs Nil
-
-length Nil = 0
-length (Cons x xs) = 1 + length xs
-
-map f Nil = Nil
-map f (Cons x xs) = Cons (f x) (map f xs)
-
-traverse f Nil = Ok Nil
-traverse f (Cons x xs) =
-  case f x of
-    Err e => Err e
-    Ok y =>
-      case traverse f xs of
-        Err e => Err e
-        Ok ys => Ok (Cons y ys)
-
-andThen r f =
-  case r of
-    Ok x => f x
-    Err e => Err e
-
-step r k =
-  case r of
-    Ok p =>
-      case p of
-        Pair x st => k x st
-    Err e => Err e
-
-
-concatMap f Nil = Nil
-concatMap f (Cons x rest) = append (f x) (concatMap f rest)
-
-memName name Nil = False
-memName name (Cons x rest) = if x == name then True else memName name rest
-
-lookupPair name Nil = Nothing
-lookupPair name (Cons p rest) =
-  case p of
-    Pair k v => if k == name then Just v else lookupPair name rest
 
 collectClauses Nil name = Nil
 collectClauses (Cons d rest) name =
@@ -121,3 +54,18 @@ ctorArity name decls =
             Just arity => Just arity
             Nothing => ctorArity name rest
         _ => ctorArity name rest
+
+declNames d =
+  case d of
+    DFun name pats body => Cons name Nil
+    DSig name ty => Cons name Nil
+    DData dname params ctors => map firstOf ctors
+
+topNames decls = concatMap declNames decls
+
+declCtors d =
+  case d of
+    DData dname params ctors => map firstOf ctors
+    _ => Nil
+
+ctorsOf decls = concatMap declCtors decls

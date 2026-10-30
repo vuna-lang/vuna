@@ -1,7 +1,7 @@
 -- vuna-compile：用 vuna 写的编译器 CLI。
 -- 用法：vuna-compile [--no-print] [--root DIR] <entry.vuna> [out.ml]
 -- 不传 out.ml 时把生成的 OCaml 打到 stdout。
-import Vuna.Ast
+import Vuna.Base
 import Vuna.Interp
 
 usage = "usage: vuna [--no-print] [--root DIR] <entry.vuna> [out.ml]"

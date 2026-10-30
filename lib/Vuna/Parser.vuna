@@ -1,5 +1,6 @@
 -- vuna 源码 parser：offside layout，返回 AST 与 imports。
 
+import Vuna.Base
 import Vuna.Ast
 import Vuna.Lexer
 
