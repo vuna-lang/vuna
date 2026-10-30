@@ -45,7 +45,7 @@ stage3.ml；stage2 == stage3 即 fixed point
 
 ```console
 # 前提：当前源码能被当前种子编译（nix flake check 通过）
-vuna-boot --root lib --no-print app/Compile.vuna bootstrap/stage1.ml
+vuna --typed --no-print --root lib app/Compile.vuna bootstrap/stage1.ml
 nix flake check            # 新种子能编译当前源码，且 fixed point 成立
 git diff bootstrap/        # 确认变化可解释
 git add bootstrap/ && git commit
@@ -71,7 +71,7 @@ git add bootstrap/ && git commit
 │       ├── Eval.vuna     # 值表示、内建函数、求值器与 show
 │       ├── Loader.vuna   # import 图、名字解析、flatten（含模块规则）
 │       ├── Typecheck.vuna # HM 类型检查（M7）
-│       ├── TypedCodegen.vuna # 原生 OCaml typed codegen（M8a）
+│       ├── TypedCodegen.vuna # 原生 OCaml typed codegen（M8）
 │       ├── Codegen.vuna  # flatten 后的 AST → OCaml
 │       └── Interp.vuna   # 对外 facade（interpret/interpretFile/compileFile）
 ├── app/
@@ -147,14 +147,14 @@ git add bootstrap/ && git commit
   表达式/模式推断、签名校验与无签名顶层推断）；loader 会把 DSig/构造器类型里的类型名解析成
   模块内全名（open/qualified/alias 都支持），因此跨模块类型检查可用；
 - `lib/Vuna/Codegen.vuna`：把 flatten 后的 program 翻译成动态 value 表示的 OCaml；
-- `lib/Vuna/TypedCodegen.vuna`：M8a typed codegen，用类型信息生成原生 OCaml
-  类型、构造器、模式匹配与 builtins（`--typed`，opt-in）；
+- `lib/Vuna/TypedCodegen.vuna`：M8 typed codegen，用类型信息生成原生 OCaml
+  类型、构造器、模式匹配、data show 与 builtins；现在是默认 codegen；
 - `lib/Vuna/Interp.vuna`：facade，只暴露 `interpret`/`interpretFile`/`compileFile`；
 - 模块内部通过 import 自动 open 使用非限定名，只有 import 行写模块全名；
 - 顶层类型签名紧贴其第一个函数子句，签名与实现之间不留空行；顶层声明之间用一个空行分隔；
-- [app/Compile.vuna](app/Compile.vuna)：`vuna [--no-print] [--no-typecheck] [--typed] [--root DIR] <entry.vuna> [out.ml]`；
-  默认先跑类型检查；`--no-typecheck` 可跳过（专测 codegen 负例时用）；
-  `--typed` 使用 M8a 原生 OCaml typed codegen（默认仍是动态 value codegen）；
+- [app/Compile.vuna](app/Compile.vuna)：`vuna [--no-print] [--no-typecheck] [--root DIR] <entry.vuna> [out.ml]`；
+  默认跑类型检查并生成原生 OCaml typed codegen；`--no-typecheck` 关闭检查并回退
+  dynamic value codegen（专测 codegen 负例时用）；`--typed` 仍可显式选择 typed；
   `--no-print` 表示生成的程序不自动打印 `main` 的结果（用于编译自己做 IO 的 CLI）；
 - [app/Interp.vuna](app/Interp.vuna)：`vuna-interp [--root DIR] <file.vuna>`，把
   `interpretFile` 的字符串结果原样打印。
@@ -235,9 +235,8 @@ nix fmt               # nixfmt-tree 格式化 .nix
 
 ## 限制与路线
 
-- 类型检查已默认开启，M7c 完成；M8a/M8b 的 `--typed` 原生 OCaml codegen 已覆盖
-  全部单文件与模块 corpus（含 data show），但仍 opt-in；typed 编译器的自举受 OCaml
-  单态递归限制，M8b 还需要做顶层依赖分组；
+- 类型检查与原生 OCaml typed codegen 已默认开启；M8b 完成 typed 自举，
+  `bootstrap/stage1.ml` 已由 typed 编译器轮换；M8c 待做动态 codegen 清理与收尾；
 - 生成代码是单文件、动态 value 表示，性能与错误信息暂未优化；
 - 运行时错误没有源码位置；`where` / `do` / 隐式参数 / 依赖类型未实现；
 - IO 失败（如 `readFile` 缺失文件）会抛宿主异常；编译器 CLI 没有 `exit` 内建，

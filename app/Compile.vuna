@@ -6,14 +6,14 @@ import Vuna.Interp
 
 usage = "usage: vuna [--no-print] [--no-typecheck] [--typed] [--root DIR] <entry.vuna> [out.ml]"
 
-main = dispatch True True False "lib" getArgs
+main = dispatch True True True "lib" getArgs
 
 dispatch printResult typeCheck typed root args =
   case args of
     Nil => emitUsage
     Cons a rest =>
       if a == "--no-print" then dispatch False typeCheck typed root rest
-      else if a == "--no-typecheck" then dispatch printResult False typed root rest
+      else if a == "--no-typecheck" then dispatch printResult False False root rest
       else if a == "--typecheck" then dispatch printResult True typed root rest
       else if a == "--typed" then dispatch printResult True True root rest
       else if a == "--root" then

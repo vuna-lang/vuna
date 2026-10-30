@@ -503,13 +503,134 @@ arityOf decls name =
     Just n => n
     Nothing => 0
 
-genTop : List Decl -> List (Pair String Scheme) -> Result String
-genTop decls globals =
+filterNames : (String -> Bool) -> List String -> List String
+filterNames pred names =
+  case names of
+    Nil => Nil
+    Cons n rest => if pred n then Cons n (filterNames pred rest) else filterNames pred rest
+
+notIn : String -> List String -> Bool
+notIn name names = if memName name names then False else True
+
+neighborsOf : List (Pair String (List String)) -> String -> List String
+neighborsOf adj name =
+  case adj of
+    Nil => Nil
+    Cons p rest =>
+      case p of
+        Pair n ns => if n == name then ns else neighborsOf rest name
+
+reachable : List (Pair String (List String)) -> String -> List String
+reachable adj start = dfsReach adj (Cons start Nil) Nil
+
+dfsReach : List (Pair String (List String)) -> List String -> List String -> List String
+dfsReach adj pending visited =
+  case pending of
+    Nil => visited
+    Cons n rest =>
+      if memName n visited then dfsReach adj rest visited
+      else dfsReach adj (append (neighborsOf adj n) rest) (Cons n visited)
+
+sameGroup : List (Pair String (List String)) -> String -> String -> Bool
+sameGroup adj a b = memName b (reachable adj a) && memName a (reachable adj b)
+
+makeGroups : List (Pair String (List String)) -> List String -> List (List String)
+makeGroups adj names =
+  case names of
+    Nil => Nil
+    Cons n rest =>
+      let same = filterNames (\m => sameGroup adj n m) rest
+      in
+        let group = Cons n same
+        in
+          Cons group (makeGroups adj (filterNames (\m => notIn m group) rest))
+
+groupDeps : List (Pair String (List String)) -> List String -> List String
+groupDeps adj group = filterNames (\n => notIn n group) (uniqueNames (concatMap (neighborsOf adj) group))
+
+allIn : List String -> List String -> Bool
+allIn names allowed =
+  case names of
+    Nil => True
+    Cons n rest => if memName n allowed then allIn rest allowed else False
+
+groupReady : List (Pair String (List String)) -> List String -> List String -> Bool
+groupReady adj group emitted = allIn (groupDeps adj group) emitted
+
+pickReady adj groups emitted = pickReadyAcc adj groups Nil emitted
+
+pickReadyAcc adj Nil before emitted = Nothing
+pickReadyAcc adj (Cons g rest) before emitted =
+  if groupReady adj g emitted then
+    Just (Pair g (append (reverse before) rest))
+  else pickReadyAcc adj rest (Cons g before) emitted
+
+orderGroups adj groups = orderGroupsAcc adj groups Nil
+
+orderGroupsAcc adj Nil emitted = Ok Nil
+orderGroupsAcc adj remaining emitted =
+  case pickReady adj remaining emitted of
+    Nothing => Err "typed codegen: dependency cycle between groups"
+    Just (Pair g rest) =>
+      andThen (orderGroupsAcc adj rest (append g emitted)) (\tail =>
+        Ok (Cons g tail))
+
+genGroupDef decls name =
+  andThen (genFunction decls name) (\body =>
+    Ok (valueName name ++ " = " ++ body))
+
+genGroup decls group =
+  andThen (mapResult (genGroupDef decls) group) (\defs =>
+    Ok ("let rec " ++ joinWith "\nand " defs))
+
+genFunctionRefs : List Decl -> String -> List String
+genFunctionRefs decls name =
+  uniqueNames (concatMap clauseRefs (clausesFor decls name))
+
+clauseRefs : Pair (List Pat) Expr -> List String
+clauseRefs clause =
+  case clause of
+    Pair pats body => exprRefs body
+
+exprRefs : Expr -> List String
+exprRefs expr =
+  case expr of
+    EVar name => Cons name Nil
+    EInt n => Nil
+    EStr s => Nil
+    EApp fn args => unionNames (exprRefs fn) (concatMap exprRefs args)
+    ELam params body => exprRefs body
+    ELet binds body => unionNames (concatMap bindRefs binds) (exprRefs body)
+    ECase scrut alts => unionNames (exprRefs scrut) (concatMap altRefs alts)
+    EIf c t e => unionNames (exprRefs c) (unionNames (exprRefs t) (exprRefs e))
+
+bindRefs : Pair Pat Expr -> List String
+bindRefs b =
+  case b of
+    Pair pat value => exprRefs value
+
+altRefs : Pair Pat Expr -> List String
+altRefs a =
+  case a of
+    Pair pat body => exprRefs body
+
+unionNames : List String -> List String -> List String
+unionNames Nil ys = ys
+unionNames (Cons x rest) ys =
+  if memName x ys then unionNames rest ys else Cons x (unionNames rest ys)
+
+genTop : List Decl -> Result String
+genTop decls =
   case functionNames decls of
     Nil => Err "typed codegen: no definitions"
     names =>
-      andThen (mapResult (genTopDef decls globals) names) (\defs =>
-        Ok ("let rec " ++ joinWith "\nand " defs ++ "\n"))
+      let adj = map (\n => Pair n (filterNames (\r => memName r names) (genFunctionRefs decls n))) names
+      in
+        let groups = makeGroups adj names
+        in
+          andThen (orderGroups adj groups) (\ordered =>
+            andThen (mapResult (genGroup decls) ordered) (\parts =>
+              Ok (joinWith "\n\n" parts ++ "\n")))
 
 runtimeCodeTyped =
   "\n" ++
@@ -543,14 +664,19 @@ runtimeCodeTyped =
   "  Buffer.contents buf\n" ++
   "let bi_str_from_int n = string_of_int n\n" ++
   "let bi_read_file path =\n" ++
-  "  let ch = open_in_bin path in\n" ++
-  "  Fun.protect ~finally:(fun () -> close_in_noerr ch)\n" ++
-  "    (fun () -> really_input_string ch (in_channel_length ch))\n" ++
+  "  try\n" ++
+  "    let ch = open_in_bin path in\n" ++
+  "    Fun.protect ~finally:(fun () -> close_in_noerr ch)\n" ++
+  "      (fun () -> really_input_string ch (in_channel_length ch))\n" ++
+  "  with Sys_error msg -> failwith (\"readFile: \" ^ msg)\n" ++
   "let bi_write_file path contents =\n" ++
-  "  let ch = open_out_bin path in\n" ++
-  "  Fun.protect ~finally:(fun () -> close_out_noerr ch)\n" ++
-  "    (fun () -> output_string ch contents);\n" ++
-  "  String.length contents\n" ++
+  "  try\n" ++
+  "    let ch = open_out_bin path in\n" ++
+  "    Fun.protect ~finally:(fun () -> close_out_noerr ch)\n" ++
+  "      (fun () -> output_string ch contents);\n" ++
+  "    String.length contents\n" ++
+  "  with Sys_error msg -> failwith (\"writeFile: \" ^ msg)\n" ++
+
   "let bi_print s = print_string s; flush stdout; String.length s\n" ++
   "let bi_get_args () =\n" ++
   "  let argv = Sys.argv in\n" ++
@@ -588,8 +714,8 @@ generateProgramTyped decls globals printResult =
               andThen (showForTy decls ty) (\showMain =>
                 andThen (genTypeDecls decls) (\types =>
                   andThen (genShowDecls decls) (\shows =>
-                    andThen (genTop decls globals) (\tops =>
+                    andThen (genTop decls) (\tops =>
                       let output = runtimeCodeTyped ++ "\n" ++ types ++ "\n" ++ shows ++ "\n" ++ tops
                       in if printResult then
                            Ok (output ++ "let () = print_endline (" ++ showMain ++ " (" ++ valueName "main" ++ " ()))\n")
-                         else Ok output))))
+                         else Ok (output ++ "let () = ignore (" ++ valueName "main" ++ " ())\n")))))
