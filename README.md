@@ -3,7 +3,7 @@
 vuna 是一个函数式编程语言，本仓库是它的编译器。
 
 编译器完全用 vuna 自己写（`lib/Vuna/` 下的 Ast/Lexer/Parser/Interp/Codegen
-模块 + `app/compile.vuna`），通过提交入库的 OCaml 种子自举。构建、
+模块 + `app/Compile.vuna`），通过提交入库的 OCaml 种子自举。构建、
 测试和语言演进都不依赖外部编译器。早期用于启动自举的 OCaml 实现 `vunax` 已在
 M6 完成后删除；需要查看历史可从 git log 找到。
 
@@ -12,12 +12,12 @@ M6 完成后删除；需要查看历史可从 git log 找到。
 | 工具 | 作用 |
 | --- | --- |
 | `vuna-boot` | stage 1：从 `bootstrap/stage1.ml` 构建的种子二进制 |
-| `vuna` | stage 2：`vuna-boot` 编译当前 `lib/` + `app/compile.vuna` 得到，当前编译器 |
+| `vuna` | stage 2：`vuna-boot` 编译当前 `lib/` + `app/Compile.vuna` 得到，当前编译器 |
 | `vuna-interp` | 自解释器编译产物，解释执行 `.vuna` 文件，用于差分测试 |
 
 ```text
 bootstrap/stage1.ml（提交入库的 OCaml 种子）──ocamlopt──▶ vuna-boot
-  │  vuna-boot 编译当前 lib/ + app/compile.vuna
+  │  vuna-boot 编译当前 lib/ + app/Compile.vuna
   ▼
 stage2.ml ──ocamlopt──▶ vuna（当前编译器）
   │  vuna 再编译同一份源码
@@ -45,7 +45,7 @@ stage3.ml；stage2 == stage3 即 fixed point
 
 ```console
 # 前提：当前源码能被当前种子编译（nix flake check 通过）
-vuna-boot --root lib --no-print app/compile.vuna bootstrap/stage1.ml
+vuna-boot --root lib --no-print app/Compile.vuna bootstrap/stage1.ml
 nix flake check            # 新种子能编译当前源码，且 fixed point 成立
 git diff bootstrap/        # 确认变化可解释
 git add bootstrap/ && git commit
@@ -66,13 +66,14 @@ git add bootstrap/ && git commit
 │       ├── Ast.vuna      # 语法类型（Pat/Expr/Decl/Import）与 AST helper
 │       ├── Lexer.vuna    # 词法分析（token + 位置）
 │       ├── Parser.vuna   # offside layout parser → AST/imports
+│       ├── Builtins.vuna # 内建函数名字与元数（Loader/Eval 共用）
 │       ├── Eval.vuna     # 值表示、内建函数、求值器与 show
 │       ├── Loader.vuna   # import 图、名字解析、flatten（含模块规则）
 │       ├── Codegen.vuna  # flatten 后的 AST → OCaml
 │       └── Interp.vuna   # 对外 facade（interpret/interpretFile/compileFile）
 ├── app/
-│   ├── compile.vuna      # 编译器 CLI（vuna）
-│   └── interp.vuna       # 解释器 CLI（vuna-interp）
+│   ├── Compile.vuna      # 编译器 CLI（vuna）
+│   └── Interp.vuna       # 解释器 CLI（vuna-interp）
 ├── test/
 │   ├── run-tests.sh      # vuna 原生测试（只用 vuna / vuna-boot / vuna-interp）
 │   └── corpus/           # run / run_err / err / modules 语料与 golden
@@ -104,7 +105,7 @@ git add bootstrap/ && git commit
 - **文件 = 模块**，模块根默认 `lib/`（`--root` 可覆盖）；`lib/Vuna/Parser.vuna`
   ⇔ 模块 `Vuna.Parser`；
 - 路径段必须匹配 `[A-Z][A-Za-z0-9_]*`，路径/文件名与模块名**精确一致**，没有大小写映射；
-- 入口文件可以在 `lib/` 外（如 `app/compile.vuna`），它本身不是模块；
+- 入口文件可以在 `lib/` 外（如 `app/Compile.vuna`），它本身不是模块；
 - `import` 只能在文件顶部，是**直接依赖**；循环导入、重复 import、重复 alias 都是硬错误；
 - import 的四种形式：
 
@@ -135,15 +136,16 @@ git add bootstrap/ && git commit
   （`funArity`/`ctorArity`/`topNames`/`ctorsOf` 等），依赖 Base；
 - `lib/Vuna/Lexer.vuna`：词法分析，token 带行列位置；
 - `lib/Vuna/Parser.vuna`：offside layout parser，输出 AST 与 imports；
+- `lib/Vuna/Builtins.vuna`：内建函数名字与元数，Loader 与 Eval 共用；
 - `lib/Vuna/Eval.vuna`：值表示、内建函数、call-by-value 求值器与 `show`；
 - `lib/Vuna/Loader.vuna`：import 图、模块名校验、名字解析与 flatten
   （`loadProgram root entry`）；
 - `lib/Vuna/Codegen.vuna`：把 flatten 后的 program 翻译成 OCaml；
 - `lib/Vuna/Interp.vuna`：facade，只暴露 `interpret`/`interpretFile`/`compileFile`；
 - 模块内部通过 import 自动 open 使用非限定名，只有 import 行写模块全名；
-- [app/compile.vuna](app/compile.vuna)：`vuna [--no-print] [--root DIR] <entry.vuna> [out.ml]`；
+- [app/Compile.vuna](app/Compile.vuna)：`vuna [--no-print] [--root DIR] <entry.vuna> [out.ml]`；
   `--no-print` 表示生成的程序不自动打印 `main` 的结果（用于编译自己做 IO 的 CLI）；
-- [app/interp.vuna](app/interp.vuna)：`vuna-interp [--root DIR] <file.vuna>`，把
+- [app/Interp.vuna](app/Interp.vuna)：`vuna-interp [--root DIR] <file.vuna>`，把
   `interpretFile` 的字符串结果原样打印。
 
 ### codegen 的表示

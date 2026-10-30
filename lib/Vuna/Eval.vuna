@@ -2,6 +2,7 @@
 
 import Vuna.Base
 import Vuna.Ast
+import Vuna.Builtins
 
 data Value : Type where
   VInt : Int -> Value
@@ -11,30 +12,6 @@ data Value : Type where
   VLam : List String -> Expr -> List (Pair String Value) -> Value
   VBuiltin : String -> List Value -> Value
 
-
-builtinArity name =
-  if name == "+" then Just 2
-  else if name == "-" then Just 2
-  else if name == "*" then Just 2
-  else if name == "/" then Just 2
-  else if name == "==" then Just 2
-  else if name == "/=" then Just 2
-  else if name == "<" then Just 2
-  else if name == "<=" then Just 2
-  else if name == ">" then Just 2
-  else if name == ">=" then Just 2
-  else if name == "&&" then Just 2
-  else if name == "||" then Just 2
-  else if name == "++" then Just 2
-  else if name == "strLength" then Just 1
-  else if name == "strUnpack" then Just 1
-  else if name == "strPack" then Just 1
-  else if name == "strFromInt" then Just 1
-  else if name == "readFile" then Just 1
-  else if name == "writeFile" then Just 2
-  else if name == "print" then Just 1
-  else if name == "getArgs" then Just 0
-  else Nothing
 
 forceValue decls v =
   case v of

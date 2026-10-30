@@ -31,12 +31,12 @@
       # 自举链（完全由 vuna 自己维持，没有外部编译器）：
       #   bootstrap/stage1.ml（提交入库的 OCaml 种子）
       #     → ocamlopt → vuna-boot（stage 1）
-      #     → vuna-boot 编译当前 lib/ + app/compile.vuna → stage2.ml
+      #     → vuna-boot 编译当前 lib/ + app/Compile.vuna → stage2.ml
       #     → ocamlopt → vuna（stage 2，当前编译器）
       #     → vuna 再编译同一份源码 → stage3.ml；stage2 == stage3 即 fixed point
       #
       # 种子通过 seed rotation 更新：
-      #   vuna-boot --root lib --no-print app/compile.vuna bootstrap/stage1.ml
+      #   vuna-boot --root lib --no-print app/Compile.vuna bootstrap/stage1.ml
       # 不变量：当前入库种子必须能编译当前源码（checks.bootstrap-selfhost 守）。
       packages = forAllSystems (
         system:
@@ -81,8 +81,8 @@
               ''
                 mkdir -p "$out/bin" app
                 cp -r ${./lib} lib
-                cp ${./app/compile.vuna} app/compile.vuna
-                ${vuna-boot}/bin/vuna-boot --root lib --no-print app/compile.vuna stage2.ml
+                cp ${./app/Compile.vuna} app/Compile.vuna
+                ${vuna-boot}/bin/vuna-boot --root lib --no-print app/Compile.vuna stage2.ml
                 ocamlopt -w -a -o "$out/bin/vuna" stage2.ml
               '';
 
@@ -102,8 +102,8 @@
               ''
                 mkdir -p "$out/bin" app
                 cp -r ${./lib} lib
-                cp ${./app/interp.vuna} app/interp.vuna
-                ${vuna}/bin/vuna --no-print --root lib app/interp.vuna program.ml
+                cp ${./app/Interp.vuna} app/Interp.vuna
+                ${vuna}/bin/vuna --no-print --root lib app/Interp.vuna program.ml
                 ocamlopt -w -a -o "$out/bin/vuna-interp" program.ml
               '';
         in
@@ -148,12 +148,12 @@
               ''
                 mkdir -p app
                 cp -r ${./lib} lib
-                cp ${./app/compile.vuna} app/compile.vuna
+                cp ${./app/Compile.vuna} app/Compile.vuna
                 # 种子编译当前源码 → stage 2（当前编译器）
-                ${vuna-boot}/bin/vuna-boot --root lib --no-print app/compile.vuna stage2.ml
+                ${vuna-boot}/bin/vuna-boot --root lib --no-print app/Compile.vuna stage2.ml
                 ocamlopt -w -a -o stage2 stage2.ml
                 # stage 2 再编译同一份源码 → stage 3；两者必须字节一致
-                ./stage2 --root lib --no-print app/compile.vuna stage3.ml
+                ./stage2 --root lib --no-print app/Compile.vuna stage3.ml
                 cmp stage2.ml stage3.ml
                 # 行为抽查：当前编译器编译并运行一个程序
                 cp ${./test/corpus/run/12_fact.vuna} fact.vuna

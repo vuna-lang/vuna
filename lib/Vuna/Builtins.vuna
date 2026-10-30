@@ -1,0 +1,28 @@
+-- Vuna.Builtins：内建函数的名字与元数（供 Loader/Eval 共用）。
+
+import Vuna.Base
+
+builtinArity name =
+  if name == "+" then Just 2
+  else if name == "-" then Just 2
+  else if name == "*" then Just 2
+  else if name == "/" then Just 2
+  else if name == "==" then Just 2
+  else if name == "/=" then Just 2
+  else if name == "<" then Just 2
+  else if name == "<=" then Just 2
+  else if name == ">" then Just 2
+  else if name == ">=" then Just 2
+  else if name == "&&" then Just 2
+  else if name == "||" then Just 2
+  else if name == "++" then Just 2
+  else if name == "strLength" then Just 1
+  else if name == "strUnpack" then Just 1
+  else if name == "strPack" then Just 1
+  else if name == "strFromInt" then Just 1
+  else if name == "readFile" then Just 1
+  else if name == "writeFile" then Just 2
+  else if name == "print" then Just 1
+  else if name == "getArgs" then Just 0
+  else Nothing
+

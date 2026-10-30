@@ -4,7 +4,7 @@ import Vuna.Base
 import Vuna.Ast
 import Vuna.Lexer
 import Vuna.Parser
-import Vuna.Eval
+import Vuna.Builtins
 
 data Module : Type where
   Module : String -> List Import -> List Decl -> List String -> Module
