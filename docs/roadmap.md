@@ -31,20 +31,25 @@
 如果目标是“能实际写程序的语言”：
 
 ```text
-M10 模块系统 v2（已完成）──────→ M11.5 包管理与工具链（同时依赖 M11）
-M10.5 类型表达力（trait+记录+高阶kind）→ M11 标准库（do/Monad/IO 组合子）
+M10 模块系统 v2（已完成）──→ M10.5 类型表达力（trait+记录+高阶kind）
+   → M11 标准库（do/Monad/IO 组合子；编译器是首个用户）
+   → M11.5 包管理与工具链（vuna.toml / workspace / 三目录）
    → M12 性能与编译模型 → M13 高级类型/效应（研究型，单独规划）
 ```
 
 依赖说明：
 
-- **M10 已完成**；下一步主线是 M10.5 与 M11，M11.5 的前期工作可在 M10 完成后启动；
-- **M10.5（类型表达力）与 M11.5 的前期工作可并行**，二者改动面互不重叠
-  （loader/包工具 vs 类型检查/codegen）；
-- **M11（标准库）依赖 M10.5**：`do`/Monad 需要 trait + 高阶 kind；
+- **M10 已完成**；下一步主线是 M10.5 → M11 → M11.5；
+- **M10.5（类型表达力）与 M11.5 的机制部分可并行**，二者改动面互不重叠
+  （loader/包工具 vs 类型检查/codegen）；但**交付顺序**是 M11 先、M11.5 后；
+- **M11（标准库）依赖 M10.5，不依赖 M11.5**：`do`/Monad 需要 trait + 高阶 kind；
+  stdlib 先以**模块根**形态存在（`--root lib --root stdlib`），编译器作为首个用户，
+  不需要包格式；
 - **M11.5（包管理）依赖 M10 与 M11**：模块导出/重导出与路径不变式是包门面的基础；
-  多包示例项目需 M11 标准库；
-- **M11 与 M11.5 可并行**：M10 前置已完成；M11.5 中依赖标准库的验收部分等 M11。
+  stdlib 是第一个被包装成包的库，且被编译器包依赖；
+- **编译器是 stdlib 的第一个大客户**：`Maybe/List/Result/Bool` 单一真源（不再在编译器
+  `Vuna.Base` 私人重复），stdlib 由最复杂的程序（编译器）先行验证；
+- **M11 与 M11.5 的机制部分可并行**：M11.5 中“stdlib 作为首个包”的验收等 M11。
 
 如果目标是“类型系统研究平台”，可提前 M10.5；M10 与 M9 已完成。
 
@@ -88,7 +93,7 @@ M10.5 类型表达力（trait+记录+高阶kind）→ M11 标准库（do/Monad/I
 - **包级别模块导出（分两层）**：
   - 聚合层（M10 已完成）：模块级导出列表 + `module B` 重导出，包门面约定为
     `lib/Vuna.vuna`（M10 只提供能力，仓库当前未放置该文件）；
-  - 限制层（M11.5 包管理做）：根 manifest（如 `package.vuna`）声明 `[exported-modules]`，
+  - 限制层（M11.5 包管理做）：根 manifest（`vuna.toml`）声明 `[export]`，
     loader 在 import 解析时校验目标模块是否在公开集，从而隐藏包内部模块。
 - **模块路径不变式**：模块路径的**最后一段是文件名，中间段是目录，目录本身不是模块**。
 
@@ -179,7 +184,8 @@ M10.5 类型表达力（trait+记录+高阶kind）→ M11 标准库（do/Monad/I
 
 范围：
 
-- 核心库：`List`、`Maybe`、`Result`、`String`、`IO`、排序、映射等；
+- 核心库：`List`、`Maybe`、`Result`、`String`、`IO`、排序、映射等；stdlib 是
+  **独立的模块根 `stdlib/`**（成员包 `vuna-stdlib`），不混入编译器 `lib/`；
 - `do` 语法糖与明确的 IO 组合子（`bind`/`pure`/`>>`）：`do` 是 `>>=`/`pure` 的语法糖，
   依赖 Monad trait（M10.5 引入 trait 与高阶 kind）；`Monad m` 要求 `m :: * -> *`；
 - 顺序执行 `>>` 作为 `do` 的派生。
@@ -187,11 +193,38 @@ M10.5 类型表达力（trait+记录+高阶kind）→ M11 标准库（do/Monad/I
 验收：
 
 - 核心库覆盖常用操作；`do`/IO 组合子对 `Maybe`/`List`/`IO` 生效；
-- 标准库与 `do` 有类型检查与 typed codegen 测试。
+- 标准库与 `do` 有类型检查与 typed codegen 测试；
+- 编译器自身已使用 stdlib（作为首个用户，自举 fixed point 在 `lib+stdlib+app` 源上成立）。
+
+### M11 设计要点（已定）
+
+#### 编译器是 stdlib 的首个用户（单一真源）
+
+- 编译器依赖 stdlib：`Maybe/Result/List/Bool/Pair` 与通用 helper 的唯一定义在 stdlib，
+  不再在编译器 `Vuna.Base` 私人重复（避免“内建相邻全局构造器”不变式被两份定义破坏）；
+- `Vuna.Base` 变**门面**：删除上述类型与已迁走 helper，改**重导出** stdlib 模块
+  （`module Vuna.Maybe`/`module Vuna.Result`/`module Vuna.List`/`module Vuna.Bool`），
+  保留编译器专属（`Pos`/`Span`/`showSpanLoc`、模块路径 `splitOnDot`/`joinSlashes` 等、
+  诊断 `suggest`/`similarName`）；现有 `import Vuna.Base` 的模块不改一行即继续可见这些名字；
+- 门面是过渡态，日后可让各模块直接 import stdlib 后解散 `Base`；门面内不再定义
+  与 stdlib 重名的值（如 `length` 归 stdlib `List`）。
+
+#### 落地顺序与 seed 轮换（三步，前一步不依赖后一步）
+
+- **Step 1 纯重构（旧语法，seed 不轮换）**：把类型与通用 helper 从 `Vuna.Base` 迁到
+  stdlib（`data`/`import`/`module` 重导出均为 M10 已有语法），构建命令变
+  `--root lib --root stdlib --root app`；
+- **Step 2 语法落地**：M10.5 trait + 高阶 kind 进编译器（编译器自迁移去掉
+  `specializeCmp`/运行时 `show_value`）→ **rotate seed**；随后 `do` 语法糖进编译器 →
+  **rotate seed**；
+- **Step 3 stdlib 升级**：seed 已懂 trait/do，此时才允许 stdlib 写 `Monad`/`Functor`
+  实例与 `do`/`IO` 组合子；fixed point `stage1 == stage2` 在 `lib+stdlib+app` 源上成立。
+
+> 硬规则：stdlib 用 `do` 之前，seed 必须已轮换到懂 `do`（README 种子策略）。
 
 ## M11.5：包管理与工具链
 
-目标：从“能编译示例”到“能开发项目”。依赖 M10（模块导出）与 M11（标准库）。
+目标：从“能编译示例”到“能开发项目”。依赖 M10（模块导出）与 M11（标准库，stdlib 成为首个包）。
 
 范围：
 
@@ -204,6 +237,43 @@ M10.5 类型表达力（trait+记录+高阶kind）→ M11 标准库（do/Monad/I
 - 用 vuna 写一个多包示例项目；
 - 格式化后源码仍可编译且输出不变；
 - 包管理路径在 Nix 沙箱内可复现。
+
+### M11.5 设计要点（已定）
+
+#### 包格式：`vuna.toml`
+
+- 包元信息用 `vuna.toml`（TOML，非 vuna 源码）：`[package]`（name/version/edition）、
+  `[export]`（可导出模块）、`[workspace]`（成员）、`[dependencies]`；
+- **包名 ≠ 模块命名空间**：模块空间仍是 `Vuna.*`，包名只是依赖解析的键；loader 解析
+  `import Vuna.List` 按**依赖包的 `lib/` 根顺序**查找；跨依赖同名模块沿用“跨根同名硬错误”；
+- `[export]` 只能列 `lib/` 下的模块（结构约束，loader 强校验）；省略 = 导出全部 lib。
+
+#### workspace：根即一个子包
+
+- workspace 根本身是一个子包（Cargo 风格）：根 `vuna.toml` 同时含 `[workspace]` 与 `[package]`；
+- 当前仓库 = 一个 workspace：根包（编译器，`name = "vuna"`）+ 成员包 `stdlib`
+  （`name = "vuna-stdlib"`）；
+- 根包 `[dependencies]` 含 `vuna-stdlib`；`vuna-stdlib` 依赖空（`readFile`/`print`/`++`/`==`
+  是语言内建，不是包依赖）；依赖图无环：`用户包 → vuna-stdlib`、`vuna(编译器) → vuna-stdlib`。
+
+#### 三目录与单向依赖（每包固定 `lib/` `app/` `test/`）
+
+- 包内分层（依赖只向下流）：`lib` → 仅外部包 `lib`；`app` → 本包 `lib` + 本包 `app`
+  + 外部包 `lib`；`test` → 本包 `lib` + 本包 `app` + 本包 `test` + 外部包 `lib`；
+- 包间：A 依赖 B ⇒ A 只能用 B 的 `lib`；B 的 `app`/`test` 对 A 不可见；包依赖图是 DAG（无环）；
+- `app/Main.vuna` 固定入口：有可执行目标的包，入口恒为 `app/Main.vuna`；
+- `app/` **不再作为模块根**：`app/Main.vuna` 只从 `lib/`（本包+依赖包）import；`app/` 下的
+  辅助模块是 app 私有、其他包不可见；
+- 结构推论：`app/Lint.vuna` 是库模块（被 import，非入口），挪到 `lib/Vuna/Lint.vuna`；
+  `app/` 退化为纯入口目录；多根 `--root lib --root app` 退休，loader 根 = 本包 `lib/` +
+  依赖包 `lib/`（由 workspace/依赖图解析，取代手写 `--root`）。
+
+#### 与现状衔接
+
+- `test/corpus/modules/0*` 夹具已具包形态（`lib/`+`app/`+`expected.out`），升级为迷你包
+  只需加 `vuna.toml`，是天然的验收载体；
+- `test/run-tests.sh` 是工具链脚本+黄金数据，暂原地保留（CI 依赖）；`test/` 的 vuna 测试
+  模块从 `test/*.vuna` 起步；三目录约定约束源码包，不约束 harness。
 
 ## M12：性能与编译模型
 
