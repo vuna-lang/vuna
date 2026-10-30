@@ -195,7 +195,23 @@ for file in corpus/typed_ok/*.vuna; do
   fi
 done
 
-# 12) 种子冒烟：vuna-boot 编译一个程序并运行
+# 12) 跨模块 typed codegen：--typed --root lib 生成并运行
+for dir in corpus/modules/0*; do
+  [ -f "$dir/app/Main.vuna" ] || continue
+  rm -f "$tmp/typedmod.ml" "$tmp/typedmod.exe"
+  if ! typed_out=$("$VUNA" --typed --root "$dir/lib" "$dir/app/Main.vuna" "$tmp/typedmod.ml" 2>&1); then
+    bad "$dir (typed module codegen)" "exit 0" "$typed_out"
+  elif [ -n "$typed_out" ]; then
+    bad "$dir (typed module codegen output)" "" "$typed_out"
+  elif ! "$OCAMLOPT" -w -a -o "$tmp/typedmod.exe" "$tmp/typedmod.ml" >"$tmp/typedmod.log" 2>&1; then
+    bad "$dir (typed module ocamlopt)" "" "$(cat "$tmp/typedmod.log")"
+  else
+    actual=$("$tmp/typedmod.exe" 2>&1)
+    check_eq "$dir (typed module run)" "$(cat "$dir/expected.out")" "$actual"
+  fi
+done
+
+# 13) 种子冒烟：vuna-boot 编译一个程序并运行
 fact=corpus/run/12_fact.vuna
 compile_and_run "$fact (vuna-boot)" "$VUNA_BOOT" "." "$fact" "$(cat "${fact%.vuna}.out")"
 

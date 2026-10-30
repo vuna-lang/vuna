@@ -180,7 +180,7 @@ type value =
 
 ## 测试
 
-`test/run-tests.sh` 是 vuna 原生测试（113 checks），只用 `vuna` / `vuna-boot` /
+`test/run-tests.sh` 是 vuna 原生测试（121 checks），只用 `vuna` / `vuna-boot` /
 `vuna-interp`，不依赖任何外部编译器：
 
 ```console
@@ -195,7 +195,8 @@ sh test/run-tests.sh          # 需要 PATH 中有三个二进制
 - `corpus/err/*.vuna`、`corpus/run_err/*.vuna`：解析/求值错误片段；
 - `corpus/type_ok`、`corpus/type_err`：单文件类型检查正/反例；
 - `corpus/type_modules/0*`、`9*`：跨模块类型检查正/反例；
-- `corpus/typed_ok`：`--typed` 原生 OCaml 生成、`ocamlopt` 编译运行与 golden 比对；
+- `corpus/typed_ok`：`--typed` 单文件原生 OCaml 生成、编译运行与 golden 比对；
+- `corpus/modules/0*` 的 typed 版本：`--typed --root` 跨模块生成与运行；
 - `vuna-boot` 编译 `12_fact` 的种子冒烟。
 
 Nix 侧：
@@ -234,8 +235,9 @@ nix fmt               # nixfmt-tree 格式化 .nix
 
 ## 限制与路线
 
-- 类型检查已默认开启，M7c 完成；M8a 的 `--typed` 原生 OCaml codegen 已可用
-  （opt-in，main 的 show 暂支持 Int/String/Bool/List），M8b 做默认化与重新自举；
+- 类型检查已默认开启，M7c 完成；M8a/M8b 的 `--typed` 原生 OCaml codegen 已覆盖
+  全部单文件与模块 corpus（含 data show），但仍 opt-in；typed 编译器的自举受 OCaml
+  单态递归限制，M8b 还需要做顶层依赖分组；
 - 生成代码是单文件、动态 value 表示，性能与错误信息暂未优化；
 - 运行时错误没有源码位置；`where` / `do` / 隐式参数 / 依赖类型未实现；
 - IO 失败（如 `readFile` 缺失文件）会抛宿主异常；编译器 CLI 没有 `exit` 内建，

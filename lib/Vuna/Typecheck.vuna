@@ -588,7 +588,7 @@ checkProgramInfo decls =
                 Pair placeholders st3 =>
                   case checkFunctions (append builtinSchemes (append ctors (append sigs placeholders))) decls sigs (functionNames decls) st3 of
                     Err e => Err e
-                    Ok (Pair globals st4) => Ok globals
+                    Ok (Pair globals st4) => Ok (finalizeGlobals (substOf st4) globals)
 
 checkProgram decls =
   andThen (checkProgramInfo decls) (\_ => Ok Nil)
@@ -602,3 +602,14 @@ shortTyName name =
 sameBuiltinTy a b =
   let sa = shortTyName a
   in (sa == "Bool" || sa == "List") && sa == shortTyName b
+
+finalizeScheme subst sch =
+  case sch of
+    Scheme qs ty => Scheme qs (resolveTy subst ty)
+
+finalizeGlobals subst globals =
+  case globals of
+    Nil => Nil
+    Cons p rest =>
+      case p of
+        Pair name sch => Cons (Pair name (finalizeScheme subst sch)) (finalizeGlobals subst rest)
