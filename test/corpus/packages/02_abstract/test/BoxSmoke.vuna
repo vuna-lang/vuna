@@ -1,0 +1,4 @@
+import Vuna.Box
+
+main : String
+main = if boxValue (makeBox 7) == 7 then "" else "box api failed"

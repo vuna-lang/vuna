@@ -351,7 +351,7 @@ if [ "$COMPILER" = vuna ]; then
   fi
 fi
 SEED_MATCHES=false
-if diff -r seed "$STAGE1_SRC" >/dev/null 2>&1; then SEED_MATCHES=true; fi
+if diff -r -x "*.cmi" -x "*.cmx" -x "*.o" -x "vuna-seed" -x "build.log" seed "$STAGE1_SRC" >/dev/null 2>&1; then SEED_MATCHES=true; fi
 
 TESTS=skipped
 TESTS_SUMMARY=""

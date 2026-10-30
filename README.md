@@ -622,7 +622,9 @@ nix fmt               # nixfmt-tree 格式化 .nix
   （选择性重导出、部分构造器导出、dict 约束泛化等）会回退单文件，两者输出语义一致；
   优化仍归 ocamlopt（M12 不做 vuna typed IR）；runtime prelude 在分离编译中完整保留；
 - `do` / Monad / IO 组合子已在 M11 实现；隐式参数 / 依赖类型仍未实现；
-- M12 限制：seed 多文件（`.ml/.mli` 文件集）fixed point 逐字节比较；分离编译的
+- M12 限制：分离编译的*生成*阶段仍是整程序分析（gen 约 3x 单文件编译时间），
+  增量收益体现在 ocamlopt 只重编译受影响模块（`build.sh`）；seed 多文件（`.ml/.mli`
+  文件集）fixed point 逐字节比较；分离编译的
   `build.sh` 增量粒度是模块（.cmi 依赖时间戳），无跨包并行构建与依赖哈希；
   `vuna build --split` 暂不会自动回退单文件（遇到不支持构造报错，需手动用
   `vuna build`）；基准时间测量仍手动（`nix run .#bench`），CI 只守机器无关指标；

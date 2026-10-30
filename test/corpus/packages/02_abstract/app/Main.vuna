@@ -1,0 +1,4 @@
+import Vuna.Box
+
+main : String
+main = strFromInt (boxValue (makeBox 42))
