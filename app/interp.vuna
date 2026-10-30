@@ -2,7 +2,7 @@
 -- 参数：[--root DIR] <file.vuna>；root 是模块根（默认 lib）。
 import Vuna.Interp
 
-run root path = Vuna.Interp.interpretFile root path
+run root path = interpretFile root path
 
 usage = "usage: vuna-interp [--root DIR] <file.vuna>"
 

@@ -17,106 +17,106 @@ data Value : Type where
 
 
 builtinArity name =
-  if name == "+" then Vuna.Ast.Just 2
-  else if name == "-" then Vuna.Ast.Just 2
-  else if name == "*" then Vuna.Ast.Just 2
-  else if name == "/" then Vuna.Ast.Just 2
-  else if name == "==" then Vuna.Ast.Just 2
-  else if name == "/=" then Vuna.Ast.Just 2
-  else if name == "<" then Vuna.Ast.Just 2
-  else if name == "<=" then Vuna.Ast.Just 2
-  else if name == ">" then Vuna.Ast.Just 2
-  else if name == ">=" then Vuna.Ast.Just 2
-  else if name == "&&" then Vuna.Ast.Just 2
-  else if name == "||" then Vuna.Ast.Just 2
-  else if name == "++" then Vuna.Ast.Just 2
-  else if name == "strLength" then Vuna.Ast.Just 1
-  else if name == "strUnpack" then Vuna.Ast.Just 1
-  else if name == "strPack" then Vuna.Ast.Just 1
-  else if name == "strFromInt" then Vuna.Ast.Just 1
-  else if name == "readFile" then Vuna.Ast.Just 1
-  else if name == "writeFile" then Vuna.Ast.Just 2
-  else if name == "print" then Vuna.Ast.Just 1
-  else if name == "getArgs" then Vuna.Ast.Just 0
-  else Vuna.Ast.Nothing
+  if name == "+" then Just 2
+  else if name == "-" then Just 2
+  else if name == "*" then Just 2
+  else if name == "/" then Just 2
+  else if name == "==" then Just 2
+  else if name == "/=" then Just 2
+  else if name == "<" then Just 2
+  else if name == "<=" then Just 2
+  else if name == ">" then Just 2
+  else if name == ">=" then Just 2
+  else if name == "&&" then Just 2
+  else if name == "||" then Just 2
+  else if name == "++" then Just 2
+  else if name == "strLength" then Just 1
+  else if name == "strUnpack" then Just 1
+  else if name == "strPack" then Just 1
+  else if name == "strFromInt" then Just 1
+  else if name == "readFile" then Just 1
+  else if name == "writeFile" then Just 2
+  else if name == "print" then Just 1
+  else if name == "getArgs" then Just 0
+  else Nothing
 
 forceValue decls v =
   case v of
     VFun name Nil =>
-      case Vuna.Ast.funArity name decls of
-        Vuna.Ast.Just 0 => callFunction decls name Nil
-        _ => Vuna.Ast.Ok v
-    _ => Vuna.Ast.Ok v
+      case funArity name decls of
+        Just 0 => callFunction decls name Nil
+        _ => Ok v
+    _ => Ok v
 
 evalVar decls env name =
-  case Vuna.Ast.lookupPair name env of
-    Vuna.Ast.Just v => forceValue decls v
-    Vuna.Ast.Nothing => evalGlobal decls name
+  case lookupPair name env of
+    Just v => forceValue decls v
+    Nothing => evalGlobal decls name
 
 evalGlobal decls name =
-  case Vuna.Ast.funArity name decls of
-    Vuna.Ast.Just arity =>
+  case funArity name decls of
+    Just arity =>
       if arity == 0 then callFunction decls name Nil
-      else Vuna.Ast.Ok (VFun name Nil)
-    Vuna.Ast.Nothing => evalGlobalNonFun decls name
+      else Ok (VFun name Nil)
+    Nothing => evalGlobalNonFun decls name
 
 evalGlobalNonFun decls name =
-  case Vuna.Ast.ctorArity name decls of
-    Vuna.Ast.Just arity => Vuna.Ast.Ok (VCon name Nil)
-    Vuna.Ast.Nothing =>
+  case ctorArity name decls of
+    Just arity => Ok (VCon name Nil)
+    Nothing =>
       case builtinArity name of
-        Vuna.Ast.Just arity =>
-          if arity == 0 then callBuiltin name Nil else Vuna.Ast.Ok (VBuiltin name Nil)
-        Vuna.Ast.Nothing => Vuna.Ast.Err ("unbound variable: " ++ name)
+        Just arity =>
+          if arity == 0 then callBuiltin name Nil else Ok (VBuiltin name Nil)
+        Nothing => Err ("unbound variable: " ++ name)
 
 evalExpr decls env expr =
   case expr of
-    Vuna.Ast.EVar name => evalVar decls env name
-    Vuna.Ast.EInt n => Vuna.Ast.Ok (VInt n)
-    Vuna.Ast.EStr s => Vuna.Ast.Ok (VStr s)
-    Vuna.Ast.ELam params body => Vuna.Ast.Ok (VLam params body env)
-    Vuna.Ast.EApp fn args => evalApp decls env fn args
-    Vuna.Ast.ELet binds body => evalLet decls env binds body
-    Vuna.Ast.ECase scrut alts => evalCase decls env scrut alts
-    Vuna.Ast.EIf c t e => evalIf decls env c t e
+    EVar name => evalVar decls env name
+    EInt n => Ok (VInt n)
+    EStr s => Ok (VStr s)
+    ELam params body => Ok (VLam params body env)
+    EApp fn args => evalApp decls env fn args
+    ELet binds body => evalLet decls env binds body
+    ECase scrut alts => evalCase decls env scrut alts
+    EIf c t e => evalIf decls env c t e
 
 evalApp decls env fn args =
-  Vuna.Ast.andThen (evalExpr decls env fn) (\fv => foldApply decls env fv args)
+  andThen (evalExpr decls env fn) (\fv => foldApply decls env fv args)
 
-foldApply decls env fv Nil = Vuna.Ast.Ok fv
+foldApply decls env fv Nil = Ok fv
 foldApply decls env fv (Cons arg rest) =
-  Vuna.Ast.andThen (evalExpr decls env arg) (\av =>
-    Vuna.Ast.andThen (applyValue decls fv av) (\fv2 => foldApply decls env fv2 rest))
+  andThen (evalExpr decls env arg) (\av =>
+    andThen (applyValue decls fv av) (\fv2 => foldApply decls env fv2 rest))
 
 evalLet decls env binds body =
-  Vuna.Ast.andThen (evalBindings decls env binds) (\env2 => evalExpr decls env2 body)
+  andThen (evalBindings decls env binds) (\env2 => evalExpr decls env2 body)
 
-evalBindings decls env Nil = Vuna.Ast.Ok env
+evalBindings decls env Nil = Ok env
 evalBindings decls env (Cons b rest) =
   case b of
-    Vuna.Ast.Pair pat valueExpr =>
-      Vuna.Ast.andThen (evalExpr decls env valueExpr) (\v =>
+    Pair pat valueExpr =>
+      andThen (evalExpr decls env valueExpr) (\v =>
         case matchPattern pat v of
-          Vuna.Ast.Nothing => Vuna.Ast.Err "let pattern match failure"
-          Vuna.Ast.Just bs => evalBindings decls (Vuna.Ast.append bs env) rest)
+          Nothing => Err "let pattern match failure"
+          Just bs => evalBindings decls (append bs env) rest)
 
 evalCase decls env scrut alts =
-  Vuna.Ast.andThen (evalExpr decls env scrut) (\v => chooseAlt decls env v alts)
+  andThen (evalExpr decls env scrut) (\v => chooseAlt decls env v alts)
 
-chooseAlt decls env v Nil = Vuna.Ast.Err "case pattern match failure"
+chooseAlt decls env v Nil = Err "case pattern match failure"
 chooseAlt decls env v (Cons alt rest) =
   case alt of
-    Vuna.Ast.Pair pat body =>
+    Pair pat body =>
       case matchPattern pat v of
-        Vuna.Ast.Nothing => chooseAlt decls env v rest
-        Vuna.Ast.Just bs => evalExpr decls (Vuna.Ast.append bs env) body
+        Nothing => chooseAlt decls env v rest
+        Just bs => evalExpr decls (append bs env) body
 
 evalIf decls env c t e =
-  Vuna.Ast.andThen (evalExpr decls env c) (\cv =>
+  andThen (evalExpr decls env c) (\cv =>
     case cv of
       VCon "True" Nil => evalExpr decls env t
       VCon "False" Nil => evalExpr decls env e
-      _ => Vuna.Ast.Err "if condition is not a Bool")
+      _ => Err "if condition is not a Bool")
 
 applyValue decls v arg =
   case v of
@@ -124,92 +124,92 @@ applyValue decls v arg =
     VLam params body env => applyLambda decls params body env arg
     VCon name args => applyCtor decls name args arg
     VBuiltin name args => applyBuiltin decls name args arg
-    _ => Vuna.Ast.Err "cannot apply a non-function"
+    _ => Err "cannot apply a non-function"
 
 applyFun decls name bound arg =
-  case Vuna.Ast.funArity name decls of
-    Vuna.Ast.Nothing => Vuna.Ast.Err ("unknown function: " ++ name)
-    Vuna.Ast.Just arity =>
-      let bound2 = Vuna.Ast.append bound (Cons arg Nil)
-      in if Vuna.Ast.length bound2 < arity then Vuna.Ast.Ok (VFun name bound2)
-         else if Vuna.Ast.length bound2 == arity then callFunction decls name bound2
-         else Vuna.Ast.Err ("too many arguments for " ++ name)
+  case funArity name decls of
+    Nothing => Err ("unknown function: " ++ name)
+    Just arity =>
+      let bound2 = append bound (Cons arg Nil)
+      in if length bound2 < arity then Ok (VFun name bound2)
+         else if length bound2 == arity then callFunction decls name bound2
+         else Err ("too many arguments for " ++ name)
 
 applyLambda decls params body env arg =
   case params of
-    Nil => Vuna.Ast.Err "lambda has no parameters"
-    Cons p Nil => evalExpr decls (Cons (Vuna.Ast.Pair p arg) env) body
-    Cons p rest => Vuna.Ast.Ok (VLam rest body (Cons (Vuna.Ast.Pair p arg) env))
+    Nil => Err "lambda has no parameters"
+    Cons p Nil => evalExpr decls (Cons (Pair p arg) env) body
+    Cons p rest => Ok (VLam rest body (Cons (Pair p arg) env))
 
 applyCtor decls name args arg =
-  case Vuna.Ast.ctorArity name decls of
-    Vuna.Ast.Nothing => Vuna.Ast.Err ("unknown constructor: " ++ name)
-    Vuna.Ast.Just arity =>
-      if Vuna.Ast.length args >= arity then Vuna.Ast.Err ("constructor " ++ name ++ " cannot take more arguments")
-      else Vuna.Ast.Ok (VCon name (Vuna.Ast.append args (Cons arg Nil)))
+  case ctorArity name decls of
+    Nothing => Err ("unknown constructor: " ++ name)
+    Just arity =>
+      if length args >= arity then Err ("constructor " ++ name ++ " cannot take more arguments")
+      else Ok (VCon name (append args (Cons arg Nil)))
 
 applyBuiltin decls name args arg =
   case builtinArity name of
-    Vuna.Ast.Nothing => Vuna.Ast.Err ("unknown builtin: " ++ name)
-    Vuna.Ast.Just arity =>
-      let args2 = Vuna.Ast.append args (Cons arg Nil)
-      in if Vuna.Ast.length args2 < arity then Vuna.Ast.Ok (VBuiltin name args2)
-         else if Vuna.Ast.length args2 == arity then callBuiltin name args2
-         else Vuna.Ast.Err ("too many arguments for builtin " ++ name)
+    Nothing => Err ("unknown builtin: " ++ name)
+    Just arity =>
+      let args2 = append args (Cons arg Nil)
+      in if length args2 < arity then Ok (VBuiltin name args2)
+         else if length args2 == arity then callBuiltin name args2
+         else Err ("too many arguments for builtin " ++ name)
 
-callFunction decls name args = tryClauses decls name (Vuna.Ast.clausesFor decls name) args
+callFunction decls name args = tryClauses decls name (clausesFor decls name) args
 
-tryClauses decls name Nil args = Vuna.Ast.Err ("no matching clause for " ++ name)
+tryClauses decls name Nil args = Err ("no matching clause for " ++ name)
 tryClauses decls name (Cons c rest) args =
   case c of
-    Vuna.Ast.Pair pats body =>
-      if Vuna.Ast.length pats == Vuna.Ast.length args then tryMatch decls name pats body rest args
+    Pair pats body =>
+      if length pats == length args then tryMatch decls name pats body rest args
       else tryClauses decls name rest args
 
 tryMatch decls name pats body rest args =
   case matchPatterns pats args of
-    Vuna.Ast.Just binds => evalExpr decls binds body
-    Vuna.Ast.Nothing => tryClauses decls name rest args
+    Just binds => evalExpr decls binds body
+    Nothing => tryClauses decls name rest args
 
-matchPatterns Nil Nil = Vuna.Ast.Just Nil
+matchPatterns Nil Nil = Just Nil
 matchPatterns (Cons p ps) (Cons v vs) =
   case matchPattern p v of
-    Vuna.Ast.Nothing => Vuna.Ast.Nothing
-    Vuna.Ast.Just bs =>
+    Nothing => Nothing
+    Just bs =>
       case matchPatterns ps vs of
-        Vuna.Ast.Nothing => Vuna.Ast.Nothing
-        Vuna.Ast.Just bs2 => Vuna.Ast.Just (Vuna.Ast.append bs bs2)
-matchPatterns _ _ = Vuna.Ast.Nothing
+        Nothing => Nothing
+        Just bs2 => Just (append bs bs2)
+matchPatterns _ _ = Nothing
 
 matchPattern p v =
   case p of
-    Vuna.Ast.PWild => Vuna.Ast.Just Nil
-    Vuna.Ast.PVar name => Vuna.Ast.Just (Cons (Vuna.Ast.Pair name v) Nil)
-    Vuna.Ast.PInt n =>
+    PWild => Just Nil
+    PVar name => Just (Cons (Pair name v) Nil)
+    PInt n =>
       case v of
-        VInt m => if n == m then Vuna.Ast.Just Nil else Vuna.Ast.Nothing
-        _ => Vuna.Ast.Nothing
-    Vuna.Ast.PStr s =>
+        VInt m => if n == m then Just Nil else Nothing
+        _ => Nothing
+    PStr s =>
       case v of
-        VStr t => if s == t then Vuna.Ast.Just Nil else Vuna.Ast.Nothing
-        _ => Vuna.Ast.Nothing
-    Vuna.Ast.PCon name pats =>
+        VStr t => if s == t then Just Nil else Nothing
+        _ => Nothing
+    PCon name pats =>
       case v of
         VCon vname vargs =>
-          if name == vname && Vuna.Ast.length pats == Vuna.Ast.length vargs
+          if name == vname && length pats == length vargs
           then matchPatterns pats vargs
-          else Vuna.Ast.Nothing
-        _ => Vuna.Ast.Nothing
+          else Nothing
+        _ => Nothing
 
 intArg v =
   case v of
-    VInt n => Vuna.Ast.Ok n
-    _ => Vuna.Ast.Err "expected an Int argument"
+    VInt n => Ok n
+    _ => Err "expected an Int argument"
 
 stringArg v =
   case v of
-    VStr s => Vuna.Ast.Ok s
-    _ => Vuna.Ast.Err "expected a String argument"
+    VStr s => Ok s
+    _ => Err "expected a String argument"
 
 vbool b = if b then VCon "True" Nil else VCon "False" Nil
 
@@ -220,40 +220,40 @@ stringToValue s = charsToValue (strUnpack s)
 
 valueToChars v =
   case v of
-    VCon "Nil" Nil => Vuna.Ast.Ok Nil
+    VCon "Nil" Nil => Ok Nil
     VCon "Cons" (Cons head (Cons tail Nil)) =>
-      Vuna.Ast.andThen (intArg head) (\n => Vuna.Ast.andThen (valueToChars tail) (\rest => Vuna.Ast.Ok (Cons n rest)))
-    _ => Vuna.Ast.Err "strPack expects a List Int"
+      andThen (intArg head) (\n => andThen (valueToChars tail) (\rest => Ok (Cons n rest)))
+    _ => Err "strPack expects a List Int"
 
 int2 args f =
   case args of
-    Cons a (Cons b Nil) => Vuna.Ast.andThen (intArg a) (\x => Vuna.Ast.andThen (intArg b) (\y => f x y))
-    _ => Vuna.Ast.Err "bad arguments"
+    Cons a (Cons b Nil) => andThen (intArg a) (\x => andThen (intArg b) (\y => f x y))
+    _ => Err "bad arguments"
 
 str2 args f =
   case args of
-    Cons a (Cons b Nil) => Vuna.Ast.andThen (stringArg a) (\x => Vuna.Ast.andThen (stringArg b) (\y => f x y))
-    _ => Vuna.Ast.Err "bad arguments"
+    Cons a (Cons b Nil) => andThen (stringArg a) (\x => andThen (stringArg b) (\y => f x y))
+    _ => Err "bad arguments"
 
 divideBuiltin args =
   case args of
     Cons a (Cons b Nil) =>
-      Vuna.Ast.andThen (intArg a) (\x =>
-        Vuna.Ast.andThen (intArg b) (\y =>
-          if y == 0 then Vuna.Ast.Err "division by zero" else Vuna.Ast.Ok (VInt (x / y))))
-    _ => Vuna.Ast.Err "bad arguments for /"
+      andThen (intArg a) (\x =>
+        andThen (intArg b) (\y =>
+          if y == 0 then Err "division by zero" else Ok (VInt (x / y))))
+    _ => Err "bad arguments for /"
 
 eqBuiltin args =
   case args of
-    Cons (VInt a) (Cons (VInt b) Nil) => Vuna.Ast.Ok (vbool (a == b))
-    Cons (VStr a) (Cons (VStr b) Nil) => Vuna.Ast.Ok (vbool (a == b))
-    _ => Vuna.Ast.Err "bad arguments for =="
+    Cons (VInt a) (Cons (VInt b) Nil) => Ok (vbool (a == b))
+    Cons (VStr a) (Cons (VStr b) Nil) => Ok (vbool (a == b))
+    _ => Err "bad arguments for =="
 
 neqBuiltin args =
   case args of
-    Cons (VInt a) (Cons (VInt b) Nil) => Vuna.Ast.Ok (vbool (a /= b))
-    Cons (VStr a) (Cons (VStr b) Nil) => Vuna.Ast.Ok (vbool (a /= b))
-    _ => Vuna.Ast.Err "bad arguments for /="
+    Cons (VInt a) (Cons (VInt b) Nil) => Ok (vbool (a /= b))
+    Cons (VStr a) (Cons (VStr b) Nil) => Ok (vbool (a /= b))
+    _ => Err "bad arguments for /="
 
 andBuiltin args =
   case args of
@@ -261,76 +261,76 @@ andBuiltin args =
       case a of
         VCon "True" Nil =>
           case b of
-            VCon "True" Nil => Vuna.Ast.Ok (VCon "True" Nil)
-            VCon "False" Nil => Vuna.Ast.Ok (VCon "False" Nil)
-            _ => Vuna.Ast.Err "expected a Bool"
-        VCon "False" Nil => Vuna.Ast.Ok (VCon "False" Nil)
-        _ => Vuna.Ast.Err "expected a Bool"
-    _ => Vuna.Ast.Err "bad arguments for &&"
+            VCon "True" Nil => Ok (VCon "True" Nil)
+            VCon "False" Nil => Ok (VCon "False" Nil)
+            _ => Err "expected a Bool"
+        VCon "False" Nil => Ok (VCon "False" Nil)
+        _ => Err "expected a Bool"
+    _ => Err "bad arguments for &&"
 
 orBuiltin args =
   case args of
     Cons a (Cons b Nil) =>
       case a of
-        VCon "True" Nil => Vuna.Ast.Ok (VCon "True" Nil)
+        VCon "True" Nil => Ok (VCon "True" Nil)
         VCon "False" Nil =>
           case b of
-            VCon "True" Nil => Vuna.Ast.Ok (VCon "True" Nil)
-            VCon "False" Nil => Vuna.Ast.Ok (VCon "False" Nil)
-            _ => Vuna.Ast.Err "expected a Bool"
-        _ => Vuna.Ast.Err "expected a Bool"
-    _ => Vuna.Ast.Err "bad arguments for ||"
+            VCon "True" Nil => Ok (VCon "True" Nil)
+            VCon "False" Nil => Ok (VCon "False" Nil)
+            _ => Err "expected a Bool"
+        _ => Err "expected a Bool"
+    _ => Err "bad arguments for ||"
 
 callBuiltin name args =
-  if name == "+" then int2 args (\x, y => Vuna.Ast.Ok (VInt (x + y)))
-  else if name == "-" then int2 args (\x, y => Vuna.Ast.Ok (VInt (x - y)))
-  else if name == "*" then int2 args (\x, y => Vuna.Ast.Ok (VInt (x * y)))
+  if name == "+" then int2 args (\x, y => Ok (VInt (x + y)))
+  else if name == "-" then int2 args (\x, y => Ok (VInt (x - y)))
+  else if name == "*" then int2 args (\x, y => Ok (VInt (x * y)))
   else if name == "/" then divideBuiltin args
   else if name == "==" then eqBuiltin args
   else if name == "/=" then neqBuiltin args
-  else if name == "<" then int2 args (\x, y => Vuna.Ast.Ok (vbool (x < y)))
-  else if name == "<=" then int2 args (\x, y => Vuna.Ast.Ok (vbool (x <= y)))
-  else if name == ">" then int2 args (\x, y => Vuna.Ast.Ok (vbool (x > y)))
-  else if name == ">=" then int2 args (\x, y => Vuna.Ast.Ok (vbool (x >= y)))
+  else if name == "<" then int2 args (\x, y => Ok (vbool (x < y)))
+  else if name == "<=" then int2 args (\x, y => Ok (vbool (x <= y)))
+  else if name == ">" then int2 args (\x, y => Ok (vbool (x > y)))
+  else if name == ">=" then int2 args (\x, y => Ok (vbool (x >= y)))
   else if name == "&&" then andBuiltin args
   else if name == "||" then orBuiltin args
-  else if name == "++" then str2 args (\x, y => Vuna.Ast.Ok (VStr (x ++ y)))
+  else if name == "++" then str2 args (\x, y => Ok (VStr (x ++ y)))
   else if name == "strLength" then
     case args of
-      Cons a Nil => Vuna.Ast.andThen (stringArg a) (\s => Vuna.Ast.Ok (VInt (strLength s)))
-      _ => Vuna.Ast.Err "bad arguments for strLength"
+      Cons a Nil => andThen (stringArg a) (\s => Ok (VInt (strLength s)))
+      _ => Err "bad arguments for strLength"
   else if name == "strUnpack" then
     case args of
-      Cons a Nil => Vuna.Ast.andThen (stringArg a) (\s => Vuna.Ast.Ok (stringToValue s))
-      _ => Vuna.Ast.Err "bad arguments for strUnpack"
+      Cons a Nil => andThen (stringArg a) (\s => Ok (stringToValue s))
+      _ => Err "bad arguments for strUnpack"
   else if name == "strPack" then
     case args of
-      Cons a Nil => Vuna.Ast.andThen (valueToChars a) (\cs => Vuna.Ast.Ok (VStr (strPack cs)))
-      _ => Vuna.Ast.Err "bad arguments for strPack"
+      Cons a Nil => andThen (valueToChars a) (\cs => Ok (VStr (strPack cs)))
+      _ => Err "bad arguments for strPack"
   else if name == "strFromInt" then
     case args of
-      Cons a Nil => Vuna.Ast.andThen (intArg a) (\n => Vuna.Ast.Ok (VStr (strFromInt n)))
-      _ => Vuna.Ast.Err "bad arguments for strFromInt"
+      Cons a Nil => andThen (intArg a) (\n => Ok (VStr (strFromInt n)))
+      _ => Err "bad arguments for strFromInt"
   else if name == "readFile" then
     case args of
-      Cons a Nil => Vuna.Ast.andThen (stringArg a) (\s => Vuna.Ast.Ok (VStr (readFile s)))
-      _ => Vuna.Ast.Err "bad arguments for readFile"
+      Cons a Nil => andThen (stringArg a) (\s => Ok (VStr (readFile s)))
+      _ => Err "bad arguments for readFile"
   else if name == "writeFile" then
     case args of
       Cons a (Cons b Nil) =>
-        Vuna.Ast.andThen (stringArg a) (\path =>
-          Vuna.Ast.andThen (stringArg b) (\s => Vuna.Ast.Ok (VInt (writeFile path s))))
-      _ => Vuna.Ast.Err "bad arguments for writeFile"
+        andThen (stringArg a) (\path =>
+          andThen (stringArg b) (\s => Ok (VInt (writeFile path s))))
+      _ => Err "bad arguments for writeFile"
   else if name == "print" then
     case args of
-      Cons a Nil => Vuna.Ast.andThen (stringArg a) (\s => Vuna.Ast.Ok (VInt (print s)))
-      _ => Vuna.Ast.Err "bad arguments for print"
-  else if name == "getArgs" then Vuna.Ast.Ok (Vuna.Ast.map (\s => VStr s) getArgs)
-  else Vuna.Ast.Err ("unknown builtin: " ++ name)
+      Cons a Nil => andThen (stringArg a) (\s => Ok (VInt (print s)))
+      _ => Err "bad arguments for print"
+  else if name == "getArgs" then Ok (map (\s => VStr s) getArgs)
+  else Err ("unknown builtin: " ++ name)
 
 displayName name =
   case splitLastDot (splitOnDot name) of
-    Vuna.Ast.Pair revPrefix base => base
+    Pair revPrefix base => base
 
 showValue v =
   case v of
@@ -376,15 +376,15 @@ splitOnDot s = splitCharsOnDot (strUnpack s) Nil Nil
 
 splitCharsOnDot chars acc seg =
   case chars of
-    Nil => Vuna.Ast.reverse (Cons (strPack (Vuna.Ast.reverse seg)) acc)
+    Nil => reverse (Cons (strPack (reverse seg)) acc)
     Cons c rest =>
-      if c == 46 then splitCharsOnDot rest (Cons (strPack (Vuna.Ast.reverse seg)) acc) Nil
+      if c == 46 then splitCharsOnDot rest (Cons (strPack (reverse seg)) acc) Nil
       else splitCharsOnDot rest acc (Cons c seg)
 
 splitLastDot parts =
-  case Vuna.Ast.reverse parts of
-    Nil => Vuna.Ast.Pair Nil ""
-    Cons last rest => Vuna.Ast.Pair (Vuna.Ast.reverse rest) last
+  case reverse parts of
+    Nil => Pair Nil ""
+    Cons last rest => Pair (reverse rest) last
 
 joinDots Nil = ""
 joinDots (Cons x Nil) = x
@@ -398,35 +398,35 @@ joinArrows Nil = ""
 joinArrows (Cons x Nil) = x
 joinArrows (Cons x rest) = x ++ " -> " ++ joinArrows rest
 
-firstOf p = case p of Vuna.Ast.Pair a b => a
+firstOf p = case p of Pair a b => a
 
-secondOf p = case p of Vuna.Ast.Pair a b => b
+secondOf p = case p of Pair a b => b
 
 declNames d =
   case d of
-    Vuna.Ast.DFun name pats body => Cons name Nil
-    Vuna.Ast.DSig name ty => Cons name Nil
-    Vuna.Ast.DData dname params ctors => Vuna.Ast.map firstOf ctors
+    DFun name pats body => Cons name Nil
+    DSig name ty => Cons name Nil
+    DData dname params ctors => map firstOf ctors
 
-topNames decls = Vuna.Ast.concatMap declNames decls
+topNames decls = concatMap declNames decls
 
 declCtors d =
   case d of
-    Vuna.Ast.DData dname params ctors => Vuna.Ast.map firstOf ctors
+    DData dname params ctors => map firstOf ctors
     _ => Nil
 
-ctorsOf decls = Vuna.Ast.concatMap declCtors decls
+ctorsOf decls = concatMap declCtors decls
 
 allIdentChars chars =
   case chars of
     Nil => True
     Cons c rest =>
-      if Vuna.Lexer.isIdentStart c || Vuna.Lexer.isDigit c then allIdentChars rest else False
+      if isIdentStart c || isDigit c then allIdentChars rest else False
 
 validSegment seg =
   case strUnpack seg of
     Nil => False
-    Cons c rest => Vuna.Lexer.isUpperChar c && allIdentChars rest
+    Cons c rest => isUpperChar c && allIdentChars rest
 
 allSegmentsValid segs =
   case segs of
@@ -450,48 +450,48 @@ mangle prefix name = if prefix == "" then name else prefix ++ "." ++ name
 
 importName imp =
   case imp of
-    Vuna.Ast.Import name isQualified alias => name
+    Import name isQualified alias => name
 
 importIsQualified imp =
   case imp of
-    Vuna.Ast.Import name isQualified alias => isQualified
+    Import name isQualified alias => isQualified
 
 importAlias imp =
   case imp of
-    Vuna.Ast.Import name isQualified alias => alias
+    Import name isQualified alias => alias
 
-importModuleNames imports = Vuna.Ast.map importName imports
+importModuleNames imports = map importName imports
 
 hasDuplicateName Nil = False
 hasDuplicateName (Cons x rest) =
-  if Vuna.Ast.memName x rest then True else hasDuplicateName rest
+  if memName x rest then True else hasDuplicateName rest
 
 importAliases imports =
   case imports of
     Nil => Nil
     Cons imp rest =>
       case importAlias imp of
-        Vuna.Ast.Nothing => importAliases rest
-        Vuna.Ast.Just alias => Cons (Vuna.Ast.Pair alias (importName imp)) (importAliases rest)
+        Nothing => importAliases rest
+        Just alias => Cons (Pair alias (importName imp)) (importAliases rest)
 
 checkImportAliases label moduleNames aliases =
   case aliases of
-    Nil => Vuna.Ast.Ok Nil
+    Nil => Ok Nil
     Cons p rest =>
       case p of
-        Vuna.Ast.Pair alias m =>
+        Pair alias m =>
           if validSegment alias then
-            if Vuna.Ast.memName alias (Vuna.Ast.map firstOf rest) then
-              Vuna.Ast.Err (label ++ ": duplicate module alias " ++ alias)
-            else if Vuna.Ast.memName alias moduleNames then
+            if memName alias (map firstOf rest) then
+              Err (label ++ ": duplicate module alias " ++ alias)
+            else if memName alias moduleNames then
               if alias == m then checkImportAliases label moduleNames rest
-              else Vuna.Ast.Err (label ++ ": module alias " ++ alias ++ " conflicts with an imported module")
+              else Err (label ++ ": module alias " ++ alias ++ " conflicts with an imported module")
             else checkImportAliases label moduleNames rest
-          else Vuna.Ast.Err (label ++ ": invalid module alias " ++ alias)
+          else Err (label ++ ": invalid module alias " ++ alias)
 
 validateImports label imports =
   if hasDuplicateName (importModuleNames imports) then
-    Vuna.Ast.Err (label ++ ": duplicate import")
+    Err (label ++ ": duplicate import")
   else checkImportAliases label (importModuleNames imports) (importAliases imports)
 
 openModuleNames imports =
@@ -503,14 +503,14 @@ openModuleNames imports =
 
 findImportPrefix imports prefix =
   case imports of
-    Nil => Vuna.Ast.Nothing
+    Nil => Nothing
     Cons imp rest =>
-      if importName imp == prefix then Vuna.Ast.Just (importName imp)
+      if importName imp == prefix then Just (importName imp)
       else
         case importAlias imp of
-          Vuna.Ast.Just alias =>
-            if alias == prefix then Vuna.Ast.Just (importName imp) else findImportPrefix rest prefix
-          Vuna.Ast.Nothing => findImportPrefix rest prefix
+          Just alias =>
+            if alias == prefix then Just (importName imp) else findImportPrefix rest prefix
+          Nothing => findImportPrefix rest prefix
 
 joinNames Nil = ""
 joinNames (Cons x Nil) = x
@@ -518,10 +518,10 @@ joinNames (Cons x rest) = x ++ ", " ++ joinNames rest
 
 moduleDecls modules name =
   case findModule modules name of
-    Vuna.Ast.Just m =>
+    Just m =>
       case m of
         Module mname imports decls exports => decls
-    Vuna.Ast.Nothing => Nil
+    Nothing => Nil
 
 moduleCtors modules name = ctorsOf (moduleDecls modules name)
 
@@ -529,7 +529,7 @@ modulesExportingFrom modules names name =
   case names of
     Nil => Nil
     Cons m rest =>
-      if Vuna.Ast.memName name (exportsOf modules m) then
+      if memName name (exportsOf modules m) then
         Cons m (modulesExportingFrom modules rest name)
       else modulesExportingFrom modules rest name
 
@@ -540,7 +540,7 @@ modulesExportingCtorFrom modules names name =
   case names of
     Nil => Nil
     Cons m rest =>
-      if Vuna.Ast.memName name (moduleCtors modules m) then
+      if memName name (moduleCtors modules m) then
         Cons m (modulesExportingCtorFrom modules rest name)
       else modulesExportingCtorFrom modules rest name
 
@@ -551,234 +551,234 @@ modulePath root name = root ++ "/" ++ joinSlashes (splitOnDot name) ++ ".vuna"
 
 findModule modules name =
   case modules of
-    Nil => Vuna.Ast.Nothing
+    Nil => Nothing
     Cons m rest =>
       case m of
         Module mname imports decls exports =>
-          if mname == name then Vuna.Ast.Just m else findModule rest name
+          if mname == name then Just m else findModule rest name
 
 exportsOf modules name =
   case findModule modules name of
-    Vuna.Ast.Just m => case m of Module mname imports decls exports => exports
-    Vuna.Ast.Nothing => Nil
+    Just m => case m of Module mname imports decls exports => exports
+    Nothing => Nil
 
 isBuiltinName name =
   case builtinArity name of
-    Vuna.Ast.Just arity => True
-    Vuna.Ast.Nothing => False
+    Just arity => True
+    Nothing => False
 
 resolveQualified modules label imports name =
   case splitLastDot (splitOnDot name) of
-    Vuna.Ast.Pair revPrefix base =>
+    Pair revPrefix base =>
       let prefix = joinDots revPrefix
       in case findImportPrefix imports prefix of
-           Vuna.Ast.Nothing => Vuna.Ast.Err (label ++ ": module " ++ prefix ++ " is not imported")
-           Vuna.Ast.Just m =>
-             if isGlobalCtor base then Vuna.Ast.Ok base
-             else if Vuna.Ast.memName base (exportsOf modules m) then Vuna.Ast.Ok (mangle m base)
-             else Vuna.Ast.Err (label ++ ": " ++ base ++ " is not exported by " ++ m)
+           Nothing => Err (label ++ ": module " ++ prefix ++ " is not imported")
+           Just m =>
+             if isGlobalCtor base then Ok base
+             else if memName base (exportsOf modules m) then Ok (mangle m base)
+             else Err (label ++ ": " ++ base ++ " is not exported by " ++ m)
 
 resolveGlobal modules label prefix own imports scope name =
-  if Vuna.Ast.memName name scope then Vuna.Ast.Ok name
-  else if isGlobalCtor name then Vuna.Ast.Ok name
+  if memName name scope then Ok name
+  else if isGlobalCtor name then Ok name
   else if containsDot name then resolveQualified modules label imports name
-  else if Vuna.Ast.memName name own then Vuna.Ast.Ok (mangle prefix name)
-  else if isBuiltinName name then Vuna.Ast.Ok name
+  else if memName name own then Ok (mangle prefix name)
+  else if isBuiltinName name then Ok name
   else
     case modulesExporting modules imports name of
-      Nil => Vuna.Ast.Err (label ++ ": unbound variable " ++ name)
-      Cons m Nil => Vuna.Ast.Ok (mangle m name)
-      ms => Vuna.Ast.Err (label ++ ": ambiguous name " ++ name ++ " (imported from " ++ joinNames ms ++ "); qualify it")
+      Nil => Err (label ++ ": unbound variable " ++ name)
+      Cons m Nil => Ok (mangle m name)
+      ms => Err (label ++ ": ambiguous name " ++ name ++ " (imported from " ++ joinNames ms ++ "); qualify it")
 
 resolveCtor modules label prefix ownCtors imports name =
-  if isGlobalCtor name then Vuna.Ast.Ok name
+  if isGlobalCtor name then Ok name
   else if containsDot name then resolveQualified modules label imports name
-  else if Vuna.Ast.memName name ownCtors then Vuna.Ast.Ok (mangle prefix name)
+  else if memName name ownCtors then Ok (mangle prefix name)
   else
     case modulesExportingCtor modules imports name of
-      Nil => Vuna.Ast.Err (label ++ ": unknown constructor " ++ name)
-      Cons m Nil => Vuna.Ast.Ok (mangle m name)
-      ms => Vuna.Ast.Err (label ++ ": ambiguous constructor " ++ name ++ " (imported from " ++ joinNames ms ++ "); qualify it")
+      Nil => Err (label ++ ": unknown constructor " ++ name)
+      Cons m Nil => Ok (mangle m name)
+      ms => Err (label ++ ": ambiguous constructor " ++ name ++ " (imported from " ++ joinNames ms ++ "); qualify it")
 
 checkBinder label name =
-  if containsDot name then Vuna.Ast.Err (label ++ ": invalid variable name " ++ name)
-  else Vuna.Ast.Ok name
+  if containsDot name then Err (label ++ ": invalid variable name " ++ name)
+  else Ok name
 
 checkTopName label name =
-  if containsDot name then Vuna.Ast.Err (label ++ ": invalid top-level name " ++ name)
-  else Vuna.Ast.Ok name
+  if containsDot name then Err (label ++ ": invalid top-level name " ++ name)
+  else Ok name
 
 resolveTopName label prefix name =
-  Vuna.Ast.andThen (checkTopName label name) (\_ => Vuna.Ast.Ok (mangle prefix name))
+  andThen (checkTopName label name) (\_ => Ok (mangle prefix name))
 
 resolvePattern modules label prefix ownCtors imports pat =
   case pat of
-    Vuna.Ast.PWild => Vuna.Ast.Ok (Vuna.Ast.Pair Vuna.Ast.PWild Nil)
-    Vuna.Ast.PVar name =>
-      Vuna.Ast.andThen (checkBinder label name) (\_ =>
-        Vuna.Ast.Ok (Vuna.Ast.Pair (Vuna.Ast.PVar name) (Cons name Nil)))
-    Vuna.Ast.PInt n => Vuna.Ast.Ok (Vuna.Ast.Pair (Vuna.Ast.PInt n) Nil)
-    Vuna.Ast.PStr s => Vuna.Ast.Ok (Vuna.Ast.Pair (Vuna.Ast.PStr s) Nil)
-    Vuna.Ast.PCon name pats =>
-      Vuna.Ast.andThen (resolveCtor modules label prefix ownCtors imports name) (\name2 =>
-        Vuna.Ast.andThen (Vuna.Ast.traverse (resolvePattern modules label prefix ownCtors imports) pats) (\parts =>
-          Vuna.Ast.Ok (Vuna.Ast.Pair (Vuna.Ast.PCon name2 (Vuna.Ast.map firstOf parts)) (Vuna.Ast.concatMap secondOf parts))))
+    PWild => Ok (Pair PWild Nil)
+    PVar name =>
+      andThen (checkBinder label name) (\_ =>
+        Ok (Pair (PVar name) (Cons name Nil)))
+    PInt n => Ok (Pair (PInt n) Nil)
+    PStr s => Ok (Pair (PStr s) Nil)
+    PCon name pats =>
+      andThen (resolveCtor modules label prefix ownCtors imports name) (\name2 =>
+        andThen (traverse (resolvePattern modules label prefix ownCtors imports) pats) (\parts =>
+          Ok (Pair (PCon name2 (map firstOf parts)) (concatMap secondOf parts))))
 
 resolveAlt modules label prefix own ownCtors imports scope alt =
   case alt of
-    Vuna.Ast.Pair pat body =>
-      Vuna.Ast.andThen (resolvePattern modules label prefix ownCtors imports pat) (\p =>
+    Pair pat body =>
+      andThen (resolvePattern modules label prefix ownCtors imports pat) (\p =>
         case p of
-          Vuna.Ast.Pair pat2 bound =>
-            Vuna.Ast.andThen (resolveExpr modules label prefix own ownCtors imports (Vuna.Ast.append bound scope) body) (\body2 =>
-              Vuna.Ast.Ok (Vuna.Ast.Pair pat2 body2)))
+          Pair pat2 bound =>
+            andThen (resolveExpr modules label prefix own ownCtors imports (append bound scope) body) (\body2 =>
+              Ok (Pair pat2 body2)))
 
 resolveLet modules label prefix own ownCtors imports scope binds body =
   case binds of
     Nil =>
-      Vuna.Ast.andThen (resolveExpr modules label prefix own ownCtors imports scope body) (\b =>
-        Vuna.Ast.Ok (Vuna.Ast.Pair Nil b))
+      andThen (resolveExpr modules label prefix own ownCtors imports scope body) (\b =>
+        Ok (Pair Nil b))
     Cons b rest =>
       case b of
-        Vuna.Ast.Pair pat value =>
-          Vuna.Ast.andThen (resolveExpr modules label prefix own ownCtors imports scope value) (\value2 =>
-            Vuna.Ast.andThen (resolvePattern modules label prefix ownCtors imports pat) (\p =>
+        Pair pat value =>
+          andThen (resolveExpr modules label prefix own ownCtors imports scope value) (\value2 =>
+            andThen (resolvePattern modules label prefix ownCtors imports pat) (\p =>
               case p of
-                Vuna.Ast.Pair pat2 bound =>
-                  Vuna.Ast.andThen (resolveLet modules label prefix own ownCtors imports (Vuna.Ast.append bound scope) rest body) (\r =>
+                Pair pat2 bound =>
+                  andThen (resolveLet modules label prefix own ownCtors imports (append bound scope) rest body) (\r =>
                     case r of
-                      Vuna.Ast.Pair binds2 body2 =>
-                        Vuna.Ast.Ok (Vuna.Ast.Pair (Cons (Vuna.Ast.Pair pat2 value2) binds2) body2))))
+                      Pair binds2 body2 =>
+                        Ok (Pair (Cons (Pair pat2 value2) binds2) body2))))
 
 resolveExpr modules label prefix own ownCtors imports scope expr =
   case expr of
-    Vuna.Ast.EVar name =>
-      Vuna.Ast.andThen (resolveGlobal modules label prefix own imports scope name) (\n =>
-        Vuna.Ast.Ok (Vuna.Ast.EVar n))
-    Vuna.Ast.EInt n => Vuna.Ast.Ok (Vuna.Ast.EInt n)
-    Vuna.Ast.EStr s => Vuna.Ast.Ok (Vuna.Ast.EStr s)
-    Vuna.Ast.ELam params body =>
-      Vuna.Ast.andThen (Vuna.Ast.traverse (checkBinder label) params) (\_ =>
-        Vuna.Ast.andThen (resolveExpr modules label prefix own ownCtors imports (Vuna.Ast.append params scope) body) (\b =>
-          Vuna.Ast.Ok (Vuna.Ast.ELam params b)))
-    Vuna.Ast.EApp fn args =>
-      Vuna.Ast.andThen (resolveExpr modules label prefix own ownCtors imports scope fn) (\fn2 =>
-        Vuna.Ast.andThen (Vuna.Ast.traverse (\a => resolveExpr modules label prefix own ownCtors imports scope a) args) (\args2 =>
-          Vuna.Ast.Ok (Vuna.Ast.EApp fn2 args2)))
-    Vuna.Ast.ELet binds body =>
-      Vuna.Ast.andThen (resolveLet modules label prefix own ownCtors imports scope binds body) (\r =>
+    EVar name =>
+      andThen (resolveGlobal modules label prefix own imports scope name) (\n =>
+        Ok (EVar n))
+    EInt n => Ok (EInt n)
+    EStr s => Ok (EStr s)
+    ELam params body =>
+      andThen (traverse (checkBinder label) params) (\_ =>
+        andThen (resolveExpr modules label prefix own ownCtors imports (append params scope) body) (\b =>
+          Ok (ELam params b)))
+    EApp fn args =>
+      andThen (resolveExpr modules label prefix own ownCtors imports scope fn) (\fn2 =>
+        andThen (traverse (\a => resolveExpr modules label prefix own ownCtors imports scope a) args) (\args2 =>
+          Ok (EApp fn2 args2)))
+    ELet binds body =>
+      andThen (resolveLet modules label prefix own ownCtors imports scope binds body) (\r =>
         case r of
-          Vuna.Ast.Pair binds2 body2 => Vuna.Ast.Ok (Vuna.Ast.ELet binds2 body2))
-    Vuna.Ast.ECase scrut alts =>
-      Vuna.Ast.andThen (resolveExpr modules label prefix own ownCtors imports scope scrut) (\scrut2 =>
-        Vuna.Ast.andThen (Vuna.Ast.traverse (resolveAlt modules label prefix own ownCtors imports scope) alts) (\alts2 =>
-          Vuna.Ast.Ok (Vuna.Ast.ECase scrut2 alts2)))
-    Vuna.Ast.EIf c t e =>
-      Vuna.Ast.andThen (resolveExpr modules label prefix own ownCtors imports scope c) (\c2 =>
-        Vuna.Ast.andThen (resolveExpr modules label prefix own ownCtors imports scope t) (\t2 =>
-          Vuna.Ast.andThen (resolveExpr modules label prefix own ownCtors imports scope e) (\e2 =>
-            Vuna.Ast.Ok (Vuna.Ast.EIf c2 t2 e2))))
+          Pair binds2 body2 => Ok (ELet binds2 body2))
+    ECase scrut alts =>
+      andThen (resolveExpr modules label prefix own ownCtors imports scope scrut) (\scrut2 =>
+        andThen (traverse (resolveAlt modules label prefix own ownCtors imports scope) alts) (\alts2 =>
+          Ok (ECase scrut2 alts2)))
+    EIf c t e =>
+      andThen (resolveExpr modules label prefix own ownCtors imports scope c) (\c2 =>
+        andThen (resolveExpr modules label prefix own ownCtors imports scope t) (\t2 =>
+          andThen (resolveExpr modules label prefix own ownCtors imports scope e) (\e2 =>
+            Ok (EIf c2 t2 e2))))
 
 resolveCtorDecl label prefix ctor =
-  if isGlobalCtor ctor then Vuna.Ast.Ok ctor
-  else Vuna.Ast.andThen (checkTopName label ctor) (\_ => Vuna.Ast.Ok (mangle prefix ctor))
+  if isGlobalCtor ctor then Ok ctor
+  else andThen (checkTopName label ctor) (\_ => Ok (mangle prefix ctor))
 
 resolveCtorPair label prefix p =
   case p of
-    Vuna.Ast.Pair ctor arity =>
-      Vuna.Ast.andThen (resolveCtorDecl label prefix ctor) (\c => Vuna.Ast.Ok (Vuna.Ast.Pair c arity))
+    Pair ctor arity =>
+      andThen (resolveCtorDecl label prefix ctor) (\c => Ok (Pair c arity))
 
 resolveDecl modules label prefix own ownCtors imports d =
   case d of
-    Vuna.Ast.DData dname params ctors =>
-      Vuna.Ast.andThen (Vuna.Ast.traverse (resolveCtorPair label prefix) ctors) (\ctors2 =>
-        Vuna.Ast.Ok (Vuna.Ast.DData dname params ctors2))
-    Vuna.Ast.DSig name ty =>
-      Vuna.Ast.andThen (resolveTopName label prefix name) (\n => Vuna.Ast.Ok (Vuna.Ast.DSig n ty))
-    Vuna.Ast.DFun name pats body =>
-      Vuna.Ast.andThen (resolveTopName label prefix name) (\n =>
-        Vuna.Ast.andThen (Vuna.Ast.traverse (resolvePattern modules label prefix ownCtors imports) pats) (\parts =>
-          Vuna.Ast.andThen (resolveExpr modules label prefix own ownCtors imports (Vuna.Ast.concatMap secondOf parts) body) (\b =>
-            Vuna.Ast.Ok (Vuna.Ast.DFun n (Vuna.Ast.map firstOf parts) b))))
+    DData dname params ctors =>
+      andThen (traverse (resolveCtorPair label prefix) ctors) (\ctors2 =>
+        Ok (DData dname params ctors2))
+    DSig name ty =>
+      andThen (resolveTopName label prefix name) (\n => Ok (DSig n ty))
+    DFun name pats body =>
+      andThen (resolveTopName label prefix name) (\n =>
+        andThen (traverse (resolvePattern modules label prefix ownCtors imports) pats) (\parts =>
+          andThen (resolveExpr modules label prefix own ownCtors imports (concatMap secondOf parts) body) (\b =>
+            Ok (DFun n (map firstOf parts) b))))
 
 resolveProgram modules label prefix own ownCtors imports decls =
-  Vuna.Ast.traverse (resolveDecl modules label prefix own ownCtors imports) decls
+  traverse (resolveDecl modules label prefix own ownCtors imports) decls
 
 resolveEntry modules imports decls =
   resolveProgram modules "<entry>" "" (topNames decls) (ctorsOf decls) imports decls
 
 resolveModules modules =
   case modules of
-    Nil => Vuna.Ast.Ok Nil
+    Nil => Ok Nil
     Cons m rest =>
       case m of
         Module name imports decls exports =>
-          Vuna.Ast.andThen (resolveProgram modules name name exports (ctorsOf decls) imports decls) (\d1 =>
-            Vuna.Ast.andThen (resolveModules rest) (\d2 => Vuna.Ast.Ok (Vuna.Ast.append d1 d2)))
+          andThen (resolveProgram modules name name exports (ctorsOf decls) imports decls) (\d1 =>
+            andThen (resolveModules rest) (\d2 => Ok (append d1 d2)))
 
-showCycle name stack = joinArrows (Vuna.Ast.reverse (Cons name stack))
+showCycle name stack = joinArrows (reverse (Cons name stack))
 
 loadAll root modules stack imports =
   case imports of
-    Nil => Vuna.Ast.Ok modules
+    Nil => Ok modules
     Cons imp rest =>
-      Vuna.Ast.andThen (loadModule root modules stack (importName imp)) (\modules2 =>
+      andThen (loadModule root modules stack (importName imp)) (\modules2 =>
         loadAll root modules2 stack rest)
 
 loadModule root modules stack name =
   case findModule modules name of
-    Vuna.Ast.Just m => Vuna.Ast.Ok modules
-    Vuna.Ast.Nothing =>
-      if Vuna.Ast.memName name stack then Vuna.Ast.Err ("import cycle: " ++ showCycle name stack)
+    Just m => Ok modules
+    Nothing =>
+      if memName name stack then Err ("import cycle: " ++ showCycle name stack)
       else if validModuleName name then
-        Vuna.Ast.andThen (Vuna.Parser.parseSource (readFile (modulePath root name))) (\p =>
+        andThen (parseSource (readFile (modulePath root name))) (\p =>
           case p of
-            Vuna.Ast.Pair imports decls =>
-              Vuna.Ast.andThen (validateImports name imports) (\_ =>
-                Vuna.Ast.andThen (loadAll root modules (Cons name stack) imports) (\modules2 =>
-                  Vuna.Ast.Ok (Cons (Module name imports decls (topNames decls)) modules2))))
-      else Vuna.Ast.Err ("invalid module name: " ++ name)
+            Pair imports decls =>
+              andThen (validateImports name imports) (\_ =>
+                andThen (loadAll root modules (Cons name stack) imports) (\modules2 =>
+                  Ok (Cons (Module name imports decls (topNames decls)) modules2))))
+      else Err ("invalid module name: " ++ name)
 
 loadProgram root entry =
-  Vuna.Ast.andThen (Vuna.Parser.parseSource (readFile entry)) (\p =>
+  andThen (parseSource (readFile entry)) (\p =>
     case p of
-      Vuna.Ast.Pair imports decls =>
-        Vuna.Ast.andThen (validateImports "<entry>" imports) (\_ =>
-          Vuna.Ast.andThen (loadAll root Nil Nil imports) (\modules =>
-            Vuna.Ast.andThen (resolveEntry modules imports decls) (\entryDecls =>
-              Vuna.Ast.andThen (resolveModules modules) (\moduleDecls =>
-                Vuna.Ast.Ok (Vuna.Ast.append entryDecls moduleDecls))))))
+      Pair imports decls =>
+        andThen (validateImports "<entry>" imports) (\_ =>
+          andThen (loadAll root Nil Nil imports) (\modules =>
+            andThen (resolveEntry modules imports decls) (\entryDecls =>
+              andThen (resolveModules modules) (\moduleDecls =>
+                Ok (append entryDecls moduleDecls))))))
 
 runDecls decls =
   case interpretMain decls of
-    Vuna.Ast.Err e => "error: " ++ e
-    Vuna.Ast.Ok v => showValue v
+    Err e => "error: " ++ e
+    Ok v => showValue v
 
 interpret source =
-  case Vuna.Parser.parseSource source of
-    Vuna.Ast.Err e => "error: " ++ e
-    Vuna.Ast.Ok p =>
+  case parseSource source of
+    Err e => "error: " ++ e
+    Ok p =>
       case p of
-        Vuna.Ast.Pair imports decls =>
+        Pair imports decls =>
           case imports of
             Nil => runDecls decls
             _ => "error: imports are only supported by interpretFile"
 
 interpretFile root entry =
   case loadProgram root entry of
-    Vuna.Ast.Err e => "error: " ++ e
-    Vuna.Ast.Ok decls => runDecls decls
+    Err e => "error: " ++ e
+    Ok decls => runDecls decls
 
 interpretMain decls =
-  case Vuna.Ast.funArity "main" decls of
-    Vuna.Ast.Nothing => Vuna.Ast.Err "no `main` definition"
-    Vuna.Ast.Just arity =>
+  case funArity "main" decls of
+    Nothing => Err "no `main` definition"
+    Just arity =>
       if arity == 0 then callFunction decls "main" Nil
-      else Vuna.Ast.Err "`main` must be a nullary definition"
+      else Err "`main` must be a nullary definition"
 
 compileFile root entry printResult =
-  Vuna.Ast.andThen (loadProgram root entry) (\decls =>
-    case decls of ds => Vuna.Codegen.generateProgram ds printResult)
+  andThen (loadProgram root entry) (\decls =>
+    case decls of ds => generateProgram ds printResult)
 
 demo = "main = 40 + 2"
 

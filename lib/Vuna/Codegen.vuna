@@ -2,9 +2,9 @@
 
 import Vuna.Ast
 
-firstOf p = case p of Vuna.Ast.Pair a b => a
+firstOf p = case p of Pair a b => a
 
-secondOf p = case p of Vuna.Ast.Pair a b => b
+secondOf p = case p of Pair a b => b
 
 runtimeCode = "\ntype value =\n  | VInt of int\n  | VStr of string\n  | VCon of string * value list\n  | VFun of string * (value -> value)\n\nlet fail (msg : string) : 'a = failwith msg\n\nlet apply (fn : value) (arg : value) : value =\n  match fn with\n  | VFun (_, f) -> f arg\n  | _ -> fail \"cannot apply a non-function\"\n\nlet expect_int (name : string) (v : value) : int =\n  match v with VInt n -> n | _ -> fail (name ^ \": expected an Int argument\")\n\nlet expect_str (name : string) (v : value) : string =\n  match v with VStr s -> s | _ -> fail (name ^ \": expected a String argument\")\n\nlet vbool (b : bool) : value = VCon ((if b then \"True\" else \"False\"), [])\n\nlet expect_bool (name : string) (v : value) : bool =\n  match v with\n  | VCon (\"True\", []) -> true\n  | VCon (\"False\", []) -> false\n  | _ -> fail (name ^ \": expected a Bool argument\")\n\nlet rec string_to_value (s : string) : value =\n  let n = String.length s in\n  let rec go i acc =\n    if i < 0 then acc\n    else go (i - 1) (VCon (\"Cons\", [ VInt (Char.code s.[i]); acc ]))\n  in\n  go (n - 1) (VCon (\"Nil\", []))\n\nlet value_to_string (v : value) : string =\n  let buf = Buffer.create 16 in\n  let rec go (v : value) =\n    match v with\n    | VCon (\"Nil\", []) -> ()\n    | VCon (\"Cons\", [ VInt c; rest ]) ->\n        if c < 0 || c > 255 then fail \"strPack: character code out of range\";\n        Buffer.add_char buf (Char.chr c);\n        go rest\n    | _ -> fail \"strPack expects a List Int\"\n  in\n  go v;\n  Buffer.contents buf\n\nlet list_of_strings (strings : string list) : value =\n  List.fold_right\n    (fun s acc -> VCon (\"Cons\", [ VStr s; acc ]))\n    strings (VCon (\"Nil\", []))\n\nlet read_file (path : string) : string =\n  try\n    let channel = open_in_bin path in\n    Fun.protect\n      ~finally:(fun () -> close_in_noerr channel)\n      (fun () -> really_input_string channel (in_channel_length channel))\n  with Sys_error message -> fail (\"readFile: \" ^ message)\n\nlet write_file (path : string) (contents : string) : int =\n  try\n    let channel = open_out_bin path in\n    Fun.protect\n      ~finally:(fun () -> close_out_noerr channel)\n      (fun () -> output_string channel contents);\n    String.length contents\n  with Sys_error message -> fail (\"writeFile: \" ^ message)\n\nlet print_stdout (text : string) : int =\n  print_string text;\n  flush stdout;\n  String.length text\n\nlet get_args () : value =\n  let argv = Sys.argv in\n  let count = Array.length argv in\n  let args =\n    if count <= 1 then [] else Array.to_list (Array.sub argv 1 (count - 1))\n  in\n  list_of_strings args\n\nlet bi_add =\n  fun a -> VFun (\"+\", fun b -> VInt (expect_int \"+\" a + expect_int \"+\" b))\n\nlet bi_sub =\n  fun a -> VFun (\"-\", fun b -> VInt (expect_int \"-\" a - expect_int \"-\" b))\n\nlet bi_mul =\n  fun a -> VFun (\"*\", fun b -> VInt (expect_int \"*\" a * expect_int \"*\" b))\n\nlet bi_div =\n  fun a ->\n    VFun\n      ( \"/\",\n        fun b ->\n          let x = expect_int \"/\" a in\n          let y = expect_int \"/\" b in\n          if y = 0 then fail \"division by zero\" else VInt (x / y) )\n\nlet bi_eq =\n  fun a ->\n    VFun\n      ( \"==\",\n        fun b ->\n          match (a, b) with\n          | VInt x, VInt y -> vbool (x = y)\n          | VStr x, VStr y -> vbool (x = y)\n          | _ -> fail \"bad arguments for ==\" )\n\nlet bi_neq =\n  fun a ->\n    VFun\n      ( \"/=\",\n        fun b ->\n          match (a, b) with\n          | VInt x, VInt y -> vbool (x <> y)\n          | VStr x, VStr y -> vbool (x <> y)\n          | _ -> fail \"bad arguments for /=\" )\n\nlet bi_lt =\n  fun a -> VFun (\"<\", fun b -> vbool (expect_int \"<\" a < expect_int \"<\" b))\n\nlet bi_le =\n  fun a -> VFun (\"<=\", fun b -> vbool (expect_int \"<=\" a <= expect_int \"<=\" b))\n\nlet bi_gt =\n  fun a -> VFun (\">\", fun b -> vbool (expect_int \">\" a > expect_int \">\" b))\n\nlet bi_ge =\n  fun a -> VFun (\">=\", fun b -> vbool (expect_int \">=\" a >= expect_int \">=\" b))\n\nlet bi_and =\n  fun a ->\n    VFun\n      (\"&&\", fun b -> vbool (expect_bool \"&&\" a && expect_bool \"&&\" b))\n\nlet bi_or =\n  fun a ->\n    VFun (\"||\", fun b -> vbool (expect_bool \"||\" a || expect_bool \"||\" b))\n\nlet bi_concat =\n  fun a -> VFun (\"++\", fun b -> VStr (expect_str \"++\" a ^ expect_str \"++\" b))\n\nlet bi_str_length = fun a -> VInt (String.length (expect_str \"strLength\" a))\n\nlet bi_str_unpack =\n  fun a -> string_to_value (expect_str \"strUnpack\" a)\n\nlet bi_str_pack = fun a -> VStr (value_to_string a)\n\nlet bi_str_from_int =\n  fun a -> VStr (string_of_int (expect_int \"strFromInt\" a))\n\nlet display_name (name : string) : string =\n  match String.rindex_opt name '.' with\n  | Some index -> String.sub name (index + 1) (String.length name - index - 1)\n  | None -> name\n\nlet rec show_value (v : value) : string =\n  match v with\n  | VInt n -> string_of_int n\n  | VStr s -> \"\\\"\" ^ show_chars s 0 (String.length s) ^ \"\\\"\"\n  | VCon (name, []) -> display_name name\n  | VCon (name, args) ->\n      \"(\" ^ display_name name ^ \" \"\n      ^ String.concat \" \" (List.map show_value args)\n      ^ \")\"\n  | VFun (\"\", _) -> \"<lambda>\"\n  | VFun (name, _) -> \"<function \" ^ display_name name ^ \">\"\n\nand show_chars (s : string) (i : int) (n : int) : string =\n  if i >= n then \"\"\n  else\n    let rest = show_chars s (i + 1) n in\n    match s.[i] with\n    | '\"' -> \"\\\\\\\"\" ^ rest\n    | '\\\\' -> \"\\\\\\\\\" ^ rest\n    | '\\n' -> \"\\\\n\" ^ rest\n    | '\\t' -> \"\\\\t\" ^ rest\n    | '\\r' -> \"\\\\r\" ^ rest\n    | '\\b' -> \"\\\\b\" ^ rest\n    | c ->\n        let code = Char.code c in\n        if code >= 32 && code <= 126 then String.make 1 c ^ rest\n        else Printf.sprintf \"\\\\%03d\" code ^ rest\n"
 
@@ -38,11 +38,11 @@ builtinInfos =
   , BuiltinInfo "getArgs" "bi_get_args" 0 "get_args ()"
   ]
 
-findBuiltin name Nil = Vuna.Ast.Nothing
+findBuiltin name Nil = Nothing
 findBuiltin name (Cons b rest) =
   case b of
     BuiltinInfo vname ocname arity body =>
-      if vname == name then Vuna.Ast.Just b else findBuiltin name rest
+      if vname == name then Just b else findBuiltin name rest
 
 joinList sep Nil = ""
 joinList sep (Cons x Nil) = x
@@ -60,11 +60,11 @@ sanitizeChar c =
   else if c == 39 then Cons 95 (Cons 112 Nil)
   else Cons c Nil
 
-sanitizeName name = strPack (Vuna.Ast.concatMap sanitizeChar (strUnpack name))
+sanitizeName name = strPack (concatMap sanitizeChar (strUnpack name))
 
 pad3 s =
-  if Vuna.Ast.length s == 1 then "00" ++ s
-  else if Vuna.Ast.length s == 2 then "0" ++ s
+  if length s == 1 then "00" ++ s
+  else if length s == 2 then "0" ++ s
   else s
 
 escapeChar c =
@@ -76,31 +76,31 @@ escapeChar c =
   else if c >= 32 && c <= 126 then Cons c Nil
   else strUnpack ("\\" ++ pad3 (strFromInt c))
 
-ocamlString s = "\"" ++ strPack (Vuna.Ast.concatMap escapeChar (strUnpack s)) ++ "\""
+ocamlString s = "\"" ++ strPack (concatMap escapeChar (strUnpack s)) ++ "\""
 
 genVar decls scope name =
-  if Vuna.Ast.memName name scope then Vuna.Ast.Ok ("x_" ++ sanitizeName name)
+  if memName name scope then Ok ("x_" ++ sanitizeName name)
   else
-    case Vuna.Ast.funArity name decls of
-      Vuna.Ast.Just 0 => Vuna.Ast.Ok ("v_" ++ sanitizeName name ++ " ()")
-      Vuna.Ast.Just arity =>
-        Vuna.Ast.Ok ("VFun (" ++ ocamlString name ++ ", v_" ++ sanitizeName name ++ ")")
-      Vuna.Ast.Nothing =>
-        case Vuna.Ast.ctorArity name decls of
-          Vuna.Ast.Just 0 => Vuna.Ast.Ok ("VCon (" ++ ocamlString name ++ ", [])")
-          Vuna.Ast.Just arity =>
-            Vuna.Ast.Ok
+    case funArity name decls of
+      Just 0 => Ok ("v_" ++ sanitizeName name ++ " ()")
+      Just arity =>
+        Ok ("VFun (" ++ ocamlString name ++ ", v_" ++ sanitizeName name ++ ")")
+      Nothing =>
+        case ctorArity name decls of
+          Just 0 => Ok ("VCon (" ++ ocamlString name ++ ", [])")
+          Just arity =>
+            Ok
               ("VFun (" ++ ocamlString name ++ ", mk_" ++ sanitizeName name
              ++ ")")
-          Vuna.Ast.Nothing =>
+          Nothing =>
             case findBuiltin name builtinInfos of
-              Vuna.Ast.Just b =>
+              Just b =>
                 case b of
                   BuiltinInfo vname ocname arity body =>
-                    if arity == 0 then Vuna.Ast.Ok (ocname ++ " ()")
+                    if arity == 0 then Ok (ocname ++ " ()")
                     else
-                      Vuna.Ast.Ok ("VFun (" ++ ocamlString name ++ ", " ++ ocname ++ ")")
-              Vuna.Ast.Nothing => Vuna.Ast.Err ("unbound variable: " ++ name)
+                      Ok ("VFun (" ++ ocamlString name ++ ", " ++ ocname ++ ")")
+              Nothing => Err ("unbound variable: " ++ name)
 
 pconPattern name Nil = "VCon (" ++ ocamlString name ++ ", [])"
 pconPattern name pats =
@@ -108,36 +108,36 @@ pconPattern name pats =
 
 genPattern pat =
   case pat of
-    Vuna.Ast.PWild => Vuna.Ast.Ok (Vuna.Ast.Pair "_" Nil)
-    Vuna.Ast.PVar name => Vuna.Ast.Ok (Vuna.Ast.Pair ("x_" ++ sanitizeName name) (Cons name Nil))
-    Vuna.Ast.PInt n => Vuna.Ast.Ok (Vuna.Ast.Pair ("VInt (" ++ strFromInt n ++ ")") Nil)
-    Vuna.Ast.PStr s => Vuna.Ast.Ok (Vuna.Ast.Pair ("VStr " ++ ocamlString s) Nil)
-    Vuna.Ast.PCon name pats =>
-      Vuna.Ast.andThen (Vuna.Ast.traverse genPattern pats) (\parts =>
-        Vuna.Ast.Ok
-          (Vuna.Ast.Pair (pconPattern name (Vuna.Ast.map firstOf parts))
-             (Vuna.Ast.concatMap secondOf parts)))
+    PWild => Ok (Pair "_" Nil)
+    PVar name => Ok (Pair ("x_" ++ sanitizeName name) (Cons name Nil))
+    PInt n => Ok (Pair ("VInt (" ++ strFromInt n ++ ")") Nil)
+    PStr s => Ok (Pair ("VStr " ++ ocamlString s) Nil)
+    PCon name pats =>
+      andThen (traverse genPattern pats) (\parts =>
+        Ok
+          (Pair (pconPattern name (map firstOf parts))
+             (concatMap secondOf parts)))
 
 genLambda decls scope params body =
   case params of
     Nil => genExpr decls scope body
     Cons p rest =>
-      Vuna.Ast.andThen (genLambda decls (Cons p scope) rest body) (\inner =>
-        Vuna.Ast.Ok ("VFun (\"\", fun x_" ++ sanitizeName p ++ " -> " ++ inner ++ ")"))
+      andThen (genLambda decls (Cons p scope) rest body) (\inner =>
+        Ok ("VFun (\"\", fun x_" ++ sanitizeName p ++ " -> " ++ inner ++ ")"))
 
 genAlt decls scope alt =
   case alt of
-    Vuna.Ast.Pair pat body =>
-      Vuna.Ast.andThen (genPattern pat) (\p =>
+    Pair pat body =>
+      andThen (genPattern pat) (\p =>
         case p of
-          Vuna.Ast.Pair patCode bound =>
-            Vuna.Ast.andThen (genExpr decls (Vuna.Ast.append bound scope) body) (\bodyCode =>
-              Vuna.Ast.Ok ("| " ++ patCode ++ " -> " ++ bodyCode)))
+          Pair patCode bound =>
+            andThen (genExpr decls (append bound scope) body) (\bodyCode =>
+              Ok ("| " ++ patCode ++ " -> " ++ bodyCode)))
 
 genCase decls scope scrut alts =
-  Vuna.Ast.andThen (genExpr decls scope scrut) (\scrutCode =>
-    Vuna.Ast.andThen (Vuna.Ast.traverse (genAlt decls scope) alts) (\branches =>
-      Vuna.Ast.Ok
+  andThen (genExpr decls scope scrut) (\scrutCode =>
+    andThen (traverse (genAlt decls scope) alts) (\branches =>
+      Ok
         ("(match (" ++ scrutCode ++ ") with\n    "
         ++ joinList "\n    " branches
         ++ "\n    | _ -> fail \"case pattern match failure\")")))
@@ -147,13 +147,13 @@ genLet decls scope binds body =
     Nil => genExpr decls scope body
     Cons b rest =>
       case b of
-        Vuna.Ast.Pair pat value =>
-          Vuna.Ast.andThen (genExpr decls scope value) (\valueCode =>
-            Vuna.Ast.andThen (genPattern pat) (\p =>
+        Pair pat value =>
+          andThen (genExpr decls scope value) (\valueCode =>
+            andThen (genPattern pat) (\p =>
               case p of
-                Vuna.Ast.Pair patCode bound =>
-                  Vuna.Ast.andThen (genLet decls (Vuna.Ast.append bound scope) rest body) (\bodyCode =>
-                    Vuna.Ast.Ok
+                Pair patCode bound =>
+                  andThen (genLet decls (append bound scope) rest body) (\bodyCode =>
+                    Ok
                       ("(let " ++ patCode ++ " = (" ++ valueCode ++ ") in "
                       ++ bodyCode ++ ")"))))
 
@@ -163,21 +163,21 @@ cgApplyFold acc (Cons a rest) =
 
 genExpr decls scope expr =
   case expr of
-    Vuna.Ast.EVar name => genVar decls scope name
-    Vuna.Ast.EInt n => Vuna.Ast.Ok ("VInt (" ++ strFromInt n ++ ")")
-    Vuna.Ast.EStr s => Vuna.Ast.Ok ("VStr " ++ ocamlString s)
-    Vuna.Ast.ELam params body => genLambda decls scope params body
-    Vuna.Ast.EApp fn args =>
-      Vuna.Ast.andThen (genExpr decls scope fn) (\fnCode =>
-        Vuna.Ast.andThen (Vuna.Ast.traverse (\a => genExpr decls scope a) args) (\argCodes =>
-          Vuna.Ast.Ok (cgApplyFold fnCode argCodes)))
-    Vuna.Ast.ELet binds body => genLet decls scope binds body
-    Vuna.Ast.ECase scrut alts => genCase decls scope scrut alts
-    Vuna.Ast.EIf c t e =>
-      Vuna.Ast.andThen (genExpr decls scope c) (\cc =>
-        Vuna.Ast.andThen (genExpr decls scope t) (\tc =>
-          Vuna.Ast.andThen (genExpr decls scope e) (\ec =>
-            Vuna.Ast.Ok
+    EVar name => genVar decls scope name
+    EInt n => Ok ("VInt (" ++ strFromInt n ++ ")")
+    EStr s => Ok ("VStr " ++ ocamlString s)
+    ELam params body => genLambda decls scope params body
+    EApp fn args =>
+      andThen (genExpr decls scope fn) (\fnCode =>
+        andThen (traverse (\a => genExpr decls scope a) args) (\argCodes =>
+          Ok (cgApplyFold fnCode argCodes)))
+    ELet binds body => genLet decls scope binds body
+    ECase scrut alts => genCase decls scope scrut alts
+    EIf c t e =>
+      andThen (genExpr decls scope c) (\cc =>
+        andThen (genExpr decls scope t) (\tc =>
+          andThen (genExpr decls scope e) (\ec =>
+            Ok
               ("(match (" ++ cc
               ++ ") with VCon (\"True\", []) -> " ++ tc
               ++ " | VCon (\"False\", []) -> " ++ ec
@@ -188,52 +188,52 @@ groupFunctions decls = groupFunctionsLoop decls Nil
 groupFunctionsLoop Nil groups = groups
 groupFunctionsLoop (Cons d rest) groups =
   case d of
-    Vuna.Ast.DFun name pats body =>
-      groupFunctionsLoop rest (addClause name (Vuna.Ast.Pair pats body) groups)
+    DFun name pats body =>
+      groupFunctionsLoop rest (addClause name (Pair pats body) groups)
     _ => groupFunctionsLoop rest groups
 
-addClause name clause Nil = Cons (Vuna.Ast.Pair name (Cons clause Nil)) Nil
+addClause name clause Nil = Cons (Pair name (Cons clause Nil)) Nil
 addClause name clause (Cons g rest) =
   case g of
-    Vuna.Ast.Pair gname clauses =>
+    Pair gname clauses =>
       if gname == name then
-        Cons (Vuna.Ast.Pair gname (Vuna.Ast.append clauses (Cons clause Nil))) rest
+        Cons (Pair gname (append clauses (Cons clause Nil))) rest
       else Cons g (addClause name clause rest)
 
-arityOf name Nil = Vuna.Ast.Err ("function " ++ name ++ " has no clauses")
+arityOf name Nil = Err ("function " ++ name ++ " has no clauses")
 arityOf name (Cons c rest) =
   case c of
-    Vuna.Ast.Pair pats body => checkArities name (Vuna.Ast.length pats) rest
+    Pair pats body => checkArities name (length pats) rest
 
-checkArities name expected Nil = Vuna.Ast.Ok expected
+checkArities name expected Nil = Ok expected
 checkArities name expected (Cons c rest) =
   case c of
-    Vuna.Ast.Pair pats body =>
-      if Vuna.Ast.length pats == expected then checkArities name expected rest
-      else Vuna.Ast.Err ("clauses for " ++ name ++ " have different arities")
+    Pair pats body =>
+      if length pats == expected then checkArities name expected rest
+      else Err ("clauses for " ++ name ++ " have different arities")
 
 allCtors Nil = Nil
 allCtors (Cons d rest) =
   case d of
-    Vuna.Ast.DData dname params ctors => Vuna.Ast.append ctors (allCtors rest)
+    DData dname params ctors => append ctors (allCtors rest)
     _ => allCtors rest
 
-validateCtors Nil = Vuna.Ast.Ok Nil
+validateCtors Nil = Ok Nil
 validateCtors (Cons c rest) =
   case c of
-    Vuna.Ast.Pair name arity =>
-      if Vuna.Ast.memName name (Vuna.Ast.map firstOf rest) then
-        Vuna.Ast.Err ("duplicate constructor: " ++ name)
+    Pair name arity =>
+      if memName name (map firstOf rest) then
+        Err ("duplicate constructor: " ++ name)
       else validateCtors rest
 
-checkNoCtorFun Nil decls = Vuna.Ast.Ok Nil
+checkNoCtorFun Nil decls = Ok Nil
 checkNoCtorFun (Cons g rest) decls =
   case g of
-    Vuna.Ast.Pair name clauses =>
-      case Vuna.Ast.ctorArity name decls of
-        Vuna.Ast.Just arity =>
-          Vuna.Ast.Err ("name is both a constructor and a function: " ++ name)
-        Vuna.Ast.Nothing => checkNoCtorFun rest decls
+    Pair name clauses =>
+      case ctorArity name decls of
+        Just arity =>
+          Err ("name is both a constructor and a function: " ++ name)
+        Nothing => checkNoCtorFun rest decls
 
 makeParams n = makeParamsFrom 1 n
 
@@ -247,35 +247,35 @@ makeCtorParamsFrom i n =
   if i > n then Nil
   else Cons ("c" ++ strFromInt i) (makeCtorParamsFrom (i + 1) n)
 
-genBranches decls arity Nil = Vuna.Ast.Ok Nil
+genBranches decls arity Nil = Ok Nil
 genBranches decls arity (Cons c rest) =
   case c of
-    Vuna.Ast.Pair pats body =>
-      Vuna.Ast.andThen (Vuna.Ast.traverse genPattern pats) (\parts =>
-        let patternCode = if arity == 1 then headOf (Vuna.Ast.map firstOf parts) else "(" ++ joinList ", " (Vuna.Ast.map firstOf parts) ++ ")"
-        in Vuna.Ast.andThen (genExpr decls (Vuna.Ast.concatMap secondOf parts) body) (\b =>
-             Vuna.Ast.andThen (genBranches decls arity rest) (\restBranches =>
-               Vuna.Ast.Ok (Cons ("| " ++ patternCode ++ " -> " ++ b) restBranches))))
+    Pair pats body =>
+      andThen (traverse genPattern pats) (\parts =>
+        let patternCode = if arity == 1 then headOf (map firstOf parts) else "(" ++ joinList ", " (map firstOf parts) ++ ")"
+        in andThen (genExpr decls (concatMap secondOf parts) body) (\b =>
+             andThen (genBranches decls arity rest) (\restBranches =>
+               Ok (Cons ("| " ++ patternCode ++ " -> " ++ b) restBranches))))
 
 genFunction decls name clauses =
-  Vuna.Ast.andThen (arityOf name clauses) (\arity =>
+  andThen (arityOf name clauses) (\arity =>
     case clauses of
-      Nil => Vuna.Ast.Err ("function " ++ name ++ " has no clauses")
+      Nil => Err ("function " ++ name ++ " has no clauses")
       Cons first rest =>
         if arity == 0 then
           case first of
-            Vuna.Ast.Pair pats body =>
-              Vuna.Ast.andThen (genExpr decls Nil body) (\b =>
-                Vuna.Ast.Ok ("(fun () -> " ++ b ++ ")"))
+            Pair pats body =>
+              andThen (genExpr decls Nil body) (\b =>
+                Ok ("(fun () -> " ++ b ++ ")"))
         else
           let params = makeParams arity in
           let scrutinee = if arity == 1 then headOf params else "(" ++ joinList ", " params ++ ")"
-          in Vuna.Ast.andThen (genBranches decls arity clauses) (\branches =>
+          in andThen (genBranches decls arity clauses) (\branches =>
                let matchCode = "(match (" ++ scrutinee ++ ") with\n    " ++ joinList "\n    " branches ++ "\n    | _ -> fail \"no matching clause for " ++ name ++ "\")"
-               in Vuna.Ast.Ok (wrapFun name params matchCode 0)))
+               in Ok (wrapFun name params matchCode 0)))
 
 wrapFun name params matchCode k =
-  if k == Vuna.Ast.length params - 1 then
+  if k == length params - 1 then
     "(fun " ++ nthList k params ++ " -> " ++ matchCode ++ ")"
   else
     "(fun " ++ nthList k params ++ " -> VFun (" ++ ocamlString name ++ ", "
@@ -283,26 +283,26 @@ wrapFun name params matchCode k =
 
 genCtor c =
   case c of
-    Vuna.Ast.Pair name arity =>
-      if arity == 0 then Vuna.Ast.Ok ""
+    Pair name arity =>
+      if arity == 0 then Ok ""
       else
         let params = makeCtorParams arity in
         let body = "VCon (" ++ ocamlString name ++ ", [" ++ joinList "; " params ++ "])"
-        in Vuna.Ast.Ok
+        in Ok
              ("let mk_" ++ sanitizeName name ++ " = "
              ++ wrapCtor name params body 0 ++ "\n")
 
 wrapCtor name params body k =
-  if k == Vuna.Ast.length params - 1 then
+  if k == length params - 1 then
     "(fun " ++ nthList k params ++ " -> " ++ body ++ ")"
   else
     "(fun " ++ nthList k params ++ " -> VFun (" ++ ocamlString name ++ ", "
     ++ wrapCtor name params body (k + 1) ++ "))"
 
-genCtorDefs Nil = Vuna.Ast.Ok ""
+genCtorDefs Nil = Ok ""
 genCtorDefs (Cons c rest) =
-  Vuna.Ast.andThen (genCtor c) (\def =>
-    Vuna.Ast.andThen (genCtorDefs rest) (\restDefs => Vuna.Ast.Ok (def ++ restDefs)))
+  andThen (genCtor c) (\def =>
+    andThen (genCtorDefs rest) (\restDefs => Ok (def ++ restDefs)))
 
 genBuiltinDef Nil = ""
 genBuiltinDef (Cons b rest) =
@@ -311,13 +311,13 @@ genBuiltinDef (Cons b rest) =
       let def = if arity == 0 then "let " ++ ocname ++ " = fun () -> " ++ body ++ "\n" else if arity == 1 then "let " ++ ocname ++ " = fun a -> " ++ body ++ "\n" else "let " ++ ocname ++ " = fun a -> VFun (" ++ ocamlString vname ++ ", fun b -> " ++ body ++ ")\n"
       in def ++ genBuiltinDef rest
 
-genFunctions decls Nil = Vuna.Ast.Ok Nil
+genFunctions decls Nil = Ok Nil
 genFunctions decls (Cons g rest) =
   case g of
-    Vuna.Ast.Pair name clauses =>
-      Vuna.Ast.andThen (genFunction decls name clauses) (\def =>
-        Vuna.Ast.andThen (genFunctions decls rest) (\defs =>
-          Vuna.Ast.Ok (Cons (Vuna.Ast.Pair name def) defs)))
+    Pair name clauses =>
+      andThen (genFunction decls name clauses) (\def =>
+        andThen (genFunctions decls rest) (\defs =>
+          Ok (Cons (Pair name def) defs)))
 
 renderRecsFrom Nil index = ""
 renderRecsFrom (Cons f rest) index =
@@ -328,17 +328,17 @@ renderRecsFrom (Cons f rest) index =
 generateProgram decls printResult =
   case allCtors decls of
     ctors =>
-      Vuna.Ast.andThen (validateCtors ctors) (\_ =>
-        Vuna.Ast.andThen (checkNoCtorFun (groupFunctions decls) decls) (\_ =>
-          case Vuna.Ast.funArity "main" decls of
-            Vuna.Ast.Just 0 =>
-              Vuna.Ast.andThen (genFunctions decls (groupFunctions decls)) (\defs =>
-                Vuna.Ast.andThen (genCtorDefs ctors) (\ctorDefs =>
-                  Vuna.Ast.Ok
+      andThen (validateCtors ctors) (\_ =>
+        andThen (checkNoCtorFun (groupFunctions decls) decls) (\_ =>
+          case funArity "main" decls of
+            Just 0 =>
+              andThen (genFunctions decls (groupFunctions decls)) (\defs =>
+                andThen (genCtorDefs ctors) (\ctorDefs =>
+                  Ok
                     (runtimeCode ++ ctorDefs ++ genBuiltinDef builtinInfos
                     ++ renderRecsFrom defs 0
                     ++ (if printResult then
                           "let () = print_endline (show_value (v_main ()))\n"
                         else "let () = ignore (v_main ())\n"))))
-            Vuna.Ast.Just arity => Vuna.Ast.Err "`main` must be a nullary definition"
-            Vuna.Ast.Nothing => Vuna.Ast.Err "no `main` definition"))
+            Just arity => Err "`main` must be a nullary definition"
+            Nothing => Err "no `main` definition"))

@@ -53,21 +53,21 @@ skipLineComment (Chars (Cons c rest) p) =
 
 skipBlockComment depth cs =
   case cs of
-    Chars Nil p => Vuna.Ast.Err "unterminated block comment"
+    Chars Nil p => Err "unterminated block comment"
     Chars (Cons c rest) p =>
       case rest of
         Cons c2 rest2 =>
           if c == 123 && c2 == 45 then
             skipBlockComment (depth + 1) (Chars rest2 (advanceChar c2 (advanceChar c p)))
           else if c == 45 && c2 == 125 then
-            if depth == 1 then Vuna.Ast.Ok (Chars rest2 (advanceChar c2 (advanceChar c p)))
+            if depth == 1 then Ok (Chars rest2 (advanceChar c2 (advanceChar c p)))
             else skipBlockComment (depth - 1) (Chars rest2 (advanceChar c2 (advanceChar c p)))
           else skipBlockComment depth (Chars rest (advanceChar c p))
         Nil => skipBlockComment depth (Chars rest (advanceChar c p))
 
 skipTrivia cs =
   case cs of
-    Chars Nil p => Vuna.Ast.Ok cs
+    Chars Nil p => Ok cs
     Chars (Cons c rest) p =>
       if isSpace c then skipTrivia (Chars rest (advanceChar c p))
       else
@@ -77,12 +77,12 @@ skipTrivia cs =
               skipTrivia (skipLineComment (Chars rest (advanceChar c p)))
             else if c == 123 && c2 == 45 then
               case skipBlockComment 1 (Chars rest (advanceChar c p)) of
-                Vuna.Ast.Err e => Vuna.Ast.Err e
-                Vuna.Ast.Ok cs2 => skipTrivia cs2
-            else Vuna.Ast.Ok cs
-          Nil => Vuna.Ast.Ok cs
+                Err e => Err e
+                Ok cs2 => skipTrivia cs2
+            else Ok cs
+          Nil => Ok cs
 
-collectIdent (Chars Nil p) acc = Vuna.Ast.Pair (strPack (Vuna.Ast.reverse acc)) (Chars Nil p)
+collectIdent (Chars Nil p) acc = Pair (strPack (reverse acc)) (Chars Nil p)
 collectIdent (Chars (Cons c rest) p) acc =
   if isIdentChar c then collectIdent (Chars rest (advanceChar c p)) (Cons c acc)
   else if c == 46 then
@@ -90,28 +90,28 @@ collectIdent (Chars (Cons c rest) p) acc =
       Cons c2 rest2 =>
         if isIdentStart c2 then
           collectIdent (Chars rest (advanceChar c p)) (Cons c acc)
-        else Vuna.Ast.Pair (strPack (Vuna.Ast.reverse acc)) (Chars (Cons c rest) p)
-      Nil => Vuna.Ast.Pair (strPack (Vuna.Ast.reverse acc)) (Chars (Cons c rest) p)
-  else Vuna.Ast.Pair (strPack (Vuna.Ast.reverse acc)) (Chars (Cons c rest) p)
+        else Pair (strPack (reverse acc)) (Chars (Cons c rest) p)
+      Nil => Pair (strPack (reverse acc)) (Chars (Cons c rest) p)
+  else Pair (strPack (reverse acc)) (Chars (Cons c rest) p)
 
-collectInt (Chars Nil p) acc = Vuna.Ast.Pair acc (Chars Nil p)
+collectInt (Chars Nil p) acc = Pair acc (Chars Nil p)
 collectInt (Chars (Cons c rest) p) acc =
   if isDigit c then collectInt (Chars rest (advanceChar c p)) (acc * 10 + (c - 48))
-  else Vuna.Ast.Pair acc (Chars (Cons c rest) p)
+  else Pair acc (Chars (Cons c rest) p)
 
-collectOp (Chars Nil p) acc = Vuna.Ast.Pair (strPack (Vuna.Ast.reverse acc)) (Chars Nil p)
+collectOp (Chars Nil p) acc = Pair (strPack (reverse acc)) (Chars Nil p)
 collectOp (Chars (Cons c rest) p) acc =
   if isOpChar c then collectOp (Chars rest (advanceChar c p)) (Cons c acc)
-  else Vuna.Ast.Pair (strPack (Vuna.Ast.reverse acc)) (Chars (Cons c rest) p)
+  else Pair (strPack (reverse acc)) (Chars (Cons c rest) p)
 
-scanString (Chars Nil p) acc = Vuna.Ast.Err "unterminated string literal"
+scanString (Chars Nil p) acc = Err "unterminated string literal"
 scanString (Chars (Cons c rest) p) acc =
-  if c == 34 then Vuna.Ast.Ok (Vuna.Ast.Pair (strPack (Vuna.Ast.reverse acc)) (Chars rest (advanceChar c p)))
-  else if c == 10 then Vuna.Ast.Err "unterminated string literal"
+  if c == 34 then Ok (Pair (strPack (reverse acc)) (Chars rest (advanceChar c p)))
+  else if c == 10 then Err "unterminated string literal"
   else if c == 92 then scanEscape (Chars rest (advanceChar c p)) acc
   else scanString (Chars rest (advanceChar c p)) (Cons c acc)
 
-scanEscape (Chars Nil p) acc = Vuna.Ast.Err "unterminated string literal"
+scanEscape (Chars Nil p) acc = Err "unterminated string literal"
 scanEscape (Chars (Cons c rest) p) acc =
   if c == 110 then scanString (Chars rest (advanceChar c p)) (Cons 10 acc)
   else if c == 116 then scanString (Chars rest (advanceChar c p)) (Cons 9 acc)
@@ -119,48 +119,48 @@ scanEscape (Chars (Cons c rest) p) acc =
   else if c == 34 then scanString (Chars rest (advanceChar c p)) (Cons 34 acc)
   else if c == 92 then scanString (Chars rest (advanceChar c p)) (Cons 92 acc)
   else if c == 39 then scanString (Chars rest (advanceChar c p)) (Cons 39 acc)
-  else Vuna.Ast.Err "unknown escape sequence"
+  else Err "unknown escape sequence"
 
 lexChars cs =
   case skipTrivia cs of
-    Vuna.Ast.Err e => Vuna.Ast.Err e
-    Vuna.Ast.Ok cs2 =>
+    Err e => Err e
+    Ok cs2 =>
       case cs2 of
-        Chars Nil p => Vuna.Ast.Ok (Cons (PTok TEof p) Nil)
+        Chars Nil p => Ok (Cons (PTok TEof p) Nil)
         Chars (Cons c rest) p => lexToken c rest p
 
 lexToken c rest p =
   if isIdentStart c then
     case collectIdent (Chars rest (advanceChar c p)) (Cons c Nil) of
-      Vuna.Ast.Pair name cs2 =>
+      Pair name cs2 =>
         case lexChars cs2 of
-          Vuna.Ast.Err e => Vuna.Ast.Err e
-          Vuna.Ast.Ok toks => Vuna.Ast.Ok (Cons (PTok (classifyIdent name) p) toks)
+          Err e => Err e
+          Ok toks => Ok (Cons (PTok (classifyIdent name) p) toks)
   else if isDigit c then
     case collectInt (Chars rest (advanceChar c p)) (c - 48) of
-      Vuna.Ast.Pair n cs2 =>
+      Pair n cs2 =>
         case lexChars cs2 of
-          Vuna.Ast.Err e => Vuna.Ast.Err e
-          Vuna.Ast.Ok toks => Vuna.Ast.Ok (Cons (PTok (TInt n) p) toks)
+          Err e => Err e
+          Ok toks => Ok (Cons (PTok (TInt n) p) toks)
   else if c == 34 then
     case scanString (Chars rest (advanceChar c p)) Nil of
-      Vuna.Ast.Err e => Vuna.Ast.Err e
-      Vuna.Ast.Ok p2 =>
+      Err e => Err e
+      Ok p2 =>
         case p2 of
-          Vuna.Ast.Pair s cs2 =>
+          Pair s cs2 =>
             case lexChars cs2 of
-              Vuna.Ast.Err e => Vuna.Ast.Err e
-              Vuna.Ast.Ok toks => Vuna.Ast.Ok (Cons (PTok (TStr s) p) toks)
+              Err e => Err e
+              Ok toks => Ok (Cons (PTok (TStr s) p) toks)
   else if c == 40 || c == 41 || c == 91 || c == 93 || c == 44 then
     case lexChars (Chars rest (advanceChar c p)) of
-      Vuna.Ast.Err e => Vuna.Ast.Err e
-      Vuna.Ast.Ok toks => Vuna.Ast.Ok (Cons (PTok (TSym (strPack (Cons c Nil))) p) toks)
+      Err e => Err e
+      Ok toks => Ok (Cons (PTok (TSym (strPack (Cons c Nil))) p) toks)
   else if isOpChar c then
     case collectOp (Chars rest (advanceChar c p)) (Cons c Nil) of
-      Vuna.Ast.Pair op cs2 =>
+      Pair op cs2 =>
         case lexChars cs2 of
-          Vuna.Ast.Err e => Vuna.Ast.Err e
-          Vuna.Ast.Ok toks => Vuna.Ast.Ok (Cons (PTok (TSym op) p) toks)
-  else Vuna.Ast.Err "unexpected character"
+          Err e => Err e
+          Ok toks => Ok (Cons (PTok (TSym op) p) toks)
+  else Err "unexpected character"
 
 lexSource source = lexChars (Chars (strUnpack source) (Pos 1 1))
