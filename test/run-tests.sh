@@ -122,7 +122,36 @@ done
 arity_out=$("$VUNA" corpus/run_err/08_clause_arity.vuna "$tmp/arity.ml" 2>&1 || true)
 check_contains "08_clause_arity (compiler error)" "$arity_out" "clauses for f have different arities"
 
-# 7) 种子冒烟：vuna-boot 编译一个程序并运行
+# 7) 类型检查通过的程序：--typecheck 编译、运行、比对 golden
+for file in corpus/type_ok/*.vuna; do
+  base=${file%.vuna}
+  rm -f "$tmp/typed.ml" "$tmp/typed.exe"
+  if ! type_out=$("$VUNA" --typecheck "$file" "$tmp/typed.ml" 2>&1); then
+    bad "$file (typecheck)" "exit 0" "$type_out"
+  elif [ -n "$type_out" ]; then
+    bad "$file (typecheck output)" "" "$type_out"
+  elif ! "$OCAMLOPT" -w -a -o "$tmp/typed.exe" "$tmp/typed.ml" >"$tmp/typed.log" 2>&1; then
+    bad "$file (typed ocamlopt)" "" "$(cat "$tmp/typed.log")"
+  else
+    actual=$("$tmp/typed.exe" 2>&1)
+    check_eq "$file (typed run)" "$(cat "$base.out")" "$actual"
+  fi
+done
+
+# 8) 类型错误：--typecheck 必须报含片段的错误，且不写输出文件
+for file in corpus/type_err/*.vuna; do
+  fragment=$(cat "${file%.vuna}.err")
+  rm -f "$tmp/type_err.ml"
+  actual=$("$VUNA" --typecheck "$file" "$tmp/type_err.ml" 2>&1 || true)
+  check_contains "$file (type error)" "$actual" "$fragment"
+  if [ -e "$tmp/type_err.ml" ]; then
+    bad "$file (no output file)" "absent" "present"
+  else
+    ok
+  fi
+done
+
+# 9) 种子冒烟：vuna-boot 编译一个程序并运行
 fact=corpus/run/12_fact.vuna
 compile_and_run "$fact (vuna-boot)" "$VUNA_BOOT" "." "$fact" "$(cat "${fact%.vuna}.out")"
 

@@ -1,0 +1,7 @@
+f : Int -> String
+
+f x = x + 1
+
+main : Int
+
+main = 0

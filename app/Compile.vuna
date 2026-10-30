@@ -1,28 +1,30 @@
 -- vuna-compile：用 vuna 写的编译器 CLI。
--- 用法：vuna-compile [--no-print] [--root DIR] <entry.vuna> [out.ml]
+-- 用法：vuna-compile [--no-print] [--typecheck] [--root DIR] <entry.vuna> [out.ml]
 -- 不传 out.ml 时把生成的 OCaml 打到 stdout。
 import Vuna.Base
 import Vuna.Interp
 
-usage = "usage: vuna [--no-print] [--root DIR] <entry.vuna> [out.ml]"
+usage = "usage: vuna [--no-print] [--typecheck] [--root DIR] <entry.vuna> [out.ml]"
 
-main = dispatch True "lib" getArgs
+main = dispatch True False "lib" getArgs
 
-dispatch printResult root args =
+dispatch printResult typeCheck root args =
   case args of
     Nil => emitUsage
     Cons a rest =>
-      if a == "--no-print" then dispatch False root rest
+      if a == "--no-print" then dispatch False typeCheck root rest
+      else if a == "--typecheck" then dispatch printResult True root rest
       else if a == "--root" then
         case rest of
-          Cons dir rest2 => dispatch printResult dir rest2
+          Cons dir rest2 => dispatch printResult typeCheck dir rest2
           Nil => emitUsage
-      else emit printResult root a rest
+      else emit printResult typeCheck root a rest
 
 emitUsage = let _ = print (usage ++ "\n") in 1
 
-emit printResult root entry rest =
-  case compileFile root entry printResult of
+emit printResult typeCheck root entry rest =
+  let result = if typeCheck then compileFileChecked root entry printResult else compileFile root entry printResult
+  in case result of
     Ok code =>
       case rest of
         Cons out Nil => let _ = writeFile out code in 0

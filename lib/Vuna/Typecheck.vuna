@@ -1,0 +1,541 @@
+-- Vuna.Typecheck：core-v0 的 Hindley-Milner 风格类型检查。
+-- M7b 先覆盖单文件程序与显式顶层签名；模块类型名解析与自检在 M7c 处理。
+
+import Vuna.Base
+import Vuna.Ast
+
+data Ty : Type where
+  TVar : Int -> Ty
+  TCon : String -> List Ty -> Ty
+  TFun : Ty -> Ty -> Ty
+
+data Scheme : Type where
+  Scheme : List Int -> Ty -> Scheme
+
+data TC : Type where
+  TC : Int -> List (Pair Int Ty) -> TC
+
+-- ---------------------------------------------------------------
+-- 基础工具
+-- ---------------------------------------------------------------
+
+lookupSubst i Nil = Nothing
+lookupSubst i (Cons p rest) =
+  case p of
+    Pair j t => if i == j then Just t else lookupSubst i rest
+
+memInt i Nil = False
+memInt i (Cons x rest) = if i == x then True else memInt i rest
+
+addUnique x xs = if memInt x xs then xs else Cons x xs
+
+unionInts Nil ys = ys
+unionInts (Cons x rest) ys = addUnique x (unionInts rest ys)
+
+diffInts Nil ys = Nil
+diffInts (Cons x rest) ys = if memInt x ys then diffInts rest ys else Cons x (diffInts rest ys)
+
+resolveTy s ty =
+  case ty of
+    TVar i =>
+      case lookupSubst i s of
+        Just t => resolveTy s t
+        Nothing => ty
+    TCon n args => TCon n (map (resolveTy s) args)
+    TFun a b => TFun (resolveTy s a) (resolveTy s b)
+
+occursIn i s ty =
+  case resolveTy s ty of
+    TVar j => i == j
+    TCon n args => occursInArgs i s args
+    TFun a b => occursIn i s a || occursIn i s b
+
+occursInArgs i s Nil = False
+occursInArgs i s (Cons ty rest) = occursIn i s ty || occursInArgs i s rest
+
+showTy ty =
+  case ty of
+    TVar i => "t" ++ strFromInt i
+    TCon n Nil => n
+    TCon n args => "(" ++ n ++ " " ++ showTyArgs args ++ ")"
+    TFun a b => "(" ++ showTy a ++ " -> " ++ showTy b ++ ")"
+
+showTyArgs Nil = ""
+showTyArgs (Cons ty Nil) = showTy ty
+showTyArgs (Cons ty rest) = showTy ty ++ " " ++ showTyArgs rest
+
+nextVar st =
+  case st of
+    TC n s => Pair n (TC (n + 1) s)
+
+freshTy st =
+  case nextVar st of
+    Pair n st2 => Pair (TVar n) st2
+
+bindVar i ty st =
+  case st of
+    TC n s => Ok (TC n (Cons (Pair i ty) s))
+
+unifyLists Nil Nil st = Ok st
+unifyLists (Cons a ar) (Cons b br) st =
+  andThen (unify a b st) (\st2 => unifyLists ar br st2)
+unifyLists _ _ st = Err "type mismatch: different number of arguments"
+
+unify a b st =
+  case st of
+    TC n s =>
+      case resolveTy s a of
+        ra =>
+          case resolveTy s b of
+            rb =>
+              case ra of
+                TVar i =>
+                  case rb of
+                    TVar j =>
+                      if i == j then Ok st else bindVar i rb st
+                    _ =>
+                      if occursIn i s rb then Err ("occurs check: " ++ showTy rb)
+                      else bindVar i rb st
+                TCon tn xs =>
+                  case rb of
+                    TVar j =>
+                      if occursIn j s ra then Err ("occurs check: " ++ showTy ra)
+                      else bindVar j ra st
+                    TCon tn2 ys =>
+                      if tn == tn2 then unifyLists xs ys st
+                      else Err ("type mismatch: " ++ showTy ra ++ " vs " ++ showTy rb)
+                    _ => Err ("type mismatch: " ++ showTy ra ++ " vs " ++ showTy rb)
+                TFun x y =>
+                  case rb of
+                    TVar j =>
+                      if occursIn j s ra then Err ("occurs check: " ++ showTy ra)
+                      else bindVar j ra st
+                    TFun x2 y2 => andThen (unify x x2 st) (\st2 => unify y y2 st2)
+                    _ => Err ("type mismatch: " ++ showTy ra ++ " vs " ++ showTy rb)
+
+instantiateVars Nil st = Pair Nil st
+instantiateVars (Cons q rest) st =
+  case freshTy st of
+    Pair ty st2 =>
+      case instantiateVars rest st2 of
+        Pair mapping st3 => Pair (Cons (Pair q ty) mapping) st3
+
+renameTy mapping ty =
+  case ty of
+    TVar i =>
+      case lookupSubst i mapping of
+        Just t => t
+        Nothing => ty
+    TCon n args => TCon n (map (renameTy mapping) args)
+    TFun a b => TFun (renameTy mapping a) (renameTy mapping b)
+
+instantiate st sch =
+  case sch of
+    Scheme qs ty =>
+      case instantiateVars qs st of
+        Pair mapping st2 => Pair (renameTy mapping ty) st2
+
+freeVarsTy ty =
+  case ty of
+    TVar i => Cons i Nil
+    TCon n args => freeVarsArgs args
+    TFun a b => unionInts (freeVarsTy a) (freeVarsTy b)
+
+freeVarsArgs Nil = Nil
+freeVarsArgs (Cons ty rest) = unionInts (freeVarsTy ty) (freeVarsArgs rest)
+
+freeVarsScheme sch =
+  case sch of
+    Scheme qs ty => diffInts (freeVarsTy ty) qs
+
+freeVarsEnv Nil = Nil
+freeVarsEnv (Cons p rest) =
+  case p of
+    Pair n sch => unionInts (freeVarsScheme sch) (freeVarsEnv rest)
+
+-- ---------------------------------------------------------------
+-- 类型表达式 → Ty
+-- ---------------------------------------------------------------
+
+isLowerName name =
+  case strUnpack name of
+    Nil => False
+    Cons c rest => c >= 97 && c <= 122
+
+lookupTyVar name Nil = Nothing
+lookupTyVar name (Cons p rest) =
+  case p of
+    Pair n ty => if n == name then Just ty else lookupTyVar name rest
+
+knownTypeName typeNames name =
+  memName name typeNames || name == "Int" || name == "String" || name == "Bool"
+
+convertTypes typeNames vars Nil st = Ok (Pair (Pair Nil vars) st)
+convertTypes typeNames vars (Cons e rest) st =
+  andThen (convertType typeNames vars st e) (\pa =>
+    case pa of
+      Pair (Pair ty vars1) st1 =>
+        andThen (convertTypes typeNames vars1 rest st1) (\pb =>
+          case pb of
+            Pair (Pair tys vars2) st2 => Ok (Pair (Pair (Cons ty tys) vars2) st2)))
+
+convertType typeNames vars st expr =
+  case expr of
+    EVar name =>
+      if knownTypeName typeNames name then
+        Ok (Pair (Pair (TCon name Nil) vars) st)
+      else if isLowerName name then
+        case lookupTyVar name vars of
+          Just ty => Ok (Pair (Pair ty vars) st)
+          Nothing =>
+            case freshTy st of
+              Pair ty st2 => Ok (Pair (Pair ty (Cons (Pair name ty) vars)) st2)
+      else Err ("unknown type: " ++ name)
+    EApp fn args =>
+      case fn of
+        EVar "->" =>
+          case args of
+            Cons a (Cons b Nil) =>
+              andThen (convertType typeNames vars st a) (\pa =>
+                case pa of
+                  Pair (Pair ta vars1) st1 =>
+                    andThen (convertType typeNames vars1 st1 b) (\pb =>
+                      case pb of
+                        Pair (Pair tb vars2) st2 =>
+                          Ok (Pair (Pair (TFun ta tb) vars2) st2)))
+            _ => Err "invalid arrow type"
+        EVar name =>
+          if knownTypeName typeNames name then
+            andThen (convertTypes typeNames vars args st) (\pc =>
+              case pc of
+                Pair (Pair tys vars1) st1 => Ok (Pair (Pair (TCon name tys) vars1) st1))
+          else Err ("unknown type constructor: " ++ name)
+        _ => Err "invalid type application"
+    _ => Err "invalid type expression"
+
+varIds Nil = Nil
+varIds (Cons p rest) =
+  case p of
+    Pair n ty =>
+      case ty of
+        TVar i => Cons i (varIds rest)
+        _ => varIds rest
+
+schemeOfSig typeNames ty st =
+  andThen (convertType typeNames Nil st ty) (\p =>
+    case p of
+      Pair (Pair ty2 vars) st2 => Ok (Pair (Scheme (varIds vars) ty2) st2))
+
+seedVars Nil st = Pair Nil st
+seedVars (Cons name rest) st =
+  case freshTy st of
+    Pair ty st1 =>
+      case seedVars rest st1 of
+        Pair vars st2 => Pair (Cons (Pair name ty) vars) st2
+
+schemeOfCtor typeNames params st ctor =
+  case ctor of
+    Ctor name ty =>
+      case seedVars params st of
+        Pair vars st1 =>
+          andThen (convertType typeNames vars st1 ty) (\p =>
+            case p of
+              Pair (Pair ty2 vars2) st2 =>
+                Ok (Pair (Pair name (Scheme (varIds vars2) ty2)) st2))
+
+-- ---------------------------------------------------------------
+-- 收集声明：数据类型名、签名、构造器 scheme
+-- ---------------------------------------------------------------
+
+declDataNames Nil = Nil
+declDataNames (Cons d rest) =
+  case d of
+    DData name params ctors => Cons name (declDataNames rest)
+    _ => declDataNames rest
+
+collectSigs typeNames Nil st = Ok (Pair Nil st)
+collectSigs typeNames (Cons d rest) st =
+  case d of
+    DSig name ty =>
+      andThen (schemeOfSig typeNames ty st) (\p =>
+        case p of
+          Pair sch st1 =>
+            andThen (collectSigs typeNames rest st1) (\q =>
+              case q of Pair sigs st2 => Ok (Pair (Cons (Pair name sch) sigs) st2)))
+    _ => collectSigs typeNames rest st
+
+collectCtors typeNames Nil st = Ok (Pair Nil st)
+collectCtors typeNames (Cons d rest) st =
+  case d of
+    DData name params ctors =>
+      andThen (collectCtorList typeNames params ctors st) (\p =>
+        case p of
+          Pair newCtors st1 =>
+            andThen (collectCtors typeNames rest st1) (\q =>
+              case q of Pair ctors2 st2 => Ok (Pair (append newCtors ctors2) st2)))
+    _ => collectCtors typeNames rest st
+
+collectCtorList typeNames params Nil st = Ok (Pair Nil st)
+collectCtorList typeNames params (Cons c rest) st =
+  andThen (schemeOfCtor typeNames params st c) (\p =>
+    case p of
+      Pair (Pair cname sch) st1 =>
+        andThen (collectCtorList typeNames params rest st1) (\q =>
+          case q of Pair ctors st2 => Ok (Pair (Cons (Pair cname sch) ctors) st2)))
+
+-- ---------------------------------------------------------------
+-- 内建函数类型
+-- ---------------------------------------------------------------
+
+intTy = TCon "Int" Nil
+
+strTy = TCon "String" Nil
+
+boolTy = TCon "Bool" Nil
+
+listOf ty = TCon "List" (Cons ty Nil)
+
+fun2 a b c = TFun a (TFun b c)
+
+builtinSchemes =
+  [ Pair "+" (Scheme Nil (fun2 intTy intTy intTy))
+  , Pair "-" (Scheme Nil (fun2 intTy intTy intTy))
+  , Pair "*" (Scheme Nil (fun2 intTy intTy intTy))
+  , Pair "/" (Scheme Nil (fun2 intTy intTy intTy))
+  , Pair "==" (Scheme (Cons 0 Nil) (fun2 (TVar 0) (TVar 0) boolTy))
+  , Pair "/=" (Scheme (Cons 0 Nil) (fun2 (TVar 0) (TVar 0) boolTy))
+  , Pair "<" (Scheme Nil (fun2 intTy intTy boolTy))
+  , Pair "<=" (Scheme Nil (fun2 intTy intTy boolTy))
+  , Pair ">" (Scheme Nil (fun2 intTy intTy boolTy))
+  , Pair ">=" (Scheme Nil (fun2 intTy intTy boolTy))
+  , Pair "&&" (Scheme Nil (fun2 boolTy boolTy boolTy))
+  , Pair "||" (Scheme Nil (fun2 boolTy boolTy boolTy))
+  , Pair "++" (Scheme Nil (fun2 strTy strTy strTy))
+  , Pair "strLength" (Scheme Nil (TFun strTy intTy))
+  , Pair "strUnpack" (Scheme Nil (TFun strTy (listOf intTy)))
+  , Pair "strPack" (Scheme Nil (TFun (listOf intTy) strTy))
+  , Pair "strFromInt" (Scheme Nil (TFun intTy strTy))
+  , Pair "readFile" (Scheme Nil (TFun strTy strTy))
+  , Pair "writeFile" (Scheme Nil (fun2 strTy strTy intTy))
+  , Pair "print" (Scheme Nil (TFun strTy intTy))
+  , Pair "getArgs" (Scheme Nil (listOf strTy))
+  ]
+
+-- ---------------------------------------------------------------
+-- 环境查询与推断
+-- ---------------------------------------------------------------
+
+lookupLocal name Nil = Nothing
+lookupLocal name (Cons p rest) =
+  case p of
+    Pair n ty => if n == name then Just ty else lookupLocal name rest
+
+lookupScheme name Nil = Nothing
+lookupScheme name (Cons p rest) =
+  case p of
+    Pair n sch => if n == name then Just sch else lookupScheme name rest
+
+funArgs ty =
+  case ty of
+    TFun a b => Cons a (funArgs b)
+    _ => Nil
+
+funResult ty =
+  case ty of
+    TFun a b => funResult b
+    _ => ty
+
+foldFun Nil body = body
+foldFun (Cons a rest) body = TFun a (foldFun rest body)
+
+seedPatTypes Nil st = Pair Nil st
+seedPatTypes (Cons p rest) st =
+  case freshTy st of
+    Pair ty st1 =>
+      case seedPatTypes rest st1 of
+        Pair tys st2 => Pair (Cons ty tys) st2
+
+inferPatterns globals locals Nil Nil st = Ok (Pair locals st)
+inferPatterns globals locals (Cons p pr) (Cons ty tr) st =
+  andThen (inferPattern globals locals st p ty) (\q =>
+    case q of
+      Pair locals2 st1 => inferPatterns globals locals2 pr tr st1)
+inferPatterns globals locals _ _ st = Err "pattern arity mismatch"
+
+inferPattern globals locals st pat expected =
+  case pat of
+    PWild => Ok (Pair locals st)
+    PVar name => Ok (Pair (Cons (Pair name expected) locals) st)
+    PInt n => andThen (unify expected intTy st) (\st2 => Ok (Pair locals st2))
+    PStr s => andThen (unify expected strTy st) (\st2 => Ok (Pair locals st2))
+    PCon name pats =>
+      case lookupScheme name globals of
+        Nothing => Err ("unknown constructor: " ++ name)
+        Just sch =>
+          case instantiate st sch of
+            Pair ctorTy st1 =>
+              let argTys = funArgs ctorTy
+              in if length pats == length argTys then
+                   andThen (unify expected (funResult ctorTy) st1) (\st2 =>
+                     inferPatterns globals locals pats argTys st2)
+                 else Err ("constructor " ++ name ++ " expects " ++ strFromInt (length argTys) ++ " arguments")
+
+inferArgs globals locals fnTy Nil st = Ok (Pair fnTy st)
+inferArgs globals locals fnTy (Cons arg rest) st =
+  andThen (inferExpr globals locals st arg) (\pa =>
+    case pa of
+      Pair argTy st1 =>
+        case freshTy st1 of
+          Pair resTy st2 =>
+            andThen (unify fnTy (TFun argTy resTy) st2) (\st3 =>
+              inferArgs globals locals resTy rest st3))
+
+seedLocals Nil locals st = Pair Nil (Pair locals st)
+seedLocals (Cons name rest) locals st =
+  case freshTy st of
+    Pair ty st1 =>
+      case seedLocals rest (Cons (Pair name ty) locals) st1 of
+        Pair tys (Pair locals2 st2) => Pair (Cons ty tys) (Pair locals2 st2)
+
+inferBinds globals locals Nil st = Ok (Pair locals st)
+inferBinds globals locals (Cons b rest) st =
+  case b of
+    Pair pat value =>
+      andThen (inferExpr globals locals st value) (\pv =>
+        case pv of
+          Pair valueTy st1 =>
+            andThen (inferPattern globals locals st1 pat valueTy) (\pp =>
+              case pp of
+                Pair locals2 st2 => inferBinds globals locals2 rest st2))
+
+inferAlts globals locals scrutTy Nil st = Err "empty case"
+inferAlts globals locals scrutTy (Cons alt rest) st =
+  case alt of
+    Pair pat body =>
+      andThen (inferPattern globals locals st pat scrutTy) (\pp =>
+        case pp of
+          Pair locals2 st1 =>
+            andThen (inferExpr globals locals2 st1 body) (\pb =>
+              case pb of
+                Pair bodyTy st2 =>
+                  case rest of
+                    Nil => Ok (Pair bodyTy st2)
+                    _ =>
+                      andThen (inferAlts globals locals scrutTy rest st2) (\pr =>
+                        case pr of
+                          Pair restTy st3 =>
+                            andThen (unify bodyTy restTy st3) (\st4 => Ok (Pair bodyTy st4)))))
+
+inferExpr globals locals st expr =
+  case expr of
+    EVar name =>
+      case lookupLocal name locals of
+        Just ty => Ok (Pair ty st)
+        Nothing =>
+          case lookupScheme name globals of
+            Just sch =>
+              case instantiate st sch of
+                Pair ty st2 => Ok (Pair ty st2)
+            Nothing => Err ("unbound variable: " ++ name)
+    EInt n => Ok (Pair intTy st)
+    EStr s => Ok (Pair strTy st)
+    EApp fn args =>
+      andThen (inferExpr globals locals st fn) (\pf =>
+        case pf of
+          Pair fnTy st1 => inferArgs globals locals fnTy args st1)
+    ELam params body =>
+      case seedLocals params locals st of
+        Pair paramTys (Pair locals2 st1) =>
+          andThen (inferExpr globals locals2 st1 body) (\pb =>
+            case pb of
+              Pair bodyTy st2 => Ok (Pair (foldFun paramTys bodyTy) st2))
+    ELet binds body =>
+      andThen (inferBinds globals locals binds st) (\pb =>
+        case pb of
+          Pair locals2 st1 => inferExpr globals locals2 st1 body)
+    ECase scrut alts =>
+      andThen (inferExpr globals locals st scrut) (\ps =>
+        case ps of
+          Pair scrutTy st1 => inferAlts globals locals scrutTy alts st1)
+    EIf c t e =>
+      andThen (inferExpr globals locals st c) (\pc =>
+        case pc of
+          Pair condTy st1 =>
+            andThen (unify condTy boolTy st1) (\st2 =>
+              andThen (inferExpr globals locals st2 t) (\pt =>
+                case pt of
+                  Pair thenTy st3 =>
+                    andThen (inferExpr globals locals st3 e) (\pe =>
+                      case pe of
+                        Pair elseTy st4 =>
+                          andThen (unify thenTy elseTy st4) (\st5 => Ok (Pair thenTy st5))))))
+
+inferClause globals st clause =
+  case clause of
+    Pair pats body =>
+      case seedPatTypes pats st of
+        Pair paramTys st1 =>
+          andThen (inferPatterns globals Nil pats paramTys st1) (\pp =>
+            case pp of
+              Pair locals2 st2 =>
+                andThen (inferExpr globals locals2 st2 body) (\pb =>
+                  case pb of
+                    Pair bodyTy st3 => Ok (Pair (foldFun paramTys bodyTy) st3)))
+
+inferClauses globals Nil st = Err "function has no clauses"
+inferClauses globals (Cons clause rest) st =
+  andThen (inferClause globals st clause) (\pc =>
+    case pc of
+      Pair ty st1 =>
+        case rest of
+          Nil => Ok (Pair ty st1)
+          _ =>
+            andThen (inferClauses globals rest st1) (\pr =>
+              case pr of
+                Pair restTy st2 =>
+                  andThen (unify ty restTy st2) (\st3 => Ok (Pair ty st3))))
+
+functionNames decls = uniqueNames (map declFunName decls)
+
+declFunName d =
+  case d of
+    DFun name pats body => name
+    _ => ""
+
+uniqueNames Nil = Nil
+uniqueNames (Cons name rest) =
+  if name == "" then uniqueNames rest
+  else if memName name rest then uniqueNames rest
+  else Cons name (uniqueNames rest)
+
+checkFunction globals decls name st =
+  case lookupScheme name globals of
+    Nothing => Err ("missing type signature: " ++ name)
+    Just sch =>
+      case instantiate st sch of
+        Pair expected st1 =>
+          andThen (inferClauses globals (clausesFor decls name) st1) (\p =>
+            case p of
+              Pair inferred st2 =>
+                andThen (unify inferred expected st2) (\st3 => Ok st3))
+
+checkFunctions globals decls Nil st = Ok st
+checkFunctions globals decls (Cons name rest) st =
+  andThen (checkFunction globals decls name st) (\st1 =>
+    checkFunctions globals decls rest st1)
+
+checkProgram decls =
+  case collectData decls of
+    Pair typeNames dataDecls =>
+      case collectSigs typeNames decls (TC 0 Nil) of
+        Err e => Err e
+        Ok (Pair sigs st1) =>
+          case collectCtors typeNames decls st1 of
+            Err e => Err e
+            Ok (Pair ctors st2) =>
+              case checkFunctions (append builtinSchemes (append ctors sigs)) decls (functionNames decls) st2 of
+                Err e => Err e
+                Ok st3 => Ok Nil
+
+collectData decls =
+  Pair (declDataNames decls) decls

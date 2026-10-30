@@ -58,6 +58,7 @@ git add bootstrap/ && git commit
 
 ```text
 .
+├── .local                # 本地文件，被git忽略，临时文件可以放到 .local/tmp 下面
 ├── flake.nix             # Nix：vuna-boot / vuna / vuna-interp、devShell、checks
 ├── flake.lock
 ├── lib/                  # vuna 模块根（模块名由路径精确决定）
@@ -69,6 +70,7 @@ git add bootstrap/ && git commit
 │       ├── Builtins.vuna # 内建函数名字与元数（Loader/Eval 共用）
 │       ├── Eval.vuna     # 值表示、内建函数、求值器与 show
 │       ├── Loader.vuna   # import 图、名字解析、flatten（含模块规则）
+│       ├── Typecheck.vuna # HM 类型检查（M7b）
 │       ├── Codegen.vuna  # flatten 后的 AST → OCaml
 │       └── Interp.vuna   # 对外 facade（interpret/interpretFile/compileFile）
 ├── app/
@@ -140,10 +142,13 @@ git add bootstrap/ && git commit
 - `lib/Vuna/Eval.vuna`：值表示、内建函数、call-by-value 求值器与 `show`；
 - `lib/Vuna/Loader.vuna`：import 图、模块名校验、名字解析与 flatten
   （`loadProgram root entry`）；
+- `lib/Vuna/Typecheck.vuna`：HM 风格类型检查（Ty/Scheme、unify、构造器 scheme、
+  表达式/模式推断、显式签名校验）；
 - `lib/Vuna/Codegen.vuna`：把 flatten 后的 program 翻译成 OCaml；
 - `lib/Vuna/Interp.vuna`：facade，只暴露 `interpret`/`interpretFile`/`compileFile`；
 - 模块内部通过 import 自动 open 使用非限定名，只有 import 行写模块全名；
-- [app/Compile.vuna](app/Compile.vuna)：`vuna [--no-print] [--root DIR] <entry.vuna> [out.ml]`；
+- [app/Compile.vuna](app/Compile.vuna)：`vuna [--no-print] [--typecheck] [--root DIR] <entry.vuna> [out.ml]`；
+  `--typecheck` 先跑 M7b 类型检查（M7c 后设为默认）；
   `--no-print` 表示生成的程序不自动打印 `main` 的结果（用于编译自己做 IO 的 CLI）；
 - [app/Interp.vuna](app/Interp.vuna)：`vuna-interp [--root DIR] <file.vuna>`，把
   `interpretFile` 的字符串结果原样打印。
@@ -169,7 +174,7 @@ type value =
 
 ## 测试
 
-`test/run-tests.sh` 是 vuna 原生测试（96 checks），只用 `vuna` / `vuna-boot` /
+`test/run-tests.sh` 是 vuna 原生测试（104 checks），只用 `vuna` / `vuna-boot` /
 `vuna-interp`，不依赖任何外部编译器：
 
 ```console
@@ -219,7 +224,8 @@ nix fmt               # nixfmt-tree 格式化 .nix
 
 ## 限制与路线
 
-- 没有类型检查、typed codegen（M7 再设计）；类型签名只解析、擦除；
+- 类型检查目前是 opt-in（`--typecheck`），覆盖单文件、要求顶层签名；模块类型名解析与
+  编译器自检在 M7c；typed codegen 在 M8；
 - 生成代码是单文件、动态 value 表示，性能与错误信息暂未优化；
 - 运行时错误没有源码位置；`where` / `do` / 隐式参数 / 依赖类型未实现；
 - IO 失败（如 `readFile` 缺失文件）会抛宿主异常；编译器 CLI 没有 `exit` 内建，
