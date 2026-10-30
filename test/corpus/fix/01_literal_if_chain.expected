@@ -1,0 +1,7 @@
+nameArity name =
+  case name of
+    "+" => 2
+    "-" => 2
+    _ => 0
+
+main = nameArity "+"

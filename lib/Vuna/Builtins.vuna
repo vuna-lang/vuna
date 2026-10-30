@@ -1,0 +1,28 @@
+-- Vuna.Builtins：内建函数的名字与元数（供 Loader/Eval 共用）。
+
+import Vuna.Base
+
+builtinArity "+" = Just 2
+builtinArity "-" = Just 2
+builtinArity "*" = Just 2
+builtinArity "/" = Just 2
+builtinArity "==" = Just 2
+builtinArity "/=" = Just 2
+builtinArity "<" = Just 2
+builtinArity "<=" = Just 2
+builtinArity ">" = Just 2
+builtinArity ">=" = Just 2
+builtinArity "&&" = Just 2
+builtinArity "||" = Just 2
+builtinArity "++" = Just 2
+builtinArity "strLength" = Just 1
+builtinArity "strUnpack" = Just 1
+builtinArity "strPack" = Just 1
+builtinArity "strFromInt" = Just 1
+builtinArity "readFile" = Just 1
+builtinArity "writeFile" = Just 2
+builtinArity "print" = Just 1
+builtinArity "getArgs" = Just 0
+builtinArity "fileExists" = Just 1
+builtinArity "exit" = Just 1
+builtinArity _ = Nothing

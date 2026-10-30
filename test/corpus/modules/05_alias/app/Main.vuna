@@ -1,0 +1,3 @@
+import Vuna.Math as M
+
+main = M.double 21 + Vuna.Math.double 0

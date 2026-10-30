@@ -1,0 +1,3 @@
+import Vuna.Math
+
+main = double 21

@@ -1,0 +1,96 @@
+-- Vuna.Ast：core-v0 的语法类型与 AST 辅助函数。
+
+import Vuna.Base
+
+data Pat : Type where
+  PVar : String -> Pat
+  PWild : Pat
+  PCon : String -> List Pat -> Pat
+  PInt : Int -> Pat
+  PStr : String -> Pat
+
+data Expr : Type where
+  EVar : String -> Expr
+  EInt : Int -> Expr
+  EStr : String -> Expr
+  ELam : List String -> Expr -> Expr
+  EApp : Expr -> List Expr -> Expr
+  ELet : List (Pair Pat Expr) -> Expr -> Expr
+  ECase : Expr -> List (Pair Pat Expr) -> Expr
+  EIf : Expr -> Expr -> Expr -> Expr
+
+data Ctor : Type where
+  Ctor : String -> Expr -> Int -> Ctor
+
+data Decl : Type where
+  DData : String -> List String -> List Ctor -> Decl
+  DSig : String -> Expr -> Decl
+  DFun : String -> List Pat -> Expr -> Decl
+
+data Import : Type where
+  Import : String -> Bool -> Maybe String -> Import
+
+collectClauses Nil name = Nil
+collectClauses (Cons d rest) name =
+  case d of
+    DFun n pats body =>
+      if n == name then Cons (Pair pats body) (collectClauses rest name)
+      else collectClauses rest name
+    _ => collectClauses rest name
+
+clausesFor decls name = collectClauses decls name
+
+funArity name decls =
+  case clausesFor decls name of
+    Nil => Nothing
+    Cons (Pair pats body) _ => Just (length pats)
+
+ctorName (Ctor name ty arity) = name
+
+ctorType (Ctor name ty arity) = ty
+
+typeArity ty =
+  case ty of
+    EApp (EVar "->") (Cons x (Cons rest Nil)) => 1 + typeArity rest
+    _ => 0
+
+ctorArityOf (Ctor name ty arity) = arity
+
+lookupCtorArity name ctors =
+  case ctors of
+    Nil => Nothing
+    Cons c rest =>
+      if ctorName c == name then Just (ctorArityOf c) else lookupCtorArity name rest
+
+ctorArity name decls =
+  case decls of
+    Nil => Nothing
+    Cons d rest =>
+      case d of
+        DData dname params ctors =>
+          case lookupCtorArity name ctors of
+            Just arity => Just arity
+            Nothing => ctorArity name rest
+        _ => ctorArity name rest
+
+declNames d =
+  case d of
+    DFun name pats body => Cons name Nil
+    DSig name ty => Cons name Nil
+    DData dname params ctors => map ctorName ctors
+
+topNames decls = concatMap declNames decls
+
+declCtors d =
+  case d of
+    DData dname params ctors => map ctorName ctors
+    _ => Nil
+
+ctorsOf decls = concatMap declCtors decls
+
+declTypeNames d =
+  case d of
+    DData name params ctors => Cons name Nil
+    _ => Nil
+
+typeNamesOf decls = concatMap declTypeNames decls

@@ -1,0 +1,404 @@
+-- Vuna.Loader：模块加载、名字解析与 flatten。
+
+import Vuna.Base
+import Vuna.Ast
+import Vuna.Lexer
+import Vuna.Parser
+import Vuna.Builtins
+
+data Module : Type where
+  Module : String -> List Import -> List Decl -> List String -> Module
+
+
+allIdentChars chars =
+  case chars of
+    Nil => True
+    Cons c rest =>
+      if isIdentStart c || isDigit c then allIdentChars rest else False
+
+validSegment seg =
+  case strUnpack seg of
+    Nil => False
+    Cons c rest => isUpperChar c && allIdentChars rest
+
+allSegmentsValid segs =
+  case segs of
+    Nil => False
+    Cons seg rest =>
+      if validSegment seg then
+        case rest of
+          Nil => True
+          _ => allSegmentsValid rest
+      else False
+
+validModuleName name =
+  case splitOnDot name of
+    Nil => False
+    segs => allSegmentsValid segs
+
+isGlobalCtor name =
+  name == "True" || name == "False" || name == "Cons" || name == "Nil"
+
+mangle prefix name = if prefix == "" then name else prefix ++ "." ++ name
+
+importName (Import name isQualified alias) = name
+
+importIsQualified (Import name isQualified alias) = isQualified
+
+importAlias (Import name isQualified alias) = alias
+
+importModuleNames imports = map importName imports
+
+hasDuplicateName Nil = False
+hasDuplicateName (Cons x rest) =
+  if memName x rest then True else hasDuplicateName rest
+
+importAliases imports =
+  case imports of
+    Nil => Nil
+    Cons imp rest =>
+      case importAlias imp of
+        Nothing => importAliases rest
+        Just alias => Cons (Pair alias (importName imp)) (importAliases rest)
+
+checkImportAliases label moduleNames aliases =
+  case aliases of
+    Nil => Ok Nil
+    Cons (Pair alias m) rest =>
+      if validSegment alias then
+        if memName alias (map firstOf rest) then
+          Err (label ++ ": duplicate module alias " ++ alias)
+        else if memName alias moduleNames then
+          if alias == m then checkImportAliases label moduleNames rest
+          else Err (label ++ ": module alias " ++ alias ++ " conflicts with an imported module")
+        else checkImportAliases label moduleNames rest
+      else Err (label ++ ": invalid module alias " ++ alias)
+
+validateImports label imports =
+  if hasDuplicateName (importModuleNames imports) then
+    Err (label ++ ": duplicate import")
+  else checkImportAliases label (importModuleNames imports) (importAliases imports)
+
+openModuleNames imports =
+  case imports of
+    Nil => Nil
+    Cons imp rest =>
+      if importIsQualified imp then openModuleNames rest
+      else Cons (importName imp) (openModuleNames rest)
+
+findImportPrefix imports prefix =
+  case imports of
+    Nil => Nothing
+    Cons imp rest =>
+      if importName imp == prefix then Just (importName imp)
+      else
+        case importAlias imp of
+          Just alias =>
+            if alias == prefix then Just (importName imp) else findImportPrefix rest prefix
+          Nothing => findImportPrefix rest prefix
+
+joinNames Nil = ""
+joinNames (Cons x Nil) = x
+joinNames (Cons x rest) = x ++ ", " ++ joinNames rest
+
+moduleDecls modules name =
+  case findModule modules name of
+    Just (Module mname imports decls exports) => decls
+    Nothing => Nil
+
+moduleCtors modules name = ctorsOf (moduleDecls modules name)
+
+modulesExportingFrom modules names name =
+  case names of
+    Nil => Nil
+    Cons m rest =>
+      if memName name (exportsOf modules m) then
+        Cons m (modulesExportingFrom modules rest name)
+      else modulesExportingFrom modules rest name
+
+modulesExporting modules imports name =
+  modulesExportingFrom modules (openModuleNames imports) name
+
+modulesExportingCtorFrom modules names name =
+  case names of
+    Nil => Nil
+    Cons m rest =>
+      if memName name (moduleCtors modules m) then
+        Cons m (modulesExportingCtorFrom modules rest name)
+      else modulesExportingCtorFrom modules rest name
+
+modulesExportingCtor modules imports name =
+  modulesExportingCtorFrom modules (openModuleNames imports) name
+
+modulePath root name = root ++ "/" ++ joinSlashes (splitOnDot name) ++ ".vuna"
+
+collectModuleFiles Nil name acc = reverse acc
+collectModuleFiles (Cons root rest) name acc =
+  let path = modulePath root name
+  in if fileExists path then collectModuleFiles rest name (Cons path acc)
+     else collectModuleFiles rest name acc
+
+findModuleFile roots name =
+  case collectModuleFiles roots name Nil of
+    Nil => Err ("module " ++ name ++ " not found (roots: " ++ joinNames roots ++ ")")
+    Cons path Nil => Ok path
+    paths => Err ("ambiguous module " ++ name ++ " (found in: " ++ joinNames paths ++ ")")
+
+findModule modules name =
+  case modules of
+    Nil => Nothing
+    Cons (Module mname imports decls exports) rest =>
+      if mname == name then Just (Module mname imports decls exports) else findModule rest name
+
+exportsOf modules name =
+  case findModule modules name of
+    Just (Module mname imports decls exports) => exports
+    Nothing => Nil
+
+isBuiltinName name =
+  case builtinArity name of
+    Just arity => True
+    Nothing => False
+
+resolveQualified modules label imports name =
+  case splitLastDot (splitOnDot name) of
+    Pair revPrefix base =>
+      let prefix = joinDots revPrefix
+      in case findImportPrefix imports prefix of
+           Nothing => Err (label ++ ": module " ++ prefix ++ " is not imported")
+           Just m =>
+             if isGlobalCtor base then Ok base
+             else if memName base (exportsOf modules m) then Ok (mangle m base)
+             else Err (label ++ ": " ++ base ++ " is not exported by " ++ m)
+
+resolveGlobal modules label prefix own imports scope name =
+  if memName name scope then Ok name
+  else if isGlobalCtor name then Ok name
+  else if containsDot name then resolveQualified modules label imports name
+  else if memName name own then Ok (mangle prefix name)
+  else if isBuiltinName name then Ok name
+  else
+    case modulesExporting modules imports name of
+      Nil => Err (label ++ ": unbound variable " ++ name)
+      Cons m Nil => Ok (mangle m name)
+      ms => Err (label ++ ": ambiguous name " ++ name ++ " (imported from " ++ joinNames ms ++ "); qualify it")
+
+resolveCtor modules label prefix ownCtors imports name =
+  if isGlobalCtor name then Ok name
+  else if containsDot name then resolveQualified modules label imports name
+  else if memName name ownCtors then Ok (mangle prefix name)
+  else
+    case modulesExportingCtor modules imports name of
+      Nil => Err (label ++ ": unknown constructor " ++ name)
+      Cons m Nil => Ok (mangle m name)
+      ms => Err (label ++ ": ambiguous constructor " ++ name ++ " (imported from " ++ joinNames ms ++ "); qualify it")
+
+checkBinder label name =
+  if containsDot name then Err (label ++ ": invalid variable name " ++ name)
+  else Ok name
+
+checkTopName label name =
+  if containsDot name then Err (label ++ ": invalid top-level name " ++ name)
+  else Ok name
+
+resolveTopName label prefix name =
+  andThen (checkTopName label name) (\_ => Ok (mangle prefix name))
+
+resolvePattern modules label prefix ownCtors imports pat =
+  case pat of
+    PWild => Ok (Pair PWild Nil)
+    PVar name =>
+      andThen (checkBinder label name) (\_ =>
+        Ok (Pair (PVar name) (Cons name Nil)))
+    PInt n => Ok (Pair (PInt n) Nil)
+    PStr s => Ok (Pair (PStr s) Nil)
+    PCon name pats =>
+      andThen (resolveCtor modules label prefix ownCtors imports name) (\name2 =>
+        andThen (traverse (resolvePattern modules label prefix ownCtors imports) pats) (\parts =>
+          Ok (Pair (PCon name2 (map firstOf parts)) (concatMap secondOf parts))))
+
+resolveAlt modules label prefix own ownCtors imports scope (Pair pat body) =
+  andThen (resolvePattern modules label prefix ownCtors imports pat) (\p =>
+    case p of
+      Pair pat2 bound =>
+        andThen (resolveExpr modules label prefix own ownCtors imports (append bound scope) body) (\body2 =>
+          Ok (Pair pat2 body2)))
+
+resolveLet modules label prefix own ownCtors imports scope binds body =
+  case binds of
+    Nil =>
+      andThen (resolveExpr modules label prefix own ownCtors imports scope body) (\b =>
+        Ok (Pair Nil b))
+    Cons (Pair pat value) rest =>
+      andThen (resolveExpr modules label prefix own ownCtors imports scope value) (\value2 =>
+        andThen (resolvePattern modules label prefix ownCtors imports pat) (\p =>
+          case p of
+            Pair pat2 bound =>
+              andThen (resolveLet modules label prefix own ownCtors imports (append bound scope) rest body) (\r =>
+                case r of
+                  Pair binds2 body2 =>
+                    Ok (Pair (Cons (Pair pat2 value2) binds2) body2))))
+
+resolveExpr modules label prefix own ownCtors imports scope expr =
+  case expr of
+    EVar name =>
+      andThen (resolveGlobal modules label prefix own imports scope name) (\n =>
+        Ok (EVar n))
+    EInt n => Ok (EInt n)
+    EStr s => Ok (EStr s)
+    ELam params body =>
+      andThen (traverse (checkBinder label) params) (\_ =>
+        andThen (resolveExpr modules label prefix own ownCtors imports (append params scope) body) (\b =>
+          Ok (ELam params b)))
+    EApp fn args =>
+      andThen (resolveExpr modules label prefix own ownCtors imports scope fn) (\fn2 =>
+        andThen (traverse (\a => resolveExpr modules label prefix own ownCtors imports scope a) args) (\args2 =>
+          Ok (EApp fn2 args2)))
+    ELet binds body =>
+      andThen (resolveLet modules label prefix own ownCtors imports scope binds body) (\r =>
+        case r of
+          Pair binds2 body2 => Ok (ELet binds2 body2))
+    ECase scrut alts =>
+      andThen (resolveExpr modules label prefix own ownCtors imports scope scrut) (\scrut2 =>
+        andThen (traverse (resolveAlt modules label prefix own ownCtors imports scope) alts) (\alts2 =>
+          Ok (ECase scrut2 alts2)))
+    EIf c t e =>
+      andThen (resolveExpr modules label prefix own ownCtors imports scope c) (\c2 =>
+        andThen (resolveExpr modules label prefix own ownCtors imports scope t) (\t2 =>
+          andThen (resolveExpr modules label prefix own ownCtors imports scope e) (\e2 =>
+            Ok (EIf c2 t2 e2))))
+
+resolveCtorDecl label prefix ctor =
+  if isGlobalCtor ctor then Ok ctor
+  else andThen (checkTopName label ctor) (\_ => Ok (mangle prefix ctor))
+
+isLowerTypeName name =
+  case strUnpack name of
+    Nil => False
+    Cons c rest => isLowerChar c
+
+typeExportsOf modules name = typeNamesOf (moduleDecls modules name)
+
+modulesExportingTypeFrom modules names name =
+  case names of
+    Nil => Nil
+    Cons m rest =>
+      if memName name (typeExportsOf modules m) then
+        Cons m (modulesExportingTypeFrom modules rest name)
+      else modulesExportingTypeFrom modules rest name
+
+modulesExportingType modules imports name =
+  modulesExportingTypeFrom modules (openModuleNames imports) name
+
+resolveTypeName modules label prefix ownTypes imports name =
+  if name == "Int" || name == "String" || name == "Bool" || name == "Type" || name == "->" then
+    Ok name
+  else if isLowerTypeName name then Ok name
+  else if containsDot name then
+    case splitLastDot (splitOnDot name) of
+      Pair revPrefix base =>
+        let typePrefix = joinDots revPrefix
+        in case findImportPrefix imports typePrefix of
+             Nothing => Err (label ++ ": module " ++ typePrefix ++ " is not imported")
+             Just m =>
+               if memName base (typeExportsOf modules m) then Ok (mangle m base)
+               else Err (label ++ ": type " ++ base ++ " is not exported by " ++ m)
+  else if memName name ownTypes then Ok (mangle prefix name)
+  else
+    case modulesExportingType modules imports name of
+      Nil => Err (label ++ ": unknown type " ++ name)
+      Cons m Nil => Ok (mangle m name)
+      ms => Err (label ++ ": ambiguous type " ++ name ++ " (imported from " ++ joinNames ms ++ ")")
+
+resolveTypeExpr modules label prefix ownTypes imports ty =
+  case ty of
+    EVar name => andThen (resolveTypeName modules label prefix ownTypes imports name) (\n => Ok (EVar n))
+    EApp fn args =>
+      andThen (resolveTypeExpr modules label prefix ownTypes imports fn) (\fn2 =>
+        andThen (traverse (resolveTypeExpr modules label prefix ownTypes imports) args) (\args2 =>
+          Ok (EApp fn2 args2)))
+    _ => Err (label ++ ": invalid type expression (" ++ tyShape ty ++ ")")
+
+resolveTypeTopName label prefix name =
+  andThen (checkTopName label name) (\_ => Ok (mangle prefix name))
+
+resolveCtorSpec modules label prefix ownTypes imports (Ctor ctor ty arity) =
+  andThen (resolveCtorDecl label prefix ctor) (\c2 =>
+    andThen (resolveTypeExpr modules label prefix ownTypes imports ty) (\ty2 =>
+      Ok (Ctor c2 ty2 arity)))
+
+resolveDecl modules label prefix own ownCtors ownTypes imports d =
+  case d of
+    DData dname params ctors =>
+      andThen (resolveTypeTopName label prefix dname) (\dn =>
+        andThen (traverse (resolveCtorSpec modules label prefix ownTypes imports) ctors) (\ctors2 =>
+          Ok (DData dn params ctors2)))
+    DSig name ty =>
+      andThen (resolveTopName label prefix name) (\n =>
+        andThen (resolveTypeExpr modules label prefix ownTypes imports ty) (\ty2 =>
+          Ok (DSig n ty2)))
+    DFun name pats body =>
+      andThen (resolveTopName label prefix name) (\n =>
+        andThen (traverse (resolvePattern modules label prefix ownCtors imports) pats) (\parts =>
+          andThen (resolveExpr modules label prefix own ownCtors imports (concatMap secondOf parts) body) (\b =>
+            Ok (DFun n (map firstOf parts) b))))
+
+resolveProgram modules label prefix own ownCtors ownTypes imports decls =
+  traverse (resolveDecl modules label prefix own ownCtors ownTypes imports) decls
+
+resolveEntry modules imports decls =
+  resolveProgram modules "<entry>" "" (topNames decls) (ctorsOf decls) (typeNamesOf decls) imports decls
+
+resolveModules modules =
+  case modules of
+    Nil => Ok Nil
+    Cons (Module name imports decls exports) rest =>
+      andThen (resolveProgram modules name name exports (ctorsOf decls) (typeNamesOf decls) imports decls) (\d1 =>
+        andThen (resolveModules rest) (\d2 => Ok (append d1 d2)))
+
+showCycle name stack = joinArrows (reverse (Cons name stack))
+
+loadAll roots modules stack imports =
+  case imports of
+    Nil => Ok modules
+    Cons imp rest =>
+      andThen (loadModule roots modules stack (importName imp)) (\modules2 =>
+        loadAll roots modules2 stack rest)
+
+loadModule roots modules stack name =
+  case findModule modules name of
+    Just m => Ok modules
+    Nothing =>
+      if memName name stack then Err ("import cycle: " ++ showCycle name stack)
+      else if validModuleName name then
+        andThen (findModuleFile roots name) (\path =>
+          andThen (parseSource (readFile path)) (\p =>
+            case p of
+              Pair imports decls =>
+                andThen (validateImports name imports) (\_ =>
+                  andThen (loadAll roots modules (Cons name stack) imports) (\modules2 =>
+                    Ok (Cons (Module name imports decls (topNames decls)) modules2)))))
+      else Err ("invalid module name: " ++ name)
+
+loadProgram roots entry =
+  if fileExists entry then
+    andThen (parseSource (readFile entry)) (\p =>
+      case p of
+        Pair imports decls =>
+          andThen (validateImports "<entry>" imports) (\_ =>
+            andThen (loadAll roots Nil Nil imports) (\modules =>
+              andThen (resolveEntry modules imports decls) (\entryDecls =>
+                andThen (resolveModules modules) (\moduleDecls =>
+                  Ok (append entryDecls moduleDecls))))))
+  else Err ("entry file not found: " ++ entry)
+
+tyShape ty =
+  case ty of
+    EVar n => "var " ++ n
+    EApp f a => "app"
+    EInt n => "int"
+    EStr s => "str"
+    ELam ps b => "lam"
+    ELet bs b => "let"
+    ECase s alts => "case"
+    EIf c t e => "if"

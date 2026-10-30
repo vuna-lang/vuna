@@ -1,0 +1,4 @@
+import Vuna.Nat
+
+main : Nat
+main = plus (S Z) (S (S Z))

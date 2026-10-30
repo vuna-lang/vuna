@@ -1,0 +1,10 @@
+data Nat : Type where
+  Z : Nat
+  S : Nat -> Nat
+
+toInt : Nat -> Int
+toInt Z = 0
+toInt (S n) = 1 + toInt n
+
+main : Int
+main = toInt (S (S Z))

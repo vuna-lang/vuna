@@ -1,0 +1,6 @@
+nameArity name =
+  if name == "+" then 2
+  else if name == "-" then 2
+  else 0
+
+main = nameArity "+"

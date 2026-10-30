@@ -1,0 +1,386 @@
+-- Vuna.Eval：值表示、内建函数、求值器与 show。
+
+import Vuna.Base
+import Vuna.Ast
+import Vuna.Builtins
+
+data Value : Type where
+  VInt : Int -> Value
+  VStr : String -> Value
+  VCon : String -> List Value -> Value
+  VFun : String -> List Value -> Value
+  VLam : List String -> Expr -> List (Pair String Value) -> Value
+  VBuiltin : String -> List Value -> Value
+
+
+forceValue decls v =
+  case v of
+    VFun name Nil =>
+      case funArity name decls of
+        Just 0 => callFunction decls name Nil
+        _ => Ok v
+    _ => Ok v
+
+evalVar decls env name =
+  case lookupPair name env of
+    Just v => forceValue decls v
+    Nothing => evalGlobal decls name
+
+evalGlobal decls name =
+  case funArity name decls of
+    Just arity =>
+      if arity == 0 then callFunction decls name Nil
+      else Ok (VFun name Nil)
+    Nothing => evalGlobalNonFun decls name
+
+evalGlobalNonFun decls name =
+  case ctorArity name decls of
+    Just arity => Ok (VCon name Nil)
+    Nothing =>
+      case builtinArity name of
+        Just arity =>
+          if arity == 0 then callBuiltin name Nil else Ok (VBuiltin name Nil)
+        Nothing => Err ("unbound variable: " ++ name)
+
+evalExpr decls env expr =
+  case expr of
+    EVar name => evalVar decls env name
+    EInt n => Ok (VInt n)
+    EStr s => Ok (VStr s)
+    ELam params body => Ok (VLam params body env)
+    EApp fn args => evalApp decls env fn args
+    ELet binds body => evalLet decls env binds body
+    ECase scrut alts => evalCase decls env scrut alts
+    EIf c t e => evalIf decls env c t e
+
+-- `&&` / `||` 短路求值：先求值左操作数，必要时才求值右操作数。
+-- 左操作数非 Bool 报 "expected a Bool"；右操作数仅在需要时求值并检查。
+evalApp decls env fn args =
+  case fn of
+    EVar "&&" =>
+      case args of
+        Cons a (Cons b Nil) => evalAndShort decls env a b
+        _ => evalApply decls env fn args
+    EVar "||" =>
+      case args of
+        Cons a (Cons b Nil) => evalOrShort decls env a b
+        _ => evalApply decls env fn args
+    _ => evalApply decls env fn args
+
+evalApply decls env fn args =
+  andThen (evalExpr decls env fn) (\fv => foldApply decls env fv args)
+
+expectBoolValue v =
+  case v of
+    VCon "True" Nil => Ok v
+    VCon "False" Nil => Ok v
+    _ => Err "expected a Bool"
+
+evalAndShort decls env a b =
+  andThen (evalExpr decls env a) (\av =>
+    case av of
+      VCon "False" Nil => Ok av
+      VCon "True" Nil =>
+        andThen (evalExpr decls env b) (\bv => expectBoolValue bv)
+      _ => Err "expected a Bool")
+
+evalOrShort decls env a b =
+  andThen (evalExpr decls env a) (\av =>
+    case av of
+      VCon "True" Nil => Ok av
+      VCon "False" Nil =>
+        andThen (evalExpr decls env b) (\bv => expectBoolValue bv)
+      _ => Err "expected a Bool")
+
+foldApply decls env fv Nil = Ok fv
+foldApply decls env fv (Cons arg rest) =
+  andThen (evalExpr decls env arg) (\av =>
+    andThen (applyValue decls fv av) (\fv2 => foldApply decls env fv2 rest))
+
+evalLet decls env binds body =
+  andThen (evalBindings decls env binds) (\env2 => evalExpr decls env2 body)
+
+evalBindings decls env Nil = Ok env
+evalBindings decls env (Cons (Pair pat valueExpr) rest) =
+  andThen (evalExpr decls env valueExpr) (\v =>
+    case matchPattern pat v of
+      Nothing => Err "let pattern match failure"
+      Just bs => evalBindings decls (append bs env) rest)
+
+evalCase decls env scrut alts =
+  andThen (evalExpr decls env scrut) (\v => chooseAlt decls env v alts)
+
+chooseAlt decls env v Nil = Err "case pattern match failure"
+chooseAlt decls env v (Cons (Pair pat body) rest) =
+  case matchPattern pat v of
+    Nothing => chooseAlt decls env v rest
+    Just bs => evalExpr decls (append bs env) body
+
+evalIf decls env c t e =
+  andThen (evalExpr decls env c) (\cv =>
+    case cv of
+      VCon "True" Nil => evalExpr decls env t
+      VCon "False" Nil => evalExpr decls env e
+      _ => Err "if condition is not a Bool")
+
+applyValue decls v arg =
+  case v of
+    VFun name bound => applyFun decls name bound arg
+    VLam params body env => applyLambda decls params body env arg
+    VCon name args => applyCtor decls name args arg
+    VBuiltin name args => applyBuiltin decls name args arg
+    _ => Err "cannot apply a non-function"
+
+applyFun decls name bound arg =
+  case funArity name decls of
+    Nothing => Err ("unknown function: " ++ name)
+    Just arity =>
+      let bound2 = append bound (Cons arg Nil)
+      in if length bound2 < arity then Ok (VFun name bound2)
+         else if length bound2 == arity then callFunction decls name bound2
+         else Err ("too many arguments for " ++ name)
+
+applyLambda decls params body env arg =
+  case params of
+    Nil => Err "lambda has no parameters"
+    Cons p Nil => evalExpr decls (Cons (Pair p arg) env) body
+    Cons p rest => Ok (VLam rest body (Cons (Pair p arg) env))
+
+applyCtor decls name args arg =
+  case ctorArity name decls of
+    Nothing => Err ("unknown constructor: " ++ name)
+    Just arity =>
+      if length args >= arity then Err ("constructor " ++ name ++ " cannot take more arguments")
+      else Ok (VCon name (append args (Cons arg Nil)))
+
+applyBuiltin decls name args arg =
+  case builtinArity name of
+    Nothing => Err ("unknown builtin: " ++ name)
+    Just arity =>
+      let args2 = append args (Cons arg Nil)
+      in if length args2 < arity then Ok (VBuiltin name args2)
+         else if length args2 == arity then callBuiltin name args2
+         else Err ("too many arguments for builtin " ++ name)
+
+callFunction decls name args = tryClauses decls name (clausesFor decls name) args
+
+tryClauses decls name Nil args = Err ("no matching clause for " ++ name)
+tryClauses decls name (Cons (Pair pats body) rest) args =
+  if length pats == length args then tryMatch decls name pats body rest args
+  else tryClauses decls name rest args
+
+tryMatch decls name pats body rest args =
+  case matchPatterns pats args of
+    Just binds => evalExpr decls binds body
+    Nothing => tryClauses decls name rest args
+
+matchPatterns Nil Nil = Just Nil
+matchPatterns (Cons p ps) (Cons v vs) =
+  case matchPattern p v of
+    Nothing => Nothing
+    Just bs =>
+      case matchPatterns ps vs of
+        Nothing => Nothing
+        Just bs2 => Just (append bs bs2)
+matchPatterns _ _ = Nothing
+
+matchPattern p v =
+  case p of
+    PWild => Just Nil
+    PVar name => Just (Cons (Pair name v) Nil)
+    PInt n =>
+      case v of
+        VInt m => if n == m then Just Nil else Nothing
+        _ => Nothing
+    PStr s =>
+      case v of
+        VStr t => if s == t then Just Nil else Nothing
+        _ => Nothing
+    PCon name pats =>
+      case v of
+        VCon vname vargs =>
+          if name == vname && length pats == length vargs
+          then matchPatterns pats vargs
+          else Nothing
+        _ => Nothing
+
+intArg v =
+  case v of
+    VInt n => Ok n
+    _ => Err "expected an Int argument"
+
+stringArg v =
+  case v of
+    VStr s => Ok s
+    _ => Err "expected a String argument"
+
+vbool b = if b then VCon "True" Nil else VCon "False" Nil
+
+charsToValue Nil = VCon "Nil" Nil
+charsToValue (Cons c rest) = VCon "Cons" (Cons (VInt c) (Cons (charsToValue rest) Nil))
+
+stringToValue s = charsToValue (strUnpack s)
+
+strListToValue Nil = VCon "Nil" Nil
+strListToValue (Cons s rest) = VCon "Cons" (Cons (VStr s) (Cons (strListToValue rest) Nil))
+
+valueToChars v =
+  case v of
+    VCon "Nil" Nil => Ok Nil
+    VCon "Cons" (Cons head (Cons tail Nil)) =>
+      andThen (intArg head) (\n => andThen (valueToChars tail) (\rest => Ok (Cons n rest)))
+    _ => Err "strPack expects a List Int"
+
+int2 args f =
+  case args of
+    Cons a (Cons b Nil) => andThen (intArg a) (\x => andThen (intArg b) (\y => f x y))
+    _ => Err "bad arguments"
+
+str2 args f =
+  case args of
+    Cons a (Cons b Nil) => andThen (stringArg a) (\x => andThen (stringArg b) (\y => f x y))
+    _ => Err "bad arguments"
+
+divideBuiltin args =
+  case args of
+    Cons a (Cons b Nil) =>
+      andThen (intArg a) (\x =>
+        andThen (intArg b) (\y =>
+          if y == 0 then Err "division by zero" else Ok (VInt (x / y))))
+    _ => Err "bad arguments for /"
+
+eqBuiltin args =
+  case args of
+    Cons (VInt a) (Cons (VInt b) Nil) => Ok (vbool (a == b))
+    Cons (VStr a) (Cons (VStr b) Nil) => Ok (vbool (a == b))
+    _ => Err "bad arguments for =="
+
+neqBuiltin args =
+  case args of
+    Cons (VInt a) (Cons (VInt b) Nil) => Ok (vbool (a /= b))
+    Cons (VStr a) (Cons (VStr b) Nil) => Ok (vbool (a /= b))
+    _ => Err "bad arguments for /="
+
+andBuiltin args =
+  case args of
+    Cons a (Cons b Nil) =>
+      case a of
+        VCon "True" Nil =>
+          case b of
+            VCon "True" Nil => Ok (VCon "True" Nil)
+            VCon "False" Nil => Ok (VCon "False" Nil)
+            _ => Err "expected a Bool"
+        VCon "False" Nil => Ok (VCon "False" Nil)
+        _ => Err "expected a Bool"
+    _ => Err "bad arguments for &&"
+
+orBuiltin args =
+  case args of
+    Cons a (Cons b Nil) =>
+      case a of
+        VCon "True" Nil => Ok (VCon "True" Nil)
+        VCon "False" Nil =>
+          case b of
+            VCon "True" Nil => Ok (VCon "True" Nil)
+            VCon "False" Nil => Ok (VCon "False" Nil)
+            _ => Err "expected a Bool"
+        _ => Err "expected a Bool"
+    _ => Err "bad arguments for ||"
+
+callBuiltin name args =
+  case name of
+    "+" => int2 args (\x, y => Ok (VInt (x + y)))
+    "-" => int2 args (\x, y => Ok (VInt (x - y)))
+    "*" => int2 args (\x, y => Ok (VInt (x * y)))
+    "/" => divideBuiltin args
+    "==" => eqBuiltin args
+    "/=" => neqBuiltin args
+    "<" => int2 args (\x, y => Ok (vbool (x < y)))
+    "<=" => int2 args (\x, y => Ok (vbool (x <= y)))
+    ">" => int2 args (\x, y => Ok (vbool (x > y)))
+    ">=" => int2 args (\x, y => Ok (vbool (x >= y)))
+    "&&" => andBuiltin args
+    "||" => orBuiltin args
+    "++" => str2 args (\x, y => Ok (VStr (x ++ y)))
+    "strLength" =>
+      case args of
+        Cons a Nil => andThen (stringArg a) (\s => Ok (VInt (strLength s)))
+        _ => Err "bad arguments for strLength"
+    "strUnpack" =>
+      case args of
+        Cons a Nil => andThen (stringArg a) (\s => Ok (stringToValue s))
+        _ => Err "bad arguments for strUnpack"
+    "strPack" =>
+      case args of
+        Cons a Nil => andThen (valueToChars a) (\cs => Ok (VStr (strPack cs)))
+        _ => Err "bad arguments for strPack"
+    "strFromInt" =>
+      case args of
+        Cons a Nil => andThen (intArg a) (\n => Ok (VStr (strFromInt n)))
+        _ => Err "bad arguments for strFromInt"
+    "readFile" =>
+      case args of
+        Cons a Nil => andThen (stringArg a) (\s => Ok (VStr (readFile s)))
+        _ => Err "bad arguments for readFile"
+    "writeFile" =>
+      case args of
+        Cons a (Cons b Nil) =>
+          andThen (stringArg a) (\path =>
+            andThen (stringArg b) (\s => Ok (VInt (writeFile path s))))
+        _ => Err "bad arguments for writeFile"
+    "print" =>
+      case args of
+        Cons a Nil => andThen (stringArg a) (\s => Ok (VInt (print s)))
+        _ => Err "bad arguments for print"
+    "getArgs" => Ok (strListToValue getArgs)
+    "fileExists" =>
+      case args of
+        Cons a Nil => andThen (stringArg a) (\s => Ok (vbool (fileExists s)))
+        _ => Err "bad arguments for fileExists"
+    "exit" =>
+      case args of
+        Cons a Nil => andThen (intArg a) (\n => Ok (VInt (exit n)))
+        _ => Err "bad arguments for exit"
+    _ => Err ("unknown builtin: " ++ name)
+
+displayName name =
+  case splitLastDot (splitOnDot name) of
+    Pair revPrefix base => base
+
+showValue v =
+  case v of
+    VInt n => strFromInt n
+    VStr s => showString s
+    VCon name Nil => displayName name
+    VCon name args => "(" ++ displayName name ++ " " ++ showValues args ++ ")"
+    VFun name args => "<function " ++ displayName name ++ ">"
+    VLam params body env => "<lambda>"
+    VBuiltin name args => "<builtin " ++ name ++ ">"
+
+showValues Nil = ""
+showValues (Cons v Nil) = showValue v
+showValues (Cons v rest) = showValue v ++ " " ++ showValues rest
+
+showString s = "\"" ++ showStringChars (strUnpack s) ++ "\""
+
+showStringChars Nil = ""
+showStringChars (Cons c rest) =
+  if c == 34 then "\\\"" ++ showStringChars rest
+  else if c == 92 then "\\\\" ++ showStringChars rest
+  else if c == 10 then "\\n" ++ showStringChars rest
+  else if c == 9 then "\\t" ++ showStringChars rest
+  else if c == 13 then "\\r" ++ showStringChars rest
+  else strPack (Cons c Nil) ++ showStringChars rest
+
+interpretMain decls =
+  case funArity "main" decls of
+    Nothing => Err "no `main` definition"
+    Just arity =>
+      if arity == 0 then callFunction decls "main" Nil
+      else Err "`main` must be a nullary definition"
+
+runDecls decls =
+  case interpretMain decls of
+    Err e => "error: " ++ e
+    Ok v => showValue v
+

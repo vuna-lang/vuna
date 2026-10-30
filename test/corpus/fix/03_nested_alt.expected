@@ -1,0 +1,2 @@
+wrap (Just (Pair a c)) =
+  a

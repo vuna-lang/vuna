@@ -1,0 +1,1 @@
+main = if fileExists "/" then (if fileExists "/vuna/definitely-not-a-file-xyz" then 0 else 42) else 0
