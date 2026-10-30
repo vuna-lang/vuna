@@ -143,11 +143,12 @@ git add bootstrap/ && git commit
 - `lib/Vuna/Loader.vuna`：import 图、模块名校验、名字解析与 flatten
   （`loadProgram root entry`）；
 - `lib/Vuna/Typecheck.vuna`：HM 风格类型检查（Ty/Scheme、unify、构造器 scheme、
-  表达式/模式推断、显式签名校验）；loader 会把 DSig/构造器类型里的类型名解析成
+  表达式/模式推断、签名校验与无签名顶层推断）；loader 会把 DSig/构造器类型里的类型名解析成
   模块内全名（open/qualified/alias 都支持），因此跨模块类型检查可用；
 - `lib/Vuna/Codegen.vuna`：把 flatten 后的 program 翻译成 OCaml；
 - `lib/Vuna/Interp.vuna`：facade，只暴露 `interpret`/`interpretFile`/`compileFile`；
 - 模块内部通过 import 自动 open 使用非限定名，只有 import 行写模块全名；
+- 顶层类型签名紧贴其第一个函数子句，签名与实现之间不留空行；顶层声明之间用一个空行分隔；
 - [app/Compile.vuna](app/Compile.vuna)：`vuna [--no-print] [--typecheck] [--root DIR] <entry.vuna> [out.ml]`；
   `--typecheck` 先跑 M7b 类型检查（M7c 后设为默认）；
   `--no-print` 表示生成的程序不自动打印 `main` 的结果（用于编译自己做 IO 的 CLI）；
@@ -175,7 +176,7 @@ type value =
 
 ## 测试
 
-`test/run-tests.sh` 是 vuna 原生测试（107 checks），只用 `vuna` / `vuna-boot` /
+`test/run-tests.sh` 是 vuna 原生测试（108 checks），只用 `vuna` / `vuna-boot` /
 `vuna-interp`，不依赖任何外部编译器：
 
 ```console
@@ -228,7 +229,7 @@ nix fmt               # nixfmt-tree 格式化 .nix
 ## 限制与路线
 
 - 类型检查目前是 opt-in（`--typecheck`），要求顶层显式签名；模块类型名解析已完成
-  （M7c-1），编译器源码自检与无签名顶层推断留到 M7c-2；typed codegen 在 M8；
+  （M7c-1）；无签名顶层推断已完成，编译器源码自检仍待完成（M7c-2）；typed codegen 在 M8；
 - 生成代码是单文件、动态 value 表示，性能与错误信息暂未优化；
 - 运行时错误没有源码位置；`where` / `do` / 隐式参数 / 依赖类型未实现；
 - IO 失败（如 `readFile` 缺失文件）会抛宿主异常；编译器 CLI 没有 `exit` 内建，

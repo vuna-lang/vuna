@@ -7,5 +7,4 @@ plus Z y = y
 plus (S x) y = S (plus x y)
 
 main : Nat
-
 main = plus (S Z) (S (S Z))
