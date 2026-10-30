@@ -121,8 +121,8 @@ dune exec vunax -- --version
 - `vunax/test/corpus/err/*.vuna` + 同名 `.err`（错误位置与信息 golden）；
 - 改语料或解析器后运行 `vunax/test/update-golden.sh` 重新生成 golden，再 review diff。
 
-尚未实现（后续里程碑）：类型检查（core-v0 先不检查类型）、源码级自解释（M3b）、
-`where` / `do` / 隐式参数 / 依赖类型 / 模块系统。
+尚未实现（后续里程碑）：类型检查（core-v0 先不检查类型）、codegen（vuna → OCaml）
+与种子入库、`where` / `do` / 隐式参数 / 依赖类型 / 模块系统。
 
 ## 求值器（core-v0，M2）
 
@@ -152,30 +152,32 @@ dune exec vunax -- run vunax/test/corpus/run/03_data_case.vuna
 限制：没有 IO（只能通过 `main` 的返回值观察结果）、没有类型检查，
 运行时错误信息暂时不带源码位置（AST 还没有 span）。
 
-## 自解释器（M3a，AST 级）
+## 自解释器（M3，源码级）
 
-[app/interp.vuna](app/interp.vuna) 是用 vuna 写的自解释器，被 vunax 解释执行：
+[app/interp.vuna](app/interp.vuna)（约 1050 行 vuna）是用 vuna 写、被 vunax 解释执行的自解释器：
 
-- 输入是 `vunax parse` 输出的 `(program ...)` S-expression（同一套 core-v0 AST）；
-- 内部实现：S-expression reader → AST 转换 → call-by-value 求值器 → `show`，
-  以及和 vunax 一致的内建运算（含 Bool/List/String 的表示转换）；
-- `main` 约定与 vunax 相同：`vunax run app/interp.vuna` 会解释内置的 demo 程序；
-- 错误统一返回 `error: ...` 字符串。
+- 输入是 **vuna 源码**；
+- 内部完整实现 core-v0 的前端与求值：词法分析（token 带行列）→ offside layout parser
+  → call-by-value 求值 → `show`，并复刻 vunax 的内建运算与 Bool/List/String 表示转换；
+- parser 与 `vunax/lib/parser.ml` 同构：顶层声明、`data` 构造器块、`case` 分支、
+  `let` 绑定按列对齐，表达式跨行需要缩进超过块列；
+- `main` 约定与 vunax 相同：`vunax run app/interp.vuna` 解释内置 demo 源码；
+- 解析/运行错误统一返回 `error: ...` 字符串（暂时没有源码位置）。
 
 ```console
 vunax run app/interp.vuna
 # "42"
 ```
 
-验证方式（62 个测试，`nix build` 的 checkPhase 全跑）：
+验证（62 个测试，`nix build` 的 checkPhase 全跑）：
 
-- **差分测试**：对 `corpus/run/` 的每个程序，先用 vunax 直接跑得到结果，
-  再把该程序的 AST 交给 vuna 自解释器跑，两边 `show` 结果必须一致；
-- **self application**：把自解释器自己的 AST 交给它自己解释，结果与直接运行一致
-  （说明当前语言子集已经能承载整个解释器）。
+- **差分测试**：`corpus/run/` 的 15 个程序，vunax 直接跑 vs vuna 自解释器读同一份
+  源码跑，两边 `show` 结果必须一致；
+- **self application**：把 `app/interp.vuna` 自己的源码交给它自己解释，结果与直接运行
+  一致 —— 当前语言子集已经能完整承载自己的词法、语法和求值实现。
 
-限制：这一版解释的是 **AST**，还不是源码；用 vuna 重写 lexer/parser
-（源码级自解释，M3b）是下一步。运行时错误没有源码位置。
+限制：`where` / `do` / 隐式参数 / 依赖类型 / 模块系统仍未实现；错误没有源码位置；
+未做性能优化（self application 全程走解释器，秒级）。
 
 ## Nix
 
