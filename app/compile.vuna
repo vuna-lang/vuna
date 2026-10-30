@@ -1,6 +1,7 @@
 -- vuna-compile：用 vuna 写的编译器 CLI。
 -- 用法：vuna-compile [--no-print] [--root DIR] <entry.vuna> [out.ml]
 -- 不传 out.ml 时把生成的 OCaml 打到 stdout。
+import Vuna.Ast
 import Vuna.Interp
 
 usage = "usage: vuna [--no-print] [--root DIR] <entry.vuna> [out.ml]"
@@ -22,8 +23,8 @@ emitUsage = let _ = print (usage ++ "\n") in 1
 
 emit printResult root entry rest =
   case Vuna.Interp.compileFile root entry printResult of
-    Vuna.Interp.Ok code =>
+    Vuna.Ast.Ok code =>
       case rest of
         Cons out Nil => let _ = writeFile out code in 0
         _ => let _ = print code in 0
-    Vuna.Interp.Err e => let _ = print ("error: " ++ e ++ "\n") in 1
+    Vuna.Ast.Err e => let _ = print ("error: " ++ e ++ "\n") in 1

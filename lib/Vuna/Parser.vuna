@@ -1,0 +1,455 @@
+-- vuna 源码 parser：offside layout，返回 AST 与 imports。
+
+import Vuna.Ast
+import Vuna.Lexer
+
+data PState : Type where
+  PState : List PTok -> Pos -> PState
+
+-- vuna 源码 parser（offside layout）
+-- ---------------------------------------------------------------
+
+posOf (Vuna.Lexer.PTok t p) = p
+
+tokOf (Vuna.Lexer.PTok t p) = t
+
+peekTok (PState toks last) =
+  case toks of
+    Cons t rest => t
+    Nil => Vuna.Lexer.PTok Vuna.Lexer.TEof (Vuna.Lexer.Pos 1 1)
+
+peekPos st = posOf (peekTok st)
+
+lastPos (PState toks last) = last
+
+advance st =
+  case st of
+    PState toks last =>
+      case toks of
+        Cons t rest =>
+          case t of
+            Vuna.Lexer.PTok Vuna.Lexer.TEof p => st
+            _ => PState rest (posOf t)
+        Nil => st
+
+isEof st =
+  case peekTok st of
+    Vuna.Lexer.PTok Vuna.Lexer.TEof p => True
+    _ => False
+
+atSym st s =
+  case peekTok st of
+    Vuna.Lexer.PTok (Vuna.Lexer.TSym x) p => x == s
+    _ => False
+
+atKw st k =
+  case peekTok st of
+    Vuna.Lexer.PTok (Vuna.Lexer.TKw x) p => x == k
+    _ => False
+
+canContinue st blockCol =
+  case peekPos st of
+    Vuna.Lexer.Pos line col =>
+      case lastPos st of
+        Vuna.Lexer.Pos lastLine lastCol => line == lastLine || col > blockCol
+
+expectSym st s =
+  case peekTok st of
+    Vuna.Lexer.PTok (Vuna.Lexer.TSym x) p => if x == s then Vuna.Ast.Ok (Vuna.Ast.Pair 0 (advance st)) else Vuna.Ast.Err ("expected " ++ s)
+    _ => Vuna.Ast.Err ("expected " ++ s)
+
+expectKw st k =
+  case peekTok st of
+    Vuna.Lexer.PTok (Vuna.Lexer.TKw x) p => if x == k then Vuna.Ast.Ok (Vuna.Ast.Pair 0 (advance st)) else Vuna.Ast.Err ("expected " ++ k)
+    _ => Vuna.Ast.Err ("expected " ++ k)
+
+expectIdent st =
+  case peekTok st of
+    Vuna.Lexer.PTok (Vuna.Lexer.TIdent x) p => Vuna.Ast.Ok (Vuna.Ast.Pair x (advance st))
+    _ => Vuna.Ast.Err "expected identifier"
+
+upperFirst s =
+  case strUnpack s of
+    Cons c rest => c >= 65 && c <= 90
+    Nil => False
+
+startsAtom st =
+  case peekTok st of
+    Vuna.Lexer.PTok (Vuna.Lexer.TIdent x) p => True
+    Vuna.Lexer.PTok (Vuna.Lexer.TInt x) p => True
+    Vuna.Lexer.PTok (Vuna.Lexer.TStr x) p => True
+    Vuna.Lexer.PTok (Vuna.Lexer.TKw "Type") p => True
+    Vuna.Lexer.PTok (Vuna.Lexer.TSym "(") p => True
+    Vuna.Lexer.PTok (Vuna.Lexer.TSym "[") p => True
+    _ => False
+
+startsPatternAtom st =
+  case peekTok st of
+    Vuna.Lexer.PTok (Vuna.Lexer.TIdent x) p => True
+    Vuna.Lexer.PTok (Vuna.Lexer.TInt x) p => True
+    Vuna.Lexer.PTok (Vuna.Lexer.TStr x) p => True
+    Vuna.Lexer.PTok (Vuna.Lexer.TSym "(") p => True
+    Vuna.Lexer.PTok (Vuna.Lexer.TSym "[") p => True
+    _ => False
+
+infixInfo op =
+  if op == "->" then Vuna.Ast.Just (Vuna.Ast.Pair 1 1)
+  else if op == "||" then Vuna.Ast.Just (Vuna.Ast.Pair 2 0)
+  else if op == "&&" then Vuna.Ast.Just (Vuna.Ast.Pair 3 0)
+  else if op == "==" then Vuna.Ast.Just (Vuna.Ast.Pair 4 0)
+  else if op == "/=" then Vuna.Ast.Just (Vuna.Ast.Pair 4 0)
+  else if op == "<" then Vuna.Ast.Just (Vuna.Ast.Pair 4 0)
+  else if op == "<=" then Vuna.Ast.Just (Vuna.Ast.Pair 4 0)
+  else if op == ">" then Vuna.Ast.Just (Vuna.Ast.Pair 4 0)
+  else if op == ">=" then Vuna.Ast.Just (Vuna.Ast.Pair 4 0)
+  else if op == "++" then Vuna.Ast.Just (Vuna.Ast.Pair 5 1)
+  else if op == "+" then Vuna.Ast.Just (Vuna.Ast.Pair 6 0)
+  else if op == "-" then Vuna.Ast.Just (Vuna.Ast.Pair 6 0)
+  else if op == "*" then Vuna.Ast.Just (Vuna.Ast.Pair 7 0)
+  else if op == "/" then Vuna.Ast.Just (Vuna.Ast.Pair 7 0)
+  else if op == "::" then Vuna.Ast.Just (Vuna.Ast.Pair 8 1)
+  else Vuna.Ast.Nothing
+
+opExpr op = if op == "::" then Vuna.Ast.EVar "Cons" else Vuna.Ast.EVar op
+
+countArrows e =
+  case e of
+    Vuna.Ast.EApp (Vuna.Ast.EVar "->") (Cons x (Cons rest Nil)) => 1 + countArrows rest
+    _ => 0
+
+terminatesExpression tok =
+  case tok of
+    Vuna.Lexer.PTok (Vuna.Lexer.TSym ")") p => True
+    Vuna.Lexer.PTok (Vuna.Lexer.TSym "]") p => True
+    Vuna.Lexer.PTok (Vuna.Lexer.TSym ",") p => True
+    Vuna.Lexer.PTok (Vuna.Lexer.TKw "else") p => True
+    Vuna.Lexer.PTok (Vuna.Lexer.TKw "in") p => True
+    Vuna.Lexer.PTok (Vuna.Lexer.TKw "then") p => True
+    _ => False
+
+badCaseIndent st altCol =
+  if isEof st then False
+  else
+    case peekPos st of
+      Vuna.Lexer.Pos line col =>
+        if col > altCol then
+          case terminatesExpression (peekTok st) of
+            True => False
+            False => True
+        else False
+
+parseSource source =
+  Vuna.Ast.andThen (Vuna.Lexer.lexSource source) (\toks => parseProgram (PState toks (Vuna.Lexer.Pos 1 0)))
+
+parseImports st =
+  if atKw st "import" then
+    Vuna.Ast.step (expectKw st "import") (\_, st1 =>
+      Vuna.Ast.step (expectIdent st1) (\name, st2 =>
+        Vuna.Ast.step (parseImports st2) (\rest, st3 =>
+          Vuna.Ast.Ok (Vuna.Ast.Pair (Cons name rest) st3))))
+  else Vuna.Ast.Ok (Vuna.Ast.Pair Nil st)
+
+parseProgram st =
+  Vuna.Ast.step (parseImports st) (\imports, st1 =>
+    if isEof st1 then Vuna.Ast.Ok (Vuna.Ast.Pair imports Nil)
+    else
+      case peekPos st1 of
+        Vuna.Lexer.Pos line col =>
+          Vuna.Ast.step (parseDecls st1 col) (\decls, st2 =>
+            if isEof st2 then Vuna.Ast.Ok (Vuna.Ast.Pair imports decls)
+            else Vuna.Ast.Err "expected end of input"))
+
+parseDecls st blockCol =
+  if isEof st then Vuna.Ast.Ok (Vuna.Ast.Pair Nil st)
+  else
+    case peekPos st of
+      Vuna.Lexer.Pos line col =>
+        if col == blockCol then
+          Vuna.Ast.step (parseDecl st blockCol) (\decl, st1 =>
+            Vuna.Ast.step (parseDecls st1 blockCol) (\rest, st2 =>
+              Vuna.Ast.Ok (Vuna.Ast.Pair (Cons decl rest) st2)))
+        else Vuna.Ast.Err ("expected a declaration at column " ++ strFromInt blockCol)
+
+parseDecl st blockCol =
+  case peekTok st of
+    Vuna.Lexer.PTok (Vuna.Lexer.TKw "data") p => parseData st blockCol
+    Vuna.Lexer.PTok (Vuna.Lexer.TIdent name) p =>
+      let st1 = advance st
+      in if atSym st1 ":" then parseSignature st1 blockCol name
+         else parseClause st1 blockCol name
+    _ => Vuna.Ast.Err "expected a top-level declaration"
+
+parseSignature st blockCol name =
+  Vuna.Ast.step (expectSym st ":") (\_, st1 =>
+    Vuna.Ast.step (parseExpr st1 blockCol 0) (\ty, st2 => Vuna.Ast.Ok (Vuna.Ast.Pair (Vuna.Ast.DSig name ty) st2)))
+
+parseClause st blockCol name =
+  Vuna.Ast.step (parseClausePatterns st blockCol) (\pats, st1 =>
+    Vuna.Ast.step (expectSym st1 "=") (\_, st2 =>
+      Vuna.Ast.step (parseExpr st2 blockCol 0) (\body, st3 =>
+        Vuna.Ast.Ok (Vuna.Ast.Pair (Vuna.Ast.DFun name pats body) st3))))
+
+parseClausePatterns st blockCol =
+  if startsPatternAtom st && canContinue st blockCol then
+    Vuna.Ast.step (parsePatternAtom st blockCol) (\pat, st1 =>
+      Vuna.Ast.step (parseClausePatterns st1 blockCol) (\rest, st2 =>
+        Vuna.Ast.Ok (Vuna.Ast.Pair (Cons pat rest) st2)))
+  else Vuna.Ast.Ok (Vuna.Ast.Pair Nil st)
+
+parseData st blockCol =
+  Vuna.Ast.step (expectKw st "data") (\_, st1 =>
+    Vuna.Ast.step (expectIdent st1) (\name, st2 =>
+      Vuna.Ast.step (parseParams st2) (\params, st3 =>
+        Vuna.Ast.step (expectSym st3 ":") (\_, st4 =>
+          Vuna.Ast.step (parseExpr st4 blockCol 0) (\ty, st5 =>
+            Vuna.Ast.step (expectKw st5 "where") (\_, st6 =>
+              Vuna.Ast.step (parseCtors st6 blockCol) (\ctors, st7 =>
+                Vuna.Ast.Ok (Vuna.Ast.Pair (Vuna.Ast.DData name params ctors) st7))))))))
+
+parseParams st =
+  case peekTok st of
+    Vuna.Lexer.PTok (Vuna.Lexer.TIdent name) p =>
+      Vuna.Ast.step (parseParams (advance st)) (\rest, st1 =>
+        Vuna.Ast.Ok (Vuna.Ast.Pair (Cons name rest) st1))
+    _ => Vuna.Ast.Ok (Vuna.Ast.Pair Nil st)
+
+parseCtors st blockCol =
+  if isEof st then Vuna.Ast.Ok (Vuna.Ast.Pair Nil st)
+  else
+    case peekPos st of
+      Vuna.Lexer.Pos line col =>
+        if col > blockCol then parseCtorList st col
+        else Vuna.Ast.Ok (Vuna.Ast.Pair Nil st)
+
+parseCtorList st ctorCol =
+  if isEof st then Vuna.Ast.Ok (Vuna.Ast.Pair Nil st)
+  else
+    case peekPos st of
+      Vuna.Lexer.Pos line col =>
+        if col == ctorCol then
+          Vuna.Ast.step (expectIdent st) (\name, st1 =>
+            Vuna.Ast.step (expectSym st1 ":") (\_, st2 =>
+              Vuna.Ast.step (parseExpr st2 ctorCol 0) (\ty, st3 =>
+                Vuna.Ast.step (parseCtorList st3 ctorCol) (\rest, st4 =>
+                  Vuna.Ast.Ok (Vuna.Ast.Pair (Cons (Vuna.Ast.Pair name (countArrows ty)) rest) st4)))))
+        else if col > ctorCol then Vuna.Ast.Err "unexpected indentation in data block"
+        else Vuna.Ast.Ok (Vuna.Ast.Pair Nil st)
+
+parseExpr st blockCol minPrec =
+  if isEof st then Vuna.Ast.Err "unexpected end of input"
+  else if canContinue st blockCol then
+    Vuna.Ast.step (parseLhs st blockCol) (\lhs, st1 =>
+      parseInfix st1 blockCol minPrec lhs)
+  else Vuna.Ast.Err "expression is not indented enough"
+
+parseInfix st blockCol minPrec lhs =
+  case peekTok st of
+    Vuna.Lexer.PTok (Vuna.Lexer.TSym op) p =>
+      case infixInfo op of
+        Vuna.Ast.Just pr =>
+          case pr of
+            Vuna.Ast.Pair prec assoc =>
+              if prec >= minPrec && canContinue st blockCol then
+                let rhsPrec = if assoc == 0 then prec + 1 else prec
+                in Vuna.Ast.step (parseExpr (advance st) blockCol rhsPrec) (\rhs, st2 =>
+                     parseInfix st2 blockCol minPrec (Vuna.Ast.EApp (opExpr op) (Cons lhs (Cons rhs Nil))))
+              else Vuna.Ast.Ok (Vuna.Ast.Pair lhs st)
+        Vuna.Ast.Nothing => Vuna.Ast.Ok (Vuna.Ast.Pair lhs st)
+    _ => Vuna.Ast.Ok (Vuna.Ast.Pair lhs st)
+
+parseLhs st blockCol =
+  case peekTok st of
+    Vuna.Lexer.PTok (Vuna.Lexer.TSym "\\") p => parseLambda st blockCol
+    Vuna.Lexer.PTok (Vuna.Lexer.TKw "let") p => parseLet st blockCol
+    Vuna.Lexer.PTok (Vuna.Lexer.TKw "case") p => parseCase st blockCol
+    Vuna.Lexer.PTok (Vuna.Lexer.TKw "if") p => parseIf st blockCol
+    _ => parseApplication st blockCol
+
+parseApplication st blockCol =
+  Vuna.Ast.step (parseAtom st blockCol) (\first, st1 =>
+    Vuna.Ast.step (parseArgs st1 blockCol) (\args, st2 =>
+      case args of
+        Nil => Vuna.Ast.Ok (Vuna.Ast.Pair first st2)
+        _ => Vuna.Ast.Ok (Vuna.Ast.Pair (Vuna.Ast.EApp first args) st2)))
+
+parseArgs st blockCol =
+  if startsAtom st && canContinue st blockCol then
+    Vuna.Ast.step (parseAtom st blockCol) (\arg, st1 =>
+      Vuna.Ast.step (parseArgs st1 blockCol) (\rest, st2 =>
+        Vuna.Ast.Ok (Vuna.Ast.Pair (Cons arg rest) st2)))
+  else Vuna.Ast.Ok (Vuna.Ast.Pair Nil st)
+
+parseAtom st blockCol =
+  case peekTok st of
+    Vuna.Lexer.PTok (Vuna.Lexer.TIdent name) p => Vuna.Ast.Ok (Vuna.Ast.Pair (Vuna.Ast.EVar name) (advance st))
+    Vuna.Lexer.PTok (Vuna.Lexer.TInt n) p => Vuna.Ast.Ok (Vuna.Ast.Pair (Vuna.Ast.EInt n) (advance st))
+    Vuna.Lexer.PTok (Vuna.Lexer.TStr s) p => Vuna.Ast.Ok (Vuna.Ast.Pair (Vuna.Ast.EStr s) (advance st))
+    Vuna.Lexer.PTok (Vuna.Lexer.TKw "Type") p => Vuna.Ast.Ok (Vuna.Ast.Pair (Vuna.Ast.EVar "Type") (advance st))
+    Vuna.Lexer.PTok (Vuna.Lexer.TSym "(") p =>
+      Vuna.Ast.step (parseExpr (advance st) blockCol 0) (\inner, st1 =>
+        Vuna.Ast.step (expectSym st1 ")") (\_, st2 => Vuna.Ast.Ok (Vuna.Ast.Pair inner st2)))
+    Vuna.Lexer.PTok (Vuna.Lexer.TSym "[") p => parseListExpr st blockCol
+    _ => Vuna.Ast.Err "expected expression"
+
+parseListExpr st blockCol =
+  Vuna.Ast.step (expectSym st "[") (\_, st1 =>
+    if atSym st1 "]" then Vuna.Ast.Ok (Vuna.Ast.Pair (Vuna.Ast.EVar "Nil") (advance st1))
+    else
+      Vuna.Ast.step (parseListExprElems st1 blockCol) (\elems, st2 =>
+        Vuna.Ast.Ok (Vuna.Ast.Pair (foldCons elems) st2)))
+
+parseListExprElems st blockCol =
+  Vuna.Ast.step (parseExpr st blockCol 0) (\e, st1 =>
+    if atSym st1 "," then
+      Vuna.Ast.step (parseListExprElems (advance st1) blockCol) (\rest, st2 =>
+        Vuna.Ast.Ok (Vuna.Ast.Pair (Cons e rest) st2))
+    else if atSym st1 "]" then Vuna.Ast.Ok (Vuna.Ast.Pair (Cons e Nil) (advance st1))
+    else Vuna.Ast.Err "expected , or ]")
+
+foldCons Nil = Vuna.Ast.EVar "Nil"
+foldCons (Cons e rest) = Vuna.Ast.EApp (Vuna.Ast.EVar "Cons") (Cons e (Cons (foldCons rest) Nil))
+
+parseLambda st blockCol =
+  Vuna.Ast.step (expectSym st "\\") (\_, st1 =>
+    Vuna.Ast.step (expectIdent st1) (\first, st2 =>
+      Vuna.Ast.step (parseLambdaParams st2 (Cons first Nil)) (\params, st3 =>
+        Vuna.Ast.step (expectSym st3 "=>") (\_, st4 =>
+          Vuna.Ast.step (parseExpr st4 blockCol 0) (\body, st5 =>
+            Vuna.Ast.Ok (Vuna.Ast.Pair (Vuna.Ast.ELam params body) st5))))))
+
+parseLambdaParams st acc =
+  if atSym st "," then
+    Vuna.Ast.step (expectIdent (advance st)) (\name, st1 =>
+      parseLambdaParams st1 (Vuna.Ast.append acc (Cons name Nil)))
+  else Vuna.Ast.Ok (Vuna.Ast.Pair acc st)
+
+parseLet st blockCol =
+  Vuna.Ast.step (expectKw st "let") (\_, st1 =>
+    Vuna.Ast.step (parseLetBindings st1 blockCol) (\binds, st2 =>
+      Vuna.Ast.step (expectKw st2 "in") (\_, st3 =>
+        Vuna.Ast.step (parseExpr st3 blockCol 0) (\body, st4 =>
+          Vuna.Ast.Ok (Vuna.Ast.Pair (Vuna.Ast.ELet binds body) st4)))))
+
+parseLetBindings st blockCol =
+  if isEof st then Vuna.Ast.Err "expected a let binding"
+  else if atKw st "in" then Vuna.Ast.Err "expected a let binding"
+  else
+    case peekPos st of
+      Vuna.Lexer.Pos line col =>
+        if col <= blockCol then Vuna.Ast.Err "let binding is not indented enough"
+        else parseLetBindingsAt st col
+
+parseLetBindingsAt st declCol =
+  if isEof st then Vuna.Ast.Ok (Vuna.Ast.Pair Nil st)
+  else if atKw st "in" then Vuna.Ast.Ok (Vuna.Ast.Pair Nil st)
+  else
+    case peekPos st of
+      Vuna.Lexer.Pos line col =>
+        if col == declCol then
+          Vuna.Ast.step (parsePatternSingle st declCol) (\pat, st1 =>
+            Vuna.Ast.step (expectSym st1 "=") (\_, st2 =>
+              Vuna.Ast.step (parseExpr st2 declCol 0) (\value, st3 =>
+                Vuna.Ast.step (parseLetBindingsAt st3 declCol) (\rest, st4 =>
+                  Vuna.Ast.Ok (Vuna.Ast.Pair (Cons (Vuna.Ast.Pair pat value) rest) st4)))))
+        else Vuna.Ast.Ok (Vuna.Ast.Pair Nil st)
+
+parseCase st blockCol =
+  Vuna.Ast.step (expectKw st "case") (\_, st1 =>
+    Vuna.Ast.step (parseExpr st1 blockCol 0) (\scrut, st2 =>
+      Vuna.Ast.step (expectKw st2 "of") (\_, st3 =>
+        Vuna.Ast.step (parseCaseAlts st3 blockCol) (\alts, st4 =>
+          Vuna.Ast.Ok (Vuna.Ast.Pair (Vuna.Ast.ECase scrut alts) st4)))))
+
+parseCaseAlts st blockCol =
+  if isEof st then Vuna.Ast.Err "case expression needs an alternative"
+  else
+    case peekPos st of
+      Vuna.Lexer.Pos line col =>
+        if col <= blockCol then Vuna.Ast.Err "case alternative is not indented enough"
+        else
+          Vuna.Ast.step (parseAltList st col) (\alts, st2 =>
+            if badCaseIndent st2 col then Vuna.Ast.Err "unexpected indentation after case alternative"
+            else
+              case alts of
+                Nil => Vuna.Ast.Err "case expression needs an alternative"
+                _ => Vuna.Ast.Ok (Vuna.Ast.Pair alts st2))
+
+parseAltList st altCol =
+  if isEof st then Vuna.Ast.Ok (Vuna.Ast.Pair Nil st)
+  else
+    case peekPos st of
+      Vuna.Lexer.Pos line col =>
+        if col == altCol then
+          Vuna.Ast.step (parsePatternSingle st altCol) (\pat, st1 =>
+            Vuna.Ast.step (expectSym st1 "=>") (\_, st2 =>
+              Vuna.Ast.step (parseExpr st2 altCol 0) (\body, st3 =>
+                Vuna.Ast.step (parseAltList st3 altCol) (\rest, st4 =>
+                  Vuna.Ast.Ok (Vuna.Ast.Pair (Cons (Vuna.Ast.Pair pat body) rest) st4)))))
+        else Vuna.Ast.Ok (Vuna.Ast.Pair Nil st)
+
+parseIf st blockCol =
+  Vuna.Ast.step (expectKw st "if") (\_, st1 =>
+    Vuna.Ast.step (parseExpr st1 blockCol 0) (\cond, st2 =>
+      Vuna.Ast.step (expectKw st2 "then") (\_, st3 =>
+        Vuna.Ast.step (parseExpr st3 blockCol 0) (\yes, st4 =>
+          Vuna.Ast.step (expectKw st4 "else") (\_, st5 =>
+            Vuna.Ast.step (parseExpr st5 blockCol 0) (\no, st6 =>
+              Vuna.Ast.Ok (Vuna.Ast.Pair (Vuna.Ast.EIf cond yes no) st6)))))))
+
+parsePatternSingle st blockCol = parsePatternCons st blockCol
+
+parsePatternCons st blockCol =
+  Vuna.Ast.step (parsePatternHead st blockCol) (\lhs, st1 =>
+    if atSym st1 "::" && canContinue st1 blockCol then
+      Vuna.Ast.step (parsePatternCons (advance st1) blockCol) (\rhs, st2 =>
+        Vuna.Ast.Ok (Vuna.Ast.Pair (Vuna.Ast.PCon "Cons" (Cons lhs (Cons rhs Nil))) st2))
+    else Vuna.Ast.Ok (Vuna.Ast.Pair lhs st1))
+
+parsePatternHead st blockCol =
+  case peekTok st of
+    Vuna.Lexer.PTok (Vuna.Lexer.TIdent name) p =>
+      if upperFirst name then
+        Vuna.Ast.step (parsePatternAtoms (advance st) blockCol) (\args, st1 =>
+          Vuna.Ast.Ok (Vuna.Ast.Pair (Vuna.Ast.PCon name args) st1))
+      else parsePatternAtom st blockCol
+    _ => parsePatternAtom st blockCol
+
+parsePatternAtoms st blockCol =
+  if startsPatternAtom st && canContinue st blockCol then
+    Vuna.Ast.step (parsePatternAtom st blockCol) (\pat, st1 =>
+      Vuna.Ast.step (parsePatternAtoms st1 blockCol) (\rest, st2 =>
+        Vuna.Ast.Ok (Vuna.Ast.Pair (Cons pat rest) st2)))
+  else Vuna.Ast.Ok (Vuna.Ast.Pair Nil st)
+
+parsePatternAtom st blockCol =
+  case peekTok st of
+    Vuna.Lexer.PTok (Vuna.Lexer.TIdent "_") p => Vuna.Ast.Ok (Vuna.Ast.Pair Vuna.Ast.PWild (advance st))
+    Vuna.Lexer.PTok (Vuna.Lexer.TIdent name) p =>
+      if upperFirst name then Vuna.Ast.Ok (Vuna.Ast.Pair (Vuna.Ast.PCon name Nil) (advance st))
+      else Vuna.Ast.Ok (Vuna.Ast.Pair (Vuna.Ast.PVar name) (advance st))
+    Vuna.Lexer.PTok (Vuna.Lexer.TInt n) p => Vuna.Ast.Ok (Vuna.Ast.Pair (Vuna.Ast.PInt n) (advance st))
+    Vuna.Lexer.PTok (Vuna.Lexer.TStr s) p => Vuna.Ast.Ok (Vuna.Ast.Pair (Vuna.Ast.PStr s) (advance st))
+    Vuna.Lexer.PTok (Vuna.Lexer.TSym "(") p =>
+      Vuna.Ast.step (parsePatternSingle (advance st) blockCol) (\inner, st1 =>
+        Vuna.Ast.step (expectSym st1 ")") (\_, st2 => Vuna.Ast.Ok (Vuna.Ast.Pair inner st2)))
+    Vuna.Lexer.PTok (Vuna.Lexer.TSym "[") p => parseListPattern st blockCol
+    _ => Vuna.Ast.Err "expected pattern"
+
+parseListPattern st blockCol =
+  Vuna.Ast.step (expectSym st "[") (\_, st1 =>
+    if atSym st1 "]" then Vuna.Ast.Ok (Vuna.Ast.Pair (Vuna.Ast.PCon "Nil" Nil) (advance st1))
+    else
+      Vuna.Ast.step (parseListPatternElems st1 blockCol) (\pats, st2 =>
+        Vuna.Ast.Ok (Vuna.Ast.Pair (foldPCon pats) st2)))
+
+parseListPatternElems st blockCol =
+  Vuna.Ast.step (parsePatternSingle st blockCol) (\pat, st1 =>
+    if atSym st1 "," then
+      Vuna.Ast.step (parseListPatternElems (advance st1) blockCol) (\rest, st2 =>
+        Vuna.Ast.Ok (Vuna.Ast.Pair (Cons pat rest) st2))
+    else if atSym st1 "]" then Vuna.Ast.Ok (Vuna.Ast.Pair (Cons pat Nil) (advance st1))
+    else Vuna.Ast.Err "expected , or ]")
+
+foldPCon Nil = Vuna.Ast.PCon "Nil" Nil
+foldPCon (Cons p rest) = Vuna.Ast.PCon "Cons" (Cons p (Cons (foldPCon rest) Nil))
+

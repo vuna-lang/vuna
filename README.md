@@ -2,8 +2,8 @@
 
 vuna 是一个函数式编程语言，本仓库是它的编译器。
 
-编译器完全用 vuna 自己写（[lib/Vuna/Interp.vuna](lib/Vuna/Interp.vuna) +
-[app/compile.vuna](app/compile.vuna)），通过提交入库的 OCaml 种子自举。构建、
+编译器完全用 vuna 自己写（`lib/Vuna/` 下的 Ast/Lexer/Parser/Interp/Codegen
+模块 + `app/compile.vuna`），通过提交入库的 OCaml 种子自举。构建、
 测试和语言演进都不依赖外部编译器。早期用于启动自举的 OCaml 实现 `vunax` 已在
 M6 完成后删除；需要查看历史可从 git log 找到。
 
@@ -61,7 +61,12 @@ git add bootstrap/ && git commit
 ├── flake.nix             # Nix：vuna-boot / vuna / vuna-interp、devShell、checks
 ├── flake.lock
 ├── lib/                  # vuna 模块根（模块名由路径精确决定）
-│   └── Vuna/Interp.vuna  # 词法/解析/模块 loader/求值/codegen，约 2000 行 vuna
+│   └── Vuna/
+│       ├── Ast.vuna      # 共享类型：Result/Maybe/List/Pair、AST
+│       ├── Lexer.vuna    # 词法分析（token + 位置）
+│       ├── Parser.vuna   # offside layout parser → AST/imports
+│       ├── Interp.vuna   # 求值器、模块 loader、对外 facade
+│       └── Codegen.vuna  # flatten 后的 AST → OCaml
 ├── app/
 │   ├── compile.vuna      # 编译器 CLI（vuna）
 │   └── interp.vuna       # 解释器 CLI（vuna-interp）
@@ -107,11 +112,12 @@ git add bootstrap/ && git commit
 
 ## 编译器实现
 
-- [lib/Vuna/Interp.vuna](lib/Vuna/Interp.vuna) 同时包含前端、解释器与 codegen：
-  - 词法/解析：offside layout，token 不带 span；
-  - 模块 loader：`loadProgram root entry` 读取 import、循环检测、名字解析与 flatten；
-  - 解释器：call-by-value、多子句模式匹配、部分应用、内建；
-  - codegen：把 flatten 后的 program 翻译成 OCaml；
+- `lib/Vuna/Ast.vuna`：Result/Maybe/List/Pair、AST 与通用列表/Result 辅助函数；
+- `lib/Vuna/Lexer.vuna`：词法分析，token 带行列位置；
+- `lib/Vuna/Parser.vuna`：offside layout parser，输出 AST 与 imports；
+- `lib/Vuna/Interp.vuna`：求值器、模块 loader（`loadProgram`：import 图、循环检测、
+  名字解析、flatten）与对外 facade；
+- `lib/Vuna/Codegen.vuna`：把 flatten 后的 program 翻译成 OCaml；
 - [app/compile.vuna](app/compile.vuna)：`vuna [--no-print] [--root DIR] <entry.vuna> [out.ml]`；
   `--no-print` 表示生成的程序不自动打印 `main` 的结果（用于编译自己做 IO 的 CLI）；
 - [app/interp.vuna](app/interp.vuna)：`vuna-interp [--root DIR] <file.vuna>`，把
@@ -134,7 +140,7 @@ type value =
 - IO 内建在生成程序里有对应实现，语义与解释器一致；
 - 编译期检查：`main` 存在且零参数、未绑定变量、子句 arity 不一致、构造器/函数重名；
 - 生成结果是**单个 OCaml 文件**（loader 先 flatten），性能与错误信息暂未优化；
-- runtime 前导代码固化在 `Interp.vuna` 的 `runtimeCode`，是唯一实现。
+- runtime 前导代码固化在 `Codegen.vuna` 的 `runtimeCode`，是唯一实现。
 
 ## 测试
 

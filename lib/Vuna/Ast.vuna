@@ -1,0 +1,120 @@
+-- Vuna 的共享基础：Result/Maybe/List/Pair、AST 类型，
+-- 以及列表/Result/声明相关的通用辅助函数。
+
+data Result a : Type where
+  Ok : a -> Result a
+  Err : String -> Result a
+
+data Maybe a : Type where
+  Nothing : Maybe a
+  Just : a -> Maybe a
+
+data List a : Type where
+  Nil : List a
+  Cons : a -> List a -> List a
+
+data Pair a b : Type where
+  Pair : a -> b -> Pair a b
+
+
+data Pat : Type where
+  PVar : String -> Pat
+  PWild : Pat
+  PCon : String -> List Pat -> Pat
+  PInt : Int -> Pat
+  PStr : String -> Pat
+
+data Expr : Type where
+  EVar : String -> Expr
+  EInt : Int -> Expr
+  EStr : String -> Expr
+  ELam : List String -> Expr -> Expr
+  EApp : Expr -> List Expr -> Expr
+  ELet : List (Pair Pat Expr) -> Expr -> Expr
+  ECase : Expr -> List (Pair Pat Expr) -> Expr
+  EIf : Expr -> Expr -> Expr -> Expr
+
+data Decl : Type where
+  DData : String -> List String -> List (Pair String Int) -> Decl
+  DSig : String -> Expr -> Decl
+  DFun : String -> List Pat -> Expr -> Decl
+
+data Bool : Type where
+  False : Bool
+  True : Bool
+
+
+append Nil ys = ys
+append (Cons x xs) ys = Cons x (append xs ys)
+
+reverseOnto Nil acc = acc
+reverseOnto (Cons x xs) acc = reverseOnto xs (Cons x acc)
+
+reverse xs = reverseOnto xs Nil
+
+length Nil = 0
+length (Cons x xs) = 1 + length xs
+
+map f Nil = Nil
+map f (Cons x xs) = Cons (f x) (map f xs)
+
+traverse f Nil = Ok Nil
+traverse f (Cons x xs) =
+  case f x of
+    Err e => Err e
+    Ok y =>
+      case traverse f xs of
+        Err e => Err e
+        Ok ys => Ok (Cons y ys)
+
+andThen r f =
+  case r of
+    Ok x => f x
+    Err e => Err e
+
+step r k =
+  case r of
+    Ok p =>
+      case p of
+        Pair x st => k x st
+    Err e => Err e
+
+
+concatMap f Nil = Nil
+concatMap f (Cons x rest) = append (f x) (concatMap f rest)
+
+memName name Nil = False
+memName name (Cons x rest) = if x == name then True else memName name rest
+
+lookupPair name Nil = Nothing
+lookupPair name (Cons p rest) =
+  case p of
+    Pair k v => if k == name then Just v else lookupPair name rest
+
+collectClauses Nil name = Nil
+collectClauses (Cons d rest) name =
+  case d of
+    DFun n pats body =>
+      if n == name then Cons (Pair pats body) (collectClauses rest name)
+      else collectClauses rest name
+    _ => collectClauses rest name
+
+clausesFor decls name = collectClauses decls name
+
+funArity name decls =
+  case clausesFor decls name of
+    Nil => Nothing
+    Cons c rest =>
+      case c of
+        Pair pats body => Just (length pats)
+
+ctorArity name decls =
+  case decls of
+    Nil => Nothing
+    Cons d rest =>
+      case d of
+        DData dname params ctors =>
+          case lookupPair name ctors of
+            Just arity => Just arity
+            Nothing => ctorArity name rest
+        _ => ctorArity name rest

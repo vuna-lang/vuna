@@ -1,44 +1,11 @@
--- core-v0 自解释器（M3a，AST 级）：
--- 输入 vuna 源码，求值其中的 main，输出 show 后的结果。
--- 只覆盖 core-v0；错误统一返回 "error: ..." 字符串。
+-- Vuna.Interp：求值器、模块 loader 与对外 facade。
+-- 读 vuna 源码（interpret）或模块入口（interpretFile/compileFile），
+-- 求值 main 或用 Vuna.Codegen 生成 OCaml；错误统一返回 Result/字符串。
 
-data Result a : Type where
-  Ok : a -> Result a
-  Err : String -> Result a
-
-data Maybe a : Type where
-  Nothing : Maybe a
-  Just : a -> Maybe a
-
-data List a : Type where
-  Nil : List a
-  Cons : a -> List a -> List a
-
-data Pair a b : Type where
-  Pair : a -> b -> Pair a b
-
-
-data Pat : Type where
-  PVar : String -> Pat
-  PWild : Pat
-  PCon : String -> List Pat -> Pat
-  PInt : Int -> Pat
-  PStr : String -> Pat
-
-data Expr : Type where
-  EVar : String -> Expr
-  EInt : Int -> Expr
-  EStr : String -> Expr
-  ELam : List String -> Expr -> Expr
-  EApp : Expr -> List Expr -> Expr
-  ELet : List (Pair Pat Expr) -> Expr -> Expr
-  ECase : Expr -> List (Pair Pat Expr) -> Expr
-  EIf : Expr -> Expr -> Expr -> Expr
-
-data Decl : Type where
-  DData : String -> List String -> List (Pair String Int) -> Decl
-  DSig : String -> Expr -> Decl
-  DFun : String -> List Pat -> Expr -> Decl
+import Vuna.Ast
+import Vuna.Lexer
+import Vuna.Parser
+import Vuna.Codegen
 
 data Value : Type where
   VInt : Int -> Value
@@ -48,796 +15,108 @@ data Value : Type where
   VLam : List String -> Expr -> List (Pair String Value) -> Value
   VBuiltin : String -> List Value -> Value
 
-data Bool : Type where
-  False : Bool
-  True : Bool
-
-data Pos : Type where
-  Pos : Int -> Int -> Pos
-
-data Tok : Type where
-  TIdent : String -> Tok
-  TKw : String -> Tok
-  TInt : Int -> Tok
-  TStr : String -> Tok
-  TSym : String -> Tok
-  TEof : Tok
-
-data PTok : Type where
-  PTok : Tok -> Pos -> PTok
-
-data Chars : Type where
-  Chars : List Int -> Pos -> Chars
-
-data PState : Type where
-  PState : List PTok -> Pos -> PState
-
-append Nil ys = ys
-append (Cons x xs) ys = Cons x (append xs ys)
-
-reverseOnto Nil acc = acc
-reverseOnto (Cons x xs) acc = reverseOnto xs (Cons x acc)
-
-reverse xs = reverseOnto xs Nil
-
-length Nil = 0
-length (Cons x xs) = 1 + length xs
-
-map f Nil = Nil
-map f (Cons x xs) = Cons (f x) (map f xs)
-
-traverse f Nil = Ok Nil
-traverse f (Cons x xs) =
-  case f x of
-    Err e => Err e
-    Ok y =>
-      case traverse f xs of
-        Err e => Err e
-        Ok ys => Ok (Cons y ys)
-
-andThen r f =
-  case r of
-    Ok x => f x
-    Err e => Err e
-
-step r k =
-  case r of
-    Ok p =>
-      case p of
-        Pair x st => k x st
-    Err e => Err e
-
--- ---------------------------------------------------------------
--- vuna 源码 lexer（M3b）
--- ---------------------------------------------------------------
-
-advanceChar c (Pos line col) = if c == 10 then Pos (line + 1) 1 else Pos line (col + 1)
-
-isUpperChar c = c >= 65 && c <= 90
-
-isLowerChar c = c >= 97 && c <= 122
-
-isIdentStart c = isUpperChar c || isLowerChar c || c == 95
-
-isIdentChar c = isIdentStart c || isDigit c || c == 39
-
-isOpChar c =
-  c == 33 || c == 36 || c == 37 || c == 38 || c == 42 || c == 43 || c == 45
-  || c == 47 || c == 60 || c == 61 || c == 62 || c == 63 || c == 64 || c == 92
-  || c == 94 || c == 124 || c == 126 || c == 58
-
-isKeyword s =
-  s == "data" || s == "case" || s == "of" || s == "let" || s == "in" || s == "if"
-  || s == "then" || s == "else" || s == "where" || s == "Type"
-  || s == "import"
-
-classifyIdent s = if isKeyword s then TKw s else TIdent s
-
-skipLineComment (Chars Nil p) = Chars Nil p
-skipLineComment (Chars (Cons c rest) p) =
-  if c == 10 then Chars (Cons c rest) p
-  else skipLineComment (Chars rest (advanceChar c p))
-
-skipBlockComment depth cs =
-  case cs of
-    Chars Nil p => Err "unterminated block comment"
-    Chars (Cons c rest) p =>
-      case rest of
-        Cons c2 rest2 =>
-          if c == 123 && c2 == 45 then
-            skipBlockComment (depth + 1) (Chars rest2 (advanceChar c2 (advanceChar c p)))
-          else if c == 45 && c2 == 125 then
-            if depth == 1 then Ok (Chars rest2 (advanceChar c2 (advanceChar c p)))
-            else skipBlockComment (depth - 1) (Chars rest2 (advanceChar c2 (advanceChar c p)))
-          else skipBlockComment depth (Chars rest (advanceChar c p))
-        Nil => skipBlockComment depth (Chars rest (advanceChar c p))
-
-skipTrivia cs =
-  case cs of
-    Chars Nil p => Ok cs
-    Chars (Cons c rest) p =>
-      if isSpace c then skipTrivia (Chars rest (advanceChar c p))
-      else
-        case rest of
-          Cons c2 rest2 =>
-            if c == 45 && c2 == 45 then
-              skipTrivia (skipLineComment (Chars rest (advanceChar c p)))
-            else if c == 123 && c2 == 45 then
-              case skipBlockComment 1 (Chars rest (advanceChar c p)) of
-                Err e => Err e
-                Ok cs2 => skipTrivia cs2
-            else Ok cs
-          Nil => Ok cs
-
-collectIdent (Chars Nil p) acc = Pair (strPack (reverse acc)) (Chars Nil p)
-collectIdent (Chars (Cons c rest) p) acc =
-  if isIdentChar c then collectIdent (Chars rest (advanceChar c p)) (Cons c acc)
-  else if c == 46 then
-    case rest of
-      Cons c2 rest2 =>
-        if isIdentStart c2 then
-          collectIdent (Chars rest (advanceChar c p)) (Cons c acc)
-        else Pair (strPack (reverse acc)) (Chars (Cons c rest) p)
-      Nil => Pair (strPack (reverse acc)) (Chars (Cons c rest) p)
-  else Pair (strPack (reverse acc)) (Chars (Cons c rest) p)
-
-collectInt (Chars Nil p) acc = Pair acc (Chars Nil p)
-collectInt (Chars (Cons c rest) p) acc =
-  if isDigit c then collectInt (Chars rest (advanceChar c p)) (acc * 10 + (c - 48))
-  else Pair acc (Chars (Cons c rest) p)
-
-collectOp (Chars Nil p) acc = Pair (strPack (reverse acc)) (Chars Nil p)
-collectOp (Chars (Cons c rest) p) acc =
-  if isOpChar c then collectOp (Chars rest (advanceChar c p)) (Cons c acc)
-  else Pair (strPack (reverse acc)) (Chars (Cons c rest) p)
-
-scanString (Chars Nil p) acc = Err "unterminated string literal"
-scanString (Chars (Cons c rest) p) acc =
-  if c == 34 then Ok (Pair (strPack (reverse acc)) (Chars rest (advanceChar c p)))
-  else if c == 10 then Err "unterminated string literal"
-  else if c == 92 then scanEscape (Chars rest (advanceChar c p)) acc
-  else scanString (Chars rest (advanceChar c p)) (Cons c acc)
-
-scanEscape (Chars Nil p) acc = Err "unterminated string literal"
-scanEscape (Chars (Cons c rest) p) acc =
-  if c == 110 then scanString (Chars rest (advanceChar c p)) (Cons 10 acc)
-  else if c == 116 then scanString (Chars rest (advanceChar c p)) (Cons 9 acc)
-  else if c == 114 then scanString (Chars rest (advanceChar c p)) (Cons 13 acc)
-  else if c == 34 then scanString (Chars rest (advanceChar c p)) (Cons 34 acc)
-  else if c == 92 then scanString (Chars rest (advanceChar c p)) (Cons 92 acc)
-  else if c == 39 then scanString (Chars rest (advanceChar c p)) (Cons 39 acc)
-  else Err "unknown escape sequence"
-
-lexChars cs =
-  case skipTrivia cs of
-    Err e => Err e
-    Ok cs2 =>
-      case cs2 of
-        Chars Nil p => Ok (Cons (PTok TEof p) Nil)
-        Chars (Cons c rest) p => lexToken c rest p
-
-lexToken c rest p =
-  if isIdentStart c then
-    case collectIdent (Chars rest (advanceChar c p)) (Cons c Nil) of
-      Pair name cs2 =>
-        case lexChars cs2 of
-          Err e => Err e
-          Ok toks => Ok (Cons (PTok (classifyIdent name) p) toks)
-  else if isDigit c then
-    case collectInt (Chars rest (advanceChar c p)) (c - 48) of
-      Pair n cs2 =>
-        case lexChars cs2 of
-          Err e => Err e
-          Ok toks => Ok (Cons (PTok (TInt n) p) toks)
-  else if c == 34 then
-    case scanString (Chars rest (advanceChar c p)) Nil of
-      Err e => Err e
-      Ok p2 =>
-        case p2 of
-          Pair s cs2 =>
-            case lexChars cs2 of
-              Err e => Err e
-              Ok toks => Ok (Cons (PTok (TStr s) p) toks)
-  else if c == 40 || c == 41 || c == 91 || c == 93 || c == 44 then
-    case lexChars (Chars rest (advanceChar c p)) of
-      Err e => Err e
-      Ok toks => Ok (Cons (PTok (TSym (strPack (Cons c Nil))) p) toks)
-  else if isOpChar c then
-    case collectOp (Chars rest (advanceChar c p)) (Cons c Nil) of
-      Pair op cs2 =>
-        case lexChars cs2 of
-          Err e => Err e
-          Ok toks => Ok (Cons (PTok (TSym op) p) toks)
-  else Err "unexpected character"
-
-lexSource source = lexChars (Chars (strUnpack source) (Pos 1 1))
-
--- ---------------------------------------------------------------
--- vuna 源码 parser（offside layout）
--- ---------------------------------------------------------------
-
-posOf (PTok t p) = p
-
-tokOf (PTok t p) = t
-
-peekTok (PState toks last) =
-  case toks of
-    Cons t rest => t
-    Nil => PTok TEof (Pos 1 1)
-
-peekPos st = posOf (peekTok st)
-
-lastPos (PState toks last) = last
-
-advance st =
-  case st of
-    PState toks last =>
-      case toks of
-        Cons t rest =>
-          case t of
-            PTok TEof p => st
-            _ => PState rest (posOf t)
-        Nil => st
-
-isEof st =
-  case peekTok st of
-    PTok TEof p => True
-    _ => False
-
-atSym st s =
-  case peekTok st of
-    PTok (TSym x) p => x == s
-    _ => False
-
-atKw st k =
-  case peekTok st of
-    PTok (TKw x) p => x == k
-    _ => False
-
-canContinue st blockCol =
-  case peekPos st of
-    Pos line col =>
-      case lastPos st of
-        Pos lastLine lastCol => line == lastLine || col > blockCol
-
-expectSym st s =
-  case peekTok st of
-    PTok (TSym x) p => if x == s then Ok (Pair 0 (advance st)) else Err ("expected " ++ s)
-    _ => Err ("expected " ++ s)
-
-expectKw st k =
-  case peekTok st of
-    PTok (TKw x) p => if x == k then Ok (Pair 0 (advance st)) else Err ("expected " ++ k)
-    _ => Err ("expected " ++ k)
-
-expectIdent st =
-  case peekTok st of
-    PTok (TIdent x) p => Ok (Pair x (advance st))
-    _ => Err "expected identifier"
-
-upperFirst s =
-  case strUnpack s of
-    Cons c rest => c >= 65 && c <= 90
-    Nil => False
-
-startsAtom st =
-  case peekTok st of
-    PTok (TIdent x) p => True
-    PTok (TInt x) p => True
-    PTok (TStr x) p => True
-    PTok (TKw "Type") p => True
-    PTok (TSym "(") p => True
-    PTok (TSym "[") p => True
-    _ => False
-
-startsPatternAtom st =
-  case peekTok st of
-    PTok (TIdent x) p => True
-    PTok (TInt x) p => True
-    PTok (TStr x) p => True
-    PTok (TSym "(") p => True
-    PTok (TSym "[") p => True
-    _ => False
-
-infixInfo op =
-  if op == "->" then Just (Pair 1 1)
-  else if op == "||" then Just (Pair 2 0)
-  else if op == "&&" then Just (Pair 3 0)
-  else if op == "==" then Just (Pair 4 0)
-  else if op == "/=" then Just (Pair 4 0)
-  else if op == "<" then Just (Pair 4 0)
-  else if op == "<=" then Just (Pair 4 0)
-  else if op == ">" then Just (Pair 4 0)
-  else if op == ">=" then Just (Pair 4 0)
-  else if op == "++" then Just (Pair 5 1)
-  else if op == "+" then Just (Pair 6 0)
-  else if op == "-" then Just (Pair 6 0)
-  else if op == "*" then Just (Pair 7 0)
-  else if op == "/" then Just (Pair 7 0)
-  else if op == "::" then Just (Pair 8 1)
-  else Nothing
-
-opExpr op = if op == "::" then EVar "Cons" else EVar op
-
-countArrows e =
-  case e of
-    EApp (EVar "->") (Cons x (Cons rest Nil)) => 1 + countArrows rest
-    _ => 0
-
-terminatesExpression tok =
-  case tok of
-    PTok (TSym ")") p => True
-    PTok (TSym "]") p => True
-    PTok (TSym ",") p => True
-    PTok (TKw "else") p => True
-    PTok (TKw "in") p => True
-    PTok (TKw "then") p => True
-    _ => False
-
-badCaseIndent st altCol =
-  if isEof st then False
-  else
-    case peekPos st of
-      Pos line col =>
-        if col > altCol then
-          case terminatesExpression (peekTok st) of
-            True => False
-            False => True
-        else False
-
-parseSource source =
-  andThen (lexSource source) (\toks => parseProgram (PState toks (Pos 1 0)))
-
-parseImports st =
-  if atKw st "import" then
-    step (expectKw st "import") (\_, st1 =>
-      step (expectIdent st1) (\name, st2 =>
-        step (parseImports st2) (\rest, st3 =>
-          Ok (Pair (Cons name rest) st3))))
-  else Ok (Pair Nil st)
-
-parseProgram st =
-  step (parseImports st) (\imports, st1 =>
-    if isEof st1 then Ok (Pair imports Nil)
-    else
-      case peekPos st1 of
-        Pos line col =>
-          step (parseDecls st1 col) (\decls, st2 =>
-            if isEof st2 then Ok (Pair imports decls)
-            else Err "expected end of input"))
-
-parseDecls st blockCol =
-  if isEof st then Ok (Pair Nil st)
-  else
-    case peekPos st of
-      Pos line col =>
-        if col == blockCol then
-          step (parseDecl st blockCol) (\decl, st1 =>
-            step (parseDecls st1 blockCol) (\rest, st2 =>
-              Ok (Pair (Cons decl rest) st2)))
-        else Err ("expected a declaration at column " ++ strFromInt blockCol)
-
-parseDecl st blockCol =
-  case peekTok st of
-    PTok (TKw "data") p => parseData st blockCol
-    PTok (TIdent name) p =>
-      let st1 = advance st
-      in if atSym st1 ":" then parseSignature st1 blockCol name
-         else parseClause st1 blockCol name
-    _ => Err "expected a top-level declaration"
-
-parseSignature st blockCol name =
-  step (expectSym st ":") (\_, st1 =>
-    step (parseExpr st1 blockCol 0) (\ty, st2 => Ok (Pair (DSig name ty) st2)))
-
-parseClause st blockCol name =
-  step (parseClausePatterns st blockCol) (\pats, st1 =>
-    step (expectSym st1 "=") (\_, st2 =>
-      step (parseExpr st2 blockCol 0) (\body, st3 =>
-        Ok (Pair (DFun name pats body) st3))))
-
-parseClausePatterns st blockCol =
-  if startsPatternAtom st && canContinue st blockCol then
-    step (parsePatternAtom st blockCol) (\pat, st1 =>
-      step (parseClausePatterns st1 blockCol) (\rest, st2 =>
-        Ok (Pair (Cons pat rest) st2)))
-  else Ok (Pair Nil st)
-
-parseData st blockCol =
-  step (expectKw st "data") (\_, st1 =>
-    step (expectIdent st1) (\name, st2 =>
-      step (parseParams st2) (\params, st3 =>
-        step (expectSym st3 ":") (\_, st4 =>
-          step (parseExpr st4 blockCol 0) (\ty, st5 =>
-            step (expectKw st5 "where") (\_, st6 =>
-              step (parseCtors st6 blockCol) (\ctors, st7 =>
-                Ok (Pair (DData name params ctors) st7))))))))
-
-parseParams st =
-  case peekTok st of
-    PTok (TIdent name) p =>
-      step (parseParams (advance st)) (\rest, st1 =>
-        Ok (Pair (Cons name rest) st1))
-    _ => Ok (Pair Nil st)
-
-parseCtors st blockCol =
-  if isEof st then Ok (Pair Nil st)
-  else
-    case peekPos st of
-      Pos line col =>
-        if col > blockCol then parseCtorList st col
-        else Ok (Pair Nil st)
-
-parseCtorList st ctorCol =
-  if isEof st then Ok (Pair Nil st)
-  else
-    case peekPos st of
-      Pos line col =>
-        if col == ctorCol then
-          step (expectIdent st) (\name, st1 =>
-            step (expectSym st1 ":") (\_, st2 =>
-              step (parseExpr st2 ctorCol 0) (\ty, st3 =>
-                step (parseCtorList st3 ctorCol) (\rest, st4 =>
-                  Ok (Pair (Cons (Pair name (countArrows ty)) rest) st4)))))
-        else if col > ctorCol then Err "unexpected indentation in data block"
-        else Ok (Pair Nil st)
-
-parseExpr st blockCol minPrec =
-  if isEof st then Err "unexpected end of input"
-  else if canContinue st blockCol then
-    step (parseLhs st blockCol) (\lhs, st1 =>
-      parseInfix st1 blockCol minPrec lhs)
-  else Err "expression is not indented enough"
-
-parseInfix st blockCol minPrec lhs =
-  case peekTok st of
-    PTok (TSym op) p =>
-      case infixInfo op of
-        Just pr =>
-          case pr of
-            Pair prec assoc =>
-              if prec >= minPrec && canContinue st blockCol then
-                let rhsPrec = if assoc == 0 then prec + 1 else prec
-                in step (parseExpr (advance st) blockCol rhsPrec) (\rhs, st2 =>
-                     parseInfix st2 blockCol minPrec (EApp (opExpr op) (Cons lhs (Cons rhs Nil))))
-              else Ok (Pair lhs st)
-        Nothing => Ok (Pair lhs st)
-    _ => Ok (Pair lhs st)
-
-parseLhs st blockCol =
-  case peekTok st of
-    PTok (TSym "\\") p => parseLambda st blockCol
-    PTok (TKw "let") p => parseLet st blockCol
-    PTok (TKw "case") p => parseCase st blockCol
-    PTok (TKw "if") p => parseIf st blockCol
-    _ => parseApplication st blockCol
-
-parseApplication st blockCol =
-  step (parseAtom st blockCol) (\first, st1 =>
-    step (parseArgs st1 blockCol) (\args, st2 =>
-      case args of
-        Nil => Ok (Pair first st2)
-        _ => Ok (Pair (EApp first args) st2)))
-
-parseArgs st blockCol =
-  if startsAtom st && canContinue st blockCol then
-    step (parseAtom st blockCol) (\arg, st1 =>
-      step (parseArgs st1 blockCol) (\rest, st2 =>
-        Ok (Pair (Cons arg rest) st2)))
-  else Ok (Pair Nil st)
-
-parseAtom st blockCol =
-  case peekTok st of
-    PTok (TIdent name) p => Ok (Pair (EVar name) (advance st))
-    PTok (TInt n) p => Ok (Pair (EInt n) (advance st))
-    PTok (TStr s) p => Ok (Pair (EStr s) (advance st))
-    PTok (TKw "Type") p => Ok (Pair (EVar "Type") (advance st))
-    PTok (TSym "(") p =>
-      step (parseExpr (advance st) blockCol 0) (\inner, st1 =>
-        step (expectSym st1 ")") (\_, st2 => Ok (Pair inner st2)))
-    PTok (TSym "[") p => parseListExpr st blockCol
-    _ => Err "expected expression"
-
-parseListExpr st blockCol =
-  step (expectSym st "[") (\_, st1 =>
-    if atSym st1 "]" then Ok (Pair (EVar "Nil") (advance st1))
-    else
-      step (parseListExprElems st1 blockCol) (\elems, st2 =>
-        Ok (Pair (foldCons elems) st2)))
-
-parseListExprElems st blockCol =
-  step (parseExpr st blockCol 0) (\e, st1 =>
-    if atSym st1 "," then
-      step (parseListExprElems (advance st1) blockCol) (\rest, st2 =>
-        Ok (Pair (Cons e rest) st2))
-    else if atSym st1 "]" then Ok (Pair (Cons e Nil) (advance st1))
-    else Err "expected , or ]")
-
-foldCons Nil = EVar "Nil"
-foldCons (Cons e rest) = EApp (EVar "Cons") (Cons e (Cons (foldCons rest) Nil))
-
-parseLambda st blockCol =
-  step (expectSym st "\\") (\_, st1 =>
-    step (expectIdent st1) (\first, st2 =>
-      step (parseLambdaParams st2 (Cons first Nil)) (\params, st3 =>
-        step (expectSym st3 "=>") (\_, st4 =>
-          step (parseExpr st4 blockCol 0) (\body, st5 =>
-            Ok (Pair (ELam params body) st5))))))
-
-parseLambdaParams st acc =
-  if atSym st "," then
-    step (expectIdent (advance st)) (\name, st1 =>
-      parseLambdaParams st1 (append acc (Cons name Nil)))
-  else Ok (Pair acc st)
-
-parseLet st blockCol =
-  step (expectKw st "let") (\_, st1 =>
-    step (parseLetBindings st1 blockCol) (\binds, st2 =>
-      step (expectKw st2 "in") (\_, st3 =>
-        step (parseExpr st3 blockCol 0) (\body, st4 =>
-          Ok (Pair (ELet binds body) st4)))))
-
-parseLetBindings st blockCol =
-  if isEof st then Err "expected a let binding"
-  else if atKw st "in" then Err "expected a let binding"
-  else
-    case peekPos st of
-      Pos line col =>
-        if col <= blockCol then Err "let binding is not indented enough"
-        else parseLetBindingsAt st col
-
-parseLetBindingsAt st declCol =
-  if isEof st then Ok (Pair Nil st)
-  else if atKw st "in" then Ok (Pair Nil st)
-  else
-    case peekPos st of
-      Pos line col =>
-        if col == declCol then
-          step (parsePatternSingle st declCol) (\pat, st1 =>
-            step (expectSym st1 "=") (\_, st2 =>
-              step (parseExpr st2 declCol 0) (\value, st3 =>
-                step (parseLetBindingsAt st3 declCol) (\rest, st4 =>
-                  Ok (Pair (Cons (Pair pat value) rest) st4)))))
-        else Ok (Pair Nil st)
-
-parseCase st blockCol =
-  step (expectKw st "case") (\_, st1 =>
-    step (parseExpr st1 blockCol 0) (\scrut, st2 =>
-      step (expectKw st2 "of") (\_, st3 =>
-        step (parseCaseAlts st3 blockCol) (\alts, st4 =>
-          Ok (Pair (ECase scrut alts) st4)))))
-
-parseCaseAlts st blockCol =
-  if isEof st then Err "case expression needs an alternative"
-  else
-    case peekPos st of
-      Pos line col =>
-        if col <= blockCol then Err "case alternative is not indented enough"
-        else
-          step (parseAltList st col) (\alts, st2 =>
-            if badCaseIndent st2 col then Err "unexpected indentation after case alternative"
-            else
-              case alts of
-                Nil => Err "case expression needs an alternative"
-                _ => Ok (Pair alts st2))
-
-parseAltList st altCol =
-  if isEof st then Ok (Pair Nil st)
-  else
-    case peekPos st of
-      Pos line col =>
-        if col == altCol then
-          step (parsePatternSingle st altCol) (\pat, st1 =>
-            step (expectSym st1 "=>") (\_, st2 =>
-              step (parseExpr st2 altCol 0) (\body, st3 =>
-                step (parseAltList st3 altCol) (\rest, st4 =>
-                  Ok (Pair (Cons (Pair pat body) rest) st4)))))
-        else Ok (Pair Nil st)
-
-parseIf st blockCol =
-  step (expectKw st "if") (\_, st1 =>
-    step (parseExpr st1 blockCol 0) (\cond, st2 =>
-      step (expectKw st2 "then") (\_, st3 =>
-        step (parseExpr st3 blockCol 0) (\yes, st4 =>
-          step (expectKw st4 "else") (\_, st5 =>
-            step (parseExpr st5 blockCol 0) (\no, st6 =>
-              Ok (Pair (EIf cond yes no) st6)))))))
-
-parsePatternSingle st blockCol = parsePatternCons st blockCol
-
-parsePatternCons st blockCol =
-  step (parsePatternHead st blockCol) (\lhs, st1 =>
-    if atSym st1 "::" && canContinue st1 blockCol then
-      step (parsePatternCons (advance st1) blockCol) (\rhs, st2 =>
-        Ok (Pair (PCon "Cons" (Cons lhs (Cons rhs Nil))) st2))
-    else Ok (Pair lhs st1))
-
-parsePatternHead st blockCol =
-  case peekTok st of
-    PTok (TIdent name) p =>
-      if upperFirst name then
-        step (parsePatternAtoms (advance st) blockCol) (\args, st1 =>
-          Ok (Pair (PCon name args) st1))
-      else parsePatternAtom st blockCol
-    _ => parsePatternAtom st blockCol
-
-parsePatternAtoms st blockCol =
-  if startsPatternAtom st && canContinue st blockCol then
-    step (parsePatternAtom st blockCol) (\pat, st1 =>
-      step (parsePatternAtoms st1 blockCol) (\rest, st2 =>
-        Ok (Pair (Cons pat rest) st2)))
-  else Ok (Pair Nil st)
-
-parsePatternAtom st blockCol =
-  case peekTok st of
-    PTok (TIdent "_") p => Ok (Pair PWild (advance st))
-    PTok (TIdent name) p =>
-      if upperFirst name then Ok (Pair (PCon name Nil) (advance st))
-      else Ok (Pair (PVar name) (advance st))
-    PTok (TInt n) p => Ok (Pair (PInt n) (advance st))
-    PTok (TStr s) p => Ok (Pair (PStr s) (advance st))
-    PTok (TSym "(") p =>
-      step (parsePatternSingle (advance st) blockCol) (\inner, st1 =>
-        step (expectSym st1 ")") (\_, st2 => Ok (Pair inner st2)))
-    PTok (TSym "[") p => parseListPattern st blockCol
-    _ => Err "expected pattern"
-
-parseListPattern st blockCol =
-  step (expectSym st "[") (\_, st1 =>
-    if atSym st1 "]" then Ok (Pair (PCon "Nil" Nil) (advance st1))
-    else
-      step (parseListPatternElems st1 blockCol) (\pats, st2 =>
-        Ok (Pair (foldPCon pats) st2)))
-
-parseListPatternElems st blockCol =
-  step (parsePatternSingle st blockCol) (\pat, st1 =>
-    if atSym st1 "," then
-      step (parseListPatternElems (advance st1) blockCol) (\rest, st2 =>
-        Ok (Pair (Cons pat rest) st2))
-    else if atSym st1 "]" then Ok (Pair (Cons pat Nil) (advance st1))
-    else Err "expected , or ]")
-
-foldPCon Nil = PCon "Nil" Nil
-foldPCon (Cons p rest) = PCon "Cons" (Cons p (Cons (foldPCon rest) Nil))
-
-isSpace c = c == 32 || c == 9 || c == 10 || c == 13
-
-isDigit c = c >= 48 && c <= 57
-
-lookupPair name Nil = Nothing
-lookupPair name (Cons p rest) =
-  case p of
-    Pair k v => if k == name then Just v else lookupPair name rest
-
-collectClauses Nil name = Nil
-collectClauses (Cons d rest) name =
-  case d of
-    DFun n pats body =>
-      if n == name then Cons (Pair pats body) (collectClauses rest name)
-      else collectClauses rest name
-    _ => collectClauses rest name
-
-clausesFor decls name = collectClauses decls name
-
-funArity name decls =
-  case clausesFor decls name of
-    Nil => Nothing
-    Cons c rest =>
-      case c of
-        Pair pats body => Just (length pats)
-
-ctorArity name decls =
-  case decls of
-    Nil => Nothing
-    Cons d rest =>
-      case d of
-        DData dname params ctors =>
-          case lookupPair name ctors of
-            Just arity => Just arity
-            Nothing => ctorArity name rest
-        _ => ctorArity name rest
 
 builtinArity name =
-  if name == "+" then Just 2
-  else if name == "-" then Just 2
-  else if name == "*" then Just 2
-  else if name == "/" then Just 2
-  else if name == "==" then Just 2
-  else if name == "/=" then Just 2
-  else if name == "<" then Just 2
-  else if name == "<=" then Just 2
-  else if name == ">" then Just 2
-  else if name == ">=" then Just 2
-  else if name == "&&" then Just 2
-  else if name == "||" then Just 2
-  else if name == "++" then Just 2
-  else if name == "strLength" then Just 1
-  else if name == "strUnpack" then Just 1
-  else if name == "strPack" then Just 1
-  else if name == "strFromInt" then Just 1
-  else if name == "readFile" then Just 1
-  else if name == "writeFile" then Just 2
-  else if name == "print" then Just 1
-  else if name == "getArgs" then Just 0
-  else Nothing
+  if name == "+" then Vuna.Ast.Just 2
+  else if name == "-" then Vuna.Ast.Just 2
+  else if name == "*" then Vuna.Ast.Just 2
+  else if name == "/" then Vuna.Ast.Just 2
+  else if name == "==" then Vuna.Ast.Just 2
+  else if name == "/=" then Vuna.Ast.Just 2
+  else if name == "<" then Vuna.Ast.Just 2
+  else if name == "<=" then Vuna.Ast.Just 2
+  else if name == ">" then Vuna.Ast.Just 2
+  else if name == ">=" then Vuna.Ast.Just 2
+  else if name == "&&" then Vuna.Ast.Just 2
+  else if name == "||" then Vuna.Ast.Just 2
+  else if name == "++" then Vuna.Ast.Just 2
+  else if name == "strLength" then Vuna.Ast.Just 1
+  else if name == "strUnpack" then Vuna.Ast.Just 1
+  else if name == "strPack" then Vuna.Ast.Just 1
+  else if name == "strFromInt" then Vuna.Ast.Just 1
+  else if name == "readFile" then Vuna.Ast.Just 1
+  else if name == "writeFile" then Vuna.Ast.Just 2
+  else if name == "print" then Vuna.Ast.Just 1
+  else if name == "getArgs" then Vuna.Ast.Just 0
+  else Vuna.Ast.Nothing
 
 forceValue decls v =
   case v of
     VFun name Nil =>
-      case funArity name decls of
-        Just 0 => callFunction decls name Nil
-        _ => Ok v
-    _ => Ok v
+      case Vuna.Ast.funArity name decls of
+        Vuna.Ast.Just 0 => callFunction decls name Nil
+        _ => Vuna.Ast.Ok v
+    _ => Vuna.Ast.Ok v
 
 evalVar decls env name =
-  case lookupPair name env of
-    Just v => forceValue decls v
-    Nothing => evalGlobal decls name
+  case Vuna.Ast.lookupPair name env of
+    Vuna.Ast.Just v => forceValue decls v
+    Vuna.Ast.Nothing => evalGlobal decls name
 
 evalGlobal decls name =
-  case funArity name decls of
-    Just arity =>
+  case Vuna.Ast.funArity name decls of
+    Vuna.Ast.Just arity =>
       if arity == 0 then callFunction decls name Nil
-      else Ok (VFun name Nil)
-    Nothing => evalGlobalNonFun decls name
+      else Vuna.Ast.Ok (VFun name Nil)
+    Vuna.Ast.Nothing => evalGlobalNonFun decls name
 
 evalGlobalNonFun decls name =
-  case ctorArity name decls of
-    Just arity => Ok (VCon name Nil)
-    Nothing =>
+  case Vuna.Ast.ctorArity name decls of
+    Vuna.Ast.Just arity => Vuna.Ast.Ok (VCon name Nil)
+    Vuna.Ast.Nothing =>
       case builtinArity name of
-        Just arity =>
-          if arity == 0 then callBuiltin name Nil else Ok (VBuiltin name Nil)
-        Nothing => Err ("unbound variable: " ++ name)
+        Vuna.Ast.Just arity =>
+          if arity == 0 then callBuiltin name Nil else Vuna.Ast.Ok (VBuiltin name Nil)
+        Vuna.Ast.Nothing => Vuna.Ast.Err ("unbound variable: " ++ name)
 
 evalExpr decls env expr =
   case expr of
-    EVar name => evalVar decls env name
-    EInt n => Ok (VInt n)
-    EStr s => Ok (VStr s)
-    ELam params body => Ok (VLam params body env)
-    EApp fn args => evalApp decls env fn args
-    ELet binds body => evalLet decls env binds body
-    ECase scrut alts => evalCase decls env scrut alts
-    EIf c t e => evalIf decls env c t e
+    Vuna.Ast.EVar name => evalVar decls env name
+    Vuna.Ast.EInt n => Vuna.Ast.Ok (VInt n)
+    Vuna.Ast.EStr s => Vuna.Ast.Ok (VStr s)
+    Vuna.Ast.ELam params body => Vuna.Ast.Ok (VLam params body env)
+    Vuna.Ast.EApp fn args => evalApp decls env fn args
+    Vuna.Ast.ELet binds body => evalLet decls env binds body
+    Vuna.Ast.ECase scrut alts => evalCase decls env scrut alts
+    Vuna.Ast.EIf c t e => evalIf decls env c t e
 
 evalApp decls env fn args =
-  andThen (evalExpr decls env fn) (\fv => foldApply decls env fv args)
+  Vuna.Ast.andThen (evalExpr decls env fn) (\fv => foldApply decls env fv args)
 
-foldApply decls env fv Nil = Ok fv
+foldApply decls env fv Nil = Vuna.Ast.Ok fv
 foldApply decls env fv (Cons arg rest) =
-  andThen (evalExpr decls env arg) (\av =>
-    andThen (applyValue decls fv av) (\fv2 => foldApply decls env fv2 rest))
+  Vuna.Ast.andThen (evalExpr decls env arg) (\av =>
+    Vuna.Ast.andThen (applyValue decls fv av) (\fv2 => foldApply decls env fv2 rest))
 
 evalLet decls env binds body =
-  andThen (evalBindings decls env binds) (\env2 => evalExpr decls env2 body)
+  Vuna.Ast.andThen (evalBindings decls env binds) (\env2 => evalExpr decls env2 body)
 
-evalBindings decls env Nil = Ok env
+evalBindings decls env Nil = Vuna.Ast.Ok env
 evalBindings decls env (Cons b rest) =
   case b of
-    Pair pat valueExpr =>
-      andThen (evalExpr decls env valueExpr) (\v =>
+    Vuna.Ast.Pair pat valueExpr =>
+      Vuna.Ast.andThen (evalExpr decls env valueExpr) (\v =>
         case matchPattern pat v of
-          Nothing => Err "let pattern match failure"
-          Just bs => evalBindings decls (append bs env) rest)
+          Vuna.Ast.Nothing => Vuna.Ast.Err "let pattern match failure"
+          Vuna.Ast.Just bs => evalBindings decls (Vuna.Ast.append bs env) rest)
 
 evalCase decls env scrut alts =
-  andThen (evalExpr decls env scrut) (\v => chooseAlt decls env v alts)
+  Vuna.Ast.andThen (evalExpr decls env scrut) (\v => chooseAlt decls env v alts)
 
-chooseAlt decls env v Nil = Err "case pattern match failure"
+chooseAlt decls env v Nil = Vuna.Ast.Err "case pattern match failure"
 chooseAlt decls env v (Cons alt rest) =
   case alt of
-    Pair pat body =>
+    Vuna.Ast.Pair pat body =>
       case matchPattern pat v of
-        Nothing => chooseAlt decls env v rest
-        Just bs => evalExpr decls (append bs env) body
+        Vuna.Ast.Nothing => chooseAlt decls env v rest
+        Vuna.Ast.Just bs => evalExpr decls (Vuna.Ast.append bs env) body
 
 evalIf decls env c t e =
-  andThen (evalExpr decls env c) (\cv =>
+  Vuna.Ast.andThen (evalExpr decls env c) (\cv =>
     case cv of
       VCon "True" Nil => evalExpr decls env t
       VCon "False" Nil => evalExpr decls env e
-      _ => Err "if condition is not a Bool")
+      _ => Vuna.Ast.Err "if condition is not a Bool")
 
 applyValue decls v arg =
   case v of
@@ -845,92 +124,92 @@ applyValue decls v arg =
     VLam params body env => applyLambda decls params body env arg
     VCon name args => applyCtor decls name args arg
     VBuiltin name args => applyBuiltin decls name args arg
-    _ => Err "cannot apply a non-function"
+    _ => Vuna.Ast.Err "cannot apply a non-function"
 
 applyFun decls name bound arg =
-  case funArity name decls of
-    Nothing => Err ("unknown function: " ++ name)
-    Just arity =>
-      let bound2 = append bound (Cons arg Nil)
-      in if length bound2 < arity then Ok (VFun name bound2)
-         else if length bound2 == arity then callFunction decls name bound2
-         else Err ("too many arguments for " ++ name)
+  case Vuna.Ast.funArity name decls of
+    Vuna.Ast.Nothing => Vuna.Ast.Err ("unknown function: " ++ name)
+    Vuna.Ast.Just arity =>
+      let bound2 = Vuna.Ast.append bound (Cons arg Nil)
+      in if Vuna.Ast.length bound2 < arity then Vuna.Ast.Ok (VFun name bound2)
+         else if Vuna.Ast.length bound2 == arity then callFunction decls name bound2
+         else Vuna.Ast.Err ("too many arguments for " ++ name)
 
 applyLambda decls params body env arg =
   case params of
-    Nil => Err "lambda has no parameters"
-    Cons p Nil => evalExpr decls (Cons (Pair p arg) env) body
-    Cons p rest => Ok (VLam rest body (Cons (Pair p arg) env))
+    Nil => Vuna.Ast.Err "lambda has no parameters"
+    Cons p Nil => evalExpr decls (Cons (Vuna.Ast.Pair p arg) env) body
+    Cons p rest => Vuna.Ast.Ok (VLam rest body (Cons (Vuna.Ast.Pair p arg) env))
 
 applyCtor decls name args arg =
-  case ctorArity name decls of
-    Nothing => Err ("unknown constructor: " ++ name)
-    Just arity =>
-      if length args >= arity then Err ("constructor " ++ name ++ " cannot take more arguments")
-      else Ok (VCon name (append args (Cons arg Nil)))
+  case Vuna.Ast.ctorArity name decls of
+    Vuna.Ast.Nothing => Vuna.Ast.Err ("unknown constructor: " ++ name)
+    Vuna.Ast.Just arity =>
+      if Vuna.Ast.length args >= arity then Vuna.Ast.Err ("constructor " ++ name ++ " cannot take more arguments")
+      else Vuna.Ast.Ok (VCon name (Vuna.Ast.append args (Cons arg Nil)))
 
 applyBuiltin decls name args arg =
   case builtinArity name of
-    Nothing => Err ("unknown builtin: " ++ name)
-    Just arity =>
-      let args2 = append args (Cons arg Nil)
-      in if length args2 < arity then Ok (VBuiltin name args2)
-         else if length args2 == arity then callBuiltin name args2
-         else Err ("too many arguments for builtin " ++ name)
+    Vuna.Ast.Nothing => Vuna.Ast.Err ("unknown builtin: " ++ name)
+    Vuna.Ast.Just arity =>
+      let args2 = Vuna.Ast.append args (Cons arg Nil)
+      in if Vuna.Ast.length args2 < arity then Vuna.Ast.Ok (VBuiltin name args2)
+         else if Vuna.Ast.length args2 == arity then callBuiltin name args2
+         else Vuna.Ast.Err ("too many arguments for builtin " ++ name)
 
-callFunction decls name args = tryClauses decls name (clausesFor decls name) args
+callFunction decls name args = tryClauses decls name (Vuna.Ast.clausesFor decls name) args
 
-tryClauses decls name Nil args = Err ("no matching clause for " ++ name)
+tryClauses decls name Nil args = Vuna.Ast.Err ("no matching clause for " ++ name)
 tryClauses decls name (Cons c rest) args =
   case c of
-    Pair pats body =>
-      if length pats == length args then tryMatch decls name pats body rest args
+    Vuna.Ast.Pair pats body =>
+      if Vuna.Ast.length pats == Vuna.Ast.length args then tryMatch decls name pats body rest args
       else tryClauses decls name rest args
 
 tryMatch decls name pats body rest args =
   case matchPatterns pats args of
-    Just binds => evalExpr decls binds body
-    Nothing => tryClauses decls name rest args
+    Vuna.Ast.Just binds => evalExpr decls binds body
+    Vuna.Ast.Nothing => tryClauses decls name rest args
 
-matchPatterns Nil Nil = Just Nil
+matchPatterns Nil Nil = Vuna.Ast.Just Nil
 matchPatterns (Cons p ps) (Cons v vs) =
   case matchPattern p v of
-    Nothing => Nothing
-    Just bs =>
+    Vuna.Ast.Nothing => Vuna.Ast.Nothing
+    Vuna.Ast.Just bs =>
       case matchPatterns ps vs of
-        Nothing => Nothing
-        Just bs2 => Just (append bs bs2)
-matchPatterns _ _ = Nothing
+        Vuna.Ast.Nothing => Vuna.Ast.Nothing
+        Vuna.Ast.Just bs2 => Vuna.Ast.Just (Vuna.Ast.append bs bs2)
+matchPatterns _ _ = Vuna.Ast.Nothing
 
 matchPattern p v =
   case p of
-    PWild => Just Nil
-    PVar name => Just (Cons (Pair name v) Nil)
-    PInt n =>
+    Vuna.Ast.PWild => Vuna.Ast.Just Nil
+    Vuna.Ast.PVar name => Vuna.Ast.Just (Cons (Vuna.Ast.Pair name v) Nil)
+    Vuna.Ast.PInt n =>
       case v of
-        VInt m => if n == m then Just Nil else Nothing
-        _ => Nothing
-    PStr s =>
+        VInt m => if n == m then Vuna.Ast.Just Nil else Vuna.Ast.Nothing
+        _ => Vuna.Ast.Nothing
+    Vuna.Ast.PStr s =>
       case v of
-        VStr t => if s == t then Just Nil else Nothing
-        _ => Nothing
-    PCon name pats =>
+        VStr t => if s == t then Vuna.Ast.Just Nil else Vuna.Ast.Nothing
+        _ => Vuna.Ast.Nothing
+    Vuna.Ast.PCon name pats =>
       case v of
         VCon vname vargs =>
-          if name == vname && length pats == length vargs
+          if name == vname && Vuna.Ast.length pats == Vuna.Ast.length vargs
           then matchPatterns pats vargs
-          else Nothing
-        _ => Nothing
+          else Vuna.Ast.Nothing
+        _ => Vuna.Ast.Nothing
 
 intArg v =
   case v of
-    VInt n => Ok n
-    _ => Err "expected an Int argument"
+    VInt n => Vuna.Ast.Ok n
+    _ => Vuna.Ast.Err "expected an Int argument"
 
 stringArg v =
   case v of
-    VStr s => Ok s
-    _ => Err "expected a String argument"
+    VStr s => Vuna.Ast.Ok s
+    _ => Vuna.Ast.Err "expected a String argument"
 
 vbool b = if b then VCon "True" Nil else VCon "False" Nil
 
@@ -941,40 +220,40 @@ stringToValue s = charsToValue (strUnpack s)
 
 valueToChars v =
   case v of
-    VCon "Nil" Nil => Ok Nil
+    VCon "Nil" Nil => Vuna.Ast.Ok Nil
     VCon "Cons" (Cons head (Cons tail Nil)) =>
-      andThen (intArg head) (\n => andThen (valueToChars tail) (\rest => Ok (Cons n rest)))
-    _ => Err "strPack expects a List Int"
+      Vuna.Ast.andThen (intArg head) (\n => Vuna.Ast.andThen (valueToChars tail) (\rest => Vuna.Ast.Ok (Cons n rest)))
+    _ => Vuna.Ast.Err "strPack expects a List Int"
 
 int2 args f =
   case args of
-    Cons a (Cons b Nil) => andThen (intArg a) (\x => andThen (intArg b) (\y => f x y))
-    _ => Err "bad arguments"
+    Cons a (Cons b Nil) => Vuna.Ast.andThen (intArg a) (\x => Vuna.Ast.andThen (intArg b) (\y => f x y))
+    _ => Vuna.Ast.Err "bad arguments"
 
 str2 args f =
   case args of
-    Cons a (Cons b Nil) => andThen (stringArg a) (\x => andThen (stringArg b) (\y => f x y))
-    _ => Err "bad arguments"
+    Cons a (Cons b Nil) => Vuna.Ast.andThen (stringArg a) (\x => Vuna.Ast.andThen (stringArg b) (\y => f x y))
+    _ => Vuna.Ast.Err "bad arguments"
 
 divideBuiltin args =
   case args of
     Cons a (Cons b Nil) =>
-      andThen (intArg a) (\x =>
-        andThen (intArg b) (\y =>
-          if y == 0 then Err "division by zero" else Ok (VInt (x / y))))
-    _ => Err "bad arguments for /"
+      Vuna.Ast.andThen (intArg a) (\x =>
+        Vuna.Ast.andThen (intArg b) (\y =>
+          if y == 0 then Vuna.Ast.Err "division by zero" else Vuna.Ast.Ok (VInt (x / y))))
+    _ => Vuna.Ast.Err "bad arguments for /"
 
 eqBuiltin args =
   case args of
-    Cons (VInt a) (Cons (VInt b) Nil) => Ok (vbool (a == b))
-    Cons (VStr a) (Cons (VStr b) Nil) => Ok (vbool (a == b))
-    _ => Err "bad arguments for =="
+    Cons (VInt a) (Cons (VInt b) Nil) => Vuna.Ast.Ok (vbool (a == b))
+    Cons (VStr a) (Cons (VStr b) Nil) => Vuna.Ast.Ok (vbool (a == b))
+    _ => Vuna.Ast.Err "bad arguments for =="
 
 neqBuiltin args =
   case args of
-    Cons (VInt a) (Cons (VInt b) Nil) => Ok (vbool (a /= b))
-    Cons (VStr a) (Cons (VStr b) Nil) => Ok (vbool (a /= b))
-    _ => Err "bad arguments for /="
+    Cons (VInt a) (Cons (VInt b) Nil) => Vuna.Ast.Ok (vbool (a /= b))
+    Cons (VStr a) (Cons (VStr b) Nil) => Vuna.Ast.Ok (vbool (a /= b))
+    _ => Vuna.Ast.Err "bad arguments for /="
 
 andBuiltin args =
   case args of
@@ -982,76 +261,76 @@ andBuiltin args =
       case a of
         VCon "True" Nil =>
           case b of
-            VCon "True" Nil => Ok (VCon "True" Nil)
-            VCon "False" Nil => Ok (VCon "False" Nil)
-            _ => Err "expected a Bool"
-        VCon "False" Nil => Ok (VCon "False" Nil)
-        _ => Err "expected a Bool"
-    _ => Err "bad arguments for &&"
+            VCon "True" Nil => Vuna.Ast.Ok (VCon "True" Nil)
+            VCon "False" Nil => Vuna.Ast.Ok (VCon "False" Nil)
+            _ => Vuna.Ast.Err "expected a Bool"
+        VCon "False" Nil => Vuna.Ast.Ok (VCon "False" Nil)
+        _ => Vuna.Ast.Err "expected a Bool"
+    _ => Vuna.Ast.Err "bad arguments for &&"
 
 orBuiltin args =
   case args of
     Cons a (Cons b Nil) =>
       case a of
-        VCon "True" Nil => Ok (VCon "True" Nil)
+        VCon "True" Nil => Vuna.Ast.Ok (VCon "True" Nil)
         VCon "False" Nil =>
           case b of
-            VCon "True" Nil => Ok (VCon "True" Nil)
-            VCon "False" Nil => Ok (VCon "False" Nil)
-            _ => Err "expected a Bool"
-        _ => Err "expected a Bool"
-    _ => Err "bad arguments for ||"
+            VCon "True" Nil => Vuna.Ast.Ok (VCon "True" Nil)
+            VCon "False" Nil => Vuna.Ast.Ok (VCon "False" Nil)
+            _ => Vuna.Ast.Err "expected a Bool"
+        _ => Vuna.Ast.Err "expected a Bool"
+    _ => Vuna.Ast.Err "bad arguments for ||"
 
 callBuiltin name args =
-  if name == "+" then int2 args (\x, y => Ok (VInt (x + y)))
-  else if name == "-" then int2 args (\x, y => Ok (VInt (x - y)))
-  else if name == "*" then int2 args (\x, y => Ok (VInt (x * y)))
+  if name == "+" then int2 args (\x, y => Vuna.Ast.Ok (VInt (x + y)))
+  else if name == "-" then int2 args (\x, y => Vuna.Ast.Ok (VInt (x - y)))
+  else if name == "*" then int2 args (\x, y => Vuna.Ast.Ok (VInt (x * y)))
   else if name == "/" then divideBuiltin args
   else if name == "==" then eqBuiltin args
   else if name == "/=" then neqBuiltin args
-  else if name == "<" then int2 args (\x, y => Ok (vbool (x < y)))
-  else if name == "<=" then int2 args (\x, y => Ok (vbool (x <= y)))
-  else if name == ">" then int2 args (\x, y => Ok (vbool (x > y)))
-  else if name == ">=" then int2 args (\x, y => Ok (vbool (x >= y)))
+  else if name == "<" then int2 args (\x, y => Vuna.Ast.Ok (vbool (x < y)))
+  else if name == "<=" then int2 args (\x, y => Vuna.Ast.Ok (vbool (x <= y)))
+  else if name == ">" then int2 args (\x, y => Vuna.Ast.Ok (vbool (x > y)))
+  else if name == ">=" then int2 args (\x, y => Vuna.Ast.Ok (vbool (x >= y)))
   else if name == "&&" then andBuiltin args
   else if name == "||" then orBuiltin args
-  else if name == "++" then str2 args (\x, y => Ok (VStr (x ++ y)))
+  else if name == "++" then str2 args (\x, y => Vuna.Ast.Ok (VStr (x ++ y)))
   else if name == "strLength" then
     case args of
-      Cons a Nil => andThen (stringArg a) (\s => Ok (VInt (strLength s)))
-      _ => Err "bad arguments for strLength"
+      Cons a Nil => Vuna.Ast.andThen (stringArg a) (\s => Vuna.Ast.Ok (VInt (strLength s)))
+      _ => Vuna.Ast.Err "bad arguments for strLength"
   else if name == "strUnpack" then
     case args of
-      Cons a Nil => andThen (stringArg a) (\s => Ok (stringToValue s))
-      _ => Err "bad arguments for strUnpack"
+      Cons a Nil => Vuna.Ast.andThen (stringArg a) (\s => Vuna.Ast.Ok (stringToValue s))
+      _ => Vuna.Ast.Err "bad arguments for strUnpack"
   else if name == "strPack" then
     case args of
-      Cons a Nil => andThen (valueToChars a) (\cs => Ok (VStr (strPack cs)))
-      _ => Err "bad arguments for strPack"
+      Cons a Nil => Vuna.Ast.andThen (valueToChars a) (\cs => Vuna.Ast.Ok (VStr (strPack cs)))
+      _ => Vuna.Ast.Err "bad arguments for strPack"
   else if name == "strFromInt" then
     case args of
-      Cons a Nil => andThen (intArg a) (\n => Ok (VStr (strFromInt n)))
-      _ => Err "bad arguments for strFromInt"
+      Cons a Nil => Vuna.Ast.andThen (intArg a) (\n => Vuna.Ast.Ok (VStr (strFromInt n)))
+      _ => Vuna.Ast.Err "bad arguments for strFromInt"
   else if name == "readFile" then
     case args of
-      Cons a Nil => andThen (stringArg a) (\s => Ok (VStr (readFile s)))
-      _ => Err "bad arguments for readFile"
+      Cons a Nil => Vuna.Ast.andThen (stringArg a) (\s => Vuna.Ast.Ok (VStr (readFile s)))
+      _ => Vuna.Ast.Err "bad arguments for readFile"
   else if name == "writeFile" then
     case args of
       Cons a (Cons b Nil) =>
-        andThen (stringArg a) (\path =>
-          andThen (stringArg b) (\s => Ok (VInt (writeFile path s))))
-      _ => Err "bad arguments for writeFile"
+        Vuna.Ast.andThen (stringArg a) (\path =>
+          Vuna.Ast.andThen (stringArg b) (\s => Vuna.Ast.Ok (VInt (writeFile path s))))
+      _ => Vuna.Ast.Err "bad arguments for writeFile"
   else if name == "print" then
     case args of
-      Cons a Nil => andThen (stringArg a) (\s => Ok (VInt (print s)))
-      _ => Err "bad arguments for print"
-  else if name == "getArgs" then Ok (map (\s => VStr s) getArgs)
-  else Err ("unknown builtin: " ++ name)
+      Cons a Nil => Vuna.Ast.andThen (stringArg a) (\s => Vuna.Ast.Ok (VInt (print s)))
+      _ => Vuna.Ast.Err "bad arguments for print"
+  else if name == "getArgs" then Vuna.Ast.Ok (Vuna.Ast.map (\s => VStr s) getArgs)
+  else Vuna.Ast.Err ("unknown builtin: " ++ name)
 
 displayName name =
   case splitLastDot (splitOnDot name) of
-    Pair revPrefix base => base
+    Vuna.Ast.Pair revPrefix base => base
 
 showValue v =
   case v of
@@ -1085,10 +364,6 @@ showStringChars (Cons c rest) =
 data Module : Type where
   Module : String -> List String -> List Decl -> List String -> Module
 
-memName name names =
-  case names of
-    Nil => False
-    Cons x rest => if x == name then True else memName name rest
 
 memChar c chars =
   case chars of
@@ -1101,15 +376,15 @@ splitOnDot s = splitCharsOnDot (strUnpack s) Nil Nil
 
 splitCharsOnDot chars acc seg =
   case chars of
-    Nil => reverse (Cons (strPack (reverse seg)) acc)
+    Nil => Vuna.Ast.reverse (Cons (strPack (Vuna.Ast.reverse seg)) acc)
     Cons c rest =>
-      if c == 46 then splitCharsOnDot rest (Cons (strPack (reverse seg)) acc) Nil
+      if c == 46 then splitCharsOnDot rest (Cons (strPack (Vuna.Ast.reverse seg)) acc) Nil
       else splitCharsOnDot rest acc (Cons c seg)
 
 splitLastDot parts =
-  case reverse parts of
-    Nil => Pair Nil ""
-    Cons last rest => Pair (reverse rest) last
+  case Vuna.Ast.reverse parts of
+    Nil => Vuna.Ast.Pair Nil ""
+    Cons last rest => Vuna.Ast.Pair (Vuna.Ast.reverse rest) last
 
 joinDots Nil = ""
 joinDots (Cons x Nil) = x
@@ -1123,38 +398,35 @@ joinArrows Nil = ""
 joinArrows (Cons x Nil) = x
 joinArrows (Cons x rest) = x ++ " -> " ++ joinArrows rest
 
-firstOf p = case p of Pair a b => a
+firstOf p = case p of Vuna.Ast.Pair a b => a
 
-secondOf p = case p of Pair a b => b
-
-concatMap f Nil = Nil
-concatMap f (Cons x rest) = append (f x) (concatMap f rest)
+secondOf p = case p of Vuna.Ast.Pair a b => b
 
 declNames d =
   case d of
-    DFun name pats body => Cons name Nil
-    DSig name ty => Cons name Nil
-    DData dname params ctors => map firstOf ctors
+    Vuna.Ast.DFun name pats body => Cons name Nil
+    Vuna.Ast.DSig name ty => Cons name Nil
+    Vuna.Ast.DData dname params ctors => Vuna.Ast.map firstOf ctors
 
-topNames decls = concatMap declNames decls
+topNames decls = Vuna.Ast.concatMap declNames decls
 
 declCtors d =
   case d of
-    DData dname params ctors => map firstOf ctors
+    Vuna.Ast.DData dname params ctors => Vuna.Ast.map firstOf ctors
     _ => Nil
 
-ctorsOf decls = concatMap declCtors decls
+ctorsOf decls = Vuna.Ast.concatMap declCtors decls
 
 allIdentChars chars =
   case chars of
     Nil => True
     Cons c rest =>
-      if isIdentStart c || isDigit c then allIdentChars rest else False
+      if Vuna.Lexer.isIdentStart c || Vuna.Lexer.isDigit c then allIdentChars rest else False
 
 validSegment seg =
   case strUnpack seg of
     Nil => False
-    Cons c rest => isUpperChar c && allIdentChars rest
+    Cons c rest => Vuna.Lexer.isUpperChar c && allIdentChars rest
 
 allSegmentsValid segs =
   case segs of
@@ -1180,562 +452,223 @@ modulePath root name = root ++ "/" ++ joinSlashes (splitOnDot name) ++ ".vuna"
 
 findModule modules name =
   case modules of
-    Nil => Nothing
+    Nil => Vuna.Ast.Nothing
     Cons m rest =>
       case m of
         Module mname imports decls exports =>
-          if mname == name then Just m else findModule rest name
+          if mname == name then Vuna.Ast.Just m else findModule rest name
 
 exportsOf modules name =
   case findModule modules name of
-    Just m => case m of Module mname imports decls exports => exports
-    Nothing => Nil
+    Vuna.Ast.Just m => case m of Module mname imports decls exports => exports
+    Vuna.Ast.Nothing => Nil
 
 isBuiltinName name =
   case builtinArity name of
-    Just arity => True
-    Nothing => False
+    Vuna.Ast.Just arity => True
+    Vuna.Ast.Nothing => False
 
 resolveQualified modules label imports name =
   case splitLastDot (splitOnDot name) of
-    Pair revPrefix base =>
+    Vuna.Ast.Pair revPrefix base =>
       let prefix = joinDots revPrefix
-      in if memName prefix imports then
-           if isGlobalCtor base then Ok base
-           else if memName base (exportsOf modules prefix) then Ok name
-           else Err (label ++ ": " ++ base ++ " is not exported by " ++ prefix)
-         else Err (label ++ ": module " ++ prefix ++ " is not imported")
+      in if Vuna.Ast.memName prefix imports then
+           if isGlobalCtor base then Vuna.Ast.Ok base
+           else if Vuna.Ast.memName base (exportsOf modules prefix) then Vuna.Ast.Ok name
+           else Vuna.Ast.Err (label ++ ": " ++ base ++ " is not exported by " ++ prefix)
+         else Vuna.Ast.Err (label ++ ": module " ++ prefix ++ " is not imported")
 
 resolveGlobal modules label prefix own imports scope name =
-  if memName name scope then Ok name
-  else if isGlobalCtor name then Ok name
+  if Vuna.Ast.memName name scope then Vuna.Ast.Ok name
+  else if isGlobalCtor name then Vuna.Ast.Ok name
   else if containsDot name then resolveQualified modules label imports name
-  else if memName name own then Ok (mangle prefix name)
-  else if isBuiltinName name then Ok name
-  else Err (label ++ ": unbound variable " ++ name)
+  else if Vuna.Ast.memName name own then Vuna.Ast.Ok (mangle prefix name)
+  else if isBuiltinName name then Vuna.Ast.Ok name
+  else Vuna.Ast.Err (label ++ ": unbound variable " ++ name)
 
 resolveCtor modules label prefix ownCtors imports name =
-  if isGlobalCtor name then Ok name
+  if isGlobalCtor name then Vuna.Ast.Ok name
   else if containsDot name then resolveQualified modules label imports name
-  else if memName name ownCtors then Ok (mangle prefix name)
-  else Err (label ++ ": unknown constructor " ++ name)
+  else if Vuna.Ast.memName name ownCtors then Vuna.Ast.Ok (mangle prefix name)
+  else Vuna.Ast.Err (label ++ ": unknown constructor " ++ name)
 
 checkBinder label name =
-  if containsDot name then Err (label ++ ": invalid variable name " ++ name)
-  else Ok name
+  if containsDot name then Vuna.Ast.Err (label ++ ": invalid variable name " ++ name)
+  else Vuna.Ast.Ok name
 
 checkTopName label name =
-  if containsDot name then Err (label ++ ": invalid top-level name " ++ name)
-  else Ok name
+  if containsDot name then Vuna.Ast.Err (label ++ ": invalid top-level name " ++ name)
+  else Vuna.Ast.Ok name
 
 resolveTopName label prefix name =
-  andThen (checkTopName label name) (\_ => Ok (mangle prefix name))
+  Vuna.Ast.andThen (checkTopName label name) (\_ => Vuna.Ast.Ok (mangle prefix name))
 
 resolvePattern modules label prefix ownCtors imports pat =
   case pat of
-    PWild => Ok (Pair PWild Nil)
-    PVar name =>
-      andThen (checkBinder label name) (\_ =>
-        Ok (Pair (PVar name) (Cons name Nil)))
-    PInt n => Ok (Pair (PInt n) Nil)
-    PStr s => Ok (Pair (PStr s) Nil)
-    PCon name pats =>
-      andThen (resolveCtor modules label prefix ownCtors imports name) (\name2 =>
-        andThen (traverse (resolvePattern modules label prefix ownCtors imports) pats) (\parts =>
-          Ok (Pair (PCon name2 (map firstOf parts)) (concatMap secondOf parts))))
+    Vuna.Ast.PWild => Vuna.Ast.Ok (Vuna.Ast.Pair Vuna.Ast.PWild Nil)
+    Vuna.Ast.PVar name =>
+      Vuna.Ast.andThen (checkBinder label name) (\_ =>
+        Vuna.Ast.Ok (Vuna.Ast.Pair (Vuna.Ast.PVar name) (Cons name Nil)))
+    Vuna.Ast.PInt n => Vuna.Ast.Ok (Vuna.Ast.Pair (Vuna.Ast.PInt n) Nil)
+    Vuna.Ast.PStr s => Vuna.Ast.Ok (Vuna.Ast.Pair (Vuna.Ast.PStr s) Nil)
+    Vuna.Ast.PCon name pats =>
+      Vuna.Ast.andThen (resolveCtor modules label prefix ownCtors imports name) (\name2 =>
+        Vuna.Ast.andThen (Vuna.Ast.traverse (resolvePattern modules label prefix ownCtors imports) pats) (\parts =>
+          Vuna.Ast.Ok (Vuna.Ast.Pair (Vuna.Ast.PCon name2 (Vuna.Ast.map firstOf parts)) (Vuna.Ast.concatMap secondOf parts))))
 
 resolveAlt modules label prefix own ownCtors imports scope alt =
   case alt of
-    Pair pat body =>
-      andThen (resolvePattern modules label prefix ownCtors imports pat) (\p =>
+    Vuna.Ast.Pair pat body =>
+      Vuna.Ast.andThen (resolvePattern modules label prefix ownCtors imports pat) (\p =>
         case p of
-          Pair pat2 bound =>
-            andThen (resolveExpr modules label prefix own ownCtors imports (append bound scope) body) (\body2 =>
-              Ok (Pair pat2 body2)))
+          Vuna.Ast.Pair pat2 bound =>
+            Vuna.Ast.andThen (resolveExpr modules label prefix own ownCtors imports (Vuna.Ast.append bound scope) body) (\body2 =>
+              Vuna.Ast.Ok (Vuna.Ast.Pair pat2 body2)))
 
 resolveLet modules label prefix own ownCtors imports scope binds body =
   case binds of
     Nil =>
-      andThen (resolveExpr modules label prefix own ownCtors imports scope body) (\b =>
-        Ok (Pair Nil b))
+      Vuna.Ast.andThen (resolveExpr modules label prefix own ownCtors imports scope body) (\b =>
+        Vuna.Ast.Ok (Vuna.Ast.Pair Nil b))
     Cons b rest =>
       case b of
-        Pair pat value =>
-          andThen (resolveExpr modules label prefix own ownCtors imports scope value) (\value2 =>
-            andThen (resolvePattern modules label prefix ownCtors imports pat) (\p =>
+        Vuna.Ast.Pair pat value =>
+          Vuna.Ast.andThen (resolveExpr modules label prefix own ownCtors imports scope value) (\value2 =>
+            Vuna.Ast.andThen (resolvePattern modules label prefix ownCtors imports pat) (\p =>
               case p of
-                Pair pat2 bound =>
-                  andThen (resolveLet modules label prefix own ownCtors imports (append bound scope) rest body) (\r =>
+                Vuna.Ast.Pair pat2 bound =>
+                  Vuna.Ast.andThen (resolveLet modules label prefix own ownCtors imports (Vuna.Ast.append bound scope) rest body) (\r =>
                     case r of
-                      Pair binds2 body2 =>
-                        Ok (Pair (Cons (Pair pat2 value2) binds2) body2))))
+                      Vuna.Ast.Pair binds2 body2 =>
+                        Vuna.Ast.Ok (Vuna.Ast.Pair (Cons (Vuna.Ast.Pair pat2 value2) binds2) body2))))
 
 resolveExpr modules label prefix own ownCtors imports scope expr =
   case expr of
-    EVar name =>
-      andThen (resolveGlobal modules label prefix own imports scope name) (\n =>
-        Ok (EVar n))
-    EInt n => Ok (EInt n)
-    EStr s => Ok (EStr s)
-    ELam params body =>
-      andThen (traverse (checkBinder label) params) (\_ =>
-        andThen (resolveExpr modules label prefix own ownCtors imports (append params scope) body) (\b =>
-          Ok (ELam params b)))
-    EApp fn args =>
-      andThen (resolveExpr modules label prefix own ownCtors imports scope fn) (\fn2 =>
-        andThen (traverse (\a => resolveExpr modules label prefix own ownCtors imports scope a) args) (\args2 =>
-          Ok (EApp fn2 args2)))
-    ELet binds body =>
-      andThen (resolveLet modules label prefix own ownCtors imports scope binds body) (\r =>
+    Vuna.Ast.EVar name =>
+      Vuna.Ast.andThen (resolveGlobal modules label prefix own imports scope name) (\n =>
+        Vuna.Ast.Ok (Vuna.Ast.EVar n))
+    Vuna.Ast.EInt n => Vuna.Ast.Ok (Vuna.Ast.EInt n)
+    Vuna.Ast.EStr s => Vuna.Ast.Ok (Vuna.Ast.EStr s)
+    Vuna.Ast.ELam params body =>
+      Vuna.Ast.andThen (Vuna.Ast.traverse (checkBinder label) params) (\_ =>
+        Vuna.Ast.andThen (resolveExpr modules label prefix own ownCtors imports (Vuna.Ast.append params scope) body) (\b =>
+          Vuna.Ast.Ok (Vuna.Ast.ELam params b)))
+    Vuna.Ast.EApp fn args =>
+      Vuna.Ast.andThen (resolveExpr modules label prefix own ownCtors imports scope fn) (\fn2 =>
+        Vuna.Ast.andThen (Vuna.Ast.traverse (\a => resolveExpr modules label prefix own ownCtors imports scope a) args) (\args2 =>
+          Vuna.Ast.Ok (Vuna.Ast.EApp fn2 args2)))
+    Vuna.Ast.ELet binds body =>
+      Vuna.Ast.andThen (resolveLet modules label prefix own ownCtors imports scope binds body) (\r =>
         case r of
-          Pair binds2 body2 => Ok (ELet binds2 body2))
-    ECase scrut alts =>
-      andThen (resolveExpr modules label prefix own ownCtors imports scope scrut) (\scrut2 =>
-        andThen (traverse (resolveAlt modules label prefix own ownCtors imports scope) alts) (\alts2 =>
-          Ok (ECase scrut2 alts2)))
-    EIf c t e =>
-      andThen (resolveExpr modules label prefix own ownCtors imports scope c) (\c2 =>
-        andThen (resolveExpr modules label prefix own ownCtors imports scope t) (\t2 =>
-          andThen (resolveExpr modules label prefix own ownCtors imports scope e) (\e2 =>
-            Ok (EIf c2 t2 e2))))
+          Vuna.Ast.Pair binds2 body2 => Vuna.Ast.Ok (Vuna.Ast.ELet binds2 body2))
+    Vuna.Ast.ECase scrut alts =>
+      Vuna.Ast.andThen (resolveExpr modules label prefix own ownCtors imports scope scrut) (\scrut2 =>
+        Vuna.Ast.andThen (Vuna.Ast.traverse (resolveAlt modules label prefix own ownCtors imports scope) alts) (\alts2 =>
+          Vuna.Ast.Ok (Vuna.Ast.ECase scrut2 alts2)))
+    Vuna.Ast.EIf c t e =>
+      Vuna.Ast.andThen (resolveExpr modules label prefix own ownCtors imports scope c) (\c2 =>
+        Vuna.Ast.andThen (resolveExpr modules label prefix own ownCtors imports scope t) (\t2 =>
+          Vuna.Ast.andThen (resolveExpr modules label prefix own ownCtors imports scope e) (\e2 =>
+            Vuna.Ast.Ok (Vuna.Ast.EIf c2 t2 e2))))
 
 resolveCtorDecl label prefix ctor =
-  if isGlobalCtor ctor then Ok ctor
-  else andThen (checkTopName label ctor) (\_ => Ok (mangle prefix ctor))
+  if isGlobalCtor ctor then Vuna.Ast.Ok ctor
+  else Vuna.Ast.andThen (checkTopName label ctor) (\_ => Vuna.Ast.Ok (mangle prefix ctor))
 
 resolveCtorPair label prefix p =
   case p of
-    Pair ctor arity =>
-      andThen (resolveCtorDecl label prefix ctor) (\c => Ok (Pair c arity))
+    Vuna.Ast.Pair ctor arity =>
+      Vuna.Ast.andThen (resolveCtorDecl label prefix ctor) (\c => Vuna.Ast.Ok (Vuna.Ast.Pair c arity))
 
 resolveDecl modules label prefix own ownCtors imports d =
   case d of
-    DData dname params ctors =>
-      andThen (traverse (resolveCtorPair label prefix) ctors) (\ctors2 =>
-        Ok (DData dname params ctors2))
-    DSig name ty =>
-      andThen (resolveTopName label prefix name) (\n => Ok (DSig n ty))
-    DFun name pats body =>
-      andThen (resolveTopName label prefix name) (\n =>
-        andThen (traverse (resolvePattern modules label prefix ownCtors imports) pats) (\parts =>
-          andThen (resolveExpr modules label prefix own ownCtors imports (concatMap secondOf parts) body) (\b =>
-            Ok (DFun n (map firstOf parts) b))))
+    Vuna.Ast.DData dname params ctors =>
+      Vuna.Ast.andThen (Vuna.Ast.traverse (resolveCtorPair label prefix) ctors) (\ctors2 =>
+        Vuna.Ast.Ok (Vuna.Ast.DData dname params ctors2))
+    Vuna.Ast.DSig name ty =>
+      Vuna.Ast.andThen (resolveTopName label prefix name) (\n => Vuna.Ast.Ok (Vuna.Ast.DSig n ty))
+    Vuna.Ast.DFun name pats body =>
+      Vuna.Ast.andThen (resolveTopName label prefix name) (\n =>
+        Vuna.Ast.andThen (Vuna.Ast.traverse (resolvePattern modules label prefix ownCtors imports) pats) (\parts =>
+          Vuna.Ast.andThen (resolveExpr modules label prefix own ownCtors imports (Vuna.Ast.concatMap secondOf parts) body) (\b =>
+            Vuna.Ast.Ok (Vuna.Ast.DFun n (Vuna.Ast.map firstOf parts) b))))
 
 resolveProgram modules label prefix own ownCtors imports decls =
-  traverse (resolveDecl modules label prefix own ownCtors imports) decls
+  Vuna.Ast.traverse (resolveDecl modules label prefix own ownCtors imports) decls
 
 resolveEntry modules imports decls =
   resolveProgram modules "<entry>" "" (topNames decls) (ctorsOf decls) imports decls
 
 resolveModules modules =
   case modules of
-    Nil => Ok Nil
+    Nil => Vuna.Ast.Ok Nil
     Cons m rest =>
       case m of
         Module name imports decls exports =>
-          andThen (resolveProgram modules name name exports (ctorsOf decls) imports decls) (\d1 =>
-            andThen (resolveModules rest) (\d2 => Ok (append d1 d2)))
+          Vuna.Ast.andThen (resolveProgram modules name name exports (ctorsOf decls) imports decls) (\d1 =>
+            Vuna.Ast.andThen (resolveModules rest) (\d2 => Vuna.Ast.Ok (Vuna.Ast.append d1 d2)))
 
-showCycle name stack = joinArrows (reverse (Cons name stack))
+showCycle name stack = joinArrows (Vuna.Ast.reverse (Cons name stack))
 
 loadAll root modules stack imports =
   case imports of
-    Nil => Ok modules
+    Nil => Vuna.Ast.Ok modules
     Cons name rest =>
-      andThen (loadModule root modules stack name) (\modules2 =>
+      Vuna.Ast.andThen (loadModule root modules stack name) (\modules2 =>
         loadAll root modules2 stack rest)
 
 loadModule root modules stack name =
   case findModule modules name of
-    Just m => Ok modules
-    Nothing =>
-      if memName name stack then Err ("import cycle: " ++ showCycle name stack)
+    Vuna.Ast.Just m => Vuna.Ast.Ok modules
+    Vuna.Ast.Nothing =>
+      if Vuna.Ast.memName name stack then Vuna.Ast.Err ("import cycle: " ++ showCycle name stack)
       else if validModuleName name then
-        andThen (parseSource (readFile (modulePath root name))) (\p =>
+        Vuna.Ast.andThen (Vuna.Parser.parseSource (readFile (modulePath root name))) (\p =>
           case p of
-            Pair imports decls =>
-              andThen (loadAll root modules (Cons name stack) imports) (\modules2 =>
-                Ok (Cons (Module name imports decls (topNames decls)) modules2)))
-      else Err ("invalid module name: " ++ name)
+            Vuna.Ast.Pair imports decls =>
+              Vuna.Ast.andThen (loadAll root modules (Cons name stack) imports) (\modules2 =>
+                Vuna.Ast.Ok (Cons (Module name imports decls (topNames decls)) modules2)))
+      else Vuna.Ast.Err ("invalid module name: " ++ name)
 
 loadProgram root entry =
-  andThen (parseSource (readFile entry)) (\p =>
+  Vuna.Ast.andThen (Vuna.Parser.parseSource (readFile entry)) (\p =>
     case p of
-      Pair imports decls =>
-        andThen (loadAll root Nil Nil imports) (\modules =>
-          andThen (resolveEntry modules imports decls) (\entryDecls =>
-            andThen (resolveModules modules) (\moduleDecls =>
-              Ok (append entryDecls moduleDecls)))))
+      Vuna.Ast.Pair imports decls =>
+        Vuna.Ast.andThen (loadAll root Nil Nil imports) (\modules =>
+          Vuna.Ast.andThen (resolveEntry modules imports decls) (\entryDecls =>
+            Vuna.Ast.andThen (resolveModules modules) (\moduleDecls =>
+              Vuna.Ast.Ok (Vuna.Ast.append entryDecls moduleDecls)))))
 
 runDecls decls =
   case interpretMain decls of
-    Err e => "error: " ++ e
-    Ok v => showValue v
+    Vuna.Ast.Err e => "error: " ++ e
+    Vuna.Ast.Ok v => showValue v
 
 interpret source =
-  case parseSource source of
-    Err e => "error: " ++ e
-    Ok p =>
+  case Vuna.Parser.parseSource source of
+    Vuna.Ast.Err e => "error: " ++ e
+    Vuna.Ast.Ok p =>
       case p of
-        Pair imports decls =>
+        Vuna.Ast.Pair imports decls =>
           case imports of
             Nil => runDecls decls
             _ => "error: imports are only supported by interpretFile"
 
 interpretFile root entry =
   case loadProgram root entry of
-    Err e => "error: " ++ e
-    Ok decls => runDecls decls
+    Vuna.Ast.Err e => "error: " ++ e
+    Vuna.Ast.Ok decls => runDecls decls
 
 interpretMain decls =
-  case funArity "main" decls of
-    Nothing => Err "no `main` definition"
-    Just arity =>
+  case Vuna.Ast.funArity "main" decls of
+    Vuna.Ast.Nothing => Vuna.Ast.Err "no `main` definition"
+    Vuna.Ast.Just arity =>
       if arity == 0 then callFunction decls "main" Nil
-      else Err "`main` must be a nullary definition"
-
--- 运行时前导代码（runtimeCode）：vuna codegen 的唯一实现。
-runtimeCode = "\ntype value =\n  | VInt of int\n  | VStr of string\n  | VCon of string * value list\n  | VFun of string * (value -> value)\n\nlet fail (msg : string) : 'a = failwith msg\n\nlet apply (fn : value) (arg : value) : value =\n  match fn with\n  | VFun (_, f) -> f arg\n  | _ -> fail \"cannot apply a non-function\"\n\nlet expect_int (name : string) (v : value) : int =\n  match v with VInt n -> n | _ -> fail (name ^ \": expected an Int argument\")\n\nlet expect_str (name : string) (v : value) : string =\n  match v with VStr s -> s | _ -> fail (name ^ \": expected a String argument\")\n\nlet vbool (b : bool) : value = VCon ((if b then \"True\" else \"False\"), [])\n\nlet expect_bool (name : string) (v : value) : bool =\n  match v with\n  | VCon (\"True\", []) -> true\n  | VCon (\"False\", []) -> false\n  | _ -> fail (name ^ \": expected a Bool argument\")\n\nlet rec string_to_value (s : string) : value =\n  let n = String.length s in\n  let rec go i acc =\n    if i < 0 then acc\n    else go (i - 1) (VCon (\"Cons\", [ VInt (Char.code s.[i]); acc ]))\n  in\n  go (n - 1) (VCon (\"Nil\", []))\n\nlet value_to_string (v : value) : string =\n  let buf = Buffer.create 16 in\n  let rec go (v : value) =\n    match v with\n    | VCon (\"Nil\", []) -> ()\n    | VCon (\"Cons\", [ VInt c; rest ]) ->\n        if c < 0 || c > 255 then fail \"strPack: character code out of range\";\n        Buffer.add_char buf (Char.chr c);\n        go rest\n    | _ -> fail \"strPack expects a List Int\"\n  in\n  go v;\n  Buffer.contents buf\n\nlet list_of_strings (strings : string list) : value =\n  List.fold_right\n    (fun s acc -> VCon (\"Cons\", [ VStr s; acc ]))\n    strings (VCon (\"Nil\", []))\n\nlet read_file (path : string) : string =\n  try\n    let channel = open_in_bin path in\n    Fun.protect\n      ~finally:(fun () -> close_in_noerr channel)\n      (fun () -> really_input_string channel (in_channel_length channel))\n  with Sys_error message -> fail (\"readFile: \" ^ message)\n\nlet write_file (path : string) (contents : string) : int =\n  try\n    let channel = open_out_bin path in\n    Fun.protect\n      ~finally:(fun () -> close_out_noerr channel)\n      (fun () -> output_string channel contents);\n    String.length contents\n  with Sys_error message -> fail (\"writeFile: \" ^ message)\n\nlet print_stdout (text : string) : int =\n  print_string text;\n  flush stdout;\n  String.length text\n\nlet get_args () : value =\n  let argv = Sys.argv in\n  let count = Array.length argv in\n  let args =\n    if count <= 1 then [] else Array.to_list (Array.sub argv 1 (count - 1))\n  in\n  list_of_strings args\n\nlet bi_add =\n  fun a -> VFun (\"+\", fun b -> VInt (expect_int \"+\" a + expect_int \"+\" b))\n\nlet bi_sub =\n  fun a -> VFun (\"-\", fun b -> VInt (expect_int \"-\" a - expect_int \"-\" b))\n\nlet bi_mul =\n  fun a -> VFun (\"*\", fun b -> VInt (expect_int \"*\" a * expect_int \"*\" b))\n\nlet bi_div =\n  fun a ->\n    VFun\n      ( \"/\",\n        fun b ->\n          let x = expect_int \"/\" a in\n          let y = expect_int \"/\" b in\n          if y = 0 then fail \"division by zero\" else VInt (x / y) )\n\nlet bi_eq =\n  fun a ->\n    VFun\n      ( \"==\",\n        fun b ->\n          match (a, b) with\n          | VInt x, VInt y -> vbool (x = y)\n          | VStr x, VStr y -> vbool (x = y)\n          | _ -> fail \"bad arguments for ==\" )\n\nlet bi_neq =\n  fun a ->\n    VFun\n      ( \"/=\",\n        fun b ->\n          match (a, b) with\n          | VInt x, VInt y -> vbool (x <> y)\n          | VStr x, VStr y -> vbool (x <> y)\n          | _ -> fail \"bad arguments for /=\" )\n\nlet bi_lt =\n  fun a -> VFun (\"<\", fun b -> vbool (expect_int \"<\" a < expect_int \"<\" b))\n\nlet bi_le =\n  fun a -> VFun (\"<=\", fun b -> vbool (expect_int \"<=\" a <= expect_int \"<=\" b))\n\nlet bi_gt =\n  fun a -> VFun (\">\", fun b -> vbool (expect_int \">\" a > expect_int \">\" b))\n\nlet bi_ge =\n  fun a -> VFun (\">=\", fun b -> vbool (expect_int \">=\" a >= expect_int \">=\" b))\n\nlet bi_and =\n  fun a ->\n    VFun\n      (\"&&\", fun b -> vbool (expect_bool \"&&\" a && expect_bool \"&&\" b))\n\nlet bi_or =\n  fun a ->\n    VFun (\"||\", fun b -> vbool (expect_bool \"||\" a || expect_bool \"||\" b))\n\nlet bi_concat =\n  fun a -> VFun (\"++\", fun b -> VStr (expect_str \"++\" a ^ expect_str \"++\" b))\n\nlet bi_str_length = fun a -> VInt (String.length (expect_str \"strLength\" a))\n\nlet bi_str_unpack =\n  fun a -> string_to_value (expect_str \"strUnpack\" a)\n\nlet bi_str_pack = fun a -> VStr (value_to_string a)\n\nlet bi_str_from_int =\n  fun a -> VStr (string_of_int (expect_int \"strFromInt\" a))\n\nlet display_name (name : string) : string =\n  match String.rindex_opt name '.' with\n  | Some index -> String.sub name (index + 1) (String.length name - index - 1)\n  | None -> name\n\nlet rec show_value (v : value) : string =\n  match v with\n  | VInt n -> string_of_int n\n  | VStr s -> \"\\\"\" ^ show_chars s 0 (String.length s) ^ \"\\\"\"\n  | VCon (name, []) -> display_name name\n  | VCon (name, args) ->\n      \"(\" ^ display_name name ^ \" \"\n      ^ String.concat \" \" (List.map show_value args)\n      ^ \")\"\n  | VFun (\"\", _) -> \"<lambda>\"\n  | VFun (name, _) -> \"<function \" ^ display_name name ^ \">\"\n\nand show_chars (s : string) (i : int) (n : int) : string =\n  if i >= n then \"\"\n  else\n    let rest = show_chars s (i + 1) n in\n    match s.[i] with\n    | '\"' -> \"\\\\\\\"\" ^ rest\n    | '\\\\' -> \"\\\\\\\\\" ^ rest\n    | '\\n' -> \"\\\\n\" ^ rest\n    | '\\t' -> \"\\\\t\" ^ rest\n    | '\\r' -> \"\\\\r\" ^ rest\n    | '\\b' -> \"\\\\b\" ^ rest\n    | c ->\n        let code = Char.code c in\n        if code >= 32 && code <= 126 then String.make 1 c ^ rest\n        else Printf.sprintf \"\\\\%03d\" code ^ rest\n"
-
--- ---------------------------------------------------------------
--- codegen（M6）：flatten 后的程序 → 动态 value 表示的 OCaml
--- ---------------------------------------------------------------
-
-data BuiltinInfo : Type where
-  BuiltinInfo : String -> String -> Int -> String -> BuiltinInfo
-
-builtinInfos =
-  [ BuiltinInfo "+" "bi_add" 2 "VInt (expect_int \"+\" a + expect_int \"+\" b)"
-  , BuiltinInfo "-" "bi_sub" 2 "VInt (expect_int \"-\" a - expect_int \"-\" b)"
-  , BuiltinInfo "*" "bi_mul" 2 "VInt (expect_int \"*\" a * expect_int \"*\" b)"
-  , BuiltinInfo "/" "bi_div" 2 "let x = expect_int \"/\" a in let y = expect_int \"/\" b in if y = 0 then fail \"division by zero\" else VInt (x / y)"
-  , BuiltinInfo "==" "bi_eq" 2 "match (a, b) with VInt x, VInt y -> vbool (x = y) | VStr x, VStr y -> vbool (x = y) | _ -> fail \"bad arguments for ==\""
-  , BuiltinInfo "/=" "bi_neq" 2 "match (a, b) with VInt x, VInt y -> vbool (x <> y) | VStr x, VStr y -> vbool (x <> y) | _ -> fail \"bad arguments for /=\""
-  , BuiltinInfo "<" "bi_lt" 2 "vbool (expect_int \"<\" a < expect_int \"<\" b)"
-  , BuiltinInfo "<=" "bi_le" 2 "vbool (expect_int \"<=\" a <= expect_int \"<=\" b)"
-  , BuiltinInfo ">" "bi_gt" 2 "vbool (expect_int \">\" a > expect_int \">\" b)"
-  , BuiltinInfo ">=" "bi_ge" 2 "vbool (expect_int \">=\" a >= expect_int \">=\" b)"
-  , BuiltinInfo "&&" "bi_and" 2 "vbool (expect_bool \"&&\" a && expect_bool \"&&\" b)"
-  , BuiltinInfo "||" "bi_or" 2 "vbool (expect_bool \"||\" a || expect_bool \"||\" b)"
-  , BuiltinInfo "++" "bi_concat" 2 "VStr (expect_str \"++\" a ^ expect_str \"++\" b)"
-  , BuiltinInfo "strLength" "bi_str_length" 1 "VInt (String.length (expect_str \"strLength\" a))"
-  , BuiltinInfo "strUnpack" "bi_str_unpack" 1 "string_to_value (expect_str \"strUnpack\" a)"
-  , BuiltinInfo "strPack" "bi_str_pack" 1 "VStr (value_to_string a)"
-  , BuiltinInfo "strFromInt" "bi_str_from_int" 1 "VStr (string_of_int (expect_int \"strFromInt\" a))"
-  , BuiltinInfo "readFile" "bi_read_file" 1 "VStr (read_file (expect_str \"readFile\" a))"
-  , BuiltinInfo "writeFile" "bi_write_file" 2 "VInt (write_file (expect_str \"writeFile\" a) (expect_str \"writeFile\" b))"
-  , BuiltinInfo "print" "bi_print" 1 "let text = expect_str \"print\" a in VInt (print_stdout text)"
-  , BuiltinInfo "getArgs" "bi_get_args" 0 "get_args ()"
-  ]
-
-findBuiltin name Nil = Nothing
-findBuiltin name (Cons b rest) =
-  case b of
-    BuiltinInfo vname ocname arity body =>
-      if vname == name then Just b else findBuiltin name rest
-
-joinList sep Nil = ""
-joinList sep (Cons x Nil) = x
-joinList sep (Cons x rest) = x ++ sep ++ joinList sep rest
-
-headOf Nil = ""
-headOf (Cons x rest) = x
-
-nthList n Nil = ""
-nthList n (Cons x rest) = if n == 0 then x else nthList (n - 1) rest
-
-sanitizeChar c =
-  if c == 46 then Cons 95 (Cons 100 Nil)
-  else if c == 95 then Cons 95 (Cons 117 Nil)
-  else if c == 39 then Cons 95 (Cons 112 Nil)
-  else Cons c Nil
-
-sanitizeName name = strPack (concatMap sanitizeChar (strUnpack name))
-
-pad3 s =
-  if length s == 1 then "00" ++ s
-  else if length s == 2 then "0" ++ s
-  else s
-
-escapeChar c =
-  if c == 34 then Cons 92 (Cons 34 Nil)
-  else if c == 92 then Cons 92 (Cons 92 Nil)
-  else if c == 10 then Cons 92 (Cons 110 Nil)
-  else if c == 9 then Cons 92 (Cons 116 Nil)
-  else if c == 13 then Cons 92 (Cons 114 Nil)
-  else if c >= 32 && c <= 126 then Cons c Nil
-  else strUnpack ("\\" ++ pad3 (strFromInt c))
-
-ocamlString s = "\"" ++ strPack (concatMap escapeChar (strUnpack s)) ++ "\""
-
-genVar decls scope name =
-  if memName name scope then Ok ("x_" ++ sanitizeName name)
-  else
-    case funArity name decls of
-      Just 0 => Ok ("v_" ++ sanitizeName name ++ " ()")
-      Just arity =>
-        Ok ("VFun (" ++ ocamlString name ++ ", v_" ++ sanitizeName name ++ ")")
-      Nothing =>
-        case ctorArity name decls of
-          Just 0 => Ok ("VCon (" ++ ocamlString name ++ ", [])")
-          Just arity =>
-            Ok
-              ("VFun (" ++ ocamlString name ++ ", mk_" ++ sanitizeName name
-             ++ ")")
-          Nothing =>
-            case findBuiltin name builtinInfos of
-              Just b =>
-                case b of
-                  BuiltinInfo vname ocname arity body =>
-                    if arity == 0 then Ok (ocname ++ " ()")
-                    else
-                      Ok ("VFun (" ++ ocamlString name ++ ", " ++ ocname ++ ")")
-              Nothing => Err ("unbound variable: " ++ name)
-
-pconPattern name Nil = "VCon (" ++ ocamlString name ++ ", [])"
-pconPattern name pats =
-  "VCon (" ++ ocamlString name ++ ", [" ++ joinList "; " pats ++ "])"
-
-genPattern pat =
-  case pat of
-    PWild => Ok (Pair "_" Nil)
-    PVar name => Ok (Pair ("x_" ++ sanitizeName name) (Cons name Nil))
-    PInt n => Ok (Pair ("VInt (" ++ strFromInt n ++ ")") Nil)
-    PStr s => Ok (Pair ("VStr " ++ ocamlString s) Nil)
-    PCon name pats =>
-      andThen (traverse genPattern pats) (\parts =>
-        Ok
-          (Pair (pconPattern name (map firstOf parts))
-             (concatMap secondOf parts)))
-
-genLambda decls scope params body =
-  case params of
-    Nil => genExpr decls scope body
-    Cons p rest =>
-      andThen (genLambda decls (Cons p scope) rest body) (\inner =>
-        Ok ("VFun (\"\", fun x_" ++ sanitizeName p ++ " -> " ++ inner ++ ")"))
-
-genAlt decls scope alt =
-  case alt of
-    Pair pat body =>
-      andThen (genPattern pat) (\p =>
-        case p of
-          Pair patCode bound =>
-            andThen (genExpr decls (append bound scope) body) (\bodyCode =>
-              Ok ("| " ++ patCode ++ " -> " ++ bodyCode)))
-
-genCase decls scope scrut alts =
-  andThen (genExpr decls scope scrut) (\scrutCode =>
-    andThen (traverse (genAlt decls scope) alts) (\branches =>
-      Ok
-        ("(match (" ++ scrutCode ++ ") with\n    "
-        ++ joinList "\n    " branches
-        ++ "\n    | _ -> fail \"case pattern match failure\")")))
-
-genLet decls scope binds body =
-  case binds of
-    Nil => genExpr decls scope body
-    Cons b rest =>
-      case b of
-        Pair pat value =>
-          andThen (genExpr decls scope value) (\valueCode =>
-            andThen (genPattern pat) (\p =>
-              case p of
-                Pair patCode bound =>
-                  andThen (genLet decls (append bound scope) rest body) (\bodyCode =>
-                    Ok
-                      ("(let " ++ patCode ++ " = (" ++ valueCode ++ ") in "
-                      ++ bodyCode ++ ")"))))
-
-cgApplyFold acc Nil = acc
-cgApplyFold acc (Cons a rest) =
-  cgApplyFold ("(apply (" ++ acc ++ ") (" ++ a ++ "))") rest
-
-genExpr decls scope expr =
-  case expr of
-    EVar name => genVar decls scope name
-    EInt n => Ok ("VInt (" ++ strFromInt n ++ ")")
-    EStr s => Ok ("VStr " ++ ocamlString s)
-    ELam params body => genLambda decls scope params body
-    EApp fn args =>
-      andThen (genExpr decls scope fn) (\fnCode =>
-        andThen (traverse (\a => genExpr decls scope a) args) (\argCodes =>
-          Ok (cgApplyFold fnCode argCodes)))
-    ELet binds body => genLet decls scope binds body
-    ECase scrut alts => genCase decls scope scrut alts
-    EIf c t e =>
-      andThen (genExpr decls scope c) (\cc =>
-        andThen (genExpr decls scope t) (\tc =>
-          andThen (genExpr decls scope e) (\ec =>
-            Ok
-              ("(match (" ++ cc
-              ++ ") with VCon (\"True\", []) -> " ++ tc
-              ++ " | VCon (\"False\", []) -> " ++ ec
-              ++ " | _ -> fail \"if condition is not a Bool\")"))))
-
-groupFunctions decls = groupFunctionsLoop decls Nil
-
-groupFunctionsLoop Nil groups = groups
-groupFunctionsLoop (Cons d rest) groups =
-  case d of
-    DFun name pats body =>
-      groupFunctionsLoop rest (addClause name (Pair pats body) groups)
-    _ => groupFunctionsLoop rest groups
-
-addClause name clause Nil = Cons (Pair name (Cons clause Nil)) Nil
-addClause name clause (Cons g rest) =
-  case g of
-    Pair gname clauses =>
-      if gname == name then
-        Cons (Pair gname (append clauses (Cons clause Nil))) rest
-      else Cons g (addClause name clause rest)
-
-arityOf name Nil = Err ("function " ++ name ++ " has no clauses")
-arityOf name (Cons c rest) =
-  case c of
-    Pair pats body => checkArities name (length pats) rest
-
-checkArities name expected Nil = Ok expected
-checkArities name expected (Cons c rest) =
-  case c of
-    Pair pats body =>
-      if length pats == expected then checkArities name expected rest
-      else Err ("clauses for " ++ name ++ " have different arities")
-
-allCtors Nil = Nil
-allCtors (Cons d rest) =
-  case d of
-    DData dname params ctors => append ctors (allCtors rest)
-    _ => allCtors rest
-
-validateCtors Nil = Ok Nil
-validateCtors (Cons c rest) =
-  case c of
-    Pair name arity =>
-      if memName name (map firstOf rest) then
-        Err ("duplicate constructor: " ++ name)
-      else validateCtors rest
-
-checkNoCtorFun Nil decls = Ok Nil
-checkNoCtorFun (Cons g rest) decls =
-  case g of
-    Pair name clauses =>
-      case ctorArity name decls of
-        Just arity =>
-          Err ("name is both a constructor and a function: " ++ name)
-        Nothing => checkNoCtorFun rest decls
-
-makeParams n = makeParamsFrom 1 n
-
-makeParamsFrom i n =
-  if i > n then Nil
-  else Cons ("a" ++ strFromInt i) (makeParamsFrom (i + 1) n)
-
-makeCtorParams n = makeCtorParamsFrom 1 n
-
-makeCtorParamsFrom i n =
-  if i > n then Nil
-  else Cons ("c" ++ strFromInt i) (makeCtorParamsFrom (i + 1) n)
-
-genBranches decls arity Nil = Ok Nil
-genBranches decls arity (Cons c rest) =
-  case c of
-    Pair pats body =>
-      andThen (traverse genPattern pats) (\parts =>
-        let patternCode = if arity == 1 then headOf (map firstOf parts) else "(" ++ joinList ", " (map firstOf parts) ++ ")"
-        in andThen (genExpr decls (concatMap secondOf parts) body) (\b =>
-             andThen (genBranches decls arity rest) (\restBranches =>
-               Ok (Cons ("| " ++ patternCode ++ " -> " ++ b) restBranches))))
-
-genFunction decls name clauses =
-  andThen (arityOf name clauses) (\arity =>
-    case clauses of
-      Nil => Err ("function " ++ name ++ " has no clauses")
-      Cons first rest =>
-        if arity == 0 then
-          case first of
-            Pair pats body =>
-              andThen (genExpr decls Nil body) (\b =>
-                Ok ("(fun () -> " ++ b ++ ")"))
-        else
-          let params = makeParams arity in
-          let scrutinee = if arity == 1 then headOf params else "(" ++ joinList ", " params ++ ")"
-          in andThen (genBranches decls arity clauses) (\branches =>
-               let matchCode = "(match (" ++ scrutinee ++ ") with\n    " ++ joinList "\n    " branches ++ "\n    | _ -> fail \"no matching clause for " ++ name ++ "\")"
-               in Ok (wrapFun name params matchCode 0)))
-
-wrapFun name params matchCode k =
-  if k == length params - 1 then
-    "(fun " ++ nthList k params ++ " -> " ++ matchCode ++ ")"
-  else
-    "(fun " ++ nthList k params ++ " -> VFun (" ++ ocamlString name ++ ", "
-    ++ wrapFun name params matchCode (k + 1) ++ "))"
-
-genCtor c =
-  case c of
-    Pair name arity =>
-      if arity == 0 then Ok ""
-      else
-        let params = makeCtorParams arity in
-        let body = "VCon (" ++ ocamlString name ++ ", [" ++ joinList "; " params ++ "])"
-        in Ok
-             ("let mk_" ++ sanitizeName name ++ " = "
-             ++ wrapCtor name params body 0 ++ "\n")
-
-wrapCtor name params body k =
-  if k == length params - 1 then
-    "(fun " ++ nthList k params ++ " -> " ++ body ++ ")"
-  else
-    "(fun " ++ nthList k params ++ " -> VFun (" ++ ocamlString name ++ ", "
-    ++ wrapCtor name params body (k + 1) ++ "))"
-
-genCtorDefs Nil = Ok ""
-genCtorDefs (Cons c rest) =
-  andThen (genCtor c) (\def =>
-    andThen (genCtorDefs rest) (\restDefs => Ok (def ++ restDefs)))
-
-genBuiltinDef Nil = ""
-genBuiltinDef (Cons b rest) =
-  case b of
-    BuiltinInfo vname ocname arity body =>
-      let def = if arity == 0 then "let " ++ ocname ++ " = fun () -> " ++ body ++ "\n" else if arity == 1 then "let " ++ ocname ++ " = fun a -> " ++ body ++ "\n" else "let " ++ ocname ++ " = fun a -> VFun (" ++ ocamlString vname ++ ", fun b -> " ++ body ++ ")\n"
-      in def ++ genBuiltinDef rest
-
-genFunctions decls Nil = Ok Nil
-genFunctions decls (Cons g rest) =
-  case g of
-    Pair name clauses =>
-      andThen (genFunction decls name clauses) (\def =>
-        andThen (genFunctions decls rest) (\defs =>
-          Ok (Cons (Pair name def) defs)))
-
-renderRecsFrom Nil index = ""
-renderRecsFrom (Cons f rest) index =
-  let prefix = if index == 0 then "let rec " else "and "
-  in prefix ++ "v_" ++ sanitizeName (firstOf f) ++ " = " ++ secondOf f
-     ++ "\n" ++ renderRecsFrom rest (index + 1)
-
-generateProgram decls printResult =
-  case allCtors decls of
-    ctors =>
-      andThen (validateCtors ctors) (\_ =>
-        andThen (checkNoCtorFun (groupFunctions decls) decls) (\_ =>
-          case funArity "main" decls of
-            Just 0 =>
-              andThen (genFunctions decls (groupFunctions decls)) (\defs =>
-                andThen (genCtorDefs ctors) (\ctorDefs =>
-                  Ok
-                    (runtimeCode ++ ctorDefs ++ genBuiltinDef builtinInfos
-                    ++ renderRecsFrom defs 0
-                    ++ (if printResult then
-                          "let () = print_endline (show_value (v_main ()))\n"
-                        else "let () = ignore (v_main ())\n"))))
-            Just arity => Err "`main` must be a nullary definition"
-            Nothing => Err "no `main` definition"))
+      else Vuna.Ast.Err "`main` must be a nullary definition"
 
 compileFile root entry printResult =
-  andThen (loadProgram root entry) (\decls =>
-    case decls of ds => generateProgram ds printResult)
+  Vuna.Ast.andThen (loadProgram root entry) (\decls =>
+    case decls of ds => Vuna.Codegen.generateProgram ds printResult)
 
 demo = "main = 40 + 2"
 

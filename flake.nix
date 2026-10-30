@@ -12,11 +12,20 @@
       systems = [
         "x86_64-linux"
         "aarch64-linux"
-        "x86_64-darwin"
-        "aarch64-darwin"
       ];
 
       forAllSystems = nixpkgs.lib.genAttrs systems;
+
+      ocamlToolsFn =
+        system:
+        let
+          pkgs = nixpkgs.legacyPackages.${system};
+        in
+        [
+          pkgs.ocaml
+          pkgs.binutils
+          pkgs.gcc
+        ];
     in
     {
       # 自举链（完全由 vuna 自己维持，没有外部编译器）：
@@ -35,11 +44,7 @@
           pkgs = nixpkgs.legacyPackages.${system};
           inherit (pkgs) lib;
 
-          ocamlTools = [
-            pkgs.ocaml
-            pkgs.binutils
-            pkgs.gcc
-          ];
+          ocamlTools = ocamlToolsFn (system);
 
           # stage 1：提交入库的种子，直接 ocamlopt 构建。
           vuna-boot =
@@ -116,11 +121,7 @@
         in
         {
           default = pkgs.mkShell {
-            packages = [
-              # OCaml 工具链：编译种子 / 手动验证 stage2。
-              pkgs.ocaml
-              pkgs.binutils
-              pkgs.gcc
+            packages = ocamlToolsFn system ++ [
               # 种子编译器：手动检查“当前种子能编译当前源码”。
               self.packages.${system}.vuna-boot
             ];
@@ -141,11 +142,8 @@
           bootstrap-selfhost =
             pkgs.runCommand "vuna-bootstrap-selfhost"
               {
-                nativeBuildInputs = [
-                  pkgs.ocaml
-                  pkgs.binutils
-                  pkgs.gcc
-                ];
+                allowSubstitutes = false;
+                nativeBuildInputs = ocamlToolsFn system;
               }
               ''
                 mkdir -p app
@@ -169,11 +167,8 @@
           vuna-tests =
             pkgs.runCommand "vuna-tests"
               {
-                nativeBuildInputs = [
-                  pkgs.ocaml
-                  pkgs.binutils
-                  pkgs.gcc
-                ];
+                allowSubstitutes = false;
+                nativeBuildInputs = ocamlToolsFn system;
               }
               ''
                 cp -r ${./test} test
