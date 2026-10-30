@@ -8,6 +8,9 @@
 
 exception Error of string
 
+val runtime : string
+(** The OCaml runtime preamble emitted by the generator. *)
+
 val generate : ?print_result:bool -> Ast.program -> string
 (** Render a complete OCaml program (ending in a newline).
 

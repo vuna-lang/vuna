@@ -4,7 +4,7 @@ import Vuna.Interp
 
 run root path = Vuna.Interp.interpretFile root path
 
-usage = "usage: vuna-run [--root DIR] <file.vuna>"
+usage = "usage: vuna-interp [--root DIR] <file.vuna>"
 
 main =
   case getArgs of

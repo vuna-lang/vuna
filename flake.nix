@@ -50,16 +50,17 @@
             # 直接本地构建；依赖（ocaml、dune 等）仍照常走缓存替换。
             allowSubstitutes = false;
 
-            # 只把 vunax 需要的文件拷进 Nix store：vunax 源码、模块根 lib/（模块化
-            # 后的 vuna 源码）以及 CLI 入口 app/run.vuna；app/、lib/、test/ 里的
-            # 其他 vuna 源码属于自举阶段，不是 vunax 的构建输入。
+            # 只把 vunax 需要的文件拷进 Nix store：vunax 源码、模块根 lib/（vuna 源码）
+            # 与两个 CLI 入口 app/compile.vuna、app/interp.vuna；bootstrap/ 是种子
+            # 构建输入，单独引用。
             src = lib.fileset.toSource {
               root = ./.;
               fileset = lib.fileset.unions [
                 ./dune-workspace
                 ./vunax
                 ./lib
-                ./app/run.vuna
+                ./app/compile.vuna
+                ./app/interp.vuna
               ];
             };
 
@@ -73,10 +74,10 @@
             };
           };
 
-          # M5：app/run.vuna 通过 import Vuna.Interp 使用模块化的自解释器，
-          # 由 vunax 加载 lib/ 后编译成独立二进制。
-          vuna-run =
-            pkgs.runCommand "vuna-run-0.1.0"
+          # stage 1：提交入库的种子（bootstrap/stage1.ml，由 vunax 生成），
+          # 直接 ocamlopt 构建。日常不随源码更新；不变量是它能编译当前源码。
+          vuna-boot =
+            pkgs.runCommand "vuna-boot-0.1.0"
               {
                 nativeBuildInputs = [
                   pkgs.ocaml
@@ -86,24 +87,71 @@
                 allowSubstitutes = false;
 
                 meta = {
-                  description = "vuna interpreter compiled to OCaml (M5)";
+                  description = "vuna boot compiler (stage 1 seed)";
                   license = lib.licenses.mit;
-                  mainProgram = "vuna-run";
+                  mainProgram = "vuna-boot";
                 };
               }
               ''
                 mkdir -p "$out/bin"
+                cp ${./bootstrap/stage1.ml} stage1.ml
+                ocamlopt -w -a -o "$out/bin/vuna-boot" stage1.ml
+              '';
+
+          # stage 2：用入库种子编译当前 lib/ + app/compile.vuna 得到的当前编译器。
+          vuna =
+            pkgs.runCommand "vuna-0.1.0"
+              {
+                nativeBuildInputs = [
+                  pkgs.ocaml
+                  pkgs.binutils
+                  pkgs.gcc
+                ];
+                allowSubstitutes = false;
+
+                meta = {
+                  description = "vuna compiler (stage 2, built by the seed)";
+                  license = lib.licenses.mit;
+                  mainProgram = "vuna";
+                };
+              }
+              ''
+                mkdir -p "$out/bin" app
                 cp -r ${./lib} lib
-                mkdir -p app
-                cp ${./app/run.vuna} app/run.vuna
-                ${vunax}/bin/vunax compile --no-print --root lib app/run.vuna > program.ml
-                ocamlopt -w -a -o "$out/bin/vuna-run" program.ml
+                cp ${./app/compile.vuna} app/compile.vuna
+                ${vuna-boot}/bin/vuna-boot --root lib --no-print app/compile.vuna stage2.ml
+                ocamlopt -w -a -o "$out/bin/vuna" stage2.ml
+              '';
+
+          # 解释器（自解释器编译产物）：读 .vuna 文件解释执行，用于差分测试。
+          vuna-interp =
+            pkgs.runCommand "vuna-interp-0.1.0"
+              {
+                nativeBuildInputs = [
+                  pkgs.ocaml
+                  pkgs.binutils
+                  pkgs.gcc
+                ];
+                allowSubstitutes = false;
+
+                meta = {
+                  description = "vuna interpreter compiled to OCaml";
+                  license = lib.licenses.mit;
+                  mainProgram = "vuna-interp";
+                };
+              }
+              ''
+                mkdir -p "$out/bin" app
+                cp -r ${./lib} lib
+                cp ${./app/interp.vuna} app/interp.vuna
+                ${vunax}/bin/vunax compile --no-print --root lib app/interp.vuna > program.ml
+                ocamlopt -w -a -o "$out/bin/vuna-interp" program.ml
               '';
         in
         {
-          default = vunax;
-          inherit vunax;
-          vuna-run = vuna-run;
+          default = vuna;
+          inherit vunax vuna-boot vuna-interp;
+          vuna = vuna;
         }
       );
 
@@ -113,12 +161,17 @@
           pkgs = nixpkgs.legacyPackages.${system};
           ocamlPackages = pkgs.ocamlPackages;
 
-          # devShell 只需要能运行 vunax，不需要每次进入都跑包测试；
+          # devShell 只需要能运行 vunax / vuna-boot，不需要每次进入都跑包测试；
           # 测试由 nix build / nix flake check 负责。这样也避免
           # “测试失败 → devShell 构建失败 → 无法进 shell 调试”的死循环。
           vunax-dev = self.packages.${system}.vunax.overrideAttrs (_: {
             doCheck = false;
           });
+
+          # vuna-boot 是从入库 bootstrap/stage1.ml 固定构建的，不依赖当前源码
+          # 能否编译、也不跑测试，放进 devShell 很便宜。stage2 的 vuna 不进
+          # devShell：种子失效时也要能进 shell 调试。
+          vuna-boot = self.packages.${system}.vuna-boot;
         in
         {
           default = pkgs.mkShell {
@@ -128,6 +181,8 @@
             packages = [
               # 把 vunax 本身暴露到 devShell 里，直接可用 `vunax` 命令。
               vunax-dev
+              # 种子编译器：手动检查“当前种子能编译当前源码”。
+              vuna-boot
             ]
             ++ (with ocamlPackages; [
               alcotest
@@ -145,10 +200,44 @@
         }
       );
 
-      checks = forAllSystems (system: {
-        inherit (self.packages.${system}) vunax;
-        vuna-run = self.packages.${system}.vuna-run;
-      });
+      checks = forAllSystems (
+        system:
+        let
+          pkgs = nixpkgs.legacyPackages.${system};
+          inherit (self.packages.${system}) vuna-boot;
+          bootstrap-selfhost =
+            pkgs.runCommand "vuna-bootstrap-selfhost"
+              {
+                nativeBuildInputs = [
+                  pkgs.ocaml
+                  pkgs.binutils
+                  pkgs.gcc
+                ];
+              }
+              ''
+                mkdir -p app
+                cp -r ${./lib} lib
+                cp ${./app/compile.vuna} app/compile.vuna
+                # 种子编译当前源码 → stage 2（当前编译器）
+                ${vuna-boot}/bin/vuna-boot --root lib --no-print app/compile.vuna stage2.ml
+                ocamlopt -w -a -o stage2 stage2.ml
+                # stage 2 再编译同一份源码 → stage 3；两者必须字节一致
+                ./stage2 --root lib --no-print app/compile.vuna stage3.ml
+                cmp stage2.ml stage3.ml
+                # 行为抽查：当前编译器编译并运行一个程序
+                cp ${./vunax/test/corpus/run/12_fact.vuna} fact.vuna
+                ./stage2 --root lib fact.vuna fact.ml
+                ocamlopt -w -a -o fact fact.ml
+                test "$(./fact)" = "120"
+                touch "$out"
+              '';
+        in
+        {
+          inherit (self.packages.${system}) vunax vuna vuna-interp;
+          bootstrap-selfhost = bootstrap-selfhost;
+          fixed-point = bootstrap-selfhost;
+        }
+      );
 
       # nixfmt-tree 让不带参数的 `nix fmt` 也能格式化整个目录
       # （裸 nixfmt 在 Nix ≥ 2.34 下不带参数会读 stdin 并报错）。

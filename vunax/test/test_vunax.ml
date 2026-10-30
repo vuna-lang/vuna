@@ -95,7 +95,7 @@ let version_tests =
         Alcotest.(check string) "version" "0.1.0" Vunax.Version.version);
   ]
 
-(* Self-interpreter: app/interp.vuna is a vuna program that lexes, parses and
+(* Self-interpreter: lib/Vuna/Interp.vuna is a vuna program that lexes, parses and
    evaluates vuna source. Tests build a driver program in memory: all
    interpreter declarations except its demo [main], followed by
    [main = interpret <source text>]. *)
@@ -204,6 +204,52 @@ let run_binary ?(args = []) exe =
 let compile_and_run ?(args = []) ~tag program =
   run_binary ~args (build_binary ~tag program)
 
+(* M6: drive the vuna-written compiler (Vuna.Interp.compileFile) under the
+   interpreter, write the generated OCaml, then build and run it. *)
+
+let ocaml_string_literal s = Printf.sprintf "%S" s
+
+let vuna_compile ~print_result ~root ~entry ~tag =
+  if Sys.command ("mkdir -p " ^ codegen_dir) <> 0 then
+    failwith ("cannot create " ^ codegen_dir);
+  let out = Filename.concat codegen_dir (tag ^ ".vuna.ml") in
+  let driver = Filename.concat codegen_dir (tag ^ ".driver.vuna") in
+  let source =
+    Printf.sprintf
+      "import Vuna.Interp\n\n\
+       main =\n\
+      \  case Vuna.Interp.compileFile %s %s %s of\n\
+      \    Vuna.Interp.Ok code => writeFile %s code\n\
+      \    Vuna.Interp.Err e => writeFile %s e\n"
+      (ocaml_string_literal root)
+      (ocaml_string_literal entry)
+      (if print_result then "True" else "False")
+      (ocaml_string_literal out)
+      (ocaml_string_literal (out ^ ".err"))
+  in
+  let channel = open_out driver in
+  output_string channel source;
+  close_out channel;
+  let module_root = Filename.concat repo_root "lib" in
+  let program = Vunax.Loader.load ~root:module_root driver in
+  ignore (Vunax.Eval.run program);
+  let err = out ^ ".err" in
+  if Sys.file_exists err then
+    failwith ("vuna compile failed: " ^ String.trim (read_file err));
+  read_file out
+
+let build_ocaml_source ~tag source =
+  let base = Filename.concat codegen_dir tag in
+  let ml = base ^ ".ml" and exe = base ^ ".exe" in
+  let channel = open_out ml in
+  output_string channel source;
+  close_out channel;
+  if Sys.command (Printf.sprintf "ocamlopt -w -a -o %s %s" exe ml) <> 0 then
+    failwith ("ocamlopt failed for " ^ tag);
+  exe
+
+let run_ocaml_source ~tag source = run_binary (build_ocaml_source ~tag source)
+
 let compile_tests =
   sorted_files "corpus/run" ".vuna"
   |> List.map (fun file ->
@@ -223,7 +269,7 @@ let compile_self_test =
       let actual = compile_and_run ~tag:"self_interpreter" program in
       Alcotest.(check string) "self compile" expected actual)
 
-(* M5 / M4b: app/run.vuna (entry) imports Vuna.Interp; vunax loads lib/ and
+(* M5 / M4b: app/interp.vuna (entry) imports Vuna.Interp; vunax loads lib/ and
    compiles the flattened program. With [print_result:false] the binary prints
    the interpreted result itself, like `vunax run`. *)
 
@@ -235,10 +281,10 @@ let module_case_dir name =
 let run_vuna_run exe args = run_binary ~args exe
 
 let compiled_interpreter_test =
-  Alcotest.test_case "compiled vuna-run runs programs and modules" `Quick
+  Alcotest.test_case "compiled vuna-interp runs programs and modules" `Quick
     (fun () ->
       let root = Filename.concat repo_root "lib" in
-      let entry = Filename.concat repo_root "app/run.vuna" in
+      let entry = Filename.concat repo_root "app/interp.vuna" in
       let program = Vunax.Loader.load ~root entry in
       let exe =
         build_binary ~print_result:false ~tag:"compiled_interpreter" program
@@ -267,7 +313,7 @@ let compiled_interpreter_test =
           Alcotest.(check string) name expected actual)
         module_case_dirs;
       Alcotest.(check string)
-        "usage" "usage: vuna-run [--root DIR] <file.vuna>" (run_binary exe))
+        "usage" "usage: vuna-interp [--root DIR] <file.vuna>" (run_binary exe))
 
 let module_selfhost_tests =
   module_case_dirs
@@ -448,6 +494,52 @@ let module_error_tests =
               Alcotest.(check bool) "message" true (contains message fragment)
           | None -> Alcotest.fail ("expected a loader error: " ^ name)))
 
+(* M6: the vuna-written codegen compiles corpus programs and module fixtures;
+   the generated OCaml must build and behave like the interpreter. *)
+
+let vuna_codegen_corpus_test =
+  Alcotest.test_case "vuna codegen runs corpus programs" `Quick (fun () ->
+      let root = Filename.concat repo_root "lib" in
+      sorted_files "corpus/run" ".vuna"
+      |> List.iter (fun file ->
+          let path = Filename.concat "corpus/run" file in
+          let program = Vunax.Parser.parse_file path in
+          let expected = Vunax.Eval.show (Vunax.Eval.run program) in
+          let entry =
+            Filename.concat repo_root (Filename.concat "vunax/test" path)
+          in
+          let base = Filename.remove_extension file in
+          let code =
+            vuna_compile ~print_result:true ~root ~entry ~tag:("m6_" ^ base)
+          in
+          let actual = run_ocaml_source ~tag:("m6_run_" ^ base) code in
+          Alcotest.(check string) file expected actual))
+
+let vuna_codegen_module_test =
+  Alcotest.test_case "vuna codegen runs module fixture" `Quick (fun () ->
+      let dir = module_case_dir "02_data" in
+      let root = Filename.concat dir "lib" in
+      let entry = Filename.concat dir "app/Main.vuna" in
+      let expected =
+        String.trim (read_file (Filename.concat dir "expected.out"))
+      in
+      let code =
+        vuna_compile ~print_result:true ~root ~entry ~tag:"m6_module"
+      in
+      Alcotest.(check string)
+        "module" expected
+        (run_ocaml_source ~tag:"m6_module_run" code))
+
+let vuna_runtime_sync_test =
+  Alcotest.test_case "vuna runtimeCode matches vunax runtime" `Quick (fun () ->
+      let driver =
+        Lazy.force interp_decls
+        @ [ Vunax.Ast.DFun ("main", [], Vunax.Ast.EVar "runtimeCode") ]
+      in
+      Alcotest.(check string)
+        "runtime" Vunax.Codegen.runtime
+        (Vunax.Eval.run_string driver))
+
 let () =
   Alcotest.run "vunax"
     [
@@ -468,4 +560,10 @@ let () =
       ("modules", module_tests);
       ("module errors", module_error_tests);
       ("modules selfhost", module_selfhost_tests);
+      ( "m6 codegen",
+        [
+          vuna_codegen_corpus_test;
+          vuna_codegen_module_test;
+          vuna_runtime_sync_test;
+        ] );
     ]
