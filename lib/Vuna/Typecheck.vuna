@@ -1,4 +1,4 @@
-module Vuna.Typecheck (TVar, TCon, TFun, TApp, Scheme, lookupScheme, checkProgramInfoElab, checkProgramInfo, checkProgram, exhaustiveWarnings) where
+module Vuna.Typecheck (TVar, TCon, TFun, TApp, Scheme, lookupScheme, checkProgramInfoElab, checkProgramInfoElabOwners, checkProgramInfo, checkProgram, exhaustiveWarnings) where
 
 -- Vuna.Typecheck：core-v0 的 Hindley-Milner 风格类型检查。
 -- M7b 先覆盖单文件程序与显式顶层签名；模块类型名解析与自检在 M7c 处理。
@@ -2308,11 +2308,32 @@ typeArityOf decls name =
         DRecord dn params fields derivings sp => if dn == name then length params else typeArityOf rest name
         _ => typeArityOf rest name
 
-collectUserInstances typeNames traitDecls decls = collectUserInstancesGo typeNames traitDecls decls decls Nil Nil
+-- 生成声明的归属模块（M12 分离编译）：函数名 → 定义它的 vuna 模块名（"" = runtime）。
+declDefName d =
+  case d of
+    DSig name ty sp => name
+    DFun name pats body sp => name
+    _ => ""
 
-collectUserInstancesGo typeNames traitDecls allDecls Nil insts declsOut = Ok (Pair (reverse insts) (reverse declsOut))
+declNamesOf Nil = Nil
 
-collectUserInstancesGo typeNames traitDecls allDecls (Cons d rest) insts declsOut =
+declNamesOf (Cons d rest) =
+  case declDefName d of
+    "" => declNamesOf rest
+    n => Cons n (declNamesOf rest)
+
+declOwners owner decls = map (\n => Pair n owner) (declNamesOf decls)
+
+instanceOwnerOf iname =
+  case iname of
+    Just n => modulePrefixOf n
+    Nothing => ""
+
+collectUserInstances typeNames traitDecls decls = collectUserInstancesGo typeNames traitDecls decls decls Nil Nil Nil
+
+collectUserInstancesGo typeNames traitDecls allDecls Nil insts declsOut ownersOut = Ok (Pair (reverse insts) (Pair (reverse declsOut) (reverse ownersOut)))
+
+collectUserInstancesGo typeNames traitDecls allDecls (Cons d rest) insts declsOut ownersOut =
   case d of
     DInstance iname isDefault headExpr methods sp =>
       case instanceHeadParts headExpr of
@@ -2328,7 +2349,7 @@ collectUserInstancesGo typeNames traitDecls allDecls (Cons d rest) insts declsOu
                     case headTyExpr of
                       EVar tcName sp2 =>
                         if typeArityOf allDecls tcName == traitDeclArity traitDecl then
-                          finishInstanceKinded typeNames traitDecls allDecls traitDecl traitName iname isDefault headTyExpr headTy methods sp insts declsOut rest
+                          finishInstanceKinded typeNames traitDecls allDecls traitDecl traitName iname isDefault headTyExpr headTy methods sp insts declsOut ownersOut rest
                         else
                           Err (showSpanLoc sp ++ ": instance head " ++ shortTyName tcName ++ " has kind * but trait " ++ traitName ++ " expects a type constructor of arity " ++ strFromInt (traitDeclArity traitDecl))
                       _ => Err (showSpanLoc sp ++ ": instance head for higher-kinded trait must be a type constructor name")
@@ -2337,19 +2358,19 @@ collectUserInstancesGo typeNames traitDecls allDecls (Cons d rest) insts declsOu
                       Just internalName =>
                         if isDefault then
                           if orphanAllowed (modulePrefixOf internalName) traitName headTy then
-                            finishInstance typeNames traitDecls allDecls traitDecl traitName iname isDefault headTyExpr headTy methods sp insts declsOut rest
+                            finishInstance typeNames traitDecls allDecls traitDecl traitName iname isDefault headTyExpr headTy methods sp insts declsOut ownersOut rest
                           else
                             Err (showSpanLoc sp ++ ": orphan default instance " ++ traitName ++ " " ++ tyOuterTypeName headTy ++ "; name it with `as`")
-                        else finishInstance typeNames traitDecls allDecls traitDecl traitName iname isDefault headTyExpr headTy methods sp insts declsOut rest
-                      Nothing => finishInstance typeNames traitDecls allDecls traitDecl traitName iname isDefault headTyExpr headTy methods sp insts declsOut rest
+                        else finishInstance typeNames traitDecls allDecls traitDecl traitName iname isDefault headTyExpr headTy methods sp insts declsOut ownersOut rest
+                      Nothing => finishInstance typeNames traitDecls allDecls traitDecl traitName iname isDefault headTyExpr headTy methods sp insts declsOut ownersOut rest
                   else Err (showSpanLoc sp ++ ": instance head must be a concrete type")
-    _ => collectUserInstancesGo typeNames traitDecls allDecls rest insts declsOut
+    _ => collectUserInstancesGo typeNames traitDecls allDecls rest insts declsOut ownersOut
 
-finishInstanceKinded typeNames traitDecls allDecls traitDecl traitName iname isDefault headTyExpr headTy methods sp insts declsOut rest =
+finishInstanceKinded typeNames traitDecls allDecls traitDecl traitName iname isDefault headTyExpr headTy methods sp insts declsOut ownersOut rest =
   let headTy2 = TCon (tyOuterTypeName headTy) Nil
-  in finishInstance typeNames traitDecls allDecls traitDecl traitName iname isDefault headTyExpr headTy2 methods sp insts declsOut rest
+  in finishInstance typeNames traitDecls allDecls traitDecl traitName iname isDefault headTyExpr headTy2 methods sp insts declsOut ownersOut rest
 
-finishInstance typeNames traitDecls allDecls traitDecl traitName iname isDefault headTyExpr headTy methods sp insts declsOut rest =
+finishInstance typeNames traitDecls allDecls traitDecl traitName iname isDefault headTyExpr headTy methods sp insts declsOut ownersOut rest =
   let instKey = instKeyOf isDefault iname headTyExpr
   in case instanceImpls typeNames traitDecl headTyExpr methods instKey sp of
        Err e => Err e
@@ -2357,6 +2378,7 @@ finishInstance typeNames traitDecls allDecls traitDecl traitName iname isDefault
          collectUserInstancesGo typeNames traitDecls allDecls rest
            (Cons (TraitInst traitName (instanceNameFor isDefault iname) headTy impls) insts)
            (append newDecls declsOut)
+           (append (declOwners (instanceOwnerOf iname) newDecls) ownersOut)
 
 defaultInstanceAllowed derivedType derivings traitName supported sp =
   if memName (tyOuterTypeName (TCon derivedType Nil)) supported then
@@ -2427,13 +2449,26 @@ stripTraitDecls (Cons d rest) =
     DInstance iname isDefault head methods sp => stripTraitDecls rest
     _ => Cons d (stripTraitDecls rest)
 
+-- 结构 Show/Eq 生成函数的归属：按类型名反推定义模块。
+structuralOwnersOf supported eqSupported sh =
+  let tyName = shapeName sh
+  in let owner = modulePrefixOf tyName
+     in append
+          (if memName tyName supported then Cons (Pair (showFnName tyName) owner) Nil else Nil)
+          (if memName tyName eqSupported then
+             Cons (Pair (eqFnName tyName) owner) (Cons (Pair (neqFnName tyName) owner) Nil)
+           else Nil)
+
+structuralOwners shapes supported eqSupported =
+  concatMap (structuralOwnersOf supported eqSupported) shapes
+
 prepareTraits typeNames decls =
   case collectTraitDecls typeNames decls of
     Err e => Err e
     Ok (Pair traitDecls methodRefs) =>
       case collectUserInstances typeNames traitDecls decls of
         Err e => Err e
-        Ok (Pair userInsts instanceDecls) =>
+        Ok (Pair userInsts (Pair instanceDecls instanceOwners)) =>
           let shapes = collectDataShapes decls
           in let supported = supportedShapes shapes
              in let eqSupported = eqSupportedShapes shapes
@@ -2443,12 +2478,20 @@ prepareTraits typeNames decls =
                     case checkInstUniqueness (append userInsts derivedInsts) Nil of
                       Err e => Err e
                       Ok _ =>
-                        case parseGenerated (builtinHelperSrc ++ "\n" ++ tcJoin "\n\n" (structuralSrcs shapes supported eqSupported)) of
+                        case parseGenerated builtinHelperSrc of
                           Err e => Err e
-                          Ok structDecls =>
-                            Ok (Pair
-                                  (TraitCtx traitDecls (append userInsts derivedInsts) supported eqSupported methodRefs)
-                                  (append (stripTraitDecls decls) (append instanceDecls structDecls)))
+                          Ok builtinDecls =>
+                            case parseGenerated (tcJoin "\n\n" (structuralSrcs shapes supported eqSupported)) of
+                              Err e => Err e
+                              Ok structDecls =>
+                                let owners = append
+                                               (append instanceOwners (declOwners "" builtinDecls))
+                                               (structuralOwners shapes supported eqSupported)
+                                in Ok (Pair
+                                         (TraitCtx traitDecls (append userInsts derivedInsts) supported eqSupported methodRefs)
+                                         (Pair
+                                           (append (stripTraitDecls decls) (append instanceDecls (append builtinDecls structDecls)))
+                                           owners))
 
 totalConstraints Nil = 0
 
@@ -2456,12 +2499,18 @@ totalConstraints (Cons (Pair name (Scheme qs cons ty)) rest) =
   length cons + totalConstraints rest
 
 checkProgramInfoElab decls0 =
+  andThen (checkProgramInfoElabImpl decls0) (\p => Ok (firstOf p))
+
+-- 与 checkProgramInfoElab 相同，但额外返回生成声明的归属模块（M12 分离编译）。
+checkProgramInfoElabOwners decls0 = checkProgramInfoElabImpl decls0
+
+checkProgramInfoElabImpl decls0 =
   case extractRecords decls0 of
     Pair records decls1 =>
       let typeNames = typeNamesOf decls1
       in case prepareTraits typeNames decls1 of
            Err e => Err e
-           Ok (Pair tctx declsT) =>
+           Ok (Pair tctx (Pair declsT owners)) =>
              case desugarRecords records declsT of
                Err e => Err e
                Ok decls2 =>
@@ -2480,18 +2529,18 @@ checkProgramInfoElab decls0 =
                                      Err e => Err e
                                      Ok (Pair elab1 (Pair g1 stA)) =>
                                        if totalConstraints g1 == 0 then
-                                         Ok (Pair (finalizeGlobals (substOf stA) g1) (rebuildDecls decls2 elab1))
+                                         Ok (Pair (Pair (finalizeGlobals (substOf stA) g1) (rebuildDecls decls2 elab1)) owners)
                                        else
                                          case checkFunctions g1 decls2 sigs names freshTC Nil of
                                            Err e => Err e
                                            Ok (Pair elab2 (Pair g2 stB)) =>
                                              if totalConstraints g2 <= totalConstraints g1 then
-                                               Ok (Pair (finalizeGlobals (substOf stB) g2) (rebuildDecls decls2 elab2))
+                                               Ok (Pair (Pair (finalizeGlobals (substOf stB) g2) (rebuildDecls decls2 elab2)) owners)
                                              else
                                                case checkFunctions g2 decls2 sigs names freshTC Nil of
                                                  Err e => Err e
                                                  Ok (Pair elab3 (Pair g3 stC)) =>
-                                                   Ok (Pair (finalizeGlobals (substOf stC) g3) (rebuildDecls decls2 elab3))
+                                                   Ok (Pair (Pair (finalizeGlobals (substOf stC) g3) (rebuildDecls decls2 elab3)) owners)
 
 checkProgramInfo decls =
   andThen (checkProgramInfoElab decls) (\p => Ok (firstOf p))

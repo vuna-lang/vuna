@@ -1,4 +1,4 @@
-module Vuna.Loader (Module, moduleName, modulePackage, moduleImports, moduleDecls, moduleExports, Project, projectEntryDecls, projectEntryImports, projectModules, loadProject, loadProgram, loadProgramRaw) where
+module Vuna.Loader (Module, moduleNameOf, modulePackageOf, moduleImportsOf, moduleDeclsOf, moduleExportsOf, Project, projectEntryDecls, projectEntryImports, projectModules, loadProject, loadProgram, loadProgramRaw) where
 
 -- Vuna.Loader：模块加载、名字解析与 flatten。
 
@@ -16,15 +16,15 @@ data Module : Type where
 data Project : Type where
   Project : List Decl -> List Import -> List Module -> Project
 
-moduleName (Module n p is ds es) = n
+moduleNameOf (Module n p is ds es) = n
 
-modulePackage (Module n p is ds es) = p
+modulePackageOf (Module n p is ds es) = p
 
-moduleImports (Module n p is ds es) = is
+moduleImportsOf (Module n p is ds es) = is
 
-moduleDecls (Module n p is ds es) = ds
+moduleDeclsOf (Module n p is ds es) = ds
 
-moduleExports (Module n p is ds es) = es
+moduleExportsOf (Module n p is ds es) = es
 
 projectEntryDecls (Project ds is ms) = ds
 
