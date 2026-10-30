@@ -448,30 +448,85 @@ neighborsOf adj name =
     Cons (Pair n ns) rest =>
       if n == name then ns else neighborsOf rest name
 
-reachable : List (Pair String (List String)) -> String -> List String
-reachable adj start = dfsReach adj (Cons start Nil) Nil
+-- Kosaraju SCC：先在正向依赖图上求完成顺序，再在反向图上按该顺序收集分量。
+-- 旧实现对每一对函数重复做 reachable DFS（O(V^2 * reach)），V≈464 时接近 12s；
+-- 这里改为一次正向 DFS + 一次反向 DFS，复杂度 O(V + E)。
 
-dfsReach : List (Pair String (List String)) -> List String -> List String -> List String
-dfsReach adj pending visited =
-  case pending of
-    Nil => visited
+dependentsOf : String -> List (Pair String (List String)) -> List String
+dependentsOf name Nil = Nil
+dependentsOf name (Cons (Pair n ns) rest) =
+  let dep = dependentsOf name rest
+  in if memName name ns then Cons n dep else dep
+
+reverseAdj : List String -> List (Pair String (List String)) -> List (Pair String (List String))
+reverseAdj names adj = map (\n => Pair n (dependentsOf n adj)) names
+
+foldNeighborsPost : List (Pair String (List String)) -> List String -> List String -> List String -> Pair (List String) (List String)
+foldNeighborsPost adj Nil visited order = Pair visited order
+foldNeighborsPost adj (Cons m rest) visited order =
+  if memName m visited then foldNeighborsPost adj rest visited order
+  else
+    case dfsPost adj m (Cons m visited) order of
+      Pair visited2 order2 => foldNeighborsPost adj rest visited2 order2
+
+dfsPost : List (Pair String (List String)) -> String -> List String -> List String -> Pair (List String) (List String)
+dfsPost adj n visited order =
+  case foldNeighborsPost adj (neighborsOf adj n) visited order of
+    Pair visited2 order2 => Pair visited2 (Cons n order2)
+
+postOrder : List (Pair String (List String)) -> List String -> List String -> List String -> Pair (List String) (List String)
+postOrder adj nodes visited order =
+  case nodes of
+    Nil => Pair visited order
     Cons n rest =>
-      if memName n visited then dfsReach adj rest visited
-      else dfsReach adj (append (neighborsOf adj n) rest) (Cons n visited)
+      if memName n visited then postOrder adj rest visited order
+      else
+        case dfsPost adj n (Cons n visited) order of
+          Pair visited2 order2 => postOrder adj rest visited2 order2
 
-sameGroup : List (Pair String (List String)) -> String -> String -> Bool
-sameGroup adj a b = memName b (reachable adj a) && memName a (reachable adj b)
+foldNeighborsCollect : List (Pair String (List String)) -> List String -> List String -> List String -> Pair (List String) (List String)
+foldNeighborsCollect revAdj Nil visited comp = Pair visited comp
+foldNeighborsCollect revAdj (Cons m rest) visited comp =
+  if memName m visited then foldNeighborsCollect revAdj rest visited comp
+  else
+    case dfsCollect revAdj m (Cons m visited) comp of
+      Pair visited2 comp2 => foldNeighborsCollect revAdj rest visited2 comp2
 
-makeGroups : List (Pair String (List String)) -> List String -> List (List String)
-makeGroups adj names =
-  case names of
-    Nil => Nil
+dfsCollect : List (Pair String (List String)) -> String -> List String -> List String -> Pair (List String) (List String)
+dfsCollect revAdj n visited comp =
+  case foldNeighborsCollect revAdj (neighborsOf revAdj n) visited comp of
+    Pair visited2 comp2 => Pair visited2 (Cons n comp2)
+
+collectComps : List (Pair String (List String)) -> List String -> List String -> List (List String) -> List (List String)
+collectComps revAdj nodes visited comps =
+  case nodes of
+    Nil => comps
     Cons n rest =>
-      let same = filterNames (\m => sameGroup adj n m) rest
-      in
-        let group = Cons n same
-        in
-          Cons group (makeGroups adj (filterNames (\m => notIn m group) rest))
+      if memName n visited then collectComps revAdj rest visited comps
+      else
+        case dfsCollect revAdj n (Cons n visited) Nil of
+          Pair visited2 comp => collectComps revAdj rest visited2 (Cons comp comps)
+
+componentOf : List (List String) -> String -> Maybe (List String)
+componentOf Nil name = Nothing
+componentOf (Cons g rest) name =
+  if memName name g then Just g else componentOf rest name
+
+-- 与旧 makeGroups 保持完全相同的分组内容与顺序：按 names 首次出现顺序产出 SCC，
+-- 组内成员按 names 顺序排列，便于逐字节对照产物。
+groupsFromComps : List (List String) -> List String -> List (List String)
+groupsFromComps comps names = groupsFromCompsGo comps names names Nil
+
+groupsFromCompsGo : List (List String) -> List String -> List String -> List String -> List (List String)
+groupsFromCompsGo comps allNames Nil emitted = Nil
+groupsFromCompsGo comps allNames (Cons n rest) emitted =
+  if memName n emitted then groupsFromCompsGo comps allNames rest emitted
+  else
+    case componentOf comps n of
+      Just g =>
+        Cons (filterNames (\m => memName m g) allNames)
+             (groupsFromCompsGo comps allNames rest (append g emitted))
+      Nothing => groupsFromCompsGo comps allNames rest emitted
 
 groupDeps : List (Pair String (List String)) -> List String -> List String
 groupDeps adj group = filterNames (\n => notIn n group) (uniqueNames (concatMap (neighborsOf adj) group))
@@ -548,11 +603,17 @@ genTop decls =
     names =>
       let adj = map (\n => Pair n (filterNames (\r => memName r names) (genFunctionRefs decls n))) names
       in
-        let groups = makeGroups adj names
+        let revAdj = reverseAdj names adj
         in
-          andThen (orderGroups adj groups) (\ordered =>
-            andThen (mapResult (genGroup decls) ordered) (\parts =>
-              Ok (joinWith "\n\n" parts ++ "\n")))
+          case postOrder adj names Nil Nil of
+            Pair _ order =>
+              let comps = collectComps revAdj order Nil Nil
+              in
+                let groups = groupsFromComps comps names
+                in
+                  andThen (orderGroups adj groups) (\ordered =>
+                    andThen (mapResult (genGroup decls) ordered) (\parts =>
+                      Ok (joinWith "\n\n" parts ++ "\n")))
 
 runtimeCodeTyped =
   "\n" ++
