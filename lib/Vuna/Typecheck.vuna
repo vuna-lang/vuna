@@ -5,6 +5,7 @@ module Vuna.Typecheck (TVar, TCon, TFun, Scheme, lookupScheme, checkProgramInfoE
 
 import Vuna.Base
 import Vuna.Ast
+import Vuna.Parser
 
 data Ty : Type where
   TVar : Int -> Ty
@@ -23,24 +24,6 @@ data RecConstraint : Type where
   FieldCon : Ty -> String -> Ty -> Span -> RecConstraint
   UpdateCon : Ty -> String -> Ty -> Span -> RecConstraint
 
--- M10.5 trait：方法信息（短名、scheme、原始类型表达式供 instance/deriving 生成签名）。
-data TraitMethodInfo : Type where
-  TraitMethodInfo : String -> Scheme -> Expr -> TraitMethodInfo
-
-data TraitDecl : Type where
-  TraitDecl : String -> List TraitMethodInfo -> TraitDecl
-
--- 方法查找表：key（loader 解析后的方法名）、trait、方法 scheme。
-data TraitMethodRef : Type where
-  TraitMethodRef : String -> String -> Scheme -> TraitMethodRef
-
--- 实例：trait、命名实例名（Nothing=default）、head 类型、方法短名 → 实现函数名。
-data TraitInst : Type where
-  TraitInst : String -> Maybe String -> Ty -> List (Pair String String) -> TraitInst
-
-data TraitCtx : Type where
-  TraitCtx : List TraitDecl -> List TraitInst -> TraitCtx
-
 -- 推断状态：下一个类型变量编号、substitution、类型名表、记录表、待求解记录约束、
 -- 方法表 + trait 上下文（M10.5 静态派发）。
 data TC : Type where
@@ -55,7 +38,6 @@ data EExpr : Type where
   XEStr : String -> Span -> EExpr
   XELam : List String -> EExpr -> Span -> EExpr
   XEApp : EExpr -> List EExpr -> Span -> EExpr
-  XECmp : String -> List EExpr -> Ty -> Span -> EExpr
   XELet : List (Pair Pat EExpr) -> EExpr -> Bool -> Span -> EExpr
   XECase : EExpr -> Ty -> List (Pair Pat EExpr) -> Span -> EExpr
   XEIf : EExpr -> EExpr -> EExpr -> Span -> EExpr
@@ -71,7 +53,6 @@ eeSpan e =
     XEStr s sp => sp
     XELam ps b sp => sp
     XEApp f a sp => sp
-    XECmp n a ty sp => sp
     XELet bs b _ sp => sp
     XECase s ty a sp => sp
     XEIf c t e sp => sp
@@ -357,16 +338,31 @@ listOf ty = TCon "List" (Cons ty Nil)
 fun2 a b c = TFun a (TFun b c)
 
 builtinSchemes =
-  [ Pair "+" (Scheme Nil (fun2 intTy intTy intTy))
+  [ Pair "True" (Scheme Nil boolTy)
+  , Pair "False" (Scheme Nil boolTy)
+  , Pair "Nil" (Scheme (Cons 0 Nil) (TCon "List" (Cons (TVar 0) Nil)))
+  , Pair "Cons" (Scheme (Cons 0 Nil) (fun2 (TVar 0) (TCon "List" (Cons (TVar 0) Nil)) (TCon "List" (Cons (TVar 0) Nil))))
+  , Pair "+" (Scheme Nil (fun2 intTy intTy intTy))
   , Pair "-" (Scheme Nil (fun2 intTy intTy intTy))
   , Pair "*" (Scheme Nil (fun2 intTy intTy intTy))
   , Pair "/" (Scheme Nil (fun2 intTy intTy intTy))
-  , Pair "==" (Scheme (Cons 0 Nil) (fun2 (TVar 0) (TVar 0) boolTy))
-  , Pair "/=" (Scheme (Cons 0 Nil) (fun2 (TVar 0) (TVar 0) boolTy))
-  , Pair "<" (Scheme Nil (fun2 intTy intTy boolTy))
-  , Pair "<=" (Scheme Nil (fun2 intTy intTy boolTy))
-  , Pair ">" (Scheme Nil (fun2 intTy intTy boolTy))
-  , Pair ">=" (Scheme Nil (fun2 intTy intTy boolTy))
+  , Pair "bi_eq_int" (Scheme Nil (fun2 intTy intTy boolTy))
+  , Pair "bi_neq_int" (Scheme Nil (fun2 intTy intTy boolTy))
+  , Pair "bi_lt_int" (Scheme Nil (fun2 intTy intTy boolTy))
+  , Pair "bi_le_int" (Scheme Nil (fun2 intTy intTy boolTy))
+  , Pair "bi_gt_int" (Scheme Nil (fun2 intTy intTy boolTy))
+  , Pair "bi_ge_int" (Scheme Nil (fun2 intTy intTy boolTy))
+  , Pair "bi_eq_str" (Scheme Nil (fun2 strTy strTy boolTy))
+  , Pair "bi_neq_str" (Scheme Nil (fun2 strTy strTy boolTy))
+  , Pair "bi_eq_bool" (Scheme Nil (fun2 boolTy boolTy boolTy))
+  , Pair "bi_neq_bool" (Scheme Nil (fun2 boolTy boolTy boolTy))
+  , Pair "bi_show_string" (Scheme Nil (TFun strTy strTy))
+  , Pair "bi_eq_generic" (Scheme (Cons 0 Nil) (fun2 (TVar 0) (TVar 0) boolTy))
+  , Pair "bi_neq_generic" (Scheme (Cons 0 Nil) (fun2 (TVar 0) (TVar 0) boolTy))
+  , Pair "bi_lt_generic" (Scheme (Cons 0 Nil) (fun2 (TVar 0) (TVar 0) boolTy))
+  , Pair "bi_le_generic" (Scheme (Cons 0 Nil) (fun2 (TVar 0) (TVar 0) boolTy))
+  , Pair "bi_gt_generic" (Scheme (Cons 0 Nil) (fun2 (TVar 0) (TVar 0) boolTy))
+  , Pair "bi_ge_generic" (Scheme (Cons 0 Nil) (fun2 (TVar 0) (TVar 0) boolTy))
   , Pair "&&" (Scheme Nil (fun2 boolTy boolTy boolTy))
   , Pair "||" (Scheme Nil (fun2 boolTy boolTy boolTy))
   , Pair "++" (Scheme Nil (fun2 strTy strTy strTy))
@@ -382,58 +378,184 @@ builtinSchemes =
   , Pair "exit" (Scheme Nil (TFun intTy intTy))
   ]
 
--- ---------------------------------------------------------------
--- 比较运算符的 typed elaboration：按操作数 unify 后的类型改写合成 builtin 名
--- ---------------------------------------------------------------
+elabAppExpr fn fnElab args argTys argEls sp = XEApp fnElab argEls sp
 
-intCmpName name =
-  case name of
-    "==" => "bi_eq_int"
-    "/=" => "bi_neq_int"
-    "<" => "bi_lt_int"
-    "<=" => "bi_le_int"
-    ">" => "bi_gt_int"
-    ">=" => "bi_ge_int"
-    _ => name
+-- ---------- trait lowering / 校验 ----------
 
-strCmpName name =
-  case name of
-    "==" => "bi_eq_str"
-    "/=" => "bi_neq_str"
-    _ => name
+noInstanceMsg tctx tr ty = "no instance " ++ tr ++ " " ++ showTy ty ++ " (M10.5 静态派发：调用点类型必须确定)"
 
-boolCmpName name =
-  case name of
-    "==" => "bi_eq_bool"
-    "/=" => "bi_neq_bool"
-    _ => name
-
-specializeCmp name ty =
+showFallback tctx ty =
   case ty of
+    TCon "Int" Nil => Ok "vuna_show_int"
+    TCon "String" Nil => Ok "vuna_show_string"
+    TCon "Bool" Nil => Ok "vuna_show_bool"
+    TCon n Nil => if memName n (traitCtxSupported tctx) then Ok (showFnName n) else Err (noInstanceMsg tctx "Show" ty)
+    _ => Err (noInstanceMsg tctx "Show" ty)
+
+boolTrueExpr = EApp (EVar "bi_eq_int" tcNoSpan) (Cons (EInt 0 tcNoSpan) (Cons (EInt 0 tcNoSpan) Nil)) tcNoSpan
+
+boolFalseExpr = EApp (EVar "bi_eq_int" tcNoSpan) (Cons (EInt 0 tcNoSpan) (Cons (EInt 1 tcNoSpan) Nil)) tcNoSpan
+
+eqMethodExprFor tctx ty =
+  case traitMethodExpr tctx ty "Eq" "eq" of
+    Ok e => e
+    Err _ => EVar "vuna_eq_generic" tcNoSpan
+
+-- List 元素级的 Eq 回退：inline 递归函数（利用内置 Nil/Cons 构造器）。
+eqListExpr tctx elemTy =
+  let goName = "vuna_eq_list_go"
+  in let x = "vuna_eq_lx"
+     in let y = "vuna_eq_ly"
+        in let h = "vuna_eq_lh"
+           in let t = "vuna_eq_lt"
+              in let h2 = "vuna_eq_lh2"
+                 in let t2 = "vuna_eq_lt2"
+                    in let elemEq = eqMethodExprFor tctx elemTy
+                       in let recCall = EApp (EVar goName tcNoSpan) (Cons (EVar t tcNoSpan) (Cons (EVar t2 tcNoSpan) Nil)) tcNoSpan
+                          in let consBody = EApp (EVar "&&" tcNoSpan) (Cons (EApp elemEq (Cons (EVar h tcNoSpan) (Cons (EVar h2 tcNoSpan) Nil)) tcNoSpan) (Cons recCall Nil)) tcNoSpan
+                             in let consCase = ECase (EVar y tcNoSpan) (Cons (Pair (PCon "Cons" (Cons (PVar h2 tcNoSpan) (Cons (PVar t2 tcNoSpan) Nil)) tcNoSpan) consBody) (Cons (Pair (PWild tcNoSpan) boolFalseExpr) Nil)) tcNoSpan
+                                in let nilCase = ECase (EVar y tcNoSpan) (Cons (Pair (PCon "Nil" Nil tcNoSpan) boolTrueExpr) (Cons (Pair (PWild tcNoSpan) boolFalseExpr) Nil)) tcNoSpan
+                                   in let goBody = ECase (EVar x tcNoSpan) (Cons (Pair (PCon "Nil" Nil tcNoSpan) nilCase) (Cons (Pair (PCon "Cons" (Cons (PVar h tcNoSpan) (Cons (PVar t tcNoSpan) Nil)) tcNoSpan) consCase) Nil)) tcNoSpan
+                                      in ELet (Cons (Pair (PVar goName tcNoSpan) (ELam (Cons x (Cons y Nil)) goBody tcNoSpan)) Nil) (EVar goName tcNoSpan) True tcNoSpan
+
+eqFallback tctx ty key =
+  case ty of
+    TCon "Int" Nil => if key == "neq" then Ok "vuna_neq_int" else Ok "vuna_eq_int"
+    TCon "Bool" Nil => if key == "neq" then Ok "vuna_neq_bool" else Ok "vuna_eq_bool"
+    TCon "String" Nil => if key == "neq" then Ok "vuna_neq_str" else Ok "vuna_eq_str"
     TCon n args =>
-      if shortTyName n == "Int" then intCmpName name
-      else if shortTyName n == "String" then strCmpName name
-      else if shortTyName n == "Bool" then boolCmpName name
-      else name
-    _ => name
+      if memName n (traitCtxEqSupported tctx) then
+        if key == "neq" then Ok (neqFnName n) else Ok (eqFnName n)
+      else Err (noInstanceMsg tctx "Eq" ty)
+    _ => Err (noInstanceMsg tctx "Eq" ty)
 
-firstArgTy argTys =
-  case argTys of
-    Cons ty rest => ty
-    Nil => TCon "" Nil
+ordFallback tctx ty key =
+  case ty of
+    TCon "Int" Nil =>
+      case key of
+        "lt" => Ok "vuna_lt_int"
+        "le" => Ok "vuna_le_int"
+        "gt" => Ok "vuna_gt_int"
+        _ => Ok "vuna_ge_int"
+    TCon "String" Nil => Ok (ordGenericName key)
+    TCon "Bool" Nil => Ok (ordGenericName key)
+    _ => Err (noInstanceMsg tctx "Ord" ty)
 
-isCmpName name =
-  name == "==" || name == "/=" || name == "<" || name == "<=" || name == ">" || name == ">="
+ordGenericName key =
+  case key of
+    "lt" => "vuna_lt_generic"
+    "le" => "vuna_le_generic"
+    "gt" => "vuna_gt_generic"
+    _ => "vuna_ge_generic"
 
-elabAppExpr fn fnElab args argTys argEls sp =
-  case fn of
-    EVar name _ =>
-      case args of
-        Cons _ (Cons _ Nil) =>
-          if isCmpName name then XECmp name argEls (firstArgTy argTys) sp
-          else XEApp fnElab argEls sp
-        _ => XEApp fnElab argEls sp
-    _ => XEApp fnElab argEls sp
+genericMethodName tr key =
+  case tr of
+    "Eq" => if key == "neq" then Just "vuna_neq_generic" else Just "vuna_eq_generic"
+    "Ord" =>
+      case key of
+        "lt" => Just "vuna_lt_generic"
+        "le" => Just "vuna_le_generic"
+        "gt" => Just "vuna_gt_generic"
+        _ => Just "vuna_ge_generic"
+    _ => Nothing
+
+listNeqExpr tctx elemTy =
+  let eqExpr = eqListExpr tctx elemTy
+  in let a = "vuna_neq_la"
+     in let b = "vuna_neq_lb"
+        in let cond = EApp eqExpr (Cons (EVar a tcNoSpan) (Cons (EVar b tcNoSpan) Nil)) tcNoSpan
+           in ELam (Cons a (Cons b Nil)) (EIf cond boolFalseExpr boolTrueExpr tcNoSpan) tcNoSpan
+
+traitMethodExpr tctx ty tr key =
+  if freeVarsTy ty /= Nil then
+    case genericMethodName tr key of
+      Just fn => Ok (EVar fn tcNoSpan)
+      Nothing => Err ("trait method " ++ key ++ " used at a polymorphic type (only Eq/Ord have a generic fallback in M10.5)")
+  else
+    case tr of
+      "Eq" =>
+        case ty of
+          TCon "List" (Cons elemTy Nil) =>
+            if key == "neq" then Ok (listNeqExpr tctx elemTy) else Ok (eqListExpr tctx elemTy)
+          _ => andThen (concreteMethodName tctx ty tr key) (\fn => Ok (EVar fn tcNoSpan))
+      _ => andThen (concreteMethodName tctx ty tr key) (\fn => Ok (EVar fn tcNoSpan))
+
+concreteMethodName tctx ty tr key =
+  case findDefaultInst tr ty (traitCtxInsts tctx) of
+    Just inst =>
+      case lookupImpl (lastSeg key) (instImpls inst) of
+        Just fn => Ok fn
+        Nothing => Err ("instance " ++ tr ++ " " ++ showTy ty ++ " does not implement " ++ key)
+    Nothing =>
+      case tr of
+        "Show" => showFallback tctx ty
+        "Eq" => eqFallback tctx ty key
+        "Ord" => ordFallback tctx ty key
+        _ => Err (noInstanceMsg tctx tr ty)
+
+validateTraitUsesList : List (Pair Int Ty) -> TraitCtx -> List EExpr -> Result Int
+validateTraitUsesList subst tctx Nil = Ok 0
+
+validateTraitUsesList subst tctx (Cons e rest) =
+  andThen (validateTraitUses subst tctx e) (\_ => validateTraitUsesList subst tctx rest)
+
+validateTraitUses : List (Pair Int Ty) -> TraitCtx -> EExpr -> Result Int
+validateTraitUses subst tctx expr =
+  case expr of
+    XEVar n sp => Ok 0
+    XEInt n sp => Ok 0
+    XEStr s sp => Ok 0
+    XELam ps b sp => validateTraitUses subst tctx b
+    XEApp f args sp =>
+      andThen (validateTraitUses subst tctx f) (\_ => validateTraitUsesList subst tctx args)
+    XELet binds body rec_ sp =>
+      andThen (validateTraitUsesBinds subst tctx binds) (\_ => validateTraitUses subst tctx body)
+    XECase scrut ty alts sp =>
+      andThen (validateTraitUses subst tctx scrut) (\_ => validateTraitUsesAlts subst tctx alts)
+    XEIf c t e sp =>
+      andThen (validateTraitUses subst tctx c) (\_ =>
+        andThen (validateTraitUses subst tctx t) (\_ => validateTraitUses subst tctx e))
+    XEField base fname baseTy sp => validateTraitUses subst tctx base
+    XERecUpdate base baseTy fields sp =>
+      andThen (validateTraitUses subst tctx base) (\_ => validateTraitUsesFields subst tctx fields)
+    XEMethod tr key paramTy sp =>
+      let ty = resolveTy subst paramTy
+      in case traitMethodExpr tctx ty tr key of
+           Err e => Err (showSpanLoc sp ++ ": " ++ e)
+           Ok ex => Ok 0
+    XEMethodInst tr key instName paramTy sp =>
+      let ty = resolveTy subst paramTy
+      in case lookupNamedInst instName (traitCtxInsts tctx) of
+           Nothing => Err (showSpanLoc sp ++ ": unknown named instance " ++ instName)
+           Just inst =>
+             if instTraitName inst == tr then
+               if tyEqual (instHeadTy inst) ty then Ok 0
+               else Err (showSpanLoc sp ++ ": instance " ++ instName ++ " expects " ++ showTy (instHeadTy inst) ++ " but method is used at " ++ showTy ty)
+             else Err (showSpanLoc sp ++ ": instance " ++ instName ++ " is not an instance of " ++ tr)
+
+validateTraitUsesClauses : List (Pair Int Ty) -> TraitCtx -> List (Pair (List Pat) EExpr) -> Result Int
+validateTraitUsesClauses subst tctx Nil = Ok 0
+
+validateTraitUsesClauses subst tctx (Cons (Pair pats body) rest) =
+  andThen (validateTraitUses subst tctx body) (\_ => validateTraitUsesClauses subst tctx rest)
+
+validateTraitUsesBinds : List (Pair Int Ty) -> TraitCtx -> List (Pair Pat EExpr) -> Result Int
+validateTraitUsesBinds subst tctx Nil = Ok 0
+
+validateTraitUsesBinds subst tctx (Cons (Pair pat value) rest) =
+  andThen (validateTraitUses subst tctx value) (\_ => validateTraitUsesBinds subst tctx rest)
+
+validateTraitUsesAlts : List (Pair Int Ty) -> TraitCtx -> List (Pair Pat EExpr) -> Result Int
+validateTraitUsesAlts subst tctx Nil = Ok 0
+
+validateTraitUsesAlts subst tctx (Cons (Pair pat body) rest) =
+  andThen (validateTraitUses subst tctx body) (\_ => validateTraitUsesAlts subst tctx rest)
+
+validateTraitUsesFields : List (Pair Int Ty) -> TraitCtx -> List (Pair String EExpr) -> Result Int
+validateTraitUsesFields subst tctx Nil = Ok 0
+
+validateTraitUsesFields subst tctx (Cons (Pair fname value) rest) =
+  andThen (validateTraitUses subst tctx value) (\_ => validateTraitUsesFields subst tctx rest)
 
 -- 记录字段降级用的临时模式变量（只在生成的一小段 case 内可见）。
 recFieldVarsAt i n = if i >= n then Nil else Cons ("vuna_rf" ++ strFromInt i) (recFieldVarsAt (i + 1) n)
@@ -451,7 +573,7 @@ recFieldCount Nil = 0
 recFieldCount (Cons (Pair n t) rest) = 1 + recFieldCount rest
 
 -- `e.f` → `case e of R v0 .. vn => vk`；base 只求值一次。
-lowerFieldAccess subst typeNames records base fname baseTy sp =
+lowerFieldAccess subst typeNames records tctx base fname baseTy sp =
   case resolveTy subst baseTy of
     TCon rname args =>
       case lookupRecord rname records of
@@ -463,24 +585,24 @@ lowerFieldAccess subst typeNames records base fname baseTy sp =
               let n = recFieldCount fdefs
               in let names = recFieldVars n
                  in let pats = map (\nm => PVar nm sp) names
-                    in ECase (lowerExpr subst typeNames records base)
+                    in ECase (lowerExpr subst typeNames records tctx base)
                          (Cons (Pair (PCon rname pats sp) (EVar (nthName k names) sp)) Nil) sp
     _ => EInt 0 sp
 
-recUpdateArgs subst typeNames records fields provided vars i sp =
+recUpdateArgs subst typeNames records tctx fields provided vars i sp =
   case fields of
     Nil => Nil
     Cons (Pair fname fty) rest =>
       case lookupProvided fname provided of
         Just e =>
-          Cons (lowerExpr subst typeNames records e)
-               (recUpdateArgs subst typeNames records rest provided vars (i + 1) sp)
+          Cons (lowerExpr subst typeNames records tctx e)
+               (recUpdateArgs subst typeNames records tctx rest provided vars (i + 1) sp)
         Nothing =>
           Cons (EVar (nthName i vars) sp)
-               (recUpdateArgs subst typeNames records rest provided vars (i + 1) sp)
+               (recUpdateArgs subst typeNames records tctx rest provided vars (i + 1) sp)
 
 -- `{e | f = v}` → `case e of R v0 .. vn => R (v / vi) ...`
-lowerRecUpdate subst typeNames records base baseTy fields sp =
+lowerRecUpdate subst typeNames records tctx base baseTy fields sp =
   case resolveTy subst baseTy of
     TCon rname args =>
       case lookupRecord rname records of
@@ -489,53 +611,70 @@ lowerRecUpdate subst typeNames records base baseTy fields sp =
           let n = recFieldCount fdefs
           in let names = recFieldVars n
              in let pats = map (\nm => PVar nm sp) names
-                in let args2 = recUpdateArgs subst typeNames records fdefs fields names 0 sp
-                   in ECase (lowerExpr subst typeNames records base)
+                in let args2 = recUpdateArgs subst typeNames records tctx fdefs fields names 0 sp
+                   in ECase (lowerExpr subst typeNames records tctx base)
                         (Cons (Pair (PCon rname pats sp) (EApp (EVar rname sp) args2 sp)) Nil) sp
     _ => EInt 0 sp
 
-lowerExpr subst typeNames records expr =
+lowerExpr subst typeNames records tctx expr =
   case expr of
     XEVar name sp => EVar name sp
     XEInt n sp => EInt n sp
     XEStr s sp => EStr s sp
-    XELam params body sp => ELam params (lowerExpr subst typeNames records body) sp
+    XELam params body sp => ELam params (lowerExpr subst typeNames records tctx body) sp
     XEApp fn args sp =>
-      EApp (lowerExpr subst typeNames records fn) (map (lowerExpr subst typeNames records) args) sp
-    XECmp name args ty sp =>
-      EApp (EVar (specializeCmp name (resolveTy subst ty)) sp)
-           (map (lowerExpr subst typeNames records) args) sp
+      EApp (lowerExpr subst typeNames records tctx fn)
+           (map (lowerExpr subst typeNames records tctx) args) sp
     XELet binds body rec_ sp =>
-      ELet (map (lowerBind subst typeNames records) binds) (lowerExpr subst typeNames records body) rec_ sp
+      ELet (map (lowerBind subst typeNames records tctx) binds)
+           (lowerExpr subst typeNames records tctx body) rec_ sp
     XECase scrut ty alts sp =>
-      ECase (lowerExpr subst typeNames records scrut) (map (lowerAlt subst typeNames records) alts) sp
+      ECase (lowerExpr subst typeNames records tctx scrut)
+            (map (lowerAlt subst typeNames records tctx) alts) sp
     XEIf c t e sp =>
-      EIf (lowerExpr subst typeNames records c) (lowerExpr subst typeNames records t)
-          (lowerExpr subst typeNames records e) sp
+      EIf (lowerExpr subst typeNames records tctx c)
+          (lowerExpr subst typeNames records tctx t)
+          (lowerExpr subst typeNames records tctx e) sp
     XEField base fname baseTy sp =>
-      lowerFieldAccess subst typeNames records base fname baseTy sp
+      lowerFieldAccess subst typeNames records tctx base fname baseTy sp
     XERecUpdate base baseTy fields sp =>
-      lowerRecUpdate subst typeNames records base baseTy fields sp
+      lowerRecUpdate subst typeNames records tctx base baseTy fields sp
+    XEMethod tr key paramTy sp =>
+      case traitMethodExpr tctx (resolveTy subst paramTy) tr key of
+        Ok ex => ex
+        Err _ => EVar "vuna_missing_instance" sp
+    XEMethodInst tr key instName paramTy sp =>
+      case lookupNamedInst instName (traitCtxInsts tctx) of
+        Just inst =>
+          case lookupImpl (lastSeg key) (instImpls inst) of
+            Just fn => EVar fn sp
+            Nothing => EVar "vuna_missing_instance" sp
+        Nothing => EVar "vuna_missing_instance" sp
 
-lowerBind subst typeNames records (Pair pat value) =
-  Pair pat (lowerExpr subst typeNames records value)
+lowerBind subst typeNames records tctx (Pair pat value) =
+  Pair pat (lowerExpr subst typeNames records tctx value)
 
-lowerAlt subst typeNames records (Pair pat body) =
-  Pair pat (lowerExpr subst typeNames records body)
+lowerAlt subst typeNames records tctx (Pair pat body) =
+  Pair pat (lowerExpr subst typeNames records tctx body)
 
-lowerClause subst typeNames records (Pair pats body) =
-  Pair pats (lowerExpr subst typeNames records body)
+lowerClause subst typeNames records tctx (Pair pats body) =
+  Pair pats (lowerExpr subst typeNames records tctx body)
 
-lowerClauses subst typeNames records Nil = Nil
+lowerClauses subst typeNames records tctx Nil = Nil
 
-lowerClauses subst typeNames records (Cons clause rest) =
-  Cons (lowerClause subst typeNames records clause) (lowerClauses subst typeNames records rest)
+lowerClauses subst typeNames records tctx (Cons clause rest) =
+  Cons (lowerClause subst typeNames records tctx clause)
+       (lowerClauses subst typeNames records tctx rest)
 
 -- ---------------------------------------------------------------
 -- 记录（M10.5）：声明抽取、语法降级、延迟约束求解、lower
 -- ---------------------------------------------------------------
 
 recordsOf (TC n s typeNames records cons methods tctx) = records
+
+traitMethodsOf (TC n s typeNames records cons methods tctx) = methods
+
+traitCtxOf (TC n s typeNames records cons methods tctx) = tctx
 
 typeNamesOfTC (TC n s typeNames records cons methods tctx) = typeNames
 
@@ -903,6 +1042,15 @@ inferAlts globals locals scrutTy (Cons (Pair pat body) rest) st =
                         andThen (unify bodyTy restTy st3) (\st4 =>
                           Ok (Pair (Cons (Pair pat bodyElab) altsElab) (Pair bodyTy st4))))))
 
+instantiateForParam st (Scheme qs ty) pid =
+  case instantiateVars qs st of
+    Pair mapping st2 =>
+      let ty2 = renameTy mapping ty
+      in let paramTy = case lookupSubst pid mapping of
+                         Just t => t
+                         Nothing => TVar pid
+         in Pair (Pair ty2 paramTy) st2
+
 inferExpr globals locals st expr =
   case expr of
     EVar name sp =>
@@ -913,7 +1061,13 @@ inferExpr globals locals st expr =
             Just sch =>
               case instantiate st sch of
                 Pair ty st2 => Ok (Pair (Pair ty (XEVar name sp)) st2)
-            Nothing => Err ("unbound variable: " ++ name ++ suggest name (map firstOf globals))
+            Nothing =>
+              case methodRefForName name (traitMethodsOf st) of
+                Just (TraitMethodRef key tr sch pid) =>
+                  case instantiateForParam st sch pid of
+                    Pair (Pair ty paramTy) st2 =>
+                      Ok (Pair (Pair ty (XEMethod tr key paramTy sp)) st2)
+                Nothing => Err ("unbound variable: " ++ name ++ suggest name (map firstOf globals))
     EInt n sp => Ok (Pair (Pair intTy (XEInt n sp)) st)
     EStr s sp => Ok (Pair (Pair strTy (XEStr s sp)) st)
     EApp fn args sp =>
@@ -981,7 +1135,14 @@ inferExpr globals locals st expr =
                   Pair vals st2 =>
                     Ok (Pair (Pair baseTy (XERecUpdate baseElab baseTy vals sp)) st2)))
     ERecord rname fields sp => Err (showSpanLoc sp ++ ": internal: record expression should be desugared before inference")
-    EInstSel meth iname sp => Err (showSpanLoc sp ++ ": trait method selection is not implemented yet (M10.5 Phase T)")
+    EInstSel inner iname sp =>
+      andThen (inferExpr globals locals st inner) (\p =>
+        case p of
+          Pair (Pair ty elab) st1 =>
+            case elab of
+              XEMethod tr key paramTy msp =>
+                Ok (Pair (Pair ty (XEMethodInst tr key iname paramTy sp)) st1)
+              _ => Err (showSpanLoc sp ++ ": @instance 只能用于 trait 方法"))
 
 inferUpdateValues globals locals baseTy sp Nil st = Ok (Pair Nil st)
 
@@ -1145,13 +1306,16 @@ checkFunction globals decls sigs name st =
                   andThen
                     (solveRecConstraints (typeNamesOfTC st3) (recordsOf st3) (constraintsOfTC st3) st3)
                     (\st4 =>
-                      let elabClauses = lowerClauses (substOf st4) (typeNamesOfTC st4) (recordsOf st4) clauseEls
-                      in if hasSig name sigs then Ok (Pair elabClauses (Pair globals st4))
-                         else
-                           let resolved = resolveTy (substOf st4) inferred
-                           in
-                             let scheme = Scheme (diffInts (freeVarsTy resolved) (freeVarsEnvExcept name globals)) resolved
-                             in Ok (Pair elabClauses (Pair (updateScheme name scheme globals) st4)))
+                      andThen
+                        (validateTraitUsesClauses (substOf st4) (traitCtxOf st4) clauseEls)
+                        (\_ =>
+                          let elabClauses = lowerClauses (substOf st4) (typeNamesOfTC st4) (recordsOf st4) (traitCtxOf st4) clauseEls
+                          in if hasSig name sigs then Ok (Pair elabClauses (Pair globals st4))
+                             else
+                               let resolved = resolveTy (substOf st4) inferred
+                               in
+                                 let scheme = Scheme (diffInts (freeVarsTy resolved) (freeVarsEnvExcept name globals)) resolved
+                                 in Ok (Pair elabClauses (Pair (updateScheme name scheme globals) st4))))
 
 checkFunctions globals decls sigs Nil st elabMap = Ok (Pair (reverse elabMap) (Pair globals st))
 checkFunctions globals decls sigs (Cons name rest) st elabMap =
@@ -1175,34 +1339,759 @@ replaceElab name clauses (Cons (Pair n old) rest) =
   if n == name then Cons (Pair n clauses) rest
   else Cons (Pair n old) (replaceElab name clauses rest)
 
--- M10.5b（trait）实现中：当前先保持记录/旧程序路径不变。
-prepareTraits decls = Ok (Pair (TraitCtx Nil Nil) decls)
+-- ---------------------------------------------------------------
+-- trait（M10.5）：静态派发
+-- 方法调用在类型检查结束前确定实例（default 实例 / @命名实例 / Show、Eq 的结构回退），
+-- lowering 直接换成实例方法函数引用。M10.5 不做约束泛化：调用点类型必须确定。
+-- ---------------------------------------------------------------
 
-traitMethodRefs (TraitCtx decls insts) = Nil
+tcJoin sep Nil = ""
+
+tcJoin sep (Cons x Nil) = x
+
+tcJoin sep (Cons x rest) = x ++ sep ++ tcJoin sep rest
+
+sanitizeSymChar c = if c == 46 || c == 35 then 95 else c
+
+sanitizeSym name = strPack (map sanitizeSymChar (strUnpack name))
+
+lastSeg name =
+  case splitLastDot (splitOnDot name) of
+    Pair rev base => base
+
+modulePrefixOf name =
+  case splitLastDot (splitOnDot name) of
+    Pair rev base => joinDots rev
+
+tcQuoteChar c =
+  if c == 34 then "\\\""
+  else if c == 92 then "\\\\"
+  else if c == 10 then "\\n"
+  else if c == 9 then "\\t"
+  else if c == 13 then "\\r"
+  else strPack (Cons c Nil)
+
+tcQuoteChars Nil = ""
+
+tcQuoteChars (Cons c rest) = tcQuoteChar c ++ tcQuoteChars rest
+
+tcQuote s = "\"" ++ tcQuoteChars (strUnpack s) ++ "\""
+
+renderTyExpr ty =
+  case ty of
+    EVar n sp => n
+    EApp (EVar "->" sp) (Cons a (Cons b Nil)) _ =>
+      "(" ++ renderTyExpr a ++ " -> " ++ renderTyExpr b ++ ")"
+    EApp f args sp =>
+      "(" ++ renderTyExpr f ++ " " ++ tcJoin " " (map renderTyExpr args) ++ ")"
+    _ => "Int"
+
+-- 方法/实例数据结构
+data TraitMethodInfo : Type where
+  TraitMethodInfo : String -> Scheme -> Expr -> TraitMethodInfo
+
+data TraitDecl : Type where
+  TraitDecl : String -> String -> List TraitMethodInfo -> TraitDecl
+
+data TraitMethodRef : Type where
+  TraitMethodRef : String -> String -> Scheme -> Int -> TraitMethodRef
+
+data TraitInst : Type where
+  TraitInst : String -> Maybe String -> Ty -> List (Pair String String) -> TraitInst
+
+data TraitCtx : Type where
+  TraitCtx : List TraitDecl -> List TraitInst -> List String -> List String -> List TraitMethodRef -> TraitCtx
+
+traitDeclName (TraitDecl n p ms) = n
+
+traitDeclParam (TraitDecl n p ms) = p
+
+traitDeclMethods (TraitDecl n p ms) = ms
+
+methodInfoName (TraitMethodInfo n s t) = n
+
+methodInfoScheme (TraitMethodInfo n s t) = s
+
+methodInfoSig (TraitMethodInfo n s t) = t
+
+instTraitName (TraitInst t n h impls) = t
+
+instNameOf (TraitInst t n h impls) = n
+
+instHeadTy (TraitInst t n h impls) = h
+
+instImpls (TraitInst t n h impls) = impls
+
+traitCtxDecls (TraitCtx ds is sup eqsup refs) = ds
+
+traitCtxInsts (TraitCtx ds is sup eqsup refs) = is
+
+traitCtxSupported (TraitCtx ds is sup eqsup refs) = sup
+
+traitCtxEqSupported (TraitCtx ds is sup eqsup refs) = eqsup
+
+traitCtxRefs (TraitCtx ds is sup eqsup refs) = refs
+
+lookupTraitDecl name Nil = Nothing
+
+lookupTraitDecl name (Cons (TraitDecl n p ms) rest) =
+  if n == name then Just (TraitDecl n p ms) else lookupTraitDecl name rest
+
+lookupMethodRef name Nil = Nothing
+
+lookupMethodRef name (Cons (TraitMethodRef key tr sch pid) rest) =
+  if key == name then Just (TraitMethodRef key tr sch pid) else lookupMethodRef name rest
+
+lookupImpl meth Nil = Nothing
+
+lookupImpl meth (Cons (Pair m fn) rest) =
+  if m == meth then Just fn else lookupImpl meth rest
+
+lookupNamedInst name Nil = Nothing
+
+lookupNamedInst name (Cons inst rest) =
+  case instNameOf inst of
+    Just n => if n == name then Just inst else lookupNamedInst name rest
+    Nothing => lookupNamedInst name rest
+
+tyMatchesPattern pattern ty =
+  case pattern of
+    TVar i => True
+    TCon n ps =>
+      case ty of
+        TCon m args => n == m && tyListMatches ps args
+        _ => False
+    TFun a b =>
+      case ty of
+        TFun x y => tyMatchesPattern a x && tyMatchesPattern b y
+        _ => False
+
+tyListMatches Nil Nil = True
+
+tyListMatches (Cons p ps) (Cons t ts) =
+  if tyMatchesPattern p t then tyListMatches ps ts else False
+
+tyListMatches _ _ = False
+
+findDefaultInst tr ty Nil = Nothing
+
+findDefaultInst tr ty (Cons inst rest) =
+  case instNameOf inst of
+    Nothing =>
+      if instTraitName inst == tr && tyMatchesPattern (instHeadTy inst) ty then Just inst
+      else findDefaultInst tr ty rest
+    Just _ => findDefaultInst tr ty rest
+
+tyEqual a b =
+  case a of
+    TVar i =>
+      case b of
+        TVar j => i == j
+        _ => False
+    TCon n xs =>
+      case b of
+        TCon m ys => n == m && tyListEqual xs ys
+        _ => False
+    TFun x y =>
+      case b of
+        TFun x2 y2 => tyEqual x x2 && tyEqual y y2
+        _ => False
+
+tyListEqual Nil Nil = True
+
+tyListEqual (Cons a xs) (Cons b ys) = tyEqual a b && tyListEqual xs ys
+
+tyListEqual _ _ = False
+
+-- ---------- 内建 trait 声明 ----------
+
+builtinA = EVar "a" tcNoSpan
+
+builtinArrow a b = EApp (EVar "->" tcNoSpan) (Cons a (Cons b Nil)) tcNoSpan
+
+builtinShowTrait =
+  TraitDecl "Show" "a"
+    (Cons
+      (TraitMethodInfo "show"
+        (Scheme (Cons 0 Nil) (TFun (TVar 0) strTy))
+        (builtinArrow builtinA (EVar "String" tcNoSpan)))
+      Nil)
+
+builtinEqTrait =
+  TraitDecl "Eq" "a"
+    (Cons
+      (TraitMethodInfo "eq"
+        (Scheme (Cons 0 Nil) (TFun (TVar 0) (TFun (TVar 0) boolTy)))
+        (builtinArrow builtinA (builtinArrow builtinA (EVar "Bool" tcNoSpan))))
+      (Cons
+        (TraitMethodInfo "neq"
+          (Scheme (Cons 0 Nil) (TFun (TVar 0) (TFun (TVar 0) boolTy)))
+          (builtinArrow builtinA (builtinArrow builtinA (EVar "Bool" tcNoSpan))))
+        Nil))
+
+builtinOrdTrait =
+  TraitDecl "Ord" "a"
+    (Cons
+      (TraitMethodInfo "lt"
+        (Scheme (Cons 0 Nil) (TFun (TVar 0) (TFun (TVar 0) boolTy)))
+        (builtinArrow builtinA (builtinArrow builtinA (EVar "Bool" tcNoSpan))))
+      (Cons
+        (TraitMethodInfo "le"
+          (Scheme (Cons 0 Nil) (TFun (TVar 0) (TFun (TVar 0) boolTy)))
+          (builtinArrow builtinA (builtinArrow builtinA (EVar "Bool" tcNoSpan))))
+        (Cons
+          (TraitMethodInfo "gt"
+            (Scheme (Cons 0 Nil) (TFun (TVar 0) (TFun (TVar 0) boolTy)))
+            (builtinArrow builtinA (builtinArrow builtinA (EVar "Bool" tcNoSpan))))
+          (Cons
+            (TraitMethodInfo "ge"
+              (Scheme (Cons 0 Nil) (TFun (TVar 0) (TFun (TVar 0) boolTy)))
+              (builtinArrow builtinA (builtinArrow builtinA (EVar "Bool" tcNoSpan))))
+            Nil))))
+
+builtinTraitDecls = Cons builtinShowTrait (Cons builtinEqTrait (Cons builtinOrdTrait Nil))
+
+builtinMethodRefs =
+  [ TraitMethodRef "show" "Show" (Scheme (Cons 0 Nil) (TFun (TVar 0) strTy)) 0
+  , TraitMethodRef "eq" "Eq" (Scheme (Cons 0 Nil) (TFun (TVar 0) (TFun (TVar 0) boolTy))) 0
+  , TraitMethodRef "neq" "Eq" (Scheme (Cons 0 Nil) (TFun (TVar 0) (TFun (TVar 0) boolTy))) 0
+  , TraitMethodRef "lt" "Ord" (Scheme (Cons 0 Nil) (TFun (TVar 0) (TFun (TVar 0) boolTy))) 0
+  , TraitMethodRef "le" "Ord" (Scheme (Cons 0 Nil) (TFun (TVar 0) (TFun (TVar 0) boolTy))) 0
+  , TraitMethodRef "gt" "Ord" (Scheme (Cons 0 Nil) (TFun (TVar 0) (TFun (TVar 0) boolTy))) 0
+  , TraitMethodRef "ge" "Ord" (Scheme (Cons 0 Nil) (TFun (TVar 0) (TFun (TVar 0) boolTy))) 0
+  ]
+
+operatorMethod name =
+  case name of
+    "==" => Just (Pair "Eq" "eq")
+    "/=" => Just (Pair "Eq" "neq")
+    "<" => Just (Pair "Ord" "lt")
+    "<=" => Just (Pair "Ord" "le")
+    ">" => Just (Pair "Ord" "gt")
+    ">=" => Just (Pair "Ord" "ge")
+    _ => Nothing
+
+methodRefForName name refs =
+  case lookupMethodRef name refs of
+    Just r => Just r
+    Nothing =>
+      case operatorMethod name of
+        Just (Pair tr key) => lookupMethodRef key refs
+        Nothing => Nothing
+
+traitMethodScheme typeNames paramName sigTy =
+  convertType typeNames (Cons (Pair paramName (TVar 0)) Nil) (TC 0 Nil typeNames Nil Nil Nil (TraitCtx Nil Nil Nil Nil Nil)) sigTy
+
+collectTraitDecls typeNames decls = collectTraitDeclsGo typeNames decls builtinTraitDecls builtinMethodRefs
+
+collectTraitDeclsGo typeNames Nil acc refs = Ok (Pair acc refs)
+
+collectTraitDeclsGo typeNames (Cons d rest) acc refs =
+  case d of
+    DTrait tname params methods sp =>
+      case params of
+        Cons p Nil =>
+          if memName tname (map traitDeclName acc) then
+            Err (showSpanLoc sp ++ ": duplicate trait " ++ tname)
+          else
+            case traitMethodInfos typeNames tname p methods Nil Nil sp of
+              Err e => Err e
+              Ok (Pair infos newRefs) =>
+                collectTraitDeclsGo typeNames rest (append acc (Cons (TraitDecl tname p infos) Nil)) (append refs newRefs)
+        _ => Err (showSpanLoc sp ++ ": trait " ++ tname ++ " must have exactly one type parameter")
+    _ => collectTraitDeclsGo typeNames rest acc refs
+
+traitMethodInfos typeNames tname paramName methods infos refs sp =
+  case methods of
+    Nil => Ok (Pair (reverse infos) (reverse refs))
+    Cons (Pair mname sigTy) rest =>
+      if memName (lastSeg mname) (map methodInfoName infos) then
+        Err (showSpanLoc sp ++ ": duplicate trait method " ++ mname)
+      else
+        case traitMethodScheme typeNames paramName sigTy of
+          Err e => Err (showSpanLoc sp ++ ": in trait " ++ tname ++ " method " ++ mname ++ ": " ++ e)
+          Ok (Pair (Pair ty vars) st) =>
+            case lookupTyVar paramName vars of
+              Just (TVar pid) =>
+                traitMethodInfos typeNames tname paramName rest
+                  (Cons (TraitMethodInfo (lastSeg mname) (Scheme (varIds vars) ty) sigTy) infos)
+                  (Cons (TraitMethodRef mname tname (Scheme (varIds vars) ty) pid) refs) sp
+              _ => Err (showSpanLoc sp ++ ": internal trait parameter error")
+
+-- ---------- data shape + 结构 Show/Eq 生成 ----------
+
+data DataShape : Type where
+  DataShape : String -> List String -> List (Pair String (List Expr)) -> DataShape
+
+shapeName (DataShape n p cs) = n
+
+shapeParams (DataShape n p cs) = p
+
+shapeCtors (DataShape n p cs) = cs
+
+splitTyFields ty =
+  case ty of
+    EApp (EVar "->" _) (Cons a (Cons b Nil)) _ => Cons a (splitTyFields b)
+    _ => Nil
+
+shapeOfCtor (Ctor cname ty arity sp) = Pair cname (splitTyFields ty)
+
+collectDataShapes Nil = Nil
+
+collectDataShapes (Cons d rest) =
+  case d of
+    DData name params ctors derivings sp =>
+      Cons (DataShape name params (map shapeOfCtor ctors)) (collectDataShapes rest)
+    _ => collectDataShapes rest
+
+lookupDataShape name Nil = Nothing
+
+lookupDataShape name (Cons sh rest) =
+  if shapeName sh == name then Just sh else lookupDataShape name rest
+
+fieldTypeSupported supported ty =
+  case ty of
+    EVar "Int" sp => True
+    EVar "String" sp => True
+    EVar "Bool" sp => True
+    EVar n sp => memName n supported
+    _ => False
+
+fieldTypesSupported supported Nil = True
+
+fieldTypesSupported supported (Cons ty rest) =
+  if fieldTypeSupported supported ty then fieldTypesSupported supported rest else False
+
+shapeSupported supported (DataShape n params ctors) =
+  if params == Nil then ctorsSupported supported ctors else False
+
+ctorsSupported supported Nil = True
+
+ctorsSupported supported (Cons (Pair cname ftypes) rest) =
+  if fieldTypesSupported supported ftypes then ctorsSupported supported rest else False
+
+addSupportedShapes Nil supported = Pair supported 0
+
+addSupportedShapes (Cons sh shapes) supported =
+  case addSupportedShapes shapes supported of
+    Pair supported2 cnt =>
+      if memName (shapeName sh) supported2 then Pair supported2 cnt
+      else if shapeSupported (Cons (shapeName sh) supported2) sh then Pair (append supported2 (Cons (shapeName sh) Nil)) (cnt + 1)
+      else Pair supported2 cnt
+
+supportedShapesLoop shapes supported =
+  case addSupportedShapes shapes supported of
+    Pair supported2 cnt =>
+      if cnt == 0 then supported2 else supportedShapesLoop shapes supported2
+
+supportedShapes shapes = supportedShapesLoop shapes Nil
+
+-- Eq 结构回退覆盖参数化 data：参数位置字段用泛型结构相等。
+eqFieldSupported eqsup params ty =
+  case ty of
+    EVar n sp =>
+      if memName n params then True
+      else if n == "Int" || n == "String" || n == "Bool" then True
+      else memName n eqsup
+    EApp (EVar n sp) args _ => memName n eqsup && eqArgsSupported eqsup params args
+    _ => False
+
+eqArgsSupported eqsup params Nil = True
+
+eqArgsSupported eqsup params (Cons ty rest) =
+  if eqFieldSupported eqsup params ty then eqArgsSupported eqsup params rest else False
+
+eqShapeSupported eqsup (DataShape n params ctors) =
+  eqCtorsSupported eqsup params ctors
+
+eqCtorsSupported eqsup params Nil = True
+
+eqCtorsSupported eqsup params (Cons (Pair cname ftypes) rest) =
+  if fieldsEqSupported eqsup params ftypes then eqCtorsSupported eqsup params rest else False
+
+fieldsEqSupported eqsup params Nil = True
+
+fieldsEqSupported eqsup params (Cons ty rest) =
+  if eqFieldSupported eqsup params ty then fieldsEqSupported eqsup params rest else False
+
+addEqSupportedShapes Nil eqsup = Pair eqsup 0
+
+addEqSupportedShapes (Cons sh shapes) eqsup =
+  case addEqSupportedShapes shapes eqsup of
+    Pair eqsup2 cnt =>
+      if memName (shapeName sh) eqsup2 then Pair eqsup2 cnt
+      else if eqShapeSupported (Cons (shapeName sh) eqsup2) sh then Pair (append eqsup2 (Cons (shapeName sh) Nil)) (cnt + 1)
+      else Pair eqsup2 cnt
+
+eqSupportedLoop shapes eqsup =
+  case addEqSupportedShapes shapes eqsup of
+    Pair eqsup2 cnt => if cnt == 0 then eqsup2 else eqSupportedLoop shapes eqsup2
+
+eqSupportedShapes shapes = eqSupportedLoop shapes Nil
+
+showFnName tyName = "vuna_show_" ++ sanitizeSym tyName
+
+eqFnName tyName = "vuna_eq_" ++ sanitizeSym tyName
+
+neqFnName tyName = "vuna_neq_" ++ sanitizeSym tyName
+
+varNamesAt prefix i n = if i >= n then Nil else Cons (prefix ++ strFromInt i) (varNamesAt prefix (i + 1) n)
+
+varNames prefix n = varNamesAt prefix 0 n
+
+ctorPatternSrc cname vars =
+  case vars of
+    Nil => cname
+    _ => cname ++ " " ++ tcJoin " " vars
+
+showArgParts Nil = Nil
+
+showArgParts (Cons v rest) = Cons (tcQuote " ") (Cons ("(show " ++ v ++ ")") (showArgParts rest))
+
+showCtorBody cname n =
+  if n == 0 then tcQuote (lastSeg cname)
+  else "(" ++ tcJoin " ++ " (append (Cons (tcQuote "(") (Cons (tcQuote (lastSeg cname)) (append (showArgParts (varNames "v" n)) (Cons (tcQuote ")") Nil)))) Nil) ++ ")"
+
+structuralShowClause (Pair cname ftypes) =
+  "  " ++ ctorPatternSrc cname (varNames "v" (length ftypes)) ++ " => " ++ showCtorBody cname (length ftypes)
+
+structuralShowSrc sh =
+  let tyName = shapeName sh
+  in (showFnName tyName ++ " : " ++ tyName ++ " -> String\n"
+      ++ showFnName tyName ++ " x = case x of\n"
+      ++ tcJoin "\n" (map structuralShowClause (shapeCtors sh)))
+
+eqCondAt Nil Nil = "(0 == 0)"
+
+eqCondAt (Cons v vs) (Cons w ws) =
+  case eqCondAt vs ws of
+    "(0 == 0)" => "((" ++ v ++ ") == (" ++ w ++ "))"
+    rest => "((" ++ v ++ ") == (" ++ w ++ ")) && " ++ rest
+
+eqFieldFnSource params ty =
+  case ty of
+    EVar n sp =>
+      if memName n params then "vuna_eq_generic"
+      else if n == "Int" then "vuna_eq_int"
+      else if n == "String" then "vuna_eq_str"
+      else if n == "Bool" then "vuna_eq_bool"
+      else eqFnName n
+    EApp (EVar n sp) args _ => eqFnName n
+    _ => "vuna_eq_generic"
+
+eqPairConds Nil Nil params = Nil
+
+eqPairConds (Cons fty frest) (Cons v rest) params =
+  andThenListPair (eqFieldFnSource params fty) v (eqPairConds frest rest params)
+
+andThenListPair fn v rest = Cons (fn ++ " (" ++ v ++ ")") rest
+
+eqCondSrc params ftypes vvars wvars = eqCondJoin (eqPairConds ftypes vvars params) wvars
+
+eqCondJoin Nil Nil = "(0 == 0)"
+
+eqCondJoin (Cons f rest) (Cons w wrest) =
+  case eqCondJoin rest wrest of
+    "(0 == 0)" => "(" ++ f ++ " " ++ w ++ ")"
+    more => "(" ++ f ++ " " ++ w ++ ") && " ++ more
+
+structuralEqClause params (Pair cname ftypes) =
+  let n = length ftypes
+  in "  " ++ ctorPatternSrc cname (varNames "v" n) ++ " => case y of\n"
+     ++ "    " ++ ctorPatternSrc cname (varNames "w" n) ++ " => " ++ eqCondSrc params ftypes (varNames "v" n) (varNames "w" n) ++ "\n"
+     ++ "    _ => (0 == 1)"
+
+eqSigTypeSrc sh =
+  let tyName = shapeName sh
+  in let params = shapeParams sh
+  in case params of
+       Nil => tyName
+       _ => "(" ++ tyName ++ " " ++ tcJoin " " params ++ ")"
+
+structuralEqSrc sh =
+  let tyName = shapeName sh
+  in let params = shapeParams sh
+     in (eqFnName tyName ++ " : " ++ eqSigTypeSrc sh ++ " -> " ++ eqSigTypeSrc sh ++ " -> Bool\n"
+         ++ eqFnName tyName ++ " x y = case x of\n"
+         ++ tcJoin "\n" (map (structuralEqClause params) (shapeCtors sh))
+         ++ "\n  _ => (0 == 1)\n"
+         ++ neqFnName tyName ++ " : " ++ eqSigTypeSrc sh ++ " -> " ++ eqSigTypeSrc sh ++ " -> Bool\n"
+         ++ neqFnName tyName ++ " x y = if " ++ eqFnName tyName ++ " x y then (0 == 1) else (0 == 0)")
+
+structuralSrcs shapes supported eqSupported =
+  concatMap
+    (\sh => append
+       (if memName (shapeName sh) supported then Cons (structuralShowSrc sh) Nil else Nil)
+       (if memName (shapeName sh) eqSupported then Cons (structuralEqSrc sh) Nil else Nil))
+    shapes
+builtinHelperSrc =
+  "vuna_show_int n = strFromInt n\n"
+  ++ "vuna_show_bool b = if b then \"True\" else \"False\"\n"
+  ++ "vuna_show_string s = bi_show_string s\n"
+  ++ "vuna_eq_int a b = bi_eq_int a b\n"
+  ++ "vuna_neq_int a b = bi_neq_int a b\n"
+  ++ "vuna_eq_bool a b = bi_eq_bool a b\n"
+  ++ "vuna_neq_bool a b = bi_neq_bool a b\n"
+  ++ "vuna_eq_str a b = bi_eq_str a b\n"
+  ++ "vuna_neq_str a b = bi_neq_str a b\n"
+  ++ "vuna_lt_int a b = bi_lt_int a b\n"
+  ++ "vuna_le_int a b = bi_le_int a b\n"
+  ++ "vuna_gt_int a b = bi_gt_int a b\n"
+  ++ "vuna_ge_int a b = bi_ge_int a b\n"
+  ++ "vuna_eq_generic a b = bi_eq_generic a b\n"
+  ++ "vuna_neq_generic a b = bi_neq_generic a b\n"
+  ++ "vuna_lt_generic a b = bi_lt_generic a b\n"
+  ++ "vuna_le_generic a b = bi_le_generic a b\n"
+  ++ "vuna_gt_generic a b = bi_gt_generic a b\n"
+  ++ "vuna_ge_generic a b = bi_ge_generic a b\n"
+
+parseGenerated src =
+  case parseSource "<generated>" src of
+    Err e => Err ("internal generated source error: " ++ e)
+    Ok (Source hdr imports decls) =>
+      case hdr of
+        Just h => Err "internal generated source error: unexpected module header"
+        Nothing =>
+          case imports of
+            Nil => Ok decls
+            _ => Err "internal generated source error: unexpected imports"
+
+-- ---------- instance / deriving ----------
+
+methodClauses name Nil = Nil
+
+methodClauses name (Cons d rest) =
+  case d of
+    DFun n pats body sp => if n == name then Cons (Pair pats body) (methodClauses name rest) else methodClauses name rest
+    _ => methodClauses name rest
+
+substTyParam paramName headTy ty =
+  case ty of
+    EVar n sp => if n == paramName then headTy else EVar n sp
+    EApp f args sp => EApp (substTyParam paramName headTy f) (map (substTyParam paramName headTy) args) sp
+    _ => ty
+
+instanceHeadParts headExpr =
+  case headExpr of
+    EApp (EVar traitName sp) (Cons headTy Nil) _ => Ok (Pair traitName headTy)
+    _ => Err "invalid instance head (expected `instance Trait Type`)"
+
+instanceNameFor isDefault iname =
+  case iname of
+    Just n => if isDefault then Nothing else Just n
+    Nothing => Nothing
+
+instKeyOf isDefault iname headTy =
+  case iname of
+    Just n => sanitizeSym n
+    Nothing => "d_" ++ sanitizeSym (renderTyExpr headTy)
+
+implNameOf instKey methodShort = "vuna_inst_" ++ sanitizeSym instKey ++ "_" ++ sanitizeSym methodShort
+
+unknownMethodNames known Nil = Nil
+
+unknownMethodNames known (Cons d rest) =
+  case d of
+    DFun n pats body sp => if memName n known then unknownMethodNames known rest else Cons n (unknownMethodNames known rest)
+    DSig n ty sp => unknownMethodNames known rest
+    _ => unknownMethodNames known rest
+
+clauseDecl implName (Pair pats body) sp = DFun implName pats body sp
+
+instanceImpls typeNames traitDecl headTyExpr methods instKey sp =
+  instanceImplsGo typeNames traitDecl headTyExpr methods instKey sp (traitDeclMethods traitDecl) Nil Nil
+
+instanceImplsGo typeNames traitDecl headTyExpr methods instKey sp Nil decls impls =
+  case unknownMethodNames (map methodInfoName (traitDeclMethods traitDecl)) methods of
+    Nil => Ok (Pair (reverse impls) (reverse decls))
+    Cons bad rest => Err (showSpanLoc sp ++ ": instance has unknown method " ++ bad)
+
+instanceImplsGo typeNames traitDecl headTyExpr methods instKey sp (Cons info rest) decls impls =
+  let short = methodInfoName info
+  in let clauses = methodClauses short methods
+     in case clauses of
+          Nil => Err (showSpanLoc sp ++ ": instance is missing method " ++ short)
+          _ =>
+            let implName = implNameOf instKey short
+            in let sigTy = substTyParam (traitDeclParam traitDecl) headTyExpr (methodInfoSig info)
+               in let sigDecl = DSig implName sigTy sp
+                  in let funDecls = map (\c => clauseDecl implName c sp) clauses
+                     in instanceImplsGo typeNames traitDecl headTyExpr methods instKey sp rest
+                          (append (Cons sigDecl (append funDecls Nil)) decls)
+                          (Cons (Pair short implName) impls)
+
+preludeModule = "<prelude>"
+
+isBuiltinTypeName name = name == "Int" || name == "String" || name == "Bool" || name == "List"
+
+orphanAllowed instModule traitName headTy =
+  let traitModule = if memName traitName (Cons "Show" (Cons "Eq" (Cons "Ord" Nil))) then preludeModule else modulePrefixOf traitName
+  in let outerName = tyOuterTypeName headTy
+     in let headModule = if isBuiltinTypeName outerName then preludeModule else modulePrefixOf outerName
+        in instModule == traitModule || instModule == headModule
+
+tyOuterName ty =
+  case ty of
+    TCon n args => modulePrefixOf n
+    _ => ""
+
+tyOuterTypeName ty =
+  case ty of
+    TCon n args => n
+    _ => ""
+
+collectUserInstances typeNames traitDecls decls = collectUserInstancesGo typeNames traitDecls decls Nil Nil
+
+collectUserInstancesGo typeNames traitDecls Nil insts declsOut = Ok (Pair (reverse insts) (reverse declsOut))
+
+collectUserInstancesGo typeNames traitDecls (Cons d rest) insts declsOut =
+  case d of
+    DInstance iname isDefault headExpr methods sp =>
+      case instanceHeadParts headExpr of
+        Err e => Err (showSpanLoc sp ++ ": " ++ e)
+        Ok (Pair traitName headTyExpr) =>
+          case lookupTraitDecl traitName traitDecls of
+            Nothing => Err (showSpanLoc sp ++ ": unknown trait " ++ traitName)
+            Just traitDecl =>
+              case convertType typeNames Nil (TC 0 Nil typeNames Nil Nil Nil (TraitCtx Nil Nil Nil Nil Nil)) headTyExpr of
+                Err e => Err (showSpanLoc sp ++ ": in instance head: " ++ e)
+                Ok (Pair (Pair headTy vars) st) =>
+                  if vars == Nil then
+                    case iname of
+                      Just internalName =>
+                        if isDefault then
+                          if orphanAllowed (modulePrefixOf internalName) traitName headTy then
+                            finishInstance typeNames traitDecls traitDecl traitName iname isDefault headTyExpr headTy methods sp insts declsOut rest
+                          else
+                            Err (showSpanLoc sp ++ ": orphan default instance " ++ traitName ++ " " ++ tyOuterTypeName headTy ++ "; name it with `as`")
+                        else finishInstance typeNames traitDecls traitDecl traitName iname isDefault headTyExpr headTy methods sp insts declsOut rest
+                      Nothing => finishInstance typeNames traitDecls traitDecl traitName iname isDefault headTyExpr headTy methods sp insts declsOut rest
+                  else Err (showSpanLoc sp ++ ": instance head must be a concrete type")
+    _ => collectUserInstancesGo typeNames traitDecls rest insts declsOut
+
+finishInstance typeNames traitDecls traitDecl traitName iname isDefault headTyExpr headTy methods sp insts declsOut rest =
+  let instKey = instKeyOf isDefault iname headTyExpr
+  in case instanceImpls typeNames traitDecl headTyExpr methods instKey sp of
+       Err e => Err e
+       Ok (Pair impls newDecls) =>
+         collectUserInstancesGo typeNames traitDecls rest
+           (Cons (TraitInst traitName (instanceNameFor isDefault iname) headTy impls) insts)
+           (append newDecls declsOut)
+
+defaultInstanceAllowed derivedType derivings traitName supported sp =
+  if memName (tyOuterTypeName (TCon derivedType Nil)) supported then
+    if memName traitName (Cons "Show" (Cons "Eq" Nil)) then Ok Nil
+    else Err (showSpanLoc sp ++ ": deriving only supports Show/Eq in M10.5 (got " ++ traitName ++ ")")
+  else Err (showSpanLoc sp ++ ": deriving " ++ traitName ++ " is not supported for type " ++ derivedType ++ " (fields must be Int/String/Bool or data types built from them)")
+
+derivingImpls traitName tyName =
+  case traitName of
+    "Show" => Cons (Pair "show" (showFnName tyName)) Nil
+    "Eq" => Cons (Pair "eq" (eqFnName tyName)) (Cons (Pair "neq" (neqFnName tyName)) Nil)
+    _ => Nil
+
+collectDerivings supported eqSupported decls = collectDerivingsGo supported eqSupported decls Nil
+
+collectDerivingsGo supported eqSupported Nil insts = Ok (reverse insts)
+
+collectDerivingsGo supported eqSupported (Cons d rest) insts =
+  case declDerivings d of
+    Nil => collectDerivingsGo supported eqSupported rest insts
+    derivings =>
+      case d of
+        DData tyName params ctors derivings2 sp =>
+          collectDerivingNames supported eqSupported tyName params derivings sp insts rest
+        _ => collectDerivingsGo supported eqSupported rest insts
+
+collectDerivingNames supported eqSupported tyName params Nil sp insts rest =
+  collectDerivingsGo supported eqSupported rest insts
+
+collectDerivingNames supported eqSupported tyName params (Cons traitName drest) sp insts rest =
+  if traitName == "Show" && params /= Nil then
+    Err (showSpanLoc sp ++ ": deriving Show is only supported for non-parameterized data types")
+  else
+    let allowedSet = if traitName == "Eq" then eqSupported else supported
+    in case defaultInstanceAllowed tyName drest traitName allowedSet sp of
+         Err e => Err e
+         Ok _ =>
+           collectDerivingNames supported eqSupported tyName params drest sp
+             (Cons
+               (TraitInst traitName Nothing
+                 (dataHeadTy tyName params)
+                 (derivingImpls traitName tyName))
+               insts)
+             rest
+
+dataHeadTy tyName Nil = TCon tyName Nil
+
+dataHeadTy tyName params = TCon tyName (map (\p => TVar 0) params)
+
+instUniqueKey inst =
+  case instNameOf inst of
+    Just n => "named|" ++ n
+    Nothing => "default|" ++ instTraitName inst ++ "|" ++ showTy (instHeadTy inst)
+
+checkInstUniqueness Nil seen = Ok Nil
+
+checkInstUniqueness (Cons inst rest) seen =
+  let key = instUniqueKey inst
+  in if memName key seen then
+       Err ("duplicate instance: " ++ instTraitName inst ++ " " ++ showTy (instHeadTy inst))
+     else checkInstUniqueness rest (Cons key seen)
+
+stripTraitDecls Nil = Nil
+
+stripTraitDecls (Cons d rest) =
+  case d of
+    DTrait n p ms sp => stripTraitDecls rest
+    DInstance iname isDefault head methods sp => stripTraitDecls rest
+    _ => Cons d (stripTraitDecls rest)
+
+prepareTraits typeNames decls =
+  case collectTraitDecls typeNames decls of
+    Err e => Err e
+    Ok (Pair traitDecls methodRefs) =>
+      case collectUserInstances typeNames traitDecls decls of
+        Err e => Err e
+        Ok (Pair userInsts instanceDecls) =>
+          let shapes = collectDataShapes decls
+          in let supported = supportedShapes shapes
+             in let eqSupported = eqSupportedShapes shapes
+                in case collectDerivings supported eqSupported decls of
+                  Err e => Err e
+                  Ok derivedInsts =>
+                    case checkInstUniqueness (append userInsts derivedInsts) Nil of
+                      Err e => Err e
+                      Ok _ =>
+                        case parseGenerated (builtinHelperSrc ++ "\n" ++ tcJoin "\n\n" (structuralSrcs shapes supported eqSupported)) of
+                          Err e => Err e
+                          Ok structDecls =>
+                            Ok (Pair
+                                  (TraitCtx traitDecls (append userInsts derivedInsts) supported eqSupported methodRefs)
+                                  (append (stripTraitDecls decls) (append instanceDecls structDecls)))
 
 checkProgramInfoElab decls0 =
-  case prepareTraits decls0 of
-    Err e => Err e
-    Ok (Pair tctx declsA) =>
-      case extractRecords declsA of
-        Pair records decls1 =>
-          case desugarRecords records decls1 of
-            Err e => Err e
-            Ok decls2 =>
-              case collectData decls2 of
-                Pair typeNames dataDecls =>
-                  case collectSigs typeNames decls2 (TC 0 Nil typeNames records Nil Nil tctx) of
-                    Err e => Err e
-                    Ok (Pair sigs st1) =>
-                      case collectCtors typeNames decls2 st1 of
-                        Err e => Err e
-                        Ok (Pair ctors st2) =>
-                          case seedPlaceholders (functionNames decls2) sigs st2 of
-                            Pair placeholders st3 =>
-                              case checkFunctions (append builtinSchemes (append ctors (append sigs placeholders))) decls2 sigs (functionNames decls2) st3 Nil of
-                                Err e => Err e
-                                Ok (Pair elabMap (Pair globals st4)) =>
-                                  Ok (Pair (finalizeGlobals (substOf st4) globals) (rebuildDecls decls2 elabMap))
+  case extractRecords decls0 of
+    Pair records decls1 =>
+      let typeNames = typeNamesOf decls1
+      in case prepareTraits typeNames decls1 of
+           Err e => Err e
+           Ok (Pair tctx declsT) =>
+             case desugarRecords records declsT of
+               Err e => Err e
+               Ok decls2 =>
+                 case collectSigs typeNames decls2 (TC 0 Nil typeNames records Nil (traitCtxRefs tctx) tctx) of
+                   Err e => Err e
+                   Ok (Pair sigs st1) =>
+                     case collectCtors typeNames decls2 st1 of
+                       Err e => Err e
+                       Ok (Pair ctors st2) =>
+                         case seedPlaceholders (functionNames decls2) sigs st2 of
+                           Pair placeholders st3 =>
+                             case checkFunctions (append builtinSchemes (append ctors (append sigs placeholders))) decls2 sigs (functionNames decls2) st3 Nil of
+                               Err e => Err e
+                               Ok (Pair elabMap (Pair globals st4)) =>
+                                 Ok (Pair (finalizeGlobals (substOf st4) globals) (rebuildDecls decls2 elabMap))
 
 checkProgramInfo decls =
   andThen (checkProgramInfoElab decls) (\p => Ok (firstOf p))
@@ -1242,7 +2131,7 @@ exprWarnings globals decls locals e =
     EInt n sp => Nil
     EStr s sp => Nil
     ELam ps body sp =>
-      case inferExpr globals locals (TC 0 Nil Nil Nil Nil Nil (TraitCtx Nil Nil)) e of
+      case inferExpr globals locals (TC 0 Nil Nil Nil Nil Nil (TraitCtx Nil Nil Nil Nil Nil)) e of
         Ok (Pair (Pair ty _) _) =>
           let pty = flattenFun ty
           in exprWarnings globals decls (append (zipLocals ps pty) locals) body
@@ -1265,7 +2154,7 @@ letLocals globals locals (Cons (Pair pat value) rest) =
   in append patTys (letLocals globals locals rest)
 
 patternLocals globals locals pat value =
-  case inferExpr globals locals (TC 0 Nil Nil Nil Nil Nil (TraitCtx Nil Nil)) value of
+  case inferExpr globals locals (TC 0 Nil Nil Nil Nil Nil (TraitCtx Nil Nil Nil Nil Nil)) value of
     Ok (Pair (Pair ty _) _) => patVarsTy pat ty
     Err _ => Nil
 
@@ -1283,7 +2172,7 @@ bindWarnings globals decls (Pair pat value) =
     _ => Cons (showSpanLoc (patSpan pat) ++ ": non-exhaustive let pattern") Nil
 
 caseWarnings globals decls locals scrut alts sp =
-  case inferExpr globals locals (TC 0 Nil Nil Nil Nil Nil (TraitCtx Nil Nil)) scrut of
+  case inferExpr globals locals (TC 0 Nil Nil Nil Nil Nil (TraitCtx Nil Nil Nil Nil Nil)) scrut of
     Err _ => Nil
     Ok (Pair (Pair ty _) _) =>
       let ctors = tyCtorNames decls ty

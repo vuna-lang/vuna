@@ -1,0 +1,6 @@
+data Color : Type where
+  Red : Color
+deriving (Ord)
+
+main : Color
+main = Red

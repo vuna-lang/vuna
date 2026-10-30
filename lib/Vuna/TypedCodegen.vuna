@@ -427,6 +427,13 @@ builtinName ">=" = Just "bi_ge"
 builtinName "&&" = Just "bi_and"
 builtinName "||" = Just "bi_or"
 builtinName "++" = Just "bi_concat"
+builtinName "bi_show_string" = Just "bi_show_string"
+builtinName "bi_eq_generic" = Just "bi_eq_generic"
+builtinName "bi_neq_generic" = Just "bi_neq_generic"
+builtinName "bi_lt_generic" = Just "bi_lt_generic"
+builtinName "bi_le_generic" = Just "bi_le_generic"
+builtinName "bi_gt_generic" = Just "bi_gt_generic"
+builtinName "bi_ge_generic" = Just "bi_ge_generic"
 builtinName "bi_eq_int" = Just "bi_eq_int"
 builtinName "bi_neq_int" = Just "bi_neq_int"
 builtinName "bi_lt_int" = Just "bi_lt_int"
@@ -880,6 +887,13 @@ runtimePrelude =
   , Pair "show_ctor" "let show_ctor name args = if args = [] then name else \"(\" ^ name ^ \" \" ^ String.concat \" \" args ^ \")\"\n"
   , Pair "show_vbool" "let show_vbool b = if b then \"True\" else \"False\"\n"
   , Pair "show_vstring" "let show_vstring s =\n  let buf = Buffer.create 16 in\n  Buffer.add_char buf (Char.chr 34);\n  String.iter (fun c ->\n    let n = Char.code c in\n    if n = 34 then Buffer.add_string buf (String.make 1 (Char.chr 92) ^ String.make 1 (Char.chr 34))\n    else if n = 92 then Buffer.add_string buf (String.make 1 (Char.chr 92) ^ String.make 1 (Char.chr 92))\n    else if n = 10 then Buffer.add_string buf (String.make 1 (Char.chr 92) ^ \"n\")\n    else if n = 9 then Buffer.add_string buf (String.make 1 (Char.chr 92) ^ \"t\")\n    else if n = 13 then Buffer.add_string buf (String.make 1 (Char.chr 92) ^ \"r\")\n    else Buffer.add_char buf c) s;\n  Buffer.add_char buf (Char.chr 34);\n  Buffer.contents buf\n"
+  , Pair "bi_show_string" "let bi_show_string s = show_vstring s\n"
+  , Pair "bi_eq_generic" "let bi_eq_generic (a : 'a) (b : 'a) = a = b\n"
+  , Pair "bi_neq_generic" "let bi_neq_generic (a : 'a) (b : 'a) = a <> b\n"
+  , Pair "bi_lt_generic" "let bi_lt_generic (a : 'a) (b : 'a) = compare a b < 0\n"
+  , Pair "bi_le_generic" "let bi_le_generic (a : 'a) (b : 'a) = compare a b <= 0\n"
+  , Pair "bi_gt_generic" "let bi_gt_generic (a : 'a) (b : 'a) = compare a b > 0\n"
+  , Pair "bi_ge_generic" "let bi_ge_generic (a : 'a) (b : 'a) = compare a b >= 0\n"
   , Pair "show_vlist" "let rec show_vlist (show_elem : 'a -> string) (v : 'a list) : string =\n  match v with\n  | [] -> \"Nil\"\n  | x :: xs -> \"(Cons \" ^ show_elem x ^ \" \" ^ show_vlist show_elem xs ^ \")\"\n"
   ]
 
@@ -901,9 +915,44 @@ filterRuntime (Cons (Pair name chunk) rest) bodyChars =
     Cons (Pair name chunk) (filterRuntime rest bodyChars)
   else filterRuntime rest bodyChars
 
+chunkNameOf (Pair n c) = n
+
+chunkTextOf (Pair n c) = c
+
+chunkNamesOf chunks = map chunkNameOf chunks
+
+neededByChunks chunks =
+  concatMap (\ch => filterNames (\n => containsName (strUnpack n) (strUnpack (chunkTextOf ch))) (map chunkNameOf runtimePrelude)) chunks
+
+expandRuntime included =
+  case missingChunks included of
+    Nil => included
+    missing => expandRuntime (append included missing)
+
+missingChunks included =
+  filterNames2
+    (\n => notIn n (chunkNamesOf included) && memName n (neededByChunks included))
+    (map chunkNameOf runtimePrelude)
+    runtimePrelude
+
+filterNames2 pred names all =
+  case all of
+    Nil => Nil
+    Cons ch rest =>
+      if pred (chunkNameOf ch) then Cons ch (filterNames2 pred names rest)
+      else filterNames2 pred names rest
+
+keepChunks names Nil = Nil
+
+keepChunks names (Cons ch rest) =
+  if memName (chunkNameOf ch) names then Cons ch (keepChunks names rest)
+  else keepChunks names rest
+
 runtimeForBody body =
   if strLength body > 20000 then runtimeCodeTyped
-  else "\n" ++ joinWith "" (map secondOf (filterRuntime runtimePrelude (strUnpack body)))
+  else
+    let selected = expandRuntime (filterRuntime runtimePrelude (strUnpack body))
+    in "\n" ++ joinWith "" (map secondOf (keepChunks (map chunkNameOf selected) runtimePrelude))
 
 -- ---------------------------------------------------------------
 -- 生成代码的轻量 pretty printer

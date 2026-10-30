@@ -1,0 +1,10 @@
+data Bool : Type where
+  True : Bool
+  False : Bool
+
+data Dummy : Type where
+  D : Dummy
+deriving (Eq)
+
+main : Bool
+main = (1 == 1) && (1 /= 2) && (1 < 2) && (2 <= 2) && (3 > 2) && (3 >= 3) && ("a" == "a") && ("a" /= "b") && (True == True) && (False /= True)

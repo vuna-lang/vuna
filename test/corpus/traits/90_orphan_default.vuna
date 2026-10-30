@@ -1,0 +1,5 @@
+instance Show Int where
+  show n = "n"
+
+main : Int
+main = 0

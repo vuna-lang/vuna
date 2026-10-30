@@ -104,6 +104,8 @@ genShowDefs decls =
      ++ genCtorShows ctors
 
 
+runtimeCompareCode = "\nlet rec value_compare (a : value) (b : value) : int =\n  match a with\n  | VInt x -> (match b with VInt y -> if x < y then -1 else if x = y then 0 else 1 | _ -> -1)\n  | VStr x -> (match b with VStr y -> compare x y | VInt _ -> 1 | _ -> -1)\n  | VCon (n, xs) -> (match b with VCon (m, ys) -> con_compare n xs m ys | _ -> 1)\n  | _ -> 0\n\nand con_compare n xs m ys =\n  let r = compare n m in\n  if r = 0 then list_compare xs ys else r\n\nand list_compare xs ys =\n  match xs, ys with\n  | [], [] -> 0\n  | [], _ :: _ -> -1\n  | _ :: _, [] -> 1\n  | x :: xr, y :: yr ->\n      let r = value_compare x y in\n      if r = 0 then list_compare xr yr else r\n"
+
 -- codegen（M6）：flatten 后的程序 → 动态 value 表示的 OCaml
 -- ---------------------------------------------------------------
 
@@ -121,6 +123,13 @@ builtinInfos =
   , BuiltinInfo "<=" "bi_le" 2 "vbool (expect_int \"<=\" a <= expect_int \"<=\" b)"
   , BuiltinInfo ">" "bi_gt" 2 "vbool (expect_int \">\" a > expect_int \">\" b)"
   , BuiltinInfo ">=" "bi_ge" 2 "vbool (expect_int \">=\" a >= expect_int \">=\" b)"
+  , BuiltinInfo "bi_show_string" "bi_show_string" 1 "VStr (vuna_quote ^ vuna_escape (expect_str \"bi_show_string\" a) ^ vuna_quote)"
+  , BuiltinInfo "bi_eq_generic" "bi_eq_generic" 2 "vbool (value_compare a b = 0)"
+  , BuiltinInfo "bi_neq_generic" "bi_neq_generic" 2 "vbool (value_compare a b <> 0)"
+  , BuiltinInfo "bi_lt_generic" "bi_lt_generic" 2 "vbool (value_compare a b < 0)"
+  , BuiltinInfo "bi_le_generic" "bi_le_generic" 2 "vbool (value_compare a b <= 0)"
+  , BuiltinInfo "bi_gt_generic" "bi_gt_generic" 2 "vbool (value_compare a b > 0)"
+  , BuiltinInfo "bi_ge_generic" "bi_ge_generic" 2 "vbool (value_compare a b >= 0)"
   , BuiltinInfo "bi_eq_int" "bi_eq_int" 2 "vbool (expect_int \"==\" a = expect_int \"==\" b)"
   , BuiltinInfo "bi_neq_int" "bi_neq_int" 2 "vbool (expect_int \"/=\" a <> expect_int \"/=\" b)"
   , BuiltinInfo "bi_lt_int" "bi_lt_int" 2 "vbool (expect_int \"<\" a < expect_int \"<\" b)"
@@ -479,8 +488,8 @@ generateProgram decls printResult =
               andThen (genFunctions decls (groupFunctions decls)) (\defs =>
                 andThen (genCtorDefs ctors) (\ctorDefs =>
                   Ok
-                    (runtimeCode ++ ctorDefs ++ genBuiltinDef builtinInfos
-                    ++ genShowDefs decls
+                    (runtimeCode ++ runtimeCompareCode ++ genShowDefs decls
+                    ++ ctorDefs ++ genBuiltinDef builtinInfos
                     ++ renderRecsFrom defs 0
                     ++ (if printResult then
                           "let () = print_endline (vuna_show (v_main ()))\n"

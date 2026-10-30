@@ -17,6 +17,11 @@
 - M10：模块系统 v2——模块头与显式导出列表、抽象类型、`module B` / `B.name` 重导出、
   `_` 前缀隐私、模块路径不变式（loader 探针：`Vuna.vuna` 与 `Vuna/Parser.vuna` 同根共存）、
   loader 测试；编译器自身使用新特性。
+- M10.5：类型表达力——记录类型（构造/访问/更新/模式/参数化/跨模块抽象/`deriving`）；
+  trait（单参数、相干默认、命名实例、`@name`、孤儿检查、`deriving (Show, Eq)`）；
+  内置 `Show` / `Eq` / `Ord` 与运算符迁移；编译器自举使用记录 + `deriving`；
+  删除 `specializeCmp` 与运行时 `show_value`。未实现：高阶 kind 类型变量、
+  约束泛化/字典穿参（留作 M11 前置）。
 
 当前硬约束：
 
@@ -31,27 +36,27 @@
 如果目标是“能实际写程序的语言”：
 
 ```text
-M10 模块系统 v2（已完成）──→ M10.5 类型表达力（trait+记录+高阶kind）
-   → M11 标准库（do/Monad/IO 组合子；编译器是首个用户）
+M10 模块系统 v2（已完成）→ M10.5 类型表达力（已完成：记录 + trait）
+   → M11 标准库（先补高阶 kind/字典穿参，再做 do/Monad/IO 组合子；编译器是首个用户）
    → M11.5 包管理与工具链（vuna.toml / workspace / 三目录）
    → M12 性能与编译模型 → M13 高级类型/效应（研究型，单独规划）
 ```
 
 依赖说明：
 
-- **M10 已完成**；下一步主线是 M10.5 → M11 → M11.5；
-- **M10.5（类型表达力）与 M11.5 的机制部分可并行**，二者改动面互不重叠
-  （loader/包工具 vs 类型检查/codegen）；但**交付顺序**是 M11 先、M11.5 后；
-- **M11（标准库）依赖 M10.5，不依赖 M11.5**：`do`/Monad 需要 trait + 高阶 kind；
-  stdlib 先以**模块根**形态存在（`--root lib --root stdlib`），编译器作为首个用户，
-  不需要包格式；
+- **M10 与 M10.5 已完成**；下一步主线是 M11 → M11.5；
+- **M11 与 M11.5 的机制部分可并行**，二者改动面互不重叠（stdlib vs 包工具）；
+  但**交付顺序**是 M11 先、M11.5 后；
+- **M11（标准库）依赖 M10.5 的 trait 基础**（已具备），不依赖 M11.5：`do`/Monad 还
+  需要高阶 kind 与约束泛化/字典穿参，作为 M11 的前置工作补齐；stdlib 先以**模块根**
+  形态存在（`--root lib --root stdlib`），编译器作为首个用户，不需要包格式；
 - **M11.5（包管理）依赖 M10 与 M11**：模块导出/重导出与路径不变式是包门面的基础；
   stdlib 是第一个被包装成包的库，且被编译器包依赖；
 - **编译器是 stdlib 的第一个大客户**：`Maybe/List/Result/Bool` 单一真源（不再在编译器
   `Vuna.Base` 私人重复），stdlib 由最复杂的程序（编译器）先行验证；
 - **M11 与 M11.5 的机制部分可并行**：M11.5 中“stdlib 作为首个包”的验收等 M11。
 
-如果目标是“类型系统研究平台”，可提前 M10.5；M10 与 M9 已完成。
+如果目标是“类型系统研究平台”，可直接推进 M13 候选方向；M9/M10/M10.5 已完成。
 
 ---
 
@@ -115,7 +120,7 @@ M10 模块系统 v2（已完成）──→ M10.5 类型表达力（trait+记录
 - `_` 名不可导出（编译错误）；
 - `Vuna.vuna` + `Vuna/Parser.vuna` 共存、门面可解析；
 
-## M10.5：类型表达力（进行中）
+## M10.5：类型表达力（已完成）
 
 目标：解决 ad-hoc 多态，为 `do`/Monad 铺路。
 
@@ -123,11 +128,12 @@ M10 模块系统 v2（已完成）──→ M10.5 类型表达力（trait+记录
 
 - 记录类型：字段访问、更新、模式；
 - trait（命名实例）：替代当前 `==`、`show` 等特化；
-- 高阶 kind 类型变量（`TApp`/kind）：`Monad m` 要求 `m :: * -> *`；
+- 高阶 kind 类型变量（`TApp`/kind）：`Monad m` 要求 `m :: * -> *`
+  （M10.5 未实现，留作 M11 前置）；
 - 不建议此阶段直接上依赖类型；先完成记录 + trait。
 
-实现状态：**记录（record）已完成（M10.5a，含 loader 测试、三路径、跨模块抽象）**；
-trait / 命名实例 / `deriving` / 高阶 kind 仍进行中（M10.5b）。
+实现状态：记录（M10.5a）与 trait/实例/`deriving`（M10.5b）已完成；高阶 kind 与
+约束泛化/字典穿参不在 M10.5 范围内（见文末实现状态）。
 
 验收：
 
@@ -167,12 +173,13 @@ trait / 命名实例 / `deriving` / 高阶 kind 仍进行中（M10.5b）。
     （当前模块 + 已导入模块导出列表 + prelude）且能作用于 T 的 default”，恰 1 ⇒ 用；
     0 ⇒ “no instance”；≥2 ⇒ 声明期已被全局唯一检查拦住，不会到使用期。有 `@name` ⇒
     查名（可 `M.name`，需已导入），命中即用，未命中或头类型不符 ⇒ 报错。
-  - **`deriving (Show)` 生成 `default`**：同一类型可“derive 的 default + 手写命名自定义”并存
-    （用 `@` 挑自定义）；“derive 又手写未命名 default” ⇒ 两个 default ⇒ 声明期错误。
+  - **`deriving (Show, Eq)` 生成 `default`**：同一类型可“derive 的 default + 手写命名
+    自定义”并存（用 `@` 挑自定义）；“derive 又手写未命名 default” ⇒ 两个 default ⇒
+    声明期错误。
   - **经验法则**：主/结构实例写成 `default`，备选写成命名（如 `showHex`）。
-  - **实现**：无 overlapping、无实例链搜索；只要“default 全局唯一检查 + `@` 名字查找 +
-    字典穿参”。TypedCodegen 照常穿字典；`specializeCmp` 与运行时 `show_value`
-    迁到 trait 上后删除。
+  - **实现**：无 overlapping、无实例链搜索；只要“default 全局唯一检查 + `@` 名字查找”。
+    实际落地采用**静态派发**（不做字典穿参，见文末实现状态）；`specializeCmp` 与
+    运行时 `show_value` 已删除。
   - M10.5 只做**单参数 trait + 相干默认 + 命名逃逸 + deriving Show/Eq**；
     多参数/关联类型留 M13。
 
@@ -180,6 +187,19 @@ trait / 命名实例 / `deriving` / 高阶 kind 仍进行中（M10.5b）。
 
 - 命名实例：同类型 default 与命名并存、`@name` 选择、孤儿必须命名（反例报错）；
 - 编译器自身迁移：去掉 `specializeCmp` / 运行时 `show_value`，改用 trait + deriving。
+
+### M10.5 实现状态（已落地）
+
+- trait 按**静态派发**实现：调用点类型确定时，类型检查期直接解析到 default 实例 /
+  `@` 命名实例 / `Eq`、`Ord`、`Show` 的结构回退，生成直接函数调用；不做字典穿参。
+- 原因：M10.5 只需支撑记录与标准库早期代码；静态派发实现小、无运行时字典开销，
+  与现有 typed codegen 兼容。`Eq` / `Ord` 在类型无法确定时保留运行时结构比较
+  （typed 用 OCaml 结构比较，interp/dynamic 用 value 结构比较）作为回退。
+- 后续：高阶 kind（`m :: * -> *`）与约束泛化/字典穿参是 `do`/Monad 的前置，作为
+  M11 标准库的先行工作推进；default 实例可见性目前按整个程序（flatten）计算，
+  未做 import 图级细化。
+- 边界：`Ord` 的运行时内建回退只覆盖 `Int` / `String` / `Bool`（其余类型报
+  `no instance Ord`）；命名实例可经显式导出列表导出，app 侧用 `@M.fancy` 选择。
 
 ## M11：标准库
 
@@ -190,7 +210,8 @@ trait / 命名实例 / `deriving` / 高阶 kind 仍进行中（M10.5b）。
 - 核心库：`List`、`Maybe`、`Result`、`String`、`IO`、排序、映射等；stdlib 是
   **独立的模块根 `stdlib/`**（成员包 `vuna-stdlib`），不混入编译器 `lib/`；
 - `do` 语法糖与明确的 IO 组合子（`bind`/`pure`/`>>`）：`do` 是 `>>=`/`pure` 的语法糖，
-  依赖 Monad trait（M10.5 引入 trait 与高阶 kind）；`Monad m` 要求 `m :: * -> *`；
+  依赖 Monad trait（trait 基础已在 M10.5 提供；高阶 kind 与约束泛化/字典穿参需在
+  M11 前补齐）；`Monad m` 要求 `m :: * -> *`；
 - 顺序执行 `>>` 作为 `do` 的派生。
 
 验收：

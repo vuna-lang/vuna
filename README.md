@@ -219,7 +219,62 @@ git add bootstrap/ && git commit
   `T(..)` 才公开记录构造器；
 - 错误：缺字段（`missing field`）、重复字段（`duplicate field`）、未知字段
   （`unknown field`）、对非记录做字段访问/更新（`not a record type`）；
-- 限制：`deriving` 属于 Phase T，尚未实现；记录字段访问/更新在 base 类型未定时报错。
+- 记录支持 `deriving (Show, Eq)`（`Show` 要求非参数化记录且字段可 show，`Eq` 支持
+  参数化记录）；记录字段访问/更新在 base 类型未定时报错。
+
+### trait 与实例（M10.5）
+
+- 语法：
+
+  ```vuna
+  trait Pretty a where
+    pretty : a -> String
+
+  data Color : Type where
+    Red : Color
+    Blue : Color
+  deriving (Show, Eq)
+
+  instance Pretty Color where          -- 未命名实例 = default（相干默认）
+    pretty c = case c of
+      Red => "red"
+      Blue => "blue"
+
+  instance Pretty Color as fancy where -- 命名实例
+    pretty c = "fancy"
+
+  main : String
+  main = pretty Red ++ "/" ++ pretty @fancy Blue ++ "/" ++ show Red
+  ```
+
+- trait 只支持单参数；default 实例按 (trait, 类型) 全局唯一（flatten 时检查，
+  重复报 `duplicate instance`）；命名实例不自动参与解析，只能用 `@name` 选择
+  （可 `@M.name`，M 需已导入）；trait 与类型都不在本模块定义时禁止写 default，
+  必须命名（孤儿规则）；
+- `deriving (Show, Eq)` 生成 default 实例：`Show` 只支持非参数化类型且字段可 show，
+  `Eq` 支持参数化类型；derive 与手写同名 default 冲突报 `duplicate instance`；
+- 内置 trait：`Show`（`show`）、`Eq`（`eq` / `neq` 对应 `==` / `/=`）、`Ord`
+  （`lt` / `le` / `gt` / `ge` 对应 `<` / `<=` / `>` / `>=`）；运算符在类型确定时
+  静态派发到实例方法。内建/结构回退：`Eq` 覆盖 data/record/`List`；`Show` 覆盖
+  `Int` / `String` / `Bool` 与非参数化 data/record；`Ord` 的运行时内建回退只覆盖
+  `Int` / `String` / `Bool`（`Int` 用原生比较，`String` / `Bool` 走运行时结构比较，
+  typed 路径用 OCaml 结构比较），其它类型报 `no instance Ord ...`；
+- 限制（M10.5 取舍）：**静态派发**——调用点类型必须能确定；只有 `Eq` / `Ord` 在类型
+  无法确定时回退到运行时结构比较（typed 用 OCaml 结构比较，interp/dynamic 用 value
+  结构比较）；`show` 用在多态类型会报错；暂不做字典穿参、约束泛化与高阶 kind（留待
+  M11 标准库/`do`/Monad 的前置工作）；default 实例的可见性目前按整个程序（flatten）
+  计算，未做 import 图级细化；只有程序里出现 trait / instance / deriving 声明（或
+  记录等需要降级的语法）时，interp 与 `--no-typecheck` 路径才会先类型检查 + 降级，
+  因此只有内建 `show` / `==` 调用、却没有任何 trait/instance/deriving 声明的程序在
+  interp 与 `--no-typecheck` 路径保持 legacy（不做类型检查：此时 `show` 不可用、
+  `String` 的 `<` / `<=` 仍是旧的仅 Int 运行时语义），typed 路径仍会报多态 `show` 错误；
+  上面的 `Eq` / `Ord` 结构回退同样只在触发降级（出现 trait/instance/deriving/记录等）后生效；
+- 命名空间与导出：trait 名在类型命名空间、方法名在值命名空间；无模块头 = 全部导出
+  （含方法），显式导出列表需 `Trait(..)` 才导出方法；命名实例名按普通值名导出/限定
+  （显式列表里可写 `fancy`，app 侧用 `@M.fancy` 选择）；
+- 迁移：`==` / `/=` / `<` / `<=` / `>` / `>=` 由 `Eq` / `Ord` trait 承担（删除旧的
+  `specializeCmp` 特化）；动态 codegen 的固定 `show_value` 已删除，改为按程序 data
+  声明生成 `vuna_show`。
 
 ## 编译器实现
 
@@ -231,8 +286,9 @@ git add bootstrap/ && git commit
 - `lib/Vuna/Parser.vuna`：offside layout parser，输出模块头、记录声明、AST 与 imports；
 - `lib/Vuna/Builtins.vuna`：内建函数名字与元数，Loader 与 Eval 共用；
 - `lib/Vuna/Eval.vuna`：值表示、内建函数、call-by-value 求值器与 `show`；
-- `lib/Vuna/Loader.vuna`：import 图、模块头/模块名校验、模块导出表（含记录的
-  `T` / `T(..)` 构造器规则）、名字解析与 flatten
+- `lib/Vuna/Loader.vuna`：import 图、模块头/模块名校验、模块导出表（条目是
+  `deriving (Eq)` 的 `record ExportEntry`；记录与 data 共用 `T` / `T(..)` 规则）、
+  名字解析与 flatten
   （`loadProgram roots entry`，模块根是有序列表，逐根用 `fileExists` 探测，
   跨根同名模块报歧义）；
 - `lib/Vuna/Typecheck.vuna`：HM 风格类型检查（Ty/Scheme、unify、构造器 scheme、
@@ -260,8 +316,8 @@ git add bootstrap/ && git commit
 - `TypedCodegen`（默认，`--typed`）：用类型信息生成原生 OCaml 类型与代码——用户
   `data` 编译成 OCaml 变体、`Int/String/Bool/List` 映射到原生类型、`case` 编译成
   OCaml `match`、构造器直接构造变体，没有动态 `value` 包装；
-- `Codegen`（`--no-typecheck` 回退）：值统一为动态表示，生成程序入口打印
-  `show_value main`：
+- `Codegen`（`--no-typecheck` 回退）：值统一为动态表示，生成程序入口按程序的
+  data 声明生成 `vuna_show`，打印 `vuna_show main`（不再有固定运行时 `show_value`）：
 
 ```ocaml
 type value =
@@ -292,7 +348,7 @@ type value =
 
 ## 测试
 
-`test/run-tests.sh` 是 vuna 原生测试（449 checks），用 `vuna` / `vuna-boot` 驱动，
+`test/run-tests.sh` 是 vuna 原生测试（551 checks），用 `vuna` / `vuna-boot` 驱动，
 不依赖外部 vuna 实现；但运行测试需要 OCaml 编译器（`ocamlopt`）作为代码生成后端：
 
 ```console
@@ -318,6 +374,11 @@ sh test/run-tests.sh          # 需要 PATH 中有 vuna 与 vuna-boot
   三路径比对 golden；90–95 错误例三路径都要求错误片段与非 0 退出，动态/typed 还要求
   不写输出文件；跨模块正例 `0*_*/`（`Point(..)` 可构造/模式匹配，`Point` 保持抽象）、
   跨模块错误 `9*_*/`（抽象记录构造器不可见）同样覆盖三路径；
+- `corpus/traits/` trait（M10.5b，runner 第 22–25 段）：正例 01–10 三路径
+  （interp / 动态 codegen / typed codegen）比对 golden；跨模块 08 覆盖无头模块全导出
+  （含命名实例），10 覆盖显式导出 `Trait(..)`；错误例 90–98 三路径都要求错误片段、
+  非 0 退出、不写输出文件（含孤儿默认、重复实例、未知 `@`、head 不符、缺/未知方法、
+  `deriving Ord`、多态 `show`、显式只写 `Trait` 不写 `(..)` 时方法不可见）；
 - `corpus/err/*.vuna`、`corpus/run_err/*.vuna`：解析/求值错误片段；
 - `corpus/type_ok`、`corpus/type_err`：单文件类型检查正/反例；
 - `corpus/type_modules/0*`、`9*`：跨模块类型检查正/反例；
@@ -420,4 +481,6 @@ nix fmt               # nixfmt-tree 格式化 .nix
   非 0 退出码；
 - M10：模块系统 v2——模块头与显式导出列表、抽象类型、`module B` / `B.name` 重导出、
   `_` 前缀隐私、模块路径不变式；
+- M10.5：记录类型、trait 与实例（静态派发）、`deriving (Show, Eq)`、内置
+  `Show` / `Eq` / `Ord` 与运算符迁移；编译器自举使用记录 + `deriving`；
 - 早期 OCaml 外部编译器 `vunax` 已完成使命并删除。

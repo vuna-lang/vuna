@@ -1,0 +1,4 @@
+import Vuna.Pretty
+
+main : String
+main = pretty Red ++ "/" ++ pretty @Vuna.Pretty.fancy Blue

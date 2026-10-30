@@ -14,8 +14,13 @@ data Module : Type where
 -- 模块导出表（M10）。每条是「本模块公开名 → 定义处带模块前缀的名字」。
 -- kind 用字符串区分两套命名空间：val（函数/值）、ctor（构造器）、type（类型名）。
 -- ctor 条目额外记录所属数据类型的定义名，供 `T(..)` 重导出保持源模块的抽象性。
-data ExportEntry : Type where
-  ExportEntry : String -> String -> String -> String -> ExportEntry
+-- 模块导出表条目：公开名、定义处名字、所属类型（仅 ctor）。
+record ExportEntry where
+  kind : String
+  public : String
+  target : String
+  parent : String
+deriving (Eq)
 
 data ExportRef : Type where
   ExportRef : String -> String -> String -> ExportRef
@@ -124,13 +129,17 @@ exportsOf modules name =
     Just (Module mname imports decls exports) => exports
     Nothing => Nil
 
-entryKind (ExportEntry k pub tgt parent) = k
+entryKind : ExportEntry -> String
+entryKind e = e.kind
 
-entryPublic (ExportEntry k pub tgt parent) = pub
+entryPublic : ExportEntry -> String
+entryPublic e = e.public
 
-entryTarget (ExportEntry k pub tgt parent) = tgt
+entryTarget : ExportEntry -> String
+entryTarget e = e.target
 
-entryParent (ExportEntry k pub tgt parent) = parent
+entryParent : ExportEntry -> String
+entryParent e = e.parent
 
 -- 按命名空间查公开名：kinds 是允许的 kind 列表（val / ctor / type）。
 lookupExport kinds name entries =
@@ -451,8 +460,9 @@ resolveExpr modules label prefix own ownCtors imports scope expr =
           Ok (ERecUpdate b fs sp)))
     EInstSel meth name sp =>
       andThen (resolveExpr modules label prefix own ownCtors imports scope meth) (\m2 =>
-        andThen (resolveGlobal modules label prefix own imports scope name) (\n2 =>
-          Ok (EInstSel m2 n2 sp)))
+        case resolveGlobal modules label prefix own imports scope name of
+          Err e => Err (label ++ ": unknown instance name " ++ name ++ " (@" ++ name ++ ")")
+          Ok n2 => Ok (EInstSel m2 n2 sp))
 
 resolveFieldValue modules label prefix own ownCtors imports scope (Pair fname value) =
   andThen (resolveExpr modules label prefix own ownCtors imports scope value) (\v =>
@@ -632,6 +642,19 @@ findMethodNamed name methods =
     Cons (Pair mname ty) rest =>
       if mname == name then Just mname else findMethodNamed name rest
 
+findOwnInstanceName name decls =
+  case decls of
+    Nil => Nothing
+    Cons d rest =>
+      case d of
+        DInstance iname isDefault head methods sp =>
+          if isDefault then findOwnInstanceName name rest
+          else
+            case iname of
+              Just n => if n == name then Just n else findOwnInstanceName name rest
+              Nothing => findOwnInstanceName name rest
+        _ => findOwnInstanceName name rest
+
 findOwnCtorName name decls =
   case decls of
     Nil => Nothing
@@ -656,7 +679,7 @@ ownCtorEntries prefix dname names =
       if isPrivateName cname then ownCtorEntries prefix dname rest
       else
         Cons
-          (ExportEntry "ctor" cname (mangle prefix cname) (mangle prefix dname))
+          (ExportEntry { kind = "ctor", public = cname, target = mangle prefix cname, parent = mangle prefix dname })
           (ownCtorEntries prefix dname rest)
 
 -- 从某模块的导出表里取某数据类型的构造器条目：重导出 `T(..)` 时只重新公开
@@ -675,19 +698,19 @@ declImplicitExports prefix d =
       if isPrivateName dname then Nil
       else
         Cons
-          (ExportEntry "type" dname (mangle prefix dname) "")
+          (ExportEntry { kind = "type", public = dname, target = mangle prefix dname, parent = "" })
           (ownCtorEntries prefix dname (map ctorName ctors))
     DRecord dname params fields derivings sp =>
       if isPrivateName dname then Nil
       else
         Cons
-          (ExportEntry "type" dname (mangle prefix dname) "")
+          (ExportEntry { kind = "type", public = dname, target = mangle prefix dname, parent = "" })
           (ownCtorEntries prefix dname (Cons dname Nil))
     DTrait tname params methods sp =>
       if isPrivateName tname then Nil
       else
         Cons
-          (ExportEntry "type" tname (mangle prefix tname) "")
+          (ExportEntry { kind = "type", public = tname, target = mangle prefix tname, parent = "" })
           (ownCtorEntries prefix tname (map firstOf methods))
     DInstance iname isDefault head methods sp =>
       if isDefault then Nil
@@ -696,13 +719,13 @@ declImplicitExports prefix d =
           Nothing => Nil
           Just name =>
             if isPrivateName name then Nil
-            else Cons (ExportEntry "val" name (mangle prefix name) "") Nil
+            else Cons (ExportEntry { kind = "val", public = name, target = mangle prefix name, parent = "" }) Nil
     DSig name ty sp =>
       if isPrivateName name then Nil
-      else Cons (ExportEntry "val" name (mangle prefix name) "") Nil
+      else Cons (ExportEntry { kind = "val", public = name, target = mangle prefix name, parent = "" }) Nil
     DFun name pats body sp =>
       if isPrivateName name then Nil
-      else Cons (ExportEntry "val" name (mangle prefix name) "") Nil
+      else Cons (ExportEntry { kind = "val", public = name, target = mangle prefix name, parent = "" }) Nil
 
 implicitExports prefix decls = dedupeImplicitExports (concatMap (declImplicitExports prefix) decls)
 
@@ -752,7 +775,7 @@ isRecordDecl dname decls =
 
 refEntryList pub Nothing = Nil
 
-refEntryList pub (Just (ExportRef k tgt parent)) = Cons (ExportEntry k pub tgt parent) Nil
+refEntryList pub (Just (ExportRef k tgt parent)) = Cons (ExportEntry { kind = k, public = pub, target = tgt, parent = parent }) Nil
 
 ownOrImportedTypeRef modules prefix decls imports name =
   case findOwnData name decls of
@@ -769,7 +792,13 @@ ownOrImportedValueRef modules prefix decls imports name =
   case findOwnFn name decls of
     Just fn => Ok (Just (ExportRef "val" (mangle prefix fn) ""))
     Nothing =>
-      case findOwnCtorName name decls of
+      case findOwnInstanceName name decls of
+        Just iname => Ok (Just (ExportRef "val" (mangle prefix iname) ""))
+        Nothing =>
+          ownOrImportedValueRef2 modules prefix decls imports name
+
+ownOrImportedValueRef2 modules prefix decls imports name =
+  case findOwnCtorName name decls of
         Just (Pair dname cname) =>
           Ok (Just (ExportRef "ctor" (mangle prefix cname) (mangle prefix dname)))
         Nothing =>
@@ -816,13 +845,13 @@ exportSelective modules prefix m base name sp =
       case findExportType (exportsOf modules m) base of
         Just te =>
           Ok
-            (Cons (ExportEntry (entryKind e) base (entryTarget e) (entryParent e))
-              (Cons (ExportEntry "type" base (entryTarget te) "") Nil))
+            (Cons (ExportEntry { kind = entryKind e, public = base, target = entryTarget e, parent = entryParent e })
+              (Cons (ExportEntry { kind = "type", public = base, target = entryTarget te, parent = "" }) Nil))
         Nothing =>
-          Ok (Cons (ExportEntry (entryKind e) base (entryTarget e) (entryParent e)) Nil)
+          Ok (Cons (ExportEntry { kind = entryKind e, public = base, target = entryTarget e, parent = entryParent e }) Nil)
     Nothing =>
       case findExportType (exportsOf modules m) base of
-        Just te => Ok (Cons (ExportEntry "type" base (entryTarget te) "") Nil)
+        Just te => Ok (Cons (ExportEntry { kind = "type", public = base, target = entryTarget te, parent = "" }) Nil)
         Nothing =>
           Err (prefix ++ ": " ++ showSpanLoc sp ++ ": cannot export unknown name " ++ name)
 
@@ -837,7 +866,7 @@ exportTypeAll modules prefix decls imports name sp =
               Just (Pair dname ctorNames) =>
                 Ok
                   (Cons
-                    (ExportEntry "type" name (mangle prefix dname) "")
+                    (ExportEntry { kind = "type", public = name, target = mangle prefix dname, parent = "" })
                     (ownCtorEntries prefix dname ctorNames))
               Nothing =>
                 case modulesExportingType modules imports name of
@@ -851,7 +880,7 @@ exportTypeAll modules prefix decls imports name sp =
                         in let tgt = entryTarget (secondOf p)
                            in Ok
                                 (Cons
-                                  (ExportEntry "type" name tgt "")
+                                  (ExportEntry { kind = "type", public = name, target = tgt, parent = "" })
                                   (ctorEntriesOfType tgt (exportsOf modules m)))
         _ =>
           let mprefix = joinDots revPrefix
@@ -863,7 +892,7 @@ exportTypeAll modules prefix decls imports name sp =
                    Just e =>
                      Ok
                        (Cons
-                         (ExportEntry "type" base (entryTarget e) "")
+                         (ExportEntry { kind = "type", public = base, target = entryTarget e, parent = "" })
                          (ctorEntriesOfType (entryTarget e) (exportsOf modules m)))
                    Nothing =>
                      Err

@@ -480,6 +480,107 @@ for dir in corpus/records/9*_*/; do
   fi
 done
 
+# 22) trait 正例（M10.5b）：interp / 动态 codegen / typed codegen 三路径
+for file in corpus/traits/0[0-9]_*.vuna; do
+  base=${file%.vuna}
+  expected=$(cat "$base.out")
+  actual=$("$VUNA" interp "$file" 2>&1)
+  check_eq "$file (trait interp)" "$expected" "$actual"
+  rm -f "$tmp/tr_dyn.ml" "$tmp/tr_dyn.exe"
+  if ! tr_out=$("$VUNA" --no-typecheck "$file" "$tmp/tr_dyn.ml" 2>&1); then
+    bad "$file (trait dynamic codegen)" "exit 0" "$tr_out"
+  elif [ -n "$tr_out" ]; then
+    bad "$file (trait dynamic codegen output)" "" "$tr_out"
+  elif ! "$OCAMLOPT" -w -a -o "$tmp/tr_dyn.exe" "$tmp/tr_dyn.ml" >"$tmp/tr_dyn.log" 2>&1; then
+    bad "$file (trait dynamic ocamlopt)" "" "$(cat "$tmp/tr_dyn.log")"
+  else
+    actual=$("$tmp/tr_dyn.exe" 2>&1)
+    check_eq "$file (trait dynamic run)" "$expected" "$actual"
+  fi
+  rm -f "$tmp/tr_typed.ml" "$tmp/tr_typed.exe"
+  if ! tr_out=$("$VUNA" --typed "$file" "$tmp/tr_typed.ml" 2>&1); then
+    bad "$file (trait typed codegen)" "exit 0" "$tr_out"
+  elif [ -n "$tr_out" ]; then
+    bad "$file (trait typed codegen output)" "" "$tr_out"
+  elif ! "$OCAMLOPT" -w -a -o "$tmp/tr_typed.exe" "$tmp/tr_typed.ml" >"$tmp/tr_typed.log" 2>&1; then
+    bad "$file (trait typed ocamlopt)" "" "$(cat "$tmp/tr_typed.log")"
+  else
+    actual=$("$tmp/tr_typed.exe" 2>&1)
+    check_eq "$file (trait typed run)" "$expected" "$actual"
+  fi
+done
+
+# 23) trait 错误（M10.5b）：interp / 动态 / typed 三路径都失败、含片段、不写输出文件
+for file in corpus/traits/9[0-9]_*.vuna; do
+  fragment=$(cat "${file%.vuna}.err")
+  actual=$("$VUNA" interp "$file" 2>&1)
+  check_contains "$file (trait interp error)" "$actual" "$fragment"
+  "$VUNA" interp "$file" >/dev/null 2>&1
+  tr_code=$?
+  if [ "$tr_code" -ne 0 ]; then ok; else bad "$file (trait interp error exit)" "non-zero" "$tr_code"; fi
+  rm -f "$tmp/tr_err.ml"
+  actual=$("$VUNA" --no-typecheck "$file" "$tmp/tr_err.ml" 2>&1)
+  tr_code=$?
+  check_contains "$file (trait dynamic error)" "$actual" "$fragment"
+  if [ "$tr_code" -ne 0 ]; then ok; else bad "$file (trait dynamic error exit)" "non-zero" "$tr_code"; fi
+  if [ -e "$tmp/tr_err.ml" ]; then
+    bad "$file (trait dynamic no output file)" "absent" "present"
+  else
+    ok
+  fi
+  rm -f "$tmp/tr_err_typed.ml"
+  actual=$("$VUNA" --typed "$file" "$tmp/tr_err_typed.ml" 2>&1)
+  tr_code=$?
+  check_contains "$file (trait typed error)" "$actual" "$fragment"
+  if [ "$tr_code" -ne 0 ]; then ok; else bad "$file (trait typed error exit)" "non-zero" "$tr_code"; fi
+  if [ -e "$tmp/tr_err_typed.ml" ]; then
+    bad "$file (trait typed no output file)" "absent" "present"
+  else
+    ok
+  fi
+done
+
+# 24) 跨模块 trait 正例：无头模块全导出（含命名实例）/ header 显式 Trait(..) 三路径
+for dir in corpus/traits/[01][0-9]_*/; do
+  dir=${dir%/}
+  expected=$(cat "$dir/expected.out")
+  actual=$("$VUNA" interp --root "$dir/lib" --root "$dir/app" "$dir/app/Main.vuna" 2>&1)
+  check_eq "$dir (trait module interp)" "$expected" "$actual"
+  compile_and_run_roots "$dir (trait module dynamic)" "$VUNA" "$dir/app/Main.vuna" "$expected" --no-typecheck --root "$dir/lib" --root "$dir/app"
+  compile_and_run_roots "$dir (trait module typed)" "$VUNA" "$dir/app/Main.vuna" "$expected" --typed --root "$dir/lib" --root "$dir/app"
+done
+
+# 25) 跨模块 trait 错误：显式导出只写 Trait 不写 (..) → app 用方法 unbound（三路径）
+for dir in corpus/traits/9[0-9]_*/; do
+  dir=${dir%/}
+  fragment=$(cat "$dir/expected.err")
+  actual=$("$VUNA" interp --root "$dir/lib" --root "$dir/app" "$dir/app/Main.vuna" 2>&1)
+  check_contains "$dir (trait module interp error)" "$actual" "$fragment"
+  "$VUNA" interp --root "$dir/lib" --root "$dir/app" "$dir/app/Main.vuna" >/dev/null 2>&1
+  tr_code=$?
+  if [ "$tr_code" -ne 0 ]; then ok; else bad "$dir (trait module interp error exit)" "non-zero" "$tr_code"; fi
+  rm -f "$tmp/tr_mod_err.ml"
+  actual=$("$VUNA" --no-typecheck --root "$dir/lib" --root "$dir/app" "$dir/app/Main.vuna" "$tmp/tr_mod_err.ml" 2>&1)
+  tr_code=$?
+  check_contains "$dir (trait module dynamic error)" "$actual" "$fragment"
+  if [ "$tr_code" -ne 0 ]; then ok; else bad "$dir (trait module dynamic error exit)" "non-zero" "$tr_code"; fi
+  if [ -e "$tmp/tr_mod_err.ml" ]; then
+    bad "$dir (trait module dynamic no output file)" "absent" "present"
+  else
+    ok
+  fi
+  rm -f "$tmp/tr_mod_err_typed.ml"
+  actual=$("$VUNA" --typed --root "$dir/lib" --root "$dir/app" "$dir/app/Main.vuna" "$tmp/tr_mod_err_typed.ml" 2>&1)
+  tr_code=$?
+  check_contains "$dir (trait module typed error)" "$actual" "$fragment"
+  if [ "$tr_code" -ne 0 ]; then ok; else bad "$dir (trait module typed error exit)" "non-zero" "$tr_code"; fi
+  if [ -e "$tmp/tr_mod_err_typed.ml" ]; then
+    bad "$dir (trait module typed no output file)" "absent" "present"
+  else
+    ok
+  fi
+done
+
 if [ "$fail" -ne 0 ]; then
   printf '%s passed, %s failed\n' "$pass" "$fail"
   exit 1

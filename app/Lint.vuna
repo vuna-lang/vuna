@@ -157,6 +157,7 @@ startsUpper name =
     Nil => False
     Cons c rest => c >= 65 && c <= 90
 
+prefixChars : List Int -> List Int -> Bool
 prefixChars Nil text = True
 
 prefixChars (Cons p prest) text =
@@ -164,11 +165,13 @@ prefixChars (Cons p prest) text =
     Nil => False
     Cons t trest => if p == t then prefixChars prest trest else False
 
+containsSubChars : List Int -> List Int -> Bool
 containsSubChars pat text =
   case text of
     Nil => False
     Cons c rest => if prefixChars pat text then True else containsSubChars pat rest
 
+containsChar : Int -> List Int -> Bool
 containsChar c Nil = False
 
 containsChar c (Cons x rest) = if x == c then True else containsChar c rest

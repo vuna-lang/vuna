@@ -1,0 +1,16 @@
+trait Cmp a where
+  describe : a -> String
+  pairEq : a -> a -> Bool
+
+data Box : Type where
+  MkBox : Int -> Box
+
+instance Cmp Box where
+  describe b = case b of
+    MkBox n => "box" ++ show n
+  pairEq x y = case x of
+    MkBox a => case y of
+      MkBox b => a == b
+
+main : String
+main = describe (MkBox 42) ++ "/" ++ show (pairEq (MkBox 1) (MkBox 2))

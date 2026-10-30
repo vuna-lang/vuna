@@ -17,6 +17,13 @@ builtinArity ">=" = Just 2
 builtinArity "&&" = Just 2
 builtinArity "||" = Just 2
 builtinArity "++" = Just 2
+builtinArity "bi_show_string" = Just 1
+builtinArity "bi_eq_generic" = Just 2
+builtinArity "bi_neq_generic" = Just 2
+builtinArity "bi_lt_generic" = Just 2
+builtinArity "bi_le_generic" = Just 2
+builtinArity "bi_gt_generic" = Just 2
+builtinArity "bi_ge_generic" = Just 2
 builtinArity "bi_eq_int" = Just 2
 builtinArity "bi_neq_int" = Just 2
 builtinArity "bi_lt_int" = Just 2

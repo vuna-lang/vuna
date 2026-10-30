@@ -1,0 +1,8 @@
+data Dummy : Type where
+  D : Dummy
+deriving (Eq)
+
+f x y = x == y
+
+main : Bool
+main = f 1 1 && f "a" "a"
