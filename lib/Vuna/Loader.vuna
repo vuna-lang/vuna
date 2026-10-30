@@ -1,4 +1,4 @@
-module Vuna.Loader (Module, moduleNameOf, modulePackageOf, moduleImportsOf, moduleDeclsOf, moduleExportsOf, Project, projectEntryDecls, projectEntryImports, projectModules, loadProject, loadProgram, loadProgramRaw) where
+module Vuna.Loader (Module, moduleNameOf, modulePackageOf, moduleImportsOf, moduleDeclsOf, moduleExportsOf, Project, projectEntryDecls, projectEntryImports, projectModules, loadProject, resolveProject, loadProgram, loadProgramRaw) where
 
 -- Vuna.Loader：模块加载、名字解析与 flatten。
 
@@ -1060,12 +1060,29 @@ loadProject roots entryPkg entry =
                   Ok (Project decls imports modules))))
   else Err ("entry file not found: " ++ entry)
 
+-- 返回逐模块已解析（未 flatten）的声明，供 M12 分离编译使用。
+resolveProject parts =
+  case parts of
+    Project decls imports modules =>
+      andThen (resolveEntry modules imports decls) (\entryDecls =>
+        andThen (resolveModulesKeep modules) (\modules2 =>
+          Ok (Pair entryDecls modules2)))
+
+resolveModulesKeep Nil = Ok Nil
+
+resolveModulesKeep (Cons (Module name pkg imports decls exports) rest) =
+  andThen
+    (resolveProgram (Cons (Module name pkg imports decls exports) rest) name name
+       (topNames decls) (ctorsOf decls) (typeNamesOf decls) imports decls)
+    (\d1 =>
+      andThen (resolveModulesKeep rest) (\d2 =>
+        Ok (Cons (Module name pkg imports d1 exports) d2)))
+
 -- flatten：入口先解析，再按加载顺序解析各模块后拼接（与历史输出保持一致）。
 loadProgram roots entryPkg entry =
   andThen (loadProject roots entryPkg entry) (\p =>
-    andThen (resolveEntry (projectModules p) (projectEntryImports p) (projectEntryDecls p)) (\entryDecls =>
-      andThen (resolveModules (projectModules p)) (\moduleDecls =>
-        Ok (append entryDecls moduleDecls))))
+    andThen (resolveProject p) (\r =>
+      Ok (append (firstOf r) (concatMap moduleDeclsOf (secondOf r)))))
 
 -- 原始 --root DIR 模式：所有根同属空包名，不限制导出。
 loadProgramRaw roots entry = loadProgram (map rawRoot roots) "" entry

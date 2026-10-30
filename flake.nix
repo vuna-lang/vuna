@@ -182,6 +182,25 @@
                 touch "$out/ok"
               '';
 
+          # M12：机器无关的 codegen 指标门槛（bytes/lines/let rec/拼接/ctor 计数等）。
+          vuna-metrics =
+            pkgs.runCommand "vuna-metrics"
+              {
+                allowSubstitutes = false;
+              }
+              ''
+                mkdir -p "$out"
+                cp -r ${./lib} lib
+                cp -r ${./stdlib} stdlib
+                cp -r ${./app} app
+                cp ${./vuna.toml} vuna.toml
+                chmod -R u+w .
+                ${vuna}/bin/vuna build . "$out/self.ml"
+                sh ${./nix/metrics.sh} "$out/self.ml" ${./nix/metrics.budget} >"$out/metrics.txt"
+                cat "$out/metrics.txt"
+                touch "$out/ok"
+              '';
+
           # M11.5 包管理：在 Nix 沙箱内用 package 模式构建多包示例并验证可复现。
           vuna-package =
             pkgs.runCommand "vuna-package"
@@ -240,6 +259,7 @@
           fixed-point = bootstrap-selfhost;
           vuna-tests = vuna-tests;
           vuna-package = vuna-package;
+          vuna-metrics = vuna-metrics;
           vuna-typecheck = vuna-typecheck;
           vuna-lint = vuna-lint;
         }
