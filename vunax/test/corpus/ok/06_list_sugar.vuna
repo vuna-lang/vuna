@@ -1,0 +1,15 @@
+data List a : Type where
+  Nil : List a
+  Cons : a -> List a -> List a
+
+singleton : Nat -> List Nat
+singleton x = [x]
+
+pair : List Nat
+pair = [1, 2]
+
+head : List a -> a
+head (x :: xs) = x
+
+second : List Nat -> Nat
+second [x, y] = y

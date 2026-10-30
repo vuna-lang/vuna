@@ -65,9 +65,9 @@ git add bootstrap/ && git commit
 ├── vunax/                # 外部编译器（OCaml）
 │   ├── dune-project
 │   ├── vunax.opam
-│   ├── lib/              # lexer / parser / typecheck / codegen_ocaml ...
+│   ├── lib/              # token / lexer / ast / parser（后续加 typecheck / codegen）
 │   ├── bin/              # 可执行文件 vunax
-│   └── test/             # alcotest 测试
+│   └── test/             # alcotest + corpus/ 解析语料与 golden
 ├── app/                  # 自举：vuna 写的 CLI 入口（.vuna）
 ├── lib/                  # 自举：vuna 写的编译器库（.vuna）
 ├── test/                 # 自举：vuna 写的测试（.vuna）
@@ -91,6 +91,35 @@ dune fmt
 ```
 
 也可以 `cd vunax && dune build`。
+
+## 解析器（core-v0，M1）
+
+实现（`vunax/lib/`）：
+
+- `token.ml` / `lexer.ml`：token 带 1-based 行列位置；支持 `--` 行注释、`{- -}`
+  嵌套块注释、字符串转义；
+- `parser.ml`：手写递归下降 + 优先级解析；layout 用 offside 规则（不插入虚拟括号）：
+  顶层声明、`data` 构造器块、`case` 分支、`let` 绑定都按块列对齐，表达式可以跨行，
+  只要缩进大于所在块列；
+- `ast.ml`：core-v0 AST 与确定性的 S-expression 渲染；
+- 支持：`data`（简单参数化）、类型签名（解析、暂不检查）、多子句函数、
+  `case ... of`、`let ... in`、lambda、`if then else`、整数/字符串、
+  `[..]` 与 `x :: xs` 列表糖、中缀运算符
+  （`-> || && == /= < <= > >= ++ + - * / ::`）。
+
+```console
+dune exec vunax -- parse vunax/test/corpus/ok/06_list_sugar.vuna
+dune exec vunax -- --version
+```
+
+语法语料：
+
+- `vunax/test/corpus/ok/*.vuna` + 同名 `.sexp`（AST golden）；
+- `vunax/test/corpus/err/*.vuna` + 同名 `.err`（错误位置与信息 golden）；
+- 改语料或解析器后运行 `vunax/test/update-golden.sh` 重新生成 golden，再 review diff。
+
+尚未实现（后续里程碑）：类型检查（core-v0 先不检查类型）、求值器（M2）、
+自解释器（M3）、`where` / `do` / 隐式参数 / 依赖类型 / 模块系统。
 
 ## Nix
 

@@ -1,0 +1,6 @@
+-- 函数定义、签名与中缀运算符
+add : Nat -> Nat -> Nat
+add x y = x + y
+
+twice : Nat -> Nat
+twice x = add x x

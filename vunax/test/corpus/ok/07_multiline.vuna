@@ -1,0 +1,8 @@
+add : Nat -> Nat -> Nat
+add x y = x + y
+
+sum : List Nat -> Nat
+sum xs =
+  case xs of
+    Nil => 0
+    Cons y ys => add y (sum ys)

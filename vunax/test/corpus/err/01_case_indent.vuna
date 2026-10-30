@@ -1,0 +1,4 @@
+f : Nat -> Nat
+f x = case x of
+  Z => 0
+   S y => 1

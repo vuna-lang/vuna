@@ -1,0 +1,3 @@
+data X : Type where
+  A : X
+   B : X

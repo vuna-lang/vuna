@@ -1,0 +1,5 @@
+add3 : Nat -> Nat -> Nat -> Nat
+add3 x y z =
+  let s = add x y
+      t = add s z
+  in t
