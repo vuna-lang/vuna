@@ -302,18 +302,6 @@ let rec v_Vuna_dTypedCodegen_ddeclFunName = fun a0 -> match a0 with
   | C_Vuna_dAst_dDFun (name, pats, body) -> name
   | _ -> "")
 
-let rec v_Vuna_dTypedCodegen_dqidMapAt = fun a0 a1 -> match (a0, a1) with
-  | ([], i) -> []
-  | ((q) :: (rest), i) -> (C_Vuna_dBase_dPair (q, (bi_concat) ("'q") ((bi_str_from_int) (i)))) :: ((v_Vuna_dTypedCodegen_dqidMapAt) (rest) ((bi_add) (i) (1)))
-
-let rec v_Vuna_dTypedCodegen_dqidMap = fun a0 -> match a0 with
-  | (qs) -> (v_Vuna_dTypedCodegen_dqidMapAt) (qs) (0)
-
-let rec v_Vuna_dTypedCodegen_dlookupQid = fun a0 a1 -> match (a0, a1) with
-  | (i, []) -> C_Vuna_dBase_dNothing
-  | (i, (p) :: (rest)) -> (match p with
-  | C_Vuna_dBase_dPair (j, v) -> if (bi_eq) (i) (j) then C_Vuna_dBase_dJust (v) else (v_Vuna_dTypedCodegen_dlookupQid) (i) (rest))
-
 let rec v_Vuna_dTypedCodegen_dfilterNames = fun a0 a1 -> match (a0, a1) with
   | (pred, names) -> (match names with
   | [] -> []
@@ -1061,11 +1049,6 @@ let rec v_Vuna_dAst_dfunArity = fun a0 a1 -> match (a0, a1) with
   | [] -> C_Vuna_dBase_dNothing
   | (c) :: (rest) -> (match c with
   | C_Vuna_dBase_dPair (pats, body) -> C_Vuna_dBase_dJust ((v_Vuna_dBase_dlength) (pats))))
-
-let rec v_Vuna_dTypedCodegen_darityOf = fun a0 a1 -> match (a0, a1) with
-  | (decls, name) -> (match (v_Vuna_dAst_dfunArity) (name) (decls) with
-  | C_Vuna_dBase_dJust (n) -> n
-  | C_Vuna_dBase_dNothing -> 0)
 
 let rec v_Vuna_dBase_dmap = fun a0 a1 -> match (a0, a1) with
   | (f, []) -> []
@@ -2002,28 +1985,6 @@ let rec v_Vuna_dTypedCodegen_dgenShowDecls = fun a0 -> match a0 with
   | (decls) -> (match (v_Vuna_dTypedCodegen_dnonSpecialData) (decls) with
   | [] -> C_Vuna_dBase_dOk ("")
   | ds -> (v_Vuna_dBase_dandThen) ((v_Vuna_dTypedCodegen_dmapResult) ((v_Vuna_dTypedCodegen_dgenShowFunc) (decls)) (ds)) (fun parts -> C_Vuna_dBase_dOk ((bi_concat) ("let rec ") ((bi_concat) ((v_Vuna_dTypedCodegen_djoinWith) ("\nand ") (parts)) ("\n")))))
-
-let rec v_Vuna_dTypedCodegen_docamlTy = fun a0 a1 -> match (a0, a1) with
-  | (qmap, ty) -> (match ty with
-  | C_Vuna_dTypecheck_dTVar (i) -> (match (v_Vuna_dTypedCodegen_dlookupQid) (i) (qmap) with
-  | C_Vuna_dBase_dJust (v) -> v
-  | C_Vuna_dBase_dNothing -> (bi_concat) ("'q") ((bi_str_from_int) (i)))
-  | C_Vuna_dTypecheck_dTCon (name, args) -> if (bi_eq) (name) ("Int") then "int" else if (bi_eq) (name) ("String") then "string" else if (bi_eq) (name) ("Unit") then "unit" else if (v_Vuna_dTypedCodegen_disBoolName) (name) then "bool" else if (v_Vuna_dTypedCodegen_disListName) (name) then (match args with
-  | (a) :: ([]) -> (bi_concat) ("(") ((bi_concat) ((v_Vuna_dTypedCodegen_docamlTy) (qmap) (a)) (") list"))
-  | _ -> "unit") else (v_Vuna_dTypedCodegen_dappType) ((v_Vuna_dBase_dmap) ((v_Vuna_dTypedCodegen_docamlTy) (qmap)) (args)) ((v_Vuna_dTypedCodegen_dtypeNameOf) (name))
-  | C_Vuna_dTypecheck_dTFun (a, b) -> (bi_concat) ("(") ((bi_concat) ((v_Vuna_dTypedCodegen_docamlTy) (qmap) (a)) ((bi_concat) (") -> (") ((bi_concat) ((v_Vuna_dTypedCodegen_docamlTy) (qmap) (b)) (")")))))
-
-let rec v_Vuna_dTypedCodegen_dschemeAnnotation = fun a0 a1 a2 -> match (a0, a1, a2) with
-  | (globals, name, arity) -> (match (v_Vuna_dTypecheck_dlookupScheme) (name) (globals) with
-  | C_Vuna_dBase_dNothing -> C_Vuna_dBase_dOk ("")
-  | C_Vuna_dBase_dJust (sch) -> (match sch with
-  | C_Vuna_dTypecheck_dScheme (qs, ty) -> (match qs with
-  | [] -> C_Vuna_dBase_dOk ("")
-  | _ -> (let vars = (v_Vuna_dBase_dmap) (fun p -> (match p with
-  | C_Vuna_dBase_dPair (_, v) -> v)) ((v_Vuna_dTypedCodegen_dqidMap) (qs)) in (let qmap = (v_Vuna_dTypedCodegen_dqidMap) (qs) in (let fullTy = if (bi_eq) (arity) (0) then C_Vuna_dTypecheck_dTFun (C_Vuna_dTypecheck_dTCon ("Unit", []), ty) else ty in C_Vuna_dBase_dOk ((bi_concat) (" : ") ((bi_concat) ((v_Vuna_dTypedCodegen_djoinWith) (" ") (vars)) ((bi_concat) (". ") ((v_Vuna_dTypedCodegen_docamlTy) (qmap) (fullTy)))))))))))
-
-let rec v_Vuna_dTypedCodegen_dgenTopDef = fun a0 a1 a2 -> match (a0, a1, a2) with
-  | (decls, globals, name) -> (v_Vuna_dBase_dandThen) ((v_Vuna_dTypedCodegen_dgenFunction) (decls) (name)) (fun body -> (v_Vuna_dBase_dandThen) ((v_Vuna_dTypedCodegen_dschemeAnnotation) (globals) (name) ((v_Vuna_dTypedCodegen_darityOf) (decls) (name))) (fun ann -> C_Vuna_dBase_dOk ((bi_concat) ((v_Vuna_dTypedCodegen_dvalueName) (name)) ((bi_concat) (ann) ((bi_concat) (" = ") (body))))))
 
 let rec v_Vuna_dTypedCodegen_dgenerateProgramTyped = fun a0 a1 a2 -> match (a0, a1, a2) with
   | (decls, globals, printResult) -> (match (v_Vuna_dTypecheck_dlookupScheme) ("main") (globals) with

@@ -448,61 +448,6 @@ uniqueNames (Cons name rest) =
   else if memName name rest then uniqueNames rest
   else Cons name (uniqueNames rest)
 
-qidMapAt Nil i = Nil
-qidMapAt (Cons q rest) i = Cons (Pair q ("'q" ++ strFromInt i)) (qidMapAt rest (i + 1))
-
-qidMap qs = qidMapAt qs 0
-
-lookupQid i Nil = Nothing
-lookupQid i (Cons p rest) =
-  case p of
-    Pair j v => if i == j then Just v else lookupQid i rest
-
-ocamlTy qmap ty =
-  case ty of
-    TVar i =>
-      case lookupQid i qmap of
-        Just v => v
-        Nothing => "'q" ++ strFromInt i
-    TCon name args =>
-      if name == "Int" then "int"
-      else if name == "String" then "string"
-      else if name == "Unit" then "unit"
-      else if isBoolName name then "bool"
-      else if isListName name then
-        case args of
-          Cons a Nil => "(" ++ ocamlTy qmap a ++ ") list"
-          _ => "unit"
-      else appType (map (ocamlTy qmap) args) (typeNameOf name)
-    TFun a b => "(" ++ ocamlTy qmap a ++ ") -> (" ++ ocamlTy qmap b ++ ")"
-
-schemeAnnotation globals name arity =
-  case lookupScheme name globals of
-    Nothing => Ok ""
-    Just sch =>
-      case sch of
-        Scheme qs ty =>
-          case qs of
-            Nil => Ok ""
-            _ =>
-              let vars = map (\p => case p of Pair _ v => v) (qidMap qs)
-              in
-                let qmap = qidMap qs
-                in
-                  let fullTy = if arity == 0 then TFun (TCon "Unit" Nil) ty else ty
-                  in Ok (" : " ++ joinWith " " vars ++ ". " ++ ocamlTy qmap fullTy)
-
-genTopDef : List Decl -> List (Pair String Scheme) -> String -> Result String
-genTopDef decls globals name =
-  andThen (genFunction decls name) (\body =>
-    andThen (schemeAnnotation globals name (arityOf decls name)) (\ann =>
-      Ok (valueName name ++ ann ++ " = " ++ body)))
-
-arityOf decls name =
-  case funArity name decls of
-    Just n => n
-    Nothing => 0
-
 filterNames : (String -> Bool) -> List String -> List String
 filterNames pred names =
   case names of

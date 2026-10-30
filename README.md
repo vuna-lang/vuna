@@ -146,7 +146,7 @@ git add bootstrap/ && git commit
 - `lib/Vuna/Typecheck.vuna`：HM 风格类型检查（Ty/Scheme、unify、构造器 scheme、
   表达式/模式推断、签名校验与无签名顶层推断）；loader 会把 DSig/构造器类型里的类型名解析成
   模块内全名（open/qualified/alias 都支持），因此跨模块类型检查可用；
-- `lib/Vuna/Codegen.vuna`：把 flatten 后的 program 翻译成动态 value 表示的 OCaml；
+- `lib/Vuna/Codegen.vuna`：把 flatten 后的 program 翻译成动态 value 表示的 OCaml（保留为测试/调试回退）；
 - `lib/Vuna/TypedCodegen.vuna`：M8 typed codegen，用类型信息生成原生 OCaml
   类型、构造器、模式匹配、data show 与 builtins；现在是默认 codegen；
 - `lib/Vuna/Interp.vuna`：facade，只暴露 `interpret`/`interpretFile`/`compileFile`；
@@ -235,9 +235,10 @@ nix fmt               # nixfmt-tree 格式化 .nix
 
 ## 限制与路线
 
-- 类型检查与原生 OCaml typed codegen 已默认开启；M8b 完成 typed 自举，
-  `bootstrap/stage1.ml` 已由 typed 编译器轮换；M8c 待做动态 codegen 清理与收尾；
-- 生成代码是单文件、动态 value 表示，性能与错误信息暂未优化；
+- 类型检查与原生 OCaml typed codegen 已默认开启；M8 完成 typed 自举，
+  `bootstrap/stage1.ml` 由 typed 编译器轮换；dynamic codegen 保留为
+  `--no-typecheck` 的测试/调试回退路径；
+- typed codegen 生成单文件 OCaml；性能与错误信息暂未优化；
 - 运行时错误没有源码位置；`where` / `do` / 隐式参数 / 依赖类型未实现；
 - IO 失败（如 `readFile` 缺失文件）会抛宿主异常；编译器 CLI 没有 `exit` 内建，
   编译错误时退出码仍可能是 0，只通过 stdout 的 `error: ...` 判断；
