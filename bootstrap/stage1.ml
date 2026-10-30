@@ -54,6 +54,8 @@ let bi_write_file path contents =
     String.length contents
   with Sys_error msg -> failwith ("writeFile: " ^ msg)
 let bi_print s = print_string s; flush stdout; String.length s
+let bi_file_exists path = Sys.file_exists path
+let bi_exit n = exit n
 let bi_get_args () =
   let argv = Sys.argv in
   let n = Array.length argv in
@@ -477,6 +479,8 @@ let v_Vuna_dTypedCodegen_dbuiltinName = fun a0 -> match a0 with
   | ("writeFile") -> C_Vuna_dBase_dJust ("bi_write_file")
   | ("print") -> C_Vuna_dBase_dJust ("bi_print")
   | ("getArgs") -> C_Vuna_dBase_dJust ("bi_get_args")
+  | ("fileExists") -> C_Vuna_dBase_dJust ("bi_file_exists")
+  | ("exit") -> C_Vuna_dBase_dJust ("bi_exit")
   | (_) -> C_Vuna_dBase_dNothing
 
 let v_Vuna_dTypedCodegen_disVarPattern = fun p -> (match p with
@@ -558,6 +562,8 @@ let bi_write_file path contents =
     String.length contents
   with Sys_error msg -> failwith (\"writeFile: \" ^ msg)
 let bi_print s = print_string s; flush stdout; String.length s
+let bi_file_exists path = Sys.file_exists path
+let bi_exit n = exit n
 let bi_get_args () =
   let argv = Sys.argv in
   let n = Array.length argv in
@@ -764,7 +770,10 @@ let v_Vuna_dTypecheck_dbuiltinSchemes = fun () -> (C_Vuna_dBase_dPair ("+", C_Vu
                         :: ((C_Vuna_dBase_dPair ("print", C_Vuna_dTypecheck_dScheme ([], C_Vuna_dTypecheck_dTFun
                         (v_Vuna_dTypecheck_dstrTy, v_Vuna_dTypecheck_dintTy)))) :: ((C_Vuna_dBase_dPair
                         ("getArgs", C_Vuna_dTypecheck_dScheme ([], v_Vuna_dTypecheck_dlistOf v_Vuna_dTypecheck_dstrTy)))
-                        :: ([])))))))))))))))))))))
+                        :: ((C_Vuna_dBase_dPair ("fileExists", C_Vuna_dTypecheck_dScheme ([], C_Vuna_dTypecheck_dTFun
+                        (v_Vuna_dTypecheck_dstrTy, v_Vuna_dTypecheck_dboolTy)))) :: ((C_Vuna_dBase_dPair
+                        ("exit", C_Vuna_dTypecheck_dScheme ([], C_Vuna_dTypecheck_dTFun (v_Vuna_dTypecheck_dintTy,
+                        v_Vuna_dTypecheck_dintTy)))) :: ([])))))))))))))))))))))))
 
 let v_Vuna_dTypecheck_dintCmpName = fun name -> if bi_eq_str name "==" then "bi_eq_int"
 else if bi_eq_str name "/=" then "bi_neq_int"
@@ -1080,7 +1089,9 @@ let v_Vuna_dCodegen_dbuiltinInfos = (C_Vuna_dCodegen_dBuiltinInfo ("+", "bi_add"
                         :: ((C_Vuna_dCodegen_dBuiltinInfo ("writeFile", "bi_write_file", 2, "VInt (write_file (expect_str \"writeFile\" a) (expect_str \"writeFile\" b))"))
                         :: ((C_Vuna_dCodegen_dBuiltinInfo ("print", "bi_print", 1, "let text = expect_str \"print\" a in VInt (print_stdout text)"))
                         :: ((C_Vuna_dCodegen_dBuiltinInfo ("getArgs", "bi_get_args", 0, "get_args ()"))
-                        :: ([])))))))))))))))))))))
+                        :: ((C_Vuna_dCodegen_dBuiltinInfo ("fileExists", "bi_file_exists", 1, "vbool (Sys.file_exists (expect_str \"fileExists\" a))"))
+                        :: ((C_Vuna_dCodegen_dBuiltinInfo ("exit", "bi_exit", 1, "exit (expect_int \"exit\" a)"))
+                        :: ([])))))))))))))))))))))))
 
 let rec v_Vuna_dCodegen_dfindBuiltin = fun a0 a1 -> match (a0, a1) with
   | (name, []) -> C_Vuna_dBase_dNothing
@@ -1315,6 +1326,8 @@ let v_Vuna_dBuiltins_dbuiltinArity = fun a0 -> match a0 with
   | ("writeFile") -> C_Vuna_dBase_dJust (2)
   | ("print") -> C_Vuna_dBase_dJust (1)
   | ("getArgs") -> C_Vuna_dBase_dJust (0)
+  | ("fileExists") -> C_Vuna_dBase_dJust (1)
+  | ("exit") -> C_Vuna_dBase_dJust (1)
   | (_) -> C_Vuna_dBase_dNothing
 
 let v_Vuna_dLoader_disBuiltinName = fun name -> (match v_Vuna_dBuiltins_dbuiltinArity name with

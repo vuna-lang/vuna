@@ -328,6 +328,8 @@ builtinSchemes =
   , Pair "writeFile" (Scheme Nil (fun2 strTy strTy intTy))
   , Pair "print" (Scheme Nil (TFun strTy intTy))
   , Pair "getArgs" (Scheme Nil (listOf strTy))
+  , Pair "fileExists" (Scheme Nil (TFun strTy boolTy))
+  , Pair "exit" (Scheme Nil (TFun intTy intTy))
   ]
 
 -- ---------------------------------------------------------------

@@ -23,4 +23,6 @@ builtinArity "readFile" = Just 1
 builtinArity "writeFile" = Just 2
 builtinArity "print" = Just 1
 builtinArity "getArgs" = Just 0
+builtinArity "fileExists" = Just 1
+builtinArity "exit" = Just 1
 builtinArity _ = Nothing

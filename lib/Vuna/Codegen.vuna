@@ -33,6 +33,8 @@ builtinInfos =
   , BuiltinInfo "writeFile" "bi_write_file" 2 "VInt (write_file (expect_str \"writeFile\" a) (expect_str \"writeFile\" b))"
   , BuiltinInfo "print" "bi_print" 1 "let text = expect_str \"print\" a in VInt (print_stdout text)"
   , BuiltinInfo "getArgs" "bi_get_args" 0 "get_args ()"
+  , BuiltinInfo "fileExists" "bi_file_exists" 1 "vbool (Sys.file_exists (expect_str \"fileExists\" a))"
+  , BuiltinInfo "exit" "bi_exit" 1 "exit (expect_int \"exit\" a)"
   ]
 
 findBuiltin name Nil = Nothing
