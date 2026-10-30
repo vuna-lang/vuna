@@ -25,7 +25,7 @@ data EExpr : Type where
   XELam : List String -> EExpr -> Span -> EExpr
   XEApp : EExpr -> List EExpr -> Span -> EExpr
   XECmp : String -> List EExpr -> Ty -> Span -> EExpr
-  XELet : List (Pair Pat EExpr) -> EExpr -> Span -> EExpr
+  XELet : List (Pair Pat EExpr) -> EExpr -> Bool -> Span -> EExpr
   XECase : EExpr -> Ty -> List (Pair Pat EExpr) -> Span -> EExpr
   XEIf : EExpr -> EExpr -> EExpr -> Span -> EExpr
 
@@ -37,7 +37,7 @@ eeSpan e =
     XELam ps b sp => sp
     XEApp f a sp => sp
     XECmp n a ty sp => sp
-    XELet bs b sp => sp
+    XELet bs b _ sp => sp
     XECase s ty a sp => sp
     XEIf c t e sp => sp
 
@@ -404,7 +404,7 @@ lowerExpr subst expr =
     XELam params body sp => ELam params (lowerExpr subst body) sp
     XEApp fn args sp => EApp (lowerExpr subst fn) (map (lowerExpr subst) args) sp
     XECmp name args ty sp => EApp (EVar (specializeCmp name (resolveTy subst ty)) sp) (map (lowerExpr subst) args) sp
-    XELet binds body sp => ELet (map (lowerBind subst) binds) (lowerExpr subst body) sp
+    XELet binds body rec_ sp => ELet (map (lowerBind subst) binds) (lowerExpr subst body) rec_ sp
     XECase scrut ty alts sp => ECase (lowerExpr subst scrut) (map (lowerAlt subst) alts) sp
     XEIf c t e sp => EIf (lowerExpr subst c) (lowerExpr subst t) (lowerExpr subst e) sp
 
@@ -507,6 +507,45 @@ inferBinds globals locals (Cons (Pair pat value) rest) st =
                   Pair bindEls (Pair locals3 st3) =>
                     Ok (Pair (Cons (Pair pat valueElab) bindEls) (Pair locals3 st3)))))
 
+-- 递归 let（where 块）：所有绑定名对全部 value 与 body 可见，可互相/自引用。
+inferRecLet globals locals binds body sp st =
+  case seedRecNames binds st of
+    Err e => Err e
+    Ok (Pair recPairs st1) =>
+      let locals2 = recExtendLocals locals recPairs
+      in case checkRecValues globals locals2 recPairs st1 of
+           Err e => Err e
+           Ok (Pair recElabs st2) =>
+             case inferExpr globals locals2 st2 body of
+               Err e => Err e
+               Ok (Pair (Pair bodyTy bodyElab) st3) =>
+                 Ok (Pair (Pair bodyTy (XELet recElabs bodyElab True sp)) st3)
+
+seedRecNames Nil st = Ok (Pair Nil st)
+seedRecNames (Cons (Pair pat value) rest) st =
+  case pat of
+    PVar name _ =>
+      case freshTy st of
+        Pair ty st1 =>
+          case seedRecNames rest st1 of
+            Ok (Pair tail st2) => Ok (Pair (Cons (Pair (Pair name ty) (Pair pat value)) tail) st2)
+            Err e => Err e
+    _ => Err "recursive let bindings must be simple names"
+
+recExtendLocals locals Nil = locals
+recExtendLocals locals (Cons (Pair (Pair name ty) _) rest) =
+  recExtendLocals (Cons (Pair name ty) locals) rest
+
+checkRecValues globals locals Nil st = Ok (Pair Nil st)
+checkRecValues globals locals (Cons (Pair (Pair _ ty) (Pair pat value)) rest) st =
+  andThen (inferExpr globals locals st value) (\pv =>
+    case pv of
+      Pair (Pair valueTy valueElab) st1 =>
+        andThen (unify ty valueTy st1) (\st2 =>
+          case checkRecValues globals locals rest st2 of
+            Ok (Pair tail st3) => Ok (Pair (Cons (Pair pat valueElab) tail) st3)
+            Err e => Err e))
+
 inferAlts globals locals scrutTy Nil st = Err "empty case"
 inferAlts globals locals scrutTy (Cons (Pair pat body) rest) st =
   andThen (inferPattern globals locals st pat scrutTy) (\pp =>
@@ -552,14 +591,16 @@ inferExpr globals locals st expr =
             case pb of
               Pair (Pair bodyTy bodyElab) st2 =>
                 Ok (Pair (Pair (foldFun paramTys bodyTy) (XELam params bodyElab sp)) st2))
-    ELet binds body sp =>
-      andThen (inferBinds globals locals binds st) (\pb =>
-        case pb of
-          Pair bindEls (Pair locals2 st1) =>
-            andThen (inferExpr globals locals2 st1 body) (\pr =>
-              case pr of
-                Pair (Pair bodyTy bodyElab) st2 =>
-                  Ok (Pair (Pair bodyTy (XELet bindEls bodyElab sp)) st2)))
+    ELet binds body rec_ sp =>
+      if rec_ then inferRecLet globals locals binds body sp st
+      else
+        andThen (inferBinds globals locals binds st) (\pb =>
+          case pb of
+            Pair bindEls (Pair locals2 st1) =>
+              andThen (inferExpr globals locals2 st1 body) (\pr =>
+                case pr of
+                  Pair (Pair bodyTy bodyElab) st2 =>
+                    Ok (Pair (Pair bodyTy (XELet bindEls bodyElab False sp)) st2)))
     ECase scrut alts sp =>
       andThen (inferExpr globals locals st scrut) (\ps =>
         case ps of
@@ -756,7 +797,7 @@ exprWarnings globals decls locals e =
           in exprWarnings globals decls (append (zipLocals ps pty) locals) body
         Err _ => exprWarnings globals decls locals body
     EApp fn args sp => concatMap (exprWarnings globals decls locals) (Cons fn args)
-    ELet binds body sp =>
+    ELet binds body _ sp =>
       let locals2 = append (letLocals globals locals binds) locals
       in append (concatMap (bindWarnings globals decls) binds) (exprWarnings globals decls locals2 body)
     ECase scrut alts sp =>

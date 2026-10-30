@@ -15,7 +15,7 @@ data Expr : Type where
   EStr : String -> Span -> Expr
   ELam : List String -> Expr -> Span -> Expr
   EApp : Expr -> List Expr -> Span -> Expr
-  ELet : List (Pair Pat Expr) -> Expr -> Span -> Expr
+  ELet : List (Pair Pat Expr) -> Expr -> Bool -> Span -> Expr
   ECase : Expr -> List (Pair Pat Expr) -> Span -> Expr
   EIf : Expr -> Expr -> Expr -> Span -> Expr
 
@@ -43,7 +43,7 @@ exprSpan expr =
     EStr s sp => sp
     ELam ps body sp => sp
     EApp fn args sp => sp
-    ELet binds body sp => sp
+    ELet binds body _ sp => sp
     ECase scrut alts sp => sp
     EIf c t e sp => sp
 

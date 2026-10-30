@@ -3,6 +3,10 @@
 import Vuna.Base
 import Vuna.Ast
 
+joinWith sep Nil = ""
+joinWith sep (Cons x Nil) = x
+joinWith sep (Cons x rest) = x ++ sep ++ joinWith sep rest
+
 runtimeCode = "\ntype value =\n  | VInt of int\n  | VStr of string\n  | VCon of string * value list\n  | VFun of string * (value -> value)\n\nlet fail (msg : string) : 'a = failwith msg\n\nlet apply (fn : value) (arg : value) : value =\n  match fn with\n  | VFun (_, f) -> f arg\n  | _ -> fail \"cannot apply a non-function\"\n\nlet expect_int (name : string) (v : value) : int =\n  match v with VInt n -> n | _ -> fail (name ^ \": expected an Int argument\")\n\nlet expect_str (name : string) (v : value) : string =\n  match v with VStr s -> s | _ -> fail (name ^ \": expected a String argument\")\n\nlet vbool (b : bool) : value = VCon ((if b then \"True\" else \"False\"), [])\n\nlet expect_bool (name : string) (v : value) : bool =\n  match v with\n  | VCon (\"True\", []) -> true\n  | VCon (\"False\", []) -> false\n  | _ -> fail (name ^ \": expected a Bool argument\")\n\nlet string_to_value (s : string) : value =\n  let n = String.length s in\n  let rec go i acc =\n    if i < 0 then acc\n    else go (i - 1) (VCon (\"Cons\", [ VInt (Char.code s.[i]); acc ]))\n  in\n  go (n - 1) (VCon (\"Nil\", []))\n\nlet value_to_string (v : value) : string =\n  let buf = Buffer.create 16 in\n  let rec go (v : value) =\n    match v with\n    | VCon (\"Nil\", []) -> ()\n    | VCon (\"Cons\", [ VInt c; rest ]) ->\n        if c < 0 || c > 255 then fail \"strPack: character code out of range\";\n        Buffer.add_char buf (Char.chr c);\n        go rest\n    | _ -> fail \"strPack expects a List Int\"\n  in\n  go v;\n  Buffer.contents buf\n\nlet list_of_strings (strings : string list) : value =\n  List.fold_right\n    (fun s acc -> VCon (\"Cons\", [ VStr s; acc ]))\n    strings (VCon (\"Nil\", []))\n\nlet read_file (path : string) : string =\n  try\n    let channel = open_in_bin path in\n    Fun.protect\n      ~finally:(fun () -> close_in_noerr channel)\n      (fun () -> really_input_string channel (in_channel_length channel))\n  with Sys_error message -> fail (\"readFile: \" ^ message)\n\nlet write_file (path : string) (contents : string) : int =\n  try\n    let channel = open_out_bin path in\n    Fun.protect\n      ~finally:(fun () -> close_out_noerr channel)\n      (fun () -> output_string channel contents);\n    String.length contents\n  with Sys_error message -> fail (\"writeFile: \" ^ message)\n\nlet print_stdout (text : string) : int =\n  print_string text;\n  flush stdout;\n  String.length text\n\nlet get_args () : value =\n  let argv = Sys.argv in\n  let count = Array.length argv in\n  let args =\n    if count <= 1 then [] else Array.to_list (Array.sub argv 1 (count - 1))\n  in\n  list_of_strings args\n\nlet bi_add =\n  fun a -> VFun (\"+\", fun b -> VInt (expect_int \"+\" a + expect_int \"+\" b))\n\nlet bi_sub =\n  fun a -> VFun (\"-\", fun b -> VInt (expect_int \"-\" a - expect_int \"-\" b))\n\nlet bi_mul =\n  fun a -> VFun (\"*\", fun b -> VInt (expect_int \"*\" a * expect_int \"*\" b))\n\nlet bi_div =\n  fun a ->\n    VFun\n      ( \"/\",\n        fun b ->\n          let x = expect_int \"/\" a in\n          let y = expect_int \"/\" b in\n          if y = 0 then fail \"division by zero\" else VInt (x / y) )\n\nlet bi_eq =\n  fun a ->\n    VFun\n      ( \"==\",\n        fun b ->\n          match (a, b) with\n          | VInt x, VInt y -> vbool (x = y)\n          | VStr x, VStr y -> vbool (x = y)\n          | _ -> fail \"bad arguments for ==\" )\n\nlet bi_neq =\n  fun a ->\n    VFun\n      ( \"/=\",\n        fun b ->\n          match (a, b) with\n          | VInt x, VInt y -> vbool (x <> y)\n          | VStr x, VStr y -> vbool (x <> y)\n          | _ -> fail \"bad arguments for /=\" )\n\nlet bi_lt =\n  fun a -> VFun (\"<\", fun b -> vbool (expect_int \"<\" a < expect_int \"<\" b))\n\nlet bi_le =\n  fun a -> VFun (\"<=\", fun b -> vbool (expect_int \"<=\" a <= expect_int \"<=\" b))\n\nlet bi_gt =\n  fun a -> VFun (\">\", fun b -> vbool (expect_int \">\" a > expect_int \">\" b))\n\nlet bi_ge =\n  fun a -> VFun (\">=\", fun b -> vbool (expect_int \">=\" a >= expect_int \">=\" b))\n\nlet bi_and =\n  fun a ->\n    VFun\n      (\"&&\", fun b -> vbool (expect_bool \"&&\" a && expect_bool \"&&\" b))\n\nlet bi_or =\n  fun a ->\n    VFun (\"||\", fun b -> vbool (expect_bool \"||\" a || expect_bool \"||\" b))\n\nlet bi_concat =\n  fun a -> VFun (\"++\", fun b -> VStr (expect_str \"++\" a ^ expect_str \"++\" b))\n\nlet bi_str_length = fun a -> VInt (String.length (expect_str \"strLength\" a))\n\nlet bi_str_unpack =\n  fun a -> string_to_value (expect_str \"strUnpack\" a)\n\nlet bi_str_pack = fun a -> VStr (value_to_string a)\n\nlet bi_str_from_int =\n  fun a -> VStr (string_of_int (expect_int \"strFromInt\" a))\n\nlet display_name (name : string) : string =\n  match String.rindex_opt name '.' with\n  | Some index -> String.sub name (index + 1) (String.length name - index - 1)\n  | None -> name\n\nlet rec show_value (v : value) : string =\n  match v with\n  | VInt n -> string_of_int n\n  | VStr s -> \"\\\"\" ^ show_chars s 0 (String.length s) ^ \"\\\"\"\n  | VCon (name, []) -> display_name name\n  | VCon (name, args) ->\n      \"(\" ^ display_name name ^ \" \"\n      ^ String.concat \" \" (List.map show_value args)\n      ^ \")\"\n  | VFun (\"\", _) -> \"<lambda>\"\n  | VFun (name, _) -> \"<function \" ^ display_name name ^ \">\"\n\nand show_chars (s : string) (i : int) (n : int) : string =\n  if i >= n then \"\"\n  else\n    let rest = show_chars s (i + 1) n in\n    match s.[i] with\n    | '\"' -> \"\\\\\\\"\" ^ rest\n    | '\\\\' -> \"\\\\\\\\\" ^ rest\n    | '\\n' -> \"\\\\n\" ^ rest\n    | '\\t' -> \"\\\\t\" ^ rest\n    | '\\r' -> \"\\\\r\" ^ rest\n    | '\\b' -> \"\\\\b\" ^ rest\n    | c ->\n        let code = Char.code c in\n        if code >= 32 && code <= 126 then String.make 1 c ^ rest\n        else Printf.sprintf \"\\\\%03d\" code ^ rest\n"
 
 -- codegen（M6）：flatten 后的程序 → 动态 value 表示的 OCaml
@@ -134,7 +138,11 @@ genCase decls scope scrut alts =
         ++ joinList "\n    " branches
         ++ "\n    | _ -> fail \"case pattern match failure\")")))
 
-genLet decls scope binds body =
+genLet decls scope rec_ binds body =
+  if rec_ then genRecLet decls scope binds body
+  else genLetSeq decls scope binds body
+
+genLetSeq decls scope binds body =
   case binds of
     Nil => genExpr decls scope body
     Cons (Pair pat value) rest =>
@@ -142,10 +150,27 @@ genLet decls scope binds body =
         andThen (genPattern pat) (\p =>
           case p of
             Pair patCode bound =>
-              andThen (genLet decls (append bound scope) rest body) (\bodyCode =>
+              andThen (genLetSeq decls (append bound scope) rest body) (\bodyCode =>
                 Ok
                   ("(let " ++ patCode ++ " = (" ++ valueCode ++ ") in "
                   ++ bodyCode ++ ")"))))
+
+-- 递归 let（where 块）：`let rec x_<n> = ... and ... in body`。
+genRecLet decls scope binds body =
+  andThen (genRecDefs decls (append (recBindNames binds) scope) binds) (\defs =>
+    andThen (genExpr decls (append (recBindNames binds) scope) body) (\b =>
+      Ok ("(let rec " ++ joinWith " and " defs ++ " in " ++ b ++ ")")))
+
+recBindNames Nil = Nil
+recBindNames (Cons (Pair (PVar name _) _) rest) = Cons name (recBindNames rest)
+recBindNames (Cons (Pair _ _) _) = Nil
+
+genRecDefs decls scope Nil = Ok Nil
+genRecDefs decls scope (Cons (Pair (PVar name _) value) rest) =
+  andThen (genExpr decls scope value) (\v =>
+    andThen (genRecDefs decls scope rest) (\tail =>
+      Ok (Cons ("x_" ++ sanitizeName name ++ " = " ++ v) tail)))
+genRecDefs decls scope (Cons (Pair _ _) _) = Err "recursive let bindings must be simple names"
 
 cgApplyFold acc Nil = acc
 cgApplyFold acc (Cons a rest) =
@@ -201,7 +226,7 @@ genExpr decls scope expr =
     EStr s _ => Ok ("VStr " ++ ocamlString s)
     ELam params body _ => genLambda decls scope params body
     EApp fn args _ => genEApp decls scope fn args
-    ELet binds body _ => genLet decls scope binds body
+    ELet binds body rec_ _ => genLet decls scope rec_ binds body
     ECase scrut alts _ => genCase decls scope scrut alts
     EIf c t e _ =>
       andThen (genExpr decls scope c) (\cc =>

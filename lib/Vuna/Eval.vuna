@@ -54,7 +54,7 @@ evalExpr decls env expr =
     EStr s _ => Ok (VStr s)
     ELam params body _ => Ok (VLam params body env)
     EApp fn args sp => evalApp decls env sp fn args
-    ELet binds body sp => evalLet decls env sp binds body
+    ELet binds body rec_ sp => evalLet decls env sp rec_ binds body
     ECase scrut alts sp => evalCase decls env sp scrut alts
     EIf c t e sp => evalIf decls env sp c t e
 
@@ -102,8 +102,39 @@ foldApply decls env sp fv (Cons arg rest) =
   andThen (evalExpr decls env arg) (\av =>
     andThen (applyValue decls sp fv av) (\fv2 => foldApply decls env sp fv2 rest))
 
-evalLet decls env sp binds body =
-  andThen (evalBindings decls env sp binds) (\env2 => evalExpr decls env2 body)
+evalLet decls env sp rec_ binds body =
+  if rec_ && recursiveBindings binds then
+    errAt sp "recursive let (where) bindings are only supported by the compiler (use --typecheck); the interpreter evaluates them sequentially"
+  else
+    andThen (evalBindings decls env sp binds) (\env2 => evalExpr decls env2 body)
+
+-- 检测递归绑定：任一绑定值引用了本块中的某个绑定名。
+any f Nil = False
+any f (Cons x rest) = if f x then True else any f rest
+
+pairSecond (Pair _ v) = v
+
+bindNames Nil = Nil
+bindNames (Cons (Pair pat _) rest) = append (patNames pat) (bindNames rest)
+
+patNames (PVar n _) = Cons n Nil
+patNames (PCon _ ps _) = concatMap patNames ps
+patNames _ = Nil
+
+exprUsesAny (EVar n _) names = memName n names
+exprUsesAny (EApp f args _) names = exprUsesAny f names || any (\a => exprUsesAny a names) args
+exprUsesAny (ELam _ body _) names = exprUsesAny body names
+exprUsesAny (ELet binds body _ _) names =
+  any (\b => exprUsesAny (pairSecond b) names) binds || exprUsesAny body names
+exprUsesAny (ECase s alts _) names =
+  exprUsesAny s names || any (\a => exprUsesAny (pairSecond a) names) alts
+exprUsesAny (EIf c t e _) names = exprUsesAny c names || exprUsesAny t names || exprUsesAny e names
+exprUsesAny _ names = False
+
+recursiveBindings Nil = False
+recursiveBindings binds =
+  let names = bindNames binds
+  in any (\b => exprUsesAny (pairSecond b) names) binds
 
 evalBindings decls env sp Nil = Ok env
 evalBindings decls env sp (Cons (Pair pat valueExpr) rest) =

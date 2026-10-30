@@ -224,7 +224,11 @@ resolveAlt modules label prefix own ownCtors imports scope (Pair pat body) =
         andThen (resolveExpr modules label prefix own ownCtors imports (append bound scope) body) (\body2 =>
           Ok (Pair pat2 body2)))
 
-resolveLet modules label prefix own ownCtors imports scope binds body =
+resolveLet modules label prefix own ownCtors imports scope rec_ binds body =
+  if rec_ then resolveRecLet modules label prefix own ownCtors imports scope binds body
+  else resolveLetSeq modules label prefix own ownCtors imports scope binds body
+
+resolveLetSeq modules label prefix own ownCtors imports scope binds body =
   case binds of
     Nil =>
       andThen (resolveExpr modules label prefix own ownCtors imports scope body) (\b =>
@@ -234,10 +238,35 @@ resolveLet modules label prefix own ownCtors imports scope binds body =
         andThen (resolvePattern modules label prefix ownCtors imports pat) (\p =>
           case p of
             Pair pat2 bound =>
-              andThen (resolveLet modules label prefix own ownCtors imports (append bound scope) rest body) (\r =>
+              andThen (resolveLetSeq modules label prefix own ownCtors imports (append bound scope) rest body) (\r =>
                 case r of
                   Pair binds2 body2 =>
                     Ok (Pair (Cons (Pair pat2 value2) binds2) body2))))
+
+-- 递归 let（where 块）：所有绑定名对全部 value 与 body 可见。
+resolveRecLet modules label prefix own ownCtors imports scope binds body =
+  case collectRecBinds modules label prefix ownCtors imports binds of
+    Err e => Err e
+    Ok (Pair names pairs) =>
+      let scope2 = append names scope
+      in andThen (resolveRecValues modules label prefix own ownCtors imports scope2 pairs) (\values2 =>
+           andThen (resolveExpr modules label prefix own ownCtors imports scope2 body) (\b =>
+             Ok (Pair values2 b)))
+
+collectRecBinds modules label prefix ownCtors imports Nil = Ok (Pair Nil Nil)
+collectRecBinds modules label prefix ownCtors imports (Cons (Pair pat value) rest) =
+  andThen (resolvePattern modules label prefix ownCtors imports pat) (\pr =>
+    case pr of
+      Pair pat2 bound =>
+        andThen (collectRecBinds modules label prefix ownCtors imports rest) (\r =>
+          case r of
+            Pair names tail => Ok (Pair (append bound names) (Cons (Pair pat2 value) tail))))
+
+resolveRecValues modules label prefix own ownCtors imports scope Nil = Ok Nil
+resolveRecValues modules label prefix own ownCtors imports scope (Cons (Pair pat value) rest) =
+  andThen (resolveExpr modules label prefix own ownCtors imports scope value) (\value2 =>
+    andThen (resolveRecValues modules label prefix own ownCtors imports scope rest) (\tail =>
+      Ok (Cons (Pair pat value2) tail)))
 
 resolveExpr modules label prefix own ownCtors imports scope expr =
   case expr of
@@ -254,10 +283,10 @@ resolveExpr modules label prefix own ownCtors imports scope expr =
       andThen (resolveExpr modules label prefix own ownCtors imports scope fn) (\fn2 =>
         andThen (traverse (\a => resolveExpr modules label prefix own ownCtors imports scope a) args) (\args2 =>
           Ok (EApp fn2 args2 sp)))
-    ELet binds body sp =>
-      andThen (resolveLet modules label prefix own ownCtors imports scope binds body) (\r =>
+    ELet binds body rec_ sp =>
+      andThen (resolveLet modules label prefix own ownCtors imports scope rec_ binds body) (\r =>
         case r of
-          Pair binds2 body2 => Ok (ELet binds2 body2 sp))
+          Pair binds2 body2 => Ok (ELet binds2 body2 rec_ sp))
     ECase scrut alts sp =>
       andThen (resolveExpr modules label prefix own ownCtors imports scope scrut) (\scrut2 =>
         andThen (traverse (resolveAlt modules label prefix own ownCtors imports scope) alts) (\alts2 =>
@@ -399,6 +428,6 @@ tyShape ty =
     EInt n _ => "int"
     EStr s _ => "str"
     ELam ps b _ => "lam"
-    ELet bs b _ => "let"
+    ELet bs b _ _ => "let"
     ECase s alts _ => "case"
     EIf c t e _ => "if"

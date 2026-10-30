@@ -523,8 +523,8 @@ genExpr decls env expr =
       let env2 = append params env
       in andThen (genExpr decls env2 body) (\b =>
            Ok ("fun " ++ joinWith " " (map sanitizeName params) ++ " -> " ++ b))
-    ELet binds body _ =>
-      andThen (genBinds decls env binds body) (\b => Ok ("(" ++ b ++ ")"))
+    ELet binds body rec_ _ =>
+      andThen (genLetBinds decls env binds body rec_) (\b => Ok ("(" ++ b ++ ")"))
     ECase scrut alts sp =>
       andThen (genExpr decls env scrut) (\s =>
         andThen (mapResult (genAlt decls env) alts) (\arms =>
@@ -545,6 +545,26 @@ genAlt decls env (Pair pat body) =
 genCatchAll (Span f sl sc el ec) msg =
   if sl == 0 then "  | _ -> vuna_fail \"\" 0 0 (" ++ ocamlString msg ++ ")"
   else "  | _ -> vuna_fail " ++ ocamlString f ++ " " ++ strFromInt sl ++ " " ++ strFromInt sc ++ " (" ++ ocamlString msg ++ ")"
+
+genLetBinds decls env binds body False = genBinds decls env binds body
+genLetBinds decls env binds body True = genRecBinds decls env binds body
+
+-- 递归 let（where 块）：`let rec name = value and ... in body`，所有绑定名互见。
+genRecBinds decls env binds body =
+  andThen (genRecDefs decls (append (recBindNames binds) env) binds) (\defs =>
+    andThen (genExpr decls (append (recBindNames binds) env) body) (\b =>
+      Ok ("let rec " ++ joinWith "\nand " defs ++ " in " ++ b)))
+
+recBindNames Nil = Nil
+recBindNames (Cons (Pair (PVar name _) _) rest) = Cons name (recBindNames rest)
+recBindNames (Cons (Pair _ _) _) = Nil
+
+genRecDefs decls env Nil = Ok Nil
+genRecDefs decls env (Cons (Pair (PVar name _) value) rest) =
+  andThen (genExpr decls env value) (\v =>
+    andThen (genRecDefs decls env rest) (\tail =>
+      Ok (Cons (sanitizeName name ++ " = " ++ v) tail)))
+genRecDefs decls env (Cons (Pair _ _) _) = Err "recursive let bindings must be simple names"
 
 genBinds : List Decl -> List String -> List (Pair Pat Expr) -> Expr -> Result String
 genBinds decls env Nil body = genExpr decls env body
@@ -786,7 +806,7 @@ exprRefs expr =
     EStr s _ => Nil
     EApp fn args _ => unionNames (exprRefs fn) (concatMap exprRefs args)
     ELam params body _ => exprRefs body
-    ELet binds body _ => unionNames (concatMap bindRefs binds) (exprRefs body)
+    ELet binds body _ _ => unionNames (concatMap bindRefs binds) (exprRefs body)
     ECase scrut alts _ => unionNames (exprRefs scrut) (concatMap altRefs alts)
     EIf c t e _ => unionNames (exprRefs c) (unionNames (exprRefs t) (exprRefs e))
 

@@ -1,0 +1,7 @@
+f : Int -> Int
+f x = g x where
+  g y = y + h y
+  h y = y * 2
+
+main : Int
+main = f 5
