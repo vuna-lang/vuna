@@ -1,0 +1,109 @@
+{
+  description = "vuna — 函数式编程语言 vuna 的编译器";
+
+  # 使用 nixos-unstable channel 的官方 tarball 作为 nixpkgs 输入。
+  # 原因：当前网络下 github.com 的 archive 端点不可达，而 channels.nixos.org 可用。
+  # 若能正常访问 GitHub，可改为 "github:NixOS/nixpkgs/nixos-unstable"。
+  inputs.nixpkgs.url = "tarball+https://channels.nixos.org/nixos-unstable/nixexprs.tar.xz";
+
+  outputs =
+    { self, nixpkgs }:
+    let
+      systems = [
+        "x86_64-linux"
+        "aarch64-linux"
+        "x86_64-darwin"
+        "aarch64-darwin"
+      ];
+
+      forAllSystems = nixpkgs.lib.genAttrs systems;
+    in
+    {
+      # 自举链与种子策略：
+      #   vunax（外部编译器，OCaml）编译 app/ lib/ test/ 里的 vuna 编译器源码
+      #   → 生成 OCaml（bootstrap/，stage 1，自举种子）并提交入库；
+      #   → Nix 直接构建入库的 bootstrap/ 得到 stage 1 种子编译器；
+      #   → 种子编译当前源码得到 stage 2；stage 2 再编译同一份源码得到 stage 3；
+      #     两者行为一致（fixed point）才算自举完成。
+      # 种子是构建输入：日常改源码不重新生成，只在发版或兼容性变更时更新；
+      # 不变量是「当前种子必须能编译当前源码」。后续加：
+      #   packages.vuna             从 bootstrap/ 构建 stage 1
+      #   checks.bootstrap-selfhost 种子编译当前源码 → stage 2 并运行（守不变量）
+      #   checks.fixed-point        stage 2 与 stage 3 行为一致
+      #   packages.vunax / checks.vunax-selfhost  外部编译器兜底（发版时重新生成种子）
+      # 目前只有 stage 0（vunax）可构建。
+      packages = forAllSystems (
+        system:
+        let
+          pkgs = nixpkgs.legacyPackages.${system};
+          inherit (pkgs) lib;
+          ocamlPackages = pkgs.ocamlPackages;
+
+          # 外部编译器（stage 0）：用 OCaml 写，把 vuna 源码编译成 OCaml。
+          # 它本身不是自举种子。
+          vunax = ocamlPackages.buildDunePackage {
+            pname = "vunax";
+            version = "0.1.0";
+
+            # 只把 vunax 需要的文件拷进 Nix store；app/、lib/、test/
+            # 是 vuna 源码，属于自举阶段，不是 vunax 的构建输入。
+            src = lib.fileset.toSource {
+              root = ./.;
+              fileset = lib.fileset.unions [
+                ./dune-workspace
+                ./vunax
+              ];
+            };
+
+            doCheck = true;
+            checkInputs = [ ocamlPackages.alcotest ];
+
+            meta = {
+              description = "vunax — external vuna compiler (written in OCaml)";
+              license = lib.licenses.mit;
+              mainProgram = "vunax";
+            };
+          };
+        in
+        {
+          default = vunax;
+          inherit vunax;
+        }
+      );
+
+      devShells = forAllSystems (
+        system:
+        let
+          pkgs = nixpkgs.legacyPackages.${system};
+          ocamlPackages = pkgs.ocamlPackages;
+        in
+        {
+          default = pkgs.mkShell {
+            # 复用包构建里的 OCaml / dune / findlib。
+            inputsFrom = [ self.packages.${system}.vunax ];
+
+            packages = with ocamlPackages; [
+              alcotest
+              merlin
+              ocaml-lsp
+              ocamlformat
+              odoc
+              utop
+            ];
+
+            shellHook = ''
+              echo "vuna dev shell — OCaml $(ocaml -version), Dune $(dune --version)"
+            '';
+          };
+        }
+      );
+
+      checks = forAllSystems (system: {
+        inherit (self.packages.${system}) vunax;
+      });
+
+      # nixfmt-tree 让不带参数的 `nix fmt` 也能格式化整个目录
+      # （裸 nixfmt 在 Nix ≥ 2.34 下不带参数会读 stdin 并报错）。
+      formatter = forAllSystems (system: nixpkgs.legacyPackages.${system}.nixfmt-tree);
+    };
+}

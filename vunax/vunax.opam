@@ -1,0 +1,22 @@
+opam-version: "2.0"
+synopsis: "vunax — external vuna compiler (OCaml implementation)"
+description: """
+Vunax is the external compiler for the vuna programming language, written in
+OCaml. It compiles vuna source into OCaml and is used to build the bootstrap
+seed (stage 1) for self-hosting. It is not itself the bootstrap seed.
+"""
+maintainer: "vuna-lang"
+authors: "vuna-lang"
+license: "MIT"
+homepage: "https://github.com/vuna-lang/vuna"
+bug-reports: "https://github.com/vuna-lang/vuna/issues"
+dev-repo: "git+https://github.com/vuna-lang/vuna.git"
+depends: [
+  "ocaml" {>= "5.0"}
+  "dune" {>= "3.17"}
+  "alcotest" {with-test}
+]
+build: [
+  ["dune" "build" "-p" name "-j" jobs]
+  ["dune" "runtest" "-p" name "-j" jobs] {with-test}
+]

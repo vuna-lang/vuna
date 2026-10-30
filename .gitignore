@@ -34,3 +34,13 @@ setup.log
 
 # Local OPAM switch
 _opam/
+
+# Nix build results and direnv
+result
+result-*
+.direnv/
+
+
+# dsh
+.dsh-scratch/
+.agents/worktrees/
