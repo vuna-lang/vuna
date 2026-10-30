@@ -26,9 +26,10 @@ echo "seed-rotate: 已生成 seed/（$(ls seed | wc -l | tr -d ' ') 个文件）
 
 # 用种子源码构建 vuna-seed，并验证它能逐字节重生成同一文件集。
 cp -r seed "$tmp/seed"
-( cd "$tmp/seed" && sh build.sh "$tmp/vuna-seed" )
+sh "$tmp/seed/build.sh" "$tmp/vuna-seed"
 mkdir -p "$tmp/regen"
-( cd "$tmp/seed" && "$tmp/vuna-seed" build --split "$tmp/regen" "$OLDPWD" )
+# 从仓库根以包目录 "." 生成，保证嵌入的文件路径与 seed/ 一致。
+"$tmp/vuna-seed" build --split "$tmp/regen" .
 if diff -r seed "$tmp/regen" >/dev/null 2>&1; then
   echo "seed-rotate: 种子自生成 fixed point 通过（文件集逐字节一致）"
 else

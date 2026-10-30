@@ -84,14 +84,14 @@ git add seed/ && git commit
 ```
 
 注意：如果改的是**现有语法的语义**（而非新增语法），旧种子会按旧语义编译新编译器，
-需要确认没有 bootstrap 语义偏差；必要时先 rotate，再让编译器源码依赖新语义。
+需要确认没有 seed 语义偏差；必要时先 rotate，再让编译器源码依赖新语义。
 
 ## 目录结构
 
 ```text
 .
 ├── .local                # 本地文件，被git忽略，临时文件可以放到 .local/tmp 下面
-├── flake.nix             # Nix：vuna-boot / vuna、devShell、checks
+├── flake.nix             # Nix：vuna-seed / vuna、devShell、checks
 ├── flake.lock
 ├── vuna.toml             # workspace 根（同时是编译器包 vuna）；deps: vuna-stdlib
 ├── lib/                  # 编译器包 vuna 的模块根（模块名由路径精确决定）
@@ -128,7 +128,7 @@ git add seed/ && git commit
 │       └── Vuna/         # Pair/Bool/List/Maybe/Result/String/Sort/Map/Monad/IO
 ├── examples/multi/       # M11.5 多包示例（workspace 根包 + 成员包 greet + stdlib 依赖）
 ├── test/
-│   ├── run-tests.sh      # vuna 原生测试（只用 vuna / vuna-boot）
+│   ├── run-tests.sh      # vuna 原生测试（只用 vuna / vuna-seed）
 │   └── corpus/           # run/err/modules/records/traits/monad/stdlib/packages/fmt/...
 ├── seed/                 # 多文件自举信任锚点（.ml/.mli + build.sh），提交入库、由 vuna seed 生成
 ├── .gitattributes        # 把 seed/** 标记为 generated
@@ -494,11 +494,11 @@ type value =
 
 ## 测试
 
-`test/run-tests.sh` 是 vuna 原生测试（693 checks），用 `vuna` / `vuna-boot` 驱动，
+`test/run-tests.sh` 是 vuna 原生测试（699 checks），用 `vuna` / `vuna-seed` 驱动，
 不依赖外部 vuna 实现；但运行测试需要 OCaml 编译器（`ocamlopt`）作为代码生成后端：
 
 ```console
-sh test/run-tests.sh          # 需要 PATH 中有 vuna 与 vuna-boot
+sh test/run-tests.sh          # 需要 PATH 中有 vuna 与 vuna-seed
 ```
 
 覆盖：
@@ -568,20 +568,20 @@ Nix 侧：
 ```console
 nix develop
 nix build .#vuna --out-link result-vuna
-nix build .#vuna-boot --out-link result-boot
+nix build .#vuna-seed --out-link result-seed
 VUNA=$PWD/result-vuna/bin/vuna \
-VUNA_BOOT=$PWD/result-boot/bin/vuna-boot \
+VUNA_SEED=$PWD/result-seed/bin/vuna-seed \
 sh test/run-tests.sh
 ```
 
-devShell 提供 `ocaml` / `ocamlopt` 工具链和 `vuna-boot`；stage 1 的 `vuna` 不进
+devShell 提供 `ocaml` / `ocamlopt` 工具链和 `vuna-seed`；stage 1 的 `vuna` 不进
 devShell，避免种子失效时连 shell 都进不去。
 
 ## 性能基准（手动）
 
 `nix run .#bench` 是**手动**性能基准，用来在优化前后快速测量收益；不是 CI check，
 结果依赖机器，不参与 `nix flake check`。默认测量 `vuna`（stage 1），
-`--compiler boot` 改测 `vuna-boot`（stage 0 种子）。
+`--compiler boot` 改测 `vuna-seed`（stage 0 多文件种子）。
 
 ```console
 nix run .#bench -- --quick                 # 快速冒烟（runs=1）
@@ -612,7 +612,7 @@ nix fmt               # nixfmt-tree 格式化 .nix
 ## 限制与路线
 
 - 类型检查与原生 OCaml typed codegen 已默认开启；M8 完成 typed 自举，
-  `bootstrap/seed.ml` 由 typed 编译器轮换；dynamic codegen 保留为
+  `seed/` 由 typed 编译器轮换（M12 起为多文件）；dynamic codegen 保留为
   `--no-typecheck` 的测试/调试回退路径；
 - M8c 完成 codegen 性能与输出质量收尾：Kosaraju SCC、类型特化比较、`&&`/`||`
   短路、`++` 折叠与线性拼接、零参纯值 hoist、pretty printer；自举 codegen

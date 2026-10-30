@@ -31,6 +31,11 @@
   `[export]` 跨包可见性、三目录约定与 `app/Main.vuna` 入口、Loader 模块根抽象；
   `vuna build` / `test` / `fmt` / `repl` / `doc`；多包示例与 Nix 沙箱复现
   （`checks.vuna-package`）。
+- M12：性能与编译模型——分离编译（vuna 模块 → OCaml 模块 `.ml`/`.mli`，模块边界保留
+  抽象类型/重导出），生成的 `build.sh` 用 ocamlopt `.cmi/.cmx` 缓存做模块级增量构建；
+  seed 改为多文件文件集（`bootstrap/` → `seed/`、`vuna-boot` → `vuna-seed`），
+  fixed point 按文件集合逐字节比较；`checks.vuna-metrics` 机器无关指标门槛；
+  不做 vuna typed IR（优化归 ocamlopt）。
 
 当前硬约束：
 
@@ -48,12 +53,13 @@
 M10 模块系统 v2（已完成）→ M10.5 类型表达力（已完成：记录 + trait）
    → M11 标准库（已完成：高阶 kind/约束泛化 + do/Monad/IO；编译器是首个用户）
    → M11.5 包管理与工具链（已完成：vuna.toml / workspace / 三目录 + 工具链）
-   → M12 性能与编译模型（下一步）→ M13 高级类型/效应（研究型，单独规划）
+   → M12 性能与编译模型（已完成：分离编译 / seed 多文件 / 指标门槛）
+   → M13 高级类型/效应（研究型，单独规划）
 ```
 
 依赖说明：
 
-- **M10、M10.5、M11、M11.5 已完成**；下一步主线是 M12（分离编译 / seed 多文件 / 基准门槛）；
+- **M10、M10.5、M11、M11.5、M12 已完成**；下一步是 M13（研究型，单独规划）；
 - **M11 与 M11.5 的机制部分可并行**，二者改动面互不重叠（stdlib vs 包工具）；
   但**交付顺序**是 M11 先、M11.5 后；
 - **M11（标准库）依赖 M10.5 的 trait 基础**（已具备，含方法级字典穿参），不依赖 M11.5：
@@ -347,11 +353,34 @@ M10 模块系统 v2（已完成）→ M10.5 类型表达力（已完成：记录
 - `test/run-tests.sh` 是工具链脚本+黄金数据，暂原地保留（CI 依赖）；`test/` 的 vuna 测试
   模块从 `test/*.vuna` 起步；三目录约定约束源码包，不约束 harness。
 
-## M12：性能与编译模型
+## M12：性能与编译模型（已完成）
 
 目标：摆脱“整程序 flatten + 全量重编”，走向多文件分离编译。
 
 依赖：M11.5（包 DAG 是增量边界：接口变化的包，只有其传递依赖者被重编）。
+
+### M12 实现状态（已落地）
+
+- **分离编译（路线 B）**：`Vuna.TypedCodegen.generateSplitProgram` 把每个 vuna 模块
+  生成一个 OCaml 模块（`<Mod>.ml` + `<Mod>.mli`）：模块间用 `open Vuna_runtime` +
+  按 import 拓扑序 `open` 之前模块（全局唯一名字无需改写）；`.mli` 按模块导出表生成
+  sig（抽象类型 vs 完整变体、整模块重导出用 `include module type of`），入口生成
+  `Main.ml`；单文件 codegen 路径保留（解释器/动态回退、以及分离编译不支持的构造回退），
+  产物字节不变。
+- **增量构建**：`Vuna.Split.buildScript` 生成 `build.sh`：模块 `.ml/.mli` 变化、或任一
+  更早模块的 `.cmi` 比本模块 `.cmx` 新才重编，最后链接；实测无改动只链接、touch 一个
+  模块只重编它。优化仍归 ocamlopt（不做 vuna typed IR）。
+- **seed 多文件**：`bootstrap/seed.ml`（单文件）→ `seed/`（逐模块 `.ml/.mli` +
+  `build.sh`）；`vuna-boot` → `vuna-seed`；seed rotation 用 `nix/seed-rotate.sh`
+  （`vuna seed seed .`）；fixed point 按**文件集合逐字节**比较（`diff -r`），
+  `checks.seed-selfhost` 同时断言增量构建与 `12_fact` 行为。
+- **基准与回归门槛**：`checks.vuna-metrics` 聚合分离编译产物的机器无关指标
+  （bytes/lines/最长行/超长行/`let rec`/线性拼接/比较特化/ctor 计数），对比
+  `nix/metrics.budget`；精确时间测量仍手动 `nix run .#bench`（已适配多文件 seed/构建，
+  报告 fixed point / seed 一致性 / 指标）。
+- 未做：vuna typed IR、自研 native/LLVM/C 后端、跨包并行构建、依赖哈希/内容寻址缓存；
+  `vuna build --split` 遇到不支持构造（选择性重导出、部分构造器导出、dict 约束泛化等）
+  报错而不自动回退（`vuna build` 单文件路径可用）。
 
 范围：
 
@@ -375,7 +404,7 @@ M10 模块系统 v2（已完成）→ M10.5 类型表达力（已完成：记录
 
 自研 native/LLVM/C 后端 + 完整 typed IR 应作为独立大项目评估，不与本阶段捆绑。
 
-## M13：高级类型 / 效应（研究型）
+## M13：高级类型 / 效应（研究型，下一步）
 
 候选方向（一次只选一个）：
 
