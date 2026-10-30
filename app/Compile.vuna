@@ -1,30 +1,33 @@
 -- vuna-compile：用 vuna 写的编译器 CLI。
--- 用法：vuna-compile [--no-print] [--no-typecheck] [--root DIR] <entry.vuna> [out.ml]
+-- 用法：vuna-compile [--no-print] [--no-typecheck] [--typed] [--root DIR] <entry.vuna> [out.ml]
 -- 不传 out.ml 时把生成的 OCaml 打到 stdout。
 import Vuna.Base
 import Vuna.Interp
 
-usage = "usage: vuna [--no-print] [--no-typecheck] [--root DIR] <entry.vuna> [out.ml]"
+usage = "usage: vuna [--no-print] [--no-typecheck] [--typed] [--root DIR] <entry.vuna> [out.ml]"
 
-main = dispatch True True "lib" getArgs
+main = dispatch True True False "lib" getArgs
 
-dispatch printResult typeCheck root args =
+dispatch printResult typeCheck typed root args =
   case args of
     Nil => emitUsage
     Cons a rest =>
-      if a == "--no-print" then dispatch False typeCheck root rest
-      else if a == "--no-typecheck" then dispatch printResult False root rest
-      else if a == "--typecheck" then dispatch printResult True root rest
+      if a == "--no-print" then dispatch False typeCheck typed root rest
+      else if a == "--no-typecheck" then dispatch printResult False typed root rest
+      else if a == "--typecheck" then dispatch printResult True typed root rest
+      else if a == "--typed" then dispatch printResult True True root rest
       else if a == "--root" then
         case rest of
-          Cons dir rest2 => dispatch printResult typeCheck dir rest2
+          Cons dir rest2 => dispatch printResult typeCheck typed dir rest2
           Nil => emitUsage
-      else emit printResult typeCheck root a rest
+      else emit printResult typeCheck typed root a rest
 
 emitUsage = let _ = print (usage ++ "\n") in 1
 
-emit printResult typeCheck root entry rest =
-  let result = if typeCheck then compileFileChecked root entry printResult else compileFile root entry printResult
+emit printResult typeCheck typed root entry rest =
+  let result = if typed then compileFileTyped root entry printResult
+               else if typeCheck then compileFileChecked root entry printResult
+               else compileFile root entry printResult
   in case result of
     Ok code =>
       case rest of

@@ -179,7 +179,23 @@ for dir in corpus/type_modules/9*; do
   fi
 done
 
-# 11) 种子冒烟：vuna-boot 编译一个程序并运行
+# 11) typed codegen（M8a）：--typed 生成原生 OCaml，编译运行并比对 golden
+for file in corpus/typed_ok/*.vuna; do
+  base=${file%.vuna}
+  rm -f "$tmp/typedgen.ml" "$tmp/typedgen.exe"
+  if ! typed_out=$("$VUNA" --typed "$file" "$tmp/typedgen.ml" 2>&1); then
+    bad "$file (typed codegen)" "exit 0" "$typed_out"
+  elif [ -n "$typed_out" ]; then
+    bad "$file (typed codegen output)" "" "$typed_out"
+  elif ! "$OCAMLOPT" -w -a -o "$tmp/typedgen.exe" "$tmp/typedgen.ml" >"$tmp/typedgen.log" 2>&1; then
+    bad "$file (typed ocamlopt)" "" "$(cat "$tmp/typedgen.log")"
+  else
+    actual=$("$tmp/typedgen.exe" 2>&1)
+    check_eq "$file (typed run)" "$(cat "$base.out")" "$actual"
+  fi
+done
+
+# 12) 种子冒烟：vuna-boot 编译一个程序并运行
 fact=corpus/run/12_fact.vuna
 compile_and_run "$fact (vuna-boot)" "$VUNA_BOOT" "." "$fact" "$(cat "${fact%.vuna}.out")"
 

@@ -6,6 +6,7 @@ import Vuna.Loader
 import Vuna.Eval
 import Vuna.Codegen
 import Vuna.Typecheck
+import Vuna.TypedCodegen
 
 interpret source =
   case parseSource source of
@@ -33,3 +34,8 @@ main = interpret demo
 compileFileChecked root entry printResult =
   andThen (loadProgram root entry) (\decls =>
     andThen (checkProgram decls) (\_ => generateProgram decls printResult))
+
+compileFileTyped root entry printResult =
+  andThen (loadProgram root entry) (\decls =>
+    andThen (checkProgramInfo decls) (\globals =>
+      generateProgramTyped decls globals printResult))

@@ -1,0 +1,477 @@
+-- Vuna.TypedCodegen：用类型信息生成原生 OCaml 类型（M8a）。
+-- 目前覆盖 Int/String/Bool/List、函数/lambda/let/case/if、用户 data 类型、
+-- 模式匹配与 builtins；main 的 show 暂支持 Int/String/Bool/List。
+import Vuna.Base
+import Vuna.Ast
+import Vuna.Codegen
+import Vuna.Typecheck
+
+joinWith sep Nil = ""
+joinWith sep (Cons x Nil) = x
+joinWith sep (Cons x rest) = x ++ sep ++ joinWith sep rest
+
+lastName name =
+  case splitLastDot (splitOnDot name) of
+    Pair rev base => base
+
+isBoolName name = lastName name == "Bool"
+
+isListName name = lastName name == "List"
+
+typeNameOf name = "t_" ++ sanitizeName name
+
+ctorNameOf name = "C_" ++ sanitizeName name
+
+showNameOf name = "show_" ++ sanitizeName name
+
+paramVar i = "'p" ++ strFromInt i
+
+showParamVar i = "s" ++ strFromInt i
+
+paramMapAt Nil i = Nil
+paramMapAt (Cons p rest) i = Cons (Pair p (paramVar i)) (paramMapAt rest (i + 1))
+
+paramMap params = paramMapAt params 0
+
+showParamMapAt Nil i = Nil
+showParamMapAt (Cons p rest) i = Cons (Pair p (showParamVar i)) (showParamMapAt rest (i + 1))
+
+showParamMap params = showParamMapAt params 0
+
+lookupParam name Nil = Nothing
+lookupParam name (Cons p rest) =
+  case p of
+    Pair n v => if n == name then Just v else lookupParam name rest
+
+dataDecls decls =
+  case decls of
+    Nil => Nil
+    Cons d rest =>
+      case d of
+        DData name params ctors => Cons d (dataDecls rest)
+        _ => dataDecls rest
+
+nonSpecialData decls =
+  case dataDecls decls of
+    Nil => Nil
+    Cons d rest =>
+      case d of
+        DData name params ctors =>
+          if isBoolName name || isListName name then nonSpecialData rest
+          else Cons d (nonSpecialData rest)
+        _ => nonSpecialData rest
+
+lookupData decls name =
+  case decls of
+    Nil => Nothing
+    Cons d rest =>
+      case d of
+        DData dn ps cs => if dn == name then Just d else lookupData rest name
+        _ => lookupData rest name
+
+mapResult f Nil = Ok Nil
+mapResult f (Cons x rest) =
+  andThen (f x) (\y =>
+    andThen (mapResult f rest) (\ys => Ok (Cons y ys)))
+
+ocamlType decls params expr =
+  case expr of
+    EVar name =>
+      if name == "Int" then Ok "int"
+      else if name == "String" then Ok "string"
+      else if isBoolName name then Ok "bool"
+      else if isListName name then Err "List type needs an argument"
+      else
+        case lookupParam name params of
+          Just ty => Ok ty
+          Nothing =>
+            case lookupData decls name of
+              Just d => Ok (typeNameOf name)
+              Nothing => Err ("typed codegen: unknown type " ++ name)
+    EApp fn args =>
+      case fn of
+        EVar "->" =>
+          case args of
+            Cons a (Cons b Nil) =>
+              andThen (ocamlType decls params a) (\ta =>
+                andThen (ocamlType decls params b) (\tb =>
+                  Ok ("(" ++ ta ++ ") -> (" ++ tb ++ ")")))
+            _ => Err "typed codegen: invalid arrow type"
+        EVar name =>
+          if isListName name then
+            case args of
+              Cons a Nil =>
+                andThen (ocamlType decls params a) (\ta => Ok ("(" ++ ta ++ ") list"))
+              _ => Err "typed codegen: invalid List type"
+          else
+            case lookupData decls name of
+              Nothing => Err ("typed codegen: unknown type constructor " ++ name)
+              Just d =>
+                andThen (mapResult (ocamlType decls params) args) (\tys =>
+                  Ok (appType tys (typeNameOf name)))
+        _ => Err "typed codegen: invalid type application"
+    _ => Err "typed codegen: invalid type expression"
+
+appType Nil name = name
+appType (Cons x Nil) name = "(" ++ x ++ ") " ++ name
+appType args name = "(" ++ joinWith ", " args ++ ") " ++ name
+
+splitArrows expr =
+  case expr of
+    EApp (EVar "->") (Cons a (Cons b Nil)) => Cons a (splitArrows b)
+    _ => Nil
+
+genParams n = map (\i => "a" ++ strFromInt i) (range 0 n)
+
+range i n = if i >= n then Nil else Cons i (range (i + 1) n)
+
+genData decls d =
+  case d of
+    DData name params ctors =>
+      andThen (mapResult (genCtor decls (paramMap params)) ctors) (\cs =>
+        Ok ("  " ++ dataPrefix params ++ typeNameOf name ++ " =\n    " ++ joinWith "\n  | " cs))
+
+dataPrefix params =
+  case params of
+    Nil => ""
+    Cons p Nil => paramVar 0 ++ " "
+    _ => "(" ++ joinWith ", " (paramVars params) ++ ") "
+
+paramVars params =
+  case params of
+    Nil => Nil
+    Cons p rest => Cons (paramVar (length (paramVars rest))) (paramVars rest)
+
+genCtor decls pmap c =
+  case c of
+    Ctor name ty arity =>
+      case splitArrows ty of
+        Nil => Ok (ctorNameOf name)
+        Cons only Nil => andThen (ocamlType decls pmap only) (\t => Ok (ctorNameOf name ++ " of (" ++ t ++ ")"))
+        fields =>
+          andThen (mapResult (ocamlType decls pmap) fields) (\ts =>
+            Ok (ctorNameOf name ++ " of " ++ joinWith " * " (map (\t => "(" ++ t ++ ")") ts)))
+
+genTypeDecls decls =
+  case nonSpecialData decls of
+    Nil => Ok ""
+    ds =>
+      andThen (mapResult (genData decls) ds) (\parts =>
+        Ok ("type " ++ joinWith "\nand " parts ++ "\n"))
+
+showForType decls params expr =
+  case expr of
+    EVar name =>
+      if name == "Int" then Ok "string_of_int"
+      else if name == "String" then Ok "show_vstring"
+      else if isBoolName name then Ok "show_vbool"
+      else if isListName name then Err "typed codegen: List type needs an argument"
+      else
+        case lookupParam name params of
+          Just s => Ok s
+          Nothing =>
+            case lookupData decls name of
+              Just d => Err ("typed codegen: show for data type " ++ name ++ " is not supported yet")
+              Nothing => Err ("typed codegen: unknown show type " ++ name)
+    EApp fn args =>
+      case fn of
+        EVar "->" => Ok "(fun _ -> \"<function>\")"
+        EVar name =>
+          if isListName name then
+            case args of
+              Cons a Nil =>
+                andThen (showForType decls params a) (\sa => Ok ("(show_vlist " ++ sa ++ ")"))
+              _ => Err "typed codegen: invalid List show type"
+          else
+            case lookupData decls name of
+              Just d => Err ("typed codegen: show for data type " ++ name ++ " is not supported yet")
+              Nothing => Err ("typed codegen: unknown show type constructor " ++ name)
+        _ => Err "typed codegen: invalid show type application"
+    _ => Err "typed codegen: invalid show type"
+
+showForTy decls ty =
+  case ty of
+    TVar i => Ok "(fun _ -> \"<value>\")"
+    TFun a b => Ok "(fun _ -> \"<function>\")"
+    TCon name args =>
+      if name == "Int" then Ok "string_of_int"
+      else if name == "String" then Ok "show_vstring"
+      else if isBoolName name then Ok "show_vbool"
+      else if isListName name then
+        case args of
+          Cons a Nil => andThen (showForTy decls a) (\sa => Ok ("(show_vlist " ++ sa ++ ")"))
+          _ => Err "typed codegen: main List type must have one argument"
+      else Err ("typed codegen: show for data type " ++ name ++ " is not supported yet")
+
+genPat pat =
+  case pat of
+    PWild => Ok "_"
+    PVar name => Ok (sanitizeName name)
+    PInt n => Ok (strFromInt n)
+    PStr s => Ok (ocamlString s)
+    PCon name pats =>
+      if name == "Nil" then Ok "[]"
+      else if name == "True" then Ok "true"
+      else if name == "False" then Ok "false"
+      else if name == "Cons" then
+        case pats of
+          Cons h (Cons t Nil) =>
+            andThen (genPat h) (\ph =>
+              andThen (genPat t) (\pt => Ok ("(" ++ ph ++ ") :: (" ++ pt ++ ")")))
+          _ => Err "typed codegen: Cons pattern arity"
+      else
+        andThen (mapResult genPat pats) (\ps =>
+          case ps of
+            Nil => Ok (ctorNameOf name)
+            Cons p Nil => Ok (ctorNameOf name ++ " " ++ "(" ++ p ++ ")")
+            _ => Ok (ctorNameOf name ++ " (" ++ joinWith ", " ps ++ ")"))
+
+patVars pat =
+  case pat of
+    PWild => Nil
+    PVar name => Cons name Nil
+    PInt n => Nil
+    PStr s => Nil
+    PCon name pats => concatMap patVars pats
+
+genArgs decls env args =
+  mapResult (genExpr decls env) args
+
+genApp f args = "(" ++ f ++ ") " ++ joinWith " " (map (\a => "(" ++ a ++ ")") args)
+
+builtinName name =
+  if name == "+" then Just "bi_add"
+  else if name == "-" then Just "bi_sub"
+  else if name == "*" then Just "bi_mul"
+  else if name == "/" then Just "bi_div"
+  else if name == "==" then Just "bi_eq"
+  else if name == "/=" then Just "bi_neq"
+  else if name == "<" then Just "bi_lt"
+  else if name == "<=" then Just "bi_le"
+  else if name == ">" then Just "bi_gt"
+  else if name == ">=" then Just "bi_ge"
+  else if name == "&&" then Just "bi_and"
+  else if name == "||" then Just "bi_or"
+  else if name == "++" then Just "bi_concat"
+  else if name == "strLength" then Just "bi_str_length"
+  else if name == "strUnpack" then Just "bi_str_unpack"
+  else if name == "strPack" then Just "bi_str_pack"
+  else if name == "strFromInt" then Just "bi_str_from_int"
+  else if name == "readFile" then Just "bi_read_file"
+  else if name == "writeFile" then Just "bi_write_file"
+  else if name == "print" then Just "bi_print"
+  else if name == "getArgs" then Just "bi_get_args"
+  else Nothing
+
+genExpr decls env expr =
+  case expr of
+    EVar name =>
+      if memName name env then Ok (sanitizeName name)
+      else
+        case ctorArity name decls of
+          Just arity =>
+            if name == "Nil" then Ok "[]"
+            else if name == "True" then Ok "true"
+            else if name == "False" then Ok "false"
+            else if arity == 0 then Ok (ctorNameOf name)
+            else Err ("typed codegen: constructor " ++ name ++ " used without arguments")
+          Nothing =>
+            case builtinName name of
+              Just ref =>
+                if name == "getArgs" then Ok "bi_get_args ()" else Ok ref
+              Nothing =>
+                case funArity name decls of
+                  Just 0 => Ok (sanitizeName name ++ " ()")
+                  Just arity => Ok (sanitizeName name)
+                  Nothing => Err ("typed codegen: unbound variable " ++ name)
+    EInt n => Ok (strFromInt n)
+    EStr s => Ok (ocamlString s)
+    EApp fn args =>
+      case fn of
+        EVar name =>
+          case ctorArity name decls of
+            Just arity =>
+              if name == "Nil" || name == "True" || name == "False" then
+                Err ("typed codegen: constructor " ++ name ++ " cannot take arguments")
+              else if name == "Cons" then
+                case args of
+                  Cons h (Cons t Nil) =>
+                    andThen (genExpr decls env h) (\ph =>
+                      andThen (genExpr decls env t) (\pt =>
+                        Ok ("(" ++ ph ++ ") :: (" ++ pt ++ ")")))
+                  _ => Err "typed codegen: Cons arity"
+              else if length args == arity then
+                andThen (genArgs decls env args) (\as2 =>
+                  case as2 of
+                    Cons a Nil => Ok (ctorNameOf name ++ " (" ++ a ++ ")")
+                    _ => Ok (ctorNameOf name ++ " (" ++ joinWith ", " as2 ++ ")"))
+              else Err ("typed codegen: partial constructor " ++ name)
+            Nothing =>
+              andThen (genExpr decls env fn) (\f =>
+                andThen (genArgs decls env args) (\as2 => Ok (genApp f as2)))
+        _ =>
+          andThen (genExpr decls env fn) (\f =>
+            andThen (genArgs decls env args) (\as2 => Ok (genApp f as2)))
+    ELam params body =>
+      let env2 = append params env
+      in andThen (genExpr decls env2 body) (\b =>
+           Ok ("fun " ++ joinWith " " (map sanitizeName params) ++ " -> " ++ b))
+    ELet binds body => genBinds decls env binds body
+    ECase scrut alts =>
+      andThen (genExpr decls env scrut) (\s =>
+        andThen (mapResult (genAlt decls env) alts) (\arms =>
+          Ok ("match " ++ s ++ " with\n" ++ joinWith "\n" arms)))
+    EIf c t e =>
+      andThen (genExpr decls env c) (\gc =>
+        andThen (genExpr decls env t) (\gt =>
+          andThen (genExpr decls env e) (\ge =>
+            Ok ("if " ++ gc ++ " then " ++ gt ++ " else " ++ ge))))
+
+genAlt decls env alt =
+  case alt of
+    Pair pat body =>
+      andThen (genPat pat) (\p =>
+        andThen (genExpr decls (append (patVars pat) env) body) (\b =>
+          Ok ("  | " ++ p ++ " -> " ++ b)))
+
+genBinds decls env Nil body = genExpr decls env body
+genBinds decls env (Cons b rest) body =
+  case b of
+    Pair pat value =>
+      andThen (genPat pat) (\p =>
+        andThen (genExpr decls env value) (\v =>
+          andThen (genBinds decls (append (patVars pat) env) rest body) (\r =>
+            Ok ("let " ++ p ++ " = " ++ v ++ " in " ++ r))))
+
+genClause decls env clause =
+  case clause of
+    Pair pats body =>
+      andThen (mapResult genPat pats) (\ps =>
+        andThen (genExpr decls (append (concatMap patVars pats) env) body) (\b =>
+          Ok ("  | (" ++ joinWith ", " ps ++ ") -> " ++ b)))
+
+genFunction decls name =
+  case funArity name decls of
+    Nothing => Err ("typed codegen: unknown function " ++ name)
+    Just arity =>
+      case clausesFor decls name of
+        Nil => Err ("typed codegen: no clauses for " ++ name)
+        Cons first rest =>
+          let params = genParams arity
+          in if arity == 0 then
+               case first of
+                 Pair pats body =>
+                   andThen (genExpr decls Nil body) (\b =>
+                     Ok ("fun () -> " ++ b))
+             else
+               andThen (mapResult (genClause decls Nil) (clausesFor decls name)) (\arms =>
+                 let matched = if arity == 1 then "a0" else "(" ++ joinWith ", " params ++ ")"
+                 in Ok ("fun " ++ joinWith " " params ++ " -> match " ++ matched ++ " with\n" ++ joinWith "\n" arms))
+
+functionNames decls = uniqueNames (map declFunName decls)
+
+declFunName d =
+  case d of
+    DFun name pats body => name
+    _ => ""
+
+uniqueNames Nil = Nil
+uniqueNames (Cons name rest) =
+  if name == "" then uniqueNames rest
+  else if memName name rest then uniqueNames rest
+  else Cons name (uniqueNames rest)
+
+genTop decls =
+  case functionNames decls of
+    Nil => Err "typed codegen: no definitions"
+    names =>
+      andThen (mapResult (genFunction decls) names) (\defs =>
+        Ok ("let rec " ++ joinWith "\nand " (map pairDef (zip names defs)) ++ "\n"))
+
+zip Nil ys = Nil
+zip (Cons x xs) (Cons y ys) = Cons (Pair x y) (zip xs ys)
+zip _ _ = Nil
+
+runtimeCodeTyped =
+  "\n" ++
+  "let bi_add a b = a + b\n" ++
+  "let bi_sub a b = a - b\n" ++
+  "let bi_mul a b = a * b\n" ++
+  "let bi_div a b = if b = 0 then failwith \"division by zero\" else a / b\n" ++
+  "let bi_eq a b = a = b\n" ++
+  "let bi_neq a b = a <> b\n" ++
+  "let bi_lt a b = a < b\n" ++
+  "let bi_le a b = a <= b\n" ++
+  "let bi_gt a b = a > b\n" ++
+  "let bi_ge a b = a >= b\n" ++
+  "let bi_and a b = a && b\n" ++
+  "let bi_or a b = a || b\n" ++
+  "let bi_concat a b = a ^ b\n" ++
+  "let bi_str_length a = String.length a\n" ++
+  "let bi_str_unpack s =\n" ++
+  "  let rec go i acc =\n" ++
+  "    if i < 0 then acc\n" ++
+  "    else go (i - 1) (Char.code s.[i] :: acc)\n" ++
+  "  in\n" ++
+  "  go (String.length s - 1) []\n" ++
+  "let bi_str_pack cs =\n" ++
+  "  let buf = Buffer.create 16 in\n" ++
+  "  let rec go = function\n" ++
+  "    | [] -> ()\n" ++
+  "    | c :: rest -> Buffer.add_char buf (Char.chr c); go rest\n" ++
+  "  in\n" ++
+  "  go cs;\n" ++
+  "  Buffer.contents buf\n" ++
+  "let bi_str_from_int n = string_of_int n\n" ++
+  "let bi_read_file path =\n" ++
+  "  let ch = open_in_bin path in\n" ++
+  "  Fun.protect ~finally:(fun () -> close_in_noerr ch)\n" ++
+  "    (fun () -> really_input_string ch (in_channel_length ch))\n" ++
+  "let bi_write_file path contents =\n" ++
+  "  let ch = open_out_bin path in\n" ++
+  "  Fun.protect ~finally:(fun () -> close_out_noerr ch)\n" ++
+  "    (fun () -> output_string ch contents);\n" ++
+  "  String.length contents\n" ++
+  "let bi_print s = print_string s; flush stdout; String.length s\n" ++
+  "let bi_get_args () =\n" ++
+  "  let argv = Sys.argv in\n" ++
+  "  let n = Array.length argv in\n" ++
+  "  if n <= 1 then [] else Array.to_list (Array.sub argv 1 (n - 1))\n" ++
+  "let show_vbool b = if b then \"True\" else \"False\"\n" ++
+  "let show_vstring s =\n" ++
+  "  let buf = Buffer.create 16 in\n" ++
+  "  Buffer.add_char buf (Char.chr 34);\n" ++
+  "  String.iter (fun c ->\n" ++
+  "    let n = Char.code c in\n" ++
+  "    if n = 34 then Buffer.add_string buf (String.make 1 (Char.chr 92) ^ String.make 1 (Char.chr 34))\n" ++
+  "    else if n = 92 then Buffer.add_string buf (String.make 1 (Char.chr 92) ^ String.make 1 (Char.chr 92))\n" ++
+  "    else if n = 10 then Buffer.add_string buf (String.make 1 (Char.chr 92) ^ \"n\")\n" ++
+  "    else if n = 9 then Buffer.add_string buf (String.make 1 (Char.chr 92) ^ \"t\")\n" ++
+  "    else if n = 13 then Buffer.add_string buf (String.make 1 (Char.chr 92) ^ \"r\")\n" ++
+  "    else Buffer.add_char buf c) s;\n" ++
+  "  Buffer.add_char buf (Char.chr 34);\n" ++
+  "  Buffer.contents buf\n" ++
+  "let rec show_vlist show_elem v =\n" ++
+  "  match v with\n" ++
+  "  | [] -> \"Nil\"\n" ++
+  "  | x :: xs -> \"(Cons \" ^ show_elem x ^ \" \" ^ show_vlist show_elem xs ^ \")\"\n"
+
+generateProgramTyped decls globals printResult =
+  case lookupScheme "main" globals of
+    Nothing => Err "typed codegen: no main definition"
+    Just sch =>
+      case sch of
+        Scheme qs ty =>
+          case ty of
+            TFun a b => Err "typed codegen: main must be zero-arity"
+            _ =>
+              andThen (showForTy decls ty) (\showMain =>
+                andThen (genTypeDecls decls) (\types =>
+                  andThen (genTop decls) (\tops =>
+                    let output = runtimeCodeTyped ++ "\n" ++ types ++ "\n" ++ tops
+                    in if printResult then
+                         Ok (output ++ "let () = print_endline (" ++ showMain ++ " (main ()))\n")
+                       else Ok output)))
+pairDef p =
+  case p of
+    Pair name body => sanitizeName name ++ " = " ++ body

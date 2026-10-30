@@ -71,6 +71,7 @@ git add bootstrap/ && git commit
 │       ├── Eval.vuna     # 值表示、内建函数、求值器与 show
 │       ├── Loader.vuna   # import 图、名字解析、flatten（含模块规则）
 │       ├── Typecheck.vuna # HM 类型检查（M7）
+│       ├── TypedCodegen.vuna # 原生 OCaml typed codegen（M8a）
 │       ├── Codegen.vuna  # flatten 后的 AST → OCaml
 │       └── Interp.vuna   # 对外 facade（interpret/interpretFile/compileFile）
 ├── app/
@@ -145,12 +146,15 @@ git add bootstrap/ && git commit
 - `lib/Vuna/Typecheck.vuna`：HM 风格类型检查（Ty/Scheme、unify、构造器 scheme、
   表达式/模式推断、签名校验与无签名顶层推断）；loader 会把 DSig/构造器类型里的类型名解析成
   模块内全名（open/qualified/alias 都支持），因此跨模块类型检查可用；
-- `lib/Vuna/Codegen.vuna`：把 flatten 后的 program 翻译成 OCaml；
+- `lib/Vuna/Codegen.vuna`：把 flatten 后的 program 翻译成动态 value 表示的 OCaml；
+- `lib/Vuna/TypedCodegen.vuna`：M8a typed codegen，用类型信息生成原生 OCaml
+  类型、构造器、模式匹配与 builtins（`--typed`，opt-in）；
 - `lib/Vuna/Interp.vuna`：facade，只暴露 `interpret`/`interpretFile`/`compileFile`；
 - 模块内部通过 import 自动 open 使用非限定名，只有 import 行写模块全名；
 - 顶层类型签名紧贴其第一个函数子句，签名与实现之间不留空行；顶层声明之间用一个空行分隔；
-- [app/Compile.vuna](app/Compile.vuna)：`vuna [--no-print] [--no-typecheck] [--root DIR] <entry.vuna> [out.ml]`；
+- [app/Compile.vuna](app/Compile.vuna)：`vuna [--no-print] [--no-typecheck] [--typed] [--root DIR] <entry.vuna> [out.ml]`；
   默认先跑类型检查；`--no-typecheck` 可跳过（专测 codegen 负例时用）；
+  `--typed` 使用 M8a 原生 OCaml typed codegen（默认仍是动态 value codegen）；
   `--no-print` 表示生成的程序不自动打印 `main` 的结果（用于编译自己做 IO 的 CLI）；
 - [app/Interp.vuna](app/Interp.vuna)：`vuna-interp [--root DIR] <file.vuna>`，把
   `interpretFile` 的字符串结果原样打印。
@@ -176,7 +180,7 @@ type value =
 
 ## 测试
 
-`test/run-tests.sh` 是 vuna 原生测试（108 checks），只用 `vuna` / `vuna-boot` /
+`test/run-tests.sh` 是 vuna 原生测试（113 checks），只用 `vuna` / `vuna-boot` /
 `vuna-interp`，不依赖任何外部编译器：
 
 ```console
@@ -191,6 +195,7 @@ sh test/run-tests.sh          # 需要 PATH 中有三个二进制
 - `corpus/err/*.vuna`、`corpus/run_err/*.vuna`：解析/求值错误片段；
 - `corpus/type_ok`、`corpus/type_err`：单文件类型检查正/反例；
 - `corpus/type_modules/0*`、`9*`：跨模块类型检查正/反例；
+- `corpus/typed_ok`：`--typed` 原生 OCaml 生成、`ocamlopt` 编译运行与 golden 比对；
 - `vuna-boot` 编译 `12_fact` 的种子冒烟。
 
 Nix 侧：
@@ -229,8 +234,8 @@ nix fmt               # nixfmt-tree 格式化 .nix
 
 ## 限制与路线
 
-- 类型检查已默认开启；模块类型名解析、无签名顶层推断与编译器源码自检（M7c）已完成，
-  typed codegen 在 M8；
+- 类型检查已默认开启，M7c 完成；M8a 的 `--typed` 原生 OCaml codegen 已可用
+  （opt-in，main 的 show 暂支持 Int/String/Bool/List），M8b 做默认化与重新自举；
 - 生成代码是单文件、动态 value 表示，性能与错误信息暂未优化；
 - 运行时错误没有源码位置；`where` / `do` / 隐式参数 / 依赖类型未实现；
 - IO 失败（如 `readFile` 缺失文件）会抛宿主异常；编译器 CLI 没有 `exit` 内建，

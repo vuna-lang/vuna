@@ -575,7 +575,7 @@ checkFunctions globals decls sigs (Cons name rest) st =
     case p of
       Pair globals2 st1 => checkFunctions globals2 decls sigs rest st1)
 
-checkProgram decls =
+checkProgramInfo decls =
   case collectData decls of
     Pair typeNames dataDecls =>
       case collectSigs typeNames decls (TC 0 Nil) of
@@ -588,7 +588,10 @@ checkProgram decls =
                 Pair placeholders st3 =>
                   case checkFunctions (append builtinSchemes (append ctors (append sigs placeholders))) decls sigs (functionNames decls) st3 of
                     Err e => Err e
-                    Ok (Pair globals st4) => Ok Nil
+                    Ok (Pair globals st4) => Ok globals
+
+checkProgram decls =
+  andThen (checkProgramInfo decls) (\_ => Ok Nil)
 
 collectData decls =
   Pair (declDataNames decls) decls
