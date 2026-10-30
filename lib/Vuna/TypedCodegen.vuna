@@ -797,87 +797,67 @@ genTop decls =
                     andThen (mapResult (genGroup decls) ordered) (\parts =>
                       Ok (joinWith "\n\n" parts ++ "\n")))
 
-runtimeCodeTyped =
-  "\n" ++
-  "let bi_add a b = a + b\n" ++
-  "let bi_sub a b = a - b\n" ++
-  "let bi_mul a b = a * b\n" ++
-  "let bi_div a b = if b = 0 then failwith \"division by zero\" else a / b\n" ++
-  "let bi_eq a b = a = b\n" ++
-  "let bi_neq a b = a <> b\n" ++
-  "let bi_lt a b = a < b\n" ++
-  "let bi_le a b = a <= b\n" ++
-  "let bi_gt a b = a > b\n" ++
-  "let bi_ge a b = a >= b\n" ++
-  "let bi_eq_int (a : int) (b : int) = a = b\n" ++
-  "let bi_neq_int (a : int) (b : int) = a <> b\n" ++
-  "let bi_lt_int (a : int) (b : int) = a < b\n" ++
-  "let bi_le_int (a : int) (b : int) = a <= b\n" ++
-  "let bi_gt_int (a : int) (b : int) = a > b\n" ++
-  "let bi_ge_int (a : int) (b : int) = a >= b\n" ++
-  "let bi_eq_str (a : string) (b : string) = a = b\n" ++
-  "let bi_neq_str (a : string) (b : string) = a <> b\n" ++
-  "let bi_eq_bool (a : bool) (b : bool) = a = b\n" ++
-  "let bi_neq_bool (a : bool) (b : bool) = a <> b\n" ++
-  "let bi_and a b = a && b\n" ++
-  "let bi_or a b = a || b\n" ++
-  "let bi_concat a b = a ^ b\n" ++
-  "let bi_str_length a = String.length a\n" ++
-  "let bi_str_unpack s =\n" ++
-  "  let rec go i acc =\n" ++
-  "    if i < 0 then acc\n" ++
-  "    else go (i - 1) (Char.code s.[i] :: acc)\n" ++
-  "  in\n" ++
-  "  go (String.length s - 1) []\n" ++
-  "let bi_str_pack cs =\n" ++
-  "  let buf = Buffer.create 16 in\n" ++
-  "  let rec go = function\n" ++
-  "    | [] -> ()\n" ++
-  "    | c :: rest -> Buffer.add_char buf (Char.chr c); go rest\n" ++
-  "  in\n" ++
-  "  go cs;\n" ++
-  "  Buffer.contents buf\n" ++
-  "let bi_str_from_int n = string_of_int n\n" ++
-  "let bi_read_file path =\n" ++
-  "  try\n" ++
-  "    let ch = open_in_bin path in\n" ++
-  "    Fun.protect ~finally:(fun () -> close_in_noerr ch)\n" ++
-  "      (fun () -> really_input_string ch (in_channel_length ch))\n" ++
-  "  with Sys_error msg -> failwith (\"readFile: \" ^ msg)\n" ++
-  "let bi_write_file path contents =\n" ++
-  "  try\n" ++
-  "    let ch = open_out_bin path in\n" ++
-  "    Fun.protect ~finally:(fun () -> close_out_noerr ch)\n" ++
-  "      (fun () -> output_string ch contents);\n" ++
-  "    String.length contents\n" ++
-  "  with Sys_error msg -> failwith (\"writeFile: \" ^ msg)\n" ++
+runtimePrelude =
+  [ Pair "bi_add" "let bi_add a b = a + b\n"
+  , Pair "bi_sub" "let bi_sub a b = a - b\n"
+  , Pair "bi_mul" "let bi_mul a b = a * b\n"
+  , Pair "bi_div" "let bi_div a b = if b = 0 then failwith \"division by zero\" else a / b\n"
+  , Pair "bi_eq" "let bi_eq a b = a = b\n"
+  , Pair "bi_neq" "let bi_neq a b = a <> b\n"
+  , Pair "bi_lt" "let bi_lt a b = a < b\n"
+  , Pair "bi_le" "let bi_le a b = a <= b\n"
+  , Pair "bi_gt" "let bi_gt a b = a > b\n"
+  , Pair "bi_ge" "let bi_ge a b = a >= b\n"
+  , Pair "bi_eq_int" "let bi_eq_int (a : int) (b : int) = a = b\n"
+  , Pair "bi_neq_int" "let bi_neq_int (a : int) (b : int) = a <> b\n"
+  , Pair "bi_lt_int" "let bi_lt_int (a : int) (b : int) = a < b\n"
+  , Pair "bi_le_int" "let bi_le_int (a : int) (b : int) = a <= b\n"
+  , Pair "bi_gt_int" "let bi_gt_int (a : int) (b : int) = a > b\n"
+  , Pair "bi_ge_int" "let bi_ge_int (a : int) (b : int) = a >= b\n"
+  , Pair "bi_eq_str" "let bi_eq_str (a : string) (b : string) = a = b\n"
+  , Pair "bi_neq_str" "let bi_neq_str (a : string) (b : string) = a <> b\n"
+  , Pair "bi_eq_bool" "let bi_eq_bool (a : bool) (b : bool) = a = b\n"
+  , Pair "bi_neq_bool" "let bi_neq_bool (a : bool) (b : bool) = a <> b\n"
+  , Pair "bi_and" "let bi_and a b = a && b\n"
+  , Pair "bi_or" "let bi_or a b = a || b\n"
+  , Pair "bi_concat" "let bi_concat a b = a ^ b\n"
+  , Pair "bi_str_length" "let bi_str_length a = String.length a\n"
+  , Pair "bi_str_unpack" "let bi_str_unpack s =\n  let rec go i acc =\n    if i < 0 then acc\n    else go (i - 1) (Char.code s.[i] :: acc)\n  in\n  go (String.length s - 1) []\n"
+  , Pair "bi_str_pack" "let bi_str_pack cs =\n  let buf = Buffer.create 16 in\n  let rec go = function\n    | [] -> ()\n    | c :: rest -> Buffer.add_char buf (Char.chr c); go rest\n  in\n  go cs;\n  Buffer.contents buf\n"
+  , Pair "bi_str_from_int" "let bi_str_from_int n = string_of_int n\n"
+  , Pair "bi_read_file" "let bi_read_file path =\n  try\n    let ch = open_in_bin path in\n    Fun.protect ~finally:(fun () -> close_in_noerr ch)\n      (fun () -> really_input_string ch (in_channel_length ch))\n  with Sys_error msg -> failwith (\"readFile: \" ^ msg)\n"
+  , Pair "bi_write_file" "let bi_write_file path contents =\n  try\n    let ch = open_out_bin path in\n    Fun.protect ~finally:(fun () -> close_out_noerr ch)\n      (fun () -> output_string ch contents);\n    String.length contents\n  with Sys_error msg -> failwith (\"writeFile: \" ^ msg)\n"
+  , Pair "bi_print" "let bi_print s = print_string s; flush stdout; String.length s\n"
+  , Pair "bi_file_exists" "let bi_file_exists path = Sys.file_exists path\n"
+  , Pair "bi_exit" "let bi_exit n = exit n\n"
+  , Pair "bi_get_args" "let bi_get_args () =\n  let argv = Sys.argv in\n  let n = Array.length argv in\n  if n <= 1 then [] else Array.to_list (Array.sub argv 1 (n - 1))\n"
+  , Pair "show_ctor" "let show_ctor name args = if args = [] then name else \"(\" ^ name ^ \" \" ^ String.concat \" \" args ^ \")\"\n"
+  , Pair "show_vbool" "let show_vbool b = if b then \"True\" else \"False\"\n"
+  , Pair "show_vstring" "let show_vstring s =\n  let buf = Buffer.create 16 in\n  Buffer.add_char buf (Char.chr 34);\n  String.iter (fun c ->\n    let n = Char.code c in\n    if n = 34 then Buffer.add_string buf (String.make 1 (Char.chr 92) ^ String.make 1 (Char.chr 34))\n    else if n = 92 then Buffer.add_string buf (String.make 1 (Char.chr 92) ^ String.make 1 (Char.chr 92))\n    else if n = 10 then Buffer.add_string buf (String.make 1 (Char.chr 92) ^ \"n\")\n    else if n = 9 then Buffer.add_string buf (String.make 1 (Char.chr 92) ^ \"t\")\n    else if n = 13 then Buffer.add_string buf (String.make 1 (Char.chr 92) ^ \"r\")\n    else Buffer.add_char buf c) s;\n  Buffer.add_char buf (Char.chr 34);\n  Buffer.contents buf\n"
+  , Pair "show_vlist" "let rec show_vlist (show_elem : 'a -> string) (v : 'a list) : string =\n  match v with\n  | [] -> \"Nil\"\n  | x :: xs -> \"(Cons \" ^ show_elem x ^ \" \" ^ show_vlist show_elem xs ^ \")\"\n"
+  ]
 
-  "let bi_print s = print_string s; flush stdout; String.length s\n" ++
-  "let bi_file_exists path = Sys.file_exists path\n" ++
-  "let bi_exit n = exit n\n" ++
-  "let bi_get_args () =\n" ++
-  "  let argv = Sys.argv in\n" ++
-  "  let n = Array.length argv in\n" ++
-  "  if n <= 1 then [] else Array.to_list (Array.sub argv 1 (n - 1))\n" ++
-  "let show_ctor name args = if args = [] then name else \"(\" ^ name ^ \" \" ^ String.concat \" \" args ^ \")\"\n" ++
-  "let show_vbool b = if b then \"True\" else \"False\"\n" ++
-  "let show_vstring s =\n" ++
-  "  let buf = Buffer.create 16 in\n" ++
-  "  Buffer.add_char buf (Char.chr 34);\n" ++
-  "  String.iter (fun c ->\n" ++
-  "    let n = Char.code c in\n" ++
-  "    if n = 34 then Buffer.add_string buf (String.make 1 (Char.chr 92) ^ String.make 1 (Char.chr 34))\n" ++
-  "    else if n = 92 then Buffer.add_string buf (String.make 1 (Char.chr 92) ^ String.make 1 (Char.chr 92))\n" ++
-  "    else if n = 10 then Buffer.add_string buf (String.make 1 (Char.chr 92) ^ \"n\")\n" ++
-  "    else if n = 9 then Buffer.add_string buf (String.make 1 (Char.chr 92) ^ \"t\")\n" ++
-  "    else if n = 13 then Buffer.add_string buf (String.make 1 (Char.chr 92) ^ \"r\")\n" ++
-  "    else Buffer.add_char buf c) s;\n" ++
-  "  Buffer.add_char buf (Char.chr 34);\n" ++
-  "  Buffer.contents buf\n" ++
-  "let rec show_vlist (show_elem : 'a -> string) (v : 'a list) : string =\n" ++
-  "  match v with\n" ++
-  "  | [] -> \"Nil\"\n" ++
-  "  | x :: xs -> \"(Cons \" ^ show_elem x ^ \" \" ^ show_vlist show_elem xs ^ \")\"\n"
+runtimeCodeTyped = "\n" ++ joinWith "" (map secondOf runtimePrelude)
+
+-- 小程序里 prelude 占比很高：按名字扫描裁剪，只保留生成体引用到的 helper。
+-- 大程序（如编译器自身）保持完整 prelude，避免扫描开销。
+startsWith Nil hay = True
+startsWith (Cons c cs) Nil = False
+startsWith (Cons c cs) (Cons h hs) = if c == h then startsWith cs hs else False
+
+containsName needle Nil = False
+containsName needle (Cons h hs) =
+  if startsWith needle (Cons h hs) then True else containsName needle hs
+
+filterRuntime Nil bodyChars = Nil
+filterRuntime (Cons (Pair name chunk) rest) bodyChars =
+  if containsName (strUnpack name) bodyChars then
+    Cons (Pair name chunk) (filterRuntime rest bodyChars)
+  else filterRuntime rest bodyChars
+
+runtimeForBody body =
+  if strLength body > 20000 then runtimeCodeTyped
+  else "\n" ++ joinWith "" (map secondOf (filterRuntime runtimePrelude (strUnpack body)))
 
 -- ---------------------------------------------------------------
 -- 生成代码的轻量 pretty printer
@@ -947,10 +927,10 @@ escapeChar c =
 escapeLong Nil = Nil
 escapeLong (Cons c rest) = Cons (escapeChar c) (escapeLong rest)
 
-typedMainCall decls showMain printResult body =
+typedMainSuffix decls showMain printResult =
   if printResult then
-    body ++ "let () = print_endline (" ++ showMain ++ " (" ++ zeroArgRef decls "main" ++ "))\n"
-  else body ++ "let () = ignore (" ++ zeroArgRef decls "main" ++ ")\n"
+    "let () = print_endline (" ++ showMain ++ " (" ++ zeroArgRef decls "main" ++ "))\n"
+  else "let () = ignore (" ++ zeroArgRef decls "main" ++ ")\n"
 
 generateProgramTyped decls globals printResult =
   case lookupScheme "main" globals of
@@ -963,5 +943,7 @@ generateProgramTyped decls globals printResult =
             andThen (genTypeDecls decls) (\types =>
               andThen (genShowDecls decls) (\shows =>
                 andThen (genTop decls) (\tops =>
-                  Ok (formatOutput (typedMainCall decls showMain printResult
-                        (runtimeCodeTyped ++ "\n" ++ types ++ "\n" ++ shows ++ "\n" ++ tops)))))))
+                  let core = types ++ "\n" ++ shows ++ "\n" ++ tops
+                  in
+                    let suffix = typedMainSuffix decls showMain printResult
+                    in Ok (formatOutput (runtimeForBody (core ++ suffix) ++ "\n" ++ core ++ suffix))))))
