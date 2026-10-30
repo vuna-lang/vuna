@@ -1,0 +1,7 @@
+data List a : Type where
+  Nil : List a
+  Cons : a -> List a -> List a
+
+sumList : List Int -> Int
+sumList Nil = 0
+sumList (Cons x rest) = x + sumList rest

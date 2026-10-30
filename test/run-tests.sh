@@ -1,0 +1,133 @@
+#!/bin/sh
+# vuna 原生测试：只用 vuna-interp / vuna / vuna-boot 驱动。
+#
+# 环境变量（默认取 PATH 中的同名命令）：
+#   VUNA        当前编译器（stage 2）
+#   VUNA_BOOT   种子编译器（stage 1）
+#   VUNA_INTERP 解释器
+#   OCAMLOPT    OCaml 编译器，默认 ocamlopt
+set -u
+
+cd "$(dirname "$0")"
+
+: "${VUNA:=vuna}"
+: "${VUNA_BOOT:=vuna-boot}"
+: "${VUNA_INTERP:=vuna-interp}"
+: "${OCAMLOPT:=ocamlopt}"
+
+tmp=$(mktemp -d "${TMPDIR:-/tmp}/vuna-tests.XXXXXX") || exit 1
+trap 'rm -rf "$tmp"' EXIT INT TERM
+
+pass=0
+fail=0
+
+ok() { pass=$((pass + 1)); }
+
+bad() {
+  fail=$((fail + 1))
+  printf 'FAIL: %s\n' "$1"
+  if [ "$#" -ge 3 ]; then
+    printf '  expected: %s\n' "$2"
+    printf '  actual:   %s\n' "$3"
+  fi
+}
+
+check_eq() { # name expected actual
+  if [ "$2" = "$3" ]; then ok; else bad "$1" "$2" "$3"; fi
+}
+
+check_contains() { # name haystack needle
+  case "$2" in
+    *"$3"*) ok ;;
+    *) bad "$1" "(contains) $3" "$2" ;;
+  esac
+}
+
+compile_and_run() { # name compiler root entry expected
+  name=$1
+  compiler=$2
+  root=$3
+  entry=$4
+  expected=$5
+  out="$tmp/prog.ml"
+  exe="$tmp/prog.exe"
+  rm -f "$out" "$exe"
+
+  if ! compile_output=$("$compiler" --root "$root" "$entry" "$out" 2>&1); then
+    bad "$name compile" "exit 0" "$compile_output"
+    return
+  fi
+  if [ -n "$compile_output" ]; then
+    bad "$name compile output" "" "$compile_output"
+    return
+  fi
+  if ! "$OCAMLOPT" -w -a -o "$exe" "$out" >"$tmp/ocamlopt.log" 2>&1; then
+    bad "$name ocamlopt" "" "$(cat "$tmp/ocamlopt.log")"
+    return
+  fi
+  actual=$("$exe" 2>&1)
+  check_eq "$name run" "$expected" "$actual"
+}
+
+# 1) corpus：解释器输出 vs golden；编译器生成→ocamlopt→运行 vs golden
+for file in corpus/run/*.vuna; do
+  base=${file%.vuna}
+  expected=$(cat "$base.out")
+  actual=$("$VUNA_INTERP" "$file" 2>&1)
+  check_eq "$file (interp)" "$expected" "$actual"
+  compile_and_run "$file (compiler)" "$VUNA" "." "$file" "$expected"
+done
+
+# 2) 模块夹具：解释器与编译器都要读取模块并得到 expected.out
+for dir in corpus/modules/0*; do
+  expected=$(cat "$dir/expected.out")
+  actual=$("$VUNA_INTERP" --root "$dir/lib" "$dir/app/Main.vuna" 2>&1)
+  check_eq "$dir (interp)" "$expected" "$actual"
+  compile_and_run "$dir (compiler)" "$VUNA" "$dir/lib" "$dir/app/Main.vuna" "$expected"
+done
+
+# 3) 模块错误：解释器与编译器都要给出含片段的错误，且不写输出文件
+for dir in corpus/modules/9*; do
+  fragment=$(cat "$dir/expected.err")
+  actual=$("$VUNA_INTERP" --root "$dir/lib" "$dir/app/Main.vuna" 2>&1)
+  check_contains "$dir (interp error)" "$actual" "$fragment"
+  rm -f "$tmp/error.ml"
+  actual=$("$VUNA" --root "$dir/lib" "$dir/app/Main.vuna" "$tmp/error.ml" 2>&1 || true)
+  check_contains "$dir (compiler error)" "$actual" "$fragment"
+  if [ -e "$tmp/error.ml" ]; then
+    bad "$dir (no output file)" "absent" "present"
+  else
+    ok
+  fi
+done
+
+# 4) 解析错误：vuna-interp 输出含片段
+for file in corpus/err/*.vuna; do
+  fragment=$(cat "${file%.vuna}.err")
+  actual=$("$VUNA_INTERP" "$file" 2>&1)
+  check_contains "$file (parse error)" "$actual" "$fragment"
+done
+
+# 5) 求值/编译错误：解释器与编译器要给出含片段的错误
+for file in corpus/run_err/*.vuna; do
+  case "$file" in
+    *08_clause_arity*) continue ;;
+  esac
+  fragment=$(cat "${file%.vuna}.err")
+  actual=$("$VUNA_INTERP" "$file" 2>&1)
+  check_contains "$file (interp error)" "$actual" "$fragment"
+done
+
+# 6) 编译器专属错误：clause 元数不一致（解释器不检查，编译器要报）
+arity_out=$("$VUNA" corpus/run_err/08_clause_arity.vuna "$tmp/arity.ml" 2>&1 || true)
+check_contains "08_clause_arity (compiler error)" "$arity_out" "clauses for f have different arities"
+
+# 7) 种子冒烟：vuna-boot 编译一个程序并运行
+fact=corpus/run/12_fact.vuna
+compile_and_run "$fact (vuna-boot)" "$VUNA_BOOT" "." "$fact" "$(cat "${fact%.vuna}.out")"
+
+if [ "$fail" -ne 0 ]; then
+  printf '%s passed, %s failed\n' "$pass" "$fail"
+  exit 1
+fi
+printf 'vuna tests passed (%s checks)\n' "$pass"

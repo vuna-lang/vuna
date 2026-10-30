@@ -1,0 +1,9 @@
+data Bool : Type where
+  False : Bool
+  True : Bool
+
+f : Bool -> Int
+f True = 1
+
+main : Int
+main = f False

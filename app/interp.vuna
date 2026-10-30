@@ -1,0 +1,16 @@
+-- vuna-interp：编译后的解释器 CLI 入口。
+-- 参数：[--root DIR] <file.vuna>；root 是模块根（默认 lib）。
+import Vuna.Interp
+
+run root path = Vuna.Interp.interpretFile root path
+
+usage = "usage: vuna-interp [--root DIR] <file.vuna>"
+
+main =
+  case getArgs of
+    Cons "--root" (Cons root (Cons path rest)) =>
+      let _ = print (run root path ++ "\n") in 0
+    Cons path rest =>
+      let _ = print (run "lib" path ++ "\n") in 0
+    _ =>
+      let _ = print (usage ++ "\n") in 0

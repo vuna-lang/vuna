@@ -1,0 +1,5 @@
+data Unit : Type where
+  MkUnit : Unit
+
+main : Unit
+main = MkUnit 1
