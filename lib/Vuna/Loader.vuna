@@ -1,3 +1,5 @@
+module Vuna.Loader (loadProgram) where
+
 -- Vuna.Loader：模块加载、名字解析与 flatten。
 
 import Vuna.Base
@@ -7,7 +9,16 @@ import Vuna.Parser
 import Vuna.Builtins
 
 data Module : Type where
-  Module : String -> List Import -> List Decl -> List String -> Module
+  Module : String -> List Import -> List Decl -> List ExportEntry -> Module
+
+-- 模块导出表（M10）。每条是「本模块公开名 → 定义处带模块前缀的名字」。
+-- kind 用字符串区分两套命名空间：val（函数/值）、ctor（构造器）、type（类型名）。
+-- ctor 条目额外记录所属数据类型的定义名，供 `T(..)` 重导出保持源模块的抽象性。
+data ExportEntry : Type where
+  ExportEntry : String -> String -> String -> String -> ExportEntry
+
+data ExportRef : Type where
+  ExportRef : String -> String -> String -> ExportRef
 
 
 allIdentChars chars =
@@ -97,9 +108,9 @@ findImportPrefix imports prefix =
             if alias == prefix then Just (importName imp) else findImportPrefix rest prefix
           Nothing => findImportPrefix rest prefix
 
-joinNames Nil = ""
-joinNames (Cons x Nil) = x
-joinNames (Cons x rest) = x ++ ", " ++ joinNames rest
+_joinNames Nil = ""
+_joinNames (Cons x Nil) = x
+_joinNames (Cons x rest) = x ++ ", " ++ _joinNames rest
 
 moduleDecls modules name =
   case findModule modules name of
@@ -108,27 +119,80 @@ moduleDecls modules name =
 
 moduleCtors modules name = ctorsOf (moduleDecls modules name)
 
-modulesExportingFrom modules names name =
+exportsOf modules name =
+  case findModule modules name of
+    Just (Module mname imports decls exports) => exports
+    Nothing => Nil
+
+entryKind (ExportEntry k pub tgt parent) = k
+
+entryPublic (ExportEntry k pub tgt parent) = pub
+
+entryTarget (ExportEntry k pub tgt parent) = tgt
+
+entryParent (ExportEntry k pub tgt parent) = parent
+
+-- 按命名空间查公开名：kinds 是允许的 kind 列表（val / ctor / type）。
+lookupExport kinds name entries =
+  case entries of
+    Nil => Nothing
+    Cons e rest =>
+      if memName (entryKind e) kinds && entryPublic e == name then Just e
+      else lookupExport kinds name rest
+
+findExportValue entries name = lookupExport (Cons "val" (Cons "ctor" Nil)) name entries
+
+findExportCtor entries name = lookupExport (Cons "ctor" Nil) name entries
+
+findExportType entries name = lookupExport (Cons "type" Nil) name entries
+
+modulesExportingValueFrom modules names name =
   case names of
     Nil => Nil
     Cons m rest =>
-      if memName name (exportsOf modules m) then
-        Cons m (modulesExportingFrom modules rest name)
-      else modulesExportingFrom modules rest name
+      case findExportValue (exportsOf modules m) name of
+        Just e => Cons (Pair m e) (modulesExportingValueFrom modules rest name)
+        Nothing => modulesExportingValueFrom modules rest name
 
-modulesExporting modules imports name =
-  modulesExportingFrom modules (openModuleNames imports) name
+modulesExportingValue modules imports name =
+  modulesExportingValueFrom modules (openModuleNames imports) name
 
 modulesExportingCtorFrom modules names name =
   case names of
     Nil => Nil
     Cons m rest =>
-      if memName name (moduleCtors modules m) then
-        Cons m (modulesExportingCtorFrom modules rest name)
-      else modulesExportingCtorFrom modules rest name
+      case findExportCtor (exportsOf modules m) name of
+        Just e => Cons (Pair m e) (modulesExportingCtorFrom modules rest name)
+        Nothing => modulesExportingCtorFrom modules rest name
 
 modulesExportingCtor modules imports name =
   modulesExportingCtorFrom modules (openModuleNames imports) name
+
+modulesExportingTypeFrom modules names name =
+  case names of
+    Nil => Nil
+    Cons m rest =>
+      case findExportType (exportsOf modules m) name of
+        Just e => Cons (Pair m e) (modulesExportingTypeFrom modules rest name)
+        Nothing => modulesExportingTypeFrom modules rest name
+
+modulesExportingType modules imports name =
+  modulesExportingTypeFrom modules (openModuleNames imports) name
+
+-- 重导出时同名可能来自多个模块；只要 target 相同就不是歧义（门面伞模块常见）。
+sameTargetRest e pairs =
+  case pairs of
+    Nil => True
+    Cons (Pair m e2) rest => if entryTarget e == entryTarget e2 then sameTargetRest e rest else False
+
+unifyEntryPairs label kindLabel name Nil = Err (label ++ ": unknown " ++ kindLabel ++ " " ++ name)
+
+unifyEntryPairs label kindLabel name (Cons p rest) =
+  if sameTargetRest (secondOf p) rest then Ok p
+  else
+    Err
+      (label ++ ": ambiguous " ++ kindLabel ++ " " ++ name ++ " (imported from "
+     ++ _joinNames (map firstOf (Cons p rest)) ++ "); qualify it")
 
 modulePath root name = root ++ "/" ++ joinSlashes (splitOnDot name) ++ ".vuna"
 
@@ -140,20 +204,15 @@ collectModuleFiles (Cons root rest) name acc =
 
 findModuleFile roots name =
   case collectModuleFiles roots name Nil of
-    Nil => Err ("module " ++ name ++ " not found (roots: " ++ joinNames roots ++ ")")
+    Nil => Err ("module " ++ name ++ " not found (roots: " ++ _joinNames roots ++ ")")
     Cons path Nil => Ok path
-    paths => Err ("ambiguous module " ++ name ++ " (found in: " ++ joinNames paths ++ ")")
+    paths => Err ("ambiguous module " ++ name ++ " (found in: " ++ _joinNames paths ++ ")")
 
 findModule modules name =
   case modules of
     Nil => Nothing
     Cons (Module mname imports decls exports) rest =>
       if mname == name then Just (Module mname imports decls exports) else findModule rest name
-
-exportsOf modules name =
-  case findModule modules name of
-    Just (Module mname imports decls exports) => exports
-    Nothing => Nil
 
 isBuiltinName name =
   case builtinArity name of
@@ -168,8 +227,24 @@ resolveQualified modules label imports name =
            Nothing => Err (label ++ ": module " ++ prefix ++ " is not imported")
            Just m =>
              if isGlobalCtor base then Ok base
-             else if memName base (exportsOf modules m) then Ok (mangle m base)
-             else Err (label ++ ": " ++ base ++ " is not exported by " ++ m)
+             else
+               case findExportValue (exportsOf modules m) base of
+                 Just e => Ok (entryTarget e)
+                 Nothing => Err (label ++ ": " ++ base ++ " is not exported by " ++ m)
+
+-- 模式里的限定名只认构造器：`M.foo`（foo 是函数）必须报错，不能按值解析成构造器。
+resolveQualifiedCtor modules label imports name =
+  case splitLastDot (splitOnDot name) of
+    Pair revPrefix base =>
+      let prefix = joinDots revPrefix
+      in case findImportPrefix imports prefix of
+           Nothing => Err (label ++ ": module " ++ prefix ++ " is not imported")
+           Just m =>
+             if isGlobalCtor base then Ok base
+             else
+               case findExportCtor (exportsOf modules m) base of
+                 Just e => Ok (entryTarget e)
+                 Nothing => Err (label ++ ": constructor " ++ base ++ " is not exported by " ++ m)
 
 resolveGlobal modules label prefix own imports scope name =
   if memName name scope then Ok name
@@ -178,27 +253,28 @@ resolveGlobal modules label prefix own imports scope name =
   else if memName name own then Ok (mangle prefix name)
   else if isBuiltinName name then Ok name
   else
-    case modulesExporting modules imports name of
+    case modulesExportingValue modules imports name of
       Nil => Err (label ++ ": unbound variable " ++ name ++ suggest name (append own scope))
-      Cons m Nil => Ok (mangle m name)
-      ms => Err (label ++ ": ambiguous name " ++ name ++ " (imported from " ++ joinNames ms ++ "); qualify it")
+      pairs =>
+        andThen (unifyEntryPairs label "name" name pairs) (\p => Ok (entryTarget (secondOf p)))
 
 resolveCtor modules label prefix ownCtors imports name =
   if isGlobalCtor name then Ok name
-  else if containsDot name then resolveQualified modules label imports name
+  else if containsDot name then resolveQualifiedCtor modules label imports name
   else if memName name ownCtors then Ok (mangle prefix name)
   else
     case modulesExportingCtor modules imports name of
       Nil => Err (label ++ ": unknown constructor " ++ name ++ suggest name ownCtors)
-      Cons m Nil => Ok (mangle m name)
-      ms => Err (label ++ ": ambiguous constructor " ++ name ++ " (imported from " ++ joinNames ms ++ "); qualify it")
+      pairs =>
+        andThen (unifyEntryPairs label "constructor" name pairs) (\p => Ok (entryTarget (secondOf p)))
 
 checkBinder label name =
   if containsDot name then Err (label ++ ": invalid variable name " ++ name)
   else Ok name
 
 checkTopName label name =
-  if containsDot name then Err (label ++ ": invalid top-level name " ++ name)
+  if name == "_" then Err (label ++ ": invalid top-level name _ (bare _ is reserved)")
+  else if containsDot name then Err (label ++ ": invalid top-level name " ++ name)
   else Ok name
 
 resolveTopName label prefix name =
@@ -306,19 +382,6 @@ isLowerTypeName name =
     Nil => False
     Cons c rest => isLowerChar c
 
-typeExportsOf modules name = typeNamesOf (moduleDecls modules name)
-
-modulesExportingTypeFrom modules names name =
-  case names of
-    Nil => Nil
-    Cons m rest =>
-      if memName name (typeExportsOf modules m) then
-        Cons m (modulesExportingTypeFrom modules rest name)
-      else modulesExportingTypeFrom modules rest name
-
-modulesExportingType modules imports name =
-  modulesExportingTypeFrom modules (openModuleNames imports) name
-
 resolveTypeName modules label prefix ownTypes imports name =
   if name == "Int" || name == "String" || name == "Bool" || name == "Type" || name == "->" then
     Ok name
@@ -330,14 +393,15 @@ resolveTypeName modules label prefix ownTypes imports name =
         in case findImportPrefix imports typePrefix of
              Nothing => Err (label ++ ": module " ++ typePrefix ++ " is not imported")
              Just m =>
-               if memName base (typeExportsOf modules m) then Ok (mangle m base)
-               else Err (label ++ ": type " ++ base ++ " is not exported by " ++ m)
+               case findExportType (exportsOf modules m) base of
+                 Just e => Ok (entryTarget e)
+                 Nothing => Err (label ++ ": type " ++ base ++ " is not exported by " ++ m)
   else if memName name ownTypes then Ok (mangle prefix name)
   else
     case modulesExportingType modules imports name of
       Nil => Err (label ++ ": unknown type " ++ name)
-      Cons m Nil => Ok (mangle m name)
-      ms => Err (label ++ ": ambiguous type " ++ name ++ " (imported from " ++ joinNames ms ++ ")")
+      pairs =>
+        andThen (unifyEntryPairs label "type" name pairs) (\p => Ok (entryTarget (secondOf p)))
 
 resolveTypeExpr modules label prefix ownTypes imports ty =
   case ty of
@@ -382,8 +446,266 @@ resolveModules modules =
   case modules of
     Nil => Ok Nil
     Cons (Module name imports decls exports) rest =>
-      andThen (resolveProgram modules name name exports (ctorsOf decls) (typeNamesOf decls) imports decls) (\d1 =>
+      andThen (resolveProgram modules name name (topNames decls) (ctorsOf decls) (typeNamesOf decls) imports decls) (\d1 =>
         andThen (resolveModules rest) (\d2 => Ok (append d1 d2)))
+
+-- ---------------------------------------------------------------
+-- 模块导出表计算（M10）
+-- ---------------------------------------------------------------
+
+isPrivateName name = startsWith "_" name
+
+privateExportMsg prefix sp name =
+  prefix ++ ": " ++ showSpanLoc sp ++ ": cannot export private name " ++ name
+  ++ " (names starting with _ are module-private)"
+
+findOwnData name decls =
+  case decls of
+    Nil => Nothing
+    Cons d rest =>
+      case d of
+        DData dname params ctors sp =>
+          if dname == name then Just (Pair dname ctors) else findOwnData name rest
+        _ => findOwnData name rest
+
+findOwnFn name decls =
+  case decls of
+    Nil => Nothing
+    Cons d rest =>
+      case d of
+        DFun n pats body sp => if n == name then Just name else findOwnFn name rest
+        DSig n ty sp => if n == name then Just name else findOwnFn name rest
+        _ => findOwnFn name rest
+
+findCtorNamed name ctors =
+  case ctors of
+    Nil => Nothing
+    Cons c rest =>
+      if ctorName c == name then Just (ctorName c) else findCtorNamed name rest
+
+findOwnCtorName name decls =
+  case decls of
+    Nil => Nothing
+    Cons d rest =>
+      case d of
+        DData dname params ctors sp =>
+          case findCtorNamed name ctors of
+            Just cname => Just (Pair dname cname)
+            Nothing => findOwnCtorName name rest
+        _ => findOwnCtorName name rest
+
+ownCtorEntries prefix dname ctors =
+  case ctors of
+    Nil => Nil
+    Cons c rest =>
+      if isPrivateName (ctorName c) then ownCtorEntries prefix dname rest
+      else
+        Cons
+          (ExportEntry "ctor" (ctorName c) (mangle prefix (ctorName c)) (mangle prefix dname))
+          (ownCtorEntries prefix dname rest)
+
+-- 从某模块的导出表里取某数据类型的构造器条目：重导出 `T(..)` 时只重新公开
+-- 源模块本来就公开的构造器，从而保持源模块的抽象性。
+ctorEntriesOfType typeTarget entries =
+  case entries of
+    Nil => Nil
+    Cons e rest =>
+      if entryKind e == "ctor" && entryParent e == typeTarget then
+        Cons e (ctorEntriesOfType typeTarget rest)
+      else ctorEntriesOfType typeTarget rest
+
+declImplicitExports prefix d =
+  case d of
+    DData dname params ctors sp =>
+      if isPrivateName dname then Nil
+      else
+        Cons
+          (ExportEntry "type" dname (mangle prefix dname) "")
+          (ownCtorEntries prefix dname ctors)
+    DSig name ty sp =>
+      if isPrivateName name then Nil
+      else Cons (ExportEntry "val" name (mangle prefix name) "") Nil
+    DFun name pats body sp =>
+      if isPrivateName name then Nil
+      else Cons (ExportEntry "val" name (mangle prefix name) "") Nil
+
+implicitExports prefix decls = dedupeImplicitExports (concatMap (declImplicitExports prefix) decls)
+
+-- 没有模块头 = 导出全部：类型签名 DSig 与子句 DFun 会为同一个函数各产生一条
+-- val 条目，必须去重，否则重导出该模块时会在 duplicate export 检查里误报。
+dedupeImplicitExports Nil = Nil
+
+dedupeImplicitExports (Cons e rest) =
+  if hasSamePublicKind e rest then dedupeImplicitExports rest
+  else Cons e (dedupeImplicitExports rest)
+
+refEntryList pub Nothing = Nil
+
+refEntryList pub (Just (ExportRef k tgt parent)) = Cons (ExportEntry k pub tgt parent) Nil
+
+ownOrImportedTypeRef modules prefix decls imports name =
+  case findOwnData name decls of
+    Just (Pair dname ctors) => Ok (Just (ExportRef "type" (mangle prefix dname) ""))
+    Nothing =>
+      case modulesExportingType modules imports name of
+        Nil => Ok Nothing
+        pairs =>
+          case unifyEntryPairs prefix "type" name pairs of
+            Err e => Err e
+            Ok p => Ok (Just (ExportRef "type" (entryTarget (secondOf p)) ""))
+
+ownOrImportedValueRef modules prefix decls imports name =
+  case findOwnFn name decls of
+    Just fn => Ok (Just (ExportRef "val" (mangle prefix fn) ""))
+    Nothing =>
+      case findOwnCtorName name decls of
+        Just (Pair dname cname) =>
+          Ok (Just (ExportRef "ctor" (mangle prefix cname) (mangle prefix dname)))
+        Nothing =>
+          case modulesExportingValue modules imports name of
+            Nil => Ok Nothing
+            pairs =>
+              case unifyEntryPairs prefix "name" name pairs of
+                Err e => Err e
+                Ok p =>
+                  let e = secondOf p
+                  in Ok (Just (ExportRef (entryKind e) (entryTarget e) (entryParent e)))
+
+exportBare modules prefix decls imports name sp =
+  case splitLastDot (splitOnDot name) of
+    Pair revPrefix base =>
+      case revPrefix of
+        Nil =>
+          if isPrivateName name then Err (privateExportMsg prefix sp name)
+          else
+            andThen (ownOrImportedTypeRef modules prefix decls imports name) (\tr =>
+              andThen (ownOrImportedValueRef modules prefix decls imports name) (\vr =>
+                case tr of
+                  Nothing =>
+                    case vr of
+                      Nothing =>
+                        Err (prefix ++ ": " ++ showSpanLoc sp ++ ": cannot export unknown name " ++ name)
+                      Just _ => Ok (refEntryList name vr)
+                  Just _ =>
+                    case vr of
+                      Nothing => Ok (refEntryList name tr)
+                      Just _ => Ok (append (refEntryList name tr) (refEntryList name vr))))
+        _ =>
+          let mprefix = joinDots revPrefix
+          in case findImportPrefix imports mprefix of
+               Nothing =>
+                 Err (prefix ++ ": " ++ showSpanLoc sp ++ ": module " ++ mprefix ++ " is not imported")
+               Just m => exportSelective modules prefix m base name sp
+
+exportSelective modules prefix m base name sp =
+  case findExportValue (exportsOf modules m) base of
+    Just e =>
+      case findExportType (exportsOf modules m) base of
+        Just te =>
+          Ok
+            (Cons (ExportEntry (entryKind e) base (entryTarget e) (entryParent e))
+              (Cons (ExportEntry "type" base (entryTarget te) "") Nil))
+        Nothing =>
+          Ok (Cons (ExportEntry (entryKind e) base (entryTarget e) (entryParent e)) Nil)
+    Nothing =>
+      case findExportType (exportsOf modules m) base of
+        Just te => Ok (Cons (ExportEntry "type" base (entryTarget te) "") Nil)
+        Nothing =>
+          Err (prefix ++ ": " ++ showSpanLoc sp ++ ": cannot export unknown name " ++ name)
+
+exportTypeAll modules prefix decls imports name sp =
+  case splitLastDot (splitOnDot name) of
+    Pair revPrefix base =>
+      case revPrefix of
+        Nil =>
+          if isPrivateName name then Err (privateExportMsg prefix sp name)
+          else
+            case findOwnData name decls of
+              Just (Pair dname ctors) =>
+                Ok
+                  (Cons
+                    (ExportEntry "type" name (mangle prefix dname) "")
+                    (ownCtorEntries prefix dname ctors))
+              Nothing =>
+                case modulesExportingType modules imports name of
+                  Nil =>
+                    Err (prefix ++ ": " ++ showSpanLoc sp ++ ": cannot export unknown name " ++ name)
+                  pairs =>
+                    case unifyEntryPairs prefix "type" name pairs of
+                      Err e => Err e
+                      Ok p =>
+                        let m = firstOf p
+                        in let tgt = entryTarget (secondOf p)
+                           in Ok
+                                (Cons
+                                  (ExportEntry "type" name tgt "")
+                                  (ctorEntriesOfType tgt (exportsOf modules m)))
+        _ =>
+          let mprefix = joinDots revPrefix
+          in case findImportPrefix imports mprefix of
+               Nothing =>
+                 Err (prefix ++ ": " ++ showSpanLoc sp ++ ": module " ++ mprefix ++ " is not imported")
+               Just m =>
+                 case findExportType (exportsOf modules m) base of
+                   Just e =>
+                     Ok
+                       (Cons
+                         (ExportEntry "type" base (entryTarget e) "")
+                         (ctorEntriesOfType (entryTarget e) (exportsOf modules m)))
+                   Nothing =>
+                     Err
+                       (prefix ++ ": " ++ showSpanLoc sp ++ ": type " ++ base
+                      ++ " is not exported by " ++ m)
+
+exportItemEntries modules prefix decls imports item =
+  case item of
+    XModule name sp =>
+      case findImportPrefix imports name of
+        Nothing =>
+          Err (prefix ++ ": " ++ showSpanLoc sp ++ ": module " ++ name ++ " is not imported")
+        Just m => Ok (exportsOf modules m)
+    XTypeAll name sp => exportTypeAll modules prefix decls imports name sp
+    XBare name sp => exportBare modules prefix decls imports name sp
+
+hasSamePublicKind e entries =
+  case entries of
+    Nil => False
+    Cons e2 rest =>
+      if entryKind e == entryKind e2 && entryPublic e == entryPublic e2 then True
+      else hasSamePublicKind e rest
+
+checkExportDuplicates prefix Nil = Ok Nil
+
+checkExportDuplicates prefix (Cons e rest) =
+  if hasSamePublicKind e rest then
+    Err (prefix ++ ": duplicate export " ++ entryPublic e)
+  else checkExportDuplicates prefix rest
+
+explicitExports modules prefix decls imports Nil = Ok Nil
+
+explicitExports modules prefix decls imports (Cons item rest) =
+  andThen (exportItemEntries modules prefix decls imports item) (\es =>
+    andThen (explicitExports modules prefix decls imports rest) (\tail =>
+      Ok (append es tail)))
+
+validateModuleHeader label hdr =
+  case hdr of
+    Nothing => Ok Nil
+    Just (ModDecl declared hasList items sp) =>
+      if declared == label then Ok Nil
+      else
+        Err
+          (label ++ ": " ++ showSpanLoc sp ++ ": module name mismatch: source declares "
+         ++ declared)
+
+computeExports modules prefix hdr imports decls =
+  case hdr of
+    Nothing => Ok (implicitExports prefix decls)
+    Just (ModDecl declared hasList items sp) =>
+      if hasList then
+        andThen (explicitExports modules prefix decls imports items) (\es =>
+          andThen (checkExportDuplicates prefix es) (\_ => Ok es))
+      else Ok (implicitExports prefix decls)
 
 showCycle name stack = joinArrows (reverse (Cons name stack))
 
@@ -401,24 +723,30 @@ loadModule roots modules stack name =
       if memName name stack then Err ("import cycle: " ++ showCycle name stack)
       else if validModuleName name then
         andThen (findModuleFile roots name) (\path =>
-          andThen (parseSource path (readFile path)) (\p =>
-            case p of
-              Pair imports decls =>
-                andThen (validateImports name imports) (\_ =>
-                  andThen (loadAll roots modules (Cons name stack) imports) (\modules2 =>
-                    Ok (Cons (Module name imports decls (topNames decls)) modules2)))))
+          andThen (parseSource path (readFile path)) (\src =>
+            case src of
+              Source hdr imports decls =>
+                andThen (validateModuleHeader name hdr) (\_ =>
+                  andThen (validateImports name imports) (\_ =>
+                    andThen (loadAll roots modules (Cons name stack) imports) (\modules2 =>
+                      andThen (computeExports modules2 name hdr imports decls) (\exports =>
+                        Ok (Cons (Module name imports decls exports) modules2)))))))
       else Err ("invalid module name: " ++ name)
 
 loadProgram roots entry =
   if fileExists entry then
-    andThen (parseSource entry (readFile entry)) (\p =>
-      case p of
-        Pair imports decls =>
-          andThen (validateImports "<entry>" imports) (\_ =>
-            andThen (loadAll roots Nil Nil imports) (\modules =>
-              andThen (resolveEntry modules imports decls) (\entryDecls =>
-                andThen (resolveModules modules) (\moduleDecls =>
-                  Ok (append entryDecls moduleDecls))))))
+    andThen (parseSource entry (readFile entry)) (\src =>
+      case src of
+        Source hdr imports decls =>
+          case hdr of
+            Just (ModDecl dname hasList items sp) =>
+              Err ("module header is not allowed in entry file (" ++ entry ++ ")")
+            Nothing =>
+              andThen (validateImports "<entry>" imports) (\_ =>
+                andThen (loadAll roots Nil Nil imports) (\modules =>
+                  andThen (resolveEntry modules imports decls) (\entryDecls =>
+                    andThen (resolveModules modules) (\moduleDecls =>
+                      Ok (append entryDecls moduleDecls))))))
   else Err ("entry file not found: " ++ entry)
 
 tyShape ty =

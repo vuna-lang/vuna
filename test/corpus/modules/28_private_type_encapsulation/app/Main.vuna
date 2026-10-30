@@ -1,0 +1,4 @@
+import Vault
+
+main : Int
+main = Vault.use (Vault.mk 42)

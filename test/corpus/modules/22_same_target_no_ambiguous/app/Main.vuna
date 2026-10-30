@@ -1,0 +1,9 @@
+import Impl
+import Facade
+
+pick : Color -> Int
+pick c = case c of
+  Red => 22
+
+main : Int
+main = foo + pick Red

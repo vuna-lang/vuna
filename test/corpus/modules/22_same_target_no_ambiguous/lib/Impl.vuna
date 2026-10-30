@@ -1,0 +1,7 @@
+module Impl (foo, Color(..)) where
+
+foo : Int
+foo = 20
+
+data Color : Type where
+  Red : Color

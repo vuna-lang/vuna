@@ -1,0 +1,4 @@
+module Helper (helperValue) where
+
+helperValue : Int
+helperValue = 20

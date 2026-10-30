@@ -1,3 +1,5 @@
+module Vuna.Eval (runDecls) where
+
 -- Vuna.Eval：值表示、内建函数、求值器与 show。
 
 import Vuna.Base

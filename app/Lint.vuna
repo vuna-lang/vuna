@@ -1,3 +1,5 @@
+module Lint (runLint) where
+
 -- app/Lint：vuna 源码风格检查与自动修复（首批规则）。
 -- 只做语法层分析：Lexer 取 token 行列 + 按行文本重写；修复后用 parseSource 复验。
 import Vuna.Base

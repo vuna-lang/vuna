@@ -1,0 +1,3 @@
+module Facade (Inner.foo) where
+
+import Inner

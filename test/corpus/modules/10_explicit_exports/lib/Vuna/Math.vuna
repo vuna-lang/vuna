@@ -1,0 +1,10 @@
+module Vuna.Math (three, double) where
+
+three : Int
+three = 3
+
+double : Int -> Int
+double x = x * 2
+
+notExported : Int
+notExported = 99

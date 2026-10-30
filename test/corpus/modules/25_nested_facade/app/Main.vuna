@@ -1,0 +1,8 @@
+import Top
+
+pick : Top.T -> Int
+pick v = case v of
+  Top.C n => n
+
+main : Int
+main = Top.foo + pick (Top.C 22)

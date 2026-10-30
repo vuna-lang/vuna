@@ -1,0 +1,5 @@
+module M (T(..)) where
+
+data T : Type where
+  _C : Int -> T
+  A : T

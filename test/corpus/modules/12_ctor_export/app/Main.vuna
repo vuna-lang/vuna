@@ -1,0 +1,9 @@
+import Vuna.Nat
+
+pick : Nat -> Int
+pick n = case n of
+  Z => 0
+  S k => 1
+
+main : Int
+main = pick (S Z)

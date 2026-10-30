@@ -1,0 +1,4 @@
+module Helper2 (choice) where
+
+choice : Int
+choice = 12

@@ -1,0 +1,3 @@
+module Facade (Inner.T, Inner.C, Inner.D) where
+
+import Inner

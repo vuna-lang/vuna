@@ -1,0 +1,4 @@
+module M (foo) where
+
+foo : Int -> Int
+foo x = x

@@ -1,0 +1,13 @@
+module Vuna.Shape (Shape, mkCircle, area) where
+
+data Shape : Type where
+  Circle : Int -> Shape
+  Square : Int -> Shape
+
+mkCircle : Int -> Shape
+mkCircle r = Circle r
+
+area : Shape -> Int
+area s = case s of
+  Circle r => r * r * 3
+  Square w => w * w

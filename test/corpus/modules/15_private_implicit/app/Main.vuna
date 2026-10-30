@@ -1,0 +1,4 @@
+import Priv
+
+main : Int
+main = pub 41

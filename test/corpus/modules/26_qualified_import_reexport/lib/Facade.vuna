@@ -1,0 +1,6 @@
+module Facade (Inner.foo, bar) where
+
+import qualified Inner
+
+bar : Int
+bar = Inner.foo - 42

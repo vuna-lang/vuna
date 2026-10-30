@@ -1,3 +1,5 @@
+module Vuna.TypedCodegen (generateProgramTyped) where
+
 -- Vuna.TypedCodegen：用类型信息生成原生 OCaml 类型（M8a）。
 -- 目前覆盖 Int/String/Bool/List、函数/lambda/let/case/if、用户 data 类型、
 -- 模式匹配与 builtins；main 的 show 暂支持 Int/String/Bool/List。

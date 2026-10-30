@@ -1,3 +1,5 @@
+module Vuna.Parser (parseSource) where
+
 -- vuna 源码 parser：offside layout，返回 AST 与 imports。
 
 import Vuna.Base
@@ -77,6 +79,20 @@ upperFirst s =
     Cons c rest => c >= 65 && c <= 90
     Nil => False
 
+-- `_` 前缀私有构造器（如 `_C`）在模式里也要能当构造器用：`_` 开头的标识符
+-- 若紧随大写字母，按构造器解析；单独的 `_` 仍是通配符，`_x` 仍是变量。
+underscoreCtorName s =
+  case strUnpack s of
+    Cons c rest =>
+      if c == 95 then
+        case rest of
+          Cons c2 rest2 => c2 >= 65 && c2 <= 90
+          Nil => False
+      else False
+    Nil => False
+
+ctorPatternStart name = upperFirst name || underscoreCtorName name
+
 startsAtom st =
   case peekTok st of
     PTok (TIdent x) p => True
@@ -143,7 +159,63 @@ badCaseIndent st altCol =
         else False
 
 parseSource file source =
-  andThen (lexSource source) (\toks => parseProgram (PState file toks (Pos 1 0)))
+  andThen (lexSource source) (\toks =>
+    andThen (parseSourceFile (PState file toks (Pos 1 0))) (\p => Ok (firstOf p)))
+
+-- 可选模块头（M10）：`module M (导出项, ...) where`；列表省略 = 导出全部。
+parseSourceFile st =
+  step (parseModDecl st) (\hdr, st1 =>
+    step (parseImports st1) (\imports, st2 =>
+      if isEof st2 then Ok (Pair (Source hdr imports Nil) st2)
+      else
+        case peekPos st2 of
+          Pos line col =>
+            step (parseDecls st2 col) (\decls, st3 =>
+              if isEof st3 then Ok (Pair (Source hdr imports decls) st3)
+              else Err "expected end of input")))
+
+parseModDecl st =
+  if atKw st "module" then
+    step (expectKw st "module") (\_, st1 =>
+      step (expectIdent st1) (\name, st2 =>
+        if atSym st2 "(" then
+          step (parseExportItems st2) (\items, st3 =>
+            step (expectKw st3 "where") (\_, st4 =>
+              Ok (Pair (Just (ModDecl name True items (spanOf st st4))) st4)))
+        else
+          step (expectKw st2 "where") (\_, st3 =>
+            Ok (Pair (Just (ModDecl name False Nil (spanOf st st3))) st3))))
+  else Ok (Pair Nothing st)
+
+parseExportItems st =
+  step (expectSym st "(") (\_, st1 =>
+    if atSym st1 ")" then Ok (Pair Nil (advance st1))
+    else parseExportItemsFrom st1)
+
+parseExportItemsFrom st =
+  step (parseExportItem st) (\item, st1 =>
+    if atSym st1 "," then
+      step (parseExportItemsFrom (advance st1)) (\rest, st2 =>
+        Ok (Pair (Cons item rest) st2))
+    else
+      step (expectSym st1 ")") (\_, st2 =>
+        Ok (Pair (Cons item Nil) st2)))
+
+parseExportItem st =
+  case peekTok st of
+    PTok (TKw "module") p =>
+      step (expectKw st "module") (\_, st1 =>
+        step (expectIdent st1) (\name, st2 =>
+          Ok (Pair (XModule name (spanOf st st2)) st2)))
+    PTok (TIdent name) p =>
+      let st1 = advance st
+      in if atSym st1 "(" then
+           step (expectSym st1 "(") (\_, st2 =>
+             step (expectSym st2 "..") (\_, st3 =>
+               step (expectSym st3 ")") (\_, st4 =>
+                 Ok (Pair (XTypeAll name (spanOf st st4)) st4))))
+         else Ok (Pair (XBare name (spanOf st st1)) st1)
+    _ => Err "expected an export item"
 
 parseImportSpec st =
   step (expectKw st "import") (\_, st1 =>
@@ -165,16 +237,6 @@ parseImports st =
       step (parseImports st1) (\rest, st2 =>
         Ok (Pair (Cons imp rest) st2)))
   else Ok (Pair Nil st)
-
-parseProgram st =
-  step (parseImports st) (\imports, st1 =>
-    if isEof st1 then Ok (Pair imports Nil)
-    else
-      case peekPos st1 of
-        Pos line col =>
-          step (parseDecls st1 col) (\decls, st2 =>
-            if isEof st2 then Ok (Pair imports decls)
-            else Err "expected end of input"))
 
 parseDecls st blockCol =
   if isEof st then Ok (Pair Nil st)
@@ -487,7 +549,7 @@ parsePatternCons st blockCol =
 parsePatternHead st blockCol =
   case peekTok st of
     PTok (TIdent name) p =>
-      if upperFirst name then
+      if ctorPatternStart name then
         step (parsePatternAtoms (advance st) blockCol) (\args, st1 =>
           Ok (Pair (PCon name args (spanOf st st1)) st1))
       else parsePatternAtom st blockCol
@@ -504,7 +566,7 @@ parsePatternAtom st blockCol =
   case peekTok st of
     PTok (TIdent "_") p => Ok (Pair (PWild (spanOf st (advance st))) (advance st))
     PTok (TIdent name) p =>
-      if upperFirst name then Ok (Pair (PCon name Nil (spanOf st (advance st))) (advance st))
+      if ctorPatternStart name then Ok (Pair (PCon name Nil (spanOf st (advance st))) (advance st))
       else Ok (Pair (PVar name (spanOf st (advance st))) (advance st))
     PTok (TInt n) p => Ok (Pair (PInt n (spanOf st (advance st))) (advance st))
     PTok (TStr s) p => Ok (Pair (PStr s (spanOf st (advance st))) (advance st))

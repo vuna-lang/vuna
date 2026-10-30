@@ -1,0 +1,6 @@
+module M2 where
+
+_ = 1
+
+pub : Int
+pub = 2

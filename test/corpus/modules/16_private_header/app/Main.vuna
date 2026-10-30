@@ -1,0 +1,4 @@
+import Priv2
+
+main : Int
+main = pub

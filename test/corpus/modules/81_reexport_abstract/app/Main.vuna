@@ -1,0 +1,5 @@
+import Facade
+
+main : Int
+main = case Facade.mkCircle 1 of
+  Facade.Circle r => r

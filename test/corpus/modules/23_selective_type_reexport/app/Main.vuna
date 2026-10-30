@@ -1,0 +1,4 @@
+import Facade
+
+main : Facade.T
+main = Facade.mk 42

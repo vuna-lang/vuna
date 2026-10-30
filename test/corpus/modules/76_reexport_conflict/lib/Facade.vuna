@@ -1,0 +1,4 @@
+module Facade (module A, module B) where
+
+import A
+import B

@@ -1,6 +1,9 @@
+module Vuna.Interp (effectiveRoots, interpretFile, compileFile, compileFileChecked, compileFileTyped, checkFile) where
+
 -- Vuna.Interp：对外 facade（解释器/编译器入口）。
 
 import Vuna.Base
+import Vuna.Ast
 import Vuna.Parser
 import Vuna.Loader
 import Vuna.Eval
@@ -11,10 +14,13 @@ import Vuna.TypedCodegen
 interpret source =
   case parseSource "<input>" source of
     Err e => "error: " ++ e
-    Ok (Pair imports decls) =>
-      case imports of
-        Nil => runDecls decls
-        _ => "error: imports are only supported by interpretFile"
+    Ok (Source hdr imports decls) =>
+      case hdr of
+        Just _ => "error: module header is not allowed in entry file"
+        Nothing =>
+          case imports of
+            Nil => runDecls decls
+            _ => "error: imports are only supported by interpretFile"
 
 effectiveRoots Nil = Cons "lib" Nil
 effectiveRoots roots = roots

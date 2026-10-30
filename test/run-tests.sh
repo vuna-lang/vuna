@@ -80,24 +80,36 @@ for file in corpus/run/*.vuna; do
   compile_and_run "$file (compiler)" "$VUNA" "." "$file" "$expected"
 done
 
-# 2) 模块夹具：解释器与编译器都要读取模块并得到 expected.out
-for dir in corpus/modules/0*; do
+# 2) 模块夹具：解释器与动态 codegen 都要读取模块并得到 expected.out（正例 01–29；
+#    typed codegen 由第 12 段单独覆盖）
+for dir in corpus/modules/[012][0-9]_*; do
   expected=$(cat "$dir/expected.out")
   actual=$("$VUNA" interp --root "$dir/lib" --root "$dir/app" "$dir/app/Main.vuna" 2>&1)
   check_eq "$dir (interp)" "$expected" "$actual"
-  compile_and_run_roots "$dir (compiler)" "$VUNA" "$dir/app/Main.vuna" "$expected" --root "$dir/lib" --root "$dir/app"
+  compile_and_run_roots "$dir (compiler)" "$VUNA" "$dir/app/Main.vuna" "$expected" --no-typecheck --root "$dir/lib" --root "$dir/app"
 done
 
-# 3) 模块错误：解释器与编译器都要给出含片段的错误，且不写输出文件
-for dir in corpus/modules/9*; do
+# 3) 模块错误：解释器 / 动态 codegen / typed codegen 三条路径都要因同一原因失败、
+#    给出含片段的错误，且不写输出文件（错误例 70–99）
+for dir in corpus/modules/[789][0-9]_*; do
   fragment=$(cat "$dir/expected.err")
   actual=$("$VUNA" interp --root "$dir/lib" --root "$dir/app" "$dir/app/Main.vuna" 2>&1)
   check_contains "$dir (interp error)" "$actual" "$fragment"
   rm -f "$tmp/error.ml"
-  actual=$("$VUNA" --root "$dir/lib" --root "$dir/app" "$dir/app/Main.vuna" "$tmp/error.ml" 2>&1 || true)
-  check_contains "$dir (compiler error)" "$actual" "$fragment"
+  actual=$("$VUNA" --no-typecheck --root "$dir/lib" --root "$dir/app" "$dir/app/Main.vuna" "$tmp/error.ml" 2>&1 || true)
+  check_contains "$dir (dynamic compiler error)" "$actual" "$fragment"
   if [ -e "$tmp/error.ml" ]; then
-    bad "$dir (no output file)" "absent" "present"
+    bad "$dir (dynamic no output file)" "absent" "present"
+  else
+    ok
+  fi
+  rm -f "$tmp/error_typed.ml"
+  typed_err=$("$VUNA" --typed --root "$dir/lib" --root "$dir/app" "$dir/app/Main.vuna" "$tmp/error_typed.ml" 2>&1)
+  typed_code=$?
+  check_contains "$dir (typed error)" "$typed_err" "$fragment"
+  if [ "$typed_code" -ne 0 ]; then ok; else bad "$dir (typed error exit)" "non-zero" "$typed_code"; fi
+  if [ -e "$tmp/error_typed.ml" ]; then
+    bad "$dir (typed no output file)" "absent" "present"
   else
     ok
   fi
@@ -198,7 +210,7 @@ for file in corpus/typed_ok/*.vuna; do
 done
 
 # 12) 跨模块 typed codegen：--typed --root lib 生成并运行
-for dir in corpus/modules/0*; do
+for dir in corpus/modules/[012][0-9]_*; do
   [ -f "$dir/app/Main.vuna" ] || continue
   rm -f "$tmp/typedmod.ml" "$tmp/typedmod.exe"
   if ! typed_out=$("$VUNA" --typed --root "$dir/lib" --root "$dir/app" "$dir/app/Main.vuna" "$tmp/typedmod.ml" 2>&1); then

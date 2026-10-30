@@ -1,3 +1,5 @@
+module Vuna.Codegen (sanitizeName, ocamlString, generateProgram) where
+
 -- vuna codegen：把 flatten 后的程序生成动态 value 表示的 OCaml。
 
 import Vuna.Base

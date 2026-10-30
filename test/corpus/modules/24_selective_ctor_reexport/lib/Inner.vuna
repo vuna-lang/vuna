@@ -1,0 +1,5 @@
+module Inner (T(..)) where
+
+data T : Type where
+  C : Int -> T
+  D : T

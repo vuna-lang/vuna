@@ -123,7 +123,7 @@ git add bootstrap/ && git commit
   （如 `--root lib --root app`），`lib/Vuna/Parser.vuna` ⇔ 模块 `Vuna.Parser`；
 - 模块按根顺序查找；同名模块出现在多个根时是硬错误（不静默覆盖）；
 - 路径段必须匹配 `[A-Z][A-Za-z0-9_]*`，路径/文件名与模块名**精确一致**，没有大小写映射；
-- 入口文件可以在模块根外（如 `app/Main.vuna`），它本身不是模块；
+- 入口文件可以在模块根外（如 `app/Main.vuna`），它本身不是模块，不能写模块头；
 - `app/` 也可以作为模块根：`vuna --root lib --root app app/Main.vuna` 时，
   `import Lint` 解析到 `app/Lint.vuna`，`import Vuna.Base` 解析到 `lib/Vuna/Base.vuna`；
 - `import` 只能在文件顶部，是**直接依赖**；循环导入、重复 import、重复 alias 都是硬错误；
@@ -138,12 +138,48 @@ git add bootstrap/ && git commit
 
   alias 只是额外的限定前缀，原全名仍然可用；alias 必须是单个大写段、全文件唯一，
   且不能与另一个被 import 的模块名冲突；
+- **模块头**：模块文件可以在 `import` 之前写一个模块头声明导出项（导出列表可以跨行；
+  入口文件不能写）：
+
+  ```vuna
+  module Vuna.Math where           -- 省略导出列表 = 导出全部（v0 兼容）
+  module Vuna.Math () where        -- 显式导出空集
+  module Vuna.Math (three, Nat(..), module Vuna.Base, Vuna.Lexer.lexSource) where
+  ```
+
+  模块名必须与路径推导出的模块名一致（`lib/Vuna/Math.vuna` ⇔ `Vuna.Math`），不一致是
+  硬错误。导出项按「类型名/值名」两套命名空间解析（`module B` 是整模块重导出，不属于
+  单个名字）：
+
+  - `name`：裸名，类型/值两套命名空间都解析，同名都导出（构造器名按值命名空间解析）；
+    单独导出类型名时只导出类型本身（构造器不可见，即抽象类型）；
+  - `Name(..)`：导出类型及全部非私有构造器（重导出已导入的类型时只公开源模块本来就
+    公开的构造器，保持源的抽象性）；
+  - `module B`：整模块重导出，B 必须是直接 import 的模块，保留 B 的抽象性；
+  - `B.name`：从 B 选择性重导出，B 必须是直接 import 的模块；
+
+  这里的 B 可以用模块全名或 import alias 引用。暂不支持重命名重导出
+  （`foo = B.foo`）和构造器子集（`T(C1,C2)`）；同一 (kind, 名字) 重复导出（包括
+  `module B` 已覆盖的名字再单独写 `B.x`）是 `duplicate export` 硬错误；导出当前作用域
+  不可见的名字也是硬错误；
+- **`_` 前缀私有**：任何顶层名字（值/类型/构造器）以 `_` 开头即模块私有，不能导出；
+  显式导出 `_` 名是硬错误（不是静默剔除），裸 `_` 也不能作顶层名；`(..)` 同样不会让
+  `_` 构造器变公开；
+- **抽象类型**：导出项 `T` 只导出类型、不导出构造器，跨模块既不能构造也不能模式匹配；
+  要公开构造器必须写 `T(..)`；
+- **模块路径不变式**：模块路径的最后一段是文件名、中间段是目录，目录本身不是模块。
+  因此 `lib/Vuna.vuna`（模块 `Vuna`）与 `lib/Vuna/Parser.vuna`（模块 `Vuna.Parser`）
+  能在同一个根下共存、没有歧义，包门面可以直接命名为 `Vuna`；
+- 模块导出只算聚合层；包级隐藏（哪些模块对外公开）留给 M11.5 的根 manifest；
 - 非限定名的查找顺序：局部绑定 → 全局构造器 → 本模块顶层定义 → builtin →
-  已自动 open 的 import 导出。两个 open import 导出同名时，裸名报歧义，写全名或
-  alias 即可消歧；
-- 限定名用**完整模块名**或 alias，永远不会歧义；注意 import 只算直接依赖，**不传递**：
-  A import B，C import A 看不到 B 的名字；
-- v0 所有顶层声明默认导出；`True` / `False` / `Cons` / `Nil` 不参与模块前缀；
+  已自动 open 的 import 导出。两个 open import 导出同名但指向不同定义时，裸名报歧义
+  （指向同一定义的重复导出不算歧义，例如原模块与它的门面重导出）；写全名或 alias
+  即可消歧；import 只提供目标模块**导出列表**中的名字（省略模块头 = 全部导出，
+  `_` 前缀除外）；
+- 限定名用**完整模块名**或 alias，永远不会歧义，但同样只解析目标模块的导出项；
+  注意 import 只算直接依赖，**不传递**：
+  A import B，C import A 看不到 B 的名字——除非 A 用 `module B` / `B.name` 显式重导出，
+  这是受控例外，只有显式写出的名字经 A 重新可见；
 - loader 解析 import 图、做名字解析后 **flatten** 成一个 program（内部名字带模块前缀，
   如 `Vuna.Parser.parse`），解释器与 codegen 复用同一份实现；`show` 只显示最后一段，
   所以输出与单文件程序一致。
@@ -152,13 +188,13 @@ git add bootstrap/ && git commit
 
 - `lib/Vuna/Base.vuna`：Result/Maybe/List/Pair/Bool、列表/Result 辅助函数与
   `splitOnDot`/`splitLastDot` 等字符串工具；
-- `lib/Vuna/Ast.vuna`：语法类型（Pat/Expr/Decl/Import）与 AST helper
+- `lib/Vuna/Ast.vuna`：语法类型（Pat/Expr/Decl/Import/模块头）与 AST helper
   （`funArity`/`ctorArity`/`topNames`/`ctorsOf` 等），依赖 Base；
 - `lib/Vuna/Lexer.vuna`：词法分析，token 带行列位置；
-- `lib/Vuna/Parser.vuna`：offside layout parser，输出 AST 与 imports；
+- `lib/Vuna/Parser.vuna`：offside layout parser，输出模块头、AST 与 imports；
 - `lib/Vuna/Builtins.vuna`：内建函数名字与元数，Loader 与 Eval 共用；
 - `lib/Vuna/Eval.vuna`：值表示、内建函数、call-by-value 求值器与 `show`；
-- `lib/Vuna/Loader.vuna`：import 图、模块名校验、名字解析与 flatten
+- `lib/Vuna/Loader.vuna`：import 图、模块头/模块名校验、模块导出表、名字解析与 flatten
   （`loadProgram roots entry`，模块根是有序列表，逐根用 `fileExists` 探测，
   跨根同名模块报歧义）；
 - `lib/Vuna/Typecheck.vuna`：HM 风格类型检查（Ty/Scheme、unify、构造器 scheme、
@@ -218,8 +254,8 @@ type value =
 
 ## 测试
 
-`test/run-tests.sh` 是 vuna 原生测试（152 checks），只用 `vuna` / `vuna-boot`，
-不依赖任何外部编译器：
+`test/run-tests.sh` 是 vuna 原生测试（369 checks），用 `vuna` / `vuna-boot` 驱动，
+不依赖外部 vuna 实现；但运行测试需要 OCaml 编译器（`ocamlopt`）作为代码生成后端：
 
 ```console
 sh test/run-tests.sh          # 需要 PATH 中有 vuna 与 vuna-boot
@@ -228,13 +264,23 @@ sh test/run-tests.sh          # 需要 PATH 中有 vuna 与 vuna-boot
 覆盖：
 
 - `corpus/run/*.vuna`：`vuna interp` 输出 vs `.out` golden；编译器生成→`ocamlopt`→运行再比对；
-- `corpus/modules/0*`：跨模块函数/数据/嵌套 import 的解释器与编译器结果（含多根夹具）；
-- `corpus/modules/9*`：缺失模块、跨根歧义、循环导入、未限定引用、未导出名字、非法模块名；
+- `corpus/modules/` 01–29 正例（runner glob `[012][0-9]_*`）：跨模块函数/数据/嵌套 import
+  的解释器与动态 codegen（`--no-typecheck`）结果（含多根夹具）；覆盖 M10 显式导出列表、
+  重导出、抽象类型、空导出集与包门面路径共存；20–29 补充无头模块重导出、same-target
+  去重、选择性类型/构造器重导出、两级门面、qualified import 重导出、多行模块头、
+  私有类型封装、`_` 私有构造器在定义模块内匹配；
+- `corpus/modules/` 70–99 反例（runner glob `[789][0-9]_*`）：M10 的 `_` 隐私（私有值/
+  类型/构造器跨模块使用、私有构造器 `(..)` 不公开）、隐藏构造器跨模块构造/模式匹配、
+  重导出抽象性、重导出同名冲突、限定名函数当构造器模式、空导出集语义、入口文件模块头、
+  导出未知名、模块名不匹配、重复导出、显式导出 `_` 名、裸 `_` 顶层名，以及缺失模块、
+  跨根歧义、循环导入、未限定引用/未导入、同名不同定义歧义、未导出名字、非法模块名、
+  别名冲突、import 不传递；错误用例在 interp / 动态 codegen（`--no-typecheck`）/
+  typed codegen 三条路径都要求错误片段、不写输出文件；typed 路径同时断言非 0 退出；
 - `corpus/err/*.vuna`、`corpus/run_err/*.vuna`：解析/求值错误片段；
 - `corpus/type_ok`、`corpus/type_err`：单文件类型检查正/反例；
 - `corpus/type_modules/0*`、`9*`：跨模块类型检查正/反例；
 - `corpus/typed_ok`：`--typed` 单文件原生 OCaml 生成、编译运行与 golden 比对；
-- `corpus/modules/0*` 的 typed 版本：`--typed --root` 跨模块生成与运行；
+- `corpus/modules/` 01–29 的 typed 版本：`--typed --root` 跨模块生成与运行；
 - `corpus/lint/*.vuna`：`vuna lint` 检测 golden 与退出码；
 - `corpus/fix/*.vuna`：`vuna lint --fix` 结果、退出码与幂等性；
 - 统一 CLI：`help`、无参、旧式 compile 兼容、错误退出码、`vuna interp` 缺文件；
@@ -304,8 +350,8 @@ nix fmt               # nixfmt-tree 格式化 .nix
   短路、`++` 折叠与线性拼接、零参纯值 hoist、pretty printer；自举 codegen
   从 ~12s 降到 ~2s 量级；构建加 `-g` 并对 warning 39（unused rec）设 warn-error；
 - typed codegen 仍生成单文件 OCaml；小程序的 runtime prelude 会按需裁剪，
-  大程序保持完整 prelude；运行时错误没有源码位置；
-- `where` / `do` / 隐式参数 / 依赖类型未实现；
+  大程序保持完整 prelude；
+- `do` / 隐式参数 / 依赖类型未实现；
 - `vuna lint` 首批规则是保守子集：lambda 体内的冗余 `case` 不报告（vuna 的 lambda
   参数只有变量名，不能写模式）；只处理从行首 `if` 起始的规范布局（整条 if 链写在
   一行时不检测）；多行表达式分支的 if 链、非最后子句/alt 上的冗余 `case` 只报告
@@ -328,4 +374,8 @@ nix fmt               # nixfmt-tree 格式化 .nix
   种子随之轮换；
 - 工具链：`vuna` 统一 CLI（`compile` / `lint --fix` / `interp`），新增
   `fileExists` / `exit` 内建、可重复 `--root`（app 可作为模块根）；
+- M9：诊断与语言可用性——全链路 span、运行时错误带 `文件:行:列`、穷尽性/冗余检查、
+  非 0 退出码；
+- M10：模块系统 v2——模块头与显式导出列表、抽象类型、`module B` / `B.name` 重导出、
+  `_` 前缀隐私、模块路径不变式；
 - 早期 OCaml 外部编译器 `vunax` 已完成使命并删除。

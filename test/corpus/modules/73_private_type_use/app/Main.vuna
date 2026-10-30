@@ -1,0 +1,7 @@
+import M
+
+dummy : M._T -> Int
+dummy x = 0
+
+main : Int
+main = 0

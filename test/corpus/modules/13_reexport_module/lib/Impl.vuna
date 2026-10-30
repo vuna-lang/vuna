@@ -1,0 +1,10 @@
+module Impl (foo, double) where
+
+foo : Int
+foo = 20
+
+double : Int -> Int
+double x = x * 2
+
+secret : Int
+secret = 2

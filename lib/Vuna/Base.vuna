@@ -1,3 +1,5 @@
+module Vuna.Base (Result, Ok, Err, Maybe, Nothing, Just, List, Nil, Cons, Pair, Bool, False, True, Pos, Span, spanFile, spanStartLine, spanStartCol, showSpanLoc, append, reverse, length, map, traverse, andThen, step, concatMap, memName, lookupPair, firstOf, secondOf, containsDot, splitOnDot, splitLastDot, joinDots, joinSlashes, joinArrows, suggest, startsWith, posLine, posCol) where
+
 -- Vuna.Base：语言通用类型、列表/Result 辅助函数与字符串工具。
 
 data Result a : Type where
@@ -162,9 +164,9 @@ joinArrows (Cons x rest) = x ++ " -> " ++ joinArrows rest
 suggest : String -> List String -> String
 suggest name Nil = ""
 suggest name (Cons c rest) =
-  if similarName name c then " (did you mean " ++ c ++ "?)" else suggest name rest
+  if _similarName name c then " (did you mean " ++ c ++ "?)" else suggest name rest
 
-similarName a b =
+_similarName a b =
   if a == b then False
   else if startsWith a b then True
   else if startsWith b a then True

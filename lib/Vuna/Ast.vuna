@@ -1,3 +1,5 @@
+module Vuna.Ast (Pat, PVar, PWild, PCon, PInt, PStr, Expr, EVar, EInt, EStr, ELam, EApp, ELet, ECase, EIf, Ctor, Decl, DData, DSig, DFun, XBare, XTypeAll, XModule, ModDecl, Source, patSpan, exprSpan, Import, clausesFor, funArity, ctorName, ctorArityOf, ctorArity, topNames, ctorsOf, typeNamesOf) where
+
 -- Vuna.Ast：core-v0 的语法类型与 AST 辅助函数。
 
 import Vuna.Base
@@ -26,6 +28,21 @@ data Decl : Type where
   DData : String -> List String -> List Ctor -> Span -> Decl
   DSig : String -> Expr -> Span -> Decl
   DFun : String -> List Pat -> Expr -> Span -> Decl
+
+-- M10 模块头与导出项。
+-- XBare 是裸名导出，XTypeAll 是 `T(..)`，XModule 是 `module B` 整模块重导出。
+data ExportItem : Type where
+  XBare : String -> Span -> ExportItem
+  XTypeAll : String -> Span -> ExportItem
+  XModule : String -> Span -> ExportItem
+
+-- 模块头：模块名、是否写了显式导出列表、导出项、span。
+data ModDecl : Type where
+  ModDecl : String -> Bool -> List ExportItem -> Span -> ModDecl
+
+-- parser 的产物：可选模块头 + imports + 顶层声明。
+data SourceFile : Type where
+  Source : Maybe ModDecl -> List Import -> List Decl -> SourceFile
 
 -- 各节点的源码 span 访问器。
 patSpan pat =
@@ -59,6 +76,12 @@ data Import : Type where
   Import : String -> Bool -> Maybe String -> Span -> Import
 
 importSpan (Import name isQualified alias sp) = sp
+
+exportItemSpan item =
+  case item of
+    XBare name sp => sp
+    XTypeAll name sp => sp
+    XModule name sp => sp
 
 collectClauses Nil name = Nil
 collectClauses (Cons d rest) name =
@@ -111,12 +134,12 @@ declNames d =
 
 topNames decls = concatMap declNames decls
 
-declCtors d =
+_declCtors d =
   case d of
     DData dname params ctors _ => map ctorName ctors
     _ => Nil
 
-ctorsOf decls = concatMap declCtors decls
+ctorsOf decls = concatMap _declCtors decls
 
 declTypeNames d =
   case d of

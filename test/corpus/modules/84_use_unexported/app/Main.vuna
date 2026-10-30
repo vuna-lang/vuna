@@ -1,0 +1,4 @@
+import M3
+
+main : Int
+main = M3.hidden

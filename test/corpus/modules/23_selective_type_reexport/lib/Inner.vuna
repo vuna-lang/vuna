@@ -1,0 +1,7 @@
+module Inner (T, mk) where
+
+data T : Type where
+  MkT : Int -> T
+
+mk : Int -> T
+mk n = MkT n

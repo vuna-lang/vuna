@@ -1,0 +1,7 @@
+module M3 (pub) where
+
+pub : Int
+pub = 1
+
+hidden : Int
+hidden = 2

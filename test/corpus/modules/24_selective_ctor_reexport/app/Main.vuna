@@ -1,0 +1,9 @@
+import Facade
+
+fromT : Facade.T -> Int
+fromT v = case v of
+  Facade.C n => n + 2
+  Facade.D => 0
+
+main : Int
+main = fromT (Facade.C 40)

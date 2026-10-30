@@ -1,0 +1,4 @@
+import Facade
+
+main : Int
+main = Facade.f 21 + Facade.g 10
