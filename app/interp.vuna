@@ -1,4 +1,4 @@
--- vuna-run：编译后的解释器 CLI 入口。
+-- vuna-interp：编译后的解释器 CLI 入口。
 -- 参数：[--root DIR] <file.vuna>；root 是模块根（默认 lib）。
 import Vuna.Interp
 

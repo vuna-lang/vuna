@@ -1,5 +1,5 @@
 #!/bin/sh
-# vuna 原生测试：不依赖 vunax，只通过 vuna-interp / vuna / vuna-boot 驱动。
+# vuna 原生测试：只用 vuna-interp / vuna / vuna-boot 驱动。
 #
 # 环境变量（默认取 PATH 中的同名命令）：
 #   VUNA        当前编译器（stage 2）

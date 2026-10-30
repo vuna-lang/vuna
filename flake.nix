@@ -19,70 +19,33 @@
       forAllSystems = nixpkgs.lib.genAttrs systems;
     in
     {
-      # 自举链与种子策略：
-      #   vunax（外部编译器，OCaml）编译 app/ lib/ test/ 里的 vuna 编译器源码
-      #   → 生成 OCaml（bootstrap/，stage 1，自举种子）并提交入库；
-      #   → Nix 直接构建入库的 bootstrap/ 得到 stage 1 种子编译器；
-      #   → 种子编译当前源码得到 stage 2；stage 2 再编译同一份源码得到 stage 3；
-      #     两者行为一致（fixed point）才算自举完成。
-      # 种子是构建输入：日常改源码不重新生成，只在发版或兼容性变更时更新；
-      # 不变量是「当前种子必须能编译当前源码」。后续加：
-      #   packages.vuna             从 bootstrap/ 构建 stage 1
-      #   checks.bootstrap-selfhost 种子编译当前源码 → stage 2 并运行（守不变量）
-      #   checks.fixed-point        stage 2 与 stage 3 行为一致
-      #   packages.vunax / checks.vunax-selfhost  外部编译器兜底（发版时重新生成种子）
-      # 目前可构建 stage 0（vunax），以及 M4b 的 vuna-run（自解释器编译产物）。
+      # 自举链（完全由 vuna 自己维持，没有外部编译器）：
+      #   bootstrap/stage1.ml（提交入库的 OCaml 种子）
+      #     → ocamlopt → vuna-boot（stage 1）
+      #     → vuna-boot 编译当前 lib/ + app/compile.vuna → stage2.ml
+      #     → ocamlopt → vuna（stage 2，当前编译器）
+      #     → vuna 再编译同一份源码 → stage3.ml；stage2 == stage3 即 fixed point
+      #
+      # 种子通过 seed rotation 更新：
+      #   vuna-boot --root lib --no-print app/compile.vuna bootstrap/stage1.ml
+      # 不变量：当前入库种子必须能编译当前源码（checks.bootstrap-selfhost 守）。
       packages = forAllSystems (
         system:
         let
           pkgs = nixpkgs.legacyPackages.${system};
           inherit (pkgs) lib;
-          ocamlPackages = pkgs.ocamlPackages;
 
-          # 归档的 stage 0 外部编译器（OCaml）。自举链已不再依赖它：
-          # 种子由 vuna-boot 轮换生成，默认构建只经过 bootstrap/ → vuna-boot →
-          # vuna。保留它仅用于历史/审计/从零重建参考，不再随新特性更新，也不进
-          # checks；用 `nix build .#vunax` 可显式构建。
-          vunax = ocamlPackages.buildDunePackage {
-            pname = "vunax";
-            version = "0.1.0";
+          ocamlTools = [
+            pkgs.ocaml
+            pkgs.binutils
+            pkgs.gcc
+          ];
 
-            # 本地构建的包不会出现在任何 binary cache 里，标记为不接受
-            # 替代：Nix 不再为它的输出向 substituter 发 narinfo 查询，
-            # 直接本地构建；依赖（ocaml、dune 等）仍照常走缓存替换。
-            allowSubstitutes = false;
-
-            # 归档后不再需要 lib/ 与 app/（那是 vuna-facing 测试的输入）；
-            # 只保留 vunax 自身源码，保证归档实现可独立构建。
-            src = lib.fileset.toSource {
-              root = ./.;
-              fileset = lib.fileset.unions [
-                ./dune-workspace
-                ./vunax
-              ];
-            };
-
-            # 冻结：不再与 vuna 语法同步，测试不进入构建/检查路径。
-            doCheck = false;
-
-            meta = {
-              description = "vunax — archived stage 0 compiler (frozen, not used by bootstrap)";
-              license = lib.licenses.mit;
-              mainProgram = "vunax";
-            };
-          };
-
-          # stage 1：提交入库的种子（bootstrap/stage1.ml），直接 ocamlopt 构建。
-          # 种子由上一版 vuna-boot 轮换生成（seed rotation），不再经过 vunax；
-          # 日常不随源码更新，不变量是它能编译当前源码。
+          # stage 1：提交入库的种子，直接 ocamlopt 构建。
           vuna-boot =
             pkgs.runCommand "vuna-boot-0.1.0"
               {
-                nativeBuildInputs = [
-                  pkgs.ocaml
-                  pkgs.binutils
-                  pkgs.gcc
-                ];
+                nativeBuildInputs = ocamlTools;
                 allowSubstitutes = false;
 
                 meta = {
@@ -97,15 +60,11 @@
                 ocamlopt -w -a -o "$out/bin/vuna-boot" stage1.ml
               '';
 
-          # stage 2：用入库种子编译当前 lib/ + app/compile.vuna 得到的当前编译器。
+          # stage 2：用入库种子编译当前源码得到的当前编译器。
           vuna =
             pkgs.runCommand "vuna-0.1.0"
               {
-                nativeBuildInputs = [
-                  pkgs.ocaml
-                  pkgs.binutils
-                  pkgs.gcc
-                ];
+                nativeBuildInputs = ocamlTools;
                 allowSubstitutes = false;
 
                 meta = {
@@ -123,15 +82,10 @@
               '';
 
           # 解释器（自解释器编译产物）：读 .vuna 文件解释执行，用于差分测试。
-          # 用 vuna（stage 2）构建，不再经过 vunax。
           vuna-interp =
             pkgs.runCommand "vuna-interp-0.1.0"
               {
-                nativeBuildInputs = [
-                  pkgs.ocaml
-                  pkgs.binutils
-                  pkgs.gcc
-                ];
+                nativeBuildInputs = ocamlTools;
                 allowSubstitutes = false;
 
                 meta = {
@@ -150,7 +104,7 @@
         in
         {
           default = vuna;
-          inherit vunax vuna-boot vuna-interp;
+          inherit vuna-boot vuna-interp;
           vuna = vuna;
         }
       );
@@ -159,36 +113,20 @@
         system:
         let
           pkgs = nixpkgs.legacyPackages.${system};
-          ocamlPackages = pkgs.ocamlPackages;
-
-          # devShell 提供工具链、种子编译器，以及归档的 vunax（仅供历史/审计）。
-          # stage2 的 vuna 不进 devShell：种子失效时也要能进 shell 调试。
-          #
-          # vuna-boot 是从入库 bootstrap/stage1.ml 固定构建的，不依赖当前源码
-          # 能否编译、也不跑测试，放进 devShell 很便宜。
-          vuna-boot = self.packages.${system}.vuna-boot;
         in
         {
           default = pkgs.mkShell {
-            # 复用归档 vunax 包构建里的 OCaml / dune / findlib 工具链。
-            inputsFrom = [ self.packages.${system}.vunax ];
-
             packages = [
-              # 归档的 stage 0 实现：仅供历史对照/审计，不参与构建与 CI。
-              self.packages.${system}.vunax
+              # OCaml 工具链：编译种子 / 手动验证 stage2。
+              pkgs.ocaml
+              pkgs.binutils
+              pkgs.gcc
               # 种子编译器：手动检查“当前种子能编译当前源码”。
-              vuna-boot
-            ]
-            ++ (with ocamlPackages; [
-              merlin
-              ocaml-lsp
-              ocamlformat
-              odoc
-              utop
-            ]);
+              self.packages.${system}.vuna-boot
+            ];
 
             shellHook = ''
-              echo "vuna dev shell — OCaml $(ocaml -version), Dune $(dune --version)"
+              echo "vuna dev shell — OCaml $(ocaml -version)"
             '';
           };
         }
@@ -199,6 +137,7 @@
         let
           pkgs = nixpkgs.legacyPackages.${system};
           inherit (self.packages.${system}) vuna-boot vuna vuna-interp;
+
           bootstrap-selfhost =
             pkgs.runCommand "vuna-bootstrap-selfhost"
               {
@@ -226,7 +165,7 @@
                 touch "$out"
               '';
 
-          # 原生测试：只用 vuna / vuna-boot / vuna-interp，不经过 vunax。
+          # 原生测试：只用种子、vuna 与 vuna-interp。
           vuna-tests =
             pkgs.runCommand "vuna-tests"
               {
@@ -247,8 +186,7 @@
               '';
         in
         {
-          # vunax 已冻结归档，不再进入 checks；构建/自举链只用种子与 vuna。
-          inherit vuna vuna-interp;
+          inherit vuna vuna-boot vuna-interp;
           bootstrap-selfhost = bootstrap-selfhost;
           fixed-point = bootstrap-selfhost;
           vuna-tests = vuna-tests;

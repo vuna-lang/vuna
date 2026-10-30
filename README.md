@@ -2,49 +2,43 @@
 
 vuna 是一个函数式编程语言，本仓库是它的编译器。
 
-编译器现在完全用 vuna 写（`lib/Vuna/Interp.vuna` + `app/compile.vuna`），通过
-提交入库的 OCaml 种子自举。`vunax/` 是早期的 OCaml 外部编译器，已**冻结归档**，
-不再参与默认构建、checks 或自举演进。
+编译器完全用 vuna 自己写（[lib/Vuna/Interp.vuna](lib/Vuna/Interp.vuna) +
+[app/compile.vuna](app/compile.vuna)），通过提交入库的 OCaml 种子自举。构建、
+测试和语言演进都不依赖外部编译器。早期用于启动自举的 OCaml 实现 `vunax` 已在
+M6 完成后删除；需要查看历史可从 git log 找到。
 
-| 目录 | 角色 | 实现语言 |
-| --- | --- | --- |
-| `lib/`、`app/`、`test/` | 自举编译器的库 / CLI / 测试 | vuna |
-| `bootstrap/stage1.ml` | 自举种子（stage 1），提交入库；由 `vuna-boot` 轮换生成 | OCaml（生成） |
-| `vunax/` | 归档的 stage 0 外部编译器（frozen，仅审计/历史/从零重建参考） | OCaml |
+## 工具与自举链
 
-工具命名：`vuna-boot`（stage 1 种子二进制）、`vuna`（stage 2 当前编译器）、
-`vuna-interp`（自解释器编译产物，调试/差分用）；`vunax` 已归档。
-
-## 自举链
+| 工具 | 作用 |
+| --- | --- |
+| `vuna-boot` | stage 1：从 `bootstrap/stage1.ml` 构建的种子二进制 |
+| `vuna` | stage 2：`vuna-boot` 编译当前 `lib/` + `app/compile.vuna` 得到，当前编译器 |
+| `vuna-interp` | 自解释器编译产物，解释执行 `.vuna` 文件，用于差分测试 |
 
 ```text
-vuna-boot（旧种子，stage 1）
-  │  vuna-boot --root lib --no-print app/compile.vuna stage2.ml
+bootstrap/stage1.ml（提交入库的 OCaml 种子）──ocamlopt──▶ vuna-boot
+  │  vuna-boot 编译当前 lib/ + app/compile.vuna
   ▼
-stage 2（支持当前源码的编译器）──ocamlopt──▶  vuna
-  │  轮换：把 stage2.ml 提交为新的 bootstrap/stage1.ml
-  ▼
-vuna-boot（新种子）
+stage2.ml ──ocamlopt──▶ vuna（当前编译器）
   │  vuna 再编译同一份源码
   ▼
-stage 3 源码；stage2 == stage3 即 fixed point
+stage3.ml；stage2 == stage3 即 fixed point
 ```
 
-stage 2 与 stage 3 的输出一致（字节级）即达到 fixed point，自举完成。
+## 种子策略
 
-自举种子（`bootstrap/`）**提交入库**，是构建输入而不是构建产物。这里只有一个硬性
-不变量：
+种子（`bootstrap/`）**提交入库**，是构建输入而不是构建产物。唯一的硬性不变量：
 
 > **当前入库的种子必须能编译当前的 vuna 源码。**
 
-- 种子**不需要**与源码同步：日常修改 `lib/app/test` 不重新生成种子；
-- 种子只通过 **seed rotation** 更新：用当前 `vuna-boot` 编译当前编译器源码，把
-  生成的 stage 2 源码提交为新种子；不再经过 vunax；
+- 种子**不需要**与源码同步：日常修改 `lib/`、`app/`、`test/` 不重新生成种子；
+- 种子只通过 **seed rotation** 更新：用当前 `vuna-boot` 编译当前编译器源码，把生成的
+  `stage2.ml` 提交为新种子；
 - 种子比源码旧是正常状态，但必须始终保持“能编译当前源码”的能力；
 - CI 用 `checks.bootstrap-selfhost` 守这条不变量：用种子编译当前源码，构建出
-  stage 2 / stage 3 并校验字节一致；
-- 若旧种子编译不了新源码，必须先把新特性实现成旧语法可编译的形式，rotate 种子
-  之后才在编译器源码里使用新语法；
+  stage 2 / stage 3 并校验字节一致；`checks.fixed-point` 与它同一派生；
+- 如果新特性会让源码超出旧种子能编译的语法子集，必须先把特性实现成旧语法可编译的
+  形式，rotate 种子后再在编译器源码里使用新语法；
 - `bootstrap/` 下所有文件都是生成物，禁止手改。
 
 种子轮换流程：
@@ -58,36 +52,115 @@ git add bootstrap/ && git commit
 ```
 
 注意：如果改的是**现有语法的语义**（而非新增语法），旧种子会按旧语义编译新编译器，
-需要确认没有 bootstrap 语义偏差（必要时先 rotate 再让编译器依赖新语义）。
+需要确认没有 bootstrap 语义偏差；必要时先 rotate，再让编译器源码依赖新语义。
 
 ## 目录结构
 
 ```text
 .
-├── flake.nix             # Nix：vunax / vuna-boot / vuna / vuna-interp、开发环境
+├── flake.nix             # Nix：vuna-boot / vuna / vuna-interp、devShell、checks
 ├── flake.lock
-├── dune-workspace        # dune 工作区根；vunax/ 是唯一的 dune 项目
-├── vunax/                # 归档的 stage 0 实现（OCaml，冻结）
-│   ├── dune-project
-│   ├── vunax.opam
-│   ├── lib/              # token / lexer / ast / parser / loader / eval / codegen
-│   └── bin/              # 归档的 vunax
-├── lib/                  # vuna 模块根：Vuna/Interp.vuna（自解释器）等，模块名由
-│                         # 路径决定（lib/Vuna/Parser.vuna ⇔ Vuna.Parser）
-├── app/                  # vuna 入口：compile.vuna（vuna 编译器 CLI）、interp.vuna（vuna-interp）
-├── test/                 # vuna 原生测试：corpus/ + run-tests.sh（不依赖 vunax）
+├── lib/                  # vuna 模块根（模块名由路径精确决定）
+│   └── Vuna/Interp.vuna  # 词法/解析/模块 loader/求值/codegen，约 2000 行 vuna
+├── app/
+│   ├── compile.vuna      # 编译器 CLI（vuna）
+│   └── interp.vuna       # 解释器 CLI（vuna-interp）
+├── test/
+│   ├── run-tests.sh      # vuna 原生测试（只用 vuna / vuna-boot / vuna-interp）
+│   └── corpus/           # run / run_err / err / modules 语料与 golden
 ├── bootstrap/stage1.ml   # 自举种子（stage 1），提交入库，由 vuna-boot 轮换生成
-├── .ocamlformat
+├── .gitattributes        # 把 bootstrap/** 标记为 generated
 └── README.md
 ```
 
-注意：仓库根的 `lib/` 不是 OCaml 库目录。根目录只有 `dune-workspace`，真正的
-dune 项目在 `vunax/`；因此 `app/`、`lib/`、`test/` 里的 `.vuna` 文件不会被 dune
-当成 OCaml 源码扫描，也不会进入 vunax 的构建输入。
+`lib/` 是 vuna 的模块根，不是 OCaml 库目录；仓库里没有任何 dune/OCaml 项目，只
+用 `ocamlopt` 编译生成的种子和程序。
 
-## 开发与测试
+## 语言（core-v0）
 
-日常 vuna 开发不再需要 vunax：
+- 类型：`Int` / `String`、`data` 声明的代数数据类型、函数；类型签名会被解析但擦除；
+- 语法：Idris2 风格 `data ... where`、多子句函数、`case ... of`、`let ... in`、
+  lambda、`if then else`、整数/字符串字面量、`[..]` 与 `x :: xs` 列表糖、
+  中缀运算符（`-> || && == /= < <= > >= ++ + - * / ::`）；
+- layout：offside 规则；顶层声明、`data` 构造器块、`case` 分支、`let` 绑定按块列
+  对齐，表达式跨行必须缩进超过所在块列；
+- `main` 必须是零参数定义；`show` 负责把值变成字符串；
+- 内建：`+ - * /`、`== /= < <= > >=`、`&& ||`、`++`、`strLength`、`strUnpack`、
+  `strPack`、`strFromInt`，以及 IO 内建 `readFile` / `writeFile` / `print` /
+  `getArgs`；
+- 布尔值与列表约定：`True` / `False` / `Cons` / `Nil` 是内建相邻的全局构造器；
+  程序需要自己声明 `data Bool` / `data List` 才能对它们做模式匹配。
+
+### 模块系统
+
+- **文件 = 模块**，模块根默认 `lib/`（`--root` 可覆盖）；`lib/Vuna/Parser.vuna`
+  ⇔ 模块 `Vuna.Parser`；
+- 路径段必须匹配 `[A-Z][A-Za-z0-9_]*`，路径/文件名与模块名**精确一致**，没有大小写映射；
+- 入口文件可以在 `lib/` 外（如 `app/compile.vuna`），它本身不是模块；
+- `import` 只能在文件顶部，是**直接依赖**；循环导入是硬错误；
+- 跨模块引用必须**全限定**（`Vuna.Parser.parseSource`、`Vuna.List.Cons`）；
+  本模块名字与内建名不加限定；
+- v0 所有顶层声明默认导出；`True` / `False` / `Cons` / `Nil` 不参与模块前缀；
+- loader 解析 import 图、做名字解析后 **flatten** 成一个 program（内部名字带模块前缀，
+  如 `Vuna.Parser.parse`），解释器与 codegen 复用同一份实现；`show` 只显示最后一段，
+  所以输出与单文件程序一致。
+
+## 编译器实现
+
+- [lib/Vuna/Interp.vuna](lib/Vuna/Interp.vuna) 同时包含前端、解释器与 codegen：
+  - 词法/解析：offside layout，token 不带 span；
+  - 模块 loader：`loadProgram root entry` 读取 import、循环检测、名字解析与 flatten；
+  - 解释器：call-by-value、多子句模式匹配、部分应用、内建；
+  - codegen：把 flatten 后的 program 翻译成 OCaml；
+- [app/compile.vuna](app/compile.vuna)：`vuna [--no-print] [--root DIR] <entry.vuna> [out.ml]`；
+  `--no-print` 表示生成的程序不自动打印 `main` 的结果（用于编译自己做 IO 的 CLI）；
+- [app/interp.vuna](app/interp.vuna)：`vuna-interp [--root DIR] <file.vuna>`，把
+  `interpretFile` 的字符串结果原样打印。
+
+### codegen 的表示
+
+生成代码不使用解释循环：vuna 函数编译成柯里化 OCaml 函数，构造器编译成闭包构造器
+（`mk_Cons` 等），模式匹配编译成 OCaml `match`。值统一为动态表示：
+
+```ocaml
+type value =
+  | VInt of int
+  | VStr of string
+  | VCon of string * value list
+  | VFun of string * (value -> value)
+```
+
+- 生成程序入口打印 `show_value main`，格式与解释器一致；
+- IO 内建在生成程序里有对应实现，语义与解释器一致；
+- 编译期检查：`main` 存在且零参数、未绑定变量、子句 arity 不一致、构造器/函数重名；
+- 生成结果是**单个 OCaml 文件**（loader 先 flatten），性能与错误信息暂未优化；
+- runtime 前导代码固化在 `Interp.vuna` 的 `runtimeCode`，是唯一实现。
+
+## 测试
+
+`test/run-tests.sh` 是 vuna 原生测试（74 checks），只用 `vuna` / `vuna-boot` /
+`vuna-interp`，不依赖任何外部编译器：
+
+```console
+sh test/run-tests.sh          # 需要 PATH 中有三个二进制
+```
+
+覆盖：
+
+- `corpus/run/*.vuna`：解释器输出 vs `.out` golden；编译器生成→`ocamlopt`→运行再比对；
+- `corpus/modules/0*`：跨模块函数/数据/嵌套 import 的解释器与编译器结果；
+- `corpus/modules/9*`：缺失模块、循环导入、未限定引用、未导出名字、非法模块名；
+- `corpus/err/*.vuna`、`corpus/run_err/*.vuna`：解析/求值错误片段；
+- `vuna-boot` 编译 `12_fact` 的种子冒烟。
+
+Nix 侧：
+
+- `checks.vuna-tests`：在沙箱里跑上述原生测试；
+- `checks.bootstrap-selfhost`：种子编译当前源码得到 stage 2，stage 2 再编译得到
+  stage 3，`cmp` 两者，并抽查 `12_fact` → `120`；
+- `checks.fixed-point`：与 `bootstrap-selfhost` 同一派生。
+
+## 开发
 
 ```console
 nix develop
@@ -100,253 +173,8 @@ VUNA_INTERP=$PWD/result-interp/bin/vuna-interp \
 sh test/run-tests.sh
 ```
 
-`test/run-tests.sh` 是 vuna 原生测试（74 checks）：
-
-- `corpus/run/*.vuna`：`vuna-interp` 输出与 `.out` golden 比对；`vuna` 编译→`ocamlopt`→运行再比对；
-- `corpus/modules/0*`：模块夹具的解释器与编译器结果；
-- `corpus/modules/9*`：缺失模块/循环/未限定名等错误信息；
-- `corpus/err/*.vuna`、`corpus/run_err/*.vuna`：解析/求值错误片段；
-- `vuna-boot` 编译 `12_fact` 的种子冒烟。
-
-CI 用 `nix flake check` 跑 `checks.vuna-tests`、`checks.bootstrap-selfhost`、
-`checks.fixed-point`；它们只用种子与 vuna，不构建 vunax。
-
-devShell 仍暴露归档的 `vunax`（`nix build .#vunax`）用于历史命令与审计；
-`dune build` / `dune fmt` 只针对归档的 OCaml 代码。vuna 源码的格式化由
-编辑器/手工维护，不经过 OCaml 工具链。
-
-## 解析器（core-v0，M1）
-
-实现（`vunax/lib/`）：
-
-- `token.ml` / `lexer.ml`：token 带 1-based 行列位置；支持 `--` 行注释、`{- -}`
-  嵌套块注释、字符串转义；
-- `parser.ml`：手写递归下降 + 优先级解析；layout 用 offside 规则（不插入虚拟括号）：
-  顶层声明、`data` 构造器块、`case` 分支、`let` 绑定都按块列对齐，表达式可以跨行，
-  只要缩进大于所在块列；
-- `ast.ml`：core-v0 AST 与确定性的 S-expression 渲染；
-- 支持：`data`（简单参数化）、类型签名（解析、暂不检查）、多子句函数、
-  `case ... of`、`let ... in`、lambda、`if then else`、整数/字符串、
-  `[..]` 与 `x :: xs` 列表糖、中缀运算符
-  （`-> || && == /= < <= > >= ++ + - * / ::`）。
-
-```console
-dune exec vunax -- parse test/corpus/run/03_data_case.vuna
-dune exec vunax -- --version
-```
-
-语法语料：
-
-- AST golden（`.sexp`）随归档的 vunax 一起退役，不再维护；
-- `test/corpus/err/*.vuna` + 同名 `.err`（错误位置与信息 golden）；
-- 改语料或解析器后运行 `test/run-tests.sh` 直接比对；修改语料后手工更新 golden 并 review diff。
-
-尚未实现（后续里程碑）：类型检查（core-v0 先不检查类型）、typed codegen、
-种子入库、`where` / `do` / 隐式参数 / 依赖类型。
-
-## 求值器（core-v0，M2）
-
-[eval.ml](vunax/lib/eval.ml) 在现有 AST 上做严格求值（call-by-value）：
-
-- 顶层定义互递归；函数值按子句顺序做模式匹配，参数不足时返回部分应用；
-  `name = expr` 这种零参数定义在引用时自动求值（常量语义）；
-- 构造器按 `data` 里的 arity 柯里化；`case` / `let` / lambda 都支持嵌套模式；
-- `main` 必须是零参数定义，`vunax run` 求值 `main` 并用 `show` 打印结果；
-- 内建：`+ - * /`、`== /= < <= > >=`（Int/String/Int 比较）、`&& ||`、
-  `++`（String 拼接）、`strLength`、`strUnpack`（String → List Int）、
-  `strPack`（List Int → String）、`strFromInt`（Int → String）、
-  `readFile` / `writeFile` / `print` / `getArgs`（见下面 IO 一节）；
-- `if` / `&&` / `||` / 比较结果的布尔值约定为构造器 `True` / `False`
-  （与 Idris2 一致）；程序需要自己声明 `data Bool` 才能对它们做模式匹配。
-
-```console
-dune exec vunax -- run test/corpus/run/03_data_case.vuna
-# (S (S (S (S Z))))
-```
-
-求值语料：
-
-- `test/corpus/run/*.vuna` + 同名 `.out`（`main` 求值结果 golden）；
-- `test/corpus/run_err/*.vuna` + 同名 `.err`（运行时错误信息 golden）；
-- golden 由 `test/run-tests.sh` 比对；修改语料后需手工更新。
-
-限制：没有类型检查，运行时错误信息暂时不带源码位置（AST 还没有 span）。
-
-## IO（core-v0）
-
-最小 IO 内建，`vunax run`、自解释器和 codegen 产物行为一致：
-
-| 内建 | 约定类型 | 说明 |
-| --- | --- | --- |
-| `readFile` | `String -> String` | 读整个文件（binary）；失败抛运行时错误 |
-| `writeFile` | `String -> String -> Int` | 写文件（覆盖），返回写入字节数 |
-| `print` | `String -> Int` | 写 stdout，不追加换行，返回写入长度 |
-| `getArgs` | `List String` | 进程参数；零参数内建，引用即求值 |
-
-- CLI：`vunax run <file.vuna> [args...]`，参数通过 `getArgs` 传给程序；
-- 编译产物：`./program args...`，`getArgs` 是编译产物自己的参数；
-- 自解释器：`interpret` 目前只接受源码，被解释程序里的 `getArgs` 观察到的是
-  宿主进程参数（等 `interpret` 增加 args 参数时修正）；
-- IO 错误直接抛运行时错误（如 `readFile: No such file or directory`），
-  不会变成自解释器返回的 `error: ...` 字符串；
-- 这些内建和普通内建一样是严格求值的柯里化函数值，支持部分应用。
-
-## 自解释器（M3，源码级）
-
-[lib/Vuna/Interp.vuna](lib/Vuna/Interp.vuna)（约 1400 行 vuna，模块 `Vuna.Interp`）是用 vuna
-写、被 vunax 解释执行的自解释器：
-
-- 输入是 **vuna 源码**（`interpret`）或 **模块入口文件 + 模块根**（`interpretFile`）；
-- 内部完整实现 core-v0 的前端、模块加载与求值：词法分析（token 带行列）→ offside
-  layout parser → import/名字解析（flatten）→ call-by-value 求值 → `show`，
-  并复刻 vunax 的内建运算与 Bool/List/String 表示转换；
-- parser 与 `vunax/lib/parser.ml` 同构：顶层声明、`data` 构造器块、`case` 分支、
-  `let` 绑定按列对齐，表达式跨行需要缩进超过块列；
-- `main` 约定与 vunax 相同：`vunax run lib/Vuna/Interp.vuna` 解释内置 demo 源码；
-- 解析/运行错误统一返回 `error: ...` 字符串（暂时没有源码位置）；import 由
-  `interpretFile root entry` 通过 `readFile` 加载。
-
-```console
-vunax run lib/Vuna/Interp.vuna
-# "42"
-```
-
-验证（历史：归档 vunax 的 alcotest；现由 `test/run-tests.sh` 的原生测试覆盖）：
-
-- **差分测试**：`corpus/run/` 的 15 个程序，vunax 直接跑 vs vuna 自解释器读同一份
-  源码跑，两边 `show` 结果必须一致；
-- **self application**：把 `lib/Vuna/Interp.vuna` 自己的源码交给它自己解释，结果与直接
-  运行一致 —— 当前语言子集已经能完整承载自己的词法、语法和求值实现；
-- **modules selfhost**：`interpretFile` 加载 `corpus/modules/` 的模块夹具，结果与
-  vunax loader 一致。
-
-限制：`where` / `do` / 隐式参数 / 依赖类型仍未实现；错误没有源码位置；
-未做性能优化（self application 全程走解释器，秒级）。
-
-## Codegen（core-v0，M4a）
-
-[codegen.ml](vunax/lib/codegen.ml) 把 core-v0 程序翻译成可编译的 OCaml 源码：
-
-```console
-vunax compile test/corpus/run/01_arithmetic.vuna > program.ml
-ocamlopt -o program program.ml && ./program
-# 7
-```
-
-实现方式：
-
-- 生成程序里没有解释循环：vuna 函数编译成柯里化 OCaml 函数，构造器编译成闭包
-  构造器（`mk_Cons` 等），模式匹配编译成 OCaml `match`，`case`/`let`/`if` 也都是
-  原生控制流；
-- 值统一用动态表示 `VInt` / `VStr` / `VCon (name, args)` / `VFun (name, fn)`，
-  因为 core-v0 还没有类型系统；typed codegen 等类型检查之后再做；
-- 生成程序入口打印 `show_value main`，格式与 `vunax run` 的输出完全一致；
-- IO 内建在生成程序里也实现了（`readFile` / `writeFile` / `print` / `getArgs`），
-  语义与解释器一致；`getArgs` 返回编译产物自己的命令行参数；
-- 编译期检查：`main` 必须存在且零参数、未绑定变量、子句 arity 不一致、
-  构造器/函数重名都会报 `codegen error`；
-- `vunax compile --no-print`（`Codegen.generate ~print_result:false`）只求值
-  `main`、不自动打印结果，适合自己用 `print` / `writeFile` 做 IO 的 CLI 程序。
-
-验证（历史：归档 vunax 的 alcotest；现由 `test/run-tests.sh` 的原生测试覆盖）：
-
-- **codegen 差分**：`corpus/run/` 的 15 个程序逐个生成 OCaml、用 `ocamlopt` 编译、
-  运行，stdout 与解释器的 `show` 结果一致；
-- **codegen self**：把自解释器 `lib/Vuna/Interp.vuna` 用 codegen 编译成 OCaml 可执行文件，
-  运行结果与解释执行一致；
-- **codegen error**：3 个非法程序必须在 codegen 阶段报错；
-- **IO**：`getArgs` / `writeFile` + `readFile` 往返 / `readFile` 失败 / `print`
-  在解释器、codegen 产物和自解释器三条路径上分别验证；
-- **modules**：模块夹具经 loader flatten 后，eval 与 codegen 结果一致；
-- **M4b**：`app/interp.vuna`（import `Vuna.Interp`）编译出的二进制解释 corpus 全部
-  15 个程序和模块夹具，输出与 `vunax run` 一致。
-
-限制：生成代码仍是单文件（loader 先 flatten 成一个 program）、动态值表示，
-性能与错误信息暂未优化；分离编译/多单元 codegen 留给后续优化。
-
-## vuna-interp（编译出的解释器二进制，M4b）
-
-[app/interp.vuna](app/interp.vuna) 是 CLI 入口（`import Vuna.Interp`，调用
-`Vuna.Interp.interpretFile`），用 `print` 原样输出结果，由 vunax 加载 `lib/` 后编译成
-独立二进制：
-
-```console
-nix build .#vuna-interp
-./result/bin/vuna-interp test/corpus/run/12_fact.vuna
-# 120
-./result/bin/vuna-interp --root test/corpus/modules/02_data/lib \
-  test/corpus/modules/02_data/app/Main.vuna
-# 6
-```
-
-- 输出语义与 `vunax run <file>` 一致（`show` + 换行）；无参数时打印 usage；
-- 产物是原生 OCaml 可执行文件（解释器被编译后的结果），不依赖 vunax 或解释循环；
-- `--root DIR` 指定模块根（默认 `lib`），import 在运行期由 vuna 版 loader 通过
-  `readFile` 加载。
-
-## 模块系统（M5）
-
-规则：
-
-- **文件 = 模块**，模块根默认 `lib/`（`--root` 可覆盖）；
-  `lib/Vuna/Parser.vuna` ⇔ 模块 `Vuna.Parser`；
-- 路径段必须首字母大写并匹配 `[A-Z][A-Za-z0-9_]*`，**路径/文件名与模块名精确一致**，
-  没有大小写映射；
-- 入口文件可以在 `lib/` 外（如 `app/interp.vuna`），它本身不是模块；
-- `import` 只能出现在文件顶部，是**直接依赖**（不传递可见），循环导入硬错误；
-- 跨模块引用必须**全限定**：`Vuna.Parser.parseSource`、构造器 `Vuna.List.Cons`；
-  本模块名字、内建名不加限定；
-- v0 所有顶层声明默认导出；`True` / `False` / `Cons` / `Nil` 是内建相邻的**全局构造器**
-  （不参与模块前缀），这样 `getArgs`/`strUnpack` 产生的列表和 Bool 才能与用户声明匹配；
-- 实现方式是 loader 把 import 图解析、名字解析后 **flatten** 成一个 program：内部名字
-  带模块前缀（如 `Vuna.Parser.parse`），eval/codegen/自解释器复用现有实现；`show`
-  只显示最后一段，所以输出与单文件程序一致。
-
-```console
-vunax run --root lib app/interp.vuna  <args...>
-vunax compile --root lib app/interp.vuna
-```
-
-测试夹具 `test/corpus/modules/` 覆盖：跨模块函数/数据/构造器、嵌套 import，
-以及缺失模块、循环导入、未限定跨模块引用、未导出名字、非法模块名等错误。
-
-## M6：自举编译器与种子
-
-codegen 也搬进了 vuna：[lib/Vuna/Interp.vuna](lib/Vuna/Interp.vuna) 末尾实现
-`generateProgram` / `compileFile`（与 `vunax/lib/codegen.ml` 同构），
-[app/compile.vuna](app/compile.vuna) 是编译器 CLI。
-
-- 种子由**上一版 `vuna-boot`** 编译当前编译器源码轮换生成（seed rotation），
-  初始种子由已归档的 vunax 生成；此后自举不再经过 vunax；
-- `vuna-boot` 是从种子构建的二进制；它编译当前 `lib/ + app/compile.vuna` 得到
-  stage 2 → `vuna`（当前编译器）；
-- stage 2 再编译同一份源码得到 stage 3；`stage2.ml == stage3.ml` 即 fixed point。
-
-```console
-nix build .#vuna            # 当前编译器（stage 2）
-nix build .#vuna-boot       # 种子二进制（stage 1）
-nix build .#vuna-interp     # 解释器（差分测试用）
-nix flake check             # 含 checks.bootstrap-selfhost / fixed-point
-```
-
-本地命令（devShell 里）：
-
-```console
-# seed rotation：把当前源码编译结果作为新种子
-vuna-boot --root lib --no-print app/compile.vuna bootstrap/stage1.ml
-# 验证 fixed point
-vuna-boot --root lib --no-print app/compile.vuna /tmp/stage2.ml
-ocamlopt -w -a -o /tmp/stage2 /tmp/stage2.ml
-/tmp/stage2 --root lib --no-print app/compile.vuna /tmp/stage3.ml
-cmp /tmp/stage2.ml /tmp/stage3.ml      # fixed point
-```
-
-验证：原生测试 `test/run-tests.sh`（74 checks：corpus/模块的解释器与编译器、错误语料、种子冒烟）；
-`checks.bootstrap-selfhost` 用种子构建 stage 2、校验 stage2/stage3 字节一致，
-并编译运行一个程序（`12_fact` → 120）；`checks.fixed-point` 与它同一派生。
-
-限制：生成代码仍是动态 value 表示、单文件（loader flatten 后一个 program）；
-没有类型检查（M7 再设计）；种子轮换仍是手动（发版/不兼容变更时）。
+devShell 提供 `ocaml` / `ocamlopt` 工具链和 `vuna-boot`；stage2 的 `vuna` 不进
+devShell，避免种子失效时连 shell 都进不去。
 
 ## Nix
 
@@ -354,50 +182,25 @@ cmp /tmp/stage2.ml /tmp/stage3.ml      # fixed point
 nix build             # 默认 = vuna（stage 2 当前编译器）
 nix build .#vuna-boot # stage 1 种子二进制
 nix build .#vuna-interp
-nix flake check       # packages + checks（vuna-tests / bootstrap-selfhost / fixed-point）
-nix build .#vunax     # 归档的 stage 0（frozen，不进 checks/默认路径）
+nix flake check       # vuna-tests / bootstrap-selfhost / fixed-point
 nix fmt               # nixfmt-tree 格式化 .nix
 ```
 
-## 自举链的当前状态
+## 限制与路线
 
-- `packages.vuna-boot`（stage 1）：`ocamlopt` 构建入库的 `bootstrap/stage1.ml`；
-- `packages.vuna`（stage 2）：`vuna-boot` 编译当前 `lib/ + app/compile.vuna` 得到；
-- `packages.vuna-interp`：用 `vuna` 编译自解释器 CLI，读 `.vuna` 解释执行，
-  用于差分测试；
-- `packages.vunax`（stage 0）：**已冻结归档**，不参与默认构建与 checks，也不随
-  vuna 新特性更新；仅保留作历史/审计/从零重建参考；
-- `checks.vuna-tests`：只通过 `vuna`/`vuna-boot`/`vuna-interp` 跑原生测试；
-- `checks.bootstrap-selfhost` / `checks.fixed-point`：种子编译当前源码得到 stage 2，
-  stage 2 再编译得到 stage 3，`cmp` 两者并抽查运行结果，守住
-  「种子必须能编译当前源码」与 fixed point。
+- 没有类型检查、typed codegen（M7 再设计）；类型签名只解析、擦除；
+- 生成代码是单文件、动态 value 表示，性能与错误信息暂未优化；
+- 运行时错误没有源码位置；`where` / `do` / 隐式参数 / 依赖类型未实现；
+- IO 失败（如 `readFile` 缺失文件）会抛宿主异常；编译器 CLI 没有 `exit` 内建，
+  编译错误时退出码仍可能是 0，只通过 stdout 的 `error: ...` 判断；
+- 种子轮换是手动流程（发版/不兼容变更时）；
+- `test/run-tests.sh` 目前以 golden 比对为主，后续可以补充更多随机/差分测试。
 
-种子轮换流程见上面「自举链」一节；`bootstrap/` 下文件仍是生成物，禁止手改。
+## 历史
 
-P2 已完成：vuna-facing 测试已迁到 `test/run-tests.sh`，用 `vuna-interp`/`vuna`
-驱动并比对 golden；`vunax` 不再带测试，构建/CI/测试都不依赖它。归档实现仅保留
-用于历史对照与审计，可随时删除而不影响自举。
-
-## 依赖管理
-
-- 归档的 `vunax`（OCaml）依赖：`vunax/lib/dune` 的 `(libraries ...)`；nixpkgs
-  提供的库通过 flake 中 `buildDunePackage` 的 `propagatedBuildInputs` 注入；
-- vuna 编译器本身没有外部库依赖：生成的 OCaml 只使用标准库，`vuna-boot` / `vuna`
-  由 `ocamlopt` 直接构建；
-- 测试依赖：flake 的 `checkInputs` + `vunax/vunax.opam` 的 `{with-test}`（测试
-  harness 迁移前仍属归档实现）；
-- 开发工具：`devShells.default.packages`。
-
-## 说明
-
-- nixpkgs 输入使用 `channels.nixos.org` 的 channel tarball（本机访问不到 GitHub
-  的 archive 端点）；能访问 GitHub 时换回 `"github:NixOS/nixpkgs/nixos-unstable"` 即可。
-- `.ocamlformat` 的 version 需与 devShell 中的 ocamlformat 一致（当前 0.29.0）。
-- 若用 opam：`opam pin ./vunax`（opam 文件位于 vunax 项目根；该实现已归档）。
-- `bootstrap/` 是提交入库的生成物：不要手改；日常改 vuna 源码不需要重新生成种子，
-  但必须保证种子能编译当前源码（`checks.bootstrap-selfhost`）。
-- `nix build` 默认构建 `vuna`（stage 2）；`nix build .#vunax` 构建归档的 stage 0。
-- vuna codegen 的 runtime 前导代码已固化在 `lib/Vuna/Interp.vuna` 的
-  `runtimeCode`，是唯一实现；归档 vunax 的 runtime 不再与之同步。
-- devShell 仍暴露归档的 `vunax` 供现有测试 harness 使用；`nix flake check` 已不构建
-  它。P2 完成测试迁移后，`vunax` 可彻底移出 devShell 甚至删除。
+- M1：解析器；M2：解释器；M3a/M3b：AST 与源码级自解释器；
+- M4a：codegen（vuna → OCaml）；M4b：自解释器编译成独立二进制；
+- M5：模块系统（文件=模块、import、flatten）；
+- M6：用 vuna 写 codegen，种子入库，stage2/stage3 fixed point；
+- M6 之后：种子轮换为 vuna 生成，P2 把测试迁移到 vuna 原生 harness；
+- 早期 OCaml 外部编译器 `vunax` 已完成使命并删除。
