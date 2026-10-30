@@ -21,7 +21,7 @@ REPO=$(CDPATH= cd -- "$HERE/../../.." && pwd) || exit 1
 : "${OCAMLOPT:=ocamlopt}"
 
 tmp=$(mktemp -d "${TMPDIR:-/tmp}/vuna-fmt.XXXXXX") || exit 1
-trap 'rm -rf "$tmp"' EXIT INT TERM
+trap 'chmod -R u+w "$tmp" 2>/dev/null; rm -rf "$tmp" 2>/dev/null' EXIT INT TERM
 
 pass=0
 fail=0
@@ -46,6 +46,7 @@ if [ -d "$REPO/stdlib/lib/Vuna" ]; then
 elif [ -d "$REPO/stdlib/Vuna" ]; then
   cp "$REPO/stdlib/Vuna"/*.vuna "$tmp/root/Vuna/"
 fi
+chmod -R u+w "$tmp/root" 2>/dev/null || true
 cp "$HERE/_probe.vuna" "$tmp/probe.vuna"
 if ! ( cd "$REPO" && "$VUNA" --typecheck --no-print --root "$tmp/root" "$tmp/probe.vuna" "$tmp/probe.ml" ) >"$tmp/probe.log" 2>&1; then
   echo "fmt: probe compile failed:"

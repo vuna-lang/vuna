@@ -1,4 +1,4 @@
-module Vuna.Loader (loadProgram, loadProgramRaw) where
+module Vuna.Loader (Module, moduleName, modulePackage, moduleImports, moduleDecls, moduleExports, Project, projectEntryDecls, projectEntryImports, projectModules, loadProject, loadProgram, loadProgramRaw) where
 
 -- Vuna.Loader：模块加载、名字解析与 flatten。
 
@@ -11,6 +11,26 @@ import Vuna.Pkg
 
 data Module : Type where
   Module : String -> String -> List Import -> List Decl -> List ExportEntry -> Module
+
+-- 已加载项目：入口声明/import + 依赖模块列表（M12 分离编译用；保持 flatten 前的形态）。
+data Project : Type where
+  Project : List Decl -> List Import -> List Module -> Project
+
+moduleName (Module n p is ds es) = n
+
+modulePackage (Module n p is ds es) = p
+
+moduleImports (Module n p is ds es) = is
+
+moduleDecls (Module n p is ds es) = ds
+
+moduleExports (Module n p is ds es) = es
+
+projectEntryDecls (Project ds is ms) = ds
+
+projectEntryImports (Project ds is ms) = is
+
+projectModules (Project ds is ms) = ms
 
 -- 模块导出表（M10）。每条是「本模块公开名 → 定义处带模块前缀的名字」。
 -- kind 用字符串区分两套命名空间：val（函数/值）、ctor（构造器）、type（类型名）。
@@ -1025,7 +1045,8 @@ loadModule roots importerPkg modules stack name =
       else Err ("invalid module name: " ++ name)
 
 -- 包模式入口：entryPkg 是入口文件所属包（决定同包/跨包导出可见性）。
-loadProgram roots entryPkg entry =
+-- loadProject 返回 flatten 前的形态（入口声明 + 依赖模块列表），供分离编译使用。
+loadProject roots entryPkg entry =
   if fileExists entry then
     andThen (parseSource entry (readFile entry)) (\src =>
       case src of
@@ -1036,10 +1057,15 @@ loadProgram roots entryPkg entry =
             Nothing =>
               andThen (validateImports "<entry>" imports) (\_ =>
                 andThen (loadAll roots entryPkg Nil Nil imports) (\modules =>
-                  andThen (resolveEntry modules imports decls) (\entryDecls =>
-                    andThen (resolveModules modules) (\moduleDecls =>
-                      Ok (append entryDecls moduleDecls))))))
+                  Ok (Project decls imports modules))))
   else Err ("entry file not found: " ++ entry)
+
+-- flatten：入口先解析，再按加载顺序解析各模块后拼接（与历史输出保持一致）。
+loadProgram roots entryPkg entry =
+  andThen (loadProject roots entryPkg entry) (\p =>
+    andThen (resolveEntry (projectModules p) (projectEntryImports p) (projectEntryDecls p)) (\entryDecls =>
+      andThen (resolveModules (projectModules p)) (\moduleDecls =>
+        Ok (append entryDecls moduleDecls))))
 
 -- 原始 --root DIR 模式：所有根同属空包名，不限制导出。
 loadProgramRaw roots entry = loadProgram (map rawRoot roots) "" entry
