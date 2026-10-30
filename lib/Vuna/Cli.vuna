@@ -20,6 +20,7 @@ import Vuna.Files
 import Vuna.Repl
 import Vuna.Doc
 import Vuna.TestRunner
+import Vuna.SplitCli
 import qualified Vuna.Lint
 
 usage =
@@ -29,6 +30,8 @@ usage =
   ++ "  vuna lint [--fix] <file.vuna>...\n"
   ++ "  vuna interp [--root DIR]... <file.vuna>\n"
   ++ "  vuna build [--no-print] [DIR] [OUT]        从 vuna.toml 构建包（默认 DIR=.，OUT=DIR/Main.ml）\n"
+  ++ "  vuna build --split OUT [DIR]               分离编译：逐模块 OCaml 源码 + build.sh 写到 OUT\n"
+  ++ "  vuna seed [OUT] [DIR]                      生成多文件 seed（默认 OUT=seed，DIR=.）\n"
   ++ "  vuna test [DIR]                           运行包内 test/*.vuna（main : String，空串通过）\n"
   ++ "  vuna fmt [--check] [PATH]...              格式化（PATH 可为文件或目录；省略 = 包 lib/app/test）\n"
   ++ "  vuna repl [--root DIR]...                 交互式 REPL\n"
@@ -46,6 +49,7 @@ runCli args =
         "lint" => Vuna.Lint.runLint rest
         "interp" => interpArgs rest
         "build" => buildArgs rest
+        "seed" => seedArgs rest
         "test" => testArgs rest
         "fmt" => fmtArgs rest
         "repl" => replArgs rest
@@ -139,7 +143,39 @@ checkPackage dir =
 -- build（包模式）
 -- ---------------------------------------------------------------
 
-buildArgs args = buildParse True Nothing Nothing args
+buildArgs args =
+  case args of
+    Cons "--split" (Cons outDir rest) => buildSplitCmd outDir rest
+    _ => buildParse True Nothing Nothing args
+
+buildSplitCmd outDir args =
+  case args of
+    Nil => splitRun outDir "."
+    Cons dir Nil => splitRun outDir dir
+    _ => usageError
+
+splitRun outDir dir =
+  let _ = makeDir outDir
+  in case buildSplit dir outDir of
+       Err e => let _ = print ("error: " ++ e ++ "\n") in 1
+       Ok n =>
+         let _ = print ("wrote " ++ strFromInt n ++ " files to " ++ outDir ++ "\n")
+         in 0
+
+seedArgs args =
+  case args of
+    Nil => seedRun "seed" "."
+    Cons out Nil => seedRun out "."
+    Cons out (Cons dir Nil) => seedRun out dir
+    _ => usageError
+
+seedRun out dir =
+  let _ = makeDir out
+  in case seedSplit dir out of
+       Err e => let _ = print ("error: " ++ e ++ "\n") in 1
+       Ok n =>
+         let _ = print ("wrote " ++ strFromInt n ++ " files to " ++ out ++ "\n")
+         in 0
 
 buildParse printResult dir out args =
   case args of

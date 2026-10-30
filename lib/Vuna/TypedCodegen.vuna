@@ -1147,12 +1147,10 @@ allRuntimeTyOk Nil = True
 
 allRuntimeTyOk (Cons t rest) = runtimeTyOk t && allRuntimeTyOk rest
 
-runtimeSchemeOk scheme =
-  case scheme of
-    Scheme qs cons ty =>
-      case cons of
-        Nil => runtimeTyOk ty
-        _ => False
+runtimeSchemeOk (Scheme qs cons ty) =
+  case cons of
+    Nil => runtimeTyOk ty
+    _ => False
 
 refsAllSafe safe Nil = True
 
@@ -1172,10 +1170,12 @@ lookupSchemeDefault globals name =
     Nothing => Scheme Nil Nil (TCon "Int" Nil)
     Just scheme => scheme
 
-routeModuleOf ctx name =
-  case ctxModules ctx of
+routeModuleOf ctx name = routeModuleIn (ctxModules ctx) name
+
+routeModuleIn modules name =
+  case modules of
     Nil => "#unknown"
-    Cons m rest => if memName name (moduleOwnNames m) then moduleNameOf m else routeModuleOf ctx name rest
+    Cons m rest => if memName name (moduleOwnNames m) then moduleNameOf m else routeModuleIn rest name
 
 routeOf ctx name =
   case lookupPair name (ctxOwners ctx) of
@@ -1217,9 +1217,7 @@ checkRoutes ctx =
 
 -- ---------------------------------------------------------------- 拓扑序
 
-importNameOf imp =
-  case imp of
-    Import name isQualified alias sp => name
+importNameOf (Import name isQualified alias sp) = name
 
 findModuleByName modules name =
   case modules of
@@ -1307,9 +1305,12 @@ coveredByInclude e includes =
     Nil => False
     Cons x rest => if entryMem e (moduleExportsOf x) then True else coveredByInclude e rest
 
+entryOwnedBy m e =
+  splitPrefixOf (entryTarget e) == moduleNameOf m
+  || memName (entryTarget e) (moduleOwnNames m)
+
 checkForeignExports m includes =
-  let ownNames = moduleOwnNames m
-      foreign = filter (\e => not (memName (entryTarget e) ownNames)) (moduleExportsOf m)
+  let foreign = filter (\e => not (entryOwnedBy m e)) (moduleExportsOf m)
   in case filter (\e => not (coveredByInclude e includes)) foreign of
        Nil => Ok 0
        Cons e rest =>
@@ -1328,7 +1329,7 @@ mlIncludeText earlier includes =
   joinWith "" (map (\m => "include " ++ ocamlModName m ++ "\n") (includesIn earlier includes))
 
 mliIncludeText earlier includes =
-  joinWith "" (map (\m => "include module type of " ++ ocamlModName m ++ "\n") (includesIn earlier includes))
+  joinWith "" (map (\m => "include module type of struct include " ++ ocamlModName m ++ " end\n") (includesIn earlier includes))
 
 -- ---------------------------------------------------------------- 类型 / 值签名渲染
 
@@ -1354,24 +1355,41 @@ renderTy ctx ty =
       else
         andThen (mapResult (renderTy ctx) args) (\ts => Ok (appType ts (typeNameOf name)))
 
+-- 类型里的自由类型变量（用于校验 globals Scheme 的 qs 是否覆盖它们）。
+tyVarsIn ty =
+  case ty of
+    TVar i => Cons i Nil
+    TCon name args => concatMap tyVarsIn args
+    TFun a b => append (tyVarsIn a) (tyVarsIn b)
+    TApp head args => append (tyVarsIn head) (concatMap tyVarsIn args)
+
+memIntList x xs =
+  case xs of
+    Nil => False
+    Cons y rest => if x == y then True else memIntList x rest
+
+allVarsBound qs Nil = True
+
+allVarsBound qs (Cons v rest) = memIntList v qs && allVarsBound qs rest
+
 -- 返回 Nothing 表示该名字没有可导出的运行期定义（trait 方法 / 命名实例等）。
 renderValueType ctx name =
   case lookupScheme name (ctxGlobals ctx) of
     Nothing => Ok Nothing
-    Just scheme =>
-      case scheme of
-        Scheme qs cons ty =>
-          case cons of
-            Nil =>
-              case funArity name (ctxElabDecls ctx) of
-                Just 0 =>
-                  if isPureZeroArg (ctxElabDecls ctx) name then
-                    case qs of
-                      Nil => andThen (renderTy ctx ty) (\t => Ok (Just t))
-                      _ => Err ("split mode: polymorphic value \"" ++ name ++ "\" is not supported")
-                  else andThen (renderTy ctx ty) (\t => Ok (Just ("unit -> " ++ t)))
-                _ => andThen (renderTy ctx ty) (\t => Ok (Just t))
-            _ => Err ("split mode: unsupported constraint (dictionary parameter) in exported value \"" ++ name ++ "\"")
+    Just (Scheme qs cons ty) =>
+      case cons of
+        Nil =>
+          if allVarsBound qs (tyVarsIn ty) then
+            case funArity name (ctxElabDecls ctx) of
+              Just 0 =>
+                if isPureZeroArg (ctxElabDecls ctx) name then
+                  case qs of
+                    Nil => andThen (renderTy ctx ty) (\t => Ok (Just t))
+                    _ => Err ("split mode: polymorphic value \"" ++ name ++ "\" is not supported")
+                else andThen (renderTy ctx ty) (\t => Ok (Just ("unit -> " ++ t)))
+              _ => andThen (renderTy ctx ty) (\t => Ok (Just t))
+          else Err ("split mode: exported value \"" ++ name ++ "\" has unbound type variables")
+        _ => Err ("split mode: unsupported constraint (dictionary parameter) in exported value \"" ++ name ++ "\"")
 
 showValType params name =
   case params of
@@ -1389,21 +1407,18 @@ ctorExportsOf target exports = filter (\e => entryKind e == "ctor" && entryParen
 mliTypePart ctx exports d =
   case d of
     DData name params ctors derivings sp =>
-      case findExportByTarget "type" name exports of
-        Nothing => Ok (dataPrefix params ++ typeNameOf name)
-        Just typeEntry =>
-          case ctorExportsOf (entryTarget typeEntry) exports of
-            Nil => Ok (dataPrefix params ++ typeNameOf name)
-            ctorEntries =>
-              if length ctorEntries == length ctors then genData (ctxElabDecls ctx) d
-              else Err ("split mode: partial constructor export of type " ++ name ++ " is not supported")
+      case ctorExportsOf name exports of
+        Nil => Ok (dataPrefix params ++ typeNameOf name)
+        ctorEntries =>
+          if length ctorEntries == length ctors then genData (ctxElabDecls ctx) d
+          else Err ("split mode: partial constructor export of type " ++ name ++ " is not supported")
     _ => Err "split mode: invalid type declaration"
 
 genMliTypes ctx exports datas =
-  case datas of
+  case nonSpecialData datas of
     Nil => Ok ""
-    _ =>
-      andThen (mapResult (mliTypePart ctx exports) (nonSpecialData datas)) (\parts =>
+    ds =>
+      andThen (mapResult (mliTypePart ctx exports) ds) (\parts =>
         Ok ("type " ++ joinWith "\nand " parts ++ "\n"))
 
 concatMapResult f Nil = Ok Nil
@@ -1412,7 +1427,7 @@ concatMapResult f (Cons x rest) =
   andThen (f x) (\ys => andThen (concatMapResult f rest) (\zs => Ok (append ys zs)))
 
 exportValLine ctx m e =
-  if entryKind e == "val" && memName (entryTarget e) (moduleOwnNames m) then
+  if entryKind e == "val" && entryOwnedBy m e then
     case renderValueType ctx (entryTarget e) of
       Err err => Err err
       Ok Nothing => Ok Nil
@@ -1464,7 +1479,7 @@ splitModuleMli ctx earlier m =
       includes = includeModulesOf m earlier
   in andThen (genMliTypes ctx exports datas) (\types =>
        andThen (genMliVals ctx m datas) (\vals =>
-         Ok (openHeader earlier ++ mliIncludeText earlier includes ++ types ++ vals)))
+         Ok (openHeader earlier ++ mliIncludeText earlier includes ++ types ++ joinWith "" vals)))
 
 splitModuleFiles ctx ordered = splitModuleFilesGo ctx ordered Nil
 
@@ -1488,10 +1503,8 @@ splitRuntimeFile ctx =
 splitMainSuffix ctx =
   case lookupScheme "main" (ctxGlobals ctx) of
     Nothing => Err "typed codegen: no main definition"
-    Just scheme =>
-      case scheme of
-        Scheme qs cons ty =>
-          case ty of
+    Just (Scheme qs cons ty) =>
+      case ty of
             TFun a b => Err "typed codegen: main must be zero-arity"
             _ => andThen (showForTy (ctxElabDecls ctx) ty) (\showMain =>
                    Ok (typedMainSuffix (ctxElabDecls ctx) showMain True))

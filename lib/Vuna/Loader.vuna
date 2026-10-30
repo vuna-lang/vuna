@@ -1046,6 +1046,7 @@ loadModule roots importerPkg modules stack name =
 
 -- 包模式入口：entryPkg 是入口文件所属包（决定同包/跨包导出可见性）。
 -- loadProject 返回 flatten 前的形态（入口声明 + 依赖模块列表），供分离编译使用。
+loadProject : List Root -> String -> String -> Result Project
 loadProject roots entryPkg entry =
   if fileExists entry then
     andThen (parseSource entry (readFile entry)) (\src =>
@@ -1061,6 +1062,7 @@ loadProject roots entryPkg entry =
   else Err ("entry file not found: " ++ entry)
 
 -- 返回逐模块已解析（未 flatten）的声明，供 M12 分离编译使用。
+resolveProject : Project -> Result (Pair (List Decl) (List Module))
 resolveProject parts =
   case parts of
     Project decls imports modules =>
@@ -1079,12 +1081,14 @@ resolveModulesKeep (Cons (Module name pkg imports decls exports) rest) =
         Ok (Cons (Module name pkg imports d1 exports) d2)))
 
 -- flatten：入口先解析，再按加载顺序解析各模块后拼接（与历史输出保持一致）。
+loadProgram : List Root -> String -> String -> Result (List Decl)
 loadProgram roots entryPkg entry =
   andThen (loadProject roots entryPkg entry) (\p =>
     andThen (resolveProject p) (\r =>
       Ok (append (firstOf r) (concatMap moduleDeclsOf (secondOf r)))))
 
 -- 原始 --root DIR 模式：所有根同属空包名，不限制导出。
+loadProgramRaw : List String -> String -> Result (List Decl)
 loadProgramRaw roots entry = loadProgram (map rawRoot roots) "" entry
 
 tyShape ty =
