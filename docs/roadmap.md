@@ -21,8 +21,16 @@
   trait（单参数、相干默认、命名实例、`@name`、孤儿检查、`deriving (Show, Eq)`）；
   内置 `Show` / `Eq` / `Ord` 与运算符迁移；编译器自举使用记录 + `deriving`；
   删除 `specializeCmp` 与运行时 `show_value`；方法级字典穿参（裸类型变量，按 trait
-  方法扁平化）。未实现：高阶 kind 类型变量、一般约束泛化（trait 参数本身高阶，
-  留作 M11 前置）。
+  方法扁平化）。
+- M11：标准库——独立成员包 `vuna-stdlib`（`stdlib/lib/`，Pair/Bool/List/Maybe/
+  Result/String/Sort/Map/Monad/IO）；高阶 kind（`TApp`/kind 元数）与一般约束泛化；
+  `do` 语法糖与 `>>=`/`>>`、Monad/Functor 实例、IO 组合子；`Vuna.Base` 变门面，
+  编译器成为 stdlib 首个用户；新增 `readLine`/`readDir`/`isDirectory`/`makeDir`/
+  `removeFile` 内建；两次 seed 轮换。
+- M11.5：包管理与工具链——`vuna.toml`（TOML 子集）、workspace（根即包）与依赖 DAG、
+  `[export]` 跨包可见性、三目录约定与 `app/Main.vuna` 入口、Loader 模块根抽象；
+  `vuna build` / `test` / `fmt` / `repl` / `doc`；多包示例与 Nix 沙箱复现
+  （`checks.vuna-package`）。
 
 当前硬约束：
 
@@ -38,14 +46,14 @@
 
 ```text
 M10 模块系统 v2（已完成）→ M10.5 类型表达力（已完成：记录 + trait）
-   → M11 标准库（先补高阶 kind/一般约束泛化，再做 do/Monad/IO 组合子；编译器是首个用户）
-   → M11.5 包管理与工具链（vuna.toml / workspace / 三目录）
-   → M12 性能与编译模型 → M13 高级类型/效应（研究型，单独规划）
+   → M11 标准库（已完成：高阶 kind/约束泛化 + do/Monad/IO；编译器是首个用户）
+   → M11.5 包管理与工具链（已完成：vuna.toml / workspace / 三目录 + 工具链）
+   → M12 性能与编译模型（下一步）→ M13 高级类型/效应（研究型，单独规划）
 ```
 
 依赖说明：
 
-- **M10 与 M10.5 已完成**；下一步主线是 M11 → M11.5；
+- **M10、M10.5、M11、M11.5 已完成**；下一步主线是 M12（分离编译 / seed 多文件 / 基准门槛）；
 - **M11 与 M11.5 的机制部分可并行**，二者改动面互不重叠（stdlib vs 包工具）；
   但**交付顺序**是 M11 先、M11.5 后；
 - **M11（标准库）依赖 M10.5 的 trait 基础**（已具备，含方法级字典穿参），不依赖 M11.5：
@@ -209,7 +217,7 @@ M10 模块系统 v2（已完成）→ M10.5 类型表达力（已完成：记录
 - 回归修复（M10.5c）：同一 trait 的多个不同类型 default 实例相互独立（实现函数按
   head 类型取名），直接调用与泛型字典穿参调用均可。
 
-## M11：标准库
+## M11：标准库（已完成）
 
 目标：从“能编译示例”到“有可用的标准库与 effectful 编程”。
 
@@ -227,6 +235,21 @@ M10 模块系统 v2（已完成）→ M10.5 类型表达力（已完成：记录
 - 核心库覆盖常用操作；`do`/IO 组合子对 `Maybe`/`List`/`IO` 生效；
 - 标准库与 `do` 有类型检查与 typed codegen 测试；
 - 编译器自身已使用 stdlib（作为首个用户，自举 fixed point 在 `lib+stdlib+app` 源上成立）。
+
+### M11 实现状态（已落地）
+
+- 标准库：`stdlib/` 成员包（`stdlib/lib/` 模块根），模块 Pair/Bool/List/Maybe/
+  Result/String/Sort/Map/Monad/IO + 包门面 `Vuna`；`[export]` 清单；
+- 高阶 kind：`Ty.TApp`（类型变量当类型构造器应用）、trait 参数 kind 元数与实例
+  kind 校验（`instance Monad Int` 声明期报错）；一般约束泛化：高阶 kind 类型变量的
+  方法级字典穿参（如 `bindPair : m a -> m b -> m (Pair a b)` 跨类型构造器派发）；
+- `do`：parser 产出 `EDo`，loader desugar 成 `bind`/lambda；`>>=`/`>>` 中缀；
+  `do` 对 Maybe/List/IO 生效；IO 用抽象 `IO a`（`Int -> a` 包装）+ runIO/printIO 等；
+- 编译器迁移：`Vuna.Base` 门面重导出 stdlib，构建根 `lib+stdlib/lib+app`，
+  编译器是 stdlib 首个用户（fixed point 在 lib+stdlib/lib+app 上成立）；
+- 内建补充：`readLine` / `readDir` / `isDirectory` / `makeDir` / `removeFile`；
+- 测试：`corpus/monad/`（do/高阶 kind，26 段）、`corpus/stdlib/`（27 段，
+  `--root ../stdlib/lib`）、fmt golden（32 段）。
 
 ### M11 设计要点（已定）
 
@@ -254,7 +277,7 @@ M10 模块系统 v2（已完成）→ M10.5 类型表达力（已完成：记录
 
 > 硬规则：stdlib 用 `do` 之前，seed 必须已轮换到懂 `do`（README 种子策略）。
 
-## M11.5：包管理与工具链
+## M11.5：包管理与工具链（已完成）
 
 目标：从“能编译示例”到“能开发项目”。依赖 M10（模块导出）与 M11（标准库，stdlib 成为首个包）。
 
@@ -269,6 +292,23 @@ M10 模块系统 v2（已完成）→ M10.5 类型表达力（已完成：记录
 - 用 vuna 写一个多包示例项目；
 - 格式化后源码仍可编译且输出不变；
 - 包管理路径在 Nix 沙箱内可复现。
+
+### M11.5 实现状态（已落地）
+
+- `vuna.toml`：TOML 子集解析（`Vuna.Toml`）+ manifest 模型/校验（`Vuna.Manifest`）；
+  `[package]` / `[workspace].members` / `[export].modules` / `[dependencies]`（本地路径）；
+- workspace：根即包（Cargo 风格），本仓库 = 根包 `vuna` + 成员包 `vuna-stdlib`；
+- 模块根解析：`Vuna.Pkg`（`Root` = 目录 + 包名 + 可选导出集；依赖 DFS 后序、按包名
+  去重），loader 用 `loadProgram roots entryPkg entry`：同包全可见、跨包只认
+  `[export]`，隐藏模块报错；`app/Main.vuna` 固定入口，`app/` 不再作模块根
+  （`app/Lint.vuna` 迁到 `lib/Vuna/Lint.vuna`）；
+- 工具链：`vuna build`（package → typed OCaml）、`vuna test`（test/*.vuna，
+  main : String 空串通过）、`vuna fmt --check`（`Vuna.Fmt`，幂等、可重解析、注释丢失）、
+  `vuna repl`（行式，定义累积 + 完整 loader/类型检查路径）、`vuna doc`（Markdown API）；
+- 验收载体：`examples/multi/` 多包 workspace；`checks.vuna-package` 在 Nix 沙箱里
+  build/test/fmt/doc 并构建编译器自身，验证包管理路径可复现；测试 28–31 段；
+- 未做：registry / 锁文件 / 远程依赖、LSP、fmt 注释保留与折行、`vuna build` 的
+  ocamlopt 驱动（只生成 .ml）、REPL 多行输入。
 
 ### M11.5 设计要点（已定）
 

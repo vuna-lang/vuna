@@ -251,12 +251,48 @@ showAnnotation params name =
 
 pairSecond (Pair _ v) = v
 
+showDeclFnName d =
+  case d of
+    DData name params ctors derivings sp => showNameOf name
+    _ => ""
+
+showFnNames decls = map showDeclFnName (nonSpecialData decls)
+
+-- 只有 show 函数之间真的互相引用时才用 let rec；纯字段单类型用 let，
+-- 避免 OCaml warning 39（unused rec flag）。
+codeRefsOther self code Nil = False
+
+codeRefsOther self code (Cons n rest) =
+  if n == self then codeRefsOther self code rest
+  else if containsName (strUnpack n) (strUnpack code) then True
+  else codeRefsOther self code rest
+
+countName needle Nil = 0
+
+countName needle (Cons c rest) =
+  if startsWith needle (Cons c rest) then
+    1 + countName needle (drop (length needle) (Cons c rest))
+  else countName needle rest
+
+-- 自身名字在生成代码里出现超过 1 次 = 自递归（第 1 次是签名/定义处）。
+selfRecursive name code =
+  countName (strUnpack name) (strUnpack code) > 1
+
+partsNeedRec Nil Nil names = False
+
+partsNeedRec (Cons d ds) (Cons code rest) names =
+  if codeRefsOther (showDeclFnName d) code names then True
+  else if selfRecursive (showDeclFnName d) code then True
+  else partsNeedRec ds rest names
+
 genShowDecls decls =
   case nonSpecialData decls of
     Nil => Ok ""
     ds =>
       andThen (mapResult (genShowFunc decls) ds) (\parts =>
-        Ok ("let rec " ++ joinWith "\nand " parts ++ "\n"))
+        let names = showFnNames decls
+        in Ok ((if partsNeedRec ds parts names then "let rec " else "let ")
+               ++ joinWith "\nand " parts ++ "\n"))
 
 genPat : Pat -> Result String
 genPat pat =

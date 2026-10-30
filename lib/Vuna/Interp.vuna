@@ -24,7 +24,7 @@ interpret source =
             _ => "error: imports are only supported by interpretFile"
 
 -- 默认模块根：编译器自身仓库布局（lib/ + stdlib/）。
-effectiveRoots Nil = Cons (rawRoot "lib") (Cons (rawRoot "stdlib") Nil)
+effectiveRoots Nil = Cons (rawRoot "lib") (Cons (rawRoot "stdlib/lib") Nil)
 effectiveRoots roots = roots
 
 -- M10.5：使用记录/trait/deriving 的程序必须先经过类型检查与降级；

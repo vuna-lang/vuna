@@ -69,6 +69,16 @@ let bi_read_line () = try input_line stdin with End_of_file -> ""
 let bi_read_dir path =
   try List.sort compare (Array.to_list (Sys.readdir path))
   with Sys_error msg -> failwith ("readDir: " ^ msg)
+let bi_is_directory path =
+  try Sys.is_directory path with Sys_error msg -> failwith ("isDirectory: " ^ msg)
+let bi_make_dir path =
+  try (if Sys.file_exists path then 0
+  else (Sys.mkdir path 0o755; 0))
+  with Sys_error msg -> failwith ("makeDir: " ^ msg)
+let bi_remove_file path =
+  try (if Sys.file_exists path then (Sys.remove path; 0)
+  else 0)
+  with Sys_error msg -> failwith ("removeFile: " ^ msg)
 let show_ctor name args = if args = [] then name
 else "(" ^ name ^ " " ^ String.concat " " args ^ ")"
 let show_vbool b = if b then "True"
@@ -685,25 +695,41 @@ and show_Vuna_dPair_dPair : 'p0 'p1. ('p0 -> string) -> ('p1 -> string) -> ('p0,
 -> string = fun s0 s1 v -> match v with
   | C_Vuna_dPair_dPair (f0, f1) -> show_ctor "Pair" [(s0) f0; (s1) f1]
 
-let v_usage = "usage:
+let v_Vuna_dCli_dusage = "usage:
   vuna compile [--no-print] [--no-typecheck] [--typecheck] [--typed] [--root DIR]... <entry.vuna> [out.ml]
-  vuna check [--root DIR]... <entry.vuna>
+  vuna check [--root DIR]... (<entry.vuna> | <package-dir>)
   vuna lint [--fix] <file.vuna>...
   vuna interp [--root DIR]... <file.vuna>
+  vuna build [--no-print] [DIR] [OUT]        \228\187\142 vuna.toml \230\158\132\229\187\186\229\140\133\239\188\136\233\187\152\232\174\164 DIR=.\239\188\140OUT=DIR/Main.ml\239\188\137
+  vuna test [DIR]                           \232\191\144\232\161\140\229\140\133\229\134\133 test/*.vuna\239\188\136main : String\239\188\140\231\169\186\228\184\178\233\128\154\232\191\135\239\188\137
+  vuna fmt [--check] [PATH]...              \230\160\188\229\188\143\229\140\150\239\188\136PATH \229\143\175\228\184\186\230\150\135\228\187\182\230\136\150\231\155\174\229\189\149\239\188\155\231\156\129\231\149\165 = \229\140\133 lib/app/test\239\188\137
+  vuna repl [--root DIR]...                 \228\186\164\228\186\146\229\188\143 REPL
+  vuna doc [DIR] [OUT]                      \231\148\159\230\136\144 API \230\150\135\230\161\163\239\188\136\233\187\152\232\174\164 OUT=DIR/docs/api.md\239\188\137
   vuna help
 "
 
-let v_help = fun () -> (let _ = bi_print v_usage in
+let v_Vuna_dCli_dhelp = fun () -> (let _ = bi_print v_Vuna_dCli_dusage in
   0)
 
-let v_usageError = fun () -> (let _ = bi_print v_usage in
+let v_Vuna_dCli_dusageError = fun () -> (let _ = bi_print v_Vuna_dCli_dusage in
   2)
 
-let rec v_printWarnings = fun a0 -> match a0 with
+let v_Vuna_dCli_dprintErr = fun msg -> (let _ = bi_print ((let vuna_cat0' = ("error: ") in
+      (let vuna_cat1' = (msg) in
+        (let vuna_cat2' = ("\n") in
+          String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'])))) in
+  0)
+
+let rec v_Vuna_dCli_dprintWarnings = fun a0 -> match a0 with
   | ([]) -> 0
   | ((w) :: (rest)) -> (let _ = bi_print (((w) ^ ("\n"))) in
-  v_printWarnings rest)
-  | _ -> vuna_fail "app/Main.vuna" 85 1 ("no matching clause for printWarnings")
+  v_Vuna_dCli_dprintWarnings rest)
+  | _ -> vuna_fail "lib/Vuna/Cli.vuna" 127 1 ("no matching clause for Vuna.Cli.printWarnings")
+
+let v_Vuna_dCli_ddefaultDir = fun dir -> (match dir with
+  | C_Vuna_dMaybe_dJust (dir2) -> dir2
+  | C_Vuna_dMaybe_dNothing -> "."
+  | _ -> vuna_fail "lib/Vuna/Cli.vuna" 166 3 ("case pattern match failure"))
 
 let v_Vuna_dLint_deditStart = fun a0 -> match a0 with
   | (C_Vuna_dLint_dEdit (start, stop, lines)) -> start
@@ -909,6 +935,182 @@ let v_Vuna_dLint_dreportFindings = fun path fixMode findings -> (let _ = v_Vuna_
   if v_Vuna_dLint_disNilList findings then 0
   else 1)
 
+let v_Vuna_dRepl_dreplTempFile = "/tmp/vuna-repl.vuna"
+
+let v_Vuna_dRepl_dreplPrompt = "vuna> "
+
+let v_Vuna_dRepl_dreplHelp = "\229\145\189\228\187\164\239\188\154
+  :help    \230\152\190\231\164\186\229\184\174\229\138\169
+  :reset   \230\184\133\231\169\186\229\183\178\232\190\147\229\133\165\231\154\132\229\174\154\228\185\137\228\184\142 import
+  :quit    \233\128\128\229\135\186\239\188\136\229\144\140 Ctrl-D\239\188\137
+\229\133\182\228\187\150\232\190\147\229\133\165\230\140\137 vuna \230\186\144\231\160\129\229\164\132\231\144\134\239\188\154`import ...` \228\184\142\229\174\154\228\185\137\228\188\154\232\162\171\231\180\175\231\167\175\239\188\140\232\161\168\232\190\190\229\188\143\228\188\154\231\171\139\229\141\179\230\177\130\229\128\188\227\128\130
+"
+
+let v_Vuna_dFiles_dpathExistsDir = fun path -> bi_is_directory path
+
+let rec v_Vuna_dFmt_dconcatStrings = fun a0 -> match a0 with
+  | ([]) -> ""
+  | ((s) :: (rest)) -> ((s) ^ (v_Vuna_dFmt_dconcatStrings rest))
+  | _ -> vuna_fail "lib/Vuna/Fmt.vuna" 18 1 ("no matching clause for Vuna.Fmt.concatStrings")
+
+let rec v_Vuna_dFmt_djoinComma = fun a0 -> match a0 with
+  | ([]) -> ""
+  | ((x) :: ([])) -> x
+  | ((x) :: (rest)) -> (let vuna_cat0' = (x) in
+  (let vuna_cat1' = (", ") in
+    (let vuna_cat2' = (v_Vuna_dFmt_djoinComma rest) in
+      String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'])))
+  | _ -> vuna_fail "lib/Vuna/Fmt.vuna" 21 1 ("no matching clause for Vuna.Fmt.joinComma")
+
+let rec v_Vuna_dFmt_djoinSpace = fun a0 -> match a0 with
+  | ([]) -> ""
+  | ((x) :: (rest)) -> (let vuna_cat0' = (" ") in
+  (let vuna_cat1' = (x) in
+    (let vuna_cat2' = (v_Vuna_dFmt_djoinSpace rest) in
+      String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'])))
+  | _ -> vuna_fail "lib/Vuna/Fmt.vuna" 25 1 ("no matching clause for Vuna.Fmt.joinSpace")
+
+let rec v_Vuna_dFmt_djoinLines = fun a0 -> match a0 with
+  | ([]) -> ""
+  | ((l) :: ([])) -> l
+  | ((l) :: (rest)) -> (let vuna_cat0' = (l) in
+  (let vuna_cat1' = ("\n") in
+    (let vuna_cat2' = (v_Vuna_dFmt_djoinLines rest) in
+      String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'])))
+  | _ -> vuna_fail "lib/Vuna/Fmt.vuna" 28 1 ("no matching clause for Vuna.Fmt.joinLines")
+
+let v_Vuna_dFmt_dunlines = fun a0 -> match a0 with
+  | ([]) -> ""
+  | (lines) -> ((v_Vuna_dFmt_djoinLines lines) ^ ("\n"))
+  | _ -> vuna_fail "lib/Vuna/Fmt.vuna" 32 1 ("no matching clause for Vuna.Fmt.unlines")
+
+let v_Vuna_dFmt_dfirstLine = fun a0 -> match a0 with
+  | ([]) -> ""
+  | ((l) :: (rest)) -> l
+  | _ -> vuna_fail "lib/Vuna/Fmt.vuna" 35 1 ("no matching clause for Vuna.Fmt.firstLine")
+
+let v_Vuna_dFmt_drestLines = fun a0 -> match a0 with
+  | ([]) -> []
+  | ((l) :: (rest)) -> rest
+  | _ -> vuna_fail "lib/Vuna/Fmt.vuna" 38 1 ("no matching clause for Vuna.Fmt.restLines")
+
+let v_Vuna_dFmt_dprefixFirst = fun a0 a1 -> match (a0, a1) with
+  | (pre, []) -> (pre) :: ([])
+  | (pre, (l) :: (rest)) -> (((pre) ^ (l))) :: (rest)
+  | _ -> vuna_fail "lib/Vuna/Fmt.vuna" 41 1 ("no matching clause for Vuna.Fmt.prefixFirst")
+
+let rec v_Vuna_dFmt_dappendLast = fun a0 a1 -> match (a0, a1) with
+  | (suffix, []) -> (suffix) :: ([])
+  | (suffix, (l) :: ([])) -> (((l) ^ (suffix))) :: ([])
+  | (suffix, (l) :: (rest)) -> (l) :: (v_Vuna_dFmt_dappendLast suffix rest)
+  | _ -> vuna_fail "lib/Vuna/Fmt.vuna" 44 1 ("no matching clause for Vuna.Fmt.appendLast")
+
+let v_Vuna_dFmt_disNilList = fun a0 -> match a0 with
+  | ([]) -> true
+  | ((x) :: (rest)) -> false
+  | _ -> vuna_fail "lib/Vuna/Fmt.vuna" 57 1 ("no matching clause for Vuna.Fmt.isNilList")
+
+let rec v_Vuna_dFmt_dmapMaybeStrings = fun a0 a1 -> match (a0, a1) with
+  | (f, []) -> C_Vuna_dMaybe_dJust ([])
+  | (f, (x) :: (rest)) -> (match f x with
+  | C_Vuna_dMaybe_dNothing -> C_Vuna_dMaybe_dNothing
+  | C_Vuna_dMaybe_dJust (s) -> (match v_Vuna_dFmt_dmapMaybeStrings f rest with
+  | C_Vuna_dMaybe_dNothing -> C_Vuna_dMaybe_dNothing
+  | C_Vuna_dMaybe_dJust (ss) -> C_Vuna_dMaybe_dJust ((s) :: (ss))
+  | _ -> vuna_fail "lib/Vuna/Fmt.vuna" 65 7 ("case pattern match failure"))
+  | _ -> vuna_fail "lib/Vuna/Fmt.vuna" 62 3 ("case pattern match failure"))
+  | _ -> vuna_fail "lib/Vuna/Fmt.vuna" 60 1 ("no matching clause for Vuna.Fmt.mapMaybeStrings")
+
+let v_Vuna_dFmt_ddummySpan = C_Vuna_dBase_dSpan ("", 1, 1, 1, 1)
+
+let v_Vuna_dFmt_dinfixPrec = fun op -> (match op with
+  | "->" -> C_Vuna_dMaybe_dJust (C_Vuna_dPair_dPair (1, 1))
+  | ">>=" -> C_Vuna_dMaybe_dJust (C_Vuna_dPair_dPair (1, 1))
+  | "||" -> C_Vuna_dMaybe_dJust (C_Vuna_dPair_dPair (2, 0))
+  | "&&" -> C_Vuna_dMaybe_dJust (C_Vuna_dPair_dPair (3, 0))
+  | "==" -> C_Vuna_dMaybe_dJust (C_Vuna_dPair_dPair (4, 0))
+  | "/=" -> C_Vuna_dMaybe_dJust (C_Vuna_dPair_dPair (4, 0))
+  | "<" -> C_Vuna_dMaybe_dJust (C_Vuna_dPair_dPair (4, 0))
+  | "<=" -> C_Vuna_dMaybe_dJust (C_Vuna_dPair_dPair (4, 0))
+  | ">" -> C_Vuna_dMaybe_dJust (C_Vuna_dPair_dPair (4, 0))
+  | ">=" -> C_Vuna_dMaybe_dJust (C_Vuna_dPair_dPair (4, 0))
+  | "++" -> C_Vuna_dMaybe_dJust (C_Vuna_dPair_dPair (5, 1))
+  | "+" -> C_Vuna_dMaybe_dJust (C_Vuna_dPair_dPair (6, 0))
+  | "-" -> C_Vuna_dMaybe_dJust (C_Vuna_dPair_dPair (6, 0))
+  | "*" -> C_Vuna_dMaybe_dJust (C_Vuna_dPair_dPair (7, 0))
+  | "/" -> C_Vuna_dMaybe_dJust (C_Vuna_dPair_dPair (7, 0))
+  | "::" -> C_Vuna_dMaybe_dJust (C_Vuna_dPair_dPair (8, 1))
+  | "Cons" -> C_Vuna_dMaybe_dJust (C_Vuna_dPair_dPair (8, 1))
+  | _ -> C_Vuna_dMaybe_dNothing
+  | _ -> vuna_fail "lib/Vuna/Fmt.vuna" 164 3 ("case pattern match failure"))
+
+let rec v_Vuna_dFmt_dlistExprElems = fun e -> (match e with
+  | C_Vuna_dAst_dEVar ("Nil", sp) -> C_Vuna_dMaybe_dJust ([])
+  | C_Vuna_dAst_dEApp (C_Vuna_dAst_dEVar ("Cons", csp), (a) :: ((rest) :: ([])), sp) -> (match v_Vuna_dFmt_dlistExprElems
+    rest with
+  | C_Vuna_dMaybe_dJust (elems) -> C_Vuna_dMaybe_dJust ((a) :: (elems))
+  | C_Vuna_dMaybe_dNothing -> C_Vuna_dMaybe_dNothing
+  | _ -> vuna_fail "lib/Vuna/Fmt.vuna" 190 7 ("case pattern match failure"))
+  | _ -> C_Vuna_dMaybe_dNothing
+  | _ -> vuna_fail "lib/Vuna/Fmt.vuna" 187 3 ("case pattern match failure"))
+
+let v_Vuna_dFmt_dwrapPrec = fun need s -> if need then (let vuna_cat0' = ("(") in
+  (let vuna_cat1' = (s) in
+    (let vuna_cat2' = (")") in
+      String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'])))
+else s
+
+let v_Vuna_dFmt_datomForm = fun e -> (match e with
+  | C_Vuna_dAst_dEVar (name, sp) -> true
+  | C_Vuna_dAst_dEInt (n, sp) -> true
+  | C_Vuna_dAst_dEStr (s, sp) -> true
+  | C_Vuna_dAst_dEField (base, f, sp) -> true
+  | C_Vuna_dAst_dERecord (name, fields, sp) -> true
+  | C_Vuna_dAst_dERecUpdate (base, fields, sp) -> true
+  | C_Vuna_dAst_dEApp (fn, args, sp) -> (match v_Vuna_dFmt_dlistExprElems (C_Vuna_dAst_dEApp (fn, args,
+        sp)) with
+  | C_Vuna_dMaybe_dJust (elems) -> true
+  | C_Vuna_dMaybe_dNothing -> false
+  | _ -> vuna_fail "lib/Vuna/Fmt.vuna" 318 7 ("case pattern match failure"))
+  | _ -> false
+  | _ -> vuna_fail "lib/Vuna/Fmt.vuna" 310 3 ("case pattern match failure"))
+
+let v_Vuna_dFmt_drenderDerivings = fun a0 -> match a0 with
+  | ([]) -> []
+  | (names) -> ((let vuna_cat0' = ("deriving (") in
+    (let vuna_cat1' = (v_Vuna_dFmt_djoinComma names) in
+      (let vuna_cat2' = (")") in
+        String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'])))) :: ([])
+  | _ -> vuna_fail "lib/Vuna/Fmt.vuna" 506 1 ("no matching clause for Vuna.Fmt.renderDerivings")
+
+let v_Vuna_dFmt_drenderExportItem = fun item -> (match item with
+  | C_Vuna_dAst_dXBare (name, sp) -> name
+  | C_Vuna_dAst_dXTypeAll (name, sp) -> ((name) ^ ("(..)"))
+  | C_Vuna_dAst_dXModule (name, sp) -> (("module ") ^ (name))
+  | _ -> vuna_fail "lib/Vuna/Fmt.vuna" 598 3 ("case pattern match failure"))
+
+let v_Vuna_dFmt_daliasSuffix = fun maybeAlias -> (match maybeAlias with
+  | C_Vuna_dMaybe_dNothing -> ""
+  | C_Vuna_dMaybe_dJust (a) -> ((" as ") ^ (a))
+  | _ -> vuna_fail "lib/Vuna/Fmt.vuna" 607 3 ("case pattern match failure"))
+
+let v_Vuna_dFmt_drenderImport = fun a0 -> match a0 with
+  | (C_Vuna_dAst_dImport (name, isQualified, alias, sp)) -> (let vuna_cat0' = ("import ") in
+  (let vuna_cat1' = (if isQualified then "qualified "
+      else "") in
+    (let vuna_cat2' = (name) in
+      (let vuna_cat3' = (v_Vuna_dFmt_daliasSuffix alias) in
+        String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'; vuna_cat3']))))
+  | _ -> vuna_fail "lib/Vuna/Fmt.vuna" 603 1 ("no matching clause for Vuna.Fmt.renderImport")
+
+let rec v_Vuna_dFmt_dfilterSections = fun a0 -> match a0 with
+  | ([]) -> []
+  | ((section) :: (rest)) -> (match section with
+  | [] -> v_Vuna_dFmt_dfilterSections rest
+  | _ -> (section) :: (v_Vuna_dFmt_dfilterSections rest)
+  | _ -> vuna_fail "lib/Vuna/Fmt.vuna" 622 3 ("case pattern match failure"))
+  | _ -> vuna_fail "lib/Vuna/Fmt.vuna" 619 1 ("no matching clause for Vuna.Fmt.filterSections")
+
 let rec v_Vuna_dInterp_dpatsNeedElab = fun a0 -> match a0 with
   | ([]) -> false
   | ((p) :: (rest)) -> if v_Vuna_dInterp_dpatNeedsElab p then true
@@ -1061,9 +1263,9 @@ let rec v_Vuna_dTypedCodegen_dfoldStringLiterals = fun a0 -> match a0 with
   | (C_Vuna_dAst_dEStr (s2, _)) :: (rest2) -> (C_Vuna_dAst_dEStr (((s) ^ (s2)), v_Vuna_dTypedCodegen_dnoLocSpan))
   :: (rest2)
   | folded -> (C_Vuna_dAst_dEStr (s, v_Vuna_dTypedCodegen_dnoLocSpan)) :: (folded)
-  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 343 3 ("case pattern match failure"))
+  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 379 3 ("case pattern match failure"))
   | ((e) :: (rest)) -> (e) :: (v_Vuna_dTypedCodegen_dfoldStringLiterals rest)
-  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 341 1 ("no matching clause for Vuna.TypedCodegen.foldStringLiterals")
+  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 377 1 ("no matching clause for Vuna.TypedCodegen.foldStringLiterals")
 
 let v_Vuna_dTypedCodegen_dconcatBindingName = fun i -> (let vuna_cat0' = ("vuna_cat") in
   (let vuna_cat1' = (bi_str_from_int i) in
@@ -1081,7 +1283,7 @@ let rec v_Vuna_dTypedCodegen_dwrapConcatBindings = fun a0 a1 -> match (a0, a1) w
             (let vuna_cat6' = (")") in
               String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'; vuna_cat3'; vuna_cat4'; vuna_cat5';
               vuna_cat6'])))))))
-  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 404 1 ("no matching clause for Vuna.TypedCodegen.wrapConcatBindings")
+  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 440 1 ("no matching clause for Vuna.TypedCodegen.wrapConcatBindings")
 
 let v_Vuna_dTypedCodegen_dbuiltinName = fun a0 -> match a0 with
   | ("+") -> C_Vuna_dMaybe_dJust ("bi_add")
@@ -1131,44 +1333,44 @@ let v_Vuna_dTypedCodegen_dbuiltinName = fun a0 -> match a0 with
   | ("fileExists") -> C_Vuna_dMaybe_dJust ("bi_file_exists")
   | ("exit") -> C_Vuna_dMaybe_dJust ("bi_exit")
   | (_) -> C_Vuna_dMaybe_dNothing
-  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 419 1 ("no matching clause for Vuna.TypedCodegen.builtinName")
+  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 455 1 ("no matching clause for Vuna.TypedCodegen.builtinName")
 
 let rec v_Vuna_dTypedCodegen_drecBindNames = fun a0 -> match a0 with
   | ([]) -> []
   | ((C_Vuna_dPair_dPair (C_Vuna_dAst_dPVar (name, _), _)) :: (rest)) -> (name) :: (v_Vuna_dTypedCodegen_drecBindNames
   rest)
   | ((C_Vuna_dPair_dPair (_, _)) :: (_)) -> []
-  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 579 1 ("no matching clause for Vuna.TypedCodegen.recBindNames")
+  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 615 1 ("no matching clause for Vuna.TypedCodegen.recBindNames")
 
 let v_Vuna_dTypedCodegen_disIrrefutable = fun p -> (match p with
   | C_Vuna_dAst_dPVar (_, _) -> true
   | C_Vuna_dAst_dPWild (_) -> true
   | _ -> false
-  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 606 3 ("case pattern match failure"))
+  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 642 3 ("case pattern match failure"))
 
 let v_Vuna_dTypedCodegen_disVarPattern = fun p -> (match p with
   | C_Vuna_dAst_dPVar (_, _) -> true
   | C_Vuna_dAst_dPWild (_) -> true
   | _ -> false
-  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 612 3 ("case pattern match failure"))
+  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 648 3 ("case pattern match failure"))
 
 let rec v_Vuna_dTypedCodegen_dallVarPatterns = fun a0 -> match a0 with
   | ([]) -> true
   | ((p) :: (rest)) -> (if (v_Vuna_dTypedCodegen_disVarPattern p) then (v_Vuna_dTypedCodegen_dallVarPatterns
     rest)
   else false)
-  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 617 1 ("no matching clause for Vuna.TypedCodegen.allVarPatterns")
+  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 653 1 ("no matching clause for Vuna.TypedCodegen.allVarPatterns")
 
 let v_Vuna_dTypedCodegen_ddeclFunName = fun d -> (match d with
   | C_Vuna_dAst_dDFun (name, pats, body, _) -> name
   | _ -> ""
-  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 664 3 ("case pattern match failure"))
+  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 700 3 ("case pattern match failure"))
 
 let rec v_Vuna_dTypedCodegen_dfilterNames = fun pred names -> (match names with
   | [] -> []
   | (n) :: (rest) -> if pred n then (n) :: (v_Vuna_dTypedCodegen_dfilterNames pred rest)
   else v_Vuna_dTypedCodegen_dfilterNames pred rest
-  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 676 3 ("case pattern match failure"))
+  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 712 3 ("case pattern match failure"))
 
 let v_Vuna_dTypedCodegen_druntimePrelude = (C_Vuna_dPair_dPair ("vuna_fail", "let vuna_fail file line col msg =
   if line = 0 then failwith msg
@@ -1270,18 +1472,18 @@ let v_Vuna_dTypedCodegen_druntimePrelude = (C_Vuna_dPair_dPair ("vuna_fail", "le
 
 let v_Vuna_dTypedCodegen_dchunkNameOf = fun a0 -> match a0 with
   | (C_Vuna_dPair_dPair (n, c)) -> n
-  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 935 1 ("no matching clause for Vuna.TypedCodegen.chunkNameOf")
+  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 971 1 ("no matching clause for Vuna.TypedCodegen.chunkNameOf")
 
 let v_Vuna_dTypedCodegen_dchunkTextOf = fun a0 -> match a0 with
   | (C_Vuna_dPair_dPair (n, c)) -> c
-  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 937 1 ("no matching clause for Vuna.TypedCodegen.chunkTextOf")
+  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 973 1 ("no matching clause for Vuna.TypedCodegen.chunkTextOf")
 
 let rec v_Vuna_dTypedCodegen_dfilterNames2 = fun pred names all -> (match all with
   | [] -> []
   | (ch) :: (rest) -> if pred (v_Vuna_dTypedCodegen_dchunkNameOf ch) then (ch) :: (v_Vuna_dTypedCodegen_dfilterNames2
     pred names rest)
   else v_Vuna_dTypedCodegen_dfilterNames2 pred names rest
-  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 956 3 ("case pattern match failure"))
+  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 992 3 ("case pattern match failure"))
 
 let v_Vuna_dTypecheck_dmkScheme = fun qs ty -> C_Vuna_dTypecheck_dScheme (qs, [], ty)
 
@@ -2639,26 +2841,26 @@ let rec v_Vuna_dParser_dlamNames = fun a0 -> match a0 with
   | ((C_Vuna_dAst_dPVar (n, _)) :: (rest)) -> (match v_Vuna_dParser_dlamNames rest with
   | C_Vuna_dResult_dOk (ns) -> C_Vuna_dResult_dOk ((n) :: (ns))
   | C_Vuna_dResult_dErr (e) -> C_Vuna_dResult_dErr (e)
-  | _ -> vuna_fail "lib/Vuna/Parser.vuna" 349 3 ("case pattern match failure"))
+  | _ -> vuna_fail "lib/Vuna/Parser.vuna" 356 3 ("case pattern match failure"))
   | ((_) :: (_)) -> C_Vuna_dResult_dErr ("where function arguments must be simple names")
-  | _ -> vuna_fail "lib/Vuna/Parser.vuna" 347 1 ("no matching clause for Vuna.Parser.lamNames")
+  | _ -> vuna_fail "lib/Vuna/Parser.vuna" 354 1 ("no matching clause for Vuna.Parser.lamNames")
 
 let v_Vuna_dParser_dinstanceIsDefault = fun name -> (match name with
   | C_Vuna_dMaybe_dNothing -> true
   | C_Vuna_dMaybe_dJust (_) -> false
-  | _ -> vuna_fail "lib/Vuna/Parser.vuna" 463 3 ("case pattern match failure"))
+  | _ -> vuna_fail "lib/Vuna/Parser.vuna" 470 3 ("case pattern match failure"))
 
 let rec v_Vuna_dParser_dfoldCons = fun a0 a1 -> match (a0, a1) with
   | (sp, []) -> C_Vuna_dAst_dEVar ("Nil", sp)
   | (sp, (e) :: (rest)) -> C_Vuna_dAst_dEApp (C_Vuna_dAst_dEVar ("Cons", sp), (e) :: ((v_Vuna_dParser_dfoldCons
       sp rest) :: ([])), sp)
-  | _ -> vuna_fail "lib/Vuna/Parser.vuna" 652 1 ("no matching clause for Vuna.Parser.foldCons")
+  | _ -> vuna_fail "lib/Vuna/Parser.vuna" 659 1 ("no matching clause for Vuna.Parser.foldCons")
 
 let rec v_Vuna_dParser_dfoldPCon = fun a0 a1 -> match (a0, a1) with
   | (sp, []) -> C_Vuna_dAst_dPCon ("Nil", [], sp)
   | (sp, (p) :: (rest)) -> C_Vuna_dAst_dPCon ("Cons", (p) :: ((v_Vuna_dParser_dfoldPCon sp rest) :: ([])),
   sp)
-  | _ -> vuna_fail "lib/Vuna/Parser.vuna" 871 1 ("no matching clause for Vuna.Parser.foldPCon")
+  | _ -> vuna_fail "lib/Vuna/Parser.vuna" 878 1 ("no matching clause for Vuna.Parser.foldPCon")
 
 let v_Vuna_dAst_dpatSpan = fun pat -> (match pat with
   | C_Vuna_dAst_dPVar (name, sp) -> sp
@@ -3014,7 +3216,20 @@ let rec v_Vuna_dString_djoin = fun a0 a1 -> match (a0, a1) with
   (let vuna_cat1' = (sep) in
     (let vuna_cat2' = (v_Vuna_dString_djoin sep rest) in
       String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'])))
-  | _ -> vuna_fail "stdlib/Vuna/String.vuna" 26 1 ("no matching clause for Vuna.String.join")
+  | _ -> vuna_fail "stdlib/lib/Vuna/String.vuna" 26 1 ("no matching clause for Vuna.String.join")
+
+let v_Vuna_dDoc_dparamSuffix = fun a0 -> match a0 with
+  | ([]) -> ""
+  | (params) -> ((" ") ^ (v_Vuna_dString_djoin " " params))
+  | _ -> vuna_fail "lib/Vuna/Doc.vuna" 75 1 ("no matching clause for Vuna.Doc.paramSuffix")
+
+let v_Vuna_dDoc_dderivingLines = fun a0 -> match a0 with
+  | ([]) -> []
+  | (derivings) -> ((let vuna_cat0' = ("deriving (") in
+    (let vuna_cat1' = (v_Vuna_dString_djoin ", " derivings) in
+      (let vuna_cat2' = (")") in
+        String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'])))) :: ([])
+  | _ -> vuna_fail "lib/Vuna/Doc.vuna" 79 1 ("no matching clause for Vuna.Doc.derivingLines")
 
 let rec v_Vuna_dString_dunlines = fun a0 -> match a0 with
   | ([]) -> ""
@@ -3022,7 +3237,7 @@ let rec v_Vuna_dString_dunlines = fun a0 -> match a0 with
   (let vuna_cat1' = ("\n") in
     (let vuna_cat2' = (v_Vuna_dString_dunlines rest) in
       String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'])))
-  | _ -> vuna_fail "stdlib/Vuna/String.vuna" 34 1 ("no matching clause for Vuna.String.unlines")
+  | _ -> vuna_fail "stdlib/lib/Vuna/String.vuna" 34 1 ("no matching clause for Vuna.String.unlines")
 
 let rec v_Vuna_dResult_dtraverse = fun a0 a1 -> match (a0, a1) with
   | (f, []) -> C_Vuna_dResult_dOk ([])
@@ -3031,14 +3246,14 @@ let rec v_Vuna_dResult_dtraverse = fun a0 a1 -> match (a0, a1) with
   | C_Vuna_dResult_dOk (y) -> (match v_Vuna_dResult_dtraverse f xs with
   | C_Vuna_dResult_dErr (e) -> C_Vuna_dResult_dErr (e)
   | C_Vuna_dResult_dOk (ys) -> C_Vuna_dResult_dOk ((y) :: (ys))
-  | _ -> vuna_fail "stdlib/Vuna/Result.vuna" 19 7 ("case pattern match failure"))
-  | _ -> vuna_fail "stdlib/Vuna/Result.vuna" 16 3 ("case pattern match failure"))
-  | _ -> vuna_fail "stdlib/Vuna/Result.vuna" 14 1 ("no matching clause for Vuna.Result.traverse")
+  | _ -> vuna_fail "stdlib/lib/Vuna/Result.vuna" 19 7 ("case pattern match failure"))
+  | _ -> vuna_fail "stdlib/lib/Vuna/Result.vuna" 16 3 ("case pattern match failure"))
+  | _ -> vuna_fail "stdlib/lib/Vuna/Result.vuna" 14 1 ("no matching clause for Vuna.Result.traverse")
 
 let v_Vuna_dResult_dandThen = fun r f -> (match r with
   | C_Vuna_dResult_dOk (x) -> f x
   | C_Vuna_dResult_dErr (e) -> C_Vuna_dResult_dErr (e)
-  | _ -> vuna_fail "stdlib/Vuna/Result.vuna" 25 3 ("case pattern match failure"))
+  | _ -> vuna_fail "stdlib/lib/Vuna/Result.vuna" 25 3 ("case pattern match failure"))
 
 let rec v_Vuna_dTypedCodegen_dmapResult = fun a0 a1 -> match (a0, a1) with
   | (f, []) -> C_Vuna_dResult_dOk ([])
@@ -3064,40 +3279,51 @@ let rec v_Vuna_dLoader_ddesugarDo = fun a0 -> match a0 with
 let v_Vuna_dResult_dstep = fun r k -> (match r with
   | C_Vuna_dResult_dOk (C_Vuna_dPair_dPair (x, st)) -> k x st
   | C_Vuna_dResult_dErr (e) -> C_Vuna_dResult_dErr (e)
-  | _ -> vuna_fail "stdlib/Vuna/Result.vuna" 31 3 ("case pattern match failure"))
+  | _ -> vuna_fail "stdlib/lib/Vuna/Result.vuna" 31 3 ("case pattern match failure"))
 
 let rec v_Vuna_dParser_dparseParams = fun st -> (match v_Vuna_dParser_dpeekTok st with
   | C_Vuna_dLexer_dPTok (C_Vuna_dLexer_dTIdent (name), p) -> v_Vuna_dResult_dstep (v_Vuna_dParser_dparseParams
     (v_Vuna_dParser_dadvance st)) (fun rest st1 -> C_Vuna_dResult_dOk (C_Vuna_dPair_dPair ((name) :: (rest),
         st1)))
   | _ -> C_Vuna_dResult_dOk (C_Vuna_dPair_dPair ([], st))
-  | _ -> vuna_fail "lib/Vuna/Parser.vuna" 502 3 ("case pattern match failure"))
+  | _ -> vuna_fail "lib/Vuna/Parser.vuna" 509 3 ("case pattern match failure"))
 
 let v_Vuna_dResult_dmapResult = fun f r -> (match r with
   | C_Vuna_dResult_dOk (x) -> C_Vuna_dResult_dOk (f x)
   | C_Vuna_dResult_dErr (e) -> C_Vuna_dResult_dErr (e)
-  | _ -> vuna_fail "stdlib/Vuna/Result.vuna" 37 3 ("case pattern match failure"))
+  | _ -> vuna_fail "stdlib/lib/Vuna/Result.vuna" 37 3 ("case pattern match failure"))
 
 let v_Vuna_dResult_dmapError = fun f r -> (match r with
   | C_Vuna_dResult_dOk (x) -> C_Vuna_dResult_dOk (x)
   | C_Vuna_dResult_dErr (e) -> C_Vuna_dResult_dErr (f e)
-  | _ -> vuna_fail "stdlib/Vuna/Result.vuna" 43 3 ("case pattern match failure"))
+  | _ -> vuna_fail "stdlib/lib/Vuna/Result.vuna" 43 3 ("case pattern match failure"))
 
 let v_Vuna_dResult_dwithDefault = fun d r -> (match r with
   | C_Vuna_dResult_dOk (x) -> x
   | C_Vuna_dResult_dErr (e) -> d
-  | _ -> vuna_fail "stdlib/Vuna/Result.vuna" 49 3 ("case pattern match failure"))
+  | _ -> vuna_fail "stdlib/lib/Vuna/Result.vuna" 49 3 ("case pattern match failure"))
 
 let rec v_Vuna_dList_dappend = fun a0 a1 -> match (a0, a1) with
   | ([], ys) -> ys
   | ((x) :: (xs), ys) -> (x) :: (v_Vuna_dList_dappend xs ys)
-  | _ -> vuna_fail "stdlib/Vuna/List.vuna" 16 1 ("no matching clause for Vuna.List.append")
+  | _ -> vuna_fail "stdlib/lib/Vuna/List.vuna" 16 1 ("no matching clause for Vuna.List.append")
+
+let v_Vuna_dFmt_dappendBefore = fun sep lines argLines -> (match argLines with
+  | [] -> lines
+  | (a) :: (rest) -> v_Vuna_dList_dappend (v_Vuna_dFmt_dappendLast (((sep) ^ (a))) lines) rest
+  | _ -> vuna_fail "lib/Vuna/Fmt.vuna" 50 3 ("case pattern match failure"))
+
+let rec v_Vuna_dFmt_djoinSections = fun a0 -> match a0 with
+  | ([]) -> []
+  | ((section) :: ([])) -> section
+  | ((section) :: (rest)) -> v_Vuna_dList_dappend section (("") :: (v_Vuna_dFmt_djoinSections rest))
+  | _ -> vuna_fail "lib/Vuna/Fmt.vuna" 626 1 ("no matching clause for Vuna.Fmt.joinSections")
 
 let rec v_Vuna_dTypedCodegen_dconcatFlatten = fun e -> (match e with
   | C_Vuna_dAst_dEApp (C_Vuna_dAst_dEVar ("++", _), (a) :: ((b) :: ([])), _) -> v_Vuna_dList_dappend (v_Vuna_dTypedCodegen_dconcatFlatten
     a) (v_Vuna_dTypedCodegen_dconcatFlatten b)
   | _ -> (e) :: ([])
-  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 334 3 ("case pattern match failure"))
+  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 370 3 ("case pattern match failure"))
 
 let rec v_Vuna_dTypecheck_dpatVarsTy = fun a0 a1 -> match (a0, a1) with
   | (C_Vuna_dAst_dPVar (n, _), ty) -> (C_Vuna_dPair_dPair (n, ty)) :: ([])
@@ -3131,7 +3357,7 @@ let rec v_Vuna_dCodegen_dallCtors = fun a0 -> match a0 with
 let rec v_Vuna_dList_dreverseOnto = fun a0 a1 -> match (a0, a1) with
   | ([], acc) -> acc
   | ((x) :: (xs), acc) -> v_Vuna_dList_dreverseOnto xs ((x) :: (acc))
-  | _ -> vuna_fail "stdlib/Vuna/List.vuna" 20 1 ("no matching clause for Vuna.List.reverseOnto")
+  | _ -> vuna_fail "stdlib/lib/Vuna/List.vuna" 20 1 ("no matching clause for Vuna.List.reverseOnto")
 
 let v_Vuna_dList_dreverse = fun xs -> v_Vuna_dList_dreverseOnto xs []
 
@@ -3149,7 +3375,7 @@ let v_Vuna_dBase_dsplitLastDot = fun parts -> (match v_Vuna_dList_dreverse parts
 let rec v_Vuna_dList_dlength = fun a0 -> match a0 with
   | ([]) -> 0
   | ((x) :: (xs)) -> bi_add 1 (v_Vuna_dList_dlength xs)
-  | _ -> vuna_fail "stdlib/Vuna/List.vuna" 27 1 ("no matching clause for Vuna.List.length")
+  | _ -> vuna_fail "stdlib/lib/Vuna/List.vuna" 27 1 ("no matching clause for Vuna.List.length")
 
 let rec v_Vuna_dTypecheck_dtotalConstraints = fun a0 -> match a0 with
   | ([]) -> 0
@@ -3160,7 +3386,93 @@ let rec v_Vuna_dTypecheck_dtotalConstraints = fun a0 -> match a0 with
 let rec v_Vuna_dList_dmap = fun a0 a1 -> match (a0, a1) with
   | (f, []) -> []
   | (f, (x) :: (xs)) -> (f x) :: (v_Vuna_dList_dmap f xs)
-  | _ -> vuna_fail "stdlib/Vuna/List.vuna" 31 1 ("no matching clause for Vuna.List.map")
+  | _ -> vuna_fail "stdlib/lib/Vuna/List.vuna" 31 1 ("no matching clause for Vuna.List.map")
+
+let rec v_Vuna_dDoc_drenderTy = fun ty -> (match ty with
+  | C_Vuna_dAst_dEVar (name, sp) -> name
+  | C_Vuna_dAst_dEApp (C_Vuna_dAst_dEVar ("->", _), (a) :: ((b) :: ([])), _) -> (let vuna_cat0' = (v_Vuna_dDoc_drenderTyArg
+      a) in
+    (let vuna_cat1' = (" -> ") in
+      (let vuna_cat2' = (v_Vuna_dDoc_drenderTy b) in
+        String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'])))
+  | _ -> v_Vuna_dDoc_drenderTyPlain ty
+  | _ -> vuna_fail "lib/Vuna/Doc.vuna" 96 3 ("case pattern match failure"))
+and v_Vuna_dDoc_drenderTyPlain = fun ty -> (match ty with
+  | C_Vuna_dAst_dEApp (f, args, sp) -> (let vuna_cat0' = (v_Vuna_dDoc_drenderTyAtom f) in
+    (let vuna_cat1' = (" ") in
+      (let vuna_cat2' = (v_Vuna_dString_djoin " " (v_Vuna_dList_dmap v_Vuna_dDoc_drenderTyArg args))
+        in
+        String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'])))
+  | C_Vuna_dAst_dEInt (n, sp) -> bi_str_from_int n
+  | C_Vuna_dAst_dEStr (s, sp) -> (let vuna_cat0' = ("\"") in
+    (let vuna_cat1' = (s) in
+      (let vuna_cat2' = ("\"") in
+        String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'])))
+  | _ -> "_"
+  | _ -> vuna_fail "lib/Vuna/Doc.vuna" 102 3 ("case pattern match failure"))
+and v_Vuna_dDoc_drenderTyArg = fun ty -> (match ty with
+  | C_Vuna_dAst_dEVar (name, sp) -> name
+  | C_Vuna_dAst_dEApp (C_Vuna_dAst_dEVar ("->", _), (a) :: ((b) :: ([])), _) -> (let vuna_cat0' = ("(")
+    in
+    (let vuna_cat1' = (v_Vuna_dDoc_drenderTy ty) in
+      (let vuna_cat2' = (")") in
+        String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'])))
+  | _ -> (let vuna_cat0' = ("(") in
+    (let vuna_cat1' = (v_Vuna_dDoc_drenderTy ty) in
+      (let vuna_cat2' = (")") in
+        String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'])))
+  | _ -> vuna_fail "lib/Vuna/Doc.vuna" 109 3 ("case pattern match failure"))
+and v_Vuna_dDoc_drenderTyAtom = fun ty -> (match ty with
+  | C_Vuna_dAst_dEVar (name, sp) -> name
+  | _ -> (let vuna_cat0' = ("(") in
+    (let vuna_cat1' = (v_Vuna_dDoc_drenderTy ty) in
+      (let vuna_cat2' = (")") in
+        String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'])))
+  | _ -> vuna_fail "lib/Vuna/Doc.vuna" 115 3 ("case pattern match failure"))
+
+let v_Vuna_dDoc_dctorLine = fun a0 -> match a0 with
+  | (C_Vuna_dAst_dCtor (name, ty, arity, sp)) -> (let vuna_cat0' = ("  ") in
+  (let vuna_cat1' = (name) in
+    (let vuna_cat2' = (" : ") in
+      (let vuna_cat3' = (v_Vuna_dDoc_drenderTy ty) in
+        String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'; vuna_cat3']))))
+  | _ -> vuna_fail "lib/Vuna/Doc.vuna" 83 1 ("no matching clause for Vuna.Doc.ctorLine")
+
+let v_Vuna_dDoc_dfieldLine = fun a0 -> match a0 with
+  | (C_Vuna_dAst_dField (name, ty, sp)) -> (let vuna_cat0' = ("  ") in
+  (let vuna_cat1' = (name) in
+    (let vuna_cat2' = (" : ") in
+      (let vuna_cat3' = (v_Vuna_dDoc_drenderTy ty) in
+        String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'; vuna_cat3']))))
+  | _ -> vuna_fail "lib/Vuna/Doc.vuna" 85 1 ("no matching clause for Vuna.Doc.fieldLine")
+
+let v_Vuna_dDoc_dmethodLine = fun a0 -> match a0 with
+  | (C_Vuna_dPair_dPair (name, ty)) -> (let vuna_cat0' = ("  ") in
+  (let vuna_cat1' = (name) in
+    (let vuna_cat2' = (" : ") in
+      (let vuna_cat3' = (v_Vuna_dDoc_drenderTy ty) in
+        String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'; vuna_cat3']))))
+  | _ -> vuna_fail "lib/Vuna/Doc.vuna" 87 1 ("no matching clause for Vuna.Doc.methodLine")
+
+let v_Vuna_dFmt_drenderModDecl = fun a0 -> match a0 with
+  | (C_Vuna_dAst_dModDecl (name, explicit, items, sp)) -> if explicit then (let vuna_cat0' = ("module ")
+  in
+  (let vuna_cat1' = (name) in
+    (let vuna_cat2' = (" (") in
+      (let vuna_cat3' = (v_Vuna_dFmt_djoinComma (v_Vuna_dList_dmap v_Vuna_dFmt_drenderExportItem items))
+        in
+        (let vuna_cat4' = (") where") in
+          String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'; vuna_cat3'; vuna_cat4'])))))
+else (let vuna_cat0' = ("module ") in
+  (let vuna_cat1' = (name) in
+    (let vuna_cat2' = (" where") in
+      String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'])))
+  | _ -> vuna_fail "lib/Vuna/Fmt.vuna" 592 1 ("no matching clause for Vuna.Fmt.renderModDecl")
+
+let v_Vuna_dFmt_drenderHeader = fun maybeHeader -> (match maybeHeader with
+  | C_Vuna_dMaybe_dNothing -> []
+  | C_Vuna_dMaybe_dJust (m) -> (v_Vuna_dFmt_drenderModDecl m) :: ([])
+  | _ -> vuna_fail "lib/Vuna/Fmt.vuna" 612 3 ("case pattern match failure"))
 
 let v_Vuna_dTypedCodegen_dchunkNamesOf = fun chunks -> v_Vuna_dList_dmap v_Vuna_dTypedCodegen_dchunkNameOf
 chunks
@@ -3238,22 +3550,35 @@ let rec v_Vuna_dList_dfilter = fun a0 a1 -> match (a0, a1) with
   | (p, []) -> []
   | (p, (x) :: (xs)) -> if p x then (x) :: (v_Vuna_dList_dfilter p xs)
 else v_Vuna_dList_dfilter p xs
-  | _ -> vuna_fail "stdlib/Vuna/List.vuna" 35 1 ("no matching clause for Vuna.List.filter")
+  | _ -> vuna_fail "stdlib/lib/Vuna/List.vuna" 35 1 ("no matching clause for Vuna.List.filter")
 
 let rec v_Vuna_dList_dfoldl = fun a0 a1 a2 -> match (a0, a1, a2) with
   | (f, acc, []) -> acc
   | (f, acc, (x) :: (xs)) -> v_Vuna_dList_dfoldl f (f acc x) xs
-  | _ -> vuna_fail "stdlib/Vuna/List.vuna" 40 1 ("no matching clause for Vuna.List.foldl")
+  | _ -> vuna_fail "stdlib/lib/Vuna/List.vuna" 40 1 ("no matching clause for Vuna.List.foldl")
 
 let rec v_Vuna_dList_dfoldr = fun a0 a1 a2 -> match (a0, a1, a2) with
   | (f, acc, []) -> acc
   | (f, acc, (x) :: (xs)) -> f x (v_Vuna_dList_dfoldr f acc xs)
-  | _ -> vuna_fail "stdlib/Vuna/List.vuna" 44 1 ("no matching clause for Vuna.List.foldr")
+  | _ -> vuna_fail "stdlib/lib/Vuna/List.vuna" 44 1 ("no matching clause for Vuna.List.foldr")
 
 let rec v_Vuna_dList_dconcatMap = fun a0 a1 -> match (a0, a1) with
   | (f, []) -> []
   | (f, (x) :: (rest)) -> v_Vuna_dList_dappend (f x) (v_Vuna_dList_dconcatMap f rest)
-  | _ -> vuna_fail "stdlib/Vuna/List.vuna" 48 1 ("no matching clause for Vuna.List.concatMap")
+  | _ -> vuna_fail "stdlib/lib/Vuna/List.vuna" 48 1 ("no matching clause for Vuna.List.concatMap")
+
+let rec v_Vuna_dFiles_dcollectSourceFiles = fun dir -> v_Vuna_dList_dconcatMap (v_Vuna_dFiles_dwalkAny
+  dir) (bi_read_dir dir)
+and v_Vuna_dFiles_dwalkAny = fun dir name -> (match name with
+  | "." -> []
+  | ".." -> []
+  | _ -> (let path = (let vuna_cat0' = (dir) in
+      (let vuna_cat1' = ("/") in
+        (let vuna_cat2' = (name) in
+          String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2']))) in
+    if bi_is_directory path then v_Vuna_dFiles_dcollectSourceFiles path
+    else (path) :: ([]))
+  | _ -> vuna_fail "lib/Vuna/Files.vuna" 27 3 ("case pattern match failure"))
 
 let rec v_Vuna_dTypedCodegen_dpatVars = fun pat -> (match pat with
   | C_Vuna_dAst_dPWild (_) -> []
@@ -3261,7 +3586,7 @@ let rec v_Vuna_dTypedCodegen_dpatVars = fun pat -> (match pat with
   | C_Vuna_dAst_dPInt (n, _) -> []
   | C_Vuna_dAst_dPStr (s, _) -> []
   | C_Vuna_dAst_dPCon (name, pats, _) -> v_Vuna_dList_dconcatMap v_Vuna_dTypedCodegen_dpatVars pats
-  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 287 3 ("case pattern match failure"))
+  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 323 3 ("case pattern match failure"))
 
 let rec v_Vuna_dTypecheck_dpatVarNames = fun p -> (match p with
   | C_Vuna_dAst_dPVar (n, _) -> (n) :: ([])
@@ -3295,40 +3620,40 @@ let rec v_Vuna_dList_dzip = fun a0 a1 -> match (a0, a1) with
   | ([], ys) -> []
   | (xs, []) -> []
   | ((x) :: (xs), (y) :: (ys)) -> (C_Vuna_dPair_dPair (x, y)) :: (v_Vuna_dList_dzip xs ys)
-  | _ -> vuna_fail "stdlib/Vuna/List.vuna" 68 1 ("no matching clause for Vuna.List.zip")
+  | _ -> vuna_fail "stdlib/lib/Vuna/List.vuna" 68 1 ("no matching clause for Vuna.List.zip")
 
 let rec v_Vuna_dList_dmapMaybe = fun a0 a1 -> match (a0, a1) with
   | (f, []) -> []
   | (f, (x) :: (xs)) -> (match f x with
   | C_Vuna_dMaybe_dNothing -> v_Vuna_dList_dmapMaybe f xs
   | C_Vuna_dMaybe_dJust (y) -> (y) :: (v_Vuna_dList_dmapMaybe f xs)
-  | _ -> vuna_fail "stdlib/Vuna/List.vuna" 86 3 ("case pattern match failure"))
-  | _ -> vuna_fail "stdlib/Vuna/List.vuna" 84 1 ("no matching clause for Vuna.List.mapMaybe")
+  | _ -> vuna_fail "stdlib/lib/Vuna/List.vuna" 86 3 ("case pattern match failure"))
+  | _ -> vuna_fail "stdlib/lib/Vuna/List.vuna" 84 1 ("no matching clause for Vuna.List.mapMaybe")
 
 let v_Vuna_dMaybe_dfromMaybe = fun d m -> (match m with
   | C_Vuna_dMaybe_dNothing -> d
   | C_Vuna_dMaybe_dJust (x) -> x
-  | _ -> vuna_fail "stdlib/Vuna/Maybe.vuna" 16 3 ("case pattern match failure"))
+  | _ -> vuna_fail "stdlib/lib/Vuna/Maybe.vuna" 16 3 ("case pattern match failure"))
 
 let v_Vuna_dMaybe_disJust = fun m -> (match m with
   | C_Vuna_dMaybe_dNothing -> false
   | C_Vuna_dMaybe_dJust (_) -> true
-  | _ -> vuna_fail "stdlib/Vuna/Maybe.vuna" 22 3 ("case pattern match failure"))
+  | _ -> vuna_fail "stdlib/lib/Vuna/Maybe.vuna" 22 3 ("case pattern match failure"))
 
 let v_Vuna_dMaybe_disNothing = fun m -> (match m with
   | C_Vuna_dMaybe_dNothing -> true
   | C_Vuna_dMaybe_dJust (_) -> false
-  | _ -> vuna_fail "stdlib/Vuna/Maybe.vuna" 28 3 ("case pattern match failure"))
+  | _ -> vuna_fail "stdlib/lib/Vuna/Maybe.vuna" 28 3 ("case pattern match failure"))
 
 let v_Vuna_dMaybe_dmaybe = fun d f m -> (match m with
   | C_Vuna_dMaybe_dNothing -> d
   | C_Vuna_dMaybe_dJust (x) -> f x
-  | _ -> vuna_fail "stdlib/Vuna/Maybe.vuna" 34 3 ("case pattern match failure"))
+  | _ -> vuna_fail "stdlib/lib/Vuna/Maybe.vuna" 34 3 ("case pattern match failure"))
 
 let v_Vuna_dMaybe_dmapJust = fun f m -> (match m with
   | C_Vuna_dMaybe_dNothing -> C_Vuna_dMaybe_dNothing
   | C_Vuna_dMaybe_dJust (x) -> C_Vuna_dMaybe_dJust (f x)
-  | _ -> vuna_fail "stdlib/Vuna/Maybe.vuna" 40 3 ("case pattern match failure"))
+  | _ -> vuna_fail "stdlib/lib/Vuna/Maybe.vuna" 40 3 ("case pattern match failure"))
 
 let v_Vuna_dBool_dnot = fun b -> if b then false
 else true
@@ -3347,7 +3672,7 @@ else ifFalse
 
 let v_Vuna_dPair_dfirstOf = fun a0 -> match a0 with
   | (C_Vuna_dPair_dPair (a, b)) -> a
-  | _ -> vuna_fail "stdlib/Vuna/Pair.vuna" 9 1 ("no matching clause for Vuna.Pair.firstOf")
+  | _ -> vuna_fail "stdlib/lib/Vuna/Pair.vuna" 9 1 ("no matching clause for Vuna.Pair.firstOf")
 
 let v_Vuna_dAst_ddeclNames = fun d -> (match d with
   | C_Vuna_dAst_dDFun (name, pats, body, _) -> (name) :: ([])
@@ -3376,7 +3701,7 @@ let v_Vuna_dAst_dctorsOf = fun decls -> v_Vuna_dList_dconcatMap v_Vuna_dAst_d_ud
 
 let v_Vuna_dPair_dsecondOf = fun a0 -> match a0 with
   | (C_Vuna_dPair_dPair (a, b)) -> b
-  | _ -> vuna_fail "stdlib/Vuna/Pair.vuna" 12 1 ("no matching clause for Vuna.Pair.secondOf")
+  | _ -> vuna_fail "stdlib/lib/Vuna/Pair.vuna" 12 1 ("no matching clause for Vuna.Pair.secondOf")
 
 let v_Vuna_dTypedCodegen_druntimeCodeTyped = fun () -> (("\n") ^ (v_Vuna_dTypedCodegen_djoinWith "" (v_Vuna_dList_dmap
       v_Vuna_dPair_dsecondOf v_Vuna_dTypedCodegen_druntimePrelude)))
@@ -3392,14 +3717,14 @@ let v_vuna_uinst_ud_uVuna_uList_uList_ubind = fun xs f -> v_Vuna_dList_dconcatMa
 let v_vuna_uinst_ud_uVuna_uMaybe_uMaybe_ufmap = fun f m -> (match m with
   | C_Vuna_dMaybe_dNothing -> C_Vuna_dMaybe_dNothing
   | C_Vuna_dMaybe_dJust (x) -> C_Vuna_dMaybe_dJust (f x)
-  | _ -> vuna_fail "stdlib/Vuna/Maybe.vuna" 48 5 ("case pattern match failure"))
+  | _ -> vuna_fail "stdlib/lib/Vuna/Maybe.vuna" 48 5 ("case pattern match failure"))
 
 let v_vuna_uinst_ud_uVuna_uMaybe_uMaybe_upure = fun x -> C_Vuna_dMaybe_dJust (x)
 
 let v_vuna_uinst_ud_uVuna_uMaybe_uMaybe_ubind = fun m f -> (match m with
   | C_Vuna_dMaybe_dNothing -> C_Vuna_dMaybe_dNothing
   | C_Vuna_dMaybe_dJust (x) -> f x
-  | _ -> vuna_fail "stdlib/Vuna/Maybe.vuna" 54 5 ("case pattern match failure"))
+  | _ -> vuna_fail "stdlib/lib/Vuna/Maybe.vuna" 54 5 ("case pattern match failure"))
 
 let v_vuna_ushow_uint = fun n -> bi_str_from_int n
 
@@ -3485,11 +3810,76 @@ else v_Vuna_dLint_dfilterTokLine rest n
 
 let v_Vuna_dLint_dtokensOnLine = fun toks n -> v_Vuna_dLint_dfilterTokLine toks n
 
+let v_Vuna_dDoc_disPrivate = fun name -> (match bi_str_unpack name with
+  | (c) :: (rest) -> v_vuna_ueq_uint c 95
+  | [] -> false
+  | _ -> vuna_fail "lib/Vuna/Doc.vuna" 90 3 ("case pattern match failure"))
+
+let v_Vuna_dDoc_ddeclLinesOf = fun d -> (match d with
+  | C_Vuna_dAst_dDData (name, params, ctors, derivings, sp) -> if v_Vuna_dDoc_disPrivate name then []
+
+  else v_Vuna_dList_dappend (((let vuna_cat0' = ("data ") in
+        (let vuna_cat1' = (name) in
+          (let vuna_cat2' = (v_Vuna_dDoc_dparamSuffix params) in
+            (let vuna_cat3' = (" : Type where") in
+              String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'; vuna_cat3']))))) :: (v_Vuna_dList_dmap
+      v_Vuna_dDoc_dctorLine ctors)) (v_Vuna_dDoc_dderivingLines derivings)
+  | C_Vuna_dAst_dDRecord (name, params, fields, derivings, sp) -> if v_Vuna_dDoc_disPrivate name then
+  []
+  else v_Vuna_dList_dappend (((let vuna_cat0' = ("record ") in
+        (let vuna_cat1' = (name) in
+          (let vuna_cat2' = (v_Vuna_dDoc_dparamSuffix params) in
+            (let vuna_cat3' = (" where") in
+              String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'; vuna_cat3']))))) :: (v_Vuna_dList_dmap
+      v_Vuna_dDoc_dfieldLine fields)) (v_Vuna_dDoc_dderivingLines derivings)
+  | C_Vuna_dAst_dDTrait (name, params, methods, sp) -> if v_Vuna_dDoc_disPrivate name then []
+  else ((let vuna_cat0' = ("trait ") in
+      (let vuna_cat1' = (name) in
+        (let vuna_cat2' = (v_Vuna_dDoc_dparamSuffix params) in
+          (let vuna_cat3' = (" where") in
+            String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'; vuna_cat3']))))) :: (v_Vuna_dList_dmap
+    v_Vuna_dDoc_dmethodLine methods)
+  | C_Vuna_dAst_dDSig (name, ty, sp) -> if v_Vuna_dDoc_disPrivate name then []
+  else ("") :: (((let vuna_cat0' = (name) in
+        (let vuna_cat1' = (" : ") in
+          (let vuna_cat2' = (v_Vuna_dDoc_drenderTy ty) in
+            String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'])))) :: ([]))
+  | _ -> []
+  | _ -> vuna_fail "lib/Vuna/Doc.vuna" 55 3 ("case pattern match failure"))
+
+let v_Vuna_dDoc_ddeclLines = fun decls -> v_Vuna_dList_dconcatMap v_Vuna_dDoc_ddeclLinesOf decls
+
+let rec v_Vuna_dFiles_dsplitPathChars = fun a0 a1 -> match (a0, a1) with
+  | ([], acc) -> (let chars = v_Vuna_dList_dreverse acc in
+  C_Vuna_dPair_dPair ("", bi_str_pack chars))
+  | ((c) :: (rest), acc) -> if v_vuna_ueq_uint c 47 then C_Vuna_dPair_dPair (bi_str_pack (v_Vuna_dList_dreverse
+    acc), bi_str_pack rest)
+else v_Vuna_dFiles_dsplitPathChars rest ((c) :: (acc))
+  | _ -> vuna_fail "lib/Vuna/Files.vuna" 40 1 ("no matching clause for Vuna.Files.splitPathChars")
+
+let v_Vuna_dFiles_dsplitPath = fun path -> v_Vuna_dFiles_dsplitPathChars (bi_str_unpack path) []
+
+let v_Vuna_dFiles_dbaseName = fun path -> v_Vuna_dPair_dsecondOf (v_Vuna_dFiles_dsplitPath path)
+
+let v_Vuna_dFmt_descapeChar = fun c -> if v_vuna_ueq_uint c 34 then bi_str_pack ((92) :: ((34) :: ([])))
+
+else if v_vuna_ueq_uint c 92 then bi_str_pack ((92) :: ((92) :: ([])))
+else if v_vuna_ueq_uint c 10 then bi_str_pack ((92) :: ((110) :: ([])))
+else if v_vuna_ueq_uint c 9 then bi_str_pack ((92) :: ((116) :: ([])))
+else if v_vuna_ueq_uint c 13 then bi_str_pack ((92) :: ((114) :: ([])))
+else bi_str_pack ((c) :: ([]))
+
+let v_Vuna_dFmt_drenderStr = fun s -> (let vuna_cat0' = (bi_str_pack ((34) :: ([]))) in
+  (let vuna_cat1' = (v_Vuna_dFmt_dconcatStrings (v_Vuna_dList_dmap v_Vuna_dFmt_descapeChar (bi_str_unpack
+          s))) in
+    (let vuna_cat2' = (bi_str_pack ((34) :: ([]))) in
+      String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'])))
+
 let rec v_Vuna_dTypedCodegen_dtrimTrailing = fun a0 -> match a0 with
   | ([]) -> []
   | ((c) :: (rest)) -> if v_vuna_ueq_uint c 32 then v_Vuna_dTypedCodegen_dtrimTrailing rest
 else (c) :: (rest)
-  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 985 1 ("no matching clause for Vuna.TypedCodegen.trimTrailing")
+  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 1021 1 ("no matching clause for Vuna.TypedCodegen.trimTrailing")
 
 let rec v_Vuna_dTypecheck_dnthNameAt = fun a0 a1 -> match (a0, a1) with
   | (i, []) -> ""
@@ -3617,10 +4007,15 @@ let v_Vuna_dTypedCodegen_dgenShowBody = fun pmap params name arms -> (match v_Vu
                   vuna_cat6']))))))))
   | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 240 3 ("case pattern match failure"))
 
+let v_Vuna_dTypedCodegen_dshowDeclFnName = fun d -> (match d with
+  | C_Vuna_dAst_dDData (name, params, ctors, derivings, sp) -> v_Vuna_dTypedCodegen_dshowNameOf name
+  | _ -> ""
+  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 255 3 ("case pattern match failure"))
+
 let v_Vuna_dTypedCodegen_dpatParam = fun p -> (match p with
   | C_Vuna_dAst_dPVar (name, _) -> v_Vuna_dCodegen_dsanitizeName name
   | _ -> "_"
-  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 621 3 ("case pattern match failure"))
+  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 657 3 ("case pattern match failure"))
 
 let v_Vuna_dCodegen_dpad3 = fun s -> if v_vuna_ueq_uint (bi_str_length s) 1 then (("00") ^ (s))
 else if v_vuna_ueq_uint (bi_str_length s) 2 then (("0") ^ (s))
@@ -3749,7 +4144,7 @@ else if v_vuna_ueq_uint c 10 then (("\\n") ^ (v_Vuna_dEval_dshowStringChars rest
 else if v_vuna_ueq_uint c 9 then (("\\t") ^ (v_Vuna_dEval_dshowStringChars rest))
 else if v_vuna_ueq_uint c 13 then (("\\r") ^ (v_Vuna_dEval_dshowStringChars rest))
 else ((bi_str_pack ((c) :: ([]))) ^ (v_Vuna_dEval_dshowStringChars rest))
-  | _ -> vuna_fail "lib/Vuna/Eval.vuna" 516 1 ("no matching clause for Vuna.Eval.showStringChars")
+  | _ -> vuna_fail "lib/Vuna/Eval.vuna" 528 1 ("no matching clause for Vuna.Eval.showStringChars")
 
 let v_Vuna_dEval_dshowString = fun s -> (let vuna_cat0' = ("\"") in
   (let vuna_cat1' = (v_Vuna_dEval_dshowStringChars (bi_str_unpack s)) in
@@ -3983,7 +4378,7 @@ let v_Vuna_dCodegen_dctorShort = fun c -> v_Vuna_dCodegen_dlastSegment (v_Vuna_d
 let v_Vuna_dEval_ddisplayName = fun name -> (match v_Vuna_dBase_dsplitLastDot (v_Vuna_dBase_dsplitOnDot
     name) with
   | C_Vuna_dPair_dPair (revPrefix, base) -> base
-  | _ -> vuna_fail "lib/Vuna/Eval.vuna" 497 3 ("case pattern match failure"))
+  | _ -> vuna_fail "lib/Vuna/Eval.vuna" 509 3 ("case pattern match failure"))
 
 let rec v_Vuna_dEval_dshowValue = fun v -> (match v with
   | C_Vuna_dEval_dVInt (n) -> bi_str_from_int n
@@ -4004,7 +4399,7 @@ let rec v_Vuna_dEval_dshowValue = fun v -> (match v with
     (let vuna_cat1' = (name) in
       (let vuna_cat2' = (">") in
         String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'])))
-  | _ -> vuna_fail "lib/Vuna/Eval.vuna" 501 3 ("case pattern match failure"))
+  | _ -> vuna_fail "lib/Vuna/Eval.vuna" 513 3 ("case pattern match failure"))
 and v_Vuna_dEval_dshowValues = fun a0 -> match a0 with
   | ([]) -> ""
   | ((v) :: ([])) -> v_Vuna_dEval_dshowValue v
@@ -4012,7 +4407,7 @@ and v_Vuna_dEval_dshowValues = fun a0 -> match a0 with
   (let vuna_cat1' = (" ") in
     (let vuna_cat2' = (v_Vuna_dEval_dshowValues rest) in
       String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'])))
-  | _ -> vuna_fail "lib/Vuna/Eval.vuna" 510 1 ("no matching clause for Vuna.Eval.showValues")
+  | _ -> vuna_fail "lib/Vuna/Eval.vuna" 522 1 ("no matching clause for Vuna.Eval.showValues")
 
 let v_Vuna_dLoader_dmodulePath = fun root name -> (let vuna_cat0' = (v_Vuna_dPkg_drootDir root) in
   (let vuna_cat1' = ("/") in
@@ -4037,7 +4432,7 @@ let rec v_Vuna_dString_d_udropSpace = fun a0 -> match a0 with
   | ([]) -> []
   | ((c) :: (rest)) -> if v_Vuna_dString_d_uisSpace c then v_Vuna_dString_d_udropSpace rest
 else (c) :: (rest)
-  | _ -> vuna_fail "stdlib/Vuna/String.vuna" 69 1 ("no matching clause for Vuna.String._dropSpace")
+  | _ -> vuna_fail "stdlib/lib/Vuna/String.vuna" 69 1 ("no matching clause for Vuna.String._dropSpace")
 
 let v_Vuna_dString_dtrimLeft = fun s -> bi_str_pack (v_Vuna_dString_d_udropSpace (bi_str_unpack s))
 
@@ -4052,8 +4447,8 @@ let rec v_Vuna_dString_d_ustartsWithChars = fun a0 a1 -> match (a0, a1) with
   | [] -> false
   | (t) :: (trest) -> if v_vuna_ueq_uint p t then v_Vuna_dString_d_ustartsWithChars prest trest
   else false
-  | _ -> vuna_fail "stdlib/Vuna/String.vuna" 75 3 ("case pattern match failure"))
-  | _ -> vuna_fail "stdlib/Vuna/String.vuna" 73 1 ("no matching clause for Vuna.String._startsWithChars")
+  | _ -> vuna_fail "stdlib/lib/Vuna/String.vuna" 75 3 ("case pattern match failure"))
+  | _ -> vuna_fail "stdlib/lib/Vuna/String.vuna" 73 1 ("no matching clause for Vuna.String._startsWithChars")
 
 let v_Vuna_dString_dstartsWith = fun prefix text -> v_Vuna_dString_d_ustartsWithChars (bi_str_unpack prefix)
 (bi_str_unpack text)
@@ -4065,7 +4460,7 @@ text then true
 else (match text with
   | [] -> false
   | (c) :: (rest) -> v_Vuna_dString_d_ucontainsChars needle rest
-  | _ -> vuna_fail "stdlib/Vuna/String.vuna" 83 5 ("case pattern match failure"))
+  | _ -> vuna_fail "stdlib/lib/Vuna/String.vuna" 83 5 ("case pattern match failure"))
 
 let v_Vuna_dString_dcontains = fun needle text -> v_Vuna_dString_d_ucontainsChars (bi_str_unpack needle)
 (bi_str_unpack text)
@@ -4077,6 +4472,16 @@ let v_vuna_ueq_ubool = fun a b -> bi_eq_bool a b
 let v_vuna_uneq_ubool = fun a b -> bi_neq_bool a b
 
 let v_vuna_ueq_ustr = fun a b -> bi_eq_str a b
+
+let v_Vuna_dCli_ddefaultOut = fun dir out -> (match out with
+  | C_Vuna_dMaybe_dJust (out2) -> out2
+  | C_Vuna_dMaybe_dNothing -> (let dir2 = v_Vuna_dCli_ddefaultDir dir in
+    if v_vuna_ueq_ustr dir2 "." then "Main.ml"
+    else ((dir2) ^ ("/Main.ml")))
+  | _ -> vuna_fail "lib/Vuna/Cli.vuna" 171 3 ("case pattern match failure"))
+
+let v_Vuna_dCli_ddocDefaultOut = fun dir -> if v_vuna_ueq_ustr dir "." then "docs/api.md"
+else ((dir) ^ ("/docs/api.md"))
 
 let v_Vuna_dLint_dtokIsKw = fun tok key -> (match tok with
   | C_Vuna_dLexer_dPTok (C_Vuna_dLexer_dTKw (x), p) -> v_vuna_ueq_ustr x key
@@ -4178,6 +4583,111 @@ else (match v_Vuna_dLint_daltHeadPatterns headToks with
   | C_Vuna_dMaybe_dJust (pats) -> C_Vuna_dMaybe_dJust (C_Vuna_dPair_dPair ("", pats))
   | _ -> vuna_fail "lib/Vuna/Lint.vuna" 655 5 ("case pattern match failure"))
 
+let rec v_Vuna_dFmt_dpatListElemsOf = fun name pats -> if v_vuna_ueq_ustr name "Nil" then if v_Vuna_dFmt_disNilList
+pats then C_Vuna_dMaybe_dJust ([])
+else C_Vuna_dMaybe_dNothing
+else if v_vuna_ueq_ustr name "Cons" then (match pats with
+  | (a) :: ((rest) :: ([])) -> (match v_Vuna_dFmt_dpatListElems rest with
+  | C_Vuna_dMaybe_dJust (elems) -> C_Vuna_dMaybe_dJust ((a) :: (elems))
+  | C_Vuna_dMaybe_dNothing -> C_Vuna_dMaybe_dNothing
+  | _ -> vuna_fail "lib/Vuna/Fmt.vuna" 95 9 ("case pattern match failure"))
+  | _ -> C_Vuna_dMaybe_dNothing
+  | _ -> vuna_fail "lib/Vuna/Fmt.vuna" 93 5 ("case pattern match failure"))
+else C_Vuna_dMaybe_dNothing
+and v_Vuna_dFmt_dpatListElems = fun pat -> (match pat with
+  | C_Vuna_dAst_dPCon (name, pats, sp) -> v_Vuna_dFmt_dpatListElemsOf name pats
+  | _ -> C_Vuna_dMaybe_dNothing
+  | _ -> vuna_fail "lib/Vuna/Fmt.vuna" 102 3 ("case pattern match failure"))
+
+let rec v_Vuna_dFmt_drenderPat = fun pat -> (match pat with
+  | C_Vuna_dAst_dPVar (name, sp) -> name
+  | C_Vuna_dAst_dPWild (sp) -> "_"
+  | C_Vuna_dAst_dPInt (n, sp) -> bi_str_from_int n
+  | C_Vuna_dAst_dPStr (s, sp) -> v_Vuna_dFmt_drenderStr s
+  | C_Vuna_dAst_dPCon (name, pats, sp) -> v_Vuna_dFmt_drenderConPat name pats
+  | C_Vuna_dAst_dPRecord (name, fields, sp) -> v_Vuna_dFmt_drenderRecPat name fields
+  | _ -> vuna_fail "lib/Vuna/Fmt.vuna" 107 3 ("case pattern match failure"))
+and v_Vuna_dFmt_drenderConPat = fun name pats -> (match v_Vuna_dFmt_dpatListElemsOf name pats with
+  | C_Vuna_dMaybe_dJust (elems) -> (let vuna_cat0' = ("[") in
+    (let vuna_cat1' = (v_Vuna_dFmt_djoinComma (v_Vuna_dList_dmap v_Vuna_dFmt_drenderPat elems)) in
+      (let vuna_cat2' = ("]") in
+        String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'])))
+  | C_Vuna_dMaybe_dNothing -> if v_vuna_ueq_ustr name "Cons" then v_Vuna_dFmt_drenderConsPat pats
+  else if (if (v_vuna_ueq_ustr name "Nil") then (v_Vuna_dFmt_disNilList pats)
+    else false) then "[]"
+  else if v_Vuna_dFmt_disNilList pats then name
+  else ((name) ^ (v_Vuna_dFmt_djoinSpace (v_Vuna_dList_dmap v_Vuna_dFmt_drenderPatAtom pats)))
+  | _ -> vuna_fail "lib/Vuna/Fmt.vuna" 116 3 ("case pattern match failure"))
+and v_Vuna_dFmt_drenderConsPat = fun pats -> (match pats with
+  | (a) :: ((b) :: ([])) -> (let vuna_cat0' = (v_Vuna_dFmt_drenderPatAtom a) in
+    (let vuna_cat1' = (" :: ") in
+      (let vuna_cat2' = (v_Vuna_dFmt_drenderPatConsTail b) in
+        String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'])))
+  | _ -> (("Cons") ^ (v_Vuna_dFmt_djoinSpace (v_Vuna_dList_dmap v_Vuna_dFmt_drenderPatAtom pats)))
+  | _ -> vuna_fail "lib/Vuna/Fmt.vuna" 125 3 ("case pattern match failure"))
+and v_Vuna_dFmt_drenderPatConsTail = fun pat -> (match pat with
+  | C_Vuna_dAst_dPCon (name, pats, sp) -> if v_vuna_ueq_ustr name "Cons" then (match pats with
+  | (a) :: ((b) :: ([])) -> (let vuna_cat0' = (v_Vuna_dFmt_drenderPatAtom a) in
+      (let vuna_cat1' = (" :: ") in
+        (let vuna_cat2' = (v_Vuna_dFmt_drenderPatConsTail b) in
+          String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'])))
+  | _ -> v_Vuna_dFmt_drenderPatAtom pat
+  | _ -> vuna_fail "lib/Vuna/Fmt.vuna" 133 9 ("case pattern match failure"))
+  else v_Vuna_dFmt_drenderPatAtom pat
+  | _ -> v_Vuna_dFmt_drenderPatAtom pat
+  | _ -> vuna_fail "lib/Vuna/Fmt.vuna" 130 3 ("case pattern match failure"))
+and v_Vuna_dFmt_drenderPatAtom = fun pat -> (match pat with
+  | C_Vuna_dAst_dPVar (name, sp) -> name
+  | C_Vuna_dAst_dPWild (sp) -> "_"
+  | C_Vuna_dAst_dPInt (n, sp) -> bi_str_from_int n
+  | C_Vuna_dAst_dPStr (s, sp) -> v_Vuna_dFmt_drenderStr s
+  | C_Vuna_dAst_dPCon (name, [], sp) -> if v_vuna_ueq_ustr name "Nil" then "[]"
+  else name
+  | C_Vuna_dAst_dPCon (name, pats, sp) -> (let vuna_cat0' = ("(") in
+    (let vuna_cat1' = (v_Vuna_dFmt_drenderConPat name pats) in
+      (let vuna_cat2' = (")") in
+        String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'])))
+  | C_Vuna_dAst_dPRecord (name, fields, sp) -> (let vuna_cat0' = ("(") in
+    (let vuna_cat1' = (v_Vuna_dFmt_drenderRecPat name fields) in
+      (let vuna_cat2' = (")") in
+        String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'])))
+  | _ -> vuna_fail "lib/Vuna/Fmt.vuna" 140 3 ("case pattern match failure"))
+and v_Vuna_dFmt_drenderRecPat = fun name fields -> if v_Vuna_dFmt_disNilList fields then ((name) ^ (" { }"))
+
+else (let vuna_cat0' = (name) in
+  (let vuna_cat1' = (" { ") in
+    (let vuna_cat2' = (v_Vuna_dFmt_djoinComma (v_Vuna_dList_dmap v_Vuna_dFmt_drenderRecPatField fields))
+      in
+      (let vuna_cat3' = (" }") in
+        String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'; vuna_cat3']))))
+and v_Vuna_dFmt_drenderRecPatField = fun a0 -> match a0 with
+  | (C_Vuna_dPair_dPair (fname, pat)) -> (match pat with
+  | C_Vuna_dAst_dPVar (n, sp) -> if v_vuna_ueq_ustr n fname then fname
+  else (let vuna_cat0' = (fname) in
+    (let vuna_cat1' = (" = ") in
+      (let vuna_cat2' = (v_Vuna_dFmt_drenderPat pat) in
+        String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'])))
+  | _ -> (let vuna_cat0' = (fname) in
+    (let vuna_cat1' = (" = ") in
+      (let vuna_cat2' = (v_Vuna_dFmt_drenderPat pat) in
+        String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'])))
+  | _ -> vuna_fail "lib/Vuna/Fmt.vuna" 154 3 ("case pattern match failure"))
+  | _ -> vuna_fail "lib/Vuna/Fmt.vuna" 153 1 ("no matching clause for Vuna.Fmt.renderRecPatField")
+
+let v_Vuna_dFmt_dopText = fun op -> if v_vuna_ueq_ustr op "Cons" then "::"
+else op
+
+let v_Vuna_dFmt_ddeclNamed = fun d n -> (match d with
+  | C_Vuna_dAst_dDFun (m, pats, body, sp) -> v_vuna_ueq_ustr m n
+  | C_Vuna_dAst_dDSig (m, ty, sp) -> v_vuna_ueq_ustr m n
+  | _ -> false
+  | _ -> vuna_fail "lib/Vuna/Fmt.vuna" 583 3 ("case pattern match failure"))
+
+let v_Vuna_dFmt_dattachDecl = fun prev d -> (match d with
+  | C_Vuna_dAst_dDFun (n, pats, body, sp) -> v_Vuna_dFmt_ddeclNamed prev n
+  | _ -> false
+  | _ -> vuna_fail "lib/Vuna/Fmt.vuna" 578 3 ("case pattern match failure"))
+
 let v_Vuna_dTypedCodegen_disBoolName = fun name -> v_vuna_ueq_ustr (v_Vuna_dTypedCodegen_dlastName name)
 "Bool"
 
@@ -4235,20 +4745,23 @@ let rec v_Vuna_dTypedCodegen_dshowForTy = fun decls ty -> (match ty with
                 String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'; vuna_cat3'; vuna_cat4'])))))))
   | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 194 3 ("case pattern match failure"))
 
+let v_Vuna_dTypedCodegen_dshowFnNames = fun decls -> v_Vuna_dList_dmap v_Vuna_dTypedCodegen_dshowDeclFnName
+(v_Vuna_dTypedCodegen_dnonSpecialData decls)
+
 let rec v_Vuna_dTypedCodegen_dfunSpan = fun decls name -> (match decls with
   | [] -> v_Vuna_dTypedCodegen_dnoLocSpan
   | (d) :: (rest) -> (match d with
   | C_Vuna_dAst_dDFun (n, pats, body, sp) -> if v_vuna_ueq_ustr n name then sp
     else v_Vuna_dTypedCodegen_dfunSpan rest name
   | _ -> v_Vuna_dTypedCodegen_dfunSpan rest name
-  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 630 7 ("case pattern match failure"))
-  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 627 3 ("case pattern match failure"))
+  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 666 7 ("case pattern match failure"))
+  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 663 3 ("case pattern match failure"))
 
 let rec v_Vuna_dTypedCodegen_dneighborsOf = fun adj name -> (match adj with
   | [] -> []
   | (C_Vuna_dPair_dPair (n, ns)) :: (rest) -> if v_vuna_ueq_ustr n name then ns
   else v_Vuna_dTypedCodegen_dneighborsOf rest name
-  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 685 3 ("case pattern match failure"))
+  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 721 3 ("case pattern match failure"))
 
 let v_Vuna_dTypecheck_dgenericMethodName = fun tr key -> (match tr with
   | "Eq" -> if v_vuna_ueq_ustr key "neq" then C_Vuna_dMaybe_dJust ("vuna_neq_generic")
@@ -4981,7 +5494,7 @@ let v_Vuna_dParser_dparseExportItem = fun st -> (match v_Vuna_dParser_dpeekTok s
     else C_Vuna_dResult_dOk (C_Vuna_dPair_dPair (C_Vuna_dAst_dXBare (name, v_Vuna_dParser_dspanOf st st1),
         st1)))
   | _ -> C_Vuna_dResult_dErr ("expected an export item")
-  | _ -> vuna_fail "lib/Vuna/Parser.vuna" 221 3 ("case pattern match failure"))
+  | _ -> vuna_fail "lib/Vuna/Parser.vuna" 228 3 ("case pattern match failure"))
 
 let rec v_Vuna_dParser_dparseExportItemsFrom = fun st -> v_Vuna_dResult_dstep (v_Vuna_dParser_dparseExportItem
   st) (fun item st1 -> if v_Vuna_dParser_datSym st1 "," then v_Vuna_dResult_dstep (v_Vuna_dParser_dparseExportItemsFrom
@@ -5114,9 +5627,9 @@ let v_Vuna_dTypedCodegen_dzeroArgBody = fun decls name -> (match v_Vuna_dAst_dfu
   | C_Vuna_dMaybe_dJust (0) -> (match v_Vuna_dAst_dclausesFor decls name with
   | (C_Vuna_dPair_dPair ([], body)) :: ([]) -> C_Vuna_dMaybe_dJust (body)
   | _ -> C_Vuna_dMaybe_dNothing
-  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 352 7 ("case pattern match failure"))
+  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 388 7 ("case pattern match failure"))
   | _ -> C_Vuna_dMaybe_dNothing
-  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 350 3 ("case pattern match failure"))
+  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 386 3 ("case pattern match failure"))
 
 let rec v_Vuna_dAst_dlookupCtorArity = fun name ctors -> (match ctors with
   | [] -> C_Vuna_dMaybe_dNothing
@@ -5179,8 +5692,13 @@ else (match v_Vuna_dPkg_dnormalizeAcc false (v_Vuna_dPkg_dsplitOnSlash path) [] 
 
 let v_Vuna_dPkg_drawRoot = fun dir -> C_Vuna_dPkg_dRoot (v_Vuna_dPkg_dnormalizeDir dir, "", C_Vuna_dMaybe_dNothing)
 
+let v_Vuna_dCli_drootArg = fun roots rest k -> (match rest with
+  | (dir) :: (rest2) -> k (v_Vuna_dList_dappend roots ((v_Vuna_dPkg_drawRoot dir) :: ([]))) rest2
+  | [] -> v_Vuna_dCli_dusageError ()
+  | _ -> vuna_fail "lib/Vuna/Cli.vuna" 82 3 ("case pattern match failure"))
+
 let v_Vuna_dInterp_deffectiveRoots = fun a0 -> match a0 with
-  | ([]) -> (v_Vuna_dPkg_drawRoot "lib") :: ((v_Vuna_dPkg_drawRoot "stdlib") :: ([]))
+  | ([]) -> (v_Vuna_dPkg_drawRoot "lib") :: ((v_Vuna_dPkg_drawRoot "stdlib/lib") :: ([]))
   | (roots) -> roots
   | _ -> vuna_fail "lib/Vuna/Interp.vuna" 27 1 ("no matching clause for Vuna.Interp.effectiveRoots")
 
@@ -5256,6 +5774,12 @@ else v_Vuna_dPkg_dfindManifestUp start parent
 
 let v_Vuna_dPkg_dfindManifestDir = fun startDir -> (let start = v_Vuna_dPkg_dnormalizeDir startDir in
   v_Vuna_dPkg_dfindManifestUp start start)
+
+let v_Vuna_dCli_dfmtDefaultTargets = fun () -> (match v_Vuna_dPkg_dfindManifestDir "." with
+  | C_Vuna_dResult_dErr (e) -> ("lib") :: (("app") :: (("test") :: ([])))
+  | C_Vuna_dResult_dOk (dir) -> (((dir) ^ ("/lib"))) :: ((((dir) ^ ("/app"))) :: ((((dir) ^ ("/test")))
+      :: ([])))
+  | _ -> vuna_fail "lib/Vuna/Cli.vuna" 225 3 ("case pattern match failure"))
 
 let v_Vuna_dManifest_dresolveManifestPath = fun manifest rel -> (let dir = v_Vuna_dManifest_dmanifestDir
   (v_Vuna_dManifest_dmanifestPath manifest) in
@@ -5373,7 +5897,7 @@ let rec v_Vuna_dList_dmemName = fun a0 a1 -> match (a0, a1) with
   | (name, []) -> false
   | (name, (x) :: (rest)) -> if v_vuna_ueq_ustr x name then true
 else v_Vuna_dList_dmemName name rest
-  | _ -> vuna_fail "stdlib/Vuna/List.vuna" 59 1 ("no matching clause for Vuna.List.memName")
+  | _ -> vuna_fail "stdlib/lib/Vuna/List.vuna" 59 1 ("no matching clause for Vuna.List.memName")
 
 let rec v_Vuna_dLint_dintersects = fun a0 a1 -> match (a0, a1) with
   | ([], ys) -> false
@@ -5386,7 +5910,7 @@ let rec v_Vuna_dTypedCodegen_dallPureExpr = fun a0 a1 a2 -> match (a0, a1, a2) w
   | (decls, seen, (e) :: (rest)) -> (if (v_Vuna_dTypedCodegen_dpureExpr decls seen e) then (v_Vuna_dTypedCodegen_dallPureExpr
     decls seen rest)
   else false)
-  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 357 1 ("no matching clause for Vuna.TypedCodegen.allPureExpr")
+  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 393 1 ("no matching clause for Vuna.TypedCodegen.allPureExpr")
 and v_Vuna_dTypedCodegen_dpureExpr = fun decls seen e -> (match e with
   | C_Vuna_dAst_dEInt (n, _) -> true
   | C_Vuna_dAst_dEStr (s, _) -> true
@@ -5396,28 +5920,28 @@ and v_Vuna_dTypedCodegen_dpureExpr = fun decls seen e -> (match e with
   | _ -> (match v_Vuna_dTypedCodegen_dzeroArgBody decls name with
   | C_Vuna_dMaybe_dJust (body) -> v_Vuna_dTypedCodegen_dpureExpr decls ((name) :: (seen)) body
   | C_Vuna_dMaybe_dNothing -> false
-  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 370 13 ("case pattern match failure"))
-  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 367 9 ("case pattern match failure"))
+  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 406 13 ("case pattern match failure"))
+  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 403 9 ("case pattern match failure"))
   | C_Vuna_dAst_dEApp (fn, args, _) -> (match fn with
   | C_Vuna_dAst_dEVar ("++", _) -> (match v_Vuna_dTypedCodegen_dfoldStringLiterals (v_Vuna_dTypedCodegen_dconcatFlatten
         e) with
   | (C_Vuna_dAst_dEStr (_, _)) :: ([]) -> true
   | _ -> v_Vuna_dTypedCodegen_dallPureExpr decls seen args
-  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 376 11 ("case pattern match failure"))
+  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 412 11 ("case pattern match failure"))
   | C_Vuna_dAst_dEVar (name, _) -> (match v_Vuna_dAst_dctorArity name decls with
   | C_Vuna_dMaybe_dJust (_) -> v_Vuna_dTypedCodegen_dallPureExpr decls seen args
   | C_Vuna_dMaybe_dNothing -> false
-  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 380 11 ("case pattern match failure"))
+  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 416 11 ("case pattern match failure"))
   | _ -> false
-  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 374 7 ("case pattern match failure"))
+  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 410 7 ("case pattern match failure"))
   | _ -> false
-  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 361 3 ("case pattern match failure"))
+  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 397 3 ("case pattern match failure"))
 
 let v_Vuna_dTypedCodegen_disPureZeroArg = fun decls name -> (match v_Vuna_dTypedCodegen_dzeroArgBody decls
   name with
   | C_Vuna_dMaybe_dJust (body) -> v_Vuna_dTypedCodegen_dpureExpr decls ((name) :: ([])) body
   | C_Vuna_dMaybe_dNothing -> false
-  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 387 3 ("case pattern match failure"))
+  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 423 3 ("case pattern match failure"))
 
 let v_Vuna_dTypedCodegen_disAtomicExpr = fun decls env e -> (match e with
   | C_Vuna_dAst_dEVar (name, _) -> if v_Vuna_dList_dmemName name env then true
@@ -5432,13 +5956,13 @@ let v_Vuna_dTypedCodegen_disAtomicExpr = fun decls env e -> (match e with
   | C_Vuna_dMaybe_dJust (0) -> v_Vuna_dTypedCodegen_disPureZeroArg decls name
   | C_Vuna_dMaybe_dJust (_) -> true
   | C_Vuna_dMaybe_dNothing -> false
-  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 311 17 ("case pattern match failure"))
-  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 308 13 ("case pattern match failure"))
-  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 305 9 ("case pattern match failure"))
+  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 347 17 ("case pattern match failure"))
+  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 344 13 ("case pattern match failure"))
+  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 341 9 ("case pattern match failure"))
   | C_Vuna_dAst_dEInt (n, _) -> true
   | C_Vuna_dAst_dEStr (s, _) -> true
   | _ -> false
-  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 301 3 ("case pattern match failure"))
+  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 337 3 ("case pattern match failure"))
 
 let v_Vuna_dTypedCodegen_dformatArg = fun decls env e code -> if v_Vuna_dTypedCodegen_disAtomicExpr decls
 env e then code
@@ -5454,7 +5978,7 @@ let rec v_Vuna_dTypedCodegen_dapplyArgs = fun a0 a1 a2 a3 -> match (a0, a1, a2, 
     (let vuna_cat2' = (v_Vuna_dTypedCodegen_dapplyArgs decls env cs es) in
       String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'])))
   | (decls, env, _, _) -> ""
-  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 322 1 ("no matching clause for Vuna.TypedCodegen.applyArgs")
+  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 358 1 ("no matching clause for Vuna.TypedCodegen.applyArgs")
 
 let v_Vuna_dTypedCodegen_dgenAppAware = fun decls env fn args fCode argCodes -> (let head = if v_Vuna_dTypedCodegen_disAtomicExpr
   decls env fn then fCode
@@ -5473,7 +5997,7 @@ let rec v_Vuna_dTypedCodegen_duniqueNames = fun a0 -> match a0 with
   | ((name) :: (rest)) -> if v_vuna_ueq_ustr name "" then v_Vuna_dTypedCodegen_duniqueNames rest
 else if v_Vuna_dList_dmemName name rest then v_Vuna_dTypedCodegen_duniqueNames rest
 else (name) :: (v_Vuna_dTypedCodegen_duniqueNames rest)
-  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 668 1 ("no matching clause for Vuna.TypedCodegen.uniqueNames")
+  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 704 1 ("no matching clause for Vuna.TypedCodegen.uniqueNames")
 
 let v_Vuna_dTypedCodegen_dfunctionNames = fun decls -> v_Vuna_dTypedCodegen_duniqueNames (v_Vuna_dList_dmap
   v_Vuna_dTypedCodegen_ddeclFunName decls)
@@ -5487,7 +6011,7 @@ let rec v_Vuna_dTypedCodegen_ddependentsOf = fun a0 a1 -> match (a0, a1) with
   rest in
   if v_Vuna_dList_dmemName name ns then (n) :: (dep)
   else dep)
-  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 695 1 ("no matching clause for Vuna.TypedCodegen.dependentsOf")
+  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 731 1 ("no matching clause for Vuna.TypedCodegen.dependentsOf")
 
 let v_Vuna_dTypedCodegen_dreverseAdj = fun names adj -> v_Vuna_dList_dmap (fun n -> C_Vuna_dPair_dPair
   (n, v_Vuna_dTypedCodegen_ddependentsOf n adj)) names
@@ -5499,12 +6023,12 @@ adj rest visited order
 else (match v_Vuna_dTypedCodegen_ddfsPost adj m ((m) :: (visited)) order with
   | C_Vuna_dPair_dPair (visited2, order2) -> v_Vuna_dTypedCodegen_dfoldNeighborsPost adj rest visited2
   order2
-  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 708 5 ("case pattern match failure"))
-  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 704 1 ("no matching clause for Vuna.TypedCodegen.foldNeighborsPost")
+  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 744 5 ("case pattern match failure"))
+  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 740 1 ("no matching clause for Vuna.TypedCodegen.foldNeighborsPost")
 and v_Vuna_dTypedCodegen_ddfsPost = fun adj n visited order -> (match v_Vuna_dTypedCodegen_dfoldNeighborsPost
   adj (v_Vuna_dTypedCodegen_dneighborsOf adj n) visited order with
   | C_Vuna_dPair_dPair (visited2, order2) -> C_Vuna_dPair_dPair (visited2, (n) :: (order2))
-  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 713 3 ("case pattern match failure"))
+  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 749 3 ("case pattern match failure"))
 
 let rec v_Vuna_dTypedCodegen_dpostOrder = fun adj nodes visited order -> (match nodes with
   | [] -> C_Vuna_dPair_dPair (visited, order)
@@ -5512,8 +6036,8 @@ let rec v_Vuna_dTypedCodegen_dpostOrder = fun adj nodes visited order -> (match 
   visited order
   else (match v_Vuna_dTypedCodegen_ddfsPost adj n ((n) :: (visited)) order with
   | C_Vuna_dPair_dPair (visited2, order2) -> v_Vuna_dTypedCodegen_dpostOrder adj rest visited2 order2
-  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 723 9 ("case pattern match failure"))
-  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 718 3 ("case pattern match failure"))
+  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 759 9 ("case pattern match failure"))
+  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 754 3 ("case pattern match failure"))
 
 let rec v_Vuna_dTypedCodegen_dfoldNeighborsCollect = fun a0 a1 a2 a3 -> match (a0, a1, a2, a3) with
   | (revAdj, [], visited, comp) -> C_Vuna_dPair_dPair (visited, comp)
@@ -5522,12 +6046,12 @@ revAdj rest visited comp
 else (match v_Vuna_dTypedCodegen_ddfsCollect revAdj m ((m) :: (visited)) comp with
   | C_Vuna_dPair_dPair (visited2, comp2) -> v_Vuna_dTypedCodegen_dfoldNeighborsCollect revAdj rest visited2
   comp2
-  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 731 5 ("case pattern match failure"))
-  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 727 1 ("no matching clause for Vuna.TypedCodegen.foldNeighborsCollect")
+  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 767 5 ("case pattern match failure"))
+  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 763 1 ("no matching clause for Vuna.TypedCodegen.foldNeighborsCollect")
 and v_Vuna_dTypedCodegen_ddfsCollect = fun revAdj n visited comp -> (match v_Vuna_dTypedCodegen_dfoldNeighborsCollect
   revAdj (v_Vuna_dTypedCodegen_dneighborsOf revAdj n) visited comp with
   | C_Vuna_dPair_dPair (visited2, comp2) -> C_Vuna_dPair_dPair (visited2, (n) :: (comp2))
-  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 736 3 ("case pattern match failure"))
+  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 772 3 ("case pattern match failure"))
 
 let rec v_Vuna_dTypedCodegen_dcollectComps = fun revAdj nodes visited comps -> (match nodes with
   | [] -> comps
@@ -5536,14 +6060,14 @@ let rec v_Vuna_dTypedCodegen_dcollectComps = fun revAdj nodes visited comps -> (
   else (match v_Vuna_dTypedCodegen_ddfsCollect revAdj n ((n) :: (visited)) [] with
   | C_Vuna_dPair_dPair (visited2, comp) -> v_Vuna_dTypedCodegen_dcollectComps revAdj rest visited2 ((comp)
       :: (comps))
-  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 746 9 ("case pattern match failure"))
-  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 741 3 ("case pattern match failure"))
+  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 782 9 ("case pattern match failure"))
+  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 777 3 ("case pattern match failure"))
 
 let rec v_Vuna_dTypedCodegen_dcomponentOf = fun a0 a1 -> match (a0, a1) with
   | ([], name) -> C_Vuna_dMaybe_dNothing
   | ((g) :: (rest), name) -> if v_Vuna_dList_dmemName name g then C_Vuna_dMaybe_dJust (g)
 else v_Vuna_dTypedCodegen_dcomponentOf rest name
-  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 750 1 ("no matching clause for Vuna.TypedCodegen.componentOf")
+  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 786 1 ("no matching clause for Vuna.TypedCodegen.componentOf")
 
 let rec v_Vuna_dTypedCodegen_dgroupsFromCompsGo = fun a0 a1 a2 a3 -> match (a0, a1, a2, a3) with
   | (comps, allNames, [], emitted) -> []
@@ -5554,8 +6078,8 @@ else (match v_Vuna_dTypedCodegen_dcomponentOf comps n with
     allNames) :: (v_Vuna_dTypedCodegen_dgroupsFromCompsGo comps allNames rest (v_Vuna_dList_dappend g
       emitted))
   | C_Vuna_dMaybe_dNothing -> v_Vuna_dTypedCodegen_dgroupsFromCompsGo comps allNames rest emitted
-  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 764 5 ("case pattern match failure"))
-  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 760 1 ("no matching clause for Vuna.TypedCodegen.groupsFromCompsGo")
+  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 800 5 ("case pattern match failure"))
+  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 796 1 ("no matching clause for Vuna.TypedCodegen.groupsFromCompsGo")
 
 let v_Vuna_dTypedCodegen_dgroupsFromComps = fun comps names -> v_Vuna_dTypedCodegen_dgroupsFromCompsGo
 comps names names []
@@ -5569,7 +6093,7 @@ let rec v_Vuna_dTypedCodegen_dallIn = fun names allowed -> (match names with
   | (n) :: (rest) -> if v_Vuna_dList_dmemName n allowed then v_Vuna_dTypedCodegen_dallIn rest allowed
 
   else false
-  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 775 3 ("case pattern match failure"))
+  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 811 3 ("case pattern match failure"))
 
 let v_Vuna_dTypedCodegen_dgroupReady = fun adj group emitted -> v_Vuna_dTypedCodegen_dallIn (v_Vuna_dTypedCodegen_dgroupDeps
   adj group) emitted
@@ -5579,7 +6103,7 @@ let rec v_Vuna_dTypedCodegen_dpickReadyAcc = fun a0 a1 a2 a3 -> match (a0, a1, a
   | (adj, (g) :: (rest), before, emitted) -> if v_Vuna_dTypedCodegen_dgroupReady adj g emitted then C_Vuna_dMaybe_dJust
 (C_Vuna_dPair_dPair (g, v_Vuna_dList_dappend (v_Vuna_dList_dreverse before) rest))
 else v_Vuna_dTypedCodegen_dpickReadyAcc adj rest ((g) :: (before)) emitted
-  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 784 1 ("no matching clause for Vuna.TypedCodegen.pickReadyAcc")
+  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 820 1 ("no matching clause for Vuna.TypedCodegen.pickReadyAcc")
 
 let v_Vuna_dTypedCodegen_dpickReady = fun adj groups emitted -> v_Vuna_dTypedCodegen_dpickReadyAcc adj
 groups [] emitted
@@ -5590,8 +6114,8 @@ let rec v_Vuna_dTypedCodegen_dorderGroupsAcc = fun a0 a1 a2 -> match (a0, a1, a2
   | C_Vuna_dMaybe_dNothing -> C_Vuna_dResult_dErr ("typed codegen: dependency cycle between groups")
   | C_Vuna_dMaybe_dJust (C_Vuna_dPair_dPair (g, rest)) -> v_Vuna_dResult_dandThen (v_Vuna_dTypedCodegen_dorderGroupsAcc
     adj rest (v_Vuna_dList_dappend g emitted)) (fun tail -> C_Vuna_dResult_dOk ((g) :: (tail)))
-  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 794 3 ("case pattern match failure"))
-  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 792 1 ("no matching clause for Vuna.TypedCodegen.orderGroupsAcc")
+  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 830 3 ("case pattern match failure"))
+  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 828 1 ("no matching clause for Vuna.TypedCodegen.orderGroupsAcc")
 
 let v_Vuna_dTypedCodegen_dorderGroups = fun adj groups -> v_Vuna_dTypedCodegen_dorderGroupsAcc adj groups
 []
@@ -5601,7 +6125,7 @@ let rec v_Vuna_dTypedCodegen_dunionNames = fun a0 a1 -> match (a0, a1) with
   | ((x) :: (rest), ys) -> if v_Vuna_dList_dmemName x ys then v_Vuna_dTypedCodegen_dunionNames rest ys
 
 else (x) :: (v_Vuna_dTypedCodegen_dunionNames rest ys)
-  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 841 1 ("no matching clause for Vuna.TypedCodegen.unionNames")
+  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 877 1 ("no matching clause for Vuna.TypedCodegen.unionNames")
 
 let rec v_Vuna_dTypedCodegen_dexprRefs = fun expr -> (match expr with
   | C_Vuna_dAst_dEVar (name, _) -> (name) :: ([])
@@ -5617,17 +6141,17 @@ let rec v_Vuna_dTypedCodegen_dexprRefs = fun expr -> (match expr with
   | C_Vuna_dAst_dEIf (c, t, e, _) -> v_Vuna_dTypedCodegen_dunionNames (v_Vuna_dTypedCodegen_dexprRefs
     c) (v_Vuna_dTypedCodegen_dunionNames (v_Vuna_dTypedCodegen_dexprRefs t) (v_Vuna_dTypedCodegen_dexprRefs
       e))
-  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 824 3 ("case pattern match failure"))
+  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 860 3 ("case pattern match failure"))
 and v_Vuna_dTypedCodegen_dbindRefs = fun a0 -> match a0 with
   | (C_Vuna_dPair_dPair (pat, value)) -> v_Vuna_dTypedCodegen_dexprRefs value
-  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 835 1 ("no matching clause for Vuna.TypedCodegen.bindRefs")
+  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 871 1 ("no matching clause for Vuna.TypedCodegen.bindRefs")
 and v_Vuna_dTypedCodegen_daltRefs = fun a0 -> match a0 with
   | (C_Vuna_dPair_dPair (pat, body)) -> v_Vuna_dTypedCodegen_dexprRefs body
-  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 838 1 ("no matching clause for Vuna.TypedCodegen.altRefs")
+  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 874 1 ("no matching clause for Vuna.TypedCodegen.altRefs")
 
 let v_Vuna_dTypedCodegen_dclauseRefs = fun a0 -> match a0 with
   | (C_Vuna_dPair_dPair (pats, body)) -> v_Vuna_dTypedCodegen_dexprRefs body
-  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 820 1 ("no matching clause for Vuna.TypedCodegen.clauseRefs")
+  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 856 1 ("no matching clause for Vuna.TypedCodegen.clauseRefs")
 
 let v_Vuna_dTypedCodegen_dgenFunctionRefs = fun decls name -> v_Vuna_dTypedCodegen_duniqueNames (v_Vuna_dList_dconcatMap
   v_Vuna_dTypedCodegen_dclauseRefs (v_Vuna_dAst_dclausesFor decls name))
@@ -5636,14 +6160,14 @@ let v_Vuna_dTypedCodegen_dgroupNeedsRec = fun decls group -> (match group with
   | [] -> false
   | (n) :: ([]) -> v_Vuna_dList_dmemName n (v_Vuna_dTypedCodegen_dgenFunctionRefs decls n)
   | _ -> true
-  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 806 3 ("case pattern match failure"))
+  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 842 3 ("case pattern match failure"))
 
 let rec v_Vuna_dTypedCodegen_dkeepChunks = fun a0 a1 -> match (a0, a1) with
   | (names, []) -> []
   | (names, (ch) :: (rest)) -> if v_Vuna_dList_dmemName (v_Vuna_dTypedCodegen_dchunkNameOf ch) names then
 (ch) :: (v_Vuna_dTypedCodegen_dkeepChunks names rest)
 else v_Vuna_dTypedCodegen_dkeepChunks names rest
-  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 962 1 ("no matching clause for Vuna.TypedCodegen.keepChunks")
+  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 998 1 ("no matching clause for Vuna.TypedCodegen.keepChunks")
 
 let v_Vuna_dTypedCodegen_dtypedMainSuffix = fun decls showMain printResult -> if printResult then (let
   vuna_cat0' = ("let () = print_endline (") in
@@ -6395,7 +6919,7 @@ let rec v_Vuna_dList_dlookupPair = fun a0 a1 -> match (a0, a1) with
   | (name, (C_Vuna_dPair_dPair (k, v)) :: (rest)) -> if v_vuna_ueq_ustr k name then C_Vuna_dMaybe_dJust
 (v)
 else v_Vuna_dList_dlookupPair name rest
-  | _ -> vuna_fail "stdlib/Vuna/List.vuna" 63 1 ("no matching clause for Vuna.List.lookupPair")
+  | _ -> vuna_fail "stdlib/lib/Vuna/List.vuna" 63 1 ("no matching clause for Vuna.List.lookupPair")
 
 let rec v_Vuna_dTypecheck_drebuildDecls = fun a0 a1 -> match (a0, a1) with
   | ([], elabMap) -> []
@@ -6574,6 +7098,9 @@ rest (v_Vuna_dLint_dreplaceRange (v_Vuna_dLint_deditStart e) (v_Vuna_dLint_dedit
 else v_Vuna_dLint_dapplyEditList rest lines limit count
   | _ -> vuna_fail "lib/Vuna/Lint.vuna" 719 1 ("no matching clause for Vuna.Lint.applyEditList")
 
+let rec v_Vuna_dFmt_dspaces = fun n -> if v_vuna_ule_uint n 0 then ""
+else ((" ") ^ (v_Vuna_dFmt_dspaces (bi_sub n 1)))
+
 let rec v_Vuna_dLoader_dtakeSegs = fun a0 a1 -> match (a0, a1) with
   | (n, []) -> []
   | (n, (x) :: (rest)) -> if v_vuna_ule_uint n 0 then []
@@ -6627,13 +7154,13 @@ let rec v_Vuna_dList_dtake = fun a0 a1 -> match (a0, a1) with
   | (n, []) -> []
   | (n, (x) :: (xs)) -> if v_vuna_ule_uint n 0 then []
 else (x) :: (v_Vuna_dList_dtake (bi_sub n 1) xs)
-  | _ -> vuna_fail "stdlib/Vuna/List.vuna" 73 1 ("no matching clause for Vuna.List.take")
+  | _ -> vuna_fail "stdlib/lib/Vuna/List.vuna" 73 1 ("no matching clause for Vuna.List.take")
 
 let rec v_Vuna_dList_ddrop = fun a0 a1 -> match (a0, a1) with
   | (n, []) -> []
   | (n, (x) :: (xs)) -> if v_vuna_ule_uint n 0 then (x) :: (xs)
 else v_Vuna_dList_ddrop (bi_sub n 1) xs
-  | _ -> vuna_fail "stdlib/Vuna/List.vuna" 77 1 ("no matching clause for Vuna.List.drop")
+  | _ -> vuna_fail "stdlib/lib/Vuna/List.vuna" 77 1 ("no matching clause for Vuna.List.drop")
 
 let rec v_Vuna_dString_dsplitAcc = fun sep chars acc parts -> if v_Vuna_dString_d_ustartsWithChars sep
 chars then v_Vuna_dString_dsplitAcc sep (v_Vuna_dList_ddrop (v_Vuna_dList_dlength sep) chars) [] ((bi_str_pack
@@ -6641,7 +7168,7 @@ chars then v_Vuna_dString_dsplitAcc sep (v_Vuna_dList_ddrop (v_Vuna_dList_dlengt
 else (match chars with
   | [] -> v_Vuna_dList_dreverse ((bi_str_pack (v_Vuna_dList_dreverse acc)) :: (parts))
   | (c) :: (rest) -> v_Vuna_dString_dsplitAcc sep rest ((c) :: (acc)) parts
-  | _ -> vuna_fail "stdlib/Vuna/String.vuna" 21 5 ("case pattern match failure"))
+  | _ -> vuna_fail "stdlib/lib/Vuna/String.vuna" 21 5 ("case pattern match failure"))
 
 let v_Vuna_dString_dsplit = fun sep text -> if v_vuna_ueq_uint (bi_str_length sep) 0 then v_Vuna_dList_dmap
 (fun c -> bi_str_pack ((c) :: ([]))) (bi_str_unpack text)
@@ -6811,6 +7338,489 @@ let rec v_Vuna_dLint_dsortEdits = fun a0 -> match a0 with
   | ((e) :: (rest)) -> v_Vuna_dLint_dinsertEdit e (v_Vuna_dLint_dsortEdits rest)
   | _ -> vuna_fail "lib/Vuna/Lint.vuna" 689 1 ("no matching clause for Vuna.Lint.sortEdits")
 
+let rec v_Vuna_dFmt_dinlineExpr = fun e -> v_Vuna_dFmt_dinlinePrec 0 e
+and v_Vuna_dFmt_dinlinePrec = fun minPrec e -> (match e with
+  | C_Vuna_dAst_dEVar (name, sp) -> if v_vuna_ueq_ustr name "Nil" then C_Vuna_dMaybe_dJust ("[]")
+  else C_Vuna_dMaybe_dJust (name)
+  | C_Vuna_dAst_dEInt (n, sp) -> C_Vuna_dMaybe_dJust (bi_str_from_int n)
+  | C_Vuna_dAst_dEStr (s, sp) -> C_Vuna_dMaybe_dJust (v_Vuna_dFmt_drenderStr s)
+  | C_Vuna_dAst_dELam (ps, body, sp) -> (match v_Vuna_dFmt_dinlinePrec 0 body with
+  | C_Vuna_dMaybe_dNothing -> C_Vuna_dMaybe_dNothing
+  | C_Vuna_dMaybe_dJust (b) -> C_Vuna_dMaybe_dJust (v_Vuna_dFmt_dwrapPrec (v_vuna_ugt_uint minPrec 0)
+      ((let vuna_cat0' = ("\\") in
+          (let vuna_cat1' = (v_Vuna_dFmt_djoinComma ps) in
+            (let vuna_cat2' = (" => ") in
+              (let vuna_cat3' = (b) in
+                String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'; vuna_cat3']))))))
+  | _ -> vuna_fail "lib/Vuna/Fmt.vuna" 203 7 ("case pattern match failure"))
+  | C_Vuna_dAst_dEApp (fn, args, sp) -> (match v_Vuna_dFmt_dlistExprElems (C_Vuna_dAst_dEApp (fn, args,
+        sp)) with
+  | C_Vuna_dMaybe_dJust (elems) -> (match v_Vuna_dFmt_dmapMaybeStrings (fun x -> v_Vuna_dFmt_dinlineExpr
+        x) elems with
+  | C_Vuna_dMaybe_dNothing -> C_Vuna_dMaybe_dNothing
+  | C_Vuna_dMaybe_dJust (ss) -> C_Vuna_dMaybe_dJust ((let vuna_cat0' = ("[") in
+          (let vuna_cat1' = (v_Vuna_dFmt_djoinComma ss) in
+            (let vuna_cat2' = ("]") in
+              String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2']))))
+  | _ -> vuna_fail "lib/Vuna/Fmt.vuna" 209 11 ("case pattern match failure"))
+  | C_Vuna_dMaybe_dNothing -> v_Vuna_dFmt_dinlineApp minPrec fn args
+  | _ -> vuna_fail "lib/Vuna/Fmt.vuna" 207 7 ("case pattern match failure"))
+  | C_Vuna_dAst_dELet (binds, body, rec_u, sp) -> C_Vuna_dMaybe_dNothing
+  | C_Vuna_dAst_dECase (scrut, alts, sp) -> C_Vuna_dMaybe_dNothing
+  | C_Vuna_dAst_dEIf (c, t, el, sp) -> (match v_Vuna_dFmt_dinlinePrec 0 c with
+  | C_Vuna_dMaybe_dNothing -> C_Vuna_dMaybe_dNothing
+  | C_Vuna_dMaybe_dJust (cs) -> (match v_Vuna_dFmt_dinlinePrec 0 t with
+  | C_Vuna_dMaybe_dNothing -> C_Vuna_dMaybe_dNothing
+  | C_Vuna_dMaybe_dJust (ts) -> (match v_Vuna_dFmt_dinlinePrec 0 el with
+  | C_Vuna_dMaybe_dNothing -> C_Vuna_dMaybe_dNothing
+  | C_Vuna_dMaybe_dJust (es) -> C_Vuna_dMaybe_dJust (v_Vuna_dFmt_dwrapPrec (v_vuna_ugt_uint minPrec 0)
+          ((let vuna_cat0' = ("if ") in
+              (let vuna_cat1' = (cs) in
+                (let vuna_cat2' = (" then ") in
+                  (let vuna_cat3' = (ts) in
+                    (let vuna_cat4' = (" else ") in
+                      (let vuna_cat5' = (es) in
+                        String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'; vuna_cat3'; vuna_cat4';
+                        vuna_cat5']))))))))
+  | _ -> vuna_fail "lib/Vuna/Fmt.vuna" 222 15 ("case pattern match failure"))
+  | _ -> vuna_fail "lib/Vuna/Fmt.vuna" 219 11 ("case pattern match failure"))
+  | _ -> vuna_fail "lib/Vuna/Fmt.vuna" 216 7 ("case pattern match failure"))
+  | C_Vuna_dAst_dEField (base, f, sp) -> (match v_Vuna_dFmt_dinlineAtom base with
+  | C_Vuna_dMaybe_dNothing -> C_Vuna_dMaybe_dNothing
+  | C_Vuna_dMaybe_dJust (b) -> C_Vuna_dMaybe_dJust ((let vuna_cat0' = (b) in
+        (let vuna_cat1' = (".") in
+          (let vuna_cat2' = (f) in
+            String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2']))))
+  | _ -> vuna_fail "lib/Vuna/Fmt.vuna" 226 7 ("case pattern match failure"))
+  | C_Vuna_dAst_dERecord (name, fields, sp) -> (match v_Vuna_dFmt_dinlineFields fields with
+  | C_Vuna_dMaybe_dNothing -> C_Vuna_dMaybe_dNothing
+  | C_Vuna_dMaybe_dJust (ss) -> (match fields with
+  | [] -> C_Vuna_dMaybe_dJust (((name) ^ (" { }")))
+  | _ -> C_Vuna_dMaybe_dJust ((let vuna_cat0' = (name) in
+          (let vuna_cat1' = (" { ") in
+            (let vuna_cat2' = (v_Vuna_dFmt_djoinComma ss) in
+              (let vuna_cat3' = (" }") in
+                String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'; vuna_cat3'])))))
+  | _ -> vuna_fail "lib/Vuna/Fmt.vuna" 233 11 ("case pattern match failure"))
+  | _ -> vuna_fail "lib/Vuna/Fmt.vuna" 230 7 ("case pattern match failure"))
+  | C_Vuna_dAst_dERecUpdate (base, fields, sp) -> (match v_Vuna_dFmt_dinlinePrec 0 base with
+  | C_Vuna_dMaybe_dNothing -> C_Vuna_dMaybe_dNothing
+  | C_Vuna_dMaybe_dJust (b) -> (match v_Vuna_dFmt_dinlineFields fields with
+  | C_Vuna_dMaybe_dNothing -> C_Vuna_dMaybe_dNothing
+  | C_Vuna_dMaybe_dJust (ss) -> (match fields with
+  | [] -> C_Vuna_dMaybe_dJust ((let vuna_cat0' = ("{ ") in
+            (let vuna_cat1' = (b) in
+              (let vuna_cat2' = (" }") in
+                String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2']))))
+  | _ -> C_Vuna_dMaybe_dJust ((let vuna_cat0' = ("{ ") in
+            (let vuna_cat1' = (b) in
+              (let vuna_cat2' = (" | ") in
+                (let vuna_cat3' = (v_Vuna_dFmt_djoinComma ss) in
+                  (let vuna_cat4' = (" }") in
+                    String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'; vuna_cat3'; vuna_cat4']))))))
+  | _ -> vuna_fail "lib/Vuna/Fmt.vuna" 243 15 ("case pattern match failure"))
+  | _ -> vuna_fail "lib/Vuna/Fmt.vuna" 240 11 ("case pattern match failure"))
+  | _ -> vuna_fail "lib/Vuna/Fmt.vuna" 237 7 ("case pattern match failure"))
+  | C_Vuna_dAst_dEInstSel (base, inst, sp) -> (match v_Vuna_dFmt_dinlineAtom base with
+  | C_Vuna_dMaybe_dNothing -> C_Vuna_dMaybe_dNothing
+  | C_Vuna_dMaybe_dJust (b) -> C_Vuna_dMaybe_dJust ((let vuna_cat0' = (b) in
+        (let vuna_cat1' = (" @") in
+          (let vuna_cat2' = (inst) in
+            String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2']))))
+  | _ -> vuna_fail "lib/Vuna/Fmt.vuna" 247 7 ("case pattern match failure"))
+  | C_Vuna_dAst_dEDo (stmts, sp) -> C_Vuna_dMaybe_dNothing
+  | _ -> vuna_fail "lib/Vuna/Fmt.vuna" 198 3 ("case pattern match failure"))
+and v_Vuna_dFmt_dinlineFields = fun a0 -> match a0 with
+  | ([]) -> C_Vuna_dMaybe_dJust ([])
+  | ((C_Vuna_dPair_dPair (fname, value)) :: (rest)) -> (match v_Vuna_dFmt_dinlinePrec 0 value with
+  | C_Vuna_dMaybe_dNothing -> C_Vuna_dMaybe_dNothing
+  | C_Vuna_dMaybe_dJust (v) -> (match v_Vuna_dFmt_dinlineFields rest with
+  | C_Vuna_dMaybe_dNothing -> C_Vuna_dMaybe_dNothing
+  | C_Vuna_dMaybe_dJust (ss) -> C_Vuna_dMaybe_dJust (((let vuna_cat0' = (fname) in
+          (let vuna_cat1' = (" = ") in
+            (let vuna_cat2' = (v) in
+              String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'])))) :: (ss))
+  | _ -> vuna_fail "lib/Vuna/Fmt.vuna" 259 7 ("case pattern match failure"))
+  | _ -> vuna_fail "lib/Vuna/Fmt.vuna" 256 3 ("case pattern match failure"))
+  | _ -> vuna_fail "lib/Vuna/Fmt.vuna" 254 1 ("no matching clause for Vuna.Fmt.inlineFields")
+and v_Vuna_dFmt_dinlineApp = fun minPrec fn args -> (match fn with
+  | C_Vuna_dAst_dEVar ("bind", bsp) -> (match args with
+  | (a) :: ((b) :: ([])) -> v_Vuna_dFmt_dinlineInfix minPrec 1 1 ">>=" a b
+  | _ -> v_Vuna_dFmt_dinlineApply minPrec fn args
+  | _ -> vuna_fail "lib/Vuna/Fmt.vuna" 266 7 ("case pattern match failure"))
+  | C_Vuna_dAst_dEVar (op, sp) -> (match v_Vuna_dFmt_dinfixPrec op with
+  | C_Vuna_dMaybe_dJust (C_Vuna_dPair_dPair (p, assoc)) -> (match args with
+  | (a) :: ((b) :: ([])) -> v_Vuna_dFmt_dinlineInfix minPrec p assoc op a b
+  | _ -> v_Vuna_dFmt_dinlineApply minPrec fn args
+  | _ -> vuna_fail "lib/Vuna/Fmt.vuna" 272 11 ("case pattern match failure"))
+  | C_Vuna_dMaybe_dNothing -> v_Vuna_dFmt_dinlineApply minPrec fn args
+  | _ -> vuna_fail "lib/Vuna/Fmt.vuna" 270 7 ("case pattern match failure"))
+  | _ -> v_Vuna_dFmt_dinlineApply minPrec fn args
+  | _ -> vuna_fail "lib/Vuna/Fmt.vuna" 264 3 ("case pattern match failure"))
+and v_Vuna_dFmt_dinlineInfix = fun minPrec p assoc op a b -> (let leftMin = if v_vuna_ueq_uint assoc 0
+  then p
+  else bi_add p 1 in
+  let rightMin = if v_vuna_ueq_uint assoc 0 then bi_add p 1
+  else p in
+  (match v_Vuna_dFmt_dinlinePrec leftMin a with
+  | C_Vuna_dMaybe_dNothing -> C_Vuna_dMaybe_dNothing
+  | C_Vuna_dMaybe_dJust (lhsText) -> (match v_Vuna_dFmt_dinlinePrec rightMin b with
+  | C_Vuna_dMaybe_dNothing -> C_Vuna_dMaybe_dNothing
+  | C_Vuna_dMaybe_dJust (rhsText) -> C_Vuna_dMaybe_dJust (v_Vuna_dFmt_dwrapPrec (v_vuna_ult_uint p minPrec)
+        ((let vuna_cat0' = (lhsText) in
+            (let vuna_cat1' = (" ") in
+              (let vuna_cat2' = (v_Vuna_dFmt_dopText op) in
+                (let vuna_cat3' = (" ") in
+                  (let vuna_cat4' = (rhsText) in
+                    String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'; vuna_cat3'; vuna_cat4'])))))))
+  | _ -> vuna_fail "lib/Vuna/Fmt.vuna" 284 10 ("case pattern match failure"))
+  | _ -> vuna_fail "lib/Vuna/Fmt.vuna" 281 6 ("case pattern match failure")))
+and v_Vuna_dFmt_dinlineApply = fun minPrec fn args -> (match v_Vuna_dFmt_dinlineApplyHead fn with
+  | C_Vuna_dMaybe_dNothing -> C_Vuna_dMaybe_dNothing
+  | C_Vuna_dMaybe_dJust (headText) -> (match v_Vuna_dFmt_dmapMaybeStrings (fun a -> v_Vuna_dFmt_dinlineAtom
+      a) args with
+  | C_Vuna_dMaybe_dNothing -> C_Vuna_dMaybe_dNothing
+  | C_Vuna_dMaybe_dJust (argTexts) -> C_Vuna_dMaybe_dJust (v_Vuna_dFmt_dwrapPrec (v_vuna_ult_uint 9 minPrec)
+      (((headText) ^ (v_Vuna_dFmt_dconcatStrings (v_Vuna_dList_dmap (fun a -> ((" ") ^ (a))) argTexts)))))
+  | _ -> vuna_fail "lib/Vuna/Fmt.vuna" 292 7 ("case pattern match failure"))
+  | _ -> vuna_fail "lib/Vuna/Fmt.vuna" 289 3 ("case pattern match failure"))
+and v_Vuna_dFmt_dinlineApplyHead = fun fn -> (match fn with
+  | C_Vuna_dAst_dEInstSel (base, inst, sp) -> (match v_Vuna_dFmt_dinlineAtom base with
+  | C_Vuna_dMaybe_dNothing -> C_Vuna_dMaybe_dNothing
+  | C_Vuna_dMaybe_dJust (b) -> C_Vuna_dMaybe_dJust ((let vuna_cat0' = (b) in
+        (let vuna_cat1' = (" @") in
+          (let vuna_cat2' = (inst) in
+            String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2']))))
+  | _ -> vuna_fail "lib/Vuna/Fmt.vuna" 299 7 ("case pattern match failure"))
+  | _ -> v_Vuna_dFmt_dinlineAtom fn
+  | _ -> vuna_fail "lib/Vuna/Fmt.vuna" 297 3 ("case pattern match failure"))
+and v_Vuna_dFmt_dinlineAtom = fun e -> (match v_Vuna_dFmt_dinlinePrec 0 e with
+  | C_Vuna_dMaybe_dNothing -> C_Vuna_dMaybe_dNothing
+  | C_Vuna_dMaybe_dJust (s) -> if v_Vuna_dFmt_datomForm e then C_Vuna_dMaybe_dJust (s)
+  else C_Vuna_dMaybe_dJust ((let vuna_cat0' = ("(") in
+      (let vuna_cat1' = (s) in
+        (let vuna_cat2' = (")") in
+          String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2']))))
+  | _ -> vuna_fail "lib/Vuna/Fmt.vuna" 305 3 ("case pattern match failure"))
+
+let rec v_Vuna_dFmt_dparenWrap = fun lineInd e -> v_Vuna_dList_dappend (v_Vuna_dFmt_dprefixFirst "(" (v_Vuna_dFmt_drenderBlock
+    lineInd e)) ((((v_Vuna_dFmt_dspaces lineInd) ^ (")"))) :: ([]))
+and v_Vuna_dFmt_drenderExpr = fun lineInd e -> (match v_Vuna_dFmt_dinlinePrec 0 e with
+  | C_Vuna_dMaybe_dJust (s) -> (s) :: ([])
+  | C_Vuna_dMaybe_dNothing -> v_Vuna_dFmt_drenderBlock lineInd e
+  | _ -> vuna_fail "lib/Vuna/Fmt.vuna" 330 3 ("case pattern match failure"))
+and v_Vuna_dFmt_drenderAtomExpr = fun lineInd e -> (match v_Vuna_dFmt_dinlineAtom e with
+  | C_Vuna_dMaybe_dJust (s) -> (s) :: ([])
+  | C_Vuna_dMaybe_dNothing -> v_Vuna_dFmt_dparenWrap lineInd e
+  | _ -> vuna_fail "lib/Vuna/Fmt.vuna" 335 3 ("case pattern match failure"))
+and v_Vuna_dFmt_drenderBlock = fun lineInd e -> (match e with
+  | C_Vuna_dAst_dECase (scrut, alts, sp) -> v_Vuna_dFmt_drenderCase lineInd scrut alts
+  | C_Vuna_dAst_dELet (binds, body, rec_u, sp) -> v_Vuna_dFmt_drenderLet lineInd binds body
+  | C_Vuna_dAst_dEIf (c, t, el, sp) -> v_Vuna_dFmt_drenderIf lineInd c t el
+  | C_Vuna_dAst_dEApp (fn, args, sp) -> v_Vuna_dFmt_drenderAppBlock lineInd fn args
+  | C_Vuna_dAst_dELam (ps, body, sp) -> v_Vuna_dFmt_dprefixFirst ((let vuna_cat0' = ("\\") in
+      (let vuna_cat1' = (v_Vuna_dFmt_djoinComma ps) in
+        (let vuna_cat2' = (" => ") in
+          String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'])))) (v_Vuna_dFmt_drenderExpr lineInd
+    body)
+  | C_Vuna_dAst_dEField (base, f, sp) -> v_Vuna_dFmt_dappendLast (((".") ^ (f))) (v_Vuna_dFmt_drenderAtomExpr
+    lineInd base)
+  | C_Vuna_dAst_dERecord (name, fields, sp) -> v_Vuna_dFmt_drenderRecordBlock lineInd name fields
+  | C_Vuna_dAst_dERecUpdate (base, fields, sp) -> v_Vuna_dFmt_drenderRecUpdateBlock lineInd base fields
+  | C_Vuna_dAst_dEInstSel (base, inst, sp) -> v_Vuna_dFmt_dappendLast (((" @") ^ (inst))) (v_Vuna_dFmt_drenderAtomExpr
+    lineInd base)
+  | C_Vuna_dAst_dEDo (stmts, sp) -> v_Vuna_dFmt_drenderDo lineInd stmts
+  | C_Vuna_dAst_dEVar (name, sp) -> (name) :: ([])
+  | C_Vuna_dAst_dEInt (n, sp) -> (bi_str_from_int n) :: ([])
+  | C_Vuna_dAst_dEStr (s, sp) -> (v_Vuna_dFmt_drenderStr s) :: ([])
+  | _ -> vuna_fail "lib/Vuna/Fmt.vuna" 340 3 ("case pattern match failure"))
+and v_Vuna_dFmt_drenderScrut = fun lineInd e -> (match v_Vuna_dFmt_dinlineExpr e with
+  | C_Vuna_dMaybe_dJust (s) -> (s) :: ([])
+  | C_Vuna_dMaybe_dNothing -> v_Vuna_dFmt_dparenWrap lineInd e
+  | _ -> vuna_fail "lib/Vuna/Fmt.vuna" 356 3 ("case pattern match failure"))
+and v_Vuna_dFmt_drenderCase = fun lineInd scrut alts -> (let headLines = v_Vuna_dFmt_dappendLast " of"
+  (v_Vuna_dFmt_dprefixFirst "case " (v_Vuna_dFmt_drenderScrut lineInd scrut)) in
+  let altInd = bi_add lineInd 2 in
+  let altLines = v_Vuna_dList_dconcatMap (fun alt -> v_Vuna_dFmt_drenderAlt altInd alt) alts in
+  v_Vuna_dList_dappend headLines altLines)
+and v_Vuna_dFmt_drenderAlt = fun a0 a1 -> match (a0, a1) with
+  | (altInd, C_Vuna_dPair_dPair (pat, body)) -> (match body with
+  | C_Vuna_dAst_dELet (binds, inner, recFlag, sp) -> ((let vuna_cat0' = (v_Vuna_dFmt_dspaces altInd) in
+      (let vuna_cat1' = (v_Vuna_dFmt_drenderPat pat) in
+        (let vuna_cat2' = (" =>") in
+          String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'])))) :: (v_Vuna_dFmt_dprefixFirst (v_Vuna_dFmt_dspaces
+      (bi_add altInd 2)) (v_Vuna_dFmt_drenderExpr (bi_add altInd 2) body))
+  | _ -> v_Vuna_dFmt_dprefixFirst ((let vuna_cat0' = (v_Vuna_dFmt_dspaces altInd) in
+      (let vuna_cat1' = (v_Vuna_dFmt_drenderPat pat) in
+        (let vuna_cat2' = (" => ") in
+          String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'])))) (v_Vuna_dFmt_drenderExpr altInd
+    body)
+  | _ -> vuna_fail "lib/Vuna/Fmt.vuna" 367 3 ("case pattern match failure"))
+  | _ -> vuna_fail "lib/Vuna/Fmt.vuna" 366 1 ("no matching clause for Vuna.Fmt.renderAlt")
+and v_Vuna_dFmt_drenderWhenBody = fun lineInd keyword e -> (match e with
+  | C_Vuna_dAst_dELet (binds, inner, recFlag, sp) -> (((v_Vuna_dFmt_dspaces lineInd) ^ (keyword))) ::
+  (v_Vuna_dFmt_dprefixFirst (v_Vuna_dFmt_dspaces (bi_add lineInd 2)) (v_Vuna_dFmt_drenderExpr (bi_add
+        lineInd 2) e))
+  | _ -> v_Vuna_dFmt_dprefixFirst ((let vuna_cat0' = (v_Vuna_dFmt_dspaces lineInd) in
+      (let vuna_cat1' = (keyword) in
+        (let vuna_cat2' = (" ") in
+          String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'])))) (v_Vuna_dFmt_drenderExpr lineInd
+    e)
+  | _ -> vuna_fail "lib/Vuna/Fmt.vuna" 373 3 ("case pattern match failure"))
+and v_Vuna_dFmt_drenderIf = fun lineInd c t el -> (let condLines = v_Vuna_dFmt_dprefixFirst "if " (v_Vuna_dFmt_drenderScrut
+    lineInd c) in
+  let thenLines = (match t with
+  | C_Vuna_dAst_dELet (binds, inner, recFlag, sp) -> v_Vuna_dList_dappend (v_Vuna_dFmt_dappendLast " then"
+      condLines) (v_Vuna_dFmt_dprefixFirst (v_Vuna_dFmt_dspaces (bi_add lineInd 2)) (v_Vuna_dFmt_drenderExpr
+        (bi_add lineInd 2) t))
+  | _ -> (let tLines = v_Vuna_dFmt_drenderExpr lineInd t in
+      v_Vuna_dList_dappend (v_Vuna_dFmt_dappendLast (((" then ") ^ (v_Vuna_dFmt_dfirstLine tLines)))
+        condLines) (v_Vuna_dFmt_drestLines tLines))
+  | _ -> vuna_fail "lib/Vuna/Fmt.vuna" 381 9 ("case pattern match failure")) in
+  let elseLines = v_Vuna_dFmt_drenderWhenBody lineInd "else" el in
+  v_Vuna_dList_dappend thenLines elseLines)
+and v_Vuna_dFmt_drenderLet = fun lineInd binds body -> (match binds with
+  | [] -> ("let") :: (v_Vuna_dFmt_dprefixFirst (((v_Vuna_dFmt_dspaces lineInd) ^ ("in "))) (v_Vuna_dFmt_drenderExpr
+      lineInd body))
+  | (first) :: (rest) -> (let bindInd = bi_add lineInd 2 in
+    let bindingLines = v_Vuna_dList_dappend (v_Vuna_dFmt_drenderLetBinding bindInd first) (v_Vuna_dList_dconcatMap
+      (fun b -> v_Vuna_dFmt_drenderLetBinding bindInd b) rest) in
+    v_Vuna_dList_dappend (("let") :: (bindingLines)) (v_Vuna_dFmt_dprefixFirst (((v_Vuna_dFmt_dspaces
+            lineInd) ^ ("in "))) (v_Vuna_dFmt_drenderExpr lineInd body)))
+  | _ -> vuna_fail "lib/Vuna/Fmt.vuna" 391 3 ("case pattern match failure"))
+and v_Vuna_dFmt_drenderLetBinding = fun a0 a1 -> match (a0, a1) with
+  | (bindInd, C_Vuna_dPair_dPair (pat, value)) -> v_Vuna_dFmt_drenderBindingValue bindInd (((v_Vuna_dFmt_drenderPat
+      pat) ^ (" ="))) value
+  | _ -> vuna_fail "lib/Vuna/Fmt.vuna" 398 1 ("no matching clause for Vuna.Fmt.renderLetBinding")
+and v_Vuna_dFmt_drenderBindingValue = fun lineInd prefixText value -> (match value with
+  | C_Vuna_dAst_dELet (binds, inner, recFlag, sp) -> (((v_Vuna_dFmt_dspaces lineInd) ^ (prefixText)))
+  :: (v_Vuna_dFmt_dprefixFirst (v_Vuna_dFmt_dspaces (bi_add lineInd 2)) (v_Vuna_dFmt_drenderExpr (bi_add
+        lineInd 2) value))
+  | _ -> v_Vuna_dFmt_dprefixFirst ((let vuna_cat0' = (v_Vuna_dFmt_dspaces lineInd) in
+      (let vuna_cat1' = (prefixText) in
+        (let vuna_cat2' = (" ") in
+          String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'])))) (v_Vuna_dFmt_drenderExpr lineInd
+    value)
+  | _ -> vuna_fail "lib/Vuna/Fmt.vuna" 402 3 ("case pattern match failure"))
+and v_Vuna_dFmt_drenderDo = fun lineInd stmts -> ("do") :: (v_Vuna_dList_dconcatMap (fun s -> v_Vuna_dFmt_drenderDoStmt
+    (bi_add lineInd 2) s) stmts)
+and v_Vuna_dFmt_drenderDoStmt = fun stmtInd stmt -> (match stmt with
+  | C_Vuna_dAst_dDBind (pat, value, sp) -> v_Vuna_dFmt_dprefixFirst ((let vuna_cat0' = (v_Vuna_dFmt_dspaces
+        stmtInd) in
+      (let vuna_cat1' = (v_Vuna_dFmt_drenderPat pat) in
+        (let vuna_cat2' = (" <- ") in
+          String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'])))) (v_Vuna_dFmt_drenderExpr stmtInd
+    value)
+  | C_Vuna_dAst_dDExpr (value, sp) -> v_Vuna_dFmt_dprefixFirst (v_Vuna_dFmt_dspaces stmtInd) (v_Vuna_dFmt_drenderExpr
+    stmtInd value)
+  | _ -> vuna_fail "lib/Vuna/Fmt.vuna" 411 3 ("case pattern match failure"))
+and v_Vuna_dFmt_drenderAppBlock = fun lineInd fn args -> (match fn with
+  | C_Vuna_dAst_dEVar ("bind", bsp) -> (match args with
+  | (a) :: ((b) :: ([])) -> v_Vuna_dFmt_drenderInfixBlock lineInd 1 1 ">>=" a b
+  | _ -> v_Vuna_dFmt_drenderApplyBlock lineInd fn args
+  | _ -> vuna_fail "lib/Vuna/Fmt.vuna" 418 7 ("case pattern match failure"))
+  | C_Vuna_dAst_dEVar (op, sp) -> (match v_Vuna_dFmt_dinfixPrec op with
+  | C_Vuna_dMaybe_dJust (C_Vuna_dPair_dPair (p, assoc)) -> (match args with
+  | (a) :: ((b) :: ([])) -> v_Vuna_dFmt_drenderInfixBlock lineInd p assoc op a b
+  | _ -> v_Vuna_dFmt_drenderApplyBlock lineInd fn args
+  | _ -> vuna_fail "lib/Vuna/Fmt.vuna" 424 11 ("case pattern match failure"))
+  | C_Vuna_dMaybe_dNothing -> v_Vuna_dFmt_drenderApplyBlock lineInd fn args
+  | _ -> vuna_fail "lib/Vuna/Fmt.vuna" 422 7 ("case pattern match failure"))
+  | _ -> v_Vuna_dFmt_drenderApplyBlock lineInd fn args
+  | _ -> vuna_fail "lib/Vuna/Fmt.vuna" 416 3 ("case pattern match failure"))
+and v_Vuna_dFmt_drenderInfixBlock = fun lineInd p assoc op a b -> (let leftMin = if v_vuna_ueq_uint assoc
+  0 then p
+  else bi_add p 1 in
+  let rightMin = if v_vuna_ueq_uint assoc 0 then bi_add p 1
+  else p in
+  let lhsLines = v_Vuna_dFmt_drenderOperand lineInd leftMin a in
+  let rhsLines = v_Vuna_dFmt_drenderOperand lineInd rightMin b in
+  (match rhsLines with
+  | [] -> lhsLines
+  | (r) :: (rest) -> v_Vuna_dList_dappend (v_Vuna_dFmt_dappendLast ((let vuna_cat0' = (" ") in
+          (let vuna_cat1' = (v_Vuna_dFmt_dopText op) in
+            (let vuna_cat2' = (" ") in
+              (let vuna_cat3' = (r) in
+                String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'; vuna_cat3']))))) lhsLines) rest
+  | _ -> vuna_fail "lib/Vuna/Fmt.vuna" 435 6 ("case pattern match failure")))
+and v_Vuna_dFmt_drenderOperand = fun lineInd minPrec e -> (match v_Vuna_dFmt_dinlinePrec minPrec e with
+  | C_Vuna_dMaybe_dJust (s) -> (s) :: ([])
+  | C_Vuna_dMaybe_dNothing -> v_Vuna_dFmt_dparenWrap lineInd e
+  | _ -> vuna_fail "lib/Vuna/Fmt.vuna" 440 3 ("case pattern match failure"))
+and v_Vuna_dFmt_drenderApplyBlock = fun lineInd fn args -> v_Vuna_dFmt_dappendApplyArgs lineInd (v_Vuna_dFmt_drenderApplyHead
+  lineInd fn) args
+and v_Vuna_dFmt_drenderApplyHead = fun lineInd fn -> (match fn with
+  | C_Vuna_dAst_dEInstSel (base, inst, sp) -> v_Vuna_dFmt_dappendLast (((" @") ^ (inst))) (v_Vuna_dFmt_drenderAtomExpr
+    lineInd base)
+  | _ -> v_Vuna_dFmt_drenderAtomExpr lineInd fn
+  | _ -> vuna_fail "lib/Vuna/Fmt.vuna" 448 3 ("case pattern match failure"))
+and v_Vuna_dFmt_dappendApplyArgs = fun lineInd lines args -> (match args with
+  | [] -> lines
+  | (a) :: (rest) -> v_Vuna_dFmt_dappendApplyArgs lineInd (v_Vuna_dFmt_dappendBefore " " lines (v_Vuna_dFmt_drenderAtomExpr
+      lineInd a)) rest
+  | _ -> vuna_fail "lib/Vuna/Fmt.vuna" 453 3 ("case pattern match failure"))
+and v_Vuna_dFmt_drenderRecordBlock = fun lineInd name fields -> (match fields with
+  | [] -> (((name) ^ (" { }"))) :: ([])
+  | (first) :: (rest) -> (let start = v_Vuna_dFmt_dappendBefore " " ((((name) ^ (" {"))) :: ([])) (v_Vuna_dFmt_drenderFieldBlock
+      lineInd first) in
+    let withRest = v_Vuna_dFmt_dappendFieldBlocks lineInd start rest in
+    v_Vuna_dFmt_dappendLast " }" withRest)
+  | _ -> vuna_fail "lib/Vuna/Fmt.vuna" 458 3 ("case pattern match failure"))
+and v_Vuna_dFmt_dappendFieldBlocks = fun lineInd lines fields -> (match fields with
+  | [] -> lines
+  | (f) :: (rest) -> v_Vuna_dFmt_dappendFieldBlocks lineInd (v_Vuna_dFmt_dappendBefore ", " lines (v_Vuna_dFmt_drenderFieldBlock
+      lineInd f)) rest
+  | _ -> vuna_fail "lib/Vuna/Fmt.vuna" 466 3 ("case pattern match failure"))
+and v_Vuna_dFmt_drenderFieldBlock = fun a0 a1 -> match (a0, a1) with
+  | (lineInd, C_Vuna_dPair_dPair (fname, value)) -> v_Vuna_dFmt_dprefixFirst (((fname) ^ (" = "))) (v_Vuna_dFmt_drenderAtomExpr
+  lineInd value)
+  | _ -> vuna_fail "lib/Vuna/Fmt.vuna" 470 1 ("no matching clause for Vuna.Fmt.renderFieldBlock")
+and v_Vuna_dFmt_drenderRecUpdateBlock = fun lineInd base fields -> (let start = v_Vuna_dFmt_dappendBefore
+  " " (("{") :: ([])) (v_Vuna_dFmt_drenderAtomExpr lineInd base) in
+  (match fields with
+  | [] -> v_Vuna_dFmt_dappendLast " }" start
+  | (first) :: (rest) -> (let start2 = v_Vuna_dFmt_dappendBefore " | " start (v_Vuna_dFmt_drenderFieldBlock
+        lineInd first) in
+      let withRest = v_Vuna_dFmt_dappendFieldBlocks lineInd start2 rest in
+      v_Vuna_dFmt_dappendLast " }" withRest)
+  | _ -> vuna_fail "lib/Vuna/Fmt.vuna" 475 6 ("case pattern match failure")))
+
+let v_Vuna_dFmt_drenderSigDecl = fun lineInd name ty -> v_Vuna_dFmt_dprefixFirst ((let vuna_cat0' = (v_Vuna_dFmt_dspaces
+      lineInd) in
+    (let vuna_cat1' = (name) in
+      (let vuna_cat2' = (" : ") in
+        String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'])))) (v_Vuna_dFmt_drenderExpr lineInd ty)
+
+let v_Vuna_dFmt_drenderCtorDecl = fun a0 -> match a0 with
+  | (C_Vuna_dAst_dCtor (cname, ty, arity, sp)) -> v_Vuna_dFmt_dprefixFirst ((let vuna_cat0' = ("  ") in
+    (let vuna_cat1' = (cname) in
+      (let vuna_cat2' = (" : ") in
+        String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'])))) (v_Vuna_dFmt_drenderExpr 2 ty)
+  | _ -> vuna_fail "lib/Vuna/Fmt.vuna" 503 1 ("no matching clause for Vuna.Fmt.renderCtorDecl")
+
+let v_Vuna_dFmt_drenderDataDecl = fun name params ctors derivings -> (let header = (let vuna_cat0' = ("data ")
+    in
+    (let vuna_cat1' = (name) in
+      (let vuna_cat2' = (v_Vuna_dFmt_djoinSpace params) in
+        (let vuna_cat3' = (" : Type where") in
+          String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'; vuna_cat3'])))) in
+  let ctorLines = v_Vuna_dList_dconcatMap (fun c -> v_Vuna_dFmt_drenderCtorDecl c) ctors in
+  v_Vuna_dList_dappend ((header) :: ([])) (v_Vuna_dList_dappend ctorLines (v_Vuna_dFmt_drenderDerivings
+      derivings)))
+
+let v_Vuna_dFmt_drenderRecordDecl = fun name params fields derivings -> (let header = (let vuna_cat0'
+    = ("record ") in
+    (let vuna_cat1' = (name) in
+      (let vuna_cat2' = (v_Vuna_dFmt_djoinSpace params) in
+        (let vuna_cat3' = (" where") in
+          String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'; vuna_cat3'])))) in
+  let fieldLines = v_Vuna_dList_dconcatMap (fun f -> v_Vuna_dFmt_dprefixFirst ((let vuna_cat0' = ("  ")
+        in
+        (let vuna_cat1' = (v_Vuna_dAst_dfieldName f) in
+          (let vuna_cat2' = (" : ") in
+            String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'])))) (v_Vuna_dFmt_drenderExpr 2 (v_Vuna_dAst_dfieldType
+        f))) fields in
+  v_Vuna_dList_dappend ((header) :: ([])) (v_Vuna_dList_dappend fieldLines (v_Vuna_dFmt_drenderDerivings
+      derivings)))
+
+let v_Vuna_dFmt_drenderMethodSig = fun a0 -> match a0 with
+  | (C_Vuna_dPair_dPair (mname, ty)) -> v_Vuna_dFmt_dprefixFirst ((let vuna_cat0' = ("  ") in
+    (let vuna_cat1' = (mname) in
+      (let vuna_cat2' = (" : ") in
+        String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'])))) (v_Vuna_dFmt_drenderExpr 2 ty)
+  | _ -> vuna_fail "lib/Vuna/Fmt.vuna" 519 1 ("no matching clause for Vuna.Fmt.renderMethodSig")
+
+let v_Vuna_dFmt_drenderTraitDecl = fun name params methods -> (let header = (let vuna_cat0' = ("trait ")
+    in
+    (let vuna_cat1' = (name) in
+      (let vuna_cat2' = (v_Vuna_dFmt_djoinSpace params) in
+        (let vuna_cat3' = (" where") in
+          String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'; vuna_cat3'])))) in
+  let methodLines = v_Vuna_dList_dconcatMap (fun m -> v_Vuna_dFmt_drenderMethodSig m) methods in
+  v_Vuna_dList_dappend ((header) :: ([])) methodLines)
+
+let rec v_Vuna_dFmt_drenderClause = fun lineInd name pats body -> (let headerBase = (let vuna_cat0' =
+    (v_Vuna_dFmt_dspaces lineInd) in
+    (let vuna_cat1' = (name) in
+      (let vuna_cat2' = (v_Vuna_dFmt_djoinSpace (v_Vuna_dList_dmap v_Vuna_dFmt_drenderPatAtom pats))
+        in
+        (let vuna_cat3' = (" =") in
+          String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'; vuna_cat3'])))) in
+  (match body with
+  | C_Vuna_dAst_dELet (binds, inner, recFlag, sp) -> if recFlag then (let whereInd = bi_add lineInd 2
+      in
+      (match v_Vuna_dFmt_dinlinePrec 0 inner with
+  | C_Vuna_dMaybe_dJust (s) -> ((let vuna_cat0' = (headerBase) in
+            (let vuna_cat1' = (" ") in
+              (let vuna_cat2' = (s) in
+                (let vuna_cat3' = (" where") in
+                  String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'; vuna_cat3']))))) :: (v_Vuna_dFmt_drenderWhereBindings
+          whereInd binds)
+  | C_Vuna_dMaybe_dNothing -> (let bodyInd = bi_add lineInd 2 in
+          let bodyLines = v_Vuna_dFmt_dprefixFirst (v_Vuna_dFmt_dspaces bodyInd) (v_Vuna_dFmt_drenderExpr
+            bodyInd inner) in
+          let whereLine = ((v_Vuna_dFmt_dspaces whereInd) ^ ("where")) in
+          let bindLines = v_Vuna_dFmt_drenderWhereBindings (bi_add lineInd 4) binds in
+          (headerBase) :: (v_Vuna_dList_dappend bodyLines ((whereLine) :: (bindLines))))
+  | _ -> vuna_fail "lib/Vuna/Fmt.vuna" 543 15 ("case pattern match failure")))
+    else (headerBase) :: (v_Vuna_dFmt_dprefixFirst (v_Vuna_dFmt_dspaces (bi_add lineInd 2)) (v_Vuna_dFmt_drenderExpr
+        (bi_add lineInd 2) body))
+  | _ -> v_Vuna_dFmt_dprefixFirst (((headerBase) ^ (" "))) (v_Vuna_dFmt_drenderExpr lineInd body)
+  | _ -> vuna_fail "lib/Vuna/Fmt.vuna" 539 6 ("case pattern match failure")))
+and v_Vuna_dFmt_drenderWhereBindings = fun lineInd binds -> v_Vuna_dList_dconcatMap (fun b -> v_Vuna_dFmt_drenderWhereBinding
+  lineInd b) binds
+and v_Vuna_dFmt_drenderWhereBinding = fun a0 a1 -> match (a0, a1) with
+  | (lineInd, C_Vuna_dPair_dPair (pat, value)) -> (match pat with
+  | C_Vuna_dAst_dPVar (name, psp) -> (match value with
+  | C_Vuna_dAst_dELam (ps, inner, lsp) -> v_Vuna_dFmt_drenderClause lineInd name (v_Vuna_dList_dmap (fun
+        n -> C_Vuna_dAst_dPVar (n, v_Vuna_dFmt_ddummySpan)) ps) inner
+  | _ -> v_Vuna_dFmt_drenderBindingValue lineInd (((name) ^ (" ="))) value
+  | _ -> vuna_fail "lib/Vuna/Fmt.vuna" 560 7 ("case pattern match failure"))
+  | _ -> v_Vuna_dFmt_drenderBindingValue lineInd (((v_Vuna_dFmt_drenderPat pat) ^ (" ="))) value
+  | _ -> vuna_fail "lib/Vuna/Fmt.vuna" 558 3 ("case pattern match failure"))
+  | _ -> vuna_fail "lib/Vuna/Fmt.vuna" 557 1 ("no matching clause for Vuna.Fmt.renderWhereBinding")
+
+let rec v_Vuna_dFmt_drenderDeclAt = fun lineInd decl -> (match decl with
+  | C_Vuna_dAst_dDData (name, params, ctors, derivings, sp) -> v_Vuna_dFmt_drenderDataDecl name params
+  ctors derivings
+  | C_Vuna_dAst_dDSig (name, ty, sp) -> v_Vuna_dFmt_drenderSigDecl lineInd name ty
+  | C_Vuna_dAst_dDFun (name, pats, body, sp) -> v_Vuna_dFmt_drenderClause lineInd name pats body
+  | C_Vuna_dAst_dDRecord (name, params, fields, derivings, sp) -> v_Vuna_dFmt_drenderRecordDecl name params
+  fields derivings
+  | C_Vuna_dAst_dDTrait (name, params, methods, sp) -> v_Vuna_dFmt_drenderTraitDecl name params methods
+  | C_Vuna_dAst_dDInstance (mname, isDefault, head, methods, sp) -> v_Vuna_dFmt_drenderInstanceDecl mname
+  head methods
+  | _ -> vuna_fail "lib/Vuna/Fmt.vuna" 487 3 ("case pattern match failure"))
+and v_Vuna_dFmt_drenderInstanceDecl = fun mname head methods -> (let headLines = (match v_Vuna_dFmt_dinlineExpr
+    head with
+  | C_Vuna_dMaybe_dJust (s) -> (s) :: ([])
+  | C_Vuna_dMaybe_dNothing -> v_Vuna_dFmt_dparenWrap 0 head
+  | _ -> vuna_fail "lib/Vuna/Fmt.vuna" 524 9 ("case pattern match failure")) in
+  let asText = (match mname with
+  | C_Vuna_dMaybe_dNothing -> ""
+  | C_Vuna_dMaybe_dJust (n) -> ((" as ") ^ (n))
+  | _ -> vuna_fail "lib/Vuna/Fmt.vuna" 528 9 ("case pattern match failure")) in
+  let headLine = v_Vuna_dFmt_dappendLast (((asText) ^ (" where"))) (v_Vuna_dFmt_dprefixFirst "instance "
+    headLines) in
+  let methodLines = v_Vuna_dList_dconcatMap (fun d -> v_Vuna_dFmt_drenderDeclAt 2 d) methods in
+  v_Vuna_dList_dappend headLine methodLines)
+
+let rec v_Vuna_dFmt_drenderTopRest = fun a0 a1 -> match (a0, a1) with
+  | (prev, []) -> []
+  | (prev, (d) :: (rest)) -> if v_Vuna_dFmt_dattachDecl prev d then v_Vuna_dList_dappend (v_Vuna_dFmt_drenderDeclAt
+  0 d) (v_Vuna_dFmt_drenderTopRest d rest)
+else ("") :: (v_Vuna_dList_dappend (v_Vuna_dFmt_drenderDeclAt 0 d) (v_Vuna_dFmt_drenderTopRest d rest))
+  | _ -> vuna_fail "lib/Vuna/Fmt.vuna" 570 1 ("no matching clause for Vuna.Fmt.renderTopRest")
+
+let v_Vuna_dFmt_drenderTopDecls = fun a0 -> match a0 with
+  | ([]) -> []
+  | ((d) :: (rest)) -> v_Vuna_dList_dappend (v_Vuna_dFmt_drenderDeclAt 0 d) (v_Vuna_dFmt_drenderTopRest
+  d rest)
+  | _ -> vuna_fail "lib/Vuna/Fmt.vuna" 566 1 ("no matching clause for Vuna.Fmt.renderTopDecls")
+
+let v_Vuna_dFmt_drenderSourceSections = fun hdr imports decls -> (v_Vuna_dFmt_drenderHeader hdr) :: ((v_Vuna_dList_dmap
+    v_Vuna_dFmt_drenderImport imports) :: ((v_Vuna_dFmt_drenderTopDecls decls) :: ([])))
+
 let v_Vuna_dTypedCodegen_dindentWidth = fun depth -> if v_vuna_ugt_uint depth 12 then 24
 else bi_mul depth 2
 
@@ -6825,7 +7835,7 @@ else bi_str_pack ((c) :: ([]))
 let rec v_Vuna_dTypedCodegen_descapeLong = fun a0 -> match a0 with
   | ([]) -> []
   | ((c) :: (rest)) -> (v_Vuna_dTypedCodegen_descapeChar c) :: (v_Vuna_dTypedCodegen_descapeLong rest)
-  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 1039 1 ("no matching clause for Vuna.TypedCodegen.escapeLong")
+  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 1075 1 ("no matching clause for Vuna.TypedCodegen.escapeLong")
 
 let v_Vuna_dTypecheck_dmaxInt = fun a b -> if v_vuna_ugt_uint a b then a
 else b
@@ -6889,6 +7899,42 @@ let v_Vuna_dString_dendsWith = fun suffix text -> (let ls = bi_str_length suffix
     if v_vuna_ugt_uint ls lt then false
     else v_Vuna_dString_d_ustartsWithChars (bi_str_unpack suffix) (v_Vuna_dList_ddrop (bi_sub lt ls) (bi_str_unpack
         text))))
+
+let rec v_Vuna_dTestRunner_dtestFiles = fun a0 -> match a0 with
+  | ([]) -> []
+  | ((name) :: (rest)) -> if v_Vuna_dString_dendsWith ".vuna" name then (name) :: (v_Vuna_dTestRunner_dtestFiles
+  rest)
+else v_Vuna_dTestRunner_dtestFiles rest
+  | _ -> vuna_fail "lib/Vuna/TestRunner.vuna" 23 1 ("no matching clause for Vuna.TestRunner.testFiles")
+
+let v_Vuna_dDoc_dstripVunaSuffix = fun name -> if v_Vuna_dString_dendsWith ".vuna" name then v_Vuna_dString_dsubstring
+0 (bi_sub (bi_str_length name) 5) name
+else name
+
+let v_Vuna_dDoc_dmoduleHeaderLine = fun path hdr -> (match hdr with
+  | C_Vuna_dMaybe_dJust (C_Vuna_dAst_dModDecl (name, hasList, items, sp)) -> (("## ") ^ (name))
+  | C_Vuna_dMaybe_dNothing -> (match v_Vuna_dFiles_dsplitPath path with
+  | C_Vuna_dPair_dPair (dir, base) -> (("## ") ^ (v_Vuna_dDoc_dstripVunaSuffix base))
+  | _ -> vuna_fail "lib/Vuna/Doc.vuna" 44 7 ("case pattern match failure"))
+  | _ -> vuna_fail "lib/Vuna/Doc.vuna" 41 3 ("case pattern match failure"))
+
+let rec v_Vuna_dFiles_dcollectVunaFiles = fun dir -> v_Vuna_dList_dconcatMap (v_Vuna_dFiles_dwalkVuna
+  dir) (bi_read_dir dir)
+and v_Vuna_dFiles_dwalkVuna = fun dir name -> (match name with
+  | "." -> []
+  | ".." -> []
+  | _ -> (let path = (let vuna_cat0' = (dir) in
+      (let vuna_cat1' = ("/") in
+        (let vuna_cat2' = (name) in
+          String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2']))) in
+    if bi_is_directory path then v_Vuna_dFiles_dcollectVunaFiles path
+    else if v_Vuna_dString_dendsWith ".vuna" name then (path) :: ([])
+    else [])
+  | _ -> vuna_fail "lib/Vuna/Files.vuna" 13 3 ("case pattern match failure"))
+
+let v_Vuna_dCli_dexpandPath = fun path -> if bi_is_directory path then v_Vuna_dFiles_dcollectVunaFiles
+path
+else (path) :: ([])
 
 let v_vuna_uge_uint = fun a b -> bi_ge_int a b
 
@@ -7050,7 +8096,7 @@ else if (if (v_vuna_ueq_uint prev 32) then (v_vuna_ueq_uint c 105)
     v_Vuna_dTypedCodegen_dformatChars rest2 (bi_add width 2) depth false false 32 (v_Vuna_dTypedCodegen_demitStr
       ((("in\n") ^ (v_Vuna_dTypedCodegen_dindentSpaces width))) acc))
   | _ -> v_Vuna_dTypedCodegen_dformatChars rest (bi_add col 1) depth false false c ((c) :: (acc))
-  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 1002 5 ("case pattern match failure"))
+  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 1038 5 ("case pattern match failure"))
 else if (if (v_vuna_ueq_uint prev 32) then (v_vuna_ueq_uint c 101)
   else false) then (match rest with
   | (108) :: ((115) :: ((101) :: ((32) :: (rest2)))) -> (let width = v_Vuna_dTypedCodegen_dindentWidth
@@ -7062,13 +8108,13 @@ else if (if (v_vuna_ueq_uint prev 32) then (v_vuna_ueq_uint c 101)
               String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'])))) (v_Vuna_dTypedCodegen_dtrimTrailing
         acc)))
   | _ -> v_Vuna_dTypedCodegen_dformatChars rest (bi_add col 1) depth false false c ((c) :: (acc))
-  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 1008 5 ("case pattern match failure"))
+  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 1044 5 ("case pattern match failure"))
 else if (if (v_vuna_ueq_uint c 32) then (v_vuna_ugt_uint col 100)
   else false) then (let width = v_Vuna_dTypedCodegen_dindentWidth depth in
   v_Vuna_dTypedCodegen_dformatChars rest width depth false false 32 (v_Vuna_dTypedCodegen_demitStr ((("\n")
         ^ (v_Vuna_dTypedCodegen_dindentSpaces width))) (v_Vuna_dTypedCodegen_dtrimTrailing acc)))
 else v_Vuna_dTypedCodegen_dformatChars rest (bi_add col 1) depth false false c ((c) :: (acc))
-  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 989 1 ("no matching clause for Vuna.TypedCodegen.formatChars")
+  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 1025 1 ("no matching clause for Vuna.TypedCodegen.formatChars")
 
 let v_Vuna_dTypedCodegen_dformatOutput = fun s -> bi_str_pack (v_Vuna_dList_dreverse (v_Vuna_dTypedCodegen_dtrimTrailing
     (v_Vuna_dTypedCodegen_dformatChars (bi_str_unpack s) 0 0 false false 0 [])))
@@ -7204,7 +8250,7 @@ let rec v_Vuna_dTypedCodegen_dgenPat = fun pat -> (match pat with
                     (let vuna_cat4' = (")") in
                       String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'; vuna_cat3'; vuna_cat4']))))))))
   | _ -> C_Vuna_dResult_dErr ("typed codegen: Cons pattern arity")
-  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 274 11 ("case pattern match failure"))
+  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 310 11 ("case pattern match failure"))
   | _ -> v_Vuna_dResult_dandThen (v_Vuna_dTypedCodegen_dmapResult v_Vuna_dTypedCodegen_dgenPat pats) (fun
       ps -> (match ps with
   | [] -> C_Vuna_dResult_dOk (v_Vuna_dTypedCodegen_dctorNameOf name)
@@ -7218,9 +8264,9 @@ let rec v_Vuna_dTypedCodegen_dgenPat = fun pat -> (match pat with
               (let vuna_cat2' = (v_Vuna_dTypedCodegen_djoinWith ", " ps) in
                 (let vuna_cat3' = (")") in
                   String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'; vuna_cat3'])))))
-  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 281 13 ("case pattern match failure")))
-  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 269 7 ("case pattern match failure"))
-  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 263 3 ("case pattern match failure"))
+  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 317 13 ("case pattern match failure")))
+  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 305 7 ("case pattern match failure"))
+  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 299 3 ("case pattern match failure"))
 
 let v_Vuna_dTypedCodegen_dgenCatchAll = fun a0 a1 -> match (a0, a1) with
   | (C_Vuna_dBase_dSpan (f, sl, sc, el, ec), msg) -> if v_vuna_ueq_uint sl 0 then (let vuna_cat0' = ("  | _ -> vuna_fail \"\" 0 0 (")
@@ -7239,7 +8285,7 @@ else (let vuna_cat0' = ("  | _ -> vuna_fail ") in
                 (let vuna_cat8' = (")") in
                   String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'; vuna_cat3'; vuna_cat4'; vuna_cat5';
                   vuna_cat6'; vuna_cat7'; vuna_cat8'])))))))))
-  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 566 1 ("no matching clause for Vuna.TypedCodegen.genCatchAll")
+  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 602 1 ("no matching clause for Vuna.TypedCodegen.genCatchAll")
 
 let v_Vuna_dTypedCodegen_dtypedString = fun s -> if v_vuna_ugt_uint (bi_str_length s) 80 then (let vuna_cat0'
   = ("\"") in
@@ -7257,7 +8303,7 @@ and v_Vuna_dTypedCodegen_dconcatBindings = fun a0 a1 a2 a3 -> match (a0, a1, a2,
   e) (fun code -> v_Vuna_dResult_dandThen (v_Vuna_dTypedCodegen_dconcatBindings decls env (bi_add i 1)
     rest) (fun binds -> C_Vuna_dResult_dOk ((C_Vuna_dPair_dPair (v_Vuna_dTypedCodegen_dconcatBindingName
           i, code)) :: (binds))))
-  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 398 1 ("no matching clause for Vuna.TypedCodegen.concatBindings")
+  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 434 1 ("no matching clause for Vuna.TypedCodegen.concatBindings")
 and v_Vuna_dTypedCodegen_dgenConcatN = fun decls env pieces -> v_Vuna_dResult_dandThen (v_Vuna_dTypedCodegen_dconcatBindings
   decls env 0 pieces) (fun binds -> C_Vuna_dResult_dOk (v_Vuna_dTypedCodegen_dwrapConcatBindings binds
     ((let vuna_cat0' = ("String.concat \"\" [") in
@@ -7285,14 +8331,14 @@ and v_Vuna_dTypedCodegen_dgenExpr = fun decls env expr -> (match expr with
   | "getArgs" -> C_Vuna_dResult_dOk ("bi_get_args ()")
   | "readLine" -> C_Vuna_dResult_dOk ("bi_read_line ()")
   | _ -> C_Vuna_dResult_dOk (ref)
-  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 484 17 ("case pattern match failure"))
+  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 520 17 ("case pattern match failure"))
   | C_Vuna_dMaybe_dNothing -> (match v_Vuna_dAst_dfunArity name decls with
   | C_Vuna_dMaybe_dJust (0) -> C_Vuna_dResult_dOk (v_Vuna_dTypedCodegen_dzeroArgRef decls name)
   | C_Vuna_dMaybe_dJust (arity) -> C_Vuna_dResult_dOk (v_Vuna_dTypedCodegen_dvalueName name)
   | C_Vuna_dMaybe_dNothing -> C_Vuna_dResult_dErr ((("typed codegen: unbound variable ") ^ (name)))
-  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 489 17 ("case pattern match failure"))
-  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 482 13 ("case pattern match failure"))
-  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 474 9 ("case pattern match failure"))
+  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 525 17 ("case pattern match failure"))
+  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 518 13 ("case pattern match failure"))
+  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 510 9 ("case pattern match failure"))
   | C_Vuna_dAst_dEInt (n, _) -> C_Vuna_dResult_dOk (bi_str_from_int n)
   | C_Vuna_dAst_dEStr (s, _) -> C_Vuna_dResult_dOk (v_Vuna_dTypedCodegen_dtypedString s)
   | C_Vuna_dAst_dEApp (fn, args, _) -> (match fn with
@@ -7314,7 +8360,7 @@ and v_Vuna_dTypedCodegen_dgenExpr = fun decls env expr -> (match expr with
                       (let vuna_cat4' = (")") in
                         String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'; vuna_cat3'; vuna_cat4']))))))))
   | _ -> C_Vuna_dResult_dErr ("typed codegen: Cons arity")
-  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 503 17 ("case pattern match failure"))
+  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 539 17 ("case pattern match failure"))
       else if v_vuna_ueq_uint (v_Vuna_dList_dlength args) arity then v_Vuna_dResult_dandThen (v_Vuna_dTypedCodegen_dgenArgs
         decls env args) (fun as2 -> (match as2 with
   | (a) :: ([]) -> C_Vuna_dResult_dOk ((let vuna_cat0' = (v_Vuna_dTypedCodegen_dctorNameOf name) in
@@ -7327,7 +8373,7 @@ and v_Vuna_dTypedCodegen_dgenExpr = fun decls env expr -> (match expr with
                 (let vuna_cat2' = (v_Vuna_dTypedCodegen_djoinWith ", " as2) in
                   (let vuna_cat3' = (")") in
                     String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'; vuna_cat3'])))))
-  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 511 19 ("case pattern match failure")))
+  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 547 19 ("case pattern match failure")))
       else C_Vuna_dResult_dErr ((("typed codegen: partial constructor ") ^ (name)))
   | C_Vuna_dMaybe_dNothing -> if v_vuna_ueq_ustr name "&&" then (match args with
   | (a) :: ((b) :: ([])) -> v_Vuna_dResult_dandThen (v_Vuna_dTypedCodegen_dgenExpr decls env a) (fun ga
@@ -7339,7 +8385,7 @@ and v_Vuna_dTypedCodegen_dgenExpr = fun decls env expr -> (match expr with
                       (let vuna_cat4' = (") else false)") in
                         String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'; vuna_cat3'; vuna_cat4']))))))))
   | _ -> v_Vuna_dTypedCodegen_dgenCall decls env fn args
-  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 517 17 ("case pattern match failure"))
+  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 553 17 ("case pattern match failure"))
       else if v_vuna_ueq_ustr name "||" then (match args with
   | (a) :: ((b) :: ([])) -> v_Vuna_dResult_dandThen (v_Vuna_dTypedCodegen_dgenExpr decls env a) (fun ga
           -> v_Vuna_dResult_dandThen (v_Vuna_dTypedCodegen_dgenExpr decls env b) (fun gb -> C_Vuna_dResult_dOk
@@ -7350,7 +8396,7 @@ and v_Vuna_dTypedCodegen_dgenExpr = fun decls env expr -> (match expr with
                       (let vuna_cat4' = ("))") in
                         String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'; vuna_cat3'; vuna_cat4']))))))))
   | _ -> v_Vuna_dTypedCodegen_dgenCall decls env fn args
-  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 524 17 ("case pattern match failure"))
+  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 560 17 ("case pattern match failure"))
       else if v_vuna_ueq_ustr name "++" then (match args with
   | (_) :: ((_) :: ([])) -> (match v_Vuna_dTypedCodegen_dfoldStringLiterals (v_Vuna_dTypedCodegen_dconcatFlatten
             expr) with
@@ -7364,13 +8410,13 @@ and v_Vuna_dTypedCodegen_dgenExpr = fun decls env expr -> (match expr with
                         (let vuna_cat4' = ("))") in
                         String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'; vuna_cat3'; vuna_cat4']))))))))
   | pieces -> v_Vuna_dTypedCodegen_dgenConcatN decls env pieces
-  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 533 21 ("case pattern match failure"))
+  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 569 21 ("case pattern match failure"))
   | _ -> v_Vuna_dTypedCodegen_dgenCall decls env fn args
-  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 531 17 ("case pattern match failure"))
+  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 567 17 ("case pattern match failure"))
       else v_Vuna_dTypedCodegen_dgenCall decls env fn args
-  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 498 11 ("case pattern match failure"))
+  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 534 11 ("case pattern match failure"))
   | _ -> v_Vuna_dTypedCodegen_dgenCall decls env fn args
-  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 496 7 ("case pattern match failure"))
+  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 532 7 ("case pattern match failure"))
   | C_Vuna_dAst_dELam (params, body, _) -> (let env2 = v_Vuna_dList_dappend params env in
     v_Vuna_dResult_dandThen (v_Vuna_dTypedCodegen_dgenExpr decls env2 body) (fun b -> C_Vuna_dResult_dOk
       ((let vuna_cat0' = ("fun ") in
@@ -7404,7 +8450,7 @@ and v_Vuna_dTypedCodegen_dgenExpr = fun decls env expr -> (match expr with
                     (let vuna_cat5' = (ge) in
                       String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'; vuna_cat3'; vuna_cat4';
                       vuna_cat5']))))))))))
-  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 470 3 ("case pattern match failure"))
+  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 506 3 ("case pattern match failure"))
 and v_Vuna_dTypedCodegen_dgenAlt = fun a0 a1 a2 -> match (a0, a1, a2) with
   | (decls, env, C_Vuna_dPair_dPair (pat, body)) -> v_Vuna_dResult_dandThen (v_Vuna_dTypedCodegen_dgenPat
   pat) (fun p -> v_Vuna_dResult_dandThen (v_Vuna_dTypedCodegen_dgenExpr decls (v_Vuna_dList_dappend (v_Vuna_dTypedCodegen_dpatVars
@@ -7413,11 +8459,11 @@ and v_Vuna_dTypedCodegen_dgenAlt = fun a0 a1 a2 -> match (a0, a1, a2) with
           (let vuna_cat2' = (" -> ") in
             (let vuna_cat3' = (b) in
               String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'; vuna_cat3'])))))))
-  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 560 1 ("no matching clause for Vuna.TypedCodegen.genAlt")
+  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 596 1 ("no matching clause for Vuna.TypedCodegen.genAlt")
 and v_Vuna_dTypedCodegen_dgenLetBinds = fun a0 a1 a2 a3 a4 -> match (a0, a1, a2, a3, a4) with
   | (decls, env, binds, body, false) -> v_Vuna_dTypedCodegen_dgenBinds decls env binds body
   | (decls, env, binds, body, true) -> v_Vuna_dTypedCodegen_dgenRecBinds decls env binds body
-  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 570 1 ("no matching clause for Vuna.TypedCodegen.genLetBinds")
+  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 606 1 ("no matching clause for Vuna.TypedCodegen.genLetBinds")
 and v_Vuna_dTypedCodegen_dgenRecBinds = fun decls env binds body -> v_Vuna_dResult_dandThen (v_Vuna_dTypedCodegen_dgenRecDefs
   decls (v_Vuna_dList_dappend (v_Vuna_dTypedCodegen_drecBindNames binds) env) binds) (fun defs -> v_Vuna_dResult_dandThen
   (v_Vuna_dTypedCodegen_dgenExpr decls (v_Vuna_dList_dappend (v_Vuna_dTypedCodegen_drecBindNames binds)
@@ -7436,7 +8482,7 @@ and v_Vuna_dTypedCodegen_dgenRecDefs = fun a0 a1 a2 -> match (a0, a1, a2) with
             (let vuna_cat2' = (v) in
               String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'])))) :: (tail))))
   | (decls, env, (C_Vuna_dPair_dPair (_, _)) :: (_)) -> C_Vuna_dResult_dErr ("recursive let bindings must be simple names")
-  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 583 1 ("no matching clause for Vuna.TypedCodegen.genRecDefs")
+  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 619 1 ("no matching clause for Vuna.TypedCodegen.genRecDefs")
 and v_Vuna_dTypedCodegen_dgenBinds = fun a0 a1 a2 a3 -> match (a0, a1, a2, a3) with
   | (decls, env, [], body) -> v_Vuna_dTypedCodegen_dgenExpr decls env body
   | (decls, env, (C_Vuna_dPair_dPair (pat, value)) :: (rest), body) -> v_Vuna_dResult_dandThen (v_Vuna_dTypedCodegen_dgenPat
@@ -7470,7 +8516,7 @@ and v_Vuna_dTypedCodegen_dgenBinds = fun a0 a1 a2 a3 -> match (a0, a1, a2, a3) w
                         String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'; vuna_cat3'; vuna_cat4';
                         vuna_cat5'; vuna_cat6'; vuna_cat7'; vuna_cat8'; vuna_cat9'; vuna_cat10'; vuna_cat11';
                         vuna_cat12'])))))))))))))))))
-  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 591 1 ("no matching clause for Vuna.TypedCodegen.genBinds")
+  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 627 1 ("no matching clause for Vuna.TypedCodegen.genBinds")
 
 let v_Vuna_dTypedCodegen_dgenClause = fun a0 a1 a2 -> match (a0, a1, a2) with
   | (decls, env, C_Vuna_dPair_dPair (pats, body)) -> v_Vuna_dResult_dandThen (v_Vuna_dTypedCodegen_dmapResult
@@ -7481,7 +8527,7 @@ let v_Vuna_dTypedCodegen_dgenClause = fun a0 a1 a2 -> match (a0, a1, a2) with
           (let vuna_cat2' = (") -> ") in
             (let vuna_cat3' = (b) in
               String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'; vuna_cat3'])))))))
-  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 600 1 ("no matching clause for Vuna.TypedCodegen.genClause")
+  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 636 1 ("no matching clause for Vuna.TypedCodegen.genClause")
 
 let v_Vuna_dTypedCodegen_dgenFunction = fun decls name -> (match v_Vuna_dAst_dfunArity name decls with
   | C_Vuna_dMaybe_dNothing -> C_Vuna_dResult_dErr ((("typed codegen: unknown function ") ^ (name)))
@@ -7535,8 +8581,8 @@ let v_Vuna_dTypedCodegen_dgenFunction = fun decls name -> (match v_Vuna_dAst_dfu
                         ((("no matching clause for ") ^ (name)))) :: ([])))) in
                         String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'; vuna_cat3'; vuna_cat4';
                         vuna_cat5']))))))))))
-  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 639 7 ("case pattern match failure"))
-  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 636 3 ("case pattern match failure"))
+  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 675 7 ("case pattern match failure"))
+  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 672 3 ("case pattern match failure"))
 
 let v_Vuna_dTypedCodegen_dgenGroupDef = fun decls name -> v_Vuna_dResult_dandThen (v_Vuna_dTypedCodegen_dgenFunction
   decls name) (fun body -> C_Vuna_dResult_dOk ((let vuna_cat0' = (v_Vuna_dTypedCodegen_dvalueName name)
@@ -7563,8 +8609,8 @@ let v_Vuna_dTypedCodegen_dgenTop = fun decls -> (match v_Vuna_dTypedCodegen_dfun
             v_Vuna_dResult_dandThen (v_Vuna_dTypedCodegen_dorderGroups adj groups) (fun ordered -> v_Vuna_dResult_dandThen
               (v_Vuna_dTypedCodegen_dmapResult (v_Vuna_dTypedCodegen_dgenGroup decls) ordered) (fun parts
                 -> C_Vuna_dResult_dOk (((v_Vuna_dTypedCodegen_djoinWith "\n\n" parts) ^ ("\n")))))))
-  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 854 11 ("case pattern match failure"))))
-  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 847 3 ("case pattern match failure"))
+  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 890 11 ("case pattern match failure"))))
+  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 883 3 ("case pattern match failure"))
 
 let v_Vuna_dCodegen_dctorShowBody = fun a0 a1 -> match (a0, a1) with
   | (short, []) -> v_Vuna_dCodegen_docamlString short
@@ -8063,7 +9109,7 @@ and v_Vuna_dParser_dparsePatternHead = fun st blockCol -> (match v_Vuna_dParser_
             args, v_Vuna_dParser_dspanOf st st2), st2)))
     else v_Vuna_dParser_dparsePatternAtom st blockCol)
   | _ -> v_Vuna_dParser_dparsePatternAtom st blockCol
-  | _ -> vuna_fail "lib/Vuna/Parser.vuna" 798 3 ("case pattern match failure"))
+  | _ -> vuna_fail "lib/Vuna/Parser.vuna" 805 3 ("case pattern match failure"))
 and v_Vuna_dParser_dparseRecordPatternFields = fun st blockCol -> v_Vuna_dResult_dstep (v_Vuna_dParser_dexpectSym
   st "{") (fun _u st1 -> v_Vuna_dParser_dparseRecordPatternList st1 blockCol)
 and v_Vuna_dParser_dparseRecordPatternList = fun st blockCol -> if v_Vuna_dParser_datSym st "}" then C_Vuna_dResult_dOk
@@ -8082,7 +9128,7 @@ and v_Vuna_dParser_dparseRecordPatternField = fun st blockCol -> (match v_Vuna_d
             C_Vuna_dBase_dSpan (v_Vuna_dParser_dfileOf st, v_Vuna_dBase_dposLine p, v_Vuna_dBase_dposCol
               p, v_Vuna_dBase_dposLine p, v_Vuna_dBase_dposCol p))), st1)))
   | _ -> C_Vuna_dResult_dErr ("expected a record field pattern")
-  | _ -> vuna_fail "lib/Vuna/Parser.vuna" 824 3 ("case pattern match failure"))
+  | _ -> vuna_fail "lib/Vuna/Parser.vuna" 831 3 ("case pattern match failure"))
 and v_Vuna_dParser_dparsePatternAtoms = fun st blockCol -> if (if (v_Vuna_dParser_dstartsPatternAtom st)
   then (v_Vuna_dParser_dcanContinue st blockCol)
   else false) then v_Vuna_dResult_dstep (v_Vuna_dParser_dparsePatternAtom st blockCol) (fun pat st1 ->
@@ -8106,7 +9152,7 @@ and v_Vuna_dParser_dparsePatternAtom = fun st blockCol -> (match v_Vuna_dParser_
       st1 ")") (fun _u st2 -> C_Vuna_dResult_dOk (C_Vuna_dPair_dPair (inner, st2))))
   | C_Vuna_dLexer_dPTok (C_Vuna_dLexer_dTSym ("["), p) -> v_Vuna_dParser_dparseListPattern st blockCol
   | _ -> C_Vuna_dResult_dErr ("expected pattern")
-  | _ -> vuna_fail "lib/Vuna/Parser.vuna" 843 3 ("case pattern match failure"))
+  | _ -> vuna_fail "lib/Vuna/Parser.vuna" 850 3 ("case pattern match failure"))
 and v_Vuna_dParser_dparseListPattern = fun st blockCol -> v_Vuna_dResult_dstep (v_Vuna_dParser_dexpectSym
   st "[") (fun _u st1 -> if v_Vuna_dParser_datSym st1 "]" then C_Vuna_dResult_dOk (C_Vuna_dPair_dPair
     (C_Vuna_dAst_dPCon ("Nil", [], v_Vuna_dParser_dspanOf st (v_Vuna_dParser_dadvance st1)), v_Vuna_dParser_dadvance
@@ -8144,9 +9190,9 @@ and v_Vuna_dParser_dparseInfix = fun st blockCol minPrec lhs -> (match v_Vuna_dP
           lhs rhs (v_Vuna_dParser_dspanOf st st2))))
     else C_Vuna_dResult_dOk (C_Vuna_dPair_dPair (lhs, st))
   | C_Vuna_dMaybe_dNothing -> C_Vuna_dResult_dOk (C_Vuna_dPair_dPair (lhs, st))
-  | _ -> vuna_fail "lib/Vuna/Parser.vuna" 540 7 ("case pattern match failure"))
+  | _ -> vuna_fail "lib/Vuna/Parser.vuna" 547 7 ("case pattern match failure"))
   | _ -> C_Vuna_dResult_dOk (C_Vuna_dPair_dPair (lhs, st))
-  | _ -> vuna_fail "lib/Vuna/Parser.vuna" 538 3 ("case pattern match failure"))
+  | _ -> vuna_fail "lib/Vuna/Parser.vuna" 545 3 ("case pattern match failure"))
 and v_Vuna_dParser_dparseLhs = fun st blockCol -> (match v_Vuna_dParser_dpeekTok st with
   | C_Vuna_dLexer_dPTok (C_Vuna_dLexer_dTSym ("\\"), p) -> v_Vuna_dParser_dparseLambda st blockCol
   | C_Vuna_dLexer_dPTok (C_Vuna_dLexer_dTKw ("let"), p) -> v_Vuna_dParser_dparseLet st blockCol
@@ -8154,7 +9200,7 @@ and v_Vuna_dParser_dparseLhs = fun st blockCol -> (match v_Vuna_dParser_dpeekTok
   | C_Vuna_dLexer_dPTok (C_Vuna_dLexer_dTKw ("if"), p) -> v_Vuna_dParser_dparseIf st blockCol
   | C_Vuna_dLexer_dPTok (C_Vuna_dLexer_dTKw ("do"), p) -> v_Vuna_dParser_dparseDo st blockCol
   | _ -> v_Vuna_dParser_dparseApplication st blockCol
-  | _ -> vuna_fail "lib/Vuna/Parser.vuna" 551 3 ("case pattern match failure"))
+  | _ -> vuna_fail "lib/Vuna/Parser.vuna" 558 3 ("case pattern match failure"))
 and v_Vuna_dParser_dparseApplication = fun st blockCol -> v_Vuna_dResult_dstep (v_Vuna_dParser_dparseAtom
   st blockCol) (fun first st1 -> v_Vuna_dResult_dstep (v_Vuna_dParser_dparseInstanceSelector st1 blockCol
     first) (fun first2 st2 -> v_Vuna_dResult_dstep (v_Vuna_dParser_dparseArgs st2 blockCol) (fun args
@@ -8162,7 +9208,7 @@ and v_Vuna_dParser_dparseApplication = fun st blockCol -> v_Vuna_dResult_dstep (
   | [] -> C_Vuna_dResult_dOk (C_Vuna_dPair_dPair (first2, st3))
   | _ -> C_Vuna_dResult_dOk (C_Vuna_dPair_dPair (C_Vuna_dAst_dEApp (first2, args, v_Vuna_dParser_dspanOf
               st st3), st3))
-  | _ -> vuna_fail "lib/Vuna/Parser.vuna" 563 9 ("case pattern match failure")))))
+  | _ -> vuna_fail "lib/Vuna/Parser.vuna" 570 9 ("case pattern match failure")))))
 and v_Vuna_dParser_dparseArgs = fun st blockCol -> if (if (v_Vuna_dParser_dstartsAtom st) then (v_Vuna_dParser_dcanContinue
     st blockCol)
   else false) then v_Vuna_dResult_dstep (v_Vuna_dParser_dparseAtom st blockCol) (fun arg st1 -> v_Vuna_dResult_dstep
@@ -8195,7 +9241,7 @@ and v_Vuna_dParser_dparseAtomBase = fun st blockCol -> (match v_Vuna_dParser_dpe
         (v_Vuna_dParser_dparseRecordAssignments st3 blockCol) (fun fields st4 -> C_Vuna_dResult_dOk (C_Vuna_dPair_dPair
             (C_Vuna_dAst_dERecUpdate (base, fields, v_Vuna_dParser_dspanOf st st4), st4))))))
   | _ -> C_Vuna_dResult_dErr ("expected expression")
-  | _ -> vuna_fail "lib/Vuna/Parser.vuna" 598 3 ("case pattern match failure"))
+  | _ -> vuna_fail "lib/Vuna/Parser.vuna" 605 3 ("case pattern match failure"))
 and v_Vuna_dParser_dparseRecordAssignments = fun st blockCol -> if v_Vuna_dParser_datSym st "}" then C_Vuna_dResult_dOk
 (C_Vuna_dPair_dPair ([], v_Vuna_dParser_dadvance st))
 else v_Vuna_dResult_dstep (v_Vuna_dParser_dparseRecordAssignList st blockCol) (fun fs st1 -> C_Vuna_dResult_dOk
@@ -8239,7 +9285,7 @@ else (match v_Vuna_dParser_dpeekPos st with
   | C_Vuna_dBase_dPos (line, col) -> if v_vuna_ule_uint col blockCol then C_Vuna_dResult_dErr ("let binding is not indented enough")
 
   else v_Vuna_dParser_dparseLetBindingsAt st col
-  | _ -> vuna_fail "lib/Vuna/Parser.vuna" 680 5 ("case pattern match failure"))
+  | _ -> vuna_fail "lib/Vuna/Parser.vuna" 687 5 ("case pattern match failure"))
 and v_Vuna_dParser_dparseLetBindingsAt = fun st declCol -> if v_Vuna_dParser_disEof st then C_Vuna_dResult_dOk
 (C_Vuna_dPair_dPair ([], st))
 else if v_Vuna_dParser_datKw st "in" then C_Vuna_dResult_dOk (C_Vuna_dPair_dPair ([], st))
@@ -8250,7 +9296,7 @@ else (match v_Vuna_dParser_dpeekPos st with
         (v_Vuna_dParser_dparseLetBindingsAt st3 declCol) (fun rest st4 -> C_Vuna_dResult_dOk (C_Vuna_dPair_dPair
             ((C_Vuna_dPair_dPair (pat, value)) :: (rest), st4))))))
   else C_Vuna_dResult_dOk (C_Vuna_dPair_dPair ([], st))
-  | _ -> vuna_fail "lib/Vuna/Parser.vuna" 689 5 ("case pattern match failure"))
+  | _ -> vuna_fail "lib/Vuna/Parser.vuna" 696 5 ("case pattern match failure"))
 and v_Vuna_dParser_dparseCase = fun st blockCol -> v_Vuna_dResult_dstep (v_Vuna_dParser_dexpectKw st "case")
 (fun _u st1 -> v_Vuna_dResult_dstep (v_Vuna_dParser_dparseExpr st1 blockCol 0) (fun scrut st2 -> v_Vuna_dResult_dstep
     (v_Vuna_dParser_dexpectKw st2 "of") (fun _u st3 -> v_Vuna_dResult_dstep (v_Vuna_dParser_dparseCaseAlts
@@ -8266,8 +9312,8 @@ else (match v_Vuna_dParser_dpeekPos st with
     else (match alts with
   | [] -> C_Vuna_dResult_dErr ("case expression needs an alternative")
   | _ -> C_Vuna_dResult_dOk (C_Vuna_dPair_dPair (alts, st2))
-  | _ -> vuna_fail "lib/Vuna/Parser.vuna" 716 15 ("case pattern match failure")))
-  | _ -> vuna_fail "lib/Vuna/Parser.vuna" 709 5 ("case pattern match failure"))
+  | _ -> vuna_fail "lib/Vuna/Parser.vuna" 723 15 ("case pattern match failure")))
+  | _ -> vuna_fail "lib/Vuna/Parser.vuna" 716 5 ("case pattern match failure"))
 and v_Vuna_dParser_dparseAltList = fun st altCol -> if v_Vuna_dParser_disEof st then C_Vuna_dResult_dOk
 (C_Vuna_dPair_dPair ([], st))
 else (match v_Vuna_dParser_dpeekPos st with
@@ -8277,7 +9323,7 @@ else (match v_Vuna_dParser_dpeekPos st with
         (v_Vuna_dParser_dparseAltList st3 altCol) (fun rest st4 -> C_Vuna_dResult_dOk (C_Vuna_dPair_dPair
             ((C_Vuna_dPair_dPair (pat, body)) :: (rest), st4))))))
   else C_Vuna_dResult_dOk (C_Vuna_dPair_dPair ([], st))
-  | _ -> vuna_fail "lib/Vuna/Parser.vuna" 723 5 ("case pattern match failure"))
+  | _ -> vuna_fail "lib/Vuna/Parser.vuna" 730 5 ("case pattern match failure"))
 and v_Vuna_dParser_dparseIf = fun st blockCol -> v_Vuna_dResult_dstep (v_Vuna_dParser_dexpectKw st "if")
 (fun _u st1 -> v_Vuna_dResult_dstep (v_Vuna_dParser_dparseExpr st1 blockCol 0) (fun cond st2 -> v_Vuna_dResult_dstep
     (v_Vuna_dParser_dexpectKw st2 "then") (fun _u st3 -> v_Vuna_dResult_dstep (v_Vuna_dParser_dparseExpr
@@ -8295,8 +9341,8 @@ and v_Vuna_dParser_dparseDo = fun st blockCol -> v_Vuna_dResult_dstep (v_Vuna_dP
   | (C_Vuna_dAst_dDExpr (lastExpr, lastSp)) :: (rest) -> C_Vuna_dResult_dOk (C_Vuna_dPair_dPair (C_Vuna_dAst_dEDo
             (stmts, v_Vuna_dParser_dspanOf st st2), st2))
   | _ -> C_Vuna_dResult_dErr ("do block must end with an expression")
-  | _ -> vuna_fail "lib/Vuna/Parser.vuna" 753 15 ("case pattern match failure")))
-  | _ -> vuna_fail "lib/Vuna/Parser.vuna" 748 7 ("case pattern match failure")))
+  | _ -> vuna_fail "lib/Vuna/Parser.vuna" 760 15 ("case pattern match failure")))
+  | _ -> vuna_fail "lib/Vuna/Parser.vuna" 755 7 ("case pattern match failure")))
 and v_Vuna_dParser_dparseDoStmts = fun st stmtCol acc -> if v_Vuna_dParser_disEof st then C_Vuna_dResult_dOk
 (C_Vuna_dPair_dPair (v_Vuna_dList_dreverse acc, st))
 else (match v_Vuna_dParser_dpeekPos st with
@@ -8313,8 +9359,8 @@ else (match v_Vuna_dParser_dpeekPos st with
       else if v_vuna_ugt_uint col2 stmtCol then C_Vuna_dResult_dErr ("unexpected indentation in do block")
 
       else v_Vuna_dParser_dparseDoStmts st1 stmtCol ((stmt) :: (acc))
-  | _ -> vuna_fail "lib/Vuna/Parser.vuna" 767 13 ("case pattern match failure")))
-  | _ -> vuna_fail "lib/Vuna/Parser.vuna" 761 5 ("case pattern match failure"))
+  | _ -> vuna_fail "lib/Vuna/Parser.vuna" 774 13 ("case pattern match failure")))
+  | _ -> vuna_fail "lib/Vuna/Parser.vuna" 768 5 ("case pattern match failure"))
 and v_Vuna_dParser_dparseDoStmt = fun st stmtCol -> (match v_Vuna_dParser_dparsePatternSingle st stmtCol
   with
   | C_Vuna_dResult_dOk (C_Vuna_dPair_dPair (pat, st1)) -> if v_Vuna_dParser_datSym st1 "<-" then v_Vuna_dResult_dstep
@@ -8323,7 +9369,7 @@ and v_Vuna_dParser_dparseDoStmt = fun st stmtCol -> (match v_Vuna_dParser_dparse
             v_Vuna_dParser_dspanOf st st3), st3))))
   else v_Vuna_dParser_dparseDoExprStmt st stmtCol
   | C_Vuna_dResult_dErr (_) -> v_Vuna_dParser_dparseDoExprStmt st stmtCol
-  | _ -> vuna_fail "lib/Vuna/Parser.vuna" 775 3 ("case pattern match failure"))
+  | _ -> vuna_fail "lib/Vuna/Parser.vuna" 782 3 ("case pattern match failure"))
 and v_Vuna_dParser_dparseDoExprStmt = fun st stmtCol -> v_Vuna_dResult_dstep (v_Vuna_dParser_dparseExpr
   (v_Vuna_dParser_dsameLineState st) stmtCol 0) (fun e st1 -> C_Vuna_dResult_dOk (C_Vuna_dPair_dPair (C_Vuna_dAst_dDExpr
       (e, v_Vuna_dParser_dspanOf st st1), st1)))
@@ -8350,7 +9396,7 @@ let v_Vuna_dParser_dparseWhereBinding = fun st bindCol -> v_Vuna_dResult_dstep (
                     st st4)), st4))))))
     else v_Vuna_dParser_dparseWhereValue st1 pat bindCol
   | _ -> v_Vuna_dParser_dparseWhereValue st1 pat bindCol
-  | _ -> vuna_fail "lib/Vuna/Parser.vuna" 330 5 ("case pattern match failure")))
+  | _ -> vuna_fail "lib/Vuna/Parser.vuna" 337 5 ("case pattern match failure")))
 
 let rec v_Vuna_dParser_dparseWhereBindingsAt = fun st bindCol -> if v_Vuna_dParser_disEof st then C_Vuna_dResult_dOk
 (C_Vuna_dPair_dPair ([], st))
@@ -8361,7 +9407,7 @@ else (match v_Vuna_dParser_dpeekPos st with
   else if v_vuna_ugt_uint col bindCol then C_Vuna_dResult_dErr ("unexpected indentation in where block")
 
   else C_Vuna_dResult_dOk (C_Vuna_dPair_dPair ([], st))
-  | _ -> vuna_fail "lib/Vuna/Parser.vuna" 318 5 ("case pattern match failure"))
+  | _ -> vuna_fail "lib/Vuna/Parser.vuna" 325 5 ("case pattern match failure"))
 
 let v_Vuna_dParser_dparseWhereBindings = fun st whereCol -> if v_Vuna_dParser_disEof st then C_Vuna_dResult_dOk
 (C_Vuna_dPair_dPair ([], st))
@@ -8369,7 +9415,7 @@ else (match v_Vuna_dParser_dpeekPos st with
   | C_Vuna_dBase_dPos (line, col) -> if v_vuna_ugt_uint col whereCol then v_Vuna_dParser_dparseWhereBindingsAt
   st col
   else C_Vuna_dResult_dOk (C_Vuna_dPair_dPair ([], st))
-  | _ -> vuna_fail "lib/Vuna/Parser.vuna" 310 5 ("case pattern match failure"))
+  | _ -> vuna_fail "lib/Vuna/Parser.vuna" 317 5 ("case pattern match failure"))
 
 let v_Vuna_dParser_dparseWhere = fun st blockCol -> (match v_Vuna_dParser_dpeekTok st with
   | C_Vuna_dLexer_dPTok (C_Vuna_dLexer_dTKw ("where"), p) -> if v_vuna_ugt_uint (v_Vuna_dBase_dposCol
@@ -8378,7 +9424,7 @@ let v_Vuna_dParser_dparseWhere = fun st blockCol -> (match v_Vuna_dParser_dpeekT
       binds st2 -> C_Vuna_dResult_dOk (C_Vuna_dPair_dPair (binds, st2))))
   else C_Vuna_dResult_dOk (C_Vuna_dPair_dPair ([], st))
   | _ -> C_Vuna_dResult_dOk (C_Vuna_dPair_dPair ([], st))
-  | _ -> vuna_fail "lib/Vuna/Parser.vuna" 298 3 ("case pattern match failure"))
+  | _ -> vuna_fail "lib/Vuna/Parser.vuna" 305 3 ("case pattern match failure"))
 
 let v_Vuna_dParser_dparseClause = fun st blockCol name namePos -> v_Vuna_dResult_dstep (v_Vuna_dParser_dparseClausePatterns
   st blockCol) (fun pats st1 -> v_Vuna_dResult_dstep (v_Vuna_dParser_dexpectSym st1 "=") (fun _u st2 ->
@@ -8386,7 +9432,7 @@ let v_Vuna_dParser_dparseClause = fun st blockCol name namePos -> v_Vuna_dResult
       (v_Vuna_dParser_dparseWhere st3 blockCol) (fun wheres st4 -> (let body2 = (match wheres with
   | [] -> body
   | (_) :: (_) -> C_Vuna_dAst_dELet (wheres, body, true, v_Vuna_dParser_dspanOf st st4)
-  | _ -> vuna_fail "lib/Vuna/Parser.vuna" 291 17 ("case pattern match failure")) in
+  | _ -> vuna_fail "lib/Vuna/Parser.vuna" 298 17 ("case pattern match failure")) in
           C_Vuna_dResult_dOk (C_Vuna_dPair_dPair (C_Vuna_dAst_dDFun (name, pats, body2, C_Vuna_dBase_dSpan
                 (v_Vuna_dParser_dfileOf st, v_Vuna_dBase_dposLine namePos, v_Vuna_dBase_dposCol namePos,
                   v_Vuna_dBase_dposLine (v_Vuna_dParser_dlastPos st4), v_Vuna_dBase_dposCol (v_Vuna_dParser_dlastPos
@@ -8403,7 +9449,7 @@ else (match v_Vuna_dParser_dpeekPos st with
   else if v_vuna_ugt_uint col fieldCol then C_Vuna_dResult_dErr ("unexpected indentation in record block")
 
   else C_Vuna_dResult_dOk (C_Vuna_dPair_dPair ([], st))
-  | _ -> vuna_fail "lib/Vuna/Parser.vuna" 393 5 ("case pattern match failure"))
+  | _ -> vuna_fail "lib/Vuna/Parser.vuna" 400 5 ("case pattern match failure"))
 
 let v_Vuna_dParser_dparseFields = fun st blockCol -> if v_Vuna_dParser_disEof st then C_Vuna_dResult_dOk
 (C_Vuna_dPair_dPair ([], st))
@@ -8411,7 +9457,7 @@ else (match v_Vuna_dParser_dpeekPos st with
   | C_Vuna_dBase_dPos (line, col) -> if v_vuna_ugt_uint col blockCol then v_Vuna_dParser_dparseFieldList
   st col
   else C_Vuna_dResult_dOk (C_Vuna_dPair_dPair ([], st))
-  | _ -> vuna_fail "lib/Vuna/Parser.vuna" 385 5 ("case pattern match failure"))
+  | _ -> vuna_fail "lib/Vuna/Parser.vuna" 392 5 ("case pattern match failure"))
 
 let v_Vuna_dParser_dparseRecord = fun st blockCol kwPos -> v_Vuna_dResult_dstep (v_Vuna_dParser_dexpectKw
   st "record") (fun _u st1 -> v_Vuna_dResult_dstep (v_Vuna_dParser_dexpectIdent st1) (fun name st2 ->
@@ -8434,7 +9480,7 @@ else (match v_Vuna_dParser_dpeekPos st with
   else if v_vuna_ugt_uint col methodCol then C_Vuna_dResult_dErr ("unexpected indentation in trait block")
 
   else C_Vuna_dResult_dOk (C_Vuna_dPair_dPair ([], st))
-  | _ -> vuna_fail "lib/Vuna/Parser.vuna" 441 5 ("case pattern match failure"))
+  | _ -> vuna_fail "lib/Vuna/Parser.vuna" 448 5 ("case pattern match failure"))
 
 let v_Vuna_dParser_dparseMethodSigs = fun st blockCol -> if v_Vuna_dParser_disEof st then C_Vuna_dResult_dOk
 (C_Vuna_dPair_dPair ([], st))
@@ -8442,7 +9488,7 @@ else (match v_Vuna_dParser_dpeekPos st with
   | C_Vuna_dBase_dPos (line, col) -> if v_vuna_ugt_uint col blockCol then v_Vuna_dParser_dparseMethodSigList
   st col
   else C_Vuna_dResult_dOk (C_Vuna_dPair_dPair ([], st))
-  | _ -> vuna_fail "lib/Vuna/Parser.vuna" 433 5 ("case pattern match failure"))
+  | _ -> vuna_fail "lib/Vuna/Parser.vuna" 440 5 ("case pattern match failure"))
 
 let v_Vuna_dParser_dparseTrait = fun st blockCol kwPos -> v_Vuna_dResult_dstep (v_Vuna_dParser_dexpectKw
   st "trait") (fun _u st1 -> v_Vuna_dResult_dstep (v_Vuna_dParser_dexpectIdent st1) (fun name st2 -> v_Vuna_dResult_dstep
@@ -8458,7 +9504,7 @@ let v_Vuna_dParser_dparseInstanceDecl = fun st blockCol -> (match v_Vuna_dParser
     if v_Vuna_dParser_datSym st1 ":" then v_Vuna_dParser_dparseSignature st1 blockCol name p
     else v_Vuna_dParser_dparseClause st1 blockCol name p)
   | _ -> C_Vuna_dResult_dErr ("expected an instance method")
-  | _ -> vuna_fail "lib/Vuna/Parser.vuna" 494 3 ("case pattern match failure"))
+  | _ -> vuna_fail "lib/Vuna/Parser.vuna" 501 3 ("case pattern match failure"))
 
 let rec v_Vuna_dParser_dparseInstanceDeclList = fun st declCol -> if v_Vuna_dParser_disEof st then C_Vuna_dResult_dOk
 (C_Vuna_dPair_dPair ([], st))
@@ -8469,7 +9515,7 @@ else (match v_Vuna_dParser_dpeekPos st with
   else if v_vuna_ugt_uint col declCol then C_Vuna_dResult_dErr ("unexpected indentation in instance block")
 
   else C_Vuna_dResult_dOk (C_Vuna_dPair_dPair ([], st))
-  | _ -> vuna_fail "lib/Vuna/Parser.vuna" 484 5 ("case pattern match failure"))
+  | _ -> vuna_fail "lib/Vuna/Parser.vuna" 491 5 ("case pattern match failure"))
 
 let v_Vuna_dParser_dparseInstanceBody = fun st blockCol -> if v_Vuna_dParser_disEof st then C_Vuna_dResult_dOk
 (C_Vuna_dPair_dPair ([], st))
@@ -8477,7 +9523,7 @@ else (match v_Vuna_dParser_dpeekPos st with
   | C_Vuna_dBase_dPos (line, col) -> if v_vuna_ugt_uint col blockCol then v_Vuna_dParser_dparseInstanceDeclList
   st col
   else C_Vuna_dResult_dOk (C_Vuna_dPair_dPair ([], st))
-  | _ -> vuna_fail "lib/Vuna/Parser.vuna" 476 5 ("case pattern match failure"))
+  | _ -> vuna_fail "lib/Vuna/Parser.vuna" 483 5 ("case pattern match failure"))
 
 let v_Vuna_dParser_dparseInstance = fun st blockCol kwPos -> v_Vuna_dResult_dstep (v_Vuna_dParser_dexpectKw
   st "instance") (fun _u st1 -> v_Vuna_dResult_dstep (v_Vuna_dParser_dparseExpr st1 blockCol 0) (fun head
@@ -8501,7 +9547,7 @@ else (match v_Vuna_dParser_dpeekPos st with
   else if v_vuna_ugt_uint col ctorCol then C_Vuna_dResult_dErr ("unexpected indentation in data block")
 
   else C_Vuna_dResult_dOk (C_Vuna_dPair_dPair ([], st))
-  | _ -> vuna_fail "lib/Vuna/Parser.vuna" 519 5 ("case pattern match failure"))
+  | _ -> vuna_fail "lib/Vuna/Parser.vuna" 526 5 ("case pattern match failure"))
 
 let v_Vuna_dParser_dparseCtors = fun st blockCol -> if v_Vuna_dParser_disEof st then C_Vuna_dResult_dOk
 (C_Vuna_dPair_dPair ([], st))
@@ -8509,7 +9555,7 @@ else (match v_Vuna_dParser_dpeekPos st with
   | C_Vuna_dBase_dPos (line, col) -> if v_vuna_ugt_uint col blockCol then v_Vuna_dParser_dparseCtorList
   st col
   else C_Vuna_dResult_dOk (C_Vuna_dPair_dPair ([], st))
-  | _ -> vuna_fail "lib/Vuna/Parser.vuna" 511 5 ("case pattern match failure"))
+  | _ -> vuna_fail "lib/Vuna/Parser.vuna" 518 5 ("case pattern match failure"))
 
 let v_Vuna_dParser_dparseData = fun st blockCol kwPos -> v_Vuna_dResult_dstep (v_Vuna_dParser_dexpectKw
   st "data") (fun _u st1 -> v_Vuna_dResult_dstep (v_Vuna_dParser_dexpectIdent st1) (fun name st2 -> v_Vuna_dResult_dstep
@@ -8533,7 +9579,7 @@ let v_Vuna_dParser_dparseDecl = fun st blockCol -> (match v_Vuna_dParser_dpeekTo
     if v_Vuna_dParser_datSym st1 ":" then v_Vuna_dParser_dparseSignature st1 blockCol name p
     else v_Vuna_dParser_dparseClause st1 blockCol name p)
   | _ -> C_Vuna_dResult_dErr ("expected a top-level declaration")
-  | _ -> vuna_fail "lib/Vuna/Parser.vuna" 269 3 ("case pattern match failure"))
+  | _ -> vuna_fail "lib/Vuna/Parser.vuna" 276 3 ("case pattern match failure"))
 
 let rec v_Vuna_dParser_dparseDecls = fun st blockCol -> if v_Vuna_dParser_disEof st then C_Vuna_dResult_dOk
 (C_Vuna_dPair_dPair ([], st))
@@ -8542,7 +9588,7 @@ else (match v_Vuna_dParser_dpeekPos st with
     st blockCol) (fun decl st1 -> v_Vuna_dResult_dstep (v_Vuna_dParser_dparseDecls st1 blockCol) (fun
       rest st2 -> C_Vuna_dResult_dOk (C_Vuna_dPair_dPair ((decl) :: (rest), st2))))
   else C_Vuna_dResult_dErr ((("expected a declaration at column ") ^ (bi_str_from_int blockCol)))
-  | _ -> vuna_fail "lib/Vuna/Parser.vuna" 260 5 ("case pattern match failure"))
+  | _ -> vuna_fail "lib/Vuna/Parser.vuna" 267 5 ("case pattern match failure"))
 
 let v_Vuna_dParser_dparseSourceFile = fun st -> v_Vuna_dResult_dstep (v_Vuna_dParser_dparseModDecl st)
 (fun hdr st1 -> v_Vuna_dResult_dstep (v_Vuna_dParser_dparseImports st1) (fun imports st2 -> if v_Vuna_dParser_disEof
@@ -8552,7 +9598,7 @@ let v_Vuna_dParser_dparseSourceFile = fun st -> v_Vuna_dResult_dstep (v_Vuna_dPa
         st3 -> if v_Vuna_dParser_disEof st3 then C_Vuna_dResult_dOk (C_Vuna_dPair_dPair (C_Vuna_dAst_dSource
             (hdr, imports, decls), st3))
         else C_Vuna_dResult_dErr ("expected end of input"))
-  | _ -> vuna_fail "lib/Vuna/Parser.vuna" 187 9 ("case pattern match failure"))))
+  | _ -> vuna_fail "lib/Vuna/Parser.vuna" 194 9 ("case pattern match failure"))))
 
 let v_Vuna_dLexer_disUpperChar = fun c -> (if (v_vuna_uge_uint c 65) then (v_vuna_ule_uint c 90)
   else false)
@@ -8803,6 +9849,119 @@ let v_Vuna_dLint_dapplyFixes = fun source findings -> (let edits = v_Vuna_dLint_
   | _ -> vuna_fail "lib/Vuna/Lint.vuna" 733 15 ("case pattern match failure")))
   | _ -> vuna_fail "lib/Vuna/Lint.vuna" 728 6 ("case pattern match failure")))
 
+let v_Vuna_dDoc_ddocModule = fun path -> (match v_Vuna_dParser_dparseSource path (bi_read_file path) with
+  | C_Vuna_dResult_dErr (e) -> C_Vuna_dResult_dErr ((let vuna_cat0' = (path) in
+      (let vuna_cat1' = (": ") in
+        (let vuna_cat2' = (e) in
+          String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2']))))
+  | C_Vuna_dResult_dOk (C_Vuna_dAst_dSource (hdr, imports, decls)) -> C_Vuna_dResult_dOk ((let vuna_cat0'
+      = (v_Vuna_dDoc_dmoduleHeaderLine path hdr) in
+      (let vuna_cat1' = ("\n\n```vuna\n") in
+        (let vuna_cat2' = (v_Vuna_dString_djoin "\n" (v_Vuna_dDoc_ddeclLines decls)) in
+          (let vuna_cat3' = ("\n```\n") in
+            String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'; vuna_cat3'])))))
+  | _ -> vuna_fail "lib/Vuna/Doc.vuna" 35 3 ("case pattern match failure"))
+
+let rec v_Vuna_dDoc_ddocModules = fun a0 -> match a0 with
+  | ([]) -> C_Vuna_dResult_dOk ([])
+  | ((path) :: (rest)) -> v_Vuna_dResult_dandThen (v_Vuna_dDoc_ddocModule path) (fun section -> v_Vuna_dResult_dandThen
+  (v_Vuna_dDoc_ddocModules rest) (fun sections -> C_Vuna_dResult_dOk ((section) :: (sections))))
+  | _ -> vuna_fail "lib/Vuna/Doc.vuna" 28 1 ("no matching clause for Vuna.Doc.docModules")
+
+let v_Vuna_dDoc_drunDoc = fun dir outPath -> (let libDir = ((dir) ^ ("/lib")) in
+  (let root = if bi_is_directory libDir then libDir
+    else dir in
+    (let files = v_Vuna_dFiles_dcollectVunaFiles root in
+      (match v_Vuna_dDoc_ddocModules files with
+  | C_Vuna_dResult_dErr (e) -> (let _ = bi_print ((let vuna_cat0' = ("error: ") in
+              (let vuna_cat1' = (e) in
+                (let vuna_cat2' = ("\n") in
+                  String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'])))) in
+          2)
+  | C_Vuna_dResult_dOk (sections) -> (let content = (let vuna_cat0' = ("# vuna API\n\n\231\148\177 `vuna doc` \228\187\142\230\186\144\231\160\129\231\148\159\230\136\144\227\128\130\n\n")
+            in
+            (let vuna_cat1' = (v_Vuna_dString_djoin "\n" sections) in
+              (let vuna_cat2' = ("\n") in
+                String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2']))) in
+          (let parent = v_Vuna_dPair_dfirstOf (v_Vuna_dFiles_dsplitPath outPath) in
+            (let _ = if v_vuna_ueq_ustr parent "" then 0
+              else bi_make_dir parent in
+              (let _ = bi_write_file outPath content in
+                (let _ = bi_print ((let vuna_cat0' = ("wrote ") in
+                      (let vuna_cat1' = (outPath) in
+                        (let vuna_cat2' = (" (") in
+                        (let vuna_cat3' = (bi_str_from_int (v_Vuna_dList_dlength files)) in
+                        (let vuna_cat4' = (" modules)\n") in
+                        String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'; vuna_cat3'; vuna_cat4']))))))
+                  in
+                  0)))))
+  | _ -> vuna_fail "lib/Vuna/Doc.vuna" 17 12 ("case pattern match failure")))))
+
+let v_Vuna_dCli_ddocRun = fun dir out -> v_Vuna_dDoc_drunDoc dir out
+
+let v_Vuna_dCli_ddocArgs = fun args -> (match args with
+  | [] -> v_Vuna_dCli_ddocRun "." "docs/api.md"
+  | (dir) :: ([]) -> v_Vuna_dCli_ddocRun dir (v_Vuna_dCli_ddocDefaultOut dir)
+  | (dir) :: ((out) :: ([])) -> v_Vuna_dCli_ddocRun dir out
+  | _ -> v_Vuna_dCli_dusageError ()
+  | _ -> vuna_fail "lib/Vuna/Cli.vuna" 268 3 ("case pattern match failure"))
+
+let v_Vuna_dFmt_dformatSource = fun source -> (match v_Vuna_dParser_dparseSource "<fmt>" source with
+  | C_Vuna_dResult_dErr (e) -> C_Vuna_dResult_dErr (e)
+  | C_Vuna_dResult_dOk (C_Vuna_dAst_dSource (hdr, imports, decls)) -> (match v_Vuna_dFmt_djoinSections
+    (v_Vuna_dFmt_dfilterSections (v_Vuna_dFmt_drenderSourceSections hdr imports decls)) with
+  | [] -> C_Vuna_dResult_dOk ("")
+  | lines -> C_Vuna_dResult_dOk (v_Vuna_dFmt_dunlines lines)
+  | _ -> vuna_fail "lib/Vuna/Fmt.vuna" 634 7 ("case pattern match failure"))
+  | _ -> vuna_fail "lib/Vuna/Fmt.vuna" 631 3 ("case pattern match failure"))
+
+let rec v_Vuna_dCli_dfmtFiles = fun a0 a1 a2 -> match (a0, a1, a2) with
+  | (check, [], changed) -> if (if (check) then (v_vuna_ugt_uint changed 0)
+  else false) then (let _ = bi_print (((bi_str_from_int changed) ^ (" file(s) need formatting\n"))) in
+  1)
+else 0
+  | (check, (path) :: (rest), changed) -> (let original = bi_read_file path in
+  (match v_Vuna_dFmt_dformatSource original with
+  | C_Vuna_dResult_dErr (e) -> (let _ = bi_print ((let vuna_cat0' = ("error: ") in
+          (let vuna_cat1' = (path) in
+            (let vuna_cat2' = (": ") in
+              (let vuna_cat3' = (e) in
+                (let vuna_cat4' = ("\n") in
+                  String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'; vuna_cat3'; vuna_cat4']))))))
+      in
+      2)
+  | C_Vuna_dResult_dOk (formatted) -> if v_vuna_ueq_ustr formatted original then v_Vuna_dCli_dfmtFiles
+    check rest changed
+    else if check then (let _ = bi_print ((let vuna_cat0' = ("would reformat: ") in
+          (let vuna_cat1' = (path) in
+            (let vuna_cat2' = ("\n") in
+              String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'])))) in
+      v_Vuna_dCli_dfmtFiles check rest (bi_add changed 1))
+    else (let _ = bi_write_file path formatted in
+      (let _ = bi_print ((let vuna_cat0' = ("formatted ") in
+            (let vuna_cat1' = (path) in
+              (let vuna_cat2' = ("\n") in
+                String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'])))) in
+        v_Vuna_dCli_dfmtFiles check rest (bi_add changed 1)))
+  | _ -> vuna_fail "lib/Vuna/Cli.vuna" 239 6 ("case pattern match failure")))
+  | _ -> vuna_fail "lib/Vuna/Cli.vuna" 232 1 ("no matching clause for Vuna.Cli.fmtFiles")
+
+let v_Vuna_dCli_dfmtRun = fun a0 a1 -> match (a0, a1) with
+  | (check, []) -> v_Vuna_dCli_dfmtFiles check (v_Vuna_dCli_dfmtDefaultTargets ()) 0
+  | (check, paths) -> v_Vuna_dCli_dfmtFiles check (v_Vuna_dList_dconcatMap v_Vuna_dCli_dexpandPath paths)
+0
+  | _ -> vuna_fail "lib/Vuna/Cli.vuna" 220 1 ("no matching clause for Vuna.Cli.fmtRun")
+
+let rec v_Vuna_dCli_dfmtParse = fun check paths args -> (match args with
+  | [] -> v_Vuna_dCli_dfmtRun check paths
+  | (arg) :: (rest) -> (match arg with
+  | "--check" -> v_Vuna_dCli_dfmtParse true paths rest
+  | _ -> v_Vuna_dCli_dfmtParse check (v_Vuna_dList_dappend paths ((arg) :: ([]))) rest
+  | _ -> vuna_fail "lib/Vuna/Cli.vuna" 216 7 ("case pattern match failure"))
+  | _ -> vuna_fail "lib/Vuna/Cli.vuna" 213 3 ("case pattern match failure"))
+
+let v_Vuna_dCli_dfmtArgs = fun args -> v_Vuna_dCli_dfmtParse false [] args
+
 let v_Vuna_dTypecheck_dparseGenerated = fun src -> (match v_Vuna_dParser_dparseSource "<generated>" src
   with
   | C_Vuna_dResult_dErr (e) -> C_Vuna_dResult_dErr ((("internal generated source error: ") ^ (e)))
@@ -8814,6 +9973,12 @@ let v_Vuna_dTypecheck_dparseGenerated = fun src -> (match v_Vuna_dParser_dparseS
   | _ -> vuna_fail "lib/Vuna/Typecheck.vuna" 2211 11 ("case pattern match failure"))
   | _ -> vuna_fail "lib/Vuna/Typecheck.vuna" 2208 7 ("case pattern match failure"))
   | _ -> vuna_fail "lib/Vuna/Typecheck.vuna" 2205 3 ("case pattern match failure"))
+
+let v_Vuna_dParser_dparseExpressionSource = fun source -> v_Vuna_dResult_dandThen (v_Vuna_dLexer_dlexSource
+  source) (fun toks -> v_Vuna_dResult_dstep (v_Vuna_dParser_dparseExpr (C_Vuna_dParser_dPState ("<expr>",
+        toks, C_Vuna_dBase_dPos (1, 0))) 0 0) (fun e st -> if v_Vuna_dParser_disEof st then C_Vuna_dResult_dOk
+    (e)
+    else C_Vuna_dResult_dErr ("expected end of expression")))
 
 let v_Vuna_dManifest_disDigitChar = fun c -> (if (v_vuna_uge_uint c 48) then (v_vuna_ule_uint c 57)
   else false)
@@ -9512,29 +10677,59 @@ let v_Vuna_dTypedCodegen_dgenShowFunc = fun a0 a1 -> match (a0, a1) with
 (v_Vuna_dTypedCodegen_dshowParamMap params) params name ctors
   | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 230 1 ("no matching clause for Vuna.TypedCodegen.genShowFunc")
 
-let v_Vuna_dTypedCodegen_dgenShowDecls = fun decls -> (match v_Vuna_dTypedCodegen_dnonSpecialData decls
-  with
-  | [] -> C_Vuna_dResult_dOk ("")
-  | ds -> v_Vuna_dResult_dandThen (v_Vuna_dTypedCodegen_dmapResult (v_Vuna_dTypedCodegen_dgenShowFunc
-      decls) ds) (fun parts -> C_Vuna_dResult_dOk ((let vuna_cat0' = ("let rec ") in
-        (let vuna_cat1' = (v_Vuna_dTypedCodegen_djoinWith "\nand " parts) in
-          (let vuna_cat2' = ("\n") in
-            String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'])))))
-  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 255 3 ("case pattern match failure"))
-
 let rec v_Vuna_dTypedCodegen_dstartsWith = fun a0 a1 -> match (a0, a1) with
   | ([], hay) -> true
   | ((c) :: (cs), []) -> false
   | ((c) :: (cs), (h) :: (hs)) -> if v_vuna_ueq_ugeneric c h then v_Vuna_dTypedCodegen_dstartsWith cs
 hs
 else false
-  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 921 1 ("no matching clause for Vuna.TypedCodegen.startsWith")
+  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 957 1 ("no matching clause for Vuna.TypedCodegen.startsWith")
+
+let rec v_Vuna_dTypedCodegen_dcountName = fun a0 a1 -> match (a0, a1) with
+  | (needle, []) -> 0
+  | (needle, (c) :: (rest)) -> if v_Vuna_dTypedCodegen_dstartsWith needle ((c) :: (rest)) then bi_add
+1 (v_Vuna_dTypedCodegen_dcountName needle (v_Vuna_dList_ddrop (v_Vuna_dList_dlength needle) ((c) :: (rest))))
+
+else v_Vuna_dTypedCodegen_dcountName needle rest
+  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 270 1 ("no matching clause for Vuna.TypedCodegen.countName")
+
+let v_Vuna_dTypedCodegen_dselfRecursive = fun name code -> v_vuna_ugt_uint (v_Vuna_dTypedCodegen_dcountName
+  (bi_str_unpack name) (bi_str_unpack code)) 1
 
 let rec v_Vuna_dTypedCodegen_dcontainsName = fun a0 a1 -> match (a0, a1) with
   | (needle, []) -> false
   | (needle, (h) :: (hs)) -> if v_Vuna_dTypedCodegen_dstartsWith needle ((h) :: (hs)) then true
 else v_Vuna_dTypedCodegen_dcontainsName needle hs
-  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 925 1 ("no matching clause for Vuna.TypedCodegen.containsName")
+  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 961 1 ("no matching clause for Vuna.TypedCodegen.containsName")
+
+let rec v_Vuna_dTypedCodegen_dcodeRefsOther = fun a0 a1 a2 -> match (a0, a1, a2) with
+  | (self, code, []) -> false
+  | (self, code, (n) :: (rest)) -> if v_vuna_ueq_ustr n self then v_Vuna_dTypedCodegen_dcodeRefsOther
+self code rest
+else if v_Vuna_dTypedCodegen_dcontainsName (bi_str_unpack n) (bi_str_unpack code) then true
+else v_Vuna_dTypedCodegen_dcodeRefsOther self code rest
+  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 263 1 ("no matching clause for Vuna.TypedCodegen.codeRefsOther")
+
+let rec v_Vuna_dTypedCodegen_dpartsNeedRec = fun a0 a1 a2 -> match (a0, a1, a2) with
+  | ([], [], names) -> false
+  | ((d) :: (ds), (code) :: (rest), names) -> if v_Vuna_dTypedCodegen_dcodeRefsOther (v_Vuna_dTypedCodegen_dshowDeclFnName
+  d) code names then true
+else if v_Vuna_dTypedCodegen_dselfRecursive (v_Vuna_dTypedCodegen_dshowDeclFnName d) code then true
+else v_Vuna_dTypedCodegen_dpartsNeedRec ds rest names
+  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 281 1 ("no matching clause for Vuna.TypedCodegen.partsNeedRec")
+
+let v_Vuna_dTypedCodegen_dgenShowDecls = fun decls -> (match v_Vuna_dTypedCodegen_dnonSpecialData decls
+  with
+  | [] -> C_Vuna_dResult_dOk ("")
+  | ds -> v_Vuna_dResult_dandThen (v_Vuna_dTypedCodegen_dmapResult (v_Vuna_dTypedCodegen_dgenShowFunc
+      decls) ds) (fun parts -> (let names = v_Vuna_dTypedCodegen_dshowFnNames decls in
+      C_Vuna_dResult_dOk ((let vuna_cat0' = (if v_Vuna_dTypedCodegen_dpartsNeedRec ds parts names then
+            "let rec "
+            else "let ") in
+          (let vuna_cat1' = (v_Vuna_dTypedCodegen_djoinWith "\nand " parts) in
+            (let vuna_cat2' = ("\n") in
+              String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2']))))))
+  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 289 3 ("case pattern match failure"))
 
 let rec v_Vuna_dTypedCodegen_dfilterRuntime = fun a0 a1 -> match (a0, a1) with
   | ([], bodyChars) -> []
@@ -9542,7 +10737,7 @@ let rec v_Vuna_dTypedCodegen_dfilterRuntime = fun a0 a1 -> match (a0, a1) with
 (bi_str_unpack name) bodyChars then (C_Vuna_dPair_dPair (name, chunk)) :: (v_Vuna_dTypedCodegen_dfilterRuntime
   rest bodyChars)
 else v_Vuna_dTypedCodegen_dfilterRuntime rest bodyChars
-  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 929 1 ("no matching clause for Vuna.TypedCodegen.filterRuntime")
+  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 965 1 ("no matching clause for Vuna.TypedCodegen.filterRuntime")
 
 let v_Vuna_dTypedCodegen_dneededByChunks = fun chunks -> v_Vuna_dList_dconcatMap (fun ch -> v_Vuna_dTypedCodegen_dfilterNames
   (fun n -> v_Vuna_dTypedCodegen_dcontainsName (bi_str_unpack n) (bi_str_unpack (v_Vuna_dTypedCodegen_dchunkTextOf
@@ -9559,7 +10754,7 @@ let rec v_Vuna_dTypedCodegen_dexpandRuntime = fun included -> (match v_Vuna_dTyp
   included with
   | [] -> included
   | missing -> v_Vuna_dTypedCodegen_dexpandRuntime (v_Vuna_dList_dappend included missing)
-  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 945 3 ("case pattern match failure"))
+  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 981 3 ("case pattern match failure"))
 
 let v_Vuna_dTypedCodegen_druntimeForBody = fun body -> if v_vuna_ugt_uint (bi_str_length body) 20000 then
 v_Vuna_dTypedCodegen_druntimeCodeTyped ()
@@ -9590,8 +10785,8 @@ let v_Vuna_dTypedCodegen_dgenerateProgramTyped = fun decls globals printResult -
                         (let vuna_cat2' = (core) in
                         (let vuna_cat3' = (suffix) in
                         String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'; vuna_cat3']))))))))))))
-  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 1051 7 ("case pattern match failure"))
-  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 1048 3 ("case pattern match failure"))
+  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 1087 7 ("case pattern match failure"))
+  | _ -> vuna_fail "lib/Vuna/TypedCodegen.vuna" 1084 3 ("case pattern match failure"))
 
 let rec v_Vuna_dTypecheck_dlookupSubst = fun a0 a1 -> match (a0, a1) with
   | (i, []) -> C_Vuna_dMaybe_dNothing
@@ -10694,7 +11889,7 @@ let rec v_Vuna_dList_dmem = fun a0 a1 -> match (a0, a1) with
   | (x, []) -> false
   | (x, (y) :: (rest)) -> if v_vuna_ueq_ugeneric x y then true
 else v_Vuna_dList_dmem x rest
-  | _ -> vuna_fail "stdlib/Vuna/List.vuna" 55 1 ("no matching clause for Vuna.List.mem")
+  | _ -> vuna_fail "stdlib/lib/Vuna/List.vuna" 55 1 ("no matching clause for Vuna.List.mem")
 
 let v_vuna_uneq_ugeneric = fun a b -> bi_neq_generic a b
 
@@ -10904,16 +12099,31 @@ let v_Vuna_dEval_dcallBuiltin = fun name args sp -> (match name with
       (v_Vuna_dEval_dstrListToValue (bi_read_dir s)))
   | _ -> v_Vuna_dEval_derrAt sp "bad arguments for readDir"
   | _ -> vuna_fail "lib/Vuna/Eval.vuna" 483 7 ("case pattern match failure"))
+  | "isDirectory" -> (match args with
+  | (a) :: ([]) -> v_Vuna_dResult_dandThen (v_Vuna_dEval_dstringArg sp a) (fun s -> C_Vuna_dResult_dOk
+      (v_Vuna_dEval_dvbool (bi_is_directory s)))
+  | _ -> v_Vuna_dEval_derrAt sp "bad arguments for isDirectory"
+  | _ -> vuna_fail "lib/Vuna/Eval.vuna" 487 7 ("case pattern match failure"))
+  | "makeDir" -> (match args with
+  | (a) :: ([]) -> v_Vuna_dResult_dandThen (v_Vuna_dEval_dstringArg sp a) (fun s -> C_Vuna_dResult_dOk
+      (C_Vuna_dEval_dVInt (bi_make_dir s)))
+  | _ -> v_Vuna_dEval_derrAt sp "bad arguments for makeDir"
+  | _ -> vuna_fail "lib/Vuna/Eval.vuna" 491 7 ("case pattern match failure"))
+  | "removeFile" -> (match args with
+  | (a) :: ([]) -> v_Vuna_dResult_dandThen (v_Vuna_dEval_dstringArg sp a) (fun s -> C_Vuna_dResult_dOk
+      (C_Vuna_dEval_dVInt (bi_remove_file s)))
+  | _ -> v_Vuna_dEval_derrAt sp "bad arguments for removeFile"
+  | _ -> vuna_fail "lib/Vuna/Eval.vuna" 495 7 ("case pattern match failure"))
   | "fileExists" -> (match args with
   | (a) :: ([]) -> v_Vuna_dResult_dandThen (v_Vuna_dEval_dstringArg sp a) (fun s -> C_Vuna_dResult_dOk
       (v_Vuna_dEval_dvbool (bi_file_exists s)))
   | _ -> v_Vuna_dEval_derrAt sp "bad arguments for fileExists"
-  | _ -> vuna_fail "lib/Vuna/Eval.vuna" 487 7 ("case pattern match failure"))
+  | _ -> vuna_fail "lib/Vuna/Eval.vuna" 499 7 ("case pattern match failure"))
   | "exit" -> (match args with
   | (a) :: ([]) -> v_Vuna_dResult_dandThen (v_Vuna_dEval_dintArg sp a) (fun n -> C_Vuna_dResult_dOk (C_Vuna_dEval_dVInt
         (bi_exit n)))
   | _ -> v_Vuna_dEval_derrAt sp "bad arguments for exit"
-  | _ -> vuna_fail "lib/Vuna/Eval.vuna" 491 7 ("case pattern match failure"))
+  | _ -> vuna_fail "lib/Vuna/Eval.vuna" 503 7 ("case pattern match failure"))
   | _ -> v_Vuna_dEval_derrAt sp ((("unknown builtin: ") ^ (name)))
   | _ -> vuna_fail "lib/Vuna/Eval.vuna" 398 3 ("case pattern match failure"))
 
@@ -11069,12 +12279,12 @@ let v_Vuna_dEval_dinterpretMain = fun decls -> (match v_Vuna_dAst_dfunArity "mai
   | C_Vuna_dMaybe_dJust (arity) -> if v_vuna_ueq_uint arity 0 then v_Vuna_dEval_dcallFunction decls "main"
   [] v_Vuna_dEval_dnoLocSpan
   else C_Vuna_dResult_dErr ("`main` must be a nullary definition")
-  | _ -> vuna_fail "lib/Vuna/Eval.vuna" 526 3 ("case pattern match failure"))
+  | _ -> vuna_fail "lib/Vuna/Eval.vuna" 538 3 ("case pattern match failure"))
 
 let v_Vuna_dEval_drunDecls = fun decls -> (match v_Vuna_dEval_dinterpretMain decls with
   | C_Vuna_dResult_dErr (e) -> (("error: ") ^ (e))
   | C_Vuna_dResult_dOk (v) -> v_Vuna_dEval_dshowValue v
-  | _ -> vuna_fail "lib/Vuna/Eval.vuna" 533 3 ("case pattern match failure"))
+  | _ -> vuna_fail "lib/Vuna/Eval.vuna" 545 3 ("case pattern match failure"))
 
 let v_Vuna_dInterp_dinterpret = fun source -> (match v_Vuna_dParser_dparseSource "<input>" source with
   | C_Vuna_dResult_dErr (e) -> (("error: ") ^ (e))
@@ -13173,21 +14383,156 @@ let v_Vuna_dInterp_dinterpretFileIn = fun entryPkg roots entry -> (match v_Vuna_
   else v_Vuna_dEval_drunDecls decls
   | _ -> vuna_fail "lib/Vuna/Interp.vuna" 97 3 ("case pattern match failure"))
 
+let rec v_Vuna_dTestRunner_drunTestFiles = fun a0 a1 a2 a3 a4 a5 -> match (a0, a1, a2, a3, a4, a5) with
+  | (roots, pkgName, dir, [], pass, fail) -> (let _ = bi_print ((let vuna_cat0' = ("\n") in
+      (let vuna_cat1' = (bi_str_from_int pass) in
+        (let vuna_cat2' = (" passed, ") in
+          (let vuna_cat3' = (bi_str_from_int fail) in
+            (let vuna_cat4' = (" failed\n") in
+              String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'; vuna_cat3'; vuna_cat4'])))))) in
+  if v_vuna_ueq_uint fail 0 then 0
+  else 1)
+  | (roots, pkgName, dir, (name) :: (rest), pass, fail) -> (let path = (let vuna_cat0' = (dir) in
+    (let vuna_cat1' = ("/") in
+      (let vuna_cat2' = (name) in
+        String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2']))) in
+  (let output = v_Vuna_dInterp_dinterpretFileIn pkgName roots path in
+    if v_vuna_ueq_ustr output "\"\"" then (let _ = bi_print ((let vuna_cat0' = ("ok   ") in
+          (let vuna_cat1' = (name) in
+            (let vuna_cat2' = ("\n") in
+              String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'])))) in
+      v_Vuna_dTestRunner_drunTestFiles roots pkgName dir rest (bi_add pass 1) fail)
+    else (let _ = bi_print ((let vuna_cat0' = ("FAIL ") in
+          (let vuna_cat1' = (name) in
+            (let vuna_cat2' = (": ") in
+              (let vuna_cat3' = (output) in
+                (let vuna_cat4' = ("\n") in
+                  String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'; vuna_cat3'; vuna_cat4']))))))
+      in
+      v_Vuna_dTestRunner_drunTestFiles roots pkgName dir rest pass (bi_add fail 1))))
+  | _ -> vuna_fail "lib/Vuna/TestRunner.vuna" 28 1 ("no matching clause for Vuna.TestRunner.runTestFiles")
+
+let v_Vuna_dTestRunner_drunTests = fun pkg roots -> (let testDir = ((v_Vuna_dPkg_dpackageDir pkg) ^ ("/test"))
+  in
+  if bi_is_directory testDir then (let files = v_Vuna_dTestRunner_dtestFiles (bi_read_dir testDir) in
+    v_Vuna_dTestRunner_drunTestFiles roots (v_Vuna_dPkg_dpackageName pkg) testDir files 0 0)
+  else (let _ = bi_print ((let vuna_cat0' = ("error: test directory not found: ") in
+        (let vuna_cat1' = (testDir) in
+          (let vuna_cat2' = ("\n") in
+            String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'])))) in
+    2))
+
+let v_Vuna_dCli_dtestRun = fun dir -> (match v_Vuna_dPkg_dloadPackage dir with
+  | C_Vuna_dResult_dErr (e) -> (let _ = bi_print ((let vuna_cat0' = ("error: ") in
+        (let vuna_cat1' = (e) in
+          (let vuna_cat2' = ("\n") in
+            String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'])))) in
+    1)
+  | C_Vuna_dResult_dOk (pkg) -> v_Vuna_dTestRunner_drunTests pkg (v_Vuna_dPkg_dpackageRoots pkg)
+  | _ -> vuna_fail "lib/Vuna/Cli.vuna" 202 3 ("case pattern match failure"))
+
+let v_Vuna_dCli_dtestArgs = fun args -> (match args with
+  | [] -> v_Vuna_dCli_dtestRun "."
+  | (dir) :: ([]) -> v_Vuna_dCli_dtestRun dir
+  | ("--root") :: (rest) -> v_Vuna_dCli_dusageError ()
+  | _ -> v_Vuna_dCli_dusageError ()
+  | _ -> vuna_fail "lib/Vuna/Cli.vuna" 195 3 ("case pattern match failure"))
+
 let v_Vuna_dInterp_dinterpretFile = fun roots entry -> v_Vuna_dInterp_dinterpretFileIn "" roots entry
 
-let v_interpEmit = fun roots path -> (let output = v_Vuna_dInterp_dinterpretFile roots path in
+let v_Vuna_dCli_dinterpEmit = fun roots path -> (let output = v_Vuna_dInterp_dinterpretFile roots path
+  in
   (let _ = bi_print (((output) ^ ("\n"))) in
     if v_Vuna_dString_dstartsWith "error:" output then 2
     else 0))
 
-let rec v_interpParse = fun roots args -> (match args with
-  | ("--root") :: ((dir) :: (rest)) -> v_interpParse (v_Vuna_dList_dappend roots ((v_Vuna_dPkg_drawRoot
-        dir) :: ([]))) rest
-  | (path) :: ([]) -> v_interpEmit (v_Vuna_dInterp_deffectiveRoots roots) path
-  | _ -> v_usageError ()
-  | _ -> vuna_fail "app/Main.vuna" 62 3 ("case pattern match failure"))
+let rec v_Vuna_dCli_dinterpParse = fun roots args -> (match args with
+  | ("--root") :: (rest) -> v_Vuna_dCli_drootArg roots rest (fun roots2 rest2 -> v_Vuna_dCli_dinterpParse
+    roots2 rest2)
+  | (path) :: ([]) -> v_Vuna_dCli_dinterpEmit (v_Vuna_dInterp_deffectiveRoots roots) path
+  | _ -> v_Vuna_dCli_dusageError ()
+  | _ -> vuna_fail "lib/Vuna/Cli.vuna" 102 3 ("case pattern match failure"))
 
-let v_interpArgs = fun args -> v_interpParse [] args
+let v_Vuna_dCli_dinterpArgs = fun args -> v_Vuna_dCli_dinterpParse [] args
+
+let rec v_Vuna_dRepl_dreplLoop = fun roots imports defs -> (let _ = bi_print v_Vuna_dRepl_dreplPrompt
+  in
+  (let line = bi_read_line () in
+    if v_vuna_ueq_ustr line "" then 0
+    else v_Vuna_dRepl_dreplHandle roots imports defs (v_Vuna_dString_dtrim line)))
+and v_Vuna_dRepl_dreplHandle = fun roots imports defs line -> (match line with
+  | "" -> v_Vuna_dRepl_dreplLoop roots imports defs
+  | ":q" -> 0
+  | ":quit" -> 0
+  | ":reset" -> (let _ = bi_print "\229\183\178\230\184\133\231\169\186\n" in
+    v_Vuna_dRepl_dreplLoop roots "" "")
+  | ":help" -> (let _ = bi_print v_Vuna_dRepl_dreplHelp in
+    v_Vuna_dRepl_dreplLoop roots imports defs)
+  | _ -> if v_Vuna_dString_dstartsWith "import " line then v_Vuna_dRepl_dreplAddImport roots imports defs
+  line
+  else v_Vuna_dRepl_dreplDefineOrEval roots imports defs line
+  | _ -> vuna_fail "lib/Vuna/Repl.vuna" 42 3 ("case pattern match failure"))
+and v_Vuna_dRepl_dreplAddImport = fun roots imports defs line -> (let imports2 = (let vuna_cat0' = (imports)
+    in
+    (let vuna_cat1' = (line) in
+      (let vuna_cat2' = ("\n") in
+        String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2']))) in
+  (match v_Vuna_dParser_dparseSource v_Vuna_dRepl_dreplTempFile (((imports2) ^ (defs))) with
+  | C_Vuna_dResult_dErr (e) -> (let _ = bi_print ((let vuna_cat0' = ("parse error: ") in
+          (let vuna_cat1' = (e) in
+            (let vuna_cat2' = ("\n") in
+              String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'])))) in
+      v_Vuna_dRepl_dreplLoop roots imports defs)
+  | C_Vuna_dResult_dOk (_) -> v_Vuna_dRepl_dreplLoop roots imports2 defs
+  | _ -> vuna_fail "lib/Vuna/Repl.vuna" 58 6 ("case pattern match failure")))
+and v_Vuna_dRepl_dreplDefineOrEval = fun roots imports defs line -> (match v_Vuna_dParser_dparseSource
+  v_Vuna_dRepl_dreplTempFile ((let vuna_cat0' = (imports) in
+      (let vuna_cat1' = (defs) in
+        (let vuna_cat2' = (line) in
+          (let vuna_cat3' = ("\n") in
+            String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'; vuna_cat3']))))) with
+  | C_Vuna_dResult_dOk (C_Vuna_dAst_dSource (hdr, imp, decls)) -> (match hdr with
+  | C_Vuna_dMaybe_dJust (md) -> v_Vuna_dRepl_dreplEvalExpr roots imports defs line
+  | C_Vuna_dMaybe_dNothing -> v_Vuna_dRepl_dreplLoop roots imports ((let vuna_cat0' = (defs) in
+        (let vuna_cat1' = (line) in
+          (let vuna_cat2' = ("\n") in
+            String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2']))))
+  | _ -> vuna_fail "lib/Vuna/Repl.vuna" 65 7 ("case pattern match failure"))
+  | C_Vuna_dResult_dErr (e) -> v_Vuna_dRepl_dreplEvalExpr roots imports defs line
+  | _ -> vuna_fail "lib/Vuna/Repl.vuna" 63 3 ("case pattern match failure"))
+and v_Vuna_dRepl_dreplEvalExpr = fun roots imports defs line -> (match v_Vuna_dParser_dparseExpressionSource
+  line with
+  | C_Vuna_dResult_dErr (e) -> (let _ = bi_print ((let vuna_cat0' = ("\233\148\153\232\175\175: ") in
+        (let vuna_cat1' = (e) in
+          (let vuna_cat2' = ("\n") in
+            String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'])))) in
+    v_Vuna_dRepl_dreplLoop roots imports defs)
+  | C_Vuna_dResult_dOk (expr) -> (let program = (let vuna_cat0' = (imports) in
+      (let vuna_cat1' = ("\n") in
+        (let vuna_cat2' = (defs) in
+          (let vuna_cat3' = ("\nmain = ") in
+            (let vuna_cat4' = (line) in
+              (let vuna_cat5' = ("\n") in
+                String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'; vuna_cat3'; vuna_cat4'; vuna_cat5']))))))
+    in
+    (let _ = bi_write_file v_Vuna_dRepl_dreplTempFile program in
+      (let output = v_Vuna_dInterp_dinterpretFile roots v_Vuna_dRepl_dreplTempFile in
+        (let _ = bi_print (((output) ^ ("\n"))) in
+          v_Vuna_dRepl_dreplLoop roots imports defs))))
+  | _ -> vuna_fail "lib/Vuna/Repl.vuna" 71 3 ("case pattern match failure"))
+
+let v_Vuna_dRepl_drunRepl = fun roots -> (let _ = bi_print ((("vuna repl\n") ^ (v_Vuna_dRepl_dreplHelp)))
+  in
+  v_Vuna_dRepl_dreplLoop roots "" "")
+
+let rec v_Vuna_dCli_dreplParse = fun roots args -> (match args with
+  | ("--root") :: (rest) -> v_Vuna_dCli_drootArg roots rest (fun roots2 rest2 -> v_Vuna_dCli_dreplParse
+    roots2 rest2)
+  | [] -> v_Vuna_dRepl_drunRepl (v_Vuna_dInterp_deffectiveRoots roots)
+  | _ -> v_Vuna_dCli_dusageError ()
+  | _ -> vuna_fail "lib/Vuna/Cli.vuna" 258 3 ("case pattern match failure"))
+
+let v_Vuna_dCli_dreplArgs = fun args -> v_Vuna_dCli_dreplParse [] args
 
 let v_Vuna_dInterp_dcompileFileIn = fun entryPkg roots entry printResult -> v_Vuna_dResult_dandThen (v_Vuna_dLoader_dloadProgram
   roots entryPkg entry) (fun decls -> if v_Vuna_dInterp_dprogramNeedsElab decls then v_Vuna_dResult_dandThen
@@ -13205,6 +14550,56 @@ let v_Vuna_dInterp_dcompileFileTypedIn = fun entryPkg roots entry printResult ->
       printResult
   | _ -> vuna_fail "lib/Vuna/Interp.vuna" 127 7 ("case pattern match failure"))))
 
+let v_Vuna_dCli_dbuildRun = fun printResult dir out -> (match v_Vuna_dPkg_dloadPackage dir with
+  | C_Vuna_dResult_dErr (e) -> (let _ = bi_print ((let vuna_cat0' = ("error: ") in
+        (let vuna_cat1' = (e) in
+          (let vuna_cat2' = ("\n") in
+            String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'])))) in
+    1)
+  | C_Vuna_dResult_dOk (pkg) -> (match v_Vuna_dInterp_dcompileFileTypedIn (v_Vuna_dPkg_dpackageName pkg)
+    (v_Vuna_dPkg_dpackageRoots pkg) (v_Vuna_dPkg_dpackageEntry pkg) printResult with
+  | C_Vuna_dResult_dErr (e) -> (let _ = bi_print ((let vuna_cat0' = ("error: ") in
+          (let vuna_cat1' = (e) in
+            (let vuna_cat2' = ("\n") in
+              String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'])))) in
+      1)
+  | C_Vuna_dResult_dOk (code) -> (let parent = v_Vuna_dPair_dfirstOf (v_Vuna_dFiles_dsplitPath out) in
+      (let _ = if v_vuna_ueq_ustr parent "" then 0
+        else bi_make_dir parent in
+        (let _ = bi_write_file out code in
+          (let _ = bi_print ((let vuna_cat0' = ("wrote ") in
+                (let vuna_cat1' = (out) in
+                  (let vuna_cat2' = ("\n") in
+                    String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'])))) in
+            0))))
+  | _ -> vuna_fail "lib/Vuna/Cli.vuna" 181 7 ("case pattern match failure"))
+  | _ -> vuna_fail "lib/Vuna/Cli.vuna" 178 3 ("case pattern match failure"))
+
+let rec v_Vuna_dCli_dbuildParse = fun printResult dir out args -> (match args with
+  | [] -> v_Vuna_dCli_dbuildRun printResult (v_Vuna_dCli_ddefaultDir dir) (v_Vuna_dCli_ddefaultOut dir
+    out)
+  | (arg) :: (rest) -> (match arg with
+  | "--no-print" -> v_Vuna_dCli_dbuildParse false dir out rest
+  | "--out" -> (match rest with
+  | (out2) :: (rest2) -> v_Vuna_dCli_dbuildParse printResult dir (C_Vuna_dMaybe_dJust (out2)) rest2
+  | [] -> v_Vuna_dCli_dusageError ()
+  | _ -> vuna_fail "lib/Vuna/Cli.vuna" 151 11 ("case pattern match failure"))
+  | _ -> (match dir with
+  | C_Vuna_dMaybe_dNothing -> v_Vuna_dCli_dbuildParse printResult (C_Vuna_dMaybe_dJust (arg)) out rest
+  | C_Vuna_dMaybe_dJust (dir2) -> (match out with
+  | C_Vuna_dMaybe_dNothing -> (match rest with
+  | [] -> v_Vuna_dCli_dbuildRun printResult dir2 arg
+  | _ -> v_Vuna_dCli_dusageError ()
+  | _ -> vuna_fail "lib/Vuna/Cli.vuna" 160 19 ("case pattern match failure"))
+  | C_Vuna_dMaybe_dJust (out2) -> v_Vuna_dCli_dusageError ()
+  | _ -> vuna_fail "lib/Vuna/Cli.vuna" 158 15 ("case pattern match failure"))
+  | _ -> vuna_fail "lib/Vuna/Cli.vuna" 155 11 ("case pattern match failure"))
+  | _ -> vuna_fail "lib/Vuna/Cli.vuna" 148 7 ("case pattern match failure"))
+  | _ -> vuna_fail "lib/Vuna/Cli.vuna" 145 3 ("case pattern match failure"))
+
+let v_Vuna_dCli_dbuildArgs = fun args -> v_Vuna_dCli_dbuildParse true C_Vuna_dMaybe_dNothing C_Vuna_dMaybe_dNothing
+args
+
 let v_Vuna_dInterp_dcompileFileTyped = fun roots entry printResult -> v_Vuna_dInterp_dcompileFileTypedIn
 "" roots entry printResult
 
@@ -13221,11 +14616,28 @@ let v_Vuna_dInterp_dcompileFileCheckedIn = fun entryPkg roots entry printResult 
   else v_Vuna_dResult_dandThen (v_Vuna_dTypecheck_dcheckProgram decls) (fun _u -> v_Vuna_dCodegen_dgenerateProgram
     decls printResult))
 
+let v_Vuna_dCli_dcheckPackage = fun dir -> (match v_Vuna_dPkg_dloadPackage dir with
+  | C_Vuna_dResult_dErr (e) -> (let _ = bi_print ((let vuna_cat0' = ("error: ") in
+        (let vuna_cat1' = (e) in
+          (let vuna_cat2' = ("\n") in
+            String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'])))) in
+    1)
+  | C_Vuna_dResult_dOk (pkg) -> (match v_Vuna_dInterp_dcompileFileCheckedIn (v_Vuna_dPkg_dpackageName
+      pkg) (v_Vuna_dPkg_dpackageRoots pkg) (v_Vuna_dPkg_dpackageEntry pkg) false with
+  | C_Vuna_dResult_dErr (e) -> (let _ = bi_print ((let vuna_cat0' = ("error: ") in
+          (let vuna_cat1' = (e) in
+            (let vuna_cat2' = ("\n") in
+              String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'])))) in
+      1)
+  | C_Vuna_dResult_dOk (code) -> 0
+  | _ -> vuna_fail "lib/Vuna/Cli.vuna" 134 7 ("case pattern match failure"))
+  | _ -> vuna_fail "lib/Vuna/Cli.vuna" 131 3 ("case pattern match failure"))
+
 let v_Vuna_dInterp_dcompileFileChecked = fun roots entry printResult -> v_Vuna_dInterp_dcompileFileCheckedIn
 "" roots entry printResult
 
-let v_compileEmit = fun printResult typeCheck typed roots entry rest -> (let actualRoots = v_Vuna_dInterp_deffectiveRoots
-  roots in
+let v_Vuna_dCli_dcompileEmit = fun printResult typeCheck typed roots entry rest -> (let actualRoots =
+  v_Vuna_dInterp_deffectiveRoots roots in
   (let result = if typed then v_Vuna_dInterp_dcompileFileTyped actualRoots entry printResult
     else if typeCheck then v_Vuna_dInterp_dcompileFileChecked actualRoots entry printResult
     else v_Vuna_dInterp_dcompileFile actualRoots entry printResult in
@@ -13235,31 +14647,28 @@ let v_compileEmit = fun printResult typeCheck typed roots entry rest -> (let act
           0)
   | _ -> (let _ = bi_print code in
           0)
-  | _ -> vuna_fail "app/Main.vuna" 54 12 ("case pattern match failure"))
+  | _ -> vuna_fail "lib/Vuna/Cli.vuna" 94 13 ("case pattern match failure"))
   | C_Vuna_dResult_dErr (e) -> (let _ = bi_print ((let vuna_cat0' = ("error: ") in
             (let vuna_cat1' = (e) in
               (let vuna_cat2' = ("\n") in
                 String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'])))) in
         1)
-  | _ -> vuna_fail "app/Main.vuna" 52 8 ("case pattern match failure"))))
+  | _ -> vuna_fail "lib/Vuna/Cli.vuna" 92 9 ("case pattern match failure"))))
 
-let rec v_compileParse = fun printResult typeCheck typed roots args -> (match args with
-  | [] -> v_usageError ()
+let rec v_Vuna_dCli_dcompileParse = fun printResult typeCheck typed roots args -> (match args with
+  | [] -> v_Vuna_dCli_dusageError ()
   | (arg) :: (rest) -> (match arg with
-  | "--no-print" -> v_compileParse false typeCheck typed roots rest
-  | "--no-typecheck" -> v_compileParse printResult false false roots rest
-  | "--typecheck" -> v_compileParse printResult true typed roots rest
-  | "--typed" -> v_compileParse true true true roots rest
-  | "--root" -> (match rest with
-  | (dir) :: (rest2) -> v_compileParse printResult typeCheck typed (v_Vuna_dList_dappend roots ((v_Vuna_dPkg_drawRoot
-            dir) :: ([]))) rest2
-  | [] -> v_usageError ()
-  | _ -> vuna_fail "app/Main.vuna" 41 11 ("case pattern match failure"))
-  | _ -> v_compileEmit printResult typeCheck typed roots arg rest
-  | _ -> vuna_fail "app/Main.vuna" 35 7 ("case pattern match failure"))
-  | _ -> vuna_fail "app/Main.vuna" 32 3 ("case pattern match failure"))
+  | "--no-print" -> v_Vuna_dCli_dcompileParse false typeCheck typed roots rest
+  | "--no-typecheck" -> v_Vuna_dCli_dcompileParse printResult false false roots rest
+  | "--typecheck" -> v_Vuna_dCli_dcompileParse printResult true typed roots rest
+  | "--typed" -> v_Vuna_dCli_dcompileParse true true true roots rest
+  | "--root" -> v_Vuna_dCli_drootArg roots rest (fun roots2 rest2 -> v_Vuna_dCli_dcompileParse printResult
+      typeCheck typed roots2 rest2)
+  | _ -> v_Vuna_dCli_dcompileEmit printResult typeCheck typed roots arg rest
+  | _ -> vuna_fail "lib/Vuna/Cli.vuna" 73 7 ("case pattern match failure"))
+  | _ -> vuna_fail "lib/Vuna/Cli.vuna" 70 3 ("case pattern match failure"))
 
-let v_compileArgs = fun args -> v_compileParse true true true [] args
+let v_Vuna_dCli_dcompileArgs = fun args -> v_Vuna_dCli_dcompileParse true true true [] args
 
 let v_Vuna_dTypecheck_dexhaustiveWarnings = fun decls -> (match v_Vuna_dTypecheck_dcheckProgramInfo decls
   with
@@ -13284,39 +14693,45 @@ let v_Vuna_dInterp_dcheckFileIn = fun entryPkg roots entry -> (match v_Vuna_dLoa
 
 let v_Vuna_dInterp_dcheckFile = fun roots entry -> v_Vuna_dInterp_dcheckFileIn "" roots entry
 
-let v_checkEmit = fun roots path -> (match v_Vuna_dInterp_dcheckFile roots path with
+let v_Vuna_dCli_dcheckEmit = fun roots path -> (match v_Vuna_dInterp_dcheckFile roots path with
   | C_Vuna_dResult_dErr (e) -> (let _ = bi_print ((let vuna_cat0' = ("error: ") in
         (let vuna_cat1' = (e) in
           (let vuna_cat2' = ("\n") in
             String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'])))) in
     1)
-  | C_Vuna_dResult_dOk (warnings) -> (let _ = v_printWarnings warnings in
+  | C_Vuna_dResult_dOk (warnings) -> (let _ = v_Vuna_dCli_dprintWarnings warnings in
     0)
-  | _ -> vuna_fail "app/Main.vuna" 81 3 ("case pattern match failure"))
+  | _ -> vuna_fail "lib/Vuna/Cli.vuna" 123 3 ("case pattern match failure"))
 
-let rec v_checkParse = fun roots args -> (match args with
-  | ("--root") :: ((dir) :: (rest)) -> v_checkParse (v_Vuna_dList_dappend roots ((v_Vuna_dPkg_drawRoot
-        dir) :: ([]))) rest
-  | (path) :: ([]) -> v_checkEmit (v_Vuna_dInterp_deffectiveRoots roots) path
-  | _ -> v_usageError ()
-  | _ -> vuna_fail "app/Main.vuna" 75 3 ("case pattern match failure"))
+let rec v_Vuna_dCli_dcheckParse = fun roots args -> (match args with
+  | ("--root") :: (rest) -> v_Vuna_dCli_drootArg roots rest (fun roots2 rest2 -> v_Vuna_dCli_dcheckParse
+    roots2 rest2)
+  | (path) :: ([]) -> if bi_is_directory path then v_Vuna_dCli_dcheckPackage path
+  else v_Vuna_dCli_dcheckEmit (v_Vuna_dInterp_deffectiveRoots roots) path
+  | _ -> v_Vuna_dCli_dusageError ()
+  | _ -> vuna_fail "lib/Vuna/Cli.vuna" 115 3 ("case pattern match failure"))
 
-let v_checkArgs = fun args -> v_checkParse [] args
+let v_Vuna_dCli_dcheckArgs = fun args -> v_Vuna_dCli_dcheckParse [] args
 
-let v_dispatch = fun args -> (match args with
-  | [] -> v_usageError ()
+let v_Vuna_dCli_drunCli = fun args -> (match args with
+  | [] -> v_Vuna_dCli_dusageError ()
   | (arg) :: (rest) -> (match arg with
-  | "compile" -> v_compileArgs rest
-  | "check" -> v_checkArgs rest
+  | "compile" -> v_Vuna_dCli_dcompileArgs rest
+  | "check" -> v_Vuna_dCli_dcheckArgs rest
   | "lint" -> v_Vuna_dLint_drunLint rest
-  | "interp" -> v_interpArgs rest
-  | "help" -> v_help ()
-  | "--help" -> v_help ()
-  | _ -> v_compileArgs args
-  | _ -> vuna_fail "app/Main.vuna" 16 7 ("case pattern match failure"))
-  | _ -> vuna_fail "app/Main.vuna" 13 3 ("case pattern match failure"))
+  | "interp" -> v_Vuna_dCli_dinterpArgs rest
+  | "build" -> v_Vuna_dCli_dbuildArgs rest
+  | "test" -> v_Vuna_dCli_dtestArgs rest
+  | "fmt" -> v_Vuna_dCli_dfmtArgs rest
+  | "repl" -> v_Vuna_dCli_dreplArgs rest
+  | "doc" -> v_Vuna_dCli_ddocArgs rest
+  | "help" -> v_Vuna_dCli_dhelp ()
+  | "--help" -> v_Vuna_dCli_dhelp ()
+  | _ -> v_Vuna_dCli_dcompileArgs args
+  | _ -> vuna_fail "lib/Vuna/Cli.vuna" 43 7 ("case pattern match failure"))
+  | _ -> vuna_fail "lib/Vuna/Cli.vuna" 40 3 ("case pattern match failure"))
 
-let v_main = fun () -> bi_exit (v_dispatch (bi_get_args ()))
+let v_main = fun () -> bi_exit (v_Vuna_dCli_drunCli (bi_get_args ()))
 
 let v_vuna_uneq_uVuna_uPair_uPair = fun x y -> if v_vuna_ueq_uVuna_uPair_uPair x y then v_vuna_ueq_uint
 0 1
