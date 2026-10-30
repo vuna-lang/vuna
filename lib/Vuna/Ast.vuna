@@ -3,37 +3,67 @@
 import Vuna.Base
 
 data Pat : Type where
-  PVar : String -> Pat
-  PWild : Pat
-  PCon : String -> List Pat -> Pat
-  PInt : Int -> Pat
-  PStr : String -> Pat
+  PVar : String -> Span -> Pat
+  PWild : Span -> Pat
+  PCon : String -> List Pat -> Span -> Pat
+  PInt : Int -> Span -> Pat
+  PStr : String -> Span -> Pat
 
 data Expr : Type where
-  EVar : String -> Expr
-  EInt : Int -> Expr
-  EStr : String -> Expr
-  ELam : List String -> Expr -> Expr
-  EApp : Expr -> List Expr -> Expr
-  ELet : List (Pair Pat Expr) -> Expr -> Expr
-  ECase : Expr -> List (Pair Pat Expr) -> Expr
-  EIf : Expr -> Expr -> Expr -> Expr
+  EVar : String -> Span -> Expr
+  EInt : Int -> Span -> Expr
+  EStr : String -> Span -> Expr
+  ELam : List String -> Expr -> Span -> Expr
+  EApp : Expr -> List Expr -> Span -> Expr
+  ELet : List (Pair Pat Expr) -> Expr -> Span -> Expr
+  ECase : Expr -> List (Pair Pat Expr) -> Span -> Expr
+  EIf : Expr -> Expr -> Expr -> Span -> Expr
 
 data Ctor : Type where
-  Ctor : String -> Expr -> Int -> Ctor
+  Ctor : String -> Expr -> Int -> Span -> Ctor
 
 data Decl : Type where
-  DData : String -> List String -> List Ctor -> Decl
-  DSig : String -> Expr -> Decl
-  DFun : String -> List Pat -> Expr -> Decl
+  DData : String -> List String -> List Ctor -> Span -> Decl
+  DSig : String -> Expr -> Span -> Decl
+  DFun : String -> List Pat -> Expr -> Span -> Decl
+
+-- 各节点的源码 span 访问器。
+patSpan pat =
+  case pat of
+    PVar name sp => sp
+    PWild sp => sp
+    PCon name pats sp => sp
+    PInt n sp => sp
+    PStr s sp => sp
+
+exprSpan expr =
+  case expr of
+    EVar name sp => sp
+    EInt n sp => sp
+    EStr s sp => sp
+    ELam ps body sp => sp
+    EApp fn args sp => sp
+    ELet binds body sp => sp
+    ECase scrut alts sp => sp
+    EIf c t e sp => sp
+
+declSpan decl =
+  case decl of
+    DData name params ctors sp => sp
+    DSig name ty sp => sp
+    DFun name pats body sp => sp
+
+ctorSpan (Ctor name ty arity sp) = sp
 
 data Import : Type where
-  Import : String -> Bool -> Maybe String -> Import
+  Import : String -> Bool -> Maybe String -> Span -> Import
+
+importSpan (Import name isQualified alias sp) = sp
 
 collectClauses Nil name = Nil
 collectClauses (Cons d rest) name =
   case d of
-    DFun n pats body =>
+    DFun n pats body _ =>
       if n == name then Cons (Pair pats body) (collectClauses rest name)
       else collectClauses rest name
     _ => collectClauses rest name
@@ -45,16 +75,16 @@ funArity name decls =
     Nil => Nothing
     Cons (Pair pats body) _ => Just (length pats)
 
-ctorName (Ctor name ty arity) = name
+ctorName (Ctor name ty arity _) = name
 
-ctorType (Ctor name ty arity) = ty
+ctorType (Ctor name ty arity _) = ty
 
 typeArity ty =
   case ty of
-    EApp (EVar "->") (Cons x (Cons rest Nil)) => 1 + typeArity rest
+    EApp (EVar "->" _) (Cons x (Cons rest Nil)) _ => 1 + typeArity rest
     _ => 0
 
-ctorArityOf (Ctor name ty arity) = arity
+ctorArityOf (Ctor name ty arity _) = arity
 
 lookupCtorArity name ctors =
   case ctors of
@@ -67,7 +97,7 @@ ctorArity name decls =
     Nil => Nothing
     Cons d rest =>
       case d of
-        DData dname params ctors =>
+        DData dname params ctors _ =>
           case lookupCtorArity name ctors of
             Just arity => Just arity
             Nothing => ctorArity name rest
@@ -75,22 +105,22 @@ ctorArity name decls =
 
 declNames d =
   case d of
-    DFun name pats body => Cons name Nil
-    DSig name ty => Cons name Nil
-    DData dname params ctors => map ctorName ctors
+    DFun name pats body _ => Cons name Nil
+    DSig name ty _ => Cons name Nil
+    DData dname params ctors _ => map ctorName ctors
 
 topNames decls = concatMap declNames decls
 
 declCtors d =
   case d of
-    DData dname params ctors => map ctorName ctors
+    DData dname params ctors _ => map ctorName ctors
     _ => Nil
 
 ctorsOf decls = concatMap declCtors decls
 
 declTypeNames d =
   case d of
-    DData name params ctors => Cons name Nil
+    DData name params ctors _ => Cons name Nil
     _ => Nil
 
 typeNamesOf decls = concatMap declTypeNames decls

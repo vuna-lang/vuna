@@ -2,7 +2,7 @@
 
 本文记录 vuna 当前基线与后续大阶段规划。
 
-## 当前基线（M1–M8 已完成）
+## 当前基线（M1–M9 已完成）
 
 - M1：offside layout parser；
 - M2：call-by-value 求值器；
@@ -12,7 +12,10 @@
 - M6：vuna 自写 codegen + seed 固定点；
 - M7：HM 类型检查、模块类型名解析、顶层推断、编译器自检；
 - M8：原生 OCaml typed codegen（data → variant，Int/String/Bool/List 原生），
-  typed 默认，typed 自举，`bootstrap/stage1.ml` 由 typed 编译器轮换。
+  typed 默认，typed 自举，`bootstrap/stage1.ml` 由 typed 编译器轮换；
+- M9：诊断与语言可用性——AST 全链路 span，运行时错误 `文件:行:列`，
+  `case`/多子句函数/`let` 模式穷尽性与冗余检查，`vuna check` 诊断命令，
+  类型错误带源码位置与期望/实际类型及候选构造器，非 0 退出码，诊断 golden 测试。
 
 当前硬约束：
 

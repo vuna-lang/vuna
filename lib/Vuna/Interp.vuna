@@ -9,7 +9,7 @@ import Vuna.Typecheck
 import Vuna.TypedCodegen
 
 interpret source =
-  case parseSource source of
+  case parseSource "<input>" source of
     Err e => "error: " ++ e
     Ok (Pair imports decls) =>
       case imports of
@@ -37,3 +37,12 @@ compileFileTyped roots entry printResult =
     andThen (checkProgramInfoElab decls) (\p =>
       case p of
         Pair globals elabDecls => generateProgramTyped elabDecls globals printResult))
+
+-- 诊断：typecheck + 穷尽性/冗余警告（非致命）。返回警告列表。
+checkFile roots entry =
+  case loadProgram roots entry of
+    Err e => Err e
+    Ok decls =>
+      case checkProgramInfo decls of
+        Err e => Err e
+        Ok _ => Ok (exhaustiveWarnings decls)

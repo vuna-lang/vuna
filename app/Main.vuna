@@ -4,7 +4,7 @@ import Vuna.Base
 import Vuna.Interp
 import qualified Lint
 
-usage = "usage:\n  vuna compile [--no-print] [--no-typecheck] [--typecheck] [--typed] [--root DIR]... <entry.vuna> [out.ml]\n  vuna lint [--fix] <file.vuna>...\n  vuna interp [--root DIR]... <file.vuna>\n  vuna help\n"
+usage = "usage:\n  vuna compile [--no-print] [--no-typecheck] [--typecheck] [--typed] [--root DIR]... <entry.vuna> [out.ml]\n  vuna check [--root DIR]... <entry.vuna>\n  vuna lint [--fix] <file.vuna>...\n  vuna interp [--root DIR]... <file.vuna>\n  vuna help\n"
 
 main = exit (dispatch (getArgs))
 
@@ -14,6 +14,7 @@ dispatch args =
     Cons arg rest =>
       case arg of
         "compile" => compileArgs rest
+        "check" => checkArgs rest
         "lint" => Lint.runLint rest
         "interp" => interpArgs rest
         "help" => help
@@ -66,3 +67,19 @@ interpEmit roots path =
   let output = interpretFile roots path
   in let _ = print (output ++ "\n")
      in if startsWith "error:" output then 2 else 0
+
+checkArgs args = checkParse Nil args
+
+checkParse roots args =
+  case args of
+    Cons "--root" (Cons dir rest) => checkParse (append roots (Cons dir Nil)) rest
+    Cons path Nil => checkEmit (effectiveRoots roots) path
+    _ => usageError
+
+checkEmit roots path =
+  case checkFile roots path of
+    Err e => let _ = print ("error: " ++ e ++ "\n") in 1
+    Ok warnings => let _ = printWarnings warnings in 0
+
+printWarnings Nil = 0
+printWarnings (Cons w rest) = let _ = print (w ++ "\n") in printWarnings rest

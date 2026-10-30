@@ -2,9 +2,6 @@
 
 import Vuna.Base
 
-data Pos : Type where
-  Pos : Int -> Int -> Pos
-
 data Tok : Type where
   TIdent : String -> Tok
   TKw : String -> Tok

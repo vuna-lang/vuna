@@ -263,6 +263,110 @@ for file in corpus/fix/*.vuna; do
   check_eq "$file (fix idempotent)" "$(cat "$once")" "$(cat "$work")"
 done
 
+# 17) M9 诊断：运行时错误位置（行号）、穷尽性/冗余、退出码
+mkdir -p "$tmp/m9"
+cat > "$tmp/m9/loc.vuna" <<'EOF'
+data Maybe : Type where
+  Just : Int -> Maybe
+  Nothing : Maybe
+
+f : Maybe -> Int
+f (Just x) = x
+
+main : Int
+main = f Nothing
+EOF
+loc_i=$("$VUNA" interp "$tmp/m9/loc.vuna" 2>&1)
+check_contains "m9 interp location" "$loc_i" "$tmp/m9/loc.vuna:9:8: no matching clause"
+"$VUNA" interp "$tmp/m9/loc.vuna" >/dev/null 2>&1
+m9_interp_code=$?
+if [ "$m9_interp_code" -ne 0 ]; then ok; else bad "m9 interp runtime exit" "non-zero" "$m9_interp_code"; fi
+rm -f "$tmp/m9/loc.ml" "$tmp/m9/loc.exe"
+if ! "$VUNA" --typed "$tmp/m9/loc.vuna" "$tmp/m9/loc.ml" >/dev/null 2>&1; then
+  bad "m9 typed codegen" "exit 0" "compile failed"
+elif ! "$OCAMLOPT" -w -a -o "$tmp/m9/loc.exe" "$tmp/m9/loc.ml" >/dev/null 2>&1; then
+  bad "m9 typed ocamlopt" "" "ocamlopt failed"
+else
+  loc_c=$("$tmp/m9/loc.exe" 2>&1)
+  check_contains "m9 typed location" "$loc_c" "$tmp/m9/loc.vuna:6:1: no matching clause"
+  "$tmp/m9/loc.exe" >/dev/null 2>&1
+  m9_run_code=$?
+  if [ "$m9_run_code" -ne 0 ]; then ok; else bad "m9 typed runtime exit" "non-zero" "$m9_run_code"; fi
+fi
+
+cat > "$tmp/m9/ne_case.vuna" <<'EOF'
+data Maybe : Type where
+  Just : Int -> Maybe
+  Nothing : Maybe
+
+g : Maybe -> Int
+g x = case x of
+  Just a => a
+
+main : Int
+main = g Nothing
+EOF
+ne=$("$VUNA" check "$tmp/m9/ne_case.vuna" 2>&1)
+check_contains "m9 non-exhaustive case" "$ne" "non-exhaustive case"
+
+cat > "$tmp/m9/ne_fun.vuna" <<'EOF'
+data Maybe : Type where
+  Just : Int -> Maybe
+  Nothing : Maybe
+
+f : Maybe -> Int
+f (Just x) = x
+
+main : Int
+main = f Nothing
+EOF
+nef=$("$VUNA" check "$tmp/m9/ne_fun.vuna" 2>&1)
+check_contains "m9 non-exhaustive function" "$nef" "non-exhaustive function clauses"
+
+cat > "$tmp/m9/red.vuna" <<'EOF'
+data B : Type where
+  T : B
+  F : B
+
+g : B -> Int
+g x = case x of
+  T => 1
+  _ => 0
+  F => 2
+
+main : Int
+main = g T
+EOF
+rd=$("$VUNA" check "$tmp/m9/red.vuna" 2>&1)
+check_contains "m9 redundant pattern" "$rd" "redundant pattern"
+
+cat > "$tmp/m9/ok.vuna" <<'EOF'
+data Maybe : Type where
+  Just : Int -> Maybe
+  Nothing : Maybe
+
+g : Maybe -> Int
+g x = case x of
+  Just a => a
+  Nothing => 0
+
+main : Int
+main = g Nothing
+EOF
+okw=$("$VUNA" check "$tmp/m9/ok.vuna" 2>&1)
+check_eq "m9 exhaustive clean" "" "$okw"
+
+cat > "$tmp/m9/type_err.vuna" <<'EOF'
+main : Int
+main = "oops"
+EOF
+"$VUNA" check "$tmp/m9/type_err.vuna" >/dev/null 2>&1
+m9_check_code=$?
+if [ "$m9_check_code" -ne 0 ]; then ok; else bad "m9 check type err exit" "non-zero" "$m9_check_code"; fi
+"$VUNA" --typecheck "$tmp/m9/type_err.vuna" "$tmp/m9/type_err.ml" >/dev/null 2>&1
+m9_compile_code=$?
+if [ "$m9_compile_code" -ne 0 ]; then ok; else bad "m9 compile type err exit" "non-zero" "$m9_compile_code"; fi
+
 if [ "$fail" -ne 0 ]; then
   printf '%s passed, %s failed\n' "$pass" "$fail"
   exit 1

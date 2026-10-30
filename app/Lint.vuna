@@ -725,12 +725,12 @@ applyFixes source findings =
          if count == 0 then Ok (Pair 0 source)
          else
            let newSource = joinLines newLines
-           in case parseSource newSource of
+           in case parseSource "<lint>" newSource of
                 Err e => Err ("parse failed after fix: " ++ e)
                 Ok ignored => Ok (Pair count newSource)
 
 lintSource source =
-  case parseSource source of
+  case parseSource "<lint>" source of
     Err e => Err e
     Ok ignored =>
       case lexSource source of

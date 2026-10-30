@@ -20,6 +20,32 @@ data Bool : Type where
   False : Bool
   True : Bool
 
+-- 源码位置（行、列，均从 1 开始）。
+data Pos : Type where
+  Pos : Int -> Int -> Pos
+
+-- 源码 span：文件、起始行列、结束行列。文件在解析时由调用方注入，
+-- 供跨模块 flatten 后仍能追溯每个表达式来自哪个源文件。
+data Span : Type where
+  Span : String -> Int -> Int -> Int -> Int -> Span
+
+posLine (Pos l c) = l
+
+posCol (Pos l c) = c
+
+spanFile (Span f sl sc el ec) = f
+
+spanStartLine (Span f sl sc el ec) = sl
+
+spanStartCol (Span f sl sc el ec) = sc
+
+spanEndLine (Span f sl sc el ec) = el
+
+spanEndCol (Span f sl sc el ec) = ec
+
+-- 把 span 渲染成 `文件:行:列`（错误信息前缀）。
+showSpanLoc (Span f sl sc el ec) = f ++ ":" ++ strFromInt sl ++ ":" ++ strFromInt sc
+
 append : List a -> List a -> List a
 append Nil ys = ys
 append (Cons x xs) ys = Cons x (append xs ys)
@@ -131,3 +157,26 @@ joinArrows : List String -> String
 joinArrows Nil = ""
 joinArrows (Cons x Nil) = x
 joinArrows (Cons x rest) = x ++ " -> " ++ joinArrows rest
+
+-- 候选建议：与出错名相似的名字（诊断）
+suggest : String -> List String -> String
+suggest name Nil = ""
+suggest name (Cons c rest) =
+  if similarName name c then " (did you mean " ++ c ++ "?)" else suggest name rest
+
+similarName a b =
+  if a == b then False
+  else if startsWith a b then True
+  else if startsWith b a then True
+  else
+    let la = strUnpack a
+    in let lb = strUnpack b
+       in lengthDiffLE (length la) (length lb) 2 && prefixLen2 la lb >= 2
+
+prefixLen2 Nil _ = 0
+prefixLen2 _ Nil = 0
+prefixLen2 (Cons x xs) (Cons y ys) =
+  if x == y then 1 + prefixLen2 xs ys else 0
+
+lengthDiffLE la lb n =
+  if la >= lb then la - lb <= n else lb - la <= n

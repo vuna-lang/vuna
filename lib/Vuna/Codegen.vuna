@@ -102,11 +102,11 @@ pconPattern name pats =
 
 genPattern pat =
   case pat of
-    PWild => Ok (Pair "_" Nil)
-    PVar name => Ok (Pair ("x_" ++ sanitizeName name) (Cons name Nil))
-    PInt n => Ok (Pair ("VInt (" ++ strFromInt n ++ ")") Nil)
-    PStr s => Ok (Pair ("VStr " ++ ocamlString s) Nil)
-    PCon name pats =>
+    PWild _ => Ok (Pair "_" Nil)
+    PVar name _ => Ok (Pair ("x_" ++ sanitizeName name) (Cons name Nil))
+    PInt n _ => Ok (Pair ("VInt (" ++ strFromInt n ++ ")") Nil)
+    PStr s _ => Ok (Pair ("VStr " ++ ocamlString s) Nil)
+    PCon name pats _ =>
       andThen (traverse genPattern pats) (\parts =>
         Ok
           (Pair (pconPattern name (map firstOf parts))
@@ -184,11 +184,11 @@ genOrShort decls scope a b =
 
 genEApp decls scope fn args =
   case fn of
-    EVar "&&" =>
+    EVar "&&" _ =>
       case args of
         Cons a (Cons b Nil) => genAndShort decls scope a b
         _ => genApply decls scope fn args
-    EVar "||" =>
+    EVar "||" _ =>
       case args of
         Cons a (Cons b Nil) => genOrShort decls scope a b
         _ => genApply decls scope fn args
@@ -196,14 +196,14 @@ genEApp decls scope fn args =
 
 genExpr decls scope expr =
   case expr of
-    EVar name => genVar decls scope name
-    EInt n => Ok ("VInt (" ++ strFromInt n ++ ")")
-    EStr s => Ok ("VStr " ++ ocamlString s)
-    ELam params body => genLambda decls scope params body
-    EApp fn args => genEApp decls scope fn args
-    ELet binds body => genLet decls scope binds body
-    ECase scrut alts => genCase decls scope scrut alts
-    EIf c t e =>
+    EVar name _ => genVar decls scope name
+    EInt n _ => Ok ("VInt (" ++ strFromInt n ++ ")")
+    EStr s _ => Ok ("VStr " ++ ocamlString s)
+    ELam params body _ => genLambda decls scope params body
+    EApp fn args _ => genEApp decls scope fn args
+    ELet binds body _ => genLet decls scope binds body
+    ECase scrut alts _ => genCase decls scope scrut alts
+    EIf c t e _ =>
       andThen (genExpr decls scope c) (\cc =>
         andThen (genExpr decls scope t) (\tc =>
           andThen (genExpr decls scope e) (\ec =>
@@ -218,7 +218,7 @@ groupFunctions decls = groupFunctionsLoop decls Nil
 groupFunctionsLoop Nil groups = groups
 groupFunctionsLoop (Cons d rest) groups =
   case d of
-    DFun name pats body =>
+    DFun name pats body _ =>
       groupFunctionsLoop rest (addClause name (Pair pats body) groups)
     _ => groupFunctionsLoop rest groups
 
@@ -243,7 +243,7 @@ ctorPairs (Cons c rest) =
 allCtors Nil = Nil
 allCtors (Cons d rest) =
   case d of
-    DData dname params ctors => append (ctorPairs ctors) (allCtors rest)
+    DData dname params ctors _ => append (ctorPairs ctors) (allCtors rest)
     _ => allCtors rest
 
 validateCtors Nil = Ok Nil

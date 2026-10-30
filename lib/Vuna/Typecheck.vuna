@@ -17,16 +17,29 @@ data TC : Type where
 
 -- 推断阶段产出的 annotated 表达式：比较运算应用暂存操作数类型（Ty），
 -- 待子句与顶层签名 unify 完成后，再用最终 substitution 决定合成 builtin 名。
+-- 每个节点保留源码 span，供 lower 回 Expr 后做运行时错误定位。
 data EExpr : Type where
-  XEVar : String -> EExpr
-  XEInt : Int -> EExpr
-  XEStr : String -> EExpr
-  XELam : List String -> EExpr -> EExpr
-  XEApp : EExpr -> List EExpr -> EExpr
-  XECmp : String -> List EExpr -> Ty -> EExpr
-  XELet : List (Pair Pat EExpr) -> EExpr -> EExpr
-  XECase : EExpr -> List (Pair Pat EExpr) -> EExpr
-  XEIf : EExpr -> EExpr -> EExpr -> EExpr
+  XEVar : String -> Span -> EExpr
+  XEInt : Int -> Span -> EExpr
+  XEStr : String -> Span -> EExpr
+  XELam : List String -> EExpr -> Span -> EExpr
+  XEApp : EExpr -> List EExpr -> Span -> EExpr
+  XECmp : String -> List EExpr -> Ty -> Span -> EExpr
+  XELet : List (Pair Pat EExpr) -> EExpr -> Span -> EExpr
+  XECase : EExpr -> Ty -> List (Pair Pat EExpr) -> Span -> EExpr
+  XEIf : EExpr -> EExpr -> EExpr -> Span -> EExpr
+
+eeSpan e =
+  case e of
+    XEVar n sp => sp
+    XEInt n sp => sp
+    XEStr s sp => sp
+    XELam ps b sp => sp
+    XEApp f a sp => sp
+    XECmp n a ty sp => sp
+    XELet bs b sp => sp
+    XECase s ty a sp => sp
+    XEIf c t e sp => sp
 
 -- ---------------------------------------------------------------
 -- 基础工具
@@ -119,15 +132,15 @@ unify a b (TC n s) =
                   else bindVar j ra (TC n s)
                 TCon tn2 ys =>
                   if tn == tn2 || sameBuiltinTy tn tn2 then unifyLists xs ys (TC n s)
-                  else Err ("type mismatch: " ++ showTy ra ++ " vs " ++ showTy rb)
-                _ => Err ("type mismatch: " ++ showTy ra ++ " vs " ++ showTy rb)
+                  else Err ("type mismatch: expected " ++ showTy rb ++ " but got " ++ showTy ra)
+                _ => Err ("type mismatch: expected " ++ showTy rb ++ " but got " ++ showTy ra)
             TFun x y =>
               case rb of
                 TVar j =>
                   if occursIn j s ra then Err ("occurs check: " ++ showTy ra)
                   else bindVar j ra (TC n s)
                 TFun x2 y2 => andThen (unify x x2 (TC n s)) (\st2 => unify y y2 st2)
-                _ => Err ("type mismatch: " ++ showTy ra ++ " vs " ++ showTy rb)
+                _ => Err ("type mismatch: expected " ++ showTy rb ++ " but got " ++ showTy ra)
 
 instantiateVars Nil st = Pair Nil st
 instantiateVars (Cons q rest) st =
@@ -192,7 +205,7 @@ convertTypes typeNames vars (Cons e rest) st =
 
 convertType typeNames vars st expr =
   case expr of
-    EVar name =>
+    EVar name _ =>
       if knownTypeName typeNames name then
         Ok (Pair (Pair (TCon name Nil) vars) st)
       else if isLowerName name then
@@ -202,9 +215,9 @@ convertType typeNames vars st expr =
             case freshTy st of
               Pair ty st2 => Ok (Pair (Pair ty (Cons (Pair name ty) vars)) st2)
       else Err ("unknown type: " ++ name)
-    EApp fn args =>
+    EApp fn args _ =>
       case fn of
-        EVar "->" =>
+        EVar "->" _ =>
           case args of
             Cons a (Cons b Nil) =>
               andThen (convertType typeNames vars st a) (\pa =>
@@ -215,7 +228,7 @@ convertType typeNames vars st expr =
                         Pair (Pair tb vars2) st2 =>
                           Ok (Pair (Pair (TFun ta tb) vars2) st2)))
             _ => Err "invalid arrow type"
-        EVar name =>
+        EVar name _ =>
           if knownTypeName typeNames name then
             andThen (convertTypes typeNames vars args st) (\pc =>
               case pc of
@@ -242,7 +255,7 @@ seedVars (Cons name rest) st =
       case seedVars rest st1 of
         Pair vars st2 => Pair (Cons (Pair name ty) vars) st2
 
-schemeOfCtor typeNames params st (Ctor name ty arity) =
+schemeOfCtor typeNames params st (Ctor name ty arity _) =
   case seedVars params st of
     Pair vars st1 =>
       andThen (convertType typeNames vars st1 ty) (\p =>
@@ -257,13 +270,13 @@ schemeOfCtor typeNames params st (Ctor name ty arity) =
 declDataNames Nil = Nil
 declDataNames (Cons d rest) =
   case d of
-    DData name params ctors => Cons name (declDataNames rest)
+    DData name params ctors _ => Cons name (declDataNames rest)
     _ => declDataNames rest
 
 collectSigs typeNames Nil st = Ok (Pair Nil st)
 collectSigs typeNames (Cons d rest) st =
   case d of
-    DSig name ty =>
+    DSig name ty _ =>
       andThen (schemeOfSig typeNames ty st) (\p =>
         case p of
           Pair sch st1 =>
@@ -274,7 +287,7 @@ collectSigs typeNames (Cons d rest) st =
 collectCtors typeNames Nil st = Ok (Pair Nil st)
 collectCtors typeNames (Cons d rest) st =
   case d of
-    DData name params ctors =>
+    DData name params ctors _ =>
       andThen (collectCtorList typeNames params ctors st) (\p =>
         case p of
           Pair newCtors st1 =>
@@ -373,27 +386,27 @@ firstArgTy argTys =
 isCmpName name =
   name == "==" || name == "/=" || name == "<" || name == "<=" || name == ">" || name == ">="
 
-elabAppExpr fn fnElab args argTys argEls =
+elabAppExpr fn fnElab args argTys argEls sp =
   case fn of
-    EVar name =>
+    EVar name _ =>
       case args of
         Cons _ (Cons _ Nil) =>
-          if isCmpName name then XECmp name argEls (firstArgTy argTys)
-          else XEApp fnElab argEls
-        _ => XEApp fnElab argEls
-    _ => XEApp fnElab argEls
+          if isCmpName name then XECmp name argEls (firstArgTy argTys) sp
+          else XEApp fnElab argEls sp
+        _ => XEApp fnElab argEls sp
+    _ => XEApp fnElab argEls sp
 
 lowerExpr subst expr =
   case expr of
-    XEVar name => EVar name
-    XEInt n => EInt n
-    XEStr s => EStr s
-    XELam params body => ELam params (lowerExpr subst body)
-    XEApp fn args => EApp (lowerExpr subst fn) (map (lowerExpr subst) args)
-    XECmp name args ty => EApp (EVar (specializeCmp name (resolveTy subst ty))) (map (lowerExpr subst) args)
-    XELet binds body => ELet (map (lowerBind subst) binds) (lowerExpr subst body)
-    XECase scrut alts => ECase (lowerExpr subst scrut) (map (lowerAlt subst) alts)
-    XEIf c t e => EIf (lowerExpr subst c) (lowerExpr subst t) (lowerExpr subst e)
+    XEVar name sp => EVar name sp
+    XEInt n sp => EInt n sp
+    XEStr s sp => EStr s sp
+    XELam params body sp => ELam params (lowerExpr subst body) sp
+    XEApp fn args sp => EApp (lowerExpr subst fn) (map (lowerExpr subst) args) sp
+    XECmp name args ty sp => EApp (EVar (specializeCmp name (resolveTy subst ty)) sp) (map (lowerExpr subst) args) sp
+    XELet binds body sp => ELet (map (lowerBind subst) binds) (lowerExpr subst body) sp
+    XECase scrut ty alts sp => ECase (lowerExpr subst scrut) (map (lowerAlt subst) alts) sp
+    XEIf c t e sp => EIf (lowerExpr subst c) (lowerExpr subst t) (lowerExpr subst e) sp
 
 lowerBind subst (Pair pat value) = Pair pat (lowerExpr subst value)
 
@@ -445,19 +458,19 @@ inferPatterns globals locals _ _ st = Err "pattern arity mismatch"
 
 inferPattern globals locals st pat expected =
   case pat of
-    PWild => Ok (Pair locals st)
-    PVar name => Ok (Pair (Cons (Pair name expected) locals) st)
-    PInt n => andThen (unify expected intTy st) (\st2 => Ok (Pair locals st2))
-    PStr s => andThen (unify expected strTy st) (\st2 => Ok (Pair locals st2))
-    PCon name pats =>
+    PWild _ => Ok (Pair locals st)
+    PVar name _ => Ok (Pair (Cons (Pair name expected) locals) st)
+    PInt n _ => andThen (unify intTy expected st) (\st2 => Ok (Pair locals st2))
+    PStr s _ => andThen (unify strTy expected st) (\st2 => Ok (Pair locals st2))
+    PCon name pats _ =>
       case lookupScheme name globals of
-        Nothing => Err ("unknown constructor: " ++ name)
+        Nothing => Err ("unknown constructor: " ++ name ++ suggest name (map firstOf globals))
         Just sch =>
           case instantiate st sch of
             Pair ctorTy st1 =>
               let argTys = funArgs ctorTy
               in if length pats == length argTys then
-                   andThen (unify expected (funResult ctorTy) st1) (\st2 =>
+                   andThen (unify (funResult ctorTy) expected st1) (\st2 =>
                      inferPatterns globals locals pats argTys st2)
                  else Err ("constructor " ++ name ++ " expects " ++ strFromInt (length argTys) ++ " arguments")
 
@@ -513,49 +526,49 @@ inferAlts globals locals scrutTy (Cons (Pair pat body) rest) st =
 
 inferExpr globals locals st expr =
   case expr of
-    EVar name =>
+    EVar name sp =>
       case lookupLocal name locals of
-        Just ty => Ok (Pair (Pair ty (XEVar name)) st)
+        Just ty => Ok (Pair (Pair ty (XEVar name sp)) st)
         Nothing =>
           case lookupScheme name globals of
             Just sch =>
               case instantiate st sch of
-                Pair ty st2 => Ok (Pair (Pair ty (XEVar name)) st2)
-            Nothing => Err ("unbound variable: " ++ name)
-    EInt n => Ok (Pair (Pair intTy (XEInt n)) st)
-    EStr s => Ok (Pair (Pair strTy (XEStr s)) st)
-    EApp fn args =>
+                Pair ty st2 => Ok (Pair (Pair ty (XEVar name sp)) st2)
+            Nothing => Err ("unbound variable: " ++ name ++ suggest name (map firstOf globals))
+    EInt n sp => Ok (Pair (Pair intTy (XEInt n sp)) st)
+    EStr s sp => Ok (Pair (Pair strTy (XEStr s sp)) st)
+    EApp fn args sp =>
       andThen (inferExpr globals locals st fn) (\pf =>
         case pf of
           Pair (Pair fnTy fnElab) st1 =>
             andThen (inferArgs globals locals fnTy args st1) (\pr =>
               case pr of
                 Pair argTys (Pair argEls (Pair resTy st2)) =>
-                  Ok (Pair (Pair resTy (elabAppExpr fn fnElab args argTys argEls)) st2)))
-    ELam params body =>
+                  Ok (Pair (Pair resTy (elabAppExpr fn fnElab args argTys argEls sp)) st2)))
+    ELam params body sp =>
       case seedLocals params locals st of
         Pair paramTys (Pair locals2 st1) =>
           andThen (inferExpr globals locals2 st1 body) (\pb =>
             case pb of
               Pair (Pair bodyTy bodyElab) st2 =>
-                Ok (Pair (Pair (foldFun paramTys bodyTy) (XELam params bodyElab)) st2))
-    ELet binds body =>
+                Ok (Pair (Pair (foldFun paramTys bodyTy) (XELam params bodyElab sp)) st2))
+    ELet binds body sp =>
       andThen (inferBinds globals locals binds st) (\pb =>
         case pb of
           Pair bindEls (Pair locals2 st1) =>
             andThen (inferExpr globals locals2 st1 body) (\pr =>
               case pr of
                 Pair (Pair bodyTy bodyElab) st2 =>
-                  Ok (Pair (Pair bodyTy (XELet bindEls bodyElab)) st2)))
-    ECase scrut alts =>
+                  Ok (Pair (Pair bodyTy (XELet bindEls bodyElab sp)) st2)))
+    ECase scrut alts sp =>
       andThen (inferExpr globals locals st scrut) (\ps =>
         case ps of
           Pair (Pair scrutTy scrutElab) st1 =>
             andThen (inferAlts globals locals scrutTy alts st1) (\pr =>
               case pr of
                 Pair altsElab (Pair bodyTy st2) =>
-                  Ok (Pair (Pair bodyTy (XECase scrutElab altsElab)) st2)))
-    EIf c t e =>
+                  Ok (Pair (Pair bodyTy (XECase scrutElab scrutTy altsElab sp)) st2)))
+    EIf c t e sp =>
       andThen (inferExpr globals locals st c) (\pc =>
         case pc of
           Pair (Pair condTy condElab) st1 =>
@@ -567,7 +580,7 @@ inferExpr globals locals st expr =
                       case pe of
                         Pair (Pair elseTy elseElab) st4 =>
                           andThen (unify thenTy elseTy st4) (\st5 =>
-                            Ok (Pair (Pair thenTy (XEIf condElab thenElab elseElab)) st5))))))
+                            Ok (Pair (Pair thenTy (XEIf condElab thenElab elseElab sp)) st5))))))
 
 inferClause globals st (Pair pats body) =
   case seedPatTypes pats st of
@@ -598,7 +611,7 @@ functionNames decls = uniqueNames (map declFunName decls)
 
 declFunName d =
   case d of
-    DFun name pats body => name
+    DFun name pats body _ => name
     _ => ""
 
 uniqueNames Nil = Nil
@@ -633,6 +646,14 @@ freeVarsEnvExcept name env =
 
 substOf (TC n s) = s
 
+-- 类型错误的源码位置：取函数第一个子句体的 span（诊断）。
+funLoc name decls =
+  case clausesFor decls name of
+    Nil => ""
+    Cons (Pair pats body) _ =>
+      let sp = exprSpan body
+      in if spanStartLine sp == 0 then "" else showSpanLoc sp ++ ": "
+
 checkFunction globals decls sigs name st =
   case lookupScheme name globals of
     Nothing => Err ("missing type signature: " ++ name)
@@ -640,10 +661,10 @@ checkFunction globals decls sigs name st =
       case instantiate st sch of
         Pair expected st1 =>
           case inferClauses globals (clausesFor decls name) st1 of
-            Err e => Err ("in " ++ name ++ ": " ++ e)
+            Err e => Err (funLoc name decls ++ "in " ++ name ++ ": " ++ e)
             Ok (Pair clauseEls (Pair inferred st2)) =>
               case unify inferred expected st2 of
-                Err e => Err ("in " ++ name ++ ": " ++ e)
+                Err e => Err (funLoc name decls ++ "in " ++ name ++ ": " ++ e)
                 Ok st3 =>
                   let elabClauses = lowerClauses (substOf st3) clauseEls
                   in if hasSig name sigs then Ok (Pair elabClauses (Pair globals st3))
@@ -663,10 +684,10 @@ checkFunctions globals decls sigs (Cons name rest) st elabMap =
 rebuildDecls Nil elabMap = Nil
 rebuildDecls (Cons d rest) elabMap =
   case d of
-    DFun name pats body =>
+    DFun name pats body sp =>
       case lookupPair name elabMap of
         Just (Cons (Pair pats2 body2) restElab) =>
-          Cons (DFun name pats2 body2) (rebuildDecls rest (replaceElab name restElab elabMap))
+          Cons (DFun name pats2 body2 sp) (rebuildDecls rest (replaceElab name restElab elabMap))
         _ => Cons d (rebuildDecls rest elabMap)
     _ => Cons d (rebuildDecls rest elabMap)
 
@@ -696,6 +717,196 @@ checkProgramInfo decls =
 
 checkProgram decls =
   andThen (checkProgramInfo decls) (\_ => Ok Nil)
+
+-- ---------------------------------------------------------------
+-- 穷尽性 / 冗余诊断（非致命警告；typecheck 成功后单独运行）
+-- ---------------------------------------------------------------
+
+exhaustiveWarnings : List Decl -> List String
+exhaustiveWarnings decls =
+  case checkProgramInfo decls of
+    Ok globals => programWarnings globals decls
+    Err _ => Nil
+
+programWarnings globals decls =
+  concatMap (funWarnings globals decls) (functionNames decls)
+
+funWarnings globals decls name =
+  case lookupScheme name globals of
+    Nothing => Nil
+    Just sch =>
+      let clauses = clausesFor decls name
+      in let paramTys = flattenFun (schemeTy sch)
+         in let bodyWarn = concatMap (clauseBodyWarnings globals decls paramTys) clauses
+            in append (funCoverageWarnings decls paramTys clauses) bodyWarn
+
+clauseBodyWarnings globals decls paramTys (Pair pats body) =
+  let locals = zipLocals (patsVarNames pats) paramTys
+  in exprWarnings globals decls locals body
+
+exprWarnings globals decls locals e =
+  case e of
+    EVar n sp => Nil
+    EInt n sp => Nil
+    EStr s sp => Nil
+    ELam ps body sp =>
+      case inferExpr globals locals (TC 0 Nil) e of
+        Ok (Pair (Pair ty _) _) =>
+          let pty = flattenFun ty
+          in exprWarnings globals decls (append (zipLocals ps pty) locals) body
+        Err _ => exprWarnings globals decls locals body
+    EApp fn args sp => concatMap (exprWarnings globals decls locals) (Cons fn args)
+    ELet binds body sp =>
+      let locals2 = append (letLocals globals locals binds) locals
+      in append (concatMap (bindWarnings globals decls) binds) (exprWarnings globals decls locals2 body)
+    ECase scrut alts sp =>
+      append (caseWarnings globals decls locals scrut alts sp)
+            (append (exprWarnings globals decls locals scrut) (concatMap (altWarnings globals decls locals) alts))
+    EIf c t e sp => concatMap (exprWarnings globals decls locals) (Cons c (Cons t (Cons e Nil)))
+
+altWarnings globals decls locals (Pair pat body) =
+  exprWarnings globals decls locals body
+
+letLocals globals locals Nil = Nil
+letLocals globals locals (Cons (Pair pat value) rest) =
+  let patTys = patternLocals globals locals pat value
+  in append patTys (letLocals globals locals rest)
+
+patternLocals globals locals pat value =
+  case inferExpr globals locals (TC 0 Nil) value of
+    Ok (Pair (Pair ty _) _) => patVarsTy pat ty
+    Err _ => Nil
+
+patVarsTy (PVar n _) ty = Cons (Pair n ty) Nil
+patVarsTy (PCon _ subpats _) ty = subPatsVarNames subpats ty
+patVarsTy _ ty = Nil
+
+subPatsVarNames Nil ty = Nil
+subPatsVarNames (Cons p rest) ty = append (patVarsTy p ty) (subPatsVarNames rest ty)
+
+bindWarnings globals decls (Pair pat value) =
+  case pat of
+    PVar n _ => Nil
+    PWild _ => Nil
+    _ => Cons (showSpanLoc (patSpan pat) ++ ": non-exhaustive let pattern") Nil
+
+caseWarnings globals decls locals scrut alts sp =
+  case inferExpr globals locals (TC 0 Nil) scrut of
+    Err _ => Nil
+    Ok (Pair (Pair ty _) _) =>
+      let ctors = tyCtorNames decls ty
+      in if ctors == Nil then Nil
+         else
+           let pats = map firstOf alts
+           in let exhaustive = hasCatchAll pats || allCtorsCovered pats ctors
+              in let nonEx = if exhaustive then Nil else Cons (showSpanLoc sp ++ ": non-exhaustive case") Nil
+                 in append nonEx (redundantWarnings pats)
+
+funCoverageWarnings decls Nil clauses = Nil
+funCoverageWarnings decls (Cons ty rest) clauses =
+  let posPats = map (clausePatAt 0) clauses
+  in let w1 = coverageWarnings decls ty posPats
+     in append w1 (funCoverageWarnings decls rest (map dropFirstPat clauses))
+
+clausePatAt i (Pair pats body) = nthOrWild i pats
+
+coverageWarnings decls ty posPats =
+  let ctors = tyCtorNames decls ty
+  in if ctors == Nil then Nil
+     else if posPats == Nil then Nil
+     else
+       let exhaustive = hasCatchAll posPats || allCtorsCovered posPats ctors
+       in let nonEx = if exhaustive then Nil
+                      else Cons (showSpanLoc (patSpan (firstPat posPats)) ++ ": non-exhaustive function clauses") Nil
+          in append nonEx (redundantWarnings posPats)
+
+firstPat (Cons p rest) = p
+firstPat Nil = PWild (Span "" 0 0 0 0)
+
+nthOrWild i Nil = PWild (Span "" 0 0 0 0)
+nthOrWild 0 (Cons p rest) = p
+nthOrWild i (Cons p rest) = nthOrWild (i - 1) rest
+
+dropFirstPat (Pair pats body) =
+  case pats of
+    Nil => Pair Nil body
+    Cons p pr => Pair pr body
+
+tyCtorNames decls ty =
+  case ty of
+    TCon name _ => ctorNamesOf decls name
+    _ => Nil
+
+ctorNamesOf Nil name = Nil
+ctorNamesOf (Cons d rest) name =
+  case d of
+    DData dn params ctors _ =>
+      if dn == name then map ctorName ctors else ctorNamesOf rest name
+    _ => ctorNamesOf rest name
+
+allCtorsCovered pats Nil = True
+allCtorsCovered pats (Cons c rest) =
+  if ctorCovered c pats then allCtorsCovered pats rest else False
+
+ctorCovered c Nil = False
+ctorCovered c (Cons p rest) =
+  if patCoversCtor c p then True else ctorCovered c rest
+
+patCoversCtor c p =
+  case p of
+    PVar n _ => True
+    PWild _ => True
+    PCon pn subpats _ => pn == c
+    _ => False
+
+hasCatchAll Nil = False
+hasCatchAll (Cons p rest) =
+  case p of
+    PVar n _ => True
+    PWild _ => True
+    _ => hasCatchAll rest
+
+redundantWarnings pats = redWarn Nil pats
+
+redWarn prefix Nil = Nil
+redWarn prefix (Cons p rest) =
+  let more = redWarn (append prefix (Cons p Nil)) rest
+  in if anySubsumes p prefix then Cons (showSpanLoc (patSpan p) ++ ": redundant pattern") more
+     else more
+
+anySubsumes p Nil = False
+anySubsumes p (Cons earlier rest) =
+  if subsumes earlier p then True else anySubsumes p rest
+
+subsumes earlier p =
+  case earlier of
+    PVar n _ => True
+    PWild _ => True
+    PCon en subpats _ =>
+      case p of
+        PCon pn ps2 _ => en == pn
+        _ => False
+    _ => False
+
+patsVarNames Nil = Nil
+patsVarNames (Cons p rest) = append (patVarNames p) (patsVarNames rest)
+
+patVarNames p =
+  case p of
+    PVar n _ => Cons n Nil
+    PCon _ subpats _ => concatMap patVarNames subpats
+    _ => Nil
+
+zipLocals Nil Nil = Nil
+zipLocals (Cons n ns) (Cons t ts) = Cons (Pair n t) (zipLocals ns ts)
+zipLocals _ _ = Nil
+
+schemeTy (Scheme qs ty) = ty
+
+flattenFun ty =
+  case ty of
+    TFun a b => Cons a (flattenFun b)
+    _ => Nil
 
 collectData decls =
   Pair (declDataNames decls) decls

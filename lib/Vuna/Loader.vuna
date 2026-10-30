@@ -41,11 +41,11 @@ isGlobalCtor name =
 
 mangle prefix name = if prefix == "" then name else prefix ++ "." ++ name
 
-importName (Import name isQualified alias) = name
+importName (Import name isQualified alias sp) = name
 
-importIsQualified (Import name isQualified alias) = isQualified
+importIsQualified (Import name isQualified alias sp) = isQualified
 
-importAlias (Import name isQualified alias) = alias
+importAlias (Import name isQualified alias sp) = alias
 
 importModuleNames imports = map importName imports
 
@@ -179,7 +179,7 @@ resolveGlobal modules label prefix own imports scope name =
   else if isBuiltinName name then Ok name
   else
     case modulesExporting modules imports name of
-      Nil => Err (label ++ ": unbound variable " ++ name)
+      Nil => Err (label ++ ": unbound variable " ++ name ++ suggest name (append own scope))
       Cons m Nil => Ok (mangle m name)
       ms => Err (label ++ ": ambiguous name " ++ name ++ " (imported from " ++ joinNames ms ++ "); qualify it")
 
@@ -189,7 +189,7 @@ resolveCtor modules label prefix ownCtors imports name =
   else if memName name ownCtors then Ok (mangle prefix name)
   else
     case modulesExportingCtor modules imports name of
-      Nil => Err (label ++ ": unknown constructor " ++ name)
+      Nil => Err (label ++ ": unknown constructor " ++ name ++ suggest name ownCtors)
       Cons m Nil => Ok (mangle m name)
       ms => Err (label ++ ": ambiguous constructor " ++ name ++ " (imported from " ++ joinNames ms ++ "); qualify it")
 
@@ -206,16 +206,16 @@ resolveTopName label prefix name =
 
 resolvePattern modules label prefix ownCtors imports pat =
   case pat of
-    PWild => Ok (Pair PWild Nil)
-    PVar name =>
+    PWild sp => Ok (Pair (PWild sp) Nil)
+    PVar name sp =>
       andThen (checkBinder label name) (\_ =>
-        Ok (Pair (PVar name) (Cons name Nil)))
-    PInt n => Ok (Pair (PInt n) Nil)
-    PStr s => Ok (Pair (PStr s) Nil)
-    PCon name pats =>
+        Ok (Pair (PVar name sp) (Cons name Nil)))
+    PInt n sp => Ok (Pair (PInt n sp) Nil)
+    PStr s sp => Ok (Pair (PStr s sp) Nil)
+    PCon name pats sp =>
       andThen (resolveCtor modules label prefix ownCtors imports name) (\name2 =>
         andThen (traverse (resolvePattern modules label prefix ownCtors imports) pats) (\parts =>
-          Ok (Pair (PCon name2 (map firstOf parts)) (concatMap secondOf parts))))
+          Ok (Pair (PCon name2 (map firstOf parts) sp) (concatMap secondOf parts))))
 
 resolveAlt modules label prefix own ownCtors imports scope (Pair pat body) =
   andThen (resolvePattern modules label prefix ownCtors imports pat) (\p =>
@@ -241,32 +241,32 @@ resolveLet modules label prefix own ownCtors imports scope binds body =
 
 resolveExpr modules label prefix own ownCtors imports scope expr =
   case expr of
-    EVar name =>
+    EVar name sp =>
       andThen (resolveGlobal modules label prefix own imports scope name) (\n =>
-        Ok (EVar n))
-    EInt n => Ok (EInt n)
-    EStr s => Ok (EStr s)
-    ELam params body =>
+        Ok (EVar n sp))
+    EInt n sp => Ok (EInt n sp)
+    EStr s sp => Ok (EStr s sp)
+    ELam params body sp =>
       andThen (traverse (checkBinder label) params) (\_ =>
         andThen (resolveExpr modules label prefix own ownCtors imports (append params scope) body) (\b =>
-          Ok (ELam params b)))
-    EApp fn args =>
+          Ok (ELam params b sp)))
+    EApp fn args sp =>
       andThen (resolveExpr modules label prefix own ownCtors imports scope fn) (\fn2 =>
         andThen (traverse (\a => resolveExpr modules label prefix own ownCtors imports scope a) args) (\args2 =>
-          Ok (EApp fn2 args2)))
-    ELet binds body =>
+          Ok (EApp fn2 args2 sp)))
+    ELet binds body sp =>
       andThen (resolveLet modules label prefix own ownCtors imports scope binds body) (\r =>
         case r of
-          Pair binds2 body2 => Ok (ELet binds2 body2))
-    ECase scrut alts =>
+          Pair binds2 body2 => Ok (ELet binds2 body2 sp))
+    ECase scrut alts sp =>
       andThen (resolveExpr modules label prefix own ownCtors imports scope scrut) (\scrut2 =>
         andThen (traverse (resolveAlt modules label prefix own ownCtors imports scope) alts) (\alts2 =>
-          Ok (ECase scrut2 alts2)))
-    EIf c t e =>
+          Ok (ECase scrut2 alts2 sp)))
+    EIf c t e sp =>
       andThen (resolveExpr modules label prefix own ownCtors imports scope c) (\c2 =>
         andThen (resolveExpr modules label prefix own ownCtors imports scope t) (\t2 =>
           andThen (resolveExpr modules label prefix own ownCtors imports scope e) (\e2 =>
-            Ok (EIf c2 t2 e2))))
+            Ok (EIf c2 t2 e2 sp))))
 
 resolveCtorDecl label prefix ctor =
   if isGlobalCtor ctor then Ok ctor
@@ -312,36 +312,36 @@ resolveTypeName modules label prefix ownTypes imports name =
 
 resolveTypeExpr modules label prefix ownTypes imports ty =
   case ty of
-    EVar name => andThen (resolveTypeName modules label prefix ownTypes imports name) (\n => Ok (EVar n))
-    EApp fn args =>
+    EVar name sp => andThen (resolveTypeName modules label prefix ownTypes imports name) (\n => Ok (EVar n sp))
+    EApp fn args sp =>
       andThen (resolveTypeExpr modules label prefix ownTypes imports fn) (\fn2 =>
         andThen (traverse (resolveTypeExpr modules label prefix ownTypes imports) args) (\args2 =>
-          Ok (EApp fn2 args2)))
+          Ok (EApp fn2 args2 sp)))
     _ => Err (label ++ ": invalid type expression (" ++ tyShape ty ++ ")")
 
 resolveTypeTopName label prefix name =
   andThen (checkTopName label name) (\_ => Ok (mangle prefix name))
 
-resolveCtorSpec modules label prefix ownTypes imports (Ctor ctor ty arity) =
+resolveCtorSpec modules label prefix ownTypes imports (Ctor ctor ty arity sp) =
   andThen (resolveCtorDecl label prefix ctor) (\c2 =>
     andThen (resolveTypeExpr modules label prefix ownTypes imports ty) (\ty2 =>
-      Ok (Ctor c2 ty2 arity)))
+      Ok (Ctor c2 ty2 arity sp)))
 
 resolveDecl modules label prefix own ownCtors ownTypes imports d =
   case d of
-    DData dname params ctors =>
+    DData dname params ctors sp =>
       andThen (resolveTypeTopName label prefix dname) (\dn =>
         andThen (traverse (resolveCtorSpec modules label prefix ownTypes imports) ctors) (\ctors2 =>
-          Ok (DData dn params ctors2)))
-    DSig name ty =>
+          Ok (DData dn params ctors2 sp)))
+    DSig name ty sp =>
       andThen (resolveTopName label prefix name) (\n =>
         andThen (resolveTypeExpr modules label prefix ownTypes imports ty) (\ty2 =>
-          Ok (DSig n ty2)))
-    DFun name pats body =>
+          Ok (DSig n ty2 sp)))
+    DFun name pats body sp =>
       andThen (resolveTopName label prefix name) (\n =>
         andThen (traverse (resolvePattern modules label prefix ownCtors imports) pats) (\parts =>
           andThen (resolveExpr modules label prefix own ownCtors imports (concatMap secondOf parts) body) (\b =>
-            Ok (DFun n (map firstOf parts) b))))
+            Ok (DFun n (map firstOf parts) b sp))))
 
 resolveProgram modules label prefix own ownCtors ownTypes imports decls =
   traverse (resolveDecl modules label prefix own ownCtors ownTypes imports) decls
@@ -372,7 +372,7 @@ loadModule roots modules stack name =
       if memName name stack then Err ("import cycle: " ++ showCycle name stack)
       else if validModuleName name then
         andThen (findModuleFile roots name) (\path =>
-          andThen (parseSource (readFile path)) (\p =>
+          andThen (parseSource path (readFile path)) (\p =>
             case p of
               Pair imports decls =>
                 andThen (validateImports name imports) (\_ =>
@@ -382,7 +382,7 @@ loadModule roots modules stack name =
 
 loadProgram roots entry =
   if fileExists entry then
-    andThen (parseSource (readFile entry)) (\p =>
+    andThen (parseSource entry (readFile entry)) (\p =>
       case p of
         Pair imports decls =>
           andThen (validateImports "<entry>" imports) (\_ =>
@@ -394,11 +394,11 @@ loadProgram roots entry =
 
 tyShape ty =
   case ty of
-    EVar n => "var " ++ n
-    EApp f a => "app"
-    EInt n => "int"
-    EStr s => "str"
-    ELam ps b => "lam"
-    ELet bs b => "let"
-    ECase s alts => "case"
-    EIf c t e => "if"
+    EVar n _ => "var " ++ n
+    EApp f a _ => "app"
+    EInt n _ => "int"
+    EStr s _ => "str"
+    ELam ps b _ => "lam"
+    ELet bs b _ => "let"
+    ECase s alts _ => "case"
+    EIf c t e _ => "if"
