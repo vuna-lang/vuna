@@ -336,13 +336,20 @@ and call_builtin ctx name args =
   | "getArgs", [] -> list_of_strings ctx.args
   | _ -> error ("bad arguments for builtin " ^ name)
 
+let display_name name =
+  match String.rindex_opt name '.' with
+  | Some index -> String.sub name (index + 1) (String.length name - index - 1)
+  | None -> name
+
 let rec show = function
   | VInt n -> string_of_int n
   | VStr s -> Printf.sprintf "%S" s
-  | VCon (name, []) -> name
+  | VCon (name, []) -> display_name name
   | VCon (name, values) ->
-      "(" ^ name ^ " " ^ String.concat " " (List.map show values) ^ ")"
-  | VFun (name, _) -> "<function " ^ name ^ ">"
+      "(" ^ display_name name ^ " "
+      ^ String.concat " " (List.map show values)
+      ^ ")"
+  | VFun (name, _) -> "<function " ^ display_name name ^ ">"
   | VLam _ -> "<lambda>"
   | VBuiltin (name, _) -> "<builtin " ^ name ^ ">"
 

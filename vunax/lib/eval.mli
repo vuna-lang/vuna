@@ -13,6 +13,9 @@ val run : Ast.program -> value
 (** Build the global environment and evaluate [main]. Raises [Error] on runtime
     errors (including a missing or non-nullary [main]). *)
 
+val builtin_names : string list
+(** Builtin names usable without qualification. *)
+
 val run_with_args : string list -> Ast.program -> value
 (** Like [run], but the [getArgs] builtin observes the given arguments. *)
 

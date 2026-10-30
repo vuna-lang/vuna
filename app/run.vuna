@@ -1,15 +1,16 @@
--- 解释器 CLI 入口：从命令行读一个 .vuna 文件，解释执行，并把结果原样打印到
--- stdout（与 `vunax run` 的输出一致）。
---
--- 与 app/interp.vuna 组合（去掉 interp 的 demo main），再用
--- `vunax compile --no-print` 编译成独立二进制：
---
---   ./vuna-run vunax/test/corpus/run/01_arithmetic.vuna
---   7
+-- vuna-run：编译后的解释器 CLI 入口。
+-- 参数：[--root DIR] <file.vuna>；root 是模块根（默认 lib）。
+import Vuna.Interp
+
+run root path = Vuna.Interp.interpretFile root path
+
+usage = "usage: vuna-run [--root DIR] <file.vuna>"
 
 main =
   case getArgs of
+    Cons "--root" (Cons root (Cons path rest)) =>
+      let _ = print (run root path ++ "\n") in 0
     Cons path rest =>
-      let _ = print (interpret (readFile path) ++ "\n") in 0
-    Nil =>
-      let _ = print "usage: vuna-run <file.vuna>\n" in 0
+      let _ = print (run "lib" path ++ "\n") in 0
+    _ =>
+      let _ = print (usage ++ "\n") in 0

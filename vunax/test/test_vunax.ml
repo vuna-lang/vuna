@@ -101,7 +101,9 @@ let version_tests =
    [main = interpret <source text>]. *)
 
 let rec find_repo_root dir =
-  let has_interp = Sys.file_exists (Filename.concat dir "app/interp.vuna") in
+  let has_interp =
+    Sys.file_exists (Filename.concat dir "lib/Vuna/Interp.vuna")
+  in
   let has_workspace = Sys.file_exists (Filename.concat dir "dune-workspace") in
   if has_interp && has_workspace then Some dir
   else
@@ -111,9 +113,9 @@ let rec find_repo_root dir =
 let repo_root =
   match find_repo_root (Sys.getcwd ()) with
   | Some root -> root
-  | None -> failwith "cannot locate repository root (app/interp.vuna)"
+  | None -> failwith "cannot locate repository root (lib/Vuna/Interp.vuna)"
 
-let interp_path = Filename.concat repo_root "app/interp.vuna"
+let interp_path = Filename.concat repo_root "lib/Vuna/Interp.vuna"
 let interp_source = lazy (read_file interp_path)
 let interp_program = lazy (Vunax.Parser.parse_file interp_path)
 
@@ -136,11 +138,19 @@ let run_self source =
   in
   Vunax.Eval.run_string driver
 
-let run_driver_path = Filename.concat repo_root "app/run.vuna"
-let run_driver_decls = lazy (Vunax.Parser.parse_file run_driver_path)
-
-(* The interpreter plus app/run.vuna's file-reading entry point. *)
-let driver_program = lazy (Lazy.force interp_decls @ Lazy.force run_driver_decls)
+let run_interpreter_file root entry =
+  let driver =
+    Lazy.force interp_decls
+    @ [
+        Vunax.Ast.DFun
+          ( "main",
+            [],
+            Vunax.Ast.EApp
+              ( Vunax.Ast.EVar "interpretFile",
+                [ Vunax.Ast.EStr root; Vunax.Ast.EStr entry ] ) );
+      ]
+  in
+  Vunax.Eval.run_string driver
 
 let selfhost_tests =
   sorted_files "corpus/run" ".vuna"
@@ -213,25 +223,63 @@ let compile_self_test =
       let actual = compile_and_run ~tag:"self_interpreter" program in
       Alcotest.(check string) "self compile" expected actual)
 
-(* M4b: the interpreter plus app/run.vuna compiled to a native binary with
-   [print_result:false]. app/run.vuna prints the interpreted result itself, so
-   the binary behaves like `vunax run <file>` (raw [show], one newline). *)
+(* M5 / M4b: app/run.vuna (entry) imports Vuna.Interp; vunax loads lib/ and
+   compiles the flattened program. With [print_result:false] the binary prints
+   the interpreted result itself, like `vunax run`. *)
+
+let module_case_dirs = [ "01_functions"; "02_data"; "03_nested" ]
+
+let module_case_dir name =
+  Filename.concat (Filename.concat repo_root "vunax/test/corpus/modules") name
+
+let run_vuna_run exe args = run_binary ~args exe
 
 let compiled_interpreter_test =
-  Alcotest.test_case "compiled interpreter runs corpus files" `Quick (fun () ->
+  Alcotest.test_case "compiled vuna-run runs programs and modules" `Quick
+    (fun () ->
+      let root = Filename.concat repo_root "lib" in
+      let entry = Filename.concat repo_root "app/run.vuna" in
+      let program = Vunax.Loader.load ~root entry in
       let exe =
-        build_binary ~print_result:false ~tag:"compiled_interpreter"
-          (Lazy.force driver_program)
+        build_binary ~print_result:false ~tag:"compiled_interpreter" program
       in
       sorted_files "corpus/run" ".vuna"
       |> List.iter (fun file ->
           let path = Filename.concat "corpus/run" file in
-          let program = Vunax.Parser.parse_file path in
-          let expected = Vunax.Eval.show (Vunax.Eval.run program) in
-          let actual = run_binary ~args:[ path ] exe in
+          let target = Vunax.Parser.parse_file path in
+          let expected = Vunax.Eval.show (Vunax.Eval.run target) in
+          let actual = run_vuna_run exe [ "--root"; root; path ] in
           Alcotest.(check string) file expected actual);
+      List.iter
+        (fun name ->
+          let dir = module_case_dir name in
+          let expected =
+            String.trim (read_file (Filename.concat dir "expected.out"))
+          in
+          let actual =
+            run_vuna_run exe
+              [
+                "--root";
+                Filename.concat dir "lib";
+                Filename.concat dir "app/Main.vuna";
+              ]
+          in
+          Alcotest.(check string) name expected actual)
+        module_case_dirs;
       Alcotest.(check string)
-        "usage" "usage: vuna-run <file.vuna>" (run_binary exe))
+        "usage" "usage: vuna-run [--root DIR] <file.vuna>" (run_binary exe))
+
+let module_selfhost_tests =
+  module_case_dirs
+  |> List.map (fun name ->
+      Alcotest.test_case name `Quick (fun () ->
+          let dir = module_case_dir name in
+          let root = Filename.concat dir "lib" in
+          let entry = Filename.concat dir "app/Main.vuna" in
+          let program = Vunax.Loader.load ~root entry in
+          let expected = Vunax.Eval.show (Vunax.Eval.run program) in
+          let actual = run_interpreter_file root entry in
+          Alcotest.(check string) name expected actual))
 
 let expect_codegen_error name source =
   Alcotest.test_case name `Quick (fun () ->
@@ -351,6 +399,55 @@ let selfhost_io_tests =
        \"_io_tmp/interp.txt\"";
   ]
 
+(* Modules: lib/ root, file = module, fully qualified imports. *)
+
+let load_module_case name =
+  let dir = module_case_dir name in
+  Vunax.Loader.load
+    ~root:(Filename.concat dir "lib")
+    (Filename.concat dir "app/Main.vuna")
+
+let module_positive_names = [ "01_functions"; "02_data"; "03_nested" ]
+
+let module_tests =
+  module_positive_names
+  |> List.map (fun name ->
+      Alcotest.test_case name `Quick (fun () ->
+          let program = load_module_case name in
+          let expected =
+            String.trim
+              (read_file
+                 (Filename.concat (module_case_dir name) "expected.out"))
+          in
+          let actual = Vunax.Eval.show (Vunax.Eval.run program) in
+          Alcotest.(check string) "eval" expected actual;
+          let compiled = compile_and_run ~tag:("mod_" ^ name) program in
+          Alcotest.(check string) "codegen" expected compiled))
+
+let module_error_cases =
+  [
+    ("90_missing", "Missing.vuna");
+    ("91_cycle", "import cycle");
+    ("92_unqualified", "unbound variable three");
+    ("93_not_imported", "module B is not imported");
+    ("94_unknown", "not exported by Vuna.Math");
+    ("95_name", "invalid module name");
+  ]
+
+let module_error_tests =
+  module_error_cases
+  |> List.map (fun (name, fragment) ->
+      Alcotest.test_case name `Quick (fun () ->
+          match
+            try
+              ignore (load_module_case name);
+              None
+            with Vunax.Loader.Error message -> Some message
+          with
+          | Some message ->
+              Alcotest.(check bool) "message" true (contains message fragment)
+          | None -> Alcotest.fail ("expected a loader error: " ^ name)))
+
 let () =
   Alcotest.run "vunax"
     [
@@ -368,4 +465,7 @@ let () =
       ("io", eval_io_tests);
       ("io codegen", codegen_io_tests);
       ("io selfhost", selfhost_io_tests);
+      ("modules", module_tests);
+      ("module errors", module_error_tests);
+      ("modules selfhost", module_selfhost_tests);
     ]

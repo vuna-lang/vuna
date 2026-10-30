@@ -3,7 +3,19 @@ open Token
 exception Error of pos * string
 
 let keywords =
-  [ "data"; "case"; "of"; "let"; "in"; "if"; "then"; "else"; "where"; "Type" ]
+  [
+    "data";
+    "case";
+    "of";
+    "let";
+    "in";
+    "if";
+    "then";
+    "else";
+    "where";
+    "Type";
+    "import";
+  ]
 
 let is_keyword s = List.mem s keywords
 
@@ -88,9 +100,23 @@ let lex (source : string) : located array =
       let c = source.[!i] in
       if is_ident_start c then begin
         let begin_at = !i in
-        while !i < n && is_ident_char source.[!i] do
-          advance ()
-        done;
+        advance ();
+        let rec scan_ident () =
+          if !i < n then
+            let ch = source.[!i] in
+            if is_ident_char ch then begin
+              advance ();
+              scan_ident ()
+            end
+            else if ch = '.' then
+              match peek_char 1 with
+              | Some next when is_ident_start next ->
+                  advance ();
+                  advance ();
+                  scan_ident ()
+              | _ -> ()
+        in
+        scan_ident ();
         let text = String.sub source begin_at (!i - begin_at) in
         let tok = if is_keyword text then Kw text else Ident text in
         tokens := { tok; pos = start } :: !tokens

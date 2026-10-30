@@ -50,15 +50,15 @@
             # 直接本地构建；依赖（ocaml、dune 等）仍照常走缓存替换。
             allowSubstitutes = false;
 
-            # 只把 vunax 需要的文件拷进 Nix store：vunax 源码，以及测试要读取的
-            # 自解释器源码 app/interp.vuna 与 CLI 驱动 app/run.vuna；app/、lib/、
-            # test/ 里的其他 vuna 源码属于自举阶段，不是 vunax 的构建输入。
+            # 只把 vunax 需要的文件拷进 Nix store：vunax 源码、模块根 lib/（模块化
+            # 后的 vuna 源码）以及 CLI 入口 app/run.vuna；app/、lib/、test/ 里的
+            # 其他 vuna 源码属于自举阶段，不是 vunax 的构建输入。
             src = lib.fileset.toSource {
               root = ./.;
               fileset = lib.fileset.unions [
                 ./dune-workspace
                 ./vunax
-                ./app/interp.vuna
+                ./lib
                 ./app/run.vuna
               ];
             };
@@ -73,9 +73,8 @@
             };
           };
 
-          # M4b：把 vuna 自解释器（app/interp.vuna，去掉 demo main）与
-          # app/run.vuna 的 CLI 入口拼接，用 vunax 编译成独立二进制。
-          # 它从命令行读 .vuna 文件并解释执行。
+          # M5：app/run.vuna 通过 import Vuna.Interp 使用模块化的自解释器，
+          # 由 vunax 加载 lib/ 后编译成独立二进制。
           vuna-run =
             pkgs.runCommand "vuna-run-0.1.0"
               {
@@ -87,16 +86,17 @@
                 allowSubstitutes = false;
 
                 meta = {
-                  description = "vuna interpreter compiled to OCaml (M4b)";
+                  description = "vuna interpreter compiled to OCaml (M5)";
                   license = lib.licenses.mit;
                   mainProgram = "vuna-run";
                 };
               }
               ''
                 mkdir -p "$out/bin"
-                sed '/^main = interpret demo$/d' ${./app/interp.vuna} > program.vuna
-                cat ${./app/run.vuna} >> program.vuna
-                ${vunax}/bin/vunax compile --no-print program.vuna > program.ml
+                cp -r ${./lib} lib
+                mkdir -p app
+                cp ${./app/run.vuna} app/run.vuna
+                ${vunax}/bin/vunax compile --no-print --root lib app/run.vuna > program.ml
                 ocamlopt -w -a -o "$out/bin/vuna-run" program.ml
               '';
         in

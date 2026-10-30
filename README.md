@@ -65,11 +65,12 @@ git add bootstrap/ && git commit
 ├── vunax/                # 外部编译器（OCaml）
 │   ├── dune-project
 │   ├── vunax.opam
-│   ├── lib/              # token / lexer / ast / parser / eval / codegen（后续加 typecheck）
+│   ├── lib/              # token / lexer / ast / parser / loader / eval / codegen
 │   ├── bin/              # 可执行文件 vunax
-│   └── test/             # alcotest + corpus/ 解析与运行语料
-├── app/                  # 自举：vuna 写的自解释器 interp.vuna 与 CLI 驱动 run.vuna
-├── lib/                  # 自举：vuna 写的编译器库（.vuna）
+│   └── test/             # alcotest + corpus/ 解析、运行、模块语料
+├── lib/                  # vuna 模块根：Vuna/Interp.vuna（自解释器）等，模块名由
+│                         # 路径决定（lib/Vuna/Parser.vuna ⇔ Vuna.Parser）
+├── app/                  # vuna 入口：run.vuna（vuna-run CLI）
 ├── test/                 # 自举：vuna 写的测试（.vuna）
 ├── bootstrap/            # 自举种子（stage 1），提交入库；当前为空占位
 ├── .ocamlformat
@@ -88,6 +89,8 @@ dune build            # 在仓库根通过 dune-workspace 构建 vunax
 dune runtest
 vunax --version       # devShell 里直接可用（devShell 内的 vunax 跳过包测试）
 vunax run vunax/test/corpus/run/12_fact.vuna
+vunax run lib/Vuna/Interp.vuna          # 运行自解释器 demo
+vunax run --root lib app/run.vuna --root lib lib/Vuna/Interp.vuna
 dune fmt
 ```
 
@@ -122,7 +125,7 @@ dune exec vunax -- --version
 - 改语料或解析器后运行 `vunax/test/update-golden.sh` 重新生成 golden，再 review diff。
 
 尚未实现（后续里程碑）：类型检查（core-v0 先不检查类型）、typed codegen、
-模块/命名空间/导入、种子入库、`where` / `do` / 隐式参数 / 依赖类型。
+种子入库、`where` / `do` / 隐式参数 / 依赖类型。
 
 ## 求值器（core-v0，M2）
 
@@ -173,29 +176,34 @@ dune exec vunax -- run vunax/test/corpus/run/03_data_case.vuna
 
 ## 自解释器（M3，源码级）
 
-[app/interp.vuna](app/interp.vuna)（约 1050 行 vuna）是用 vuna 写、被 vunax 解释执行的自解释器：
+[lib/Vuna/Interp.vuna](lib/Vuna/Interp.vuna)（约 1400 行 vuna，模块 `Vuna.Interp`）是用 vuna
+写、被 vunax 解释执行的自解释器：
 
-- 输入是 **vuna 源码**；
-- 内部完整实现 core-v0 的前端与求值：词法分析（token 带行列）→ offside layout parser
-  → call-by-value 求值 → `show`，并复刻 vunax 的内建运算与 Bool/List/String 表示转换；
+- 输入是 **vuna 源码**（`interpret`）或 **模块入口文件 + 模块根**（`interpretFile`）；
+- 内部完整实现 core-v0 的前端、模块加载与求值：词法分析（token 带行列）→ offside
+  layout parser → import/名字解析（flatten）→ call-by-value 求值 → `show`，
+  并复刻 vunax 的内建运算与 Bool/List/String 表示转换；
 - parser 与 `vunax/lib/parser.ml` 同构：顶层声明、`data` 构造器块、`case` 分支、
   `let` 绑定按列对齐，表达式跨行需要缩进超过块列；
-- `main` 约定与 vunax 相同：`vunax run app/interp.vuna` 解释内置 demo 源码；
-- 解析/运行错误统一返回 `error: ...` 字符串（暂时没有源码位置）。
+- `main` 约定与 vunax 相同：`vunax run lib/Vuna/Interp.vuna` 解释内置 demo 源码；
+- 解析/运行错误统一返回 `error: ...` 字符串（暂时没有源码位置）；import 由
+  `interpretFile root entry` 通过 `readFile` 加载。
 
 ```console
-vunax run app/interp.vuna
+vunax run lib/Vuna/Interp.vuna
 # "42"
 ```
 
-验证（62 个测试，`nix build` 的 checkPhase 全跑）：
+验证（102 个测试，`nix build` 的 checkPhase 全跑）：
 
 - **差分测试**：`corpus/run/` 的 15 个程序，vunax 直接跑 vs vuna 自解释器读同一份
   源码跑，两边 `show` 结果必须一致；
-- **self application**：把 `app/interp.vuna` 自己的源码交给它自己解释，结果与直接运行
-  一致 —— 当前语言子集已经能完整承载自己的词法、语法和求值实现。
+- **self application**：把 `lib/Vuna/Interp.vuna` 自己的源码交给它自己解释，结果与直接
+  运行一致 —— 当前语言子集已经能完整承载自己的词法、语法和求值实现；
+- **modules selfhost**：`interpretFile` 加载 `corpus/modules/` 的模块夹具，结果与
+  vunax loader 一致。
 
-限制：`where` / `do` / 隐式参数 / 依赖类型 / 模块系统仍未实现；错误没有源码位置；
+限制：`where` / `do` / 隐式参数 / 依赖类型仍未实现；错误没有源码位置；
 未做性能优化（self application 全程走解释器，秒级）。
 
 ## Codegen（core-v0，M4a）
@@ -223,37 +231,67 @@ ocamlopt -o program program.ml && ./program
 - `vunax compile --no-print`（`Codegen.generate ~print_result:false`）只求值
   `main`、不自动打印结果，适合自己用 `print` / `writeFile` 做 IO 的 CLI 程序。
 
-验证（90 个测试，`nix build` 的 checkPhase 全跑）：
+验证（102 个测试，`nix build` 的 checkPhase 全跑）：
 
 - **codegen 差分**：`corpus/run/` 的 15 个程序逐个生成 OCaml、用 `ocamlopt` 编译、
   运行，stdout 与解释器的 `show` 结果一致；
-- **codegen self**：把自解释器 `app/interp.vuna` 用 codegen 编译成 OCaml 可执行文件，
+- **codegen self**：把自解释器 `lib/Vuna/Interp.vuna` 用 codegen 编译成 OCaml 可执行文件，
   运行结果与解释执行一致；
 - **codegen error**：3 个非法程序必须在 codegen 阶段报错；
 - **IO**：`getArgs` / `writeFile` + `readFile` 往返 / `readFile` 失败 / `print`
   在解释器、codegen 产物和自解释器三条路径上分别验证；
-- **M4b**：`app/interp.vuna` + `app/run.vuna` 组合后编译的二进制解释 corpus 全部
-  15 个程序，输出与 `vunax run` 一致。
+- **modules**：模块夹具经 loader flatten 后，eval 与 codegen 结果一致；
+- **M4b**：`app/run.vuna`（import `Vuna.Interp`）编译出的二进制解释 corpus 全部
+  15 个程序和模块夹具，输出与 `vunax run` 一致。
 
-限制：生成代码是单文件、动态值表示，性能与错误信息暂未优化；多模块 codegen 随
-M5 模块系统一起做。
+限制：生成代码仍是单文件（loader 先 flatten 成一个 program）、动态值表示，
+性能与错误信息暂未优化；分离编译/多单元 codegen 留给后续优化。
 
 ## M4b：vuna-run（编译出的解释器二进制）
 
-[app/run.vuna](app/run.vuna) 是 CLI 入口：从 `getArgs` 取文件路径，`readFile` 读源码，
-调用自解释器的 `interpret`，用 `print` 原样输出结果。把 `app/interp.vuna`（去掉 demo
-`main`）与 `app/run.vuna` 拼接后，用 `vunax compile --no-print` 编译成独立二进制：
+[app/run.vuna](app/run.vuna) 是 CLI 入口（`import Vuna.Interp`，调用
+`Vuna.Interp.interpretFile`），用 `print` 原样输出结果，由 vunax 加载 `lib/` 后编译成
+独立二进制：
 
 ```console
 nix build .#vuna-run
 ./result/bin/vuna-run vunax/test/corpus/run/12_fact.vuna
 # 120
+./result/bin/vuna-run --root vunax/test/corpus/modules/02_data/lib \
+  vunax/test/corpus/modules/02_data/app/Main.vuna
+# 6
 ```
 
 - 输出语义与 `vunax run <file>` 一致（`show` + 换行）；无参数时打印 usage；
 - 产物是原生 OCaml 可执行文件（解释器被编译后的结果），不依赖 vunax 或解释循环；
-- 组合目前是构建期文本拼接（`sed` 去掉 interp 的 demo main 再 `cat`），因为还没有
-  模块系统；M5 会换成真正的编译单元。
+- `--root DIR` 指定模块根（默认 `lib`），import 在运行期由 vuna 版 loader 通过
+  `readFile` 加载。
+
+## 模块系统（M5）
+
+规则：
+
+- **文件 = 模块**，模块根默认 `lib/`（`--root` 可覆盖）；
+  `lib/Vuna/Parser.vuna` ⇔ 模块 `Vuna.Parser`；
+- 路径段必须首字母大写并匹配 `[A-Z][A-Za-z0-9_]*`，**路径/文件名与模块名精确一致**，
+  没有大小写映射；
+- 入口文件可以在 `lib/` 外（如 `app/run.vuna`），它本身不是模块；
+- `import` 只能出现在文件顶部，是**直接依赖**（不传递可见），循环导入硬错误；
+- 跨模块引用必须**全限定**：`Vuna.Parser.parseSource`、构造器 `Vuna.List.Cons`；
+  本模块名字、内建名不加限定；
+- v0 所有顶层声明默认导出；`True` / `False` / `Cons` / `Nil` 是内建相邻的**全局构造器**
+  （不参与模块前缀），这样 `getArgs`/`strUnpack` 产生的列表和 Bool 才能与用户声明匹配；
+- 实现方式是 loader 把 import 图解析、名字解析后 **flatten** 成一个 program：内部名字
+  带模块前缀（如 `Vuna.Parser.parse`），eval/codegen/自解释器复用现有实现；`show`
+  只显示最后一段，所以输出与单文件程序一致。
+
+```console
+vunax run --root lib app/run.vuna  <args...>
+vunax compile --root lib app/run.vuna
+```
+
+测试夹具 `vunax/test/corpus/modules/` 覆盖：跨模块函数/数据/构造器、嵌套 import，
+以及缺失模块、循环导入、未限定跨模块引用、未导出名字、非法模块名等错误。
 
 ## Nix
 

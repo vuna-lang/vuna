@@ -379,9 +379,21 @@ and parse_list_expr st ~block_col =
       exprs (Ast.EVar "Nil")
   end
 
-let parse_program (source : string) : Ast.program =
+let parse_imports st =
+  let rec loop acc =
+    if at_kw st "import" then begin
+      advance st;
+      let name = expect_ident st in
+      loop (name :: acc)
+    end
+    else List.rev acc
+  in
+  loop []
+
+let parse_program_with_imports (source : string) : string list * Ast.program =
   let st = start_state (Lexer.lex source) in
-  if is_eof st then []
+  let imports = parse_imports st in
+  if is_eof st then (imports, [])
   else begin
     let block_col = (peek_pos st).col in
     let decls = ref [] in
@@ -391,8 +403,11 @@ let parse_program (source : string) : Ast.program =
           (Printf.sprintf "expected a declaration at column %d" block_col);
       decls := parse_decl st ~block_col :: !decls
     done;
-    List.rev !decls
+    (imports, List.rev !decls)
   end
+
+let parse_program (source : string) : Ast.program =
+  snd (parse_program_with_imports source)
 
 let read_file path =
   let ic = open_in_bin path in
@@ -401,3 +416,4 @@ let read_file path =
     (fun () -> really_input_string ic (in_channel_length ic))
 
 let parse_file path = parse_program (read_file path)
+let parse_file_with_imports path = parse_program_with_imports (read_file path)

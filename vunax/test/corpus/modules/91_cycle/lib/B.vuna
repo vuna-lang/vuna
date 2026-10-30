@@ -1,0 +1,4 @@
+import A
+
+bval : Int
+bval = A.aval

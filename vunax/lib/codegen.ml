@@ -200,15 +200,22 @@ let bi_str_pack = fun a -> VStr (value_to_string a)
 let bi_str_from_int =
   fun a -> VStr (string_of_int (expect_int "strFromInt" a))
 
+let display_name (name : string) : string =
+  match String.rindex_opt name '.' with
+  | Some index -> String.sub name (index + 1) (String.length name - index - 1)
+  | None -> name
+
 let rec show_value (v : value) : string =
   match v with
   | VInt n -> string_of_int n
   | VStr s -> "\"" ^ show_chars s 0 (String.length s) ^ "\""
-  | VCon (name, []) -> name
+  | VCon (name, []) -> display_name name
   | VCon (name, args) ->
-      "(" ^ name ^ " " ^ String.concat " " (List.map show_value args) ^ ")"
+      "(" ^ display_name name ^ " "
+      ^ String.concat " " (List.map show_value args)
+      ^ ")"
   | VFun ("", _) -> "<lambda>"
-  | VFun (name, _) -> "<function " ^ name ^ ">"
+  | VFun (name, _) -> "<function " ^ display_name name ^ ">"
 
 and show_chars (s : string) (i : int) (n : int) : string =
   if i >= n then ""
@@ -227,8 +234,19 @@ and show_chars (s : string) (i : int) (n : int) : string =
         else Printf.sprintf "\\%03d" code ^ rest
 |vuna_runtime}
 
+let sanitize name =
+  let buffer = Buffer.create (String.length name + 8) in
+  String.iter
+    (function
+      | '.' -> Buffer.add_string buffer "_d"
+      | '_' -> Buffer.add_string buffer "_u"
+      | '\'' -> Buffer.add_string buffer "_p"
+      | c -> Buffer.add_char buffer c)
+    name;
+  Buffer.contents buffer
+
 let rec gen_pattern = function
-  | PVar name -> ("x_" ^ name, [ name ])
+  | PVar name -> ("x_" ^ sanitize name, [ name ])
   | PWild -> ("_", [])
   | PInt n -> (Printf.sprintf "VInt (%d)" n, [])
   | PStr s -> (Printf.sprintf "VStr %S" s, [])
@@ -250,15 +268,15 @@ let builtin_ocaml_name name =
   | None -> error ("unknown builtin: " ^ name)
 
 let gen_var env scope name =
-  if List.mem name scope then "x_" ^ name
+  if List.mem name scope then "x_" ^ sanitize name
   else
     match List.assoc_opt name env.functions with
-    | Some 0 -> Printf.sprintf "v_%s ()" name
-    | Some _ -> Printf.sprintf "VFun (%S, v_%s)" name name
+    | Some 0 -> Printf.sprintf "v_%s ()" (sanitize name)
+    | Some _ -> Printf.sprintf "VFun (%S, v_%s)" name (sanitize name)
     | None -> (
         match List.assoc_opt name env.ctors with
         | Some 0 -> Printf.sprintf "VCon (%S, [])" name
-        | Some _ -> Printf.sprintf "VFun (%S, mk_%s)" name name
+        | Some _ -> Printf.sprintf "VFun (%S, mk_%s)" name (sanitize name)
         | None -> (
             match List.assoc_opt name env.builtins with
             | Some arity ->
@@ -272,10 +290,10 @@ let rec gen_lambda state env scope params body =
   match params with
   | [] -> gen_expr state env scope body
   | [ param ] ->
-      Printf.sprintf "VFun (\"\", fun x_%s -> %s)" param
+      Printf.sprintf "VFun (\"\", fun x_%s -> %s)" (sanitize param)
         (gen_expr state env (param :: scope) body)
   | param :: rest ->
-      Printf.sprintf "VFun (\"\", fun x_%s -> %s)" param
+      Printf.sprintf "VFun (\"\", fun x_%s -> %s)" (sanitize param)
         (gen_lambda state env (param :: scope) rest body)
 
 and gen_let state env scope bindings body =
@@ -285,7 +303,7 @@ and gen_let state env scope bindings body =
       let value_code = gen_expr state env scope value in
       match pattern with
       | PVar name ->
-          Printf.sprintf "(let x_%s = (%s) in %s)" name value_code
+          Printf.sprintf "(let x_%s = (%s) in %s)" (sanitize name) value_code
             (gen_let state env (name :: scope) rest body)
       | _ ->
           let tmp = fresh state "let" in
@@ -386,7 +404,7 @@ let gen_ctor (name, arity) =
         Printf.sprintf "(fun %s -> VFun (%S, %s))" (List.nth params k) name
           (wrap (k + 1))
     in
-    Printf.sprintf "let mk_%s = %s\n" name (wrap 0)
+    Printf.sprintf "let mk_%s = %s\n" (sanitize name) (wrap 0)
 
 let gen_builtin_definitions () =
   let buffer = Buffer.create 4096 in
@@ -529,7 +547,7 @@ let generate ?(print_result = true) (program : program) : string =
       (fun index (name, clauses) ->
         Printf.sprintf "%s%s = %s"
           (if index = 0 then "let rec " else "and ")
-          ("v_" ^ name)
+          ("v_" ^ sanitize name)
           (gen_function state env (name, clauses)))
       functions
   in

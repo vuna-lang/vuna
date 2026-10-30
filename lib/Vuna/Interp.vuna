@@ -129,6 +129,7 @@ isOpChar c =
 isKeyword s =
   s == "data" || s == "case" || s == "of" || s == "let" || s == "in" || s == "if"
   || s == "then" || s == "else" || s == "where" || s == "Type"
+  || s == "import"
 
 classifyIdent s = if isKeyword s then TKw s else TIdent s
 
@@ -171,6 +172,13 @@ skipTrivia cs =
 collectIdent (Chars Nil p) acc = Pair (strPack (reverse acc)) (Chars Nil p)
 collectIdent (Chars (Cons c rest) p) acc =
   if isIdentChar c then collectIdent (Chars rest (advanceChar c p)) (Cons c acc)
+  else if c == 46 then
+    case rest of
+      Cons c2 rest2 =>
+        if isIdentStart c2 then
+          collectIdent (Chars rest (advanceChar c p)) (Cons c acc)
+        else Pair (strPack (reverse acc)) (Chars (Cons c rest) p)
+      Nil => Pair (strPack (reverse acc)) (Chars (Cons c rest) p)
   else Pair (strPack (reverse acc)) (Chars (Cons c rest) p)
 
 collectInt (Chars Nil p) acc = Pair acc (Chars Nil p)
@@ -380,14 +388,23 @@ badCaseIndent st altCol =
 parseSource source =
   andThen (lexSource source) (\toks => parseProgram (PState toks (Pos 1 0)))
 
+parseImports st =
+  if atKw st "import" then
+    step (expectKw st "import") (\_, st1 =>
+      step (expectIdent st1) (\name, st2 =>
+        step (parseImports st2) (\rest, st3 =>
+          Ok (Pair (Cons name rest) st3))))
+  else Ok (Pair Nil st)
+
 parseProgram st =
-  if isEof st then Ok Nil
-  else
-    case peekPos st of
-      Pos line col =>
-        step (parseDecls st col) (\decls, st2 =>
-          if isEof st2 then Ok decls
-          else Err "expected end of input")
+  step (parseImports st) (\imports, st1 =>
+    if isEof st1 then Ok (Pair imports Nil)
+    else
+      case peekPos st1 of
+        Pos line col =>
+          step (parseDecls st1 col) (\decls, st2 =>
+            if isEof st2 then Ok (Pair imports decls)
+            else Err "expected end of input"))
 
 parseDecls st blockCol =
   if isEof st then Ok (Pair Nil st)
@@ -1032,13 +1049,17 @@ callBuiltin name args =
   else if name == "getArgs" then Ok (map (\s => VStr s) getArgs)
   else Err ("unknown builtin: " ++ name)
 
+displayName name =
+  case splitLastDot (splitOnDot name) of
+    Pair revPrefix base => base
+
 showValue v =
   case v of
     VInt n => strFromInt n
     VStr s => showString s
-    VCon name Nil => name
-    VCon name args => "(" ++ name ++ " " ++ showValues args ++ ")"
-    VFun name args => "<function " ++ name ++ ">"
+    VCon name Nil => displayName name
+    VCon name args => "(" ++ displayName name ++ " " ++ showValues args ++ ")"
+    VFun name args => "<function " ++ displayName name ++ ">"
     VLam params body env => "<lambda>"
     VBuiltin name args => "<builtin " ++ name ++ ">"
 
@@ -1057,20 +1078,321 @@ showStringChars (Cons c rest) =
   else if c == 13 then "\\r" ++ showStringChars rest
   else strPack (Cons c Nil) ++ showStringChars rest
 
+-- ---------------------------------------------------------------
+-- 模块加载与名字解析（M5）：lib/ 根、文件 = 模块、全限定导入
+-- ---------------------------------------------------------------
+
+data Module : Type where
+  Module : String -> List String -> List Decl -> List String -> Module
+
+memName name names =
+  case names of
+    Nil => False
+    Cons x rest => if x == name then True else memName name rest
+
+memChar c chars =
+  case chars of
+    Nil => False
+    Cons x rest => if x == c then True else memChar c rest
+
+containsDot s = memChar 46 (strUnpack s)
+
+splitOnDot s = splitCharsOnDot (strUnpack s) Nil Nil
+
+splitCharsOnDot chars acc seg =
+  case chars of
+    Nil => reverse (Cons (strPack (reverse seg)) acc)
+    Cons c rest =>
+      if c == 46 then splitCharsOnDot rest (Cons (strPack (reverse seg)) acc) Nil
+      else splitCharsOnDot rest acc (Cons c seg)
+
+splitLastDot parts =
+  case reverse parts of
+    Nil => Pair Nil ""
+    Cons last rest => Pair (reverse rest) last
+
+joinDots Nil = ""
+joinDots (Cons x Nil) = x
+joinDots (Cons x rest) = x ++ "." ++ joinDots rest
+
+joinSlashes Nil = ""
+joinSlashes (Cons x Nil) = x
+joinSlashes (Cons x rest) = x ++ "/" ++ joinSlashes rest
+
+joinArrows Nil = ""
+joinArrows (Cons x Nil) = x
+joinArrows (Cons x rest) = x ++ " -> " ++ joinArrows rest
+
+firstOf p = case p of Pair a b => a
+
+secondOf p = case p of Pair a b => b
+
+concatMap f Nil = Nil
+concatMap f (Cons x rest) = append (f x) (concatMap f rest)
+
+declNames d =
+  case d of
+    DFun name pats body => Cons name Nil
+    DSig name ty => Cons name Nil
+    DData dname params ctors => map firstOf ctors
+
+topNames decls = concatMap declNames decls
+
+declCtors d =
+  case d of
+    DData dname params ctors => map firstOf ctors
+    _ => Nil
+
+ctorsOf decls = concatMap declCtors decls
+
+allIdentChars chars =
+  case chars of
+    Nil => True
+    Cons c rest =>
+      if isIdentStart c || isDigit c then allIdentChars rest else False
+
+validSegment seg =
+  case strUnpack seg of
+    Nil => False
+    Cons c rest => isUpperChar c && allIdentChars rest
+
+allSegmentsValid segs =
+  case segs of
+    Nil => False
+    Cons seg rest =>
+      if validSegment seg then
+        case rest of
+          Nil => True
+          _ => allSegmentsValid rest
+      else False
+
+validModuleName name =
+  case splitOnDot name of
+    Nil => False
+    segs => allSegmentsValid segs
+
+isGlobalCtor name =
+  name == "True" || name == "False" || name == "Cons" || name == "Nil"
+
+mangle prefix name = if prefix == "" then name else prefix ++ "." ++ name
+
+modulePath root name = root ++ "/" ++ joinSlashes (splitOnDot name) ++ ".vuna"
+
+findModule modules name =
+  case modules of
+    Nil => Nothing
+    Cons m rest =>
+      case m of
+        Module mname imports decls exports =>
+          if mname == name then Just m else findModule rest name
+
+exportsOf modules name =
+  case findModule modules name of
+    Just m => case m of Module mname imports decls exports => exports
+    Nothing => Nil
+
+isBuiltinName name =
+  case builtinArity name of
+    Just arity => True
+    Nothing => False
+
+resolveQualified modules label imports name =
+  case splitLastDot (splitOnDot name) of
+    Pair revPrefix base =>
+      let prefix = joinDots revPrefix
+      in if memName prefix imports then
+           if isGlobalCtor base then Ok base
+           else if memName base (exportsOf modules prefix) then Ok name
+           else Err (label ++ ": " ++ base ++ " is not exported by " ++ prefix)
+         else Err (label ++ ": module " ++ prefix ++ " is not imported")
+
+resolveGlobal modules label prefix own imports scope name =
+  if memName name scope then Ok name
+  else if isGlobalCtor name then Ok name
+  else if containsDot name then resolveQualified modules label imports name
+  else if memName name own then Ok (mangle prefix name)
+  else if isBuiltinName name then Ok name
+  else Err (label ++ ": unbound variable " ++ name)
+
+resolveCtor modules label prefix ownCtors imports name =
+  if isGlobalCtor name then Ok name
+  else if containsDot name then resolveQualified modules label imports name
+  else if memName name ownCtors then Ok (mangle prefix name)
+  else Err (label ++ ": unknown constructor " ++ name)
+
+checkBinder label name =
+  if containsDot name then Err (label ++ ": invalid variable name " ++ name)
+  else Ok name
+
+checkTopName label name =
+  if containsDot name then Err (label ++ ": invalid top-level name " ++ name)
+  else Ok name
+
+resolveTopName label prefix name =
+  andThen (checkTopName label name) (\_ => Ok (mangle prefix name))
+
+resolvePattern modules label prefix ownCtors imports pat =
+  case pat of
+    PWild => Ok (Pair PWild Nil)
+    PVar name =>
+      andThen (checkBinder label name) (\_ =>
+        Ok (Pair (PVar name) (Cons name Nil)))
+    PInt n => Ok (Pair (PInt n) Nil)
+    PStr s => Ok (Pair (PStr s) Nil)
+    PCon name pats =>
+      andThen (resolveCtor modules label prefix ownCtors imports name) (\name2 =>
+        andThen (traverse (resolvePattern modules label prefix ownCtors imports) pats) (\parts =>
+          Ok (Pair (PCon name2 (map firstOf parts)) (concatMap secondOf parts))))
+
+resolveAlt modules label prefix own ownCtors imports scope alt =
+  case alt of
+    Pair pat body =>
+      andThen (resolvePattern modules label prefix ownCtors imports pat) (\p =>
+        case p of
+          Pair pat2 bound =>
+            andThen (resolveExpr modules label prefix own ownCtors imports (append bound scope) body) (\body2 =>
+              Ok (Pair pat2 body2)))
+
+resolveLet modules label prefix own ownCtors imports scope binds body =
+  case binds of
+    Nil =>
+      andThen (resolveExpr modules label prefix own ownCtors imports scope body) (\b =>
+        Ok (Pair Nil b))
+    Cons b rest =>
+      case b of
+        Pair pat value =>
+          andThen (resolveExpr modules label prefix own ownCtors imports scope value) (\value2 =>
+            andThen (resolvePattern modules label prefix ownCtors imports pat) (\p =>
+              case p of
+                Pair pat2 bound =>
+                  andThen (resolveLet modules label prefix own ownCtors imports (append bound scope) rest body) (\r =>
+                    case r of
+                      Pair binds2 body2 =>
+                        Ok (Pair (Cons (Pair pat2 value2) binds2) body2))))
+
+resolveExpr modules label prefix own ownCtors imports scope expr =
+  case expr of
+    EVar name =>
+      andThen (resolveGlobal modules label prefix own imports scope name) (\n =>
+        Ok (EVar n))
+    EInt n => Ok (EInt n)
+    EStr s => Ok (EStr s)
+    ELam params body =>
+      andThen (traverse (checkBinder label) params) (\_ =>
+        andThen (resolveExpr modules label prefix own ownCtors imports (append params scope) body) (\b =>
+          Ok (ELam params b)))
+    EApp fn args =>
+      andThen (resolveExpr modules label prefix own ownCtors imports scope fn) (\fn2 =>
+        andThen (traverse (\a => resolveExpr modules label prefix own ownCtors imports scope a) args) (\args2 =>
+          Ok (EApp fn2 args2)))
+    ELet binds body =>
+      andThen (resolveLet modules label prefix own ownCtors imports scope binds body) (\r =>
+        case r of
+          Pair binds2 body2 => Ok (ELet binds2 body2))
+    ECase scrut alts =>
+      andThen (resolveExpr modules label prefix own ownCtors imports scope scrut) (\scrut2 =>
+        andThen (traverse (resolveAlt modules label prefix own ownCtors imports scope) alts) (\alts2 =>
+          Ok (ECase scrut2 alts2)))
+    EIf c t e =>
+      andThen (resolveExpr modules label prefix own ownCtors imports scope c) (\c2 =>
+        andThen (resolveExpr modules label prefix own ownCtors imports scope t) (\t2 =>
+          andThen (resolveExpr modules label prefix own ownCtors imports scope e) (\e2 =>
+            Ok (EIf c2 t2 e2))))
+
+resolveCtorDecl label prefix ctor =
+  if isGlobalCtor ctor then Ok ctor
+  else andThen (checkTopName label ctor) (\_ => Ok (mangle prefix ctor))
+
+resolveCtorPair label prefix p =
+  case p of
+    Pair ctor arity =>
+      andThen (resolveCtorDecl label prefix ctor) (\c => Ok (Pair c arity))
+
+resolveDecl modules label prefix own ownCtors imports d =
+  case d of
+    DData dname params ctors =>
+      andThen (traverse (resolveCtorPair label prefix) ctors) (\ctors2 =>
+        Ok (DData dname params ctors2))
+    DSig name ty =>
+      andThen (resolveTopName label prefix name) (\n => Ok (DSig n ty))
+    DFun name pats body =>
+      andThen (resolveTopName label prefix name) (\n =>
+        andThen (traverse (resolvePattern modules label prefix ownCtors imports) pats) (\parts =>
+          andThen (resolveExpr modules label prefix own ownCtors imports (concatMap secondOf parts) body) (\b =>
+            Ok (DFun n (map firstOf parts) b))))
+
+resolveProgram modules label prefix own ownCtors imports decls =
+  traverse (resolveDecl modules label prefix own ownCtors imports) decls
+
+resolveEntry modules imports decls =
+  resolveProgram modules "<entry>" "" (topNames decls) (ctorsOf decls) imports decls
+
+resolveModules modules =
+  case modules of
+    Nil => Ok Nil
+    Cons m rest =>
+      case m of
+        Module name imports decls exports =>
+          andThen (resolveProgram modules name name exports (ctorsOf decls) imports decls) (\d1 =>
+            andThen (resolveModules rest) (\d2 => Ok (append d1 d2)))
+
+showCycle name stack = joinArrows (reverse (Cons name stack))
+
+loadAll root modules stack imports =
+  case imports of
+    Nil => Ok modules
+    Cons name rest =>
+      andThen (loadModule root modules stack name) (\modules2 =>
+        loadAll root modules2 stack rest)
+
+loadModule root modules stack name =
+  case findModule modules name of
+    Just m => Ok modules
+    Nothing =>
+      if memName name stack then Err ("import cycle: " ++ showCycle name stack)
+      else if validModuleName name then
+        andThen (parseSource (readFile (modulePath root name))) (\p =>
+          case p of
+            Pair imports decls =>
+              andThen (loadAll root modules (Cons name stack) imports) (\modules2 =>
+                Ok (Cons (Module name imports decls (topNames decls)) modules2)))
+      else Err ("invalid module name: " ++ name)
+
+loadProgram root entry =
+  andThen (parseSource (readFile entry)) (\p =>
+    case p of
+      Pair imports decls =>
+        andThen (loadAll root Nil Nil imports) (\modules =>
+          andThen (resolveEntry modules imports decls) (\entryDecls =>
+            andThen (resolveModules modules) (\moduleDecls =>
+              Ok (append entryDecls moduleDecls)))))
+
+runDecls decls =
+  case interpretMain decls of
+    Err e => "error: " ++ e
+    Ok v => showValue v
+
+interpret source =
+  case parseSource source of
+    Err e => "error: " ++ e
+    Ok p =>
+      case p of
+        Pair imports decls =>
+          case imports of
+            Nil => runDecls decls
+            _ => "error: imports are only supported by interpretFile"
+
+interpretFile root entry =
+  case loadProgram root entry of
+    Err e => "error: " ++ e
+    Ok decls => runDecls decls
+
 interpretMain decls =
   case funArity "main" decls of
     Nothing => Err "no `main` definition"
     Just arity =>
       if arity == 0 then callFunction decls "main" Nil
       else Err "`main` must be a nullary definition"
-
-interpret source =
-  case parseSource source of
-    Err e => "error: " ++ e
-    Ok decls =>
-      case interpretMain decls of
-        Err e => "error: " ++ e
-        Ok v => showValue v
 
 demo = "main = 40 + 2"
 

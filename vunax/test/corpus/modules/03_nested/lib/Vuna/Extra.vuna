@@ -1,0 +1,4 @@
+import Vuna.Base
+
+answer : Int
+answer = Vuna.Base.answer + 2
