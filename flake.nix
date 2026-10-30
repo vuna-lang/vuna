@@ -39,8 +39,10 @@
           inherit (pkgs) lib;
           ocamlPackages = pkgs.ocamlPackages;
 
-          # 外部编译器（stage 0）：用 OCaml 写，把 vuna 源码编译成 OCaml。
-          # 它本身不是自举种子。
+          # 归档的 stage 0 外部编译器（OCaml）。自举链已不再依赖它：
+          # 种子由 vuna-boot 轮换生成，默认构建只经过 bootstrap/ → vuna-boot →
+          # vuna。保留它仅用于历史/审计/从零重建参考，不再随新特性更新，也不进
+          # checks；用 `nix build .#vunax` 可显式构建。
           vunax = ocamlPackages.buildDunePackage {
             pname = "vunax";
             version = "0.1.0";
@@ -50,32 +52,30 @@
             # 直接本地构建；依赖（ocaml、dune 等）仍照常走缓存替换。
             allowSubstitutes = false;
 
-            # 只把 vunax 需要的文件拷进 Nix store：vunax 源码、模块根 lib/（vuna 源码）
-            # 与两个 CLI 入口 app/compile.vuna、app/interp.vuna；bootstrap/ 是种子
-            # 构建输入，单独引用。
+            # 归档后不再需要 lib/ 与 app/（那是 vuna-facing 测试的输入）；
+            # 只保留 vunax 自身源码，保证归档实现可独立构建。
             src = lib.fileset.toSource {
               root = ./.;
               fileset = lib.fileset.unions [
                 ./dune-workspace
                 ./vunax
-                ./lib
-                ./app/compile.vuna
-                ./app/interp.vuna
               ];
             };
 
-            doCheck = true;
+            # 冻结：不再与 vuna 语法同步，测试不进入构建/检查路径。
+            doCheck = false;
             checkInputs = [ ocamlPackages.alcotest ];
 
             meta = {
-              description = "vunax — external vuna compiler (written in OCaml)";
+              description = "vunax — archived stage 0 compiler (frozen, not used by bootstrap)";
               license = lib.licenses.mit;
               mainProgram = "vunax";
             };
           };
 
-          # stage 1：提交入库的种子（bootstrap/stage1.ml，由 vunax 生成），
-          # 直接 ocamlopt 构建。日常不随源码更新；不变量是它能编译当前源码。
+          # stage 1：提交入库的种子（bootstrap/stage1.ml），直接 ocamlopt 构建。
+          # 种子由上一版 vuna-boot 轮换生成（seed rotation），不再经过 vunax；
+          # 日常不随源码更新，不变量是它能编译当前源码。
           vuna-boot =
             pkgs.runCommand "vuna-boot-0.1.0"
               {
@@ -124,6 +124,7 @@
               '';
 
           # 解释器（自解释器编译产物）：读 .vuna 文件解释执行，用于差分测试。
+          # 用 vuna（stage 2）构建，不再经过 vunax。
           vuna-interp =
             pkgs.runCommand "vuna-interp-0.1.0"
               {
@@ -144,7 +145,7 @@
                 mkdir -p "$out/bin" app
                 cp -r ${./lib} lib
                 cp ${./app/interp.vuna} app/interp.vuna
-                ${vunax}/bin/vunax compile --no-print --root lib app/interp.vuna > program.ml
+                ${vuna}/bin/vuna --no-print --root lib app/interp.vuna program.ml
                 ocamlopt -w -a -o "$out/bin/vuna-interp" program.ml
               '';
         in
@@ -233,7 +234,8 @@
               '';
         in
         {
-          inherit (self.packages.${system}) vunax vuna vuna-interp;
+          # vunax 已冻结归档，不再进入 checks；构建/自举链只用种子与 vuna。
+          inherit (self.packages.${system}) vuna vuna-interp;
           bootstrap-selfhost = bootstrap-selfhost;
           fixed-point = bootstrap-selfhost;
         }

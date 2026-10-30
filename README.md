@@ -2,61 +2,63 @@
 
 vuna 是一个函数式编程语言，本仓库是它的编译器。
 
-编译器有两套实现：先用 OCaml 写一个**外部编译器**（host compiler），再由它把
-用 vuna 写的编译器源码编译成 OCaml，作为**自举种子**启动自举。
+编译器现在完全用 vuna 写（`lib/Vuna/Interp.vuna` + `app/compile.vuna`），通过
+提交入库的 OCaml 种子自举。`vunax/` 是早期的 OCaml 外部编译器，已**冻结归档**，
+不再参与默认构建、checks 或自举演进。
 
 | 目录 | 角色 | 实现语言 |
 | --- | --- | --- |
-| `vunax/` | 外部编译器（host compiler），把 vuna 源码编译成 OCaml | OCaml |
-| `app/`、`lib/`、`test/` | 自举编译器的 CLI / 编译器库 / 测试 | vuna |
-| `bootstrap/` | 自举种子（stage 1）：vunax 编译 vuna 编译器源码得到的 OCaml，提交入库 | OCaml（生成） |
+| `lib/`、`app/`、`test/` | 自举编译器的库 / CLI / 测试 | vuna |
+| `bootstrap/stage1.ml` | 自举种子（stage 1），提交入库；由 `vuna-boot` 轮换生成 | OCaml（生成） |
+| `vunax/` | 归档的 stage 0 外部编译器（frozen，仅审计/历史/从零重建参考） | OCaml |
 
-`vunax` 不是自举种子；它只是“认识 vuna 的 OCaml 程序”，用来生产种子。
-
-工具命名：`vunax`（stage 0，OCaml）、`vuna-boot`（stage 1 种子二进制）、
-`vuna`（stage 2 当前编译器）、`vuna-interp`（自解释器编译产物，调试/差分用）。
+工具命名：`vuna-boot`（stage 1 种子二进制）、`vuna`（stage 2 当前编译器）、
+`vuna-interp`（自解释器编译产物，调试/差分用）；`vunax` 已归档。
 
 ## 自举链
 
 ```text
-vunax（OCaml，stage 0）
-  │  vunax compile --no-print --root lib app/compile.vuna
+vuna-boot（旧种子，stage 1）
+  │  vuna-boot --root lib --no-print app/compile.vuna stage2.ml
   ▼
-bootstrap/stage1.ml（stage 1 种子，提交入库）  ──ocamlopt──▶  vuna-boot
-  │  vuna-boot 编译当前 lib/ + app/compile.vuna
+stage 2（支持当前源码的编译器）──ocamlopt──▶  vuna
+  │  轮换：把 stage2.ml 提交为新的 bootstrap/stage1.ml
   ▼
-stage 2（当前编译器）  ──ocamlopt──▶  vuna
+vuna-boot（新种子）
   │  vuna 再编译同一份源码
   ▼
 stage 3 源码；stage2 == stage3 即 fixed point
 ```
 
-stage 2 与 stage 3 的行为一致（对同一输入产生相同输出）即达到 fixed point，自举完成。
+stage 2 与 stage 3 的输出一致（字节级）即达到 fixed point，自举完成。
 
 自举种子（`bootstrap/`）**提交入库**，是构建输入而不是构建产物。这里只有一个硬性
 不变量：
 
 > **当前入库的种子必须能编译当前的 vuna 源码。**
 
-- 种子**不需要**与源码同步：日常修改 `app/lib/test` 不重新生成种子；
-- 只在两种情况下更新种子：发版时；或语言出现旧种子无法编译的不兼容变更时；
+- 种子**不需要**与源码同步：日常修改 `lib/app/test` 不重新生成种子；
+- 种子只通过 **seed rotation** 更新：用当前 `vuna-boot` 编译当前编译器源码，把
+  生成的 stage 2 源码提交为新种子；不再经过 vunax；
 - 种子比源码旧是正常状态，但必须始终保持“能编译当前源码”的能力；
 - CI 用 `checks.bootstrap-selfhost` 守这条不变量：用种子编译当前源码，构建出
-  stage 2 并运行；
-- 若旧种子编译不了新源码，必须在合并前解决：要么回退语言变更，要么更新种子
-  （同时升级 vunax）；
+  stage 2 / stage 3 并校验字节一致；
+- 若旧种子编译不了新源码，必须先把新特性实现成旧语法可编译的形式，rotate 种子
+  之后才在编译器源码里使用新语法；
 - `bootstrap/` 下所有文件都是生成物，禁止手改。
 
-种子更新流程：
+种子轮换流程：
 
 ```console
-# 触发条件：发版，或当前种子已无法编译当前源码
-# 用能编译新源码的 vunax 重新生成（具体命令等 vunax 的 CLI 接口确定）
-vunax compile --no-print --root lib app/compile.vuna > bootstrap/stage1.ml
+# 前提：当前源码能被当前种子编译（nix flake check 通过）
+vuna-boot --root lib --no-print app/compile.vuna bootstrap/stage1.ml
+nix flake check            # 新种子能编译当前源码，且 fixed point 成立
 git diff bootstrap/        # 确认变化可解释
-nix flake check            # 含 checks.bootstrap-selfhost
 git add bootstrap/ && git commit
 ```
+
+注意：如果改的是**现有语法的语义**（而非新增语法），旧种子会按旧语义编译新编译器，
+需要确认没有 bootstrap 语义偏差（必要时先 rotate 再让编译器依赖新语义）。
 
 ## 目录结构
 
@@ -305,7 +307,8 @@ codegen 也搬进了 vuna：[lib/Vuna/Interp.vuna](lib/Vuna/Interp.vuna) 末尾�
 `generateProgram` / `compileFile`（与 `vunax/lib/codegen.ml` 同构），
 [app/compile.vuna](app/compile.vuna) 是编译器 CLI。
 
-- `vunax` 把 vuna 编译器源码编译成 `bootstrap/stage1.ml`（stage 1 种子，提交入库）；
+- 种子由**上一版 `vuna-boot`** 编译当前编译器源码轮换生成（seed rotation），
+  初始种子由已归档的 vunax 生成；此后自举不再经过 vunax；
 - `vuna-boot` 是从种子构建的二进制；它编译当前 `lib/ + app/compile.vuna` 得到
   stage 2 → `vuna`（当前编译器）；
 - stage 2 再编译同一份源码得到 stage 3；`stage2.ml == stage3.ml` 即 fixed point。
@@ -320,48 +323,58 @@ nix flake check             # 含 checks.bootstrap-selfhost / fixed-point
 本地命令（devShell 里）：
 
 ```console
-vunax compile --no-print --root lib app/compile.vuna > bootstrap/stage1.ml
+# seed rotation：把当前源码编译结果作为新种子
+vuna-boot --root lib --no-print app/compile.vuna bootstrap/stage1.ml
+# 验证 fixed point
 vuna-boot --root lib --no-print app/compile.vuna /tmp/stage2.ml
 ocamlopt -w -a -o /tmp/stage2 /tmp/stage2.ml
 /tmp/stage2 --root lib --no-print app/compile.vuna /tmp/stage3.ml
 cmp /tmp/stage2.ml /tmp/stage3.ml      # fixed point
 ```
 
-验证：104 个测试（含 vuna codegen 对 corpus 与模块夹具的生成→编译→运行）；
+验证：105 个测试（含 vuna codegen 对 corpus 与模块夹具的生成→编译→运行）；
 `checks.bootstrap-selfhost` 用种子构建 stage 2、校验 stage2/stage3 字节一致，
 并编译运行一个程序（`12_fact` → 120）；`checks.fixed-point` 与它同一派生。
 
 限制：生成代码仍是动态 value 表示、单文件（loader flatten 后一个 program）；
-没有类型检查（M7 再设计）；种子更新仍是手动（发版/不兼容变更时）。
+没有类型检查（M7 再设计）；种子轮换仍是手动（发版/不兼容变更时）。
 
 ## Nix
 
 ```console
 nix build             # 默认 = vuna（stage 2 当前编译器）
-nix build .#vunax     # stage 0 外部编译器
 nix build .#vuna-boot # stage 1 种子二进制
 nix build .#vuna-interp
 nix flake check       # 构建 packages + checks（含 bootstrap-selfhost / fixed-point）
+nix build .#vunax     # 归档的 stage 0（frozen，不进 checks/默认路径）
 nix fmt               # nixfmt-tree 格式化 .nix
 ```
 
 ## 自举链的当前状态
 
-- `packages.vunax`（stage 0）：OCaml 外部编译器，把 vuna 源码编译成 OCaml；
 - `packages.vuna-boot`（stage 1）：`ocamlopt` 构建入库的 `bootstrap/stage1.ml`；
 - `packages.vuna`（stage 2）：`vuna-boot` 编译当前 `lib/ + app/compile.vuna` 得到；
-- `packages.vuna-interp`：自解释器编译产物，读 `.vuna` 解释执行，用于差分测试；
+- `packages.vuna-interp`：用 `vuna` 编译自解释器 CLI，读 `.vuna` 解释执行，
+  用于差分测试；
+- `packages.vunax`（stage 0）：**已冻结归档**，不参与默认构建与 checks，也不随
+  vuna 新特性更新；仅保留作历史/审计/从零重建参考；
 - `checks.bootstrap-selfhost` / `checks.fixed-point`：种子编译当前源码得到 stage 2，
   stage 2 再编译得到 stage 3，`cmp` 两者并抽查运行结果，守住
   「种子必须能编译当前源码」与 fixed point。
 
-种子更新流程见上面「自举链」一节；`bootstrap/` 下文件仍是生成物，禁止手改。
+种子轮换流程见上面「自举链」一节；`bootstrap/` 下文件仍是生成物，禁止手改。
+
+注意：vuna-facing 测试目前仍在 `vunax/test/` 下（用 vunax 的 parser/eval 驱动），
+这是 P2（测试 harness 迁移）要处理的事项；构建链已经与 vunax 解耦。
 
 ## 依赖管理
 
-- vunax 的库依赖：`vunax/lib/dune` 的 `(libraries ...)`；nixpkgs 提供的库通过
-  flake 中 `buildDunePackage` 的 `propagatedBuildInputs` 注入；
-- 测试依赖：flake 的 `checkInputs` + `vunax/vunax.opam` 的 `{with-test}`；
+- 归档的 `vunax`（OCaml）依赖：`vunax/lib/dune` 的 `(libraries ...)`；nixpkgs
+  提供的库通过 flake 中 `buildDunePackage` 的 `propagatedBuildInputs` 注入；
+- vuna 编译器本身没有外部库依赖：生成的 OCaml 只使用标准库，`vuna-boot` / `vuna`
+  由 `ocamlopt` 直接构建；
+- 测试依赖：flake 的 `checkInputs` + `vunax/vunax.opam` 的 `{with-test}`（测试
+  harness 迁移前仍属归档实现）；
 - 开发工具：`devShells.default.packages`。
 
 ## 说明
@@ -369,9 +382,12 @@ nix fmt               # nixfmt-tree 格式化 .nix
 - nixpkgs 输入使用 `channels.nixos.org` 的 channel tarball（本机访问不到 GitHub
   的 archive 端点）；能访问 GitHub 时换回 `"github:NixOS/nixpkgs/nixos-unstable"` 即可。
 - `.ocamlformat` 的 version 需与 devShell 中的 ocamlformat 一致（当前 0.29.0）。
-- 若用 opam：`opam pin ./vunax`（opam 文件位于 vunax 项目根）。
+- 若用 opam：`opam pin ./vunax`（opam 文件位于 vunax 项目根；该实现已归档）。
 - `bootstrap/` 是提交入库的生成物：不要手改；日常改 vuna 源码不需要重新生成种子，
   但必须保证种子能编译当前源码（`checks.bootstrap-selfhost`）。
-- `nix build` 默认构建 `vuna`（stage 2）；`nix build .#vunax` 构建 stage 0。
+- `nix build` 默认构建 `vuna`（stage 2）；`nix build .#vunax` 构建归档的 stage 0。
 - vuna codegen 的 runtime 前导代码由 `vunax/test/gen-runtime-vuna.sh` 从
-  `vunax/lib/codegen.ml` 生成并嵌在 `lib/Vuna/Interp.vuna`，两边有测试保证同步。
+  `vunax/lib/codegen.ml` 生成并嵌在 `lib/Vuna/Interp.vuna`，两边有测试保证同步；
+  该脚本属于归档工具链，测试迁移后可一并移走。
+- devShell 仍暴露归档的 `vunax` 供现有测试 harness 使用；`nix flake check` 已不构建
+  它。P2 完成测试迁移后，`vunax` 可彻底移出 devShell 甚至删除。
