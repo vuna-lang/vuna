@@ -1,4 +1,4 @@
-module Vuna.TypedCodegen (generateProgramTyped) where
+module Vuna.TypedCodegen (generateProgramTyped, generateSplitProgram) where
 
 -- Vuna.TypedCodegen：用类型信息生成原生 OCaml 类型（M8a）。
 -- 目前覆盖 Int/String/Bool/List、函数/lambda/let/case/if、用户 data 类型、
@@ -7,6 +7,8 @@ import Vuna.Base
 import Vuna.Ast
 import Vuna.Codegen
 import Vuna.Typecheck
+import Vuna.Loader
+import Vuna.Split
 
 joinWith sep Nil = ""
 joinWith sep (Cons x Nil) = x
@@ -151,10 +153,12 @@ genCtor decls pmap (Ctor name ty arity _) =
       andThen (mapResult (ocamlType decls pmap) fields) (\ts =>
         Ok (ctorNameOf name ++ " of " ++ joinWith " * " (map (\t => "(" ++ t ++ ")") ts)))
 
-genTypeDecls decls =
-  case nonSpecialData decls of
+genTypeDecls decls = genTypeDeclsOf decls (nonSpecialData decls)
+
+genTypeDeclsOf decls ds =
+  case ds of
     Nil => Ok ""
-    ds =>
+    _ =>
       andThen (mapResult (genData decls) ds) (\parts =>
         Ok ("type " ++ joinWith "\nand " parts ++ "\n"))
 
@@ -285,12 +289,14 @@ partsNeedRec (Cons d ds) (Cons code rest) names =
   else if selfRecursive (showDeclFnName d) code then True
   else partsNeedRec ds rest names
 
-genShowDecls decls =
-  case nonSpecialData decls of
+genShowDecls decls = genShowDeclsOf decls (nonSpecialData decls)
+
+genShowDeclsOf decls ds =
+  case ds of
     Nil => Ok ""
-    ds =>
+    _ =>
       andThen (mapResult (genShowFunc decls) ds) (\parts =>
-        let names = showFnNames decls
+        let names = showFnNames ds
         in Ok ((if partsNeedRec ds parts names then "let rec " else "let ")
                ++ joinWith "\nand " parts ++ "\n"))
 
@@ -878,11 +884,13 @@ unionNames Nil ys = ys
 unionNames (Cons x rest) ys =
   if memName x ys then unionNames rest ys else Cons x (unionNames rest ys)
 
-genTop : List Decl -> Result String
-genTop decls =
-  case functionNames decls of
+genTop decls = genTopNames decls (functionNames decls)
+
+genTopNames : List Decl -> List String -> Result String
+genTopNames decls names =
+  case names of
     Nil => Err "typed codegen: no definitions"
-    names =>
+    _ =>
       let adj = map (\n => Pair n (filterNames (\r => memName r names) (genFunctionRefs decls n))) names
       in
         let revAdj = reverseAdj names adj
@@ -1095,3 +1103,422 @@ generateProgramTyped decls globals printResult =
                   in
                     let suffix = typedMainSuffix decls showMain printResult
                     in Ok (formatOutput (runtimeForBody (core ++ suffix) ++ "\n" ++ core ++ suffix))))))
+-- ---------------------------------------------------------------
+-- M12-A：分离编译（逐 vuna 模块生成 OCaml 模块）
+-- 模块 .ml/.mli 的顺序 = import 拓扑序（依赖先）；每个 .ml 先 open Vuna_runtime，
+-- 再按顺序 open 之前所有模块，因此跨模块的全局唯一 OCaml 名字都能裸名解析。
+-- ---------------------------------------------------------------
+
+-- 分离编译上下文：项目模块（resolveProject 产物）、入口/全程序 decls、
+-- globals/owners、入口名字集合、elaborated 里出现过的全部名字、runtime 安全集合。
+data SplitCtx : Type where
+  SplitCtx : List Module -> List Decl -> List Decl -> List (Pair String Scheme) -> List (Pair String String) -> List String -> List String -> List String -> SplitCtx
+
+ctxModules (SplitCtx modules entryDecls elabDecls globals owners entryNames definedNames runtimeSafe) = modules
+
+ctxEntryDecls (SplitCtx modules entryDecls elabDecls globals owners entryNames definedNames runtimeSafe) = entryDecls
+
+ctxElabDecls (SplitCtx modules entryDecls elabDecls globals owners entryNames definedNames runtimeSafe) = elabDecls
+
+ctxGlobals (SplitCtx modules entryDecls elabDecls globals owners entryNames definedNames runtimeSafe) = globals
+
+ctxOwners (SplitCtx modules entryDecls elabDecls globals owners entryNames definedNames runtimeSafe) = owners
+
+ctxEntryNames (SplitCtx modules entryDecls elabDecls globals owners entryNames definedNames runtimeSafe) = entryNames
+
+ctxDefinedNames (SplitCtx modules entryDecls elabDecls globals owners entryNames definedNames runtimeSafe) = definedNames
+
+ctxRuntimeSafe (SplitCtx modules entryDecls elabDecls globals owners entryNames definedNames runtimeSafe) = runtimeSafe
+
+splitPrefixOf name =
+  case splitLastDot (splitOnDot name) of
+    Pair rev base => joinDots rev
+
+isBuiltinTypeCon name = name == "Int" || name == "String" || name == "Bool" || name == "List"
+
+runtimeTyOk ty =
+  case ty of
+    TVar i => True
+    TCon name args => isBuiltinTypeCon name && allRuntimeTyOk args
+    TFun a b => runtimeTyOk a && runtimeTyOk b
+    TApp head args => False
+
+allRuntimeTyOk Nil = True
+
+allRuntimeTyOk (Cons t rest) = runtimeTyOk t && allRuntimeTyOk rest
+
+runtimeSchemeOk scheme =
+  case scheme of
+    Scheme qs cons ty =>
+      case cons of
+        Nil => runtimeTyOk ty
+        _ => False
+
+refsAllSafe safe Nil = True
+
+refsAllSafe safe (Cons r rest) = memName r safe && refsAllSafe safe rest
+
+definedRefs ctx name = filter (\r => memName r (ctxDefinedNames ctx)) (genFunctionRefs (ctxElabDecls ctx) name)
+
+runtimeSafeLoop ctx safe =
+  let safe2 = filter (\n => refsAllSafe safe (definedRefs ctx n)) safe
+  in if length safe2 == length safe then safe else runtimeSafeLoop ctx safe2
+
+runtimeSafeOf ctx candidates =
+  runtimeSafeLoop ctx (filter (\n => runtimeSchemeOk (lookupSchemeDefault (ctxGlobals ctx) n)) candidates)
+
+lookupSchemeDefault globals name =
+  case lookupScheme name globals of
+    Nothing => Scheme Nil Nil (TCon "Int" Nil)
+    Just scheme => scheme
+
+routeModuleOf ctx name =
+  case ctxModules ctx of
+    Nil => "#unknown"
+    Cons m rest => if memName name (moduleOwnNames m) then moduleNameOf m else routeModuleOf ctx name rest
+
+routeOf ctx name =
+  case lookupPair name (ctxOwners ctx) of
+    Just owner =>
+      if owner == "" then
+        if memName name (ctxRuntimeSafe ctx) then "#runtime" else "#main"
+      else owner
+    Nothing =>
+      if memName name (ctxEntryNames ctx) then "#entry" else routeModuleOf ctx name
+
+declSplitName d =
+  case d of
+    DData n ps cs ds sp => n
+    DRecord n ps fs ds sp => n
+    DFun n ps b sp => n
+    DSig n ty sp => n
+    DTrait n ps ms sp => n
+    DInstance iname isDefault head methods sp =>
+      case iname of
+        Just n => n
+        Nothing => ""
+
+routeData ctx route =
+  filter (\d => case d of
+                  DData n ps cs ds sp => routeOf ctx n == route
+                  _ => False)
+    (ctxElabDecls ctx)
+
+routeFunNames ctx route =
+  uniqueNames (concatMap (\d => case d of
+                                 DFun n ps b sp => if routeOf ctx n == route then Cons n Nil else Nil
+                                 _ => Nil)
+    (ctxElabDecls ctx))
+
+checkRoutes ctx =
+  case filter (\d => routeOf ctx (declSplitName d) == "#unknown") (ctxElabDecls ctx) of
+    Nil => Ok 0
+    Cons d rest => Err ("split mode: cannot assign declaration " ++ declSplitName d ++ " to a module")
+
+-- ---------------------------------------------------------------- 拓扑序
+
+importNameOf imp =
+  case imp of
+    Import name isQualified alias sp => name
+
+findModuleByName modules name =
+  case modules of
+    Nil => Nothing
+    Cons m rest => if moduleNameOf m == name then Just m else findModuleByName rest name
+
+topoOrder modules = topoAll modules modules Nil Nil
+
+topoAll all Nil visited order = Ok order
+
+topoAll all (Cons m rest) visited order =
+  andThen (topoVisit all m visited order) (\p =>
+    topoAll all rest (firstOf p) (secondOf p))
+
+topoDeps all Nil visited order = Ok (Pair visited order)
+
+topoDeps all (Cons imp rest) visited order =
+  case findModuleByName all (importNameOf imp) of
+    Nothing => Err ("split mode: imported module " ++ importNameOf imp ++ " is not loaded")
+    Just dep => andThen (topoVisit all dep visited order) (\p => topoDeps all rest (firstOf p) (secondOf p))
+
+topoVisit all m visited order =
+  if memName (moduleNameOf m) visited then Ok (Pair visited order)
+  else
+    andThen (topoDeps all (moduleImportsOf m) (Cons (moduleNameOf m) visited) order) (\p =>
+      Ok (Pair (firstOf p) (append (secondOf p) (Cons m Nil))))
+
+-- ---------------------------------------------------------------- 模块划分
+
+moduleOwnNames m =
+  uniqueNames (append (topNames (moduleDeclsOf m))
+    (append (typeNamesOf (moduleDeclsOf m)) (ctorsOf (moduleDeclsOf m))))
+
+ocamlModName m = sanitizeName (moduleNameOf m)
+
+-- 整模块重导出检测：entry 相等 → X 的全部导出都在 B 的导出表里。
+entryEq a b =
+  entryKind a == entryKind b && entryPublic a == entryPublic b
+  && entryTarget a == entryTarget b && entryParent a == entryParent b
+
+entryMem e Nil = False
+
+entryMem e (Cons x rest) = if entryEq e x then True else entryMem e rest
+
+entriesSubset Nil supers = True
+
+entriesSubset (Cons e rest) supers = entryMem e supers && entriesSubset rest supers
+
+entriesNonEmpty Nil = False
+
+entriesNonEmpty (Cons e rest) = True
+
+importsHave earlier imps name =
+  case imps of
+    Nil => False
+    Cons imp rest =>
+      if importNameOf imp == name then True else importsHave earlier rest name
+
+directImportsOf earlier imps =
+  filter (\m => importsHave earlier imps (moduleNameOf m)) earlier
+
+coversModule x y = entriesNonEmpty (moduleExportsOf x) && entriesSubset (moduleExportsOf x) (moduleExportsOf y)
+
+coveredBy kept x =
+  case kept of
+    Nil => False
+    Cons z rest => if coversModule x z then True else coveredBy rest x
+
+maximalIncludes candidates = reverse (maximalIncludesGo candidates Nil)
+
+maximalIncludesGo Nil kept = kept
+
+maximalIncludesGo (Cons x rest) kept =
+  if coveredBy kept x then maximalIncludesGo rest kept
+  else maximalIncludesGo rest (Cons x (filter (\z => not (coversModule z x)) kept))
+
+includeModulesOf m earlier =
+  let exports = moduleExportsOf m
+      directs = directImportsOf earlier (moduleImportsOf m)
+      candidates = filter (\x => entriesNonEmpty (moduleExportsOf x) && entriesSubset (moduleExportsOf x) exports) directs
+  in maximalIncludes candidates
+
+coveredByInclude e includes =
+  case includes of
+    Nil => False
+    Cons x rest => if entryMem e (moduleExportsOf x) then True else coveredByInclude e rest
+
+checkForeignExports m includes =
+  let ownNames = moduleOwnNames m
+      foreign = filter (\e => not (memName (entryTarget e) ownNames)) (moduleExportsOf m)
+  in case filter (\e => not (coveredByInclude e includes)) foreign of
+       Nil => Ok 0
+       Cons e rest =>
+         Err ("split mode: selective re-export of \"" ++ entryPublic e
+           ++ "\" from module " ++ moduleNameOf m ++ " is not supported")
+
+-- ---------------------------------------------------------------- OCaml 头
+
+openHeader earlier =
+  "open Vuna_runtime\n" ++ joinWith "" (map (\m => "open " ++ ocamlModName m ++ "\n") earlier)
+
+includesIn earlier includes =
+  filter (\m => memName (moduleNameOf m) (map moduleNameOf includes)) earlier
+
+mlIncludeText earlier includes =
+  joinWith "" (map (\m => "include " ++ ocamlModName m ++ "\n") (includesIn earlier includes))
+
+mliIncludeText earlier includes =
+  joinWith "" (map (\m => "include module type of " ++ ocamlModName m ++ "\n") (includesIn earlier includes))
+
+-- ---------------------------------------------------------------- 类型 / 值签名渲染
+
+builtinTyArgs Nil base = Ok base
+
+builtinTyArgs args base = Err "split mode: builtin type cannot be applied"
+
+renderTy ctx ty =
+  case ty of
+    TVar i => Ok ("'a" ++ strFromInt i)
+    TFun a b =>
+      andThen (renderTy ctx a) (\ta =>
+        andThen (renderTy ctx b) (\tb => Ok ("(" ++ ta ++ ") -> (" ++ tb ++ ")")))
+    TApp head args => Err "split mode: unsupported constraint (type application) in exported signature"
+    TCon name args =>
+      if name == "Int" then builtinTyArgs args "int"
+      else if name == "String" then builtinTyArgs args "string"
+      else if isBoolName name then builtinTyArgs args "bool"
+      else if isListName name then
+        case args of
+          Cons a Nil => andThen (renderTy ctx a) (\ta => Ok ("(" ++ ta ++ ") list"))
+          _ => Err "split mode: invalid List type in exported signature"
+      else
+        andThen (mapResult (renderTy ctx) args) (\ts => Ok (appType ts (typeNameOf name)))
+
+-- 返回 Nothing 表示该名字没有可导出的运行期定义（trait 方法 / 命名实例等）。
+renderValueType ctx name =
+  case lookupScheme name (ctxGlobals ctx) of
+    Nothing => Ok Nothing
+    Just scheme =>
+      case scheme of
+        Scheme qs cons ty =>
+          case cons of
+            Nil =>
+              case funArity name (ctxElabDecls ctx) of
+                Just 0 =>
+                  if isPureZeroArg (ctxElabDecls ctx) name then
+                    case qs of
+                      Nil => andThen (renderTy ctx ty) (\t => Ok (Just t))
+                      _ => Err ("split mode: polymorphic value \"" ++ name ++ "\" is not supported")
+                  else andThen (renderTy ctx ty) (\t => Ok (Just ("unit -> " ++ t)))
+                _ => andThen (renderTy ctx ty) (\t => Ok (Just t))
+            _ => Err ("split mode: unsupported constraint (dictionary parameter) in exported value \"" ++ name ++ "\"")
+
+showValType params name =
+  case params of
+    Nil => typeNameOf name ++ " -> string"
+    _ => showAnnotation params name
+
+findExportByTarget kind target exports =
+  case exports of
+    Nil => Nothing
+    Cons e rest =>
+      if entryKind e == kind && entryTarget e == target then Just e else findExportByTarget kind target rest
+
+ctorExportsOf target exports = filter (\e => entryKind e == "ctor" && entryParent e == target) exports
+
+mliTypePart ctx exports d =
+  case d of
+    DData name params ctors derivings sp =>
+      case findExportByTarget "type" name exports of
+        Nothing => Ok (dataPrefix params ++ typeNameOf name)
+        Just typeEntry =>
+          case ctorExportsOf (entryTarget typeEntry) exports of
+            Nil => Ok (dataPrefix params ++ typeNameOf name)
+            ctorEntries =>
+              if length ctorEntries == length ctors then genData (ctxElabDecls ctx) d
+              else Err ("split mode: partial constructor export of type " ++ name ++ " is not supported")
+    _ => Err "split mode: invalid type declaration"
+
+genMliTypes ctx exports datas =
+  case datas of
+    Nil => Ok ""
+    _ =>
+      andThen (mapResult (mliTypePart ctx exports) (nonSpecialData datas)) (\parts =>
+        Ok ("type " ++ joinWith "\nand " parts ++ "\n"))
+
+concatMapResult f Nil = Ok Nil
+
+concatMapResult f (Cons x rest) =
+  andThen (f x) (\ys => andThen (concatMapResult f rest) (\zs => Ok (append ys zs)))
+
+exportValLine ctx m e =
+  if entryKind e == "val" && memName (entryTarget e) (moduleOwnNames m) then
+    case renderValueType ctx (entryTarget e) of
+      Err err => Err err
+      Ok Nothing => Ok Nil
+      Ok (Just ty) => Ok (Cons ("val " ++ valueName (entryTarget e) ++ " : " ++ ty ++ "\n") Nil)
+  else Ok Nil
+
+generatedValLine ctx name =
+  case renderValueType ctx name of
+    Err err => Err err
+    Ok Nothing => Ok Nil
+    Ok (Just ty) => Ok (Cons ("val " ++ valueName name ++ " : " ++ ty ++ "\n") Nil)
+
+showValLine ctx d =
+  case d of
+    DData name params ctors derivings sp =>
+      Ok (Cons ("val " ++ showNameOf name ++ " : " ++ showValType params name ++ "\n") Nil)
+    _ => Ok Nil
+
+ownersOfPart ctx part =
+  uniqueNames (map firstOf (filter (\p => secondOf p == part) (ctxOwners ctx)))
+
+genMliVals ctx m datas =
+  andThen (concatMapResult (exportValLine ctx m) (moduleExportsOf m)) (\exported =>
+    andThen (concatMapResult (generatedValLine ctx) (ownersOfPart ctx (moduleNameOf m))) (\generated =>
+      andThen (concatMapResult (showValLine ctx) (nonSpecialData datas)) (\shows =>
+        Ok (append exported (append generated shows)))))
+
+-- ---------------------------------------------------------------- 各文件
+
+genModuleTops ctx names =
+  case names of
+    Nil => Ok ""
+    _ => genTopNames (ctxElabDecls ctx) names
+
+splitModuleMl ctx earlier m =
+  let part = moduleNameOf m
+      datas = routeData ctx part
+      names = routeFunNames ctx part
+      includes = includeModulesOf m earlier
+  in andThen (checkForeignExports m includes) (\ok =>
+       andThen (genTypeDeclsOf (ctxElabDecls ctx) (nonSpecialData datas)) (\types =>
+         andThen (genShowDeclsOf (ctxElabDecls ctx) (nonSpecialData datas)) (\shows =>
+           andThen (genModuleTops ctx names) (\tops =>
+             Ok (openHeader earlier ++ mlIncludeText earlier includes ++ types ++ shows ++ tops)))))
+
+splitModuleMli ctx earlier m =
+  let datas = routeData ctx (moduleNameOf m)
+      exports = moduleExportsOf m
+      includes = includeModulesOf m earlier
+  in andThen (genMliTypes ctx exports datas) (\types =>
+       andThen (genMliVals ctx m datas) (\vals =>
+         Ok (openHeader earlier ++ mliIncludeText earlier includes ++ types ++ vals)))
+
+splitModuleFiles ctx ordered = splitModuleFilesGo ctx ordered Nil
+
+splitModuleFilesGo ctx ordered earlier =
+  case ordered of
+    Nil => Ok Nil
+    Cons m rest =>
+      andThen (splitModuleMli ctx earlier m) (\mli =>
+        andThen (splitModuleMl ctx earlier m) (\ml =>
+          andThen (splitModuleFilesGo ctx rest (append earlier (Cons m Nil))) (\more =>
+            Ok (Cons (SplitFile (ocamlModName m ++ ".mli") mli)
+                  (Cons (SplitFile (ocamlModName m ++ ".ml") ml) more)))))
+
+splitRuntimeFile ctx =
+  case routeFunNames ctx "#runtime" of
+    Nil => Ok runtimeCodeTyped
+    names =>
+      andThen (genTopNames (ctxElabDecls ctx) names) (\tops =>
+        Ok (runtimeCodeTyped ++ "\n" ++ tops))
+
+splitMainSuffix ctx =
+  case lookupScheme "main" (ctxGlobals ctx) of
+    Nothing => Err "typed codegen: no main definition"
+    Just scheme =>
+      case scheme of
+        Scheme qs cons ty =>
+          case ty of
+            TFun a b => Err "typed codegen: main must be zero-arity"
+            _ => andThen (showForTy (ctxElabDecls ctx) ty) (\showMain =>
+                   Ok (typedMainSuffix (ctxElabDecls ctx) showMain True))
+
+splitMainFile ctx ordered =
+  let entryData = routeData ctx "#entry"
+      mainNames = append (routeFunNames ctx "#entry") (routeFunNames ctx "#main")
+  in andThen (genTypeDeclsOf (ctxElabDecls ctx) (nonSpecialData entryData)) (\types =>
+       andThen (genShowDeclsOf (ctxElabDecls ctx) (nonSpecialData entryData)) (\shows =>
+         andThen (genModuleTops ctx mainNames) (\tops =>
+           andThen (splitMainSuffix ctx) (\suffix =>
+             Ok (openHeader ordered ++ types ++ shows ++ tops ++ suffix)))))
+
+generateSplitProgram : List Module -> List Decl -> List Decl -> List (Pair String Scheme) -> List (Pair String String) -> Result (List SplitFile)
+generateSplitProgram modules entryDecls elabDecls globals owners =
+  let entryNames = uniqueNames (append (topNames entryDecls)
+                       (append (typeNamesOf entryDecls) (ctorsOf entryDecls)))
+      definedNames = uniqueNames (append (functionNames elabDecls)
+                        (append (ctorsOf elabDecls) (typeNamesOf elabDecls)))
+      runtimeCandidates = uniqueNames (map firstOf (filter (\p => secondOf p == "") owners))
+      baseCtx = SplitCtx modules entryDecls elabDecls globals owners entryNames definedNames Nil
+      runtimeSafe = runtimeSafeOf baseCtx runtimeCandidates
+      ctx = SplitCtx modules entryDecls elabDecls globals owners entryNames definedNames runtimeSafe
+  in andThen (checkRoutes ctx) (\ok =>
+       andThen (topoOrder modules) (\ordered =>
+         andThen (splitRuntimeFile ctx) (\runtimeText =>
+           andThen (splitModuleFiles ctx ordered) (\moduleFiles =>
+             andThen (splitMainFile ctx ordered) (\mainText =>
+               Ok (Cons (SplitFile "Vuna_runtime.ml" runtimeText)
+                     (append moduleFiles (Cons (SplitFile "Main.ml" mainText) Nil))))))))
