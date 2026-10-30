@@ -1,4 +1,4 @@
-module Vuna.Split (SplitFile, splitName, splitText, splitInitFiles, writeSplitFiles, splitCompileOrder, buildScript) where
+module Vuna.Split (SplitFile(..), splitName, splitText, splitInitFiles, writeSplitFiles, splitCompileOrder, buildScript) where
 
 -- Vuna.Split：分离编译（M12）的输出文件模型与构建脚本生成。
 --
