@@ -41,6 +41,7 @@ check_eq() { # name expected actual
 # 只用一个 --root，兼容 CLI 的 --root 语义变化与 stdlib 包布局（stdlib/Vuna 或 stdlib/lib/Vuna）。
 mkdir -p "$tmp/root"
 cp -r "$REPO/lib/Vuna" "$tmp/root/Vuna"
+chmod -R u+w "$tmp/root" 2>/dev/null || true
 if [ -d "$REPO/stdlib/lib/Vuna" ]; then
   cp "$REPO/stdlib/lib/Vuna"/*.vuna "$tmp/root/Vuna/"
 elif [ -d "$REPO/stdlib/Vuna" ]; then
