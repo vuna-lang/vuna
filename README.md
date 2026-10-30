@@ -134,7 +134,8 @@ dune exec vunax -- --version
 - `main` 必须是零参数定义，`vunax run` 求值 `main` 并用 `show` 打印结果；
 - 内建：`+ - * /`、`== /= < <= > >=`（Int/String/Int 比较）、`&& ||`、
   `++`（String 拼接）、`strLength`、`strUnpack`（String → List Int）、
-  `strPack`（List Int → String）、`strFromInt`（Int → String）；
+  `strPack`（List Int → String）、`strFromInt`（Int → String）、
+  `readFile` / `writeFile` / `print` / `getArgs`（见下面 IO 一节）；
 - `if` / `&&` / `||` / 比较结果的布尔值约定为构造器 `True` / `False`
   （与 Idris2 一致）；程序需要自己声明 `data Bool` 才能对它们做模式匹配。
 
@@ -149,8 +150,26 @@ dune exec vunax -- run vunax/test/corpus/run/03_data_case.vuna
 - `vunax/test/corpus/run_err/*.vuna` + 同名 `.err`（运行时错误信息 golden）；
 - 与解析 golden 一起由 `vunax/test/update-golden.sh` 重新生成。
 
-限制：没有 IO（只能通过 `main` 的返回值观察结果）、没有类型检查，
-运行时错误信息暂时不带源码位置（AST 还没有 span）。
+限制：没有类型检查，运行时错误信息暂时不带源码位置（AST 还没有 span）。
+
+## IO（core-v0）
+
+最小 IO 内建，`vunax run`、自解释器和 codegen 产物行为一致：
+
+| 内建 | 约定类型 | 说明 |
+| --- | --- | --- |
+| `readFile` | `String -> String` | 读整个文件（binary）；失败抛运行时错误 |
+| `writeFile` | `String -> String -> Int` | 写文件（覆盖），返回写入字节数 |
+| `print` | `String -> Int` | 写 stdout，不追加换行，返回写入长度 |
+| `getArgs` | `List String` | 进程参数；零参数内建，引用即求值 |
+
+- CLI：`vunax run <file.vuna> [args...]`，参数通过 `getArgs` 传给程序；
+- 编译产物：`./program args...`，`getArgs` 是编译产物自己的参数；
+- 自解释器：`interpret` 目前只接受源码，被解释程序里的 `getArgs` 观察到的是
+  宿主进程参数（等 `interpret` 增加 args 参数时修正）；
+- IO 错误直接抛运行时错误（如 `readFile: No such file or directory`），
+  不会变成自解释器返回的 `error: ...` 字符串；
+- 这些内建和普通内建一样是严格求值的柯里化函数值，支持部分应用。
 
 ## 自解释器（M3，源码级）
 
@@ -197,16 +216,20 @@ ocamlopt -o program program.ml && ./program
 - 值统一用动态表示 `VInt` / `VStr` / `VCon (name, args)` / `VFun (name, fn)`，
   因为 core-v0 还没有类型系统；typed codegen 等类型检查之后再做；
 - 生成程序入口打印 `show_value main`，格式与 `vunax run` 的输出完全一致；
+- IO 内建在生成程序里也实现了（`readFile` / `writeFile` / `print` / `getArgs`），
+  语义与解释器一致；`getArgs` 返回编译产物自己的命令行参数；
 - 编译期检查：`main` 必须存在且零参数、未绑定变量、子句 arity 不一致、
   构造器/函数重名都会报 `codegen error`。
 
-验证（81 个测试，`nix build` 的 checkPhase 全跑）：
+验证（89 个测试，`nix build` 的 checkPhase 全跑）：
 
 - **codegen 差分**：`corpus/run/` 的 15 个程序逐个生成 OCaml、用 `ocamlopt` 编译、
   运行，stdout 与解释器的 `show` 结果一致；
 - **codegen self**：把自解释器 `app/interp.vuna` 用 codegen 编译成 OCaml 可执行文件，
   运行结果与解释执行一致（M4b 的预演）；
-- **codegen error**：3 个非法程序必须在 codegen 阶段报错。
+- **codegen error**：3 个非法程序必须在 codegen 阶段报错；
+- **IO**：`getArgs` / `writeFile` + `readFile` 往返 / `readFile` 失败 / `print`
+  在解释器、codegen 产物和自解释器三条路径上分别验证。
 
 限制：生成代码是单文件、动态值表示，性能与错误信息暂未优化；多模块 codegen 随
 M5 模块系统一起做。

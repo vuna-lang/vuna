@@ -24,6 +24,10 @@ let builtins =
     ("strUnpack", "bi_str_unpack", 1);
     ("strPack", "bi_str_pack", 1);
     ("strFromInt", "bi_str_from_int", 1);
+    ("readFile", "bi_read_file", 1);
+    ("writeFile", "bi_write_file", 2);
+    ("print", "bi_print", 1);
+    ("getArgs", "bi_get_args", 0);
   ]
 
 type env = {
@@ -88,6 +92,41 @@ let value_to_string (v : value) : string =
   in
   go v;
   Buffer.contents buf
+
+let list_of_strings (strings : string list) : value =
+  List.fold_right
+    (fun s acc -> VCon ("Cons", [ VStr s; acc ]))
+    strings (VCon ("Nil", []))
+
+let read_file (path : string) : string =
+  try
+    let channel = open_in_bin path in
+    Fun.protect
+      ~finally:(fun () -> close_in_noerr channel)
+      (fun () -> really_input_string channel (in_channel_length channel))
+  with Sys_error message -> fail ("readFile: " ^ message)
+
+let write_file (path : string) (contents : string) : int =
+  try
+    let channel = open_out_bin path in
+    Fun.protect
+      ~finally:(fun () -> close_out_noerr channel)
+      (fun () -> output_string channel contents);
+    String.length contents
+  with Sys_error message -> fail ("writeFile: " ^ message)
+
+let print_stdout (text : string) : int =
+  print_string text;
+  flush stdout;
+  String.length text
+
+let get_args () : value =
+  let argv = Sys.argv in
+  let count = Array.length argv in
+  let args =
+    if count <= 1 then [] else Array.to_list (Array.sub argv 1 (count - 1))
+  in
+  list_of_strings args
 
 let bi_add =
   fun a -> VFun ("+", fun b -> VInt (expect_int "+" a + expect_int "+" b))
@@ -222,8 +261,11 @@ let gen_var env scope name =
         | Some _ -> Printf.sprintf "VFun (%S, mk_%s)" name name
         | None -> (
             match List.assoc_opt name env.builtins with
-            | Some _ ->
-                Printf.sprintf "VFun (%S, %s)" name (builtin_ocaml_name name)
+            | Some arity ->
+                if arity = 0 then
+                  Printf.sprintf "%s ()" (builtin_ocaml_name name)
+                else
+                  Printf.sprintf "VFun (%S, %s)" name (builtin_ocaml_name name)
             | None -> error ("unbound variable: " ^ name)))
 
 let rec gen_lambda state env scope params body =
@@ -376,9 +418,19 @@ let gen_builtin_definitions () =
         | "bi_str_pack" -> "VStr (value_to_string a)"
         | "bi_str_from_int" ->
             "VStr (string_of_int (expect_int \"strFromInt\" a))"
+        | "bi_read_file" -> "VStr (read_file (expect_str \"readFile\" a))"
+        | "bi_write_file" ->
+            "VInt (write_file (expect_str \"writeFile\" a) (expect_str \
+             \"writeFile\" b))"
+        | "bi_print" ->
+            "let text = expect_str \"print\" a in VInt (print_stdout text)"
+        | "bi_get_args" -> "get_args ()"
         | other -> error ("unhandled builtin: " ^ other)
       in
       match arity with
+      | 0 ->
+          Buffer.add_string buffer
+            (Printf.sprintf "let %s = fun () -> %s\n" ocaml_name body)
       | 1 ->
           Buffer.add_string buffer
             (Printf.sprintf "let %s = fun a -> %s\n" ocaml_name body)

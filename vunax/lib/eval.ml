@@ -18,6 +18,7 @@ type context = {
   ctor_arity : (string * int) list;
   fun_arity : (string * int) list;
   fun_clauses : (string * (pattern list * expr) list) list;
+  args : string list;
 }
 
 let error message = raise (Error message)
@@ -41,13 +42,20 @@ let builtin_names =
     "strUnpack";
     "strPack";
     "strFromInt";
+    "readFile";
+    "writeFile";
+    "print";
+    "getArgs";
   ]
 
 let builtin_arity = function
   | "+" | "-" | "*" | "/" | "==" | "/=" | "<" | "<=" | ">" | ">=" | "&&" | "||"
-  | "++" ->
+  | "++" | "writeFile" ->
       2
-  | "strLength" | "strUnpack" | "strPack" | "strFromInt" -> 1
+  | "strLength" | "strUnpack" | "strPack" | "strFromInt" | "readFile" | "print"
+    ->
+      1
+  | "getArgs" -> 0
   | name -> error ("unknown builtin: " ^ name)
 
 let string_to_list s =
@@ -70,6 +78,34 @@ let list_to_string value =
   in
   go value;
   Buffer.contents buffer
+
+let list_of_strings strings =
+  List.fold_right
+    (fun s acc -> VCon ("Cons", [ VStr s; acc ]))
+    strings
+    (VCon ("Nil", []))
+
+let read_file path =
+  try
+    let channel = open_in_bin path in
+    Fun.protect
+      ~finally:(fun () -> close_in_noerr channel)
+      (fun () -> really_input_string channel (in_channel_length channel))
+  with Sys_error message -> error ("readFile: " ^ message)
+
+let write_file path contents =
+  try
+    let channel = open_out_bin path in
+    Fun.protect
+      ~finally:(fun () -> close_out_noerr channel)
+      (fun () -> output_string channel contents);
+    String.length contents
+  with Sys_error message -> error ("writeFile: " ^ message)
+
+let print_stdout text =
+  print_string text;
+  flush stdout;
+  String.length text
 
 let rec match_pattern pattern value =
   match (pattern, value) with
@@ -94,7 +130,7 @@ and match_patterns patterns values =
   in
   go patterns values []
 
-let build_context (program : program) : context =
+let build_context (program : program) (args : string list) : context =
   let constructors = ref [] in
   List.iter
     (function
@@ -146,7 +182,13 @@ let build_context (program : program) : context =
     @ List.map (fun (ctor, _) -> (ctor, VCon (ctor, []))) !constructors
     @ List.map (fun name -> (name, VBuiltin (name, []))) builtin_names
   in
-  { globals; ctor_arity = !constructors; fun_arity; fun_clauses = functions }
+  {
+    globals;
+    ctor_arity = !constructors;
+    fun_arity;
+    fun_clauses = functions;
+    args;
+  }
 
 let rec eval ctx env expr =
   match expr with
@@ -209,7 +251,7 @@ and apply ctx fn arg =
       let args = args @ [ arg ] in
       let arity = builtin_arity name in
       if List.length args < arity then VBuiltin (name, args)
-      else if List.length args = arity then call_builtin name args
+      else if List.length args = arity then call_builtin ctx name args
       else error ("builtin " ^ name ^ " was applied to too many arguments")
   | VInt _ | VStr _ -> error "cannot apply a non-function"
 
@@ -247,9 +289,10 @@ and force_nullary ctx value =
   match value with
   | VFun (name, []) when List.assoc_opt name ctx.fun_arity = Some 0 ->
       call_function ctx name []
+  | VBuiltin (name, []) when builtin_arity name = 0 -> call_builtin ctx name []
   | _ -> value
 
-and call_builtin name args =
+and call_builtin ctx name args =
   let int_arg = function
     | VInt n -> n
     | _ -> error ("builtin " ^ name ^ " expects an Int argument")
@@ -287,6 +330,10 @@ and call_builtin name args =
   | "strUnpack", [ a ] -> string_to_list (string_arg a)
   | "strPack", [ a ] -> VStr (list_to_string a)
   | "strFromInt", [ a ] -> VStr (string_of_int (int_arg a))
+  | "readFile", [ a ] -> VStr (read_file (string_arg a))
+  | "writeFile", [ a; b ] -> VInt (write_file (string_arg a) (string_arg b))
+  | "print", [ a ] -> VInt (print_stdout (string_arg a))
+  | "getArgs", [] -> list_of_strings ctx.args
   | _ -> error ("bad arguments for builtin " ^ name)
 
 let rec show = function
@@ -299,8 +346,8 @@ let rec show = function
   | VLam _ -> "<lambda>"
   | VBuiltin (name, _) -> "<builtin " ^ name ^ ">"
 
-let run (program : program) : value =
-  let ctx = build_context program in
+let run_with_args (args : string list) (program : program) : value =
+  let ctx = build_context program args in
   match List.assoc_opt "main" ctx.globals with
   | None -> error "no `main` definition"
   | Some (VFun ("main", [])) -> (
@@ -308,6 +355,8 @@ let run (program : program) : value =
       | Some 0 -> call_function ctx "main" []
       | _ -> error "`main` must be a nullary definition")
   | Some _ -> error "`main` must be defined by clauses"
+
+let run (program : program) : value = run_with_args [] program
 
 let run_string (program : program) : string =
   match run program with

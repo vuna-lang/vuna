@@ -738,6 +738,10 @@ builtinArity name =
   else if name == "strUnpack" then Just 1
   else if name == "strPack" then Just 1
   else if name == "strFromInt" then Just 1
+  else if name == "readFile" then Just 1
+  else if name == "writeFile" then Just 2
+  else if name == "print" then Just 1
+  else if name == "getArgs" then Just 0
   else Nothing
 
 forceValue decls v =
@@ -765,7 +769,8 @@ evalGlobalNonFun decls name =
     Just arity => Ok (VCon name Nil)
     Nothing =>
       case builtinArity name of
-        Just arity => Ok (VBuiltin name Nil)
+        Just arity =>
+          if arity == 0 then callBuiltin name Nil else Ok (VBuiltin name Nil)
         Nothing => Err ("unbound variable: " ++ name)
 
 evalExpr decls env expr =
@@ -1010,6 +1015,21 @@ callBuiltin name args =
     case args of
       Cons a Nil => andThen (intArg a) (\n => Ok (VStr (strFromInt n)))
       _ => Err "bad arguments for strFromInt"
+  else if name == "readFile" then
+    case args of
+      Cons a Nil => andThen (stringArg a) (\s => Ok (VStr (readFile s)))
+      _ => Err "bad arguments for readFile"
+  else if name == "writeFile" then
+    case args of
+      Cons a (Cons b Nil) =>
+        andThen (stringArg a) (\path =>
+          andThen (stringArg b) (\s => Ok (VInt (writeFile path s))))
+      _ => Err "bad arguments for writeFile"
+  else if name == "print" then
+    case args of
+      Cons a Nil => andThen (stringArg a) (\s => Ok (VInt (print s)))
+      _ => Err "bad arguments for print"
+  else if name == "getArgs" then Ok (map (\s => VStr s) getArgs)
   else Err ("unknown builtin: " ++ name)
 
 showValue v =
