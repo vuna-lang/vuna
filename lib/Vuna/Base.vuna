@@ -90,6 +90,16 @@ memChar c chars =
 containsDot : String -> Bool
 containsDot s = memChar 46 (strUnpack s)
 
+startsWith : String -> String -> Bool
+startsWith prefix text = startsWithChars (strUnpack prefix) (strUnpack text)
+
+startsWithChars : List Int -> List Int -> Bool
+startsWithChars Nil text = True
+startsWithChars (Cons p prest) text =
+  case text of
+    Nil => False
+    Cons t trest => if p == t then startsWithChars prest trest else False
+
 splitOnDot : String -> List String
 splitOnDot s = splitCharsOnDot (strUnpack s) Nil Nil
 

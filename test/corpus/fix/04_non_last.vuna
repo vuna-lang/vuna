@@ -1,0 +1,6 @@
+f p =
+  case p of
+    Pair a b => a
+f other = 0
+
+main = f (Pair 1 2)

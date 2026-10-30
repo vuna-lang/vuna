@@ -1,0 +1,5 @@
+wrap x =
+  case x of
+    Just b =>
+      case b of
+        Pair a c => a

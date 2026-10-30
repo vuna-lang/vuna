@@ -99,37 +99,35 @@ unifyLists (Cons a ar) (Cons b br) st =
 unifyLists _ _ st = Err "type mismatch: different number of arguments"
 
 unify : Ty -> Ty -> TC -> Result TC
-unify a b st =
-  case st of
-    TC n s =>
-      case resolveTy s a of
-        ra =>
-          case resolveTy s b of
-            rb =>
-              case ra of
-                TVar i =>
-                  case rb of
-                    TVar j =>
-                      if i == j then Ok st else bindVar i rb st
-                    _ =>
-                      if occursIn i s rb then Err ("occurs check: " ++ showTy rb)
-                      else bindVar i rb st
-                TCon tn xs =>
-                  case rb of
-                    TVar j =>
-                      if occursIn j s ra then Err ("occurs check: " ++ showTy ra)
-                      else bindVar j ra st
-                    TCon tn2 ys =>
-                      if tn == tn2 || sameBuiltinTy tn tn2 then unifyLists xs ys st
-                      else Err ("type mismatch: " ++ showTy ra ++ " vs " ++ showTy rb)
-                    _ => Err ("type mismatch: " ++ showTy ra ++ " vs " ++ showTy rb)
-                TFun x y =>
-                  case rb of
-                    TVar j =>
-                      if occursIn j s ra then Err ("occurs check: " ++ showTy ra)
-                      else bindVar j ra st
-                    TFun x2 y2 => andThen (unify x x2 st) (\st2 => unify y y2 st2)
-                    _ => Err ("type mismatch: " ++ showTy ra ++ " vs " ++ showTy rb)
+unify a b (TC n s) =
+  case resolveTy s a of
+    ra =>
+      case resolveTy s b of
+        rb =>
+          case ra of
+            TVar i =>
+              case rb of
+                TVar j =>
+                  if i == j then Ok (TC n s) else bindVar i rb (TC n s)
+                _ =>
+                  if occursIn i s rb then Err ("occurs check: " ++ showTy rb)
+                  else bindVar i rb (TC n s)
+            TCon tn xs =>
+              case rb of
+                TVar j =>
+                  if occursIn j s ra then Err ("occurs check: " ++ showTy ra)
+                  else bindVar j ra (TC n s)
+                TCon tn2 ys =>
+                  if tn == tn2 || sameBuiltinTy tn tn2 then unifyLists xs ys (TC n s)
+                  else Err ("type mismatch: " ++ showTy ra ++ " vs " ++ showTy rb)
+                _ => Err ("type mismatch: " ++ showTy ra ++ " vs " ++ showTy rb)
+            TFun x y =>
+              case rb of
+                TVar j =>
+                  if occursIn j s ra then Err ("occurs check: " ++ showTy ra)
+                  else bindVar j ra (TC n s)
+                TFun x2 y2 => andThen (unify x x2 (TC n s)) (\st2 => unify y y2 st2)
+                _ => Err ("type mismatch: " ++ showTy ra ++ " vs " ++ showTy rb)
 
 instantiateVars Nil st = Pair Nil st
 instantiateVars (Cons q rest) st =
@@ -337,23 +335,26 @@ builtinSchemes =
 -- ---------------------------------------------------------------
 
 intCmpName name =
-  if name == "==" then "bi_eq_int"
-  else if name == "/=" then "bi_neq_int"
-  else if name == "<" then "bi_lt_int"
-  else if name == "<=" then "bi_le_int"
-  else if name == ">" then "bi_gt_int"
-  else if name == ">=" then "bi_ge_int"
-  else name
+  case name of
+    "==" => "bi_eq_int"
+    "/=" => "bi_neq_int"
+    "<" => "bi_lt_int"
+    "<=" => "bi_le_int"
+    ">" => "bi_gt_int"
+    ">=" => "bi_ge_int"
+    _ => name
 
 strCmpName name =
-  if name == "==" then "bi_eq_str"
-  else if name == "/=" then "bi_neq_str"
-  else name
+  case name of
+    "==" => "bi_eq_str"
+    "/=" => "bi_neq_str"
+    _ => name
 
 boolCmpName name =
-  if name == "==" then "bi_eq_bool"
-  else if name == "/=" then "bi_neq_bool"
-  else name
+  case name of
+    "==" => "bi_eq_bool"
+    "/=" => "bi_neq_bool"
+    _ => name
 
 specializeCmp name ty =
   case ty of
@@ -713,3 +714,4 @@ finalizeGlobals subst globals =
     Nil => Nil
     Cons (Pair name sch) rest =>
       Cons (Pair name (finalizeScheme subst sch)) (finalizeGlobals subst rest)
+

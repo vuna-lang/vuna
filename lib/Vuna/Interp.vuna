@@ -28,10 +28,6 @@ compileFile roots entry printResult =
   andThen (loadProgram roots entry) (\decls =>
     case decls of ds => generateProgram ds printResult)
 
-demo = "main = 40 + 2"
-
-main = interpret demo
-
 compileFileChecked roots entry printResult =
   andThen (loadProgram roots entry) (\decls =>
     andThen (checkProgram decls) (\_ => generateProgram decls printResult))

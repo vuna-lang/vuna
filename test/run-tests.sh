@@ -1,10 +1,9 @@
 #!/bin/sh
-# vuna 原生测试：只用 vuna-interp / vuna / vuna-boot 驱动。
+# vuna 原生测试：只用 vuna / vuna-boot 驱动。
 #
 # 环境变量（默认取 PATH 中的同名命令）：
 #   VUNA        当前编译器（stage 2）
 #   VUNA_BOOT   种子编译器（stage 1）
-#   VUNA_INTERP 解释器
 #   OCAMLOPT    OCaml 编译器，默认 ocamlopt
 set -u
 
@@ -12,7 +11,6 @@ cd "$(dirname "$0")"
 
 : "${VUNA:=vuna}"
 : "${VUNA_BOOT:=vuna-boot}"
-: "${VUNA_INTERP:=vuna-interp}"
 : "${OCAMLOPT:=ocamlopt}"
 
 tmp=$(mktemp -d "${TMPDIR:-/tmp}/vuna-tests.XXXXXX") || exit 1
@@ -77,7 +75,7 @@ compile_and_run() { # name compiler root entry expected
 for file in corpus/run/*.vuna; do
   base=${file%.vuna}
   expected=$(cat "$base.out")
-  actual=$("$VUNA_INTERP" "$file" 2>&1)
+  actual=$("$VUNA" interp "$file" 2>&1)
   check_eq "$file (interp)" "$expected" "$actual"
   compile_and_run "$file (compiler)" "$VUNA" "." "$file" "$expected"
 done
@@ -85,7 +83,7 @@ done
 # 2) 模块夹具：解释器与编译器都要读取模块并得到 expected.out
 for dir in corpus/modules/0*; do
   expected=$(cat "$dir/expected.out")
-  actual=$("$VUNA_INTERP" --root "$dir/lib" --root "$dir/app" "$dir/app/Main.vuna" 2>&1)
+  actual=$("$VUNA" interp --root "$dir/lib" --root "$dir/app" "$dir/app/Main.vuna" 2>&1)
   check_eq "$dir (interp)" "$expected" "$actual"
   compile_and_run_roots "$dir (compiler)" "$VUNA" "$dir/app/Main.vuna" "$expected" --root "$dir/lib" --root "$dir/app"
 done
@@ -93,7 +91,7 @@ done
 # 3) 模块错误：解释器与编译器都要给出含片段的错误，且不写输出文件
 for dir in corpus/modules/9*; do
   fragment=$(cat "$dir/expected.err")
-  actual=$("$VUNA_INTERP" --root "$dir/lib" --root "$dir/app" "$dir/app/Main.vuna" 2>&1)
+  actual=$("$VUNA" interp --root "$dir/lib" --root "$dir/app" "$dir/app/Main.vuna" 2>&1)
   check_contains "$dir (interp error)" "$actual" "$fragment"
   rm -f "$tmp/error.ml"
   actual=$("$VUNA" --root "$dir/lib" --root "$dir/app" "$dir/app/Main.vuna" "$tmp/error.ml" 2>&1 || true)
@@ -105,10 +103,10 @@ for dir in corpus/modules/9*; do
   fi
 done
 
-# 4) 解析错误：vuna-interp 输出含片段
+# 4) 解析错误：vuna interp 输出含片段
 for file in corpus/err/*.vuna; do
   fragment=$(cat "${file%.vuna}.err")
-  actual=$("$VUNA_INTERP" "$file" 2>&1)
+  actual=$("$VUNA" interp "$file" 2>&1)
   check_contains "$file (parse error)" "$actual" "$fragment"
 done
 
@@ -118,7 +116,7 @@ for file in corpus/run_err/*.vuna; do
     *08_clause_arity*) continue ;;
   esac
   fragment=$(cat "${file%.vuna}.err")
-  actual=$("$VUNA_INTERP" "$file" 2>&1)
+  actual=$("$VUNA" interp "$file" 2>&1)
   check_contains "$file (interp error)" "$actual" "$fragment"
 done
 
@@ -218,6 +216,52 @@ done
 # 13) 种子冒烟：vuna-boot 编译一个程序并运行
 fact=corpus/run/12_fact.vuna
 compile_and_run "$fact (vuna-boot)" "$VUNA_BOOT" "." "$fact" "$(cat "${fact%.vuna}.out")"
+
+# 14) 统一 CLI：help、退出码、旧式 compile 兼容
+help_out=$("$VUNA" help 2>&1)
+check_contains "vuna help" "$help_out" "usage:"
+"$VUNA" >/dev/null 2>&1
+check_eq "vuna no args exit" "2" "$?"
+"$VUNA" --root lib corpus/run/01_arithmetic.vuna >/dev/null 2>&1
+check_eq "vuna legacy compile exit" "0" "$?"
+"$VUNA" --root lib corpus/err/01_case_indent.vuna "$tmp/cli_err.ml" >/dev/null 2>&1
+cli_code=$?
+if [ "$cli_code" -ne 0 ]; then ok; else bad "vuna compile error exit" "non-zero" "$cli_code"; fi
+"$VUNA" interp /no/such/file.vuna >/dev/null 2>&1
+check_eq "vuna interp missing exit" "2" "$?"
+"$VUNA" lint >/dev/null 2>&1
+check_eq "vuna lint no args exit" "2" "$?"
+
+# 15) lint 检测 golden 与退出码
+for file in corpus/lint/*.vuna; do
+  base=${file%.vuna}
+  expected=$(cat "$base.out")
+  actual=$("$VUNA" lint "$file" 2>&1)
+  check_eq "$file (lint)" "$expected" "$actual"
+  "$VUNA" lint "$file" >/dev/null 2>&1
+  lint_code=$?
+  if [ -n "$expected" ]; then
+    check_eq "$file (lint exit)" "1" "$lint_code"
+  else
+    check_eq "$file (lint exit)" "0" "$lint_code"
+  fi
+done
+
+# 16) lint --fix golden、退出码与幂等
+for file in corpus/fix/*.vuna; do
+  base=${file%.vuna}
+  name=$(basename "$base")
+  expected=$(cat "$base.expected")
+  work="$tmp/fix_$name.vuna"
+  once="$tmp/fix_once_$name.vuna"
+  cp "$file" "$work"
+  chmod u+w "$work"
+  "$VUNA" lint --fix "$work" >/dev/null 2>&1
+  check_eq "$file (fix)" "$expected" "$(cat "$work")"
+  cp "$work" "$once"
+  "$VUNA" lint --fix "$work" >/dev/null 2>&1
+  check_eq "$file (fix idempotent)" "$(cat "$once")" "$(cat "$work")"
+done
 
 if [ "$fail" -ne 0 ]; then
   printf '%s passed, %s failed\n' "$pass" "$fail"

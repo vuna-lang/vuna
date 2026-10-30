@@ -31,12 +31,12 @@
       # 自举链（完全由 vuna 自己维持，没有外部编译器）：
       #   bootstrap/stage1.ml（提交入库的 OCaml 种子）
       #     → ocamlopt → vuna-boot（stage 1）
-      #     → vuna-boot 编译当前 lib/ + app/Compile.vuna → stage2.ml
+      #     → vuna-boot 编译当前 lib/ + app/Main.vuna → stage2.ml
       #     → ocamlopt → vuna（stage 2，当前编译器）
       #     → vuna 再编译同一份源码 → stage3.ml；stage2 == stage3 即 fixed point
       #
       # 种子通过 seed rotation 更新：
-      #   vuna-boot --root lib --no-print app/Compile.vuna bootstrap/stage1.ml
+      #   vuna-boot --root lib --root app --no-print app/Main.vuna bootstrap/stage1.ml
       # 不变量：当前入库种子必须能编译当前源码（checks.bootstrap-selfhost 守）。
       packages = forAllSystems (
         system:
@@ -79,37 +79,17 @@
                 };
               }
               ''
-                mkdir -p "$out/bin" app
+                mkdir -p "$out/bin"
                 cp -r ${./lib} lib
-                cp ${./app/Compile.vuna} app/Compile.vuna
-                ${vuna-boot}/bin/vuna-boot --root lib --no-print app/Compile.vuna stage2.ml
+                cp -r ${./app} app
+                ${vuna-boot}/bin/vuna-boot --root lib --root app --no-print app/Main.vuna stage2.ml
                 ocamlopt -g -w -a+39 -warn-error +39 -o "$out/bin/vuna" stage2.ml
               '';
 
-          # 解释器（自解释器编译产物）：读 .vuna 文件解释执行，用于差分测试。
-          vuna-interp =
-            pkgs.runCommand "vuna-interp-0.1.0"
-              {
-                nativeBuildInputs = ocamlTools;
-                allowSubstitutes = false;
-
-                meta = {
-                  description = "vuna interpreter compiled to OCaml";
-                  license = lib.licenses.mit;
-                  mainProgram = "vuna-interp";
-                };
-              }
-              ''
-                mkdir -p "$out/bin" app
-                cp -r ${./lib} lib
-                cp ${./app/Interp.vuna} app/Interp.vuna
-                ${vuna}/bin/vuna --no-print --root lib app/Interp.vuna program.ml
-                ocamlopt -g -w -a+39 -warn-error +39 -o "$out/bin/vuna-interp" program.ml
-              '';
         in
         {
           default = vuna;
-          inherit vuna-boot vuna-interp;
+          inherit vuna-boot;
           vuna = vuna;
         }
       );
@@ -137,7 +117,7 @@
         system:
         let
           pkgs = nixpkgs.legacyPackages.${system};
-          inherit (self.packages.${system}) vuna-boot vuna vuna-interp;
+          inherit (self.packages.${system}) vuna-boot vuna;
 
           bootstrap-selfhost =
             pkgs.runCommand "vuna-bootstrap-selfhost"
@@ -146,14 +126,13 @@
                 nativeBuildInputs = ocamlToolsFn system;
               }
               ''
-                mkdir -p app
                 cp -r ${./lib} lib
-                cp ${./app/Compile.vuna} app/Compile.vuna
+                cp -r ${./app} app
                 # 种子编译当前源码 → stage 2（当前编译器）
-                ${vuna-boot}/bin/vuna-boot --root lib --no-print app/Compile.vuna stage2.ml
+                ${vuna-boot}/bin/vuna-boot --root lib --root app --no-print app/Main.vuna stage2.ml
                 ocamlopt -g -w -a+39 -warn-error +39 -o stage2 stage2.ml
                 # stage 2 再编译同一份源码 → stage 3；两者必须字节一致
-                ./stage2 --root lib --no-print app/Compile.vuna stage3.ml
+                ./stage2 --root lib --root app --no-print app/Main.vuna stage3.ml
                 cmp stage2.ml stage3.ml
                 # 行为抽查：当前编译器编译并运行一个程序
                 cp ${./test/corpus/run/12_fact.vuna} fact.vuna
@@ -171,11 +150,23 @@
               }
               ''
                 mkdir -p "$out"
-                ${vuna}/bin/vuna --typecheck --no-print --root ${./lib} ${./app/Compile.vuna} "$out/self.ml"
+                ${vuna}/bin/vuna --typecheck --no-print --root ${./lib} --root ${./app} ${./app/Main.vuna} "$out/self.ml"
                 touch "$out/ok"
               '';
 
-          # 原生测试：只用种子、vuna 与 vuna-interp。
+          # lint 自检：当前源码必须零 finding。
+          vuna-lint =
+            pkgs.runCommand "vuna-lint"
+              {
+                allowSubstitutes = false;
+              }
+              ''
+                mkdir -p "$out"
+                ${vuna}/bin/vuna lint ${./lib/Vuna}/*.vuna ${./app}/*.vuna
+                touch "$out/ok"
+              '';
+
+          # 原生测试：只用种子与 vuna。
           vuna-tests =
             pkgs.runCommand "vuna-tests"
               {
@@ -187,17 +178,17 @@
                 cd test
                 VUNA=${vuna}/bin/vuna \
                 VUNA_BOOT=${vuna-boot}/bin/vuna-boot \
-                VUNA_INTERP=${vuna-interp}/bin/vuna-interp \
                 sh run-tests.sh
                 touch "$out"
               '';
         in
         {
-          inherit vuna vuna-boot vuna-interp;
+          inherit vuna vuna-boot;
           bootstrap-selfhost = bootstrap-selfhost;
           fixed-point = bootstrap-selfhost;
           vuna-tests = vuna-tests;
           vuna-typecheck = vuna-typecheck;
+          vuna-lint = vuna-lint;
         }
       );
 
