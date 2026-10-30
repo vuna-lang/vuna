@@ -19,8 +19,11 @@ data Expr : Type where
   ECase : Expr -> List (Pair Pat Expr) -> Expr
   EIf : Expr -> Expr -> Expr -> Expr
 
+data Ctor : Type where
+  Ctor : String -> Expr -> Ctor
+
 data Decl : Type where
-  DData : String -> List String -> List (Pair String Int) -> Decl
+  DData : String -> List String -> List Ctor -> Decl
   DSig : String -> Expr -> Decl
   DFun : String -> List Pat -> Expr -> Decl
 
@@ -44,13 +47,34 @@ funArity name decls =
       case c of
         Pair pats body => Just (length pats)
 
+ctorName c =
+  case c of
+    Ctor name ty => name
+
+ctorType c =
+  case c of
+    Ctor name ty => ty
+
+typeArity ty =
+  case ty of
+    EApp (EVar "->") (Cons x (Cons rest Nil)) => 1 + typeArity rest
+    _ => 0
+
+ctorArityOf c = typeArity (ctorType c)
+
+lookupCtorArity name ctors =
+  case ctors of
+    Nil => Nothing
+    Cons c rest =>
+      if ctorName c == name then Just (ctorArityOf c) else lookupCtorArity name rest
+
 ctorArity name decls =
   case decls of
     Nil => Nothing
     Cons d rest =>
       case d of
         DData dname params ctors =>
-          case lookupPair name ctors of
+          case lookupCtorArity name ctors of
             Just arity => Just arity
             Nothing => ctorArity name rest
         _ => ctorArity name rest
@@ -59,13 +83,13 @@ declNames d =
   case d of
     DFun name pats body => Cons name Nil
     DSig name ty => Cons name Nil
-    DData dname params ctors => map firstOf ctors
+    DData dname params ctors => map ctorName ctors
 
 topNames decls = concatMap declNames decls
 
 declCtors d =
   case d of
-    DData dname params ctors => map firstOf ctors
+    DData dname params ctors => map ctorName ctors
     _ => Nil
 
 ctorsOf decls = concatMap declCtors decls

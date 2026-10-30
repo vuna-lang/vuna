@@ -276,15 +276,15 @@ resolveCtorDecl label prefix ctor =
   if isGlobalCtor ctor then Ok ctor
   else andThen (checkTopName label ctor) (\_ => Ok (mangle prefix ctor))
 
-resolveCtorPair label prefix p =
-  case p of
-    Pair ctor arity =>
-      andThen (resolveCtorDecl label prefix ctor) (\c => Ok (Pair c arity))
+resolveCtorSpec label prefix c =
+  case c of
+    Ctor ctor ty =>
+      andThen (resolveCtorDecl label prefix ctor) (\c2 => Ok (Ctor c2 ty))
 
 resolveDecl modules label prefix own ownCtors imports d =
   case d of
     DData dname params ctors =>
-      andThen (traverse (resolveCtorPair label prefix) ctors) (\ctors2 =>
+      andThen (traverse (resolveCtorSpec label prefix) ctors) (\ctors2 =>
         Ok (DData dname params ctors2))
     DSig name ty =>
       andThen (resolveTopName label prefix name) (\n => Ok (DSig n ty))

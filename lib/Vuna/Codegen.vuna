@@ -209,10 +209,14 @@ checkArities name expected (Cons c rest) =
       if length pats == expected then checkArities name expected rest
       else Err ("clauses for " ++ name ++ " have different arities")
 
+ctorPairs Nil = Nil
+ctorPairs (Cons c rest) =
+  Cons (Pair (ctorName c) (ctorArityOf c)) (ctorPairs rest)
+
 allCtors Nil = Nil
 allCtors (Cons d rest) =
   case d of
-    DData dname params ctors => append ctors (allCtors rest)
+    DData dname params ctors => append (ctorPairs ctors) (allCtors rest)
     _ => allCtors rest
 
 validateCtors Nil = Ok Nil
