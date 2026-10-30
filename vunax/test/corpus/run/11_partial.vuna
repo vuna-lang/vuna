@@ -1,0 +1,8 @@
+add : Int -> Int -> Int
+add x y = x + y
+
+inc : Int -> Int
+inc = add 1
+
+main : Int
+main = inc 41

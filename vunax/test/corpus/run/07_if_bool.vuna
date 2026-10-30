@@ -1,0 +1,9 @@
+data Bool : Type where
+  False : Bool
+  True : Bool
+
+isZero : Int -> Bool
+isZero x = if x == 0 then True else False
+
+main : Int
+main = if isZero 0 then 1 else 2

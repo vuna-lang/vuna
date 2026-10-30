@@ -1,0 +1,6 @@
+f : Int -> Int
+f x = x
+f x y = y
+
+main : Int
+main = f 1

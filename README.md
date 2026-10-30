@@ -65,7 +65,7 @@ git add bootstrap/ && git commit
 ├── vunax/                # 外部编译器（OCaml）
 │   ├── dune-project
 │   ├── vunax.opam
-│   ├── lib/              # token / lexer / ast / parser（后续加 typecheck / codegen）
+│   ├── lib/              # token / lexer / ast / parser / eval（后续加 typecheck / codegen）
 │   ├── bin/              # 可执行文件 vunax
 │   └── test/             # alcotest + corpus/ 解析语料与 golden
 ├── app/                  # 自举：vuna 写的 CLI 入口（.vuna）
@@ -118,8 +118,36 @@ dune exec vunax -- --version
 - `vunax/test/corpus/err/*.vuna` + 同名 `.err`（错误位置与信息 golden）；
 - 改语料或解析器后运行 `vunax/test/update-golden.sh` 重新生成 golden，再 review diff。
 
-尚未实现（后续里程碑）：类型检查（core-v0 先不检查类型）、求值器（M2）、
-自解释器（M3）、`where` / `do` / 隐式参数 / 依赖类型 / 模块系统。
+尚未实现（后续里程碑）：类型检查（core-v0 先不检查类型）、自解释器（M3）、
+`where` / `do` / 隐式参数 / 依赖类型 / 模块系统。
+
+## 求值器（core-v0，M2）
+
+[eval.ml](vunax/lib/eval.ml) 在现有 AST 上做严格求值（call-by-value）：
+
+- 顶层定义互递归；函数值按子句顺序做模式匹配，参数不足时返回部分应用；
+  `name = expr` 这种零参数定义在引用时自动求值（常量语义）；
+- 构造器按 `data` 里的 arity 柯里化；`case` / `let` / lambda 都支持嵌套模式；
+- `main` 必须是零参数定义，`vunax run` 求值 `main` 并用 `show` 打印结果；
+- 内建：`+ - * /`、`== /= < <= > >=`（Int/String/Int 比较）、`&& ||`、
+  `++`（String 拼接）、`strLength`、`strUnpack`（String → List Int）、
+  `strPack`（List Int → String）；
+- `if` / `&&` / `||` / 比较结果的布尔值约定为构造器 `True` / `False`
+  （与 Idris2 一致）；程序需要自己声明 `data Bool` 才能对它们做模式匹配。
+
+```console
+dune exec vunax -- run vunax/test/corpus/run/03_data_case.vuna
+# (S (S (S (S Z))))
+```
+
+求值语料：
+
+- `vunax/test/corpus/run/*.vuna` + 同名 `.out`（`main` 求值结果 golden）；
+- `vunax/test/corpus/run_err/*.vuna` + 同名 `.err`（运行时错误信息 golden）；
+- 与解析 golden 一起由 `vunax/test/update-golden.sh` 重新生成。
+
+限制：没有 IO（只能通过 `main` 的返回值观察结果）、没有类型检查，
+运行时错误信息暂时不带源码位置（AST 还没有 span）。
 
 ## Nix
 

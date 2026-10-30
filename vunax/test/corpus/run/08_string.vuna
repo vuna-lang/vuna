@@ -1,0 +1,2 @@
+main : String
+main = "vuna" ++ " " ++ "core"

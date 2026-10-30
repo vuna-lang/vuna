@@ -1,0 +1,7 @@
+data Bool : Type where
+  False : Bool
+  True : Bool
+
+main : Int
+main = case False of
+  True => 1

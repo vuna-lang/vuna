@@ -17,6 +17,17 @@ let parse_error_text file =
   with Vunax.Lexer.Error (pos, message) | Vunax.Parser.Error (pos, message) ->
     Vunax.Token.pos_to_string pos ^ ": " ^ message
 
+let run_output file =
+  let path = Filename.concat "corpus/run" file in
+  Vunax.Eval.show (Vunax.Eval.run (Vunax.Parser.parse_file path))
+
+let run_error_text file =
+  let path = Filename.concat "corpus/run_err" file in
+  try
+    ignore (Vunax.Eval.run (Vunax.Parser.parse_file path));
+    "no error"
+  with Vunax.Eval.Error message -> message
+
 let ok_tests =
   sorted_files "corpus/ok" ".vuna"
   |> List.map (fun file ->
@@ -48,6 +59,32 @@ let error_tests =
             (String.trim (read_file expected_path))
             (String.trim (parse_error_text file))))
 
+let run_tests =
+  sorted_files "corpus/run" ".vuna"
+  |> List.map (fun file ->
+      Alcotest.test_case file `Quick (fun () ->
+          let expected_path =
+            Filename.concat "corpus/run"
+              (Filename.remove_extension file ^ ".out")
+          in
+          Alcotest.(check string)
+            file
+            (String.trim (read_file expected_path))
+            (String.trim (run_output file))))
+
+let run_error_tests =
+  sorted_files "corpus/run_err" ".vuna"
+  |> List.map (fun file ->
+      Alcotest.test_case file `Quick (fun () ->
+          let expected_path =
+            Filename.concat "corpus/run_err"
+              (Filename.remove_extension file ^ ".err")
+          in
+          Alcotest.(check string)
+            file
+            (String.trim (read_file expected_path))
+            (String.trim (run_error_text file))))
+
 let version_tests =
   [
     Alcotest.test_case "banner" `Quick (fun () ->
@@ -64,4 +101,6 @@ let () =
       ("version", version_tests);
       ("parse", ok_tests);
       ("parse error", error_tests);
+      ("run", run_tests);
+      ("run error", run_error_tests);
     ]
