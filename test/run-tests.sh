@@ -481,7 +481,7 @@ for dir in corpus/records/9*_*/; do
 done
 
 # 22) trait 正例（M10.5b）：interp / 动态 codegen / typed codegen 三路径
-for file in corpus/traits/0[0-9]_*.vuna; do
+for file in corpus/traits/[01][0-9]_*.vuna; do
   base=${file%.vuna}
   expected=$(cat "$base.out")
   actual=$("$VUNA" interp "$file" 2>&1)

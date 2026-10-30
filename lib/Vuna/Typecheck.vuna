@@ -12,8 +12,12 @@ data Ty : Type where
   TCon : String -> List Ty -> Ty
   TFun : Ty -> Ty -> Ty
 
+-- scheme：量化类型变量、trait 约束（trait 名 + 类型）、类型。
+-- M10.5c：泛型（裸类型变量）trait 约束通过方法函数参数穿参（字典扁平化）。
 data Scheme : Type where
-  Scheme : List Int -> Ty -> Scheme
+  Scheme : List Int -> List (Pair String Ty) -> Ty -> Scheme
+
+mkScheme qs ty = Scheme qs Nil ty
 
 -- M10.5 记录声明信息：类型名、参数名、字段（名+类型表达式）、deriving 列表。
 data RecordInfo : Type where
@@ -43,6 +47,7 @@ data EExpr : Type where
   XEIf : EExpr -> EExpr -> EExpr -> Span -> EExpr
   XEField : EExpr -> String -> Ty -> Span -> EExpr
   XERecUpdate : EExpr -> Ty -> List (Pair String EExpr) -> Span -> EExpr
+  XEFun : String -> List (Pair String Ty) -> Span -> EExpr
   XEMethod : String -> String -> Ty -> Span -> EExpr
   XEMethodInst : String -> String -> String -> Ty -> Span -> EExpr
 
@@ -58,6 +63,7 @@ eeSpan e =
     XEIf c t e sp => sp
     XEField b f ty sp => sp
     XERecUpdate b ty fs sp => sp
+    XEFun name cons sp => sp
     XEMethod tr meth ty sp => sp
     XEMethodInst tr meth inst ty sp => sp
 
@@ -178,10 +184,18 @@ renameTy mapping ty =
     TCon n args => TCon n (map (renameTy mapping) args)
     TFun a b => TFun (renameTy mapping a) (renameTy mapping b)
 
-instantiate : TC -> Scheme -> Pair Ty TC
-instantiate st (Scheme qs ty) =
+instantiateFull : TC -> Scheme -> Pair (Pair Ty (List (Pair String Ty))) TC
+instantiateFull st (Scheme qs cons ty) =
   case instantiateVars qs st of
-    Pair mapping st2 => Pair (renameTy mapping ty) st2
+    Pair mapping st2 =>
+      let ty2 = renameTy mapping ty
+      in let cons2 = map (\c => Pair (firstOf c) (renameTy mapping (secondOf c))) cons
+         in Pair (Pair ty2 cons2) st2
+
+instantiate : TC -> Scheme -> Pair Ty TC
+instantiate st sch =
+  case instantiateFull st sch of
+    Pair (Pair ty cons) st2 => Pair ty st2
 
 freeVarsTy ty =
   case ty of
@@ -192,7 +206,10 @@ freeVarsTy ty =
 freeVarsArgs Nil = Nil
 freeVarsArgs (Cons ty rest) = unionInts (freeVarsTy ty) (freeVarsArgs rest)
 
-freeVarsScheme (Scheme qs ty) = diffInts (freeVarsTy ty) qs
+freeVarsScheme (Scheme qs cons ty) =
+  diffInts (append (freeVarsTy ty) (concatMap consFreeVars cons)) qs
+
+consFreeVars (Pair tr ty) = freeVarsTy ty
 
 freeVarsEnv Nil = Nil
 freeVarsEnv (Cons (Pair n sch) rest) =
@@ -266,7 +283,7 @@ varIds (Cons (Pair n ty) rest) =
 schemeOfSig typeNames ty st =
   andThen (convertType typeNames Nil st ty) (\p =>
     case p of
-      Pair (Pair ty2 vars) st2 => Ok (Pair (Scheme (varIds vars) ty2) st2))
+      Pair (Pair ty2 vars) st2 => Ok (Pair (mkScheme (varIds vars) ty2) st2))
 
 seedVars Nil st = Pair Nil st
 seedVars (Cons name rest) st =
@@ -281,7 +298,7 @@ schemeOfCtor typeNames params st (Ctor name ty arity _) =
       andThen (convertType typeNames vars st1 ty) (\p =>
         case p of
           Pair (Pair ty2 vars2) st2 =>
-            Ok (Pair (Pair name (Scheme (varIds vars2) ty2)) st2))
+            Ok (Pair (Pair name (mkScheme (varIds vars2) ty2)) st2))
 
 -- ---------------------------------------------------------------
 -- 收集声明：数据类型名、签名、构造器 scheme
@@ -338,44 +355,44 @@ listOf ty = TCon "List" (Cons ty Nil)
 fun2 a b c = TFun a (TFun b c)
 
 builtinSchemes =
-  [ Pair "True" (Scheme Nil boolTy)
-  , Pair "False" (Scheme Nil boolTy)
-  , Pair "Nil" (Scheme (Cons 0 Nil) (TCon "List" (Cons (TVar 0) Nil)))
-  , Pair "Cons" (Scheme (Cons 0 Nil) (fun2 (TVar 0) (TCon "List" (Cons (TVar 0) Nil)) (TCon "List" (Cons (TVar 0) Nil))))
-  , Pair "+" (Scheme Nil (fun2 intTy intTy intTy))
-  , Pair "-" (Scheme Nil (fun2 intTy intTy intTy))
-  , Pair "*" (Scheme Nil (fun2 intTy intTy intTy))
-  , Pair "/" (Scheme Nil (fun2 intTy intTy intTy))
-  , Pair "bi_eq_int" (Scheme Nil (fun2 intTy intTy boolTy))
-  , Pair "bi_neq_int" (Scheme Nil (fun2 intTy intTy boolTy))
-  , Pair "bi_lt_int" (Scheme Nil (fun2 intTy intTy boolTy))
-  , Pair "bi_le_int" (Scheme Nil (fun2 intTy intTy boolTy))
-  , Pair "bi_gt_int" (Scheme Nil (fun2 intTy intTy boolTy))
-  , Pair "bi_ge_int" (Scheme Nil (fun2 intTy intTy boolTy))
-  , Pair "bi_eq_str" (Scheme Nil (fun2 strTy strTy boolTy))
-  , Pair "bi_neq_str" (Scheme Nil (fun2 strTy strTy boolTy))
-  , Pair "bi_eq_bool" (Scheme Nil (fun2 boolTy boolTy boolTy))
-  , Pair "bi_neq_bool" (Scheme Nil (fun2 boolTy boolTy boolTy))
-  , Pair "bi_show_string" (Scheme Nil (TFun strTy strTy))
-  , Pair "bi_eq_generic" (Scheme (Cons 0 Nil) (fun2 (TVar 0) (TVar 0) boolTy))
-  , Pair "bi_neq_generic" (Scheme (Cons 0 Nil) (fun2 (TVar 0) (TVar 0) boolTy))
-  , Pair "bi_lt_generic" (Scheme (Cons 0 Nil) (fun2 (TVar 0) (TVar 0) boolTy))
-  , Pair "bi_le_generic" (Scheme (Cons 0 Nil) (fun2 (TVar 0) (TVar 0) boolTy))
-  , Pair "bi_gt_generic" (Scheme (Cons 0 Nil) (fun2 (TVar 0) (TVar 0) boolTy))
-  , Pair "bi_ge_generic" (Scheme (Cons 0 Nil) (fun2 (TVar 0) (TVar 0) boolTy))
-  , Pair "&&" (Scheme Nil (fun2 boolTy boolTy boolTy))
-  , Pair "||" (Scheme Nil (fun2 boolTy boolTy boolTy))
-  , Pair "++" (Scheme Nil (fun2 strTy strTy strTy))
-  , Pair "strLength" (Scheme Nil (TFun strTy intTy))
-  , Pair "strUnpack" (Scheme Nil (TFun strTy (listOf intTy)))
-  , Pair "strPack" (Scheme Nil (TFun (listOf intTy) strTy))
-  , Pair "strFromInt" (Scheme Nil (TFun intTy strTy))
-  , Pair "readFile" (Scheme Nil (TFun strTy strTy))
-  , Pair "writeFile" (Scheme Nil (fun2 strTy strTy intTy))
-  , Pair "print" (Scheme Nil (TFun strTy intTy))
-  , Pair "getArgs" (Scheme Nil (listOf strTy))
-  , Pair "fileExists" (Scheme Nil (TFun strTy boolTy))
-  , Pair "exit" (Scheme Nil (TFun intTy intTy))
+  [ Pair "True" (mkScheme Nil boolTy)
+  , Pair "False" (mkScheme Nil boolTy)
+  , Pair "Nil" (mkScheme (Cons 0 Nil) (TCon "List" (Cons (TVar 0) Nil)))
+  , Pair "Cons" (mkScheme (Cons 0 Nil) (fun2 (TVar 0) (TCon "List" (Cons (TVar 0) Nil)) (TCon "List" (Cons (TVar 0) Nil))))
+  , Pair "+" (mkScheme Nil (fun2 intTy intTy intTy))
+  , Pair "-" (mkScheme Nil (fun2 intTy intTy intTy))
+  , Pair "*" (mkScheme Nil (fun2 intTy intTy intTy))
+  , Pair "/" (mkScheme Nil (fun2 intTy intTy intTy))
+  , Pair "bi_eq_int" (mkScheme Nil (fun2 intTy intTy boolTy))
+  , Pair "bi_neq_int" (mkScheme Nil (fun2 intTy intTy boolTy))
+  , Pair "bi_lt_int" (mkScheme Nil (fun2 intTy intTy boolTy))
+  , Pair "bi_le_int" (mkScheme Nil (fun2 intTy intTy boolTy))
+  , Pair "bi_gt_int" (mkScheme Nil (fun2 intTy intTy boolTy))
+  , Pair "bi_ge_int" (mkScheme Nil (fun2 intTy intTy boolTy))
+  , Pair "bi_eq_str" (mkScheme Nil (fun2 strTy strTy boolTy))
+  , Pair "bi_neq_str" (mkScheme Nil (fun2 strTy strTy boolTy))
+  , Pair "bi_eq_bool" (mkScheme Nil (fun2 boolTy boolTy boolTy))
+  , Pair "bi_neq_bool" (mkScheme Nil (fun2 boolTy boolTy boolTy))
+  , Pair "bi_show_string" (mkScheme Nil (TFun strTy strTy))
+  , Pair "bi_eq_generic" (mkScheme (Cons 0 Nil) (fun2 (TVar 0) (TVar 0) boolTy))
+  , Pair "bi_neq_generic" (mkScheme (Cons 0 Nil) (fun2 (TVar 0) (TVar 0) boolTy))
+  , Pair "bi_lt_generic" (mkScheme (Cons 0 Nil) (fun2 (TVar 0) (TVar 0) boolTy))
+  , Pair "bi_le_generic" (mkScheme (Cons 0 Nil) (fun2 (TVar 0) (TVar 0) boolTy))
+  , Pair "bi_gt_generic" (mkScheme (Cons 0 Nil) (fun2 (TVar 0) (TVar 0) boolTy))
+  , Pair "bi_ge_generic" (mkScheme (Cons 0 Nil) (fun2 (TVar 0) (TVar 0) boolTy))
+  , Pair "&&" (mkScheme Nil (fun2 boolTy boolTy boolTy))
+  , Pair "||" (mkScheme Nil (fun2 boolTy boolTy boolTy))
+  , Pair "++" (mkScheme Nil (fun2 strTy strTy strTy))
+  , Pair "strLength" (mkScheme Nil (TFun strTy intTy))
+  , Pair "strUnpack" (mkScheme Nil (TFun strTy (listOf intTy)))
+  , Pair "strPack" (mkScheme Nil (TFun (listOf intTy) strTy))
+  , Pair "strFromInt" (mkScheme Nil (TFun intTy strTy))
+  , Pair "readFile" (mkScheme Nil (TFun strTy strTy))
+  , Pair "writeFile" (mkScheme Nil (fun2 strTy strTy intTy))
+  , Pair "print" (mkScheme Nil (TFun strTy intTy))
+  , Pair "getArgs" (mkScheme Nil (listOf strTy))
+  , Pair "fileExists" (mkScheme Nil (TFun strTy boolTy))
+  , Pair "exit" (mkScheme Nil (TFun intTy intTy))
   ]
 
 elabAppExpr fn fnElab args argTys argEls sp = XEApp fnElab argEls sp
@@ -493,36 +510,184 @@ concreteMethodName tctx ty tr key =
         "Ord" => ordFallback tctx ty key
         _ => Err (noInstanceMsg tctx tr ty)
 
-validateTraitUsesList : List (Pair Int Ty) -> TraitCtx -> List EExpr -> Result Int
-validateTraitUsesList subst tctx Nil = Ok 0
+-- M10.5c：泛型（裸类型变量）trait 约束 → 方法函数参数（字典扁平化穿参）。
+data DictParam : Type where
+  DictParam : String -> Int -> String -> String -> DictParam
 
-validateTraitUsesList subst tctx (Cons e rest) =
-  andThen (validateTraitUses subst tctx e) (\_ => validateTraitUsesList subst tctx rest)
+dictParamTrait (DictParam tr vid key name) = tr
 
-validateTraitUses : List (Pair Int Ty) -> TraitCtx -> EExpr -> Result Int
-validateTraitUses subst tctx expr =
+dictParamVar (DictParam tr vid key name) = vid
+
+dictParamKey (DictParam tr vid key name) = key
+
+dictParamName (DictParam tr vid key name) = name
+
+traitMethodKeys tctx tr =
+  case lookupTraitDecl tr (traitCtxDecls tctx) of
+    Nothing => Nil
+    Just td => map methodInfoName (traitDeclMethods td)
+
+isDictTrait tr = tr /= "Eq" && tr /= "Ord"
+
+needsHave need needs = memName need needs
+
+addNeed : String -> Ty -> List (Pair String Ty) -> List (Pair String Ty)
+addNeed tr ty needs =
+  let key = tr ++ "|" ++ showTy ty
+  in if hasNeed key needs then needs else append needs (Cons (Pair tr ty) Nil)
+
+hasNeed : String -> List (Pair String Ty) -> Bool
+hasNeed key Nil = False
+
+hasNeed key (Cons (Pair tr ty) rest) =
+  if tr ++ "|" ++ showTy ty == key then True else hasNeed key rest
+
+collectNeedsFromExpr : List (Pair Int Ty) -> TraitCtx -> List (Pair String Ty) -> EExpr -> List (Pair String Ty)
+collectNeedsFromExpr subst tctx needs expr =
+  case expr of
+    XEMethod tr key paramTy sp =>
+      if isDictTrait tr then
+        case resolveTy subst paramTy of
+          TVar v => addNeed tr (TVar v) needs
+          other => needs
+      else needs
+    XEFun name cons sp => foldNeeds subst tctx needs cons
+    XEVar n sp => needs
+    XEInt n sp => needs
+    XEStr s sp => needs
+    XELam ps b sp => collectNeedsFromExpr subst tctx needs b
+    XEApp f args sp => collectNeedsFromExprList subst tctx (collectNeedsFromExpr subst tctx needs f) args
+    XELet binds body rec_ sp =>
+      collectNeedsFromExpr subst tctx (collectNeedsFromBinds subst tctx needs binds) body
+    XECase scrut ty alts sp =>
+      collectNeedsFromExprList subst tctx (collectNeedsFromExpr subst tctx needs scrut) (map secondOf alts)
+    XEIf c t e sp =>
+      collectNeedsFromExpr subst tctx
+        (collectNeedsFromExpr subst tctx (collectNeedsFromExpr subst tctx needs c) t) e
+    XEField base fname baseTy sp => collectNeedsFromExpr subst tctx needs base
+    XERecUpdate base baseTy fields sp =>
+      collectNeedsFromExpr subst tctx needs base
+    XEMethodInst tr key instName paramTy sp => needs
+
+collectNeedsFromExprList : List (Pair Int Ty) -> TraitCtx -> List (Pair String Ty) -> List EExpr -> List (Pair String Ty)
+collectNeedsFromExprList subst tctx needs Nil = needs
+
+collectNeedsFromExprList subst tctx needs (Cons e rest) =
+  collectNeedsFromExprList subst tctx (collectNeedsFromExpr subst tctx needs e) rest
+
+collectNeedsFromBinds : List (Pair Int Ty) -> TraitCtx -> List (Pair String Ty) -> List (Pair Pat EExpr) -> List (Pair String Ty)
+collectNeedsFromBinds subst tctx needs Nil = needs
+
+collectNeedsFromBinds subst tctx needs (Cons (Pair pat value) rest) =
+  collectNeedsFromBinds subst tctx (collectNeedsFromExpr subst tctx needs value) rest
+
+foldNeeds : List (Pair Int Ty) -> TraitCtx -> List (Pair String Ty) -> List (Pair String Ty) -> List (Pair String Ty)
+foldNeeds subst tctx needs Nil = needs
+
+foldNeeds subst tctx needs (Cons (Pair tr ty) rest) =
+  if isDictTrait tr then
+    case resolveTy subst ty of
+      TVar v => foldNeeds subst tctx (addNeed tr (TVar v) needs) rest
+      other => foldNeeds subst tctx needs rest
+  else foldNeeds subst tctx needs rest
+
+collectNeedsClauses : List (Pair Int Ty) -> TraitCtx -> List (Pair (List Pat) EExpr) -> List (Pair String Ty)
+collectNeedsClauses subst tctx clauses =
+  foldClauseNeeds subst tctx Nil clauses
+
+foldClauseNeeds : List (Pair Int Ty) -> TraitCtx -> List (Pair String Ty) -> List (Pair (List Pat) EExpr) -> List (Pair String Ty)
+foldClauseNeeds subst tctx needs Nil = needs
+
+foldClauseNeeds subst tctx needs (Cons (Pair pats body) rest) =
+  foldClauseNeeds subst tctx (collectNeedsFromExpr subst tctx needs body) rest
+
+-- need 列表（"tr|tN" 字符串）→ DictParam 列表（顺序确定）。
+dictParamsFor : TraitCtx -> List (Pair String Ty) -> List DictParam
+dictParamsFor tctx needs =
+  dictParamsForGo tctx needs Nil 0
+
+dictParamsForGo tctx Nil acc idx = reverse acc
+
+dictParamsForGo tctx (Cons (Pair tr ty) rest) acc idx =
+  case ty of
+    TVar v => dictParamsForMethods tctx tr v (traitMethodKeys tctx tr) acc idx rest
+    other => dictParamsForGo tctx rest acc idx
+
+dictParamsForMethods tctx tr v Nil acc idx rest = dictParamsForGo tctx rest acc idx
+
+dictParamsForMethods tctx tr v (Cons key keys) acc idx rest =
+  let pname = "vuna_dict" ++ strFromInt idx
+  in dictParamsForMethods tctx tr v keys (Cons (DictParam tr v key pname) acc) (idx + 1) rest
+
+dictParamNames params = map dictParamName params
+
+findDictParam params tr v key =
+  case params of
+    Nil => Nothing
+    Cons p rest =>
+      if dictParamTrait p == tr && dictParamVar p == v && dictParamKey p == key then Just (dictParamName p)
+      else findDictParam rest tr v key
+
+dictMethodExpr : TraitCtx -> List (Pair Int Ty) -> List DictParam -> String -> String -> Ty -> Result Expr
+dictMethodExpr tctx subst params tr key paramTy =
+  let ty = resolveTy subst paramTy
+  in case ty of
+       TVar v =>
+         case findDictParam params tr v (lastSeg key) of
+           Just p => Ok (EVar p tcNoSpan)
+           Nothing => traitMethodExpr tctx ty tr key
+       other => traitMethodExpr tctx ty tr key
+
+dictArgsFor : TraitCtx -> List (Pair Int Ty) -> List DictParam -> List (Pair String Ty) -> List Expr
+dictArgsFor tctx subst params cons =
+  foldDictArgs tctx subst params Nil cons
+
+foldDictArgs tctx subst params acc Nil = reverse acc
+
+foldDictArgs tctx subst params acc (Cons (Pair tr ty) rest) =
+  foldDictArgs tctx subst params (append acc (dictMethodArgs tctx subst params tr ty)) rest
+
+dictMethodArgs tctx subst params tr ty =
+  case traitMethodKeys tctx tr of
+    Nil => Nil
+    keys => map (\key => dictMethodArg tctx subst params tr (lastSeg key) ty) keys
+
+dictMethodArg tctx subst params tr key ty =
+  case dictMethodExpr tctx subst params tr key ty of
+    Ok e => e
+    Err _ => EVar "vuna_missing_dict" tcNoSpan
+
+validateTraitUsesList : List (Pair Int Ty) -> TraitCtx -> List DictParam -> List EExpr -> Result Int
+validateTraitUsesList subst tctx params Nil = Ok 0
+
+validateTraitUsesList subst tctx params (Cons e rest) =
+  andThen (validateTraitUses subst tctx params e) (\_ => validateTraitUsesList subst tctx params rest)
+
+validateTraitUses : List (Pair Int Ty) -> TraitCtx -> List DictParam -> EExpr -> Result Int
+validateTraitUses subst tctx params expr =
   case expr of
     XEVar n sp => Ok 0
     XEInt n sp => Ok 0
     XEStr s sp => Ok 0
-    XELam ps b sp => validateTraitUses subst tctx b
+    XELam ps b sp => validateTraitUses subst tctx params b
     XEApp f args sp =>
-      andThen (validateTraitUses subst tctx f) (\_ => validateTraitUsesList subst tctx args)
+      andThen (validateTraitUses subst tctx params f) (\_ => validateTraitUsesList subst tctx params args)
     XELet binds body rec_ sp =>
-      andThen (validateTraitUsesBinds subst tctx binds) (\_ => validateTraitUses subst tctx body)
+      andThen (validateTraitUsesBinds subst tctx params binds) (\_ => validateTraitUses subst tctx params body)
     XECase scrut ty alts sp =>
-      andThen (validateTraitUses subst tctx scrut) (\_ => validateTraitUsesAlts subst tctx alts)
+      andThen (validateTraitUses subst tctx params scrut) (\_ => validateTraitUsesAlts subst tctx params alts)
     XEIf c t e sp =>
-      andThen (validateTraitUses subst tctx c) (\_ =>
-        andThen (validateTraitUses subst tctx t) (\_ => validateTraitUses subst tctx e))
-    XEField base fname baseTy sp => validateTraitUses subst tctx base
+      andThen (validateTraitUses subst tctx params c) (\_ =>
+        andThen (validateTraitUses subst tctx params t) (\_ => validateTraitUses subst tctx params e))
+    XEField base fname baseTy sp => validateTraitUses subst tctx params base
     XERecUpdate base baseTy fields sp =>
-      andThen (validateTraitUses subst tctx base) (\_ => validateTraitUsesFields subst tctx fields)
+      andThen (validateTraitUses subst tctx params base) (\_ => validateTraitUsesFields subst tctx params fields)
+    XEFun name cons sp =>
+      andThen (validateFunDicts subst tctx params cons) (\_ => Ok 0)
     XEMethod tr key paramTy sp =>
-      let ty = resolveTy subst paramTy
-      in case traitMethodExpr tctx ty tr key of
-           Err e => Err (showSpanLoc sp ++ ": " ++ e)
-           Ok ex => Ok 0
+      case dictMethodExpr tctx subst params tr key paramTy of
+        Err e => Err (showSpanLoc sp ++ ": " ++ e)
+        Ok ex => Ok 0
     XEMethodInst tr key instName paramTy sp =>
       let ty = resolveTy subst paramTy
       in case lookupNamedInst instName (traitCtxInsts tctx) of
@@ -533,29 +698,44 @@ validateTraitUses subst tctx expr =
                else Err (showSpanLoc sp ++ ": instance " ++ instName ++ " expects " ++ showTy (instHeadTy inst) ++ " but method is used at " ++ showTy ty)
              else Err (showSpanLoc sp ++ ": instance " ++ instName ++ " is not an instance of " ++ tr)
 
-validateTraitUsesClauses : List (Pair Int Ty) -> TraitCtx -> List (Pair (List Pat) EExpr) -> Result Int
-validateTraitUsesClauses subst tctx Nil = Ok 0
+validateFunDicts subst tctx params Nil = Ok 0
 
-validateTraitUsesClauses subst tctx (Cons (Pair pats body) rest) =
-  andThen (validateTraitUses subst tctx body) (\_ => validateTraitUsesClauses subst tctx rest)
+validateFunDicts subst tctx params (Cons (Pair tr ty) rest) =
+  case traitMethodKeys tctx tr of
+    Nil => validateFunDicts subst tctx params rest
+    keys =>
+      andThen (validateFunDictKeys subst tctx params tr keys ty) (\_ => validateFunDicts subst tctx params rest)
 
-validateTraitUsesBinds : List (Pair Int Ty) -> TraitCtx -> List (Pair Pat EExpr) -> Result Int
-validateTraitUsesBinds subst tctx Nil = Ok 0
+validateFunDictKeys subst tctx params tr Nil ty = Ok 0
 
-validateTraitUsesBinds subst tctx (Cons (Pair pat value) rest) =
-  andThen (validateTraitUses subst tctx value) (\_ => validateTraitUsesBinds subst tctx rest)
+validateFunDictKeys subst tctx params tr (Cons key keys) ty =
+  case dictMethodExpr tctx subst params tr key ty of
+    Err e => Err e
+    Ok ex => validateFunDictKeys subst tctx params tr keys ty
 
-validateTraitUsesAlts : List (Pair Int Ty) -> TraitCtx -> List (Pair Pat EExpr) -> Result Int
-validateTraitUsesAlts subst tctx Nil = Ok 0
+validateTraitUsesClauses : List (Pair Int Ty) -> TraitCtx -> List DictParam -> List (Pair (List Pat) EExpr) -> Result Int
+validateTraitUsesClauses subst tctx params Nil = Ok 0
 
-validateTraitUsesAlts subst tctx (Cons (Pair pat body) rest) =
-  andThen (validateTraitUses subst tctx body) (\_ => validateTraitUsesAlts subst tctx rest)
+validateTraitUsesClauses subst tctx params (Cons (Pair pats body) rest) =
+  andThen (validateTraitUses subst tctx params body) (\_ => validateTraitUsesClauses subst tctx params rest)
 
-validateTraitUsesFields : List (Pair Int Ty) -> TraitCtx -> List (Pair String EExpr) -> Result Int
-validateTraitUsesFields subst tctx Nil = Ok 0
+validateTraitUsesBinds : List (Pair Int Ty) -> TraitCtx -> List DictParam -> List (Pair Pat EExpr) -> Result Int
+validateTraitUsesBinds subst tctx params Nil = Ok 0
 
-validateTraitUsesFields subst tctx (Cons (Pair fname value) rest) =
-  andThen (validateTraitUses subst tctx value) (\_ => validateTraitUsesFields subst tctx rest)
+validateTraitUsesBinds subst tctx params (Cons (Pair pat value) rest) =
+  andThen (validateTraitUses subst tctx params value) (\_ => validateTraitUsesBinds subst tctx params rest)
+
+validateTraitUsesAlts : List (Pair Int Ty) -> TraitCtx -> List DictParam -> List (Pair Pat EExpr) -> Result Int
+validateTraitUsesAlts subst tctx params Nil = Ok 0
+
+validateTraitUsesAlts subst tctx params (Cons (Pair pat body) rest) =
+  andThen (validateTraitUses subst tctx params body) (\_ => validateTraitUsesAlts subst tctx params rest)
+
+validateTraitUsesFields : List (Pair Int Ty) -> TraitCtx -> List DictParam -> List (Pair String EExpr) -> Result Int
+validateTraitUsesFields subst tctx params Nil = Ok 0
+
+validateTraitUsesFields subst tctx params (Cons (Pair fname value) rest) =
+  andThen (validateTraitUses subst tctx params value) (\_ => validateTraitUsesFields subst tctx params rest)
 
 -- 记录字段降级用的临时模式变量（只在生成的一小段 case 内可见）。
 recFieldVarsAt i n = if i >= n then Nil else Cons ("vuna_rf" ++ strFromInt i) (recFieldVarsAt (i + 1) n)
@@ -572,75 +752,77 @@ recFieldCount Nil = 0
 
 recFieldCount (Cons (Pair n t) rest) = 1 + recFieldCount rest
 
--- `e.f` → `case e of R v0 .. vn => vk`；base 只求值一次。
-lowerFieldAccess subst typeNames records tctx base fname baseTy sp =
+lowerFieldAccess subst typeNames records tctx params base fname baseTy sp =
   case resolveTy subst baseTy of
     TCon rname args =>
       case lookupRecord rname records of
         Nothing => EInt 0 sp
-        Just (RecordInfo rname2 params fdefs derivings) =>
+        Just (RecordInfo rname2 rparams fdefs derivings) =>
           case fieldIndex fname fdefs of
             Nothing => EInt 0 sp
             Just k =>
               let n = recFieldCount fdefs
               in let names = recFieldVars n
                  in let pats = map (\nm => PVar nm sp) names
-                    in ECase (lowerExpr subst typeNames records tctx base)
+                    in ECase (lowerExpr subst typeNames records tctx params base)
                          (Cons (Pair (PCon rname pats sp) (EVar (nthName k names) sp)) Nil) sp
     _ => EInt 0 sp
 
-recUpdateArgs subst typeNames records tctx fields provided vars i sp =
+recUpdateArgs subst typeNames records tctx params fields provided vars i sp =
   case fields of
     Nil => Nil
     Cons (Pair fname fty) rest =>
       case lookupProvided fname provided of
         Just e =>
-          Cons (lowerExpr subst typeNames records tctx e)
-               (recUpdateArgs subst typeNames records tctx rest provided vars (i + 1) sp)
+          Cons (lowerExpr subst typeNames records tctx params e)
+               (recUpdateArgs subst typeNames records tctx params rest provided vars (i + 1) sp)
         Nothing =>
           Cons (EVar (nthName i vars) sp)
-               (recUpdateArgs subst typeNames records tctx rest provided vars (i + 1) sp)
+               (recUpdateArgs subst typeNames records tctx params rest provided vars (i + 1) sp)
 
--- `{e | f = v}` → `case e of R v0 .. vn => R (v / vi) ...`
-lowerRecUpdate subst typeNames records tctx base baseTy fields sp =
+lowerRecUpdate subst typeNames records tctx params base baseTy fields sp =
   case resolveTy subst baseTy of
     TCon rname args =>
       case lookupRecord rname records of
         Nothing => EInt 0 sp
-        Just (RecordInfo rname2 params fdefs derivings) =>
+        Just (RecordInfo rname2 rparams fdefs derivings) =>
           let n = recFieldCount fdefs
           in let names = recFieldVars n
              in let pats = map (\nm => PVar nm sp) names
-                in let args2 = recUpdateArgs subst typeNames records tctx fdefs fields names 0 sp
-                   in ECase (lowerExpr subst typeNames records tctx base)
+                in let args2 = recUpdateArgs subst typeNames records tctx params fdefs fields names 0 sp
+                   in ECase (lowerExpr subst typeNames records tctx params base)
                         (Cons (Pair (PCon rname pats sp) (EApp (EVar rname sp) args2 sp)) Nil) sp
     _ => EInt 0 sp
 
-lowerExpr subst typeNames records tctx expr =
+lowerExpr subst typeNames records tctx params expr =
   case expr of
     XEVar name sp => EVar name sp
     XEInt n sp => EInt n sp
     XEStr s sp => EStr s sp
-    XELam params body sp => ELam params (lowerExpr subst typeNames records tctx body) sp
+    XELam ps b sp => ELam ps (lowerExpr subst typeNames records tctx params b) sp
     XEApp fn args sp =>
-      EApp (lowerExpr subst typeNames records tctx fn)
-           (map (lowerExpr subst typeNames records tctx) args) sp
+      EApp (lowerExpr subst typeNames records tctx params fn)
+           (map (lowerExpr subst typeNames records tctx params) args) sp
     XELet binds body rec_ sp =>
-      ELet (map (lowerBind subst typeNames records tctx) binds)
-           (lowerExpr subst typeNames records tctx body) rec_ sp
+      ELet (map (lowerBind subst typeNames records tctx params) binds)
+           (lowerExpr subst typeNames records tctx params body) rec_ sp
     XECase scrut ty alts sp =>
-      ECase (lowerExpr subst typeNames records tctx scrut)
-            (map (lowerAlt subst typeNames records tctx) alts) sp
+      ECase (lowerExpr subst typeNames records tctx params scrut)
+            (map (lowerAlt subst typeNames records tctx params) alts) sp
     XEIf c t e sp =>
-      EIf (lowerExpr subst typeNames records tctx c)
-          (lowerExpr subst typeNames records tctx t)
-          (lowerExpr subst typeNames records tctx e) sp
+      EIf (lowerExpr subst typeNames records tctx params c)
+          (lowerExpr subst typeNames records tctx params t)
+          (lowerExpr subst typeNames records tctx params e) sp
     XEField base fname baseTy sp =>
-      lowerFieldAccess subst typeNames records tctx base fname baseTy sp
+      lowerFieldAccess subst typeNames records tctx params base fname baseTy sp
     XERecUpdate base baseTy fields sp =>
-      lowerRecUpdate subst typeNames records tctx base baseTy fields sp
+      lowerRecUpdate subst typeNames records tctx params base baseTy fields sp
+    XEFun name cons sp =>
+      case dictArgsFor tctx subst params cons of
+        Nil => EVar name sp
+        args => EApp (EVar name sp) args sp
     XEMethod tr key paramTy sp =>
-      case traitMethodExpr tctx (resolveTy subst paramTy) tr key of
+      case dictMethodExpr tctx subst params tr key paramTy of
         Ok ex => ex
         Err _ => EVar "vuna_missing_instance" sp
     XEMethodInst tr key instName paramTy sp =>
@@ -651,20 +833,31 @@ lowerExpr subst typeNames records tctx expr =
             Nothing => EVar "vuna_missing_instance" sp
         Nothing => EVar "vuna_missing_instance" sp
 
-lowerBind subst typeNames records tctx (Pair pat value) =
-  Pair pat (lowerExpr subst typeNames records tctx value)
+lowerBind subst typeNames records tctx params (Pair pat value) =
+  Pair pat (lowerExpr subst typeNames records tctx params value)
 
-lowerAlt subst typeNames records tctx (Pair pat body) =
-  Pair pat (lowerExpr subst typeNames records tctx body)
+lowerAlt subst typeNames records tctx params (Pair pat body) =
+  Pair pat (lowerExpr subst typeNames records tctx params body)
 
-lowerClause subst typeNames records tctx (Pair pats body) =
-  Pair pats (lowerExpr subst typeNames records tctx body)
+lowerClause subst typeNames records tctx params (Pair pats body) =
+  Pair pats (lowerExpr subst typeNames records tctx params body)
 
-lowerClauses subst typeNames records tctx Nil = Nil
+lowerClauses subst typeNames records tctx params Nil = Nil
 
-lowerClauses subst typeNames records tctx (Cons clause rest) =
-  Cons (lowerClause subst typeNames records tctx clause)
-       (lowerClauses subst typeNames records tctx rest)
+lowerClauses subst typeNames records tctx params (Cons clause rest) =
+  Cons (lowerClause subst typeNames records tctx params clause)
+       (lowerClauses subst typeNames records tctx params rest)
+
+-- 给每条子句前置字典参数。
+prependClauseParam pname Nil = Nil
+
+prependClauseParam pname (Cons (Pair pats body) rest) =
+  Cons (Pair (Cons (PVar pname tcNoSpan) pats) body) (prependClauseParam pname rest)
+
+prependClauseParams Nil clauses = clauses
+
+prependClauseParams (Cons pname prest) clauses =
+  prependClauseParams prest (prependClauseParam pname clauses)
 
 -- ---------------------------------------------------------------
 -- 记录（M10.5）：声明抽取、语法降级、延迟约束求解、lower
@@ -1042,7 +1235,7 @@ inferAlts globals locals scrutTy (Cons (Pair pat body) rest) st =
                         andThen (unify bodyTy restTy st3) (\st4 =>
                           Ok (Pair (Cons (Pair pat bodyElab) altsElab) (Pair bodyTy st4))))))
 
-instantiateForParam st (Scheme qs ty) pid =
+instantiateForParam st (Scheme qs cons ty) pid =
   case instantiateVars qs st of
     Pair mapping st2 =>
       let ty2 = renameTy mapping ty
@@ -1059,8 +1252,10 @@ inferExpr globals locals st expr =
         Nothing =>
           case lookupScheme name globals of
             Just sch =>
-              case instantiate st sch of
-                Pair ty st2 => Ok (Pair (Pair ty (XEVar name sp)) st2)
+              case instantiateFull st sch of
+                Pair (Pair ty cons) st2 =>
+                  if cons == Nil then Ok (Pair (Pair ty (XEVar name sp)) st2)
+                  else Ok (Pair (Pair ty (XEFun name cons sp)) st2)
             Nothing =>
               case methodRefForName name (traitMethodsOf st) of
                 Just (TraitMethodRef key tr sch pid) =>
@@ -1266,7 +1461,7 @@ seedPlaceholders (Cons name rest) sigs st =
     case freshTy st of
       Pair ty st1 =>
         case seedPlaceholders rest sigs st1 of
-          Pair ps st2 => Pair (Cons (Pair name (Scheme Nil ty)) ps) st2
+          Pair ps st2 => Pair (Cons (Pair name (mkScheme Nil ty)) ps) st2
 
 updateScheme name sch env =
   case env of
@@ -1291,7 +1486,16 @@ funLoc name decls =
       let sp = exprSpan body
       in if spanStartLine sp == 0 then "" else showSpanLoc sp ++ ": "
 
-checkFunction globals decls sigs name st =
+filterNeeds genVars Nil = Nil
+
+filterNeeds genVars (Cons (Pair tr ty) rest) =
+  case ty of
+    TVar v =>
+      if memInt v genVars then Cons (Pair tr ty) (filterNeeds genVars rest)
+      else filterNeeds genVars rest
+    other => filterNeeds genVars rest
+
+checkFunctionOnce globals decls sigs name st =
   case lookupScheme name globals of
     Nothing => Err ("missing type signature: " ++ name)
     Just sch =>
@@ -1306,16 +1510,46 @@ checkFunction globals decls sigs name st =
                   andThen
                     (solveRecConstraints (typeNamesOfTC st3) (recordsOf st3) (constraintsOfTC st3) st3)
                     (\st4 =>
-                      andThen
-                        (validateTraitUsesClauses (substOf st4) (traitCtxOf st4) clauseEls)
-                        (\_ =>
-                          let elabClauses = lowerClauses (substOf st4) (typeNamesOfTC st4) (recordsOf st4) (traitCtxOf st4) clauseEls
-                          in if hasSig name sigs then Ok (Pair elabClauses (Pair globals st4))
-                             else
-                               let resolved = resolveTy (substOf st4) inferred
-                               in
-                                 let scheme = Scheme (diffInts (freeVarsTy resolved) (freeVarsEnvExcept name globals)) resolved
-                                 in Ok (Pair elabClauses (Pair (updateScheme name scheme globals) st4))))
+                      let resolved = resolveTy (substOf st4) inferred
+                      in let genVars = diffInts (freeVarsTy resolved) (freeVarsEnvExcept name globals)
+                         in let needs = collectNeedsClauses (substOf st4) (traitCtxOf st4) clauseEls
+                            in Ok (Pair clauseEls (Pair inferred (Pair needs (Pair genVars st4)))))
+
+finishFunction globals decls sigs name inferred needs genVars clauses st =
+  let params = dictParamsFor (traitCtxOf st) needs
+  in finishFunctionCheck globals name inferred needs params clauses st
+
+finishFunctionCheck globals name inferred needs params clauses st =
+  case prependClauseParams (dictParamNames params) clauses of
+    clauses2 =>
+      andThen (validateTraitUsesClauses (substOf st) (traitCtxOf st) params clauses2) (\_ =>
+        finishFunctionLower globals name inferred needs params clauses2 st)
+
+finishFunctionLower globals name inferred needs params clauses2 st =
+  let elab = lowerClauses (substOf st) (typeNamesOfTC st) (recordsOf st) (traitCtxOf st) params clauses2
+  in finishFunctionScheme globals name inferred needs elab st
+
+finishFunctionScheme globals name inferred needs elab st =
+  let resolved = resolveTy (substOf st) inferred
+  in let qs = diffInts (freeVarsTy resolved) (freeVarsEnvExcept name globals)
+     in let scheme = Scheme qs needs resolved
+        in Ok (Pair elab (Pair (updateScheme name scheme globals) st))
+
+checkFunction globals decls sigs name st =
+  case checkFunctionOnce globals decls sigs name st of
+    Err e => Err e
+    Ok (Pair clauses (Pair inferred (Pair needs (Pair genVars st1)))) =>
+      let needs1 = filterNeeds genVars needs
+      in if needs1 == Nil then
+           finishFunction globals decls sigs name inferred Nil genVars clauses st1
+         else
+           let resolved = resolveTy (substOf st1) inferred
+           in let scheme1 = Scheme genVars needs1 resolved
+              in let globals2 = updateScheme name scheme1 globals
+                 in case checkFunctionOnce globals2 decls sigs name st1 of
+                      Err e => Err e
+                      Ok (Pair clauses2 (Pair inferred2 (Pair needs2 (Pair genVars2 st2)))) =>
+                        finishFunction globals2 decls sigs name inferred2 (filterNeeds genVars2 needs2) genVars2 clauses2 st2
 
 checkFunctions globals decls sigs Nil st elabMap = Ok (Pair (reverse elabMap) (Pair globals st))
 checkFunctions globals decls sigs (Cons name rest) st elabMap =
@@ -1513,7 +1747,7 @@ builtinShowTrait =
   TraitDecl "Show" "a"
     (Cons
       (TraitMethodInfo "show"
-        (Scheme (Cons 0 Nil) (TFun (TVar 0) strTy))
+        (mkScheme (Cons 0 Nil) (TFun (TVar 0) strTy))
         (builtinArrow builtinA (EVar "String" tcNoSpan)))
       Nil)
 
@@ -1521,11 +1755,11 @@ builtinEqTrait =
   TraitDecl "Eq" "a"
     (Cons
       (TraitMethodInfo "eq"
-        (Scheme (Cons 0 Nil) (TFun (TVar 0) (TFun (TVar 0) boolTy)))
+        (mkScheme (Cons 0 Nil) (TFun (TVar 0) (TFun (TVar 0) boolTy)))
         (builtinArrow builtinA (builtinArrow builtinA (EVar "Bool" tcNoSpan))))
       (Cons
         (TraitMethodInfo "neq"
-          (Scheme (Cons 0 Nil) (TFun (TVar 0) (TFun (TVar 0) boolTy)))
+          (mkScheme (Cons 0 Nil) (TFun (TVar 0) (TFun (TVar 0) boolTy)))
           (builtinArrow builtinA (builtinArrow builtinA (EVar "Bool" tcNoSpan))))
         Nil))
 
@@ -1533,32 +1767,32 @@ builtinOrdTrait =
   TraitDecl "Ord" "a"
     (Cons
       (TraitMethodInfo "lt"
-        (Scheme (Cons 0 Nil) (TFun (TVar 0) (TFun (TVar 0) boolTy)))
+        (mkScheme (Cons 0 Nil) (TFun (TVar 0) (TFun (TVar 0) boolTy)))
         (builtinArrow builtinA (builtinArrow builtinA (EVar "Bool" tcNoSpan))))
       (Cons
         (TraitMethodInfo "le"
-          (Scheme (Cons 0 Nil) (TFun (TVar 0) (TFun (TVar 0) boolTy)))
+          (mkScheme (Cons 0 Nil) (TFun (TVar 0) (TFun (TVar 0) boolTy)))
           (builtinArrow builtinA (builtinArrow builtinA (EVar "Bool" tcNoSpan))))
         (Cons
           (TraitMethodInfo "gt"
-            (Scheme (Cons 0 Nil) (TFun (TVar 0) (TFun (TVar 0) boolTy)))
+            (mkScheme (Cons 0 Nil) (TFun (TVar 0) (TFun (TVar 0) boolTy)))
             (builtinArrow builtinA (builtinArrow builtinA (EVar "Bool" tcNoSpan))))
           (Cons
             (TraitMethodInfo "ge"
-              (Scheme (Cons 0 Nil) (TFun (TVar 0) (TFun (TVar 0) boolTy)))
+              (mkScheme (Cons 0 Nil) (TFun (TVar 0) (TFun (TVar 0) boolTy)))
               (builtinArrow builtinA (builtinArrow builtinA (EVar "Bool" tcNoSpan))))
             Nil))))
 
 builtinTraitDecls = Cons builtinShowTrait (Cons builtinEqTrait (Cons builtinOrdTrait Nil))
 
 builtinMethodRefs =
-  [ TraitMethodRef "show" "Show" (Scheme (Cons 0 Nil) (TFun (TVar 0) strTy)) 0
-  , TraitMethodRef "eq" "Eq" (Scheme (Cons 0 Nil) (TFun (TVar 0) (TFun (TVar 0) boolTy))) 0
-  , TraitMethodRef "neq" "Eq" (Scheme (Cons 0 Nil) (TFun (TVar 0) (TFun (TVar 0) boolTy))) 0
-  , TraitMethodRef "lt" "Ord" (Scheme (Cons 0 Nil) (TFun (TVar 0) (TFun (TVar 0) boolTy))) 0
-  , TraitMethodRef "le" "Ord" (Scheme (Cons 0 Nil) (TFun (TVar 0) (TFun (TVar 0) boolTy))) 0
-  , TraitMethodRef "gt" "Ord" (Scheme (Cons 0 Nil) (TFun (TVar 0) (TFun (TVar 0) boolTy))) 0
-  , TraitMethodRef "ge" "Ord" (Scheme (Cons 0 Nil) (TFun (TVar 0) (TFun (TVar 0) boolTy))) 0
+  [ TraitMethodRef "show" "Show" (mkScheme (Cons 0 Nil) (TFun (TVar 0) strTy)) 0
+  , TraitMethodRef "eq" "Eq" (mkScheme (Cons 0 Nil) (TFun (TVar 0) (TFun (TVar 0) boolTy))) 0
+  , TraitMethodRef "neq" "Eq" (mkScheme (Cons 0 Nil) (TFun (TVar 0) (TFun (TVar 0) boolTy))) 0
+  , TraitMethodRef "lt" "Ord" (mkScheme (Cons 0 Nil) (TFun (TVar 0) (TFun (TVar 0) boolTy))) 0
+  , TraitMethodRef "le" "Ord" (mkScheme (Cons 0 Nil) (TFun (TVar 0) (TFun (TVar 0) boolTy))) 0
+  , TraitMethodRef "gt" "Ord" (mkScheme (Cons 0 Nil) (TFun (TVar 0) (TFun (TVar 0) boolTy))) 0
+  , TraitMethodRef "ge" "Ord" (mkScheme (Cons 0 Nil) (TFun (TVar 0) (TFun (TVar 0) boolTy))) 0
   ]
 
 operatorMethod name =
@@ -1614,8 +1848,8 @@ traitMethodInfos typeNames tname paramName methods infos refs sp =
             case lookupTyVar paramName vars of
               Just (TVar pid) =>
                 traitMethodInfos typeNames tname paramName rest
-                  (Cons (TraitMethodInfo (lastSeg mname) (Scheme (varIds vars) ty) sigTy) infos)
-                  (Cons (TraitMethodRef mname tname (Scheme (varIds vars) ty) pid) refs) sp
+                  (Cons (TraitMethodInfo (lastSeg mname) (mkScheme (varIds vars) ty) sigTy) infos)
+                  (Cons (TraitMethodRef mname tname (mkScheme (varIds vars) ty) pid) refs) sp
               _ => Err (showSpanLoc sp ++ ": internal trait parameter error")
 
 -- ---------- data shape + 结构 Show/Eq 生成 ----------
@@ -1882,9 +2116,11 @@ instanceNameFor isDefault iname =
     Nothing => Nothing
 
 instKeyOf isDefault iname headTy =
-  case iname of
-    Just n => sanitizeSym n
-    Nothing => "d_" ++ sanitizeSym (renderTyExpr headTy)
+  if isDefault then "d_" ++ sanitizeSym (renderTyExpr headTy)
+  else
+    case iname of
+      Just n => sanitizeSym n
+      Nothing => "d_" ++ sanitizeSym (renderTyExpr headTy)
 
 implNameOf instKey methodShort = "vuna_inst_" ++ sanitizeSym instKey ++ "_" ++ sanitizeSym methodShort
 
@@ -2070,6 +2306,11 @@ prepareTraits typeNames decls =
                                   (TraitCtx traitDecls (append userInsts derivedInsts) supported eqSupported methodRefs)
                                   (append (stripTraitDecls decls) (append instanceDecls structDecls)))
 
+totalConstraints Nil = 0
+
+totalConstraints (Cons (Pair name (Scheme qs cons ty)) rest) =
+  length cons + totalConstraints rest
+
 checkProgramInfoElab decls0 =
   case extractRecords decls0 of
     Pair records decls1 =>
@@ -2080,18 +2321,33 @@ checkProgramInfoElab decls0 =
              case desugarRecords records declsT of
                Err e => Err e
                Ok decls2 =>
-                 case collectSigs typeNames decls2 (TC 0 Nil typeNames records Nil (traitCtxRefs tctx) tctx) of
-                   Err e => Err e
-                   Ok (Pair sigs st1) =>
-                     case collectCtors typeNames decls2 st1 of
-                       Err e => Err e
-                       Ok (Pair ctors st2) =>
-                         case seedPlaceholders (functionNames decls2) sigs st2 of
-                           Pair placeholders st3 =>
-                             case checkFunctions (append builtinSchemes (append ctors (append sigs placeholders))) decls2 sigs (functionNames decls2) st3 Nil of
-                               Err e => Err e
-                               Ok (Pair elabMap (Pair globals st4)) =>
-                                 Ok (Pair (finalizeGlobals (substOf st4) globals) (rebuildDecls decls2 elabMap))
+                 let freshTC = TC 0 Nil typeNames records Nil (traitCtxRefs tctx) tctx
+                 in case collectSigs typeNames decls2 freshTC of
+                      Err e => Err e
+                      Ok (Pair sigs st1) =>
+                        case collectCtors typeNames decls2 st1 of
+                          Err e => Err e
+                          Ok (Pair ctors st2) =>
+                            case seedPlaceholders (functionNames decls2) sigs st2 of
+                              Pair placeholders st3 =>
+                                let names = functionNames decls2
+                                in let env0 = append builtinSchemes (append ctors (append sigs placeholders))
+                                in case checkFunctions env0 decls2 sigs names st3 Nil of
+                                     Err e => Err e
+                                     Ok (Pair elab1 (Pair g1 stA)) =>
+                                       if totalConstraints g1 == 0 then
+                                         Ok (Pair (finalizeGlobals (substOf stA) g1) (rebuildDecls decls2 elab1))
+                                       else
+                                         case checkFunctions g1 decls2 sigs names freshTC Nil of
+                                           Err e => Err e
+                                           Ok (Pair elab2 (Pair g2 stB)) =>
+                                             if totalConstraints g2 <= totalConstraints g1 then
+                                               Ok (Pair (finalizeGlobals (substOf stB) g2) (rebuildDecls decls2 elab2))
+                                             else
+                                               case checkFunctions g2 decls2 sigs names freshTC Nil of
+                                                 Err e => Err e
+                                                 Ok (Pair elab3 (Pair g3 stC)) =>
+                                                   Ok (Pair (finalizeGlobals (substOf stC) g3) (rebuildDecls decls2 elab3))
 
 checkProgramInfo decls =
   andThen (checkProgramInfoElab decls) (\p => Ok (firstOf p))
@@ -2282,7 +2538,7 @@ zipLocals Nil Nil = Nil
 zipLocals (Cons n ns) (Cons t ts) = Cons (Pair n t) (zipLocals ns ts)
 zipLocals _ _ = Nil
 
-schemeTy (Scheme qs ty) = ty
+schemeTy (Scheme qs cons ty) = ty
 
 flattenFun ty =
   case ty of
@@ -2299,7 +2555,8 @@ sameBuiltinTy a b =
   let sa = shortTyName a
   in (sa == "Bool" || sa == "List") && sa == shortTyName b
 
-finalizeScheme subst (Scheme qs ty) = Scheme qs (resolveTy subst ty)
+finalizeScheme subst (Scheme qs cons ty) =
+  Scheme qs (map (\c => Pair (firstOf c) (resolveTy subst (secondOf c))) cons) (resolveTy subst ty)
 
 finalizeGlobals subst globals =
   case globals of

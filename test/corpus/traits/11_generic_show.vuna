@@ -2,7 +2,7 @@ data Dummy : Type where
   D : Dummy
 deriving (Eq)
 
-f x = show x
+showIt x = show x
 
 main : String
-main = "x"
+main = showIt 42 ++ "/" ++ showIt "s"

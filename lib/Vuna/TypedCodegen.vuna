@@ -1030,7 +1030,7 @@ typedMainSuffix decls showMain printResult =
 generateProgramTyped decls globals printResult =
   case lookupScheme "main" globals of
     Nothing => Err "typed codegen: no main definition"
-    Just (Scheme qs ty) =>
+    Just (Scheme qs cons ty) =>
       case ty of
         TFun a b => Err "typed codegen: main must be zero-arity"
         _ =>

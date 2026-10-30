@@ -259,16 +259,23 @@ git add bootstrap/ && git commit
   `Int` / `String` / `Bool` 与非参数化 data/record；`Ord` 的运行时内建回退只覆盖
   `Int` / `String` / `Bool`（`Int` 用原生比较，`String` / `Bool` 走运行时结构比较，
   typed 路径用 OCaml 结构比较），其它类型报 `no instance Ord ...`；
-- 限制（M10.5 取舍）：**静态派发**——调用点类型必须能确定；只有 `Eq` / `Ord` 在类型
-  无法确定时回退到运行时结构比较（typed 用 OCaml 结构比较，interp/dynamic 用 value
-  结构比较）；`show` 用在多态类型会报错；暂不做字典穿参、约束泛化与高阶 kind（留待
-  M11 标准库/`do`/Monad 的前置工作）；default 实例的可见性目前按整个程序（flatten）
-  计算，未做 import 图级细化；只有程序里出现 trait / instance / deriving 声明（或
-  记录等需要降级的语法）时，interp 与 `--no-typecheck` 路径才会先类型检查 + 降级，
-  因此只有内建 `show` / `==` 调用、却没有任何 trait/instance/deriving 声明的程序在
-  interp 与 `--no-typecheck` 路径保持 legacy（不做类型检查：此时 `show` 不可用、
-  `String` 的 `<` / `<=` 仍是旧的仅 Int 运行时语义），typed 路径仍会报多态 `show` 错误；
-  上面的 `Eq` / `Ord` 结构回退同样只在触发降级（出现 trait/instance/deriving/记录等）后生效；
+- 实现（M10.5c）与限制：具体类型的调用点仍走**静态派发**；当方法调用点类型是
+  **裸类型变量**时（如 `showIt x = show x`）做**方法级字典穿参**——类型检查给该函数
+  增加方法函数参数（字典按 trait 方法扁平化），调用点静态传入具体实例方法或调用者的
+  字典参数，支持跨函数传播、前向引用与递归；例如 `data Dummy deriving (Eq)` 加
+  `showIt x = show x` 是合法程序（调用 `showIt 42` / `showIt "s"` 时分别传入对应
+  `show` 实现）。`Eq` / `Ord` 在类型无法确定时（含 `List a` 等结构化泛型）仍回退到
+  运行时结构比较（typed 用 OCaml 结构比较，interp/dynamic 用 value 结构比较）；
+  `Show` / 用户 trait 的结构化泛型（如 `show (List a)`）仍不支持（只有裸类型变量
+  支持字典穿参）并报错；高阶 kind 与一般约束泛化（trait 参数本身高阶）仍未实现，
+  留作 M11 前置；default 实例的可见性目前按整个程序（flatten）计算，未做 import
+  图级细化；
+- 求值与降级触发：只有程序里出现 trait / instance / deriving 声明（或记录等需要降级
+  的语法）时，interp 与 `--no-typecheck` 路径才会先类型检查 + 降级；只有内建
+  `show` / `==` 调用、却没有任何 trait/instance/deriving 声明的程序在上述路径保持
+  legacy（不做类型检查：此时 `show` 不可用、`String` 的 `<` / `<=` 仍是旧的仅 Int
+  运行时语义），typed 路径仍按 M10.5 规则检查（裸类型变量 `show` 可经字典穿参，
+  结构化泛型 `show` 仍报错）；上面的 `Eq` / `Ord` 结构回退同样只在触发降级后生效；
 - 命名空间与导出：trait 名在类型命名空间、方法名在值命名空间；无模块头 = 全部导出
   （含方法），显式导出列表需 `Trait(..)` 才导出方法；命名实例名按普通值名导出/限定
   （显式列表里可写 `fancy`，app 侧用 `@M.fancy` 选择）；
@@ -348,7 +355,7 @@ type value =
 
 ## 测试
 
-`test/run-tests.sh` 是 vuna 原生测试（551 checks），用 `vuna` / `vuna-boot` 驱动，
+`test/run-tests.sh` 是 vuna 原生测试（552 checks），用 `vuna` / `vuna-boot` 驱动，
 不依赖外部 vuna 实现；但运行测试需要 OCaml 编译器（`ocamlopt`）作为代码生成后端：
 
 ```console
@@ -374,11 +381,12 @@ sh test/run-tests.sh          # 需要 PATH 中有 vuna 与 vuna-boot
   三路径比对 golden；90–95 错误例三路径都要求错误片段与非 0 退出，动态/typed 还要求
   不写输出文件；跨模块正例 `0*_*/`（`Point(..)` 可构造/模式匹配，`Point` 保持抽象）、
   跨模块错误 `9*_*/`（抽象记录构造器不可见）同样覆盖三路径；
-- `corpus/traits/` trait（M10.5b，runner 第 22–25 段）：正例 01–10 三路径
-  （interp / 动态 codegen / typed codegen）比对 golden；跨模块 08 覆盖无头模块全导出
-  （含命名实例），10 覆盖显式导出 `Trait(..)`；错误例 90–98 三路径都要求错误片段、
-  非 0 退出、不写输出文件（含孤儿默认、重复实例、未知 `@`、head 不符、缺/未知方法、
-  `deriving Ord`、多态 `show`、显式只写 `Trait` 不写 `(..)` 时方法不可见）；
+- `corpus/traits/` trait（M10.5b/c，runner 第 22–25 段）：正例 01–13 三路径
+  （interp / 动态 codegen / typed codegen）比对 golden（含 11/12 泛型字典穿参、13
+  多类型 default 实例）；跨模块 08 覆盖无头模块全导出（含命名实例），10 覆盖显式导出
+  `Trait(..)`；错误例 90–96、98 三路径都要求错误片段、非 0 退出、不写输出文件
+  （含孤儿默认、重复实例、未知 `@`、head 不符、缺/未知方法、`deriving Ord`、显式
+  只写 `Trait` 不写 `(..)` 时方法不可见）；
 - `corpus/err/*.vuna`、`corpus/run_err/*.vuna`：解析/求值错误片段；
 - `corpus/type_ok`、`corpus/type_err`：单文件类型检查正/反例；
 - `corpus/type_modules/0*`、`9*`：跨模块类型检查正/反例；
@@ -481,6 +489,7 @@ nix fmt               # nixfmt-tree 格式化 .nix
   非 0 退出码；
 - M10：模块系统 v2——模块头与显式导出列表、抽象类型、`module B` / `B.name` 重导出、
   `_` 前缀隐私、模块路径不变式；
-- M10.5：记录类型、trait 与实例（静态派发）、`deriving (Show, Eq)`、内置
-  `Show` / `Eq` / `Ord` 与运算符迁移；编译器自举使用记录 + `deriving`；
+- M10.5：记录类型、trait 与实例（静态派发 + 裸类型变量方法级字典穿参）、
+  `deriving (Show, Eq)`、内置 `Show` / `Eq` / `Ord` 与运算符迁移；编译器自举使用
+  记录 + `deriving`；
 - 早期 OCaml 外部编译器 `vunax` 已完成使命并删除。
