@@ -737,6 +737,7 @@ done
 for file in corpus/run/01_arithmetic.vuna corpus/run/03_data_case.vuna corpus/monad/01_do_maybe.vuna corpus/traits/03_deriving_show_eq_enum.vuna; do
   expected=$(cat "${file%.vuna}.out")
   cp "$file" "$tmp/fmt_src.vuna"
+  chmod u+w "$tmp/fmt_src.vuna"
   "$VUNA" fmt "$tmp/fmt_src.vuna" >/dev/null 2>&1
   actual=$("$VUNA" interp "$tmp/fmt_src.vuna" 2>&1)
   check_eq "$file (fmt interp)" "$expected" "$actual"

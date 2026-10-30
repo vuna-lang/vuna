@@ -225,6 +225,8 @@
               ''
                 cp -r ${./test} test
                 cp -r ${./stdlib} stdlib
+                cp -r ${./lib} lib
+                cp -r ${./app} app
                 cd test
                 VUNA=${vuna}/bin/vuna \
                 VUNA_BOOT=${vuna-boot}/bin/vuna-boot \
