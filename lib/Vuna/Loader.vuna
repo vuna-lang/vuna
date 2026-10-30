@@ -132,6 +132,18 @@ modulesExportingCtor modules imports name =
 
 modulePath root name = root ++ "/" ++ joinSlashes (splitOnDot name) ++ ".vuna"
 
+collectModuleFiles Nil name acc = reverse acc
+collectModuleFiles (Cons root rest) name acc =
+  let path = modulePath root name
+  in if fileExists path then collectModuleFiles rest name (Cons path acc)
+     else collectModuleFiles rest name acc
+
+findModuleFile roots name =
+  case collectModuleFiles roots name Nil of
+    Nil => Err ("module " ++ name ++ " not found (roots: " ++ joinNames roots ++ ")")
+    Cons path Nil => Ok path
+    paths => Err ("ambiguous module " ++ name ++ " (found in: " ++ joinNames paths ++ ")")
+
 findModule modules name =
   case modules of
     Nil => Nothing
@@ -346,36 +358,39 @@ resolveModules modules =
 
 showCycle name stack = joinArrows (reverse (Cons name stack))
 
-loadAll root modules stack imports =
+loadAll roots modules stack imports =
   case imports of
     Nil => Ok modules
     Cons imp rest =>
-      andThen (loadModule root modules stack (importName imp)) (\modules2 =>
-        loadAll root modules2 stack rest)
+      andThen (loadModule roots modules stack (importName imp)) (\modules2 =>
+        loadAll roots modules2 stack rest)
 
-loadModule root modules stack name =
+loadModule roots modules stack name =
   case findModule modules name of
     Just m => Ok modules
     Nothing =>
       if memName name stack then Err ("import cycle: " ++ showCycle name stack)
       else if validModuleName name then
-        andThen (parseSource (readFile (modulePath root name))) (\p =>
-          case p of
-            Pair imports decls =>
-              andThen (validateImports name imports) (\_ =>
-                andThen (loadAll root modules (Cons name stack) imports) (\modules2 =>
-                  Ok (Cons (Module name imports decls (topNames decls)) modules2))))
+        andThen (findModuleFile roots name) (\path =>
+          andThen (parseSource (readFile path)) (\p =>
+            case p of
+              Pair imports decls =>
+                andThen (validateImports name imports) (\_ =>
+                  andThen (loadAll roots modules (Cons name stack) imports) (\modules2 =>
+                    Ok (Cons (Module name imports decls (topNames decls)) modules2)))))
       else Err ("invalid module name: " ++ name)
 
-loadProgram root entry =
-  andThen (parseSource (readFile entry)) (\p =>
-    case p of
-      Pair imports decls =>
-        andThen (validateImports "<entry>" imports) (\_ =>
-          andThen (loadAll root Nil Nil imports) (\modules =>
-            andThen (resolveEntry modules imports decls) (\entryDecls =>
-              andThen (resolveModules modules) (\moduleDecls =>
-                Ok (append entryDecls moduleDecls))))))
+loadProgram roots entry =
+  if fileExists entry then
+    andThen (parseSource (readFile entry)) (\p =>
+      case p of
+        Pair imports decls =>
+          andThen (validateImports "<entry>" imports) (\_ =>
+            andThen (loadAll roots Nil Nil imports) (\modules =>
+              andThen (resolveEntry modules imports decls) (\entryDecls =>
+                andThen (resolveModules modules) (\moduleDecls =>
+                  Ok (append entryDecls moduleDecls))))))
+  else Err ("entry file not found: " ++ entry)
 
 tyShape ty =
   case ty of

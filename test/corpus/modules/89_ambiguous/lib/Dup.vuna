@@ -1,0 +1,2 @@
+-- 与 app/Dup.vuna 同名，用于测试跨根歧义。
+dupValue = 1

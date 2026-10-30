@@ -43,17 +43,17 @@ check_contains() { # name haystack needle
   esac
 }
 
-compile_and_run() { # name compiler root entry expected
+compile_and_run_roots() { # name compiler entry expected root...
   name=$1
   compiler=$2
-  root=$3
-  entry=$4
-  expected=$5
+  entry=$3
+  expected=$4
+  shift 4
   out="$tmp/prog.ml"
   exe="$tmp/prog.exe"
   rm -f "$out" "$exe"
 
-  if ! compile_output=$("$compiler" --root "$root" "$entry" "$out" 2>&1); then
+  if ! compile_output=$("$compiler" "$@" "$entry" "$out" 2>&1); then
     bad "$name compile" "exit 0" "$compile_output"
     return
   fi
@@ -69,6 +69,10 @@ compile_and_run() { # name compiler root entry expected
   check_eq "$name run" "$expected" "$actual"
 }
 
+compile_and_run() { # name compiler root entry expected
+  compile_and_run_roots "$1" "$2" "$4" "$5" --root "$3"
+}
+
 # 1) corpus：解释器输出 vs golden；编译器生成→ocamlopt→运行 vs golden
 for file in corpus/run/*.vuna; do
   base=${file%.vuna}
@@ -81,18 +85,18 @@ done
 # 2) 模块夹具：解释器与编译器都要读取模块并得到 expected.out
 for dir in corpus/modules/0*; do
   expected=$(cat "$dir/expected.out")
-  actual=$("$VUNA_INTERP" --root "$dir/lib" "$dir/app/Main.vuna" 2>&1)
+  actual=$("$VUNA_INTERP" --root "$dir/lib" --root "$dir/app" "$dir/app/Main.vuna" 2>&1)
   check_eq "$dir (interp)" "$expected" "$actual"
-  compile_and_run "$dir (compiler)" "$VUNA" "$dir/lib" "$dir/app/Main.vuna" "$expected"
+  compile_and_run_roots "$dir (compiler)" "$VUNA" "$dir/app/Main.vuna" "$expected" --root "$dir/lib" --root "$dir/app"
 done
 
 # 3) 模块错误：解释器与编译器都要给出含片段的错误，且不写输出文件
 for dir in corpus/modules/9*; do
   fragment=$(cat "$dir/expected.err")
-  actual=$("$VUNA_INTERP" --root "$dir/lib" "$dir/app/Main.vuna" 2>&1)
+  actual=$("$VUNA_INTERP" --root "$dir/lib" --root "$dir/app" "$dir/app/Main.vuna" 2>&1)
   check_contains "$dir (interp error)" "$actual" "$fragment"
   rm -f "$tmp/error.ml"
-  actual=$("$VUNA" --root "$dir/lib" "$dir/app/Main.vuna" "$tmp/error.ml" 2>&1 || true)
+  actual=$("$VUNA" --root "$dir/lib" --root "$dir/app" "$dir/app/Main.vuna" "$tmp/error.ml" 2>&1 || true)
   check_contains "$dir (compiler error)" "$actual" "$fragment"
   if [ -e "$tmp/error.ml" ]; then
     bad "$dir (no output file)" "absent" "present"
@@ -199,7 +203,7 @@ done
 for dir in corpus/modules/0*; do
   [ -f "$dir/app/Main.vuna" ] || continue
   rm -f "$tmp/typedmod.ml" "$tmp/typedmod.exe"
-  if ! typed_out=$("$VUNA" --typed --root "$dir/lib" "$dir/app/Main.vuna" "$tmp/typedmod.ml" 2>&1); then
+  if ! typed_out=$("$VUNA" --typed --root "$dir/lib" --root "$dir/app" "$dir/app/Main.vuna" "$tmp/typedmod.ml" 2>&1); then
     bad "$dir (typed module codegen)" "exit 0" "$typed_out"
   elif [ -n "$typed_out" ]; then
     bad "$dir (typed module codegen output)" "" "$typed_out"

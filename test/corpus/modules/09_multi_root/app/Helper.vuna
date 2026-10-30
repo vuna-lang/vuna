@@ -1,0 +1,5 @@
+-- app 侧模块：验证 --root app 命中，并可引用 lib 侧模块。
+import Vuna.Math
+
+triple : Int -> Int
+triple x = x + double x

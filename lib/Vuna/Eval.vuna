@@ -333,6 +333,14 @@ callBuiltin name args =
         Cons a Nil => andThen (stringArg a) (\s => Ok (VInt (print s)))
         _ => Err "bad arguments for print"
     "getArgs" => Ok (strListToValue getArgs)
+    "fileExists" =>
+      case args of
+        Cons a Nil => andThen (stringArg a) (\s => Ok (vbool (fileExists s)))
+        _ => Err "bad arguments for fileExists"
+    "exit" =>
+      case args of
+        Cons a Nil => andThen (intArg a) (\n => Ok (VInt (exit n)))
+        _ => Err "bad arguments for exit"
     _ => Err ("unknown builtin: " ++ name)
 
 displayName name =

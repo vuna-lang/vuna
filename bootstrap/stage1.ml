@@ -331,10 +331,14 @@ and show_Vuna_dBase_dPair : 'p0 'p1. ('p0 -> string) -> ('p1 -> string) -> ('p0,
 -> string = fun s0 s1 v -> match v with
   | C_Vuna_dBase_dPair (f0, f1) -> show_ctor "Pair" [(s0) f0; (s1) f1]
 
-let v_usage = "usage: vuna [--no-print] [--no-typecheck] [--typed] [--root DIR] <entry.vuna> [out.ml]"
+let v_usage = "usage: vuna [--no-print] [--no-typecheck] [--typed] [--root DIR]... <entry.vuna> [out.ml]"
 
 let v_emitUsage = fun () -> (let _ = bi_print (((v_usage) ^ ("\n"))) in
   1)
+
+let v_Vuna_dInterp_deffectiveRoots = fun a0 -> match a0 with
+  | ([]) -> ("lib") :: ([])
+  | (roots) -> roots
 
 let v_Vuna_dInterp_ddemo = "main = 40 + 2"
 
@@ -2047,6 +2051,14 @@ let v_Vuna_dEval_dcallBuiltin = fun name args -> (match name with
         (bi_print s)))
   | _ -> C_Vuna_dBase_dErr ("bad arguments for print"))
   | "getArgs" -> C_Vuna_dBase_dOk (v_Vuna_dEval_dstrListToValue (bi_get_args ()))
+  | "fileExists" -> (match args with
+  | (a) :: ([]) -> v_Vuna_dBase_dandThen (v_Vuna_dEval_dstringArg a) (fun s -> C_Vuna_dBase_dOk (v_Vuna_dEval_dvbool
+        (bi_file_exists s)))
+  | _ -> C_Vuna_dBase_dErr ("bad arguments for fileExists"))
+  | "exit" -> (match args with
+  | (a) :: ([]) -> v_Vuna_dBase_dandThen (v_Vuna_dEval_dintArg a) (fun n -> C_Vuna_dBase_dOk (C_Vuna_dEval_dVInt
+        (bi_exit n)))
+  | _ -> C_Vuna_dBase_dErr ("bad arguments for exit"))
   | _ -> C_Vuna_dBase_dErr ((("unknown builtin: ") ^ (name))))
 
 let v_Vuna_dEval_devalGlobalNonFun = fun decls name -> (match v_Vuna_dAst_dctorArity name decls with
@@ -4400,6 +4412,28 @@ let v_Vuna_dLoader_dmodulePath = fun root name -> (let vuna_cat0' = (root) in
       (let vuna_cat3' = (".vuna") in
         String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'; vuna_cat3']))))
 
+let rec v_Vuna_dLoader_dcollectModuleFiles = fun a0 a1 a2 -> match (a0, a1, a2) with
+  | ([], name, acc) -> v_Vuna_dBase_dreverse acc
+  | ((root) :: (rest), name, acc) -> (let path = v_Vuna_dLoader_dmodulePath root name in
+  if bi_file_exists path then v_Vuna_dLoader_dcollectModuleFiles rest name ((path) :: (acc))
+  else v_Vuna_dLoader_dcollectModuleFiles rest name acc)
+
+let v_Vuna_dLoader_dfindModuleFile = fun roots name -> (match v_Vuna_dLoader_dcollectModuleFiles roots
+  name [] with
+  | [] -> C_Vuna_dBase_dErr ((let vuna_cat0' = ("module ") in
+      (let vuna_cat1' = (name) in
+        (let vuna_cat2' = (" not found (roots: ") in
+          (let vuna_cat3' = (v_Vuna_dLoader_djoinNames roots) in
+            (let vuna_cat4' = (")") in
+              String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'; vuna_cat3'; vuna_cat4']))))))
+  | (path) :: ([]) -> C_Vuna_dBase_dOk (path)
+  | paths -> C_Vuna_dBase_dErr ((let vuna_cat0' = ("ambiguous module ") in
+      (let vuna_cat1' = (name) in
+        (let vuna_cat2' = (" (found in: ") in
+          (let vuna_cat3' = (v_Vuna_dLoader_djoinNames paths) in
+            (let vuna_cat4' = (")") in
+              String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'; vuna_cat3'; vuna_cat4'])))))))
+
 let rec v_Vuna_dBase_djoinArrows = fun a0 -> match a0 with
   | ([]) -> ""
   | ((x) :: ([])) -> x
@@ -4411,75 +4445,80 @@ let rec v_Vuna_dBase_djoinArrows = fun a0 -> match a0 with
 let v_Vuna_dLoader_dshowCycle = fun name stack -> v_Vuna_dBase_djoinArrows (v_Vuna_dBase_dreverse ((name)
     :: (stack)))
 
-let rec v_Vuna_dLoader_dloadAll = fun root modules stack imports -> (match imports with
+let rec v_Vuna_dLoader_dloadAll = fun roots modules stack imports -> (match imports with
   | [] -> C_Vuna_dBase_dOk (modules)
-  | (imp) :: (rest) -> v_Vuna_dBase_dandThen (v_Vuna_dLoader_dloadModule root modules stack (v_Vuna_dLoader_dimportName
-      imp)) (fun modules2 -> v_Vuna_dLoader_dloadAll root modules2 stack rest))
-and v_Vuna_dLoader_dloadModule = fun root modules stack name -> (match v_Vuna_dLoader_dfindModule modules
+  | (imp) :: (rest) -> v_Vuna_dBase_dandThen (v_Vuna_dLoader_dloadModule roots modules stack (v_Vuna_dLoader_dimportName
+      imp)) (fun modules2 -> v_Vuna_dLoader_dloadAll roots modules2 stack rest))
+and v_Vuna_dLoader_dloadModule = fun roots modules stack name -> (match v_Vuna_dLoader_dfindModule modules
   name with
   | C_Vuna_dBase_dJust (m) -> C_Vuna_dBase_dOk (modules)
   | C_Vuna_dBase_dNothing -> if v_Vuna_dBase_dmemName name stack then C_Vuna_dBase_dErr ((("import cycle: ")
       ^ (v_Vuna_dLoader_dshowCycle name stack)))
-  else if v_Vuna_dLoader_dvalidModuleName name then v_Vuna_dBase_dandThen (v_Vuna_dParser_dparseSource
-    (bi_read_file (v_Vuna_dLoader_dmodulePath root name))) (fun p -> (match p with
+  else if v_Vuna_dLoader_dvalidModuleName name then v_Vuna_dBase_dandThen (v_Vuna_dLoader_dfindModuleFile
+    roots name) (fun path -> v_Vuna_dBase_dandThen (v_Vuna_dParser_dparseSource (bi_read_file path)) (fun
+      p -> (match p with
   | C_Vuna_dBase_dPair (imports, decls) -> v_Vuna_dBase_dandThen (v_Vuna_dLoader_dvalidateImports name
-        imports) (fun _u -> v_Vuna_dBase_dandThen (v_Vuna_dLoader_dloadAll root modules ((name) :: (stack))
-          imports) (fun modules2 -> C_Vuna_dBase_dOk ((C_Vuna_dLoader_dModule (name, imports, decls, v_Vuna_dAst_dtopNames
-                decls)) :: (modules2))))))
+          imports) (fun _u -> v_Vuna_dBase_dandThen (v_Vuna_dLoader_dloadAll roots modules ((name) ::
+              (stack)) imports) (fun modules2 -> C_Vuna_dBase_dOk ((C_Vuna_dLoader_dModule (name, imports,
+                  decls, v_Vuna_dAst_dtopNames decls)) :: (modules2)))))))
   else C_Vuna_dBase_dErr ((("invalid module name: ") ^ (name))))
 
-let v_Vuna_dLoader_dloadProgram = fun root entry -> v_Vuna_dBase_dandThen (v_Vuna_dParser_dparseSource
-  (bi_read_file entry)) (fun p -> (match p with
+let v_Vuna_dLoader_dloadProgram = fun roots entry -> if bi_file_exists entry then v_Vuna_dBase_dandThen
+(v_Vuna_dParser_dparseSource (bi_read_file entry)) (fun p -> (match p with
   | C_Vuna_dBase_dPair (imports, decls) -> v_Vuna_dBase_dandThen (v_Vuna_dLoader_dvalidateImports "<entry>"
-      imports) (fun _u -> v_Vuna_dBase_dandThen (v_Vuna_dLoader_dloadAll root [] [] imports) (fun modules
+      imports) (fun _u -> v_Vuna_dBase_dandThen (v_Vuna_dLoader_dloadAll roots [] [] imports) (fun modules
         -> v_Vuna_dBase_dandThen (v_Vuna_dLoader_dresolveEntry modules imports decls) (fun entryDecls
           -> v_Vuna_dBase_dandThen (v_Vuna_dLoader_dresolveModules modules) (fun moduleDecls -> C_Vuna_dBase_dOk
             (v_Vuna_dBase_dappend entryDecls moduleDecls)))))))
+else C_Vuna_dBase_dErr ((("entry file not found: ") ^ (entry)))
 
-let v_Vuna_dInterp_dinterpretFile = fun root entry -> (match v_Vuna_dLoader_dloadProgram root entry with
+let v_Vuna_dInterp_dinterpretFile = fun roots entry -> (match v_Vuna_dLoader_dloadProgram roots entry
+  with
   | C_Vuna_dBase_dErr (e) -> (("error: ") ^ (e))
   | C_Vuna_dBase_dOk (decls) -> v_Vuna_dEval_drunDecls decls)
 
-let v_Vuna_dInterp_dcompileFile = fun root entry printResult -> v_Vuna_dBase_dandThen (v_Vuna_dLoader_dloadProgram
-  root entry) (fun decls -> (match decls with
+let v_Vuna_dInterp_dcompileFile = fun roots entry printResult -> v_Vuna_dBase_dandThen (v_Vuna_dLoader_dloadProgram
+  roots entry) (fun decls -> (match decls with
   | ds -> v_Vuna_dCodegen_dgenerateProgram ds printResult))
 
-let v_Vuna_dInterp_dcompileFileChecked = fun root entry printResult -> v_Vuna_dBase_dandThen (v_Vuna_dLoader_dloadProgram
-  root entry) (fun decls -> v_Vuna_dBase_dandThen (v_Vuna_dTypecheck_dcheckProgram decls) (fun _u -> v_Vuna_dCodegen_dgenerateProgram
-    decls printResult))
+let v_Vuna_dInterp_dcompileFileChecked = fun roots entry printResult -> v_Vuna_dBase_dandThen (v_Vuna_dLoader_dloadProgram
+  roots entry) (fun decls -> v_Vuna_dBase_dandThen (v_Vuna_dTypecheck_dcheckProgram decls) (fun _u ->
+    v_Vuna_dCodegen_dgenerateProgram decls printResult))
 
-let v_Vuna_dInterp_dcompileFileTyped = fun root entry printResult -> v_Vuna_dBase_dandThen (v_Vuna_dLoader_dloadProgram
-  root entry) (fun decls -> v_Vuna_dBase_dandThen (v_Vuna_dTypecheck_dcheckProgramInfoElab decls) (fun
+let v_Vuna_dInterp_dcompileFileTyped = fun roots entry printResult -> v_Vuna_dBase_dandThen (v_Vuna_dLoader_dloadProgram
+  roots entry) (fun decls -> v_Vuna_dBase_dandThen (v_Vuna_dTypecheck_dcheckProgramInfoElab decls) (fun
     p -> (match p with
   | C_Vuna_dBase_dPair (globals, elabDecls) -> v_Vuna_dTypedCodegen_dgenerateProgramTyped elabDecls globals
       printResult)))
 
-let v_emit = fun printResult typeCheck typed root entry rest -> (let result = if typed then v_Vuna_dInterp_dcompileFileTyped
-  root entry printResult
-  else if typeCheck then v_Vuna_dInterp_dcompileFileChecked root entry printResult
-  else v_Vuna_dInterp_dcompileFile root entry printResult in
-  (match result with
+let v_emit = fun printResult typeCheck typed roots entry rest -> (let actualRoots = v_Vuna_dInterp_deffectiveRoots
+  roots in
+  (let result = if typed then v_Vuna_dInterp_dcompileFileTyped actualRoots entry printResult
+    else if typeCheck then v_Vuna_dInterp_dcompileFileChecked actualRoots entry printResult
+    else v_Vuna_dInterp_dcompileFile actualRoots entry printResult in
+    (match result with
   | C_Vuna_dBase_dOk (code) -> (match rest with
   | (out) :: ([]) -> (let _ = bi_write_file out code in
-        0)
+          0)
   | _ -> (let _ = bi_print code in
-        0))
+          0))
   | C_Vuna_dBase_dErr (e) -> (let _ = bi_print ((let vuna_cat0' = ("error: ") in
-          (let vuna_cat1' = (e) in
-            (let vuna_cat2' = ("\n") in
-              String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'])))) in
-      1)))
+            (let vuna_cat1' = (e) in
+              (let vuna_cat2' = ("\n") in
+                String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'])))) in
+        1))))
 
-let rec v_dispatch = fun printResult typeCheck typed root args -> (match args with
+let rec v_dispatch = fun printResult typeCheck typed roots args -> (match args with
   | [] -> v_emitUsage ()
-  | (a) :: (rest) -> if bi_eq_str a "--no-print" then v_dispatch false typeCheck typed root rest
-  else if bi_eq_str a "--no-typecheck" then v_dispatch printResult false false root rest
-  else if bi_eq_str a "--typecheck" then v_dispatch printResult true typed root rest
-  else if bi_eq_str a "--typed" then v_dispatch printResult true true root rest
+  | (a) :: (rest) -> if bi_eq_str a "--no-print" then v_dispatch false typeCheck typed roots rest
+  else if bi_eq_str a "--no-typecheck" then v_dispatch printResult false false roots rest
+  else if bi_eq_str a "--typecheck" then v_dispatch printResult true typed roots rest
+  else if bi_eq_str a "--typed" then v_dispatch printResult true true roots rest
   else if bi_eq_str a "--root" then (match rest with
-  | (dir) :: (rest2) -> v_dispatch printResult typeCheck typed dir rest2
+  | (dir) :: (rest2) -> v_dispatch printResult typeCheck typed (v_Vuna_dBase_dappend roots ((dir) :: ([])))
+    rest2
   | [] -> v_emitUsage ())
-  else v_emit printResult typeCheck typed root a rest)
+  else v_emit printResult typeCheck typed roots a rest)
 
-let v_main = fun () -> v_dispatch true true true "lib" (bi_get_args ())
+let v_main = fun () -> v_dispatch true true true [] (bi_get_args ())
 let () = ignore (v_main ())

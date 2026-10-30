@@ -98,8 +98,8 @@ git add bootstrap/ && git commit
   对齐，表达式跨行必须缩进超过所在块列；
 - `main` 必须是零参数定义；`show` 负责把值变成字符串；
 - 内建：`+ - * /`、`== /= < <= > >=`、`&& ||`、`++`、`strLength`、`strUnpack`、
-  `strPack`、`strFromInt`，以及 IO 内建 `readFile` / `writeFile` / `print` /
-  `getArgs`；
+  `strPack`、`strFromInt`，IO 内建 `readFile` / `writeFile` / `print` / `getArgs`，
+  以及 `fileExists` / `exit`；
 - `&&` / `||` 短路求值：先求左操作数，左侧能决定结果时不求值右侧（解释器与
   两种 codegen 一致）；
 - 布尔值与列表约定：`True` / `False` / `Cons` / `Nil` 是内建相邻的全局构造器；
@@ -107,8 +107,9 @@ git add bootstrap/ && git commit
 
 ### 模块系统
 
-- **文件 = 模块**，模块根默认 `lib/`（`--root` 可覆盖）；`lib/Vuna/Parser.vuna`
-  ⇔ 模块 `Vuna.Parser`；
+- **文件 = 模块**，模块根默认 `lib/`；`--root` 可重复，按出现顺序组成模块根列表
+  （如 `--root lib --root app`），`lib/Vuna/Parser.vuna` ⇔ 模块 `Vuna.Parser`；
+- 模块按根顺序查找；同名模块出现在多个根时是硬错误（不静默覆盖）；
 - 路径段必须匹配 `[A-Z][A-Za-z0-9_]*`，路径/文件名与模块名**精确一致**，没有大小写映射；
 - 入口文件可以在 `lib/` 外（如 `app/Compile.vuna`），它本身不是模块；
 - `import` 只能在文件顶部，是**直接依赖**；循环导入、重复 import、重复 alias 都是硬错误；
