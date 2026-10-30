@@ -1,0 +1,4 @@
+import Facade
+
+main : Int
+main = Facade.foo

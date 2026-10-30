@@ -1,0 +1,31 @@
+module Multi (
+  -- 裸名导出
+  foo,
+
+  -- 值名导出
+  bar,
+
+  -- 类型 + 全部公开构造器
+  Bar(..),
+
+  {- 整模块重导出 -}
+  module Helper,
+
+  {-
+    多行块注释中的选择性重导出
+  -}
+  Helper2.choice
+) where
+
+import Helper
+import Helper2
+
+foo : Int
+foo = 10
+
+data Bar : Type where
+  MkBar : Int -> Bar
+
+bar : Bar -> Int
+bar b = case b of
+  MkBar n => n

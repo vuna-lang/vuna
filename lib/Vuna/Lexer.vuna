@@ -1,9 +1,8 @@
+module Vuna.Lexer (TIdent, TKw, TInt, TStr, TSym, TEof, PTok, isUpperChar, isLowerChar, isIdentStart, isDigit, lexSource) where
+
 -- vuna 源码 lexer：字符游标、token 与 pos。
 
 import Vuna.Base
-
-data Pos : Type where
-  Pos : Int -> Int -> Pos
 
 data Tok : Type where
   TIdent : String -> Tok
@@ -35,14 +34,16 @@ isSpace c = c == 32 || c == 9 || c == 10 || c == 13
 
 isOpChar c =
   c == 33 || c == 36 || c == 37 || c == 38 || c == 42 || c == 43 || c == 45
-  || c == 47 || c == 60 || c == 61 || c == 62 || c == 63 || c == 64 || c == 92
-  || c == 94 || c == 124 || c == 126 || c == 58
+  || c == 46 || c == 47 || c == 60 || c == 61 || c == 62 || c == 63 || c == 64
+  || c == 92 || c == 94 || c == 124 || c == 126 || c == 58
 
 isKeyword s =
   s == "data" || s == "case" || s == "of" || s == "let" || s == "in" || s == "if"
   || s == "then" || s == "else" || s == "where" || s == "Type"
-  || s == "import"
+  || s == "import" || s == "module"
   || s == "qualified" || s == "as"
+  || s == "record" || s == "trait" || s == "instance" || s == "deriving"
+  || s == "do"
 
 classifyIdent s = if isKeyword s then TKw s else TIdent s
 
@@ -149,7 +150,7 @@ lexToken c rest p =
         case lexChars cs2 of
           Err e => Err e
           Ok toks => Ok (Cons (PTok (TStr s) p) toks)
-  else if c == 40 || c == 41 || c == 91 || c == 93 || c == 44 then
+  else if c == 40 || c == 41 || c == 91 || c == 93 || c == 44 || c == 123 || c == 125 then
     case lexChars (Chars rest (advanceChar c p)) of
       Err e => Err e
       Ok toks => Ok (Cons (PTok (TSym (strPack (Cons c Nil))) p) toks)

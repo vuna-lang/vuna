@@ -1,0 +1,9 @@
+data Color : Type where
+  Red : Color
+deriving (Show)
+
+instance Show Color where
+  show c = "color"
+
+main : String
+main = show Red

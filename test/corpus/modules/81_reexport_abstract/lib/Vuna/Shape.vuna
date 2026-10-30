@@ -1,0 +1,7 @@
+module Vuna.Shape (Shape, mkCircle) where
+
+data Shape : Type where
+  Circle : Int -> Shape
+
+mkCircle : Int -> Shape
+mkCircle r = Circle r

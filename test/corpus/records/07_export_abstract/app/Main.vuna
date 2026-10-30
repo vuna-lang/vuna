@@ -1,0 +1,10 @@
+import Vuna.Point
+
+p : Point
+p = Vuna.Point.mk 20 20
+
+q : Point
+q = { p | x = 22 }
+
+main : Int
+main = q.x + q.y

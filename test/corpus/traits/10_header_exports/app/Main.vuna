@@ -1,0 +1,4 @@
+import Vuna.P
+
+main : String
+main = pretty Red ++ "/" ++ pretty Blue

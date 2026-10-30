@@ -1,0 +1,5 @@
+import M
+
+main : Int
+main = case 1 of
+  M.foo x => x

@@ -1,0 +1,4 @@
+module Vuna.Plain where
+
+plain : Int
+plain = 1

@@ -1,0 +1,3 @@
+module Facade (module Vuna.Shape) where
+
+import Vuna.Shape

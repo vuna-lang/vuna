@@ -1,0 +1,5 @@
+f : Int -> Int
+f n = n.x
+
+main : Int
+main = f 1

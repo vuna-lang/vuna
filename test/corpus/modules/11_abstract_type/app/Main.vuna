@@ -1,0 +1,4 @@
+import Vuna.Shape
+
+main : Shape
+main = Vuna.Shape.mkCircle 2

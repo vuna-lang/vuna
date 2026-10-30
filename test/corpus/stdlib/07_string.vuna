@@ -1,0 +1,29 @@
+-- stdlib：Vuna.String 常用操作。
+import Vuna.String
+import Vuna.List
+
+showBool : Bool -> String
+showBool b = if b then "True" else "False"
+
+showStrList : List String -> String
+showStrList Nil = "[]"
+showStrList (Cons x xs) = "[" ++ x ++ showStrTail xs
+
+showStrTail : List String -> String
+showStrTail Nil = "]"
+showStrTail (Cons x xs) = "," ++ x ++ showStrTail xs
+
+main : String
+main =
+  "sp=" ++ showStrList (split "," "a,b,c")
+    ++ " j=" ++ join "-" (Cons "x" (Cons "y" Nil))
+    ++ " ln=" ++ showStrList (lines "a\nbc")
+    ++ " ul=" ++ showBool (unlines (Cons "x" (Cons "y" Nil)) == "x\ny\n")
+    ++ " tr=" ++ trim "  hi  "
+    ++ " tl=" ++ trimLeft "  lo"
+    ++ " tr2=" ++ trimRight "hi  "
+    ++ " ct=" ++ showBool (contains "ell" "hello") ++ showBool (contains "zz" "hello")
+    ++ " sw=" ++ showBool (startsWith "he" "hello")
+    ++ " ew=" ++ showBool (endsWith "lo" "hello")
+    ++ " rp=" ++ repeat 3 "ab"
+    ++ " ss=" ++ substring 1 3 "hello"

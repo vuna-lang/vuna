@@ -1,0 +1,27 @@
+data Bool : Type where
+  False : Bool
+  True : Bool
+
+data List a : Type where
+  Nil : List a
+  Cons : a -> List a -> List a
+
+data Maybe : Type where
+  Nothing : Maybe
+  Just : Int -> Maybe
+
+f : Maybe -> Int
+f Nothing = 0
+f (Just 0) = 1
+f (Just n) = n
+
+g : List Int -> Int
+g Nil = 0
+g (Cons x xs) = x + g xs
+
+h : List Int -> Int
+h (Cons _ (Cons y _)) = y
+h _ = 0
+
+main : Int
+main = f (Just 5) + g [1, 2] + h [3, 4]

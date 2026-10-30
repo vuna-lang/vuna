@@ -1,0 +1,40 @@
+module Vuna.TestRunner (runTests) where
+
+-- Vuna.TestRunner：包内测试运行器（M11.5）。
+--
+-- 约定：包 `test/` 下每个 `*.vuna` 是一个测试模块，`main : String`；
+-- 返回空串表示通过，返回非空串表示失败（打印失败信息）。
+-- 用解释器 + 降级路径执行，能覆盖 trait/record/do；代码生成路径的验证留给 CI 脚本。
+
+import Vuna.Base
+import Vuna.Pkg
+import Vuna.Interp
+
+runTests : Package -> List Root -> Int
+runTests pkg roots =
+  let testDir = packageDir pkg ++ "/test"
+  in if isDirectory testDir then
+       let files = testFiles (readDir testDir)
+       in runTestFiles roots (packageName pkg) testDir files 0 0
+     else
+       let _ = print ("error: test directory not found: " ++ testDir ++ "\n")
+       in 2
+
+testFiles Nil = Nil
+
+testFiles (Cons name rest) =
+  if endsWith ".vuna" name then Cons name (testFiles rest) else testFiles rest
+
+runTestFiles roots pkgName dir Nil pass fail =
+  let _ = print ("\n" ++ strFromInt pass ++ " passed, " ++ strFromInt fail ++ " failed\n")
+  in if fail == 0 then 0 else 1
+
+runTestFiles roots pkgName dir (Cons name rest) pass fail =
+  let path = dir ++ "/" ++ name
+  in let output = interpretFileIn pkgName roots path
+     in if output == "\"\"" then
+          let _ = print ("ok   " ++ name ++ "\n")
+          in runTestFiles roots pkgName dir rest (pass + 1) fail
+        else
+          let _ = print ("FAIL " ++ name ++ ": " ++ output ++ "\n")
+          in runTestFiles roots pkgName dir rest pass (fail + 1)

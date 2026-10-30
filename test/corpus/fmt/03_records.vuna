@@ -1,0 +1,21 @@
+record Point where
+  x : Int
+  y : Int
+deriving (Show, Eq)
+
+record Pair a b where
+  fst : a
+  snd : b
+
+p : Point
+p = Point { y = 2, x = 1 }
+
+q : Point
+q = { p | x = 3, y = 4 }
+
+sumPt : Point -> Int
+sumPt point = case point of
+  Point { x, y } => x + y
+
+main : Int
+main = sumPt q + p.x

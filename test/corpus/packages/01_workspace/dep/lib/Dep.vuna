@@ -1,0 +1,4 @@
+module Dep (depText) where
+
+depText : String
+depText = "dep"

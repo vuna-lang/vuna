@@ -1,0 +1,7 @@
+module M (pub) where
+
+data _T : Type where
+  MkT : Int -> _T
+
+pub : Int
+pub = 0

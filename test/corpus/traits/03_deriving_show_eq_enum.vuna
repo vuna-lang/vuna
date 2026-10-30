@@ -1,0 +1,6 @@
+data Pair2 : Type where
+  MkPair : Int -> Int -> Pair2
+deriving (Show, Eq)
+
+main : String
+main = show (MkPair 1 2) ++ (if MkPair 1 2 == MkPair 1 2 then "/eq" else "/ne")

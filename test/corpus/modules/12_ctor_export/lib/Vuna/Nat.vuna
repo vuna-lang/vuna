@@ -1,0 +1,5 @@
+module Vuna.Nat (Nat(..)) where
+
+data Nat : Type where
+  Z : Nat
+  S : Nat -> Nat

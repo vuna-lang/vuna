@@ -1,0 +1,7 @@
+module Priv2 where
+
+_helper : Int
+_helper = 2
+
+pub : Int
+pub = _helper * 21

@@ -1,0 +1,4 @@
+import M4
+
+main : Int
+main = 0

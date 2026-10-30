@@ -1,0 +1,10 @@
+-- stdlib 反例：Maybe 的 Monad 实例已由 Vuna.Maybe 提供，重复定义是硬错误。
+import Vuna.Monad
+import Vuna.Maybe
+
+instance Monad Maybe where
+  bind m f = m
+  pure x = Just x
+
+main : Int
+main = 0

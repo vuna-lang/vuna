@@ -1,0 +1,13 @@
+-- 无模块头：隐式导出全部公开名字，导出表不得因多子句/同名 sig 重复。
+data Color : Type where
+  Red : Color
+  Blue : Color
+
+add : Int -> Int -> Int
+add x y = x + y
+
+pick : Color -> Int
+pick Red = 1
+pick Blue = 2
+
+triple x = x + x + x

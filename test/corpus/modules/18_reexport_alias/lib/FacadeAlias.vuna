@@ -1,0 +1,3 @@
+module FacadeAlias (module I) where
+
+import Impl2 as I

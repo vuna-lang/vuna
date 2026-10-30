@@ -1,0 +1,14 @@
+-- T(..) 只公开非 _ 前缀构造器 A；_C 保持私有但定义模块内可构造/匹配。
+module M (T(..), f, mk) where
+
+data T : Type where
+  _C : Int -> T
+  A : T
+
+f : T -> Int
+f v = case v of
+  _C n => n
+  A => 0
+
+mk : Int -> T
+mk n = _C n

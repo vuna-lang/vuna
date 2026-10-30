@@ -1,0 +1,21 @@
+data Maybe : Type where
+  Nothing : Maybe
+  Just : Int -> Maybe
+
+addM : Maybe -> Maybe -> Maybe
+addM a b = do
+  x <- a
+  y <- b
+  Just (x + y)
+
+nested : Maybe -> Maybe
+nested m = do
+  x <- m
+  case x of
+    0 => Just 1
+    _ => do
+      y <- Just x
+      Just (y + 1)
+
+main : Maybe
+main = addM (Just 1) (Just 2)

@@ -1,0 +1,9 @@
+[package]
+name = "app"
+version = "0.1.0"
+
+[workspace]
+members = ["dep"]
+
+[dependencies]
+dep = "dep"

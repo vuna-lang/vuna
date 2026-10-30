@@ -1,0 +1,22 @@
+import Greet
+import Vuna.List
+import Vuna.Monad
+
+main : String
+main = greeting 3 ++ "|" ++ showNames (names 2)
+
+showNames : List String -> String
+showNames [] = ""
+showNames ([x]) = x
+showNames (x :: rest) = x ++ " " ++ showNames rest
+
+names : Int -> List String
+names n = do
+  i <- countTo n
+  pure ("n" ++ strFromInt i)
+
+countTo : Int -> List Int
+countTo n = if n <= 0 then [] else signed n
+
+signed : Int -> List Int
+signed n = n :: countTo (n - 1)

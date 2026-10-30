@@ -1,0 +1,19 @@
+-- M11 反例：do 绑定模式只支持变量或 `_`。
+trait Monad m where
+  bind : m a -> (a -> m b) -> m b
+  pure : a -> m a
+
+data Maybe a : Type where
+  Nothing : Maybe a
+  Just : a -> Maybe a
+
+instance Monad Maybe where
+  bind m f = case m of
+    Nothing => Nothing
+    Just x => f x
+  pure x = Just x
+
+main : Maybe Int
+main = do
+  Just x <- Just 1
+  pure x

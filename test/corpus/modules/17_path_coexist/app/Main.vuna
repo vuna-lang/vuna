@@ -1,0 +1,5 @@
+import Vuna
+import Vuna.Parser
+
+main : Int
+main = Vuna.answer + Vuna.Parser.answer

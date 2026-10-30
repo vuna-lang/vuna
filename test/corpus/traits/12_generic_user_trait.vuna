@@ -1,0 +1,16 @@
+trait Pretty a where
+  pretty : a -> String
+
+data Color : Type where
+  Red : Color
+  Blue : Color
+
+instance Pretty Color where
+  pretty c = case c of
+    Red => "red"
+    Blue => "blue"
+
+render x = pretty x
+
+main : String
+main = render Red ++ "/" ++ render Blue

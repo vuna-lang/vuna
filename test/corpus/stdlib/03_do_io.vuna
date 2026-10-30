@@ -1,0 +1,12 @@
+-- stdlib：do 在 IO monad 上（含 `_ <-` 丢弃结果）；golden 含 print 输出 + main 结果。
+import Vuna.Monad
+import Vuna.IO
+
+program : IO Int
+program = do
+  _ <- printIO "abc"
+  n <- pure 3
+  pure n
+
+main : Int
+main = runIO program

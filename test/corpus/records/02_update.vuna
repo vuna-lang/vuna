@@ -1,0 +1,15 @@
+record Point where
+  x : Int
+  y : Int
+
+p : Point
+p = Point { x = 1, y = 2 }
+
+q : Point
+q = { p | x = 40 }
+
+r : Point
+r = { q | x = 40, y = 1 }
+
+main : Int
+main = if p.y == 2 then p.x + q.x + r.y else 0

@@ -1,0 +1,4 @@
+module Impl2 (bump) where
+
+bump : Int -> Int
+bump x = x + 1

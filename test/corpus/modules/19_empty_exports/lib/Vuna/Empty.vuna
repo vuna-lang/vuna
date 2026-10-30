@@ -1,0 +1,4 @@
+module Vuna.Empty () where
+
+hidden : Int
+hidden = 1

@@ -1,0 +1,3 @@
+module Facade (module Impl) where
+
+import Impl

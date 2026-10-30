@@ -1,0 +1,4 @@
+import M
+
+main : Int
+main = M._secret

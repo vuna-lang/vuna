@@ -1,0 +1,6 @@
+import M
+
+main : Int
+main = case M.A of
+  M._C y => y
+  A => 0

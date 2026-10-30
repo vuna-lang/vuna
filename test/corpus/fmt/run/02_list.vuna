@@ -1,0 +1,14 @@
+data List a : Type where
+  Nil : List a
+  Cons : a -> List a -> List a
+
+sum : List Int -> Int
+sum Nil = 0
+sum (Cons x xs) = x + sum xs
+
+doubleAll : List Int -> List Int
+doubleAll Nil = Nil
+doubleAll (Cons x xs) = Cons (x * 2) (doubleAll xs)
+
+main : Int
+main = sum (doubleAll [1, 2, 3])

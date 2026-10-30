@@ -1,3 +1,5 @@
+module Vuna.TypedCodegen (generateProgramTyped) where
+
 -- Vuna.TypedCodegen：用类型信息生成原生 OCaml 类型（M8a）。
 -- 目前覆盖 Int/String/Bool/List、函数/lambda/let/case/if、用户 data 类型、
 -- 模式匹配与 builtins；main 的 show 暂支持 Int/String/Bool/List。
@@ -49,7 +51,7 @@ dataDecls decls =
     Nil => Nil
     Cons d rest =>
       case d of
-        DData name params ctors => Cons d (dataDecls rest)
+        DData name params ctors _ _ => Cons d (dataDecls rest)
         _ => dataDecls rest
 
 nonSpecialData decls =
@@ -57,7 +59,7 @@ nonSpecialData decls =
     Nil => Nil
     Cons d rest =>
       case d of
-        DData name params ctors =>
+        DData name params ctors _ _ =>
           if isBoolName name || isListName name then nonSpecialData rest
           else Cons d (nonSpecialData rest)
         _ => nonSpecialData rest
@@ -67,7 +69,7 @@ lookupData decls name =
     Nil => Nothing
     Cons d rest =>
       case d of
-        DData dn ps cs => if dn == name then Just d else lookupData rest name
+        DData dn ps cs _ _ => if dn == name then Just d else lookupData rest name
         _ => lookupData rest name
 
 mapResult f Nil = Ok Nil
@@ -77,7 +79,7 @@ mapResult f (Cons x rest) =
 
 ocamlType decls params expr =
   case expr of
-    EVar name =>
+    EVar name _ =>
       if name == "Int" then Ok "int"
       else if name == "String" then Ok "string"
       else if isBoolName name then Ok "bool"
@@ -89,16 +91,16 @@ ocamlType decls params expr =
             case lookupData decls name of
               Just d => Ok (typeNameOf name)
               Nothing => Err ("typed codegen: unknown type " ++ name)
-    EApp fn args =>
+    EApp fn args _ =>
       case fn of
-        EVar "->" =>
+        EVar "->" _ =>
           case args of
             Cons a (Cons b Nil) =>
               andThen (ocamlType decls params a) (\ta =>
                 andThen (ocamlType decls params b) (\tb =>
                   Ok ("(" ++ ta ++ ") -> (" ++ tb ++ ")")))
             _ => Err "typed codegen: invalid arrow type"
-        EVar name =>
+        EVar name _ =>
           if isListName name then
             case args of
               Cons a Nil =>
@@ -119,14 +121,14 @@ appType args name = "(" ++ joinWith ", " args ++ ") " ++ name
 
 splitArrows expr =
   case expr of
-    EApp (EVar "->") (Cons a (Cons b Nil)) => Cons a (splitArrows b)
+    EApp (EVar "->" _) (Cons a (Cons b Nil)) _ => Cons a (splitArrows b)
     _ => Nil
 
 genParams n = map (\i => "a" ++ strFromInt i) (range 0 n)
 
 range i n = if i >= n then Nil else Cons i (range (i + 1) n)
 
-genData decls (DData name params ctors) =
+genData decls (DData name params ctors _ _) =
   andThen (mapResult (genCtor decls (paramMap params)) ctors) (\cs =>
     Ok ("  " ++ dataPrefix params ++ typeNameOf name ++ " =\n    " ++ joinWith "\n  | " cs))
 
@@ -141,7 +143,7 @@ paramVarsAt (Cons p rest) i = Cons (paramVar i) (paramVarsAt rest (i + 1))
 
 paramVars params = paramVarsAt params 0
 
-genCtor decls pmap (Ctor name ty arity) =
+genCtor decls pmap (Ctor name ty arity _) =
   case splitArrows ty of
     Nil => Ok (ctorNameOf name)
     Cons only Nil => andThen (ocamlType decls pmap only) (\t => Ok (ctorNameOf name ++ " of (" ++ t ++ ")"))
@@ -158,7 +160,7 @@ genTypeDecls decls =
 
 showForType decls params expr =
   case expr of
-    EVar name =>
+    EVar name _ =>
       if name == "Int" then Ok "string_of_int"
       else if name == "String" then Ok "show_vstring"
       else if isBoolName name then Ok "show_vbool"
@@ -170,10 +172,10 @@ showForType decls params expr =
             case lookupData decls name of
               Just d => Ok (showNameOf name)
               Nothing => Err ("typed codegen: unknown show type " ++ name)
-    EApp fn args =>
+    EApp fn args _ =>
       case fn of
-        EVar "->" => Ok "(fun _ -> \"<function>\")"
-        EVar name =>
+        EVar "->" _ => Ok "(fun _ -> \"<function>\")"
+        EVar name _ =>
           if isListName name then
             case args of
               Cons a Nil =>
@@ -192,6 +194,10 @@ showForTy decls ty =
   case ty of
     TVar i => Ok "(fun _ -> \"<value>\")"
     TFun a b => Ok "(fun _ -> \"<function>\")"
+    TApp head args =>
+      case head of
+        TCon n hargs => showForTy decls (TCon n (append hargs args))
+        _ => Err "typed codegen: main type has an unresolved type constructor"
     TCon name args =>
       if name == "Int" then Ok "string_of_int"
       else if name == "String" then Ok "show_vstring"
@@ -212,7 +218,7 @@ genShowFields decls pmap (Cons f fs) (Cons v vs) =
     andThen (genShowFields decls pmap fs vs) (\ss =>
       Ok (Cons ("(" ++ s ++ ") " ++ v) ss)))
 
-genShowCtor decls pmap (Ctor name ty arity) = genShowCtorWith decls pmap name (splitArrows ty)
+genShowCtor decls pmap (Ctor name ty arity _) = genShowCtorWith decls pmap name (splitArrows ty)
 
 genShowCtorWith decls pmap name fields =
   andThen (genShowFields decls pmap fields (fieldVars (length fields))) (\shows =>
@@ -221,7 +227,7 @@ genShowCtorWith decls pmap name fields =
       Cons v Nil => Ok ("  | " ++ ctorNameOf name ++ " " ++ v ++ " -> show_ctor " ++ ocamlString (lastName name) ++ " [" ++ joinWith "; " shows ++ "]")
       vars => Ok ("  | " ++ ctorNameOf name ++ " (" ++ joinWith ", " vars ++ ") -> show_ctor " ++ ocamlString (lastName name) ++ " [" ++ joinWith "; " shows ++ "]"))
 
-genShowFunc decls (DData name params ctors) =
+genShowFunc decls (DData name params ctors _ _) =
   genShowFuncWith decls (showParamMap params) params name ctors
 
 genShowFuncWith : List Decl -> List (Pair String String) -> List String -> String -> List Ctor -> Result String
@@ -245,21 +251,57 @@ showAnnotation params name =
 
 pairSecond (Pair _ v) = v
 
+showDeclFnName d =
+  case d of
+    DData name params ctors derivings sp => showNameOf name
+    _ => ""
+
+showFnNames decls = map showDeclFnName (nonSpecialData decls)
+
+-- 只有 show 函数之间真的互相引用时才用 let rec；纯字段单类型用 let，
+-- 避免 OCaml warning 39（unused rec flag）。
+codeRefsOther self code Nil = False
+
+codeRefsOther self code (Cons n rest) =
+  if n == self then codeRefsOther self code rest
+  else if containsName (strUnpack n) (strUnpack code) then True
+  else codeRefsOther self code rest
+
+countName needle Nil = 0
+
+countName needle (Cons c rest) =
+  if startsWith needle (Cons c rest) then
+    1 + countName needle (drop (length needle) (Cons c rest))
+  else countName needle rest
+
+-- 自身名字在生成代码里出现超过 1 次 = 自递归（第 1 次是签名/定义处）。
+selfRecursive name code =
+  countName (strUnpack name) (strUnpack code) > 1
+
+partsNeedRec Nil Nil names = False
+
+partsNeedRec (Cons d ds) (Cons code rest) names =
+  if codeRefsOther (showDeclFnName d) code names then True
+  else if selfRecursive (showDeclFnName d) code then True
+  else partsNeedRec ds rest names
+
 genShowDecls decls =
   case nonSpecialData decls of
     Nil => Ok ""
     ds =>
       andThen (mapResult (genShowFunc decls) ds) (\parts =>
-        Ok ("let rec " ++ joinWith "\nand " parts ++ "\n"))
+        let names = showFnNames decls
+        in Ok ((if partsNeedRec ds parts names then "let rec " else "let ")
+               ++ joinWith "\nand " parts ++ "\n"))
 
 genPat : Pat -> Result String
 genPat pat =
   case pat of
-    PWild => Ok "_"
-    PVar name => Ok (sanitizeName name)
-    PInt n => Ok (strFromInt n)
-    PStr s => Ok (ocamlString s)
-    PCon name pats =>
+    PWild _ => Ok "_"
+    PVar name _ => Ok (sanitizeName name)
+    PInt n _ => Ok (strFromInt n)
+    PStr s _ => Ok (ocamlString s)
+    PCon name pats _ =>
       case name of
         "Nil" => Ok "[]"
         "True" => Ok "true"
@@ -279,11 +321,11 @@ genPat pat =
 
 patVars pat =
   case pat of
-    PWild => Nil
-    PVar name => Cons name Nil
-    PInt n => Nil
-    PStr s => Nil
-    PCon name pats => concatMap patVars pats
+    PWild _ => Nil
+    PVar name _ => Cons name Nil
+    PInt n _ => Nil
+    PStr s _ => Nil
+    PCon name pats _ => concatMap patVars pats
 
 genArgs : List Decl -> List String -> List Expr -> Result (List String)
 genArgs decls env args =
@@ -293,21 +335,21 @@ genArgs decls env args =
 -- 原子包括：局部变量、字面量、零参构造器/内置/顶层函数名。
 isAtomicExpr decls env e =
   case e of
-    EVar name =>
+    EVar name _ =>
       if memName name env then True
       else
         case ctorArity name decls of
           Just arity => if arity == 0 then True else False
           Nothing =>
             case builtinName name of
-              Just ref => if name == "getArgs" then False else True
+              Just ref => if name == "getArgs" || name == "readLine" then False else True
               Nothing =>
                 case funArity name decls of
                   Just 0 => isPureZeroArg decls name
                   Just _ => True
                   Nothing => False
-    EInt n => True
-    EStr s => True
+    EInt n _ => True
+    EStr s _ => True
     _ => False
 
 formatArg decls env e code =
@@ -326,14 +368,17 @@ genAppAware decls env fn args fCode argCodes =
 -- 展平同时处理右结合（parser 默认）与显式左括号两种嵌套。
 concatFlatten e =
   case e of
-    EApp (EVar "++") (Cons a (Cons b Nil)) => append (concatFlatten a) (concatFlatten b)
+    EApp (EVar "++" _) (Cons a (Cons b Nil)) _ => append (concatFlatten a) (concatFlatten b)
     _ => Cons e Nil
 
+-- 折叠出的合成字面量不需要真实源码位置，使用空 span。
+noLocSpan = Span "" 0 0 0 0
+
 foldStringLiterals Nil = Nil
-foldStringLiterals (Cons (EStr s) rest) =
+foldStringLiterals (Cons (EStr s _) rest) =
   case foldStringLiterals rest of
-    Cons (EStr s2) rest2 => Cons (EStr (s ++ s2)) rest2
-    folded => Cons (EStr s) folded
+    Cons (EStr s2 _) rest2 => Cons (EStr (s ++ s2) noLocSpan) rest2
+    folded => Cons (EStr s noLocSpan) folded
 foldStringLiterals (Cons e rest) = Cons e (foldStringLiterals rest)
 
 -- 零参纯值 hoist：结构化纯度分析；零参定义互引用时用 seen 防环。
@@ -350,9 +395,9 @@ allPureExpr decls seen (Cons e rest) = pureExpr decls seen e && allPureExpr decl
 
 pureExpr decls seen e =
   case e of
-    EInt n => True
-    EStr s => True
-    EVar name =>
+    EInt n _ => True
+    EStr s _ => True
+    EVar name _ =>
       if memName name seen then False
       else
         case ctorArity name decls of
@@ -361,13 +406,13 @@ pureExpr decls seen e =
             case zeroArgBody decls name of
               Just body => pureExpr decls (Cons name seen) body
               Nothing => False
-    EApp fn args =>
+    EApp fn args _ =>
       case fn of
-        EVar "++" =>
+        EVar "++" _ =>
           case foldStringLiterals (concatFlatten e) of
-            Cons (EStr _) Nil => True
+            Cons (EStr _ _) Nil => True
             _ => allPureExpr decls seen args
-        EVar name =>
+        EVar name _ =>
           case ctorArity name decls of
             Just _ => allPureExpr decls seen args
             Nothing => False
@@ -422,6 +467,13 @@ builtinName ">=" = Just "bi_ge"
 builtinName "&&" = Just "bi_and"
 builtinName "||" = Just "bi_or"
 builtinName "++" = Just "bi_concat"
+builtinName "bi_show_string" = Just "bi_show_string"
+builtinName "bi_eq_generic" = Just "bi_eq_generic"
+builtinName "bi_neq_generic" = Just "bi_neq_generic"
+builtinName "bi_lt_generic" = Just "bi_lt_generic"
+builtinName "bi_le_generic" = Just "bi_le_generic"
+builtinName "bi_gt_generic" = Just "bi_gt_generic"
+builtinName "bi_ge_generic" = Just "bi_ge_generic"
 builtinName "bi_eq_int" = Just "bi_eq_int"
 builtinName "bi_neq_int" = Just "bi_neq_int"
 builtinName "bi_lt_int" = Just "bi_lt_int"
@@ -440,6 +492,11 @@ builtinName "readFile" = Just "bi_read_file"
 builtinName "writeFile" = Just "bi_write_file"
 builtinName "print" = Just "bi_print"
 builtinName "getArgs" = Just "bi_get_args"
+builtinName "readLine" = Just "bi_read_line"
+builtinName "readDir" = Just "bi_read_dir"
+builtinName "isDirectory" = Just "bi_is_directory"
+builtinName "makeDir" = Just "bi_make_dir"
+builtinName "removeFile" = Just "bi_remove_file"
 builtinName "fileExists" = Just "bi_file_exists"
 builtinName "exit" = Just "bi_exit"
 builtinName _ = Nothing
@@ -447,7 +504,7 @@ builtinName _ = Nothing
 genExpr : List Decl -> List String -> Expr -> Result String
 genExpr decls env expr =
   case expr of
-    EVar name =>
+    EVar name _ =>
       if memName name env then Ok (sanitizeName name)
       else
         case ctorArity name decls of
@@ -460,17 +517,20 @@ genExpr decls env expr =
           Nothing =>
             case builtinName name of
               Just ref =>
-                if name == "getArgs" then Ok "bi_get_args ()" else Ok ref
+                case name of
+                  "getArgs" => Ok "bi_get_args ()"
+                  "readLine" => Ok "bi_read_line ()"
+                  _ => Ok ref
               Nothing =>
                 case funArity name decls of
                   Just 0 => Ok (zeroArgRef decls name)
                   Just arity => Ok (valueName name)
                   Nothing => Err ("typed codegen: unbound variable " ++ name)
-    EInt n => Ok (strFromInt n)
-    EStr s => Ok (typedString s)
-    EApp fn args =>
+    EInt n _ => Ok (strFromInt n)
+    EStr s _ => Ok (typedString s)
+    EApp fn args _ =>
       case fn of
-        EVar name =>
+        EVar name _ =>
           case ctorArity name decls of
             Just arity =>
               if name == "Nil" || name == "True" || name == "False" then
@@ -516,17 +576,17 @@ genExpr decls env expr =
                   _ => genCall decls env fn args
               else genCall decls env fn args
         _ => genCall decls env fn args
-    ELam params body =>
+    ELam params body _ =>
       let env2 = append params env
       in andThen (genExpr decls env2 body) (\b =>
            Ok ("fun " ++ joinWith " " (map sanitizeName params) ++ " -> " ++ b))
-    ELet binds body =>
-      andThen (genBinds decls env binds body) (\b => Ok ("(" ++ b ++ ")"))
-    ECase scrut alts =>
+    ELet binds body rec_ _ =>
+      andThen (genLetBinds decls env binds body rec_) (\b => Ok ("(" ++ b ++ ")"))
+    ECase scrut alts sp =>
       andThen (genExpr decls env scrut) (\s =>
         andThen (mapResult (genAlt decls env) alts) (\arms =>
-          Ok ("(match " ++ s ++ " with\n" ++ joinWith "\n" arms ++ ")")))
-    EIf c t e =>
+          Ok ("(match " ++ s ++ " with\n" ++ joinWith "\n" (append arms (Cons (genCatchAll sp "case pattern match failure") Nil)) ++ ")")))
+    EIf c t e _ =>
       andThen (genExpr decls env c) (\gc =>
         andThen (genExpr decls env t) (\gt =>
           andThen (genExpr decls env e) (\ge =>
@@ -538,13 +598,39 @@ genAlt decls env (Pair pat body) =
     andThen (genExpr decls (append (patVars pat) env) body) (\b =>
       Ok ("  | " ++ p ++ " -> " ++ b)))
 
+-- 生成兜底分支，报告 `文件:行:列`。
+genCatchAll (Span f sl sc el ec) msg =
+  if sl == 0 then "  | _ -> vuna_fail \"\" 0 0 (" ++ ocamlString msg ++ ")"
+  else "  | _ -> vuna_fail " ++ ocamlString f ++ " " ++ strFromInt sl ++ " " ++ strFromInt sc ++ " (" ++ ocamlString msg ++ ")"
+
+genLetBinds decls env binds body False = genBinds decls env binds body
+genLetBinds decls env binds body True = genRecBinds decls env binds body
+
+-- 递归 let（where 块）：`let rec name = value and ... in body`，所有绑定名互见。
+genRecBinds decls env binds body =
+  andThen (genRecDefs decls (append (recBindNames binds) env) binds) (\defs =>
+    andThen (genExpr decls (append (recBindNames binds) env) body) (\b =>
+      Ok ("let rec " ++ joinWith "\nand " defs ++ " in " ++ b)))
+
+recBindNames Nil = Nil
+recBindNames (Cons (Pair (PVar name _) _) rest) = Cons name (recBindNames rest)
+recBindNames (Cons (Pair _ _) _) = Nil
+
+genRecDefs decls env Nil = Ok Nil
+genRecDefs decls env (Cons (Pair (PVar name _) value) rest) =
+  andThen (genExpr decls env value) (\v =>
+    andThen (genRecDefs decls env rest) (\tail =>
+      Ok (Cons (sanitizeName name ++ " = " ++ v) tail)))
+genRecDefs decls env (Cons (Pair _ _) _) = Err "recursive let bindings must be simple names"
+
 genBinds : List Decl -> List String -> List (Pair Pat Expr) -> Expr -> Result String
 genBinds decls env Nil body = genExpr decls env body
 genBinds decls env (Cons (Pair pat value) rest) body =
   andThen (genPat pat) (\p =>
     andThen (genExpr decls env value) (\v =>
       andThen (genBinds decls (append (patVars pat) env) rest body) (\r =>
-        Ok ("let " ++ p ++ " = " ++ v ++ " in " ++ r))))
+        if isIrrefutable pat then Ok ("let " ++ p ++ " = " ++ v ++ " in " ++ r)
+        else Ok ("(match " ++ v ++ " with\n  | " ++ p ++ " -> " ++ r ++ "\n  | _ -> vuna_fail " ++ ocamlString (spanFile (patSpan pat)) ++ " " ++ strFromInt (spanStartLine (patSpan pat)) ++ " " ++ strFromInt (spanStartCol (patSpan pat)) ++ " (\"let pattern match failure\"))"))))
 
 genClause : List Decl -> List String -> Pair (List Pat) Expr -> Result String
 genClause decls env (Pair pats body) =
@@ -552,10 +638,16 @@ genClause decls env (Pair pats body) =
     andThen (genExpr decls (append (concatMap patVars pats) env) body) (\b =>
       Ok ("  | (" ++ joinWith ", " ps ++ ") -> " ++ b)))
 
+isIrrefutable p =
+  case p of
+    PVar _ _ => True
+    PWild _ => True
+    _ => False
+
 isVarPattern p =
   case p of
-    PVar _ => True
-    PWild => True
+    PVar _ _ => True
+    PWild _ => True
     _ => False
 
 allVarPatterns Nil = True
@@ -563,10 +655,18 @@ allVarPatterns (Cons p rest) = isVarPattern p && allVarPatterns rest
 
 patParam p =
   case p of
-    PVar name => sanitizeName name
+    PVar name _ => sanitizeName name
     _ => "_"
 
 -- 单子句且模式全是变量/通配时，直接生成 fun，省掉 match 与元组打包。
+funSpan decls name =
+  case decls of
+    Nil => noLocSpan
+    Cons d rest =>
+      case d of
+        DFun n pats body sp => if n == name then sp else funSpan rest name
+        _ => funSpan rest name
+
 genFunction : List Decl -> String -> Result String
 genFunction decls name =
   case funArity name decls of
@@ -587,18 +687,18 @@ genFunction decls name =
             andThen (mapResult (genClause decls Nil) (clausesFor decls name)) (\arms =>
               let params = genParams arity
               in let matched = if arity == 1 then "a0" else "(" ++ joinWith ", " params ++ ")"
-                 in Ok ("fun " ++ joinWith " " params ++ " -> match " ++ matched ++ " with\n" ++ joinWith "\n" arms))
+                 in Ok ("fun " ++ joinWith " " params ++ " -> match " ++ matched ++ " with\n" ++ joinWith "\n" (append arms (Cons (genCatchAll (funSpan decls name) ("no matching clause for " ++ name)) Nil))))
         Cons first rest =>
           andThen (mapResult (genClause decls Nil) (clausesFor decls name)) (\arms =>
             let params = genParams arity
             in let matched = if arity == 1 then "a0" else "(" ++ joinWith ", " params ++ ")"
-               in Ok ("fun " ++ joinWith " " params ++ " -> match " ++ matched ++ " with\n" ++ joinWith "\n" arms))
+               in Ok ("fun " ++ joinWith " " params ++ " -> match " ++ matched ++ " with\n" ++ joinWith "\n" (append arms (Cons (genCatchAll (funSpan decls name) ("no matching clause for " ++ name)) Nil))))
 
 functionNames decls = uniqueNames (map declFunName decls)
 
 declFunName d =
   case d of
-    DFun name pats body => name
+    DFun name pats body _ => name
     _ => ""
 
 uniqueNames Nil = Nil
@@ -758,14 +858,14 @@ clauseRefs (Pair pats body) = exprRefs body
 exprRefs : Expr -> List String
 exprRefs expr =
   case expr of
-    EVar name => Cons name Nil
-    EInt n => Nil
-    EStr s => Nil
-    EApp fn args => unionNames (exprRefs fn) (concatMap exprRefs args)
-    ELam params body => exprRefs body
-    ELet binds body => unionNames (concatMap bindRefs binds) (exprRefs body)
-    ECase scrut alts => unionNames (exprRefs scrut) (concatMap altRefs alts)
-    EIf c t e => unionNames (exprRefs c) (unionNames (exprRefs t) (exprRefs e))
+    EVar name _ => Cons name Nil
+    EInt n _ => Nil
+    EStr s _ => Nil
+    EApp fn args _ => unionNames (exprRefs fn) (concatMap exprRefs args)
+    ELam params body _ => exprRefs body
+    ELet binds body _ _ => unionNames (concatMap bindRefs binds) (exprRefs body)
+    ECase scrut alts _ => unionNames (exprRefs scrut) (concatMap altRefs alts)
+    EIf c t e _ => unionNames (exprRefs c) (unionNames (exprRefs t) (exprRefs e))
 
 bindRefs : Pair Pat Expr -> List String
 bindRefs (Pair pat value) = exprRefs value
@@ -798,7 +898,8 @@ genTop decls =
                       Ok (joinWith "\n\n" parts ++ "\n")))
 
 runtimePrelude =
-  [ Pair "bi_add" "let bi_add a b = a + b\n"
+  [ Pair "vuna_fail" "let vuna_fail file line col msg =\n  if line = 0 then failwith msg\n  else failwith (file ^ \":\" ^ string_of_int line ^ \":\" ^ string_of_int col ^ \": \" ^ msg)\n"
+  , Pair "bi_add" "let bi_add a b = a + b\n"
   , Pair "bi_sub" "let bi_sub a b = a - b\n"
   , Pair "bi_mul" "let bi_mul a b = a * b\n"
   , Pair "bi_div" "let bi_div a b = if b = 0 then failwith \"division by zero\" else a / b\n"
@@ -831,9 +932,21 @@ runtimePrelude =
   , Pair "bi_file_exists" "let bi_file_exists path = Sys.file_exists path\n"
   , Pair "bi_exit" "let bi_exit n = exit n\n"
   , Pair "bi_get_args" "let bi_get_args () =\n  let argv = Sys.argv in\n  let n = Array.length argv in\n  if n <= 1 then [] else Array.to_list (Array.sub argv 1 (n - 1))\n"
+  , Pair "bi_read_line" "let bi_read_line () = try input_line stdin with End_of_file -> \"\"\n"
+  , Pair "bi_read_dir" "let bi_read_dir path =\n  try List.sort compare (Array.to_list (Sys.readdir path))\n  with Sys_error msg -> failwith (\"readDir: \" ^ msg)\n"
+  , Pair "bi_is_directory" "let bi_is_directory path =\n  try Sys.is_directory path with Sys_error msg -> failwith (\"isDirectory: \" ^ msg)\n"
+  , Pair "bi_make_dir" "let bi_make_dir path =\n  try (if Sys.file_exists path then 0 else (Sys.mkdir path 0o755; 0))\n  with Sys_error msg -> failwith (\"makeDir: \" ^ msg)\n"
+  , Pair "bi_remove_file" "let bi_remove_file path =\n  try (if Sys.file_exists path then (Sys.remove path; 0) else 0)\n  with Sys_error msg -> failwith (\"removeFile: \" ^ msg)\n"
   , Pair "show_ctor" "let show_ctor name args = if args = [] then name else \"(\" ^ name ^ \" \" ^ String.concat \" \" args ^ \")\"\n"
   , Pair "show_vbool" "let show_vbool b = if b then \"True\" else \"False\"\n"
   , Pair "show_vstring" "let show_vstring s =\n  let buf = Buffer.create 16 in\n  Buffer.add_char buf (Char.chr 34);\n  String.iter (fun c ->\n    let n = Char.code c in\n    if n = 34 then Buffer.add_string buf (String.make 1 (Char.chr 92) ^ String.make 1 (Char.chr 34))\n    else if n = 92 then Buffer.add_string buf (String.make 1 (Char.chr 92) ^ String.make 1 (Char.chr 92))\n    else if n = 10 then Buffer.add_string buf (String.make 1 (Char.chr 92) ^ \"n\")\n    else if n = 9 then Buffer.add_string buf (String.make 1 (Char.chr 92) ^ \"t\")\n    else if n = 13 then Buffer.add_string buf (String.make 1 (Char.chr 92) ^ \"r\")\n    else Buffer.add_char buf c) s;\n  Buffer.add_char buf (Char.chr 34);\n  Buffer.contents buf\n"
+  , Pair "bi_show_string" "let bi_show_string s = show_vstring s\n"
+  , Pair "bi_eq_generic" "let bi_eq_generic (a : 'a) (b : 'a) = a = b\n"
+  , Pair "bi_neq_generic" "let bi_neq_generic (a : 'a) (b : 'a) = a <> b\n"
+  , Pair "bi_lt_generic" "let bi_lt_generic (a : 'a) (b : 'a) = compare a b < 0\n"
+  , Pair "bi_le_generic" "let bi_le_generic (a : 'a) (b : 'a) = compare a b <= 0\n"
+  , Pair "bi_gt_generic" "let bi_gt_generic (a : 'a) (b : 'a) = compare a b > 0\n"
+  , Pair "bi_ge_generic" "let bi_ge_generic (a : 'a) (b : 'a) = compare a b >= 0\n"
   , Pair "show_vlist" "let rec show_vlist (show_elem : 'a -> string) (v : 'a list) : string =\n  match v with\n  | [] -> \"Nil\"\n  | x :: xs -> \"(Cons \" ^ show_elem x ^ \" \" ^ show_vlist show_elem xs ^ \")\"\n"
   ]
 
@@ -855,9 +968,44 @@ filterRuntime (Cons (Pair name chunk) rest) bodyChars =
     Cons (Pair name chunk) (filterRuntime rest bodyChars)
   else filterRuntime rest bodyChars
 
+chunkNameOf (Pair n c) = n
+
+chunkTextOf (Pair n c) = c
+
+chunkNamesOf chunks = map chunkNameOf chunks
+
+neededByChunks chunks =
+  concatMap (\ch => filterNames (\n => containsName (strUnpack n) (strUnpack (chunkTextOf ch))) (map chunkNameOf runtimePrelude)) chunks
+
+expandRuntime included =
+  case missingChunks included of
+    Nil => included
+    missing => expandRuntime (append included missing)
+
+missingChunks included =
+  filterNames2
+    (\n => notIn n (chunkNamesOf included) && memName n (neededByChunks included))
+    (map chunkNameOf runtimePrelude)
+    runtimePrelude
+
+filterNames2 pred names all =
+  case all of
+    Nil => Nil
+    Cons ch rest =>
+      if pred (chunkNameOf ch) then Cons ch (filterNames2 pred names rest)
+      else filterNames2 pred names rest
+
+keepChunks names Nil = Nil
+
+keepChunks names (Cons ch rest) =
+  if memName (chunkNameOf ch) names then Cons ch (keepChunks names rest)
+  else keepChunks names rest
+
 runtimeForBody body =
   if strLength body > 20000 then runtimeCodeTyped
-  else "\n" ++ joinWith "" (map secondOf (filterRuntime runtimePrelude (strUnpack body)))
+  else
+    let selected = expandRuntime (filterRuntime runtimePrelude (strUnpack body))
+    in "\n" ++ joinWith "" (map secondOf (keepChunks (map chunkNameOf selected) runtimePrelude))
 
 -- ---------------------------------------------------------------
 -- 生成代码的轻量 pretty printer
@@ -935,7 +1083,7 @@ typedMainSuffix decls showMain printResult =
 generateProgramTyped decls globals printResult =
   case lookupScheme "main" globals of
     Nothing => Err "typed codegen: no main definition"
-    Just (Scheme qs ty) =>
+    Just (Scheme qs cons ty) =>
       case ty of
         TFun a b => Err "typed codegen: main must be zero-arity"
         _ =>

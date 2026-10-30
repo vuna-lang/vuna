@@ -1,85 +1,42 @@
--- Vuna.Base：语言通用类型、列表/Result 辅助函数与字符串工具。
+module Vuna.Base (module Vuna.Pair, module Vuna.Bool, module Vuna.List, module Vuna.Maybe, module Vuna.Result, module Vuna.String, Pos, Span, posLine, posCol, spanFile, spanStartLine, spanStartCol, spanEndLine, spanEndCol, showSpanLoc, suggest, containsDot, splitOnDot, splitLastDot, joinDots, joinSlashes, joinArrows) where
 
-data Result a : Type where
-  Ok : a -> Result a
-  Err : String -> Result a
+-- Vuna.Base：编译器门面（M11）。
+-- 通用类型与 helper 的唯一真源已迁到 stdlib/（Vuna.Pair/Bool/List/Maybe/Result/String），
+-- 这里整模块重导出，保持既有 `import Vuna.Base` 的模块零改动；
+-- 只保留编译器专属的源码位置（Pos/Span）与模块路径/诊断工具。
 
-data Maybe a : Type where
-  Nothing : Maybe a
-  Just : a -> Maybe a
+import Vuna.Pair
+import Vuna.Bool
+import Vuna.List
+import Vuna.Maybe
+import Vuna.Result
+import Vuna.String
 
-data List a : Type where
-  Nil : List a
-  Cons : a -> List a -> List a
+-- 源码位置（行、列，均从 1 开始）。
+data Pos : Type where
+  Pos : Int -> Int -> Pos
 
-data Pair a b : Type where
-  Pair : a -> b -> Pair a b
+-- 源码 span：文件、起始行列、结束行列。文件在解析时由调用方注入，
+-- 供跨模块 flatten 后仍能追溯每个表达式来自哪个源文件。
+data Span : Type where
+  Span : String -> Int -> Int -> Int -> Int -> Span
 
+posLine (Pos l c) = l
 
-data Bool : Type where
-  False : Bool
-  True : Bool
+posCol (Pos l c) = c
 
-append : List a -> List a -> List a
-append Nil ys = ys
-append (Cons x xs) ys = Cons x (append xs ys)
+spanFile (Span f sl sc el ec) = f
 
-reverseOnto : List a -> List a -> List a
-reverseOnto Nil acc = acc
-reverseOnto (Cons x xs) acc = reverseOnto xs (Cons x acc)
+spanStartLine (Span f sl sc el ec) = sl
 
-reverse : List a -> List a
-reverse xs = reverseOnto xs Nil
+spanStartCol (Span f sl sc el ec) = sc
 
-length : List a -> Int
-length Nil = 0
-length (Cons x xs) = 1 + length xs
+spanEndLine (Span f sl sc el ec) = el
 
-map : (a -> b) -> List a -> List b
-map f Nil = Nil
-map f (Cons x xs) = Cons (f x) (map f xs)
+spanEndCol (Span f sl sc el ec) = ec
 
-traverse : (a -> Result b) -> List a -> Result (List b)
-traverse f Nil = Ok Nil
-traverse f (Cons x xs) =
-  case f x of
-    Err e => Err e
-    Ok y =>
-      case traverse f xs of
-        Err e => Err e
-        Ok ys => Ok (Cons y ys)
-
-andThen : Result a -> (a -> Result b) -> Result b
-andThen r f =
-  case r of
-    Ok x => f x
-    Err e => Err e
-
-step : Result (Pair a b) -> (a -> b -> Result c) -> Result c
-step r k =
-  case r of
-    Ok (Pair x st) => k x st
-    Err e => Err e
-
-
-concatMap : (a -> List b) -> List a -> List b
-concatMap f Nil = Nil
-concatMap f (Cons x rest) = append (f x) (concatMap f rest)
-
-memName : String -> List String -> Bool
-memName name Nil = False
-memName name (Cons x rest) = if x == name then True else memName name rest
-
-lookupPair : String -> List (Pair String v) -> Maybe v
-lookupPair name Nil = Nothing
-lookupPair name (Cons (Pair k v) rest) =
-  if k == name then Just v else lookupPair name rest
-
-firstOf : Pair a b -> a
-firstOf (Pair a b) = a
-
-secondOf : Pair a b -> b
-secondOf (Pair a b) = b
+-- 把 span 渲染成 `文件:行:列`（错误信息前缀）。
+showSpanLoc (Span f sl sc el ec) = f ++ ":" ++ strFromInt sl ++ ":" ++ strFromInt sc
 
 memChar : Int -> List Int -> Bool
 memChar c chars =
@@ -87,18 +44,9 @@ memChar c chars =
     Nil => False
     Cons x rest => if x == c then True else memChar c rest
 
+-- 模块路径工具：`A.B.C` 的拆分/拼接（编译器专属）。
 containsDot : String -> Bool
 containsDot s = memChar 46 (strUnpack s)
-
-startsWith : String -> String -> Bool
-startsWith prefix text = startsWithChars (strUnpack prefix) (strUnpack text)
-
-startsWithChars : List Int -> List Int -> Bool
-startsWithChars Nil text = True
-startsWithChars (Cons p prest) text =
-  case text of
-    Nil => False
-    Cons t trest => if p == t then startsWithChars prest trest else False
 
 splitOnDot : String -> List String
 splitOnDot s = splitCharsOnDot (strUnpack s) Nil Nil
@@ -131,3 +79,26 @@ joinArrows : List String -> String
 joinArrows Nil = ""
 joinArrows (Cons x Nil) = x
 joinArrows (Cons x rest) = x ++ " -> " ++ joinArrows rest
+
+-- 候选建议：与出错名相似的名字（诊断）
+suggest : String -> List String -> String
+suggest name Nil = ""
+suggest name (Cons c rest) =
+  if _similarName name c then " (did you mean " ++ c ++ "?)" else suggest name rest
+
+_similarName a b =
+  if a == b then False
+  else if startsWith a b then True
+  else if startsWith b a then True
+  else
+    let la = strUnpack a
+    in let lb = strUnpack b
+       in lengthDiffLE (length la) (length lb) 2 && prefixLen2 la lb >= 2
+
+prefixLen2 Nil _ = 0
+prefixLen2 _ Nil = 0
+prefixLen2 (Cons x xs) (Cons y ys) =
+  if x == y then 1 + prefixLen2 xs ys else 0
+
+lengthDiffLE la lb n =
+  if la >= lb then la - lb <= n else lb - la <= n

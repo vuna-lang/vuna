@@ -1,0 +1,4 @@
+import Multi
+
+main : Int
+main = Multi.foo + Multi.helperValue + Multi.choice + Multi.bar (Multi.MkBar 0)

@@ -1,0 +1,5 @@
+-- stdlib 反例：IO 抽象类型，构造器 MkIO 不导出。
+import Vuna.IO
+
+main : IO Int
+main = MkIO (\w => 1)

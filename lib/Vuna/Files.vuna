@@ -1,0 +1,48 @@
+module Vuna.Files (collectVunaFiles, collectSourceFiles, pathExistsDir, splitPath, baseName) where
+
+-- Vuna.Files：目录遍历与路径小工具（fmt / doc / test 共用）。
+-- 只依赖 readDir / isDirectory / fileExists 内建；readDir 返回字典序，遍历顺序确定。
+
+import Vuna.Base
+
+-- 递归收集目录下所有 .vuna 文件（跳过 . / .. 与隐藏项）。
+collectVunaFiles : String -> List String
+collectVunaFiles dir = concatMap (walkVuna dir) (readDir dir)
+
+walkVuna dir name =
+  case name of
+    "." => Nil
+    ".." => Nil
+    _ =>
+      let path = dir ++ "/" ++ name
+      in if isDirectory path then collectVunaFiles path
+         else if endsWith ".vuna" name then Cons path Nil
+         else Nil
+
+-- 递归收集目录下所有非隐藏项（文件与目录），用于通用遍历。
+collectSourceFiles : String -> List String
+collectSourceFiles dir = concatMap (walkAny dir) (readDir dir)
+
+walkAny dir name =
+  case name of
+    "." => Nil
+    ".." => Nil
+    _ =>
+      let path = dir ++ "/" ++ name
+      in if isDirectory path then collectSourceFiles path else Cons path Nil
+
+pathExistsDir path = isDirectory path
+
+-- 路径拆分：返回去掉最后一段的目录与最后一段（无 "/" 时目录为 ""）。
+splitPath : String -> Pair String String
+splitPath path = splitPathChars (strUnpack path) Nil
+
+splitPathChars Nil acc =
+  let chars = reverse acc
+  in Pair "" (strPack chars)
+
+splitPathChars (Cons c rest) acc =
+  if c == 47 then Pair (strPack (reverse acc)) (strPack rest) else splitPathChars rest (Cons c acc)
+
+baseName : String -> String
+baseName path = secondOf (splitPath path)

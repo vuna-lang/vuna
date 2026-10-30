@@ -1,0 +1,15 @@
+module Vuna.Sample (Point(..), Shape, area, module Vuna.Base, Vuna.Parser.parseSource) where
+
+import Vuna.Base
+import qualified Vuna.Parser as P
+import Vuna.Ast as A
+import qualified Vuna.Lexer as L
+
+data Shape : Type where
+  Circle : Int -> Shape
+  Rect : Int -> Int -> Shape
+
+area : Shape -> Int
+area s = case s of
+  Circle r => 3 * r * r
+  Rect w h => w * h

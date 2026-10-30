@@ -1,0 +1,13 @@
+-- stdlib：Vuna.IO 的显式 API（runIO/pureIO/bindIO/fmapIO/printIO/printlnIO）。
+-- 所有效果放进单个 IO 动作，保证三路径输出顺序一致。
+import Vuna.Monad
+import Vuna.IO
+
+program : IO Int
+program =
+  bindIO (printIO "abc") (\n =>
+    bindIO (fmapIO (\m => n + m) (printIO "de")) (\k =>
+      fmapIO (\x => k + x + 10) (printlnIO "x")))
+
+main : Int
+main = runIO program + runIO (pureIO 0)

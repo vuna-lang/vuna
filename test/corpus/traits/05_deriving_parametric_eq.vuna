@@ -1,0 +1,7 @@
+data Maybe2 a : Type where
+  Nothing2 : Maybe2 a
+  Just2 : a -> Maybe2 a
+deriving (Eq)
+
+main : Bool
+main = (Just2 1 == Just2 1) && (Nothing2 /= Just2 2)

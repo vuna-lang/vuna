@@ -1,0 +1,3 @@
+import M
+
+main = M._C 1

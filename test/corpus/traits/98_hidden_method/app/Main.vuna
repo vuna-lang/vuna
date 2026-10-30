@@ -1,0 +1,4 @@
+import Vuna.T
+
+main : String
+main = pretty Red

@@ -1,0 +1,5 @@
+import Vuna.Shape
+
+main : Int
+main = case mkCircle 2 of
+  Circle r => r

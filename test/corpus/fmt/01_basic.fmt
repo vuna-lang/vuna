@@ -1,0 +1,10 @@
+data Nat : Type where
+  Zero : Nat
+  Succ : Nat -> Nat
+
+plus : Nat -> Nat -> Nat
+plus Zero y = y
+plus (Succ x) y = Succ (plus x y)
+
+main : Nat
+main = plus (Succ Zero) (Succ (Succ Zero))

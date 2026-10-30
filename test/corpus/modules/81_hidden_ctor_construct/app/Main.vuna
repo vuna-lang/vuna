@@ -1,0 +1,3 @@
+import Vuna.Shape
+
+main = Vuna.Shape.Circle 2

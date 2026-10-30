@@ -1,0 +1,4 @@
+import Vuna.Empty
+
+main : Int
+main = 42

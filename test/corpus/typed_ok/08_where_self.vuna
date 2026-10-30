@@ -1,0 +1,6 @@
+f : Int -> Int
+f x = g x where
+  g y = if y == 0 then 1 else y * g (y - 1)
+
+main : Int
+main = f 5

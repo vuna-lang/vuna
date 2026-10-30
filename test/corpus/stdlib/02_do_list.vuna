@@ -1,0 +1,20 @@
+-- stdlib：do 在 List monad 上（bind = concatMap，pure = 单元素）。
+import Vuna.Monad
+import Vuna.List
+import Vuna.Pair
+
+showPair : Pair Int Int -> String
+showPair (Pair a b) = strFromInt a ++ ":" ++ strFromInt b
+
+showPairs : List (Pair Int Int) -> String
+showPairs Nil = "[]"
+showPairs (Cons p ps) = showPair p ++ " " ++ showPairs ps
+
+pairs : List (Pair Int Int)
+pairs = do
+  x <- Cons 1 (Cons 2 Nil)
+  y <- Cons 10 (Cons 20 Nil)
+  pure (Pair x y)
+
+main : String
+main = showPairs pairs

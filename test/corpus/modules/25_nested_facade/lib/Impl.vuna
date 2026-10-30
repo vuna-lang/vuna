@@ -1,0 +1,7 @@
+module Impl (foo, T(..)) where
+
+foo : Int
+foo = 20
+
+data T : Type where
+  C : Int -> T

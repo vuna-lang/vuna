@@ -1,0 +1,4 @@
+import FacadeAlias
+
+main : Int
+main = FacadeAlias.bump 41
