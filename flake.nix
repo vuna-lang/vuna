@@ -45,6 +45,11 @@
             pname = "vunax";
             version = "0.1.0";
 
+            # 本地构建的包不会出现在任何 binary cache 里，标记为不接受
+            # 替代：Nix 不再为它的输出向 substituter 发 narinfo 查询，
+            # 直接本地构建；依赖（ocaml、dune 等）仍照常走缓存替换。
+            allowSubstitutes = false;
+
             # 只把 vunax 需要的文件拷进 Nix store；app/、lib/、test/
             # 是 vuna 源码，属于自举阶段，不是 vunax 的构建输入。
             src = lib.fileset.toSource {
