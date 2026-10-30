@@ -17,8 +17,8 @@ usage() {
   cat <<'EOF'
 usage: vuna-bench [options]
 
-手动测量 vuna 的构建/编译性能与生成产物尺寸。默认测量 vuna（stage 2）；
-加 --compiler boot 测量 vuna-boot（stage 1 种子）。请在仓库根目录运行。
+手动测量 vuna 的构建/编译性能与生成产物尺寸。默认测量 vuna（stage 1）；
+加 --compiler boot 测量 vuna-boot（stage 0 种子）。请在仓库根目录运行。
 
 options:
   --compiler vuna|boot   被测编译器（默认 vuna）
@@ -115,13 +115,13 @@ case $RUNS in
   ''|*[!0-9]*|0) die "--runs must be a positive integer" ;;
 esac
 case $COMPILER in
-  vuna|stage2) COMPILER=vuna ;;
-  boot|vuna-boot|stage1) COMPILER=boot ;;
+  vuna|stage1) COMPILER=vuna ;;
+  boot|vuna-boot|stage0) COMPILER=boot ;;
   *) die "--compiler must be vuna or boot" ;;
 esac
 
 REPO=$PWD
-[ -f "$REPO/bootstrap/stage1.ml" ] || die "run from the repo root (bootstrap/stage1.ml not found)"
+[ -f "$REPO/bootstrap/seed.ml" ] || die "run from the repo root (bootstrap/seed.ml not found)"
 [ -f "$REPO/app/Main.vuna" ] || die "run from the repo root (app/Main.vuna not found)"
 [ -d "$REPO/lib/Vuna" ] || die "run from the repo root (lib/Vuna not found)"
 command -v ocamlopt >/dev/null 2>&1 || die "ocamlopt not found (use: nix run .#bench)"
@@ -157,7 +157,7 @@ NPROC=$(getconf _NPROCESSORS_ONLN 2>/dev/null || printf 'unknown')
 OCAMLOPT_VERSION=$(ocamlopt -version 2>/dev/null || printf 'unknown')
 FLAMBDA=$(ocamlopt -config 2>/dev/null | awk -F': *' '$1 == "flambda" { print $2 }' || true)
 [ -n "$FLAMBDA" ] || FLAMBDA=unknown
-STAGE1_SHA=$(sha256sum bootstrap/stage1.ml | awk '{ print $1 }')
+SEED_SHA=$(sha256sum bootstrap/seed.ml | awk '{ print $1 }')
 SRC_LINES=$(cat lib/Vuna/*.vuna app/*.vuna | wc -l | tr -d ' ')
 SRC_BYTES=$(cat lib/Vuna/*.vuna app/*.vuna | wc -c | tr -d ' ')
 
@@ -252,20 +252,20 @@ measure() {
 
 # ---- 构建 ----------------------------------------------------------------
 SEED_BIN=$WORK/vuna-boot
-STAGE2=$WORK/stage2.ml
+STAGE1=$WORK/stage1.ml
 VUNA_BIN=$WORK/vuna
-STAGE3=$WORK/stage3.ml
+STAGE2=$WORK/stage2.ml
 
-measure seed_build ocamlopt -g -w -a+39 -warn-error +39 -o "$SEED_BIN" bootstrap/stage1.ml
-measure seed_compile "$SEED_BIN" --root lib --root app --no-print app/Main.vuna "$STAGE2"
-measure stage2_build ocamlopt -g -w -a+39 -warn-error +39 -o "$VUNA_BIN" "$STAGE2"
+measure seed_build ocamlopt -g -w -a+39 -warn-error +39 -o "$SEED_BIN" bootstrap/seed.ml
+measure seed_compile "$SEED_BIN" --root lib --root app --no-print app/Main.vuna "$STAGE1"
+measure stage1_build ocamlopt -g -w -a+39 -warn-error +39 -o "$VUNA_BIN" "$STAGE1"
 
 if [ "$COMPILER" = vuna ]; then
   SELF_BIN=$VUNA_BIN
-  SELF_OUT=$STAGE3
+  SELF_OUT=$STAGE2
 else
   SELF_BIN=$SEED_BIN
-  SELF_OUT=$STAGE2
+  SELF_OUT=$STAGE1
 fi
 
 measure compiler_self_compile "$SELF_BIN" --root lib --root app --no-print app/Main.vuna "$SELF_OUT"
@@ -331,8 +331,8 @@ collect_stats() {
   COUNT["${key}_rec_zero_arg"]=$(grep -cE '^let rec [A-Za-z0-9_]+ = fun \(\) ->' "$f" || true)
 }
 
-collect_stats stage1 bootstrap/stage1.ml
-collect_stats stage2 "$STAGE2"
+collect_stats seed bootstrap/seed.ml
+collect_stats stage1 "$STAGE1"
 collect_stats self "$SELF_OUT"
 collect_stats tiny "$WORK/tiny.ml"
 if [ "$WITH_DYNAMIC" = 1 ]; then collect_stats dyn "$WORK/dyn.ml"; fi
@@ -340,7 +340,7 @@ if [ "$WITH_DYNAMIC" = 1 ]; then collect_stats dyn "$WORK/dyn.ml"; fi
 # ---- 状态 ----------------------------------------------------------------
 FIXED_POINT=skipped
 if [ "$COMPILER" = vuna ]; then
-  if cmp -s "$STAGE2" "$STAGE3"; then
+  if cmp -s "$STAGE1" "$STAGE2"; then
     FIXED_POINT=true
   else
     FIXED_POINT=false
@@ -348,7 +348,7 @@ if [ "$COMPILER" = vuna ]; then
   fi
 fi
 SEED_MATCHES=false
-if cmp -s bootstrap/stage1.ml "$STAGE2"; then SEED_MATCHES=true; fi
+if cmp -s bootstrap/seed.ml "$STAGE1"; then SEED_MATCHES=true; fi
 
 TESTS=skipped
 TESTS_SUMMARY=""
@@ -386,7 +386,7 @@ print_table() {
   note ""
   note "== 构建性能 =="
   metric_line seed_build
-  metric_line stage2_build
+  metric_line stage1_build
   note ""
   note "== 编译性能（$COMPILER）=="
   metric_line seed_compile
@@ -399,15 +399,15 @@ print_table() {
   note ""
   note "== 产物尺寸 =="
   printf '  %-10s %10s %8s %9s %8s %8s %10s %9s\n' artifact bytes lines max_line '>120' '>500' 'trail_ws' 'blank_ws'
-  for key in stage1 stage2 self tiny dyn; do
+  for key in seed stage1 self tiny dyn; do
     [ -n "${SIZE[${key}_bytes]:-}" ] || continue
     printf '  %-10s %10s %8s %9s %8s %8s %10s %9s\n' \
       "$key" "${SIZE[${key}_bytes]}" "${SIZE[${key}_lines]}" "${SIZE[${key}_max_line]}" \
       "${SIZE[${key}_over120]}" "${SIZE[${key}_over500]}" "${SIZE[${key}_trailing_ws]}" "${SIZE[${key}_blank_ws]}"
   done
   note ""
-  note "== codegen 指标（stage1 / stage2 / self） =="
-  for key in stage1 stage2 self; do
+  note "== codegen 指标（seed / stage1 / self） =="
+  for key in seed stage1 self; do
     [ -n "${COUNT[${key}_let_rec]:-}" ] || continue
     printf '  %-8s let_rec %4s  let %4s  and %4s  type %4s  String.concat %4s  bi_eq_int %4s  bi_eq_str %4s  bi_eq_bool %4s  rec0arg %2s\n' \
       "$key" "${COUNT[${key}_let_rec]}" "${COUNT[${key}_let]}" "${COUNT[${key}_and]}" "${COUNT[${key}_type]}" \
@@ -417,7 +417,7 @@ print_table() {
   note ""
   note "== 状态 =="
   note "  fixed_point: $FIXED_POINT"
-  note "  seed_matches_stage2: $SEED_MATCHES"
+  note "  seed_matches_stage1: $SEED_MATCHES"
   note "  corpus_failures: $CORPUS_FAILS"
   note "  tests: $TESTS ${TESTS_SUMMARY}"
   note ""
@@ -524,7 +524,7 @@ emit_json() {
     "flambda": "$(json_escape "$FLAMBDA")",
     "arch": "$(json_escape "$ARCH")",
     "nproc": $(case $NPROC in *[!0-9]*|'') printf 'null' ;; *) printf '%s' "$NPROC" ;; esac),
-    "stage1_sha256": "$(json_escape "$STAGE1_SHA")",
+    "seed_sha256": "$(json_escape "$SEED_SHA")",
     "runs": $RUNS,
     "warmup": $WARMUP
   },
@@ -538,7 +538,7 @@ emit_json() {
   },
   "status": {
     "fixed_point": $(json_bool "$FIXED_POINT"),
-    "seed_matches_stage2": $(json_bool "$SEED_MATCHES"),
+    "seed_matches_stage1": $(json_bool "$SEED_MATCHES"),
     "corpus_ok": $CORPUS_OK,
     "corpus_total": $CORPUS_TOTAL,
     "tests": "$(json_escape "$TESTS")"
