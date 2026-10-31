@@ -42,15 +42,34 @@ splitCompileOrder (Cons name rest) =
 
 stripMl name = substring 0 (strLength name - 3) name
 
--- 增量构建脚本；names 是编译单元（无扩展名）顺序，最后 Link 到 "$OUT"。
+-- 构建脚本；names 是编译单元（无扩展名）顺序，最后 Link 到 "$OUT"。
+-- 干净构建（没有 .cmx，例如 Nix 构建 seed / stage1）走一次 ocamlopt 调用，
+-- 避免几十次进程启动；已有 .cmx 时才走按模块时间戳的增量路径。
 buildScript : List String -> String
 buildScript names =
   "#!/bin/sh\n"
-  ++ "# 由 vuna 生成：分离编译增量构建脚本（M12）。用法: ./build.sh [OUT]\n"
+  ++ "# 由 vuna 生成：分离编译构建脚本。用法: ./build.sh [OUT]\n"
+  ++ "# 干净构建：一次 ocamlopt 编译全部 .mli/.ml 并链接；\n"
+  ++ "# 增量构建：按 .ml/.mli/.cmi 时间戳逐模块重编（编译单元顺序即依赖顺序）。\n"
   ++ "set -eu\n"
   ++ "cd \"$(dirname \"$0\")\"\n"
   ++ "OUT=${1:-program}\n"
   ++ "FLAGS=\"-g -w -a+39 -warn-error +39\"\n"
+  ++ "MODULES=\"" ++ spaceJoin names ++ "\"\n"
+  ++ "clean=1\n"
+  ++ "for m in $MODULES; do\n"
+  ++ "  if [ -f \"$m.cmx\" ]; then clean=0; fi\n"
+  ++ "done\n"
+  ++ "if [ \"$clean\" -eq 1 ]; then\n"
+  ++ "  SOURCES=\"\"\n"
+  ++ "  for m in $MODULES; do\n"
+  ++ "    if [ -f \"$m.mli\" ]; then SOURCES=\"$SOURCES $m.mli\"; fi\n"
+  ++ "    SOURCES=\"$SOURCES $m.ml\"\n"
+  ++ "  done\n"
+  ++ "  ocamlopt $FLAGS -o \"$OUT\" $SOURCES\n"
+  ++ "  echo \"built $OUT\"\n"
+  ++ "  exit 0\n"
+  ++ "fi\n"
   ++ "compile_mod() {\n"
   ++ "  base=$1\n"
   ++ "  shift\n"
@@ -74,6 +93,10 @@ buildScript names =
   ++ compileCalls names Nil
   ++ "ocamlopt $FLAGS -o \"$OUT\" " ++ joinCmxs names ++ "\n"
   ++ "echo \"built $OUT\"\n"
+
+spaceJoin Nil = ""
+
+spaceJoin (Cons name rest) = name ++ " " ++ spaceJoin rest
 
 depsSuffix Nil = ""
 

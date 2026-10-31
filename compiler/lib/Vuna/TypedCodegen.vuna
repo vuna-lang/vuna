@@ -1110,25 +1110,30 @@ generateProgramTyped decls globals printResult =
 -- ---------------------------------------------------------------
 
 -- 分离编译上下文：项目模块（resolveProject 产物）、入口/全程序 decls、
--- globals/owners、入口名字集合、elaborated 里出现过的全部名字、runtime 安全集合。
+-- globals/owners、入口名字集合、elaborated 里出现过的全部名字、runtime 安全集合，
+-- 以及“函数名 -> 归属模块”的路由表（避免每个模块反复 routeOf 扫描 owners）。
 data SplitCtx : Type where
-  SplitCtx : List Module -> List Decl -> List Decl -> List (Pair String Scheme) -> List (Pair String String) -> List String -> List String -> List String -> SplitCtx
+  SplitCtx : List Module -> List Decl -> List Decl -> List (Pair String Scheme) -> List (Pair String String) -> List String -> List String -> List String -> List (Pair String String) -> List (Pair String String) -> SplitCtx
 
-ctxModules (SplitCtx modules entryDecls elabDecls globals owners entryNames definedNames runtimeSafe) = modules
+ctxModules (SplitCtx modules entryDecls elabDecls globals owners entryNames definedNames runtimeSafe routedFuns routedDatas) = modules
 
-ctxEntryDecls (SplitCtx modules entryDecls elabDecls globals owners entryNames definedNames runtimeSafe) = entryDecls
+ctxEntryDecls (SplitCtx modules entryDecls elabDecls globals owners entryNames definedNames runtimeSafe routedFuns routedDatas) = entryDecls
 
-ctxElabDecls (SplitCtx modules entryDecls elabDecls globals owners entryNames definedNames runtimeSafe) = elabDecls
+ctxElabDecls (SplitCtx modules entryDecls elabDecls globals owners entryNames definedNames runtimeSafe routedFuns routedDatas) = elabDecls
 
-ctxGlobals (SplitCtx modules entryDecls elabDecls globals owners entryNames definedNames runtimeSafe) = globals
+ctxGlobals (SplitCtx modules entryDecls elabDecls globals owners entryNames definedNames runtimeSafe routedFuns routedDatas) = globals
 
-ctxOwners (SplitCtx modules entryDecls elabDecls globals owners entryNames definedNames runtimeSafe) = owners
+ctxOwners (SplitCtx modules entryDecls elabDecls globals owners entryNames definedNames runtimeSafe routedFuns routedDatas) = owners
 
-ctxEntryNames (SplitCtx modules entryDecls elabDecls globals owners entryNames definedNames runtimeSafe) = entryNames
+ctxEntryNames (SplitCtx modules entryDecls elabDecls globals owners entryNames definedNames runtimeSafe routedFuns routedDatas) = entryNames
 
-ctxDefinedNames (SplitCtx modules entryDecls elabDecls globals owners entryNames definedNames runtimeSafe) = definedNames
+ctxDefinedNames (SplitCtx modules entryDecls elabDecls globals owners entryNames definedNames runtimeSafe routedFuns routedDatas) = definedNames
 
-ctxRuntimeSafe (SplitCtx modules entryDecls elabDecls globals owners entryNames definedNames runtimeSafe) = runtimeSafe
+ctxRuntimeSafe (SplitCtx modules entryDecls elabDecls globals owners entryNames definedNames runtimeSafe routedFuns routedDatas) = runtimeSafe
+
+ctxRoutedFuns (SplitCtx modules entryDecls elabDecls globals owners entryNames definedNames runtimeSafe routedFuns routedDatas) = routedFuns
+
+ctxRoutedDatas (SplitCtx modules entryDecls elabDecls globals owners entryNames definedNames runtimeSafe routedFuns routedDatas) = routedDatas
 
 splitPrefixOf name =
   case splitLastDot (splitOnDot name) of
@@ -1198,17 +1203,27 @@ declSplitName d =
         Just n => n
         Nothing => ""
 
+routeDataTable ctx decls =
+  concatMap (\d => case d of
+                     DData n ps cs ds sp => Cons (Pair n (routeOf ctx n)) Nil
+                     _ => Nil)
+    decls
+
 routeData ctx route =
-  filter (\d => case d of
-                  DData n ps cs ds sp => routeOf ctx n == route
-                  _ => False)
-    (ctxElabDecls ctx)
+  let names = uniqueNames (map firstOf (filter (\p => secondOf p == route) (ctxRoutedDatas ctx)))
+  in filter (\d => case d of
+                     DData n ps cs ds sp => memName n names
+                     _ => False)
+       (ctxElabDecls ctx)
+
+routeFunTable ctx decls =
+  concatMap (\d => case d of
+                     DFun n ps b sp => Cons (Pair n (routeOf ctx n)) Nil
+                     _ => Nil)
+    decls
 
 routeFunNames ctx route =
-  uniqueNames (concatMap (\d => case d of
-                                 DFun n ps b sp => if routeOf ctx n == route then Cons n Nil else Nil
-                                 _ => Nil)
-    (ctxElabDecls ctx))
+  uniqueNames (map firstOf (filter (\p => secondOf p == route) (ctxRoutedFuns ctx)))
 
 checkRoutes ctx =
   case filter (\d => routeOf ctx (declSplitName d) == "#unknown") (ctxElabDecls ctx) of
@@ -1525,9 +1540,12 @@ generateSplitProgram modules entryDecls elabDecls globals owners =
       definedNames = uniqueNames (append (functionNames elabDecls)
                         (append (ctorsOf elabDecls) (typeNamesOf elabDecls)))
       runtimeCandidates = uniqueNames (map firstOf (filter (\p => secondOf p == "") owners))
-      baseCtx = SplitCtx modules entryDecls elabDecls globals owners entryNames definedNames Nil
+      baseCtx = SplitCtx modules entryDecls elabDecls globals owners entryNames definedNames Nil Nil Nil
       runtimeSafe = runtimeSafeOf baseCtx runtimeCandidates
-      ctx = SplitCtx modules entryDecls elabDecls globals owners entryNames definedNames runtimeSafe
+      routeCtx = SplitCtx modules entryDecls elabDecls globals owners entryNames definedNames runtimeSafe Nil Nil
+      routedFuns = routeFunTable routeCtx elabDecls
+      routedDatas = routeDataTable routeCtx elabDecls
+      ctx = SplitCtx modules entryDecls elabDecls globals owners entryNames definedNames runtimeSafe routedFuns routedDatas
   in andThen (checkRoutes ctx) (\ok =>
        andThen (topoOrder modules) (\ordered =>
          andThen (splitRuntimeFile ctx) (\runtimeText =>

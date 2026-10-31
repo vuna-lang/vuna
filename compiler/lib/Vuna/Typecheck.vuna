@@ -34,7 +34,75 @@ data RecConstraint : Type where
 -- 推断状态：下一个类型变量编号、substitution、类型名表、记录表、待求解记录约束、
 -- 方法表 + trait 上下文（M10.5 静态派发）。
 data TC : Type where
-  TC : Int -> List (Pair Int Ty) -> List String -> List RecordInfo -> List RecConstraint -> List TraitMethodRef -> TraitCtx -> TC
+  TC : Int -> TySubst -> List String -> List RecordInfo -> List RecConstraint -> List TraitMethodRef -> TraitCtx -> TC
+
+-- 类型变量替换：Int 键 → Ty 的 AVL 树。
+-- 原先用关联表（TySubst）：每次 unify 都要 resolveTy 整个类型，
+-- 而每次 TVar 查找线性扫描 substitution，整体退化为 O(n²)（自举约 15s）。
+-- AVL 把查找/插入都降到 O(log n)，是 M12.5 之后的编译性能修复。
+data TySubst : Type where
+  TsLeaf : TySubst
+  TsNode : Int -> Ty -> Int -> TySubst -> TySubst -> TySubst
+
+tsHeight : TySubst -> Int
+tsHeight TsLeaf = 0
+tsHeight (TsNode k v h l r) = h
+
+tsMax a b = if a >= b then a else b
+
+tsMake k v l r = TsNode k v (1 + tsMax (tsHeight l) (tsHeight r)) l r
+
+tsRotRight s =
+  case s of
+    TsNode k v h (TsNode lk lv lh ll lr) r => tsMake lk lv ll (tsMake k v lr r)
+    _ => s
+
+tsRotLeft s =
+  case s of
+    TsNode k v h l (TsNode rk rv rh rl rr) => tsMake rk rv (tsMake k v l rl) rr
+    _ => s
+
+tsBalance s =
+  case s of
+    TsNode k v h l r =>
+      let bf = tsHeight l - tsHeight r
+      in tsBalanceBy bf s
+    _ => s
+
+tsBalanceBy bf s =
+  if bf > 1 then tsBalanceLeft s
+  else if bf < 0 - 1 then tsBalanceRight s
+  else s
+
+tsBalanceLeft s =
+  case s of
+    TsNode k v h l r => case l of
+      TsNode lk lv lh ll lr =>
+        if tsHeight ll >= tsHeight lr then tsRotRight s
+        else tsRotRight (tsMake k v (tsRotLeft l) r)
+      _ => s
+    _ => s
+
+tsBalanceRight s =
+  case s of
+    TsNode k v h l r => case r of
+      TsNode rk rv rh rl rr =>
+        if tsHeight rr >= tsHeight rl then tsRotLeft s
+        else tsRotLeft (tsMake k v l (tsRotRight r))
+      _ => s
+    _ => s
+
+tsPut : Int -> Ty -> TySubst -> TySubst
+tsPut i ty TsLeaf = TsNode i ty 1 TsLeaf TsLeaf
+tsPut i ty (TsNode j tj h l r) =
+  if i == j then TsNode j ty h l r
+  else if i < j then tsBalance (tsMake j tj (tsPut i ty l) r)
+  else tsBalance (tsMake j tj l (tsPut i ty r))
+
+tsGet : Int -> TySubst -> Maybe Ty
+tsGet i TsLeaf = Nothing
+tsGet i (TsNode j t h l r) =
+  if i == j then Just t else if i < j then tsGet i l else tsGet i r
 
 -- 推断阶段产出的 annotated 表达式：比较运算应用暂存操作数类型（Ty），
 -- 待子句与顶层签名 unify 完成后，再用最终 substitution 决定合成 builtin 名。
@@ -89,11 +157,11 @@ unionInts (Cons x rest) ys = addUnique x (unionInts rest ys)
 diffInts Nil ys = Nil
 diffInts (Cons x rest) ys = if memInt x ys then diffInts rest ys else Cons x (diffInts rest ys)
 
-resolveTy : List (Pair Int Ty) -> Ty -> Ty
+resolveTy : TySubst -> Ty -> Ty
 resolveTy s ty =
   case ty of
     TVar i =>
-      case lookupSubst i s of
+      case tsGet i s of
         Just t => resolveTy s t
         Nothing => ty
     TCon n args => TCon n (map (resolveTy s) args)
@@ -103,7 +171,7 @@ resolveTy s ty =
         TCon n hargs => resolveTy s (TCon n (append hargs (map (resolveTy s) args)))
         head2 => TApp head2 (map (resolveTy s) args)
 
-occursIn : Int -> List (Pair Int Ty) -> Ty -> Bool
+occursIn : Int -> TySubst -> Ty -> Bool
 occursIn i s ty =
   case resolveTy s ty of
     TVar j => i == j
@@ -136,7 +204,7 @@ freshTy st =
     Pair n st2 => Pair (TVar n) st2
 
 bindVar : Int -> Ty -> TC -> Result TC
-bindVar i ty (TC n s typeNames records cons methods tctx) = Ok (TC n (Cons (Pair i ty) s) typeNames records cons methods tctx)
+bindVar i ty (TC n s typeNames records cons methods tctx) = Ok (TC n (tsPut i ty s) typeNames records cons methods tctx)
 
 unifyLists : List Ty -> List Ty -> TC -> Result TC
 unifyLists Nil Nil st = Ok st
@@ -611,7 +679,7 @@ hasNeed key Nil = False
 hasNeed key (Cons (Pair tr ty) rest) =
   if tr ++ "|" ++ showTy ty == key then True else hasNeed key rest
 
-collectNeedsFromExpr : List (Pair Int Ty) -> TraitCtx -> List (Pair String Ty) -> EExpr -> List (Pair String Ty)
+collectNeedsFromExpr : TySubst -> TraitCtx -> List (Pair String Ty) -> EExpr -> List (Pair String Ty)
 collectNeedsFromExpr subst tctx needs expr =
   case expr of
     XEMethod tr key paramTy sp =>
@@ -638,19 +706,19 @@ collectNeedsFromExpr subst tctx needs expr =
       collectNeedsFromExpr subst tctx needs base
     XEMethodInst tr key instName paramTy sp => needs
 
-collectNeedsFromExprList : List (Pair Int Ty) -> TraitCtx -> List (Pair String Ty) -> List EExpr -> List (Pair String Ty)
+collectNeedsFromExprList : TySubst -> TraitCtx -> List (Pair String Ty) -> List EExpr -> List (Pair String Ty)
 collectNeedsFromExprList subst tctx needs Nil = needs
 
 collectNeedsFromExprList subst tctx needs (Cons e rest) =
   collectNeedsFromExprList subst tctx (collectNeedsFromExpr subst tctx needs e) rest
 
-collectNeedsFromBinds : List (Pair Int Ty) -> TraitCtx -> List (Pair String Ty) -> List (Pair Pat EExpr) -> List (Pair String Ty)
+collectNeedsFromBinds : TySubst -> TraitCtx -> List (Pair String Ty) -> List (Pair Pat EExpr) -> List (Pair String Ty)
 collectNeedsFromBinds subst tctx needs Nil = needs
 
 collectNeedsFromBinds subst tctx needs (Cons (Pair pat value) rest) =
   collectNeedsFromBinds subst tctx (collectNeedsFromExpr subst tctx needs value) rest
 
-foldNeeds : List (Pair Int Ty) -> TraitCtx -> List (Pair String Ty) -> List (Pair String Ty) -> List (Pair String Ty)
+foldNeeds : TySubst -> TraitCtx -> List (Pair String Ty) -> List (Pair String Ty) -> List (Pair String Ty)
 foldNeeds subst tctx needs Nil = needs
 
 foldNeeds subst tctx needs (Cons (Pair tr ty) rest) =
@@ -660,11 +728,11 @@ foldNeeds subst tctx needs (Cons (Pair tr ty) rest) =
       Nothing => foldNeeds subst tctx needs rest
   else foldNeeds subst tctx needs rest
 
-collectNeedsClauses : List (Pair Int Ty) -> TraitCtx -> List (Pair (List Pat) EExpr) -> List (Pair String Ty)
+collectNeedsClauses : TySubst -> TraitCtx -> List (Pair (List Pat) EExpr) -> List (Pair String Ty)
 collectNeedsClauses subst tctx clauses =
   foldClauseNeeds subst tctx Nil clauses
 
-foldClauseNeeds : List (Pair Int Ty) -> TraitCtx -> List (Pair String Ty) -> List (Pair (List Pat) EExpr) -> List (Pair String Ty)
+foldClauseNeeds : TySubst -> TraitCtx -> List (Pair String Ty) -> List (Pair (List Pat) EExpr) -> List (Pair String Ty)
 foldClauseNeeds subst tctx needs Nil = needs
 
 foldClauseNeeds subst tctx needs (Cons (Pair pats body) rest) =
@@ -697,7 +765,7 @@ findDictParam params tr v key =
       if dictParamTrait p == tr && dictParamVar p == v && dictParamKey p == key then Just (dictParamName p)
       else findDictParam rest tr v key
 
-dictMethodExpr : TraitCtx -> List (Pair Int Ty) -> List DictParam -> String -> String -> Ty -> Result Expr
+dictMethodExpr : TraitCtx -> TySubst -> List DictParam -> String -> String -> Ty -> Result Expr
 dictMethodExpr tctx subst params tr key paramTy =
   let ty = resolveTy subst paramTy
   in case headVarOf ty of
@@ -707,7 +775,7 @@ dictMethodExpr tctx subst params tr key paramTy =
            Nothing => traitMethodExpr tctx ty tr key
        Nothing => traitMethodExpr tctx ty tr key
 
-dictArgsFor : TraitCtx -> List (Pair Int Ty) -> List DictParam -> List (Pair String Ty) -> List Expr
+dictArgsFor : TraitCtx -> TySubst -> List DictParam -> List (Pair String Ty) -> List Expr
 dictArgsFor tctx subst params cons =
   foldDictArgs tctx subst params Nil cons
 
@@ -726,13 +794,13 @@ dictMethodArg tctx subst params tr key ty =
     Ok e => e
     Err _ => EVar "vuna_missing_dict" tcNoSpan
 
-validateTraitUsesList : List (Pair Int Ty) -> TraitCtx -> List DictParam -> List EExpr -> Result Int
+validateTraitUsesList : TySubst -> TraitCtx -> List DictParam -> List EExpr -> Result Int
 validateTraitUsesList subst tctx params Nil = Ok 0
 
 validateTraitUsesList subst tctx params (Cons e rest) =
   andThen (validateTraitUses subst tctx params e) (\_ => validateTraitUsesList subst tctx params rest)
 
-validateTraitUses : List (Pair Int Ty) -> TraitCtx -> List DictParam -> EExpr -> Result Int
+validateTraitUses : TySubst -> TraitCtx -> List DictParam -> EExpr -> Result Int
 validateTraitUses subst tctx params expr =
   case expr of
     XEVar n sp => Ok 0
@@ -782,25 +850,25 @@ validateFunDictKeys subst tctx params tr (Cons key keys) ty =
     Err e => Err e
     Ok ex => validateFunDictKeys subst tctx params tr keys ty
 
-validateTraitUsesClauses : List (Pair Int Ty) -> TraitCtx -> List DictParam -> List (Pair (List Pat) EExpr) -> Result Int
+validateTraitUsesClauses : TySubst -> TraitCtx -> List DictParam -> List (Pair (List Pat) EExpr) -> Result Int
 validateTraitUsesClauses subst tctx params Nil = Ok 0
 
 validateTraitUsesClauses subst tctx params (Cons (Pair pats body) rest) =
   andThen (validateTraitUses subst tctx params body) (\_ => validateTraitUsesClauses subst tctx params rest)
 
-validateTraitUsesBinds : List (Pair Int Ty) -> TraitCtx -> List DictParam -> List (Pair Pat EExpr) -> Result Int
+validateTraitUsesBinds : TySubst -> TraitCtx -> List DictParam -> List (Pair Pat EExpr) -> Result Int
 validateTraitUsesBinds subst tctx params Nil = Ok 0
 
 validateTraitUsesBinds subst tctx params (Cons (Pair pat value) rest) =
   andThen (validateTraitUses subst tctx params value) (\_ => validateTraitUsesBinds subst tctx params rest)
 
-validateTraitUsesAlts : List (Pair Int Ty) -> TraitCtx -> List DictParam -> List (Pair Pat EExpr) -> Result Int
+validateTraitUsesAlts : TySubst -> TraitCtx -> List DictParam -> List (Pair Pat EExpr) -> Result Int
 validateTraitUsesAlts subst tctx params Nil = Ok 0
 
 validateTraitUsesAlts subst tctx params (Cons (Pair pat body) rest) =
   andThen (validateTraitUses subst tctx params body) (\_ => validateTraitUsesAlts subst tctx params rest)
 
-validateTraitUsesFields : List (Pair Int Ty) -> TraitCtx -> List DictParam -> List (Pair String EExpr) -> Result Int
+validateTraitUsesFields : TySubst -> TraitCtx -> List DictParam -> List (Pair String EExpr) -> Result Int
 validateTraitUsesFields subst tctx params Nil = Ok 0
 
 validateTraitUsesFields subst tctx params (Cons (Pair fname value) rest) =
@@ -1543,7 +1611,14 @@ freeVarsEnvExcept name env =
     Nil => Nil
     Cons (Pair n sch) rest =>
       if n == name then freeVarsEnvExcept name rest
-      else unionInts (freeVarsScheme sch) (freeVarsEnvExcept name rest)
+      else freeVarsEnvExceptOne name sch rest
+
+-- placeholders（无签名函数的预置 fresh 变量）的 free vars 是每函数唯一的“幽灵”变量，
+-- 不会出现在待推断类型里；跳过它们，避免每个函数都扫描上千个占位 scheme。
+freeVarsEnvExceptOne name sch rest =
+  case sch of
+    Scheme Nil Nil (TVar k) => freeVarsEnvExcept name rest
+    _ => unionInts (freeVarsScheme sch) (freeVarsEnvExcept name rest)
 
 substOf (TC n s typeNames records cons methods tctx) = s
 
@@ -1905,7 +1980,7 @@ methodRefForName name refs =
 
 -- trait 参数固定用 TVar 0 表示；临时 TC 的 fresh 编号从 1 开始，避免与参数 0 撞号。
 traitMethodScheme typeNames paramName sigTy =
-  convertType typeNames (Cons (Pair paramName (TVar 0)) Nil) (TC 1 Nil typeNames Nil Nil Nil (TraitCtx Nil Nil Nil Nil Nil)) sigTy
+  convertType typeNames (Cons (Pair paramName (TVar 0)) Nil) (TC 1 TsLeaf typeNames Nil Nil Nil (TraitCtx Nil Nil Nil Nil Nil)) sigTy
 
 -- trait 类型参数的 kind 元数：方法签名里 `p a b ...` 的最大应用参数个数（0 = `*`）。
 tyExprParamArity paramName ty =
@@ -2342,7 +2417,7 @@ collectUserInstancesGo typeNames traitDecls allDecls (Cons d rest) insts declsOu
           case lookupTraitDecl traitName traitDecls of
             Nothing => Err (showSpanLoc sp ++ ": unknown trait " ++ traitName)
             Just traitDecl =>
-              case convertType typeNames Nil (TC 0 Nil typeNames Nil Nil Nil (TraitCtx Nil Nil Nil Nil Nil)) headTyExpr of
+              case convertType typeNames Nil (TC 0 TsLeaf typeNames Nil Nil Nil (TraitCtx Nil Nil Nil Nil Nil)) headTyExpr of
                 Err e => Err (showSpanLoc sp ++ ": in instance head: " ++ e)
                 Ok (Pair (Pair headTy vars) st) =>
                   if traitDeclArity traitDecl > 0 then
@@ -2514,7 +2589,7 @@ checkProgramInfoElabImpl decls0 =
              case desugarRecords records declsT of
                Err e => Err e
                Ok decls2 =>
-                 let freshTC = TC 0 Nil typeNames records Nil (traitCtxRefs tctx) tctx
+                 let freshTC = TC 0 TsLeaf typeNames records Nil (traitCtxRefs tctx) tctx
                  in case collectSigs typeNames decls2 freshTC of
                       Err e => Err e
                       Ok (Pair sigs st1) =>
@@ -2580,7 +2655,7 @@ exprWarnings globals decls locals e =
     EInt n sp => Nil
     EStr s sp => Nil
     ELam ps body sp =>
-      case inferExpr globals locals (TC 0 Nil Nil Nil Nil Nil (TraitCtx Nil Nil Nil Nil Nil)) e of
+      case inferExpr globals locals (TC 0 TsLeaf Nil Nil Nil Nil (TraitCtx Nil Nil Nil Nil Nil)) e of
         Ok (Pair (Pair ty _) _) =>
           let pty = flattenFun ty
           in exprWarnings globals decls (append (zipLocals ps pty) locals) body
@@ -2603,7 +2678,7 @@ letLocals globals locals (Cons (Pair pat value) rest) =
   in append patTys (letLocals globals locals rest)
 
 patternLocals globals locals pat value =
-  case inferExpr globals locals (TC 0 Nil Nil Nil Nil Nil (TraitCtx Nil Nil Nil Nil Nil)) value of
+  case inferExpr globals locals (TC 0 TsLeaf Nil Nil Nil Nil (TraitCtx Nil Nil Nil Nil Nil)) value of
     Ok (Pair (Pair ty _) _) => patVarsTy pat ty
     Err _ => Nil
 
@@ -2621,7 +2696,7 @@ bindWarnings globals decls (Pair pat value) =
     _ => Cons (showSpanLoc (patSpan pat) ++ ": non-exhaustive let pattern") Nil
 
 caseWarnings globals decls locals scrut alts sp =
-  case inferExpr globals locals (TC 0 Nil Nil Nil Nil Nil (TraitCtx Nil Nil Nil Nil Nil)) scrut of
+  case inferExpr globals locals (TC 0 TsLeaf Nil Nil Nil Nil (TraitCtx Nil Nil Nil Nil Nil)) scrut of
     Err _ => Nil
     Ok (Pair (Pair ty _) _) =>
       let ctors = tyCtorNames decls ty

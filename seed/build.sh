@@ -1,9 +1,26 @@
 #!/bin/sh
-# 由 vuna 生成：分离编译增量构建脚本（M12）。用法: ./build.sh [OUT]
+# 由 vuna 生成：分离编译构建脚本。用法: ./build.sh [OUT]
+# 干净构建：一次 ocamlopt 编译全部 .mli/.ml 并链接；
+# 增量构建：按 .ml/.mli/.cmi 时间戳逐模块重编（编译单元顺序即依赖顺序）。
 set -eu
 cd "$(dirname "$0")"
 OUT=${1:-program}
 FLAGS="-g -w -a+39 -warn-error +39"
+MODULES="Vuna_runtime Vuna_dPair Vuna_dBool Vuna_dMonad Vuna_dMaybe Vuna_dList Vuna_dResult Vuna_dString Vuna_dBase Vuna_dToml Vuna_dManifest Vuna_dPkg Vuna_dAst Vuna_dLexer Vuna_dParser Vuna_dBuiltins Vuna_dLoader Vuna_dCodegen Vuna_dTypecheck Vuna_dSplit Vuna_dTypedCodegen Vuna_dCompile Vuna_dSplitCli Vuna_dCompilerCli Main "
+clean=1
+for m in $MODULES; do
+  if [ -f "$m.cmx" ]; then clean=0; fi
+done
+if [ "$clean" -eq 1 ]; then
+  SOURCES=""
+  for m in $MODULES; do
+    if [ -f "$m.mli" ]; then SOURCES="$SOURCES $m.mli"; fi
+    SOURCES="$SOURCES $m.ml"
+  done
+  ocamlopt $FLAGS -o "$OUT" $SOURCES
+  echo "built $OUT"
+  exit 0
+fi
 compile_mod() {
   base=$1
   shift

@@ -461,6 +461,7 @@ git add seed/ && git commit
 - `compiler/lib/Vuna/Typecheck.vuna`：HM 风格类型检查（Ty/Scheme、unify、构造器 scheme、
   表达式/模式推断、签名校验与无签名顶层推断）；`Ty` 含 `TApp`（高阶 kind 应用）、
   `Scheme` 带 trait 约束、方法级字典穿参（裸类型变量与高阶 kind 类型变量都支持）；
+  类型变量替换用 AVL 树（`TySubst`，O(log n) 查找）而不是关联表，避免 unify 的 O(n²)；
   loader 会把 DSig/构造器类型里的类型名解析成模块内全名（open/qualified/alias 都支持），
   因此跨模块类型检查可用；
 - `compiler/lib/Vuna/Codegen.vuna`：把 flatten 后的 program 翻译成动态 value 表示的 OCaml
@@ -469,10 +470,12 @@ git add seed/ && git commit
   构造器、模式匹配、data show 与 builtins；默认 codegen。M12 新增
   `generateSplitProgram`：按 vuna 模块生成逐模块 `.ml` + `.mli`（模块间用 open 链
   解析全局唯一名字；抽象类型按模块导出表生成 sig；整模块重导出用 include），
-  单文件路径重构为 `genTopNames` 等子集函数，产物字节不变；
-- `compiler/lib/Vuna/Split.vuna` / `SplitCli.vuna`：分离编译输出文件模型、`build.sh` 增量
-  构建脚本（模块 .ml/.mli 或依赖 .cmi 变化才重编，最后链接）、包模式
-  `build --split` / `seed` 入口；
+  单文件路径重构为 `genTopNames` 等子集函数，产物字节不变；分离编译预计算
+  “声明名 → 归属模块”路由表（`routeFunTable`/`routeDataTable`），避免每个模块反复扫描
+  owners/全程序 decls；
+- `compiler/lib/Vuna/Split.vuna` / `SplitCli.vuna`：分离编译输出文件模型、`build.sh`
+  构建脚本（干净构建用一次 `ocamlopt` 编译全部 `.mli/.ml` 并链接；已有 `.cmx` 时按
+  模块时间戳增量重编）、包模式 `build --split` / `seed` 入口；
 - `compiler/lib/Vuna/Toml.vuna` / `Manifest.vuna` / `Pkg.vuna`：`vuna.toml` 解析、
   manifest 模型与校验、workspace/依赖 DAG/模块根解析（`Root` 的包导出限制在此计算）；
 - `compiler/lib/Vuna/Compile.vuna`：编译入口（`effectiveRoots` / `compileFile*` /
@@ -675,9 +678,9 @@ nix fmt               # nixfmt-tree 格式化 .nix
   （选择性重导出、部分构造器导出、dict 约束泛化等）会回退单文件，两者输出语义一致；
   优化仍归 ocamlopt（M12 不做 vuna typed IR）；runtime prelude 在分离编译中完整保留；
 - `do` / Monad / IO 组合子已在 M11 实现；隐式参数 / 依赖类型仍未实现；
-- M12 限制：分离编译的*生成*阶段仍是整程序分析（gen 约 3x 单文件编译时间），
-  增量收益体现在 ocamlopt 只重编译受影响模块（`build.sh`）；seed 多文件（`.ml/.mli`
-  文件集）fixed point 逐字节比较；分离编译的
+- M12 限制：分离编译的*生成*阶段仍是整程序分析，但经过 M12.5 性能修复后与单文件
+  编译同量级（约 2s）；增量收益体现在 ocamlopt 只重编译受影响模块（`build.sh`）；
+  seed 多文件（`.ml/.mli` 文件集）fixed point 逐字节比较；分离编译的
   `build.sh` 增量粒度是模块（.cmi 依赖时间戳），无跨包并行构建与依赖哈希；
   `vuna build --split` 暂不会自动回退单文件（遇到不支持构造报错，需手动用
   `vuna build`）；基准时间测量仍手动（`nix run .#bench`），CI 只守机器无关指标；
@@ -685,6 +688,11 @@ nix fmt               # nixfmt-tree 格式化 .nix
   生成，工具链不在 TCB；产品 CLI `vuna` 仍是单一二进制（in-process 调 compiler 库，
   不做进程转发，也不需要新增进程执行内建）。LSP / package manager 若加入，放在
   根包（CLI）侧或独立包，**永不进入 seed 闭包**；
+- M12.5 编译性能修复：类型替换改 AVL（unify 从 O(n²) 回到 O(n log n)）、分离编译
+  预计算路由表（去掉每模块 O(decls×names) 扫描）、跳过无签名函数占位 scheme 的
+  env free-var 扫描、干净构建走单次 ocamlopt。本机 compiler 闭包的 `build --split`
+  从 ~32s 降到 ~2s，`nix build .#vuna-seed --rebuild` ~1.4s、
+  `nix build .#vuna-compiler --rebuild` ~3.4s；
 - M11.6 fmt 限制：行宽 100，但模块头/导出列表、类型签名与超长字符串字面量不折行；
   表达式内部的注释会前移到最内层包含它的条目（或下一条目），不保证留在原位置；
   单行块注释可以挂在行尾，多行块注释只作为前置注释；
@@ -740,4 +748,6 @@ nix fmt               # nixfmt-tree 格式化 .nix
   `vuna-compiler`），根包 `vuna` 退为产品 CLI 并经 in-process 调库复用编译命令；
   seed 只覆盖 compiler 包入口闭包（工具链移出 TCB，文件 63→49），fixed point、
   seed 闭包断言、metrics 目标与基准脚本同步调整；新增跨包重导出夹具；
+  同期修复编译性能（AVL 类型替换、分离编译路由表、快速 seed 构建），compiler 闭包
+  的 `build --split` 从 ~32s 降到 ~2s；
 - 早期 OCaml 外部编译器 `vunax` 已完成使命并删除。
