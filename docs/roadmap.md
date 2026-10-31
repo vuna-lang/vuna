@@ -36,6 +36,8 @@
   seed 改为多文件文件集（`bootstrap/` → `seed/`、`vuna-boot` → `vuna-seed`），
   fixed point 按文件集合逐字节比较；`checks.vuna-metrics` 机器无关指标门槛；
   不做 vuna typed IR（优化归 ocamlopt）。
+- M11.6：fmt 完善——注释保留（行/块/嵌套/行尾，按语法条目挂载）与 100 列行宽
+  折行（RHS / 列表 / 应用 / 中缀链）；fmt golden 覆盖注释与折行。
 
 当前硬约束：
 
@@ -54,12 +56,14 @@ M10 模块系统 v2（已完成）→ M10.5 类型表达力（已完成：记录
    → M11 标准库（已完成：高阶 kind/约束泛化 + do/Monad/IO；编译器是首个用户）
    → M11.5 包管理与工具链（已完成：vuna.toml / workspace / 三目录 + 工具链）
    → M12 性能与编译模型（已完成：分离编译 / seed 多文件 / 指标门槛）
+   → M11.6 fmt 完善（已完成：注释保留 / 行宽折行）
    → M13 高级类型/效应（研究型，单独规划）
 ```
 
 依赖说明：
 
-- **M10、M10.5、M11、M11.5、M12 已完成**；下一步是 M13（研究型，单独规划）；
+- **M10、M10.5、M11、M11.5、M12、M11.6 已完成**；下一步是 M13（研究型，单独规划）；
+  M11.6 是 M11.5 工具链的收尾（fmt 注释/折行），不改变语言语义，也不影响 M12 编译模型；
 - **M11 与 M11.5 的机制部分可并行**，二者改动面互不重叠（stdlib vs 包工具）；
   但**交付顺序**是 M11 先、M11.5 后；
 - **M11（标准库）依赖 M10.5 的 trait 基础**（已具备，含方法级字典穿参），不依赖 M11.5：
@@ -309,12 +313,13 @@ M10 模块系统 v2（已完成）→ M10.5 类型表达力（已完成：记录
   `[export]`，隐藏模块报错；`app/Main.vuna` 固定入口，`app/` 不再作模块根
   （`app/Lint.vuna` 迁到 `lib/Vuna/Lint.vuna`）；
 - 工具链：`vuna build`（package → typed OCaml）、`vuna test`（test/*.vuna，
-  main : String 空串通过）、`vuna fmt --check`（`Vuna.Fmt`，幂等、可重解析、注释丢失）、
-  `vuna repl`（行式，定义累积 + 完整 loader/类型检查路径）、`vuna doc`（Markdown API）；
+  main : String 空串通过）、`vuna fmt --check`（`Vuna.Fmt`，幂等、可重解析；
+  注释保留与折行见 M11.6）、`vuna repl`（行式，定义累积 + 完整 loader/类型检查路径）、
+  `vuna doc`（Markdown API）；
 - 验收载体：`examples/multi/` 多包 workspace；`checks.vuna-package` 在 Nix 沙箱里
   build/test/fmt/doc 并构建编译器自身，验证包管理路径可复现；测试 28–31 段；
-- 未做：registry / 锁文件 / 远程依赖、LSP、fmt 注释保留与折行、`vuna build` 的
-  ocamlopt 驱动（只生成 .ml）、REPL 多行输入。
+- 未做：registry / 锁文件 / 远程依赖、LSP、`vuna build` 的 ocamlopt 驱动
+  （只生成 .ml）、REPL 多行输入。
 
 ### M11.5 设计要点（已定）
 
@@ -403,6 +408,39 @@ M10 模块系统 v2（已完成）→ M10.5 类型表达力（已完成：记录
 - fixed point 与自检不因优化改变语义（seed 多文件后 = 文件集合逐字节一致）。
 
 自研 native/LLVM/C 后端 + 完整 typed IR 应作为独立大项目评估，不与本阶段捆绑。
+
+## M11.6：fmt 完善（已完成）
+
+目标：补齐 M11.5 工具链遗留的 `vuna fmt` 两大缺口——注释保留与行宽折行。
+
+范围：
+
+- **注释保留**：AST 不保留注释，格式化器在 parse 之外单独 lex 注释（`Lexer.lexComments`），
+  按源码位置挂到语法条目上，再随条目输出；
+- **行宽折行**：默认 100 列，超过时在可重新 parse 的位置折行。
+
+### M11.6 实现状态（已落地）
+
+- **注释模型**：`Comment`（行/块 + 原文 + span）由 `lexComments` 单独扫描；与 `skipTrivia`
+  同一套规则（`--` 行注释、可嵌套 `{- -}`，字符串里的注释符不算）。注释不进 token 流，
+  parser 与其余编译路径零改动。
+- **注释挂载**：格式化器为每个可挂注释的条目收集 span（模块头、import、顶层声明、
+  数据构造器、记录字段、trait 方法、instance 方法、let/where 绑定、case 分支、
+  do 语句），按位置分配：
+  - 与条目结尾同行的单行注释 → 该条目的行尾注释（追加在该条目最后一行）；
+  - 其它注释 → 下一条目的前置注释（条目缩进处单独成行）；
+  - 若「下一条目」已跳出当前声明（函数体末尾的注释等）→ 前移到最内层包含它的条目；
+  - 文件末尾的注释保留在文件末尾。
+  该规则保证 `format(format(x)) == format(x)` 且 `format(x)` 可重新 parse；
+  多行块注释按条目缩进重排（只改前导空白）。
+- **折行规则**（`maxWidth = 100`）：声明/绑定/分支/do 绑定的 RHS 放不下时折到下一行
+  （`=` / `=>` / `<-` 之后缩进 2）；列表字面量逐元素一行；函数应用参数按行宽贪心
+  折行；中缀链把运算符放续行行首（续行缩进 2，满足 offside 约束）。
+  模块头/导出列表、类型签名与超长字符串字面量不折行（折行以可重新 parse 为前提）。
+- **验收载体**：`test/corpus/fmt/` 新增/更新注释夹具（09、15、16、17、18）与折行夹具
+  19，`run/07_wrap.vuna` 验证「折行后语义不变」；probe 断言 format→parse→format 幂等。
+  fmt corpus 65 checks；`vuna lint` 自检与 `checks.vuna-metrics` 预算同步更新。
+- 未做：注释在表达式内部的精确定位（会前移）、类型/模块头折行、按项目配置行宽。
 
 ## M13：高级类型 / 效应（研究型，下一步）
 

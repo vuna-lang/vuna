@@ -1,0 +1,12 @@
+-- 模块头前置注释
+module Vuna.Demo (exported) where
+
+-- import 前置注释
+import Vuna.Bool -- import 行尾注释
+import qualified Vuna.List as L
+
+-- 声明前置注释
+exported : Int
+exported = 1
+
+-- 文件末尾注释

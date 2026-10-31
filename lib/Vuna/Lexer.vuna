@@ -1,4 +1,4 @@
-module Vuna.Lexer (TIdent, TKw, TInt, TStr, TSym, TEof, PTok, isUpperChar, isLowerChar, isIdentStart, isDigit, lexSource) where
+module Vuna.Lexer (TIdent, TKw, TInt, TStr, TSym, TEof, PTok, isUpperChar, isLowerChar, isIdentStart, isDigit, lexSource, CKind, CLine, CBlock, Comment, commentKind, commentText, commentSpan, lexComments) where
 
 -- vuna 源码 lexer：字符游标、token 与 pos。
 
@@ -163,3 +163,90 @@ lexToken c rest p =
   else Err "unexpected character"
 
 lexSource source = lexChars (Chars (strUnpack source) (Pos 1 1))
+
+-- ---------------------------------------------------------------
+-- 注释扫描（fmt 用）：注释不进入 token 流，但格式化器需要保留它们。
+-- 与 skipTrivia 使用同一套规则（`--` 行注释、`{- -}` 可嵌套块注释，
+-- 字符串字面量里的 `--` / `{-` 不算注释）。
+-- ---------------------------------------------------------------
+
+data CKind : Type where
+  CLine : CKind
+  CBlock : CKind
+
+data Comment : Type where
+  Comment : CKind -> String -> Span -> Comment
+
+commentKind (Comment kind text sp) = kind
+
+commentText (Comment kind text sp) = text
+
+commentSpan (Comment kind text sp) = sp
+
+trimTrailingSpace s = strPack (reverse (dropTrailingSpace (reverse (strUnpack s))))
+
+dropTrailingSpace Nil = Nil
+
+dropTrailingSpace (Cons c rest) =
+  if c == 32 || c == 9 || c == 13 then dropTrailingSpace rest else Cons c rest
+
+-- 跳过字符串字面量（从开引号之后开始），返回引号之后的位置。
+skipStringBody (Chars Nil p) = Err "unterminated string literal"
+
+skipStringBody (Chars (Cons c rest) p) =
+  if c == 34 then Ok (Chars rest (advanceChar c p))
+  else if c == 92 then
+    case rest of
+      Cons c2 rest2 => skipStringBody (Chars rest2 (advanceChar c2 (advanceChar c p)))
+      Nil => Err "unterminated string literal"
+  else skipStringBody (Chars rest (advanceChar c p))
+
+-- 行注释正文：从 `--` 之后扫到行尾（不消费换行）；endP 是最后一个正文字符位置。
+collectLineBody (Chars Nil p) acc endP = Pair (strPack (reverse acc)) (Pair (Chars Nil p) endP)
+
+collectLineBody (Chars (Cons c rest) p) acc endP =
+  if c == 10 then Pair (strPack (reverse acc)) (Pair (Chars (Cons c rest) p) endP)
+  else collectLineBody (Chars rest (advanceChar c p)) (Cons c acc) p
+
+-- 块注释正文：深度从 1 开始，返回 `{-` 与 `-}` 之间的原文；endP 是 `}` 的位置。
+collectBlockBody (Chars Nil p) depth acc endP = Err "unterminated block comment"
+
+collectBlockBody (Chars (Cons c rest) p) depth acc endP =
+  case rest of
+    Cons c2 rest2 =>
+      if c == 123 && c2 == 45 then
+        collectBlockBody (Chars rest2 (advanceChar c2 (advanceChar c p))) (depth + 1) (Cons c2 (Cons c acc)) (advanceChar c2 p)
+      else if c == 45 && c2 == 125 then
+        if depth == 1 then
+          Ok (Pair (strPack (reverse acc)) (Pair (Chars rest2 (advanceChar c2 (advanceChar c p))) (advanceChar c2 p)))
+        else
+          collectBlockBody (Chars rest2 (advanceChar c2 (advanceChar c p))) (depth - 1) (Cons c2 (Cons c acc)) (advanceChar c2 p)
+      else collectBlockBody (Chars rest (advanceChar c p)) depth (Cons c acc) p
+    Nil => collectBlockBody (Chars rest (advanceChar c p)) depth (Cons c acc) p
+
+commentSpanOf startP endP = Span "" (posLine startP) (posCol startP) (posLine endP) (posCol endP)
+
+scanComments (Chars Nil p) acc = Ok (reverse acc)
+
+scanComments (Chars (Cons c rest) p) acc =
+  if c == 34 then
+    case skipStringBody (Chars rest (advanceChar c p)) of
+      Err e => Err e
+      Ok cs2 => scanComments cs2 acc
+  else
+    case rest of
+      Cons c2 rest2 =>
+        if c == 45 && c2 == 45 then
+          case collectLineBody (Chars rest2 (advanceChar c2 (advanceChar c p))) Nil (advanceChar c2 p) of
+            Pair text (Pair cs2 endP) =>
+              scanComments cs2 (Cons (Comment CLine (trimTrailingSpace text) (commentSpanOf p endP)) acc)
+        else if c == 123 && c2 == 45 then
+          case collectBlockBody (Chars rest2 (advanceChar c2 (advanceChar c p))) 1 Nil (advanceChar c2 p) of
+            Err e => Err e
+            Ok (Pair text (Pair cs2 endP)) =>
+              scanComments cs2 (Cons (Comment CBlock text (commentSpanOf p endP)) acc)
+        else scanComments (Chars rest (advanceChar c p)) acc
+      Nil => Ok (reverse acc)
+
+-- 扫描整段源码里的注释（源码顺序），供格式化器按位置重新插入。
+lexComments source = scanComments (Chars (strUnpack source) (Pos 1 1)) Nil

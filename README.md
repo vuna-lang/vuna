@@ -398,7 +398,8 @@ dune/OCaml 项目，只用 `ocamlopt` 编译生成的种子和程序。
     `DIR/Main.ml`）；
   - `vuna test [DIR]`：解释执行 `test/*.vuna`，`main : String` 空串通过，非空为失败信息；
   - `vuna fmt [--check] [PATH]...`：`Vuna.Fmt` 格式化（2 空格缩进、幂等、可重新
-    parse；**注释会丢失**，因为 AST 不保留注释）；
+    parse；M11.6 起**保留行注释/块注释**，超过 100 列时在 RHS、列表字面量、
+    函数应用参数与中缀链处折行）；
   - `vuna repl [--root DIR]...`：行式 REPL，定义累积、表达式立即走完整
     loader/类型检查/解释器路径（支持 import/记录/trait/do）；
   - `vuna doc [DIR] [OUT]`：扫描 `lib/` 生成 Markdown API 文档。
@@ -494,7 +495,7 @@ type value =
 
 ## 测试
 
-`test/run-tests.sh` 是 vuna 原生测试（704 checks），用 `vuna` / `vuna-seed` 驱动，
+`test/run-tests.sh` 是 vuna 原生测试（706 checks），用 `vuna` / `vuna-seed` 驱动，
 不依赖外部 vuna 实现；但运行测试需要 OCaml 编译器（`ocamlopt`）作为代码生成后端：
 
 ```console
@@ -531,7 +532,7 @@ sh test/run-tests.sh          # 需要 PATH 中有 vuna 与 vuna-seed
   kind 不符、无 Monad、do 块结尾非法、do 绑定模式非法等错误例；
 - `corpus/stdlib/`（M11，第 27 段）：`--root ../stdlib/lib` 下 stdlib 各模块与
   do/IO 的正例三路径、错误例；另有 `test/corpus/fmt/check.sh`（第 32 段）覆盖
-  格式化 golden 与幂等；
+  格式化 golden、注释保留（行/块/嵌套/行尾）、行宽折行与幂等；
 - `corpus/packages/`（M11.5，第 28–29 段）：`vuna build` / `vuna test` 的
   workspace 正例（跨包 import + `[export]` + `app/Main.vuna` 入口）与缺依赖、
   依赖环、隐藏模块错误例；第 30–31 段覆盖 fmt 前后语义一致、`vuna doc`、`vuna repl`；
@@ -628,8 +629,11 @@ nix fmt               # nixfmt-tree 格式化 .nix
   `build.sh` 增量粒度是模块（.cmi 依赖时间戳），无跨包并行构建与依赖哈希；
   `vuna build --split` 暂不会自动回退单文件（遇到不支持构造报错，需手动用
   `vuna build`）；基准时间测量仍手动（`nix run .#bench`），CI 只守机器无关指标；
-- M11.5 工具链限制：`vuna fmt` 不保留注释（AST 无注释）、不做行宽折行；REPL 一次
-  只接受一行（多行定义/表达式需后续扩展）；`vuna test` 走解释器路径（代码生成路径由
+- M11.6 fmt 限制：行宽 100，但模块头/导出列表、类型签名与超长字符串字面量不折行；
+  表达式内部的注释会前移到最内层包含它的条目（或下一条目），不保证留在原位置；
+  单行块注释可以挂在行尾，多行块注释只作为前置注释；
+- M11.5 工具链限制：REPL 一次只接受一行（多行定义/表达式需后续扩展）；
+  `vuna test` 走解释器路径（代码生成路径由
   `test/run-tests.sh` 覆盖）；`vuna build` 只生成 OCaml 源码，不含编译器驱动；
   依赖只支持本地路径（registry/锁文件未做）；`Map` 是关联表实现的抽象类型（无平衡树）；
   `Result` 暂无 Functor/Monad 实例；
@@ -674,4 +678,6 @@ nix fmt               # nixfmt-tree 格式化 .nix
   重导出），`build.sh` 增量构建（ocamlopt `.cmi/.cmx` 缓存）；seed 改为多文件
   文件集（`bootstrap/` → `seed/`、`vuna-boot` → `vuna-seed`），fixed point 按
   文件集合逐字节比较；机器无关 codegen 指标作 CI 门槛（`checks.vuna-metrics`）；
+- M11.6：fmt 完善——注释保留（行/块/嵌套/行尾，按语法条目挂载）、100 列行宽折行
+  （RHS / 列表 / 应用 / 中缀链），fmt golden 覆盖注释与折行；
 - 早期 OCaml 外部编译器 `vunax` 已完成使命并删除。

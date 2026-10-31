@@ -530,7 +530,7 @@ parseCtorList st ctorCol =
             step (expectSym st1 ":") (\_, st2 =>
               step (parseExpr st2 ctorCol 0) (\ty, st3 =>
                 step (parseCtorList st3 ctorCol) (\rest, st4 =>
-                  Ok (Pair (Cons (Ctor name ty (countArrows ty) (spanOf st st4)) rest) st4)))))
+                  Ok (Pair (Cons (Ctor name ty (countArrows ty) (spanOf st st3)) rest) st4)))))
         else if col > ctorCol then Err "unexpected indentation in data block"
         else Ok (Pair Nil st)
 
