@@ -1,0 +1,18 @@
+-- M15：接口（trait）+ 实例搜索 + 方法投影（字典编码）。
+data Color : Type where
+  Red : Color
+  Blue : Color
+
+trait Pretty a where
+  pretty : a -> String
+
+instance Pretty Color where
+  pretty c = case c of
+    Red => "red"
+    Blue => "blue"
+
+red : Color
+red = Red
+
+main : String
+main = pretty red

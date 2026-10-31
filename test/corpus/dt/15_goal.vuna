@@ -1,0 +1,7 @@
+-- M15：洞的目标显示 —— check 阶段的 `_` 会被求解（intrinsic 位置），
+-- 未解的洞在诊断里带上位置与目标类型。
+id : (a : Type) -> a -> a
+id a x = x
+
+main : Int
+main = id _ 7

@@ -1,4 +1,4 @@
-module Vuna.Compiler.Elab (DtDef, dtDefName, dtDefType, dtDefBody, DtCtor, dtCtorName, dtCtorFamily, dtCtorTelescope, dtCtorType, DtData, dtDataName, dtDataParams, dtDataCtors, elabProgram) where
+module Vuna.Compiler.Elab (DtDef, dtDefName, dtDefType, dtDefBody, DtCtor, dtCtorName, dtCtorFamily, dtCtorTelescope, dtCtorType, DtData, dtDataName, dtDataParams, dtDataCtors, DtClass, dtClassName, dtClassParams, dtClassMethods, dtClassFieldTys, DtGoal, dtGoalMeta, dtGoalSpan, dtGoalType, dtGoalCtx, DtProgram, dtProgDatas, dtProgDefs, dtProgGoals, dtProgSols, DtGoalInfo, dtGoalInfoSpan, dtGoalInfoGoal, dtGoalInfoCtx, elabProgram, elabProgramFull, goalsOfProgram, checkInstanceHeads, elabInstanceBodies, dictTypeName, dictCtorName) where
 
 -- Vuna.Compiler.Elab：DT 精化器（双向检查 + 一阶元变量 + 类型级隐式插入 + M14 索引族）。
 --
@@ -45,27 +45,85 @@ dtDataParams (DtData name params ctors) = params
 
 dtDataCtors (DtData name params ctors) = ctors
 
+-- M15：一个洞的目标。编号、位置、目标类型（level 形态）、绑定时上下文快照。
+data DtGoal : Type where
+  DtGoal : Int -> Span -> Value -> List (Pair String Term) -> DtGoal
+
+dtGoalMeta (DtGoal m sp ty ctx) = m
+
+dtGoalSpan (DtGoal m sp ty ctx) = sp
+
+dtGoalType (DtGoal m sp ty ctx) = ty
+
+dtGoalCtx (DtGoal m sp ty ctx) = ctx
+
+-- M15：接口（trait）声明。参数名表、方法（名字 + 完整投影类型项）。
+data DtClass : Type where
+  DtClass : String -> List String -> List (Pair String Term) -> List Term -> DtClass
+
+dtClassName (DtClass name params projs fieldTys) = name
+
+dtClassParams (DtClass name params projs fieldTys) = params
+
+dtClassMethods (DtClass name params projs fieldTys) = projs
+
+dtClassFieldTys (DtClass name params projs fieldTys) = fieldTys
+
+-- M15：已注册实例：定义名 + 实例头类型项（`Show Int` 这类闭合项）。
+data DtInst : Type where
+  DtInst : String -> Term -> DtInst
+
+dtInstName (DtInst name head) = name
+
+dtInstHead (DtInst name head) = head
+
 -- 精化状态：下一个元变量编号、已解元变量（level 形态的 Value）、已精化的定义体、
 -- 已声明的归纳族（M14：case 精化需要知道族的构造子 telescope）。
 data Ec : Type where
-  Ec : Int -> List (Pair Int Value) -> List (Pair String Term) -> List DtData -> Ec
+  Ec : Int -> List (Pair Int Value) -> List (Pair String Term) -> List DtData -> List (Pair Int Int) -> List DtGoal -> List DtInst -> List DtClass -> Ec
 
-ecNext (Ec next sols defs datas) = next
+ecNext (Ec next sols defs datas depths goals insts classes) = next
 
-ecSols (Ec next sols defs datas) = sols
+ecSols (Ec next sols defs datas depths goals insts classes) = sols
 
-ecDefs (Ec next sols defs datas) = defs
+ecDefs (Ec next sols defs datas depths goals insts classes) = defs
 
-ecDatas (Ec next sols defs datas) = datas
+ecDatas (Ec next sols defs datas depths goals insts classes) = datas
+
+ecDepthOfMeta (Ec next sols defs datas depths goals insts classes) = depths
+
+ecGoals (Ec next sols defs datas depths goals insts classes) = goals
+
+ecInsts (Ec next sols defs datas depths goals insts classes) = insts
+
+ecClasses (Ec next sols defs datas depths goals insts classes) = classes
+
+ecAddGoal : Ec -> DtGoal -> Ec
+ecAddGoal (Ec next sols defs datas depths goals insts classes) g =
+  Ec next sols defs datas depths (append goals [g]) insts classes
+
+ecAddInst : Ec -> DtInst -> Ec
+ecAddInst (Ec next sols defs datas depths goals insts classes) i =
+  Ec next sols defs datas depths goals (append insts [i]) classes
+
+ecAddClass : Ec -> DtClass -> Ec
+ecAddClass (Ec next sols defs datas depths goals insts classes) c =
+  Ec next sols defs datas depths goals insts (append classes [c])
+
+ecEmpty : Ec
+ecEmpty = Ec 0 [] [] [] [] [] [] []
 
 ecPutSols : Ec -> List (Pair Int Value) -> Ec
-ecPutSols (Ec next sols defs datas) sols2 = Ec next sols2 defs datas
+ecPutSols (Ec next sols defs datas depths goals insts classes) sols2 =
+  Ec next sols2 defs datas depths goals insts classes
 
 ecAddDef : Ec -> Pair String Term -> Ec
-ecAddDef (Ec next sols defs datas) d = Ec next sols (append defs [d]) datas
+ecAddDef (Ec next sols defs datas depths goals insts classes) d =
+  Ec next sols (append defs [d]) datas depths goals insts classes
 
 ecAddData : Ec -> DtData -> Ec
-ecAddData (Ec next sols defs datas) d = Ec next sols defs (append datas [d])
+ecAddData (Ec next sols defs datas depths goals insts classes) d =
+  Ec next sols defs (append datas [d]) depths goals insts classes
 
 -- 局部上下文：最近绑定的在前（名字 + 类型项；类型项在当前上下文里有效）。
 -- refinements 是 M14 的索引精化：level ↦ Value（Value 是 level 形态，可以提到
@@ -154,8 +212,19 @@ emptyCtx = Ctx [] []
 errAt : Span -> String -> Result a
 errAt sp msg = Err (showSpanLoc sp ++ ": " ++ msg)
 
-newMeta : Ec -> Pair Term Ec
-newMeta (Ec next sols defs datas) = Pair (TMeta next) (Ec (next + 1) sols defs datas)
+-- M15：新建元变量并记录创建深度（求解时的作用域检查用）。
+newMeta : Ctx -> Ec -> Pair Term Ec
+newMeta ctx (Ec next sols defs datas depths goals insts classes) =
+  Pair (TMeta next)
+    (Ec (next + 1) sols defs datas (Pair next (ctxDepth ctx) :: depths) goals insts classes)
+
+-- M15：新建一个「洞」元变量：除创建深度外还记下目标类型与上下文快照（供 goal 显示）。
+newHoleMeta : Ctx -> Ec -> Span -> Value -> Pair Term Ec
+newHoleMeta ctx (Ec next sols defs datas depths goals insts classes) sp ty =
+  let
+    goal = DtGoal next sp ty (ctxItems ctx)
+  in Pair (TMeta next)
+    (Ec (next + 1) sols defs datas (Pair next (ctxDepth ctx) :: depths) (append goals [goal]) insts classes)
 
 forceVal : Ec -> Value -> Value
 forceVal ec v = force (ecDefs ec) (ecSols ec) defaultFuel v
@@ -163,7 +232,48 @@ forceVal ec v = force (ecDefs ec) (ecSols ec) defaultFuel v
 convEc : Ec -> Int -> Value -> Value -> Result Ec
 convEc ec depth expected actual = case conv (ecDefs ec) (ecSols ec) depth expected actual of
   Err e => Err e
-  Ok sols2 => Ok (ecPutSols ec sols2)
+  Ok sols2 => case checkSolsScoped ec sols2 of
+    Err e => Err e
+    Ok _ => Ok (ecPutSols ec sols2)
+
+-- M15 元变量上下文：新解不得引用「创建该元变量之后才绑定」的局部变量（作用域逃逸）。
+-- conv 本身不知道元变量的创建深度，所以解表回来后在这里统一复核新增的解。
+checkSolsScoped : Ec -> List (Pair Int Value) -> Result Int
+checkSolsScoped ec sols = checkScopedFrom ec (ecDepthOfMeta ec) sols
+
+checkScopedFrom : Ec -> List (Pair Int Int) -> List (Pair Int Value) -> Result Int
+checkScopedFrom ec [] sols = Ok 0
+checkScopedFrom ec ((Pair m created) :: rest) sols = case metaLookup m sols of
+  Nothing => checkScopedFrom ec rest sols
+  Just v =>
+    if levelEscapes created 0 v then Err ("DT: cannot solve metavariable ?" ++ strFromInt m ++ " (solution would escape its scope)")
+    else checkScopedFrom ec rest sols
+
+-- 解里是否出现 level ≥ limit 的局部变量（即创建该元变量之后才绑定的变量）。
+levelEscapes : Int -> Int -> Value -> Bool
+levelEscapes limit depth v = case v of
+  VNeutral n => case n of
+    NVar name lvl sp => lvl >= limit || levelEscapesList limit sp
+    NGlobal g sp => levelEscapesList limit sp
+  VPi name implicit dom clo => levelEscapes limit depth dom || levelEscapesClo limit clo
+  VLam name erased clo => levelEscapesClo limit clo
+  VMeta m sp => levelEscapesList limit sp
+  VCon c args => levelEscapesList limit args
+  VCase scrut alts => levelEscapes limit depth scrut
+  VIf c th el =>
+    levelEscapes limit depth c || levelEscapes limit depth th || levelEscapes limit depth el
+  VType n => False
+  VInt n => False
+  VStr s => False
+  VBool b => False
+
+levelEscapesList : Int -> List Value -> Bool
+levelEscapesList limit [] = False
+levelEscapesList limit (v :: rest) = levelEscapes limit 0 v || levelEscapesList limit rest
+
+levelEscapesClo : Int -> Closure -> Bool
+levelEscapesClo limit clo = case clo of
+  Clos env body => levelEscapesList limit env
 
 -- 未解元变量：返回第一个未解的编号。
 unsolvedFrom : Int -> Int -> List (Pair Int Value) -> Maybe Int
@@ -173,7 +283,7 @@ else case metaLookup i sols of
   Nothing => Just i
 
 unsolvedMeta : Ec -> Maybe Int
-unsolvedMeta (Ec next sols defs datas) = unsolvedFrom 0 next sols
+unsolvedMeta (Ec next sols defs datas depths goals insts classes) = unsolvedFrom 0 next sols
 
 maxInt : Int -> Int -> Int
 maxInt a b = if a >= b then a else b
@@ -255,10 +365,10 @@ collectSigsInto acc (d :: rest) = case d of
   DFun name pats body sp => collectSigsInto acc rest
   DData name params kind ctors derivings sp => collectSigsInto acc rest
   DRecord name params fields derivings sp =>
-    errAt sp "DT: record declarations are not supported yet (M15)"
-  DTrait name params methods sp => errAt sp "DT: trait declarations are not supported yet (M15)"
-  DInstance mname isDefault head methods sp =>
-    errAt sp "DT: instance declarations are not supported yet (M15)"
+    errAt sp "DT: record declarations are not supported yet (M17)"
+  -- M15：trait / instance 走字典编码（见 elabClasses / elabInstances），签名收集阶段只需放行。
+  DTrait name params methods sp => collectSigsInto acc rest
+  DInstance mname isDefault head methods sp => collectSigsInto acc rest
 
 memSig : List (Pair String Expr) -> String -> Bool
 memSig [] name = False
@@ -400,6 +510,337 @@ elabDatas (ds :: rest) globals ec = andThen (elabData globals ec ds) (\p => case
   Pair dd (Pair globals2 ec2) => andThen (elabDatas rest globals2 ec2) (\q => case q of
     Pair dds (Pair globals3 ec3) => Ok (Pair (dd :: dds) (Pair globals3 ec3))
   )
+)
+
+-- ---------------------------------------------------------------
+-- M15：接口（trait）与实例（instance）——字典编码
+-- ---------------------------------------------------------------
+--
+-- 不新增 Core 节点，全部落到既有 data / 隐式 Pi / 构造子上：
+--
+--   trait Show a where            data Dict_Show : Type -> Type where
+--     show : a -> String            MkDict_Show : {a : Type} -> (a -> String) -> Dict_Show a
+--
+--   show : {a : Type} -> {d : Dict_Show a} -> a -> String
+--   show a d x = case d of            -- 方法投影：字典当隐式参数穿进来
+--     MkDict_Show f => f x
+--
+--   instance Show Color where      Show_Color : Dict_Show Color
+--     show c = ...                 Show_Color = MkDict_Show (\c => ...)
+--
+-- 实例搜索发生在隐式 binder 的域是接口字典时：在已注册实例里找头能统一到
+-- `Dict_C args` 的那一个并插入。找不到 ⇒ 明确的缺失诊断。
+-- 旧 trait 代码的**方法名用法不变**；codegen 不需要新逻辑。
+-- 内部名字（不进入用户可见命名空间）。
+dictTypeName : String -> String
+dictTypeName cname = "Dict_" ++ cname
+
+dictCtorName : String -> String
+dictCtorName cname = "MkDict_" ++ cname
+
+-- 收集 trait / instance 声明（按源顺序）。
+collectTraitDecls : List Decl -> List (Pair Decl Span) -> List (Pair Decl Span)
+collectTraitDecls [] acc = reverse acc
+collectTraitDecls (d :: rest) acc = case d of
+  DTrait tname params methods sp => collectTraitDecls rest (Pair d sp :: acc)
+  _ => collectTraitDecls rest acc
+
+collectInstDecls : List Decl -> List (Pair Decl Span) -> List (Pair Decl Span)
+collectInstDecls [] acc = reverse acc
+collectInstDecls (d :: rest) acc = case d of
+  DInstance mname isDefault head methods sp => collectInstDecls rest (Pair d sp :: acc)
+  _ => collectInstDecls rest acc
+
+-- 单参数接口的参数名（elabTrait 已校验 length params == 1）。
+paramNameOf : List String -> String
+paramNameOf [] = "_"
+paramNameOf (p :: rest) = p
+
+-- 类参数（M15 只支持单参数接口）绑成隐式 `Type` binder 后的局部上下文。
+bindClassParams : List String -> Ctx -> Ctx
+bindClassParams [] ctx = ctx
+bindClassParams (p :: rest) ctx = bindClassParams rest (ctxBind p (TType 0) ctx)
+
+-- 每个方法的字段类型（在类参数 binders 之下检查）。
+classFieldTys : List (Pair String Term) -> Ec -> List String -> List (Pair String Expr) -> Result (Pair (List Term) Ec)
+classFieldTys globals ec params methods =
+  classFieldTysGo globals (bindClassParams params emptyCtx) ec methods []
+
+classFieldTysGo : List (Pair String Term) -> Ctx -> Ec -> List (Pair String Expr) -> List Term -> Result (Pair (List Term) Ec)
+classFieldTysGo globals ctx ec [] acc = Ok (Pair (reverse acc) ec)
+classFieldTysGo globals ctx ec (m :: rest) acc = case m of
+  Pair mname mexpr => andThen (checkType globals ctx ec mexpr) (\p => case p of
+    Pair tyTerm (Pair sort ec1) => classFieldTysGo globals ctx ec1 rest (tyTerm :: acc)
+  )
+
+-- 批量把定义体塞进 Ec 的 defs 表（delta 展开用）。
+foldlAddDef : Ec -> List (Pair String Term) -> Ec
+foldlAddDef ec [] = ec
+foldlAddDef ec (d :: rest) = foldlAddDef (ecAddDef ec d) rest
+
+foldPiFieldTys : List Term -> Term -> Term
+foldPiFieldTys [] ty = ty
+foldPiFieldTys (f :: rest) ty = TPi "_" False f (foldPiFieldTys rest ty)
+
+-- 精化一个 trait：字典 DtData + 方法投影（签名 + 定义体）+ 类表项。
+elabTrait : List (Pair String Term) -> Ec -> Pair Decl Span -> Result (Pair DtData (Pair (List (Pair String Term)) (Pair DtClass Ec)))
+elabTrait globals ec ds = case ds of
+  Pair d dsp => case d of
+    DTrait tname params methods sp => if length params /= 1 then errAt sp "DT: interfaces must have exactly one parameter (M15 limitation)"
+    else andThen (classFieldTys globals ec params methods) (\p => case p of
+      Pair fieldTys ec1 =>
+        let
+          pname = paramNameOf params
+          dname = dictTypeName tname
+          cname = dictCtorName tname
+          dapp = foldAppTerms (TGlobal dname) [Pair (TVar pname 0) True]
+          ctorTy = TPi pname True (TType 0) (foldPiFieldTys fieldTys dapp)
+          tele = teleOfType ctorTy
+          dd = DtData dname tele [DtCtor cname dname tele ctorTy]
+          projs = methodProjections tname pname methods fieldTys
+          projBodies = projectionDefs tname pname methods fieldTys (length methods)
+          cls = DtClass tname params projs fieldTys
+          ec2 = ecAddClass (ecAddData ec1 dd) cls
+          ec3 = foldlAddDef ec2 projBodies
+        in Ok (Pair dd (Pair projs (Pair cls ec3)))
+    )
+    _ => errAt dsp "DT: internal: expected a trait declaration"
+
+-- 方法投影的签名与定义体：
+--   sig:  `{p : Type} -> {d : Dict_C p} -> <方法类型>`
+--   body: `\p => \d => case d of MkDict_C f0..fn => fk x1..xar`
+-- 字段 fk 对应第 k 个方法（与构造子字段声明顺序一致）。
+methodProjections : String -> String -> List (Pair String Expr) -> List Term -> List (Pair String Term)
+methodProjections tname pname methods fieldTys = methodProjZip tname pname 0 methods fieldTys
+
+methodProjZip : String -> String -> Int -> List (Pair String Expr) -> List Term -> List (Pair String Term)
+methodProjZip tname pname idx [] fieldTys = []
+methodProjZip tname pname idx (m :: rest) [] = []
+methodProjZip tname pname idx (m :: rest) (t :: rest2) = case m of
+  Pair mname mexpr =>
+    Pair mname (TPi pname True (TType 0) (TPi "_" True (foldAppTerms (TGlobal (dictTypeName tname)) [Pair (TVar pname 0) True]) (shift 0 1 t)))
+      :: methodProjZip tname pname (idx + 1) rest rest2
+
+-- 投影的定义体：`\p => \d => \x0 .. \x(ar-1) => case d of MkDict_C f0..fn => f_k x0..x(ar-1)`
+--
+-- 签名 `{p : Type} -> {d : Dict_C p} -> <方法类型>`：p 在先、d 在后，方法自身
+-- 的显式参数再往后。外层 lambda 顺序必须是 `_p` 然后 `_d`（与签名一致）。
+-- de Bruijn 索引（最内层 = 0；case 分支绑定子 f（n 个）在方法参数之内）：
+--   _d           : index = n + ar
+--   _p           : index = n + ar + 1
+--   f_k          : index = n - 1 - k
+--   x_i          : index = n + (ar - 1 - i)
+projectionBody : String -> Int -> Int -> Int -> Term
+projectionBody ctor fieldIdx arity nFields =
+  let
+    -- scrutinee 在分支绑定子之外求值，所以只跨过方法参数（_p=ar+1、_d=ar）。
+    dictIdx = arity
+    fieldVar = TVar (fieldVarName fieldIdx) (nFields - 1 - fieldIdx)
+    argTerms = methodArgTerms arity nFields
+    applied = foldAppTerms fieldVar (map (\a => Pair a False) argTerms)
+    binders = fieldBinderNames nFields
+    alt = CaseAlt ctor binders applied
+    caseTerm = TCase (TVar "_d" dictIdx) [alt]
+    lamArgs = methodArgLams arity 0 caseTerm
+  in TLam "_p" True (TLam "_d" False lamArgs)
+
+-- 方法参数 x_i 的 index：n + (ar - 1 - i)。
+methodArgTerms : Int -> Int -> List Term
+methodArgTerms arity nFields = methodArgTermsGo arity nFields 0
+
+methodArgTermsGo : Int -> Int -> Int -> List Term
+methodArgTermsGo arity nFields i =
+  if i >= arity then []
+  else TVar ("x" ++ strFromInt i) (nFields + (arity - 1 - i)) :: methodArgTermsGo arity nFields (i + 1)
+
+-- 逐层 lambda 绑定方法参数（x_0 最外）。
+methodArgLams : Int -> Int -> Term -> Term
+methodArgLams arity i body =
+  if i >= arity then body else TLam ("x" ++ strFromInt i) False (methodArgLams arity (i + 1) body)
+
+fieldVarName : Int -> String
+fieldVarName i = "f" ++ strFromInt i
+
+fieldBinderNames : Int -> List (Pair String Bool)
+fieldBinderNames n = fieldBinderGo n 0 []
+
+fieldBinderGo : Int -> Int -> List (Pair String Bool) -> List (Pair String Bool)
+fieldBinderGo n i acc =
+  if i >= n then reverse acc else fieldBinderGo n (i + 1) (Pair (fieldVarName i) False :: acc)
+
+explicitPiArity : Term -> Int
+explicitPiArity t = case t of
+  TPi n implicit dom cod => if implicit then explicitPiArity cod else 1 + explicitPiArity cod
+  _ => 0
+
+-- 投影定义表：每个方法一条 `m = <投影定义体>`。
+projectionDefs : String -> String -> List (Pair String Expr) -> List Term -> Int -> List (Pair String Term)
+projectionDefs tname pname methods fieldTys nFields =
+  projectionDefsGo (dictCtorName tname) methods fieldTys 0 nFields
+
+projectionDefsGo : String -> List (Pair String Expr) -> List Term -> Int -> Int -> List (Pair String Term)
+projectionDefsGo ctor [] fieldTys idx nFields = []
+projectionDefsGo ctor (m :: rest) [] idx nFields = []
+projectionDefsGo ctor (m :: rest) (t :: rest2) idx nFields = case m of
+  Pair mname mexpr =>
+    Pair mname (projectionBody ctor idx (explicitPiArity t) nFields)
+      :: projectionDefsGo ctor rest rest2 (idx + 1) nFields
+
+-- 实例头 `Show Int` 的类名与实参。
+instanceHeadName : Expr -> Maybe String
+instanceHeadName e = case e of
+  EVar n sp => Just n
+  EApp fn args sp => case fn of
+    EVar n fsp => Just n
+    _ => Nothing
+  _ => Nothing
+
+-- 实例定义名：默认由类名与头实参派生（`Show_Int`），`as name` 覆盖。
+instanceName : Maybe String -> Expr -> String
+instanceName mname headExpr = case mname of
+  Just n => n
+  Nothing => derivedInstName headExpr
+
+derivedInstName : Expr -> String
+derivedInstName e = case e of
+  EApp fn args sp => case fn of
+    EVar n fsp => n ++ argSuffix args
+    _ => "Inst"
+  EVar n sp => n
+  _ => "Inst"
+
+argSuffix : List Expr -> String
+argSuffix [] = ""
+argSuffix (a :: rest) = "_" ++ exprNameFor a ++ argSuffix rest
+
+exprNameFor : Expr -> String
+exprNameFor e = case e of
+  EVar n sp => n
+  EInt n sp => strFromInt n
+  EStr s sp => s
+  _ => "X"
+
+-- 实例头实参的名字（`Pretty Color` 里的 `Color`）。
+argNameOf : Expr -> String
+argNameOf e = case e of
+  EVar n sp => n
+  _ => "Int"
+
+-- 实例体：每个方法子句按方法签名 check，再按声明顺序组成字典构造子应用。
+elabInstance : List (Pair String Term) -> List DtClass -> List DtData -> Ec -> Pair Decl Span -> Result (Pair (List (Pair String Term)) Ec)
+elabInstance globals classes datas ec ds = case ds of
+  Pair d dsp => case d of
+    DInstance mname isDefault headExpr methods msp => case instanceHeadName headExpr of
+      Nothing => errAt msp "DT: instance head must be an interface application (e.g. Show Int)"
+      Just cname => case findClass cname classes of
+        Nothing => errAt msp ("DT: unknown interface " ++ cname ++ " in instance head")
+        Just cls => andThen (elabInstanceMethods globals cls (instanceHeadTerm headExpr) ec methods msp) (\p => case p of
+          Pair fieldTerms (Pair fieldArgs ec1) =>
+            let
+              iname = instanceName mname headExpr
+              headTerm = instanceHeadTerm headExpr
+              dctor = dictCtorName (dtClassName cls)
+              dictTerm = TCon dctor fieldArgs
+              dictTyTerm = ctorResultType cls headTerm
+            in Ok
+              (Pair [Pair iname dictTyTerm] (ecAddDef (ecAddInst ec1 (DtInst iname dictTyTerm)) (Pair iname dictTerm)))
+        )
+    _ => errAt dsp "DT: internal: expected an instance declaration"
+
+-- 实例头 `Show Int` 的类型项（`Dict_Show Int`）。
+-- 实例头的实参项：`Pretty Color` → `TGlobal "Color"`（M15 只支持单参数接口）。
+instanceHeadTerm : Expr -> Term
+instanceHeadTerm e = case e of
+  EApp fn (a :: rest) sp => TGlobal (argNameOf a)
+  EVar n sp => TGlobal n
+  _ => TGlobal "Int"
+
+-- 实例注册用的头类型：`Dict_C <arg>`，供实例搜索按头统一。
+ctorResultType : DtClass -> Term -> Term
+ctorResultType cls arg = foldAppTerms (TGlobal (dictTypeName (dtClassName cls))) [Pair arg True]
+
+findClass : String -> List DtClass -> Maybe DtClass
+findClass name [] = Nothing
+findClass name (c :: rest) = if dtClassName c == name then Just c else findClass name rest
+
+-- 方法实现：逐个把 `m p1..pn = body` 变成一个 lambda 字段值。
+-- 方法签名里的类参数 `a` 要被实例头的实参（如 `Color`）替换：`show : a -> String`
+-- 在 `instance Show Color` 里就是 `Color -> String`。
+elabInstanceMethods : List (Pair String Term) -> DtClass -> Term -> Ec -> List Decl -> Span -> Result (Pair (List Term) (Pair (List (Pair Term Bool)) Ec))
+elabInstanceMethods globals cls headArg ec methods sp =
+  elabInstanceMethodsGo globals ec (dtClassFieldTys cls) (paramNameOf (dtClassParams cls)) headArg
+    methods [] [] sp
+
+elabInstanceMethodsGo : List (Pair String Term) -> Ec -> List Term -> String -> Term -> List Decl -> List Term -> List (Pair Term Bool) -> Span -> Result (Pair (List Term) (Pair (List (Pair Term Bool)) Ec))
+elabInstanceMethodsGo globals ec [] pname headArg decls terms args sp =
+  Ok (Pair (reverse terms) (Pair (reverse args) ec))
+elabInstanceMethodsGo globals ec (fty :: rest) pname headArg decls terms args sp = case findMethodAt (length terms) decls of
+  Nothing => errAt sp "DT: instance is missing an implementation for an interface method"
+  Just (Pair mname (Pair pats (Pair body msp))) =>
+    let
+      instTy = substClassParam pname headArg fty
+    in andThen (elabInstanceMethod globals ec instTy pats body msp) (\p => case p of
+      Pair term ec1 =>
+        elabInstanceMethodsGo globals ec1 rest pname headArg decls (term :: terms)
+          (Pair term False :: args) sp
+    )
+
+-- 把方法类型里对类参数（de Bruijn 0）的引用替换成实例头的实参项。
+-- 字段类型是在 `{a : Type}` 之下检查的闭合项，所以 a 就是 index 0。
+-- 把字段类型里对类参数的引用（de Bruijn 0）替换成实例头实参。
+-- 字段类型是在 `{a : Type}` 之下检查的闭合项，所以类参数恒为 index 0；
+-- 这里按 **索引** 替换（不按名字），避免上游换名失效。
+substClassParam : String -> Term -> Term -> Term
+substClassParam pname arg ty = substVarAt 0 arg ty
+
+substVarAt : Int -> Term -> Term -> Term
+substVarAt idx arg t = case t of
+  TVar n i => if i == idx then arg else t
+  TMeta m => t
+  TGlobal g => t
+  TType n => t
+  TPi n implicit dom cod => TPi n implicit (substVarAt idx arg dom) (substVarAt (idx + 1) arg cod)
+  TLam n erased body => TLam n erased (substVarAt (idx + 1) arg body)
+  TApp f a erased => TApp (substVarAt idx arg f) (substVarAt idx arg a) erased
+  TCon c cargs => TCon c (map (\p => Pair (substVarAt idx arg (firstOf p)) (secondOf p)) cargs)
+  TCase scrut alts => TCase (substVarAt idx arg scrut) (map (substAltAt idx arg) alts)
+  TInt n => t
+  TStr s => t
+  TBool b => t
+  TIf c th el => TIf (substVarAt idx arg c) (substVarAt idx arg th) (substVarAt idx arg el)
+
+substAltAt : Int -> Term -> CaseAlt -> CaseAlt
+substAltAt idx arg alt =
+  CaseAlt (caseAltName alt) (caseAltBinders alt)
+    (substVarAt (idx + length (caseAltBinders alt)) arg (caseAltBody alt))
+
+-- 第 n 个方法子句（按方法在接口里的声明顺序取实例体里的同名 DFun）。
+findMethodAt : Int -> List Decl -> Maybe (Pair String (Pair (List Pat) (Pair Expr Span)))
+findMethodAt n decls = case methodClauses decls of
+  [] => Nothing
+  _ => pickAt n (methodClauses decls)
+
+methodClauses : List Decl -> List (Pair String (Pair (List Pat) (Pair Expr Span)))
+methodClauses [] = []
+methodClauses (d :: rest) = case d of
+  DFun name pats body sp => Pair name (Pair pats (Pair body sp)) :: methodClauses rest
+  _ => methodClauses rest
+
+pickAt : Int -> List a -> Maybe a
+pickAt n [] = Nothing
+pickAt n (x :: rest) = if n <= 0 then Just x else pickAt (n - 1) rest
+
+findMethodClause : String -> List Decl -> Maybe (Pair (List Pat) (Pair Expr Span))
+findMethodClause name [] = Nothing
+findMethodClause name (d :: rest) = case d of
+  DFun n pats body sp =>
+    if n == name then Just (Pair pats (Pair body sp)) else findMethodClause name rest
+  _ => findMethodClause name rest
+
+-- 单个方法实现：把（已实例化的）方法签名当期望类型，走 checkBinders。
+elabInstanceMethod : List (Pair String Term) -> Ec -> Term -> List Pat -> Expr -> Span -> Result (Pair Term Ec)
+elabInstanceMethod globals ec mty pats body sp = andThen (checkBinders globals emptyCtx ec pats body (eval [] mty) sp) (\p => case p of
+  Pair term ec1 => Ok (Pair term ec1)
 )
 
 -- ---------------------------------------------------------------
@@ -685,18 +1126,194 @@ hasFunClause name (d :: rest) = case d of
   DFun n pats body sp => if n == name then True else hasFunClause name rest
   _ => hasFunClause name rest
 
-elabProgram : List Decl -> Result (Pair (List DtData) (List DtDef))
-elabProgram decls = andThen (collectSigs decls) (\sigs => andThen (elabDatas (collectDataDecls decls []) preludeGlobals (Ec 0 [] [] [])) (\pd => case pd of
-  Pair datas (Pair globals0 ec0) => andThen (elabSigs sigs globals0 ec0) (\p => case p of
-    Pair globals ec1 => andThen (checkAllDefined sigs globals decls) (\_ => andThen (elabBodies decls globals [] [] ec1) (\q => case q of
-      Pair defs ec2 => case unsolvedMeta ec2 of
-        Just m => Err ("DT: unsolved metavariable ?" ++ strFromInt m)
-        Nothing => Ok (Pair datas defs)
-    )
-    )
+-- M15：完整精化，额外返回洞目标与最终状态（供 `vuna goal` / LSP 的洞显示）。
+data DtProgram : Type where
+  DtProgram : List DtData -> List DtDef -> List DtGoal -> List (Pair Int Value) -> DtProgram
+
+dtProgDatas (DtProgram datas defs goals sols) = datas
+
+dtProgDefs (DtProgram datas defs goals sols) = defs
+
+dtProgGoals (DtProgram datas defs goals sols) = goals
+
+dtProgSols (DtProgram datas defs goals sols) = sols
+
+elabProgramFull : List Decl -> Result DtProgram
+elabProgramFull decls = andThen (collectSigs decls) (\sigs => andThen (elabDatas (collectDataDecls decls []) preludeGlobals ecEmpty) (\pd => case pd of
+  Pair datas (Pair globals0 ec0) => andThen (elabTraits (collectTraitDecls decls []) globals0 ec0) (\pt => case pt of
+    Pair classDatas (Pair projGlobals (Pair classes ec1)) =>
+      let
+        globals1 = append globals0 projGlobals
+        datas1 = append datas classDatas
+      in andThen (checkInstanceHeads (collectInstDecls decls []) classes globals1 ec1) (\pih => case pih of
+        Pair instHeads ec1b =>
+          let
+            globals2 = append globals1 instHeads
+          in andThen (elabSigs sigs globals2 ec1b) (\p => case p of
+            Pair globals ec2 => andThen (checkAllDefined sigs globals decls) (\_ => andThen (elabBodies decls globals [] [] ec2) (\q => case q of
+              Pair defs ec3 => andThen (elabInstanceBodies (collectInstDecls decls []) classes datas1 globals ec3) (\pi => case pi of
+                Pair instDefs ec4 => case unsolvedMeta ec4 of
+                  Just m => Err (unsolvedMessage ec4 m)
+                  Nothing =>
+                    let
+                      extra = extraDefsOf globals ec4 (append instDefs defs)
+                    in Ok
+                      (DtProgram datas1 (append instDefs (append extra defs)) (ecGoals ec4) (ecSols ec4))
+              )
+            )
+            )
+          )
+      )
   )
 )
 )
+
+-- M15：批量注册实例。
+foldlAddInst : Ec -> List DtInst -> Ec
+foldlAddInst ec [] = ec
+foldlAddInst ec (i :: rest) = foldlAddInst (ecAddInst ec i) rest
+
+-- 实例头（`Dict_C <arg>`）的签名先入 globals：实例方法体要按它 check。
+checkInstanceHeads : List (Pair Decl Span) -> List DtClass -> List (Pair String Term) -> Ec -> Result (Pair (List (Pair String Term)) Ec)
+checkInstanceHeads decls classes globals ec = checkInstanceHeadsGo decls classes globals ec [] []
+
+checkInstanceHeadsGo : List (Pair Decl Span) -> List DtClass -> List (Pair String Term) -> Ec -> List (Pair String Term) -> List DtInst -> Result (Pair (List (Pair String Term)) Ec)
+checkInstanceHeadsGo [] classes globals ec acc insts =
+  Ok (Pair (reverse acc) (foldlAddInst ec (reverse insts)))
+checkInstanceHeadsGo (d :: rest) classes globals ec acc insts = case d of
+  Pair decl dsp => case decl of
+    DInstance mname isDefault headExpr methods msp => case instanceHeadName headExpr of
+      Nothing => errAt msp "DT: instance head must be an interface application (e.g. Show Int)"
+      Just cname => case findClass cname classes of
+        Nothing => errAt msp ("DT: unknown interface " ++ cname ++ " in instance head")
+        Just cls =>
+          let
+            iname = instanceName mname headExpr
+            ty = ctorResultType cls (instanceHeadTerm headExpr)
+          in checkInstanceHeadsGo rest classes globals ec (Pair iname ty :: acc)
+            (DtInst iname ty :: insts)
+    _ => checkInstanceHeadsGo rest classes globals ec acc insts
+
+-- 实例方法体（在顶层定义之后精化）。
+elabInstanceBodies : List (Pair Decl Span) -> List DtClass -> List DtData -> List (Pair String Term) -> Ec -> Result (Pair (List DtDef) Ec)
+elabInstanceBodies decls classes datas globals ec =
+  elabInstanceBodiesGo decls classes datas globals ec []
+
+elabInstanceBodiesGo : List (Pair Decl Span) -> List DtClass -> List DtData -> List (Pair String Term) -> Ec -> List DtDef -> Result (Pair (List DtDef) Ec)
+elabInstanceBodiesGo [] classes datas globals ec acc = Ok (Pair (reverse acc) ec)
+elabInstanceBodiesGo (d :: rest) classes datas globals ec acc = andThen (elabInstance globals classes datas ec d) (\p => case p of
+  Pair gs ec1 =>
+    let
+      newDefs = instanceDefsOf ec ec1 gs
+    in elabInstanceBodiesGo rest classes datas (append globals gs) ec1 (append newDefs acc)
+)
+
+-- 从「精化前后 Ec 的 defs 差集」里取出这一条 instance 生成的定义。
+instanceDefsOf : Ec -> Ec -> List (Pair String Term) -> List DtDef
+instanceDefsOf ecBefore ecAfter gs =
+  map
+    (\g => DtDef (firstOf g) (defTypeOrDefault gs (firstOf g)) (defBodyOf (ecDefs ecAfter) (firstOf g)))
+    gs
+
+defBodyOf : List (Pair String Term) -> String -> Term
+defBodyOf defs name = case defLookup name defs of
+  Just body => body
+  Nothing => TInt 0
+
+-- 逐条精化 trait，收集字典 data / 投影签名 / 类表。
+elabTraits : List (Pair Decl Span) -> List (Pair String Term) -> Ec -> Result (Pair (List DtData) (Pair (List (Pair String Term)) (Pair (List DtClass) Ec)))
+elabTraits decls globals ec = elabTraitsGo decls globals ec [] [] []
+
+elabTraitsGo : List (Pair Decl Span) -> List (Pair String Term) -> Ec -> List DtData -> List (Pair String Term) -> List DtClass -> Result (Pair (List DtData) (Pair (List (Pair String Term)) (Pair (List DtClass) Ec)))
+elabTraitsGo [] globals ec ds gs cs =
+  Ok (Pair (reverse ds) (Pair (reverse gs) (Pair (reverse cs) ec)))
+elabTraitsGo (d :: rest) globals ec ds gs cs = andThen (elabTrait globals ec d) (\p => case p of
+  Pair dd (Pair projs (Pair cls ec1)) =>
+    elabTraitsGo rest (append globals projs) ec1 (dd :: ds) (append projs gs) (cls :: cs)
+)
+
+-- 逐条精化 instance：定义体进 Ec 的 defs（实例表），头类型进 globals。
+elabInstances : List (Pair Decl Span) -> List DtClass -> List DtData -> List (Pair String Term) -> Ec -> Result (Pair (List (Pair String Term)) Ec)
+elabInstances decls classes datas globals ec = elabInstancesGo decls classes datas globals ec []
+
+elabInstancesGo : List (Pair Decl Span) -> List DtClass -> List DtData -> List (Pair String Term) -> Ec -> List (Pair String Term) -> Result (Pair (List (Pair String Term)) Ec)
+elabInstancesGo [] classes datas globals ec acc = Ok (Pair (reverse acc) ec)
+elabInstancesGo (d :: rest) classes datas globals ec acc = andThen (elabInstance globals classes datas ec d) (\p => case p of
+  Pair gs ec1 => elabInstancesGo rest classes datas (append globals gs) ec1 (append gs acc)
+)
+
+-- M15：ecDefs 里那些不是源文件 DFun 的定义（接口投影、实例字典）。
+-- 它们的类型从 globals 里查（投影签名 / 实例头类型都在 elabTraits/elabInstances 时入表）。
+extraDefsOf : List (Pair String Term) -> Ec -> List DtDef -> List DtDef
+extraDefsOf globals ec sourceDefs = extraDefsGo globals (map dtDefName sourceDefs) (ecDefs ec) []
+
+extraDefsGo : List (Pair String Term) -> List String -> List (Pair String Term) -> List DtDef -> List DtDef
+extraDefsGo globals sourceNames [] acc = reverse acc
+extraDefsGo globals sourceNames (d :: rest) acc =
+  if memName (firstOf d) sourceNames then extraDefsGo globals sourceNames rest acc
+  else extraDefsGo globals sourceNames rest
+    (DtDef (firstOf d) (defTypeOrDefault globals (firstOf d)) (secondOf d) :: acc)
+
+defTypeOrDefault : List (Pair String Term) -> String -> Term
+defTypeOrDefault globals name = case globalLookup name globals of
+  Just ty => ty
+  Nothing => TGlobal "Int"
+
+-- M15：未解元变量若来自洞，报洞的目标（而不是光秃秃的编号）。
+unsolvedMessage : Ec -> Int -> String
+unsolvedMessage ec m = case findGoal m (ecGoals ec) of
+  Just g =>
+    "DT: unsolved hole "
+      ++ showSpanLoc (dtGoalSpan g)
+      ++ " with goal "
+      ++ showValueAt (ctxDepthOf g) (dtGoalType g)
+  Nothing => "DT: unsolved metavariable ?" ++ strFromInt m
+
+-- 洞目标里的类型是 level 形态，show 时深度取快照上下文的长度。
+ctxDepthOf : DtGoal -> Int
+ctxDepthOf g = length (dtGoalCtx g)
+
+findGoal : Int -> List DtGoal -> Maybe DtGoal
+findGoal m [] = Nothing
+findGoal m (g :: rest) = if dtGoalMeta g == m then Just g else findGoal m rest
+
+-- M15：面向工具链的洞目标查询（LSP / `vuna goal` 用）。
+data DtGoalInfo : Type where
+  DtGoalInfo : Span -> String -> List (Pair String String) -> DtGoalInfo
+
+dtGoalInfoSpan (DtGoalInfo sp goal ctx) = sp
+
+dtGoalInfoGoal (DtGoalInfo sp goal ctx) = goal
+
+dtGoalInfoCtx (DtGoalInfo sp goal ctx) = ctx
+
+goalInfoOf : List (Pair Int Value) -> DtGoal -> DtGoalInfo
+goalInfoOf sols g =
+  DtGoalInfo (dtGoalSpan g) (showValueAt (ctxDepthOf g) (zonkGoal sols (dtGoalType g)))
+    (ctxEntriesOf (dtGoalCtx g))
+
+-- 洞目标里的类型可能仍含已解元变量：用当前解表 force 一遍再 show。
+zonkGoal : List (Pair Int Value) -> Value -> Value
+zonkGoal sols v = force [] sols defaultFuel v
+
+-- 上下文条目（名字 + 类型）用于显示：类型项按快照深度用中性环境求值后 show。
+ctxEntriesOf : List (Pair String Term) -> List (Pair String String)
+ctxEntriesOf items = ctxEntriesAt items 0 (length items)
+
+ctxEntriesAt : List (Pair String Term) -> Int -> Int -> List (Pair String String)
+ctxEntriesAt [] idx depth = []
+ctxEntriesAt ((Pair name ty) :: rest) idx depth =
+  Pair name (showValueAt depth (eval (ctxEnvAt (Pair name ty :: rest) 0 depth) (shift 0 (idx + 1) ty)))
+    :: ctxEntriesAt rest (idx + 1) depth
+
+goalsOfProgram : List Decl -> Result (List DtGoalInfo)
+goalsOfProgram decls =
+  andThen (elabProgramFull decls)
+    (\prog => Ok (map (goalInfoOf (dtProgSols prog)) (dtProgGoals prog)))
+
+elabProgram : List Decl -> Result (Pair (List DtData) (List DtDef))
+elabProgram decls =
+  andThen (elabProgramFull decls) (\prog => Ok (Pair (dtProgDatas prog) (dtProgDefs prog)))
 
 -- ---------------------------------------------------------------
 -- 定义：签名 + 变量模式 → lambda 化的体
@@ -880,24 +1497,52 @@ foldAppTerms fn [] = fn
 foldAppTerms fn ((Pair arg erased) :: rest) = foldAppTerms (TApp fn arg erased) rest
 
 inferArgs : List (Pair String Term) -> Ctx -> Ec -> Value -> List Expr -> Span -> Result (Pair (List (Pair Term Bool)) (Pair Value Ec))
-inferArgs globals ctx ec ty args sp =
+inferArgs globals ctx ec ty args sp = inferArgsGo globals ctx ec ty args sp
+
+inferArgsGo : List (Pair String Term) -> Ctx -> Ec -> Value -> List Expr -> Span -> Result (Pair (List (Pair Term Bool)) (Pair Value Ec))
+inferArgsGo globals ctx ec ty args sp =
   let
     forced = forceVal ec ty
   in case forced of
-    VPi name implicit dom clo => if implicit then if isIndexDomain ec dom then
+    VPi name implicit dom clo => if implicit then if isDictDomain ec dom then andThen (constrainDictDom globals ec ctx dom args sp) (\ec0 => if hasUnsolvedMetaValue ec0 (forceVal ec0 dom) then
       let
-        pmeta = newMeta ec
+        -- 字典参数：域里若还有未解元变量（`Dict_C ?a`），先用「后面紧跟的显式实参」
+        -- 去约束它——把实参按域检查一遍（不消费），再搜索实例。这样 `pretty red`
+        -- 里 `?a` 会被 `red : Color` 定住成 `Color`。
+        pmeta = newMeta ctx ec0
+      in case pmeta of
+        Pair metaTerm ec1 =>
+          let
+            metaVal = eval (ctxEnv ctx) metaTerm
+            ty2 = applyClosure clo metaVal
+          in andThen (inferArgsGo globals ctx ec1 ty2 args sp) (\p => case p of
+            Pair argTerms (Pair resTy ec2) =>
+              Ok (Pair (Pair metaTerm False :: argTerms) (Pair resTy ec2))
+          )
+    else andThen (searchInstance ec0 (forceVal ec0 dom) sp) (\p => case p of
+      Pair instTerm ec1 =>
+        let
+          ty2 = applyClosure clo (evalCtx ctx instTerm)
+        in andThen (inferArgsGo globals ctx ec1 ty2 args sp) (\q => case q of
+          Pair argTerms (Pair resTy ec2) =>
+            Ok (Pair (Pair instTerm False :: argTerms) (Pair resTy ec2))
+        )
+    )
+    )
+    else if isIndexDomain ec dom then
+      let
+        pmeta = newMeta ctx ec
       in case pmeta of
         Pair metaTerm ec1 =>
           let
             metaVal = eval (ctxEnv ctx) metaTerm
             erased = True
             ty2 = applyClosure clo metaVal
-          in andThen (inferArgs globals ctx ec1 ty2 args sp) (\p => case p of
+          in andThen (inferArgsGo globals ctx ec1 ty2 args sp) (\p => case p of
             Pair argTerms (Pair resTy ec2) =>
               Ok (Pair (Pair metaTerm erased :: argTerms) (Pair resTy ec2))
           )
-    else errAt sp "DT: implicit parameters must be types or inductive families (M14)"
+    else errAt sp "DT: implicit parameters must be types or inductive families (M15)"
     else case args of
       [] => Ok (Pair [] (Pair forced ec))
       a :: rest => andThen (checkE globals ctx ec a dom) (\p => case p of
@@ -905,7 +1550,7 @@ inferArgs globals ctx ec ty args sp =
           let
             erased = isTypeValue dom
             ty2 = applyClosure clo (evalCtx ctx aTerm)
-          in andThen (inferArgs globals ctx ec1 ty2 rest sp) (\q => case q of
+          in andThen (inferArgsGo globals ctx ec1 ty2 rest sp) (\q => case q of
             Pair argTerms (Pair resTy ec2) =>
               Ok (Pair (Pair aTerm erased :: argTerms) (Pair resTy ec2))
           )
@@ -914,11 +1559,124 @@ inferArgs globals ctx ec ty args sp =
       [] => Ok (Pair [] (Pair forced ec))
       a :: rest => errAt (exprSpan a) "DT: too many arguments (not a function)"
 
+-- 域是不是接口字典（`Dict_C ...`）。
+isDictDomain : Ec -> Value -> Bool
+isDictDomain ec dom = isDictValue ec (forceVal ec dom)
+
+isDictValue : Ec -> Value -> Bool
+isDictValue ec v = case v of
+  VNeutral n => case n of
+    NGlobal g sp => isDictFamily ec g
+    _ => False
+  _ => False
+
+isDictFamily : Ec -> String -> Bool
+isDictFamily ec g = memName g (map (\c => dictTypeName (dtClassName c)) (ecClasses ec))
+
+-- 实例搜索：在已注册实例里找头能统一到目标字典类型的那个，返回它的定义引用。
+-- 统一过程中解出的元变量（典型是 `Dict_C ?a` 里的 `?a`，由实例头 `Dict_C T` 定住）
+-- 必须写回状态，否则后续投影的类型检查拿不到类参数。
+-- 零个 ⇒ 明确报缺失；多个 ⇒ 报歧义（M15 不做优先级/相干性细化）。
+searchInstance : Ec -> Value -> Span -> Result (Pair Term Ec)
+searchInstance ec dom sp = case filterInstances ec dom (ecInsts ec) [] of
+  Pair [] sols =>
+    errAt sp ("DT: no instance found for " ++ showValue dom ++ " ;; " ++ dictClassArgDebug ec dom)
+  Pair ([i]) sols => Ok (Pair (TGlobal (dtInstName i)) (ecPutSols ec sols))
+  Pair cands sols =>
+    errAt sp
+      ("DT: ambiguous instance for " ++ showValue dom ++ " (candidates: " ++ joinInstNames cands ++ ")")
+
+filterInstances : Ec -> Value -> List DtInst -> List (Pair Int Value) -> Pair (List DtInst) (List (Pair Int Value))
+filterInstances ec dom [] sols = Pair [] sols
+filterInstances ec dom (i :: rest) sols =
+  let
+    hd = forceVal ec (eval [] (dtInstHead i))
+  in case conv (ecDefs ec) sols 0 dom hd of
+    Err e => filterInstances ec dom rest sols
+    Ok sols2 => case filterInstances ec dom rest sols2 of
+      Pair more final => Pair (i :: more) final
+
+joinInstNames : List DtInst -> String
+joinInstNames [] = ""
+joinInstNames (i :: rest) = dtInstName i ++ joinRestInstNames rest
+
+joinRestInstNames : List DtInst -> String
+joinRestInstNames [] = ""
+joinRestInstNames (i :: rest) = ", " ++ dtInstName i ++ joinRestInstNames rest
+
+joinDebugVals : Ec -> List Value -> String
+joinDebugVals ec [] = ""
+joinDebugVals ec (v :: rest) =
+  showValueAt 0 (forceVal ec v) ++ (if length rest == 0 then "" else ",") ++ joinDebugVals ec rest
+
+dictClassArgDebug : Ec -> Value -> String
+dictClassArgDebug ec dom = case forceVal ec dom of
+  VNeutral n => case n of
+    NGlobal g sp => g ++ "/" ++ strFromInt (length sp) ++ " args(" ++ joinDebugVals ec sp ++ ")"
+    NVar name lvl sp => "var " ++ name
+    _ => "other-neutral"
+  VMeta m sp => "meta " ++ strFromInt m
+  _ => "non-neutral"
+
+-- 用「后面紧跟的显式实参」约束字典域里的类参数元变量。
+-- 我们的目标场景是 `pretty red`：字典域是 `Dict_Pretty ?a`，而 `pretty` 的下一个
+-- 显式实参是 `a`，它的类型正是 `?a`。检查该实参就会把 `?a` 解成 `Color`。
+-- 这是保守的特例（只处理「字典域的直接实参就是类参数」这一形态），解不出就原样返回，
+-- 由调用方决定占位还是报错。
+constrainDictDom : List (Pair String Term) -> Ec -> Ctx -> Value -> List Expr -> Span -> Result Ec
+constrainDictDom globals ec ctx dom args sp = case args of
+  [] => Ok ec
+  a :: rest => case dictClassArg ec dom of
+    -- 字典域的值形态是 `Dict_C ?a`；把 `?a` 取出来当实参的期望类型检查一遍。
+    Nothing => Ok ec
+    Just argTy => case inferE globals ctx ec a of
+      -- 推断实参自身的类型，再用 conv 统一到类参数（元变量）上：
+      -- `red : Color` 与 `?a` 统一 ⇒ `?a := Color`。
+      Err e => Ok ec
+      Ok (Pair aTerm (Pair aTy ec1)) => case convEc ec1 (ctxDepth ctx) argTy aTy of
+        Err e => Ok ec
+        Ok ec2 => Ok ec2
+
+-- 从字典域 `Dict_C arg` 里取出 `arg`（类参数）。
+dictClassArg : Ec -> Value -> Maybe Value
+dictClassArg ec dom = case forceVal ec dom of
+  VNeutral n => case n of
+    NGlobal g sp => case sp of
+      [arg] => Just arg
+      _ => Nothing
+    _ => Nothing
+  _ => Nothing
+
+-- 域里是否还有未解元变量（用于判断字典参数此刻能否搜索实例）。
+hasUnsolvedMetaValue : Ec -> Value -> Bool
+hasUnsolvedMetaValue ec v = case v of
+  VMeta m sp => case metaLookup m (ecSols ec) of
+    Just solved => hasUnsolvedMetaValue ec solved
+    Nothing => True
+  VNeutral n => case n of
+    NVar name lvl sp => hasUnsolvedMetaList ec sp
+    NGlobal g sp => hasUnsolvedMetaList ec sp
+  VPi name implicit dom clo => hasUnsolvedMetaValue ec dom || hasUnsolvedMetaClo ec clo
+  VLam name erased clo => hasUnsolvedMetaClo ec clo
+  VCon c args => hasUnsolvedMetaList ec args
+  VCase scrut alts => hasUnsolvedMetaValue ec scrut
+  VIf c th el =>
+    hasUnsolvedMetaValue ec c || hasUnsolvedMetaValue ec th || hasUnsolvedMetaValue ec el
+  _ => False
+
+hasUnsolvedMetaList : Ec -> List Value -> Bool
+hasUnsolvedMetaList ec [] = False
+hasUnsolvedMetaList ec (v :: rest) = hasUnsolvedMetaValue ec v || hasUnsolvedMetaList ec rest
+
+hasUnsolvedMetaClo : Ec -> Closure -> Bool
+hasUnsolvedMetaClo ec clo = case clo of
+  Clos env body => hasUnsolvedMetaList ec env
+
 checkE : List (Pair String Term) -> Ctx -> Ec -> Expr -> Value -> Result (Pair Term Ec)
 checkE globals ctx ec expr expected = case expr of
   EVar name sp => if name == "_" then
     let
-      pmeta = newMeta ec
+      pmeta = newHoleMeta ctx ec sp expected
     in case pmeta of
       Pair metaTerm ec1 => Ok (Pair metaTerm ec1)
   else checkApp globals ctx ec (EVar name sp) [] expected sp
