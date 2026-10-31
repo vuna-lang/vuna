@@ -56,6 +56,24 @@ atSym st s =
     PTok (TSym x) p => x == s
     _ => False
 
+-- 向后看第 n 个 token（0 = 当前）。M13 的 Pi binder 需要 2-token lookahead。
+nthTok : List PTok -> Int -> Maybe PTok
+nthTok Nil n = Nothing
+nthTok (Cons t rest) n = if n <= 0 then Just t else nthTok rest (n - 1)
+
+peekTokAt : PState -> Int -> Maybe PTok
+peekTokAt st n = nthTok (toksOf st) n
+
+-- bindhead：下一个 token 是 `标识符 :`（M13：`(x : A) -> B` / `{x : A} -> B`）。
+binderHeadName : PState -> Maybe String
+binderHeadName st =
+  case peekTok st of
+    PTok (TIdent name) p =>
+      case peekTokAt st 1 of
+        Just (PTok (TSym ":") _) => Just name
+        _ => Nothing
+    _ => Nothing
+
 atKw st k =
   case peekTok st of
     PTok (TKw x) p => x == k
@@ -614,16 +632,37 @@ parseAtomBase st blockCol =
     PTok (TStr s) p => Ok (Pair (EStr s (spanOf st (advance st))) (advance st))
     PTok (TKw "Type") p => Ok (Pair (EVar "Type" (spanOf st (advance st))) (advance st))
     PTok (TSym "(") p =>
-      step (parseExpr (advance st) blockCol 0) (\inner, st1 =>
-        step (expectSym st1 ")") (\_, st2 => Ok (Pair inner st2)))
+      case binderHeadName (advance st) of
+        Just name => parsePiBinder st blockCol name False "(" ")"
+        Nothing =>
+          step (parseExpr (advance st) blockCol 0) (\inner, st1 =>
+            step (expectSym st1 ")") (\_, st2 => Ok (Pair inner st2)))
     PTok (TSym "[") p => parseListExpr st blockCol
     PTok (TSym "{") p =>
-      step (expectSym st "{") (\_, st1 =>
-        step (parseExpr st1 blockCol 0) (\base, st2 =>
-          step (expectSym st2 "|") (\_, st3 =>
-            step (parseRecordAssignments st3 blockCol) (\fields, st4 =>
-              Ok (Pair (ERecUpdate base fields (spanOf st st4)) st4)))))
+      case binderHeadName (advance st) of
+        Just name => parsePiBinder st blockCol name True "{" "}"
+        Nothing =>
+          step (expectSym st "{") (\_, st1 =>
+            step (parseExpr st1 blockCol 0) (\base, st2 =>
+              step (expectSym st2 "|") (\_, st3 =>
+                step (parseRecordAssignments st3 blockCol) (\fields, st4 =>
+                  Ok (Pair (ERecUpdate base fields (spanOf st st4)) st4)))))
     _ => Err "expected expression"
+
+-- DT（M13）Pi binder：`(x : A) -> B` 或 `{x : A} -> B`。
+-- 进入时已在开括号处；binder 名先由 lookahead 确认，再要求 `->`。
+parsePiBinder st blockCol name implicit openSym closeSym =
+  if containsDot name then Err "pi binder name must be a simple identifier"
+  else
+    step (expectSym st openSym) (\_, st1 =>
+      step (expectIdent st1) (\name2, st2 =>
+        step (expectSym st2 ":") (\_, st3 =>
+          step (parseExpr st3 blockCol 0) (\dom, st4 =>
+            step (expectSym st4 closeSym) (\_, st5 =>
+              step (expectSym st5 "->") (\_, st6 =>
+                step (parseExpr st6 blockCol 1) (\cod, st7 =>
+                  Ok (Pair (EPi name2 implicit dom cod (spanOf st st7)) st7))))))))
+
 
 -- `{ f = e, ... }`：构造与更新的公共字段列表（进入时已在 `{` 之后）。
 parseRecordAssignments st blockCol =

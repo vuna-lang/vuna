@@ -1,0 +1,2 @@
+loop : Int -> Int
+loop n = loop n

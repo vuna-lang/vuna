@@ -92,3 +92,4 @@ exprNeedsElab e = case e of
   ECase scrut alts sp => if exprNeedsElab scrut then True else altsNeedElab alts
   EIf c t el sp =>
     if exprNeedsElab c then True else if exprNeedsElab t then True else exprNeedsElab el
+  EPi name implicit dom cod sp => True

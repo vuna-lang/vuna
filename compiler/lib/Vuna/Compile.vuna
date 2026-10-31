@@ -1,13 +1,15 @@
-module Vuna.Compile (effectiveRoots, compileFileTyped, compileFileTypedExec, checkFile, compileFileTypedIn, compileFileTypedExecIn, checkFileIn) where
+module Vuna.Compile (effectiveRoots, compileFileTyped, compileFileTypedExec, checkFile, compileFileTypedIn, compileFileTypedExecIn, checkFileIn, compileFileDt, checkFileDt) where
 
 -- Vuna.Compile：编译入口（供 CompilerCli / CLI / 测试使用）。
 --
--- 只保留 typed codegen 一条路径；checkFile* 只做类型检查与诊断，不生成代码。
+-- 只保留 typed codegen 一条 HM 路径；checkFile* 只做类型检查与诊断，不生成代码。
+-- M13 起另有 DT 单文件路径（compileFileDt / checkFileDt，见 Vuna.Dt）。
 import Vuna.Base
 import Vuna.Pkg
 import Vuna.Loader
 import Vuna.Typecheck
 import Vuna.TypedCodegen
+import Vuna.Dt
 
 -- 未显式给 --root 时使用当前目录包的模块根（vuna.toml）；
 -- 当前目录不是包则没有默认根，原始文件模式需显式 --root。
@@ -43,3 +45,13 @@ checkFileIn entryPkg roots entry = case loadProgram roots entryPkg entry of
   Ok decls => case checkProgramInfoElab decls of
     Err e => Err e
     Ok (Pair globals elabDecls) => Ok (exhaustiveWarningsFor globals elabDecls)
+
+-- ---------------------------------------------------------------
+-- M13：DT 单文件路径（不经过 Loader；单文件自包含）
+-- ---------------------------------------------------------------
+
+compileFileDt : String -> Bool -> Result String
+compileFileDt entry printResult = dtCompileFile entry printResult
+
+checkFileDt : String -> Result (List String)
+checkFileDt entry = dtCheckFile entry

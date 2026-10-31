@@ -1,0 +1,5 @@
+idI : {a : Type} -> a -> a
+idI x = x
+
+main : Int
+main = idI 5

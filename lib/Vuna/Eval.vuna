@@ -59,6 +59,8 @@ evalExpr decls env expr =
     ELet binds body rec_ sp => evalLet decls env sp rec_ binds body
     ECase scrut alts sp => evalCase decls env sp scrut alts
     EIf c t e sp => evalIf decls env sp c t e
+    EPi name implicit dom cod sp =>
+      errAt sp "dependent function type is not supported by `vuna interp` (use `vuna interp --dt`)"
 
 -- `&&` / `||` 短路求值：先求值左操作数，必要时才求值右操作数。
 -- 左操作数非 Bool 报 "expected a Bool"；右操作数仅在需要时求值并检查。

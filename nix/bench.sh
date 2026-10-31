@@ -186,6 +186,7 @@ if [ "$WITH_TESTS" = 1 ]; then
 else
   mkdir -p "$WORK/src/test/corpus"
   cp -r test/corpus/run "$WORK/src/test/corpus/"
+  cp -r test/corpus/dt "$WORK/src/test/corpus/"
 fi
 cd "$WORK/src"
 
@@ -278,6 +279,8 @@ cat seed/*.ml >"$WORK/seed_concat.ml"
 
 printf 'main = 40 + 2\n' >tiny.vuna
 measure tiny_compile "$SELF_BIN" compile --root compiler/lib --root lib --root stdlib/lib --root app --no-print tiny.vuna "$WORK/tiny.ml"
+# M13：DT 精化 + 擦除 codegen 基准（单文件，Pi + 类型擦除）
+measure dt_elab "$SELF_BIN" compile --dt --no-print test/corpus/dt/03_compose.vuna "$WORK/dt.ml"
 
 # ---- corpus 批量编译（单次计时，内部循环） --------------------------------
 cat >"$WORK/corpus.sh" <<'EOS'
@@ -396,6 +399,7 @@ print_table() {
   metric_line compiler_self_compile
   metric_line compiler_closure_compile
   metric_line tiny_compile
+  metric_line dt_elab
   metric_line corpus_compile
   note "  throughput: ${SELF_LINES_PER_SEC} lines/s, ${SELF_KB_PER_SEC} KB/s (self-compile source: $SRC_LINES lines / $SRC_BYTES B)"
   note "  corpus: ${CORPUS_OK}/${CORPUS_TOTAL} compiled"

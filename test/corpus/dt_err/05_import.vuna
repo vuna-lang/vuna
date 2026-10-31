@@ -1,0 +1,4 @@
+import Vuna.List
+
+main : Int
+main = 1

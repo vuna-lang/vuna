@@ -96,6 +96,11 @@ renderTy ty =
   case ty of
     EVar name sp => name
     EApp (EVar "->" _) (Cons a (Cons b Nil)) _ => renderTyArg a ++ " -> " ++ renderTy b
+    EPi name implicit dom cod sp =>
+      let binder =
+            if implicit then "{" ++ name ++ " : " ++ renderTy dom ++ "}"
+            else "(" ++ name ++ " : " ++ renderTy dom ++ ")"
+      in binder ++ " -> " ++ renderTy cod
     _ => renderTyPlain ty
 
 renderTyPlain ty =

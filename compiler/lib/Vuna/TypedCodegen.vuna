@@ -635,6 +635,8 @@ genExpr decls env expr =
         andThen (genExpr decls env t) (\gt =>
           andThen (genExpr decls env e) (\ge =>
             Ok ("if " ++ gc ++ " then " ++ gt ++ " else " ++ ge))))
+    EPi name implicit dom cod sp =>
+      Err "typed codegen: unexpected dependent function type (use --dt)"
 
 genAlt : List Decl -> List String -> Pair Pat Expr -> Result String
 genAlt decls env (Pair pat body) =
@@ -910,6 +912,7 @@ exprRefs expr =
     ELet binds body _ _ => unionNames (concatMap bindRefs binds) (exprRefs body)
     ECase scrut alts _ => unionNames (exprRefs scrut) (concatMap altRefs alts)
     EIf c t e _ => unionNames (exprRefs c) (unionNames (exprRefs t) (exprRefs e))
+    EPi name implicit dom cod sp => unionNames (exprRefs dom) (exprRefs cod)
 
 bindRefs : Pair Pat Expr -> List String
 bindRefs (Pair pat value) = exprRefs value

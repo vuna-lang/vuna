@@ -1,0 +1,8 @@
+Endo : Type 1
+Endo = (a : Type) -> a -> a
+
+id : Endo
+id a x = x
+
+main : Int
+main = id Int 9

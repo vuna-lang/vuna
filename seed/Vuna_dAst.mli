@@ -26,6 +26,7 @@ and   t_Vuna_dAst_dExpr =
   | C_Vuna_dAst_dEStr of (string) * (t_Vuna_dBase_dSpan)
   | C_Vuna_dAst_dELam of ((string) list) * (t_Vuna_dAst_dExpr) * (t_Vuna_dBase_dSpan)
   | C_Vuna_dAst_dEApp of (t_Vuna_dAst_dExpr) * ((t_Vuna_dAst_dExpr) list) * (t_Vuna_dBase_dSpan)
+  | C_Vuna_dAst_dEPi of (string) * (bool) * (t_Vuna_dAst_dExpr) * (t_Vuna_dAst_dExpr) * (t_Vuna_dBase_dSpan)
   | C_Vuna_dAst_dELet of (((t_Vuna_dAst_dPat, t_Vuna_dAst_dExpr) t_Vuna_dPair_dPair) list) * (t_Vuna_dAst_dExpr) * (bool) * (t_Vuna_dBase_dSpan)
   | C_Vuna_dAst_dECase of (t_Vuna_dAst_dExpr) * (((t_Vuna_dAst_dPat, t_Vuna_dAst_dExpr) t_Vuna_dPair_dPair) list) * (t_Vuna_dBase_dSpan)
   | C_Vuna_dAst_dEIf of (t_Vuna_dAst_dExpr) * (t_Vuna_dAst_dExpr) * (t_Vuna_dAst_dExpr) * (t_Vuna_dBase_dSpan)

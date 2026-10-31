@@ -31,6 +31,7 @@
 - M12.5：工具链与自举边界拆分——编译器独立为成员包 `vuna-compiler`，seed 只含编译器入口闭包（63 → 49 个文件），工具链移出 TCB；同期修复编译性能（AVL 类型替换 / 路由表 / 快速 seed 构建，compiler 闭包 build --split ~32s → ~2s）。
 - M12.6：main / IO 语义——可执行入口 `main : IO a` 由运行时执行（无公开 runner），用户包与 `vuna interp`/`--root` 入口都不能直接调用 effectful 内建（只能经 `Vuna.IO`）；IO 组合统一走 Functor/Monad trait（`fmap`/`bind`/`pure`、`>>=`、`do`），效果 API 直接 IO 化（print/getArgs/readFile 等返回 IO，内部 prim_*）；seed 51 个文件 / ~0.86 MB；`vuna interp` / `vuna test` 保留纯 main 结果 show 的调试约定。
 - M12.7：DT 前置清理——删除 dynamic codegen（`Vuna.Codegen`）与 `--no-typecheck` / `--typecheck` / `--typed` / `build --no-print` / `--out` / 裸 compile 回退，typed 成为唯一 codegen；`check` 改为纯类型检查（单次 typecheck），clause arity 诊断统一到 typecheck；默认模块根改为当前包；seed 49 个文件 / ~0.81 MB。
+- M13：DT 地基——新增 Core TT（`Type`/Pi/应用/lambda/if，NbE + beta/delta/eta，非累积宇宙）、双向精化器（一阶 metavariable、类型级隐式插入、delta 类型别名）、擦除型 DT codegen 与 `interp --dt` 核心求值器；`--dt` 单文件 opt-in（compile/check/interp），HM 路径零改动；新增 `docs/dt-core.md` 设计稿；seed 57 个文件 / ~0.92 MB。
 
 ## 当前硬约束
 
@@ -38,7 +39,7 @@
 2. seed rotation 后 stage 1 与 stage 2 必须字节一致；
 3. `test/run-tests.sh`、`nix build`、`nix flake check` 必须保持通过；
 4. **seed 只含 compiler 包的入口闭包**；工具链（fmt/lint/repl/doc/test、未来的 LSP/package manager）不进入 TCB；
-5. 已不再保留 dynamic codegen；HM 回归路径是 **interp + typed + split**，DT 主路径是 **core evaluator + typed**；
+5. 已不再保留 dynamic codegen；HM 回归路径是 **interp + typed + split**，DT 主路径是 **core evaluator + 擦除 codegen**（M13 起是 `--dt` 单文件 opt-in，M17 前 split 可回退）；
 6. 新增语法先以**旧种子可编译**的形式落地，rotation 之后才在编译器源码中使用；每阶段保持旧 HM 回归。
 
 ## 路线目标：依赖类型
@@ -59,26 +60,6 @@
 
 ## 下一步 / 待办
 
-### M13：核心类型论与精化器（DT 地基）
-
-**目标**：新增最小但可用的核心类型论与精化器：宇宙、Pi、定义性相等、metavariable/基础隐式插入；DT 子集可编译运行；旧 HM 路径完全不变。
-
-**范围**：
-
-- 新增编译器模块（建议 `Vuna/Core.vuna`、`Vuna/Elab.vuna`、`Vuna/CoreCodegen.vuna`；名称以实现为准），全部先用现有 HM 语法编写。
-- Core：`Term`（Var/Global/Type l/Pi/Lam/App/Let/Meta）、`Value`、`Closure`、`Env`、`Level`；NbE 求值/quote/定义性相等（beta/delta/eta）；简单宇宙层级 `Type 0 : Type 1`（暂不做累积性/宇宙多态）。
-- Surface：`(x : A) -> B`、`Type`、`Type 1`、类型级应用、洞 `_`、基础隐式 `{x : A} -> B`；parser/loader 接入，旧语法不变。
-- Elaborator：双向检查/推断、metavariable、一阶/pattern unification、基础隐式插入、错误信息。
-- 集成：`--dt` opt-in（或按语法自动选择）；DT 代码可导入现有 stdlib 的简单模块（List/Maybe/Int/String），先做受限互操作；完整 trait/模块互操作留到 M15–M18。
-- Codegen：类型/类型级项擦除；简单 DT 程序生成 OCaml；单文件先行，split 可回退。
-- 测试：`id : (a : Type) -> a -> a`、`const`、`compose`、`apply`；宇宙错误、转换错误、洞；旧 HM corpus 全量回归。
-
-**验收**：上述 DT 例子通过核心求值器与 typed codegen；旧 HM 路径不变；编译器自检、fixed point、`nix flake check` 通过；HM 编译时间不回归；DT 精化时间有基准；README/roadmap 更新。
-
-**前置**：M12.7；当前 seed；现有 loader/parser/typecheck 架构。
-
-**风险**：核心 TT/精化器复杂度；双路径维护；与 HM 模块互操作；性能。**设计闸门**：先出 core syntax/semantics/erasure 设计稿；若双路径被证明不可维护，再评估统一或重写。
-
 ### M14：索引族与依赖模式匹配
 
 **目标**：支持索引归纳族（Vec/Fin/Eq 等）与依赖模式匹配。
@@ -93,7 +74,7 @@
 
 **验收**：Vec/Fin/Eq 例子通过核心求值器 + typed codegen；不可能情况正确拒绝；旧 HM 零回归；编译器自检/fixed point/flake check 通过；split 回退显式记录。
 
-**前置**：M13。**风险**：依赖模式匹配/索引 unification；类型级递归；与现有 ADT/codegen 的整合。**设计闸门**：先定索引族 core 表示、模式匹配 unifier、coverage 规则。
+**前置**：M13（已完成）。**风险**：依赖模式匹配/索引 unification；类型级递归；与现有 ADT/codegen 的整合。**设计闸门**：先定索引族 core 表示、模式匹配 unifier、coverage 规则。
 
 ### M15：隐式参数、接口与洞
 
@@ -212,9 +193,9 @@
 
 主序列：
 
-**M12.7（已完成）→ M13 → M14 → M15 → M16 → M17 → M18**
+**M12.7（已完成）→ M13（已完成）→ M14 → M15 → M16 → M17 → M18**
 
-- **M12.7 已完成**：已删除无法支持 DT 的第二条 codegen，缩小 TCB，简化测试/CLI；现在开始 DT 主线。
+- **M12.7 / M13 已完成**：先删除无法支持 DT 的第二条 codegen（缩小 TCB、简化测试/CLI），再落地 Core TT + 精化器 + `--dt` 单文件路径；DT 主线进入 M14（索引族与依赖模式匹配）。
 - **M13 → M14 是核心**，难以并行；M15 的可用性工作可在 M14 尾部启动。
 - **M16 收口健全性/性能**；**M17 可与 M16 重叠**；**M18 是最高风险决策点**。
 - **M19 / M20 可在 M15 后并行**；**M21 在 M16/M18 后决策**；**M22 贯穿**；**M23 在 M19/M21 后**。

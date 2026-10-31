@@ -375,6 +375,8 @@ convertType typeNames vars st expr =
                         Pair (Pair tys vars1) st3 => Ok (Pair (Pair (TApp ty tys) vars1) st3))
           else Err ("unknown type constructor: " ++ name)
         _ => Err "invalid type application"
+    EPi name implicit dom cod sp =>
+      Err (showSpanLoc sp ++ ": dependent function type requires --dt")
     _ => Err "invalid type expression"
 
 varIds Nil = Nil
@@ -1211,6 +1213,8 @@ desugarExpr records e =
         andThen (traverse (desugarFieldValue records) fields) (\fs => Ok (ERecUpdate b fs sp)))
     EInstSel m n sp =>
       andThen (desugarExpr records m) (\m2 => Ok (EInstSel m2 n sp))
+    EPi name implicit dom cod sp =>
+      Err (showSpanLoc sp ++ ": dependent function type requires --dt")
 
 desugarRecordValues : List RecordInfo -> List (Pair String Expr) -> List (Pair String Expr) -> Span -> Result (List Expr)
 desugarRecordValues records Nil provided sp = Ok Nil
@@ -1486,6 +1490,8 @@ inferExpr globals locals st expr =
               XEMethod tr key paramTy msp =>
                 Ok (Pair (Pair ty (XEMethodInst tr key iname paramTy sp)) st1)
               _ => Err (showSpanLoc sp ++ ": @instance 只能用于 trait 方法"))
+    EPi name implicit dom cod sp =>
+      Err (showSpanLoc sp ++ ": dependent function type requires --dt")
 
 inferUpdateValues globals locals baseTy sp Nil st = Ok (Pair Nil st)
 
@@ -2699,6 +2705,7 @@ exprWarnings globals decls locals e =
       append (caseWarnings globals decls locals scrut alts sp)
             (append (exprWarnings globals decls locals scrut) (concatMap (altWarnings globals decls locals) alts))
     EIf c t e sp => concatMap (exprWarnings globals decls locals) (Cons c (Cons t (Cons e Nil)))
+    EPi name implicit dom cod sp => Nil
 
 altWarnings globals decls locals (Pair pat body) =
   exprWarnings globals decls locals body

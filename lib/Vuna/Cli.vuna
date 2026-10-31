@@ -13,6 +13,7 @@ import Vuna.Pkg
 import Vuna.Compile
 import Vuna.CompilerCli
 import Vuna.Interp
+import Vuna.Dt
 import Vuna.Fmt
 import Vuna.Files
 import Vuna.Repl
@@ -23,7 +24,7 @@ import qualified Vuna.Lint
 toolUsageLines : String -> String
 toolUsageLines prog =
   "  " ++ prog ++ " lint [--fix] <file.vuna>...\n"
-  ++ "  " ++ prog ++ " interp [--root DIR]... <file.vuna>\n"
+  ++ "  " ++ prog ++ " interp [--dt] [--root DIR]... <file.vuna>\n"
   ++ "  " ++ prog ++ " test [DIR]                           运行包内 test/*.vuna（main : String，空串通过）\n"
   ++ "  " ++ prog ++ " fmt [--check] [PATH]...              格式化（PATH 可为文件或目录；省略 = workspace 源码目录）\n"
   ++ "  " ++ prog ++ " repl [--root DIR]...                 交互式 REPL\n"
@@ -71,15 +72,27 @@ unknownCommand prog arg =
 -- interp
 -- ---------------------------------------------------------------
 
-interpArgs args = interpParse Nil args
+interpArgs args = interpParse False False Nil args
 
-interpParse roots args =
+interpParse dt hasRoot roots args =
   case args of
-    Cons "--root" rest => rootArg roots rest (\roots2, rest2 => interpParse roots2 rest2)
+    Cons "--dt" rest => interpParse True hasRoot roots rest
+    Cons "--root" rest => rootArg roots rest (\roots2, rest2 => interpParse dt True roots2 rest2)
     Cons path Nil =>
       if startsWith "-" path then usageError
+      else if dt then
+        if hasRoot then interpDtRootError
+        else interpDtEmit path
       else interpEmit (effectiveRoots roots) path
     _ => usageError
+
+interpDtRootError =
+  let _ = print "error: --dt does not support --root yet (DT single-file mode)\n" in 2
+
+interpDtEmit path =
+  case dtEvalFile path of
+    Err e => let _ = print ("error: " ++ e ++ "\n") in 2
+    Ok output => let _ = print (output ++ "\n") in 0
 
 rootArg roots rest k =
   case rest of

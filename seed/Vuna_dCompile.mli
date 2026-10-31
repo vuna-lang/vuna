@@ -19,6 +19,10 @@ open Vuna_dLoader
 open Vuna_dTypecheck
 open Vuna_dSplit
 open Vuna_dTypedCodegen
+open Vuna_dCore
+open Vuna_dElab
+open Vuna_dCoreCodegen
+open Vuna_dDt
 val v_Vuna_dCompile_deffectiveRoots : ((t_Vuna_dPkg_dRoot) list) -> ((t_Vuna_dPkg_dRoot) list)
 val v_Vuna_dCompile_dcompileFileTyped : ((t_Vuna_dPkg_dRoot) list) -> ((string) -> ((bool) -> ((string) t_Vuna_dResult_dResult)))
 val v_Vuna_dCompile_dcompileFileTypedExec : ((t_Vuna_dPkg_dRoot) list) -> ((string) -> ((string) t_Vuna_dResult_dResult))
@@ -26,3 +30,5 @@ val v_Vuna_dCompile_dcheckFile : ((t_Vuna_dPkg_dRoot) list) -> ((string) -> (((s
 val v_Vuna_dCompile_dcompileFileTypedIn : (string) -> (((t_Vuna_dPkg_dRoot) list) -> ((string) -> ((bool) -> ((string) t_Vuna_dResult_dResult))))
 val v_Vuna_dCompile_dcompileFileTypedExecIn : (string) -> (((t_Vuna_dPkg_dRoot) list) -> ((string) -> ((string) t_Vuna_dResult_dResult)))
 val v_Vuna_dCompile_dcheckFileIn : (string) -> (((t_Vuna_dPkg_dRoot) list) -> ((string) -> (((string) list) t_Vuna_dResult_dResult)))
+val v_Vuna_dCompile_dcompileFileDt : (string) -> ((bool) -> ((string) t_Vuna_dResult_dResult))
+val v_Vuna_dCompile_dcheckFileDt : (string) -> (((string) list) t_Vuna_dResult_dResult)

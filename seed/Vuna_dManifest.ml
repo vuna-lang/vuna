@@ -188,8 +188,8 @@ let v_vuna_ueq_uVuna_uManifest_uManifest = fun x y -> (match x with
   | C_Vuna_dManifest_dManifest (v0, v1, v2, v3, v4, v5, v6) -> (match y with
   | C_Vuna_dManifest_dManifest (w0, w1, w2, w3, w4, w5, w6) -> (if ((if ((if ((if ((if ((if (v_vuna_ueq_uVuna_uMaybe_uMaybe v0 w0) then (v_vuna_ueq_uVuna_uMaybe_uMaybe v1 w1) else false)) then (v_vuna_ueq_uVuna_uMaybe_uMaybe v2 w2) else false)) then (v_vuna_ueq_uVuna_uList_uList v3 w3) else false)) then (v_vuna_ueq_uVuna_uMaybe_uMaybe v4 w4) else false)) then (v_vuna_ueq_uVuna_uList_uList v5 w5) else false)) then (v_vuna_ueq_ustr v6 w6) else false)
   | _ -> v_vuna_ueq_uint 0 1
-  | _ -> vuna_fail "<generated>" 344 50 ("case pattern match failure"))
+  | _ -> vuna_fail "<generated>" 428 50 ("case pattern match failure"))
   | _ -> v_vuna_ueq_uint 0 1
-  | _ -> vuna_fail "<generated>" 343 38 ("case pattern match failure"))
+  | _ -> vuna_fail "<generated>" 427 38 ("case pattern match failure"))
 
 let v_vuna_uneq_uVuna_uManifest_uManifest = fun x y -> if v_vuna_ueq_uVuna_uManifest_uManifest x y then v_vuna_ueq_uint 0 1 else v_vuna_ueq_uint 0 0

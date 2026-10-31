@@ -16,11 +16,12 @@ import Vuna.SplitCli
 
 compilerUsageLines : String -> String
 compilerUsageLines prog =
-  "  " ++ prog ++ " compile [--no-print] [--root DIR]... <entry.vuna> [out.ml]\n"
-  ++ "  " ++ prog ++ " check [--root DIR]... (<entry.vuna> | <package-dir>)\n"
+  "  " ++ prog ++ " compile [--dt] [--no-print] [--root DIR]... <entry.vuna> [out.ml]\n"
+  ++ "  " ++ prog ++ " check [--dt] [--root DIR]... (<entry.vuna> | <package-dir>)\n"
   ++ "  " ++ prog ++ " build [DIR [OUT]]              从 vuna.toml 构建包（默认 DIR=.，OUT=DIR/Main.ml）\n"
   ++ "  " ++ prog ++ " build --split OUT [DIR]        分离编译：逐模块 OCaml 源码 + build.sh 写到 OUT\n"
   ++ "  " ++ prog ++ " seed [OUT [DIR]]               生成多文件 seed（默认 OUT=seed，DIR=.）\n"
+  ++ "  --dt                            experimental DT (core TT) single-file pipeline (M13)\n"
   ++ "  " ++ prog ++ " help, -h\n"
 
 compilerUsage prog = "usage:\n" ++ compilerUsageLines prog
@@ -39,8 +40,8 @@ runCompilerCliFor1 prog args =
       case arg of
         "compile" => compileArgs prog rest
         "check" => checkArgs prog rest
-        "build" => buildArgs prog rest
-        "seed" => seedArgs prog rest
+        "build" => if anyDt rest then dtCmdErr prog else buildArgs prog rest
+        "seed" => if anyDt rest then dtCmdErr prog else seedArgs prog rest
         "help" => helpFor prog
         "--no-typecheck" => removedFlag prog arg
         "--typecheck" => removedFlag prog arg
@@ -85,48 +86,83 @@ invalidFlag prog flag =
       let _ = print "error: --no-print is only valid for `compile`; `build` never prints main's result\n" in 2
     _ => removedFlag prog flag
 
+anyDt : List String -> Bool
+anyDt Nil = False
+anyDt (Cons arg rest) = if arg == "--dt" then True else anyDt rest
+
+dtCmdErr prog =
+  let _ = print ("error: --dt is only supported by compile/check/interp (M13 single-file mode)\n") in 2
+
+dtRootErr prog =
+  let _ = print ("error: --dt does not support --root yet (DT single-file mode)\n") in 2
+
+dtDirErr prog =
+  let _ = print ("error: --dt only supports a single file (DT packages come later)\n") in 2
+
 -- ---------------------------------------------------------------
 -- compile / check（文件模式）
 -- ---------------------------------------------------------------
 
-compileArgs prog args = compileParse prog True Nil args
+compileArgs prog args = compileParse prog True False False Nil args
 
-compileParse prog printResult roots args =
+compileParse prog printResult dt hasRoot roots args =
   case args of
     Nil => usageErr prog
     Cons arg rest =>
       case arg of
-        "--no-print" => compileParse prog False roots rest
-        "--root" => rootArg prog roots rest (\roots2, rest2 => compileParse prog printResult roots2 rest2)
+        "--dt" => compileParse prog printResult True hasRoot roots rest
+        "--no-print" => compileParse prog False dt hasRoot roots rest
+        "--root" => rootArg prog roots rest (\roots2, rest2 => compileParse prog printResult dt True roots2 rest2)
         _ =>
           if startsWith "-" arg then removedFlag prog arg
-          else compileEmit prog printResult roots arg rest
+          else compileEmit prog printResult dt hasRoot roots arg rest
 
 rootArg prog roots rest k =
   case rest of
     Cons dir rest2 => k (append roots (Cons (rawRoot dir) Nil)) rest2
     Nil => usageErr prog
 
-compileEmit prog printResult roots entry rest =
-  let actualRoots = effectiveRoots roots
-  in case compileFileTyped actualRoots entry printResult of
-       Ok code =>
-         case rest of
-           Nil => let _ = print code in 0
-           Cons out Nil => let _ = writeFile out code in 0
-           _ => usageErr prog
-       Err e => let _ = print ("error: " ++ e ++ "\n") in 1
+compileEmit prog printResult dt hasRoot roots entry rest =
+  if dt then
+    if hasRoot then dtRootErr prog
+    else
+      case compileFileDt entry printResult of
+        Ok code =>
+          case rest of
+            Nil => let _ = print code in 0
+            Cons out Nil => let _ = writeFile out code in 0
+            _ => usageErr prog
+        Err e => let _ = print ("error: " ++ e ++ "\n") in 1
+  else
+    let actualRoots = effectiveRoots roots
+    in case compileFileTyped actualRoots entry printResult of
+         Ok code =>
+           case rest of
+             Nil => let _ = print code in 0
+             Cons out Nil => let _ = writeFile out code in 0
+             _ => usageErr prog
+         Err e => let _ = print ("error: " ++ e ++ "\n") in 1
 
-checkArgs prog args = checkParse prog Nil args
+checkArgs prog args = checkParse prog False False Nil args
 
-checkParse prog roots args =
+checkParse prog dt hasRoot roots args =
   case args of
-    Cons "--root" rest => rootArg prog roots rest (\roots2, rest2 => checkParse prog roots2 rest2)
+    Cons "--dt" rest => checkParse prog True hasRoot roots rest
+    Cons "--root" rest => rootArg prog roots rest (\roots2, rest2 => checkParse prog dt True roots2 rest2)
     Cons arg Nil =>
       if startsWith "-" arg then removedFlag prog arg
+      else if dt then
+        if hasRoot then dtRootErr prog
+        else if isDirectory arg then dtDirErr prog
+        else checkEmitDt arg
       else if isDirectory arg then checkPackage arg
       else checkEmit (effectiveRoots roots) arg
     _ => usageErr prog
+
+checkEmitDt path =
+  case checkFileDt path of
+    Err e => let _ = print ("error: " ++ e ++ "\n") in 1
+    Ok warnings => let _ = printWarnings warnings in 0
 
 checkEmit roots path =
   case checkFile roots path of

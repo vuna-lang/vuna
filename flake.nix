@@ -213,6 +213,11 @@
                 ./vuna-stage1 compile --root compiler/lib fact.vuna fact.ml
                 ocamlopt -g -w -a+39 -warn-error +39 -o fact fact.ml
                 test "$(./fact)" = "120"
+                # M13 行为抽查：DT 路径（Pi + 擦除 codegen）在 seed 构建的 stage1 上可用
+                cp ${./test/corpus/dt/01_id.vuna} dt_id.vuna
+                ./vuna-stage1 compile --dt dt_id.vuna dt_id.ml
+                ocamlopt -g -w -a+39 -warn-error +39 -o dt_id dt_id.ml
+                test "$(./dt_id)" = "42"
                 # 增量构建：无改动时 build.sh 不重编任何模块（只链接）
                 ( cd b1 && sh build.sh ../vuna-stage1 ) >build2.log
                 ! grep -q '^compile ' build2.log

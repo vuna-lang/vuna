@@ -1,0 +1,505 @@
+module Vuna.Core (Term, TVar, TMeta, TGlobal, TType, TPi, TLam, TApp, TInt, TStr, TBool, TIf, Value, VType, VPi, VLam, VNeutral, VMeta, VInt, VStr, VBool, VIf, Neutral, NVar, NGlobal, Closure, Clos, eval, applyClosure, applyValue, applySpine, shift, quote, force, normalize, conv, defaultFuel, isTypeValue, typeLevelOf, metaLookup, defLookup, showTerm, showValue, showValueAt) where
+
+-- Vuna.Core：M13 的 core 类型论表示、NbE 求值与定义性相等。
+--
+-- 该模块不依赖 Loader / Typecheck：DT 路径用自己的精化器（Vuna.Elab），
+-- HM 路径完全不变。名字（TVar/TLam/TPi/NVar）只为打印与 OCaml 生成保留，
+-- 语义由 de Bruijn index / de Bruijn level 决定。
+--
+-- 擦除标志（TLam/TApp 的 Bool、TPi 的 implicit）由精化器按“绑定域是否为宇宙”
+-- 设置；codegen 只读标志，不需要类型信息。
+--
+-- 定义性相等：beta（NbE）+ delta（force 展开有定义的全局，步数上限）+ eta
+-- （函数/Pi 用 fresh var 扩展）。元变量求解是 M13 的一阶子集：只接受空 spine、
+-- 闭合解、occurs check；高阶元变量与带局部绑定的解报 M13 限制（M15 补齐）。
+
+import Vuna.Base
+
+data Term : Type where
+  TVar : String -> Int -> Term
+  TMeta : Int -> Term
+  TGlobal : String -> Term
+  TType : Int -> Term
+  TPi : String -> Bool -> Term -> Term -> Term
+  TLam : String -> Bool -> Term -> Term
+  TApp : Term -> Term -> Bool -> Term
+  TInt : Int -> Term
+  TStr : String -> Term
+  TBool : Bool -> Term
+  TIf : Term -> Term -> Term -> Term
+
+data Closure : Type where
+  Clos : List Value -> Term -> Closure
+
+data Neutral : Type where
+  NVar : String -> Int -> List Value -> Neutral
+  NGlobal : String -> List Value -> Neutral
+
+data Value : Type where
+  VType : Int -> Value
+  VPi : String -> Bool -> Value -> Closure -> Value
+  VLam : String -> Bool -> Closure -> Value
+  VNeutral : Neutral -> Value
+  VMeta : Int -> List Value -> Value
+  VInt : Int -> Value
+  VStr : String -> Value
+  VBool : Bool -> Value
+  VIf : Value -> Value -> Value -> Value
+
+defaultFuel : Int
+defaultFuel = 512
+
+-- ---------------------------------------------------------------
+-- 环境与求值（beta）
+-- ---------------------------------------------------------------
+
+lookupEnv : Int -> List Value -> Maybe Value
+lookupEnv i Nil = Nothing
+lookupEnv i (Cons v rest) = if i <= 0 then Just v else lookupEnv (i - 1) rest
+
+eval : List Value -> Term -> Value
+eval env t =
+  case t of
+    TVar name i =>
+      case lookupEnv i env of
+        Just v => v
+        Nothing => VNeutral (NVar name i Nil)
+    TMeta m => VMeta m Nil
+    TGlobal g => VNeutral (NGlobal g Nil)
+    TType n => VType n
+    TPi name implicit dom cod => VPi name implicit (eval env dom) (Clos env cod)
+    TLam name erased body => VLam name erased (Clos env body)
+    TApp f a erased => applyValue (eval env f) (eval env a)
+    TInt n => VInt n
+    TStr s => VStr s
+    TBool b => VBool b
+    TIf c th el => evalIf (eval env c) (eval env th) (eval env el)
+
+evalIf : Value -> Value -> Value -> Value
+evalIf c th el =
+  case c of
+    VBool b => if b then th else el
+    _ => VIf c th el
+
+spineAppend : Neutral -> Value -> Neutral
+spineAppend n a =
+  case n of
+    NVar name level sp => NVar name level (append sp (Cons a Nil))
+    NGlobal g sp => NGlobal g (append sp (Cons a Nil))
+
+applyValue : Value -> Value -> Value
+applyValue f a =
+  case f of
+    VLam name erased (Clos env body) => eval (Cons a env) body
+    VNeutral n => VNeutral (spineAppend n a)
+    VMeta m sp => VMeta m (append sp (Cons a Nil))
+    _ => f
+
+applyClosure : Closure -> Value -> Value
+applyClosure (Clos env body) v = eval (Cons v env) body
+
+applySpine : Value -> List Value -> Value
+applySpine v Nil = v
+applySpine v (Cons a rest) = applySpine (applyValue v a) rest
+
+-- ---------------------------------------------------------------
+-- 元变量 / 定义表（M13：解是闭合项，表用关联表即可）
+-- ---------------------------------------------------------------
+
+metaLookup : Int -> List (Pair Int Term) -> Maybe Term
+metaLookup i Nil = Nothing
+metaLookup i (Cons (Pair j t) rest) = if i == j then Just t else metaLookup i rest
+
+defLookup : String -> List (Pair String Term) -> Maybe Term
+defLookup name Nil = Nothing
+defLookup name (Cons (Pair n t) rest) = if name == n then Just t else defLookup name rest
+
+-- ---------------------------------------------------------------
+-- delta 展开：已解元变量 + 有定义的全局（带步数上限，避免递归定义挂死）
+-- ---------------------------------------------------------------
+
+force : List (Pair String Term) -> List (Pair Int Term) -> Int -> Value -> Value
+force defs sols fuel v =
+  if fuel <= 0 then v
+  else
+    case v of
+      VMeta m sp =>
+        case metaLookup m sols of
+          Just t => force defs sols (fuel - 1) (applySpine (eval Nil t) sp)
+          Nothing => v
+      VNeutral n =>
+        case n of
+          NGlobal g sp =>
+            case defLookup g defs of
+              Just body => force defs sols (fuel - 1) (applySpine (eval Nil body) sp)
+              Nothing =>
+                case primReduce g sp of
+                  Just v2 => force defs sols (fuel - 1) v2
+                  Nothing => v
+          _ => v
+      _ => v
+
+-- ---------------------------------------------------------------
+-- prelude 运算符的原语归约（Int/String/Bool 字面量上）。
+-- 只用于内置运算符；用户定义的全局由 delta 展开处理。
+-- ---------------------------------------------------------------
+
+isPrimitiveName : String -> Bool
+isPrimitiveName g =
+  g == "+" || g == "-" || g == "*" || g == "/"
+  || g == "==" || g == "/=" || g == "<" || g == "<=" || g == ">" || g == ">="
+  || g == "++" || g == "&&" || g == "||"
+
+asInt : Value -> Maybe Int
+asInt v = case v of
+  VInt n => Just n
+  _ => Nothing
+
+asStr : Value -> Maybe String
+asStr v = case v of
+  VStr s => Just s
+  _ => Nothing
+
+asBool : Value -> Maybe Bool
+asBool v = case v of
+  VBool b => Just b
+  _ => Nothing
+
+intPrim2 : List Value -> (Int -> Int -> Value) -> Maybe Value
+intPrim2 (Cons a (Cons b Nil)) f =
+  case asInt a of
+    Just x => case asInt b of
+                Just y => Just (f x y)
+                Nothing => Nothing
+    Nothing => Nothing
+intPrim2 sp f = Nothing
+
+boolPrim2 : List Value -> (Bool -> Bool -> Value) -> Maybe Value
+boolPrim2 (Cons a (Cons b Nil)) f =
+  case asBool a of
+    Just x => case asBool b of
+                Just y => Just (f x y)
+                Nothing => Nothing
+    Nothing => Nothing
+boolPrim2 sp f = Nothing
+
+strPrim2 : List Value -> (String -> String -> Value) -> Maybe Value
+strPrim2 (Cons a (Cons b Nil)) f =
+  case asStr a of
+    Just x => case asStr b of
+                Just y => Just (f x y)
+                Nothing => Nothing
+    Nothing => Nothing
+strPrim2 sp f = Nothing
+
+primReduce : String -> List Value -> Maybe Value
+primReduce g sp =
+  case g of
+    "+" => intPrim2 sp (\a, b => VInt (a + b))
+    "-" => intPrim2 sp (\a, b => VInt (a - b))
+    "*" => intPrim2 sp (\a, b => VInt (a * b))
+    "/" => intPrim2 sp (\a, b => if b == 0 then VInt 0 else VInt (a / b))
+    "==" => intPrim2 sp (\a, b => VBool (a == b))
+    "/=" => intPrim2 sp (\a, b => VBool (notBool (a == b)))
+    "<" => intPrim2 sp (\a, b => VBool (a < b))
+    "<=" => intPrim2 sp (\a, b => VBool (a <= b))
+    ">" => intPrim2 sp (\a, b => VBool (a > b))
+    ">=" => intPrim2 sp (\a, b => VBool (a >= b))
+    "++" => strPrim2 sp (\a, b => VStr (a ++ b))
+    "&&" => boolPrim2 sp (\a, b => VBool (a && b))
+    "||" => boolPrim2 sp (\a, b => VBool (a || b))
+    _ => Nothing
+
+notBool : Bool -> Bool
+notBool b = if b then False else True
+
+-- ---------------------------------------------------------------
+-- 深度正规化（interp --dt 展示 main 用）：先 force，再递归 spine / if 分支。
+-- 与 force 不同，它会继续深入中立项的实参，因此 `inc (dbl 20)` 能算成 41。
+-- ---------------------------------------------------------------
+
+normalize : List (Pair String Term) -> List (Pair Int Term) -> Int -> Value -> Value
+normalize defs sols fuel v =
+  if fuel <= 0 then v
+  else
+    case force defs sols fuel v of
+      VNeutral n => normalizeNeutral defs sols fuel n
+      VIf c th el => normalizeIf defs sols fuel c th el
+      other => other
+
+normalizeNeutral : List (Pair String Term) -> List (Pair Int Term) -> Int -> Neutral -> Value
+normalizeNeutral defs sols fuel n =
+  case n of
+    NVar name level sp => VNeutral (NVar name level (map (normalize defs sols fuel) sp))
+    NGlobal g sp =>
+      let sp2 = map (normalize defs sols fuel) sp
+      in case defLookup g defs of
+           Just body => normalize defs sols (fuel - 1) (applySpine (eval Nil body) sp2)
+           Nothing =>
+             case primReduce g sp2 of
+               Just v2 => normalize defs sols (fuel - 1) v2
+               Nothing => VNeutral (NGlobal g sp2)
+
+normalizeIf : List (Pair String Term) -> List (Pair Int Term) -> Int -> Value -> Value -> Value -> Value
+normalizeIf defs sols fuel c th el =
+  case normalize defs sols (fuel - 1) c of
+    VBool b => normalize defs sols (fuel - 1) (if b then th else el)
+    VNeutral n =>
+      VIf (VNeutral n) (normalize defs sols (fuel - 1) th) (normalize defs sols (fuel - 1) el)
+    other =>
+      VIf other (normalize defs sols (fuel - 1) th) (normalize defs sols (fuel - 1) el)
+
+-- ---------------------------------------------------------------
+-- quote：值 → 项（level 转 de Bruijn index）
+-- ---------------------------------------------------------------
+
+quote : Int -> Value -> Term
+quote depth v =
+  case v of
+    VType n => TType n
+    VPi name implicit dom cod =>
+      TPi name implicit (quote depth dom) (quote (depth + 1) (applyClosure cod (freshVar name depth)))
+    VLam name erased clo =>
+      TLam name erased (quote (depth + 1) (applyClosure clo (freshVar name depth)))
+    VNeutral n => quoteNeutral depth n
+    VMeta m sp => applyTermSpine (TMeta m) (map (quote depth) sp)
+    VInt n => TInt n
+    VStr s => TStr s
+    VBool b => TBool b
+    VIf c th el => TIf (quote depth c) (quote depth th) (quote depth el)
+
+freshVar : String -> Int -> Value
+freshVar name level = VNeutral (NVar name level Nil)
+
+quoteNeutral : Int -> Neutral -> Term
+quoteNeutral depth n =
+  case n of
+    NVar name level sp =>
+      applyTermSpine (TVar name (varIndex depth level)) (map (quote depth) sp)
+    NGlobal g sp => applyTermSpine (TGlobal g) (map (quote depth) sp)
+
+varIndex depth level = if level < depth then depth - level - 1 else 0
+
+applyTermSpine : Term -> List Term -> Term
+applyTermSpine head Nil = head
+applyTermSpine head (Cons a rest) = applyTermSpine (TApp head a False) rest
+
+-- ---------------------------------------------------------------
+-- 定义性相等（beta + delta + eta）与一阶元变量求解
+-- 返回更新后的元变量解表。
+-- ---------------------------------------------------------------
+
+conv : List (Pair String Term) -> List (Pair Int Term) -> Int -> Value -> Value -> Result (List (Pair Int Term))
+conv defs sols depth a b =
+  let a2 = force defs sols defaultFuel a
+      y2 = force defs sols defaultFuel b
+  in case a2 of
+       VMeta m sp => solveMeta defs sols depth m sp y2
+       _ =>
+         case y2 of
+           VMeta m sp => solveMeta defs sols depth m sp a2
+           _ => convBoth defs sols depth a2 y2
+
+convBoth : List (Pair String Term) -> List (Pair Int Term) -> Int -> Value -> Value -> Result (List (Pair Int Term))
+convBoth defs sols depth a b =
+  case a of
+    VType i =>
+      case b of
+        VType j => if i == j then Ok sols else mismatchAt depth a b
+        _ => mismatchAt depth a b
+    VPi name implicit dom cod =>
+      case b of
+        VPi name2 implicit2 dom2 cod2 =>
+          if implicit == implicit2 then
+            andThen (conv defs sols depth dom dom2) (\sols2 =>
+              let v = freshVar name depth
+              in conv defs sols2 (depth + 1) (applyClosure cod v) (applyClosure cod2 v))
+          else mismatchAt depth a b
+        _ => mismatchAt depth a b
+    VLam name erased clo =>
+      case b of
+        VLam name2 erased2 clo2 =>
+          let v = freshVar name depth
+          in conv defs sols (depth + 1) (applyClosure clo v) (applyClosure clo2 v)
+        _ => etaRight defs sols depth name clo b
+    VNeutral n =>
+      case b of
+        VNeutral n2 => convNeutral defs sols depth n n2 a b
+        VLam name2 erased2 clo2 => etaLeft defs sols depth a name2 clo2
+        _ => mismatchAt depth a b
+    VInt n =>
+      case b of
+        VInt m => if n == m then Ok sols else mismatchAt depth a b
+        _ => mismatchAt depth a b
+    VStr s =>
+      case b of
+        VStr s2 => if s == s2 then Ok sols else mismatchAt depth a b
+        _ => mismatchAt depth a b
+    VBool x =>
+      case b of
+        VBool y => if x == y then Ok sols else mismatchAt depth a b
+        _ => mismatchAt depth a b
+    VIf c th el =>
+      case b of
+        VIf c2 th2 el2 =>
+          andThen (conv defs sols depth c c2) (\sols2 =>
+            andThen (conv defs sols2 depth th th2) (\sols3 =>
+              conv defs sols3 depth el el2))
+        _ => mismatchAt depth a b
+    _ => mismatchAt depth a b
+
+etaLeft defs sols depth a name clo =
+  let v = freshVar name depth
+  in conv defs sols (depth + 1) (applyValue a v) (applyClosure clo v)
+
+etaRight defs sols depth name clo b =
+  let v = freshVar name depth
+  in conv defs sols (depth + 1) (applyClosure clo v) (applyValue b v)
+
+convNeutral : List (Pair String Term) -> List (Pair Int Term) -> Int -> Neutral -> Neutral -> Value -> Value -> Result (List (Pair Int Term))
+convNeutral defs sols depth n1 n2 v1 v2 =
+  case n1 of
+    NVar name level sp =>
+      case n2 of
+        NVar name2 level2 sp2 =>
+          if level == level2 then convSpines defs sols depth sp sp2 v1 v2 else mismatchAt depth v1 v2
+        _ => mismatchAt depth v1 v2
+    NGlobal g sp =>
+      case n2 of
+        NGlobal g2 sp2 =>
+          if g == g2 then convSpines defs sols depth sp sp2 v1 v2 else mismatchAt depth v1 v2
+        _ => mismatchAt depth v1 v2
+
+convSpines defs sols depth Nil Nil v1 v2 = Ok sols
+convSpines defs sols depth (Cons a xs) (Cons b ys) v1 v2 =
+  andThen (conv defs sols depth a b) (\sols2 => convSpines defs sols2 depth xs ys v1 v2)
+convSpines defs sols depth _ _ v1 v2 = mismatchAt depth v1 v2
+
+mismatchAt : Int -> Value -> Value -> Result a
+mismatchAt depth a b =
+  Err ("type mismatch: expected " ++ showValueAt depth a ++ ", got " ++ showValueAt depth b)
+
+-- 一阶求解：spine 必须为空；解必须是闭合项（不含局部绑定变量）。
+solveMeta : List (Pair String Term) -> List (Pair Int Term) -> Int -> Int -> List Value -> Value -> Result (List (Pair Int Term))
+solveMeta defs sols depth m sp rhs =
+  case sp of
+    Nil =>
+      case metaLookup m sols of
+        Just t => conv defs sols depth (eval Nil t) rhs
+        Nothing =>
+          let t = quote depth rhs
+          in if hasFreeVar 0 t then
+               Err ("cannot solve metavariable ?" ++ strFromInt m ++ " (bound variables in solution; M13 limitation)")
+             else if hasMeta m 0 t then
+               Err ("cannot solve metavariable ?" ++ strFromInt m ++ " (occurs check)")
+             else Ok (Cons (Pair m t) sols)
+    _ =>
+      Err ("cannot solve higher-order metavariable ?" ++ strFromInt m ++ " (M13 limitation)")
+
+-- 闭合项检查：TVar 只有在被 lambda/Pi 绑定时才允许。
+hasFreeVar : Int -> Term -> Bool
+hasFreeVar depth t =
+  case t of
+    TVar name i => if i >= depth then True else False
+    TMeta m => False
+    TGlobal g => False
+    TType n => False
+    TPi name implicit dom cod => hasFreeVar depth dom || hasFreeVar (depth + 1) cod
+    TLam name erased body => hasFreeVar (depth + 1) body
+    TApp f a erased => hasFreeVar depth f || hasFreeVar depth a
+    TInt n => False
+    TStr s => False
+    TBool b => False
+    TIf c th el => hasFreeVar depth c || hasFreeVar depth th || hasFreeVar depth el
+
+hasMeta : Int -> Int -> Term -> Bool
+hasMeta m depth t =
+  case t of
+    TMeta j => m == j
+    TVar name i => False
+    TGlobal g => False
+    TType n => False
+    TPi name implicit dom cod => hasMeta m depth dom || hasMeta m (depth + 1) cod
+    TLam name erased body => hasMeta m (depth + 1) body
+    TApp f a erased => hasMeta m depth f || hasMeta m depth a
+    TInt n => False
+    TStr s => False
+    TBool b => False
+    TIf c th el => hasMeta m depth c || hasMeta m depth th || hasMeta m depth el
+
+-- ---------------------------------------------------------------
+-- de Bruijn 移动：把项从深度 depth 的上下文嵌入到更深上下文（自由变量 +amount）。
+-- 局部上下文的类型按「绑定时上下文」存储，取用时需要 shift 0 (idx+1)。
+-- ---------------------------------------------------------------
+
+shift : Int -> Int -> Term -> Term
+shift depth amount t =
+  case t of
+    TVar name i => if i >= depth then TVar name (i + amount) else t
+    TMeta m => t
+    TGlobal g => t
+    TType n => t
+    TPi name implicit dom cod => TPi name implicit (shift depth amount dom) (shift (depth + 1) amount cod)
+    TLam name erased body => TLam name erased (shift (depth + 1) amount body)
+    TApp f a erased => TApp (shift depth amount f) (shift depth amount a) erased
+    TInt n => t
+    TStr s => t
+    TBool b => t
+    TIf c th el => TIf (shift depth amount c) (shift depth amount th) (shift depth amount el)
+
+-- ---------------------------------------------------------------
+-- 宇宙 helper
+-- ---------------------------------------------------------------
+
+isTypeValue : Value -> Bool
+isTypeValue v =
+  case v of
+    VType n => True
+    _ => False
+
+typeLevelOf : Value -> Maybe Int
+typeLevelOf v =
+  case v of
+    VType n => Just n
+    _ => Nothing
+
+-- ---------------------------------------------------------------
+-- 打印（错误信息与 interp --dt 结果展示）
+-- ---------------------------------------------------------------
+
+showTerm : Term -> String
+showTerm t =
+  case t of
+    TVar name i => name
+    TMeta m => "?" ++ strFromInt m
+    TGlobal g => g
+    TType n => if n == 0 then "Type" else "Type " ++ strFromInt n
+    TPi name implicit dom cod =>
+      if name == "_" then showTerm dom ++ " -> " ++ showTerm cod
+      else if implicit then "{" ++ name ++ " : " ++ showTerm dom ++ "} -> " ++ showTerm cod
+      else "(" ++ name ++ " : " ++ showTerm dom ++ ") -> " ++ showTerm cod
+    TLam name erased body => "\\" ++ name ++ " => " ++ showTerm body
+    TApp f a erased => "(" ++ showTerm f ++ " " ++ showTerm a ++ ")"
+    TInt n => strFromInt n
+    TStr s => showCoreString s
+    TBool b => if b then "True" else "False"
+    TIf c th el => "if " ++ showTerm c ++ " then " ++ showTerm th ++ " else " ++ showTerm el
+
+showValueAt : Int -> Value -> String
+showValueAt depth v = showTerm (quote depth v)
+
+showValue : Value -> String
+showValue v = showValueAt 0 v
+
+showCoreString : String -> String
+showCoreString s = "\"" ++ showCoreChars (strUnpack s) ++ "\""
+
+showCoreChars : List Int -> String
+showCoreChars Nil = ""
+showCoreChars (Cons c rest) =
+  if c == 34 then "\\\"" ++ showCoreChars rest
+  else if c == 92 then "\\\\" ++ showCoreChars rest
+  else if c == 10 then "\\n" ++ showCoreChars rest
+  else if c == 9 then "\\t" ++ showCoreChars rest
+  else if c == 13 then "\\r" ++ showCoreChars rest
+  else strPack (Cons c Nil) ++ showCoreChars rest

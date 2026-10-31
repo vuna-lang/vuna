@@ -339,6 +339,7 @@ exprAnchors e =
     EStr s sp => Nil
     ELam ps body sp => exprAnchors body
     EApp fn args sp => append (exprAnchors fn) (concatMap exprAnchors args)
+    EPi name implicit dom cod sp => append (exprAnchors dom) (exprAnchors cod)
     ELet binds body rec_ sp =>
       append (append (map bindingAnchor binds) (concatMap bindingValueAnchors binds)) (exprAnchors body)
     ECase scrut alts sp =>
@@ -491,6 +492,7 @@ inlinePrec minPrec e =
             Nothing => Nothing
             Just ss => Just ("[" ++ joinComma ss ++ "]")
         Nothing => inlineApp minPrec fn args
+    EPi name implicit dom cod sp => inlinePi minPrec name implicit dom cod
     ELet binds body rec_ sp => Nothing
     ECase scrut alts sp => Nothing
     EIf c t el sp =>
@@ -541,10 +543,29 @@ inlineFields (Cons (Pair fname value) rest) =
         Nothing => Nothing
         Just ss => Just (Cons (fname ++ " = " ++ v) ss)
 
+-- DT（M13）命名 Pi：`(x : A) -> B` 与隐式 `{x : A} -> B`；`->` 右结合。
+inlinePi minPrec name implicit dom cod =
+  case inlinePrec 0 dom of
+    Nothing => Nothing
+    Just d =>
+      case inlinePrec 1 cod of
+        Nothing => Nothing
+        Just c =>
+          let binder =
+                if implicit then "{" ++ name ++ " : " ++ d ++ "}"
+                else "(" ++ name ++ " : " ++ d ++ ")"
+          in Just (wrapPrec (minPrec > 1) (binder ++ " -> " ++ c))
+
+-- 域/余域含块结构时的兜底布局（DT 类型一般走 inlinePi；这里只保证不丢字符）。
+renderPiBlock at lineInd implicit name dom cod =
+  let openTxt = if implicit then "{" ++ name ++ " : " else "(" ++ name ++ " : "
+      closeTxt = if implicit then "}" else ")"
+      domLines = appendLast (" " ++ closeTxt ++ " ->") (prefixFirst openTxt (renderExpr at lineInd dom))
+  in append domLines (prefixFirst (spaces (lineInd + 2)) (renderExpr at (lineInd + 2) cod))
+
 inlineApp minPrec fn args =
   case fn of
-    EVar "bind" bsp =>
-      case args of
+    EVar "bind" bsp =>      case args of
         Cons a (Cons b Nil) => inlineInfix minPrec 1 1 ">>=" a b
         _ => inlineApply minPrec fn args
     EVar op sp =>
@@ -684,6 +705,7 @@ renderBlock at lineInd e =
     ELet binds body rec_ sp => renderLet at lineInd binds body
     EIf c t el sp => renderIf at lineInd c t el
     EApp fn args sp => renderAppBlock at lineInd fn args
+    EPi name implicit dom cod sp => renderPiBlock at lineInd implicit name dom cod
     ELam ps body sp => prefixFirst ("\\" ++ joinComma ps ++ " => ") (renderExpr at lineInd body)
     EField base f sp => appendLast ("." ++ f) (renderAtomExpr at lineInd base)
     ERecord name fields sp => renderRecordBlock at lineInd name fields

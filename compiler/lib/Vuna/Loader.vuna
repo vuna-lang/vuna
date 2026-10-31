@@ -486,6 +486,8 @@ resolveExpr modules label prefix own ownCtors imports scope expr =
       andThen (resolveExpr modules label prefix own ownCtors imports scope fn) (\fn2 =>
         andThen (traverse (\a => resolveExpr modules label prefix own ownCtors imports scope a) args) (\args2 =>
           Ok (EApp fn2 args2 sp)))
+    EPi name implicit dom cod sp =>
+      Err (label ++ ": " ++ showSpanLoc sp ++ ": dependent function type requires --dt")
     ELet binds body rec_ sp =>
       andThen (resolveLet modules label prefix own ownCtors imports scope rec_ binds body) (\r =>
         case r of
@@ -585,6 +587,8 @@ resolveTypeExpr modules label prefix ownTypes imports ty =
       andThen (resolveTypeExpr modules label prefix ownTypes imports fn) (\fn2 =>
         andThen (traverse (resolveTypeExpr modules label prefix ownTypes imports) args) (\args2 =>
           Ok (EApp fn2 args2 sp)))
+    EPi name implicit dom cod sp =>
+      Err (label ++ ": " ++ showSpanLoc sp ++ ": dependent function type requires --dt")
     _ => Err (label ++ ": invalid type expression (" ++ tyShape ty ++ ")")
 
 resolveTypeTopName label prefix name =

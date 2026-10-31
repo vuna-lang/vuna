@@ -19,6 +19,10 @@ open Vuna_dLoader
 open Vuna_dTypecheck
 open Vuna_dSplit
 open Vuna_dTypedCodegen
+open Vuna_dCore
+open Vuna_dElab
+open Vuna_dCoreCodegen
+open Vuna_dDt
 open Vuna_dCompile
 open Vuna_dSplitCli
 val v_Vuna_dCompilerCli_drunCompilerCli : ((string) list) -> (int)

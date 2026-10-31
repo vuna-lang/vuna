@@ -700,6 +700,71 @@ else
   ok
 fi
 
+
+# 34) DT（M13）：interp --dt（核心求值器）/ compile --dt（擦除 codegen）与 golden 一致
+for file in corpus/dt/*.vuna; do
+  base=${file%.vuna}
+  expected=$(cat "$base.out")
+  actual=$("$VUNA" interp --dt "$file" 2>&1)
+  check_eq "$file (dt interp)" "$expected" "$actual"
+  "$VUNA" check --dt "$file" >/dev/null 2>&1
+  check_eq "$file (dt check exit)" "0" "$?"
+  rm -f "$tmp/dt.ml" "$tmp/dt.exe"
+  if ! dt_out=$("$VUNA" compile --dt "$file" "$tmp/dt.ml" 2>&1); then
+    bad "$file (dt compile)" "exit 0" "$dt_out"
+  elif [ -n "$dt_out" ]; then
+    bad "$file (dt compile output)" "" "$dt_out"
+  elif ! "$OCAMLOPT" -w -a -o "$tmp/dt.exe" "$tmp/dt.ml" >"$tmp/dt.log" 2>&1; then
+    bad "$file (dt ocamlopt)" "" "$(cat "$tmp/dt.log")"
+  else
+    actual=$("$tmp/dt.exe" 2>&1)
+    check_eq "$file (dt run)" "$expected" "$actual"
+  fi
+done
+
+# DT 错误：check --dt 与 compile --dt 都失败、含片段、不写输出文件
+for file in corpus/dt_err/*.vuna; do
+  fragment=$(cat "${file%.vuna}.err")
+  actual=$("$VUNA" check --dt "$file" 2>&1)
+  dt_code=$?
+  check_contains "$file (dt error)" "$actual" "$fragment"
+  if [ "$dt_code" -ne 0 ]; then ok; else bad "$file (dt error exit)" "non-zero" "$dt_code"; fi
+  rm -f "$tmp/dt_err_compile.ml"
+  actual=$("$VUNA" compile --dt "$file" "$tmp/dt_err_compile.ml" 2>&1)
+  dt_code=$?
+  check_contains "$file (dt compile error)" "$actual" "$fragment"
+  if [ "$dt_code" -ne 0 ]; then ok; else bad "$file (dt compile error exit)" "non-zero" "$dt_code"; fi
+  if [ -e "$tmp/dt_err_compile.ml" ]; then
+    bad "$file (dt no output file)" "absent" "present"
+  else
+    ok
+  fi
+done
+
+# DT CLI 约束：--dt 不接受 --root / 包目录；build / seed 不支持 --dt
+help_out=$("$VUNA" help 2>&1)
+check_contains "dt help" "$help_out" "--dt"
+dt_root_msg=$("$VUNA" compile --dt --root lib corpus/dt/01_id.vuna 2>&1)
+check_eq "dt compile --root exit" "2" "$?"
+check_contains "dt compile --root msg" "$dt_root_msg" "--dt does not support --root"
+"$VUNA" check --dt compiler >/dev/null 2>&1
+check_eq "dt check dir exit" "2" "$?"
+"$VUNA" build --dt . >/dev/null 2>&1
+check_eq "dt build exit" "2" "$?"
+"$VUNA" seed --dt >/dev/null 2>&1
+check_eq "dt seed exit" "2" "$?"
+"$VUNA" interp --dt --root stdlib/lib corpus/dt/01_id.vuna >/dev/null 2>&1
+check_eq "dt interp --root exit" "2" "$?"
+
+# DT fmt round-trip：Pi 语法格式化后仍解析为同一程序且幂等
+cp corpus/dt/03_compose.vuna "$tmp/dt_fmt.vuna"
+chmod u+w "$tmp/dt_fmt.vuna"
+"$VUNA" fmt "$tmp/dt_fmt.vuna" >/dev/null 2>&1
+actual=$("$VUNA" interp --dt "$tmp/dt_fmt.vuna" 2>&1)
+check_eq "dt fmt interp" "41" "$actual"
+"$VUNA" fmt --check "$tmp/dt_fmt.vuna" >/dev/null 2>&1
+check_eq "dt fmt idempotent" "0" "$?"
+
 if [ "$fail" -ne 0 ]; then
   printf '%s passed, %s failed\n' "$pass" "$fail"
   exit 1

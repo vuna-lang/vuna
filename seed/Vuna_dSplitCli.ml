@@ -19,6 +19,10 @@ open Vuna_dLoader
 open Vuna_dTypecheck
 open Vuna_dSplit
 open Vuna_dTypedCodegen
+open Vuna_dCore
+open Vuna_dElab
+open Vuna_dCoreCodegen
+open Vuna_dDt
 open Vuna_dCompile
 type   t_Vuna_dSplitCli_dSplitInput =
     C_Vuna_dSplitCli_dSplitInput of ((t_Vuna_dLoader_dModule) list) * ((t_Vuna_dAst_dDecl) list) * ((t_Vuna_dAst_dDecl) list) * (((string, t_Vuna_dTypecheck_dScheme) t_Vuna_dPair_dPair) list) * (((string, string) t_Vuna_dPair_dPair) list)

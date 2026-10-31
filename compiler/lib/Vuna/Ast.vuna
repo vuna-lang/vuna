@@ -1,4 +1,4 @@
-module Vuna.Ast (Pat, PVar, PWild, PCon, PInt, PStr, PRecord, Expr, EVar, EInt, EStr, ELam, EApp, ELet, ECase, EIf, EField, ERecord, ERecUpdate, EInstSel, EDo, DoStmt, DBind, DExpr, doStmtSpan, doStmtExpr, Ctor, Field, Decl, DData, DSig, DFun, DRecord, DTrait, DInstance, XBare, XTypeAll, XModule, ModDecl, modDeclSpan, Source, patSpan, exprSpan, declSpan, ctorSpan, fieldSpan, fieldName, fieldType, Import, importSpan, exportItemSpan, clausesFor, funArity, ctorName, ctorType, ctorArityOf, ctorArity, declNames, topNames, ctorsOf, typeNamesOf, declDerivings) where
+module Vuna.Ast (Pat, PVar, PWild, PCon, PInt, PStr, PRecord, Expr, EVar, EInt, EStr, ELam, EApp, EPi, ELet, ECase, EIf, EField, ERecord, ERecUpdate, EInstSel, EDo, DoStmt, DBind, DExpr, doStmtSpan, doStmtExpr, Ctor, Field, Decl, DData, DSig, DFun, DRecord, DTrait, DInstance, XBare, XTypeAll, XModule, ModDecl, modDeclSpan, Source, patSpan, exprSpan, declSpan, ctorSpan, fieldSpan, fieldName, fieldType, Import, importSpan, exportItemSpan, clausesFor, funArity, ctorName, ctorType, ctorArityOf, ctorArity, declNames, topNames, ctorsOf, typeNamesOf, declDerivings) where
 
 -- Vuna.Ast：core-v0/M10.5 的语法类型与 AST 辅助函数。
 
@@ -22,6 +22,9 @@ data Expr : Type where
   EStr : String -> Span -> Expr
   ELam : List String -> Expr -> Span -> Expr
   EApp : Expr -> List Expr -> Span -> Expr
+  -- DT（M13）命名 Pi：`(x : A) -> B` 与隐式 `{x : A} -> B`。
+  -- 匿名 `A -> B` 仍沿用 `EApp (EVar "->") [A, B]` 编码（既有路径零改动）。
+  EPi : String -> Bool -> Expr -> Expr -> Span -> Expr
   ELet : List (Pair Pat Expr) -> Expr -> Bool -> Span -> Expr
   ECase : Expr -> List (Pair Pat Expr) -> Span -> Expr
   EIf : Expr -> Expr -> Expr -> Span -> Expr
@@ -79,6 +82,7 @@ exprSpan expr =
     EStr s sp => sp
     ELam ps body sp => sp
     EApp fn args sp => sp
+    EPi name implicit dom cod sp => sp
     ELet binds body _ sp => sp
     ECase scrut alts sp => sp
     EIf c t e sp => sp

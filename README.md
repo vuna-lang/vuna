@@ -21,8 +21,8 @@ Ast/Lexer/Parser/Loader/Typecheck/TypedCodegen 与编译器驱动）+ 根包 `vu
 `vuna-compiler` 是编译器自己的 CLI（也是 seed 的来源）：
 
 ```console
-vuna-compiler compile [--no-print] [--root DIR]... <entry.vuna> [out.ml]
-vuna-compiler check [--root DIR]... (<entry.vuna> | <package-dir>)
+vuna-compiler compile [--dt] [--no-print] [--root DIR]... <entry.vuna> [out.ml]
+vuna-compiler check [--dt] [--root DIR]... (<entry.vuna> | <package-dir>)
 vuna-compiler build [DIR [OUT]]        # 包模式：生成 typed OCaml（默认 DIR/Main.ml）
 vuna-compiler build --split OUT [DIR]  # 分离编译：逐模块 .ml/.mli + build.sh 写到 OUT
 vuna-compiler seed [OUT [DIR]]         # 生成多文件 seed（默认 OUT=seed，DIR=.）
@@ -34,10 +34,10 @@ vuna-compiler help, -h
 
 ```console
 # 文件模式（M9 起的原有能力）
-vuna compile [--no-print] [--root DIR]... <entry.vuna> [out.ml]
-vuna check [--root DIR]... (<entry.vuna> | <package-dir>)
+vuna compile [--dt] [--no-print] [--root DIR]... <entry.vuna> [out.ml]
+vuna check [--dt] [--root DIR]... (<entry.vuna> | <package-dir>)
 vuna lint [--fix] <file.vuna>...
-vuna interp [--root DIR]... <file.vuna>
+vuna interp [--dt] [--root DIR]... <file.vuna>
 # 包模式（M11.5：从 vuna.toml / workspace / 依赖 DAG 解析模块根）
 vuna build [DIR [OUT]]         # 默认 DIR=.、OUT=DIR/Main.ml（生成 typed OCaml）
 vuna build --split OUT [DIR]   # M12 分离编译：逐模块 .ml/.mli + build.sh 写到 OUT
@@ -77,7 +77,7 @@ stage2 文件集；stage1 == stage2（文件集合逐字节）即 fixed point
 种子（`seed/`）**提交入库**，是构建输入而不是构建产物。M12 起种子是**多文件文件集**：
 每个 vuna 模块对应一个 OCaml 模块（`.ml` + `.mli`），外加共享 runtime 与 `build.sh`。
 M12.5 起种子**只覆盖 compiler 包**（`compiler/app/Main.vuna` 的 import 闭包）：工具链
-（fmt/lint/repl/doc/test）由编译器编译出来，不在信任锚点里。当前 49 个文件、约 0.81 MB。
+（fmt/lint/repl/doc/test）由编译器编译出来，不在信任锚点里。当前 57 个文件、约 0.92 MB（M13 起含 DT 模块 Core/Elab/CoreCodegen/Dt）。
 唯一的硬性不变量：
 
 > **当前入库的种子必须能编译当前的 vuna 源码。**
@@ -452,6 +452,42 @@ git add seed/ && git commit
   产品 CLI、stdlib 自身在包级 allowlist 内，`--root` 原始文件模式与 `vuna interp`
   保留给调试/测试。
 
+### DT 子集（M13，实验性）
+
+`--dt` 打开与 HM 并存的依赖类型（DT）路径：Core TT + NbE + 双向精化器 +
+擦除型 codegen。M13 只支持**单文件、自包含**的 DT 程序：不经过模块 Loader，
+不支持 `import` / 包模式，也不进入 `build` / `build --split` / `seed`；HM 路径
+（interp + typed + split）语义与产物不变。设计与边界见
+[docs/dt-core.md](docs/dt-core.md)。
+
+```vuna
+-- 类型：Type / Type n、A -> B、(x : A) -> B、{x : A} -> B
+id : (a : Type) -> a -> a
+id a x = x
+
+const : (a : Type) -> (b : Type) -> a -> b -> a
+const a b x y = x
+
+main : Int
+main = id Int 42
+```
+
+```console
+vuna check --dt file.vuna            # 精化 + 擦除检查（不生成代码）
+vuna compile --dt file.vuna out.ml   # 擦除并生成 OCaml（main : Int/String/Bool）
+vuna interp --dt file.vuna           # 核心求值器（NbE + delta）求值 main
+```
+
+支持：`Type` / `Type n` 非累积宇宙、Pi（显式 / 隐式）、应用、lambda（需签名）、
+`if`、洞 `_`、Int/String/Bool 字面量与 `+ - * / == /= < <= > >= ++ && ||`。
+每个定义必须有类型签名；类型级参数按擦除规则不生成运行时参数。类型级定义
+（类型是宇宙，如 `Endo : Type 1`）整体擦除；类型别名参与 delta 归约。
+
+M13 限制（后续阶段补齐）：无 `data` / `record` / `trait` / `case` / `let` /
+`where` / 递归（M14/M15/M16）；元变量只解闭合项、不支持高阶元变量（M15）；
+隐式参数只支持类型级（M15）；不做终止性 / 覆盖性与完整擦除分析（M16）；
+不接入 split / 包模式（M17 前）。
+
 ## 编译器实现
 
 编译器包 `compiler/`（`vuna-compiler`）负责“源码 → OCaml / seed”，根包 `lib/` 只放
@@ -487,6 +523,22 @@ git add seed/ && git commit
   “声明名 → 归属模块”路由表（`routeFunTable`/`routeDataTable`），避免每个模块反复扫描
   owners/全程序 decls；M12.6 起 `main : IO a` 的入口由运行时执行（单文件直接 match
   IO 构造器；分离编译在 IO 模块生成代码里注入 `__vuna_run_io` 执行器，源码不可见）；
+- `compiler/lib/Vuna/Core.vuna`（M13）：DT 的 core 类型论——`Term`（`TVar`/`TMeta`/
+  `TGlobal`/`TType`/`TPi`/`TLam`/`TApp`/字面量/`TIf`）、`Value`/`Closure`/`Neutral`、
+  NbE `eval`、`quote`、`force`（已解元变量 + delta 展开，带步数上限）、`normalize`
+  （核心求值器展示用）、定义性相等 `conv`（beta/delta/eta + 一阶元变量求解）、
+  prelude 运算符的原语归约与 `showTerm`；
+- `compiler/lib/Vuna/Elab.vuna`（M13）：DT 双向精化器——内置 prelude（Int/String/Bool
+  与运算符）、签名/定义收集、`checkE`/`inferE`/`checkType`、隐式参数插入、
+  metavariable（只解闭合项）、`Ec` 状态（元变量解 + 已精化定义体供 delta），
+  错误信息带 `文件:行:列`；
+- `compiler/lib/Vuna/CoreCodegen.vuna`（M13）：DT 擦除与 OCaml 生成——按「类型是否为
+  宇宙」区分类型级/运行时定义、擦除检查（拒绝运行时使用类型级绑定/定义）、按依赖
+  拓扑排序（递归报错）、生成自包含最小 runtime（`bi_*`/`dt_show_*`）、
+  `main : Int/String/Bool` 的入口打印；
+- `compiler/lib/Vuna/Dt.vuna`（M13）：DT 单文件 facade（`dtCheckFile`/`dtCompileFile`/
+  `dtEvalFile`）：只 `readFile` + `parseSource`，拒绝模块头与 `import`；核心求值器
+  通过 `interp --dt` 暴露，用于与 codegen 结果对照；
 - `compiler/lib/Vuna/Split.vuna` / `SplitCli.vuna`：分离编译输出文件模型、`build.sh`
   构建脚本（干净构建用一次 `ocamlopt` 编译全部 `.mli/.ml` 并链接；已有 `.cmx` 时按
   模块时间戳增量重编）、包模式 `build --split` / `seed` 入口；
@@ -547,7 +599,7 @@ typed codegen 只用 OCaml 标准库，不依赖解释循环。代码质量优�
 
 ## 测试
 
-`test/run-tests.sh` 是 vuna 原生测试（553 checks），用 `vuna` / `vuna-seed` 驱动，
+`test/run-tests.sh` 是 vuna 原生测试（641 checks），用 `vuna` / `vuna-seed` 驱动，
 不依赖外部 vuna 实现；但运行测试需要 OCaml 编译器（`ocamlopt`）作为代码生成后端：
 
 ```console
@@ -653,7 +705,8 @@ nix run .#bench -- --with-tests            # 额外跑全部 checks
 ```
 
 报告包含：三级构建性能（seed → vuna-compiler → vuna 的 ocamlopt 时间）、编译性能
-（seed/vuna 自编译 compiler 闭包与产品闭包、corpus 批量编译、tiny 程序）、编译吞吐、
+（seed/vuna 自编译 compiler 闭包与产品闭包、corpus 批量编译、tiny 程序、
+DT 精化 + 擦除 codegen（`dt_elab`））、编译吞吐、
 生成产物的 bytes/lines/最长行/超长行/行尾空白、
 codegen 健康度计数（`let rec`、`String.concat ""`、`bi_eq_int/_str/_bool`、零参 rec
 thunk）、以及 fixed point / seed 一致性 / 可选 tests 状态。`--json` 输出机器可读
@@ -683,7 +736,9 @@ nix fmt               # nixfmt-tree 格式化 .nix
   构造使用单文件产物；`vuna build` 仍是单文件，`vuna build --split` 遇到不支持构造
   直接报错（不回退）；优化仍归 ocamlopt（M12 不做 vuna typed IR）；runtime prelude
   在分离编译中完整保留；
-- `do` / Monad / IO 组合子已在 M11 实现；隐式参数 / 依赖类型仍未实现；
+- `do` / Monad / IO 组合子已在 M11 实现；DT（依赖类型）在 M13 起步：`--dt`
+  单文件路径（Core TT + 精化器 + 擦除 codegen + `interp --dt`），完整 DT 主线见
+  [docs/roadmap.md](docs/roadmap.md) 与 [docs/dt-core.md](docs/dt-core.md)；
 - M12 限制：分离编译的*生成*阶段仍是整程序分析，但经过 M12.5 性能修复后与单文件
   编译同量级（约 2s）；增量收益体现在 ocamlopt 只重编译受影响模块（`build.sh`）；
   seed 多文件（`.ml/.mli` 文件集）fixed point 逐字节比较；分离编译的
@@ -776,6 +831,11 @@ nix fmt               # nixfmt-tree 格式化 .nix
   效果 API 直接 IO 化（`print : String -> IO Int`、`getArgs : IO (List String)` 等），
   内部由不导出的 `prim_*` 原语实现；
   seed 51 个文件 / ~0.86 MB；`vuna interp`/`vuna test` 保留纯 main 结果 show 的调试约定；
+- M13：DT 地基——Core TT（`Type`/Pi/应用/lambda/if；NbE + beta/delta/eta；
+  非累积宇宙）、双向精化器（一阶 metavariable、类型级隐式插入、delta 类型别名）、
+  擦除型 DT codegen 与 `interp --dt` 核心求值器；`--dt` 单文件 opt-in，HM 路径
+  语义与产物不变；新增 `docs/dt-core.md` 设计稿与 `test/corpus/dt*` 夹具；
+  seed 49 → 57 个文件 / ~0.92 MB；
 - M12.7：删除 dynamic codegen（`Vuna.Codegen`）与 `--no-typecheck` / `--typecheck` /
   `--typed` / `build --no-print` / `--out` / 裸 compile 回退；typed 成为唯一 codegen，
   `vuna check` 改为纯类型检查（单次 typecheck）、arity 诊断统一到 typecheck，
