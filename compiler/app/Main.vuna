@@ -1,0 +1,5 @@
+-- vuna-compiler：编译器 CLI 入口（seed 与 stage 1 编译器共用）。
+-- 命令集见 `vuna-compiler help`；工具命令在根包 vuna。
+import Vuna.CompilerCli
+
+main = exit (runCompilerCli (getArgs))

@@ -29,14 +29,14 @@
     in
     {
       # 自举链（完全由 vuna 自己维持，没有外部编译器）：
-      #   seed/（提交入库的**多文件** OCaml 信任锚点：逐 vuna 模块的 .ml/.mli + build.sh）
-      #     → seed/build.sh → ocamlopt 链接 → vuna-seed（stage 0）
-      #     → vuna-seed build --split stage1 .（分离编译当前源码）
-      #     → stage1/build.sh → ocamlopt → vuna（stage 1，当前编译器）
-      #     → vuna 再生成 stage2 文件集；stage1 == stage2（文件集合逐字节）即 fixed point
+      #   seed/（提交入库的多文件 OCaml 信任锚点；只含 **compiler 包** 的入口闭包）
+      #     → seed/build.sh → ocamlopt 链接 → vuna-seed（stage 0 编译器）
+      #     → vuna-seed build --split stage1 compiler → 构建 → vuna-compiler（stage 1 编译器）
+      #     → vuna-compiler build --split stage1 . → 构建 → vuna（产品 CLI，含工具链）
+      #     → vuna-compiler 再生成 compiler 文件集；stage1 == stage2 即 fixed point
       #
       # 种子通过 seed rotation 更新（nix/seed-rotate.sh）：
-      #   vuna seed seed .
+      #   vuna seed seed compiler
       # 不变量：当前入库种子必须能编译当前源码（checks.seed-selfhost 守）。
       packages = forAllSystems (
         system:
@@ -70,7 +70,30 @@
                 sh build.sh "$out/bin/vuna-seed"
               '';
 
-          # stage 1：种子对当前源码做分离编译（逐模块 .ml/.mli），再用生成的 build.sh 构建。
+          # stage 1 编译器：种子对 compiler 包做分离编译，用生成的 build.sh 构建。
+          vuna-compiler =
+            pkgs.runCommand "vuna-compiler-0.1.0"
+              {
+                nativeBuildInputs = ocamlTools;
+                allowSubstitutes = false;
+
+                meta = {
+                  description = "vuna compiler (stage 1, split-compiled from compiler/)";
+                  license = lib.licenses.mit;
+                  mainProgram = "vuna-compiler";
+                };
+              }
+              ''
+                mkdir -p "$out/bin"
+                cp -r ${./compiler} compiler
+                cp -r ${./stdlib} stdlib
+                chmod -R u+w .
+                ${vuna-seed}/bin/vuna-seed build --split stage1 compiler
+                cd stage1
+                sh build.sh "$out/bin/vuna-compiler"
+              '';
+
+          # 产品 CLI：由 stage 1 编译器构建根包（compiler + 工具链）。
           vuna =
             pkgs.runCommand "vuna-0.1.0"
               {
@@ -78,7 +101,7 @@
                 allowSubstitutes = false;
 
                 meta = {
-                  description = "vuna compiler (stage 1, split-compiled by the seed)";
+                  description = "vuna CLI (stage 1, tools + compiler library)";
                   license = lib.licenses.mit;
                   mainProgram = "vuna";
                 };
@@ -86,11 +109,12 @@
               ''
                 mkdir -p "$out/bin"
                 cp -r ${./lib} lib
-                cp -r ${./stdlib} stdlib
                 cp -r ${./app} app
+                cp -r ${./compiler} compiler
+                cp -r ${./stdlib} stdlib
                 cp ${./vuna.toml} vuna.toml
                 chmod -R u+w .
-                ${vuna-seed}/bin/vuna-seed build --split stage1 .
+                ${vuna-compiler}/bin/vuna-compiler build --split stage1 .
                 cd stage1
                 sh build.sh "$out/bin/vuna"
               '';
@@ -98,7 +122,7 @@
         in
         {
           default = vuna;
-          inherit vuna-seed vuna-bench;
+          inherit vuna-seed vuna-compiler vuna-bench;
           vuna = vuna;
         }
       );
@@ -137,9 +161,9 @@
         system:
         let
           pkgs = nixpkgs.legacyPackages.${system};
-          inherit (self.packages.${system}) vuna-seed vuna;
+          inherit (self.packages.${system}) vuna-seed vuna-compiler vuna;
 
-          # M12：种子 → stage1（分离编译文件集）→ stage2 文件集，逐字节一致。
+          # M12：种子 → stage1（compiler 分离编译文件集）→ stage2 文件集，逐字节一致。
           seed-selfhost =
             pkgs.runCommand "vuna-seed-selfhost"
               {
@@ -148,24 +172,38 @@
               }
               ''
                 cp -r ${./seed} seed
-                cp -r ${./lib} lib
+                cp -r ${./compiler} compiler
                 cp -r ${./stdlib} stdlib
+                cp -r ${./lib} lib
                 cp -r ${./app} app
                 cp ${./vuna.toml} vuna.toml
                 chmod -R u+w .
                 # 构建种子（stage 0）
                 ( cd seed && sh build.sh ../vuna-seed )
-                # 种子对当前源码分离编译 → stage1 源码集
-                ./vuna-seed build --split s1 .
+                # 种子对 compiler 包分离编译 → stage1 源码集
+                ./vuna-seed build --split s1 compiler
+                # stage1 只能包含 compiler 闭包，不能把工具模块带进种子
+                for tool in Cli Fmt Lint Doc Repl TestRunner Files Eval Interp; do
+                  if [ -e "s1/Vuna_d$tool.ml" ]; then
+                    echo "seed closure includes tool module Vuna.$tool" >&2
+                    exit 1
+                  fi
+                done
                 # 在副本里构建 stage1，避免构建产物污染文件集比较
                 cp -r s1 b1
                 ( cd b1 && sh build.sh ../vuna-stage1 )
                 # stage1 再生成 → stage2 源码集；两者逐字节一致
-                ./vuna-stage1 build --split s2 .
+                ./vuna-stage1 build --split s2 compiler
                 diff -r s1 s2
-                # 行为抽查：当前编译器编译并运行一个程序
+                for tool in Cli Fmt Lint Doc Repl TestRunner Files Eval Interp; do
+                  if [ -e "s2/Vuna_d$tool.ml" ]; then
+                    echo "stage2 closure includes tool module Vuna.$tool" >&2
+                    exit 1
+                  fi
+                done
+                # 行为抽查：stage1 编译器编译并运行一个程序
                 cp ${./test/corpus/run/12_fact.vuna} fact.vuna
-                ./vuna-stage1 --root lib fact.vuna fact.ml
+                ./vuna-stage1 --root compiler/lib fact.vuna fact.ml
                 ocamlopt -g -w -a+39 -warn-error +39 -o fact fact.ml
                 test "$(./fact)" = "120"
                 # 增量构建：无改动时 build.sh 不重编任何模块（只链接）
@@ -174,11 +212,11 @@
                 touch b1/Vuna_dList.ml
                 ( cd b1 && sh build.sh ../vuna-stage1 ) >build3.log
                 grep -q '^compile Vuna_dList' build3.log
-                ! grep -q '^compile Vuna_dRuntime' build3.log
+                ! grep -q '^compile Vuna_runtime' build3.log
                 touch "$out"
               '';
 
-          # 类型检查自检：当前编译器必须能类型检查自己的源码。
+          # 类型检查自检：当前编译器必须能类型检查自己的源码（经包依赖覆盖 compiler 包）。
           vuna-typecheck =
             pkgs.runCommand "vuna-typecheck"
               {
@@ -187,6 +225,7 @@
               ''
                 mkdir -p "$out"
                 cp -r ${./lib} lib
+                cp -r ${./compiler} compiler
                 cp -r ${./stdlib} stdlib
                 cp -r ${./app} app
                 cp ${./vuna.toml} vuna.toml
@@ -195,7 +234,7 @@
                 touch "$out/ok"
               '';
 
-          # lint 自检：当前源码必须零 finding。
+          # lint 自检：当前源码（compiler + CLI + stdlib）必须零 finding。
           vuna-lint =
             pkgs.runCommand "vuna-lint"
               {
@@ -203,11 +242,11 @@
               }
               ''
                 mkdir -p "$out"
-                ${vuna}/bin/vuna lint ${./lib/Vuna}/*.vuna ${./stdlib/lib/Vuna}/*.vuna ${./stdlib/lib}/*.vuna ${./app}/*.vuna
+                ${vuna}/bin/vuna lint ${./compiler/lib/Vuna}/*.vuna ${./lib/Vuna}/*.vuna ${./stdlib/lib/Vuna}/*.vuna ${./stdlib/lib}/*.vuna ${./app}/*.vuna
                 touch "$out/ok"
               '';
 
-          # M12：机器无关的 codegen 指标门槛（bytes/lines/let rec/拼接/ctor 计数等）。
+          # M12：机器无关的 codegen 指标门槛；测量 seed 闭包（compiler 包）的生成代码。
           vuna-metrics =
             pkgs.runCommand "vuna-metrics"
               {
@@ -215,12 +254,10 @@
               }
               ''
                 mkdir -p "$out"
-                cp -r ${./lib} lib
+                cp -r ${./compiler} compiler
                 cp -r ${./stdlib} stdlib
-                cp -r ${./app} app
-                cp ${./vuna.toml} vuna.toml
                 chmod -R u+w .
-                ${vuna}/bin/vuna build --split "$out/self" .
+                ${vuna}/bin/vuna build --split "$out/self" compiler
                 sh ${./nix/metrics.sh} "$out/self" ${./nix/metrics.budget} >"$out/metrics.txt"
                 cat "$out/metrics.txt"
                 touch "$out/ok"
@@ -236,11 +273,14 @@
               ''
                 mkdir -p "$out"
                 cp -r ${./lib} lib
+                cp -r ${./compiler} compiler
                 cp -r ${./stdlib} stdlib
                 cp -r ${./app} app
                 cp -r ${./examples} examples
                 cp ${./vuna.toml} vuna.toml
                 chmod -R u+w .
+                # 编译器 CLI 独立可用
+                ${vuna-compiler}/bin/vuna-compiler help | grep -q "vuna-compiler compile"
                 # 多包示例：workspace 根包 + 成员依赖包 + stdlib 路径依赖
                 ${vuna}/bin/vuna build examples/multi "$out/multi.ml"
                 ocamlopt -g -w -a+39 -warn-error +39 -o "$out/multi" "$out/multi.ml"
@@ -252,7 +292,7 @@
                 ${vuna}/bin/vuna fmt --check examples/multi
                 ${vuna}/bin/vuna doc examples/multi/greet "$out/api.md"
                 grep -q "## Greet" "$out/api.md"
-                # 仓库自身（编译器包）也走 package 模式构建
+                # 仓库自身（根包）也走 package 模式构建
                 ${vuna}/bin/vuna build . "$out/self.ml"
                 ocamlopt -g -w -a+39 -warn-error +39 -o "$out/self" "$out/self.ml"
                 "$out/self" help | grep -q usage
@@ -270,6 +310,7 @@
                 cp -r ${./test} test
                 cp -r ${./stdlib} stdlib
                 cp -r ${./lib} lib
+                cp -r ${./compiler} compiler
                 cp -r ${./app} app
                 cd test
                 VUNA=${vuna}/bin/vuna \
@@ -279,7 +320,7 @@
               '';
         in
         {
-          inherit vuna vuna-seed;
+          inherit vuna vuna-seed vuna-compiler;
           seed-selfhost = seed-selfhost;
           fixed-point = seed-selfhost;
           vuna-tests = vuna-tests;

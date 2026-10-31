@@ -37,10 +37,13 @@ check_eq() { # name expected actual
   if [ "$2" = "$3" ]; then ok; else bad "$1"; printf '  expected: %s\n  actual:   %s\n' "$2" "$3"; fi
 }
 
-# ---- 合并模块根（lib/Vuna + stdlib 的 Vuna/*.vuna），编译探针 ----
+# ---- 合并模块根（编译器包 + CLI 包的 Vuna/*.vuna + stdlib），编译探针 ----
 # 只用一个 --root，兼容 CLI 的 --root 语义变化与 stdlib 包布局（stdlib/Vuna 或 stdlib/lib/Vuna）。
-mkdir -p "$tmp/root"
-cp -r "$REPO/lib/Vuna" "$tmp/root/Vuna"
+mkdir -p "$tmp/root/Vuna"
+if [ -d "$REPO/compiler/lib/Vuna" ]; then
+  cp "$REPO/compiler/lib/Vuna"/*.vuna "$tmp/root/Vuna/"
+fi
+cp "$REPO/lib/Vuna"/*.vuna "$tmp/root/Vuna/"
 chmod -R u+w "$tmp/root" 2>/dev/null || true
 if [ -d "$REPO/stdlib/lib/Vuna" ]; then
   cp "$REPO/stdlib/lib/Vuna"/*.vuna "$tmp/root/Vuna/"

@@ -1,13 +1,13 @@
 # codegen 机器无关指标预算（M12 回归门槛；超预算 = CI 失败）。
-# 指标聚合自分离编译（`vuna build --split`）的源码文件集。
-# 有意改变 codegen 后，用 `vuna build --split out . && sh nix/metrics.sh out` 复测并更新本文件。
-# M11.6：fmt 增加注释保留与行宽折行，Fmt/Lexer 源码增长，上调对应预算。
-bytes 985000
-lines 10700
-maxline 8000
-longlines 2720
-letrec 600
-strcat 390
-eqint 40
-zeroarg 40
-ctorcount 2060
+# 指标聚合自分离编译（`vuna build --split`）的 **compiler 包闭包**（seed 闭包）。
+# 有意改变 codegen 后，用 `vuna build --split out compiler && sh nix/metrics.sh out` 复测并更新本文件。
+# M12.5：种子只覆盖 compiler 包后，按 seed 闭包重新标定（不再含工具链生成代码）。
+bytes 800000
+lines 8250
+maxline 7500
+longlines 2320
+letrec 490
+strcat 290
+eqint 30
+zeroarg 25
+ctorcount 1580

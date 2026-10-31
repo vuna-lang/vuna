@@ -1,0 +1,5 @@
+import Facade
+import Vuna.Use
+
+main : String
+main = strFromInt (total (Cons 1 (Cons 2 (Cons 3 Nil))) + firstOr (Just 10))

@@ -1,11 +1,14 @@
 # vuna 仓库自身是一个 workspace（Cargo 风格：根目录同时是包）。
+# 根包 = 产品 CLI（vuna）；compiler/ 是编译器包（vuna-compiler），
+# 它的入口闭包就是 seed/ 的内容。
 [package]
 name = "vuna"
 version = "0.1.0"
 edition = "2026"
 
 [workspace]
-members = ["stdlib"]
+members = ["compiler", "stdlib"]
 
 [dependencies]
+vuna-compiler = "compiler"
 vuna-stdlib = "stdlib"
