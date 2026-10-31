@@ -1,5 +1,6 @@
 import Vuna.Hello
 import Dep
+import Vuna.IO
 
-main : String
-main = hello ++ "/" ++ depText
+main : IO Int
+main = printIO (hello ++ "/" ++ depText)

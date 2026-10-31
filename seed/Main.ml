@@ -4,6 +4,7 @@ open Vuna_dBool
 open Vuna_dMonad
 open Vuna_dMaybe
 open Vuna_dList
+open Vuna_dIO
 open Vuna_dResult
 open Vuna_dString
 open Vuna_dBase
@@ -22,5 +23,5 @@ open Vuna_dTypedCodegen
 open Vuna_dCompile
 open Vuna_dSplitCli
 open Vuna_dCompilerCli
-let v_main = fun () -> bi_exit (v_Vuna_dCompilerCli_drunCompilerCli (bi_get_args ()))
-let () = print_endline (string_of_int (v_main ()))
+let v_main = fun () -> v_Vuna_dIO_dbindIO (v_Vuna_dIO_dpureIO (v_Vuna_dCompilerCli_drunCompilerCli (bi_get_args ()))) (fun code -> v_Vuna_dIO_dexitIO code)
+let () = ignore (Vuna_dIO.__vuna_run_io (v_main ()))

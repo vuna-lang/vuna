@@ -13,8 +13,9 @@ data Module : Type where
   Module : String -> String -> List Import -> List Decl -> List ExportEntry -> Module
 
 -- 已加载项目：入口声明/import + 依赖模块列表（M12 分离编译用；保持 flatten 前的形态）。
+-- entryPkg 用于按包限制 effectful 内建（M12.6：普通包只能通过 Vuna.IO 使用效果）。
 data Project : Type where
-  Project : List Decl -> List Import -> List Module -> Project
+  Project : List Decl -> List Import -> List Module -> String -> Project
 
 moduleNameOf (Module n p is ds es) = n
 
@@ -26,11 +27,13 @@ moduleDeclsOf (Module n p is ds es) = ds
 
 moduleExportsOf (Module n p is ds es) = es
 
-projectEntryDecls (Project ds is ms) = ds
+projectEntryDecls (Project ds is ms pkg) = ds
 
-projectEntryImports (Project ds is ms) = is
+projectEntryImports (Project ds is ms pkg) = is
 
-projectModules (Project ds is ms) = ms
+projectModules (Project ds is ms pkg) = ms
+
+projectEntryPkg (Project ds is ms pkg) = pkg
 
 -- 模块导出表（M10）。每条是「本模块公开名 → 定义处带模块前缀的名字」。
 -- kind 用字符串区分两套命名空间：val（函数/值）、ctor（构造器）、type（类型名）。
@@ -653,15 +656,21 @@ resolveInstanceMethod modules label prefix own ownCtors ownTypes imports d =
 resolveProgram modules label prefix own ownCtors ownTypes imports decls =
   traverse (resolveDecl modules label prefix own ownCtors ownTypes imports) decls
 
-resolveEntry modules imports decls =
-  resolveProgram modules "<entry>" "" (topNames decls) (ctorsOf decls) (typeNamesOf decls) imports decls
+resolveEntry modules entryPkg imports decls =
+  andThen
+    (resolveProgram modules "<entry>" "" (topNames decls) (ctorsOf decls) (typeNamesOf decls) imports decls)
+    (\d => checkEffectsBuiltins "<entry>" entryPkg d)
 
 resolveModules modules =
   case modules of
     Nil => Ok Nil
     Cons (Module name mpkg imports decls exports) rest =>
-      andThen (resolveProgram modules name name (topNames decls) (ctorsOf decls) (typeNamesOf decls) imports decls) (\d1 =>
-        andThen (resolveModules rest) (\d2 => Ok (append d1 d2)))
+      andThen
+        (andThen
+          (resolveProgram modules name name (topNames decls) (ctorsOf decls) (typeNamesOf decls) imports decls)
+          (\d => checkEffectsBuiltins name mpkg d))
+        (\d1 =>
+          andThen (resolveModules rest) (\d2 => Ok (append d1 d2)))
 
 -- ---------------------------------------------------------------
 -- 模块导出表计算（M10）
@@ -1058,13 +1067,13 @@ loadProject roots entryPkg entry =
             Nothing =>
               andThen (validateImports "<entry>" imports) (\_ =>
                 andThen (loadAll roots entryPkg Nil Nil imports) (\modules =>
-                  Ok (Project decls imports modules))))
+                  Ok (Project decls imports modules entryPkg))))
   else Err ("entry file not found: " ++ entry)
 
 -- 返回逐模块已解析（未 flatten）的声明，供 M12 分离编译使用。
 resolveProject : Project -> Result (Pair (List Decl) (List Module))
-resolveProject (Project decls imports modules) =
-  andThen (resolveEntry modules imports decls) (\entryDecls =>
+resolveProject (Project decls imports modules entryPkg) =
+  andThen (resolveEntry modules entryPkg imports decls) (\entryDecls =>
     andThen (resolveModulesKeep modules) (\modules2 =>
       Ok (Pair entryDecls modules2)))
 
@@ -1072,8 +1081,10 @@ resolveModulesKeep Nil = Ok Nil
 
 resolveModulesKeep (Cons (Module name pkg imports decls exports) rest) =
   andThen
-    (resolveProgram (Cons (Module name pkg imports decls exports) rest) name name
-       (topNames decls) (ctorsOf decls) (typeNamesOf decls) imports decls)
+    (andThen
+      (resolveProgram (Cons (Module name pkg imports decls exports) rest) name name
+         (topNames decls) (ctorsOf decls) (typeNamesOf decls) imports decls)
+      (\d => checkEffectsBuiltins name pkg d))
     (\d1 =>
       andThen (resolveModulesKeep rest) (\d2 =>
         Ok (Cons (Module name pkg imports d1 exports) d2)))
@@ -1088,6 +1099,82 @@ loadProgram roots entryPkg entry =
 -- 原始 --root DIR 模式：所有根同属空包名，不限制导出。
 loadProgramRaw : List String -> String -> Result (List Decl)
 loadProgramRaw roots entry = loadProgram (map rawRoot roots) "" entry
+
+-- ---------------------------------------------------------------
+-- effectful 内建的包级限制（M12.6）
+-- 编译器 / 产品 CLI / stdlib 自己需要直接做文件 IO，允许使用纯内建；
+-- 普通用户包只能通过 Vuna.IO 的 IO API 使用效果，不能在纯代码里直接 print/readFile。
+-- （--root 原始模式 entryPkg = ""，保留给解释器/测试夹具的调试路径。）
+-- ---------------------------------------------------------------
+
+packageAllowsEffects pkg =
+  pkg == "" || pkg == "vuna" || pkg == "vuna-compiler" || pkg == "vuna-stdlib"
+
+isEffectfulBuiltin name =
+  name == "print" || name == "readFile" || name == "writeFile" || name == "getArgs"
+  || name == "readLine" || name == "readDir" || name == "isDirectory"
+  || name == "makeDir" || name == "removeFile" || name == "fileExists"
+  || name == "exit"
+
+firstEffect Nil = Nothing
+
+firstEffect (Cons Nothing rest) = firstEffect rest
+
+firstEffect (Cons (Just n) rest) = Just n
+
+effExpr e =
+  case e of
+    EVar n sp => if isEffectfulBuiltin n then Just n else Nothing
+    EInt n sp => Nothing
+    EStr s sp => Nothing
+    ELam ps body sp => effExpr body
+    EApp fn args sp => firstEffect (Cons (effExpr fn) (map effExpr args))
+    ELet binds body rec_ sp => firstEffect (Cons (effBinds binds) (Cons (effExpr body) Nil))
+    ECase scrut alts sp => firstEffect (Cons (effExpr scrut) (Cons (effAlts alts) Nil))
+    EIf c t el sp => firstEffect (Cons (effExpr c) (Cons (effExpr t) (Cons (effExpr el) Nil)))
+    EField base fname sp => effExpr base
+    ERecord name fields sp => effFields fields
+    ERecUpdate base fields sp => firstEffect (Cons (effExpr base) (Cons (effFields fields) Nil))
+    EInstSel meth iname sp => Nothing
+    EDo stmts sp => firstEffect (map effDo stmts)
+
+effBinds Nil = Nothing
+
+effBinds (Cons (Pair pat value) rest) =
+  firstEffect (Cons (effExpr value) (Cons (effBinds rest) Nil))
+
+effAlts Nil = Nothing
+
+effAlts (Cons (Pair pat body) rest) =
+  firstEffect (Cons (effExpr body) (Cons (effAlts rest) Nil))
+
+effFields Nil = Nothing
+
+effFields (Cons (Pair fname value) rest) =
+  firstEffect (Cons (effExpr value) (Cons (effFields rest) Nil))
+
+effDo s =
+  case s of
+    DBind pat value sp => effExpr value
+    DExpr value sp => effExpr value
+
+effDecl d =
+  case d of
+    DFun n pats body sp => effExpr body
+    DTrait n ps methods sp => Nothing
+    DInstance iname isDefault headTy methods sp => firstEffect (map effDecl methods)
+    _ => Nothing
+
+effDecls decls = firstEffect (map effDecl decls)
+
+checkEffectsBuiltins label pkg decls =
+  if packageAllowsEffects pkg then Ok decls
+  else
+    case effDecls decls of
+      Nothing => Ok decls
+      Just name =>
+        Err (label ++ ": effectful builtin `" ++ name ++ "` is not available in package "
+          ++ pkg ++ " (use Vuna.IO)")
 
 tyShape ty =
   case ty of

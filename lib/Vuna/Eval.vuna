@@ -541,7 +541,18 @@ interpretMain decls =
       if arity == 0 then callFunction decls "main" Nil noLocSpan
       else Err "`main` must be a nullary definition"
 
+-- 解释器执行 entry：main : IO a 时按运行时的约定执行动作（MkIO f → f 0），
+-- 否则保持旧的“show 纯 main 结果”行为（vuna test / interp 的调试约定）。
+runMainValue decls v =
+  case v of
+    VCon name (Cons f Nil) =>
+      if displayName name == "MkIO" then applyValue decls noLocSpan f (VInt 0) else Ok v
+    _ => Ok v
+
 runDecls decls =
   case interpretMain decls of
     Err e => "error: " ++ e
-    Ok v => showValue v
+    Ok v =>
+      case runMainValue decls v of
+        Err e => "error: " ++ e
+        Ok r => showValue r

@@ -1606,19 +1606,24 @@ updateScheme name sch env =
     Cons (Pair n s) rest =>
       if n == name then Cons (Pair n sch) rest else Cons (Pair n s) (updateScheme name sch rest)
 
-freeVarsEnvExcept name env =
-  case env of
-    Nil => Nil
-    Cons (Pair n sch) rest =>
-      if n == name then freeVarsEnvExcept name rest
-      else freeVarsEnvExceptOne name sch rest
-
--- placeholders（无签名函数的预置 fresh 变量）的 free vars 是每函数唯一的“幽灵”变量，
--- 不会出现在待推断类型里；跳过它们，避免每个函数都扫描上千个占位 scheme。
-freeVarsEnvExceptOne name sch rest =
+-- 判断类型变量 v 是否 free 于 env（排除 name 自身）：
+-- 只需要对 inferred 里出现的少量 free vars 逐个查 env，避免为每个函数构造整个 env 的并集。
+varInScheme v sch =
   case sch of
-    Scheme Nil Nil (TVar k) => freeVarsEnvExcept name rest
-    _ => unionInts (freeVarsScheme sch) (freeVarsEnvExcept name rest)
+    Scheme Nil Nil (TVar k) => v == k
+    _ => memInt v (freeVarsScheme sch)
+
+varInEnvExcept v name env =
+  case env of
+    Nil => False
+    Cons (Pair n sch) rest =>
+      if n == name then varInEnvExcept v name rest
+      else if varInScheme v sch then True
+      else varInEnvExcept v name rest
+
+-- 可泛化的类型变量：freeVarsTy resolved 中不 free 于 env 的那些。
+generalizableVars name env ty =
+  filter (\v => not (varInEnvExcept v name env)) (freeVarsTy ty)
 
 substOf (TC n s typeNames records cons methods tctx) = s
 
@@ -1655,7 +1660,7 @@ checkFunctionOnce globals decls sigs name st =
                     (solveRecConstraints (typeNamesOfTC st3) (recordsOf st3) (constraintsOfTC st3) st3)
                     (\st4 =>
                       let resolved = resolveTy (substOf st4) inferred
-                      in let genVars = diffInts (freeVarsTy resolved) (freeVarsEnvExcept name globals)
+                      in let genVars = generalizableVars name globals resolved
                          in let needs = collectNeedsClauses (substOf st4) (traitCtxOf st4) clauseEls
                             in Ok (Pair clauseEls (Pair inferred (Pair needs (Pair genVars st4)))))
 
@@ -1675,7 +1680,7 @@ finishFunctionLower globals name inferred needs params clauses2 st =
 
 finishFunctionScheme globals name inferred needs elab st =
   let resolved = resolveTy (substOf st) inferred
-  in let qs = diffInts (freeVarsTy resolved) (freeVarsEnvExcept name globals)
+  in let qs = generalizableVars name globals resolved
      in let scheme = Scheme qs needs resolved
         in Ok (Pair elab (Pair (updateScheme name scheme globals) st))
 
@@ -2573,10 +2578,12 @@ totalConstraints Nil = 0
 totalConstraints (Cons (Pair name (Scheme qs cons ty)) rest) =
   length cons + totalConstraints rest
 
+checkProgramInfoElab : List Decl -> Result (Pair (List (Pair String Scheme)) (List Decl))
 checkProgramInfoElab decls0 =
   andThen (checkProgramInfoElabImpl decls0) (\p => Ok (firstOf p))
 
 -- 与 checkProgramInfoElab 相同，但额外返回生成声明的归属模块（M12 分离编译）。
+checkProgramInfoElabOwners : List Decl -> Result (Pair (Pair (List (Pair String Scheme)) (List Decl)) (List (Pair String String)))
 checkProgramInfoElabOwners decls0 = checkProgramInfoElabImpl decls0
 
 checkProgramInfoElabImpl decls0 =
@@ -2617,9 +2624,11 @@ checkProgramInfoElabImpl decls0 =
                                                  Ok (Pair elab3 (Pair g3 stC)) =>
                                                    Ok (Pair (Pair (finalizeGlobals (substOf stC) g3) (rebuildDecls decls2 elab3)) owners)
 
+checkProgramInfo : List Decl -> Result (List (Pair String Scheme))
 checkProgramInfo decls =
   andThen (checkProgramInfoElab decls) (\p => Ok (firstOf p))
 
+checkProgram : List Decl -> Result (List String)
 checkProgram decls =
   andThen (checkProgramInfo decls) (\_ => Ok Nil)
 

@@ -291,7 +291,7 @@
                 # 多包示例：workspace 根包 + 成员依赖包 + stdlib 路径依赖
                 ${vuna}/bin/vuna build examples/multi "$out/multi.ml"
                 ocamlopt -g -w -a+39 -warn-error +39 -o "$out/multi" "$out/multi.ml"
-                test "$("$out/multi")" = '"hi hi hi|n2 n1"'
+                test "$("$out/multi")" = 'hi hi hi|n2 n1'
                 # 包内测试运行器
                 ${vuna}/bin/vuna test examples/multi >"$out/test.log"
                 grep -q "1 passed, 0 failed" "$out/test.log"

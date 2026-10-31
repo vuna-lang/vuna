@@ -4,6 +4,7 @@ open Vuna_dBool
 open Vuna_dMonad
 open Vuna_dMaybe
 open Vuna_dList
+open Vuna_dIO
 open Vuna_dResult
 open Vuna_dString
 include module type of struct include Vuna_dPair end

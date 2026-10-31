@@ -4,6 +4,7 @@ open Vuna_dBool
 open Vuna_dMonad
 open Vuna_dMaybe
 open Vuna_dList
+open Vuna_dIO
 open Vuna_dResult
 val v_Vuna_dString_dsplit : (string) -> ((string) -> ((string) list))
 val v_Vuna_dString_djoin : (string) -> (((string) list) -> (string))

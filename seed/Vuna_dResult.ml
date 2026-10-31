@@ -4,6 +4,7 @@ open Vuna_dBool
 open Vuna_dMonad
 open Vuna_dMaybe
 open Vuna_dList
+open Vuna_dIO
 type   'p0 t_Vuna_dResult_dResult =
     C_Vuna_dResult_dOk of ('p0)
   | C_Vuna_dResult_dErr of (string)

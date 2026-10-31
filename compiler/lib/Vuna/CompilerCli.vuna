@@ -180,7 +180,7 @@ buildRun printResult dir out =
   case loadPackage dir of
     Err e => let _ = print ("error: " ++ e ++ "\n") in 1
     Ok pkg =>
-      case compileFileTypedIn (packageName pkg) (packageRoots pkg) (packageEntry pkg) printResult of
+      case compileFileTypedExecIn (packageName pkg) (packageRoots pkg) (packageEntry pkg) printResult of
         Err e => let _ = print ("error: " ++ e ++ "\n") in 1
         Ok code =>
           let parent = firstOf (splitPath out)

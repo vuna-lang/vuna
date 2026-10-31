@@ -4,6 +4,7 @@ open Vuna_dBool
 open Vuna_dMonad
 open Vuna_dMaybe
 open Vuna_dList
+open Vuna_dIO
 open Vuna_dResult
 open Vuna_dString
 open Vuna_dBase
@@ -121,7 +122,7 @@ let v_Vuna_dCompilerCli_ddefaultOut = fun dir out -> (match out with
 
 let v_Vuna_dCompilerCli_dbuildRun = fun printResult dir out -> (match v_Vuna_dPkg_dloadPackage dir with
   | C_Vuna_dResult_dErr (e) -> (let _ = bi_print ((let vuna_cat0' = ("error: ") in (let vuna_cat1' = (e) in (let vuna_cat2' = ("\n") in String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'])))) in 1)
-  | C_Vuna_dResult_dOk (pkg) -> (match v_Vuna_dCompile_dcompileFileTypedIn (v_Vuna_dPkg_dpackageName pkg) (v_Vuna_dPkg_dpackageRoots pkg) (v_Vuna_dPkg_dpackageEntry pkg) printResult with
+  | C_Vuna_dResult_dOk (pkg) -> (match v_Vuna_dCompile_dcompileFileTypedExecIn (v_Vuna_dPkg_dpackageName pkg) (v_Vuna_dPkg_dpackageRoots pkg) (v_Vuna_dPkg_dpackageEntry pkg) printResult with
   | C_Vuna_dResult_dErr (e) -> (let _ = bi_print ((let vuna_cat0' = ("error: ") in (let vuna_cat1' = (e) in (let vuna_cat2' = ("\n") in String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'])))) in 1)
   | C_Vuna_dResult_dOk (code) -> (let parent = v_Vuna_dPair_dfirstOf (v_Vuna_dBase_dsplitPath out) in (let _ = if v_vuna_ueq_ustr parent "" then 0 else bi_make_dir parent in (let _ = bi_write_file out code in (let _ = bi_print ((let vuna_cat0' = ("wrote ") in (let vuna_cat1' = (out) in (let vuna_cat2' = ("\n") in String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'])))) in 0))))
   | _ -> vuna_fail "compiler/lib/Vuna/CompilerCli.vuna" 183 7 ("case pattern match failure"))

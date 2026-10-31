@@ -1,4 +1,4 @@
-module Vuna.TypedCodegen (generateProgramTyped, generateSplitProgram) where
+module Vuna.TypedCodegen (generateProgramTyped, generateProgramTypedExec, generateSplitProgram) where
 
 -- Vuna.TypedCodegen：用类型信息生成原生 OCaml 类型（M8a）。
 -- 目前覆盖 Int/String/Bool/List、函数/lambda/let/case/if、用户 data 类型、
@@ -1088,21 +1088,127 @@ typedMainSuffix decls showMain printResult =
     "let () = print_endline (" ++ showMain ++ " (" ++ zeroArgRef decls "main" ++ "))\n"
   else "let () = ignore (" ++ zeroArgRef decls "main" ++ ")\n"
 
-generateProgramTyped decls globals printResult =
+-- main : IO a 的两种执行方式：
+--   exec（vuna build / vuna seed）：执行动作，忽略结果（退出码由 exitIO 控制）；
+--   permissive（--typed / interp / test）：执行动作并 show 结果，保持测试/调试输出。
+isIOType ty =
+  case ty of
+    TCon n args => lastName n == "IO"
+    _ => False
+
+ioResultTy ty =
+  case ty of
+    TCon n args =>
+      case args of
+        Cons a Nil => Just a
+        _ => Nothing
+    _ => Nothing
+
+ioCtorOf decls =
+  case decls of
+    Nil => Nothing
+    Cons d rest =>
+      case d of
+        DData n params ctors derivings sp =>
+          if lastName n == "IO" then
+            case ctors of
+              Cons c cs => Just (ctorName c)
+              Nil => Nothing
+          else ioCtorOf rest
+        _ => ioCtorOf rest
+
+ioRunExpr decls ctor =
+  "match " ++ zeroArgRef decls "main" ++ " with " ++ ctorNameOf ctor ++ " __iof -> __iof 0"
+
+ioTypeNameOf decls =
+  case decls of
+    Nil => Nothing
+    Cons d rest =>
+      case d of
+        DData n params ctors derivings sp =>
+          if lastName n == "IO" then Just n else ioTypeNameOf rest
+        _ => ioTypeNameOf rest
+
+ioOwnerModule decls =
+  case ioTypeNameOf decls of
+    Nothing => ""
+    Just n =>
+      case splitLastDot (splitOnDot n) of
+        Pair revPrefix base => joinDots revPrefix
+
+ioExecSuffix decls ctor =
+  "let () = ignore (" ++ ioRunExpr decls ctor ++ ")\n"
+
+-- 分离编译时 IO 构造器在 Vuna.IO 模块里是抽象的，Main.ml 不能直接 match。
+-- 由代码生成器在 IO 模块的 .ml/.mli 里注入一个只存在于生成代码中的执行器；
+-- vuna 源码无法引用它（不是语言 API），因此不构成绕开 IO 的逃逸口。
+ioExecSuffixSplit decls ctor =
+  "let () = ignore (" ++ sanitizeName (ioOwnerModule decls)
+  ++ ".__vuna_run_io (" ++ zeroArgRef decls "main" ++ "))\n"
+
+injectIOHelperOne target ctorN typeN helperMl helperMli f =
+  if splitName f == target ++ ".ml" then
+    SplitFile (splitName f) (splitText f ++ helperMl)
+  else if splitName f == target ++ ".mli" then
+    SplitFile (splitName f) (splitText f ++ helperMli)
+  else f
+
+injectIOHelper decls files =
+  case ioTypeNameOf decls of
+    Nothing => files
+    Just tyName =>
+      case ioCtorOf decls of
+        Nothing => files
+        Just ctor =>
+          let target = sanitizeName (ioOwnerModule decls)
+              ctorN = ctorNameOf ctor
+              typeN = typeNameOf tyName
+              helperMl = "\nlet __vuna_run_io (" ++ ctorN ++ " f) = f 0\n"
+              helperMli = "\nval __vuna_run_io : ('a) " ++ typeN ++ " -> ('a)\n"
+          in map (injectIOHelperOne target ctorN typeN helperMl helperMli) files
+
+ioPermSuffix decls ctor showResult printResult =
+  if printResult then
+    "let () = let __io_r = (" ++ ioRunExpr decls ctor ++ ") in print_endline (" ++ showResult ++ " __io_r)\n"
+  else ioExecSuffix decls ctor
+
+mainSuffix decls globals printResult exec =
   case lookupScheme "main" globals of
     Nothing => Err "typed codegen: no main definition"
     Just (Scheme qs cons ty) =>
       case ty of
         TFun a b => Err "typed codegen: main must be zero-arity"
         _ =>
-          andThen (showForTy decls ty) (\showMain =>
-            andThen (genTypeDecls decls) (\types =>
-              andThen (genShowDecls decls) (\shows =>
-                andThen (genTop decls) (\tops =>
-                  let core = types ++ "\n" ++ shows ++ "\n" ++ tops
-                  in
-                    let suffix = typedMainSuffix decls showMain printResult
-                    in Ok (formatOutput (runtimeForBody (core ++ suffix) ++ "\n" ++ core ++ suffix))))))
+          if isIOType ty then
+            case ioCtorOf decls of
+              Nothing => Err "typed codegen: IO type is not defined in this program"
+              Just ctor =>
+                if exec then Ok (ioExecSuffix decls ctor)
+                else
+                  case ioResultTy ty of
+                    Nothing => Err "typed codegen: IO type must have one argument"
+                    Just resultTy =>
+                      andThen (showForTy decls resultTy) (\showResult =>
+                        Ok (ioPermSuffix decls ctor showResult printResult))
+          else if exec then
+            Err "typed codegen: executable main must have type IO a (use Vuna.IO)"
+          else
+            andThen (showForTy decls ty) (\showMain =>
+              Ok (typedMainSuffix decls showMain printResult))
+
+generateProgramTypedMode decls globals printResult exec =
+  andThen (mainSuffix decls globals printResult exec) (\suffix =>
+    andThen (genTypeDecls decls) (\types =>
+      andThen (genShowDecls decls) (\shows =>
+        andThen (genTop decls) (\tops =>
+          let core = types ++ "\n" ++ shows ++ "\n" ++ tops
+          in Ok (formatOutput (runtimeForBody (core ++ suffix) ++ "\n" ++ core ++ suffix))))))
+
+generateProgramTyped decls globals printResult =
+  generateProgramTypedMode decls globals printResult False
+
+generateProgramTypedExec decls globals printResult =
+  generateProgramTypedMode decls globals printResult True
 -- ---------------------------------------------------------------
 -- M12-A：分离编译（逐 vuna 模块生成 OCaml 模块）
 -- 模块 .ml/.mli 的顺序 = import 拓扑序（依赖先）；每个 .ml 先 open Vuna_runtime，
@@ -1520,9 +1626,13 @@ splitMainSuffix ctx =
     Nothing => Err "typed codegen: no main definition"
     Just (Scheme qs cons ty) =>
       case ty of
-            TFun a b => Err "typed codegen: main must be zero-arity"
-            _ => andThen (showForTy (ctxElabDecls ctx) ty) (\showMain =>
-                   Ok (typedMainSuffix (ctxElabDecls ctx) showMain True))
+        TFun a b => Err "typed codegen: main must be zero-arity"
+        _ =>
+          if isIOType ty then
+            case ioCtorOf (ctxElabDecls ctx) of
+              Nothing => Err "typed codegen: IO type is not defined in this program"
+              Just ctor => Ok (ioExecSuffixSplit (ctxElabDecls ctx) ctor)
+          else Err "typed codegen: executable main must have type IO a (use Vuna.IO)"
 
 splitMainFile ctx ordered =
   let entryData = routeData ctx "#entry"
@@ -1551,5 +1661,6 @@ generateSplitProgram modules entryDecls elabDecls globals owners =
          andThen (splitRuntimeFile ctx) (\runtimeText =>
            andThen (splitModuleFiles ctx ordered) (\moduleFiles =>
              andThen (splitMainFile ctx ordered) (\mainText =>
-               Ok (Cons (SplitFile "Vuna_runtime.ml" runtimeText)
-                     (append moduleFiles (Cons (SplitFile "Main.ml" mainText) Nil))))))))
+               let files = injectIOHelper (ctxElabDecls ctx) moduleFiles
+               in Ok (Cons (SplitFile "Vuna_runtime.ml" runtimeText)
+                     (append files (Cons (SplitFile "Main.ml" mainText) Nil))))))))

@@ -4,6 +4,7 @@ open Vuna_dBool
 open Vuna_dMonad
 open Vuna_dMaybe
 open Vuna_dList
+open Vuna_dIO
 open Vuna_dResult
 open Vuna_dString
 open Vuna_dBase
@@ -556,7 +557,13 @@ let rec v_Vuna_dCodegen_drenderRecsFrom = fun a0 a1 -> match (a0, a1) with
 
 let v_Vuna_dCodegen_dgenerateProgram = fun decls printResult -> (match v_Vuna_dCodegen_dallCtors decls with
   | ctors -> v_Vuna_dResult_dandThen (v_Vuna_dCodegen_dvalidateCtors ctors) (fun _u -> v_Vuna_dResult_dandThen (v_Vuna_dCodegen_dcheckNoCtorFun (v_Vuna_dCodegen_dgroupFunctions decls) decls) (fun _u -> (match v_Vuna_dAst_dfunArity "main" decls with
-  | C_Vuna_dMaybe_dJust (0) -> v_Vuna_dResult_dandThen (v_Vuna_dCodegen_dgenFunctions decls (v_Vuna_dCodegen_dgroupFunctions decls)) (fun defs -> v_Vuna_dResult_dandThen (v_Vuna_dCodegen_dgenCtorDefs ctors) (fun ctorDefs -> C_Vuna_dResult_dOk ((let vuna_cat0' = (v_Vuna_dCodegen_druntimeCode) in (let vuna_cat1' = (v_Vuna_dCodegen_druntimeCompareCode) in (let vuna_cat2' = (v_Vuna_dCodegen_dgenShowDefs decls) in (let vuna_cat3' = (ctorDefs) in (let vuna_cat4' = (v_Vuna_dCodegen_dgenBuiltinDef v_Vuna_dCodegen_dbuiltinInfos) in (let vuna_cat5' = (v_Vuna_dCodegen_drenderRecsFrom defs 0) in (let vuna_cat6' = (if printResult then "let () = print_endline (vuna_show (v_main ()))\n" else "let () = ignore (v_main ())\n") in String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'; vuna_cat3'; vuna_cat4'; vuna_cat5'; vuna_cat6']))))))))))
+  | C_Vuna_dMaybe_dJust (0) -> v_Vuna_dResult_dandThen (v_Vuna_dCodegen_dgenFunctions decls (v_Vuna_dCodegen_dgroupFunctions decls)) (fun defs -> v_Vuna_dResult_dandThen (v_Vuna_dCodegen_dgenCtorDefs ctors) (fun ctorDefs -> C_Vuna_dResult_dOk ((let vuna_cat0' = (v_Vuna_dCodegen_druntimeCode) in (let vuna_cat1' = (v_Vuna_dCodegen_druntimeCompareCode) in (let vuna_cat2' = (v_Vuna_dCodegen_dgenShowDefs decls) in (let vuna_cat3' = (ctorDefs) in (let vuna_cat4' = (v_Vuna_dCodegen_dgenBuiltinDef v_Vuna_dCodegen_dbuiltinInfos) in (let vuna_cat5' = (v_Vuna_dCodegen_drenderRecsFrom defs 0) in (let vuna_cat6' = ("let () =
+  let __mv = v_main () in
+  let __mr = match __mv with
+    | VCon (__tag, [ __f ]) when vuna_short __tag = \"MkIO\" -> apply __f (VInt 0)
+    | _ -> __mv
+  in
+") in (let vuna_cat7' = (if printResult then "  print_endline (vuna_show __mr)\n" else "  ignore __mr\n") in String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'; vuna_cat3'; vuna_cat4'; vuna_cat5'; vuna_cat6'; vuna_cat7'])))))))))))
   | C_Vuna_dMaybe_dJust (arity) -> C_Vuna_dResult_dErr ("`main` must be a nullary definition")
   | C_Vuna_dMaybe_dNothing -> C_Vuna_dResult_dErr ("no `main` definition")
   | _ -> vuna_fail "compiler/lib/Vuna/Codegen.vuna" 491 11 ("case pattern match failure"))))

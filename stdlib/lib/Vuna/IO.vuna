@@ -1,7 +1,9 @@
-module Vuna.IO (IO, runIO, pureIO, bindIO, fmapIO, printIO, printlnIO, readFileIO, writeFileIO, getArgsIO, exitIO) where
+module Vuna.IO (IO, pureIO, bindIO, fmapIO, printIO, printlnIO, readFileIO, writeFileIO, getArgsIO, exitIO) where
 
--- Vuna.IO：抽象 IO 类型（M11-C）。
--- 表示是「世界令牌 Int -> a」的函数；构造器 MkIO 私有，跨模块只能通过 API 使用。
+-- Vuna.IO：抽象 IO 动作（M11-C / M12.6）。
+-- 表示是「世界令牌 Int -> a」的挂起函数；构造器 MkIO 私有，跨模块只能通过 API 使用。
+-- 没有公开的 runIO / unsafeRunIO：IO 动作只能由运行时在 `main` 处执行，
+-- 用户代码无法在纯表达式里主动执行 IO（Haskell/Idris2 的 main 语义）。
 -- Functor/Monad 实例让 `do` / `>>=` / `>>` 可以直接用于 IO。
 
 import Vuna.List
@@ -9,10 +11,6 @@ import Vuna.Monad
 
 data IO a : Type where
   MkIO : (Int -> a) -> IO a
-
--- 用一个初始世界令牌运行 IO 动作，拿到最终结果。
-runIO : IO a -> a
-runIO (MkIO f) = f 0
 
 pureIO : a -> IO a
 pureIO x = MkIO (\w => x)

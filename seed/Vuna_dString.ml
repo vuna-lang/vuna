@@ -4,6 +4,7 @@ open Vuna_dBool
 open Vuna_dMonad
 open Vuna_dMaybe
 open Vuna_dList
+open Vuna_dIO
 open Vuna_dResult
 let rec v_Vuna_dString_djoin = fun a0 a1 -> match (a0, a1) with
   | (sep, []) -> ""

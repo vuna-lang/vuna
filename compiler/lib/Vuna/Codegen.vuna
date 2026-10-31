@@ -496,8 +496,14 @@ generateProgram decls printResult =
                     (runtimeCode ++ runtimeCompareCode ++ genShowDefs decls
                     ++ ctorDefs ++ genBuiltinDef builtinInfos
                     ++ renderRecsFrom defs 0
+                    ++ "let () =\n"
+                    ++ "  let __mv = v_main () in\n"
+                    ++ "  let __mr = match __mv with\n"
+                    ++ "    | VCon (__tag, [ __f ]) when vuna_short __tag = \"MkIO\" -> apply __f (VInt 0)\n"
+                    ++ "    | _ -> __mv\n"
+                    ++ "  in\n"
                     ++ (if printResult then
-                          "let () = print_endline (vuna_show (v_main ()))\n"
-                        else "let () = ignore (v_main ())\n"))))
+                          "  print_endline (vuna_show __mr)\n"
+                        else "  ignore __mr\n"))))
             Just arity => Err "`main` must be a nullary definition"
             Nothing => Err "no `main` definition"))

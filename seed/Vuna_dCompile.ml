@@ -4,6 +4,7 @@ open Vuna_dBool
 open Vuna_dMonad
 open Vuna_dMaybe
 open Vuna_dList
+open Vuna_dIO
 open Vuna_dResult
 open Vuna_dString
 open Vuna_dBase
@@ -90,15 +91,21 @@ let v_Vuna_dCompile_dcompileFileTypedIn = fun entryPkg roots entry printResult -
 
 let v_Vuna_dCompile_dcompileFileTyped = fun roots entry printResult -> v_Vuna_dCompile_dcompileFileTypedIn "" roots entry printResult
 
+let v_Vuna_dCompile_dcompileFileTypedExecIn = fun entryPkg roots entry printResult -> v_Vuna_dResult_dandThen (v_Vuna_dLoader_dloadProgram roots entryPkg entry) (fun decls -> v_Vuna_dResult_dandThen (v_Vuna_dTypecheck_dcheckProgramInfoElab decls) (fun p -> (match p with
+  | C_Vuna_dPair_dPair (globals, elabDecls) -> v_Vuna_dTypedCodegen_dgenerateProgramTypedExec elabDecls globals printResult
+  | _ -> vuna_fail "compiler/lib/Vuna/Compile.vuna" 88 157 ("case pattern match failure"))))
+
+let v_Vuna_dCompile_dcompileFileTypedExec = fun roots entry printResult -> v_Vuna_dCompile_dcompileFileTypedExecIn "" roots entry printResult
+
 let v_Vuna_dCompile_dcheckFileIn = fun entryPkg roots entry -> (match v_Vuna_dLoader_dloadProgram roots entryPkg entry with
   | C_Vuna_dResult_dErr (e) -> C_Vuna_dResult_dErr (e)
   | C_Vuna_dResult_dOk (decls) -> if v_Vuna_dCompile_dprogramNeedsElab decls then (match v_Vuna_dTypecheck_dcheckProgramInfoElab decls with
   | C_Vuna_dResult_dErr (e) -> C_Vuna_dResult_dErr (e)
   | C_Vuna_dResult_dOk (C_Vuna_dPair_dPair (globals, elabDecls)) -> C_Vuna_dResult_dOk (v_Vuna_dTypecheck_dexhaustiveWarnings elabDecls)
-  | _ -> vuna_fail "compiler/lib/Vuna/Compile.vuna" 91 46 ("case pattern match failure")) else (match v_Vuna_dTypecheck_dcheckProgramInfo decls with
+  | _ -> vuna_fail "compiler/lib/Vuna/Compile.vuna" 98 46 ("case pattern match failure")) else (match v_Vuna_dTypecheck_dcheckProgramInfo decls with
   | C_Vuna_dResult_dErr (e) -> C_Vuna_dResult_dErr (e)
   | C_Vuna_dResult_dOk (_) -> C_Vuna_dResult_dOk (v_Vuna_dTypecheck_dexhaustiveWarnings decls)
-  | _ -> vuna_fail "compiler/lib/Vuna/Compile.vuna" 94 8 ("case pattern match failure"))
-  | _ -> vuna_fail "compiler/lib/Vuna/Compile.vuna" 89 36 ("case pattern match failure"))
+  | _ -> vuna_fail "compiler/lib/Vuna/Compile.vuna" 101 8 ("case pattern match failure"))
+  | _ -> vuna_fail "compiler/lib/Vuna/Compile.vuna" 96 36 ("case pattern match failure"))
 
 let v_Vuna_dCompile_dcheckFile = fun roots entry -> v_Vuna_dCompile_dcheckFileIn "" roots entry

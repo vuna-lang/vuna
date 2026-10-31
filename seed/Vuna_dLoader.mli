@@ -4,6 +4,7 @@ open Vuna_dBool
 open Vuna_dMonad
 open Vuna_dMaybe
 open Vuna_dList
+open Vuna_dIO
 open Vuna_dResult
 open Vuna_dString
 open Vuna_dBase
@@ -17,7 +18,7 @@ open Vuna_dBuiltins
 type   t_Vuna_dLoader_dModule =
     C_Vuna_dLoader_dModule of (string) * (string) * ((t_Vuna_dAst_dImport) list) * ((t_Vuna_dAst_dDecl) list) * ((t_Vuna_dLoader_dExportEntry) list)
 and   t_Vuna_dLoader_dProject =
-    C_Vuna_dLoader_dProject of ((t_Vuna_dAst_dDecl) list) * ((t_Vuna_dAst_dImport) list) * ((t_Vuna_dLoader_dModule) list)
+    C_Vuna_dLoader_dProject of ((t_Vuna_dAst_dDecl) list) * ((t_Vuna_dAst_dImport) list) * ((t_Vuna_dLoader_dModule) list) * (string)
 and t_Vuna_dLoader_dExportEntry
 and t_Vuna_dLoader_dExportRef
 val v_Vuna_dLoader_dmoduleNameOf : (t_Vuna_dLoader_dModule) -> (string)

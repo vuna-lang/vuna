@@ -1,5 +1,8 @@
 -- vuna：统一 CLI 入口（M11.5；实现在 lib/Vuna/Cli.vuna）。
+-- main : IO Int——由运行时执行；退出码由 exitIO 传递。
 -- 用法见 `vuna help`。
 import Vuna.Cli
+import Vuna.IO
 
-main = exit (runCli (getArgs))
+main : IO Int
+main = bindIO (pureIO (runCli (getArgs))) (\code => exitIO code)

@@ -7,3 +7,4 @@ members = ["dep"]
 
 [dependencies]
 dep = "dep"
+vuna-stdlib = "../../../../stdlib"

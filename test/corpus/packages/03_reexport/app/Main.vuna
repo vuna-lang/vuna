@@ -1,5 +1,6 @@
 import Facade
 import Vuna.Use
+import Vuna.IO
 
-main : String
-main = strFromInt (total (Cons 1 (Cons 2 (Cons 3 Nil))) + firstOr (Just 10))
+main : IO Int
+main = printIO (strFromInt (total (Cons 1 (Cons 2 (Cons 3 Nil))) + firstOr (Just 10)))

@@ -75,7 +75,7 @@ stage2 文件集；stage1 == stage2（文件集合逐字节）即 fixed point
 种子（`seed/`）**提交入库**，是构建输入而不是构建产物。M12 起种子是**多文件文件集**：
 每个 vuna 模块对应一个 OCaml 模块（`.ml` + `.mli`），外加共享 runtime 与 `build.sh`。
 M12.5 起种子**只覆盖 compiler 包**（`compiler/app/Main.vuna` 的 import 闭包）：工具链
-（fmt/lint/repl/doc/test）由编译器编译出来，不在信任锚点里。当前 49 个文件、约 0.8 MB。
+（fmt/lint/repl/doc/test）由编译器编译出来，不在信任锚点里。当前 51 个文件、约 0.86 MB。
 唯一的硬性不变量：
 
 > **当前入库的种子必须能编译当前的 vuna 源码。**
@@ -119,7 +119,7 @@ git add seed/ && git commit
 ├── compiler/             # 编译器包 vuna-compiler（seed 的唯一来源）
 │   ├── vuna.toml         # [package] + [export] 编译器模块 + deps vuna-stdlib
 │   ├── app/
-│   │   └── Main.vuna     # 编译器 CLI 入口：main = exit (runCompilerCli (getArgs))
+│   │   └── Main.vuna     # 编译器 CLI 入口：main : IO Int（运行时执行）
 │   └── lib/Vuna/
 │       ├── Base.vuna     # 编译器门面：重导出 stdlib 核心 + Pos/Span/路径工具
 │       ├── Ast.vuna      # 语法类型与 AST helper
@@ -146,7 +146,7 @@ git add seed/ && git commit
 │       ├── Doc.vuna      # API 文档生成（vuna doc）
 │       └── TestRunner.vuna # 包内测试运行器（vuna test）
 ├── app/
-│   └── Main.vuna         # 纯入口：main = exit (runCli (getArgs))
+│   └── Main.vuna         # 产品 CLI 入口：main : IO Int（运行时执行）
 ├── stdlib/               # 成员包 vuna-stdlib（独立模块根 stdlib/lib/）
 │   ├── vuna.toml         # [package] + [export] 导出模块清单
 │   └── lib/
@@ -319,6 +319,8 @@ git add seed/ && git commit
   main = pretty Red ++ "/" ++ pretty @fancy Blue ++ "/" ++ show Red
   ```
 
+- 上面的 `main : String` 是 `vuna interp` / `vuna test` 的调试约定；可执行包
+  （`vuna build` / `--split`）要求 `main : IO a`（M12.6）。
 - trait 只支持单参数；default 实例按 (trait, 类型) 全局唯一（flatten 时检查，
   重复报 `duplicate instance`）；命名实例不自动参与解析，只能用 `@name` 选择
   （可 `@M.name`，M 需已导入）；trait 与类型都不在本模块定义时禁止写 default，
@@ -383,9 +385,12 @@ git add seed/ && git commit
   （`instance Monad Maybe`），kind 不符（如 `instance Monad Int`）在声明期报错。
 - 一般约束泛化：签名里出现高阶类型变量（如 `bindPair : m a -> m b -> m (Pair a b)`）
   时，类型检查自动给函数加方法级字典参数；调用点按实际类型静态派发或继续穿参。
-- `do` 对 `Maybe` / `List` / `IO` 都生效；`IO` 是 `stdlib/lib/Vuna/IO.vuna`
-  的抽象类型（构造器私有），提供 `runIO` / `printIO` / `printlnIO` /
+- `do` 对 `Maybe` / `List` / `IO` 都生效。`IO` 是 `stdlib/lib/Vuna/IO.vuna` 的抽象类型
+  （构造器私有），提供 `pureIO` / `bindIO` / `fmapIO` / `printIO` / `printlnIO` /
   `readFileIO` / `writeFileIO` / `getArgsIO` / `exitIO` 与 Monad 组合子。
+  **没有公开的 `runIO`/`unsafeRunIO`**：IO 动作只能由运行时在 `main` 处执行。
+  可执行包/`vuna build` 要求 `main : IO a`；`vuna interp`/`vuna test` 仍保留
+  “显示纯 main 结果”的调试约定（不是语言的可执行入口语义）。
 
 ### 标准库（M11）
 
@@ -438,6 +443,11 @@ git add seed/ && git commit
   - `vuna doc [DIR] [OUT]`：扫描 `lib/` 生成 Markdown API 文档。
 - 示例：`examples/multi/` 是多包 workspace（根包 + 成员包 `greet` + stdlib 路径依赖），
   `checks.vuna-package` 在 Nix 沙箱里构建并运行它，验证包管理路径可复现。
+- 可执行入口：`vuna build` / `vuna seed` 要求入口 `main : IO a`（运行时执行动作，
+  退出码用 `exitIO`）；`vuna build --split` 同样按可执行入口处理。普通用户包不能
+  直接调用 effectful 内建（`print` / `readFile` / ...），只能经 `Vuna.IO`；编译器、
+  产品 CLI、stdlib 自身在包级 allowlist 内，`--root` 原始文件模式与 `vuna interp`
+  保留给调试/测试。
 
 ## 编译器实现
 
@@ -457,7 +467,9 @@ git add seed/ && git commit
   `deriving (Eq)` 的 `record ExportEntry`；记录与 data 共用 `T` / `T(..)` 规则）、
   名字解析与 flatten（`loadProgram roots entryPkg entry`：模块根是 `Pkg.Root` 有序列表
   ——目录 + 包名 + 可选 `[export]` 集；同包全可见、跨包只认导出集，隐藏模块与跨根同名
-  都是硬错误）、`do` 语句 desugar 成 `bind`；
+  都是硬错误）、`do` 语句 desugar 成 `bind`；M12.6 起按包限制 effectful 内建：
+  普通包不能在纯代码里直接用 `print` / `readFile` / `exit` 等（只能经 `Vuna.IO`），
+  编译器 / 产品 CLI / stdlib 自身在 allowlist 内；
 - `compiler/lib/Vuna/Typecheck.vuna`：HM 风格类型检查（Ty/Scheme、unify、构造器 scheme、
   表达式/模式推断、签名校验与无签名顶层推断）；`Ty` 含 `TApp`（高阶 kind 应用）、
   `Scheme` 带 trait 约束、方法级字典穿参（裸类型变量与高阶 kind 类型变量都支持）；
@@ -472,7 +484,8 @@ git add seed/ && git commit
   解析全局唯一名字；抽象类型按模块导出表生成 sig；整模块重导出用 include），
   单文件路径重构为 `genTopNames` 等子集函数，产物字节不变；分离编译预计算
   “声明名 → 归属模块”路由表（`routeFunTable`/`routeDataTable`），避免每个模块反复扫描
-  owners/全程序 decls；
+  owners/全程序 decls；M12.6 起 `main : IO a` 的入口由运行时执行（单文件直接 match
+  IO 构造器；分离编译在 IO 模块生成代码里注入 `__vuna_run_io` 执行器，源码不可见）；
 - `compiler/lib/Vuna/Split.vuna` / `SplitCli.vuna`：分离编译输出文件模型、`build.sh`
   构建脚本（干净构建用一次 `ocamlopt` 编译全部 `.mli/.ml` 并链接；已有 `.cmx` 时按
   模块时间戳增量重编）、包模式 `build --split` / `seed` 入口；
@@ -493,8 +506,10 @@ git add seed/ && git commit
   文档、测试运行器、产品 CLI）；
 - 模块内部通过 import 自动 open 使用非限定名，只有 import 行写模块全名；
 - 顶层类型签名紧贴其第一个函数子句，签名与实现之间不留空行；顶层声明之间用一个空行分隔；
-- [app/Main.vuna](app/Main.vuna)：产品 CLI 纯入口，`main = exit (runCli (getArgs))`；
-  CLI 实现在 `lib/Vuna/Cli.vuna`。`vuna compile` 保留
+- [app/Main.vuna](app/Main.vuna)：产品 CLI 入口，`main : IO Int`（运行时执行，
+  `exitIO` 传递退出码）；CLI 实现在 `lib/Vuna/Cli.vuna`。`vuna build` / `--split`
+  要求 `main : IO a`；纯 main 只在 `vuna interp` / `vuna test` 的调试约定下自动 show。
+  `vuna compile` 保留
   `[--no-print] [--no-typecheck] [--typed] [--root DIR]... <entry.vuna> [out.ml]`；
   默认跑类型检查并生成原生 OCaml typed codegen；`--no-typecheck` 关闭检查并回退
   dynamic value codegen；`--no-print` 表示生成的程序不自动打印 `main` 的结果；
@@ -693,6 +708,12 @@ nix fmt               # nixfmt-tree 格式化 .nix
   env free-var 扫描、干净构建走单次 ocamlopt。本机 compiler 闭包的 `build --split`
   从 ~32s 降到 ~2s，`nix build .#vuna-seed --rebuild` ~1.4s、
   `nix build .#vuna-compiler --rebuild` ~3.4s；
+- M12.6 main / IO：可执行入口（`vuna build` / `--split` / `seed`）要求 `main : IO a`，
+  由运行时执行动作（没有公开的 `runIO` / `unsafeRunIO`）；普通用户包不能直接调用
+  effectful 内建（`print` / `readFile` / `exit` / ...），只能经 `Vuna.IO`（编译器 /
+  产品 CLI / stdlib 自身在包级 allowlist 内）；`vuna interp` / `vuna test` / `--root`
+  文件模式保留“纯 main 结果 show”的调试约定。当前 `IO` 仍是库层 thunk 表示，不是
+  完整的 effect 类型系统（留给 M13）；
 - M11.6 fmt 限制：行宽 100，但模块头/导出列表、类型签名与超长字符串字面量不折行；
   表达式内部的注释会前移到最内层包含它的条目（或下一条目），不保证留在原位置；
   单行块注释可以挂在行尾，多行块注释只作为前置注释；
@@ -750,4 +771,7 @@ nix fmt               # nixfmt-tree 格式化 .nix
   seed 闭包断言、metrics 目标与基准脚本同步调整；新增跨包重导出夹具；
   同期修复编译性能（AVL 类型替换、分离编译路由表、快速 seed 构建），compiler 闭包
   的 `build --split` 从 ~32s 降到 ~2s；
+- M12.6：main / IO 语义——可执行入口 `main : IO a`（运行时执行，无公开 runner），
+  用户包不能直接调用 effectful 内建（包级 allowlist），`Vuna.IO` 成为唯一效果 API；
+  seed 51 个文件 / ~0.86 MB；`vuna interp`/`vuna test` 保留纯 main 调试约定；
 - 早期 OCaml 外部编译器 `vunax` 已完成使命并删除。

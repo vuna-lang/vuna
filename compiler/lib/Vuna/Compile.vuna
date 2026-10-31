@@ -1,4 +1,4 @@
-module Vuna.Compile (effectiveRoots, compileFile, compileFileChecked, compileFileTyped, checkFile, compileFileIn, compileFileCheckedIn, compileFileTypedIn, checkFileIn, programNeedsElab) where
+module Vuna.Compile (effectiveRoots, compileFile, compileFileChecked, compileFileTyped, compileFileTypedExec, checkFile, compileFileIn, compileFileCheckedIn, compileFileTypedIn, compileFileTypedExecIn, checkFileIn, programNeedsElab) where
 
 -- Vuna.Compile：编译入口（供 CompilerCli / CLI / 测试使用）。
 --
@@ -80,6 +80,13 @@ compileFileTyped roots entry printResult = compileFileTypedIn "" roots entry pri
 
 compileFileTypedIn entryPkg roots entry printResult = andThen (loadProgram roots entryPkg entry) (\decls => andThen (checkProgramInfoElab decls) (\p => case p of
   Pair globals elabDecls => generateProgramTyped elabDecls globals printResult
+)
+)
+
+compileFileTypedExec roots entry printResult = compileFileTypedExecIn "" roots entry printResult
+
+compileFileTypedExecIn entryPkg roots entry printResult = andThen (loadProgram roots entryPkg entry) (\decls => andThen (checkProgramInfoElab decls) (\p => case p of
+  Pair globals elabDecls => generateProgramTypedExec elabDecls globals printResult
 )
 )
 
