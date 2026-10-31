@@ -81,7 +81,9 @@ HM 路径的任何改动都不应该需要动这里，反之亦然。
 
 **入口符号**：
 - `Vuna.Compiler.Dt.dtCheckFile` / `dtCompileFile` / `dtEvalFile`（单文件 facade）
-- `Vuna.Compiler.Elab.elabProgram`
+- `Vuna.Compiler.Elab.elabProgram` / `elabProgramFull`（M15 起返回洞目标与解表）
+- `Vuna.Compiler.Elab.goalsOfProgram`（洞目标查询，供 `vuna goal` 与 LSP hover）
+- `Vuna.Compiler.Elab.checkTerminationDecls`（M16 结构化递归终止性）
 - `Vuna.Compiler.Core.eval` / `quote` / `conv` / `normalize` / `defaultFuel`
 - `Vuna.Compiler.CoreCodegen.checkDtProgram` / `generateDtProgram`
 - 经 `Vuna.Compiler.Compile.compileFileDt` / `checkFileDt` 与 `Vuna.Compiler.CompilerCli`
@@ -93,7 +95,7 @@ HM 路径的任何改动都不应该需要动这里，反之亦然。
 **通常连带改动**：`Core`（Term/Value 构造子）→ `Elab`（精化/覆盖率）→
 `CoreCodegen`（擦除与生成）三处必须同步；`docs/dt-core.md` 记录设计边界。
 
-**建议测试标签**：第 34 段（`corpus/dt` 12 个正例、`corpus/dt_err` 15 个反例，
+**建议测试标签**：第 34–35 段（`corpus/dt` 17 个正例、`corpus/dt_err` 17 个反例，
 `interp --dt` / `check --dt` / `compile --dt` 三路）。
 
 ## 3. 包与 workspace：Toml → Manifest → Pkg → Loader
@@ -141,7 +143,7 @@ vuna.toml
 
 **TCB 边界（硬约束）**：工具链永不进入 seed。`compiler/app/Main.vuna` 的 import 闭包
 不含任何 `Vuna.*` 工具模块；`nix/seed-rotate.sh` 与 `flake.nix` 用同一 blacklist 断言：
-`Cli Fmt Lint Doc Repl TestRunner Files Eval Interp Process Codegen Index`。新增工具模块
+`Cli Fmt Lint Doc Repl TestRunner Files Eval Interp Process Codegen Index Lsp Json`。新增工具模块
 时必须同步这个清单，否则 `checks.seed-selfhost` 会在 TCB 泄漏时失败。
 
 **效应内建的包级 allowlist**：`Vuna.Compiler.Loader.packageAllowsEffects` 只放行
@@ -187,7 +189,7 @@ seed 只含 compiler 包入口闭包。
 | 改 `base/` 标准库 | 第 26–27 段（monad / stdlib）+ `vuna check .` |
 | 改 `compiler/` 任一模块 | 全量 `test/run-tests.sh` + `nix flake check`（至少 seed-selfhost） |
 | 改语法/类型规则 | 第 1、4–12、18–27 段 + 全量测试 + 编译器自检 |
-| 改 `--dt` | 第 34 段 + HM 路径零回归（全量测试） |
+| 改 `--dt` | 第 34–35 段 + HM 路径零回归（全量测试） |
 | 改 `vuna.toml` 机制 | 第 28–29、33 段 + `checks.vuna-package` |
 | 改 Nix | `nix flake check`（`checks.*` 全绿）+ `nix build .#vuna` |
 

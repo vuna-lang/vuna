@@ -43,7 +43,7 @@ vuna api Vuna.Compiler.Loader                   # 某模块的签名面（含注
 3. **`seed/` 只含 compiler 包入口闭包**（`compiler/app/Main.vuna` 的 import 闭包）；
 4. **工具链不进 TCB**：`fmt`/`lint`/`repl`/`doc`/`test`/`Index`（以及未来的 LSP、
    package manager）永不进入 seed 闭包；blacklist 见 `nix/seed-rotate.sh` 与 `flake.nix`
-   的 `forbidden` 循环：`Cli Fmt Lint Doc Repl TestRunner Files Eval Interp Process Codegen Index`；
+   的 `forbidden` 循环：`Cli Fmt Lint Doc Repl TestRunner Files Eval Interp Process Codegen Index Lsp Json`；
 5. **效果内建按包 allowlist**：只有 `vuna` / `vuna-compiler` / `vuna-base` 可直接调用
    effectful 内建（`print`/`readFile`/`exit`/`prim_*` 等），其余包必须经 `Base.IO`
    （`Vuna.Compiler.Loader.packageAllowsEffects`）；
@@ -91,7 +91,7 @@ vuna seed seed compiler              # 重新生成 seed（正式流程用 nix/s
 | `base/` | 标准库 `vuna-base`（`Base.*` + `Prelude`） | 是（被 compiler 依赖） |
 | `app/` | 产品 CLI 入口 `main = exit (runCli (getArgs))` | 否 |
 | `seed/` | 提交入库的多文件 OCaml 信任锚点（生成物，禁止手改，别读） | — |
-| `test/` | `run-tests.sh`（34 段）+ `corpus/` 夹具 | 否 |
+| `test/` | `run-tests.sh`（35 段）+ `corpus/` 夹具 | 否 |
 | `nix/` | `seed-rotate.sh`、`metrics.*`、`bench.*`、`run-tests.nix` | 否 |
 | `docs/` | 分层文档（见下方导航） | 否 |
 
@@ -102,6 +102,7 @@ vuna seed seed compiler              # 重新生成 seed（正式流程用 nix/s
   [stdlib.md](docs/reference/stdlib.md)、[packages.md](docs/reference/packages.md)、
   [dt.md](docs/reference/dt.md)
 - 编译器实现与 codegen：[compiler.md](docs/reference/compiler.md)
+- DT 工具链（洞目标、LSP、错误索引）：[dt-tooling.md](docs/reference/dt-tooling.md)
 - 自举与种子：[bootstrap.md](docs/reference/bootstrap.md)
 - 测试与 CI：[testing.md](docs/reference/testing.md)；已知边界：[limits.md](docs/reference/limits.md)
 - 路线图 / 历史：[docs/roadmap.md](docs/roadmap.md)、[docs/history.md](docs/history.md)、

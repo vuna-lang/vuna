@@ -768,6 +768,19 @@ check_eq "dt fmt interp" "41" "$actual"
 "$VUNA" fmt --check "$tmp/dt_fmt.vuna" >/dev/null 2>&1
 check_eq "dt fmt idempotent" "0" "$?"
 
+# 35) M17 工具链：`vuna goal` 洞目标显示 + LSP 编辑器冒烟
+goal_out=$("$VUNA" goal corpus/dt/15_goal.vuna 2>&1)
+check_contains "goal hole span" "$goal_out" "15_goal.vuna:7:11"
+check_contains "goal hole type" "$goal_out" "goal Type"
+"$VUNA" goal corpus/dt/15_goal.vuna >/dev/null 2>&1
+check_eq "goal exit" "0" "$?"
+no_hole_out=$("$VUNA" goal corpus/dt/01_id.vuna 2>&1)
+check_contains "goal none" "$no_hole_out" "no holes"
+"$VUNA" goal >/dev/null 2>&1
+check_eq "goal no args exit" "2" "$?"
+sh corpus/lsp/smoke.sh "$VUNA" >/dev/null 2>&1
+check_eq "lsp smoke" "0" "$?"
+
 if [ "$fail" -ne 0 ]; then
   printf '%s passed, %s failed\n' "$pass" "$fail"
   exit 1

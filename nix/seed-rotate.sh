@@ -29,7 +29,7 @@ mkdir -p seed
 echo "seed-rotate: 已生成 seed/（$(ls seed | wc -l | tr -d ' ') 个文件）"
 
 # 种子必须只含 compiler 闭包：工具模块与旧 dynamic codegen 一旦出现都算错误。
-for tool in Cli Fmt Lint Doc Repl TestRunner Files Eval Interp Process Codegen Index; do
+for tool in Cli Fmt Lint Doc Repl TestRunner Files Eval Interp Process Codegen Index Lsp Json; do
   if [ -e "seed/Vuna_d$tool.ml" ]; then
     echo "seed-rotate: 错误：seed 包含不允许的模块 Vuna.$tool" >&2
     exit 1

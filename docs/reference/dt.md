@@ -79,17 +79,29 @@ trans a b c p q = case p of
   Refl d => q
 ```
 
-几条 M14 的硬边界，写代码前值得先知道：
+几条硬边界，写代码前值得先知道（M15/M16 之后的状态）：
 
-- **索引 binder 必须显式**。`data Vec : Type -> Nat -> Type` 的构造子写
-  `Cons : (a : Type) -> (n : Nat) -> a -> Vec a n -> Vec a (Succ n)`；隐式索引推断
-  （`{n : Nat} -> ...` 靠调用点自动求解，例如 `FSucc FZero`）**M14 不做**，推迟到
-  **M15**。M14 里期望类型能给出闭合解时隐式 binder 偶尔可用，但一旦要从调用点反推
-  索引或解里出现局部变量，就报 `unsolved metavariable` / `type mismatch`。
+- **隐式索引推断可用（M15）**。构造子/函数的索引 binder 现在可以写隐式
+  （`Cons : {a : Type} -> {n : Nat} -> ...`），调用点由实参或期望类型反推：
+  ```vuna
+  three : Vec Int (Succ (Succ (Succ Zero)))
+  three = vapp (Cons 1 (Cons 2 Nil)) (Cons 3 Nil)
+  ```
+  推断仍受一阶限制：需要在**构造子推断位置**从内层实参反推（`FSucc FZero` 单独作为
+  实参而外层没有期望类型）时仍可能报 `DT: unsolved metavariable`。
+- **接口与实例（M15）**。`trait` / `instance` 走字典编码：`trait Pretty a` →
+  `data Dict_Pretty : Type -> Type`，方法投影把字典当隐式参数，调用点的实例由**实例
+  搜索**自动插入。`Show`/`Eq` 这类单参数接口直接可用；缺失/歧义实例有明确诊断。
+  多参数接口报 `DT: interfaces must have exactly one parameter (M15 limitation)`。
+- **终止性检查（M16）**。自递归函数必须结构递归：每个递归调用至少有一个实参是同一
+  形参的真子项（`case` 分支里构造子的字段算子项）。否则报
+  `DT: cannot prove termination of <f> (recursive call does not structurally decrease)`。
+  互递归按「每个分量至少一次下降」近似，复杂尺寸变化矩阵不做。
 - **擦除规则**：binder 的域是**宇宙**（`a : Type`）⇒ 擦除；域是**归纳族**（`n : Nat`
   这类索引）⇒ **保留运行时表示**。所以 `Vec a n` 的值是一条带长度索引字段的链表
-  （`type 'a t_Vec = C_Vec_Nil | C_Vec_Cons of 'a t_Nat * 'a * 'a t_Vec`），索引不是
-  零成本抽象（完整擦除分析属 M16）。
+  （`type 'a t_Vec = C_Vec_Nil | C_Vec_Cons of 'a t_Nat * 'a * 'a t_Vec`）。
+  M16 探测确认索引**不能无条件擦除**（`vlen` 把长度索引当递归参数传下去，运行时真的
+  读它）；完整擦除需要整程序使用分析，仍是后续工作。
 - **`case` 分支必须绑定构造子的全部显式 telescope binder**（族参数与索引也各占一个
   位置，即使分支体不用）：`Cons b m y ys => ...` 依次对应 `a`、`n`、字段 `a`、
   `Vec a m`。只支持**顶层构造子模式**；嵌套模式（`Succ (Succ k)`）报
@@ -105,7 +117,10 @@ trans a b c p q = case p of
   类型级求值（只在索引 unification 时按定义性相等比较）。
 - **`check --dt` 不要求 `main`**（库文件可直接 check），`compile --dt` 要求 `main`
   且其类型为 `Int` / `String` / `Bool`。
-- 只有**一阶（闭合）元变量解**；高阶/开放解、终止性/覆盖性证明都归 M15/M16。
+- 元变量求解支持引用创建时已存在的局部变量（作用域检查会拒绝逃逸解）；高阶/开放解
+  仍不支持。
+- 洞 `_` 未解时的诊断带**位置与目标类型**：`DT: unsolved hole <loc> with goal <ty>`；
+  `vuna goal` 可列出全部洞（见 [dt-tooling.md](dt-tooling.md)）。
 
 ## 命令与边界
 

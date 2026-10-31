@@ -13,12 +13,16 @@ import Vuna.Compiler.Compile
 import Vuna.Compiler.CompilerCli
 import Vuna.Interp
 import Vuna.Compiler.Dt
+import Vuna.Compiler.Parser
+import Vuna.Compiler.Ast
+import Vuna.Compiler.Elab
 import Vuna.Fmt
 import Vuna.Files
 import Vuna.Index
 import Vuna.Repl
 import Vuna.Doc
 import Vuna.TestRunner
+import Vuna.Lsp
 import qualified Vuna.Lint
 
 toolUsageLines : String -> String
@@ -53,6 +57,12 @@ toolUsageLines prog =
     ++ "  "
     ++ prog
     ++ " api <Module.name>                   某模块的签名面（含注释与行号）\n"
+    ++ "  "
+    ++ prog
+    ++ " goal <file.vuna>                   列出 DT 洞的目标与上下文（M17）\n"
+    ++ "  "
+    ++ prog
+    ++ " lsp                                 启动 LSP server（JSON-RPC over stdio）\n"
 
 usageFor prog = "usage:\n" ++ compilerUsageLines prog ++ toolUsageLines prog
 
@@ -74,6 +84,8 @@ runCli1 args = case args of
     "doc" => docArgs rest
     "map" => mapArgs rest
     "api" => apiArgs rest
+    "lsp" => Vuna.Lsp.runLspTool rest
+    "goal" => goalArgs rest
     "help" => help
     _ => if startsWith "-" arg then runCompilerCliFor "vuna" args else unknownCommand "vuna" arg
 
@@ -321,3 +333,41 @@ runApi modName = withIndex (\index => case renderApi index modName of
       _ = print (text ++ "\n")
     in 0
 )
+
+-- ---------------------------------------------------------------
+-- goal（M17：洞目标显示）
+-- `vuna goal <file.vuna>` 列出 DT 文件里每个洞 `_` 的位置、目标类型与上下文。
+-- ---------------------------------------------------------------
+goalArgs args = case args of
+  [file] => if startsWith "-" file then usageError else goalRun file
+  _ => usageError
+
+goalRun file = case goalsOfFile file of
+  Err e =>
+    let
+      _ = print ("error: " ++ e ++ "\n")
+    in 1
+  Ok infos =>
+    let
+      _ = print (goalHeader file (length infos) ++ renderGoals file infos)
+    in 0
+
+goalsOfFile file = if fileExists file then case parseSource file (readFile file) of
+  Err e => Err e
+  Ok (Source _ _ decls) => goalsOfProgram decls
+else Err ("file not found: " ++ file)
+
+renderGoals file [] = ""
+renderGoals file (i :: rest) =
+  showSpanLoc (dtGoalInfoSpan i)
+    ++ ": goal "
+    ++ dtGoalInfoGoal i
+    ++ "\n"
+    ++ renderGoalCtx (dtGoalInfoCtx i)
+    ++ renderGoals file rest
+
+renderGoalCtx [] = ""
+renderGoalCtx (e :: rest) = case e of
+  Pair n ty => "  " ++ n ++ " : " ++ ty ++ "\n" ++ renderGoalCtx rest
+
+goalHeader file n = if n == 0 then file ++ ": no holes\n" else ""

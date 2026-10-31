@@ -190,7 +190,7 @@
                 cp ${./vuna.toml} vuna.toml
                 chmod -R u+w .
                 # 提交入库的 seed 只能含 compiler 闭包（工具链与 dynamic codegen 都不在 TCB 里）
-                for forbidden in Cli Fmt Lint Doc Repl TestRunner Files Eval Interp Process Codegen Index; do
+                for forbidden in Cli Fmt Lint Doc Repl TestRunner Files Eval Interp Process Codegen Index Lsp Json; do
                   if [ -e "seed/Vuna_d$forbidden.ml" ]; then
                     echo "committed seed includes forbidden module Vuna.$forbidden" >&2
                     exit 1
@@ -201,7 +201,7 @@
                 # 种子对 compiler 包分离编译 → stage1 源码集
                 ./vuna-seed build --split s1 compiler
                 # stage1 只能包含 compiler 闭包，不能把工具模块/旧 codegen 带进种子
-                for forbidden in Cli Fmt Lint Doc Repl TestRunner Files Eval Interp Process Codegen Index; do
+                for forbidden in Cli Fmt Lint Doc Repl TestRunner Files Eval Interp Process Codegen Index Lsp Json; do
                   if [ -e "s1/Vuna_d$forbidden.ml" ]; then
                     echo "seed closure includes forbidden module Vuna.$forbidden" >&2
                     exit 1
@@ -213,7 +213,7 @@
                 # stage1 再生成 → stage2 源码集；两者逐字节一致
                 ./vuna-stage1 build --split s2 compiler
                 diff -r s1 s2
-                for forbidden in Cli Fmt Lint Doc Repl TestRunner Files Eval Interp Process Codegen Index; do
+                for forbidden in Cli Fmt Lint Doc Repl TestRunner Files Eval Interp Process Codegen Index Lsp Json; do
                   if [ -e "s2/Vuna_d$forbidden.ml" ]; then
                     echo "stage2 closure includes forbidden module Vuna.$forbidden" >&2
                     exit 1
