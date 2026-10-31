@@ -6,7 +6,7 @@
 #                              且 format→parse→format 幂等（probe check）。
 #   run/*.vuna + *.out      —— 可解释程序：格式化前后 `vuna interp` 输出一致且等于 golden。
 #   typed/*.vuna + *.out    —— typed codegen 程序（覆盖 where 等解释器不支持的构造）：
-#                              格式化前后 --typed 生成、ocamlopt 编译、运行输出一致且等于 golden。
+#                              格式化前后 typed 生成、ocamlopt 编译、运行输出一致且等于 golden。
 #   _probe.vuna             —— 探针源码（下划线开头，不当作输入），由本脚本用 VUNA 编译。
 #
 # 环境变量：
@@ -52,7 +52,7 @@ elif [ -d "$REPO/stdlib/Vuna" ]; then
 fi
 chmod -R u+w "$tmp/root" 2>/dev/null || true
 cp "$HERE/_probe.vuna" "$tmp/probe.vuna"
-if ! ( cd "$REPO" && "$VUNA" --typecheck --no-print --root "$tmp/root" "$tmp/probe.vuna" "$tmp/probe.ml" ) >"$tmp/probe.log" 2>&1; then
+if ! ( cd "$REPO" && "$VUNA" compile --no-print --root "$tmp/root" "$tmp/probe.vuna" "$tmp/probe.ml" ) >"$tmp/probe.log" 2>&1; then
   echo "fmt: probe compile failed:"
   cat "$tmp/probe.log"
   exit 1
@@ -142,7 +142,7 @@ for file in "$HERE"/typed/*.vuna; do
   expected_text=$(cat "$expected")
   # 原文件
   rm -f "$tmp/t1.ml" "$tmp/t1.exe"
-  if ! ( cd "$REPO" && "$VUNA" --typed "$file" "$tmp/t1.ml" ) >"$tmp/t1.log" 2>&1; then
+  if ! ( cd "$REPO" && "$VUNA" compile "$file" "$tmp/t1.ml" ) >"$tmp/t1.log" 2>&1; then
     bad "$name (typed compile)"
     cat "$tmp/t1.log"
     continue
@@ -156,7 +156,7 @@ for file in "$HERE"/typed/*.vuna; do
   check_eq "$name (typed golden)" "$expected_text" "$before"
   # 格式化后的文件
   rm -f "$tmp/t2.ml" "$tmp/t2.exe"
-  if ! ( cd "$REPO" && "$VUNA" --typed "$formatted" "$tmp/t2.ml" ) >"$tmp/t2.log" 2>&1; then
+  if ! ( cd "$REPO" && "$VUNA" compile "$formatted" "$tmp/t2.ml" ) >"$tmp/t2.log" 2>&1; then
     bad "$name (typed compile after format)"
     cat "$tmp/t2.log"
     continue

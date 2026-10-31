@@ -28,10 +28,10 @@ mkdir -p seed
 "$VUNA" seed seed compiler
 echo "seed-rotate: 已生成 seed/（$(ls seed | wc -l | tr -d ' ') 个文件）"
 
-# 种子必须只含 compiler 闭包：工具模块一旦出现说明 seed 入口不小心 import 了工具。
-for tool in Cli Fmt Lint Doc Repl TestRunner Files Eval Interp; do
+# 种子必须只含 compiler 闭包：工具模块与旧 dynamic codegen 一旦出现都算错误。
+for tool in Cli Fmt Lint Doc Repl TestRunner Files Eval Interp Codegen; do
   if [ -e "seed/Vuna_d$tool.ml" ]; then
-    echo "seed-rotate: 错误：seed 包含工具模块 Vuna.$tool" >&2
+    echo "seed-rotate: 错误：seed 包含不允许的模块 Vuna.$tool" >&2
     exit 1
   fi
 done

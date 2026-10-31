@@ -3,7 +3,7 @@
 vuna 是一个函数式编程语言，本仓库是它的编译器与工具链。
 
 编译器完全用 vuna 自己写：编译器包 `compiler/`（`vuna-compiler`，含
-Ast/Lexer/Parser/Loader/Typecheck/Codegen 与编译器驱动）+ 根包 `vuna`（产品 CLI 与
+Ast/Lexer/Parser/Loader/Typecheck/TypedCodegen 与编译器驱动）+ 根包 `vuna`（产品 CLI 与
 工具链 fmt/lint/repl/doc/test），标准库在独立的成员包 `stdlib/`（模块根
 `stdlib/lib/`）。`seed/` 只由 compiler 包的入口闭包生成——**可固化成种子的部分与
 产品工具链明确分开**。仓库通过提交入库的 OCaml 种子自举，构建、测试和语言演进都不
@@ -21,12 +21,12 @@ Ast/Lexer/Parser/Loader/Typecheck/Codegen 与编译器驱动）+ 根包 `vuna`�
 `vuna-compiler` 是编译器自己的 CLI（也是 seed 的来源）：
 
 ```console
-vuna-compiler compile [--no-print] [--no-typecheck] [--typecheck] [--typed] [--root DIR]... <entry.vuna> [out.ml]
+vuna-compiler compile [--no-print] [--root DIR]... <entry.vuna> [out.ml]
 vuna-compiler check [--root DIR]... (<entry.vuna> | <package-dir>)
-vuna-compiler build [--no-print] [DIR] [OUT]   # 包模式：生成 typed OCaml（默认 DIR/Main.ml）
-vuna-compiler build --split OUT [DIR]          # 分离编译：逐模块 .ml/.mli + build.sh 写到 OUT
-vuna-compiler seed [OUT] [DIR]                 # 生成多文件 seed（默认 OUT=seed，DIR=.）
-vuna-compiler help
+vuna-compiler build [DIR [OUT]]        # 包模式：生成 typed OCaml（默认 DIR/Main.ml）
+vuna-compiler build --split OUT [DIR]  # 分离编译：逐模块 .ml/.mli + build.sh 写到 OUT
+vuna-compiler seed [OUT [DIR]]         # 生成多文件 seed（默认 OUT=seed，DIR=.）
+vuna-compiler help, -h
 ```
 
 `vuna` 是产品 CLI：编译器命令与工具链命令都在这里，编译命令直接调用
@@ -34,25 +34,27 @@ vuna-compiler help
 
 ```console
 # 文件模式（M9 起的原有能力）
-vuna compile [--no-print] [--no-typecheck] [--typecheck] [--typed] [--root DIR]... <entry.vuna> [out.ml]
+vuna compile [--no-print] [--root DIR]... <entry.vuna> [out.ml]
 vuna check [--root DIR]... (<entry.vuna> | <package-dir>)
 vuna lint [--fix] <file.vuna>...
 vuna interp [--root DIR]... <file.vuna>
 # 包模式（M11.5：从 vuna.toml / workspace / 依赖 DAG 解析模块根）
-vuna build [--no-print] [DIR] [OUT]   # 默认 DIR=.、OUT=DIR/Main.ml（生成 typed OCaml）
-vuna build --split OUT [DIR]          # M12 分离编译：逐模块 .ml/.mli + build.sh 写到 OUT
-vuna seed [OUT] [DIR]                 # 生成多文件 seed 文件集（默认 OUT=seed）
-vuna test [DIR]                       # 解释执行 test/*.vuna（main : String，空串通过）
-vuna fmt [--check] [PATH]...          # 格式化；省略 PATH = 当前包 lib/app/test
-vuna repl [--root DIR]...             # 交互式 REPL
-vuna doc [DIR] [OUT]                  # 从 lib/ 生成 API 文档（默认 DIR/docs/api.md）
-vuna help
+vuna build [DIR [OUT]]         # 默认 DIR=.、OUT=DIR/Main.ml（生成 typed OCaml）
+vuna build --split OUT [DIR]   # M12 分离编译：逐模块 .ml/.mli + build.sh 写到 OUT
+vuna seed [OUT [DIR]]          # 生成多文件 seed 文件集（默认 OUT=seed）
+vuna test [DIR]                # 解释执行 test/*.vuna（main : String，空串通过）
+vuna fmt [--check] [PATH]...   # 格式化；省略 PATH = 当前包 lib/app/test
+vuna repl [--root DIR]...      # 交互式 REPL
+vuna doc [DIR [OUT]]           # 从 lib/ 生成 API 文档（默认 DIR/docs/api.md）
+vuna help, -h
 ```
 
-不带子命令时等价于 `vuna compile`（兼容旧调用）；`vuna interp` 取代了原来的独立
-`vuna-interp` 二进制。包模式下 loader 的模块根由 `vuna.toml` 的 workspace / 依赖图
-解析（本包 `lib/` + 依赖包 `lib/`），不再需要手写 `--root`；`--root` 保留为原始
-文件模式（例如编译器自举、测试夹具）显式指定模块根的入口。
+每个命令都必须显式书写，不再支持“无子命令 = compile”的旧式回退。`vuna interp`
+取代了原来的独立 `vuna-interp` 二进制，并保留“不检查执行”的调试语义（普通程序
+直接求值；record / trait / deriving 程序会先类型检查并降级）。包模式下 loader 的
+模块根由 `vuna.toml` 的 workspace / 依赖图解析（本包 `lib/` + 依赖包 `lib/`）；
+省略 `--root` 时使用当前目录包的模块根（当前目录不是包则为空），`--root` 仍用于
+原始文件模式（例如编译器自举、测试夹具）显式指定模块根。
 
 ```text
 seed/（提交入库的多文件 OCaml 信任锚点：**compiler 包**入口的闭包，不含工具链）
@@ -75,7 +77,7 @@ stage2 文件集；stage1 == stage2（文件集合逐字节）即 fixed point
 种子（`seed/`）**提交入库**，是构建输入而不是构建产物。M12 起种子是**多文件文件集**：
 每个 vuna 模块对应一个 OCaml 模块（`.ml` + `.mli`），外加共享 runtime 与 `build.sh`。
 M12.5 起种子**只覆盖 compiler 包**（`compiler/app/Main.vuna` 的 import 闭包）：工具链
-（fmt/lint/repl/doc/test）由编译器编译出来，不在信任锚点里。当前 51 个文件、约 0.86 MB。
+（fmt/lint/repl/doc/test）由编译器编译出来，不在信任锚点里。当前 49 个文件、约 0.81 MB。
 唯一的硬性不变量：
 
 > **当前入库的种子必须能编译当前的 vuna 源码。**
@@ -129,10 +131,9 @@ git add seed/ && git commit
 │       ├── Toml.vuna / Manifest.vuna / Pkg.vuna  # 包格式、workspace / 依赖 DAG
 │       ├── Loader.vuna   # import 图、模块根、名字解析与 flatten
 │       ├── Typecheck.vuna # HM 类型检查（记录/trait/高阶 kind/字典穿参）
-│       ├── Codegen.vuna  # 动态 value codegen（--no-typecheck 回退）
-│       ├── TypedCodegen.vuna # 原生 OCaml typed codegen + 分离编译
+│       ├── TypedCodegen.vuna # 原生 OCaml typed codegen（单文件 + 分离编译）
 │       ├── Split.vuna / SplitCli.vuna # 分离编译输出模型 / build --split / seed
-│       ├── Compile.vuna  # 编译入口（effectiveRoots / compile* / checkFile）
+│       ├── Compile.vuna  # 编译入口（effectiveRoots / typed compile / checkFile）
 │       └── CompilerCli.vuna # 编译器 CLI（compile/check/build/seed）
 ├── lib/                  # 产品 CLI 包 vuna 的模块根（工具链）
 │   └── Vuna/
@@ -284,7 +285,7 @@ git add seed/ && git commit
 
   字段访问写作 `p.x`，支持链式（如 `s.start.x`）；
 - 实现上记录在类型检查阶段降级为单构造器 `data`：构造 = 构造器应用，字段访问/更新 =
-  内联 `case`，所以解释器、动态 codegen（`--no-typecheck`）与 typed codegen 行为一致；
+  内联 `case`，所以解释器与 typed codegen 行为一致；
 - 字段访问/更新的 base 类型必须可推断；推断不出时报
   `cannot resolve record type ... add a type signature`，给函数参数补类型签名即可；
 - 导出遵循模块规则：`T` 只导出记录类型（构造器隐藏，跨模块不能构造/模式匹配，即抽象），
@@ -339,23 +340,21 @@ git add seed/ && git commit
   字典参数，支持跨函数传播、前向引用与递归；例如 `data Dummy deriving (Eq)` 加
   `showIt x = show x` 是合法程序（调用 `showIt 42` / `showIt "s"` 时分别传入对应
   `show` 实现）。`Eq` / `Ord` 在类型无法确定时（含 `List a` 等结构化泛型）仍回退到
-  运行时结构比较（typed 用 OCaml 结构比较，interp/dynamic 用 value 结构比较）；
+  运行时结构比较（typed 用 OCaml 结构比较，interp 用 value 结构比较）；
   `Show` / 用户 trait 的结构化泛型（如 `show (List a)`）仍不支持（只有裸类型变量
   支持字典穿参）并报错；**高阶 kind**（`Ty.TApp` + kind 元数）与**一般约束泛化**
   （trait 参数本身是类型构造器变量，如 `Monad m` 的字典穿参）已在 M11 实现；
   default 实例的可见性目前按整个程序（flatten）计算，未做 import 图级细化；
 - 求值与降级触发：只有程序里出现 trait / instance / deriving 声明（或记录等需要降级
-  的语法）时，interp 与 `--no-typecheck` 路径才会先类型检查 + 降级；只有内建
-  `show` / `==` 调用、却没有任何 trait/instance/deriving 声明的程序在上述路径保持
-  legacy（不做类型检查：此时 `show` 不可用、`String` 的 `<` / `<=` 仍是旧的仅 Int
-  运行时语义），typed 路径仍按 M10.5 规则检查（裸类型变量 `show` 可经字典穿参，
-  结构化泛型 `show` 仍报错）；上面的 `Eq` / `Ord` 结构回退同样只在触发降级后生效；
+  的语法）时，`vuna interp` 才会先类型检查 + 降级；普通程序保持 legacy 直接求值
+  （不检查，作为 `--no-typecheck` 删除后的调试入口）。typed 路径始终按 M10.5 规则
+  检查（裸类型变量 `show` 可经字典穿参，结构化泛型 `show` 仍报错）；上面的
+  `Eq` / `Ord` 结构回退同样只在触发降级后生效；
 - 命名空间与导出：trait 名在类型命名空间、方法名在值命名空间；无模块头 = 全部导出
   （含方法），显式导出列表需 `Trait(..)` 才导出方法；命名实例名按普通值名导出/限定
   （显式列表里可写 `fancy`，app 侧用 `@M.fancy` 选择）；
 - 迁移：`==` / `/=` / `<` / `<=` / `>` / `>=` 由 `Eq` / `Ord` trait 承担（删除旧的
-  `specializeCmp` 特化）；动态 codegen 的固定 `show_value` 已删除，改为按程序 data
-  声明生成 `vuna_show`。
+  `specializeCmp` 特化）；Show 由 typed codegen 按程序 data 声明生成。
 
 ### do、Monad 与 Functor（M11）
 
@@ -480,10 +479,8 @@ git add seed/ && git commit
   类型变量替换用 AVL 树（`TySubst`，O(log n) 查找）而不是关联表，避免 unify 的 O(n²)；
   loader 会把 DSig/构造器类型里的类型名解析成模块内全名（open/qualified/alias 都支持），
   因此跨模块类型检查可用；
-- `compiler/lib/Vuna/Codegen.vuna`：把 flatten 后的 program 翻译成动态 value 表示的 OCaml
-  （保留为测试/调试回退）；
 - `compiler/lib/Vuna/TypedCodegen.vuna`：typed codegen，用类型信息生成原生 OCaml 类型、
-  构造器、模式匹配、data show 与 builtins；默认 codegen。M12 新增
+  构造器、模式匹配、data show 与 builtins；是唯一 codegen 路径。M12 新增
   `generateSplitProgram`：按 vuna 模块生成逐模块 `.ml` + `.mli`（模块间用 open 链
   解析全局唯一名字；抽象类型按模块导出表生成 sig；整模块重导出用 include），
   单文件路径重构为 `genTopNames` 等子集函数，产物字节不变；分离编译预计算
@@ -495,8 +492,8 @@ git add seed/ && git commit
   模块时间戳增量重编）、包模式 `build --split` / `seed` 入口；
 - `compiler/lib/Vuna/Toml.vuna` / `Manifest.vuna` / `Pkg.vuna`：`vuna.toml` 解析、
   manifest 模型与校验、workspace/依赖 DAG/模块根解析（`Root` 的包导出限制在此计算）；
-- `compiler/lib/Vuna/Compile.vuna`：编译入口（`effectiveRoots` / `compileFile*` /
-  `checkFile*` / `programNeedsElab`），不依赖 `Vuna.Eval`；
+- `compiler/lib/Vuna/Compile.vuna`：编译入口（`effectiveRoots` / typed `compileFile*` /
+  `checkFile*`），不依赖 `Vuna.Eval`；`check*` 只做类型检查与诊断，不生成代码；
 - `compiler/lib/Vuna/CompilerCli.vuna`：编译器 CLI（compile/check/build/seed）；
   `compiler/app/Main.vuna` 是它的入口，也是 seed 闭包的根。
 
@@ -504,7 +501,8 @@ git add seed/ && git commit
 
 - `Eval.vuna`：值表示、内建函数、call-by-value 求值器与 `show`；
 - `Interp.vuna`：解释器 facade（`interpretFile` + 包感知 `...In entryPkg ...` 变体），
-  依赖 Eval，只被 CLI/REPL/test runner 使用；
+  依赖 Eval，只被 CLI/REPL/test runner 使用；普通程序保留“不检查执行”，
+  record / trait / deriving 程序先类型检查并降级；
 - `Files.vuna` / `Fmt.vuna` / `Lint.vuna` / `Repl.vuna` / `Doc.vuna` /
   `TestRunner.vuna` / `Cli.vuna`：M11.5 工具链（目录遍历、格式化、风格检查、REPL、
   文档、测试运行器、产品 CLI）；
@@ -513,34 +511,22 @@ git add seed/ && git commit
 - [app/Main.vuna](app/Main.vuna)：产品 CLI 入口，`main : IO Int`（运行时执行，
   `exit` 传递退出码）；CLI 实现在 `lib/Vuna/Cli.vuna`。`vuna build` / `--split`
   要求 `main : IO a`；纯 main 只在 `vuna interp` / `vuna test` 的调试约定下自动 show。
-  `vuna compile` 保留
-  `[--no-print] [--no-typecheck] [--typed] [--root DIR]... <entry.vuna> [out.ml]`；
-  默认跑类型检查并生成原生 OCaml typed codegen；`--no-typecheck` 关闭检查并回退
-  dynamic value codegen；`--no-print` 表示生成的程序不自动打印 `main` 的结果；
-  不带子命令时按 compile 处理，兼容旧调用；M11.5 起另有 `build/test/fmt/repl/doc`；
+  `vuna compile [--no-print] [--root DIR]... <entry.vuna> [out.ml]` 始终跑类型检查并生成
+  typed OCaml；`--no-print` 表示生成的程序不自动打印 `main` 的结果（fmt 自测等工具场景），
+  可执行程序应使用 `vuna build`。M11.5 起另有 `build/test/fmt/repl/doc`；
 - [lib/Vuna/Lint.vuna](lib/Vuna/Lint.vuna)：`vuna lint [--fix] <file.vuna>...`，首批
   两条规则 `literal-if-chain` 与 `redundant-case`；只做语法层检查，`--fix` 写回前会
   重新 `parseSource` 校验。`vuna interp` 直接调用 `interpretFile` 解释执行文件。
 
 ### codegen 的表示
 
-有两种 codegen，默认走 typed：
+只有一条 codegen（typed，M12.7 起 dynamic codegen 已删除）：
 
-- `TypedCodegen`（默认，`--typed`）：用类型信息生成原生 OCaml 类型与代码——用户
+- `TypedCodegen`：用类型信息生成原生 OCaml 类型与代码——用户
   `data` 编译成 OCaml 变体、`Int/String/Bool/List` 映射到原生类型、`case` 编译成
-  OCaml `match`、构造器直接构造变体，没有动态 `value` 包装；
-- `Codegen`（`--no-typecheck` 回退）：值统一为动态表示，生成程序入口按程序的
-  data 声明生成 `vuna_show`，打印 `vuna_show main`（不再有固定运行时 `show_value`）：
+  OCaml `match`、构造器直接构造变体，没有动态 `value` 包装。
 
-```ocaml
-type value =
-  | VInt of int
-  | VStr of string
-  | VCon of string * value list
-  | VFun of string * (value -> value)
-```
-
-两种路径都只用 OCaml 标准库，不依赖解释循环。typed codegen 的代码质量优化：
+typed codegen 只用 OCaml 标准库，不依赖解释循环。代码质量优化：
 
 - **依赖分组**：用 Kosaraju SCC 一次正向 + 一次反向 DFS 求出函数依赖分量，
   `genTop` 复杂度从 O(V²·reach) 降到 O(V+E)（自举 codegen 从 ~12s 降到 ~0.2s）；
@@ -549,19 +535,19 @@ type value =
   `bi_eq_int` / `bi_eq_str` / `bi_eq_bool` / `bi_*_int` 等单态 helper，
   避免多态 `caml_equal` / `caml_less_than`（多态函数里的比较仍保留通用 `bi_eq`）；
 - **短路**：`a && b` / `a || b` 生成 OCaml `if`，左侧能决定结果时不求值右侧；
-  解释器与动态 codegen 同样短路；
+  解释器同样短路；
 - **字符串拼接**：同层 `++` 链编译期折叠相邻字面量，3 段以上生成按序求值的
   `let` 绑定 + `String.concat "" [...]`（线性时间，不再是右嵌套 `^`）；
 - **输出收尾**：单子句全变量模式直接生成 `fun x y -> ...`（省 match/元组）、
   原子实参省略括号、零参纯值 hoist 成普通 `let`（每次引用不再重建值）；
 - **可读性**：生成代码经过轻量 pretty printer（按 `in`/`else`/行宽断行），
   长字符串按真实换行输出，避免几 KB 的单行；
-- 生成结果仍是**单个 OCaml 文件**（loader 先 flatten）；runtime 前导代码分别在
-  `Codegen.vuna` 的 `runtimeCode` 与 `TypedCodegen.vuna` 的 `runtimeCodeTyped`。
+- 生成结果仍是**单个 OCaml 文件**（loader 先 flatten）；分离编译时拆成逐模块
+  `.ml/.mli`；runtime 前导代码在 `TypedCodegen.vuna` 的 `runtimeCodeTyped`。
 
 ## 测试
 
-`test/run-tests.sh` 是 vuna 原生测试（711 checks），用 `vuna` / `vuna-seed` 驱动，
+`test/run-tests.sh` 是 vuna 原生测试（553 checks），用 `vuna` / `vuna-seed` 驱动，
 不依赖外部 vuna 实现；但运行测试需要 OCaml 编译器（`ocamlopt`）作为代码生成后端：
 
 ```console
@@ -572,7 +558,7 @@ sh test/run-tests.sh          # 需要 PATH 中有 vuna 与 vuna-seed
 
 - `corpus/run/*.vuna`：`vuna interp` 输出 vs `.out` golden；编译器生成→`ocamlopt`→运行再比对；
 - `corpus/modules/` 01–29 正例（runner glob `[012][0-9]_*`）：跨模块函数/数据/嵌套 import
-  的解释器与动态 codegen（`--no-typecheck`）结果（含多根夹具）；覆盖 M10 显式导出列表、
+  的解释器与 typed codegen 结果（含多根夹具）；覆盖 M10 显式导出列表、
   重导出、抽象类型、空导出集与包门面路径共存；20–29 补充无头模块重导出、same-target
   去重、选择性类型/构造器重导出、两级门面、qualified import 重导出、多行模块头、
   私有类型封装、`_` 私有构造器在定义模块内匹配；
@@ -581,23 +567,23 @@ sh test/run-tests.sh          # 需要 PATH 中有 vuna 与 vuna-seed
   重导出抽象性、重导出同名冲突、限定名函数当构造器模式、空导出集语义、入口文件模块头、
   导出未知名、模块名不匹配、重复导出、显式导出 `_` 名、裸 `_` 顶层名，以及缺失模块、
   跨根歧义、循环导入、未限定引用/未导入、同名不同定义歧义、未导出名字、非法模块名、
-  别名冲突、import 不传递；错误用例在 interp / 动态 codegen（`--no-typecheck`）/
-  typed codegen 三条路径都要求错误片段、不写输出文件；typed 路径同时断言非 0 退出；
-- `corpus/records/` 记录（M10.5a）：01–05 正例在 interp / 动态 codegen / typed codegen
-  三路径比对 golden；90–95 错误例三路径都要求错误片段与非 0 退出，动态/typed 还要求
+  别名冲突、import 不传递；错误用例在 interp / typed codegen 两条路径都要求错误片段、
+  不写输出文件；typed 路径同时断言非 0 退出；
+- `corpus/records/` 记录（M10.5a）：01–05 正例在 interp / typed codegen
+  两条路径比对 golden；90–95 错误例两条路径都要求错误片段与非 0 退出，typed 还要求
   不写输出文件；跨模块正例 `0*_*/`（`Point(..)` 可构造/模式匹配，`Point` 保持抽象）、
-  跨模块错误 `9*_*/`（抽象记录构造器不可见）同样覆盖三路径；
-- `corpus/traits/` trait（M10.5b/c，runner 第 22–25 段）：正例 01–13 三路径
-  （interp / 动态 codegen / typed codegen）比对 golden（含 11/12 泛型字典穿参、13
+  跨模块错误 `9*_*/`（抽象记录构造器不可见）同样覆盖两条路径；
+- `corpus/traits/` trait（M10.5b/c，runner 第 22–25 段）：正例 01–13 两条路径
+  （interp / typed codegen）比对 golden（含 11/12 泛型字典穿参、13
   多类型 default 实例）；跨模块 08 覆盖无头模块全导出（含命名实例），10 覆盖显式导出
-  `Trait(..)`；错误例 90–96、98 三路径都要求错误片段、非 0 退出、不写输出文件
+  `Trait(..)`；错误例 90–96、98 两条路径都要求错误片段、非 0 退出、不写输出文件
   （含孤儿默认、重复实例、未知 `@`、head 不符、缺/未知方法、`deriving Ord`、显式
   只写 `Trait` 不写 `(..)` 时方法不可见）；
 - `corpus/monad/`（M11，runner 第 26 段）：`do` / `>>=` / `>>` 在 Maybe/List 上的
-  正例三路径，含高阶 kind 泛型函数（`bindPair : m a -> m b -> m (Pair a b)`）与
+  正例两条路径，含高阶 kind 泛型函数（`bindPair : m a -> m b -> m (Pair a b)`）与
   kind 不符、无 Monad、do 块结尾非法、do 绑定模式非法等错误例；
 - `corpus/stdlib/`（M11，第 27 段）：`--root ../stdlib/lib` 下 stdlib 各模块与
-  do/IO 的正例三路径、错误例；另有 `test/corpus/fmt/check.sh`（第 32 段）覆盖
+  do/IO 的正例两条路径、错误例；另有 `test/corpus/fmt/check.sh`（第 32 段）覆盖
   格式化 golden、注释保留（行/块/嵌套/行尾）、行宽折行与幂等；
 - `corpus/packages/`（M11.5，第 28–29 段）：`vuna build` / `vuna test` 的
   workspace 正例（跨包 import + `[export]` + `app/Main.vuna` 入口）与缺依赖、
@@ -607,11 +593,11 @@ sh test/run-tests.sh          # 需要 PATH 中有 vuna 与 vuna-seed
 - `corpus/err/*.vuna`、`corpus/run_err/*.vuna`：解析/求值错误片段；
 - `corpus/type_ok`、`corpus/type_err`：单文件类型检查正/反例；
 - `corpus/type_modules/0*`、`9*`：跨模块类型检查正/反例；
-- `corpus/typed_ok`：`--typed` 单文件原生 OCaml 生成、编译运行与 golden 比对；
-- `corpus/modules/` 01–29 的 typed 版本：`--typed --root` 跨模块生成与运行；
+- `corpus/typed_ok`：默认 typed 单文件原生 OCaml 生成、编译运行与 golden 比对；
+- `corpus/modules/` 01–29 的 typed 版本：默认 typed + `--root` 跨模块生成与运行；
 - `corpus/lint/*.vuna`：`vuna lint` 检测 golden 与退出码；
 - `corpus/fix/*.vuna`：`vuna lint --fix` 结果、退出码与幂等性；
-- 统一 CLI：`help`、无参、旧式 compile 兼容、错误退出码、`vuna interp` 缺文件；
+- 统一 CLI：`help`、无参、子命令要求、已删除参数提示、错误退出码、`vuna interp` 缺文件；
 - `vuna-seed` 编译 `12_fact` 的种子冒烟；
 - 第 33 段（M12）：包模式分离编译——`vuna build --split` 生成文件集、`build.sh`
   构建运行与单文件输出一致、无改动不重编、touch 单个模块只重编它。
@@ -628,7 +614,7 @@ Nix 侧：
   `vuna doc`，并用 package 模式构建编译器自身；
 - `checks.seed-selfhost`（M12/M12.5）：`seed/` 构建 `vuna-seed` → 对 **compiler 包**
   分离编译得 stage 1 文件集 → 构建 stage 1 `vuna-compiler` → 再生成 stage 2 文件集，
-  `diff -r` 逐字节一致；断言 seed/stage1/stage2 都不含工具模块；
+  `diff -r` 逐字节一致；断言 seed/stage1/stage2 都不含工具模块与 dynamic codegen；
   另查增量构建（无改动不重编、touch 模块只重编它）与 `12_fact` → `120`；
 - `checks.vuna-metrics`（M12）：机器无关 codegen 指标（bytes/lines/最长行/超长行/
   `let rec`/拼接/比较特化/ctor 计数）对 **compiler 闭包** 聚合，对比
@@ -667,8 +653,8 @@ nix run .#bench -- --with-tests            # 额外跑全部 checks
 ```
 
 报告包含：三级构建性能（seed → vuna-compiler → vuna 的 ocamlopt 时间）、编译性能
-（seed/vuna 自编译 compiler 闭包与产品闭包、corpus 批量编译、tiny 程序、typed 与
-`--no-typecheck` 路径）、编译吞吐、生成产物的 bytes/lines/最长行/超长行/行尾空白、
+（seed/vuna 自编译 compiler 闭包与产品闭包、corpus 批量编译、tiny 程序）、编译吞吐、
+生成产物的 bytes/lines/最长行/超长行/行尾空白、
 codegen 健康度计数（`let rec`、`String.concat ""`、`bi_eq_int/_str/_bool`、零参 rec
 thunk）、以及 fixed point / seed 一致性 / 可选 tests 状态。`--json` 输出机器可读
 报告，`--baseline` 输出与历史报告的 delta。所有中间产物写入临时目录
@@ -686,16 +672,17 @@ nix fmt               # nixfmt-tree 格式化 .nix
 
 ## 限制与路线
 
-- 类型检查与原生 OCaml typed codegen 已默认开启；M8 完成 typed 自举，
-  `seed/` 由 typed 编译器轮换（M12 起为多文件）；dynamic codegen 保留为
-  `--no-typecheck` 的测试/调试回退路径；
+- 类型检查与原生 OCaml typed codegen 已默认开启，且是唯一 codegen 路径
+  （M12.7 删除 dynamic codegen）；M8 完成 typed 自举，`seed/` 由 typed 编译器轮换
+  （M12 起为多文件）；`vuna interp` 对普通程序保留“不检查执行”的调试语义；
 - M8c 完成 codegen 性能与输出质量收尾：Kosaraju SCC、类型特化比较、`&&`/`||`
   短路、`++` 折叠与线性拼接、零参纯值 hoist、pretty printer；自举 codegen
   从 ~12s 降到 ~2s 量级；构建加 `-g` 并对 warning 39（unused rec）设 warn-error；
 - M12 起构建默认走分离编译（每 vuna 模块一个 OCaml 模块 + `build.sh` 增量构建）；
-  typed codegen 的**单文件**路径仍保留：解释器/动态回退、以及分离编译不支持的构造
-  （选择性重导出、部分构造器导出、dict 约束泛化等）会回退单文件，两者输出语义一致；
-  优化仍归 ocamlopt（M12 不做 vuna typed IR）；runtime prelude 在分离编译中完整保留；
+  typed codegen 的**单文件**路径仍保留：`vuna compile`、测试/调试与分离编译不支持的
+  构造使用单文件产物；`vuna build` 仍是单文件，`vuna build --split` 遇到不支持构造
+  直接报错（不回退）；优化仍归 ocamlopt（M12 不做 vuna typed IR）；runtime prelude
+  在分离编译中完整保留；
 - `do` / Monad / IO 组合子已在 M11 实现；隐式参数 / 依赖类型仍未实现；
 - M12 限制：分离编译的*生成*阶段仍是整程序分析，但经过 M12.5 性能修复后与单文件
   编译同量级（约 2s）；增量收益体现在 ocamlopt 只重编译受影响模块（`build.sh`）；
@@ -740,7 +727,7 @@ nix fmt               # nixfmt-tree 格式化 .nix
   解析/IO 错误 2）；
 - 种子轮换是手动流程（发版/不兼容变更时）；日常工具链改动不需要 rotation；
 - `test/run-tests.sh` 目前以 golden 比对为主，后续可以补充更多随机/差分测试；
-- dynamic codegen 的删除计划（M12.7）与依赖类型主线（M13–M18）见
+- M12.7 已完成：删除 dynamic codegen 与旧开关；依赖类型主线（M13–M18）见
   [docs/roadmap.md](docs/roadmap.md)。
 
 ## 历史
@@ -789,4 +776,8 @@ nix fmt               # nixfmt-tree 格式化 .nix
   效果 API 直接 IO 化（`print : String -> IO Int`、`getArgs : IO (List String)` 等），
   内部由不导出的 `prim_*` 原语实现；
   seed 51 个文件 / ~0.86 MB；`vuna interp`/`vuna test` 保留纯 main 结果 show 的调试约定；
+- M12.7：删除 dynamic codegen（`Vuna.Codegen`）与 `--no-typecheck` / `--typecheck` /
+  `--typed` / `build --no-print` / `--out` / 裸 compile 回退；typed 成为唯一 codegen，
+  `vuna check` 改为纯类型检查（单次 typecheck）、arity 诊断统一到 typecheck，
+  CLI 要求显式子命令、默认模块根改为当前包；seed 49 个文件 / ~0.81 MB；
 - 早期 OCaml 外部编译器 `vunax` 已完成使命并删除。

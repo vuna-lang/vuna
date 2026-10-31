@@ -106,7 +106,7 @@ foldApply decls env sp fv (Cons arg rest) =
 
 evalLet decls env sp rec_ binds body =
   if rec_ && recursiveBindings binds then
-    errAt sp "recursive let (where) bindings are only supported by the compiler (use --typecheck); the interpreter evaluates them sequentially"
+    errAt sp "recursive let (where) bindings are only supported by the compiler; the interpreter evaluates them sequentially"
   else
     andThen (evalBindings decls env sp binds) (\env2 => evalExpr decls env2 body)
 

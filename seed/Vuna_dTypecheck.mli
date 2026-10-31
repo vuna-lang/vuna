@@ -16,7 +16,6 @@ open Vuna_dLexer
 open Vuna_dParser
 open Vuna_dBuiltins
 open Vuna_dLoader
-open Vuna_dCodegen
 type   t_Vuna_dTypecheck_dTy =
     C_Vuna_dTypecheck_dTVar of (int)
   | C_Vuna_dTypecheck_dTCon of (string) * ((t_Vuna_dTypecheck_dTy) list)
@@ -37,11 +36,10 @@ and t_Vuna_dTypecheck_dTraitInst
 and t_Vuna_dTypecheck_dTraitCtx
 and t_Vuna_dTypecheck_dDataShape
 val v_Vuna_dTypecheck_dlookupScheme : (string) -> ((((string, t_Vuna_dTypecheck_dScheme) t_Vuna_dPair_dPair) list) -> ((t_Vuna_dTypecheck_dScheme) t_Vuna_dMaybe_dMaybe))
+val v_Vuna_dTypecheck_dcheckClauseArities : ((t_Vuna_dAst_dDecl) list) -> (((string) list) t_Vuna_dResult_dResult)
 val v_Vuna_dTypecheck_dcheckProgramInfoElab : ((t_Vuna_dAst_dDecl) list) -> (((((string, t_Vuna_dTypecheck_dScheme) t_Vuna_dPair_dPair) list, (t_Vuna_dAst_dDecl) list) t_Vuna_dPair_dPair) t_Vuna_dResult_dResult)
 val v_Vuna_dTypecheck_dcheckProgramInfoElabOwners : ((t_Vuna_dAst_dDecl) list) -> ((((((string, t_Vuna_dTypecheck_dScheme) t_Vuna_dPair_dPair) list, (t_Vuna_dAst_dDecl) list) t_Vuna_dPair_dPair, ((string, string) t_Vuna_dPair_dPair) list) t_Vuna_dPair_dPair) t_Vuna_dResult_dResult)
-val v_Vuna_dTypecheck_dcheckProgramInfo : ((t_Vuna_dAst_dDecl) list) -> ((((string, t_Vuna_dTypecheck_dScheme) t_Vuna_dPair_dPair) list) t_Vuna_dResult_dResult)
-val v_Vuna_dTypecheck_dcheckProgram : ((t_Vuna_dAst_dDecl) list) -> (((string) list) t_Vuna_dResult_dResult)
-val v_Vuna_dTypecheck_dexhaustiveWarnings : ((t_Vuna_dAst_dDecl) list) -> ((string) list)
+val v_Vuna_dTypecheck_dexhaustiveWarningsFor : (((string, t_Vuna_dTypecheck_dScheme) t_Vuna_dPair_dPair) list) -> (((t_Vuna_dAst_dDecl) list) -> ((string) list))
 val v_vuna_ueq_uVuna_uTypecheck_uTy : (t_Vuna_dTypecheck_dTy) -> ((t_Vuna_dTypecheck_dTy) -> (bool))
 val v_vuna_uneq_uVuna_uTypecheck_uTy : (t_Vuna_dTypecheck_dTy) -> ((t_Vuna_dTypecheck_dTy) -> (bool))
 val v_vuna_ueq_uVuna_uTypecheck_uScheme : (t_Vuna_dTypecheck_dScheme) -> ((t_Vuna_dTypecheck_dScheme) -> (bool))

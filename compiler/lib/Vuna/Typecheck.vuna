@@ -1,4 +1,4 @@
-module Vuna.Typecheck (Ty, TVar, TCon, TFun, TApp, Scheme, lookupScheme, checkProgramInfoElab, checkProgramInfoElabOwners, checkProgramInfo, checkProgram, exhaustiveWarnings) where
+module Vuna.Typecheck (Ty, TVar, TCon, TFun, TApp, Scheme, lookupScheme, checkClauseArities, checkProgramInfoElab, checkProgramInfoElabOwners, exhaustiveWarningsFor) where
 
 -- Vuna.Typecheck：core-v0 的 Hindley-Milner 风格类型检查。
 -- M7b 先覆盖单文件程序与显式顶层签名；模块类型名解析与自检在 M7c 处理。
@@ -2589,13 +2589,34 @@ totalConstraints Nil = 0
 totalConstraints (Cons (Pair name (Scheme qs cons ty)) rest) =
   length cons + totalConstraints rest
 
+-- 子句元数一致性：同一函数的各子句必须参数个数相同。
+-- 放在类型推断之前，保证 interp / typed / check 给出同一条明确诊断。
+checkClauseArities : List Decl -> Result (List String)
+checkClauseArities decls = checkClauseAritiesFor (functionNames decls) decls
+
+checkClauseAritiesFor Nil decls = Ok Nil
+checkClauseAritiesFor (Cons name rest) decls =
+  case clausesFor decls name of
+    Nil => checkClauseAritiesFor rest decls
+    Cons (Pair pats body) _ =>
+      case firstArityMismatch (length pats) (clausesFor decls name) of
+        Nothing => checkClauseAritiesFor rest decls
+        Just sp => Err (showSpanLoc sp ++ ": clauses for " ++ name ++ " have different arities")
+
+firstArityMismatch expected Nil = Nothing
+firstArityMismatch expected (Cons (Pair pats body) rest) =
+  if length pats == expected then firstArityMismatch expected rest
+  else Just (exprSpan body)
+
 checkProgramInfoElab : List Decl -> Result (Pair (List (Pair String Scheme)) (List Decl))
 checkProgramInfoElab decls0 =
-  andThen (checkProgramInfoElabImpl decls0) (\p => Ok (firstOf p))
+  andThen (checkClauseArities decls0) (\_ =>
+    andThen (checkProgramInfoElabImpl decls0) (\p => Ok (firstOf p)))
 
 -- 与 checkProgramInfoElab 相同，但额外返回生成声明的归属模块（M12 分离编译）。
 checkProgramInfoElabOwners : List Decl -> Result (Pair (Pair (List (Pair String Scheme)) (List Decl)) (List (Pair String String)))
-checkProgramInfoElabOwners decls0 = checkProgramInfoElabImpl decls0
+checkProgramInfoElabOwners decls0 =
+  andThen (checkClauseArities decls0) (\_ => checkProgramInfoElabImpl decls0)
 
 checkProgramInfoElabImpl decls0 =
   case extractRecords decls0 of
@@ -2635,23 +2656,13 @@ checkProgramInfoElabImpl decls0 =
                                                  Ok (Pair elab3 (Pair g3 stC)) =>
                                                    Ok (Pair (Pair (finalizeGlobals (substOf stC) g3) (rebuildDecls decls2 elab3)) owners)
 
-checkProgramInfo : List Decl -> Result (List (Pair String Scheme))
-checkProgramInfo decls =
-  andThen (checkProgramInfoElab decls) (\p => Ok (firstOf p))
-
-checkProgram : List Decl -> Result (List String)
-checkProgram decls =
-  andThen (checkProgramInfo decls) (\_ => Ok Nil)
-
 -- ---------------------------------------------------------------
 -- 穷尽性 / 冗余诊断（非致命警告；typecheck 成功后单独运行）
 -- ---------------------------------------------------------------
 
-exhaustiveWarnings : List Decl -> List String
-exhaustiveWarnings decls =
-  case checkProgramInfo decls of
-    Ok globals => programWarnings globals decls
-    Err _ => Nil
+-- 复用已经算好的 globals，避免 check 路径重复跑一遍 typecheck。
+exhaustiveWarningsFor : List (Pair String Scheme) -> List Decl -> List String
+exhaustiveWarningsFor globals decls = programWarnings globals decls
 
 programWarnings globals decls =
   concatMap (funWarnings globals decls) (functionNames decls)

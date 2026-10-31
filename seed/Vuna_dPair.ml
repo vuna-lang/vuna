@@ -15,8 +15,8 @@ let v_vuna_ueq_uVuna_uPair_uPair = fun x y -> (match x with
   | C_Vuna_dPair_dPair (v0, v1) -> (match y with
   | C_Vuna_dPair_dPair (w0, w1) -> (if (v_vuna_ueq_ugeneric v0 w0) then (v_vuna_ueq_ugeneric v1 w1) else false)
   | _ -> v_vuna_ueq_uint 0 1
-  | _ -> vuna_fail "<generated>" 481 27 ("case pattern match failure"))
+  | _ -> vuna_fail "<generated>" 468 27 ("case pattern match failure"))
   | _ -> v_vuna_ueq_uint 0 1
-  | _ -> vuna_fail "<generated>" 480 30 ("case pattern match failure"))
+  | _ -> vuna_fail "<generated>" 467 30 ("case pattern match failure"))
 
 let v_vuna_uneq_uVuna_uPair_uPair = fun x y -> if v_vuna_ueq_uVuna_uPair_uPair x y then v_vuna_ueq_uint 0 1 else v_vuna_ueq_uint 0 0

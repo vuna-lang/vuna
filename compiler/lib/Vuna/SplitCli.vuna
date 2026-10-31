@@ -3,8 +3,8 @@ module Vuna.SplitCli (SplitInput, buildSplit, seedSplit) where
 -- Vuna.SplitCli：包模式的分离编译入口（M12）。
 --   vuna build --split OUTDIR [DIR]   → 包编译成逐模块 OCaml 源码 + build.sh（写到 OUTDIR）
 --   vuna seed OUTDIR                  → 同上（生成 seed 文件集，供种子轮换）
--- 若程序含分离编译暂不支持的构造（如需要 trait 字典参数的泛型函数），返回 Err，
--- 由 CLI 回退到单文件 codegen。
+-- 若程序含分离编译暂不支持的构造（如需要 trait 字典参数的泛型函数），返回 Err；
+-- split 本身不回退，调用方可用 `vuna build` 的单文件 typed 路径。
 
 import Vuna.Base
 import Vuna.Ast

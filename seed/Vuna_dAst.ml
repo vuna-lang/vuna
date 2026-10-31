@@ -276,29 +276,29 @@ let v_vuna_ueq_uVuna_uAst_uPat = fun x y -> (match x with
   | C_Vuna_dAst_dPVar (v0, v1) -> (match y with
   | C_Vuna_dAst_dPVar (w0, w1) -> (if (v_vuna_ueq_ustr v0 w0) then (v_vuna_ueq_uVuna_uBase_uSpan v1 w1) else false)
   | _ -> v_vuna_ueq_uint 0 1
-  | _ -> vuna_fail "<generated>" 276 26 ("case pattern match failure"))
+  | _ -> vuna_fail "<generated>" 263 26 ("case pattern match failure"))
   | C_Vuna_dAst_dPWild (v0) -> (match y with
   | C_Vuna_dAst_dPWild (w0) -> v_vuna_ueq_uVuna_uBase_uSpan v0 w0
   | _ -> v_vuna_ueq_uint 0 1
-  | _ -> vuna_fail "<generated>" 279 24 ("case pattern match failure"))
+  | _ -> vuna_fail "<generated>" 266 24 ("case pattern match failure"))
   | C_Vuna_dAst_dPCon (v0, v1, v2) -> (match y with
   | C_Vuna_dAst_dPCon (w0, w1, w2) -> (if ((if (v_vuna_ueq_ustr v0 w0) then (v_vuna_ueq_uVuna_uList_uList v1 w1) else false)) then (v_vuna_ueq_uVuna_uBase_uSpan v2 w2) else false)
   | _ -> v_vuna_ueq_uint 0 1
-  | _ -> vuna_fail "<generated>" 282 29 ("case pattern match failure"))
+  | _ -> vuna_fail "<generated>" 269 29 ("case pattern match failure"))
   | C_Vuna_dAst_dPInt (v0, v1) -> (match y with
   | C_Vuna_dAst_dPInt (w0, w1) -> (if (v_vuna_ueq_uint v0 w0) then (v_vuna_ueq_uVuna_uBase_uSpan v1 w1) else false)
   | _ -> v_vuna_ueq_uint 0 1
-  | _ -> vuna_fail "<generated>" 285 26 ("case pattern match failure"))
+  | _ -> vuna_fail "<generated>" 272 26 ("case pattern match failure"))
   | C_Vuna_dAst_dPStr (v0, v1) -> (match y with
   | C_Vuna_dAst_dPStr (w0, w1) -> (if (v_vuna_ueq_ustr v0 w0) then (v_vuna_ueq_uVuna_uBase_uSpan v1 w1) else false)
   | _ -> v_vuna_ueq_uint 0 1
-  | _ -> vuna_fail "<generated>" 288 26 ("case pattern match failure"))
+  | _ -> vuna_fail "<generated>" 275 26 ("case pattern match failure"))
   | C_Vuna_dAst_dPRecord (v0, v1, v2) -> (match y with
   | C_Vuna_dAst_dPRecord (w0, w1, w2) -> (if ((if (v_vuna_ueq_ustr v0 w0) then (v_vuna_ueq_uVuna_uList_uList v1 w1) else false)) then (v_vuna_ueq_uVuna_uBase_uSpan v2 w2) else false)
   | _ -> v_vuna_ueq_uint 0 1
-  | _ -> vuna_fail "<generated>" 291 32 ("case pattern match failure"))
+  | _ -> vuna_fail "<generated>" 278 32 ("case pattern match failure"))
   | _ -> v_vuna_ueq_uint 0 1
-  | _ -> vuna_fail "<generated>" 275 28 ("case pattern match failure"))
+  | _ -> vuna_fail "<generated>" 262 28 ("case pattern match failure"))
 
 let v_vuna_uneq_uVuna_uAst_uPat = fun x y -> if v_vuna_ueq_uVuna_uAst_uPat x y then v_vuna_ueq_uint 0 1 else v_vuna_ueq_uint 0 0
 
@@ -306,23 +306,23 @@ let v_vuna_ushow_uVuna_uAst_uExportItem = fun x -> (match x with
   | C_Vuna_dAst_dXBare (v0, v1) -> (let vuna_cat0' = ("(XBare ") in (let vuna_cat1' = (v_vuna_ushow_ustring v0) in (let vuna_cat2' = (" ") in (let vuna_cat3' = (v_vuna_ushow_uVuna_uBase_uSpan v1) in (let vuna_cat4' = (")") in String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'; vuna_cat3'; vuna_cat4'])))))
   | C_Vuna_dAst_dXTypeAll (v0, v1) -> (let vuna_cat0' = ("(XTypeAll ") in (let vuna_cat1' = (v_vuna_ushow_ustring v0) in (let vuna_cat2' = (" ") in (let vuna_cat3' = (v_vuna_ushow_uVuna_uBase_uSpan v1) in (let vuna_cat4' = (")") in String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'; vuna_cat3'; vuna_cat4'])))))
   | C_Vuna_dAst_dXModule (v0, v1) -> (let vuna_cat0' = ("(XModule ") in (let vuna_cat1' = (v_vuna_ushow_ustring v0) in (let vuna_cat2' = (" ") in (let vuna_cat3' = (v_vuna_ushow_uVuna_uBase_uSpan v1) in (let vuna_cat4' = (")") in String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'; vuna_cat3'; vuna_cat4'])))))
-  | _ -> vuna_fail "<generated>" 299 35 ("case pattern match failure"))
+  | _ -> vuna_fail "<generated>" 286 35 ("case pattern match failure"))
 
 let v_vuna_ueq_uVuna_uAst_uExportItem = fun x y -> (match x with
   | C_Vuna_dAst_dXBare (v0, v1) -> (match y with
   | C_Vuna_dAst_dXBare (w0, w1) -> (if (v_vuna_ueq_ustr v0 w0) then (v_vuna_ueq_uVuna_uBase_uSpan v1 w1) else false)
   | _ -> v_vuna_ueq_uint 0 1
-  | _ -> vuna_fail "<generated>" 306 27 ("case pattern match failure"))
+  | _ -> vuna_fail "<generated>" 293 27 ("case pattern match failure"))
   | C_Vuna_dAst_dXTypeAll (v0, v1) -> (match y with
   | C_Vuna_dAst_dXTypeAll (w0, w1) -> (if (v_vuna_ueq_ustr v0 w0) then (v_vuna_ueq_uVuna_uBase_uSpan v1 w1) else false)
   | _ -> v_vuna_ueq_uint 0 1
-  | _ -> vuna_fail "<generated>" 309 30 ("case pattern match failure"))
+  | _ -> vuna_fail "<generated>" 296 30 ("case pattern match failure"))
   | C_Vuna_dAst_dXModule (v0, v1) -> (match y with
   | C_Vuna_dAst_dXModule (w0, w1) -> (if (v_vuna_ueq_ustr v0 w0) then (v_vuna_ueq_uVuna_uBase_uSpan v1 w1) else false)
   | _ -> v_vuna_ueq_uint 0 1
-  | _ -> vuna_fail "<generated>" 312 29 ("case pattern match failure"))
+  | _ -> vuna_fail "<generated>" 299 29 ("case pattern match failure"))
   | _ -> v_vuna_ueq_uint 0 1
-  | _ -> vuna_fail "<generated>" 305 35 ("case pattern match failure"))
+  | _ -> vuna_fail "<generated>" 292 35 ("case pattern match failure"))
 
 let v_vuna_uneq_uVuna_uAst_uExportItem = fun x y -> if v_vuna_ueq_uVuna_uAst_uExportItem x y then v_vuna_ueq_uint 0 1 else v_vuna_ueq_uint 0 0
 
@@ -330,9 +330,9 @@ let v_vuna_ueq_uVuna_uAst_uModDecl = fun x y -> (match x with
   | C_Vuna_dAst_dModDecl (v0, v1, v2, v3) -> (match y with
   | C_Vuna_dAst_dModDecl (w0, w1, w2, w3) -> (if ((if ((if (v_vuna_ueq_ustr v0 w0) then (v_vuna_ueq_ubool v1 w1) else false)) then (v_vuna_ueq_uVuna_uList_uList v2 w2) else false)) then (v_vuna_ueq_uVuna_uBase_uSpan v3 w3) else false)
   | _ -> v_vuna_ueq_uint 0 1
-  | _ -> vuna_fail "<generated>" 321 35 ("case pattern match failure"))
+  | _ -> vuna_fail "<generated>" 308 35 ("case pattern match failure"))
   | _ -> v_vuna_ueq_uint 0 1
-  | _ -> vuna_fail "<generated>" 320 32 ("case pattern match failure"))
+  | _ -> vuna_fail "<generated>" 307 32 ("case pattern match failure"))
 
 let v_vuna_uneq_uVuna_uAst_uModDecl = fun x y -> if v_vuna_ueq_uVuna_uAst_uModDecl x y then v_vuna_ueq_uint 0 1 else v_vuna_ueq_uint 0 0
 
@@ -340,8 +340,8 @@ let v_vuna_ueq_uVuna_uAst_uImport = fun x y -> (match x with
   | C_Vuna_dAst_dImport (v0, v1, v2, v3) -> (match y with
   | C_Vuna_dAst_dImport (w0, w1, w2, w3) -> (if ((if ((if (v_vuna_ueq_ustr v0 w0) then (v_vuna_ueq_ubool v1 w1) else false)) then (v_vuna_ueq_uVuna_uMaybe_uMaybe v2 w2) else false)) then (v_vuna_ueq_uVuna_uBase_uSpan v3 w3) else false)
   | _ -> v_vuna_ueq_uint 0 1
-  | _ -> vuna_fail "<generated>" 330 34 ("case pattern match failure"))
+  | _ -> vuna_fail "<generated>" 317 34 ("case pattern match failure"))
   | _ -> v_vuna_ueq_uint 0 1
-  | _ -> vuna_fail "<generated>" 329 31 ("case pattern match failure"))
+  | _ -> vuna_fail "<generated>" 316 31 ("case pattern match failure"))
 
 let v_vuna_uneq_uVuna_uAst_uImport = fun x y -> if v_vuna_ueq_uVuna_uAst_uImport x y then v_vuna_ueq_uint 0 1 else v_vuna_ueq_uint 0 0

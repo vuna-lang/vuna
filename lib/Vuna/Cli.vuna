@@ -5,6 +5,8 @@ module Vuna.Cli (runCli) where
 -- 编译器命令（compile / check / build / seed）由 Vuna.CompilerCli 实现，
 -- 这里只做 in-process 分发；工具命令（lint / interp / test / fmt / repl / doc）
 -- 在本包实现。app/Main.vuna 仍然只是 `main = exit (runCli (getArgs))`。
+--
+-- 每个命令都必须显式书写；不再支持“无子命令 = compile”的旧式回退。
 
 import Vuna.Base
 import Vuna.Pkg
@@ -25,12 +27,15 @@ toolUsageLines prog =
   ++ "  " ++ prog ++ " test [DIR]                           运行包内 test/*.vuna（main : String，空串通过）\n"
   ++ "  " ++ prog ++ " fmt [--check] [PATH]...              格式化（PATH 可为文件或目录；省略 = workspace 源码目录）\n"
   ++ "  " ++ prog ++ " repl [--root DIR]...                 交互式 REPL\n"
-  ++ "  " ++ prog ++ " doc [DIR] [OUT]                      生成 API 文档（默认 OUT=DIR/docs/api.md）\n"
+  ++ "  " ++ prog ++ " doc [DIR [OUT]]                      生成 API 文档（默认 OUT=DIR/docs/api.md）\n"
 
 usageFor prog = "usage:\n" ++ compilerUsageLines prog ++ toolUsageLines prog
 
 runCli : List String -> Int
 runCli args =
+  if anyHelp args then help else runCli1 args
+
+runCli1 args =
   case args of
     Nil => usageError
     Cons arg rest =>
@@ -46,12 +51,21 @@ runCli args =
         "repl" => replArgs rest
         "doc" => docArgs rest
         "help" => help
-        "--help" => help
-        _ => runCompilerCliFor "vuna" args
+        _ =>
+          if startsWith "-" arg then runCompilerCliFor "vuna" args
+          else unknownCommand "vuna" arg
+
+anyHelp : List String -> Bool
+anyHelp Nil = False
+anyHelp (Cons arg rest) =
+  if arg == "-h" || arg == "--help" then True else anyHelp rest
 
 help = let _ = print (usageFor "vuna") in 0
 
 usageError = let _ = print (usageFor "vuna") in 2
+
+unknownCommand prog arg =
+  let _ = print ("error: unknown command `" ++ arg ++ "`\n" ++ "run `" ++ prog ++ " help`\n") in 2
 
 -- ---------------------------------------------------------------
 -- interp
@@ -62,7 +76,9 @@ interpArgs args = interpParse Nil args
 interpParse roots args =
   case args of
     Cons "--root" rest => rootArg roots rest (\roots2, rest2 => interpParse roots2 rest2)
-    Cons path Nil => interpEmit (effectiveRoots roots) path
+    Cons path Nil =>
+      if startsWith "-" path then usageError
+      else interpEmit (effectiveRoots roots) path
     _ => usageError
 
 rootArg roots rest k =
@@ -82,8 +98,8 @@ interpEmit roots path =
 testArgs args =
   case args of
     Nil => testRun "."
-    Cons dir Nil => testRun dir
-    Cons "--root" rest => usageError
+    Cons dir Nil =>
+      if startsWith "-" dir then usageError else testRun dir
     _ => usageError
 
 testRun dir =
@@ -103,7 +119,9 @@ fmtParse check paths args =
     Cons arg rest =>
       case arg of
         "--check" => fmtParse True paths rest
-        _ => fmtParse check (append paths (Cons arg Nil)) rest
+        _ =>
+          if startsWith "-" arg then usageError
+          else fmtParse check (append paths (Cons arg Nil)) rest
 
 fmtRun check Nil = fmtFiles check (fmtDefaultTargets) 0
 fmtRun check paths = fmtFiles check (concatMap expandPath paths) 0
@@ -169,8 +187,10 @@ replParse roots args =
 docArgs args =
   case args of
     Nil => docRun "." "docs/api.md"
-    Cons dir Nil => docRun dir (docDefaultOut dir)
-    Cons dir (Cons out Nil) => docRun dir out
+    Cons dir Nil =>
+      if startsWith "-" dir then usageError else docRun dir (docDefaultOut dir)
+    Cons dir (Cons out Nil) =>
+      if startsWith "-" dir || startsWith "-" out then usageError else docRun dir out
     _ => usageError
 
 docDefaultOut dir =

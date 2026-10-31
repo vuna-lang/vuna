@@ -5,10 +5,35 @@ module Vuna.TypedCodegen (generateProgramTyped, generateProgramTypedExec, genera
 -- 模式匹配与 builtins；main 的 show 暂支持 Int/String/Bool/List。
 import Vuna.Base
 import Vuna.Ast
-import Vuna.Codegen
 import Vuna.Typecheck
 import Vuna.Loader
 import Vuna.Split
+
+-- OCaml 标识符 / 字符串字面量转义（原 Vuna.Codegen 的共享 helper；
+-- dynamic codegen 删除后并入 typed codegen）。
+sanitizeChar c =
+  if c == 46 then Cons 95 (Cons 100 Nil)
+  else if c == 95 then Cons 95 (Cons 117 Nil)
+  else if c == 39 then Cons 95 (Cons 112 Nil)
+  else Cons c Nil
+
+sanitizeName name = strPack (concatMap sanitizeChar (strUnpack name))
+
+ocamlPad3 s =
+  if strLength s == 1 then "00" ++ s
+  else if strLength s == 2 then "0" ++ s
+  else s
+
+ocamlEscapeChar c =
+  if c == 34 then Cons 92 (Cons 34 Nil)
+  else if c == 92 then Cons 92 (Cons 92 Nil)
+  else if c == 10 then Cons 92 (Cons 110 Nil)
+  else if c == 9 then Cons 92 (Cons 116 Nil)
+  else if c == 13 then Cons 92 (Cons 114 Nil)
+  else if c >= 32 && c <= 126 then Cons c Nil
+  else strUnpack ("\\" ++ ocamlPad3 (strFromInt c))
+
+ocamlString s = "\"" ++ strPack (concatMap ocamlEscapeChar (strUnpack s)) ++ "\""
 
 joinWith sep Nil = ""
 joinWith sep (Cons x Nil) = x
@@ -1103,7 +1128,7 @@ typedMainSuffix decls showMain printResult =
 
 -- main : IO a 的两种执行方式：
 --   exec（vuna build / vuna seed）：执行动作，忽略结果（退出码由 exitIO 控制）；
---   permissive（--typed / interp / test）：执行动作并 show 结果，保持测试/调试输出。
+--   permissive（compile / interp / test）：执行动作并 show 结果，保持测试/调试输出。
 isIOType ty =
   case ty of
     TCon n args => lastName n == "IO"
@@ -1220,8 +1245,8 @@ generateProgramTypedMode decls globals printResult exec =
 generateProgramTyped decls globals printResult =
   generateProgramTypedMode decls globals printResult False
 
-generateProgramTypedExec decls globals printResult =
-  generateProgramTypedMode decls globals printResult True
+generateProgramTypedExec decls globals =
+  generateProgramTypedMode decls globals False True
 -- ---------------------------------------------------------------
 -- M12-A：分离编译（逐 vuna 模块生成 OCaml 模块）
 -- 模块 .ml/.mli 的顺序 = import 拓扑序（依赖先）；每个 .ml 先 open Vuna_runtime，

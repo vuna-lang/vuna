@@ -16,7 +16,6 @@ open Vuna_dLexer
 open Vuna_dParser
 open Vuna_dBuiltins
 open Vuna_dLoader
-open Vuna_dCodegen
 open Vuna_dTypecheck
 open Vuna_dSplit
 open Vuna_dTypedCodegen

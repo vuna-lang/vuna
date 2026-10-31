@@ -18,7 +18,6 @@ modules = [
   "Vuna.Pkg",
   "Vuna.Loader",
   "Vuna.Typecheck",
-  "Vuna.Codegen",
   "Vuna.TypedCodegen",
   "Vuna.Split",
   "Vuna.SplitCli",

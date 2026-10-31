@@ -30,6 +30,7 @@
 - M11.6：fmt 完善——注释保留与 100 列行宽折行。
 - M12.5：工具链与自举边界拆分——编译器独立为成员包 `vuna-compiler`，seed 只含编译器入口闭包（63 → 49 个文件），工具链移出 TCB；同期修复编译性能（AVL 类型替换 / 路由表 / 快速 seed 构建，compiler 闭包 build --split ~32s → ~2s）。
 - M12.6：main / IO 语义——可执行入口 `main : IO a` 由运行时执行（无公开 runner），用户包与 `vuna interp`/`--root` 入口都不能直接调用 effectful 内建（只能经 `Vuna.IO`）；IO 组合统一走 Functor/Monad trait（`fmap`/`bind`/`pure`、`>>=`、`do`），效果 API 直接 IO 化（print/getArgs/readFile 等返回 IO，内部 prim_*）；seed 51 个文件 / ~0.86 MB；`vuna interp` / `vuna test` 保留纯 main 结果 show 的调试约定。
+- M12.7：DT 前置清理——删除 dynamic codegen（`Vuna.Codegen`）与 `--no-typecheck` / `--typecheck` / `--typed` / `build --no-print` / `--out` / 裸 compile 回退，typed 成为唯一 codegen；`check` 改为纯类型检查（单次 typecheck），clause arity 诊断统一到 typecheck；默认模块根改为当前包；seed 49 个文件 / ~0.81 MB。
 
 ## 当前硬约束
 
@@ -37,50 +38,26 @@
 2. seed rotation 后 stage 1 与 stage 2 必须字节一致；
 3. `test/run-tests.sh`、`nix build`、`nix flake check` 必须保持通过；
 4. **seed 只含 compiler 包的入口闭包**；工具链（fmt/lint/repl/doc/test、未来的 LSP/package manager）不进入 TCB；
-5. M12.7 完成后不再保留 dynamic codegen；HM 回归路径是 **interp + typed + split**，DT 主路径是 **core evaluator + typed**，DT 不承诺 dynamic codegen；
+5. 已不再保留 dynamic codegen；HM 回归路径是 **interp + typed + split**，DT 主路径是 **core evaluator + typed**；
 6. 新增语法先以**旧种子可编译**的形式落地，rotation 之后才在编译器源码中使用；每阶段保持旧 HM 回归。
 
 ## 路线目标：依赖类型
 
 - **终态**：Idris2 风格的完整依赖类型——宇宙、Pi、索引归纳族、依赖模式匹配、隐式参数、接口、洞、终止性/覆盖性、擦除，并能用 vuna 自己写编译器。
 - **迁移方式**：渐进/双路径。新增核心类型论（Core TT）与精化器（Elaborator），与现有 HM 检查器并存；HM 代码继续走原路径，DT 代码走新路径，逐步统一，M18 再把编译器本体迁到 DT。**不做一次性全量重写**——那会直接破坏自举、seed 和现有测试。
-- **兼容性**：现有 trait / 记录 / 模块 / 包 / IO / 工具链继续可用；旧 HM 测试与既有路径（M12.7 后为 interp + typed + split）不得回归。
+- **兼容性**：现有 trait / 记录 / 模块 / 包 / IO / 工具链继续可用；旧 HM 测试与既有路径（interp + typed + split）不得回归。
 - **非目标（当前）**：证明助手级 tactic/自动化；线性类型；独立 GC 与多后端优先于 DT 核心；大型标准库扩张优先于类型核心。
 - **成本边界**：每阶段过 `nix flake check`（含 `seed-selfhost`、`vuna-metrics`）；HM 编译时间不回归；DT 精化时间有基准记录。
 
 ## 阶段共同门槛
 
 - `nix flake check`（vuna-tests / vuna-package / vuna-metrics / vuna-typecheck / vuna-lint / seed-selfhost / fixed-point）通过。
-- 旧 HM 代码零回归：M12.7 后为 interp + typed + split 三路径；新增 DT 语法的 interp 覆盖按阶段能力补齐，例外在文档中显式记录。
+- 旧 HM 代码零回归：interp + typed + split 三路径；新增 DT 语法的 interp 覆盖按阶段能力补齐，例外在文档中显式记录。
 - DT 代码：核心求值器与 typed codegen 语义一致；`build --split` 在 M17 前允许单文件回退。
 - 当前种子能编译当前源码；rotation 后 stage1 == stage2；seed 仍只含 compiler 包闭包。
 - 编译器自检通过；新增阶段更新 README 限制/历史与 roadmap 完成摘要；M18 起编译器逐步 dogfooding。
 
 ## 下一步 / 待办
-
-### M12.7：移除 dynamic codegen（DT 前置清理）
-
-**目标**：删除 dynamic codegen 与 `--no-typecheck` / `--typecheck` 旧语义，只保留 typed codegen；缩小 TCB/seed，为依赖类型清掉第二条代码生成路径。
-
-dynamic codegen 是 M4/M8 时期的参考实现与 `--no-typecheck` 调试回退；typed 已是默认且成熟，它只剩「测试差分」与「不检查编译」两个可替代用途（前者可由 interp↔typed 差分承担，后者可用 `vuna interp`），且与 DT 语义不兼容。**不建长期维护分支**：保留 archive tag/commit hash 即可，需要时从 git 历史恢复或做短期实验分支。
-
-**范围**：
-
-- 删除 `compiler/lib/Vuna/Codegen.vuna`；把 `sanitizeName` / `ocamlString` 移到 `compiler/lib/Vuna/Base.vuna`（或 `TypedCodegen` 本地），更新 `TypedCodegen` 的 import。
-- `compiler/lib/Vuna/Compile.vuna`：删除 `compileFile` / `compileFileChecked` / `compileFileIn` / `compileFileCheckedIn` 与 `import Vuna.Codegen`；保留 `compileFileTyped*` 与 `checkFile*`；`checkFileIn` 继续服务 `vuna check`。
-- `compiler/lib/Vuna/CompilerCli.vuna`：usage 移除 `--no-typecheck` / `--typecheck`；compile 默认 typed，`--typed` 保留为显式 no-op；`checkPackage` 改用纯 `checkFileIn`（不再生成代码）；`build` / `seed` 不变。`--no-typecheck` 如仍传入，打印「已移除；未检查执行请用 `vuna interp`」并以用法错误退出。
-- 测试：删除 `test/run-tests.sh` 中 dynamic 重复块，保留 interp + typed；`type_ok` 的 `--typecheck` 改 `--typed`/默认；`run_err/08_clause_arity` 改为 typed 断言（非 0 + 泛化错误片段）或补 loader 级 arity 检查后再断言统一消息；新增/保留 interp ↔ typed 差分用例，弥补失去 dynamic oracle 的损失；更新测试计数。
-- bench：`nix/bench.sh` 删除 dynamic 测量与 `--no-dynamic` 选项。
-- seed：轮换 seed，删除 `Vuna_dCodegen.ml/.mli`（预计 51 → 49 文件、约 -54 KB）；`flake.nix` 的 seed-selfhost 增加「seed/stage1/stage2 不含 `Vuna_dCodegen`」断言。
-- 指标：重新跑 `vuna build --split out compiler && sh nix/metrics.sh out`，更新 `nix/metrics.budget`。
-- 文档：README 移除 `--no-typecheck` / `--typecheck` 示例、`Codegen.vuna` 目录项、动态 codegen 表示与测试描述、limits 中的回退说明。
-- 归档：删除前记录 commit hash，或打 `archive/dynamic-codegen` tag；**不建长期维护分支**。
-
-**验收**：仓库不再有 `Vuna.Codegen` / dynamic `generateProgram` 引用；`--no-typecheck` 不再工作且有明确提示；`vuna check/build/seed/interp/test/fmt/doc/repl` 正常；`test/run-tests.sh`、`nix build`、`nix flake check` 通过；seed fixed point；metrics 已重标定；README/roadmap 不再把 dynamic codegen 描述为现行能力。
-
-**前置**：M12.6；typed codegen 已覆盖全部语言特性（测试验证）。
-
-**风险**：失去独立 codegen oracle；外部脚本使用 `--no-typecheck`；clause arity 诊断变化；seed rotation/metrics 重标定。缓解：interp↔typed 差分/property 测试、CLI 明确报错、archive tag、独立提交便于回滚。
 
 ### M13：核心类型论与精化器（DT 地基）
 
@@ -235,9 +212,9 @@ dynamic codegen 是 M4/M8 时期的参考实现与 `--no-typecheck` 调试回退
 
 主序列：
 
-**M12.7 → M13 → M14 → M15 → M16 → M17 → M18**
+**M12.7（已完成）→ M13 → M14 → M15 → M16 → M17 → M18**
 
-- **M12.7 先行**：删掉无法支持 DT 的第二条 codegen，缩小 TCB，简化测试/CLI，再开始 DT。
+- **M12.7 已完成**：已删除无法支持 DT 的第二条 codegen，缩小 TCB，简化测试/CLI；现在开始 DT 主线。
 - **M13 → M14 是核心**，难以并行；M15 的可用性工作可在 M14 尾部启动。
 - **M16 收口健全性/性能**；**M17 可与 M16 重叠**；**M18 是最高风险决策点**。
 - **M19 / M20 可在 M15 后并行**；**M21 在 M16/M18 后决策**；**M22 贯穿**；**M23 在 M19/M21 后**。
@@ -257,7 +234,7 @@ dynamic codegen 是 M4/M8 时期的参考实现与 `--no-typecheck` 调试回退
 | 线性/效应系统 | **M19 效应**；线性类型进研究储备 |
 | 更完整的模块类型系统 | **M20** |
 | 类型类 v2 | 不单列；**M15 的接口/隐式参数**取代，保留旧 trait 兼容层 |
-| dynamic codegen | **M12.7 删除**（DT 前置清理） |
+| dynamic codegen | 已由 M12.7 删除（DT 前置清理） |
 
 ## 研究储备（不排期）
 

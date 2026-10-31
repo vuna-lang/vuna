@@ -178,10 +178,10 @@
                 cp -r ${./app} app
                 cp ${./vuna.toml} vuna.toml
                 chmod -R u+w .
-                # 提交入库的 seed 只能含 compiler 闭包（工具链不在 TCB 里）
-                for tool in Cli Fmt Lint Doc Repl TestRunner Files Eval Interp; do
-                  if [ -e "seed/Vuna_d$tool.ml" ]; then
-                    echo "committed seed includes tool module Vuna.$tool" >&2
+                # 提交入库的 seed 只能含 compiler 闭包（工具链与 dynamic codegen 都不在 TCB 里）
+                for forbidden in Cli Fmt Lint Doc Repl TestRunner Files Eval Interp Codegen; do
+                  if [ -e "seed/Vuna_d$forbidden.ml" ]; then
+                    echo "committed seed includes forbidden module Vuna.$forbidden" >&2
                     exit 1
                   fi
                 done
@@ -189,10 +189,10 @@
                 ( cd seed && sh build.sh ../vuna-seed )
                 # 种子对 compiler 包分离编译 → stage1 源码集
                 ./vuna-seed build --split s1 compiler
-                # stage1 只能包含 compiler 闭包，不能把工具模块带进种子
-                for tool in Cli Fmt Lint Doc Repl TestRunner Files Eval Interp; do
-                  if [ -e "s1/Vuna_d$tool.ml" ]; then
-                    echo "seed closure includes tool module Vuna.$tool" >&2
+                # stage1 只能包含 compiler 闭包，不能把工具模块/旧 codegen 带进种子
+                for forbidden in Cli Fmt Lint Doc Repl TestRunner Files Eval Interp Codegen; do
+                  if [ -e "s1/Vuna_d$forbidden.ml" ]; then
+                    echo "seed closure includes forbidden module Vuna.$forbidden" >&2
                     exit 1
                   fi
                 done
@@ -202,15 +202,15 @@
                 # stage1 再生成 → stage2 源码集；两者逐字节一致
                 ./vuna-stage1 build --split s2 compiler
                 diff -r s1 s2
-                for tool in Cli Fmt Lint Doc Repl TestRunner Files Eval Interp; do
-                  if [ -e "s2/Vuna_d$tool.ml" ]; then
-                    echo "stage2 closure includes tool module Vuna.$tool" >&2
+                for forbidden in Cli Fmt Lint Doc Repl TestRunner Files Eval Interp Codegen; do
+                  if [ -e "s2/Vuna_d$forbidden.ml" ]; then
+                    echo "stage2 closure includes forbidden module Vuna.$forbidden" >&2
                     exit 1
                   fi
                 done
                 # 行为抽查：stage1 编译器编译并运行一个程序
                 cp ${./test/corpus/run/12_fact.vuna} fact.vuna
-                ./vuna-stage1 --root compiler/lib fact.vuna fact.ml
+                ./vuna-stage1 compile --root compiler/lib fact.vuna fact.ml
                 ocamlopt -g -w -a+39 -warn-error +39 -o fact fact.ml
                 test "$(./fact)" = "120"
                 # 增量构建：无改动时 build.sh 不重编任何模块（只链接）

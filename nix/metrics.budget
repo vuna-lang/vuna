@@ -3,12 +3,13 @@
 # 有意改变 codegen 后，用 `vuna build --split out compiler && sh nix/metrics.sh out` 复测并更新本文件。
 # M12.5：种子只覆盖 compiler 包后，按 seed 闭包重新标定（不再含工具链生成代码）。
 # M12.6：main : IO / 效果内建包级限制 / IO API 与 prim_* 原语后重新标定。
-bytes 830000
-lines 8600
-maxline 9200
-longlines 2400
-letrec 490
-strcat 295
-eqint 30
-zeroarg 27
-ctorcount 1620
+# M12.7：删除 dynamic codegen 后按 typed 单路径重新标定（闭包 -1 个 .ml，约 -54 KB）。
+bytes 765000
+lines 7850
+maxline 8900
+longlines 2250
+letrec 445
+strcat 250
+eqint 27
+zeroarg 21
+ctorcount 1540

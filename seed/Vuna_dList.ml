@@ -98,12 +98,12 @@ let rec v_vuna_ueq_uVuna_uList_uList = fun x y -> (match x with
   | [] -> (match y with
   | [] -> v_vuna_ueq_uint 0 0
   | _ -> v_vuna_ueq_uint 0 1
-  | _ -> vuna_fail "<generated>" 440 10 ("case pattern match failure"))
+  | _ -> vuna_fail "<generated>" 427 10 ("case pattern match failure"))
   | (v0) :: (v1) -> (match y with
   | (w0) :: (w1) -> (if (v_vuna_ueq_ugeneric v0 w0) then (v_vuna_ueq_uVuna_uList_uList v1 w1) else false)
   | _ -> v_vuna_ueq_uint 0 1
-  | _ -> vuna_fail "<generated>" 443 17 ("case pattern match failure"))
+  | _ -> vuna_fail "<generated>" 430 17 ("case pattern match failure"))
   | _ -> v_vuna_ueq_uint 0 1
-  | _ -> vuna_fail "<generated>" 439 30 ("case pattern match failure"))
+  | _ -> vuna_fail "<generated>" 426 30 ("case pattern match failure"))
 
 let v_vuna_uneq_uVuna_uList_uList = fun x y -> if v_vuna_ueq_uVuna_uList_uList x y then v_vuna_ueq_uint 0 1 else v_vuna_ueq_uint 0 0

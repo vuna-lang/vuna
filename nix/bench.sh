@@ -9,7 +9,6 @@ COMPILER=vuna
 JSON_OUT=""
 BASELINE=""
 WITH_TESTS=0
-WITH_DYNAMIC=1
 KEEP=0
 STATUS=ok
 
@@ -28,7 +27,6 @@ options:
   --save FILE            与 --json 相同
   --baseline FILE        与之前的 JSON 报告对比，输出 delta
   --with-tests           额外运行 test/run-tests.sh（较慢）
-  --no-dynamic           跳过 --no-typecheck 动态路径测量
   --keep                 保留临时构建目录
   -h, --help             显示本帮助
 
@@ -91,10 +89,6 @@ while [ $# -gt 0 ]; do
       ;;
     --with-tests)
       WITH_TESTS=1
-      shift
-      ;;
-    --no-dynamic)
-      WITH_DYNAMIC=0
       shift
       ;;
     --keep)
@@ -283,11 +277,7 @@ cat "$STAGE1_SRC"/*.ml >"$WORK/stage1_concat.ml"
 cat seed/*.ml >"$WORK/seed_concat.ml"
 
 printf 'main = 40 + 2\n' >tiny.vuna
-measure tiny_compile "$SELF_BIN" --root compiler/lib --root lib --root stdlib/lib --root app --no-print tiny.vuna "$WORK/tiny.ml"
-
-if [ "$WITH_DYNAMIC" = 1 ]; then
-  measure dynamic_self_compile "$SELF_BIN" --no-typecheck --root compiler/lib --root lib --root stdlib/lib --root app --no-print app/Main.vuna "$WORK/dyn.ml"
-fi
+measure tiny_compile "$SELF_BIN" compile --root compiler/lib --root lib --root stdlib/lib --root app --no-print tiny.vuna "$WORK/tiny.ml"
 
 # ---- corpus 批量编译（单次计时，内部循环） --------------------------------
 cat >"$WORK/corpus.sh" <<'EOS'
@@ -298,7 +288,7 @@ mkdir -p "$CORPUS_OUT"
 : >"$CORPUS_FAIL"
 for f in test/corpus/run/*.vuna; do
   out="$CORPUS_OUT/$(basename "$f" .vuna).ml"
-  if ! "$CORPUS_BIN" --root compiler/lib --root lib --root stdlib/lib --root app --no-print "$f" "$out" >>"$CORPUS_LOG" 2>&1; then
+  if ! "$CORPUS_BIN" compile --root compiler/lib --root lib --root stdlib/lib --root app --no-print "$f" "$out" >>"$CORPUS_LOG" 2>&1; then
     printf '%s\n' "$f" >>"$CORPUS_FAIL"
   fi
 done
@@ -347,7 +337,6 @@ collect_stats seed "$WORK/seed_concat.ml"
 collect_stats stage1 "$WORK/stage1_concat.ml"
 collect_stats self "$WORK/self_concat.ml"
 collect_stats tiny "$WORK/tiny.ml"
-if [ "$WITH_DYNAMIC" = 1 ]; then collect_stats dyn "$WORK/dyn.ml"; fi
 
 # ---- 状态 ----------------------------------------------------------------
 FIXED_POINT=skipped
@@ -408,13 +397,12 @@ print_table() {
   metric_line compiler_closure_compile
   metric_line tiny_compile
   metric_line corpus_compile
-  if [ "$WITH_DYNAMIC" = 1 ]; then metric_line dynamic_self_compile; fi
   note "  throughput: ${SELF_LINES_PER_SEC} lines/s, ${SELF_KB_PER_SEC} KB/s (self-compile source: $SRC_LINES lines / $SRC_BYTES B)"
   note "  corpus: ${CORPUS_OK}/${CORPUS_TOTAL} compiled"
   note ""
   note "== 产物尺寸 =="
   printf '  %-10s %10s %8s %9s %8s %8s %10s %9s\n' artifact bytes lines max_line '>120' '>500' 'trail_ws' 'blank_ws'
-  for key in seed stage1 self tiny dyn; do
+  for key in seed stage1 self tiny; do
     [ -n "${SIZE[${key}_bytes]:-}" ] || continue
     printf '  %-10s %10s %8s %9s %8s %8s %10s %9s\n' \
       "$key" "${SIZE[${key}_bytes]}" "${SIZE[${key}_lines]}" "${SIZE[${key}_max_line]}" \

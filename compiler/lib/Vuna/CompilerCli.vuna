@@ -5,6 +5,9 @@ module Vuna.CompilerCli (runCompilerCli, runCompilerCliFor, compilerUsageLines) 
 -- 只包含“把源码变成 OCaml / seed”需要的命令：compile / check / build / seed；
 -- 工具命令（lint / interp / test / fmt / repl / doc）在 Vuna.Cli。
 -- compiler/app/Main.vuna 的入口闭包就是 seed 闭包。
+--
+-- CLI 只有 typed codegen 一条路径；旧的 dynamic 开关（--no-typecheck /
+-- --typecheck / --typed）已删除。--no-print 只用于 compile 的调试/测试场景。
 
 import Vuna.Base
 import Vuna.Pkg
@@ -13,12 +16,12 @@ import Vuna.SplitCli
 
 compilerUsageLines : String -> String
 compilerUsageLines prog =
-  "  " ++ prog ++ " compile [--no-print] [--no-typecheck] [--typecheck] [--typed] [--root DIR]... <entry.vuna> [out.ml]\n"
+  "  " ++ prog ++ " compile [--no-print] [--root DIR]... <entry.vuna> [out.ml]\n"
   ++ "  " ++ prog ++ " check [--root DIR]... (<entry.vuna> | <package-dir>)\n"
-  ++ "  " ++ prog ++ " build [--no-print] [DIR] [OUT]        从 vuna.toml 构建包（默认 DIR=.，OUT=DIR/Main.ml）\n"
-  ++ "  " ++ prog ++ " build --split OUT [DIR]               分离编译：逐模块 OCaml 源码 + build.sh 写到 OUT\n"
-  ++ "  " ++ prog ++ " seed [OUT] [DIR]                      生成多文件 seed（默认 OUT=seed，DIR=.）\n"
-  ++ "  " ++ prog ++ " help\n"
+  ++ "  " ++ prog ++ " build [DIR [OUT]]              从 vuna.toml 构建包（默认 DIR=.，OUT=DIR/Main.ml）\n"
+  ++ "  " ++ prog ++ " build --split OUT [DIR]        分离编译：逐模块 OCaml 源码 + build.sh 写到 OUT\n"
+  ++ "  " ++ prog ++ " seed [OUT [DIR]]               生成多文件 seed（默认 OUT=seed，DIR=.）\n"
+  ++ "  " ++ prog ++ " help, -h\n"
 
 compilerUsage prog = "usage:\n" ++ compilerUsageLines prog
 
@@ -27,6 +30,9 @@ runCompilerCli args = runCompilerCliFor "vuna-compiler" args
 
 runCompilerCliFor : String -> List String -> Int
 runCompilerCliFor prog args =
+  if anyHelp args then helpFor prog else runCompilerCliFor1 prog args
+
+runCompilerCliFor1 prog args =
   case args of
     Nil => usageErr prog
     Cons arg rest =>
@@ -36,57 +42,90 @@ runCompilerCliFor prog args =
         "build" => buildArgs prog rest
         "seed" => seedArgs prog rest
         "help" => helpFor prog
-        "--help" => helpFor prog
-        _ => compileArgs prog args
+        "--no-typecheck" => removedFlag prog arg
+        "--typecheck" => removedFlag prog arg
+        "--typed" => removedFlag prog arg
+        "--out" => removedFlag prog arg
+        _ =>
+          if startsWith "-" arg then missingCommand prog arg
+          else unknownCommand prog arg
+
+anyHelp : List String -> Bool
+anyHelp Nil = False
+anyHelp (Cons arg rest) =
+  if arg == "-h" || arg == "--help" then True else anyHelp rest
 
 helpFor prog = let _ = print (compilerUsage prog) in 0
 
 usageErr prog = let _ = print (compilerUsage prog) in 2
 
+missingCommand prog arg =
+  let msg = "error: missing command before `" ++ arg ++ "`\n" ++ "run `" ++ prog ++ " help` (or `" ++ prog ++ " compile ...`)\n"
+  in let _ = print msg in 2
+
+unknownCommand prog arg =
+  let _ = print ("error: unknown command `" ++ arg ++ "`\n" ++ "run `" ++ prog ++ " help`\n") in 2
+
+removedHint flag =
+  case flag of
+    "--no-typecheck" => "use `vuna interp` for unchecked execution"
+    "--typecheck" => "typed codegen is always enabled"
+    "--typed" => "typed codegen is always enabled"
+    "--out" => "use the positional OUT argument"
+    _ => ""
+
+removedFlag prog flag =
+  case removedHint flag of
+    "" => usageErr prog
+    hint => let _ = print ("error: " ++ flag ++ " has been removed; " ++ hint ++ "\n") in 2
+
+invalidFlag prog flag =
+  case flag of
+    "--no-print" =>
+      let _ = print "error: --no-print is only valid for `compile`; `build` never prints main's result\n" in 2
+    _ => removedFlag prog flag
+
 -- ---------------------------------------------------------------
 -- compile / check（文件模式）
 -- ---------------------------------------------------------------
 
-compileArgs prog args = compileParse prog True True True Nil args
+compileArgs prog args = compileParse prog True Nil args
 
-compileParse prog printResult typeCheck typed roots args =
+compileParse prog printResult roots args =
   case args of
     Nil => usageErr prog
     Cons arg rest =>
       case arg of
-        "--no-print" => compileParse prog False typeCheck typed roots rest
-        "--no-typecheck" => compileParse prog printResult False False roots rest
-        "--typecheck" => compileParse prog printResult True typed roots rest
-        "--typed" => compileParse prog True True True roots rest
-        "--root" => rootArg prog roots rest (\roots2, rest2 => compileParse prog printResult typeCheck typed roots2 rest2)
-        _ => compileEmit printResult typeCheck typed roots arg rest
+        "--no-print" => compileParse prog False roots rest
+        "--root" => rootArg prog roots rest (\roots2, rest2 => compileParse prog printResult roots2 rest2)
+        _ =>
+          if startsWith "-" arg then removedFlag prog arg
+          else compileEmit prog printResult roots arg rest
 
 rootArg prog roots rest k =
   case rest of
     Cons dir rest2 => k (append roots (Cons (rawRoot dir) Nil)) rest2
     Nil => usageErr prog
 
-compileEmit printResult typeCheck typed roots entry rest =
+compileEmit prog printResult roots entry rest =
   let actualRoots = effectiveRoots roots
-  in let result =
-           if typed then compileFileTyped actualRoots entry printResult
-           else if typeCheck then compileFileChecked actualRoots entry printResult
-           else compileFile actualRoots entry printResult
-     in case result of
-          Ok code =>
-            case rest of
-              Cons out Nil => let _ = writeFile out code in 0
-              _ => let _ = print code in 0
-          Err e => let _ = print ("error: " ++ e ++ "\n") in 1
+  in case compileFileTyped actualRoots entry printResult of
+       Ok code =>
+         case rest of
+           Nil => let _ = print code in 0
+           Cons out Nil => let _ = writeFile out code in 0
+           _ => usageErr prog
+       Err e => let _ = print ("error: " ++ e ++ "\n") in 1
 
 checkArgs prog args = checkParse prog Nil args
 
 checkParse prog roots args =
   case args of
     Cons "--root" rest => rootArg prog roots rest (\roots2, rest2 => checkParse prog roots2 rest2)
-    Cons path Nil =>
-      if isDirectory path then checkPackage path
-      else checkEmit (effectiveRoots roots) path
+    Cons arg Nil =>
+      if startsWith "-" arg then removedFlag prog arg
+      else if isDirectory arg then checkPackage arg
+      else checkEmit (effectiveRoots roots) arg
     _ => usageErr prog
 
 checkEmit roots path =
@@ -101,9 +140,9 @@ checkPackage dir =
   case loadPackage dir of
     Err e => let _ = print ("error: " ++ e ++ "\n") in 1
     Ok pkg =>
-      case compileFileCheckedIn (packageName pkg) (packageRoots pkg) (packageEntry pkg) False of
+      case checkFileIn (packageName pkg) (packageRoots pkg) (packageEntry pkg) of
         Err e => let _ = print ("error: " ++ e ++ "\n") in 1
-        Ok code => 0
+        Ok warnings => let _ = printWarnings warnings in 0
 
 -- ---------------------------------------------------------------
 -- build（包模式）
@@ -111,13 +150,15 @@ checkPackage dir =
 
 buildArgs prog args =
   case args of
+    Cons "--split" Nil => usageErr prog
     Cons "--split" (Cons outDir rest) => buildSplitCmd prog outDir rest
-    _ => buildParse prog True Nothing Nothing args
+    _ => buildParse prog Nothing Nothing args
 
 buildSplitCmd prog outDir args =
   case args of
     Nil => splitRun outDir "."
-    Cons dir Nil => splitRun outDir dir
+    Cons dir Nil =>
+      if startsWith "-" dir then invalidFlag prog dir else splitRun outDir dir
     _ => usageErr prog
 
 splitRun outDir dir =
@@ -131,9 +172,13 @@ splitRun outDir dir =
 seedArgs prog args =
   case args of
     Nil => seedRun "seed" "."
-    Cons out Nil => seedRun out "."
-    Cons out (Cons dir Nil) => seedRun out dir
-    _ => usageErr prog
+    Cons out rest =>
+      if startsWith "-" out then invalidFlag prog out
+      else case rest of
+        Nil => seedRun out "."
+        Cons dir Nil =>
+          if startsWith "-" dir then invalidFlag prog dir else seedRun out dir
+        _ => usageErr prog
 
 seedRun out dir =
   let _ = makeDir out
@@ -143,26 +188,17 @@ seedRun out dir =
          let _ = print ("wrote " ++ strFromInt n ++ " files to " ++ out ++ "\n")
          in 0
 
-buildParse prog printResult dir out args =
+buildParse prog dir out args =
   case args of
-    Nil => buildRun printResult (defaultDir dir) (defaultOut dir out)
+    Nil => buildRun (defaultDir dir) (defaultOut dir out)
     Cons arg rest =>
-      case arg of
-        "--no-print" => buildParse prog False dir out rest
-        "--out" =>
-          case rest of
-            Cons out2 rest2 => buildParse prog printResult dir (Just out2) rest2
-            Nil => usageErr prog
-        _ =>
-          case dir of
-            Nothing => buildParse prog printResult (Just arg) out rest
-            Just dir2 =>
-              case out of
-                Nothing =>
-                  case rest of
-                    Nil => buildRun printResult dir2 arg
-                    _ => usageErr prog
-                Just out2 => usageErr prog
+      if startsWith "-" arg then invalidFlag prog arg
+      else case dir of
+        Nothing => buildParse prog (Just arg) out rest
+        Just _ =>
+          case out of
+            Nothing => buildParse prog dir (Just arg) rest
+            Just _ => usageErr prog
 
 defaultDir dir =
   case dir of
@@ -176,11 +212,11 @@ defaultOut dir out =
       let dir2 = defaultDir dir
       in if dir2 == "." then "Main.ml" else dir2 ++ "/Main.ml"
 
-buildRun printResult dir out =
+buildRun dir out =
   case loadPackage dir of
     Err e => let _ = print ("error: " ++ e ++ "\n") in 1
     Ok pkg =>
-      case compileFileTypedExecIn (packageName pkg) (packageRoots pkg) (packageEntry pkg) printResult of
+      case compileFileTypedExecIn (packageName pkg) (packageRoots pkg) (packageEntry pkg) of
         Err e => let _ = print ("error: " ++ e ++ "\n") in 1
         Ok code =>
           let parent = firstOf (splitPath out)
