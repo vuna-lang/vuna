@@ -3,6 +3,6 @@ import Vuna.IO
 
 main : IO Int
 main = do
-  root <- fileExistsIO "/"
-  nope <- fileExistsIO "/vuna/definitely-not-a-file-xyz"
+  root <- fileExists "/"
+  nope <- fileExists "/vuna/definitely-not-a-file-xyz"
   pure (if root then (if nope then 0 else 42) else 0)

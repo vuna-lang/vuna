@@ -1,13 +1,13 @@
--- stdlib：Vuna.IO 的显式 API + Monad/Functor trait（printIO/printlnIO/do/pure）。
+-- stdlib：Vuna.IO 的显式 API + Monad/Functor trait（print/println/do/pure）。
 -- main : IO Int 由运行时执行；所有效果放进单个 IO 动作，保证三路径输出顺序一致。
 import Vuna.Monad
 import Vuna.IO
 
 program : IO Int
 program = do
-  n <- printIO "abc"
-  m <- printIO "de"
-  x <- printlnIO "x"
+  n <- print "abc"
+  m <- print "de"
+  x <- println "x"
   pure (n + m + x + 10)
 
 main : IO Int

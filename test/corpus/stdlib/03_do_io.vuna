@@ -4,7 +4,7 @@ import Vuna.IO
 
 program : IO Int
 program = do
-  _ <- printIO "abc"
+  _ <- print "abc"
   n <- pure 3
   pure n
 

@@ -363,6 +363,10 @@ resolveGlobal modules label prefix own imports scope name =
   else if isGlobalCtor name then Ok name
   else if containsDot name then resolveQualified modules label imports name
   else if memName name own then Ok (mangle prefix name)
+  else if isEffectfulBuiltin name then
+    case modulesExportingValue modules imports name of
+      Nil => Ok name
+      pairs => andThen (unifyEntryPairs label "name" name pairs) (\p => Ok (entryTarget (secondOf p)))
   else if isBuiltinName name then Ok name
   else if isBuiltinTraitName name then Ok name
   else if isPreludeTraitMethod name then Ok name
@@ -1115,6 +1119,10 @@ isEffectfulBuiltin name =
   || name == "readLine" || name == "readDir" || name == "isDirectory"
   || name == "makeDir" || name == "removeFile" || name == "fileExists"
   || name == "exit"
+  || name == "prim_print" || name == "prim_readFile" || name == "prim_writeFile"
+  || name == "prim_getArgs" || name == "prim_readLine" || name == "prim_readDir"
+  || name == "prim_isDirectory" || name == "prim_makeDir" || name == "prim_removeFile"
+  || name == "prim_fileExists" || name == "prim_exit"
 
 firstEffect Nil = Nothing
 

@@ -394,8 +394,11 @@ genericCmp sp args mode =
          else Ok (vbool (r >= 0))
     _ => errAt sp "bad arguments for generic comparison"
 
+primBaseName name =
+  if startsWith "prim_" name then substring 5 (strLength name - 5) name else name
+
 callBuiltin name args sp =
-  case name of
+  case primBaseName name of
     "+" => int2 sp args (\x, y => Ok (VInt (x + y)))
     "-" => int2 sp args (\x, y => Ok (VInt (x - y)))
     "*" => int2 sp args (\x, y => Ok (VInt (x * y)))

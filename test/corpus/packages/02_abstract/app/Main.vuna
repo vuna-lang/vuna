@@ -2,4 +2,4 @@ import Vuna.Box
 import Vuna.IO
 
 main : IO Int
-main = printIO (strFromInt (boxValue (makeBox 42)))
+main = print (strFromInt (boxValue (makeBox 42)))

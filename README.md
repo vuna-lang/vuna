@@ -387,10 +387,11 @@ git add seed/ && git commit
   时，类型检查自动给函数加方法级字典参数；调用点按实际类型静态派发或继续穿参。
 - `do` 对 `Maybe` / `List` / `IO` 都生效。`IO` 是 `stdlib/lib/Vuna/IO.vuna` 的抽象类型
   （构造器私有）；组合统一用 `Functor` / `Monad` trait 的 `fmap` / `bind` / `pure`、
-  `>>=` 与 `do`，不再导出 `bindIO` / `pureIO` / `fmapIO`。效果原语是 `printIO` /
-  `printlnIO` / `readFileIO` / `writeFileIO` / `readLineIO` / `readDirIO` /
-  `isDirectoryIO` / `makeDirIO` / `removeFileIO` / `fileExistsIO` / `getArgsIO` /
-  `exitIO`。
+  `>>=` 与 `do`，不再导出 `bindIO` / `pureIO` / `fmapIO`。效果 API 直接返回 IO：
+  `print` / `println` / `readFile` / `writeFile` / `readLine` / `readDir` /
+  `isDirectory` / `makeDir` / `removeFile` / `fileExists` / `getArgs` / `exit`
+  （例如 `getArgs : IO (List String)`、`print : String -> IO Int`）；
+  内部实现用不导出的 `prim_*` 原语。
   **没有公开的 `runIO`/`unsafeRunIO`**：IO 动作只能由运行时在 `main` 处执行。
   可执行包/`vuna build` 要求 `main : IO a`；`vuna interp`/`vuna test` 仍保留
   “显示纯 main 结果”的调试约定，但入口代码里同样不能直接调用 effectful 内建。
@@ -447,7 +448,7 @@ git add seed/ && git commit
 - 示例：`examples/multi/` 是多包 workspace（根包 + 成员包 `greet` + stdlib 路径依赖），
   `checks.vuna-package` 在 Nix 沙箱里构建并运行它，验证包管理路径可复现。
 - 可执行入口：`vuna build` / `vuna seed` 要求入口 `main : IO a`（运行时执行动作，
-  退出码用 `exitIO`）；`vuna build --split` 同样按可执行入口处理。普通用户包不能
+  退出码用 `exit`）；`vuna build --split` 同样按可执行入口处理。普通用户包不能
   直接调用 effectful 内建（`print` / `readFile` / ...），只能经 `Vuna.IO`；编译器、
   产品 CLI、stdlib 自身在包级 allowlist 内，`--root` 原始文件模式与 `vuna interp`
   保留给调试/测试。
@@ -510,7 +511,7 @@ git add seed/ && git commit
 - 模块内部通过 import 自动 open 使用非限定名，只有 import 行写模块全名；
 - 顶层类型签名紧贴其第一个函数子句，签名与实现之间不留空行；顶层声明之间用一个空行分隔；
 - [app/Main.vuna](app/Main.vuna)：产品 CLI 入口，`main : IO Int`（运行时执行，
-  `exitIO` 传递退出码）；CLI 实现在 `lib/Vuna/Cli.vuna`。`vuna build` / `--split`
+  `exit` 传递退出码）；CLI 实现在 `lib/Vuna/Cli.vuna`。`vuna build` / `--split`
   要求 `main : IO a`；纯 main 只在 `vuna interp` / `vuna test` 的调试约定下自动 show。
   `vuna compile` 保留
   `[--no-print] [--no-typecheck] [--typed] [--root DIR]... <entry.vuna> [out.ml]`；
@@ -718,7 +719,9 @@ nix fmt               # nixfmt-tree 格式化 .nix
   的**入口文件**同样禁止直接调用 effectful 内建（只有被加载的 stdlib/compiler
   模块内部可用），纯 main 结果 show 仍保留为调试约定。IO 组合统一用
   `Functor`/`Monad` trait（`fmap`/`bind`/`pure`、`>>=`、`do`），不再导出
-  `bindIO`/`pureIO`/`fmapIO`。当前 `IO` 仍是库层 thunk 表示，不是完整的 effect
+  `bindIO`/`pureIO`/`fmapIO`；效果 API 直接返回 IO（`print : String -> IO Int`、
+  `getArgs : IO (List String)` 等），内部由不导出的 `prim_*` 原语实现。
+  当前 `IO` 仍是库层 thunk 表示，不是完整的 effect
   类型系统（留给 M13）；
 - M11.6 fmt 限制：行宽 100，但模块头/导出列表、类型签名与超长字符串字面量不折行；
   表达式内部的注释会前移到最内层包含它的条目（或下一条目），不保证留在原位置；
@@ -781,5 +784,7 @@ nix fmt               # nixfmt-tree 格式化 .nix
   用户包与调试入口都不能直接调用 effectful 内建（包级 / 入口级限制），
   `Vuna.IO` 成为唯一效果 API；IO 组合统一走 `Functor`/`Monad` trait
   （`fmap`/`bind`/`pure`、`>>=`、`do`），删除 `bindIO`/`pureIO`/`fmapIO` 导出；
+  效果 API 直接 IO 化（`print : String -> IO Int`、`getArgs : IO (List String)` 等），
+  内部由不导出的 `prim_*` 原语实现；
   seed 51 个文件 / ~0.86 MB；`vuna interp`/`vuna test` 保留纯 main 结果 show 的调试约定；
 - 早期 OCaml 外部编译器 `vunax` 已完成使命并删除。

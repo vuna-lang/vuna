@@ -49,4 +49,18 @@ builtinArity "makeDir" = Just 1
 builtinArity "removeFile" = Just 1
 builtinArity "fileExists" = Just 1
 builtinArity "exit" = Just 1
+
+-- 效果原语的内部名字：stdlib Vuna.IO 用它们实现公开的 IO API；
+-- 普通包不可直接调用（Loader 的 effectful 包级限制覆盖 prim_*）。
+builtinArity "prim_readFile" = Just 1
+builtinArity "prim_writeFile" = Just 2
+builtinArity "prim_print" = Just 1
+builtinArity "prim_getArgs" = Just 0
+builtinArity "prim_readLine" = Just 0
+builtinArity "prim_readDir" = Just 1
+builtinArity "prim_isDirectory" = Just 1
+builtinArity "prim_makeDir" = Just 1
+builtinArity "prim_removeFile" = Just 1
+builtinArity "prim_fileExists" = Just 1
+builtinArity "prim_exit" = Just 1
 builtinArity _ = Nothing

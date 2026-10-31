@@ -501,6 +501,17 @@ builtinSchemes =
   , Pair "removeFile" (mkScheme Nil (TFun strTy intTy))
   , Pair "fileExists" (mkScheme Nil (TFun strTy boolTy))
   , Pair "exit" (mkScheme Nil (TFun intTy intTy))
+  , Pair "prim_readFile" (mkScheme Nil (TFun strTy strTy))
+  , Pair "prim_writeFile" (mkScheme Nil (fun2 strTy strTy intTy))
+  , Pair "prim_print" (mkScheme Nil (TFun strTy intTy))
+  , Pair "prim_getArgs" (mkScheme Nil (listOf strTy))
+  , Pair "prim_readLine" (mkScheme Nil strTy)
+  , Pair "prim_readDir" (mkScheme Nil (TFun strTy (listOf strTy)))
+  , Pair "prim_isDirectory" (mkScheme Nil (TFun strTy boolTy))
+  , Pair "prim_makeDir" (mkScheme Nil (TFun strTy intTy))
+  , Pair "prim_removeFile" (mkScheme Nil (TFun strTy intTy))
+  , Pair "prim_fileExists" (mkScheme Nil (TFun strTy boolTy))
+  , Pair "prim_exit" (mkScheme Nil (TFun intTy intTy))
   ]
 
 elabAppExpr fn fnElab args argTys argEls sp = XEApp fnElab argEls sp

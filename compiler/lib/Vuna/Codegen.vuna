@@ -158,6 +158,17 @@ builtinInfos =
   , BuiltinInfo "removeFile" "bi_remove_file" 1 "VInt (remove_file (expect_str \"removeFile\" a))"
   , BuiltinInfo "fileExists" "bi_file_exists" 1 "vbool (Sys.file_exists (expect_str \"fileExists\" a))"
   , BuiltinInfo "exit" "bi_exit" 1 "exit (expect_int \"exit\" a)"
+  , BuiltinInfo "prim_readFile" "bi_read_file" 1 "VStr (read_file (expect_str \"readFile\" a))"
+  , BuiltinInfo "prim_writeFile" "bi_write_file" 2 "VInt (write_file (expect_str \"writeFile\" a) (expect_str \"writeFile\" b))"
+  , BuiltinInfo "prim_print" "bi_print" 1 "let text = expect_str \"print\" a in VInt (print_stdout text)"
+  , BuiltinInfo "prim_getArgs" "bi_get_args" 0 "get_args ()"
+  , BuiltinInfo "prim_readLine" "bi_read_line" 0 "VStr (read_line ())"
+  , BuiltinInfo "prim_readDir" "bi_read_dir" 1 "list_of_strings (read_dir (expect_str \"readDir\" a))"
+  , BuiltinInfo "prim_isDirectory" "bi_is_directory" 1 "vbool (is_directory (expect_str \"isDirectory\" a))"
+  , BuiltinInfo "prim_makeDir" "bi_make_dir" 1 "VInt (make_dir (expect_str \"makeDir\" a))"
+  , BuiltinInfo "prim_removeFile" "bi_remove_file" 1 "VInt (remove_file (expect_str \"removeFile\" a))"
+  , BuiltinInfo "prim_fileExists" "bi_file_exists" 1 "vbool (Sys.file_exists (expect_str \"fileExists\" a))"
+  , BuiltinInfo "prim_exit" "bi_exit" 1 "exit (expect_int \"exit\" a)"
   ]
 
 findBuiltin name Nil = Nothing

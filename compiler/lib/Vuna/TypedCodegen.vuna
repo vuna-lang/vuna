@@ -348,7 +348,7 @@ isAtomicExpr decls env e =
           Just arity => if arity == 0 then True else False
           Nothing =>
             case builtinName name of
-              Just ref => if name == "getArgs" || name == "readLine" then False else True
+              Just ref => if name == "getArgs" || name == "readLine" || name == "prim_getArgs" || name == "prim_readLine" then False else True
               Nothing =>
                 case funArity name decls of
                   Just 0 => isPureZeroArg decls name
@@ -505,6 +505,17 @@ builtinName "makeDir" = Just "bi_make_dir"
 builtinName "removeFile" = Just "bi_remove_file"
 builtinName "fileExists" = Just "bi_file_exists"
 builtinName "exit" = Just "bi_exit"
+builtinName "prim_readFile" = Just "bi_read_file"
+builtinName "prim_writeFile" = Just "bi_write_file"
+builtinName "prim_print" = Just "bi_print"
+builtinName "prim_getArgs" = Just "bi_get_args"
+builtinName "prim_readLine" = Just "bi_read_line"
+builtinName "prim_readDir" = Just "bi_read_dir"
+builtinName "prim_isDirectory" = Just "bi_is_directory"
+builtinName "prim_makeDir" = Just "bi_make_dir"
+builtinName "prim_removeFile" = Just "bi_remove_file"
+builtinName "prim_fileExists" = Just "bi_file_exists"
+builtinName "prim_exit" = Just "bi_exit"
 builtinName _ = Nothing
 
 genExpr : List Decl -> List String -> Expr -> Result String
@@ -525,7 +536,9 @@ genExpr decls env expr =
               Just ref =>
                 case name of
                   "getArgs" => Ok "bi_get_args ()"
+                  "prim_getArgs" => Ok "bi_get_args ()"
                   "readLine" => Ok "bi_read_line ()"
+                  "prim_readLine" => Ok "bi_read_line ()"
                   _ => Ok ref
               Nothing =>
                 case funArity name decls of

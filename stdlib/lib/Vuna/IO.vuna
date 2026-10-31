@@ -1,13 +1,13 @@
-module Vuna.IO (IO, printIO, printlnIO, readFileIO, writeFileIO, readLineIO,
-                 readDirIO, isDirectoryIO, makeDirIO, removeFileIO, fileExistsIO,
-                 getArgsIO, exitIO) where
+module Vuna.IO (IO, print, println, readFile, writeFile, readLine, readDir,
+                 isDirectory, makeDir, removeFile, fileExists, getArgs, exit) where
 
--- Vuna.IO：抽象 IO 动作（M11-C / M12.6）。
+-- Vuna.IO：抽象 IO 动作与效果 API（M11-C / M12.6）。
 -- 表示是「世界令牌 Int -> a」的挂起函数；构造器 MkIO 私有。
--- 没有公开的 runIO / unsafeRunIO，也没有 bindIO/pureIO/fmapIO：IO 动作只能由运行时
--- 在 `main` 处执行；组合用 Functor/Monad trait（fmap/bind/pure、`>>=`、`do`）。
--- effectful 内建（print/readFile/...）只允许 IO 模块与编译器/工具链内部使用，
--- 普通用户包只能通过本模块的 IO API 使用效果。
+-- 没有公开的 runIO / unsafeRunIO：IO 动作只能由运行时在 `main` 处执行。
+-- 组合统一用 Functor/Monad trait（fmap/bind/pure、`>>=`、`do`），不导出 bindIO 等。
+--
+-- 这里的效果函数就是用户可见的 print / readFile / getArgs / exit：
+-- 它们直接返回 IO，内部由 prim_* 原语实现；普通包不能调用 prim_*。
 
 import Vuna.List
 import Vuna.Monad
@@ -27,43 +27,41 @@ ioBind (MkIO f) k =
 ioFmap : (a -> b) -> IO a -> IO b
 ioFmap f (MkIO g) = MkIO (\w => f (g w))
 
--- 输出字符串，返回打印长度（与内建 print 一致）。
-printIO : String -> IO Int
-printIO s = MkIO (\w => print s)
+print : String -> IO Int
+print s = MkIO (\w => prim_print s)
 
--- 输出字符串并换行。
-printlnIO : String -> IO Int
-printlnIO s = printIO (s ++ "\n")
+println : String -> IO Int
+println s = print (s ++ "\n")
 
-readFileIO : String -> IO String
-readFileIO path = MkIO (\w => readFile path)
+readFile : String -> IO String
+readFile path = MkIO (\w => prim_readFile path)
 
-writeFileIO : String -> String -> IO Int
-writeFileIO path contents = MkIO (\w => writeFile path contents)
+writeFile : String -> String -> IO Int
+writeFile path contents = MkIO (\w => prim_writeFile path contents)
 
-readLineIO : IO String
-readLineIO = MkIO (\w => readLine)
+readLine : IO String
+readLine = MkIO (\w => prim_readLine)
 
-readDirIO : String -> IO (List String)
-readDirIO path = MkIO (\w => readDir path)
+readDir : String -> IO (List String)
+readDir path = MkIO (\w => prim_readDir path)
 
-isDirectoryIO : String -> IO Bool
-isDirectoryIO path = MkIO (\w => isDirectory path)
+isDirectory : String -> IO Bool
+isDirectory path = MkIO (\w => prim_isDirectory path)
 
-makeDirIO : String -> IO Int
-makeDirIO path = MkIO (\w => makeDir path)
+makeDir : String -> IO Int
+makeDir path = MkIO (\w => prim_makeDir path)
 
-removeFileIO : String -> IO Int
-removeFileIO path = MkIO (\w => removeFile path)
+removeFile : String -> IO Int
+removeFile path = MkIO (\w => prim_removeFile path)
 
-fileExistsIO : String -> IO Bool
-fileExistsIO path = MkIO (\w => fileExists path)
+fileExists : String -> IO Bool
+fileExists path = MkIO (\w => prim_fileExists path)
 
-getArgsIO : IO (List String)
-getArgsIO = MkIO (\w => getArgs)
+getArgs : IO (List String)
+getArgs = MkIO (\w => prim_getArgs)
 
-exitIO : Int -> IO Int
-exitIO code = MkIO (\w => exit code)
+exit : Int -> IO Int
+exit code = MkIO (\w => prim_exit code)
 
 instance Functor IO where
   fmap f io = ioFmap f io

@@ -1,10 +1,11 @@
 -- vuna-compiler：编译器 CLI 入口（seed 与 stage 1 编译器共用）。
--- main : IO Int——由运行时执行；命令集见 `vuna-compiler help`，工具命令在根包 vuna。
+-- main : IO Int——由运行时执行；getArgs/exit 是 Vuna.IO 的 IO API。
 import Vuna.CompilerCli
 import Vuna.Monad
 import Vuna.IO
 
 main : IO Int
 main = do
-  code <- pure (runCompilerCli (getArgs))
-  exitIO code
+  args <- getArgs
+  code <- pure (runCompilerCli args)
+  exit code

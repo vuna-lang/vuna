@@ -15,5 +15,5 @@ result =
 
 main : IO String
 main = do
-  _ <- printIO "p"
+  _ <- print "p"
   pure result

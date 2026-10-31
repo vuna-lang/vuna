@@ -4,7 +4,7 @@ import Vuna.Monad
 import Vuna.IO
 
 main : IO Int
-main = printIO (greeting 3 ++ "|" ++ showNames (names 2))
+main = print (greeting 3 ++ "|" ++ showNames (names 2))
 
 showNames : List String -> String
 showNames [] = ""

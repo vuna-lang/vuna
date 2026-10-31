@@ -2,13 +2,13 @@
 # 指标聚合自分离编译（`vuna build --split`）的 **compiler 包闭包**（seed 闭包）。
 # 有意改变 codegen 后，用 `vuna build --split out compiler && sh nix/metrics.sh out` 复测并更新本文件。
 # M12.5：种子只覆盖 compiler 包后，按 seed 闭包重新标定（不再含工具链生成代码）。
-# M12.6：main : IO / effectful builtin 包级限制 / IO runtime helper 后重新标定。
-bytes 820000
-lines 8500
-maxline 7500
+# M12.6：main : IO / 效果内建包级限制 / IO API 与 prim_* 原语后重新标定。
+bytes 830000
+lines 8600
+maxline 9200
 longlines 2400
 letrec 490
 strcat 295
 eqint 30
-zeroarg 26
+zeroarg 27
 ctorcount 1620

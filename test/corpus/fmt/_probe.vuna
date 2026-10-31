@@ -9,7 +9,7 @@ import Vuna.IO
 
 main : IO Int
 main = do
-  args <- getArgsIO
+  args <- getArgs
   run args
 
 run : List String -> IO Int
@@ -19,26 +19,26 @@ run args =
     Cons "check" (Cons path Nil) => runCheck path
     Cons "write" (Cons path (Cons out Nil)) => runWrite path out
     _ => do
-      _ <- printIO "usage: probe (fmt|check|write) file [out]\n"
+      _ <- print "usage: probe (fmt|check|write) file [out]\n"
       pure 2
 
 fail : String -> String -> IO Int
 fail path msg = do
-  _ <- printIO (path ++ ": " ++ msg ++ "\n")
+  _ <- print (path ++ ": " ++ msg ++ "\n")
   pure 1
 
 runFmt : String -> IO Int
 runFmt path = do
-  source <- readFileIO path
+  source <- readFile path
   case formatSource source of
     Err e => fail path ("format error: " ++ e)
     Ok out => do
-      _ <- printIO out
+      _ <- print out
       pure 0
 
 runCheck : String -> IO Int
 runCheck path = do
-  source <- readFileIO path
+  source <- readFile path
   case formatSource source of
     Err e => fail path ("format error: " ++ e)
     Ok out1 =>
@@ -53,9 +53,9 @@ runCheck path = do
 
 runWrite : String -> String -> IO Int
 runWrite path out = do
-  source <- readFileIO path
+  source <- readFile path
   case formatSource source of
     Err e => fail path ("format error: " ++ e)
     Ok formatted => do
-      _ <- writeFileIO out formatted
+      _ <- writeFile out formatted
       pure 0

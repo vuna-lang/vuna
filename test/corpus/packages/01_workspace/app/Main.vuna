@@ -3,4 +3,4 @@ import Dep
 import Vuna.IO
 
 main : IO Int
-main = printIO (hello ++ "/" ++ depText)
+main = print (hello ++ "/" ++ depText)
