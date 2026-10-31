@@ -1,1 +1,8 @@
-main = if fileExists "/" then (if fileExists "/vuna/definitely-not-a-file-xyz" then 0 else 42) else 0
+import Vuna.Monad
+import Vuna.IO
+
+main : IO Int
+main = do
+  root <- fileExists "/"
+  nope <- fileExists "/vuna/definitely-not-a-file-xyz"
+  pure (if root then (if nope then 0 else 42) else 0)

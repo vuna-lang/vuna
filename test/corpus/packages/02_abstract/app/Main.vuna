@@ -1,0 +1,5 @@
+import Vuna.Box
+import Vuna.IO
+
+main : IO Int
+main = print (strFromInt (boxValue (makeBox 42)))

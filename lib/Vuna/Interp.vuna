@@ -1,6 +1,12 @@
-module Vuna.Interp (effectiveRoots, interpretFile, compileFile, compileFileChecked, compileFileTyped, checkFile, interpretFileIn, compileFileIn, compileFileCheckedIn, compileFileTypedIn, checkFileIn) where
+module Vuna.Interp (interpretFile, interpretFileIn) where
 
--- Vuna.Interp：对外 facade（解释器/编译器入口）。
+-- Vuna.Interp：解释器 facade（工具链侧；编译入口见 Vuna.Compile）。
+--
+-- 该模块依赖 Vuna.Eval，只被 CLI / REPL / test runner 使用，不属于编译器 seed 闭包。
+--
+-- `vuna interp` 保留“不检查执行”的调试语义：普通程序直接求值（与 M12.7 之前
+-- 一致，也是删除 `--no-typecheck` 后的替代入口）；只有 record / trait / deriving
+-- 程序必须先类型检查并降级。子句元数一致性是结构性检查，始终先跑。
 
 import Vuna.Base
 import Vuna.Pkg
@@ -8,9 +14,7 @@ import Vuna.Ast
 import Vuna.Parser
 import Vuna.Loader
 import Vuna.Eval
-import Vuna.Codegen
 import Vuna.Typecheck
-import Vuna.TypedCodegen
 
 interpret source =
   case parseSource "<input>" source of
@@ -23,74 +27,6 @@ interpret source =
             Nil => runDecls decls
             _ => "error: imports are only supported by interpretFile"
 
--- 默认模块根：编译器自身仓库布局（lib/ + stdlib/）。
-effectiveRoots Nil = Cons (rawRoot "lib") (Cons (rawRoot "stdlib/lib") Nil)
-effectiveRoots roots = roots
-
--- M10.5：使用记录/trait/deriving 的程序必须先经过类型检查与降级；
--- 旧程序保持原 legacy 路径（interp/--no-typecheck 仍不类型检查）。
-programNeedsElab Nil = False
-
-programNeedsElab (Cons d rest) =
-  case d of
-    DRecord name params fields derivings sp => True
-    DTrait name params methods sp => True
-    DInstance iname isDefault head methods sp => True
-    DData name params ctors derivings sp =>
-      case derivings of
-        Nil => programNeedsElab rest
-        _ => True
-    DFun name pats body sp =>
-      if patsNeedElab pats then True
-      else if exprNeedsElab body then True
-      else programNeedsElab rest
-    DSig name ty sp => programNeedsElab rest
-
-patsNeedElab Nil = False
-
-patsNeedElab (Cons p rest) = if patNeedsElab p then True else patsNeedElab rest
-
-patNeedsElab p =
-  case p of
-    PRecord name fields sp => True
-    PCon name pats sp => patsNeedElab pats
-    _ => False
-
-argsNeedElab Nil = False
-
-argsNeedElab (Cons e rest) = if exprNeedsElab e then True else argsNeedElab rest
-
-bindsNeedElab Nil = False
-
-bindsNeedElab (Cons (Pair pat value) rest) =
-  if patNeedsElab pat then True
-  else if exprNeedsElab value then True
-  else bindsNeedElab rest
-
-altsNeedElab Nil = False
-
-altsNeedElab (Cons (Pair pat body) rest) =
-  if patNeedsElab pat then True
-  else if exprNeedsElab body then True
-  else altsNeedElab rest
-
-exprNeedsElab e =
-  case e of
-    EField base fname sp => True
-    ERecord name fields sp => True
-    ERecUpdate base fields sp => True
-    EInstSel meth iname sp => True
-    EVar name sp => False
-    EInt n sp => False
-    EStr s sp => False
-    ELam ps body sp => exprNeedsElab body
-    EApp fn args sp => if exprNeedsElab fn then True else argsNeedElab args
-    ELet binds body rec_ sp =>
-      if bindsNeedElab binds then True else exprNeedsElab body
-    ECase scrut alts sp =>
-      if exprNeedsElab scrut then True else altsNeedElab alts
-    EIf c t el sp => if exprNeedsElab c then True else if exprNeedsElab t then True else exprNeedsElab el
-
 interpretFile roots entry = interpretFileIn "" roots entry
 
 interpretFileIn entryPkg roots entry =
@@ -101,44 +37,58 @@ interpretFileIn entryPkg roots entry =
         case checkProgramInfoElab decls of
           Err e => "error: " ++ e
           Ok (Pair globals elabDecls) => runDecls elabDecls
-      else runDecls decls
-
-compileFile roots entry printResult = compileFileIn "" roots entry printResult
-
-compileFileIn entryPkg roots entry printResult =
-  andThen (loadProgram roots entryPkg entry) (\decls =>
-    if programNeedsElab decls then
-      andThen (checkProgramInfoElab decls) (\p => generateProgram (secondOf p) printResult)
-    else generateProgram decls printResult)
-
-compileFileChecked roots entry printResult = compileFileCheckedIn "" roots entry printResult
-
-compileFileCheckedIn entryPkg roots entry printResult =
-  andThen (loadProgram roots entryPkg entry) (\decls =>
-    if programNeedsElab decls then
-      andThen (checkProgramInfoElab decls) (\p => generateProgram (secondOf p) printResult)
-    else andThen (checkProgram decls) (\_ => generateProgram decls printResult))
-
-compileFileTyped roots entry printResult = compileFileTypedIn "" roots entry printResult
-
-compileFileTypedIn entryPkg roots entry printResult =
-  andThen (loadProgram roots entryPkg entry) (\decls =>
-    andThen (checkProgramInfoElab decls) (\p =>
-      case p of
-        Pair globals elabDecls => generateProgramTyped elabDecls globals printResult))
-
--- 诊断：typecheck + 穷尽性/冗余警告（非致命）。返回警告列表。
-checkFile roots entry = checkFileIn "" roots entry
-
-checkFileIn entryPkg roots entry =
-  case loadProgram roots entryPkg entry of
-    Err e => Err e
-    Ok decls =>
-      if programNeedsElab decls then
-        case checkProgramInfoElab decls of
-          Err e => Err e
-          Ok (Pair globals elabDecls) => Ok (exhaustiveWarnings elabDecls)
       else
-        case checkProgramInfo decls of
-          Err e => Err e
-          Ok _ => Ok (exhaustiveWarnings decls)
+        case checkClauseArities decls of
+          Err e => "error: " ++ e
+          Ok _ => runDecls decls
+
+-- ---------------------------------------------------------------
+-- 取消检查的求值路径只需要判断是否会用到 record/trait 降级。
+-- 谓词留在工具链侧（不进 seed 闭包）。
+-- ---------------------------------------------------------------
+
+programNeedsElab Nil = False
+programNeedsElab (Cons d rest) = case d of
+  DRecord name params fields derivings sp => True
+  DTrait name params methods sp => True
+  DInstance iname isDefault head methods sp => True
+  DData name params ctors derivings sp => case derivings of
+    Nil => programNeedsElab rest
+    _ => True
+  DFun name pats body sp =>
+    if patsNeedElab pats then True else if exprNeedsElab body then True else programNeedsElab rest
+  DSig name ty sp => programNeedsElab rest
+
+patsNeedElab Nil = False
+patsNeedElab (Cons p rest) = if patNeedsElab p then True else patsNeedElab rest
+
+patNeedsElab p = case p of
+  PRecord name fields sp => True
+  PCon name pats sp => patsNeedElab pats
+  _ => False
+
+argsNeedElab Nil = False
+argsNeedElab (Cons e rest) = if exprNeedsElab e then True else argsNeedElab rest
+
+bindsNeedElab Nil = False
+bindsNeedElab (Cons (Pair pat value) rest) =
+  if patNeedsElab pat then True else if exprNeedsElab value then True else bindsNeedElab rest
+
+altsNeedElab Nil = False
+altsNeedElab (Cons (Pair pat body) rest) =
+  if patNeedsElab pat then True else if exprNeedsElab body then True else altsNeedElab rest
+
+exprNeedsElab e = case e of
+  EField base fname sp => True
+  ERecord name fields sp => True
+  ERecUpdate base fields sp => True
+  EInstSel meth iname sp => True
+  EVar name sp => False
+  EInt n sp => False
+  EStr s sp => False
+  ELam ps body sp => exprNeedsElab body
+  EApp fn args sp => if exprNeedsElab fn then True else argsNeedElab args
+  ELet binds body rec_ sp => if bindsNeedElab binds then True else exprNeedsElab body
+  ECase scrut alts sp => if exprNeedsElab scrut then True else altsNeedElab alts
+  EIf c t el sp =>
+    if exprNeedsElab c then True else if exprNeedsElab t then True else exprNeedsElab el

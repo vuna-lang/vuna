@@ -1,0 +1,22 @@
+-- data / record / trait / instance 注释保留。
+data Color : Type where
+  -- 构造器前置注释
+  Red : Color -- 构造器行尾注释
+  -- 第二个构造器前置
+  Green : Color
+  Blue : Color
+
+{- 记录前置多行
+   块注释 -}
+record Point where
+  -- 字段前置
+  x : Int -- 字段行尾
+  y : Int
+
+trait Size a where
+  -- 方法前置
+  size : a -> Int
+
+instance Size Bool where
+  -- 实例方法前置
+  size b = if b then 1 else 0 -- 实例方法行尾

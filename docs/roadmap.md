@@ -1,400 +1,254 @@
 # Vuna 路线图
 
-本文记录 vuna 当前基线与后续大阶段规划。
+本文记录 vuna 的当前基线与后续规划。
+
+## 维护规则
+
+- **已完成阶段整段删除**：阶段完成后，删除该阶段的目标、范围、验收、设计要点、实现状态等详细段落，正文中不再保留。
+- **已完成阶段一句话**：只在「已完成」列表中保留一句话摘要（阶段编号 + 核心交付物）；需要历史细节时查 git 历史。
+- **未完成阶段保留细节**：保留目标、范围、验收，可继续补充设计要点与前置条件。
+- **新增阶段先写入「下一步 / 待办」**，完成后按上述规则收敛。
+- **研究储备与并行轨道不占 M 编号**；研究储备进入排期时再分配编号。
+- **插入阶段用 x.5 编号**（如 M12.7），主序列保持整数编号。
 
 ## 已完成
 
-- M1：offside layout parser；
-- M2：call-by-value 求值器；
-- M3：自解释器；
-- M4：动态 value 表示 codegen 与编译版解释器；
-- M5：文件即模块、import / qualified / alias、模块名与循环检查；
-- M6：vuna 自写 codegen + seed 固定点；
-- M7：HM 类型检查、模块类型名解析、顶层推断、编译器自检；
-- M8：原生 OCaml typed codegen（data → variant，Int/String/Bool/List 原生），
-  typed 默认，typed 自举，`bootstrap/seed.ml` 由 typed 编译器轮换；
+- M1：offside layout parser。
+- M2：call-by-value 求值器。
+- M3：自解释器。
+- M4：动态 value 表示 codegen 与编译版解释器。
+- M5：文件即模块、import / qualified / alias、模块名与循环检查。
+- M6：vuna 自写 codegen 与 seed 固定点。
+- M7：HM 类型检查、模块类型名解析、顶层推断与编译器自检。
+- M8：原生 OCaml typed codegen（data → variant，Int/String/Bool/List 原生），typed 默认并完成 typed 自举。
 - M9：诊断与语言可用性——全链路 span、运行时错误 `文件:行:列`、穷尽性/冗余检查、非 0 退出码。
-- M10：模块系统 v2——模块头与显式导出列表、抽象类型、`module B` / `B.name` 重导出、
-  `_` 前缀隐私、模块路径不变式（loader 探针：`Vuna.vuna` 与 `Vuna/Parser.vuna` 同根共存）、
-  loader 测试；编译器自身使用新特性。
-- M10.5：类型表达力——记录类型（构造/访问/更新/模式/参数化/跨模块抽象/`deriving`）；
-  trait（单参数、相干默认、命名实例、`@name`、孤儿检查、`deriving (Show, Eq)`）；
-  内置 `Show` / `Eq` / `Ord` 与运算符迁移；编译器自举使用记录 + `deriving`；
-  删除 `specializeCmp` 与运行时 `show_value`；方法级字典穿参（裸类型变量，按 trait
-  方法扁平化）。
-- M11：标准库——独立成员包 `vuna-stdlib`（`stdlib/lib/`，Pair/Bool/List/Maybe/
-  Result/String/Sort/Map/Monad/IO）；高阶 kind（`TApp`/kind 元数）与一般约束泛化；
-  `do` 语法糖与 `>>=`/`>>`、Monad/Functor 实例、IO 组合子；`Vuna.Base` 变门面，
-  编译器成为 stdlib 首个用户；新增 `readLine`/`readDir`/`isDirectory`/`makeDir`/
-  `removeFile` 内建；两次 seed 轮换。
-- M11.5：包管理与工具链——`vuna.toml`（TOML 子集）、workspace（根即包）与依赖 DAG、
-  `[export]` 跨包可见性、三目录约定与 `app/Main.vuna` 入口、Loader 模块根抽象；
-  `vuna build` / `test` / `fmt` / `repl` / `doc`；多包示例与 Nix 沙箱复现
-  （`checks.vuna-package`）。
+- M10：模块系统 v2——模块头与显式导出列表、抽象类型、`module B` / `B.name` 重导出、`_` 前缀隐私与模块路径不变式。
+- M10.5：类型表达力——记录类型与 trait（单参数、相干默认、命名实例、孤儿检查、`deriving`），内置 `Show` / `Eq` / `Ord` 与方法级字典穿参。
+- M11：标准库——独立成员包 `vuna-stdlib`，高阶 kind 与一般约束泛化，`do` 语法糖与 IO 组合子，编译器成为 stdlib 首个用户。
+- M11.5：包管理与工具链——`vuna.toml`、workspace 与依赖 DAG、`[export]` 跨包可见性、三目录约定，以及 `build` / `test` / `fmt` / `repl` / `doc`。
+- M12：性能与编译模型——分离编译（vuna 模块 → OCaml `.ml` / `.mli`）与 ocamlopt 模块级增量构建，seed 改为多文件文件集，新增机器无关指标门槛。
+- M11.6：fmt 完善——注释保留与 100 列行宽折行。
+- M12.5：工具链与自举边界拆分——编译器独立为成员包 `vuna-compiler`，seed 只含编译器入口闭包（63 → 49 个文件），工具链移出 TCB；同期修复编译性能（AVL 类型替换 / 路由表 / 快速 seed 构建，compiler 闭包 build --split ~32s → ~2s）。
+- M12.6：main / IO 语义——可执行入口 `main : IO a` 由运行时执行（无公开 runner），用户包与 `vuna interp`/`--root` 入口都不能直接调用 effectful 内建（只能经 `Vuna.IO`）；IO 组合统一走 Functor/Monad trait（`fmap`/`bind`/`pure`、`>>=`、`do`），效果 API 直接 IO 化（print/getArgs/readFile 等返回 IO，内部 prim_*）；seed 51 个文件 / ~0.86 MB；`vuna interp` / `vuna test` 保留纯 main 结果 show 的调试约定。
+- M12.7：DT 前置清理——删除 dynamic codegen（`Vuna.Codegen`）与 `--no-typecheck` / `--typecheck` / `--typed` / `build --no-print` / `--out` / 裸 compile 回退，typed 成为唯一 codegen；`check` 改为纯类型检查（单次 typecheck），clause arity 诊断统一到 typecheck；默认模块根改为当前包；seed 49 个文件 / ~0.81 MB。
 
-当前硬约束：
+## 当前硬约束
 
 1. 当前编译器必须能通过自身类型检查；
 2. seed rotation 后 stage 1 与 stage 2 必须字节一致；
-3. `test/run-tests.sh`、`nix build`、`nix flake check` 必须保持通过。
+3. `test/run-tests.sh`、`nix build`、`nix flake check` 必须保持通过；
+4. **seed 只含 compiler 包的入口闭包**；工具链（fmt/lint/repl/doc/test、未来的 LSP/package manager）不进入 TCB；
+5. 已不再保留 dynamic codegen；HM 回归路径是 **interp + typed + split**，DT 主路径是 **core evaluator + typed**；
+6. 新增语法先以**旧种子可编译**的形式落地，rotation 之后才在编译器源码中使用；每阶段保持旧 HM 回归。
 
-当前保留 `dynamic codegen` 仅作为 `--no-typecheck` 的测试/调试回退路径。
+## 路线目标：依赖类型
 
-## 推荐顺序
+- **终态**：Idris2 风格的完整依赖类型——宇宙、Pi、索引归纳族、依赖模式匹配、隐式参数、接口、洞、终止性/覆盖性、擦除，并能用 vuna 自己写编译器。
+- **迁移方式**：渐进/双路径。新增核心类型论（Core TT）与精化器（Elaborator），与现有 HM 检查器并存；HM 代码继续走原路径，DT 代码走新路径，逐步统一，M18 再把编译器本体迁到 DT。**不做一次性全量重写**——那会直接破坏自举、seed 和现有测试。
+- **兼容性**：现有 trait / 记录 / 模块 / 包 / IO / 工具链继续可用；旧 HM 测试与既有路径（interp + typed + split）不得回归。
+- **非目标（当前）**：证明助手级 tactic/自动化；线性类型；独立 GC 与多后端优先于 DT 核心；大型标准库扩张优先于类型核心。
+- **成本边界**：每阶段过 `nix flake check`（含 `seed-selfhost`、`vuna-metrics`）；HM 编译时间不回归；DT 精化时间有基准记录。
 
-如果目标是“能实际写程序的语言”：
+## 阶段共同门槛
 
-```text
-M10 模块系统 v2（已完成）→ M10.5 类型表达力（已完成：记录 + trait）
-   → M11 标准库（已完成：高阶 kind/约束泛化 + do/Monad/IO；编译器是首个用户）
-   → M11.5 包管理与工具链（已完成：vuna.toml / workspace / 三目录 + 工具链）
-   → M12 性能与编译模型（下一步）→ M13 高级类型/效应（研究型，单独规划）
-```
+- `nix flake check`（vuna-tests / vuna-package / vuna-metrics / vuna-typecheck / vuna-lint / seed-selfhost / fixed-point）通过。
+- 旧 HM 代码零回归：interp + typed + split 三路径；新增 DT 语法的 interp 覆盖按阶段能力补齐，例外在文档中显式记录。
+- DT 代码：核心求值器与 typed codegen 语义一致；`build --split` 在 M17 前允许单文件回退。
+- 当前种子能编译当前源码；rotation 后 stage1 == stage2；seed 仍只含 compiler 包闭包。
+- 编译器自检通过；新增阶段更新 README 限制/历史与 roadmap 完成摘要；M18 起编译器逐步 dogfooding。
 
-依赖说明：
+## 下一步 / 待办
 
-- **M10、M10.5、M11、M11.5 已完成**；下一步主线是 M12（分离编译 / seed 多文件 / 基准门槛）；
-- **M11 与 M11.5 的机制部分可并行**，二者改动面互不重叠（stdlib vs 包工具）；
-  但**交付顺序**是 M11 先、M11.5 后；
-- **M11（标准库）依赖 M10.5 的 trait 基础**（已具备，含方法级字典穿参），不依赖 M11.5：
-  `do`/Monad 还需要高阶 kind 与一般约束泛化，作为 M11 的前置工作补齐；stdlib 先以
-  **模块根**形态存在（`--root lib --root stdlib`），编译器作为首个用户，不需要包格式；
-- **M11.5（包管理）依赖 M10 与 M11**：模块导出/重导出与路径不变式是包门面的基础；
-  stdlib 是第一个被包装成包的库，且被编译器包依赖；
-- **编译器是 stdlib 的第一个大客户**：`Maybe/List/Result/Bool` 单一真源（不再在编译器
-  `Vuna.Base` 私人重复），stdlib 由最复杂的程序（编译器）先行验证；
-- **M11 与 M11.5 的机制部分可并行**：M11.5 中“stdlib 作为首个包”的验收等 M11。
+### M13：核心类型论与精化器（DT 地基）
 
-如果目标是“类型系统研究平台”，可直接推进 M13 候选方向；M9/M10/M10.5 已完成。
+**目标**：新增最小但可用的核心类型论与精化器：宇宙、Pi、定义性相等、metavariable/基础隐式插入；DT 子集可编译运行；旧 HM 路径完全不变。
 
----
+**范围**：
 
-## M10：模块系统 v2（已完成）
+- 新增编译器模块（建议 `Vuna/Core.vuna`、`Vuna/Elab.vuna`、`Vuna/CoreCodegen.vuna`；名称以实现为准），全部先用现有 HM 语法编写。
+- Core：`Term`（Var/Global/Type l/Pi/Lam/App/Let/Meta）、`Value`、`Closure`、`Env`、`Level`；NbE 求值/quote/定义性相等（beta/delta/eta）；简单宇宙层级 `Type 0 : Type 1`（暂不做累积性/宇宙多态）。
+- Surface：`(x : A) -> B`、`Type`、`Type 1`、类型级应用、洞 `_`、基础隐式 `{x : A} -> B`；parser/loader 接入，旧语法不变。
+- Elaborator：双向检查/推断、metavariable、一阶/pattern unification、基础隐式插入、错误信息。
+- 集成：`--dt` opt-in（或按语法自动选择）；DT 代码可导入现有 stdlib 的简单模块（List/Maybe/Int/String），先做受限互操作；完整 trait/模块互操作留到 M15–M18。
+- Codegen：类型/类型级项擦除；简单 DT 程序生成 OCaml；单文件先行，split 可回退。
+- 测试：`id : (a : Type) -> a -> a`、`const`、`compose`、`apply`；宇宙错误、转换错误、洞；旧 HM corpus 全量回归。
 
-目标：让语言能组织真实程序（模块边界、抽象与可见性）。
+**验收**：上述 DT 例子通过核心求值器与 typed codegen；旧 HM 路径不变；编译器自检、fixed point、`nix flake check` 通过；HM 编译时间不回归；DT 精化时间有基准；README/roadmap 更新。
 
-范围：
+**前置**：M12.7；当前 seed；现有 loader/parser/typecheck 架构。
 
-- 显式导出/抽象类型：模块签名，只导出接口不导出构造器；
-- 模块类型名与值命名空间进一步分离；
-- 视目标再考虑 functor、嵌套模块、模块类型别名（M10 未实现，留待后续）。
+**风险**：核心 TT/精化器复杂度；双路径维护；与 HM 模块互操作；性能。**设计闸门**：先出 core syntax/semantics/erasure 设计稿；若双路径被证明不可维护，再评估统一或重写。
 
-验收：
+### M14：索引族与依赖模式匹配
 
-- 跨模块抽象类型不可被构造器模式破坏；
-- 模块导出/重导出/`_` 前缀有 loader 测试；
-- 编译器自身可用新特性（至少不依赖旧 hack）。
+**目标**：支持索引归纳族（Vec/Fin/Eq 等）与依赖模式匹配。
 
-### M10 设计要点（已实现）
+**范围**：
 
-#### 模块导出与可见性
+- Surface/Core：`data Vec : Nat -> Type where ...`、带 telescope 的构造器、索引；类型级 `Nat` 与构造器归约。
+- 依赖模式匹配：`case` 对索引做 unification、不可达分支/不可能情况；基础 coverage 检查；`with`/`rewrite` 暂不做或只做最小实验（见研究储备）。
+- 类型级递归限制：暂用结构化递归/燃料限制，完整 termination 留 M16。
+- Codegen：索引/证明暂不保证完全擦除，先保证语义正确；Vec/Fin/Eq 例子可运行。
+- 测试：Vec append/map/head、Fin 安全索引、Eq 的 refl/sym/trans；不可能情况正反例。
 
-- **显式导出列表**写在模块头，**省略列表 = 导出全部**（与 v0 行为一致，自举零迁移）：
-
-  ```vuna
-  module M (export-item, ...) where
-  ```
-
-- **抽象类型**：导出项 `T` = 只导出类型（构造器不可见）；`T(..)` = 类型 + 构造器
-  （重导出已导入的类型时只公开源模块本来就公开的构造器，保持源的抽象性）。
-  这直接满足验收“跨模块抽象类型不可被构造器模式破坏”。
-- **命名空间**：导出项按 M7 的类型名/值名两套命名空间解析；`foo` 若同时是类型名与值名，
-  裸名导出两者，`foo(..)` 再放构造器。暂不做选择性子集 `T(C1,C2)`。
-- **重导出**：`module B` = 整模块重导出（门面/伞模块，保留 B 的抽象性）；
-  `B.foo` = 选择性重导出（限定名，永不歧义）；重命名重导出 `foo = B.foo` 暂缓。
-  重导出名须在当前作用域可见。这是“import 只算直接依赖、不传递”的**受控例外**：
-  只有显式列出的名字重新可见。
-- **包级别模块导出（分两层）**：
-  - 聚合层（M10 已完成）：模块级导出列表 + `module B` 重导出，包门面约定为
-    `lib/Vuna.vuna`（M10 只提供能力，仓库当前未放置该文件）；
-  - 限制层（M11.5 包管理做）：根 manifest（`vuna.toml`）声明 `[export]`，
-    loader 在 import 解析时校验目标模块是否在公开集，从而隐藏包内部模块。
-- **模块路径不变式**：模块路径的**最后一段是文件名，中间段是目录，目录本身不是模块**。
-
-  ```vuna
-  modulePath root name = root ++ "/" ++ joinSlashes (splitOnDot name) ++ ".vuna"
-  ```
-
-  由此在同根下 `Vuna.vuna`（模块 `Vuna`）与 `Vuna/Parser.vuna`（模块 `Vuna.Parser`）
-  可以共存、无歧义，包门面可直接命名 `Vuna`。loader 测试用探针验证：
-  `Vuna.vuna` + `Vuna/Parser.vuna` 共存，`import Vuna` 与 `import Vuna.Parser` 都能解析。
-- **`_` 前缀不可导出**：任何顶层名字（值/类型/构造器）以 `_` 开头 ⇒ 隐式私有、不可导出；
-  尝试导出 `_` 名 ⇒ 硬错误（不是静默剔除，符合 M9“不再靠猜”）；对构造器也生效
-  （`_` 是硬隐私标记，不因 `(..)` 放松）；顶层名字禁止裸 `_`（与模式通配符冲突）。
-  模块名段不受此约束（须 `[A-Z][A-Za-z0-9_]*`），二者不冲突。
-
-#### 验收补充
-
-- 跨模块抽象类型不可被构造器模式破坏（`T` 导出、跨模块 `case x of ...` 报错）；
-- `_` 名不可导出（编译错误）；
-- `Vuna.vuna` + `Vuna/Parser.vuna` 共存、门面可解析；
-
-## M10.5：类型表达力（已完成）
-
-目标：解决 ad-hoc 多态，为 `do`/Monad 铺路。
-
-范围：
-
-- 记录类型：字段访问、更新、模式；
-- trait（命名实例）：替代当前 `==`、`show` 等特化；
-- 高阶 kind 类型变量（`TApp`/kind）：`Monad m` 要求 `m :: * -> *`
-  （M10.5 未实现，留作 M11 前置）；
-- 不建议此阶段直接上依赖类型；先完成记录 + trait。
-
-实现状态：记录（M10.5a）与 trait/实例/`deriving`（M10.5b）、方法级字典穿参
-（M10.5c，裸类型变量）已完成；高阶 kind 与一般约束泛化不在 M10.5 范围内
-（见文末实现状态）。
-
-验收：
-
-- 记录与 trait 有类型检查测试与 typed codegen 测试；
-- 编译器自身可用新特性（至少不依赖旧 hack）。
-
-### M10.5 设计要点（已定）
-
-#### trait（替代当前 `==`、`show` 特化）
-
-- 命名：**`trait`**。不用 `interface`（① 暗示面向对象子类型，vuna 无对象；
-  ② 与“模块签名/模块接口”撞词）；不用 `type class`（背负 Haskell 全套实例解析的预期包袱）。
-- 声明与使用（`as` 复用 import alias 风格）：
-
-  ```vuna
-  trait Show a where
-    show : a -> String
-
-  instance Show Int where               -- default（未命名，相干）
-    show n = strFromInt n
-
-  instance Show Int as showHexInt where -- 命名实例
-    show n = "0x" ++ strFromInt n
-
-  show x                -- 隐式走 default
-  show @showHexInt x    -- 显式指名（名字级，与未来类型应用 @T 正交）
-  ```
-
-- **命名实例模型 X（已定）**：
-  - 未命名实例 = `default`，按 **(trait, 类型) 至多一个**，且**全局唯一**（flatten 时检查，
-    不是使用期）。`default` 不是全模块唯一——`Show Int` 与 `Show String` 可同存。
-  - 显式实例名占模块顶层命名空间：同模块、同 trait 内唯一；可模块限定（`M.name`）、
-    可导出导入。
-  - **孤儿实例（trait 与类型都不在本模块定义）必须命名、禁止 `default`**——这是
-    “默认相干”的安全阀：default 永不孤儿 ⇒ 不会出现两库各写一个 `default Show Int`。
-  - 隐式解析**只认 `default`，命名实例绝不自动选**。算法：无 `@` 时收集“可见
-    （当前模块 + 已导入模块导出列表 + prelude）且能作用于 T 的 default”，恰 1 ⇒ 用；
-    0 ⇒ “no instance”；≥2 ⇒ 声明期已被全局唯一检查拦住，不会到使用期。有 `@name` ⇒
-    查名（可 `M.name`，需已导入），命中即用，未命中或头类型不符 ⇒ 报错。
-  - **`deriving (Show, Eq)` 生成 `default`**：同一类型可“derive 的 default + 手写命名
-    自定义”并存（用 `@` 挑自定义）；“derive 又手写未命名 default” ⇒ 两个 default ⇒
-    声明期错误。
-  - **经验法则**：主/结构实例写成 `default`，备选写成命名（如 `showHex`）。
-  - **实现**：无 overlapping、无实例链搜索；只要“default 全局唯一检查 + `@` 名字查找”。
-    实际落地采用**静态派发 + 方法级字典穿参**（裸类型变量，见文末实现状态）；
-    `specializeCmp` 与运行时 `show_value` 已删除。
-  - M10.5 只做**单参数 trait + 相干默认 + 命名逃逸 + deriving Show/Eq**；
-    多参数/关联类型留 M13。
-
-#### 验收补充
-
-- 命名实例：同类型 default 与命名并存、`@name` 选择、孤儿必须命名（反例报错）；
-- 编译器自身迁移：去掉 `specializeCmp` / 运行时 `show_value`，改用 trait + deriving。
-
-### M10.5 实现状态（已落地）
-
-- trait 主要按**静态派发**实现：调用点类型确定时，类型检查期直接解析到 default 实例 /
-  `@` 命名实例 / `Eq`、`Ord`、`Show` 的结构回退，生成直接函数调用。**方法级字典穿参**
-  （M10.5c）覆盖调用点类型是裸类型变量的情况：类型检查给函数增加方法函数参数（字典按
-  trait 方法扁平化），调用点静态传入具体实例方法或调用者的字典参数，支持跨函数传播、
-  前向引用与递归。
-- 原因：M10.5 只需支撑记录与标准库早期代码；静态派发实现小、无运行时字典开销，与现有
-  typed codegen 兼容；裸类型变量场景再用方法级字典穿参补齐。`Eq` / `Ord` 在类型无法
-  确定时（含 `List a` 等结构化泛型）保留运行时结构比较（typed 用 OCaml 结构比较，
-  interp/dynamic 用 value 结构比较）作为回退；`Show` / 用户 trait 的结构化泛型仍报错。
-- 后续：高阶 kind（`m :: * -> *`）与一般约束泛化是 `do`/Monad 的前置，作为 M11 标准库
-  的先行工作推进；default 实例可见性目前按整个程序（flatten）计算，未做 import 图级
-  细化。
-- 边界：`Ord` 的运行时内建回退只覆盖 `Int` / `String` / `Bool`（其余类型报
-  `no instance Ord`）；命名实例可经显式导出列表导出，app 侧用 `@M.fancy` 选择。
-- 回归修复（M10.5c）：同一 trait 的多个不同类型 default 实例相互独立（实现函数按
-  head 类型取名），直接调用与泛型字典穿参调用均可。
-
-## M11：标准库（已完成）
-
-目标：从“能编译示例”到“有可用的标准库与 effectful 编程”。
-
-范围：
-
-- 核心库：`List`、`Maybe`、`Result`、`String`、`IO`、排序、映射等；stdlib 是
-  **独立的模块根 `stdlib/`**（成员包 `vuna-stdlib`），不混入编译器 `lib/`；
-- `do` 语法糖与明确的 IO 组合子（`bind`/`pure`/`>>`）：`do` 是 `>>=`/`pure` 的语法糖，
-  依赖 Monad trait（trait 与裸类型变量字典穿参已在 M10.5 提供；高阶 kind 与一般约束
-  泛化需在 M11 前补齐）；`Monad m` 要求 `m :: * -> *`；
-- 顺序执行 `>>` 作为 `do` 的派生。
-
-验收：
-
-- 核心库覆盖常用操作；`do`/IO 组合子对 `Maybe`/`List`/`IO` 生效；
-- 标准库与 `do` 有类型检查与 typed codegen 测试；
-- 编译器自身已使用 stdlib（作为首个用户，自举 fixed point 在 `lib+stdlib+app` 源上成立）。
-
-### M11 实现状态（已落地）
-
-- 标准库：`stdlib/` 成员包（`stdlib/lib/` 模块根），模块 Pair/Bool/List/Maybe/
-  Result/String/Sort/Map/Monad/IO + 包门面 `Vuna`；`[export]` 清单；
-- 高阶 kind：`Ty.TApp`（类型变量当类型构造器应用）、trait 参数 kind 元数与实例
-  kind 校验（`instance Monad Int` 声明期报错）；一般约束泛化：高阶 kind 类型变量的
-  方法级字典穿参（如 `bindPair : m a -> m b -> m (Pair a b)` 跨类型构造器派发）；
-- `do`：parser 产出 `EDo`，loader desugar 成 `bind`/lambda；`>>=`/`>>` 中缀；
-  `do` 对 Maybe/List/IO 生效；IO 用抽象 `IO a`（`Int -> a` 包装）+ runIO/printIO 等；
-- 编译器迁移：`Vuna.Base` 门面重导出 stdlib，构建根 `lib+stdlib/lib+app`，
-  编译器是 stdlib 首个用户（fixed point 在 lib+stdlib/lib+app 上成立）；
-- 内建补充：`readLine` / `readDir` / `isDirectory` / `makeDir` / `removeFile`；
-- 测试：`corpus/monad/`（do/高阶 kind，26 段）、`corpus/stdlib/`（27 段，
-  `--root ../stdlib/lib`）、fmt golden（32 段）。
-
-### M11 设计要点（已定）
-
-#### 编译器是 stdlib 的首个用户（单一真源）
-
-- 编译器依赖 stdlib：`Maybe/Result/List/Bool/Pair` 与通用 helper 的唯一定义在 stdlib，
-  不再在编译器 `Vuna.Base` 私人重复（避免“内建相邻全局构造器”不变式被两份定义破坏）；
-- `Vuna.Base` 变**门面**：删除上述类型与已迁走 helper，改**重导出** stdlib 模块
-  （`module Vuna.Maybe`/`module Vuna.Result`/`module Vuna.List`/`module Vuna.Bool`），
-  保留编译器专属（`Pos`/`Span`/`showSpanLoc`、模块路径 `splitOnDot`/`joinSlashes` 等、
-  诊断 `suggest`/`similarName`）；现有 `import Vuna.Base` 的模块不改一行即继续可见这些名字；
-- 门面是过渡态，日后可让各模块直接 import stdlib 后解散 `Base`；门面内不再定义
-  与 stdlib 重名的值（如 `length` 归 stdlib `List`）。
-
-#### 落地顺序与 seed 轮换（三步，前一步不依赖后一步）
-
-- **Step 1 纯重构（旧语法，seed 不轮换）**：把类型与通用 helper 从 `Vuna.Base` 迁到
-  stdlib（`data`/`import`/`module` 重导出均为 M10 已有语法），构建命令变
-  `--root lib --root stdlib --root app`；
-- **Step 2 语法落地**：M10.5 trait + 高阶 kind 进编译器（编译器自迁移去掉
-  `specializeCmp`/运行时 `show_value`）→ **rotate seed**；随后 `do` 语法糖进编译器 →
-  **rotate seed**；
-- **Step 3 stdlib 升级**：seed 已懂 trait/do，此时才允许 stdlib 写 `Monad`/`Functor`
-  实例与 `do`/`IO` 组合子；fixed point `stage1 == stage2` 在 `lib+stdlib+app` 源上成立。
-
-> 硬规则：stdlib 用 `do` 之前，seed 必须已轮换到懂 `do`（README 种子策略）。
-
-## M11.5：包管理与工具链（已完成）
-
-目标：从“能编译示例”到“能开发项目”。依赖 M10（模块导出）与 M11（标准库，stdlib 成为首个包）。
-
-范围：
-
-- 包格式与锁文件；先与 Nix 集成，不急于完整 registry；
-- `vuna fmt`、REPL、测试运行器、文档生成；
-- LSP 可后置，但 formatter + REPL 对语言迭代帮助最大。
-
-验收：
-
-- 用 vuna 写一个多包示例项目；
-- 格式化后源码仍可编译且输出不变；
-- 包管理路径在 Nix 沙箱内可复现。
-
-### M11.5 实现状态（已落地）
-
-- `vuna.toml`：TOML 子集解析（`Vuna.Toml`）+ manifest 模型/校验（`Vuna.Manifest`）；
-  `[package]` / `[workspace].members` / `[export].modules` / `[dependencies]`（本地路径）；
-- workspace：根即包（Cargo 风格），本仓库 = 根包 `vuna` + 成员包 `vuna-stdlib`；
-- 模块根解析：`Vuna.Pkg`（`Root` = 目录 + 包名 + 可选导出集；依赖 DFS 后序、按包名
-  去重），loader 用 `loadProgram roots entryPkg entry`：同包全可见、跨包只认
-  `[export]`，隐藏模块报错；`app/Main.vuna` 固定入口，`app/` 不再作模块根
-  （`app/Lint.vuna` 迁到 `lib/Vuna/Lint.vuna`）；
-- 工具链：`vuna build`（package → typed OCaml）、`vuna test`（test/*.vuna，
-  main : String 空串通过）、`vuna fmt --check`（`Vuna.Fmt`，幂等、可重解析、注释丢失）、
-  `vuna repl`（行式，定义累积 + 完整 loader/类型检查路径）、`vuna doc`（Markdown API）；
-- 验收载体：`examples/multi/` 多包 workspace；`checks.vuna-package` 在 Nix 沙箱里
-  build/test/fmt/doc 并构建编译器自身，验证包管理路径可复现；测试 28–31 段；
-- 未做：registry / 锁文件 / 远程依赖、LSP、fmt 注释保留与折行、`vuna build` 的
-  ocamlopt 驱动（只生成 .ml）、REPL 多行输入。
-
-### M11.5 设计要点（已定）
-
-#### 包格式：`vuna.toml`
-
-- 包元信息用 `vuna.toml`（TOML，非 vuna 源码）：`[package]`（name/version/edition）、
-  `[export]`（可导出模块）、`[workspace]`（成员）、`[dependencies]`；
-- **包名 ≠ 模块命名空间**：模块空间仍是 `Vuna.*`，包名只是依赖解析的键；loader 解析
-  `import Vuna.List` 按**依赖包的 `lib/` 根顺序**查找；跨依赖同名模块沿用“跨根同名硬错误”；
-- `[export]` 只能列 `lib/` 下的模块（结构约束，loader 强校验）；省略 = 导出全部 lib。
-
-#### workspace：根即一个子包
-
-- workspace 根本身是一个子包（Cargo 风格）：根 `vuna.toml` 同时含 `[workspace]` 与 `[package]`；
-- 当前仓库 = 一个 workspace：根包（编译器，`name = "vuna"`）+ 成员包 `stdlib`
-  （`name = "vuna-stdlib"`）；
-- 根包 `[dependencies]` 含 `vuna-stdlib`；`vuna-stdlib` 依赖空（`readFile`/`print`/`++`/`==`
-  是语言内建，不是包依赖）；依赖图无环：`用户包 → vuna-stdlib`、`vuna(编译器) → vuna-stdlib`。
-
-#### 三目录与单向依赖（每包固定 `lib/` `app/` `test/`）
-
-- 包内分层（依赖只向下流）：`lib` → 仅外部包 `lib`；`app` → 本包 `lib` + 本包 `app`
-  + 外部包 `lib`；`test` → 本包 `lib` + 本包 `app` + 本包 `test` + 外部包 `lib`；
-- 包间：A 依赖 B ⇒ A 只能用 B 的 `lib`；B 的 `app`/`test` 对 A 不可见；包依赖图是 DAG（无环）；
-- `app/Main.vuna` 固定入口：有可执行目标的包，入口恒为 `app/Main.vuna`；
-- `app/` **不再作为模块根**：`app/Main.vuna` 只从 `lib/`（本包+依赖包）import；`app/` 下的
-  辅助模块是 app 私有、其他包不可见；
-- 结构推论：`app/Lint.vuna` 是库模块（被 import，非入口），挪到 `lib/Vuna/Lint.vuna`；
-  `app/` 退化为纯入口目录；多根 `--root lib --root app` 退休，loader 根 = 本包 `lib/` +
-  依赖包 `lib/`（由 workspace/依赖图解析，取代手写 `--root`）。
-
-#### 与现状衔接
-
-- `test/corpus/modules/0*` 夹具已具包形态（`lib/`+`app/`+`expected.out`），升级为迷你包
-  只需加 `vuna.toml`，是天然的验收载体；
-- `test/run-tests.sh` 是工具链脚本+黄金数据，暂原地保留（CI 依赖）；`test/` 的 vuna 测试
-  模块从 `test/*.vuna` 起步；三目录约定约束源码包，不约束 harness。
-
-## M12：性能与编译模型
-
-目标：摆脱“整程序 flatten + 全量重编”，走向多文件分离编译。
-
-依赖：M11.5（包 DAG 是增量边界：接口变化的包，只有其传递依赖者被重编）。
-
-范围：
-
-- **分离编译（路线 B）**：vuna 模块 → OCaml 模块（`module M : sig ... end = struct ... end`），
-  逐模块 `.ml`；构建用 ocamlopt 原生 `.cmi/.cmx` 缓存；
-- **优化归属 ocamlopt**：模式匹配编译/尾调用/死代码/内联等由 ocamlopt 承担；M12 **不做
-  vuna typed IR**（完整 IR + 优化 pass 随多后端一并评估）；
-- **seed 接受多文件**：信任锚点从单文件变多文件集合；`bootstrap/` 改名 `seed/`、
-  `vuna-boot` 改名 `vuna-seed`（随本项落地时执行）；seed rotation 与 fixed point 按
-  **文件集合逐字节一致**；
-- **基准测试与性能回归门槛**：机器无关指标（生成产物 bytes/lines/最长行、构造计数）
-  作 CI 门槛 + 粗时间界；精确时间测量保持手动 `nix run .#bench -- --baseline`；
-- 评估是否以及何时脱离 OCaml 后端 → 后置到多后端/IR 项目一并评估。
-
-验收：
-
-- 增量编译不再重编全部模块（ocamlopt `.cmi/.cmx` 缓存生效）；
-- 跨模块抽象类型/重导出在 OCaml 模块边界（sig）上仍正确；
-- 关键基准有可比较数据；机器无关指标作回归门槛；
-- fixed point 与自检不因优化改变语义（seed 多文件后 = 文件集合逐字节一致）。
-
-自研 native/LLVM/C 后端 + 完整 typed IR 应作为独立大项目评估，不与本阶段捆绑。
-
-## M13：高级类型 / 效应（研究型）
-
-候选方向（一次只选一个）：
-
-- 依赖类型；
-- 线性/效应系统；
-- 隐式参数；
-- 更完整的模块类型系统。
-
-前置条件：
-
-- M10.5 的类型基础稳定；
-- M9 的诊断能支撑复杂类型错误；
-- 有明确的语言目标与可接受的编译期成本。
+**验收**：Vec/Fin/Eq 例子通过核心求值器 + typed codegen；不可能情况正确拒绝；旧 HM 零回归；编译器自检/fixed point/flake check 通过；split 回退显式记录。
+
+**前置**：M13。**风险**：依赖模式匹配/索引 unification；类型级递归；与现有 ADT/codegen 的整合。**设计闸门**：先定索引族 core 表示、模式匹配 unifier、coverage 规则。
+
+### M15：隐式参数、接口与洞
+
+**目标**：让 DT 可用：隐式参数、自动插入/求解、接口（替代/兼容 trait）、洞与目标显示。
+
+**范围**：
+
+- Surface/Core：`{x : A}` 隐式 binder、隐式应用/插入、接口声明与实例（可用 record + implicit 编码）、洞 `_` 与目标类型显示。
+- 解析：instance search、歧义/相干性、局部 given、跨模块可见；与 M13 的 metavariable/unification 整合。
+- 旧 trait 兼容：现有 `trait`/`instance` 语法尽量 desugar 到新接口；旧代码不要求改写。
+- Codegen/split：隐式参数/字典擦除或穿参；`.mli` 能导出接口/隐式签名。
+- 测试：`Show`/`Eq` 接口、Vec 的隐式长度、实例搜索、洞求解、旧 trait corpus 回归。
+
+**验收**：接口/隐式/洞例子通过；旧 trait 代码零改动；歧义/缺失实例有明确诊断；编译器自检/fixed point/flake check；HM 性能不回归。
+
+**前置**：M13/M14。**风险**：解析/相干性；metavariable 交互；错误信息；与旧 trait 的语义差异。**设计闸门**：先定接口/实例/隐式解析规则与旧 trait 的兼容边界。
+
+### M16：终止性、覆盖性与擦除
+
+**目标**：健全性与性能：终止性/覆盖性检查，证明与索引的擦除，DT 代码生成不携带证明开销。
+
+**范围**：
+
+- 终止性检查（结构化递归/尺寸变化）、totality/partial 标记；类型级求值的终止性保证。
+- 覆盖性检查：穷尽性、不可达分支、不可能情况。
+- 擦除分析：类型/索引/证明擦除；typed codegen/核心 codegen；运行时表示。
+- 性能：DT 与 HM 程序基准；编译器自举性能预算。
+- 测试：total/non-total、覆盖性正反例、擦除前后语义一致、性能基线。
+
+**验收**：非终止/不覆盖程序被正确拒绝或标记；总函数通过；证明/索引在生成代码中被擦除（有检查）；DT 语义不变；编译器自检/fixed point/flake check；性能不超预算。
+
+**前置**：M14/M15。**风险**：终止性检查难度；擦除正确性；性能；与 split 的交互。**设计闸门**：先定 termination 规则、erasure 规则与例外（如 `partial`）。
+
+### M17：DT 工具链与证明工程
+
+**目标**：让 DT 可日常使用：LSP、洞/目标、case splitting、诊断、文档与教程；可与 M16 重叠。
+
+**范围**：
+
+- LSP server（放根包，永不进 seed）：诊断、补全、跳转、悬停、洞目标、case splitting、格式化。
+- 洞工作流：`vuna` 命令展示目标/上下文；编辑器冒烟。
+- 证明工程：`rewrite`/`with` 等 ergonomics 按需；tactics/自动化只做研究储备。
+- 文档：DT 教程、错误索引、迁移说明；`vuna doc` 支持接口/隐式签名。
+
+**验收**：VS Code/Neovim 冒烟；洞/case splitting/诊断可用；文档站构建；seed 闭包不变；`nix flake check` 扩展。
+
+**前置**：M15；可与 M16 并行。**风险**：编辑器协议/兼容；性能；语法变更导致返工。
+
+### M18：自举迁移（决策点）
+
+**目标**：编译器本体使用 DT 子集；seed rotation 后 fixed point；用语言写自己，验证 DT 的实用性。
+
+**范围**：
+
+- 在 M17 结束前轮换 seed，使 seed 包含 DT 精化器；再用 DT 语法迁移编译器模块（从 Core/Elab 周边开始，逐步扩大）。
+- 使用索引类型/隐式参数/接口/证明表达关键不变量（如 de Bruijn 索引、上下文良构）；可选证明关键引理（substitution/weakening 等），不承诺完整验证。
+- seed/多文件 fixed point、性能预算、旧测试回归。
+
+**验收**：编译器能从 seed 构建；stage1 == stage2；性能可接受；DT 编译器源码通过自身检查；旧 HM 功能/测试不回归；文档记录迁移范围与未验证部分。
+
+**前置**：M16/M17；seed rotation 完成。**风险**：最高；可能暴露 DT 性能/终止性/擦除问题。**决策闸门**：若 DT 仍不可用/性能不可接受，保留 HM 编译器并只把 DT 作为用户语言，不强行全量迁移。
+
+## 后续大阶段（M19–M23）
+
+### M19：效应与 IO 的 DT 化
+
+**目标**：在 DT 上表达 IO/State/Reader/Error 等效果；保留 `main : IO a` 与现有 `Vuna.IO` 兼容；代数效应作为可选方向。
+
+**范围**：接口/monad 编码；DT 程序 IO 例子；`main` 语义；测试；性能。
+
+**验收**：DT 程序通过核心求值器 + typed codegen；`main : IO a` 与包级 effectful 内建限制保持；旧 HM IO 代码兼容。
+
+**前置**：M15/M16；可与 M16 后段并行。**优先级**：高（实用程序需要），不阻塞 DT 主线。
+
+### M20：模块系统 v3
+
+**目标**：signature / functor / 嵌套模块 / module type 别名 / opaque ascription；与包 `[export]`、DT 记录/接口整合。
+
+**范围**：签名匹配、functor Map/Set、跨包可见性、split/`.mli`、旧模块代码兼容。
+
+**验收**：签名匹配正/反例、抽象泄露反例、functor 示例；旧模块代码零改动；seed 闭包不变。
+
+**前置**：M13/M15；可并行。**优先级**：中。
+
+### M21：运行时与多后端
+
+**目标**：擦除感知的运行时；决定继续绑定 OCaml runtime 还是自研 GC/后端无关 IR；Wasm/JS 后端。
+
+**范围**：决策文档 + 原型；GC/运行时正确性/性能；新后端语义一致；seed 边界不变。
+
+**验收**：决策结论可执行；若实施，后端语义一致、性能基线、旧测试不回归。
+
+**前置**：M16/M18。**优先级**：条件性；DT 擦除后 OCaml 后端可能长期够用。
+
+### M22：标准库与包生态
+
+**目标**：DT 验证库（Vec/Fin/Map/Set/排序等）、包 registry/版本解析/lockfile/文档托管。
+
+**范围**：验证库正例/性质；本地 registry 端到端；锁文件可复现；CI。
+
+**验收**：验证库可构建；registry 端到端；锁文件可复现；文档可发布。
+
+**前置**：M14/M15/M17。**优先级**：高（采用度），贯穿推进；registry 可后置。
+
+### M23：并发与异步
+
+**目标**：基于效应/接口的 async/await 或结构化并发；调度器；取消/超时。
+
+**范围**：并发原语/调度；与 IO/effect 整合；测试。
+
+**验收**：并发示例、取消/超时/异常、竞态测试；性能基线。
+
+**前置**：M19/M21。**优先级**：条件性；可先库级后语言级。
+
+## 推荐顺序与并行策略
+
+主序列：
+
+**M12.7（已完成）→ M13 → M14 → M15 → M16 → M17 → M18**
+
+- **M12.7 已完成**：已删除无法支持 DT 的第二条 codegen，缩小 TCB，简化测试/CLI；现在开始 DT 主线。
+- **M13 → M14 是核心**，难以并行；M15 的可用性工作可在 M14 尾部启动。
+- **M16 收口健全性/性能**；**M17 可与 M16 重叠**；**M18 是最高风险决策点**。
+- **M19 / M20 可在 M15 后并行**；**M21 在 M16/M18 后决策**；**M22 贯穿**；**M23 在 M19/M21 后**。
+
+替代路径：
+
+- 只做 GADT/类型级编程：M13–M14 可裁剪，M15–M18 后移。
+- 优先大程序模块化：M20 提前到 M14/M15 之后并行。
+- 优先实用效应：M19 在 M15 后并行，不阻塞 DT 主线。
+
+## 旧 M13 候选方向归属
+
+| 原方向 | 新归属 |
+| --- | --- |
+| 依赖类型 | **M13–M18 主线** |
+| 隐式参数 | **M15** |
+| 线性/效应系统 | **M19 效应**；线性类型进研究储备 |
+| 更完整的模块类型系统 | **M20** |
+| 类型类 v2 | 不单列；**M15 的接口/隐式参数**取代，保留旧 trait 兼容层 |
+| dynamic codegen | 已由 M12.7 删除（DT 前置清理） |
+
+## 研究储备（不排期）
+
+- 宇宙多态/累积性。
+- 线性/量化类型（资源安全）。
+- 证明自动化/tactics/reflection。
+- `rewrite` / `with` / dependent elimination 的进阶 ergonomics（若 M15/M17 未覆盖）。
+- 效应行多态/更完整的效应系统（若 M19 只做 monadic 编码）。
+- 自研 GC/多后端探索（若 M21 决定不做）。
 
 ## 暂缓事项
 
-- 完整独立运行时/GC；
-- 多后端支持（先保持 OCaml 后端）；
-- 大型标准库扩张；
-- 包 registry 与远程依赖解析。
-
-这些应在 M9–M12 稳定后再评估。
+- 独立 runtime/GC → M21 决策。
+- 多后端 → M21（决策后）。
+- 大型 stdlib 扩张 → M22/持续轨道。
+- 包 registry 与远程依赖 → M22（DT 核心稳定后）。
+- 线性类型与依赖类型之外的类型系统研究 → 研究储备。

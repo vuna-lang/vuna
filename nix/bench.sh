@@ -9,7 +9,6 @@ COMPILER=vuna
 JSON_OUT=""
 BASELINE=""
 WITH_TESTS=0
-WITH_DYNAMIC=1
 KEEP=0
 STATUS=ok
 
@@ -18,7 +17,7 @@ usage() {
 usage: vuna-bench [options]
 
 手动测量 vuna 的构建/编译性能与生成产物尺寸。默认测量 vuna（stage 1）；
-加 --compiler boot 测量 vuna-boot（stage 0 种子）。请在仓库根目录运行。
+加 --compiler boot 测量 vuna-seed（stage 0 多文件种子）。请在仓库根目录运行。
 
 options:
   --compiler vuna|boot   被测编译器（默认 vuna）
@@ -28,7 +27,6 @@ options:
   --save FILE            与 --json 相同
   --baseline FILE        与之前的 JSON 报告对比，输出 delta
   --with-tests           额外运行 test/run-tests.sh（较慢）
-  --no-dynamic           跳过 --no-typecheck 动态路径测量
   --keep                 保留临时构建目录
   -h, --help             显示本帮助
 
@@ -93,10 +91,6 @@ while [ $# -gt 0 ]; do
       WITH_TESTS=1
       shift
       ;;
-    --no-dynamic)
-      WITH_DYNAMIC=0
-      shift
-      ;;
     --keep)
       KEEP=1
       shift
@@ -116,13 +110,14 @@ case $RUNS in
 esac
 case $COMPILER in
   vuna|stage1) COMPILER=vuna ;;
-  boot|vuna-boot|stage0) COMPILER=boot ;;
+  boot|vuna-seed|vuna-boot|stage0) COMPILER=boot ;;
   *) die "--compiler must be vuna or boot" ;;
 esac
 
 REPO=$PWD
-[ -f "$REPO/bootstrap/seed.ml" ] || die "run from the repo root (bootstrap/seed.ml not found)"
+[ -f "$REPO/seed/build.sh" ] || die "run from the repo root (seed/build.sh not found)"
 [ -f "$REPO/app/Main.vuna" ] || die "run from the repo root (app/Main.vuna not found)"
+[ -d "$REPO/compiler/lib/Vuna" ] || die "run from the repo root (compiler/lib/Vuna not found)"
 [ -d "$REPO/lib/Vuna" ] || die "run from the repo root (lib/Vuna not found)"
 command -v ocamlopt >/dev/null 2>&1 || die "ocamlopt not found (use: nix run .#bench)"
 
@@ -157,9 +152,9 @@ NPROC=$(getconf _NPROCESSORS_ONLN 2>/dev/null || printf 'unknown')
 OCAMLOPT_VERSION=$(ocamlopt -version 2>/dev/null || printf 'unknown')
 FLAMBDA=$(ocamlopt -config 2>/dev/null | awk -F': *' '$1 == "flambda" { print $2 }' || true)
 [ -n "$FLAMBDA" ] || FLAMBDA=unknown
-SEED_SHA=$(sha256sum bootstrap/seed.ml | awk '{ print $1 }')
-SRC_LINES=$(cat lib/Vuna/*.vuna app/*.vuna | wc -l | tr -d ' ')
-SRC_BYTES=$(cat lib/Vuna/*.vuna app/*.vuna | wc -c | tr -d ' ')
+SEED_SHA=$(find seed -type f | LC_ALL=C sort | xargs sha256sum | sha256sum | awk '{ print $1 }')
+SRC_LINES=$(cat compiler/lib/Vuna/*.vuna lib/Vuna/*.vuna app/*.vuna | wc -l | tr -d ' ')
+SRC_BYTES=$(cat compiler/lib/Vuna/*.vuna lib/Vuna/*.vuna app/*.vuna | wc -c | tr -d ' ')
 
 GIT_HEAD=unknown
 GIT_DIRTY=unknown
@@ -185,7 +180,7 @@ fi
 
 # ---- 工作副本 ------------------------------------------------------------
 mkdir -p "$WORK/src"
-cp -r lib app bootstrap "$WORK/src/"
+cp -r compiler lib app stdlib seed vuna.toml "$WORK/src/"
 if [ "$WITH_TESTS" = 1 ]; then
   cp -r test "$WORK/src/"
 else
@@ -251,31 +246,38 @@ measure() {
 }
 
 # ---- 构建 ----------------------------------------------------------------
-SEED_BIN=$WORK/vuna-boot
-STAGE1=$WORK/stage1.ml
+SEED_BIN=$WORK/vuna-seed
+STAGE1_SRC=$WORK/stage1src
+STAGE1_BUILD=$WORK/stage1build
+VUNA_COMPILER_BIN=$WORK/vuna-compiler
+PRODUCT_SRC=$WORK/productsrc
+PRODUCT_BUILD=$WORK/productbuild
 VUNA_BIN=$WORK/vuna
-STAGE2=$WORK/stage2.ml
+SELF_OUT_SRC=$WORK/selfsrc
+SELF_COMPILER_SRC=$WORK/selfcompilersrc
 
-measure seed_build ocamlopt -g -w -a+39 -warn-error +39 -o "$SEED_BIN" bootstrap/seed.ml
-measure seed_compile "$SEED_BIN" --root lib --root stdlib/lib --root app --no-print app/Main.vuna "$STAGE1"
-measure stage1_build ocamlopt -g -w -a+39 -warn-error +39 -o "$VUNA_BIN" "$STAGE1"
+measure seed_build sh seed/build.sh "$SEED_BIN"
+measure seed_compile "$SEED_BIN" build --split "$STAGE1_SRC" compiler
+cp -r "$STAGE1_SRC" "$STAGE1_BUILD"
+measure stage1_build sh "$STAGE1_BUILD/build.sh" "$VUNA_COMPILER_BIN"
+measure product_compile "$VUNA_COMPILER_BIN" build --split "$PRODUCT_SRC" .
+cp -r "$PRODUCT_SRC" "$PRODUCT_BUILD"
+measure product_build sh "$PRODUCT_BUILD/build.sh" "$VUNA_BIN"
 
 if [ "$COMPILER" = vuna ]; then
   SELF_BIN=$VUNA_BIN
-  SELF_OUT=$STAGE2
 else
   SELF_BIN=$SEED_BIN
-  SELF_OUT=$STAGE1
 fi
 
-measure compiler_self_compile "$SELF_BIN" --root lib --root stdlib/lib --root app --no-print app/Main.vuna "$SELF_OUT"
+measure compiler_self_compile "$SELF_BIN" build --split "$SELF_OUT_SRC" .
+measure compiler_closure_compile "$SELF_BIN" build --split "$SELF_COMPILER_SRC" compiler
+cat "$SELF_OUT_SRC"/*.ml >"$WORK/self_concat.ml"
+cat "$STAGE1_SRC"/*.ml >"$WORK/stage1_concat.ml"
+cat seed/*.ml >"$WORK/seed_concat.ml"
 
 printf 'main = 40 + 2\n' >tiny.vuna
-measure tiny_compile "$SELF_BIN" --root lib --root stdlib/lib --root app --no-print tiny.vuna "$WORK/tiny.ml"
-
-if [ "$WITH_DYNAMIC" = 1 ]; then
-  measure dynamic_self_compile "$SELF_BIN" --no-typecheck --root lib --root stdlib/lib --root app --no-print app/Main.vuna "$WORK/dyn.ml"
-fi
+measure tiny_compile "$SELF_BIN" compile --root compiler/lib --root lib --root stdlib/lib --root app --no-print tiny.vuna "$WORK/tiny.ml"
 
 # ---- corpus 批量编译（单次计时，内部循环） --------------------------------
 cat >"$WORK/corpus.sh" <<'EOS'
@@ -286,7 +288,7 @@ mkdir -p "$CORPUS_OUT"
 : >"$CORPUS_FAIL"
 for f in test/corpus/run/*.vuna; do
   out="$CORPUS_OUT/$(basename "$f" .vuna).ml"
-  if ! "$CORPUS_BIN" --root lib --root stdlib/lib --root app --no-print "$f" "$out" >>"$CORPUS_LOG" 2>&1; then
+  if ! "$CORPUS_BIN" compile --root compiler/lib --root lib --root stdlib/lib --root app --no-print "$f" "$out" >>"$CORPUS_LOG" 2>&1; then
     printf '%s\n' "$f" >>"$CORPUS_FAIL"
   fi
 done
@@ -331,16 +333,15 @@ collect_stats() {
   COUNT["${key}_rec_zero_arg"]=$(grep -cE '^let rec [A-Za-z0-9_]+ = fun \(\) ->' "$f" || true)
 }
 
-collect_stats seed bootstrap/seed.ml
-collect_stats stage1 "$STAGE1"
-collect_stats self "$SELF_OUT"
+collect_stats seed "$WORK/seed_concat.ml"
+collect_stats stage1 "$WORK/stage1_concat.ml"
+collect_stats self "$WORK/self_concat.ml"
 collect_stats tiny "$WORK/tiny.ml"
-if [ "$WITH_DYNAMIC" = 1 ]; then collect_stats dyn "$WORK/dyn.ml"; fi
 
 # ---- 状态 ----------------------------------------------------------------
 FIXED_POINT=skipped
 if [ "$COMPILER" = vuna ]; then
-  if cmp -s "$STAGE1" "$STAGE2"; then
+  if diff -r "$STAGE1_SRC" "$SELF_COMPILER_SRC" >/dev/null 2>&1; then
     FIXED_POINT=true
   else
     FIXED_POINT=false
@@ -348,12 +349,12 @@ if [ "$COMPILER" = vuna ]; then
   fi
 fi
 SEED_MATCHES=false
-if cmp -s bootstrap/seed.ml "$STAGE1"; then SEED_MATCHES=true; fi
+if diff -r -x "*.cmi" -x "*.cmx" -x "*.o" -x "vuna-seed" -x "build.log" seed "$STAGE1_SRC" >/dev/null 2>&1; then SEED_MATCHES=true; fi
 
 TESTS=skipped
 TESTS_SUMMARY=""
 if [ "$WITH_TESTS" = 1 ]; then
-  if ( cd test && VUNA=$VUNA_BIN VUNA_BOOT=$SEED_BIN OCAMLOPT=ocamlopt sh run-tests.sh ) >"$WORK/tests.log" 2>&1; then
+  if ( cd test && VUNA=$VUNA_BIN VUNA_SEED=$SEED_BIN OCAMLOPT=ocamlopt sh run-tests.sh ) >"$WORK/tests.log" 2>&1; then
     TESTS=ok
   else
     TESTS=fail
@@ -387,19 +388,21 @@ print_table() {
   note "== 构建性能 =="
   metric_line seed_build
   metric_line stage1_build
+  metric_line product_compile
+  metric_line product_build
   note ""
   note "== 编译性能（$COMPILER）=="
   metric_line seed_compile
   metric_line compiler_self_compile
+  metric_line compiler_closure_compile
   metric_line tiny_compile
   metric_line corpus_compile
-  if [ "$WITH_DYNAMIC" = 1 ]; then metric_line dynamic_self_compile; fi
   note "  throughput: ${SELF_LINES_PER_SEC} lines/s, ${SELF_KB_PER_SEC} KB/s (self-compile source: $SRC_LINES lines / $SRC_BYTES B)"
   note "  corpus: ${CORPUS_OK}/${CORPUS_TOTAL} compiled"
   note ""
   note "== 产物尺寸 =="
   printf '  %-10s %10s %8s %9s %8s %8s %10s %9s\n' artifact bytes lines max_line '>120' '>500' 'trail_ws' 'blank_ws'
-  for key in seed stage1 self tiny dyn; do
+  for key in seed stage1 self tiny; do
     [ -n "${SIZE[${key}_bytes]:-}" ] || continue
     printf '  %-10s %10s %8s %9s %8s %8s %10s %9s\n' \
       "$key" "${SIZE[${key}_bytes]}" "${SIZE[${key}_lines]}" "${SIZE[${key}_max_line]}" \

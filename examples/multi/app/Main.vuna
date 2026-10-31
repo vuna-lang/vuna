@@ -1,9 +1,10 @@
 import Greet
 import Vuna.List
 import Vuna.Monad
+import Vuna.IO
 
-main : String
-main = greeting 3 ++ "|" ++ showNames (names 2)
+main : IO Int
+main = print (greeting 3 ++ "|" ++ showNames (names 2))
 
 showNames : List String -> String
 showNames [] = ""

@@ -1,0 +1,29 @@
+-- 行宽 100：超长 RHS / 列表 / 应用 / 中缀链折行（M11.6）。
+
+longSum : Int -> Int -> Int -> Int -> Int -> Int -> Int
+longSum a b c d e f g = a + b + c + d + e + f + g + a * b + c * d + e * f + g + a - b + c - d + e - f + g
+
+longLet : Int -> Int
+longLet n = let aVeryLongBindingName = n + 1 in let anotherEvenLongerBindingName = aVeryLongBindingName + 2 in anotherEvenLongerBindingName
+
+longApp : Int
+longApp = someVeryLongFunctionName alphaValue betaValue gammaValue deltaValue epsilonValue zetaValue etaValue thetaValue
+
+longList : List Int
+longList = [100000, 200000, 300000, 400000, 500000, 600000, 700000, 800000, 900000, 1000000, 1100000, 1200000]
+
+longIf : Int -> Int
+longIf n = if n > 0 then someVeryLongFunctionName n n n n n n n n else anotherVeryLongFunctionName n n n n n n n n
+
+longCase : Int -> Int
+longCase n = case n of
+  0 => 100
+  _ => longSum n n n n n n n + longSum n n n n n n n + longSum n n n n n n n + longSum n n n n n n n
+
+longDo : Int -> Int
+longDo n = do
+  aVeryLongVariableName <- someVeryLongFunctionName n n n n n n n n n n n n n n n n n n n n n n n n n
+  pure aVeryLongVariableName
+
+longString : String
+longString = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"

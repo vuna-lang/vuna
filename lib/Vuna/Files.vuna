@@ -1,7 +1,8 @@
-module Vuna.Files (collectVunaFiles, collectSourceFiles, pathExistsDir, splitPath, baseName) where
+module Vuna.Files (collectVunaFiles, collectSourceFiles, pathExistsDir) where
 
--- Vuna.Files：目录遍历与路径小工具（fmt / doc / test 共用）。
+-- Vuna.Files：目录遍历工具（fmt / doc / test 共用）。
 -- 只依赖 readDir / isDirectory / fileExists 内建；readDir 返回字典序，遍历顺序确定。
+-- 路径拆分（splitPath / baseName）在 Vuna.Base，供编译器驱动与工具共用。
 
 import Vuna.Base
 
@@ -32,17 +33,3 @@ walkAny dir name =
       in if isDirectory path then collectSourceFiles path else Cons path Nil
 
 pathExistsDir path = isDirectory path
-
--- 路径拆分：返回去掉最后一段的目录与最后一段（无 "/" 时目录为 ""）。
-splitPath : String -> Pair String String
-splitPath path = splitPathChars (strUnpack path) Nil
-
-splitPathChars Nil acc =
-  let chars = reverse acc
-  in Pair "" (strPack chars)
-
-splitPathChars (Cons c rest) acc =
-  if c == 47 then Pair (strPack (reverse acc)) (strPack rest) else splitPathChars rest (Cons c acc)
-
-baseName : String -> String
-baseName path = secondOf (splitPath path)

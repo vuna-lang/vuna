@@ -51,6 +51,7 @@ _scratch/
 .vscode/
 
 # vuna 生成物（package / 工具链输出）
-Main.ml
 docs/api.md
+examples/**/Main.ml
 examples/**/main
+/Main.ml

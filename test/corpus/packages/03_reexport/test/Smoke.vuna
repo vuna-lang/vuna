@@ -1,0 +1,4 @@
+import Vuna.Use
+
+main : String
+main = if total (Cons 1 (Cons 2 Nil)) == 2 then "" else "total failed"

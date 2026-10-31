@@ -106,7 +106,7 @@ foldApply decls env sp fv (Cons arg rest) =
 
 evalLet decls env sp rec_ binds body =
   if rec_ && recursiveBindings binds then
-    errAt sp "recursive let (where) bindings are only supported by the compiler (use --typecheck); the interpreter evaluates them sequentially"
+    errAt sp "recursive let (where) bindings are only supported by the compiler; the interpreter evaluates them sequentially"
   else
     andThen (evalBindings decls env sp binds) (\env2 => evalExpr decls env2 body)
 
@@ -394,8 +394,11 @@ genericCmp sp args mode =
          else Ok (vbool (r >= 0))
     _ => errAt sp "bad arguments for generic comparison"
 
+primBaseName name =
+  if startsWith "prim_" name then substring 5 (strLength name - 5) name else name
+
 callBuiltin name args sp =
-  case name of
+  case primBaseName name of
     "+" => int2 sp args (\x, y => Ok (VInt (x + y)))
     "-" => int2 sp args (\x, y => Ok (VInt (x - y)))
     "*" => int2 sp args (\x, y => Ok (VInt (x * y)))
@@ -541,7 +544,18 @@ interpretMain decls =
       if arity == 0 then callFunction decls "main" Nil noLocSpan
       else Err "`main` must be a nullary definition"
 
+-- 解释器执行 entry：main : IO a 时按运行时的约定执行动作（MkIO f → f 0），
+-- 否则保持旧的“show 纯 main 结果”行为（vuna test / interp 的调试约定）。
+runMainValue decls v =
+  case v of
+    VCon name (Cons f Nil) =>
+      if displayName name == "MkIO" then applyValue decls noLocSpan f (VInt 0) else Ok v
+    _ => Ok v
+
 runDecls decls =
   case interpretMain decls of
     Err e => "error: " ++ e
-    Ok v => showValue v
+    Ok v =>
+      case runMainValue decls v of
+        Err e => "error: " ++ e
+        Ok r => showValue r

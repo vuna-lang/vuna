@@ -6,6 +6,7 @@ let
     pkgs.bash
     pkgs.coreutils
     pkgs.diffutils
+    pkgs.findutils
     pkgs.gawk
     pkgs.gnugrep
     pkgs.gnused

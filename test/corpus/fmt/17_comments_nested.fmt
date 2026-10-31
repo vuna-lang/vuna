@@ -1,0 +1,31 @@
+helper : Int -> Int
+helper n =
+  let
+    -- let 绑定前置
+    a = n + 1 -- a 行尾
+    -- b 绑定前置
+    b = a * 2
+  in b
+
+classify : Int -> String
+classify n = case n of
+  -- 零分支前置
+  0 => "zero" -- 零分支行尾
+  -- 默认分支前置
+  _ => "other"
+
+withWhere : Int -> Int
+withWhere n = base where
+  -- where 绑定前置
+  base = n + 1
+
+run : Int -> Int
+run n = do
+  -- do 语句前置
+  x <- pure n -- do 语句行尾
+  pure x
+
+fac : Int -> Int
+fac n = 1
+-- 第二子句前置
+fac n = n

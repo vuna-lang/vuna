@@ -1,19 +1,17 @@
 module Vuna.Cli (runCli) where
 
--- Vuna.Cli：统一 CLI 实现（M11.5）。
--- app/Main.vuna 只保留 `main = exit (runCli (getArgs))`，入口目录退化为纯入口。
+-- Vuna.Cli：产品 CLI（vuna）。
 --
--- 子命令：
---   compile / check / interp / lint   （M9 起的原有能力，文件模式）
---   build   [DIR] [OUT]               包模式：vuna.toml → lib 根 → 生成 typed OCaml
---   test    [DIR]                     包模式：解释 test/*.vuna（main : String，"" 通过）
---   fmt     [--check] [PATH]...       格式化（--check 只检查，非 0 表示需要格式化）
---   repl                              交互式 REPL
---   doc     [DIR] [OUT]               从 lib/ 生成 docs/api.md
---   help
+-- 编译器命令（compile / check / build / seed）由 Vuna.CompilerCli 实现，
+-- 这里只做 in-process 分发；工具命令（lint / interp / test / fmt / repl / doc）
+-- 在本包实现。app/Main.vuna 仍然只是 `main = exit (runCli (getArgs))`。
+--
+-- 每个命令都必须显式书写；不再支持“无子命令 = compile”的旧式回退。
 
 import Vuna.Base
 import Vuna.Pkg
+import Vuna.Compile
+import Vuna.CompilerCli
 import Vuna.Interp
 import Vuna.Fmt
 import Vuna.Files
@@ -22,170 +20,76 @@ import Vuna.Doc
 import Vuna.TestRunner
 import qualified Vuna.Lint
 
-usage =
-  "usage:\n"
-  ++ "  vuna compile [--no-print] [--no-typecheck] [--typecheck] [--typed] [--root DIR]... <entry.vuna> [out.ml]\n"
-  ++ "  vuna check [--root DIR]... (<entry.vuna> | <package-dir>)\n"
-  ++ "  vuna lint [--fix] <file.vuna>...\n"
-  ++ "  vuna interp [--root DIR]... <file.vuna>\n"
-  ++ "  vuna build [--no-print] [DIR] [OUT]        从 vuna.toml 构建包（默认 DIR=.，OUT=DIR/Main.ml）\n"
-  ++ "  vuna test [DIR]                           运行包内 test/*.vuna（main : String，空串通过）\n"
-  ++ "  vuna fmt [--check] [PATH]...              格式化（PATH 可为文件或目录；省略 = 包 lib/app/test）\n"
-  ++ "  vuna repl [--root DIR]...                 交互式 REPL\n"
-  ++ "  vuna doc [DIR] [OUT]                      生成 API 文档（默认 OUT=DIR/docs/api.md）\n"
-  ++ "  vuna help\n"
+toolUsageLines : String -> String
+toolUsageLines prog =
+  "  " ++ prog ++ " lint [--fix] <file.vuna>...\n"
+  ++ "  " ++ prog ++ " interp [--root DIR]... <file.vuna>\n"
+  ++ "  " ++ prog ++ " test [DIR]                           运行包内 test/*.vuna（main : String，空串通过）\n"
+  ++ "  " ++ prog ++ " fmt [--check] [PATH]...              格式化（PATH 可为文件或目录；省略 = workspace 源码目录）\n"
+  ++ "  " ++ prog ++ " repl [--root DIR]...                 交互式 REPL\n"
+  ++ "  " ++ prog ++ " doc [DIR [OUT]]                      生成 API 文档（默认 OUT=DIR/docs/api.md）\n"
+
+usageFor prog = "usage:\n" ++ compilerUsageLines prog ++ toolUsageLines prog
 
 runCli : List String -> Int
 runCli args =
+  if anyHelp args then help else runCli1 args
+
+runCli1 args =
   case args of
     Nil => usageError
     Cons arg rest =>
       case arg of
-        "compile" => compileArgs rest
-        "check" => checkArgs rest
+        "compile" => runCompilerCliFor "vuna" (Cons arg rest)
+        "check" => runCompilerCliFor "vuna" (Cons arg rest)
+        "build" => runCompilerCliFor "vuna" (Cons arg rest)
+        "seed" => runCompilerCliFor "vuna" (Cons arg rest)
         "lint" => Vuna.Lint.runLint rest
         "interp" => interpArgs rest
-        "build" => buildArgs rest
         "test" => testArgs rest
         "fmt" => fmtArgs rest
         "repl" => replArgs rest
         "doc" => docArgs rest
         "help" => help
-        "--help" => help
-        _ => compileArgs args
+        _ =>
+          if startsWith "-" arg then runCompilerCliFor "vuna" args
+          else unknownCommand "vuna" arg
 
-help = let _ = print usage in 0
+anyHelp : List String -> Bool
+anyHelp Nil = False
+anyHelp (Cons arg rest) =
+  if arg == "-h" || arg == "--help" then True else anyHelp rest
 
-usageError = let _ = print usage in 2
+help = let _ = print (usageFor "vuna") in 0
 
-printErr msg = let _ = print ("error: " ++ msg ++ "\n") in 0
+usageError = let _ = print (usageFor "vuna") in 2
+
+unknownCommand prog arg =
+  let _ = print ("error: unknown command `" ++ arg ++ "`\n" ++ "run `" ++ prog ++ " help`\n") in 2
 
 -- ---------------------------------------------------------------
--- compile / interp / check（原有文件模式）
+-- interp
 -- ---------------------------------------------------------------
-
-compileArgs args = compileParse True True True Nil args
-
-compileParse printResult typeCheck typed roots args =
-  case args of
-    Nil => usageError
-    Cons arg rest =>
-      case arg of
-        "--no-print" => compileParse False typeCheck typed roots rest
-        "--no-typecheck" => compileParse printResult False False roots rest
-        "--typecheck" => compileParse printResult True typed roots rest
-        "--typed" => compileParse True True True roots rest
-        "--root" => rootArg roots rest (\roots2, rest2 => compileParse printResult typeCheck typed roots2 rest2)
-        _ => compileEmit printResult typeCheck typed roots arg rest
-
-rootArg roots rest k =
-  case rest of
-    Cons dir rest2 => k (append roots (Cons (rawRoot dir) Nil)) rest2
-    Nil => usageError
-
-compileEmit printResult typeCheck typed roots entry rest =
-  let actualRoots = effectiveRoots roots
-  in let result =
-           if typed then compileFileTyped actualRoots entry printResult
-           else if typeCheck then compileFileChecked actualRoots entry printResult
-           else compileFile actualRoots entry printResult
-     in case result of
-          Ok code =>
-            case rest of
-              Cons out Nil => let _ = writeFile out code in 0
-              _ => let _ = print code in 0
-          Err e => let _ = print ("error: " ++ e ++ "\n") in 1
 
 interpArgs args = interpParse Nil args
 
 interpParse roots args =
   case args of
     Cons "--root" rest => rootArg roots rest (\roots2, rest2 => interpParse roots2 rest2)
-    Cons path Nil => interpEmit (effectiveRoots roots) path
+    Cons path Nil =>
+      if startsWith "-" path then usageError
+      else interpEmit (effectiveRoots roots) path
     _ => usageError
+
+rootArg roots rest k =
+  case rest of
+    Cons dir rest2 => k (append roots (Cons (rawRoot dir) Nil)) rest2
+    Nil => usageError
 
 interpEmit roots path =
   let output = interpretFile roots path
   in let _ = print (output ++ "\n")
      in if startsWith "error:" output then 2 else 0
-
-checkArgs args = checkParse Nil args
-
-checkParse roots args =
-  case args of
-    Cons "--root" rest => rootArg roots rest (\roots2, rest2 => checkParse roots2 rest2)
-    Cons path Nil =>
-      if isDirectory path then checkPackage path
-      else checkEmit (effectiveRoots roots) path
-    _ => usageError
-
-checkEmit roots path =
-  case checkFile roots path of
-    Err e => let _ = print ("error: " ++ e ++ "\n") in 1
-    Ok warnings => let _ = printWarnings warnings in 0
-
-printWarnings Nil = 0
-printWarnings (Cons w rest) = let _ = print (w ++ "\n") in printWarnings rest
-
-checkPackage dir =
-  case loadPackage dir of
-    Err e => let _ = print ("error: " ++ e ++ "\n") in 1
-    Ok pkg =>
-      case compileFileCheckedIn (packageName pkg) (packageRoots pkg) (packageEntry pkg) False of
-        Err e => let _ = print ("error: " ++ e ++ "\n") in 1
-        Ok code => 0
-
--- ---------------------------------------------------------------
--- build（包模式）
--- ---------------------------------------------------------------
-
-buildArgs args = buildParse True Nothing Nothing args
-
-buildParse printResult dir out args =
-  case args of
-    Nil => buildRun printResult (defaultDir dir) (defaultOut dir out)
-    Cons arg rest =>
-      case arg of
-        "--no-print" => buildParse False dir out rest
-        "--out" =>
-          case rest of
-            Cons out2 rest2 => buildParse printResult dir (Just out2) rest2
-            Nil => usageError
-        _ =>
-          case dir of
-            Nothing => buildParse printResult (Just arg) out rest
-            Just dir2 =>
-              case out of
-                Nothing =>
-                  case rest of
-                    Nil => buildRun printResult dir2 arg
-                    _ => usageError
-                Just out2 => usageError
-
-defaultDir dir =
-  case dir of
-    Just dir2 => dir2
-    Nothing => "."
-
-defaultOut dir out =
-  case out of
-    Just out2 => out2
-    Nothing =>
-      let dir2 = defaultDir dir
-      in if dir2 == "." then "Main.ml" else dir2 ++ "/Main.ml"
-
-buildRun printResult dir out =
-  case loadPackage dir of
-    Err e => let _ = print ("error: " ++ e ++ "\n") in 1
-    Ok pkg =>
-      case compileFileTypedIn (packageName pkg) (packageRoots pkg) (packageEntry pkg) printResult of
-        Err e => let _ = print ("error: " ++ e ++ "\n") in 1
-        Ok code =>
-          let parent = firstOf (splitPath out)
-          in let _ = if parent == "" then 0 else makeDir parent
-             in let _ = writeFile out code
-                in let _ = print ("wrote " ++ out ++ "\n")
-                   in 0
 
 -- ---------------------------------------------------------------
 -- test（包模式）
@@ -194,8 +98,8 @@ buildRun printResult dir out =
 testArgs args =
   case args of
     Nil => testRun "."
-    Cons dir Nil => testRun dir
-    Cons "--root" rest => usageError
+    Cons dir Nil =>
+      if startsWith "-" dir then usageError else testRun dir
     _ => usageError
 
 testRun dir =
@@ -215,16 +119,32 @@ fmtParse check paths args =
     Cons arg rest =>
       case arg of
         "--check" => fmtParse True paths rest
-        _ => fmtParse check (append paths (Cons arg Nil)) rest
+        _ =>
+          if startsWith "-" arg then usageError
+          else fmtParse check (append paths (Cons arg Nil)) rest
 
 fmtRun check Nil = fmtFiles check (fmtDefaultTargets) 0
 fmtRun check paths = fmtFiles check (concatMap expandPath paths) 0
 
+-- 省略 PATH 时格式化 workspace 内所有包的 lib/app/test（拆包后 compiler/ 也在内）。
 fmtDefaultTargets : List String
 fmtDefaultTargets =
   case findManifestDir "." of
     Err e => ["lib", "app", "test"]
-    Ok dir => [dir ++ "/lib", dir ++ "/app", dir ++ "/test"]
+    Ok dir =>
+      case workspacePackages dir of
+        Err e => [dir ++ "/lib", dir ++ "/app", dir ++ "/test"]
+        Ok pkgs => existingTargets (concatMap packageTargets pkgs) Nil
+
+packageTargets pkg =
+  Cons (packageDir pkg ++ "/lib")
+    (Cons (packageDir pkg ++ "/app") (Cons (packageDir pkg ++ "/test") Nil))
+
+existingTargets Nil acc = reverse acc
+
+existingTargets (Cons path rest) acc =
+  if isDirectory path then existingTargets rest (Cons path acc)
+  else existingTargets rest acc
 
 expandPath path =
   if isDirectory path then collectVunaFiles path else Cons path Nil
@@ -267,8 +187,10 @@ replParse roots args =
 docArgs args =
   case args of
     Nil => docRun "." "docs/api.md"
-    Cons dir Nil => docRun dir (docDefaultOut dir)
-    Cons dir (Cons out Nil) => docRun dir out
+    Cons dir Nil =>
+      if startsWith "-" dir then usageError else docRun dir (docDefaultOut dir)
+    Cons dir (Cons out Nil) =>
+      if startsWith "-" dir || startsWith "-" out then usageError else docRun dir out
     _ => usageError
 
 docDefaultOut dir =

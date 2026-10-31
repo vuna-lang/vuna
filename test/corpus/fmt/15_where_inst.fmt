@@ -1,3 +1,4 @@
+-- 仅格式化 golden：do 需要 Monad 实例，这里只验证格式化（不参与语义测试）。
 data Maybe : Type where
   Nothing : Maybe
   Just : Int -> Maybe
