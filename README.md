@@ -570,8 +570,8 @@ trans a b c p q = case p of
   （`type 'a t_Vec = C_Vec_Nil | C_Vec_Cons of 'a t_Nat * 'a * 'a t_Vec`），索引不是
   零成本抽象（完整擦除分析属 M16）。
 - **`case` 分支必须绑定构造子的全部显式 telescope binder**（族参数与索引也各占一个
-  位置，即使分支体不用）：`Cons b m y ys => ...` 对应 `a`、`n`、字段、`Vec a n`。
-  只支持**顶层构造子模式**；嵌套模式（`Succ (Succ k)`）报
+  位置，即使分支体不用）：`Cons b m y ys => ...` 依次对应 `a`、`n`、字段 `a`、
+  `Vec a m`。只支持**顶层构造子模式**；嵌套模式（`Succ (Succ k)`）报
   `DT: nested patterns are not supported yet`；兜底 `_ => ...`（变量模式等价）只能放
   **最后**一个分支。
 - **可达性决定分支能否省略**：若函数签名把索引**细化**（如 `Vec a (Succ m)`），
@@ -585,6 +585,19 @@ trans a b c p q = case p of
 - **`check --dt` 不要求 `main`**（库文件可直接 check），`compile --dt` 要求 `main`
   且其类型为 `Int` / `String` / `Bool`。
 - 只有**一阶（闭合）元变量解**；高阶/开放解、终止性/覆盖性证明都归 M15/M16。
+
+测试夹具（`test/run-tests.sh` 第 34 段，两条路径都跑）：
+
+- 正例 `test/corpus/dt/` 共 **12** 个：M13 的 `01_id`–`08_if`；M14 新增
+  `09_nat`（`Nat` + 递归 `plus`，输出 `5`）、`10_vec`（`Vec` 的长度/首元素/尾，输出
+  `4`）、`11_fin`（`Fin` 安全取下标，输出 `7`）、`12_eq`（`Eq` 的 `sym`/`trans`，
+  输出 `7`）。
+- 负例 `test/corpus/dt_err/` 共 **15** 个：M13 的 `01_universe`、`02_conv`、
+  `03_hole`、`05_import`、`06_unknown`、`07_lambda`、`08_arity`、`09_runtime_type`、
+  `11_implicit_non_type`；M14 新增/改名 `04_nonexhaustive`（漏写 `Succ` 分支）、
+  `10_impossible`（写了不可达分支）、`12_case_int`（case 打在 `Int` 上）、
+  `13_unknown_ctor`（未知构造子）、`14_bad_ctor_result`（构造子结果不是所属族）、
+  `15_nested_pat`（嵌套模式）。
 
 ```console
 vuna check --dt file.vuna            # 精化 + 擦除检查（不生成代码）
@@ -621,7 +634,7 @@ typed codegen 只用 OCaml 标准库，不依赖解释循环。代码质量优�
 
 ## 测试
 
-`test/run-tests.sh` 是 vuna 原生测试（{TEST_COUNT} checks），用 `vuna` / `vuna-seed` 驱动，
+`test/run-tests.sh` 是 vuna 原生测试（679 checks），用 `vuna` / `vuna-seed` 驱动，
 不依赖外部 vuna 实现；但运行测试需要 OCaml 编译器（`ocamlopt`）作为代码生成后端：
 
 ```console
@@ -676,13 +689,12 @@ sh test/run-tests.sh          # 需要 PATH 中有 vuna 与 vuna-seed
 - `vuna-seed` 编译 `12_fact` 的种子冒烟；
 - 第 33 段（M12.8）：包级 `compile --package`——`.output/{lib,app}` + `build.sh`
   增量编译、输出与单文件一致、无改动不重编、touch 单个模块只重编它；
-- 第 34 段（M13/M14）DT：`corpus/dt/*.vuna` 的 `interp --dt`（核心求值器）/
+- 第 34 段（M13/M14）DT：`corpus/dt/*.vuna`（12 个）的 `interp --dt`（核心求值器）/
   `check --dt`（精化 + 擦除检查）/ `compile --dt`（擦除 codegen → ocamlopt → 运行）
-  三路与 golden 一致，正例含 M14 的 `09_nat` / `10_vec` / `11_fin` / `12_eq`；
-  `corpus/dt_err/*.vuna` 在 `check --dt` 与 `compile --dt` 两条路径都要求错误片段、
-  非 0 退出且不写输出文件（非穷尽 case、不可满足分支、对 `Int` 做 case、嵌套模式、
-  构造子不返回该族）；另有 `--dt` CLI 约束（不支持 `--root` / 包目录，`build` /
-  `seed` 不支持 `--dt`）；
+  三路与 golden 一致；`corpus/dt_err/*.vuna`（15 个）在 `check --dt` 与 `compile --dt`
+  两条路径都要求错误片段、非 0 退出且不写输出文件（非穷尽 case、不可满足分支、
+  对 `Int` 做 case、未知构造子、构造子不返回该族、嵌套模式）；另有 `--dt` CLI 约束
+  （不支持 `--root` / 包目录，`build` / `seed` 不支持 `--dt`）；
 
 Nix 侧：
 
@@ -895,11 +907,12 @@ nix fmt               # nixfmt-tree 格式化 .nix
   `.output/bin/<包名>`），`vuna build --split` / `seed` 保留扁平分离 codegen；
   seed 61 个文件 / ~1.2 MB；
 - M14：索引族与依赖模式匹配——Core 增加构造子应用与 case（`TCon`/`TCase` /
-  `VCon`/`VCase`），`data F : <kind> where` 声明的索引归纳族（构造子带显式
-  `{...} ->` telescope，族参数隐式、宇宙域 binder 擦除），`case` 做索引 unification
-  与分支可达性判定（不可满足分支可省略、写错则报错）与覆盖率检查；解除递归定义
-  限制（SCC 分组，终止靠 delta 展开 fuel）；核心求值器与擦除型 codegen 同步扩展
-  （运行时族 → OCaml 变体、族前缀构造子名、`match` + 不可能分支 `failwith`）；
-  新增 `test/corpus/dt/09_nat` / `10_vec` / `11_fin` / `12_eq` 正例与
-  `dt_err` 反例；仍为单文件 `--dt` opt-in，split/包集成留 M17；
+  `VCon`/`VCase`），`data F : <kind> where` 声明的索引归纳族（构造子写完整显式
+  telescope `(a : Type) -> (n : Nat) -> ...`；宇宙域 binder 擦除、索引保留运行时表示），
+  `case` 做索引 unification 与分支可达性判定（不可满足分支可省略、写错则报错）与
+  覆盖率检查；解除递归定义限制（SCC 分组，终止靠 delta 展开 fuel）；核心求值器与
+  擦除型 codegen 同步扩展（运行时族 → OCaml 变体、族前缀构造子名、`match` + 不可能
+  分支 `failwith`）；新增 `test/corpus/dt/09_nat` / `10_vec` / `11_fin` / `12_eq`
+  正例（输出 5 / 4 / 7 / 7）与 `dt_err` 反例；隐式索引推断留 M15；仍为单文件
+  `--dt` opt-in，split/包集成留 M17；
 - 早期 OCaml 外部编译器 `vunax` 已完成使命并删除。

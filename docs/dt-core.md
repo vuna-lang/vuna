@@ -137,10 +137,10 @@ data Term where
 
 ## 9. 后续阶段接口
 
-- M14（**已实现**）：`data F : <kind> where` 的索引归纳族、带显式 `{...}` telescope
-  的构造器、依赖模式匹配。Core 增加了 `TCon` / `TCase`（值域 `VCon` / `VCase`），
-  精化器增加 `unifyIdx` 索引 unification 与覆盖率判定，递归定义限制同时解除。
-  实现细节见 §11–§23。
+- M14（**已实现**）：`data F : <kind> where` 的索引归纳族、带显式 telescope 的构造器
+  （`(a : Type) -> (n : Nat) -> ...`）、依赖模式匹配。Core 增加了 `TCon` / `TCase`
+  （值域 `VCon` / `VCase`），精化器增加 `unifyIdx` 索引 unification 与覆盖率判定，
+  递归定义限制同时解除。实现细节见 §11–§23。
 - M15：metavariable context、隐式搜索/接口、洞目标显示；替换 M13/M14 的一阶求解
   限制（包括隐式索引推断）。
 - M16：终止性/覆盖性 + 真正擦除分析（替代 M13 的 codegen 期擦除检查与 M14 的
@@ -182,7 +182,10 @@ trait / `do` / 嵌套模式 / 多 clause 函数、DT 的多文件与工具链集
 
 M14 **没有新增语法**（满足「新增语法先以旧种子可编译的形式落地」的硬约束）：
 `data` 复用已有的 `data Name params : kind where` 形式，族参数**不放圆括号**，而是用
-kind 的箭头个数表示 arity；构造子的参数/索引全靠签名里显式的 `{...} ->` binder。
+kind 的箭头个数表示 arity；构造子的参数/索引在签名里逐个 binder 重新绑定。
+
+**M14 的索引 binder 一律写显式形式**（`(a : Type)`、`(n : Nat)`），这也是全部夹具的
+写法：
 
 ```vuna
 data Nat : Type where
@@ -190,30 +193,32 @@ data Nat : Type where
   Succ : Nat -> Nat
 
 data Vec : Type -> Nat -> Type where
-  Nil  : {a : Type} -> Vec a Zero
-  Cons : {a : Type} -> {n : Nat} -> a -> Vec a n -> Vec a (Succ n)
+  Nil  : (a : Type) -> Vec a Zero
+  Cons : (a : Type) -> (n : Nat) -> a -> Vec a n -> Vec a (Succ n)
 
 data Fin : Nat -> Type where
-  FZero : {n : Nat} -> Fin (Succ n)
-  FSucc : {n : Nat} -> Fin n -> Fin (Succ n)
+  FZero : (n : Nat) -> Fin (Succ n)
+  FSucc : (n : Nat) -> Fin n -> Fin (Succ n)
 
 data Eq : Type -> Type -> Type where
-  Refl : {a : Type} -> Eq a a
+  Refl : (a : Type) -> Eq a a
 ```
 
 要点：
 
-- 族头是 `data F : <kind> where`；kind 的**箭头个数 = 族参数个数（arity）**，
-  域依次对应族的参数/索引位置（`Vec : Type -> Nat -> Type` 即 `Vec a n`）。
+- 族头是 `data F : <kind> where`；kind 的**箭头个数 = 族的参数/索引个数（arity）**，
+  域依次对应族应用 `F a n` 的位置（`Vec : Type -> Nat -> Type` 即 `Vec a n`）。
   `data Vec (a : Type) (n : Nat) : Type where` 这种圆括号 binder 形式**M14 不支持**。
-- 构造子写法仍是 `C : T`，`T` 里用显式 `{...} ->` binder 重绑族参数（`{a : Type}`、
-  `{n : Nat}`）；构造子表缩进对齐。
-- 构造子 telescope 的**前 arity 个 binder** 必须与 kind 的域一一对应（族参数/索引），
-  其余 binder 是「字段」，会成为 `case` 分支的绑定变量。
-- 构造子应用在源码里**不写**族参数/索引（`Cons x xs`、`Nil`），它们由构造子签名里的
-  隐式 binder 自动绑定。
+- 构造子写法仍是 `C : T`；`T` 是**完整 Pi 链**，前 `arity` 个 binder 对应族的参数/
+  索引（与 kind 的域一一对应），其余 binder 是字段。构造子表缩进对齐。
+- **隐式索引推断 M14 不做（M15）**：`{n : Nat} -> ...` 配合调用点自动求解（例如
+  `FSucc FZero` 让精化器倒推出 `n`）不在 M14 的能力范围内。用 `{...}` 写构造子时，
+  只有期望类型已经**完全确定**索引（闭合解）的场合才可能碰巧通过，这不是受支持的
+  用法；需要从调用点反推索引或解中出现局部变量时，会报
+  `DT: unsolved metavariable ?k` 或 `type mismatch`。
+- 构造子应用要**写全**族参数/索引（显式 binder 不会被省略）：`Cons Int Zero 1 (Nil Int)`。
 - 族的类型级应用（`Vec a n`）保持**中性** `TGlobal "Vec" [..]`，不做类型级求值；
-  只比较索引项是否定义性相等 / 可统一。
+  索引只在 unification 时按定义性相等比较。
 - 注意 `Nil` / `Cons` 同时是 HM 的 list 语法糖：写 `[]` / `x :: xs` 与写
   `Nil` / `Cons x xs` 解析成同一个 `PCon`，`vuna fmt` 会按 HM 语法糖渲染成前者；
   文档示例保留构造子名以突出“这就是用户声明的族”。
@@ -221,31 +226,33 @@ data Eq : Type -> Type -> Type where
 `case`：
 
 ```vuna
-vlength : {a : Type} -> {n : Nat} -> Vec a n -> Nat
-vlength xs = case xs of
-  Nil       => Zero
-  Cons _ ys => Succ (vlength ys)
+vlength : (a : Type) -> (n : Nat) -> Vec a n -> Nat
+vlength a n xs = case xs of
+  Nil b         => Zero
+  Cons b m y ys => Succ (vlength b m ys)
 
-vhead : {a : Type} -> {n : Nat} -> Vec a (Succ n) -> a
-vhead xs = case xs of
-  Cons x rest => x
+vhead : (a : Type) -> (n : Nat) -> Vec a (Succ n) -> a
+vhead a n xs = case xs of
+  Cons b m x rest => x
 ```
 
 - `case <scrut> of` 后跟缩进对齐的分支 `<构造子名> <变量...> => body` 或 `_ => body`。
-- 分支**只写字段绑定**，不写族参数/索引：`Cons x rest` 绑 `x : a`、`rest : Vec a n`。
+- **分支要绑定构造子的全部显式 telescope binder**：族参数与索引各占一个位置，即使
+  分支体不用。`Cons b m y ys` 依次绑 `a`、`n`、字段 `a`、`Vec a m`；只写
+  `Cons x rest` 会报 `DT: case branch has too few arguments for its constructor`。
+  隐式 binder 不消费子模式（`bindCtorTele` 里 `implicit` 分支直接压栈）。
 - `vhead` 只写 `Cons` 是合法的：`Nil` 的结果索引 `Vec a Zero` 与 scrutinee 的
   `Vec a (Succ n)` 不可统一 ⇒ 该分支不可达，覆盖率检查合法跳过（M14 的核心卖点）。
 - 兜底 `_ => ...`（或变量模式，等价）只能放最后，没有绑定变量。
-- 只支持**顶层构造子模式**；嵌套模式（`Cons x Nil`）报
+- 只支持**顶层构造子模式**；嵌套模式（`Succ (Succ k)`）报
   `DT: nested patterns are not supported yet (M14 limitation)`。
 - case 表达式**需要已知的结果类型**（通常来自函数签名）：`inferE` 对 `ECase` 报错，
   所以 case 不能出现在推断位置。
-- check 位置仍可用洞 `_`（例如把某个构造子的隐式索引实参交给元变量求解），但求解仍
-  受 M13 的一阶/闭合限制。
+- check 位置仍可用洞 `_`，但求解仍受 M13 的一阶/闭合限制。
 
 函数定义仍只能**一个 clause**（模式参数只支持变量 / `_`），多 clause 报
-`DT: multiple clauses are not supported yet (use case; M16)`。但**递归定义已解禁**
-（M14 起 `vlength`、`plus` 都直接递归）。
+`DT: multiple clauses are not supported yet (use a single equation; M16)`。但
+**递归定义已解禁**（M14 起 `vlength`、`plus` 都直接递归）。
 
 ## 13. Core 表示：TCon / TCase / VCon / VCase
 
@@ -292,16 +299,18 @@ data DtData : Type where
 ```
 
 - 族参数 telescope 由 **kind 的箭头个数**确定（`data Vec : Type -> Nat -> Type` 得到
-  两个族参数 `a` / `n`），擦除标志按域是否为宇宙计算：`{a : Type}` 擦除、
-  `{n : Nat}` 保留。
+  两个参数 `a` / `n`），擦除标志按域是否为宇宙计算：`(a : Type)` 擦除、
+  `(n : Nat)` **保留**（索引保留运行时表示）。
 - `DtCtor` 的 telescope 是**完整的**：前 `arity` 个 binder 是族参数/索引（与 kind 的
   域一一对应），其余是字段；结果索引写在类型项里。类型项是闭合的 core 项
   （`TGlobal` 指族名）。
-- 擦除规则与函数 binder 一致：**域是宇宙（`Type n`）的 binder 被擦除**；索引/证明
-  参数保留运行时表示（`Vec` 的 `n`、`Fin` 的 `n` 都保留）。`Eq a b` 的构造子
-  `Refl` 没有任何字段、两个族参数都是宇宙域，因此 `Eq a b` 在运行时是**零字段**变体。
-- 构造子里族参数**一律隐式**：`Cons x xs` 不写 `Vec a n` 里的 `a` / `n`；精化器按
-  telescope 顺序插入隐式实参并生成 `TCon`。
+- 擦除规则与函数 binder 一致（`teleOf`：`erased = implicit || isTypeValue dom`）：
+  **域是宇宙（`Type n`）的 binder 被擦除**；域是归纳族的索引 binder（如 `(n : Nat)`）
+  **保留运行时表示**——`Vec a n` 的值在 OCaml 里带长度索引字段（`C_Vec_Cons of
+  'a t_Nat * 'a * 'a t_Vec`），索引不是零成本抽象，完整擦除分析属 M16。`Eq a b` 的
+  构造子 `Refl` 只有宇宙域 binder、没有字段，因此 `Eq a b` 在运行时是**零字段**变体。
+- 构造子应用**必须写全**族参数/索引（显式 binder 不省略）：`Cons Int Zero 1 (Nil Int)`；
+  精化器按 telescope 顺序逐个消费实参，饱和后生成 `TCon`（未饱和保持 `TApp`）。
 - 构造子名在 Core 里保持全局唯一（`Cons`、`Nil`），跨族重名由精化器在收集阶段报错；
   codegen 侧再加族前缀（§21）。
 
@@ -422,10 +431,14 @@ M13 的 `data` / `case` / 递归不再报“不支持”；`record` / `trait` / 
 
 ## 22. 已知限制（M14 之后）
 
-- **仍无隐式索引推断**：函数签名里的隐式索引要在签名中显式写成 `{n : Nat}` 绑定，
-  或在 case 的 scrutinee 里以能直接对照的项出现；M14 不做高阶/开放元变量，
-  因此不能靠求解元变量“猜出”索引。构造子实参里的族参数/索引由构造子 signature 的
-  隐式 binder 提供，不涉及推断。
+- **不支持隐式索引推断（M15）**。M14 要求索引 binder 写成**显式**形式
+  （`data Vec : Type -> Nat -> Type` + 构造子 `Cons : (a : Type) -> (n : Nat) -> ...`）；
+  `{n : Nat} -> ...` 这种隐式索引靠调用点自动求解（例如 `FSucc FZero` 反推 `n`）
+  不属于 M14 的能力。若用 `{...}` 写构造子，只有期望类型已经把索引**完全确定**
+  （闭合解）时才可能通过，一旦要从调用点反推索引或在解里引入局部变量，就会报
+  `DT: unsolved metavariable ?k` 或 `type mismatch`；这是 M15 的工作。
+- 索引值**保留运行时表示**（`Vec a n` 的值带长度字段）；证明/索引的完整擦除分析属
+  M16。
 - **case 不能出现在推断位置**：必须有已知的结果类型（通常来自函数签名）。
 - 只有**一阶（闭合）元变量解**；高阶/开放解仍属 M15。
 - 仍不支持 `let`、record、trait/instance、`do`、嵌套模式、多 clause 函数。
@@ -439,14 +452,22 @@ M13 的 `data` / `case` / 递归不再报“不支持”；`record` / `trait` / 
 
 ## 23. M14 测试夹具
 
-正例 `test/corpus/dt/`：
+正例 `test/corpus/dt/` 共 12 个（M13 的 `01_id`–`08_if` + M14 的四个）；
+数值是 `interp --dt` / `compile --dt` 的 golden：
 
-- `09_nat.vuna`：`Nat` + 递归 `plus` / `toInt`，`main = 5`；
-- `10_vec.vuna`：`Vec` 的 `vlength`（两分支都写）/ `vapp` / `vhead`（只写 `Cons`，
-  `Nil` 分支因索引不可满足而合法省略）；
-- `11_fin.vuna`：`Fin` + 安全取下标 `findex`（对 `Vec` 与 `Fin` 各做一次 case）；
-- `12_eq.vuna`：`Eq` 的 `sym` / `trans`（都是 `case e of Refl => ...`；`Eq` 的构造子
-  没有字段，运行时是零字段变体，typed codegen 里返回 `C_Eq_Refl`）。
+- `09_nat.vuna`：`Nat` + 递归 `plus` / `toInt`，输出 `5`；
+- `10_vec.vuna`：`Vec` 的 `vhead`（只写 `Cons`）/ `vtail` / `vlen`，输出 `4`；
+- `11_fin.vuna`：`Fin` 安全取下标 `at`（`Vec a (Succ m)` 与 `Fin (Succ m)` 一起排除
+  `Nil` / `FZero` 两个不可能分支），输出 `7`；
+- `12_eq.vuna`：`Eq` 的 `sym` / `trans`（都是 `case e of Refl ... => ...`；`Eq` 的
+  构造子没有字段，运行时是零字段变体，codegen 里是 `C_Eq_Refl`），输出 `7`。
 
-反例 `test/corpus/dt_err/`：非穷尽 case、不可满足分支、scrutinee 非归纳族（对 `Int`
-做 case）、嵌套模式、构造子返回值不是该族；`04_data` 被改造为「非穷尽 case」夹具。
+负例 `test/corpus/dt_err/` 共 15 个，断言错误片段：
+
+- M13：`01_universe`、`02_conv`、`03_hole`、`05_import`、`06_unknown`、`07_lambda`、
+  `08_arity`、`09_runtime_type`、`11_implicit_non_type`；
+- M14 新增/改名：`04_nonexhaustive`（漏写 `Succ` 分支，报
+  `case is not exhaustive: missing Succ`）、`10_impossible`（写了不可达分支，报
+  `this branch is impossible`）、`12_case_int`（case 打在 `Int` 上）、
+  `13_unknown_ctor`（未知构造子）、`14_bad_ctor_result`（构造子结果不是所属族）、
+  `15_nested_pat`（嵌套模式）。
