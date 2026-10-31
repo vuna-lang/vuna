@@ -1,21 +1,36 @@
 # vuna
 
-vuna 是一个函数式编程语言，本仓库是它的编译器。
+vuna 是一个函数式编程语言，本仓库是它的编译器与工具链。
 
-编译器完全用 vuna 自己写：`lib/Vuna/` 下的编译器模块（Ast/Lexer/Parser/Loader/
-Typecheck/Codegen/Interp/工具链）+ `app/Main.vuna` 入口，标准库在独立的成员包
-`stdlib/`（模块根 `stdlib/lib/`）。仓库通过提交入库的 OCaml 种子自举，构建、
-测试和语言演进都不依赖外部编译器。早期用于启动自举的 OCaml 实现 `vunax` 已在
-M6 完成后删除；需要查看历史可从 git log 找到。
+编译器完全用 vuna 自己写：编译器包 `compiler/`（`vuna-compiler`，含
+Ast/Lexer/Parser/Loader/Typecheck/Codegen 与编译器驱动）+ 根包 `vuna`（产品 CLI 与
+工具链 fmt/lint/repl/doc/test），标准库在独立的成员包 `stdlib/`（模块根
+`stdlib/lib/`）。`seed/` 只由 compiler 包的入口闭包生成——**可固化成种子的部分与
+产品工具链明确分开**。仓库通过提交入库的 OCaml 种子自举，构建、测试和语言演进都不
+依赖外部编译器。早期用于启动自举的 OCaml 实现 `vunax` 已在 M6 完成后删除；需要
+查看历史可从 git log 找到。
 
 ## 工具与自举链
 
 | 工具 | 作用 |
 | --- | --- |
-| `vuna-seed` | stage 0：从多文件种子 `seed/`（`seed/build.sh` + ocamlopt）构建的种子二进制 |
-| `vuna` | stage 1：`vuna-seed` 对当前源码分离编译后再用生成的 `build.sh` 构建，当前编译器 |
+| `vuna-seed` | stage 0：从多文件种子 `seed/`（`seed/build.sh` + ocamlopt）构建的种子编译器 |
+| `vuna-compiler` | stage 1 编译器（从 `compiler/` 分离编译）：`compile/check/build[--split]/seed` |
+| `vuna` | 产品 CLI：工具链 + 编译器命令（in-process 调用 compiler 库） |
 
-`vuna` 统一了原来的编译器与解释器入口：
+`vuna-compiler` 是编译器自己的 CLI（也是 seed 的来源）：
+
+```console
+vuna-compiler compile [--no-print] [--no-typecheck] [--typecheck] [--typed] [--root DIR]... <entry.vuna> [out.ml]
+vuna-compiler check [--root DIR]... (<entry.vuna> | <package-dir>)
+vuna-compiler build [--no-print] [DIR] [OUT]   # 包模式：生成 typed OCaml（默认 DIR/Main.ml）
+vuna-compiler build --split OUT [DIR]          # 分离编译：逐模块 .ml/.mli + build.sh 写到 OUT
+vuna-compiler seed [OUT] [DIR]                 # 生成多文件 seed（默认 OUT=seed，DIR=.）
+vuna-compiler help
+```
+
+`vuna` 是产品 CLI：编译器命令与工具链命令都在这里，编译命令直接调用
+`Vuna.CompilerCli` 的库实现（不 fork 子进程），无进程执行内建、无额外运行时依赖：
 
 ```console
 # 文件模式（M9 起的原有能力）
@@ -40,14 +55,17 @@ vuna help
 文件模式（例如编译器自举、测试夹具）显式指定模块根的入口。
 
 ```text
-seed/（提交入库的多文件 OCaml 信任锚点：逐 vuna 模块的 .ml/.mli + build.sh）
+seed/（提交入库的多文件 OCaml 信任锚点：**compiler 包**入口的闭包，不含工具链）
   │  seed/build.sh + ocamlopt（ocamlopt -c 逐模块 + 链接）
   ▼
-vuna-seed（stage 0）
-  │  vuna-seed build --split stage1 .   （对当前源码分离编译：每模块一个 OCaml 模块）
+vuna-seed（stage 0 编译器）
+  │  vuna-seed build --split stage1 compiler   （对 compiler 包分离编译）
   ▼
-stage1/*.ml + *.mli + build.sh ──ocamlopt（增量）──▶ vuna（stage 1，当前编译器）
-  │  vuna 再生成 stage2 文件集
+stage1/*.ml + *.mli + build.sh ──ocamlopt（增量）──▶ vuna-compiler（stage 1 编译器）
+  │  vuna-compiler build --split stage-cli .   （对根包分离编译：compiler + 工具链）
+  ▼
+stage-cli/* ──ocamlopt──▶ vuna（产品 CLI）
+  │  vuna-compiler 再生成 stage2 compiler 文件集
   ▼
 stage2 文件集；stage1 == stage2（文件集合逐字节）即 fixed point
 ```
@@ -56,18 +74,21 @@ stage2 文件集；stage1 == stage2（文件集合逐字节）即 fixed point
 
 种子（`seed/`）**提交入库**，是构建输入而不是构建产物。M12 起种子是**多文件文件集**：
 每个 vuna 模块对应一个 OCaml 模块（`.ml` + `.mli`），外加共享 runtime 与 `build.sh`。
+M12.5 起种子**只覆盖 compiler 包**（`compiler/app/Main.vuna` 的 import 闭包）：工具链
+（fmt/lint/repl/doc/test）由编译器编译出来，不在信任锚点里。当前 49 个文件、约 0.8 MB。
 唯一的硬性不变量：
 
 > **当前入库的种子必须能编译当前的 vuna 源码。**
 
-- 种子**不需要**与源码同步：日常修改 `lib/`、`app/`、`test/`、`stdlib/` 不重新生成种子；
-- 种子只通过 **seed rotation** 更新：用当前编译器对当前源码做分离编译，把生成的
+- 种子**不需要**与源码同步：日常修改 `lib/`、`app/`、`test/`、`stdlib/`（以及只在
+  CLI 侧的工具改动）不重新生成种子；只有 `compiler/` 的变更才可能需要 rotation；
+- 种子只通过 **seed rotation** 更新：用当前产品 CLI 对 compiler 包做分离编译，把生成的
   多文件文件集提交为新 `seed/`（`nix/seed-rotate.sh` 会顺带验证种子自生成 fixed point）；
 - 种子比源码旧是正常状态，但必须始终保持“能编译当前源码”的能力；
 - CI 用 `checks.seed-selfhost` 守这条不变量：`seed/build.sh` → `vuna-seed`；种子对
-  当前源码分离编译得到 stage1 文件集并构建；stage1 再生成 stage2 文件集，`diff -r`
-  逐字节一致；同时检查增量构建（无改动不重编、touch 一个模块只重编它）与行为抽查；
-  `checks.fixed-point` 与它同一派生；
+  **compiler 包**分离编译得到 stage1 文件集并构建；stage1 再生成 stage2 文件集，
+  `diff -r` 逐字节一致；同时断言 seed/stage1/stage2 都不含工具模块、检查增量构建
+  （无改动不重编、touch 一个模块只重编它）与行为抽查；`checks.fixed-point` 与它同一派生；
 - 如果新特性会让源码超出旧种子能编译的语法子集，必须先把特性实现成旧语法可编译的
   形式，rotate 种子后再在编译器源码里使用新语法；
 - `seed/` 下所有文件都是生成物，禁止手改。
@@ -77,48 +98,53 @@ stage2 文件集；stage1 == stage2（文件集合逐字节）即 fixed point
 ```console
 # 前提：当前源码能被当前种子编译（nix flake check 通过）
 nix build .#vuna --out-link result
-sh nix/seed-rotate.sh ./result/bin/vuna   # 生成 seed/ 并校验种子自生成 fixed point
+sh nix/seed-rotate.sh ./result/bin/vuna   # vuna seed seed compiler + 自生成 fixed point
 nix flake check                           # seed-selfhost 等全部通过
-git diff seed/                            # 确认变化可解释（通常只有生成代码变化）
+git diff seed/                            # 确认变化可解释（文件集 + 路径/代码变化）
 git add seed/ && git commit
 ```
 
-注意：如果改的是**现有语法的语义**（而非新增语法），旧种子会按旧语义编译新编译器，
-需要确认没有 seed 语义偏差；必要时先 rotate，再让编译器源码依赖新语义。
+注意：种子必须从仓库根、以 `compiler` 为包目录生成（脚本已固定这一点），这样产物里
+嵌入的源码路径保持一致。如果改的是**现有语法的语义**（而非新增语法），旧种子会按旧
+语义编译新编译器，需要确认没有 seed 语义偏差；必要时先 rotate，再让编译器源码依赖新语义。
 
 ## 目录结构
 
 ```text
 .
 ├── .local                # 本地文件，被git忽略，临时文件可以放到 .local/tmp 下面
-├── flake.nix             # Nix：vuna-seed / vuna、devShell、checks
+├── flake.nix             # Nix：vuna-seed / vuna-compiler / vuna、devShell、checks
 ├── flake.lock
-├── vuna.toml             # workspace 根（同时是编译器包 vuna）；deps: vuna-stdlib
-├── lib/                  # 编译器包 vuna 的模块根（模块名由路径精确决定）
-│   └── Vuna/
-│       ├── Base.vuna     # 编译器门面：重导出 stdlib 核心模块 + Pos/Span/模块路径工具
-│       ├── Ast.vuna      # 语法类型（Pat/Expr/DoStmt/Decl/Import）与 AST helper
+├── vuna.toml             # workspace 根（同时是产品 CLI 包 vuna）；members: compiler/stdlib
+├── compiler/             # 编译器包 vuna-compiler（seed 的唯一来源）
+│   ├── vuna.toml         # [package] + [export] 编译器模块 + deps vuna-stdlib
+│   ├── app/
+│   │   └── Main.vuna     # 编译器 CLI 入口：main = exit (runCompilerCli (getArgs))
+│   └── lib/Vuna/
+│       ├── Base.vuna     # 编译器门面：重导出 stdlib 核心 + Pos/Span/路径工具
+│       ├── Ast.vuna      # 语法类型与 AST helper
 │       ├── Lexer.vuna    # 词法分析（token + 位置）
-│       ├── Parser.vuna   # offside layout parser → AST/imports（含 do / >>= / >>）
-│       ├── Builtins.vuna # 内建函数名字与元数（Loader/Eval 共用）
+│       ├── Parser.vuna   # offside layout parser → AST/imports
+│       ├── Builtins.vuna # 内建函数名字与元数
+│       ├── Toml.vuna / Manifest.vuna / Pkg.vuna  # 包格式、workspace / 依赖 DAG
+│       ├── Loader.vuna   # import 图、模块根、名字解析与 flatten
+│       ├── Typecheck.vuna # HM 类型检查（记录/trait/高阶 kind/字典穿参）
+│       ├── Codegen.vuna  # 动态 value codegen（--no-typecheck 回退）
+│       ├── TypedCodegen.vuna # 原生 OCaml typed codegen + 分离编译
+│       ├── Split.vuna / SplitCli.vuna # 分离编译输出模型 / build --split / seed
+│       ├── Compile.vuna  # 编译入口（effectiveRoots / compile* / checkFile）
+│       └── CompilerCli.vuna # 编译器 CLI（compile/check/build/seed）
+├── lib/                  # 产品 CLI 包 vuna 的模块根（工具链）
+│   └── Vuna/
+│       ├── Cli.vuna      # 产品 CLI：工具命令 + in-process 调 compiler 命令
+│       ├── Interp.vuna   # 解释器 facade（依赖 Eval）
 │       ├── Eval.vuna     # 值表示、内建函数、求值器与 show
-│       ├── Loader.vuna   # import 图、模块根（Root/包导出）、名字解析与 flatten
-│       ├── Typecheck.vuna # HM 类型检查（含记录/trait/高阶 kind/字典穿参）
-│       ├── TypedCodegen.vuna # 原生 OCaml typed codegen（M8）
-│       ├── Codegen.vuna  # flatten 后的 AST → OCaml（--no-typecheck 回退）
-│       ├── Interp.vuna   # 对外 facade（含包感知入口）
-│       ├── Toml.vuna     # TOML 子集解析（vuna.toml 基础件）
-│       ├── Manifest.vuna # vuna.toml 语义模型与校验
-│       ├── Pkg.vuna      # workspace / 依赖 DAG / 模块根解析
 │       ├── Files.vuna    # 目录遍历小工具（fmt/doc/test 共用）
 │       ├── Fmt.vuna      # 源码格式化器（vuna fmt）
+│       ├── Lint.vuna     # 风格检查与自动修复（vuna lint）
 │       ├── Repl.vuna     # 交互式 REPL（vuna repl）
 │       ├── Doc.vuna      # API 文档生成（vuna doc）
-│       ├── TestRunner.vuna # 包内测试运行器（vuna test）
-│       ├── Cli.vuna      # 统一 CLI 实现
-│       ├── Split.vuna    # 分离编译输出文件模型 + 增量构建脚本生成
-│       ├── SplitCli.vuna # 包模式分离编译入口（build --split / seed）
-│       └── Lint.vuna     # 风格检查与自动修复（literal-if-chain / redundant-case）
+│       └── TestRunner.vuna # 包内测试运行器（vuna test）
 ├── app/
 │   └── Main.vuna         # 纯入口：main = exit (runCli (getArgs))
 ├── stdlib/               # 成员包 vuna-stdlib（独立模块根 stdlib/lib/）
@@ -130,16 +156,17 @@ git add seed/ && git commit
 ├── test/
 │   ├── run-tests.sh      # vuna 原生测试（只用 vuna / vuna-seed）
 │   └── corpus/           # run/err/modules/records/traits/monad/stdlib/packages/fmt/...
-├── seed/                 # 多文件自举信任锚点（.ml/.mli + build.sh），提交入库、由 vuna seed 生成
+├── seed/                 # compiler 闭包的多文件自举信任锚点，提交入库、由 vuna seed 生成
 ├── .gitattributes        # 把 seed/** 标记为 generated
 └── README.md
 ```
 
-仓库本身是一个 workspace（Cargo 风格：根目录同时是包）：根包 `vuna`（模块根
-`lib/`，入口 `app/Main.vuna`）依赖成员包 `vuna-stdlib`（模块根 `stdlib/lib/`）。
-`lib/`、`stdlib/lib/` 都是 vuna 模块根，不是 OCaml 库目录；`app/` 是纯入口目录，
-不再作为模块根（原 `app/Lint.vuna` 已迁到 `lib/Vuna/Lint.vuna`）。仓库里没有任何
-dune/OCaml 项目，只用 `ocamlopt` 编译生成的种子和程序。
+仓库本身是一个 workspace（Cargo 风格：根目录同时是包）：根包 `vuna` 是产品 CLI
+（模块根 `lib/`，入口 `app/Main.vuna`），依赖成员包 `vuna-compiler`（模块根
+`compiler/lib/`，入口 `compiler/app/Main.vuna`）与 `vuna-stdlib`（模块根
+`stdlib/lib/`）；`vuna-compiler` 依赖 `vuna-stdlib`。`compiler/lib/`、`lib/`、
+`stdlib/lib/` 都是 vuna 模块根，不是 OCaml 库目录；`app/` 是纯入口目录。仓库里没有
+任何 dune/OCaml 项目，只用 `ocamlopt` 编译生成的种子和程序。
 
 ## 语言（core-v0）
 
@@ -363,7 +390,7 @@ dune/OCaml 项目，只用 `ocamlopt` 编译生成的种子和程序。
 ### 标准库（M11）
 
 标准库是独立成员包 `vuna-stdlib`（模块根 `stdlib/lib/`），编译器是它的第一个用户：
-`lib/Vuna/Base.vuna` 只是门面（整模块重导出 stdlib 核心模块 + 保留编译器的
+`compiler/lib/Vuna/Base.vuna` 只是门面（整模块重导出 stdlib 核心模块 + 保留编译器的
 `Pos`/`Span`、模块路径与诊断工具），编译器不再私自重复定义 `Maybe`/`List` 等类型。
 
 | 模块 | 内容 |
@@ -379,13 +406,15 @@ dune/OCaml 项目，只用 `ocamlopt` 编译生成的种子和程序。
 跨包使用时只可见 `stdlib/vuna.toml` `[export]` 列出的模块；抽象类型（`Map`、`IO`）
 的构造器保持私有。
 
-### 包管理与工具链（M11.5）
+### 包管理与工具链（M11.5 / M12.5）
 
 - 包元信息用 `vuna.toml`（TOML 子集）：`[package]`（name/version/edition）、
   `[workspace]`（members）、`[export]`（modules）、`[dependencies]`
   （依赖名 = 相对路径，暂不做 registry）。
 - **workspace 根即一个包**（Cargo 风格）：根 `vuna.toml` 同时含 `[workspace]` 与
-  `[package]`；成员是子目录，各自有自己的 `vuna.toml`。
+  `[package]`；成员是子目录，各自有自己的 `vuna.toml`。本仓库 = 根包 `vuna`（产品
+  CLI）+ 成员包 `vuna-compiler`（编译器）+ 成员包 `vuna-stdlib`（标准库）；依赖图
+  `vuna → vuna-compiler → vuna-stdlib`，根包也直接依赖 stdlib。
 - 每包固定三目录：`lib/`（模块根）、`app/`（入口，恒为 `app/Main.vuna`）、
   `test/`（测试模块）。依赖只向下流：`app`/`test` 可用本包 `lib` + 依赖包 `lib`；
   依赖包之间是 DAG（循环依赖报错）。
@@ -393,13 +422,17 @@ dune/OCaml 项目，只用 `ocamlopt` 编译生成的种子和程序。
   `Vuna.List`）；loader 按「本包 lib + 依赖包 lib（DFS 后序、按包名去重）」解析
   import，跨包只认依赖包 `[export]` 列表，隐藏模块报
   `is not exported by package ...`。
-- 工具链（`lib/Vuna/Cli.vuna`）：
+- 编译器 CLI（`compiler/lib/Vuna/CompilerCli.vuna`）：`vuna-compiler` 提供
+  `compile/check/build[--split]/seed`，入口 `compiler/app/Main.vuna`；**seed 只由这个
+  入口的闭包生成**。产品 CLI（`lib/Vuna/Cli.vuna`）通过 in-process 调库实现同样的
+  compile/check/build/seed，并追加工具命令：
   - `vuna build [DIR] [OUT]`：从 `vuna.toml` 解析模块根，生成 typed OCaml（默认
     `DIR/Main.ml`）；
   - `vuna test [DIR]`：解释执行 `test/*.vuna`，`main : String` 空串通过，非空为失败信息；
   - `vuna fmt [--check] [PATH]...`：`Vuna.Fmt` 格式化（2 空格缩进、幂等、可重新
     parse；M11.6 起**保留行注释/块注释**，超过 100 列时在 RHS、列表字面量、
-    函数应用参数与中缀链处折行）；
+    函数应用参数与中缀链处折行）；省略 PATH 时格式化 workspace 内所有包的
+    `lib/app/test`（拆包后自动覆盖 `compiler/lib`）；
   - `vuna repl [--root DIR]...`：行式 REPL，定义累积、表达式立即走完整
     loader/类型检查/解释器路径（支持 import/记录/trait/do）；
   - `vuna doc [DIR] [OUT]`：扫描 `lib/` 生成 Markdown API 文档。
@@ -408,46 +441,57 @@ dune/OCaml 项目，只用 `ocamlopt` 编译生成的种子和程序。
 
 ## 编译器实现
 
-- `lib/Vuna/Base.vuna`：编译器门面——整模块重导出 `Vuna.Pair` / `Vuna.Bool` /
+编译器包 `compiler/`（`vuna-compiler`）负责“源码 → OCaml / seed”，根包 `lib/` 只放
+产品 CLI 与工具链。编译器模块：
+
+- `compiler/lib/Vuna/Base.vuna`：编译器门面——整模块重导出 `Vuna.Pair` / `Vuna.Bool` /
   `Vuna.List` / `Vuna.Maybe` / `Vuna.Result` / `Vuna.String`，并保留编译器专属的
-  `Pos` / `Span`、模块路径工具（`splitOnDot` 等）与诊断建议（`suggest`）；
-- `lib/Vuna/Ast.vuna`：语法类型（Pat/Expr/DoStmt/Decl/Import/模块头、导出项与记录字段）
-  与 AST helper（`funArity`/`ctorArity`/`topNames`/`ctorsOf` 等），依赖 Base；
-- `lib/Vuna/Lexer.vuna`：词法分析，token 带行列位置；
-- `lib/Vuna/Parser.vuna`：offside layout parser，输出模块头、记录声明、AST 与 imports；
-  支持 `do` 块（`DoStmt`）与 `>>=` / `>>` 中缀；`parseExpressionSource` 供 REPL 用；
-- `lib/Vuna/Builtins.vuna`：内建函数名字与元数，Loader 与 Eval 共用；
-- `lib/Vuna/Eval.vuna`：值表示、内建函数、call-by-value 求值器与 `show`；
-- `lib/Vuna/Loader.vuna`：import 图、模块头/模块名校验、模块导出表（条目是
+  `Pos` / `Span`、模块路径工具（`splitOnDot`、`splitPath` 等）与诊断建议（`suggest`）；
+- `compiler/lib/Vuna/Ast.vuna`：语法类型（Pat/Expr/DoStmt/Decl/Import/模块头、导出项
+  与记录字段）与 AST helper（`funArity`/`ctorArity`/`topNames`/`ctorsOf` 等）；
+- `compiler/lib/Vuna/Lexer.vuna`：词法分析，token 带行列位置；
+- `compiler/lib/Vuna/Parser.vuna`：offside layout parser，输出模块头、记录声明、AST 与
+  imports；支持 `do` 块（`DoStmt`）与 `>>=` / `>>` 中缀；`parseExpressionSource` 供 REPL 用；
+- `compiler/lib/Vuna/Builtins.vuna`：内建函数名字与元数，Loader 与 Eval 共用；
+- `compiler/lib/Vuna/Loader.vuna`：import 图、模块头/模块名校验、模块导出表（条目是
   `deriving (Eq)` 的 `record ExportEntry`；记录与 data 共用 `T` / `T(..)` 规则）、
   名字解析与 flatten（`loadProgram roots entryPkg entry`：模块根是 `Pkg.Root` 有序列表
   ——目录 + 包名 + 可选 `[export]` 集；同包全可见、跨包只认导出集，隐藏模块与跨根同名
   都是硬错误）、`do` 语句 desugar 成 `bind`；
-- `lib/Vuna/Typecheck.vuna`：HM 风格类型检查（Ty/Scheme、unify、构造器 scheme、
+- `compiler/lib/Vuna/Typecheck.vuna`：HM 风格类型检查（Ty/Scheme、unify、构造器 scheme、
   表达式/模式推断、签名校验与无签名顶层推断）；`Ty` 含 `TApp`（高阶 kind 应用）、
   `Scheme` 带 trait 约束、方法级字典穿参（裸类型变量与高阶 kind 类型变量都支持）；
   loader 会把 DSig/构造器类型里的类型名解析成模块内全名（open/qualified/alias 都支持），
   因此跨模块类型检查可用；
-- `lib/Vuna/Codegen.vuna`：把 flatten 后的 program 翻译成动态 value 表示的 OCaml（保留为测试/调试回退）；
-- `lib/Vuna/TypedCodegen.vuna`：typed codegen，用类型信息生成原生 OCaml 类型、
+- `compiler/lib/Vuna/Codegen.vuna`：把 flatten 后的 program 翻译成动态 value 表示的 OCaml
+  （保留为测试/调试回退）；
+- `compiler/lib/Vuna/TypedCodegen.vuna`：typed codegen，用类型信息生成原生 OCaml 类型、
   构造器、模式匹配、data show 与 builtins；默认 codegen。M12 新增
   `generateSplitProgram`：按 vuna 模块生成逐模块 `.ml` + `.mli`（模块间用 open 链
   解析全局唯一名字；抽象类型按模块导出表生成 sig；整模块重导出用 include），
   单文件路径重构为 `genTopNames` 等子集函数，产物字节不变；
-- `lib/Vuna/Split.vuna` / `SplitCli.vuna`：分离编译输出文件模型、`build.sh` 增量
+- `compiler/lib/Vuna/Split.vuna` / `SplitCli.vuna`：分离编译输出文件模型、`build.sh` 增量
   构建脚本（模块 .ml/.mli 或依赖 .cmi 变化才重编，最后链接）、包模式
-  `vuna build --split` / `vuna seed` 入口；
-- `lib/Vuna/Interp.vuna`：facade（`interpretFile` / `compileFileTyped` 等 + 包感知
-  `...In entryPkg ...` 变体）；
-- `lib/Vuna/Toml.vuna` / `Manifest.vuna` / `Pkg.vuna`：`vuna.toml` 解析、
+  `build --split` / `seed` 入口；
+- `compiler/lib/Vuna/Toml.vuna` / `Manifest.vuna` / `Pkg.vuna`：`vuna.toml` 解析、
   manifest 模型与校验、workspace/依赖 DAG/模块根解析（`Root` 的包导出限制在此计算）；
-- `lib/Vuna/Files.vuna` / `Fmt.vuna` / `Repl.vuna` / `Doc.vuna` /
-  `TestRunner.vuna` / `Cli.vuna`：M11.5 工具链（目录遍历、格式化、REPL、文档、
-  测试运行器、统一 CLI）；
+- `compiler/lib/Vuna/Compile.vuna`：编译入口（`effectiveRoots` / `compileFile*` /
+  `checkFile*` / `programNeedsElab`），不依赖 `Vuna.Eval`；
+- `compiler/lib/Vuna/CompilerCli.vuna`：编译器 CLI（compile/check/build/seed）；
+  `compiler/app/Main.vuna` 是它的入口，也是 seed 闭包的根。
+
+工具链（根包 `lib/Vuna/`）：
+
+- `Eval.vuna`：值表示、内建函数、call-by-value 求值器与 `show`；
+- `Interp.vuna`：解释器 facade（`interpretFile` + 包感知 `...In entryPkg ...` 变体），
+  依赖 Eval，只被 CLI/REPL/test runner 使用；
+- `Files.vuna` / `Fmt.vuna` / `Lint.vuna` / `Repl.vuna` / `Doc.vuna` /
+  `TestRunner.vuna` / `Cli.vuna`：M11.5 工具链（目录遍历、格式化、风格检查、REPL、
+  文档、测试运行器、产品 CLI）；
 - 模块内部通过 import 自动 open 使用非限定名，只有 import 行写模块全名；
 - 顶层类型签名紧贴其第一个函数子句，签名与实现之间不留空行；顶层声明之间用一个空行分隔；
-- [app/Main.vuna](app/Main.vuna)：纯入口，`main = exit (runCli (getArgs))`；CLI 实现
-  在 `lib/Vuna/Cli.vuna`。`vuna compile` 保留
+- [app/Main.vuna](app/Main.vuna)：产品 CLI 纯入口，`main = exit (runCli (getArgs))`；
+  CLI 实现在 `lib/Vuna/Cli.vuna`。`vuna compile` 保留
   `[--no-print] [--no-typecheck] [--typed] [--root DIR]... <entry.vuna> [out.ml]`；
   默认跑类型检查并生成原生 OCaml typed codegen；`--no-typecheck` 关闭检查并回退
   dynamic value codegen；`--no-print` 表示生成的程序不自动打印 `main` 的结果；
@@ -495,7 +539,7 @@ type value =
 
 ## 测试
 
-`test/run-tests.sh` 是 vuna 原生测试（706 checks），用 `vuna` / `vuna-seed` 驱动，
+`test/run-tests.sh` 是 vuna 原生测试（711 checks），用 `vuna` / `vuna-seed` 驱动，
 不依赖外部 vuna 实现；但运行测试需要 OCaml 编译器（`ocamlopt`）作为代码生成后端：
 
 ```console
@@ -535,7 +579,9 @@ sh test/run-tests.sh          # 需要 PATH 中有 vuna 与 vuna-seed
   格式化 golden、注释保留（行/块/嵌套/行尾）、行宽折行与幂等；
 - `corpus/packages/`（M11.5，第 28–29 段）：`vuna build` / `vuna test` 的
   workspace 正例（跨包 import + `[export]` + `app/Main.vuna` 入口）与缺依赖、
-  依赖环、隐藏模块错误例；第 30–31 段覆盖 fmt 前后语义一致、`vuna doc`、`vuna repl`；
+  依赖环、隐藏模块错误例；M12.5 增加 `03_reexport`（facade 包重导出 stdlib、
+  只依赖 facade 的包使用 List/Maybe，覆盖 compiler 包门面的三包链路）；
+  第 30–31 段覆盖 fmt 前后语义一致、`vuna doc`、`vuna repl`；
 - `corpus/err/*.vuna`、`corpus/run_err/*.vuna`：解析/求值错误片段；
 - `corpus/type_ok`、`corpus/type_err`：单文件类型检查正/反例；
 - `corpus/type_modules/0*`、`9*`：跨模块类型检查正/反例；
@@ -552,37 +598,42 @@ Nix 侧：
 
 - `checks.vuna-tests`：在沙箱里跑上述原生测试；
 - `checks.vuna-typecheck`：用当前编译器类型检查自己的源码；
-- `checks.vuna-lint`：对 `lib/Vuna/*.vuna`、`stdlib/lib/Vuna/*.vuna`、`stdlib/lib/*.vuna`
-  与 `app/*.vuna` 跑 `vuna lint`，要求零 finding；
+- `checks.vuna-lint`：对 `compiler/lib/Vuna/*.vuna`、`lib/Vuna/*.vuna`、
+  `stdlib/lib/Vuna/*.vuna`、`stdlib/lib/*.vuna` 与 `app/*.vuna` 跑 `vuna lint`，
+  要求零 finding；
 - `checks.vuna-package`：在沙箱里用 `vuna build` 构建 `examples/multi`（workspace +
   成员包 + stdlib 依赖）、运行并比对输出，跑 `vuna test` / `vuna fmt --check` /
   `vuna doc`，并用 package 模式构建编译器自身；
-- `checks.seed-selfhost`（M12）：`seed/` 构建 `vuna-seed` → 分离编译当前源码得
-  stage 1 文件集 → 构建 stage 1 → 再生成 stage 2 文件集，`diff -r` 逐字节一致；
+- `checks.seed-selfhost`（M12/M12.5）：`seed/` 构建 `vuna-seed` → 对 **compiler 包**
+  分离编译得 stage 1 文件集 → 构建 stage 1 `vuna-compiler` → 再生成 stage 2 文件集，
+  `diff -r` 逐字节一致；断言 seed/stage1/stage2 都不含工具模块；
   另查增量构建（无改动不重编、touch 模块只重编它）与 `12_fact` → `120`；
 - `checks.vuna-metrics`（M12）：机器无关 codegen 指标（bytes/lines/最长行/超长行/
-  `let rec`/拼接/比较特化/ctor 计数）对比 `nix/metrics.budget`，超预算失败；
+  `let rec`/拼接/比较特化/ctor 计数）对 **compiler 闭包** 聚合，对比
+  `nix/metrics.budget`，超预算失败；
 - `checks.fixed-point`：与 `seed-selfhost` 同一派生。
 
 ## 开发
 
 ```console
 nix develop
-nix build .#vuna --out-link result-vuna
-nix build .#vuna-seed --out-link result-seed
+nix build .#vuna --out-link result-vuna           # 产品 CLI
+nix build .#vuna-compiler --out-link result-compiler  # 编译器 CLI（stage 1）
+nix build .#vuna-seed --out-link result-seed      # stage 0 种子编译器
 VUNA=$PWD/result-vuna/bin/vuna \
-VUNA_SEED=$PWD/result-seed/bin/vuna-seed \
+VUNA_SEED=$PWD/result-compiler/bin/vuna-compiler \
 sh test/run-tests.sh
 ```
 
 devShell 提供 `ocaml` / `ocamlopt` 工具链和 `vuna-seed`；stage 1 的 `vuna` 不进
-devShell，避免种子失效时连 shell 都进不去。
+devShell，避免种子失效时连 shell 都进不去。`vuna-compiler` 可独立使用；
+`VUNA_SEED` 只需要一个能 `compile` 的编译器，stage 0 或 stage 1 均可。
 
 ## 性能基准（手动）
 
 `nix run .#bench` 是**手动**性能基准，用来在优化前后快速测量收益；不是 CI check，
-结果依赖机器，不参与 `nix flake check`。默认测量 `vuna`（stage 1），
-`--compiler boot` 改测 `vuna-seed`（stage 0 多文件种子）。
+结果依赖机器，不参与 `nix flake check`。默认测量 `vuna`（产品 CLI），
+`--compiler boot` 改测 `vuna-seed`（stage 0 编译器）。
 
 ```console
 nix run .#bench -- --quick                 # 快速冒烟（runs=1）
@@ -593,19 +644,20 @@ nix run .#bench -- --compiler boot         # 改测 seed 编译器
 nix run .#bench -- --with-tests            # 额外跑全部 checks
 ```
 
-报告包含：构建性能（ocamlopt 构建 seed/stage1 的时间）、编译性能（seed/vuna 自编译、
-corpus 批量编译、tiny 程序、typed 与 `--no-typecheck` 路径）、编译吞吐、
-生成产物的 bytes/lines/最长行/超长行/行尾空白、codegen 健康度计数
-（`let rec`、`String.concat ""`、`bi_eq_int/_str/_bool`、零参 rec thunk）、
-以及 fixed point / seed 一致性 / 可选 tests 状态。`--json` 输出机器可读报告，
-`--baseline` 输出与历史报告的 delta。所有中间产物写入临时目录（`TMPDIR` 可覆盖），
-不会写入仓库。
+报告包含：三级构建性能（seed → vuna-compiler → vuna 的 ocamlopt 时间）、编译性能
+（seed/vuna 自编译 compiler 闭包与产品闭包、corpus 批量编译、tiny 程序、typed 与
+`--no-typecheck` 路径）、编译吞吐、生成产物的 bytes/lines/最长行/超长行/行尾空白、
+codegen 健康度计数（`let rec`、`String.concat ""`、`bi_eq_int/_str/_bool`、零参 rec
+thunk）、以及 fixed point / seed 一致性 / 可选 tests 状态。`--json` 输出机器可读
+报告，`--baseline` 输出与历史报告的 delta。所有中间产物写入临时目录
+（`TMPDIR` 可覆盖），不会写入仓库。
 
 ## Nix
 
 ```console
-nix build             # 默认 = vuna（stage 1 当前编译器）
-nix build .#vuna-seed # stage 0 种子二进制（从多文件 seed/ 构建）
+nix build             # 默认 = vuna（产品 CLI）
+nix build .#vuna-compiler # stage 1 编译器（从 compiler/ 分离编译）
+nix build .#vuna-seed # stage 0 种子编译器（从多文件 seed/ 构建）
 nix flake check       # vuna-tests / vuna-package / vuna-metrics / vuna-typecheck / vuna-lint / seed-selfhost
 nix fmt               # nixfmt-tree 格式化 .nix
 ```
@@ -629,6 +681,10 @@ nix fmt               # nixfmt-tree 格式化 .nix
   `build.sh` 增量粒度是模块（.cmi 依赖时间戳），无跨包并行构建与依赖哈希；
   `vuna build --split` 暂不会自动回退单文件（遇到不支持构造报错，需手动用
   `vuna build`）；基准时间测量仍手动（`nix run .#bench`），CI 只守机器无关指标；
+- M12.5 边界：编译器是独立成员包 `vuna-compiler`，`seed/` 只由 compiler 包入口闭包
+  生成，工具链不在 TCB；产品 CLI `vuna` 仍是单一二进制（in-process 调 compiler 库，
+  不做进程转发，也不需要新增进程执行内建）。LSP / package manager 若加入，放在
+  根包（CLI）侧或独立包，**永不进入 seed 闭包**；
 - M11.6 fmt 限制：行宽 100，但模块头/导出列表、类型签名与超长字符串字面量不折行；
   表达式内部的注释会前移到最内层包含它的条目（或下一条目），不保证留在原位置；
   单行块注释可以挂在行尾，多行块注释只作为前置注释；
@@ -644,7 +700,7 @@ nix fmt               # nixfmt-tree 格式化 .nix
 - IO 失败（如 `readFile` 缺失文件）会抛宿主异常，但入口文件缺失会返回普通错误；
   CLI 使用 `exit` 内建返回非 0 退出码（compile 错误 1、lint 有 finding 1、用法/
   解析/IO 错误 2）；
-- 种子轮换是手动流程（发版/不兼容变更时）；
+- 种子轮换是手动流程（发版/不兼容变更时）；日常工具链改动不需要 rotation；
 - `test/run-tests.sh` 目前以 golden 比对为主，后续可以补充更多随机/差分测试。
 
 ## 历史
@@ -680,4 +736,8 @@ nix fmt               # nixfmt-tree 格式化 .nix
   文件集合逐字节比较；机器无关 codegen 指标作 CI 门槛（`checks.vuna-metrics`）；
 - M11.6：fmt 完善——注释保留（行/块/嵌套/行尾，按语法条目挂载）、100 列行宽折行
   （RHS / 列表 / 应用 / 中缀链），fmt golden 覆盖注释与折行；
+- M12.5：工具链与自举边界拆分——编译器独立为成员包 `vuna-compiler`（自有 CLI
+  `vuna-compiler`），根包 `vuna` 退为产品 CLI 并经 in-process 调库复用编译命令；
+  seed 只覆盖 compiler 包入口闭包（工具链移出 TCB，文件 63→49），fixed point、
+  seed 闭包断言、metrics 目标与基准脚本同步调整；新增跨包重导出夹具；
 - 早期 OCaml 外部编译器 `vunax` 已完成使命并删除。

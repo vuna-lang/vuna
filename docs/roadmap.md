@@ -38,12 +38,19 @@
   不做 vuna typed IR（优化归 ocamlopt）。
 - M11.6：fmt 完善——注释保留（行/块/嵌套/行尾，按语法条目挂载）与 100 列行宽
   折行（RHS / 列表 / 应用 / 中缀链）；fmt golden 覆盖注释与折行。
+- M12.5：工具链与自举边界拆分——编译器独立为成员包 `vuna-compiler`（自有 CLI
+  `vuna-compiler`，seed 只由 `compiler/app/Main.vuna` 的入口闭包生成），根包 `vuna`
+  为产品 CLI 并通过 in-process 调库复用 compile/check/build/seed；工具链移出 TCB
+  （seed 63→49 个文件），fixed point / metrics / bench / CI 断言同步调整；
+  新增跨包重导出夹具。
 
 当前硬约束：
 
 1. 当前编译器必须能通过自身类型检查；
 2. seed rotation 后 stage 1 与 stage 2 必须字节一致；
-3. `test/run-tests.sh`、`nix build`、`nix flake check` 必须保持通过。
+3. `test/run-tests.sh`、`nix build`、`nix flake check` 必须保持通过；
+4. **seed 只含 compiler 包的入口闭包**；工具链（fmt/lint/repl/doc/test、未来的
+   LSP/package manager）不进入 TCB。
 
 当前保留 `dynamic codegen` 仅作为 `--no-typecheck` 的测试/调试回退路径。
 
@@ -57,13 +64,14 @@ M10 模块系统 v2（已完成）→ M10.5 类型表达力（已完成：记录
    → M11.5 包管理与工具链（已完成：vuna.toml / workspace / 三目录 + 工具链）
    → M12 性能与编译模型（已完成：分离编译 / seed 多文件 / 指标门槛）
    → M11.6 fmt 完善（已完成：注释保留 / 行宽折行）
+   → M12.5 工具链与自举边界（已完成：vuna-compiler 独立包 / seed 只含编译器）
    → M13 高级类型/效应（研究型，单独规划）
 ```
 
 依赖说明：
 
-- **M10、M10.5、M11、M11.5、M12、M11.6 已完成**；下一步是 M13（研究型，单独规划）；
-  M11.6 是 M11.5 工具链的收尾（fmt 注释/折行），不改变语言语义，也不影响 M12 编译模型；
+- **M10、M10.5、M11、M11.5、M12、M11.6、M12.5 已完成**；下一步是 M13（研究型，
+  单独规划）；M12.5 是构建/信任边界调整，不改变语言语义，也不影响 M13 的类型研究；
 - **M11 与 M11.5 的机制部分可并行**，二者改动面互不重叠（stdlib vs 包工具）；
   但**交付顺序**是 M11 先、M11.5 后；
 - **M11（标准库）依赖 M10.5 的 trait 基础**（已具备，含方法级字典穿参），不依赖 M11.5：
@@ -441,6 +449,27 @@ M10 模块系统 v2（已完成）→ M10.5 类型表达力（已完成：记录
   19，`run/07_wrap.vuna` 验证「折行后语义不变」；probe 断言 format→parse→format 幂等。
   fmt corpus 65 checks；`vuna lint` 自检与 `checks.vuna-metrics` 预算同步更新。
 - 未做：注释在表达式内部的精确定位（会前移）、类型/模块头折行、按项目配置行宽。
+
+## M12.5：工具链与自举边界拆分（已完成）
+
+目标：把“可固化成种子的编译器”与“产品工具链”分开，缩小 seed（TCB），同时不改变
+语言语义、不引入进程转发。
+
+范围与结论：
+
+- `compiler/` = 成员包 `vuna-compiler`：编译器库 + 编译器 CLI
+  （`compiler/app/Main.vuna` → `compile/check/build/seed`）；其入口闭包就是 seed；
+- 根包 `vuna` = 产品 CLI：compiler 命令通过 **in-process 调库**（`Vuna.CompilerCli`）
+  复用，工具链 fmt/lint/repl/doc/test 留在根包；不新增进程执行 builtin；
+- `Vuna.Interp` 拆出 `Vuna.Compile`（不依赖 Eval），`Vuna.Cli` 拆出
+  `Vuna.CompilerCli`；`splitPath/baseName` 下沉 `Vuna.Base` 以避免 compiler 依赖工具模块；
+- seed 63 → 49 个文件（约 1.0 MB → 0.8 MB），不含 `Vuna_d{Cli,Fmt,Lint,Doc,Repl,
+  TestRunner,Files,Eval,Interp}`；rotation 命令变为 `vuna seed seed compiler`；
+- CI：`checks.seed-selfhost` 只对 compiler 闭包做 fixed point，并断言 seed/stage1/
+  stage2 无工具模块；metrics 目标改为 compiler 闭包；bench 改为 seed → vuna-compiler
+  → vuna 三级构建；新增 `03_reexport` 跨包重导出夹具；
+- 未做（留给后续）：LSP / package manager 的具体实现——它们应放在根包（CLI）侧或
+  独立包，永远不进入 seed。
 
 ## M13：高级类型 / 效应（研究型，下一步）
 

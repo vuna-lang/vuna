@@ -31,6 +31,8 @@ val v_Vuna_dBase_dsplitLastDot : ((string) list) -> (((string) list, string) t_V
 val v_Vuna_dBase_djoinDots : ((string) list) -> (string)
 val v_Vuna_dBase_djoinSlashes : ((string) list) -> (string)
 val v_Vuna_dBase_djoinArrows : ((string) list) -> (string)
+val v_Vuna_dBase_dsplitPath : (string) -> ((string, string) t_Vuna_dPair_dPair)
+val v_Vuna_dBase_dbaseName : (string) -> (string)
 val v_vuna_ushow_uVuna_uBase_uPos : (t_Vuna_dBase_dPos) -> (string)
 val v_vuna_ueq_uVuna_uBase_uPos : (t_Vuna_dBase_dPos) -> ((t_Vuna_dBase_dPos) -> (bool))
 val v_vuna_uneq_uVuna_uBase_uPos : (t_Vuna_dBase_dPos) -> ((t_Vuna_dBase_dPos) -> (bool))

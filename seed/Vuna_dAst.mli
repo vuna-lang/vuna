@@ -57,6 +57,7 @@ and   t_Vuna_dAst_dImport =
     C_Vuna_dAst_dImport of (string) * (bool) * ((string) t_Vuna_dMaybe_dMaybe) * (t_Vuna_dBase_dSpan)
 val v_Vuna_dAst_ddoStmtSpan : (t_Vuna_dAst_dDoStmt) -> (t_Vuna_dBase_dSpan)
 val v_Vuna_dAst_ddoStmtExpr : (t_Vuna_dAst_dDoStmt) -> (t_Vuna_dAst_dExpr)
+val v_Vuna_dAst_dmodDeclSpan : (t_Vuna_dAst_dModDecl) -> (t_Vuna_dBase_dSpan)
 val v_Vuna_dAst_dpatSpan : (t_Vuna_dAst_dPat) -> (t_Vuna_dBase_dSpan)
 val v_Vuna_dAst_dexprSpan : (t_Vuna_dAst_dExpr) -> (t_Vuna_dBase_dSpan)
 val v_Vuna_dAst_ddeclSpan : (t_Vuna_dAst_dDecl) -> (t_Vuna_dBase_dSpan)

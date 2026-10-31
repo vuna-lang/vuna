@@ -15,19 +15,12 @@ open Vuna_dLexer
 open Vuna_dParser
 open Vuna_dBuiltins
 open Vuna_dLoader
-open Vuna_dEval
 open Vuna_dCodegen
 open Vuna_dTypecheck
 open Vuna_dSplit
 open Vuna_dTypedCodegen
-open Vuna_dInterp
-open Vuna_dFmt
-open Vuna_dFiles
-open Vuna_dRepl
-open Vuna_dDoc
-open Vuna_dTestRunner
+open Vuna_dCompile
 open Vuna_dSplitCli
-open Vuna_dLint
-open Vuna_dCli
-let v_main = fun () -> bi_exit (v_Vuna_dCli_drunCli (bi_get_args ()))
+open Vuna_dCompilerCli
+let v_main = fun () -> bi_exit (v_Vuna_dCompilerCli_drunCompilerCli (bi_get_args ()))
 let () = print_endline (string_of_int (v_main ()))

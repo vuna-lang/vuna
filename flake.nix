@@ -178,6 +178,13 @@
                 cp -r ${./app} app
                 cp ${./vuna.toml} vuna.toml
                 chmod -R u+w .
+                # 提交入库的 seed 只能含 compiler 闭包（工具链不在 TCB 里）
+                for tool in Cli Fmt Lint Doc Repl TestRunner Files Eval Interp; do
+                  if [ -e "seed/Vuna_d$tool.ml" ]; then
+                    echo "committed seed includes tool module Vuna.$tool" >&2
+                    exit 1
+                  fi
+                done
                 # 构建种子（stage 0）
                 ( cd seed && sh build.sh ../vuna-seed )
                 # 种子对 compiler 包分离编译 → stage1 源码集

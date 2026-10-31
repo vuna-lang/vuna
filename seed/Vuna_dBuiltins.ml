@@ -60,4 +60,4 @@ let v_Vuna_dBuiltins_dbuiltinArity = fun a0 -> match a0 with
   | ("fileExists") -> C_Vuna_dMaybe_dJust (1)
   | ("exit") -> C_Vuna_dMaybe_dJust (1)
   | (_) -> C_Vuna_dMaybe_dNothing
-  | _ -> vuna_fail "./lib/Vuna/Builtins.vuna" 7 1 ("no matching clause for Vuna.Builtins.builtinArity")
+  | _ -> vuna_fail "compiler/lib/Vuna/Builtins.vuna" 7 1 ("no matching clause for Vuna.Builtins.builtinArity")

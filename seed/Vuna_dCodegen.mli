@@ -15,7 +15,6 @@ open Vuna_dLexer
 open Vuna_dParser
 open Vuna_dBuiltins
 open Vuna_dLoader
-open Vuna_dEval
 type t_Vuna_dCodegen_dBuiltinInfo
 val v_Vuna_dCodegen_dsanitizeName : (string) -> (string)
 val v_Vuna_dCodegen_docamlString : (string) -> (string)
