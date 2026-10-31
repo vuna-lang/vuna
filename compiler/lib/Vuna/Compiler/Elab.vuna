@@ -1,4 +1,4 @@
-module Vuna.Compiler.Elab (DtDef, dtDefName, dtDefType, dtDefBody, DtCtor, dtCtorName, dtCtorFamily, dtCtorTelescope, dtCtorType, DtData, dtDataName, dtDataParams, dtDataCtors, DtClass, dtClassName, dtClassParams, dtClassMethods, dtClassFieldTys, DtGoal, dtGoalMeta, dtGoalSpan, dtGoalType, dtGoalCtx, DtProgram, dtProgDatas, dtProgDefs, dtProgGoals, dtProgSols, DtGoalInfo, dtGoalInfoSpan, dtGoalInfoGoal, dtGoalInfoCtx, elabProgram, elabProgramFull, goalsOfProgram, checkInstanceHeads, elabInstanceBodies, dictTypeName, dictCtorName) where
+module Vuna.Compiler.Elab (DtDef, dtDefName, dtDefType, dtDefBody, DtCtor, dtCtorName, dtCtorFamily, dtCtorTelescope, dtCtorType, DtData, dtDataName, dtDataParams, dtDataCtors, DtClass, dtClassName, dtClassParams, dtClassMethods, dtClassFieldTys, DtGoal, dtGoalMeta, dtGoalSpan, dtGoalType, dtGoalCtx, DtProgram, dtProgDatas, dtProgDefs, dtProgGoals, dtProgSols, DtGoalInfo, dtGoalInfoSpan, dtGoalInfoGoal, dtGoalInfoCtx, elabProgram, elabProgramFull, goalsOfProgram, checkInstanceHeads, elabInstanceBodies, dictTypeName, dictCtorName, eraseIndexMask, indexErasureCandidates) where
 
 -- Vuna.Compiler.Elab：DT 精化器（双向检查 + 一阶元变量 + 类型级隐式插入 + M14 索引族）。
 --
@@ -1157,8 +1157,8 @@ elabProgramFull decls = andThen (collectSigs decls) (\sigs => andThen (elabDatas
                   Nothing =>
                     let
                       extra = extraDefsOf globals ec4 (append instDefs defs)
-                    in Ok
-                      (DtProgram datas1 (append instDefs (append extra defs)) (ecGoals ec4) (ecSols ec4))
+                    in andThen (checkTerminationDecls decls)
+                      (\_ => Ok (DtProgram datas1 (append instDefs (append extra defs)) (ecGoals ec4) (ecSols ec4)))
               )
             )
             )
@@ -1258,6 +1258,272 @@ defTypeOrDefault : List (Pair String Term) -> String -> Term
 defTypeOrDefault globals name = case globalLookup name globals of
   Just ty => ty
   Nothing => TGlobal "Int"
+
+-- ===============================================================
+-- M16：索引擦除分析（诊断级，不改变 codegen）
+-- ===============================================================
+--
+-- M13/M14 的规则：binder 域是宇宙 ⇒ 擦除；域是归纳族（索引，如 `n : Nat`）⇒ **保留**
+-- 运行时表示，于是 `Vec a n` 的每个 Cons 带一个 `t_Nat` 长度字段。
+--
+-- M16 想把它擦掉，但**不能无条件擦**——本阶段探测到一个关键事实：
+-- `vlen a n xs = case xs of Cons b m y ys => 1 + vlen b m ys` 把索引 `m`
+-- 当作递归参数传下去，于是索引在运行时**真的被读取**（作为参数与构造子实参）。
+-- 无条件擦除会让这类定义无法生成代码（`DT: type-level binding 'm' is used at
+-- runtime`）。正确的擦除需要「整程序使用分析」：只有当某族的索引从不流到运行时
+-- 位置（构造子字段 / 函数实参 / 模式绑定后被使用）时才可擦。
+--
+-- 因此 M16 落地的擦除能力是**分析 + 诊断**，而不是改写表示：
+--   * eraseIndexMask 给出每个族参数「若只用标签分派则可擦」的保守判定；
+--   * indexNeedsRuntime 给出「该索引是否真的在运行时被用到」；
+--   * 两者一致时说明可安全擦除（M16 不做，留 M18 dogfooding 时按整程序信息落地）。
+--
+-- 结论写进 docs/dt-core.md 的「已知限制」：索引仍保留运行时表示，擦除留给后续阶段。
+-- 保守判定：该族参数若只出现在结果索引位置（不出现在任何构造子的非索引字段域），
+-- 则「标签分派」本身不需要它 ⇒ 理论可擦。
+eraseIndexMask : DtData -> List Bool
+eraseIndexMask dd = eraseMaskGo dd (dtDataParams dd) 0 []
+
+eraseMaskGo : DtData -> List (Pair String Bool) -> Int -> List Bool -> List Bool
+eraseMaskGo dd [] i acc = reverse acc
+eraseMaskGo dd (p :: rest) i acc =
+  eraseMaskGo dd rest (i + 1) (not (paramUsedInFieldTys dd i) :: acc)
+
+paramUsedInFieldTys : DtData -> Int -> Bool
+paramUsedInFieldTys dd i = usedInCtors i (length (dtDataParams dd)) (dtDataCtors dd)
+
+usedInCtors : Int -> Int -> List DtCtor -> Bool
+usedInCtors i arity [] = False
+usedInCtors i arity (c :: rest) = usedInCtor i arity c || usedInCtors i arity rest
+
+usedInCtor : Int -> Int -> DtCtor -> Bool
+usedInCtor i arity c = usedInTele i arity 0 (ctorFieldTerms arity (dtCtorType c))
+
+-- 取构造子的字段域项（跳过前 arity 个族参数/索引 binder）。
+ctorFieldTerms : Int -> Term -> List Term
+ctorFieldTerms arity ty = ctorFieldGo arity ty []
+
+ctorFieldGo : Int -> Term -> List Term -> List Term
+ctorFieldGo arity t acc = case t of
+  TPi name implicit dom cod =>
+    if arity > 0 then ctorFieldGo (arity - 1) cod acc else ctorFieldGo 0 cod (dom :: acc)
+  _ => reverse acc
+
+usedInTele : Int -> Int -> Int -> List Term -> Bool
+usedInTele i arity k ts = usedInTeleGo (k + arity) ts
+
+usedInTeleGo : Int -> List Term -> Bool
+usedInTeleGo depth [] = False
+usedInTeleGo depth (t :: rest) = termUsesVar depth t || usedInTeleGo depth rest
+
+termUsesVar : Int -> Term -> Bool
+termUsesVar depth t = case t of
+  TVar n i => i == depth
+  TMeta m => False
+  TGlobal g => False
+  TType n => False
+  TPi n implicit dom cod => termUsesVar depth dom || termUsesVar (depth + 1) cod
+  TLam n erased body => termUsesVar (depth + 1) body
+  TApp f a erased => termUsesVar depth f || termUsesVar depth a
+  TCon c args => termUsesVarArgs depth args
+  TCase scrut alts => termUsesVar depth scrut || termUsesVarAlts depth alts
+  TInt n => False
+  TStr s => False
+  TBool b => False
+  TIf c th el => termUsesVar depth c || termUsesVar depth th || termUsesVar depth el
+
+termUsesVarArgs : Int -> List (Pair Term Bool) -> Bool
+termUsesVarArgs depth [] = False
+termUsesVarArgs depth ((Pair a erased) :: rest) = termUsesVar depth a || termUsesVarArgs depth rest
+
+termUsesVarAlts : Int -> List CaseAlt -> Bool
+termUsesVarAlts depth [] = False
+termUsesVarAlts depth (alt :: rest) =
+  termUsesVar (depth + length (caseAltBinders alt)) (caseAltBody alt) || termUsesVarAlts depth rest
+
+-- 诊断：返回「理论上可擦、但实际仍保留运行时表示」的族参数名表（供文档 / lint 用）。
+indexErasureCandidates : List DtData -> List (Pair String (List String))
+indexErasureCandidates [] = []
+indexErasureCandidates (d :: rest) = candidateOf d :: indexErasureCandidates rest
+
+candidateOf : DtData -> Pair String (List String)
+candidateOf d = Pair (dtDataName d) (candidateNames (dtDataParams d) (eraseIndexMask d))
+
+candidateNames : List (Pair String Bool) -> List Bool -> List String
+candidateNames [] ms = []
+candidateNames (p :: rest) [] = []
+candidateNames (p :: rest) (m :: ms) = case p of
+  Pair n e => if m then n :: candidateNames rest ms else candidateNames rest ms
+
+-- ===============================================================
+-- M16：终止性检查（结构化递归，surface AST）
+-- ===============================================================
+--
+-- 只分析**自递归**函数（互递归见下一节的近似）。规则：体内每个对自身的调用，
+-- 都必须至少有一个实参是「对应形参的真子项」。
+--
+-- size 表：变量名 ↦ (形参下标, 深度)。形参自身深度 0；`case a of Succ k =>` 里
+-- 构造子字段继承 a 的形参下标、深度 +1（真子项）。递归调用 `f a1..an` 下降 ⇔
+-- 存在 i，sizeOf(ai) 的形参下标 == i 且深度 > 0。
+--
+-- `plus a b = case a of Zero => b | Succ k => Succ (plus k b)`：k 的 size=(0,1)，
+-- 调用第 0 实参 k 深度 1 > 0 ⇒ 下降 ⇒ 通过。
+-- `loop n = loop n`：n 的 size=(0,0)，不严格下降 ⇒ 拒绝。
+checkTerminationDecls : List Decl -> Result Int
+checkTerminationDecls decls = checkTermDeclsGo (funDefsOf decls)
+
+funDefsOf : List Decl -> List (Pair String (Pair (List Pat) Expr))
+funDefsOf [] = []
+funDefsOf (d :: rest) = case d of
+  DFun name pats body sp => Pair name (Pair pats body) :: funDefsOf rest
+  _ => funDefsOf rest
+
+checkTermDeclsGo : List (Pair String (Pair (List Pat) Expr)) -> Result Int
+checkTermDeclsGo [] = Ok 0
+checkTermDeclsGo (fd :: rest) = case fd of
+  Pair name (Pair pats body) =>
+    if funMentions name body then andThen (checkTermOne name pats body) (\_ => checkTermDeclsGo rest)
+    else checkTermDeclsGo rest
+
+-- 体里是否出现对自身的调用（名字出现在表达式里）。
+funMentions : String -> Expr -> Bool
+funMentions name e = case e of
+  EVar n sp => n == name
+  EInt n sp => False
+  EStr s sp => False
+  ELam ns b sp => funMentions name b
+  EApp fn args sp => funMentions name fn || funMentionsList name args
+  EPi n implicit dom cod sp => funMentions name dom || funMentions name cod
+  ELet binds b rec_ sp => funMentions name b
+  ECase scrut alts sp => funMentions name scrut || funMentionsAlts name alts
+  EIf c t el sp => funMentions name c || funMentions name t || funMentions name el
+  EField base f sp => funMentions name base
+  ERecord rn fields sp => funMentionsFields name fields
+  ERecUpdate base fields sp => funMentions name base
+  EInstSel meth iname sp => funMentions name meth
+  EDo stmts sp => funMentionsStmts name stmts
+
+funMentionsList : String -> List Expr -> Bool
+funMentionsList name [] = False
+funMentionsList name (e :: rest) = funMentions name e || funMentionsList name rest
+
+funMentionsAlts : String -> List (Pair Pat Expr) -> Bool
+funMentionsAlts name [] = False
+funMentionsAlts name (a :: rest) = case a of
+  Pair p b => funMentions name b || funMentionsAlts name rest
+
+funMentionsFields : String -> List (Pair String Expr) -> Bool
+funMentionsFields name [] = False
+funMentionsFields name (f :: rest) = case f of
+  Pair fn fe => funMentions name fe || funMentionsFields name rest
+
+funMentionsStmts : String -> List DoStmt -> Bool
+funMentionsStmts name [] = False
+funMentionsStmts name (s :: rest) = funMentions name (doStmtExpr s) || funMentionsStmts name rest
+
+-- 单个自递归定义。
+checkTermOne : String -> List Pat -> Expr -> Result Int
+checkTermOne fname pats body = checkTermBody fname (initialSizes (patNames pats)) body
+
+patNames : List Pat -> List String
+patNames [] = []
+patNames (p :: rest) = case p of
+  PVar n sp => n :: patNames rest
+  PWild sp => "_" :: patNames rest
+  _ => "_" :: patNames rest
+
+initialSizes : List String -> List (Pair String (Pair Int Int))
+initialSizes names = initialSizesGo names 0
+
+initialSizesGo : List String -> Int -> List (Pair String (Pair Int Int))
+initialSizesGo [] i = []
+initialSizesGo (n :: rest) i = Pair n (Pair i 0) :: initialSizesGo rest (i + 1)
+
+-- 遍历体：每个对 fname 的调用都必须有下降证据。
+checkTermBody : String -> List (Pair String (Pair Int Int)) -> Expr -> Result Int
+checkTermBody fname sizes e = case e of
+  EApp fn args sp => case callIndexes fname fn args of
+    Nothing => checkTermBody fname sizes fn
+    Just idxs =>
+      if anyDescends idxs args sizes then checkTermArgs fname sizes args
+      else Err
+        ("DT: cannot prove termination of " ++ fname ++ " (recursive call does not structurally decrease)")
+  ECase scrut alts sp =>
+    andThen (checkTermBody fname sizes scrut) (\_ => checkTermAlts fname sizes scrut alts)
+  EIf c t el sp =>
+    andThen (checkTermBody fname sizes c)
+      (\_ => andThen (checkTermBody fname sizes t) (\_ => checkTermBody fname sizes el))
+  ELam ns b sp => checkTermBody fname sizes b
+  ELet binds b rec_ sp => checkTermBody fname sizes b
+  _ => Ok 0
+
+checkTermArgs : String -> List (Pair String (Pair Int Int)) -> List Expr -> Result Int
+checkTermArgs fname sizes [] = Ok 0
+checkTermArgs fname sizes (a :: rest) =
+  andThen (checkTermBody fname sizes a) (\_ => checkTermArgs fname sizes rest)
+
+checkTermAlts : String -> List (Pair String (Pair Int Int)) -> Expr -> List (Pair Pat Expr) -> Result Int
+checkTermAlts fname sizes scrut [] = Ok 0
+checkTermAlts fname sizes scrut (a :: rest) = case a of
+  Pair pat body =>
+    andThen (checkTermBody fname (extendSizes sizes scrut pat) body)
+      (\_ => checkTermAlts fname sizes scrut rest)
+
+-- 调用形态：`fname a1 .. an`（裸 EVar 或无实参都算，索引表给出实参位置）。
+callIndexes : String -> Expr -> List Expr -> Maybe (List Int)
+callIndexes fname fn args = case fn of
+  EVar n sp => if n == fname then Just (rangeInt (length args)) else Nothing
+  _ => Nothing
+
+rangeInt : Int -> List Int
+rangeInt n = rangeIntGo n 0
+
+rangeIntGo : Int -> Int -> List Int
+rangeIntGo n i = if i >= n then [] else i :: rangeIntGo n (i + 1)
+
+-- 至少一个实参在其对应位置严格下降（源自同一形参、且深度 > 0）。
+anyDescends : List Int -> List Expr -> List (Pair String (Pair Int Int)) -> Bool
+anyDescends [] args sizes = False
+anyDescends (i :: rest) args sizes = case nthExpr args i of
+  Nothing => anyDescends rest args sizes
+  Just a => if argDescendsAt i a sizes then True else anyDescends rest args sizes
+
+argDescendsAt : Int -> Expr -> List (Pair String (Pair Int Int)) -> Bool
+argDescendsAt i a sizes = case a of
+  EVar n sp => case sizeOfVar n sizes of
+    Just sz => case sz of
+      Pair base depth => base == i && depth > 0
+    Nothing => False
+  _ => False
+
+nthExpr : List Expr -> Int -> Maybe Expr
+nthExpr [] i = Nothing
+nthExpr (e :: rest) i = if i <= 0 then Just e else nthExpr rest (i - 1)
+
+-- 把模式的绑定变量加入 size 表。
+extendSizes : List (Pair String (Pair Int Int)) -> Expr -> Pat -> List (Pair String (Pair Int Int))
+extendSizes sizes scrut pat = case scrut of
+  EVar vname vsp => case sizeOfVar vname sizes of
+    Nothing => sizes
+    Just base => case pat of
+      PCon cname subpats psp => append sizes (subSizeEntries base subpats)
+      _ => sizes
+  _ => sizes
+
+subSizeEntries : Pair Int Int -> List Pat -> List (Pair String (Pair Int Int))
+subSizeEntries base subpats = subSizeGo base subpats
+
+subSizeGo : Pair Int Int -> List Pat -> List (Pair String (Pair Int Int))
+subSizeGo base [] = []
+subSizeGo base (p :: rest) = case p of
+  PVar n sp => case base of
+    Pair b d => Pair n (Pair b (d + 1)) :: subSizeGo base rest
+  _ => subSizeGo base rest
+
+sizeOfVar : String -> List (Pair String (Pair Int Int)) -> Maybe (Pair Int Int)
+sizeOfVar name [] = Nothing
+sizeOfVar name (s :: rest) = case s of
+  Pair n sz => if n == name then Just sz else sizeOfVar name rest
 
 -- M15：未解元变量若来自洞，报洞的目标（而不是光秃秃的编号）。
 unsolvedMessage : Ec -> Int -> String

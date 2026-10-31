@@ -1,0 +1,20 @@
+-- M16：结构化递归通过终止性检查（每次递归调用都在构造子子项上）。
+data Nat : Type where
+  Zero : Nat
+  Succ : Nat -> Nat
+
+plus : Nat -> Nat -> Nat
+plus a b = case a of
+  Zero => b
+  Succ k => Succ (plus k b)
+
+toInt : Nat -> Int
+toInt n = case n of
+  Zero => 0
+  Succ k => 1 + toInt k
+
+four : Nat
+four = Succ (Succ (Succ (Succ Zero)))
+
+main : Int
+main = toInt (plus four four)
