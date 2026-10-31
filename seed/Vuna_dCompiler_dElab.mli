@@ -23,19 +23,25 @@ open Vuna_dCompiler_dTypedCodegen
 open Vuna_dCompiler_dCore
 type   t_Vuna_dCompiler_dElab_dDtDef =
     C_Vuna_dCompiler_dElab_dDtDef of (string) * (t_Vuna_dCompiler_dCore_dTerm) * (t_Vuna_dCompiler_dCore_dTerm)
+and   t_Vuna_dCompiler_dElab_dDtCtor =
+    C_Vuna_dCompiler_dElab_dDtCtor of (string) * (string) * (((string, bool) t_Base_dPair_dPair) list) * (t_Vuna_dCompiler_dCore_dTerm)
+and   t_Vuna_dCompiler_dElab_dDtData =
+    C_Vuna_dCompiler_dElab_dDtData of (string) * (((string, bool) t_Base_dPair_dPair) list) * ((t_Vuna_dCompiler_dElab_dDtCtor) list)
 and t_Vuna_dCompiler_dElab_dEc
 and t_Vuna_dCompiler_dElab_dCtx
 val v_Vuna_dCompiler_dElab_ddtDefName : (t_Vuna_dCompiler_dElab_dDtDef) -> (string)
 val v_Vuna_dCompiler_dElab_ddtDefType : (t_Vuna_dCompiler_dElab_dDtDef) -> (t_Vuna_dCompiler_dCore_dTerm)
 val v_Vuna_dCompiler_dElab_ddtDefBody : (t_Vuna_dCompiler_dElab_dDtDef) -> (t_Vuna_dCompiler_dCore_dTerm)
-val v_Vuna_dCompiler_dElab_delabProgram : ((t_Vuna_dCompiler_dAst_dDecl) list) -> (((t_Vuna_dCompiler_dElab_dDtDef) list) t_Base_dResult_dResult)
-val v_vuna_ushow_uVuna_uCompiler_uElab_uDtDef : (t_Vuna_dCompiler_dElab_dDtDef) -> (string)
-val v_vuna_ueq_uVuna_uCompiler_uElab_uDtDef : (t_Vuna_dCompiler_dElab_dDtDef) -> ((t_Vuna_dCompiler_dElab_dDtDef) -> (bool))
-val v_vuna_uneq_uVuna_uCompiler_uElab_uDtDef : (t_Vuna_dCompiler_dElab_dDtDef) -> ((t_Vuna_dCompiler_dElab_dDtDef) -> (bool))
-val v_vuna_ueq_uVuna_uCompiler_uElab_uEc : (t_Vuna_dCompiler_dElab_dEc) -> ((t_Vuna_dCompiler_dElab_dEc) -> (bool))
-val v_vuna_uneq_uVuna_uCompiler_uElab_uEc : (t_Vuna_dCompiler_dElab_dEc) -> ((t_Vuna_dCompiler_dElab_dEc) -> (bool))
-val v_vuna_ueq_uVuna_uCompiler_uElab_uCtx : (t_Vuna_dCompiler_dElab_dCtx) -> ((t_Vuna_dCompiler_dElab_dCtx) -> (bool))
-val v_vuna_uneq_uVuna_uCompiler_uElab_uCtx : (t_Vuna_dCompiler_dElab_dCtx) -> ((t_Vuna_dCompiler_dElab_dCtx) -> (bool))
+val v_Vuna_dCompiler_dElab_ddtCtorName : (t_Vuna_dCompiler_dElab_dDtCtor) -> (string)
+val v_Vuna_dCompiler_dElab_ddtCtorFamily : (t_Vuna_dCompiler_dElab_dDtCtor) -> (string)
+val v_Vuna_dCompiler_dElab_ddtCtorTelescope : (t_Vuna_dCompiler_dElab_dDtCtor) -> (((string, bool) t_Base_dPair_dPair) list)
+val v_Vuna_dCompiler_dElab_ddtCtorType : (t_Vuna_dCompiler_dElab_dDtCtor) -> (t_Vuna_dCompiler_dCore_dTerm)
+val v_Vuna_dCompiler_dElab_ddtDataName : (t_Vuna_dCompiler_dElab_dDtData) -> (string)
+val v_Vuna_dCompiler_dElab_ddtDataParams : (t_Vuna_dCompiler_dElab_dDtData) -> (((string, bool) t_Base_dPair_dPair) list)
+val v_Vuna_dCompiler_dElab_ddtDataCtors : (t_Vuna_dCompiler_dElab_dDtData) -> ((t_Vuna_dCompiler_dElab_dDtCtor) list)
+val v_Vuna_dCompiler_dElab_delabProgram : ((t_Vuna_dCompiler_dAst_dDecl) list) -> ((((t_Vuna_dCompiler_dElab_dDtData) list, (t_Vuna_dCompiler_dElab_dDtDef) list) t_Base_dPair_dPair) t_Base_dResult_dResult)
 val show_Vuna_dCompiler_dElab_dDtDef : t_Vuna_dCompiler_dElab_dDtDef -> string
+val show_Vuna_dCompiler_dElab_dDtCtor : t_Vuna_dCompiler_dElab_dDtCtor -> string
+val show_Vuna_dCompiler_dElab_dDtData : t_Vuna_dCompiler_dElab_dDtData -> string
 val show_Vuna_dCompiler_dElab_dEc : t_Vuna_dCompiler_dElab_dEc -> string
 val show_Vuna_dCompiler_dElab_dCtx : t_Vuna_dCompiler_dElab_dCtx -> string

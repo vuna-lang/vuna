@@ -42,7 +42,7 @@ and   t_Vuna_dCompiler_dAst_dDoStmt =
 and   t_Vuna_dCompiler_dAst_dCtor =
     C_Vuna_dCompiler_dAst_dCtor of (string) * (t_Vuna_dCompiler_dAst_dExpr) * (int) * (t_Vuna_dCompiler_dCommon_dSpan)
 and   t_Vuna_dCompiler_dAst_dDecl =
-    C_Vuna_dCompiler_dAst_dDData of (string) * ((string) list) * ((t_Vuna_dCompiler_dAst_dCtor) list) * ((string) list) * (t_Vuna_dCompiler_dCommon_dSpan)
+    C_Vuna_dCompiler_dAst_dDData of (string) * ((string) list) * (t_Vuna_dCompiler_dAst_dExpr) * ((t_Vuna_dCompiler_dAst_dCtor) list) * ((string) list) * (t_Vuna_dCompiler_dCommon_dSpan)
   | C_Vuna_dCompiler_dAst_dDSig of (string) * (t_Vuna_dCompiler_dAst_dExpr) * (t_Vuna_dCompiler_dCommon_dSpan)
   | C_Vuna_dCompiler_dAst_dDFun of (string) * ((t_Vuna_dCompiler_dAst_dPat) list) * (t_Vuna_dCompiler_dAst_dExpr) * (t_Vuna_dCompiler_dCommon_dSpan)
   | C_Vuna_dCompiler_dAst_dDRecord of (string) * ((string) list) * ((t_Vuna_dCompiler_dAst_dField) list) * ((string) list) * (t_Vuna_dCompiler_dCommon_dSpan)

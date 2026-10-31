@@ -82,7 +82,7 @@ let rec v_Vuna_dCompiler_dTypedCodegen_dlookupParam = fun a0 a1 -> match (a0, a1
 let rec v_Vuna_dCompiler_dTypedCodegen_ddataDecls = fun decls -> (match decls with
   | [] -> []
   | (d) :: (rest) -> (match d with
-  | C_Vuna_dCompiler_dAst_dDData (name, params, ctors, _, _) -> (d) :: (v_Vuna_dCompiler_dTypedCodegen_ddataDecls rest)
+  | C_Vuna_dCompiler_dAst_dDData (name, params, kind, ctors, _, _) -> (d) :: (v_Vuna_dCompiler_dTypedCodegen_ddataDecls rest)
   | _ -> v_Vuna_dCompiler_dTypedCodegen_ddataDecls rest
   | _ -> vuna_fail "compiler/lib/Vuna/Compiler/TypedCodegen.vuna" 80 7 ("case pattern match failure"))
   | _ -> vuna_fail "compiler/lib/Vuna/Compiler/TypedCodegen.vuna" 77 3 ("case pattern match failure"))
@@ -90,7 +90,7 @@ let rec v_Vuna_dCompiler_dTypedCodegen_ddataDecls = fun decls -> (match decls wi
 let rec v_Vuna_dCompiler_dTypedCodegen_dnonSpecialData = fun decls -> (match v_Vuna_dCompiler_dTypedCodegen_ddataDecls decls with
   | [] -> []
   | (d) :: (rest) -> (match d with
-  | C_Vuna_dCompiler_dAst_dDData (name, params, ctors, _, _) -> if (if (v_Vuna_dCompiler_dTypedCodegen_disBoolName name) then true else (v_Vuna_dCompiler_dTypedCodegen_disListName name)) then v_Vuna_dCompiler_dTypedCodegen_dnonSpecialData rest else (d) :: (v_Vuna_dCompiler_dTypedCodegen_dnonSpecialData rest)
+  | C_Vuna_dCompiler_dAst_dDData (name, params, kind, ctors, _, _) -> if (if (v_Vuna_dCompiler_dTypedCodegen_disBoolName name) then true else (v_Vuna_dCompiler_dTypedCodegen_disListName name)) then v_Vuna_dCompiler_dTypedCodegen_dnonSpecialData rest else (d) :: (v_Vuna_dCompiler_dTypedCodegen_dnonSpecialData rest)
   | _ -> v_Vuna_dCompiler_dTypedCodegen_dnonSpecialData rest
   | _ -> vuna_fail "compiler/lib/Vuna/Compiler/TypedCodegen.vuna" 88 7 ("case pattern match failure"))
   | _ -> vuna_fail "compiler/lib/Vuna/Compiler/TypedCodegen.vuna" 85 3 ("case pattern match failure"))
@@ -98,7 +98,7 @@ let rec v_Vuna_dCompiler_dTypedCodegen_dnonSpecialData = fun decls -> (match v_V
 let rec v_Vuna_dCompiler_dTypedCodegen_dlookupData = fun decls name -> (match decls with
   | [] -> C_Base_dMaybe_dNothing
   | (d) :: (rest) -> (match d with
-  | C_Vuna_dCompiler_dAst_dDData (dn, ps, cs, _, _) -> if v_vuna_ueq_ustr dn name then C_Base_dMaybe_dJust (d) else v_Vuna_dCompiler_dTypedCodegen_dlookupData rest name
+  | C_Vuna_dCompiler_dAst_dDData (dn, ps, kind, cs, _, _) -> if v_vuna_ueq_ustr dn name then C_Base_dMaybe_dJust (d) else v_Vuna_dCompiler_dTypedCodegen_dlookupData rest name
   | _ -> v_Vuna_dCompiler_dTypedCodegen_dlookupData rest name
   | _ -> vuna_fail "compiler/lib/Vuna/Compiler/TypedCodegen.vuna" 98 7 ("case pattern match failure"))
   | _ -> vuna_fail "compiler/lib/Vuna/Compiler/TypedCodegen.vuna" 95 3 ("case pattern match failure"))
@@ -170,7 +170,7 @@ let v_Vuna_dCompiler_dTypedCodegen_dgenCtor = fun a0 a1 a2 -> match (a0, a1, a2)
   | _ -> vuna_fail "compiler/lib/Vuna/Compiler/TypedCodegen.vuna" 173 1 ("no matching clause for Vuna.Compiler.TypedCodegen.genCtor")
 
 let v_Vuna_dCompiler_dTypedCodegen_dgenData = fun a0 a1 -> match (a0, a1) with
-  | (decls, C_Vuna_dCompiler_dAst_dDData (name, params, ctors, _, _)) -> v_Base_dResult_dandThen (v_Vuna_dCompiler_dTypedCodegen_dmapResult (v_Vuna_dCompiler_dTypedCodegen_dgenCtor decls (v_Vuna_dCompiler_dTypedCodegen_dparamMap params)) ctors) (fun cs -> C_Base_dResult_dOk ((let vuna_cat0' = ("  ") in (let vuna_cat1' = (v_Vuna_dCompiler_dTypedCodegen_ddataPrefix params) in (let vuna_cat2' = (v_Vuna_dCompiler_dTypedCodegen_dtypeNameOf name) in (let vuna_cat3' = (" =\n    ") in (let vuna_cat4' = (v_Vuna_dCompiler_dTypedCodegen_djoinWith "\n  | " cs) in String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'; vuna_cat3'; vuna_cat4'])))))))
+  | (decls, C_Vuna_dCompiler_dAst_dDData (name, params, kind, ctors, _, _)) -> v_Base_dResult_dandThen (v_Vuna_dCompiler_dTypedCodegen_dmapResult (v_Vuna_dCompiler_dTypedCodegen_dgenCtor decls (v_Vuna_dCompiler_dTypedCodegen_dparamMap params)) ctors) (fun cs -> C_Base_dResult_dOk ((let vuna_cat0' = ("  ") in (let vuna_cat1' = (v_Vuna_dCompiler_dTypedCodegen_ddataPrefix params) in (let vuna_cat2' = (v_Vuna_dCompiler_dTypedCodegen_dtypeNameOf name) in (let vuna_cat3' = (" =\n    ") in (let vuna_cat4' = (v_Vuna_dCompiler_dTypedCodegen_djoinWith "\n  | " cs) in String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'; vuna_cat3'; vuna_cat4'])))))))
   | _ -> vuna_fail "compiler/lib/Vuna/Compiler/TypedCodegen.vuna" 158 1 ("no matching clause for Vuna.Compiler.TypedCodegen.genData")
 
 let v_Vuna_dCompiler_dTypedCodegen_dgenTypeDeclsOf = fun decls ds -> (match ds with
@@ -246,11 +246,11 @@ let v_Vuna_dCompiler_dTypedCodegen_dgenShowBody = fun pmap params name arms -> (
 let v_Vuna_dCompiler_dTypedCodegen_dgenShowFuncWith = fun decls pmap params name ctors -> v_Base_dResult_dandThen (v_Vuna_dCompiler_dTypedCodegen_dmapResult (v_Vuna_dCompiler_dTypedCodegen_dgenShowCtor decls pmap) ctors) (fun arms -> v_Vuna_dCompiler_dTypedCodegen_dgenShowBody pmap params name arms)
 
 let v_Vuna_dCompiler_dTypedCodegen_dgenShowFunc = fun a0 a1 -> match (a0, a1) with
-  | (decls, C_Vuna_dCompiler_dAst_dDData (name, params, ctors, _, _)) -> v_Vuna_dCompiler_dTypedCodegen_dgenShowFuncWith decls (v_Vuna_dCompiler_dTypedCodegen_dshowParamMap params) params name ctors
+  | (decls, C_Vuna_dCompiler_dAst_dDData (name, params, kind, ctors, _, _)) -> v_Vuna_dCompiler_dTypedCodegen_dgenShowFuncWith decls (v_Vuna_dCompiler_dTypedCodegen_dshowParamMap params) params name ctors
   | _ -> vuna_fail "compiler/lib/Vuna/Compiler/TypedCodegen.vuna" 259 1 ("no matching clause for Vuna.Compiler.TypedCodegen.genShowFunc")
 
 let v_Vuna_dCompiler_dTypedCodegen_dshowDeclFnName = fun d -> (match d with
-  | C_Vuna_dCompiler_dAst_dDData (name, params, ctors, derivings, sp) -> v_Vuna_dCompiler_dTypedCodegen_dshowNameOf name
+  | C_Vuna_dCompiler_dAst_dDData (name, params, kind, ctors, derivings, sp) -> v_Vuna_dCompiler_dTypedCodegen_dshowNameOf name
   | _ -> ""
   | _ -> vuna_fail "compiler/lib/Vuna/Compiler/TypedCodegen.vuna" 284 3 ("case pattern match failure"))
 
@@ -920,7 +920,7 @@ let v_Vuna_dCompiler_dTypedCodegen_dioResultTy = fun ty -> (match ty with
 let rec v_Vuna_dCompiler_dTypedCodegen_dioCtorOf = fun decls -> (match decls with
   | [] -> C_Base_dMaybe_dNothing
   | (d) :: (rest) -> (match d with
-  | C_Vuna_dCompiler_dAst_dDData (n, params, ctors, derivings, sp) -> if v_vuna_ueq_ustr (v_Vuna_dCompiler_dTypedCodegen_dlastName n) "IO" then (match ctors with
+  | C_Vuna_dCompiler_dAst_dDData (n, params, kind, ctors, derivings, sp) -> if v_vuna_ueq_ustr (v_Vuna_dCompiler_dTypedCodegen_dlastName n) "IO" then (match ctors with
   | (c) :: (cs) -> C_Base_dMaybe_dJust (v_Vuna_dCompiler_dAst_dctorName c)
   | [] -> C_Base_dMaybe_dNothing
   | _ -> vuna_fail "compiler/lib/Vuna/Compiler/TypedCodegen.vuna" 1157 13 ("case pattern match failure")) else v_Vuna_dCompiler_dTypedCodegen_dioCtorOf rest
@@ -933,7 +933,7 @@ let v_Vuna_dCompiler_dTypedCodegen_dioRunExpr = fun decls ctor -> (let vuna_cat0
 let rec v_Vuna_dCompiler_dTypedCodegen_dioTypeNameOf = fun decls -> (match decls with
   | [] -> C_Base_dMaybe_dNothing
   | (d) :: (rest) -> (match d with
-  | C_Vuna_dCompiler_dAst_dDData (n, params, ctors, derivings, sp) -> if v_vuna_ueq_ustr (v_Vuna_dCompiler_dTypedCodegen_dlastName n) "IO" then C_Base_dMaybe_dJust (n) else v_Vuna_dCompiler_dTypedCodegen_dioTypeNameOf rest
+  | C_Vuna_dCompiler_dAst_dDData (n, params, kind, ctors, derivings, sp) -> if v_vuna_ueq_ustr (v_Vuna_dCompiler_dTypedCodegen_dlastName n) "IO" then C_Base_dMaybe_dJust (n) else v_Vuna_dCompiler_dTypedCodegen_dioTypeNameOf rest
   | _ -> v_Vuna_dCompiler_dTypedCodegen_dioTypeNameOf rest
   | _ -> vuna_fail "compiler/lib/Vuna/Compiler/TypedCodegen.vuna" 1170 7 ("case pattern match failure"))
   | _ -> vuna_fail "compiler/lib/Vuna/Compiler/TypedCodegen.vuna" 1167 3 ("case pattern match failure"))
@@ -1062,7 +1062,7 @@ let v_Vuna_dCompiler_dTypedCodegen_dlookupSchemeDefault = fun globals name -> (m
 let v_Vuna_dCompiler_dTypedCodegen_druntimeSafeOf = fun ctx candidates -> v_Vuna_dCompiler_dTypedCodegen_druntimeSafeLoop ctx (v_Base_dList_dfilter (fun n -> v_Vuna_dCompiler_dTypedCodegen_druntimeSchemeOk (v_Vuna_dCompiler_dTypedCodegen_dlookupSchemeDefault (v_Vuna_dCompiler_dTypedCodegen_dctxGlobals ctx) n)) candidates)
 
 let v_Vuna_dCompiler_dTypedCodegen_ddeclSplitName = fun d -> (match d with
-  | C_Vuna_dCompiler_dAst_dDData (n, ps, cs, ds, sp) -> n
+  | C_Vuna_dCompiler_dAst_dDData (n, ps, kind, cs, ds, sp) -> n
   | C_Vuna_dCompiler_dAst_dDRecord (n, ps, fs, ds, sp) -> n
   | C_Vuna_dCompiler_dAst_dDFun (n, ps, b, sp) -> n
   | C_Vuna_dCompiler_dAst_dDSig (n, ty, sp) -> n
@@ -1074,7 +1074,7 @@ let v_Vuna_dCompiler_dTypedCodegen_ddeclSplitName = fun d -> (match d with
   | _ -> vuna_fail "compiler/lib/Vuna/Compiler/TypedCodegen.vuna" 1344 3 ("case pattern match failure"))
 
 let v_Vuna_dCompiler_dTypedCodegen_drouteData = fun ctx route -> (let names = v_Vuna_dCompiler_dTypedCodegen_duniqueNames (v_Base_dList_dmap v_Base_dPair_dfirstOf (v_Base_dList_dfilter (fun p -> v_vuna_ueq_ustr (v_Base_dPair_dsecondOf p) route) (v_Vuna_dCompiler_dTypedCodegen_dctxRoutedDatas ctx))) in v_Base_dList_dfilter (fun d -> (match d with
-  | C_Vuna_dCompiler_dAst_dDData (n, ps, cs, ds, sp) -> v_Base_dList_dmemName n names
+  | C_Vuna_dCompiler_dAst_dDData (n, ps, kind, cs, ds, sp) -> v_Base_dList_dmemName n names
   | _ -> false
   | _ -> vuna_fail "compiler/lib/Vuna/Compiler/TypedCodegen.vuna" 1363 20 ("case pattern match failure"))) (v_Vuna_dCompiler_dTypedCodegen_dctxElabDecls ctx))
 
@@ -1120,7 +1120,7 @@ let v_Vuna_dCompiler_dTypedCodegen_drouteOf = fun ctx name -> (match v_Base_dLis
   | _ -> vuna_fail "compiler/lib/Vuna/Compiler/TypedCodegen.vuna" 1335 3 ("case pattern match failure"))
 
 let v_Vuna_dCompiler_dTypedCodegen_drouteDataTable = fun ctx decls -> v_Base_dList_dconcatMap (fun d -> (match d with
-  | C_Vuna_dCompiler_dAst_dDData (n, ps, cs, ds, sp) -> (C_Base_dPair_dPair (n, v_Vuna_dCompiler_dTypedCodegen_drouteOf ctx n)) :: ([])
+  | C_Vuna_dCompiler_dAst_dDData (n, ps, kind, cs, ds, sp) -> (C_Base_dPair_dPair (n, v_Vuna_dCompiler_dTypedCodegen_drouteOf ctx n)) :: ([])
   | _ -> []
   | _ -> vuna_fail "compiler/lib/Vuna/Compiler/TypedCodegen.vuna" 1356 20 ("case pattern match failure"))) decls
 
@@ -1252,7 +1252,7 @@ let rec v_Vuna_dCompiler_dTypedCodegen_dfindExportByTarget = fun kind target exp
 let v_Vuna_dCompiler_dTypedCodegen_dctorExportsOf = fun target exports -> v_Base_dList_dfilter (fun e -> (if (v_vuna_ueq_ustr (v_Vuna_dCompiler_dLoader_dentryKind e) "ctor") then (v_vuna_ueq_ustr (v_Vuna_dCompiler_dLoader_dentryParent e) target) else false)) exports
 
 let v_Vuna_dCompiler_dTypedCodegen_dmliTypePart = fun ctx exports d -> (match d with
-  | C_Vuna_dCompiler_dAst_dDData (name, params, ctors, derivings, sp) -> (match v_Vuna_dCompiler_dTypedCodegen_dctorExportsOf name exports with
+  | C_Vuna_dCompiler_dAst_dDData (name, params, kind, ctors, derivings, sp) -> (match v_Vuna_dCompiler_dTypedCodegen_dctorExportsOf name exports with
   | [] -> C_Base_dResult_dOk (((v_Vuna_dCompiler_dTypedCodegen_ddataPrefix params) ^ (v_Vuna_dCompiler_dTypedCodegen_dtypeNameOf name)))
   | ctorEntries -> if v_vuna_ueq_uint (v_Base_dList_dlength ctorEntries) (v_Base_dList_dlength ctors) then v_Vuna_dCompiler_dTypedCodegen_dgenData (v_Vuna_dCompiler_dTypedCodegen_dctxElabDecls ctx) d else C_Base_dResult_dErr ((let vuna_cat0' = ("split mode: partial constructor export of type ") in (let vuna_cat1' = (name) in (let vuna_cat2' = (" is not supported") in String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2']))))
   | _ -> vuna_fail "compiler/lib/Vuna/Compiler/TypedCodegen.vuna" 1572 7 ("case pattern match failure"))
@@ -1282,7 +1282,7 @@ let v_Vuna_dCompiler_dTypedCodegen_dgeneratedValLine = fun ctx name -> (match v_
   | _ -> vuna_fail "compiler/lib/Vuna/Compiler/TypedCodegen.vuna" 1600 3 ("case pattern match failure"))
 
 let v_Vuna_dCompiler_dTypedCodegen_dshowValLine = fun ctx d -> (match d with
-  | C_Vuna_dCompiler_dAst_dDData (name, params, ctors, derivings, sp) -> C_Base_dResult_dOk (((let vuna_cat0' = ("val ") in (let vuna_cat1' = (v_Vuna_dCompiler_dTypedCodegen_dshowNameOf name) in (let vuna_cat2' = (" : ") in (let vuna_cat3' = (v_Vuna_dCompiler_dTypedCodegen_dshowValType params name) in (let vuna_cat4' = ("\n") in String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'; vuna_cat3'; vuna_cat4'])))))) :: ([]))
+  | C_Vuna_dCompiler_dAst_dDData (name, params, kind, ctors, derivings, sp) -> C_Base_dResult_dOk (((let vuna_cat0' = ("val ") in (let vuna_cat1' = (v_Vuna_dCompiler_dTypedCodegen_dshowNameOf name) in (let vuna_cat2' = (" : ") in (let vuna_cat3' = (v_Vuna_dCompiler_dTypedCodegen_dshowValType params name) in (let vuna_cat4' = ("\n") in String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'; vuna_cat3'; vuna_cat4'])))))) :: ([]))
   | _ -> C_Base_dResult_dOk ([])
   | _ -> vuna_fail "compiler/lib/Vuna/Compiler/TypedCodegen.vuna" 1606 3 ("case pattern match failure"))
 

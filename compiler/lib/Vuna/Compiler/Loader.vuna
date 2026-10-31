@@ -609,11 +609,11 @@ resolveCtorSpec modules label prefix ownTypes imports (Ctor ctor ty arity sp) =
 
 resolveDecl modules label prefix own ownCtors ownTypes imports d =
   case d of
-    DData dname params ctors derivings sp =>
+    DData dname params kind ctors derivings sp =>
       andThen (resolveTypeTopName label prefix dname) (\dn =>
         andThen (traverse (resolveCtorSpec modules label prefix ownTypes imports) ctors) (\ctors2 =>
           andThen (traverse (resolveTypeName modules label prefix ownTypes imports) derivings) (\ds2 =>
-            Ok (DData dn params ctors2 ds2 sp))))
+            Ok (DData dn params kind ctors2 ds2 sp))))
     DRecord dname params fields derivings sp =>
       andThen (resolveTypeTopName label prefix dname) (\dn =>
         andThen (traverse (resolveRecordField modules label prefix ownTypes imports) fields) (\fields2 =>
@@ -705,7 +705,7 @@ findOwnData name decls =
     Nil => Nothing
     Cons d rest =>
       case d of
-        DData dname params ctors derivings sp =>
+        DData dname params kind ctors derivings sp =>
           if dname == name then Just (Pair dname (map ctorName ctors)) else findOwnData name rest
         DRecord dname params fields derivings sp =>
           if dname == name then Just (Pair dname (Cons dname Nil)) else findOwnData name rest
@@ -752,7 +752,7 @@ findOwnCtorName name decls =
     Nil => Nothing
     Cons d rest =>
       case d of
-        DData dname params ctors derivings sp =>
+        DData dname params kind ctors derivings sp =>
           case findCtorNamed name ctors of
             Just cname => Just (Pair dname cname)
             Nothing => findOwnCtorName name rest
@@ -786,7 +786,7 @@ ctorEntriesOfType typeTarget entries =
 
 declImplicitExports prefix d =
   case d of
-    DData dname params ctors derivings sp =>
+    DData dname params kind ctors derivings sp =>
       if isPrivateName dname then Nil
       else
         Cons

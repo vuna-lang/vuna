@@ -58,3 +58,4 @@ examples/**/main
 
 # vuna 包级 compile 输出
 .output/
+/seed/program

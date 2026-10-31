@@ -1,0 +1,22 @@
+-- M14：归纳族 Nat + case 消除 + 递归（SCC 分组）。
+data Nat : Type where
+  Zero : Nat
+  Succ : Nat -> Nat
+
+plus : Nat -> Nat -> Nat
+plus m n =
+  case m of
+    Zero => n
+    Succ k => Succ (plus k n)
+
+toInt : Nat -> Int
+toInt n =
+  case n of
+    Zero => 0
+    Succ k => 1 + toInt k
+
+three : Nat
+three = Succ (Succ (Succ Zero))
+
+main : Int
+main = toInt (plus three (Succ (Succ Zero)))

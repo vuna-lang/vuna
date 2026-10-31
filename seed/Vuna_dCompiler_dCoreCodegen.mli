@@ -22,5 +22,13 @@ open Vuna_dCompiler_dSplit
 open Vuna_dCompiler_dTypedCodegen
 open Vuna_dCompiler_dCore
 open Vuna_dCompiler_dElab
-val v_Vuna_dCompiler_dCoreCodegen_dcheckDtProgram : ((t_Vuna_dCompiler_dElab_dDtDef) list) -> ((int) t_Base_dResult_dResult)
-val v_Vuna_dCompiler_dCoreCodegen_dgenerateDtProgram : ((t_Vuna_dCompiler_dElab_dDtDef) list) -> ((bool) -> ((string) t_Base_dResult_dResult))
+type t_Vuna_dCompiler_dCoreCodegen_dGenSt
+and t_Vuna_dCompiler_dCoreCodegen_dAltEnv
+val v_Vuna_dCompiler_dCoreCodegen_dcheckDtProgram : (((t_Vuna_dCompiler_dElab_dDtData) list, (t_Vuna_dCompiler_dElab_dDtDef) list) t_Base_dPair_dPair) -> ((int) t_Base_dResult_dResult)
+val v_Vuna_dCompiler_dCoreCodegen_dgenerateDtProgram : (((t_Vuna_dCompiler_dElab_dDtData) list, (t_Vuna_dCompiler_dElab_dDtDef) list) t_Base_dPair_dPair) -> ((bool) -> ((string) t_Base_dResult_dResult))
+val v_vuna_ueq_uVuna_uCompiler_uCoreCodegen_uGenSt : (t_Vuna_dCompiler_dCoreCodegen_dGenSt) -> ((t_Vuna_dCompiler_dCoreCodegen_dGenSt) -> (bool))
+val v_vuna_uneq_uVuna_uCompiler_uCoreCodegen_uGenSt : (t_Vuna_dCompiler_dCoreCodegen_dGenSt) -> ((t_Vuna_dCompiler_dCoreCodegen_dGenSt) -> (bool))
+val v_vuna_ueq_uVuna_uCompiler_uCoreCodegen_uAltEnv : (t_Vuna_dCompiler_dCoreCodegen_dAltEnv) -> ((t_Vuna_dCompiler_dCoreCodegen_dAltEnv) -> (bool))
+val v_vuna_uneq_uVuna_uCompiler_uCoreCodegen_uAltEnv : (t_Vuna_dCompiler_dCoreCodegen_dAltEnv) -> ((t_Vuna_dCompiler_dCoreCodegen_dAltEnv) -> (bool))
+val show_Vuna_dCompiler_dCoreCodegen_dGenSt : t_Vuna_dCompiler_dCoreCodegen_dGenSt -> string
+val show_Vuna_dCompiler_dCoreCodegen_dAltEnv : t_Vuna_dCompiler_dCoreCodegen_dAltEnv -> string

@@ -416,7 +416,7 @@ let v_Vuna_dCompiler_dLoader_dprivateExportMsg = fun prefix sp name -> (let vuna
 let rec v_Vuna_dCompiler_dLoader_dfindOwnData = fun name decls -> (match decls with
   | [] -> C_Base_dMaybe_dNothing
   | (d) :: (rest) -> (match d with
-  | C_Vuna_dCompiler_dAst_dDData (dname, params, ctors, derivings, sp) -> if v_vuna_ueq_ustr dname name then C_Base_dMaybe_dJust (C_Base_dPair_dPair (dname, v_Base_dList_dmap v_Vuna_dCompiler_dAst_dctorName ctors)) else v_Vuna_dCompiler_dLoader_dfindOwnData name rest
+  | C_Vuna_dCompiler_dAst_dDData (dname, params, kind, ctors, derivings, sp) -> if v_vuna_ueq_ustr dname name then C_Base_dMaybe_dJust (C_Base_dPair_dPair (dname, v_Base_dList_dmap v_Vuna_dCompiler_dAst_dctorName ctors)) else v_Vuna_dCompiler_dLoader_dfindOwnData name rest
   | C_Vuna_dCompiler_dAst_dDRecord (dname, params, fields, derivings, sp) -> if v_vuna_ueq_ustr dname name then C_Base_dMaybe_dJust (C_Base_dPair_dPair (dname, (dname) :: ([]))) else v_Vuna_dCompiler_dLoader_dfindOwnData name rest
   | C_Vuna_dCompiler_dAst_dDTrait (tname, params, methods, sp) -> if v_vuna_ueq_ustr tname name then C_Base_dMaybe_dJust (C_Base_dPair_dPair (tname, v_Base_dList_dmap v_Base_dPair_dfirstOf methods)) else v_Vuna_dCompiler_dLoader_dfindOwnData name rest
   | _ -> v_Vuna_dCompiler_dLoader_dfindOwnData name rest
@@ -456,7 +456,7 @@ let rec v_Vuna_dCompiler_dLoader_dfindOwnInstanceName = fun name decls -> (match
 let rec v_Vuna_dCompiler_dLoader_dfindOwnCtorName = fun name decls -> (match decls with
   | [] -> C_Base_dMaybe_dNothing
   | (d) :: (rest) -> (match d with
-  | C_Vuna_dCompiler_dAst_dDData (dname, params, ctors, derivings, sp) -> (match v_Vuna_dCompiler_dLoader_dfindCtorNamed name ctors with
+  | C_Vuna_dCompiler_dAst_dDData (dname, params, kind, ctors, derivings, sp) -> (match v_Vuna_dCompiler_dLoader_dfindCtorNamed name ctors with
   | C_Base_dMaybe_dJust (cname) -> C_Base_dMaybe_dJust (C_Base_dPair_dPair (dname, cname))
   | C_Base_dMaybe_dNothing -> v_Vuna_dCompiler_dLoader_dfindOwnCtorName name rest
   | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Loader.vuna" 756 11 ("case pattern match failure"))
@@ -480,7 +480,7 @@ let rec v_Vuna_dCompiler_dLoader_dctorEntriesOfType = fun typeTarget entries -> 
   | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Loader.vuna" 780 3 ("case pattern match failure"))
 
 let v_Vuna_dCompiler_dLoader_ddeclImplicitExports = fun prefix d -> (match d with
-  | C_Vuna_dCompiler_dAst_dDData (dname, params, ctors, derivings, sp) -> if v_Vuna_dCompiler_dLoader_disPrivateName dname then [] else (C_Vuna_dCompiler_dLoader_dExportEntry ("type", dname, v_Vuna_dCompiler_dLoader_dmangle prefix dname, "")) :: (v_Vuna_dCompiler_dLoader_downCtorEntries prefix dname (v_Base_dList_dmap v_Vuna_dCompiler_dAst_dctorName ctors))
+  | C_Vuna_dCompiler_dAst_dDData (dname, params, kind, ctors, derivings, sp) -> if v_Vuna_dCompiler_dLoader_disPrivateName dname then [] else (C_Vuna_dCompiler_dLoader_dExportEntry ("type", dname, v_Vuna_dCompiler_dLoader_dmangle prefix dname, "")) :: (v_Vuna_dCompiler_dLoader_downCtorEntries prefix dname (v_Base_dList_dmap v_Vuna_dCompiler_dAst_dctorName ctors))
   | C_Vuna_dCompiler_dAst_dDRecord (dname, params, fields, derivings, sp) -> if v_Vuna_dCompiler_dLoader_disPrivateName dname then [] else (C_Vuna_dCompiler_dLoader_dExportEntry ("type", dname, v_Vuna_dCompiler_dLoader_dmangle prefix dname, "")) :: (v_Vuna_dCompiler_dLoader_downCtorEntries prefix dname ((dname) :: ([])))
   | C_Vuna_dCompiler_dAst_dDTrait (tname, params, methods, sp) -> if v_Vuna_dCompiler_dLoader_disPrivateName tname then [] else (C_Vuna_dCompiler_dLoader_dExportEntry ("type", tname, v_Vuna_dCompiler_dLoader_dmangle prefix tname, "")) :: (v_Vuna_dCompiler_dLoader_downCtorEntries prefix tname (v_Base_dList_dmap v_Base_dPair_dfirstOf methods))
   | C_Vuna_dCompiler_dAst_dDInstance (iname, isDefault, head, methods, sp) -> if isDefault then [] else (match iname with
@@ -841,7 +841,7 @@ let v_Vuna_dCompiler_dLoader_dresolveInstanceMethod = fun modules label prefix o
   | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Loader.vuna" 660 3 ("case pattern match failure"))
 
 let v_Vuna_dCompiler_dLoader_dresolveDecl = fun modules label prefix own ownCtors ownTypes imports d -> (match d with
-  | C_Vuna_dCompiler_dAst_dDData (dname, params, ctors, derivings, sp) -> v_Base_dResult_dandThen (v_Vuna_dCompiler_dLoader_dresolveTypeTopName label prefix dname) (fun dn -> v_Base_dResult_dandThen (v_Base_dResult_dtraverse (v_Vuna_dCompiler_dLoader_dresolveCtorSpec modules label prefix ownTypes imports) ctors) (fun ctors2 -> v_Base_dResult_dandThen (v_Base_dResult_dtraverse (v_Vuna_dCompiler_dLoader_dresolveTypeName modules label prefix ownTypes imports) derivings) (fun ds2 -> C_Base_dResult_dOk (C_Vuna_dCompiler_dAst_dDData (dn, params, ctors2, ds2, sp)))))
+  | C_Vuna_dCompiler_dAst_dDData (dname, params, kind, ctors, derivings, sp) -> v_Base_dResult_dandThen (v_Vuna_dCompiler_dLoader_dresolveTypeTopName label prefix dname) (fun dn -> v_Base_dResult_dandThen (v_Base_dResult_dtraverse (v_Vuna_dCompiler_dLoader_dresolveCtorSpec modules label prefix ownTypes imports) ctors) (fun ctors2 -> v_Base_dResult_dandThen (v_Base_dResult_dtraverse (v_Vuna_dCompiler_dLoader_dresolveTypeName modules label prefix ownTypes imports) derivings) (fun ds2 -> C_Base_dResult_dOk (C_Vuna_dCompiler_dAst_dDData (dn, params, kind, ctors2, ds2, sp)))))
   | C_Vuna_dCompiler_dAst_dDRecord (dname, params, fields, derivings, sp) -> v_Base_dResult_dandThen (v_Vuna_dCompiler_dLoader_dresolveTypeTopName label prefix dname) (fun dn -> v_Base_dResult_dandThen (v_Base_dResult_dtraverse (v_Vuna_dCompiler_dLoader_dresolveRecordField modules label prefix ownTypes imports) fields) (fun fields2 -> v_Base_dResult_dandThen (v_Base_dResult_dtraverse (v_Vuna_dCompiler_dLoader_dresolveTypeName modules label prefix ownTypes imports) derivings) (fun ds2 -> C_Base_dResult_dOk (C_Vuna_dCompiler_dAst_dDRecord (dn, params, fields2, ds2, sp)))))
   | C_Vuna_dCompiler_dAst_dDTrait (tname, params, methods, sp) -> v_Base_dResult_dandThen (v_Vuna_dCompiler_dLoader_dresolveTypeTopName label prefix tname) (fun tn -> v_Base_dResult_dandThen (v_Base_dResult_dtraverse (v_Vuna_dCompiler_dLoader_dresolveTraitMethod modules label prefix ownTypes imports) methods) (fun ms -> C_Base_dResult_dOk (C_Vuna_dCompiler_dAst_dDTrait (tn, params, ms, sp))))
   | C_Vuna_dCompiler_dAst_dDInstance (iname, isDefault, head, methods, sp) -> v_Base_dResult_dandThen (v_Vuna_dCompiler_dLoader_dresolveInstanceName label prefix iname) (fun in2 -> v_Base_dResult_dandThen (v_Vuna_dCompiler_dLoader_dresolveTypeExpr modules label prefix ownTypes imports head) (fun head2 -> v_Base_dResult_dandThen (v_Base_dResult_dtraverse (v_Vuna_dCompiler_dLoader_dresolveInstanceMethod modules label prefix own ownCtors ownTypes imports) methods) (fun ms -> C_Base_dResult_dOk (C_Vuna_dCompiler_dAst_dDInstance (in2, isDefault, head2, ms, sp)))))
@@ -873,28 +873,28 @@ let v_Vuna_dCompiler_dLoader_dloadProgramRaw = fun roots entry -> v_Vuna_dCompil
 
 let v_vuna_ushow_uVuna_uCompiler_uLoader_uExportEntry = fun x -> (match x with
   | C_Vuna_dCompiler_dLoader_dExportEntry (v0, v1, v2, v3) -> (let vuna_cat0' = ("(ExportEntry ") in (let vuna_cat1' = (v_vuna_ushow_ustring v0) in (let vuna_cat2' = (" ") in (let vuna_cat3' = (v_vuna_ushow_ustring v1) in (let vuna_cat4' = (" ") in (let vuna_cat5' = (v_vuna_ushow_ustring v2) in (let vuna_cat6' = (" ") in (let vuna_cat7' = (v_vuna_ushow_ustring v3) in (let vuna_cat8' = (")") in String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'; vuna_cat3'; vuna_cat4'; vuna_cat5'; vuna_cat6'; vuna_cat7'; vuna_cat8'])))))))))
-  | _ -> vuna_fail "<generated>" 226 48 ("case pattern match failure"))
+  | _ -> vuna_fail "<generated>" 160 48 ("case pattern match failure"))
 
 let v_vuna_ueq_uVuna_uCompiler_uLoader_uExportEntry = fun x y -> (match x with
   | C_Vuna_dCompiler_dLoader_dExportEntry (v0, v1, v2, v3) -> (match y with
   | C_Vuna_dCompiler_dLoader_dExportEntry (w0, w1, w2, w3) -> (if ((if ((if (v_vuna_ueq_ustr v0 w0) then (v_vuna_ueq_ustr v1 w1) else false)) then (v_vuna_ueq_ustr v2 w2) else false)) then (v_vuna_ueq_ustr v3 w3) else false)
   | _ -> v_vuna_ueq_uint 0 1
-  | _ -> vuna_fail "<generated>" 231 51 ("case pattern match failure"))
+  | _ -> vuna_fail "<generated>" 165 51 ("case pattern match failure"))
   | _ -> v_vuna_ueq_uint 0 1
-  | _ -> vuna_fail "<generated>" 230 48 ("case pattern match failure"))
+  | _ -> vuna_fail "<generated>" 164 48 ("case pattern match failure"))
 
 let v_vuna_uneq_uVuna_uCompiler_uLoader_uExportEntry = fun x y -> if v_vuna_ueq_uVuna_uCompiler_uLoader_uExportEntry x y then v_vuna_ueq_uint 0 1 else v_vuna_ueq_uint 0 0
 
 let v_vuna_ushow_uVuna_uCompiler_uLoader_uExportRef = fun x -> (match x with
   | C_Vuna_dCompiler_dLoader_dExportRef (v0, v1, v2) -> (let vuna_cat0' = ("(ExportRef ") in (let vuna_cat1' = (v_vuna_ushow_ustring v0) in (let vuna_cat2' = (" ") in (let vuna_cat3' = (v_vuna_ushow_ustring v1) in (let vuna_cat4' = (" ") in (let vuna_cat5' = (v_vuna_ushow_ustring v2) in (let vuna_cat6' = (")") in String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'; vuna_cat3'; vuna_cat4'; vuna_cat5'; vuna_cat6'])))))))
-  | _ -> vuna_fail "<generated>" 239 46 ("case pattern match failure"))
+  | _ -> vuna_fail "<generated>" 173 46 ("case pattern match failure"))
 
 let v_vuna_ueq_uVuna_uCompiler_uLoader_uExportRef = fun x y -> (match x with
   | C_Vuna_dCompiler_dLoader_dExportRef (v0, v1, v2) -> (match y with
   | C_Vuna_dCompiler_dLoader_dExportRef (w0, w1, w2) -> (if ((if (v_vuna_ueq_ustr v0 w0) then (v_vuna_ueq_ustr v1 w1) else false)) then (v_vuna_ueq_ustr v2 w2) else false)
   | _ -> v_vuna_ueq_uint 0 1
-  | _ -> vuna_fail "<generated>" 244 46 ("case pattern match failure"))
+  | _ -> vuna_fail "<generated>" 178 46 ("case pattern match failure"))
   | _ -> v_vuna_ueq_uint 0 1
-  | _ -> vuna_fail "<generated>" 243 46 ("case pattern match failure"))
+  | _ -> vuna_fail "<generated>" 177 46 ("case pattern match failure"))
 
 let v_vuna_uneq_uVuna_uCompiler_uLoader_uExportRef = fun x y -> if v_vuna_ueq_uVuna_uCompiler_uLoader_uExportRef x y then v_vuna_ueq_uint 0 1 else v_vuna_ueq_uint 0 0

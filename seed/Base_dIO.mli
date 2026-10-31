@@ -17,9 +17,9 @@ val v_Base_dIO_dremoveFile : (string) -> ((int) t_Base_dIO_dIO)
 val v_Base_dIO_dfileExists : (string) -> ((bool) t_Base_dIO_dIO)
 val v_Base_dIO_dgetArgs : unit -> ((string) list) t_Base_dIO_dIO
 val v_Base_dIO_dexit : (int) -> ((int) t_Base_dIO_dIO)
-val v_vuna_uinst_ud_uBase_uIO_uIO_ufmap : (('a37958) -> ('a37957)) -> ((('a37958) t_Base_dIO_dIO) -> (('a37957) t_Base_dIO_dIO))
-val v_vuna_uinst_ud_uBase_uIO_uIO_upure : ('a37965) -> (('a37965) t_Base_dIO_dIO)
-val v_vuna_uinst_ud_uBase_uIO_uIO_ubind : (('a37970) t_Base_dIO_dIO) -> ((('a37970) -> (('a37969) t_Base_dIO_dIO)) -> (('a37969) t_Base_dIO_dIO))
+val v_vuna_uinst_ud_uBase_uIO_uIO_ufmap : (('a41707) -> ('a41706)) -> ((('a41707) t_Base_dIO_dIO) -> (('a41706) t_Base_dIO_dIO))
+val v_vuna_uinst_ud_uBase_uIO_uIO_upure : ('a41714) -> (('a41714) t_Base_dIO_dIO)
+val v_vuna_uinst_ud_uBase_uIO_uIO_ubind : (('a41719) t_Base_dIO_dIO) -> ((('a41719) -> (('a41718) t_Base_dIO_dIO)) -> (('a41718) t_Base_dIO_dIO))
 val show_Base_dIO_dIO : 'p0. ('p0 -> string) -> ('p0) t_Base_dIO_dIO -> string
 
 val __vuna_run_io : ('a) t_Base_dIO_dIO -> ('a)

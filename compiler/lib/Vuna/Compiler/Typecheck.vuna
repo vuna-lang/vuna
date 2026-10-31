@@ -412,7 +412,7 @@ schemeOfCtor typeNames params st (Ctor name ty arity _) =
 declDataNames Nil = Nil
 declDataNames (Cons d rest) =
   case d of
-    DData name params ctors _ _ => Cons name (declDataNames rest)
+    DData name params kind ctors _ _ => Cons name (declDataNames rest)
     _ => declDataNames rest
 
 collectSigs typeNames Nil st = Ok (Pair Nil st)
@@ -429,7 +429,7 @@ collectSigs typeNames (Cons d rest) st =
 collectCtors typeNames Nil st = Ok (Pair Nil st)
 collectCtors typeNames (Cons d rest) st =
   case d of
-    DData name params ctors _ _ =>
+    DData name params kind ctors _ _ =>
       andThen (collectCtorList typeNames params ctors st) (\p =>
         case p of
           Pair newCtors st1 =>
@@ -1124,7 +1124,7 @@ recordArrowType (Cons f fs) ret sp =
   EApp (EVar "->" sp) (Cons (fieldType f) (Cons (recordArrowType fs ret sp) Nil)) sp
 
 recordDeclToData (DRecord dname params fields derivings sp) =
-  DData dname params
+  DData dname params (EVar "Type" sp)
     (Cons (Ctor dname (recordArrowType fields (recordRetType dname params sp) sp) (length fields) sp) Nil)
     derivings sp
 
@@ -1138,7 +1138,7 @@ desugarRecordDecl records d =
     DFun name pats body sp =>
       andThen (traverse (desugarPattern records) pats) (\pats2 =>
         andThen (desugarExpr records body) (\body2 => Ok (DFun name pats2 body2 sp)))
-    DData name params ctors derivings sp => Ok d
+    DData name params kind ctors derivings sp => Ok d
     DRecord name params fields derivings sp => Ok d
     DTrait name params methods sp => Ok d
     DInstance iname isDefault head methods sp =>
@@ -2094,7 +2094,7 @@ collectDataShapes Nil = Nil
 
 collectDataShapes (Cons d rest) =
   case d of
-    DData name params ctors derivings sp =>
+    DData name params kind ctors derivings sp =>
       Cons (DataShape name params (map shapeOfCtor ctors)) (collectDataShapes rest)
     _ => collectDataShapes rest
 
@@ -2402,7 +2402,7 @@ typeArityOf decls name =
     Nil => 0
     Cons d rest =>
       case d of
-        DData dn params ctors derivings sp => if dn == name then length params else typeArityOf rest name
+        DData dn params kind ctors derivings sp => if dn == name then length params else typeArityOf rest name
         DRecord dn params fields derivings sp => if dn == name then length params else typeArityOf rest name
         _ => typeArityOf rest name
 
@@ -2499,7 +2499,7 @@ collectDerivingsGo supported eqSupported (Cons d rest) insts =
     Nil => collectDerivingsGo supported eqSupported rest insts
     derivings =>
       case d of
-        DData tyName params ctors derivings2 sp =>
+        DData tyName params kind ctors derivings2 sp =>
           collectDerivingNames supported eqSupported tyName params derivings sp insts rest
         _ => collectDerivingsGo supported eqSupported rest insts
 
@@ -2784,7 +2784,7 @@ tyCtorNames decls ty =
 ctorNamesOf Nil name = Nil
 ctorNamesOf (Cons d rest) name =
   case d of
-    DData dn params ctors _ _ =>
+    DData dn params kind ctors _ _ =>
       if dn == name then map ctorName ctors else ctorNamesOf rest name
     _ => ctorNamesOf rest name
 

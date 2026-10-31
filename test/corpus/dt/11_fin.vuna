@@ -1,0 +1,23 @@
+-- M14：Fin 安全索引 —— `Vec a (Succ m)` 与 `Fin (Succ m)` 一起排除两个 Nil/FZero 不可能分支。
+data Nat : Type where
+  Zero : Nat
+  Succ : Nat -> Nat
+
+data Fin : Nat -> Type where
+  FZero : (n : Nat) -> Fin (Succ n)
+  FSucc : (n : Nat) -> Fin n -> Fin (Succ n)
+
+data Vec : Type -> Nat -> Type where
+  Nil : (a : Type) -> Vec a Zero
+  Cons : (a : Type) -> (n : Nat) -> a -> Vec a n -> Vec a (Succ n)
+
+at : (a : Type) -> (m : Nat) -> Vec a (Succ m) -> Fin (Succ m) -> a
+at a m xs i =
+  case xs of
+    Cons b k y ys =>
+      case i of
+        FZero j => y
+        FSucc j h => y
+
+main : Int
+main = at Int Zero (Cons Int Zero 7 (Nil Int)) (FZero Zero)

@@ -42,7 +42,7 @@ and   t_Vuna_dCompiler_dAst_dDoStmt =
 and   t_Vuna_dCompiler_dAst_dCtor =
     C_Vuna_dCompiler_dAst_dCtor of (string) * (t_Vuna_dCompiler_dAst_dExpr) * (int) * (t_Vuna_dCompiler_dCommon_dSpan)
 and   t_Vuna_dCompiler_dAst_dDecl =
-    C_Vuna_dCompiler_dAst_dDData of (string) * ((string) list) * ((t_Vuna_dCompiler_dAst_dCtor) list) * ((string) list) * (t_Vuna_dCompiler_dCommon_dSpan)
+    C_Vuna_dCompiler_dAst_dDData of (string) * ((string) list) * (t_Vuna_dCompiler_dAst_dExpr) * ((t_Vuna_dCompiler_dAst_dCtor) list) * ((string) list) * (t_Vuna_dCompiler_dCommon_dSpan)
   | C_Vuna_dCompiler_dAst_dDSig of (string) * (t_Vuna_dCompiler_dAst_dExpr) * (t_Vuna_dCompiler_dCommon_dSpan)
   | C_Vuna_dCompiler_dAst_dDFun of (string) * ((t_Vuna_dCompiler_dAst_dPat) list) * (t_Vuna_dCompiler_dAst_dExpr) * (t_Vuna_dCompiler_dCommon_dSpan)
   | C_Vuna_dCompiler_dAst_dDRecord of (string) * ((string) list) * ((t_Vuna_dCompiler_dAst_dField) list) * ((string) list) * (t_Vuna_dCompiler_dCommon_dSpan)
@@ -94,7 +94,7 @@ and show_Vuna_dCompiler_dAst_dCtor v =
   | C_Vuna_dCompiler_dAst_dCtor (f0, f1, f2, f3) -> show_ctor "Ctor" [(show_vstring) f0; (show_Vuna_dCompiler_dAst_dExpr) f1; (string_of_int) f2; (show_Vuna_dCompiler_dCommon_dSpan) f3]
 and show_Vuna_dCompiler_dAst_dDecl v =
   match v with
-  | C_Vuna_dCompiler_dAst_dDData (f0, f1, f2, f3, f4) -> show_ctor "DData" [(show_vstring) f0; ((fun v -> let rec go = function [] -> "Nil" | x :: xs -> "(Cons " ^ (show_vstring) x ^ " " ^ go xs ^ ")" in go v)) f1; ((fun v -> let rec go = function [] -> "Nil" | x :: xs -> "(Cons " ^ (show_Vuna_dCompiler_dAst_dCtor) x ^ " " ^ go xs ^ ")" in go v)) f2; ((fun v -> let rec go = function [] -> "Nil" | x :: xs -> "(Cons " ^ (show_vstring) x ^ " " ^ go xs ^ ")" in go v)) f3; (show_Vuna_dCompiler_dCommon_dSpan) f4]
+  | C_Vuna_dCompiler_dAst_dDData (f0, f1, f2, f3, f4, f5) -> show_ctor "DData" [(show_vstring) f0; ((fun v -> let rec go = function [] -> "Nil" | x :: xs -> "(Cons " ^ (show_vstring) x ^ " " ^ go xs ^ ")" in go v)) f1; (show_Vuna_dCompiler_dAst_dExpr) f2; ((fun v -> let rec go = function [] -> "Nil" | x :: xs -> "(Cons " ^ (show_Vuna_dCompiler_dAst_dCtor) x ^ " " ^ go xs ^ ")" in go v)) f3; ((fun v -> let rec go = function [] -> "Nil" | x :: xs -> "(Cons " ^ (show_vstring) x ^ " " ^ go xs ^ ")" in go v)) f4; (show_Vuna_dCompiler_dCommon_dSpan) f5]
   | C_Vuna_dCompiler_dAst_dDSig (f0, f1, f2) -> show_ctor "DSig" [(show_vstring) f0; (show_Vuna_dCompiler_dAst_dExpr) f1; (show_Vuna_dCompiler_dCommon_dSpan) f2]
   | C_Vuna_dCompiler_dAst_dDFun (f0, f1, f2, f3) -> show_ctor "DFun" [(show_vstring) f0; ((fun v -> let rec go = function [] -> "Nil" | x :: xs -> "(Cons " ^ (show_Vuna_dCompiler_dAst_dPat) x ^ " " ^ go xs ^ ")" in go v)) f1; (show_Vuna_dCompiler_dAst_dExpr) f2; (show_Vuna_dCompiler_dCommon_dSpan) f3]
   | C_Vuna_dCompiler_dAst_dDRecord (f0, f1, f2, f3, f4) -> show_ctor "DRecord" [(show_vstring) f0; ((fun v -> let rec go = function [] -> "Nil" | x :: xs -> "(Cons " ^ (show_vstring) x ^ " " ^ go xs ^ ")" in go v)) f1; ((fun v -> let rec go = function [] -> "Nil" | x :: xs -> "(Cons " ^ (show_Vuna_dCompiler_dAst_dField) x ^ " " ^ go xs ^ ")" in go v)) f2; ((fun v -> let rec go = function [] -> "Nil" | x :: xs -> "(Cons " ^ (show_vstring) x ^ " " ^ go xs ^ ")" in go v)) f3; (show_Vuna_dCompiler_dCommon_dSpan) f4]
@@ -121,7 +121,7 @@ let v_Vuna_dCompiler_dAst_dpatSpan = fun pat -> (match pat with
   | C_Vuna_dCompiler_dAst_dPInt (n, sp) -> sp
   | C_Vuna_dCompiler_dAst_dPStr (s, sp) -> sp
   | C_Vuna_dCompiler_dAst_dPRecord (name, fields, sp) -> sp
-  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Ast.vuna" 70 3 ("case pattern match failure"))
+  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Ast.vuna" 71 3 ("case pattern match failure"))
 
 let v_Vuna_dCompiler_dAst_dexprSpan = fun expr -> (match expr with
   | C_Vuna_dCompiler_dAst_dEVar (name, sp) -> sp
@@ -138,171 +138,171 @@ let v_Vuna_dCompiler_dAst_dexprSpan = fun expr -> (match expr with
   | C_Vuna_dCompiler_dAst_dERecUpdate (base, fields, sp) -> sp
   | C_Vuna_dCompiler_dAst_dEInstSel (meth, name, sp) -> sp
   | C_Vuna_dCompiler_dAst_dEDo (stmts, sp) -> sp
-  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Ast.vuna" 79 3 ("case pattern match failure"))
+  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Ast.vuna" 80 3 ("case pattern match failure"))
 
 let v_Vuna_dCompiler_dAst_ddoStmtSpan = fun stmt -> (match stmt with
   | C_Vuna_dCompiler_dAst_dDBind (pat, expr, sp) -> sp
   | C_Vuna_dCompiler_dAst_dDExpr (expr, sp) -> sp
-  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Ast.vuna" 96 3 ("case pattern match failure"))
+  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Ast.vuna" 97 3 ("case pattern match failure"))
 
 let v_Vuna_dCompiler_dAst_ddoStmtExpr = fun stmt -> (match stmt with
   | C_Vuna_dCompiler_dAst_dDBind (pat, expr, sp) -> expr
   | C_Vuna_dCompiler_dAst_dDExpr (expr, sp) -> expr
-  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Ast.vuna" 101 3 ("case pattern match failure"))
+  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Ast.vuna" 102 3 ("case pattern match failure"))
 
 let v_Vuna_dCompiler_dAst_ddeclSpan = fun decl -> (match decl with
-  | C_Vuna_dCompiler_dAst_dDData (name, params, ctors, derivings, sp) -> sp
+  | C_Vuna_dCompiler_dAst_dDData (name, params, kind, ctors, derivings, sp) -> sp
   | C_Vuna_dCompiler_dAst_dDSig (name, ty, sp) -> sp
   | C_Vuna_dCompiler_dAst_dDFun (name, pats, body, sp) -> sp
   | C_Vuna_dCompiler_dAst_dDRecord (name, params, fields, derivings, sp) -> sp
   | C_Vuna_dCompiler_dAst_dDTrait (name, params, methods, sp) -> sp
   | C_Vuna_dCompiler_dAst_dDInstance (name, isDefault, head, methods, sp) -> sp
-  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Ast.vuna" 106 3 ("case pattern match failure"))
+  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Ast.vuna" 107 3 ("case pattern match failure"))
 
 let v_Vuna_dCompiler_dAst_dctorSpan = fun a0 -> match a0 with
   | (C_Vuna_dCompiler_dAst_dCtor (name, ty, arity, sp)) -> sp
-  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Ast.vuna" 114 1 ("no matching clause for Vuna.Compiler.Ast.ctorSpan")
+  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Ast.vuna" 115 1 ("no matching clause for Vuna.Compiler.Ast.ctorSpan")
 
 let v_Vuna_dCompiler_dAst_dfieldSpan = fun a0 -> match a0 with
   | (C_Vuna_dCompiler_dAst_dField (name, ty, sp)) -> sp
-  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Ast.vuna" 116 1 ("no matching clause for Vuna.Compiler.Ast.fieldSpan")
+  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Ast.vuna" 117 1 ("no matching clause for Vuna.Compiler.Ast.fieldSpan")
 
 let v_Vuna_dCompiler_dAst_dfieldName = fun a0 -> match a0 with
   | (C_Vuna_dCompiler_dAst_dField (name, ty, sp)) -> name
-  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Ast.vuna" 118 1 ("no matching clause for Vuna.Compiler.Ast.fieldName")
+  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Ast.vuna" 119 1 ("no matching clause for Vuna.Compiler.Ast.fieldName")
 
 let v_Vuna_dCompiler_dAst_dfieldType = fun a0 -> match a0 with
   | (C_Vuna_dCompiler_dAst_dField (name, ty, sp)) -> ty
-  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Ast.vuna" 120 1 ("no matching clause for Vuna.Compiler.Ast.fieldType")
+  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Ast.vuna" 121 1 ("no matching clause for Vuna.Compiler.Ast.fieldType")
 
 let v_Vuna_dCompiler_dAst_dimportSpan = fun a0 -> match a0 with
   | (C_Vuna_dCompiler_dAst_dImport (name, isQualified, alias, sp)) -> sp
-  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Ast.vuna" 125 1 ("no matching clause for Vuna.Compiler.Ast.importSpan")
+  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Ast.vuna" 126 1 ("no matching clause for Vuna.Compiler.Ast.importSpan")
 
 let v_Vuna_dCompiler_dAst_dmodDeclSpan = fun a0 -> match a0 with
   | (C_Vuna_dCompiler_dAst_dModDecl (name, explicit, items, sp)) -> sp
-  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Ast.vuna" 127 1 ("no matching clause for Vuna.Compiler.Ast.modDeclSpan")
+  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Ast.vuna" 128 1 ("no matching clause for Vuna.Compiler.Ast.modDeclSpan")
 
 let v_Vuna_dCompiler_dAst_dexportItemSpan = fun item -> (match item with
   | C_Vuna_dCompiler_dAst_dXBare (name, sp) -> sp
   | C_Vuna_dCompiler_dAst_dXTypeAll (name, sp) -> sp
   | C_Vuna_dCompiler_dAst_dXModule (name, sp) -> sp
-  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Ast.vuna" 130 3 ("case pattern match failure"))
+  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Ast.vuna" 131 3 ("case pattern match failure"))
 
 let rec v_Vuna_dCompiler_dAst_dcollectClauses = fun a0 a1 -> match (a0, a1) with
   | ([], name) -> []
   | ((d) :: (rest), name) -> (match d with
   | C_Vuna_dCompiler_dAst_dDFun (n, pats, body, _) -> if v_vuna_ueq_ustr n name then (C_Base_dPair_dPair (pats, body)) :: (v_Vuna_dCompiler_dAst_dcollectClauses rest name) else v_Vuna_dCompiler_dAst_dcollectClauses rest name
   | _ -> v_Vuna_dCompiler_dAst_dcollectClauses rest name
-  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Ast.vuna" 137 3 ("case pattern match failure"))
-  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Ast.vuna" 135 1 ("no matching clause for Vuna.Compiler.Ast.collectClauses")
+  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Ast.vuna" 138 3 ("case pattern match failure"))
+  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Ast.vuna" 136 1 ("no matching clause for Vuna.Compiler.Ast.collectClauses")
 
 let v_Vuna_dCompiler_dAst_dclausesFor = fun decls name -> v_Vuna_dCompiler_dAst_dcollectClauses decls name
 
 let v_Vuna_dCompiler_dAst_dfunArity = fun name decls -> (match v_Vuna_dCompiler_dAst_dclausesFor decls name with
   | [] -> C_Base_dMaybe_dNothing
   | (C_Base_dPair_dPair (pats, body)) :: (_) -> C_Base_dMaybe_dJust (v_Base_dList_dlength pats)
-  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Ast.vuna" 146 3 ("case pattern match failure"))
+  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Ast.vuna" 147 3 ("case pattern match failure"))
 
 let v_Vuna_dCompiler_dAst_dctorName = fun a0 -> match a0 with
   | (C_Vuna_dCompiler_dAst_dCtor (name, ty, arity, _)) -> name
-  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Ast.vuna" 150 1 ("no matching clause for Vuna.Compiler.Ast.ctorName")
+  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Ast.vuna" 151 1 ("no matching clause for Vuna.Compiler.Ast.ctorName")
 
 let v_Vuna_dCompiler_dAst_dctorType = fun a0 -> match a0 with
   | (C_Vuna_dCompiler_dAst_dCtor (name, ty, arity, _)) -> ty
-  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Ast.vuna" 152 1 ("no matching clause for Vuna.Compiler.Ast.ctorType")
+  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Ast.vuna" 153 1 ("no matching clause for Vuna.Compiler.Ast.ctorType")
 
 let rec v_Vuna_dCompiler_dAst_dtypeArity = fun ty -> (match ty with
   | C_Vuna_dCompiler_dAst_dEApp (C_Vuna_dCompiler_dAst_dEVar ("->", _), (x) :: ((rest) :: ([])), _) -> bi_add 1 (v_Vuna_dCompiler_dAst_dtypeArity rest)
   | _ -> 0
-  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Ast.vuna" 155 3 ("case pattern match failure"))
+  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Ast.vuna" 156 3 ("case pattern match failure"))
 
 let v_Vuna_dCompiler_dAst_dctorArityOf = fun a0 -> match a0 with
   | (C_Vuna_dCompiler_dAst_dCtor (name, ty, arity, _)) -> arity
-  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Ast.vuna" 159 1 ("no matching clause for Vuna.Compiler.Ast.ctorArityOf")
+  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Ast.vuna" 160 1 ("no matching clause for Vuna.Compiler.Ast.ctorArityOf")
 
 let rec v_Vuna_dCompiler_dAst_dlookupCtorArity = fun name ctors -> (match ctors with
   | [] -> C_Base_dMaybe_dNothing
   | (c) :: (rest) -> if v_vuna_ueq_ustr (v_Vuna_dCompiler_dAst_dctorName c) name then C_Base_dMaybe_dJust (v_Vuna_dCompiler_dAst_dctorArityOf c) else v_Vuna_dCompiler_dAst_dlookupCtorArity name rest
-  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Ast.vuna" 162 3 ("case pattern match failure"))
+  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Ast.vuna" 163 3 ("case pattern match failure"))
 
 let rec v_Vuna_dCompiler_dAst_dctorArity = fun name decls -> (match decls with
   | [] -> C_Base_dMaybe_dNothing
   | (d) :: (rest) -> (match d with
-  | C_Vuna_dCompiler_dAst_dDData (dname, params, ctors, derivings, sp) -> (match v_Vuna_dCompiler_dAst_dlookupCtorArity name ctors with
+  | C_Vuna_dCompiler_dAst_dDData (dname, params, kind, ctors, derivings, sp) -> (match v_Vuna_dCompiler_dAst_dlookupCtorArity name ctors with
   | C_Base_dMaybe_dJust (arity) -> C_Base_dMaybe_dJust (arity)
   | C_Base_dMaybe_dNothing -> v_Vuna_dCompiler_dAst_dctorArity name rest
-  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Ast.vuna" 173 11 ("case pattern match failure"))
+  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Ast.vuna" 174 11 ("case pattern match failure"))
   | C_Vuna_dCompiler_dAst_dDRecord (dname, params, fields, derivings, sp) -> if v_vuna_ueq_ustr name dname then C_Base_dMaybe_dJust (v_Base_dList_dlength fields) else v_Vuna_dCompiler_dAst_dctorArity name rest
   | _ -> v_Vuna_dCompiler_dAst_dctorArity name rest
-  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Ast.vuna" 171 7 ("case pattern match failure"))
-  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Ast.vuna" 168 3 ("case pattern match failure"))
+  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Ast.vuna" 172 7 ("case pattern match failure"))
+  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Ast.vuna" 169 3 ("case pattern match failure"))
 
 let v_Vuna_dCompiler_dAst_ddeclNames = fun d -> (match d with
   | C_Vuna_dCompiler_dAst_dDFun (name, pats, body, _) -> (name) :: ([])
   | C_Vuna_dCompiler_dAst_dDSig (name, ty, _) -> (name) :: ([])
-  | C_Vuna_dCompiler_dAst_dDData (dname, params, ctors, derivings, _) -> v_Base_dList_dmap v_Vuna_dCompiler_dAst_dctorName ctors
+  | C_Vuna_dCompiler_dAst_dDData (dname, params, kind, ctors, derivings, _) -> v_Base_dList_dmap v_Vuna_dCompiler_dAst_dctorName ctors
   | C_Vuna_dCompiler_dAst_dDRecord (dname, params, fields, derivings, _) -> (dname) :: ([])
   | C_Vuna_dCompiler_dAst_dDTrait (tname, params, methods, _) -> v_Base_dList_dmap v_Base_dPair_dfirstOf methods
   | C_Vuna_dCompiler_dAst_dDInstance (name, isDefault, head, methods, _) -> (match name with
   | C_Base_dMaybe_dNothing -> []
   | C_Base_dMaybe_dJust (n) -> (n) :: ([])
-  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Ast.vuna" 188 7 ("case pattern match failure"))
-  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Ast.vuna" 181 3 ("case pattern match failure"))
+  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Ast.vuna" 189 7 ("case pattern match failure"))
+  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Ast.vuna" 182 3 ("case pattern match failure"))
 
 let v_Vuna_dCompiler_dAst_dtopNames = fun decls -> v_Base_dList_dconcatMap v_Vuna_dCompiler_dAst_ddeclNames decls
 
 let v_Vuna_dCompiler_dAst_d_udeclCtors = fun d -> (match d with
-  | C_Vuna_dCompiler_dAst_dDData (dname, params, ctors, derivings, _) -> v_Base_dList_dmap v_Vuna_dCompiler_dAst_dctorName ctors
+  | C_Vuna_dCompiler_dAst_dDData (dname, params, kind, ctors, derivings, _) -> v_Base_dList_dmap v_Vuna_dCompiler_dAst_dctorName ctors
   | C_Vuna_dCompiler_dAst_dDRecord (dname, params, fields, derivings, _) -> (dname) :: ([])
   | C_Vuna_dCompiler_dAst_dDTrait (tname, params, methods, _) -> v_Base_dList_dmap v_Base_dPair_dfirstOf methods
   | _ -> []
-  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Ast.vuna" 195 3 ("case pattern match failure"))
+  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Ast.vuna" 196 3 ("case pattern match failure"))
 
 let v_Vuna_dCompiler_dAst_dctorsOf = fun decls -> v_Base_dList_dconcatMap v_Vuna_dCompiler_dAst_d_udeclCtors decls
 
 let v_Vuna_dCompiler_dAst_ddeclTypeNames = fun d -> (match d with
-  | C_Vuna_dCompiler_dAst_dDData (name, params, ctors, derivings, _) -> (name) :: ([])
+  | C_Vuna_dCompiler_dAst_dDData (name, params, kind, ctors, derivings, _) -> (name) :: ([])
   | C_Vuna_dCompiler_dAst_dDRecord (name, params, fields, derivings, _) -> (name) :: ([])
   | C_Vuna_dCompiler_dAst_dDTrait (name, params, methods, _) -> (name) :: ([])
   | _ -> []
-  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Ast.vuna" 204 3 ("case pattern match failure"))
+  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Ast.vuna" 205 3 ("case pattern match failure"))
 
 let v_Vuna_dCompiler_dAst_dtypeNamesOf = fun decls -> v_Base_dList_dconcatMap v_Vuna_dCompiler_dAst_ddeclTypeNames decls
 
 let v_Vuna_dCompiler_dAst_ddeclDerivings = fun d -> (match d with
-  | C_Vuna_dCompiler_dAst_dDData (name, params, ctors, derivings, _) -> derivings
+  | C_Vuna_dCompiler_dAst_dDData (name, params, kind, ctors, derivings, _) -> derivings
   | C_Vuna_dCompiler_dAst_dDRecord (name, params, fields, derivings, _) -> derivings
   | _ -> []
-  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Ast.vuna" 213 3 ("case pattern match failure"))
+  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Ast.vuna" 214 3 ("case pattern match failure"))
 
 let v_vuna_ueq_uVuna_uCompiler_uAst_uPat = fun x y -> (match x with
   | C_Vuna_dCompiler_dAst_dPVar (v0, v1) -> (match y with
   | C_Vuna_dCompiler_dAst_dPVar (w0, w1) -> (if (v_vuna_ueq_ustr v0 w0) then (v_vuna_ueq_uVuna_uCompiler_uCommon_uSpan v1 w1) else false)
   | _ -> v_vuna_ueq_uint 0 1
-  | _ -> vuna_fail "<generated>" 347 35 ("case pattern match failure"))
+  | _ -> vuna_fail "<generated>" 281 35 ("case pattern match failure"))
   | C_Vuna_dCompiler_dAst_dPWild (v0) -> (match y with
   | C_Vuna_dCompiler_dAst_dPWild (w0) -> v_vuna_ueq_uVuna_uCompiler_uCommon_uSpan v0 w0
   | _ -> v_vuna_ueq_uint 0 1
-  | _ -> vuna_fail "<generated>" 350 33 ("case pattern match failure"))
+  | _ -> vuna_fail "<generated>" 284 33 ("case pattern match failure"))
   | C_Vuna_dCompiler_dAst_dPCon (v0, v1, v2) -> (match y with
   | C_Vuna_dCompiler_dAst_dPCon (w0, w1, w2) -> (if ((if (v_vuna_ueq_ustr v0 w0) then (v_vuna_ueq_uBase_uList_uList v1 w1) else false)) then (v_vuna_ueq_uVuna_uCompiler_uCommon_uSpan v2 w2) else false)
   | _ -> v_vuna_ueq_uint 0 1
-  | _ -> vuna_fail "<generated>" 353 38 ("case pattern match failure"))
+  | _ -> vuna_fail "<generated>" 287 38 ("case pattern match failure"))
   | C_Vuna_dCompiler_dAst_dPInt (v0, v1) -> (match y with
   | C_Vuna_dCompiler_dAst_dPInt (w0, w1) -> (if (v_vuna_ueq_uint v0 w0) then (v_vuna_ueq_uVuna_uCompiler_uCommon_uSpan v1 w1) else false)
   | _ -> v_vuna_ueq_uint 0 1
-  | _ -> vuna_fail "<generated>" 356 35 ("case pattern match failure"))
+  | _ -> vuna_fail "<generated>" 290 35 ("case pattern match failure"))
   | C_Vuna_dCompiler_dAst_dPStr (v0, v1) -> (match y with
   | C_Vuna_dCompiler_dAst_dPStr (w0, w1) -> (if (v_vuna_ueq_ustr v0 w0) then (v_vuna_ueq_uVuna_uCompiler_uCommon_uSpan v1 w1) else false)
   | _ -> v_vuna_ueq_uint 0 1
-  | _ -> vuna_fail "<generated>" 359 35 ("case pattern match failure"))
+  | _ -> vuna_fail "<generated>" 293 35 ("case pattern match failure"))
   | C_Vuna_dCompiler_dAst_dPRecord (v0, v1, v2) -> (match y with
   | C_Vuna_dCompiler_dAst_dPRecord (w0, w1, w2) -> (if ((if (v_vuna_ueq_ustr v0 w0) then (v_vuna_ueq_uBase_uList_uList v1 w1) else false)) then (v_vuna_ueq_uVuna_uCompiler_uCommon_uSpan v2 w2) else false)
   | _ -> v_vuna_ueq_uint 0 1
-  | _ -> vuna_fail "<generated>" 362 41 ("case pattern match failure"))
+  | _ -> vuna_fail "<generated>" 296 41 ("case pattern match failure"))
   | _ -> v_vuna_ueq_uint 0 1
-  | _ -> vuna_fail "<generated>" 346 37 ("case pattern match failure"))
+  | _ -> vuna_fail "<generated>" 280 37 ("case pattern match failure"))
 
 let v_vuna_uneq_uVuna_uCompiler_uAst_uPat = fun x y -> if v_vuna_ueq_uVuna_uCompiler_uAst_uPat x y then v_vuna_ueq_uint 0 1 else v_vuna_ueq_uint 0 0
 
@@ -310,23 +310,23 @@ let v_vuna_ushow_uVuna_uCompiler_uAst_uExportItem = fun x -> (match x with
   | C_Vuna_dCompiler_dAst_dXBare (v0, v1) -> (let vuna_cat0' = ("(XBare ") in (let vuna_cat1' = (v_vuna_ushow_ustring v0) in (let vuna_cat2' = (" ") in (let vuna_cat3' = (v_vuna_ushow_uVuna_uCompiler_uCommon_uSpan v1) in (let vuna_cat4' = (")") in String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'; vuna_cat3'; vuna_cat4'])))))
   | C_Vuna_dCompiler_dAst_dXTypeAll (v0, v1) -> (let vuna_cat0' = ("(XTypeAll ") in (let vuna_cat1' = (v_vuna_ushow_ustring v0) in (let vuna_cat2' = (" ") in (let vuna_cat3' = (v_vuna_ushow_uVuna_uCompiler_uCommon_uSpan v1) in (let vuna_cat4' = (")") in String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'; vuna_cat3'; vuna_cat4'])))))
   | C_Vuna_dCompiler_dAst_dXModule (v0, v1) -> (let vuna_cat0' = ("(XModule ") in (let vuna_cat1' = (v_vuna_ushow_ustring v0) in (let vuna_cat2' = (" ") in (let vuna_cat3' = (v_vuna_ushow_uVuna_uCompiler_uCommon_uSpan v1) in (let vuna_cat4' = (")") in String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'; vuna_cat3'; vuna_cat4'])))))
-  | _ -> vuna_fail "<generated>" 370 44 ("case pattern match failure"))
+  | _ -> vuna_fail "<generated>" 304 44 ("case pattern match failure"))
 
 let v_vuna_ueq_uVuna_uCompiler_uAst_uExportItem = fun x y -> (match x with
   | C_Vuna_dCompiler_dAst_dXBare (v0, v1) -> (match y with
   | C_Vuna_dCompiler_dAst_dXBare (w0, w1) -> (if (v_vuna_ueq_ustr v0 w0) then (v_vuna_ueq_uVuna_uCompiler_uCommon_uSpan v1 w1) else false)
   | _ -> v_vuna_ueq_uint 0 1
-  | _ -> vuna_fail "<generated>" 377 36 ("case pattern match failure"))
+  | _ -> vuna_fail "<generated>" 311 36 ("case pattern match failure"))
   | C_Vuna_dCompiler_dAst_dXTypeAll (v0, v1) -> (match y with
   | C_Vuna_dCompiler_dAst_dXTypeAll (w0, w1) -> (if (v_vuna_ueq_ustr v0 w0) then (v_vuna_ueq_uVuna_uCompiler_uCommon_uSpan v1 w1) else false)
   | _ -> v_vuna_ueq_uint 0 1
-  | _ -> vuna_fail "<generated>" 380 39 ("case pattern match failure"))
+  | _ -> vuna_fail "<generated>" 314 39 ("case pattern match failure"))
   | C_Vuna_dCompiler_dAst_dXModule (v0, v1) -> (match y with
   | C_Vuna_dCompiler_dAst_dXModule (w0, w1) -> (if (v_vuna_ueq_ustr v0 w0) then (v_vuna_ueq_uVuna_uCompiler_uCommon_uSpan v1 w1) else false)
   | _ -> v_vuna_ueq_uint 0 1
-  | _ -> vuna_fail "<generated>" 383 38 ("case pattern match failure"))
+  | _ -> vuna_fail "<generated>" 317 38 ("case pattern match failure"))
   | _ -> v_vuna_ueq_uint 0 1
-  | _ -> vuna_fail "<generated>" 376 44 ("case pattern match failure"))
+  | _ -> vuna_fail "<generated>" 310 44 ("case pattern match failure"))
 
 let v_vuna_uneq_uVuna_uCompiler_uAst_uExportItem = fun x y -> if v_vuna_ueq_uVuna_uCompiler_uAst_uExportItem x y then v_vuna_ueq_uint 0 1 else v_vuna_ueq_uint 0 0
 
@@ -334,9 +334,9 @@ let v_vuna_ueq_uVuna_uCompiler_uAst_uModDecl = fun x y -> (match x with
   | C_Vuna_dCompiler_dAst_dModDecl (v0, v1, v2, v3) -> (match y with
   | C_Vuna_dCompiler_dAst_dModDecl (w0, w1, w2, w3) -> (if ((if ((if (v_vuna_ueq_ustr v0 w0) then (v_vuna_ueq_ubool v1 w1) else false)) then (v_vuna_ueq_uBase_uList_uList v2 w2) else false)) then (v_vuna_ueq_uVuna_uCompiler_uCommon_uSpan v3 w3) else false)
   | _ -> v_vuna_ueq_uint 0 1
-  | _ -> vuna_fail "<generated>" 392 44 ("case pattern match failure"))
+  | _ -> vuna_fail "<generated>" 326 44 ("case pattern match failure"))
   | _ -> v_vuna_ueq_uint 0 1
-  | _ -> vuna_fail "<generated>" 391 41 ("case pattern match failure"))
+  | _ -> vuna_fail "<generated>" 325 41 ("case pattern match failure"))
 
 let v_vuna_uneq_uVuna_uCompiler_uAst_uModDecl = fun x y -> if v_vuna_ueq_uVuna_uCompiler_uAst_uModDecl x y then v_vuna_ueq_uint 0 1 else v_vuna_ueq_uint 0 0
 
@@ -344,8 +344,8 @@ let v_vuna_ueq_uVuna_uCompiler_uAst_uImport = fun x y -> (match x with
   | C_Vuna_dCompiler_dAst_dImport (v0, v1, v2, v3) -> (match y with
   | C_Vuna_dCompiler_dAst_dImport (w0, w1, w2, w3) -> (if ((if ((if (v_vuna_ueq_ustr v0 w0) then (v_vuna_ueq_ubool v1 w1) else false)) then (v_vuna_ueq_uBase_uMaybe_uMaybe v2 w2) else false)) then (v_vuna_ueq_uVuna_uCompiler_uCommon_uSpan v3 w3) else false)
   | _ -> v_vuna_ueq_uint 0 1
-  | _ -> vuna_fail "<generated>" 401 43 ("case pattern match failure"))
+  | _ -> vuna_fail "<generated>" 335 43 ("case pattern match failure"))
   | _ -> v_vuna_ueq_uint 0 1
-  | _ -> vuna_fail "<generated>" 400 40 ("case pattern match failure"))
+  | _ -> vuna_fail "<generated>" 334 40 ("case pattern match failure"))
 
 let v_vuna_uneq_uVuna_uCompiler_uAst_uImport = fun x y -> if v_vuna_ueq_uVuna_uCompiler_uAst_uImport x y then v_vuna_ueq_uint 0 1 else v_vuna_ueq_uint 0 0

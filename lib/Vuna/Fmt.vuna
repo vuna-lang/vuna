@@ -310,7 +310,7 @@ headerAnchors hdr =
 
 declAnchors d =
   case d of
-    DData name params ctors derivings sp => Cons sp (map ctorSpan ctors)
+    DData name params kind ctors derivings sp => Cons sp (map ctorSpan ctors)
     DSig name ty sp => Cons sp Nil
     DFun name pats body sp => Cons sp (exprAnchors body)
     DRecord name params fields derivings sp => Cons sp (map fieldSpan fields)
@@ -956,7 +956,7 @@ renderDeclAt at lineInd decl =
 
 renderDeclBody at lineInd decl =
   case decl of
-    DData name params ctors derivings sp => renderDataDecl at name params ctors derivings
+    DData name params kind ctors derivings sp => renderDataDecl at name params kind ctors derivings
     DSig name ty sp => renderSigDecl at lineInd name ty
     DFun name pats body sp => renderClause at lineInd name pats body
     DRecord name params fields derivings sp => renderRecordDecl at name params fields derivings
@@ -966,8 +966,8 @@ renderDeclBody at lineInd decl =
 renderSigDecl at lineInd name ty =
   prefixFirst (spaces lineInd ++ name ++ " : ") (renderTypeExpr at lineInd ty)
 
-renderDataDecl at name params ctors derivings =
-  let header = "data " ++ name ++ joinSpace params ++ " : Type where"
+renderDataDecl at name params kind ctors derivings =
+  let header = "data " ++ name ++ joinSpace params ++ " : " ++ join " " (renderTypeExpr at 0 kind) ++ " where"
       ctorLines = concatMap (\c => renderCtorDecl at c) ctors
   in append (Cons header Nil) (append ctorLines (renderDerivings derivings))
 

@@ -78,7 +78,7 @@ dataDecls decls =
     Nil => Nil
     Cons d rest =>
       case d of
-        DData name params ctors _ _ => Cons d (dataDecls rest)
+        DData name params kind ctors _ _ => Cons d (dataDecls rest)
         _ => dataDecls rest
 
 nonSpecialData decls =
@@ -86,7 +86,7 @@ nonSpecialData decls =
     Nil => Nil
     Cons d rest =>
       case d of
-        DData name params ctors _ _ =>
+        DData name params kind ctors _ _ =>
           if isBoolName name || isListName name then nonSpecialData rest
           else Cons d (nonSpecialData rest)
         _ => nonSpecialData rest
@@ -96,7 +96,7 @@ lookupData decls name =
     Nil => Nothing
     Cons d rest =>
       case d of
-        DData dn ps cs _ _ => if dn == name then Just d else lookupData rest name
+        DData dn ps kind cs _ _ => if dn == name then Just d else lookupData rest name
         _ => lookupData rest name
 
 mapResult f Nil = Ok Nil
@@ -155,7 +155,7 @@ genParams n = map (\i => "a" ++ strFromInt i) (range 0 n)
 
 range i n = if i >= n then Nil else Cons i (range (i + 1) n)
 
-genData decls (DData name params ctors _ _) =
+genData decls (DData name params kind ctors _ _) =
   andThen (mapResult (genCtor decls (paramMap params)) ctors) (\cs =>
     Ok ("  " ++ dataPrefix params ++ typeNameOf name ++ " =\n    " ++ joinWith "\n  | " cs))
 
@@ -256,7 +256,7 @@ genShowCtorWith decls pmap name fields =
       Cons v Nil => Ok ("  | " ++ ctorNameOf name ++ " " ++ v ++ " -> show_ctor " ++ ocamlString (lastName name) ++ " [" ++ joinWith "; " shows ++ "]")
       vars => Ok ("  | " ++ ctorNameOf name ++ " (" ++ joinWith ", " vars ++ ") -> show_ctor " ++ ocamlString (lastName name) ++ " [" ++ joinWith "; " shows ++ "]"))
 
-genShowFunc decls (DData name params ctors _ _) =
+genShowFunc decls (DData name params kind ctors _ _) =
   genShowFuncWith decls (showParamMap params) params name ctors
 
 genShowFuncWith : List Decl -> List (Pair String String) -> List String -> String -> List Ctor -> Result String
@@ -282,7 +282,7 @@ pairSecond (Pair _ v) = v
 
 showDeclFnName d =
   case d of
-    DData name params ctors derivings sp => showNameOf name
+    DData name params kind ctors derivings sp => showNameOf name
     _ => ""
 
 showFnNames decls = map showDeclFnName (nonSpecialData decls)
@@ -1152,7 +1152,7 @@ ioCtorOf decls =
     Nil => Nothing
     Cons d rest =>
       case d of
-        DData n params ctors derivings sp =>
+        DData n params kind ctors derivings sp =>
           if lastName n == "IO" then
             case ctors of
               Cons c cs => Just (ctorName c)
@@ -1168,7 +1168,7 @@ ioTypeNameOf decls =
     Nil => Nothing
     Cons d rest =>
       case d of
-        DData n params ctors derivings sp =>
+        DData n params kind ctors derivings sp =>
           if lastName n == "IO" then Just n else ioTypeNameOf rest
         _ => ioTypeNameOf rest
 
@@ -1342,7 +1342,7 @@ routeOf ctx name =
 
 declSplitName d =
   case d of
-    DData n ps cs ds sp => n
+    DData n ps kind cs ds sp => n
     DRecord n ps fs ds sp => n
     DFun n ps b sp => n
     DSig n ty sp => n
@@ -1354,14 +1354,14 @@ declSplitName d =
 
 routeDataTable ctx decls =
   concatMap (\d => case d of
-                     DData n ps cs ds sp => Cons (Pair n (routeOf ctx n)) Nil
+                     DData n ps kind cs ds sp => Cons (Pair n (routeOf ctx n)) Nil
                      _ => Nil)
     decls
 
 routeData ctx route =
   let names = uniqueNames (map firstOf (filter (\p => secondOf p == route) (ctxRoutedDatas ctx)))
   in filter (\d => case d of
-                     DData n ps cs ds sp => memName n names
+                     DData n ps kind cs ds sp => memName n names
                      _ => False)
        (ctxElabDecls ctx)
 
@@ -1568,7 +1568,7 @@ ctorExportsOf target exports = filter (\e => entryKind e == "ctor" && entryParen
 
 mliTypePart ctx exports d =
   case d of
-    DData name params ctors derivings sp =>
+    DData name params kind ctors derivings sp =>
       case ctorExportsOf name exports of
         Nil => Ok (dataPrefix params ++ typeNameOf name)
         ctorEntries =>
@@ -1604,7 +1604,7 @@ generatedValLine ctx name =
 
 showValLine ctx d =
   case d of
-    DData name params ctors derivings sp =>
+    DData name params kind ctors derivings sp =>
       Ok (Cons ("val " ++ showNameOf name ++ " : " ++ showValType params name ++ "\n") Nil)
     _ => Ok Nil
 

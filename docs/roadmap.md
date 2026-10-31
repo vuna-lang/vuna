@@ -33,6 +33,7 @@
 - M12.7：DT 前置清理——删除 dynamic codegen（`Vuna.Codegen`）与 `--no-typecheck` / `--typecheck` / `--typed` / `build --no-print` / `--out` / 裸 compile 回退，typed 成为唯一 codegen；`check` 改为纯类型检查（单次 typecheck），clause arity 诊断统一到 typecheck；默认模块根改为当前包；seed 49 个文件 / ~0.81 MB。
 - M13：DT 地基——新增 Core TT（`Type`/Pi/应用/lambda/if，NbE + beta/delta/eta，非累积宇宙）、双向精化器（一阶 metavariable、类型级隐式插入、delta 类型别名）、擦除型 DT codegen 与 `interp --dt` 核心求值器；`--dt` 单文件 opt-in（compile/check/interp），HM 路径零改动；新增 `docs/dt-core.md` 设计稿；seed 57 个文件 / ~0.92 MB。
 - M12.8：命名空间、Prelude 与包级构建——标准库改为 `vuna-base` / `Base.*`，编译器模块迁到 `Vuna.Compiler.*`（门面 `Vuna.Compiler.Common`）；新增顶层 `Prelude`（重导出 Pair/Bool/List/Maybe/Result/String/Monad，不含 `Base.IO` 效果函数），包模式自动导入、原始 `--root` 模式不导入；新增 `vuna compile --package`（`.output/{lib,app}`）与 `vuna build`（ocamlopt → `.output/bin/<包名>`），`--split` / `seed` 保留扁平分离 codegen；seed 61 个文件 / ~1.2 MB。
+- M14：索引族与依赖模式匹配——Core 增加 `TCon` / `TCase`（值域 `VCon` / `VCase`），`data F : <kind> where` 的索引归纳族（构造子带显式 `{...}` telescope、族参数隐式、宇宙域 binder 擦除），`case` 做索引 unification 与分支可达性/覆盖率判定（不可满足分支可合法省略、写错则拒绝），解除递归定义限制（SCC 分组，终止靠 delta 展开 fuel）；核心求值器与擦除型 codegen 同步扩展（运行时族 → OCaml 变体、构造子名加族前缀、`TCase` → `match` + 不可能分支 `failwith`）；新增 `test/corpus/dt/09_nat` / `10_vec` / `11_fin` / `12_eq` 正例与 `dt_err` 反例；仍是单文件 `--dt` opt-in，split/包集成留 M17。
 
 ## 当前硬约束
 
@@ -60,22 +61,6 @@
 - 编译器自检通过；新增阶段更新 README 限制/历史与 roadmap 完成摘要；M18 起编译器逐步 dogfooding。
 
 ## 下一步 / 待办
-
-### M14：索引族与依赖模式匹配
-
-**目标**：支持索引归纳族（Vec/Fin/Eq 等）与依赖模式匹配。
-
-**范围**：
-
-- Surface/Core：`data Vec : Nat -> Type where ...`、带 telescope 的构造器、索引；类型级 `Nat` 与构造器归约。
-- 依赖模式匹配：`case` 对索引做 unification、不可达分支/不可能情况；基础 coverage 检查；`with`/`rewrite` 暂不做或只做最小实验（见研究储备）。
-- 类型级递归限制：暂用结构化递归/燃料限制，完整 termination 留 M16。
-- Codegen：索引/证明暂不保证完全擦除，先保证语义正确；Vec/Fin/Eq 例子可运行。
-- 测试：Vec append/map/head、Fin 安全索引、Eq 的 refl/sym/trans；不可能情况正反例。
-
-**验收**：Vec/Fin/Eq 例子通过核心求值器 + typed codegen；不可能情况正确拒绝；旧 HM 零回归；编译器自检/fixed point/flake check 通过；split 回退显式记录。
-
-**前置**：M13（已完成）。**风险**：依赖模式匹配/索引 unification；类型级递归；与现有 ADT/codegen 的整合。**设计闸门**：先定索引族 core 表示、模式匹配 unifier、coverage 规则。
 
 ### M15：隐式参数、接口与洞
 
@@ -194,10 +179,13 @@
 
 主序列：
 
-**M12.7（已完成）→ M13（已完成）→ M12.8（已完成）→ M14 → M15 → M16 → M17 → M18**
+**M12.7（已完成）→ M13（已完成）→ M12.8（已完成）→ M14（已完成）→ M15 → M16 → M17 → M18**
 
-- **M12.7 / M13 / M12.8 已完成**：先删除无法支持 DT 的第二条 codegen（缩小 TCB、简化测试/CLI），再落地 Core TT + 精化器 + `--dt` 单文件路径，随后完成标准库/编译器命名空间收敛、`Prelude` 自动导入与 `.output` 包级构建；DT 主线进入 M14（索引族与依赖模式匹配）。
-- **M13 → M14 是核心**，难以并行；M15 的可用性工作可在 M14 尾部启动。
+- **M12.7 / M13 / M12.8 / M14 已完成**：先删除无法支持 DT 的第二条 codegen（缩小
+  TCB、简化测试/CLI），再落地 Core TT + 精化器 + `--dt` 单文件路径，随后完成标准库/
+  编译器命名空间收敛、`Prelude` 自动导入与 `.output` 包级构建，最后加入索引归纳族与
+  依赖模式匹配、解除递归定义限制；DT 主线进入 M15（隐式参数、接口与洞）。
+- **M13 → M14 是核心**，难以并行（已完成）；M15 的可用性工作可在 M14 尾部启动。
 - **M16 收口健全性/性能**；**M17 可与 M16 重叠**；**M18 是最高风险决策点**。
 - **M19 / M20 可在 M15 后并行**；**M21 在 M16/M18 后决策**；**M22 贯穿**；**M23 在 M19/M21 后**。
 
@@ -234,3 +222,46 @@
 - 大型标准库扩张 → M22/持续轨道。
 - 包 registry 与远程依赖 → M22（DT 核心稳定后）。
 - 线性类型与依赖类型之外的类型系统研究 → 研究储备。
+
+## 附录：M14 验收明细（已完成，可删除）
+
+按维护规则，已完成阶段最终收敛为一句话摘要（已写入上方「已完成」列表）；这里保留
+M14 的验收清单供核对，确认后可整段删除。
+
+### M14：索引族与依赖模式匹配（已完成）
+
+**目标**：支持索引归纳族（Vec/Fin/Eq 等）与依赖模式匹配。
+
+**状态**：已完成（DT 单文件 `--dt` 路径；split/包集成按硬约束延后到 M17）。
+
+**范围**：
+
+- Surface/Core：`data F : <kind> where`（kind 箭头个数 = 族参数 arity）、带显式
+  telescope 的构造器、构造子应用；类型级 `Nat` / 构造器归约（靠 delta 展开，非专门
+  类型级求值）。
+- 依赖模式匹配：`case` 对索引做 unification、不可达分支/不可能情况；基础 coverage
+  检查；`with`/`rewrite` 未做（留研究储备）。
+- 类型级递归限制：暂用结构化递归/燃料限制（`defaultFuel = 512`），完整 termination
+  留 M16。
+- Codegen：运行时族 → OCaml 变体（只有宇宙域族参数成为类型参数，索引作为构造子字段
+  保留），`TCon` → 构造子应用，`TCase` → `match`；SCC 分组生成 `let rec ... and ...`。
+- 测试：Vec length/append/head、Fin 安全索引、Eq 的 sym/trans；不可能情况正反例。
+
+**验收**（逐条）：
+
+- [x] Vec/Fin/Eq 例子通过核心求值器（`interp --dt`）+ typed codegen（`compile --dt`）：
+  `test/corpus/dt/09_nat` / `10_vec` / `11_fin` / `12_eq`。
+- [x] 不可能情况正确拒绝：源码写出的不可满足分支报
+  `DT: this branch is impossible (index constraints are unsatisfiable)`；省略的
+  不可满足分支合法（`vhead` 只写 `Cons`）；非穷尽 case 报
+  `DT: case is not exhaustive: missing <C>`；反例在 `test/corpus/dt_err/`。
+- [x] 旧 HM 零回归：interp + typed + split 三路径语义与产物不变，DT 仍是 `--dt`
+  单文件 opt-in。
+- [x] 编译器自检 / fixed point / `nix flake check` 通过（M14 合并前 Lead 验证）。
+- [x] split 回退显式记录：DT 的 split / 包集成按硬约束延后到 M17，M14 只做单文件
+  `--dt`；当前 `--dt` 不接受 `--root` / 包目录，`build` / `seed` 不支持 `--dt`，
+  `build --split` 对 DT 无专门回退。
+
+**前置**：M13（已完成）。**风险**：依赖模式匹配/索引 unification；类型级递归；
+与现有 ADT/codegen 的整合。**设计闸门**：先定索引族 core 表示、模式匹配 unifier、
+coverage 规则（已完成，落地记录见 [dt-core.md](dt-core.md) §11–§23）。

@@ -53,11 +53,11 @@ declLines decls = concatMap declLinesOf decls
 
 declLinesOf d =
   case d of
-    DData name params ctors derivings sp =>
+    DData name params kind ctors derivings sp =>
       if isPrivate name then Nil
       else
         append
-          (Cons ("data " ++ name ++ paramSuffix params ++ " : Type where") (map ctorLine ctors))
+          (Cons ("data " ++ name ++ paramSuffix params ++ " : " ++ renderTy kind ++ " where") (map ctorLine ctors))
           (derivingLines derivings)
     DRecord name params fields derivings sp =>
       if isPrivate name then Nil

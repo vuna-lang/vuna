@@ -51,12 +51,12 @@ let v_vuna_ueq_uBase_uResult_uResult = fun x y -> (match x with
   | C_Base_dResult_dOk (v0) -> (match y with
   | C_Base_dResult_dOk (w0) -> v_vuna_ueq_ugeneric v0 w0
   | _ -> v_vuna_ueq_uint 0 1
-  | _ -> vuna_fail "<generated>" 499 24 ("case pattern match failure"))
+  | _ -> vuna_fail "<generated>" 433 24 ("case pattern match failure"))
   | C_Base_dResult_dErr (v0) -> (match y with
   | C_Base_dResult_dErr (w0) -> v_vuna_ueq_ustr v0 w0
   | _ -> v_vuna_ueq_uint 0 1
-  | _ -> vuna_fail "<generated>" 502 25 ("case pattern match failure"))
+  | _ -> vuna_fail "<generated>" 436 25 ("case pattern match failure"))
   | _ -> v_vuna_ueq_uint 0 1
-  | _ -> vuna_fail "<generated>" 498 34 ("case pattern match failure"))
+  | _ -> vuna_fail "<generated>" 432 34 ("case pattern match failure"))
 
 let v_vuna_uneq_uBase_uResult_uResult = fun x y -> if v_vuna_ueq_uBase_uResult_uResult x y then v_vuna_ueq_uint 0 1 else v_vuna_ueq_uint 0 0

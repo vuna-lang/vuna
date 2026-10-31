@@ -442,7 +442,7 @@ let v_Vuna_dCompiler_dParser_dparseCtors = fun st blockCol -> if v_Vuna_dCompile
   | C_Vuna_dCompiler_dCommon_dPos (line, col) -> if v_vuna_ugt_uint col blockCol then v_Vuna_dCompiler_dParser_dparseCtorList st col else C_Base_dResult_dOk (C_Base_dPair_dPair ([], st))
   | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Parser.vuna" 536 5 ("case pattern match failure"))
 
-let v_Vuna_dCompiler_dParser_dparseData = fun st blockCol kwPos -> v_Base_dResult_dstep (v_Vuna_dCompiler_dParser_dexpectKw st "data") (fun _u st1 -> v_Base_dResult_dstep (v_Vuna_dCompiler_dParser_dexpectIdent st1) (fun name st2 -> v_Base_dResult_dstep (v_Vuna_dCompiler_dParser_dparseParams st2) (fun params st3 -> v_Base_dResult_dstep (v_Vuna_dCompiler_dParser_dexpectSym st3 ":") (fun _u st4 -> v_Base_dResult_dstep (v_Vuna_dCompiler_dParser_dparseExpr st4 blockCol 0) (fun ty st5 -> v_Base_dResult_dstep (v_Vuna_dCompiler_dParser_dexpectKw st5 "where") (fun _u st6 -> v_Base_dResult_dstep (v_Vuna_dCompiler_dParser_dparseCtors st6 blockCol) (fun ctors st7 -> v_Base_dResult_dstep (v_Vuna_dCompiler_dParser_dparseDeriving st7) (fun derivings st8 -> C_Base_dResult_dOk (C_Base_dPair_dPair (C_Vuna_dCompiler_dAst_dDData (name, params, ctors, derivings, C_Vuna_dCompiler_dCommon_dSpan (v_Vuna_dCompiler_dParser_dfileOf st, v_Vuna_dCompiler_dCommon_dposLine kwPos, v_Vuna_dCompiler_dCommon_dposCol kwPos, v_Vuna_dCompiler_dCommon_dposLine (v_Vuna_dCompiler_dParser_dlastPos st8), v_Vuna_dCompiler_dCommon_dposCol (v_Vuna_dCompiler_dParser_dlastPos st8))), st8))))))))))
+let v_Vuna_dCompiler_dParser_dparseData = fun st blockCol kwPos -> v_Base_dResult_dstep (v_Vuna_dCompiler_dParser_dexpectKw st "data") (fun _u st1 -> v_Base_dResult_dstep (v_Vuna_dCompiler_dParser_dexpectIdent st1) (fun name st2 -> v_Base_dResult_dstep (v_Vuna_dCompiler_dParser_dparseParams st2) (fun params st3 -> v_Base_dResult_dstep (v_Vuna_dCompiler_dParser_dexpectSym st3 ":") (fun _u st4 -> v_Base_dResult_dstep (v_Vuna_dCompiler_dParser_dparseExpr st4 blockCol 0) (fun ty st5 -> v_Base_dResult_dstep (v_Vuna_dCompiler_dParser_dexpectKw st5 "where") (fun _u st6 -> v_Base_dResult_dstep (v_Vuna_dCompiler_dParser_dparseCtors st6 blockCol) (fun ctors st7 -> v_Base_dResult_dstep (v_Vuna_dCompiler_dParser_dparseDeriving st7) (fun derivings st8 -> C_Base_dResult_dOk (C_Base_dPair_dPair (C_Vuna_dCompiler_dAst_dDData (name, params, ty, ctors, derivings, C_Vuna_dCompiler_dCommon_dSpan (v_Vuna_dCompiler_dParser_dfileOf st, v_Vuna_dCompiler_dCommon_dposLine kwPos, v_Vuna_dCompiler_dCommon_dposCol kwPos, v_Vuna_dCompiler_dCommon_dposLine (v_Vuna_dCompiler_dParser_dlastPos st8), v_Vuna_dCompiler_dCommon_dposCol (v_Vuna_dCompiler_dParser_dlastPos st8))), st8))))))))))
 
 let v_Vuna_dCompiler_dParser_dparseDecl = fun st blockCol -> (match v_Vuna_dCompiler_dParser_dpeekTok st with
   | C_Vuna_dCompiler_dLexer_dPTok (C_Vuna_dCompiler_dLexer_dTKw ("data"), p) -> v_Vuna_dCompiler_dParser_dparseData st blockCol p
@@ -467,8 +467,8 @@ let v_vuna_ueq_uVuna_uCompiler_uParser_uPState = fun x y -> (match x with
   | C_Vuna_dCompiler_dParser_dPState (v0, v1, v2) -> (match y with
   | C_Vuna_dCompiler_dParser_dPState (w0, w1, w2) -> (if ((if (v_vuna_ueq_ustr v0 w0) then (v_vuna_ueq_uBase_uList_uList v1 w1) else false)) then (v_vuna_ueq_uVuna_uCompiler_uCommon_uPos v2 w2) else false)
   | _ -> v_vuna_ueq_uint 0 1
-  | _ -> vuna_fail "<generated>" 253 43 ("case pattern match failure"))
+  | _ -> vuna_fail "<generated>" 187 43 ("case pattern match failure"))
   | _ -> v_vuna_ueq_uint 0 1
-  | _ -> vuna_fail "<generated>" 252 43 ("case pattern match failure"))
+  | _ -> vuna_fail "<generated>" 186 43 ("case pattern match failure"))
 
 let v_vuna_uneq_uVuna_uCompiler_uParser_uPState = fun x y -> if v_vuna_ueq_uVuna_uCompiler_uParser_uPState x y then v_vuna_ueq_uint 0 1 else v_vuna_ueq_uint 0 0

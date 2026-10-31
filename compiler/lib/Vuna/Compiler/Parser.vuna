@@ -392,7 +392,7 @@ parseData st blockCol kwPos =
             step (expectKw st5 "where") (\_, st6 =>
               step (parseCtors st6 blockCol) (\ctors, st7 =>
                 step (parseDeriving st7) (\derivings, st8 =>
-                  Ok (Pair (DData name params ctors derivings (Span (fileOf st) (posLine kwPos) (posCol kwPos) (posLine (lastPos st8)) (posCol (lastPos st8)))) st8)))))))))
+                  Ok (Pair (DData name params ty ctors derivings (Span (fileOf st) (posLine kwPos) (posCol kwPos) (posLine (lastPos st8)) (posCol (lastPos st8)))) st8)))))))))
 
 -- 记录声明（M10.5）：`record Name params where` + 缩进字段 `f : Ty`，可跟 deriving。
 parseRecord st blockCol kwPos =

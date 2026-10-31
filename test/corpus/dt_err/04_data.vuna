@@ -1,2 +1,0 @@
-data Color : Type where
-  Red : Color

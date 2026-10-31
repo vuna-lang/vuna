@@ -1,0 +1,13 @@
+data Nat : Type where
+  Zero : Nat
+  Succ : Nat -> Nat
+
+-- M14 不支持嵌套构造子模式：`Succ (Succ k)` 里外层是构造子模式、内层又是。
+bad : Nat -> Int
+bad n =
+  case n of
+    Zero => 0
+    Succ (Succ k) => 1
+
+main : Int
+main = 1

@@ -43,7 +43,8 @@ data Ctor : Type where
   Ctor : String -> Expr -> Int -> Span -> Ctor
 
 data Decl : Type where
-  DData : String -> List String -> List Ctor -> List String -> Span -> Decl
+  -- M14：`data Name params : kind where`；kind 是索引族的类型表达式（HM 路径只接受 `Type`）。
+  DData : String -> List String -> Expr -> List Ctor -> List String -> Span -> Decl
   DSig : String -> Expr -> Span -> Decl
   DFun : String -> List Pat -> Expr -> Span -> Decl
   DRecord : String -> List String -> List Field -> List String -> Span -> Decl
@@ -104,7 +105,7 @@ doStmtExpr stmt =
 
 declSpan decl =
   case decl of
-    DData name params ctors derivings sp => sp
+    DData name params kind ctors derivings sp => sp
     DSig name ty sp => sp
     DFun name pats body sp => sp
     DRecord name params fields derivings sp => sp
@@ -169,7 +170,7 @@ ctorArity name decls =
     Nil => Nothing
     Cons d rest =>
       case d of
-        DData dname params ctors derivings sp =>
+        DData dname params kind ctors derivings sp =>
           case lookupCtorArity name ctors of
             Just arity => Just arity
             Nothing => ctorArity name rest
@@ -181,7 +182,7 @@ declNames d =
   case d of
     DFun name pats body _ => Cons name Nil
     DSig name ty _ => Cons name Nil
-    DData dname params ctors derivings _ => map ctorName ctors
+    DData dname params kind ctors derivings _ => map ctorName ctors
     DRecord dname params fields derivings _ => Cons dname Nil
     DTrait tname params methods _ => map firstOf methods
     DInstance name isDefault head methods _ =>
@@ -193,7 +194,7 @@ topNames decls = concatMap declNames decls
 
 _declCtors d =
   case d of
-    DData dname params ctors derivings _ => map ctorName ctors
+    DData dname params kind ctors derivings _ => map ctorName ctors
     DRecord dname params fields derivings _ => Cons dname Nil
     DTrait tname params methods _ => map firstOf methods
     _ => Nil
@@ -202,7 +203,7 @@ ctorsOf decls = concatMap _declCtors decls
 
 declTypeNames d =
   case d of
-    DData name params ctors derivings _ => Cons name Nil
+    DData name params kind ctors derivings _ => Cons name Nil
     DRecord name params fields derivings _ => Cons name Nil
     DTrait name params methods _ => Cons name Nil
     _ => Nil
@@ -211,6 +212,6 @@ typeNamesOf decls = concatMap declTypeNames decls
 
 declDerivings d =
   case d of
-    DData name params ctors derivings _ => derivings
+    DData name params kind ctors derivings _ => derivings
     DRecord name params fields derivings _ => derivings
     _ => Nil

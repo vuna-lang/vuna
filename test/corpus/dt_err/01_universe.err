@@ -1,1 +1,1 @@
-type mismatch: expected Type, got Type 1
+DT: Type needs exactly one non-negative level

@@ -477,132 +477,120 @@ git add seed/ && git commit
   产品 CLI、`vuna-base` 自身在包级 allowlist 内，`--root` 原始文件模式与 `vuna interp`
   保留给调试/测试。
 
-### DT 子集（M13，实验性）
+### DT 子集（M14，实验性）
 
 `--dt` 打开与 HM 并存的依赖类型（DT）路径：Core TT + NbE + 双向精化器 +
-擦除型 codegen。M13 只支持**单文件、自包含**的 DT 程序：不经过模块 Loader，
-不支持 `import` / 包模式，也不进入 `build` / `build --split` / `seed`；HM 路径
-（interp + typed + split）语义与产物不变。设计与边界见
-[docs/dt-core.md](docs/dt-core.md)。
+擦除型 codegen。M14 在 M13（依赖函数 + 一阶元变量）之上加入**索引归纳族**与
+**依赖模式匹配**（`data` + `case`），并因此解除了递归定义限制。DT 仍是
+**单文件、自包含、显式 opt-in**：不经过模块 Loader，不支持 `import` / 包模式，
+也不进入 `build` / `build --split` / `seed`；HM 路径（interp + typed + split）
+语义与产物不变。设计与边界见 [docs/dt-core.md](docs/dt-core.md)。
 
 ```vuna
--- 类型：Type / Type n、A -> B、(x : A) -> B、{x : A} -> B
 id : (a : Type) -> a -> a
 id a x = x
 
-const : (a : Type) -> (b : Type) -> a -> b -> a
-const a b x y = x
+-- 索引归纳族：Nat / Vec / Fin / Eq 都是用户声明的，没有内置 Nat
+data Nat : Type where
+  Zero : Nat
+  Succ : Nat -> Nat
 
-main : Int
-main = id Int 42
+-- 族头只写 kind，箭头个数 = 族的参数/索引个数；构造子用完整 telescope 重绑它们,
+-- 前 arity 个 binder 对应族的参数/索引，其余是字段。
+-- 注意：M14 的索引 binder 一律写成**显式**（`(n : Nat)`）——隐式索引推断属于 M15。
+data Vec : Type -> Nat -> Type where
+  Nil  : (a : Type) -> Vec a Zero
+  Cons : (a : Type) -> (n : Nat) -> a -> Vec a n -> Vec a (Succ n)
+
+-- 递归定义在 M14 已解禁（靠 delta 展开 fuel 终止）
+plus : Nat -> Nat -> Nat
+plus a b = case a of
+  Zero   => b
+  Succ k => Succ (plus k b)
+
+-- 构造子应用要写全族参数/索引（显式 binder 不会被省略）。
+-- 「类型参数」域是宇宙（如 `a : Type`）⇒ 擦除；
+-- 「索引」域是归纳族（如 `n : Nat`）⇒ 保留运行时表示，所以 Vec 的值带长度字段。
+three : Vec Int (Succ (Succ (Succ Zero)))
+three = Cons Int (Succ (Succ Zero)) 1 (Cons Int (Succ Zero) 2 (Cons Int Zero 3 (Nil Int)))
+
+vlength : (a : Type) -> (n : Nat) -> Vec a n -> Nat
+vlength a n xs = case xs of
+  Nil b              => Zero
+  Cons b m y ys      => Succ (vlength b m ys)
 ```
+
+依赖模式匹配：`case` 对索引做 unification，只有可达分支才要求写出。
+
+```vuna
+-- vhead 只写 Cons：Nil 的结果索引 Vec a Zero 与 scrutinee 的 Vec a (Succ n)
+-- 不可统一，因此该分支不可能，覆盖率检查合法地跳过它。
+vhead : (a : Type) -> (n : Nat) -> Vec a (Succ n) -> a
+vhead a n xs = case xs of
+  Cons b m x rest => x
+```
+
+```vuna
+-- Fin：上界索引让 FZero 只存在于 Succ n
+data Fin : Nat -> Type where
+  FZero : (n : Nat) -> Fin (Succ n)
+  FSucc : (n : Nat) -> Fin n -> Fin (Succ n)
+
+-- Vec a (Succ m) 与 Fin (Succ m) 同时排掉 Nil 与 FZero 两个不可能分支。
+findex : (a : Type) -> (m : Nat) -> Vec a (Succ m) -> Fin (Succ m) -> a
+findex a m xs i = case xs of
+  Cons b k x rest => case i of
+    FZero j   => x
+    FSucc j h => x
+```
+
+```vuna
+-- Eq：Refl 把两个索引统一成一个，sym/trans 不需要额外的证明构造
+data Eq : Type -> Type -> Type where
+  Refl : (a : Type) -> Eq a a
+
+sym : (a : Type) -> (b : Type) -> Eq a b -> Eq b a
+sym a b e = case e of
+  Refl c => Refl c
+
+trans : (a : Type) -> (b : Type) -> (c : Type) -> Eq a b -> Eq b c -> Eq a c
+trans a b c p q = case p of
+  Refl d => q
+```
+
+几条 M14 的硬边界，写代码前值得先知道：
+
+- **索引 binder 必须显式**。`data Vec : Type -> Nat -> Type` 的构造子写
+  `Cons : (a : Type) -> (n : Nat) -> a -> Vec a n -> Vec a (Succ n)`；隐式索引推断
+  （`{n : Nat} -> ...` 靠调用点自动求解，例如 `FSucc FZero`）**M14 不做**，推迟到
+  **M15**。M14 里期望类型能给出闭合解时隐式 binder 偶尔可用，但一旦要从调用点反推
+  索引或解里出现局部变量，就报 `unsolved metavariable` / `type mismatch`。
+- **擦除规则**：binder 的域是**宇宙**（`a : Type`）⇒ 擦除；域是**归纳族**（`n : Nat`
+  这类索引）⇒ **保留运行时表示**。所以 `Vec a n` 的值是一条带长度索引字段的链表
+  （`type 'a t_Vec = C_Vec_Nil | C_Vec_Cons of 'a t_Nat * 'a * 'a t_Vec`），索引不是
+  零成本抽象（完整擦除分析属 M16）。
+- **`case` 分支必须绑定构造子的全部显式 telescope binder**（族参数与索引也各占一个
+  位置，即使分支体不用）：`Cons b m y ys => ...` 对应 `a`、`n`、字段、`Vec a n`。
+  只支持**顶层构造子模式**；嵌套模式（`Succ (Succ k)`）报
+  `DT: nested patterns are not supported yet`；兜底 `_ => ...`（变量模式等价）只能放
+  **最后**一个分支。
+- **可达性决定分支能否省略**：若函数签名把索引**细化**（如 `Vec a (Succ m)`），
+  与该索引不可统一的分支（`Nil`）**可以省略**，写了则报
+  `DT: this branch is impossible`；若签名是**泛化**索引（`Vec a n`），则所有构造子
+  都可达，必须写全，漏写报 `DT: case is not exhaustive: missing <C>`。
+- **`data` 的 kind 必须是 `... -> Type` 的箭头链**，构造子的结果类型必须回到本族
+  （否则报 `DT: constructor <C> does not return <F>`）。族名本身按 kind 入
+  `globals`，每个构造子挂**完整 Pi 类型**；类型级 `Vec a n` 是**中性应用**，不做
+  类型级求值（只在索引 unification 时按定义性相等比较）。
+- **`check --dt` 不要求 `main`**（库文件可直接 check），`compile --dt` 要求 `main`
+  且其类型为 `Int` / `String` / `Bool`。
+- 只有**一阶（闭合）元变量解**；高阶/开放解、终止性/覆盖性证明都归 M15/M16。
 
 ```console
 vuna check --dt file.vuna            # 精化 + 擦除检查（不生成代码）
 vuna compile --dt file.vuna out.ml   # 擦除并生成 OCaml（main : Int/String/Bool）
 vuna interp --dt file.vuna           # 核心求值器（NbE + delta）求值 main
 ```
-
-支持：`Type` / `Type n` 非累积宇宙、Pi（显式 / 隐式）、应用、lambda（需签名）、
-`if`、洞 `_`、Int/String/Bool 字面量与 `+ - * / == /= < <= > >= ++ && ||`。
-每个定义必须有类型签名；类型级参数按擦除规则不生成运行时参数。类型级定义
-（类型是宇宙，如 `Endo : Type 1`）整体擦除；类型别名参与 delta 归约。
-
-M13 限制（后续阶段补齐）：无 `data` / `record` / `trait` / `case` / `let` /
-`where` / 递归（M14/M15/M16）；元变量只解闭合项、不支持高阶元变量（M15）；
-隐式参数只支持类型级（M15）；不做终止性 / 覆盖性与完整擦除分析（M16）；
-不接入 split / 包模式（M17 前）。
-
-## 编译器实现
-
-编译器包 `compiler/`（`vuna-compiler`）负责“源码 → OCaml / seed”，根包 `lib/` 只放
-产品 CLI 与工具链。编译器模块：
-
-- `compiler/lib/Vuna/Compiler/Common.vuna`：编译器门面——整模块重导出 `Base.Pair` /
-  `Base.Bool` / `Base.List` / `Base.Maybe` / `Base.Result` / `Base.String`，并保留编译器
-  专属的 `Pos` / `Span`、模块路径工具（`splitOnDot`、`splitPath` 等）与诊断建议（`suggest`）；
-- `compiler/lib/Vuna/Compiler/Ast.vuna`：语法类型（Pat/Expr/DoStmt/Decl/Import/模块头、
-  导出项与记录字段）与 AST helper（`funArity`/`ctorArity`/`topNames`/`ctorsOf` 等）；
-- `compiler/lib/Vuna/Compiler/Lexer.vuna`：词法分析，token 带行列位置；
-- `compiler/lib/Vuna/Compiler/Parser.vuna`：offside layout parser，输出模块头、记录声明、
-  AST 与 imports；支持 `do` 块（`DoStmt`）与 `>>=` / `>>` 中缀；`parseExpressionSource`
-  供 REPL 用；
-- `compiler/lib/Vuna/Compiler/Builtins.vuna`：内建函数名字与元数，Loader 与 Eval 共用；
-- `compiler/lib/Vuna/Compiler/Loader.vuna`：import 图、模块头/模块名校验、模块导出表
-  （条目是 `deriving (Eq)` 的 `record ExportEntry`；记录与 data 共用 `T` / `T(..)` 规则）、
-  名字解析与 flatten（`loadProgram roots entryPkg entry`：模块根是 `Pkg.Root` 有序列表
-  ——目录 + 包名 + 可选 `[export]` 集；同包全可见、跨包只认导出集，隐藏模块与跨根同名
-  都是硬错误）、`do` 语句 desugar 成 `bind`、包模式自动注入 `Prelude`（原始 `--root`
-  模式不注入）；M12.6 起按包限制 effectful 内建：普通包不能在纯代码里直接用
-  `print` / `readFile` / `exit` 等（只能经 `Base.IO`），编译器 / 产品 CLI / `vuna-base`
-  自身在 allowlist 内；
-- `compiler/lib/Vuna/Compiler/Typecheck.vuna`：HM 风格类型检查（Ty/Scheme、unify、构造器
-  scheme、表达式/模式推断、签名校验与无签名顶层推断）；`Ty` 含 `TApp`（高阶 kind 应用）、
-  `Scheme` 带 trait 约束、方法级字典穿参（裸类型变量与高阶 kind 类型变量都支持）；
-  类型变量替换用 AVL 树（`TySubst`，O(log n) 查找）而不是关联表，避免 unify 的 O(n²)；
-  loader 会把 DSig/构造器类型里的类型名解析成模块内全名（open/qualified/alias 都支持），
-  因此跨模块类型检查可用；
-- `compiler/lib/Vuna/Compiler/TypedCodegen.vuna`：typed codegen，用类型信息生成原生
-  OCaml 类型、构造器、模式匹配、data show 与 builtins；是唯一 codegen 路径。M12 新增
-  `generateSplitProgram`：按 vuna 模块生成逐模块 `.ml` + `.mli`（模块间用 open 链
-  解析全局唯一名字；抽象类型按模块导出表生成 sig；整模块重导出用 include），
-  单文件路径重构为 `genTopNames` 等子集函数，产物字节不变；分离编译预计算
-  “声明名 → 归属模块”路由表（`routeFunTable`/`routeDataTable`），避免每个模块反复扫描
-  owners/全程序 decls；M12.6 起 `main : IO a` 的入口由运行时执行（单文件直接 match
-  IO 构造器；分离编译在 IO 模块生成代码里注入 `__vuna_run_io` 执行器，源码不可见）；
-- `compiler/lib/Vuna/Compiler/Core.vuna`（M13）：DT 的 core 类型论——`Term`（`TVar`/
-  `TMeta`/`TGlobal`/`TType`/`TPi`/`TLam`/`TApp`/字面量/`TIf`）、`Value`/`Closure`/
-  `Neutral`、NbE `eval`、`quote`、`force`（已解元变量 + delta 展开，带步数上限）、
-  `normalize`（核心求值器展示用）、定义性相等 `conv`（beta/delta/eta + 一阶元变量求解）、
-  prelude 运算符的原语归约与 `showTerm`；
-- `compiler/lib/Vuna/Compiler/Elab.vuna`（M13）：DT 双向精化器——内置 prelude（Int/
-  String/Bool 与运算符）、签名/定义收集、`checkE`/`inferE`/`checkType`、隐式参数插入、
-  metavariable（只解闭合项）、`Ec` 状态（元变量解 + 已精化定义体供 delta），
-  错误信息带 `文件:行:列`；
-- `compiler/lib/Vuna/Compiler/CoreCodegen.vuna`（M13）：DT 擦除与 OCaml 生成——按「类型
-  是否为宇宙」区分类型级/运行时定义、擦除检查（拒绝运行时使用类型级绑定/定义）、按
-  依赖拓扑排序（递归报错）、生成自包含最小 runtime（`bi_*`/`dt_show_*`）、
-  `main : Int/String/Bool` 的入口打印；
-- `compiler/lib/Vuna/Compiler/Dt.vuna`（M13）：DT 单文件 facade（`dtCheckFile`/
-  `dtCompileFile`/`dtEvalFile`）：只 `readFile` + `parseSource`，拒绝模块头与 `import`；
-  核心求值器通过 `interp --dt` 暴露，用于与 codegen 结果对照；
-- `compiler/lib/Vuna/Compiler/Split.vuna` / `SplitCli.vuna`：分离编译输出文件模型、
-  `build.sh` 构建脚本（干净构建用一次 `ocamlopt` 编译全部 `.mli/.ml` 并链接；已有
-  `.cmx` 时按模块时间戳增量重编）、扁平分离 codegen 入口（`build --split` / `seed`）
-  与包级 codegen（`compile --package`，`.output/{lib,app}`）；
-- `compiler/lib/Vuna/Compiler/Process.vuna`：工具链进程执行入口（`runIn`，`prim_runIn`
-  受包级 allowlist 限制，不进 `[export]`）；
-- `compiler/lib/Vuna/Compiler/Toml.vuna` / `Manifest.vuna` / `Pkg.vuna`：`vuna.toml`
-  解析、manifest 模型与校验、workspace/依赖 DAG/模块根解析（`Root` 的包导出限制在此计算）；
-- `compiler/lib/Vuna/Compiler/Compile.vuna`：编译入口（`effectiveRoots` / typed
-  `compileFile*` / `checkFile*`），不依赖 `Vuna.Eval`；`check*` 只做类型检查与诊断，
-  不生成代码；
-- `compiler/lib/Vuna/Compiler/CompilerCli.vuna`：编译器 CLI
-  （compile/check/build/seed + compile --package）；`compiler/app/Main.vuna` 是它的入口，
-  也是 seed 闭包的根。
-
-工具链（根包 `lib/Vuna/`）：
-
-- `Eval.vuna`：值表示、内建函数、call-by-value 求值器与 `show`；
-- `Interp.vuna`：解释器 facade（`interpretFile` + 包感知 `...In entryPkg ...` 变体），
-  依赖 Eval，只被 CLI/REPL/test runner 使用；普通程序保留“不检查执行”，
-  record / trait / deriving 程序先类型检查并降级；
-- `Files.vuna` / `Fmt.vuna` / `Lint.vuna` / `Repl.vuna` / `Doc.vuna` /
-  `TestRunner.vuna` / `Process.vuna` / `Cli.vuna`：M11.5 工具链（目录遍历、格式化、
-  风格检查、REPL、文档、测试运行器、进程执行入口、产品 CLI）；
-- 模块内部通过 import 自动 open 使用非限定名，只有 import 行写模块全名；
-- 顶层类型签名紧贴其第一个函数子句，签名与实现之间不留空行；顶层声明之间用一个空行分隔；
-- [app/Main.vuna](app/Main.vuna)：产品 CLI 入口，`main : IO Int`（运行时执行，
-  `exit` 传递退出码）；CLI 实现在 `lib/Vuna/Cli.vuna`。`vuna build` / `--split`
-  要求 `main : IO a`；纯 main 只在 `vuna interp` / `vuna test` 的调试约定下自动 show。
-  `vuna compile [--no-print] [--root DIR]... <entry.vuna> [out.ml]` 始终跑类型检查并生成
-  typed OCaml；`--no-print` 表示生成的程序不自动打印 `main` 的结果（fmt 自测等工具场景），
-  可执行程序应使用 `vuna build`（`.output/bin/<包名>`）。M11.5 起另有
-  `build/test/fmt/repl/doc`；M12.8 起 `vuna compile --package` / `vuna build` 走
-  `.output` 包级 codegen 与 ocamlopt；
-- [lib/Vuna/Lint.vuna](lib/Vuna/Lint.vuna)：`vuna lint [--fix] <file.vuna>...`，首批
-  两条规则 `literal-if-chain` 与 `redundant-case`；只做语法层检查，`--fix` 写回前会
-  重新 `parseSource` 校验。`vuna interp` 直接调用 `interpretFile` 解释执行文件。
 
 ### codegen 的表示
 
@@ -633,7 +621,7 @@ typed codegen 只用 OCaml 标准库，不依赖解释循环。代码质量优�
 
 ## 测试
 
-`test/run-tests.sh` 是 vuna 原生测试（647 checks），用 `vuna` / `vuna-seed` 驱动，
+`test/run-tests.sh` 是 vuna 原生测试（{TEST_COUNT} checks），用 `vuna` / `vuna-seed` 驱动，
 不依赖外部 vuna 实现；但运行测试需要 OCaml 编译器（`ocamlopt`）作为代码生成后端：
 
 ```console
@@ -688,6 +676,13 @@ sh test/run-tests.sh          # 需要 PATH 中有 vuna 与 vuna-seed
 - `vuna-seed` 编译 `12_fact` 的种子冒烟；
 - 第 33 段（M12.8）：包级 `compile --package`——`.output/{lib,app}` + `build.sh`
   增量编译、输出与单文件一致、无改动不重编、touch 单个模块只重编它；
+- 第 34 段（M13/M14）DT：`corpus/dt/*.vuna` 的 `interp --dt`（核心求值器）/
+  `check --dt`（精化 + 擦除检查）/ `compile --dt`（擦除 codegen → ocamlopt → 运行）
+  三路与 golden 一致，正例含 M14 的 `09_nat` / `10_vec` / `11_fin` / `12_eq`；
+  `corpus/dt_err/*.vuna` 在 `check --dt` 与 `compile --dt` 两条路径都要求错误片段、
+  非 0 退出且不写输出文件（非穷尽 case、不可满足分支、对 `Int` 做 case、嵌套模式、
+  构造子不返回该族）；另有 `--dt` CLI 约束（不支持 `--root` / 包目录，`build` /
+  `seed` 不支持 `--dt`）；
 
 Nix 侧：
 
@@ -776,8 +771,10 @@ nix fmt               # nixfmt-tree 格式化 .nix
   （不回退）；typed codegen 的**单文件**路径仍保留：`vuna compile`、测试/调试与包级
   codegen 不支持的构造使用单文件产物；优化仍归 ocamlopt（M12 不做 vuna typed IR）；
   runtime prelude 在分离编译中完整保留；
-- `do` / Monad / IO 组合子已在 M11 实现；DT（依赖类型）在 M13 起步：`--dt`
-  单文件路径（Core TT + 精化器 + 擦除 codegen + `interp --dt`），完整 DT 主线见
+- `do` / Monad / IO 组合子已在 M11 实现；DT（依赖类型）M13 起步、M14 落地索引族：
+  `--dt` 单文件路径（Core TT + 精化器 + 擦除 codegen + `interp --dt`），M14 加入
+  `data` 索引归纳族与依赖 `case`、解除递归定义限制；仍无隐式索引推断 / 高阶元变量 /
+  终止性与完整擦除分析，仍不接入 split / 包模式 / `import`。完整 DT 主线见
   [docs/roadmap.md](docs/roadmap.md) 与 [docs/dt-core.md](docs/dt-core.md)；
 - M12 限制：分离编译的*生成*阶段仍是整程序分析，但经过 M12.5 性能修复后与单文件
   编译同量级（约 2s）；增量收益体现在 ocamlopt 只重编译受影响模块（`build.sh`）；
@@ -829,9 +826,10 @@ nix fmt               # nixfmt-tree 格式化 .nix
   原始 `--root` 模式不导入（保持自举/夹具的显式 import 语义）；`vuna build` 需要
   PATH 中有 `ocamlopt`，库包先用 `vuna compile --package` 生成 `.output/lib/`；
   `Prelude` 刻意不含 `Base.IO` 效果函数（避免与编译器直接使用的内建同名）；
-- M12.7 / M12.8 已完成：删除 dynamic codegen 与旧开关；完成标准库/编译器命名空间
-  收敛、`Prelude` 自动导入与 `.output` 包级构建；依赖类型主线（M13–M18）见
-  [docs/roadmap.md](docs/roadmap.md)。
+- M12.7 / M12.8 / M13 / M14 已完成：删除 dynamic codegen 与旧开关；完成标准库/
+  编译器命名空间收敛、`Prelude` 自动导入与 `.output` 包级构建；DT 地基（Core TT +
+  精化器 + 单文件 `--dt`）之后落地索引归纳族与依赖模式匹配；依赖类型主线（M13–M18）
+  见 [docs/roadmap.md](docs/roadmap.md)。
 
 ## 历史
 
@@ -896,4 +894,12 @@ nix fmt               # nixfmt-tree 格式化 .nix
   `vuna compile --package`（`.output/{lib,app}`）与 `vuna build`（ocamlopt →
   `.output/bin/<包名>`），`vuna build --split` / `seed` 保留扁平分离 codegen；
   seed 61 个文件 / ~1.2 MB；
+- M14：索引族与依赖模式匹配——Core 增加构造子应用与 case（`TCon`/`TCase` /
+  `VCon`/`VCase`），`data F : <kind> where` 声明的索引归纳族（构造子带显式
+  `{...} ->` telescope，族参数隐式、宇宙域 binder 擦除），`case` 做索引 unification
+  与分支可达性判定（不可满足分支可省略、写错则报错）与覆盖率检查；解除递归定义
+  限制（SCC 分组，终止靠 delta 展开 fuel）；核心求值器与擦除型 codegen 同步扩展
+  （运行时族 → OCaml 变体、族前缀构造子名、`match` + 不可能分支 `failwith`）；
+  新增 `test/corpus/dt/09_nat` / `10_vec` / `11_fin` / `12_eq` 正例与
+  `dt_err` 反例；仍为单文件 `--dt` opt-in，split/包集成留 M17；
 - 早期 OCaml 外部编译器 `vunax` 已完成使命并删除。

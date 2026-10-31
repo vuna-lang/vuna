@@ -30,32 +30,34 @@ let v_Vuna_dCompiler_dDt_ddtLoad = fun entry -> if bi_file_exists entry then (ma
   | C_Base_dMaybe_dNothing -> (match imports with
   | [] -> C_Base_dResult_dOk (decls)
   | _ -> C_Base_dResult_dErr ("DT: imports are not supported yet (single-file mode)")
-  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Dt.vuna" 24 13 ("case pattern match failure"))
-  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Dt.vuna" 21 9 ("case pattern match failure"))
-  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Dt.vuna" 18 5 ("case pattern match failure")) else C_Base_dResult_dErr ((("entry file not found: ") ^ (entry)))
+  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Dt.vuna" 20 16 ("case pattern match failure"))
+  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Dt.vuna" 17 36 ("case pattern match failure"))
+  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Dt.vuna" 15 41 ("case pattern match failure")) else C_Base_dResult_dErr ((("entry file not found: ") ^ (entry)))
 
-let v_Vuna_dCompiler_dDt_ddtCheckFile = fun entry -> v_Base_dResult_dandThen (v_Vuna_dCompiler_dDt_ddtLoad entry) (fun decls -> v_Base_dResult_dandThen (v_Vuna_dCompiler_dElab_delabProgram decls) (fun defs -> v_Base_dResult_dandThen (v_Vuna_dCompiler_dCoreCodegen_dcheckDtProgram defs) (fun _u -> C_Base_dResult_dOk ([]))))
+let v_Vuna_dCompiler_dDt_ddtCheckFile = fun entry -> v_Base_dResult_dandThen (v_Vuna_dCompiler_dDt_ddtLoad entry) (fun decls -> v_Base_dResult_dandThen (v_Vuna_dCompiler_dElab_delabProgram decls) (fun program -> v_Base_dResult_dandThen (v_Vuna_dCompiler_dCoreCodegen_dcheckDtProgram program) (fun _u -> C_Base_dResult_dOk ([]))))
 
-let v_Vuna_dCompiler_dDt_ddtCompileFile = fun entry printResult -> v_Base_dResult_dandThen (v_Vuna_dCompiler_dDt_ddtLoad entry) (fun decls -> v_Base_dResult_dandThen (v_Vuna_dCompiler_dElab_delabProgram decls) (fun defs -> v_Vuna_dCompiler_dCoreCodegen_dgenerateDtProgram defs printResult))
+let v_Vuna_dCompiler_dDt_ddtCompileFile = fun entry printResult -> v_Base_dResult_dandThen (v_Vuna_dCompiler_dDt_ddtLoad entry) (fun decls -> v_Base_dResult_dandThen (v_Vuna_dCompiler_dElab_delabProgram decls) (fun program -> v_Vuna_dCompiler_dCoreCodegen_dgenerateDtProgram program printResult))
 
 let rec v_Vuna_dCompiler_dDt_dfindMainDef = fun a0 -> match a0 with
   | ([]) -> C_Base_dMaybe_dNothing
   | ((d) :: (rest)) -> if v_vuna_ueq_ustr (v_Vuna_dCompiler_dElab_ddtDefName d) "main" then C_Base_dMaybe_dJust (d) else v_Vuna_dCompiler_dDt_dfindMainDef rest
-  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Dt.vuna" 60 1 ("no matching clause for Vuna.Compiler.Dt.findMainDef")
+  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Dt.vuna" 55 1 ("no matching clause for Vuna.Compiler.Dt.findMainDef")
 
 let rec v_Vuna_dCompiler_dDt_ddefTableOf = fun a0 -> match a0 with
   | ([]) -> []
   | ((d) :: (rest)) -> (C_Base_dPair_dPair (v_Vuna_dCompiler_dElab_ddtDefName d, v_Vuna_dCompiler_dElab_ddtDefBody d)) :: (v_Vuna_dCompiler_dDt_ddefTableOf rest)
-  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Dt.vuna" 65 1 ("no matching clause for Vuna.Compiler.Dt.defTableOf")
+  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Dt.vuna" 59 1 ("no matching clause for Vuna.Compiler.Dt.defTableOf")
 
-let v_Vuna_dCompiler_dDt_devalDtMain = fun defs -> (match v_Vuna_dCompiler_dDt_dfindMainDef defs with
+let v_Vuna_dCompiler_dDt_devalDtMain = fun a0 -> match a0 with
+  | (C_Base_dPair_dPair (datas, defs)) -> (match v_Vuna_dCompiler_dDt_dfindMainDef defs with
   | C_Base_dMaybe_dNothing -> C_Base_dResult_dErr ("DT: no main definition")
   | C_Base_dMaybe_dJust (mainDef) -> (let table = v_Vuna_dCompiler_dDt_ddefTableOf defs in let mainVal = v_Vuna_dCompiler_dCore_dnormalize table [] v_Vuna_dCompiler_dCore_ddefaultFuel (C_Vuna_dCompiler_dCore_dVNeutral (C_Vuna_dCompiler_dCore_dNGlobal ("main", []))) in (match mainVal with
   | C_Vuna_dCompiler_dCore_dVInt (n) -> C_Base_dResult_dOk (bi_str_from_int n)
   | C_Vuna_dCompiler_dCore_dVStr (s) -> C_Base_dResult_dOk (v_Vuna_dCompiler_dCore_dshowValue mainVal)
   | C_Vuna_dCompiler_dCore_dVBool (b) -> C_Base_dResult_dOk (v_Vuna_dCompiler_dCore_dshowValue mainVal)
   | _ -> C_Base_dResult_dErr ("DT: main does not reduce to a value")
-  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Dt.vuna" 53 10 ("case pattern match failure")))
-  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Dt.vuna" 48 3 ("case pattern match failure"))
+  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Dt.vuna" 48 8 ("case pattern match failure")))
+  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Dt.vuna" 42 32 ("case pattern match failure"))
+  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Dt.vuna" 42 1 ("no matching clause for Vuna.Compiler.Dt.evalDtMain")
 
-let v_Vuna_dCompiler_dDt_ddtEvalFile = fun entry -> v_Base_dResult_dandThen (v_Vuna_dCompiler_dDt_ddtLoad entry) (fun decls -> v_Base_dResult_dandThen (v_Vuna_dCompiler_dElab_delabProgram decls) (fun defs -> v_Vuna_dCompiler_dDt_devalDtMain defs))
+let v_Vuna_dCompiler_dDt_ddtEvalFile = fun entry -> v_Base_dResult_dandThen (v_Vuna_dCompiler_dDt_ddtLoad entry) (fun decls -> v_Base_dResult_dandThen (v_Vuna_dCompiler_dElab_delabProgram decls) (fun program -> v_Vuna_dCompiler_dDt_devalDtMain program))
