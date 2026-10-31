@@ -722,7 +722,7 @@ nix fmt               # nixfmt-tree 格式化 .nix
   `bindIO`/`pureIO`/`fmapIO`；效果 API 直接返回 IO（`print : String -> IO Int`、
   `getArgs : IO (List String)` 等），内部由不导出的 `prim_*` 原语实现。
   当前 `IO` 仍是库层 thunk 表示，不是完整的 effect
-  类型系统（留给 M13）；
+  类型系统（留给后续效应阶段，见 [docs/roadmap.md](docs/roadmap.md)）；
 - M11.6 fmt 限制：行宽 100，但模块头/导出列表、类型签名与超长字符串字面量不折行；
   表达式内部的注释会前移到最内层包含它的条目（或下一条目），不保证留在原位置；
   单行块注释可以挂在行尾，多行块注释只作为前置注释；
@@ -739,7 +739,9 @@ nix fmt               # nixfmt-tree 格式化 .nix
   CLI 使用 `exit` 内建返回非 0 退出码（compile 错误 1、lint 有 finding 1、用法/
   解析/IO 错误 2）；
 - 种子轮换是手动流程（发版/不兼容变更时）；日常工具链改动不需要 rotation；
-- `test/run-tests.sh` 目前以 golden 比对为主，后续可以补充更多随机/差分测试。
+- `test/run-tests.sh` 目前以 golden 比对为主，后续可以补充更多随机/差分测试；
+- dynamic codegen 的删除计划（M12.7）与依赖类型主线（M13–M18）见
+  [docs/roadmap.md](docs/roadmap.md)。
 
 ## 历史
 
