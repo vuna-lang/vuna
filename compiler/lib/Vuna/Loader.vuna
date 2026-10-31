@@ -1108,7 +1108,7 @@ loadProgramRaw roots entry = loadProgram (map rawRoot roots) "" entry
 -- ---------------------------------------------------------------
 
 packageAllowsEffects pkg =
-  pkg == "" || pkg == "vuna" || pkg == "vuna-compiler" || pkg == "vuna-stdlib"
+  pkg == "vuna" || pkg == "vuna-compiler" || pkg == "vuna-stdlib"
 
 isEffectfulBuiltin name =
   name == "print" || name == "readFile" || name == "writeFile" || name == "getArgs"
@@ -1169,6 +1169,7 @@ effDecls decls = firstEffect (map effDecl decls)
 
 checkEffectsBuiltins label pkg decls =
   if packageAllowsEffects pkg then Ok decls
+  else if pkg == "" && label /= "<entry>" then Ok decls
   else
     case effDecls decls of
       Nothing => Ok decls

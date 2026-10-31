@@ -716,7 +716,7 @@ let v_Vuna_dLoader_dloadProject = fun roots entryPkg entry -> if bi_file_exists 
   | _ -> vuna_fail "compiler/lib/Vuna/Loader.vuna" 1064 11 ("case pattern match failure"))
   | _ -> vuna_fail "compiler/lib/Vuna/Loader.vuna" 1062 7 ("case pattern match failure"))) else C_Vuna_dResult_dErr ((("entry file not found: ") ^ (entry)))
 
-let v_Vuna_dLoader_dpackageAllowsEffects = fun pkg -> (if ((if ((if (v_vuna_ueq_ustr pkg "") then true else (v_vuna_ueq_ustr pkg "vuna"))) then true else (v_vuna_ueq_ustr pkg "vuna-compiler"))) then true else (v_vuna_ueq_ustr pkg "vuna-stdlib"))
+let v_Vuna_dLoader_dpackageAllowsEffects = fun pkg -> (if ((if (v_vuna_ueq_ustr pkg "vuna") then true else (v_vuna_ueq_ustr pkg "vuna-compiler"))) then true else (v_vuna_ueq_ustr pkg "vuna-stdlib"))
 
 let v_Vuna_dLoader_disEffectfulBuiltin = fun name -> (if ((if ((if ((if ((if ((if ((if ((if ((if ((if (v_vuna_ueq_ustr name "print") then true else (v_vuna_ueq_ustr name "readFile"))) then true else (v_vuna_ueq_ustr name "writeFile"))) then true else (v_vuna_ueq_ustr name "getArgs"))) then true else (v_vuna_ueq_ustr name "readLine"))) then true else (v_vuna_ueq_ustr name "readDir"))) then true else (v_vuna_ueq_ustr name "isDirectory"))) then true else (v_vuna_ueq_ustr name "makeDir"))) then true else (v_vuna_ueq_ustr name "removeFile"))) then true else (v_vuna_ueq_ustr name "fileExists"))) then true else (v_vuna_ueq_ustr name "exit"))
 
@@ -767,10 +767,10 @@ let rec v_Vuna_dLoader_deffDecl = fun d -> (match d with
 
 let v_Vuna_dLoader_deffDecls = fun decls -> v_Vuna_dLoader_dfirstEffect (v_Vuna_dList_dmap v_Vuna_dLoader_deffDecl decls)
 
-let v_Vuna_dLoader_dcheckEffectsBuiltins = fun label pkg decls -> if v_Vuna_dLoader_dpackageAllowsEffects pkg then C_Vuna_dResult_dOk (decls) else (match v_Vuna_dLoader_deffDecls decls with
+let v_Vuna_dLoader_dcheckEffectsBuiltins = fun label pkg decls -> if v_Vuna_dLoader_dpackageAllowsEffects pkg then C_Vuna_dResult_dOk (decls) else if (if (v_vuna_ueq_ustr pkg "") then (v_vuna_uneq_ustr label "<entry>") else false) then C_Vuna_dResult_dOk (decls) else (match v_Vuna_dLoader_deffDecls decls with
   | C_Vuna_dMaybe_dNothing -> C_Vuna_dResult_dOk (decls)
   | C_Vuna_dMaybe_dJust (name) -> C_Vuna_dResult_dErr ((let vuna_cat0' = (label) in (let vuna_cat1' = (": effectful builtin `") in (let vuna_cat2' = (name) in (let vuna_cat3' = ("` is not available in package ") in (let vuna_cat4' = (pkg) in (let vuna_cat5' = (" (use Vuna.IO)") in String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'; vuna_cat3'; vuna_cat4'; vuna_cat5'])))))))
-  | _ -> vuna_fail "compiler/lib/Vuna/Loader.vuna" 1173 5 ("case pattern match failure"))
+  | _ -> vuna_fail "compiler/lib/Vuna/Loader.vuna" 1174 5 ("case pattern match failure"))
 
 let v_Vuna_dLoader_dtyShape = fun ty -> (match ty with
   | C_Vuna_dAst_dEVar (n, _) -> (("var ") ^ (n))
@@ -782,7 +782,7 @@ let v_Vuna_dLoader_dtyShape = fun ty -> (match ty with
   | C_Vuna_dAst_dECase (s, alts, _) -> "case"
   | C_Vuna_dAst_dEIf (c, t, e, _) -> "if"
   | C_Vuna_dAst_dEDo (stmts, _) -> "do"
-  | _ -> vuna_fail "compiler/lib/Vuna/Loader.vuna" 1180 3 ("case pattern match failure"))
+  | _ -> vuna_fail "compiler/lib/Vuna/Loader.vuna" 1181 3 ("case pattern match failure"))
 
 let rec v_Vuna_dLoader_dresolveTypeExpr = fun modules label prefix ownTypes imports ty -> (match ty with
   | C_Vuna_dAst_dEVar (name, sp) -> v_Vuna_dResult_dandThen (v_Vuna_dLoader_dresolveTypeName modules label prefix ownTypes imports name) (fun n -> C_Vuna_dResult_dOk (C_Vuna_dAst_dEVar (n, sp)))

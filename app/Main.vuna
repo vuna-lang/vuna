@@ -2,7 +2,10 @@
 -- main : IO Int——由运行时执行；退出码由 exitIO 传递。
 -- 用法见 `vuna help`。
 import Vuna.Cli
+import Vuna.Monad
 import Vuna.IO
 
 main : IO Int
-main = bindIO (pureIO (runCli (getArgs))) (\code => exitIO code)
+main = do
+  code <- pure (runCli (getArgs))
+  exitIO code

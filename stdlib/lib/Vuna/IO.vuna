@@ -1,10 +1,13 @@
-module Vuna.IO (IO, pureIO, bindIO, fmapIO, printIO, printlnIO, readFileIO, writeFileIO, getArgsIO, exitIO) where
+module Vuna.IO (IO, printIO, printlnIO, readFileIO, writeFileIO, readLineIO,
+                 readDirIO, isDirectoryIO, makeDirIO, removeFileIO, fileExistsIO,
+                 getArgsIO, exitIO) where
 
 -- Vuna.IO：抽象 IO 动作（M11-C / M12.6）。
--- 表示是「世界令牌 Int -> a」的挂起函数；构造器 MkIO 私有，跨模块只能通过 API 使用。
--- 没有公开的 runIO / unsafeRunIO：IO 动作只能由运行时在 `main` 处执行，
--- 用户代码无法在纯表达式里主动执行 IO（Haskell/Idris2 的 main 语义）。
--- Functor/Monad 实例让 `do` / `>>=` / `>>` 可以直接用于 IO。
+-- 表示是「世界令牌 Int -> a」的挂起函数；构造器 MkIO 私有。
+-- 没有公开的 runIO / unsafeRunIO，也没有 bindIO/pureIO/fmapIO：IO 动作只能由运行时
+-- 在 `main` 处执行；组合用 Functor/Monad trait（fmap/bind/pure、`>>=`、`do`）。
+-- effectful 内建（print/readFile/...）只允许 IO 模块与编译器/工具链内部使用，
+-- 普通用户包只能通过本模块的 IO API 使用效果。
 
 import Vuna.List
 import Vuna.Monad
@@ -12,16 +15,17 @@ import Vuna.Monad
 data IO a : Type where
   MkIO : (Int -> a) -> IO a
 
-pureIO : a -> IO a
-pureIO x = MkIO (\w => x)
+-- 内部构造器（不导出）：Functor/Monad 实例的实现细节。
+ioPure : a -> IO a
+ioPure x = MkIO (\w => x)
 
-bindIO : IO a -> (a -> IO b) -> IO b
-bindIO (MkIO f) k =
+ioBind : IO a -> (a -> IO b) -> IO b
+ioBind (MkIO f) k =
   MkIO (\w => case k (f w) of
                 MkIO g => g w)
 
-fmapIO : (a -> b) -> IO a -> IO b
-fmapIO f (MkIO g) = MkIO (\w => f (g w))
+ioFmap : (a -> b) -> IO a -> IO b
+ioFmap f (MkIO g) = MkIO (\w => f (g w))
 
 -- 输出字符串，返回打印长度（与内建 print 一致）。
 printIO : String -> IO Int
@@ -37,6 +41,24 @@ readFileIO path = MkIO (\w => readFile path)
 writeFileIO : String -> String -> IO Int
 writeFileIO path contents = MkIO (\w => writeFile path contents)
 
+readLineIO : IO String
+readLineIO = MkIO (\w => readLine)
+
+readDirIO : String -> IO (List String)
+readDirIO path = MkIO (\w => readDir path)
+
+isDirectoryIO : String -> IO Bool
+isDirectoryIO path = MkIO (\w => isDirectory path)
+
+makeDirIO : String -> IO Int
+makeDirIO path = MkIO (\w => makeDir path)
+
+removeFileIO : String -> IO Int
+removeFileIO path = MkIO (\w => removeFile path)
+
+fileExistsIO : String -> IO Bool
+fileExistsIO path = MkIO (\w => fileExists path)
+
 getArgsIO : IO (List String)
 getArgsIO = MkIO (\w => getArgs)
 
@@ -44,8 +66,8 @@ exitIO : Int -> IO Int
 exitIO code = MkIO (\w => exit code)
 
 instance Functor IO where
-  fmap f io = fmapIO f io
+  fmap f io = ioFmap f io
 
 instance Monad IO where
-  bind io k = bindIO io k
-  pure x = pureIO x
+  bind io k = ioBind io k
+  pure x = ioPure x

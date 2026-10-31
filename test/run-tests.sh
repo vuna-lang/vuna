@@ -76,9 +76,17 @@ compile_and_run() { # name compiler root entry expected
 for file in corpus/run/*.vuna; do
   base=${file%.vuna}
   expected=$(cat "$base.out")
-  actual=$("$VUNA" interp "$file" 2>&1)
+  extra=""
+  case "$file" in
+    *16_file_exists*) extra="--root ../stdlib/lib" ;;
+  esac
+  actual=$("$VUNA" interp $extra "$file" 2>&1)
   check_eq "$file (interp)" "$expected" "$actual"
-  compile_and_run "$file (compiler)" "$VUNA" "." "$file" "$expected"
+  if [ -n "$extra" ]; then
+    compile_and_run_roots "$file (compiler)" "$VUNA" "$file" "$expected" $extra --root .
+  else
+    compile_and_run "$file (compiler)" "$VUNA" "." "$file" "$expected"
+  fi
 done
 
 # 2) 模块夹具：解释器与动态 codegen 都要读取模块并得到 expected.out（正例 01–29；

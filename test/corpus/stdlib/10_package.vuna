@@ -14,4 +14,6 @@ result =
        ++ strFromInt (fromMaybe 0 (lookup "a" (insert "a" 7 empty))) ++ "/" ++ strFromInt (strLength "p")
 
 main : IO String
-main = bindIO (printIO "p") (\_ => pureIO result)
+main = do
+  _ <- printIO "p"
+  pure result

@@ -386,11 +386,14 @@ git add seed/ && git commit
 - 一般约束泛化：签名里出现高阶类型变量（如 `bindPair : m a -> m b -> m (Pair a b)`）
   时，类型检查自动给函数加方法级字典参数；调用点按实际类型静态派发或继续穿参。
 - `do` 对 `Maybe` / `List` / `IO` 都生效。`IO` 是 `stdlib/lib/Vuna/IO.vuna` 的抽象类型
-  （构造器私有），提供 `pureIO` / `bindIO` / `fmapIO` / `printIO` / `printlnIO` /
-  `readFileIO` / `writeFileIO` / `getArgsIO` / `exitIO` 与 Monad 组合子。
+  （构造器私有）；组合统一用 `Functor` / `Monad` trait 的 `fmap` / `bind` / `pure`、
+  `>>=` 与 `do`，不再导出 `bindIO` / `pureIO` / `fmapIO`。效果原语是 `printIO` /
+  `printlnIO` / `readFileIO` / `writeFileIO` / `readLineIO` / `readDirIO` /
+  `isDirectoryIO` / `makeDirIO` / `removeFileIO` / `fileExistsIO` / `getArgsIO` /
+  `exitIO`。
   **没有公开的 `runIO`/`unsafeRunIO`**：IO 动作只能由运行时在 `main` 处执行。
   可执行包/`vuna build` 要求 `main : IO a`；`vuna interp`/`vuna test` 仍保留
-  “显示纯 main 结果”的调试约定（不是语言的可执行入口语义）。
+  “显示纯 main 结果”的调试约定，但入口代码里同样不能直接调用 effectful 内建。
 
 ### 标准库（M11）
 
@@ -712,8 +715,11 @@ nix fmt               # nixfmt-tree 格式化 .nix
   由运行时执行动作（没有公开的 `runIO` / `unsafeRunIO`）；普通用户包不能直接调用
   effectful 内建（`print` / `readFile` / `exit` / ...），只能经 `Vuna.IO`（编译器 /
   产品 CLI / stdlib 自身在包级 allowlist 内）；`vuna interp` / `vuna test` / `--root`
-  文件模式保留“纯 main 结果 show”的调试约定。当前 `IO` 仍是库层 thunk 表示，不是
-  完整的 effect 类型系统（留给 M13）；
+  的**入口文件**同样禁止直接调用 effectful 内建（只有被加载的 stdlib/compiler
+  模块内部可用），纯 main 结果 show 仍保留为调试约定。IO 组合统一用
+  `Functor`/`Monad` trait（`fmap`/`bind`/`pure`、`>>=`、`do`），不再导出
+  `bindIO`/`pureIO`/`fmapIO`。当前 `IO` 仍是库层 thunk 表示，不是完整的 effect
+  类型系统（留给 M13）；
 - M11.6 fmt 限制：行宽 100，但模块头/导出列表、类型签名与超长字符串字面量不折行；
   表达式内部的注释会前移到最内层包含它的条目（或下一条目），不保证留在原位置；
   单行块注释可以挂在行尾，多行块注释只作为前置注释；
@@ -772,6 +778,8 @@ nix fmt               # nixfmt-tree 格式化 .nix
   同期修复编译性能（AVL 类型替换、分离编译路由表、快速 seed 构建），compiler 闭包
   的 `build --split` 从 ~32s 降到 ~2s；
 - M12.6：main / IO 语义——可执行入口 `main : IO a`（运行时执行，无公开 runner），
-  用户包不能直接调用 effectful 内建（包级 allowlist），`Vuna.IO` 成为唯一效果 API；
-  seed 51 个文件 / ~0.86 MB；`vuna interp`/`vuna test` 保留纯 main 调试约定；
+  用户包与调试入口都不能直接调用 effectful 内建（包级 / 入口级限制），
+  `Vuna.IO` 成为唯一效果 API；IO 组合统一走 `Functor`/`Monad` trait
+  （`fmap`/`bind`/`pure`、`>>=`、`do`），删除 `bindIO`/`pureIO`/`fmapIO` 导出；
+  seed 51 个文件 / ~0.86 MB；`vuna interp`/`vuna test` 保留纯 main 结果 show 的调试约定；
 - 早期 OCaml 外部编译器 `vunax` 已完成使命并删除。

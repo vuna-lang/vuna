@@ -1,48 +1,61 @@
 -- fmt 测试探针：读文件 → formatSource；mode: fmt/check/write。
 -- 由 check.sh 用当前编译器编译（不是测试输入，文件名以下划线开头）。
-import qualified Vuna.Base as B
+-- main : IO Int，由运行时执行；效果只经 Vuna.IO。
+import Vuna.Base
 import Vuna.Fmt
 import Vuna.Parser
+import Vuna.Monad
+import Vuna.IO
 
-data Bool : Type where
-  False : Bool
-  True : Bool
+main : IO Int
+main = do
+  args <- getArgsIO
+  run args
 
-data List a : Type where
-  Nil : List a
-  Cons : a -> List a -> List a
-
-main = exit (run (getArgs))
-
+run : List String -> IO Int
 run args =
   case args of
     Cons "fmt" (Cons path Nil) => runFmt path
     Cons "check" (Cons path Nil) => runCheck path
     Cons "write" (Cons path (Cons out Nil)) => runWrite path out
-    _ => let _ = print "usage: probe (fmt|check|write) file [out]\n" in 2
+    _ => do
+      _ <- printIO "usage: probe (fmt|check|write) file [out]\n"
+      pure 2
 
-fail path msg = let _ = print (path ++ ": " ++ msg ++ "\n") in 1
+fail : String -> String -> IO Int
+fail path msg = do
+  _ <- printIO (path ++ ": " ++ msg ++ "\n")
+  pure 1
 
-runFmt path =
-  case formatSource (readFile path) of
-    B.Err e => fail path ("format error: " ++ e)
-    B.Ok out => let _ = print out in 0
+runFmt : String -> IO Int
+runFmt path = do
+  source <- readFileIO path
+  case formatSource source of
+    Err e => fail path ("format error: " ++ e)
+    Ok out => do
+      _ <- printIO out
+      pure 0
 
-runCheck path =
-  let source = readFile path
-  in case formatSource source of
-       B.Err e => fail path ("format error: " ++ e)
-       B.Ok out1 =>
-         case parseSource path out1 of
-           B.Err e => fail path ("reparse error: " ++ e)
-           B.Ok parsed =>
-             case formatSource out1 of
-               B.Err e => fail path ("reformat error: " ++ e)
-               B.Ok out2 =>
-                 if out1 == out2 then 0
-                 else fail path ("not idempotent\n--- first ---\n" ++ out1 ++ "--- second ---\n" ++ out2)
+runCheck : String -> IO Int
+runCheck path = do
+  source <- readFileIO path
+  case formatSource source of
+    Err e => fail path ("format error: " ++ e)
+    Ok out1 =>
+      case parseSource path out1 of
+        Err e => fail path ("reparse error: " ++ e)
+        Ok parsed =>
+          case formatSource out1 of
+            Err e => fail path ("reformat error: " ++ e)
+            Ok out2 =>
+              if out1 == out2 then pure 0
+              else fail path ("not idempotent\n--- first ---\n" ++ out1 ++ "--- second ---\n" ++ out2)
 
-runWrite path out =
-  case formatSource (readFile path) of
-    B.Err e => fail path ("format error: " ++ e)
-    B.Ok formatted => let _ = writeFile out formatted in 0
+runWrite : String -> String -> IO Int
+runWrite path out = do
+  source <- readFileIO path
+  case formatSource source of
+    Err e => fail path ("format error: " ++ e)
+    Ok formatted => do
+      _ <- writeFileIO out formatted
+      pure 0
