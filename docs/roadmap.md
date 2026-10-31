@@ -34,6 +34,10 @@
 - M13：DT 地基——新增 Core TT（`Type`/Pi/应用/lambda/if，NbE + beta/delta/eta，非累积宇宙）、双向精化器（一阶 metavariable、类型级隐式插入、delta 类型别名）、擦除型 DT codegen 与 `interp --dt` 核心求值器；`--dt` 单文件 opt-in（compile/check/interp），HM 路径零改动；新增 `docs/dt-core.md` 设计稿；seed 57 个文件 / ~0.92 MB。
 - M12.8：命名空间、Prelude 与包级构建——标准库改为 `vuna-base` / `Base.*`，编译器模块迁到 `Vuna.Compiler.*`（门面 `Vuna.Compiler.Common`）；新增顶层 `Prelude`（重导出 Pair/Bool/List/Maybe/Result/String/Monad，不含 `Base.IO` 效果函数），包模式自动导入、原始 `--root` 模式不导入；新增 `vuna compile --package`（`.output/{lib,app}`）与 `vuna build`（ocamlopt → `.output/bin/<包名>`），`--split` / `seed` 保留扁平分离 codegen；seed 61 个文件 / ~1.2 MB。
 - M14：索引族与依赖模式匹配——Core 增加 `TCon` / `TCase`（值域 `VCon` / `VCase`），`data F : <kind> where` 的索引归纳族（构造子写完整显式 telescope，宇宙域 binder 擦除、索引保留运行时表示），`case` 做索引 unification 与分支可达性/覆盖率判定（不可满足分支可合法省略、写错则拒绝），解除递归定义限制（SCC 分组，终止靠 delta 展开 fuel）；核心求值器与擦除型 codegen 同步扩展（运行时族 → OCaml 变体、构造子名加族前缀、`TCase` → `match` + 不可能分支 `failwith`）；新增 `test/corpus/dt/09_nat` / `10_vec` / `11_fin` / `12_eq` 正例与 `dt_err` 反例；隐式索引推断留 M15，仍是单文件 `--dt` opt-in，split/包集成留 M17。
+- M15：隐式参数、接口与洞——元变量上下文（作用域逃逸检查）、隐式索引推断、trait/instance 字典编码 + 实例搜索、洞目标显示（`unsolved hole <loc> with goal <ty>`）。
+- M16：终止性与覆盖性——surface AST 上的结构化递归终止性检查（`DT: cannot prove termination of <f>`），覆盖性边界固定；索引擦除分析落地为诊断（探测确认索引不能无条件擦，需整程序使用分析）。
+- M17：DT 工具链——`vuna goal` 洞目标/上下文、`vuna lsp`（JSON-RPC over stdio：诊断、Full 同步、洞 hover，27 项冒烟断言）、`vuna doc` 支持接口与隐式签名；`Lsp`/`Json` 不进入 TCB。
+- M18：自举迁移决策——seed rotation（stage1 == stage2）；用 DT 表达 de Bruijn 上下文良构（`Ctx a (Succ n)` 静态排除越界）；决策：编译器本体暂不全量迁移，前置条件（DT 多文件、完整擦除）已记录。
 
 ## 当前硬约束
 
@@ -41,7 +45,7 @@
 2. seed rotation 后 stage 1 与 stage 2 必须字节一致；
 3. `test/run-tests.sh`、`nix build`、`nix flake check` 必须保持通过；
 4. **seed 只含 compiler 包的入口闭包**；工具链（fmt/lint/repl/doc/test、未来的 LSP/package manager）不进入 TCB；
-5. 已不再保留 dynamic codegen；HM 回归路径是 **interp + typed + split**，DT 主路径是 **core evaluator + 擦除 codegen**（M13 起是 `--dt` 单文件 opt-in，M17 前 split 可回退）；
+5. 已不再保留 dynamic codegen；HM 回归路径是 **interp + typed + split**，DT 主路径是 **core evaluator + 擦除 codegen**（M13 起是 `--dt` 单文件 opt-in；M18 后仍单文件，DT 多文件见「下一步 / 待办」）；
 6. 新增语法先以**旧种子可编译**的形式落地，rotation 之后才在编译器源码中使用；每阶段保持旧 HM 回归。
 
 ## 路线目标：依赖类型
@@ -61,67 +65,32 @@
 - 编译器自检通过；新增阶段更新 README 限制/历史与 roadmap 完成摘要；M18 起编译器逐步 dogfooding。
 
 ## 下一步 / 待办
+### DT 多文件与包集成（M20 前置）
 
-### M15：隐式参数、接口与洞
+**目标**：让 `--dt` 走出单文件——支持 `import` / `--root` / 包模式，并被 `build` / `split` /
+`seed` 接受。这是 M18 决策里「编译器本体迁 DT」的第一前置条件。
 
-**目标**：让 DT 可用：隐式参数、自动插入/求解、接口（替代/兼容 trait）、洞与目标显示。
+**范围**：DT 侧模块级名字解析与可见性规则（平行于 HM 的 `Loader`）、跨模块精化顺序、
+`vuna.toml` 包模式下的 DT 入口、`build --dt` 与 `split` 的产物形状。
 
-**范围**：
+**验收**：多文件 DT 程序可 `check` / `compile` / `interp --dt`；旧 HM 三路径零回归；
+seed 闭包不变（DT 多文件仍是 `--dt` opt-in，不进 seed）。
 
-- Surface/Core：`{x : A}` 隐式 binder、隐式应用/插入、接口声明与实例（可用 record + implicit 编码）、洞 `_` 与目标类型显示。
-- 解析：instance search、歧义/相干性、局部 given、跨模块可见；与 M13 的 metavariable/unification 整合。
-- 旧 trait 兼容：现有 `trait`/`instance` 语法尽量 desugar 到新接口；旧代码不要求改写。
-- Codegen/split：隐式参数/字典擦除或穿参；`.mli` 能导出接口/隐式签名。
-- 测试：`Show`/`Eq` 接口、Vec 的隐式长度、实例搜索、洞求解、旧 trait corpus 回归。
+**前置**：M20 模块系统 v3 的签名匹配。**风险**：平行 Loader 的语义漂移；与 HM 模块系统分叉。
 
-**验收**：接口/隐式/洞例子通过；旧 trait 代码零改动；歧义/缺失实例有明确诊断；编译器自检/fixed point/flake check；HM 性能不回归。
+### 完整擦除分析（M18 前置）
 
-**前置**：M13/M14。**风险**：解析/相干性；metavariable 交互；错误信息；与旧 trait 的语义差异。**设计闸门**：先定接口/实例/隐式解析规则与旧 trait 的兼容边界。
+**目标**：把 M16 的「索引擦除诊断」推进到真正改写运行时表示——索引/证明不出现在生成代码里。
 
-### M16：终止性、覆盖性与擦除
+**范围**：整程序使用分析（`indexReads` / `finalMask`，见
+[m16-design.md](reference/m16-design.md) §3.3）；`DtData`/`DtCtor` 的 mask 应用；
+codegen 三处对齐（`ctorFieldTys`、`genConApp`、`alignAltBinders`）；反例保护（`vlen` 类必须保留字段）。
 
-**目标**：健全性与性能：终止性/覆盖性检查，证明与索引的擦除，DT 代码生成不携带证明开销。
+**验收**：`10_vec` 的 `C_Vec_Cons` 字段数 3 → 2；全部 DT 夹具 `interp --dt` 与
+`compile --dt`+`ocamlopt` 输出逐字节一致；`vlen` 不被误擦。
 
-**范围**：
+**前置**：M16。**风险**：误擦导致运行时报错；保守判定可能收益有限。
 
-- 终止性检查（结构化递归/尺寸变化）、totality/partial 标记；类型级求值的终止性保证。
-- 覆盖性检查：穷尽性、不可达分支、不可能情况。
-- 擦除分析：类型/索引/证明擦除；typed codegen/核心 codegen；运行时表示。
-- 性能：DT 与 HM 程序基准；编译器自举性能预算。
-- 测试：total/non-total、覆盖性正反例、擦除前后语义一致、性能基线。
-
-**验收**：非终止/不覆盖程序被正确拒绝或标记；总函数通过；证明/索引在生成代码中被擦除（有检查）；DT 语义不变；编译器自检/fixed point/flake check；性能不超预算。
-
-**前置**：M14/M15。**风险**：终止性检查难度；擦除正确性；性能；与 split 的交互。**设计闸门**：先定 termination 规则、erasure 规则与例外（如 `partial`）。
-
-### M17：DT 工具链与证明工程
-
-**目标**：让 DT 可日常使用：LSP、洞/目标、case splitting、诊断、文档与教程；可与 M16 重叠。
-
-**范围**：
-
-- LSP server（放根包，永不进 seed）：诊断、补全、跳转、悬停、洞目标、case splitting、格式化。
-- 洞工作流：`vuna` 命令展示目标/上下文；编辑器冒烟。
-- 证明工程：`rewrite`/`with` 等 ergonomics 按需；tactics/自动化只做研究储备。
-- 文档：DT 教程、错误索引、迁移说明；`vuna doc` 支持接口/隐式签名。
-
-**验收**：VS Code/Neovim 冒烟；洞/case splitting/诊断可用；文档站构建；seed 闭包不变；`nix flake check` 扩展。
-
-**前置**：M15；可与 M16 并行。**风险**：编辑器协议/兼容；性能；语法变更导致返工。
-
-### M18：自举迁移（决策点）
-
-**目标**：编译器本体使用 DT 子集；seed rotation 后 fixed point；用语言写自己，验证 DT 的实用性。
-
-**范围**：
-
-- 在 M17 结束前轮换 seed，使 seed 包含 DT 精化器；再用 DT 语法迁移编译器模块（从 Core/Elab 周边开始，逐步扩大）。
-- 使用索引类型/隐式参数/接口/证明表达关键不变量（如 de Bruijn 索引、上下文良构）；可选证明关键引理（substitution/weakening 等），不承诺完整验证。
-- seed/多文件 fixed point、性能预算、旧测试回归。
-
-**验收**：编译器能从 seed 构建；stage1 == stage2；性能可接受；DT 编译器源码通过自身检查；旧 HM 功能/测试不回归；文档记录迁移范围与未验证部分。
-
-**前置**：M16/M17；seed rotation 完成。**风险**：最高；可能暴露 DT 性能/终止性/擦除问题。**决策闸门**：若 DT 仍不可用/性能不可接受，保留 HM 编译器并只把 DT 作为用户语言，不强行全量迁移。
 
 ## 后续大阶段（M19–M23）
 
@@ -179,19 +148,22 @@
 
 主序列：
 
-**M12.7（已完成）→ M13（已完成）→ M12.8（已完成）→ M14（已完成）→ M15 → M16 → M17 → M18**
+**M12.7 → M13 → M12.8 → M14 → M15 → M16 → M17 → M18（全部已完成）→ M19 / M20 → M21 → M22 / M23**
 
-- **M12.7 / M13 / M12.8 / M14 已完成**：先删除无法支持 DT 的第二条 codegen（缩小
-  TCB、简化测试/CLI），再落地 Core TT + 精化器 + `--dt` 单文件路径，随后完成标准库/
-  编译器命名空间收敛、`Prelude` 自动导入与 `.output` 包级构建，最后加入索引归纳族与
-  依赖模式匹配、解除递归定义限制；DT 主线进入 M15（隐式参数、接口与洞）。
-- **M13 → M14 是核心**，难以并行（已完成）；M15 的可用性工作可在 M14 尾部启动。
-- **M16 收口健全性/性能**；**M17 可与 M16 重叠**；**M18 是最高风险决策点**。
-- **M19 / M20 可在 M15 后并行**；**M21 在 M16/M18 后决策**；**M22 贯穿**；**M23 在 M19/M21 后**。
+- **M12.7–M14 已完成**：先删除无法支持 DT 的第二条 codegen（缩小 TCB、简化测试/CLI），
+  再落地 Core TT + 精化器 + `--dt` 单文件路径，随后完成标准库/编译器命名空间收敛、
+  `Prelude` 自动导入与 `.output` 包级构建，最后加入索引归纳族与依赖模式匹配。
+- **M15–M18 已完成**：隐式参数/接口/洞 → 终止性与覆盖性 → DT 工具链（`vuna goal`、
+  LSP、doc）→ 自举迁移决策（seed rotation + 不变量验证，本体暂不迁移）。
+- **M19 / M20 可并行**；**M21 在 M18 后决策**；**M22 贯穿**；**M23 在 M19/M21 后**。
+- DT 主线后续两项前置工作见「下一步 / 待办」：**DT 多文件与包集成**、
+  **完整擦除分析**——它们是「编译器本体迁 DT」的前置条件。
 
 替代路径：
 
 - 只做 GADT/类型级编程：M13–M14 可裁剪，M15–M18 后移。
+- 优先大程序模块化：M20 提前并行。
+- 优先实用效应：M19 并行，不阻塞 DT 主线。
 - 优先大程序模块化：M20 提前到 M14/M15 之后并行。
 - 优先实用效应：M19 在 M15 后并行，不阻塞 DT 主线。
 
@@ -222,46 +194,3 @@
 - 大型标准库扩张 → M22/持续轨道。
 - 包 registry 与远程依赖 → M22（DT 核心稳定后）。
 - 线性类型与依赖类型之外的类型系统研究 → 研究储备。
-
-## 附录：M14 验收明细（已完成，可删除）
-
-按维护规则，已完成阶段最终收敛为一句话摘要（已写入上方「已完成」列表）；这里保留
-M14 的验收清单供核对，确认后可整段删除。
-
-### M14：索引族与依赖模式匹配（已完成）
-
-**目标**：支持索引归纳族（Vec/Fin/Eq 等）与依赖模式匹配。
-
-**状态**：已完成（DT 单文件 `--dt` 路径；split/包集成按硬约束延后到 M17）。
-
-**范围**：
-
-- Surface/Core：`data F : <kind> where`（kind 箭头个数 = 族参数 arity）、带显式
-  telescope 的构造器、构造子应用；类型级 `Nat` / 构造器归约（靠 delta 展开，非专门
-  类型级求值）。
-- 依赖模式匹配：`case` 对索引做 unification、不可达分支/不可能情况；基础 coverage
-  检查；`with`/`rewrite` 未做（留研究储备）。
-- 类型级递归限制：暂用结构化递归/燃料限制（`defaultFuel = 512`），完整 termination
-  留 M16。
-- Codegen：运行时族 → OCaml 变体（只有宇宙域族参数成为类型参数，索引作为构造子字段
-  保留），`TCon` → 构造子应用，`TCase` → `match`；SCC 分组生成 `let rec ... and ...`。
-- 测试：Vec length/append/head、Fin 安全索引、Eq 的 sym/trans；不可能情况正反例。
-
-**验收**（逐条）：
-
-- [x] Vec/Fin/Eq 例子通过核心求值器（`interp --dt`）+ typed codegen（`compile --dt`）：
-  `test/corpus/dt/09_nat` / `10_vec` / `11_fin` / `12_eq`。
-- [x] 不可能情况正确拒绝：源码写出的不可满足分支报
-  `DT: this branch is impossible (index constraints are unsatisfiable)`；省略的
-  不可满足分支合法（`vhead` 只写 `Cons`）；非穷尽 case 报
-  `DT: case is not exhaustive: missing <C>`；反例在 `test/corpus/dt_err/`。
-- [x] 旧 HM 零回归：interp + typed + split 三路径语义与产物不变，DT 仍是 `--dt`
-  单文件 opt-in。
-- [x] 编译器自检 / fixed point / `nix flake check` 通过（M14 合并前 Lead 验证）。
-- [x] split 回退显式记录：DT 的 split / 包集成按硬约束延后到 M17，M14 只做单文件
-  `--dt`；当前 `--dt` 不接受 `--root` / 包目录，`build` / `seed` 不支持 `--dt`，
-  `build --split` 对 DT 无专门回退。
-
-**前置**：M13（已完成）。**风险**：依赖模式匹配/索引 unification；类型级递归；
-与现有 ADT/codegen 的整合。**设计闸门**：先定索引族 core 表示、模式匹配 unifier、
-coverage 规则（已完成，落地记录见 [dt-core.md](dt-core.md) §11–§23）。

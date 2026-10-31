@@ -11,7 +11,6 @@
    [`docs/dt-core.md`](docs/dt-core.md)、[`docs/history.md`](docs/history.md)。
 
 **定位符号**（首选 `Vuna.Index` 工具模块；本地 `vuna` 若早于 Index 落地，先重建）：
-
 ```console
 vuna map                                        # 模块总览（按包分组，字节数/声明数）
 vuna map --modules                              # 扁平模块清单
@@ -20,9 +19,7 @@ vuna map --impact Vuna.Compiler.Loader.loadProgram  # 引用者模块 + 建议�
 vuna api Vuna.Compiler.Loader                   # 某模块的签名面（含注释与行号）
 ```
 
-索引缓存在 `.local/index/`（gitignored），按 mtime+size 自动判新鲜度；兜底用 `grep -n` 定位。
-
-**不要做的事**：通读全仓；读 `seed/`（生成物，1.2MB OCaml）或 `docs/api.md`（生成物）。
+**不要做的事**：通读全仓；读 `seed/` 或 `docs/api.md`（生成物）。
 
 ## 编译器选取规则
 

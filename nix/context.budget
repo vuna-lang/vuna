@@ -11,9 +11,11 @@
 #   - 全仓 `vuna fmt` 后重新标定：格式化把多行 case 折行合并，
 #     Typecheck.vuna 2877 → 2529 行，max_module_lines 随之下调到 2540；
 #     文档侧数字按实测收紧到接近现值（留极小余量）。
-coldstart_bytes 32400
-agents_lines 112
-arch_lines 201
+#   - M15–M18：AGENTS 导航加 DT 工具链条目、architecture 补 DT 入口符号与 34–35 段，
+#     同时压缩了重复示例；按实测下调到 32360 / 109 / 200 / 200 / 168 / 2540。
+coldstart_bytes 32360
+agents_lines 109
+arch_lines 200
 readme_lines 200
 max_ref_lines 168
 max_module_lines 2540

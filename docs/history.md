@@ -57,6 +57,30 @@ git 历史里）。各里程碑对应的模块与设计见 [docs/architecture.md
   分支 `failwith`）；新增 `test/corpus/dt/09_nat` / `10_vec` / `11_fin` / `12_eq`
   正例（输出 5 / 4 / 7 / 7）与 `dt_err` 反例；隐式索引推断留 M15；仍为单文件
   `--dt` opt-in，split/包集成留 M17；
+- M15：隐式参数、接口与洞——元变量上下文（解记录创建深度，`convEc` 复核作用域逃逸，
+  取代 M13 的「闭合解」限制）、隐式索引推断（`vapp`/`three` 免写族参数）、
+  trait/instance 字典编码（`Dict_C` / `MkDict_C`）+ 方法投影（签名 + 定义体）+
+  实例搜索（按头统一并写回元变量解，缺失/歧义明确诊断）、洞目标显示
+  （`DT: unsolved hole <loc> with goal <ty>`）；新增夹具 `13_iface` / `14_solve` / `15_goal`；
+- M16：终止性与覆盖性——surface AST 上的结构化递归终止性检查（自递归调用必须有实参
+  是同一形参的真子项；`plus`/`vlen` 通过，`loop n = loop n` 被拒，文案
+  `DT: cannot prove termination of <f>`）；覆盖性边界固定（嵌套模式/多 clause 仍不支持）；
+  索引擦除分析落地为**诊断级**（`eraseIndexMask`）——探测确认索引不能无条件擦：`vlen`
+  把长度索引当递归参数传下去，运行时真被读，安全擦除需整程序使用分析；夹具
+  `16_total` / `17_erase` 与 `16_nonterm` / `17_nested_total`；
+- M17：DT 工具链——`vuna goal <file.vuna>` 列出洞的位置/目标类型/上下文
+  （`Elab.goalsOfProgram`）；`vuna lsp`（JSON-RPC 2.0 over stdio：initialize/shutdown/
+  exit、didOpen/didChange/didClose Full 同步、publishDiagnostics（0-based range）、
+  DT 洞 hover；未实现 method 显式返回空结果）；`lib/Vuna/Json.vuna` 最小 JSON 编解码；
+  `test/corpus/lsp/smoke.sh` 27 项断言；`vuna doc` 可渲染接口与隐式签名；`Lsp`/`Json`
+  加入 TCB forbidden 清单；新增 `docs/reference/dt-tooling.md`；
+- M18：自举迁移决策——seed rotation 让 M15–M17 的 DT 精化器进入信任锚点
+  （stage1 == stage2 逐字节一致，seed 仍 31 个模块）；用 DT 表达编译器不变量
+  （`test/corpus/dt/18_ctx.vuna`：`Ctx a (Succ n)` 静态排除越界访问）；健全性修复：
+  `unifyIdx` 燃料耗尽从静默成功改为硬错误
+  `DT: index unification ran out of reduction fuel`；**决策：编译器本体暂不全量迁移**
+  （擦除未完成、DT 仍单文件、收益集中在 Core/Elab），前置条件见
+  `docs/reference/m18-migration.md`；metrics 重新标定；新增 `docs/reference/m16-design.md`；
 - 早期 OCaml 外部编译器 `vunax` 已完成使命并删除（M6 完成后删除，历史可从 git log 找到）。
 
 ## 已完成里程碑细节

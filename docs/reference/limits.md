@@ -18,11 +18,17 @@
   （不回退）；typed codegen 的**单文件**路径仍保留：`vuna compile`、测试/调试与包级
   codegen 不支持的构造使用单文件产物；优化仍归 ocamlopt（M12 不做 vuna typed IR）；
   runtime prelude 在分离编译中完整保留；
-- `do` / Monad / IO 组合子已在 M11 实现；DT（依赖类型）M13 起步、M14 落地索引族：
-  `--dt` 单文件路径（Core TT + 精化器 + 擦除 codegen + `interp --dt`），M14 加入
-  `data` 索引归纳族与依赖 `case`、解除递归定义限制；仍无隐式索引推断 / 高阶元变量 /
-  终止性与完整擦除分析，仍不接入 split / 包模式 / `import`。完整 DT 主线见
-  [docs/roadmap.md](../roadmap.md) 与 [docs/dt-core.md](../dt-core.md)；
+- `do` / Monad / IO 组合子已在 M11 实现；DT（依赖类型）M13 起步、M14 索引族、M15 隐式/
+  接口/洞、M16 终止性、M17 工具链、M18 自举决策：`--dt` 单文件路径（Core TT + 精化器 +
+  擦除 codegen + `interp --dt` + `vuna goal` + `vuna lsp`）。**仍存的 DT 边界**：
+  - 仍是**单文件** opt-in，不接入 `import` / split / 包模式 / `build` / `seed`；
+  - **索引保留运行时表示**（完整擦除需整程序使用分析，见
+    [m16-design.md](m16-design.md) §3）；
+  - **互递归与跨调用 size-change 不查**（终止性只做逐调用结构下降，可能放过死循环程序）；
+  - 嵌套模式、多 clause 函数、多参数接口仍不支持；
+  - 高阶/开放元变量解不支持（作用域逃逸会被拒）。
+  完整 DT 主线见 [docs/roadmap.md](../roadmap.md)、设计边界见
+  [docs/dt-core.md](../dt-core.md)、工具链见 [dt-tooling.md](dt-tooling.md)；
 - M12 限制：分离编译的*生成*阶段仍是整程序分析，但经过 M12.5 性能修复后与单文件
   编译同量级（约 2s）；增量收益体现在 ocamlopt 只重编译受影响模块（`build.sh`）；
   seed 多文件（`.ml/.mli` 文件集）fixed point 逐字节比较；分离编译的

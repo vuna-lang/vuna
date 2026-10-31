@@ -81,9 +81,7 @@ HM 路径的任何改动都不应该需要动这里，反之亦然。
 
 **入口符号**：
 - `Vuna.Compiler.Dt.dtCheckFile` / `dtCompileFile` / `dtEvalFile`（单文件 facade）
-- `Vuna.Compiler.Elab.elabProgram` / `elabProgramFull`（M15 起返回洞目标与解表）
-- `Vuna.Compiler.Elab.goalsOfProgram`（洞目标查询，供 `vuna goal` 与 LSP hover）
-- `Vuna.Compiler.Elab.checkTerminationDecls`（M16 结构化递归终止性）
+- `Vuna.Compiler.Elab.elabProgram` / `elabProgramFull`（M15 起带洞目标与解表）；`goalsOfProgram` 供 `vuna goal` 与 LSP hover；`checkTerminationDecls` 做 M16 终止性
 - `Vuna.Compiler.Core.eval` / `quote` / `conv` / `normalize` / `defaultFuel`
 - `Vuna.Compiler.CoreCodegen.checkDtProgram` / `generateDtProgram`
 - 经 `Vuna.Compiler.Compile.compileFileDt` / `checkFileDt` 与 `Vuna.Compiler.CompilerCli`
@@ -95,8 +93,7 @@ HM 路径的任何改动都不应该需要动这里，反之亦然。
 **通常连带改动**：`Core`（Term/Value 构造子）→ `Elab`（精化/覆盖率）→
 `CoreCodegen`（擦除与生成）三处必须同步；`docs/dt-core.md` 记录设计边界。
 
-**建议测试标签**：第 34–35 段（`corpus/dt` 17 个正例、`corpus/dt_err` 17 个反例，
-`interp --dt` / `check --dt` / `compile --dt` 三路）。
+**建议测试标签**：第 34–35 段（`corpus/dt` 18 个正例、`corpus/dt_err` 17 个反例，三路 `interp`/`check`/`compile --dt`）。
 
 ## 3. 包与 workspace：Toml → Manifest → Pkg → Loader
 
