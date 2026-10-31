@@ -9,7 +9,6 @@ module Vuna.Repl (runRepl) where
 --     loader / 类型检查 / 降级 / 解释器路径（因此 REPL 支持模块、记录、trait、do）。
 --   - `:q`/`:quit` 退出，`:help` 帮助，`:reset` 清空缓冲。
 -- 限制：一次只能输入一行（多行定义/表达式暂不支持）。
-
 import Vuna.Compiler.Common
 import Vuna.Compiler.Ast
 import Vuna.Compiler.Pkg
@@ -22,57 +21,68 @@ replPrompt = "vuna> "
 
 replHelp =
   "命令：\n"
-  ++ "  :help    显示帮助\n"
-  ++ "  :reset   清空已输入的定义与 import\n"
-  ++ "  :quit    退出（同 Ctrl-D）\n"
-  ++ "其他输入按 vuna 源码处理：`import ...` 与定义会被累积，表达式会立即求值。\n"
+    ++ "  :help    显示帮助\n"
+    ++ "  :reset   清空已输入的定义与 import\n"
+    ++ "  :quit    退出（同 Ctrl-D）\n"
+    ++ "其他输入按 vuna 源码处理：`import ...` 与定义会被累积，表达式会立即求值。\n"
 
 runRepl : List Root -> Int
 runRepl roots =
-  let _ = print ("vuna repl\n" ++ replHelp)
+  let
+    _ = print ("vuna repl\n" ++ replHelp)
   in replLoop roots "" ""
 
 replLoop roots imports defs =
-  let _ = print replPrompt
-  in let line = readLine
-     in if line == "" then 0
-        else replHandle roots imports defs (trim line)
+  let
+    _ = print replPrompt
+  in let
+    line = readLine
+  in if line == "" then 0 else replHandle roots imports defs (trim line)
 
-replHandle roots imports defs line =
-  case line of
-    "" => replLoop roots imports defs
-    ":q" => 0
-    ":quit" => 0
-    ":reset" =>
-      let _ = print "已清空\n"
-      in replLoop roots "" ""
-    ":help" =>
-      let _ = print replHelp
-      in replLoop roots imports defs
-    _ =>
-      if startsWith "import " line then replAddImport roots imports defs line
-      else replDefineOrEval roots imports defs line
+replHandle roots imports defs line = case line of
+  "" => replLoop roots imports defs
+  ":q" => 0
+  ":quit" => 0
+  ":reset" =>
+    let
+      _ = print "已清空\n"
+    in replLoop roots "" ""
+  ":help" =>
+    let
+      _ = print replHelp
+    in replLoop roots imports defs
+  _ =>
+    if startsWith "import " line then replAddImport roots imports defs line
+    else replDefineOrEval roots imports defs line
 
 replAddImport roots imports defs line =
-  let imports2 = imports ++ line ++ "\n"
+  let
+    imports2 = imports ++ line ++ "\n"
   in case parseSource replTempFile (imports2 ++ defs) of
-       Err e => let _ = print ("parse error: " ++ e ++ "\n") in replLoop roots imports defs
-       Ok _ => replLoop roots imports2 defs
+    Err e =>
+      let
+        _ = print ("parse error: " ++ e ++ "\n")
+      in replLoop roots imports defs
+    Ok _ => replLoop roots imports2 defs
 
-replDefineOrEval roots imports defs line =
-  case parseSource replTempFile (imports ++ defs ++ line ++ "\n") of
-    Ok (Source hdr imp decls) =>
-      case hdr of
-        Just md => replEvalExpr roots imports defs line
-        Nothing => replLoop roots imports (defs ++ line ++ "\n")
-    Err e => replEvalExpr roots imports defs line
+replDefineOrEval roots imports defs line = case parseSource replTempFile (imports ++ defs ++ line ++ "\n") of
+  Ok (Source hdr imp decls) => case hdr of
+    Just md => replEvalExpr roots imports defs line
+    Nothing => replLoop roots imports (defs ++ line ++ "\n")
+  Err e => replEvalExpr roots imports defs line
 
-replEvalExpr roots imports defs line =
-  case parseExpressionSource line of
-    Err e => let _ = print ("错误: " ++ e ++ "\n") in replLoop roots imports defs
-    Ok expr =>
-      let program = imports ++ "\n" ++ defs ++ "\nmain = " ++ line ++ "\n"
-      in let _ = writeFile replTempFile program
-         in let output = interpretFile roots replTempFile
-            in let _ = print (output ++ "\n")
-               in replLoop roots imports defs
+replEvalExpr roots imports defs line = case parseExpressionSource line of
+  Err e =>
+    let
+      _ = print ("错误: " ++ e ++ "\n")
+    in replLoop roots imports defs
+  Ok expr =>
+    let
+      program = imports ++ "\n" ++ defs ++ "\nmain = " ++ line ++ "\n"
+    in let
+      _ = writeFile replTempFile program
+    in let
+      output = interpretFile roots replTempFile
+    in let
+      _ = print (output ++ "\n")
+    in replLoop roots imports defs

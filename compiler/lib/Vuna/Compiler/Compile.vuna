@@ -18,10 +18,9 @@ effectiveRoots [] = currentPackageRoots
 effectiveRoots roots = roots
 
 currentPackageRoots : List Root
-currentPackageRoots =
-  case loadPackage "." of
-    Err _ => Nil
-    Ok pkg => packageRoots pkg
+currentPackageRoots = case loadPackage "." of
+  Err _ => []
+  Ok pkg => packageRoots pkg
 
 compileFileTyped roots entry printResult = compileFileTypedIn "" roots entry printResult
 
@@ -48,22 +47,20 @@ checkFileIn entryPkg roots entry = case loadProgram roots entryPkg entry of
 
 -- 库包检查：以 [export].modules 为根，不走 app/Main.vuna。
 checkPackageIn : String -> List Root -> List String -> Result (List String)
-checkPackageIn entryPkg roots names =
-  case loadProjectModules roots entryPkg names of
+checkPackageIn entryPkg roots names = case loadProjectModules roots entryPkg names of
+  Err e => Err e
+  Ok project => case resolveProject project of
     Err e => Err e
-    Ok project =>
-      case resolveProject project of
+    Ok parts =>
+      let
+        flat = append (firstOf parts) (concatMap moduleDeclsOf (secondOf parts))
+      in case checkProgramInfoElab flat of
         Err e => Err e
-        Ok parts =>
-          let flat = append (firstOf parts) (concatMap moduleDeclsOf (secondOf parts))
-          in case checkProgramInfoElab flat of
-               Err e => Err e
-               Ok (Pair globals elabDecls) => Ok (exhaustiveWarningsFor globals elabDecls)
+        Ok (Pair globals elabDecls) => Ok (exhaustiveWarningsFor globals elabDecls)
 
 -- ---------------------------------------------------------------
 -- M13：DT 单文件路径（不经过 Loader；单文件自包含）
 -- ---------------------------------------------------------------
-
 compileFileDt : String -> Bool -> Result String
 compileFileDt entry printResult = dtCompileFile entry printResult
 

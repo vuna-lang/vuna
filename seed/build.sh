@@ -17,7 +17,7 @@ if [ "$clean" -eq 1 ]; then
     if [ -f "$m.mli" ]; then SOURCES="$SOURCES $m.mli"; fi
     SOURCES="$SOURCES $m.ml"
   done
-  ocamlopt $FLAGS -o "$OUT" $SOURCES
+  ocamlopt $FLAGS -I +unix -o "$OUT" unix.cmxa $SOURCES
   echo "built $OUT"
   exit 0
 fi
@@ -37,8 +37,8 @@ compile_mod() {
   done
   if [ "$stale" -eq 1 ]; then
     echo "compile $base"
-    if [ -f "$base.mli" ]; then ocamlopt $FLAGS -c "$base.mli"; fi
-    ocamlopt $FLAGS -c "$base.ml"
+    if [ -f "$base.mli" ]; then ocamlopt $FLAGS -I +unix -c "$base.mli"; fi
+    ocamlopt $FLAGS -I +unix -c "$base.ml"
   fi
 }
 compile_mod Vuna_runtime
@@ -72,5 +72,5 @@ compile_mod Vuna_dCompiler_dSplitCli Vuna_dCompiler_dCompile Vuna_dCompiler_dDt 
 compile_mod Vuna_dCompiler_dProcess Vuna_dCompiler_dSplitCli Vuna_dCompiler_dCompile Vuna_dCompiler_dDt Vuna_dCompiler_dCoreCodegen Vuna_dCompiler_dElab Vuna_dCompiler_dCore Vuna_dCompiler_dTypedCodegen Vuna_dCompiler_dSplit Vuna_dCompiler_dTypecheck Vuna_dCompiler_dLoader Vuna_dCompiler_dBuiltins Vuna_dCompiler_dParser Vuna_dCompiler_dLexer Vuna_dCompiler_dAst Vuna_dCompiler_dPkg Vuna_dCompiler_dManifest Vuna_dCompiler_dToml Vuna_dCompiler_dCommon Prelude Base_dString Base_dResult Base_dIO Base_dList Base_dMaybe Base_dMonad Base_dBool Base_dPair Vuna_runtime
 compile_mod Vuna_dCompiler_dCompilerCli Vuna_dCompiler_dProcess Vuna_dCompiler_dSplitCli Vuna_dCompiler_dCompile Vuna_dCompiler_dDt Vuna_dCompiler_dCoreCodegen Vuna_dCompiler_dElab Vuna_dCompiler_dCore Vuna_dCompiler_dTypedCodegen Vuna_dCompiler_dSplit Vuna_dCompiler_dTypecheck Vuna_dCompiler_dLoader Vuna_dCompiler_dBuiltins Vuna_dCompiler_dParser Vuna_dCompiler_dLexer Vuna_dCompiler_dAst Vuna_dCompiler_dPkg Vuna_dCompiler_dManifest Vuna_dCompiler_dToml Vuna_dCompiler_dCommon Prelude Base_dString Base_dResult Base_dIO Base_dList Base_dMaybe Base_dMonad Base_dBool Base_dPair Vuna_runtime
 compile_mod Main Vuna_dCompiler_dCompilerCli Vuna_dCompiler_dProcess Vuna_dCompiler_dSplitCli Vuna_dCompiler_dCompile Vuna_dCompiler_dDt Vuna_dCompiler_dCoreCodegen Vuna_dCompiler_dElab Vuna_dCompiler_dCore Vuna_dCompiler_dTypedCodegen Vuna_dCompiler_dSplit Vuna_dCompiler_dTypecheck Vuna_dCompiler_dLoader Vuna_dCompiler_dBuiltins Vuna_dCompiler_dParser Vuna_dCompiler_dLexer Vuna_dCompiler_dAst Vuna_dCompiler_dPkg Vuna_dCompiler_dManifest Vuna_dCompiler_dToml Vuna_dCompiler_dCommon Prelude Base_dString Base_dResult Base_dIO Base_dList Base_dMaybe Base_dMonad Base_dBool Base_dPair Vuna_runtime
-ocamlopt $FLAGS -o "$OUT" Vuna_runtime.cmx Base_dPair.cmx Base_dBool.cmx Base_dMonad.cmx Base_dMaybe.cmx Base_dList.cmx Base_dIO.cmx Base_dResult.cmx Base_dString.cmx Prelude.cmx Vuna_dCompiler_dCommon.cmx Vuna_dCompiler_dToml.cmx Vuna_dCompiler_dManifest.cmx Vuna_dCompiler_dPkg.cmx Vuna_dCompiler_dAst.cmx Vuna_dCompiler_dLexer.cmx Vuna_dCompiler_dParser.cmx Vuna_dCompiler_dBuiltins.cmx Vuna_dCompiler_dLoader.cmx Vuna_dCompiler_dTypecheck.cmx Vuna_dCompiler_dSplit.cmx Vuna_dCompiler_dTypedCodegen.cmx Vuna_dCompiler_dCore.cmx Vuna_dCompiler_dElab.cmx Vuna_dCompiler_dCoreCodegen.cmx Vuna_dCompiler_dDt.cmx Vuna_dCompiler_dCompile.cmx Vuna_dCompiler_dSplitCli.cmx Vuna_dCompiler_dProcess.cmx Vuna_dCompiler_dCompilerCli.cmx Main.cmx
+ocamlopt $FLAGS -I +unix -o "$OUT" unix.cmxa Vuna_runtime.cmx Base_dPair.cmx Base_dBool.cmx Base_dMonad.cmx Base_dMaybe.cmx Base_dList.cmx Base_dIO.cmx Base_dResult.cmx Base_dString.cmx Prelude.cmx Vuna_dCompiler_dCommon.cmx Vuna_dCompiler_dToml.cmx Vuna_dCompiler_dManifest.cmx Vuna_dCompiler_dPkg.cmx Vuna_dCompiler_dAst.cmx Vuna_dCompiler_dLexer.cmx Vuna_dCompiler_dParser.cmx Vuna_dCompiler_dBuiltins.cmx Vuna_dCompiler_dLoader.cmx Vuna_dCompiler_dTypecheck.cmx Vuna_dCompiler_dSplit.cmx Vuna_dCompiler_dTypedCodegen.cmx Vuna_dCompiler_dCore.cmx Vuna_dCompiler_dElab.cmx Vuna_dCompiler_dCoreCodegen.cmx Vuna_dCompiler_dDt.cmx Vuna_dCompiler_dCompile.cmx Vuna_dCompiler_dSplitCli.cmx Vuna_dCompiler_dProcess.cmx Vuna_dCompiler_dCompilerCli.cmx Main.cmx
 echo "built $OUT"

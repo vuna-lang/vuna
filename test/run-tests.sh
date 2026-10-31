@@ -60,7 +60,7 @@ compile_and_run_roots() { # name compiler entry expected root...
     bad "$name compile output" "" "$compile_output"
     return
   fi
-  if ! "$OCAMLOPT" -w -a -o "$exe" "$out" >"$tmp/ocamlopt.log" 2>&1; then
+  if ! "$OCAMLOPT" -w -a -I +unix -o "$exe" unix.cmxa "$out" >"$tmp/ocamlopt.log" 2>&1; then
     bad "$name ocamlopt" "" "$(cat "$tmp/ocamlopt.log")"
     return
   fi
@@ -79,6 +79,7 @@ for file in corpus/run/*.vuna; do
   extra=""
   case "$file" in
     *16_file_exists*) extra="--root ../base/lib" ;;
+    *17_file_meta*) extra="--root ../base/lib" ;;
   esac
   actual=$("$VUNA" interp $extra "$file" 2>&1)
   check_eq "$file (interp)" "$expected" "$actual"
@@ -141,7 +142,7 @@ for file in corpus/type_ok/*.vuna; do
     bad "$file (typecheck)" "exit 0" "$type_out"
   elif [ -n "$type_out" ]; then
     bad "$file (typecheck output)" "" "$type_out"
-  elif ! "$OCAMLOPT" -w -a -o "$tmp/typed.exe" "$tmp/typed.ml" >"$tmp/typed.log" 2>&1; then
+  elif ! "$OCAMLOPT" -w -a -I +unix -o "$tmp/typed.exe" unix.cmxa "$tmp/typed.ml" >"$tmp/typed.log" 2>&1; then
     bad "$file (typed ocamlopt)" "" "$(cat "$tmp/typed.log")"
   else
     actual=$("$tmp/typed.exe" 2>&1)
@@ -169,7 +170,7 @@ for dir in corpus/type_modules/0*; do
     bad "$dir (module typecheck)" "exit 0" "$tm_out"
   elif [ -n "$tm_out" ]; then
     bad "$dir (module typecheck output)" "" "$tm_out"
-  elif ! "$OCAMLOPT" -w -a -o "$tmp/tm.exe" "$tmp/tm.ml" >"$tmp/tm.log" 2>&1; then
+  elif ! "$OCAMLOPT" -w -a -I +unix -o "$tmp/tm.exe" unix.cmxa "$tmp/tm.ml" >"$tmp/tm.log" 2>&1; then
     bad "$dir (module typed ocamlopt)" "" "$(cat "$tmp/tm.log")"
   else
     actual=$("$tmp/tm.exe" 2>&1)
@@ -198,7 +199,7 @@ for file in corpus/typed_ok/*.vuna; do
     bad "$file (typed codegen)" "exit 0" "$typed_out"
   elif [ -n "$typed_out" ]; then
     bad "$file (typed codegen output)" "" "$typed_out"
-  elif ! "$OCAMLOPT" -w -a -o "$tmp/typedgen.exe" "$tmp/typedgen.ml" >"$tmp/typedgen.log" 2>&1; then
+  elif ! "$OCAMLOPT" -w -a -I +unix -o "$tmp/typedgen.exe" unix.cmxa "$tmp/typedgen.ml" >"$tmp/typedgen.log" 2>&1; then
     bad "$file (typed ocamlopt)" "" "$(cat "$tmp/typedgen.log")"
   else
     actual=$("$tmp/typedgen.exe" 2>&1)
@@ -214,7 +215,7 @@ for dir in corpus/modules/[012][0-9]_*; do
     bad "$dir (typed module codegen)" "exit 0" "$typed_out"
   elif [ -n "$typed_out" ]; then
     bad "$dir (typed module codegen output)" "" "$typed_out"
-  elif ! "$OCAMLOPT" -w -a -o "$tmp/typedmod.exe" "$tmp/typedmod.ml" >"$tmp/typedmod.log" 2>&1; then
+  elif ! "$OCAMLOPT" -w -a -I +unix -o "$tmp/typedmod.exe" unix.cmxa "$tmp/typedmod.ml" >"$tmp/typedmod.log" 2>&1; then
     bad "$dir (typed module ocamlopt)" "" "$(cat "$tmp/typedmod.log")"
   else
     actual=$("$tmp/typedmod.exe" 2>&1)
@@ -302,7 +303,7 @@ if [ "$m9_interp_code" -ne 0 ]; then ok; else bad "m9 interp runtime exit" "non-
 rm -f "$tmp/m9/loc.ml" "$tmp/m9/loc.exe"
 if ! "$VUNA" compile "$tmp/m9/loc.vuna" "$tmp/m9/loc.ml" >/dev/null 2>&1; then
   bad "m9 typed codegen" "exit 0" "compile failed"
-elif ! "$OCAMLOPT" -w -a -o "$tmp/m9/loc.exe" "$tmp/m9/loc.ml" >/dev/null 2>&1; then
+elif ! "$OCAMLOPT" -w -a -I +unix -o "$tmp/m9/loc.exe" unix.cmxa "$tmp/m9/loc.ml" >/dev/null 2>&1; then
   bad "m9 typed ocamlopt" "" "ocamlopt failed"
 else
   loc_c=$("$tmp/m9/loc.exe" 2>&1)
@@ -396,7 +397,7 @@ for file in corpus/records/0*.vuna; do
     bad "$file (record typed codegen)" "exit 0" "$rec_out"
   elif [ -n "$rec_out" ]; then
     bad "$file (record typed codegen output)" "" "$rec_out"
-  elif ! "$OCAMLOPT" -w -a -o "$tmp/rec_typed.exe" "$tmp/rec_typed.ml" >"$tmp/rec_typed.log" 2>&1; then
+  elif ! "$OCAMLOPT" -w -a -I +unix -o "$tmp/rec_typed.exe" unix.cmxa "$tmp/rec_typed.ml" >"$tmp/rec_typed.log" 2>&1; then
     bad "$file (record typed ocamlopt)" "" "$(cat "$tmp/rec_typed.log")"
   else
     actual=$("$tmp/rec_typed.exe" 2>&1)
@@ -465,7 +466,7 @@ for file in corpus/traits/[01][0-9]_*.vuna; do
     bad "$file (trait typed codegen)" "exit 0" "$tr_out"
   elif [ -n "$tr_out" ]; then
     bad "$file (trait typed codegen output)" "" "$tr_out"
-  elif ! "$OCAMLOPT" -w -a -o "$tmp/tr_typed.exe" "$tmp/tr_typed.ml" >"$tmp/tr_typed.log" 2>&1; then
+  elif ! "$OCAMLOPT" -w -a -I +unix -o "$tmp/tr_typed.exe" unix.cmxa "$tmp/tr_typed.ml" >"$tmp/tr_typed.log" 2>&1; then
     bad "$file (trait typed ocamlopt)" "" "$(cat "$tmp/tr_typed.log")"
   else
     actual=$("$tmp/tr_typed.exe" 2>&1)
@@ -534,7 +535,7 @@ for file in corpus/monad/[01][0-9]_*.vuna; do
     bad "$file (monad typed codegen)" "exit 0" "$mon_out"
   elif [ -n "$mon_out" ]; then
     bad "$file (monad typed codegen output)" "" "$mon_out"
-  elif ! "$OCAMLOPT" -w -a -o "$tmp/monad_typed.exe" "$tmp/monad_typed.ml" >"$tmp/monad_typed.log" 2>&1; then
+  elif ! "$OCAMLOPT" -w -a -I +unix -o "$tmp/monad_typed.exe" unix.cmxa "$tmp/monad_typed.ml" >"$tmp/monad_typed.log" 2>&1; then
     bad "$file (monad typed ocamlopt)" "" "$(cat "$tmp/monad_typed.log")"
   else
     actual=$("$tmp/monad_typed.exe" 2>&1)
@@ -572,7 +573,7 @@ for file in corpus/stdlib/[01][0-9]_*.vuna; do
     bad "$file (stdlib typed codegen)" "exit 0" "$std_out"
   elif [ -n "$std_out" ]; then
     bad "$file (stdlib typed codegen output)" "" "$std_out"
-  elif ! "$OCAMLOPT" -w -a -o "$tmp/stdlib_typed.exe" "$tmp/stdlib_typed.ml" >"$tmp/stdlib_typed.log" 2>&1; then
+  elif ! "$OCAMLOPT" -w -a -I +unix -o "$tmp/stdlib_typed.exe" unix.cmxa "$tmp/stdlib_typed.ml" >"$tmp/stdlib_typed.log" 2>&1; then
     bad "$file (stdlib typed ocamlopt)" "" "$(cat "$tmp/stdlib_typed.log")"
   else
     actual=$("$tmp/stdlib_typed.exe" 2>&1)
@@ -716,7 +717,7 @@ for file in corpus/dt/*.vuna; do
     bad "$file (dt compile)" "exit 0" "$dt_out"
   elif [ -n "$dt_out" ]; then
     bad "$file (dt compile output)" "" "$dt_out"
-  elif ! "$OCAMLOPT" -w -a -o "$tmp/dt.exe" "$tmp/dt.ml" >"$tmp/dt.log" 2>&1; then
+  elif ! "$OCAMLOPT" -w -a -I +unix -o "$tmp/dt.exe" unix.cmxa "$tmp/dt.ml" >"$tmp/dt.log" 2>&1; then
     bad "$file (dt ocamlopt)" "" "$(cat "$tmp/dt.log")"
   else
     actual=$("$tmp/dt.exe" 2>&1)

@@ -2,7 +2,6 @@ module Base.Map (Map, empty, insert, lookup, remove, keys, values, size, fromLis
 
 -- Base.Map：基于 assoc list 的抽象映射类型。
 -- 模块头只导出 Map（不含构造器 MkMap），跨模块只能通过 API 使用。
-
 import Base.List
 import Base.Pair
 import Base.Maybe
@@ -11,7 +10,7 @@ data Map k v : Type where
   MkMap : List (Pair k v) -> Map k v
 
 empty : Map k v
-empty = MkMap Nil
+empty = MkMap []
 
 insert : k -> v -> Map k v -> Map k v
 insert key value (MkMap pairs) = MkMap (_insertPair key value pairs)
@@ -38,17 +37,15 @@ toList : Map k v -> List (Pair k v)
 toList (MkMap pairs) = pairs
 
 _insertPair : k -> v -> List (Pair k v) -> List (Pair k v)
-_insertPair key value Nil = Cons (Pair key value) Nil
-_insertPair key value (Cons (Pair k2 v2) rest) =
-  if k2 == key then Cons (Pair key value) rest
-  else Cons (Pair k2 v2) (_insertPair key value rest)
+_insertPair key value [] = [Pair key value]
+_insertPair key value ((Pair k2 v2) :: rest) =
+  if k2 == key then Pair key value :: rest else Pair k2 v2 :: _insertPair key value rest
 
 _lookupPair : k -> List (Pair k v) -> Maybe v
-_lookupPair key Nil = Nothing
-_lookupPair key (Cons (Pair k2 v2) rest) =
-  if k2 == key then Just v2 else _lookupPair key rest
+_lookupPair key [] = Nothing
+_lookupPair key ((Pair k2 v2) :: rest) = if k2 == key then Just v2 else _lookupPair key rest
 
 _removePair : k -> List (Pair k v) -> List (Pair k v)
-_removePair key Nil = Nil
-_removePair key (Cons (Pair k2 v2) rest) =
-  if k2 == key then rest else Cons (Pair k2 v2) (_removePair key rest)
+_removePair key [] = []
+_removePair key ((Pair k2 v2) :: rest) =
+  if k2 == key then rest else Pair k2 v2 :: _removePair key rest

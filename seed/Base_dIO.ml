@@ -13,12 +13,12 @@ let v_Base_dIO_dioPure = fun x -> C_Base_dIO_dMkIO (fun w -> x)
 let v_Base_dIO_dioBind = fun a0 a1 -> match (a0, a1) with
   | (C_Base_dIO_dMkIO (f), k) -> C_Base_dIO_dMkIO (fun w -> (match k (f w) with
   | C_Base_dIO_dMkIO (g) -> g w
-  | _ -> vuna_fail "base/lib/Base/IO.vuna" 24 15 ("case pattern match failure")))
-  | _ -> vuna_fail "base/lib/Base/IO.vuna" 23 1 ("no matching clause for Base.IO.ioBind")
+  | _ -> vuna_fail "base/lib/Base/IO.vuna" 21 33 ("case pattern match failure")))
+  | _ -> vuna_fail "base/lib/Base/IO.vuna" 21 1 ("no matching clause for Base.IO.ioBind")
 
 let v_Base_dIO_dioFmap = fun a0 a1 -> match (a0, a1) with
   | (f, C_Base_dIO_dMkIO (g)) -> C_Base_dIO_dMkIO (fun w -> f (g w))
-  | _ -> vuna_fail "base/lib/Base/IO.vuna" 28 1 ("no matching clause for Base.IO.ioFmap")
+  | _ -> vuna_fail "base/lib/Base/IO.vuna" 26 1 ("no matching clause for Base.IO.ioFmap")
 
 let v_Base_dIO_dprint = fun s -> C_Base_dIO_dMkIO (fun w -> bi_print s)
 
@@ -39,6 +39,10 @@ let v_Base_dIO_dmakeDir = fun path -> C_Base_dIO_dMkIO (fun w -> bi_make_dir pat
 let v_Base_dIO_dremoveFile = fun path -> C_Base_dIO_dMkIO (fun w -> bi_remove_file path)
 
 let v_Base_dIO_dfileExists = fun path -> C_Base_dIO_dMkIO (fun w -> bi_file_exists path)
+
+let v_Base_dIO_dfileMtime = fun path -> C_Base_dIO_dMkIO (fun w -> bi_file_mtime path)
+
+let v_Base_dIO_dfileSize = fun path -> C_Base_dIO_dMkIO (fun w -> bi_file_size path)
 
 let v_Base_dIO_dgetArgs = fun () -> C_Base_dIO_dMkIO (fun w -> bi_get_args ())
 

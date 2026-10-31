@@ -2,7 +2,6 @@ module Base.Result (Result(..), traverse, andThen, step, mapResult, mapError, wi
 
 -- Base.Result：成功/失败结果类型与组合子（Base 语义迁移 + 常用补充）。
 -- 说明：`step` 处理 `Result (Pair a b)`，因此额外依赖 Base.Pair（叶模块，无环）。
-
 import Base.List
 import Base.Pair
 
@@ -11,41 +10,34 @@ data Result a : Type where
   Err : String -> Result a
 
 traverse : (a -> Result b) -> List a -> Result (List b)
-traverse f Nil = Ok Nil
-traverse f (Cons x xs) =
-  case f x of
+traverse f [] = Ok []
+traverse f (x :: xs) = case f x of
+  Err e => Err e
+  Ok y => case traverse f xs of
     Err e => Err e
-    Ok y =>
-      case traverse f xs of
-        Err e => Err e
-        Ok ys => Ok (Cons y ys)
+    Ok ys => Ok (y :: ys)
 
 andThen : Result a -> (a -> Result b) -> Result b
-andThen r f =
-  case r of
-    Ok x => f x
-    Err e => Err e
+andThen r f = case r of
+  Ok x => f x
+  Err e => Err e
 
 step : Result (Pair a b) -> (a -> b -> Result c) -> Result c
-step r k =
-  case r of
-    Ok (Pair x st) => k x st
-    Err e => Err e
+step r k = case r of
+  Ok (Pair x st) => k x st
+  Err e => Err e
 
 mapResult : (a -> b) -> Result a -> Result b
-mapResult f r =
-  case r of
-    Ok x => Ok (f x)
-    Err e => Err e
+mapResult f r = case r of
+  Ok x => Ok (f x)
+  Err e => Err e
 
 mapError : (String -> String) -> Result a -> Result a
-mapError f r =
-  case r of
-    Ok x => Ok x
-    Err e => Err (f e)
+mapError f r = case r of
+  Ok x => Ok x
+  Err e => Err (f e)
 
 withDefault : a -> Result a -> a
-withDefault d r =
-  case r of
-    Ok x => x
-    Err e => d
+withDefault d r = case r of
+  Ok x => x
+  Err e => d

@@ -5,11 +5,11 @@ let show_Base_dPair_dPair : 'p0 'p1. ('p0 -> string) -> ('p1 -> string) -> ('p0,
   | C_Base_dPair_dPair (f0, f1) -> show_ctor "Pair" [(s0) f0; (s1) f1]
 let v_Base_dPair_dfirstOf = fun a0 -> match a0 with
   | (C_Base_dPair_dPair (a, b)) -> a
-  | _ -> vuna_fail "base/lib/Base/Pair.vuna" 9 1 ("no matching clause for Base.Pair.firstOf")
+  | _ -> vuna_fail "base/lib/Base/Pair.vuna" 8 1 ("no matching clause for Base.Pair.firstOf")
 
 let v_Base_dPair_dsecondOf = fun a0 -> match a0 with
   | (C_Base_dPair_dPair (a, b)) -> b
-  | _ -> vuna_fail "base/lib/Base/Pair.vuna" 12 1 ("no matching clause for Base.Pair.secondOf")
+  | _ -> vuna_fail "base/lib/Base/Pair.vuna" 11 1 ("no matching clause for Base.Pair.secondOf")
 
 let v_vuna_ueq_uBase_uPair_uPair = fun x y -> (match x with
   | C_Base_dPair_dPair (v0, v1) -> (match y with

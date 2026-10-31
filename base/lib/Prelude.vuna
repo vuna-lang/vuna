@@ -1,6 +1,4 @@
-module Prelude (module Base.Pair, module Base.Bool, module Base.List,
-                module Base.Maybe, module Base.Result, module Base.String,
-                module Base.Monad) where
+module Prelude (module Base.Pair, module Base.Bool, module Base.List, module Base.Maybe, module Base.Result, module Base.String, module Base.Monad) where
 
 -- Prelude：默认导入（自动 import）的精选门面。
 --
@@ -8,7 +6,6 @@ module Prelude (module Base.Pair, module Base.Bool, module Base.List,
 -- 刻意不重导出 Base.IO：print/readFile/writeFile/getArgs/exit 与编译器直接
 -- 使用的效果内建同名，若进入隐式 import 会把工具链里的内建调用解析成
 -- Base.IO 的 IO 动作。需要 IO 时显式 `import Base.IO`。
-
 import Base.Pair
 import Base.Bool
 import Base.List

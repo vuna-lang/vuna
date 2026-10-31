@@ -1,7 +1,6 @@
 module Base.Bool (Bool(..), not, and, or, xor, bool) where
 
 -- Base.Bool：布尔类型与逻辑辅助函数。无依赖模块。
-
 data Bool : Type where
   False : Bool
   True : Bool

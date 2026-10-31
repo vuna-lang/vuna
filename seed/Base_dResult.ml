@@ -18,34 +18,34 @@ let rec v_Base_dResult_dtraverse = fun a0 a1 -> match (a0, a1) with
   | C_Base_dResult_dOk (y) -> (match v_Base_dResult_dtraverse f xs with
   | C_Base_dResult_dErr (e) -> C_Base_dResult_dErr (e)
   | C_Base_dResult_dOk (ys) -> C_Base_dResult_dOk ((y) :: (ys))
-  | _ -> vuna_fail "base/lib/Base/Result.vuna" 19 7 ("case pattern match failure"))
-  | _ -> vuna_fail "base/lib/Base/Result.vuna" 16 3 ("case pattern match failure"))
-  | _ -> vuna_fail "base/lib/Base/Result.vuna" 14 1 ("no matching clause for Base.Result.traverse")
+  | _ -> vuna_fail "base/lib/Base/Result.vuna" 16 11 ("case pattern match failure"))
+  | _ -> vuna_fail "base/lib/Base/Result.vuna" 14 24 ("case pattern match failure"))
+  | _ -> vuna_fail "base/lib/Base/Result.vuna" 13 1 ("no matching clause for Base.Result.traverse")
 
 let v_Base_dResult_dandThen = fun r f -> (match r with
   | C_Base_dResult_dOk (x) -> f x
   | C_Base_dResult_dErr (e) -> C_Base_dResult_dErr (e)
-  | _ -> vuna_fail "base/lib/Base/Result.vuna" 25 3 ("case pattern match failure"))
+  | _ -> vuna_fail "base/lib/Base/Result.vuna" 21 15 ("case pattern match failure"))
 
 let v_Base_dResult_dstep = fun r k -> (match r with
   | C_Base_dResult_dOk (C_Base_dPair_dPair (x, st)) -> k x st
   | C_Base_dResult_dErr (e) -> C_Base_dResult_dErr (e)
-  | _ -> vuna_fail "base/lib/Base/Result.vuna" 31 3 ("case pattern match failure"))
+  | _ -> vuna_fail "base/lib/Base/Result.vuna" 26 12 ("case pattern match failure"))
 
 let v_Base_dResult_dmapResult = fun f r -> (match r with
   | C_Base_dResult_dOk (x) -> C_Base_dResult_dOk (f x)
   | C_Base_dResult_dErr (e) -> C_Base_dResult_dErr (e)
-  | _ -> vuna_fail "base/lib/Base/Result.vuna" 37 3 ("case pattern match failure"))
+  | _ -> vuna_fail "base/lib/Base/Result.vuna" 31 17 ("case pattern match failure"))
 
 let v_Base_dResult_dmapError = fun f r -> (match r with
   | C_Base_dResult_dOk (x) -> C_Base_dResult_dOk (x)
   | C_Base_dResult_dErr (e) -> C_Base_dResult_dErr (f e)
-  | _ -> vuna_fail "base/lib/Base/Result.vuna" 43 3 ("case pattern match failure"))
+  | _ -> vuna_fail "base/lib/Base/Result.vuna" 36 16 ("case pattern match failure"))
 
 let v_Base_dResult_dwithDefault = fun d r -> (match r with
   | C_Base_dResult_dOk (x) -> x
   | C_Base_dResult_dErr (e) -> d
-  | _ -> vuna_fail "base/lib/Base/Result.vuna" 49 3 ("case pattern match failure"))
+  | _ -> vuna_fail "base/lib/Base/Result.vuna" 41 19 ("case pattern match failure"))
 
 let v_vuna_ueq_uBase_uResult_uResult = fun x y -> (match x with
   | C_Base_dResult_dOk (v0) -> (match y with

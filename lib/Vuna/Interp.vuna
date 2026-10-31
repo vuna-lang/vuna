@@ -7,7 +7,6 @@ module Vuna.Interp (interpretFile, interpretFileIn) where
 -- `vuna interp` 保留“不检查执行”的调试语义：普通程序直接求值（与 M12.7 之前
 -- 一致，也是删除 `--no-typecheck` 后的替代入口）；只有 record / trait / deriving
 -- 程序必须先类型检查并降级。子句元数一致性是结构性检查，始终先跑。
-
 import Vuna.Compiler.Common
 import Vuna.Compiler.Pkg
 import Vuna.Compiler.Ast
@@ -16,66 +15,58 @@ import Vuna.Compiler.Loader
 import Vuna.Eval
 import Vuna.Compiler.Typecheck
 
-interpret source =
-  case parseSource "<input>" source of
-    Err e => "error: " ++ e
-    Ok (Source hdr imports decls) =>
-      case hdr of
-        Just _ => "error: module header is not allowed in entry file"
-        Nothing =>
-          case imports of
-            Nil => runDecls decls
-            _ => "error: imports are only supported by interpretFile"
+interpret source = case parseSource "<input>" source of
+  Err e => "error: " ++ e
+  Ok (Source hdr imports decls) => case hdr of
+    Just _ => "error: module header is not allowed in entry file"
+    Nothing => case imports of
+      [] => runDecls decls
+      _ => "error: imports are only supported by interpretFile"
 
 interpretFile roots entry = interpretFileIn "" roots entry
 
-interpretFileIn entryPkg roots entry =
-  case loadProgram roots entryPkg entry of
+interpretFileIn entryPkg roots entry = case loadProgram roots entryPkg entry of
+  Err e => "error: " ++ e
+  Ok decls => if programNeedsElab decls then case checkProgramInfoElab decls of
     Err e => "error: " ++ e
-    Ok decls =>
-      if programNeedsElab decls then
-        case checkProgramInfoElab decls of
-          Err e => "error: " ++ e
-          Ok (Pair globals elabDecls) => runDecls elabDecls
-      else
-        case checkClauseArities decls of
-          Err e => "error: " ++ e
-          Ok _ => runDecls decls
+    Ok (Pair globals elabDecls) => runDecls elabDecls
+  else case checkClauseArities decls of
+    Err e => "error: " ++ e
+    Ok _ => runDecls decls
 
 -- ---------------------------------------------------------------
 -- 取消检查的求值路径只需要判断是否会用到 record/trait 降级。
 -- 谓词留在工具链侧（不进 seed 闭包）。
 -- ---------------------------------------------------------------
-
-programNeedsElab Nil = False
-programNeedsElab (Cons d rest) = case d of
+programNeedsElab [] = False
+programNeedsElab (d :: rest) = case d of
   DRecord name params fields derivings sp => True
   DTrait name params methods sp => True
   DInstance iname isDefault head methods sp => True
   DData name params kind ctors derivings sp => case derivings of
-    Nil => programNeedsElab rest
+    [] => programNeedsElab rest
     _ => True
   DFun name pats body sp =>
     if patsNeedElab pats then True else if exprNeedsElab body then True else programNeedsElab rest
   DSig name ty sp => programNeedsElab rest
 
-patsNeedElab Nil = False
-patsNeedElab (Cons p rest) = if patNeedsElab p then True else patsNeedElab rest
+patsNeedElab [] = False
+patsNeedElab (p :: rest) = if patNeedsElab p then True else patsNeedElab rest
 
 patNeedsElab p = case p of
   PRecord name fields sp => True
   PCon name pats sp => patsNeedElab pats
   _ => False
 
-argsNeedElab Nil = False
-argsNeedElab (Cons e rest) = if exprNeedsElab e then True else argsNeedElab rest
+argsNeedElab [] = False
+argsNeedElab (e :: rest) = if exprNeedsElab e then True else argsNeedElab rest
 
-bindsNeedElab Nil = False
-bindsNeedElab (Cons (Pair pat value) rest) =
+bindsNeedElab [] = False
+bindsNeedElab ((Pair pat value) :: rest) =
   if patNeedsElab pat then True else if exprNeedsElab value then True else bindsNeedElab rest
 
-altsNeedElab Nil = False
-altsNeedElab (Cons (Pair pat body) rest) =
+altsNeedElab [] = False
+altsNeedElab ((Pair pat body) :: rest) =
   if patNeedsElab pat then True else if exprNeedsElab body then True else altsNeedElab rest
 
 exprNeedsElab e = case e of

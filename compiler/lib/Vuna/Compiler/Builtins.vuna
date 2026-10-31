@@ -1,7 +1,6 @@
 module Vuna.Compiler.Builtins (builtinArity) where
 
 -- Vuna.Compiler.Builtins：内建函数的名字与元数（供 Loader/Eval 共用）。
-
 import Vuna.Compiler.Common
 
 builtinArity "+" = Just 2
@@ -48,8 +47,9 @@ builtinArity "isDirectory" = Just 1
 builtinArity "makeDir" = Just 1
 builtinArity "removeFile" = Just 1
 builtinArity "fileExists" = Just 1
+builtinArity "fileMtime" = Just 1
+builtinArity "fileSize" = Just 1
 builtinArity "exit" = Just 1
-
 -- 效果原语的内部名字：stdlib Base.IO 用它们实现公开的 IO API；
 -- 普通包不可直接调用（Loader 的 effectful 包级限制覆盖 prim_*）。
 builtinArity "prim_readFile" = Just 1
@@ -62,6 +62,8 @@ builtinArity "prim_isDirectory" = Just 1
 builtinArity "prim_makeDir" = Just 1
 builtinArity "prim_removeFile" = Just 1
 builtinArity "prim_fileExists" = Just 1
+builtinArity "prim_fileMtime" = Just 1
+builtinArity "prim_fileSize" = Just 1
 builtinArity "prim_exit" = Just 1
 builtinArity "prim_runIn" = Just 2
 builtinArity _ = Nothing

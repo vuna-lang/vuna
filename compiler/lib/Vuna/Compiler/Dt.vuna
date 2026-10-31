@@ -35,8 +35,7 @@ dtCompileFile entry printResult =
 -- 核心求值器：精化后用 NbE + delta 求 main 的值并 show（与 codegen 结果对照）。
 dtEvalFile : String -> Result String
 dtEvalFile entry =
-  andThen (dtLoad entry)
-    (\decls => andThen (elabProgram decls) (\program => evalDtMain program))
+  andThen (dtLoad entry) (\decls => andThen (elabProgram decls) (\program => evalDtMain program))
 
 evalDtMain : Pair (List DtData) (List DtDef) -> Result String
 evalDtMain (Pair datas defs) = case findMainDef defs of

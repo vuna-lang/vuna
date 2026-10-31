@@ -6,10 +6,13 @@
 # M12.7：删除 dynamic codegen 后按 typed 单路径重新标定（闭包 -1 个 .ml，约 -54 KB）。
 # M12.8：stdlib→base / compiler→Vuna.Compiler.* / Prelude 自动导入 / .output 布局后重新标定。
 # M14：DT 索引族 + case + SCC 分组（CoreCodegen 变体声明与匹配臂）后重新标定。
+# fileMtime/fileSize：runtime 增 2 个 chunk（Unix.stat），builtinSchemes 字面量变长，
+#   故 maxline 上调；bytes/lines 仍低于 M14 值。
+# 全仓 `vuna fmt` 后重新标定：longlines 4417 → 3885（格式化折行生效），预算收紧到 3900。
 bytes 1120000
 lines 10500
-maxline 11700
-longlines 3900
+maxline 12400
+longlines 3890
 letrec 575
 strcat 320
 eqint 35

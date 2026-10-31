@@ -6,7 +6,6 @@ module Vuna.Compiler.Pkg (Root(..), rawRoot, rootDir, rootName, rootPackage, roo
 -- 本模块用内建 readFile / fileExists 读盘，不做 realpath：路径只做 lexical
 -- 规范化（合并 "//"、消去 "."、".."），循环检测与去重用规范化后的目录字符串。
 -- 包内目录约定：lib/、app/、test/；入口固定 app/Main.vuna。
-
 import Vuna.Compiler.Common
 import Vuna.Compiler.Manifest
 
@@ -47,211 +46,175 @@ packageDir : Package -> String
 packageDir (Package manifest dependencies dir) = dir
 
 packageName : Package -> String
-packageName package =
-  case manifestName (packageManifest package) of
-    Nothing => ""
-    Just name => name
+packageName package = case manifestName (packageManifest package) of
+  Nothing => ""
+  Just name => name
 
 packageExports : Package -> Maybe (List String)
 packageExports package = manifestExports (packageManifest package)
 
 -- ---------------------------------------------------------------- 路径工具
-
-splitSlashChars chars acc seg =
-  case chars of
-    Nil => reverse (Cons (strPack (reverse seg)) acc)
-    Cons c rest =>
-      if c == 47 then splitSlashChars rest (Cons (strPack (reverse seg)) acc) Nil
-      else splitSlashChars rest acc (Cons c seg)
+splitSlashChars chars acc seg = case chars of
+  [] => reverse (strPack (reverse seg) :: acc)
+  c :: rest =>
+    if c == 47 then splitSlashChars rest (strPack (reverse seg) :: acc) []
+    else splitSlashChars rest acc (c :: seg)
 
 splitOnSlash : String -> List String
-splitOnSlash path = splitSlashChars (strUnpack path) Nil Nil
+splitOnSlash path = splitSlashChars (strUnpack path) [] []
 
 -- 把段列表按 lexical 规则折叠；acc 为反向累积的已处理段。
-normalizeParent absolute acc rest =
-  case acc of
-    Nil =>
-      if absolute then normalizeAcc absolute rest Nil
-      else normalizeAcc absolute rest (Cons ".." Nil)
-    Cons prev prevRest =>
-      if prev == ".." then normalizeAcc absolute rest (Cons ".." acc)
-      else normalizeAcc absolute rest prevRest
+normalizeParent absolute acc rest = case acc of
+  [] => if absolute then normalizeAcc absolute rest [] else normalizeAcc absolute rest [".."]
+  prev :: prevRest =>
+    if prev == ".." then normalizeAcc absolute rest (".." :: acc)
+    else normalizeAcc absolute rest prevRest
 
-normalizeAcc absolute segments acc =
-  case segments of
-    Nil => acc
-    Cons seg rest =>
-      case seg of
-        "" => normalizeAcc absolute rest acc
-        "." => normalizeAcc absolute rest acc
-        ".." => normalizeParent absolute acc rest
-        _ => normalizeAcc absolute rest (Cons seg acc)
+normalizeAcc absolute segments acc = case segments of
+  [] => acc
+  seg :: rest => case seg of
+    "" => normalizeAcc absolute rest acc
+    "." => normalizeAcc absolute rest acc
+    ".." => normalizeParent absolute acc rest
+    _ => normalizeAcc absolute rest (seg :: acc)
 
 -- 目录字符串规范化（lexical，不解析符号链接）："a/./b/../c/" -> "a/c"。
 -- 相对路径空结果归一为 "."，绝对路径空结果归一为 "/"。
 normalizeDir : String -> String
-normalizeDir path =
-  if startsWith "/" path then
-    case normalizeAcc True (splitOnSlash path) Nil of
-      Nil => "/"
-      segments => "/" ++ joinSlashes (reverse segments)
-  else
-    case normalizeAcc False (splitOnSlash path) Nil of
-      Nil => "."
-      segments => joinSlashes (reverse segments)
+normalizeDir path = if startsWith "/" path then case normalizeAcc True (splitOnSlash path) [] of
+  [] => "/"
+  segments => "/" ++ joinSlashes (reverse segments)
+else case normalizeAcc False (splitOnSlash path) [] of
+  [] => "."
+  segments => joinSlashes (reverse segments)
 
 -- 依赖路径拼接：绝对路径直接用，相对路径相对 base 目录规范化。
 joinPath : String -> String -> String
 joinPath base rel =
-  if startsWith "/" rel then normalizeDir rel
-  else normalizeDir (base ++ "/" ++ rel)
+  if startsWith "/" rel then normalizeDir rel else normalizeDir (base ++ "/" ++ rel)
 
 -- ---------------------------------------------------------------- manifest
-
 -- path 是 vuna.toml 的路径；缺失时报 `pkg: missing vuna.toml in <目录>`。
 loadManifestAt : String -> Result Manifest
-loadManifestAt path =
-  if fileExists path then
-    case parseManifest path (readFile path) of
-      Err e => Err ("pkg: " ++ e)
-      Ok manifest =>
-        case validateManifest manifest of
-          Err e => Err ("pkg: " ++ e)
-          Ok validated => Ok validated
-  else Err ("pkg: missing vuna.toml in " ++ normalizeDir (manifestDir path))
+loadManifestAt path = if fileExists path then case parseManifest path (readFile path) of
+  Err e => Err ("pkg: " ++ e)
+  Ok manifest => case validateManifest manifest of
+    Err e => Err ("pkg: " ++ e)
+    Ok validated => Ok validated
+else Err ("pkg: missing vuna.toml in " ++ normalizeDir (manifestDir path))
 
-manifestNameString manifest =
-  case manifestName manifest of
-    Nothing => ""
-    Just name => name
+manifestNameString manifest = case manifestName manifest of
+  Nothing => ""
+  Just name => name
 
 -- ---------------------------------------------------------------- 加载包
-
 -- 依赖链栈：每个元素是 (规范化目录, 包名)；只用于循环检测。
-memStackDir dir stack =
-  case stack of
-    Nil => False
-    Cons pair rest => if firstOf pair == dir then True else memStackDir dir rest
+memStackDir dir stack = case stack of
+  [] => False
+  pair :: rest => if firstOf pair == dir then True else memStackDir dir rest
 
-cyclePrefix dir stack =
-  case stack of
-    Nil => Nothing
-    Cons pair rest =>
-      if firstOf pair == dir then Just (Cons pair Nil)
-      else
-        case cyclePrefix dir rest of
-          Nothing => Nothing
-          Just prefix => Just (Cons pair prefix)
+cyclePrefix dir stack = case stack of
+  [] => Nothing
+  pair :: rest => if firstOf pair == dir then Just [pair]
+  else case cyclePrefix dir rest of
+    Nothing => Nothing
+    Just prefix => Just (pair :: prefix)
 
-cycleMessage dir depName stack =
-  case depName of
+cycleMessage dir depName stack = case depName of
+  Nothing => "pkg: dependency cycle at " ++ dir
+  Just dep => case cyclePrefix dir stack of
     Nothing => "pkg: dependency cycle at " ++ dir
-    Just dep =>
-      case cyclePrefix dir stack of
-        Nothing => "pkg: dependency cycle at " ++ dir
-        Just prefix =>
-          "pkg: dependency cycle: "
-          ++ joinArrows (append (map secondOf (reverse prefix)) (Cons dep Nil))
+    Just prefix =>
+      "pkg: dependency cycle: " ++ joinArrows (append (map secondOf (reverse prefix)) [dep])
 
-dependencyNameOk depName actual =
-  case depName of
-    Nothing => True
-    Just expected => expected == actual
+dependencyNameOk depName actual = case depName of
+  Nothing => True
+  Just expected => expected == actual
 
-mismatchMessage depName actual =
-  case depName of
-    Nothing => "pkg: package name mismatch"
-    Just expected =>
-      "pkg: dependency " ++ expected ++ " expects package name "
-      ++ expected ++ " but found " ++ actual
+mismatchMessage depName actual = case depName of
+  Nothing => "pkg: package name mismatch"
+  Just expected =>
+    "pkg: dependency "
+      ++ expected
+      ++ " expects package name "
+      ++ expected
+      ++ " but found "
+      ++ actual
 
-loadDependencyList stack baseDir deps =
-  case deps of
-    Nil => Ok Nil
-    Cons (Pair depName rel) rest =>
-      case loadPackageWalk stack (Just depName) (joinPath baseDir rel) of
-        Err e => Err e
-        Ok dependency =>
-          case loadDependencyList stack baseDir rest of
-            Err e => Err e
-            Ok dependencies => Ok (Cons dependency dependencies)
+loadDependencyList stack baseDir deps = case deps of
+  [] => Ok []
+  (Pair depName rel) :: rest => case loadPackageWalk stack (Just depName) (joinPath baseDir rel) of
+    Err e => Err e
+    Ok dependency => case loadDependencyList stack baseDir rest of
+      Err e => Err e
+      Ok dependencies => Ok (dependency :: dependencies)
 
 loadPackageWalk stack depName dir =
-  let normalized = normalizeDir dir
+  let
+    normalized = normalizeDir dir
   in if memStackDir normalized stack then Err (cycleMessage normalized depName stack)
-     else
-       case loadManifestAt (normalized ++ "/vuna.toml") of
-         Err e => Err e
-         Ok manifest =>
-           let name = manifestNameString manifest
-           in if dependencyNameOk depName name then
-                case loadDependencyList (Cons (Pair normalized name) stack) normalized (manifestDependencies manifest) of
-                  Err e => Err e
-                  Ok dependencies => Ok (Package manifest dependencies normalized)
-              else Err (mismatchMessage depName name)
+  else case loadManifestAt (normalized ++ "/vuna.toml") of
+    Err e => Err e
+    Ok manifest =>
+      let
+        name = manifestNameString manifest
+      in if dependencyNameOk depName name then case loadDependencyList (Pair normalized name :: stack) normalized (manifestDependencies manifest) of
+        Err e => Err e
+        Ok dependencies => Ok (Package manifest dependencies normalized)
+      else Err (mismatchMessage depName name)
 
 -- 加载 dir/vuna.toml 及其 [dependencies] 路径依赖（递归、含循环检测）。
 loadPackage : String -> Result Package
-loadPackage dir = loadPackageWalk Nil Nothing dir
+loadPackage dir = loadPackageWalk [] Nothing dir
 
 -- ---------------------------------------------------------------- workspace
-
-loadMembers baseDir members =
-  case members of
-    Nil => Ok Nil
-    Cons rel rest =>
-      case loadPackage (joinPath baseDir rel) of
-        Err e => Err e
-        Ok memberPackage =>
-          case loadMembers baseDir rest of
-            Err e => Err e
-            Ok memberPackages => Ok (Cons memberPackage memberPackages)
+loadMembers baseDir members = case members of
+  [] => Ok []
+  rel :: rest => case loadPackage (joinPath baseDir rel) of
+    Err e => Err e
+    Ok memberPackage => case loadMembers baseDir rest of
+      Err e => Err e
+      Ok memberPackages => Ok (memberPackage :: memberPackages)
 
 -- 根包 + [workspace].members（顺序同 manifest）；没有 members 时只含根包。
 workspacePackages : String -> Result (List Package)
 workspacePackages rootBaseDir =
-  let base = normalizeDir rootBaseDir
+  let
+    base = normalizeDir rootBaseDir
   in case loadPackage base of
-       Err e => Err e
-       Ok rootPackage =>
-         case loadMembers base (manifestMembers (packageManifest rootPackage)) of
-           Err e => Err e
-           Ok members => Ok (Cons rootPackage members)
+    Err e => Err e
+    Ok rootPackage => case loadMembers base (manifestMembers (packageManifest rootPackage)) of
+      Err e => Err e
+      Ok members => Ok (rootPackage :: members)
 
 -- ---------------------------------------------------------------- 模块根
-
 dependencyRootOf package =
   Root (packageDir package ++ "/lib") (packageName package) (packageExports package)
 
 -- DFS 后序：先深依赖、再直接依赖本体；按包名去重（首次出现保留）。
 -- 返回 (更新后的 seen, 根列表)。
-dependencyRoots seen packages =
-  case packages of
-    Nil => Pair seen Nil
-    Cons package rest =>
-      if memName (packageName package) seen then dependencyRoots seen rest
-      else
-        case dependencyRoots (Cons (packageName package) seen) (packageDependencies package) of
-          Pair seen1 transitive =>
-            case dependencyRoots seen1 rest of
-              Pair seen2 siblings =>
-                Pair seen2 (append transitive (Cons (dependencyRootOf package) siblings))
+dependencyRoots seen packages = case packages of
+  [] => Pair seen []
+  package :: rest => if memName (packageName package) seen then dependencyRoots seen rest
+  else case dependencyRoots (packageName package :: seen) (packageDependencies package) of
+    Pair seen1 transitive => case dependencyRoots seen1 rest of
+      Pair seen2 siblings => Pair seen2 (append transitive (dependencyRootOf package :: siblings))
 
 -- 自身 lib 根在最前（exports = Nothing：本包内全部可见）；
 -- 随后是传递依赖的 lib 根（依赖优先的 DFS 后序），各自用 [export].modules 限制。
 packageRoots : Package -> List Root
 packageRoots package =
-  let selfName = packageName package
-      selfRoot = Root (packageDir package ++ "/lib") selfName Nothing
-  in case dependencyRoots (Cons selfName Nil) (packageDependencies package) of
-       Pair seen roots => Cons selfRoot roots
+  let
+    selfName = packageName package
+    selfRoot = Root (packageDir package ++ "/lib") selfName Nothing
+  in case dependencyRoots [selfName] (packageDependencies package) of
+    Pair seen roots => selfRoot :: roots
 
 -- 包入口固定为 <dir>/app/Main.vuna。
 packageEntry : Package -> String
 packageEntry package = packageDir package ++ "/app/Main.vuna"
 
 -- ---------------------------------------------------------------- 查找
-
 findManifestUp start dir =
   if fileExists (dir ++ "/vuna.toml") then Ok dir
   else findManifestUpStep start dir (manifestDir dir)
@@ -263,5 +226,6 @@ findManifestUpStep start dir parent =
 -- 从 startDir 向上找第一个含 vuna.toml 的目录；返回规范化目录（不带尾部 "/"）。
 findManifestDir : String -> Result String
 findManifestDir startDir =
-  let start = normalizeDir startDir
+  let
+    start = normalizeDir startDir
   in findManifestUp start start

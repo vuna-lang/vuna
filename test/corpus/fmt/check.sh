@@ -51,7 +51,7 @@ if ! ( cd "$REPO" && "$VUNA" compile --no-print --root "$tmp/root" "$tmp/probe.v
   cat "$tmp/probe.log"
   exit 1
 fi
-if ! "$OCAMLOPT" -w -a -o "$tmp/probe.exe" "$tmp/probe.ml" >"$tmp/probe.opt.log" 2>&1; then
+if ! "$OCAMLOPT" -w -a -I +unix -o "$tmp/probe.exe" unix.cmxa "$tmp/probe.ml" >"$tmp/probe.opt.log" 2>&1; then
   echo "fmt: probe ocamlopt failed:"
   cat "$tmp/probe.opt.log"
   exit 1
@@ -141,7 +141,7 @@ for file in "$HERE"/typed/*.vuna; do
     cat "$tmp/t1.log"
     continue
   fi
-  if ! "$OCAMLOPT" -w -a -o "$tmp/t1.exe" "$tmp/t1.ml" >"$tmp/t1.opt.log" 2>&1; then
+  if ! "$OCAMLOPT" -w -a -I +unix -o "$tmp/t1.exe" unix.cmxa "$tmp/t1.ml" >"$tmp/t1.opt.log" 2>&1; then
     bad "$name (typed ocamlopt)"
     cat "$tmp/t1.opt.log"
     continue
@@ -155,7 +155,7 @@ for file in "$HERE"/typed/*.vuna; do
     cat "$tmp/t2.log"
     continue
   fi
-  if ! "$OCAMLOPT" -w -a -o "$tmp/t2.exe" "$tmp/t2.ml" >"$tmp/t2.opt.log" 2>&1; then
+  if ! "$OCAMLOPT" -w -a -I +unix -o "$tmp/t2.exe" unix.cmxa "$tmp/t2.ml" >"$tmp/t2.opt.log" 2>&1; then
     bad "$name (typed ocamlopt after format)"
     cat "$tmp/t2.opt.log"
     continue

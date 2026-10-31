@@ -49,6 +49,10 @@
           # 手动性能基准（`nix run .#bench`）；不进 checks。
           vuna-bench = import ./nix/bench.nix { inherit pkgs ocamlTools; };
 
+          # 原生测试 runner（`nix run .#run-tests`）；编译器在运行时解析，
+          # 不在构建期绑定，详见 nix/run-tests.nix。不进 checks。
+          vuna-run-tests = import ./nix/run-tests.nix { inherit pkgs ocamlTools; };
+
           # stage 0：提交入库的多文件信任锚点种子，用 seed/build.sh 构建。
           vuna-seed =
             pkgs.runCommand "vuna-seed-0.1.0"
@@ -120,12 +124,21 @@
         in
         {
           default = vuna;
-          inherit vuna-seed vuna-compiler vuna-bench;
+          inherit vuna-seed vuna-compiler vuna-bench vuna-run-tests;
           vuna = vuna;
         }
       );
 
       apps = forAllSystems (system: {
+        # 原生测试：`nix run .#run-tests [-- --list | --only dt | --vuna stable]`
+        # 编译器运行时解析（默认本仓库 #vuna/#vuna-seed，--vuna stable 用远端别名）。
+        run-tests = {
+          type = "app";
+          program = "${self.packages.${system}.vuna-run-tests}/bin/vuna-run-tests";
+          meta = {
+            description = "vuna 原生测试（包装 test/run-tests.sh，支持 --list / --only）";
+          };
+        };
         # 手动性能基准：nix run .#bench -- [--compiler boot] [--runs N] ...
         bench = {
           type = "app";
@@ -177,7 +190,7 @@
                 cp ${./vuna.toml} vuna.toml
                 chmod -R u+w .
                 # 提交入库的 seed 只能含 compiler 闭包（工具链与 dynamic codegen 都不在 TCB 里）
-                for forbidden in Cli Fmt Lint Doc Repl TestRunner Files Eval Interp Process Codegen; do
+                for forbidden in Cli Fmt Lint Doc Repl TestRunner Files Eval Interp Process Codegen Index; do
                   if [ -e "seed/Vuna_d$forbidden.ml" ]; then
                     echo "committed seed includes forbidden module Vuna.$forbidden" >&2
                     exit 1
@@ -188,7 +201,7 @@
                 # 种子对 compiler 包分离编译 → stage1 源码集
                 ./vuna-seed build --split s1 compiler
                 # stage1 只能包含 compiler 闭包，不能把工具模块/旧 codegen 带进种子
-                for forbidden in Cli Fmt Lint Doc Repl TestRunner Files Eval Interp Process Codegen; do
+                for forbidden in Cli Fmt Lint Doc Repl TestRunner Files Eval Interp Process Codegen Index; do
                   if [ -e "s1/Vuna_d$forbidden.ml" ]; then
                     echo "seed closure includes forbidden module Vuna.$forbidden" >&2
                     exit 1
@@ -200,7 +213,7 @@
                 # stage1 再生成 → stage2 源码集；两者逐字节一致
                 ./vuna-stage1 build --split s2 compiler
                 diff -r s1 s2
-                for forbidden in Cli Fmt Lint Doc Repl TestRunner Files Eval Interp Process Codegen; do
+                for forbidden in Cli Fmt Lint Doc Repl TestRunner Files Eval Interp Process Codegen Index; do
                   if [ -e "s2/Vuna_d$forbidden.ml" ]; then
                     echo "stage2 closure includes forbidden module Vuna.$forbidden" >&2
                     exit 1
@@ -209,12 +222,12 @@
                 # 行为抽查：stage1 编译器编译并运行一个程序
                 cp ${./test/corpus/run/12_fact.vuna} fact.vuna
                 ./vuna-stage1 compile --root compiler/lib fact.vuna fact.ml
-                ocamlopt -g -w -a+39 -warn-error +39 -o fact fact.ml
+                ocamlopt -g -w -a+39 -warn-error +39 -I +unix -o fact unix.cmxa fact.ml
                 test "$(./fact)" = "120"
                 # M13 行为抽查：DT 路径（Pi + 擦除 codegen）在 seed 构建的 stage1 上可用
                 cp ${./test/corpus/dt/01_id.vuna} dt_id.vuna
                 ./vuna-stage1 compile --dt dt_id.vuna dt_id.ml
-                ocamlopt -g -w -a+39 -warn-error +39 -o dt_id dt_id.ml
+                ocamlopt -g -w -a+39 -warn-error +39 -I +unix -o dt_id unix.cmxa dt_id.ml
                 test "$(./dt_id)" = "42"
                 # 增量构建：无改动时 build.sh 不重编任何模块（只链接）
                 ( cd b1 && sh build.sh ../vuna-stage1 ) >build2.log
@@ -253,6 +266,52 @@
               ''
                 mkdir -p "$out"
                 ${vuna}/bin/vuna lint ${./compiler/lib/Vuna/Compiler}/*.vuna ${./lib/Vuna}/*.vuna ${./base}/lib/Base/*.vuna ${./base}/lib/*.vuna ${./app}/*.vuna
+                touch "$out/ok"
+              '';
+
+          # 索引自检：`vuna map` / `--find` / `--impact` / `api` 在真实仓库树上可用，
+          # 符号位置合理，缓存能自动失效，索引不含 seed//test/，Index 不在 TCB。
+          vuna-index =
+            pkgs.runCommand "vuna-index"
+              {
+                allowSubstitutes = false;
+                nativeBuildInputs = [ pkgs.bash pkgs.coreutils pkgs.gnugrep ];
+              }
+              ''
+                mkdir -p "$out"
+                cp -r ${./compiler} compiler
+                cp -r ${./base} base
+                cp -r ${./lib} lib
+                cp -r ${./app} app
+                cp -r ${./seed} seed
+                cp ${./vuna.toml} vuna.toml
+                cp ${./nix/index-check.sh} index-check.sh
+                chmod -R u+w .
+                sh index-check.sh ${vuna}/bin/vuna .
+              '';
+
+          # 冷启动上下文预算：入口文档字节数 / 单模块行数只降不升。
+          context-budget =
+            pkgs.runCommand "vuna-context-budget"
+              {
+                allowSubstitutes = false;
+                nativeBuildInputs = [ pkgs.bash pkgs.coreutils ];
+              }
+              ''
+                mkdir -p "$out"
+                cp -r ${./compiler} compiler
+                cp -r ${./base} base
+                cp -r ${./lib} lib
+                cp -r ${./app} app
+                cp -r ${./docs} docs
+                cp ${./AGENTS.md} AGENTS.md
+                cp ${./README.md} README.md
+                cp ${./nix/context-budget.sh} context-budget.sh
+                cp ${./nix/context.budget} context.budget
+                chmod -R u+w .
+                mkdir -p nix
+                cp context-budget.sh context.budget nix/
+                sh context-budget.sh . ./context.budget
                 touch "$out/ok"
               '';
 
@@ -336,6 +395,8 @@
           vuna-metrics = vuna-metrics;
           vuna-typecheck = vuna-typecheck;
           vuna-lint = vuna-lint;
+          vuna-index = vuna-index;
+          context-budget = context-budget;
         }
       );
 

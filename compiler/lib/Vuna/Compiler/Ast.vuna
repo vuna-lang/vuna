@@ -1,7 +1,6 @@
 module Vuna.Compiler.Ast (Pat, PVar, PWild, PCon, PInt, PStr, PRecord, Expr, EVar, EInt, EStr, ELam, EApp, EPi, ELet, ECase, EIf, EField, ERecord, ERecUpdate, EInstSel, EDo, DoStmt, DBind, DExpr, doStmtSpan, doStmtExpr, Ctor, Field, Decl, DData, DSig, DFun, DRecord, DTrait, DInstance, XBare, XTypeAll, XModule, ModDecl, modDeclSpan, Source, patSpan, exprSpan, declSpan, ctorSpan, fieldSpan, fieldName, fieldType, Import, importSpan, exportItemSpan, clausesFor, funArity, ctorName, ctorType, ctorArityOf, ctorArity, declNames, topNames, ctorsOf, typeNamesOf, declDerivings) where
 
 -- Vuna.Compiler.Ast：core-v0/M10.5 的语法类型与 AST 辅助函数。
-
 import Vuna.Compiler.Common
 
 -- 记录字段：字段名 + 类型表达式 + span（M10.5）。
@@ -67,50 +66,45 @@ data SourceFile : Type where
   Source : Maybe ModDecl -> List Import -> List Decl -> SourceFile
 
 -- 各节点的源码 span 访问器。
-patSpan pat =
-  case pat of
-    PVar name sp => sp
-    PWild sp => sp
-    PCon name pats sp => sp
-    PInt n sp => sp
-    PStr s sp => sp
-    PRecord name fields sp => sp
+patSpan pat = case pat of
+  PVar name sp => sp
+  PWild sp => sp
+  PCon name pats sp => sp
+  PInt n sp => sp
+  PStr s sp => sp
+  PRecord name fields sp => sp
 
-exprSpan expr =
-  case expr of
-    EVar name sp => sp
-    EInt n sp => sp
-    EStr s sp => sp
-    ELam ps body sp => sp
-    EApp fn args sp => sp
-    EPi name implicit dom cod sp => sp
-    ELet binds body _ sp => sp
-    ECase scrut alts sp => sp
-    EIf c t e sp => sp
-    EField base f sp => sp
-    ERecord name fields sp => sp
-    ERecUpdate base fields sp => sp
-    EInstSel meth name sp => sp
-    EDo stmts sp => sp
+exprSpan expr = case expr of
+  EVar name sp => sp
+  EInt n sp => sp
+  EStr s sp => sp
+  ELam ps body sp => sp
+  EApp fn args sp => sp
+  EPi name implicit dom cod sp => sp
+  ELet binds body _ sp => sp
+  ECase scrut alts sp => sp
+  EIf c t e sp => sp
+  EField base f sp => sp
+  ERecord name fields sp => sp
+  ERecUpdate base fields sp => sp
+  EInstSel meth name sp => sp
+  EDo stmts sp => sp
 
-doStmtSpan stmt =
-  case stmt of
-    DBind pat expr sp => sp
-    DExpr expr sp => sp
+doStmtSpan stmt = case stmt of
+  DBind pat expr sp => sp
+  DExpr expr sp => sp
 
-doStmtExpr stmt =
-  case stmt of
-    DBind pat expr sp => expr
-    DExpr expr sp => expr
+doStmtExpr stmt = case stmt of
+  DBind pat expr sp => expr
+  DExpr expr sp => expr
 
-declSpan decl =
-  case decl of
-    DData name params kind ctors derivings sp => sp
-    DSig name ty sp => sp
-    DFun name pats body sp => sp
-    DRecord name params fields derivings sp => sp
-    DTrait name params methods sp => sp
-    DInstance name isDefault head methods sp => sp
+declSpan decl = case decl of
+  DData name params kind ctors derivings sp => sp
+  DSig name ty sp => sp
+  DFun name pats body sp => sp
+  DRecord name params fields derivings sp => sp
+  DTrait name params methods sp => sp
+  DInstance name isDefault head methods sp => sp
 
 ctorSpan (Ctor name ty arity sp) = sp
 
@@ -127,91 +121,76 @@ importSpan (Import name isQualified alias sp) = sp
 
 modDeclSpan (ModDecl name explicit items sp) = sp
 
-exportItemSpan item =
-  case item of
-    XBare name sp => sp
-    XTypeAll name sp => sp
-    XModule name sp => sp
+exportItemSpan item = case item of
+  XBare name sp => sp
+  XTypeAll name sp => sp
+  XModule name sp => sp
 
-collectClauses Nil name = Nil
-collectClauses (Cons d rest) name =
-  case d of
-    DFun n pats body _ =>
-      if n == name then Cons (Pair pats body) (collectClauses rest name)
-      else collectClauses rest name
-    _ => collectClauses rest name
+collectClauses [] name = []
+collectClauses (d :: rest) name = case d of
+  DFun n pats body _ =>
+    if n == name then Pair pats body :: collectClauses rest name else collectClauses rest name
+  _ => collectClauses rest name
 
 clausesFor decls name = collectClauses decls name
 
-funArity name decls =
-  case clausesFor decls name of
-    Nil => Nothing
-    Cons (Pair pats body) _ => Just (length pats)
+funArity name decls = case clausesFor decls name of
+  [] => Nothing
+  (Pair pats body) :: _ => Just (length pats)
 
 ctorName (Ctor name ty arity _) = name
 
 ctorType (Ctor name ty arity _) = ty
 
-typeArity ty =
-  case ty of
-    EApp (EVar "->" _) (Cons x (Cons rest Nil)) _ => 1 + typeArity rest
-    _ => 0
+typeArity ty = case ty of
+  EApp (EVar "->" _) ([x, rest]) _ => 1 + typeArity rest
+  _ => 0
 
 ctorArityOf (Ctor name ty arity _) = arity
 
-lookupCtorArity name ctors =
-  case ctors of
-    Nil => Nothing
-    Cons c rest =>
-      if ctorName c == name then Just (ctorArityOf c) else lookupCtorArity name rest
+lookupCtorArity name ctors = case ctors of
+  [] => Nothing
+  c :: rest => if ctorName c == name then Just (ctorArityOf c) else lookupCtorArity name rest
 
-ctorArity name decls =
-  case decls of
-    Nil => Nothing
-    Cons d rest =>
-      case d of
-        DData dname params kind ctors derivings sp =>
-          case lookupCtorArity name ctors of
-            Just arity => Just arity
-            Nothing => ctorArity name rest
-        DRecord dname params fields derivings sp =>
-          if name == dname then Just (length fields) else ctorArity name rest
-        _ => ctorArity name rest
+ctorArity name decls = case decls of
+  [] => Nothing
+  d :: rest => case d of
+    DData dname params kind ctors derivings sp => case lookupCtorArity name ctors of
+      Just arity => Just arity
+      Nothing => ctorArity name rest
+    DRecord dname params fields derivings sp =>
+      if name == dname then Just (length fields) else ctorArity name rest
+    _ => ctorArity name rest
 
-declNames d =
-  case d of
-    DFun name pats body _ => Cons name Nil
-    DSig name ty _ => Cons name Nil
-    DData dname params kind ctors derivings _ => map ctorName ctors
-    DRecord dname params fields derivings _ => Cons dname Nil
-    DTrait tname params methods _ => map firstOf methods
-    DInstance name isDefault head methods _ =>
-      case name of
-        Nothing => Nil
-        Just n => Cons n Nil
+declNames d = case d of
+  DFun name pats body _ => [name]
+  DSig name ty _ => [name]
+  DData dname params kind ctors derivings _ => map ctorName ctors
+  DRecord dname params fields derivings _ => [dname]
+  DTrait tname params methods _ => map firstOf methods
+  DInstance name isDefault head methods _ => case name of
+    Nothing => []
+    Just n => [n]
 
 topNames decls = concatMap declNames decls
 
-_declCtors d =
-  case d of
-    DData dname params kind ctors derivings _ => map ctorName ctors
-    DRecord dname params fields derivings _ => Cons dname Nil
-    DTrait tname params methods _ => map firstOf methods
-    _ => Nil
+_declCtors d = case d of
+  DData dname params kind ctors derivings _ => map ctorName ctors
+  DRecord dname params fields derivings _ => [dname]
+  DTrait tname params methods _ => map firstOf methods
+  _ => []
 
 ctorsOf decls = concatMap _declCtors decls
 
-declTypeNames d =
-  case d of
-    DData name params kind ctors derivings _ => Cons name Nil
-    DRecord name params fields derivings _ => Cons name Nil
-    DTrait name params methods _ => Cons name Nil
-    _ => Nil
+declTypeNames d = case d of
+  DData name params kind ctors derivings _ => [name]
+  DRecord name params fields derivings _ => [name]
+  DTrait name params methods _ => [name]
+  _ => []
 
 typeNamesOf decls = concatMap declTypeNames decls
 
-declDerivings d =
-  case d of
-    DData name params kind ctors derivings _ => derivings
-    DRecord name params fields derivings _ => derivings
-    _ => Nil
+declDerivings d = case d of
+  DData name params kind ctors derivings _ => derivings
+  DRecord name params fields derivings _ => derivings
+  _ => []

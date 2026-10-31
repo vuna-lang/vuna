@@ -52,7 +52,7 @@ and show_Vuna_dCompiler_dLexer_dComment v =
   | C_Vuna_dCompiler_dLexer_dComment (f0, f1, f2) -> show_ctor "Comment" [(show_Vuna_dCompiler_dLexer_dCKind) f0; (show_vstring) f1; (show_Vuna_dCompiler_dCommon_dSpan) f2]
 let v_Vuna_dCompiler_dLexer_dadvanceChar = fun a0 a1 -> match (a0, a1) with
   | (c, C_Vuna_dCompiler_dCommon_dPos (line, col)) -> if v_vuna_ueq_uint c 10 then C_Vuna_dCompiler_dCommon_dPos (bi_add line 1, 1) else C_Vuna_dCompiler_dCommon_dPos (line, bi_add col 1)
-  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Lexer.vuna" 21 1 ("no matching clause for Vuna.Compiler.Lexer.advanceChar")
+  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Lexer.vuna" 20 1 ("no matching clause for Vuna.Compiler.Lexer.advanceChar")
 
 let v_Vuna_dCompiler_dLexer_disUpperChar = fun c -> (if (v_vuna_uge_uint c 65) then (v_vuna_ule_uint c 90) else false)
 
@@ -75,15 +75,15 @@ let v_Vuna_dCompiler_dLexer_dclassifyIdent = fun s -> if v_Vuna_dCompiler_dLexer
 let rec v_Vuna_dCompiler_dLexer_dskipLineComment = fun a0 -> match a0 with
   | (C_Vuna_dCompiler_dLexer_dChars ([], p)) -> C_Vuna_dCompiler_dLexer_dChars ([], p)
   | (C_Vuna_dCompiler_dLexer_dChars ((c) :: (rest), p)) -> if v_vuna_ueq_uint c 10 then C_Vuna_dCompiler_dLexer_dChars ((c) :: (rest), p) else v_Vuna_dCompiler_dLexer_dskipLineComment (C_Vuna_dCompiler_dLexer_dChars (rest, v_Vuna_dCompiler_dLexer_dadvanceChar c p))
-  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Lexer.vuna" 50 1 ("no matching clause for Vuna.Compiler.Lexer.skipLineComment")
+  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Lexer.vuna" 78 1 ("no matching clause for Vuna.Compiler.Lexer.skipLineComment")
 
 let rec v_Vuna_dCompiler_dLexer_dskipBlockComment = fun depth cs -> (match cs with
   | C_Vuna_dCompiler_dLexer_dChars ([], p) -> C_Base_dResult_dErr ("unterminated block comment")
   | C_Vuna_dCompiler_dLexer_dChars ((c) :: (rest), p) -> (match rest with
   | (c2) :: (rest2) -> if (if (v_vuna_ueq_uint c 123) then (v_vuna_ueq_uint c2 45) else false) then v_Vuna_dCompiler_dLexer_dskipBlockComment (bi_add depth 1) (C_Vuna_dCompiler_dLexer_dChars (rest2, v_Vuna_dCompiler_dLexer_dadvanceChar c2 (v_Vuna_dCompiler_dLexer_dadvanceChar c p))) else if (if (v_vuna_ueq_uint c 45) then (v_vuna_ueq_uint c2 125) else false) then if v_vuna_ueq_uint depth 1 then C_Base_dResult_dOk (C_Vuna_dCompiler_dLexer_dChars (rest2, v_Vuna_dCompiler_dLexer_dadvanceChar c2 (v_Vuna_dCompiler_dLexer_dadvanceChar c p))) else v_Vuna_dCompiler_dLexer_dskipBlockComment (bi_sub depth 1) (C_Vuna_dCompiler_dLexer_dChars (rest2, v_Vuna_dCompiler_dLexer_dadvanceChar c2 (v_Vuna_dCompiler_dLexer_dadvanceChar c p))) else v_Vuna_dCompiler_dLexer_dskipBlockComment depth (C_Vuna_dCompiler_dLexer_dChars (rest, v_Vuna_dCompiler_dLexer_dadvanceChar c p))
   | [] -> v_Vuna_dCompiler_dLexer_dskipBlockComment depth (C_Vuna_dCompiler_dLexer_dChars (rest, v_Vuna_dCompiler_dLexer_dadvanceChar c p))
-  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Lexer.vuna" 59 7 ("case pattern match failure"))
-  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Lexer.vuna" 56 3 ("case pattern match failure"))
+  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Lexer.vuna" 84 26 ("case pattern match failure"))
+  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Lexer.vuna" 82 29 ("case pattern match failure"))
 
 let rec v_Vuna_dCompiler_dLexer_dskipTrivia = fun cs -> (match cs with
   | C_Vuna_dCompiler_dLexer_dChars ([], p) -> C_Base_dResult_dOk (cs)
@@ -91,89 +91,89 @@ let rec v_Vuna_dCompiler_dLexer_dskipTrivia = fun cs -> (match cs with
   | (c2) :: (rest2) -> if (if (v_vuna_ueq_uint c 45) then (v_vuna_ueq_uint c2 45) else false) then v_Vuna_dCompiler_dLexer_dskipTrivia (v_Vuna_dCompiler_dLexer_dskipLineComment (C_Vuna_dCompiler_dLexer_dChars (rest, v_Vuna_dCompiler_dLexer_dadvanceChar c p))) else if (if (v_vuna_ueq_uint c 123) then (v_vuna_ueq_uint c2 45) else false) then (match v_Vuna_dCompiler_dLexer_dskipBlockComment 1 (C_Vuna_dCompiler_dLexer_dChars (rest, v_Vuna_dCompiler_dLexer_dadvanceChar c p)) with
   | C_Base_dResult_dErr (e) -> C_Base_dResult_dErr (e)
   | C_Base_dResult_dOk (cs2) -> v_Vuna_dCompiler_dLexer_dskipTrivia cs2
-  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Lexer.vuna" 80 15 ("case pattern match failure")) else C_Base_dResult_dOk (cs)
+  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Lexer.vuna" 97 39 ("case pattern match failure")) else C_Base_dResult_dOk (cs)
   | [] -> C_Base_dResult_dOk (cs)
-  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Lexer.vuna" 75 9 ("case pattern match failure"))
-  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Lexer.vuna" 70 3 ("case pattern match failure"))
+  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Lexer.vuna" 95 8 ("case pattern match failure"))
+  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Lexer.vuna" 92 17 ("case pattern match failure"))
 
 let rec v_Vuna_dCompiler_dLexer_dcollectIdent = fun a0 a1 -> match (a0, a1) with
   | (C_Vuna_dCompiler_dLexer_dChars ([], p), acc) -> C_Base_dPair_dPair (bi_str_pack (v_Base_dList_dreverse acc), C_Vuna_dCompiler_dLexer_dChars ([], p))
   | (C_Vuna_dCompiler_dLexer_dChars ((c) :: (rest), p), acc) -> if v_Vuna_dCompiler_dLexer_disIdentChar c then v_Vuna_dCompiler_dLexer_dcollectIdent (C_Vuna_dCompiler_dLexer_dChars (rest, v_Vuna_dCompiler_dLexer_dadvanceChar c p)) ((c) :: (acc)) else if v_vuna_ueq_uint c 46 then (match rest with
   | (c2) :: (rest2) -> if v_Vuna_dCompiler_dLexer_disIdentStart c2 then v_Vuna_dCompiler_dLexer_dcollectIdent (C_Vuna_dCompiler_dLexer_dChars (rest, v_Vuna_dCompiler_dLexer_dadvanceChar c p)) ((c) :: (acc)) else C_Base_dPair_dPair (bi_str_pack (v_Base_dList_dreverse acc), C_Vuna_dCompiler_dLexer_dChars ((c) :: (rest), p))
   | [] -> C_Base_dPair_dPair (bi_str_pack (v_Base_dList_dreverse acc), C_Vuna_dCompiler_dLexer_dChars ((c) :: (rest), p))
-  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Lexer.vuna" 90 5 ("case pattern match failure")) else C_Base_dPair_dPair (bi_str_pack (v_Base_dList_dreverse acc), C_Vuna_dCompiler_dLexer_dChars ((c) :: (rest), p))
-  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Lexer.vuna" 86 1 ("no matching clause for Vuna.Compiler.Lexer.collectIdent")
+  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Lexer.vuna" 105 22 ("case pattern match failure")) else C_Base_dPair_dPair (bi_str_pack (v_Base_dList_dreverse acc), C_Vuna_dCompiler_dLexer_dChars ((c) :: (rest), p))
+  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Lexer.vuna" 103 1 ("no matching clause for Vuna.Compiler.Lexer.collectIdent")
 
 let rec v_Vuna_dCompiler_dLexer_dcollectInt = fun a0 a1 -> match (a0, a1) with
   | (C_Vuna_dCompiler_dLexer_dChars ([], p), acc) -> C_Base_dPair_dPair (acc, C_Vuna_dCompiler_dLexer_dChars ([], p))
   | (C_Vuna_dCompiler_dLexer_dChars ((c) :: (rest), p), acc) -> if v_Vuna_dCompiler_dLexer_disDigit c then v_Vuna_dCompiler_dLexer_dcollectInt (C_Vuna_dCompiler_dLexer_dChars (rest, v_Vuna_dCompiler_dLexer_dadvanceChar c p)) (bi_add (bi_mul acc 10) (bi_sub c 48)) else C_Base_dPair_dPair (acc, C_Vuna_dCompiler_dLexer_dChars ((c) :: (rest), p))
-  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Lexer.vuna" 98 1 ("no matching clause for Vuna.Compiler.Lexer.collectInt")
+  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Lexer.vuna" 112 1 ("no matching clause for Vuna.Compiler.Lexer.collectInt")
 
 let rec v_Vuna_dCompiler_dLexer_dcollectOp = fun a0 a1 -> match (a0, a1) with
   | (C_Vuna_dCompiler_dLexer_dChars ([], p), acc) -> C_Base_dPair_dPair (bi_str_pack (v_Base_dList_dreverse acc), C_Vuna_dCompiler_dLexer_dChars ([], p))
   | (C_Vuna_dCompiler_dLexer_dChars ((c) :: (rest), p), acc) -> if v_Vuna_dCompiler_dLexer_disOpChar c then v_Vuna_dCompiler_dLexer_dcollectOp (C_Vuna_dCompiler_dLexer_dChars (rest, v_Vuna_dCompiler_dLexer_dadvanceChar c p)) ((c) :: (acc)) else C_Base_dPair_dPair (bi_str_pack (v_Base_dList_dreverse acc), C_Vuna_dCompiler_dLexer_dChars ((c) :: (rest), p))
-  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Lexer.vuna" 103 1 ("no matching clause for Vuna.Compiler.Lexer.collectOp")
+  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Lexer.vuna" 117 1 ("no matching clause for Vuna.Compiler.Lexer.collectOp")
 
 let rec v_Vuna_dCompiler_dLexer_dscanString = fun a0 a1 -> match (a0, a1) with
   | (C_Vuna_dCompiler_dLexer_dChars ([], p), acc) -> C_Base_dResult_dErr ("unterminated string literal")
   | (C_Vuna_dCompiler_dLexer_dChars ((c) :: (rest), p), acc) -> if v_vuna_ueq_uint c 34 then C_Base_dResult_dOk (C_Base_dPair_dPair (bi_str_pack (v_Base_dList_dreverse acc), C_Vuna_dCompiler_dLexer_dChars (rest, v_Vuna_dCompiler_dLexer_dadvanceChar c p))) else if v_vuna_ueq_uint c 10 then C_Base_dResult_dErr ("unterminated string literal") else if v_vuna_ueq_uint c 92 then v_Vuna_dCompiler_dLexer_dscanEscape (C_Vuna_dCompiler_dLexer_dChars (rest, v_Vuna_dCompiler_dLexer_dadvanceChar c p)) acc else v_Vuna_dCompiler_dLexer_dscanString (C_Vuna_dCompiler_dLexer_dChars (rest, v_Vuna_dCompiler_dLexer_dadvanceChar c p)) ((c) :: (acc))
-  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Lexer.vuna" 108 1 ("no matching clause for Vuna.Compiler.Lexer.scanString")
+  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Lexer.vuna" 122 1 ("no matching clause for Vuna.Compiler.Lexer.scanString")
 and v_Vuna_dCompiler_dLexer_dscanEscape = fun a0 a1 -> match (a0, a1) with
   | (C_Vuna_dCompiler_dLexer_dChars ([], p), acc) -> C_Base_dResult_dErr ("unterminated string literal")
   | (C_Vuna_dCompiler_dLexer_dChars ((c) :: (rest), p), acc) -> if v_vuna_ueq_uint c 110 then v_Vuna_dCompiler_dLexer_dscanString (C_Vuna_dCompiler_dLexer_dChars (rest, v_Vuna_dCompiler_dLexer_dadvanceChar c p)) ((10) :: (acc)) else if v_vuna_ueq_uint c 116 then v_Vuna_dCompiler_dLexer_dscanString (C_Vuna_dCompiler_dLexer_dChars (rest, v_Vuna_dCompiler_dLexer_dadvanceChar c p)) ((9) :: (acc)) else if v_vuna_ueq_uint c 114 then v_Vuna_dCompiler_dLexer_dscanString (C_Vuna_dCompiler_dLexer_dChars (rest, v_Vuna_dCompiler_dLexer_dadvanceChar c p)) ((13) :: (acc)) else if v_vuna_ueq_uint c 34 then v_Vuna_dCompiler_dLexer_dscanString (C_Vuna_dCompiler_dLexer_dChars (rest, v_Vuna_dCompiler_dLexer_dadvanceChar c p)) ((34) :: (acc)) else if v_vuna_ueq_uint c 92 then v_Vuna_dCompiler_dLexer_dscanString (C_Vuna_dCompiler_dLexer_dChars (rest, v_Vuna_dCompiler_dLexer_dadvanceChar c p)) ((92) :: (acc)) else if v_vuna_ueq_uint c 39 then v_Vuna_dCompiler_dLexer_dscanString (C_Vuna_dCompiler_dLexer_dChars (rest, v_Vuna_dCompiler_dLexer_dadvanceChar c p)) ((39) :: (acc)) else C_Base_dResult_dErr ("unknown escape sequence")
-  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Lexer.vuna" 115 1 ("no matching clause for Vuna.Compiler.Lexer.scanEscape")
+  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Lexer.vuna" 129 1 ("no matching clause for Vuna.Compiler.Lexer.scanEscape")
 
 let rec v_Vuna_dCompiler_dLexer_dlexChars = fun cs -> (match v_Vuna_dCompiler_dLexer_dskipTrivia cs with
   | C_Base_dResult_dErr (e) -> C_Base_dResult_dErr (e)
   | C_Base_dResult_dOk (cs2) -> (match cs2 with
   | C_Vuna_dCompiler_dLexer_dChars ([], p) -> C_Base_dResult_dOk ((C_Vuna_dCompiler_dLexer_dPTok (C_Vuna_dCompiler_dLexer_dTEof, p)) :: ([]))
   | C_Vuna_dCompiler_dLexer_dChars ((c) :: (rest), p) -> v_Vuna_dCompiler_dLexer_dlexToken c rest p
-  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Lexer.vuna" 129 7 ("case pattern match failure"))
-  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Lexer.vuna" 126 3 ("case pattern match failure"))
+  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Lexer.vuna" 141 13 ("case pattern match failure"))
+  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Lexer.vuna" 139 15 ("case pattern match failure"))
 and v_Vuna_dCompiler_dLexer_dlexToken = fun c rest p -> if v_Vuna_dCompiler_dLexer_disIdentStart c then (match v_Vuna_dCompiler_dLexer_dcollectIdent (C_Vuna_dCompiler_dLexer_dChars (rest, v_Vuna_dCompiler_dLexer_dadvanceChar c p)) ((c) :: ([])) with
   | C_Base_dPair_dPair (name, cs2) -> (match v_Vuna_dCompiler_dLexer_dlexChars cs2 with
   | C_Base_dResult_dErr (e) -> C_Base_dResult_dErr (e)
   | C_Base_dResult_dOk (toks) -> C_Base_dResult_dOk ((C_Vuna_dCompiler_dLexer_dPTok (v_Vuna_dCompiler_dLexer_dclassifyIdent name, p)) :: (toks))
-  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Lexer.vuna" 137 9 ("case pattern match failure"))
-  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Lexer.vuna" 135 5 ("case pattern match failure")) else if v_Vuna_dCompiler_dLexer_disDigit c then (match v_Vuna_dCompiler_dLexer_dcollectInt (C_Vuna_dCompiler_dLexer_dChars (rest, v_Vuna_dCompiler_dLexer_dadvanceChar c p)) (bi_sub c 48) with
+  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Lexer.vuna" 146 20 ("case pattern match failure"))
+  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Lexer.vuna" 145 44 ("case pattern match failure")) else if v_Vuna_dCompiler_dLexer_disDigit c then (match v_Vuna_dCompiler_dLexer_dcollectInt (C_Vuna_dCompiler_dLexer_dChars (rest, v_Vuna_dCompiler_dLexer_dadvanceChar c p)) (bi_sub c 48) with
   | C_Base_dPair_dPair (n, cs2) -> (match v_Vuna_dCompiler_dLexer_dlexChars cs2 with
   | C_Base_dResult_dErr (e) -> C_Base_dResult_dErr (e)
   | C_Base_dResult_dOk (toks) -> C_Base_dResult_dOk ((C_Vuna_dCompiler_dLexer_dPTok (C_Vuna_dCompiler_dLexer_dTInt (n), p)) :: (toks))
-  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Lexer.vuna" 143 9 ("case pattern match failure"))
-  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Lexer.vuna" 141 5 ("case pattern match failure")) else if v_vuna_ueq_uint c 34 then (match v_Vuna_dCompiler_dLexer_dscanString (C_Vuna_dCompiler_dLexer_dChars (rest, v_Vuna_dCompiler_dLexer_dadvanceChar c p)) [] with
+  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Lexer.vuna" 150 17 ("case pattern match failure"))
+  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Lexer.vuna" 149 24 ("case pattern match failure")) else if v_vuna_ueq_uint c 34 then (match v_Vuna_dCompiler_dLexer_dscanString (C_Vuna_dCompiler_dLexer_dChars (rest, v_Vuna_dCompiler_dLexer_dadvanceChar c p)) [] with
   | C_Base_dResult_dErr (e) -> C_Base_dResult_dErr (e)
   | C_Base_dResult_dOk (C_Base_dPair_dPair (s, cs2)) -> (match v_Vuna_dCompiler_dLexer_dlexChars cs2 with
   | C_Base_dResult_dErr (e) -> C_Base_dResult_dErr (e)
   | C_Base_dResult_dOk (toks) -> C_Base_dResult_dOk ((C_Vuna_dCompiler_dLexer_dPTok (C_Vuna_dCompiler_dLexer_dTStr (s), p)) :: (toks))
-  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Lexer.vuna" 150 9 ("case pattern match failure"))
-  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Lexer.vuna" 147 5 ("case pattern match failure")) else if (if ((if ((if ((if ((if ((if (v_vuna_ueq_uint c 40) then true else (v_vuna_ueq_uint c 41))) then true else (v_vuna_ueq_uint c 91))) then true else (v_vuna_ueq_uint c 93))) then true else (v_vuna_ueq_uint c 44))) then true else (v_vuna_ueq_uint c 123))) then true else (v_vuna_ueq_uint c 125)) then (match v_Vuna_dCompiler_dLexer_dlexChars (C_Vuna_dCompiler_dLexer_dChars (rest, v_Vuna_dCompiler_dLexer_dadvanceChar c p)) with
+  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Lexer.vuna" 155 22 ("case pattern match failure"))
+  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Lexer.vuna" 153 22 ("case pattern match failure")) else if (if ((if ((if ((if ((if ((if (v_vuna_ueq_uint c 40) then true else (v_vuna_ueq_uint c 41))) then true else (v_vuna_ueq_uint c 91))) then true else (v_vuna_ueq_uint c 93))) then true else (v_vuna_ueq_uint c 44))) then true else (v_vuna_ueq_uint c 123))) then true else (v_vuna_ueq_uint c 125)) then (match v_Vuna_dCompiler_dLexer_dlexChars (C_Vuna_dCompiler_dLexer_dChars (rest, v_Vuna_dCompiler_dLexer_dadvanceChar c p)) with
   | C_Base_dResult_dErr (e) -> C_Base_dResult_dErr (e)
   | C_Base_dResult_dOk (toks) -> C_Base_dResult_dOk ((C_Vuna_dCompiler_dLexer_dPTok (C_Vuna_dCompiler_dLexer_dTSym (bi_str_pack ((c) :: ([]))), p)) :: (toks))
-  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Lexer.vuna" 154 5 ("case pattern match failure")) else if v_Vuna_dCompiler_dLexer_disOpChar c then (match v_Vuna_dCompiler_dLexer_dcollectOp (C_Vuna_dCompiler_dLexer_dChars (rest, v_Vuna_dCompiler_dLexer_dadvanceChar c p)) ((c) :: ([])) with
+  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Lexer.vuna" 158 90 ("case pattern match failure")) else if v_Vuna_dCompiler_dLexer_disOpChar c then (match v_Vuna_dCompiler_dLexer_dcollectOp (C_Vuna_dCompiler_dLexer_dChars (rest, v_Vuna_dCompiler_dLexer_dadvanceChar c p)) ((c) :: ([])) with
   | C_Base_dPair_dPair (op, cs2) -> (match v_Vuna_dCompiler_dLexer_dlexChars cs2 with
   | C_Base_dResult_dErr (e) -> C_Base_dResult_dErr (e)
   | C_Base_dResult_dOk (toks) -> C_Base_dResult_dOk ((C_Vuna_dCompiler_dLexer_dPTok (C_Vuna_dCompiler_dLexer_dTSym (op), p)) :: (toks))
-  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Lexer.vuna" 160 9 ("case pattern match failure"))
-  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Lexer.vuna" 158 5 ("case pattern match failure")) else C_Base_dResult_dErr ("unexpected character")
+  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Lexer.vuna" 162 18 ("case pattern match failure"))
+  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Lexer.vuna" 161 25 ("case pattern match failure")) else C_Base_dResult_dErr ("unexpected character")
 
 let v_Vuna_dCompiler_dLexer_dlexSource = fun source -> v_Vuna_dCompiler_dLexer_dlexChars (C_Vuna_dCompiler_dLexer_dChars (bi_str_unpack source, C_Vuna_dCompiler_dCommon_dPos (1, 1)))
 
 let v_Vuna_dCompiler_dLexer_dcommentKind = fun a0 -> match a0 with
   | (C_Vuna_dCompiler_dLexer_dComment (kind, text, sp)) -> kind
-  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Lexer.vuna" 180 1 ("no matching clause for Vuna.Compiler.Lexer.commentKind")
+  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Lexer.vuna" 181 1 ("no matching clause for Vuna.Compiler.Lexer.commentKind")
 
 let v_Vuna_dCompiler_dLexer_dcommentText = fun a0 -> match a0 with
   | (C_Vuna_dCompiler_dLexer_dComment (kind, text, sp)) -> text
-  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Lexer.vuna" 182 1 ("no matching clause for Vuna.Compiler.Lexer.commentText")
+  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Lexer.vuna" 183 1 ("no matching clause for Vuna.Compiler.Lexer.commentText")
 
 let v_Vuna_dCompiler_dLexer_dcommentSpan = fun a0 -> match a0 with
   | (C_Vuna_dCompiler_dLexer_dComment (kind, text, sp)) -> sp
-  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Lexer.vuna" 184 1 ("no matching clause for Vuna.Compiler.Lexer.commentSpan")
+  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Lexer.vuna" 185 1 ("no matching clause for Vuna.Compiler.Lexer.commentSpan")
 
 let rec v_Vuna_dCompiler_dLexer_ddropTrailingSpace = fun a0 -> match a0 with
   | ([]) -> []
   | ((c) :: (rest)) -> if (if ((if (v_vuna_ueq_uint c 32) then true else (v_vuna_ueq_uint c 9))) then true else (v_vuna_ueq_uint c 13)) then v_Vuna_dCompiler_dLexer_ddropTrailingSpace rest else (c) :: (rest)
-  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Lexer.vuna" 188 1 ("no matching clause for Vuna.Compiler.Lexer.dropTrailingSpace")
+  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Lexer.vuna" 189 1 ("no matching clause for Vuna.Compiler.Lexer.dropTrailingSpace")
 
 let v_Vuna_dCompiler_dLexer_dtrimTrailingSpace = fun s -> bi_str_pack (v_Base_dList_dreverse (v_Vuna_dCompiler_dLexer_ddropTrailingSpace (v_Base_dList_dreverse (bi_str_unpack s))))
 
@@ -182,21 +182,21 @@ let rec v_Vuna_dCompiler_dLexer_dskipStringBody = fun a0 -> match a0 with
   | (C_Vuna_dCompiler_dLexer_dChars ((c) :: (rest), p)) -> if v_vuna_ueq_uint c 34 then C_Base_dResult_dOk (C_Vuna_dCompiler_dLexer_dChars (rest, v_Vuna_dCompiler_dLexer_dadvanceChar c p)) else if v_vuna_ueq_uint c 92 then (match rest with
   | (c2) :: (rest2) -> v_Vuna_dCompiler_dLexer_dskipStringBody (C_Vuna_dCompiler_dLexer_dChars (rest2, v_Vuna_dCompiler_dLexer_dadvanceChar c2 (v_Vuna_dCompiler_dLexer_dadvanceChar c p)))
   | [] -> C_Base_dResult_dErr ("unterminated string literal")
-  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Lexer.vuna" 199 5 ("case pattern match failure")) else v_Vuna_dCompiler_dLexer_dskipStringBody (C_Vuna_dCompiler_dLexer_dChars (rest, v_Vuna_dCompiler_dLexer_dadvanceChar c p))
+  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Lexer.vuna" 196 22 ("case pattern match failure")) else v_Vuna_dCompiler_dLexer_dskipStringBody (C_Vuna_dCompiler_dLexer_dChars (rest, v_Vuna_dCompiler_dLexer_dadvanceChar c p))
   | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Lexer.vuna" 194 1 ("no matching clause for Vuna.Compiler.Lexer.skipStringBody")
 
 let rec v_Vuna_dCompiler_dLexer_dcollectLineBody = fun a0 a1 a2 -> match (a0, a1, a2) with
   | (C_Vuna_dCompiler_dLexer_dChars ([], p), acc, endP) -> C_Base_dPair_dPair (bi_str_pack (v_Base_dList_dreverse acc), C_Base_dPair_dPair (C_Vuna_dCompiler_dLexer_dChars ([], p), endP))
   | (C_Vuna_dCompiler_dLexer_dChars ((c) :: (rest), p), acc, endP) -> if v_vuna_ueq_uint c 10 then C_Base_dPair_dPair (bi_str_pack (v_Base_dList_dreverse acc), C_Base_dPair_dPair (C_Vuna_dCompiler_dLexer_dChars ((c) :: (rest), p), endP)) else v_Vuna_dCompiler_dLexer_dcollectLineBody (C_Vuna_dCompiler_dLexer_dChars (rest, v_Vuna_dCompiler_dLexer_dadvanceChar c p)) ((c) :: (acc)) p
-  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Lexer.vuna" 205 1 ("no matching clause for Vuna.Compiler.Lexer.collectLineBody")
+  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Lexer.vuna" 202 1 ("no matching clause for Vuna.Compiler.Lexer.collectLineBody")
 
 let rec v_Vuna_dCompiler_dLexer_dcollectBlockBody = fun a0 a1 a2 a3 -> match (a0, a1, a2, a3) with
   | (C_Vuna_dCompiler_dLexer_dChars ([], p), depth, acc, endP) -> C_Base_dResult_dErr ("unterminated block comment")
   | (C_Vuna_dCompiler_dLexer_dChars ((c) :: (rest), p), depth, acc, endP) -> (match rest with
   | (c2) :: (rest2) -> if (if (v_vuna_ueq_uint c 123) then (v_vuna_ueq_uint c2 45) else false) then v_Vuna_dCompiler_dLexer_dcollectBlockBody (C_Vuna_dCompiler_dLexer_dChars (rest2, v_Vuna_dCompiler_dLexer_dadvanceChar c2 (v_Vuna_dCompiler_dLexer_dadvanceChar c p))) (bi_add depth 1) ((c2) :: ((c) :: (acc))) (v_Vuna_dCompiler_dLexer_dadvanceChar c2 p) else if (if (v_vuna_ueq_uint c 45) then (v_vuna_ueq_uint c2 125) else false) then if v_vuna_ueq_uint depth 1 then C_Base_dResult_dOk (C_Base_dPair_dPair (bi_str_pack (v_Base_dList_dreverse acc), C_Base_dPair_dPair (C_Vuna_dCompiler_dLexer_dChars (rest2, v_Vuna_dCompiler_dLexer_dadvanceChar c2 (v_Vuna_dCompiler_dLexer_dadvanceChar c p)), v_Vuna_dCompiler_dLexer_dadvanceChar c2 p))) else v_Vuna_dCompiler_dLexer_dcollectBlockBody (C_Vuna_dCompiler_dLexer_dChars (rest2, v_Vuna_dCompiler_dLexer_dadvanceChar c2 (v_Vuna_dCompiler_dLexer_dadvanceChar c p))) (bi_sub depth 1) ((c2) :: ((c) :: (acc))) (v_Vuna_dCompiler_dLexer_dadvanceChar c2 p) else v_Vuna_dCompiler_dLexer_dcollectBlockBody (C_Vuna_dCompiler_dLexer_dChars (rest, v_Vuna_dCompiler_dLexer_dadvanceChar c p)) depth ((c) :: (acc)) p
   | [] -> v_Vuna_dCompiler_dLexer_dcollectBlockBody (C_Vuna_dCompiler_dLexer_dChars (rest, v_Vuna_dCompiler_dLexer_dadvanceChar c p)) depth ((c) :: (acc)) p
-  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Lexer.vuna" 215 3 ("case pattern match failure"))
-  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Lexer.vuna" 212 1 ("no matching clause for Vuna.Compiler.Lexer.collectBlockBody")
+  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Lexer.vuna" 209 57 ("case pattern match failure"))
+  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Lexer.vuna" 208 1 ("no matching clause for Vuna.Compiler.Lexer.collectBlockBody")
 
 let v_Vuna_dCompiler_dLexer_dcommentSpanOf = fun startP endP -> C_Vuna_dCompiler_dCommon_dSpan ("", v_Vuna_dCompiler_dCommon_dposLine startP, v_Vuna_dCompiler_dCommon_dposCol startP, v_Vuna_dCompiler_dCommon_dposLine endP, v_Vuna_dCompiler_dCommon_dposCol endP)
 
@@ -205,16 +205,16 @@ let rec v_Vuna_dCompiler_dLexer_dscanComments = fun a0 a1 -> match (a0, a1) with
   | (C_Vuna_dCompiler_dLexer_dChars ((c) :: (rest), p), acc) -> if v_vuna_ueq_uint c 34 then (match v_Vuna_dCompiler_dLexer_dskipStringBody (C_Vuna_dCompiler_dLexer_dChars (rest, v_Vuna_dCompiler_dLexer_dadvanceChar c p)) with
   | C_Base_dResult_dErr (e) -> C_Base_dResult_dErr (e)
   | C_Base_dResult_dOk (cs2) -> v_Vuna_dCompiler_dLexer_dscanComments cs2 acc
-  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Lexer.vuna" 233 5 ("case pattern match failure")) else (match rest with
+  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Lexer.vuna" 223 58 ("case pattern match failure")) else (match rest with
   | (c2) :: (rest2) -> if (if (v_vuna_ueq_uint c 45) then (v_vuna_ueq_uint c2 45) else false) then (match v_Vuna_dCompiler_dLexer_dcollectLineBody (C_Vuna_dCompiler_dLexer_dChars (rest2, v_Vuna_dCompiler_dLexer_dadvanceChar c2 (v_Vuna_dCompiler_dLexer_dadvanceChar c p))) [] (v_Vuna_dCompiler_dLexer_dadvanceChar c2 p) with
   | C_Base_dPair_dPair (text, C_Base_dPair_dPair (cs2, endP)) -> v_Vuna_dCompiler_dLexer_dscanComments cs2 ((C_Vuna_dCompiler_dLexer_dComment (C_Vuna_dCompiler_dLexer_dCLine, v_Vuna_dCompiler_dLexer_dtrimTrailingSpace text, v_Vuna_dCompiler_dLexer_dcommentSpanOf p endP)) :: (acc))
-  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Lexer.vuna" 240 11 ("case pattern match failure")) else if (if (v_vuna_ueq_uint c 123) then (v_vuna_ueq_uint c2 45) else false) then (match v_Vuna_dCompiler_dLexer_dcollectBlockBody (C_Vuna_dCompiler_dLexer_dChars (rest2, v_Vuna_dCompiler_dLexer_dadvanceChar c2 (v_Vuna_dCompiler_dLexer_dadvanceChar c p))) 1 [] (v_Vuna_dCompiler_dLexer_dadvanceChar c2 p) with
+  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Lexer.vuna" 227 46 ("case pattern match failure")) else if (if (v_vuna_ueq_uint c 123) then (v_vuna_ueq_uint c2 45) else false) then (match v_Vuna_dCompiler_dLexer_dcollectBlockBody (C_Vuna_dCompiler_dLexer_dChars (rest2, v_Vuna_dCompiler_dLexer_dadvanceChar c2 (v_Vuna_dCompiler_dLexer_dadvanceChar c p))) 1 [] (v_Vuna_dCompiler_dLexer_dadvanceChar c2 p) with
   | C_Base_dResult_dErr (e) -> C_Base_dResult_dErr (e)
   | C_Base_dResult_dOk (C_Base_dPair_dPair (text, C_Base_dPair_dPair (cs2, endP))) -> v_Vuna_dCompiler_dLexer_dscanComments cs2 ((C_Vuna_dCompiler_dLexer_dComment (C_Vuna_dCompiler_dLexer_dCBlock, text, v_Vuna_dCompiler_dLexer_dcommentSpanOf p endP)) :: (acc))
-  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Lexer.vuna" 244 11 ("case pattern match failure")) else v_Vuna_dCompiler_dLexer_dscanComments (C_Vuna_dCompiler_dLexer_dChars (rest, v_Vuna_dCompiler_dLexer_dadvanceChar c p)) acc
+  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Lexer.vuna" 230 37 ("case pattern match failure")) else v_Vuna_dCompiler_dLexer_dscanComments (C_Vuna_dCompiler_dLexer_dChars (rest, v_Vuna_dCompiler_dLexer_dadvanceChar c p)) acc
   | [] -> C_Base_dResult_dOk (v_Base_dList_dreverse acc)
-  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Lexer.vuna" 237 5 ("case pattern match failure"))
-  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Lexer.vuna" 229 1 ("no matching clause for Vuna.Compiler.Lexer.scanComments")
+  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Lexer.vuna" 226 6 ("case pattern match failure"))
+  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Lexer.vuna" 222 1 ("no matching clause for Vuna.Compiler.Lexer.scanComments")
 
 let v_Vuna_dCompiler_dLexer_dlexComments = fun source -> v_Vuna_dCompiler_dLexer_dscanComments (C_Vuna_dCompiler_dLexer_dChars (bi_str_unpack source, C_Vuna_dCompiler_dCommon_dPos (1, 1))) []
 

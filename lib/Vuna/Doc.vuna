@@ -3,7 +3,6 @@ module Vuna.Doc (runDoc) where
 -- Vuna.Doc：从源码生成 API 文档（M11.5）。
 -- 扫描包 lib/（或给定目录）下的所有 .vuna 模块，把模块头 + 类型声明 + 顶层签名
 -- 渲染成 Markdown；不依赖类型检查（纯语法级），`_` 前缀私有名字跳过。
-
 import Vuna.Compiler.Common
 import Vuna.Compiler.Ast
 import Vuna.Compiler.Parser
@@ -11,74 +10,80 @@ import Vuna.Files
 
 runDoc : String -> String -> Int
 runDoc dir outPath =
-  let libDir = dir ++ "/lib"
-  in let root = if isDirectory libDir then libDir else dir
-     in let files = collectVunaFiles root
-        in case docModules files of
-             Err e => let _ = print ("error: " ++ e ++ "\n") in 2
-             Ok sections =>
-               let content = "# vuna API\n\n由 `vuna doc` 从源码生成。\n\n" ++ join "\n" sections ++ "\n"
-               in let parent = firstOf (splitPath outPath)
-                  in let _ = if parent == "" then 0 else makeDir parent
-                     in let _ = writeFile outPath content
-                        in let _ = print ("wrote " ++ outPath ++ " (" ++ strFromInt (length files) ++ " modules)\n")
-                           in 0
+  let
+    libDir = dir ++ "/lib"
+  in let
+    root = if pathExistsDir libDir then libDir else dir
+  in if pathExistsDir root then
+    let
+      files = collectVunaFiles root
+    in case docModules files of
+      Err e =>
+        let
+          _ = print ("error: " ++ e ++ "\n")
+        in 2
+      Ok sections =>
+        let
+          content =
+            "# vuna API\n\n由 `vuna doc` 从源码生成。\n\n" ++ join "\n" sections ++ "\n"
+        in let
+          parent = firstOf (splitPath outPath)
+        in let
+          _ = if parent == "" then 0 else makeDir parent
+        in let
+          _ = writeFile outPath content
+        in let
+          _ = print ("wrote " ++ outPath ++ " (" ++ strFromInt (length files) ++ " modules)\n")
+        in 0
+  else
+    let
+      _ = print ("error: no such directory: " ++ dir ++ "\n")
+    in 2
 
 docModules : List String -> Result (List String)
-docModules Nil = Ok Nil
-docModules (Cons path rest) =
-  andThen (docModule path) (\section =>
-    andThen (docModules rest) (\sections => Ok (Cons section sections)))
+docModules [] = Ok []
+docModules (path :: rest) =
+  andThen (docModule path)
+    (\section => andThen (docModules rest) (\sections => Ok (section :: sections)))
 
 docModule : String -> Result String
-docModule path =
-  case parseSource path (readFile path) of
-    Err e => Err (path ++ ": " ++ e)
-    Ok (Source hdr imports decls) =>
-      Ok (moduleHeaderLine path hdr ++ "\n\n```vuna\n" ++ join "\n" (declLines decls) ++ "\n```\n")
+docModule path = case parseSource path (readFile path) of
+  Err e => Err (path ++ ": " ++ e)
+  Ok (Source hdr imports decls) =>
+    Ok (moduleHeaderLine path hdr ++ "\n\n```vuna\n" ++ join "\n" (declLines decls) ++ "\n```\n")
 
-moduleHeaderLine path hdr =
-  case hdr of
-    Just (ModDecl name hasList items sp) => "## " ++ name
-    Nothing =>
-      case splitPath path of
-        Pair dir base => "## " ++ stripVunaSuffix base
+moduleHeaderLine path hdr = case hdr of
+  Just (ModDecl name hasList items sp) => "## " ++ name
+  Nothing => case splitPath path of
+    Pair dir base => "## " ++ stripVunaSuffix base
 
-stripVunaSuffix name =
-  if endsWith ".vuna" name then substring 0 (strLength name - 5) name else name
+stripVunaSuffix name = if endsWith ".vuna" name then substring 0 (strLength name - 5) name else name
 
 -- 顶层声明渲染：类型/记录/trait 展开成员，签名单行；无签名函数不列出。
 declLines : List Decl -> List String
 declLines decls = concatMap declLinesOf decls
 
-declLinesOf d =
-  case d of
-    DData name params kind ctors derivings sp =>
-      if isPrivate name then Nil
-      else
-        append
-          (Cons ("data " ++ name ++ paramSuffix params ++ " : " ++ renderTy kind ++ " where") (map ctorLine ctors))
-          (derivingLines derivings)
-    DRecord name params fields derivings sp =>
-      if isPrivate name then Nil
-      else
-        append
-          (Cons ("record " ++ name ++ paramSuffix params ++ " where") (map fieldLine fields))
-          (derivingLines derivings)
-    DTrait name params methods sp =>
-      if isPrivate name then Nil
-      else Cons ("trait " ++ name ++ paramSuffix params ++ " where") (map methodLine methods)
-    DSig name ty sp =>
-      if isPrivate name then Nil else Cons "" (Cons (name ++ " : " ++ renderTy ty) Nil)
-    _ => Nil
+declLinesOf d = case d of
+  DData name params kind ctors derivings sp =>
+    if isPrivate name then []
+    else append
+      (("data " ++ name ++ paramSuffix params ++ " : " ++ renderTy kind ++ " where") :: map ctorLine ctors)
+      (derivingLines derivings)
+  DRecord name params fields derivings sp =>
+    if isPrivate name then []
+    else append (("record " ++ name ++ paramSuffix params ++ " where") :: map fieldLine fields)
+      (derivingLines derivings)
+  DTrait name params methods sp =>
+    if isPrivate name then []
+    else ("trait " ++ name ++ paramSuffix params ++ " where") :: map methodLine methods
+  DSig name ty sp => if isPrivate name then [] else ["", name ++ " : " ++ renderTy ty]
+  _ => []
 
-paramSuffix Nil = ""
-
+paramSuffix [] = ""
 paramSuffix params = " " ++ join " " params
 
-derivingLines Nil = Nil
-
-derivingLines derivings = Cons ("deriving (" ++ join ", " derivings ++ ")") Nil
+derivingLines [] = []
+derivingLines derivings = ["deriving (" ++ join ", " derivings ++ ")"]
 
 ctorLine (Ctor name ty arity sp) = "  " ++ name ++ " : " ++ renderTy ty
 
@@ -86,37 +91,33 @@ fieldLine (Field name ty sp) = "  " ++ name ++ " : " ++ renderTy ty
 
 methodLine (Pair name ty) = "  " ++ name ++ " : " ++ renderTy ty
 
-isPrivate name =
-  case strUnpack name of
-    Cons c rest => c == 95
-    Nil => False
+isPrivate name = case strUnpack name of
+  c :: rest => c == 95
+  [] => False
 
 renderTy : Expr -> String
-renderTy ty =
-  case ty of
-    EVar name sp => name
-    EApp (EVar "->" _) (Cons a (Cons b Nil)) _ => renderTyArg a ++ " -> " ++ renderTy b
-    EPi name implicit dom cod sp =>
-      let binder =
-            if implicit then "{" ++ name ++ " : " ++ renderTy dom ++ "}"
-            else "(" ++ name ++ " : " ++ renderTy dom ++ ")"
-      in binder ++ " -> " ++ renderTy cod
-    _ => renderTyPlain ty
+renderTy ty = case ty of
+  EVar name sp => name
+  EApp (EVar "->" _) ([a, b]) _ => renderTyArg a ++ " -> " ++ renderTy b
+  EPi name implicit dom cod sp =>
+    let
+      binder =
+        if implicit then "{" ++ name ++ " : " ++ renderTy dom ++ "}"
+        else "(" ++ name ++ " : " ++ renderTy dom ++ ")"
+    in binder ++ " -> " ++ renderTy cod
+  _ => renderTyPlain ty
 
-renderTyPlain ty =
-  case ty of
-    EApp f args sp => renderTyAtom f ++ " " ++ join " " (map renderTyArg args)
-    EInt n sp => strFromInt n
-    EStr s sp => "\"" ++ s ++ "\""
-    _ => "_"
+renderTyPlain ty = case ty of
+  EApp f args sp => renderTyAtom f ++ " " ++ join " " (map renderTyArg args)
+  EInt n sp => strFromInt n
+  EStr s sp => "\"" ++ s ++ "\""
+  _ => "_"
 
-renderTyArg ty =
-  case ty of
-    EVar name sp => name
-    EApp (EVar "->" _) (Cons a (Cons b Nil)) _ => "(" ++ renderTy ty ++ ")"
-    _ => "(" ++ renderTy ty ++ ")"
+renderTyArg ty = case ty of
+  EVar name sp => name
+  EApp (EVar "->" _) ([a, b]) _ => "(" ++ renderTy ty ++ ")"
+  _ => "(" ++ renderTy ty ++ ")"
 
-renderTyAtom ty =
-  case ty of
-    EVar name sp => name
-    _ => "(" ++ renderTy ty ++ ")"
+renderTyAtom ty = case ty of
+  EVar name sp => name
+  _ => "(" ++ renderTy ty ++ ")"

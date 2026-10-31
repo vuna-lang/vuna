@@ -39,7 +39,7 @@ let v_Vuna_dCompiler_dCompilerCli_dcompilerUsage = fun prog -> (("usage:\n") ^ (
 let rec v_Vuna_dCompiler_dCompilerCli_danyHelp = fun a0 -> match a0 with
   | ([]) -> false
   | ((arg) :: (rest)) -> if (if (v_vuna_ueq_ustr arg "-h") then true else (v_vuna_ueq_ustr arg "--help")) then true else v_Vuna_dCompiler_dCompilerCli_danyHelp rest
-  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/CompilerCli.vuna" 57 1 ("no matching clause for Vuna.Compiler.CompilerCli.anyHelp")
+  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/CompilerCli.vuna" 65 1 ("no matching clause for Vuna.Compiler.CompilerCli.anyHelp")
 
 let v_Vuna_dCompiler_dCompilerCli_dhelpFor = fun prog -> (let _ = bi_print (v_Vuna_dCompiler_dCompilerCli_dcompilerUsage prog) in 0)
 
@@ -55,23 +55,23 @@ let v_Vuna_dCompiler_dCompilerCli_dremovedHint = fun flag -> (match flag with
   | "--typed" -> "typed codegen is always enabled"
   | "--out" -> "use the positional OUT argument"
   | _ -> ""
-  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/CompilerCli.vuna" 73 3 ("case pattern match failure"))
+  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/CompilerCli.vuna" 98 20 ("case pattern match failure"))
 
 let v_Vuna_dCompiler_dCompilerCli_dremovedFlag = fun prog flag -> (match v_Vuna_dCompiler_dCompilerCli_dremovedHint flag with
   | "" -> v_Vuna_dCompiler_dCompilerCli_dusageErr prog
   | hint -> (let _ = bi_print ((let vuna_cat0' = ("error: ") in (let vuna_cat1' = (flag) in (let vuna_cat2' = (" has been removed; ") in (let vuna_cat3' = (hint) in (let vuna_cat4' = ("\n") in String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'; vuna_cat3'; vuna_cat4'])))))) in 2)
-  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/CompilerCli.vuna" 81 3 ("case pattern match failure"))
+  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/CompilerCli.vuna" 105 25 ("case pattern match failure"))
 
 let v_Vuna_dCompiler_dCompilerCli_dinvalidFlag = fun prog flag -> (match flag with
   | "--no-print" -> (let _ = bi_print "error: --no-print is only valid for `compile`; `build` never prints main's result
 " in 2)
   | _ -> v_Vuna_dCompiler_dCompilerCli_dremovedFlag prog flag
-  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/CompilerCli.vuna" 86 3 ("case pattern match failure"))
+  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/CompilerCli.vuna" 112 25 ("case pattern match failure"))
 
 let rec v_Vuna_dCompiler_dCompilerCli_danyDt = fun a0 -> match a0 with
   | ([]) -> false
   | ((arg) :: (rest)) -> if v_vuna_ueq_ustr arg "--dt" then true else v_Vuna_dCompiler_dCompilerCli_danyDt rest
-  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/CompilerCli.vuna" 92 1 ("no matching clause for Vuna.Compiler.CompilerCli.anyDt")
+  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/CompilerCli.vuna" 121 1 ("no matching clause for Vuna.Compiler.CompilerCli.anyDt")
 
 let v_Vuna_dCompiler_dCompilerCli_ddtCmdErr = fun prog -> (let _ = bi_print "error: --dt is only supported by compile/check/interp (M13 single-file mode)\n" in 2)
 
@@ -82,28 +82,28 @@ let v_Vuna_dCompiler_dCompilerCli_ddtDirErr = fun prog -> (let _ = bi_print "err
 let v_Vuna_dCompiler_dCompilerCli_dpackageRun = fun prog dir out -> (match v_Vuna_dCompiler_dSplitCli_dcompilePackage dir out with
   | C_Base_dResult_dErr (e) -> (let _ = bi_print ((let vuna_cat0' = ("error: ") in (let vuna_cat1' = (e) in (let vuna_cat2' = ("\n") in String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'])))) in 1)
   | C_Base_dResult_dOk (n) -> (let _ = bi_print ((let vuna_cat0' = ("wrote ") in (let vuna_cat1' = (bi_str_from_int n) in (let vuna_cat2' = (" files to ") in (let vuna_cat3' = (out) in (let vuna_cat4' = ("\n") in String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'; vuna_cat3'; vuna_cat4'])))))) in 0)
-  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/CompilerCli.vuna" 141 3 ("case pattern match failure"))
+  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/CompilerCli.vuna" 167 27 ("case pattern match failure"))
 
 let v_Vuna_dCompiler_dCompilerCli_drootArg = fun prog roots rest k -> (match rest with
   | (dir) :: (rest2) -> k (v_Base_dList_dappend roots ((v_Vuna_dCompiler_dPkg_drawRoot dir) :: ([]))) rest2
   | [] -> v_Vuna_dCompiler_dCompilerCli_dusageErr prog
-  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/CompilerCli.vuna" 160 3 ("case pattern match failure"))
+  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/CompilerCli.vuna" 188 29 ("case pattern match failure"))
 
 let v_Vuna_dCompiler_dCompilerCli_dcompileEmit = fun prog printResult dt hasRoot roots entry rest -> if dt then if hasRoot then v_Vuna_dCompiler_dCompilerCli_ddtRootErr prog else (match v_Vuna_dCompiler_dCompile_dcompileFileDt entry printResult with
   | C_Base_dResult_dOk (code) -> (match rest with
   | [] -> (let _ = bi_print code in 0)
   | (out) :: ([]) -> (let _ = bi_write_file out code in 0)
   | _ -> v_Vuna_dCompiler_dCompilerCli_dusageErr prog
-  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/CompilerCli.vuna" 170 11 ("case pattern match failure"))
+  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/CompilerCli.vuna" 194 14 ("case pattern match failure"))
   | C_Base_dResult_dErr (e) -> (let _ = bi_print ((let vuna_cat0' = ("error: ") in (let vuna_cat1' = (e) in (let vuna_cat2' = ("\n") in String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'])))) in 1)
-  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/CompilerCli.vuna" 168 7 ("case pattern match failure")) else (let actualRoots = v_Vuna_dCompiler_dCompile_deffectiveRoots roots in (match v_Vuna_dCompiler_dCompile_dcompileFileTyped actualRoots entry printResult with
+  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/CompilerCli.vuna" 193 6 ("case pattern match failure")) else (let actualRoots = v_Vuna_dCompiler_dCompile_deffectiveRoots roots in (match v_Vuna_dCompiler_dCompile_dcompileFileTyped actualRoots entry printResult with
   | C_Base_dResult_dOk (code) -> (match rest with
   | [] -> (let _ = bi_print code in 0)
   | (out) :: ([]) -> (let _ = bi_write_file out code in 0)
   | _ -> v_Vuna_dCompiler_dCompilerCli_dusageErr prog
-  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/CompilerCli.vuna" 179 12 ("case pattern match failure"))
+  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/CompilerCli.vuna" 212 16 ("case pattern match failure"))
   | C_Base_dResult_dErr (e) -> (let _ = bi_print ((let vuna_cat0' = ("error: ") in (let vuna_cat1' = (e) in (let vuna_cat2' = ("\n") in String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'])))) in 1)
-  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/CompilerCli.vuna" 177 8 ("case pattern match failure")))
+  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/CompilerCli.vuna" 211 6 ("case pattern match failure")))
 
 let rec v_Vuna_dCompiler_dCompilerCli_dcompileParse = fun prog printResult dt hasRoot roots args -> (match args with
   | [] -> v_Vuna_dCompiler_dCompilerCli_dusageErr prog
@@ -112,66 +112,66 @@ let rec v_Vuna_dCompiler_dCompilerCli_dcompileParse = fun prog printResult dt ha
   | "--no-print" -> v_Vuna_dCompiler_dCompilerCli_dcompileParse prog false dt hasRoot roots rest
   | "--root" -> v_Vuna_dCompiler_dCompilerCli_drootArg prog roots rest (fun roots2 rest2 -> v_Vuna_dCompiler_dCompilerCli_dcompileParse prog printResult dt true roots2 rest2)
   | _ -> if v_Base_dString_dstartsWith "-" arg then v_Vuna_dCompiler_dCompilerCli_dremovedFlag prog arg else v_Vuna_dCompiler_dCompilerCli_dcompileEmit prog printResult dt hasRoot roots arg rest
-  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/CompilerCli.vuna" 151 7 ("case pattern match failure"))
-  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/CompilerCli.vuna" 148 3 ("case pattern match failure"))
+  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/CompilerCli.vuna" 179 18 ("case pattern match failure"))
+  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/CompilerCli.vuna" 177 55 ("case pattern match failure"))
 
 let rec v_Vuna_dCompiler_dCompilerCli_dprintWarnings = fun a0 -> match a0 with
   | ([]) -> 0
   | ((w) :: (rest)) -> (let _ = bi_print (((w) ^ ("\n"))) in v_Vuna_dCompiler_dCompilerCli_dprintWarnings rest)
-  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/CompilerCli.vuna" 211 1 ("no matching clause for Vuna.Compiler.CompilerCli.printWarnings")
+  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/CompilerCli.vuna" 259 1 ("no matching clause for Vuna.Compiler.CompilerCli.printWarnings")
 
 let v_Vuna_dCompiler_dCompilerCli_dcheckEmitDt = fun path -> (match v_Vuna_dCompiler_dCompile_dcheckFileDt path with
   | C_Base_dResult_dErr (e) -> (let _ = bi_print ((let vuna_cat0' = ("error: ") in (let vuna_cat1' = (e) in (let vuna_cat2' = ("\n") in String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'])))) in 1)
   | C_Base_dResult_dOk (warnings) -> (let _ = v_Vuna_dCompiler_dCompilerCli_dprintWarnings warnings in 0)
-  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/CompilerCli.vuna" 202 3 ("case pattern match failure"))
+  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/CompilerCli.vuna" 239 20 ("case pattern match failure"))
 
 let v_Vuna_dCompiler_dCompilerCli_dcheckEmit = fun roots path -> (match v_Vuna_dCompiler_dCompile_dcheckFile roots path with
   | C_Base_dResult_dErr (e) -> (let _ = bi_print ((let vuna_cat0' = ("error: ") in (let vuna_cat1' = (e) in (let vuna_cat2' = ("\n") in String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'])))) in 1)
   | C_Base_dResult_dOk (warnings) -> (let _ = v_Vuna_dCompiler_dCompilerCli_dprintWarnings warnings in 0)
-  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/CompilerCli.vuna" 207 3 ("case pattern match failure"))
+  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/CompilerCli.vuna" 249 24 ("case pattern match failure"))
 
 let v_Vuna_dCompiler_dCompilerCli_dcheckPkgEntry = fun pkg -> (match v_Vuna_dCompiler_dCompile_dcheckFileIn (v_Vuna_dCompiler_dPkg_dpackageName pkg) (v_Vuna_dCompiler_dPkg_dpackageRoots pkg) (v_Vuna_dCompiler_dPkg_dpackageEntry pkg) with
   | C_Base_dResult_dErr (e) -> (let _ = bi_print ((let vuna_cat0' = ("error: ") in (let vuna_cat1' = (e) in (let vuna_cat2' = ("\n") in String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'])))) in 1)
   | C_Base_dResult_dOk (warnings) -> (let _ = v_Vuna_dCompiler_dCompilerCli_dprintWarnings warnings in 0)
-  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/CompilerCli.vuna" 222 3 ("case pattern match failure"))
+  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/CompilerCli.vuna" 272 21 ("case pattern match failure"))
 
 let v_Vuna_dCompiler_dCompilerCli_dcheckPkgLibrary = fun pkg -> (match v_Vuna_dCompiler_dPkg_dpackageExports pkg with
   | C_Base_dMaybe_dNothing -> (let _ = bi_print ((let vuna_cat0' = ("error: check: library package ") in (let vuna_cat1' = (v_Vuna_dCompiler_dPkg_dpackageName pkg) in (let vuna_cat2' = (" has no [export].modules\n") in String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'])))) in 1)
   | C_Base_dMaybe_dJust (names) -> (match v_Vuna_dCompiler_dCompile_dcheckPackageIn (v_Vuna_dCompiler_dPkg_dpackageName pkg) (v_Vuna_dCompiler_dPkg_dpackageRoots pkg) names with
   | C_Base_dResult_dErr (e) -> (let _ = bi_print ((let vuna_cat0' = ("error: ") in (let vuna_cat1' = (e) in (let vuna_cat2' = ("\n") in String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'])))) in 1)
   | C_Base_dResult_dOk (warnings) -> (let _ = v_Vuna_dCompiler_dCompilerCli_dprintWarnings warnings in 0)
-  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/CompilerCli.vuna" 232 7 ("case pattern match failure"))
-  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/CompilerCli.vuna" 227 3 ("case pattern match failure"))
+  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/CompilerCli.vuna" 288 17 ("case pattern match failure"))
+  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/CompilerCli.vuna" 282 23 ("case pattern match failure"))
 
 let v_Vuna_dCompiler_dCompilerCli_dcheckPackage = fun dir -> (match v_Vuna_dCompiler_dPkg_dloadPackage dir with
   | C_Base_dResult_dErr (e) -> (let _ = bi_print ((let vuna_cat0' = ("error: ") in (let vuna_cat1' = (e) in (let vuna_cat2' = ("\n") in String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'])))) in 1)
   | C_Base_dResult_dOk (pkg) -> if bi_file_exists (v_Vuna_dCompiler_dPkg_dpackageEntry pkg) then v_Vuna_dCompiler_dCompilerCli_dcheckPkgEntry pkg else v_Vuna_dCompiler_dCompilerCli_dcheckPkgLibrary pkg
-  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/CompilerCli.vuna" 215 3 ("case pattern match failure"))
+  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/CompilerCli.vuna" 265 20 ("case pattern match failure"))
 
 let rec v_Vuna_dCompiler_dCompilerCli_dcheckParse = fun prog dt hasRoot roots args -> (match args with
   | ("--dt") :: (rest) -> v_Vuna_dCompiler_dCompilerCli_dcheckParse prog true hasRoot roots rest
   | ("--root") :: (rest) -> v_Vuna_dCompiler_dCompilerCli_drootArg prog roots rest (fun roots2 rest2 -> v_Vuna_dCompiler_dCompilerCli_dcheckParse prog dt true roots2 rest2)
   | (arg) :: ([]) -> if v_Base_dString_dstartsWith "-" arg then v_Vuna_dCompiler_dCompilerCli_dremovedFlag prog arg else if dt then if hasRoot then v_Vuna_dCompiler_dCompilerCli_ddtRootErr prog else if bi_is_directory arg then v_Vuna_dCompiler_dCompilerCli_ddtDirErr prog else v_Vuna_dCompiler_dCompilerCli_dcheckEmitDt arg else if bi_is_directory arg then v_Vuna_dCompiler_dCompilerCli_dcheckPackage arg else v_Vuna_dCompiler_dCompilerCli_dcheckEmit (v_Vuna_dCompiler_dCompile_deffectiveRoots roots) arg
   | _ -> v_Vuna_dCompiler_dCompilerCli_dusageErr prog
-  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/CompilerCli.vuna" 188 3 ("case pattern match failure"))
+  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/CompilerCli.vuna" 229 41 ("case pattern match failure"))
 
 let v_Vuna_dCompiler_dCompilerCli_dcheckArgs = fun prog args -> v_Vuna_dCompiler_dCompilerCli_dcheckParse prog false false [] args
 
 let v_Vuna_dCompiler_dCompilerCli_dsplitRun = fun outDir dir -> (let _ = bi_make_dir outDir in (match v_Vuna_dCompiler_dSplitCli_dbuildSplit dir outDir with
   | C_Base_dResult_dErr (e) -> (let _ = bi_print ((let vuna_cat0' = ("error: ") in (let vuna_cat1' = (e) in (let vuna_cat2' = ("\n") in String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'])))) in 1)
   | C_Base_dResult_dOk (n) -> (let _ = bi_print ((let vuna_cat0' = ("wrote ") in (let vuna_cat1' = (bi_str_from_int n) in (let vuna_cat2' = (" files to ") in (let vuna_cat3' = (outDir) in (let vuna_cat4' = ("\n") in String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'; vuna_cat3'; vuna_cat4'])))))) in 0)
-  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/CompilerCli.vuna" 255 6 ("case pattern match failure")))
+  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/CompilerCli.vuna" 314 6 ("case pattern match failure")))
 
 let v_Vuna_dCompiler_dCompilerCli_dbuildSplitCmd = fun prog outDir args -> (match args with
   | [] -> v_Vuna_dCompiler_dCompilerCli_dsplitRun outDir "."
   | (dir) :: ([]) -> if v_Base_dString_dstartsWith "-" dir then v_Vuna_dCompiler_dCompilerCli_dinvalidFlag prog dir else v_Vuna_dCompiler_dCompilerCli_dsplitRun outDir dir
   | _ -> v_Vuna_dCompiler_dCompilerCli_dusageErr prog
-  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/CompilerCli.vuna" 247 3 ("case pattern match failure"))
+  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/CompilerCli.vuna" 306 34 ("case pattern match failure"))
 
 let v_Vuna_dCompiler_dCompilerCli_dseedRun = fun out dir -> (let _ = bi_make_dir out in (match v_Vuna_dCompiler_dSplitCli_dseedSplit dir out with
   | C_Base_dResult_dErr (e) -> (let _ = bi_print ((let vuna_cat0' = ("error: ") in (let vuna_cat1' = (e) in (let vuna_cat2' = ("\n") in String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'])))) in 1)
   | C_Base_dResult_dOk (n) -> (let _ = bi_print ((let vuna_cat0' = ("wrote ") in (let vuna_cat1' = (bi_str_from_int n) in (let vuna_cat2' = (" files to ") in (let vuna_cat3' = (out) in (let vuna_cat4' = ("\n") in String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'; vuna_cat3'; vuna_cat4'])))))) in 0)
-  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/CompilerCli.vuna" 274 6 ("case pattern match failure")))
+  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/CompilerCli.vuna" 335 6 ("case pattern match failure")))
 
 let v_Vuna_dCompiler_dCompilerCli_dseedArgs = fun prog args -> (match args with
   | [] -> v_Vuna_dCompiler_dCompilerCli_dseedRun "seed" "."
@@ -179,18 +179,18 @@ let v_Vuna_dCompiler_dCompilerCli_dseedArgs = fun prog args -> (match args with
   | [] -> v_Vuna_dCompiler_dCompilerCli_dseedRun out "."
   | (dir) :: ([]) -> if v_Base_dString_dstartsWith "-" dir then v_Vuna_dCompiler_dCompilerCli_dinvalidFlag prog dir else v_Vuna_dCompiler_dCompilerCli_dseedRun out dir
   | _ -> v_Vuna_dCompiler_dCompilerCli_dusageErr prog
-  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/CompilerCli.vuna" 266 12 ("case pattern match failure"))
-  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/CompilerCli.vuna" 262 3 ("case pattern match failure"))
+  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/CompilerCli.vuna" 327 8 ("case pattern match failure"))
+  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/CompilerCli.vuna" 324 22 ("case pattern match failure"))
 
 let v_Vuna_dCompiler_dCompilerCli_ddefaultDir = fun dir -> (match dir with
   | C_Base_dMaybe_dJust (dir2) -> dir2
   | C_Base_dMaybe_dNothing -> "."
-  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/CompilerCli.vuna" 293 3 ("case pattern match failure"))
+  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/CompilerCli.vuna" 355 18 ("case pattern match failure"))
 
 let v_Vuna_dCompiler_dCompilerCli_ddefaultPackageOut = fun dir out -> (match out with
   | C_Base_dMaybe_dJust (out2) -> out2
   | C_Base_dMaybe_dNothing -> ((v_Vuna_dCompiler_dCompilerCli_ddefaultDir dir) ^ ("/.output"))
-  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/CompilerCli.vuna" 136 3 ("case pattern match failure"))
+  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/CompilerCli.vuna" 163 29 ("case pattern match failure"))
 
 let rec v_Vuna_dCompiler_dCompilerCli_dpackageParse = fun prog dir out args -> (match args with
   | [] -> v_Vuna_dCompiler_dCompilerCli_dpackageRun prog (v_Vuna_dCompiler_dCompilerCli_ddefaultDir dir) (v_Vuna_dCompiler_dCompilerCli_ddefaultPackageOut dir out)
@@ -200,21 +200,21 @@ let rec v_Vuna_dCompiler_dCompilerCli_dpackageParse = fun prog dir out args -> (
   | _ -> if v_Base_dString_dstartsWith "-" arg then v_Vuna_dCompiler_dCompilerCli_dremovedFlag prog arg else (match dir with
   | C_Base_dMaybe_dNothing -> v_Vuna_dCompiler_dCompilerCli_dpackageParse prog (C_Base_dMaybe_dJust (arg)) out rest
   | C_Base_dMaybe_dJust (_) -> v_Vuna_dCompiler_dCompilerCli_dusageErr prog
-  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/CompilerCli.vuna" 123 16 ("case pattern match failure"))
-  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/CompilerCli.vuna" 118 7 ("case pattern match failure"))
-  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/CompilerCli.vuna" 115 3 ("case pattern match failure"))
+  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/CompilerCli.vuna" 153 10 ("case pattern match failure"))
+  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/CompilerCli.vuna" 149 18 ("case pattern match failure"))
+  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/CompilerCli.vuna" 147 34 ("case pattern match failure"))
 and v_Vuna_dCompiler_dCompilerCli_dpackageOutArg = fun prog dir out rest -> (match rest with
   | (value) :: (rest2) -> (match out with
   | C_Base_dMaybe_dNothing -> v_Vuna_dCompiler_dCompilerCli_dpackageParse prog dir (C_Base_dMaybe_dJust (value)) rest2
   | C_Base_dMaybe_dJust (_) -> v_Vuna_dCompiler_dCompilerCli_dusageErr prog
-  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/CompilerCli.vuna" 130 7 ("case pattern match failure"))
+  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/CompilerCli.vuna" 158 21 ("case pattern match failure"))
   | [] -> v_Vuna_dCompiler_dCompilerCli_dusageErr prog
-  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/CompilerCli.vuna" 128 3 ("case pattern match failure"))
+  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/CompilerCli.vuna" 157 35 ("case pattern match failure"))
 
 let v_Vuna_dCompiler_dCompilerCli_dcompileArgs = fun prog args -> (match args with
   | ("--package") :: (rest) -> v_Vuna_dCompiler_dCompilerCli_dpackageParse prog C_Base_dMaybe_dNothing C_Base_dMaybe_dNothing rest
   | _ -> v_Vuna_dCompiler_dCompilerCli_dcompileParse prog true false false [] args
-  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/CompilerCli.vuna" 109 3 ("case pattern match failure"))
+  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/CompilerCli.vuna" 142 25 ("case pattern match failure"))
 
 let v_Vuna_dCompiler_dCompilerCli_ddefaultOutDir = fun dir -> ((dir) ^ ("/.output"))
 
@@ -230,14 +230,14 @@ let v_Vuna_dCompiler_dCompilerCli_drunBuildScript = fun dir name outDir -> if bi
 let v_Vuna_dCompiler_dCompilerCli_dbuildExecutable = fun dir noCompile pkg -> (let name = v_Vuna_dCompiler_dPkg_dpackageName pkg in (let outDir = v_Vuna_dCompiler_dCompilerCli_ddefaultOutDir dir in if noCompile then v_Vuna_dCompiler_dCompilerCli_drunBuildScript dir name outDir else (match v_Vuna_dCompiler_dSplitCli_dcompilePackage dir outDir with
   | C_Base_dResult_dErr (e) -> (let _ = bi_print ((let vuna_cat0' = ("error: ") in (let vuna_cat1' = (e) in (let vuna_cat2' = ("\n") in String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'])))) in 1)
   | C_Base_dResult_dOk (n) -> (let _ = bi_print ((let vuna_cat0' = ("wrote ") in (let vuna_cat1' = (bi_str_from_int n) in (let vuna_cat2' = (" files to .output\n") in String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'])))) in v_Vuna_dCompiler_dCompilerCli_drunBuildScript dir name outDir)
-  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/CompilerCli.vuna" 322 14 ("case pattern match failure"))))
+  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/CompilerCli.vuna" 387 8 ("case pattern match failure"))))
 
 let v_Vuna_dCompiler_dCompilerCli_dbuildPackage = fun prog dir noCompile pkg -> if bi_file_exists (v_Vuna_dCompiler_dPkg_dpackageEntry pkg) then v_Vuna_dCompiler_dCompilerCli_dbuildExecutable dir noCompile pkg else v_Vuna_dCompiler_dCompilerCli_derrNoMain ()
 
 let v_Vuna_dCompiler_dCompilerCli_dbuildRun = fun prog dir noCompile -> (match v_Vuna_dCompiler_dPkg_dloadPackage dir with
   | C_Base_dResult_dErr (e) -> (let _ = bi_print ((let vuna_cat0' = ("error: ") in (let vuna_cat1' = (e) in (let vuna_cat2' = ("\n") in String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'])))) in 1)
   | C_Base_dResult_dOk (pkg) -> v_Vuna_dCompiler_dCompilerCli_dbuildPackage prog dir noCompile pkg
-  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/CompilerCli.vuna" 305 3 ("case pattern match failure"))
+  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/CompilerCli.vuna" 365 31 ("case pattern match failure"))
 
 let rec v_Vuna_dCompiler_dCompilerCli_dbuildParse = fun prog dir noCompile args -> (match args with
   | [] -> v_Vuna_dCompiler_dCompilerCli_dbuildRun prog (v_Vuna_dCompiler_dCompilerCli_ddefaultDir dir) noCompile
@@ -246,15 +246,15 @@ let rec v_Vuna_dCompiler_dCompilerCli_dbuildParse = fun prog dir noCompile args 
   | _ -> if v_Base_dString_dstartsWith "-" arg then v_Vuna_dCompiler_dCompilerCli_dinvalidFlag prog arg else (match dir with
   | C_Base_dMaybe_dNothing -> v_Vuna_dCompiler_dCompilerCli_dbuildParse prog (C_Base_dMaybe_dJust (arg)) noCompile rest
   | C_Base_dMaybe_dJust (_) -> v_Vuna_dCompiler_dCompilerCli_dusageErr prog
-  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/CompilerCli.vuna" 288 16 ("case pattern match failure"))
-  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/CompilerCli.vuna" 284 7 ("case pattern match failure"))
-  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/CompilerCli.vuna" 281 3 ("case pattern match failure"))
+  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/CompilerCli.vuna" 350 10 ("case pattern match failure"))
+  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/CompilerCli.vuna" 347 18 ("case pattern match failure"))
+  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/CompilerCli.vuna" 345 38 ("case pattern match failure"))
 
 let v_Vuna_dCompiler_dCompilerCli_dbuildArgs = fun prog args -> (match args with
   | ("--split") :: ([]) -> v_Vuna_dCompiler_dCompilerCli_dusageErr prog
   | ("--split") :: ((outDir) :: (rest)) -> v_Vuna_dCompiler_dCompilerCli_dbuildSplitCmd prog outDir rest
   | _ -> v_Vuna_dCompiler_dCompilerCli_dbuildParse prog C_Base_dMaybe_dNothing false args
-  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/CompilerCli.vuna" 241 3 ("case pattern match failure"))
+  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/CompilerCli.vuna" 301 23 ("case pattern match failure"))
 
 let v_Vuna_dCompiler_dCompilerCli_drunCompilerCliFor1 = fun prog args -> (match args with
   | [] -> v_Vuna_dCompiler_dCompilerCli_dusageErr prog
@@ -269,8 +269,8 @@ let v_Vuna_dCompiler_dCompilerCli_drunCompilerCliFor1 = fun prog args -> (match 
   | "--typed" -> v_Vuna_dCompiler_dCompilerCli_dremovedFlag prog arg
   | "--out" -> v_Vuna_dCompiler_dCompilerCli_dremovedFlag prog arg
   | _ -> if v_Base_dString_dstartsWith "-" arg then v_Vuna_dCompiler_dCompilerCli_dmissingCommand prog arg else v_Vuna_dCompiler_dCompilerCli_dunknownCommand prog arg
-  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/CompilerCli.vuna" 42 7 ("case pattern match failure"))
-  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/CompilerCli.vuna" 39 3 ("case pattern match failure"))
+  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/CompilerCli.vuna" 52 18 ("case pattern match failure"))
+  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/CompilerCli.vuna" 50 32 ("case pattern match failure"))
 
 let v_Vuna_dCompiler_dCompilerCli_drunCompilerCliFor = fun prog args -> if v_Vuna_dCompiler_dCompilerCli_danyHelp args then v_Vuna_dCompiler_dCompilerCli_dhelpFor prog else v_Vuna_dCompiler_dCompilerCli_drunCompilerCliFor1 prog args
 
