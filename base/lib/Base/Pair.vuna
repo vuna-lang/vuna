@@ -1,0 +1,12 @@
+module Base.Pair (Pair(..), firstOf, secondOf) where
+
+-- Base.Pair：二元组类型与投影函数。无依赖模块。
+
+data Pair a b : Type where
+  Pair : a -> b -> Pair a b
+
+firstOf : Pair a b -> a
+firstOf (Pair a b) = a
+
+secondOf : Pair a b -> b
+secondOf (Pair a b) = b

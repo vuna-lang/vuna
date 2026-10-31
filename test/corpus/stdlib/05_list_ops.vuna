@@ -1,7 +1,7 @@
--- stdlib：Vuna.List 常用操作。
-import Vuna.List
-import Vuna.Pair
-import Vuna.Maybe
+-- stdlib：Base.List 常用操作。
+import Base.List
+import Base.Pair
+import Base.Maybe
 
 showBool : Bool -> String
 showBool b = if b then "True" else "False"

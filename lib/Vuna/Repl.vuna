@@ -10,10 +10,10 @@ module Vuna.Repl (runRepl) where
 --   - `:q`/`:quit` 退出，`:help` 帮助，`:reset` 清空缓冲。
 -- 限制：一次只能输入一行（多行定义/表达式暂不支持）。
 
-import Vuna.Base
-import Vuna.Ast
-import Vuna.Pkg
-import Vuna.Parser
+import Vuna.Compiler.Common
+import Vuna.Compiler.Ast
+import Vuna.Compiler.Pkg
+import Vuna.Compiler.Parser
 import Vuna.Interp
 
 replTempFile = "/tmp/vuna-repl.vuna"

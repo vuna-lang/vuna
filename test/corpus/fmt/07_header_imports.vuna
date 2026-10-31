@@ -1,9 +1,9 @@
-module Vuna.Sample (Point(..), Shape, area, module Vuna.Base, Vuna.Parser.parseSource) where
+module Vuna.Sample (Point(..), Shape, area, module Vuna.Compiler.Common, Vuna.Compiler.Parser.parseSource) where
 
-import Vuna.Base
-import qualified Vuna.Parser as P
-import Vuna.Ast as A
-import qualified Vuna.Lexer as L
+import Vuna.Compiler.Common
+import qualified Vuna.Compiler.Parser as P
+import Vuna.Compiler.Ast as A
+import qualified Vuna.Compiler.Lexer as L
 
 data Shape : Type where
   Circle : Int -> Shape

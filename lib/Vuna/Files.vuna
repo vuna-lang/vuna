@@ -2,9 +2,9 @@ module Vuna.Files (collectVunaFiles, collectSourceFiles, pathExistsDir) where
 
 -- Vuna.Files：目录遍历工具（fmt / doc / test 共用）。
 -- 只依赖 readDir / isDirectory / fileExists 内建；readDir 返回字典序，遍历顺序确定。
--- 路径拆分（splitPath / baseName）在 Vuna.Base，供编译器驱动与工具共用。
+-- 路径拆分（splitPath / baseName）在 Vuna.Compiler.Common，供编译器驱动与工具共用。
 
-import Vuna.Base
+import Vuna.Compiler.Common
 
 -- 递归收集目录下所有 .vuna 文件（跳过 . / .. 与隐藏项）。
 collectVunaFiles : String -> List String

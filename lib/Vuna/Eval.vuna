@@ -2,9 +2,9 @@ module Vuna.Eval (runDecls) where
 
 -- Vuna.Eval：值表示、内建函数、求值器与 show。
 
-import Vuna.Base
-import Vuna.Ast
-import Vuna.Builtins
+import Vuna.Compiler.Common
+import Vuna.Compiler.Ast
+import Vuna.Compiler.Builtins
 
 data Value : Type where
   VInt : Int -> Value
@@ -508,6 +508,7 @@ callBuiltin name args sp =
       case args of
         Cons a Nil => andThen (intArg sp a) (\n => Ok (VInt (exit n)))
         _ => errAt sp "bad arguments for exit"
+    "prim_runIn" => errAt sp "prim_runIn is not available in the interpreter"
     _ => errAt sp ("unknown builtin: " ++ name)
 
 displayName name =

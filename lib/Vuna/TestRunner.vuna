@@ -6,8 +6,8 @@ module Vuna.TestRunner (runTests) where
 -- 返回空串表示通过，返回非空串表示失败（打印失败信息）。
 -- 用解释器 + 降级路径执行，能覆盖 trait/record/do；代码生成路径的验证留给 CI 脚本。
 
-import Vuna.Base
-import Vuna.Pkg
+import Vuna.Compiler.Common
+import Vuna.Compiler.Pkg
 import Vuna.Interp
 
 runTests : Package -> List Root -> Int

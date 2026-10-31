@@ -1,0 +1,97 @@
+module Base.List (List(..), append, reverse, length, map, filter, foldl, foldr, concatMap, flatMap, mem, memName, lookupPair, zip, take, drop, range, mapMaybe) where
+
+-- Base.List：列表类型与常用操作（Base 语义迁移 + 常用补充）。
+-- import Base.Bool 只为让 `data Bool` 声明进入程序（typed codegen 生成 True/False 表达式所需）。
+
+import Base.Pair
+import Base.Maybe
+import Base.Bool
+import Base.Monad
+
+data List a : Type where
+  Nil : List a
+  Cons : a -> List a -> List a
+
+append : List a -> List a -> List a
+append Nil ys = ys
+append (Cons x xs) ys = Cons x (append xs ys)
+
+reverseOnto : List a -> List a -> List a
+reverseOnto Nil acc = acc
+reverseOnto (Cons x xs) acc = reverseOnto xs (Cons x acc)
+
+reverse : List a -> List a
+reverse xs = reverseOnto xs Nil
+
+length : List a -> Int
+length Nil = 0
+length (Cons x xs) = 1 + length xs
+
+map : (a -> b) -> List a -> List b
+map f Nil = Nil
+map f (Cons x xs) = Cons (f x) (map f xs)
+
+filter : (a -> Bool) -> List a -> List a
+filter p Nil = Nil
+filter p (Cons x xs) =
+  if p x then Cons x (filter p xs) else filter p xs
+
+foldl : (b -> a -> b) -> b -> List a -> b
+foldl f acc Nil = acc
+foldl f acc (Cons x xs) = foldl f (f acc x) xs
+
+foldr : (a -> b -> b) -> b -> List a -> b
+foldr f acc Nil = acc
+foldr f acc (Cons x xs) = f x (foldr f acc xs)
+
+concatMap : (a -> List b) -> List a -> List b
+concatMap f Nil = Nil
+concatMap f (Cons x rest) = append (f x) (concatMap f rest)
+
+flatMap : (a -> List b) -> List a -> List b
+flatMap f xs = concatMap f xs
+
+mem : a -> List a -> Bool
+mem x Nil = False
+mem x (Cons y rest) = if x == y then True else mem x rest
+
+memName : String -> List String -> Bool
+memName name Nil = False
+memName name (Cons x rest) = if x == name then True else memName name rest
+
+lookupPair : String -> List (Pair String v) -> Maybe v
+lookupPair name Nil = Nothing
+lookupPair name (Cons (Pair k v) rest) =
+  if k == name then Just v else lookupPair name rest
+
+zip : List a -> List b -> List (Pair a b)
+zip Nil ys = Nil
+zip xs Nil = Nil
+zip (Cons x xs) (Cons y ys) = Cons (Pair x y) (zip xs ys)
+
+take : Int -> List a -> List a
+take n Nil = Nil
+take n (Cons x xs) = if n <= 0 then Nil else Cons x (take (n - 1) xs)
+
+drop : Int -> List a -> List a
+drop n Nil = Nil
+drop n (Cons x xs) = if n <= 0 then Cons x xs else drop (n - 1) xs
+
+range : Int -> Int -> List Int
+range i n = if i >= n then Nil else Cons i (range (i + 1) n)
+
+mapMaybe : (a -> Maybe b) -> List a -> List b
+mapMaybe f Nil = Nil
+mapMaybe f (Cons x xs) =
+  case f x of
+    Nothing => mapMaybe f xs
+    Just y => Cons y (mapMaybe f xs)
+
+-- M11-C：Functor / Monad 实例（trait 来自 Base.Monad，List 定义在本模块）。
+instance Functor List where
+  fmap f xs = map f xs
+
+instance Monad List where
+  bind xs f = concatMap f xs
+  pure x = Cons x Nil
+

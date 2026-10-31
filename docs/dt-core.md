@@ -6,9 +6,10 @@
 
 ## 1. 范围
 
-- 新增模块：`compiler/lib/Vuna/Core.vuna`（core 语法/值/NbE/转换）、
-  `Vuna/Elab.vuna`（双向精化器）、`Vuna/CoreCodegen.vuna`（擦除 + OCaml 生成）、
-  `Vuna/Dt.vuna`（单文件 facade）。
+- 新增模块：`compiler/lib/Vuna/Compiler/Core.vuna`（core 语法/值/NbE/转换）、
+  `compiler/lib/Vuna/Compiler/Elab.vuna`（双向精化器）、
+  `compiler/lib/Vuna/Compiler/CoreCodegen.vuna`（擦除 + OCaml 生成）、
+  `compiler/lib/Vuna/Compiler/Dt.vuna`（单文件 facade）。
 - 入口：`vuna compile --dt` / `vuna check --dt` / `vuna interp --dt`。
 - 只支持单文件：不经过 Loader、不支持 `import`、不支持包模式、不接入
   `build` / `split` / `seed`（M17 前 roadmap 允许 split 回退）。
@@ -102,10 +103,10 @@ data Term where
 
 ## 7. 与 HM 路径的边界
 
-- 只共享 `Ast` / `Parser` / `Fmt` / `Base`；`EPi` 在 HM 的 loader 里报
-  `dependent function type requires --dt`。
-- `Vuna.Dt` 是唯一对外 facade（`compiler/vuna.toml` 的 `[export]`）；核心求值器
-  通过 `vuna interp --dt` 暴露，用于与 codegen 结果做一致性测试。
+- 只共享 `Vuna.Compiler.Ast` / `Vuna.Compiler.Parser` / `Vuna.Fmt` 与 `Base.*`；
+  `EPi` 在 HM 的 loader 里报 `dependent function type requires --dt`。
+- `Vuna.Compiler.Dt` 是唯一对外 facade（`compiler/vuna.toml` 的 `[export]`）；
+  核心求值器通过 `vuna interp --dt` 暴露，用于与 codegen 结果做一致性测试。
 - M13 的 DT 不进入 `build` / `seed` / `split`；seed 仍只由 HM typed codegen 生成
   （DT 模块是普通 HM 源码，随 compiler 闭包进入 TCB）。
 

@@ -78,7 +78,7 @@ for file in corpus/run/*.vuna; do
   expected=$(cat "$base.out")
   extra=""
   case "$file" in
-    *16_file_exists*) extra="--root ../stdlib/lib" ;;
+    *16_file_exists*) extra="--root ../base/lib" ;;
   esac
   actual=$("$VUNA" interp $extra "$file" 2>&1)
   check_eq "$file (interp)" "$expected" "$actual"
@@ -565,10 +565,10 @@ done
 for file in corpus/stdlib/[01][0-9]_*.vuna; do
   base=${file%.vuna}
   expected=$(cat "$base.out")
-  actual=$("$VUNA" interp --root ../stdlib/lib "$file" 2>&1)
+  actual=$("$VUNA" interp --root ../base/lib "$file" 2>&1)
   check_eq "$file (stdlib interp)" "$expected" "$actual"
   rm -f "$tmp/stdlib_typed.ml" "$tmp/stdlib_typed.exe"
-  if ! std_out=$("$VUNA" compile --root ../stdlib/lib "$file" "$tmp/stdlib_typed.ml" 2>&1); then
+  if ! std_out=$("$VUNA" compile --root ../base/lib "$file" "$tmp/stdlib_typed.ml" 2>&1); then
     bad "$file (stdlib typed codegen)" "exit 0" "$std_out"
   elif [ -n "$std_out" ]; then
     bad "$file (stdlib typed codegen output)" "" "$std_out"
@@ -582,13 +582,13 @@ done
 
 for file in corpus/stdlib/9[0-9]_*.vuna; do
   fragment=$(cat "${file%.vuna}.err")
-  actual=$("$VUNA" interp --root ../stdlib/lib "$file" 2>&1)
+  actual=$("$VUNA" interp --root ../base/lib "$file" 2>&1)
   check_contains "$file (stdlib interp error)" "$actual" "$fragment"
-  "$VUNA" interp --root ../stdlib/lib "$file" >/dev/null 2>&1
+  "$VUNA" interp --root ../base/lib "$file" >/dev/null 2>&1
   std_code=$?
   if [ "$std_code" -ne 0 ]; then ok; else bad "$file (stdlib interp error exit)" "non-zero" "$std_code"; fi
   rm -f "$tmp/stdlib_err_typed.ml"
-  actual=$("$VUNA" compile --root ../stdlib/lib "$file" "$tmp/stdlib_err_typed.ml" 2>&1)
+  actual=$("$VUNA" compile --root ../base/lib "$file" "$tmp/stdlib_err_typed.ml" 2>&1)
   std_code=$?
   check_contains "$file (stdlib typed error)" "$actual" "$fragment"
   if [ "$std_code" -ne 0 ]; then ok; else bad "$file (stdlib typed error exit)" "non-zero" "$std_code"; fi
@@ -599,18 +599,19 @@ for file in corpus/stdlib/9[0-9]_*.vuna; do
   fi
 done
 
-# 28) 包模式（M11.5）：workspace + 依赖包 + [export] + app/Main.vuna 入口
-#     正例：vuna build 生成 → ocamlopt → 运行比对 golden；vuna test 运行 test/*.vuna
+# 28) 包模式（M11.5/M12.8）：workspace + 依赖包 + [export] + app/Main.vuna 入口
+#     正例：vuna compile --package 生成 .output → build.sh 链接 → 运行比对 golden
 for dir in corpus/packages/[01][0-9]_*/; do
   dir=${dir%/}
   expected=$(cat "$dir/expected.out")
-  rm -f "$tmp/pkg.ml" "$tmp/pkg.exe"
-  if ! pkg_out=$("$VUNA" build "$dir" "$tmp/pkg.ml" 2>&1); then
-    bad "$dir (package build)" "exit 0" "$pkg_out"
-  elif ! "$OCAMLOPT" -w -a -o "$tmp/pkg.exe" "$tmp/pkg.ml" >"$tmp/pkg.log" 2>&1; then
-    bad "$dir (package ocamlopt)" "" "$(cat "$tmp/pkg.log")"
+  pkg_out_dir=$tmp/pkg-out-$(basename "$dir")
+  rm -rf "$pkg_out_dir"
+  if ! pkg_out=$("$VUNA" compile --package --out "$pkg_out_dir" "$dir" 2>&1); then
+    bad "$dir (package compile)" "exit 0" "$pkg_out"
+  elif ! ( cd "$pkg_out_dir" && OCAMLOPT="$OCAMLOPT" sh build.sh bin/prog ) >"$tmp/pkg.log" 2>&1; then
+    bad "$dir (package build)" "" "$(cat "$tmp/pkg.log")"
   else
-    actual=$("$tmp/pkg.exe" 2>&1)
+    actual=$("$pkg_out_dir/bin/prog" 2>&1)
     check_eq "$dir (package run)" "$expected" "$actual"
   fi
   test_out=$("$VUNA" test "$dir" 2>&1)
@@ -623,13 +624,14 @@ done
 for dir in corpus/packages/9[0-9]_*/; do
   dir=${dir%/}
   fragment=$(cat "$dir/expected.err")
-  rm -f "$tmp/pkg_err.ml"
-  actual=$("$VUNA" build "$dir" "$tmp/pkg_err.ml" 2>&1)
+  pkg_err_dir=$tmp/pkg-err-out-$(basename "$dir")
+  rm -rf "$pkg_err_dir"
+  actual=$("$VUNA" compile --package --out "$pkg_err_dir" "$dir" 2>&1)
   pkg_code=$?
   check_contains "$dir (package error)" "$actual" "$fragment"
   if [ "$pkg_code" -ne 0 ]; then ok; else bad "$dir (package error exit)" "non-zero" "$pkg_code"; fi
-  if [ -e "$tmp/pkg_err.ml" ]; then
-    bad "$dir (package no output file)" "absent" "present"
+  if [ -e "$pkg_err_dir/lib" ] || [ -e "$pkg_err_dir/app" ]; then
+    bad "$dir (package no output files)" "absent" "present"
   else
     ok
   fi
@@ -662,40 +664,40 @@ VUNA="$VUNA" OCAMLOPT="$OCAMLOPT" sh corpus/fmt/check.sh >"$tmp/fmt_check.log" 2
 fmt_code=$?
 if [ "$fmt_code" -eq 0 ]; then ok; else bad "fmt corpus" "exit 0" "$(tail -3 "$tmp/fmt_check.log")"; fi
 
-# 33) M12 分离编译：逐模块生成 → build.sh 增量编译 → 输出与单文件一致
+# 33) M12.8 包级 compile：.output/{lib,app} → build.sh 增量编译 → 输出一致
 for pkg in corpus/packages/[01][0-9]_*/; do
   pkg=${pkg%/}
   split_dir=$tmp/split-$(basename "$pkg")
   rm -rf "$split_dir"
   mkdir -p "$split_dir"
-  if ! split_out=$("$VUNA" build --split "$split_dir" "$pkg" 2>&1); then
-    bad "$pkg (split generate)" "exit 0" "$split_out"
+  if ! split_out=$("$VUNA" compile --package --out "$split_dir" "$pkg" 2>&1); then
+    bad "$pkg (package generate)" "exit 0" "$split_out"
     continue
   fi
-  if [ ! -f "$split_dir/build.sh" ]; then
-    bad "$pkg (split build.sh)" "present" "missing"
+  if [ ! -f "$split_dir/build.sh" ] || [ ! -f "$split_dir/app/Main.ml" ]; then
+    bad "$pkg (package layout)" "lib+app+build.sh" "missing"
     continue
   fi
   ok
-  ( cd "$split_dir" && sh build.sh prog ) >"$tmp/split_build.log" 2>&1
-  check_eq "$pkg (split build exit)" "0" "$?"
-  actual=$("$split_dir/prog" 2>&1)
-  check_eq "$pkg (split run)" "$(cat "$pkg/expected.out")" "$actual"
+  ( cd "$split_dir" && OCAMLOPT="$OCAMLOPT" sh build.sh bin/prog ) >"$tmp/split_build.log" 2>&1
+  check_eq "$pkg (package build exit)" "0" "$?"
+  actual=$("$split_dir/bin/prog" 2>&1)
+  check_eq "$pkg (package run)" "$(cat "$pkg/expected.out")" "$actual"
 done
 
 # 增量构建行为用 01_workspace 验证
 split_dir=$tmp/split-01_workspace
-( cd "$split_dir" && sh build.sh prog ) >"$tmp/split_noop.log" 2>&1
+( cd "$split_dir" && OCAMLOPT="$OCAMLOPT" sh build.sh bin/prog ) >"$tmp/split_noop.log" 2>&1
 if grep -q '^compile ' "$tmp/split_noop.log"; then
-  bad "split incremental noop" "no compile lines" "$(cat "$tmp/split_noop.log")"
+  bad "package incremental noop" "no compile lines" "$(cat "$tmp/split_noop.log")"
 else
   ok
 fi
-touch "$split_dir/Vuna_dHello.ml"
-( cd "$split_dir" && sh build.sh prog ) >"$tmp/split_inc.log" 2>&1
-check_contains "split incremental module" "$(cat "$tmp/split_inc.log")" "compile Vuna_dHello"
+touch "$split_dir/lib/Vuna_dHello.ml"
+( cd "$split_dir" && OCAMLOPT="$OCAMLOPT" sh build.sh bin/prog ) >"$tmp/split_inc.log" 2>&1
+check_contains "package incremental module" "$(cat "$tmp/split_inc.log")" "compile Vuna_dHello"
 if grep -q '^compile Vuna_runtime' "$tmp/split_inc.log"; then
-  bad "split incremental runtime untouched" "no runtime compile" "$(cat "$tmp/split_inc.log")"
+  bad "package incremental runtime untouched" "no runtime compile" "$(cat "$tmp/split_inc.log")"
 else
   ok
 fi
@@ -753,7 +755,7 @@ check_eq "dt check dir exit" "2" "$?"
 check_eq "dt build exit" "2" "$?"
 "$VUNA" seed --dt >/dev/null 2>&1
 check_eq "dt seed exit" "2" "$?"
-"$VUNA" interp --dt --root stdlib/lib corpus/dt/01_id.vuna >/dev/null 2>&1
+"$VUNA" interp --dt --root base/lib corpus/dt/01_id.vuna >/dev/null 2>&1
 check_eq "dt interp --root exit" "2" "$?"
 
 # DT fmt round-trip：Pi 语法格式化后仍解析为同一程序且幂等

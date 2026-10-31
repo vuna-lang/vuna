@@ -1,6 +1,6 @@
 module Vuna.Interp (interpretFile, interpretFileIn) where
 
--- Vuna.Interp：解释器 facade（工具链侧；编译入口见 Vuna.Compile）。
+-- Vuna.Interp：解释器 facade（工具链侧；编译入口见 Vuna.Compiler.Compile）。
 --
 -- 该模块依赖 Vuna.Eval，只被 CLI / REPL / test runner 使用，不属于编译器 seed 闭包。
 --
@@ -8,13 +8,13 @@ module Vuna.Interp (interpretFile, interpretFileIn) where
 -- 一致，也是删除 `--no-typecheck` 后的替代入口）；只有 record / trait / deriving
 -- 程序必须先类型检查并降级。子句元数一致性是结构性检查，始终先跑。
 
-import Vuna.Base
-import Vuna.Pkg
-import Vuna.Ast
-import Vuna.Parser
-import Vuna.Loader
+import Vuna.Compiler.Common
+import Vuna.Compiler.Pkg
+import Vuna.Compiler.Ast
+import Vuna.Compiler.Parser
+import Vuna.Compiler.Loader
 import Vuna.Eval
-import Vuna.Typecheck
+import Vuna.Compiler.Typecheck
 
 interpret source =
   case parseSource "<input>" source of

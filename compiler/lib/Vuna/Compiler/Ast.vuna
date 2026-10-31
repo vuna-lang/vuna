@@ -1,0 +1,216 @@
+module Vuna.Compiler.Ast (Pat, PVar, PWild, PCon, PInt, PStr, PRecord, Expr, EVar, EInt, EStr, ELam, EApp, EPi, ELet, ECase, EIf, EField, ERecord, ERecUpdate, EInstSel, EDo, DoStmt, DBind, DExpr, doStmtSpan, doStmtExpr, Ctor, Field, Decl, DData, DSig, DFun, DRecord, DTrait, DInstance, XBare, XTypeAll, XModule, ModDecl, modDeclSpan, Source, patSpan, exprSpan, declSpan, ctorSpan, fieldSpan, fieldName, fieldType, Import, importSpan, exportItemSpan, clausesFor, funArity, ctorName, ctorType, ctorArityOf, ctorArity, declNames, topNames, ctorsOf, typeNamesOf, declDerivings) where
+
+-- Vuna.Compiler.Ast：core-v0/M10.5 的语法类型与 AST 辅助函数。
+
+import Vuna.Compiler.Common
+
+-- 记录字段：字段名 + 类型表达式 + span（M10.5）。
+data Field : Type where
+  Field : String -> Expr -> Span -> Field
+
+data Pat : Type where
+  PVar : String -> Span -> Pat
+  PWild : Span -> Pat
+  PCon : String -> List Pat -> Span -> Pat
+  PInt : Int -> Span -> Pat
+  PStr : String -> Span -> Pat
+  PRecord : String -> List (Pair String Pat) -> Span -> Pat
+
+data Expr : Type where
+  EVar : String -> Span -> Expr
+  EInt : Int -> Span -> Expr
+  EStr : String -> Span -> Expr
+  ELam : List String -> Expr -> Span -> Expr
+  EApp : Expr -> List Expr -> Span -> Expr
+  -- DT（M13）命名 Pi：`(x : A) -> B` 与隐式 `{x : A} -> B`。
+  -- 匿名 `A -> B` 仍沿用 `EApp (EVar "->") [A, B]` 编码（既有路径零改动）。
+  EPi : String -> Bool -> Expr -> Expr -> Span -> Expr
+  ELet : List (Pair Pat Expr) -> Expr -> Bool -> Span -> Expr
+  ECase : Expr -> List (Pair Pat Expr) -> Span -> Expr
+  EIf : Expr -> Expr -> Expr -> Span -> Expr
+  EField : Expr -> String -> Span -> Expr
+  ERecord : String -> List (Pair String Expr) -> Span -> Expr
+  ERecUpdate : Expr -> List (Pair String Expr) -> Span -> Expr
+  EInstSel : Expr -> String -> Span -> Expr
+  EDo : List DoStmt -> Span -> Expr
+
+-- do 语句（M11）：`pat <- expr` 或裸表达式；最后一条必须是裸表达式。
+data DoStmt : Type where
+  DBind : Pat -> Expr -> Span -> DoStmt
+  DExpr : Expr -> Span -> DoStmt
+
+data Ctor : Type where
+  Ctor : String -> Expr -> Int -> Span -> Ctor
+
+data Decl : Type where
+  DData : String -> List String -> List Ctor -> List String -> Span -> Decl
+  DSig : String -> Expr -> Span -> Decl
+  DFun : String -> List Pat -> Expr -> Span -> Decl
+  DRecord : String -> List String -> List Field -> List String -> Span -> Decl
+  DTrait : String -> List String -> List (Pair String Expr) -> Span -> Decl
+  DInstance : Maybe String -> Bool -> Expr -> List Decl -> Span -> Decl
+
+-- M10 模块头与导出项。
+-- XBare 是裸名导出，XTypeAll 是 `T(..)`，XModule 是 `module B` 整模块重导出。
+data ExportItem : Type where
+  XBare : String -> Span -> ExportItem
+  XTypeAll : String -> Span -> ExportItem
+  XModule : String -> Span -> ExportItem
+
+-- 模块头：模块名、是否写了显式导出列表、导出项、span。
+data ModDecl : Type where
+  ModDecl : String -> Bool -> List ExportItem -> Span -> ModDecl
+
+-- parser 的产物：可选模块头 + imports + 顶层声明。
+data SourceFile : Type where
+  Source : Maybe ModDecl -> List Import -> List Decl -> SourceFile
+
+-- 各节点的源码 span 访问器。
+patSpan pat =
+  case pat of
+    PVar name sp => sp
+    PWild sp => sp
+    PCon name pats sp => sp
+    PInt n sp => sp
+    PStr s sp => sp
+    PRecord name fields sp => sp
+
+exprSpan expr =
+  case expr of
+    EVar name sp => sp
+    EInt n sp => sp
+    EStr s sp => sp
+    ELam ps body sp => sp
+    EApp fn args sp => sp
+    EPi name implicit dom cod sp => sp
+    ELet binds body _ sp => sp
+    ECase scrut alts sp => sp
+    EIf c t e sp => sp
+    EField base f sp => sp
+    ERecord name fields sp => sp
+    ERecUpdate base fields sp => sp
+    EInstSel meth name sp => sp
+    EDo stmts sp => sp
+
+doStmtSpan stmt =
+  case stmt of
+    DBind pat expr sp => sp
+    DExpr expr sp => sp
+
+doStmtExpr stmt =
+  case stmt of
+    DBind pat expr sp => expr
+    DExpr expr sp => expr
+
+declSpan decl =
+  case decl of
+    DData name params ctors derivings sp => sp
+    DSig name ty sp => sp
+    DFun name pats body sp => sp
+    DRecord name params fields derivings sp => sp
+    DTrait name params methods sp => sp
+    DInstance name isDefault head methods sp => sp
+
+ctorSpan (Ctor name ty arity sp) = sp
+
+fieldSpan (Field name ty sp) = sp
+
+fieldName (Field name ty sp) = name
+
+fieldType (Field name ty sp) = ty
+
+data Import : Type where
+  Import : String -> Bool -> Maybe String -> Span -> Import
+
+importSpan (Import name isQualified alias sp) = sp
+
+modDeclSpan (ModDecl name explicit items sp) = sp
+
+exportItemSpan item =
+  case item of
+    XBare name sp => sp
+    XTypeAll name sp => sp
+    XModule name sp => sp
+
+collectClauses Nil name = Nil
+collectClauses (Cons d rest) name =
+  case d of
+    DFun n pats body _ =>
+      if n == name then Cons (Pair pats body) (collectClauses rest name)
+      else collectClauses rest name
+    _ => collectClauses rest name
+
+clausesFor decls name = collectClauses decls name
+
+funArity name decls =
+  case clausesFor decls name of
+    Nil => Nothing
+    Cons (Pair pats body) _ => Just (length pats)
+
+ctorName (Ctor name ty arity _) = name
+
+ctorType (Ctor name ty arity _) = ty
+
+typeArity ty =
+  case ty of
+    EApp (EVar "->" _) (Cons x (Cons rest Nil)) _ => 1 + typeArity rest
+    _ => 0
+
+ctorArityOf (Ctor name ty arity _) = arity
+
+lookupCtorArity name ctors =
+  case ctors of
+    Nil => Nothing
+    Cons c rest =>
+      if ctorName c == name then Just (ctorArityOf c) else lookupCtorArity name rest
+
+ctorArity name decls =
+  case decls of
+    Nil => Nothing
+    Cons d rest =>
+      case d of
+        DData dname params ctors derivings sp =>
+          case lookupCtorArity name ctors of
+            Just arity => Just arity
+            Nothing => ctorArity name rest
+        DRecord dname params fields derivings sp =>
+          if name == dname then Just (length fields) else ctorArity name rest
+        _ => ctorArity name rest
+
+declNames d =
+  case d of
+    DFun name pats body _ => Cons name Nil
+    DSig name ty _ => Cons name Nil
+    DData dname params ctors derivings _ => map ctorName ctors
+    DRecord dname params fields derivings _ => Cons dname Nil
+    DTrait tname params methods _ => map firstOf methods
+    DInstance name isDefault head methods _ =>
+      case name of
+        Nothing => Nil
+        Just n => Cons n Nil
+
+topNames decls = concatMap declNames decls
+
+_declCtors d =
+  case d of
+    DData dname params ctors derivings _ => map ctorName ctors
+    DRecord dname params fields derivings _ => Cons dname Nil
+    DTrait tname params methods _ => map firstOf methods
+    _ => Nil
+
+ctorsOf decls = concatMap _declCtors decls
+
+declTypeNames d =
+  case d of
+    DData name params ctors derivings _ => Cons name Nil
+    DRecord name params fields derivings _ => Cons name Nil
+    DTrait name params methods _ => Cons name Nil
+    _ => Nil
+
+typeNamesOf decls = concatMap declTypeNames decls
+
+declDerivings d =
+  case d of
+    DData name params ctors derivings _ => derivings
+    DRecord name params fields derivings _ => derivings
+    _ => Nil

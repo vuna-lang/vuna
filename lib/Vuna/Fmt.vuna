@@ -9,10 +9,10 @@ module Vuna.Fmt (formatSource) where
 -- 末尾的注释成为该条目的行尾注释；表达式内部的注释前移到最内层包含它的条目
 -- （没有则前移到下一条目；文件末尾的注释保留在文件末尾）。
 
-import Vuna.Base
-import Vuna.Ast
-import Vuna.Parser
-import Vuna.Lexer
+import Vuna.Compiler.Common
+import Vuna.Compiler.Ast
+import Vuna.Compiler.Parser
+import Vuna.Compiler.Lexer
 
 -- ---------------------------------------------------------------
 -- 行 / 字符串小工具

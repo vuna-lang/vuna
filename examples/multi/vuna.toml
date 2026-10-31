@@ -9,4 +9,4 @@ members = ["greet"]
 
 [dependencies]
 greet = "greet"
-vuna-stdlib = "../../stdlib"
+vuna-base = "../../base"

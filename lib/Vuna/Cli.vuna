@@ -2,18 +2,18 @@ module Vuna.Cli (runCli) where
 
 -- Vuna.Cli：产品 CLI（vuna）。
 --
--- 编译器命令（compile / check / build / seed）由 Vuna.CompilerCli 实现，
+-- 编译器命令（compile / check / build / seed）由 Vuna.Compiler.CompilerCli 实现，
 -- 这里只做 in-process 分发；工具命令（lint / interp / test / fmt / repl / doc）
 -- 在本包实现。app/Main.vuna 仍然只是 `main = exit (runCli (getArgs))`。
 --
 -- 每个命令都必须显式书写；不再支持“无子命令 = compile”的旧式回退。
 
-import Vuna.Base
-import Vuna.Pkg
-import Vuna.Compile
-import Vuna.CompilerCli
+import Vuna.Compiler.Common
+import Vuna.Compiler.Pkg
+import Vuna.Compiler.Compile
+import Vuna.Compiler.CompilerCli
 import Vuna.Interp
-import Vuna.Dt
+import Vuna.Compiler.Dt
 import Vuna.Fmt
 import Vuna.Files
 import Vuna.Repl

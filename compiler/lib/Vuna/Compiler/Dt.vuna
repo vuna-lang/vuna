@@ -1,0 +1,66 @@
+module Vuna.Compiler.Dt (dtCheckFile, dtCompileFile, dtEvalFile) where
+
+-- Vuna.Compiler.Dt：M13 的 DT 单文件 facade（供 Compile / CompilerCli / Interp 使用）。
+--
+-- DT 路径只读一个文件：parseSource → Vuna.Compiler.Elab →（check / codegen / 核心求值）。
+-- 不经过 Loader：M13 的 DT 是自包含单文件，不支持 import / 包模式 / 模块头。
+
+import Vuna.Compiler.Common
+import Vuna.Compiler.Ast
+import Vuna.Compiler.Parser
+import Vuna.Compiler.Core
+import Vuna.Compiler.Elab
+import Vuna.Compiler.CoreCodegen
+
+dtLoad : String -> Result (List Decl)
+dtLoad entry =
+  if fileExists entry then
+    case parseSource entry (readFile entry) of
+      Err e => Err e
+      Ok (Source hdr imports decls) =>
+        case hdr of
+          Just m => Err (showSpanLoc (modDeclSpan m) ++ ": DT: module header is not allowed in entry file")
+          Nothing =>
+            case imports of
+              Nil => Ok decls
+              _ => Err "DT: imports are not supported yet (single-file mode)"
+  else Err ("entry file not found: " ++ entry)
+
+dtCheckFile : String -> Result (List String)
+dtCheckFile entry =
+  andThen (dtLoad entry) (\decls =>
+    andThen (elabProgram decls) (\defs =>
+      andThen (checkDtProgram defs) (\_ => Ok Nil)))
+
+dtCompileFile : String -> Bool -> Result String
+dtCompileFile entry printResult =
+  andThen (dtLoad entry) (\decls =>
+    andThen (elabProgram decls) (\defs => generateDtProgram defs printResult))
+
+-- 核心求值器：精化后用 NbE + delta 求 main 的值并 show（与 codegen 结果对照）。
+dtEvalFile : String -> Result String
+dtEvalFile entry =
+  andThen (dtLoad entry) (\decls =>
+    andThen (elabProgram decls) (\defs => evalDtMain defs))
+
+evalDtMain : List DtDef -> Result String
+evalDtMain defs =
+  case findMainDef defs of
+    Nothing => Err "DT: no main definition"
+    Just mainDef =>
+      let table = defTableOf defs
+          mainVal = normalize table Nil defaultFuel (VNeutral (NGlobal "main" Nil))
+      in case mainVal of
+           VInt n => Ok (strFromInt n)
+           VStr s => Ok (showValue mainVal)
+           VBool b => Ok (showValue mainVal)
+           _ => Err "DT: main does not reduce to a value"
+
+findMainDef : List DtDef -> Maybe DtDef
+findMainDef Nil = Nothing
+findMainDef (Cons d rest) =
+  if dtDefName d == "main" then Just d else findMainDef rest
+
+defTableOf : List DtDef -> List (Pair String Term)
+defTableOf Nil = Nil
+defTableOf (Cons d rest) = Cons (Pair (dtDefName d) (dtDefBody d)) (defTableOf rest)

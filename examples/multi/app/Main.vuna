@@ -1,7 +1,7 @@
 import Greet
-import Vuna.List
-import Vuna.Monad
-import Vuna.IO
+import Base.List
+import Base.Monad
+import Base.IO
 
 main : IO Int
 main = print (greeting 3 ++ "|" ++ showNames (names 2))

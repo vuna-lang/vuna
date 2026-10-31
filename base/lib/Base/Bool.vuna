@@ -1,0 +1,22 @@
+module Base.Bool (Bool(..), not, and, or, xor, bool) where
+
+-- Base.Bool：布尔类型与逻辑辅助函数。无依赖模块。
+
+data Bool : Type where
+  False : Bool
+  True : Bool
+
+not : Bool -> Bool
+not b = if b then False else True
+
+and : Bool -> Bool -> Bool
+and a b = if a then b else False
+
+or : Bool -> Bool -> Bool
+or a b = if a then True else b
+
+xor : Bool -> Bool -> Bool
+xor a b = if a then not b else b
+
+bool : a -> a -> Bool -> a
+bool ifFalse ifTrue b = if b then ifTrue else ifFalse

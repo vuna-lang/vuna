@@ -24,14 +24,15 @@
 - M9：诊断与语言可用性——全链路 span、运行时错误 `文件:行:列`、穷尽性/冗余检查、非 0 退出码。
 - M10：模块系统 v2——模块头与显式导出列表、抽象类型、`module B` / `B.name` 重导出、`_` 前缀隐私与模块路径不变式。
 - M10.5：类型表达力——记录类型与 trait（单参数、相干默认、命名实例、孤儿检查、`deriving`），内置 `Show` / `Eq` / `Ord` 与方法级字典穿参。
-- M11：标准库——独立成员包 `vuna-stdlib`，高阶 kind 与一般约束泛化，`do` 语法糖与 IO 组合子，编译器成为 stdlib 首个用户。
+- M11：标准库——独立标准库成员包（现 `vuna-base`，当时叫 `vuna-stdlib`；模块现 `Base.*`），高阶 kind 与一般约束泛化，`do` 语法糖与 IO 组合子，编译器成为标准库首个用户。
 - M11.5：包管理与工具链——`vuna.toml`、workspace 与依赖 DAG、`[export]` 跨包可见性、三目录约定，以及 `build` / `test` / `fmt` / `repl` / `doc`。
 - M12：性能与编译模型——分离编译（vuna 模块 → OCaml `.ml` / `.mli`）与 ocamlopt 模块级增量构建，seed 改为多文件文件集，新增机器无关指标门槛。
 - M11.6：fmt 完善——注释保留与 100 列行宽折行。
 - M12.5：工具链与自举边界拆分——编译器独立为成员包 `vuna-compiler`，seed 只含编译器入口闭包（63 → 49 个文件），工具链移出 TCB；同期修复编译性能（AVL 类型替换 / 路由表 / 快速 seed 构建，compiler 闭包 build --split ~32s → ~2s）。
-- M12.6：main / IO 语义——可执行入口 `main : IO a` 由运行时执行（无公开 runner），用户包与 `vuna interp`/`--root` 入口都不能直接调用 effectful 内建（只能经 `Vuna.IO`）；IO 组合统一走 Functor/Monad trait（`fmap`/`bind`/`pure`、`>>=`、`do`），效果 API 直接 IO 化（print/getArgs/readFile 等返回 IO，内部 prim_*）；seed 51 个文件 / ~0.86 MB；`vuna interp` / `vuna test` 保留纯 main 结果 show 的调试约定。
+- M12.6：main / IO 语义——可执行入口 `main : IO a` 由运行时执行（无公开 runner），用户包与 `vuna interp`/`--root` 入口都不能直接调用 effectful 内建（只能经 `Base.IO`，当时叫 `Vuna.IO`）；IO 组合统一走 Functor/Monad trait（`fmap`/`bind`/`pure`、`>>=`、`do`），效果 API 直接 IO 化（print/getArgs/readFile 等返回 IO，内部 prim_*）；seed 51 个文件 / ~0.86 MB；`vuna interp` / `vuna test` 保留纯 main 结果 show 的调试约定。
 - M12.7：DT 前置清理——删除 dynamic codegen（`Vuna.Codegen`）与 `--no-typecheck` / `--typecheck` / `--typed` / `build --no-print` / `--out` / 裸 compile 回退，typed 成为唯一 codegen；`check` 改为纯类型检查（单次 typecheck），clause arity 诊断统一到 typecheck；默认模块根改为当前包；seed 49 个文件 / ~0.81 MB。
 - M13：DT 地基——新增 Core TT（`Type`/Pi/应用/lambda/if，NbE + beta/delta/eta，非累积宇宙）、双向精化器（一阶 metavariable、类型级隐式插入、delta 类型别名）、擦除型 DT codegen 与 `interp --dt` 核心求值器；`--dt` 单文件 opt-in（compile/check/interp），HM 路径零改动；新增 `docs/dt-core.md` 设计稿；seed 57 个文件 / ~0.92 MB。
+- M12.8：命名空间、Prelude 与包级构建——标准库改为 `vuna-base` / `Base.*`，编译器模块迁到 `Vuna.Compiler.*`（门面 `Vuna.Compiler.Common`）；新增顶层 `Prelude`（重导出 Pair/Bool/List/Maybe/Result/String/Monad，不含 `Base.IO` 效果函数），包模式自动导入、原始 `--root` 模式不导入；新增 `vuna compile --package`（`.output/{lib,app}`）与 `vuna build`（ocamlopt → `.output/bin/<包名>`），`--split` / `seed` 保留扁平分离 codegen；seed 61 个文件 / ~1.2 MB。
 
 ## 当前硬约束
 
@@ -141,7 +142,7 @@
 
 ### M19：效应与 IO 的 DT 化
 
-**目标**：在 DT 上表达 IO/State/Reader/Error 等效果；保留 `main : IO a` 与现有 `Vuna.IO` 兼容；代数效应作为可选方向。
+**目标**：在 DT 上表达 IO/State/Reader/Error 等效果；保留 `main : IO a` 与现有 `Base.IO`（当时叫 `Vuna.IO`）兼容；代数效应作为可选方向。
 
 **范围**：接口/monad 编码；DT 程序 IO 例子；`main` 语义；测试；性能。
 
@@ -193,9 +194,9 @@
 
 主序列：
 
-**M12.7（已完成）→ M13（已完成）→ M14 → M15 → M16 → M17 → M18**
+**M12.7（已完成）→ M13（已完成）→ M12.8（已完成）→ M14 → M15 → M16 → M17 → M18**
 
-- **M12.7 / M13 已完成**：先删除无法支持 DT 的第二条 codegen（缩小 TCB、简化测试/CLI），再落地 Core TT + 精化器 + `--dt` 单文件路径；DT 主线进入 M14（索引族与依赖模式匹配）。
+- **M12.7 / M13 / M12.8 已完成**：先删除无法支持 DT 的第二条 codegen（缩小 TCB、简化测试/CLI），再落地 Core TT + 精化器 + `--dt` 单文件路径，随后完成标准库/编译器命名空间收敛、`Prelude` 自动导入与 `.output` 包级构建；DT 主线进入 M14（索引族与依赖模式匹配）。
 - **M13 → M14 是核心**，难以并行；M15 的可用性工作可在 M14 尾部启动。
 - **M16 收口健全性/性能**；**M17 可与 M16 重叠**；**M18 是最高风险决策点**。
 - **M19 / M20 可在 M15 后并行**；**M21 在 M16/M18 后决策**；**M22 贯穿**；**M23 在 M19/M21 后**。
@@ -230,6 +231,6 @@
 
 - 独立 runtime/GC → M21 决策。
 - 多后端 → M21（决策后）。
-- 大型 stdlib 扩张 → M22/持续轨道。
+- 大型标准库扩张 → M22/持续轨道。
 - 包 registry 与远程依赖 → M22（DT 核心稳定后）。
 - 线性类型与依赖类型之外的类型系统研究 → 研究储备。

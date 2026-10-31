@@ -37,19 +37,13 @@ check_eq() { # name expected actual
   if [ "$2" = "$3" ]; then ok; else bad "$1"; printf '  expected: %s\n  actual:   %s\n' "$2" "$3"; fi
 }
 
-# ---- 合并模块根（编译器包 + CLI 包的 Vuna/*.vuna + stdlib），编译探针 ----
-# 只用一个 --root，兼容 CLI 的 --root 语义变化与 stdlib 包布局（stdlib/Vuna 或 stdlib/lib/Vuna）。
-mkdir -p "$tmp/root/Vuna"
-if [ -d "$REPO/compiler/lib/Vuna" ]; then
-  cp "$REPO/compiler/lib/Vuna"/*.vuna "$tmp/root/Vuna/"
-fi
+# ---- 合并模块根（root Vuna 工具链 + compiler 的 Vuna/Compiler + base 的 Base），编译探针 ----
+mkdir -p "$tmp/root/Vuna/Compiler" "$tmp/root/Base"
 cp "$REPO/lib/Vuna"/*.vuna "$tmp/root/Vuna/"
-chmod -R u+w "$tmp/root" 2>/dev/null || true
-if [ -d "$REPO/stdlib/lib/Vuna" ]; then
-  cp "$REPO/stdlib/lib/Vuna"/*.vuna "$tmp/root/Vuna/"
-elif [ -d "$REPO/stdlib/Vuna" ]; then
-  cp "$REPO/stdlib/Vuna"/*.vuna "$tmp/root/Vuna/"
-fi
+cp "$REPO/compiler/lib/Vuna/Compiler"/*.vuna "$tmp/root/Vuna/Compiler/"
+cp "$REPO/base/lib/Base"/*.vuna "$tmp/root/Base/"
+cp "$REPO/base/lib/Base.vuna" "$tmp/root/Base.vuna"
+cp "$REPO/base/lib/Prelude.vuna" "$tmp/root/Prelude.vuna"
 chmod -R u+w "$tmp/root" 2>/dev/null || true
 cp "$HERE/_probe.vuna" "$tmp/probe.vuna"
 if ! ( cd "$REPO" && "$VUNA" compile --no-print --root "$tmp/root" "$tmp/probe.vuna" "$tmp/probe.ml" ) >"$tmp/probe.log" 2>&1; then

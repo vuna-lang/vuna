@@ -3,4 +3,4 @@ name = "absapp"
 version = "0.1.0"
 
 [dependencies]
-vuna-stdlib = "../../../../stdlib"
+vuna-base = "../../../../base"

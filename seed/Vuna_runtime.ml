@@ -57,6 +57,11 @@ let bi_write_file path contents =
 let bi_print s = print_string s; flush stdout; String.length s
 let bi_file_exists path = Sys.file_exists path
 let bi_exit n = exit n
+let bi_run_in dir args =
+  let quote s = Filename.quote s in
+  let cmd = String.concat " " (List.map quote args) in
+  let old = Sys.getcwd () in
+  Fun.protect ~finally:(fun () -> Sys.chdir old) (fun () -> Sys.chdir dir; Sys.command cmd)
 let bi_get_args () =
   let argv = Sys.argv in
   let n = Array.length argv in

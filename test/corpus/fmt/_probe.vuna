@@ -1,11 +1,11 @@
 -- fmt 测试探针：读文件 → formatSource；mode: fmt/check/write。
 -- 由 check.sh 用当前编译器编译（不是测试输入，文件名以下划线开头）。
--- main : IO Int，由运行时执行；效果只经 Vuna.IO。
-import Vuna.Base
+-- main : IO Int，由运行时执行；效果只经 Base.IO。
+import Vuna.Compiler.Common
 import Vuna.Fmt
-import Vuna.Parser
-import Vuna.Monad
-import Vuna.IO
+import Vuna.Compiler.Parser
+import Base.Monad
+import Base.IO
 
 main : IO Int
 main = do

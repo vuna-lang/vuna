@@ -1,0 +1,506 @@
+module Vuna.Compiler.Elab (DtDef, dtDefName, dtDefType, dtDefBody, elabProgram) where
+
+-- Vuna.Compiler.Elab：M13 的 DT 精化器（双向检查 + 一阶元变量 + 类型级隐式插入）。
+--
+-- 输入是 parser 的原始声明（不经 Loader）：DT 是单文件、自包含的前端，
+-- 名字解析在精化器里完成（局部上下文 + 全局签名 + 内置 prelude）。
+--
+-- 状态 Ec 里保存：下一个元变量编号、已解元变量（闭合项）、已精化的定义体
+-- （供 Core.force 的 delta 展开）。定义体按源顺序精化，所以 delta 只对
+-- 前面已精化的定义可见（见 docs/dt-core.md）。
+
+import Vuna.Compiler.Common
+import Vuna.Compiler.Ast
+import Vuna.Compiler.Core
+
+-- 一个 DT 定义：名字、类型项、体项（均为闭项；体带擦除标志）。
+data DtDef : Type where
+  DtDef : String -> Term -> Term -> DtDef
+
+dtDefName (DtDef name ty body) = name
+
+dtDefType (DtDef name ty body) = ty
+
+dtDefBody (DtDef name ty body) = body
+
+-- 精化状态。
+data Ec : Type where
+  Ec : Int -> List (Pair Int Term) -> List (Pair String Term) -> Ec
+
+ecNext (Ec next sols defs) = next
+
+ecSols (Ec next sols defs) = sols
+
+ecDefs (Ec next sols defs) = defs
+
+ecPutSols : Ec -> List (Pair Int Term) -> Ec
+ecPutSols (Ec next sols defs) sols2 = Ec next sols2 defs
+
+ecAddDef : Ec -> Pair String Term -> Ec
+ecAddDef (Ec next sols defs) d = Ec next sols (append defs (Cons d Nil))
+
+-- 局部上下文：最近绑定的在前（名字 + 类型项；类型项在当前上下文里有效）。
+data Ctx : Type where
+  Ctx : List (Pair String Term) -> Ctx
+
+ctxItems (Ctx items) = items
+
+ctxDepth : Ctx -> Int
+ctxDepth ctx = length (ctxItems ctx)
+
+ctxBind : String -> Term -> Ctx -> Ctx
+ctxBind name ty (Ctx items) = Ctx (Cons (Pair name ty) items)
+
+-- 把一个 Value 形态的类型重新 quote 成项再入上下文（Pi 值里的域只有 Value）。
+ctxBindValue : String -> Value -> Ctx -> Ctx
+ctxBindValue name dom ctx = ctxBind name (quote (ctxDepth ctx) dom) ctx
+
+ctxLookupAt : String -> List (Pair String Term) -> Int -> Maybe (Pair Int Term)
+ctxLookupAt name Nil idx = Nothing
+ctxLookupAt name (Cons (Pair n ty) rest) idx =
+  if n == name then Just (Pair idx ty) else ctxLookupAt name rest (idx + 1)
+
+ctxLookup : String -> Ctx -> Maybe (Pair Int Term)
+ctxLookup name ctx = ctxLookupAt name (ctxItems ctx) 0
+
+-- 上下文的求值环境：binder 的 level 从底部开始，与 quote 约定一致。
+ctxEnvAt : List (Pair String Term) -> Int -> Int -> List Value
+ctxEnvAt Nil idx depth = Nil
+ctxEnvAt (Cons (Pair name ty) rest) idx depth =
+  Cons (VNeutral (NVar name (depth - idx - 1) Nil)) (ctxEnvAt rest (idx + 1) depth)
+
+ctxEnv : Ctx -> List Value
+ctxEnv ctx = ctxEnvAt (ctxItems ctx) 0 (ctxDepth ctx)
+
+evalCtx : Ctx -> Term -> Value
+evalCtx ctx ty = eval (ctxEnv ctx) ty
+
+-- 局部变量 i 的类型：存储时按「绑定时上下文」，取用时需要 weaken (i+1)。
+varTypeValue : Ctx -> Int -> Term -> Value
+varTypeValue ctx idx ty = eval (ctxEnv ctx) (shift 0 (idx + 1) ty)
+
+emptyCtx : Ctx
+emptyCtx = Ctx Nil
+
+-- ---------------------------------------------------------------
+-- 错误 / 状态 helper
+-- ---------------------------------------------------------------
+
+errAt : Span -> String -> Result a
+errAt sp msg = Err (showSpanLoc sp ++ ": " ++ msg)
+
+newMeta : Ec -> Pair Term Ec
+newMeta (Ec next sols defs) = Pair (TMeta next) (Ec (next + 1) sols defs)
+
+forceVal : Ec -> Value -> Value
+forceVal ec v = force (ecDefs ec) (ecSols ec) defaultFuel v
+
+convEc : Ec -> Int -> Value -> Value -> Result Ec
+convEc ec depth expected actual =
+  case conv (ecDefs ec) (ecSols ec) depth expected actual of
+    Err e => Err e
+    Ok sols2 => Ok (ecPutSols ec sols2)
+
+-- 未解元变量：返回第一个未解的编号。
+unsolvedFrom : Int -> Int -> List (Pair Int Term) -> Maybe Int
+unsolvedFrom i stop sols =
+  if i >= stop then Nothing
+  else
+    case metaLookup i sols of
+      Just _ => unsolvedFrom (i + 1) stop sols
+      Nothing => Just i
+
+unsolvedMeta : Ec -> Maybe Int
+unsolvedMeta (Ec next sols defs) = unsolvedFrom 0 next sols
+
+maxInt : Int -> Int -> Int
+maxInt a b = if a >= b then a else b
+
+-- ---------------------------------------------------------------
+-- 内置 prelude：只有类型常量、Bool 值与 Int/String/Bool 运算符。
+-- 名字与 TypedCodegen 的 runtime helper 一一对应（codegen 按名字映射）。
+-- ---------------------------------------------------------------
+
+preludeNames : List String
+preludeNames =
+  [ "Int", "String", "Bool", "True", "False"
+  , "+", "-", "*", "/", "==", "/=", "<", "<=", ">", ">=", "++", "&&", "||"
+  ]
+
+intTy : Term
+intTy = TGlobal "Int"
+
+strTy : Term
+strTy = TGlobal "String"
+
+boolTy : Term
+boolTy = TGlobal "Bool"
+
+fun2 : Term -> Term -> Term -> Term
+fun2 a b c = TPi "_" False a (TPi "_" False b c)
+
+preludeGlobals : List (Pair String Term)
+preludeGlobals =
+  [ Pair "Int" (TType 0)
+  , Pair "String" (TType 0)
+  , Pair "Bool" (TType 0)
+  , Pair "True" boolTy
+  , Pair "False" boolTy
+  , Pair "+" (fun2 intTy intTy intTy)
+  , Pair "-" (fun2 intTy intTy intTy)
+  , Pair "*" (fun2 intTy intTy intTy)
+  , Pair "/" (fun2 intTy intTy intTy)
+  , Pair "==" (fun2 intTy intTy boolTy)
+  , Pair "/=" (fun2 intTy intTy boolTy)
+  , Pair "<" (fun2 intTy intTy boolTy)
+  , Pair "<=" (fun2 intTy intTy boolTy)
+  , Pair ">" (fun2 intTy intTy boolTy)
+  , Pair ">=" (fun2 intTy intTy boolTy)
+  , Pair "++" (fun2 strTy strTy strTy)
+  , Pair "&&" (fun2 boolTy boolTy boolTy)
+  , Pair "||" (fun2 boolTy boolTy boolTy)
+  ]
+
+globalLookup : String -> List (Pair String Term) -> Maybe Term
+globalLookup name Nil = Nothing
+globalLookup name (Cons (Pair n ty) rest) =
+  if name == n then Just ty else globalLookup name rest
+
+-- ---------------------------------------------------------------
+-- 声明收集
+-- ---------------------------------------------------------------
+
+collectSigsInto : List (Pair String Expr) -> List Decl -> Result (List (Pair String Expr))
+collectSigsInto acc Nil = Ok (reverse acc)
+collectSigsInto acc (Cons d rest) =
+  case d of
+    DSig name ty sp =>
+      if memName name preludeNames then errAt sp ("DT: cannot redefine builtin " ++ name)
+      else if memSig acc name then errAt sp ("DT: duplicate signature for " ++ name)
+      else collectSigsInto (Cons (Pair name ty) acc) rest
+    DFun name pats body sp => collectSigsInto acc rest
+    DData name params ctors derivings sp =>
+      errAt sp "DT: data declarations are not supported yet (M14)"
+    DRecord name params fields derivings sp =>
+      errAt sp "DT: record declarations are not supported yet (M15)"
+    DTrait name params methods sp =>
+      errAt sp "DT: trait declarations are not supported yet (M15)"
+    DInstance mname isDefault head methods sp =>
+      errAt sp "DT: instance declarations are not supported yet (M15)"
+
+memSig : List (Pair String Expr) -> String -> Bool
+memSig Nil name = False
+memSig (Cons (Pair n ty) rest) name = if n == name then True else memSig rest name
+
+memDefName : String -> List (Pair String Term) -> Bool
+memDefName name Nil = False
+memDefName name (Cons (Pair n ty) rest) = if n == name then True else memDefName name rest
+
+collectSigs : List Decl -> Result (List (Pair String Expr))
+collectSigs decls = collectSigsInto Nil decls
+
+-- ---------------------------------------------------------------
+-- 精化入口
+-- ---------------------------------------------------------------
+
+-- 按源顺序精化签名：每个签名只对「prelude + 之前的签名」可见。
+elabSigs : List (Pair String Expr) -> List (Pair String Term) -> Ec -> Result (Pair (List (Pair String Term)) Ec)
+elabSigs Nil globals ec = Ok (Pair globals ec)
+elabSigs (Cons (Pair name tyExpr) rest) globals ec =
+  andThen (checkType globals emptyCtx ec tyExpr) (\p =>
+    case p of
+      Pair tyTerm (Pair sortLvl ec1) =>
+        elabSigs rest (append globals (Cons (Pair name tyTerm) Nil)) ec1)
+
+-- 按源顺序精化定义体；这里所有签名已在 globals 里。
+elabBodies : List Decl -> List (Pair String Term) -> List (Pair String Term) -> List DtDef -> Ec -> Result (Pair (List DtDef) Ec)
+elabBodies Nil globals doneDefs acc ec = Ok (Pair (reverse acc) ec)
+elabBodies (Cons d rest) globals doneDefs acc ec =
+  case d of
+    DFun name pats body sp =>
+      case globalLookup name globals of
+        Nothing => errAt sp ("DT: expected a type signature for " ++ name)
+        Just tyTerm =>
+          if memDefName name doneDefs then errAt sp ("DT: multiple clauses are not supported yet (M14)")
+          else
+            andThen (checkDef globals ec pats body (eval Nil tyTerm) sp) (\p =>
+              case p of
+                Pair bodyTerm ec1 =>
+                  elabBodies rest globals (Cons (Pair name tyTerm) doneDefs)
+                    (Cons (DtDef name tyTerm bodyTerm) acc) (ecAddDef ec1 (Pair name bodyTerm)))
+    _ => elabBodies rest globals doneDefs acc ec
+
+-- 每个签名都必须有定义（M13 不支持公理/未定义顶层）。
+checkAllDefined : List (Pair String Expr) -> List (Pair String Term) -> List Decl -> Result (List String)
+checkAllDefined Nil globals decls = Ok Nil
+checkAllDefined (Cons (Pair name tyExpr) rest) globals decls =
+  if hasFunClause name decls then
+    case globalLookup name globals of
+      Nothing => Err ("DT: signature for " ++ name ++ " has no definition")
+      Just ty => checkAllDefined rest globals decls
+  else Err ("DT: signature for " ++ name ++ " has no definition")
+
+hasFunClause : String -> List Decl -> Bool
+hasFunClause name Nil = False
+hasFunClause name (Cons d rest) =
+  case d of
+    DFun n pats body sp => if n == name then True else hasFunClause name rest
+    _ => hasFunClause name rest
+
+elabProgram : List Decl -> Result (List DtDef)
+elabProgram decls =
+  andThen (collectSigs decls) (\sigs =>
+    andThen (elabSigs sigs preludeGlobals (Ec 0 Nil Nil)) (\p =>
+      case p of
+        Pair globals ec1 =>
+          andThen (checkAllDefined sigs globals decls) (\_ =>
+            andThen (elabBodies decls globals Nil Nil ec1) (\q =>
+              case q of
+                Pair defs ec2 =>
+                  case unsolvedMeta ec2 of
+                    Just m => Err ("DT: unsolved metavariable ?" ++ strFromInt m)
+                    Nothing => Ok defs))))
+
+-- ---------------------------------------------------------------
+-- 定义：签名 + 变量模式 → lambda 化的体
+-- ---------------------------------------------------------------
+
+checkDef : List (Pair String Term) -> Ec -> List Pat -> Expr -> Value -> Span -> Result (Pair Term Ec)
+checkDef globals ec pats body expected sp =
+  checkBinders globals emptyCtx ec pats body expected sp
+
+checkBinders : List (Pair String Term) -> Ctx -> Ec -> List Pat -> Expr -> Value -> Span -> Result (Pair Term Ec)
+checkBinders globals ctx ec Nil body expected sp =
+  let forced = forceVal ec expected
+  in case forced of
+       VPi name implicit dom clo =>
+         if implicit then
+           if isTypeValue dom then
+             let lvl = ctxDepth ctx
+                 v = freshVarValue name lvl
+                 ctx2 = ctxBindValue name dom ctx
+                 expected2 = applyClosure clo v
+                 erased = isTypeValue dom
+             in andThen (checkBinders globals ctx2 ec Nil body expected2 sp) (\p =>
+                  case p of
+                    Pair inner ec1 => Ok (Pair (TLam name erased inner) ec1))
+           else errAt sp "DT: implicit parameters must be types in M13"
+         else checkBodyAtEnd globals ctx ec body expected sp
+       _ => checkE globals ctx ec body expected
+
+-- 模式用完后仍剩显式 Pi：body 是 lambda 时按 check 处理，否则是参数个数不足。
+checkBodyAtEnd : List (Pair String Term) -> Ctx -> Ec -> Expr -> Value -> Span -> Result (Pair Term Ec)
+checkBodyAtEnd globals ctx ec body expected sp =
+  case body of
+    ELam names lambdaBody lambdaSp => checkE globals ctx ec body expected
+    _ => errAt sp "DT: definition has fewer parameters than its signature"
+checkBinders globals ctx ec (Cons pat rest) body expected sp =
+  let forced = forceVal ec expected
+  in case forced of
+       VPi name implicit dom clo =>
+         if implicit then
+           if isTypeValue dom then
+             let lvl = ctxDepth ctx
+                 v = freshVarValue name lvl
+                 ctx2 = ctxBindValue name dom ctx
+                 expected2 = applyClosure clo v
+                 erased = isTypeValue dom
+             in andThen (checkBinders globals ctx2 ec (Cons pat rest) body expected2 sp) (\p =>
+                  case p of
+                    Pair inner ec1 => Ok (Pair (TLam name erased inner) ec1))
+           else errAt sp "DT: implicit parameters must be types in M13"
+         else
+           case pat of
+             PVar pname psp =>
+               bindOnePattern globals ctx ec pname rest body dom clo sp
+             PWild psp =>
+               bindOnePattern globals ctx ec "_" rest body dom clo sp
+             _ => errAt (patSpan pat) "DT: definition parameters must be variables (M13)"
+       _ => errAt sp "DT: definition has more parameters than its signature"
+
+bindOnePattern : List (Pair String Term) -> Ctx -> Ec -> String -> List Pat -> Expr -> Value -> Closure -> Span -> Result (Pair Term Ec)
+bindOnePattern globals ctx ec pname pats body dom clo sp =
+  let lvl = ctxDepth ctx
+      v = freshVarValue pname lvl
+      ctx2 = ctxBindValue pname dom ctx
+      erasure = isTypeValue dom
+  in andThen (checkBinders globals ctx2 ec pats body (applyClosure clo v) sp) (\p =>
+       case p of
+         Pair inner ec1 => Ok (Pair (TLam pname erasure inner) ec1))
+
+freshVarValue : String -> Int -> Value
+freshVarValue name level = VNeutral (NVar name level Nil)
+
+-- ---------------------------------------------------------------
+-- 双向检查
+-- ---------------------------------------------------------------
+
+inferE : List (Pair String Term) -> Ctx -> Ec -> Expr -> Result (Pair Term (Pair Value Ec))
+inferE globals ctx ec expr =
+  case expr of
+    EVar name sp =>
+      if name == "Type" then Ok (Pair (TType 0) (Pair (VType 1) ec))
+      else if name == "_" then errAt sp "DT: cannot infer the type of a hole; give it an expected type"
+      else
+        case ctxLookup name ctx of
+          Just (Pair idx tyTerm) =>
+            Ok (Pair (TVar name idx) (Pair (varTypeValue ctx idx tyTerm) ec))
+          Nothing =>
+            case globalLookup name globals of
+              Just tyTerm => Ok (Pair (TGlobal name) (Pair (eval Nil tyTerm) ec))
+              Nothing => errAt sp ("DT: unknown name " ++ name)
+    EInt n sp => Ok (Pair (TInt n) (Pair (VNeutral (NGlobal "Int" Nil)) ec))
+    EStr s sp => Ok (Pair (TStr s) (Pair (VNeutral (NGlobal "String" Nil)) ec))
+    EPi name implicit dom cod sp => inferPi globals ctx ec name implicit dom cod sp
+    EApp fn args sp => inferApp globals ctx ec fn args sp
+    ELam names body sp =>
+      errAt sp "DT: cannot infer the type of a lambda; add a signature"
+    EIf c t e sp =>
+      andThen (checkE globals ctx ec c (VNeutral (NGlobal "Bool" Nil))) (\p =>
+        case p of
+          Pair cTerm ec1 =>
+            andThen (inferE globals ctx ec1 t) (\pt =>
+              case pt of
+                Pair tTerm (Pair tTy ec2) =>
+                  andThen (inferE globals ctx ec2 e) (\pe =>
+                    case pe of
+                      Pair eTerm (Pair eTy ec3) =>
+                        andThen (convEc ec3 (ctxDepth ctx) tTy eTy) (\ec4 =>
+                          Ok (Pair (TIf cTerm tTerm eTerm) (Pair tTy ec4))))))
+    ELet binds body rec_ sp => errAt sp "DT: let expressions are not supported yet (M13)"
+    ECase scrut alts sp => errAt sp "DT: case expressions are not supported yet (M14)"
+    EField base fname sp => errAt sp "DT: record field access is not supported yet (M15)"
+    ERecord rname fields sp => errAt sp "DT: records are not supported yet (M15)"
+    ERecUpdate base fields sp => errAt sp "DT: record update is not supported yet (M15)"
+    EInstSel meth iname sp => errAt sp "DT: instance selection is not supported yet (M15)"
+    EDo stmts sp => errAt sp "DT: do blocks are not supported yet (M19)"
+
+inferPi : List (Pair String Term) -> Ctx -> Ec -> String -> Bool -> Expr -> Expr -> Span -> Result (Pair Term (Pair Value Ec))
+inferPi globals ctx ec name implicit dom cod sp =
+  andThen (checkType globals ctx ec dom) (\pd =>
+    case pd of
+      Pair domTerm (Pair domSort ec1) =>
+        let lvl = ctxDepth ctx
+            ctx2 = ctxBind name domTerm ctx
+        in andThen (checkType globals ctx2 ec1 cod) (\pc =>
+             case pc of
+               Pair codTerm (Pair codSort ec2) =>
+                 Ok (Pair (TPi name implicit domTerm codTerm) (Pair (VType (maxInt domSort codSort)) ec2))))
+
+-- 应用：逐个消费显式实参，遇到隐式 Pi 先插入元变量。
+inferApp : List (Pair String Term) -> Ctx -> Ec -> Expr -> List Expr -> Span -> Result (Pair Term (Pair Value Ec))
+inferApp globals ctx ec fn args sp =
+  case fn of
+    EVar "->" _ =>
+      case args of
+        Cons a (Cons b Nil) => inferPi globals ctx ec "_" False a b sp
+        _ => errAt sp "DT: invalid arrow type"
+    EVar "Type" tsp =>
+      case args of
+        Cons (EInt n nsp) Nil =>
+          if n < 0 then errAt nsp "DT: universe level must be non-negative"
+          else Ok (Pair (TType n) (Pair (VType (n + 1)) ec))
+        _ => errAt tsp "DT: Type needs exactly one non-negative level (or none)"
+    _ =>
+      andThen (inferE globals ctx ec fn) (\pf =>
+        case pf of
+          Pair fnTerm (Pair fnTy ec1) =>
+            andThen (inferArgs globals ctx ec1 fnTy args sp) (\pa =>
+              case pa of
+                Pair argTerms (Pair resTy ec2) =>
+                  Ok (Pair (foldAppTerms fnTerm argTerms) (Pair resTy ec2))))
+
+foldAppTerms : Term -> List (Pair Term Bool) -> Term
+foldAppTerms fn Nil = fn
+foldAppTerms fn (Cons (Pair arg erased) rest) = foldAppTerms (TApp fn arg erased) rest
+
+inferArgs : List (Pair String Term) -> Ctx -> Ec -> Value -> List Expr -> Span -> Result (Pair (List (Pair Term Bool)) (Pair Value Ec))
+inferArgs globals ctx ec ty args sp =
+  let forced = forceVal ec ty
+  in case forced of
+       VPi name implicit dom clo =>
+         if implicit then
+           if isTypeValue dom then
+             let pmeta = newMeta ec
+             in case pmeta of
+                  Pair metaTerm ec1 =>
+                    let metaVal = eval (ctxEnv ctx) metaTerm
+                        erased = isTypeValue dom
+                        ty2 = applyClosure clo metaVal
+                    in andThen (inferArgs globals ctx ec1 ty2 args sp) (\p =>
+                         case p of
+                           Pair argTerms (Pair resTy ec2) =>
+                             Ok (Pair (Cons (Pair metaTerm erased) argTerms) (Pair resTy ec2)))
+           else errAt sp "DT: implicit parameters must be types in M13"
+         else
+           case args of
+             Nil => Ok (Pair Nil (Pair forced ec))
+             Cons a rest =>
+               andThen (checkE globals ctx ec a dom) (\p =>
+                 case p of
+                   Pair aTerm ec1 =>
+                     let erased = isTypeValue dom
+                         ty2 = applyClosure clo (evalCtx ctx aTerm)
+                     in andThen (inferArgs globals ctx ec1 ty2 rest sp) (\q =>
+                          case q of
+                            Pair argTerms (Pair resTy ec2) =>
+                              Ok (Pair (Cons (Pair aTerm erased) argTerms) (Pair resTy ec2))))
+       _ =>
+         case args of
+           Nil => Ok (Pair Nil (Pair forced ec))
+           Cons a rest => errAt (exprSpan a) "DT: too many arguments (not a function)"
+
+checkE : List (Pair String Term) -> Ctx -> Ec -> Expr -> Value -> Result (Pair Term Ec)
+checkE globals ctx ec expr expected =
+  case expr of
+    EVar name sp =>
+      if name == "_" then
+        let pmeta = newMeta ec
+        in case pmeta of
+             Pair metaTerm ec1 => Ok (Pair metaTerm ec1)
+      else checkByInfer globals ctx ec expr expected
+    EInt n sp => checkByInfer globals ctx ec expr expected
+    EStr s sp => checkByInfer globals ctx ec expr expected
+    ELam names body sp => checkLam globals ctx ec names body expected sp
+    EApp (EVar "->" _) args sp => checkByInfer globals ctx ec expr expected
+    EApp (EVar "Type" _) args sp => checkByInfer globals ctx ec expr expected
+    EApp fn args sp => checkByInfer globals ctx ec expr expected
+    EPi name implicit dom cod sp => checkByInfer globals ctx ec expr expected
+    EIf c t e sp => checkByInfer globals ctx ec expr expected
+    _ => checkByInfer globals ctx ec expr expected
+
+checkByInfer : List (Pair String Term) -> Ctx -> Ec -> Expr -> Value -> Result (Pair Term Ec)
+checkByInfer globals ctx ec expr expected =
+  case inferE globals ctx ec expr of
+    Err e => Err e
+    Ok (Pair term (Pair actual ec1)) =>
+      case convEc ec1 (ctxDepth ctx) expected actual of
+        Err e => Err (showSpanLoc (exprSpan expr) ++ ": " ++ e)
+        Ok ec2 => Ok (Pair term ec2)
+
+checkLam : List (Pair String Term) -> Ctx -> Ec -> List String -> Expr -> Value -> Span -> Result (Pair Term Ec)
+checkLam globals ctx ec Nil body expected sp =
+  checkE globals ctx ec body expected
+checkLam globals ctx ec (Cons name rest) body expected sp =
+  let forced = forceVal ec expected
+  in case forced of
+       VPi pname implicit dom clo =>
+         let lvl = ctxDepth ctx
+             v = freshVarValue pname lvl
+             ctx2 = ctxBindValue name dom ctx
+             expected2 = applyClosure clo v
+             erased = isTypeValue dom
+         in andThen (checkLam globals ctx2 ec rest body expected2 sp) (\p =>
+              case p of
+                Pair inner ec1 => Ok (Pair (TLam name erased inner) ec1))
+       _ => errAt sp "DT: lambda has more parameters than the expected function type"
+
+checkType : List (Pair String Term) -> Ctx -> Ec -> Expr -> Result (Pair Term (Pair Int Ec))
+checkType globals ctx ec expr =
+  andThen (inferE globals ctx ec expr) (\p =>
+    case p of
+      Pair term (Pair ty ec1) =>
+        let forced = forceVal ec1 ty
+        in case typeLevelOf forced of
+             Just lvl => Ok (Pair term (Pair lvl ec1))
+             Nothing => errAt (exprSpan expr) ("DT: expected a type, but this expression has type " ++ showValueAt (ctxDepth ctx) ty))

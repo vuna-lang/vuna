@@ -1,7 +1,7 @@
 module Greet (greeting, shout) where
 
-import Vuna.List
-import Vuna.String
+import Base.List
+import Base.String
 
 greeting : Int -> String
 greeting n = join " " (repeatText n "hi")
