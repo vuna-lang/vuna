@@ -1,4 +1,4 @@
-module Vuna.Base (module Vuna.Pair, module Vuna.Bool, module Vuna.List, module Vuna.Maybe, module Vuna.Result, module Vuna.String, Pos, Span, posLine, posCol, spanFile, spanStartLine, spanStartCol, spanEndLine, spanEndCol, showSpanLoc, suggest, containsDot, splitOnDot, splitLastDot, joinDots, joinSlashes, joinArrows) where
+module Vuna.Base (module Vuna.Pair, module Vuna.Bool, module Vuna.List, module Vuna.Maybe, module Vuna.Result, module Vuna.String, Pos, Span, posLine, posCol, spanFile, spanStartLine, spanStartCol, spanEndLine, spanEndCol, showSpanLoc, suggest, containsDot, splitOnDot, splitLastDot, joinDots, joinSlashes, joinArrows, splitPath, baseName) where
 
 -- Vuna.Base：编译器门面（M11）。
 -- 通用类型与 helper 的唯一真源已迁到 stdlib/（Vuna.Pair/Bool/List/Maybe/Result/String），
@@ -79,6 +79,21 @@ joinArrows : List String -> String
 joinArrows Nil = ""
 joinArrows (Cons x Nil) = x
 joinArrows (Cons x rest) = x ++ " -> " ++ joinArrows rest
+
+-- 路径拆分：返回去掉最后一段的目录与最后一段（无 "/" 时目录为 ""）。
+-- 编译器驱动（创建输出文件父目录）与 doc 共用，因此放在 Base 而不是工具模块。
+splitPath : String -> Pair String String
+splitPath path = splitPathChars (strUnpack path) Nil
+
+splitPathChars Nil acc =
+  let chars = reverse acc
+  in Pair "" (strPack chars)
+
+splitPathChars (Cons c rest) acc =
+  if c == 47 then Pair (strPack (reverse acc)) (strPack rest) else splitPathChars rest (Cons c acc)
+
+baseName : String -> String
+baseName path = secondOf (splitPath path)
 
 -- 候选建议：与出错名相似的名字（诊断）
 suggest : String -> List String -> String
