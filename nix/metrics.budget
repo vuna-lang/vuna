@@ -9,12 +9,15 @@
 # fileMtime/fileSize：runtime 增 2 个 chunk（Unix.stat），builtinSchemes 字面量变长，
 #   故 maxline 上调；bytes/lines 仍低于 M14 值。
 # 全仓 `vuna fmt` 后重新标定：longlines 4417 → 3885（格式化折行生效），预算收紧到 3900。
-bytes 1120000
-lines 10500
+# M15–M17：DT 精化器大幅扩张（元变量上下文/接口字典/实例搜索/洞目标/终止性检查/擦除判定）
+#   后重新标定：bytes 1177528 / lines 11066 / longlines 4161 / letrec 614 / ctorcount 2298。
+#   seed 文件数不变（31 个模块），工具链（Lsp/Json）仍不在闭包内。
+bytes 1190000
+lines 11200
 maxline 12400
-longlines 3890
-letrec 575
-strcat 320
+longlines 4250
+letrec 640
+strcat 330
 eqint 35
 zeroarg 30
-ctorcount 2200
+ctorcount 2400

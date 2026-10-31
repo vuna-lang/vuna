@@ -413,13 +413,25 @@ dispatch methodName msg state = case methodName of
 -- ---------------------------------------------------------------
 -- 帧读取：字节缓冲 + 按 Content-Length 切帧
 -- ---------------------------------------------------------------
--- 从 stdin 再读一行并入缓冲；Nothing = EOF（`readLine` 在 EOF 返回 ""，
--- 真正的空行只出现在 header 结束处，那里已由 splitHeaders 消费，所以安全）。
+-- 从 stdin 再读一行并入缓冲；Nothing = EOF。
+--
+-- 难点：`readLine` 在 EOF 返回 ""，与「真正的空行」无法区分。而 **LF-only 帧**
+-- （client 用 `\n` 分隔 header）的 header 结束符正好是一个空行，必须保留它的
+-- `\n` 才能被 splitHeaders 识别成 `\n\n`。所以这里做一次 lookahead：
+--   - 读到非空行 ⇒ 直接并入「行 + "\n"」；
+--   - 读到空行  ⇒ 再读一行：又空 ⇒ 判定 EOF；非空 ⇒ 前一个空行是真的空行，
+--                 并入 "\n" 与这一行。
+-- CRLF 帧不受影响：`input_line` 只剥 `\n`，空行读到的是 "\r" 而不是 ""，
+-- 走非空分支，于是缓冲里自然得到 `\r\n\r\n`。
 readMore : String -> Maybe String
 readMore pending =
   let
     line = readLine
-  in if line == "" then Nothing else Just (pending ++ line ++ "\n")
+  in if line /= "" then Just (pending ++ line ++ "\n")
+  else
+    let
+      next = readLine
+    in if next == "" then Nothing else Just (pending ++ "\n" ++ next ++ "\n")
 
 -- 找子串 needle 从 start 起的字节偏移；找不到返回 -1。
 findFrom : String -> Int -> String -> Int
@@ -484,7 +496,9 @@ nextFrame pending = case splitHeaders pending of
 lspLoop : String -> LspState -> Int
 lspLoop pending state = case nextFrame pending of
   Nothing => case readMore pending of
-    Nothing => flushLogs (logTo "input closed" state)
+    -- EOF 且从未收到 shutdown ⇒ 非正常断开，退 1。
+    -- 注意 flushLogs 返回的是写入字节数，不能直接当退出码。
+    Nothing => abnormalExit (logTo "input closed" state)
     Just pending2 => lspLoop pending2 state
   Just (Pair body rest) => case parseJson body of
     Err e => lspLoop rest (logTo ("malformed frame: " ++ e) state)
@@ -504,6 +518,14 @@ exitCodeOf state =
   let
     _ = flushLogs state
   in if stateShutdown state then 0 else 1
+
+-- 非正常结束（stdin EOF / 空输入）：flush 日志后一律退 1，
+-- 不能把 flushLogs 的「写入字节数」当退出码。
+abnormalExit : LspState -> Int
+abnormalExit state =
+  let
+    _ = flushLogs state
+  in 1
 
 runLsp : Int
 runLsp = lspLoop "" (logTo "starting" (LspState [] False []))

@@ -873,28 +873,28 @@ let v_Vuna_dCompiler_dLoader_dloadProgramRaw = fun roots entry -> v_Vuna_dCompil
 
 let v_vuna_ushow_uVuna_uCompiler_uLoader_uExportEntry = fun x -> (match x with
   | C_Vuna_dCompiler_dLoader_dExportEntry (v0, v1, v2, v3) -> (let vuna_cat0' = ("(ExportEntry ") in (let vuna_cat1' = (v_vuna_ushow_ustring v0) in (let vuna_cat2' = (" ") in (let vuna_cat3' = (v_vuna_ushow_ustring v1) in (let vuna_cat4' = (" ") in (let vuna_cat5' = (v_vuna_ushow_ustring v2) in (let vuna_cat6' = (" ") in (let vuna_cat7' = (v_vuna_ushow_ustring v3) in (let vuna_cat8' = (")") in String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'; vuna_cat3'; vuna_cat4'; vuna_cat5'; vuna_cat6'; vuna_cat7'; vuna_cat8'])))))))))
-  | _ -> vuna_fail "<generated>" 160 48 ("case pattern match failure"))
+  | _ -> vuna_fail "<generated>" 169 48 ("case pattern match failure"))
 
 let v_vuna_ueq_uVuna_uCompiler_uLoader_uExportEntry = fun x y -> (match x with
   | C_Vuna_dCompiler_dLoader_dExportEntry (v0, v1, v2, v3) -> (match y with
   | C_Vuna_dCompiler_dLoader_dExportEntry (w0, w1, w2, w3) -> (if ((if ((if (v_vuna_ueq_ustr v0 w0) then (v_vuna_ueq_ustr v1 w1) else false)) then (v_vuna_ueq_ustr v2 w2) else false)) then (v_vuna_ueq_ustr v3 w3) else false)
   | _ -> v_vuna_ueq_uint 0 1
-  | _ -> vuna_fail "<generated>" 165 51 ("case pattern match failure"))
+  | _ -> vuna_fail "<generated>" 174 51 ("case pattern match failure"))
   | _ -> v_vuna_ueq_uint 0 1
-  | _ -> vuna_fail "<generated>" 164 48 ("case pattern match failure"))
+  | _ -> vuna_fail "<generated>" 173 48 ("case pattern match failure"))
 
 let v_vuna_uneq_uVuna_uCompiler_uLoader_uExportEntry = fun x y -> if v_vuna_ueq_uVuna_uCompiler_uLoader_uExportEntry x y then v_vuna_ueq_uint 0 1 else v_vuna_ueq_uint 0 0
 
 let v_vuna_ushow_uVuna_uCompiler_uLoader_uExportRef = fun x -> (match x with
   | C_Vuna_dCompiler_dLoader_dExportRef (v0, v1, v2) -> (let vuna_cat0' = ("(ExportRef ") in (let vuna_cat1' = (v_vuna_ushow_ustring v0) in (let vuna_cat2' = (" ") in (let vuna_cat3' = (v_vuna_ushow_ustring v1) in (let vuna_cat4' = (" ") in (let vuna_cat5' = (v_vuna_ushow_ustring v2) in (let vuna_cat6' = (")") in String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'; vuna_cat3'; vuna_cat4'; vuna_cat5'; vuna_cat6'])))))))
-  | _ -> vuna_fail "<generated>" 173 46 ("case pattern match failure"))
+  | _ -> vuna_fail "<generated>" 182 46 ("case pattern match failure"))
 
 let v_vuna_ueq_uVuna_uCompiler_uLoader_uExportRef = fun x y -> (match x with
   | C_Vuna_dCompiler_dLoader_dExportRef (v0, v1, v2) -> (match y with
   | C_Vuna_dCompiler_dLoader_dExportRef (w0, w1, w2) -> (if ((if (v_vuna_ueq_ustr v0 w0) then (v_vuna_ueq_ustr v1 w1) else false)) then (v_vuna_ueq_ustr v2 w2) else false)
   | _ -> v_vuna_ueq_uint 0 1
-  | _ -> vuna_fail "<generated>" 178 46 ("case pattern match failure"))
+  | _ -> vuna_fail "<generated>" 187 46 ("case pattern match failure"))
   | _ -> v_vuna_ueq_uint 0 1
-  | _ -> vuna_fail "<generated>" 177 46 ("case pattern match failure"))
+  | _ -> vuna_fail "<generated>" 186 46 ("case pattern match failure"))
 
 let v_vuna_uneq_uVuna_uCompiler_uLoader_uExportRef = fun x y -> if v_vuna_ueq_uVuna_uCompiler_uLoader_uExportRef x y then v_vuna_ueq_uint 0 1 else v_vuna_ueq_uint 0 0

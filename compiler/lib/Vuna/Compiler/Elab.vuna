@@ -866,7 +866,7 @@ unifyIdxList ec acc depth fuel (x :: xs) (y :: ys) =
 unifyIdxList ec acc depth fuel _ _ = unifyErr
 
 unifyIdx : Ec -> List (Pair Int Value) -> Int -> Int -> Value -> Value -> Result (List (Pair Int Value))
-unifyIdx ec acc depth fuel a b = if fuel <= 0 then Ok acc
+unifyIdx ec acc depth fuel a b = if fuel <= 0 then Err "DT: index unification ran out of reduction fuel"
 else
   let
     a2 = force (ecDefs ec) (ecSols ec) defaultFuel (refineValue acc defaultFuel a)

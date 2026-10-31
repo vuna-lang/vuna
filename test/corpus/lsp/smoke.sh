@@ -180,6 +180,35 @@ check_contains "shutdown 返回 result:null" "$shutdown_frame" '"result":null'
 # ---- 6) 最后一帧是 shutdown 响应（exit 不产生输出）----
 check_contains "最后一帧是 shutdown 响应" "$(frame_at 6)" '"id":3'
 
+# ---- 7) 帧分隔符兼容：只用 LF（`\n\n`）的 header 也必须能解析 ----
+# 规范写的是 `\r\n`，但部分客户端/手写测试用纯 `\n`。回归点：空行在行式读入
+# 下与 EOF 长得一样，容易被误判成输入结束。
+{
+  printf 'Content-Length: 75\n\n{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"capabilities":{}}}'
+  printf 'Content-Length: 44\r\n\r\n{"jsonrpc":"2.0","id":2,"method":"shutdown"}'
+  printf 'Content-Length: 47\r\n\r\n{"jsonrpc":"2.0","method":"exit","params":null}'
+} >"$tmp/lf.bin"
+lf_out=$("$VUNA" lsp <"$tmp/lf.bin" 2>/dev/null | tr -d '\r')
+check_contains "LF-only header 能解析出 initialize" "$lf_out" '"id":1'
+check_contains "LF-only 之后能继续读 CRLF 帧" "$lf_out" '"id":2'
+
+# ---- 8) 退出码 ----
+# LSP 约定：收到 shutdown 再 exit 退 0；EOF/未 shutdown 就退出算异常，退 1。
+# 回归点：EOF 路径曾把 flushLogs 的「写入字节数」当退出码。
+{
+  printf 'Content-Length: 44\r\n\r\n{"jsonrpc":"2.0","id":1,"method":"shutdown"}'
+  printf 'Content-Length: 47\r\n\r\n{"jsonrpc":"2.0","method":"exit","params":null}'
+} >"$tmp/ok.bin"
+"$VUNA" lsp <"$tmp/ok.bin" >/dev/null 2>&1
+check_eq "shutdown→exit 退出码 0" "0" "$?"
+
+"$VUNA" lsp </dev/null >/dev/null 2>&1
+check_eq "空 stdin 退出码 1" "1" "$?"
+
+printf 'Content-Length: 44\r\n\r\n{"jsonrpc":"2.0","id":1,"method":"shutdown"}' >"$tmp/eof.bin"
+"$VUNA" lsp <"$tmp/eof.bin" >/dev/null 2>&1
+check_eq "收到 shutdown 但无 exit（EOF）退出码 1" "1" "$?"
+
 printf 'lsp: %d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ] && echo "lsp smoke passed"
 [ "$fail" -eq 0 ]
