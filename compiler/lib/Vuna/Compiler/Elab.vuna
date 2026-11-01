@@ -82,53 +82,70 @@ dtInstName (DtInst name head) = name
 
 dtInstHead (DtInst name head) = head
 
+
 -- 精化状态：下一个元变量编号、已解元变量（level 形态的 Value）、已精化的定义体、
 -- 已声明的归纳族（M14：case 精化需要知道族的构造子 telescope）。
+-- M22：`dgoals` 是延迟的字典约束——`Dict_C args` 因类参数未解而被延迟成裸元变量；
+-- 等类参数被解（如 `?m = IO`）后 `resolveDictGoals` 回填实例。
+data DtDictGoal : Type where
+  DtDictGoal : Int -> Value -> DtDictGoal
+
 data Ec : Type where
-  Ec : Int -> List (Pair Int Value) -> List (Pair String Term) -> List DtData -> List (Pair Int Int) -> List DtGoal -> List DtInst -> List DtClass -> Ec
+  Ec : Int -> List (Pair Int Value) -> List (Pair String Term) -> List DtData -> List (Pair Int Int) -> List DtGoal -> List DtInst -> List DtClass -> List DtDictGoal -> Ec
 
-ecNext (Ec next sols defs datas depths goals insts classes) = next
+ecNext (Ec next sols defs datas depths goals insts classes dgoals) = next
 
-ecSols (Ec next sols defs datas depths goals insts classes) = sols
+ecSols (Ec next sols defs datas depths goals insts classes dgoals) = sols
 
-ecDefs (Ec next sols defs datas depths goals insts classes) = defs
+ecDefs (Ec next sols defs datas depths goals insts classes dgoals) = defs
 
-ecDatas (Ec next sols defs datas depths goals insts classes) = datas
+ecDatas (Ec next sols defs datas depths goals insts classes dgoals) = datas
 
-ecDepthOfMeta (Ec next sols defs datas depths goals insts classes) = depths
+ecDepthOfMeta (Ec next sols defs datas depths goals insts classes dgoals) = depths
 
-ecGoals (Ec next sols defs datas depths goals insts classes) = goals
+ecGoals (Ec next sols defs datas depths goals insts classes dgoals) = goals
 
-ecInsts (Ec next sols defs datas depths goals insts classes) = insts
+ecInsts (Ec next sols defs datas depths goals insts classes dgoals) = insts
 
-ecClasses (Ec next sols defs datas depths goals insts classes) = classes
+ecClasses (Ec next sols defs datas depths goals insts classes dgoals) = classes
 
 ecAddGoal : Ec -> DtGoal -> Ec
-ecAddGoal (Ec next sols defs datas depths goals insts classes) g =
-  Ec next sols defs datas depths (append goals [g]) insts classes
+ecAddGoal (Ec next sols defs datas depths goals insts classes dgoals) g =
+  Ec next sols defs datas depths (append goals [g]) insts classes dgoals
 
 ecAddInst : Ec -> DtInst -> Ec
-ecAddInst (Ec next sols defs datas depths goals insts classes) i =
-  Ec next sols defs datas depths goals (append insts [i]) classes
+ecAddInst (Ec next sols defs datas depths goals insts classes dgoals) i =
+  Ec next sols defs datas depths goals (append insts [i]) classes dgoals
 
 ecAddClass : Ec -> DtClass -> Ec
-ecAddClass (Ec next sols defs datas depths goals insts classes) c =
-  Ec next sols defs datas depths goals insts (append classes [c])
+ecAddClass (Ec next sols defs datas depths goals insts classes dgoals) c =
+  Ec next sols defs datas depths goals insts (append classes [c]) dgoals
+
+-- M22：延迟的字典约束访问器。
+ecDictGoals (Ec next sols defs datas depths goals insts classes dgoals) = dgoals
+
+ecPutDictGoals : Ec -> List DtDictGoal -> Ec
+ecPutDictGoals (Ec next sols defs datas depths goals insts classes dgoals) dgoals2 =
+  Ec next sols defs datas depths goals insts classes dgoals2
+
+ecAddDictGoal : Ec -> DtDictGoal -> Ec
+ecAddDictGoal (Ec next sols defs datas depths goals insts classes dgoals) g =
+  Ec next sols defs datas depths goals insts classes (append dgoals [g])
 
 ecEmpty : Ec
-ecEmpty = Ec 0 [] [] [] [] [] [] []
+ecEmpty = Ec 0 [] [] [] [] [] [] [] []
 
 ecPutSols : Ec -> List (Pair Int Value) -> Ec
-ecPutSols (Ec next sols defs datas depths goals insts classes) sols2 =
-  Ec next sols2 defs datas depths goals insts classes
+ecPutSols (Ec next sols defs datas depths goals insts classes dgoals) sols2 =
+  Ec next sols2 defs datas depths goals insts classes dgoals
 
 ecAddDef : Ec -> Pair String Term -> Ec
-ecAddDef (Ec next sols defs datas depths goals insts classes) d =
-  Ec next sols (append defs [d]) datas depths goals insts classes
+ecAddDef (Ec next sols defs datas depths goals insts classes dgoals) d =
+  Ec next sols (append defs [d]) datas depths goals insts classes dgoals
 
 ecAddData : Ec -> DtData -> Ec
-ecAddData (Ec next sols defs datas depths goals insts classes) d =
-  Ec next sols defs (append datas [d]) depths goals insts classes
+ecAddData (Ec next sols defs datas depths goals insts classes dgoals) d =
+  Ec next sols defs (append datas [d]) depths goals insts classes dgoals
 
 -- 局部上下文：最近绑定的在前（名字 + 类型项；类型项在当前上下文里有效）。
 -- refinements 是 M14 的索引精化：level ↦ Value（Value 是 level 形态，可以提到
@@ -219,17 +236,17 @@ errAt sp msg = Err (showSpanLoc sp ++ ": " ++ msg)
 
 -- M15：新建元变量并记录创建深度（求解时的作用域检查用）。
 newMeta : Ctx -> Ec -> Pair Term Ec
-newMeta ctx (Ec next sols defs datas depths goals insts classes) =
+newMeta ctx (Ec next sols defs datas depths goals insts classes dgoals) =
   Pair (TMeta next)
-    (Ec (next + 1) sols defs datas (Pair next (ctxDepth ctx) :: depths) goals insts classes)
+    (Ec (next + 1) sols defs datas (Pair next (ctxDepth ctx) :: depths) goals insts classes dgoals)
 
 -- M15：新建一个「洞」元变量：除创建深度外还记下目标类型与上下文快照（供 goal 显示）。
 newHoleMeta : Ctx -> Ec -> Span -> Value -> Pair Term Ec
-newHoleMeta ctx (Ec next sols defs datas depths goals insts classes) sp ty =
+newHoleMeta ctx (Ec next sols defs datas depths goals insts classes dgoals) sp ty =
   let
     goal = DtGoal next sp ty (ctxItems ctx)
   in Pair (TMeta next)
-    (Ec (next + 1) sols defs datas (Pair next (ctxDepth ctx) :: depths) (append goals [goal]) insts classes)
+    (Ec (next + 1) sols defs datas (Pair next (ctxDepth ctx) :: depths) (append goals [goal]) insts classes dgoals)
 
 forceVal : Ec -> Value -> Value
 forceVal ec v = force (ecDefs ec) (ecSols ec) defaultFuel v
@@ -288,7 +305,7 @@ else case metaLookup i sols of
   Nothing => Just i
 
 unsolvedMeta : Ec -> Maybe Int
-unsolvedMeta (Ec next sols defs datas depths goals insts classes) = unsolvedFrom 0 next sols
+unsolvedMeta (Ec next sols defs datas depths goals insts classes dgoals) = unsolvedFrom 0 next sols
 
 maxInt : Int -> Int -> Int
 maxInt a b = if a >= b then a else b
@@ -1193,8 +1210,9 @@ elabBodies (d :: rest) globals doneDefs acc ec = case d of
     Just tyTerm => if memDefName name doneDefs then elabBodies rest globals doneDefs acc ec
     else andThen (elabFunDef globals ec (clausesFor (d :: rest) name) (eval [] tyTerm) sp) (\p => case p of
       Pair bodyTerm ec1 =>
-        elabBodies rest globals (Pair name tyTerm :: doneDefs) (DtDef name tyTerm bodyTerm :: acc)
-          (ecAddDef ec1 (Pair name bodyTerm))
+        let cleanTerm = substDictTerm ec1 bodyTerm in
+        elabBodies rest globals (Pair name tyTerm :: doneDefs) (DtDef name tyTerm cleanTerm :: acc)
+          (ecAddDef ec1 (Pair name cleanTerm))
     )
   _ => elabBodies rest globals doneDefs acc ec
 
@@ -1303,7 +1321,7 @@ elabInstanceBodiesGo (d :: rest) classes datas globals ec acc = andThen (elabIns
 instanceDefsOf : Ec -> Ec -> List (Pair String Term) -> List DtDef
 instanceDefsOf ecBefore ecAfter gs =
   map
-    (\g => DtDef (firstOf g) (defTypeOrDefault gs (firstOf g)) (defBodyOf (ecDefs ecAfter) (firstOf g)))
+    (\g => DtDef (firstOf g) (defTypeOrDefault gs (firstOf g)) (substDictTerm ecAfter (defBodyOf (ecDefs ecAfter) (firstOf g))))
     gs
 
 defBodyOf : List (Pair String Term) -> String -> Term
@@ -1901,7 +1919,8 @@ inferArgsGo globals ctx ec ty args sp =
   let
     forced = forceVal ec ty
   in case forced of
-    VPi name implicit rig dom clo => if implicit then if isDictDomain ec dom then andThen (constrainDictDom globals ec ctx dom args sp) (\ec0 => case searchInstance ec0 (forceVal ec0 dom) sp of
+    VPi name implicit rig dom clo => if implicit then if isDictDomain ec dom then
+      andThen (constrainDictDom globals ec ctx dom args sp) (\ec0 => case searchInstance ec0 (forceVal ec0 dom) sp of
       Ok (Pair instTerm ec1) =>
         let
           ty2 = applyClosure clo (evalCtx ctx instTerm)
@@ -1909,13 +1928,16 @@ inferArgsGo globals ctx ec ty args sp =
           Pair argTerms (Pair resTy ec2) =>
             Ok (Pair (Pair instTerm Rig1 :: argTerms) (Pair resTy ec2))
         )
-      Err e => if hasUnsolvedMetaValue ec0 (forceVal ec0 dom) then case newMeta ctx ec0 of
-        -- 类参数未解且无唯一实例：延迟成普通元变量，等 `?a` 被结果类型 /
-        -- 其它约束解了再回填（见 `resolveDictGoals`；`mem` 的刚性 `a` 也走这里）。
-        Pair metaTerm ec1 => andThen (inferArgsGo globals ctx ec1 (applyClosure clo (eval (ctxEnv ctx) metaTerm)) args sp) (\p => case p of
-          Pair argTerms (Pair resTy ec2) =>
-            Ok (Pair (Pair metaTerm Rig1 :: argTerms) (Pair resTy ec2))
-        )
+      Err e => if hasUnsolvedMetaValue ec0 (forceVal ec0 dom) then
+        let
+          m = ecNext ec0
+        in case newMeta ctx ec0 of
+          -- 类参数未解且无唯一实例：延迟成裸元变量并记字典目标，等 `?a` 被结果类型 /
+          -- 其它约束解了再回填（`resolveDictGoals`；`mem` 的刚性 `a` 也走这里）。
+          Pair metaTerm ec1 => andThen (inferArgsGo globals ctx (ecAddDictGoal ec1 (DtDictGoal m (forceVal ec0 dom))) (applyClosure clo (eval (ctxEnv ctx) metaTerm)) args sp) (\p => case p of
+            Pair argTerms (Pair resTy ec2) =>
+              Ok (Pair (Pair metaTerm Rig1 :: argTerms) (Pair resTy ec2))
+          )
       else Err e
     )
     else if isIndexDomain ec dom then case newMeta ctx ec of
@@ -1959,6 +1981,76 @@ searchInstance ec dom sp = case filterInstances ec dom (ecInsts ec) (ecSols ec) 
     errAt sp
       ("DT: ambiguous instance for " ++ showValue dom ++ " (candidates: " ++ joinInstNames cands ++ ")")
 
+-- M22：回填延迟的字典元变量。每个 `DtDictGoal m dom`：类参数已解（非元变量）且能搜到
+-- 唯一实例时解 `?m = <实例>`；仍未解或仍歧义则留到下一轮（幂等，可反复调用）。
+resolveDictGoals : List (Pair String Term) -> Ec -> Ec
+resolveDictGoals globals ec = case ecDictGoals ec of
+  [] => ec
+  (DtDictGoal m dom) :: rest =>
+    let
+      ec1 = ecPutDictGoals ec rest
+      forced = forceVal ec1 dom
+    in case dictClassArg ec1 forced of
+      Just argTy => if hasUnsolvedMetaValue ec1 argTy then
+        -- 类参数仍未解：留到下一轮（先处理 rest，再把这目标追加回列表）。
+        ecAddDictGoal (resolveDictGoals globals ec1) (DtDictGoal m forced)
+      else case searchInstance ec1 forced (Span "" 0 0 0 0) of
+        Ok (Pair instTerm ec2) => case solveMeta (ecDefs ec2) (ecSols ec2) 0 m [] (eval [] instTerm) of
+          Ok sols2 => resolveDictGoals globals (ecPutSols ec2 sols2)
+          Err e => ecAddDictGoal (resolveDictGoals globals ec1) (DtDictGoal m forced)
+        Err e => ecAddDictGoal (resolveDictGoals globals ec1) (DtDictGoal m forced)
+      Nothing => ecAddDictGoal (resolveDictGoals globals ec1) (DtDictGoal m forced)
+
+-- M22：把「已解且闭」的元变量在项里替换成其实例项（`TMeta m` → `quote 0` 的解）。
+-- 字典元变量是运行时实参（Rig1），codegen 会对残留的 `TMeta` 报错；只有擦除的
+-- 类型/索引元变量（Rig0）可留在项里。字典解（实例构造子）是闭的，`quote 0` 安全；
+-- 带自由变量（非闭）的解跳过——它们只可能是擦除元变量，codegen 跳过。
+substDictTerm : Ec -> Term -> Term
+substDictTerm ec t = substSolvedMetas (ecSols ec) t
+
+substSolvedMetas : List (Pair Int Value) -> Term -> Term
+substSolvedMetas sols t = case t of
+  TMeta m => case metaLookup m sols of
+    Just v =>
+      let soln = quote 0 v in
+      if hasFreeTermVar 0 soln then t else soln
+    Nothing => t
+  TPi name implicit rig dom cod =>
+    TPi name implicit rig (substSolvedMetas sols dom) (substSolvedMetas sols cod)
+  TLam name rig body => TLam name rig (substSolvedMetas sols body)
+  TApp f a rig => TApp (substSolvedMetas sols f) (substSolvedMetas sols a) rig
+  TCon c args => TCon c (map (substSolvedPair sols) args)
+  TCase scrut alts => TCase (substSolvedMetas sols scrut) (map (substSolvedAlt sols) alts)
+  TIf c th el => TIf (substSolvedMetas sols c) (substSolvedMetas sols th) (substSolvedMetas sols el)
+  _ => t
+
+substSolvedPair : List (Pair Int Value) -> Pair Term Rig -> Pair Term Rig
+substSolvedPair sols (Pair arg rig) = Pair (substSolvedMetas sols arg) rig
+
+substSolvedAlt : List (Pair Int Value) -> CaseAlt -> CaseAlt
+substSolvedAlt sols (CaseAlt name binders body) = CaseAlt name binders (substSolvedMetas sols body)
+
+-- 项里是否有自由变量（`i >= depth` 的 `TVar`）。闭项无自由变量。
+hasFreeTermVar : Int -> Term -> Bool
+hasFreeTermVar depth t = case t of
+  TVar name i => i >= depth
+  TPi name implicit rig dom cod => hasFreeTermVar depth dom || hasFreeTermVar (depth + 1) cod
+  TLam name rig body => hasFreeTermVar (depth + 1) body
+  TApp f a rig => hasFreeTermVar depth f || hasFreeTermVar depth a
+  TCon c args => anyPairFree depth args
+  TCase scrut alts => hasFreeTermVar depth scrut || anyAltFree depth alts
+  TIf c th el => hasFreeTermVar depth c || hasFreeTermVar depth th || hasFreeTermVar depth el
+  _ => False
+
+anyPairFree : Int -> List (Pair Term Rig) -> Bool
+anyPairFree depth [] = False
+anyPairFree depth ((Pair arg rig) :: rest) = hasFreeTermVar depth arg || anyPairFree depth rest
+
+anyAltFree : Int -> List CaseAlt -> Bool
+anyAltFree depth [] = False
+anyAltFree depth (alt :: rest) = case alt of
+  CaseAlt name binders body => hasFreeTermVar (depth + length binders) body || anyAltFree depth rest
+
 -- 实例表筛选（M22）：接受**可新增解**的头匹配——`Dict_C ?a`（`?a` 未解）与实例头
 -- `Dict_C IO` 统一会解出 `?a = IO`，这正是「约束求解」：字典约束本身确定类参数。
 -- 每个候选都对照**同一份初始 sols** 试匹配（不把前一个候选的解带进下一个），
@@ -1989,7 +2081,18 @@ constrainDictDom globals ec ctx dom args sp = case dictClassArg ec dom of
   Nothing => Ok ec
   Just argTy => case dictArgKind ec dom of
     Nothing => Ok ec
-    Just argKind => constrainDictDomGoK globals ec ctx argTy argKind args sp
+    Just argKind => case argTy of
+      -- 类参数是裸元变量：在**副本**上推断显式实参以确定它（`MkB` → `?a = B`），
+      -- 但只把 `?a` 的解带回真实 ec，`inferE` 新建的孤儿元变量随副本丢弃——
+      -- 否则 `bind (pure 41)` 的 `pure` 类参数（`?3`）会变成未解孤儿报 M13。
+      VMeta a [] => andThen (constrainDictDomGoK globals ec ctx argTy argKind args sp)
+        (\ecProbe => case metaLookup a (ecSols ecProbe) of
+          Just v => case solveMeta (ecDefs ec) (ecSols ec) 0 a [] v of
+            Ok sols2 => Ok (ecPutSols ec sols2)
+            Err e => Ok ec
+          Nothing => Ok ec
+        )
+      _ => constrainDictDomGoK globals ec ctx argTy argKind args sp
 
 -- 字典族的类参数 kind：字典 data `Dict_C` 的构造子类型第一个 binder 的域
 -- （`MkDict_C : {p : K} -> <字段>` 里的 `K`）。
@@ -2169,7 +2272,7 @@ checkByInfer globals ctx ec expr expected = case inferE globals ctx ec expr of
   Err e => Err e
   Ok (Pair term (Pair actual ec1)) => case convEc ec1 (ctxDepth ctx) expected actual of
     Err e => Err (showSpanLoc (exprSpan expr) ++ ": " ++ e)
-    Ok ec2 => Ok (Pair term ec2)
+    Ok ec2 => Ok (Pair term (resolveDictGoals globals ec2))
 
 checkLam : List (Pair String Term) -> Ctx -> Ec -> List String -> Expr -> Value -> Span -> Result (Pair Term Ec)
 checkLam globals ctx ec [] body expected sp = checkE globals ctx ec body expected
