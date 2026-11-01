@@ -12,12 +12,16 @@
 # M15–M17：DT 精化器大幅扩张（元变量上下文/接口字典/实例搜索/洞目标/终止性检查/擦除判定）
 #   后重新标定：bytes 1177528 / lines 11066 / longlines 4161 / letrec 614 / ctorcount 2298。
 #   seed 文件数不变（31 个模块），工具链（Lsp/Json）仍不在闭包内。
-bytes 1190000
-lines 11200
+# M19：DT 语言面 parity（let / 推断位 case / 嵌套模式 / 多 clause / 内建字面量模式）
+#   后重新标定：bytes 1225233 / lines 11525 / longlines 4310 / ctorcount 2422。
+#   增长全部来自 DT 精化器（Elab 的模式矩阵与内建 case 降级），HM 产物语义不变；
+#   seed 文件数仍 31 个模块，工具链仍不在闭包内。
+bytes 1230000
+lines 11600
 maxline 12400
-longlines 4250
+longlines 4350
 letrec 640
 strcat 330
 eqint 35
 zeroarg 30
-ctorcount 2400
+ctorcount 2450

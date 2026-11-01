@@ -106,6 +106,26 @@ git 历史里）。各里程碑对应的模块与设计见 [docs/architecture.md
   升级为 `binderRig : Bool -> Value -> Rig`。映射表与三条不变量写进 `docs/dt-core.md` §24；
   新增正例 `dt/20_rig` / `dt/21_level` 与反例 `dt_err/19_rig_type_runtime`。
 
+- M19：DT 语言面 parity（5/8 项落地）——把 dt-parity 表里「不补就写不了真实模块」的
+  五项补齐，全部有正反例：
+  ① **多 clause 与方程左端模式**（399 名 / 978 行）：合成单个 lambda + case 表达式树，
+     按列递归（标准模式矩阵）——整列是变量就改名继续，出现构造子就按构造子分组、把
+     模式替换成子模式后递归，变量/通配汇成兜底；分支 pattern 的子模式一律用新鲜变量
+     （`_sc<i>`），因此不依赖 `bindCtorTele` 内部的 `_np<N>` 编号约定。
+  ② **`let`**（296 处，含 `where` 块）：检查位与推断位两条路径都脱糖为
+     `(\x => body) e`，绑定子的 rig 由值类型经 `binderRig` 决定，擦除行为与函数参数一致。
+  ③ **推断位 `case`**（132 处）：建元变量当期望类型再按检查模式处理，分支逐个 check
+     会把期望写进它——`if` 分支、函数实参、`let` 的 value 位置都可用。
+  ④ **嵌套构造子模式**（410 分支）：改写成内层 case（`Cons a x rest => case x of
+     Succ k => body`），因此内层同样过覆盖检查与索引合一，支持任意深度。
+  ⑤ **内建类型上的字面量模式**：`Bool` 降级成 `TIf`；`Int` / `String` 降级成嵌套
+     `TIf` 链（判据 `==`），因此必须有变量/通配兜底分支。
+  顺带修掉核心求值器两个真实缺陷：`normalizeCase` 原先只正规化 scrutinee、不进入分支体
+  （嵌套 case 在 `interp` 下无法归约），`applyCaseAlt` 原先不处理兜底分支（空名字），
+  于是「变量 clause 汇成兜底」的分支永远命不中。metrics 按实测重新标定。
+  未完成：内建泛化（`==` 跨类型、`str*` 进 prelude）、trait 高阶 kind、`record`、
+  `deriving`——归入后续阶段。
+
 ## 决策变更：M18 迁移动机失效（2026-11）
 
 M18 的结论是「编译器本体暂不全量迁移到 DT」，依据是四条理由，其中两条是**硬前提**：
