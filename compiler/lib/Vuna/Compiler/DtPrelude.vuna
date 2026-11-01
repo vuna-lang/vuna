@@ -1,0 +1,132 @@
+module Vuna.Compiler.DtPrelude (preludeNames, preludeGlobals, intTy, strTy, boolTy, fun2, isEqOp, builtinTyName, eqRuntimeName, polyEqTy) where
+
+-- Vuna.Compiler.DtPrelude：DT 的**内置定义表**（M19 起独立成模块）。
+--
+-- 这里只有纯数据（类型项与名字表），不依赖精化状态：
+-- - `preludeNames` / `preludeGlobals`：DT 单文件路径可见的内置名字与签名；
+-- - `intTy` / `strTy` / `boolTy` / `fun2`：拼签名用的类型项构造器；
+-- - `isEqOp` / `builtinTyName` / `eqRuntimeName` / `polyEqTy`：`==` / `/=` 的
+--   跨类型特化（精化器在饱和应用处按实参类型重写运行时函数名）。
+--
+-- 拆出来是为了让 `Elab` 专注精化规则（模块行数预算是硬门槛，见 nix/context.budget）。
+import Vuna.Compiler.Common
+import Vuna.Compiler.Core
+
+-- ---------------------------------------------------------------
+-- 内置 prelude：只有类型常量、Bool 值与 Int/String/Bool 运算符。
+-- 名字与 TypedCodegen 的 runtime helper 一一对应（codegen 按名字映射）。
+-- ---------------------------------------------------------------
+preludeNames : List String
+preludeNames =
+  [ "Int",
+    "String",
+    "Bool",
+    "True",
+    "False",
+    "+",
+    "-",
+    "*",
+    "/",
+    "==",
+    "/=",
+    "<",
+    "<=",
+    ">",
+    ">=",
+    "++",
+    "strFromInt",
+    "strUnpack",
+    "strPack",
+    "strLength",
+    "&&",
+    "||"
+  ]
+
+intTy : Term
+intTy = TGlobal "Int"
+
+strTy : Term
+strTy = TGlobal "String"
+
+boolTy : Term
+boolTy = TGlobal "Bool"
+
+fun2 : Term -> Term -> Term -> Term
+fun2 a b c = TPi "_" False Rig1 a (TPi "_" False Rig1 b c)
+
+-- ---------------------------------------------------------------
+-- M19：内建泛化（`==` / `/=` 跨类型）与 str* 进 prelude
+-- ---------------------------------------------------------------
+--
+-- `==` / `/=` 的签名带一个隐式类型参数 `{a : Type}`：
+--   `== : {a : Type} -> a -> a -> Bool`
+-- 精化到**饱和应用**时按第一个实参的类型把它特化成运行时函数
+-- （`bi_eq_int` / `bi_eq_str` / `bi_neq_int` / `bi_neq_str`）。特化在精化期完成，
+-- 因此 codegen 只需按名字映射、不需要类型信息——M18.6「codegen 不感知判定来源」
+-- 不被破坏，`Rig` / `Level` 的封装也不受影响。
+--
+-- 非 Int / String 的实参类型直接报可解释错误，而不是静默走错分支。
+eqOps : List String
+eqOps = ["==", "/="]
+
+isEqOp : String -> Bool
+isEqOp name = memName name eqOps
+
+-- 内建类型名（`VNeutral (NGlobal g [])` 形态）。
+builtinTyName : Value -> Maybe String
+builtinTyName v = case v of
+  VNeutral n => case n of
+    NGlobal g sp => if sp == [] then Just g else Nothing
+    _ => Nothing
+  _ => Nothing
+
+-- 按实参类型选运行时函数名。
+eqRuntimeName : String -> String -> Result String
+eqRuntimeName op tyName = case tyName of
+  "Int" => if op == "==" then Ok "bi_eq_int" else Ok "bi_neq_int"
+  "String" => if op == "==" then Ok "bi_eq_str" else Ok "bi_neq_str"
+  _ => Err ("DT: `" ++ op ++ "` is only defined for Int and String (found " ++ tyName ++ "; M19)")
+
+-- 泛化后的 `==` / `/=` 签名：`{a : Type} -> a -> a -> Bool`。
+polyEqTy : Term
+polyEqTy = TPi "a" True Rig0 (TType levelZero) (fun2 (TVar "a" 0) (TVar "a" 0) boolTy)
+
+-- str* 内建的签名。
+strFromIntTy : Term
+strFromIntTy = TPi "_" False Rig1 intTy strTy
+
+strUnpackTy : Term
+strUnpackTy = TPi "_" False Rig1 strTy (TApp (TGlobal "List") intTy Rig1)
+
+strPackTy : Term
+strPackTy = TPi "_" False Rig1 (TApp (TGlobal "List") intTy Rig1) strTy
+
+strLengthTy : Term
+strLengthTy = TPi "_" False Rig1 strTy intTy
+
+preludeGlobals : List (Pair String Term)
+preludeGlobals =
+  [ Pair "Int" (TType levelZero),
+    Pair "String" (TType levelZero),
+    Pair "Bool" (TType levelZero),
+    Pair "True" boolTy,
+    Pair "False" boolTy,
+    Pair "+" (fun2 intTy intTy intTy),
+    Pair "-" (fun2 intTy intTy intTy),
+    Pair "*" (fun2 intTy intTy intTy),
+    Pair "/" (fun2 intTy intTy intTy),
+    Pair "==" polyEqTy,
+    Pair "/=" polyEqTy,
+    Pair "<" (fun2 intTy intTy boolTy),
+    Pair "<=" (fun2 intTy intTy boolTy),
+    Pair ">" (fun2 intTy intTy boolTy),
+    Pair ">=" (fun2 intTy intTy boolTy),
+    Pair "++" (fun2 strTy strTy strTy),
+    Pair "&&" (fun2 boolTy boolTy boolTy),
+    Pair "||" (fun2 boolTy boolTy boolTy),
+    Pair "strFromInt" strFromIntTy,
+    Pair "strUnpack" strUnpackTy,
+    Pair "strPack" strPackTy,
+    Pair "strLength" strLengthTy
+  ]
+

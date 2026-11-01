@@ -114,8 +114,10 @@ trans a b c p q = case p of
   做法是建元变量当期望类型。
 - **内建类型上的字面量模式（M19）**。`Bool` 的 `case` 降级成 `if`；`Int` / `String`
   的字面量分支降级成嵌套 `if` 链，因此**必须有一个变量/通配兜底分支**（值域穷尽不了）。
-- **内建函数仍是单态的（M19 未完成项）**：`==` / `/=` 只对 `Int`；`strFromInt` /
-  `strUnpack` / `strPack` / `strLength` 尚未进入 DT prelude。
+- **内建泛化（M19）**。`==` / `/=` 带隐式类型参数（`{a : Type} -> a -> a -> Bool`），
+  精化到饱和应用时按第一个实参类型特化成 `bi_eq_int` / `bi_eq_str` 这类运行时函数；
+  非 `Int` / `String` 报 `is only defined for Int and String`。`strFromInt` /
+  `strUnpack` / `strPack` / `strLength` 已进 prelude（定义表在 `DtPrelude.vuna`）。
 - **可达性决定分支能否省略**：若函数签名把索引**细化**（如 `Vec a (Succ m)`），
   与该索引不可统一的分支（`Nil`）**可以省略**，写了则报
   `DT: this branch is impossible`；若签名是**泛化**索引（`Vec a n`），则所有构造子
@@ -147,17 +149,17 @@ vuna interp --dt file.vuna           # 核心求值器（NbE + delta）求值 ma
 `test/run-tests.sh` 第 34 段，三条路径（`interp --dt` / `check --dt` / `compile --dt` +
 `ocamlopt`）都跑：
 
-- 正例 `test/corpus/dt/` 共 **25** 个：M13 `01_id`–`08_if`；M14 `09_nat`/`10_vec`/`11_fin`/`12_eq`；
+- 正例 `test/corpus/dt/` 共 **26** 个：M13 `01_id`–`08_if`；M14 `09_nat`/`10_vec`/`11_fin`/`12_eq`；
   M15 `13_iface`/`14_solve`/`15_goal`；M16 `16_total`/`17_erase`；M18 `18_ctx`；
   M18.5 `19_lam`；M18.6 `20_rig`/`21_level`；M19 `22_let`（let 四种形态）、
-  `23_nested`（索引族嵌套模式）、`24_clauses`（多 clause）、`25_literal`（Bool / Int 字面量）。
+  `23_nested`、`24_clauses`、`25_literal`、`26_builtin_poly`（`==` 跨类型 / str*）。
   数值见各 `.out` 文件。
-- 负例 `test/corpus/dt_err/` 共 **21** 个：M13 的 `01_universe`、`02_conv`、
+- 负例 `test/corpus/dt_err/` 共 **22** 个：M13 的 `01_universe`、`02_conv`、
   `03_hole`、`05_import`、`06_unknown`、`07_lambda`、`08_arity`、`09_runtime_type`、
   `11_implicit_non_type`；M14 `04_nonexhaustive`/`10_impossible`/`12_case_int`/
   `13_unknown_ctor`/`14_bad_ctor_result`/`15_nested_pat`；M16 `16_nonterm`/`17_nested_total`；
   M18.5 `18_lam_type_used`；M18.6 `19_rig_type_runtime`；M19 `20_let_bad_pat`/
-  `21_clause_arity`。断言片段见各 `.err` 文件。
+  `21_clause_arity`/`22_eq_unsupported`。断言片段见各 `.err` 文件。
 
 ## 相关阅读
 

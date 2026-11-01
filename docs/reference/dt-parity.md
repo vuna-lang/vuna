@@ -21,8 +21,8 @@
 | 5 | ~~`let` 表达式~~（`where` 块 desugar 成 `ELet`） | **M19 已实现**：脱糖为 `(\\x => body) e` | 296 | 4 | 189 | M19（已完成） |
 | 6 | ~~`case` 在推断位~~ | **M19 已实现**：元变量作期望类型 | 132 | 2 | 29 | M19（已完成） |
 | 7 | ~~`case` 嵌套构造子模式~~ | **M19 已实现**：改写成内层 case | 410 alts | 1 | 91 | M19（已完成） |
-| 8 | DT prelude 只有 Int/String/Bool + 算术比较 + `++` / `&&` / `\|\|`：无 List/Pair/Maybe/Result，无 `strFromInt` / `strUnpack` / `strPack` / `print` / `readFile` / `exit` / `getArgs`（`Elab.preludeGlobals` / `preludeNames`） | `DT: unknown name <name>` | List 1064、Pair 1845、Maybe 65、Result 175；str* 57/43/36、print 42、readFile 13、exit 9 | 79/30/17/18；0/13/7/6/5/5 | 132/286/27/21；33/49/39/48/11/8 | M19 + M21 |
-| 9 | `==` / `/=` 只对 Int | `Elab.preludeGlobals`：`type mismatch: expected Int, got String` | 155 处字符串比较 | 0 | 52 | M19 |
+| 8 | DT prelude 只有 Int/String/Bool + 算术比较 + `++` / `&&` / `\|\|` + `str*`：无 List/Pair/Maybe/Result，无 `print` / `readFile` / `exit` / `getArgs`（`DtPrelude.preludeGlobals` / `preludeNames`） | `DT: unknown name <name>` | List 1064、Pair 1845、Maybe 65、Result 175；print 42、readFile 13、exit 9 | 79/30/17/18；5/5/5/5 | 132/286/27/21；48/11/8 | M21 |
+| 9 | ~~`==` / `/=` 只对 Int~~ | **M19 已实现**：隐式类型参数 + 精化期按实参类型特化（`bi_eq_str` 等） | 155 处字符串比较 | 0 | 52 | M19（已完成） |
 | 10 | ~~`case` 只接受归纳族~~ | **M19 已实现**：Bool 降级 if，Int/String 降级 if 链（需兜底） | 4（Bool 分支） | 0 | 0 | M19（已完成） |
 | 11 | 非结构递归（算术递减 / fuel 式） | `Elab.checkTermBody`：`DT: cannot prove termination of <f> ...` | 41（`Elab` 14、`Core` 13、`Loader` 5、余 9） | 3 | 20 | M19 风险项 |
 | 12 | 单文件：无 `import` / 模块头 / 包目录 / `build` / `--root` | `Dt.dtLoad`：`DT: imports are not supported yet (single-file mode)`、`DT: module header is not allowed in entry file`；`CompilerCli.dtCmdErr` / `dtRootErr` / `dtDirErr` | 20 模块头 / 64 import | 12 / 33 | 13 / 64 | M20 |
@@ -32,7 +32,7 @@
 | 16 | `do` 块 | `Elab.inferE` EDo：`DT: do blocks are not supported yet (M19)` | 0（`compiler/app/Main.vuna` 1 处） | 0 | 1（`app/Main.vuna`） | M21 |
 | 17 | ~~隐式索引 binder 一律擦除~~ | **M18.5 已修复**：隐式 binder 仍恒擦除（这是正确语义——隐式实参由精化器插入），但**显式索引 binder** 恢复参与运行时表示 | — | — | — | M18.5（已完成） |
 
-第 1 项曾是该表唯一的 **bug**，M18.5 已修、第 17 项随之收敛；**M19 完成第 3–7、10 项**。
+第 1 项曾是该表唯一的 **bug**，M18.5 已修、第 17 项随之收敛；**M19 完成第 3–7、9、10 项**。
 第 2 项是**迁移工作量**而非语言缺陷（§5 ②）；第 8/13/16 项构成「编译器本体不可能用 DT
 写」的硬边界；第 14/15 项**保留并补齐**——它们有 `fmt/` 与 `traits/` 夹具覆盖（决策与
 理由见 roadmap 的「决策变更」）。
@@ -98,7 +98,7 @@ compile」在此失效，DT 存在能产出错误程序的通道。修复方式�
 2. **多 clause 399 名 / 978 行**是逐文件去重口径；跨文件拼接是 421 名 / 1050 行（同名碰撞）。
 3. **`let` 296 是 `compiler/lib` 的量**，`lib` 是 189——勿混列读取。
 
-测试面：DT 正例 25 / 负例 21，见 [testing.md](testing.md)。
+测试面：DT 正例 26 / 负例 22，见 [testing.md](testing.md)。
 
 ## 5. 对计划的三条推论
 

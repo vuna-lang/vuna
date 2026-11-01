@@ -376,6 +376,12 @@ dtRuntime =
     ++ "let bi_div a b = if b = 0 then failwith \"division by zero\" else a / b\n"
     ++ "let bi_eq_int (a : int) (b : int) = a = b\n"
     ++ "let bi_neq_int (a : int) (b : int) = a <> b\n"
+    ++ "let bi_eq_str (a : string) (b : string) = a = b\n"
+    ++ "let bi_neq_str (a : string) (b : string) = a <> b\n"
+    ++ "let bi_strFromInt (n : int) = string_of_int n\n"
+    ++ "let bi_strLength (s : string) = String.length s\n"
+    ++ "let bi_strUnpack (s : string) = List.init (String.length s) (fun i -> Char.code s.[i])\n"
+    ++ "let bi_strPack (cs : int list) = String.init (List.length cs) (fun i -> Char.chr (List.nth cs i))\n"
     ++ "let bi_lt_int (a : int) (b : int) = a < b\n"
     ++ "let bi_le_int (a : int) (b : int) = a <= b\n"
     ++ "let bi_gt_int (a : int) (b : int) = a > b\n"
@@ -398,6 +404,9 @@ dtRuntime =
     ++ "  Buffer.add_char buf (Char.chr 34);\n"
     ++ "  Buffer.contents buf\n"
 
+-- M19：`==` / `/=` 的跨类型特化（精化期已按实参类型重写成 `bi_eq_int` / `bi_eq_str`
+-- 这类名字），以及 str* 内建。codegen 只做名字映射、不感知类型——M18.6 的
+-- 「codegen 不感知判定来源」不被破坏。
 globalRef : String -> Result String
 globalRef name = case name of
   "True" => Ok "true"
@@ -415,6 +424,14 @@ globalRef name = case name of
   "++" => Ok "bi_concat"
   "&&" => Ok "bi_and"
   "||" => Ok "bi_or"
+  "bi_eq_int" => Ok "bi_eq_int"
+  "bi_neq_int" => Ok "bi_neq_int"
+  "bi_eq_str" => Ok "bi_eq_str"
+  "bi_neq_str" => Ok "bi_neq_str"
+  "strFromInt" => Ok "bi_strFromInt"
+  "strUnpack" => Ok "bi_strUnpack"
+  "strPack" => Ok "bi_strPack"
+  "strLength" => Ok "bi_strLength"
   _ => Ok (valueName name)
 
 -- 零参构造子（True/False 之外的 user 构造子）作为普通值引用时，OCaml 里就是裸构造子；

@@ -106,8 +106,8 @@ git 历史里）。各里程碑对应的模块与设计见 [docs/architecture.md
   升级为 `binderRig : Bool -> Value -> Rig`。映射表与三条不变量写进 `docs/dt-core.md` §24；
   新增正例 `dt/20_rig` / `dt/21_level` 与反例 `dt_err/19_rig_type_runtime`。
 
-- M19：DT 语言面 parity（5/8 项落地）——把 dt-parity 表里「不补就写不了真实模块」的
-  五项补齐，全部有正反例：
+- M19：DT 语言面 parity（6/8 项落地）——把 dt-parity 表里「不补就写不了真实模块」的
+  六项补齐，全部有正反例：
   ① **多 clause 与方程左端模式**（399 名 / 978 行）：合成单个 lambda + case 表达式树，
      按列递归（标准模式矩阵）——整列是变量就改名继续，出现构造子就按构造子分组、把
      模式替换成子模式后递归，变量/通配汇成兜底；分支 pattern 的子模式一律用新鲜变量
@@ -120,11 +120,14 @@ git 历史里）。各里程碑对应的模块与设计见 [docs/architecture.md
      Succ k => body`），因此内层同样过覆盖检查与索引合一，支持任意深度。
   ⑤ **内建类型上的字面量模式**：`Bool` 降级成 `TIf`；`Int` / `String` 降级成嵌套
      `TIf` 链（判据 `==`），因此必须有变量/通配兜底分支。
+  ⑥ **内建泛化**：`==` / `/=` 带隐式类型参数，精化到饱和应用时按第一个实参类型
+     特化成 `bi_eq_int` / `bi_eq_str` 这类运行时函数（codegen 只做名字映射）；
+     `strFromInt` / `strUnpack` / `strPack` / `strLength` 进 prelude。定义表拆成
+     独立模块 `DtPrelude.vuna`（`Elab` 行数回到模块预算内）。
   顺带修掉核心求值器两个真实缺陷：`normalizeCase` 原先只正规化 scrutinee、不进入分支体
   （嵌套 case 在 `interp` 下无法归约），`applyCaseAlt` 原先不处理兜底分支（空名字），
-  于是「变量 clause 汇成兜底」的分支永远命不中。metrics 按实测重新标定。
-  未完成：内建泛化（`==` 跨类型、`str*` 进 prelude）、trait 高阶 kind、`record`、
-  `deriving`——归入后续阶段。
+  于是「变量 clause 汇成兜底」的分支永远命不中。metrics 按实测重新标定两次。
+  未完成：trait 高阶 kind、`record`、`deriving`——归入后续阶段。
 
 ## 决策变更：M18 迁移动机失效（2026-11）
 

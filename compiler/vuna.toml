@@ -20,6 +20,7 @@ modules = [
   "Vuna.Compiler.Typecheck",
   "Vuna.Compiler.TypedCodegen",
   "Vuna.Compiler.Core",
+  "Vuna.Compiler.DtPrelude",
   "Vuna.Compiler.Elab",
   "Vuna.Compiler.CoreCodegen",
   "Vuna.Compiler.Dt",

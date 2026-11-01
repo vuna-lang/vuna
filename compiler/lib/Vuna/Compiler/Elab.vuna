@@ -11,6 +11,7 @@ module Vuna.Compiler.Elab (DtDef, dtDefName, dtDefType, dtDefBody, DtCtor, dtCto
 import Vuna.Compiler.Common
 import Vuna.Compiler.Ast
 import Vuna.Compiler.Core
+import Vuna.Compiler.DtPrelude
 
 -- 一个 DT 定义：名字、类型项、体项（均为闭项；体带擦除标志）。
 data DtDef : Type where
@@ -287,66 +288,6 @@ unsolvedMeta (Ec next sols defs datas depths goals insts classes) = unsolvedFrom
 
 maxInt : Int -> Int -> Int
 maxInt a b = if a >= b then a else b
-
--- ---------------------------------------------------------------
--- 内置 prelude：只有类型常量、Bool 值与 Int/String/Bool 运算符。
--- 名字与 TypedCodegen 的 runtime helper 一一对应（codegen 按名字映射）。
--- ---------------------------------------------------------------
-preludeNames : List String
-preludeNames =
-  [ "Int",
-    "String",
-    "Bool",
-    "True",
-    "False",
-    "+",
-    "-",
-    "*",
-    "/",
-    "==",
-    "/=",
-    "<",
-    "<=",
-    ">",
-    ">=",
-    "++",
-    "&&",
-    "||"
-  ]
-
-intTy : Term
-intTy = TGlobal "Int"
-
-strTy : Term
-strTy = TGlobal "String"
-
-boolTy : Term
-boolTy = TGlobal "Bool"
-
-fun2 : Term -> Term -> Term -> Term
-fun2 a b c = TPi "_" False Rig1 a (TPi "_" False Rig1 b c)
-
-preludeGlobals : List (Pair String Term)
-preludeGlobals =
-  [ Pair "Int" (TType levelZero),
-    Pair "String" (TType levelZero),
-    Pair "Bool" (TType levelZero),
-    Pair "True" boolTy,
-    Pair "False" boolTy,
-    Pair "+" (fun2 intTy intTy intTy),
-    Pair "-" (fun2 intTy intTy intTy),
-    Pair "*" (fun2 intTy intTy intTy),
-    Pair "/" (fun2 intTy intTy intTy),
-    Pair "==" (fun2 intTy intTy boolTy),
-    Pair "/=" (fun2 intTy intTy boolTy),
-    Pair "<" (fun2 intTy intTy boolTy),
-    Pair "<=" (fun2 intTy intTy boolTy),
-    Pair ">" (fun2 intTy intTy boolTy),
-    Pair ">=" (fun2 intTy intTy boolTy),
-    Pair "++" (fun2 strTy strTy strTy),
-    Pair "&&" (fun2 boolTy boolTy boolTy),
-    Pair "||" (fun2 boolTy boolTy boolTy)
-  ]
 
 globalLookup : String -> List (Pair String Term) -> Maybe Term
 globalLookup name [] = Nothing
@@ -1886,7 +1827,15 @@ inferApp globals ctx ec fn args sp = case fn of
     _ => inferAppGeneral globals ctx ec fn args sp
 
 inferAppGeneral : List (Pair String Term) -> Ctx -> Ec -> Expr -> List Expr -> Span -> Result (Pair Term (Pair Value Ec))
-inferAppGeneral globals ctx ec fn args sp = andThen (inferE globals ctx ec fn) (\pf => case pf of
+inferAppGeneral globals ctx ec fn args sp = case fn of
+  EVar name vsp => andThen (specializeEqApp globals ctx ec name args sp) (\mspec => case mspec of
+    Just pair => Ok pair
+    Nothing => inferAppGeneralGo globals ctx ec fn args sp
+  )
+  _ => inferAppGeneralGo globals ctx ec fn args sp
+
+inferAppGeneralGo : List (Pair String Term) -> Ctx -> Ec -> Expr -> List Expr -> Span -> Result (Pair Term (Pair Value Ec))
+inferAppGeneralGo globals ctx ec fn args sp = andThen (inferE globals ctx ec fn) (\pf => case pf of
   Pair fnTerm (Pair fnTy ec1) => andThen (inferArgs globals ctx ec1 fnTy args sp) (\pa => case pa of
     Pair argTerms (Pair resTy ec2) =>
       Ok (Pair (ctorAppTerm (ecDatas ec2) fnTerm argTerms) (Pair resTy ec2))
@@ -2243,9 +2192,37 @@ checkApp globals ctx ec fn args expected sp = case fn of
       Nothing => checkAppGeneral globals ctx ec fn args expected sp
   _ => checkAppGeneral globals ctx ec fn args expected sp
 
+-- M19：`==` / `/=` 的饱和应用按实参类型特化。
+-- 返回 `Nothing` 表示「不是泛化比较运算符的饱和应用」，调用方走常规路径。
+-- 特化后的项是 `bi_eq_int a b` / `bi_eq_str a b` 这类具体运行时函数应用，
+-- 因此 codegen 只需要名字映射（不感知类型），M18.6 的封装不被破坏。
+specializeEqApp : List (Pair String Term) -> Ctx -> Ec -> String -> List Expr -> Span -> Result (Maybe (Pair Term (Pair Value Ec)))
+specializeEqApp globals ctx ec name args sp = if isEqOp name then case args of
+  [a, b] => andThen (inferE globals ctx ec a) (\pa => case pa of
+    Pair aTerm (Pair aTy ec1) => andThen (inferE globals ctx ec1 b) (\pb => case pb of
+      Pair bTerm (Pair bTy ec2) =>
+        andThen (convEc ec2 (ctxDepth ctx) aTy bTy)
+          (\ec3 => specializeEqTy name aTerm bTerm aTy ec3)
+    )
+  )
+  _ => Ok Nothing
+else Ok Nothing
+
+specializeEqTy : String -> Term -> Term -> Value -> Ec -> Result (Maybe (Pair Term (Pair Value Ec)))
+specializeEqTy name aTerm bTerm aTy ec = case builtinTyName (forceVal ec aTy) of
+  Nothing => Ok Nothing
+  Just tyName =>
+    andThen (eqRuntimeName name tyName)
+      (\rt => Ok (Just (Pair (TApp (TApp (TGlobal rt) aTerm Rig1) bTerm Rig1) (Pair (VNeutral (NGlobal "Bool" [])) ec))))
+
 checkAppGeneral : List (Pair String Term) -> Ctx -> Ec -> Expr -> List Expr -> Value -> Span -> Result (Pair Term Ec)
-checkAppGeneral globals ctx ec fn args expected sp =
-  checkByInfer globals ctx ec (EApp fn args sp) expected
+checkAppGeneral globals ctx ec fn args expected sp = case fn of
+  EVar name vsp => andThen (specializeEqApp globals ctx ec name args sp) (\mspec => case mspec of
+    Just (Pair term (Pair termTy ec1)) =>
+      andThen (convEc ec1 (ctxDepth ctx) expected termTy) (\ec2 => Ok (Pair term ec2))
+    Nothing => checkByInfer globals ctx ec (EApp fn args sp) expected
+  )
+  _ => checkByInfer globals ctx ec (EApp fn args sp) expected
 
 -- 构造子应用：先按签名收隐式实参（元变量），再逐个检查显式实参，最后统一结果类型。
 checkAppCtor : List (Pair String Term) -> Ctx -> Ec -> String -> List Expr -> Value -> Span -> Result (Pair Term Ec)

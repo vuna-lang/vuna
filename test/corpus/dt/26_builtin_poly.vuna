@@ -1,0 +1,36 @@
+-- M19：内建泛化——`==` / `/=` 跨类型（按实参类型特化），str* 系列进 DT prelude。
+data Nat : Type where
+  Zero : Nat
+  Succ : Nat -> Nat
+
+-- 字符串比较（之前只对 Int，报 expected Int, got String）。
+sameName : String -> String -> Bool
+sameName a b = a == b
+
+diffName : String -> String -> Bool
+diffName a b = a /= b
+
+-- Int 比较仍然是 Int 语义（特化成 bi_eq_int）。
+sameInt : Int -> Int -> Bool
+sameInt a b = a == b
+
+-- str* 内建：strLength / strFromInt / strUnpack / strPack。
+lenOf : String -> Int
+lenOf s = strLength s
+
+showInt : Int -> String
+showInt n = strFromInt n
+
+-- 字符串比较结果参与控制流（推断位的 `==`）。
+pickBy : String -> Int
+pickBy s = if s == "yes" then 1 else 0
+
+main : Int
+main =
+  let
+    a = if sameName "abc" "abc" then 1 else 0
+    b = if diffName "abc" "abd" then 2 else 0
+    c = if sameInt 3 3 then 4 else 0
+    d = lenOf "hello"
+    e = lenOf (showInt 123)
+  in a + b + c + d + e + pickBy "yes"
