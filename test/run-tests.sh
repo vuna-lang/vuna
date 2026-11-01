@@ -1,17 +1,16 @@
 #!/bin/sh
-# vuna 原生测试：只用 vuna / vuna-boot 驱动。
+# vuna 原生测试：只用 vuna / vuna-seed 驱动。
 #
 # 环境变量（默认取 PATH 中的同名命令）：
 #   VUNA        当前编译器（stage 1）
-#   VUNA_SEED   种子编译器（stage 0，多文件 seed/ 构建；兼容旧名 VUNA_BOOT）
+#   VUNA_SEED   种子编译器（stage 0，多文件 seed/ 构建）
 #   OCAMLOPT    OCaml 编译器，默认 ocamlopt
 set -u
 
 cd "$(dirname "$0")"
 
 : "${VUNA:=vuna}"
-: "${VUNA_BOOT:=vuna-boot}"
-: "${VUNA_SEED:=${VUNA_BOOT}}"
+: "${VUNA_SEED:=vuna-seed}"
 : "${OCAMLOPT:=ocamlopt}"
 
 tmp=$(mktemp -d "${TMPDIR:-/tmp}/vuna-tests.XXXXXX") || exit 1
@@ -223,9 +222,9 @@ for dir in corpus/modules/[012][0-9]_*; do
   fi
 done
 
-# 13) 种子冒烟：vuna-boot 编译一个程序并运行
+# 13) 种子冒烟：vuna-seed 编译一个程序并运行
 fact=corpus/run/12_fact.vuna
-compile_and_run "$fact (vuna-boot)" "$VUNA_SEED" "." "$fact" "$(cat "${fact%.vuna}.out")"
+compile_and_run "$fact (vuna-seed)" "$VUNA_SEED" "." "$fact" "$(cat "${fact%.vuna}.out")"
 
 # 14) 统一 CLI：help、退出码、子命令要求、已删除参数
 help_out=$("$VUNA" help 2>&1)

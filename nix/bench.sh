@@ -17,10 +17,10 @@ usage() {
 usage: vuna-bench [options]
 
 手动测量 vuna 的构建/编译性能与生成产物尺寸。默认测量 vuna（stage 1）；
-加 --compiler boot 测量 vuna-seed（stage 0 多文件种子）。请在仓库根目录运行。
+加 `--compiler seed` 测量 vuna-seed（stage 0 多文件种子）。请在仓库根目录运行。
 
 options:
-  --compiler vuna|boot   被测编译器（默认 vuna）
+  --compiler vuna|seed   被测编译器（默认 vuna）
   --runs N               计时重复次数（默认 3）
   --quick                等价于 --runs 1、无 warmup
   --json FILE|-          写出 JSON 报告；`-` 表示只输出 JSON
@@ -110,8 +110,8 @@ case $RUNS in
 esac
 case $COMPILER in
   vuna|stage1) COMPILER=vuna ;;
-  boot|vuna-seed|vuna-boot|stage0) COMPILER=boot ;;
-  *) die "--compiler must be vuna or boot" ;;
+  seed|vuna-seed|stage0) COMPILER=seed ;;
+  *) die "--compiler must be vuna or seed" ;;
 esac
 
 REPO=$PWD

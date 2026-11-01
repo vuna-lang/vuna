@@ -13,8 +13,8 @@
 sh test/run-tests.sh          # 需要 PATH 中有 vuna 与 vuna-seed
 ```
 
-环境变量：`VUNA`（stage 1 产品 CLI）、`VUNA_SEED`（stage 0 种子编译器，兼容旧名
-`VUNA_BOOT`）、`OCAMLOPT`（默认 `ocamlopt`）。脚本开头会 `cd "$(dirname "$0")"`，
+环境变量：`VUNA`（stage 1 产品 CLI）、`VUNA_SEED`（stage 0 种子编译器）、
+`OCAMLOPT`（默认 `ocamlopt`）。脚本开头会 `cd "$(dirname "$0")"`，
 并以相对路径引用 `corpus/...` 与 `../base/lib`，所以从仓库根 `sh test/run-tests.sh`
 即可（不需要手工切到 `test/`）。
 

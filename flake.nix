@@ -139,7 +139,7 @@
             description = "vuna 原生测试（包装 test/run-tests.sh，支持 --list / --only）";
           };
         };
-        # 手动性能基准：nix run .#bench -- [--compiler boot] [--runs N] ...
+        # 手动性能基准：nix run .#bench -- [--compiler seed] [--runs N] ...
         bench = {
           type = "app";
           program = "${self.packages.${system}.vuna-bench}/bin/vuna-bench";
