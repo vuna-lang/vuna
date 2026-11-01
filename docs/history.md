@@ -362,3 +362,44 @@ M18 当时的完整论证保留在 [docs/reference/m18-migration.md](reference/m
 **结论**：M22 泛型实例约束求解需要一个专门、谨慎的精化架构改动（延迟约束收集 + 事后
 求解 / 期望类型前向传播），并伴随 Elab 行数净压缩。建议单独一轮专注处理，先用现有
 `test/corpus/dt/` 的 `bind`/`do` 用例做门禁，再补 `mem` 的约束推断。
+
+### M22 追加定位：更高阶元变量的硬阻塞（M13 限制）
+
+实现「延迟字典约束」（`newHoleMeta` 记 `ecGoals` + `resolveDictGoals` 事后回填）后，
+`m21_bind` 的错误从 `no instance found for (Dict_Monad ?4)` 变成
+`cannot solve higher-order metavariable ?0 (M13 limitation)`。这暴露了**比延迟回填更深的
+根因**：
+
+1. **`constrainDictDom` 无 kind 检查**（`Elab.vuna`）。`constrainDictDomGo` 用
+   `convEc` 把类参数与**后续实参类型头部**统一；`convEc`/`solveMeta` 解元变量**不做
+   kind 检查**，于是 `pure 41` 的内层字典 `Dict_Monad ?m'` 被实参 `41 : Int` 解成
+   `?m' = Int`（`?m'` 的 kind 是 `Type -> Type`，`Int` 的 kind 是 `Type`）。`bind` 的
+   `?m` 跟着塌缩到 `Int`，`normalize dom = Dict_Monad Int`，`Monad Int` 无实例 ⇒
+   `searchInstance` 报错。**延迟路径因 `?m` 已被解成 `Int` 而从不触发**
+   （`hasUnsolvedMetaValue` 为假）。
+   - 修法（已验证可行）：`constrainDictDom` 先取**字典族的类参数 kind**
+     （`Dict_C` 的构造子类型 `MkDict_C : {p : K} -> ...` 第一个 binder 的域 `K`），
+     实参头部 `g` 的 kind 与 `K` 一致（`Color` 对 `Show`，`IO` 对 `Monad`）才约束；
+     头部是元变量（`?m' Int`）或 Pi 则跳过。这样 `?m` 保持未解 ⇒ 延迟路径触发。
+2. **更高阶元变量不可解（M13 硬限制，真正的阻塞）**。`solveMeta`（`Core.vuna:599`）
+   对**被应用的元变量**直接报错：`sp` 非空 ⇒ `cannot solve higher-order metavariable`。
+   `Monad` 的类参数 `?m : Type -> Type` 天生更高阶：`bind` 精化时 `?m` 已被应用
+   （`?m ?a`、`?m ?b`），结果类型 `?m ?b = IO Int` 要求 `?m = IO`——这是**高阶模式**
+   解，M13 拒绝。`?m` 在 `constrainDictDom` 时是**裸**元变量（可一阶解），但此时
+   `?m = IO` 的来源（结果类型 `IO Int`）尚未出现；等到 `?m ?b = IO Int` 出现时 `?m`
+   已被应用。**延迟回填解决不了这一点**：无论 `?m` 何时解，它一旦被应用就触发 M13。
+   ⇒ `bind (pure 41)` 的 `Monad` 用例**需要更高阶元变量求解**（`solveMeta` 支持模式
+   统一），这是 `Core.vuna` 的核心改动，不是 Elab 层的补丁。
+3. **`instanceHeadTerm`/`argNameOf` 头部限定名缺失**（潜在第二处不匹配）。
+   `instanceHeadTerm (EApp fn (a::_) _) = TGlobal (argNameOf a)`，`argNameOf (EVar n _) = n`
+   返回**非限定**名（`IO`），而程序里的 `IO` 是 `TGlobal "Base.IO.IO"`（模块限定）。
+   即使 `?m` 正确解成 `IO`，实例头 `Dict_Monad (TGlobal "IO")` 也未必与
+   `Dict_Monad (TGlobal "Base.IO.IO")` 统一。
+
+**当前状态**：`resolveDictGoals` + `newHoleMeta` 的延迟字典机制与 `constrainDictDom`
+的 kind 检查都已实现并验证（849 项测试全绿、零回归），但**因 M13 更高阶限制，`bind`
+用例仍未通过**；`Elab.vuna` 因这两处改动净增约 63 行，超出 `max_module_lines 2540`
+预算。为保持 CI 绿与预算守门，本提交暂将 `Elab.vuna` 还原到 HEAD（2540 行），把
+上述定位落盘。**M22 的真实完成路径**：先做 `Core.vuna` 的更高阶元变量模式统一
+（`solveMeta` 支持 `VMeta m sp` 的 pattern 求解），再启用延迟字典机制 + kind 检查 +
+头部限定名修正，最后补 `mem` 约束推断。
