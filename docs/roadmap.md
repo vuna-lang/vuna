@@ -54,6 +54,7 @@ vuna **尚未发布任何版本**：没有外部用户、没有下游生态、�
 - M16：终止性与覆盖性——surface AST 上的结构化递归终止性检查（`DT: cannot prove termination of <f>`），覆盖性边界固定；索引擦除分析落地为诊断（探测确认索引不能无条件擦，需整程序使用分析）。
 - M17：DT 工具链——`vuna goal` 洞目标/上下文、`vuna lsp`（JSON-RPC over stdio：诊断、Full 同步、洞 hover，27 项冒烟断言）、`vuna doc` 支持接口与隐式签名；`Lsp`/`Json` 不进入 TCB。
 - M18：自举迁移决策——seed rotation（stage1 == stage2）；用 DT 表达 de Bruijn 上下文良构（`Ctx a (Succ n)` 静态排除越界）；当时的结论「编译器本体暂不全量迁移」**已被推翻**，见「决策变更」。
+- M18.5：DT 可靠性修复——lambda 形参擦除 bug（形参被无条件标为 erased：运行时使用时硬报错、未使用时静默少生成一层 `fun`）；擦除判据收敛为全仓唯一入口 `Elab.erasedBinder`（隐式恒擦 / 显式仅宇宙域擦），六处判据点统一；`run-tests.sh` 第 34 段加「同夹具 `interp` 输出 == 编译产物输出」逐夹具对拍；正例 `19_lam`、反例 `18_lam_type_used`。
 
 ## 终态（本路线图的目标）
 

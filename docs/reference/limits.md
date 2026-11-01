@@ -22,8 +22,9 @@
   接口/洞、M16 终止性、M17 工具链、M18 自举决策：`--dt` 单文件路径（Core TT + 精化器 +
   擦除 codegen + `interp --dt` + `vuna goal` + `vuna lsp`）。**仍存的 DT 边界**
   （M19–M24 逐条拆除，清单与用量见 [dt-parity.md](dt-parity.md)）：
-  - **lambda 形参被无条件擦除**（bug）：参数在运行时被用时直接报错，未被用时**静默错编译**
-    （check/compile 退出 0，产物少形参，ocamlopt 才报错）——M18.5 修复；
+  - ~~**lambda 形参被无条件擦除**（bug）~~：**M18.5 已修复**——擦除判据收敛为全仓唯一入口
+    `Elab.erasedBinder`（隐式 binder 恒擦除，显式 binder 仅宇宙域擦除），并加了「同夹具
+    `interp` 输出 == 编译产物输出」的逐夹具对拍断言；
   - 仍是**单文件** opt-in，不接入 `import` / split / 包模式 / `build` / `seed`（M20）；
   - **索引保留运行时表示**（完整擦除需整程序使用分析，见
     [m16-design.md](m16-design.md) §3）（M22）；

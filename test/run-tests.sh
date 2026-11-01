@@ -704,11 +704,15 @@ fi
 
 
 # 34) DT（M13）：interp --dt（核心求值器）/ compile --dt（擦除 codegen）与 golden 一致
+#
+# M18.5 追加：核心求值器与擦除 codegen 必须语义一致——同一夹具 `interp` 的输出
+# 与 `compile`+`ocamlopt` 产物的输出逐字节相同（不依赖 golden，直接对拍两条路径）。
 for file in corpus/dt/*.vuna; do
   base=${file%.vuna}
   expected=$(cat "$base.out")
   actual=$("$VUNA" interp --dt "$file" 2>&1)
   check_eq "$file (dt interp)" "$expected" "$actual"
+  interp_out=$actual
   "$VUNA" check --dt "$file" >/dev/null 2>&1
   check_eq "$file (dt check exit)" "0" "$?"
   rm -f "$tmp/dt.ml" "$tmp/dt.exe"
@@ -721,6 +725,7 @@ for file in corpus/dt/*.vuna; do
   else
     actual=$("$tmp/dt.exe" 2>&1)
     check_eq "$file (dt run)" "$expected" "$actual"
+    check_eq "$file (dt interp == run)" "$interp_out" "$actual"
   fi
 done
 

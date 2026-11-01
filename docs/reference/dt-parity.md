@@ -14,7 +14,7 @@
 
 | # | 能力缺口 | 当前行为 / 错误文案 | compiler/lib | base/lib | lib | 归属 |
 |---|---|---|---|---|---|---|
-| 1 | **lambda 形参无条件擦除**（含 `f = \x => ...`、`case` 分支里的闭包） | `Elab.checkLam` 里 `erased = True`；`CoreCodegen.checkErasure` 报 `` DT: type-level binding `x` is used at runtime (M13 limitation) ``；形参未使用时**静默错编译**（§3） | 739（691 含具名参数） | 18 | 104 | M18.5（bug） |
+| 1 | ~~lambda 形参无条件擦除~~（含 `f = \x => ...`、`case` 分支里的闭包） | **M18.5 已修复**：统一判据 `Elab.erasedBinder`——隐式 binder 恒擦除，显式 binder 仅宇宙域擦除；既有反例 `07_lambda` / `09_runtime_type` 之外新增 `18_lam_type_used` | 739（691 含具名参数） | 18 | 104 | M18.5（已完成） |
 | 2 | 无签名顶层定义 | `Elab.elabBodies`：`DT: expected a type signature for <name>` | 1083 / 1649 defs | 0 / 85 | 574 / 710 | M23（签名工具） |
 | 3 | 多 clause 函数 | `Elab.elabBodies`：`DT: multiple clauses are not supported yet (use a single equation; M16)` | 399 名 / 978 行 | 24 / 51 | 123 / 266 | M19 |
 | 4 | 方程左端模式（构造子/字面量/列表） | `Elab.checkBinders`：`DT: definition parameters must be variables (M13)` | 832 defs（单 clause 433） | 36 | 302 | M19 |
@@ -30,12 +30,12 @@
 | 14 | `record` 声明 / 字段访问 / 更新 / 模式 | `Elab.collectSigsInto`（DRecord）、`Elab.inferE`（EField / ERecord / ERecordUpdate）：`DT: record declarations are not supported yet (M17)` 等 | 1 声明、14 构造、4 字段读取（另有 `fmt/` 夹具） | 0 | 0 | M19（补齐） |
 | 15 | `deriving` | `Elab.elabData`：`DT: deriving is not supported yet (M15)` | 1（`Loader.ExportEntry`）+ `traits/` 13 个夹具 | 0 | 0 | M19（补齐） |
 | 16 | `do` 块 | `Elab.inferE` EDo：`DT: do blocks are not supported yet (M19)` | 0（`compiler/app/Main.vuna` 1 处） | 0 | 1（`app/Main.vuna`） | M21 |
-| 17 | 隐式索引 binder 一律擦除 | `Elab.checkBinders` 隐式分支同样 `erased = True` | — | — | — | M18.5（随第 1 项） |
+| 17 | ~~隐式索引 binder 一律擦除~~ | **M18.5 已修复**：隐式 binder 仍恒擦除（这是正确语义——隐式实参由精化器插入），但**显式索引 binder** 恢复参与运行时表示 | — | — | — | M18.5（已完成） |
 
-第 1 项是唯一的 **bug**（其余是未实现的能力）；第 2 项的量是**迁移工作量**而非语言缺陷
-（§5 ②）；第 8/13/16 项构成「编译器本体不可能用 DT 写」的硬边界；第 14/15 项**保留并补齐**
-——两者是已实现、且分别有 `fmt/` 与 `traits/` 夹具覆盖的语言特性，删除只省下实现穿透点，
-却损失记法 ergonomics（决策与理由见 roadmap 的「决策变更」）。
+第 1 项曾是该表唯一的 **bug**（其余是未实现的能力），M18.5 已修；第 2 项的量是**迁移工作量**
+而非语言缺陷（§5 ②）；第 8/13/16 项构成「编译器本体不可能用 DT 写」的硬边界；第 14/15 项
+**保留并补齐**——两者是已实现、且分别有 `fmt/` 与 `traits/` 夹具覆盖的语言特性，删除只省下
+实现穿透点，却损失记法 ergonomics（决策与理由见 roadmap 的「决策变更」）。
 
 ## 2. 「不可绕」与「可绕」
 
@@ -53,23 +53,25 @@
   `record`（14）与 `deriving`（15）**不在此列**：它们是终态保留的语言特性，DT 侧必须补齐
   （`deriving` 在 DT 的自然形态是生成 instance，复用 M15 的实例搜索）。
 
-## 3. lambda 擦除缺陷（bug，不是阶段特性）
+## 3. lambda 擦除缺陷（M18.5 已修复，留作样本）
 
-`Elab.checkLam` 把**每个** lambda 形参标成 `erased = True`，`CoreCodegen.genTerm` 的
+`Elab.checkLam` 曾把**每个** lambda 形参标成 `erased = True`，`CoreCodegen.genTerm` 的
 `TLam` 分支配套「擦除即不生成形参」。于是任何 lambda 形参都被当成类型级变量，产生两条
-失败路径。
+失败路径——两路都已被 `test/corpus/dt/19_lam.vuna` 固化为回归夹具。
 
-**路径 A：形参在运行时被使用 → 直接报错**（`repro/lam_used.vuna`）：
+**路径 A：形参在运行时被使用 → 直接报错**（修复前）：
 
 ```vuna
-twice f x = f (f x)          -- twice : (Nat -> Nat) -> Nat -> Nat
+twice : (Nat -> Nat) -> Nat -> Nat
+twice f x = f (f x)
+
 three : Nat
 three = twice (\n => Succ n) Zero
 -- error: in `three`: DT: type-level binding `n` is used at runtime
 ```
 
 **路径 B：形参未被使用 → 静默错编译**：`check` 与 `compile` 都退出 0、`interp` 结果正确，
-但生成的 OCaml **少一个形参**（`repro/lam_unused.vuna`，`main = apply2 (\n => 7) 1`）：
+但生成的 OCaml **少一个形参**（`main = apply2 (\n => 7) 1`）：
 
 ```ocaml
 let v_apply2 = (fun f -> (fun x -> (f x)))
@@ -78,24 +80,23 @@ let v_main = ((v_apply2 7) 1)     (* 少一层 fun：7 被当成函数 *)
 (* Error: The constant 7 has type int but an expression was expected of type 'a -> 'b *)
 ```
 
-路径 B 是本次审计唯一**违反类型系统基本保证**的发现：`CoreCodegen` 注释里「能 check 就能
-compile」在此失效，DT 存在能产出错误程序的通道。所以它是 M18.5 的 bug 修复而非 M19 的
-阶段能力；正确规则与定义参数一致——`erased = isTypeValue dom`（域是宇宙或索引才擦），
-lambda 形参默认参与运行时表示。唯一绕法是把 lambda 提到顶层命名函数，但覆盖不了 691 个
-具名 lambda 的主流形态。
+路径 B 是审计中唯一**违反类型系统基本保证**的发现：`CoreCodegen` 注释里「能 check 就能
+compile」在此失效，DT 存在能产出错误程序的通道。修复方式是把判据收敛成全仓唯一入口
+`Elab.erasedBinder implicit dom = implicit || isTypeValue dom`，六处判据点
+（`teleOf` / `checkBinders` / `bindOnePattern` / `checkLam` / `inferArgs` / `bindCtorBinder`）
+全部改走它；`test/run-tests.sh` 第 34 段同时加了「同夹具 `interp` 输出 == 编译产物输出」的
+逐夹具对拍断言，保证语义一致性不靠人工比对。
 
 ## 4. 核对的数字与口径差异
 
 三处需注意口径（其余数字与 `.local/audit-a/stats/stats.sh` 一致、可直接复核）：
 
-1. **字符串比较 155 / 52**：155 是 `compiler/lib` 中「`==` 右侧紧跟字符串字面量的行数」；
-   `lib` 同口径是 **52**，把 `/=` 也算上是 **55**——差别只在是否统计 `/=`。表 1 写 52，
-   roadmap 引用 155 时指 `compiler/lib`。
-2. **多 clause 399 名 / 978 行**是逐文件去重口径；跨文件拼接口径是 421 名 / 1050 行
-   （差异来自不同模块同名碰撞）。逐文件口径更接近真实函数数。
+1. **字符串比较 155 / 52**：155 是 `compiler/lib` 中「`==` 右侧紧跟字符串字面量的行数」，
+   `lib` 同口径是 **52**（`/=` 也算上是 **55**）；表 1 写 52，roadmap 引用 155 时指 `compiler/lib`。
+2. **多 clause 399 名 / 978 行**是逐文件去重口径；跨文件拼接是 421 名 / 1050 行（同名碰撞）。
 3. **`let` 296 是 `compiler/lib` 的量**，`lib` 是 189——勿混列读取。
 
-测试面：DT 正例 18 个、负例 17 个（旧文档写的 12/15 已漂移），见 [testing.md](testing.md)。
+测试面：DT 正例 19 个、负例 18 个（M18.5 各加一），见 [testing.md](testing.md)。
 
 ## 5. 对计划的三条推论
 

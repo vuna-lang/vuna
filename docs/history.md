@@ -81,7 +81,18 @@ git 历史里）。各里程碑对应的模块与设计见 [docs/architecture.md
   `DT: index unification ran out of reduction fuel`；**决策：编译器本体暂不全量迁移**
   （擦除未完成、DT 仍单文件、收益集中在 Core/Elab），前置条件见
   `docs/reference/m18-migration.md`；metrics 重新标定；新增 `docs/reference/m16-design.md`；
-- 早期 OCaml 外部编译器 `vunax` 已完成使命并删除（M6 完成后删除，历史可从 git log 找到）。
+- 早期 OCaml 外部编译器 `vunax` 已完成使命并删除（M6 完成后删除，历史可从 git log 找到）；
+- M18.5：DT 可靠性修复——`Elab.checkLam` 曾把每个 lambda 形参无条件标成 `erased = True`，
+  造成两条失败路径：形参在运行时被使用 → `DT: type-level binding ... is used at runtime`
+  硬报错；形参未被使用 → **静默少生成一层 `fun`**（`check`/`compile` 退出 0，
+  `ocamlopt` 才报类型错），这是审计中唯一违反「能 check 就能 compile」的通道。
+  修复方式：擦除判据收敛为全仓唯一入口 `Elab.erasedBinder implicit dom =
+  implicit || isTypeValue dom`（隐式 binder 恒擦除，显式 binder 仅宇宙域擦除），
+  `teleOf` / `checkBinders` / `bindOnePattern` / `checkLam` / `inferArgs` /
+  `bindCtorBinder` 六处判据点全部改走它；`test/run-tests.sh` 第 34 段新增逐夹具
+  「`interp --dt` 输出 == `compile --dt`+`ocamlopt` 输出」对拍断言；新增正例
+  `dt/19_lam`（四种形态：形参被使用 / 未被使用 / 捕获上游 / 高阶传参）与反例
+  `dt_err/18_lam_type_used`（宇宙域形参仍擦除，被当运行时值必须报错）。
 
 ## 决策变更：M18 迁移动机失效（2026-11）
 

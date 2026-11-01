@@ -443,7 +443,7 @@ teleOf ty env = case ty of
     let
       domVal = eval env dom
       v = VNeutral (NVar name (length env) [])
-      erased = implicit || isTypeValue domVal
+      erased = erasedBinder implicit domVal
     in Pair name erased :: teleOf cod (v :: env)
   _ => []
 
@@ -990,7 +990,7 @@ bindCtorBinder : Ctx -> Value -> Term -> String -> List Pat -> List (Pair String
 bindCtorBinder ctx domVal cod binderName rest acc =
   let
     ctx2 = ctxBindValue binderName domVal ctx
-  in bindCtorGo ctx2 cod rest (Pair binderName (isTypeValue domVal) :: acc)
+  in bindCtorGo ctx2 cod rest (Pair binderName (erasedBinder False domVal) :: acc)
 
 -- 显式 constructor 分支：绑 telescope → 合一结果索引 → 在精化后的上下文里查分支体。
 elabConAlt : List (Pair String Term) -> Ctx -> Ec -> DtData -> List Value -> Value -> String -> List Pat -> Span -> Expr -> Result (Pair CaseAlt Ec)
@@ -1639,7 +1639,7 @@ bindOnePattern globals ctx ec pname pats body dom clo sp =
     lvl = ctxDepth ctx
     v = freshVarValue pname lvl
     ctx2 = ctxBindValue pname dom ctx
-    erasure = isTypeValue dom
+    erasure = erasedBinder False dom
   in andThen (checkBinders globals ctx2 ec pats body (applyClosure clo v) sp) (\p => case p of
     Pair inner ec1 => Ok (Pair (TLam pname erasure inner) ec1)
   )
@@ -1648,6 +1648,20 @@ bindOnePattern globals ctx ec pname pats body dom clo sp =
 -- 其它类型（Int/String/...）仍拒绝：隐式实参不参与运行时计算。
 isIndexDomain : Ec -> Value -> Bool
 isIndexDomain ec dom = isTypeValue dom || isDataHead (ecDatas ec) (forceVal ec dom)
+
+-- ---------------------------------------------------------------
+-- 擦除判据（M18.5：全仓唯一入口）
+-- ---------------------------------------------------------------
+--
+-- 规则：**只有域是宇宙（`Type`）的 binder 才擦除**；隐式 binder 恒擦除（精化器插入
+-- 隐式实参，运行时不传）。索引（`{n : Nat}` 这类归纳族域）**保留运行时表示**——
+-- 它们可能被当成递归参数读回来（见 `vlen`），安全擦除需要整程序使用分析（M22）。
+--
+-- 这个词是全仓唯一判据：`teleOf` / `checkBinders` / `bindOnePattern` / `checkLam` /
+-- `inferArgs` / `bindCtorBinder` 六处都必须走它，否则「字段数 / telescope 长度 /
+-- 绑定数」三处会各自漂移，违反即静默错编译（M24.6 第一级要把它升级成类型保证）。
+erasedBinder : Bool -> Value -> Bool
+erasedBinder implicit dom = implicit || isTypeValue dom
 
 isDataHead : List DtData -> Value -> Bool
 isDataHead datas v = case v of
@@ -1814,7 +1828,7 @@ inferArgsGo globals ctx ec ty args sp =
       a :: rest => andThen (checkE globals ctx ec a dom) (\p => case p of
         Pair aTerm ec1 =>
           let
-            erased = isTypeValue dom
+            erased = erasedBinder False dom
             ty2 = applyClosure clo (evalCtx ctx aTerm)
           in andThen (inferArgsGo globals ctx ec1 ty2 rest sp) (\q => case q of
             Pair argTerms (Pair resTy ec2) =>
@@ -1976,7 +1990,11 @@ checkLam globals ctx ec (name :: rest) body expected sp =
         v = freshVarValue pname lvl
         ctx2 = ctxBindValue name dom ctx
         expected2 = applyClosure clo v
-        erased = True
+        -- M18.5：lambda 形参与定义参数同一条规则——隐式 binder 恒擦除（隐式实参由
+        -- 精化器插入，运行时不传），显式 binder 只有域是宇宙才擦除。
+        -- 之前无条件写 True：形参在运行时被使用时硬报错，未被使用时静默少生成一层
+        -- `fun`（能 check 不能 compile）。见 docs/reference/dt-parity.md §3。
+        erased = erasedBinder implicit dom
       in andThen (checkLam globals ctx2 ec rest body expected2 sp) (\p => case p of
         Pair inner ec1 => Ok (Pair (TLam name erased inner) ec1)
       )

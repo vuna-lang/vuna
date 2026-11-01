@@ -105,6 +105,16 @@ data Term where
 
 ## 6. 擦除与 codegen
 
+**擦除判据（M18.5 起全仓唯一入口）**：`Elab.erasedBinder implicit dom = implicit || isTypeValue dom`。
+隐式 binder 恒擦除（隐式实参由精化器插入，运行时不传）；显式 binder **只有域是宇宙
+（`Type`）才擦除**，索引域（`{n : Nat}` 这类归纳族）保留运行时表示——它们可能被当递归
+参数读回来（`vlen`），安全擦除需要整程序使用分析（M22 只接判据入口，不做分析）。
+六处判据点 `teleOf` / `checkBinders` / `bindOnePattern` / `checkLam` / `inferArgs` /
+`bindCtorBinder` 一律走它；M24.6 第一级要把「字段数 / telescope 长度 / 绑定数」的三重
+一致性升级成类型保证。M18.5 之前 `checkLam` 无条件写 `erased = True`，导致 lambda 形参
+被当类型级变量：被使用时硬报错，未被使用时**静默少生成一层 `fun`**（能 check 不能 compile）；
+单元夹具 `test/corpus/dt/19_lam.vuna` 与反例 `dt_err/18_lam_type_used.vuna` 固化该规则。
+
 1. 按「类型 force 后是否为 `VType _`」区分类型级定义与运行时定义；类型级定义
    不生成运行时代码（如 `Endo`、`f : (a:Type) -> Type`）。
 2. 擦除检查：运行时项引用被擦除绑定 / 类型级定义 / `TPi` 时报错
@@ -452,10 +462,10 @@ M13 的 `data` / `case` / 递归不再报“不支持”；`record` / `trait` / 
 
 ## 23. M14 测试夹具
 
-> **本节的数字是 M14 当时的快照。** 当前实测为 **18 正例 / 17 反例**（M15 追加
+> **本节的数字是 M14 当时的快照。** 当前实测为 **19 正例 / 18 反例**（M15 追加
 > `13_iface`/`14_solve`/`15_goal`，M16 追加 `16_total`/`17_erase` 与反例
-> `16_nonterm`/`17_nested_total`，M18 追加 `18_ctx`）；完整清单见
-> [reference/dt.md](reference/dt.md)。
+> `16_nonterm`/`17_nested_total`，M18 追加 `18_ctx`，M18.5 追加正例 `19_lam` 与
+> 反例 `18_lam_type_used`）；完整清单见 [reference/dt.md](reference/dt.md)。
 
 正例 `test/corpus/dt/` 共 12 个（M13 的 `01_id`–`08_if` + M14 的四个）；
 数值是 `interp --dt` / `compile --dt` 的 golden：
