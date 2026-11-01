@@ -1,4 +1,4 @@
-module Vuna.Compiler.Core (Rig, Rig0, Rig1, RigOmega, rigIsErased, rigIsLinear, rigIsOmega, rigOfBinder, Level, levelZero, levelSucc, levelMax, levelToInt, levelOfInt, levelEq, levelLt, Term, TVar, TMeta, TGlobal, TType, TPi, TLam, TApp, TCon, TCase, CaseAlt, caseAltName, caseAltBinders, caseAltBody, TInt, TStr, TBool, TIf, Value, VType, VPi, VLam, VNeutral, VMeta, VCon, VCase, VCaseAlt, vCaseAltName, vCaseAltBinders, vCaseAltClosure, VInt, VStr, VBool, VIf, Neutral, NVar, NGlobal, Closure, Clos, eval, applyClosure, applyValue, applySpine, shift, quote, evalCase, force, normalize, conv, solveMeta, defaultFuel, isTypeValue, typeLevelOf, metaLookup, defLookup, showTerm, showValue, showValueAt) where
+module Vuna.Compiler.Core (Rig, Rig0, Rig1, RigOmega, rigIsErased, rigIsLinear, rigIsOmega, rigOfBinder, Level, levelZero, levelSucc, levelMax, levelToInt, levelOfInt, levelEq, levelLt, Term, TVar, TMeta, TGlobal, TType, TPi, TLam, TApp, TCon, TCase, CaseAlt, caseAltName, caseAltBinders, caseAltBody, TInt, TStr, TBool, TIf, Value, VType, VPi, VLam, VNeutral, VMeta, VCon, VCase, VCaseAlt, vCaseAltName, vCaseAltBinders, vCaseAltClosure, VInt, VStr, VBool, VIf, Neutral, NVar, NGlobal, Closure, Clos, eval, applyClosure, applyValue, applySpine, shift, quote, evalCase, force, normalize, conv, solveMeta, defaultFuel, isTypeValue, typeLevelOf, metaLookup, defLookup, substSolvedMetas, substVarAt, levelEscapes, showTerm, showValue, showValueAt) where
 
 -- Vuna.Compiler.Core：M13 的 core 类型论表示、NbE 求值与定义性相等。
 --
@@ -744,6 +744,99 @@ typeLevelOf v = case v of
 -- ---------------------------------------------------------------
 -- 打印（错误信息与 interp --dt 结果展示）
 -- ---------------------------------------------------------------
+-- 解里是否出现 level ≥ limit 的局部变量（即创建该元变量之后才绑定的变量）。
+levelEscapes : Int -> Int -> Value -> Bool
+levelEscapes limit depth v = case v of
+  VNeutral n => case n of
+    NVar name lvl sp => lvl >= limit || levelEscapesList limit sp
+    NGlobal g sp => levelEscapesList limit sp
+  VPi name implicit rig dom clo => levelEscapes limit depth dom || levelEscapesClo limit clo
+  VLam name rig clo => levelEscapesClo limit clo
+  VMeta m sp => levelEscapesList limit sp
+  VCon c args => levelEscapesList limit args
+  VCase scrut alts => levelEscapes limit depth scrut
+  VIf c th el =>
+    levelEscapes limit depth c || levelEscapes limit depth th || levelEscapes limit depth el
+  VType l => False
+  VInt n => False
+  VStr s => False
+  VBool b => False
+
+levelEscapesList : Int -> List Value -> Bool
+levelEscapesList limit [] = False
+levelEscapesList limit (v :: rest) = levelEscapes limit 0 v || levelEscapesList limit rest
+
+levelEscapesClo : Int -> Closure -> Bool
+levelEscapesClo limit clo = case clo of
+  Clos env body => levelEscapesList limit env
+
+-- 把项里对 de Bruijn 索引 `idx` 的变量引用替换成项 `arg`（按索引替换，不按名字）。
+substVarAt : Int -> Term -> Term -> Term
+substVarAt idx arg t = case t of
+  TVar n i => if i == idx then arg else t
+  TMeta m => t
+  TGlobal g => t
+  TType l => t
+  TPi n implicit rig dom cod =>
+    TPi n implicit rig (substVarAt idx arg dom) (substVarAt (idx + 1) arg cod)
+  TLam n erased body => TLam n erased (substVarAt (idx + 1) arg body)
+  TApp f a erased => TApp (substVarAt idx arg f) (substVarAt idx arg a) erased
+  TCon c cargs => TCon c (map (\p => Pair (substVarAt idx arg (firstOf p)) (secondOf p)) cargs)
+  TCase scrut alts => TCase (substVarAt idx arg scrut) (map (substAltAt idx arg) alts)
+  TInt n => t
+  TStr s => t
+  TBool b => t
+  TIf c th el => TIf (substVarAt idx arg c) (substVarAt idx arg th) (substVarAt idx arg el)
+
+substAltAt : Int -> Term -> CaseAlt -> CaseAlt
+substAltAt idx arg alt =
+  CaseAlt (caseAltName alt) (caseAltBinders alt)
+    (substVarAt (idx + length (caseAltBinders alt)) arg (caseAltBody alt))
+
+-- M22：把「已解且闭」的元变量在项里替换成其实例项（`TMeta m` → `quote 0` 的解）。
+-- 字典元变量是运行时实参（Rig1），codegen 会对残留的 `TMeta` 报错；只有擦除的
+-- 类型/索引元变量（Rig0）可留在项里。字典解（实例构造子）是闭的，`quote 0` 安全；
+-- 带自由变量（非闭）的解跳过——它们只可能是擦除元变量，codegen 跳过。
+substSolvedMetas : List (Pair Int Value) -> Term -> Term
+substSolvedMetas sols t = case t of
+  TMeta m => case metaLookup m sols of
+    Just v =>
+      let
+        soln = quote 0 v
+      in if hasFreeTermVar 0 soln then t else soln
+    Nothing => t
+  TPi n i r d c => TPi n i r (substSolvedMetas sols d) (substSolvedMetas sols c)
+  TLam n r b => TLam n r (substSolvedMetas sols b)
+  TApp f a r => TApp (substSolvedMetas sols f) (substSolvedMetas sols a) r
+  TCon c args => TCon c (map (\p => Pair (substSolvedMetas sols (firstOf p)) (secondOf p)) args)
+  TCase s alts => TCase (substSolvedMetas sols s) (map (substSolvedAlt sols) alts)
+  TIf c th el => TIf (substSolvedMetas sols c) (substSolvedMetas sols th) (substSolvedMetas sols el)
+  _ => t
+
+substSolvedAlt : List (Pair Int Value) -> CaseAlt -> CaseAlt
+substSolvedAlt sols (CaseAlt n bs b) = CaseAlt n bs (substSolvedMetas sols b)
+
+-- 项里是否有自由变量（`i >= depth` 的 `TVar`）。闭项无自由变量。
+hasFreeTermVar : Int -> Term -> Bool
+hasFreeTermVar d t = case t of
+  TVar n i => i >= d
+  TPi n i r dm cd => hasFreeTermVar d dm || hasFreeTermVar (d + 1) cd
+  TLam n r b => hasFreeTermVar (d + 1) b
+  TApp f a r => hasFreeTermVar d f || hasFreeTermVar d a
+  TCon c args => anyPairFree d args
+  TCase s alts => hasFreeTermVar d s || anyAltFree d alts
+  TIf c th el => hasFreeTermVar d c || hasFreeTermVar d th || hasFreeTermVar d el
+  _ => False
+
+anyPairFree : Int -> List (Pair Term Rig) -> Bool
+anyPairFree d [] = False
+anyPairFree d ((Pair a r) :: rest) = hasFreeTermVar d a || anyPairFree d rest
+
+anyAltFree : Int -> List CaseAlt -> Bool
+anyAltFree d [] = False
+anyAltFree d (alt :: rest) = case alt of
+  CaseAlt n bs b => hasFreeTermVar (d + length bs) b || anyAltFree d rest
+
 showTerm : Term -> String
 showTerm t = case t of
   TVar name i => name
