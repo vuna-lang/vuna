@@ -157,6 +157,21 @@ git 历史里）。各里程碑对应的模块与设计见 [docs/architecture.md
   构造器形态，高阶 kind 的实例头写的就是构造器，而实参类型常是 `Box Int`）。
   正例 `dt/29_multi_instance`（正序与反序调用都对）、反例 `dt_err/25_no_instance`。
 
+- M19 最后一项 `deriving` 落地：DT 的自然形态是**生成 instance**，因此 `DtDerive.vuna`
+  把 `deriving (Show, Eq, Ord)` 展开成等价的 `DInstance` 声明，交给既有的字典编码与
+  实例搜索——没有新增任何精化规则。方法体按构造子骨架机械生成：`show` 逐构造子拼
+  `"(C f0 f1)"`（零参直接给名字）、`eq` 同构造子逐字段 `&&`、`lt` 先按声明顺序比构造子
+  索引再逐字段、`le` 由 `lt` 派生（不依赖 `Eq`）、`gt`/`ge` 由 `lt`/`le` 反转。
+  同时给出内建 `Show`/`Eq`/`Ord` trait 声明与内建 `Show` 实例（`Int`/`String`/`Bool`），
+  因为派生 `show` 的字段展示是递归的。
+  
+  关键实现细节：展开出的实例必须**追加到声明列表末尾**——那条 data 的族信息要等
+  `elabDatas` 阶段才进 `globals`，插在中间会让实例方法体的 `case` 拿不到 scrutinee
+  类型。`==` 对非内建类型也改为走 `Eq` 实例（`deriving (Eq)` 才有意义），反例
+  `dt_err/22_eq_unsupported` 的诊断相应变成「找不到 Eq 实例」。
+  夹具：正例 `dt/30_deriving`（Show + Eq 的四种组合）、`dt/31_deriving_ord`（Ord 四方法
+  + 字段比较 + Show 组合）；反例 `dt_err/26_derive_unknown`。
+
 ## 决策变更：M18 迁移动机失效（2026-11）
 
 M18 的结论是「编译器本体暂不全量迁移到 DT」，依据是四条理由，其中两条是**硬前提**：

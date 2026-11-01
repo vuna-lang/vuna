@@ -1,4 +1,4 @@
-module Vuna.Compiler.DtPrelude (preludeNames, preludeGlobals, intTy, strTy, boolTy, fun2, isEqOp, builtinTyName, eqRuntimeName, polyEqTy) where
+module Vuna.Compiler.DtPrelude (preludeNames, preludeGlobals, intTy, strTy, boolTy, fun2, isEqOp, builtinTyName, builtinEqTyName, eqRuntimeName, polyEqTy) where
 
 -- Vuna.Compiler.DtPrelude：DT 的**内置定义表**（M19 起独立成模块）。
 --
@@ -129,3 +129,10 @@ preludeGlobals =
     Pair "strPack" strPackTy,
     Pair "strLength" strLengthTy
   ]
+
+-- 只认内建可特化类型（`Int` / `String`）；其它类型在 DT 里走 `Eq` 实例。
+builtinEqTyName : Value -> Maybe String
+builtinEqTyName v = case builtinTyName v of
+  Just "Int" => Just "Int"
+  Just "String" => Just "String"
+  _ => Nothing

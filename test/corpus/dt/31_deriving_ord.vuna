@@ -1,0 +1,24 @@
+-- M19：`deriving (Ord)`——构造子按声明顺序为序，同构造子逐字段比较。
+data C3 : Type where
+  Low : C3
+  Mid : C3
+  High : C3
+deriving (Ord)
+
+data Rated : Type where
+  MkRated : Int -> Rated
+deriving (Ord, Show)
+
+check : Bool -> Int
+check b = if b then 1 else 0
+
+main : Int
+main =
+  check (lt Low Mid)
+    + check (lt Mid High)
+    + check (le Low Low)
+    + check (gt High Low)
+    + check (ge High High)
+    + check (lt (MkRated 1) (MkRated 2))
+    + check (le (MkRated 2) (MkRated 2))
+    + check (show (MkRated 7) == "(MkRated 7)")

@@ -28,11 +28,11 @@
 | 12 | 单文件：无 `import` / 模块头 / 包目录 / `build` / `--root` | `Dt.dtLoad`：`DT: imports are not supported yet (single-file mode)`、`DT: module header is not allowed in entry file`；`CompilerCli.dtCmdErr` / `dtRootErr` / `dtDirErr` | 20 模块头 / 64 import | 12 / 33 | 13 / 64 | M20 |
 | 13 | `main` 只能是 Int/String/Bool，无 `main : IO a` | `CoreCodegen.mainShowErr`：`DT: main must return Int, String or Bool (M13 limitation)` | 两入口均 `main : IO Int` | — | — | M21 |
 | 14 | ~~`record` 声明 / 字段访问 / 更新 / 模式~~ | **M19 已实现**：精化前统一降级成单构造子 data（`DtRecords.vuna`），构造子名 `Mk<R>` | 1 声明、14 构造、4 字段读取（另有 `fmt/` 夹具） | 0 | 0 | M19（已完成） |
-| 15 | `deriving` | `Elab.elabData`：`DT: deriving is not supported yet (M15)` | 1（`Loader.ExportEntry`）+ `traits/` 13 个夹具 | 0 | 0 | M19（补齐） |
+| 15 | ~~`deriving`~~ | **M19 已实现**：展开成等价 instance（`DtDerive.vuna`），生成 Show/Eq/Ord 方法体 | 1（`Loader.ExportEntry`）+ `traits/` 13 个夹具 | 0 | 0 | M19（已完成） |
 | 16 | `do` 块 | `Elab.inferE` EDo：`DT: do blocks are not supported yet (M19)` | 0（`compiler/app/Main.vuna` 1 处） | 0 | 1（`app/Main.vuna`） | M21 |
 | 17 | ~~隐式索引 binder 一律擦除~~ | **M18.5 已修复**：隐式 binder 仍恒擦除（这是正确语义——隐式实参由精化器插入），但**显式索引 binder** 恢复参与运行时表示 | — | — | — | M18.5（已完成） |
 
-第 1 项曾是该表唯一的 **bug**，M18.5 已修、第 17 项随之收敛；**M19 完成第 3–7、9、10、14 项**，第 8 项的 `str*` 也已落地（剩余容器与 IO 原语归 M21）。第 2 项是**迁移工作量**而非
+第 1 项曾是该表唯一的 **bug**，M18.5 已修、第 17 项随之收敛；**M19 完成第 3–7、9、10、14、15 项**，第 8 项的 `str*` 也已落地（剩余容器与 IO 原语归 M21）。第 2 项是**迁移工作量**而非
 语言缺陷（§5 ②）；第 8/13/16 项构成「编译器本体不可能用 DT 写」的硬边界；第 14/15 项
 **保留并补齐**——它们有 `fmt/` 与 `traits/` 夹具覆盖（决策见 roadmap「决策变更」）。
 
@@ -97,7 +97,7 @@ compile」在此失效，DT 存在能产出错误程序的通道。修复方式�
 2. **多 clause 399 名 / 978 行**是逐文件去重口径；跨文件拼接是 421 名 / 1050 行（同名碰撞）。
 3. **`let` 296 是 `compiler/lib` 的量**，`lib` 是 189——勿混列读取。
 
-测试面：DT 正例 29 / 负例 25，见 [testing.md](testing.md)。
+测试面：DT 正例 31 / 负例 26，见 [testing.md](testing.md)。
 
 ## 5. 对计划的三条推论
 

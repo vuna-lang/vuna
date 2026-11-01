@@ -1,1 +1,1 @@
-is only defined for Int and String
+no instance found for (Dict_Eq Nat)

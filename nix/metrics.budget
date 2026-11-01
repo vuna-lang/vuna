@@ -24,12 +24,15 @@
 # M19 record 支持（声明/构造/字段访问/模式/更新，DT 侧复用同一套语法降级）：
 #   seed 闭包 34 个模块，bytes 1269049 / lines 11983 / longlines 4462 / letrec 656 /
 #   ctorcount 2498，按实测重新标定（新增 DtRecords 模块的 AST 遍历与 case 构造）。
-bytes 1274000
-lines 12040
+# M19 deriving（展开成等价 instance + 内建 Show/Eq/Ord trait 与内建 Show 实例）与
+#   同 trait 多实例修复：seed 闭包 35 个模块，bytes 1289038 / lines 12147 /
+#   longlines 4523 / letrec 664 / zeroarg 34 / ctorcount 2504，按实测重新标定。
+bytes 1295000
+lines 12200
 maxline 12400
-longlines 4480
-letrec 660
+longlines 4540
+letrec 680
 strcat 330
 eqint 35
-zeroarg 30
-ctorcount 2510
+zeroarg 40
+ctorcount 2520

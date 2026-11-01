@@ -56,9 +56,9 @@ vuna **尚未发布任何版本**：没有外部用户、没有下游生态、�
 - M18：自举迁移决策——seed rotation（stage1 == stage2）；用 DT 表达 de Bruijn 上下文良构（`Ctx a (Succ n)` 静态排除越界）；当时的结论「编译器本体暂不全量迁移」**已被推翻**，见「决策变更」。
 - M18.5：DT 可靠性修复——lambda 形参擦除 bug（形参被无条件标为 erased：运行时使用时硬报错、未使用时静默少生成一层 `fun`）；擦除判据收敛为全仓唯一入口 `Elab.erasedBinder`（隐式恒擦 / 显式仅宇宙域擦），六处判据点统一；`run-tests.sh` 第 34 段加「同夹具 `interp` 输出 == 编译产物输出」逐夹具对拍；正例 `19_lam`、反例 `18_lam_type_used`。
 - M18.6：核心表示层定型（QTT 预留）——`erased : Bool` 换成三值 `Rig`（`Rig0`/`Rig1`/`RigOmega`，`RigOmega` 在类型里存在但不产生）、`TType : Int` 换成不透明 `Level`；访问器分三层（构造 `rigOfBinder`/`levelSucc`/`levelMax`、判定 `rigIsErased`、展示比较 `levelToInt`/`levelEq`/`levelLt`）；`Core` 之外对 `Rig`/`Level` 模式匹配数为 0；**行为零变化**（全部 DT 夹具 `compile --dt` 产物逐字节相同）；正例 `20_rig`/`21_level`、反例 `19_rig_type_runtime`。
-- M19：DT 语言面 parity（8/9，`deriving` 后移）——`let`（检查位 + 推断位脱糖为 `(\\x => body) e`，296 处）、推断位 `case`（元变量作期望类型，132 处）、嵌套构造子模式（改写成内层 case，410 分支）、多 clause 与方程左端模式（标准模式矩阵，399 名 / 978 行）、内建字面量模式（Bool→if，Int/String→if 链）、内建泛化（`==` / `/=` 隐式类型参数 + 精化期按实参类型特化、`str*` 进 prelude）、trait 高阶 kind（类参数 kind 从方法签名推断，投影 multiplicity 两侧统一）、`record`（声明/构造/字段访问/模式/更新，精化前统一降级）；顺带修掉核心求值器两个缺陷（`normalizeCase` 不进分支体、`applyCaseAlt` 不处理兜底）。
-`deriving` 后移：它需要「同 trait 多实例」，这条路径的 M15 遗留缺陷已在本阶段修复
-（见下方「同 trait 多实例」），`deriving` 可直接建在其上。
+- M19：DT 语言面 parity（9/9，完成）——`let`（检查位 + 推断位脱糖为 `(\\x => body) e`，296 处）、推断位 `case`（元变量作期望类型，132 处）、嵌套构造子模式（改写成内层 case，410 分支）、多 clause 与方程左端模式（标准模式矩阵，399 名 / 978 行）、内建字面量模式（Bool→if，Int/String→if 链）、内建泛化（`==` / `/=` 隐式类型参数 + 精化期按实参类型特化、`str*` 进 prelude）、trait 高阶 kind（类参数 kind 从方法签名推断，投影 multiplicity 两侧统一）、`record`（声明/构造/字段访问/模式/更新，精化前统一降级）；`deriving`（展开成等价 instance，内建 Show/Eq/Ord trait 与内建 Show 实例）；顺带修掉
+核心求值器两个缺陷（`normalizeCase` 不进分支体、`applyCaseAlt` 不处理兜底）与一条
+M15 遗留缺陷（同 trait 多实例，见下方）。
 
 ## 终态（本路线图的目标）
 
@@ -118,10 +118,10 @@ vuna **尚未发布任何版本**：没有外部用户、没有下游生态、�
   纯记法（等价于「带一个构造子的 data」），在精化前统一降级（`DtRecords.vuna`），DT 侧
   没有任何 record 专用精化规则。降级后的构造子名用 `Mk<R>`（DT 的 globals 是一张表，
   同名会让 `Point 1 2` 被解析成「把类型当函数应用」）。
-- **`deriving`（`Show` / `Eq` / `Ord`）**：DT 侧补齐，**不删除**。DT 的自然形态是**生成
-  instance**（复用 M15 的实例搜索与字典编码），而不是照搬 HM 的降级通道。
-  **受阻于下一条**：`deriving` 需要「同一 trait 多实例」，而实例搜索目前会把
-  `Dict_C ?a` 里的元变量绑定到第一个候选（详见 `docs/dt-core.md` §24.6）。
+- ~~**`deriving`（`Show` / `Eq` / `Ord`）**~~：**已完成**——DT 的自然形态是**生成
+  instance**（`DtDerive.vuna`）：展开成等价 `DInstance`，交给既有的字典编码与实例搜索，
+  不照搬 HM 的降级通道。内建 `Show` / `Eq` / `Ord` trait 与内建 `Show` 实例（`Int` /
+  `String` / `Bool`）一并给出。
 - ~~**同 trait 多实例**（M19 发现的 M15 遗留缺陷）~~：**已修复**——两条不变量：
   ① 实例搜索不得解决元变量（`filterInstances` 只接受不新增解的匹配，并以 `ecSols`
   为初始解集）；② 类参数由 `constrainDictDom` 约束，跳过类型实参并把实参类型收缩到

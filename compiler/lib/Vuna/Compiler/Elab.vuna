@@ -13,6 +13,7 @@ import Vuna.Compiler.Ast
 import Vuna.Compiler.Core
 import Vuna.Compiler.DtPrelude
 import Vuna.Compiler.DtKind
+import Vuna.Compiler.DtDerive
 import Vuna.Compiler.DtRecords
 
 -- 一个 DT 定义：名字、类型项、体项（均为闭项；体带擦除标志）。
@@ -429,7 +430,6 @@ elabData : List (Pair String Term) -> Ec -> Pair Decl Span -> Result (Pair DtDat
 elabData globals ec ds = case ds of
   Pair d dsp => case d of
     DData dname writtenParams kindExpr ctors derivings dsp2 => if memName dname preludeNames then errAt dsp2 ("DT: cannot redefine builtin " ++ dname)
-    else if nonEmpty derivings then errAt dsp2 "DT: deriving is not supported yet (M15)"
     else andThen (checkType globals emptyCtx ec kindExpr) (\pk => case pk of
       Pair kindTerm (Pair kindSort ec1) => if not (kindWellFormed kindTerm) then errAt dsp2 "DT: the kind of a data declaration must be a chain of arrows ending in Type"
       else
@@ -573,15 +573,9 @@ methodProjZip tname pname pKind idx (m :: rest) (t :: rest2) = case m of
     Pair mname (TPi pname True Rig0 pKind (TPi "_" True Rig0 (foldAppTerms (TGlobal (dictTypeName tname)) [Pair (TVar pname 0) Rig0]) (shift 0 1 t)))
       :: methodProjZip tname pname pKind (idx + 1) rest rest2
 
--- 投影的定义体：`\p => \d => \x0 .. \x(ar-1) => case d of MkDict_C f0..fn => f_k x0..x(ar-1)`
---
--- 签名 `{p : Type} -> {d : Dict_C p} -> <方法类型>`：p 在先、d 在后，方法自身
--- 的显式参数再往后。外层 lambda 顺序必须是 `_p` 然后 `_d`（与签名一致）。
--- de Bruijn 索引（最内层 = 0；case 分支绑定子 f（n 个）在方法参数之内）：
---   _d           : index = n + ar
---   _p           : index = n + ar + 1
---   f_k          : index = n - 1 - k
---   x_i          : index = n + (ar - 1 - i)
+-- 投影的定义体：`\p => \d => \x0 .. \x(ar-1) => case d of MkDict_C f0..fn => f_k x0..`
+-- 签名 `{p} -> {d : Dict_C p} -> <方法类型>`；de Bruijn 索引：`_d = n+ar`、`_p = n+ar+1`、
+-- `f_k = n-1-k`、`x_i = n+(ar-1-i)`（最内层 = 0，分支绑定子 f 在方法参数之内）。
 -- `rigs` 是方法显式参数各自的 multiplicity（M19：从方法签名逐 binder 取，
 -- `binderRig` 判据与实例方法体一致）。**lambda 链与应用点必须用同一份 rigs**：
 -- 擦除位既不生成运行时形参、也不传实参——两侧都跳过，才能与由 `checkDef` 生成的
@@ -1228,11 +1222,12 @@ dtProgSols (DtProgram datas defs goals sols) = sols
 
 -- 精化入口。M19：先做 record 降级（`DtRecords.prepareDecls`）——record 是纯记法。
 elabProgramFull : List Decl -> Result DtProgram
-elabProgramFull decls = andThen (prepareDecls decls) (\ds => elabProgramGo ds)
+elabProgramFull decls =
+  andThen (prepareDecls decls) (\ds => andThen (expandDerivings ds) (\ds2 => elabProgramGo ds2))
 
 elabProgramGo : List Decl -> Result DtProgram
 elabProgramGo decls = andThen (collectSigs decls) (\sigs => andThen (elabDatas (collectDataDecls decls []) preludeGlobals ecEmpty) (\pd => case pd of
-  Pair datas (Pair globals0 ec0) => andThen (elabTraits (collectTraitDecls decls []) globals0 ec0) (\pt => case pt of
+  Pair datas (Pair globals0 ec0) => andThen (elabTraits (append (collectTraitDecls builtinTraitDecls []) (collectTraitDecls decls [])) globals0 ec0) (\pt => case pt of
     Pair classDatas (Pair projGlobals (Pair classes ec1)) =>
       let
         globals1 = append globals0 projGlobals
@@ -1243,7 +1238,7 @@ elabProgramGo decls = andThen (collectSigs decls) (\sigs => andThen (elabDatas (
             globals2 = append globals1 instHeads
           in andThen (elabSigs sigs globals2 ec1b) (\p => case p of
             Pair globals ec2 => andThen (checkAllDefined sigs globals decls) (\_ => andThen (elabBodies decls globals [] [] ec2) (\q => case q of
-              Pair defs ec3 => andThen (elabInstanceBodies (collectInstDecls decls []) classes datas1 globals ec3) (\pi => case pi of
+              Pair defs ec3 => andThen (elabInstanceBodies (collectInstDecls (append builtinShowInstances decls) []) classes datas1 globals ec3) (\pi => case pi of
                 Pair instDefs ec4 => case unsolvedMeta ec4 of
                   Just m => Err (unsolvedMessage ec4 m)
                   Nothing =>
@@ -1983,8 +1978,7 @@ isDictValue ec v = case v of
 isDictFamily : Ec -> String -> Bool
 isDictFamily ec g = memName g (map (\c => dictTypeName (dtClassName c)) (ecClasses ec))
 
--- 实例搜索：找头能统一到目标字典类型的实例，返回它的定义引用。零个 ⇒ 报缺失；
--- 多个 ⇒ 报歧义（M15 不做优先级/相干性细化）。
+-- 实例搜索：找头能统一到目标字典类型的实例。零个 ⇒ 报缺失，多个 ⇒ 报歧义。
 searchInstance : Ec -> Value -> Span -> Result (Pair Term Ec)
 searchInstance ec dom sp = case filterInstances ec dom (ecInsts ec) (ecSols ec) of
   Pair [] sols => errAt sp ("DT: no instance found for " ++ showValue dom)
@@ -1993,12 +1987,8 @@ searchInstance ec dom sp = case filterInstances ec dom (ecInsts ec) (ecSols ec) 
     errAt sp
       ("DT: ambiguous instance for " ++ showValue dom ++ " (candidates: " ++ joinInstNames cands ++ ")")
 
--- 实例表筛选（M22）：只接受**不新增解**的头匹配。
---
--- `dom` 可能还带元变量（`Dict_C ?a`）。若允许 `conv` 顺手把 `?a` 解成候选的参数，
--- 就等于**把第一个候选的参数当答案**，同 trait 的第二个实例永远匹配不上。因此
--- 「比较没有新增解」（返回的 `sols` 与输入等长）是硬条件：实例搜索是纯查找，元变量的
--- 约束交给 `constrainDictDom`，两者职责不重叠。
+-- 实例表筛选（M22）：只接受**不新增解**的头匹配——否则 `conv` 会把 `Dict_C ?a` 的 `?a`
+-- 顺手解成第一个候选的参数，同 trait 第二个实例永远匹配不上。约束交给 `constrainDictDom`。
 filterInstances : Ec -> Value -> List DtInst -> List (Pair Int Value) -> Pair (List DtInst) (List (Pair Int Value))
 filterInstances ec dom [] sols = Pair [] sols
 filterInstances ec dom (i :: rest) sols =
@@ -2018,9 +2008,8 @@ joinRestInstNames : List DtInst -> String
 joinRestInstNames [] = ""
 joinRestInstNames (i :: rest) = ", " ++ dtInstName i ++ joinRestInstNames rest
 
--- 用「后面紧跟的显式实参」约束字典域里的类参数元变量 `?a`（`Dict_C ?a`）。
--- 两条规则：跳过类型实参（与类参数无关，会把 `?a` 解成 `Int`）；把实参类型收缩到
--- 应用头部（类参数只可能是构造器形态，高阶 kind 的实例头写的就是构造器）。
+-- 用后续显式实参约束 `Dict_C ?a` 里的类参数：跳过类型实参（会把 `?a` 解成 `Int`）、
+-- 把实参类型收缩到应用头部（类参数只可能是构造器形态，高阶 kind 的实例头写构造器）。
 constrainDictDom : List (Pair String Term) -> Ec -> Ctx -> Value -> List Expr -> Span -> Result Ec
 constrainDictDom globals ec ctx dom args sp = case dictClassArg ec dom of
   Nothing => Ok ec
@@ -2245,20 +2234,32 @@ specializeEqApp globals ctx ec name args sp = if isEqOp name then case args of
     Pair aTerm (Pair aTy ec1) => andThen (inferE globals ctx ec1 b) (\pb => case pb of
       Pair bTerm (Pair bTy ec2) =>
         andThen (convEc ec2 (ctxDepth ctx) aTy bTy)
-          (\ec3 => specializeEqTy name aTerm bTerm aTy ec3)
+          (\ec3 => specializeEqTy name aTerm bTerm sp aTy ec3)
     )
   )
   _ => Ok Nothing
 else Ok Nothing
 
-specializeEqTy : String -> Term -> Term -> Value -> Ec -> Result (Maybe (Pair Term (Pair Value Ec)))
-specializeEqTy name aTerm bTerm aTy ec = case builtinTyName (forceVal ec aTy) of
-  Nothing => Ok Nothing
+-- `==` / `/=` 的饱和应用（M19）。`Int` / `String` 按实参类型特化成具体运行时函数；
+-- 其它类型解析成 `Eq` 字典的方法投影（字典由实例搜索插入）——这正是 `deriving (Eq)`
+-- 的用处。解析都在精化期完成，codegen 只按名字映射、不需要类型信息。
+specializeEqTy : String -> Term -> Term -> Span -> Value -> Ec -> Result (Maybe (Pair Term (Pair Value Ec)))
+specializeEqTy name aTerm bTerm sp aTy ec = case builtinEqTyName (forceVal ec aTy) of
   Just tyName =>
     andThen (eqRuntimeName name tyName)
       (\rt => Ok (Just (Pair (TApp (TApp (TGlobal rt) aTerm Rig1) bTerm Rig1) (Pair (VNeutral (NGlobal "Bool" [])) ec))))
+  Nothing =>
+    let
+      mname = if name == "==" then "eq" else "neq"
+      -- `eq : {a : Type} -> {d : Dict_Eq a} -> a -> a -> Bool`：类型（擦除）+ 字典。
+      tyTerm = quote 0 aTy
+      dictTy = VNeutral (NGlobal (dictTypeName "Eq") [eval [] tyTerm])
+    in andThen (searchInstance ec dictTy sp) (\p => case p of
+      Pair dictTerm ec1 =>
+        Ok
+          (Just (Pair (TApp (TApp (TApp (TApp (TGlobal mname) tyTerm Rig0) dictTerm Rig1) aTerm Rig1) bTerm Rig1) (Pair (VNeutral (NGlobal "Bool" [])) ec1)))
+    )
 
-checkAppGeneral : List (Pair String Term) -> Ctx -> Ec -> Expr -> List Expr -> Value -> Span -> Result (Pair Term Ec)
 checkAppGeneral globals ctx ec fn args expected sp = case fn of
   EVar name vsp => andThen (specializeEqApp globals ctx ec name args sp) (\mspec => case mspec of
     Just (Pair term (Pair termTy ec1)) =>
