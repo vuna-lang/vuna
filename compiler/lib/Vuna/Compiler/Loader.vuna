@@ -521,7 +521,13 @@ startsUpperName name = case strUnpack name of
   [] => False
   c :: rest => c >= 65 && c <= 90
 
-resolveTypeName modules label prefix ownTypes imports name = if name == "Int" || name == "String" || name == "Bool" || name == "Type" || name == "->" then Ok name
+-- 类型名解析（M20：本模块声明的类型名**优先于**内建名）。
+--
+-- `Base.Bool` 会重新声明 `data Bool`，此时 `Bool` 应解析成 `Base.Bool.Bool`（mangled），
+-- 而不是内建 `Bool`——否则构造子检查会报 `constructor False does not return
+-- Base.Bool.Bool`（族名对不上）。因此 `ownTypes` 的判定必须排在内建名之前。
+resolveTypeName modules label prefix ownTypes imports name = if memName name ownTypes then Ok (mangle prefix name)
+else if name == "Int" || name == "String" || name == "Bool" || name == "Type" || name == "->" then Ok name
 else if isBuiltinTraitName name then Ok name
 else if isLowerTypeName name then Ok name
 else if containsDot name then case splitLastDot (splitOnDot name) of
@@ -533,7 +539,6 @@ else if containsDot name then case splitLastDot (splitOnDot name) of
       Just m => case findExportType (exportsOf modules m) base of
         Just e => Ok (entryTarget e)
         Nothing => Err (label ++ ": type " ++ base ++ " is not exported by " ++ m)
-else if memName name ownTypes then Ok (mangle prefix name)
 else case modulesExportingType modules imports name of
   [] => Err (label ++ ": unknown type " ++ name)
   pairs => andThen (unifyEntryPairs label "type" name pairs) (\p => Ok (entryTarget (secondOf p)))
