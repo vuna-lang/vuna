@@ -1,41 +1,41 @@
 module Vuna.Compiler.Dt (dtCheckFile, dtCompileFile, dtEvalFile) where
 
--- Vuna.Compiler.Dt：M13 的 DT 单文件 facade（供 Compile / CompilerCli / Interp 使用）。
+-- Vuna.Compiler.Dt：DT 路径的 facade（供 Compile / CompilerCli / Interp 使用）。
 --
--- DT 路径只读一个文件：parseSource → Vuna.Compiler.Elab →（check / codegen / 核心求值）。
--- 不经过 Loader：M13 的 DT 是自包含单文件，不支持 import / 包模式 / 模块头。
+-- M13 时 DT 是单文件自包含：parseSource → Elab →（check / codegen / 核心求值），
+-- 不经过 Loader、拒绝模块头与 import。**M20 起改为复用 `Loader`**：多文件、`import`、
+-- `--root` 与包目录都能用，名字解析完全交给既有 Loader（不新建平行 Loader）。
+--
+-- 声明列表是「入口文件 + 所有依赖模块」的拼接（`loadProgramRaw` 的形状）：DT 精化器
+-- 按**整程序**精化，模块边界对精化不构成约束——M22 的分离编译才需要保留模块信息，
+-- 届时再换成 `loadProject` + `resolveProject` 的模块级形状。
 import Vuna.Compiler.Common
 import Vuna.Compiler.Ast
 import Vuna.Compiler.Parser
+import Vuna.Compiler.Loader
 import Vuna.Compiler.Core
 import Vuna.Compiler.Elab
 import Vuna.Compiler.CoreCodegen
 
-dtLoad : String -> Result (List Decl)
-dtLoad entry = if fileExists entry then case parseSource entry (readFile entry) of
-  Err e => Err e
-  Ok (Source hdr imports decls) => case hdr of
-    Just m =>
-      Err (showSpanLoc (modDeclSpan m) ++ ": DT: module header is not allowed in entry file")
-    Nothing => case imports of
-      [] => Ok decls
-      _ => Err "DT: imports are not supported yet (single-file mode)"
-else Err ("entry file not found: " ++ entry)
+-- 入口 + 全部依赖模块的声明。
+dtLoad : List String -> String -> Result (List Decl)
+dtLoad roots entry = loadProgramRaw roots entry
 
-dtCheckFile : String -> Result (List String)
-dtCheckFile entry =
-  andThen (dtLoad entry)
+dtCheckFile : List String -> String -> Result (List String)
+dtCheckFile roots entry =
+  andThen (dtLoad roots entry)
     (\decls => andThen (elabProgram decls) (\program => andThen (checkDtProgram program) (\_ => Ok [])))
 
-dtCompileFile : String -> Bool -> Result String
-dtCompileFile entry printResult =
-  andThen (dtLoad entry)
+dtCompileFile : List String -> String -> Bool -> Result String
+dtCompileFile roots entry printResult =
+  andThen (dtLoad roots entry)
     (\decls => andThen (elabProgram decls) (\program => generateDtProgram program printResult))
 
 -- 核心求值器：精化后用 NbE + delta 求 main 的值并 show（与 codegen 结果对照）。
-dtEvalFile : String -> Result String
-dtEvalFile entry =
-  andThen (dtLoad entry) (\decls => andThen (elabProgram decls) (\program => evalDtMain program))
+dtEvalFile : List String -> String -> Result String
+dtEvalFile roots entry =
+  andThen (dtLoad roots entry)
+    (\decls => andThen (elabProgram decls) (\program => evalDtMain program))
 
 evalDtMain : Pair (List DtData) (List DtDef) -> Result String
 evalDtMain (Pair datas defs) = case findMainDef defs of

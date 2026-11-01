@@ -652,9 +652,8 @@ instanceHeadName e = case e of
 
 -- 实例定义名：默认由类名与头实参派生（`Show_Int`），`as name` 覆盖。
 instanceName : Maybe String -> Expr -> String
-instanceName mname headExpr = case mname of
-  Just n => n
-  Nothing => derivedInstName headExpr
+instanceName mname headExpr =
+  instanceDefName mname (derivedInstName headExpr) (derivedInstName headExpr)
 
 derivedInstName : Expr -> String
 derivedInstName e = case e of

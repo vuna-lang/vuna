@@ -25,7 +25,7 @@
 | 9 | ~~`==` / `/=` 只对 Int~~ | **M19 已实现**：隐式类型参数 + 精化期按实参类型特化（`bi_eq_str` 等） | 155 处字符串比较 | 0 | 52 | M19（已完成） |
 | 10 | ~~`case` 只接受归纳族~~ | **M19 已实现**：Bool 降级 if，Int/String 降级 if 链（需兜底） | 4（Bool 分支） | 0 | 0 | M19（已完成） |
 | 11 | 非结构递归（算术递减 / fuel 式） | `Elab.checkTermBody`：`DT: cannot prove termination of <f> ...` | 41（`Elab` 14、`Core` 13、`Loader` 5、余 9） | 3 | 20 | M19 风险项 |
-| 12 | 单文件：无 `import` / 模块头 / 包目录 / `build` / `--root` | `Dt.dtLoad`：`DT: imports are not supported yet (single-file mode)`、`DT: module header is not allowed in entry file`；`CompilerCli.dtCmdErr` / `dtRootErr` / `dtDirErr` | 20 模块头 / 64 import | 12 / 33 | 13 / 64 | M20 |
+| 12 | ~~单文件~~：无 `import` / `--root` | **M20 已实现**：复用 Loader（`loadProgramRaw`）。剩余包目录与参数化 `data Foo a` | 20 模块头 / 64 import | 12 / 33 | 13 / 64 | M20（主体完成） |
 | 13 | `main` 只能是 Int/String/Bool，无 `main : IO a` | `CoreCodegen.mainShowErr`：`DT: main must return Int, String or Bool (M13 limitation)` | 两入口均 `main : IO Int` | — | — | M21 |
 | 14 | ~~`record` 声明 / 字段访问 / 更新 / 模式~~ | **M19 已实现**：精化前统一降级成单构造子 data（`DtRecords.vuna`），构造子名 `Mk<R>` | 1 声明、14 构造、4 字段读取（另有 `fmt/` 夹具） | 0 | 0 | M19（已完成） |
 | 15 | ~~`deriving`~~ | **M19 已实现**：展开成等价 instance（`DtDerive.vuna`），生成 Show/Eq/Ord 方法体 | 1（`Loader.ExportEntry`）+ `traits/` 13 个夹具 | 0 | 0 | M19（已完成） |

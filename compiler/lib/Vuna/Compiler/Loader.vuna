@@ -244,6 +244,50 @@ isBuiltinName name = case builtinArity name of
 
 isBuiltinTraitName name = name == "Show" || name == "Eq" || name == "Ord"
 
+-- DT prelude 里在 Loader 阶段必须放行的名字（M20）。
+--
+-- DT 单文件时这些名字由 `DtPrelude.preludeGlobals` 直接提供，Loader 不参与；M20 起
+-- `--dt` 复用 Loader，于是 `Int` / `String` / `Bool` / 运算符号 / `str*` / 内建 trait
+-- 都要能被解析。这里只放行**纯解析**，语义仍由 `Elab` 的 prelude 决定。
+isDtPreludeName : String -> Bool
+isDtPreludeName name = memName name dtPreludeNames
+
+dtPreludeNames : List String
+dtPreludeNames =
+  [ "Type",
+    "->",
+    "_",
+    "Int",
+    "String",
+    "Bool",
+    "True",
+    "False",
+    "+",
+    "-",
+    "*",
+    "/",
+    "==",
+    "/=",
+    "<",
+    "<=",
+    ">",
+    ">=",
+    "++",
+    "&&",
+    "||",
+    "strFromInt",
+    "strUnpack",
+    "strPack",
+    "strLength",
+    "show",
+    "eq",
+    "neq",
+    "lt",
+    "le",
+    "gt",
+    "ge"
+  ]
+
 isPreludeTraitMethod name =
   name == "show"
     || name == "eq"
@@ -323,6 +367,7 @@ else if isEffectfulBuiltin name then case modulesExportingValue modules imports 
 else if isBuiltinName name then Ok name
 else if isBuiltinTraitName name then Ok name
 else if isPreludeTraitMethod name then Ok name
+else if isDtPreludeName name then Ok name
 else case modulesExportingValue modules imports name of
   [] => Err (label ++ ": unbound variable " ++ name ++ suggest name (append own scope))
   pairs => andThen (unifyEntryPairs label "name" name pairs) (\p => Ok (entryTarget (secondOf p)))
@@ -414,8 +459,13 @@ resolveExpr modules label prefix own ownCtors imports scope expr = case expr of
   EApp fn args sp =>
     andThen (resolveExpr modules label prefix own ownCtors imports scope fn)
       (\fn2 => andThen (traverse (\a => resolveExpr modules label prefix own ownCtors imports scope a) args) (\args2 => Ok (EApp fn2 args2 sp)))
+  -- M20：`EPi` 只做**结构递归解析**，不在这里判定「是否允许」。M13–M19 的 DT 是单文件、
+  -- 不经 Loader，所以这条以前直接拒绝；M20 起 `--dt` 复用 Loader，而依赖类型是 DT 的
+  -- 核心语法。放行判定的责任交给下游检查器：HM 的 `Typecheck` 仍然报
+  -- `dependent function type requires --dt`（既有行为不变），DT 的 `Elab` 正常精化。
   EPi name implicit dom cod sp =>
-    Err (label ++ ": " ++ showSpanLoc sp ++ ": dependent function type requires --dt")
+    andThen (resolveExpr modules label prefix own ownCtors imports scope dom)
+      (\dom2 => andThen (resolveExpr modules label prefix own ownCtors imports (append [name] scope) cod) (\cod2 => Ok (EPi name implicit dom2 cod2 sp)))
   ELet binds body rec_ sp => andThen (resolveLet modules label prefix own ownCtors imports scope rec_ binds body) (\r => case r of
     Pair binds2 body2 => Ok (ELet binds2 body2 rec_ sp)
   )
@@ -489,13 +539,18 @@ else case modulesExportingType modules imports name of
   pairs => andThen (unifyEntryPairs label "type" name pairs) (\p => Ok (entryTarget (secondOf p)))
 
 resolveTypeExpr modules label prefix ownTypes imports ty = case ty of
+  -- M20：DT 的层级（`Type 1`）与洞（`_`）在这里只做结构放行，语义由下游检查器决定。
+  EApp (EVar "Type" _) args _ => Ok ty
+  EInt n sp => Ok ty
   EVar name sp =>
     andThen (resolveTypeName modules label prefix ownTypes imports name) (\n => Ok (EVar n sp))
   EApp fn args sp =>
     andThen (resolveTypeExpr modules label prefix ownTypes imports fn)
       (\fn2 => andThen (traverse (resolveTypeExpr modules label prefix ownTypes imports) args) (\args2 => Ok (EApp fn2 args2 sp)))
+  -- M20：同上——只做结构递归，允许与否交给下游检查器。
   EPi name implicit dom cod sp =>
-    Err (label ++ ": " ++ showSpanLoc sp ++ ": dependent function type requires --dt")
+    andThen (resolveTypeExpr modules label prefix ownTypes imports dom)
+      (\dom2 => andThen (resolveTypeExpr modules label prefix ownTypes imports cod) (\cod2 => Ok (EPi name implicit dom2 cod2 sp)))
   _ => Err (label ++ ": invalid type expression (" ++ tyShape ty ++ ")")
 
 resolveTypeTopName label prefix name =
@@ -552,14 +607,14 @@ resolveProgram modules label prefix own ownCtors ownTypes imports decls =
 
 resolveEntry modules entryPkg imports decls =
   andThen
-    (resolveProgram modules "<entry>" "" (topNames decls) (ctorsOf decls) (typeNamesOf decls) imports decls)
+    (resolveProgram modules "<entry>" "" (append (topNames decls) (typeNamesOf decls)) (ctorsOf decls) (append (ctorsOf decls) (append (topNames decls) (typeNamesOf decls))) imports decls)
     (\d => checkEffectsBuiltins "<entry>" entryPkg d)
 
 resolveModules modules = case modules of
   [] => Ok []
   (Module name mpkg imports imps decls exports) :: rest =>
     andThen
-      (andThen (resolveProgram modules name name (topNames decls) (ctorsOf decls) (typeNamesOf decls) (append imports imps) decls) (\d => checkEffectsBuiltins name mpkg d))
+      (andThen (resolveProgram modules name name (append (topNames decls) (typeNamesOf decls)) (ctorsOf decls) (append (ctorsOf decls) (append (topNames decls) (typeNamesOf decls))) (append imports imps) decls) (\d => checkEffectsBuiltins name mpkg d))
       (\d1 => andThen (resolveModules rest) (\d2 => Ok (append d1 d2)))
 
 -- ---------------------------------------------------------------
@@ -909,7 +964,7 @@ resolveProject (Project decls imports implicit modules entryPkg) =
 resolveModulesKeep [] = Ok []
 resolveModulesKeep ((Module name pkg imports implicit decls exports) :: rest) =
   andThen
-    (andThen (resolveProgram (Module name pkg imports implicit decls exports :: rest) name name (topNames decls) (ctorsOf decls) (typeNamesOf decls) (append imports implicit) decls) (\d => checkEffectsBuiltins name pkg d))
+    (andThen (resolveProgram (Module name pkg imports implicit decls exports :: rest) name name (append (topNames decls) (typeNamesOf decls)) (ctorsOf decls) (append (ctorsOf decls) (append (topNames decls) (typeNamesOf decls))) (append imports implicit) decls) (\d => checkEffectsBuiltins name pkg d))
     (\d1 => andThen (resolveModulesKeep rest) (\d2 => Ok (Module name pkg imports implicit d1 exports :: d2)))
 
 -- flatten：入口先解析，再按加载顺序解析各模块后拼接（与历史输出保持一致）。
@@ -976,6 +1031,8 @@ effExpr e = case e of
   ERecord name fields sp => effFields fields
   ERecUpdate base fields sp => firstEffect [effExpr base, effFields fields]
   EInstSel meth iname sp => Nothing
+  -- M20：`EPi` 是 DT 的核心语法，这里只做结构递归（类型层不算 effect）。
+  EPi name implicit dom cod sp => firstEffect [effExpr dom, effExpr cod]
   EDo stmts sp => firstEffect (map effDo stmts)
 
 effBinds [] = Nothing

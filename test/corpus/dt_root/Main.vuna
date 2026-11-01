@@ -1,0 +1,4 @@
+import Lib
+
+main : Int
+main = double 21

@@ -136,9 +136,9 @@ M15 遗留缺陷（同 trait 多实例，见下方）。
   本仓库自己少用不等于特性该淘汰。
 - `do` 保留，实现放 M21。
 
-**进度（已完成 8/9 项）**：多 clause 与方程左端模式、`let`（含推断位）、推断位 `case`、
-嵌套构造子模式、内建字面量模式、内建泛化（`==` 跨类型 / str* 进 prelude）、trait 高阶
-kind、`record`——八项全部落地并有正反例；顺带修掉核心求值器两个真实缺陷。剩余：`deriving`。
+**进度（9/9，已完成）**：九项全部落地并有正反例——多 clause 与方程左端模式、`let`、
+推断位 `case`、嵌套构造子模式、内建字面量模式、内建泛化、trait 高阶 kind、`record`、
+`deriving`；顺带修掉核心求值器两个缺陷与一条 M15 遗留缺陷（同 trait 多实例）。
 详见 [docs/history.md](history.md)。
 
 **验收**：每项都有至少一正一反 corpus；`test/corpus/traits/` 与 `test/corpus/fmt/` 的
@@ -149,6 +149,10 @@ HM 三路径零回归。
 record 的字段访问在做擦除判定时容易与「类型级投影」混淆。
 
 ### M20：DT 多文件与模块集成
+
+**进度（已完成主体）**：`--dt` 已复用 `Loader`——多文件、`import`、`--root` 均可；
+见下方「实现要点」。剩余：`pkg` 目录模式与「`vuna-base` 全部模块通过」的最后一个阻塞点
+（参数化 `data Foo a` 的构造子字段引用族参数）。
 
 **目标**：DT 走出单文件，接入 `import` / `--root` / 包模式；**直接复用现有 `Loader` / `Pkg`**。
 
@@ -161,8 +165,25 @@ record 的字段访问在做擦除判定时容易与「类型级投影」混淆�
 - 名字解析完全复用 Loader（**不新建平行 Loader**）。
 - `--dt` 开关迁移期内保留，M24 删除。
 
-**验收**：多文件 DT 程序（含跨包 import）可 check / compile / interp；`vuna-base` 全部模块
-`check --dt` 通过；HM 三路径零回归；seed 闭包不变。
+**实现要点（已落地）**：
+
+- `Dt.dtLoad` 改成 `loadProgramRaw roots entry`：入口文件 + 所有依赖模块的声明拼接后
+  一起精化（DT 是按整程序精化，模块边界对精化不构成约束；M22 分离编译才需要模块级形状）。
+- `--dt` 的 CLI 放行 `--root` 与目录参数：`Compile` / `CompilerCli` / `Cli` 三处 facade
+  都改成传 roots；`interp --dt --root <dir> <entry>` 可用。
+- **Loader 放行 DT 语法**（roadmap 预见的风险项）：`EPi` 从「直接拒绝」改为**结构递归
+  解析**，允许与否交给下游检查器——HM 的 `Typecheck` 仍报 `dependent function type
+  requires --dt`（零放宽），DT 的 `Elab` 正常精化。`effExpr` 也补上 `EPi` 分支（否则
+  副作用扫描会崩）。
+- **Loader 认得 DT prelude 与族名**：`Int` / `String` / `Bool` / `Type` / `->` / `_` /
+  运算符号 / `str*` / 内建 trait 方法进放行表；`own` 与 `ownTypes` 都并入 data 类型名
+  （`Vec Nat n` 的 `Nat` 在值层位置出现）。
+- 两处 **codegen / 命名**修正：`sanitizeChar` 处理 `#`（Loader 生成的匿名实例名
+  `#default` 不是合法 OCaml 标识符）；匿名实例名按实例头唯一化（否则同 trait 多实例
+  在 `defs` 表里互相覆盖——这是 M20 接入 Loader 后暴露的真实 bug）。
+
+**验收**：多文件 DT 程序（含跨包 import）可 check / compile / interp ✅；`vuna-base` 全部模块
+`check --dt` 通过 ⬜（卡在参数化 `data`）；HM 三路径零回归 ✅；seed 闭包不变 ✅。
 
 **前置**：M19。**风险**：DT 与 HM 共用 Loader 时，`--dt` 专属语法（`EPi`、索引 `data`）
 需要 Loader 放行而非报错，注意别把 HM 的既有检查放宽。

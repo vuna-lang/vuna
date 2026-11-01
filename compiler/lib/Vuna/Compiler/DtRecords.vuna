@@ -142,14 +142,7 @@ desugarRecordPatternFields records ((Pair fname fty) :: rest) provided sp = case
 
 desugarExpr : List RecordInfo -> Expr -> Result Expr
 desugarExpr records e = case e of
-  -- 带点的标识符：lexer 把 `p.x` 合成单个 `EVar "p.x"`（模块限定名也走这条路）。
-  -- 单文件 DT 模式下没有模块系统，这里按「变量 + 字段链」拆分；拆不出字段链
-  -- （如限定名的最后一段不是 record 字段）时就保留原样，交给精化器报未知名字。
-  EVar n sp => case splitOnDot n of
-    [] => Ok e
-    [one] => Ok (EVar one sp)
-    -- 拆出字段链后**重新**走降级：字段访问本身还要改写（见上面的 EField 分支）。
-    head :: rest => desugarExpr records (foldAppFields (EVar head sp) rest sp)
+  EVar n sp => Ok e
   EInt n sp => Ok e
   EStr s sp => Ok e
   ELam ps b sp => andThen (desugarExpr records b) (\b2 => Ok (ELam ps b2 sp))
@@ -231,26 +224,15 @@ fieldAccessPats fname [] = []
 fieldAccessPats fname ((Pair f alt) :: rest) =
   (if f == fname then PVar f (exprSpan alt) else PWild (exprSpan alt)) :: fieldAccessPats fname rest
 
--- `a.b.c` → `EField (EField (EVar "a") "b") "c"`。
--- 没有点就原样返回；以点开头的名字（不应出现）也原样返回。
-dottedToFieldChain : String -> Span -> Expr
-dottedToFieldChain name sp = case splitOnDot name of
-  [] => EVar name sp
-  [one] => EVar one sp
-  head :: rest => foldAppFields (EVar head sp) rest sp
-
-foldAppFields : Expr -> List String -> Span -> Expr
-foldAppFields base [] sp = base
-foldAppFields base (f :: rest) sp = foldAppFields (EField base f sp) rest sp
-
 -- DT 的一步式入口：抽取 record 信息并完成全部降级。
 -- `Elab.elabProgramFull` 只需 `andThen (prepareDecls decls) elabProgramGo`。
 prepareDecls : List Decl -> Result (List Decl)
-prepareDecls decls0 = let
-  split = recordsOfDecls ctorName decls0
-  records = firstOf split
-  decls = secondOf split
-in desugarRecords records decls
+prepareDecls decls0 =
+  let
+    split = recordsOfDecls ctorName decls0
+    records = firstOf split
+    decls = secondOf split
+  in desugarRecords records decls
 
 -- DT 的构造子命名策略：`Mk<R>`（globals 是一张表，类型名与构造子同名会让 `Point 1 2`
 -- 被解析成「把类型当函数应用」）。

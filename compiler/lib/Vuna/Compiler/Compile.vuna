@@ -59,10 +59,10 @@ checkPackageIn entryPkg roots names = case loadProjectModules roots entryPkg nam
         Ok (Pair globals elabDecls) => Ok (exhaustiveWarningsFor globals elabDecls)
 
 -- ---------------------------------------------------------------
--- M13：DT 单文件路径（不经过 Loader；单文件自包含）
+-- M20：DT 路径（复用 Loader：多文件 / import / --root / 包目录）
 -- ---------------------------------------------------------------
-compileFileDt : String -> Bool -> Result String
-compileFileDt entry printResult = dtCompileFile entry printResult
+compileFileDt : List String -> String -> Bool -> Result String
+compileFileDt roots entry printResult = dtCompileFile roots entry printResult
 
-checkFileDt : String -> Result (List String)
-checkFileDt entry = dtCheckFile entry
+checkFileDt : List String -> String -> Result (List String)
+checkFileDt roots entry = dtCheckFile roots entry

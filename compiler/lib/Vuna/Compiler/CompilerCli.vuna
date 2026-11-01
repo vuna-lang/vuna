@@ -189,8 +189,7 @@ rootArg prog roots rest k = case rest of
   dir :: rest2 => k (append roots [rawRoot dir]) rest2
   [] => usageErr prog
 
-compileEmit prog printResult dt hasRoot roots entry rest = if dt then if hasRoot then dtRootErr prog
-else case compileFileDt entry printResult of
+compileEmit prog printResult dt hasRoot roots entry rest = if dt then case compileFileDt (map rootDir roots) entry printResult of
   Ok code => case rest of
     [] =>
       let
@@ -232,11 +231,11 @@ checkParse prog dt hasRoot roots args = case args of
     rootArg prog roots rest (\roots2, rest2 => checkParse prog dt True roots2 rest2)
   [arg] =>
     if startsWith "-" arg then removedFlag prog arg
-    else if dt then if hasRoot then dtRootErr prog else if isDirectory arg then dtDirErr prog else checkEmitDt arg
+    else if dt then checkEmitDt (map rootDir roots) arg
     else if isDirectory arg then checkPackage arg else checkEmit (effectiveRoots roots) arg
   _ => usageErr prog
 
-checkEmitDt path = case checkFileDt path of
+checkEmitDt roots path = case checkFileDt roots path of
   Err e =>
     let
       _ = print ("error: " ++ e ++ "\n")

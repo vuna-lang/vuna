@@ -141,8 +141,9 @@ vuna compile --dt file.vuna out.ml   # 擦除并生成 OCaml（main : Int/String
 vuna interp --dt file.vuna           # 核心求值器（NbE + delta）求值 main
 ```
 
-`--dt` 不支持 `--root` 与包目录；`build` / `seed` 不支持 `--dt`。DT 路径与 HM 路径
-互不影响：HM 的 interp + typed + split 语义与产物保持不变。
+M20 起 `--dt` **复用 Loader**：支持多文件 / `import` / `--root`（`interp --dt --root <dir>
+<entry>`），包目录模式与参数化 `data Foo a` 仍是缺口。`build` / `seed` 不支持 `--dt`。
+DT 路径与 HM 路径互不影响：HM 的 interp + typed + split 语义与产物保持不变。
 
 ## 测试夹具
 

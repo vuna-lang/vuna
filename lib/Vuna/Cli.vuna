@@ -118,16 +118,11 @@ interpParse dt hasRoot roots args = case args of
   "--root" :: rest => rootArg roots rest (\roots2, rest2 => interpParse dt True roots2 rest2)
   [path] =>
     if startsWith "-" path then usageError
-    else if dt then if hasRoot then interpDtRootError else interpDtEmit path
+    else if dt then interpDtEmit (map rootDir roots) path
     else interpEmit (effectiveRoots roots) path
   _ => usageError
 
-interpDtRootError =
-  let
-    _ = print "error: --dt does not support --root yet (DT single-file mode)\n"
-  in 2
-
-interpDtEmit path = case dtEvalFile path of
+interpDtEmit roots path = case dtEvalFile roots path of
   Err e =>
     let
       _ = print ("error: " ++ e ++ "\n")

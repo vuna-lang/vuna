@@ -172,7 +172,16 @@ declNames d = case d of
     Nothing => []
     Just n => [n]
 
+-- 顶层可见名字（M20：把 data / record / trait 的**类型名**也算进来）。
+-- Loader 用它判断「是不是本模块声明的名字」；DT 的类型名可以在值层位置出现
+-- （`Vec Nat n` 的 `Nat`），所以必须一并认出来。语义仍由下游检查器决定。
 topNames decls = concatMap declNames decls
+
+declAllNames d = case d of
+  DData dname params kind ctors derivings _ => dname :: map ctorName ctors
+  DRecord dname params fields derivings _ => [dname]
+  DTrait tname params methods _ => tname :: map firstOf methods
+  _ => declNames d
 
 _declCtors d = case d of
   DData dname params kind ctors derivings _ => map ctorName ctors

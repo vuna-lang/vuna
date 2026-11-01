@@ -172,6 +172,16 @@ git 历史里）。各里程碑对应的模块与设计见 [docs/architecture.md
   夹具：正例 `dt/30_deriving`（Show + Eq 的四种组合）、`dt/31_deriving_ord`（Ord 四方法
   + 字段比较 + Show 组合）；反例 `dt_err/26_derive_unknown`。
 
+- M20：DT 复用 Loader，走出单文件。`dtLoad` 改成 `loadProgramRaw`；`--dt` 的 CLI 放行
+  `--root` 与目录；Loader 从「拒绝 `EPi`」改成「结构递归、放行判定交给下游检查器」
+  （HM 的 `Typecheck` 仍报 `requires --dt`，零放宽），并认得 DT prelude、`Type` 层级、
+  洞 `_` 与 data 类型名。接入后暴露两个真实 bug 并修掉：`sanitizeChar` 不处理 `#`
+  （Loader 生成的匿名实例名 `#default` 不是合法 OCaml 标识符）、匿名实例名不唯一
+  （同 trait 多实例的字典互相覆盖）。
+  未完成：「`vuna-base` 全模块 `check --dt`」卡在参数化 `data Foo a` 的构造子字段引用
+  族参数（`Cons2 : a -> MyList a -> MyList a` 报 `unknown name a`）——这是 DT 精化器
+  里族参数上下文与字段类型检查没对齐，属 M20 剩余项。
+
 ## 决策变更：M18 迁移动机失效（2026-11）
 
 M18 的结论是「编译器本体暂不全量迁移到 DT」，依据是四条理由，其中两条是**硬前提**：

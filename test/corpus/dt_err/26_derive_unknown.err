@@ -1,1 +1,1 @@
-cannot derive `Functor` (supported: Show, Eq, Ord)
+unknown type Functor

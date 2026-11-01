@@ -1,0 +1,5 @@
+module Lib where
+
+-- M20：DT 多文件夹具的依赖模块。
+double : Int -> Int
+double x = x + x

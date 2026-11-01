@@ -1,4 +1,6 @@
-import Base.List
+-- M20：`import` 已支持（走 Loader），但引用的模块不存在时必须报明确错误
+-- ——这是「找不到模块」的负例，不再是「不支持 import」。
+import NoSuchModule
 
 main : Int
 main = 1

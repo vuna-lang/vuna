@@ -747,21 +747,16 @@ for file in corpus/dt_err/*.vuna; do
     ok
   fi
 done
-
-# DT CLI 约束：--dt 不接受 --root / 包目录；build / seed 不支持 --dt
+# DT CLI：M20 起 `--dt` 接受 --root（复用 Loader）；build / seed 仍不支持 --dt
 help_out=$("$VUNA" help 2>&1)
 check_contains "dt help" "$help_out" "--dt"
-dt_root_msg=$("$VUNA" compile --dt --root lib corpus/dt/01_id.vuna 2>&1)
-check_eq "dt compile --root exit" "2" "$?"
-check_contains "dt compile --root msg" "$dt_root_msg" "--dt does not support --root"
-"$VUNA" check --dt compiler >/dev/null 2>&1
-check_eq "dt check dir exit" "2" "$?"
+dt_multi_out=$("$VUNA" interp --dt --root corpus/dt_root corpus/dt_root/Main.vuna 2>&1)
+check_eq "dt interp --root exit" "0" "$?"
+check_eq "dt interp --root output" "42" "$dt_multi_out"
 "$VUNA" build --dt . >/dev/null 2>&1
 check_eq "dt build exit" "2" "$?"
 "$VUNA" seed --dt >/dev/null 2>&1
 check_eq "dt seed exit" "2" "$?"
-"$VUNA" interp --dt --root base/lib corpus/dt/01_id.vuna >/dev/null 2>&1
-check_eq "dt interp --root exit" "2" "$?"
 
 # DT fmt round-trip：Pi 语法格式化后仍解析为同一程序且幂等
 cp corpus/dt/03_compose.vuna "$tmp/dt_fmt.vuna"

@@ -331,8 +331,10 @@ prepareDtProgram program =
 -- OCaml 生成
 -- ---------------------------------------------------------------
 sanitizeChar : Int -> List Int
+-- `#` 出现在 Loader 生成的匿名实例名里（`#default`、`#fancy`），OCaml 标识符不允许。
 sanitizeChar c =
-  if c == 46 then [95, 100] else if c == 95 then [95, 117] else if c == 39 then [95, 112] else [c]
+  if c == 46 then [95, 100]
+  else if c == 95 then [95, 117] else if c == 39 then [95, 112] else if c == 35 then [95, 104] else [c]
 
 sanitizeName : String -> String
 sanitizeName name = strPack (concatMap sanitizeChar (strUnpack name))
