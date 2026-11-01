@@ -10,14 +10,8 @@
    compiler / bootstrap / testing / limits / dt）、[`docs/roadmap.md`](docs/roadmap.md)、
    [`docs/dt-core.md`](docs/dt-core.md)、[`docs/history.md`](docs/history.md)。
 
-**定位符号**（首选 `Vuna.Index` 工具模块；本地 `vuna` 若早于 Index 落地，先重建）：
-```console
-vuna map                                        # 模块总览（按包分组，字节数/声明数）
-vuna map --modules                              # 扁平模块清单
-vuna map --find Vuna.Compiler.Typecheck.unify   # 定义位置 + 签名（歧义时列候选、退出码 2）
-vuna map --impact Vuna.Compiler.Loader.loadProgram  # 引用者模块 + 建议测试标签
-vuna api Vuna.Compiler.Loader                   # 某模块的签名面（含注释与行号）
-```
+**定位符号**用 `vuna map --find` / `--impact` / `vuna api`（用法与场景分工见技能
+`.agents/skills/repo-navigation/SKILL.md`）。
 
 **不要做的事**：通读全仓；读 `seed/` 或 `docs/api.md`（生成物）。
 
@@ -61,7 +55,9 @@ vuna api Vuna.Compiler.Loader                   # 某模块的签名面（含注
   → 再用新语法。
 - 不要为了自测跑 `nix build` / `nix flake check`（慢，通常由 Lead/CI 负责）；改完代码
   优先用本地 `./result/bin/vuna` 或 `.local/build2/vuna` 做小范围验证。
-- 事实以源码与现有文档为准；文档里不要写不存在的命令或文件。
+- **探索按场景选工具**（规程见技能 `.agents/skills/repo-navigation/SKILL.md`）：要改的
+  模块整篇 `read`；不改只引用的用 `vuna map` / `vuna api`，**不要 grep**（拿多拿少又没签名）。
+- **探索完必须落盘**：数据流 / 不变量 / 边界写进 `docs/` 并接进导航，别只留在会话里。
 
 ## 常用命令速查
 
@@ -100,6 +96,7 @@ vuna seed seed compiler              # 重新生成 seed（正式流程用 nix/s
   [dt.md](docs/reference/dt.md)
 - 编译器实现与 codegen：[compiler.md](docs/reference/compiler.md)
 - DT 工具链（洞目标、LSP、错误索引）：[dt-tooling.md](docs/reference/dt-tooling.md)
+- 仓库探索（按场景选工具、探索后落盘）：技能 `.agents/skills/repo-navigation/SKILL.md`
 - 自举与种子：[bootstrap.md](docs/reference/bootstrap.md)
 - 测试与 CI：[testing.md](docs/reference/testing.md)；已知边界：[limits.md](docs/reference/limits.md)
 - 路线图 / 历史：[docs/roadmap.md](docs/roadmap.md)、[docs/history.md](docs/history.md)、
