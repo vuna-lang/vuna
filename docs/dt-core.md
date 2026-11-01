@@ -603,3 +603,37 @@ main = nameOf MkA ++ "/" ++ nameOf MkB   -- 修复前：type mismatch: expected 
 **为什么重要**：这条缺陷会挡住 M23 全仓迁移（真实代码里到处是同 trait 多实例），也是
 `deriving` 的前置。回归夹具：正例 `dt/29_multi_instance`（同 trait 两个实例、正序与
 反序调用都对）、反例 `dt_err/25_no_instance`（缺实例必须报明确错误）。
+
+## 已知缺口：多态族的构造子字段类型不被索引精化（2026-11 探明）
+
+`case` 分支里，构造子的字段 binder 按 `bindCtorTele` 绑定、再经 `unifyIdxList` 把
+结果索引与 scrutinee 的索引统一，产出 `level ↦ value` 的 refs，分支体的期望类型
+由 `refineValue refs` 精化。**当字段类型本身引用族参数时，这个精化落不到字段上**：
+
+```vuna
+data Wrap : Type -> Type where
+  MkWrap : {a : Type} -> (a -> Int) -> Wrap a
+
+run : Wrap Int -> Int
+run w = case w of
+  MkWrap f => f 41        -- type mismatch: expected a, got Int
+```
+
+`f` 的类型 `a -> Int` 里的 `a` 是构造子的隐式族参数 binder（在 branchCtx 里是独立
+binder）。`ctxBindValue` 存项时用 `quote (ctxDepth ctx)`（相对 ctx 底部的形式），而
+`varTypeValue` 取用时做 `shift 0 (idx + 1)`（假设项是「相对绑定点上方」的形式）——
+两个基准不一致，于是 refs 里的 `高层a ↦ Int` 替换不到 `f` 的类型里。
+
+**不是 M20 引入的**：`data Wrap : Type -> Type` + 显式 `{a : Type}` 的写法在 M20 之前
+就失败（M20 的参数化 `data Foo a` 只是让这种写法更常见）。
+
+**为什么它是 M21 的硬前置**：`Base.IO` 的 `MkIO : (Int -> a) -> IO a` 正是这个形状，
+`ioBind` / `ioFmap` 的 `case ... of MkIO g => ...` 全部踩同一个坑。
+
+修法方向（择一）：
+- 统一两个基准：`ctxBindValue` 存项时存成「相对绑定点」的形式，与 `varTypeValue` 的
+  `shift 0 (idx+1)` 对齐；
+- 或让 `ctxRefine` 在追加 refs 时**就地重写** items 里的项（要注意 items 是相对各自
+  绑定点存的形式，重写时必须用对应 level 的环境求值）。
+
+回归夹具待补：正例（`Wrap Int` 里 `f 41` 得 42）、反例（索引不匹配仍要报错）。

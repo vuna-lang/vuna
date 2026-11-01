@@ -199,6 +199,22 @@ HM 三路径零回归 ✅；seed 闭包不变 ✅（36 个模块，metrics 已�
 effectful 内建进 DT prelude；包级 allowlist 语义保留；`main : IO a` 的执行语义对齐现有
 `ioRunExpr`。可选的代数效应方向不在此阶段。
 
+**已探明的前置缺口（2026-11，起 M21 前必须补）**：
+
+1. **多态族的构造子字段类型不被索引精化**。`data Wrap : Type -> Type where
+   MkWrap : {a : Type} -> (a -> Int) -> Wrap a` 的 `run : Wrap Int -> Int` 里
+   `case w of MkWrap f => f 41` 报 `type mismatch: expected a, got Int`——`f` 的类型
+   `a -> Int` 里的 `a` 是构造子的隐式族参数 binder，`unifyIdxList` 产出
+   `高层a ↦ Int` 的 ref 后，`varTypeValue` 取用时 `shift 0 (idx+1)` 的位移量与
+   `ctxBindValue` 存项时 `quote (ctxDepth ctx)` 的基准不一致，ref 落不到 `f` 的类型上。
+   这不是 M20 引入的：显式 `{a : Type}` 写法在 M20 前就失败。`Base.IO` 的
+   `MkIO : (Int -> a) -> IO a` 正好是这种形状，**它是 `bindIO` 精化的直接阻塞点**。
+2. `do` 降级产物是裸 `bind`/`pure`（`Loader.desugarDo`），DT prelude 与 globals 都要
+   提供这两个名字（trait 方法投影 + `Monad IO` 实例）。
+3. `interp --dt` 目前只接受「归约成值」的 `main`，`main : IO a` 需要按 `ioRunExpr`
+   的语义执行（DT 核心求值器侧：对 `MkIO f` 取 `f 0` 并继续归约）。
+
+
 **验收**：`app/Main.vuna` 与 `compiler/app/Main.vuna` 的等价程序在 DT 下 check → compile →
 运行成功；`do` 正反例；`Base.IO` 全部 API 可用。
 
