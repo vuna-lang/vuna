@@ -1,0 +1,45 @@
+-- M19：多 clause 与方程左端模式（合成单个 case 表达式）。
+data Nat : Type where
+  Zero : Nat
+  Succ : Nat -> Nat
+
+data List : Type -> Type where
+  Nil : (a : Type) -> List a
+  Cons : (a : Type) -> a -> List a -> List a
+
+data Maybe : Type -> Type where
+  Nothing : (a : Type) -> Maybe a
+  Just : (a : Type) -> a -> Maybe a
+
+-- 每条 clause 的方程左端是构造子模式。
+plus : Nat -> Nat -> Nat
+plus Zero b = b
+plus (Succ k) b = Succ (plus k b)
+
+toInt : Nat -> Int
+toInt Zero = 0
+toInt (Succ k) = 1 + toInt k
+
+len : List Nat -> Int
+len (Nil a) = 0
+len (Cons a y ys) = 1 + len ys
+
+-- 同一构造子的多个 clause（子模式细化）+ 变量兜底。
+pick : Maybe Nat -> Int
+pick (Nothing a) = 0
+pick (Just a Zero) = 1
+pick (Just a (Succ k)) = 2
+
+-- 兜底 clause 在最前（前面的 clause 匹配所有值时后者不可达，语义按 clause 顺序）。
+alwaysOne : Nat -> Int
+alwaysOne n = 1
+alwaysOne Zero = 99
+
+four : Nat
+four = Succ (Succ (Succ (Succ Zero)))
+
+list1 : List Nat
+list1 = Cons Nat Zero (Cons Nat (Succ Zero) ([] Nat))
+
+main : Int
+main = toInt (plus four four) + len list1 + pick (Just Nat (Succ Zero)) + alwaysOne four

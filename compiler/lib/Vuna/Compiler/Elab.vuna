@@ -1148,8 +1148,8 @@ elabBodies [] globals doneDefs acc ec = Ok (Pair (reverse acc) ec)
 elabBodies (d :: rest) globals doneDefs acc ec = case d of
   DFun name pats body sp => case globalLookup name globals of
     Nothing => errAt sp ("DT: expected a type signature for " ++ name)
-    Just tyTerm => if memDefName name doneDefs then errAt sp "DT: multiple clauses are not supported yet (use a single equation; M16)"
-    else andThen (checkDef globals ec pats body (eval [] tyTerm) sp) (\p => case p of
+    Just tyTerm => if memDefName name doneDefs then elabBodies rest globals doneDefs acc ec
+    else andThen (elabFunDef globals ec (clausesFor (d :: rest) name) (eval [] tyTerm) sp) (\p => case p of
       Pair bodyTerm ec1 =>
         elabBodies rest globals (Pair name tyTerm :: doneDefs) (DtDef name tyTerm bodyTerm :: acc)
           (ecAddDef ec1 (Pair name bodyTerm))
@@ -2173,3 +2173,228 @@ checkAppCtor globals ctx ec name args expected sp = case globalLookup name globa
       andThen (convEc ec1 (ctxDepth ctx) expected resTy)
         (\ec2 => Ok (Pair (ctorAppTerm (ecDatas ec2) (TGlobal name) argTerms) ec2))
   )
+
+-- ---------------------------------------------------------------
+-- M19：多 clause 与方程左端模式
+-- ---------------------------------------------------------------
+--
+-- 把 `plus Zero b = b` / `plus (Succ k) b = Succ (plus k b)` 合成为单个项：
+--
+--   plus = \mc0 => \mc1 => case mc0 of
+--     Zero => mc1
+--     Succ k => Succ (plus k mc1)
+--
+-- 两步：① 按参数个数生成 lambda 链（位置名 `mc<i>`，与签名的 Pi 链逐个对齐）；
+-- ② 在体内按**列**递归构建 case 树（标准模式矩阵）：
+--    - 整列都是变量 → 把该列用户写的名字改写成位置名，剥掉该列继续；
+--    - 该列有构造子 → 用该位置名作 scrutinee 生成 case；同一构造子的多个 clause
+--      把模式替换成它的子模式后递归（所以 `f (Just x)` 与 `f (Just (Just y))` 能共存），
+--      变量/通配 clause 汇成兜底分支。
+--
+-- 生成的是纯 lambda + case 表达式，交给既有精化路径检查——覆盖检查、索引合一、
+-- 擦除判定全部自动生效，不需要新的精化规则。
+elabFunDef : List (Pair String Term) -> Ec -> List (Pair (List Pat) Expr) -> Value -> Span -> Result (Pair Term Ec)
+elabFunDef globals ec clauses expected sp = case clauses of
+  [] => errAt sp "DT: function has no clauses"
+  [Pair pats body] => checkDef globals ec pats body expected sp
+  _ => andThen (multiToExpr clauses) (\bodyExpr => checkDef globals ec [] bodyExpr expected sp)
+
+multiToExpr : List (Pair (List Pat) Expr) -> Result Expr
+multiToExpr clauses = case arityOf clauses of
+  Nothing => Err "DT: function has no clauses"
+  Just n =>
+    let
+      names = paramNames n
+    in andThen (buildColumnExpr clauses names 200) (\body => Ok (wrapLambdas names body))
+
+arityOf : List (Pair (List Pat) Expr) -> Maybe Int
+arityOf [] = Nothing
+arityOf (c :: rest) = case c of
+  Pair pats body => Just (length pats)
+
+paramNames : Int -> List String
+paramNames n = paramNamesGo 0 n []
+
+paramNamesGo : Int -> Int -> List String -> List String
+paramNamesGo i n acc =
+  if i >= n then reverse acc else paramNamesGo (i + 1) n (("mc" ++ strFromInt i) :: acc)
+
+wrapLambdas : List String -> Expr -> Expr
+wrapLambdas [] body = body
+wrapLambdas (n :: rest) body = ELam [n] (wrapLambdas rest body) (Span "" 0 0 0 0)
+
+-- 按列递归。params 是**尚未消耗**的位置名（与剩余模式列一一对应）。
+buildColumnExpr : List (Pair (List Pat) Expr) -> List String -> Int -> Result Expr
+buildColumnExpr clauses params fuel = if fuel <= 0 then Err "DT: pattern matrix recursion ran out of fuel"
+else if allEmptyPats clauses then Ok (bodyOfFirst clauses)
+else case params of
+  [] => Err "DT: clause has more patterns than the function arity"
+  pos :: restParams =>
+    if allVarHeads clauses then andThen (buildColumnExpr (stripFirstCol clauses) restParams (fuel - 1))
+      (\inner => Ok (renameFirstVars clauses pos inner))
+    else andThen (ctorAltList clauses restParams (fuel - 1))
+      (\alts => andThen (fallbackAltList clauses restParams (fuel - 1)) (\fb => Ok (ECase (EVar pos (Span "" 0 0 0 0)) (append alts fb) (Span "" 0 0 0 0))))
+
+allEmptyPats : List (Pair (List Pat) Expr) -> Bool
+allEmptyPats [] = True
+allEmptyPats (c :: rest) = case c of
+  Pair [] body => allEmptyPats rest
+  _ => False
+
+bodyOfFirst : List (Pair (List Pat) Expr) -> Expr
+bodyOfFirst clauses = case clauses of
+  (Pair pats body) :: rest => body
+  [] => EInt 0 (Span "" 0 0 0 0)
+
+isVarPatD : Pat -> Bool
+isVarPatD p = case p of
+  PVar n sp => True
+  PWild sp => True
+  _ => False
+
+allVarHeads : List (Pair (List Pat) Expr) -> Bool
+allVarHeads [] = True
+allVarHeads (c :: rest) = case c of
+  Pair (p :: ps) body => isVarPatD p && allVarHeads rest
+  Pair [] body => False
+
+stripFirstCol : List (Pair (List Pat) Expr) -> List (Pair (List Pat) Expr)
+stripFirstCol [] = []
+stripFirstCol (c :: rest) = case c of
+  Pair [] body => c :: stripFirstCol rest
+  Pair (p :: ps) body => Pair ps body :: stripFirstCol rest
+
+-- 整列都是变量：把该列用户写的名字改写成位置名，再继续处理剩余列。
+-- 每 clause 的体各自改名（不同 clause 可以用不同的变量名）。
+renameFirstVars : List (Pair (List Pat) Expr) -> String -> Expr -> Expr
+renameFirstVars clauses pos inner = case clauses of
+  [] => inner
+  (Pair (p :: ps) body) :: rest => case p of
+    PVar nm psp => renameFirstVars rest pos (renameExpr nm pos inner)
+    _ => renameFirstVars rest pos inner
+  (Pair [] body) :: rest => renameFirstVars rest pos inner
+
+renameExpr : String -> String -> Expr -> Expr
+renameExpr oldName newName e = case e of
+  EVar nm sp => if nm == oldName then EVar newName sp else e
+  EInt n sp => EInt n sp
+  EStr s sp => EStr s sp
+  ELam names body sp => ELam names (renameExprUnless oldName newName names body) sp
+  EApp fn args sp => EApp (renameExpr oldName newName fn) (map (renameExpr oldName newName) args) sp
+  EPi nm implicit dom cod sp =>
+    EPi nm implicit (renameExpr oldName newName dom) (renameExprUnless oldName newName [nm] cod) sp
+  ELet binds body rec_ sp =>
+    ELet (map (renameBind oldName newName) binds)
+      (renameExprUnless oldName newName (bindNames binds) body) rec_ sp
+  ECase scrut alts sp =>
+    ECase (renameExpr oldName newName scrut) (map (renameAlt oldName newName) alts) sp
+  EIf c t e2 sp =>
+    EIf (renameExpr oldName newName c) (renameExpr oldName newName t)
+      (renameExpr oldName newName e2) sp
+  EField b f sp => EField (renameExpr oldName newName b) f sp
+  EDo stmts sp => EDo stmts sp
+
+renameExprUnless : String -> String -> List String -> Expr -> Expr
+renameExprUnless oldName newName names body =
+  if memName oldName names then body else renameExpr oldName newName body
+
+renameBind : String -> String -> Pair Pat Expr -> Pair Pat Expr
+renameBind oldName newName bind = Pair (firstOf bind) (renameExpr oldName newName (secondOf bind))
+
+bindNames : List (Pair Pat Expr) -> List String
+bindNames [] = []
+bindNames (b :: rest) = append (patNamesOf (firstOf b)) (bindNames rest)
+
+patNamesOf : Pat -> List String
+patNamesOf p = case p of
+  PVar n sp => [n]
+  PWild sp => []
+  PCon cn ps sp => concatMap patNamesOf ps
+  PInt n sp => []
+  PStr s sp => []
+  PRecord rn fields sp => concatMap (\f => patNamesOf (secondOf f)) fields
+
+renameAlt : String -> String -> Pair Pat Expr -> Pair Pat Expr
+renameAlt oldName newName alt =
+  let
+    p = firstOf alt
+  in Pair p (renameExprUnless oldName newName (patNamesOf p) (secondOf alt))
+
+-- 该列出现构造子：每个构造子一组。
+--
+-- **分支 pattern 的子模式一律用新鲜变量**（`_sc<i>`）：这样 `bindCtorTele` 不会折叠
+-- 任何嵌套模式，位置名与 body 里的引用完全可控；子模式的真实形态交给内层
+-- `buildColumnExpr` 用 case 表达。比依赖 `bindCtorTele` 的 `_np<N>` 编号稳健。
+ctorAltList : List (Pair (List Pat) Expr) -> List String -> Int -> Result (List (Pair Pat Expr))
+ctorAltList clauses restParams fuel = ctorAltListGo clauses (ctorHeads clauses) restParams fuel
+
+ctorAltListGo : List (Pair (List Pat) Expr) -> List String -> List String -> Int -> Result (List (Pair Pat Expr))
+ctorAltListGo clauses [] restParams fuel = Ok []
+ctorAltListGo clauses (cname :: rest) restParams fuel =
+  let
+    subpatCount = ctorSubPatCount clauses cname
+    freshSubs = subNames subpatCount
+    expanded = clausesForCtor cname clauses
+    subParams = append freshSubs restParams
+    branchPats = map (\n => PVar n (Span "" 0 0 0 0)) freshSubs
+  in andThen (buildColumnExpr expanded subParams (fuel - 1))
+    (\bodyExpr => andThen (ctorAltListGo clauses rest restParams (fuel - 1)) (\tail => Ok (Pair (PCon cname branchPats (Span "" 0 0 0 0)) bodyExpr :: tail)))
+
+-- 该构造子在本列各 clause 里的子模式个数（取第一个匹配 clause 的长度）。
+ctorSubPatCount : List (Pair (List Pat) Expr) -> String -> Int
+ctorSubPatCount [] cname = 0
+ctorSubPatCount (c :: rest) cname = case c of
+  Pair (p :: ps) body => case p of
+    PCon cn subpats psp => if cn == cname then length subpats else ctorSubPatCount rest cname
+    _ => ctorSubPatCount rest cname
+  Pair [] body => ctorSubPatCount rest cname
+
+subNames : Int -> List String
+subNames n = subNamesGo 0 n []
+
+subNamesGo : Int -> Int -> List String -> List String
+subNamesGo i n acc =
+  if i >= n then reverse acc else subNamesGo (i + 1) n (("_sc" ++ strFromInt i) :: acc)
+
+ctorHeads : List (Pair (List Pat) Expr) -> List String
+ctorHeads [] = []
+ctorHeads (c :: rest) = case c of
+  Pair (p :: ps) body => case p of
+    PCon cname subpats psp => addNameDistinct cname (ctorHeads rest)
+    _ => ctorHeads rest
+  Pair [] body => ctorHeads rest
+
+addNameDistinct : String -> List String -> List String
+addNameDistinct name [] = [name]
+addNameDistinct name (x :: rest) = if x == name then x :: rest else x :: addNameDistinct name rest
+
+firstCtorPats : String -> List (Pair (List Pat) Expr) -> List Pat
+firstCtorPats cname [] = []
+firstCtorPats cname (c :: rest) = case c of
+  Pair (p :: ps) body => case p of
+    PCon cn subpats psp => if cn == cname then subpats else firstCtorPats cname rest
+    _ => firstCtorPats cname rest
+  Pair [] body => firstCtorPats cname rest
+
+clausesForCtor : String -> List (Pair (List Pat) Expr) -> List (Pair (List Pat) Expr)
+clausesForCtor cname [] = []
+clausesForCtor cname (c :: rest) = case c of
+  Pair (p :: ps) body => case p of
+    PCon cn subpats psp =>
+      if cn == cname then Pair (append subpats ps) body :: clausesForCtor cname rest
+      else clausesForCtor cname rest
+    _ => clausesForCtor cname rest
+  Pair [] body => clausesForCtor cname rest
+
+filterFallback : List (Pair (List Pat) Expr) -> List (Pair (List Pat) Expr)
+filterFallback [] = []
+filterFallback (c :: rest) = case c of
+  Pair (p :: ps) body => if isVarPatD p then c :: filterFallback rest else filterFallback rest
+  Pair [] body => filterFallback rest
+
+fallbackAltList : List (Pair (List Pat) Expr) -> List String -> Int -> Result (List (Pair Pat Expr))
+fallbackAltList clauses restParams fuel = case filterFallback clauses of
+  [] => Ok []
+  fbs =>
+    andThen (buildColumnExpr (stripFirstCol fbs) restParams (fuel - 1))
+      (\bodyExpr => Ok [Pair (PWild (Span "" 0 0 0 0)) bodyExpr])
