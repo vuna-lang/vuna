@@ -105,59 +105,24 @@ record / trait / deriving 程序会先类型检查并降级）。省略 `--root`
 
 ```text
 .
-├── .local                # 本地文件，被 git 忽略，临时文件可以放到 .local/tmp 下面
-├── flake.nix             # Nix：vuna-seed / vuna-compiler / vuna、devShell、checks
-├── flake.lock
-├── vuna.toml             # workspace 根（同时是产品 CLI 包 vuna）；members: compiler/base
-├── compiler/             # 编译器包 vuna-compiler（seed 的唯一来源）
-│   ├── vuna.toml         # [package] + [export] 编译器模块 + deps vuna-base
-│   ├── app/Main.vuna     # 编译器 CLI 入口：main : IO Int（运行时执行）
-│   └── lib/Vuna/Compiler/
-│       ├── Common.vuna   # 编译器门面：重导出 Base.* 核心 + Pos/Span/路径/诊断工具
-│       ├── Ast.vuna      # 语法类型与 AST helper
-│       ├── Lexer.vuna    # 词法分析（token + 位置）
-│       ├── Parser.vuna   # offside layout parser → AST/imports
-│       ├── Builtins.vuna # 内建函数名字与元数
-│       ├── Toml.vuna / Manifest.vuna / Pkg.vuna  # 包格式、workspace / 依赖 DAG
-│       ├── Loader.vuna   # import 图、模块根、名字解析与 flatten（含 Prelude 自动导入）
-│       ├── Typecheck.vuna # HM 类型检查（记录/trait/高阶 kind/字典穿参）
-│       ├── TypedCodegen.vuna # 原生 OCaml typed codegen（单文件 + 分离编译）
-│       ├── Core.vuna / Elab.vuna / CoreCodegen.vuna / Dt.vuna # DT 核心类型论、精化器、擦除 codegen、facade
-│       ├── Split.vuna / SplitCli.vuna # 分离编译输出模型 / build --split / seed / compile --package
-│       ├── Process.vuna  # 工具链进程执行入口（受包级 allowlist 限制）
-│       ├── Compile.vuna  # 编译入口（effectiveRoots / typed compile / checkFile）
-│       └── CompilerCli.vuna # 编译器 CLI（compile/check/build/seed）
-├── lib/                  # 产品 CLI 包 vuna 的模块根（工具链）
-│   └── Vuna/
-│       ├── Cli.vuna      # 产品 CLI：工具命令 + in-process 调 compiler 命令
-│       ├── Interp.vuna   # 解释器 facade（依赖 Eval）
-│       ├── Eval.vuna     # 值表示、内建函数、求值器与 show
-│       ├── Files.vuna    # 目录遍历小工具（fmt/doc/test 共用）
-│       ├── Fmt.vuna      # 源码格式化器（vuna fmt）
-│       ├── Lint.vuna     # 风格检查与自动修复（vuna lint）
-│       ├── Repl.vuna     # 交互式 REPL（vuna repl）
-│       ├── Doc.vuna      # API 文档生成（vuna doc）
-│       ├── Index.vuna    # 源码符号索引（vuna map / vuna api，不进 seed 闭包）
-│       ├── Process.vuna  # 工具链进程执行入口
-│       └── TestRunner.vuna # 包内测试运行器（vuna test）
-├── app/Main.vuna         # 产品 CLI 入口：main : IO Int（运行时执行）
-├── base/                 # 成员包 vuna-base（标准库，独立模块根 base/lib/）
-│   ├── vuna.toml         # [package] + [export] 导出模块清单
-│   └── lib/              # Base.vuna（包门面）、Prelude.vuna（自动导入）、Base/{Pair,Bool,List,...}
-├── examples/multi/       # 多包示例（workspace 根包 + 成员包 greet + base 依赖）
-├── test/                 # run-tests.sh（vuna 原生测试）+ corpus/ 夹具
-├── seed/                 # compiler 闭包的多文件自举信任锚点，提交入库、由 vuna seed 生成
-├── docs/                 # 分层文档（见下方「文档导航」）
-├── .gitattributes        # 把 seed/** 标记为 generated
-└── README.md
+├── compiler/  # 编译器包 vuna-compiler（seed 唯一来源）：app/Main.vuna + lib/Vuna/Compiler/
+├── base/      # 成员包 vuna-base：lib/Base.*、Prelude.vuna
+├── lib/       # 产品 CLI 包 vuna 的模块根（工具链 Vuna.*）
+├── app/       # 产品 CLI 入口 main : IO Int
+├── seed/      # compiler 闭包的多文件自举信任锚点（生成物，禁止手改）
+├── test/      # run-tests.sh + corpus/ 夹具
+├── examples/  # 多包示例
+├── nix/       # seed-rotate.sh、metrics、bench、run-tests
+├── docs/      # 分层文档（见 AGENTS.md 导航）
+├── vuna.toml  # workspace 根（同时是产品 CLI 包）；members: compiler/base
+└── flake.nix  # vuna-seed / vuna-compiler / vuna、devShell、checks
 ```
 
-仓库本身是一个 workspace（Cargo 风格：根目录同时是包）：根包 `vuna` 是产品 CLI
-（模块根 `lib/`，入口 `app/Main.vuna`），依赖成员包 `vuna-compiler`（模块根
-`compiler/lib/`，入口 `compiler/app/Main.vuna`）与 `vuna-base`（模块根 `base/lib/`）；
-`vuna-compiler` 依赖 `vuna-base`。`compiler/lib/`、`lib/`、`base/lib/` 都是 vuna 模块根，
-不是 OCaml 库目录；`app/` 是纯入口目录。仓库里没有任何 dune/OCaml 项目，只用 `ocamlopt`
-编译生成的种子和程序。
+逐模块职责见 [docs/architecture.md](docs/architecture.md)。仓库本身是一个 workspace
+（Cargo 风格：根目录同时是包）：根包 `vuna` 依赖成员包 `vuna-compiler`（模块根
+`compiler/lib/`）与 `vuna-base`（模块根 `base/lib/`）。三者都是 vuna 模块根，不是 OCaml
+库目录；`app/` 是纯入口目录。仓库里没有任何 dune/OCaml 项目，只用 `ocamlopt` 编译生成的
+种子和程序。
 
 ## 硬约束（改坏了 CI 会失败）
 

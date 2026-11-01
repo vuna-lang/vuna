@@ -14,9 +14,13 @@
 #   - M15–M18：AGENTS 导航加 DT 工具链条目、architecture 补 DT 入口符号与 34–35 段。
 #   - 探索指南移入技能 `.agents/skills/repo-navigation/`：AGENTS 里的定位符号命令块与
 #     探索细则改为一句话指针，coldstart 32272 / agents 106，按实测下调。
-coldstart_bytes 32290
+#   - 转向单一 DT 路径的文档改写后超预算（coldstart 34773 / agents 122 / arch 209 /
+#     readme 205 / max_ref 169），做了一轮结构化压缩：README 目录树改单行注释版、
+#     AGENTS 目录速览与命令速查去表格、architecture 的「通常连带改动」表格改行内叙述、
+#     dt-parity 口径说明合并。按实测重新标定（预算只降不升）。
+coldstart_bytes 30392
 agents_lines 106
-arch_lines 200
-readme_lines 200
+arch_lines 199
+readme_lines 170
 max_ref_lines 168
 max_module_lines 2540

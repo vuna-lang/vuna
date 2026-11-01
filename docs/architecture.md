@@ -20,9 +20,7 @@ codegen 要点见 [compiler.md](reference/compiler.md)，语言语义见 [langua
 ```
 
 - `compiler/`：编译器（所有 `Vuna.Compiler.*`），其入口闭包 = `seed/`；
-- `lib/`：根包工具链（`Vuna.Cli` / `Vuna.Interp` / `Vuna.Eval` / `Vuna.Fmt` /
-  `Vuna.Lint` / `Vuna.Repl` / `Vuna.Doc` / `Vuna.TestRunner` / `Vuna.Files` /
-  `Vuna.Process`）；
+- `lib/`：根包工具链（`Vuna.Cli/Interp/Eval/Fmt/Lint/Repl/Doc/Index/TestRunner/Files/Process`）；
 - `base/`：标准库（`Base.*` + 顶层 `Prelude`）；
 - `app/Main.vuna`：`main = exit (runCli (getArgs))`，只做分发。
 
@@ -58,17 +56,15 @@ codegen 要点见 [compiler.md](reference/compiler.md)，语言语义见 [langua
 **解释器侧（不在 seed 内）**：`Vuna.Interp.interpretFile` 复用同一 Loader + Typecheck，
 求值走 `Vuna.Eval.runDecls`；`vuna interp` 需要降级（record/trait/deriving）时先检查再求值。
 
-**通常连带改动**：
-| 改动 | 需要一起改 |
-| --- | --- |
-| 新 token / 新语法 | `Lexer` + `Parser` + `Ast`（`Expr`/`Decl` 构造子）+ `Typecheck` + `TypedCodegen` + `Fmt`（打印/幂等）+ `Eval`（interp 路径） |
-| 名字解析 / 导出规则 | `Loader`（`Project`/`ExportEntry`）+ `Ast`（`ModDecl`）+ `Typecheck`（env 构建） |
-| 类型规则 / 降级 | `Typecheck` + `TypedCodegen` + `Vuna.Eval`（降级后的语义必须一致） |
-| 诊断信息 | `Ast`/`Common`（`Span`、`showSpanLoc`）+ 各阶段 `Result` 错误 + 测试 golden |
+**通常连带改动**：新 token/语法 = `Lexer` + `Parser` + `Ast` + `Typecheck` +
+`TypedCodegen` + `Fmt`（打印/幂等）+ `Eval`（interp 路径）；名字解析/导出 = `Loader`
+（`Project`/`ExportEntry`）+ `Ast`（`ModDecl`）+ `Typecheck`（env 构建）；类型规则/降级 =
+`Typecheck` + `TypedCodegen` + `Vuna.Eval`（降级后语义必须一致）；诊断 = `Ast`/`Common`
+（`Span`、`showSpanLoc`）+ 各阶段 `Result` 错误 + 测试 golden。
 
-**建议测试标签**：`test/run-tests.sh` 第 1 段（`corpus/run`）、第 4–5 段（解析/求值
-错误）、第 6 段（arity）、第 7–10 段（类型检查正反例、跨模块）、第 11–12 段（typed
-codegen 单文件/跨模块）、第 18–27 段（记录、trait、do/Monad、stdlib）。
+**建议测试标签**：第 1 段（`corpus/run`）、第 4–5 段（解析/求值错误）、第 6 段（arity）、
+第 7–10 段（类型检查正反例、跨模块）、第 11–12 段（typed codegen 单文件/跨模块）、
+第 18–27 段（记录、trait、do/Monad、stdlib）。
 
 ## 2. DT 路径：Core → Elab → CoreCodegen（+ Dt facade）
 
@@ -91,24 +87,25 @@ HM 路径的任何改动都不应该需要动这里，反之亦然。
 
 **入口符号**：
 - `Vuna.Compiler.Dt.dtCheckFile` / `dtCompileFile` / `dtEvalFile`（单文件 facade）
-- `Vuna.Compiler.Elab.elabProgram` / `elabProgramFull`（M15 起带洞目标与解表）；`goalsOfProgram` 供 `vuna goal` 与 LSP hover；`checkTerminationDecls` 做 M16 终止性
+- `Vuna.Compiler.Elab.elabProgram` / `elabProgramFull`（带洞目标与解表）；`goalsOfProgram`
+  供 `vuna goal` 与 LSP hover；`checkTerminationDecls` 做终止性
 - `Vuna.Compiler.Core.eval` / `quote` / `conv` / `normalize` / `defaultFuel`
 - `Vuna.Compiler.CoreCodegen.checkDtProgram` / `generateDtProgram`
 - 经 `Vuna.Compiler.Compile.compileFileDt` / `checkFileDt` 与 `Vuna.Compiler.CompilerCli`
   暴露给 CLI（`compile --dt` / `check --dt` / `interp --dt`）
 
-**边界**（当前状态，M19–M24 逐条拆除）：DT 不经过 Loader，不支持 `import` / `--root` / 包模式，不进入 `build` /
-`build --split` / `seed`。HM 路径（interp + typed + split）语义与产物必须不变。
+**边界**（M19–M24 逐条拆除）：DT 不经过 Loader，不支持 `import`/`--root`/包模式，
+不进入 `build`/`build --split`/`seed`；HM 路径语义与产物必须不变。
 
-**通常连带改动**：`Core`（Term/Value 构造子）→ `Elab`（精化/覆盖率）→
-`CoreCodegen`（擦除与生成）三处必须同步；`docs/dt-core.md` 记录设计边界。
+**通常连带改动**：`Core`（Term/Value 构造子）→ `Elab`（精化/覆盖率）→ `CoreCodegen`
+（擦除与生成）三处必须同步；设计边界见 [dt-core.md](dt-core.md)。
 
-**建议测试标签**：第 34–35 段（`corpus/dt` 18 个正例、`corpus/dt_err` 17 个反例，三路 `interp`/`check`/`compile --dt`）。
+**建议测试标签**：第 34–35 段（`corpus/dt` 与 `dt_err` 夹具，三路 `interp`/`check`/
+`compile --dt`；数量见 [testing.md](reference/testing.md)）。
 
 ## 3. 包与 workspace：Toml → Manifest → Pkg → Loader
 
-**何时该看这里**：改 `vuna.toml` 格式、workspace 成员、依赖 DAG、`[export]` 可见性、
-模块根解析。
+**何时该看这里**：改 `vuna.toml` 格式、workspace 成员、依赖 DAG、`[export]` 可见性、模块根解析。
 
 **数据流**：
 ```text
@@ -119,21 +116,18 @@ vuna.toml
  → Vuna.Compiler.Loader.loadProject           （Root 列表：本包 lib/ + 依赖包 lib/）
 ```
 
-**入口符号**：`Vuna.Compiler.Manifest.parseManifest` / `validateManifest`；
-`Vuna.Compiler.Pkg.loadPackage` / `workspacePackages` / `packageRoots` / `packageEntry` /
-`packageExports`；`Vuna.Compiler.Loader.loadProject` / `loadProjectModules` /
-`resolveProject`。CLI 侧组合在 `Vuna.Compiler.SplitCli.compilePackage` /
-`buildSplit` / `seedSplit`。
+**入口符号**：`Manifest.parseManifest` / `validateManifest`；`Pkg.loadPackage` /
+`workspacePackages` / `packageRoots` / `packageEntry` / `packageExports`；`Loader.loadProject` /
+`loadProjectModules` / `resolveProject`；CLI 侧组合在 `SplitCli.compilePackage` / `buildSplit` / `seedSplit`。
+（模块前缀均为 `Vuna.Compiler.`。）
 
-**约束**：`Toml` / `Manifest` 不做文件 I/O（调用方读入字符串）；`Pkg` 只做 lexical
-路径规范化，不做 realpath；跨包只认依赖包 `[export]` 列表，隐藏模块报
-`is not exported by package ...`；依赖图必须是 DAG。
+**约束**：`Toml`/`Manifest` 不做文件 I/O（调用方读入字符串）；`Pkg` 只做 lexical 路径
+规范化；跨包只认依赖包 `[export]` 列表，隐藏模块报 `is not exported by package ...`；
+依赖图必须是 DAG。
 
-**通常连带改动**：新增 manifest 字段 = `Manifest`（data + parse + validate + accessor）
-+ `Pkg`（消费）+ `SplitCli`/`Cli`（CLI）+ `examples/multi` 与 `corpus/packages` 夹具。
-
-**建议测试标签**：第 28–29 段（包模式正例/错误例）、第 33 段（包级 compile 与增量
-构建）、`checks.vuna-package`。
+**通常连带改动**：新增 manifest 字段 = `Manifest`（data+parse+validate+accessor）+
+`Pkg`（消费）+ `SplitCli`/`Cli` + `examples/multi` 与 `corpus/packages` 夹具；测试第
+28–29 段（包模式正/反例）、第 33 段（包级 compile 与增量构建）、`checks.vuna-package`。
 
 ## 4. 根包工具链与 TCB 边界
 
@@ -157,36 +151,32 @@ vuna.toml
 `vuna` / `vuna-compiler` / `vuna-base` 三个包直接调用 effectful 内建；其余包必须经
 `Base.IO`。
 
-**通常连带改动**：新子命令 = `Vuna.Cli` 分发 + 对应工具模块 + `toolUsageLines` +
-`test/run-tests.sh` 第 14 段（统一 CLI）+ 相关章节；若新模块可能被 compiler 闭包
-import，先确认它不进 TCB。
+**通常连带改动**：新子命令 = `Vuna.Cli` 分发 + 工具模块 + `toolUsageLines` + 第 14 段；
+若新模块可能被 compiler 闭包 import，先确认它不进 TCB。
 
-**建议测试标签**：第 14–16 段（CLI / lint / lint --fix）、第 30–31 段（fmt 语义一致、
-doc、repl）、第 32 段（fmt golden）、`checks.vuna-lint`。
+**建议测试标签**：第 14–16 段（CLI / lint）、第 30–32 段（fmt 语义一致、doc、repl、
+golden）、`checks.vuna-lint`。
 
 ## 5. 自举链：seed → vuna-seed → vuna-compiler → vuna
 
 **何时该看这里**：改 `compiler/` 后怀疑种子失效、要 rotate seed、或改 Nix 构建图。
 
 ```text
-seed/（提交入库，compiler 包入口闭包；seed/build.sh + ocamlopt）
- → vuna-seed（stage 0）
- → vuna-seed compile --package --out stage1 compiler && sh stage1/build.sh → vuna-compiler（stage 1）
+seed/（提交入库，compiler 包入口闭包；seed/build.sh + ocamlopt）→ vuna-seed（stage 0）
+ → vuna-seed compile --package --out stage1 compiler && sh stage1/build.sh → vuna-compiler
  → vuna-compiler build . → .output/bin/vuna（产品 CLI）
- → vuna-compiler build --split s1 compiler / s2 compiler → diff -r s1 s2（fixed point）
+ → vuna-compiler build --split s1/s2 compiler → diff -r s1 s2（fixed point）
 ```
-**入口符号 / 命令**：`vuna seed [OUT [DIR]]`（`Vuna.Compiler.SplitCli.seedSplit`）、
-`vuna-compiler build --split OUT [DIR]`（`buildSplit`）、`nix/seed-rotate.sh`、
-`flake.nix` 的 `packages.vuna-seed` / `vuna-compiler` / `vuna` 与 `checks.seed-selfhost`。
-**硬不变量**：当前 seed 必须能编译当前源码；rotation 后 stage1 == stage2（文件集逐字节）；
-seed 只含 compiler 包入口闭包。
+**入口符号 / 命令**：`vuna seed`（`SplitCli.seedSplit`）、`build --split`（`buildSplit`）、
+`nix/seed-rotate.sh`、`flake.nix` 的 packages 与 `checks.seed-selfhost`。
+**硬不变量**：当前 seed 必须能编译当前源码；rotation 后 stage1 == stage2；seed 只含
+compiler 包入口闭包。
 
-**通常连带改动**：改动 `compiler/` → 先验证“旧种子能编译新源码”（`nix flake check` 或
-`nix build .#vuna-seed`）；需要新语法时先以旧语法落地 → rotate → 再用新语法。
-详见 [docs/reference/bootstrap.md](reference/bootstrap.md)。
+**通常连带改动**：改动 `compiler/` → 先验证「旧种子能编译新源码」（`nix flake check`
+或 `nix build .#vuna-seed`）；新语法先以旧语法落地 → rotate → 再用。详见
+[bootstrap.md](reference/bootstrap.md)。
 
-**建议测试标签**：`checks.seed-selfhost`（= `checks.fixed-point`）、第 13 段（种子冒烟
-`vuna-seed` 编译 `12_fact`）。
+**建议测试标签**：`checks.seed-selfhost`（= `fixed-point`）、第 13 段（种子冒烟）。
 
 ## 改一处 → 跑什么（速查）
 
@@ -202,8 +192,7 @@ seed 只含 compiler 包入口闭包。
 
 ## 相关阅读
 
-- 模块职责、codegen 与 metrics：[compiler.md](reference/compiler.md)
-- 种子策略与 rotation：[bootstrap.md](reference/bootstrap.md)
-- 测试、corpus 分类与 nix checks：[testing.md](reference/testing.md)
-- 语言语义：[language.md](reference/language.md)、[type-system.md](reference/type-system.md)、
-  [dt.md](reference/dt.md)；路线图：[docs/roadmap.md](roadmap.md)；DT 设计：[docs/dt-core.md](dt-core.md)
+模块职责与 codegen：[compiler.md](reference/compiler.md)；种子与 rotation：[bootstrap.md](reference/bootstrap.md)；
+测试与 nix checks：[testing.md](reference/testing.md)；语言语义：[language.md](reference/language.md)、
+[type-system.md](reference/type-system.md)、[dt.md](reference/dt.md)；路线图：[roadmap.md](roadmap.md)；
+DT 设计：[docs/dt-core.md](dt-core.md)。
