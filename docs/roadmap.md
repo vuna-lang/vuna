@@ -56,7 +56,7 @@ vuna **尚未发布任何版本**：没有外部用户、没有下游生态、�
 - M18：自举迁移决策——seed rotation（stage1 == stage2）；用 DT 表达 de Bruijn 上下文良构（`Ctx a (Succ n)` 静态排除越界）；当时的结论「编译器本体暂不全量迁移」**已被推翻**，见「决策变更」。
 - M18.5：DT 可靠性修复——lambda 形参擦除 bug（形参被无条件标为 erased：运行时使用时硬报错、未使用时静默少生成一层 `fun`）；擦除判据收敛为全仓唯一入口 `Elab.erasedBinder`（隐式恒擦 / 显式仅宇宙域擦），六处判据点统一；`run-tests.sh` 第 34 段加「同夹具 `interp` 输出 == 编译产物输出」逐夹具对拍；正例 `19_lam`、反例 `18_lam_type_used`。
 - M18.6：核心表示层定型（QTT 预留）——`erased : Bool` 换成三值 `Rig`（`Rig0`/`Rig1`/`RigOmega`，`RigOmega` 在类型里存在但不产生）、`TType : Int` 换成不透明 `Level`；访问器分三层（构造 `rigOfBinder`/`levelSucc`/`levelMax`、判定 `rigIsErased`、展示比较 `levelToInt`/`levelEq`/`levelLt`）；`Core` 之外对 `Rig`/`Level` 模式匹配数为 0；**行为零变化**（全部 DT 夹具 `compile --dt` 产物逐字节相同）；正例 `20_rig`/`21_level`、反例 `19_rig_type_runtime`。
-- M19：DT 语言面 parity（6/8）——`let`（检查位 + 推断位脱糖为 `(\\x => body) e`，296 处）、推断位 `case`（元变量作期望类型，132 处）、嵌套构造子模式（改写成内层 case，410 分支）、多 clause 与方程左端模式（标准模式矩阵，399 名 / 978 行）、内建字面量模式（Bool→if，Int/String→if 链）、内建泛化（`==` / `/=` 隐式类型参数 + 精化期按实参类型特化、`str*` 进 prelude）；顺带修掉核心求值器两个缺陷（`normalizeCase` 不进分支体、`applyCaseAlt` 不处理兜底）。剩余：trait 高阶 kind、`record`、`deriving`。
+- M19：DT 语言面 parity（7/8）——`let`（检查位 + 推断位脱糖为 `(\\x => body) e`，296 处）、推断位 `case`（元变量作期望类型，132 处）、嵌套构造子模式（改写成内层 case，410 分支）、多 clause 与方程左端模式（标准模式矩阵，399 名 / 978 行）、内建字面量模式（Bool→if，Int/String→if 链）、内建泛化（`==` / `/=` 隐式类型参数 + 精化期按实参类型特化、`str*` 进 prelude）、trait 高阶 kind（类参数 kind 从方法签名推断，投影 multiplicity 两侧统一）；顺带修掉核心求值器两个缺陷（`normalizeCase` 不进分支体、`applyCaseAlt` 不处理兜底）。剩余：`record`、`deriving`。
 
 ## 终态（本路线图的目标）
 
@@ -107,11 +107,11 @@ vuna **尚未发布任何版本**：没有外部用户、没有下游生态、�
 - **内建类型的字面量模式**：`case` 打在 `Bool` / `Int` / `String` 上。
 - ~~**内建泛化**~~：**已完成**——`==` / `/=` 带隐式类型参数、精化期按实参类型特化成
   `bi_eq_int` / `bi_eq_str` 等；`strFromInt` / `strUnpack` / `strPack` / `strLength` 进 prelude。
-- **trait 高阶 kind**（未完成，需先做擦除语义重构）：`trait Functor f`（`f : Type -> Type`）
-  目前在 DT 下报 `too many arguments`，`Base.Monad` 依赖它。调研结论：单加 kind 推断不够——
-  `Rig0` binder 在 codegen 与核心求值器里对「是否占 de Bruijn 位置」的处理不一致（codegen
-  保留占位、求值器照样消费实参），高阶 kind 的实例投影会因此错位。**前置**：先把
-  擦除 binder 的运行时位置语义统一（与 M22「擦除判据接线」同源）。
+- ~~**trait 高阶 kind**~~：**已完成**——类参数的 kind 从方法签名推断（被应用 k 次 ⇒
+  `Type -> ... -> Type`，见 `DtKind.vuna`），字典构造子与投影按真实 kind 生成，实例头与
+  隐式参数检查也接受 kind 形态。顺带修掉一个真实错位：投影的 lambda 链与应用点原先一律
+  用 Rig1，而 `a : Type` 这类参数实际擦除，导致 `interp` 与编译产物不一致——现在两侧
+  统一用同一份 `rigs`。
 - **`record`（声明 / 构造 / 字段访问 / 更新 / 记录模式）**：DT 侧补齐，**不删除**。
   实现穿透点在 `DRecord` 28 处、`EField` / `ERecord` / `ERecUpdate` / `PRecord` 各一处；
   擦除规则上记录字段与 `data` 构造子字段一致。
@@ -127,10 +127,10 @@ vuna **尚未发布任何版本**：没有外部用户、没有下游生态、�
   本仓库自己少用不等于特性该淘汰。
 - `do` 保留，实现放 M21。
 
-**进度（已完成 6/8 项）**：多 clause 与方程左端模式、`let`（含推断位）、推断位 `case`、
-嵌套构造子模式、内建字面量模式、内建泛化（`==` 跨类型 / str* 进 prelude）——六项全部
-落地并有正反例；顺带修掉核心求值器两个真实缺陷。剩余：trait 高阶 kind、`record`、
-`deriving`。详见 [docs/history.md](history.md)。
+**进度（已完成 7/8 项）**：多 clause 与方程左端模式、`let`（含推断位）、推断位 `case`、
+嵌套构造子模式、内建字面量模式、内建泛化（`==` 跨类型 / str* 进 prelude）、trait 高阶
+kind（类参数 kind 从方法签名推断，投影 multiplicity 两侧统一）——七项全部落地并有正反例；
+顺带修掉核心求值器两个真实缺陷。剩余：`record`、`deriving`。详见 [docs/history.md](history.md)。
 
 **验收**：每项都有至少一正一反 corpus；`test/corpus/traits/` 与 `test/corpus/fmt/` 的
 record/deriving 夹具在 `--dt` 下全绿；[dt.md](reference/dt.md) 的「硬边界」清单同步收缩；

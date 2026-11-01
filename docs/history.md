@@ -127,9 +127,13 @@ git 历史里）。各里程碑对应的模块与设计见 [docs/architecture.md
   顺带修掉核心求值器两个真实缺陷：`normalizeCase` 原先只正规化 scrutinee、不进入分支体
   （嵌套 case 在 `interp` 下无法归约），`applyCaseAlt` 原先不处理兜底分支（空名字），
   于是「变量 clause 汇成兜底」的分支永远命不中。metrics 按实测重新标定两次。
-  未完成：trait 高阶 kind、`record`、`deriving`。**高阶 kind 的调研结论**：单加 kind 推断
-  不够——`Rig0` binder 在 codegen（保留占位）与核心求值器（照样消费实参）里对「是否占
-  运行时位置」不一致，实例投影会错位；须先统一擦除语义（M22 第一步），因此后移。
+  ⑦ **trait 高阶 kind**：类参数的 kind 从方法签名推断（`DtKind.vuna`；被应用 k 次 ⇒
+     `Type -> ... -> Type`），字典构造子与投影按真实 kind 生成，实例头与隐式参数检查也
+     接受 kind 形态。顺带修掉一个真实错位——投影的 lambda 链与应用点原先一律写 Rig1，
+     而 `a : Type` 这类参数实际擦除，导致 `interp` 与编译产物不一致；现在两侧统一用
+     `methodArgRigsOf` 取的同一份 rigs。「类型层」判据同时收窄成「域全为宇宙的 Pi 链」，
+     否则值层函数类型 `a -> b` 会被误擦（`03_compose` / `04_apply` 崩）。
+  未完成：`record`、`deriving`。
 
 ## 决策变更：M18 迁移动机失效（2026-11）
 

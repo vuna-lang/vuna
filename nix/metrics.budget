@@ -18,12 +18,15 @@
 #   seed 文件数仍 31 个模块，工具链仍不在闭包内。
 # M19 内建泛化 + DtPrelude 拆模块：新增 1 个 seed 模块（32 个），bytes 1236686 /
 #   lines 11661 / longlines 4341 / ctorcount 2444，按实测重新标定。
-bytes 1240000
-lines 11700
+# M19 高阶 kind（trait 类参数按方法签名推断 kind）+ 投影 multiplicity 修正 + DtKind
+#   拆模块：seed 闭包 33 个模块，bytes 1243217 / lines 11742 / longlines 4363 /
+#   ctorcount 2458，按实测重新标定。
+bytes 1246000
+lines 11780
 maxline 12400
-longlines 4360
+longlines 4380
 letrec 640
 strcat 330
 eqint 35
 zeroarg 30
-ctorcount 2460
+ctorcount 2470

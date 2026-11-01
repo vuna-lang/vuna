@@ -540,7 +540,7 @@ QTT 落地的增量工作是：语法加 multiplicity 标注（`Parser` / `Ast` 
 multiplicity 静态擦除，后者按运行时是否读取判定。M22 因此只接判据入口，不投入实现
 使用分析——这是 [docs/roadmap.md](roadmap.md) M22 与「决策变更」的记录内容。
 
-### 24.5 擦除 binder 的运行时位置语义（M19 调研，M22 的前置）
+### 24.5 擦除 binder 的运行时位置语义（M19 已统一）
 
 M19 尝试补 `trait Functor f`（类参数是 `Type -> Type` 的高阶 kind）时，暴露出一条**尚未
 统一**的语义：`Rig0` binder 在运行时到底占不占一个位置？
@@ -553,7 +553,16 @@ M19 尝试补 `trait Functor f`（类参数是 `Type -> Type` 的高阶 kind）�
 运行时参数**中间**（`fmap : (a : Type) -> (b : Type) -> (a -> b) -> f a -> f b` 的投影），
 「lambda 链里有没有这一层」在两条路径上就得到不同答案，实例投影因此错位。
 
-**结论**：这不是高阶 kind 的局部问题，而是擦除语义的表述问题。把它作为
-**M22「擦除判据接线」的第一步**：统一成「`Rig0` binder 在所有运行时视图里都不占位置」
-（`Core` 的求值环境、`CoreCodegen` 的 binder 栈、telescope 的字段计数三处一起对齐），
-之后高阶 kind 与 `record` 才能稳定落地。trait 高阶 kind 因此后移到 M22 之后。
+**结论与修复**（M19 已落地）：根因不是「占不占位置」这个抽象问题，而是**精化器生成的项
+本身不自洽**——`trait` 投影的 lambda 链与应用点一律写 `Rig1`，而方法签名里 `a : Type`
+这类 binder 实际是 `Rig0`。实例方法体按真实 rig 生成，投影却按表面 arity 生成，两者的
+运行时元数不同，于是「求值器照样消费一个实参」与「codegen 不生成形参」不再一致。
+
+修法不是改求值器或 codegen（两者各自都对），而是让**精化器用同一份 rigs 生成两侧**：
+`methodArgRigsOf` 从方法类型逐 binder 取 multiplicity，投影的 lambda 链
+（`methodArgLams`）与调用点（`methodArgTerms`）都用它。同时收窄「类型层」判据：必须是
+**域全为宇宙的 Pi 链**（`Type -> Type`）；值层函数类型 `a -> b` 的域是类型变量，不能被
+误判（否则 `03_compose` / `04_apply` 直接崩）。
+
+**不变量**：精化器产出的项，其 lambda 链元数必须与该类型的 Pi 链逐 binder 对齐，
+`Rig0` 位置两侧都跳过。这条不变量由 `methodArgRigsOf` 单点保证。

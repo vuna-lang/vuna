@@ -129,4 +129,3 @@ preludeGlobals =
     Pair "strPack" strPackTy,
     Pair "strLength" strLengthTy
   ]
-

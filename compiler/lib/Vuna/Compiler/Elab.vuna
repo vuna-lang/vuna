@@ -12,6 +12,7 @@ import Vuna.Compiler.Common
 import Vuna.Compiler.Ast
 import Vuna.Compiler.Core
 import Vuna.Compiler.DtPrelude
+import Vuna.Compiler.DtKind
 
 -- 一个 DT 定义：名字、类型项、体项（均为闭项；体带擦除标志）。
 data DtDef : Type where
@@ -497,15 +498,20 @@ paramNameOf : List String -> String
 paramNameOf [] = "_"
 paramNameOf (p :: rest) = p
 
--- 类参数（M15 只支持单参数接口）绑成隐式 `Type` binder 后的局部上下文。
-bindClassParams : List String -> Ctx -> Ctx
-bindClassParams [] ctx = ctx
-bindClassParams (p :: rest) ctx = bindClassParams rest (ctxBind p (TType levelZero) ctx)
+-- 类参数绑成隐式 binder 后的局部上下文。
+--
+-- M19：类参数可以是**高阶 kind**（`trait Mapper f`，方法签名里写 `f a`）。kind 从方法
+-- 签名推断：参数名在签名里被应用了 k 个实参就当 `Type -> ... -> Type`（k 个箭头），
+-- 从未被应用就是 `Type`。trait 的方法签名本来就把参数的用法写清楚了。
+bindClassParams : List String -> List (Pair String Expr) -> Ctx -> Ctx
+bindClassParams [] methods ctx = ctx
+bindClassParams (p :: rest) methods ctx =
+  bindClassParams rest methods (ctxBind p (classParamKind p methods) ctx)
 
 -- 每个方法的字段类型（在类参数 binders 之下检查）。
 classFieldTys : List (Pair String Term) -> Ec -> List String -> List (Pair String Expr) -> Result (Pair (List Term) Ec)
 classFieldTys globals ec params methods =
-  classFieldTysGo globals (bindClassParams params emptyCtx) ec methods []
+  classFieldTysGo globals (bindClassParams params methods emptyCtx) ec methods []
 
 classFieldTysGo : List (Pair String Term) -> Ctx -> Ec -> List (Pair String Expr) -> List Term -> Result (Pair (List Term) Ec)
 classFieldTysGo globals ctx ec [] acc = Ok (Pair (reverse acc) ec)
@@ -532,13 +538,15 @@ elabTrait globals ec ds = case ds of
       Pair fieldTys ec1 =>
         let
           pname = paramNameOf params
+          -- M19：类参数的 kind 从方法签名推断（`Functor f` 的 `f` 是 `Type -> Type`）。
+          pKind = classParamKind pname methods
           dname = dictTypeName tname
           cname = dictCtorName tname
           dapp = foldAppTerms (TGlobal dname) [Pair (TVar pname 0) Rig0]
-          ctorTy = TPi pname True Rig0 (TType levelZero) (foldPiFieldTys fieldTys dapp)
+          ctorTy = TPi pname True Rig0 pKind (foldPiFieldTys fieldTys dapp)
           tele = teleOfType ctorTy
           dd = DtData dname tele [DtCtor cname dname tele ctorTy]
-          projs = methodProjections tname pname methods fieldTys
+          projs = methodProjections tname pname pKind methods fieldTys
           projBodies = projectionDefs tname pname methods fieldTys (length methods)
           cls = DtClass tname params projs fieldTys
           ec2 = ecAddClass (ecAddData ec1 dd) cls
@@ -548,19 +556,23 @@ elabTrait globals ec ds = case ds of
     _ => errAt dsp "DT: internal: expected a trait declaration"
 
 -- 方法投影的签名与定义体：
---   sig:  `{p : Type} -> {d : Dict_C p} -> <方法类型>`
+--   sig:  `{p : <kind>} -> {d : Dict_C p} -> <方法类型>`
 --   body: `\p => \d => case d of MkDict_C f0..fn => fk x1..xar`
 -- 字段 fk 对应第 k 个方法（与构造子字段声明顺序一致）。
-methodProjections : String -> String -> List (Pair String Expr) -> List Term -> List (Pair String Term)
-methodProjections tname pname methods fieldTys = methodProjZip tname pname 0 methods fieldTys
+--
+-- M19：`p` 的 kind 由 `classParamKind` 从方法签名推断，高阶 kind（`Functor f` 的
+-- `Type -> Type`）也按真实 kind 生成 binder，不再写死 `Type`。
+methodProjections : String -> String -> Term -> List (Pair String Expr) -> List Term -> List (Pair String Term)
+methodProjections tname pname pKind methods fieldTys =
+  methodProjZip tname pname pKind 0 methods fieldTys
 
-methodProjZip : String -> String -> Int -> List (Pair String Expr) -> List Term -> List (Pair String Term)
-methodProjZip tname pname idx [] fieldTys = []
-methodProjZip tname pname idx (m :: rest) [] = []
-methodProjZip tname pname idx (m :: rest) (t :: rest2) = case m of
+methodProjZip : String -> String -> Term -> Int -> List (Pair String Expr) -> List Term -> List (Pair String Term)
+methodProjZip tname pname pKind idx [] fieldTys = []
+methodProjZip tname pname pKind idx (m :: rest) [] = []
+methodProjZip tname pname pKind idx (m :: rest) (t :: rest2) = case m of
   Pair mname mexpr =>
-    Pair mname (TPi pname True Rig0 (TType levelZero) (TPi "_" True Rig0 (foldAppTerms (TGlobal (dictTypeName tname)) [Pair (TVar pname 0) Rig0]) (shift 0 1 t)))
-      :: methodProjZip tname pname (idx + 1) rest rest2
+    Pair mname (TPi pname True Rig0 pKind (TPi "_" True Rig0 (foldAppTerms (TGlobal (dictTypeName tname)) [Pair (TVar pname 0) Rig0]) (shift 0 1 t)))
+      :: methodProjZip tname pname pKind (idx + 1) rest rest2
 
 -- 投影的定义体：`\p => \d => \x0 .. \x(ar-1) => case d of MkDict_C f0..fn => f_k x0..x(ar-1)`
 --
@@ -571,34 +583,43 @@ methodProjZip tname pname idx (m :: rest) (t :: rest2) = case m of
 --   _p           : index = n + ar + 1
 --   f_k          : index = n - 1 - k
 --   x_i          : index = n + (ar - 1 - i)
-projectionBody : String -> Int -> Int -> Int -> Term
-projectionBody ctor fieldIdx arity nFields =
+-- `rigs` 是方法显式参数各自的 multiplicity（M19：从方法签名逐 binder 取，
+-- `binderRig` 判据与实例方法体一致）。**lambda 链与应用点必须用同一份 rigs**：
+-- 擦除位既不生成运行时形参、也不传实参——两侧都跳过，才能与由 `checkDef` 生成的
+-- 实例方法体（同样按 rig 跳过擦除位）严格对齐。
+projectionBody : String -> Int -> List Rig -> Int -> Term
+projectionBody ctor fieldIdx rigs nFields =
   let
+    arity = length rigs
     -- scrutinee 在分支绑定子之外求值，所以只跨过方法参数（_p=ar+1、_d=ar）。
     dictIdx = arity
     fieldVar = TVar (fieldVarName fieldIdx) (nFields - 1 - fieldIdx)
-    argTerms = methodArgTerms arity nFields
-    applied = foldAppTerms fieldVar (map (\a => Pair a Rig1) argTerms)
+    argPairs = methodArgTerms rigs nFields
+    applied = foldAppTerms fieldVar argPairs
     binders = fieldBinderNames nFields
     alt = CaseAlt ctor binders applied
     caseTerm = TCase (TVar "_d" dictIdx) [alt]
-    lamArgs = methodArgLams arity 0 caseTerm
+    lamArgs = methodArgLams rigs 0 caseTerm
   in TLam "_p" Rig0 (TLam "_d" Rig1 lamArgs)
 
--- 方法参数 x_i 的 index：n + (ar - 1 - i)。
-methodArgTerms : Int -> Int -> List Term
-methodArgTerms arity nFields = methodArgTermsGo arity nFields 0
+-- 方法参数 x_i 的 (项, rig)：index = n + (ar - 1 - i)。
+methodArgTerms : List Rig -> Int -> List (Pair Term Rig)
+methodArgTerms rigs nFields = methodArgTermsGo rigs nFields 0 (length rigs)
 
-methodArgTermsGo : Int -> Int -> Int -> List Term
-methodArgTermsGo arity nFields i =
-  if i >= arity then []
-  else TVar ("x" ++ strFromInt i) (nFields + (arity - 1 - i)) :: methodArgTermsGo arity nFields (i + 1)
+methodArgTermsGo : List Rig -> Int -> Int -> Int -> List (Pair Term Rig)
+methodArgTermsGo rigs nFields i arity = case rigs of
+  [] => []
+  rig :: rest =>
+    Pair (TVar ("x" ++ strFromInt i) (nFields + (arity - 1 - i))) rig
+      :: methodArgTermsGo rest nFields (i + 1) arity
 
--- 逐层 lambda 绑定方法参数（x_0 最外）。
-methodArgLams : Int -> Int -> Term -> Term
-methodArgLams arity i body =
-  if i >= arity then body else TLam ("x" ++ strFromInt i) Rig1 (methodArgLams arity (i + 1) body)
+-- 逐层 lambda 绑定方法参数（x_0 最外），每层用各自 rig。
+methodArgLams : List Rig -> Int -> Term -> Term
+methodArgLams [] i body = body
+methodArgLams (rig :: rest) i body =
+  TLam ("x" ++ strFromInt i) rig (methodArgLams rest (i + 1) body)
 
+-- 方法显式参数的 multiplicity 表：逐 binder 按域判断（域是宇宙 ⇒ Rig0 擦除）。
 fieldVarName : Int -> String
 fieldVarName i = "f" ++ strFromInt i
 
@@ -624,7 +645,7 @@ projectionDefsGo ctor [] fieldTys idx nFields = []
 projectionDefsGo ctor (m :: rest) [] idx nFields = []
 projectionDefsGo ctor (m :: rest) (t :: rest2) idx nFields = case m of
   Pair mname mexpr =>
-    Pair mname (projectionBody ctor idx (explicitPiArity t) nFields)
+    Pair mname (projectionBody ctor idx (methodArgRigsOf binderRig t) nFields)
       :: projectionDefsGo ctor rest rest2 (idx + 1) nFields
 
 -- 实例头 `Show Int` 的类名与实参。
@@ -1707,15 +1728,19 @@ bindOnePattern globals ctx ec pname pats body dom clo sp =
     lvl = ctxDepth ctx
     v = freshVarValue pname lvl
     ctx2 = ctxBindValue pname dom ctx
-    erasure = binderRig False dom
+    erasure = typeLayerRig False dom
   in andThen (checkBinders globals ctx2 ec pats body (applyClosure clo v) sp) (\p => case p of
     Pair inner ec1 => Ok (Pair (TLam pname erasure inner) ec1)
   )
 
 -- M14：隐式 binder 的域可以是宇宙，也可以是已声明归纳族（`{n : Nat}` 这类索引）；
 -- 其它类型（Int/String/...）仍拒绝：隐式实参不参与运行时计算。
+-- 隐式 binder 的域可以是：宇宙、已声明归纳族（`{n : Nat}` 这类索引），或**高阶 kind**
+-- （`{f : Type -> Type}`，M19 起 `trait Mapper f` 需要）。其它类型（Int/String/…）仍
+-- 拒绝：隐式实参不参与运行时计算。
 isIndexDomain : Ec -> Value -> Bool
-isIndexDomain ec dom = isTypeValue dom || isDataHead (ecDatas ec) (forceVal ec dom)
+isIndexDomain ec dom =
+  isTypeValue dom || isTypeLayerValue dom || isDataHead (ecDatas ec) (forceVal ec dom)
 
 -- ---------------------------------------------------------------
 -- 擦除判据（M18.5：全仓唯一入口）
@@ -1730,6 +1755,22 @@ isIndexDomain ec dom = isTypeValue dom || isDataHead (ecDatas ec) (forceVal ec d
 -- 绑定数」三处会各自漂移，违反即静默错编译（M24.6 第一级要把它升级成类型保证）。
 binderRig : Bool -> Value -> Rig
 binderRig implicit dom = rigOfBinder implicit (isTypeValue dom)
+
+-- 域在「类型层」（M19）：宇宙，或**域全是宇宙的 Pi 链**（`Type -> Type` 这类高阶 kind）。
+-- 用于**实参**与**定义参数**的 multiplicity——`applyTwice Box ...` 里的 `Box` 是类型
+-- 构造器，必须擦除，否则 codegen 报「type-level name is used at runtime」。
+--
+-- 判据必须是递归的：值层函数类型 `a -> b` 也是 Pi，但它的域是**类型变量**（不是宇宙），
+-- 因此不被误判为类型层（否则函数参数会被擦掉，`03_compose` / `04_apply` 直接崩）。
+typeLayerRig : Bool -> Value -> Rig
+typeLayerRig implicit dom = if implicit then Rig0 else if isTypeLayerValue dom then Rig0 else Rig1
+
+isTypeLayerValue : Value -> Bool
+isTypeLayerValue v = case v of
+  VType l => True
+  VPi pname implicit rig dom clo =>
+    isTypeLayerValue dom && isTypeLayerValue (applyClosure clo (VNeutral (NVar pname 0 [])))
+  _ => False
 
 isDataHead : List DtData -> Value -> Bool
 isDataHead datas v = case v of
@@ -1914,7 +1955,7 @@ inferArgsGo globals ctx ec ty args sp =
       a :: rest => andThen (checkE globals ctx ec a dom) (\p => case p of
         Pair aTerm ec1 =>
           let
-            erased = binderRig False dom
+            erased = typeLayerRig False dom
             ty2 = applyClosure clo (evalCtx ctx aTerm)
           in andThen (inferArgsGo globals ctx ec1 ty2 rest sp) (\q => case q of
             Pair argTerms (Pair resTy ec2) =>
