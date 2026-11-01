@@ -1115,8 +1115,91 @@ checkCase globals ctx ec scrut alts expected sp = andThen (inferE globals ctx ec
 
 checkCaseFam : List (Pair String Term) -> Ctx -> Ec -> Term -> Value -> List (Pair Pat Expr) -> Value -> Span -> Result (Pair Term Ec)
 checkCaseFam globals ctx ec scrutTerm scrutTy alts expected sp = case forceVal ec scrutTy of
+  VNeutral (NGlobal "Bool" []) => checkBoolCase globals ctx ec scrutTerm alts expected sp
+  VNeutral (NGlobal "Int" []) => checkLitCase globals ctx ec scrutTerm "Int" alts expected sp
+  VNeutral (NGlobal "String" []) => checkLitCase globals ctx ec scrutTerm "String" alts expected sp
   VNeutral (NGlobal fam idxs) => checkCaseOf globals ctx ec scrutTerm fam idxs alts expected sp
   _ => errAt sp "DT: case scrutinee is not an inductive family"
+
+-- M19：Bool 上的 case 降级成 if（`True` / `False` 是零参构造子形态的模式）。
+checkBoolCase : List (Pair String Term) -> Ctx -> Ec -> Term -> List (Pair Pat Expr) -> Value -> Span -> Result (Pair Term Ec)
+checkBoolCase globals ctx ec scrutTerm alts expected sp = andThen (boolAlt globals ctx ec alts "True" expected sp) (\p => case p of
+  Pair trueBody (Pair catchAll ec1) => case catchAll of
+    Just falseBody => Ok (Pair (TIf scrutTerm trueBody falseBody) ec1)
+    Nothing => andThen (boolAlt globals ctx ec alts "False" expected sp) (\q => case q of
+      Pair falseBody (Pair _ ec2) => Ok (Pair (TIf scrutTerm trueBody falseBody) ec2)
+    )
+)
+
+-- 取 `True` / `False` 分支的体；变量/通配分支作为两边的兜底。
+boolAlt : List (Pair String Term) -> Ctx -> Ec -> List (Pair Pat Expr) -> String -> Value -> Span -> Result (Pair Term (Pair (Maybe Term) Ec))
+boolAlt globals ctx ec alts target expected sp =
+  boolAltGo globals ctx ec alts target expected sp Nothing
+
+boolAltGo : List (Pair String Term) -> Ctx -> Ec -> List (Pair Pat Expr) -> String -> Value -> Span -> Maybe Term -> Result (Pair Term (Pair (Maybe Term) Ec))
+boolAltGo globals ctx ec [] target expected sp catchAll = case catchAll of
+  Just t => Ok (Pair t (Pair Nothing ec))
+  Nothing => errAt sp ("DT: case is not exhaustive: missing " ++ target)
+boolAltGo globals ctx ec (alt :: rest) target expected sp catchAll = case alt of
+  Pair pat body => case pat of
+    PCon cname args psp => if cname == target then andThen (checkE globals ctx ec body expected) (\p => case p of
+      Pair bodyTerm ec1 => Ok (Pair bodyTerm (Pair catchAll ec1))
+    )
+    else boolAltGo globals ctx ec rest target expected sp catchAll
+    PVar pname psp => andThen (checkE globals ctx ec body expected) (\p => case p of
+      Pair bodyTerm ec1 => boolAltGo globals ctx ec rest target expected sp (Just bodyTerm)
+    )
+    PWild psp => andThen (checkE globals ctx ec body expected) (\p => case p of
+      Pair bodyTerm ec1 => boolAltGo globals ctx ec rest target expected sp (Just bodyTerm)
+    )
+    _ => errAt (patSpan pat) "DT: case on Bool only accepts True / False / variable patterns (M19)"
+
+-- M19：Int / String 上的字面量模式降级成嵌套 if。
+-- `case n of 0 => a; 1 => b; x => c` 变成 `if n == 0 then a else if n == 1 then b else c`。
+checkLitCase : List (Pair String Term) -> Ctx -> Ec -> Term -> String -> List (Pair Pat Expr) -> Value -> Span -> Result (Pair Term Ec)
+checkLitCase globals ctx ec scrutTerm tyName alts expected sp = andThen (checkLitAlts globals ctx ec scrutTerm tyName alts expected sp) (\p => case p of
+  Pair term (Pair hasDefault ec1) =>
+    if hasDefault then Ok (Pair term ec1)
+    else errAt sp "DT: case on Int / String needs a variable or wildcard branch as fallback (M19)"
+)
+
+-- Int / String 字面量列：每个字面量降成 `if n == lit then body else <rest>`；
+-- 变量/通配分支提供 fallback（并且把变量绑进上下文，让用户在体里能用它）。
+checkLitAlts : List (Pair String Term) -> Ctx -> Ec -> Term -> String -> List (Pair Pat Expr) -> Value -> Span -> Result (Pair Term (Pair Bool Ec))
+checkLitAlts globals ctx ec scrutTerm tyName [] expected sp =
+  Ok (Pair (TIf (TBool False) (TInt 0) (TInt 0)) (Pair False ec))
+checkLitAlts globals ctx ec scrutTerm tyName (alt :: rest) expected sp = case alt of
+  Pair pat body => case pat of
+    PInt n psp => andThen (checkE globals ctx ec body expected) (\p => case p of
+      Pair bodyTerm ec1 => andThen (checkLitAlts globals ctx ec1 scrutTerm tyName rest expected sp) (\q => case q of
+        Pair restTerm (Pair hasDefault ec2) =>
+          Ok
+            (Pair (TIf (TApp (TApp (TGlobal "==") scrutTerm Rig1) (TInt n) Rig1) bodyTerm restTerm) (Pair hasDefault ec2))
+      )
+    )
+    PStr s psp => andThen (checkE globals ctx ec body expected) (\p => case p of
+      Pair bodyTerm ec1 => andThen (checkLitAlts globals ctx ec1 scrutTerm tyName rest expected sp) (\q => case q of
+        Pair restTerm (Pair hasDefault ec2) =>
+          Ok
+            (Pair (TIf (TApp (TApp (TGlobal "==") scrutTerm Rig1) (TStr s) Rig1) bodyTerm restTerm) (Pair hasDefault ec2))
+      )
+    )
+    PVar pname psp => andThen (checkLitBoundVar globals ctx ec scrutTerm tyName pname body expected sp) (\p => case p of
+      Pair bodyTerm ec1 => Ok (Pair bodyTerm (Pair True ec1))
+    )
+    PWild psp => andThen (checkE globals ctx ec body expected) (\p => case p of
+      Pair bodyTerm ec1 => Ok (Pair bodyTerm (Pair True ec1))
+    )
+    _ =>
+      errAt (patSpan pat) "DT: case on Int / String only accepts literals / variable patterns (M19)"
+
+-- fallback 分支的体在「scrutinee 绑成该变量」的上下文里检查。
+checkLitBoundVar : List (Pair String Term) -> Ctx -> Ec -> Term -> String -> String -> Expr -> Value -> Span -> Result (Pair Term Ec)
+checkLitBoundVar globals ctx ec scrutTerm tyName name body expected sp =
+  let
+    scrutVal = evalCtx ctx scrutTerm
+    ctx2 = ctxBindValue name scrutVal ctx
+  in checkE globals ctx2 ec body expected
 
 checkCaseOf : List (Pair String Term) -> Ctx -> Ec -> Term -> String -> List Value -> List (Pair Pat Expr) -> Value -> Span -> Result (Pair Term Ec)
 checkCaseOf globals ctx ec scrutTerm fam idxs alts expected sp = case dtDataLookup fam (ecDatas ec) of
@@ -2224,6 +2307,32 @@ wrapLambdas [] body = body
 wrapLambdas (n :: rest) body = ELam [n] (wrapLambdas rest body) (Span "" 0 0 0 0)
 
 -- 按列递归。params 是**尚未消耗**的位置名（与剩余模式列一一对应）。
+-- 该列含内建字面量模式（Int / String）：生成嵌套 if 链。
+-- `f 0 = a; f 1 = b; f n = c` → `if pos == 0 then a else if pos == 1 then b else c`
+-- 变量/通配 clause 在字面量之后提供 fallback（体按剩余列递归构建）。
+litAltExpr : List (Pair (List Pat) Expr) -> String -> List String -> Int -> Result Expr
+litAltExpr clauses pos restParams fuel = litAltExprGo clauses pos restParams fuel
+
+litAltExprGo : List (Pair (List Pat) Expr) -> String -> List String -> Int -> Result Expr
+litAltExprGo clauses pos restParams fuel = case clauses of
+  [] => Err "DT: case on Int / String needs a variable or wildcard branch as fallback (M19)"
+  (Pair (p :: ps) body) :: rest => case p of
+    PVar pname psp =>
+      andThen (buildColumnExpr (stripFirstCol clauses) restParams (fuel - 1))
+        (\inner => Ok (renameExpr pname pos inner))
+    PWild psp => buildColumnExpr (stripFirstCol clauses) restParams (fuel - 1)
+    _ =>
+      andThen (litAltExprGo rest pos restParams (fuel - 1))
+        (\restExpr => andThen (buildColumnExpr [Pair ps body] restParams (fuel - 1)) (\bodyExpr => Ok (EIf (EApp (EVar "==" (Span "" 0 0 0 0)) [EVar pos (Span "" 0 0 0 0), litPatExpr p] (patSpan p)) bodyExpr restExpr (patSpan p))))
+  (Pair [] body) :: rest => Err "DT: clause has more patterns than the function arity"
+
+-- 把字面量模式还原成表达式（Int / String）。
+litPatExpr : Pat -> Expr
+litPatExpr p = case p of
+  PInt n sp => EInt n sp
+  PStr s sp => EStr s sp
+  _ => EInt 0 (Span "" 0 0 0 0)
+
 buildColumnExpr : List (Pair (List Pat) Expr) -> List String -> Int -> Result Expr
 buildColumnExpr clauses params fuel = if fuel <= 0 then Err "DT: pattern matrix recursion ran out of fuel"
 else if allEmptyPats clauses then Ok (bodyOfFirst clauses)
@@ -2232,8 +2341,18 @@ else case params of
   pos :: restParams =>
     if allVarHeads clauses then andThen (buildColumnExpr (stripFirstCol clauses) restParams (fuel - 1))
       (\inner => Ok (renameFirstVars clauses pos inner))
-    else andThen (ctorAltList clauses restParams (fuel - 1))
+    else if allCtorHeads clauses then andThen (ctorAltList clauses restParams (fuel - 1))
       (\alts => andThen (fallbackAltList clauses restParams (fuel - 1)) (\fb => Ok (ECase (EVar pos (Span "" 0 0 0 0)) (append alts fb) (Span "" 0 0 0 0))))
+    else litAltExpr clauses pos restParams (fuel - 1)
+
+-- 该列全是构造子模式（不含字面量）。
+allCtorHeads : List (Pair (List Pat) Expr) -> Bool
+allCtorHeads [] = True
+allCtorHeads (c :: rest) = case c of
+  Pair (p :: ps) body => case p of
+    PCon cname subpats psp => allCtorHeads rest
+    _ => False
+  Pair [] body => False
 
 allEmptyPats : List (Pair (List Pat) Expr) -> Bool
 allEmptyPats [] = True

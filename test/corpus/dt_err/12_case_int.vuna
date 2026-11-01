@@ -1,8 +1,8 @@
--- case 的 scrutinee 必须是归纳族，不能是 Int。
+-- M19：Int / String 上的 case 已支持字面量模式，但必须带变量/通配兜底——
+-- 穷尽不了的值域不能只列有限个字面量。
 bad : Int -> Int
-bad n =
-  case n of
-    Zero => 0
+bad 0 = 1
+bad 1 = 2
 
 main : Int
 main = 1
