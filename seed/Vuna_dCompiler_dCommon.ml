@@ -119,28 +119,28 @@ let rec v_Vuna_dCompiler_dCommon_dsuggest = fun a0 a1 -> match (a0, a1) with
 
 let v_vuna_ushow_uVuna_uCompiler_uCommon_uPos = fun x -> (match x with
   | C_Vuna_dCompiler_dCommon_dPos (v0, v1) -> (let vuna_cat0' = ("(Pos ") in (let vuna_cat1' = (v_vuna_ushow_uint v0) in (let vuna_cat2' = (" ") in (let vuna_cat3' = (v_vuna_ushow_uint v1) in (let vuna_cat4' = (")") in String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'; vuna_cat3'; vuna_cat4'])))))
-  | _ -> vuna_fail "<generated>" 415 40 ("case pattern match failure"))
+  | _ -> vuna_fail "<generated>" 467 40 ("case pattern match failure"))
 
 let v_vuna_ueq_uVuna_uCompiler_uCommon_uPos = fun x y -> (match x with
   | C_Vuna_dCompiler_dCommon_dPos (v0, v1) -> (match y with
   | C_Vuna_dCompiler_dCommon_dPos (w0, w1) -> (if (v_vuna_ueq_uint v0 w0) then (v_vuna_ueq_uint v1 w1) else false)
   | _ -> v_vuna_ueq_uint 0 1
-  | _ -> vuna_fail "<generated>" 420 37 ("case pattern match failure"))
+  | _ -> vuna_fail "<generated>" 472 37 ("case pattern match failure"))
   | _ -> v_vuna_ueq_uint 0 1
-  | _ -> vuna_fail "<generated>" 419 40 ("case pattern match failure"))
+  | _ -> vuna_fail "<generated>" 471 40 ("case pattern match failure"))
 
 let v_vuna_uneq_uVuna_uCompiler_uCommon_uPos = fun x y -> if v_vuna_ueq_uVuna_uCompiler_uCommon_uPos x y then v_vuna_ueq_uint 0 1 else v_vuna_ueq_uint 0 0
 
 let v_vuna_ushow_uVuna_uCompiler_uCommon_uSpan = fun x -> (match x with
   | C_Vuna_dCompiler_dCommon_dSpan (v0, v1, v2, v3, v4) -> (let vuna_cat0' = ("(Span ") in (let vuna_cat1' = (v_vuna_ushow_ustring v0) in (let vuna_cat2' = (" ") in (let vuna_cat3' = (v_vuna_ushow_uint v1) in (let vuna_cat4' = (" ") in (let vuna_cat5' = (v_vuna_ushow_uint v2) in (let vuna_cat6' = (" ") in (let vuna_cat7' = (v_vuna_ushow_uint v3) in (let vuna_cat8' = (" ") in (let vuna_cat9' = (v_vuna_ushow_uint v4) in (let vuna_cat10' = (")") in String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'; vuna_cat3'; vuna_cat4'; vuna_cat5'; vuna_cat6'; vuna_cat7'; vuna_cat8'; vuna_cat9'; vuna_cat10'])))))))))))
-  | _ -> vuna_fail "<generated>" 428 41 ("case pattern match failure"))
+  | _ -> vuna_fail "<generated>" 480 41 ("case pattern match failure"))
 
 let v_vuna_ueq_uVuna_uCompiler_uCommon_uSpan = fun x y -> (match x with
   | C_Vuna_dCompiler_dCommon_dSpan (v0, v1, v2, v3, v4) -> (match y with
   | C_Vuna_dCompiler_dCommon_dSpan (w0, w1, w2, w3, w4) -> (if ((if ((if ((if (v_vuna_ueq_ustr v0 w0) then (v_vuna_ueq_uint v1 w1) else false)) then (v_vuna_ueq_uint v2 w2) else false)) then (v_vuna_ueq_uint v3 w3) else false)) then (v_vuna_ueq_uint v4 w4) else false)
   | _ -> v_vuna_ueq_uint 0 1
-  | _ -> vuna_fail "<generated>" 433 47 ("case pattern match failure"))
+  | _ -> vuna_fail "<generated>" 485 47 ("case pattern match failure"))
   | _ -> v_vuna_ueq_uint 0 1
-  | _ -> vuna_fail "<generated>" 432 41 ("case pattern match failure"))
+  | _ -> vuna_fail "<generated>" 484 41 ("case pattern match failure"))
 
 let v_vuna_uneq_uVuna_uCompiler_uCommon_uSpan = fun x y -> if v_vuna_ueq_uVuna_uCompiler_uCommon_uSpan x y then v_vuna_ueq_uint 0 1 else v_vuna_ueq_uint 0 0

@@ -1725,9 +1725,7 @@ bindOnePattern globals ctx ec pname pats body dom clo sp =
     Pair inner ec1 => Ok (Pair (TLam pname erasure inner) ec1)
   )
 
--- M14：隐式 binder 的域可以是宇宙，也可以是已声明归纳族（`{n : Nat}` 这类索引）；
--- 其它类型（Int/String/...）仍拒绝：隐式实参不参与运行时计算。
--- 隐式 binder 的域可以是：宇宙、已声明归纳族（`{n : Nat}` 这类索引），或**高阶 kind**
+-- M14：隐式 binder 的域可以是：宇宙、已声明归纳族（`{n : Nat}` 这类索引），或**高阶 kind**
 -- （`{f : Type -> Type}`，M19 起 `trait Mapper f` 需要）。其它类型（Int/String/…）仍
 -- 拒绝：隐式实参不参与运行时计算。
 isIndexDomain : Ec -> Value -> Bool
@@ -1903,56 +1901,36 @@ inferArgsGo globals ctx ec ty args sp =
   let
     forced = forceVal ec ty
   in case forced of
-    VPi name implicit rig dom clo => if implicit then if isDictDomain ec dom then andThen (constrainDictDom globals ec ctx dom args sp) (\ec0 => if hasUnsolvedMetaValue ec0 (forceVal ec0 dom) then
-      let
-        -- 字典参数：域里若还有未解元变量（`Dict_C ?a`），先用「后面紧跟的显式实参」
-        -- 去约束它——把实参按域检查一遍（不消费），再搜索实例。这样 `pretty red`
-        -- 里 `?a` 会被 `red : Color` 定住成 `Color`。
-        pmeta = newMeta ctx ec0
-      in case pmeta of
-        Pair metaTerm ec1 =>
-          let
-            metaVal = eval (ctxEnv ctx) metaTerm
-            ty2 = applyClosure clo metaVal
-          in andThen (inferArgsGo globals ctx ec1 ty2 args sp) (\p => case p of
-            Pair argTerms (Pair resTy ec2) =>
-              Ok (Pair (Pair metaTerm Rig1 :: argTerms) (Pair resTy ec2))
-          )
-    else andThen (searchInstance ec0 (forceVal ec0 dom) sp) (\p => case p of
-      Pair instTerm ec1 =>
+    VPi name implicit rig dom clo => if implicit then if isDictDomain ec dom then andThen (constrainDictDom globals ec ctx dom args sp) (\ec0 => case searchInstance ec0 (forceVal ec0 dom) sp of
+      Ok (Pair instTerm ec1) =>
         let
           ty2 = applyClosure clo (evalCtx ctx instTerm)
         in andThen (inferArgsGo globals ctx ec1 ty2 args sp) (\q => case q of
           Pair argTerms (Pair resTy ec2) =>
             Ok (Pair (Pair instTerm Rig1 :: argTerms) (Pair resTy ec2))
         )
+      Err e => if hasUnsolvedMetaValue ec0 (forceVal ec0 dom) then case newMeta ctx ec0 of
+        -- 类参数未解且无唯一实例：延迟成普通元变量，等 `?a` 被结果类型 /
+        -- 其它约束解了再回填（见 `resolveDictGoals`；`mem` 的刚性 `a` 也走这里）。
+        Pair metaTerm ec1 => andThen (inferArgsGo globals ctx ec1 (applyClosure clo (eval (ctxEnv ctx) metaTerm)) args sp) (\p => case p of
+          Pair argTerms (Pair resTy ec2) =>
+            Ok (Pair (Pair metaTerm Rig1 :: argTerms) (Pair resTy ec2))
+        )
+      else Err e
     )
-    )
-    else if isIndexDomain ec dom then
-      let
-        pmeta = newMeta ctx ec
-      in case pmeta of
-        Pair metaTerm ec1 =>
-          let
-            metaVal = eval (ctxEnv ctx) metaTerm
-            erased = Rig0
-            ty2 = applyClosure clo metaVal
-          in andThen (inferArgsGo globals ctx ec1 ty2 args sp) (\p => case p of
-            Pair argTerms (Pair resTy ec2) =>
-              Ok (Pair (Pair metaTerm erased :: argTerms) (Pair resTy ec2))
-          )
+    else if isIndexDomain ec dom then case newMeta ctx ec of
+      Pair metaTerm ec1 => andThen (inferArgsGo globals ctx ec1 (applyClosure clo (eval (ctxEnv ctx) metaTerm)) args sp) (\p => case p of
+        Pair argTerms (Pair resTy ec2) =>
+          Ok (Pair (Pair metaTerm Rig0 :: argTerms) (Pair resTy ec2))
+      )
     else errAt sp "DT: implicit parameters must be types or inductive families (M15)"
     else case args of
       [] => Ok (Pair [] (Pair forced ec))
       a :: rest => andThen (checkE globals ctx ec a dom) (\p => case p of
-        Pair aTerm ec1 =>
-          let
-            erased = typeLayerRig False dom
-            ty2 = applyClosure clo (evalCtx ctx aTerm)
-          in andThen (inferArgsGo globals ctx ec1 ty2 rest sp) (\q => case q of
-            Pair argTerms (Pair resTy ec2) =>
-              Ok (Pair (Pair aTerm erased :: argTerms) (Pair resTy ec2))
-          )
+        Pair aTerm ec1 => andThen (inferArgsGo globals ctx ec1 (applyClosure clo (evalCtx ctx aTerm)) rest sp) (\q => case q of
+          Pair argTerms (Pair resTy ec2) =>
+            Ok (Pair (Pair aTerm (typeLayerRig False dom) :: argTerms) (Pair resTy ec2))
+        )
       )
     _ => case args of
       [] => Ok (Pair [] (Pair forced ec))
@@ -1981,8 +1959,10 @@ searchInstance ec dom sp = case filterInstances ec dom (ecInsts ec) (ecSols ec) 
     errAt sp
       ("DT: ambiguous instance for " ++ showValue dom ++ " (candidates: " ++ joinInstNames cands ++ ")")
 
--- 实例表筛选（M22）：只接受**不新增解**的头匹配——否则 `conv` 会把 `Dict_C ?a` 的 `?a`
--- 顺手解成第一个候选的参数，同 trait 第二个实例永远匹配不上。约束交给 `constrainDictDom`。
+-- 实例表筛选（M22）：接受**可新增解**的头匹配——`Dict_C ?a`（`?a` 未解）与实例头
+-- `Dict_C IO` 统一会解出 `?a = IO`，这正是「约束求解」：字典约束本身确定类参数。
+-- 每个候选都对照**同一份初始 sols** 试匹配（不把前一个候选的解带进下一个），
+-- 否则 `?a` 被第一个候选定死，第二个候选永远匹配不上、歧义漏检。
 filterInstances : Ec -> Value -> List DtInst -> List (Pair Int Value) -> Pair (List DtInst) (List (Pair Int Value))
 filterInstances ec dom [] sols = Pair [] sols
 filterInstances ec dom (i :: rest) sols =
@@ -1990,9 +1970,8 @@ filterInstances ec dom (i :: rest) sols =
     hd = forceVal ec (eval [] (dtInstHead i))
   in case conv (ecDefs ec) sols 0 dom hd of
     Err e => filterInstances ec dom rest sols
-    Ok sols2 => if length sols2 == length sols then case filterInstances ec dom rest sols2 of
-      Pair more final => Pair (i :: more) final
-    else filterInstances ec dom rest sols
+    Ok sols2 => case filterInstances ec dom rest sols of
+      Pair more final => Pair (i :: more) sols2
 
 joinInstNames : List DtInst -> String
 joinInstNames [] = ""
@@ -2002,41 +1981,68 @@ joinRestInstNames : List DtInst -> String
 joinRestInstNames [] = ""
 joinRestInstNames (i :: rest) = ", " ++ dtInstName i ++ joinRestInstNames rest
 
--- 用后续显式实参约束 `Dict_C ?a` 里的类参数：跳过类型实参（会把 `?a` 解成 `Int`）、
--- 把实参类型收缩到应用头部（类参数只可能是构造器形态，高阶 kind 的实例头写构造器）。
+-- 用后续显式实参约束 `Dict_C ?a` 里的类参数。M22：先取字典族的**类参数 kind**，
+-- 实参头部与它 kind 不匹配（`Monad ?m` 被 `41 : Int` 解成 `?m = Int`）或头部不是
+-- 具体构造子（`?m' Int`）就不约束——类参数由字典实例 / 结果类型决定。
 constrainDictDom : List (Pair String Term) -> Ec -> Ctx -> Value -> List Expr -> Span -> Result Ec
 constrainDictDom globals ec ctx dom args sp = case dictClassArg ec dom of
   Nothing => Ok ec
-  Just argTy => constrainDictDomGo globals ec ctx argTy args sp
+  Just argTy => case dictArgKind ec dom of
+    Nothing => Ok ec
+    Just argKind => constrainDictDomGoK globals ec ctx argTy argKind args sp
 
-constrainDictDomGo : List (Pair String Term) -> Ec -> Ctx -> Value -> List Expr -> Span -> Result Ec
-constrainDictDomGo globals ec ctx argTy args sp = case args of
+-- 字典族的类参数 kind：字典 data `Dict_C` 的构造子类型第一个 binder 的域
+-- （`MkDict_C : {p : K} -> <字段>` 里的 `K`）。
+dictArgKind : Ec -> Value -> Maybe Value
+dictArgKind ec dom = case dictFamilyNameOf ec dom of
+  Nothing => Nothing
+  Just fam => case dtDataLookup fam (ecDatas ec) of
+    Nothing => Nothing
+    Just dd => case dtDataCtors dd of
+      [] => Nothing
+      c :: _ => case forceVal ec (eval [] (dtCtorType c)) of
+        VPi name implicit rig domK clo => Just domK
+        _ => Nothing
+
+dictFamilyNameOf : Ec -> Value -> Maybe String
+dictFamilyNameOf ec dom = case forceVal ec dom of
+  VNeutral (NGlobal g sp) => Just g
+  _ => Nothing
+
+constrainDictDomGoK : List (Pair String Term) -> Ec -> Ctx -> Value -> Value -> List Expr -> Span -> Result Ec
+constrainDictDomGoK globals ec ctx argTy argKind args sp = case args of
   [] => Ok ec
   a :: rest => case inferE globals ctx ec a of
     Err e => Ok ec
     Ok (Pair aTerm (Pair aTy ec1)) =>
       let
         forced = forceVal ec1 aTy
-      in if isTypeValue forced then constrainDictDomGo globals ec1 ctx argTy rest sp
-      else case convEc ec1 (ctxDepth ctx) argTy (neutralHeadOrSelf forced) of
+      in if isTypeValue forced then constrainDictDomGoK globals ec1 ctx argTy argKind rest sp
+      else if argHeadMatchesKind globals ec1 ctx forced argKind then case convEc ec1 (ctxDepth ctx) argTy (neutralHeadOrSelf forced) of
         Ok ec2 => Ok ec2
-        Err e => constrainDictDomGo globals ec1 ctx argTy rest sp
+        Err e => constrainDictDomGoK globals ec1 ctx argTy argKind rest sp
+      else constrainDictDomGoK globals ec1 ctx argTy argKind rest sp
+
+-- 实参头部 `g` 的 kind 与类参数 kind 一致（`Color` 对 `Show`，`IO` 对 `Monad`）才约束。
+-- 头部是元变量（`?m' Int`）或 Pi 都不是具体构造子 ⇒ 不约束。
+argHeadMatchesKind : List (Pair String Term) -> Ec -> Ctx -> Value -> Value -> Bool
+argHeadMatchesKind globals ec ctx forced argKind = case neutralHeadOrSelf forced of
+  VNeutral (NGlobal g []) => case globalLookup g globals of
+    Just dictSig => case convEc ec (ctxDepth ctx) argKind (forceVal ec (eval [] dictSig)) of
+      Ok ec2 => True
+      Err e => False
+    Nothing => True
+  _ => False
 
 -- 中性应用的头部（`Box Int` ⇒ `Box`）；非应用原样返回。
 neutralHeadOrSelf : Value -> Value
 neutralHeadOrSelf v = case v of
-  VNeutral n => case n of
-    NGlobal g (_ :: _) => VNeutral (NGlobal g [])
-    _ => v
+  VNeutral (NGlobal g (_ :: _)) => VNeutral (NGlobal g [])
   _ => v
 
 dictClassArg : Ec -> Value -> Maybe Value
 dictClassArg ec dom = case forceVal ec dom of
-  VNeutral n => case n of
-    NGlobal g sp => case sp of
-      [arg] => Just arg
-      _ => Nothing
-    _ => Nothing
+  VNeutral (NGlobal g ([arg])) => Just arg
   _ => Nothing
 
 -- 域里是否还有未解元变量（用于判断字典参数此刻能否搜索实例）。
@@ -2087,17 +2093,9 @@ checkE globals ctx ec expr expected = case expr of
 -- ---------------------------------------------------------------
 -- M19：`let` 表达式
 -- ---------------------------------------------------------------
---
--- 逐条处理：推断绑定值的类型 → 在上下文里绑上名字 → 处理后续绑定与 body →
--- 产出 `(\x => body) value`（beta 等价）。**不在 Core 里加 TLet**：`let` 是纯记法，
--- 不是类型论构造（QTT 与擦除判据都不需要单独认识它）；`rig` 由绑定值的类型经
--- `binderRig` 决定，因此「let 绑定的擦除行为」与「函数参数」自动一致。
---
--- 作用域：后续绑定能看到前面的绑定（顺序 let），不互相递归。`where` 块 desugar 出的
--- `rec_ = True` 走同一条路径——本仓库当前没有 `where` 块（0 处），互递归 let 留到
--- M23 迁移时按实际需要补。
---
--- 局限：绑定左端只接受简单变量或通配；构造子模式 let 等价于 case，随嵌套模式一起做。
+-- 逐条处理：推断绑定值 → 上下文绑名 → 处理后续与 body → `(\x => body) value`（beta 等价）。
+-- 不引入 `TLet`（`let` 是纯记法，不是类型论构造）；`rig` 由绑定值类型经 `binderRig` 决定，
+-- 与函数参数自动一致。后续绑定可见前面（顺序 let），不互递归；构造子模式 let 等价 case。
 checkLet : List (Pair String Term) -> Ctx -> Ec -> List (Pair Pat Expr) -> Expr -> Bool -> Value -> Span -> Result (Pair Term Ec)
 checkLet globals ctx ec binds body rec_ expected sp =
   checkLetGo globals ctx ec binds body rec_ expected sp
@@ -2275,22 +2273,10 @@ checkAppCtor globals ctx ec name args expected sp = case globalLookup name globa
 -- ---------------------------------------------------------------
 -- M19：多 clause 与方程左端模式
 -- ---------------------------------------------------------------
---
--- 把 `plus Zero b = b` / `plus (Succ k) b = Succ (plus k b)` 合成为单个项：
---
---   plus = \mc0 => \mc1 => case mc0 of
---     Zero => mc1
---     Succ k => Succ (plus k mc1)
---
--- 两步：① 按参数个数生成 lambda 链（位置名 `mc<i>`，与签名的 Pi 链逐个对齐）；
--- ② 在体内按**列**递归构建 case 树（标准模式矩阵）：
---    - 整列都是变量 → 把该列用户写的名字改写成位置名，剥掉该列继续；
---    - 该列有构造子 → 用该位置名作 scrutinee 生成 case；同一构造子的多个 clause
---      把模式替换成它的子模式后递归（所以 `f (Just x)` 与 `f (Just (Just y))` 能共存），
---      变量/通配 clause 汇成兜底分支。
---
--- 生成的是纯 lambda + case 表达式，交给既有精化路径检查——覆盖检查、索引合一、
--- 擦除判定全部自动生效，不需要新的精化规则。
+-- 把 `plus Zero b = b` / `plus (Succ k) b = Succ (plus k b)` 合成：`\mc0 => \mc1 => case mc0 of ...`。
+-- 两步：① 按参数个数生成 lambda 链（`mc<i>` 与签名 Pi 链对齐）；② 按**列**递归构建 case 树
+-- （标准模式矩阵：整列变量改名继续；有构造子则用该位置名作 scrutinee，同构造子的子模式递归，
+-- 变量/通配汇成兜底）。产物是纯 lambda + case，交给既有精化路径，覆盖/索引/擦除全自动。
 elabFunDef : List (Pair String Term) -> Ec -> List (Pair (List Pat) Expr) -> Value -> Span -> Result (Pair Term Ec)
 elabFunDef globals ec clauses expected sp = case clauses of
   [] => errAt sp "DT: function has no clauses"

@@ -21,6 +21,11 @@ open Vuna_dCompiler_dTypecheck
 open Vuna_dCompiler_dSplit
 open Vuna_dCompiler_dTypedCodegen
 open Vuna_dCompiler_dCore
+open Vuna_dCompiler_dDtPrelude
+open Vuna_dCompiler_dDtKind
+open Vuna_dCompiler_dDtQuant
+open Vuna_dCompiler_dDtDerive
+open Vuna_dCompiler_dDtRecords
 open Vuna_dCompiler_dElab
 open Vuna_dCompiler_dCoreCodegen
 open Vuna_dCompiler_dDt
@@ -67,6 +72,6 @@ let v_Vuna_dCompiler_dCompile_dcheckPackageIn = fun entryPkg roots names -> (mat
   | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Compile.vuna" 52 17 ("case pattern match failure"))
   | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Compile.vuna" 50 39 ("case pattern match failure"))
 
-let v_Vuna_dCompiler_dCompile_dcompileFileDt = fun entry printResult -> v_Vuna_dCompiler_dDt_ddtCompileFile entry printResult
+let v_Vuna_dCompiler_dCompile_dcompileFileDt = fun roots entry printResult -> v_Vuna_dCompiler_dDt_ddtCompileFile roots entry printResult
 
-let v_Vuna_dCompiler_dCompile_dcheckFileDt = fun entry -> v_Vuna_dCompiler_dDt_ddtCheckFile entry
+let v_Vuna_dCompiler_dCompile_dcheckFileDt = fun roots entry -> v_Vuna_dCompiler_dDt_ddtCheckFile roots entry

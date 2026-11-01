@@ -21,6 +21,11 @@ open Vuna_dCompiler_dTypecheck
 open Vuna_dCompiler_dSplit
 open Vuna_dCompiler_dTypedCodegen
 open Vuna_dCompiler_dCore
+open Vuna_dCompiler_dDtPrelude
+open Vuna_dCompiler_dDtKind
+open Vuna_dCompiler_dDtQuant
+open Vuna_dCompiler_dDtDerive
+open Vuna_dCompiler_dDtRecords
 open Vuna_dCompiler_dElab
 type t_Vuna_dCompiler_dCoreCodegen_dGenSt
 and t_Vuna_dCompiler_dCoreCodegen_dAltEnv

@@ -21,8 +21,13 @@ open Vuna_dCompiler_dTypecheck
 open Vuna_dCompiler_dSplit
 open Vuna_dCompiler_dTypedCodegen
 open Vuna_dCompiler_dCore
+open Vuna_dCompiler_dDtPrelude
+open Vuna_dCompiler_dDtKind
+open Vuna_dCompiler_dDtQuant
+open Vuna_dCompiler_dDtDerive
+open Vuna_dCompiler_dDtRecords
 open Vuna_dCompiler_dElab
 open Vuna_dCompiler_dCoreCodegen
-val v_Vuna_dCompiler_dDt_ddtCheckFile : (string) -> (((string) list) t_Base_dResult_dResult)
-val v_Vuna_dCompiler_dDt_ddtCompileFile : (string) -> ((bool) -> ((string) t_Base_dResult_dResult))
-val v_Vuna_dCompiler_dDt_ddtEvalFile : (string) -> ((string) t_Base_dResult_dResult)
+val v_Vuna_dCompiler_dDt_ddtCheckFile : ((string) list) -> ((string) -> (((string) list) t_Base_dResult_dResult))
+val v_Vuna_dCompiler_dDt_ddtCompileFile : ((string) list) -> ((string) -> ((bool) -> ((string) t_Base_dResult_dResult)))
+val v_Vuna_dCompiler_dDt_ddtEvalFile : ((string) list) -> ((string) -> ((string) t_Base_dResult_dResult))

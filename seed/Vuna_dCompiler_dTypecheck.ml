@@ -2442,21 +2442,21 @@ let rec v_vuna_ueq_uVuna_uCompiler_uTypecheck_uTy = fun x y -> (match x with
   | C_Vuna_dCompiler_dTypecheck_dTVar (v0) -> (match y with
   | C_Vuna_dCompiler_dTypecheck_dTVar (w0) -> v_vuna_ueq_uint v0 w0
   | _ -> v_vuna_ueq_uint 0 1
-  | _ -> vuna_fail "<generated>" 43 38 ("case pattern match failure"))
+  | _ -> vuna_fail "<generated>" 95 38 ("case pattern match failure"))
   | C_Vuna_dCompiler_dTypecheck_dTCon (v0, v1) -> (match y with
   | C_Vuna_dCompiler_dTypecheck_dTCon (w0, w1) -> (if (v_vuna_ueq_ustr v0 w0) then (v_vuna_ueq_uBase_uList_uList v1 w1) else false)
   | _ -> v_vuna_ueq_uint 0 1
-  | _ -> vuna_fail "<generated>" 46 41 ("case pattern match failure"))
+  | _ -> vuna_fail "<generated>" 98 41 ("case pattern match failure"))
   | C_Vuna_dCompiler_dTypecheck_dTFun (v0, v1) -> (match y with
   | C_Vuna_dCompiler_dTypecheck_dTFun (w0, w1) -> (if (v_vuna_ueq_uVuna_uCompiler_uTypecheck_uTy v0 w0) then (v_vuna_ueq_uVuna_uCompiler_uTypecheck_uTy v1 w1) else false)
   | _ -> v_vuna_ueq_uint 0 1
-  | _ -> vuna_fail "<generated>" 49 41 ("case pattern match failure"))
+  | _ -> vuna_fail "<generated>" 101 41 ("case pattern match failure"))
   | C_Vuna_dCompiler_dTypecheck_dTApp (v0, v1) -> (match y with
   | C_Vuna_dCompiler_dTypecheck_dTApp (w0, w1) -> (if (v_vuna_ueq_uVuna_uCompiler_uTypecheck_uTy v0 w0) then (v_vuna_ueq_uBase_uList_uList v1 w1) else false)
   | _ -> v_vuna_ueq_uint 0 1
-  | _ -> vuna_fail "<generated>" 52 41 ("case pattern match failure"))
+  | _ -> vuna_fail "<generated>" 104 41 ("case pattern match failure"))
   | _ -> v_vuna_ueq_uint 0 1
-  | _ -> vuna_fail "<generated>" 42 42 ("case pattern match failure"))
+  | _ -> vuna_fail "<generated>" 94 42 ("case pattern match failure"))
 
 let v_vuna_uneq_uVuna_uCompiler_uTypecheck_uTy = fun x y -> if v_vuna_ueq_uVuna_uCompiler_uTypecheck_uTy x y then v_vuna_ueq_uint 0 1 else v_vuna_ueq_uint 0 0
 
@@ -2464,9 +2464,9 @@ let v_vuna_ueq_uVuna_uCompiler_uTypecheck_uScheme = fun x y -> (match x with
   | C_Vuna_dCompiler_dTypecheck_dScheme (v0, v1, v2) -> (match y with
   | C_Vuna_dCompiler_dTypecheck_dScheme (w0, w1, w2) -> (if ((if (v_vuna_ueq_uBase_uList_uList v0 w0) then (v_vuna_ueq_uBase_uList_uList v1 w1) else false)) then (v_vuna_ueq_uVuna_uCompiler_uTypecheck_uTy v2 w2) else false)
   | _ -> v_vuna_ueq_uint 0 1
-  | _ -> vuna_fail "<generated>" 61 46 ("case pattern match failure"))
+  | _ -> vuna_fail "<generated>" 113 46 ("case pattern match failure"))
   | _ -> v_vuna_ueq_uint 0 1
-  | _ -> vuna_fail "<generated>" 60 46 ("case pattern match failure"))
+  | _ -> vuna_fail "<generated>" 112 46 ("case pattern match failure"))
 
 let v_vuna_uneq_uVuna_uCompiler_uTypecheck_uScheme = fun x y -> if v_vuna_ueq_uVuna_uCompiler_uTypecheck_uScheme x y then v_vuna_ueq_uint 0 1 else v_vuna_ueq_uint 0 0
 
@@ -2474,13 +2474,13 @@ let v_vuna_ueq_uVuna_uCompiler_uTypecheck_uRecConstraint = fun x y -> (match x w
   | C_Vuna_dCompiler_dTypecheck_dFieldCon (v0, v1, v2, v3) -> (match y with
   | C_Vuna_dCompiler_dTypecheck_dFieldCon (w0, w1, w2, w3) -> (if ((if ((if (v_vuna_ueq_uVuna_uCompiler_uTypecheck_uTy v0 w0) then (v_vuna_ueq_ustr v1 w1) else false)) then (v_vuna_ueq_uVuna_uCompiler_uTypecheck_uTy v2 w2) else false)) then (v_vuna_ueq_uVuna_uCompiler_uCommon_uSpan v3 w3) else false)
   | _ -> v_vuna_ueq_uint 0 1
-  | _ -> vuna_fail "<generated>" 70 51 ("case pattern match failure"))
+  | _ -> vuna_fail "<generated>" 122 51 ("case pattern match failure"))
   | C_Vuna_dCompiler_dTypecheck_dUpdateCon (v0, v1, v2, v3) -> (match y with
   | C_Vuna_dCompiler_dTypecheck_dUpdateCon (w0, w1, w2, w3) -> (if ((if ((if (v_vuna_ueq_uVuna_uCompiler_uTypecheck_uTy v0 w0) then (v_vuna_ueq_ustr v1 w1) else false)) then (v_vuna_ueq_uVuna_uCompiler_uTypecheck_uTy v2 w2) else false)) then (v_vuna_ueq_uVuna_uCompiler_uCommon_uSpan v3 w3) else false)
   | _ -> v_vuna_ueq_uint 0 1
-  | _ -> vuna_fail "<generated>" 73 52 ("case pattern match failure"))
+  | _ -> vuna_fail "<generated>" 125 52 ("case pattern match failure"))
   | _ -> v_vuna_ueq_uint 0 1
-  | _ -> vuna_fail "<generated>" 69 53 ("case pattern match failure"))
+  | _ -> vuna_fail "<generated>" 121 53 ("case pattern match failure"))
 
 let v_vuna_uneq_uVuna_uCompiler_uTypecheck_uRecConstraint = fun x y -> if v_vuna_ueq_uVuna_uCompiler_uTypecheck_uRecConstraint x y then v_vuna_ueq_uint 0 1 else v_vuna_ueq_uint 0 0
 
@@ -2488,13 +2488,13 @@ let rec v_vuna_ueq_uVuna_uCompiler_uTypecheck_uTySubst = fun x y -> (match x wit
   | C_Vuna_dCompiler_dTypecheck_dTsLeaf -> (match y with
   | C_Vuna_dCompiler_dTypecheck_dTsLeaf -> v_vuna_ueq_uint 0 0
   | _ -> v_vuna_ueq_uint 0 1
-  | _ -> vuna_fail "<generated>" 82 37 ("case pattern match failure"))
+  | _ -> vuna_fail "<generated>" 134 37 ("case pattern match failure"))
   | C_Vuna_dCompiler_dTypecheck_dTsNode (v0, v1, v2, v3, v4) -> (match y with
   | C_Vuna_dCompiler_dTypecheck_dTsNode (w0, w1, w2, w3, w4) -> (if ((if ((if ((if (v_vuna_ueq_uint v0 w0) then (v_vuna_ueq_uVuna_uCompiler_uTypecheck_uTy v1 w1) else false)) then (v_vuna_ueq_uint v2 w2) else false)) then (v_vuna_ueq_uVuna_uCompiler_uTypecheck_uTySubst v3 w3) else false)) then (v_vuna_ueq_uVuna_uCompiler_uTypecheck_uTySubst v4 w4) else false)
   | _ -> v_vuna_ueq_uint 0 1
-  | _ -> vuna_fail "<generated>" 85 52 ("case pattern match failure"))
+  | _ -> vuna_fail "<generated>" 137 52 ("case pattern match failure"))
   | _ -> v_vuna_ueq_uint 0 1
-  | _ -> vuna_fail "<generated>" 81 47 ("case pattern match failure"))
+  | _ -> vuna_fail "<generated>" 133 47 ("case pattern match failure"))
 
 let v_vuna_uneq_uVuna_uCompiler_uTypecheck_uTySubst = fun x y -> if v_vuna_ueq_uVuna_uCompiler_uTypecheck_uTySubst x y then v_vuna_ueq_uint 0 1 else v_vuna_ueq_uint 0 0
 
@@ -2502,71 +2502,71 @@ let rec v_vuna_ueq_uVuna_uCompiler_uTypecheck_uEExpr = fun x y -> (match x with
   | C_Vuna_dCompiler_dTypecheck_dXEVar (v0, v1) -> (match y with
   | C_Vuna_dCompiler_dTypecheck_dXEVar (w0, w1) -> (if (v_vuna_ueq_ustr v0 w0) then (v_vuna_ueq_uVuna_uCompiler_uCommon_uSpan v1 w1) else false)
   | _ -> v_vuna_ueq_uint 0 1
-  | _ -> vuna_fail "<generated>" 94 42 ("case pattern match failure"))
+  | _ -> vuna_fail "<generated>" 146 42 ("case pattern match failure"))
   | C_Vuna_dCompiler_dTypecheck_dXEInt (v0, v1) -> (match y with
   | C_Vuna_dCompiler_dTypecheck_dXEInt (w0, w1) -> (if (v_vuna_ueq_uint v0 w0) then (v_vuna_ueq_uVuna_uCompiler_uCommon_uSpan v1 w1) else false)
   | _ -> v_vuna_ueq_uint 0 1
-  | _ -> vuna_fail "<generated>" 97 42 ("case pattern match failure"))
+  | _ -> vuna_fail "<generated>" 149 42 ("case pattern match failure"))
   | C_Vuna_dCompiler_dTypecheck_dXEStr (v0, v1) -> (match y with
   | C_Vuna_dCompiler_dTypecheck_dXEStr (w0, w1) -> (if (v_vuna_ueq_ustr v0 w0) then (v_vuna_ueq_uVuna_uCompiler_uCommon_uSpan v1 w1) else false)
   | _ -> v_vuna_ueq_uint 0 1
-  | _ -> vuna_fail "<generated>" 100 42 ("case pattern match failure"))
+  | _ -> vuna_fail "<generated>" 152 42 ("case pattern match failure"))
   | C_Vuna_dCompiler_dTypecheck_dXELam (v0, v1, v2) -> (match y with
   | C_Vuna_dCompiler_dTypecheck_dXELam (w0, w1, w2) -> (if ((if (v_vuna_ueq_uBase_uList_uList v0 w0) then (v_vuna_ueq_uVuna_uCompiler_uTypecheck_uEExpr v1 w1) else false)) then (v_vuna_ueq_uVuna_uCompiler_uCommon_uSpan v2 w2) else false)
   | _ -> v_vuna_ueq_uint 0 1
-  | _ -> vuna_fail "<generated>" 103 45 ("case pattern match failure"))
+  | _ -> vuna_fail "<generated>" 155 45 ("case pattern match failure"))
   | C_Vuna_dCompiler_dTypecheck_dXEApp (v0, v1, v2) -> (match y with
   | C_Vuna_dCompiler_dTypecheck_dXEApp (w0, w1, w2) -> (if ((if (v_vuna_ueq_uVuna_uCompiler_uTypecheck_uEExpr v0 w0) then (v_vuna_ueq_uBase_uList_uList v1 w1) else false)) then (v_vuna_ueq_uVuna_uCompiler_uCommon_uSpan v2 w2) else false)
   | _ -> v_vuna_ueq_uint 0 1
-  | _ -> vuna_fail "<generated>" 106 45 ("case pattern match failure"))
+  | _ -> vuna_fail "<generated>" 158 45 ("case pattern match failure"))
   | C_Vuna_dCompiler_dTypecheck_dXELet (v0, v1, v2, v3) -> (match y with
   | C_Vuna_dCompiler_dTypecheck_dXELet (w0, w1, w2, w3) -> (if ((if ((if (v_vuna_ueq_uBase_uList_uList v0 w0) then (v_vuna_ueq_uVuna_uCompiler_uTypecheck_uEExpr v1 w1) else false)) then (v_vuna_ueq_ubool v2 w2) else false)) then (v_vuna_ueq_uVuna_uCompiler_uCommon_uSpan v3 w3) else false)
   | _ -> v_vuna_ueq_uint 0 1
-  | _ -> vuna_fail "<generated>" 109 48 ("case pattern match failure"))
+  | _ -> vuna_fail "<generated>" 161 48 ("case pattern match failure"))
   | C_Vuna_dCompiler_dTypecheck_dXECase (v0, v1, v2, v3) -> (match y with
   | C_Vuna_dCompiler_dTypecheck_dXECase (w0, w1, w2, w3) -> (if ((if ((if (v_vuna_ueq_uVuna_uCompiler_uTypecheck_uEExpr v0 w0) then (v_vuna_ueq_uVuna_uCompiler_uTypecheck_uTy v1 w1) else false)) then (v_vuna_ueq_uBase_uList_uList v2 w2) else false)) then (v_vuna_ueq_uVuna_uCompiler_uCommon_uSpan v3 w3) else false)
   | _ -> v_vuna_ueq_uint 0 1
-  | _ -> vuna_fail "<generated>" 112 49 ("case pattern match failure"))
+  | _ -> vuna_fail "<generated>" 164 49 ("case pattern match failure"))
   | C_Vuna_dCompiler_dTypecheck_dXEIf (v0, v1, v2, v3) -> (match y with
   | C_Vuna_dCompiler_dTypecheck_dXEIf (w0, w1, w2, w3) -> (if ((if ((if (v_vuna_ueq_uVuna_uCompiler_uTypecheck_uEExpr v0 w0) then (v_vuna_ueq_uVuna_uCompiler_uTypecheck_uEExpr v1 w1) else false)) then (v_vuna_ueq_uVuna_uCompiler_uTypecheck_uEExpr v2 w2) else false)) then (v_vuna_ueq_uVuna_uCompiler_uCommon_uSpan v3 w3) else false)
   | _ -> v_vuna_ueq_uint 0 1
-  | _ -> vuna_fail "<generated>" 115 47 ("case pattern match failure"))
+  | _ -> vuna_fail "<generated>" 167 47 ("case pattern match failure"))
   | C_Vuna_dCompiler_dTypecheck_dXEField (v0, v1, v2, v3) -> (match y with
   | C_Vuna_dCompiler_dTypecheck_dXEField (w0, w1, w2, w3) -> (if ((if ((if (v_vuna_ueq_uVuna_uCompiler_uTypecheck_uEExpr v0 w0) then (v_vuna_ueq_ustr v1 w1) else false)) then (v_vuna_ueq_uVuna_uCompiler_uTypecheck_uTy v2 w2) else false)) then (v_vuna_ueq_uVuna_uCompiler_uCommon_uSpan v3 w3) else false)
   | _ -> v_vuna_ueq_uint 0 1
-  | _ -> vuna_fail "<generated>" 118 50 ("case pattern match failure"))
+  | _ -> vuna_fail "<generated>" 170 50 ("case pattern match failure"))
   | C_Vuna_dCompiler_dTypecheck_dXERecUpdate (v0, v1, v2, v3) -> (match y with
   | C_Vuna_dCompiler_dTypecheck_dXERecUpdate (w0, w1, w2, w3) -> (if ((if ((if (v_vuna_ueq_uVuna_uCompiler_uTypecheck_uEExpr v0 w0) then (v_vuna_ueq_uVuna_uCompiler_uTypecheck_uTy v1 w1) else false)) then (v_vuna_ueq_uBase_uList_uList v2 w2) else false)) then (v_vuna_ueq_uVuna_uCompiler_uCommon_uSpan v3 w3) else false)
   | _ -> v_vuna_ueq_uint 0 1
-  | _ -> vuna_fail "<generated>" 121 54 ("case pattern match failure"))
+  | _ -> vuna_fail "<generated>" 173 54 ("case pattern match failure"))
   | C_Vuna_dCompiler_dTypecheck_dXEFun (v0, v1, v2) -> (match y with
   | C_Vuna_dCompiler_dTypecheck_dXEFun (w0, w1, w2) -> (if ((if (v_vuna_ueq_ustr v0 w0) then (v_vuna_ueq_uBase_uList_uList v1 w1) else false)) then (v_vuna_ueq_uVuna_uCompiler_uCommon_uSpan v2 w2) else false)
   | _ -> v_vuna_ueq_uint 0 1
-  | _ -> vuna_fail "<generated>" 124 45 ("case pattern match failure"))
+  | _ -> vuna_fail "<generated>" 176 45 ("case pattern match failure"))
   | C_Vuna_dCompiler_dTypecheck_dXEMethod (v0, v1, v2, v3) -> (match y with
   | C_Vuna_dCompiler_dTypecheck_dXEMethod (w0, w1, w2, w3) -> (if ((if ((if (v_vuna_ueq_ustr v0 w0) then (v_vuna_ueq_ustr v1 w1) else false)) then (v_vuna_ueq_uVuna_uCompiler_uTypecheck_uTy v2 w2) else false)) then (v_vuna_ueq_uVuna_uCompiler_uCommon_uSpan v3 w3) else false)
   | _ -> v_vuna_ueq_uint 0 1
-  | _ -> vuna_fail "<generated>" 127 51 ("case pattern match failure"))
+  | _ -> vuna_fail "<generated>" 179 51 ("case pattern match failure"))
   | C_Vuna_dCompiler_dTypecheck_dXEMethodInst (v0, v1, v2, v3, v4) -> (match y with
   | C_Vuna_dCompiler_dTypecheck_dXEMethodInst (w0, w1, w2, w3, w4) -> (if ((if ((if ((if (v_vuna_ueq_ustr v0 w0) then (v_vuna_ueq_ustr v1 w1) else false)) then (v_vuna_ueq_ustr v2 w2) else false)) then (v_vuna_ueq_uVuna_uCompiler_uTypecheck_uTy v3 w3) else false)) then (v_vuna_ueq_uVuna_uCompiler_uCommon_uSpan v4 w4) else false)
   | _ -> v_vuna_ueq_uint 0 1
-  | _ -> vuna_fail "<generated>" 130 58 ("case pattern match failure"))
+  | _ -> vuna_fail "<generated>" 182 58 ("case pattern match failure"))
   | _ -> v_vuna_ueq_uint 0 1
-  | _ -> vuna_fail "<generated>" 93 45 ("case pattern match failure"))
+  | _ -> vuna_fail "<generated>" 145 45 ("case pattern match failure"))
 
 let v_vuna_uneq_uVuna_uCompiler_uTypecheck_uEExpr = fun x y -> if v_vuna_ueq_uVuna_uCompiler_uTypecheck_uEExpr x y then v_vuna_ueq_uint 0 1 else v_vuna_ueq_uint 0 0
 
 let v_vuna_ushow_uVuna_uCompiler_uTypecheck_uDictParam = fun x -> (match x with
   | C_Vuna_dCompiler_dTypecheck_dDictParam (v0, v1, v2, v3) -> (let vuna_cat0' = ("(DictParam ") in (let vuna_cat1' = (v_vuna_ushow_ustring v0) in (let vuna_cat2' = (" ") in (let vuna_cat3' = (v_vuna_ushow_uint v1) in (let vuna_cat4' = (" ") in (let vuna_cat5' = (v_vuna_ushow_ustring v2) in (let vuna_cat6' = (" ") in (let vuna_cat7' = (v_vuna_ushow_ustring v3) in (let vuna_cat8' = (")") in String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'; vuna_cat3'; vuna_cat4'; vuna_cat5'; vuna_cat6'; vuna_cat7'; vuna_cat8'])))))))))
-  | _ -> vuna_fail "<generated>" 138 49 ("case pattern match failure"))
+  | _ -> vuna_fail "<generated>" 190 49 ("case pattern match failure"))
 
 let v_vuna_ueq_uVuna_uCompiler_uTypecheck_uDictParam = fun x y -> (match x with
   | C_Vuna_dCompiler_dTypecheck_dDictParam (v0, v1, v2, v3) -> (match y with
   | C_Vuna_dCompiler_dTypecheck_dDictParam (w0, w1, w2, w3) -> (if ((if ((if (v_vuna_ueq_ustr v0 w0) then (v_vuna_ueq_uint v1 w1) else false)) then (v_vuna_ueq_ustr v2 w2) else false)) then (v_vuna_ueq_ustr v3 w3) else false)
   | _ -> v_vuna_ueq_uint 0 1
-  | _ -> vuna_fail "<generated>" 143 52 ("case pattern match failure"))
+  | _ -> vuna_fail "<generated>" 195 52 ("case pattern match failure"))
   | _ -> v_vuna_ueq_uint 0 1
-  | _ -> vuna_fail "<generated>" 142 49 ("case pattern match failure"))
+  | _ -> vuna_fail "<generated>" 194 49 ("case pattern match failure"))
 
 let v_vuna_uneq_uVuna_uCompiler_uTypecheck_uDictParam = fun x y -> if v_vuna_ueq_uVuna_uCompiler_uTypecheck_uDictParam x y then v_vuna_ueq_uint 0 1 else v_vuna_ueq_uint 0 0
 
@@ -2574,9 +2574,9 @@ let v_vuna_ueq_uVuna_uCompiler_uTypecheck_uTraitMethodRef = fun x y -> (match x 
   | C_Vuna_dCompiler_dTypecheck_dTraitMethodRef (v0, v1, v2, v3) -> (match y with
   | C_Vuna_dCompiler_dTypecheck_dTraitMethodRef (w0, w1, w2, w3) -> (if ((if ((if (v_vuna_ueq_ustr v0 w0) then (v_vuna_ueq_ustr v1 w1) else false)) then (v_vuna_ueq_uVuna_uCompiler_uTypecheck_uScheme v2 w2) else false)) then (v_vuna_ueq_uint v3 w3) else false)
   | _ -> v_vuna_ueq_uint 0 1
-  | _ -> vuna_fail "<generated>" 152 57 ("case pattern match failure"))
+  | _ -> vuna_fail "<generated>" 204 57 ("case pattern match failure"))
   | _ -> v_vuna_ueq_uint 0 1
-  | _ -> vuna_fail "<generated>" 151 54 ("case pattern match failure"))
+  | _ -> vuna_fail "<generated>" 203 54 ("case pattern match failure"))
 
 let v_vuna_uneq_uVuna_uCompiler_uTypecheck_uTraitMethodRef = fun x y -> if v_vuna_ueq_uVuna_uCompiler_uTypecheck_uTraitMethodRef x y then v_vuna_ueq_uint 0 1 else v_vuna_ueq_uint 0 0
 
@@ -2584,8 +2584,8 @@ let v_vuna_ueq_uVuna_uCompiler_uTypecheck_uTraitInst = fun x y -> (match x with
   | C_Vuna_dCompiler_dTypecheck_dTraitInst (v0, v1, v2, v3) -> (match y with
   | C_Vuna_dCompiler_dTypecheck_dTraitInst (w0, w1, w2, w3) -> (if ((if ((if (v_vuna_ueq_ustr v0 w0) then (v_vuna_ueq_uBase_uMaybe_uMaybe v1 w1) else false)) then (v_vuna_ueq_uVuna_uCompiler_uTypecheck_uTy v2 w2) else false)) then (v_vuna_ueq_uBase_uList_uList v3 w3) else false)
   | _ -> v_vuna_ueq_uint 0 1
-  | _ -> vuna_fail "<generated>" 161 52 ("case pattern match failure"))
+  | _ -> vuna_fail "<generated>" 213 52 ("case pattern match failure"))
   | _ -> v_vuna_ueq_uint 0 1
-  | _ -> vuna_fail "<generated>" 160 49 ("case pattern match failure"))
+  | _ -> vuna_fail "<generated>" 212 49 ("case pattern match failure"))
 
 let v_vuna_uneq_uVuna_uCompiler_uTypecheck_uTraitInst = fun x y -> if v_vuna_ueq_uVuna_uCompiler_uTypecheck_uTraitInst x y then v_vuna_ueq_uint 0 1 else v_vuna_ueq_uint 0 0

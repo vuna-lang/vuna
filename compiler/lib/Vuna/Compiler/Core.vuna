@@ -596,6 +596,13 @@ mismatchAt depth a b =
 -- 一阶求解：spine 必须为空。解是 level 形态的 Value，可以提到当前上下文里的局部变量
 -- （M14 的索引精化需要 `n ↦ Zero` 这类提到分支绑定子的解）；是否越界由精化器按
 -- 上下文的允许 level 上界检查（见 Elab.solveIdx）。
+-- M13 扩展（更高阶）：`?m sp` 与 `rhs` 头一致时按 head 提取，元-元对齐时解 `?m`。
+splitAtVals : Int -> List Value -> Pair (List Value) (List Value)
+splitAtVals 0 xs = Pair [] xs
+splitAtVals n [] = Pair [] []
+splitAtVals n (x :: xs) = case splitAtVals (n - 1) xs of
+  Pair a b => Pair (x :: a) b
+
 solveMeta : List (Pair String Term) -> List (Pair Int Value) -> Int -> Int -> List Value -> Value -> Result (List (Pair Int Value))
 solveMeta defs sols depth m sp rhs = case sp of
   [] => case metaLookup m sols of
@@ -605,7 +612,36 @@ solveMeta defs sols depth m sp rhs = case sp of
         t = quote depth rhs
       in if hasMeta m 0 t then Err ("cannot solve metavariable ?" ++ strFromInt m ++ " (occurs check)")
       else Ok (Pair m rhs :: sols)
+  _ => solveMetaHo defs sols depth m sp rhs
+
+-- 更高阶求解（M13 扩展）：只在「头一致」的安全形状上做提取/对齐，其余仍报 M13。
+solveMetaHo : List (Pair String Term) -> List (Pair Int Value) -> Int -> Int -> List Value -> Value -> Result (List (Pair Int Value))
+solveMetaHo defs sols depth m sp rhs = case rhs of
+  VMeta n sp2 => case metaLookup n sols of
+    Just t => conv defs sols depth (applySpine (VMeta m sp) []) (applySpine t sp2)
+    Nothing =>
+      if m == n then convSpines defs sols depth sp sp2 (VMeta m sp) rhs
+      else andThen (solveMeta defs sols depth m [] (VMeta n []))
+        (\sols2 => convSpines defs sols2 depth sp sp2 (VMeta m sp) rhs)
+  -- `?m sp = ?m sp2`：同头，只统一 spine。
+  -- `?m sp = ?n sp2`：元-元对齐，`?m = ?n` 再统一 spine。
+  VNeutral n => case n of
+    NGlobal g args => solveMetaHead defs sols depth m sp (VNeutral n) (VNeutral (NGlobal g [])) args
+    NVar name level args =>
+      solveMetaHead defs sols depth m sp (VNeutral n) (VNeutral (NVar name level [])) args
+    _ => Err ("cannot solve higher-order metavariable ?" ++ strFromInt m ++ " (M13 limitation)")
   _ => Err ("cannot solve higher-order metavariable ?" ++ strFromInt m ++ " (M13 limitation)")
+
+-- `?m sp = head args`（|args| >= |sp|）：`?m = head (take extra args)` 再统一剩余 spine。
+solveMetaHead : List (Pair String Term) -> List (Pair Int Value) -> Int -> Int -> List Value -> Value -> Value -> List Value -> Result (List (Pair Int Value))
+solveMetaHead defs sols depth m sp whole headVal args = if length args >= length sp then
+  let
+    extra = length args - length sp
+  in case splitAtVals extra args of
+    Pair headArgs tailArgs =>
+      andThen (solveMeta defs sols depth m [] (applySpine headVal headArgs))
+        (\sols2 => convSpines defs sols2 depth sp tailArgs (VMeta m sp) whole)
+else Err ("cannot solve higher-order metavariable ?" ++ strFromInt m ++ " (M13 limitation)")
 
 -- 闭合项检查：TVar 只有在被 lambda/Pi 绑定时才允许。
 hasFreeVar : Int -> Term -> Bool

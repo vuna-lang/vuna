@@ -21,12 +21,17 @@ open Vuna_dCompiler_dTypecheck
 open Vuna_dCompiler_dSplit
 open Vuna_dCompiler_dTypedCodegen
 open Vuna_dCompiler_dCore
+open Vuna_dCompiler_dDtPrelude
+open Vuna_dCompiler_dDtKind
+open Vuna_dCompiler_dDtQuant
+open Vuna_dCompiler_dDtDerive
+open Vuna_dCompiler_dDtRecords
 type   t_Vuna_dCompiler_dElab_dDtDef =
     C_Vuna_dCompiler_dElab_dDtDef of (string) * (t_Vuna_dCompiler_dCore_dTerm) * (t_Vuna_dCompiler_dCore_dTerm)
 and   t_Vuna_dCompiler_dElab_dDtCtor =
-    C_Vuna_dCompiler_dElab_dDtCtor of (string) * (string) * (((string, bool) t_Base_dPair_dPair) list) * (t_Vuna_dCompiler_dCore_dTerm)
+    C_Vuna_dCompiler_dElab_dDtCtor of (string) * (string) * (((string, t_Vuna_dCompiler_dCore_dRig) t_Base_dPair_dPair) list) * (t_Vuna_dCompiler_dCore_dTerm)
 and   t_Vuna_dCompiler_dElab_dDtData =
-    C_Vuna_dCompiler_dElab_dDtData of (string) * (((string, bool) t_Base_dPair_dPair) list) * ((t_Vuna_dCompiler_dElab_dDtCtor) list)
+    C_Vuna_dCompiler_dElab_dDtData of (string) * (((string, t_Vuna_dCompiler_dCore_dRig) t_Base_dPair_dPair) list) * ((t_Vuna_dCompiler_dElab_dDtCtor) list)
 and   t_Vuna_dCompiler_dElab_dDtGoal =
     C_Vuna_dCompiler_dElab_dDtGoal of (int) * (t_Vuna_dCompiler_dCommon_dSpan) * (t_Vuna_dCompiler_dCore_dValue) * (((string, t_Vuna_dCompiler_dCore_dTerm) t_Base_dPair_dPair) list)
 and   t_Vuna_dCompiler_dElab_dDtClass =
@@ -34,6 +39,8 @@ and   t_Vuna_dCompiler_dElab_dDtClass =
 and t_Vuna_dCompiler_dElab_dDtInst
 and t_Vuna_dCompiler_dElab_dEc
 and t_Vuna_dCompiler_dElab_dCtx
+and t_Vuna_dCompiler_dElab_dPending
+and t_Vuna_dCompiler_dElab_dBindAcc
 and   t_Vuna_dCompiler_dElab_dDtProgram =
     C_Vuna_dCompiler_dElab_dDtProgram of ((t_Vuna_dCompiler_dElab_dDtData) list) * ((t_Vuna_dCompiler_dElab_dDtDef) list) * ((t_Vuna_dCompiler_dElab_dDtGoal) list) * (((int, t_Vuna_dCompiler_dCore_dValue) t_Base_dPair_dPair) list)
 and   t_Vuna_dCompiler_dElab_dDtGoalInfo =
@@ -43,10 +50,10 @@ val v_Vuna_dCompiler_dElab_ddtDefType : (t_Vuna_dCompiler_dElab_dDtDef) -> (t_Vu
 val v_Vuna_dCompiler_dElab_ddtDefBody : (t_Vuna_dCompiler_dElab_dDtDef) -> (t_Vuna_dCompiler_dCore_dTerm)
 val v_Vuna_dCompiler_dElab_ddtCtorName : (t_Vuna_dCompiler_dElab_dDtCtor) -> (string)
 val v_Vuna_dCompiler_dElab_ddtCtorFamily : (t_Vuna_dCompiler_dElab_dDtCtor) -> (string)
-val v_Vuna_dCompiler_dElab_ddtCtorTelescope : (t_Vuna_dCompiler_dElab_dDtCtor) -> (((string, bool) t_Base_dPair_dPair) list)
+val v_Vuna_dCompiler_dElab_ddtCtorTelescope : (t_Vuna_dCompiler_dElab_dDtCtor) -> (((string, t_Vuna_dCompiler_dCore_dRig) t_Base_dPair_dPair) list)
 val v_Vuna_dCompiler_dElab_ddtCtorType : (t_Vuna_dCompiler_dElab_dDtCtor) -> (t_Vuna_dCompiler_dCore_dTerm)
 val v_Vuna_dCompiler_dElab_ddtDataName : (t_Vuna_dCompiler_dElab_dDtData) -> (string)
-val v_Vuna_dCompiler_dElab_ddtDataParams : (t_Vuna_dCompiler_dElab_dDtData) -> (((string, bool) t_Base_dPair_dPair) list)
+val v_Vuna_dCompiler_dElab_ddtDataParams : (t_Vuna_dCompiler_dElab_dDtData) -> (((string, t_Vuna_dCompiler_dCore_dRig) t_Base_dPair_dPair) list)
 val v_Vuna_dCompiler_dElab_ddtDataCtors : (t_Vuna_dCompiler_dElab_dDtData) -> ((t_Vuna_dCompiler_dElab_dDtCtor) list)
 val v_Vuna_dCompiler_dElab_ddtClassName : (t_Vuna_dCompiler_dElab_dDtClass) -> (string)
 val v_Vuna_dCompiler_dElab_ddtClassParams : (t_Vuna_dCompiler_dElab_dDtClass) -> ((string) list)
@@ -72,6 +79,10 @@ val v_Vuna_dCompiler_dElab_ddictTypeName : (string) -> (string)
 val v_Vuna_dCompiler_dElab_ddictCtorName : (string) -> (string)
 val v_Vuna_dCompiler_dElab_deraseIndexMask : (t_Vuna_dCompiler_dElab_dDtData) -> ((bool) list)
 val v_Vuna_dCompiler_dElab_dindexErasureCandidates : ((t_Vuna_dCompiler_dElab_dDtData) list) -> (((string, (string) list) t_Base_dPair_dPair) list)
+val v_vuna_ueq_uVuna_uCompiler_uElab_uPending : (t_Vuna_dCompiler_dElab_dPending) -> ((t_Vuna_dCompiler_dElab_dPending) -> (bool))
+val v_vuna_uneq_uVuna_uCompiler_uElab_uPending : (t_Vuna_dCompiler_dElab_dPending) -> ((t_Vuna_dCompiler_dElab_dPending) -> (bool))
+val v_vuna_ueq_uVuna_uCompiler_uElab_uBindAcc : (t_Vuna_dCompiler_dElab_dBindAcc) -> ((t_Vuna_dCompiler_dElab_dBindAcc) -> (bool))
+val v_vuna_uneq_uVuna_uCompiler_uElab_uBindAcc : (t_Vuna_dCompiler_dElab_dBindAcc) -> ((t_Vuna_dCompiler_dElab_dBindAcc) -> (bool))
 val v_vuna_ueq_uVuna_uCompiler_uElab_uDtGoalInfo : (t_Vuna_dCompiler_dElab_dDtGoalInfo) -> ((t_Vuna_dCompiler_dElab_dDtGoalInfo) -> (bool))
 val v_vuna_uneq_uVuna_uCompiler_uElab_uDtGoalInfo : (t_Vuna_dCompiler_dElab_dDtGoalInfo) -> ((t_Vuna_dCompiler_dElab_dDtGoalInfo) -> (bool))
 val show_Vuna_dCompiler_dElab_dDtDef : t_Vuna_dCompiler_dElab_dDtDef -> string
@@ -82,5 +93,7 @@ val show_Vuna_dCompiler_dElab_dDtClass : t_Vuna_dCompiler_dElab_dDtClass -> stri
 val show_Vuna_dCompiler_dElab_dDtInst : t_Vuna_dCompiler_dElab_dDtInst -> string
 val show_Vuna_dCompiler_dElab_dEc : t_Vuna_dCompiler_dElab_dEc -> string
 val show_Vuna_dCompiler_dElab_dCtx : t_Vuna_dCompiler_dElab_dCtx -> string
+val show_Vuna_dCompiler_dElab_dPending : t_Vuna_dCompiler_dElab_dPending -> string
+val show_Vuna_dCompiler_dElab_dBindAcc : t_Vuna_dCompiler_dElab_dBindAcc -> string
 val show_Vuna_dCompiler_dElab_dDtProgram : t_Vuna_dCompiler_dElab_dDtProgram -> string
 val show_Vuna_dCompiler_dElab_dDtGoalInfo : t_Vuna_dCompiler_dElab_dDtGoalInfo -> string

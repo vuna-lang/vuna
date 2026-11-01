@@ -196,9 +196,9 @@ let v_vuna_ueq_uVuna_uCompiler_uPkg_uRoot = fun x y -> (match x with
   | C_Vuna_dCompiler_dPkg_dRoot (v0, v1, v2) -> (match y with
   | C_Vuna_dCompiler_dPkg_dRoot (w0, w1, w2) -> (if ((if (v_vuna_ueq_ustr v0 w0) then (v_vuna_ueq_ustr v1 w1) else false)) then (v_vuna_ueq_uBase_uMaybe_uMaybe v2 w2) else false)
   | _ -> v_vuna_ueq_uint 0 1
-  | _ -> vuna_fail "<generated>" 353 38 ("case pattern match failure"))
+  | _ -> vuna_fail "<generated>" 405 38 ("case pattern match failure"))
   | _ -> v_vuna_ueq_uint 0 1
-  | _ -> vuna_fail "<generated>" 352 38 ("case pattern match failure"))
+  | _ -> vuna_fail "<generated>" 404 38 ("case pattern match failure"))
 
 let v_vuna_uneq_uVuna_uCompiler_uPkg_uRoot = fun x y -> if v_vuna_ueq_uVuna_uCompiler_uPkg_uRoot x y then v_vuna_ueq_uint 0 1 else v_vuna_ueq_uint 0 0
 
@@ -206,8 +206,8 @@ let v_vuna_ueq_uVuna_uCompiler_uPkg_uPackage = fun x y -> (match x with
   | C_Vuna_dCompiler_dPkg_dPackage (v0, v1, v2) -> (match y with
   | C_Vuna_dCompiler_dPkg_dPackage (w0, w1, w2) -> (if ((if (v_vuna_ueq_uVuna_uCompiler_uManifest_uManifest v0 w0) then (v_vuna_ueq_uBase_uList_uList v1 w1) else false)) then (v_vuna_ueq_ustr v2 w2) else false)
   | _ -> v_vuna_ueq_uint 0 1
-  | _ -> vuna_fail "<generated>" 362 41 ("case pattern match failure"))
+  | _ -> vuna_fail "<generated>" 414 41 ("case pattern match failure"))
   | _ -> v_vuna_ueq_uint 0 1
-  | _ -> vuna_fail "<generated>" 361 41 ("case pattern match failure"))
+  | _ -> vuna_fail "<generated>" 413 41 ("case pattern match failure"))
 
 let v_vuna_uneq_uVuna_uCompiler_uPkg_uPackage = fun x y -> if v_vuna_ueq_uVuna_uCompiler_uPkg_uPackage x y then v_vuna_ueq_uint 0 1 else v_vuna_ueq_uint 0 0

@@ -49,12 +49,12 @@ let v_vuna_ueq_uBase_uMaybe_uMaybe = fun x y -> (match x with
   | C_Base_dMaybe_dNothing -> (match y with
   | C_Base_dMaybe_dNothing -> v_vuna_ueq_uint 0 0
   | _ -> v_vuna_ueq_uint 0 1
-  | _ -> vuna_fail "<generated>" 466 25 ("case pattern match failure"))
+  | _ -> vuna_fail "<generated>" 518 25 ("case pattern match failure"))
   | C_Base_dMaybe_dJust (v0) -> (match y with
   | C_Base_dMaybe_dJust (w0) -> v_vuna_ueq_ugeneric v0 w0
   | _ -> v_vuna_ueq_uint 0 1
-  | _ -> vuna_fail "<generated>" 469 25 ("case pattern match failure"))
+  | _ -> vuna_fail "<generated>" 521 25 ("case pattern match failure"))
   | _ -> v_vuna_ueq_uint 0 1
-  | _ -> vuna_fail "<generated>" 465 32 ("case pattern match failure"))
+  | _ -> vuna_fail "<generated>" 517 32 ("case pattern match failure"))
 
 let v_vuna_uneq_uBase_uMaybe_uMaybe = fun x y -> if v_vuna_ueq_uBase_uMaybe_uMaybe x y then v_vuna_ueq_uint 0 1 else v_vuna_ueq_uint 0 0

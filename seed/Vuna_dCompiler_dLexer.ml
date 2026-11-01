@@ -225,49 +225,49 @@ let v_vuna_ushow_uVuna_uCompiler_uLexer_uTok = fun x -> (match x with
   | C_Vuna_dCompiler_dLexer_dTStr (v0) -> (let vuna_cat0' = ("(TStr ") in (let vuna_cat1' = (v_vuna_ushow_ustring v0) in (let vuna_cat2' = (")") in String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'])))
   | C_Vuna_dCompiler_dLexer_dTSym (v0) -> (let vuna_cat0' = ("(TSym ") in (let vuna_cat1' = (v_vuna_ushow_ustring v0) in (let vuna_cat2' = (")") in String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'])))
   | C_Vuna_dCompiler_dLexer_dTEof -> "TEof"
-  | _ -> vuna_fail "<generated>" 204 39 ("case pattern match failure"))
+  | _ -> vuna_fail "<generated>" 256 39 ("case pattern match failure"))
 
 let v_vuna_ueq_uVuna_uCompiler_uLexer_uTok = fun x y -> (match x with
   | C_Vuna_dCompiler_dLexer_dTIdent (v0) -> (match y with
   | C_Vuna_dCompiler_dLexer_dTIdent (w0) -> v_vuna_ueq_ustr v0 w0
   | _ -> v_vuna_ueq_uint 0 1
-  | _ -> vuna_fail "<generated>" 214 36 ("case pattern match failure"))
+  | _ -> vuna_fail "<generated>" 266 36 ("case pattern match failure"))
   | C_Vuna_dCompiler_dLexer_dTKw (v0) -> (match y with
   | C_Vuna_dCompiler_dLexer_dTKw (w0) -> v_vuna_ueq_ustr v0 w0
   | _ -> v_vuna_ueq_uint 0 1
-  | _ -> vuna_fail "<generated>" 217 33 ("case pattern match failure"))
+  | _ -> vuna_fail "<generated>" 269 33 ("case pattern match failure"))
   | C_Vuna_dCompiler_dLexer_dTInt (v0) -> (match y with
   | C_Vuna_dCompiler_dLexer_dTInt (w0) -> v_vuna_ueq_uint v0 w0
   | _ -> v_vuna_ueq_uint 0 1
-  | _ -> vuna_fail "<generated>" 220 34 ("case pattern match failure"))
+  | _ -> vuna_fail "<generated>" 272 34 ("case pattern match failure"))
   | C_Vuna_dCompiler_dLexer_dTStr (v0) -> (match y with
   | C_Vuna_dCompiler_dLexer_dTStr (w0) -> v_vuna_ueq_ustr v0 w0
   | _ -> v_vuna_ueq_uint 0 1
-  | _ -> vuna_fail "<generated>" 223 34 ("case pattern match failure"))
+  | _ -> vuna_fail "<generated>" 275 34 ("case pattern match failure"))
   | C_Vuna_dCompiler_dLexer_dTSym (v0) -> (match y with
   | C_Vuna_dCompiler_dLexer_dTSym (w0) -> v_vuna_ueq_ustr v0 w0
   | _ -> v_vuna_ueq_uint 0 1
-  | _ -> vuna_fail "<generated>" 226 34 ("case pattern match failure"))
+  | _ -> vuna_fail "<generated>" 278 34 ("case pattern match failure"))
   | C_Vuna_dCompiler_dLexer_dTEof -> (match y with
   | C_Vuna_dCompiler_dLexer_dTEof -> v_vuna_ueq_uint 0 0
   | _ -> v_vuna_ueq_uint 0 1
-  | _ -> vuna_fail "<generated>" 229 31 ("case pattern match failure"))
+  | _ -> vuna_fail "<generated>" 281 31 ("case pattern match failure"))
   | _ -> v_vuna_ueq_uint 0 1
-  | _ -> vuna_fail "<generated>" 213 39 ("case pattern match failure"))
+  | _ -> vuna_fail "<generated>" 265 39 ("case pattern match failure"))
 
 let v_vuna_uneq_uVuna_uCompiler_uLexer_uTok = fun x y -> if v_vuna_ueq_uVuna_uCompiler_uLexer_uTok x y then v_vuna_ueq_uint 0 1 else v_vuna_ueq_uint 0 0
 
 let v_vuna_ushow_uVuna_uCompiler_uLexer_uPTok = fun x -> (match x with
   | C_Vuna_dCompiler_dLexer_dPTok (v0, v1) -> (let vuna_cat0' = ("(PTok ") in (let vuna_cat1' = (v_vuna_ushow_uVuna_uCompiler_uLexer_uTok v0) in (let vuna_cat2' = (" ") in (let vuna_cat3' = (v_vuna_ushow_uVuna_uCompiler_uCommon_uPos v1) in (let vuna_cat4' = (")") in String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'; vuna_cat3'; vuna_cat4'])))))
-  | _ -> vuna_fail "<generated>" 237 40 ("case pattern match failure"))
+  | _ -> vuna_fail "<generated>" 289 40 ("case pattern match failure"))
 
 let v_vuna_ueq_uVuna_uCompiler_uLexer_uPTok = fun x y -> (match x with
   | C_Vuna_dCompiler_dLexer_dPTok (v0, v1) -> (match y with
   | C_Vuna_dCompiler_dLexer_dPTok (w0, w1) -> (if (v_vuna_ueq_uVuna_uCompiler_uLexer_uTok v0 w0) then (v_vuna_ueq_uVuna_uCompiler_uCommon_uPos v1 w1) else false)
   | _ -> v_vuna_ueq_uint 0 1
-  | _ -> vuna_fail "<generated>" 242 37 ("case pattern match failure"))
+  | _ -> vuna_fail "<generated>" 294 37 ("case pattern match failure"))
   | _ -> v_vuna_ueq_uint 0 1
-  | _ -> vuna_fail "<generated>" 241 40 ("case pattern match failure"))
+  | _ -> vuna_fail "<generated>" 293 40 ("case pattern match failure"))
 
 let v_vuna_uneq_uVuna_uCompiler_uLexer_uPTok = fun x y -> if v_vuna_ueq_uVuna_uCompiler_uLexer_uPTok x y then v_vuna_ueq_uint 0 1 else v_vuna_ueq_uint 0 0
 
@@ -275,41 +275,41 @@ let v_vuna_ueq_uVuna_uCompiler_uLexer_uChars = fun x y -> (match x with
   | C_Vuna_dCompiler_dLexer_dChars (v0, v1) -> (match y with
   | C_Vuna_dCompiler_dLexer_dChars (w0, w1) -> (if (v_vuna_ueq_uBase_uList_uList v0 w0) then (v_vuna_ueq_uVuna_uCompiler_uCommon_uPos v1 w1) else false)
   | _ -> v_vuna_ueq_uint 0 1
-  | _ -> vuna_fail "<generated>" 251 38 ("case pattern match failure"))
+  | _ -> vuna_fail "<generated>" 303 38 ("case pattern match failure"))
   | _ -> v_vuna_ueq_uint 0 1
-  | _ -> vuna_fail "<generated>" 250 41 ("case pattern match failure"))
+  | _ -> vuna_fail "<generated>" 302 41 ("case pattern match failure"))
 
 let v_vuna_uneq_uVuna_uCompiler_uLexer_uChars = fun x y -> if v_vuna_ueq_uVuna_uCompiler_uLexer_uChars x y then v_vuna_ueq_uint 0 1 else v_vuna_ueq_uint 0 0
 
 let v_vuna_ushow_uVuna_uCompiler_uLexer_uCKind = fun x -> (match x with
   | C_Vuna_dCompiler_dLexer_dCLine -> "CLine"
   | C_Vuna_dCompiler_dLexer_dCBlock -> "CBlock"
-  | _ -> vuna_fail "<generated>" 259 41 ("case pattern match failure"))
+  | _ -> vuna_fail "<generated>" 311 41 ("case pattern match failure"))
 
 let v_vuna_ueq_uVuna_uCompiler_uLexer_uCKind = fun x y -> (match x with
   | C_Vuna_dCompiler_dLexer_dCLine -> (match y with
   | C_Vuna_dCompiler_dLexer_dCLine -> v_vuna_ueq_uint 0 0
   | _ -> v_vuna_ueq_uint 0 1
-  | _ -> vuna_fail "<generated>" 265 32 ("case pattern match failure"))
+  | _ -> vuna_fail "<generated>" 317 32 ("case pattern match failure"))
   | C_Vuna_dCompiler_dLexer_dCBlock -> (match y with
   | C_Vuna_dCompiler_dLexer_dCBlock -> v_vuna_ueq_uint 0 0
   | _ -> v_vuna_ueq_uint 0 1
-  | _ -> vuna_fail "<generated>" 268 33 ("case pattern match failure"))
+  | _ -> vuna_fail "<generated>" 320 33 ("case pattern match failure"))
   | _ -> v_vuna_ueq_uint 0 1
-  | _ -> vuna_fail "<generated>" 264 41 ("case pattern match failure"))
+  | _ -> vuna_fail "<generated>" 316 41 ("case pattern match failure"))
 
 let v_vuna_uneq_uVuna_uCompiler_uLexer_uCKind = fun x y -> if v_vuna_ueq_uVuna_uCompiler_uLexer_uCKind x y then v_vuna_ueq_uint 0 1 else v_vuna_ueq_uint 0 0
 
 let v_vuna_ushow_uVuna_uCompiler_uLexer_uComment = fun x -> (match x with
   | C_Vuna_dCompiler_dLexer_dComment (v0, v1, v2) -> (let vuna_cat0' = ("(Comment ") in (let vuna_cat1' = (v_vuna_ushow_uVuna_uCompiler_uLexer_uCKind v0) in (let vuna_cat2' = (" ") in (let vuna_cat3' = (v_vuna_ushow_ustring v1) in (let vuna_cat4' = (" ") in (let vuna_cat5' = (v_vuna_ushow_uVuna_uCompiler_uCommon_uSpan v2) in (let vuna_cat6' = (")") in String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'; vuna_cat3'; vuna_cat4'; vuna_cat5'; vuna_cat6'])))))))
-  | _ -> vuna_fail "<generated>" 276 43 ("case pattern match failure"))
+  | _ -> vuna_fail "<generated>" 328 43 ("case pattern match failure"))
 
 let v_vuna_ueq_uVuna_uCompiler_uLexer_uComment = fun x y -> (match x with
   | C_Vuna_dCompiler_dLexer_dComment (v0, v1, v2) -> (match y with
   | C_Vuna_dCompiler_dLexer_dComment (w0, w1, w2) -> (if ((if (v_vuna_ueq_uVuna_uCompiler_uLexer_uCKind v0 w0) then (v_vuna_ueq_ustr v1 w1) else false)) then (v_vuna_ueq_uVuna_uCompiler_uCommon_uSpan v2 w2) else false)
   | _ -> v_vuna_ueq_uint 0 1
-  | _ -> vuna_fail "<generated>" 281 43 ("case pattern match failure"))
+  | _ -> vuna_fail "<generated>" 333 43 ("case pattern match failure"))
   | _ -> v_vuna_ueq_uint 0 1
-  | _ -> vuna_fail "<generated>" 280 43 ("case pattern match failure"))
+  | _ -> vuna_fail "<generated>" 332 43 ("case pattern match failure"))
 
 let v_vuna_uneq_uVuna_uCompiler_uLexer_uComment = fun x y -> if v_vuna_ueq_uVuna_uCompiler_uLexer_uComment x y then v_vuna_ueq_uint 0 1 else v_vuna_ueq_uint 0 0

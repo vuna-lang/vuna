@@ -403,3 +403,33 @@ M18 当时的完整论证保留在 [docs/reference/m18-migration.md](reference/m
 上述定位落盘。**M22 的真实完成路径**：先做 `Core.vuna` 的更高阶元变量模式统一
 （`solveMeta` 支持 `VMeta m sp` 的 pattern 求解），再启用延迟字典机制 + kind 检查 +
 头部限定名修正，最后补 `mem` 约束推断。
+
+### M22 实现进展：Core 更高阶统一 + 字典延迟骨架
+
+按上节结论先做 `Core.vuna` 的更高阶元变量模式统一，并重新启用延迟字典机制与
+`constrainDictDom` 的 kind 检查：
+
+1. **`Core.vuna` 更高阶统一（`solveMeta` → `solveMetaHo`）**：非空 spine 不再直接报
+   M13，而是按形状求解——
+   - 元-元对齐（`?m sp = ?n sp2`）：`?m = ?n` 再 `convSpines`；
+   - 中性头提取（`?m sp = head args`，`|args| >= |sp|`）：`?m = head (take extra args)`
+     再统一剩余 spine（`solveMetaHead` + `splitAtVals`）；
+   - 其余形状仍报 M13（保守）。
+2. **`Elab.vuna` 字典延迟 + kind 检查**：`constrainDictDom` 先取字典族类参数 kind
+   （`dictArgKind`），实参头部与之 kind 一致才约束（`argHeadMatchesKind`）；`?m` 未解且
+   无唯一实例时延迟成普通元变量（`hasUnsolvedMetaValue` 判据）；`filterInstances` 放开头
+   匹配（允许新增解，候选对照同一份初始 sols）。
+3. **`Base.IO` 构造子模式改 case**：`ioBind`/`ioFmap` 的参数 `MkIO f` 触发 M13
+   「定义参数必须是变量」，改写为函数体 `case ... of`（与 DT 设计一致）。
+
+**验证**：`test/corpus/dt/` 全绿（0 失败）；`test/run-tests.sh` 849 项通过（零回归）；
+`sh nix/context-budget.sh .` 在预算内（`max_module_lines 2529`）；seed rotation fixed
+point 通过。新增局部夹具 `_scratch/m22_monad.vuna`（本地 `IO` + 泛型 `Monad` trait）——
+`bind (pure 41) (\x => pure (x+1))` 在 DT 下**通过**，证明结果类型驱动 `?m = IO` 的
+更高阶路径已打通。
+
+**仍阻塞（下一轮）**：
+- `m21_bind`（`Base.IO` 版）：`Base/IO.vuna` 的 `prim_*` effectful 内建未进 DT prelude
+  （属 M21「effectful 内建进 DT prelude」）；
+- `mem : a -> List a -> Bool`：刚性签名变量 `a` 上的 `Eq a` 约束推断（签名缺 `Eq a`，
+  DT 需在签名推断并补隐式 `{d : Dict_Eq a}`，失败回退重精化）。
