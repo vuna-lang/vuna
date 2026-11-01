@@ -2,12 +2,12 @@ data Nat : Type where
   Zero : Nat
   Succ : Nat -> Nat
 
--- M14 不支持嵌套构造子模式：`Succ (Succ k)` 里外层是构造子模式、内层又是。
+-- M19：嵌套构造子模式已支持，展开成内层 case；内层同样必须覆盖全部可达分支。
+-- `Succ (Succ k)` 把内层 case 限制在 `Succ` 上，因此缺 `Zero` 分支必须报错。
 bad : Nat -> Int
-bad n =
-  case n of
-    Zero => 0
-    Succ (Succ k) => 1
+bad n = case n of
+  Zero => 0
+  Succ (Succ k) => 1
 
 main : Int
 main = 1

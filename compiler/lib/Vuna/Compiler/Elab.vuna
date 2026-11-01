@@ -965,12 +965,33 @@ ctorResultTerms c = case resultSpine (dtCtorType c) of
 -- ---------------------------------------------------------------
 -- M14：case 精化 + 覆盖率
 -- ---------------------------------------------------------------
--- 把构造子 telescope 绑进上下文。隐式 binder 不消费子模式；显式 binder 消费一个
--- 只允许是变量/通配的子模式（嵌套模式留到 M15）。
-bindCtorTele : Ctx -> Term -> List Pat -> Result (Pair Ctx (Pair (List (Pair String Rig)) (List Pat)))
-bindCtorTele ctx ty subpats = bindCtorGo ctx ty subpats []
+-- M19：嵌套构造子模式。做法是**把嵌套模式改写成嵌套 case**：
+-- `Cons a (Succ k) rest => body` 变成 `Cons a x1 rest => case x1 of Succ k => body`。
+-- 这样不需要新的精化规则、也不需要新的 Core 构造子——内层 case 走既有的索引合一与
+-- 覆盖率检查，语义与手写嵌套 case 完全一致，且天然支持任意深度。
+--
+-- 绑定 telescope 时把非变量的子模式收集成「新鲜 binder + 待匹配 (pat, var)」，
+-- 分支体精化前把待匹配列表折成由内向外的内层 case。
+-- 待匹配项：子模式 + 它在分支上下文里的 binder 名字。
+data Pending : Type where
+  Pending : Pat -> String -> Pending
 
-bindCtorGo : Ctx -> Term -> List Pat -> List (Pair String Rig) -> Result (Pair Ctx (Pair (List (Pair String Rig)) (List Pat)))
+pendingPat (Pending p n) = p
+
+pendingName (Pending p n) = n
+
+-- bindCtorGo 的累加器：telescope 绑定子（逆序）+ 待展开的嵌套模式（正序）。
+data BindAcc : Type where
+  BindAcc : List (Pair String Rig) -> List Pending -> BindAcc
+
+baBinders (BindAcc bs ps) = bs
+
+baPending (BindAcc bs ps) = ps
+
+bindCtorTele : Ctx -> Term -> List Pat -> Result (Pair Ctx (Pair (List (Pair String Rig)) (Pair (List Pending) (List Pat))))
+bindCtorTele ctx ty subpats = bindCtorGo ctx ty subpats (BindAcc [] [])
+
+bindCtorGo : Ctx -> Term -> List Pat -> BindAcc -> Result (Pair Ctx (Pair (List (Pair String Rig)) (Pair (List Pending) (List Pat))))
 bindCtorGo ctx ty subpats acc = case ty of
   TPi name implicit rig dom cod =>
     let
@@ -978,34 +999,56 @@ bindCtorGo ctx ty subpats acc = case ty of
     in if implicit then
       let
         ctx2 = ctxBindValue name domVal ctx
-      in bindCtorGo ctx2 cod subpats (Pair name Rig0 :: acc)
+      in bindCtorGo ctx2 cod subpats (BindAcc (Pair name Rig0 :: baBinders acc) (baPending acc))
     else case subpats of
       [] => Err "DT: case branch has too few arguments for its constructor"
       p :: rest => case p of
         PVar pname psp => bindCtorBinder ctx domVal cod pname rest acc
         PWild psp => bindCtorBinder ctx domVal cod "_" rest acc
-        _ => Err "DT: nested patterns are not supported yet (M14 limitation)"
-  _ => Ok (Pair ctx (Pair (reverse acc) subpats))
+        PCon cname args psp =>
+          let
+            -- 嵌套模式：绑一个新鲜名字占位，把 (子模式, 名字) 记下来稍后折成内层 case。
+            fresh = freshPatName (length (baPending acc))
+            ctx2 = ctxBindValue fresh domVal ctx
+          in bindCtorGo ctx2 cod rest
+            (BindAcc (Pair fresh (binderRig False domVal) :: baBinders acc) (append (baPending acc) [Pending p fresh]))
+        _ => Err "DT: nested patterns must be constructor patterns (M19)"
+  _ => Ok (Pair ctx (Pair (reverse (baBinders acc)) (Pair (baPending acc) subpats)))
 
-bindCtorBinder : Ctx -> Value -> Term -> String -> List Pat -> List (Pair String Rig) -> Result (Pair Ctx (Pair (List (Pair String Rig)) (List Pat)))
+freshPatName : Int -> String
+freshPatName i = "_np" ++ strFromInt i
+
+bindCtorBinder : Ctx -> Value -> Term -> String -> List Pat -> BindAcc -> Result (Pair Ctx (Pair (List (Pair String Rig)) (Pair (List Pending) (List Pat))))
 bindCtorBinder ctx domVal cod binderName rest acc =
   let
     ctx2 = ctxBindValue binderName domVal ctx
-  in bindCtorGo ctx2 cod rest (Pair binderName (binderRig False domVal) :: acc)
+  in bindCtorGo ctx2 cod rest
+    (BindAcc (Pair binderName (binderRig False domVal) :: baBinders acc) (baPending acc))
 
--- 显式 constructor 分支：绑 telescope → 合一结果索引 → 在精化后的上下文里查分支体。
+-- 折成内层 case：`[Pending p1 v1, Pending p2 v2]` + body
+-- → `case v1 of p1 => (case v2 of p2 => body)`（收集顺序即由外到内）。
+foldPending : List Pending -> Expr -> Expr
+foldPending [] body = body
+foldPending (p :: rest) body =
+  let
+    ps = patSpan (pendingPat p)
+  in ECase (EVar (pendingName p) ps) [Pair (pendingPat p) (foldPending rest body)] ps
+
+-- 显式 constructor 分支：绑 telescope → 合一结果索引 → 把嵌套模式折成内层 case →
+-- 在精化后的上下文里查分支体。
 elabConAlt : List (Pair String Term) -> Ctx -> Ec -> DtData -> List Value -> Value -> String -> List Pat -> Span -> Expr -> Result (Pair CaseAlt Ec)
 elabConAlt globals ctx ec dd idxs expected cname args psp body = case findCtorIn cname (dtDataCtors dd) of
   Nothing => errAt psp ("DT: unknown constructor " ++ cname ++ " in case " ++ dtDataName dd)
   Just ctor => andThen (bindCtorTele ctx (dtCtorType ctor) args) (\p => case p of
-    Pair branchCtx (Pair binders leftover) => if nonEmpty leftover then errAt psp ("DT: branch for constructor " ++ cname ++ " has too many arguments")
+    Pair branchCtx (Pair binders (Pair pending leftover)) => if nonEmpty leftover then errAt psp ("DT: branch for constructor " ++ cname ++ " has too many arguments")
     else case unifyIdxList ec [] (ctxDepth branchCtx) defaultFuel (ctorResultValsIn branchCtx ctor) (map (refineValue [] defaultFuel) idxs) of
       Err e => errAt psp "DT: this branch is impossible (index constraints are unsatisfiable)"
       Ok refs2 =>
         let
           refinedExpected = refineValue refs2 defaultFuel expected
           branchCtx2 = ctxRefine branchCtx refs2
-        in andThen (checkE globals branchCtx2 ec body refinedExpected) (\pb => case pb of
+          body2 = foldPending pending body
+        in andThen (checkE globals branchCtx2 ec body2 refinedExpected) (\pb => case pb of
           Pair bodyTerm ec2 => Ok (Pair (CaseAlt cname binders bodyTerm) ec2)
         )
   )

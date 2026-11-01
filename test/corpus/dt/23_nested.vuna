@@ -1,0 +1,27 @@
+-- M19：嵌套构造子模式（改写成内层 case，语义与手写嵌套 case 一致）。
+--
+-- DT 的 case 要求「每个构造子至多一个分支」，所以嵌套模式的价值在于：在被索引族
+-- 排除了其它分支之后，把子结构一次匹配掉。内层 case 同样要过覆盖检查。
+data Nat : Type where
+  Zero : Nat
+  Succ : Nat -> Nat
+
+data Vec : Type -> Nat -> Type where
+  VNil : {a : Type} -> Vec a Zero
+  VCons : {a : Type} -> {n : Nat} -> a -> Vec a n -> Vec a (Succ n)
+
+data Box : Type -> Type where
+  MkBox : (a : Type) -> a -> Box a
+
+-- 嵌套模式 + 索引合一：外层的 VCons 已排掉 VNil，内层再匹配 Vec 的尾部。
+vhead2 : (n : Nat) -> Vec Int (Succ (Succ n)) -> Int
+vhead2 n v = case v of
+  VCons x (VCons y ys) => x + y
+
+-- 嵌套在非索引族上：内层只有一种可达形态时合法。
+unbox : Box (Box Int) -> Int
+unbox b = case b of
+  MkBox a (MkBox c y) => y
+
+main : Int
+main = vhead2 Zero (VCons 3 (VCons 4 VNil)) + unbox (MkBox (Box Int) (MkBox Int 5))
