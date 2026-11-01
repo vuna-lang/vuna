@@ -1,0 +1,29 @@
+-- M18.6：表示层定型（三值 rig）的可观测后果。
+-- 擦除由 rig 驱动：Rig0 的 binder 不进运行时表示，Rig1 的进。
+data Nat : Type where
+  Zero : Nat
+  Succ : Nat -> Nat
+
+-- 隐式 binder = Rig0，显式值 binder = Rig1。
+-- Vec 的族参数 a 是隐式类型（Rig0），长度索引 n 也是隐式（Rig0）；
+-- 字段 y 与 ys 是显式（Rig1），因此进入运行时表示。
+data Vec : Type -> Nat -> Type where
+  Nil : {a : Type} -> Vec a Zero
+  Cons : {a : Type} -> {n : Nat} -> a -> Vec a n -> Vec a (Succ n)
+
+-- 显式写出来的类型级参数（Rig0）：不进运行时表示，因此可以在类型位置反复使用。
+vlen : {a : Type} -> {n : Nat} -> Vec a n -> Int
+vlen xs = case xs of
+  Nil => 0
+  Cons y ys => 1 + vlen ys
+
+-- 值与索引同时存在：索引擦除后 vhead 的签名仍能静态排除 Nil。
+vhead : {a : Type} -> {n : Nat} -> Vec a (Succ n) -> a
+vhead xs = case xs of
+  Cons y ys => y
+
+three : Vec Int (Succ (Succ (Succ Zero)))
+three = Cons 1 (Cons 2 (Cons 3 Nil))
+
+main : Int
+main = vhead three + vlen three

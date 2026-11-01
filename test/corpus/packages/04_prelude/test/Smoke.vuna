@@ -1,0 +1,4 @@
+import Base.List
+
+main : String
+main = if length (Cons 1 (Cons 2 Nil)) == 2 then "" else "bad"

@@ -1,35 +1,58 @@
-module Vuna.Files (collectVunaFiles, collectSourceFiles, pathExistsDir) where
+module Vuna.Files (collectVunaFiles, collectSourceFiles, pathExistsDir, pathExistsFile) where
 
--- Vuna.Files：目录遍历工具（fmt / doc / test 共用）。
+-- Vuna.Files：目录遍历工具（fmt / doc / test / Index 共用）。
 -- 只依赖 readDir / isDirectory / fileExists 内建；readDir 返回字典序，遍历顺序确定。
--- 路径拆分（splitPath / baseName）在 Vuna.Base，供编译器驱动与工具共用。
-
-import Vuna.Base
+-- 路径拆分（splitPath / baseName）在 Vuna.Compiler.Common，供编译器驱动与工具共用。
+--
+-- 注意：内建 `isDirectory` 对**不存在的路径**会抛异常（会直接终止进程），
+-- 所以任何来自用户输入的路径都必须先用 `pathExistsDir` 判存在，
+-- 不要直接调用 `isDirectory`。
+import Vuna.Compiler.Common
 
 -- 递归收集目录下所有 .vuna 文件（跳过 . / .. 与隐藏项）。
-collectVunaFiles : String -> List String
-collectVunaFiles dir = concatMap (walkVuna dir) (readDir dir)
+-- 同时跳过生成物与本地缓存目录：它们可能包含符号链接 / 超大文件，
+-- 既不该被格式化，也不该被 doc / test 扫描。
+-- `corpus` 也跳过：test/corpus/ 下的 .vuna 是**夹具**，大量是故意不合法的源码
+-- （解析错误、缩进错误、类型错误用例），格式化器 / 文档生成器不应该扫它们。
+skipGenerated name =
+  name == ".git"
+    || name == ".local"
+    || name == ".output"
+    || name == ".direnv"
+    || name == "node_modules"
+    || name == ".vscode"
+    || name == "_scratch"
+    || name == ".dsh-plugins"
+    || name == "result"
+    || name == "corpus"
 
-walkVuna dir name =
-  case name of
-    "." => Nil
-    ".." => Nil
-    _ =>
-      let path = dir ++ "/" ++ name
-      in if isDirectory path then collectVunaFiles path
-         else if endsWith ".vuna" name then Cons path Nil
-         else Nil
+collectVunaFiles : String -> List String
+collectVunaFiles dir = if pathExistsDir dir then concatMap (walkVuna dir) (readDir dir) else []
+
+walkVuna dir name = case name of
+  "." => []
+  ".." => []
+  _ => if skipGenerated name then []
+  else
+    let
+      path = dir ++ "/" ++ name
+    in if pathExistsDir path then collectVunaFiles path
+    else if endsWith ".vuna" name then [path] else []
 
 -- 递归收集目录下所有非隐藏项（文件与目录），用于通用遍历。
 collectSourceFiles : String -> List String
-collectSourceFiles dir = concatMap (walkAny dir) (readDir dir)
+collectSourceFiles dir = if pathExistsDir dir then concatMap (walkAny dir) (readDir dir) else []
 
-walkAny dir name =
-  case name of
-    "." => Nil
-    ".." => Nil
-    _ =>
-      let path = dir ++ "/" ++ name
-      in if isDirectory path then collectSourceFiles path else Cons path Nil
+walkAny dir name = case name of
+  "." => []
+  ".." => []
+  _ => if skipGenerated name then []
+  else
+    let
+      path = dir ++ "/" ++ name
+    in if pathExistsDir path then collectSourceFiles path else [path]
 
-pathExistsDir path = isDirectory path
+-- 安全的目录判定：不存在返回 False，而不是抛异常。
+pathExistsDir path = pathExistsFile path && isDirectory path
+
+pathExistsFile path = fileExists path

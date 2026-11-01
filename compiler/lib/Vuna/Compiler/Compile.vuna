@@ -1,0 +1,68 @@
+module Vuna.Compiler.Compile (effectiveRoots, compileFileTyped, compileFileTypedExec, checkFile, compileFileTypedIn, compileFileTypedExecIn, checkFileIn, checkPackageIn, compileFileDt, checkFileDt) where
+
+-- Vuna.Compiler.Compile：编译入口（供 CompilerCli / CLI / 测试使用）。
+--
+-- 只保留 typed codegen 一条 HM 路径；checkFile* 只做类型检查与诊断，不生成代码。
+-- M13 起另有 DT 单文件路径（compileFileDt / checkFileDt，见 Vuna.Compiler.Dt）。
+import Vuna.Compiler.Common
+import Vuna.Compiler.Pkg
+import Vuna.Compiler.Loader
+import Vuna.Compiler.Typecheck
+import Vuna.Compiler.TypedCodegen
+import Vuna.Compiler.Dt
+
+-- 未显式给 --root 时使用当前目录包的模块根（vuna.toml）；
+-- 当前目录不是包则没有默认根，原始文件模式需显式 --root。
+effectiveRoots : List Root -> List Root
+effectiveRoots [] = currentPackageRoots
+effectiveRoots roots = roots
+
+currentPackageRoots : List Root
+currentPackageRoots = case loadPackage "." of
+  Err _ => []
+  Ok pkg => packageRoots pkg
+
+compileFileTyped roots entry printResult = compileFileTypedIn "" roots entry printResult
+
+compileFileTypedIn entryPkg roots entry printResult = andThen (loadProgram roots entryPkg entry) (\decls => andThen (checkProgramInfoElab decls) (\p => case p of
+  Pair globals elabDecls => generateProgramTyped elabDecls globals printResult
+)
+)
+
+compileFileTypedExec roots entry = compileFileTypedExecIn "" roots entry
+
+compileFileTypedExecIn entryPkg roots entry = andThen (loadProgram roots entryPkg entry) (\decls => andThen (checkProgramInfoElab decls) (\p => case p of
+  Pair globals elabDecls => generateProgramTypedExec elabDecls globals
+)
+)
+
+-- 诊断：typecheck + 穷尽性/冗余警告（非致命）。返回警告列表。
+checkFile roots entry = checkFileIn "" roots entry
+
+checkFileIn entryPkg roots entry = case loadProgram roots entryPkg entry of
+  Err e => Err e
+  Ok decls => case checkProgramInfoElab decls of
+    Err e => Err e
+    Ok (Pair globals elabDecls) => Ok (exhaustiveWarningsFor globals elabDecls)
+
+-- 库包检查：以 [export].modules 为根，不走 app/Main.vuna。
+checkPackageIn : String -> List Root -> List String -> Result (List String)
+checkPackageIn entryPkg roots names = case loadProjectModules roots entryPkg names of
+  Err e => Err e
+  Ok project => case resolveProject project of
+    Err e => Err e
+    Ok parts =>
+      let
+        flat = append (firstOf parts) (concatMap moduleDeclsOf (secondOf parts))
+      in case checkProgramInfoElab flat of
+        Err e => Err e
+        Ok (Pair globals elabDecls) => Ok (exhaustiveWarningsFor globals elabDecls)
+
+-- ---------------------------------------------------------------
+-- M13：DT 单文件路径（不经过 Loader；单文件自包含）
+-- ---------------------------------------------------------------
+compileFileDt : String -> Bool -> Result String
+compileFileDt entry printResult = dtCompileFile entry printResult
+
+checkFileDt : String -> Result (List String)
+checkFileDt entry = dtCheckFile entry

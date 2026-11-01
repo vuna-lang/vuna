@@ -17,10 +17,10 @@ usage() {
 usage: vuna-bench [options]
 
 手动测量 vuna 的构建/编译性能与生成产物尺寸。默认测量 vuna（stage 1）；
-加 --compiler boot 测量 vuna-seed（stage 0 多文件种子）。请在仓库根目录运行。
+加 `--compiler seed` 测量 vuna-seed（stage 0 多文件种子）。请在仓库根目录运行。
 
 options:
-  --compiler vuna|boot   被测编译器（默认 vuna）
+  --compiler vuna|seed   被测编译器（默认 vuna）
   --runs N               计时重复次数（默认 3）
   --quick                等价于 --runs 1、无 warmup
   --json FILE|-          写出 JSON 报告；`-` 表示只输出 JSON
@@ -110,14 +110,14 @@ case $RUNS in
 esac
 case $COMPILER in
   vuna|stage1) COMPILER=vuna ;;
-  boot|vuna-seed|vuna-boot|stage0) COMPILER=boot ;;
-  *) die "--compiler must be vuna or boot" ;;
+  seed|vuna-seed|stage0) COMPILER=seed ;;
+  *) die "--compiler must be vuna or seed" ;;
 esac
 
 REPO=$PWD
 [ -f "$REPO/seed/build.sh" ] || die "run from the repo root (seed/build.sh not found)"
 [ -f "$REPO/app/Main.vuna" ] || die "run from the repo root (app/Main.vuna not found)"
-[ -d "$REPO/compiler/lib/Vuna" ] || die "run from the repo root (compiler/lib/Vuna not found)"
+[ -d "$REPO/compiler/lib/Vuna/Compiler" ] || die "run from the repo root (compiler/lib/Vuna/Compiler not found)"
 [ -d "$REPO/lib/Vuna" ] || die "run from the repo root (lib/Vuna not found)"
 command -v ocamlopt >/dev/null 2>&1 || die "ocamlopt not found (use: nix run .#bench)"
 
@@ -153,8 +153,8 @@ OCAMLOPT_VERSION=$(ocamlopt -version 2>/dev/null || printf 'unknown')
 FLAMBDA=$(ocamlopt -config 2>/dev/null | awk -F': *' '$1 == "flambda" { print $2 }' || true)
 [ -n "$FLAMBDA" ] || FLAMBDA=unknown
 SEED_SHA=$(find seed -type f | LC_ALL=C sort | xargs sha256sum | sha256sum | awk '{ print $1 }')
-SRC_LINES=$(cat compiler/lib/Vuna/*.vuna lib/Vuna/*.vuna app/*.vuna | wc -l | tr -d ' ')
-SRC_BYTES=$(cat compiler/lib/Vuna/*.vuna lib/Vuna/*.vuna app/*.vuna | wc -c | tr -d ' ')
+SRC_LINES=$(cat compiler/lib/Vuna/Compiler/*.vuna lib/Vuna/*.vuna app/*.vuna | wc -l | tr -d ' ')
+SRC_BYTES=$(cat compiler/lib/Vuna/Compiler/*.vuna lib/Vuna/*.vuna app/*.vuna | wc -c | tr -d ' ')
 
 GIT_HEAD=unknown
 GIT_DIRTY=unknown
@@ -180,12 +180,13 @@ fi
 
 # ---- 工作副本 ------------------------------------------------------------
 mkdir -p "$WORK/src"
-cp -r compiler lib app stdlib seed vuna.toml "$WORK/src/"
+cp -r compiler lib app base seed vuna.toml "$WORK/src/"
 if [ "$WITH_TESTS" = 1 ]; then
   cp -r test "$WORK/src/"
 else
   mkdir -p "$WORK/src/test/corpus"
   cp -r test/corpus/run "$WORK/src/test/corpus/"
+  cp -r test/corpus/dt "$WORK/src/test/corpus/"
 fi
 cd "$WORK/src"
 
@@ -277,7 +278,9 @@ cat "$STAGE1_SRC"/*.ml >"$WORK/stage1_concat.ml"
 cat seed/*.ml >"$WORK/seed_concat.ml"
 
 printf 'main = 40 + 2\n' >tiny.vuna
-measure tiny_compile "$SELF_BIN" compile --root compiler/lib --root lib --root stdlib/lib --root app --no-print tiny.vuna "$WORK/tiny.ml"
+measure tiny_compile "$SELF_BIN" compile --root compiler/lib --root lib --root base/lib --root app --no-print tiny.vuna "$WORK/tiny.ml"
+# M13：DT 精化 + 擦除 codegen 基准（单文件，Pi + 类型擦除）
+measure dt_elab "$SELF_BIN" compile --dt --no-print test/corpus/dt/03_compose.vuna "$WORK/dt.ml"
 
 # ---- corpus 批量编译（单次计时，内部循环） --------------------------------
 cat >"$WORK/corpus.sh" <<'EOS'
@@ -288,7 +291,7 @@ mkdir -p "$CORPUS_OUT"
 : >"$CORPUS_FAIL"
 for f in test/corpus/run/*.vuna; do
   out="$CORPUS_OUT/$(basename "$f" .vuna).ml"
-  if ! "$CORPUS_BIN" compile --root compiler/lib --root lib --root stdlib/lib --root app --no-print "$f" "$out" >>"$CORPUS_LOG" 2>&1; then
+  if ! "$CORPUS_BIN" compile --root compiler/lib --root lib --root base/lib --root app --no-print "$f" "$out" >>"$CORPUS_LOG" 2>&1; then
     printf '%s\n' "$f" >>"$CORPUS_FAIL"
   fi
 done
@@ -396,6 +399,7 @@ print_table() {
   metric_line compiler_self_compile
   metric_line compiler_closure_compile
   metric_line tiny_compile
+  metric_line dt_elab
   metric_line corpus_compile
   note "  throughput: ${SELF_LINES_PER_SEC} lines/s, ${SELF_KB_PER_SEC} KB/s (self-compile source: $SRC_LINES lines / $SRC_BYTES B)"
   note "  corpus: ${CORPUS_OK}/${CORPUS_TOTAL} compiled"

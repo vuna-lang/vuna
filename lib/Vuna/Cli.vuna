@@ -2,198 +2,372 @@ module Vuna.Cli (runCli) where
 
 -- Vuna.Cli：产品 CLI（vuna）。
 --
--- 编译器命令（compile / check / build / seed）由 Vuna.CompilerCli 实现，
+-- 编译器命令（compile / check / build / seed）由 Vuna.Compiler.CompilerCli 实现，
 -- 这里只做 in-process 分发；工具命令（lint / interp / test / fmt / repl / doc）
 -- 在本包实现。app/Main.vuna 仍然只是 `main = exit (runCli (getArgs))`。
 --
 -- 每个命令都必须显式书写；不再支持“无子命令 = compile”的旧式回退。
-
-import Vuna.Base
-import Vuna.Pkg
-import Vuna.Compile
-import Vuna.CompilerCli
+import Vuna.Compiler.Common
+import Vuna.Compiler.Pkg
+import Vuna.Compiler.Compile
+import Vuna.Compiler.CompilerCli
 import Vuna.Interp
+import Vuna.Compiler.Dt
+import Vuna.Compiler.Parser
+import Vuna.Compiler.Ast
+import Vuna.Compiler.Elab
 import Vuna.Fmt
 import Vuna.Files
+import Vuna.Index
 import Vuna.Repl
 import Vuna.Doc
 import Vuna.TestRunner
+import Vuna.Lsp
 import qualified Vuna.Lint
 
 toolUsageLines : String -> String
 toolUsageLines prog =
-  "  " ++ prog ++ " lint [--fix] <file.vuna>...\n"
-  ++ "  " ++ prog ++ " interp [--root DIR]... <file.vuna>\n"
-  ++ "  " ++ prog ++ " test [DIR]                           运行包内 test/*.vuna（main : String，空串通过）\n"
-  ++ "  " ++ prog ++ " fmt [--check] [PATH]...              格式化（PATH 可为文件或目录；省略 = workspace 源码目录）\n"
-  ++ "  " ++ prog ++ " repl [--root DIR]...                 交互式 REPL\n"
-  ++ "  " ++ prog ++ " doc [DIR [OUT]]                      生成 API 文档（默认 OUT=DIR/docs/api.md）\n"
+  "  "
+    ++ prog
+    ++ " lint [--fix] <file.vuna>...\n"
+    ++ "  "
+    ++ prog
+    ++ " interp [--dt] [--root DIR]... <file.vuna>\n"
+    ++ "  "
+    ++ prog
+    ++ " test [DIR]                           运行包内 test/*.vuna（main : String，空串通过）\n"
+    ++ "  "
+    ++ prog
+    ++ " fmt [--check] [PATH]...              格式化（PATH 可为文件或目录；省略 = workspace 源码目录）\n"
+    ++ "  "
+    ++ prog
+    ++ " repl [--root DIR]...                 交互式 REPL\n"
+    ++ "  "
+    ++ prog
+    ++ " doc [--with-comments] [DIR [OUT]]    生成 API 文档（默认 OUT=DIR/docs/api.md）\n"
+    ++ "  "
+    ++ prog
+    ++ " map [--modules]                      模块总览（索引缓存在 .local/index/，自动新鲜度判定）\n"
+    ++ "  "
+    ++ prog
+    ++ " map --find <Module.name>            定位符号：定义位置 + 引用者 + 建议测试\n"
+    ++ "  "
+    ++ prog
+    ++ " map --impact <Module.name>          改动影响面：受影响模块 + 测试标签\n"
+    ++ "  "
+    ++ prog
+    ++ " api <Module.name>                   某模块的签名面（含注释与行号）\n"
+    ++ "  "
+    ++ prog
+    ++ " goal <file.vuna>                   列出 DT 洞的目标与上下文（M17）\n"
+    ++ "  "
+    ++ prog
+    ++ " lsp                                 启动 LSP server（JSON-RPC over stdio）\n"
 
 usageFor prog = "usage:\n" ++ compilerUsageLines prog ++ toolUsageLines prog
 
 runCli : List String -> Int
-runCli args =
-  if anyHelp args then help else runCli1 args
+runCli args = if anyHelp args then help else runCli1 args
 
-runCli1 args =
-  case args of
-    Nil => usageError
-    Cons arg rest =>
-      case arg of
-        "compile" => runCompilerCliFor "vuna" (Cons arg rest)
-        "check" => runCompilerCliFor "vuna" (Cons arg rest)
-        "build" => runCompilerCliFor "vuna" (Cons arg rest)
-        "seed" => runCompilerCliFor "vuna" (Cons arg rest)
-        "lint" => Vuna.Lint.runLint rest
-        "interp" => interpArgs rest
-        "test" => testArgs rest
-        "fmt" => fmtArgs rest
-        "repl" => replArgs rest
-        "doc" => docArgs rest
-        "help" => help
-        _ =>
-          if startsWith "-" arg then runCompilerCliFor "vuna" args
-          else unknownCommand "vuna" arg
+runCli1 args = case args of
+  [] => usageError
+  arg :: rest => case arg of
+    "compile" => runCompilerCliFor "vuna" (arg :: rest)
+    "check" => runCompilerCliFor "vuna" (arg :: rest)
+    "build" => runCompilerCliFor "vuna" (arg :: rest)
+    "seed" => runCompilerCliFor "vuna" (arg :: rest)
+    "lint" => Vuna.Lint.runLint rest
+    "interp" => interpArgs rest
+    "test" => testArgs rest
+    "fmt" => fmtArgs rest
+    "repl" => replArgs rest
+    "doc" => docArgs rest
+    "map" => mapArgs rest
+    "api" => apiArgs rest
+    "lsp" => Vuna.Lsp.runLspTool rest
+    "goal" => goalArgs rest
+    "help" => help
+    _ => if startsWith "-" arg then runCompilerCliFor "vuna" args else unknownCommand "vuna" arg
 
 anyHelp : List String -> Bool
-anyHelp Nil = False
-anyHelp (Cons arg rest) =
-  if arg == "-h" || arg == "--help" then True else anyHelp rest
+anyHelp [] = False
+anyHelp (arg :: rest) = if arg == "-h" || arg == "--help" then True else anyHelp rest
 
-help = let _ = print (usageFor "vuna") in 0
+help =
+  let
+    _ = print (usageFor "vuna")
+  in 0
 
-usageError = let _ = print (usageFor "vuna") in 2
+usageError =
+  let
+    _ = print (usageFor "vuna")
+  in 2
 
 unknownCommand prog arg =
-  let _ = print ("error: unknown command `" ++ arg ++ "`\n" ++ "run `" ++ prog ++ " help`\n") in 2
+  let
+    _ = print ("error: unknown command `" ++ arg ++ "`\n" ++ "run `" ++ prog ++ " help`\n")
+  in 2
 
 -- ---------------------------------------------------------------
 -- interp
 -- ---------------------------------------------------------------
+interpArgs args = interpParse False False [] args
 
-interpArgs args = interpParse Nil args
+interpParse dt hasRoot roots args = case args of
+  "--dt" :: rest => interpParse True hasRoot roots rest
+  "--root" :: rest => rootArg roots rest (\roots2, rest2 => interpParse dt True roots2 rest2)
+  [path] =>
+    if startsWith "-" path then usageError
+    else if dt then if hasRoot then interpDtRootError else interpDtEmit path
+    else interpEmit (effectiveRoots roots) path
+  _ => usageError
 
-interpParse roots args =
-  case args of
-    Cons "--root" rest => rootArg roots rest (\roots2, rest2 => interpParse roots2 rest2)
-    Cons path Nil =>
-      if startsWith "-" path then usageError
-      else interpEmit (effectiveRoots roots) path
-    _ => usageError
+interpDtRootError =
+  let
+    _ = print "error: --dt does not support --root yet (DT single-file mode)\n"
+  in 2
 
-rootArg roots rest k =
-  case rest of
-    Cons dir rest2 => k (append roots (Cons (rawRoot dir) Nil)) rest2
-    Nil => usageError
+interpDtEmit path = case dtEvalFile path of
+  Err e =>
+    let
+      _ = print ("error: " ++ e ++ "\n")
+    in 2
+  Ok output =>
+    let
+      _ = print (output ++ "\n")
+    in 0
+
+rootArg roots rest k = case rest of
+  dir :: rest2 => k (append roots [rawRoot dir]) rest2
+  [] => usageError
 
 interpEmit roots path =
-  let output = interpretFile roots path
-  in let _ = print (output ++ "\n")
-     in if startsWith "error:" output then 2 else 0
+  let
+    output = interpretFile roots path
+  in let
+    _ = print (output ++ "\n")
+  in if startsWith "error:" output then 2 else 0
 
 -- ---------------------------------------------------------------
 -- test（包模式）
 -- ---------------------------------------------------------------
+testArgs args = case args of
+  [] => testRun "."
+  [dir] => if startsWith "-" dir then usageError else testRun dir
+  _ => usageError
 
-testArgs args =
-  case args of
-    Nil => testRun "."
-    Cons dir Nil =>
-      if startsWith "-" dir then usageError else testRun dir
-    _ => usageError
-
-testRun dir =
-  case loadPackage dir of
-    Err e => let _ = print ("error: " ++ e ++ "\n") in 1
-    Ok pkg => runTests pkg (packageRoots pkg)
+testRun dir = case loadPackage dir of
+  Err e =>
+    let
+      _ = print ("error: " ++ e ++ "\n")
+    in 1
+  Ok pkg => runTests pkg (packageRoots pkg)
 
 -- ---------------------------------------------------------------
 -- fmt
 -- ---------------------------------------------------------------
+fmtArgs args = fmtParse False [] args
 
-fmtArgs args = fmtParse False Nil args
+fmtParse check paths args = case args of
+  [] => fmtRun check paths
+  arg :: rest => case arg of
+    "--check" => fmtParse True paths rest
+    _ => if startsWith "-" arg then usageError else fmtParse check (append paths [arg]) rest
 
-fmtParse check paths args =
-  case args of
-    Nil => fmtRun check paths
-    Cons arg rest =>
-      case arg of
-        "--check" => fmtParse True paths rest
-        _ =>
-          if startsWith "-" arg then usageError
-          else fmtParse check (append paths (Cons arg Nil)) rest
-
-fmtRun check Nil = fmtFiles check (fmtDefaultTargets) 0
+fmtRun check [] = fmtFiles check (concatMap expandPath fmtDefaultTargets) 0
 fmtRun check paths = fmtFiles check (concatMap expandPath paths) 0
 
 -- 省略 PATH 时格式化 workspace 内所有包的 lib/app/test（拆包后 compiler/ 也在内）。
 fmtDefaultTargets : List String
-fmtDefaultTargets =
-  case findManifestDir "." of
-    Err e => ["lib", "app", "test"]
-    Ok dir =>
-      case workspacePackages dir of
-        Err e => [dir ++ "/lib", dir ++ "/app", dir ++ "/test"]
-        Ok pkgs => existingTargets (concatMap packageTargets pkgs) Nil
+fmtDefaultTargets = case findManifestDir "." of
+  Err e => ["lib", "app", "test"]
+  Ok dir => case workspacePackages dir of
+    Err e => [dir ++ "/lib", dir ++ "/app", dir ++ "/test"]
+    Ok pkgs => existingTargets (concatMap packageTargets pkgs) []
 
-packageTargets pkg =
-  Cons (packageDir pkg ++ "/lib")
-    (Cons (packageDir pkg ++ "/app") (Cons (packageDir pkg ++ "/test") Nil))
+packageTargets pkg = [packageDir pkg ++ "/lib", packageDir pkg ++ "/app", packageDir pkg ++ "/test"]
 
-existingTargets Nil acc = reverse acc
+existingTargets [] acc = reverse acc
+existingTargets (path :: rest) acc =
+  if pathExistsDir path then existingTargets rest (path :: acc) else existingTargets rest acc
 
-existingTargets (Cons path rest) acc =
-  if isDirectory path then existingTargets rest (Cons path acc)
-  else existingTargets rest acc
+expandPath path = if pathExistsDir path then collectVunaFiles path else [path]
 
-expandPath path =
-  if isDirectory path then collectVunaFiles path else Cons path Nil
-
-fmtFiles check Nil changed =
-  if check && changed > 0 then
-    let _ = print (strFromInt changed ++ " file(s) need formatting\n") in 1
-  else 0
-
-fmtFiles check (Cons path rest) changed =
-  let original = readFile path
+fmtFiles check [] changed = if check && changed > 0 then
+  let
+    _ = print (strFromInt changed ++ " file(s) need formatting\n")
+  in 1
+else 0
+fmtFiles check (path :: rest) changed =
+  let
+    original = readFile path
   in case formatSource original of
-       Err e => let _ = print ("error: " ++ path ++ ": " ++ e ++ "\n") in 2
-       Ok formatted =>
-         if formatted == original then fmtFiles check rest changed
-         else if check then
-           let _ = print ("would reformat: " ++ path ++ "\n")
-           in fmtFiles check rest (changed + 1)
-         else
-           let _ = writeFile path formatted
-           in let _ = print ("formatted " ++ path ++ "\n")
-              in fmtFiles check rest (changed + 1)
+    Err e =>
+      let
+        _ = print ("error: " ++ path ++ ": " ++ e ++ "\n")
+      in 2
+    Ok formatted => if formatted == original then fmtFiles check rest changed
+    else if check then
+      let
+        _ = print ("would reformat: " ++ path ++ "\n")
+      in fmtFiles check rest (changed + 1)
+    else
+      let
+        _ = writeFile path formatted
+      in let
+        _ = print ("formatted " ++ path ++ "\n")
+      in fmtFiles check rest (changed + 1)
 
 -- ---------------------------------------------------------------
 -- repl
 -- ---------------------------------------------------------------
+replArgs args = replParse [] args
 
-replArgs args = replParse Nil args
-
-replParse roots args =
-  case args of
-    Cons "--root" rest => rootArg roots rest (\roots2, rest2 => replParse roots2 rest2)
-    Nil => runRepl (effectiveRoots roots)
-    _ => usageError
+replParse roots args = case args of
+  "--root" :: rest => rootArg roots rest (\roots2, rest2 => replParse roots2 rest2)
+  [] => runRepl (effectiveRoots roots)
+  _ => usageError
 
 -- ---------------------------------------------------------------
 -- doc
 -- ---------------------------------------------------------------
+docArgs args = case args of
+  [] => docRun "." "docs/api.md"
+  [dir] => if startsWith "-" dir then usageError else docRun dir (docDefaultOut dir)
+  [dir, out] => if startsWith "-" dir || startsWith "-" out then usageError else docRun dir out
+  _ => usageError
 
-docArgs args =
-  case args of
-    Nil => docRun "." "docs/api.md"
-    Cons dir Nil =>
-      if startsWith "-" dir then usageError else docRun dir (docDefaultOut dir)
-    Cons dir (Cons out Nil) =>
-      if startsWith "-" dir || startsWith "-" out then usageError else docRun dir out
-    _ => usageError
-
-docDefaultOut dir =
-  if dir == "." then "docs/api.md" else dir ++ "/docs/api.md"
+docDefaultOut dir = if dir == "." then "docs/api.md" else dir ++ "/docs/api.md"
 
 docRun dir out = runDoc dir out
+
+-- ---------------------------------------------------------------
+-- map / api（源码索引）
+-- 索引缓存在 .local/index/，每次调用自动按 mtime+size 判定新鲜度，
+-- 没有「刷新索引」命令；详见 Vuna.Index。
+-- ---------------------------------------------------------------
+mapArgs args = mapParse False False False Nothing args
+
+mapParse modulesOnly findMode impactMode query args = case args of
+  [] => case query of
+    Nothing => printOverview modulesOnly
+    Just q =>
+      if findMode then runFind q else if impactMode then runImpact q else printOverview modulesOnly
+  "--modules" :: rest => mapParse True findMode impactMode query rest
+  "--find" :: rest => case rest of
+    q :: more => mapParse modulesOnly True impactMode (Just q) more
+    [] => usageError
+  "--impact" :: rest => case rest of
+    q :: more => mapParse modulesOnly findMode True (Just q) more
+    [] => usageError
+  arg :: rest =>
+    if startsWith "-" arg then usageError
+    else mapParse modulesOnly findMode impactMode (Just arg) rest
+
+-- 索引根默认为当前目录（workspace 根）。
+withIndex f = case loadOrBuild "." of
+  Err e =>
+    let
+      _ = print ("error: " ++ e ++ "\n")
+    in 1
+  Ok index => f index
+
+printOverview modulesOnly = withIndex (\index => let
+  text = if modulesOnly then renderModules index else renderOverview index
+in let
+  _ = print (text ++ "\n")
+in 0
+)
+
+runFind query = withIndex (\index => case findSymbol index query of
+  Err e =>
+    let
+      _ = print ("error: " ++ e ++ "\n")
+    in 1
+  Ok hits =>
+    let
+      _ = map (\s => print (symLineText s ++ "\n")) hits
+    in case hits of
+      [] => 1
+      [_] => 0
+      _ =>
+        let
+          _ =
+            print
+              ("ambiguous: " ++ strFromInt (length hits) ++ " candidates, use a full Module.name\n")
+        in 2
+)
+
+-- 一行：全名 + 文件:行 + 签名。
+symLineText s =
+  symFullName s
+    ++ "  ("
+    ++ strFromInt (symLine s)
+    ++ ":"
+    ++ strFromInt (symCol s)
+    ++ ")"
+    ++ (if symSig s == "" then "" else "  " ++ symSig s)
+
+runImpact query = withIndex (\index => case impactOf index query of
+  Err e =>
+    let
+      _ = print ("error: " ++ e ++ "\n")
+    in 1
+  Ok text =>
+    let
+      _ = print (text ++ "\n")
+    in 0
+)
+
+apiArgs args = case args of
+  [modName] => runApi modName
+  _ => usageError
+
+runApi modName = withIndex (\index => case renderApi index modName of
+  Err e =>
+    let
+      _ = print ("error: " ++ e ++ "\n")
+    in 1
+  Ok text =>
+    let
+      _ = print (text ++ "\n")
+    in 0
+)
+
+-- ---------------------------------------------------------------
+-- goal（M17：洞目标显示）
+-- `vuna goal <file.vuna>` 列出 DT 文件里每个洞 `_` 的位置、目标类型与上下文。
+-- ---------------------------------------------------------------
+goalArgs args = case args of
+  [file] => if startsWith "-" file then usageError else goalRun file
+  _ => usageError
+
+goalRun file = case goalsOfFile file of
+  Err e =>
+    let
+      _ = print ("error: " ++ e ++ "\n")
+    in 1
+  Ok infos =>
+    let
+      _ = print (goalHeader file (length infos) ++ renderGoals file infos)
+    in 0
+
+goalsOfFile file = if fileExists file then case parseSource file (readFile file) of
+  Err e => Err e
+  Ok (Source _ _ decls) => goalsOfProgram decls
+else Err ("file not found: " ++ file)
+
+renderGoals file [] = ""
+renderGoals file (i :: rest) =
+  showSpanLoc (dtGoalInfoSpan i)
+    ++ ": goal "
+    ++ dtGoalInfoGoal i
+    ++ "\n"
+    ++ renderGoalCtx (dtGoalInfoCtx i)
+    ++ renderGoals file rest
+
+renderGoalCtx [] = ""
+renderGoalCtx (e :: rest) = case e of
+  Pair n ty => "  " ++ n ++ " : " ++ ty ++ "\n" ++ renderGoalCtx rest
+
+goalHeader file n = if n == 0 then file ++ ": no holes\n" else ""

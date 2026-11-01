@@ -1,0 +1,238 @@
+module Vuna.Compiler.Lexer (TIdent, TKw, TInt, TStr, TSym, TEof, PTok, isUpperChar, isLowerChar, isIdentStart, isDigit, lexSource, CKind, CLine, CBlock, Comment, commentKind, commentText, commentSpan, lexComments) where
+
+-- vuna 源码 lexer：字符游标、token 与 pos。
+import Vuna.Compiler.Common
+
+data Tok : Type where
+  TIdent : String -> Tok
+  TKw : String -> Tok
+  TInt : Int -> Tok
+  TStr : String -> Tok
+  TSym : String -> Tok
+  TEof : Tok
+
+data PTok : Type where
+  PTok : Tok -> Pos -> PTok
+
+data Chars : Type where
+  Chars : List Int -> Pos -> Chars
+
+advanceChar c (Pos line col) = if c == 10 then Pos (line + 1) 1 else Pos line (col + 1)
+
+isUpperChar c = c >= 65 && c <= 90
+
+isLowerChar c = c >= 97 && c <= 122
+
+isIdentStart c = isUpperChar c || isLowerChar c || c == 95
+
+isIdentChar c = isIdentStart c || isDigit c || c == 39
+
+isDigit c = c >= 48 && c <= 57
+
+isSpace c = c == 32 || c == 9 || c == 10 || c == 13
+
+isOpChar c =
+  c == 33
+    || c == 36
+    || c == 37
+    || c == 38
+    || c == 42
+    || c == 43
+    || c == 45
+    || c == 46
+    || c == 47
+    || c == 60
+    || c == 61
+    || c == 62
+    || c == 63
+    || c == 64
+    || c == 92
+    || c == 94
+    || c == 124
+    || c == 126
+    || c == 58
+
+isKeyword s =
+  s == "data"
+    || s == "case"
+    || s == "of"
+    || s == "let"
+    || s == "in"
+    || s == "if"
+    || s == "then"
+    || s == "else"
+    || s == "where"
+    || s == "Type"
+    || s == "import"
+    || s == "module"
+    || s == "qualified"
+    || s == "as"
+    || s == "record"
+    || s == "trait"
+    || s == "instance"
+    || s == "deriving"
+    || s == "do"
+
+classifyIdent s = if isKeyword s then TKw s else TIdent s
+
+skipLineComment (Chars [] p) = Chars [] p
+skipLineComment (Chars (c :: rest) p) =
+  if c == 10 then Chars (c :: rest) p else skipLineComment (Chars rest (advanceChar c p))
+
+skipBlockComment depth cs = case cs of
+  Chars [] p => Err "unterminated block comment"
+  Chars (c :: rest) p => case rest of
+    c2 :: rest2 =>
+      if c == 123 && c2 == 45 then skipBlockComment (depth + 1) (Chars rest2 (advanceChar c2 (advanceChar c p)))
+      else if c == 45 && c2 == 125 then if depth == 1 then Ok (Chars rest2 (advanceChar c2 (advanceChar c p)))
+      else skipBlockComment (depth - 1) (Chars rest2 (advanceChar c2 (advanceChar c p)))
+      else skipBlockComment depth (Chars rest (advanceChar c p))
+    [] => skipBlockComment depth (Chars rest (advanceChar c p))
+
+skipTrivia cs = case cs of
+  Chars [] p => Ok cs
+  Chars (c :: rest) p => if isSpace c then skipTrivia (Chars rest (advanceChar c p))
+  else case rest of
+    c2 :: rest2 => if c == 45 && c2 == 45 then skipTrivia (skipLineComment (Chars rest (advanceChar c p)))
+    else if c == 123 && c2 == 45 then case skipBlockComment 1 (Chars rest (advanceChar c p)) of
+      Err e => Err e
+      Ok cs2 => skipTrivia cs2
+    else Ok cs
+    [] => Ok cs
+
+collectIdent (Chars [] p) acc = Pair (strPack (reverse acc)) (Chars [] p)
+collectIdent (Chars (c :: rest) p) acc = if isIdentChar c then collectIdent (Chars rest (advanceChar c p)) (c :: acc)
+else if c == 46 then case rest of
+  c2 :: rest2 =>
+    if isIdentStart c2 then collectIdent (Chars rest (advanceChar c p)) (c :: acc)
+    else Pair (strPack (reverse acc)) (Chars (c :: rest) p)
+  [] => Pair (strPack (reverse acc)) (Chars (c :: rest) p)
+else Pair (strPack (reverse acc)) (Chars (c :: rest) p)
+
+collectInt (Chars [] p) acc = Pair acc (Chars [] p)
+collectInt (Chars (c :: rest) p) acc =
+  if isDigit c then collectInt (Chars rest (advanceChar c p)) (acc * 10 + (c - 48))
+  else Pair acc (Chars (c :: rest) p)
+
+collectOp (Chars [] p) acc = Pair (strPack (reverse acc)) (Chars [] p)
+collectOp (Chars (c :: rest) p) acc =
+  if isOpChar c then collectOp (Chars rest (advanceChar c p)) (c :: acc)
+  else Pair (strPack (reverse acc)) (Chars (c :: rest) p)
+
+scanString (Chars [] p) acc = Err "unterminated string literal"
+scanString (Chars (c :: rest) p) acc =
+  if c == 34 then Ok (Pair (strPack (reverse acc)) (Chars rest (advanceChar c p)))
+  else if c == 10 then Err "unterminated string literal"
+  else if c == 92 then scanEscape (Chars rest (advanceChar c p)) acc
+  else scanString (Chars rest (advanceChar c p)) (c :: acc)
+
+scanEscape (Chars [] p) acc = Err "unterminated string literal"
+scanEscape (Chars (c :: rest) p) acc =
+  if c == 110 then scanString (Chars rest (advanceChar c p)) (10 :: acc)
+  else if c == 116 then scanString (Chars rest (advanceChar c p)) (9 :: acc)
+  else if c == 114 then scanString (Chars rest (advanceChar c p)) (13 :: acc)
+  else if c == 34 then scanString (Chars rest (advanceChar c p)) (34 :: acc)
+  else if c == 92 then scanString (Chars rest (advanceChar c p)) (92 :: acc)
+  else if c == 39 then scanString (Chars rest (advanceChar c p)) (39 :: acc)
+  else Err "unknown escape sequence"
+
+lexChars cs = case skipTrivia cs of
+  Err e => Err e
+  Ok cs2 => case cs2 of
+    Chars [] p => Ok [PTok TEof p]
+    Chars (c :: rest) p => lexToken c rest p
+
+lexToken c rest p = if isIdentStart c then case collectIdent (Chars rest (advanceChar c p)) [c] of
+  Pair name cs2 => case lexChars cs2 of
+    Err e => Err e
+    Ok toks => Ok (PTok (classifyIdent name) p :: toks)
+else if isDigit c then case collectInt (Chars rest (advanceChar c p)) (c - 48) of
+  Pair n cs2 => case lexChars cs2 of
+    Err e => Err e
+    Ok toks => Ok (PTok (TInt n) p :: toks)
+else if c == 34 then case scanString (Chars rest (advanceChar c p)) [] of
+  Err e => Err e
+  Ok (Pair s cs2) => case lexChars cs2 of
+    Err e => Err e
+    Ok toks => Ok (PTok (TStr s) p :: toks)
+else if c == 40 || c == 41 || c == 91 || c == 93 || c == 44 || c == 123 || c == 125 then case lexChars (Chars rest (advanceChar c p)) of
+  Err e => Err e
+  Ok toks => Ok (PTok (TSym (strPack [c])) p :: toks)
+else if isOpChar c then case collectOp (Chars rest (advanceChar c p)) [c] of
+  Pair op cs2 => case lexChars cs2 of
+    Err e => Err e
+    Ok toks => Ok (PTok (TSym op) p :: toks)
+else Err "unexpected character"
+
+lexSource source = lexChars (Chars (strUnpack source) (Pos 1 1))
+
+-- ---------------------------------------------------------------
+-- 注释扫描（fmt 用）：注释不进入 token 流，但格式化器需要保留它们。
+-- 与 skipTrivia 使用同一套规则（`--` 行注释、`{- -}` 可嵌套块注释，
+-- 字符串字面量里的 `--` / `{-` 不算注释）。
+-- ---------------------------------------------------------------
+data CKind : Type where
+  CLine : CKind
+  CBlock : CKind
+
+data Comment : Type where
+  Comment : CKind -> String -> Span -> Comment
+
+commentKind (Comment kind text sp) = kind
+
+commentText (Comment kind text sp) = text
+
+commentSpan (Comment kind text sp) = sp
+
+trimTrailingSpace s = strPack (reverse (dropTrailingSpace (reverse (strUnpack s))))
+
+dropTrailingSpace [] = []
+dropTrailingSpace (c :: rest) =
+  if c == 32 || c == 9 || c == 13 then dropTrailingSpace rest else c :: rest
+
+-- 跳过字符串字面量（从开引号之后开始），返回引号之后的位置。
+skipStringBody (Chars [] p) = Err "unterminated string literal"
+skipStringBody (Chars (c :: rest) p) = if c == 34 then Ok (Chars rest (advanceChar c p))
+else if c == 92 then case rest of
+  c2 :: rest2 => skipStringBody (Chars rest2 (advanceChar c2 (advanceChar c p)))
+  [] => Err "unterminated string literal"
+else skipStringBody (Chars rest (advanceChar c p))
+
+-- 行注释正文：从 `--` 之后扫到行尾（不消费换行）；endP 是最后一个正文字符位置。
+collectLineBody (Chars [] p) acc endP = Pair (strPack (reverse acc)) (Pair (Chars [] p) endP)
+collectLineBody (Chars (c :: rest) p) acc endP =
+  if c == 10 then Pair (strPack (reverse acc)) (Pair (Chars (c :: rest) p) endP)
+  else collectLineBody (Chars rest (advanceChar c p)) (c :: acc) p
+
+-- 块注释正文：深度从 1 开始，返回 `{-` 与 `-}` 之间的原文；endP 是 `}` 的位置。
+collectBlockBody (Chars [] p) depth acc endP = Err "unterminated block comment"
+collectBlockBody (Chars (c :: rest) p) depth acc endP = case rest of
+  c2 :: rest2 =>
+    if c == 123 && c2 == 45 then collectBlockBody (Chars rest2 (advanceChar c2 (advanceChar c p))) (depth + 1) (c2 :: c :: acc)
+      (advanceChar c2 p)
+    else if c == 45 && c2 == 125 then if depth == 1 then Ok
+      (Pair (strPack (reverse acc)) (Pair (Chars rest2 (advanceChar c2 (advanceChar c p))) (advanceChar c2 p)))
+    else collectBlockBody (Chars rest2 (advanceChar c2 (advanceChar c p))) (depth - 1) (c2 :: c :: acc)
+      (advanceChar c2 p)
+    else collectBlockBody (Chars rest (advanceChar c p)) depth (c :: acc) p
+  [] => collectBlockBody (Chars rest (advanceChar c p)) depth (c :: acc) p
+
+commentSpanOf startP endP = Span "" (posLine startP) (posCol startP) (posLine endP) (posCol endP)
+
+scanComments (Chars [] p) acc = Ok (reverse acc)
+scanComments (Chars (c :: rest) p) acc = if c == 34 then case skipStringBody (Chars rest (advanceChar c p)) of
+  Err e => Err e
+  Ok cs2 => scanComments cs2 acc
+else case rest of
+  c2 :: rest2 => if c == 45 && c2 == 45 then case collectLineBody (Chars rest2 (advanceChar c2 (advanceChar c p))) [] (advanceChar c2 p) of
+    Pair text (Pair cs2 endP) =>
+      scanComments cs2 (Comment CLine (trimTrailingSpace text) (commentSpanOf p endP) :: acc)
+  else if c == 123 && c2 == 45 then case collectBlockBody (Chars rest2 (advanceChar c2 (advanceChar c p))) 1 [] (advanceChar c2 p) of
+    Err e => Err e
+    Ok (Pair text (Pair cs2 endP)) =>
+      scanComments cs2 (Comment CBlock text (commentSpanOf p endP) :: acc)
+  else scanComments (Chars rest (advanceChar c p)) acc
+  [] => Ok (reverse acc)
+
+-- 扫描整段源码里的注释（源码顺序），供格式化器按位置重新插入。
+lexComments source = scanComments (Chars (strUnpack source) (Pos 1 1)) []

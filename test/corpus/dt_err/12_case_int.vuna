@@ -1,0 +1,8 @@
+-- case 的 scrutinee 必须是归纳族，不能是 Int。
+bad : Int -> Int
+bad n =
+  case n of
+    Zero => 0
+
+main : Int
+main = 1

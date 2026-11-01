@@ -1,0 +1,17 @@
+data Nat : Type where
+  Zero : Nat
+  Succ : Nat -> Nat
+
+data Vec : Type -> Nat -> Type where
+  Nil : (a : Type) -> Vec a Zero
+  Cons : (a : Type) -> (n : Nat) -> a -> Vec a n -> Vec a (Succ n)
+
+-- Nil 分支的索引约束（Zero 与 Succ m）不可满足，写出来必须报错。
+bad : (a : Type) -> (m : Nat) -> Vec a (Succ m) -> Int
+bad a m xs =
+  case xs of
+    Nil b => 0
+    Cons b k y ys => 1
+
+main : Int
+main = 1

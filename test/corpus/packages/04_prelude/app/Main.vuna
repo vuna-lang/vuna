@@ -1,0 +1,9 @@
+-- Prelude 自动导入：不写 import 也能使用 List/String 的常用名；
+-- IO 效果函数仍需显式 import Base.IO。
+import Base.IO
+import Base.Monad
+
+main : IO Int
+main = do
+  _ <- print (join "-" (map strFromInt (map (\x => x + 1) (Cons 1 (Cons 2 Nil)))))
+  pure 0

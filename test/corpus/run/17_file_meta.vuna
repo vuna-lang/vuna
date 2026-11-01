@@ -1,0 +1,14 @@
+import Base.Monad
+import Base.IO
+
+main : IO Int
+main = do
+  self <- fileSize "corpus/run/17_file_meta.vuna"
+  stamp <- fileMtime "corpus/run/17_file_meta.vuna"
+  missingSize <- fileSize "/vuna/definitely-not-a-file-xyz"
+  missingMtime <- fileMtime "/vuna/definitely-not-a-file-xyz"
+  pure (if self > 0 then
+          (if stamp > 1000000000 then
+             (if missingSize == 0 then (if missingMtime == 0 then 7 else 1) else 2)
+           else 3)
+        else 4)

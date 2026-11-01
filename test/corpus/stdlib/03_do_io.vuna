@@ -1,6 +1,6 @@
 -- stdlib：do 在 IO monad 上（含 `_ <-` 丢弃结果）；main : IO Int 由运行器执行。
-import Vuna.Monad
-import Vuna.IO
+import Base.Monad
+import Base.IO
 
 program : IO Int
 program = do

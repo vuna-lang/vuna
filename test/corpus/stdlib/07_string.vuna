@@ -1,6 +1,6 @@
--- stdlib：Vuna.String 常用操作。
-import Vuna.String
-import Vuna.List
+-- stdlib：Base.String 常用操作。
+import Base.String
+import Base.List
 
 showBool : Bool -> String
 showBool b = if b then "True" else "False"

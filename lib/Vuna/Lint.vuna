@@ -2,9 +2,9 @@ module Vuna.Lint (runLint) where
 
 -- app/Lint：vuna 源码风格检查与自动修复（首批规则）。
 -- 只做语法层分析：Lexer 取 token 行列 + 按行文本重写；修复后用 parseSource 复验。
-import Vuna.Base
-import Vuna.Lexer
-import Vuna.Parser
+import Vuna.Compiler.Common
+import Vuna.Compiler.Lexer
+import Vuna.Compiler.Parser
 
 data Edit : Type where
   Edit : Int -> Int -> List String -> Edit
@@ -60,60 +60,50 @@ caseBodyEnd (CaseBody stop lines) = stop
 
 caseBodyLines (CaseBody stop lines) = lines
 
-isNilList Nil = True
-isNilList (Cons x rest) = False
+isNilList [] = True
+isNilList (x :: rest) = False
 
 notBool b = if b then False else True
 
 isSpaceChar c = c == 32 || c == 9
 
-spaceChars n = if n <= 0 then Nil else Cons 32 (spaceChars (n - 1))
+spaceChars n = if n <= 0 then [] else 32 :: spaceChars (n - 1)
 
 spaces n = strPack (spaceChars n)
 
 indentOf line = indentChars (strUnpack line)
 
-indentChars Nil = 0
-
-indentChars (Cons c rest) =
-  if c == 32 then 1 + indentChars rest
-  else if c == 9 then 1 + indentChars rest
-  else 0
+indentChars [] = 0
+indentChars (c :: rest) =
+  if c == 32 then 1 + indentChars rest else if c == 9 then 1 + indentChars rest else 0
 
 isBlankLine line = blankChars (strUnpack line)
 
-blankChars Nil = True
+blankChars [] = True
+blankChars (c :: rest) = isSpaceChar c && blankChars rest
 
-blankChars (Cons c rest) = isSpaceChar c && blankChars rest
+splitLines source = splitLinesFrom (strUnpack source) [] []
 
-splitLines source = splitLinesFrom (strUnpack source) Nil Nil
+splitLinesFrom [] acc cur = reverse (strPack (reverse cur) :: acc)
+splitLinesFrom (c :: rest) acc cur =
+  if c == 10 then splitLinesFrom rest (strPack (reverse cur) :: acc) []
+  else splitLinesFrom rest acc (c :: cur)
 
-splitLinesFrom Nil acc cur = reverse (Cons (strPack (reverse cur)) acc)
+joinLines [] = ""
+joinLines (line :: rest) = line ++ "\n" ++ joinLines rest
 
-splitLinesFrom (Cons c rest) acc cur =
-  if c == 10 then splitLinesFrom rest (Cons (strPack (reverse cur)) acc) Nil
-  else splitLinesFrom rest acc (Cons c cur)
-
-joinLines Nil = ""
-
-joinLines (Cons line rest) = line ++ "\n" ++ joinLines rest
-
-nthLine Nil n = ""
-
-nthLine (Cons line rest) n = if n <= 1 then line else nthLine rest (n - 1)
+nthLine [] n = ""
+nthLine (line :: rest) n = if n <= 1 then line else nthLine rest (n - 1)
 
 lineAt lines n = nthLine lines n
 
-takeChars n Nil = Nil
+takeChars n [] = []
+takeChars n (c :: rest) = if n <= 0 then [] else c :: takeChars (n - 1) rest
 
-takeChars n (Cons c rest) = if n <= 0 then Nil else Cons c (takeChars (n - 1) rest)
-
-dropChars n chars =
-  if n <= 0 then chars
-  else
-    case chars of
-      Nil => Nil
-      Cons c rest => dropChars (n - 1) rest
+dropChars n chars = if n <= 0 then chars
+else case chars of
+  [] => []
+  c :: rest => dropChars (n - 1) rest
 
 sliceChars start count chars = takeChars count (dropChars start chars)
 
@@ -121,21 +111,18 @@ sliceLine start count line = strPack (sliceChars start count (strUnpack line))
 
 dropIndent n line = strPack (dropChars n (strUnpack line))
 
-nthChar i Nil = 0
-
-nthChar i (Cons c rest) = if i <= 0 then c else nthChar (i - 1) rest
+nthChar i [] = 0
+nthChar i (c :: rest) = if i <= 0 then c else nthChar (i - 1) rest
 
 trimLen chars n =
-  if n <= 0 then 0
-  else if isSpaceChar (nthChar (n - 1) chars) then trimLen chars (n - 1)
-  else n
+  if n <= 0 then 0 else if isSpaceChar (nthChar (n - 1) chars) then trimLen chars (n - 1) else n
 
-trimEnd line = strPack (takeChars (trimLen (strUnpack line) (length (strUnpack line))) (strUnpack line))
+trimEnd line =
+  strPack (takeChars (trimLen (strUnpack line) (length (strUnpack line))) (strUnpack line))
 
-dropSpaceChars chars =
-  case chars of
-    Nil => Nil
-    Cons c rest => if isSpaceChar c then dropSpaceChars rest else chars
+dropSpaceChars chars = case chars of
+  [] => []
+  c :: rest => if isSpaceChar c then dropSpaceChars rest else chars
 
 trimStart line = strPack (dropSpaceChars (strUnpack line))
 
@@ -143,40 +130,36 @@ trimBoth line = trimStart (trimEnd line)
 
 textFromCol line col = trimBoth (strPack (dropChars (col - 1) (strUnpack line)))
 
-blankFill n stop = if n > stop then Nil else Cons "" (blankFill (n + 1) stop)
+blankFill n stop = if n > stop then [] else "" :: blankFill (n + 1) stop
 
 tailFromCol line col = strPack (dropChars (col - 1) (strUnpack line))
 
-startsLower name =
-  case strUnpack name of
-    Nil => False
-    Cons c rest => c >= 97 && c <= 122
+startsLower name = case strUnpack name of
+  [] => False
+  c :: rest => c >= 97 && c <= 122
 
-startsUpper name =
-  case strUnpack name of
-    Nil => False
-    Cons c rest => c >= 65 && c <= 90
+startsUpper name = case strUnpack name of
+  [] => False
+  c :: rest => c >= 65 && c <= 90
 
 prefixChars : List Int -> List Int -> Bool
-prefixChars Nil text = True
-
-prefixChars (Cons p prest) text =
-  case text of
-    Nil => False
-    Cons t trest => if p == t then prefixChars prest trest else False
+prefixChars [] text = True
+prefixChars (p :: prest) text = case text of
+  [] => False
+  t :: trest => if p == t then prefixChars prest trest else False
 
 containsSubChars : List Int -> List Int -> Bool
-containsSubChars pat text =
-  case text of
-    Nil => False
-    Cons c rest => if prefixChars pat text then True else containsSubChars pat rest
+containsSubChars pat text = case text of
+  [] => False
+  c :: rest => if prefixChars pat text then True else containsSubChars pat rest
 
 containsChar : Int -> List Int -> Bool
-containsChar c Nil = False
+containsChar c [] = False
+containsChar c (x :: rest) = if x == c then True else containsChar c rest
 
-containsChar c (Cons x rest) = if x == c then True else containsChar c rest
-
-hasComment line = containsSubChars (strUnpack "--") (strUnpack line) || containsSubChars (strUnpack "{-") (strUnpack line)
+hasComment line =
+  containsSubChars (strUnpack "--") (strUnpack line)
+    || containsSubChars (strUnpack "{-") (strUnpack line)
 
 hasTabOrCR line = containsChar 9 (strUnpack line) || containsChar 13 (strUnpack line)
 
@@ -190,627 +173,603 @@ tokLine tok = posLine (tokPos tok)
 
 tokCol tok = posCol (tokPos tok)
 
-tokIsKw tok key =
-  case tok of
-    PTok (TKw x) p => x == key
-    _ => False
+tokIsKw tok key = case tok of
+  PTok (TKw x) p => x == key
+  _ => False
 
-tokIsSym tok sym =
-  case tok of
-    PTok (TSym x) p => x == sym
-    _ => False
+tokIsSym tok sym = case tok of
+  PTok (TSym x) p => x == sym
+  _ => False
 
-tokIdentOf tok =
-  case tok of
-    PTok (TIdent x) p => Just x
-    _ => Nothing
+tokIdentOf tok = case tok of
+  PTok (TIdent x) p => Just x
+  _ => Nothing
 
-tokStrOf tok =
-  case tok of
-    PTok (TStr x) p => Just x
-    _ => Nothing
+tokStrOf tok = case tok of
+  PTok (TStr x) p => Just x
+  _ => Nothing
 
-tokIntOf tok =
-  case tok of
-    PTok (TInt x) p => Just x
-    _ => Nothing
+tokIntOf tok = case tok of
+  PTok (TInt x) p => Just x
+  _ => Nothing
 
-headToken Nil = Nothing
+headToken [] = Nothing
+headToken (t :: rest) = Just t
 
-headToken (Cons t rest) = Just t
-
-lastToken Nil = Nothing
-
-lastToken (Cons t Nil) = Just t
-
-lastToken (Cons t rest) = lastToken rest
+lastToken [] = Nothing
+lastToken ([t]) = Just t
+lastToken (t :: rest) = lastToken rest
 
 tokensOnLine toks n = filterTokLine toks n
 
-filterTokLine Nil n = Nil
-
-filterTokLine (Cons t rest) n =
-  if tokLine t == n then Cons t (filterTokLine rest n) else filterTokLine rest n
+filterTokLine [] n = []
+filterTokLine (t :: rest) n =
+  if tokLine t == n then t :: filterTokLine rest n else filterTokLine rest n
 
 bodyMentionsVar toks var start stop =
   if start >= stop then False
   else if countIdent var (tokensOnLine toks start) > 0 then True
   else bodyMentionsVar toks var (start + 1) stop
 
-hasSym Nil sym = False
+hasSym [] sym = False
+hasSym (t :: rest) sym = if tokIsSym t sym then True else hasSym rest sym
 
-hasSym (Cons t rest) sym = if tokIsSym t sym then True else hasSym rest sym
+tailOf [] = []
+tailOf (t :: rest) = rest
 
-tailOf Nil = Nil
+splitAtSym sym toks = splitAtSymGo sym toks []
 
-tailOf (Cons t rest) = rest
-
-splitAtSym sym toks = splitAtSymGo sym toks Nil
-
-splitAtSymGo sym Nil acc = Nothing
-
-splitAtSymGo sym (Cons t rest) acc =
+splitAtSymGo sym [] acc = Nothing
+splitAtSymGo sym (t :: rest) acc =
   if tokIsSym t sym then Just (Pair (reverse acc) (Pair t rest))
-  else splitAtSymGo sym rest (Cons t acc)
+  else splitAtSymGo sym rest (t :: acc)
 
-countIdent name Nil = 0
+countIdent name [] = 0
+countIdent name (t :: rest) = case tokIdentOf t of
+  Just other => if other == name then 1 + countIdent name rest else countIdent name rest
+  Nothing => countIdent name rest
 
-countIdent name (Cons t rest) =
-  case tokIdentOf t of
-    Just other => if other == name then 1 + countIdent name rest else countIdent name rest
-    Nothing => countIdent name rest
+lowercaseIdents [] = []
+lowercaseIdents (t :: rest) = case tokIdentOf t of
+  Just name =>
+    if startsLower name && name /= "_" then name :: lowercaseIdents rest else lowercaseIdents rest
+  Nothing => lowercaseIdents rest
 
-lowercaseIdents Nil = Nil
-
-lowercaseIdents (Cons t rest) =
-  case tokIdentOf t of
-    Just name =>
-      if startsLower name && name /= "_" then Cons name (lowercaseIdents rest)
-      else lowercaseIdents rest
-    Nothing => lowercaseIdents rest
-
-intersects Nil ys = False
-
-intersects (Cons x rest) ys =
-  if memName x ys then True else intersects rest ys
+intersects [] ys = False
+intersects (x :: rest) ys = if memName x ys then True else intersects rest ys
 
 isSimpleTokens toks = simpleFrom toks 0 && noKeyword toks
 
-simpleFrom Nil depth = depth == 0
+simpleFrom [] depth = depth == 0
+simpleFrom (t :: rest) depth = case t of
+  PTok (TSym s) p =>
+    if s == "(" || s == "[" then simpleFrom rest (depth + 1)
+    else if s == ")" || s == "]" then if depth > 0 then simpleFrom rest (depth - 1) else False
+    else simpleFrom rest depth
+  _ => simpleFrom rest depth
 
-simpleFrom (Cons t rest) depth =
-  case t of
-    PTok (TSym s) p =>
-      if s == "(" || s == "[" then simpleFrom rest (depth + 1)
-      else if s == ")" || s == "]" then if depth > 0 then simpleFrom rest (depth - 1) else False
-      else simpleFrom rest depth
-    _ => simpleFrom rest depth
+noKeyword [] = True
+noKeyword (t :: rest) = case t of
+  PTok (TKw x) p => False
+  _ => noKeyword rest
 
-noKeyword Nil = True
+startsWithIf toks = case toks of
+  t :: rest => tokIsKw t "if"
+  [] => False
 
-noKeyword (Cons t rest) =
-  case t of
-    PTok (TKw x) p => False
-    _ => noKeyword rest
-
-startsWithIf toks =
-  case toks of
-    Cons t rest => tokIsKw t "if"
-    Nil => False
-
-parseIfHead toks line =
-  case toks of
-    Nil => Nothing
-    Cons t1 rest =>
-      case tokIdentOf t1 of
-        Nothing => Nothing
-        Just name =>
-          case rest of
-            Nil => Nothing
-            Cons t2 rest2 =>
-              if tokIsSym t2 "==" then
-                case rest2 of
-                  Nil => Nothing
-                  Cons t3 rest3 =>
-                    case tokStrOf t3 of
-                      Nothing => Nothing
-                      Just lit =>
-                        case rest3 of
-                          Nil => Nothing
-                          Cons t4 rest4 =>
-                            if tokIsKw t4 "then" then
-                              if isNilList rest4 then Nothing
-                              else if isSimpleTokens rest4 then
-                                Just (IfHead name (trimEnd (sliceLine (tokCol t3 - 1) (tokCol t4 - tokCol t3) line)) (textFromCol line (tokCol t4 + 4)))
-                              else Nothing
-                            else Nothing
+parseIfHead toks line = case toks of
+  [] => Nothing
+  t1 :: rest => case tokIdentOf t1 of
+    Nothing => Nothing
+    Just name => case rest of
+      [] => Nothing
+      t2 :: rest2 => if tokIsSym t2 "==" then case rest2 of
+        [] => Nothing
+        t3 :: rest3 => case tokStrOf t3 of
+          Nothing => Nothing
+          Just lit => case rest3 of
+            [] => Nothing
+            t4 :: rest4 =>
+              if tokIsKw t4 "then" then if isNilList rest4 then Nothing
+              else if isSimpleTokens rest4 then Just
+                (IfHead name (trimEnd (sliceLine (tokCol t3 - 1) (tokCol t4 - tokCol t3) line)) (textFromCol line (tokCol t4 + 4)))
               else Nothing
+              else Nothing
+      else Nothing
 
 finalElseText line elseTok rest =
   if isNilList rest then Nothing
   else if startsWithIf rest then Nothing
-  else if isSimpleTokens rest then Just (textFromCol line (tokCol elseTok + 4))
-  else Nothing
+  else if isSimpleTokens rest then Just (textFromCol line (tokCol elseTok + 4)) else Nothing
 
 renderLitBranch indent branch = spaces (indent + 2) ++ litText branch ++ " => " ++ litExpr branch
 
 makeChainFinding firstLine indent scrutinee acc defaultText lastLine =
-  let branches = reverse acc
-  in if length branches < 2 then Nil
-     else
-       let newLines = append (Cons (spaces indent ++ "case " ++ scrutinee ++ " of") Nil) (append (map (\b => renderLitBranch indent b) branches) (Cons (spaces (indent + 2) ++ "_ => " ++ defaultText) Nil))
-       in Cons (Finding firstLine (indent + 1) "literal-if-chain" ("if/else-if chain on `" ++ scrutinee ++ "` can be a case with literal patterns") (Just (Edit firstLine lastLine newLines))) Nil
-
-finishChain lines toks lastLine n indent firstLine scrutinee acc =
-  if n > lastLine then Nil
+  let
+    branches = reverse acc
+  in if length branches < 2 then []
   else
-    let line = lineAt lines n
-    in let ts = tokensOnLine toks n
-    in if isNilList ts then Nil
-       else if indentOf line /= indent then Nil
-       else if hasComment line then Nil
-       else
-         case ts of
-           Nil => Nil
-           Cons first rest =>
-             if tokIsKw first "else" then
-               case rest of
-                 Nil => Nil
-                 Cons second rest2 =>
-                   if tokIsKw second "if" then
-                     case parseIfHead rest2 line of
-                       Nothing => Nil
-                       Just head =>
-                         if headName head == scrutinee then
-                           finishChain lines toks lastLine (n + 1) indent firstLine scrutinee (Cons (LitBranch (headText head) (headExpr head)) acc)
-                         else Nil
-                   else
-                     case finalElseText line first rest of
-                       Nothing => Nil
-                       Just text => makeChainFinding firstLine indent scrutinee acc text n
-             else Nil
+    let
+      newLines =
+        append [spaces indent ++ "case " ++ scrutinee ++ " of"]
+          (append (map (\b => renderLitBranch indent b) branches) [spaces (indent + 2) ++ "_ => " ++ defaultText])
+    in [ Finding firstLine (indent + 1) "literal-if-chain" ("if/else-if chain on `" ++ scrutinee ++ "` can be a case with literal patterns") (Just (Edit firstLine lastLine newLines))
+    ]
+
+finishChain lines toks lastLine n indent firstLine scrutinee acc = if n > lastLine then []
+else
+  let
+    line = lineAt lines n
+  in let
+    ts = tokensOnLine toks n
+  in if isNilList ts then []
+  else if indentOf line /= indent then []
+  else if hasComment line then []
+  else case ts of
+    [] => []
+    first :: rest => if tokIsKw first "else" then case rest of
+      [] => []
+      second :: rest2 => if tokIsKw second "if" then case parseIfHead rest2 line of
+        Nothing => []
+        Just head =>
+          if headName head == scrutinee then finishChain lines toks lastLine (n + 1) indent firstLine scrutinee
+            (LitBranch (headText head) (headExpr head) :: acc)
+          else []
+      else case finalElseText line first rest of
+        Nothing => []
+        Just text => makeChainFinding firstLine indent scrutinee acc text n
+    else []
 
 ifChainAt lines toks lastLine n =
-  let line = lineAt lines n
-  in let ts = tokensOnLine toks n
-  in if isNilList ts then Nil
-     else if hasComment line then Nil
-     else
-       case ts of
-         Nil => Nil
-         Cons first rest =>
-           if tokIsKw first "if" && tokCol first == indentOf line + 1 then
-             case parseIfHead rest line of
-               Nothing => Nil
-               Just head => finishChain lines toks lastLine (n + 1) (indentOf line) n (headName head) (Cons (LitBranch (headText head) (headExpr head)) Nil)
-           else Nil
+  let
+    line = lineAt lines n
+  in let
+    ts = tokensOnLine toks n
+  in if isNilList ts then []
+  else if hasComment line then []
+  else case ts of
+    [] => []
+    first :: rest => if tokIsKw first "if" && tokCol first == indentOf line + 1 then case parseIfHead rest line of
+      Nothing => []
+      Just head =>
+        finishChain lines toks lastLine (n + 1) (indentOf line) n (headName head)
+          [LitBranch (headText head) (headExpr head)]
+    else []
 
 scanIfChains lines toks n lastLine =
-  if n > lastLine then Nil
+  if n > lastLine then []
   else append (ifChainAt lines toks lastLine n) (scanIfChains lines toks (n + 1) lastLine)
 
-caseVarOf toks =
-  case toks of
-    Nil => Nothing
-    Cons t1 rest =>
-      if tokIsKw t1 "case" then
-        case rest of
-          Nil => Nothing
-          Cons t2 rest2 =>
-            case tokIdentOf t2 of
-              Nothing => Nothing
-              Just name =>
-                case rest2 of
-                  Nil => Nothing
-                  Cons t3 rest3 =>
-                    if tokIsKw t3 "of" && isNilList rest3 then Just name else Nothing
-      else Nothing
+caseVarOf toks = case toks of
+  [] => Nothing
+  t1 :: rest => if tokIsKw t1 "case" then case rest of
+    [] => Nothing
+    t2 :: rest2 => case tokIdentOf t2 of
+      Nothing => Nothing
+      Just name => case rest2 of
+        [] => Nothing
+        t3 :: rest3 => if tokIsKw t3 "of" && isNilList rest3 then Just name else Nothing
+  else Nothing
 
-enclosingClause lines toks headLine =
-  if headLine < 1 then Nothing
+enclosingClause lines toks headLine = if headLine < 1 then Nothing
+else
+  let
+    line = lineAt lines headLine
+  in if isBlankLine line then Nothing
+  else if indentOf line /= 0 then Nothing
   else
-    let line = lineAt lines headLine
-    in if isBlankLine line then Nothing
-       else if indentOf line /= 0 then Nothing
-       else
-         let ts = tokensOnLine toks headLine
-         in if hasSym ts "=" && notBool (hasSym ts "=>") then Just (Enclosing headLine ts "clause")
-            else Nothing
+    let
+      ts = tokensOnLine toks headLine
+    in if hasSym ts "=" && notBool (hasSym ts "=>") then Just (Enclosing headLine ts "clause")
+    else Nothing
 
-enclosingAlt lines toks headLine expectedIndent =
-  if headLine < 1 then Nothing
+enclosingAlt lines toks headLine expectedIndent = if headLine < 1 then Nothing
+else
+  let
+    line = lineAt lines headLine
+  in if isBlankLine line then Nothing
+  else if indentOf line /= expectedIndent then Nothing
   else
-    let line = lineAt lines headLine
-    in if isBlankLine line then Nothing
-       else if indentOf line /= expectedIndent then Nothing
-       else
-         let ts = tokensOnLine toks headLine
-         in if hasSym ts "\\" then Nothing
-            else
-              case lastToken ts of
-                Nothing => Nothing
-                Just t => if tokIsSym t "=>" then Just (Enclosing headLine ts "alt") else Nothing
+    let
+      ts = tokensOnLine toks headLine
+    in if hasSym ts "\\" then Nothing
+    else case lastToken ts of
+      Nothing => Nothing
+      Just t => if tokIsSym t "=>" then Just (Enclosing headLine ts "alt") else Nothing
 
 enclosingOf lines toks caseLine indent =
   if indent == 2 then enclosingClause lines toks (caseLine - 1)
   else enclosingAlt lines toks (caseLine - 1) (indent - 2)
 
-ctorOrLitPattern toks =
-  case toks of
-    Nil => False
-    Cons t rest =>
-      case tokIdentOf t of
-        Just name => startsUpper name
-        Nothing =>
-          case tokIntOf t of
-            Just n => True
-            Nothing =>
-              case tokStrOf t of
-                Just s => True
-                Nothing => False
+ctorOrLitPattern toks = case toks of
+  [] => False
+  t :: rest => case tokIdentOf t of
+    Just name => startsUpper name
+    Nothing => case tokIntOf t of
+      Just n => True
+      Nothing => case tokStrOf t of
+        Just s => True
+        Nothing => False
 
-scanBody lines toks lastLine n indent acc =
-  if n > lastLine then CaseBody n (reverse acc)
-  else
-    let line = lineAt lines n
-    in if isBlankLine line then scanBody lines toks lastLine (n + 1) indent (Cons line acc)
-       else if indentOf line > indent then scanBody lines toks lastLine (n + 1) indent (Cons line acc)
-       else CaseBody n (reverse acc)
+scanBody lines toks lastLine n indent acc = if n > lastLine then CaseBody n (reverse acc)
+else
+  let
+    line = lineAt lines n
+  in if isBlankLine line then scanBody lines toks lastLine (n + 1) indent (line :: acc)
+  else if indentOf line > indent then scanBody lines toks lastLine (n + 1) indent (line :: acc)
+  else CaseBody n (reverse acc)
 
 blockBodyOk lines toks lastLine start stop indent =
   if start >= stop then False
   else if bodyIndentOk lines start stop indent && noSiblingAlt lines toks start stop indent then True
-       else False
+  else False
 
-bodyIndentOk lines n stop indent =
-  if n >= stop then True
-  else
-    let line = lineAt lines n
-    in if isBlankLine line then bodyIndentOk lines (n + 1) stop indent
-       else if hasComment line || hasTabOrCR line then False
-       else if indentOf line < indent + 4 then False
-       else bodyIndentOk lines (n + 1) stop indent
+bodyIndentOk lines n stop indent = if n >= stop then True
+else
+  let
+    line = lineAt lines n
+  in if isBlankLine line then bodyIndentOk lines (n + 1) stop indent
+  else if hasComment line || hasTabOrCR line then False
+  else if indentOf line < indent + 4 then False else bodyIndentOk lines (n + 1) stop indent
 
-noSiblingAlt lines toks n stop indent =
-  if n >= stop then True
-  else
-    let line = lineAt lines n
-    in let ts = tokensOnLine toks n
-    in if isBlankLine line then noSiblingAlt lines toks (n + 1) stop indent
-       else if indentOf line == indent + 2 && hasSym ts "=>" then False
-       else noSiblingAlt lines toks (n + 1) stop indent
+noSiblingAlt lines toks n stop indent = if n >= stop then True
+else
+  let
+    line = lineAt lines n
+  in let
+    ts = tokensOnLine toks n
+  in if isBlankLine line then noSiblingAlt lines toks (n + 1) stop indent
+  else if indentOf line == indent + 2 && hasSym ts "=>" then False
+  else noSiblingAlt lines toks (n + 1) stop indent
 
-nextNonBlank lines n lastLine =
-  if n > lastLine then n
-  else
-    let line = lineAt lines n
-    in if isBlankLine line then nextNonBlank lines (n + 1) lastLine else n
+nextNonBlank lines n lastLine = if n > lastLine then n
+else
+  let
+    line = lineAt lines n
+  in if isBlankLine line then nextNonBlank lines (n + 1) lastLine else n
 
 tailTokenCol tok = tokCol tok + strLength (tokenText tok)
 
-tokenText tok =
-  case tok of
-    PTok (TIdent x) p => x
-    PTok (TKw x) p => x
-    PTok (TInt x) p => strFromInt x
-    PTok (TStr x) p => x
-    PTok (TSym x) p => x
-    PTok TEof p => ""
+tokenText tok = case tok of
+  PTok (TIdent x) p => x
+  PTok (TKw x) p => x
+  PTok (TInt x) p => strFromInt x
+  PTok (TStr x) p => x
+  PTok (TSym x) p => x
+  PTok TEof p => ""
 
 replaceIdentInLine line tok replacement =
-  let col = tokCol tok
-      len = strLength (tokenText tok)
-      prefix = sliceLine 0 (col - 1) line
-      suffix = tailFromCol line (col + len)
+  let
+    col = tokCol tok
+    len = strLength (tokenText tok)
+    prefix = sliceLine 0 (col - 1) line
+    suffix = tailFromCol line (col + len)
   in prefix ++ replacement ++ suffix
 
-clauseHeadPatterns toks =
-  case splitAtSym "=" toks of
-    Nothing => Nothing
-    Just (Pair before (Pair arrow after)) =>
-      if isNilList after then
-        case before of
-          Nil => Nothing
-          Cons fn rest => Just (Pair (tokenText fn) rest)
-      else Nothing
+clauseHeadPatterns toks = case splitAtSym "=" toks of
+  Nothing => Nothing
+  Just (Pair before (Pair arrow after)) => if isNilList after then case before of
+    [] => Nothing
+    fn :: rest => Just (Pair (tokenText fn) rest)
+  else Nothing
 
-altHeadPatterns toks =
-  case splitAtSym "=>" toks of
-    Nothing => Nothing
-    Just (Pair before (Pair arrow after)) =>
-      if isNilList after then Just before else Nothing
+altHeadPatterns toks = case splitAtSym "=>" toks of
+  Nothing => Nothing
+  Just (Pair before (Pair arrow after)) => if isNilList after then Just before else Nothing
 
 lastClauseCheck lines toks lastLine stop fnName =
-  let next = nextNonBlank lines stop lastLine
+  let
+    next = nextNonBlank lines stop lastLine
   in if next > lastLine then True
-     else
-       let line = lineAt lines next
-       in if indentOf line /= 0 then False
-          else
-            let ts = tokensOnLine toks next
-            in case headToken ts of
-                 Nothing => False
-                 Just t => case tokIdentOf t of
-                             Just other => notBool (other == fnName)
-                             Nothing => True
+  else
+    let
+      line = lineAt lines next
+    in if indentOf line /= 0 then False
+    else
+      let
+        ts = tokensOnLine toks next
+      in case headToken ts of
+        Nothing => False
+        Just t => case tokIdentOf t of
+          Just other => notBool (other == fnName)
+          Nothing => True
 
 lastAltCheck lines toks lastLine stop indent =
-  let next = nextNonBlank lines stop lastLine
+  let
+    next = nextNonBlank lines stop lastLine
   in if next > lastLine then True
-     else
-       let line = lineAt lines next
-       in let ind = indentOf line
-          in if ind == indent - 2 then
-               if hasSym (tokensOnLine toks next) "=>" then False else True
-             else if ind < indent - 2 then True
-             else False
-
-linesClean lines start stop =
-  if start > stop then True
   else
-    let line = lineAt lines start
-    in if hasComment line || hasTabOrCR line then False
-       else linesClean lines (start + 1) stop
+    let
+      line = lineAt lines next
+    in let
+      ind = indentOf line
+    in if ind == indent - 2 then if hasSym (tokensOnLine toks next) "=>" then False else True
+    else if ind < indent - 2 then True else False
+
+linesClean lines start stop = if start > stop then True
+else
+  let
+    line = lineAt lines start
+  in if hasComment line || hasTabOrCR line then False else linesClean lines (start + 1) stop
 
 checkRedundantBody lines toks lastLine caseLine indent var enclosing =
-  let headLine = enclosingLine enclosing
-      headToks = enclosingToks enclosing
-      kind = enclosingKind enclosing
-      altLine = caseLine + 1
-  in if altLine > lastLine then Nil
-     else
-       let altText = lineAt lines altLine
-       in if isBlankLine altText then Nil
-          else if indentOf altText /= indent + 2 then Nil
-          else
-            let altToks = tokensOnLine toks altLine
-            in case splitAtSym "=>" altToks of
-                 Nothing => Nil
-                 Just (Pair patToks (Pair arrow bodyToks)) =>
-                   if isNilList patToks then Nil
-                   else if notBool (ctorOrLitPattern patToks) then Nil
-                   else
-                     let patText = trimEnd (sliceLine (tokCol (headOfTokens patToks) - 1) (tokCol arrow - tokCol (headOfTokens patToks)) altText)
-                     in if isNilList bodyToks then
-                          blockShape lines toks lastLine caseLine indent var enclosing patToks patText arrow
-                        else
-                          inlineShape lines toks lastLine caseLine indent var enclosing patToks patText arrow bodyToks
+  let
+    headLine = enclosingLine enclosing
+    headToks = enclosingToks enclosing
+    kind = enclosingKind enclosing
+    altLine = caseLine + 1
+  in if altLine > lastLine then []
+  else
+    let
+      altText = lineAt lines altLine
+    in if isBlankLine altText then []
+    else if indentOf altText /= indent + 2 then []
+    else
+      let
+        altToks = tokensOnLine toks altLine
+      in case splitAtSym "=>" altToks of
+        Nothing => []
+        Just (Pair patToks (Pair arrow bodyToks)) => if isNilList patToks then []
+        else if notBool (ctorOrLitPattern patToks) then []
+        else
+          let
+            patText =
+              trimEnd
+                (sliceLine (tokCol (headOfTokens patToks) - 1) (tokCol arrow - tokCol (headOfTokens patToks)) altText)
+          in if isNilList bodyToks then blockShape lines toks lastLine caseLine indent var enclosing patToks patText arrow
+          else inlineShape lines toks lastLine caseLine indent var enclosing patToks patText arrow
+            bodyToks
 
-headOfTokens Nil = PTok TEof (Pos 1 1)
-
-headOfTokens (Cons t rest) = t
+headOfTokens [] = PTok TEof (Pos 1 1)
+headOfTokens (t :: rest) = t
 
 inlineShape lines toks lastLine caseLine indent var enclosing patToks patText arrow bodyToks =
-  let altLine = caseLine + 1
-      altText = lineAt lines altLine
-      next = nextNonBlank lines (altLine + 1) lastLine
-  in if notBool (simpleFrom bodyToks 0) then Nil
-     else if next <= lastLine && indentOf (lineAt lines next) >= indent then Nil
-     else if notBool (linesClean lines (enclosingLine enclosing) (caseLine + 1)) then Nil
-     else
-       let bodyText = textFromCol altText (tokCol arrow + 2)
-           tailEnd = if next > lastLine then lastLine else next - 1
-           newBody = Cons (spaces indent ++ bodyText) (blankFill (altLine + 1) tailEnd)
-       in redundantFinding lines toks lastLine caseLine indent var enclosing patToks patText (countIdent var bodyToks > 0) next newBody
+  let
+    altLine = caseLine + 1
+    altText = lineAt lines altLine
+    next = nextNonBlank lines (altLine + 1) lastLine
+  in if notBool (simpleFrom bodyToks 0) then []
+  else if next <= lastLine && indentOf (lineAt lines next) >= indent then []
+  else if notBool (linesClean lines (enclosingLine enclosing) (caseLine + 1)) then []
+  else
+    let
+      bodyText = textFromCol altText (tokCol arrow + 2)
+      tailEnd = if next > lastLine then lastLine else next - 1
+      newBody = (spaces indent ++ bodyText) :: blankFill (altLine + 1) tailEnd
+    in redundantFinding lines toks lastLine caseLine indent var enclosing patToks patText
+      (countIdent var bodyToks > 0) next newBody
 
 blockShape lines toks lastLine caseLine indent var enclosing patToks patText arrow =
-  let altLine = caseLine + 1
-      scanned = scanBody lines toks lastLine (altLine + 1) indent Nil
+  let
+    altLine = caseLine + 1
+    scanned = scanBody lines toks lastLine (altLine + 1) indent []
   in case scanned of
-       CaseBody stop rawLines =>
-         if stop <= altLine + 1 then Nil
-         else if notBool (stop > lastLine || indentOf (lineAt lines stop) < indent) then Nil
-         else if notBool (blockBodyOk lines toks lastLine (altLine + 1) stop indent) then Nil
-         else if notBool (linesClean lines (enclosingLine enclosing) (stop - 1)) then Nil
-         else
-           let newBody = map (\line => dropIndent 4 line) rawLines
-           in redundantFinding lines toks lastLine caseLine indent var enclosing patToks patText (bodyMentionsVar toks var (altLine + 1) stop) stop newBody
+    CaseBody stop rawLines => if stop <= altLine + 1 then []
+    else if notBool (stop > lastLine || indentOf (lineAt lines stop) < indent) then []
+    else if notBool (blockBodyOk lines toks lastLine (altLine + 1) stop indent) then []
+    else if notBool (linesClean lines (enclosingLine enclosing) (stop - 1)) then []
+    else
+      let
+        newBody = map (\line => dropIndent 4 line) rawLines
+      in redundantFinding lines toks lastLine caseLine indent var enclosing patToks patText
+        (bodyMentionsVar toks var (altLine + 1) stop) stop newBody
 
 redundantFinding lines toks lastLine caseLine indent var enclosing patToks patText mentions stop newBody =
-  let headLine = enclosingLine enclosing
-      headToks = enclosingToks enclosing
-      kind = enclosingKind enclosing
-      headText = lineAt lines headLine
+  let
+    headLine = enclosingLine enclosing
+    headToks = enclosingToks enclosing
+    kind = enclosingKind enclosing
+    headText = lineAt lines headLine
   in case tokenOfVar var headToks of
-       Nothing => Nil
-       Just varTok =>
-         case enclosingPatterns kind headToks of
-           Nothing => Nil
-           Just (Pair fnOrKind patArea) =>
-             let outerNames = lowercaseIdents patArea
-                 innerNames = lowercaseIdents patToks
-                 otherOuter = removeName var outerNames
-                 conflict = intersects innerNames otherOuter
-                 oneOccurrence = countIdent var patArea == 1
-                 lastOk = enclosingIsLast lines toks lastLine stop indent kind fnOrKind
-                 cleanOk = linesClean lines headLine (caseLine + 1)
-             in if notBool oneOccurrence then Nil
-                else if conflict then Nil
-                else
-                  let newHead = replaceIdentInLine headText varTok ("(" ++ patText ++ ")")
-                      newLines = Cons newHead newBody
-                      fixable = lastOk && cleanOk && notBool mentions
-                      edit = if fixable then Just (Edit headLine (stop - 1) newLines) else Nothing
-                  in Cons (Finding caseLine (indent + 1) "redundant-case" ("single-alternative case on `" ++ var ++ "` can be folded into the enclosing pattern") edit) Nil
+    Nothing => []
+    Just varTok => case enclosingPatterns kind headToks of
+      Nothing => []
+      Just (Pair fnOrKind patArea) =>
+        let
+          outerNames = lowercaseIdents patArea
+          innerNames = lowercaseIdents patToks
+          otherOuter = removeName var outerNames
+          conflict = intersects innerNames otherOuter
+          oneOccurrence = countIdent var patArea == 1
+          lastOk = enclosingIsLast lines toks lastLine stop indent kind fnOrKind
+          cleanOk = linesClean lines headLine (caseLine + 1)
+        in if notBool oneOccurrence then []
+        else if conflict then []
+        else
+          let
+            newHead = replaceIdentInLine headText varTok ("(" ++ patText ++ ")")
+            newLines = newHead :: newBody
+            fixable = lastOk && cleanOk && notBool mentions
+            edit = if fixable then Just (Edit headLine (stop - 1) newLines) else Nothing
+          in [ Finding caseLine (indent + 1) "redundant-case" ("single-alternative case on `" ++ var ++ "` can be folded into the enclosing pattern") edit
+          ]
 
-tokenOfVar name Nil = Nothing
+tokenOfVar name [] = Nothing
+tokenOfVar name (t :: rest) = case tokIdentOf t of
+  Just other => if other == name then Just t else tokenOfVar name rest
+  Nothing => tokenOfVar name rest
 
-tokenOfVar name (Cons t rest) =
-  case tokIdentOf t of
-    Just other => if other == name then Just t else tokenOfVar name rest
-    Nothing => tokenOfVar name rest
+removeName name [] = []
+removeName name (x :: rest) = if x == name then removeName name rest else x :: removeName name rest
 
-removeName name Nil = Nil
-
-removeName name (Cons x rest) =
-  if x == name then removeName name rest else Cons x (removeName name rest)
-
-enclosingPatterns kind headToks =
-  if kind == "clause" then
-    case clauseHeadPatterns headToks of
-      Nothing => Nothing
-      Just (Pair fnName pats) =>
-        Just (Pair fnName pats)
-  else
-    case altHeadPatterns headToks of
-      Nothing => Nothing
-      Just pats => Just (Pair "" pats)
+enclosingPatterns kind headToks = if kind == "clause" then case clauseHeadPatterns headToks of
+  Nothing => Nothing
+  Just (Pair fnName pats) => Just (Pair fnName pats)
+else case altHeadPatterns headToks of
+  Nothing => Nothing
+  Just pats => Just (Pair "" pats)
 
 enclosingIsLast lines toks lastLine stop indent kind fnOrKind =
   if kind == "clause" then lastClauseCheck lines toks lastLine stop fnOrKind
   else lastAltCheck lines toks lastLine stop indent
 
 redundantCaseAt lines toks lastLine n =
-  let line = lineAt lines n
-  in let indent = indentOf line
-  in let ts = tokensOnLine toks n
+  let
+    line = lineAt lines n
+  in let
+    indent = indentOf line
+  in let
+    ts = tokensOnLine toks n
   in case caseVarOf ts of
-       Nothing => Nil
-       Just var =>
-         case enclosingOf lines toks n indent of
-           Nothing => Nil
-           Just enclosing => checkRedundantBody lines toks lastLine n indent var enclosing
+    Nothing => []
+    Just var => case enclosingOf lines toks n indent of
+      Nothing => []
+      Just enclosing => checkRedundantBody lines toks lastLine n indent var enclosing
 
 scanRedundant lines toks n lastLine =
-  if n > lastLine then Nil
+  if n > lastLine then []
   else append (redundantCaseAt lines toks lastLine n) (scanRedundant lines toks (n + 1) lastLine)
 
-sortFindings Nil = Nil
+sortFindings [] = []
+sortFindings (f :: rest) = insertFinding f (sortFindings rest)
 
-sortFindings (Cons f rest) = insertFinding f (sortFindings rest)
+insertFinding f [] = [f]
+insertFinding f (g :: rest) =
+  if findingLine f < findingLine g then f :: g :: rest
+  else if findingLine f == findingLine g && findingCol f <= findingCol g then f :: g :: rest
+  else g :: insertFinding f rest
 
-insertFinding f Nil = Cons f Nil
+sortEdits [] = []
+sortEdits (e :: rest) = insertEdit e (sortEdits rest)
 
-insertFinding f (Cons g rest) =
-  if findingLine f < findingLine g then Cons f (Cons g rest)
-  else if findingLine f == findingLine g && findingCol f <= findingCol g then Cons f (Cons g rest)
-  else Cons g (insertFinding f rest)
+insertEdit e [] = [e]
+insertEdit e (f :: rest) =
+  if editStart e > editStart f then e :: f :: rest else f :: insertEdit e rest
 
-sortEdits Nil = Nil
+collectEdits [] acc = acc
+collectEdits (f :: rest) acc = case findingEdit f of
+  Nothing => collectEdits rest acc
+  Just e => collectEdits rest (e :: acc)
 
-sortEdits (Cons e rest) = insertEdit e (sortEdits rest)
+takeList n [] = []
+takeList n (x :: rest) = if n <= 0 then [] else x :: takeList (n - 1) rest
 
-insertEdit e Nil = Cons e Nil
+dropList n lines = if n <= 0 then lines
+else case lines of
+  [] => []
+  x :: rest => dropList (n - 1) rest
 
-insertEdit e (Cons f rest) =
-  if editStart e > editStart f then Cons e (Cons f rest)
-  else Cons f (insertEdit e rest)
+replaceRange start stop newLines lines =
+  append (takeList (start - 1) lines) (append newLines (dropList stop lines))
 
-collectEdits Nil acc = acc
-
-collectEdits (Cons f rest) acc =
-  case findingEdit f of
-    Nothing => collectEdits rest acc
-    Just e => collectEdits rest (Cons e acc)
-
-takeList n Nil = Nil
-
-takeList n (Cons x rest) = if n <= 0 then Nil else Cons x (takeList (n - 1) rest)
-
-dropList n lines =
-  if n <= 0 then lines
-  else
-    case lines of
-      Nil => Nil
-      Cons x rest => dropList (n - 1) rest
-
-replaceRange start stop newLines lines = append (takeList (start - 1) lines) (append newLines (dropList stop lines))
-
-applyEditList Nil lines limit count = Pair count lines
-
-applyEditList (Cons e rest) lines limit count =
-  if editEnd e < limit then
-    applyEditList rest (replaceRange (editStart e) (editEnd e) (editLines e) lines) (editStart e) (count + 1)
+applyEditList [] lines limit count = Pair count lines
+applyEditList (e :: rest) lines limit count =
+  if editEnd e < limit then applyEditList rest (replaceRange (editStart e) (editEnd e) (editLines e) lines) (editStart e)
+    (count + 1)
   else applyEditList rest lines limit count
 
 applyFixes source findings =
-  let edits = sortEdits (collectEdits findings Nil)
+  let
+    edits = sortEdits (collectEdits findings [])
   in case applyEditList edits (splitLines source) (length (splitLines source) + 1) 0 of
-       Pair count newLines =>
-         if count == 0 then Ok (Pair 0 source)
-         else
-           let newSource = joinLines newLines
-           in case parseSource "<lint>" newSource of
-                Err e => Err ("parse failed after fix: " ++ e)
-                Ok ignored => Ok (Pair count newSource)
+    Pair count newLines => if count == 0 then Ok (Pair 0 source)
+    else
+      let
+        newSource = joinLines newLines
+      in case parseSource "<lint>" newSource of
+        Err e => Err ("parse failed after fix: " ++ e)
+        Ok ignored => Ok (Pair count newSource)
 
-lintSource source =
-  case parseSource "<lint>" source of
+lintSource source = case parseSource "<lint>" source of
+  Err e => Err e
+  Ok ignored => case lexSource source of
     Err e => Err e
-    Ok ignored =>
-      case lexSource source of
-        Err e => Err e
-        Ok toks =>
-          let lines = splitLines source
-          in Ok (sortFindings (append (scanIfChains lines toks 1 (length lines)) (scanRedundant lines toks 1 (length lines))))
+    Ok toks =>
+      let
+        lines = splitLines source
+      in Ok
+        (sortFindings (append (scanIfChains lines toks 1 (length lines)) (scanRedundant lines toks 1 (length lines))))
 
 printFinding path fixMode f =
-  let suffix = if fixMode then " (not auto-fixable)" else ""
-      text = path ++ ":" ++ strFromInt (findingLine f) ++ ":" ++ strFromInt (findingCol f) ++ ": " ++ findingRule f ++ ": " ++ findingMessage f ++ suffix ++ "\n"
-  in let _ = print text in 0
+  let
+    suffix = if fixMode then " (not auto-fixable)" else ""
+    text =
+      path
+        ++ ":"
+        ++ strFromInt (findingLine f)
+        ++ ":"
+        ++ strFromInt (findingCol f)
+        ++ ": "
+        ++ findingRule f
+        ++ ": "
+        ++ findingMessage f
+        ++ suffix
+        ++ "\n"
+  in let
+    _ = print text
+  in 0
 
-printFindings path fixMode Nil = 0
-
-printFindings path fixMode (Cons f rest) =
-  let _ = printFinding path fixMode f
+printFindings path fixMode [] = 0
+printFindings path fixMode (f :: rest) =
+  let
+    _ = printFinding path fixMode f
   in printFindings path fixMode rest
 
 lintUsage = "usage: vuna lint [--fix] <file.vuna>...\n"
 
-lintUsageError = let _ = print lintUsage in 2
+lintUsageError =
+  let
+    _ = print lintUsage
+  in 2
 
 reportFindings path fixMode findings =
-  let _ = printFindings path fixMode findings
+  let
+    _ = printFindings path fixMode findings
   in if isNilList findings then 0 else 1
 
-fixLoop source findings passes total =
-  if passes <= 0 then Ok (Pair total source)
+fixLoop source findings passes total = if passes <= 0 then Ok (Pair total source)
+else case applyFixes source findings of
+  Err e => Err e
+  Ok (Pair count newSource) => if count == 0 then Ok (Pair total source)
+  else case lintSource newSource of
+    Err e => Err e
+    Ok remaining => fixLoop newSource remaining (passes - 1) (total + count)
+
+fixReport path source findings = case fixLoop source findings 8 0 of
+  Err e =>
+    let
+      _ = print (path ++ ": error: " ++ e ++ "\n")
+    in 2
+  Ok (Pair count newSource) => if count == 0 then reportFindings path True findings
   else
-    case applyFixes source findings of
-      Err e => Err e
-      Ok (Pair count newSource) =>
-        if count == 0 then Ok (Pair total source)
-        else
-          case lintSource newSource of
-            Err e => Err e
-            Ok remaining => fixLoop newSource remaining (passes - 1) (total + count)
+    let
+      _ = writeFile path newSource
+    in case lintSource newSource of
+      Err e =>
+        let
+          _ = print (path ++ ": error: " ++ e ++ "\n")
+        in 2
+      Ok remaining =>
+        let
+          _ = print (path ++ ": fixed " ++ strFromInt count ++ " finding(s)\n")
+        in reportFindings path True remaining
 
-fixReport path source findings =
-  case fixLoop source findings 8 0 of
-    Err e => let _ = print (path ++ ": error: " ++ e ++ "\n") in 2
-    Ok (Pair count newSource) =>
-      if count == 0 then reportFindings path True findings
-      else
-        let _ = writeFile path newSource
-        in case lintSource newSource of
-             Err e => let _ = print (path ++ ": error: " ++ e ++ "\n") in 2
-             Ok remaining =>
-               let _ = print (path ++ ": fixed " ++ strFromInt count ++ " finding(s)\n")
-               in reportFindings path True remaining
+lintExisting doFix path source = case lintSource source of
+  Err e =>
+    let
+      _ = print (path ++ ": error: " ++ e ++ "\n")
+    in 2
+  Ok findings =>
+    if doFix then fixReport path source findings else reportFindings path False findings
 
-lintExisting doFix path source =
-  case lintSource source of
-    Err e => let _ = print (path ++ ": error: " ++ e ++ "\n") in 2
-    Ok findings => if doFix then fixReport path source findings else reportFindings path False findings
+lintOne doFix path = if fileExists path then lintExisting doFix path (readFile path)
+else
+  let
+    _ = print (path ++ ": error: file not found\n")
+  in 2
 
-lintOne doFix path =
-  if fileExists path then lintExisting doFix path (readFile path)
-  else let _ = print (path ++ ": error: file not found\n") in 2
+lintFiles doFix [] = 0
+lintFiles doFix (path :: rest) =
+  let
+    code = lintOne doFix path
+  in let
+    restCode = lintFiles doFix rest
+  in if code > restCode then code else restCode
 
-lintFiles doFix Nil = 0
+lintArgs doFix files args = case args of
+  [] => if isNilList files then lintUsageError else lintFiles doFix (reverse files)
+  arg :: rest =>
+    if arg == "--fix" then lintArgs True files rest
+    else if startsWith "-" arg then lintUsageError else lintArgs doFix (arg :: files) rest
 
-lintFiles doFix (Cons path rest) =
-  let code = lintOne doFix path
-  in let restCode = lintFiles doFix rest
-     in if code > restCode then code else restCode
-
-lintArgs doFix files args =
-  case args of
-    Nil => if isNilList files then lintUsageError else lintFiles doFix (reverse files)
-    Cons arg rest =>
-      if arg == "--fix" then lintArgs True files rest
-      else if startsWith "-" arg then lintUsageError
-      else lintArgs doFix (Cons arg files) rest
-
-runLint args = lintArgs False Nil args
-
+runLint args = lintArgs False [] args

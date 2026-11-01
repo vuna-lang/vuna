@@ -1,0 +1,14 @@
+data Nat : Type where
+  Zero : Nat
+  Succ : Nat -> Nat
+
+-- 分支里写了不属于该族的构造子。
+bad : Nat -> Int
+bad n =
+  case n of
+    Zero => 0
+    Succ k => 1
+    Bogus => 2
+
+main : Int
+main = 1

@@ -1,0 +1,5 @@
+const : (a : Type) -> (b : Type) -> a -> b -> a
+const a b x y = x
+
+main : Int
+main = const Int String 7 "ignored"

@@ -1,0 +1,4 @@
+import Base.List
+
+main : Int
+main = 1

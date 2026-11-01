@@ -1,0 +1,29 @@
+-- M16：索引/证明擦除 —— Eq 无字段、Vec 的长度索引不参与运行时计算。
+data Nat : Type where
+  Zero : Nat
+  Succ : Nat -> Nat
+
+data Eq : Type -> Type -> Type where
+  Refl : {a : Type} -> Eq a a
+
+data Vec : Type -> Nat -> Type where
+  Nil : {a : Type} -> Vec a Zero
+  Cons : {a : Type} -> {n : Nat} -> a -> Vec a n -> Vec a (Succ n)
+
+-- sym/trans 只用构造子标签，不需要携带证明
+sym : {a : Type} -> {b : Type} -> Eq a b -> Eq b a
+sym e = case e of
+  Refl => Refl
+
+two : Nat
+two = Succ (Succ Zero)
+
+v : Vec Int (Succ (Succ Zero))
+v = Cons 5 (Cons 6 Nil)
+
+vhead : {a : Type} -> {n : Nat} -> Vec a (Succ n) -> a
+vhead xs = case xs of
+  Cons y ys => y
+
+main : Int
+main = vhead v

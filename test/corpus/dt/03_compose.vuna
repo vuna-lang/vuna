@@ -1,0 +1,11 @@
+compose : (a : Type) -> (b : Type) -> (c : Type) -> (b -> c) -> (a -> b) -> a -> c
+compose a b c f g x = f (g x)
+
+inc : Int -> Int
+inc n = n + 1
+
+dbl : Int -> Int
+dbl n = n * 2
+
+main : Int
+main = compose Int Int Int inc dbl 20

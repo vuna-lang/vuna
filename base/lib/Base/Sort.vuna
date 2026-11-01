@@ -1,0 +1,24 @@
+module Base.Sort (mergeSort, sortBy) where
+
+-- Base.Sort：稳定归并排序。`<=` 由内建 Ord 回退承担（typed 路径可用）。
+import Base.List
+
+sortBy : (a -> a -> Bool) -> List a -> List a
+sortBy le xs = case xs of
+  [] => []
+  [_] => xs
+  _ =>
+    let
+      n = length xs
+    in let
+      half = n / 2
+    in mergeBy le (sortBy le (take half xs)) (sortBy le (drop half xs))
+
+mergeBy : (a -> a -> Bool) -> List a -> List a -> List a
+mergeBy le [] ys = ys
+mergeBy le xs [] = xs
+mergeBy le (x :: xs) (y :: ys) =
+  if le x y then x :: mergeBy le xs (y :: ys) else y :: mergeBy le (x :: xs) ys
+
+mergeSort : List a -> List a
+mergeSort xs = sortBy (\x, y => x <= y) xs

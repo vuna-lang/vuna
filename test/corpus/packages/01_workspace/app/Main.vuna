@@ -1,6 +1,6 @@
 import Vuna.Hello
 import Dep
-import Vuna.IO
+import Base.IO
 
 main : IO Int
 main = print (hello ++ "/" ++ depText)

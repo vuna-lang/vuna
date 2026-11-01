@@ -1,0 +1,29 @@
+-- M18：用 DT 表达编译器不变量 —— de Bruijn 上下文良构（长度是索引）。
+--
+-- `Ctx a (Succ n)` 让 `head` 的越界分支在类型层面不可能：`Empty` 的结果索引是
+-- `Ctx a Zero`，与 `Ctx a (Succ n)` 不可统一 ⇒ 该分支不可达，不需要写。
+-- 这就是自举迁移时用索引表达「访问不越界」的方式。
+data Nat : Type where
+  Zero : Nat
+  Succ : Nat -> Nat
+
+data Ctx : Type -> Nat -> Type where
+  Empty : {a : Type} -> Ctx a Zero
+  Extend : {a : Type} -> {n : Nat} -> Ctx a n -> a -> Ctx a (Succ n)
+
+-- 已知非空的上下文里取最近绑定：类型保证不越界。
+head : {a : Type} -> {n : Nat} -> Ctx a (Succ n) -> a
+head c = case c of
+  Extend rest x => x
+
+clen : {a : Type} -> {n : Nat} -> Ctx a n -> Nat
+clen c = case c of
+  Empty => Zero
+  Extend rest x => Succ (clen rest)
+
+-- 三个绑定的上下文：类型索引自动是 3，不需要手写。
+three : Ctx String (Succ (Succ (Succ Zero)))
+three = Extend (Extend (Extend Empty "a") "b") "c"
+
+main : Int
+main = 2

@@ -8,79 +8,71 @@ module Vuna.Fmt (formatSource) where
 -- 绑定/case 分支/do 语句）：单独成行的注释成为下一条目的前置注释，写在同一行
 -- 末尾的注释成为该条目的行尾注释；表达式内部的注释前移到最内层包含它的条目
 -- （没有则前移到下一条目；文件末尾的注释保留在文件末尾）。
-
-import Vuna.Base
-import Vuna.Ast
-import Vuna.Parser
-import Vuna.Lexer
+import Vuna.Compiler.Common
+import Vuna.Compiler.Ast
+import Vuna.Compiler.Parser
+import Vuna.Compiler.Lexer
 
 -- ---------------------------------------------------------------
 -- 行 / 字符串小工具
 -- ---------------------------------------------------------------
-
 spaces n = if n <= 0 then "" else " " ++ spaces (n - 1)
 
-concatStrings Nil = ""
-concatStrings (Cons s rest) = s ++ concatStrings rest
+concatStrings [] = ""
+concatStrings (s :: rest) = s ++ concatStrings rest
 
-joinComma Nil = ""
-joinComma (Cons x Nil) = x
-joinComma (Cons x rest) = x ++ ", " ++ joinComma rest
+joinComma [] = ""
+joinComma ([x]) = x
+joinComma (x :: rest) = x ++ ", " ++ joinComma rest
 
-joinSpace Nil = ""
-joinSpace (Cons x rest) = " " ++ x ++ joinSpace rest
+joinSpace [] = ""
+joinSpace (x :: rest) = " " ++ x ++ joinSpace rest
 
-joinLines Nil = ""
-joinLines (Cons l Nil) = l
-joinLines (Cons l rest) = l ++ "\n" ++ joinLines rest
+joinLines [] = ""
+joinLines ([l]) = l
+joinLines (l :: rest) = l ++ "\n" ++ joinLines rest
 
-unlines Nil = ""
+unlines [] = ""
 unlines lines = joinLines lines ++ "\n"
 
-firstLine Nil = ""
-firstLine (Cons l rest) = l
+firstLine [] = ""
+firstLine (l :: rest) = l
 
-restLines Nil = Nil
-restLines (Cons l rest) = rest
+restLines [] = []
+restLines (l :: rest) = rest
 
-prefixFirst pre Nil = Cons pre Nil
-prefixFirst pre (Cons l rest) = Cons (pre ++ l) rest
+prefixFirst pre [] = [pre]
+prefixFirst pre (l :: rest) = (pre ++ l) :: rest
 
-appendLast suffix Nil = Cons suffix Nil
-appendLast suffix (Cons l Nil) = Cons (l ++ suffix) Nil
-appendLast suffix (Cons l rest) = Cons l (appendLast suffix rest)
+appendLast suffix [] = [suffix]
+appendLast suffix ([l]) = [l ++ suffix]
+appendLast suffix (l :: rest) = l :: appendLast suffix rest
 
 -- 把 argLines 追加到 lines 的最后一个物理行后面（前置分隔串 sep）。
-appendBefore sep lines argLines =
-  case argLines of
-    Nil => lines
-    Cons a rest => append (appendLast (sep ++ a) lines) rest
+appendBefore sep lines argLines = case argLines of
+  [] => lines
+  a :: rest => append (appendLast (sep ++ a) lines) rest
 
-isNilList Nil = True
-isNilList (Cons x rest) = False
+isNilList [] = True
+isNilList (x :: rest) = False
 
-mapMaybeStrings f Nil = Just Nil
-mapMaybeStrings f (Cons x rest) =
-  case f x of
+mapMaybeStrings f [] = Just []
+mapMaybeStrings f (x :: rest) = case f x of
+  Nothing => Nothing
+  Just s => case mapMaybeStrings f rest of
     Nothing => Nothing
-    Just s =>
-      case mapMaybeStrings f rest of
-        Nothing => Nothing
-        Just ss => Just (Cons s ss)
+    Just ss => Just (s :: ss)
 
 -- ---------------------------------------------------------------
 -- 字符串字面量：按 lexer 支持的转义重新编码
 -- ---------------------------------------------------------------
-
 escapeChar c =
-  if c == 34 then strPack (Cons 92 (Cons 34 Nil))
-  else if c == 92 then strPack (Cons 92 (Cons 92 Nil))
-  else if c == 10 then strPack (Cons 92 (Cons 110 Nil))
-  else if c == 9 then strPack (Cons 92 (Cons 116 Nil))
-  else if c == 13 then strPack (Cons 92 (Cons 114 Nil))
-  else strPack (Cons c Nil)
+  if c == 34 then strPack [92, 34]
+  else if c == 92 then strPack [92, 92]
+  else if c == 10 then strPack [92, 110]
+  else if c == 9 then strPack [92, 116] else if c == 13 then strPack [92, 114] else strPack [c]
 
-renderStr s = strPack (Cons 34 Nil) ++ concatStrings (map escapeChar (strUnpack s)) ++ strPack (Cons 34 Nil)
+renderStr s = strPack [34] ++ concatStrings (map escapeChar (strUnpack s)) ++ strPack [34]
 
 dummySpan = Span "" 1 1 1 1
 
@@ -92,230 +84,192 @@ dummySpan = Span "" 1 1 1 1
 -- - 行尾注释（仅单行注释）追加在该条目最后一行末尾；
 -- - 多行块注释一律以「前置」形式插入（不挂在行尾）。
 -- ---------------------------------------------------------------
-
-isLineComment c =
-  case commentKind c of
-    CLine => True
-    CBlock => False
+isLineComment c = case commentKind c of
+  CLine => True
+  CBlock => False
 
 containsNewline s = hasNewlineChar (strUnpack s)
 
-hasNewlineChar Nil = False
-
-hasNewlineChar (Cons c rest) =
-  if c == 10 then True else hasNewlineChar rest
+hasNewlineChar [] = False
+hasNewlineChar (c :: rest) = if c == 10 then True else hasNewlineChar rest
 
 isSingleLineComment c = if containsNewline (commentText c) then False else True
 
-inlineCommentText c =
-  case commentKind c of
-    CLine => "--" ++ commentText c
-    CBlock => "{-" ++ commentText c ++ "-}"
+inlineCommentText c = case commentKind c of
+  CLine => "--" ++ commentText c
+  CBlock => "{-" ++ commentText c ++ "-}"
 
 trimRightSpaces s = strPack (reverse (dropReverseSpaces (reverse (strUnpack s))))
 
-dropReverseSpaces Nil = Nil
-
-dropReverseSpaces (Cons c rest) =
-  if c == 32 || c == 9 then dropReverseSpaces rest else Cons c rest
+dropReverseSpaces [] = []
+dropReverseSpaces (c :: rest) = if c == 32 || c == 9 then dropReverseSpaces rest else c :: rest
 
 -- 按 `\n` 切分（保留末尾空段，块注释原文用）。
-splitOnNewline s = splitNewlineChars (strUnpack s) Nil Nil
+splitOnNewline s = splitNewlineChars (strUnpack s) [] []
 
-splitNewlineChars Nil acc seg = reverse (Cons (strPack (reverse seg)) acc)
-
-splitNewlineChars (Cons c rest) acc seg =
-  if c == 10 then splitNewlineChars rest (Cons (strPack (reverse seg)) acc) Nil
-  else splitNewlineChars rest acc (Cons c seg)
+splitNewlineChars [] acc seg = reverse (strPack (reverse seg) :: acc)
+splitNewlineChars (c :: rest) acc seg =
+  if c == 10 then splitNewlineChars rest (strPack (reverse seg) :: acc) []
+  else splitNewlineChars rest acc (c :: seg)
 
 -- 去掉至多 n 个前导空格（块注释续行的公共缩进）。
-dropSpacesUpTo n line =
-  if n <= 0 then line
-  else
-    case strUnpack line of
-      Cons c rest => if c == 32 then dropSpacesUpTo (n - 1) (strPack rest) else line
-      Nil => line
+dropSpacesUpTo n line = if n <= 0 then line
+else case strUnpack line of
+  c :: rest => if c == 32 then dropSpacesUpTo (n - 1) (strPack rest) else line
+  [] => line
 
 -- 块注释续行：去掉原来的起始列缩进，再按目标缩进重排（只改空白，不改正文）。
 commentContinuation indent stripN line =
-  let trimmed = trimRightSpaces (dropSpacesUpTo stripN line)
+  let
+    trimmed = trimRightSpaces (dropSpacesUpTo stripN line)
   in if trimmed == "" then "" else spaces indent ++ trimmed
 
 -- 最后一行保留原行尾空白（`-}` 前通常有一个空格），只去除起始列缩进。
-commentTailLines indent stripN lines =
-  case lines of
-    Nil => Nil
-    Cons line Nil => Cons (spaces indent ++ dropSpacesUpTo stripN line ++ "-}") Nil
-    Cons line rest => Cons (commentContinuation indent stripN line) (commentTailLines indent stripN rest)
+commentTailLines indent stripN lines = case lines of
+  [] => []
+  [line] => [spaces indent ++ dropSpacesUpTo stripN line ++ "-}"]
+  line :: rest => commentContinuation indent stripN line :: commentTailLines indent stripN rest
 
 blockCommentLines indent c =
-  let textLines = splitOnNewline (commentText c)
-      stripN = spanStartCol (commentSpan c) - 1
+  let
+    textLines = splitOnNewline (commentText c)
+    stripN = spanStartCol (commentSpan c) - 1
   in case textLines of
-       Nil => Cons (spaces indent ++ "{- -}") Nil
-       Cons first rest =>
-         Cons (spaces indent ++ "{-" ++ trimRightSpaces first) (commentTailLines indent stripN rest)
+    [] => [spaces indent ++ "{- -}"]
+    first :: rest =>
+      (spaces indent ++ "{-" ++ trimRightSpaces first) :: commentTailLines indent stripN rest
 
-commentLeadLines indent c =
-  case commentKind c of
-    CLine => Cons (spaces indent ++ "--" ++ commentText c) Nil
-    CBlock =>
-      if containsNewline (commentText c) then blockCommentLines indent c
-      else Cons (spaces indent ++ "{-" ++ commentText c ++ "-}") Nil
+commentLeadLines indent c = case commentKind c of
+  CLine => [spaces indent ++ "--" ++ commentText c]
+  CBlock =>
+    if containsNewline (commentText c) then blockCommentLines indent c
+    else [spaces indent ++ "{-" ++ commentText c ++ "-}"]
 
 -- 位置比较与附件表 ------------------------------------------------
+posBefore l1 c1 l2 c2 = l1 < l2 || l1 == l2 && c1 < c2
 
-posBefore l1 c1 l2 c2 = l1 < l2 || (l1 == l2 && c1 < c2)
-
-posBeforeOrEq l1 c1 l2 c2 = l1 < l2 || (l1 == l2 && c1 <= c2)
+posBeforeOrEq l1 c1 l2 c2 = l1 < l2 || l1 == l2 && c1 <= c2
 
 -- 注释起点是否落在条目 span 内。
 containsPos sp line col =
   posBeforeOrEq (spanStartLine sp) (spanStartCol sp) line col
-  && posBeforeOrEq line col (spanEndLine sp) (spanEndCol sp)
+    && posBeforeOrEq line col (spanEndLine sp) (spanEndCol sp)
 
 -- 最内层包含注释的条目（起点最晚者）。
 innermostEnclosing anchors csp = enclosingFold Nothing anchors csp
 
-enclosingFold best Nil csp = best
-
-enclosingFold best (Cons sp rest) csp =
-  if containsPos sp (spanStartLine csp) (spanStartCol csp) then
-    case best of
-      Nothing => enclosingFold (Just sp) rest csp
-      Just b =>
-        if betterNext sp b then enclosingFold (Just sp) rest csp else enclosingFold best rest csp
-  else enclosingFold best rest csp
+enclosingFold best [] csp = best
+enclosingFold best (sp :: rest) csp = if containsPos sp (spanStartLine csp) (spanStartCol csp) then case best of
+  Nothing => enclosingFold (Just sp) rest csp
+  Just b =>
+    if betterNext sp b then enclosingFold (Just sp) rest csp else enclosingFold best rest csp
+else enclosingFold best rest csp
 
 sameKey (Pair l c) (Pair l2 c2) = l == l2 && c == c2
 
 -- 附件表：条目起点 (行, 列) -> (前置注释, 行尾注释)。
-lookupSlot at line col =
-  case at of
-    Nil => Nothing
-    Cons (Pair key slot) rest =>
-      if sameKey key (Pair line col) then Just slot else lookupSlot rest line col
+lookupSlot at line col = case at of
+  [] => Nothing
+  (Pair key slot) :: rest =>
+    if sameKey key (Pair line col) then Just slot else lookupSlot rest line col
 
-leadOf at line col =
-  case lookupSlot at line col of
-    Nothing => Nil
-    Just slot => firstOf slot
+leadOf at line col = case lookupSlot at line col of
+  Nothing => []
+  Just slot => firstOf slot
 
-trailOf at line col =
-  case lookupSlot at line col of
-    Nothing => Nil
-    Just slot => secondOf slot
+trailOf at line col = case lookupSlot at line col of
+  Nothing => []
+  Just slot => secondOf slot
 
-addToSlot key isTrail comment at =
-  case at of
-    Nil =>
-      if isTrail
-      then Cons (Pair key (Pair Nil (Cons comment Nil))) Nil
-      else Cons (Pair key (Pair (Cons comment Nil) Nil)) Nil
-    Cons (Pair k slot) rest =>
-      if sameKey k key then
-        let newSlot =
-              if isTrail
-              then Pair (firstOf slot) (append (secondOf slot) (Cons comment Nil))
-              else Pair (append (firstOf slot) (Cons comment Nil)) (secondOf slot)
-        in Cons (Pair key newSlot) rest
-      else Cons (Pair k slot) (addToSlot key isTrail comment rest)
+addToSlot key isTrail comment at = case at of
+  [] => if isTrail then [Pair key (Pair [] [comment])] else [Pair key (Pair [comment] [])]
+  (Pair k slot) :: rest => if sameKey k key then
+    let
+      newSlot =
+        if isTrail then Pair (firstOf slot) (append (secondOf slot) [comment])
+        else Pair (append (firstOf slot) [comment]) (secondOf slot)
+    in Pair key newSlot :: rest
+  else Pair k slot :: addToSlot key isTrail comment rest
 
 -- 行尾注释候选：与注释同行的、结束于注释之前的最近条目（结束列最大；
 -- 同列时取起点更晚者，即更深层条目）。
 trailCandidate sp csp = spanEndLine sp == spanStartLine csp && spanEndCol sp < spanStartCol csp
 
 betterTrail sp b =
-  let ec = spanEndCol sp
-      bc = spanEndCol b
+  let
+    ec = spanEndCol sp
+    bc = spanEndCol b
   in if ec > bc then True
-     else if ec < bc then False
-     else posBefore (spanStartLine b) (spanStartCol b) (spanStartLine sp) (spanStartCol sp)
+  else if ec < bc then False
+  else posBefore (spanStartLine b) (spanStartCol b) (spanStartLine sp) (spanStartCol sp)
 
 bestTrailAnchor anchors csp = trailFold Nothing anchors csp
 
-trailFold best Nil csp = best
-
-trailFold best (Cons sp rest) csp =
-  if trailCandidate sp csp then
-    case best of
-      Nothing => trailFold (Just sp) rest csp
-      Just b =>
-        if betterTrail sp b then trailFold (Just sp) rest csp else trailFold best rest csp
-  else trailFold best rest csp
+trailFold best [] csp = best
+trailFold best (sp :: rest) csp = if trailCandidate sp csp then case best of
+  Nothing => trailFold (Just sp) rest csp
+  Just b => if betterTrail sp b then trailFold (Just sp) rest csp else trailFold best rest csp
+else trailFold best rest csp
 
 -- 下一条目：起点严格晚于注释起点的最近条目。
 isLaterAnchor sp csp =
   posBefore (spanStartLine csp) (spanStartCol csp) (spanStartLine sp) (spanStartCol sp)
 
-betterNext sp b =
-  posBefore (spanStartLine sp) (spanStartCol sp) (spanStartLine b) (spanStartCol b)
+betterNext sp b = posBefore (spanStartLine sp) (spanStartCol sp) (spanStartLine b) (spanStartCol b)
 
 bestNextAnchor anchors csp = nextFold Nothing anchors csp
 
-nextFold best Nil csp = best
+nextFold best [] csp = best
+nextFold best (sp :: rest) csp = if isLaterAnchor sp csp then case best of
+  Nothing => nextFold (Just sp) rest csp
+  Just b => if betterNext sp b then nextFold (Just sp) rest csp else nextFold best rest csp
+else nextFold best rest csp
 
-nextFold best (Cons sp rest) csp =
-  if isLaterAnchor sp csp then
-    case best of
-      Nothing => nextFold (Just sp) rest csp
-      Just b =>
-        if betterNext sp b then nextFold (Just sp) rest csp else nextFold best rest csp
-  else nextFold best rest csp
-
-assignComments anchors Nil at eof = Pair at eof
-
-assignComments anchors (Cons c rest) at eof =
-  let csp = commentSpan c
-  in if isSingleLineComment c then
-       case bestTrailAnchor anchors csp of
-         Just sp =>
-           assignComments anchors rest
-             (addToSlot (Pair (spanStartLine sp) (spanStartCol sp)) True c at) eof
-         Nothing => assignNextComment anchors c rest at eof
-     else assignNextComment anchors c rest at eof
-
-assignNextComment anchors c rest at eof =
-  case nextAnchorWithFallback anchors (commentSpan c) of
+assignComments anchors [] at eof = Pair at eof
+assignComments anchors (c :: rest) at eof =
+  let
+    csp = commentSpan c
+  in if isSingleLineComment c then case bestTrailAnchor anchors csp of
     Just sp =>
-      assignComments anchors rest
-        (addToSlot (Pair (spanStartLine sp) (spanStartCol sp)) False c at) eof
-    Nothing => assignComments anchors rest at (append eof (Cons c Nil))
+      assignComments anchors rest (addToSlot (Pair (spanStartLine sp) (spanStartCol sp)) True c at)
+        eof
+    Nothing => assignNextComment anchors c rest at eof
+  else assignNextComment anchors c rest at eof
+
+assignNextComment anchors c rest at eof = case nextAnchorWithFallback anchors (commentSpan c) of
+  Just sp =>
+    assignComments anchors rest (addToSlot (Pair (spanStartLine sp) (spanStartCol sp)) False c at)
+      eof
+  Nothing => assignComments anchors rest at (append eof [c])
 
 -- 没有「下一条目」或下一条目已跳出当前声明时，注释前移到最内层包含它的条目之前
 -- （例如函数体末尾的注释回到该函数上方，而不是下一位函数上方）。
-nextAnchorWithFallback anchors csp =
-  case bestNextAnchor anchors csp of
-    Nothing =>
-      case innermostEnclosing anchors csp of
-        Nothing => Nothing
-        Just enc => Just enc
-    Just sp =>
-      case innermostEnclosing anchors csp of
-        Nothing => Just sp
-        Just enc =>
-          if posBeforeOrEq (spanStartLine enc) (spanStartCol enc) (spanStartLine sp) (spanStartCol sp) && posBeforeOrEq (spanStartLine sp) (spanStartCol sp) (spanEndLine enc) (spanEndCol enc)
-          then Just sp
-          else Just enc
+nextAnchorWithFallback anchors csp = case bestNextAnchor anchors csp of
+  Nothing => case innermostEnclosing anchors csp of
+    Nothing => Nothing
+    Just enc => Just enc
+  Just sp => case innermostEnclosing anchors csp of
+    Nothing => Just sp
+    Just enc =>
+      if posBeforeOrEq (spanStartLine enc) (spanStartCol enc) (spanStartLine sp) (spanStartCol sp) && posBeforeOrEq (spanStartLine sp) (spanStartCol sp) (spanEndLine enc) (spanEndCol enc) then Just sp
+      else Just enc
 
 -- 条目定位：收集所有可挂注释的语法条目 span（源码顺序）。
 traitMethodAnchor (Pair name ty) = exprSpan ty
 
 importAnchor imp = importSpan imp
 
-headerAnchors hdr =
-  case hdr of
-    Nothing => Nil
-    Just m => Cons (modDeclSpan m) Nil
+headerAnchors hdr = case hdr of
+  Nothing => []
+  Just m => [modDeclSpan m]
 
-declAnchors d =
-  case d of
-    DData name params ctors derivings sp => Cons sp (map ctorSpan ctors)
-    DSig name ty sp => Cons sp Nil
-    DFun name pats body sp => Cons sp (exprAnchors body)
-    DRecord name params fields derivings sp => Cons sp (map fieldSpan fields)
-    DTrait name params methods sp => Cons sp (map traitMethodAnchor methods)
-    DInstance mname isDefault head methods sp => Cons sp (concatMap declAnchors methods)
+declAnchors d = case d of
+  DData name params kind ctors derivings sp => sp :: map ctorSpan ctors
+  DSig name ty sp => [sp]
+  DFun name pats body sp => sp :: exprAnchors body
+  DRecord name params fields derivings sp => sp :: map fieldSpan fields
+  DTrait name params methods sp => sp :: map traitMethodAnchor methods
+  DInstance mname isDefault head methods sp => sp :: concatMap declAnchors methods
 
 bindingAnchor (Pair pat value) = patSpan pat
 
@@ -327,279 +281,255 @@ altBodyAnchors (Pair pat body) = exprAnchors body
 
 fieldExprAnchors (Pair fname value) = exprAnchors value
 
-doStmtAnchors stmt =
-  case stmt of
-    DBind pat value sp => Cons sp (exprAnchors value)
-    DExpr value sp => Cons sp (exprAnchors value)
+doStmtAnchors stmt = case stmt of
+  DBind pat value sp => sp :: exprAnchors value
+  DExpr value sp => sp :: exprAnchors value
 
-exprAnchors e =
-  case e of
-    EVar name sp => Nil
-    EInt n sp => Nil
-    EStr s sp => Nil
-    ELam ps body sp => exprAnchors body
-    EApp fn args sp => append (exprAnchors fn) (concatMap exprAnchors args)
-    ELet binds body rec_ sp =>
-      append (append (map bindingAnchor binds) (concatMap bindingValueAnchors binds)) (exprAnchors body)
-    ECase scrut alts sp =>
-      append (exprAnchors scrut) (append (map altAnchor alts) (concatMap altBodyAnchors alts))
-    EIf c t el sp => append (exprAnchors c) (append (exprAnchors t) (exprAnchors el))
-    EField base f sp => exprAnchors base
-    ERecord name fields sp => concatMap fieldExprAnchors fields
-    ERecUpdate base fields sp => append (exprAnchors base) (concatMap fieldExprAnchors fields)
-    EInstSel base inst sp => exprAnchors base
-    EDo stmts sp => concatMap doStmtAnchors stmts
+exprAnchors e = case e of
+  EVar name sp => []
+  EInt n sp => []
+  EStr s sp => []
+  ELam ps body sp => exprAnchors body
+  EApp fn args sp => append (exprAnchors fn) (concatMap exprAnchors args)
+  EPi name implicit dom cod sp => append (exprAnchors dom) (exprAnchors cod)
+  ELet binds body rec_ sp =>
+    append (append (map bindingAnchor binds) (concatMap bindingValueAnchors binds))
+      (exprAnchors body)
+  ECase scrut alts sp =>
+    append (exprAnchors scrut) (append (map altAnchor alts) (concatMap altBodyAnchors alts))
+  EIf c t el sp => append (exprAnchors c) (append (exprAnchors t) (exprAnchors el))
+  EField base f sp => exprAnchors base
+  ERecord name fields sp => concatMap fieldExprAnchors fields
+  ERecUpdate base fields sp => append (exprAnchors base) (concatMap fieldExprAnchors fields)
+  EInstSel base inst sp => exprAnchors base
+  EDo stmts sp => concatMap doStmtAnchors stmts
 
 anchorSpans hdr imports decls =
   append (headerAnchors hdr) (append (map importAnchor imports) (concatMap declAnchors decls))
 
 -- 把附件表应用到条目渲染结果上：前置注释在上，行尾注释追加到最后一行。
-leadingLines at sp indent = concatMap (\c => commentLeadLines indent c) (leadOf at (spanStartLine sp) (spanStartCol sp))
+leadingLines at sp indent =
+  concatMap (\c => commentLeadLines indent c) (leadOf at (spanStartLine sp) (spanStartCol sp))
 
-trailingOn at sp lines =
-  case trailOf at (spanStartLine sp) (spanStartCol sp) of
-    Nil => lines
-    cs => foldl (\acc, c => appendLast (" " ++ inlineCommentText c) acc) lines cs
+trailingOn at sp lines = case trailOf at (spanStartLine sp) (spanStartCol sp) of
+  [] => lines
+  cs => foldl (\acc, c => appendLast (" " ++ inlineCommentText c) acc) lines cs
 
 attachAt at sp indent lines = append (leadingLines at sp indent) (trailingOn at sp lines)
 
 -- ---------------------------------------------------------------
 -- 模式（模式没有块结构，统一输出单行，必要时加括号）
 -- ---------------------------------------------------------------
+patListElemsOf name pats = if name == "Nil" then if isNilList pats then Just [] else Nothing
+else if name == "Cons" then case pats of
+  [a, rest] => case patListElems rest of
+    Just elems => Just (a :: elems)
+    Nothing => Nothing
+  _ => Nothing
+else Nothing
 
-patListElemsOf name pats =
-  if name == "Nil" then
-    if isNilList pats then Just Nil else Nothing
-  else if name == "Cons" then
-    case pats of
-      Cons a (Cons rest Nil) =>
-        case patListElems rest of
-          Just elems => Just (Cons a elems)
-          Nothing => Nothing
-      _ => Nothing
-  else Nothing
+patListElems pat = case pat of
+  PCon name pats sp => patListElemsOf name pats
+  _ => Nothing
 
-patListElems pat =
-  case pat of
-    PCon name pats sp => patListElemsOf name pats
-    _ => Nothing
+renderPat pat = case pat of
+  PVar name sp => name
+  PWild sp => "_"
+  PInt n sp => strFromInt n
+  PStr s sp => renderStr s
+  PCon name pats sp => renderConPat name pats
+  PRecord name fields sp => renderRecPat name fields
 
-renderPat pat =
-  case pat of
-    PVar name sp => name
-    PWild sp => "_"
-    PInt n sp => strFromInt n
-    PStr s sp => renderStr s
-    PCon name pats sp => renderConPat name pats
-    PRecord name fields sp => renderRecPat name fields
+renderConPat name pats = case patListElemsOf name pats of
+  Just elems => "[" ++ joinComma (map renderPat elems) ++ "]"
+  Nothing =>
+    if name == "Cons" then renderConsPat pats
+    else if name == "Nil" && isNilList pats then "[]"
+    else if isNilList pats then name else name ++ joinSpace (map renderPatAtom pats)
 
-renderConPat name pats =
-  case patListElemsOf name pats of
-    Just elems => "[" ++ joinComma (map renderPat elems) ++ "]"
-    Nothing =>
-      if name == "Cons" then renderConsPat pats
-      else if name == "Nil" && isNilList pats then "[]"
-      else if isNilList pats then name
-      else name ++ joinSpace (map renderPatAtom pats)
+renderConsPat pats = case pats of
+  [a, b] => renderPatAtom a ++ " :: " ++ renderPatConsTail b
+  _ => "Cons" ++ joinSpace (map renderPatAtom pats)
 
-renderConsPat pats =
-  case pats of
-    Cons a (Cons b Nil) => renderPatAtom a ++ " :: " ++ renderPatConsTail b
-    _ => "Cons" ++ joinSpace (map renderPatAtom pats)
-
-renderPatConsTail pat =
-  case pat of
-    PCon name pats sp =>
-      if name == "Cons" then
-        case pats of
-          Cons a (Cons b Nil) => renderPatAtom a ++ " :: " ++ renderPatConsTail b
-          _ => renderPatAtom pat
-      else renderPatAtom pat
+renderPatConsTail pat = case pat of
+  PCon name pats sp => if name == "Cons" then case pats of
+    [a, b] => renderPatAtom a ++ " :: " ++ renderPatConsTail b
     _ => renderPatAtom pat
+  else renderPatAtom pat
+  _ => renderPatAtom pat
 
-renderPatAtom pat =
-  case pat of
-    PVar name sp => name
-    PWild sp => "_"
-    PInt n sp => strFromInt n
-    PStr s sp => renderStr s
-    PCon name Nil sp => if name == "Nil" then "[]" else name
-    PCon name pats sp => "(" ++ renderConPat name pats ++ ")"
-    PRecord name fields sp => "(" ++ renderRecPat name fields ++ ")"
+renderPatAtom pat = case pat of
+  PVar name sp => name
+  PWild sp => "_"
+  PInt n sp => strFromInt n
+  PStr s sp => renderStr s
+  PCon name [] sp => if name == "Nil" then "[]" else name
+  PCon name pats sp => "(" ++ renderConPat name pats ++ ")"
+  PRecord name fields sp => "(" ++ renderRecPat name fields ++ ")"
 
 renderRecPat name fields =
   if isNilList fields then name ++ " { }"
   else name ++ " { " ++ joinComma (map renderRecPatField fields) ++ " }"
 
-renderRecPatField (Pair fname pat) =
-  case pat of
-    PVar n sp => if n == fname then fname else fname ++ " = " ++ renderPat pat
-    _ => fname ++ " = " ++ renderPat pat
+renderRecPatField (Pair fname pat) = case pat of
+  PVar n sp => if n == fname then fname else fname ++ " = " ++ renderPat pat
+  _ => fname ++ " = " ++ renderPat pat
 
 -- ---------------------------------------------------------------
 -- 单行表达式：inlineExpr / inlinePrec / inlineAtom
 -- inlinePrec 按运算符优先级决定是否补括号；块结构（case/let/do）返回 Nothing。
 -- ---------------------------------------------------------------
-
-infixPrec op =
-  case op of
-    "->" => Just (Pair 1 1)
-    ">>=" => Just (Pair 1 1)
-    "||" => Just (Pair 2 0)
-    "&&" => Just (Pair 3 0)
-    "==" => Just (Pair 4 0)
-    "/=" => Just (Pair 4 0)
-    "<" => Just (Pair 4 0)
-    "<=" => Just (Pair 4 0)
-    ">" => Just (Pair 4 0)
-    ">=" => Just (Pair 4 0)
-    "++" => Just (Pair 5 1)
-    "+" => Just (Pair 6 0)
-    "-" => Just (Pair 6 0)
-    "*" => Just (Pair 7 0)
-    "/" => Just (Pair 7 0)
-    "::" => Just (Pair 8 1)
-    "Cons" => Just (Pair 8 1)
-    _ => Nothing
+infixPrec op = case op of
+  "->" => Just (Pair 1 1)
+  ">>=" => Just (Pair 1 1)
+  "||" => Just (Pair 2 0)
+  "&&" => Just (Pair 3 0)
+  "==" => Just (Pair 4 0)
+  "/=" => Just (Pair 4 0)
+  "<" => Just (Pair 4 0)
+  "<=" => Just (Pair 4 0)
+  ">" => Just (Pair 4 0)
+  ">=" => Just (Pair 4 0)
+  "++" => Just (Pair 5 1)
+  "+" => Just (Pair 6 0)
+  "-" => Just (Pair 6 0)
+  "*" => Just (Pair 7 0)
+  "/" => Just (Pair 7 0)
+  "::" => Just (Pair 8 1)
+  "Cons" => Just (Pair 8 1)
+  _ => Nothing
 
 opText op = if op == "Cons" then "::" else op
 
-listExprElems e =
-  case e of
-    EVar "Nil" sp => Just Nil
-    EApp (EVar "Cons" csp) (Cons a (Cons rest Nil)) sp =>
-      case listExprElems rest of
-        Just elems => Just (Cons a elems)
-        Nothing => Nothing
-    _ => Nothing
+listExprElems e = case e of
+  EVar "Nil" sp => Just []
+  EApp (EVar "Cons" csp) ([a, rest]) sp => case listExprElems rest of
+    Just elems => Just (a :: elems)
+    Nothing => Nothing
+  _ => Nothing
 
 inlineExpr e = inlinePrec 0 e
 
-inlinePrec minPrec e =
-  case e of
-    EVar name sp => if name == "Nil" then Just "[]" else Just name
-    EInt n sp => Just (strFromInt n)
-    EStr s sp => Just (renderStr s)
-    ELam ps body sp =>
-      case inlinePrec 0 body of
+inlinePrec minPrec e = case e of
+  EVar name sp => if name == "Nil" then Just "[]" else Just name
+  EInt n sp => Just (strFromInt n)
+  EStr s sp => Just (renderStr s)
+  ELam ps body sp => case inlinePrec 0 body of
+    Nothing => Nothing
+    Just b => Just (wrapPrec (minPrec > 0) ("\\" ++ joinComma ps ++ " => " ++ b))
+  EApp fn args sp => case listExprElems (EApp fn args sp) of
+    Just elems => case mapMaybeStrings (\x => inlineExpr x) elems of
+      Nothing => Nothing
+      Just ss => Just ("[" ++ joinComma ss ++ "]")
+    Nothing => inlineApp minPrec fn args
+  EPi name implicit dom cod sp => inlinePi minPrec name implicit dom cod
+  ELet binds body rec_ sp => Nothing
+  ECase scrut alts sp => Nothing
+  EIf c t el sp => case inlinePrec 0 c of
+    Nothing => Nothing
+    Just cs => case inlinePrec 0 t of
+      Nothing => Nothing
+      Just ts => case inlinePrec 0 el of
         Nothing => Nothing
-        Just b => Just (wrapPrec (minPrec > 0) ("\\" ++ joinComma ps ++ " => " ++ b))
-    EApp fn args sp =>
-      case listExprElems (EApp fn args sp) of
-        Just elems =>
-          case mapMaybeStrings (\x => inlineExpr x) elems of
-            Nothing => Nothing
-            Just ss => Just ("[" ++ joinComma ss ++ "]")
-        Nothing => inlineApp minPrec fn args
-    ELet binds body rec_ sp => Nothing
-    ECase scrut alts sp => Nothing
-    EIf c t el sp =>
-      case inlinePrec 0 c of
-        Nothing => Nothing
-        Just cs =>
-          case inlinePrec 0 t of
-            Nothing => Nothing
-            Just ts =>
-              case inlinePrec 0 el of
-                Nothing => Nothing
-                Just es => Just (wrapPrec (minPrec > 0) ("if " ++ cs ++ " then " ++ ts ++ " else " ++ es))
-    EField base f sp =>
-      case inlineAtom base of
-        Nothing => Nothing
-        Just b => Just (b ++ "." ++ f)
-    ERecord name fields sp =>
-      case inlineFields fields of
-        Nothing => Nothing
-        Just ss =>
-          case fields of
-            Nil => Just (name ++ " { }")
-            _ => Just (name ++ " { " ++ joinComma ss ++ " }")
-    ERecUpdate base fields sp =>
-      case inlinePrec 0 base of
-        Nothing => Nothing
-        Just b =>
-          case inlineFields fields of
-            Nothing => Nothing
-            Just ss =>
-              case fields of
-                Nil => Just ("{ " ++ b ++ " }")
-                _ => Just ("{ " ++ b ++ " | " ++ joinComma ss ++ " }")
-    EInstSel base inst sp =>
-      case inlineAtom base of
-        Nothing => Nothing
-        Just b => Just (b ++ " @" ++ inst)
-    EDo stmts sp => Nothing
+        Just es => Just (wrapPrec (minPrec > 0) ("if " ++ cs ++ " then " ++ ts ++ " else " ++ es))
+  EField base f sp => case inlineAtom base of
+    Nothing => Nothing
+    Just b => Just (b ++ "." ++ f)
+  ERecord name fields sp => case inlineFields fields of
+    Nothing => Nothing
+    Just ss => case fields of
+      [] => Just (name ++ " { }")
+      _ => Just (name ++ " { " ++ joinComma ss ++ " }")
+  ERecUpdate base fields sp => case inlinePrec 0 base of
+    Nothing => Nothing
+    Just b => case inlineFields fields of
+      Nothing => Nothing
+      Just ss => case fields of
+        [] => Just ("{ " ++ b ++ " }")
+        _ => Just ("{ " ++ b ++ " | " ++ joinComma ss ++ " }")
+  EInstSel base inst sp => case inlineAtom base of
+    Nothing => Nothing
+    Just b => Just (b ++ " @" ++ inst)
+  EDo stmts sp => Nothing
 
 wrapPrec need s = if need then "(" ++ s ++ ")" else s
 
-inlineFields Nil = Just Nil
-inlineFields (Cons (Pair fname value) rest) =
-  case inlinePrec 0 value of
+inlineFields [] = Just []
+inlineFields ((Pair fname value) :: rest) = case inlinePrec 0 value of
+  Nothing => Nothing
+  Just v => case inlineFields rest of
     Nothing => Nothing
-    Just v =>
-      case inlineFields rest of
-        Nothing => Nothing
-        Just ss => Just (Cons (fname ++ " = " ++ v) ss)
+    Just ss => Just ((fname ++ " = " ++ v) :: ss)
 
-inlineApp minPrec fn args =
-  case fn of
-    EVar "bind" bsp =>
-      case args of
-        Cons a (Cons b Nil) => inlineInfix minPrec 1 1 ">>=" a b
-        _ => inlineApply minPrec fn args
-    EVar op sp =>
-      case infixPrec op of
-        Just (Pair p assoc) =>
-          case args of
-            Cons a (Cons b Nil) => inlineInfix minPrec p assoc op a b
-            _ => inlineApply minPrec fn args
-        Nothing => inlineApply minPrec fn args
+-- DT（M13）命名 Pi：`(x : A) -> B` 与隐式 `{x : A} -> B`；`->` 右结合。
+inlinePi minPrec name implicit dom cod = case inlinePrec 0 dom of
+  Nothing => Nothing
+  Just d => case inlinePrec 1 cod of
+    Nothing => Nothing
+    Just c =>
+      let
+        binder =
+          if implicit then "{" ++ name ++ " : " ++ d ++ "}" else "(" ++ name ++ " : " ++ d ++ ")"
+      in Just (wrapPrec (minPrec > 1) (binder ++ " -> " ++ c))
+
+-- 域/余域含块结构时的兜底布局（DT 类型一般走 inlinePi；这里只保证不丢字符）。
+renderPiBlock at lineInd implicit name dom cod =
+  let
+    openTxt = if implicit then "{" ++ name ++ " : " else "(" ++ name ++ " : "
+    closeTxt = if implicit then "}" else ")"
+    domLines =
+      appendLast (" " ++ closeTxt ++ " ->") (prefixFirst openTxt (renderExpr at lineInd dom))
+  in append domLines (prefixFirst (spaces (lineInd + 2)) (renderExpr at (lineInd + 2) cod))
+
+inlineApp minPrec fn args = case fn of
+  EVar "bind" bsp => case args of
+    [a, b] => inlineInfix minPrec 1 1 ">>=" a b
     _ => inlineApply minPrec fn args
+  EVar op sp => case infixPrec op of
+    Just (Pair p assoc) => case args of
+      [a, b] => inlineInfix minPrec p assoc op a b
+      _ => inlineApply minPrec fn args
+    Nothing => inlineApply minPrec fn args
+  _ => inlineApply minPrec fn args
 
 inlineInfix minPrec p assoc op a b =
-  let leftMin = if assoc == 0 then p else p + 1
-      rightMin = if assoc == 0 then p + 1 else p
+  let
+    leftMin = if assoc == 0 then p else p + 1
+    rightMin = if assoc == 0 then p + 1 else p
   in case inlinePrec leftMin a of
-       Nothing => Nothing
-       Just lhsText =>
-         case inlinePrec rightMin b of
-           Nothing => Nothing
-           Just rhsText => Just (wrapPrec (p < minPrec) (lhsText ++ " " ++ opText op ++ " " ++ rhsText))
-
-inlineApply minPrec fn args =
-  case inlineApplyHead fn of
     Nothing => Nothing
-    Just headText =>
-      case mapMaybeStrings (\a => inlineAtom a) args of
-        Nothing => Nothing
-        Just argTexts => Just (wrapPrec (9 < minPrec) (headText ++ concatStrings (map (\a => " " ++ a) argTexts)))
+    Just lhsText => case inlinePrec rightMin b of
+      Nothing => Nothing
+      Just rhsText => Just (wrapPrec (p < minPrec) (lhsText ++ " " ++ opText op ++ " " ++ rhsText))
 
-inlineApplyHead fn =
-  case fn of
-    EInstSel base inst sp =>
-      case inlineAtom base of
-        Nothing => Nothing
-        Just b => Just (b ++ " @" ++ inst)
-    _ => inlineAtom fn
-
-inlineAtom e =
-  case inlinePrec 0 e of
+inlineApply minPrec fn args = case inlineApplyHead fn of
+  Nothing => Nothing
+  Just headText => case mapMaybeStrings (\a => inlineAtom a) args of
     Nothing => Nothing
-    Just s => if atomForm e then Just s else Just ("(" ++ s ++ ")")
+    Just argTexts =>
+      Just (wrapPrec (9 < minPrec) (headText ++ concatStrings (map (\a => " " ++ a) argTexts)))
 
-atomForm e =
-  case e of
-    EVar name sp => True
-    EInt n sp => True
-    EStr s sp => True
-    EField base f sp => True
-    ERecord name fields sp => True
-    ERecUpdate base fields sp => True
-    EApp fn args sp =>
-      case listExprElems (EApp fn args sp) of
-        Just elems => True
-        Nothing => False
-    _ => False
+inlineApplyHead fn = case fn of
+  EInstSel base inst sp => case inlineAtom base of
+    Nothing => Nothing
+    Just b => Just (b ++ " @" ++ inst)
+  _ => inlineAtom fn
+
+inlineAtom e = case inlinePrec 0 e of
+  Nothing => Nothing
+  Just s => if atomForm e then Just s else Just ("(" ++ s ++ ")")
+
+atomForm e = case e of
+  EVar name sp => True
+  EInt n sp => True
+  EStr s sp => True
+  EField base f sp => True
+  ERecord name fields sp => True
+  ERecUpdate base fields sp => True
+  EApp fn args sp => case listExprElems (EApp fn args sp) of
+    Just elems => True
+    Nothing => False
+  _ => False
 
 -- ---------------------------------------------------------------
 -- 行宽（M11.6）：超过 maxWidth 的表达式在安全位置折行。
@@ -610,500 +540,467 @@ atomForm e =
 -- - 中缀链前置换行（运算符在续行行首）。
 -- 字符串字面量与单原子长度无法折行，允许超过行宽。
 -- ---------------------------------------------------------------
-
 maxWidth = 100
 
 strWidth s = length (strUnpack s)
 
 fitsLine indent text = indent + strWidth text <= maxWidth
 
-lastLineOf Nil = ""
-lastLineOf (Cons x Nil) = x
-lastLineOf (Cons x rest) = lastLineOf rest
+lastLineOf [] = ""
+lastLineOf ([x]) = x
+lastLineOf (x :: rest) = lastLineOf rest
 
 -- ---------------------------------------------------------------
 -- 块级表达式（含 case/let/do 或含块结构的子表达式）；
 -- lineInd = 该表达式起始物理行的缩进（0 基），块内缩进 = lineInd + 2。
 -- 返回 List String：首行不含缩进，续行是绝对缩进。
 -- ---------------------------------------------------------------
-
-renderExpr at lineInd e =
-  case inlinePrec 0 e of
-    Just s => if fitsLine lineInd s then Cons s Nil else renderWide at lineInd e
-    Nothing => renderBlock at lineInd e
+renderExpr at lineInd e = case inlinePrec 0 e of
+  Just s => if fitsLine lineInd s then [s] else renderWide at lineInd e
+  Nothing => renderBlock at lineInd e
 
 -- 类型表达式不折行（保持签名/字段类型紧凑，避免 `->` 链被打断）。
-renderTypeExpr at lineInd e =
-  case inlinePrec 0 e of
-    Just s => Cons s Nil
-    Nothing => renderBlock at lineInd e
+renderTypeExpr at lineInd e = case inlinePrec 0 e of
+  Just s => [s]
+  Nothing => renderBlock at lineInd e
 
 -- 行内放不下时的折行形式。
-renderWide at lineInd e =
-  case e of
-    EIf c t el sp => renderIf at lineInd c t el
-    EApp fn args sp =>
-      case listExprElems (EApp fn args sp) of
-        Just elems =>
-          case mapMaybeStrings (\x => inlineExpr x) elems of
-            Just ss => renderListBlock at lineInd ss
-            Nothing => renderAppBlock at lineInd fn args
-        Nothing => renderAppBlock at lineInd fn args
-    _ => Cons (renderExprInline e) Nil
+renderWide at lineInd e = case e of
+  EIf c t el sp => renderIf at lineInd c t el
+  EApp fn args sp => case listExprElems (EApp fn args sp) of
+    Just elems => case mapMaybeStrings (\x => inlineExpr x) elems of
+      Just ss => renderListBlock at lineInd ss
+      Nothing => renderAppBlock at lineInd fn args
+    Nothing => renderAppBlock at lineInd fn args
+  _ => [renderExprInline e]
 
-renderExprInline e =
-  case inlinePrec 0 e of
-    Just s => s
-    Nothing => ""
+renderExprInline e = case inlinePrec 0 e of
+  Just s => s
+  Nothing => ""
 
 -- 列表字面量折行：`[ a,` / `  b` / `]`（最后一个元素后不加逗号）。
-renderListBlock at lineInd Nil = Cons "[]" Nil
+renderListBlock at lineInd [] = ["[]"]
+renderListBlock at lineInd (first :: rest) =
+  append ["[ " ++ first ++ (if isNilList rest then "" else ",")]
+    (renderListBlockRest at lineInd rest)
 
-renderListBlock at lineInd (Cons first rest) =
-  append (Cons ("[ " ++ first ++ (if isNilList rest then "" else ",")) Nil)
-         (renderListBlockRest at lineInd rest)
+renderListBlockRest at lineInd [] = [spaces lineInd ++ "]"]
+renderListBlockRest at lineInd ([s]) = [spaces (lineInd + 2) ++ s, spaces lineInd ++ "]"]
+renderListBlockRest at lineInd (s :: rest) =
+  (spaces (lineInd + 2) ++ s ++ ",") :: renderListBlockRest at lineInd rest
 
-renderListBlockRest at lineInd Nil = Cons (spaces lineInd ++ "]") Nil
+renderAtomExpr at lineInd e = case inlineAtom e of
+  Just s => [s]
+  Nothing => parenWrapInd at lineInd e
 
-renderListBlockRest at lineInd (Cons s Nil) =
-  Cons (spaces (lineInd + 2) ++ s) (Cons (spaces lineInd ++ "]") Nil)
+parenWrapInd at lineInd e =
+  append (prefixFirst "(" (renderBlock at lineInd e)) [spaces lineInd ++ ")"]
 
-renderListBlockRest at lineInd (Cons s rest) =
-  Cons (spaces (lineInd + 2) ++ s ++ ",") (renderListBlockRest at lineInd rest)
+renderBlock at lineInd e = case e of
+  ECase scrut alts sp => renderCase at lineInd scrut alts
+  ELet binds body rec_ sp => renderLet at lineInd binds body
+  EIf c t el sp => renderIf at lineInd c t el
+  EApp fn args sp => renderAppBlock at lineInd fn args
+  EPi name implicit dom cod sp => renderPiBlock at lineInd implicit name dom cod
+  ELam ps body sp => prefixFirst ("\\" ++ joinComma ps ++ " => ") (renderExpr at lineInd body)
+  EField base f sp => appendLast ("." ++ f) (renderAtomExpr at lineInd base)
+  ERecord name fields sp => renderRecordBlock at lineInd name fields
+  ERecUpdate base fields sp => renderRecUpdateBlock at lineInd base fields
+  EInstSel base inst sp => appendLast (" @" ++ inst) (renderAtomExpr at lineInd base)
+  EDo stmts sp => renderDo at lineInd stmts
+  EVar name sp => [name]
+  EInt n sp => [strFromInt n]
+  EStr s sp => [renderStr s]
 
-renderAtomExpr at lineInd e =
-  case inlineAtom e of
-    Just s => Cons s Nil
-    Nothing => parenWrapInd at lineInd e
-
-parenWrapInd at lineInd e = append (prefixFirst "(" (renderBlock at lineInd e)) (Cons (spaces lineInd ++ ")") Nil)
-
-renderBlock at lineInd e =
-  case e of
-    ECase scrut alts sp => renderCase at lineInd scrut alts
-    ELet binds body rec_ sp => renderLet at lineInd binds body
-    EIf c t el sp => renderIf at lineInd c t el
-    EApp fn args sp => renderAppBlock at lineInd fn args
-    ELam ps body sp => prefixFirst ("\\" ++ joinComma ps ++ " => ") (renderExpr at lineInd body)
-    EField base f sp => appendLast ("." ++ f) (renderAtomExpr at lineInd base)
-    ERecord name fields sp => renderRecordBlock at lineInd name fields
-    ERecUpdate base fields sp => renderRecUpdateBlock at lineInd base fields
-    EInstSel base inst sp => appendLast (" @" ++ inst) (renderAtomExpr at lineInd base)
-    EDo stmts sp => renderDo at lineInd stmts
-    EVar name sp => Cons name Nil
-    EInt n sp => Cons (strFromInt n) Nil
-    EStr s sp => Cons (renderStr s) Nil
-
-renderScrut at lineInd e =
-  case inlineExpr e of
-    Just s => Cons s Nil
-    Nothing => parenWrapInd at lineInd e
+renderScrut at lineInd e = case inlineExpr e of
+  Just s => [s]
+  Nothing => parenWrapInd at lineInd e
 
 renderCase at lineInd scrut alts =
-  let headLines = appendLast " of" (prefixFirst "case " (renderScrut at lineInd scrut))
-      altInd = lineInd + 2
-      altLines = concatMap (\alt => renderAlt at altInd alt) alts
+  let
+    headLines = appendLast " of" (prefixFirst "case " (renderScrut at lineInd scrut))
+    altInd = lineInd + 2
+    altLines = concatMap (\alt => renderAlt at altInd alt) alts
   in append headLines altLines
 
 renderAlt at altInd (Pair pat body) =
   attachAt at (patSpan pat) altInd (renderAltBody at altInd pat body)
 
-renderAltBody at altInd pat body =
-  case body of
-    ELet binds inner recFlag sp =>
-      Cons (spaces altInd ++ renderPat pat ++ " =>") (prefixFirst (spaces (altInd + 2)) (renderExpr at (altInd + 2) body))
-    _ =>
-      let prefix = spaces altInd ++ renderPat pat ++ " => "
-      in case inlinePrec 0 body of
-           Just s =>
-             if strWidth (prefix ++ s) <= maxWidth
-             then Cons (prefix ++ s) Nil
-             else Cons (spaces altInd ++ renderPat pat ++ " =>") (prefixFirst (spaces (altInd + 2)) (renderExpr at (altInd + 2) body))
-           Nothing => prefixFirst prefix (renderExpr at altInd body)
+renderAltBody at altInd pat body = case body of
+  ELet binds inner recFlag sp =>
+    (spaces altInd ++ renderPat pat ++ " =>")
+      :: prefixFirst (spaces (altInd + 2)) (renderExpr at (altInd + 2) body)
+  _ =>
+    let
+      prefix = spaces altInd ++ renderPat pat ++ " => "
+    in case inlinePrec 0 body of
+      Just s =>
+        if strWidth (prefix ++ s) <= maxWidth then [prefix ++ s]
+        else (spaces altInd ++ renderPat pat ++ " =>")
+          :: prefixFirst (spaces (altInd + 2)) (renderExpr at (altInd + 2) body)
+      Nothing => prefixFirst prefix (renderExpr at altInd body)
 
-renderWhenBody at lineInd keyword e =
-  case e of
-    ELet binds inner recFlag sp =>
-      Cons (spaces lineInd ++ keyword) (prefixFirst (spaces (lineInd + 2)) (renderExpr at (lineInd + 2) e))
-    _ => prefixFirst (spaces lineInd ++ keyword ++ " ") (renderExpr at lineInd e)
+renderWhenBody at lineInd keyword e = case e of
+  ELet binds inner recFlag sp =>
+    (spaces lineInd ++ keyword)
+      :: prefixFirst (spaces (lineInd + 2)) (renderExpr at (lineInd + 2) e)
+  _ => prefixFirst (spaces lineInd ++ keyword ++ " ") (renderExpr at lineInd e)
 
 renderIf at lineInd c t el =
-  let condLines = prefixFirst "if " (renderScrut at lineInd c)
-      thenLines =
-        case t of
-          ELet binds inner recFlag sp =>
-            append (appendLast " then" condLines) (prefixFirst (spaces (lineInd + 2)) (renderExpr at (lineInd + 2) t))
-          _ =>
-            let tLines = renderExpr at lineInd t
-            in append (appendLast (" then " ++ firstLine tLines) condLines) (restLines tLines)
-      elseLines = renderWhenBody at lineInd "else" el
+  let
+    condLines = prefixFirst "if " (renderScrut at lineInd c)
+    thenLines = case t of
+      ELet binds inner recFlag sp =>
+        append (appendLast " then" condLines)
+          (prefixFirst (spaces (lineInd + 2)) (renderExpr at (lineInd + 2) t))
+      _ =>
+        let
+          tLines = renderExpr at lineInd t
+        in append (appendLast (" then " ++ firstLine tLines) condLines) (restLines tLines)
+    elseLines = renderWhenBody at lineInd "else" el
   in append thenLines elseLines
 
-renderLet at lineInd binds body =
-  case binds of
-    Nil => Cons "let" (prefixFirst (spaces lineInd ++ "in ") (renderExpr at lineInd body))
-    Cons first rest =>
-      let bindInd = lineInd + 2
-          bindingLines = append (renderLetBinding at bindInd first) (concatMap (\b => renderLetBinding at bindInd b) rest)
-      in append (Cons "let" bindingLines) (prefixFirst (spaces lineInd ++ "in ") (renderExpr at lineInd body))
+renderLet at lineInd binds body = case binds of
+  [] => "let" :: prefixFirst (spaces lineInd ++ "in ") (renderExpr at lineInd body)
+  first :: rest =>
+    let
+      bindInd = lineInd + 2
+      bindingLines =
+        append (renderLetBinding at bindInd first)
+          (concatMap (\b => renderLetBinding at bindInd b) rest)
+    in append ("let" :: bindingLines)
+      (prefixFirst (spaces lineInd ++ "in ") (renderExpr at lineInd body))
 
 renderLetBinding at bindInd (Pair pat value) =
   attachAt at (patSpan pat) bindInd (renderBindingValue at bindInd (renderPat pat ++ " =") value)
 
-renderBindingValue at lineInd prefixText value =
-  case value of
-    ELet binds inner recFlag sp =>
-      Cons (spaces lineInd ++ prefixText) (prefixFirst (spaces (lineInd + 2)) (renderExpr at (lineInd + 2) value))
-    _ =>
-      case inlinePrec 0 value of
-        Just s =>
-          if strWidth (spaces lineInd ++ prefixText ++ " " ++ s) <= maxWidth
-          then Cons (spaces lineInd ++ prefixText ++ " " ++ s) Nil
-          else Cons (spaces lineInd ++ prefixText) (prefixFirst (spaces (lineInd + 2)) (renderExpr at (lineInd + 2) value))
-        Nothing => prefixFirst (spaces lineInd ++ prefixText ++ " ") (renderExpr at lineInd value)
+renderBindingValue at lineInd prefixText value = case value of
+  ELet binds inner recFlag sp =>
+    (spaces lineInd ++ prefixText)
+      :: prefixFirst (spaces (lineInd + 2)) (renderExpr at (lineInd + 2) value)
+  _ => case inlinePrec 0 value of
+    Just s =>
+      if strWidth (spaces lineInd ++ prefixText ++ " " ++ s) <= maxWidth then [spaces lineInd ++ prefixText ++ " " ++ s]
+      else (spaces lineInd ++ prefixText)
+        :: prefixFirst (spaces (lineInd + 2)) (renderExpr at (lineInd + 2) value)
+    Nothing => prefixFirst (spaces lineInd ++ prefixText ++ " ") (renderExpr at lineInd value)
 
-renderDo at lineInd stmts =
-  Cons "do" (concatMap (\s => renderDoStmt at (lineInd + 2) s) stmts)
+renderDo at lineInd stmts = "do" :: concatMap (\s => renderDoStmt at (lineInd + 2) s) stmts
 
 renderDoStmt at stmtInd stmt =
   attachAt at (doStmtSpan stmt) stmtInd (renderDoStmtBody at stmtInd stmt)
 
-renderDoStmtBody at stmtInd stmt =
-  case stmt of
-    DBind pat value sp =>
-      let prefix = spaces stmtInd ++ renderPat pat ++ " <- "
-      in case inlinePrec 0 value of
-           Just s =>
-             if strWidth (prefix ++ s) <= maxWidth
-             then Cons (prefix ++ s) Nil
-             else Cons (spaces stmtInd ++ renderPat pat ++ " <-") (prefixFirst (spaces (stmtInd + 2)) (renderExpr at (stmtInd + 2) value))
-           Nothing => prefixFirst prefix (renderExpr at stmtInd value)
-    DExpr value sp => prefixFirst (spaces stmtInd) (renderExpr at stmtInd value)
+renderDoStmtBody at stmtInd stmt = case stmt of
+  DBind pat value sp =>
+    let
+      prefix = spaces stmtInd ++ renderPat pat ++ " <- "
+    in case inlinePrec 0 value of
+      Just s =>
+        if strWidth (prefix ++ s) <= maxWidth then [prefix ++ s]
+        else (spaces stmtInd ++ renderPat pat ++ " <-")
+          :: prefixFirst (spaces (stmtInd + 2)) (renderExpr at (stmtInd + 2) value)
+      Nothing => prefixFirst prefix (renderExpr at stmtInd value)
+  DExpr value sp => prefixFirst (spaces stmtInd) (renderExpr at stmtInd value)
 
-renderAppBlock at lineInd fn args =
-  case fn of
-    EVar "bind" bsp =>
-      case args of
-        Cons a (Cons b Nil) => renderInfixBlock at lineInd 1 1 ">>=" a b
-        _ => renderApplyBlock at lineInd fn args
-    EVar op sp =>
-      case infixPrec op of
-        Just (Pair p assoc) =>
-          case args of
-            Cons a (Cons b Nil) => renderInfixBlock at lineInd p assoc op a b
-            _ => renderApplyBlock at lineInd fn args
-        Nothing => renderApplyBlock at lineInd fn args
+renderAppBlock at lineInd fn args = case fn of
+  EVar "bind" bsp => case args of
+    [a, b] => renderInfixBlock at lineInd 1 1 ">>=" a b
     _ => renderApplyBlock at lineInd fn args
+  EVar op sp => case infixPrec op of
+    Just (Pair p assoc) => case args of
+      [a, b] => renderInfixBlock at lineInd p assoc op a b
+      _ => renderApplyBlock at lineInd fn args
+    Nothing => renderApplyBlock at lineInd fn args
+  _ => renderApplyBlock at lineInd fn args
 
-renderInfixBlock at lineInd p assoc op a b =
-  case inlineInfix 0 p assoc op a b of
-    Just s =>
-      if fitsLine lineInd s then Cons s Nil
-      else renderInfixChain at lineInd p assoc op (infixChainOperands p assoc op a b)
-    Nothing =>
-      let leftMin = if assoc == 0 then p else p + 1
-          rightMin = if assoc == 0 then p + 1 else p
-          lhsLines = renderOperand at lineInd leftMin a
-          rhsLines = renderOperand at lineInd rightMin b
-      in case rhsLines of
-           Nil => lhsLines
-           Cons r rest => append (appendLast (" " ++ opText op ++ " " ++ r) lhsLines) rest
+renderInfixBlock at lineInd p assoc op a b = case inlineInfix 0 p assoc op a b of
+  Just s =>
+    if fitsLine lineInd s then [s]
+    else renderInfixChain at lineInd p assoc op (infixChainOperands p assoc op a b)
+  Nothing =>
+    let
+      leftMin = if assoc == 0 then p else p + 1
+      rightMin = if assoc == 0 then p + 1 else p
+      lhsLines = renderOperand at lineInd leftMin a
+      rhsLines = renderOperand at lineInd rightMin b
+    in case rhsLines of
+      [] => lhsLines
+      r :: rest => append (appendLast (" " ++ opText op ++ " " ++ r) lhsLines) rest
 
 -- 中缀链：运算符放续行行首（续行缩进 lineInd+2，满足 parser 的 offside 约束）。
 infixChainOperands p assoc op a b =
-  if assoc == 1
-  then Cons a (flattenInfixRight p op b)
-  else append (flattenInfixLeft p op a) (Cons b Nil)
+  if assoc == 1 then a :: flattenInfixRight p op b else append (flattenInfixLeft p op a) [b]
 
-matchInfixNode p op e =
-  case e of
-    EApp (EVar name sp) (Cons l (Cons r Nil)) sp2 =>
-      let op2 = if name == "bind" then ">>=" else name
-      in case infixPrec op2 of
-           Just (Pair p2 assoc2) =>
-             if p2 == p && op2 == op then Just (Pair l r) else Nothing
-           Nothing => Nothing
-    _ => Nothing
+matchInfixNode p op e = case e of
+  EApp (EVar name sp) ([l, r]) sp2 =>
+    let
+      op2 = if name == "bind" then ">>=" else name
+    in case infixPrec op2 of
+      Just (Pair p2 assoc2) => if p2 == p && op2 == op then Just (Pair l r) else Nothing
+      Nothing => Nothing
+  _ => Nothing
 
-flattenInfixLeft p op e =
-  case matchInfixNode p op e of
-    Nothing => Cons e Nil
-    Just (Pair l r) => append (flattenInfixLeft p op l) (Cons r Nil)
+flattenInfixLeft p op e = case matchInfixNode p op e of
+  Nothing => [e]
+  Just (Pair l r) => append (flattenInfixLeft p op l) [r]
 
-flattenInfixRight p op e =
-  case matchInfixNode p op e of
-    Nothing => Cons e Nil
-    Just (Pair l r) => Cons l (flattenInfixRight p op r)
+flattenInfixRight p op e = case matchInfixNode p op e of
+  Nothing => [e]
+  Just (Pair l r) => l :: flattenInfixRight p op r
 
-renderInfixChain at lineInd p assoc op operands =
-  case operands of
-    Nil => Nil
-    Cons first rest =>
-      append (renderChainFirst at lineInd (p + 1) first)
-             (concatMap (\o => renderChainRest at lineInd (p + 1) op o) rest)
+renderInfixChain at lineInd p assoc op operands = case operands of
+  [] => []
+  first :: rest =>
+    append (renderChainFirst at lineInd (p + 1) first)
+      (concatMap (\o => renderChainRest at lineInd (p + 1) op o) rest)
 
-renderChainFirst at lineInd minPrec e =
-  case inlinePrec minPrec e of
-    Just s => if fitsLine lineInd s then Cons s Nil else renderWideOperand at lineInd minPrec e
-    Nothing => parenWrapInd at lineInd e
+renderChainFirst at lineInd minPrec e = case inlinePrec minPrec e of
+  Just s => if fitsLine lineInd s then [s] else renderWideOperand at lineInd minPrec e
+  Nothing => parenWrapInd at lineInd e
 
 renderWideOperand at lineInd minPrec e =
-  if minPrec > 0 then Cons (renderExprInlineOperand minPrec e) Nil else renderWide at lineInd e
+  if minPrec > 0 then [renderExprInlineOperand minPrec e] else renderWide at lineInd e
 
-renderExprInlineOperand minPrec e =
-  case inlinePrec minPrec e of
-    Just s => s
-    Nothing => ""
+renderExprInlineOperand minPrec e = case inlinePrec minPrec e of
+  Just s => s
+  Nothing => ""
 
-renderChainRest at lineInd minPrec op e =
-  case inlinePrec minPrec e of
-    Just s => Cons (spaces (lineInd + 2) ++ opText op ++ " " ++ s) Nil
-    Nothing => prefixFirst (spaces (lineInd + 2) ++ opText op ++ " ") (parenWrapInd at (lineInd + 2) e)
+renderChainRest at lineInd minPrec op e = case inlinePrec minPrec e of
+  Just s => [spaces (lineInd + 2) ++ opText op ++ " " ++ s]
+  Nothing =>
+    prefixFirst (spaces (lineInd + 2) ++ opText op ++ " ") (parenWrapInd at (lineInd + 2) e)
 
-renderOperand at lineInd minPrec e =
-  case inlinePrec minPrec e of
-    Just s => Cons s Nil
-    Nothing => parenWrapInd at lineInd e
+renderOperand at lineInd minPrec e = case inlinePrec minPrec e of
+  Just s => [s]
+  Nothing => parenWrapInd at lineInd e
 
 renderApplyBlock at lineInd fn args =
-  let headLines = renderApplyHead at lineInd fn
+  let
+    headLines = renderApplyHead at lineInd fn
   in case mapMaybeStrings (\a => inlineAtom a) args of
-       Nothing => appendApplyArgs at lineInd headLines args
-       Just texts =>
-         case headLines of
-           Cons h Nil =>
-             if fitsLine lineInd (h ++ concatStrings (map (\t => " " ++ t) texts))
-             then appendApplyArgs at lineInd headLines args
-             else packApplyArgs lineInd (Cons h Nil) texts
-           _ => appendApplyArgs at lineInd headLines args
+    Nothing => appendApplyArgs at lineInd headLines args
+    Just texts => case headLines of
+      [h] =>
+        if fitsLine lineInd (h ++ concatStrings (map (\t => " " ++ t) texts)) then appendApplyArgs at lineInd headLines args
+        else packApplyArgs lineInd [h] texts
+      _ => appendApplyArgs at lineInd headLines args
 
 -- 贪心折行：尽量把参数放在当前行，放不下就新起一行（缩进 lineInd+2）。
-packApplyArgs lineInd lines Nil = lines
-
-packApplyArgs lineInd lines (Cons t rest) =
-  if fitsLineWidth (lastLineWidth lineInd lines) t
-  then packApplyArgs lineInd (appendLast (" " ++ t) lines) rest
-  else packApplyArgs lineInd (append lines (Cons (spaces (lineInd + 2) ++ t) Nil)) rest
+packApplyArgs lineInd lines [] = lines
+packApplyArgs lineInd lines (t :: rest) =
+  if fitsLineWidth (lastLineWidth lineInd lines) t then packApplyArgs lineInd (appendLast (" " ++ t) lines) rest
+  else packApplyArgs lineInd (append lines [spaces (lineInd + 2) ++ t]) rest
 
 lastLineWidth lineInd lines =
-  if isNilList (restLines lines) then lineInd + strWidth (lastLineOf lines) else strWidth (lastLineOf lines)
+  if isNilList (restLines lines) then lineInd + strWidth (lastLineOf lines)
+  else strWidth (lastLineOf lines)
 
 fitsLineWidth currentWidth t = currentWidth + 1 + strWidth t <= maxWidth
 
-renderApplyHead at lineInd fn =
-  case fn of
-    EInstSel base inst sp => appendLast (" @" ++ inst) (renderAtomExpr at lineInd base)
-    _ => renderAtomExpr at lineInd fn
+renderApplyHead at lineInd fn = case fn of
+  EInstSel base inst sp => appendLast (" @" ++ inst) (renderAtomExpr at lineInd base)
+  _ => renderAtomExpr at lineInd fn
 
-appendApplyArgs at lineInd lines args =
-  case args of
-    Nil => lines
-    Cons a rest => appendApplyArgs at lineInd (appendBefore " " lines (renderAtomExpr at lineInd a)) rest
+appendApplyArgs at lineInd lines args = case args of
+  [] => lines
+  a :: rest =>
+    appendApplyArgs at lineInd (appendBefore " " lines (renderAtomExpr at lineInd a)) rest
 
-renderRecordBlock at lineInd name fields =
-  case fields of
-    Nil => Cons (name ++ " { }") Nil
-    Cons first rest =>
-      let start = appendBefore " " (Cons (name ++ " {") Nil) (renderFieldBlock at lineInd first)
-          withRest = appendFieldBlocks at lineInd start rest
-      in appendLast " }" withRest
+renderRecordBlock at lineInd name fields = case fields of
+  [] => [name ++ " { }"]
+  first :: rest =>
+    let
+      start = appendBefore " " [name ++ " {"] (renderFieldBlock at lineInd first)
+      withRest = appendFieldBlocks at lineInd start rest
+    in appendLast " }" withRest
 
-appendFieldBlocks at lineInd lines fields =
-  case fields of
-    Nil => lines
-    Cons f rest => appendFieldBlocks at lineInd (appendBefore ", " lines (renderFieldBlock at lineInd f)) rest
+appendFieldBlocks at lineInd lines fields = case fields of
+  [] => lines
+  f :: rest =>
+    appendFieldBlocks at lineInd (appendBefore ", " lines (renderFieldBlock at lineInd f)) rest
 
 renderFieldBlock at lineInd (Pair fname value) =
   prefixFirst (fname ++ " = ") (renderAtomExpr at lineInd value)
 
 renderRecUpdateBlock at lineInd base fields =
-  let start = appendBefore " " (Cons "{" Nil) (renderAtomExpr at lineInd base)
+  let
+    start = appendBefore " " ["{"] (renderAtomExpr at lineInd base)
   in case fields of
-       Nil => appendLast " }" start
-       Cons first rest =>
-         let start2 = appendBefore " | " start (renderFieldBlock at lineInd first)
-             withRest = appendFieldBlocks at lineInd start2 rest
-         in appendLast " }" withRest
+    [] => appendLast " }" start
+    first :: rest =>
+      let
+        start2 = appendBefore " | " start (renderFieldBlock at lineInd first)
+        withRest = appendFieldBlocks at lineInd start2 rest
+      in appendLast " }" withRest
 
 -- ---------------------------------------------------------------
 -- 声明渲染
 -- ---------------------------------------------------------------
+renderDeclAt at lineInd decl = attachAt at (declSpan decl) lineInd (renderDeclBody at lineInd decl)
 
-renderDeclAt at lineInd decl =
-  attachAt at (declSpan decl) lineInd (renderDeclBody at lineInd decl)
-
-renderDeclBody at lineInd decl =
-  case decl of
-    DData name params ctors derivings sp => renderDataDecl at name params ctors derivings
-    DSig name ty sp => renderSigDecl at lineInd name ty
-    DFun name pats body sp => renderClause at lineInd name pats body
-    DRecord name params fields derivings sp => renderRecordDecl at name params fields derivings
-    DTrait name params methods sp => renderTraitDecl at name params methods
-    DInstance mname isDefault head methods sp => renderInstanceDecl at mname head methods
+renderDeclBody at lineInd decl = case decl of
+  DData name params kind ctors derivings sp => renderDataDecl at name params kind ctors derivings
+  DSig name ty sp => renderSigDecl at lineInd name ty
+  DFun name pats body sp => renderClause at lineInd name pats body
+  DRecord name params fields derivings sp => renderRecordDecl at name params fields derivings
+  DTrait name params methods sp => renderTraitDecl at name params methods
+  DInstance mname isDefault head methods sp => renderInstanceDecl at mname head methods
 
 renderSigDecl at lineInd name ty =
   prefixFirst (spaces lineInd ++ name ++ " : ") (renderTypeExpr at lineInd ty)
 
-renderDataDecl at name params ctors derivings =
-  let header = "data " ++ name ++ joinSpace params ++ " : Type where"
-      ctorLines = concatMap (\c => renderCtorDecl at c) ctors
-  in append (Cons header Nil) (append ctorLines (renderDerivings derivings))
+renderDataDecl at name params kind ctors derivings =
+  let
+    header =
+      "data "
+        ++ name
+        ++ joinSpace params
+        ++ " : "
+        ++ join " " (renderTypeExpr at 0 kind)
+        ++ " where"
+    ctorLines = concatMap (\c => renderCtorDecl at c) ctors
+  in append [header] (append ctorLines (renderDerivings derivings))
 
 renderCtorDecl at (Ctor cname ty arity sp) =
   attachAt at sp 2 (prefixFirst ("  " ++ cname ++ " : ") (renderTypeExpr at 2 ty))
 
-renderDerivings Nil = Nil
-renderDerivings names = Cons ("deriving (" ++ joinComma names ++ ")") Nil
+renderDerivings [] = []
+renderDerivings names = ["deriving (" ++ joinComma names ++ ")"]
 
 renderRecordDecl at name params fields derivings =
-  let header = "record " ++ name ++ joinSpace params ++ " where"
-      fieldLines = concatMap (\f => renderRecordField at f) fields
-  in append (Cons header Nil) (append fieldLines (renderDerivings derivings))
+  let
+    header = "record " ++ name ++ joinSpace params ++ " where"
+    fieldLines = concatMap (\f => renderRecordField at f) fields
+  in append [header] (append fieldLines (renderDerivings derivings))
 
 renderRecordField at f =
-  attachAt at (fieldSpan f) 2 (prefixFirst ("  " ++ fieldName f ++ " : ") (renderTypeExpr at 2 (fieldType f)))
+  attachAt at (fieldSpan f) 2
+    (prefixFirst ("  " ++ fieldName f ++ " : ") (renderTypeExpr at 2 (fieldType f)))
 
 renderTraitDecl at name params methods =
-  let header = "trait " ++ name ++ joinSpace params ++ " where"
-      methodLines = concatMap (\m => renderMethodSig at m) methods
-  in append (Cons header Nil) methodLines
+  let
+    header = "trait " ++ name ++ joinSpace params ++ " where"
+    methodLines = concatMap (\m => renderMethodSig at m) methods
+  in append [header] methodLines
 
 renderMethodSig at (Pair mname ty) =
   attachAt at (exprSpan ty) 2 (prefixFirst ("  " ++ mname ++ " : ") (renderTypeExpr at 2 ty))
 
 renderInstanceDecl at mname head methods =
-  let headLines =
-        case inlineExpr head of
-          Just s => Cons s Nil
-          Nothing => parenWrapInd at 0 head
-      asText =
-        case mname of
-          Nothing => ""
-          Just n => " as " ++ n
-      headLine = appendLast (asText ++ " where") (prefixFirst "instance " headLines)
-      methodLines = concatMap (\d => renderDeclAt at 2 d) methods
+  let
+    headLines = case inlineExpr head of
+      Just s => [s]
+      Nothing => parenWrapInd at 0 head
+    asText = case mname of
+      Nothing => ""
+      Just n => " as " ++ n
+    headLine = appendLast (asText ++ " where") (prefixFirst "instance " headLines)
+    methodLines = concatMap (\d => renderDeclAt at 2 d) methods
   in append headLine methodLines
 
 -- 函数子句 / instance 方法子句 / where 绑定子句共用。
 -- where 块（parser desugar 成 ELet .. True）优先按 where 形式还原。
 renderClause at lineInd name pats body =
-  let headerBase = spaces lineInd ++ name ++ joinSpace (map renderPatAtom pats) ++ " ="
+  let
+    headerBase = spaces lineInd ++ name ++ joinSpace (map renderPatAtom pats) ++ " ="
   in case body of
-       ELet binds inner recFlag sp =>
-         if recFlag then
-           let whereInd = lineInd + 2
-           in case inlinePrec 0 inner of
-                Just s => Cons (headerBase ++ " " ++ s ++ " where") (renderWhereBindings at whereInd binds)
-                Nothing =>
-                  let bodyInd = lineInd + 2
-                      bodyLines = prefixFirst (spaces bodyInd) (renderExpr at bodyInd inner)
-                      whereLine = spaces whereInd ++ "where"
-                      bindLines = renderWhereBindings at (lineInd + 4) binds
-                  in Cons headerBase (append bodyLines (Cons whereLine bindLines))
-         else Cons headerBase (prefixFirst (spaces (lineInd + 2)) (renderExpr at (lineInd + 2) body))
-       _ =>
-         case inlinePrec 0 body of
-           Just s =>
-             if strWidth (headerBase ++ " " ++ s) <= maxWidth
-             then Cons (headerBase ++ " " ++ s) Nil
-             else Cons headerBase (prefixFirst (spaces (lineInd + 2)) (renderExpr at (lineInd + 2) body))
-           Nothing => prefixFirst (headerBase ++ " ") (renderExpr at lineInd body)
+    ELet binds inner recFlag sp => if recFlag then
+      let
+        whereInd = lineInd + 2
+      in case inlinePrec 0 inner of
+        Just s => (headerBase ++ " " ++ s ++ " where") :: renderWhereBindings at whereInd binds
+        Nothing =>
+          let
+            bodyInd = lineInd + 2
+            bodyLines = prefixFirst (spaces bodyInd) (renderExpr at bodyInd inner)
+            whereLine = spaces whereInd ++ "where"
+            bindLines = renderWhereBindings at (lineInd + 4) binds
+          in headerBase :: append bodyLines (whereLine :: bindLines)
+    else headerBase :: prefixFirst (spaces (lineInd + 2)) (renderExpr at (lineInd + 2) body)
+    _ => case inlinePrec 0 body of
+      Just s =>
+        if strWidth (headerBase ++ " " ++ s) <= maxWidth then [headerBase ++ " " ++ s]
+        else headerBase :: prefixFirst (spaces (lineInd + 2)) (renderExpr at (lineInd + 2) body)
+      Nothing => prefixFirst (headerBase ++ " ") (renderExpr at lineInd body)
 
-renderWhereBindings at lineInd binds =
-  concatMap (\b => renderWhereBinding at lineInd b) binds
+renderWhereBindings at lineInd binds = concatMap (\b => renderWhereBinding at lineInd b) binds
 
 renderWhereBinding at lineInd (Pair pat value) =
   attachAt at (patSpan pat) lineInd (renderWhereBindingBody at lineInd pat value)
 
-renderWhereBindingBody at lineInd pat value =
-  case pat of
-    PVar name psp =>
-      case value of
-        ELam ps inner lsp => renderClause at lineInd name (map (\n => PVar n dummySpan) ps) inner
-        _ => renderBindingValue at lineInd (name ++ " =") value
-    _ => renderBindingValue at lineInd (renderPat pat ++ " =") value
+renderWhereBindingBody at lineInd pat value = case pat of
+  PVar name psp => case value of
+    ELam ps inner lsp => renderClause at lineInd name (map (\n => PVar n dummySpan) ps) inner
+    _ => renderBindingValue at lineInd (name ++ " =") value
+  _ => renderBindingValue at lineInd (renderPat pat ++ " =") value
 
 -- 顶层声明：不同函数之间一个空行；类型签名紧贴同名函数子句。
-renderTopDecls at Nil = Nil
+renderTopDecls at [] = []
+renderTopDecls at (d :: rest) = append (renderDeclAt at 0 d) (renderTopRest at d rest)
 
-renderTopDecls at (Cons d rest) = append (renderDeclAt at 0 d) (renderTopRest at d rest)
+renderTopRest at prev [] = []
+renderTopRest at prev (d :: rest) =
+  if attachDecl prev d then append (renderDeclAt at 0 d) (renderTopRest at d rest)
+  else "" :: append (renderDeclAt at 0 d) (renderTopRest at d rest)
 
-renderTopRest at prev Nil = Nil
+attachDecl prev d = case d of
+  DFun n pats body sp => declNamed prev n
+  _ => False
 
-renderTopRest at prev (Cons d rest) =
-  if attachDecl prev d
-  then append (renderDeclAt at 0 d) (renderTopRest at d rest)
-  else Cons "" (append (renderDeclAt at 0 d) (renderTopRest at d rest))
-
-attachDecl prev d =
-  case d of
-    DFun n pats body sp => declNamed prev n
-    _ => False
-
-declNamed d n =
-  case d of
-    DFun m pats body sp => m == n
-    DSig m ty sp => m == n
-    _ => False
+declNamed d n = case d of
+  DFun m pats body sp => m == n
+  DSig m ty sp => m == n
+  _ => False
 
 -- ---------------------------------------------------------------
 -- 模块头 / import / 文件组装
 -- ---------------------------------------------------------------
-
 renderModDecl (ModDecl name explicit items sp) =
-  if explicit
-  then "module " ++ name ++ " (" ++ joinComma (map renderExportItem items) ++ ") where"
+  if explicit then "module " ++ name ++ " (" ++ joinComma (map renderExportItem items) ++ ") where"
   else "module " ++ name ++ " where"
 
-renderExportItem item =
-  case item of
-    XBare name sp => name
-    XTypeAll name sp => name ++ "(..)"
-    XModule name sp => "module " ++ name
+renderExportItem item = case item of
+  XBare name sp => name
+  XTypeAll name sp => name ++ "(..)"
+  XModule name sp => "module " ++ name
 
 renderImport (Import name isQualified alias sp) =
   "import " ++ (if isQualified then "qualified " else "") ++ name ++ aliasSuffix alias
 
-aliasSuffix maybeAlias =
-  case maybeAlias of
-    Nothing => ""
-    Just a => " as " ++ a
+aliasSuffix maybeAlias = case maybeAlias of
+  Nothing => ""
+  Just a => " as " ++ a
 
-renderHeader at maybeHeader =
-  case maybeHeader of
-    Nothing => Nil
-    Just m => attachAt at (modDeclSpan m) 0 (Cons (renderModDecl m) Nil)
+renderHeader at maybeHeader = case maybeHeader of
+  Nothing => []
+  Just m => attachAt at (modDeclSpan m) 0 [renderModDecl m]
 
-renderImportLine at imp = attachAt at (importSpan imp) 0 (Cons (renderImport imp) Nil)
+renderImportLine at imp = attachAt at (importSpan imp) 0 [renderImport imp]
 
-renderEofComments Nil = Nil
+renderEofComments [] = []
 renderEofComments comments = concatMap (commentLeadLines 0) comments
 
 renderSourceSections hdr imports decls at eof =
-  Cons (renderHeader at hdr)
-    (Cons (concatMap (renderImportLine at) imports)
-      (Cons (renderTopDecls at decls) (Cons (renderEofComments eof) Nil)))
+  [ renderHeader at hdr,
+    concatMap (renderImportLine at) imports,
+    renderTopDecls at decls,
+    renderEofComments eof
+  ]
 
-filterSections Nil = Nil
+filterSections [] = []
+filterSections (section :: rest) = case section of
+  [] => filterSections rest
+  _ => section :: filterSections rest
 
-filterSections (Cons section rest) =
-  case section of
-    Nil => filterSections rest
-    _ => Cons section (filterSections rest)
+joinSections [] = []
+joinSections ([section]) = section
+joinSections (section :: rest) = append section ("" :: joinSections rest)
 
-joinSections Nil = Nil
-joinSections (Cons section Nil) = section
-joinSections (Cons section rest) = append section (Cons "" (joinSections rest))
-
-formatSource source =
-  case parseSource "<fmt>" source of
+formatSource source = case parseSource "<fmt>" source of
+  Err e => Err e
+  Ok (Source hdr imports decls) => case lexComments source of
     Err e => Err e
-    Ok (Source hdr imports decls) =>
-      case lexComments source of
-        Err e => Err e
-        Ok comments =>
-          case assignComments (anchorSpans hdr imports decls) comments Nil Nil of
-            Pair at eof =>
-              case joinSections (filterSections (renderSourceSections hdr imports decls at eof)) of
-                Nil => Ok ""
-                lines => Ok (unlines lines)
+    Ok comments => case assignComments (anchorSpans hdr imports decls) comments [] [] of
+      Pair at eof => case joinSections (filterSections (renderSourceSections hdr imports decls at eof)) of
+        [] => Ok ""
+        lines => Ok (unlines lines)

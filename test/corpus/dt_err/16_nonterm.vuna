@@ -1,0 +1,10 @@
+-- M16：非结构化递归被拒（递归调用的实参没有变小）。
+data Nat : Type where
+  Zero : Nat
+  Succ : Nat -> Nat
+
+loop : Nat -> Nat
+loop n = loop n
+
+main : Int
+main = 1

@@ -1,5 +1,5 @@
 -- stdlib 反例：instance 少实现 trait 方法 pure。
-import Vuna.Monad
+import Base.Monad
 
 data Box a : Type where
   MkBox : a -> Box a

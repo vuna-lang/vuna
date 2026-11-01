@@ -1,0 +1,7 @@
+data Nat : Type where
+  Zero : Nat
+  Succ : Nat -> Nat
+
+-- 构造子的结果类型必须回到它声明的族。
+data Bad : Type where
+  MkBad : Nat

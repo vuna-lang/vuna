@@ -1,0 +1,92 @@
+module Base.List (List(..), append, reverse, length, map, filter, foldl, foldr, concatMap, flatMap, mem, memName, lookupPair, zip, take, drop, range, mapMaybe) where
+
+-- Base.List：列表类型与常用操作（Base 语义迁移 + 常用补充）。
+-- import Base.Bool 只为让 `data Bool` 声明进入程序（typed codegen 生成 True/False 表达式所需）。
+import Base.Pair
+import Base.Maybe
+import Base.Bool
+import Base.Monad
+
+data List a : Type where
+  Nil : List a
+  Cons : a -> List a -> List a
+
+append : List a -> List a -> List a
+append [] ys = ys
+append (x :: xs) ys = x :: append xs ys
+
+reverseOnto : List a -> List a -> List a
+reverseOnto [] acc = acc
+reverseOnto (x :: xs) acc = reverseOnto xs (x :: acc)
+
+reverse : List a -> List a
+reverse xs = reverseOnto xs []
+
+length : List a -> Int
+length [] = 0
+length (x :: xs) = 1 + length xs
+
+map : (a -> b) -> List a -> List b
+map f [] = []
+map f (x :: xs) = f x :: map f xs
+
+filter : (a -> Bool) -> List a -> List a
+filter p [] = []
+filter p (x :: xs) = if p x then x :: filter p xs else filter p xs
+
+foldl : (b -> a -> b) -> b -> List a -> b
+foldl f acc [] = acc
+foldl f acc (x :: xs) = foldl f (f acc x) xs
+
+foldr : (a -> b -> b) -> b -> List a -> b
+foldr f acc [] = acc
+foldr f acc (x :: xs) = f x (foldr f acc xs)
+
+concatMap : (a -> List b) -> List a -> List b
+concatMap f [] = []
+concatMap f (x :: rest) = append (f x) (concatMap f rest)
+
+flatMap : (a -> List b) -> List a -> List b
+flatMap f xs = concatMap f xs
+
+mem : a -> List a -> Bool
+mem x [] = False
+mem x (y :: rest) = if x == y then True else mem x rest
+
+memName : String -> List String -> Bool
+memName name [] = False
+memName name (x :: rest) = if x == name then True else memName name rest
+
+lookupPair : String -> List (Pair String v) -> Maybe v
+lookupPair name [] = Nothing
+lookupPair name ((Pair k v) :: rest) = if k == name then Just v else lookupPair name rest
+
+zip : List a -> List b -> List (Pair a b)
+zip [] ys = []
+zip xs [] = []
+zip (x :: xs) (y :: ys) = Pair x y :: zip xs ys
+
+take : Int -> List a -> List a
+take n [] = []
+take n (x :: xs) = if n <= 0 then [] else x :: take (n - 1) xs
+
+drop : Int -> List a -> List a
+drop n [] = []
+drop n (x :: xs) = if n <= 0 then x :: xs else drop (n - 1) xs
+
+range : Int -> Int -> List Int
+range i n = if i >= n then [] else i :: range (i + 1) n
+
+mapMaybe : (a -> Maybe b) -> List a -> List b
+mapMaybe f [] = []
+mapMaybe f (x :: xs) = case f x of
+  Nothing => mapMaybe f xs
+  Just y => y :: mapMaybe f xs
+
+-- M11-C：Functor / Monad 实例（trait 来自 Base.Monad，List 定义在本模块）。
+instance Functor List where
+  fmap f xs = map f xs
+
+instance Monad List where
+  bind xs f = concatMap f xs
+  pure x = [x]

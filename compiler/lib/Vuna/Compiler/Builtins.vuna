@@ -1,0 +1,69 @@
+module Vuna.Compiler.Builtins (builtinArity) where
+
+-- Vuna.Compiler.Builtins：内建函数的名字与元数（供 Loader/Eval 共用）。
+import Vuna.Compiler.Common
+
+builtinArity "+" = Just 2
+builtinArity "-" = Just 2
+builtinArity "*" = Just 2
+builtinArity "/" = Just 2
+builtinArity "==" = Just 2
+builtinArity "/=" = Just 2
+builtinArity "<" = Just 2
+builtinArity "<=" = Just 2
+builtinArity ">" = Just 2
+builtinArity ">=" = Just 2
+builtinArity "&&" = Just 2
+builtinArity "||" = Just 2
+builtinArity "++" = Just 2
+builtinArity "bi_show_string" = Just 1
+builtinArity "bi_eq_generic" = Just 2
+builtinArity "bi_neq_generic" = Just 2
+builtinArity "bi_lt_generic" = Just 2
+builtinArity "bi_le_generic" = Just 2
+builtinArity "bi_gt_generic" = Just 2
+builtinArity "bi_ge_generic" = Just 2
+builtinArity "bi_eq_int" = Just 2
+builtinArity "bi_neq_int" = Just 2
+builtinArity "bi_lt_int" = Just 2
+builtinArity "bi_le_int" = Just 2
+builtinArity "bi_gt_int" = Just 2
+builtinArity "bi_ge_int" = Just 2
+builtinArity "bi_eq_str" = Just 2
+builtinArity "bi_neq_str" = Just 2
+builtinArity "bi_eq_bool" = Just 2
+builtinArity "bi_neq_bool" = Just 2
+builtinArity "strLength" = Just 1
+builtinArity "strUnpack" = Just 1
+builtinArity "strPack" = Just 1
+builtinArity "strFromInt" = Just 1
+builtinArity "readFile" = Just 1
+builtinArity "writeFile" = Just 2
+builtinArity "print" = Just 1
+builtinArity "getArgs" = Just 0
+builtinArity "readLine" = Just 0
+builtinArity "readDir" = Just 1
+builtinArity "isDirectory" = Just 1
+builtinArity "makeDir" = Just 1
+builtinArity "removeFile" = Just 1
+builtinArity "fileExists" = Just 1
+builtinArity "fileMtime" = Just 1
+builtinArity "fileSize" = Just 1
+builtinArity "exit" = Just 1
+-- 效果原语的内部名字：stdlib Base.IO 用它们实现公开的 IO API；
+-- 普通包不可直接调用（Loader 的 effectful 包级限制覆盖 prim_*）。
+builtinArity "prim_readFile" = Just 1
+builtinArity "prim_writeFile" = Just 2
+builtinArity "prim_print" = Just 1
+builtinArity "prim_getArgs" = Just 0
+builtinArity "prim_readLine" = Just 0
+builtinArity "prim_readDir" = Just 1
+builtinArity "prim_isDirectory" = Just 1
+builtinArity "prim_makeDir" = Just 1
+builtinArity "prim_removeFile" = Just 1
+builtinArity "prim_fileExists" = Just 1
+builtinArity "prim_fileMtime" = Just 1
+builtinArity "prim_fileSize" = Just 1
+builtinArity "prim_exit" = Just 1
+builtinArity "prim_runIn" = Just 2
+builtinArity _ = Nothing

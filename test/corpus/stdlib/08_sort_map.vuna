@@ -1,9 +1,9 @@
--- stdlib：Vuna.Sort + 抽象 Vuna.Map（跨模块只能通过 API 使用）。
-import Vuna.Sort
-import Vuna.Map
-import Vuna.List
-import Vuna.Pair
-import Vuna.Maybe
+-- stdlib：Base.Sort + 抽象 Base.Map（跨模块只能通过 API 使用）。
+import Base.Sort
+import Base.Map
+import Base.List
+import Base.Pair
+import Base.Maybe
 
 showIntList : List Int -> String
 showIntList Nil = "[]"

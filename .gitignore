@@ -55,3 +55,7 @@ docs/api.md
 examples/**/Main.ml
 examples/**/main
 /Main.ml
+
+# vuna 包级 compile 输出
+.output/
+/seed/program

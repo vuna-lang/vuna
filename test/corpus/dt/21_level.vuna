@@ -1,0 +1,31 @@
+-- M18.6：宇宙层级不透明化后的可观测行为。
+-- 层级只能经 levelZero / levelSucc / levelMax / levelEq 前进，Elab 不自己做 Int 算术；
+-- 定义性相等里 `VType i` 与 `VType j` 的比较走 levelEq。
+data Nat : Type where
+  Zero : Nat
+  Succ : Nat -> Nat
+
+-- 显式类型参数是 Rig0：不参与运行时表示，可以在类型位置出现多次。
+constTy : (a : Type) -> (b : Type) -> a -> a
+constTy a b x = x
+
+idE : (a : Type) -> a -> a
+idE a x = x
+
+one : Nat
+one = Succ Zero
+
+toInt : Nat -> Int
+toInt n = case n of
+  Zero => 0
+  Succ k => 1 + toInt k
+
+-- 箭头类型的域/余域都是宇宙：层级取 max（levelMax），构造出的 TPi 仍可检查。
+apply : (a : Type) -> (b : Type) -> (a -> b) -> a -> b
+apply a b f x = f x
+
+inc : Int -> Int
+inc n = n + 1
+
+main : Int
+main = toInt (idE Nat (constTy Nat Int one)) + apply Int Int inc 1

@@ -1,0 +1,11 @@
+-- M16：覆盖性 —— 漏写可达分支仍被拒（M14 起已有），这里固定 M16 的回归。
+data Nat : Type where
+  Zero : Nat
+  Succ : Nat -> Nat
+
+f : Nat -> Int
+f n = case n of
+  Zero => 0
+
+main : Int
+main = f Zero

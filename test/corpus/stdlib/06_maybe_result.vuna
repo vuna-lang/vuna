@@ -1,8 +1,8 @@
 -- stdlib：Maybe 消除函数 + Result 组合子。
-import Vuna.Maybe
-import Vuna.Result
-import Vuna.List
-import Vuna.Pair
+import Base.Maybe
+import Base.Result
+import Base.List
+import Base.Pair
 
 showBool : Bool -> String
 showBool b = if b then "True" else "False"

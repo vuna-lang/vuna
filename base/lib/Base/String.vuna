@@ -1,0 +1,77 @@
+module Base.String (split, join, lines, unlines, trim, trimLeft, trimRight, contains, startsWith, endsWith, repeat, substring) where
+
+-- Base.String：字符串工具。底层只使用 strUnpack/strPack/strLength/++ 与 Base.List。
+-- import Base.Bool 只为让 `data Bool` 声明进入程序（typed codegen 生成 True/False 表达式所需）。
+import Base.List
+import Base.Bool
+
+split : String -> String -> List String
+split sep text =
+  if strLength sep == 0 then map (\c => strPack [c]) (strUnpack text)
+  else splitAcc (strUnpack sep) (strUnpack text) [] []
+
+splitAcc : List Int -> List Int -> List Int -> List String -> List String
+splitAcc sep chars acc parts = if _startsWithChars sep chars then splitAcc sep (drop (length sep) chars) [] (strPack (reverse acc) :: parts)
+else case chars of
+  [] => reverse (strPack (reverse acc) :: parts)
+  c :: rest => splitAcc sep rest (c :: acc) parts
+
+join : String -> List String -> String
+join sep [] = ""
+join sep ([x]) = x
+join sep (x :: rest) = x ++ sep ++ join sep rest
+
+lines : String -> List String
+lines s = split "\n" s
+
+unlines : List String -> String
+unlines [] = ""
+unlines (x :: rest) = x ++ "\n" ++ unlines rest
+
+trimLeft : String -> String
+trimLeft s = strPack (_dropSpace (strUnpack s))
+
+trimRight : String -> String
+trimRight s = strPack (reverse (_dropSpace (reverse (strUnpack s))))
+
+trim : String -> String
+trim s = trimLeft (trimRight s)
+
+contains : String -> String -> Bool
+contains needle text = _containsChars (strUnpack needle) (strUnpack text)
+
+startsWith : String -> String -> Bool
+startsWith prefix text = _startsWithChars (strUnpack prefix) (strUnpack text)
+
+endsWith : String -> String -> Bool
+endsWith suffix text =
+  let
+    ls = strLength suffix
+  in let
+    lt = strLength text
+  in if ls > lt then False else _startsWithChars (strUnpack suffix) (drop (lt - ls) (strUnpack text))
+
+repeat : Int -> String -> String
+repeat n s = if n <= 0 then "" else s ++ repeat (n - 1) s
+
+substring : Int -> Int -> String -> String
+substring start len s = strPack (take len (drop start (strUnpack s)))
+
+_isSpace : Int -> Bool
+_isSpace c = c == 32 || c == 9 || c == 10 || c == 13
+
+_dropSpace : List Int -> List Int
+_dropSpace [] = []
+_dropSpace (c :: rest) = if _isSpace c then _dropSpace rest else c :: rest
+
+_startsWithChars : List Int -> List Int -> Bool
+_startsWithChars [] text = True
+_startsWithChars (p :: prest) text = case text of
+  [] => False
+  t :: trest => if p == t then _startsWithChars prest trest else False
+
+_containsChars : List Int -> List Int -> Bool
+_containsChars needle text = if _startsWithChars needle text then True
+else case text of
+  [] => False
+  c :: rest => _containsChars needle rest

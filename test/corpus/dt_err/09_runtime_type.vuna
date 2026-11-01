@@ -1,0 +1,2 @@
+f : (a : Type) -> Type
+f a = a

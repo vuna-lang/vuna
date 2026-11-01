@@ -1,0 +1,8 @@
+isZero : Int -> Bool
+isZero n = n == 0
+
+pick : Int -> Int -> Bool -> Int
+pick a b c = if c then a else b
+
+main : Int
+main = pick 1 2 (isZero 1)

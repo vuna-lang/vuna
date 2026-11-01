@@ -1,4 +1,4 @@
-import Vuna.List
+import Base.List
 
 main : String
 main = if length [1, 2, 3] == 3 then "" else "length failed"

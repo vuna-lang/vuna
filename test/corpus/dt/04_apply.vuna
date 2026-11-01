@@ -1,0 +1,8 @@
+apply : (a : Type) -> (b : Type) -> (a -> b) -> a -> b
+apply a b f x = f x
+
+inc : Int -> Int
+inc n = n + 1
+
+main : Int
+main = apply Int Int inc 41

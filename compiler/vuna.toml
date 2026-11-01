@@ -8,22 +8,26 @@ edition = "2026"
 
 [export]
 modules = [
-  "Vuna.Base",
-  "Vuna.Ast",
-  "Vuna.Lexer",
-  "Vuna.Parser",
-  "Vuna.Builtins",
-  "Vuna.Toml",
-  "Vuna.Manifest",
-  "Vuna.Pkg",
-  "Vuna.Loader",
-  "Vuna.Typecheck",
-  "Vuna.TypedCodegen",
-  "Vuna.Split",
-  "Vuna.SplitCli",
-  "Vuna.Compile",
-  "Vuna.CompilerCli"
+  "Vuna.Compiler.Common",
+  "Vuna.Compiler.Ast",
+  "Vuna.Compiler.Lexer",
+  "Vuna.Compiler.Parser",
+  "Vuna.Compiler.Builtins",
+  "Vuna.Compiler.Toml",
+  "Vuna.Compiler.Manifest",
+  "Vuna.Compiler.Pkg",
+  "Vuna.Compiler.Loader",
+  "Vuna.Compiler.Typecheck",
+  "Vuna.Compiler.TypedCodegen",
+  "Vuna.Compiler.Core",
+  "Vuna.Compiler.Elab",
+  "Vuna.Compiler.CoreCodegen",
+  "Vuna.Compiler.Dt",
+  "Vuna.Compiler.Split",
+  "Vuna.Compiler.SplitCli",
+  "Vuna.Compiler.Compile",
+  "Vuna.Compiler.CompilerCli"
 ]
 
 [dependencies]
-vuna-stdlib = "../stdlib"
+vuna-base = "../base"
