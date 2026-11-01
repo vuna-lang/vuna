@@ -19,9 +19,9 @@ val v_Base_dIO_dfileMtime : (string) -> ((int) t_Base_dIO_dIO)
 val v_Base_dIO_dfileSize : (string) -> ((int) t_Base_dIO_dIO)
 val v_Base_dIO_dgetArgs : unit -> ((string) list) t_Base_dIO_dIO
 val v_Base_dIO_dexit : (int) -> ((int) t_Base_dIO_dIO)
-val v_vuna_uinst_ud_uBase_uIO_uIO_ufmap : (('a50367) -> ('a50366)) -> ((('a50367) t_Base_dIO_dIO) -> (('a50366) t_Base_dIO_dIO))
-val v_vuna_uinst_ud_uBase_uIO_uIO_upure : ('a50374) -> (('a50374) t_Base_dIO_dIO)
-val v_vuna_uinst_ud_uBase_uIO_uIO_ubind : (('a50379) t_Base_dIO_dIO) -> ((('a50379) -> (('a50378) t_Base_dIO_dIO)) -> (('a50378) t_Base_dIO_dIO))
+val v_vuna_uinst_ud_uBase_uIO_uIO_ufmap : (('a50543) -> ('a50542)) -> ((('a50543) t_Base_dIO_dIO) -> (('a50542) t_Base_dIO_dIO))
+val v_vuna_uinst_ud_uBase_uIO_uIO_upure : ('a50550) -> (('a50550) t_Base_dIO_dIO)
+val v_vuna_uinst_ud_uBase_uIO_uIO_ubind : (('a50555) t_Base_dIO_dIO) -> ((('a50555) -> (('a50554) t_Base_dIO_dIO)) -> (('a50554) t_Base_dIO_dIO))
 val show_Base_dIO_dIO : 'p0. ('p0 -> string) -> ('p0) t_Base_dIO_dIO -> string
 
 val __vuna_run_io : ('a) t_Base_dIO_dIO -> ('a)

@@ -104,6 +104,41 @@ strPackTy = TPi "_" False Rig1 (TApp (TGlobal "List") intTy Rig1) strTy
 strLengthTy : Term
 strLengthTy = TPi "_" False Rig1 strTy intTy
 
+-- 效果内建的 DT 签名（与 HM `builtinTypes` 对齐）。`List` 是 Base.List 的 data，
+-- 精化期已按模块限定（`Base.List.List`）进 globals（`elabData` 把 data 名与构造子
+-- 加进 globals），所以这里用限定名；这些名字只进 `preludeGlobals`、不进
+-- `preludeNames`（不阻止程序另定义同名；Base.IO 只用不定义）。
+listOfTy : Term -> Term
+listOfTy t = TApp (TGlobal "Base.List.List") t Rig1
+
+primReadFileTy = TPi "_" False Rig1 strTy strTy
+
+primWriteFileTy = fun2 strTy strTy intTy
+
+primPrintTy = TPi "_" False Rig1 strTy intTy
+
+primGetArgsTy = listOfTy strTy
+
+primReadLineTy = strTy
+
+primReadDirTy = TPi "_" False Rig1 strTy (listOfTy strTy)
+
+primIsDirectoryTy = TPi "_" False Rig1 strTy boolTy
+
+primMakeDirTy = TPi "_" False Rig1 strTy intTy
+
+primRemoveFileTy = TPi "_" False Rig1 strTy intTy
+
+primFileExistsTy = TPi "_" False Rig1 strTy boolTy
+
+primFileMtimeTy = TPi "_" False Rig1 strTy intTy
+
+primFileSizeTy = TPi "_" False Rig1 strTy intTy
+
+primExitTy = TPi "_" False Rig1 intTy intTy
+
+primRunInTy = fun2 strTy (listOfTy strTy) intTy
+
 preludeGlobals : List (Pair String Term)
 preludeGlobals =
   [ Pair "Int" (TType levelZero),
@@ -127,7 +162,21 @@ preludeGlobals =
     Pair "strFromInt" strFromIntTy,
     Pair "strUnpack" strUnpackTy,
     Pair "strPack" strPackTy,
-    Pair "strLength" strLengthTy
+    Pair "strLength" strLengthTy,
+    Pair "prim_readFile" primReadFileTy,
+    Pair "prim_writeFile" primWriteFileTy,
+    Pair "prim_print" primPrintTy,
+    Pair "prim_getArgs" primGetArgsTy,
+    Pair "prim_readLine" primReadLineTy,
+    Pair "prim_readDir" primReadDirTy,
+    Pair "prim_isDirectory" primIsDirectoryTy,
+    Pair "prim_makeDir" primMakeDirTy,
+    Pair "prim_removeFile" primRemoveFileTy,
+    Pair "prim_fileExists" primFileExistsTy,
+    Pair "prim_fileMtime" primFileMtimeTy,
+    Pair "prim_fileSize" primFileSizeTy,
+    Pair "prim_exit" primExitTy,
+    Pair "prim_runIn" primRunInTy
   ]
 
 -- 只认内建可特化类型（`Int` / `String`）；其它类型在 DT 里走 `Eq` 实例。
