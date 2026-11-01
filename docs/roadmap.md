@@ -210,6 +210,7 @@ effectful 内建进 DT prelude；包级 allowlist 语义保留；`main : IO a` �
    走 `NVar` 分支）。详见 [dt-core.md](dt-core.md)。
    这不是 M20 引入的：显式 `{a : Type}` 写法在 M20 前就失败。`Base.IO` 的
    `MkIO : (Int -> a) -> IO a` 正好是这种形状，**它是 `bindIO` 精化的直接阻塞点**。
+   **（2026-11 已修复，见下方进度）**
 2. `do` 降级产物是裸 `bind`/`pure`（`Loader.desugarDo`），DT prelude 与 globals 都要
    提供这两个名字（trait 方法投影 + `Monad IO` 实例）。
 3. `interp --dt` 目前只接受「归约成值」的 `main`，`main : IO a` 需要按 `ioRunExpr`
@@ -220,6 +221,17 @@ effectful 内建进 DT prelude；包级 allowlist 语义保留；`main : IO a` �
 运行成功；`do` 正反例；`Base.IO` 全部 API 可用。
 
 **前置**：M19（`do` 需要 let/推断位 case）。**可与 M20 并行。** **优先级**：高。
+
+**进度（1/3 前置缺口已补，2026-11）**：
+
+- 缺口 1（多态族构造子的函数类型字段不被索引精化）已修复：不再在**结果**上做
+  `refineValue`（对 `VPi`/`VLam` 的 `_ => v` 不递归），而是在**取用点**（`Elab.varTypeValue`
+  / `Elab.evalCtx`）把精化代入**求值环境**再 `eval`——闭包自然携带精化后的环境，域与余域
+  都递归精化，且不动 `refineValue` 的 16 个调用点（此前尝试给 `refineValue` 加
+  `VPi`/`VLam` 分支 + `refineClosureDown` + `freshVar`，因 `quote` 深度错位引发 10 处回归，
+  已放弃）。新增正例 `test/corpus/dt/33_poly_fn_field.vuna`（输出 `1`）与负例
+  `test/corpus/dt_err/27_poly_fn_field_err.vuna`（`expected Bool, got Int`）。全量
+  `test/run-tests.sh` 841 项通过。缺口 2、3 仍待 M21 主体实现。
 
 ### M22：擦除判据接线与统一 codegen
 

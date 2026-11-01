@@ -150,16 +150,16 @@ DT 路径与 HM 路径互不影响：HM 的 interp + typed + split 语义与产�
 `test/run-tests.sh` 第 34 段，三条路径（`interp --dt` / `check --dt` / `compile --dt` +
 `ocamlopt`）都跑：
 
-- 正例 `test/corpus/dt/` 共 **32** 个：M13 `01_id`–`08_if`；M14 `09_nat`/`10_vec`/`11_fin`/`12_eq`；
+- 正例 `test/corpus/dt/` 共 **33** 个：M13 `01_id`–`08_if`；M14 `09_nat`/`10_vec`/`11_fin`/`12_eq`；
   M15 `13_iface`/`14_solve`/`15_goal`；M16 `16_total`/`17_erase`；M18 `18_ctx`；
   M18.5 `19_lam`；M18.6 `20_rig`/`21_level`；M19 `22_let` 起共 10 个（`22_let`–`31_deriving_ord`）；
-  M20 `32_parametric_data`（`data Foo a : Type` 写法 + 构造子字段引用族参数）。
+  M20 `32_parametric_data`（`data Foo a : Type` 写法 + 构造子字段引用族参数）；M21 `33_poly_fn_field`（函数字段被索引精化）。
   数值见各 `.out` 文件。
-- 负例 `test/corpus/dt_err/` 共 **26** 个：M13 的 `01_universe`、`02_conv`、
+- 负例 `test/corpus/dt_err/` 共 **27** 个：M13 的 `01_universe`、`02_conv`、
   `03_hole`、`05_import`、`06_unknown`、`07_lambda`、`08_arity`、`09_runtime_type`、
   `11_implicit_non_type`；M14 `04_nonexhaustive`/`10_impossible`/`12_case_int`/
   `13_unknown_ctor`/`14_bad_ctor_result`/`15_nested_pat`；M16 `16_nonterm`/`17_nested_total`；
-  M18.5 `18_lam_type_used`；M18.6 `19_rig_type_runtime`；M19 `20_let_bad_pat` 起共 7 个。
+  M18.5 `18_lam_type_used`；M18.6 `19_rig_type_runtime`；M19 `20_let_bad_pat` 起共 7 个；M21 `27_poly_fn_field_err`（函数字段精化失败路径）。
 
 ## 相关阅读
 

@@ -604,7 +604,7 @@ main = nameOf MkA ++ "/" ++ nameOf MkB   -- 修复前：type mismatch: expected 
 `deriving` 的前置。回归夹具：正例 `dt/29_multi_instance`（同 trait 两个实例、正序与
 反序调用都对）、反例 `dt_err/25_no_instance`（缺实例必须报明确错误）。
 
-## 已知缺口：多态族的构造子字段类型不被索引精化（2026-11 探明）
+## 已知缺口：多态族的构造子字段类型不被索引精化（2026-11 探明并修复）
 
 `case` 分支里，构造子的字段 binder 按 `bindCtorTele` 绑定、再经 `unifyIdxList` 把
 结果索引与 scrutinee 的索引统一，产出 `level ↦ value` 的 refs，分支体的期望类型
@@ -616,7 +616,7 @@ data Wrap : Type -> Type where
 
 run : Wrap Int -> Int
 run w = case w of
-  MkWrap f => f 41        -- type mismatch: expected a, got Int
+  MkWrap f => f 41        -- 修复前: type mismatch: expected a, got Int
 ```
 
 **根因（已确证）**：`Elab.refineValue` 的兜底分支是 `_ => v`，**`VPi` 与 `VLam` 都不
@@ -625,12 +625,14 @@ run w = case w of
 走的是 `VNeutral / NVar` 分支——这也解释了为什么 `unwrap : Wrap a -> a` 能过而
 `f 41` 不能。
 
-**修法**：让 `refineValue` 递归进 `VPi`/`VLam`。难点在闭包——`Clos env body` 里的
-`env` 是捕获时的环境，重构时 `quote` 的 depth 必须与展开时的深度一致（试过直接用
-`length env` 与 `freshVarValue ... (length env)`，会让 `compose` 这类三层 Pi 的
-`b`/`c` 错位，10 个既有夹具回归）。可行方向是把当前深度作为参数穿进 `refineValue`
-（16 处调用点），或在**取用点**（`varTypeValue` / `inferApp` 的 `VPi` 展开处）做闭包
-展开式精化，避免动全局签名。
+**修法（已落地）**：不在**结果**上做 `refineValue`（对 `VPi`/`VLam` 的 `_ => v`
+不递归），而是在**取用点**把精化代入**求值环境**再 `eval`——`Elab.varTypeValue` /
+`Elab.evalCtx` 改为先 `map (refineValue refs) (ctxEnvAt ...)` 得到精化后的环境，再
+`eval`。闭包（`Clos env body`）捕获的是**环境**，`applyClosure` 用 `v :: env` 求值，
+因此精化后的环境自然被闭包携带：`VPi` 的**域**在 `eval` 时精化，**余域**在
+`applyClosure` 时精化，嵌套函数类型递归成立。这避免了给 `refineValue` 加
+`VPi`/`VLam` 分支（此前尝试 `refineClosureDown` + `freshVarValue`，因 `quote` 深度
+错位让 `compose` 这类三层 Pi 的 `b`/`c` 错位，10 个既有夹具回归，已放弃）。
 
 **不是 M20 引入的**：`data Wrap : Type -> Type` + 显式 `{a : Type}` 的写法在 M20 之前
 就失败（M20 的参数化 `data Foo a` 只是让这种写法更常见）。
@@ -638,10 +640,7 @@ run w = case w of
 **为什么它是 M21 的硬前置**：`Base.IO` 的 `MkIO : (Int -> a) -> IO a` 正是这个形状，
 `ioBind` / `ioFmap` 的 `case ... of MkIO g => ...` 全部踩同一个坑。
 
-修法方向（择一）：
-- 统一两个基准：`ctxBindValue` 存项时存成「相对绑定点」的形式，与 `varTypeValue` 的
-  `shift 0 (idx+1)` 对齐；
-- 或让 `ctxRefine` 在追加 refs 时**就地重写** items 里的项（要注意 items 是相对各自
-  绑定点存的形式，重写时必须用对应 level 的环境求值）。
-
-回归夹具待补：正例（`Wrap Int` 里 `f 41` 得 42）、反例（索引不匹配仍要报错）。
+**回归夹具（已补）**：正例 `test/corpus/dt/33_poly_fn_field.vuna`（`Wrap Int` 里
+`g 0` 得 `1`）；负例 `test/corpus/dt_err/27_poly_fn_field_err.vuna`（`Wrap Bool` 里
+`g 0` 报 `expected Bool, got Int`，确保精化真的替换而非跳过）。全量
+`test/run-tests.sh` 841 项通过。

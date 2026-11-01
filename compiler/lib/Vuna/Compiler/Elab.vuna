@@ -198,15 +198,15 @@ refineLookup : Int -> List (Pair Int Value) -> Maybe Value
 refineLookup lvl [] = Nothing
 refineLookup lvl ((Pair l v) :: rest) = if l == lvl then Just v else refineLookup lvl rest
 
--- 索引位置上的求值：先按中性环境求值，再代入当前精化。
+-- M21：在取用点把精化代入求值环境再 eval（闭包捕获环境，域/余域递归精化）。见 history.md。
 evalCtx : Ctx -> Term -> Value
 evalCtx (Ctx items refs) ty =
-  refineValue refs defaultFuel (eval (ctxEnvAt items 0 (length items)) ty)
+  eval (map (refineValue refs defaultFuel) (ctxEnvAt items 0 (length items))) ty
 
 -- 局部变量 i 的类型：存储时按「绑定时上下文」，取用时需要 weaken (i+1)。
 varTypeValue : Ctx -> Int -> Term -> Value
 varTypeValue (Ctx items refs) idx ty =
-  refineValue refs defaultFuel (eval (ctxEnvAt items 0 (length items)) (shift 0 (idx + 1) ty))
+  eval (map (refineValue refs defaultFuel) (ctxEnvAt items 0 (length items))) (shift 0 (idx + 1) ty)
 
 emptyCtx : Ctx
 emptyCtx = Ctx [] []

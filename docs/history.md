@@ -198,6 +198,19 @@ git 历史里）。各里程碑对应的模块与设计见 [docs/architecture.md
 - M20 剩余：`vuna-base` 的 `check --dt` 已推进到 `Base.List:54`（`mem : a -> List a -> Bool`
   里 `x == y` 需要 `Eq a` 实例约束）——泛型函数上的实例约束求解属 M22 范围。此外
   `pkg` 目录模式（包入口）未接通。
+- M21 前置缺口补丁：多态族构造子的**函数类型**字段不被索引精化。根因是
+  `Elab.refineValue` 对 `VPi`/`VLam` 的兜底 `_ => v` 不递归，所以 `MkWrap : {a : Type} ->
+  (a -> Int) -> Wrap a` 在 `case w of MkWrap g`（w : Wrap Int）里 `g : a -> Int` 的 `a`
+  永远替换不到 `Int`，`g 0` 报 `expected a, got Int`。修法：`Elab.varTypeValue` /
+  `Elab.evalCtx` 不再在**求值结果**上做 `refineValue`，而是在**取用点**把精化代入
+  **求值环境**再 `eval`——闭包捕获的是环境，精化后的环境自然被 `applyClosure` 携带，
+  域与余域都递归精化。不动 `refineValue` 的 16 个调用点；此前试过给 `refineValue` 加
+  `VPi`/`VLam` 分支（`refineClosureDown` + `freshVarValue`），因 `quote` 深度错位让
+  `compose` 这类三层 Pi 的 `b`/`c` 错位、10 个既有夹具回归，已放弃。新增正例
+  `test/corpus/dt/33_poly_fn_field.vuna`（输出 `1`）、负例
+  `test/corpus/dt_err/27_poly_fn_field_err.vuna`（`expected Bool, got Int`）；全量
+  `test/run-tests.sh` 841 项通过。`Base.IO` 的 `MkIO : (Int -> a) -> IO a`（`bindIO` /
+  `ioFmap` 的阻塞点）由此解锁。
 
 ## 决策变更：M18 迁移动机失效（2026-11）
 
