@@ -127,7 +127,9 @@ git 历史里）。各里程碑对应的模块与设计见 [docs/architecture.md
   顺带修掉核心求值器两个真实缺陷：`normalizeCase` 原先只正规化 scrutinee、不进入分支体
   （嵌套 case 在 `interp` 下无法归约），`applyCaseAlt` 原先不处理兜底分支（空名字），
   于是「变量 clause 汇成兜底」的分支永远命不中。metrics 按实测重新标定两次。
-  未完成：trait 高阶 kind、`record`、`deriving`——归入后续阶段。
+  未完成：trait 高阶 kind、`record`、`deriving`。**高阶 kind 的调研结论**：单加 kind 推断
+  不够——`Rig0` binder 在 codegen（保留占位）与核心求值器（照样消费实参）里对「是否占
+  运行时位置」不一致，实例投影会错位；须先统一擦除语义（M22 第一步），因此后移。
 
 ## 决策变更：M18 迁移动机失效（2026-11）
 

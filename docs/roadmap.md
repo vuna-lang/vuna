@@ -105,10 +105,13 @@ vuna **尚未发布任何版本**：没有外部用户、没有下游生态、�
 - **推断位 `case`**（约 132 处）：推断时先建元变量作期望类型，再逐个分支 check。
 - **嵌套构造子模式**（约 410 个分支）：递归展开为嵌套 `case`。
 - **内建类型的字面量模式**：`case` 打在 `Bool` / `Int` / `String` 上。
-- **内建泛化**：`==` / `/=` 跨类型（155 处字符串比较）、`strFromInt` / `strUnpack` /
-  `strPack` / `strLength` 进 DT prelude。
-- **trait 高阶 kind**：`trait Functor f` 目前在 DT 下报 `too many arguments`；`Base.Monad`
-  依赖它。同步定多参数接口的去留。
+- ~~**内建泛化**~~：**已完成**——`==` / `/=` 带隐式类型参数、精化期按实参类型特化成
+  `bi_eq_int` / `bi_eq_str` 等；`strFromInt` / `strUnpack` / `strPack` / `strLength` 进 prelude。
+- **trait 高阶 kind**（未完成，需先做擦除语义重构）：`trait Functor f`（`f : Type -> Type`）
+  目前在 DT 下报 `too many arguments`，`Base.Monad` 依赖它。调研结论：单加 kind 推断不够——
+  `Rig0` binder 在 codegen 与核心求值器里对「是否占 de Bruijn 位置」的处理不一致（codegen
+  保留占位、求值器照样消费实参），高阶 kind 的实例投影会因此错位。**前置**：先把
+  擦除 binder 的运行时位置语义统一（与 M22「擦除判据接线」同源）。
 - **`record`（声明 / 构造 / 字段访问 / 更新 / 记录模式）**：DT 侧补齐，**不删除**。
   实现穿透点在 `DRecord` 28 处、`EField` / `ERecord` / `ERecUpdate` / `PRecord` 各一处；
   擦除规则上记录字段与 `data` 构造子字段一致。

@@ -14,7 +14,7 @@
 
 | # | 能力缺口 | 当前行为 / 错误文案 | compiler/lib | base/lib | lib | 归属 |
 |---|---|---|---|---|---|---|
-| 1 | ~~lambda 形参无条件擦除~~（含 `f = \x => ...`、`case` 分支里的闭包） | **M18.5 已修复**：统一判据 `Elab.erasedBinder`——隐式 binder 恒擦除，显式 binder 仅宇宙域擦除；既有反例 `07_lambda` / `09_runtime_type` 之外新增 `18_lam_type_used` | 739（691 含具名参数） | 18 | 104 | M18.5（已完成） |
+| 1 | ~~lambda 形参无条件擦除~~（含 `f = | 8 | DT prelude 无 List/Pair/Maybe/Result，无 `print` / `readFile` / `exit` / `getArgs`（`DtPrelude.preludeGlobals` / `preludeNames`） | `DT: unknown name <name>` | List 1064、Pair 1845、Maybe 65、Result 175；print 42、readFile 13、exit 9 | 79/30/17/18；5/5/5/5 | 132/286/27/21；48/11/8 | M21 |x => ...`、`case` 分支里的闭包） | **M18.5 已修复**：统一判据 `Elab.erasedBinder`——隐式 binder 恒擦除，显式 binder 仅宇宙域擦除；既有反例 `07_lambda` / `09_runtime_type` 之外新增 `18_lam_type_used` | 739（691 含具名参数） | 18 | 104 | M18.5（已完成） |
 | 2 | 无签名顶层定义 | `Elab.elabBodies`：`DT: expected a type signature for <name>` | 1083 / 1649 defs | 0 / 85 | 574 / 710 | M23（签名工具） |
 | 3 | ~~多 clause 函数~~ | **M19 已实现**：合成单个 lambda + case 表达式树（标准模式矩阵） | 399 名 / 978 行 | 24 / 51 | 123 / 266 | M19（已完成） |
 | 4 | ~~方程左端模式~~（构造子/字面量/列表） | **M19 已实现**：随多 clause 一起，模式矩阵展开 | 832 defs（单 clause 433） | 36 | 302 | M19（已完成） |
@@ -32,10 +32,10 @@
 | 16 | `do` 块 | `Elab.inferE` EDo：`DT: do blocks are not supported yet (M19)` | 0（`compiler/app/Main.vuna` 1 处） | 0 | 1（`app/Main.vuna`） | M21 |
 | 17 | ~~隐式索引 binder 一律擦除~~ | **M18.5 已修复**：隐式 binder 仍恒擦除（这是正确语义——隐式实参由精化器插入），但**显式索引 binder** 恢复参与运行时表示 | — | — | — | M18.5（已完成） |
 
-第 1 项曾是该表唯一的 **bug**，M18.5 已修、第 17 项随之收敛；**M19 完成第 3–7、9、10 项**。
-第 2 项是**迁移工作量**而非语言缺陷（§5 ②）；第 8/13/16 项构成「编译器本体不可能用 DT
-写」的硬边界；第 14/15 项**保留并补齐**——它们有 `fmt/` 与 `traits/` 夹具覆盖（决策与
-理由见 roadmap 的「决策变更」）。
+第 1 项曾是该表唯一的 **bug**，M18.5 已修、第 17 项随之收敛；**M19 完成第 3–7、9、10
+项**，第 8 项的 `str*` 也已落地（剩余容器与 IO 原语归 M21）。第 2 项是**迁移工作量**而非
+语言缺陷（§5 ②）；第 8/13/16 项构成「编译器本体不可能用 DT 写」的硬边界；第 14/15 项
+**保留并补齐**——它们有 `fmt/` 与 `traits/` 夹具覆盖（决策见 roadmap「决策变更」）。
 
 **M18.6 的表示层改动不在本表内**：它不加能力、不改行为，只把 `erased : Bool` 换成三值
 `Rig`、`TType : Int` 换成不透明 `Level`（见 [dt-core.md](../dt-core.md) §24）。

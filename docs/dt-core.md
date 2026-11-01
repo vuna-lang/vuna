@@ -539,3 +539,21 @@ QTT 落地的增量工作是：语法加 multiplicity 标注（`Parser` / `Ast` 
 注意 QTT 的判据与 M16 探索的「整程序使用分析」是**两套不同方案**：前者按 binder 的
 multiplicity 静态擦除，后者按运行时是否读取判定。M22 因此只接判据入口，不投入实现
 使用分析——这是 [docs/roadmap.md](roadmap.md) M22 与「决策变更」的记录内容。
+
+### 24.5 擦除 binder 的运行时位置语义（M19 调研，M22 的前置）
+
+M19 尝试补 `trait Functor f`（类参数是 `Type -> Type` 的高阶 kind）时，暴露出一条**尚未
+统一**的语义：`Rig0` binder 在运行时到底占不占一个位置？
+
+- `CoreCodegen.genTerm` 的 `TLam` 分支：`rigIsErased` ⇒ **不生成** OCaml 形参，但
+  `binders` 里**保留**一个占位项（`Pair "" Rig0`），因此 `binderAt` 的 index 仍把它算进去；
+- `Core.eval` / `applyValue`：`VLam` 不管 rig，**照样收一个实参**。
+
+两者在普通场景下恰好自洽（擦除位既不生成形参、也不被运行时引用），但一旦擦除位夹在
+运行时参数**中间**（`fmap : (a : Type) -> (b : Type) -> (a -> b) -> f a -> f b` 的投影），
+「lambda 链里有没有这一层」在两条路径上就得到不同答案，实例投影因此错位。
+
+**结论**：这不是高阶 kind 的局部问题，而是擦除语义的表述问题。把它作为
+**M22「擦除判据接线」的第一步**：统一成「`Rig0` binder 在所有运行时视图里都不占位置」
+（`Core` 的求值环境、`CoreCodegen` 的 binder 栈、telescope 的字段计数三处一起对齐），
+之后高阶 kind 与 `record` 才能稳定落地。trait 高阶 kind 因此后移到 M22 之后。
