@@ -1,4 +1,4 @@
-# 语言参考：DT 子集（M14，实验性）
+# 语言参考：DT 子集（M19，实验性）
 
 `--dt` 打开与 HM 并存的依赖类型（DT）路径：Core TT + NbE + 双向精化器 +
 擦除型 codegen。M14 在 M13（依赖函数 + 一阶元变量）之上加入**索引归纳族**与
@@ -79,7 +79,7 @@ trans a b c p q = case p of
   Refl d => q
 ```
 
-几条硬边界，写代码前值得先知道（M15/M16 之后的状态）：
+几条硬边界，写代码前值得先知道（M19 之后的状态）：
 
 - **隐式索引推断可用（M15）**。构造子/函数的索引 binder 现在可以写隐式
   （`Cons : {a : Type} -> {n : Nat} -> ...`），调用点由实参或期望类型反推：
@@ -102,11 +102,22 @@ trans a b c p q = case p of
   （`type 'a t_Vec = C_Vec_Nil | C_Vec_Cons of 'a t_Nat * 'a * 'a t_Vec`）。
   M16 探测确认索引**不能无条件擦除**（`vlen` 把长度索引当递归参数传下去，运行时真的
   读它）；完整擦除需要整程序使用分析，仍是后续工作。
-- **`case` 分支必须绑定构造子的全部显式 telescope binder**（族参数与索引也各占一个
-  位置，即使分支体不用）：`Cons b m y ys => ...` 依次对应 `a`、`n`、字段 `a`、
-  `Vec a m`。只支持**顶层构造子模式**；嵌套模式（`Succ (Succ k)`）报
-  `DT: nested patterns are not supported yet`；兜底 `_ => ...`（变量模式等价）只能放
-  **最后**一个分支。
+- **`case` 分支与模式（M19）**。分支必须绑定构造子的全部显式 telescope binder（族参数
+  与索引也各占一个位置，即使分支体不用）；**嵌套构造子模式已支持**（`Succ (Succ k)`，
+  精化期改写成内层 case，因此内层同样要过覆盖检查）；兜底 `_ => ...`（变量模式等价）
+  只能放**最后一个**分支。
+- **多 clause 与方程左端模式（M19）**。`f p1 = e1` / `f p2 = e2` 保留语法，精化期合成
+  单个 lambda + case 表达式树（标准模式矩阵），因此同一构造子的多个 clause、变量兜底、
+  `f (Just x)` 与 `f (Just (Just y))` 共存都成立；多 clause 的参数个数必须一致。
+- **`let` 与推断位 `case`（M19）**。`let ... in`（含 `where` 块）脱糖为
+  `(\x => body) e`；`case` 可以出现在推断位（函数实参、`if` 分支、`let` 的 value），
+  做法是建元变量当期望类型。
+- **内建类型上的字面量模式（M19）**。`Bool` 的 `case` 降级成 `if`；`Int` / `String`
+  的字面量分支降级成嵌套 `if` 链，因此**必须有一个变量/通配兜底分支**（值域穷尽不了）。
+- **内建泛化（M19）**。`==` / `/=` 带隐式类型参数（`{a : Type} -> a -> a -> Bool`），
+  精化到饱和应用时按第一个实参类型特化成 `bi_eq_int` / `bi_eq_str` 这类运行时函数；
+  非 `Int` / `String` 报 `is only defined for Int and String`。`strFromInt` /
+  `strUnpack` / `strPack` / `strLength` 已进 prelude（定义表在 `DtPrelude.vuna`）。
 - **可达性决定分支能否省略**：若函数签名把索引**细化**（如 `Vec a (Succ m)`），
   与该索引不可统一的分支（`Nil`）**可以省略**，写了则报
   `DT: this branch is impossible`；若签名是**泛化**索引（`Vec a n`），则所有构造子
@@ -138,21 +149,15 @@ vuna interp --dt file.vuna           # 核心求值器（NbE + delta）求值 ma
 `test/run-tests.sh` 第 34 段，三条路径（`interp --dt` / `check --dt` / `compile --dt` +
 `ocamlopt`）都跑：
 
-- 正例 `test/corpus/dt/` 共 **21** 个：M13 的 `01_id`–`08_if`；M14 新增
-  `09_nat`（`Nat` + 递归 `plus`，输出 `5`）、`10_vec`（`Vec` 的长度/首元素/尾，输出
-  `4`）、`11_fin`（`Fin` 安全取下标，输出 `7`）、`12_eq`（`Eq` 的 `sym`/`trans`，
-  输出 `7`）；M15 的 `13_iface` / `14_solve` / `15_goal`；M16 的 `16_total` / `17_erase`；
-  M18 的 `18_ctx`；M18.5 的 `19_lam`（lambda 形参擦除规则的四种形态，输出 `31`）；
-  M18.6 的 `20_rig`（Rig0 索引不占运行时字段 / Rig1 字段保留，输出 `4`）、`21_level`
-  （`Level` 只经构造器与访问器前进，输出 `3`）。
-- 负例 `test/corpus/dt_err/` 共 **19** 个：M13 的 `01_universe`、`02_conv`、
+- 正例 `test/corpus/dt/` 共 **31** 个：M13 `01_id`–`08_if`；M14 `09_nat`/`10_vec`/`11_fin`/`12_eq`；
+  M15 `13_iface`/`14_solve`/`15_goal`；M16 `16_total`/`17_erase`；M18 `18_ctx`；
+  M18.5 `19_lam`；M18.6 `20_rig`/`21_level`；M19 `22_let` 起共 10 个（`22_let`–`31_deriving_ord`）。
+  数值见各 `.out` 文件。
+- 负例 `test/corpus/dt_err/` 共 **26** 个：M13 的 `01_universe`、`02_conv`、
   `03_hole`、`05_import`、`06_unknown`、`07_lambda`、`08_arity`、`09_runtime_type`、
-  `11_implicit_non_type`；M14 新增/改名 `04_nonexhaustive`（漏写 `Succ` 分支）、
-  `10_impossible`（写了不可达分支）、`12_case_int`（case 打在 `Int` 上）、
-  `13_unknown_ctor`（未知构造子）、`14_bad_ctor_result`（构造子结果不是所属族）、
-  `15_nested_pat`（嵌套模式）；M16 的 `16_nonterm`（非结构递归）、`17_nested_total`；
-  M18.5 的 `18_lam_type_used`（宇宙域 lambda 形参仍擦除，被当运行时值用必须报错）；
-  M18.6 的 `19_rig_type_runtime`（Rig0 绑定被当运行时值用必须报错）。
+  `11_implicit_non_type`；M14 `04_nonexhaustive`/`10_impossible`/`12_case_int`/
+  `13_unknown_ctor`/`14_bad_ctor_result`/`15_nested_pat`；M16 `16_nonterm`/`17_nested_total`；
+  M18.5 `18_lam_type_used`；M18.6 `19_rig_type_runtime`；M19 `20_let_bad_pat` 起共 7 个。
 
 ## 相关阅读
 

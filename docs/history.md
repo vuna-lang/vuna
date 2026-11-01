@@ -106,6 +106,72 @@ git 历史里）。各里程碑对应的模块与设计见 [docs/architecture.md
   升级为 `binderRig : Bool -> Value -> Rig`。映射表与三条不变量写进 `docs/dt-core.md` §24；
   新增正例 `dt/20_rig` / `dt/21_level` 与反例 `dt_err/19_rig_type_runtime`。
 
+- M19：DT 语言面 parity（8/9 项落地）——把 dt-parity 表里「不补就写不了真实模块」的
+  八项补齐，全部有正反例：
+  ① **多 clause 与方程左端模式**（399 名 / 978 行）：合成单个 lambda + case 表达式树，
+     按列递归（标准模式矩阵）——整列是变量就改名继续，出现构造子就按构造子分组、把
+     模式替换成子模式后递归，变量/通配汇成兜底；分支 pattern 的子模式一律用新鲜变量
+     （`_sc<i>`），因此不依赖 `bindCtorTele` 内部的 `_np<N>` 编号约定。
+  ② **`let`**（296 处，含 `where` 块）：检查位与推断位两条路径都脱糖为
+     `(\x => body) e`，绑定子的 rig 由值类型经 `binderRig` 决定，擦除行为与函数参数一致。
+  ③ **推断位 `case`**（132 处）：建元变量当期望类型再按检查模式处理，分支逐个 check
+     会把期望写进它——`if` 分支、函数实参、`let` 的 value 位置都可用。
+  ④ **嵌套构造子模式**（410 分支）：改写成内层 case（`Cons a x rest => case x of
+     Succ k => body`），因此内层同样过覆盖检查与索引合一，支持任意深度。
+  ⑤ **内建类型上的字面量模式**：`Bool` 降级成 `TIf`；`Int` / `String` 降级成嵌套
+     `TIf` 链（判据 `==`），因此必须有变量/通配兜底分支。
+  ⑥ **内建泛化**：`==` / `/=` 带隐式类型参数，精化到饱和应用时按第一个实参类型
+     特化成 `bi_eq_int` / `bi_eq_str` 这类运行时函数（codegen 只做名字映射）；
+     `strFromInt` / `strUnpack` / `strPack` / `strLength` 进 prelude。定义表拆成
+     独立模块 `DtPrelude.vuna`（`Elab` 行数回到模块预算内）。
+  顺带修掉核心求值器两个真实缺陷：`normalizeCase` 原先只正规化 scrutinee、不进入分支体
+  （嵌套 case 在 `interp` 下无法归约），`applyCaseAlt` 原先不处理兜底分支（空名字），
+  于是「变量 clause 汇成兜底」的分支永远命不中。metrics 按实测重新标定两次。
+  ⑦ **trait 高阶 kind**：类参数的 kind 从方法签名推断（`DtKind.vuna`；被应用 k 次 ⇒
+     `Type -> ... -> Type`），字典构造子与投影按真实 kind 生成，实例头与隐式参数检查也
+     接受 kind 形态。顺带修掉一个真实错位——投影的 lambda 链与应用点原先一律写 Rig1，
+     而 `a : Type` 这类参数实际擦除，导致 `interp` 与编译产物不一致；现在两侧统一用
+     `methodArgRigsOf` 取的同一份 rigs。「类型层」判据同时收窄成「域全为宇宙的 Pi 链」，
+     否则值层函数类型 `a -> b` 会被误擦（`03_compose` / `04_apply` 崩）。
+  ⑧ **`record`**（声明 / 构造 / 字段访问 / 更新 / 记录模式）：record 是**纯记法**——
+     等价于「带一个构造子的 data，构造子按声明顺序接收全部字段」。降级在精化前完成
+     （`DtRecords.vuna`），因此 DT 侧没有任何 record 专用精化规则：构造 → 构造子应用、
+     字段访问 → `case` 投影、记录模式 → 构造子模式、更新 → 构造新记录。构造子名用
+     `Mk<R>`：DT 的 `globals` 是一张表，类型名与构造子同名会让 `Point 1 2` 被解析成
+     「把类型当函数应用」（HM 分表存储，因此沿用记录名）。带点标识符（`p.x`）由 lexer
+     合成单 token，降级时按「变量 + 字段链」拆分。
+  未完成：`deriving`。
+
+- M19 收尾时尝试 `deriving`，撞上一条 **M15 遗留缺陷**：同 trait 多实例会互相干扰。
+  根因定位到 `inferArgsGo` 的字典参数分支——类参数 `?a` 还没被后续实参约束时就去
+  搜索实例，`Dict_C ?a` 与第一个候选统一、`?a` 被解成该候选的参数，于是第二个实例的
+  调用全错（`nameOf MkB` 报 `expected A, got B`）。现有夹具都只有单实例，所以从 M15
+  起一直没暴露；它会直接挡住 M23 全仓迁移。结论写进 `docs/dt-core.md` §24.6 与 roadmap，
+  列为 M22 首要项，`deriving` 后移到其后。
+
+- M19 收尾时接着修复了上一条记录里的同 trait 多实例缺陷（它挡住 `deriving` 与 M23）。
+  两条不变量：① **实例搜索不得解决元变量**——`filterInstances` 只接受「不新增解」的
+  头匹配，并以 `ecSols` 为初始解集（否则已解的元变量会被误判为新增解，既有单实例夹具
+  反而全挂）；② **类参数由 `constrainDictDom` 约束**——跳过类型实参（`firstOf2 Int ...`
+  的 `Int` 会把 `?a` 解成 `Int`），并把实参类型收缩到**应用头部**（类参数只可能是
+  构造器形态，高阶 kind 的实例头写的就是构造器，而实参类型常是 `Box Int`）。
+  正例 `dt/29_multi_instance`（正序与反序调用都对）、反例 `dt_err/25_no_instance`。
+
+- M19 最后一项 `deriving` 落地：DT 的自然形态是**生成 instance**，因此 `DtDerive.vuna`
+  把 `deriving (Show, Eq, Ord)` 展开成等价的 `DInstance` 声明，交给既有的字典编码与
+  实例搜索——没有新增任何精化规则。方法体按构造子骨架机械生成：`show` 逐构造子拼
+  `"(C f0 f1)"`（零参直接给名字）、`eq` 同构造子逐字段 `&&`、`lt` 先按声明顺序比构造子
+  索引再逐字段、`le` 由 `lt` 派生（不依赖 `Eq`）、`gt`/`ge` 由 `lt`/`le` 反转。
+  同时给出内建 `Show`/`Eq`/`Ord` trait 声明与内建 `Show` 实例（`Int`/`String`/`Bool`），
+  因为派生 `show` 的字段展示是递归的。
+  
+  关键实现细节：展开出的实例必须**追加到声明列表末尾**——那条 data 的族信息要等
+  `elabDatas` 阶段才进 `globals`，插在中间会让实例方法体的 `case` 拿不到 scrutinee
+  类型。`==` 对非内建类型也改为走 `Eq` 实例（`deriving (Eq)` 才有意义），反例
+  `dt_err/22_eq_unsupported` 的诊断相应变成「找不到 Eq 实例」。
+  夹具：正例 `dt/30_deriving`（Show + Eq 的四种组合）、`dt/31_deriving_ord`（Ord 四方法
+  + 字段比较 + Show 组合）；反例 `dt_err/26_derive_unknown`。
+
 ## 决策变更：M18 迁移动机失效（2026-11）
 
 M18 的结论是「编译器本体暂不全量迁移到 DT」，依据是四条理由，其中两条是**硬前提**：

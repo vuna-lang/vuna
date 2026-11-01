@@ -1,0 +1,33 @@
+-- M19：trait 的高阶 kind 参数（`Mapper f`，`f : Type -> Type`）+ 实例投影。
+--
+-- M15 把类参数一律绑成 `Type`，于是 `trait Mapper f` 的方法签名里写 `f a` 就报
+-- `too many arguments`。M19 起：
+-- - 类参数的 kind 从方法签名推断（被应用 k 次 ⇒ `Type -> ... -> Type`）；
+-- - 投影的 lambda 链与应用点用**同一份 rigs**（`a : Type` 这类擦除位两侧都跳过），
+--   因此与实例方法体的擦除行为严格对齐——这是 M22「擦除判据接线」的第一步。
+data Box : Type -> Type where
+  MkBox : (a : Type) -> a -> Box a
+
+trait Mapper f where
+  firstOf2 : (a : Type) -> f a -> f a -> f a
+
+instance Mapper Box where
+  firstOf2 a x y = x
+
+-- 投影调用：类型实参被擦除，只有值实参进运行时。
+picked : Box Int
+picked = firstOf2 Int (MkBox Int 7) (MkBox Int 9)
+
+-- 高阶 kind 的类参数也能出现在普通函数签名里（类型级应用 + 擦除）。
+applyTwice : (f : Type -> Type) -> (a : Type) -> f a -> f a -> f a
+applyTwice f a x y = x
+
+picked2 : Box Int
+picked2 = applyTwice Box Int (MkBox Int 40) (MkBox Int 41)
+
+unbox : Box Int -> Int
+unbox b = case b of
+  MkBox t v => v
+
+main : Int
+main = unbox picked + unbox picked2

@@ -539,3 +539,67 @@ QTT 落地的增量工作是：语法加 multiplicity 标注（`Parser` / `Ast` 
 注意 QTT 的判据与 M16 探索的「整程序使用分析」是**两套不同方案**：前者按 binder 的
 multiplicity 静态擦除，后者按运行时是否读取判定。M22 因此只接判据入口，不投入实现
 使用分析——这是 [docs/roadmap.md](roadmap.md) M22 与「决策变更」的记录内容。
+
+### 24.5 擦除 binder 的运行时位置语义（M19 已统一）
+
+M19 尝试补 `trait Functor f`（类参数是 `Type -> Type` 的高阶 kind）时，暴露出一条**尚未
+统一**的语义：`Rig0` binder 在运行时到底占不占一个位置？
+
+- `CoreCodegen.genTerm` 的 `TLam` 分支：`rigIsErased` ⇒ **不生成** OCaml 形参，但
+  `binders` 里**保留**一个占位项（`Pair "" Rig0`），因此 `binderAt` 的 index 仍把它算进去；
+- `Core.eval` / `applyValue`：`VLam` 不管 rig，**照样收一个实参**。
+
+两者在普通场景下恰好自洽（擦除位既不生成形参、也不被运行时引用），但一旦擦除位夹在
+运行时参数**中间**（`fmap : (a : Type) -> (b : Type) -> (a -> b) -> f a -> f b` 的投影），
+「lambda 链里有没有这一层」在两条路径上就得到不同答案，实例投影因此错位。
+
+**结论与修复**（M19 已落地）：根因不是「占不占位置」这个抽象问题，而是**精化器生成的项
+本身不自洽**——`trait` 投影的 lambda 链与应用点一律写 `Rig1`，而方法签名里 `a : Type`
+这类 binder 实际是 `Rig0`。实例方法体按真实 rig 生成，投影却按表面 arity 生成，两者的
+运行时元数不同，于是「求值器照样消费一个实参」与「codegen 不生成形参」不再一致。
+
+修法不是改求值器或 codegen（两者各自都对），而是让**精化器用同一份 rigs 生成两侧**：
+`methodArgRigsOf` 从方法类型逐 binder 取 multiplicity，投影的 lambda 链
+（`methodArgLams`）与调用点（`methodArgTerms`）都用它。同时收窄「类型层」判据：必须是
+**域全为宇宙的 Pi 链**（`Type -> Type`）；值层函数类型 `a -> b` 的域是类型变量，不能被
+误判（否则 `03_compose` / `04_apply` 直接崩）。
+
+**不变量**：精化器产出的项，其 lambda 链元数必须与该类型的 Pi 链逐 binder 对齐，
+`Rig0` 位置两侧都跳过。这条不变量由 `methodArgRigsOf` 单点保证。
+
+### 24.6 同 trait 多实例（M19 发现并修复）
+
+这是在实现 M19 最后一项 `deriving (Show, Eq, Ord)` 时撞上的：`deriving` 本身不难
+（展开成手写 `instance` 即可），但它需要「同一个 trait 有多个实例」，于是暴露出
+**M15 实例编码的一条结构限制**——现在已修复。
+
+最小复现（不需要 `deriving`）：
+
+```vuna
+trait Name a where
+  nameOf : a -> String
+instance Name A where
+  nameOf x = "A"
+instance Name B where
+  nameOf x = "B"
+main = nameOf MkA ++ "/" ++ nameOf MkB   -- 修复前：type mismatch: expected A, got B
+```
+
+**根因**：`inferArgsGo` 处理字典参数时，先让后续显式实参去约束 `Dict_C ?a` 里的 `?a`，
+但紧随其后的 `searchInstance` 会拿**仍带元变量**的 `Dict_C ?a` 去匹配实例表。
+`filterInstances` 用 `conv` 比较，`Dict_C ?a` 与第一个候选就能统一——`?a` 被顺手解成
+该候选的参数，之后所有其它实例的调用都错。单实例一直正常，因为唯一候选就是正确答案。
+
+**修复（两条不变量）**：
+
+1. **实例搜索不得解决元变量**。`filterInstances` 只接受「比较没有新增解」的头匹配
+   （`conv` 返回的 `sols` 与输入等长），实例搜索因此变成纯查找。它还需要以
+   `ecSols ec` 作为初始解集，否则已解的元变量会被当成未解、误判为「新增解」。
+2. **类参数的约束由 `constrainDictDom` 负责**，且要跳过类型实参（`firstOf2 Int ...`
+   的 `Int` 与类参数无关，拿它统一会把 `?a` 解成 `Int`）；同时把实参类型收缩到
+   **应用头部**（类参数只可能是构造器形态，高阶 kind 的实例头写的就是构造器本身，
+   而实参类型常是 `Box Int` 这样的应用形态）。
+
+**为什么重要**：这条缺陷会挡住 M23 全仓迁移（真实代码里到处是同 trait 多实例），也是
+`deriving` 的前置。回归夹具：正例 `dt/29_multi_instance`（同 trait 两个实例、正序与
+反序调用都对）、反例 `dt_err/25_no_instance`（缺实例必须报明确错误）。

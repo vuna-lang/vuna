@@ -1,0 +1,45 @@
+-- M19：`deriving (Show, Eq)` 在 DT 下可用（展开成等价的 instance）。
+--
+-- `deriving` 不需要新的精化规则：它等价于手写 `instance`，方法体按构造子骨架机械生成。
+-- 展开发生在精化之前（`DtDerive.vuna`），交给既有的字典编码与实例搜索处理。
+--
+-- 前置两项都在 M19 完成：同 trait 多实例能正确解析（`Show Int` 与 `Show Color` 共存）、
+-- `==` 对非内建类型走 `Eq` 实例。
+data Color : Type where
+  Red : Color
+  Blue : Color
+deriving (Show, Eq)
+
+data Pair2 : Type where
+  MkPair : Int -> Int -> Pair2
+deriving (Show, Eq)
+
+-- Show：零参构造子 ⇒ 名字；带字段 ⇒ `(C f0 f1)`，字段递归 show。
+shownColor : String
+shownColor = show Red ++ "/" ++ show Blue
+
+shownPair : String
+shownPair = show (MkPair 1 2)
+
+-- Eq：同构造子逐字段比较，不同构造子 ⇒ False。
+eqSame : Bool
+eqSame = MkPair 1 2 == MkPair 1 2
+
+eqDiffField : Bool
+eqDiffField = MkPair 1 2 == MkPair 1 3
+
+eqDiffCtor : Bool
+eqDiffCtor = Red == Blue
+
+-- neq 由 eq 派生。
+neqSame : Bool
+neqSame = Red /= Red
+
+main : Int
+main =
+  if shownColor == "Red/Blue" && shownPair == "(MkPair 1 2)" && eqSame && notBool eqDiffField && notBool eqDiffCtor && notBool neqSame then 1
+  else 0
+
+-- 内建 `Bool` 没有 `not`，这里用 if 表达。
+notBool : Bool -> Bool
+notBool b = if b then False else True

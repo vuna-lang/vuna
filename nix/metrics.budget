@@ -12,12 +12,27 @@
 # M15–M17：DT 精化器大幅扩张（元变量上下文/接口字典/实例搜索/洞目标/终止性检查/擦除判定）
 #   后重新标定：bytes 1177528 / lines 11066 / longlines 4161 / letrec 614 / ctorcount 2298。
 #   seed 文件数不变（31 个模块），工具链（Lsp/Json）仍不在闭包内。
-bytes 1190000
-lines 11200
+# M19：DT 语言面 parity（let / 推断位 case / 嵌套模式 / 多 clause / 内建字面量模式）
+#   后重新标定：bytes 1225233 / lines 11525 / longlines 4310 / ctorcount 2422。
+#   增长全部来自 DT 精化器（Elab 的模式矩阵与内建 case 降级），HM 产物语义不变；
+#   seed 文件数仍 31 个模块，工具链仍不在闭包内。
+# M19 内建泛化 + DtPrelude 拆模块：新增 1 个 seed 模块（32 个），bytes 1236686 /
+#   lines 11661 / longlines 4341 / ctorcount 2444，按实测重新标定。
+# M19 高阶 kind（trait 类参数按方法签名推断 kind）+ 投影 multiplicity 修正 + DtKind
+#   拆模块：seed 闭包 33 个模块，bytes 1243217 / lines 11742 / longlines 4363 /
+#   ctorcount 2458，按实测重新标定。
+# M19 record 支持（声明/构造/字段访问/模式/更新，DT 侧复用同一套语法降级）：
+#   seed 闭包 34 个模块，bytes 1269049 / lines 11983 / longlines 4462 / letrec 656 /
+#   ctorcount 2498，按实测重新标定（新增 DtRecords 模块的 AST 遍历与 case 构造）。
+# M19 deriving（展开成等价 instance + 内建 Show/Eq/Ord trait 与内建 Show 实例）与
+#   同 trait 多实例修复：seed 闭包 35 个模块，bytes 1289038 / lines 12147 /
+#   longlines 4523 / letrec 664 / zeroarg 34 / ctorcount 2504，按实测重新标定。
+bytes 1295000
+lines 12200
 maxline 12400
-longlines 4250
-letrec 640
+longlines 4540
+letrec 680
 strcat 330
 eqint 35
-zeroarg 30
-ctorcount 2400
+zeroarg 40
+ctorcount 2520

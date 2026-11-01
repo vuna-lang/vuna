@@ -1,0 +1,11 @@
+-- M19：`==` 对非内建类型走 `Eq` 实例；没有实例时必须报可解释错误，
+-- 而不是静默走错误分支或给出误导性的「只支持 Int/String」。
+data Nat : Type where
+  Zero : Nat
+  Succ : Nat -> Nat
+
+bad : Nat -> Nat -> Bool
+bad a b = a == b
+
+main : Int
+main = 1

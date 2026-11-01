@@ -1,0 +1,30 @@
+-- M19：内建类型上的字面量模式（Bool 降级成 if；Int 降级成嵌套 if 链）。
+data Nat : Type where
+  Zero : Nat
+  Succ : Nat -> Nat
+
+-- Bool：`True` / `False` 是零参形态的模式。
+boolToInt : Bool -> Int
+boolToInt True = 1
+boolToInt False = 0
+
+-- Int 字面量 + 变量兜底（case 在推断位也需要兜底）。
+classify : Int -> Int
+classify 0 = 100
+classify 1 = 200
+classify n = n
+
+-- 单 clause 的 case 形式同样支持。
+singleCase : Bool -> Int
+singleCase b = case b of
+  True => 10
+  False => 20
+
+-- 组合：case 结果参与运算。
+nested : Int -> Int
+nested n = case n of
+  0 => classify 1
+  k => singleCase True
+
+main : Int
+main = boolToInt True + classify 0 + classify 7 + singleCase False + nested 0

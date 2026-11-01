@@ -11,6 +11,10 @@ module Vuna.Compiler.Elab (DtDef, dtDefName, dtDefType, dtDefBody, DtCtor, dtCto
 import Vuna.Compiler.Common
 import Vuna.Compiler.Ast
 import Vuna.Compiler.Core
+import Vuna.Compiler.DtPrelude
+import Vuna.Compiler.DtKind
+import Vuna.Compiler.DtDerive
+import Vuna.Compiler.DtRecords
 
 -- 一个 DT 定义：名字、类型项、体项（均为闭项；体带擦除标志）。
 data DtDef : Type where
@@ -288,66 +292,6 @@ unsolvedMeta (Ec next sols defs datas depths goals insts classes) = unsolvedFrom
 maxInt : Int -> Int -> Int
 maxInt a b = if a >= b then a else b
 
--- ---------------------------------------------------------------
--- 内置 prelude：只有类型常量、Bool 值与 Int/String/Bool 运算符。
--- 名字与 TypedCodegen 的 runtime helper 一一对应（codegen 按名字映射）。
--- ---------------------------------------------------------------
-preludeNames : List String
-preludeNames =
-  [ "Int",
-    "String",
-    "Bool",
-    "True",
-    "False",
-    "+",
-    "-",
-    "*",
-    "/",
-    "==",
-    "/=",
-    "<",
-    "<=",
-    ">",
-    ">=",
-    "++",
-    "&&",
-    "||"
-  ]
-
-intTy : Term
-intTy = TGlobal "Int"
-
-strTy : Term
-strTy = TGlobal "String"
-
-boolTy : Term
-boolTy = TGlobal "Bool"
-
-fun2 : Term -> Term -> Term -> Term
-fun2 a b c = TPi "_" False Rig1 a (TPi "_" False Rig1 b c)
-
-preludeGlobals : List (Pair String Term)
-preludeGlobals =
-  [ Pair "Int" (TType levelZero),
-    Pair "String" (TType levelZero),
-    Pair "Bool" (TType levelZero),
-    Pair "True" boolTy,
-    Pair "False" boolTy,
-    Pair "+" (fun2 intTy intTy intTy),
-    Pair "-" (fun2 intTy intTy intTy),
-    Pair "*" (fun2 intTy intTy intTy),
-    Pair "/" (fun2 intTy intTy intTy),
-    Pair "==" (fun2 intTy intTy boolTy),
-    Pair "/=" (fun2 intTy intTy boolTy),
-    Pair "<" (fun2 intTy intTy boolTy),
-    Pair "<=" (fun2 intTy intTy boolTy),
-    Pair ">" (fun2 intTy intTy boolTy),
-    Pair ">=" (fun2 intTy intTy boolTy),
-    Pair "++" (fun2 strTy strTy strTy),
-    Pair "&&" (fun2 boolTy boolTy boolTy),
-    Pair "||" (fun2 boolTy boolTy boolTy)
-  ]
-
 globalLookup : String -> List (Pair String Term) -> Maybe Term
 globalLookup name [] = Nothing
 globalLookup name ((Pair n ty) :: rest) = if name == n then Just ty else globalLookup name rest
@@ -364,9 +308,7 @@ collectSigsInto acc (d :: rest) = case d of
     else collectSigsInto (Pair name ty :: acc) rest
   DFun name pats body sp => collectSigsInto acc rest
   DData name params kind ctors derivings sp => collectSigsInto acc rest
-  DRecord name params fields derivings sp =>
-    errAt sp "DT: record declarations are not supported yet (M17)"
-  -- M15：trait / instance 走字典编码（见 elabClasses / elabInstances），签名收集阶段只需放行。
+  DRecord name params fields derivings sp => errAt sp "DT: internal: record was not desugared"
   DTrait name params methods sp => collectSigsInto acc rest
   DInstance mname isDefault head methods sp => collectSigsInto acc rest
 
@@ -488,7 +430,6 @@ elabData : List (Pair String Term) -> Ec -> Pair Decl Span -> Result (Pair DtDat
 elabData globals ec ds = case ds of
   Pair d dsp => case d of
     DData dname writtenParams kindExpr ctors derivings dsp2 => if memName dname preludeNames then errAt dsp2 ("DT: cannot redefine builtin " ++ dname)
-    else if nonEmpty derivings then errAt dsp2 "DT: deriving is not supported yet (M15)"
     else andThen (checkType globals emptyCtx ec kindExpr) (\pk => case pk of
       Pair kindTerm (Pair kindSort ec1) => if not (kindWellFormed kindTerm) then errAt dsp2 "DT: the kind of a data declaration must be a chain of arrows ending in Type"
       else
@@ -556,15 +497,20 @@ paramNameOf : List String -> String
 paramNameOf [] = "_"
 paramNameOf (p :: rest) = p
 
--- 类参数（M15 只支持单参数接口）绑成隐式 `Type` binder 后的局部上下文。
-bindClassParams : List String -> Ctx -> Ctx
-bindClassParams [] ctx = ctx
-bindClassParams (p :: rest) ctx = bindClassParams rest (ctxBind p (TType levelZero) ctx)
+-- 类参数绑成隐式 binder 后的局部上下文。
+--
+-- M19：类参数可以是**高阶 kind**（`trait Mapper f`，方法签名里写 `f a`）。kind 从方法
+-- 签名推断：参数名在签名里被应用了 k 个实参就当 `Type -> ... -> Type`（k 个箭头），
+-- 从未被应用就是 `Type`。trait 的方法签名本来就把参数的用法写清楚了。
+bindClassParams : List String -> List (Pair String Expr) -> Ctx -> Ctx
+bindClassParams [] methods ctx = ctx
+bindClassParams (p :: rest) methods ctx =
+  bindClassParams rest methods (ctxBind p (classParamKind p methods) ctx)
 
 -- 每个方法的字段类型（在类参数 binders 之下检查）。
 classFieldTys : List (Pair String Term) -> Ec -> List String -> List (Pair String Expr) -> Result (Pair (List Term) Ec)
 classFieldTys globals ec params methods =
-  classFieldTysGo globals (bindClassParams params emptyCtx) ec methods []
+  classFieldTysGo globals (bindClassParams params methods emptyCtx) ec methods []
 
 classFieldTysGo : List (Pair String Term) -> Ctx -> Ec -> List (Pair String Expr) -> List Term -> Result (Pair (List Term) Ec)
 classFieldTysGo globals ctx ec [] acc = Ok (Pair (reverse acc) ec)
@@ -591,13 +537,15 @@ elabTrait globals ec ds = case ds of
       Pair fieldTys ec1 =>
         let
           pname = paramNameOf params
+          -- M19：类参数的 kind 从方法签名推断（`Functor f` 的 `f` 是 `Type -> Type`）。
+          pKind = classParamKind pname methods
           dname = dictTypeName tname
           cname = dictCtorName tname
           dapp = foldAppTerms (TGlobal dname) [Pair (TVar pname 0) Rig0]
-          ctorTy = TPi pname True Rig0 (TType levelZero) (foldPiFieldTys fieldTys dapp)
+          ctorTy = TPi pname True Rig0 pKind (foldPiFieldTys fieldTys dapp)
           tele = teleOfType ctorTy
           dd = DtData dname tele [DtCtor cname dname tele ctorTy]
-          projs = methodProjections tname pname methods fieldTys
+          projs = methodProjections tname pname pKind methods fieldTys
           projBodies = projectionDefs tname pname methods fieldTys (length methods)
           cls = DtClass tname params projs fieldTys
           ec2 = ecAddClass (ecAddData ec1 dd) cls
@@ -607,57 +555,64 @@ elabTrait globals ec ds = case ds of
     _ => errAt dsp "DT: internal: expected a trait declaration"
 
 -- 方法投影的签名与定义体：
---   sig:  `{p : Type} -> {d : Dict_C p} -> <方法类型>`
+--   sig:  `{p : <kind>} -> {d : Dict_C p} -> <方法类型>`
 --   body: `\p => \d => case d of MkDict_C f0..fn => fk x1..xar`
 -- 字段 fk 对应第 k 个方法（与构造子字段声明顺序一致）。
-methodProjections : String -> String -> List (Pair String Expr) -> List Term -> List (Pair String Term)
-methodProjections tname pname methods fieldTys = methodProjZip tname pname 0 methods fieldTys
-
-methodProjZip : String -> String -> Int -> List (Pair String Expr) -> List Term -> List (Pair String Term)
-methodProjZip tname pname idx [] fieldTys = []
-methodProjZip tname pname idx (m :: rest) [] = []
-methodProjZip tname pname idx (m :: rest) (t :: rest2) = case m of
-  Pair mname mexpr =>
-    Pair mname (TPi pname True Rig0 (TType levelZero) (TPi "_" True Rig0 (foldAppTerms (TGlobal (dictTypeName tname)) [Pair (TVar pname 0) Rig0]) (shift 0 1 t)))
-      :: methodProjZip tname pname (idx + 1) rest rest2
-
--- 投影的定义体：`\p => \d => \x0 .. \x(ar-1) => case d of MkDict_C f0..fn => f_k x0..x(ar-1)`
 --
--- 签名 `{p : Type} -> {d : Dict_C p} -> <方法类型>`：p 在先、d 在后，方法自身
--- 的显式参数再往后。外层 lambda 顺序必须是 `_p` 然后 `_d`（与签名一致）。
--- de Bruijn 索引（最内层 = 0；case 分支绑定子 f（n 个）在方法参数之内）：
---   _d           : index = n + ar
---   _p           : index = n + ar + 1
---   f_k          : index = n - 1 - k
---   x_i          : index = n + (ar - 1 - i)
-projectionBody : String -> Int -> Int -> Int -> Term
-projectionBody ctor fieldIdx arity nFields =
+-- M19：`p` 的 kind 由 `classParamKind` 从方法签名推断，高阶 kind（`Functor f` 的
+-- `Type -> Type`）也按真实 kind 生成 binder，不再写死 `Type`。
+methodProjections : String -> String -> Term -> List (Pair String Expr) -> List Term -> List (Pair String Term)
+methodProjections tname pname pKind methods fieldTys =
+  methodProjZip tname pname pKind 0 methods fieldTys
+
+methodProjZip : String -> String -> Term -> Int -> List (Pair String Expr) -> List Term -> List (Pair String Term)
+methodProjZip tname pname pKind idx [] fieldTys = []
+methodProjZip tname pname pKind idx (m :: rest) [] = []
+methodProjZip tname pname pKind idx (m :: rest) (t :: rest2) = case m of
+  Pair mname mexpr =>
+    Pair mname (TPi pname True Rig0 pKind (TPi "_" True Rig0 (foldAppTerms (TGlobal (dictTypeName tname)) [Pair (TVar pname 0) Rig0]) (shift 0 1 t)))
+      :: methodProjZip tname pname pKind (idx + 1) rest rest2
+
+-- 投影的定义体：`\p => \d => \x0 .. \x(ar-1) => case d of MkDict_C f0..fn => f_k x0..`
+-- 签名 `{p} -> {d : Dict_C p} -> <方法类型>`；de Bruijn 索引：`_d = n+ar`、`_p = n+ar+1`、
+-- `f_k = n-1-k`、`x_i = n+(ar-1-i)`（最内层 = 0，分支绑定子 f 在方法参数之内）。
+-- `rigs` 是方法显式参数各自的 multiplicity（M19：从方法签名逐 binder 取，
+-- `binderRig` 判据与实例方法体一致）。**lambda 链与应用点必须用同一份 rigs**：
+-- 擦除位既不生成运行时形参、也不传实参——两侧都跳过，才能与由 `checkDef` 生成的
+-- 实例方法体（同样按 rig 跳过擦除位）严格对齐。
+projectionBody : String -> Int -> List Rig -> Int -> Term
+projectionBody ctor fieldIdx rigs nFields =
   let
+    arity = length rigs
     -- scrutinee 在分支绑定子之外求值，所以只跨过方法参数（_p=ar+1、_d=ar）。
     dictIdx = arity
     fieldVar = TVar (fieldVarName fieldIdx) (nFields - 1 - fieldIdx)
-    argTerms = methodArgTerms arity nFields
-    applied = foldAppTerms fieldVar (map (\a => Pair a Rig1) argTerms)
+    argPairs = methodArgTerms rigs nFields
+    applied = foldAppTerms fieldVar argPairs
     binders = fieldBinderNames nFields
     alt = CaseAlt ctor binders applied
     caseTerm = TCase (TVar "_d" dictIdx) [alt]
-    lamArgs = methodArgLams arity 0 caseTerm
+    lamArgs = methodArgLams rigs 0 caseTerm
   in TLam "_p" Rig0 (TLam "_d" Rig1 lamArgs)
 
--- 方法参数 x_i 的 index：n + (ar - 1 - i)。
-methodArgTerms : Int -> Int -> List Term
-methodArgTerms arity nFields = methodArgTermsGo arity nFields 0
+-- 方法参数 x_i 的 (项, rig)：index = n + (ar - 1 - i)。
+methodArgTerms : List Rig -> Int -> List (Pair Term Rig)
+methodArgTerms rigs nFields = methodArgTermsGo rigs nFields 0 (length rigs)
 
-methodArgTermsGo : Int -> Int -> Int -> List Term
-methodArgTermsGo arity nFields i =
-  if i >= arity then []
-  else TVar ("x" ++ strFromInt i) (nFields + (arity - 1 - i)) :: methodArgTermsGo arity nFields (i + 1)
+methodArgTermsGo : List Rig -> Int -> Int -> Int -> List (Pair Term Rig)
+methodArgTermsGo rigs nFields i arity = case rigs of
+  [] => []
+  rig :: rest =>
+    Pair (TVar ("x" ++ strFromInt i) (nFields + (arity - 1 - i))) rig
+      :: methodArgTermsGo rest nFields (i + 1) arity
 
--- 逐层 lambda 绑定方法参数（x_0 最外）。
-methodArgLams : Int -> Int -> Term -> Term
-methodArgLams arity i body =
-  if i >= arity then body else TLam ("x" ++ strFromInt i) Rig1 (methodArgLams arity (i + 1) body)
+-- 逐层 lambda 绑定方法参数（x_0 最外），每层用各自 rig。
+methodArgLams : List Rig -> Int -> Term -> Term
+methodArgLams [] i body = body
+methodArgLams (rig :: rest) i body =
+  TLam ("x" ++ strFromInt i) rig (methodArgLams rest (i + 1) body)
 
+-- 方法显式参数的 multiplicity 表：逐 binder 按域判断（域是宇宙 ⇒ Rig0 擦除）。
 fieldVarName : Int -> String
 fieldVarName i = "f" ++ strFromInt i
 
@@ -683,7 +638,7 @@ projectionDefsGo ctor [] fieldTys idx nFields = []
 projectionDefsGo ctor (m :: rest) [] idx nFields = []
 projectionDefsGo ctor (m :: rest) (t :: rest2) idx nFields = case m of
   Pair mname mexpr =>
-    Pair mname (projectionBody ctor idx (explicitPiArity t) nFields)
+    Pair mname (projectionBody ctor idx (methodArgRigsOf binderRig t) nFields)
       :: projectionDefsGo ctor rest rest2 (idx + 1) nFields
 
 -- 实例头 `Show Int` 的类名与实参。
@@ -965,12 +920,33 @@ ctorResultTerms c = case resultSpine (dtCtorType c) of
 -- ---------------------------------------------------------------
 -- M14：case 精化 + 覆盖率
 -- ---------------------------------------------------------------
--- 把构造子 telescope 绑进上下文。隐式 binder 不消费子模式；显式 binder 消费一个
--- 只允许是变量/通配的子模式（嵌套模式留到 M15）。
-bindCtorTele : Ctx -> Term -> List Pat -> Result (Pair Ctx (Pair (List (Pair String Rig)) (List Pat)))
-bindCtorTele ctx ty subpats = bindCtorGo ctx ty subpats []
+-- M19：嵌套构造子模式。做法是**把嵌套模式改写成嵌套 case**：
+-- `Cons a (Succ k) rest => body` 变成 `Cons a x1 rest => case x1 of Succ k => body`。
+-- 这样不需要新的精化规则、也不需要新的 Core 构造子——内层 case 走既有的索引合一与
+-- 覆盖率检查，语义与手写嵌套 case 完全一致，且天然支持任意深度。
+--
+-- 绑定 telescope 时把非变量的子模式收集成「新鲜 binder + 待匹配 (pat, var)」，
+-- 分支体精化前把待匹配列表折成由内向外的内层 case。
+-- 待匹配项：子模式 + 它在分支上下文里的 binder 名字。
+data Pending : Type where
+  Pending : Pat -> String -> Pending
 
-bindCtorGo : Ctx -> Term -> List Pat -> List (Pair String Rig) -> Result (Pair Ctx (Pair (List (Pair String Rig)) (List Pat)))
+pendingPat (Pending p n) = p
+
+pendingName (Pending p n) = n
+
+-- bindCtorGo 的累加器：telescope 绑定子（逆序）+ 待展开的嵌套模式（正序）。
+data BindAcc : Type where
+  BindAcc : List (Pair String Rig) -> List Pending -> BindAcc
+
+baBinders (BindAcc bs ps) = bs
+
+baPending (BindAcc bs ps) = ps
+
+bindCtorTele : Ctx -> Term -> List Pat -> Result (Pair Ctx (Pair (List (Pair String Rig)) (Pair (List Pending) (List Pat))))
+bindCtorTele ctx ty subpats = bindCtorGo ctx ty subpats (BindAcc [] [])
+
+bindCtorGo : Ctx -> Term -> List Pat -> BindAcc -> Result (Pair Ctx (Pair (List (Pair String Rig)) (Pair (List Pending) (List Pat))))
 bindCtorGo ctx ty subpats acc = case ty of
   TPi name implicit rig dom cod =>
     let
@@ -978,34 +954,56 @@ bindCtorGo ctx ty subpats acc = case ty of
     in if implicit then
       let
         ctx2 = ctxBindValue name domVal ctx
-      in bindCtorGo ctx2 cod subpats (Pair name Rig0 :: acc)
+      in bindCtorGo ctx2 cod subpats (BindAcc (Pair name Rig0 :: baBinders acc) (baPending acc))
     else case subpats of
       [] => Err "DT: case branch has too few arguments for its constructor"
       p :: rest => case p of
         PVar pname psp => bindCtorBinder ctx domVal cod pname rest acc
         PWild psp => bindCtorBinder ctx domVal cod "_" rest acc
-        _ => Err "DT: nested patterns are not supported yet (M14 limitation)"
-  _ => Ok (Pair ctx (Pair (reverse acc) subpats))
+        PCon cname args psp =>
+          let
+            -- 嵌套模式：绑一个新鲜名字占位，把 (子模式, 名字) 记下来稍后折成内层 case。
+            fresh = freshPatName (length (baPending acc))
+            ctx2 = ctxBindValue fresh domVal ctx
+          in bindCtorGo ctx2 cod rest
+            (BindAcc (Pair fresh (binderRig False domVal) :: baBinders acc) (append (baPending acc) [Pending p fresh]))
+        _ => Err "DT: nested patterns must be constructor patterns (M19)"
+  _ => Ok (Pair ctx (Pair (reverse (baBinders acc)) (Pair (baPending acc) subpats)))
 
-bindCtorBinder : Ctx -> Value -> Term -> String -> List Pat -> List (Pair String Rig) -> Result (Pair Ctx (Pair (List (Pair String Rig)) (List Pat)))
+freshPatName : Int -> String
+freshPatName i = "_np" ++ strFromInt i
+
+bindCtorBinder : Ctx -> Value -> Term -> String -> List Pat -> BindAcc -> Result (Pair Ctx (Pair (List (Pair String Rig)) (Pair (List Pending) (List Pat))))
 bindCtorBinder ctx domVal cod binderName rest acc =
   let
     ctx2 = ctxBindValue binderName domVal ctx
-  in bindCtorGo ctx2 cod rest (Pair binderName (binderRig False domVal) :: acc)
+  in bindCtorGo ctx2 cod rest
+    (BindAcc (Pair binderName (binderRig False domVal) :: baBinders acc) (baPending acc))
 
--- 显式 constructor 分支：绑 telescope → 合一结果索引 → 在精化后的上下文里查分支体。
+-- 折成内层 case：`[Pending p1 v1, Pending p2 v2]` + body
+-- → `case v1 of p1 => (case v2 of p2 => body)`（收集顺序即由外到内）。
+foldPending : List Pending -> Expr -> Expr
+foldPending [] body = body
+foldPending (p :: rest) body =
+  let
+    ps = patSpan (pendingPat p)
+  in ECase (EVar (pendingName p) ps) [Pair (pendingPat p) (foldPending rest body)] ps
+
+-- 显式 constructor 分支：绑 telescope → 合一结果索引 → 把嵌套模式折成内层 case →
+-- 在精化后的上下文里查分支体。
 elabConAlt : List (Pair String Term) -> Ctx -> Ec -> DtData -> List Value -> Value -> String -> List Pat -> Span -> Expr -> Result (Pair CaseAlt Ec)
 elabConAlt globals ctx ec dd idxs expected cname args psp body = case findCtorIn cname (dtDataCtors dd) of
   Nothing => errAt psp ("DT: unknown constructor " ++ cname ++ " in case " ++ dtDataName dd)
   Just ctor => andThen (bindCtorTele ctx (dtCtorType ctor) args) (\p => case p of
-    Pair branchCtx (Pair binders leftover) => if nonEmpty leftover then errAt psp ("DT: branch for constructor " ++ cname ++ " has too many arguments")
+    Pair branchCtx (Pair binders (Pair pending leftover)) => if nonEmpty leftover then errAt psp ("DT: branch for constructor " ++ cname ++ " has too many arguments")
     else case unifyIdxList ec [] (ctxDepth branchCtx) defaultFuel (ctorResultValsIn branchCtx ctor) (map (refineValue [] defaultFuel) idxs) of
       Err e => errAt psp "DT: this branch is impossible (index constraints are unsatisfiable)"
       Ok refs2 =>
         let
           refinedExpected = refineValue refs2 defaultFuel expected
           branchCtx2 = ctxRefine branchCtx refs2
-        in andThen (checkE globals branchCtx2 ec body refinedExpected) (\pb => case pb of
+          body2 = foldPending pending body
+        in andThen (checkE globals branchCtx2 ec body2 refinedExpected) (\pb => case pb of
           Pair bodyTerm ec2 => Ok (Pair (CaseAlt cname binders bodyTerm) ec2)
         )
   )
@@ -1072,8 +1070,91 @@ checkCase globals ctx ec scrut alts expected sp = andThen (inferE globals ctx ec
 
 checkCaseFam : List (Pair String Term) -> Ctx -> Ec -> Term -> Value -> List (Pair Pat Expr) -> Value -> Span -> Result (Pair Term Ec)
 checkCaseFam globals ctx ec scrutTerm scrutTy alts expected sp = case forceVal ec scrutTy of
+  VNeutral (NGlobal "Bool" []) => checkBoolCase globals ctx ec scrutTerm alts expected sp
+  VNeutral (NGlobal "Int" []) => checkLitCase globals ctx ec scrutTerm "Int" alts expected sp
+  VNeutral (NGlobal "String" []) => checkLitCase globals ctx ec scrutTerm "String" alts expected sp
   VNeutral (NGlobal fam idxs) => checkCaseOf globals ctx ec scrutTerm fam idxs alts expected sp
   _ => errAt sp "DT: case scrutinee is not an inductive family"
+
+-- M19：Bool 上的 case 降级成 if（`True` / `False` 是零参构造子形态的模式）。
+checkBoolCase : List (Pair String Term) -> Ctx -> Ec -> Term -> List (Pair Pat Expr) -> Value -> Span -> Result (Pair Term Ec)
+checkBoolCase globals ctx ec scrutTerm alts expected sp = andThen (boolAlt globals ctx ec alts "True" expected sp) (\p => case p of
+  Pair trueBody (Pair catchAll ec1) => case catchAll of
+    Just falseBody => Ok (Pair (TIf scrutTerm trueBody falseBody) ec1)
+    Nothing => andThen (boolAlt globals ctx ec alts "False" expected sp) (\q => case q of
+      Pair falseBody (Pair _ ec2) => Ok (Pair (TIf scrutTerm trueBody falseBody) ec2)
+    )
+)
+
+-- 取 `True` / `False` 分支的体；变量/通配分支作为两边的兜底。
+boolAlt : List (Pair String Term) -> Ctx -> Ec -> List (Pair Pat Expr) -> String -> Value -> Span -> Result (Pair Term (Pair (Maybe Term) Ec))
+boolAlt globals ctx ec alts target expected sp =
+  boolAltGo globals ctx ec alts target expected sp Nothing
+
+boolAltGo : List (Pair String Term) -> Ctx -> Ec -> List (Pair Pat Expr) -> String -> Value -> Span -> Maybe Term -> Result (Pair Term (Pair (Maybe Term) Ec))
+boolAltGo globals ctx ec [] target expected sp catchAll = case catchAll of
+  Just t => Ok (Pair t (Pair Nothing ec))
+  Nothing => errAt sp ("DT: case is not exhaustive: missing " ++ target)
+boolAltGo globals ctx ec (alt :: rest) target expected sp catchAll = case alt of
+  Pair pat body => case pat of
+    PCon cname args psp => if cname == target then andThen (checkE globals ctx ec body expected) (\p => case p of
+      Pair bodyTerm ec1 => Ok (Pair bodyTerm (Pair catchAll ec1))
+    )
+    else boolAltGo globals ctx ec rest target expected sp catchAll
+    PVar pname psp => andThen (checkE globals ctx ec body expected) (\p => case p of
+      Pair bodyTerm ec1 => boolAltGo globals ctx ec rest target expected sp (Just bodyTerm)
+    )
+    PWild psp => andThen (checkE globals ctx ec body expected) (\p => case p of
+      Pair bodyTerm ec1 => boolAltGo globals ctx ec rest target expected sp (Just bodyTerm)
+    )
+    _ => errAt (patSpan pat) "DT: case on Bool only accepts True / False / variable patterns (M19)"
+
+-- M19：Int / String 上的字面量模式降级成嵌套 if。
+-- `case n of 0 => a; 1 => b; x => c` 变成 `if n == 0 then a else if n == 1 then b else c`。
+checkLitCase : List (Pair String Term) -> Ctx -> Ec -> Term -> String -> List (Pair Pat Expr) -> Value -> Span -> Result (Pair Term Ec)
+checkLitCase globals ctx ec scrutTerm tyName alts expected sp = andThen (checkLitAlts globals ctx ec scrutTerm tyName alts expected sp) (\p => case p of
+  Pair term (Pair hasDefault ec1) =>
+    if hasDefault then Ok (Pair term ec1)
+    else errAt sp "DT: case on Int / String needs a variable or wildcard branch as fallback (M19)"
+)
+
+-- Int / String 字面量列：每个字面量降成 `if n == lit then body else <rest>`；
+-- 变量/通配分支提供 fallback（并且把变量绑进上下文，让用户在体里能用它）。
+checkLitAlts : List (Pair String Term) -> Ctx -> Ec -> Term -> String -> List (Pair Pat Expr) -> Value -> Span -> Result (Pair Term (Pair Bool Ec))
+checkLitAlts globals ctx ec scrutTerm tyName [] expected sp =
+  Ok (Pair (TIf (TBool False) (TInt 0) (TInt 0)) (Pair False ec))
+checkLitAlts globals ctx ec scrutTerm tyName (alt :: rest) expected sp = case alt of
+  Pair pat body => case pat of
+    PInt n psp => andThen (checkE globals ctx ec body expected) (\p => case p of
+      Pair bodyTerm ec1 => andThen (checkLitAlts globals ctx ec1 scrutTerm tyName rest expected sp) (\q => case q of
+        Pair restTerm (Pair hasDefault ec2) =>
+          Ok
+            (Pair (TIf (TApp (TApp (TGlobal "==") scrutTerm Rig1) (TInt n) Rig1) bodyTerm restTerm) (Pair hasDefault ec2))
+      )
+    )
+    PStr s psp => andThen (checkE globals ctx ec body expected) (\p => case p of
+      Pair bodyTerm ec1 => andThen (checkLitAlts globals ctx ec1 scrutTerm tyName rest expected sp) (\q => case q of
+        Pair restTerm (Pair hasDefault ec2) =>
+          Ok
+            (Pair (TIf (TApp (TApp (TGlobal "==") scrutTerm Rig1) (TStr s) Rig1) bodyTerm restTerm) (Pair hasDefault ec2))
+      )
+    )
+    PVar pname psp => andThen (checkLitBoundVar globals ctx ec scrutTerm tyName pname body expected sp) (\p => case p of
+      Pair bodyTerm ec1 => Ok (Pair bodyTerm (Pair True ec1))
+    )
+    PWild psp => andThen (checkE globals ctx ec body expected) (\p => case p of
+      Pair bodyTerm ec1 => Ok (Pair bodyTerm (Pair True ec1))
+    )
+    _ =>
+      errAt (patSpan pat) "DT: case on Int / String only accepts literals / variable patterns (M19)"
+
+-- fallback 分支的体在「scrutinee 绑成该变量」的上下文里检查。
+checkLitBoundVar : List (Pair String Term) -> Ctx -> Ec -> Term -> String -> String -> Expr -> Value -> Span -> Result (Pair Term Ec)
+checkLitBoundVar globals ctx ec scrutTerm tyName name body expected sp =
+  let
+    scrutVal = evalCtx ctx scrutTerm
+    ctx2 = ctxBindValue name scrutVal ctx
+  in checkE globals ctx2 ec body expected
 
 checkCaseOf : List (Pair String Term) -> Ctx -> Ec -> Term -> String -> List Value -> List (Pair Pat Expr) -> Value -> Span -> Result (Pair Term Ec)
 checkCaseOf globals ctx ec scrutTerm fam idxs alts expected sp = case dtDataLookup fam (ecDatas ec) of
@@ -1105,8 +1186,8 @@ elabBodies [] globals doneDefs acc ec = Ok (Pair (reverse acc) ec)
 elabBodies (d :: rest) globals doneDefs acc ec = case d of
   DFun name pats body sp => case globalLookup name globals of
     Nothing => errAt sp ("DT: expected a type signature for " ++ name)
-    Just tyTerm => if memDefName name doneDefs then errAt sp "DT: multiple clauses are not supported yet (use a single equation; M16)"
-    else andThen (checkDef globals ec pats body (eval [] tyTerm) sp) (\p => case p of
+    Just tyTerm => if memDefName name doneDefs then elabBodies rest globals doneDefs acc ec
+    else andThen (elabFunDef globals ec (clausesFor (d :: rest) name) (eval [] tyTerm) sp) (\p => case p of
       Pair bodyTerm ec1 =>
         elabBodies rest globals (Pair name tyTerm :: doneDefs) (DtDef name tyTerm bodyTerm :: acc)
           (ecAddDef ec1 (Pair name bodyTerm))
@@ -1139,9 +1220,14 @@ dtProgGoals (DtProgram datas defs goals sols) = goals
 
 dtProgSols (DtProgram datas defs goals sols) = sols
 
+-- 精化入口。M19：先做 record 降级（`DtRecords.prepareDecls`）——record 是纯记法。
 elabProgramFull : List Decl -> Result DtProgram
-elabProgramFull decls = andThen (collectSigs decls) (\sigs => andThen (elabDatas (collectDataDecls decls []) preludeGlobals ecEmpty) (\pd => case pd of
-  Pair datas (Pair globals0 ec0) => andThen (elabTraits (collectTraitDecls decls []) globals0 ec0) (\pt => case pt of
+elabProgramFull decls =
+  andThen (prepareDecls decls) (\ds => andThen (expandDerivings ds) (\ds2 => elabProgramGo ds2))
+
+elabProgramGo : List Decl -> Result DtProgram
+elabProgramGo decls = andThen (collectSigs decls) (\sigs => andThen (elabDatas (collectDataDecls decls []) preludeGlobals ecEmpty) (\pd => case pd of
+  Pair datas (Pair globals0 ec0) => andThen (elabTraits (append (collectTraitDecls builtinTraitDecls []) (collectTraitDecls decls [])) globals0 ec0) (\pt => case pt of
     Pair classDatas (Pair projGlobals (Pair classes ec1)) =>
       let
         globals1 = append globals0 projGlobals
@@ -1152,7 +1238,7 @@ elabProgramFull decls = andThen (collectSigs decls) (\sigs => andThen (elabDatas
             globals2 = append globals1 instHeads
           in andThen (elabSigs sigs globals2 ec1b) (\p => case p of
             Pair globals ec2 => andThen (checkAllDefined sigs globals decls) (\_ => andThen (elabBodies decls globals [] [] ec2) (\q => case q of
-              Pair defs ec3 => andThen (elabInstanceBodies (collectInstDecls decls []) classes datas1 globals ec3) (\pi => case pi of
+              Pair defs ec3 => andThen (elabInstanceBodies (collectInstDecls (append builtinShowInstances decls) []) classes datas1 globals ec3) (\pi => case pi of
                 Pair instDefs ec4 => case unsolvedMeta ec4 of
                   Just m => Err (unsolvedMessage ec4 m)
                   Nothing =>
@@ -1640,15 +1726,19 @@ bindOnePattern globals ctx ec pname pats body dom clo sp =
     lvl = ctxDepth ctx
     v = freshVarValue pname lvl
     ctx2 = ctxBindValue pname dom ctx
-    erasure = binderRig False dom
+    erasure = typeLayerRig False dom
   in andThen (checkBinders globals ctx2 ec pats body (applyClosure clo v) sp) (\p => case p of
     Pair inner ec1 => Ok (Pair (TLam pname erasure inner) ec1)
   )
 
 -- M14：隐式 binder 的域可以是宇宙，也可以是已声明归纳族（`{n : Nat}` 这类索引）；
 -- 其它类型（Int/String/...）仍拒绝：隐式实参不参与运行时计算。
+-- 隐式 binder 的域可以是：宇宙、已声明归纳族（`{n : Nat}` 这类索引），或**高阶 kind**
+-- （`{f : Type -> Type}`，M19 起 `trait Mapper f` 需要）。其它类型（Int/String/…）仍
+-- 拒绝：隐式实参不参与运行时计算。
 isIndexDomain : Ec -> Value -> Bool
-isIndexDomain ec dom = isTypeValue dom || isDataHead (ecDatas ec) (forceVal ec dom)
+isIndexDomain ec dom =
+  isTypeValue dom || isTypeLayerValue dom || isDataHead (ecDatas ec) (forceVal ec dom)
 
 -- ---------------------------------------------------------------
 -- 擦除判据（M18.5：全仓唯一入口）
@@ -1664,6 +1754,22 @@ isIndexDomain ec dom = isTypeValue dom || isDataHead (ecDatas ec) (forceVal ec d
 binderRig : Bool -> Value -> Rig
 binderRig implicit dom = rigOfBinder implicit (isTypeValue dom)
 
+-- 域在「类型层」（M19）：宇宙，或**域全是宇宙的 Pi 链**（`Type -> Type` 这类高阶 kind）。
+-- 用于**实参**与**定义参数**的 multiplicity——`applyTwice Box ...` 里的 `Box` 是类型
+-- 构造器，必须擦除，否则 codegen 报「type-level name is used at runtime」。
+--
+-- 判据必须是递归的：值层函数类型 `a -> b` 也是 Pi，但它的域是**类型变量**（不是宇宙），
+-- 因此不被误判为类型层（否则函数参数会被擦掉，`03_compose` / `04_apply` 直接崩）。
+typeLayerRig : Bool -> Value -> Rig
+typeLayerRig implicit dom = if implicit then Rig0 else if isTypeLayerValue dom then Rig0 else Rig1
+
+isTypeLayerValue : Value -> Bool
+isTypeLayerValue v = case v of
+  VType l => True
+  VPi pname implicit rig dom clo =>
+    isTypeLayerValue dom && isTypeLayerValue (applyClosure clo (VNeutral (NVar pname 0 [])))
+  _ => False
+
 isDataHead : List DtData -> Value -> Bool
 isDataHead datas v = case v of
   VNeutral n => case n of
@@ -1676,10 +1782,19 @@ isDataHead datas v = case v of
 freshVarValue : String -> Int -> Value
 freshVarValue name level = VNeutral (NVar name level [])
 
--- case 出现在推断位置时拿不到期望类型：case 的结果类型不做归纳（M14 只支持检查模式）。
+-- M19：case 出现在推断位置（函数实参、if 分支、let 的 value）。做法是建一个元变量当
+-- 期望类型，再按检查模式处理 case——分支逐个 check 会把期望写进这个元变量。
 inferCaseE : List (Pair String Term) -> Ctx -> Ec -> Expr -> List (Pair Pat Expr) -> Span -> Result (Pair Term (Pair Value Ec))
 inferCaseE globals ctx ec scrut alts sp =
-  errAt sp "DT: cannot infer the type of a case expression; give it an expected type"
+  let
+    pmeta = newMeta ctx ec
+  in case pmeta of
+    Pair metaTerm ec1 =>
+      let
+        metaTy = evalCtx ctx metaTerm
+      in andThen (checkCase globals ctx ec1 scrut alts metaTy sp) (\p => case p of
+        Pair term ec2 => Ok (Pair term (Pair metaTy ec2))
+      )
 
 -- ---------------------------------------------------------------
 -- 双向检查
@@ -1707,7 +1822,7 @@ inferE globals ctx ec expr = case expr of
       )
     )
   )
-  ELet binds body rec_ sp => errAt sp "DT: let expressions are not supported yet (M13)"
+  ELet binds body rec_ sp => inferLet globals ctx ec binds body rec_ sp
   ECase scrut alts sp => inferCaseE globals ctx ec scrut alts sp
   EField base fname sp => errAt sp "DT: record field access is not supported yet (M15)"
   ERecord rname fields sp => errAt sp "DT: records are not supported yet (M15)"
@@ -1751,7 +1866,15 @@ inferApp globals ctx ec fn args sp = case fn of
     _ => inferAppGeneral globals ctx ec fn args sp
 
 inferAppGeneral : List (Pair String Term) -> Ctx -> Ec -> Expr -> List Expr -> Span -> Result (Pair Term (Pair Value Ec))
-inferAppGeneral globals ctx ec fn args sp = andThen (inferE globals ctx ec fn) (\pf => case pf of
+inferAppGeneral globals ctx ec fn args sp = case fn of
+  EVar name vsp => andThen (specializeEqApp globals ctx ec name args sp) (\mspec => case mspec of
+    Just pair => Ok pair
+    Nothing => inferAppGeneralGo globals ctx ec fn args sp
+  )
+  _ => inferAppGeneralGo globals ctx ec fn args sp
+
+inferAppGeneralGo : List (Pair String Term) -> Ctx -> Ec -> Expr -> List Expr -> Span -> Result (Pair Term (Pair Value Ec))
+inferAppGeneralGo globals ctx ec fn args sp = andThen (inferE globals ctx ec fn) (\pf => case pf of
   Pair fnTerm (Pair fnTy ec1) => andThen (inferArgs globals ctx ec1 fnTy args sp) (\pa => case pa of
     Pair argTerms (Pair resTy ec2) =>
       Ok (Pair (ctorAppTerm (ecDatas ec2) fnTerm argTerms) (Pair resTy ec2))
@@ -1830,7 +1953,7 @@ inferArgsGo globals ctx ec ty args sp =
       a :: rest => andThen (checkE globals ctx ec a dom) (\p => case p of
         Pair aTerm ec1 =>
           let
-            erased = binderRig False dom
+            erased = typeLayerRig False dom
             ty2 = applyClosure clo (evalCtx ctx aTerm)
           in andThen (inferArgsGo globals ctx ec1 ty2 rest sp) (\q => case q of
             Pair argTerms (Pair resTy ec2) =>
@@ -1855,19 +1978,17 @@ isDictValue ec v = case v of
 isDictFamily : Ec -> String -> Bool
 isDictFamily ec g = memName g (map (\c => dictTypeName (dtClassName c)) (ecClasses ec))
 
--- 实例搜索：在已注册实例里找头能统一到目标字典类型的那个，返回它的定义引用。
--- 统一过程中解出的元变量（典型是 `Dict_C ?a` 里的 `?a`，由实例头 `Dict_C T` 定住）
--- 必须写回状态，否则后续投影的类型检查拿不到类参数。
--- 零个 ⇒ 明确报缺失；多个 ⇒ 报歧义（M15 不做优先级/相干性细化）。
+-- 实例搜索：找头能统一到目标字典类型的实例。零个 ⇒ 报缺失，多个 ⇒ 报歧义。
 searchInstance : Ec -> Value -> Span -> Result (Pair Term Ec)
-searchInstance ec dom sp = case filterInstances ec dom (ecInsts ec) [] of
-  Pair [] sols =>
-    errAt sp ("DT: no instance found for " ++ showValue dom ++ " ;; " ++ dictClassArgDebug ec dom)
+searchInstance ec dom sp = case filterInstances ec dom (ecInsts ec) (ecSols ec) of
+  Pair [] sols => errAt sp ("DT: no instance found for " ++ showValue dom)
   Pair ([i]) sols => Ok (Pair (TGlobal (dtInstName i)) (ecPutSols ec sols))
   Pair cands sols =>
     errAt sp
       ("DT: ambiguous instance for " ++ showValue dom ++ " (candidates: " ++ joinInstNames cands ++ ")")
 
+-- 实例表筛选（M22）：只接受**不新增解**的头匹配——否则 `conv` 会把 `Dict_C ?a` 的 `?a`
+-- 顺手解成第一个候选的参数，同 trait 第二个实例永远匹配不上。约束交给 `constrainDictDom`。
 filterInstances : Ec -> Value -> List DtInst -> List (Pair Int Value) -> Pair (List DtInst) (List (Pair Int Value))
 filterInstances ec dom [] sols = Pair [] sols
 filterInstances ec dom (i :: rest) sols =
@@ -1875,8 +1996,9 @@ filterInstances ec dom (i :: rest) sols =
     hd = forceVal ec (eval [] (dtInstHead i))
   in case conv (ecDefs ec) sols 0 dom hd of
     Err e => filterInstances ec dom rest sols
-    Ok sols2 => case filterInstances ec dom rest sols2 of
+    Ok sols2 => if length sols2 == length sols then case filterInstances ec dom rest sols2 of
       Pair more final => Pair (i :: more) final
+    else filterInstances ec dom rest sols
 
 joinInstNames : List DtInst -> String
 joinInstNames [] = ""
@@ -1886,40 +2008,34 @@ joinRestInstNames : List DtInst -> String
 joinRestInstNames [] = ""
 joinRestInstNames (i :: rest) = ", " ++ dtInstName i ++ joinRestInstNames rest
 
-joinDebugVals : Ec -> List Value -> String
-joinDebugVals ec [] = ""
-joinDebugVals ec (v :: rest) =
-  showValueAt 0 (forceVal ec v) ++ (if length rest == 0 then "" else ",") ++ joinDebugVals ec rest
-
-dictClassArgDebug : Ec -> Value -> String
-dictClassArgDebug ec dom = case forceVal ec dom of
-  VNeutral n => case n of
-    NGlobal g sp => g ++ "/" ++ strFromInt (length sp) ++ " args(" ++ joinDebugVals ec sp ++ ")"
-    NVar name lvl sp => "var " ++ name
-    _ => "other-neutral"
-  VMeta m sp => "meta " ++ strFromInt m
-  _ => "non-neutral"
-
--- 用「后面紧跟的显式实参」约束字典域里的类参数元变量。
--- 我们的目标场景是 `pretty red`：字典域是 `Dict_Pretty ?a`，而 `pretty` 的下一个
--- 显式实参是 `a`，它的类型正是 `?a`。检查该实参就会把 `?a` 解成 `Color`。
--- 这是保守的特例（只处理「字典域的直接实参就是类参数」这一形态），解不出就原样返回，
--- 由调用方决定占位还是报错。
+-- 用后续显式实参约束 `Dict_C ?a` 里的类参数：跳过类型实参（会把 `?a` 解成 `Int`）、
+-- 把实参类型收缩到应用头部（类参数只可能是构造器形态，高阶 kind 的实例头写构造器）。
 constrainDictDom : List (Pair String Term) -> Ec -> Ctx -> Value -> List Expr -> Span -> Result Ec
-constrainDictDom globals ec ctx dom args sp = case args of
-  [] => Ok ec
-  a :: rest => case dictClassArg ec dom of
-    -- 字典域的值形态是 `Dict_C ?a`；把 `?a` 取出来当实参的期望类型检查一遍。
-    Nothing => Ok ec
-    Just argTy => case inferE globals ctx ec a of
-      -- 推断实参自身的类型，再用 conv 统一到类参数（元变量）上：
-      -- `red : Color` 与 `?a` 统一 ⇒ `?a := Color`。
-      Err e => Ok ec
-      Ok (Pair aTerm (Pair aTy ec1)) => case convEc ec1 (ctxDepth ctx) argTy aTy of
-        Err e => Ok ec
-        Ok ec2 => Ok ec2
+constrainDictDom globals ec ctx dom args sp = case dictClassArg ec dom of
+  Nothing => Ok ec
+  Just argTy => constrainDictDomGo globals ec ctx argTy args sp
 
--- 从字典域 `Dict_C arg` 里取出 `arg`（类参数）。
+constrainDictDomGo : List (Pair String Term) -> Ec -> Ctx -> Value -> List Expr -> Span -> Result Ec
+constrainDictDomGo globals ec ctx argTy args sp = case args of
+  [] => Ok ec
+  a :: rest => case inferE globals ctx ec a of
+    Err e => Ok ec
+    Ok (Pair aTerm (Pair aTy ec1)) =>
+      let
+        forced = forceVal ec1 aTy
+      in if isTypeValue forced then constrainDictDomGo globals ec1 ctx argTy rest sp
+      else case convEc ec1 (ctxDepth ctx) argTy (neutralHeadOrSelf forced) of
+        Ok ec2 => Ok ec2
+        Err e => constrainDictDomGo globals ec1 ctx argTy rest sp
+
+-- 中性应用的头部（`Box Int` ⇒ `Box`）；非应用原样返回。
+neutralHeadOrSelf : Value -> Value
+neutralHeadOrSelf v = case v of
+  VNeutral n => case n of
+    NGlobal g (_ :: _) => VNeutral (NGlobal g [])
+    _ => v
+  _ => v
+
 dictClassArg : Ec -> Value -> Maybe Value
 dictClassArg ec dom = case forceVal ec dom of
   VNeutral n => case n of
@@ -1971,7 +2087,90 @@ checkE globals ctx ec expr expected = case expr of
   EPi name implicit dom cod sp => checkByInfer globals ctx ec expr expected
   EIf c t e sp => checkByInfer globals ctx ec expr expected
   ECase scrut alts csp => checkCase globals ctx ec scrut alts expected csp
+  ELet binds body rec_ sp => checkLet globals ctx ec binds body rec_ expected sp
   _ => checkByInfer globals ctx ec expr expected
+
+-- ---------------------------------------------------------------
+-- M19：`let` 表达式
+-- ---------------------------------------------------------------
+--
+-- 逐条处理：推断绑定值的类型 → 在上下文里绑上名字 → 处理后续绑定与 body →
+-- 产出 `(\x => body) value`（beta 等价）。**不在 Core 里加 TLet**：`let` 是纯记法，
+-- 不是类型论构造（QTT 与擦除判据都不需要单独认识它）；`rig` 由绑定值的类型经
+-- `binderRig` 决定，因此「let 绑定的擦除行为」与「函数参数」自动一致。
+--
+-- 作用域：后续绑定能看到前面的绑定（顺序 let），不互相递归。`where` 块 desugar 出的
+-- `rec_ = True` 走同一条路径——本仓库当前没有 `where` 块（0 处），互递归 let 留到
+-- M23 迁移时按实际需要补。
+--
+-- 局限：绑定左端只接受简单变量或通配；构造子模式 let 等价于 case，随嵌套模式一起做。
+checkLet : List (Pair String Term) -> Ctx -> Ec -> List (Pair Pat Expr) -> Expr -> Bool -> Value -> Span -> Result (Pair Term Ec)
+checkLet globals ctx ec binds body rec_ expected sp =
+  checkLetGo globals ctx ec binds body rec_ expected sp
+
+checkLetGo : List (Pair String Term) -> Ctx -> Ec -> List (Pair Pat Expr) -> Expr -> Bool -> Value -> Span -> Result (Pair Term Ec)
+checkLetGo globals ctx ec [] body rec_ expected sp = checkE globals ctx ec body expected
+checkLetGo globals ctx ec (bind :: rest) body rec_ expected sp =
+  checkLetOne globals ctx ec bind rest body rec_ expected sp
+
+checkLetOne : List (Pair String Term) -> Ctx -> Ec -> Pair Pat Expr -> List (Pair Pat Expr) -> Expr -> Bool -> Value -> Span -> Result (Pair Term Ec)
+checkLetOne globals ctx ec bind rest body rec_ expected sp = case firstOf bind of
+  PVar name psp =>
+    let
+      value = secondOf bind
+    in andThen (inferE globals ctx ec value) (\pv => case pv of
+      Pair valueTerm (Pair valueTy ec1) =>
+        let
+          rig = binderRig False valueTy
+          ctx2 = ctxBindValue name valueTy ctx
+        in andThen (checkLetGo globals ctx2 ec1 rest body rec_ expected sp) (\pb => case pb of
+          Pair bodyTerm ec2 => Ok (Pair (TApp (TLam name rig bodyTerm) valueTerm rig) ec2)
+        )
+    )
+  PWild psp =>
+    let
+      value = secondOf bind
+    in andThen (inferE globals ctx ec value) (\pv => case pv of
+      Pair valueTerm (Pair valueTy ec1) =>
+        let
+          rig = binderRig False valueTy
+        in andThen (checkLetGo globals ctx ec1 rest body rec_ expected sp) (\pb => case pb of
+          Pair bodyTerm ec2 => Ok (Pair (TApp (TLam "_" rig bodyTerm) valueTerm rig) ec2)
+        )
+    )
+  _ => errAt (patSpan (firstOf bind)) "DT: let bindings must be simple names or wildcards (M19)"
+
+-- M19：推断位的 `let`（嵌套 let 的 value 位置就是推断位）。
+inferLet : List (Pair String Term) -> Ctx -> Ec -> List (Pair Pat Expr) -> Expr -> Bool -> Span -> Result (Pair Term (Pair Value Ec))
+inferLet globals ctx ec binds body rec_ sp = case binds of
+  [] => inferE globals ctx ec body
+  (Pair pat value) :: rest => case pat of
+    PVar name psp => inferLetBound globals ctx ec name value rest body rec_ sp
+    PWild psp => inferLetIgnored globals ctx ec value rest body rec_ sp
+    _ => errAt (patSpan pat) "DT: let bindings must be simple names or wildcards (M19)"
+
+inferLetBound : List (Pair String Term) -> Ctx -> Ec -> String -> Expr -> List (Pair Pat Expr) -> Expr -> Bool -> Span -> Result (Pair Term (Pair Value Ec))
+inferLetBound globals ctx ec name value rest body rec_ sp = andThen (inferE globals ctx ec value) (\pv => case pv of
+  Pair valueTerm (Pair valueTy ec1) =>
+    let
+      rig = binderRig False valueTy
+      ctx2 = ctxBindValue name valueTy ctx
+    in andThen (inferLet globals ctx2 ec1 rest body rec_ sp) (\pb => case pb of
+      Pair bodyTerm (Pair bodyTy ec2) =>
+        Ok (Pair (TApp (TLam name rig bodyTerm) valueTerm rig) (Pair bodyTy ec2))
+    )
+)
+
+inferLetIgnored : List (Pair String Term) -> Ctx -> Ec -> Expr -> List (Pair Pat Expr) -> Expr -> Bool -> Span -> Result (Pair Term (Pair Value Ec))
+inferLetIgnored globals ctx ec value rest body rec_ sp = andThen (inferE globals ctx ec value) (\pv => case pv of
+  Pair valueTerm (Pair valueTy ec1) =>
+    let
+      rig = binderRig False valueTy
+    in andThen (inferLet globals ctx ec1 rest body rec_ sp) (\pb => case pb of
+      Pair bodyTerm (Pair bodyTy ec2) =>
+        Ok (Pair (TApp (TLam "_" rig bodyTerm) valueTerm rig) (Pair bodyTy ec2))
+    )
+)
 
 checkByInfer : List (Pair String Term) -> Ctx -> Ec -> Expr -> Value -> Result (Pair Term Ec)
 checkByInfer globals ctx ec expr expected = case inferE globals ctx ec expr of
@@ -2025,9 +2224,49 @@ checkApp globals ctx ec fn args expected sp = case fn of
       Nothing => checkAppGeneral globals ctx ec fn args expected sp
   _ => checkAppGeneral globals ctx ec fn args expected sp
 
-checkAppGeneral : List (Pair String Term) -> Ctx -> Ec -> Expr -> List Expr -> Value -> Span -> Result (Pair Term Ec)
-checkAppGeneral globals ctx ec fn args expected sp =
-  checkByInfer globals ctx ec (EApp fn args sp) expected
+-- M19：`==` / `/=` 的饱和应用按实参类型特化。
+-- 返回 `Nothing` 表示「不是泛化比较运算符的饱和应用」，调用方走常规路径。
+-- 特化后的项是 `bi_eq_int a b` / `bi_eq_str a b` 这类具体运行时函数应用，
+-- 因此 codegen 只需要名字映射（不感知类型），M18.6 的封装不被破坏。
+specializeEqApp : List (Pair String Term) -> Ctx -> Ec -> String -> List Expr -> Span -> Result (Maybe (Pair Term (Pair Value Ec)))
+specializeEqApp globals ctx ec name args sp = if isEqOp name then case args of
+  [a, b] => andThen (inferE globals ctx ec a) (\pa => case pa of
+    Pair aTerm (Pair aTy ec1) => andThen (inferE globals ctx ec1 b) (\pb => case pb of
+      Pair bTerm (Pair bTy ec2) =>
+        andThen (convEc ec2 (ctxDepth ctx) aTy bTy)
+          (\ec3 => specializeEqTy name aTerm bTerm sp aTy ec3)
+    )
+  )
+  _ => Ok Nothing
+else Ok Nothing
+
+-- `==` / `/=` 的饱和应用（M19）。`Int` / `String` 按实参类型特化成具体运行时函数；
+-- 其它类型解析成 `Eq` 字典的方法投影（字典由实例搜索插入）——这正是 `deriving (Eq)`
+-- 的用处。解析都在精化期完成，codegen 只按名字映射、不需要类型信息。
+specializeEqTy : String -> Term -> Term -> Span -> Value -> Ec -> Result (Maybe (Pair Term (Pair Value Ec)))
+specializeEqTy name aTerm bTerm sp aTy ec = case builtinEqTyName (forceVal ec aTy) of
+  Just tyName =>
+    andThen (eqRuntimeName name tyName)
+      (\rt => Ok (Just (Pair (TApp (TApp (TGlobal rt) aTerm Rig1) bTerm Rig1) (Pair (VNeutral (NGlobal "Bool" [])) ec))))
+  Nothing =>
+    let
+      mname = if name == "==" then "eq" else "neq"
+      -- `eq : {a : Type} -> {d : Dict_Eq a} -> a -> a -> Bool`：类型（擦除）+ 字典。
+      tyTerm = quote 0 aTy
+      dictTy = VNeutral (NGlobal (dictTypeName "Eq") [eval [] tyTerm])
+    in andThen (searchInstance ec dictTy sp) (\p => case p of
+      Pair dictTerm ec1 =>
+        Ok
+          (Just (Pair (TApp (TApp (TApp (TApp (TGlobal mname) tyTerm Rig0) dictTerm Rig1) aTerm Rig1) bTerm Rig1) (Pair (VNeutral (NGlobal "Bool" [])) ec1)))
+    )
+
+checkAppGeneral globals ctx ec fn args expected sp = case fn of
+  EVar name vsp => andThen (specializeEqApp globals ctx ec name args sp) (\mspec => case mspec of
+    Just (Pair term (Pair termTy ec1)) =>
+      andThen (convEc ec1 (ctxDepth ctx) expected termTy) (\ec2 => Ok (Pair term ec2))
+    Nothing => checkByInfer globals ctx ec (EApp fn args sp) expected
+  )
+  _ => checkByInfer globals ctx ec (EApp fn args sp) expected
 
 -- 构造子应用：先按签名收隐式实参（元变量），再逐个检查显式实参，最后统一结果类型。
 checkAppCtor : List (Pair String Term) -> Ctx -> Ec -> String -> List Expr -> Value -> Span -> Result (Pair Term Ec)
@@ -2038,3 +2277,264 @@ checkAppCtor globals ctx ec name args expected sp = case globalLookup name globa
       andThen (convEc ec1 (ctxDepth ctx) expected resTy)
         (\ec2 => Ok (Pair (ctorAppTerm (ecDatas ec2) (TGlobal name) argTerms) ec2))
   )
+
+-- ---------------------------------------------------------------
+-- M19：多 clause 与方程左端模式
+-- ---------------------------------------------------------------
+--
+-- 把 `plus Zero b = b` / `plus (Succ k) b = Succ (plus k b)` 合成为单个项：
+--
+--   plus = \mc0 => \mc1 => case mc0 of
+--     Zero => mc1
+--     Succ k => Succ (plus k mc1)
+--
+-- 两步：① 按参数个数生成 lambda 链（位置名 `mc<i>`，与签名的 Pi 链逐个对齐）；
+-- ② 在体内按**列**递归构建 case 树（标准模式矩阵）：
+--    - 整列都是变量 → 把该列用户写的名字改写成位置名，剥掉该列继续；
+--    - 该列有构造子 → 用该位置名作 scrutinee 生成 case；同一构造子的多个 clause
+--      把模式替换成它的子模式后递归（所以 `f (Just x)` 与 `f (Just (Just y))` 能共存），
+--      变量/通配 clause 汇成兜底分支。
+--
+-- 生成的是纯 lambda + case 表达式，交给既有精化路径检查——覆盖检查、索引合一、
+-- 擦除判定全部自动生效，不需要新的精化规则。
+elabFunDef : List (Pair String Term) -> Ec -> List (Pair (List Pat) Expr) -> Value -> Span -> Result (Pair Term Ec)
+elabFunDef globals ec clauses expected sp = case clauses of
+  [] => errAt sp "DT: function has no clauses"
+  [Pair pats body] => checkDef globals ec pats body expected sp
+  _ => andThen (multiToExpr clauses) (\bodyExpr => checkDef globals ec [] bodyExpr expected sp)
+
+multiToExpr : List (Pair (List Pat) Expr) -> Result Expr
+multiToExpr clauses = case arityOf clauses of
+  Nothing => Err "DT: function has no clauses"
+  Just n =>
+    let
+      names = paramNames n
+    in andThen (buildColumnExpr clauses names 200) (\body => Ok (wrapLambdas names body))
+
+arityOf : List (Pair (List Pat) Expr) -> Maybe Int
+arityOf [] = Nothing
+arityOf (c :: rest) = case c of
+  Pair pats body => Just (length pats)
+
+paramNames : Int -> List String
+paramNames n = paramNamesGo 0 n []
+
+paramNamesGo : Int -> Int -> List String -> List String
+paramNamesGo i n acc =
+  if i >= n then reverse acc else paramNamesGo (i + 1) n (("mc" ++ strFromInt i) :: acc)
+
+wrapLambdas : List String -> Expr -> Expr
+wrapLambdas [] body = body
+wrapLambdas (n :: rest) body = ELam [n] (wrapLambdas rest body) (Span "" 0 0 0 0)
+
+-- 按列递归。params 是**尚未消耗**的位置名（与剩余模式列一一对应）。
+-- 该列含内建字面量模式（Int / String）：生成嵌套 if 链。
+-- `f 0 = a; f 1 = b; f n = c` → `if pos == 0 then a else if pos == 1 then b else c`
+-- 变量/通配 clause 在字面量之后提供 fallback（体按剩余列递归构建）。
+litAltExpr : List (Pair (List Pat) Expr) -> String -> List String -> Int -> Result Expr
+litAltExpr clauses pos restParams fuel = litAltExprGo clauses pos restParams fuel
+
+litAltExprGo : List (Pair (List Pat) Expr) -> String -> List String -> Int -> Result Expr
+litAltExprGo clauses pos restParams fuel = case clauses of
+  [] => Err "DT: case on Int / String needs a variable or wildcard branch as fallback (M19)"
+  (Pair (p :: ps) body) :: rest => case p of
+    PVar pname psp =>
+      andThen (buildColumnExpr (stripFirstCol clauses) restParams (fuel - 1))
+        (\inner => Ok (renameExpr pname pos inner))
+    PWild psp => buildColumnExpr (stripFirstCol clauses) restParams (fuel - 1)
+    _ =>
+      andThen (litAltExprGo rest pos restParams (fuel - 1))
+        (\restExpr => andThen (buildColumnExpr [Pair ps body] restParams (fuel - 1)) (\bodyExpr => Ok (EIf (EApp (EVar "==" (Span "" 0 0 0 0)) [EVar pos (Span "" 0 0 0 0), litPatExpr p] (patSpan p)) bodyExpr restExpr (patSpan p))))
+  (Pair [] body) :: rest => Err "DT: clause has more patterns than the function arity"
+
+-- 把字面量模式还原成表达式（Int / String）。
+litPatExpr : Pat -> Expr
+litPatExpr p = case p of
+  PInt n sp => EInt n sp
+  PStr s sp => EStr s sp
+  _ => EInt 0 (Span "" 0 0 0 0)
+
+buildColumnExpr : List (Pair (List Pat) Expr) -> List String -> Int -> Result Expr
+buildColumnExpr clauses params fuel = if fuel <= 0 then Err "DT: pattern matrix recursion ran out of fuel"
+else if allEmptyPats clauses then Ok (bodyOfFirst clauses)
+else case params of
+  [] => Err "DT: clause has more patterns than the function arity"
+  pos :: restParams =>
+    if allVarHeads clauses then andThen (buildColumnExpr (stripFirstCol clauses) restParams (fuel - 1))
+      (\inner => Ok (renameFirstVars clauses pos inner))
+    else if allCtorHeads clauses then andThen (ctorAltList clauses restParams (fuel - 1))
+      (\alts => andThen (fallbackAltList clauses restParams (fuel - 1)) (\fb => Ok (ECase (EVar pos (Span "" 0 0 0 0)) (append alts fb) (Span "" 0 0 0 0))))
+    else litAltExpr clauses pos restParams (fuel - 1)
+
+-- 该列全是构造子模式（不含字面量）。
+allCtorHeads : List (Pair (List Pat) Expr) -> Bool
+allCtorHeads [] = True
+allCtorHeads (c :: rest) = case c of
+  Pair (p :: ps) body => case p of
+    PCon cname subpats psp => allCtorHeads rest
+    _ => False
+  Pair [] body => False
+
+allEmptyPats : List (Pair (List Pat) Expr) -> Bool
+allEmptyPats [] = True
+allEmptyPats (c :: rest) = case c of
+  Pair [] body => allEmptyPats rest
+  _ => False
+
+bodyOfFirst : List (Pair (List Pat) Expr) -> Expr
+bodyOfFirst clauses = case clauses of
+  (Pair pats body) :: rest => body
+  [] => EInt 0 (Span "" 0 0 0 0)
+
+isVarPatD : Pat -> Bool
+isVarPatD p = case p of
+  PVar n sp => True
+  PWild sp => True
+  _ => False
+
+allVarHeads : List (Pair (List Pat) Expr) -> Bool
+allVarHeads [] = True
+allVarHeads (c :: rest) = case c of
+  Pair (p :: ps) body => isVarPatD p && allVarHeads rest
+  Pair [] body => False
+
+stripFirstCol : List (Pair (List Pat) Expr) -> List (Pair (List Pat) Expr)
+stripFirstCol [] = []
+stripFirstCol (c :: rest) = case c of
+  Pair [] body => c :: stripFirstCol rest
+  Pair (p :: ps) body => Pair ps body :: stripFirstCol rest
+
+-- 整列都是变量：把该列用户写的名字改写成位置名，再继续处理剩余列。
+-- 每 clause 的体各自改名（不同 clause 可以用不同的变量名）。
+renameFirstVars : List (Pair (List Pat) Expr) -> String -> Expr -> Expr
+renameFirstVars clauses pos inner = case clauses of
+  [] => inner
+  (Pair (p :: ps) body) :: rest => case p of
+    PVar nm psp => renameFirstVars rest pos (renameExpr nm pos inner)
+    _ => renameFirstVars rest pos inner
+  (Pair [] body) :: rest => renameFirstVars rest pos inner
+
+renameExpr : String -> String -> Expr -> Expr
+renameExpr oldName newName e = case e of
+  EVar nm sp => if nm == oldName then EVar newName sp else e
+  EInt n sp => EInt n sp
+  EStr s sp => EStr s sp
+  ELam names body sp => ELam names (renameExprUnless oldName newName names body) sp
+  EApp fn args sp => EApp (renameExpr oldName newName fn) (map (renameExpr oldName newName) args) sp
+  EPi nm implicit dom cod sp =>
+    EPi nm implicit (renameExpr oldName newName dom) (renameExprUnless oldName newName [nm] cod) sp
+  ELet binds body rec_ sp =>
+    ELet (map (renameBind oldName newName) binds)
+      (renameExprUnless oldName newName (bindNames binds) body) rec_ sp
+  ECase scrut alts sp =>
+    ECase (renameExpr oldName newName scrut) (map (renameAlt oldName newName) alts) sp
+  EIf c t e2 sp =>
+    EIf (renameExpr oldName newName c) (renameExpr oldName newName t)
+      (renameExpr oldName newName e2) sp
+  EField b f sp => EField (renameExpr oldName newName b) f sp
+  EDo stmts sp => EDo stmts sp
+
+renameExprUnless : String -> String -> List String -> Expr -> Expr
+renameExprUnless oldName newName names body =
+  if memName oldName names then body else renameExpr oldName newName body
+
+renameBind : String -> String -> Pair Pat Expr -> Pair Pat Expr
+renameBind oldName newName bind = Pair (firstOf bind) (renameExpr oldName newName (secondOf bind))
+
+bindNames : List (Pair Pat Expr) -> List String
+bindNames [] = []
+bindNames (b :: rest) = append (patNamesOf (firstOf b)) (bindNames rest)
+
+patNamesOf : Pat -> List String
+patNamesOf p = case p of
+  PVar n sp => [n]
+  PWild sp => []
+  PCon cn ps sp => concatMap patNamesOf ps
+  PInt n sp => []
+  PStr s sp => []
+  PRecord rn fields sp => concatMap (\f => patNamesOf (secondOf f)) fields
+
+renameAlt : String -> String -> Pair Pat Expr -> Pair Pat Expr
+renameAlt oldName newName alt =
+  let
+    p = firstOf alt
+  in Pair p (renameExprUnless oldName newName (patNamesOf p) (secondOf alt))
+
+-- 该列出现构造子：每个构造子一组。
+--
+-- **分支 pattern 的子模式一律用新鲜变量**（`_sc<i>`）：这样 `bindCtorTele` 不会折叠
+-- 任何嵌套模式，位置名与 body 里的引用完全可控；子模式的真实形态交给内层
+-- `buildColumnExpr` 用 case 表达。比依赖 `bindCtorTele` 的 `_np<N>` 编号稳健。
+ctorAltList : List (Pair (List Pat) Expr) -> List String -> Int -> Result (List (Pair Pat Expr))
+ctorAltList clauses restParams fuel = ctorAltListGo clauses (ctorHeads clauses) restParams fuel
+
+ctorAltListGo : List (Pair (List Pat) Expr) -> List String -> List String -> Int -> Result (List (Pair Pat Expr))
+ctorAltListGo clauses [] restParams fuel = Ok []
+ctorAltListGo clauses (cname :: rest) restParams fuel =
+  let
+    subpatCount = ctorSubPatCount clauses cname
+    freshSubs = subNames subpatCount
+    expanded = clausesForCtor cname clauses
+    subParams = append freshSubs restParams
+    branchPats = map (\n => PVar n (Span "" 0 0 0 0)) freshSubs
+  in andThen (buildColumnExpr expanded subParams (fuel - 1))
+    (\bodyExpr => andThen (ctorAltListGo clauses rest restParams (fuel - 1)) (\tail => Ok (Pair (PCon cname branchPats (Span "" 0 0 0 0)) bodyExpr :: tail)))
+
+-- 该构造子在本列各 clause 里的子模式个数（取第一个匹配 clause 的长度）。
+ctorSubPatCount : List (Pair (List Pat) Expr) -> String -> Int
+ctorSubPatCount [] cname = 0
+ctorSubPatCount (c :: rest) cname = case c of
+  Pair (p :: ps) body => case p of
+    PCon cn subpats psp => if cn == cname then length subpats else ctorSubPatCount rest cname
+    _ => ctorSubPatCount rest cname
+  Pair [] body => ctorSubPatCount rest cname
+
+subNames : Int -> List String
+subNames n = subNamesGo 0 n []
+
+subNamesGo : Int -> Int -> List String -> List String
+subNamesGo i n acc =
+  if i >= n then reverse acc else subNamesGo (i + 1) n (("_sc" ++ strFromInt i) :: acc)
+
+ctorHeads : List (Pair (List Pat) Expr) -> List String
+ctorHeads [] = []
+ctorHeads (c :: rest) = case c of
+  Pair (p :: ps) body => case p of
+    PCon cname subpats psp => addNameDistinct cname (ctorHeads rest)
+    _ => ctorHeads rest
+  Pair [] body => ctorHeads rest
+
+addNameDistinct : String -> List String -> List String
+addNameDistinct name [] = [name]
+addNameDistinct name (x :: rest) = if x == name then x :: rest else x :: addNameDistinct name rest
+
+firstCtorPats : String -> List (Pair (List Pat) Expr) -> List Pat
+firstCtorPats cname [] = []
+firstCtorPats cname (c :: rest) = case c of
+  Pair (p :: ps) body => case p of
+    PCon cn subpats psp => if cn == cname then subpats else firstCtorPats cname rest
+    _ => firstCtorPats cname rest
+  Pair [] body => firstCtorPats cname rest
+
+clausesForCtor : String -> List (Pair (List Pat) Expr) -> List (Pair (List Pat) Expr)
+clausesForCtor cname [] = []
+clausesForCtor cname (c :: rest) = case c of
+  Pair (p :: ps) body => case p of
+    PCon cn subpats psp =>
+      if cn == cname then Pair (append subpats ps) body :: clausesForCtor cname rest
+      else clausesForCtor cname rest
+    _ => clausesForCtor cname rest
+  Pair [] body => clausesForCtor cname rest
+
+filterFallback : List (Pair (List Pat) Expr) -> List (Pair (List Pat) Expr)
+filterFallback [] = []
+filterFallback (c :: rest) = case c of
+  Pair (p :: ps) body => if isVarPatD p then c :: filterFallback rest else filterFallback rest
+  Pair [] body => filterFallback rest
+
+fallbackAltList : List (Pair (List Pat) Expr) -> List String -> Int -> Result (List (Pair Pat Expr))
+fallbackAltList clauses restParams fuel = case filterFallback clauses of
+  [] => Ok []
+  fbs =>
+    andThen (buildColumnExpr (stripFirstCol fbs) restParams (fuel - 1))
+      (\bodyExpr => Ok [Pair (PWild (Span "" 0 0 0 0)) bodyExpr])

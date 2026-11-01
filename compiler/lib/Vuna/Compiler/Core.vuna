@@ -190,6 +190,9 @@ applyCaseAlt : String -> List Value -> List VCaseAlt -> Value
 applyCaseAlt c args [] = VCase (VCon c args) []
 applyCaseAlt c args (alt :: rest) = if vCaseAltName alt == c then case vCaseAltClosure alt of
   Clos env body => eval (append (reverse args) env) body
+else if vCaseAltName alt == "" then case vCaseAltClosure alt of
+  -- 兜底分支（源码里写的是变量/通配，精化后名字为空串）
+  Clos env body => eval env body
 else applyCaseAlt c args rest
 
 evalIf : Value -> Value -> Value -> Value
@@ -272,6 +275,12 @@ isPrimitiveName g =
     || g == "++"
     || g == "&&"
     || g == "||"
+    || g == "bi_eq_int"
+    || g == "bi_neq_int"
+    || g == "bi_eq_str"
+    || g == "bi_neq_str"
+    || g == "strFromInt"
+    || g == "strLength"
 
 asInt : Value -> Maybe Int
 asInt v = case v of
@@ -317,6 +326,32 @@ strPrim2 ([a, b]) f = case asStr a of
   Nothing => Nothing
 strPrim2 sp f = Nothing
 
+intPrim1 : List Value -> (Int -> Value) -> Maybe Value
+intPrim1 ([a]) f = case asInt a of
+  Just x => Just (f x)
+  Nothing => Nothing
+intPrim1 sp f = Nothing
+
+strPrim1 : List Value -> (String -> Value) -> Maybe Value
+strPrim1 ([a]) f = case asStr a of
+  Just x => Just (f x)
+  Nothing => Nothing
+strPrim1 sp f = Nothing
+
+-- 字符串相等（`==` 的跨类型特化用）。
+strEq : String -> String -> Bool
+strEq a b = a == b
+
+strPrim3 : List Value -> (String -> String -> String -> Value) -> Maybe Value
+strPrim3 ([a, b, c]) f = case asStr a of
+  Just x => case asStr b of
+    Just y => case asStr c of
+      Just z => Just (f x y z)
+      Nothing => Nothing
+    Nothing => Nothing
+  Nothing => Nothing
+strPrim3 sp f = Nothing
+
 primReduce : String -> List Value -> Maybe Value
 primReduce g sp = case g of
   "+" => intPrim2 sp (\a, b => VInt (a + b))
@@ -334,6 +369,13 @@ primReduce g sp = case g of
   "False" => primConst sp (VBool False)
   "&&" => boolPrim2 sp (\a, b => VBool (a && b))
   "||" => boolPrim2 sp (\a, b => VBool (a || b))
+  -- M19：`==` / `/=` 的跨类型特化名与 str* 内建（精化期按实参类型重写）。
+  "bi_eq_int" => intPrim2 sp (\a, b => VBool (a == b))
+  "bi_neq_int" => intPrim2 sp (\a, b => VBool (notBool (a == b)))
+  "bi_eq_str" => strPrim2 sp (\a, b => VBool (strEq a b))
+  "bi_neq_str" => strPrim2 sp (\a, b => VBool (notBool (strEq a b)))
+  "strFromInt" => intPrim1 sp (\n => VStr (strFromInt n))
+  "strLength" => strPrim1 sp (\s => VInt (strLength s))
   _ => Nothing
 
 notBool : Bool -> Bool
@@ -351,9 +393,12 @@ else case force defs sols fuel v of
   VCase scrut alts => normalizeCase defs sols fuel scrut alts
   other => other
 
--- 卡住的 case：只继续正规化 scrutinee；分支闭包保持原样（分支体按需在 quote/conv 时展开）。
+-- case 正规化：scrutinee 归约到构造子就走该分支并继续正规化（分支体里可能还有
+-- case——嵌套模式展开出来的内层匹配就是这种形态）；否则只正规化 scrutinee、保持卡住。
 normalizeCase : List (Pair String Term) -> List (Pair Int Value) -> Int -> Value -> List VCaseAlt -> Value
-normalizeCase defs sols fuel scrut alts = VCase (normalize defs sols (fuel - 1) scrut) alts
+normalizeCase defs sols fuel scrut alts = case normalize defs sols (fuel - 1) scrut of
+  VCon c args => normalize defs sols (fuel - 1) (applyCaseAlt c args alts)
+  s2 => VCase s2 alts
 
 normalizeNeutral : List (Pair String Term) -> List (Pair Int Value) -> Int -> Neutral -> Value
 normalizeNeutral defs sols fuel n = case n of

@@ -1,0 +1,41 @@
+-- M19：`let` 表达式（顺序绑定 + 嵌套 + 推断位 + 捕获外层 binder）。
+-- `let x = e in body` 在精化期脱糖为 `(\x => body) e`，因此擦除行为与函数参数一致。
+data Nat : Type where
+  Zero : Nat
+  Succ : Nat -> Nat
+
+toInt : Nat -> Int
+toInt n = case n of
+  Zero => 0
+  Succ k => 1 + toInt k
+
+-- 顺序绑定：后面的绑定看得到前面的。
+seq : Int
+seq =
+  let
+    n = 2
+    m = n + 3
+  in m * 2
+
+-- 捕获外层 binder：let 绑定可以引用函数参数。
+addN : Int -> Int -> Int
+addN n x =
+  let
+    step = x + n
+  in step + step
+
+-- 嵌套 let（内层出现在外层绑定的 value 位置 = 推断位）。
+nested : Int
+nested =
+  let
+    a =
+      let
+        b = 1
+      in b + 1
+  in a + 10
+
+three : Nat
+three = Succ (Succ (Succ Zero))
+
+main : Int
+main = seq + addN 5 3 + nested + toInt three

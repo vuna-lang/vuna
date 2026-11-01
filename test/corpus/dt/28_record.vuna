@@ -1,0 +1,30 @@
+-- M19：`record`（声明 / 构造 / 字段访问 / 记录模式）在 DT 下可用。
+--
+-- record 不是核心语言特性，而是纯记法：一条 `record R where ...` 等价于「带一个构造子
+-- 的 data，构造子按声明顺序接收全部字段」。降级在精化之前完成（`DtRecords.vuna`），
+-- 因此 DT 侧没有任何 record 专用精化规则。
+record Point where
+  x : Int
+  y : Int
+
+origin : Point
+origin = Point { x = 3, y = 4 }
+
+-- 字段访问（降级成 `case base of MkPoint x y => x`）。
+px : Int
+px = origin.x
+
+py : Int
+py = origin.y
+
+-- 记录模式（降级成构造子模式，缺省字段补通配）。
+sumP : Point -> Int
+sumP p = case p of
+  Point { x = a, y = b } => a + b
+
+-- 记录更新（降级成构造新记录）。
+shifted : Point
+shifted = Point { x = origin.x + 10, y = origin.y }
+
+main : Int
+main = px + py + sumP shifted

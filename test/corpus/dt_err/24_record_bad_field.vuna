@@ -1,0 +1,10 @@
+-- M19：记录构造缺字段 / 多字段必须报错（降级到构造子应用时会漏参数或类型不符）。
+record Point where
+  x : Int
+  y : Int
+
+bad : Point
+bad = Point { x = 1 }
+
+main : Int
+main = 1
