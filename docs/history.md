@@ -93,6 +93,18 @@ git 历史里）。各里程碑对应的模块与设计见 [docs/architecture.md
   「`interp --dt` 输出 == `compile --dt`+`ocamlopt` 输出」对拍断言；新增正例
   `dt/19_lam`（四种形态：形参被使用 / 未被使用 / 捕获上游 / 高阶传参）与反例
   `dt_err/18_lam_type_used`（宇宙域形参仍擦除，被当运行时值必须报错）。
+- M18.6：核心表示层定型（QTT 预留）——把两处「以后要上 QTT / 宇宙多态就得全仓改」的
+  表示决定一次钉死，**行为零变化**（全部 DT 夹具的 `compile --dt` 产物与 M18.5 逐字节
+  相同，`diff -r` 验证）。① `TPi`/`TLam`/`TApp`/`TCon`/`CaseAlt` 的 `Bool`（是否擦除）
+  换成三值 `Rig`（`Rig0` 类型级 / `Rig1` 值级 / `RigOmega` 预留但不产生）；
+  ② `TType : Int` / `VType : Int` 换成不透明 `Level`（内部 `MkLevel Int`，只有 `Core`
+  可见）；③ 泄漏面收敛成三层访问器——构造 `rigOfBinder` / `levelZero` / `levelSucc` /
+  `levelMax` / `levelOfInt`，判定 `rigIsErased` / `rigIsLinear` / `rigIsOmega`，展示与比较
+  `levelToInt` / `levelEq` / `levelLt`。全仓 `Pair Term Bool` / `Pair String Bool` 清零，
+  `Core` 之外对 `Rig` / `Level` 的模式匹配数为 0（`Elab` / `CoreCodegen` 只构造
+  `Rig0` / `Rig1` 并经 `rigIsErased` 读）。`erasedBinder : Bool -> Value -> Bool` 相应
+  升级为 `binderRig : Bool -> Value -> Rig`。映射表与三条不变量写进 `docs/dt-core.md` §24；
+  新增正例 `dt/20_rig` / `dt/21_level` 与反例 `dt_err/19_rig_type_runtime`。
 
 ## 决策变更：M18 迁移动机失效（2026-11）
 

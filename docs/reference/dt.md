@@ -138,18 +138,21 @@ vuna interp --dt file.vuna           # 核心求值器（NbE + delta）求值 ma
 `test/run-tests.sh` 第 34 段，三条路径（`interp --dt` / `check --dt` / `compile --dt` +
 `ocamlopt`）都跑：
 
-- 正例 `test/corpus/dt/` 共 **19** 个：M13 的 `01_id`–`08_if`；M14 新增
+- 正例 `test/corpus/dt/` 共 **21** 个：M13 的 `01_id`–`08_if`；M14 新增
   `09_nat`（`Nat` + 递归 `plus`，输出 `5`）、`10_vec`（`Vec` 的长度/首元素/尾，输出
   `4`）、`11_fin`（`Fin` 安全取下标，输出 `7`）、`12_eq`（`Eq` 的 `sym`/`trans`，
   输出 `7`）；M15 的 `13_iface` / `14_solve` / `15_goal`；M16 的 `16_total` / `17_erase`；
-  M18 的 `18_ctx`；M18.5 的 `19_lam`（lambda 形参擦除规则的四种形态，输出 `31`）。
-- 负例 `test/corpus/dt_err/` 共 **18** 个：M13 的 `01_universe`、`02_conv`、
+  M18 的 `18_ctx`；M18.5 的 `19_lam`（lambda 形参擦除规则的四种形态，输出 `31`）；
+  M18.6 的 `20_rig`（Rig0 索引不占运行时字段 / Rig1 字段保留，输出 `4`）、`21_level`
+  （`Level` 只经构造器与访问器前进，输出 `3`）。
+- 负例 `test/corpus/dt_err/` 共 **19** 个：M13 的 `01_universe`、`02_conv`、
   `03_hole`、`05_import`、`06_unknown`、`07_lambda`、`08_arity`、`09_runtime_type`、
   `11_implicit_non_type`；M14 新增/改名 `04_nonexhaustive`（漏写 `Succ` 分支）、
   `10_impossible`（写了不可达分支）、`12_case_int`（case 打在 `Int` 上）、
   `13_unknown_ctor`（未知构造子）、`14_bad_ctor_result`（构造子结果不是所属族）、
   `15_nested_pat`（嵌套模式）；M16 的 `16_nonterm`（非结构递归）、`17_nested_total`；
-  M18.5 的 `18_lam_type_used`（宇宙域 lambda 形参仍擦除，被当运行时值用必须报错）。
+  M18.5 的 `18_lam_type_used`（宇宙域 lambda 形参仍擦除，被当运行时值用必须报错）；
+  M18.6 的 `19_rig_type_runtime`（Rig0 绑定被当运行时值用必须报错）。
 
 ## 相关阅读
 

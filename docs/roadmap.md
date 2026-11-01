@@ -55,6 +55,7 @@ vuna **尚未发布任何版本**：没有外部用户、没有下游生态、�
 - M17：DT 工具链——`vuna goal` 洞目标/上下文、`vuna lsp`（JSON-RPC over stdio：诊断、Full 同步、洞 hover，27 项冒烟断言）、`vuna doc` 支持接口与隐式签名；`Lsp`/`Json` 不进入 TCB。
 - M18：自举迁移决策——seed rotation（stage1 == stage2）；用 DT 表达 de Bruijn 上下文良构（`Ctx a (Succ n)` 静态排除越界）；当时的结论「编译器本体暂不全量迁移」**已被推翻**，见「决策变更」。
 - M18.5：DT 可靠性修复——lambda 形参擦除 bug（形参被无条件标为 erased：运行时使用时硬报错、未使用时静默少生成一层 `fun`）；擦除判据收敛为全仓唯一入口 `Elab.erasedBinder`（隐式恒擦 / 显式仅宇宙域擦），六处判据点统一；`run-tests.sh` 第 34 段加「同夹具 `interp` 输出 == 编译产物输出」逐夹具对拍；正例 `19_lam`、反例 `18_lam_type_used`。
+- M18.6：核心表示层定型（QTT 预留）——`erased : Bool` 换成三值 `Rig`（`Rig0`/`Rig1`/`RigOmega`，`RigOmega` 在类型里存在但不产生）、`TType : Int` 换成不透明 `Level`；访问器分三层（构造 `rigOfBinder`/`levelSucc`/`levelMax`、判定 `rigIsErased`、展示比较 `levelToInt`/`levelEq`/`levelLt`）；`Core` 之外对 `Rig`/`Level` 模式匹配数为 0；**行为零变化**（全部 DT 夹具 `compile --dt` 产物逐字节相同）；正例 `20_rig`/`21_level`、反例 `19_rig_type_runtime`。
 
 ## 终态（本路线图的目标）
 
@@ -89,55 +90,6 @@ vuna **尚未发布任何版本**：没有外部用户、没有下游生态、�
 - **新增 DT 能力必须同时给 `test/corpus/dt*` 正例与反例**，否则计入未完成。
 
 ## 路线阶段（M18.5–M24：走向单一路径）
-
-### M18.5：DT 可靠性修复（bug 级，不加新能力）
-
-**目标**：修掉 DT 路径上「能 check 不能 compile」与擦除语义错误。这是把 DT 提升为唯一路径的
-信任前提，属缺陷修复而非阶段特性。
-
-**范围**：
-
-- **lambda binder 擦除**：`Elab.checkLam` 目前把形参无条件标成 erased，导致参数在运行时被
-  使用时直接报 `DT: type-level binding ... is used at runtime`，参数未被使用时则**静默错编译**
-  （`check`/`compile` 退出 0，生成的 OCaml 少一个形参，`ocamlopt` 才报类型错）。正确规则与
-  定义参数一致：`erased = isTypeValue dom`（域是宇宙或索引才擦），lambda 形参默认参与运行时表示。
-- 擦除正确性不变量落地：`CoreCodegen.checkErasure` / `TLam` 生成 / `teleOf` 三处对齐。
-- 补四组正反例：参数被使用、参数未被使用、闭包捕获上游状态、高阶传 lambda；同时断言
-  `check` 与 `compile`+`ocamlopt` 结果一致。
-
-**验收**：上述四组在 `--dt` 下三路（interp / check / compile+ocamlopt）全部通过；新增
-「同夹具 interp 与编译产物输出一致」的批量断言；HM 三路径零回归。
-
-**前置**：无。**风险**：擦除规则改动波及 Codegen 的变体字段对齐，需同步
-[dt-core.md](dt-core.md) §21/§22。**证据**：[dt-parity.md](reference/dt-parity.md) §3。
-
-### M18.6：核心表示层定型（QTT 预留）
-
-**目标**：把「以后要上 QTT / 宇宙多态就得全仓改」的那几个表示决定，在一个阶段内钉死。
-**现在改是几小时，等代码长到 M23 规模再改是几周**；本阶段不加任何用户可见能力，
-行为必须与 M18.5 完全一致。
-
-**范围**（三件，全部是表示层而非算法）：
-
-1. **`erased : Bool` → 三值 rig**：`Core.Term` / `Value` 里 `TPi` / `TLam` / `TApp` /
-   `TCon` / `CaseAlt` 的 `Bool` 换成 `Rig`（`Rig0` / `Rig1` / `RigOmega`）。当前映射：
-   类型域与隐式索引 → `Rig0`，其余 → `Rig1`；`RigOmega` 暂不产生（QTT 落地时才用）。
-   这是**纯类型签名改动**，`CoreCodegen` 判 `Rig0` 即「不生成」。
-2. **宇宙层级不透明化**：`TType : Int` / `VType : Int` 的 `Int` 换成不透明 `Level`
-   （内部可以先就是 `Int`，加零个或多个变量与 `max` 时为局部改动）。
-   `conv` / `showTerm` / `typeLevelOf` / `checkType` 只能经访问器与构造函数触碰层级，
-   **禁止直接对 `Int` 做算术或模式匹配**。
-3. **泄漏面收敛**：把「谁能直接解构 rig / Level」收成少量访问器（如 `rigIsErased`、
-   `levelSucc`），Elab 与 CoreCodegen 一律走访问器。加一条注释性不变量写进
-   [dt-core.md](dt-core.md)，防止后续阶段又把 `Bool` 直接铺回去。
-
-**验收**：全部 DT 夹具与 `nix flake check` 行为零变化（`interp` / `compile` 输出逐字节相同）；
-全仓不再有 `erased : Bool` 与直接 `TType (n + 1)` 式的层级算术；新增
-[dt-core.md](dt-core.md) 一节记录「表示层 → QTT 的映射表」。
-
-**前置**：M18.5（同文件、同一条擦除路径，合成一次改动更安全）。
-**风险**：纯机械改动但散布面广（`TPi` 31、`TApp` 28、`TLam` 25、`TType` 22 处），
-必须靠既有夹具与 golden 兜住。**动机**：见 [dt-parity.md](reference/dt-parity.md) 与本文「决策变更」。
 
 ### M19：DT 语言面 parity（单文件）
 

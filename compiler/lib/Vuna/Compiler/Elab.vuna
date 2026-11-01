@@ -25,7 +25,7 @@ dtDefBody (DtDef name ty body) = body
 -- M14：一个构造子。telescope 是「族参数 + 字段」的完整 binder 表（名字 / 擦除标志），
 -- 类型项是闭合的（`{a : Type} -> {n : Nat} -> a -> Vec a n -> Vec a (Succ n)` 形态）。
 data DtCtor : Type where
-  DtCtor : String -> String -> List (Pair String Bool) -> Term -> DtCtor
+  DtCtor : String -> String -> List (Pair String Rig) -> Term -> DtCtor
 
 dtCtorName (DtCtor name family tele ty) = name
 
@@ -37,7 +37,7 @@ dtCtorType (DtCtor name family tele ty) = ty
 
 -- M14：一个归纳族（索引族）。params 来自 kind 的 Pi binder（域是宇宙的擦除）。
 data DtData : Type where
-  DtData : String -> List (Pair String Bool) -> List DtCtor -> DtData
+  DtData : String -> List (Pair String Rig) -> List DtCtor -> DtData
 
 dtDataName (DtData name params ctors) = name
 
@@ -255,14 +255,14 @@ levelEscapes limit depth v = case v of
   VNeutral n => case n of
     NVar name lvl sp => lvl >= limit || levelEscapesList limit sp
     NGlobal g sp => levelEscapesList limit sp
-  VPi name implicit dom clo => levelEscapes limit depth dom || levelEscapesClo limit clo
-  VLam name erased clo => levelEscapesClo limit clo
+  VPi name implicit rig dom clo => levelEscapes limit depth dom || levelEscapesClo limit clo
+  VLam name rig clo => levelEscapesClo limit clo
   VMeta m sp => levelEscapesList limit sp
   VCon c args => levelEscapesList limit args
   VCase scrut alts => levelEscapes limit depth scrut
   VIf c th el =>
     levelEscapes limit depth c || levelEscapes limit depth th || levelEscapes limit depth el
-  VType n => False
+  VType l => False
   VInt n => False
   VStr s => False
   VBool b => False
@@ -324,13 +324,13 @@ boolTy : Term
 boolTy = TGlobal "Bool"
 
 fun2 : Term -> Term -> Term -> Term
-fun2 a b c = TPi "_" False a (TPi "_" False b c)
+fun2 a b c = TPi "_" False Rig1 a (TPi "_" False Rig1 b c)
 
 preludeGlobals : List (Pair String Term)
 preludeGlobals =
-  [ Pair "Int" (TType 0),
-    Pair "String" (TType 0),
-    Pair "Bool" (TType 0),
+  [ Pair "Int" (TType levelZero),
+    Pair "String" (TType levelZero),
+    Pair "Bool" (TType levelZero),
     Pair "True" boolTy,
     Pair "False" boolTy,
     Pair "+" (fun2 intTy intTy intTy),
@@ -408,14 +408,14 @@ nonEmpty (_ :: _) = True
 -- 族的 kind 必须是「箭头链 + 宇宙结尾」。
 kindWellFormed : Term -> Bool
 kindWellFormed ty = case ty of
-  TPi name implicit dom cod => kindWellFormed cod
-  TType n => True
+  TPi name implicit rig dom cod => kindWellFormed cod
+  TType l => True
   _ => False
 
 -- 族的参数/索引 telescope：binder 名 + 是否擦除（域是宇宙）。
-splitKind : Term -> List (Pair String Bool)
+splitKind : Term -> List (Pair String Rig)
 splitKind ty = case ty of
-  TPi name implicit dom cod => Pair name (isTypeValue (eval [] dom)) :: splitKind cod
+  TPi name implicit _ dom cod => Pair name (binderRig implicit (eval [] dom)) :: splitKind cod
   _ => []
 
 dtDataLookup : String -> List DtData -> Maybe DtData
@@ -434,17 +434,17 @@ dtCtorLookup name (d :: rest) = case findCtorIn name (dtDataCtors d) of
 
 -- 构造子类型的 telescope：逐个 binder 求值域。
 -- 隐式 binder（族参数/索引）一律擦除；显式 binder 只有在域是宇宙时才擦除。
-teleOfType : Term -> List (Pair String Bool)
+teleOfType : Term -> List (Pair String Rig)
 teleOfType ty = teleOf ty []
 
-teleOf : Term -> List Value -> List (Pair String Bool)
+teleOf : Term -> List Value -> List (Pair String Rig)
 teleOf ty env = case ty of
-  TPi name implicit dom cod =>
+  TPi name implicit rig dom cod =>
     let
       domVal = eval env dom
       v = VNeutral (NVar name (length env) [])
-      erased = erasedBinder implicit domVal
-    in Pair name erased :: teleOf cod (v :: env)
+      rig = binderRig implicit domVal
+    in Pair name rig :: teleOf cod (v :: env)
   _ => []
 
 -- 结果类型 `F r1..rk` 的「头 + 实参」。
@@ -457,7 +457,7 @@ spineOfType t = case t of
 
 resultSpine : Term -> Pair String (List Term)
 resultSpine ty = case ty of
-  TPi name implicit dom cod => resultSpine cod
+  TPi name implicit rig dom cod => resultSpine cod
   _ => spineOfType ty
 
 -- 精化一个构造子：类型是「Pi 链 → F r1..rk」。
@@ -559,7 +559,7 @@ paramNameOf (p :: rest) = p
 -- 类参数（M15 只支持单参数接口）绑成隐式 `Type` binder 后的局部上下文。
 bindClassParams : List String -> Ctx -> Ctx
 bindClassParams [] ctx = ctx
-bindClassParams (p :: rest) ctx = bindClassParams rest (ctxBind p (TType 0) ctx)
+bindClassParams (p :: rest) ctx = bindClassParams rest (ctxBind p (TType levelZero) ctx)
 
 -- 每个方法的字段类型（在类参数 binders 之下检查）。
 classFieldTys : List (Pair String Term) -> Ec -> List String -> List (Pair String Expr) -> Result (Pair (List Term) Ec)
@@ -580,7 +580,7 @@ foldlAddDef ec (d :: rest) = foldlAddDef (ecAddDef ec d) rest
 
 foldPiFieldTys : List Term -> Term -> Term
 foldPiFieldTys [] ty = ty
-foldPiFieldTys (f :: rest) ty = TPi "_" False f (foldPiFieldTys rest ty)
+foldPiFieldTys (f :: rest) ty = TPi "_" False Rig1 f (foldPiFieldTys rest ty)
 
 -- 精化一个 trait：字典 DtData + 方法投影（签名 + 定义体）+ 类表项。
 elabTrait : List (Pair String Term) -> Ec -> Pair Decl Span -> Result (Pair DtData (Pair (List (Pair String Term)) (Pair DtClass Ec)))
@@ -593,8 +593,8 @@ elabTrait globals ec ds = case ds of
           pname = paramNameOf params
           dname = dictTypeName tname
           cname = dictCtorName tname
-          dapp = foldAppTerms (TGlobal dname) [Pair (TVar pname 0) True]
-          ctorTy = TPi pname True (TType 0) (foldPiFieldTys fieldTys dapp)
+          dapp = foldAppTerms (TGlobal dname) [Pair (TVar pname 0) Rig0]
+          ctorTy = TPi pname True Rig0 (TType levelZero) (foldPiFieldTys fieldTys dapp)
           tele = teleOfType ctorTy
           dd = DtData dname tele [DtCtor cname dname tele ctorTy]
           projs = methodProjections tname pname methods fieldTys
@@ -618,7 +618,7 @@ methodProjZip tname pname idx [] fieldTys = []
 methodProjZip tname pname idx (m :: rest) [] = []
 methodProjZip tname pname idx (m :: rest) (t :: rest2) = case m of
   Pair mname mexpr =>
-    Pair mname (TPi pname True (TType 0) (TPi "_" True (foldAppTerms (TGlobal (dictTypeName tname)) [Pair (TVar pname 0) True]) (shift 0 1 t)))
+    Pair mname (TPi pname True Rig0 (TType levelZero) (TPi "_" True Rig0 (foldAppTerms (TGlobal (dictTypeName tname)) [Pair (TVar pname 0) Rig0]) (shift 0 1 t)))
       :: methodProjZip tname pname (idx + 1) rest rest2
 
 -- 投影的定义体：`\p => \d => \x0 .. \x(ar-1) => case d of MkDict_C f0..fn => f_k x0..x(ar-1)`
@@ -637,12 +637,12 @@ projectionBody ctor fieldIdx arity nFields =
     dictIdx = arity
     fieldVar = TVar (fieldVarName fieldIdx) (nFields - 1 - fieldIdx)
     argTerms = methodArgTerms arity nFields
-    applied = foldAppTerms fieldVar (map (\a => Pair a False) argTerms)
+    applied = foldAppTerms fieldVar (map (\a => Pair a Rig1) argTerms)
     binders = fieldBinderNames nFields
     alt = CaseAlt ctor binders applied
     caseTerm = TCase (TVar "_d" dictIdx) [alt]
     lamArgs = methodArgLams arity 0 caseTerm
-  in TLam "_p" True (TLam "_d" False lamArgs)
+  in TLam "_p" Rig0 (TLam "_d" Rig1 lamArgs)
 
 -- 方法参数 x_i 的 index：n + (ar - 1 - i)。
 methodArgTerms : Int -> Int -> List Term
@@ -656,21 +656,21 @@ methodArgTermsGo arity nFields i =
 -- 逐层 lambda 绑定方法参数（x_0 最外）。
 methodArgLams : Int -> Int -> Term -> Term
 methodArgLams arity i body =
-  if i >= arity then body else TLam ("x" ++ strFromInt i) False (methodArgLams arity (i + 1) body)
+  if i >= arity then body else TLam ("x" ++ strFromInt i) Rig1 (methodArgLams arity (i + 1) body)
 
 fieldVarName : Int -> String
 fieldVarName i = "f" ++ strFromInt i
 
-fieldBinderNames : Int -> List (Pair String Bool)
+fieldBinderNames : Int -> List (Pair String Rig)
 fieldBinderNames n = fieldBinderGo n 0 []
 
-fieldBinderGo : Int -> Int -> List (Pair String Bool) -> List (Pair String Bool)
+fieldBinderGo : Int -> Int -> List (Pair String Rig) -> List (Pair String Rig)
 fieldBinderGo n i acc =
-  if i >= n then reverse acc else fieldBinderGo n (i + 1) (Pair (fieldVarName i) False :: acc)
+  if i >= n then reverse acc else fieldBinderGo n (i + 1) (Pair (fieldVarName i) Rig1 :: acc)
 
 explicitPiArity : Term -> Int
 explicitPiArity t = case t of
-  TPi n implicit dom cod => if implicit then explicitPiArity cod else 1 + explicitPiArity cod
+  TPi n implicit rig dom cod => if implicit then explicitPiArity cod else 1 + explicitPiArity cod
   _ => 0
 
 -- 投影定义表：每个方法一条 `m = <投影定义体>`。
@@ -757,7 +757,7 @@ instanceHeadTerm e = case e of
 
 -- 实例注册用的头类型：`Dict_C <arg>`，供实例搜索按头统一。
 ctorResultType : DtClass -> Term -> Term
-ctorResultType cls arg = foldAppTerms (TGlobal (dictTypeName (dtClassName cls))) [Pair arg True]
+ctorResultType cls arg = foldAppTerms (TGlobal (dictTypeName (dtClassName cls))) [Pair arg Rig0]
 
 findClass : String -> List DtClass -> Maybe DtClass
 findClass name [] = Nothing
@@ -766,12 +766,12 @@ findClass name (c :: rest) = if dtClassName c == name then Just c else findClass
 -- 方法实现：逐个把 `m p1..pn = body` 变成一个 lambda 字段值。
 -- 方法签名里的类参数 `a` 要被实例头的实参（如 `Color`）替换：`show : a -> String`
 -- 在 `instance Show Color` 里就是 `Color -> String`。
-elabInstanceMethods : List (Pair String Term) -> DtClass -> Term -> Ec -> List Decl -> Span -> Result (Pair (List Term) (Pair (List (Pair Term Bool)) Ec))
+elabInstanceMethods : List (Pair String Term) -> DtClass -> Term -> Ec -> List Decl -> Span -> Result (Pair (List Term) (Pair (List (Pair Term Rig)) Ec))
 elabInstanceMethods globals cls headArg ec methods sp =
   elabInstanceMethodsGo globals ec (dtClassFieldTys cls) (paramNameOf (dtClassParams cls)) headArg
     methods [] [] sp
 
-elabInstanceMethodsGo : List (Pair String Term) -> Ec -> List Term -> String -> Term -> List Decl -> List Term -> List (Pair Term Bool) -> Span -> Result (Pair (List Term) (Pair (List (Pair Term Bool)) Ec))
+elabInstanceMethodsGo : List (Pair String Term) -> Ec -> List Term -> String -> Term -> List Decl -> List Term -> List (Pair Term Rig) -> Span -> Result (Pair (List Term) (Pair (List (Pair Term Rig)) Ec))
 elabInstanceMethodsGo globals ec [] pname headArg decls terms args sp =
   Ok (Pair (reverse terms) (Pair (reverse args) ec))
 elabInstanceMethodsGo globals ec (fty :: rest) pname headArg decls terms args sp = case findMethodAt (length terms) decls of
@@ -782,7 +782,7 @@ elabInstanceMethodsGo globals ec (fty :: rest) pname headArg decls terms args sp
     in andThen (elabInstanceMethod globals ec instTy pats body msp) (\p => case p of
       Pair term ec1 =>
         elabInstanceMethodsGo globals ec1 rest pname headArg decls (term :: terms)
-          (Pair term False :: args) sp
+          (Pair term Rig1 :: args) sp
     )
 
 -- 把方法类型里对类参数（de Bruijn 0）的引用替换成实例头的实参项。
@@ -798,8 +798,9 @@ substVarAt idx arg t = case t of
   TVar n i => if i == idx then arg else t
   TMeta m => t
   TGlobal g => t
-  TType n => t
-  TPi n implicit dom cod => TPi n implicit (substVarAt idx arg dom) (substVarAt (idx + 1) arg cod)
+  TType l => t
+  TPi n implicit rig dom cod =>
+    TPi n implicit rig (substVarAt idx arg dom) (substVarAt (idx + 1) arg cod)
   TLam n erased body => TLam n erased (substVarAt (idx + 1) arg body)
   TApp f a erased => TApp (substVarAt idx arg f) (substVarAt idx arg a) erased
   TCon c cargs => TCon c (map (\p => Pair (substVarAt idx arg (firstOf p)) (secondOf p)) cargs)
@@ -888,13 +889,13 @@ occursLevel lvl v = case v of
   VNeutral n => case n of
     NVar name l sp => l == lvl || occursLevelList lvl sp
     NGlobal g sp => occursLevelList lvl sp
-  VPi name implicit dom clo => occursLevel lvl dom || occursLevelClo lvl clo
-  VLam name erased clo => occursLevelClo lvl clo
+  VPi name implicit rig dom clo => occursLevel lvl dom || occursLevelClo lvl clo
+  VLam name rig clo => occursLevelClo lvl clo
   VMeta m sp => occursLevelList lvl sp
   VCon c args => occursLevelList lvl args
   VCase scrut alts => occursLevel lvl scrut
   VIf c th el => occursLevel lvl c || occursLevel lvl th || occursLevel lvl el
-  VType n => False
+  VType l => False
   VInt n => False
   VStr s => False
   VBool b => False
@@ -919,7 +920,7 @@ unifyIdxRigid ec acc depth a b = case a of
       else unifyIdxConv ec acc depth a b
     _ => unifyIdxConv ec acc depth a b
   VType i => case b of
-    VType j => if i == j then Ok acc else unifyErr
+    VType j => if levelEq i j then Ok acc else unifyErr
     _ => unifyErr
   VInt n => case b of
     VInt m => if n == m then Ok acc else unifyErr
@@ -939,7 +940,7 @@ unifyIdxConv ec acc depth a b = case conv (ecDefs ec) (ecSols ec) depth a b of
   Err e => unifyErr
 
 -- 构造子结果索引的新鲜实例（可达性分析 / 分支合一用）。
-freshTeleVals : List (Pair String Bool) -> Int -> Int -> List Value
+freshTeleVals : List (Pair String Rig) -> Int -> Int -> List Value
 freshTeleVals [] base i = []
 freshTeleVals ((Pair name erased) :: rest) base i =
   VNeutral (NVar name (base + i) []) :: freshTeleVals rest base (i + 1)
@@ -966,18 +967,18 @@ ctorResultTerms c = case resultSpine (dtCtorType c) of
 -- ---------------------------------------------------------------
 -- 把构造子 telescope 绑进上下文。隐式 binder 不消费子模式；显式 binder 消费一个
 -- 只允许是变量/通配的子模式（嵌套模式留到 M15）。
-bindCtorTele : Ctx -> Term -> List Pat -> Result (Pair Ctx (Pair (List (Pair String Bool)) (List Pat)))
+bindCtorTele : Ctx -> Term -> List Pat -> Result (Pair Ctx (Pair (List (Pair String Rig)) (List Pat)))
 bindCtorTele ctx ty subpats = bindCtorGo ctx ty subpats []
 
-bindCtorGo : Ctx -> Term -> List Pat -> List (Pair String Bool) -> Result (Pair Ctx (Pair (List (Pair String Bool)) (List Pat)))
+bindCtorGo : Ctx -> Term -> List Pat -> List (Pair String Rig) -> Result (Pair Ctx (Pair (List (Pair String Rig)) (List Pat)))
 bindCtorGo ctx ty subpats acc = case ty of
-  TPi name implicit dom cod =>
+  TPi name implicit rig dom cod =>
     let
       domVal = eval (ctxEnv ctx) dom
     in if implicit then
       let
         ctx2 = ctxBindValue name domVal ctx
-      in bindCtorGo ctx2 cod subpats (Pair name True :: acc)
+      in bindCtorGo ctx2 cod subpats (Pair name Rig0 :: acc)
     else case subpats of
       [] => Err "DT: case branch has too few arguments for its constructor"
       p :: rest => case p of
@@ -986,11 +987,11 @@ bindCtorGo ctx ty subpats acc = case ty of
         _ => Err "DT: nested patterns are not supported yet (M14 limitation)"
   _ => Ok (Pair ctx (Pair (reverse acc) subpats))
 
-bindCtorBinder : Ctx -> Value -> Term -> String -> List Pat -> List (Pair String Bool) -> Result (Pair Ctx (Pair (List (Pair String Bool)) (List Pat)))
+bindCtorBinder : Ctx -> Value -> Term -> String -> List Pat -> List (Pair String Rig) -> Result (Pair Ctx (Pair (List (Pair String Rig)) (List Pat)))
 bindCtorBinder ctx domVal cod binderName rest acc =
   let
     ctx2 = ctxBindValue binderName domVal ctx
-  in bindCtorGo ctx2 cod rest (Pair binderName (erasedBinder False domVal) :: acc)
+  in bindCtorGo ctx2 cod rest (Pair binderName (binderRig False domVal) :: acc)
 
 -- 显式 constructor 分支：绑 telescope → 合一结果索引 → 在精化后的上下文里查分支体。
 elabConAlt : List (Pair String Term) -> Ctx -> Ec -> DtData -> List Value -> Value -> String -> List Pat -> Span -> Expr -> Result (Pair CaseAlt Ec)
@@ -1284,7 +1285,7 @@ defTypeOrDefault globals name = case globalLookup name globals of
 eraseIndexMask : DtData -> List Bool
 eraseIndexMask dd = eraseMaskGo dd (dtDataParams dd) 0 []
 
-eraseMaskGo : DtData -> List (Pair String Bool) -> Int -> List Bool -> List Bool
+eraseMaskGo : DtData -> List (Pair String Rig) -> Int -> List Bool -> List Bool
 eraseMaskGo dd [] i acc = reverse acc
 eraseMaskGo dd (p :: rest) i acc =
   eraseMaskGo dd rest (i + 1) (not (paramUsedInFieldTys dd i) :: acc)
@@ -1305,7 +1306,7 @@ ctorFieldTerms arity ty = ctorFieldGo arity ty []
 
 ctorFieldGo : Int -> Term -> List Term -> List Term
 ctorFieldGo arity t acc = case t of
-  TPi name implicit dom cod =>
+  TPi name implicit rig dom cod =>
     if arity > 0 then ctorFieldGo (arity - 1) cod acc else ctorFieldGo 0 cod (dom :: acc)
   _ => reverse acc
 
@@ -1321,8 +1322,8 @@ termUsesVar depth t = case t of
   TVar n i => i == depth
   TMeta m => False
   TGlobal g => False
-  TType n => False
-  TPi n implicit dom cod => termUsesVar depth dom || termUsesVar (depth + 1) cod
+  TType l => False
+  TPi n implicit rig dom cod => termUsesVar depth dom || termUsesVar (depth + 1) cod
   TLam n erased body => termUsesVar (depth + 1) body
   TApp f a erased => termUsesVar depth f || termUsesVar depth a
   TCon c args => termUsesVarArgs depth args
@@ -1332,7 +1333,7 @@ termUsesVar depth t = case t of
   TBool b => False
   TIf c th el => termUsesVar depth c || termUsesVar depth th || termUsesVar depth el
 
-termUsesVarArgs : Int -> List (Pair Term Bool) -> Bool
+termUsesVarArgs : Int -> List (Pair Term Rig) -> Bool
 termUsesVarArgs depth [] = False
 termUsesVarArgs depth ((Pair a erased) :: rest) = termUsesVar depth a || termUsesVarArgs depth rest
 
@@ -1349,7 +1350,7 @@ indexErasureCandidates (d :: rest) = candidateOf d :: indexErasureCandidates res
 candidateOf : DtData -> Pair String (List String)
 candidateOf d = Pair (dtDataName d) (candidateNames (dtDataParams d) (eraseIndexMask d))
 
-candidateNames : List (Pair String Bool) -> List Bool -> List String
+candidateNames : List (Pair String Rig) -> List Bool -> List String
 candidateNames [] ms = []
 candidateNames (p :: rest) [] = []
 candidateNames (p :: rest) (m :: ms) = case p of
@@ -1592,15 +1593,15 @@ checkBinders globals ctx ec [] body expected sp =
   let
     forced = forceVal ec expected
   in case forced of
-    VPi name implicit dom clo => if implicit then if isIndexDomain ec dom then
+    VPi name implicit rig dom clo => if implicit then if isIndexDomain ec dom then
       let
         lvl = ctxDepth ctx
         v = freshVarValue name lvl
         ctx2 = ctxBindValue name dom ctx
         expected2 = applyClosure clo v
-        erased = True
+        bRig = Rig0
       in andThen (checkBinders globals ctx2 ec [] body expected2 sp) (\p => case p of
-        Pair inner ec1 => Ok (Pair (TLam name erased inner) ec1)
+        Pair inner ec1 => Ok (Pair (TLam name bRig inner) ec1)
       )
     else errAt sp "DT: implicit parameters must be types or inductive families (M14)"
     else checkBodyAtEnd globals ctx ec body expected sp
@@ -1616,15 +1617,15 @@ checkBinders globals ctx ec (pat :: rest) body expected sp =
   let
     forced = forceVal ec expected
   in case forced of
-    VPi name implicit dom clo => if implicit then if isIndexDomain ec dom then
+    VPi name implicit rig dom clo => if implicit then if isIndexDomain ec dom then
       let
         lvl = ctxDepth ctx
         v = freshVarValue name lvl
         ctx2 = ctxBindValue name dom ctx
         expected2 = applyClosure clo v
-        erased = True
+        bRig = Rig0
       in andThen (checkBinders globals ctx2 ec (pat :: rest) body expected2 sp) (\p => case p of
-        Pair inner ec1 => Ok (Pair (TLam name erased inner) ec1)
+        Pair inner ec1 => Ok (Pair (TLam name bRig inner) ec1)
       )
     else errAt sp "DT: implicit parameters must be types or inductive families (M14)"
     else case pat of
@@ -1639,7 +1640,7 @@ bindOnePattern globals ctx ec pname pats body dom clo sp =
     lvl = ctxDepth ctx
     v = freshVarValue pname lvl
     ctx2 = ctxBindValue pname dom ctx
-    erasure = erasedBinder False dom
+    erasure = binderRig False dom
   in andThen (checkBinders globals ctx2 ec pats body (applyClosure clo v) sp) (\p => case p of
     Pair inner ec1 => Ok (Pair (TLam pname erasure inner) ec1)
   )
@@ -1660,8 +1661,8 @@ isIndexDomain ec dom = isTypeValue dom || isDataHead (ecDatas ec) (forceVal ec d
 -- 这个词是全仓唯一判据：`teleOf` / `checkBinders` / `bindOnePattern` / `checkLam` /
 -- `inferArgs` / `bindCtorBinder` 六处都必须走它，否则「字段数 / telescope 长度 /
 -- 绑定数」三处会各自漂移，违反即静默错编译（M24.6 第一级要把它升级成类型保证）。
-erasedBinder : Bool -> Value -> Bool
-erasedBinder implicit dom = implicit || isTypeValue dom
+binderRig : Bool -> Value -> Rig
+binderRig implicit dom = rigOfBinder implicit (isTypeValue dom)
 
 isDataHead : List DtData -> Value -> Bool
 isDataHead datas v = case v of
@@ -1685,7 +1686,7 @@ inferCaseE globals ctx ec scrut alts sp =
 -- ---------------------------------------------------------------
 inferE : List (Pair String Term) -> Ctx -> Ec -> Expr -> Result (Pair Term (Pair Value Ec))
 inferE globals ctx ec expr = case expr of
-  EVar name sp => if name == "Type" then Ok (Pair (TType 0) (Pair (VType 1) ec))
+  EVar name sp => if name == "Type" then Ok (Pair (TType levelZero) (Pair (VType (levelSucc levelZero)) ec))
   else if name == "_" then errAt sp "DT: cannot infer the type of a hole; give it an expected type"
   else case ctxLookup name ctx of
     Just (Pair idx tyTerm) => Ok (Pair (TVar name idx) (Pair (varTypeValue ctx idx tyTerm) ec))
@@ -1722,7 +1723,8 @@ inferPi globals ctx ec name implicit dom cod sp = andThen (checkType globals ctx
       ctx2 = ctxBind name domTerm ctx
     in andThen (checkType globals ctx2 ec1 cod) (\pc => case pc of
       Pair codTerm (Pair codSort ec2) =>
-        Ok (Pair (TPi name implicit domTerm codTerm) (Pair (VType (maxInt domSort codSort)) ec2))
+        Ok
+          (Pair (TPi name implicit (rigOfBinder implicit False) domTerm codTerm) (Pair (VType (levelMax domSort codSort)) ec2))
     )
 )
 
@@ -1735,7 +1737,7 @@ inferApp globals ctx ec fn args sp = case fn of
   EVar "Type" tsp => case args of
     [EInt n nsp] =>
       if n < 0 then errAt nsp "DT: universe level must be non-negative"
-      else Ok (Pair (TType n) (Pair (VType (n + 1)) ec))
+      else Ok (Pair (TType (levelOfInt n)) (Pair (VType (levelSucc (levelOfInt n))) ec))
     _ => errAt tsp "DT: Type needs exactly one non-negative level (or none)"
   _ => case fn of
     EVar name vsp => case ctxLookup name ctx of
@@ -1764,7 +1766,7 @@ ctorRefTerm datas name = case dtCtorLookup name datas of
 
 -- 构造子应用必须饱和成 TCon，求值器才能给 case 造出 VCon（中性 NGlobal 命不中分支）。
 -- 未饱和的部分应用（柯里化）保持 TApp：此时 case 会卡住，与 HM 语义一致。
-ctorAppTerm : List DtData -> Term -> List (Pair Term Bool) -> Term
+ctorAppTerm : List DtData -> Term -> List (Pair Term Rig) -> Term
 ctorAppTerm datas (TGlobal g) args = case dtCtorLookup g datas of
   Just ctor =>
     if length args >= length (dtCtorTelescope ctor) then TCon g args
@@ -1772,19 +1774,19 @@ ctorAppTerm datas (TGlobal g) args = case dtCtorLookup g datas of
   Nothing => foldAppTerms (TGlobal g) args
 ctorAppTerm datas fn args = foldAppTerms fn args
 
-foldAppTerms : Term -> List (Pair Term Bool) -> Term
+foldAppTerms : Term -> List (Pair Term Rig) -> Term
 foldAppTerms fn [] = fn
 foldAppTerms fn ((Pair arg erased) :: rest) = foldAppTerms (TApp fn arg erased) rest
 
-inferArgs : List (Pair String Term) -> Ctx -> Ec -> Value -> List Expr -> Span -> Result (Pair (List (Pair Term Bool)) (Pair Value Ec))
+inferArgs : List (Pair String Term) -> Ctx -> Ec -> Value -> List Expr -> Span -> Result (Pair (List (Pair Term Rig)) (Pair Value Ec))
 inferArgs globals ctx ec ty args sp = inferArgsGo globals ctx ec ty args sp
 
-inferArgsGo : List (Pair String Term) -> Ctx -> Ec -> Value -> List Expr -> Span -> Result (Pair (List (Pair Term Bool)) (Pair Value Ec))
+inferArgsGo : List (Pair String Term) -> Ctx -> Ec -> Value -> List Expr -> Span -> Result (Pair (List (Pair Term Rig)) (Pair Value Ec))
 inferArgsGo globals ctx ec ty args sp =
   let
     forced = forceVal ec ty
   in case forced of
-    VPi name implicit dom clo => if implicit then if isDictDomain ec dom then andThen (constrainDictDom globals ec ctx dom args sp) (\ec0 => if hasUnsolvedMetaValue ec0 (forceVal ec0 dom) then
+    VPi name implicit rig dom clo => if implicit then if isDictDomain ec dom then andThen (constrainDictDom globals ec ctx dom args sp) (\ec0 => if hasUnsolvedMetaValue ec0 (forceVal ec0 dom) then
       let
         -- 字典参数：域里若还有未解元变量（`Dict_C ?a`），先用「后面紧跟的显式实参」
         -- 去约束它——把实参按域检查一遍（不消费），再搜索实例。这样 `pretty red`
@@ -1797,7 +1799,7 @@ inferArgsGo globals ctx ec ty args sp =
             ty2 = applyClosure clo metaVal
           in andThen (inferArgsGo globals ctx ec1 ty2 args sp) (\p => case p of
             Pair argTerms (Pair resTy ec2) =>
-              Ok (Pair (Pair metaTerm False :: argTerms) (Pair resTy ec2))
+              Ok (Pair (Pair metaTerm Rig1 :: argTerms) (Pair resTy ec2))
           )
     else andThen (searchInstance ec0 (forceVal ec0 dom) sp) (\p => case p of
       Pair instTerm ec1 =>
@@ -1805,7 +1807,7 @@ inferArgsGo globals ctx ec ty args sp =
           ty2 = applyClosure clo (evalCtx ctx instTerm)
         in andThen (inferArgsGo globals ctx ec1 ty2 args sp) (\q => case q of
           Pair argTerms (Pair resTy ec2) =>
-            Ok (Pair (Pair instTerm False :: argTerms) (Pair resTy ec2))
+            Ok (Pair (Pair instTerm Rig1 :: argTerms) (Pair resTy ec2))
         )
     )
     )
@@ -1816,7 +1818,7 @@ inferArgsGo globals ctx ec ty args sp =
         Pair metaTerm ec1 =>
           let
             metaVal = eval (ctxEnv ctx) metaTerm
-            erased = True
+            erased = Rig0
             ty2 = applyClosure clo metaVal
           in andThen (inferArgsGo globals ctx ec1 ty2 args sp) (\p => case p of
             Pair argTerms (Pair resTy ec2) =>
@@ -1828,7 +1830,7 @@ inferArgsGo globals ctx ec ty args sp =
       a :: rest => andThen (checkE globals ctx ec a dom) (\p => case p of
         Pair aTerm ec1 =>
           let
-            erased = erasedBinder False dom
+            erased = binderRig False dom
             ty2 = applyClosure clo (evalCtx ctx aTerm)
           in andThen (inferArgsGo globals ctx ec1 ty2 rest sp) (\q => case q of
             Pair argTerms (Pair resTy ec2) =>
@@ -1936,8 +1938,8 @@ hasUnsolvedMetaValue ec v = case v of
   VNeutral n => case n of
     NVar name lvl sp => hasUnsolvedMetaList ec sp
     NGlobal g sp => hasUnsolvedMetaList ec sp
-  VPi name implicit dom clo => hasUnsolvedMetaValue ec dom || hasUnsolvedMetaClo ec clo
-  VLam name erased clo => hasUnsolvedMetaClo ec clo
+  VPi name implicit rig dom clo => hasUnsolvedMetaValue ec dom || hasUnsolvedMetaClo ec clo
+  VLam name rig clo => hasUnsolvedMetaClo ec clo
   VCon c args => hasUnsolvedMetaList ec args
   VCase scrut alts => hasUnsolvedMetaValue ec scrut
   VIf c th el =>
@@ -1984,7 +1986,7 @@ checkLam globals ctx ec (name :: rest) body expected sp =
   let
     forced = forceVal ec expected
   in case forced of
-    VPi pname implicit dom clo =>
+    VPi pname implicit rig dom clo =>
       let
         lvl = ctxDepth ctx
         v = freshVarValue pname lvl
@@ -1994,13 +1996,13 @@ checkLam globals ctx ec (name :: rest) body expected sp =
         -- 精化器插入，运行时不传），显式 binder 只有域是宇宙才擦除。
         -- 之前无条件写 True：形参在运行时被使用时硬报错，未被使用时静默少生成一层
         -- `fun`（能 check 不能 compile）。见 docs/reference/dt-parity.md §3。
-        erased = erasedBinder implicit dom
+        lamRig = binderRig implicit dom
       in andThen (checkLam globals ctx2 ec rest body expected2 sp) (\p => case p of
-        Pair inner ec1 => Ok (Pair (TLam name erased inner) ec1)
+        Pair inner ec1 => Ok (Pair (TLam name lamRig inner) ec1)
       )
     _ => errAt sp "DT: lambda has more parameters than the expected function type"
 
-checkType : List (Pair String Term) -> Ctx -> Ec -> Expr -> Result (Pair Term (Pair Int Ec))
+checkType : List (Pair String Term) -> Ctx -> Ec -> Expr -> Result (Pair Term (Pair Level Ec))
 checkType globals ctx ec expr = andThen (inferE globals ctx ec expr) (\p => case p of
   Pair term (Pair ty ec1) =>
     let

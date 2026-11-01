@@ -462,10 +462,11 @@ M13 的 `data` / `case` / 递归不再报“不支持”；`record` / `trait` / 
 
 ## 23. M14 测试夹具
 
-> **本节的数字是 M14 当时的快照。** 当前实测为 **19 正例 / 18 反例**（M15 追加
+> **本节的数字是 M14 当时的快照。** 当前实测为 **21 正例 / 19 反例**（M15 追加
 > `13_iface`/`14_solve`/`15_goal`，M16 追加 `16_total`/`17_erase` 与反例
-> `16_nonterm`/`17_nested_total`，M18 追加 `18_ctx`，M18.5 追加正例 `19_lam` 与
-> 反例 `18_lam_type_used`）；完整清单见 [reference/dt.md](reference/dt.md)。
+> `16_nonterm`/`17_nested_total`，M18 追加 `18_ctx`，M18.5 追加正例 `19_lam` 与反例
+> `18_lam_type_used`，M18.6 追加正例 `20_rig`/`21_level` 与反例 `19_rig_type_runtime`）；
+> 完整清单见 [reference/dt.md](reference/dt.md)。
 
 正例 `test/corpus/dt/` 共 12 个（M13 的 `01_id`–`08_if` + M14 的四个）；
 数值是 `interp --dt` / `compile --dt` 的 golden：
@@ -494,36 +495,39 @@ QTT（量化类型理论）与宇宙多态在将来落地时只替换「判据�
 `Core` / `Elab` / `CoreCodegen` 的骨架。背景见 [docs/roadmap.md](roadmap.md) 的 M18.6
 与 [reference/dt-parity.md](reference/dt-parity.md)。
 
-### 24.1 为什么现在做
+### 24.1 已落地（M18.6 完成）
 
-当前 `Term` / `Value` 把两个将来必须泛化的东西写死成了不可抽象的形态：
+两项表示层改动已经在 `Core` 里定型，**行为与 M18.5 完全一致**——全部 DT 夹具的
+`compile --dt` 产物与改前逐字节相同（`diff -r` 验证），`test/run-tests.sh` 742 checks 全绿。
 
-- `TPi` / `TLam` / `TApp` / `TCon` / `CaseAlt` 的 binder 都带 `Bool` 字段表示「是否擦除」；
-- `TType : Int` / `VType : Int` 直接把宇宙层级写成 `Int`，泄漏到 `conv`、`showTerm`、
-  `typeLevelOf`、`checkType`。
-
-改动面统计（`Core` / `Elab` / `CoreCodegen` 三文件）：`TPi` 31、`TApp` 28、`TLam` 25、
-`TType` 22、`VPi` 14、`VType` 15 处。**现在改是几小时，等代码长到 M23 规模再改是几周。**
-
-### 24.2 定型后的表示
-
-| 现在 | 定型后 | 当前映射 |
+| 改前 | 改后 | 映射 |
 | --- | --- | --- |
-| `Bool`（是否擦除） | `data Rig` = `Rig0` / `Rig1` / `RigOmega` | 类型域与隐式索引 → `Rig0`；其余 → `Rig1`；`RigOmega` 暂不产生 |
-| `TType : Int` | `TType : Level`（不透明） | 内部先就是 `Int`，零个变量、无 `max` |
-| 直接解构 `Bool` / `Int` | 经访问器（如 `rigIsErased`、`levelSucc`） | Elab 与 CoreCodegen 一律走访问器 |
+| `Bool`（是否擦除） | `data Rig` = `Rig0` / `Rig1` / `RigOmega` | 隐式 binder、类型域 → `Rig0`；其余 → `Rig1`；`RigOmega` 暂不产生 |
+| `TType : Int` / `VType : Int` | `TType : Level` / `VType : Level`（不透明） | 内部是 `MkLevel Int`，但只有 `Core` 可见 |
+| 直接解构 | 经访问器 | 见 §24.2 |
 
-`RigOmega` 现在不被使用，但**在类型里存在**——这就是「QTT 预留」的全部含义：QTT 落地时
-只需让精化器产出 `RigOmega` 并让擦除判据读三种值，codegen 的下游逻辑不变（仍判「是否
-擦除」）。
+改动面（实测）：`Core` / `Elab` / `CoreCodegen` 三文件 48 处 `Pair Term Bool` /
+`Pair String Bool` 换成 `Rig`；`VType` / `TType` 的解构与构造共 20 余处改走 `Level`。
 
-### 24.3 不变量（后续阶段必须保持）
+### 24.2 三个 accessor 层
+
+- **构造入口**：`rigOfBinder implicit isTypeDom`（精化器唯一构造点）、`levelZero` / `levelSucc` /
+  `levelMax` / `levelOfInt`（后者只给输入语法 `Type n` 用）。`Elab` **不写**
+  `if ... then Rig0 else Rig1` 这类判断。
+- **判定入口**：`rigIsErased`（codegen 与擦除检查）、`rigIsLinear` / `rigIsOmega`（QTT 预留）。
+- **展示与比较入口**：`levelToInt`（只给 `showTerm`）、`levelEq` / `levelLt`（`conv` / `unifyIdx`）。
+
+`RigOmega` 现在不产生，但**在类型里存在**——QTT 落地时精化器只需产出它，codegen 的下游
+逻辑（判「是否擦除」）不变。
+
+### 24.3 不变量（M18.6 起生效，后续阶段必须保持）
 
 1. **`Core` 之外不得对 `Rig` / `Level` 做模式匹配**，只能用访问器与构造器；新增用法先补访问器。
-2. **擦除判定只有一个入口**（M22 落地为 `eraseMask` 之类），使「rig 驱动」与未来的
-   「使用分析驱动」可互换；`CoreCodegen` 不感知判据来源。
-3. `Level` 的算术（`succ` / `max`）只在 `Core` 内部实现；`Elab` 通过 `checkType` 的返回值
-   与访问器拿层级，不自己算。
+   当前违反数为 0：`Elab` / `CoreCodegen` 只出现 `Rig0` / `Rig1` 构造与 `rigIsErased` 读。
+2. **擦除判定只有一个入口**：`Elab.binderRig`（构造 Rig）与 `Core.rigIsErased`（读 Rig）。
+   M22 会把它升级成可替换的 `eraseMask`，使「rig 驱动」与未来的「使用分析驱动」可互换。
+3. `Level` 的算术（`succ` / `max`）只在 `Core` 内部实现；`Elab` 经 `checkType` 返回的
+   `Level` 与访问器拿层级，不自己算。当前违反数为 0。
 4. 破坏上述任一条时，须在本节记录例外与理由。
 
 ### 24.4 与 QTT 的衔接

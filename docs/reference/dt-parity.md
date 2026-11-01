@@ -32,10 +32,13 @@
 | 16 | `do` 块 | `Elab.inferE` EDo：`DT: do blocks are not supported yet (M19)` | 0（`compiler/app/Main.vuna` 1 处） | 0 | 1（`app/Main.vuna`） | M21 |
 | 17 | ~~隐式索引 binder 一律擦除~~ | **M18.5 已修复**：隐式 binder 仍恒擦除（这是正确语义——隐式实参由精化器插入），但**显式索引 binder** 恢复参与运行时表示 | — | — | — | M18.5（已完成） |
 
-第 1 项曾是该表唯一的 **bug**（其余是未实现的能力），M18.5 已修；第 2 项的量是**迁移工作量**
-而非语言缺陷（§5 ②）；第 8/13/16 项构成「编译器本体不可能用 DT 写」的硬边界；第 14/15 项
-**保留并补齐**——两者是已实现、且分别有 `fmt/` 与 `traits/` 夹具覆盖的语言特性，删除只省下
-实现穿透点，却损失记法 ergonomics（决策与理由见 roadmap 的「决策变更」）。
+第 1 项曾是该表唯一的 **bug**（其余是未实现的能力），M18.5 已修、第 17 项随之收敛。
+第 2 项是**迁移工作量**而非语言缺陷（§5 ②）；第 8/13/16 项构成「编译器本体不可能用 DT
+写」的硬边界；第 14/15 项**保留并补齐**——两者有 `fmt/` 与 `traits/` 夹具覆盖，删除只省下
+实现穿透点却损失记法 ergonomics（决策与理由见 roadmap 的「决策变更」）。
+
+**M18.6 的表示层改动不在本表内**：它不加能力、不改行为，只把 `erased : Bool` 换成三值
+`Rig`、`TType : Int` 换成不透明 `Level`（见 [dt-core.md](../dt-core.md) §24）。
 
 ## 2. 「不可绕」与「可绕」
 
@@ -89,14 +92,13 @@ compile」在此失效，DT 存在能产出错误程序的通道。修复方式�
 
 ## 4. 核对的数字与口径差异
 
-三处需注意口径（其余数字与 `.local/audit-a/stats/stats.sh` 一致、可直接复核）：
-
+三处口径差异（其余与 `.local/audit-a/stats/stats.sh` 一致）：
 1. **字符串比较 155 / 52**：155 是 `compiler/lib` 中「`==` 右侧紧跟字符串字面量的行数」，
    `lib` 同口径是 **52**（`/=` 也算上是 **55**）；表 1 写 52，roadmap 引用 155 时指 `compiler/lib`。
 2. **多 clause 399 名 / 978 行**是逐文件去重口径；跨文件拼接是 421 名 / 1050 行（同名碰撞）。
 3. **`let` 296 是 `compiler/lib` 的量**，`lib` 是 189——勿混列读取。
 
-测试面：DT 正例 19 个、负例 18 个（M18.5 各加一），见 [testing.md](testing.md)。
+测试面：DT 正例 21 / 负例 19（M18.5、M18.6 各加一对），见 [testing.md](testing.md)。
 
 ## 5. 对计划的三条推论
 
@@ -114,11 +116,10 @@ compile」在此失效，DT 存在能产出错误程序的通道。修复方式�
 
 ## 相关阅读
 
-- 阶段划分与验收：[docs/roadmap.md](../roadmap.md)（M18.5–M24）；DT 语义与设计：
-  [dt.md](dt.md)、[docs/dt-core.md](../dt-core.md)
-- 被推翻的 M18 决策原文：[m18-migration.md](m18-migration.md)；限制与测试面：
-  [limits.md](limits.md)、[testing.md](testing.md)
-- 审计原始数据：`.local/audit-a/REPORT.md`、`.local/audit-a/repro.sh`、`.local/audit-b/`
+阶段划分与验收：[roadmap.md](../roadmap.md)（M18.5–M24）；DT 语义与设计：[dt.md](dt.md)、
+[dt-core.md](../dt-core.md)；被推翻的 M18 决策原文：[m18-migration.md](m18-migration.md)；
+限制与测试面：[limits.md](limits.md)、[testing.md](testing.md)；审计原始数据：
+`.local/audit-a/REPORT.md`、`.local/audit-a/repro.sh`、`.local/audit-b/`。
 
 ## 6. 索引精化的能力边界（M24.5 的依据）
 

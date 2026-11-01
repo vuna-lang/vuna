@@ -6,7 +6,7 @@ module Vuna.Compiler.CoreCodegen (checkDtProgram, generateDtProgram) where
 -- 自带最小 runtime（bi_* 与 show helper），不引用 HM codegen 的内部 helper。
 --
 -- 擦除规则（由精化器在项上标好的标志驱动）：
--- - TLam erased = True 的绑定不生成参数；TApp 实参 erased = True 时不生成实参；
+-- - `rigIsErased` 为真的绑定不生成参数；同样为真的实参不生成实参；
 -- - 类型级定义（类型 force 后是宇宙）整体不生成运行时定义；
 -- - 运行时项里出现被擦除绑定 / 类型级定义 / 类型本身 → 报错（M16 做完整擦除分析）。
 --
@@ -26,10 +26,10 @@ import Vuna.Compiler.Elab
 -- 精化器可能把饱和的构造子应用表示成嵌套 `TApp (TApp (TCon c []) a) b`，
 -- 也可能直接给 `TCon c [a, b]`。这里统一折叠成 (构造子名, 实参列表)：
 -- 擦除/依赖分析按实参自带的擦除标志判断，生成侧好一次性 tupled 出来。
-flattenConApp : Term -> Maybe (Pair String (List (Pair Term Bool)))
+flattenConApp : Term -> Maybe (Pair String (List (Pair Term Rig)))
 flattenConApp t = case t of
-  TApp f a erased => case flattenConApp f of
-    Just (Pair c args) => Just (Pair c (append args [Pair a erased]))
+  TApp f a rig => case flattenConApp f of
+    Just (Pair c args) => Just (Pair c (append args [Pair a rig]))
     Nothing => Nothing
   TCon c args => Just (Pair c args)
   _ => Nothing
@@ -72,25 +72,25 @@ checkOneErasure typeNames d = case checkErasure typeNames [] (dtDefBody d) of
 showMetaHint : Int -> String
 showMetaHint m = " ?" ++ strFromInt m
 
-checkErasure : List String -> List (Pair String Bool) -> Term -> Result Int
+checkErasure : List String -> List (Pair String Rig) -> Term -> Result Int
 checkErasure typeNames binders t = case t of
   TVar name i => case binderAt i binders of
-    Just (Pair n erased) =>
-      if erased then Err ("DT: type-level binding `" ++ name ++ "` is used at runtime (M13 limitation)")
+    Just (Pair n rig) =>
+      if rigIsErased rig then Err ("DT: type-level binding `" ++ name ++ "` is used at runtime (M13 limitation)")
       else Ok 0
     Nothing => Err ("DT: internal: unbound runtime variable " ++ name)
   TGlobal name =>
     if memName name typeNames then Err ("DT: type-level name `" ++ name ++ "` is used at runtime (M13 limitation)")
     else Ok 0
-  TType n => Err "DT: a type is used at runtime (M13 limitation)"
-  TPi name implicit dom cod => Err "DT: a type is used at runtime (M13 limitation)"
+  TType l => Err "DT: a type is used at runtime (M13 limitation)"
+  TPi name implicit rig dom cod => Err "DT: a type is used at runtime (M13 limitation)"
   TMeta m => Err ("DT: unsolved metavariable in runtime code" ++ showMetaHint m)
-  TLam name erased body => checkErasure typeNames (Pair name erased :: binders) body
-  TApp f a erased => case flattenConApp t of
+  TLam name rig body => checkErasure typeNames (Pair name rig :: binders) body
+  TApp f a rig => case flattenConApp t of
     -- 嵌套在构造子上的应用按构造子实参检查（实参自带擦除标志，比 TApp 的更准）。
     Just (Pair c args) => checkConArgsErasure typeNames binders args
     Nothing =>
-      if erased then checkErasure typeNames binders f
+      if rigIsErased rig then checkErasure typeNames binders f
       else andThen (checkErasure typeNames binders f) (\_ => checkErasure typeNames binders a)
   -- M14：构造子应用只看非擦除实参（擦除实参是族参数/索引，允许是类型项）。
   TCon c args => checkConArgsErasure typeNames binders args
@@ -104,13 +104,13 @@ checkErasure typeNames binders t = case t of
     andThen (checkErasure typeNames binders c)
       (\_ => andThen (checkErasure typeNames binders th) (\_ => checkErasure typeNames binders el))
 
-checkConArgsErasure : List String -> List (Pair String Bool) -> List (Pair Term Bool) -> Result Int
+checkConArgsErasure : List String -> List (Pair String Rig) -> List (Pair Term Rig) -> Result Int
 checkConArgsErasure typeNames binders [] = Ok 0
-checkConArgsErasure typeNames binders ((Pair arg erased) :: rest) =
-  if erased then checkConArgsErasure typeNames binders rest
+checkConArgsErasure typeNames binders ((Pair arg rig) :: rest) =
+  if rigIsErased rig then checkConArgsErasure typeNames binders rest
   else andThen (checkErasure typeNames binders arg) (\_ => checkConArgsErasure typeNames binders rest)
 
-checkAltErasure : List String -> List (Pair String Bool) -> List CaseAlt -> Result Int
+checkAltErasure : List String -> List (Pair String Rig) -> List CaseAlt -> Result Int
 checkAltErasure typeNames binders [] = Ok 0
 checkAltErasure typeNames binders (alt :: rest) =
   let
@@ -119,7 +119,7 @@ checkAltErasure typeNames binders (alt :: rest) =
   in andThen (checkErasure typeNames env (caseAltBody alt))
     (\_ => checkAltErasure typeNames binders rest)
 
-binderAt : Int -> List (Pair String Bool) -> Maybe (Pair String Bool)
+binderAt : Int -> List (Pair String Rig) -> Maybe (Pair String Rig)
 binderAt i [] = Nothing
 binderAt i (b :: rest) = if i <= 0 then Just b else binderAt (i - 1) rest
 
@@ -129,13 +129,13 @@ termDepsInto runtimeNames acc t = case t of
   TGlobal name => if memName name runtimeNames then addName name acc else acc
   TVar name i => acc
   TMeta m => acc
-  TType n => acc
-  TPi name implicit dom cod => acc
-  TLam name erased body => termDepsInto runtimeNames acc body
-  TApp f a erased => case flattenConApp t of
+  TType l => acc
+  TPi name implicit rig dom cod => acc
+  TLam name rig body => termDepsInto runtimeNames acc body
+  TApp f a rig => case flattenConApp t of
     Just (Pair c args) => termDepsArgs runtimeNames acc args
     Nothing =>
-      if erased then termDepsInto runtimeNames acc f
+      if rigIsErased rig then termDepsInto runtimeNames acc f
       else termDepsInto runtimeNames (termDepsInto runtimeNames acc f) a
   TCon c args => termDepsArgs runtimeNames acc args
   TCase scrut alts => termDepsAlts runtimeNames (termDepsInto runtimeNames acc scrut) alts
@@ -145,10 +145,10 @@ termDepsInto runtimeNames acc t = case t of
   TIf c th el =>
     termDepsInto runtimeNames (termDepsInto runtimeNames (termDepsInto runtimeNames acc c) th) el
 
-termDepsArgs : List String -> List String -> List (Pair Term Bool) -> List String
+termDepsArgs : List String -> List String -> List (Pair Term Rig) -> List String
 termDepsArgs runtimeNames acc [] = acc
-termDepsArgs runtimeNames acc ((Pair arg erased) :: rest) =
-  if erased then termDepsArgs runtimeNames acc rest
+termDepsArgs runtimeNames acc ((Pair arg rig) :: rest) =
+  if rigIsErased rig then termDepsArgs runtimeNames acc rest
   else termDepsArgs runtimeNames (termDepsInto runtimeNames acc arg) rest
 
 termDepsAlts : List String -> List String -> List CaseAlt -> List String
@@ -444,14 +444,14 @@ ocamlFieldTy families v = case v of
     _ => "'a"
   _ => "'a"
 
--- 从构造子的完整 Pi 类型项里按位置取出每个非擦除 binder 的域类型。
-ctorFieldTys : List String -> List (Pair String Bool) -> Int -> Value -> List String
+-- 从构造子的完整 Pi 类型项里按位置取出每个未擦除 binder 的域类型。
+ctorFieldTys : List String -> List (Pair String Rig) -> Int -> Value -> List String
 ctorFieldTys families [] lvl v = []
-ctorFieldTys families ((Pair name erased) :: rest) lvl v = case v of
-  VPi pname implicit dom clo =>
+ctorFieldTys families ((Pair name rig) :: rest) lvl v = case v of
+  VPi pname implicit _ dom clo =>
     let
       next = applyClosure clo (VNeutral (NVar pname lvl []))
-    in if erased then ctorFieldTys families rest (lvl + 1) next
+    in if rigIsErased rig then ctorFieldTys families rest (lvl + 1) next
     else ocamlFieldTy families dom :: ctorFieldTys families rest (lvl + 1) next
   _ => []
 
@@ -510,7 +510,7 @@ mkGenSt datas = GenSt (map dtDataName datas) (ctorTableOf datas) 0
 -- case 分支的绑定环境：全部 telescope binder 都进环境（擦除的用占位名 + True），
 -- 顺序为 telescope 表面顺序的逆序；pattern 只保留未擦除的 fresh 名。
 data AltEnv : Type where
-  AltEnv : List (Pair String Bool) -> List String -> GenSt -> AltEnv
+  AltEnv : List (Pair String Rig) -> List String -> GenSt -> AltEnv
 
 aeEnv (AltEnv env pats st) = env
 
@@ -518,23 +518,23 @@ aePats (AltEnv env pats st) = pats
 
 aeSt (AltEnv env pats st) = st
 
-altEnvGo : GenSt -> List (Pair String Bool) -> List (Pair String Bool) -> List String -> AltEnv
+altEnvGo : GenSt -> List (Pair String Rig) -> List (Pair String Rig) -> List String -> AltEnv
 altEnvGo st env [] pats = AltEnv env (reverse pats) st
-altEnvGo st env ((Pair name erased) :: rest) pats = if erased then altEnvGo st (Pair "" True :: env) rest pats
+altEnvGo st env ((Pair name rig) :: rest) pats = if rigIsErased rig then altEnvGo st (Pair "" Rig0 :: env) rest pats
 else
   let
     fresh = gsNext st
     nm = "dtb__" ++ strFromInt fresh
-  in altEnvGo (gsPutNext st (fresh + 1)) (Pair nm False :: env) rest (nm :: pats)
+  in altEnvGo (gsPutNext st (fresh + 1)) (Pair nm Rig1 :: env) rest (nm :: pats)
 
-altEnv : GenSt -> List (Pair String Bool) -> List (Pair String Bool) -> AltEnv
+altEnv : GenSt -> List (Pair String Rig) -> List (Pair String Rig) -> AltEnv
 altEnv st outer tele = altEnvGo st outer tele []
 
-genTerm : GenSt -> List (Pair String Bool) -> Term -> Result (Pair String GenSt)
+genTerm : GenSt -> List (Pair String Rig) -> Term -> Result (Pair String GenSt)
 genTerm st binders t = case t of
   TVar name i => case binderAt i binders of
-    Just (Pair oc erased) =>
-      if erased then Err ("DT: type-level binding `" ++ name ++ "` is used at runtime (M13 limitation)")
+    Just (Pair oc rig) =>
+      if rigIsErased rig then Err ("DT: type-level binding `" ++ name ++ "` is used at runtime (M13 limitation)")
       else Ok (Pair oc st)
     Nothing => Err "DT: internal: unbound runtime variable"
   TGlobal name => genGlobalRef st name
@@ -548,28 +548,28 @@ genTerm st binders t = case t of
       )
     )
   )
-  TLam name erased body => if erased then andThen (genTerm st (Pair "" True :: binders) body) (\p => case p of
+  TLam name rig body => if rigIsErased rig then andThen (genTerm st (Pair "" Rig0 :: binders) body) (\p => case p of
     Pair b st2 => Ok (Pair b st2)
   )
   else
     let
       ocName = sanitizeName name
-    in andThen (genTerm st (Pair ocName False :: binders) body) (\p => case p of
+    in andThen (genTerm st (Pair ocName Rig1 :: binders) body) (\p => case p of
       Pair b st2 => Ok (Pair ("(fun " ++ ocName ++ " -> " ++ b ++ ")") st2)
     )
-  TApp f a erased => genApp st binders f a erased
+  TApp f a rig => genApp st binders f a rig
   TCon c args => genConApp st binders c args
   TCase scrut alts => genCase st binders scrut alts
-  TPi name implicit dom cod => Err "DT: a type is used at runtime (M13 limitation)"
-  TType n => Err "DT: a type is used at runtime (M13 limitation)"
+  TPi name implicit rig dom cod => Err "DT: a type is used at runtime (M13 limitation)"
+  TType l => Err "DT: a type is used at runtime (M13 limitation)"
   TMeta m => Err ("DT: unsolved metavariable in runtime code" ++ showMetaHint m)
 
 -- 应用：精化器可能把饱和的构造子应用表示成嵌套 `TApp (TApp (TCon c []) a) b`。
 -- 这种形态必须先折叠成 `TCon c [a, b]`，否则 OCaml 侧会把它当成 curried 调用
 -- （多变体构造子是 tupled 的，`C 1 2` 类型不对）。
-genApp : GenSt -> List (Pair String Bool) -> Term -> Term -> Bool -> Result (Pair String GenSt)
-genApp st binders f a erased = if erased then genTerm st binders f
-else case flattenConApp (TApp f a erased) of
+genApp : GenSt -> List (Pair String Rig) -> Term -> Term -> Rig -> Result (Pair String GenSt)
+genApp st binders f a rig = if rigIsErased rig then genTerm st binders f
+else case flattenConApp (TApp f a rig) of
   Just (Pair c args) => genConApp st binders c args
   Nothing => andThen (genTerm st binders f) (\pf => case pf of
     Pair fs st1 => andThen (genTerm st1 binders a) (\pa => case pa of
@@ -584,16 +584,16 @@ conAppText name [] = name
 conAppText name ([a]) = "(" ++ name ++ " " ++ a ++ ")"
 conAppText name args = "(" ++ name ++ " (" ++ joinWith ", " args ++ "))"
 
-genConArgs : GenSt -> List (Pair String Bool) -> List (Pair Term Bool) -> Result (Pair (List String) GenSt)
+genConArgs : GenSt -> List (Pair String Rig) -> List (Pair Term Rig) -> Result (Pair (List String) GenSt)
 genConArgs st binders [] = Ok (Pair [] st)
-genConArgs st binders ((Pair arg erased) :: rest) = if erased then genConArgs st binders rest
+genConArgs st binders ((Pair arg rig) :: rest) = if rigIsErased rig then genConArgs st binders rest
 else andThen (genTerm st binders arg) (\p => case p of
   Pair text st2 => andThen (genConArgs st2 binders rest) (\q => case q of
     Pair texts st3 => Ok (Pair (text :: texts) st3)
   )
 )
 
-genConApp : GenSt -> List (Pair String Bool) -> String -> List (Pair Term Bool) -> Result (Pair String GenSt)
+genConApp : GenSt -> List (Pair String Rig) -> String -> List (Pair Term Rig) -> Result (Pair String GenSt)
 genConApp st binders c args = case lookupPair c (gsCtors st) of
   Nothing => Err ("DT: internal: unknown constructor " ++ c)
   Just family => andThen (genConArgs st binders args) (\p => case p of
@@ -608,7 +608,7 @@ armPatternText : String -> List String -> String
 armPatternText cname [] = cname
 armPatternText cname pats = cname ++ " (" ++ joinWith ", " pats ++ ")"
 
-genArm : GenSt -> List (Pair String Bool) -> CaseAlt -> Result (Pair String GenSt)
+genArm : GenSt -> List (Pair String Rig) -> CaseAlt -> Result (Pair String GenSt)
 genArm st outer alt = if caseAltName alt == "" then
   let
     bound = altEnv st outer (caseAltBinders alt)
@@ -628,7 +628,7 @@ else case lookupPair (caseAltName alt) (gsCtors st) of
         in Ok (Pair ("  | " ++ patText ++ " -> " ++ b ++ "\n") st2)
     )
 
-genArms : GenSt -> List (Pair String Bool) -> List CaseAlt -> Result (Pair String GenSt)
+genArms : GenSt -> List (Pair String Rig) -> List CaseAlt -> Result (Pair String GenSt)
 genArms st binders [] = Ok (Pair "" st)
 genArms st binders (alt :: rest) = andThen (genArm st binders alt) (\p => case p of
   Pair arm st2 => andThen (genArms st2 binders rest) (\q => case q of
@@ -636,7 +636,7 @@ genArms st binders (alt :: rest) = andThen (genArm st binders alt) (\p => case p
   )
 )
 
-genCase : GenSt -> List (Pair String Bool) -> Term -> List CaseAlt -> Result (Pair String GenSt)
+genCase : GenSt -> List (Pair String Rig) -> Term -> List CaseAlt -> Result (Pair String GenSt)
 genCase st binders scrut alts = andThen (genTerm st binders scrut) (\p => case p of
   Pair scrutText st1 => andThen (genArms st1 binders alts) (\q => case q of
     Pair arms st2 =>

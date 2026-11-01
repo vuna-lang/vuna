@@ -19,11 +19,12 @@
   codegen 不支持的构造使用单文件产物；优化仍归 ocamlopt（M12 不做 vuna typed IR）；
   runtime prelude 在分离编译中完整保留；
 - `do` / Monad / IO 组合子已在 M11 实现；DT（依赖类型）M13 起步、M14 索引族、M15 隐式/
-  接口/洞、M16 终止性、M17 工具链、M18 自举决策：`--dt` 单文件路径（Core TT + 精化器 +
-  擦除 codegen + `interp --dt` + `vuna goal` + `vuna lsp`）。**仍存的 DT 边界**
-  （M19–M24 逐条拆除，清单与用量见 [dt-parity.md](dt-parity.md)）：
+  接口/洞、M16 终止性、M17 工具链、M18 自举决策、M18.5 擦除修复、M18.6 表示层定型
+  （三值 `Rig` + 不透明 `Level`，见 [docs/dt-core.md](../dt-core.md) §24）：`--dt` 单文件
+  路径（Core TT + 精化器 + 擦除 codegen + `interp --dt` + `vuna goal` + `vuna lsp`）。
+  **仍存的 DT 边界**（M19–M24 逐条拆除，清单与用量见 [dt-parity.md](dt-parity.md)）：
   - ~~**lambda 形参被无条件擦除**（bug）~~：**M18.5 已修复**——擦除判据收敛为全仓唯一入口
-    `Elab.erasedBinder`（隐式 binder 恒擦除，显式 binder 仅宇宙域擦除），并加了「同夹具
+    `Elab.binderRig`（隐式 binder 恒擦除，显式 binder 仅宇宙域擦除），并加了「同夹具
     `interp` 输出 == 编译产物输出」的逐夹具对拍断言；
   - 仍是**单文件** opt-in，不接入 `import` / split / 包模式 / `build` / `seed`（M20）；
   - **索引保留运行时表示**（完整擦除需整程序使用分析，见
