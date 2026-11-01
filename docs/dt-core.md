@@ -566,3 +566,40 @@ M19 尝试补 `trait Functor f`（类参数是 `Type -> Type` 的高阶 kind）�
 
 **不变量**：精化器产出的项，其 lambda 链元数必须与该类型的 Pi 链逐 binder 对齐，
 `Rig0` 位置两侧都跳过。这条不变量由 `methodArgRigsOf` 单点保证。
+
+### 24.6 同 trait 多实例的缺陷（M19 发现，M15 遗留）
+
+这是在实现 M19 最后一项 `deriving (Show, Eq, Ord)` 时撞上的：`deriving` 本身不难
+（展开成手写 `instance` 即可，单实例的 `Show` / `Eq` 都能正常工作），但它需要
+「同一个 trait 有多个实例」，于是暴露出 **M15 实例编码的一条结构限制**。
+
+最小复现（不需要 `deriving`）：
+
+```vuna
+trait Name a where
+  nameOf : a -> String
+instance Name A where
+  nameOf x = "A"
+instance Name B where
+  nameOf x = "B"
+main = nameOf MkA ++ "/" ++ nameOf MkB   -- type mismatch: expected A, got B
+```
+
+**根因（已定位到具体分支）**：`inferArgsGo` 处理字典参数时，先用
+`constrainDictDom` 让后面的显式实参去约束 `Dict_C ?a` 里的 `?a`；但当 `?a` 尚未被
+约束住（例如 `nameOf MkB` 的约束发生在后面的迭代里），续接的
+`searchInstance ec0 (forceVal ec0 dom)` 会拿仍带元变量的 `Dict_Name ?a` 去匹配实例表。
+`filterInstances` 用 `conv` 比较，`Dict_Name ?a` 与**第一个**实例 `Dict_Name A` 就能
+统一——`?a` 被顺手解成 `A`，之后对 `B` 的调用自然报 `expected A, got B`。
+
+这也解释了为什么单实例一直正常：唯一候选就是正确答案，绑定它不会错。
+
+**修法**：字典参数分支必须先**把类参数约束住**再搜索实例。两条路：要么推迟实例
+搜索到后续显式实参约束完 `?a` 之后（改动 `inferArgsGo` 的迭代顺序），要么在
+`filterInstances` 里拒绝「靠绑定元变量才成立的匹配」（只接受 `conv` 在**不新增解**的
+前提下成立的头）。后者更局部、也更安全——它把「实例搜索不应当解决元变量」变成一条
+不变量。
+
+**影响**：现有 DT 夹具（`13_iface` 等）都只有单实例，所以这条限制从 M15 起一直没暴露；
+它会直接挡住 **M23 全仓迁移**（真实代码里到处是同 trait 多实例）与 `deriving`。
+因此它被列为 **M22 的首要项**，`deriving` 后移到其后。
