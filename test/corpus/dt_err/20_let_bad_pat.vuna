@@ -1,0 +1,10 @@
+-- M19：let 绑定左端只接受简单变量/通配；构造子模式必须报错。
+data Nat : Type where
+  Zero : Nat
+  Succ : Nat -> Nat
+
+main : Int
+main =
+  let
+    Succ k = Succ Zero
+  in 0

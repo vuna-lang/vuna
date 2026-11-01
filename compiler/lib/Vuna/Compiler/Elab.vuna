@@ -1676,10 +1676,19 @@ isDataHead datas v = case v of
 freshVarValue : String -> Int -> Value
 freshVarValue name level = VNeutral (NVar name level [])
 
--- case 出现在推断位置时拿不到期望类型：case 的结果类型不做归纳（M14 只支持检查模式）。
+-- M19：case 出现在推断位置（函数实参、if 分支、let 的 value）。做法是建一个元变量当
+-- 期望类型，再按检查模式处理 case——分支逐个 check 会把期望写进这个元变量。
 inferCaseE : List (Pair String Term) -> Ctx -> Ec -> Expr -> List (Pair Pat Expr) -> Span -> Result (Pair Term (Pair Value Ec))
 inferCaseE globals ctx ec scrut alts sp =
-  errAt sp "DT: cannot infer the type of a case expression; give it an expected type"
+  let
+    pmeta = newMeta ctx ec
+  in case pmeta of
+    Pair metaTerm ec1 =>
+      let
+        metaTy = evalCtx ctx metaTerm
+      in andThen (checkCase globals ctx ec1 scrut alts metaTy sp) (\p => case p of
+        Pair term ec2 => Ok (Pair term (Pair metaTy ec2))
+      )
 
 -- ---------------------------------------------------------------
 -- 双向检查
@@ -1707,7 +1716,7 @@ inferE globals ctx ec expr = case expr of
       )
     )
   )
-  ELet binds body rec_ sp => errAt sp "DT: let expressions are not supported yet (M13)"
+  ELet binds body rec_ sp => inferLet globals ctx ec binds body rec_ sp
   ECase scrut alts sp => inferCaseE globals ctx ec scrut alts sp
   EField base fname sp => errAt sp "DT: record field access is not supported yet (M15)"
   ERecord rname fields sp => errAt sp "DT: records are not supported yet (M15)"
@@ -1971,7 +1980,90 @@ checkE globals ctx ec expr expected = case expr of
   EPi name implicit dom cod sp => checkByInfer globals ctx ec expr expected
   EIf c t e sp => checkByInfer globals ctx ec expr expected
   ECase scrut alts csp => checkCase globals ctx ec scrut alts expected csp
+  ELet binds body rec_ sp => checkLet globals ctx ec binds body rec_ expected sp
   _ => checkByInfer globals ctx ec expr expected
+
+-- ---------------------------------------------------------------
+-- M19：`let` 表达式
+-- ---------------------------------------------------------------
+--
+-- 逐条处理：推断绑定值的类型 → 在上下文里绑上名字 → 处理后续绑定与 body →
+-- 产出 `(\x => body) value`（beta 等价）。**不在 Core 里加 TLet**：`let` 是纯记法，
+-- 不是类型论构造（QTT 与擦除判据都不需要单独认识它）；`rig` 由绑定值的类型经
+-- `binderRig` 决定，因此「let 绑定的擦除行为」与「函数参数」自动一致。
+--
+-- 作用域：后续绑定能看到前面的绑定（顺序 let），不互相递归。`where` 块 desugar 出的
+-- `rec_ = True` 走同一条路径——本仓库当前没有 `where` 块（0 处），互递归 let 留到
+-- M23 迁移时按实际需要补。
+--
+-- 局限：绑定左端只接受简单变量或通配；构造子模式 let 等价于 case，随嵌套模式一起做。
+checkLet : List (Pair String Term) -> Ctx -> Ec -> List (Pair Pat Expr) -> Expr -> Bool -> Value -> Span -> Result (Pair Term Ec)
+checkLet globals ctx ec binds body rec_ expected sp =
+  checkLetGo globals ctx ec binds body rec_ expected sp
+
+checkLetGo : List (Pair String Term) -> Ctx -> Ec -> List (Pair Pat Expr) -> Expr -> Bool -> Value -> Span -> Result (Pair Term Ec)
+checkLetGo globals ctx ec [] body rec_ expected sp = checkE globals ctx ec body expected
+checkLetGo globals ctx ec (bind :: rest) body rec_ expected sp =
+  checkLetOne globals ctx ec bind rest body rec_ expected sp
+
+checkLetOne : List (Pair String Term) -> Ctx -> Ec -> Pair Pat Expr -> List (Pair Pat Expr) -> Expr -> Bool -> Value -> Span -> Result (Pair Term Ec)
+checkLetOne globals ctx ec bind rest body rec_ expected sp = case firstOf bind of
+  PVar name psp =>
+    let
+      value = secondOf bind
+    in andThen (inferE globals ctx ec value) (\pv => case pv of
+      Pair valueTerm (Pair valueTy ec1) =>
+        let
+          rig = binderRig False valueTy
+          ctx2 = ctxBindValue name valueTy ctx
+        in andThen (checkLetGo globals ctx2 ec1 rest body rec_ expected sp) (\pb => case pb of
+          Pair bodyTerm ec2 => Ok (Pair (TApp (TLam name rig bodyTerm) valueTerm rig) ec2)
+        )
+    )
+  PWild psp =>
+    let
+      value = secondOf bind
+    in andThen (inferE globals ctx ec value) (\pv => case pv of
+      Pair valueTerm (Pair valueTy ec1) =>
+        let
+          rig = binderRig False valueTy
+        in andThen (checkLetGo globals ctx ec1 rest body rec_ expected sp) (\pb => case pb of
+          Pair bodyTerm ec2 => Ok (Pair (TApp (TLam "_" rig bodyTerm) valueTerm rig) ec2)
+        )
+    )
+  _ => errAt (patSpan (firstOf bind)) "DT: let bindings must be simple names or wildcards (M19)"
+
+-- M19：推断位的 `let`（嵌套 let 的 value 位置就是推断位）。
+inferLet : List (Pair String Term) -> Ctx -> Ec -> List (Pair Pat Expr) -> Expr -> Bool -> Span -> Result (Pair Term (Pair Value Ec))
+inferLet globals ctx ec binds body rec_ sp = case binds of
+  [] => inferE globals ctx ec body
+  (Pair pat value) :: rest => case pat of
+    PVar name psp => inferLetBound globals ctx ec name value rest body rec_ sp
+    PWild psp => inferLetIgnored globals ctx ec value rest body rec_ sp
+    _ => errAt (patSpan pat) "DT: let bindings must be simple names or wildcards (M19)"
+
+inferLetBound : List (Pair String Term) -> Ctx -> Ec -> String -> Expr -> List (Pair Pat Expr) -> Expr -> Bool -> Span -> Result (Pair Term (Pair Value Ec))
+inferLetBound globals ctx ec name value rest body rec_ sp = andThen (inferE globals ctx ec value) (\pv => case pv of
+  Pair valueTerm (Pair valueTy ec1) =>
+    let
+      rig = binderRig False valueTy
+      ctx2 = ctxBindValue name valueTy ctx
+    in andThen (inferLet globals ctx2 ec1 rest body rec_ sp) (\pb => case pb of
+      Pair bodyTerm (Pair bodyTy ec2) =>
+        Ok (Pair (TApp (TLam name rig bodyTerm) valueTerm rig) (Pair bodyTy ec2))
+    )
+)
+
+inferLetIgnored : List (Pair String Term) -> Ctx -> Ec -> Expr -> List (Pair Pat Expr) -> Expr -> Bool -> Span -> Result (Pair Term (Pair Value Ec))
+inferLetIgnored globals ctx ec value rest body rec_ sp = andThen (inferE globals ctx ec value) (\pv => case pv of
+  Pair valueTerm (Pair valueTy ec1) =>
+    let
+      rig = binderRig False valueTy
+    in andThen (inferLet globals ctx ec1 rest body rec_ sp) (\pb => case pb of
+      Pair bodyTerm (Pair bodyTy ec2) =>
+        Ok (Pair (TApp (TLam "_" rig bodyTerm) valueTerm rig) (Pair bodyTy ec2))
+    )
+)
 
 checkByInfer : List (Pair String Term) -> Ctx -> Ec -> Expr -> Value -> Result (Pair Term Ec)
 checkByInfer globals ctx ec expr expected = case inferE globals ctx ec expr of
