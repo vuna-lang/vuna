@@ -1,4 +1,4 @@
-module Vuna.Compiler.DtDerive (builtinTraitDecls, builtinShowInstances, expandDerivings) where
+module Vuna.Compiler.DtDerive (builtinTraitDecls, builtinShowInstances, builtinEqInstances, expandDerivings) where
 
 -- Vuna.Compiler.DtDerive：`deriving` 的**实例生成**（M19）。
 --
@@ -73,6 +73,33 @@ showBoolInstance =
 
 head : String -> Expr
 head tn = EApp (EVar "Show" noSpan) [EVar tn noSpan] noSpan
+
+-- ---------------------------------------------------------------
+-- 内建类型的 Eq 实例
+-- ---------------------------------------------------------------
+--
+-- M22 泛型实例约束求解后，`mem : {d : Dict_Eq a} -> a -> List a -> Bool` 在具体类型上
+-- 实例化时，调用方要把 `Dict_Eq Int` / `Dict_Eq String` 交给 `d`。`Int` / `String` 的
+-- `eq` / `neq` 直接复用 `==` / `/=`（它们在精化期特化到 `bi_eq_int` / `bi_eq_str`，不走
+-- 实例搜索）。`Bool` 不在此列——`builtinEqTyName` 只认 Int / String，`Bool == Bool` 会
+-- 撞上本实例造成自递归，需要的话以后用直接析取补。
+builtinEqInstances : List Decl
+builtinEqInstances = [eqIntInstance, eqStringInstance]
+
+eqIntInstance : Decl
+eqIntInstance =
+  DInstance Nothing False (eqHead "Int")
+    [DFun "eq" [PVar "x" noSpan, PVar "y" noSpan] (EApp (EVar "==" noSpan) [EVar "x" noSpan, EVar "y" noSpan] noSpan) noSpan, DFun "neq" [PVar "x" noSpan, PVar "y" noSpan] (EApp (EVar "/=" noSpan) [EVar "x" noSpan, EVar "y" noSpan] noSpan) noSpan]
+    noSpan
+
+eqStringInstance : Decl
+eqStringInstance =
+  DInstance Nothing False (eqHead "String")
+    [DFun "eq" [PVar "x" noSpan, PVar "y" noSpan] (EApp (EVar "==" noSpan) [EVar "x" noSpan, EVar "y" noSpan] noSpan) noSpan, DFun "neq" [PVar "x" noSpan, PVar "y" noSpan] (EApp (EVar "/=" noSpan) [EVar "x" noSpan, EVar "y" noSpan] noSpan) noSpan]
+    noSpan
+
+eqHead : String -> Expr
+eqHead tn = EApp (EVar "Eq" noSpan) [EVar tn noSpan] noSpan
 
 -- ---------------------------------------------------------------
 -- 展开 `deriving (T1, T2)` ⇒ 等价 instance 声明

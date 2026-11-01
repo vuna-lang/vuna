@@ -1,13 +1,9 @@
 module Vuna.Compiler.Elab (DtDef, dtDefName, dtDefType, dtDefBody, DtCtor, dtCtorName, dtCtorFamily, dtCtorTelescope, dtCtorType, DtData, dtDataName, dtDataParams, dtDataCtors, DtClass, dtClassName, dtClassParams, dtClassMethods, dtClassFieldTys, DtGoal, dtGoalMeta, dtGoalSpan, dtGoalType, dtGoalCtx, DtProgram, dtProgDatas, dtProgDefs, dtProgGoals, dtProgSols, DtGoalInfo, dtGoalInfoSpan, dtGoalInfoGoal, dtGoalInfoCtx, elabProgram, elabProgramFull, goalsOfProgram, checkInstanceHeads, elabInstanceBodies, dictTypeName, dictCtorName, eraseIndexMask, indexErasureCandidates) where
 
 -- Vuna.Compiler.Elab：DT 精化器（双向检查 + 一阶元变量 + 类型级隐式插入 + M14 索引族）。
---
--- 输入是 parser 的原始声明（不经 Loader）：DT 是单文件、自包含的前端，
--- 名字解析在精化器里完成（局部上下文 + 全局签名 + 内置 prelude）。
---
--- 状态 Ec 里保存：下一个元变量编号、已解元变量、每个元变量的创建深度
--- （zonk 用）、已精化的定义体（供 Core.force 的 delta 展开）。定义体按源
--- 顺序精化，所以 delta 只对前面已精化的定义可见（见 docs/dt-core.md）。
+-- 输入是 parser 的原始声明（不经 Loader）：名字解析在精化器里完成。
+-- 状态 Ec 保存下一个元变量编号、已解元变量（含创建深度，zonk 用）与已精化的定义体
+-- （供 Core.force 的 delta 展开）；定义体按源顺序精化，delta 只对已精化定义可见。
 import Vuna.Compiler.Common
 import Vuna.Compiler.Ast
 import Vuna.Compiler.Core
@@ -84,8 +80,7 @@ dtInstHead (DtInst name head) = head
 
 -- 精化状态：下一个元变量编号、已解元变量（level 形态的 Value）、已精化的定义体、
 -- 已声明的归纳族（M14：case 精化需要知道族的构造子 telescope）。
--- M22：`dgoals` 是延迟的字典约束——`Dict_C args` 因类参数未解而被延迟成裸元变量；
--- 等类参数被解（如 `?m = IO`）后 `resolveDictGoals` 回填实例。
+-- M22：`dgoals` 是延迟的字典约束——类参数未解时延迟成裸元变量，解后由 `resolveDictGoals` 回填。
 data DtDictGoal : Type where
   DtDictGoal : Int -> Value -> DtDictGoal
 
@@ -147,9 +142,8 @@ ecAddData (Ec next sols defs datas depths goals insts classes dgoals) d =
   Ec next sols defs (append datas [d]) depths goals insts classes dgoals
 
 -- 局部上下文：最近绑定的在前（名字 + 类型项；类型项在当前上下文里有效）。
--- refinements 是 M14 的索引精化：level ↦ Value（Value 是 level 形态，可以提到
--- 比它新的 binder，所以不需要 de Bruijn 搬运）。求值环境在构造时把它们代入，
--- 于是所有类型的求值/相等检查自动享受精化。
+-- refinements 是 M14 的索引精化：level ↦ Value（level 形态，可提到更新的 binder，无需 de Bruijn
+-- 搬运）。求值环境构造时代入，于是所有类型的求值/相等检查自动享受精化。
 data Ctx : Type where
   Ctx : List (Pair String Term) -> List (Pair Int Value) -> Ctx
 
@@ -186,9 +180,8 @@ ctxEnvAt ((Pair name ty) :: rest) idx depth =
 ctxEnv : Ctx -> List Value
 ctxEnv (Ctx items refs) = ctxEnvAt items 0 (length items)
 
--- M14：把精化代入一个值。精化是「level ↦ Value」，而求值环境里的 binder 都
--- 是中性变量，所以在求值之后做一次重写即可（不需要重建闭包：索引位置上出现的
--- 东西基本是中性变量或构造子值）。resolveLevel 处理链式精化（a ↦ b、b ↦ c）。
+-- M14：把精化代入一个值。精化是「level ↦ Value」，而求值环境里的 binder 都是中性变量，
+-- 求值后做一次重写即可（索引位置上出现的基本是中性变量或构造子值）。resolveLevel 处理链式精化。
 refineValue : List (Pair Int Value) -> Int -> Value -> Value
 refineValue refs fuel v = if fuel <= 0 then v
 else case v of
@@ -458,13 +451,11 @@ elabDatas (ds :: rest) globals ec = andThen (elabData globals ec ds) (\p => case
 -- ---------------------------------------------------------------
 -- M15：接口（trait）与实例（instance）——字典编码
 -- ---------------------------------------------------------------
---
 -- 不新增 Core 节点，全部落到既有 data / 隐式 Pi / 构造子上：
 -- `trait Show a` ⇒ `data Dict_Show : Type -> Type` + 方法投影
 -- `show : {a : Type} -> {d : Dict_Show a} -> a -> String`（字典当隐式参数穿进来）。
--- 实例搜索发生在隐式 binder 的域是接口字典时：在已注册实例里找头能统一到
--- `Dict_C args` 的那一个并插入；找不到 ⇒ 明确的缺失诊断。
--- 完整设计与不变量见 `docs/dt-core.md`。
+-- 实例搜索发生在隐式 binder 的域是接口字典时：在已注册实例里找头能统一到 `Dict_C args`
+-- 的那一个并插入；找不到 ⇒ 明确缺失诊断。设计见 `docs/dt-core.md`。
 dictTypeName : String -> String
 dictTypeName cname = "Dict_" ++ cname
 
@@ -490,10 +481,8 @@ paramNameOf [] = "_"
 paramNameOf (p :: rest) = p
 
 -- 类参数绑成隐式 binder 后的局部上下文。
---
--- M19：类参数可以是**高阶 kind**（`trait Mapper f`，方法签名里写 `f a`）。kind 从方法
--- 签名推断：参数名在签名里被应用了 k 个实参就当 `Type -> ... -> Type`（k 个箭头），
--- 从未被应用就是 `Type`。trait 的方法签名本来就把参数的用法写清楚了。
+-- M19：类参数可以是**高阶 kind**（`trait Mapper f`，方法签名里写 `f a`）。kind 从方法签名推断：
+-- 参数名被应用了 k 个实参就当 `Type -> ... -> Type`（k 个箭头），从未被应用就是 `Type`。
 bindClassParams : List String -> List (Pair String Expr) -> Ctx -> Ctx
 bindClassParams [] methods ctx = ctx
 bindClassParams (p :: rest) methods ctx =
@@ -569,10 +558,9 @@ methodProjZip tname pname pKind idx (m :: rest) (t :: rest2) = case m of
 -- 投影的定义体：`\p => \d => \x0 .. \x(ar-1) => case d of MkDict_C f0..fn => f_k x0..`
 -- 签名 `{p} -> {d : Dict_C p} -> <方法类型>`；de Bruijn 索引：`_d = n+ar`、`_p = n+ar+1`、
 -- `f_k = n-1-k`、`x_i = n+(ar-1-i)`（最内层 = 0，分支绑定子 f 在方法参数之内）。
--- `rigs` 是方法显式参数各自的 multiplicity（M19：从方法签名逐 binder 取，
--- `binderRig` 判据与实例方法体一致）。**lambda 链与应用点必须用同一份 rigs**：
--- 擦除位既不生成运行时形参、也不传实参——两侧都跳过，才能与由 `checkDef` 生成的
--- 实例方法体（同样按 rig 跳过擦除位）严格对齐。
+-- `rigs` 是方法显式参数各自的 multiplicity（M19：从方法签名逐 binder 取，`binderRig` 判据与
+-- 实例方法体一致）。**lambda 链与应用点必须用同一份 rigs**：擦除位既不生成运行时形参、也不传
+-- 实参——两侧都跳过，才能与由 `checkDef` 生成的实例方法体（同样按 rig 跳过擦除位）严格对齐。
 projectionBody : String -> Int -> List Rig -> Int -> Term
 projectionBody ctor fieldIdx rigs nFields =
   let
@@ -770,15 +758,11 @@ elabInstanceMethod globals ec mty pats body sp = andThen (checkBinders globals e
 -- ---------------------------------------------------------------
 -- M14：索引合一（unifyIdx）
 -- ---------------------------------------------------------------
---
 -- 只做索引层面的一阶合一：把 case 分支构造子的结果索引与 scrutinee 的索引对齐。
--- 两类结果：
--- - 可合一 ⇒ 产出精化表（level ↦ Value），分支体内所有类型求值都带上它；
--- - 不可合一 ⇒ 该分支不可达：省略即合法（覆盖率跳过），写出即报错。
---
--- 方向约定：优先精化 **level 更大**（更内层）的那个变量。于是 ctor 一侧的新鲜
--- 变量精化成 scrutinee 的真实变量（`m ↦ n`），不会把真实变量解到分支作用域外面
--- （Value 是 level 形态，无需 de Bruijn 搬运）。
+-- 可合一 ⇒ 产出精化表（level ↦ Value），分支体内所有类型求值都带上它；
+-- 不可合一 ⇒ 该分支不可达：省略即合法（覆盖率跳过），写出即报错。
+-- 方向约定：优先精化 **level 更大**（更内层）的变量，于是 ctor 一侧的新鲜变量精化成
+-- scrutinee 的真实变量（`m ↦ n`），不会把真实变量解到分支作用域外（level 形态，无需 de Bruijn）。
 unifyErr : Result a
 unifyErr = Err "DT: this branch is impossible (index constraints are unsatisfiable)"
 
@@ -890,12 +874,9 @@ ctorResultTerms c = case resultSpine (dtCtorType c) of
 -- ---------------------------------------------------------------
 -- M19：嵌套构造子模式。做法是**把嵌套模式改写成嵌套 case**：
 -- `Cons a (Succ k) rest => body` 变成 `Cons a x1 rest => case x1 of Succ k => body`。
--- 这样不需要新的精化规则、也不需要新的 Core 构造子——内层 case 走既有的索引合一与
--- 覆盖率检查，语义与手写嵌套 case 完全一致，且天然支持任意深度。
---
--- 绑定 telescope 时把非变量的子模式收集成「新鲜 binder + 待匹配 (pat, var)」，
--- 分支体精化前把待匹配列表折成由内向外的内层 case。
--- 待匹配项：子模式 + 它在分支上下文里的 binder 名字。
+-- 不需要新的精化规则或 Core 构造子——内层 case 走既有的索引合一与覆盖率检查，语义与手写
+-- 嵌套 case 一致，天然支持任意深度。绑定 telescope 时把非变量子模式收集成「新鲜 binder +
+-- 待匹配 (pat, var)」，分支体精化前把待匹配列表折成由内向外的内层 case。
 data Pending : Type where
   Pending : Pat -> String -> Pending
 
@@ -1146,6 +1127,51 @@ elabSigs ((Pair name tyExpr) :: rest) globals ec = andThen (checkType globals em
   Pair tyTerm (Pair sortLvl ec1) => elabSigs rest (append globals [Pair name tyTerm]) ec1
 )
 
+-- ---------------------------------------------------------------
+-- 泛型实例约束提升（M20 剩余 / M22 前置）
+-- ---------------------------------------------------------------
+-- 定义体对刚性类参数的字典需求（如 `mem` 的 `Dict_Eq a`）被 `deferEqDict` 延迟成 `?d`+自由目标；
+-- 体精化完后 `liftFreeDictGoals` 提升成隐式字典参数：`mem : a -> L a -> Bool` →
+-- `mem : {a} -> {d : Dict_Eq a} -> a -> L a -> Bool`，体前插 `TLam d`、`?d` 换 `d`、解孤儿 `?d`。
+freeDictGoals : Ec -> List (Pair Int Value)
+freeDictGoals ec = freeDictGoalsGo ec (ecDictGoals ec)
+
+freeDictGoalsGo : Ec -> List DtDictGoal -> List (Pair Int Value)
+freeDictGoalsGo ec [] = []
+freeDictGoalsGo ec (g :: rest) = case g of
+  DtDictGoal m dom =>
+    if isRigidDictArg ec dom then Pair m dom :: freeDictGoalsGo ec rest else freeDictGoalsGo ec rest
+
+classArgIndex : Ec -> Value -> Int
+classArgIndex ec dom = case dictClassArg ec dom of
+  Just arg => case quote 0 arg of
+    TVar name idx => idx
+    _ => 0
+  Nothing => 0
+
+-- 解掉被替换出体的孤儿 `?m`（否则 `unsolvedMeta` 报未解元变量）。
+solveLiftedMeta : Ec -> String -> Int -> Ec
+solveLiftedMeta ec name m = case solveMeta (ecDefs ec) (ecSols ec) 0 m [] (VNeutral (NVar name 0 [])) of
+  Ok sols2 => ecPutSols ec sols2
+  Err e => ec
+
+-- 提升全部自由字典目标（当前支持单目标；多目标按出现顺序逐个处理，索引在插入后由
+-- `classArgIndex` 重新计算——同位置多目标（如 `Eq a` 与 `Show a`）会依次后移）。
+liftFreeDictGoals : Ec -> Term -> Term -> Pair Term (Pair Term Ec)
+liftFreeDictGoals ec ty body = liftFreeDictGoalsGo ec ty body (freeDictGoals ec)
+
+liftFreeDictGoalsGo : Ec -> Term -> Term -> List (Pair Int Value) -> Pair Term (Pair Term Ec)
+liftFreeDictGoalsGo ec ty body [] = Pair ty (Pair body ec)
+liftFreeDictGoalsGo ec ty body ((Pair m dom) :: rest) =
+  let
+    dName = "d" ++ strFromInt m
+    argIdx = classArgIndex ec dom
+    dictDom = quote 0 dom
+    ty2 = insertDictBinder dName argIdx dictDom ty
+    body2 = insertLamBinder dName argIdx (substMetaVar m dName (argIdx + 1) body)
+    ec2 = solveLiftedMeta ec dName m
+  in liftFreeDictGoalsGo ec2 ty2 body2 rest
+
 -- 按源顺序精化定义体；这里所有签名已在 globals 里。
 elabBodies : List Decl -> List (Pair String Term) -> List (Pair String Term) -> List DtDef -> Ec -> Result (Pair (List DtDef) Ec)
 elabBodies [] globals doneDefs acc ec = Ok (Pair (reverse acc) ec)
@@ -1156,9 +1182,13 @@ elabBodies (d :: rest) globals doneDefs acc ec = case d of
     else andThen (elabFunDef globals ec (clausesFor (d :: rest) name) (eval [] tyTerm) sp) (\p => case p of
       Pair bodyTerm ec1 =>
         let
-          cleanTerm = substDictTerm ec1 bodyTerm
-        in elabBodies rest globals (Pair name tyTerm :: doneDefs) (DtDef name tyTerm cleanTerm :: acc)
-          (ecAddDef ec1 (Pair name cleanTerm))
+          lifted = liftFreeDictGoals ec1 tyTerm bodyTerm
+          liftedTy = firstOf lifted
+          liftedBody = firstOf (secondOf lifted)
+          liftedEc = secondOf (secondOf lifted)
+          cleanTerm = substDictTerm liftedEc liftedBody
+        in elabBodies rest globals (Pair name liftedTy :: doneDefs)
+          (DtDef name liftedTy cleanTerm :: acc) (ecAddDef liftedEc (Pair name cleanTerm))
     )
   _ => elabBodies rest globals doneDefs acc ec
 
@@ -1206,7 +1236,7 @@ elabProgramGo decls = andThen (collectSigs decls) (\sigs => andThen (elabDatas (
             globals2 = append globals1 instHeads
           in andThen (elabSigs sigs globals2 ec1b) (\p => case p of
             Pair globals ec2 => andThen (checkAllDefined sigs globals decls) (\_ => andThen (elabBodies decls globals [] [] ec2) (\q => case q of
-              Pair defs ec3 => andThen (elabInstanceBodies (collectInstDecls (append builtinShowInstances decls) []) classes datas1 globals ec3) (\pi => case pi of
+              Pair defs ec3 => andThen (elabInstanceBodies (collectInstDecls (append builtinShowInstances (append builtinEqInstances decls)) []) classes datas1 globals ec3) (\pi => case pi of
                 Pair instDefs ec4 => case unsolvedMeta ec4 of
                   Just m => Err (unsolvedMessage ec4 m)
                   Nothing =>
@@ -1317,15 +1347,12 @@ defTypeOrDefault globals name = case globalLookup name globals of
 -- ===============================================================
 -- M16：索引擦除分析（诊断级，不改变 codegen）
 -- ===============================================================
---
--- M13/M14 的擦除规则：binder 域是宇宙 ⇒ 擦除；域是归纳族（索引，如 `n : Nat`）⇒
--- **保留**运行时表示（`Vec a n` 的每个 Cons 带一个 `t_Nat` 长度字段）。
---
--- 索引**不能无条件擦**：`vlen a n xs = case xs of Cons b m y ys => 1 + vlen b m ys`
--- 把索引 `m` 当递归参数传下去，于是它在运行时**真的被读取**；无条件擦除会让这类
--- 定义无法生成代码。正确擦除需要整程序使用分析，因此 M16 落地的是**分析 + 诊断**：
--- `eraseIndexMask` 给出保守可擦判定，`indexNeedsRuntime` 给出是否真的被用到。
--- 详见 `docs/dt-core.md` 的「已知限制」。
+-- M13/M14 的擦除规则：binder 域是宇宙 ⇒ 擦除；域是归纳族（索引，如 `n : Nat`）⇒ **保留**运行时
+-- 表示（`Vec a n` 的每个 Cons 带一个 `t_Nat` 长度字段）。
+-- 索引**不能无条件擦**：`vlen a n xs = case xs of Cons b m y ys => 1 + vlen b m ys` 把索引 `m`
+-- 当递归参数传下去，运行时**真的被读取**；无条件擦除会让这类定义无法生成代码。
+-- 正确擦除需要整程序使用分析，M16 落地的是**分析 + 诊断**：`eraseIndexMask` 给出保守可擦判定，
+-- `indexNeedsRuntime` 给出是否真的被用到。详见 `docs/dt-core.md` 的「已知限制」。
 eraseIndexMask : DtData -> List Bool
 eraseIndexMask dd = eraseMaskGo dd (dtDataParams dd) 0 []
 
@@ -1403,17 +1430,10 @@ candidateNames (p :: rest) (m :: ms) = case p of
 -- ===============================================================
 -- M16：终止性检查（结构化递归，surface AST）
 -- ===============================================================
---
--- 只分析**自递归**函数（互递归见下一节的近似）。规则：体内每个对自身的调用，
--- 都必须至少有一个实参是「对应形参的真子项」。
---
--- size 表：变量名 ↦ (形参下标, 深度)。形参自身深度 0；`case a of Succ k =>` 里
--- 构造子字段继承 a 的形参下标、深度 +1（真子项）。递归调用 `f a1..an` 下降 ⇔
--- 存在 i，sizeOf(ai) 的形参下标 == i 且深度 > 0。
---
--- `plus a b = case a of Zero => b | Succ k => Succ (plus k b)`：k 的 size=(0,1)，
--- 调用第 0 实参 k 深度 1 > 0 ⇒ 下降 ⇒ 通过。
--- `loop n = loop n`：n 的 size=(0,0)，不严格下降 ⇒ 拒绝。
+-- 只分析自递归函数。规则：体内每个自调用必须至少有一个实参是「对应形参的真子项」。
+-- size 表：变量名 ↦ (形参下标, 深度)；形参深度 0，构造子字段继承下标、深度+1。
+-- `plus a b = case a of Zero => b | Succ k => Succ (plus k b)`：k 的 size=(0,1) ⇒ 下降 ⇒ 通过。
+-- `loop n = loop n`：n 的 size=(0,0) ⇒ 拒绝。
 checkTerminationDecls : List Decl -> Result Int
 checkTerminationDecls decls = checkTermDeclsGo (funDefsOf decls)
 
@@ -1468,21 +1488,21 @@ funMentionsStmts name (s :: rest) = funMentions name (doStmtExpr s) || funMentio
 
 -- 单个自递归定义。
 checkTermOne : String -> List Pat -> Expr -> Result Int
-checkTermOne fname pats body = checkTermBody fname (initialSizes (patNames pats)) body
+checkTermOne fname pats body = checkTermBody fname (patSizeEntries pats) body
 
-patNames : List Pat -> List String
-patNames [] = []
-patNames (p :: rest) = case p of
-  PVar n sp => n :: patNames rest
-  PWild sp => "_" :: patNames rest
-  _ => "_" :: patNames rest
+-- 顶层形参的尺寸表：递归进构造子模式，给子变量加深度（`Cons y rest` 的 `rest` → (i,1)）。
+-- 这样 `mem x (Cons y rest) = ... mem x rest ...` 能证明 `rest` 严格下降。
+patSizeEntries : List Pat -> List (Pair String (Pair Int Int))
+patSizeEntries pats = patSizeGo pats 0
 
-initialSizes : List String -> List (Pair String (Pair Int Int))
-initialSizes names = initialSizesGo names 0
-
-initialSizesGo : List String -> Int -> List (Pair String (Pair Int Int))
-initialSizesGo [] i = []
-initialSizesGo (n :: rest) i = Pair n (Pair i 0) :: initialSizesGo rest (i + 1)
+patSizeGo : List Pat -> Int -> List (Pair String (Pair Int Int))
+patSizeGo [] i = []
+patSizeGo (p :: rest) i = case p of
+  PVar n sp => Pair n (Pair i 0) :: patSizeGo rest (i + 1)
+  PWild sp => Pair "_" (Pair i 0) :: patSizeGo rest (i + 1)
+  PCon cn ps sp =>
+    append (Pair "_" (Pair i 0) :: subSizeEntries (Pair i 0) ps) (patSizeGo rest (i + 1))
+  _ => Pair "_" (Pair i 0) :: patSizeGo rest (i + 1)
 
 -- 遍历体：每个对 fname 的调用都必须有下降证据。
 checkTermBody : String -> List (Pair String (Pair Int Int)) -> Expr -> Result Int
@@ -1694,14 +1714,11 @@ isIndexDomain ec dom =
 -- ---------------------------------------------------------------
 -- 擦除判据（M18.5：全仓唯一入口）
 -- ---------------------------------------------------------------
---
--- 规则：**只有域是宇宙（`Type`）的 binder 才擦除**；隐式 binder 恒擦除（精化器插入
--- 隐式实参，运行时不传）。索引（`{n : Nat}` 这类归纳族域）**保留运行时表示**——
--- 它们可能被当成递归参数读回来（见 `vlen`），安全擦除需要整程序使用分析（M22）。
---
--- 这个词是全仓唯一判据：`teleOf` / `checkBinders` / `bindOnePattern` / `checkLam` /
--- `inferArgs` / `bindCtorBinder` 六处都必须走它，否则「字段数 / telescope 长度 /
--- 绑定数」三处会各自漂移，违反即静默错编译（M24.6 第一级要把它升级成类型保证）。
+-- 规则：**只有域是宇宙（`Type`）的 binder 才擦除**；隐式 binder 恒擦除（精化器插入隐式实参，
+-- 运行时不传）。索引（`{n : Nat}` 这类归纳族域）**保留运行时表示**——它们可能被当成递归参数
+-- 读回来（见 `vlen`），安全擦除需要整程序使用分析（M22）。
+-- 这个词是全仓唯一判据：`teleOf` / `checkBinders` / `bindOnePattern` / `checkLam` / `inferArgs` /
+-- `bindCtorBinder` 六处都必须走它，否则「字段数 / telescope 长度 / 绑定数」三处各自漂移。
 binderRig : Bool -> Value -> Rig
 binderRig implicit dom = rigOfBinder implicit (isTypeValue dom)
 
@@ -1868,7 +1885,7 @@ inferArgsGo globals ctx ec ty args sp =
           Pair argTerms (Pair resTy ec2) =>
             Ok (Pair (Pair instTerm Rig1 :: argTerms) (Pair resTy ec2))
         )
-      Err e => if hasUnsolvedMetaValue ec0 (forceVal ec0 dom) then
+      Err e => if hasUnsolvedMetaValue (ecSols ec0) (forceVal ec0 dom) then
         let
           m = ecNext ec0
         in case newMeta ctx ec0 of
@@ -1932,7 +1949,7 @@ resolveDictGoals globals ec = case ecDictGoals ec of
       forced = forceVal ec1 dom
       keep = ecAddDictGoal (resolveDictGoals globals ec1) (DtDictGoal m forced)
     in case dictClassArg ec1 forced of
-      Just argTy => if hasUnsolvedMetaValue ec1 argTy then keep
+      Just argTy => if hasUnsolvedMetaValue (ecSols ec1) argTy then keep
       else case searchInstance ec1 forced (Span "" 0 0 0 0) of
         Ok (Pair instTerm ec2) => case solveMeta (ecDefs ec2) (ecSols ec2) 0 m [] (eval [] instTerm) of
           Ok sols2 => resolveDictGoals globals (ecPutSols ec2 sols2)
@@ -2043,30 +2060,16 @@ dictClassArg ec dom = case forceVal ec dom of
   VNeutral (NGlobal g ([arg])) => Just arg
   _ => Nothing
 
--- 域里是否还有未解元变量（用于判断字典参数此刻能否搜索实例）。
-hasUnsolvedMetaValue : Ec -> Value -> Bool
-hasUnsolvedMetaValue ec v = case v of
-  VMeta m sp => case metaLookup m (ecSols ec) of
-    Just solved => hasUnsolvedMetaValue ec solved
-    Nothing => True
-  VNeutral n => case n of
-    NVar name lvl sp => hasUnsolvedMetaList ec sp
-    NGlobal g sp => hasUnsolvedMetaList ec sp
-  VPi name implicit rig dom clo => hasUnsolvedMetaValue ec dom || hasUnsolvedMetaClo ec clo
-  VLam name rig clo => hasUnsolvedMetaClo ec clo
-  VCon c args => hasUnsolvedMetaList ec args
-  VCase scrut alts => hasUnsolvedMetaValue ec scrut
-  VIf c th el =>
-    hasUnsolvedMetaValue ec c || hasUnsolvedMetaValue ec th || hasUnsolvedMetaValue ec el
-  _ => False
-
-hasUnsolvedMetaList : Ec -> List Value -> Bool
-hasUnsolvedMetaList ec [] = False
-hasUnsolvedMetaList ec (v :: rest) = hasUnsolvedMetaValue ec v || hasUnsolvedMetaList ec rest
-
-hasUnsolvedMetaClo : Ec -> Closure -> Bool
-hasUnsolvedMetaClo ec clo = case clo of
-  Clos env body => hasUnsolvedMetaList ec env
+-- 字典域类参数是不是定义体的刚性变量（绑定于当前定义类型，无实例可搜）。
+-- `mem` 的 `Dict_Eq a` 走这里；具体类型（`NGlobal`）与元变量不在此列。
+isRigidDictArg : Ec -> Value -> Bool
+isRigidDictArg ec dom = case dictClassArg ec dom of
+  Just arg => case forceVal ec arg of
+    VNeutral n => case n of
+      NVar name lvl sp => True
+      _ => False
+    _ => False
+  Nothing => False
 
 checkE : List (Pair String Term) -> Ctx -> Ec -> Expr -> Value -> Result (Pair Term Ec)
 checkE globals ctx ec expr expected = case expr of
@@ -2224,7 +2227,7 @@ specializeEqApp globals ctx ec name args sp = if isEqOp name then case args of
     Pair aTerm (Pair aTy ec1) => andThen (inferE globals ctx ec1 b) (\pb => case pb of
       Pair bTerm (Pair bTy ec2) =>
         andThen (convEc ec2 (ctxDepth ctx) aTy bTy)
-          (\ec3 => specializeEqTy name aTerm bTerm sp aTy ec3)
+          (\ec3 => specializeEqTy globals ctx name aTerm bTerm sp aTy ec3)
     )
   )
   _ => Ok Nothing
@@ -2233,8 +2236,8 @@ else Ok Nothing
 -- `==` / `/=` 的饱和应用（M19）。`Int` / `String` 按实参类型特化成具体运行时函数；
 -- 其它类型解析成 `Eq` 字典的方法投影（字典由实例搜索插入）——这正是 `deriving (Eq)`
 -- 的用处。解析都在精化期完成，codegen 只按名字映射、不需要类型信息。
-specializeEqTy : String -> Term -> Term -> Span -> Value -> Ec -> Result (Maybe (Pair Term (Pair Value Ec)))
-specializeEqTy name aTerm bTerm sp aTy ec = case builtinEqTyName (forceVal ec aTy) of
+specializeEqTy : List (Pair String Term) -> Ctx -> String -> Term -> Term -> Span -> Value -> Ec -> Result (Maybe (Pair Term (Pair Value Ec)))
+specializeEqTy globals ctx name aTerm bTerm sp aTy ec = case builtinEqTyName (forceVal ec aTy) of
   Just tyName =>
     andThen (eqRuntimeName name tyName)
       (\rt => Ok (Just (Pair (TApp (TApp (TGlobal rt) aTerm Rig1) bTerm Rig1) (Pair (VNeutral (NGlobal "Bool" [])) ec))))
@@ -2244,11 +2247,24 @@ specializeEqTy name aTerm bTerm sp aTy ec = case builtinEqTyName (forceVal ec aT
       -- `eq : {a : Type} -> {d : Dict_Eq a} -> a -> a -> Bool`：类型（擦除）+ 字典。
       tyTerm = quote 0 aTy
       dictTy = VNeutral (NGlobal (dictTypeName "Eq") [eval [] tyTerm])
-    in andThen (searchInstance ec dictTy sp) (\p => case p of
-      Pair dictTerm ec1 =>
+    in case searchInstance ec dictTy sp of
+      Ok (Pair dictTerm ec1) =>
         Ok
           (Just (Pair (TApp (TApp (TApp (TApp (TGlobal mname) tyTerm Rig0) dictTerm Rig1) aTerm Rig1) bTerm Rig1) (Pair (VNeutral (NGlobal "Bool" [])) ec1)))
-    )
+      Err e =>
+        if isRigidDictArg ec dictTy then deferEqDict globals ctx mname tyTerm aTerm bTerm sp dictTy ec
+        else Err e
+
+-- 刚性类参数（如 `mem` 的 `a`）没有可搜实例：延迟成裸元变量 + 记录自由字典目标，
+-- 等定义体精化完由 `liftFreeDictGoals` 提升成 `{d : Dict_Eq a}` 隐式参数。
+deferEqDict : List (Pair String Term) -> Ctx -> String -> Term -> Term -> Term -> Span -> Value -> Ec -> Result (Maybe (Pair Term (Pair Value Ec)))
+deferEqDict globals ctx mname tyTerm aTerm bTerm sp dictTy ec =
+  let
+    m = ecNext ec
+  in case newMeta ctx ec of
+    Pair metaTerm ec1 =>
+      Ok
+        (Just (Pair (TApp (TApp (TApp (TApp (TGlobal mname) tyTerm Rig0) metaTerm Rig1) aTerm Rig1) bTerm Rig1) (Pair (VNeutral (NGlobal "Bool" [])) (ecAddDictGoal ec1 (DtDictGoal m dictTy)))))
 
 checkAppGeneral globals ctx ec fn args expected sp = case fn of
   EVar name vsp => andThen (specializeEqApp globals ctx ec name args sp) (\mspec => case mspec of
@@ -2305,10 +2321,9 @@ wrapLambdas : List String -> Expr -> Expr
 wrapLambdas [] body = body
 wrapLambdas (n :: rest) body = ELam [n] (wrapLambdas rest body) (Span "" 0 0 0 0)
 
--- 按列递归。params 是**尚未消耗**的位置名（与剩余模式列一一对应）。
--- 该列含内建字面量模式（Int / String）：生成嵌套 if 链。
--- `f 0 = a; f 1 = b; f n = c` → `if pos == 0 then a else if pos == 1 then b else c`
--- 变量/通配 clause 在字面量之后提供 fallback（体按剩余列递归构建）。
+-- 按列递归。params 是**尚未消耗**的位置名（与剩余模式列一一对应）。该列含内建字面量模式
+-- （Int / String）：生成嵌套 if 链——`f 0 = a; f 1 = b; f n = c` → `if pos == 0 then a else
+-- if pos == 1 then b else c`；变量/通配 clause 在字面量之后提供 fallback（体按剩余列递归构建）。
 litAltExpr : List (Pair (List Pat) Expr) -> String -> List String -> Int -> Result Expr
 litAltExpr clauses pos restParams fuel = litAltExprGo clauses pos restParams fuel
 

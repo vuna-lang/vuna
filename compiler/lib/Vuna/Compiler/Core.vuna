@@ -1,4 +1,4 @@
-module Vuna.Compiler.Core (Rig, Rig0, Rig1, RigOmega, rigIsErased, rigIsLinear, rigIsOmega, rigOfBinder, Level, levelZero, levelSucc, levelMax, levelToInt, levelOfInt, levelEq, levelLt, Term, TVar, TMeta, TGlobal, TType, TPi, TLam, TApp, TCon, TCase, CaseAlt, caseAltName, caseAltBinders, caseAltBody, TInt, TStr, TBool, TIf, Value, VType, VPi, VLam, VNeutral, VMeta, VCon, VCase, VCaseAlt, vCaseAltName, vCaseAltBinders, vCaseAltClosure, VInt, VStr, VBool, VIf, Neutral, NVar, NGlobal, Closure, Clos, eval, applyClosure, applyValue, applySpine, shift, quote, evalCase, force, normalize, conv, solveMeta, defaultFuel, isTypeValue, typeLevelOf, metaLookup, defLookup, substSolvedMetas, substVarAt, levelEscapes, showTerm, showValue, showValueAt) where
+module Vuna.Compiler.Core (Rig, Rig0, Rig1, RigOmega, rigIsErased, rigIsLinear, rigIsOmega, rigOfBinder, Level, levelZero, levelSucc, levelMax, levelToInt, levelOfInt, levelEq, levelLt, Term, TVar, TMeta, TGlobal, TType, TPi, TLam, TApp, TCon, TCase, CaseAlt, caseAltName, caseAltBinders, caseAltBody, TInt, TStr, TBool, TIf, Value, VType, VPi, VLam, VNeutral, VMeta, VCon, VCase, VCaseAlt, vCaseAltName, vCaseAltBinders, vCaseAltClosure, VInt, VStr, VBool, VIf, Neutral, NVar, NGlobal, Closure, Clos, eval, applyClosure, applyValue, applySpine, shift, quote, evalCase, force, normalize, conv, solveMeta, defaultFuel, isTypeValue, typeLevelOf, metaLookup, defLookup, substSolvedMetas, substVarAt, levelEscapes, substMetaVar, insertDictBinder, insertLamBinder, hasUnsolvedMetaValue, showTerm, showValue, showValueAt) where
 
 -- Vuna.Compiler.Core：M13 的 core 类型论表示、NbE 求值与定义性相等。
 --
@@ -816,6 +816,54 @@ substSolvedMetas sols t = case t of
 substSolvedAlt : List (Pair Int Value) -> CaseAlt -> CaseAlt
 substSolvedAlt sols (CaseAlt n bs b) = CaseAlt n bs (substSolvedMetas sols b)
 
+-- M20 字典提升：替换 `?m` 为 `TVar d (depth - q)`（`q` = 插入点外侧绑定子数，含类参数绑定子）。
+-- `depth` 是 `?m` 出现处深度（de Bruijn）；用于把延迟的字典元变量变成提升后的字典绑定子变量。
+substMetaVar : Int -> String -> Int -> Term -> Term
+substMetaVar m name q t = substMetaVarGo m name q 0 t
+
+substMetaVarGo : Int -> String -> Int -> Int -> Term -> Term
+substMetaVarGo m name q depth t = case t of
+  TMeta n => if n == m then TVar name (depth - q) else t
+  TPi n i r d c =>
+    TPi n i r (substMetaVarGo m name q depth d) (substMetaVarGo m name q (depth + 1) c)
+  TLam n r b => TLam n r (substMetaVarGo m name q (depth + 1) b)
+  TApp f a r => TApp (substMetaVarGo m name q depth f) (substMetaVarGo m name q depth a) r
+  TCon c args =>
+    TCon c (map (\p => Pair (substMetaVarGo m name q depth (firstOf p)) (secondOf p)) args)
+  TCase s alts =>
+    TCase (substMetaVarGo m name q depth s) (map (substMetaVarAlt m name q depth) alts)
+  TIf c th el =>
+    TIf (substMetaVarGo m name q depth c) (substMetaVarGo m name q depth th)
+      (substMetaVarGo m name q depth el)
+  _ => t
+
+substMetaVarAlt : Int -> String -> Int -> Int -> CaseAlt -> CaseAlt
+substMetaVarAlt m name q depth (CaseAlt bn bs b) =
+  CaseAlt bn bs (substMetaVarGo m name q (depth + length bs) b)
+
+-- M20 字典提升：在 `TPi` 链索引 `idx` 的绑定子后插入 `{d : Dict_C a}`（隐式运行时字典）。
+-- `dictDom` 里类参数引用插入后索引 +1（`d` 落在类参数绑定子之内）。
+insertDictBinder : String -> Int -> Term -> Term -> Term
+insertDictBinder name idx dictDom t = insertDictBinderGo name idx (shift idx 1 dictDom) 0 t
+
+insertDictBinderGo : String -> Int -> Term -> Int -> Term -> Term
+insertDictBinderGo name idx dictDom depth t = case t of
+  TPi n i r d c =>
+    if depth == idx then TPi n i r d (TPi name True Rig1 dictDom (shift depth 1 c))
+    else TPi n i r d (insertDictBinderGo name idx dictDom (depth + 1) c)
+  _ => t
+
+-- M20 字典提升：在 `TLam` 链索引 `idx` 的绑定子后插入 `TLam d`。
+insertLamBinder : String -> Int -> Term -> Term
+insertLamBinder name idx t = insertLamBinderGo name idx 0 t
+
+insertLamBinderGo : String -> Int -> Int -> Term -> Term
+insertLamBinderGo name idx depth t = case t of
+  TLam n r b =>
+    if depth == idx then TLam n r (TLam name Rig1 (insertLamBinderGo name idx (depth + 1) b))
+    else TLam n r (insertLamBinderGo name idx (depth + 1) b)
+  _ => t
+
 -- 项里是否有自由变量（`i >= depth` 的 `TVar`）。闭项无自由变量。
 hasFreeTermVar : Int -> Term -> Bool
 hasFreeTermVar d t = case t of
@@ -836,6 +884,31 @@ anyAltFree : Int -> List CaseAlt -> Bool
 anyAltFree d [] = False
 anyAltFree d (alt :: rest) = case alt of
   CaseAlt n bs b => hasFreeTermVar (d + length bs) b || anyAltFree d rest
+
+-- M20：值里是否还有未解元变量（`VMeta m` 未解，或解里仍有未解）。
+hasUnsolvedMetaValue : List (Pair Int Value) -> Value -> Bool
+hasUnsolvedMetaValue sols v = case v of
+  VMeta m sp => case metaLookup m sols of
+    Just solved => hasUnsolvedMetaValue sols solved
+    Nothing => True
+  VNeutral n => case n of
+    NVar name lvl sp => hasUnsolvedMetaList sols sp
+    NGlobal g sp => hasUnsolvedMetaList sols sp
+  VPi name implicit rig dom clo => hasUnsolvedMetaValue sols dom || hasUnsolvedMetaClo sols clo
+  VLam name rig clo => hasUnsolvedMetaClo sols clo
+  VCon c args => hasUnsolvedMetaList sols args
+  VCase scrut alts => hasUnsolvedMetaValue sols scrut
+  VIf c th el =>
+    hasUnsolvedMetaValue sols c || hasUnsolvedMetaValue sols th || hasUnsolvedMetaValue sols el
+  _ => False
+
+hasUnsolvedMetaList : List (Pair Int Value) -> List Value -> Bool
+hasUnsolvedMetaList sols [] = False
+hasUnsolvedMetaList sols (v :: rest) = hasUnsolvedMetaValue sols v || hasUnsolvedMetaList sols rest
+
+hasUnsolvedMetaClo : List (Pair Int Value) -> Closure -> Bool
+hasUnsolvedMetaClo sols clo = case clo of
+  Clos env body => hasUnsolvedMetaList sols env
 
 showTerm : Term -> String
 showTerm t = case t of
