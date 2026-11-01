@@ -29,12 +29,15 @@
 #   longlines 4523 / letrec 664 / zeroarg 34 / ctorcount 2504，按实测重新标定。
 # M20 参数化 data + 签名类型变量量化（`DtQuant` 模块）：seed 闭包 36 个模块，
 #   bytes 1299063 / lines 12263 / longlines 4556 / letrec 674 / ctorcount 2522。
+# M21 main : IO a 执行 + 具体 bind/pure 的 do（`Dt.evalDtMain` / `CoreCodegen` 的
+#   ioResultTy / ioRunText / genDtHook）：seed 闭包 36 个模块，bytes 1304369 /
+#   lines 12324 / longlines 4576 / letrec 677 / ctorcount 2536，按实测重新标定。
 bytes 1305000
-lines 12280
+lines 12340
 maxline 12400
-longlines 4560
+longlines 4580
 letrec 680
 strcat 330
 eqint 35
 zeroarg 40
-ctorcount 2530
+ctorcount 2545

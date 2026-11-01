@@ -212,9 +212,11 @@ effectful 内建进 DT prelude；包级 allowlist 语义保留；`main : IO a` �
    `MkIO : (Int -> a) -> IO a` 正好是这种形状，**它是 `bindIO` 精化的直接阻塞点**。
    **（2026-11 已修复，见下方进度）**
 2. `do` 降级产物是裸 `bind`/`pure`（`Loader.desugarDo`），DT prelude 与 globals 都要
-   提供这两个名字（trait 方法投影 + `Monad IO` 实例）。
+   提供这两个名字（trait 方法投影 + `Monad IO` 实例）。**（2026-11 已部分落地：具体
+   bind/pure 让 `do` 在 DT 下可跑；泛型 `Monad IO` 实例留到 M22，见下方进度）**
 3. `interp --dt` 目前只接受「归约成值」的 `main`，`main : IO a` 需要按 `ioRunExpr`
    的语义执行（DT 核心求值器侧：对 `MkIO f` 取 `f 0` 并继续归约）。
+   **（2026-11 已修复，见下方进度）**
 
 
 **验收**：`app/Main.vuna` 与 `compiler/app/Main.vuna` 的等价程序在 DT 下 check → compile →
@@ -222,7 +224,7 @@ effectful 内建进 DT prelude；包级 allowlist 语义保留；`main : IO a` �
 
 **前置**：M19（`do` 需要 let/推断位 case）。**可与 M20 并行。** **优先级**：高。
 
-**进度（1/3 前置缺口已补，2026-11）**：
+**进度（前置缺口 1、3 已补；缺口 2 部分落地，2026-11）**：
 
 - 缺口 1（多态族构造子的函数类型字段不被索引精化）已修复：不再在**结果**上做
   `refineValue`（对 `VPi`/`VLam` 的 `_ => v` 不递归），而是在**取用点**（`Elab.varTypeValue`
@@ -230,8 +232,19 @@ effectful 内建进 DT prelude；包级 allowlist 语义保留；`main : IO a` �
   都递归精化，且不动 `refineValue` 的 16 个调用点（此前尝试给 `refineValue` 加
   `VPi`/`VLam` 分支 + `refineClosureDown` + `freshVar`，因 `quote` 深度错位引发 10 处回归，
   已放弃）。新增正例 `test/corpus/dt/33_poly_fn_field.vuna`（输出 `1`）与负例
-  `test/corpus/dt_err/27_poly_fn_field_err.vuna`（`expected Bool, got Int`）。全量
-  `test/run-tests.sh` 841 项通过。缺口 2、3 仍待 M21 主体实现。
+  `test/corpus/dt_err/27_poly_fn_field_err.vuna`（`expected Bool, got Int`）。
+- 缺口 3（`main : IO a` 的执行）已修复：`Dt.evalDtMain` 与 `CoreCodegen.generateDtProgram`
+  都按 main 的**类型**识别 IO（族名 `IO`，含 `Base.IO.IO` 带模块前缀形态），取构造子
+  **末实参** `f`（隐式族参数也进值表示，所以不能按位置取第一个）后对世界令牌 0 应用
+  `f 0` 并继续归约，与 HM `ioRunExpr` 语义一致。新增正例
+  `test/corpus/dt/34_io_do.vuna`（do + 具体 bind/pure，输出 `42`）与
+  `test/corpus/dt/35_io_main.vuna`（`main : IO String`，输出 `"hello"`）。
+- 缺口 2（`do` 的 bind/pure）：**部分落地**。`do` 在 DT 下已能精化并执行，但用的是
+  **具体**（非 trait）`bind`/`pure`——泛型 `Monad IO` 实例需要「字典域类参数被后续实参
+  约束后再搜实例」的推理次序修复，属 M22 的泛型实例约束求解（`Base.List.mem` 的 `Eq a`
+  是同一处）。泛型 `Monad` 实例 + 实例约束求解完成后，`do` 切到 trait 方法投影即达成
+  「Base.IO 全部 API 可用」。
+- 全量 `test/run-tests.sh` 849 项通过（新增 2 正例 × 4 检查/路径）。
 
 ### M22：擦除判据接线与统一 codegen
 

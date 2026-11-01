@@ -37,18 +37,45 @@ dtEvalFile roots entry =
   andThen (dtLoad roots entry)
     (\decls => andThen (elabProgram decls) (\program => evalDtMain program))
 
+-- main : IO a 的执行（M21，对齐 HM ioRunExpr）：先归约 main 到 IO 构造子
+-- （`MkIO f`），再对世界令牌 0 应用 `f 0` 并继续归约。IO 的识别按 main 的
+-- **类型**（`isIOType`，族名 `IO`，含 `Base.IO.IO` 这类带模块前缀的名字）；
+-- 纯值的 main 仍按 VInt/VStr/VBool 直接显示。
 evalDtMain : Pair (List DtData) (List DtDef) -> Result String
-evalDtMain (Pair datas defs) = case findMainDef defs of
+evalDtMain (Pair _ defs) = case findMainDef defs of
   Nothing => Err "DT: no main definition"
   Just mainDef =>
     let
       table = defTableOf defs
       mainVal = normalize table [] defaultFuel (VNeutral (NGlobal "main" []))
-    in case mainVal of
+    in if isIOType (dtDefType mainDef) then case mainVal of
+      VCon _ args => case reverse args of
+        f :: _ => Ok (showValueResult (normalize table [] defaultFuel (applyValue f (VInt 0))))
+        [] => Err "DT: main : IO a but its constructor has no arguments"
+      _ => Err "DT: main does not reduce to an IO action"
+    else case mainVal of
       VInt n => Ok (strFromInt n)
       VStr s => Ok (showValue mainVal)
       VBool b => Ok (showValue mainVal)
       _ => Err "DT: main does not reduce to a value"
+
+-- 族名（去掉模块前缀）：`Base.IO.IO` → `IO`。
+lastName : String -> String
+lastName name = case splitLastDot (splitOnDot name) of
+  Pair rev base => base
+
+-- main 的类型是不是 `IO a`（族名对得上，含模块前缀形态）。
+isIOType : Term -> Bool
+isIOType t = case t of
+  TApp fn _ _ => isIOType fn
+  TGlobal g => lastName g == "IO"
+  _ => False
+
+-- IO 动作的结果与普通 main 的结果统一显示：Int 用 strFromInt，其余交给 showValue。
+showValueResult : Value -> String
+showValueResult v = case v of
+  VInt n => strFromInt n
+  _ => showValue v
 
 findMainDef : List DtDef -> Maybe DtDef
 findMainDef [] = Nothing

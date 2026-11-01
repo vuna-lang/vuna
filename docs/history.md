@@ -211,6 +211,16 @@ git 历史里）。各里程碑对应的模块与设计见 [docs/architecture.md
   `test/corpus/dt_err/27_poly_fn_field_err.vuna`（`expected Bool, got Int`）；全量
   `test/run-tests.sh` 841 项通过。`Base.IO` 的 `MkIO : (Int -> a) -> IO a`（`bindIO` /
   `ioFmap` 的阻塞点）由此解锁。
+- M21 主体第一步：`main : IO a` 的执行 + `do` 的具体 bind/pure。`Dt.evalDtMain` 与
+  `CoreCodegen.generateDtProgram` 都按 main 的**类型**识别 IO（族名 `IO`，含
+  `Base.IO.IO` 带模块前缀形态），取构造子**末实参** `f`（隐式族参数也进值表示，所以
+  不能按位置取第一个）后对世界令牌 0 应用 `f 0` 并继续归约，与 HM `ioRunExpr` 语义
+  一致（`interp --dt` 与 `compile --dt`+ocamlopt 产物逐字节一致）。`do` 在 DT 下可
+  精化执行，但用**具体**（非 trait）`bind`/`pure`——泛型 `Monad IO` 实例需要「字典域
+  类参数被后续实参约束后再搜实例」的推理次序修复，属 M22 泛型实例约束求解
+  （`Base.List.mem` 的 `Eq a` 是同一处）。新增正例 `test/corpus/dt/34_io_do.vuna`
+  （输出 `42`）、`35_io_main.vuna`（`main : IO String`，输出 `"hello"`）；全量
+  `test/run-tests.sh` 849 项通过。
 
 ## 决策变更：M18 迁移动机失效（2026-11）
 

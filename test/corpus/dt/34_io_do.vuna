@@ -1,0 +1,19 @@
+-- M21：main : IO a 的执行（对齐 HM ioRunExpr），以及 do 块在 DT 下的精化。
+-- do 降级为裸 bind/pure（Loader.desugarDo），这里用具体（非 trait）bind/pure，
+-- 因为泛型 Monad 实例的约束求解属于 M22（见 docs/reference/dt.md）。
+data IO a : Type where
+  MkIO : (Int -> a) -> IO a
+
+pure : a -> IO a
+pure x = MkIO (\w => x)
+
+bind : IO a -> (a -> IO b) -> IO b
+bind io k = case io of
+  MkIO f => MkIO (\w => case k (f w) of
+    MkIO g => g w
+  )
+
+main : IO Int
+main = do
+  x <- pure 41
+  pure (x + 1)

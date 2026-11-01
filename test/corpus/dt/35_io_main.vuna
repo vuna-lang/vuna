@@ -1,0 +1,7 @@
+-- M21：main : IO a 直接作为值构造子（无 do），执行时对世界令牌 0 应用 f 0。
+-- IO 的识别按 main 的类型（族名 IO），构造子的运行实参取最后一个（f）。
+data IO a : Type where
+  MkIO : (Int -> a) -> IO a
+
+main : IO String
+main = MkIO (\w => "hello")

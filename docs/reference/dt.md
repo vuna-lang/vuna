@@ -150,10 +150,10 @@ DT 路径与 HM 路径互不影响：HM 的 interp + typed + split 语义与产�
 `test/run-tests.sh` 第 34 段，三条路径（`interp --dt` / `check --dt` / `compile --dt` +
 `ocamlopt`）都跑：
 
-- 正例 `test/corpus/dt/` 共 **33** 个：M13 `01_id`–`08_if`；M14 `09_nat`/`10_vec`/`11_fin`/`12_eq`；
+- 正例 `test/corpus/dt/` 共 **35** 个：M13 `01_id`–`08_if`；M14 `09_nat`/`10_vec`/`11_fin`/`12_eq`；
   M15 `13_iface`/`14_solve`/`15_goal`；M16 `16_total`/`17_erase`；M18 `18_ctx`；
   M18.5 `19_lam`；M18.6 `20_rig`/`21_level`；M19 `22_let` 起共 10 个（`22_let`–`31_deriving_ord`）；
-  M20 `32_parametric_data`（`data Foo a : Type` 写法 + 构造子字段引用族参数）；M21 `33_poly_fn_field`（函数字段被索引精化）。
+  M20 `32_parametric_data`（`data Foo a : Type` 写法 + 构造子字段引用族参数）；M21 `33_poly_fn_field`（函数字段被索引精化）、`34_io_do`/`35_io_main`（main : IO a 执行：按类型识别 IO、取构造子末实参 `f` 后对世界令牌 0 应用 `f 0`；do 用具体 bind/pure）。
   数值见各 `.out` 文件。
 - 负例 `test/corpus/dt_err/` 共 **27** 个：M13 的 `01_universe`、`02_conv`、
   `03_hole`、`05_import`、`06_unknown`、`07_lambda`、`08_arity`、`09_runtime_type`、

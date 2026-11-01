@@ -716,6 +716,31 @@ mainShow table tyTerm = case force table [] defaultFuel (eval [] tyTerm) of
     _ => mainShowErr
   _ => mainShowErr
 
+-- M21：main : IO a 的执行（对齐 HM ioRunExpr）。先归约 main 到 IO 构造子
+-- （`MkIO f`），再对世界令牌 0 应用 `f 0` 并继续归约。IO 的识别按 main 的
+-- **类型**（族名 `IO`，含 `Base.IO.IO` 这类带模块前缀的名字）。
+lastName : String -> String
+lastName name = case splitLastDot (splitOnDot name) of
+  Pair rev base => base
+
+-- 把 `IO a` 拆成内层类型 `a`；不是 `IO ...` 则 Nothing。
+ioResultTy : Term -> Maybe Term
+ioResultTy t = case t of
+  TApp fn arg _ => case fn of
+    TGlobal g => if lastName g == "IO" then Just arg else Nothing
+    _ => Nothing
+  _ => Nothing
+
+-- 找 IO 族的（族名, 构造子名），用于生成 `match main with C_IO_MkIO f -> f 0`。
+ioCtorOf : List DtData -> Maybe (Pair String String)
+ioCtorOf [] = Nothing
+ioCtorOf (d :: rest) = if lastName (dtDataName d) == "IO" then firstCtorOf d else ioCtorOf rest
+
+firstCtorOf : DtData -> Maybe (Pair String String)
+firstCtorOf d = case dtDataCtors d of
+  c :: _ => Just (Pair (dtDataName d) (dtCtorName c))
+  [] => Nothing
+
 mainShowForName : String -> Result (Pair String String)
 mainShowForName g = case g of
   "Int" => Ok (Pair "string_of_int" "int")
@@ -746,16 +771,33 @@ generateDtProgram : Pair (List DtData) (List DtDef) -> Bool -> Result String
 generateDtProgram program printResult = andThen (genProgramBody program) (\p => case p of
   Pair bodyText (Pair runtime table) => case findDtDef "main" runtime of
     Nothing => Err "DT: no main definition"
-    Just mainDef => andThen (mainShow table (dtDefType mainDef)) (\showPair => case showPair of
-      Pair showFn kind =>
-        let
-          mainRef = valueName "main"
-          hook =
-            if printResult then "let () = print_endline (" ++ showFn ++ " (" ++ mainRef ++ "))\n"
-            else "let () = ignore (" ++ mainRef ++ ")\n"
-        in Ok (bodyText ++ "\n" ++ hook)
-    )
+    Just mainDef =>
+      let
+        mainTy = dtDefType mainDef
+        mainRef = valueName "main"
+      in case ioResultTy mainTy of
+        Just innerTy => genDtHook bodyText table innerTy (ioRunText program mainRef) printResult
+        Nothing => genDtHook bodyText table mainTy mainRef printResult
 )
+
+-- main 钩子：`mainExpr` 是运行时求 main 值的表达式（普通 main 直接是 `v_main`；
+-- main : IO a 则是 `match v_main with C_IO_MkIO f -> f 0`），按类型 `tyTerm` 选展示函数。
+genDtHook : String -> List (Pair String Term) -> Term -> String -> Bool -> Result String
+genDtHook bodyText table tyTerm mainExpr printResult = andThen (mainShow table tyTerm) (\showPair => case showPair of
+  Pair showFn kind =>
+    let
+      hook =
+        if printResult then "let () = print_endline (" ++ showFn ++ " (" ++ mainExpr ++ "))\n"
+        else "let () = ignore (" ++ mainExpr ++ ")\n"
+    in Ok (bodyText ++ "\n" ++ hook)
+)
+
+-- `match v_main with C_IO_MkIO f -> f 0`（找不到 IO 构造子时回退为原样引用）。
+ioRunText : Pair (List DtData) (List DtDef) -> String -> String
+ioRunText program mainRef = case ioCtorOf (firstOf program) of
+  Just (Pair family ctor) =>
+    "match " ++ mainRef ++ " with " ++ ctorOcamlName family ctor ++ " f -> f 0"
+  Nothing => mainRef
 
 -- `vuna check --dt` 跑一遍完整生成主体（丢弃产物），保证「能 check 就能 compile」：
 -- 擦除检查、构造子引用、SCC 分组、类型声明与函数生成都在这一步走到。
