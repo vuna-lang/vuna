@@ -13,6 +13,7 @@ import Vuna.Compiler.Ast
 import Vuna.Compiler.Core
 import Vuna.Compiler.DtPrelude
 import Vuna.Compiler.DtKind
+import Vuna.Compiler.DtRecords
 
 -- 一个 DT 定义：名字、类型项、体项（均为闭项；体带擦除标志）。
 data DtDef : Type where
@@ -306,9 +307,7 @@ collectSigsInto acc (d :: rest) = case d of
     else collectSigsInto (Pair name ty :: acc) rest
   DFun name pats body sp => collectSigsInto acc rest
   DData name params kind ctors derivings sp => collectSigsInto acc rest
-  DRecord name params fields derivings sp =>
-    errAt sp "DT: record declarations are not supported yet (M17)"
-  -- M15：trait / instance 走字典编码（见 elabClasses / elabInstances），签名收集阶段只需放行。
+  DRecord name params fields derivings sp => errAt sp "DT: internal: record was not desugared"
   DTrait name params methods sp => collectSigsInto acc rest
   DInstance mname isDefault head methods sp => collectSigsInto acc rest
 
@@ -1227,8 +1226,12 @@ dtProgGoals (DtProgram datas defs goals sols) = goals
 
 dtProgSols (DtProgram datas defs goals sols) = sols
 
+-- 精化入口。M19：先做 record 降级（`DtRecords.prepareDecls`）——record 是纯记法。
 elabProgramFull : List Decl -> Result DtProgram
-elabProgramFull decls = andThen (collectSigs decls) (\sigs => andThen (elabDatas (collectDataDecls decls []) preludeGlobals ecEmpty) (\pd => case pd of
+elabProgramFull decls = andThen (prepareDecls decls) (\ds => elabProgramGo ds)
+elabProgramGo : List Decl -> Result DtProgram
+
+elabProgramGo decls = andThen (collectSigs decls) (\sigs => andThen (elabDatas (collectDataDecls decls []) preludeGlobals ecEmpty) (\pd => case pd of
   Pair datas (Pair globals0 ec0) => andThen (elabTraits (collectTraitDecls decls []) globals0 ec0) (\pt => case pt of
     Pair classDatas (Pair projGlobals (Pair classes ec1)) =>
       let

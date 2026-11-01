@@ -1,0 +1,258 @@
+module Vuna.Compiler.DtRecords (RecordInfo, recordInfoName, recordInfoParams, recordInfoFields, recordInfoDerivings, recordInfoCtor, lookupRecord, fieldNamesOf, fieldIndex, lookupProvided, hasDuplicateFieldNames, missingFieldMsg, unknownFieldMsg, duplicateFieldMsg, firstUnknownFieldMsg, checkProvidedFields, recordsOfDecls, recordDeclToData, desugarRecords, prepareDecls) where
+
+-- Vuna.Compiler.Records：`record` 的**语法降级**（M19 提取成共享模块）。
+--
+-- record 在 vuna 里不是独立的核心语言特性，而是**纯记法**：一条 `record R where ...`
+-- 等价于「带一个构造子的 data，构造子按声明顺序接收全部字段」，record 的构造、字段
+-- 访问、更新与模式匹配都能在 AST 层无歧义地改写成等价的 data 记法。因此降级发生在
+-- **精化之前**，HM 与 DT 两条路径共用同一份改写（这也是终态需要的行为——M24 删除 HM
+-- 时这条降级留在共享模块里，不需要搬家）。
+--
+-- 本模块只做 AST → AST 变换，不依赖任何检查器状态（HM 的类型变量表、DT 的元变量上下文
+-- 都不进来），因此放在编译器包的中立位置。
+import Vuna.Compiler.Common
+import Vuna.Compiler.Ast
+
+-- 记录声明信息。第五个字段是**构造子名**：HM 路径沿用记录名（历史行为，构造子在独立
+-- 的值命名空间里不冲突）；DT 路径用 `Mk<R>`（DT 的 globals 是一张表，类型名与构造子
+-- 同名会让 `Point 1 2` 被解析成「把类型当函数应用」）。
+data RecordInfo : Type where
+  RecordInfo : String -> List String -> List (Pair String Expr) -> List String -> String -> RecordInfo
+
+recordInfoName (RecordInfo name params fields derivings ctor) = name
+
+recordInfoParams (RecordInfo name params fields derivings ctor) = params
+
+recordInfoFields (RecordInfo name params fields derivings ctor) = fields
+
+recordInfoDerivings (RecordInfo name params fields derivings ctor) = derivings
+
+recordInfoCtor (RecordInfo name params fields derivings ctor) = ctor
+
+lookupRecord name [] = Nothing
+lookupRecord name ((RecordInfo rname params fields derivings ctor) :: rest) =
+  if rname == name then Just (RecordInfo rname params fields derivings ctor)
+  else lookupRecord name rest
+
+fieldNamesOf [] = []
+fieldNamesOf ((Pair n t) :: rest) = n :: fieldNamesOf rest
+
+fieldIndexAt fname [] i = Nothing
+fieldIndexAt fname ((Pair n t) :: rest) i =
+  if n == fname then Just i else fieldIndexAt fname rest (i + 1)
+
+fieldIndex fname fields = fieldIndexAt fname fields 0
+
+lookupProvided : String -> List (Pair String a) -> Maybe a
+lookupProvided fname [] = Nothing
+lookupProvided fname ((Pair n e) :: rest) = if n == fname then Just e else lookupProvided fname rest
+
+hasDuplicateFieldNames : List (Pair String a) -> Bool
+hasDuplicateFieldNames [] = False
+hasDuplicateFieldNames ((Pair n e) :: rest) = case lookupProvided n rest of
+  Just _ => True
+  Nothing => hasDuplicateFieldNames rest
+
+missingFieldMsg sp fname = showSpanLoc sp ++ ": missing field " ++ fname
+
+unknownFieldMsg sp fname = showSpanLoc sp ++ ": unknown field " ++ fname
+
+duplicateFieldMsg sp = showSpanLoc sp ++ ": duplicate field"
+
+hasUnknownFields fieldNames [] = False
+hasUnknownFields fieldNames ((Pair n v) :: rest) =
+  if memName n fieldNames then hasUnknownFields fieldNames rest else True
+
+firstUnknownFieldMsg sp fieldNames [] = unknownFieldMsg sp ""
+firstUnknownFieldMsg sp fieldNames ((Pair n v) :: rest) =
+  if memName n fieldNames then firstUnknownFieldMsg sp fieldNames rest else unknownFieldMsg sp n
+
+checkProvidedFields fieldNames [] sp = Ok []
+checkProvidedFields fieldNames ((Pair n v) :: rest) sp =
+  if memName n fieldNames then checkProvidedFields fieldNames rest sp
+  else Err (unknownFieldMsg sp n)
+
+-- 记录声明抽取：DRecord 记住 RecordInfo，并降级成单构造器 DData。
+recordsOfDecls : (String -> String) -> List Decl -> Pair (List RecordInfo) (List Decl)
+recordsOfDecls ctorOf [] = Pair [] []
+recordsOfDecls ctorOf (d :: rest) = case recordsOfDecls ctorOf rest of
+  Pair recs ds => case d of
+    DRecord dname params fields derivings sp =>
+      let
+        info = RecordInfo dname params (map recordFieldPair fields) derivings (ctorOf dname)
+      in Pair (info :: recs) (recordDeclToData d (ctorOf dname) :: ds)
+    _ => Pair recs (d :: ds)
+
+recordFieldPair (Field fname ty sp) = Pair fname ty
+
+-- 记录的构造子名：`Mk<R>`。
+-- 记录声明降级：单构造子 DData。构造子名由 `ctor` 参数给出（见上面的策略说明）。
+recordParamVarExprs params sp = map (\p => EVar p sp) params
+
+recordRetType dname params sp = EApp (EVar dname sp) (recordParamVarExprs params sp) sp
+
+-- 构造子类型用一等的 `EPi` 表示（不是 `EVar "->"` 的语法编码）：这是记录降级的
+-- **输出**，交给下游检查器，不应当依赖某个检查器对箭头语法的特殊处理。
+recordArrowType [] ret sp = ret
+recordArrowType (f :: fs) ret sp = EPi "_" False (fieldType f) (recordArrowType fs ret sp) sp
+
+recordDeclToData (DRecord dname params fields derivings sp) ctor =
+  DData dname params (EVar "Type" sp)
+    [Ctor ctor (recordArrowType fields (recordRetType dname params sp) sp) (length fields) sp]
+    derivings sp
+
+-- 记录语法降级：构造 → 构造器应用；记录模式 → 构造器模式（按声明顺序补 PWild）。
+desugarRecords : List RecordInfo -> List Decl -> Result (List Decl)
+desugarRecords records decls = traverse (desugarRecordDecl records) decls
+
+desugarRecordDecl : List RecordInfo -> Decl -> Result Decl
+desugarRecordDecl records d = case d of
+  DFun name pats body sp =>
+    andThen (traverse (desugarPattern records) pats)
+      (\pats2 => andThen (desugarExpr records body) (\body2 => Ok (DFun name pats2 body2 sp)))
+  DData name params kind ctors derivings sp => Ok d
+  DRecord name params fields derivings sp => Ok d
+  DTrait name params methods sp => Ok d
+  DInstance iname isDefault head methods sp =>
+    andThen (traverse (desugarRecordDecl records) methods)
+      (\ms => Ok (DInstance iname isDefault head ms sp))
+  DSig name ty sp => Ok d
+
+desugarPattern records pat = case pat of
+  PWild sp => Ok (PWild sp)
+  PVar n sp => Ok (PVar n sp)
+  PInt n sp => Ok (PInt n sp)
+  PStr s sp => Ok (PStr s sp)
+  PCon name pats sp =>
+    andThen (traverse (desugarPattern records) pats) (\ps => Ok (PCon name ps sp))
+  PRecord name fields sp => case lookupRecord name records of
+    Nothing => Err (showSpanLoc sp ++ ": unknown record: " ++ name)
+    Just (RecordInfo rname params fdefs derivings ctor) =>
+      if hasDuplicateFieldNames fields then Err (duplicateFieldMsg sp)
+      else if hasUnknownFields (fieldNamesOf fdefs) fields then Err (firstUnknownFieldMsg sp (fieldNamesOf fdefs) fields)
+      else andThen (desugarRecordPatternFields records fdefs fields sp) (\ps => Ok (PCon ctor ps sp))
+
+desugarRecordPatternFields records [] provided sp = Ok []
+desugarRecordPatternFields records ((Pair fname fty) :: rest) provided sp = case lookupProvided fname provided of
+  Nothing =>
+    andThen (desugarRecordPatternFields records rest provided sp) (\ps => Ok (PWild sp :: ps))
+  Just p =>
+    andThen (desugarPattern records p)
+      (\p2 => andThen (desugarRecordPatternFields records rest provided sp) (\ps => Ok (p2 :: ps)))
+
+desugarExpr : List RecordInfo -> Expr -> Result Expr
+desugarExpr records e = case e of
+  -- 带点的标识符：lexer 把 `p.x` 合成单个 `EVar "p.x"`（模块限定名也走这条路）。
+  -- 单文件 DT 模式下没有模块系统，这里按「变量 + 字段链」拆分；拆不出字段链
+  -- （如限定名的最后一段不是 record 字段）时就保留原样，交给精化器报未知名字。
+  EVar n sp => case splitOnDot n of
+    [] => Ok e
+    [one] => Ok (EVar one sp)
+    -- 拆出字段链后**重新**走降级：字段访问本身还要改写（见上面的 EField 分支）。
+    head :: rest => desugarExpr records (foldAppFields (EVar head sp) rest sp)
+  EInt n sp => Ok e
+  EStr s sp => Ok e
+  ELam ps b sp => andThen (desugarExpr records b) (\b2 => Ok (ELam ps b2 sp))
+  EApp f args sp =>
+    andThen (desugarExpr records f)
+      (\f2 => andThen (traverse (desugarExpr records) args) (\a2 => Ok (EApp f2 a2 sp)))
+  ELet binds body rec_ sp =>
+    andThen (traverse (desugarBind records) binds)
+      (\b2 => andThen (desugarExpr records body) (\body2 => Ok (ELet b2 body2 rec_ sp)))
+  ECase scrut alts sp =>
+    andThen (desugarExpr records scrut)
+      (\s2 => andThen (traverse (desugarAlt records) alts) (\a2 => Ok (ECase s2 a2 sp)))
+  EIf c t el sp =>
+    andThen (desugarExpr records c)
+      (\c2 => andThen (desugarExpr records t) (\t2 => andThen (desugarExpr records el) (\e2 => Ok (EIf c2 t2 e2 sp))))
+  EField base fname sp => andThen (desugarExpr records base) (\b => case recordsWithField fname records of
+    [] => Err (showSpanLoc sp ++ ": unknown field " ++ fname)
+    [one] => Ok (fieldAccessExpr one fname b sp)
+    _ => Err (showSpanLoc sp ++ ": ambiguous field " ++ fname ++ " (declared by multiple records)")
+  )
+  ERecord name fields sp => case lookupRecord name records of
+    Nothing => Err (showSpanLoc sp ++ ": unknown record: " ++ name)
+    Just (RecordInfo rname params fdefs derivings ctor) =>
+      if hasDuplicateFieldNames fields then Err (duplicateFieldMsg sp)
+      else if hasUnknownFields (fieldNamesOf fdefs) fields then Err (firstUnknownFieldMsg sp (fieldNamesOf fdefs) fields)
+      else andThen (desugarRecordValues records fdefs fields sp) (\vs => Ok (EApp (EVar ctor sp) vs sp))
+  ERecUpdate base fields sp =>
+    andThen (desugarExpr records base)
+      (\b => andThen (traverse (desugarFieldValue records) fields) (\fs => Ok (ERecUpdate b fs sp)))
+  EInstSel m n sp => andThen (desugarExpr records m) (\m2 => Ok (EInstSel m2 n sp))
+  -- EPi 的可用性由各自的检查器判定（HM 报错、DT 支持），降级这里只做结构递归。
+  EPi name implicit dom cod sp =>
+    andThen (desugarExpr records dom)
+      (\d2 => andThen (desugarExpr records cod) (\c2 => Ok (EPi name implicit d2 c2 sp)))
+
+desugarRecordValues : List RecordInfo -> List (Pair String Expr) -> List (Pair String Expr) -> Span -> Result (List Expr)
+desugarRecordValues records [] provided sp = Ok []
+desugarRecordValues records ((Pair fname fty) :: rest) provided sp = case lookupProvided fname provided of
+  Nothing => Err (missingFieldMsg sp fname)
+  Just v =>
+    andThen (desugarExpr records v)
+      (\v2 => andThen (desugarRecordValues records rest provided sp) (\vs => Ok (v2 :: vs)))
+
+desugarFieldValue : List RecordInfo -> Pair String Expr -> Result (Pair String Expr)
+desugarFieldValue records (Pair fname v) =
+  andThen (desugarExpr records v) (\v2 => Ok (Pair fname v2))
+
+desugarBind : List RecordInfo -> Pair Pat Expr -> Result (Pair Pat Expr)
+desugarBind records (Pair pat value) =
+  andThen (desugarPattern records pat)
+    (\p2 => andThen (desugarExpr records value) (\v2 => Ok (Pair p2 v2)))
+
+desugarAlt : List RecordInfo -> Pair Pat Expr -> Result (Pair Pat Expr)
+desugarAlt records (Pair pat body) =
+  andThen (desugarPattern records pat)
+    (\p2 => andThen (desugarExpr records body) (\b2 => Ok (Pair p2 b2)))
+
+-- 声明了该字段的 record 列表（字段访问的语法层消歧用）。
+recordsWithField : String -> List RecordInfo -> List RecordInfo
+recordsWithField fname [] = []
+recordsWithField fname (r :: rest) = case r of
+  RecordInfo rname params fdefs derivings ctor =>
+    if memName fname (fieldNamesOf fdefs) then r :: recordsWithField fname rest
+    else recordsWithField fname rest
+
+-- 字段访问降级：`case base of Mk<R> f0 .. fn => f_k`（缺省位置补通配）。
+fieldAccessExpr : RecordInfo -> String -> Expr -> Span -> Expr
+fieldAccessExpr info fname b sp = case info of
+  RecordInfo rname params fdefs derivings ctor =>
+    let
+      pats = fieldAccessPats fname fdefs
+      body = EVar fname sp
+      alt = Pair (PCon ctor pats sp) body
+    in ECase b [alt] sp
+
+-- 分支模式：命中的字段位置绑定成与字段同名的变量，其余补通配。
+fieldAccessPats : String -> List (Pair String Expr) -> List Pat
+fieldAccessPats fname [] = []
+fieldAccessPats fname ((Pair f alt) :: rest) =
+  (if f == fname then PVar f (exprSpan alt) else PWild (exprSpan alt)) :: fieldAccessPats fname rest
+
+-- `a.b.c` → `EField (EField (EVar "a") "b") "c"`。
+-- 没有点就原样返回；以点开头的名字（不应出现）也原样返回。
+dottedToFieldChain : String -> Span -> Expr
+dottedToFieldChain name sp = case splitOnDot name of
+  [] => EVar name sp
+  [one] => EVar one sp
+  head :: rest => foldAppFields (EVar head sp) rest sp
+
+foldAppFields : Expr -> List String -> Span -> Expr
+foldAppFields base [] sp = base
+foldAppFields base (f :: rest) sp = foldAppFields (EField base f sp) rest sp
+
+-- DT 的一步式入口：抽取 record 信息并完成全部降级。
+-- `Elab.elabProgramFull` 只需 `andThen (prepareDecls decls) elabProgramGo`。
+prepareDecls : List Decl -> Result (List Decl)
+prepareDecls decls0 = let
+  split = recordsOfDecls ctorName decls0
+  records = firstOf split
+  decls = secondOf split
+in desugarRecords records decls
+
+-- DT 的构造子命名策略：`Mk<R>`（globals 是一张表，类型名与构造子同名会让 `Point 1 2`
+-- 被解析成「把类型当函数应用」）。
+ctorName : String -> String
+ctorName dname = "Mk" ++ dname

@@ -21,12 +21,15 @@
 # M19 高阶 kind（trait 类参数按方法签名推断 kind）+ 投影 multiplicity 修正 + DtKind
 #   拆模块：seed 闭包 33 个模块，bytes 1243217 / lines 11742 / longlines 4363 /
 #   ctorcount 2458，按实测重新标定。
-bytes 1246000
-lines 11780
+# M19 record 支持（声明/构造/字段访问/模式/更新，DT 侧复用同一套语法降级）：
+#   seed 闭包 34 个模块，bytes 1269049 / lines 11983 / longlines 4462 / letrec 656 /
+#   ctorcount 2498，按实测重新标定（新增 DtRecords 模块的 AST 遍历与 case 构造）。
+bytes 1274000
+lines 12040
 maxline 12400
-longlines 4380
-letrec 640
+longlines 4480
+letrec 660
 strcat 330
 eqint 35
 zeroarg 30
-ctorcount 2470
+ctorcount 2510
