@@ -1229,8 +1229,8 @@ dtProgSols (DtProgram datas defs goals sols) = sols
 -- 精化入口。M19：先做 record 降级（`DtRecords.prepareDecls`）——record 是纯记法。
 elabProgramFull : List Decl -> Result DtProgram
 elabProgramFull decls = andThen (prepareDecls decls) (\ds => elabProgramGo ds)
-elabProgramGo : List Decl -> Result DtProgram
 
+elabProgramGo : List Decl -> Result DtProgram
 elabProgramGo decls = andThen (collectSigs decls) (\sigs => andThen (elabDatas (collectDataDecls decls []) preludeGlobals ecEmpty) (\pd => case pd of
   Pair datas (Pair globals0 ec0) => andThen (elabTraits (collectTraitDecls decls []) globals0 ec0) (\pt => case pt of
     Pair classDatas (Pair projGlobals (Pair classes ec1)) =>
@@ -1983,19 +1983,22 @@ isDictValue ec v = case v of
 isDictFamily : Ec -> String -> Bool
 isDictFamily ec g = memName g (map (\c => dictTypeName (dtClassName c)) (ecClasses ec))
 
--- 实例搜索：在已注册实例里找头能统一到目标字典类型的那个，返回它的定义引用。
--- 统一过程中解出的元变量（典型是 `Dict_C ?a` 里的 `?a`，由实例头 `Dict_C T` 定住）
--- 必须写回状态，否则后续投影的类型检查拿不到类参数。
--- 零个 ⇒ 明确报缺失；多个 ⇒ 报歧义（M15 不做优先级/相干性细化）。
+-- 实例搜索：找头能统一到目标字典类型的实例，返回它的定义引用。零个 ⇒ 报缺失；
+-- 多个 ⇒ 报歧义（M15 不做优先级/相干性细化）。
 searchInstance : Ec -> Value -> Span -> Result (Pair Term Ec)
-searchInstance ec dom sp = case filterInstances ec dom (ecInsts ec) [] of
-  Pair [] sols =>
-    errAt sp ("DT: no instance found for " ++ showValue dom ++ " ;; " ++ dictClassArgDebug ec dom)
+searchInstance ec dom sp = case filterInstances ec dom (ecInsts ec) (ecSols ec) of
+  Pair [] sols => errAt sp ("DT: no instance found for " ++ showValue dom)
   Pair ([i]) sols => Ok (Pair (TGlobal (dtInstName i)) (ecPutSols ec sols))
   Pair cands sols =>
     errAt sp
       ("DT: ambiguous instance for " ++ showValue dom ++ " (candidates: " ++ joinInstNames cands ++ ")")
 
+-- 实例表筛选（M22）：只接受**不新增解**的头匹配。
+--
+-- `dom` 可能还带元变量（`Dict_C ?a`）。若允许 `conv` 顺手把 `?a` 解成候选的参数，
+-- 就等于**把第一个候选的参数当答案**，同 trait 的第二个实例永远匹配不上。因此
+-- 「比较没有新增解」（返回的 `sols` 与输入等长）是硬条件：实例搜索是纯查找，元变量的
+-- 约束交给 `constrainDictDom`，两者职责不重叠。
 filterInstances : Ec -> Value -> List DtInst -> List (Pair Int Value) -> Pair (List DtInst) (List (Pair Int Value))
 filterInstances ec dom [] sols = Pair [] sols
 filterInstances ec dom (i :: rest) sols =
@@ -2003,8 +2006,9 @@ filterInstances ec dom (i :: rest) sols =
     hd = forceVal ec (eval [] (dtInstHead i))
   in case conv (ecDefs ec) sols 0 dom hd of
     Err e => filterInstances ec dom rest sols
-    Ok sols2 => case filterInstances ec dom rest sols2 of
+    Ok sols2 => if length sols2 == length sols then case filterInstances ec dom rest sols2 of
       Pair more final => Pair (i :: more) final
+    else filterInstances ec dom rest sols
 
 joinInstNames : List DtInst -> String
 joinInstNames [] = ""
@@ -2014,40 +2018,35 @@ joinRestInstNames : List DtInst -> String
 joinRestInstNames [] = ""
 joinRestInstNames (i :: rest) = ", " ++ dtInstName i ++ joinRestInstNames rest
 
-joinDebugVals : Ec -> List Value -> String
-joinDebugVals ec [] = ""
-joinDebugVals ec (v :: rest) =
-  showValueAt 0 (forceVal ec v) ++ (if length rest == 0 then "" else ",") ++ joinDebugVals ec rest
-
-dictClassArgDebug : Ec -> Value -> String
-dictClassArgDebug ec dom = case forceVal ec dom of
-  VNeutral n => case n of
-    NGlobal g sp => g ++ "/" ++ strFromInt (length sp) ++ " args(" ++ joinDebugVals ec sp ++ ")"
-    NVar name lvl sp => "var " ++ name
-    _ => "other-neutral"
-  VMeta m sp => "meta " ++ strFromInt m
-  _ => "non-neutral"
-
--- 用「后面紧跟的显式实参」约束字典域里的类参数元变量。
--- 我们的目标场景是 `pretty red`：字典域是 `Dict_Pretty ?a`，而 `pretty` 的下一个
--- 显式实参是 `a`，它的类型正是 `?a`。检查该实参就会把 `?a` 解成 `Color`。
--- 这是保守的特例（只处理「字典域的直接实参就是类参数」这一形态），解不出就原样返回，
--- 由调用方决定占位还是报错。
+-- 用「后面紧跟的显式实参」约束字典域里的类参数元变量 `?a`（`Dict_C ?a`）。
+-- 两条规则：跳过类型实参（与类参数无关，会把 `?a` 解成 `Int`）；把实参类型收缩到
+-- 应用头部（类参数只可能是构造器形态，高阶 kind 的实例头写的就是构造器）。
 constrainDictDom : List (Pair String Term) -> Ec -> Ctx -> Value -> List Expr -> Span -> Result Ec
-constrainDictDom globals ec ctx dom args sp = case args of
-  [] => Ok ec
-  a :: rest => case dictClassArg ec dom of
-    -- 字典域的值形态是 `Dict_C ?a`；把 `?a` 取出来当实参的期望类型检查一遍。
-    Nothing => Ok ec
-    Just argTy => case inferE globals ctx ec a of
-      -- 推断实参自身的类型，再用 conv 统一到类参数（元变量）上：
-      -- `red : Color` 与 `?a` 统一 ⇒ `?a := Color`。
-      Err e => Ok ec
-      Ok (Pair aTerm (Pair aTy ec1)) => case convEc ec1 (ctxDepth ctx) argTy aTy of
-        Err e => Ok ec
-        Ok ec2 => Ok ec2
+constrainDictDom globals ec ctx dom args sp = case dictClassArg ec dom of
+  Nothing => Ok ec
+  Just argTy => constrainDictDomGo globals ec ctx argTy args sp
 
--- 从字典域 `Dict_C arg` 里取出 `arg`（类参数）。
+constrainDictDomGo : List (Pair String Term) -> Ec -> Ctx -> Value -> List Expr -> Span -> Result Ec
+constrainDictDomGo globals ec ctx argTy args sp = case args of
+  [] => Ok ec
+  a :: rest => case inferE globals ctx ec a of
+    Err e => Ok ec
+    Ok (Pair aTerm (Pair aTy ec1)) =>
+      let
+        forced = forceVal ec1 aTy
+      in if isTypeValue forced then constrainDictDomGo globals ec1 ctx argTy rest sp
+      else case convEc ec1 (ctxDepth ctx) argTy (neutralHeadOrSelf forced) of
+        Ok ec2 => Ok ec2
+        Err e => constrainDictDomGo globals ec1 ctx argTy rest sp
+
+-- 中性应用的头部（`Box Int` ⇒ `Box`）；非应用原样返回。
+neutralHeadOrSelf : Value -> Value
+neutralHeadOrSelf v = case v of
+  VNeutral n => case n of
+    NGlobal g (_ :: _) => VNeutral (NGlobal g [])
+    _ => v
+  _ => v
+
 dictClassArg : Ec -> Value -> Maybe Value
 dictClassArg ec dom = case forceVal ec dom of
   VNeutral n => case n of

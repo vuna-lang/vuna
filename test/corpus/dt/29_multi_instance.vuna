@@ -1,0 +1,35 @@
+-- M19/M22：同一个 trait 的多个实例必须都能正确解析（M15 遗留缺陷）。
+--
+-- 曾经的错误行为：字典参数分支在类参数 `?a` 尚未被后续实参约束时就去搜索实例，
+-- `Dict_C ?a` 与**第一个**候选统一、`?a` 被解成该候选的参数，于是第二个实例的调用
+-- 报 `type mismatch: expected A, got B`。现有夹具都只有单实例所以一直没暴露。
+--
+-- 修法（两条不变量）：
+-- - 实例搜索不得解决元变量（`filterInstances` 只接受不新增解的头匹配）；
+-- - `constrainDictDom` 用后续**非类型**实参约束 `?a`，并把实参类型的应用头部作为
+--   类参数候选（高阶 kind 的实例头写的是构造器本身）。
+data A : Type where
+  MkA : A
+
+data B : Type where
+  MkB : B
+
+trait Name a where
+  nameOf : a -> String
+
+instance Name A where
+  nameOf x = "A"
+
+instance Name B where
+  nameOf x = "B"
+
+-- 两次调用各自解析到不同实例。
+both : String
+both = nameOf MkA ++ "/" ++ nameOf MkB
+
+-- 反序（确保不是靠注册顺序蒙对）。
+bothRev : String
+bothRev = nameOf MkB ++ "/" ++ nameOf MkA
+
+main : String
+main = both ++ "|" ++ bothRev

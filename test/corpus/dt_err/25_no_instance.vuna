@@ -1,0 +1,15 @@
+-- M22：没有对应实例时必须报明确错误（而不是静默绑定到别的实例）。
+data A : Type where
+  MkA : A
+
+data B : Type where
+  MkB : B
+
+trait Name a where
+  nameOf : a -> String
+
+instance Name A where
+  nameOf x = "A"
+
+main : String
+main = nameOf MkB
