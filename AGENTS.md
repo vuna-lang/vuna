@@ -2,6 +2,21 @@
 
 本文件是仓库里**唯一固定的必读入口**。目标：用最少上下文定位到该改的地方，而不是通读全仓。
 
+## 项目前提：没有兼容义务
+
+**vuna 尚未发布任何版本。没有外部用户、没有下游生态、没有历史包袱。**
+
+- 全部源码（`compiler/`、`base/`、`lib/`、`test/`、`examples/`）都在本仓库内；
+- **任何设计、接口、命令、实现、哲学都允许被推翻**——包括 `AGENTS.md` 与
+  `docs/roadmap.md` 里已写下的决策；
+- 「两条路径并存」「保留兼容层」「以后可能有人依赖」都**不构成保留理由**。
+  评估一个遗留物只看一条：**它在终态里还成立吗**；
+- 推翻旧决策时不要静默改写历史：在 `docs/roadmap.md` 的「决策变更」表记一行
+  （原决策 → 新决策 → 理由），细节进 `docs/history.md`。
+
+这条前提直接决定当前路线：**终态是单一 DT 路径，HM 检查器与 codegen 将被删除**。
+见 [`docs/roadmap.md`](docs/roadmap.md) 的「终态」与 M18.5–M24。
+
 ## 阅读顺序
 
 1. `AGENTS.md`（本文件）——不变量、纪律、常用命令；
@@ -38,8 +53,9 @@
 5. **效果内建按包 allowlist**：只有 `vuna` / `vuna-compiler` / `vuna-base` 可直接调用
    effectful 内建（`print`/`readFile`/`exit`/`prim_*` 等），其余包必须经 `Base.IO`
    （`Vuna.Compiler.Loader.packageAllowsEffects`）；
-6. **HM 路径与 `--dt` 路径零回归**：HM = interp + typed + split 三路径；DT = 单文件
-   `--dt` opt-in（core evaluator + 擦除 codegen）。两者互不影响；
+6. **迁移期双路径零回归，终态单路径**：M18.5–M23 期间 HM（interp + typed + split）与
+   DT（core evaluator + 擦除 codegen）都必须保持通过；**M24 之后 HM 模块删除**，
+   `--dt` 开关消失，只剩一条路径。当前处于迁移期，先按双路径守门；
 7. 编译器自检通过：`vuna check .` 必须能检查自身源码（`checks.vuna-typecheck`）。
 
 ## 纪律
@@ -93,7 +109,7 @@ vuna seed seed compiler              # 重新生成 seed（正式流程用 nix/s
 - 子系统地图、改动定位：[`docs/architecture.md`](docs/architecture.md)
 - 语言语义：[language.md](docs/reference/language.md)、[type-system.md](docs/reference/type-system.md)、
   [stdlib.md](docs/reference/stdlib.md)、[packages.md](docs/reference/packages.md)、
-  [dt.md](docs/reference/dt.md)
+  [dt.md](docs/reference/dt.md)、[dt-parity.md](docs/reference/dt-parity.md)（DT 取代 HM 的落差证据）
 - 编译器实现与 codegen：[compiler.md](docs/reference/compiler.md)
 - DT 工具链（洞目标、LSP、错误索引）：[dt-tooling.md](docs/reference/dt-tooling.md)
 - 仓库探索（按场景选工具、探索后落盘）：技能 `.agents/skills/repo-navigation/SKILL.md`

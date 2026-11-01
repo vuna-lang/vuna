@@ -1,5 +1,12 @@
 # 自举迁移决策（M18）
 
+> **⚠ 本文的决策已被推翻（2026-11）。** 当时结论是「编译器本体暂不全量迁移到 DT」，
+> 依据的两条硬前提（DT 单文件、擦除未完成）正被 M18.5–M22 直接消掉；同时项目确认为
+> **尚未发布、无外部用户、无兼容义务**，「保留 HM 以免破坏兼容」不再成立。
+> **当前方向见 [docs/roadmap.md](../roadmap.md)**：终态是单一 DT 路径，HM 检查器与
+> codegen 将被删除。本文保留原样作为历史记录与「被推翻的决策」样本——
+> 它的第 4 节（前置条件清单）仍然是理解迁移工作量的最好材料，但排序已过时。
+
 本文是 M18「自举迁移（决策点）」的记录：**做到了什么、验证了什么、还差什么、以及
 编译器本体是否应该继续迁到 DT**。设计背景见 [docs/dt-core.md](../dt-core.md)，
 路线图见 [docs/roadmap.md](../roadmap.md)。
@@ -130,8 +137,9 @@ three = Extend (Extend (Extend Empty "a") "b") "c"
 
 ## 相关阅读
 
-- DT 语言参考：[dt.md](reference/dt.md)
-- DT 工具链：[dt-tooling.md](reference/dt-tooling.md)
-- DT 设计与实现边界：[docs/dt-core.md](dt-core.md)
-- 自举链与 seed：[reference/bootstrap.md](reference/bootstrap.md)
-- 路线图：[docs/roadmap.md](roadmap.md)
+- DT 语言参考：[dt.md](dt.md)
+- DT 工具链：[dt-tooling.md](dt-tooling.md)
+- DT 设计与实现边界：[docs/dt-core.md](../dt-core.md)
+- 自举链与 seed：[bootstrap.md](bootstrap.md)
+- 路线图：[docs/roadmap.md](../roadmap.md)
+- 当前方向（本文决策已被推翻，与上一行同一文档）：[dt-parity.md](dt-parity.md)

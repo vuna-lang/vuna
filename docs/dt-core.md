@@ -452,6 +452,11 @@ M13 的 `data` / `case` / 递归不再报“不支持”；`record` / `trait` / 
 
 ## 23. M14 测试夹具
 
+> **本节的数字是 M14 当时的快照。** 当前实测为 **18 正例 / 17 反例**（M15 追加
+> `13_iface`/`14_solve`/`15_goal`，M16 追加 `16_total`/`17_erase` 与反例
+> `16_nonterm`/`17_nested_total`，M18 追加 `18_ctx`）；完整清单见
+> [reference/dt.md](reference/dt.md)。
+
 正例 `test/corpus/dt/` 共 12 个（M13 的 `01_id`–`08_if` + M14 的四个）；
 数值是 `interp --dt` / `compile --dt` 的 golden：
 
@@ -471,3 +476,52 @@ M13 的 `data` / `case` / 递归不再报“不支持”；`record` / `trait` / 
   `this branch is impossible`）、`12_case_int`（case 打在 `Int` 上）、
   `13_unknown_ctor`（未知构造子）、`14_bad_ctor_result`（构造子结果不是所属族）、
   `15_nested_pat`（嵌套模式）。
+
+## 24. 表示层定型与 QTT 预留（M18.6）
+
+本节记录**核心类型论表示层**的定型决定：这些决定本身不增加用户可见能力，目的是让
+QTT（量化类型理论）与宇宙多态在将来落地时只替换「判据」与「层级实现」，而不必重做
+`Core` / `Elab` / `CoreCodegen` 的骨架。背景见 [docs/roadmap.md](roadmap.md) 的 M18.6
+与 [reference/dt-parity.md](reference/dt-parity.md)。
+
+### 24.1 为什么现在做
+
+当前 `Term` / `Value` 把两个将来必须泛化的东西写死成了不可抽象的形态：
+
+- `TPi` / `TLam` / `TApp` / `TCon` / `CaseAlt` 的 binder 都带 `Bool` 字段表示「是否擦除」；
+- `TType : Int` / `VType : Int` 直接把宇宙层级写成 `Int`，泄漏到 `conv`、`showTerm`、
+  `typeLevelOf`、`checkType`。
+
+改动面统计（`Core` / `Elab` / `CoreCodegen` 三文件）：`TPi` 31、`TApp` 28、`TLam` 25、
+`TType` 22、`VPi` 14、`VType` 15 处。**现在改是几小时，等代码长到 M23 规模再改是几周。**
+
+### 24.2 定型后的表示
+
+| 现在 | 定型后 | 当前映射 |
+| --- | --- | --- |
+| `Bool`（是否擦除） | `data Rig` = `Rig0` / `Rig1` / `RigOmega` | 类型域与隐式索引 → `Rig0`；其余 → `Rig1`；`RigOmega` 暂不产生 |
+| `TType : Int` | `TType : Level`（不透明） | 内部先就是 `Int`，零个变量、无 `max` |
+| 直接解构 `Bool` / `Int` | 经访问器（如 `rigIsErased`、`levelSucc`） | Elab 与 CoreCodegen 一律走访问器 |
+
+`RigOmega` 现在不被使用，但**在类型里存在**——这就是「QTT 预留」的全部含义：QTT 落地时
+只需让精化器产出 `RigOmega` 并让擦除判据读三种值，codegen 的下游逻辑不变（仍判「是否
+擦除」）。
+
+### 24.3 不变量（后续阶段必须保持）
+
+1. **`Core` 之外不得对 `Rig` / `Level` 做模式匹配**，只能用访问器与构造器；新增用法先补访问器。
+2. **擦除判定只有一个入口**（M22 落地为 `eraseMask` 之类），使「rig 驱动」与未来的
+   「使用分析驱动」可互换；`CoreCodegen` 不感知判据来源。
+3. `Level` 的算术（`succ` / `max`）只在 `Core` 内部实现；`Elab` 通过 `checkType` 的返回值
+   与访问器拿层级，不自己算。
+4. 破坏上述任一条时，须在本节记录例外与理由。
+
+### 24.4 与 QTT 的衔接
+
+QTT 落地的增量工作是：语法加 multiplicity 标注（`Parser` / `Ast` 加一个字段）、精化器
+产出 `Rig`、擦除判据读 `Rig0`。**不需要**改动的：codegen 的变体/`match` 结构、SCC 分组、
+模块系统、`Loader` / `Pkg`、seed 自举链。
+
+注意 QTT 的判据与 M16 探索的「整程序使用分析」是**两套不同方案**：前者按 binder 的
+multiplicity 静态擦除，后者按运行时是否读取判定。M22 因此只接判据入口，不投入实现
+使用分析——这是 [docs/roadmap.md](roadmap.md) M22 与「决策变更」的记录内容。

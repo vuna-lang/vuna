@@ -20,12 +20,17 @@
   runtime prelude 在分离编译中完整保留；
 - `do` / Monad / IO 组合子已在 M11 实现；DT（依赖类型）M13 起步、M14 索引族、M15 隐式/
   接口/洞、M16 终止性、M17 工具链、M18 自举决策：`--dt` 单文件路径（Core TT + 精化器 +
-  擦除 codegen + `interp --dt` + `vuna goal` + `vuna lsp`）。**仍存的 DT 边界**：
-  - 仍是**单文件** opt-in，不接入 `import` / split / 包模式 / `build` / `seed`；
+  擦除 codegen + `interp --dt` + `vuna goal` + `vuna lsp`）。**仍存的 DT 边界**
+  （M19–M24 逐条拆除，清单与用量见 [dt-parity.md](dt-parity.md)）：
+  - **lambda 形参被无条件擦除**（bug）：参数在运行时被用时直接报错，未被用时**静默错编译**
+    （check/compile 退出 0，产物少形参，ocamlopt 才报错）——M18.5 修复；
+  - 仍是**单文件** opt-in，不接入 `import` / split / 包模式 / `build` / `seed`（M20）；
   - **索引保留运行时表示**（完整擦除需整程序使用分析，见
-    [m16-design.md](m16-design.md) §3）；
+    [m16-design.md](m16-design.md) §3）（M22）；
   - **互递归与跨调用 size-change 不查**（终止性只做逐调用结构下降，可能放过死循环程序）；
-  - 嵌套模式、多 clause 函数、多参数接口仍不支持；
+  - 嵌套模式、多 clause 函数、多参数接口、`let`、推断位 `case`、内建类型的字面量模式
+    仍不支持（M19）；`record` / `deriving` 按终态决策**删除**而非补齐；
+  - 无签名顶层定义不支持（M23 用一次性导出工具回填签名）；
   - 高阶/开放元变量解不支持（作用域逃逸会被拒）。
   完整 DT 主线见 [docs/roadmap.md](../roadmap.md)、设计边界见
   [docs/dt-core.md](../dt-core.md)、工具链见 [dt-tooling.md](dt-tooling.md)；

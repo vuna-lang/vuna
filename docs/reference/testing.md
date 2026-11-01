@@ -79,12 +79,13 @@ nix run .#run-tests -- --vuna stable  # 编译器改用注册表别名 vuna（�
 - `vuna-seed` 编译 `12_fact` 的种子冒烟；
 - 第 33 段（M12.8）：包级 `compile --package`——`.output/{lib,app}` + `build.sh`
   增量编译、输出与单文件一致、无改动不重编、touch 单个模块只重编它；
-- 第 34 段（M13–M16）DT：`corpus/dt/*.vuna`（17 个）的 `interp --dt`（核心求值器）/
+- 第 34 段（M13–M18）DT：`corpus/dt/*.vuna`（18 个）的 `interp --dt`（核心求值器）/
   `check --dt`（精化 + 擦除检查）/ `compile --dt`（擦除 codegen → ocamlopt → 运行）
-  三路与 golden 一致；`corpus/dt_err/*.vuna`（15 个）在 `check --dt` 与 `compile --dt`
+  三路与 golden 一致；`corpus/dt_err/*.vuna`（17 个）在 `check --dt` 与 `compile --dt`
   两条路径都要求错误片段、非 0 退出且不写输出文件（非穷尽 case、不可满足分支、
-  对 `Int` 做 case、未知构造子、构造子不返回该族、嵌套模式）；另有 `--dt` CLI 约束
-  （不支持 `--root` / 包目录，`build` / `seed` 不支持 `--dt`）。
+  对 `Int` 做 case、未知构造子、构造子不返回该族、嵌套模式、非结构递归）；另有 `--dt`
+  CLI 约束（不支持 `--root` / 包目录，`build` / `seed` 不支持 `--dt`）——这些约束会在
+  M20–M24 随 DT 接管而拆除。
 
 ## Nix checks 清单
 

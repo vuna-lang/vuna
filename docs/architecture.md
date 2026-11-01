@@ -5,6 +5,11 @@
 codegen 要点见 [compiler.md](reference/compiler.md)，语言语义见 [language.md](reference/language.md)，
 自举链见 [bootstrap.md](reference/bootstrap.md)。
 
+> **迁移期提示（2026-11 起）**：本文描述的是**当前**的双路径状态。终态是**单一 DT 路径**——
+> 第 1 节的 HM 主路径（`Typecheck` / `TypedCodegen`）将被删除，第 2 节的 DT 路径成为唯一
+> 路径且接入包模式。迁移期间两条路径都要守（零回归），但新增能力只往 DT 侧加。
+> 计划见 [docs/roadmap.md](roadmap.md)，能力落差见 [dt-parity.md](reference/dt-parity.md)。
+
 ## 仓库分层
 
 ```text
@@ -27,8 +32,10 @@ codegen 要点见 [compiler.md](reference/compiler.md)，语言语义见 [langua
 
 ## 1. HM 主路径：Lexer → Parser → Loader → Typecheck → TypedCodegen
 
+> **迁移期模块，终态删除**（M24）。新能力不要加在这里，加到第 2 节。
+
 **何时该看这里**：改语法、import/模块解析、类型检查规则、OCaml 代码生成；
-绝大多数日常改动落在这条链上。
+多数日常改动落在这条链上。
 
 **数据流**：
 ```text
@@ -65,6 +72,9 @@ codegen 单文件/跨模块）、第 18–27 段（记录、trait、do/Monad、s
 
 ## 2. DT 路径：Core → Elab → CoreCodegen（+ Dt facade）
 
+> **终态唯一路径**。当前仍是单文件 `--dt` opt-in，M18.5–M24 逐步补齐语言面、多文件、
+> 效应与 codegen，最终接管 seed。
+
 **何时该看这里**：改 `--dt` 相关语法、精化规则、索引 unification、擦除 codegen；
 HM 路径的任何改动都不应该需要动这里，反之亦然。
 
@@ -87,7 +97,7 @@ HM 路径的任何改动都不应该需要动这里，反之亦然。
 - 经 `Vuna.Compiler.Compile.compileFileDt` / `checkFileDt` 与 `Vuna.Compiler.CompilerCli`
   暴露给 CLI（`compile --dt` / `check --dt` / `interp --dt`）
 
-**边界**：DT 不经过 Loader，不支持 `import` / `--root` / 包模式，不进入 `build` /
+**边界**（当前状态，M19–M24 逐条拆除）：DT 不经过 Loader，不支持 `import` / `--root` / 包模式，不进入 `build` /
 `build --split` / `seed`。HM 路径（interp + typed + split）语义与产物必须不变。
 
 **通常连带改动**：`Core`（Term/Value 构造子）→ `Elab`（精化/覆盖率）→

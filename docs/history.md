@@ -83,6 +83,51 @@ git 历史里）。各里程碑对应的模块与设计见 [docs/architecture.md
   `docs/reference/m18-migration.md`；metrics 重新标定；新增 `docs/reference/m16-design.md`；
 - 早期 OCaml 外部编译器 `vunax` 已完成使命并删除（M6 完成后删除，历史可从 git log 找到）。
 
+## 决策变更：M18 迁移动机失效（2026-11）
+
+M18 的结论是「编译器本体暂不全量迁移到 DT」，依据是四条理由，其中两条是**硬前提**：
+DT 仍是单文件 opt-in、擦除未完成。2026-11 明确了项目前提——**vuna 尚未发布，没有外部
+用户与下游生态，所有源码都在本仓库内，任何设计/接口/命令/实现/哲学都可推翻**——
+因此「保留 HM 以避免破坏兼容」这条理由消失，M18 的决策随之被推翻。
+
+推翻后的路线（详见 [docs/roadmap.md](roadmap.md)）：
+
+- **终态**：单一依赖类型路径，`Typecheck` / `TypedCodegen` 从仓库删除，`--dt` 开关消失；
+- **迁移期**（M18.5–M23）双路径零回归仍然守门，但只是过程性约束；
+- 原「DT 多文件与包集成」从「第一前置」**后延**为 M20：真正的第一前置是语言面 parity
+  （M19）与关键缺陷修复（M18.5）；
+- 原「完整擦除分析」从待办小项提升为独立阶段 M22（codegen 换代 + metrics 重标定）；
+- 原 M19–M23（效应 / 模块 v3 / 运行时 / 生态 / 并发）依次后延为 M21 / M25 / M26 /
+  M28 / M27。
+
+决策理由与能力落差的量化证据见 [docs/reference/dt-parity.md](reference/dt-parity.md)；
+M18 当时的完整论证保留在 [docs/reference/m18-migration.md](reference/m18-migration.md)
+作为历史记录与「被推翻的决策」样本，不再代表当前方向。
+
+## 路线补充：DT 大重构（2026-11）
+
+在「迁移到单一路径」之后追加了一段**编译器本体 DT 大重构**（M24.5 + M24.6）。起因是
+一个自然的问题：既然编译器已经跑在 DT 上，那就该用上依赖类型真正的表达力，而不是
+把 HM 风格的代码逐行翻译过来。
+
+为此做了一轮实测（77 个夹具），结论直接决定了阶段划分：
+
+- **正面**：弱化（`wkVar`/`wkTerm`）、单变量替换（`subst`，穿过 binder 时 lift）、
+  按族 `case`（`vhead`/`idv`）都已可写，`subst` 甚至能 `interp` 求值。
+- **边界**：精化器只在「`case` 打在被索引族本身、且 goal 索引就是该形参」时给出等式；
+  跨形参等式（`append`）、scrutinee 精化反射进 goal（`rep`）、用「分支不可能」免写分支
+  （`lookupEnv`）都还不行。**这构成了 M24.5 的全部范围。**
+- **反面（同样重要）**：拓扑序见证、元变量上下文索引化、终止性 `Acc` 见证三个「看起来
+  很 DT」的方向实测收益低于成本，已显式记入 roadmap 的「明确不划算」，防止后人重做。
+
+同时发现两个与 DT 无关的真 bug：`Pkg` 按包名去重会静默丢弃重名成员的整支依赖
+（实测重名 workspace 全部静默 `exit 0`）；`Loader` 用 `Nothing => []` 把「模块未加载」
+伪装成「无导出」。两者都记入 M24.6 的「顺手修掉」。
+
+> 过程中有一份实验报告得出「`subst` 也写不出来」的结论，复核后发现是该夹具漏掉了
+> 穿过 binder 时的 `shift u`；修正后通过。教训已写进
+> [dt-parity.md §6](reference/dt-parity.md)（引用此类结论前先复核夹具本身）。
+
 ## 已完成里程碑细节
 
 ### M8c / M12：codegen 与编译模型
@@ -142,6 +187,8 @@ git 历史里）。各里程碑对应的模块与设计见 [docs/architecture.md
 
 ## 相关阅读
 
-- 路线图（含已完成阶段一句话与后续 M15–M23）：[docs/roadmap.md](roadmap.md)
+- 路线图（终态 + M18.5–M28 规划 + 决策变更表）：[docs/roadmap.md](roadmap.md)
+- DT 取代 HM 的能力落差证据：[docs/reference/dt-parity.md](reference/dt-parity.md)
 - DT 设计与 M13/M14 边界：[docs/dt-core.md](dt-core.md)
+- 被推翻的 M18 决策原文：[docs/reference/m18-migration.md](reference/m18-migration.md)
 - 子系统地图：[docs/architecture.md](architecture.md)

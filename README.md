@@ -2,6 +2,10 @@
 
 vuna 是一个函数式编程语言，本仓库是它的编译器与工具链。
 
+> **vuna 尚未发布任何版本**：没有外部用户、没有下游生态、没有历史包袱。全部源码都在
+> 本仓库内，**任何设计、接口、命令、实现、哲学都允许被推翻**。终态是**单一依赖类型路径**
+> （HM 检查器与 codegen 将被删除），见 [docs/roadmap.md](docs/roadmap.md)。
+
 编译器完全用 vuna 自己写：编译器包 `compiler/`（`vuna-compiler`，模块 `Vuna.Compiler.*`，
 含 Ast/Lexer/Parser/Loader/Typecheck/TypedCodegen/Core/Elab 与编译器驱动）+ 根包 `vuna`
 （产品 CLI 与工具链 fmt/lint/repl/doc/test），标准库在独立的成员包 `base/`
@@ -164,8 +168,9 @@ record / trait / deriving 程序会先类型检查并降级）。省略 `--root`
    `Cli Fmt Lint Doc Repl TestRunner Files Eval Interp Process Codegen` 断言；
 4. **效果内建按包 allowlist**：只有 `vuna` / `vuna-compiler` / `vuna-base` 可直接调用
    effectful 内建，其余包必须经 `Base.IO`（`Vuna.Compiler.Loader.packageAllowsEffects`）；
-5. **HM 路径与 `--dt` 路径零回归**：HM = interp + typed + split；DT = 单文件 `--dt`
-   opt-in（core evaluator + 擦除 codegen）；
+5. **迁移期双路径零回归，终态单路径**：M18.5–M23 期间 HM（interp + typed + split）与 DT
+   （core evaluator + 擦除 codegen）都必须保持通过；**M24 之后 HM 模块删除**、`--dt`
+   开关消失，只剩一条路径。当前处于迁移期；
 6. 编译器自检通过：`vuna check .` 能检查自身源码（`checks.vuna-typecheck`）；
 7. `seed/` 下所有文件都是生成物，禁止手改；只能通过 seed rotation 更新。
 
@@ -183,12 +188,13 @@ record / trait / deriving 程序会先类型检查并降级）。省略 `--root`
 | [docs/reference/stdlib.md](docs/reference/stdlib.md) | 标准库 `vuna-base` 模块清单与 `Prelude` 自动导入 |
 | [docs/reference/packages.md](docs/reference/packages.md) | `vuna.toml` 包格式、workspace / 依赖 DAG、工具链命令一览 |
 | [docs/reference/dt.md](docs/reference/dt.md) | DT 子集（M14）：索引归纳族、依赖模式匹配、硬边界与夹具 |
+| [docs/reference/dt-parity.md](docs/reference/dt-parity.md) | DT 取代 HM 的能力落差证据表（含 lambda 擦除缺陷与用量统计） |
 | [docs/reference/compiler.md](docs/reference/compiler.md) | 编译器模块职责、codegen 表示与优化、机器无关指标 |
 | [docs/reference/bootstrap.md](docs/reference/bootstrap.md) | 种子策略、rotation 流程、fixed point、TCB 边界 |
 | [docs/reference/testing.md](docs/reference/testing.md) | 测试体系、corpus 分类、nix checks 清单、性能基准 |
 | [docs/reference/limits.md](docs/reference/limits.md) | 当前限制与已知边界（编译模型 / IO / 工具链细节） |
 | [docs/history.md](docs/history.md) | 里程碑历史与已完成阶段细节 |
-| [docs/roadmap.md](docs/roadmap.md) | 路线图：已完成阶段一句话摘要 + 后续 M15–M23 与阶段门槛 |
+| [docs/roadmap.md](docs/roadmap.md) | 路线图：终态（单一 DT 路径）+ M18.5–M28 规划 + 决策变更表 |
 | [docs/dt-core.md](docs/dt-core.md) | DT 核心类型论与精化器设计稿（M13–M14） |
 
 文档分层规则：README 只保留定位/上手/目录/硬约束/导航；细节在 `docs/reference/`；
