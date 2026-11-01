@@ -619,10 +619,18 @@ run w = case w of
   MkWrap f => f 41        -- type mismatch: expected a, got Int
 ```
 
-`f` 的类型 `a -> Int` 里的 `a` 是构造子的隐式族参数 binder（在 branchCtx 里是独立
-binder）。`ctxBindValue` 存项时用 `quote (ctxDepth ctx)`（相对 ctx 底部的形式），而
-`varTypeValue` 取用时做 `shift 0 (idx + 1)`（假设项是「相对绑定点上方」的形式）——
-两个基准不一致，于是 refs 里的 `高层a ↦ Int` 替换不到 `f` 的类型里。
+**根因（已确证）**：`Elab.refineValue` 的兜底分支是 `_ => v`，**`VPi` 与 `VLam` 都不
+递归**。字段类型 `a -> Int` 求值后是 `VPi`，于是精化直接原样返回，refs 里的
+`高层a ↦ Int` 永远替换不到它里面。纯变量字段（类型是 `NVar`）能精化成功，正因为它
+走的是 `VNeutral / NVar` 分支——这也解释了为什么 `unwrap : Wrap a -> a` 能过而
+`f 41` 不能。
+
+**修法**：让 `refineValue` 递归进 `VPi`/`VLam`。难点在闭包——`Clos env body` 里的
+`env` 是捕获时的环境，重构时 `quote` 的 depth 必须与展开时的深度一致（试过直接用
+`length env` 与 `freshVarValue ... (length env)`，会让 `compose` 这类三层 Pi 的
+`b`/`c` 错位，10 个既有夹具回归）。可行方向是把当前深度作为参数穿进 `refineValue`
+（16 处调用点），或在**取用点**（`varTypeValue` / `inferApp` 的 `VPi` 展开处）做闭包
+展开式精化，避免动全局签名。
 
 **不是 M20 引入的**：`data Wrap : Type -> Type` + 显式 `{a : Type}` 的写法在 M20 之前
 就失败（M20 的参数化 `data Foo a` 只是让这种写法更常见）。

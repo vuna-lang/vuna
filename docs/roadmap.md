@@ -205,8 +205,9 @@ effectful 内建进 DT prelude；包级 allowlist 语义保留；`main : IO a` �
    MkWrap : {a : Type} -> (a -> Int) -> Wrap a` 的 `run : Wrap Int -> Int` 里
    `case w of MkWrap f => f 41` 报 `type mismatch: expected a, got Int`——`f` 的类型
    `a -> Int` 里的 `a` 是构造子的隐式族参数 binder，`unifyIdxList` 产出
-   `高层a ↦ Int` 的 ref 后，`varTypeValue` 取用时 `shift 0 (idx+1)` 的位移量与
-   `ctxBindValue` 存项时 `quote (ctxDepth ctx)` 的基准不一致，ref 落不到 `f` 的类型上。
+   `Elab.refineValue` 的兜底分支 `_ => v` 让 **`VPi`/`VLam` 不参与精化**——字段类型
+   `a -> Int` 求值是 `VPi`，精化直接原样返回，ref 永远替换不到里面（纯变量字段能过是因为
+   走 `NVar` 分支）。详见 [dt-core.md](dt-core.md)。
    这不是 M20 引入的：显式 `{a : Type}` 写法在 M20 前就失败。`Base.IO` 的
    `MkIO : (Int -> a) -> IO a` 正好是这种形状，**它是 `bindIO` 精化的直接阻塞点**。
 2. `do` 降级产物是裸 `bind`/`pure`（`Loader.desugarDo`），DT prelude 与 globals 都要
