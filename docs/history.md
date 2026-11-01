@@ -331,3 +331,34 @@ M18 当时的完整论证保留在 [docs/reference/m18-migration.md](reference/m
 - DT 设计与 M13/M14 边界：[docs/dt-core.md](dt-core.md)
 - 被推翻的 M18 决策原文：[docs/reference/m18-migration.md](reference/m18-migration.md)
 - 子系统地图：[docs/architecture.md](architecture.md)
+
+## M22 泛型实例约束求解：阻塞点精确定位（探查记录）
+
+`bind (pure 41) (\x => pure (x+1))`（`main : IO Int`）在 DT 下报
+`no instance found for (Dict_Base.Monad.Monad ?4)`。逐层定位到根因与两条独立阻塞点：
+
+1. **`bind` 的类参数由结果类型而非实参确定**。`bind : {m}{a}{b} -> {d : Dict_Monad m}
+   -> m a -> (a -> m b) -> m b` 的字典 `{d}` 出现在显式实参**之前**。精化到 `{d}` 时
+   `?m` 仍未解：`constrainDictDom` 只把 `?m` 与实参类型头部统一（`pure 41 : ?m' ?a` 的
+   头部是 `?m'`，统一后仍两个元变量，得不到构造子）。`hasUnsolvedMetaValue` 为真 ⇒ 走
+   **延迟路径**（`Elab.vuna:1906-1922`）：字典被降级成普通元变量 `pmeta`，等 `?m` 被
+   结果类型（`IO Int`）解开——但 `?m` 是在 `inferArgsGo` **返回之后**（`checkByInfer`
+   的 `convEc expected`）才解开，延迟路径**从不回填** `pmeta`，最终 `unsolvedMeta` 报错。
+   ⇒ 需要一个「延迟约束收集 + 事后求解」机制：延迟路径把 `(pmeta, Dict_Monad ?m)` 记成
+   待解约束；所有 def 精化完成后扫描，`?m` 已解为具体构造子时 `searchInstance` 回填
+   `pmeta`。
+2. **`mem : a -> List a -> Bool` 缺约束**（`base/lib/Base/List.vuna:54`）。签名不含
+   `Eq a`，但函数体用 `x == y` 触发 `Dict_Eq a`（`a` 为**刚性**签名变量）⇒ 实例搜索失败。
+   HM 路径靠「约束推断」自动补 `Eq a`；DT 需在签名里推断并补隐式 `{d : Dict_Eq a}`
+   （实例搜索失败且类参数为刚性变量时，提升为签名约束并重精化）。
+
+**两条路径的共性**：都要求 Elab.vuna 在 `max_module_lines 2540`（上下文预算，只允许降）
+的硬约束下**净增**代码——延迟约束需要 `newDictMeta`（用 `ecGoals` 记录字典元变量类型，
+复用 `DtGoal` 结构，无需改 `Ec` 字段）+ 事后 `resolveDictGoals` 扫描 + 调用点；约束推断
+需要失败回退重精化。两者都是 M22 的核心，但**不可**做成小补丁；`filterInstances` 的
+「唯一候选回退（pickSolo）」是死代码——`searchInstance` 只在 `?m` 已解时被调用，从不
+遇到未解类参数，回退永远不触发。
+
+**结论**：M22 泛型实例约束求解需要一个专门、谨慎的精化架构改动（延迟约束收集 + 事后
+求解 / 期望类型前向传播），并伴随 Elab 行数净压缩。建议单独一轮专注处理，先用现有
+`test/corpus/dt/` 的 `bind`/`do` 用例做门禁，再补 `mem` 的约束推断。
