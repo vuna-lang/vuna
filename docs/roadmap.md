@@ -150,9 +150,11 @@ record 的字段访问在做擦除判定时容易与「类型级投影」混淆�
 
 ### M20：DT 多文件与模块集成
 
-**进度（已完成主体）**：`--dt` 已复用 `Loader`——多文件、`import`、`--root` 均可；
-见下方「实现要点」。剩余：`pkg` 目录模式与「`vuna-base` 全部模块通过」的最后一个阻塞点
-（参数化 `data Foo a` 的构造子字段引用族参数）。
+**进度（已完成 9/10 项）**：`--dt` 复用 `Loader`（多文件 / `import` / `--root`）；
+参数化 `data Foo a : Type`（`prependParams` 并 kind + 构造子补隐式 `EPi`）；
+trait 方法与顶层签名的类型变量隐式量化（`DtQuant`，`Base.Monad` / `Base.List` 已能过）；
+`Base.Bool` 的类型名优先级修复。剩余：`vuna-base` 卡在 `Base.List:54` 的
+`needs Eq a` 约束──泛型函数里的实例约束需要 M22 的约束求解，以及 `pkg` 目录模式。
 
 **目标**：DT 走出单文件，接入 `import` / `--root` / 包模式；**直接复用现有 `Loader` / `Pkg`**。
 
@@ -182,8 +184,9 @@ record 的字段访问在做擦除判定时容易与「类型级投影」混淆�
   `#default` 不是合法 OCaml 标识符）；匿名实例名按实例头唯一化（否则同 trait 多实例
   在 `defs` 表里互相覆盖——这是 M20 接入 Loader 后暴露的真实 bug）。
 
-**验收**：多文件 DT 程序（含跨包 import）可 check / compile / interp ✅；`vuna-base` 全部模块
-`check --dt` 通过 ⬜（卡在参数化 `data`）；HM 三路径零回归 ✅；seed 闭包不变 ✅。
+**验收**：多文件 DT 程序（含跨包 import）可 check / compile / interp ✅；
+`vuna-base` 全部模块 `check --dt` 通过 ⬜（只剩 `Base.List:54` 的泛型实例约束）；
+HM 三路径零回归 ✅；seed 闭包不变 ✅（36 个模块，metrics 已重标定）。
 
 **前置**：M19。**风险**：DT 与 HM 共用 Loader 时，`--dt` 专属语法（`EPi`、索引 `data`）
 需要 Loader 放行而非报错，注意别把 HM 的既有检查放宽。

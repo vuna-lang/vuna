@@ -13,6 +13,7 @@ import Vuna.Compiler.Ast
 import Vuna.Compiler.Core
 import Vuna.Compiler.DtPrelude
 import Vuna.Compiler.DtKind
+import Vuna.Compiler.DtQuant
 import Vuna.Compiler.DtDerive
 import Vuna.Compiler.DtRecords
 
@@ -297,22 +298,6 @@ globalLookup name [] = Nothing
 globalLookup name ((Pair n ty) :: rest) = if name == n then Just ty else globalLookup name rest
 
 -- ---------------------------------------------------------------
--- 声明收集
--- ---------------------------------------------------------------
-collectSigsInto : List (Pair String Expr) -> List Decl -> Result (List (Pair String Expr))
-collectSigsInto acc [] = Ok (reverse acc)
-collectSigsInto acc (d :: rest) = case d of
-  DSig name ty sp =>
-    if memName name preludeNames then errAt sp ("DT: cannot redefine builtin " ++ name)
-    else if memSig acc name then errAt sp ("DT: duplicate signature for " ++ name)
-    else collectSigsInto (Pair name ty :: acc) rest
-  DFun name pats body sp => collectSigsInto acc rest
-  DData name params kind ctors derivings sp => collectSigsInto acc rest
-  DRecord name params fields derivings sp => errAt sp "DT: internal: record was not desugared"
-  DTrait name params methods sp => collectSigsInto acc rest
-  DInstance mname isDefault head methods sp => collectSigsInto acc rest
-
-memSig : List (Pair String Expr) -> String -> Bool
 memSig [] name = False
 memSig ((Pair n ty) :: rest) name = if n == name then True else memSig rest name
 
@@ -321,19 +306,23 @@ memDefName name [] = False
 memDefName name ((Pair n ty) :: rest) = if n == name then True else memDefName name rest
 
 collectSigs : List Decl -> Result (List (Pair String Expr))
-collectSigs decls = collectSigsInto [] decls
+collectSigs decls = collectSigsInto (definedNames decls) [] decls
 
--- ---------------------------------------------------------------
--- M14：归纳族（data）与构造子（ctor）的精化
--- ---------------------------------------------------------------
---
--- 族的 surface 形态是 `data F : k1 -> ... -> kn -> Type where`：kind 的箭头链
--- 给出族的参数/索引 telescope（域求值后是宇宙 ⇒ 该 binder 被擦除）。
--- 构造子写成完整 telescope：`Cons : {a : Type} -> {n : Nat} -> a -> Vec a n -> Vec a (Succ n)`，
--- 结果类型必须是 `F r1..rk`（k = 族的参数个数）。
---
--- 构造子在 globals 里的类型是它完整的 Pi 类型项，所以 `Cons x xs` 走普通应用；
--- 族名自己在 globals 里是 kind 类型，类型级 `Vec a n` 就是个中性应用（不做类型级求值）。
+-- 声明收集（M20：签名里的自由小写名量化为隐式类型参数，见 `DtQuant.quantifyTopSig`）。
+-- `allDefs` 是**整个程序**的定义名（不能只看后面：`plus` 可能定义在引用它的签名之前）。
+collectSigsInto : List String -> List (Pair String Expr) -> List Decl -> Result (List (Pair String Expr))
+collectSigsInto allDefs acc [] = Ok (reverse acc)
+collectSigsInto allDefs acc (d :: rest) = case d of
+  DSig name ty sp =>
+    if memName name preludeNames then errAt sp ("DT: cannot redefine builtin " ++ name)
+    else if memSig acc name then errAt sp ("DT: duplicate signature for " ++ name)
+    else collectSigsInto allDefs (Pair name (quantifyTopSig allDefs ty sp) :: acc) rest
+  DFun name pats body sp => collectSigsInto allDefs acc rest
+  DData name params kind ctors derivings sp => collectSigsInto allDefs acc rest
+  DRecord name params fields derivings sp => errAt sp "DT: internal: record was not desugared"
+  DTrait name params methods sp => collectSigsInto allDefs acc rest
+  DInstance mname isDefault head methods sp => collectSigsInto allDefs acc rest
+
 --
 -- 已精化的族按源顺序积累在 Ec 的 datas 里（case 精化需要族的 ctor telescope）。
 -- 收集 data 声明（按源顺序）。
@@ -405,13 +394,33 @@ resultSpine ty = case ty of
 -- 精化一个构造子：类型是「Pi 链 → F r1..rk」。
 elabCtor : List (Pair String Term) -> String -> Int -> Ec -> Ctor -> Result (Pair DtCtor Ec)
 elabCtor globals fam arity ec c = case c of
-  Ctor cname tyExpr arityHint csp => andThen (checkType globals emptyCtx ec tyExpr) (\pk => case pk of
-    Pair tyTerm (Pair sort ec1) => case resultSpine tyTerm of
-      Pair head args =>
-        if head /= fam then errAt csp ("DT: constructor " ++ cname ++ " does not return " ++ fam)
-        else if length args /= arity then errAt csp ("DT: constructor " ++ cname ++ " has the wrong number of indices for " ++ fam)
-        else Ok (Pair (DtCtor cname fam (teleOfType tyTerm) tyTerm) ec1)
-  )
+  Ctor cname tyExpr arityHint csp =>
+    let
+      -- M20：`data Foo a : Type` 的构造子类型不写 `{a : Type} ->`，这里把族参数补成隐式
+      -- `EPi` 再检查（`a -> Foo a` ⇒ `{a : Type} -> a -> Foo a`），与显式写法形状一致。
+      famKind = case globalLookup fam globals of
+        Just k => k
+        Nothing => TType levelZero
+      tyExpr2 = if hasFamParams tyExpr then tyExpr else prependFamParams famKind tyExpr csp
+    in andThen (checkType globals emptyCtx ec tyExpr2) (\pk => case pk of
+      Pair tyTerm (Pair sort ec1) => case resultSpine (dropParams tyTerm) of
+        Pair head args =>
+          if head /= fam then errAt csp ("DT: constructor " ++ cname ++ " does not return " ++ fam)
+          else if length args /= arity then errAt csp ("DT: constructor " ++ cname ++ " has the wrong number of indices for " ++ fam)
+          else Ok (Pair (DtCtor cname fam (teleOfType tyTerm) tyTerm) ec1)
+    )
+
+-- 族的 kind 里的参数个数，补成隐式 `EPi`。
+prependFamParams : Term -> Expr -> Span -> Expr
+prependFamParams kindTerm tyExpr sp = case kindTerm of
+  TPi n implicit rigB dom cod => EPi n True (EVar "Type" sp) (prependFamParams cod tyExpr sp) sp
+  _ => tyExpr
+
+-- 剥掉外层 Pi（`resultSpine` 需要看返回类型）。
+dropParams : Term -> Term
+dropParams t = case t of
+  TPi n implicit rigB dom cod => dropParams cod
+  _ => t
 
 elabCtors : List (Pair String Term) -> String -> Int -> Ec -> List Ctor -> Result (Pair (List DtCtor) Ec)
 elabCtors globals fam arity ec [] = Ok (Pair [] ec)
@@ -431,17 +440,22 @@ elabData globals ec ds = case ds of
   Pair d dsp => case d of
     DData dname writtenParams kindExpr ctors derivings dsp2 => if memName dname preludeNames then errAt dsp2 ("DT: cannot redefine builtin " ++ dname)
     else andThen (checkType globals emptyCtx ec kindExpr) (\pk => case pk of
-      Pair kindTerm (Pair kindSort ec1) => if not (kindWellFormed kindTerm) then errAt dsp2 "DT: the kind of a data declaration must be a chain of arrows ending in Type"
-      else
+      Pair kindTerm (Pair kindSort ec1) =>
         let
-          tele = splitKind kindTerm
+          -- M20：族名后的参数并进 kind（`data List a : Type`），否则 `List a` 在构造子
+          -- 类型里被当成「把非函数应用」。用显式 binder，与 `: Type -> Type` 写法一致。
+          fullKind = prependParams writtenParams kindTerm
+          tele = splitKind fullKind
           arity = length tele
-          globals2 = append globals [Pair dname kindTerm]
-        in andThen (elabCtors globals2 dname arity ec1 ctors) (\q => case q of
-          Pair dctors ec2 =>
-            Ok
-              (Pair (DtData dname tele dctors) (Pair (append globals2 (ctorGlobals dctors)) (ecAddData ec2 (DtData dname tele dctors))))
-        )
+        in if not (kindWellFormed fullKind) then errAt dsp2 "DT: the kind of a data declaration must be a chain of arrows ending in Type"
+        else
+          let
+            globals2 = append globals [Pair dname fullKind]
+          in andThen (elabCtors globals2 dname arity ec1 ctors) (\q => case q of
+            Pair dctors ec2 =>
+              Ok
+                (Pair (DtData dname tele dctors) (Pair (append globals2 (ctorGlobals dctors)) (ecAddData ec2 (DtData dname tele dctors))))
+          )
     )
 
 -- 按源顺序精化所有 data 声明。
@@ -458,21 +472,11 @@ elabDatas (ds :: rest) globals ec = andThen (elabData globals ec ds) (\p => case
 -- ---------------------------------------------------------------
 --
 -- 不新增 Core 节点，全部落到既有 data / 隐式 Pi / 构造子上：
---
---   trait Show a where            data Dict_Show : Type -> Type where
---     show : a -> String            MkDict_Show : {a : Type} -> (a -> String) -> Dict_Show a
---
---   show : {a : Type} -> {d : Dict_Show a} -> a -> String
---   show a d x = case d of            -- 方法投影：字典当隐式参数穿进来
---     MkDict_Show f => f x
---
---   instance Show Color where      Show_Color : Dict_Show Color
---     show c = ...                 Show_Color = MkDict_Show (\c => ...)
---
+-- `trait Show a` ⇒ `data Dict_Show : Type -> Type` + 方法投影
+-- `show : {a : Type} -> {d : Dict_Show a} -> a -> String`（字典当隐式参数穿进来）。
 -- 实例搜索发生在隐式 binder 的域是接口字典时：在已注册实例里找头能统一到
--- `Dict_C args` 的那一个并插入。找不到 ⇒ 明确的缺失诊断。
--- 旧 trait 代码的**方法名用法不变**；codegen 不需要新逻辑。
--- 内部名字（不进入用户可见命名空间）。
+-- `Dict_C args` 的那一个并插入；找不到 ⇒ 明确的缺失诊断。
+-- 完整设计与不变量见 `docs/dt-core.md`。
 dictTypeName : String -> String
 dictTypeName cname = "Dict_" ++ cname
 
@@ -515,7 +519,8 @@ classFieldTys globals ec params methods =
 classFieldTysGo : List (Pair String Term) -> Ctx -> Ec -> List (Pair String Expr) -> List Term -> Result (Pair (List Term) Ec)
 classFieldTysGo globals ctx ec [] acc = Ok (Pair (reverse acc) ec)
 classFieldTysGo globals ctx ec (m :: rest) acc = case m of
-  Pair mname mexpr => andThen (checkType globals ctx ec mexpr) (\p => case p of
+  Pair mname mexpr => andThen (checkType globals ctx ec (quantifyTraitSig (\nm => isJust (ctxLookup nm ctx)) mexpr (exprSpan mexpr))) (\p => case p of
+    -- M20：trait 方法签名里的自由小写名（`fmap` 的 `a`/`b`）量化为隐式类型参数。
     Pair tyTerm (Pair sort ec1) => classFieldTysGo globals ctx ec1 rest (tyTerm :: acc)
   )
 
@@ -1349,24 +1354,14 @@ defTypeOrDefault globals name = case globalLookup name globals of
 -- M16：索引擦除分析（诊断级，不改变 codegen）
 -- ===============================================================
 --
--- M13/M14 的规则：binder 域是宇宙 ⇒ 擦除；域是归纳族（索引，如 `n : Nat`）⇒ **保留**
--- 运行时表示，于是 `Vec a n` 的每个 Cons 带一个 `t_Nat` 长度字段。
+-- M13/M14 的擦除规则：binder 域是宇宙 ⇒ 擦除；域是归纳族（索引，如 `n : Nat`）⇒
+-- **保留**运行时表示（`Vec a n` 的每个 Cons 带一个 `t_Nat` 长度字段）。
 --
--- M16 想把它擦掉，但**不能无条件擦**——本阶段探测到一个关键事实：
--- `vlen a n xs = case xs of Cons b m y ys => 1 + vlen b m ys` 把索引 `m`
--- 当作递归参数传下去，于是索引在运行时**真的被读取**（作为参数与构造子实参）。
--- 无条件擦除会让这类定义无法生成代码（`DT: type-level binding 'm' is used at
--- runtime`）。正确的擦除需要「整程序使用分析」：只有当某族的索引从不流到运行时
--- 位置（构造子字段 / 函数实参 / 模式绑定后被使用）时才可擦。
---
--- 因此 M16 落地的擦除能力是**分析 + 诊断**，而不是改写表示：
---   * eraseIndexMask 给出每个族参数「若只用标签分派则可擦」的保守判定；
---   * indexNeedsRuntime 给出「该索引是否真的在运行时被用到」；
---   * 两者一致时说明可安全擦除（M16 不做，留 M18 dogfooding 时按整程序信息落地）。
---
--- 结论写进 docs/dt-core.md 的「已知限制」：索引仍保留运行时表示，擦除留给后续阶段。
--- 保守判定：该族参数若只出现在结果索引位置（不出现在任何构造子的非索引字段域），
--- 则「标签分派」本身不需要它 ⇒ 理论可擦。
+-- 索引**不能无条件擦**：`vlen a n xs = case xs of Cons b m y ys => 1 + vlen b m ys`
+-- 把索引 `m` 当递归参数传下去，于是它在运行时**真的被读取**；无条件擦除会让这类
+-- 定义无法生成代码。正确擦除需要整程序使用分析，因此 M16 落地的是**分析 + 诊断**：
+-- `eraseIndexMask` 给出保守可擦判定，`indexNeedsRuntime` 给出是否真的被用到。
+-- 详见 `docs/dt-core.md` 的「已知限制」。
 eraseIndexMask : DtData -> List Bool
 eraseIndexMask dd = eraseMaskGo dd (dtDataParams dd) 0 []
 
@@ -2537,3 +2532,9 @@ fallbackAltList clauses restParams fuel = case filterFallback clauses of
   fbs =>
     andThen (buildColumnExpr (stripFirstCol fbs) restParams (fuel - 1))
       (\bodyExpr => Ok [Pair (PWild (Span "" 0 0 0 0)) bodyExpr])
+
+-- 构造子类型是否已显式带（隐式）类型参数。
+hasFamParams : Expr -> Bool
+hasFamParams e = case e of
+  EPi n implicit dom cod sp => True
+  _ => False

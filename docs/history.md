@@ -178,9 +178,26 @@ git 历史里）。各里程碑对应的模块与设计见 [docs/architecture.md
   洞 `_` 与 data 类型名。接入后暴露两个真实 bug 并修掉：`sanitizeChar` 不处理 `#`
   （Loader 生成的匿名实例名 `#default` 不是合法 OCaml 标识符）、匿名实例名不唯一
   （同 trait 多实例的字典互相覆盖）。
-  未完成：「`vuna-base` 全模块 `check --dt`」卡在参数化 `data Foo a` 的构造子字段引用
-  族参数（`Cons2 : a -> MyList a -> MyList a` 报 `unknown name a`）——这是 DT 精化器
-  里族参数上下文与字段类型检查没对齐，属 M20 剩余项。
+- M20 第二个补丁：参数化 `data Foo a : Type` 在 DT 下可用（`vuna-base` 7 个模块都用
+  这种写法）。两处改动：`DtPrelude.prependParams` 把族名后的参数作为**隐式** binder
+  并进 kind（`data List a : Type` 的 kind 只有裸 `Type`，不并进去 `List a` 就被当成
+  「把非函数应用」）；`Elab.elabCtor` 在检查构造子类型前把族参数补成隐式 `EPi`
+  （`MkWrap : a -> Wrap a` ⇒ `{a : Type} -> a -> Wrap a`），与 `data Foo : Type -> Type` +
+  显式 `{a : Type}` 的既有写法形状对齐——否则构造 `Wrap Int` 报
+  `type mismatch: expected a, got Int`。
+- M20 第三个补丁：签名里的类型变量隐式量化。vuna 允许 `append : List a -> List a`
+  不写类型参数（HM 靠推断，DT 需要显式 binder），trait 方法签名同理
+  （`fmap : (a -> b) -> f a -> f b`）。新增 `Vuna.Compiler.DtQuant`（纯 AST 变换，
+  独立成模块以守住 `Elab` 的模块行数门槛）：收集签名里的自由小写名并包成
+  `EPi n True (Type)`，同时排除类参数（其 kind 是 `Type -> Type`，不能被 `Type` 覆盖）、
+  签名内已显式绑定的名字、以及**本程序另有定义的名字**（`vapp` 这类会被误当类型变量）。
+  副作用：`Elab` 反而从 2539 降到 2525 行（顺手把两段长设计注释压成指针，细节移入本文档）。
+- M20 第四个补丁：`Loader.resolveTypeName` 让本模块声明的类型名**优先于**内建名——
+  `Base.Bool` 重新声明 `data Bool` 时，`Bool` 必须解析成 mangled 的 `Base.Bool.Bool`，
+  否则构造子检查报 `constructor False does not return Base.Bool.Bool`。
+- M20 剩余：`vuna-base` 的 `check --dt` 已推进到 `Base.List:54`（`mem : a -> List a -> Bool`
+  里 `x == y` 需要 `Eq a` 实例约束）——泛型函数上的实例约束求解属 M22 范围。此外
+  `pkg` 目录模式（包入口）未接通。
 
 ## 决策变更：M18 迁移动机失效（2026-11）
 

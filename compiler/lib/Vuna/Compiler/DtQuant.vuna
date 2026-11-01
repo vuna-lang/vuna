@@ -1,0 +1,124 @@
+module Vuna.Compiler.DtQuant (quantifyTraitSig, quantifyTopSig, definedNames) where
+
+-- Vuna.Compiler.DtQuant：把签名里的**自由小写名**量化为隐式类型参数（M20）。
+--
+-- vuna 的签名可以不写类型参数：`append : List a -> List a -> List a` 里的 `a`、trait 方法
+-- 的 `fmap : (a -> b) -> f a -> f b` 里的 `a`/`b`，都是隐式量化的类型变量（HM 路径靠
+-- 推断，DT 需要显式 binder）。这里收集这些名字并包成 `EPi n True (Type)`。
+--
+-- 纯 AST 变换（只依赖 `Ast`），因此独立成模块——`Elab` 的模块行数是硬门槛。
+import Vuna.Compiler.Common
+import Vuna.Compiler.Ast
+
+-- 把 trait 方法签名里的自由小写名量化为隐式类型参数。
+-- `boundInScope` 给出「这个名字已在上下文里」的判定（trait 的类参数不算自由变量，
+-- 且它们的 kind 是 `Type -> Type` 这类高阶形态，不能被 `Type` 覆盖）。
+quantifyTraitSig : (String -> Bool) -> Expr -> Span -> Expr
+quantifyTraitSig inScope ty sp = quantify (freeNames inScope ty) ty sp
+
+freeNames : (String -> Bool) -> Expr -> List String
+freeNames inScope ty = keepOut inScope (dropPiBound (lowerVarNames ty) (piBoundNames ty))
+
+keepOut : (String -> Bool) -> List String -> List String
+keepOut inScope [] = []
+keepOut inScope (n :: rest) = if inScope n then keepOut inScope rest else n :: keepOut inScope rest
+
+quantify : List String -> Expr -> Span -> Expr
+quantify [] e sp = e
+quantify (n :: rest) e sp = EPi n True (EVar "Type" sp) (quantify rest e sp) sp
+
+piBoundNames : Expr -> List String
+piBoundNames e = case e of
+  EPi n implicit dom cod sp => n :: piBoundNames cod
+  _ => []
+
+lowerVarNames : Expr -> List String
+lowerVarNames e = dedupNames (exprLowerVars e)
+
+exprLowerVars : Expr -> List String
+exprLowerVars e = case e of
+  EVar n sp => if isLowerIdent n then [n] else []
+  EApp fn args sp => append (exprLowerVars fn) (concatMap exprLowerVars args)
+  ELam names body sp => exprLowerVars body
+  EPi n implicit dom cod sp => append (exprLowerVars dom) (exprLowerVars cod)
+  EIf c t f sp => append (exprLowerVars c) (append (exprLowerVars t) (exprLowerVars f))
+  ELet binds body rec_ sp =>
+    append (concatMap (\b => exprLowerVars (secondOf b)) binds) (exprLowerVars body)
+  ECase scrut alts sp =>
+    append (exprLowerVars scrut) (concatMap (\a => exprLowerVars (secondOf a)) alts)
+  EField b f sp => exprLowerVars b
+  ERecord rn fields sp => concatMap (\p => exprLowerVars (secondOf p)) fields
+  ERecUpdate b fields sp => exprLowerVars b
+  EInstSel b m sp => exprLowerVars b
+  _ => []
+
+isLowerIdent : String -> Bool
+isLowerIdent n = case strUnpack n of
+  [] => False
+  c :: rest => c >= 97 && c <= 122
+
+dedupNames : List String -> List String
+dedupNames [] = []
+dedupNames (x :: rest) = if memName x rest then dedupNames rest else x :: dedupNames rest
+
+dropPiBound : List String -> List String -> List String
+dropPiBound names [] = names
+dropPiBound names (b :: rest) = dropPiBound (dropName b names) rest
+
+dropName : String -> List String -> List String
+dropName b [] = []
+dropName b (n :: rest) = if n == b then dropName b rest else n :: dropName b rest
+
+-- 顶层签名里要量化的自由名字：额外排除本程序另有定义的名字（`vapp` 这类会被误
+-- 当类型变量）与内建 prelude 名。
+quantifyTopSig : List String -> Expr -> Span -> Expr
+quantifyTopSig defined ty sp =
+  quantify (keepOutList (append defined topPreludeNames) (freeNames (\n => False) ty)) ty sp
+
+keepOutList : List String -> List String -> List String
+keepOutList banned [] = []
+keepOutList banned (n :: rest) =
+  if memName n banned then keepOutList banned rest else n :: keepOutList banned rest
+
+topPreludeNames : List String
+topPreludeNames =
+  [ "Int",
+    "String",
+    "Bool",
+    "True",
+    "False",
+    "+",
+    "-",
+    "*",
+    "/",
+    "==",
+    "/=",
+    "<",
+    "<=",
+    ">",
+    ">=",
+    "++",
+    "&&",
+    "||",
+    "strFromInt",
+    "strUnpack",
+    "strPack",
+    "strLength",
+    "show",
+    "eq",
+    "neq",
+    "lt",
+    "le",
+    "gt",
+    "ge",
+    "Type",
+    "->",
+    "_"
+  ]
+
+-- 本程序里另有定义（DFun）的顶层名字：签名里的这些名字不是类型变量。
+definedNames : List Decl -> List String
+definedNames [] = []
+definedNames (d :: rest) = case d of
+  DFun n pats body sp => n :: definedNames rest
+  _ => definedNames rest

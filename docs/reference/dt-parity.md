@@ -25,7 +25,7 @@
 | 9 | ~~`==` / `/=` 只对 Int~~ | **M19 已实现**：隐式类型参数 + 精化期按实参类型特化（`bi_eq_str` 等） | 155 处字符串比较 | 0 | 52 | M19（已完成） |
 | 10 | ~~`case` 只接受归纳族~~ | **M19 已实现**：Bool 降级 if，Int/String 降级 if 链（需兜底） | 4（Bool 分支） | 0 | 0 | M19（已完成） |
 | 11 | 非结构递归（算术递减 / fuel 式） | `Elab.checkTermBody`：`DT: cannot prove termination of <f> ...` | 41（`Elab` 14、`Core` 13、`Loader` 5、余 9） | 3 | 20 | M19 风险项 |
-| 12 | ~~单文件~~：无 `import` / `--root` | **M20 已实现**：复用 Loader（`loadProgramRaw`）。剩余包目录与参数化 `data Foo a` | 20 模块头 / 64 import | 12 / 33 | 13 / 64 | M20（主体完成） |
+| 12 | ~~单文件~~：无 `import` / `--root` / `data Foo a` | **M20 已实现**：复用 Loader（`loadProgramRaw`）、参数化 `data`、签名类型变量隐式量化。剩余包目录与泛型实例约束 | 20 模块头 / 64 import | 12 / 33 | 13 / 64 | M20（9/10） |
 | 13 | `main` 只能是 Int/String/Bool，无 `main : IO a` | `CoreCodegen.mainShowErr`：`DT: main must return Int, String or Bool (M13 limitation)` | 两入口均 `main : IO Int` | — | — | M21 |
 | 14 | ~~`record` 声明 / 字段访问 / 更新 / 模式~~ | **M19 已实现**：精化前统一降级成单构造子 data（`DtRecords.vuna`），构造子名 `Mk<R>` | 1 声明、14 构造、4 字段读取（另有 `fmt/` 夹具） | 0 | 0 | M19（已完成） |
 | 15 | ~~`deriving`~~ | **M19 已实现**：展开成等价 instance（`DtDerive.vuna`），生成 Show/Eq/Ord 方法体 | 1（`Loader.ExportEntry`）+ `traits/` 13 个夹具 | 0 | 0 | M19（已完成） |
@@ -97,7 +97,7 @@ compile」在此失效，DT 存在能产出错误程序的通道。修复方式�
 2. **多 clause 399 名 / 978 行**是逐文件去重口径；跨文件拼接是 421 名 / 1050 行（同名碰撞）。
 3. **`let` 296 是 `compiler/lib` 的量**，`lib` 是 189——勿混列读取。
 
-测试面：DT 正例 31 / 负例 26，见 [testing.md](testing.md)。
+测试面：DT 正例 32 / 负例 26，见 [testing.md](testing.md)。
 
 ## 5. 对计划的三条推论
 

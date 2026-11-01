@@ -1,4 +1,4 @@
-module Vuna.Compiler.DtPrelude (preludeNames, preludeGlobals, intTy, strTy, boolTy, fun2, isEqOp, builtinTyName, builtinEqTyName, eqRuntimeName, polyEqTy, instanceDefName) where
+module Vuna.Compiler.DtPrelude (preludeNames, preludeGlobals, intTy, strTy, boolTy, fun2, isEqOp, builtinTyName, builtinEqTyName, eqRuntimeName, polyEqTy, instanceDefName, prependParams) where
 
 -- Vuna.Compiler.DtPrelude：DT 的**内置定义表**（M19 起独立成模块）。
 --
@@ -149,3 +149,11 @@ instanceDefName mname derived fallback = case mname of
 
 hashToUnderscore : Int -> Int
 hashToUnderscore c = if c == 35 then 95 else c
+
+-- 族名后的参数作为**隐式** binder 前置到 kind（`data List a : Type` 的 `a` + `Type`
+-- ⇒ `{a : Type} -> Type`）。与 `data List : Type -> Type` 的既有写法（构造子用
+-- `{a : Type}` 隐式参数）保持一致——`List Int` 的 `Int` 由实参或期望类型反推。
+prependParams : List String -> Term -> Term
+prependParams [] kindTerm = kindTerm
+prependParams (p :: rest) kindTerm =
+  TPi p False Rig1 (TType levelZero) (prependParams rest kindTerm)
