@@ -1,0 +1,46 @@
+-- M21：`Base.IO` 的公开 API 在 DT 下全部可用（类型面）。效果不在这条夹具里执行
+-- （纯核心求值器不跑效果），运行时效果见 corpus/dt_io/。
+import Base.IO
+import Base.List
+
+readProbe : IO String
+readProbe = readFile "x"
+
+writeProbe : IO Int
+writeProbe = writeFile "x" "y"
+
+lineProbe : IO String
+lineProbe = readLine
+
+dirProbe : IO (List String)
+dirProbe = readDir "."
+
+isDirProbe : IO Bool
+isDirProbe = isDirectory "."
+
+makeDirProbe : IO Int
+makeDirProbe = makeDir "x"
+
+removeProbe : IO Int
+removeProbe = removeFile "x"
+
+existsProbe : IO Bool
+existsProbe = fileExists "x"
+
+mtimeProbe : IO Int
+mtimeProbe = fileTimeProbe
+
+fileTimeProbe : IO Int
+fileTimeProbe = fileMtime "x"
+
+sizeProbe : IO Int
+sizeProbe = fileSize "x"
+
+argsProbe : IO (List String)
+argsProbe = getArgs
+
+exitProbe : IO Int
+exitProbe = exit 0
+
+main : IO Int
+main = pure 0

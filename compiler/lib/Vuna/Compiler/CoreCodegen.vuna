@@ -405,6 +405,28 @@ dtRuntime =
     ++ "    else Buffer.add_char buf c) s;\n"
     ++ "  Buffer.add_char buf (Char.chr 34);\n"
     ++ "  Buffer.contents buf\n"
+    ++ dtPrimRuntime
+
+-- M21：effectful 内建（`prim_*`）的 DT 运行时实现。
+-- 签名在 `DtPrelude.preludeGlobals`（`prim_*` 只进 globals、不进 `preludeNames`），
+-- 这里补 OCaml 侧实现；`prim_getArgs` / `prim_readLine` 在 Base.IO 里是**值**，
+-- 所以在引用点展开成 `dtp_*(()`，与 HM `TypedCodegen` 的处理一致（每次求值都重新读）。
+dtPrimRuntime : String
+dtPrimRuntime =
+  "let dtp_print s = print_string s; flush stdout; String.length s\n"
+    ++ "let dtp_readFile path =\n  try\n    let ch = open_in_bin path in\n    Fun.protect ~finally:(fun () -> close_in_noerr ch)\n      (fun () -> really_input_string ch (in_channel_length ch))\n  with Sys_error msg -> failwith (\"readFile: \" ^ msg)\n"
+    ++ "let dtp_writeFile path contents =\n  try\n    let ch = open_out_bin path in\n    Fun.protect ~finally:(fun () -> close_out_noerr ch)\n      (fun () -> output_string ch contents);\n    String.length contents\n  with Sys_error msg -> failwith (\"writeFile: \" ^ msg)\n"
+    ++ "let dtp_getArgs () =\n  let argv = Sys.argv in\n  let n = Array.length argv in\n  if n <= 1 then [] else Array.to_list (Array.sub argv 1 (n - 1))\n"
+    ++ "let dtp_readLine () = try input_line stdin with End_of_file -> \"\"\n"
+    ++ "let dtp_readDir path =\n  try List.sort compare (Array.to_list (Sys.readdir path))\n  with Sys_error msg -> failwith (\"readDir: \" ^ msg)\n"
+    ++ "let dtp_isDirectory path =\n  try Sys.is_directory path with Sys_error msg -> failwith (\"isDirectory: \" ^ msg)\n"
+    ++ "let dtp_makeDir path =\n  try (if Sys.file_exists path then 0 else (Sys.mkdir path 0o755; 0))\n  with Sys_error msg -> failwith (\"makeDir: \" ^ msg)\n"
+    ++ "let dtp_removeFile path =\n  try (if Sys.file_exists path then (Sys.remove path; 0) else 0)\n  with Sys_error msg -> failwith (\"removeFile: \" ^ msg)\n"
+    ++ "let dtp_fileExists path = Sys.file_exists path\n"
+    ++ "let dtp_fileMtime path =\n  try int_of_float (Unix.stat path).Unix.st_mtime with _ -> 0\n"
+    ++ "let dtp_fileSize path =\n  try (Unix.stat path).Unix.st_size with _ -> 0\n"
+    ++ "let dtp_exit n = exit n\n"
+    ++ "let dtp_runIn dir args =\n  let quote s = Filename.quote s in\n  let cmd = String.concat \" \" (List.map quote args) in\n  let old = Sys.getcwd () in\n  Fun.protect ~finally:(fun () -> Sys.chdir old) (fun () -> Sys.chdir dir; Sys.command cmd)\n"
 
 -- M19：`==` / `/=` 的跨类型特化（精化期已按实参类型重写成 `bi_eq_int` / `bi_eq_str`
 -- 这类名字），以及 str* 内建。codegen 只做名字映射、不感知类型——M18.6 的
@@ -434,6 +456,20 @@ globalRef name = case name of
   "strUnpack" => Ok "bi_strUnpack"
   "strPack" => Ok "bi_strPack"
   "strLength" => Ok "bi_strLength"
+  "prim_print" => Ok "dtp_print"
+  "prim_readFile" => Ok "dtp_readFile"
+  "prim_writeFile" => Ok "dtp_writeFile"
+  "prim_readDir" => Ok "dtp_readDir"
+  "prim_isDirectory" => Ok "dtp_isDirectory"
+  "prim_makeDir" => Ok "dtp_makeDir"
+  "prim_removeFile" => Ok "dtp_removeFile"
+  "prim_fileExists" => Ok "dtp_fileExists"
+  "prim_fileMtime" => Ok "dtp_fileMtime"
+  "prim_fileSize" => Ok "dtp_fileSize"
+  "prim_exit" => Ok "dtp_exit"
+  "prim_runIn" => Ok "dtp_runIn"
+  "prim_getArgs" => Ok "(dtp_getArgs ())"
+  "prim_readLine" => Ok "(dtp_readLine ())"
   _ => Ok (valueName name)
 
 -- 零参构造子（True/False 之外的 user 构造子）作为普通值引用时，OCaml 里就是裸构造子；
@@ -447,61 +483,257 @@ genGlobalRef st name = case lookupPair name (gsCtors st) of
 -- 变体类型声明（族 → OCaml type）
 -- ---------------------------------------------------------------
 --
--- 每个族生成 `type 'a t_F = C_F_C1 [of T1 * T2 ...] | ...`（永远带一个类型参数 'a）。
--- 字段类型渲染规则（DT 的运行时类型只有这几种）：
---   Int → int；String → string；Bool → bool；
---   族应用 F ... → 'a t_F（索引/类型实参全部丢掉，统一用族内固定的 'a）；
---   其它（类型变量、Type、类型别名等）→ 'a。
--- 这样任何字段都能被 'a 或具体类型容纳，一定可编译（-w -a 关掉未使用变量警告）。
-ocamlFieldTy : List String -> Value -> String
-ocamlFieldTy families v = case v of
-  VNeutral n => case n of
-    NGlobal g sp =>
-      if g == "Int" then "int"
-      else if g == "String" then "string"
-      else if g == "Bool" then "bool" else if memName g families then "'a " ++ typeName g else "'a"
-    _ => "'a"
-  _ => "'a"
+-- 每个族生成 `type ('a0,...) t_F = ...`。类型参数按下面的规则分配（M21）：
+--
+--   * **族类型参数**（kind 里域是宇宙的参数，如 `List a` 的 `a`）：只有真正出现在
+--     运行时字段类型里的才保留。递归出现 `Cons : a -> List a -> List a` 复用同一个
+--     参数（渲染成 `'a0 * 'a0 t_List`），否则 `append` 这类递归定义会在 OCaml 里
+--     统一出无限类型（occurs check）；
+--   * **不透明字段**（函数类型 / Type / 其它静态没法命名的字段类型）：每个字段各占一个
+--     **独立**类型参数。字典族的字段类型互不相同（`bind : m a -> (a -> m b) -> m b` /
+--     `pure : a -> m a`），共用参数会把它们错误统一；异构 `Pair a b` 同理；
+--   * **没被用到的族参数不生成**：`IO a` 的字段是函数 `Int -> a`（整体不透明），
+--     所以 `IO` 的 OCaml 类型没有类型参数，也就不会在每个顶层 `IO` 值上留下
+--     不可泛化的弱变量（旧实现里 `readFile "x"` 得到 `('a,_weak) t_IO` 直接报错）。
+--
+-- 「用到」的判定与字段渲染必须用同一张表，否则声明与实参位置会漂移。表用不动点计算
+-- （族之间可互相引用）：初始全空，按渲染位置收集引用，单调增长到稳定。
+typeParamName : Int -> String
+typeParamName i = "'a" ++ strFromInt i
 
--- 从构造子的完整 Pi 类型项里按位置取出每个未擦除 binder 的域类型。
-ctorFieldTys : List String -> List (Pair String Rig) -> Int -> Value -> List String
-ctorFieldTys families [] lvl v = []
-ctorFieldTys families ((Pair name rig) :: rest) lvl v = case v of
+typeParamNames : Int -> List String
+typeParamNames n = map typeParamName (range 0 n)
+
+typeParamDecl : Int -> String
+typeParamDecl 0 = ""
+typeParamDecl n = case typeParamNames n of
+  [only] => only ++ " "
+  names => "(" ++ joinWith ", " names ++ ") "
+
+-- kind 里的候选类型参数位置（域是宇宙的族参数）。
+typeParamLevels : DtData -> List Int
+typeParamLevels d = typeParamLevelsGo (dtDataParams d) 0
+
+typeParamLevelsGo : List (Pair String Rig) -> Int -> List Int
+typeParamLevelsGo [] i = []
+typeParamLevelsGo (p :: rest) i =
+  if rigIsErased (secondOf p) then i :: typeParamLevelsGo rest (i + 1)
+  else typeParamLevelsGo rest (i + 1)
+
+findDtData : String -> List DtData -> Maybe DtData
+findDtData name [] = Nothing
+findDtData name (d :: rest) = if dtDataName d == name then Just d else findDtData name rest
+
+memInt : Int -> List Int -> Bool
+memInt i [] = False
+memInt i (x :: rest) = if x == i then True else memInt i rest
+
+levelSlot : List Int -> Int -> Maybe Int
+levelSlot levels lvl = levelSlotGo levels lvl 0
+
+levelSlotGo : List Int -> Int -> Int -> Maybe Int
+levelSlotGo [] lvl acc = Nothing
+levelSlotGo (x :: rest) lvl acc = if x == lvl then Just acc else levelSlotGo rest lvl (acc + 1)
+
+nthValue : List Value -> Int -> Maybe Value
+nthValue [] i = Nothing
+nthValue (v :: rest) i = if i <= 0 then Just v else nthValue rest (i - 1)
+
+lookupUsed : List (Pair String (List Int)) -> String -> List Int
+lookupUsed [] name = []
+lookupUsed (p :: rest) name = if firstOf p == name then secondOf p else lookupUsed rest name
+
+-- 收集「在渲染位置上」引用了当前族哪些候选类型参数。
+-- 收集「在渲染位置上」引用了当前族哪些候选类型参数。
+-- `lvl` 是当前到达的 binder 深度（给 Pi 的闭包喂 fresh var 用）。
+collectUsedLevels : List Int -> List (Pair String (List Int)) -> List DtData -> Int -> Value -> List Int
+collectUsedLevels tps table datas lvl v = case v of
+  VPi name implicit rig dom clo =>
+    if implicit then collectUsedLevels tps table datas (lvl + 1) (applyClosure clo (VNeutral (NVar name lvl [])))
+    else append (collectUsedLevels tps table datas lvl dom)
+      (collectUsedLevels tps table datas (lvl + 1) (applyClosure clo (VNeutral (NVar name lvl []))))
+  VNeutral n => case n of
+    NVar name lvl2 sp =>
+      append (if memInt lvl2 tps then [lvl2] else []) (collectUsedSpine tps table datas lvl sp)
+    NGlobal g sp => case findDtData g datas of
+      Just gd => collectFamilyArgs tps table datas lvl (lookupUsed table g) sp
+      Nothing => collectUsedSpine tps table datas lvl sp
+  _ => []
+
+collectUsedSpine : List Int -> List (Pair String (List Int)) -> List DtData -> Int -> List Value -> List Int
+collectUsedSpine tps table datas lvl [] = []
+collectUsedSpine tps table datas lvl (v :: rest) =
+  append (collectUsedLevels tps table datas lvl v) (collectUsedSpine tps table datas lvl rest)
+
+collectFamilyArgs : List Int -> List (Pair String (List Int)) -> List DtData -> Int -> List Int -> List Value -> List Int
+collectFamilyArgs tps table datas lvl usedPats args = case usedPats of
+  [] => []
+  i :: rest => case nthValue args i of
+    Just arg =>
+      append (collectUsedLevels tps table datas lvl arg)
+        (collectFamilyArgs tps table datas lvl rest args)
+    Nothing => collectFamilyArgs tps table datas lvl rest args
+
+ctorUsedLevels : List Int -> List (Pair String (List Int)) -> List DtData -> List (Pair String Rig) -> Int -> Value -> List Int
+ctorUsedLevels tps table datas [] lvl v = []
+ctorUsedLevels tps table datas ((Pair name rig) :: rest) lvl v = case v of
   VPi pname implicit _ dom clo =>
     let
       next = applyClosure clo (VNeutral (NVar pname lvl []))
-    in if rigIsErased rig then ctorFieldTys families rest (lvl + 1) next
-    else ocamlFieldTy families dom :: ctorFieldTys families rest (lvl + 1) next
+    in if rigIsErased rig then ctorUsedLevels tps table datas rest (lvl + 1) next
+    else append (collectUsedLevels tps table datas lvl dom)
+      (ctorUsedLevels tps table datas rest (lvl + 1) next)
   _ => []
+
+dataUsedLevels : DtData -> List (Pair String (List Int)) -> List DtData -> List Int
+dataUsedLevels d table datas =
+  let
+    raw =
+      concatMap
+        (\c => ctorUsedLevels (typeParamLevels d) table datas (dtCtorTelescope c) 0 (eval [] (dtCtorType c)))
+        (dtDataCtors d)
+  in filter (\l => memInt l raw) (typeParamLevels d)
+
+sameLevelTable : List (Pair String (List Int)) -> List (Pair String (List Int)) -> Bool
+sameLevelTable [] [] = True
+sameLevelTable (a :: rest) (b :: rest2) =
+  if firstOf a == firstOf b && secondOf a == secondOf b then sameLevelTable rest rest2 else False
+sameLevelTable _ _ = False
+
+usedTableFix : List DtData -> List (Pair String (List Int)) -> List (Pair String (List Int))
+usedTableFix datas table =
+  let
+    next = map (\d => Pair (dtDataName d) (dataUsedLevels d table datas)) datas
+  in if sameLevelTable next table then next else usedTableFix datas next
+
+-- 字段/类型实参渲染。
+familyTyText : String -> List String -> String
+familyTyText name [] = typeName name
+familyTyText name ([a]) = a ++ " " ++ typeName name
+familyTyText name args = "(" ++ joinWith ", " args ++ ") " ++ typeName name
+
+renderFamilyArgs : List Int -> List (Pair String (List Int)) -> List DtData -> List Int -> List Value -> List String
+renderFamilyArgs levels table datas usedPats args = case usedPats of
+  [] => []
+  i :: rest => case nthValue args i of
+    Just arg =>
+      renderTypeArg levels table datas arg :: renderFamilyArgs levels table datas rest args
+    Nothing => renderFamilyArgs levels table datas rest args
+
+renderTypeArg : List Int -> List (Pair String (List Int)) -> List DtData -> Value -> String
+renderTypeArg levels table datas v = case v of
+  VNeutral n => case n of
+    NVar name lvl sp => case levelSlot levels lvl of
+      Just s => typeParamName s
+      Nothing => "unit"
+    NGlobal g sp => case g of
+      "Int" => "int"
+      "String" => "string"
+      "Bool" => "bool"
+      _ => case findDtData g datas of
+        Just gd => familyTyText g (renderFamilyArgs levels table datas (lookupUsed table g) sp)
+        Nothing => "unit"
+  _ => "unit"
+
+-- 单个字段的 OCaml 类型 + 下一个不透明参数槽。
+-- 显式 Pi 字段（`(Int -> a)` 这类）**结构化渲染**：它把族参数（IO 的结果类型）带进
+-- OCaml 类型，顶层值就不会留下弱类型变量。带隐式量词的 Pi（trait 方法签名，如
+-- `bind : m a -> (a -> m b) -> m b`）整体不透明——方法级多态没法用 OCaml 类型表达。
+renderPiTy : List Int -> List (Pair String (List Int)) -> List DtData -> Int -> Value -> String
+renderPiTy levels table datas lvl v = case v of
+  VPi name implicit rig dom clo =>
+    let
+      next = applyClosure clo (VNeutral (NVar name lvl []))
+    in if rigIsErased rig then renderPiTy levels table datas (lvl + 1) next
+    else "("
+      ++ renderPiTy levels table datas lvl dom
+      ++ ") -> "
+      ++ renderPiTy levels table datas (lvl + 1) next
+  _ => renderTypeArg levels table datas v
+
+-- 单个字段的 OCaml 类型 + 下一个不透明参数槽。
+renderFieldTy : List Int -> List (Pair String (List Int)) -> List DtData -> Int -> Value -> Int -> Pair String Int
+renderFieldTy levels table datas lvl dom slot = case dom of
+  VPi name implicit rig d clo =>
+    if implicit then Pair (typeParamName slot) (slot + 1)
+    else Pair (renderPiTy levels table datas lvl dom) slot
+  VNeutral n => case n of
+    NVar name lvl2 sp => case levelSlot levels lvl2 of
+      Just s => Pair (typeParamName s) slot
+      Nothing => Pair (typeParamName slot) (slot + 1)
+    NGlobal g sp => case g of
+      "Int" => Pair "int" slot
+      "String" => Pair "string" slot
+      "Bool" => Pair "bool" slot
+      _ => case findDtData g datas of
+        Just gd =>
+          Pair (familyTyText g (renderFamilyArgs levels table datas (lookupUsed table g) sp)) slot
+        Nothing => Pair (typeParamName slot) (slot + 1)
+  _ => Pair (typeParamName slot) (slot + 1)
+
+ctorFieldTexts : List Int -> List (Pair String (List Int)) -> List DtData -> List (Pair String Rig) -> Int -> Value -> Int -> Pair (List String) Int
+ctorFieldTexts levels table datas [] lvl v slot = Pair [] slot
+ctorFieldTexts levels table datas ((Pair name rig) :: rest) lvl v slot = case v of
+  VPi pname implicit _ dom clo =>
+    let
+      next = applyClosure clo (VNeutral (NVar pname lvl []))
+    in if rigIsErased rig then ctorFieldTexts levels table datas rest (lvl + 1) next slot
+    else case renderFieldTy levels table datas lvl dom slot of
+      Pair text slot2 => case ctorFieldTexts levels table datas rest (lvl + 1) next slot2 of
+        Pair texts slot3 => Pair (text :: texts) slot3
+  _ => Pair [] slot
+
+ctorArityNeed : List Int -> List (Pair String (List Int)) -> List DtData -> DtCtor -> Int
+ctorArityNeed levels table datas c =
+  secondOf (ctorFieldTexts levels table datas (dtCtorTelescope c) 0 (eval [] (dtCtorType c)) (length levels))
+    - length levels
+
+dataArityNeed : List Int -> List (Pair String (List Int)) -> List DtData -> List DtCtor -> Int
+dataArityNeed levels table datas ctors =
+  length levels + maxIntList (map (ctorArityNeed levels table datas) ctors)
+
+maxIntList : List Int -> Int
+maxIntList [] = 0
+maxIntList (x :: rest) = if x >= maxIntList rest then x else maxIntList rest
 
 ctorDeclText : String -> List String -> String
 ctorDeclText name [] = name
-ctorDeclText name ([t]) = name ++ " of " ++ t
-ctorDeclText name ts = name ++ " of " ++ joinWith " * " ts
+ctorDeclText name ([t]) = name ++ " of " ++ parenOne t
+ctorDeclText name ts = name ++ " of " ++ joinWith " * " (parenList ts)
 
-genCtorDecl : List String -> DtCtor -> Result String
-genCtorDecl families c =
+parenList : List String -> List String
+parenList [] = []
+parenList (t :: rest) = append [parenOne t] (parenList rest)
+
+parenOne : String -> String
+parenOne t = "(" ++ t ++ ")"
+
+genCtorDecl : List Int -> List (Pair String (List Int)) -> List DtData -> DtCtor -> Result String
+genCtorDecl levels table datas c =
   Ok
-    (ctorDeclText (ctorOcamlName (dtCtorFamily c) (dtCtorName c)) (ctorFieldTys families (dtCtorTelescope c) 0 (eval [] (dtCtorType c))))
+    (ctorDeclText (ctorOcamlName (dtCtorFamily c) (dtCtorName c)) (firstOf (ctorFieldTexts levels table datas (dtCtorTelescope c) 0 (eval [] (dtCtorType c)) (length levels))))
 
-genDataDecl : List String -> DtData -> Result String
-genDataDecl families d =
-  andThen (traverse (genCtorDecl families) (dtDataCtors d))
-    (\cs => Ok ("'a " ++ typeName (dtDataName d) ++ " = " ++ ctorBodyText cs))
+genDataDecl : List (Pair String (List Int)) -> List DtData -> DtData -> Result String
+genDataDecl table datas d =
+  let
+    levels = lookupUsed table (dtDataName d)
+    arity = dataArityNeed levels table datas (dtDataCtors d)
+  in andThen (traverse (genCtorDecl levels table datas) (dtDataCtors d))
+    (\cs => Ok (typeParamDecl arity ++ typeName (dtDataName d) ++ " = " ++ ctorBodyText cs))
 
 ctorBodyText : List String -> String
 ctorBodyText [] = "|"
 ctorBodyText cs = joinWith " | " cs
 
--- 族之间可能互相引用字段类型，统一放进一个 `type ... and ...` 递归组，声明顺序无关。
 genTypeDecls : List DtData -> Result String
 genTypeDecls datas = case datas of
   [] => Ok ""
   _ =>
-    andThen (traverse (genDataDecl (map dtDataName datas)) datas)
+    let
+      table = usedTableFix datas (map (\d => Pair (dtDataName d) []) datas)
+    in andThen (traverse (genDataDecl table datas) datas)
       (\parts => Ok ("type " ++ joinWith "\nand " parts ++ "\n\n"))
 
--- ---------------------------------------------------------------
 -- 项 → OCaml
 -- ---------------------------------------------------------------
 --
@@ -525,6 +757,15 @@ ctorTableOf (d :: rest) = append (ctorTableOfData d) (ctorTableOf rest)
 
 mkGenSt : List DtData -> GenSt
 mkGenSt datas = GenSt (map dtDataName datas) (ctorTableOf datas) 0
+
+-- M21：Bool 族不进运行时表示。`True` / `False` 与 `if` 统一是 OCaml bool
+-- （Elab 把 Bool 族的构造子精化成 `TBool`），所以不生成变体类型与变体构造子，
+-- 构造子表里也不放 Bool——引用会回落到 `globalRef` 的 `true` / `false`。
+isBoolFamilyName : String -> Bool
+isBoolFamilyName name = lastName name == "Bool"
+
+runtimeDatas : List DtData -> List DtData
+runtimeDatas datas = filter (\d => if isBoolFamilyName (dtDataName d) then False else True) datas
 
 -- case 分支的绑定环境：全部 telescope binder 都进环境（擦除的用占位名 + True），
 -- 顺序为 telescope 表面顺序的逆序；pattern 只保留未擦除的 fresh 名。
@@ -600,7 +841,7 @@ else case flattenConApp (TApp f a rig) of
 -- 不是 curried，所以多实参必须用逗号包成一个元组。
 conAppText : String -> List String -> String
 conAppText name [] = name
-conAppText name ([a]) = "(" ++ name ++ " " ++ a ++ ")"
+conAppText name ([a]) = "(" ++ name ++ " (" ++ a ++ "))"
 conAppText name args = "(" ++ name ++ " (" ++ joinWith ", " args ++ "))"
 
 genConArgs : GenSt -> List (Pair String Rig) -> List (Pair Term Rig) -> Result (Pair (List String) GenSt)
@@ -709,6 +950,7 @@ genGroups adj st (g :: rest) = andThen (genGroup adj st g) (\p => case p of
 )
 
 -- main 的展示方式（类型 force 后必须是 Int/String/Bool）。
+-- 按族**短名**识别：Bool 的权威定义是 `Base.Bool.Bool`，也接受单文件 `data Bool`。
 mainShow : List (Pair String Term) -> Term -> Result (Pair String String)
 mainShow table tyTerm = case force table [] defaultFuel (eval [] tyTerm) of
   VNeutral n => case n of
@@ -742,7 +984,7 @@ firstCtorOf d = case dtDataCtors d of
   [] => Nothing
 
 mainShowForName : String -> Result (Pair String String)
-mainShowForName g = case g of
+mainShowForName g = case lastName g of
   "Int" => Ok (Pair "string_of_int" "int")
   "String" => Ok (Pair "dt_show_string" "string")
   "Bool" => Ok (Pair "dt_show_bool" "bool")
@@ -759,7 +1001,7 @@ genProgramBody program =
     datas = firstOf program
     defs = secondOf program
   in andThen (prepareDtProgram program) (\p => case p of
-    Pair runtime groups => andThen (genTypeDecls datas) (\typeText => andThen (genGroups (depAdjacency runtime) (mkGenSt datas) groups) (\q => case q of
+    Pair runtime groups => andThen (genTypeDecls (runtimeDatas datas)) (\typeText => andThen (genGroups (depAdjacency runtime) (mkGenSt (runtimeDatas datas)) groups) (\q => case q of
       Pair bodies st2 =>
         Ok
           (Pair (dtRuntime ++ "\n" ++ typeText ++ joinWith "\n\n" bodies) (Pair runtime (defTable defs)))
@@ -797,7 +1039,6 @@ ioRunText : Pair (List DtData) (List DtDef) -> String -> String
 ioRunText program mainRef = case ioCtorOf (firstOf program) of
   Just (Pair family ctor) =>
     "match " ++ mainRef ++ " with " ++ ctorOcamlName family ctor ++ " f -> f 0"
-  Nothing => mainRef
 
 -- `vuna check --dt` 跑一遍完整生成主体（丢弃产物），保证「能 check 就能 compile」：
 -- 擦除检查、构造子引用、SCC 分组、类型声明与函数生成都在这一步走到。

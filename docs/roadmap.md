@@ -109,7 +109,7 @@ M15 遗留缺陷（同 trait 多实例，细节见 [history.md](history.md)）�
 | M13–M18.6 | 已完成 | DT 地基、索引族、trait/实例、终止性、工具链、擦除修复、表示层定型 | — |
 | M19 / M20 | 已完成 | 语言面 parity；复用 Loader 走出单文件 | 细节见 [history.md](history.md) |
 | M20.5 | 已完成 | 泛型实例约束求解（`solveMetaHo`、字典延迟、`mem`） | —（`git log` 里记作 M22） |
-| M21 | 部分 | `main : IO a` 已落地；`do` / trait 方法投影本阶段完成 | `fmap`/`bind` unbound、实例方法构造子形参被拒 |
+| M21 | 已完成 | `main : IO a` 执行、`do` / trait 投影（Base.IO 重导出）、实例方法模式矩阵、Bool 统一表示、effectful 内建进 codegen | — |
 | M22.1 | 未开始 | 包目录与 CLI 入口（`check` / `compile --dt`） | 目录被当文件读并崩溃 |
 | M22.2 | 未开始 | 库名统一与精化缺口（`str*`/`List`、跨模块族名、`Sort`、Bool 去桩） | `Base.String` / `Base.Map` / `Base.Sort` 探针失败 |
 | M22.3 | 未开始 | 擦除判据接线 + 统一 codegen + `build`/`seed` 入口 + metrics | 显式索引仍保留运行时字段 |
@@ -141,20 +141,46 @@ allowlist 语义保留；`main : IO a` 的执行语义对齐现有 `ioRunExpr`�
   （`expected Bool, got Int`）。`Base.IO` 的 `MkIO : (Int -> a) -> IO a` 由此解锁。
 - effectful 内建（`prim_*`）签名已进 DT prelude。
 
-**当前阻碍（2026-11 探针，均在本阶段范围内解决）**：
+**已完成（2026-11，收尾）**：
 
-- `import Base.Monad` 后 `fmap` 报 `unbound variable fmap`；`import Base.IO` 后 `do` 报
-  `unbound variable bind`——`elabTrait` 生成的投影名是裸方法名，不经过 Loader 的模块
-  限定，也没有进入模块导出表。需要把投影纳入导出/导入解析（或按「trait 名.方法名」
-  限定）。
-- `instance FMap Box where fmp g (MkBox x) = ...` 报
-  `DT: definition parameters must be variables (M13)`——实例方法体没有走
-  `DtMatch.multiToExpr` 的模式矩阵。把实例方法体接到与普通多 clause 相同的路径。
-- 泛型 `Monad IO` 实例依赖 M20.5（已完成）。
+- **trait 方法投影跨模块可见**：`Base.IO` 模块头重导出 `Functor(..)` / `Monad(..)`
+  （Loader 的 `T(..)` 重导出规则会把方法投影条目一起带出），因此 `import Base.IO`
+  后 `do` / `bind` / `pure` / `fmap` 直接可用；`import Base.Monad` 路径不变。HM 路径
+  同一份重导出零回归。正例 `test/corpus/dt_base/01_io_do`、`03_fmap_bind`、`04_monad_trait`。
+- **实例方法体的模式矩阵**：`elabInstanceMethod` 不再要求全变量形参——多 clause 与
+  构造子形参统一走 `elabFunDef`（`DtMatch.multiToExpr` + 覆盖判定）。顺带修掉
+  「同一个方法的第二条 clause 被忽略」（按方法名收集全部 clause，名字按末段匹配模
+  块限定投影名）。正例 `dt/37_instance_ctor_pat`，反例
+  `dt_err/29_instance_ctor_pat_coverage`。
+- **匿名实例名唯一化**：Loader 给无名实例加模块前缀（`Base.IO.#default`），旧判定
+  按「名字以 # 开头」看不到匿名性，`instance Functor IO` 与 `instance Monad IO` 的
+  字典互相覆盖；改为按「类名 + 头实参」派生（`Base.IO.Monad_IO`）。内建 Show/Eq
+  实例头提前到定义体之前注册，字典提升后的签名回写 globals。
+- **泛型字典提升支持自递归**：字典 binder 插入位置改用类参数的 binder level（并修掉
+  `insertDictBinder` 对域的错误 shift）；体里按旧签名精化的自递归调用点补字典实参
+  （`insertDictCalls`）；已提升的目标不再被后续每个定义重复提升。`Base.List.mem`
+  / `memName` 这类 `{d : Dict_Eq a}` 提升后的递归定义可生成可编译的 OCaml。
+- **effectful 内建进 DT codegen**：`prim_*` 补 `dtp_*` 运行时实现与名字映射，
+  `prim_getArgs` / `prim_readLine` 在引用点展开；`main : IO a` 的钩子对装箱前的 `f`
+  取末字段后 `f 0`。`corpus/dt_io/01_print` 编译运行输出 `hello7`。
+- **Bool 统一运行时表示**（M22.2 的 Bool 去桩前置）：`data Bool`（`Base.Bool.Bool`
+  或单文件声明）的 `True`/`False` 一律精化成核心 `TBool`，Bool 族不生成 OCaml 变体、
+  构造子不进构造子表；`if` / `case` 按族短名识别，`main : Bool` 按短名选显示函数。
+  `if True then 1 else 0` 的 `interp --dt` 与编译产物现在都是 `1`。
+- **codegen 变体类型按「用到的族参数」渲染**：每族只把字段类型里真正出现的类型参数
+  计入 OCaml 类型参数；字段类型为族应用的复用族参数（递归族因此不会在 OCaml 侧产生
+  occurs check），字典/函数字段各占独立不透明参数，**显式 Pi 字段结构化渲染**
+  （`MkIO` 的字段成为 `int -> 'a0`，顶层 `IO` 值不再有不可泛化的弱类型变量）。
+- **其它精化修复**：`inferPi` 的显式 `(a : Type)` binder 现在按「域是宇宙」判据擦除
+  （`binderRig`）；字典构造子字段 Pi 链逐字段 `shift`（`Eq`/`Ord` 多方法签名不再把
+  类参数指到前一个字段上）；Base 门面重复重导出同一目标不再误报 duplicate export。
 
-**验收**：`app/Main.vuna` 与 `compiler/app/Main.vuna` 的等价程序在 DT 下 check → compile →
-运行成功；`do` 正反例；`fmap` / `bind` / `pure` 经 `import Base.IO` 或 `import Base.Monad`
-可用；实例方法构造子形参正例与反例各一；`Base.IO` 全部 API 可用。
+**验收**：`test/corpus/dt_base/`（`import Base.IO` / `Base.Monad` / `Base.Maybe` 的
+`do`、trait 投影、实例方法构造子形参、`Base.IO` 全部 API 类型面）三路（interp /
+check / compile+run）全绿；`test/corpus/dt_io/`（效果执行）编译运行输出与 golden
+一致；`dt/37` 正例与 `dt_err/29` 反例；`Base.IO` 全部 API 在 `check --dt` 下可用。
+`app/Main.vuna` / `compiler/app/Main.vuna` 等价程序的**全量** DT 化依赖 record 与全库
+迁移，验收拆到 M22.2 / M23（见「决策变更」）。
 
 **前置**：M20.5（已完成）。**风险**：投影命名变更会影响 `deriving` 展开（生成体的
 方法名），需要同步 M24.7 的 trait 库化方案。
@@ -472,6 +498,7 @@ fuel 消耗，需同步 `dt_elab` 基准；若第 3 项做不动，M24.6 的范�
 | `record` 与 `deriving` 删除 | 本文 2026-11 初版 | **保留并补齐** | 两者是已实现且有 17 个夹具覆盖的特性；删除只省 ~68 个穿透点，却损失记法 ergonomics。本仓库自己少用不等于特性该淘汰 |
 | 核心表示层用 `erased : Bool` + `TType : Int` | M13 起 | M18.6 改为三值 rig + 不透明 `Level` | 现在改是几小时，M23 规模后改是几周；QTT/宇宙多态落地时只需换判据与层级实现 |
 | 顶层签名可省略 | M7 起 | DT **必须写签名**，提供一次性签名导出工具回填 | 依赖类型精化需要签名做检查模式与错误定位；不引入 HM 式顶层推断 |
+| M21 验收含「`app/Main.vuna` 等价程序 DT 全绿」 | 本文 M21 | 拆到 M22.2 / M23：M21 以 dt_base/dt_io 夹具验收 `Base.IO` 面 | app/Main 依赖 record 与全库迁移；M21 只承诺 IO/trait 通路可用 |
 | `vuna interp` 保留「不检查直接执行」 | M12.6 | 取消，改为精化后的核心求值器 | 单路径下没有「另一种语言」可以免检执行 |
 | 原 M19（效应）/ M20（模块 v3）/ M21（运行时）/ M22（生态）/ M23（并发） | 本文旧版 | 依次改为 M21 / M25 / M26 / M28 / M27 | 让位于单路径迁移主线 |
 | `Show` / `Eq` / `Ord` 与 Bool 桩由编译器内建 | M10.5 / M19 | 库为唯一来源：`Base.{Show,Eq,Ord}` + `Base.Bool`，编译器只留语法/表示特化；Bool 去桩在 M22.2、trait 库化排 M24.7 | 消除双份定义与 5 处短名桥接 hack；与已库化的 `List` / `Monad` 对齐 |

@@ -559,3 +559,77 @@ point 通过。新增局部夹具 `_scratch/m22_monad.vuna`（本地 `IO` + 泛�
   裸 `True`/`False` 产生值，所以 `interp --dt`/codegen 下真实 Bool 的 `if` 仍不归约
   （例：`import Base.Bool; main = if True then 1 else 0` 能 check、interp 报
   `main does not reduce to a value`），M23 接 codegen 前需统一 Bool 表示。
+
+## M21：效应与 IO 的 DT 化（2026-11）
+
+**目标**：DT 程序能表达 `main : IO a`、`do` 块与 effectful 内建，`Base.IO` 达到可用性。
+`main : IO a` 的执行（按 main 类型识别 IO、取构造子末实参 `f` 后应用世界令牌 0）与
+多态函数字段的索引精化在此前已落地（`dt/33`–`35`），本轮收尾解决剩下 4 类阻塞：
+
+1. **trait 方法投影跨模块不可见**。`import Base.Monad` 时投影可用（Loader 的
+   `T(..)` 重导出带出方法条目），但 `import Base.IO` 后的 `do`（脱糖成 `bind`）报
+   `unbound variable bind`——Base.IO 只定义实例、不重导出 trait。修法在**库层**：
+   `Base.IO` 模块头导出 `Functor(..)` / `Monad(..)`（源 target 仍是
+   `Base.Monad.*`），Loader 的重导出规则自动带出投影；HM 与 DT 同一份重导出，
+   `checks.vuna-lint` / 夹具零回归。同时修了门面重复重导出同一目标的 duplicate
+   export 误报（条目按 target 去重；`module M (f, f)` 这类真正的重复项仍然报错）。
+
+2. **实例方法体的构造子形参**。`instance FMap Box2 where fmp g (MkBox2 x) = ...` 报
+   `DT: definition parameters must be variables (M13)`：实例方法走独立的
+   `checkBinders`，没接模式矩阵。修法：`elabInstanceMethod` 改走 `elabFunDef`，
+   多 clause 与构造子形参复用 `DtMatch` 的同一套矩阵/覆盖判定。顺带发现并修掉
+   「实例方法只取第一条 clause」（原实现按方法**位置**取，现按方法名收集全部
+   clause；投影名是模块限定的，实例体里的方法名是裸名，按末段匹配）。正例
+   `dt/37_instance_ctor_pat`，反例 `dt_err/29_instance_ctor_pat_coverage`。
+
+3. **匿名实例字典互相覆盖**。Loader 给无名实例加模块前缀（`Base.IO.#default`），
+   Elab 旧判定只看「名字是否以 # 开头」，于是 `instance Functor IO` 与
+   `instance Monad IO` 生成同一个定义名，后者覆盖前者（`bind` 投影拿到 Functor
+   字典 → `main does not reduce to an IO action`）。修法：匿名名按「类名 + 头实参」
+   重新派生（`Base.IO.Functor_IO` / `Base.IO.Monad_IO`）；`ecAddInst` 幂等。
+   **连带**：内建 `Show`/`Eq` 实例头必须提前到定义体之前注册（否则 `Dict_Eq Int`
+   在 `mem` 调用点搜不到），实例定义体仍在最后阶段精化。
+
+4. **泛型字典提升与自递归**。`mem : a -> List a -> Bool` 体里的 `x == y` 把
+   `Dict_Eq a` 延迟成 `?d`，定义体精化完后提升成隐式字典参数。旧实现有三处缺陷：
+   (a) 字典 binder 插入点用 `quote` 得到的 de Bruijn **index** 而不是类的
+   binder **level**，多类型参数时位置漂移；(b) `insertDictBinder` 误把字典域
+   shift 一次（`Dict_Eq a` 变成 `Dict_Eq a#1`）；(c) 体是按旧签名精化的，自递归
+   调用点没有字典实参，`let rec v_mem = fun d -> ... v_mem x ys` 的 OCaml 类型对
+   不上。修法：按 level 插入、域不 shift、新增 `insertDictCalls` 按应用位置补实参
+   （遍历时跟踪 binder 深度算 `TVar d` 的 index）；提升后的签名回写 globals，后续
+   定义按新签名走隐式实参插入；已提升的目标不再被后续每个定义重复提升。
+
+5. **effectful 内建的 DT codegen**。签名早在 prelude，但 codegen 没有运行时实现：
+   `prim_print` 之类的全局引用生成 `v_prim_uprint`（未定义）。修法：`dtRuntime` 新增
+   `dtp_*`（print/readFile/writeFile/getArgs/readLine/readDir/isDirectory/makeDir/
+   removeFile/fileExists/fileMtime/fileSize/exit/runIn），`globalRef` 按名映射；
+   `prim_getArgs`/`prim_readLine` 在引用点展开成 `(dtp_getArgs ())`（与 HM 一致）。
+   效果夹具 `corpus/dt_io/01_print` 编译运行输出 `hello7`。
+
+6. **Bool 统一运行时表示**（M22.2 去桩的前置，提前到 M21 因为 `Base.List` /
+   `Base.Maybe` 传递依赖 `Base.Bool`）。此前 `data Bool` 是变体而 `if`/内建算子走
+   `TBool`，两侧靠 `boolTypedVal` 桥接；一旦 `Base.Bool` 进入 DT 程序，变体构造子
+   与 OCaml bool 混用直接编译失败。修法：Bool 族的 `True`/`False` 在精化期一律
+   变成核心 `TBool`，Bool 族不进 codegen 的变体声明与构造子表，`if`/`case` 与
+   `main : Bool` 按族**短名**识别。`if True then 1 else 0` 的 `interp --dt` 与编译
+   产物现在一致（此前 history 记录的「真实 Bool 的 if 不归约」边界消失）。
+
+7. **codegen 变体类型的字段形状**。旧的「所有字段共用一个 `'a`」让特异字段
+   （字典的 `bind`/`pure`、异构 `Pair`）无法通过 OCaml 类型检查；改为按「用到的族
+   参数」分配：族应用字段复用族参数（递归族如 `List` 因此不会触发 occurs check），
+   函数/其它字段各占独立不透明参数，**显式 Pi 字段结构化渲染**（`MkIO` 的字段是
+   `int -> 'a0`，顶层 `IO` 值不再有不可泛化的弱类型）。擦除判据（`Rig`）仍是唯一
+   字段形状来源，见 [dt-core.md](dt-core.md)。同一轮还修了：`inferPi` 的显式
+   `(a : Type)` binder 未按「域是宇宙」擦除（`binderRig`）、字典构造子字段 Pi 链
+   逐字段 `shift`（`Eq`/`Ord` 多方法签名把类参数指到前一个字段）。
+
+**验证**：`test/corpus/dt_base/`（Base.IO 的 `do`、trait 投影、实例方法构造子形参、
+Base.IO 全 API 类型面）三路全绿；`test/corpus/dt_io/01_print` 编译运行输出 golden；
+新增正例 `dt/37` 与反例 `dt_err/29`；`test/run-tests.sh` **889 项全绿**（含 dt_base /
+dt_io 两个新段）。`docs/reference/dt.md`、`limits.md`、`testing.md` 同步。
+
+**仍存边界**（M22.2/M22.3 处理）：`str*` 签名用裸 `List` 而程序里是 `Base.List.List`
+（`import Base.String` 失败）；`Base.Map`/`Base` 的跨模块族名解析；`Base.Sort` 的多列
+覆盖；prelude 里 `Bool`/`True`/`False` 桩尚未删除（表示已统一，权威定义已是
+`Base.Bool`）；`build`/`seed` 仍不接受 `--dt`；擦除判据尚未接线到 codegen。

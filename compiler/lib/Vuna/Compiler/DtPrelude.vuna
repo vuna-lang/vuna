@@ -1,4 +1,4 @@
-module Vuna.Compiler.DtPrelude (preludeNames, preludeGlobals, intTy, strTy, boolTy, fun2, isEqOp, builtinTyName, builtinEqTyName, eqRuntimeName, polyEqTy, instanceDefName, prependParams) where
+module Vuna.Compiler.DtPrelude (preludeNames, preludeGlobals, intTy, strTy, boolTy, fun2, isEqOp, builtinTyName, builtinEqTyName, eqRuntimeName, polyEqTy, prependParams) where
 
 -- Vuna.Compiler.DtPrelude：DT 的**内置定义表**（M19 起独立成模块）。
 --
@@ -187,19 +187,6 @@ builtinEqTyName v = case builtinTyName v of
   Just "Int" => Just "Int"
   Just "String" => Just "String"
   _ => Nothing
-
--- 实例定义名（M20）：Loader 给无名实例生成的匿名名（`#default`）对所有实例都一样，
--- 同 trait 多实例会在 defs 表里互相覆盖（观测到的现象：`instance Name A` 与 `Name B`
--- 生成的字典都叫 `#default`，代码里是同一个定义）。因此匿名名要按实例头唯一化，
--- 同时把 `#` 换成 `_`（不是合法标识符字符）。
-instanceDefName : Maybe String -> String -> String -> String
-instanceDefName mname derived fallback = case mname of
-  Just n =>
-    if startsWith "#" n then derived ++ "_" ++ strPack (map hashToUnderscore (strUnpack n)) else n
-  Nothing => fallback
-
-hashToUnderscore : Int -> Int
-hashToUnderscore c = if c == 35 then 95 else c
 
 -- 族名后的参数作为**隐式** binder 前置到 kind（`data List a : Type` 的 `a` + `Type`
 -- ⇒ `{a : Type} -> Type`）。与 `data List : Type -> Type` 的既有写法（构造子用

@@ -747,6 +747,51 @@ for file in corpus/dt_err/*.vuna; do
     ok
   fi
 done
+
+# 34a) DT + Base 库（M21）：`--root ../base/lib` 下 import Base.* 的三路一致性。
+# 全部夹具都是纯计算（core evaluator 不执行效果），因此可保留 interp == run 对拍。
+for file in corpus/dt_base/*.vuna; do
+  base=${file%.vuna}
+  expected=$(cat "$base.out")
+  actual=$("$VUNA" interp --dt --root ../base/lib "$file" 2>&1)
+  check_eq "$file (dt base interp)" "$expected" "$actual"
+  interp_out=$actual
+  "$VUNA" check --dt --root ../base/lib "$file" >/dev/null 2>&1
+  check_eq "$file (dt base check exit)" "0" "$?"
+  rm -f "$tmp/dt_base.ml" "$tmp/dt_base.exe"
+  if ! dt_out=$("$VUNA" compile --dt --root ../base/lib "$file" "$tmp/dt_base.ml" 2>&1); then
+    bad "$file (dt base compile)" "exit 0" "$dt_out"
+  elif [ -n "$dt_out" ]; then
+    bad "$file (dt base compile output)" "" "$dt_out"
+  elif ! "$OCAMLOPT" -w -a -I +unix -o "$tmp/dt_base.exe" unix.cmxa "$tmp/dt_base.ml" >"$tmp/dt_base.log" 2>&1; then
+    bad "$file (dt base ocamlopt)" "" "$(cat "$tmp/dt_base.log")"
+  else
+    actual=$("$tmp/dt_base.exe" 2>&1)
+    check_eq "$file (dt base run)" "$expected" "$actual"
+    check_eq "$file (dt base interp == run)" "$interp_out" "$actual"
+  fi
+done
+
+# 34b) DT 效果（M21）：`main : IO a` 的编译产物真正执行 Base.IO 效果。
+# core evaluator 是纯求值器（不跑效果），所以效果夹具只要求「编译产物输出 == golden」，
+# 并额外要求 `check --dt` 通过。
+for file in corpus/dt_io/*.vuna; do
+  base=${file%.vuna}
+  expected=$(cat "$base.out")
+  "$VUNA" check --dt --root ../base/lib "$file" >/dev/null 2>&1
+  check_eq "$file (dt io check exit)" "0" "$?"
+  rm -f "$tmp/dt_io.ml" "$tmp/dt_io.exe"
+  if ! dt_out=$("$VUNA" compile --dt --root ../base/lib "$file" "$tmp/dt_io.ml" 2>&1); then
+    bad "$file (dt io compile)" "exit 0" "$dt_out"
+  elif [ -n "$dt_out" ]; then
+    bad "$file (dt io compile output)" "" "$dt_out"
+  elif ! "$OCAMLOPT" -w -a -I +unix -o "$tmp/dt_io.exe" unix.cmxa "$tmp/dt_io.ml" >"$tmp/dt_io.log" 2>&1; then
+    bad "$file (dt io ocamlopt)" "" "$(cat "$tmp/dt_io.log")"
+  else
+    actual=$("$tmp/dt_io.exe" 2>&1)
+    check_eq "$file (dt io run)" "$expected" "$actual"
+  fi
+done
 # DT CLI：M20 起 `--dt` 接受 --root（复用 Loader）；build / seed 仍不支持 --dt
 help_out=$("$VUNA" help 2>&1)
 check_contains "dt help" "$help_out" "--dt"

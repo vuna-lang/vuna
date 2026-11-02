@@ -1,9 +1,10 @@
-# 语言参考：DT 子集（M19，实验性）
+# 语言参考：DT 子集（M21，实验性）
 
 `--dt` 打开依赖类型（DT）路径：Core TT + NbE + 双向精化器 + 擦除型 codegen。
 M14 加入**索引归纳族**与**依赖模式匹配**（`data` + `case`），解除递归定义限制；
-M20 起**复用 Loader**，支持多文件、`import` 与 `--root`。DT 仍是**显式 opt-in**：
-包目录与 `build` / `build --split` / `seed` 不接受 `--dt`；HM 路径语义与产物不变。
+M20 起**复用 Loader**，支持多文件、`import` 与 `--root`；M21 起 `main : IO a`、`do`、
+effectful 内建与 `Base.IO` 可用。DT 仍是**显式 opt-in**：包目录（M22.1 进行中）与
+`build` / `build --split` / `seed` 不接受 `--dt`；HM 路径语义与产物不变。
 设计与边界见 [docs/dt-core.md](../dt-core.md)，阶段状态与阻碍见 [roadmap.md](../roadmap.md)。
 
 ```vuna
@@ -90,8 +91,10 @@ trans a b c p q = case p of
   实参而外层没有期望类型）时仍可能报 `DT: unsolved metavariable`。
 - **接口与实例（M15）**。`trait` / `instance` 走字典编码：`trait Pretty a` →
   `data Dict_Pretty : Type -> Type`，方法投影把字典当隐式参数，调用点的实例由**实例
-  搜索**自动插入。`Show`/`Eq` 这类单参数接口直接可用；缺失/歧义实例有明确诊断。**已知缺口**：库定义
-  trait 的方法投影跨模块不可见（`fmap`/`bind` unbound，`do` 因此不可用），见 M21。
+  搜索**自动插入。`Show`/`Eq` 这类单参数接口直接可用；缺失/歧义实例有明确诊断。M21 起库定义 trait 的
+  方法投影跨模块可见：`Base.IO` 重导出 `Functor(..)` / `Monad(..)`，所以 `import Base.IO`
+  后 `do` / `bind` / `pure` / `fmap` 直接可用；`import Base.Monad` 路径不变。实例方法
+  支持构造子形参与多 clause（与普通函数同一条模式矩阵）。
   多参数接口报 `DT: interfaces must have exactly one parameter (M15 limitation)`。
 - **终止性检查（M16）**。自递归函数必须结构递归：每个递归调用至少有一个实参是同一
   形参的真子项（`case` 分支里构造子的字段算子项）。否则报
@@ -115,6 +118,10 @@ trans a b c p q = case p of
   做法是建元变量当期望类型。
 - **内建类型上的字面量模式（M19）**。`Bool` 的 `case` 降级成 `if`；`Int` / `String`
   的字面量分支降级成嵌套 `if` 链，因此**必须有一个变量/通配兜底分支**（值域穷尽不了）。
+- **Bool 的运行时表示已统一（M21）**：`data Bool`（`Base.Bool.Bool` 或单文件声明）的
+  `True` / `False` 精化成核心 `TBool`，Bool 族不生成 OCaml 变体，`if` / `case` /
+  `main : Bool` 按族**短名**识别。prelude 里剩余的 `Bool` / `True` / `False` 桩只服务
+  单文件无库模式，去桩在 M22.2。
 - **内建泛化（M19）**。`==` / `/=` 带隐式类型参数（`{a : Type} -> a -> a -> Bool`），精化到
   饱和应用时按第一个实参类型特化成 `bi_eq_int` / `bi_eq_str`；非 `Int` / `String` 报
   `is only defined for Int and String`；`strFromInt` 等已进 prelude（`DtPrelude.vuna`）。
@@ -125,8 +132,10 @@ trans a b c p q = case p of
   （否则报 `DT: constructor <C> does not return <F>`）。族名本身按 kind 入
   `globals`，每个构造子挂**完整 Pi 类型**；类型级 `Vec a n` 是**中性应用**，不做
   类型级求值（只在索引 unification 时按定义性相等比较）。
-- **`check --dt` 不要求 `main`**（库文件可直接 check），`compile --dt` 要求 `main`
-  且其类型为 `Int` / `String` / `Bool`。
+- **`check --dt` 不要求 `main`**（库文件可直接 check），`compile --dt` 要求 `main`；
+  `main` 的类型可以是 `Int` / `String` / `Bool`（普通值），也可以是 `IO a`（M21：
+  按类型识别 IO 族、取构造子末字段 `f` 后 `f 0`）。编译产物执行效果；`interp --dt`
+  的纯核心求值器不执行效果，所以效果夹具只比编译产物输出。
 - 元变量求解支持引用创建时已存在的局部变量（作用域检查会拒绝逃逸解）；高阶/开放解
   仍不支持。
 - 洞 `_` 未解时的诊断带**位置与目标类型**：`DT: unsolved hole <loc> with goal <ty>`；
@@ -148,16 +157,26 @@ M20 起 `--dt` **复用 Loader**：支持多文件 / `import` / `--root`，参�
 
 `test/run-tests.sh` 第 34 段三条路径（`interp --dt` / `check --dt` / `compile --dt` + `ocamlopt`）。
 
-- 正例 `test/corpus/dt/` 共 **36** 个：M13 `01_id`–`08_if`；M14 `09_nat`/`10_vec`/`11_fin`/`12_eq`；
+- 正例 `test/corpus/dt/` 共 **37** 个：M13 `01_id`–`08_if`；M14 `09_nat`/`10_vec`/`11_fin`/`12_eq`；
   M15 `13_iface`/`14_solve`/`15_goal`；M16 `16_total`/`17_erase`；M18 `18_ctx`；
   M18.5 `19_lam`；M18.6 `20_rig`/`21_level`；M19 `22_let` 起共 10 个（`22_let`–`31_deriving_ord`）；
-  M20 `32_parametric_data`（`data Foo a : Type` 写法 + 构造子字段引用族参数）；M21 `33_poly_fn_field`（函数字段被索引精化）、`34_io_do`/`35_io_main`（main : IO a 执行：按类型识别 IO、取构造子末实参 `f` 后对世界令牌 0 应用 `f 0`；do 用具体 bind/pure）；M20.5 `36_multi_clause`（多 clause 模式矩阵：双构造子参数、构造子+通配混合列、单 clause 构造子形参、零参构造子值）。数值见各 `.out` 文件。
-- 负例 `test/corpus/dt_err/` 共 **28** 个：M13 的 `01_universe`、`02_conv`、
+  M20 `32_parametric_data`（`data Foo a : Type` 写法 + 构造子字段引用族参数）；M21
+  `33_poly_fn_field`（函数字段被索引精化）、`34_io_do`/`35_io_main`（main : IO a 执行）、
+  `37_instance_ctor_pat`（实例方法多 clause + 构造子形参）；M20.5 `36_multi_clause`。
+  数值见各 `.out` 文件。
+- 正例 `test/corpus/dt_base/`（M21，`--root ../base/lib`，5 个）：`import Base.IO` 后
+  `do`/`bind`/`pure`/`fmap` 可用、`Base.IO` 全部 API 的类型面、`import Base.Monad` +
+  `Base.Maybe` 的 trait 投影与实例方法构造子形参。三条路径（interp / check /
+  compile+run）与 golden 与 interp==run 对拍全绿。
+- 正例 `test/corpus/dt_io/`（M21，效果执行，1 个）：`main : IO a` 的编译产物真正执行
+  `Base.IO` 效果（`print`）。核心求值器不执行效果，所以这一段只比编译产物输出。
+- 负例 `test/corpus/dt_err/` 共 **29** 个：M13 的 `01_universe`、`02_conv`、
   `03_hole`、`05_import`、`06_unknown`、`07_lambda`、`08_arity`、`09_runtime_type`、
   `11_implicit_non_type`；M14 `04_nonexhaustive`/`10_impossible`/`12_case_int`/
   `13_unknown_ctor`/`14_bad_ctor_result`/`15_nested_pat`；M16 `16_nonterm`/`17_nested_total`；
   M18.5 `18_lam_type_used`；M18.6 `19_rig_type_runtime`；M19 `20_let_bad_pat` 起共 7 个；
-  M21 `27_poly_fn_field_err`（函数字段精化失败路径）；M20.5 `28_multi_clause_coverage`（多 clause 覆盖不足）。
+  M21 `27_poly_fn_field_err`（函数字段精化失败）、`29_instance_ctor_pat_coverage`
+  （实例方法多 clause 覆盖不足）；M20.5 `28_multi_clause_coverage`。
 
 ## 相关阅读
 

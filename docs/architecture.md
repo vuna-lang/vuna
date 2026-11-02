@@ -97,9 +97,13 @@ codegen 要点见 [compiler.md](reference/compiler.md)，语言语义见 [langua
   `conv` / `normalize` / `defaultFuel`；`CoreCodegen.checkDtProgram` / `generateDtProgram`
 - 经 `Compile.compileFileDt` / `checkFileDt` 与 `CompilerCli` 暴露给 CLI（`--dt` 三条命令）
 
-**边界**：`--dt` 支持 `import` / `--root`（M20）；**包目录模式与 `build` / `seed` 仍不支持**
-（M22.1）。已知阻碍：trait 方法投影跨模块（M21）、`str*` / `List` 与 `Base.Map` /
-`Base.Sort` 精化（M22.2）——见 roadmap 各阶段的「当前阻碍」。
+**边界**：`--dt` 支持 `import` / `--root`（M20）；`main : IO a`、`do`、effectful 内建与
+`Base.IO` 可用（M21）；包目录入口在 M22.1，`build` / `seed` 仍不支持 `--dt`（M22.3）。
+已知阻碍：`str*` / `List` 与 `Base.Map` / `Base.Sort` 精化（M22.2）——见 roadmap 各阶段
+的「当前阻碍」。M21 另统一了 Bool 的运行时表示（`TBool`），并把字典提升扩展到自递归
+定义；codegen 变体类型的字段形状由「用到的族参数 + 不透明字段参数」决定
+（见 [dt-core.md](dt-core.md)）。
+
 **通常连带改动**：`Core` → `Elab` → `CoreCodegen` 三处同步（见 [dt-core.md](dt-core.md)）；测试第 34–35 段（三路互拍，见 [testing.md](reference/testing.md)）。
 
 ## 3. 包与 workspace：Toml → Manifest → Pkg → Loader

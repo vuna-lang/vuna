@@ -844,7 +844,7 @@ substMetaVarAlt m name q depth (CaseAlt bn bs b) =
 -- M20 字典提升：在 `TPi` 链索引 `idx` 的绑定子后插入 `{d : Dict_C a}`（隐式运行时字典）。
 -- `dictDom` 里类参数引用插入后索引 +1（`d` 落在类参数绑定子之内）。
 insertDictBinder : String -> Int -> Term -> Term -> Term
-insertDictBinder name idx dictDom t = insertDictBinderGo name idx (shift idx 1 dictDom) 0 t
+insertDictBinder name idx dictDom t = insertDictBinderGo name idx dictDom 0 t
 
 insertDictBinderGo : String -> Int -> Term -> Int -> Term -> Term
 insertDictBinderGo name idx dictDom depth t = case t of

@@ -1,0 +1,16 @@
+-- M21：实例方法体的构造子形参（与普通多 clause 走同一套模式矩阵）。
+trait MapOne f where
+  mapOne : (a -> a) -> f a -> f a
+
+data Twice a : Type where
+  TwiceOne : a -> Twice a
+  TwiceTwo : a -> a -> Twice a
+
+instance MapOne Twice where
+  mapOne g (TwiceOne x) = TwiceOne (g x)
+  mapOne g (TwiceTwo x y) = TwiceTwo (g x) (g y)
+
+main : Int
+main = case mapOne (\x => x + 1) (TwiceTwo 40 41) of
+  TwiceOne x => x
+  TwiceTwo x y => x + y

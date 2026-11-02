@@ -1,0 +1,12 @@
+-- M21：实例方法体的构造子形参（走与普通多 clause 相同的模式矩阵）。
+import Base.Monad
+
+data Box a : Type where
+  MkBox : a -> Box a
+
+instance Functor Box where
+  fmap g (MkBox x) = MkBox (g x)
+
+main : Int
+main = case fmap (\x => x + 1) (MkBox 41) of
+  MkBox y => y

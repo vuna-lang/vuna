@@ -874,15 +874,69 @@ hasSamePublicKind e entries = case entries of
     if entryKind e == entryKind e2 && entryPublic e == entryPublic e2 then True
     else hasSamePublicKind e rest
 
+-- 冲突判定：同名同 kind 但**定义处不同**才算重复导出。同一个定义经两条路径重导出
+-- （门面同时导出 Base.Monad 与 Base.IO，两者都重导出 `Functor(..)`）不是冲突。
+hasConflictingExport e entries = case entries of
+  [] => False
+  e2 :: rest =>
+    if entryKind e == entryKind e2 && entryPublic e == entryPublic e2 && entryTarget e /= entryTarget e2 then True
+    else hasConflictingExport e rest
+
+sameExportEntry e e2 =
+  entryKind e == entryKind e2
+    && entryPublic e == entryPublic e2
+    && entryTarget e == entryTarget e2
+    && entryParent e == entryParent e2
+
+dedupeExportEntries [] = []
+dedupeExportEntries (e :: rest) =
+  if memExportEntries e rest then dedupeExportEntries rest else e :: dedupeExportEntries rest
+
+memExportEntries e entries = case entries of
+  [] => False
+  e2 :: rest => if sameExportEntry e e2 then True else memExportEntries e rest
+
 checkExportDuplicates prefix [] = Ok []
 checkExportDuplicates prefix (e :: rest) =
-  if hasSamePublicKind e rest then Err (prefix ++ ": duplicate export " ++ entryPublic e)
+  if hasConflictingExport e rest then Err (prefix ++ ": duplicate export " ++ entryPublic e)
   else checkExportDuplicates prefix rest
+
+-- 显式导出列表里「同一个名字写了两遍」是错误（`module M (foo, foo)`）；
+-- 但同一个**定义**经不同模块重导出（门面同时导出 Base.Monad 与 Base.IO，两者都
+-- 重导出 `Functor(..)`）不是冲突——条目按 target 去重即可。
+exportItemKey : ExportItem -> String
+exportItemKey item = case item of
+  XBare n sp => "bare:" ++ n
+  XTypeAll n sp => "typeall:" ++ n
+  XModule n sp => "module:" ++ n
+
+duplicateExportItem : List ExportItem -> Maybe String
+duplicateExportItem [] = Nothing
+duplicateExportItem (item :: rest) =
+  if memExportItemKey (exportItemKey item) rest then Just (exportItemName item)
+  else duplicateExportItem rest
+
+memExportItemKey key items = case items of
+  [] => False
+  item :: rest => if exportItemKey item == key then True else memExportItemKey key rest
+
+exportItemName item = case item of
+  XBare n sp => n
+  XTypeAll n sp => n
+  XModule n sp => n
+
+checkExportItemDuplicates prefix [] = Ok 0
+checkExportItemDuplicates prefix (item :: rest) = case duplicateExportItem (item :: rest) of
+  Just n => Err (prefix ++ ": duplicate export " ++ n)
+  Nothing => checkExportItemDuplicates prefix rest
 
 explicitExports modules prefix decls imports [] = Ok []
 explicitExports modules prefix decls imports (item :: rest) =
+  andThen (checkExportItemDuplicates prefix (item :: rest))
+    (\_ => andThen (exportItemEntries modules prefix decls imports item) (\es => andThen (explicitExports modules prefix decls imports rest) (\tail => Ok (dedupeExportEntries (append es tail)))))
+explicitExports modules prefix decls imports (item :: rest) =
   andThen (exportItemEntries modules prefix decls imports item)
-    (\es => andThen (explicitExports modules prefix decls imports rest) (\tail => Ok (append es tail)))
+    (\es => andThen (explicitExports modules prefix decls imports rest) (\tail => Ok (dedupeExportEntries (append es tail))))
 
 validateModuleHeader label hdr = case hdr of
   Nothing => Ok []
