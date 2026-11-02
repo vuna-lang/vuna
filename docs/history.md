@@ -736,6 +736,14 @@ metrics 重标定都留给 M22.3；DT core evaluator 不支持 `strUnpack`/`strP
 4. **metrics 重标定**：M21/M22 的编译器源码增长后按实测重设 `nix/metrics.budget`
    （seed 闭包 37 个模块：bytes 1424318 / lines 13426 / longlines 5009 / letrec 727 /
    strcat 355 / zeroarg 51 / ctorcount 2778；`sh nix/metrics.sh` within budget）。
+5. **CI 收尾（`nix flake check`）**：`checks.context-budget` 在 M21/M22 后超预算
+   （`coldstart_bytes` / `arch_lines` / `max_ref_lines` / `max_module_lines`）。修法：
+   (a) 把 M16 终止性检查从 `Elab` 抽成 `Vuna.Compiler.DtTerm`（单模块 2674 → Typecheck
+   2529，≤2540 行上限；闭包 38 个模块、总分块量不变）；(b) `dt.md` 211 → 139 行、
+   `testing.md` 178 → 166 行（压缩示例与夹具清单，细节留在 roadmap/history），
+   `architecture.md` 204 → 195 行并收紧 DT 边界段——预算文件**未上调**（`context.budget`
+   的“只降不升”约束）；(c) 按 38 模块重新实测 `nix/metrics.budget`（bytes 1425475 /
+   lines 13462 / longlines 5011）。最终 `nix flake check` 8 项全绿。
 
 **验证**：`test/run-tests.sh` 新增 34d 段（build --dt 运行、--no-compile 布局、
 --split / seed --dt 的 build.sh 可运行、seed --dt 拒绝 seed/、缺 OUT exit 2、库包错误、

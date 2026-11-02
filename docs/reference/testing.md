@@ -79,32 +79,20 @@ nix run .#vuna-run-tests -- --vuna stable  # 编译器改用注册表别名 vuna
 - `vuna-seed` 编译 `12_fact` 的种子冒烟；
 - 第 33 段（M12.8）：包级 `compile --package`——`.output/{lib,app}` + `build.sh`
   增量编译、输出与单文件一致、无改动不重编、touch 单个模块只重编它；
-- 第 34 段（M13–M22）DT：`corpus/dt/*.vuna`（37 个）三路（`interp --dt` / `check --dt` /
-  `compile --dt`+ocamlopt）与 golden 一致，并断言 `interp` 输出 == 编译产物输出（M18.5 起）；
-  `corpus/dt_err/*.vuna`（29 个）在 `check --dt` 与 `compile --dt`
-  两条路径都要求错误片段、非 0 退出且不写输出文件（非穷尽 case、不可满足分支、
-  对 `Int` 做 case、未知构造子、构造子不返回该族、嵌套模式、非结构递归、多 clause
-  覆盖不足、实例方法覆盖不足）；
-  第 34a 段（M21/M22.2）：`corpus/dt_base/*.vuna`（8 个，`--root ../base/lib`）三路 +
-  interp==run 对拍——M21 覆盖 `import Base.IO` 后的 `do`/`bind`/`pure`/`fmap`、`Base.IO`
-  全部 API 的类型面、`import Base.Monad`+`Base.Maybe` 的 trait 投影与实例方法构造子形参；
-  M22.2 增加 `Base.String`（`join`/`split`）、`Base.Sort`+`Base.Map`、`import Base` 门面。
-  带 `.nointerp` 标记的夹具（`06_base_string`）跳过 interp 对拍（核心求值器尚无
-  `strUnpack`/`strPack` 归约），仍要求 check / compile / run 与 golden 一致；
-  第 34b 段（M21）：`corpus/dt_io/*.vuna`（效果执行）只跑 `check --dt` 与
-  `compile --dt`+ocamlopt，断言编译产物输出与 golden 一致（核心求值器不执行效果）；
-  第 34c 段（M22.1）：`corpus/dt_pkg/` 包目录——`01_exec` 的 `check --dt` /
-  `compile --dt`+ocamlopt/运行（输出 42）、`02_lib` 库包 check 通过且 compile 清晰报错
-  不写输出、`03_bad` 无 `vuna.toml` 清晰错误、不存在路径与 `interp --dt <dir>` 的清晰
-  错误；
-  第 34d 段（M22.3a）：DT 的 `build` / `seed` 入口——`build --dt` 产
-  `.output/{main.ml,build.sh,bin/<pkg>}` 并运行输出 golden、`--no-compile` 只写两份
-  源码、`build --dt --split OUT` 与 `seed --dt OUT` 的 `build.sh` 可编译运行、
-  `seed --dt seed` 被拒绝（不写 `seed/`）、库包给清晰错误、HM `build` 零回归；
-  另断言 `seed --dt` 缺 OUT 时 exit 2；
-  另有 `--dt` CLI 约束（M20 起 `interp`/`check` 支持 `import` 与 `--root`；M22.1 起
-  `check`/`compile --dt` 支持包目录；M22.3 起 `build`/`seed` 也接受 `--dt`，输出是
-  单文件 `main.ml` + `build.sh`）——逐模块切分与 `seed/` 轮换留到 M24。
+- 第 34 段（M13–M22）DT：`corpus/dt/*.vuna`（38 个）三路（`interp --dt` / `check --dt` /
+  `compile --dt`+ocamlopt）与 golden 一致，并断言 `interp` 输出 == 编译产物输出；
+  `corpus/dt_err/*.vuna`（29 个）两条路径都要求错误片段、非 0 退出且不写输出文件；
+  34a `corpus/dt_base/*.vuna`（8 个，`--root ../base/lib`）三路 + interp==run 对拍
+  （`Base.IO`/`do`/trait 投影、`Base.String`、`Base.Sort`+`Map`、`import Base` 门面；
+  `06_base_string` 带 `.nointerp`——核心求值器尚无 `strUnpack`/`strPack` 归约）；
+  34b `corpus/dt_io/*.vuna` 只跑 check + compile+ocamlopt（核心求值器不执行效果）；
+  34c `corpus/dt_pkg/` 包目录：`01_exec` 三路（42）、`02_lib` 库包 check 通过 / compile
+  清晰报错、`03_bad` 无 `vuna.toml` 清晰错误、不存在路径与 `interp --dt <dir>` 清晰错误；
+  34d DT `build`/`seed` 入口：`build --dt` 产 `.output/{main.ml,build.sh,bin/<pkg>}` 并
+  运行 golden、`--no-compile` 只写源码、`--split` / `seed --dt` 的 `build.sh` 可运行、
+  `seed --dt seed` 被拒绝、库包清晰错误、HM `build` 零回归、`seed --dt` 缺 OUT exit 2；
+  `--dt` CLI 约束：M20 起支持 `import`/`--root`，M22.1 起 `check`/`compile` 接受包目录，
+  M22.3 起 `build`/`seed` 也接受（单文件输出；逐模块切分与 `seed/` 轮换留 M24）。
 
 ## Nix checks 清单
 

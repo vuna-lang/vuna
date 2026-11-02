@@ -67,7 +67,7 @@ codegen 要点见 [compiler.md](reference/compiler.md)，语言语义见 [langua
 第 7–10 段（类型检查正反例、跨模块）、第 11–12 段（typed codegen 单文件/跨模块）、
 第 18–27 段（记录、trait、do/Monad、stdlib）。
 
-## 2. DT 路径：Loader → Elab → CoreCodegen（+ Dt facade）
+## 2. DT 路径：Loader → Elab → CoreCodegen
 
 > **终态唯一路径**（M21–M24.7 补齐效应 / codegen / 包入口 / 库化，最终接管 seed；
 > 阶段状态与阻碍见 [docs/roadmap.md](roadmap.md)）。
@@ -76,37 +76,28 @@ codegen 要点见 [compiler.md](reference/compiler.md)，语言语义见 [langua
 
 **数据流**：
 ```text
-.vuna + --dt（M20 起支持 import / --root）
+.vuna + --dt（M20 起 import / --root；M22.1 起包目录）
  → Parser.parseSource                  （与 HM 共用 parser）
- → Loader.loadProgramRaw               （入口 + 依赖模块的声明拼接）
- → Elab.elabProgramFull                （精化入口：DtRecords.prepareDecls →
-     DtDerive.expandDerivings → elabProgramGo；body 内走 DtMatch.multiToExpr 与 Core 的
-     NbE / 索引合一 / 实例搜索）
- → CoreCodegen.checkDtProgram          （擦除检查）
- → CoreCodegen.generateDtProgram       （擦除型 OCaml 生成）
+ → Loader.loadProgramRaw / Ordered      （入口 + 依赖模块声明，按依赖序拼接）
+ → Elab.elabProgramFull                 （DtRecords → DtDerive → elabProgramGo；
+     body 内走 DtMatch.multiToExpr 与 Core 的 NbE / 索引合一 / 实例搜索）
+ → CoreCodegen.checkDtProgram / generateDtProgram（擦除检查 + 擦除型 OCaml 生成）
  → ocamlopt
 ```
 
-**入口符号**：
-- `Dt.dtCheckFile` / `dtCompileFile` / `dtEvalFile`（文件 facade）；`Loader.loadProgramRaw`
-  （`--dt` / `--root` 原始模式的声明来源）
-- `Elab.elabProgram` / `elabProgramFull`（洞目标与解表；`goalsOfProgram` 供 goal/LSP；
-  `checkTerminationDecls` 做终止性）；内部依次调 `DtRecords.prepareDecls` →
-  `DtDerive.expandDerivings` → `elabProgramGo`
-- `DtMatch.multiToExpr` / `buildColumnExpr`（多 clause → 单表达式）；`Core.eval` / `quote` /
-  `conv` / `normalize` / `defaultFuel`；`CoreCodegen.checkDtProgram` / `generateDtProgram`
-- 经 `Compile.compileFileDt` / `checkFileDt` 与 `CompilerCli` 暴露给 CLI（`--dt` 三条命令）
+**入口符号**：`Dt.dtCheckFile` / `dtCompileFile` / `dtEvalFile`；`Loader.loadProgram*`；
+`Elab.elabProgramFull`（洞目标走 `goalsOfProgram`）、`DtTerm.checkTerminationDecls`；
+`DtMatch.multiToExpr` / `buildColumnExpr`；`Core.eval` / `quote` / `conv` / `normalize`；
+`CoreCodegen.checkDtProgram` / `generateDtProgram`；CLI 经 `Compile.compileFileDt` /
+`CompilerCli`（`--dt` 命令与 `build`/`seed` 入口）。
 
 **边界**：`--dt` 支持 `import` / `--root`（M20）；`main : IO a`、`do`、effectful 内建与
-`Base.IO` 可用（M21）；`check` / `compile --dt` 接受包目录（M22.1，含库包 check 与依赖序
-拼接），`base` 全部模块可精化（M22.2：`Base.String` / `Map` / `Sort` / 门面 `Base` /
-`Prelude`；Bool 值构造子已去桩、只留 prelude 类型别名）；`build --dt` / `build --dt
---split` / `seed --dt` 接线（M22.3，输出是**整程序单文件** `main.ml` + `build.sh`，逐模块
-切分留 M24）。M21 统一了 Bool 的运行时表示（`TBool`）并把字典提升扩展到自递归定义；
-M22.2 补齐模式矩阵的族覆盖与嵌套兜底下沉、泛型比较（`Ord` 字典 + 内建实例）、`str*` 的
-`List` 族桥接（`dtp_unpack` / `dtp_pack`）；M22.3 把擦除判据收敛到 `Core.rigIsErased`
-（唯一的运行时表示判据）并重标定 metrics；codegen 变体类型的字段形状由「用到的族参数 +
-不透明字段参数」决定（见 [dt-core.md](dt-core.md)）。
+`Base.IO` 可用（M21）；`check` / `compile --dt` 接受包目录、`base` 全部模块可精化
+（M22.1/M22.2：含 `Base.String`/`Map`/`Sort`/门面 `Base`/`Prelude`，Bool 值构造子去桩、
+只留 prelude 类型别名）；`build --dt` / `seed --dt` 接线（M22.3，整程序单文件
+`main.ml` + `build.sh`，逐模块切分留 M24）；擦除判据收敛到 `Core.rigIsErased`。M21–M22.2
+的表示细节（`TBool`、字典提升、模式矩阵族覆盖、泛型比较、`str*` 的 `List` 族桥接）见
+[dt-core.md](dt-core.md) 与 [roadmap.md](roadmap.md)。
 
 **通常连带改动**：`Core` → `Elab` → `CoreCodegen` 三处同步（见 [dt-core.md](dt-core.md)）；测试第 34–35 段（三路互拍，见 [testing.md](reference/testing.md)）。
 

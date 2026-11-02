@@ -1,0 +1,170 @@
+module Vuna.Compiler.DtTerm (checkTerminationDecls) where
+
+-- Vuna.Compiler.DtTerm：DT 终止性检查（M16）。只分析自递归函数，规则是「体内每个
+-- 自调用必须至少有一个实参是相应形参的真子项」。输入是 surface AST（`List Decl`），
+-- 与精化状态无关，因此独立成模块，避免 `Elab` 单模块膨胀（冷启动上下文预算）。
+import Vuna.Compiler.Common
+import Vuna.Compiler.Ast
+
+-- ===============================================================
+-- M16：终止性检查（结构化递归，surface AST）
+-- 只分析自递归函数。规则：体内每个自调用必须至少有一个实参是「对应形参的真子项」。
+-- ===============================================================
+-- size 表：变量名 ↦ (形参下标, 深度)；形参深度 0，构造子字段继承下标、深度+1。
+-- `plus a b = case a of Zero => b | Succ k => Succ (plus k b)`：k 的 size=(0,1) ⇒ 下降 ⇒ 通过。
+-- `loop n = loop n`：n 的 size=(0,0) ⇒ 拒绝。
+checkTerminationDecls : List Decl -> Result Int
+checkTerminationDecls decls = checkTermDeclsGo (funDefsOf decls)
+
+funDefsOf : List Decl -> List (Pair String (Pair (List Pat) Expr))
+funDefsOf [] = []
+funDefsOf (d :: rest) = case d of
+  DFun name pats body sp => Pair name (Pair pats body) :: funDefsOf rest
+  _ => funDefsOf rest
+
+checkTermDeclsGo : List (Pair String (Pair (List Pat) Expr)) -> Result Int
+checkTermDeclsGo [] = Ok 0
+checkTermDeclsGo (fd :: rest) = case fd of
+  Pair name (Pair pats body) =>
+    if funMentions name body then andThen (checkTermOne name pats body) (\_ => checkTermDeclsGo rest)
+    else checkTermDeclsGo rest
+
+-- 体里是否出现对自身的调用（名字出现在表达式里）。
+funMentions : String -> Expr -> Bool
+funMentions name e = case e of
+  EVar n sp => n == name
+  EInt n sp => False
+  EStr s sp => False
+  ELam ns b sp => funMentions name b
+  EApp fn args sp => funMentions name fn || funMentionsList name args
+  EPi n implicit dom cod sp => funMentions name dom || funMentions name cod
+  ELet binds b rec_ sp => funMentions name b
+  ECase scrut alts sp => funMentions name scrut || funMentionsAlts name alts
+  EIf c t el sp => funMentions name c || funMentions name t || funMentions name el
+  EField base f sp => funMentions name base
+  ERecord rn fields sp => funMentionsFields name fields
+  ERecUpdate base fields sp => funMentions name base
+  EInstSel meth iname sp => funMentions name meth
+  EDo stmts sp => funMentionsStmts name stmts
+
+funMentionsList : String -> List Expr -> Bool
+funMentionsList name [] = False
+funMentionsList name (e :: rest) = funMentions name e || funMentionsList name rest
+
+funMentionsAlts : String -> List (Pair Pat Expr) -> Bool
+funMentionsAlts name [] = False
+funMentionsAlts name (a :: rest) = case a of
+  Pair p b => funMentions name b || funMentionsAlts name rest
+
+funMentionsFields : String -> List (Pair String Expr) -> Bool
+funMentionsFields name [] = False
+funMentionsFields name (f :: rest) = case f of
+  Pair fn fe => funMentions name fe || funMentionsFields name rest
+
+funMentionsStmts : String -> List DoStmt -> Bool
+funMentionsStmts name [] = False
+funMentionsStmts name (s :: rest) = funMentions name (doStmtExpr s) || funMentionsStmts name rest
+
+-- 单个自递归定义。
+checkTermOne : String -> List Pat -> Expr -> Result Int
+checkTermOne fname pats body = checkTermBody fname (patSizeEntries pats) body
+
+-- 顶层形参的尺寸表：递归进构造子模式，给子变量加深度（`Cons y rest` 的 `rest` → (i,1)）。
+-- 这样 `mem x (Cons y rest) = ... mem x rest ...` 能证明 `rest` 严格下降。
+patSizeEntries : List Pat -> List (Pair String (Pair Int Int))
+patSizeEntries pats = patSizeGo pats 0
+
+patSizeGo : List Pat -> Int -> List (Pair String (Pair Int Int))
+patSizeGo [] i = []
+patSizeGo (p :: rest) i = case p of
+  PVar n sp => Pair n (Pair i 0) :: patSizeGo rest (i + 1)
+  PWild sp => Pair "_" (Pair i 0) :: patSizeGo rest (i + 1)
+  PCon cn ps sp =>
+    append (Pair "_" (Pair i 0) :: subSizeEntries (Pair i 0) ps) (patSizeGo rest (i + 1))
+  _ => Pair "_" (Pair i 0) :: patSizeGo rest (i + 1)
+
+-- 遍历体：每个对 fname 的调用都必须有下降证据。
+checkTermBody : String -> List (Pair String (Pair Int Int)) -> Expr -> Result Int
+checkTermBody fname sizes e = case e of
+  EApp fn args sp => case callIndexes fname fn args of
+    Nothing => checkTermBody fname sizes fn
+    Just idxs =>
+      if anyDescends idxs args sizes then checkTermArgs fname sizes args
+      else Err
+        ("DT: cannot prove termination of " ++ fname ++ " (recursive call does not structurally decrease)")
+  ECase scrut alts sp =>
+    andThen (checkTermBody fname sizes scrut) (\_ => checkTermAlts fname sizes scrut alts)
+  EIf c t el sp =>
+    andThen (checkTermBody fname sizes c)
+      (\_ => andThen (checkTermBody fname sizes t) (\_ => checkTermBody fname sizes el))
+  ELam ns b sp => checkTermBody fname sizes b
+  ELet binds b rec_ sp => checkTermBody fname sizes b
+  _ => Ok 0
+
+checkTermArgs : String -> List (Pair String (Pair Int Int)) -> List Expr -> Result Int
+checkTermArgs fname sizes [] = Ok 0
+checkTermArgs fname sizes (a :: rest) =
+  andThen (checkTermBody fname sizes a) (\_ => checkTermArgs fname sizes rest)
+
+checkTermAlts : String -> List (Pair String (Pair Int Int)) -> Expr -> List (Pair Pat Expr) -> Result Int
+checkTermAlts fname sizes scrut [] = Ok 0
+checkTermAlts fname sizes scrut (a :: rest) = case a of
+  Pair pat body =>
+    andThen (checkTermBody fname (extendSizes sizes scrut pat) body)
+      (\_ => checkTermAlts fname sizes scrut rest)
+
+-- 调用形态：`fname a1 .. an`（裸 EVar 或无实参都算，索引表给出实参位置）。
+callIndexes : String -> Expr -> List Expr -> Maybe (List Int)
+callIndexes fname fn args = case fn of
+  EVar n sp => if n == fname then Just (rangeInt (length args)) else Nothing
+  _ => Nothing
+
+rangeInt : Int -> List Int
+rangeInt n = rangeIntGo n 0
+
+rangeIntGo : Int -> Int -> List Int
+rangeIntGo n i = if i >= n then [] else i :: rangeIntGo n (i + 1)
+
+-- 至少一个实参在其对应位置严格下降（源自同一形参、且深度 > 0）。
+anyDescends : List Int -> List Expr -> List (Pair String (Pair Int Int)) -> Bool
+anyDescends [] args sizes = False
+anyDescends (i :: rest) args sizes = case nthExpr args i of
+  Nothing => anyDescends rest args sizes
+  Just a => if argDescendsAt i a sizes then True else anyDescends rest args sizes
+
+argDescendsAt : Int -> Expr -> List (Pair String (Pair Int Int)) -> Bool
+argDescendsAt i a sizes = case a of
+  EVar n sp => case sizeOfVar n sizes of
+    Just sz => case sz of
+      Pair base depth => base == i && depth > 0
+    Nothing => False
+  _ => False
+
+nthExpr : List Expr -> Int -> Maybe Expr
+nthExpr [] i = Nothing
+nthExpr (e :: rest) i = if i <= 0 then Just e else nthExpr rest (i - 1)
+
+-- 把模式的绑定变量加入 size 表。
+extendSizes : List (Pair String (Pair Int Int)) -> Expr -> Pat -> List (Pair String (Pair Int Int))
+extendSizes sizes scrut pat = case scrut of
+  EVar vname vsp => case sizeOfVar vname sizes of
+    Nothing => sizes
+    Just base => case pat of
+      PCon cname subpats psp => append sizes (subSizeEntries base subpats)
+      _ => sizes
+  _ => sizes
+
+subSizeEntries : Pair Int Int -> List Pat -> List (Pair String (Pair Int Int))
+subSizeEntries base subpats = subSizeGo base subpats
+
+subSizeGo : Pair Int Int -> List Pat -> List (Pair String (Pair Int Int))
+subSizeGo base [] = []
+subSizeGo base (p :: rest) = case p of
+  PVar n sp => case base of
+    Pair b d => Pair n (Pair b (d + 1)) :: subSizeGo base rest
+  _ => subSizeGo base rest
+
+sizeOfVar : String -> List (Pair String (Pair Int Int)) -> Maybe (Pair Int Int)
+sizeOfVar name [] = Nothing
+sizeOfVar name (s :: rest) = case s of
+  Pair n sz => if n == name then Just sz else sizeOfVar name rest
