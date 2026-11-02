@@ -1,15 +1,15 @@
-module Vuna.Compiler.SplitCli (buildSplit, seedSplit) where
+module Vuna.Compiler.Driver.SplitCli (buildSplit, seedSplit) where
 
--- Vuna.Compiler.SplitCli：包模式的分离编译入口（M24：DT split 输出）。
+-- Vuna.Compiler.Driver.SplitCli：包模式的分离编译入口（M24：DT split 输出）。
 --   vuna build --split OUTDIR [DIR]   → 逐模块 DT codegen 到 OUTDIR + build.sh
 --   vuna seed OUTDIR [DIR]            → 同上（seed rotation 用）
 --
--- 输出模型由 Vuna.Compiler.Split（SplitFile / build.sh）承载；生成器在
--- Vuna.Compiler.CoreCodegen.generateDtSplitProgram，包级加载/精化在 Vuna.Compiler.Dt。
+-- 输出模型由 Vuna.Compiler.Driver.Split（SplitFile / build.sh）承载；生成器在
+-- Vuna.Compiler.Codegen.generateDtSplitProgram，包级加载/精化在 Vuna.Compiler.Driver.Dt。
 import Vuna.Compiler.Common
-import Vuna.Compiler.Pkg
-import Vuna.Compiler.Dt
-import Vuna.Compiler.Split
+import Vuna.Compiler.Packages.Pkg
+import Vuna.Compiler.Driver.Dt
+import Vuna.Compiler.Driver.Split
 
 buildSplit : String -> String -> Result Int
 buildSplit dir outDir = case loadPackage dir of

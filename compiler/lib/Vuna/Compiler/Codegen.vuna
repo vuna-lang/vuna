@@ -1,6 +1,6 @@
-module Vuna.Compiler.CoreCodegen (checkDtProgram, generateDtProgram, generateDtSplitProgram) where
+module Vuna.Compiler.Codegen (checkDtProgram, generateDtProgram, generateDtSplitProgram) where
 
--- Vuna.Compiler.CoreCodegen：DT 的擦除检查与 OCaml 生成（M14：索引族 + 依赖模式匹配）。
+-- Vuna.Compiler.Codegen：DT 的擦除检查与 OCaml 生成（M14：索引族 + 依赖模式匹配）。
 --
 -- 与 TypedCodegen（HM 路径）完全独立：只依赖 Vuna.Compiler.Core / Vuna.Compiler.Elab，
 -- 自带最小 runtime（bi_* 与 show helper），不引用 HM codegen 的内部 helper。
@@ -16,8 +16,8 @@ module Vuna.Compiler.CoreCodegen (checkDtProgram, generateDtProgram, generateDtS
 -- - TCase → OCaml match（分支绑定变量用去重名，擦除绑定子不进 pattern 但占 index）；
 -- - 递归定义 → SCC 分组，自/互递归分量用 `let rec ... and ...` 生成。
 import Vuna.Compiler.Common
-import Vuna.Compiler.Ast
-import Vuna.Compiler.Split
+import Vuna.Compiler.Frontend.Ast
+import Vuna.Compiler.Driver.Split
 import Vuna.Compiler.Core
 import Vuna.Compiler.Elab
 

@@ -1,6 +1,6 @@
-module Vuna.Compiler.DtMatch (allVarPats, multiToCaseExpr, multiToExpr) where
+module Vuna.Compiler.Elab.Match (allVarPats, multiToCaseExpr, multiToExpr) where
 
--- Vuna.Compiler.DtMatch：把「多 clause + 构造子/字面量模式」的函数体降级成核心表达式。
+-- Vuna.Compiler.Elab.Match：把「多 clause + 构造子/字面量模式」的函数体降级成核心表达式。
 --
 -- 输入是 parser 的 clause 模式矩阵（`List (Pair (List Pat) Expr)`），输出一个不含顶层
 -- 模式匹配的 `Expr`：参数折成 lambda，逐列下降，构造子列编成 `case`，Int/String 列编成
@@ -10,7 +10,7 @@ module Vuna.Compiler.DtMatch (allVarPats, multiToCaseExpr, multiToExpr) where
 -- 关键不变量：每个 `ctorAltList` 递归层生成的新鲜子模式名必须带**本列位置名**
 -- （见 `subNamesFor`），否则层间同名会让外层 rename 抓到内层 binder。
 import Vuna.Compiler.Common
-import Vuna.Compiler.Ast
+import Vuna.Compiler.Frontend.Ast
 
 -- 单 clause 的参数全是变量（或通配）时可直接 `checkDef` 绑定；否则需要 `multiToExpr`
 -- 合成 case（如 `firstOf (Pair a b) = a`——参数是构造子模式）。

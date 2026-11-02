@@ -1,4 +1,4 @@
-module Vuna.Compiler.Split
+module Vuna.Compiler.Driver.Split
   ( SplitFile(..)
   , buildScript
   , buildScriptPackage
@@ -10,7 +10,7 @@ module Vuna.Compiler.Split
   , writeSplitFilesChanged
   ) where
 
--- Vuna.Compiler.Split：分离编译（M12）的输出文件模型与构建脚本生成。
+-- Vuna.Compiler.Driver.Split：分离编译（M12）的输出文件模型与构建脚本生成。
 --
 -- TypedCodegen.generateSplitProgram 产出 `List SplitFile`（相对文件名 + 内容）；
 -- 本模块负责落盘并生成增量构建脚本：

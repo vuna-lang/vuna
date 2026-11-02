@@ -3,7 +3,7 @@
 -- main : IO Int，由运行时执行；效果只经 Base.IO。
 import Vuna.Compiler.Common
 import Vuna.Fmt
-import Vuna.Compiler.Parser
+import Vuna.Compiler.Frontend.Parser
 import Base.Monad
 import Base.IO
 

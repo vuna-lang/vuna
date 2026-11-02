@@ -1,4 +1,4 @@
-module Vuna.Compiler.Dt
+module Vuna.Compiler.Driver.Dt
   ( dtCheckFile
   , dtCheckLibrary
   , dtCheckProject
@@ -9,7 +9,7 @@ module Vuna.Compiler.Dt
   , dtSplitProject
   ) where
 
--- Vuna.Compiler.Dt：DT 路径的 facade（供 Compile / CompilerCli / Interp 使用）。
+-- Vuna.Compiler.Driver.Dt：DT 路径的 facade（供 Compile / CompilerCli / Interp 使用）。
 --
 -- M13 时 DT 是单文件自包含：parseSource → Elab →（check / codegen / 核心求值），
 -- 不经过 Loader、拒绝模块头与 import。**M20 起改为复用 `Loader`**：多文件、`import`、
@@ -21,14 +21,14 @@ module Vuna.Compiler.Dt
 --     再按**依赖顺序**拼接（见 `dtProjectDecls`）。
 -- DT 精化器按**整程序**精化，模块边界对精化不构成约束。
 import Vuna.Compiler.Common
-import Vuna.Compiler.Ast
-import Vuna.Compiler.Parser
-import Vuna.Compiler.Pkg
+import Vuna.Compiler.Frontend.Ast
+import Vuna.Compiler.Frontend.Parser
+import Vuna.Compiler.Packages.Pkg
 import Vuna.Compiler.Loader
 import Vuna.Compiler.Core
 import Vuna.Compiler.Elab
-import Vuna.Compiler.CoreCodegen
-import Vuna.Compiler.Split
+import Vuna.Compiler.Codegen
+import Vuna.Compiler.Driver.Split
 
 -- 入口 + 全部依赖模块的声明（单文件 / --root 原始模式）。
 dtLoad : List String -> String -> Result (List Decl)

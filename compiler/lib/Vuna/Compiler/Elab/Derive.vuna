@@ -1,6 +1,6 @@
-module Vuna.Compiler.DtDerive (expandDerivings) where
+module Vuna.Compiler.Elab.Derive (expandDerivings) where
 
--- Vuna.Compiler.DtDerive：`deriving` 的**实例生成**（M19；M24.7 改为库里的 trait）。
+-- Vuna.Compiler.Elab.Derive：`deriving` 的**实例生成**（M19；M24.7 改为库里的 trait）。
 --
 -- `deriving (Show, Eq)` 不需要新的精化规则：它等价于一条手写 `instance`，方法体按 data
 -- 的构造子骨架机械生成。因此这里把它展开成 `DInstance`，交给既有的实例精化（M15 的
@@ -20,7 +20,7 @@ module Vuna.Compiler.DtDerive (expandDerivings) where
 --   Eq  ：`eq (C x1 ..) (C y1 ..) = x1 == y1 && ..`；不同构造子 ⇒ `False`。
 --   Ord ：先按**声明顺序**比构造子索引，同构造子再逐字段比。
 import Vuna.Compiler.Common
-import Vuna.Compiler.Ast
+import Vuna.Compiler.Frontend.Ast
 
 -- 类名最后一段：`Base.Show.Show` → `Show`；派生规则按它分派（找不到的类报不支持）。
 traitShortName : String -> String

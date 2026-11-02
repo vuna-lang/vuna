@@ -1,6 +1,6 @@
-module Vuna.Compiler.DtQuant (definedNames, quantifyTopSig, quantifyTraitSig) where
+module Vuna.Compiler.Elab.Quant (definedNames, quantifyTopSig, quantifyTraitSig) where
 
--- Vuna.Compiler.DtQuant：把签名里的**自由小写名**量化为隐式类型参数（M20）。
+-- Vuna.Compiler.Elab.Quant：把签名里的**自由小写名**量化为隐式类型参数（M20）。
 --
 -- vuna 的签名可以不写类型参数：`append : List a -> List a -> List a` 里的 `a`、trait 方法
 -- 的 `fmap : (a -> b) -> f a -> f b` 里的 `a`/`b`，都是隐式量化的类型变量（HM 路径靠
@@ -8,8 +8,8 @@ module Vuna.Compiler.DtQuant (definedNames, quantifyTopSig, quantifyTraitSig) wh
 --
 -- 纯 AST 变换（只依赖 `Ast`），因此独立成模块——`Elab` 的模块行数是硬门槛。
 import Vuna.Compiler.Common
-import Vuna.Compiler.Ast
-import Vuna.Compiler.DtKind
+import Vuna.Compiler.Frontend.Ast
+import Vuna.Compiler.Elab.Kind
 
 -- 把 trait 方法签名里的自由小写名量化为隐式类型参数。
 -- `boundInScope` 给出「这个名字已在上下文里」的判定（trait 的类参数不算自由变量，

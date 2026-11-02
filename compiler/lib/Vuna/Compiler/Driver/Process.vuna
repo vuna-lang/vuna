@@ -1,6 +1,6 @@
-module Vuna.Compiler.Process (runIn) where
+module Vuna.Compiler.Driver.Process (runIn) where
 
--- Vuna.Compiler.Process：工具链内部的进程执行入口（不进 [export]）。
+-- Vuna.Compiler.Driver.Process：工具链内部的进程执行入口（不进 [export]）。
 -- prim_runIn 是受包级 allowlist 限制的效果内建；普通用户包不能直接调用。
 import Vuna.Compiler.Common
 

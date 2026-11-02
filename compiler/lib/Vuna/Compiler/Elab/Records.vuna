@@ -1,4 +1,4 @@
-module Vuna.Compiler.DtRecords
+module Vuna.Compiler.Elab.Records
   ( RecordInfo
   , checkProvidedFields
   , desugarRecords
@@ -32,7 +32,7 @@ module Vuna.Compiler.DtRecords
 -- 本模块只做 AST → AST 变换，不依赖任何检查器状态（HM 的类型变量表、DT 的元变量上下文
 -- 都不进来），因此放在编译器包的中立位置。
 import Vuna.Compiler.Common
-import Vuna.Compiler.Ast
+import Vuna.Compiler.Frontend.Ast
 
 -- 记录声明信息。第五个字段是**构造子名**：与记录名同名（M23 起；Elab 让值位置先查
 -- 构造子表、类型位置走 globals，两者同名不再冲突）。

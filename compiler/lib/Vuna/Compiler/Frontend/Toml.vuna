@@ -1,4 +1,4 @@
-module Vuna.Compiler.Toml
+module Vuna.Compiler.Frontend.Toml
   ( TomlEntry(..)
   , TomlValue(..)
   , lookupEntry
@@ -7,7 +7,7 @@ module Vuna.Compiler.Toml
   , parseTomlAt
   ) where
 
--- Vuna.Compiler.Toml：TOML 子集解析器（M11.5 包管理基础件）。
+-- Vuna.Compiler.Frontend.Toml：TOML 子集解析器（M11.5 包管理基础件）。
 -- 支持：# 行注释（字符串内的 # 不算）、空行、[section]、[section.sub]、
 -- key = value；value 支持 basic string（转义 \" \\ \n \t \r \b \f）、
 -- 可负整数、true/false、字符串数组（可空、可跨行、元素间可带注释/逗号）。

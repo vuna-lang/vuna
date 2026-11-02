@@ -31,8 +31,8 @@ module Vuna.Lsp (runLsp, runLspTool) where
 -- 洞目标：hover 跑 `goalsOfProgram`（DT 精化器），
 -- 命中请求位置的洞时返回目标类型与绑定的上下文。可插拔点是 `dtGoalsOf`。
 import Vuna.Compiler.Common
-import Vuna.Compiler.Ast
-import Vuna.Compiler.Parser
+import Vuna.Compiler.Frontend.Ast
+import Vuna.Compiler.Frontend.Parser
 import Vuna.Compiler.Elab
 import Vuna.Json
 

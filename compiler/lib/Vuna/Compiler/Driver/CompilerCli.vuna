@@ -1,15 +1,19 @@
-module Vuna.Compiler.CompilerCli (compilerUsageLines, runCompilerCli, runCompilerCliFor) where
+module Vuna.Compiler.Driver.CompilerCli
+  ( compilerUsageLines
+  , runCompilerCli
+  , runCompilerCliFor
+  ) where
 
--- Vuna.Compiler.CompilerCli：编译器自己的 CLI（vuna-compiler）。
+-- Vuna.Compiler.Driver.CompilerCli：编译器自己的 CLI（vuna-compiler）。
 --
 -- M24 起唯一路径是 DT（精化 + 擦除 codegen）：compile / check / build / seed。
 -- 工具命令（lint / interp / test / fmt / repl / doc）在 Vuna.Cli。
 -- compiler/app/Main.vuna 的入口闭包就是 seed 闭包。
 import Vuna.Compiler.Common
-import Vuna.Compiler.Pkg
-import Vuna.Compiler.Compile
-import Vuna.Compiler.SplitCli
-import Vuna.Compiler.Process
+import Vuna.Compiler.Packages.Pkg
+import Vuna.Compiler.Driver.Compile
+import Vuna.Compiler.Driver.SplitCli
+import Vuna.Compiler.Driver.Process
 
 compilerUsageLines : String -> String
 compilerUsageLines prog =

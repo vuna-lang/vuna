@@ -54,15 +54,15 @@ module Vuna.Compiler.Elab
 -- 状态 Ec 保存下一个元变量编号、已解元变量（含创建深度，zonk 用）与已精化的定义体
 -- （供 Core.force 的 delta 展开）；定义体按源顺序精化，delta 只对已精化定义可见。
 import Vuna.Compiler.Common
-import Vuna.Compiler.Ast
-import Vuna.Compiler.DtMatch
-import Vuna.Compiler.DtTerm
+import Vuna.Compiler.Frontend.Ast
+import Vuna.Compiler.Elab.Match
+import Vuna.Compiler.Elab.Termination
 import Vuna.Compiler.Core
-import Vuna.Compiler.DtPrelude
-import Vuna.Compiler.DtKind
-import Vuna.Compiler.DtQuant
-import Vuna.Compiler.DtDerive
-import Vuna.Compiler.DtRecords
+import Vuna.Compiler.Elab.Prelude
+import Vuna.Compiler.Elab.Kind
+import Vuna.Compiler.Elab.Quant
+import Vuna.Compiler.Elab.Derive
+import Vuna.Compiler.Elab.Records
 
 -- 一个 DT 定义：名字、类型项、体项（均为闭项；体带擦除标志）。
 data DtDef : Type where
@@ -2004,7 +2004,7 @@ dtProgNext : DtProgram -> Int
 dtProgNext (DtProgram datas defs goals sols globals insts classes next) = next
 
 -- ---------------------------------------------------------------
--- M23：REPL 表达式求值（`Vuna.Compiler.Dt.dtEvalExpr` 的下半段）
+-- M23：REPL 表达式求值（`Vuna.Compiler.Driver.Dt.dtEvalExpr` 的下半段）
 -- ---------------------------------------------------------------
 -- 在**已精化程序**的环境（globals / 实例表 / 类表 / 解表）里精化并求值一条表达式。
 -- 新元变量从程序的元变量游标之后分配，因此程序阶段遗留的 meta 只可能已解

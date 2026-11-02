@@ -81,7 +81,7 @@ else
 fi
 
 # 6) api：某模块签名面含行号。
-if ! api=$("$VUNA" api Vuna.Compiler.Builtins 2>&1); then
+if ! api=$("$VUNA" api Vuna.Compiler.Loader.Builtins 2>&1); then
   bad "api failed: $api"
 else
   case "$api" in

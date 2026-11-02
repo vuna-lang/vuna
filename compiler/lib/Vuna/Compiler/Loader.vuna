@@ -29,11 +29,11 @@ module Vuna.Compiler.Loader
 
 -- Vuna.Compiler.Loader：模块加载、名字解析与 flatten。
 import Vuna.Compiler.Common
-import Vuna.Compiler.Ast
-import Vuna.Compiler.Lexer
-import Vuna.Compiler.Parser
-import Vuna.Compiler.Builtins
-import Vuna.Compiler.Pkg
+import Vuna.Compiler.Frontend.Ast
+import Vuna.Compiler.Frontend.Lexer
+import Vuna.Compiler.Frontend.Parser
+import Vuna.Compiler.Loader.Builtins
+import Vuna.Compiler.Packages.Pkg
 
 -- 显式 import 与自动注入的 Prelude（隐式 import）分开保存：
 -- 名字解析与 codegen 拓扑序用 all；模块重导出/include 只认显式 import。
@@ -410,7 +410,7 @@ resolveQualifiedCtor modules label imports name = case splitLastDot (splitOnDot 
       )
 
 -- 带点表达式的解析（M10.5）：先按「最长可解析模块前缀」尝试限定名/限定值+字段链，
--- 否则按「变量/顶层名 + 字段链」处理。`p.x`、`M.point.x`、`Vuna.Compiler.Parser.parseSource` 都走这里。
+-- 否则按「变量/顶层名 + 字段链」处理。`p.x`、`M.point.x`、`Vuna.Compiler.Frontend.Parser.parseSource` 都走这里。
 resolveDottedExpr : List Module -> String -> String -> List String -> List Import -> List String -> String -> Span -> Result Expr
 resolveDottedExpr modules label prefix own imports scope name sp = case splitOnDot name of
   [] => Err (label ++ ": invalid dotted name " ++ name)

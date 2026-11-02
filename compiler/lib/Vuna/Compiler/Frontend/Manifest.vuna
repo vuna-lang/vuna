@@ -1,4 +1,4 @@
-module Vuna.Compiler.Manifest
+module Vuna.Compiler.Frontend.Manifest
   ( Manifest(..)
   , manifestDependencies
   , manifestDir
@@ -13,7 +13,7 @@ module Vuna.Compiler.Manifest
   , validateManifest
   ) where
 
--- Vuna.Compiler.Manifest：vuna.toml 的语义模型（M11.5 包管理基础件）。
+-- Vuna.Compiler.Frontend.Manifest：vuna.toml 的语义模型（M11.5 包管理基础件）。
 -- 表约定：
 --   [package]     name / version / edition（edition 可选）
 --   [workspace]   members = ["stdlib", "app"]（可选）
@@ -22,7 +22,7 @@ module Vuna.Compiler.Manifest
 -- parseManifest 只解析，不检查文件是否存在；validateManifest 做结构校验。
 -- 本模块不做文件 I/O：调用方用自己的 readFile 读入内容后传入。
 import Vuna.Compiler.Common
-import Vuna.Compiler.Toml
+import Vuna.Compiler.Frontend.Toml
 
 data Manifest : Type where
   Manifest : Maybe String -> Maybe String -> Maybe String -> List String -> Maybe (List String) -> List (Pair String String) -> String -> Manifest

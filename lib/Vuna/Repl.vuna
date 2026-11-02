@@ -11,9 +11,9 @@ module Vuna.Repl (runRepl) where
 -- 限制：一次只能输入一行（多行定义/表达式暂不支持）。DT 顶层签名必填，所以定义
 -- 要先输入 `x : Int` 再输入 `x = 1 + 1`，之后表达式才能引用 `x`。
 import Vuna.Compiler.Common
-import Vuna.Compiler.Ast
-import Vuna.Compiler.Pkg
-import Vuna.Compiler.Parser
+import Vuna.Compiler.Frontend.Ast
+import Vuna.Compiler.Packages.Pkg
+import Vuna.Compiler.Frontend.Parser
 import Vuna.Interp
 
 replTempFile : String

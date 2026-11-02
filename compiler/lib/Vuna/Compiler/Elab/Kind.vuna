@@ -1,6 +1,6 @@
-module Vuna.Compiler.DtKind (arityFun, classParamKind, exprMaxAppArity, methodArgRigsOf) where
+module Vuna.Compiler.Elab.Kind (arityFun, classParamKind, exprMaxAppArity, methodArgRigsOf) where
 
--- Vuna.Compiler.DtKind：trait 类参数的 **kind 推断**（M19）。
+-- Vuna.Compiler.Elab.Kind：trait 类参数的 **kind 推断**（M19）。
 --
 -- M15 把类参数一律绑成 `Type`，于是 `trait Functor f` 的方法签名里写 `f a` 就报
 -- `too many arguments`。这里从方法签名推断参数 kind：参数名在签名里被应用了 k 个
@@ -9,7 +9,7 @@ module Vuna.Compiler.DtKind (arityFun, classParamKind, exprMaxAppArity, methodAr
 --
 -- 拆成独立模块是为了让 `Elab` 专注精化规则（模块行数预算是硬门槛）。
 import Vuna.Compiler.Common
-import Vuna.Compiler.Ast
+import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Core
 
 classParamKind : String -> List (Pair String Expr) -> Term

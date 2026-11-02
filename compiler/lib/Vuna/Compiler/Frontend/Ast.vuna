@@ -1,4 +1,4 @@
-module Vuna.Compiler.Ast
+module Vuna.Compiler.Frontend.Ast
   ( Ctor
   , DBind
   , DData
@@ -67,7 +67,7 @@ module Vuna.Compiler.Ast
   , typeNamesOf
   ) where
 
--- Vuna.Compiler.Ast：core-v0/M10.5 的语法类型与 AST 辅助函数。
+-- Vuna.Compiler.Frontend.Ast：core-v0/M10.5 的语法类型与 AST 辅助函数。
 import Vuna.Compiler.Common
 
 -- 记录字段：字段名 + 类型表达式 + span（M10.5）。

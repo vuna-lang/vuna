@@ -1,4 +1,4 @@
-module Vuna.Compiler.Pkg
+module Vuna.Compiler.Packages.Pkg
   ( Package(..)
   , Root(..)
   , findManifestDir
@@ -19,14 +19,14 @@ module Vuna.Compiler.Pkg
   , workspacePackages
   ) where
 
--- Vuna.Compiler.Pkg：M11.5 包 / workspace 解析层（不碰 Loader / CLI）。
+-- Vuna.Compiler.Packages.Pkg：M11.5 包 / workspace 解析层（不碰 Loader / CLI）。
 -- 每个包 = 带 vuna.toml 的目录；workspace 根同时是子包（Cargo 风格：
 -- 根 vuna.toml 同时含 [workspace] 与 [package]）。
 -- 本模块用内建 readFile / fileExists 读盘，不做 realpath：路径只做 lexical
 -- 规范化（合并 "//"、消去 "."、".."），循环检测与去重用规范化后的目录字符串。
 -- 包内目录约定：lib/、app/、test/；入口固定 app/Main.vuna。
 import Vuna.Compiler.Common
-import Vuna.Compiler.Manifest
+import Vuna.Compiler.Frontend.Manifest
 
 -- 模块根：目录、包名（rawRoot 为空串）、可选导出模块列表。
 -- exports = Nothing 表示该根不限制导出（自己包 / --root 原始模式）；

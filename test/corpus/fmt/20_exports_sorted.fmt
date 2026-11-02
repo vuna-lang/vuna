@@ -1,7 +1,7 @@
 module Vuna.Zeta
   ( Alpha(..)
   , Gamma
-  , Vuna.Compiler.Parser.parseSource
+  , Vuna.Compiler.Frontend.Parser.parseSource
   , beta
   , zeta
   , module Base.Bool
@@ -10,7 +10,7 @@ module Vuna.Zeta
 
 import Base.Bool
 import Base.List
-import Vuna.Compiler.Parser
+import Vuna.Compiler.Frontend.Parser
 
 zeta : Int
 zeta = 1

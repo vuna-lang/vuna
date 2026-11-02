@@ -1,4 +1,4 @@
-module Vuna.Compiler.Compile
+module Vuna.Compiler.Driver.Compile
   ( checkFileDt
   , checkLibraryDt
   , checkProjectDt
@@ -10,12 +10,12 @@ module Vuna.Compiler.Compile
   , effectiveRoots
   ) where
 
--- Vuna.Compiler.Compile：编译入口（供 CompilerCli / 测试使用）。唯一路径是 DT：
+-- Vuna.Compiler.Driver.Compile：编译入口（供 CompilerCli / 测试使用）。唯一路径是 DT：
 -- 精化（Elab）→ 擦除检查 + OCaml 生成（CoreCodegen）；checkFile* 只检查不产码。
 import Vuna.Compiler.Common
-import Vuna.Compiler.Pkg
+import Vuna.Compiler.Packages.Pkg
 import Vuna.Compiler.Loader
-import Vuna.Compiler.Dt
+import Vuna.Compiler.Driver.Dt
 
 -- 未显式给 --root 时使用当前目录包的模块根（vuna.toml）；
 -- 当前目录不是包则没有默认根，原始文件模式需显式 --root。

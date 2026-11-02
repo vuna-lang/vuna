@@ -47,10 +47,10 @@ module Vuna.Index
 -- 符号全名：`<vuna 模块全名>.<顶层名>`，如
 -- `Vuna.Compiler.Typecheck.checkProgramInfoElab`。
 import Vuna.Compiler.Common
-import Vuna.Compiler.Ast
-import Vuna.Compiler.Parser
-import Vuna.Compiler.Lexer
-import Vuna.Compiler.Pkg
+import Vuna.Compiler.Frontend.Ast
+import Vuna.Compiler.Frontend.Parser
+import Vuna.Compiler.Frontend.Lexer
+import Vuna.Compiler.Packages.Pkg
 
 -- ---------------------------------------------------------------
 -- 数据模型

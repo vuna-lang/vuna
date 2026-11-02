@@ -1,9 +1,9 @@
-module Vuna.Compiler.Parser (parseExpressionSource, parseSource) where
+module Vuna.Compiler.Frontend.Parser (parseExpressionSource, parseSource) where
 
 -- vuna 源码 parser：offside layout，返回 AST 与 imports。
 import Vuna.Compiler.Common
-import Vuna.Compiler.Ast
-import Vuna.Compiler.Lexer
+import Vuna.Compiler.Frontend.Ast
+import Vuna.Compiler.Frontend.Lexer
 
 data PState : Type where
   PState : String -> List PTok -> Pos -> PState

@@ -4,8 +4,8 @@ module Vuna.Doc (runDoc) where
 -- 扫描包 lib/（或给定目录）下的所有 .vuna 模块，把模块头 + 类型声明 + 顶层签名
 -- 渲染成 Markdown；不依赖类型检查（纯语法级），`_` 前缀私有名字跳过。
 import Vuna.Compiler.Common
-import Vuna.Compiler.Ast
-import Vuna.Compiler.Parser
+import Vuna.Compiler.Frontend.Ast
+import Vuna.Compiler.Frontend.Parser
 import Vuna.Files
 
 runDoc : String -> String -> Int

@@ -1,4 +1,4 @@
-module Vuna.Compiler.DtPrelude
+module Vuna.Compiler.Elab.Prelude
   ( boolTy
   , builtinEqTyName
   , builtinTyName
@@ -17,7 +17,7 @@ module Vuna.Compiler.DtPrelude
   , strTy
   ) where
 
--- Vuna.Compiler.DtPrelude：DT 的**内置定义表**（M19 起独立成模块）。
+-- Vuna.Compiler.Elab.Prelude：DT 的**内置定义表**（M19 起独立成模块）。
 --
 -- 这里只有纯数据（类型项与名字表），不依赖精化状态：
 -- - `preludeNames` / `preludeGlobals`：DT 单文件路径可见的内置名字与签名；

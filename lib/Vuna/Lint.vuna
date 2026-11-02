@@ -3,8 +3,8 @@ module Vuna.Lint (runLint) where
 -- app/Lint：vuna 源码风格检查与自动修复（首批规则）。
 -- 只做语法层分析：Lexer 取 token 行列 + 按行文本重写；修复后用 parseSource 复验。
 import Vuna.Compiler.Common
-import Vuna.Compiler.Lexer
-import Vuna.Compiler.Parser
+import Vuna.Compiler.Frontend.Lexer
+import Vuna.Compiler.Frontend.Parser
 
 data Edit : Type where
   Edit : Int -> Int -> List String -> Edit

@@ -44,9 +44,9 @@ check_eq() { # name expected actual
 #      不带包上下文，会触发对 Vuna.Compiler.Lexer 等 fuel/NbE 辅助函数的终止性检查。 ----
 pkg="$tmp/probe-pkg"
 mkdir -p "$pkg/lib/Vuna/Compiler" "$pkg/lib/Base" "$pkg/app"
-cp "$REPO/lib/Vuna"/*.vuna "$pkg/lib/Vuna/"
-cp "$REPO/compiler/lib/Vuna/Compiler"/*.vuna "$pkg/lib/Vuna/Compiler/"
-cp "$REPO/base/lib/Base"/*.vuna "$pkg/lib/Base/"
+cp -R "$REPO/lib/Vuna/." "$pkg/lib/Vuna/"
+cp -R "$REPO/compiler/lib/Vuna/Compiler/." "$pkg/lib/Vuna/Compiler/"
+cp -R "$REPO/base/lib/Base/." "$pkg/lib/Base/"
 cp "$REPO/base/lib/Base.vuna" "$pkg/lib/Base.vuna"
 cp "$REPO/base/lib/Prelude.vuna" "$pkg/lib/Prelude.vuna"
 cp "$HERE/_probe.vuna" "$pkg/app/Main.vuna"
