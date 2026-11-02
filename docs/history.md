@@ -773,3 +773,43 @@ metrics 重标定都留给 M22.3；DT core evaluator 不支持 `strUnpack`/`strP
 HM build 零回归）；`--only 34` 与全量测试全绿；`dt/38_explicit_index` 三路一致。
 
 **仍存边界**：DT 输出尚未逐模块切分（M24 seed 切换前置）；`seed/` 仍由 HM 生成，未轮换。
+
+## M23 进展：三包源码迁到 DT 下通过（2026-11）
+
+**目标推进**：`vuna check --dt .`（root/lib/app + compiler/base 依赖闭包）与
+`vuna build --dt .` 首次全仓通过；`compiler/.output/bin/vuna-compiler` 与
+`.output/bin/vuna` 两个 DT 产物可运行（help/check 正常）。签名回填已在先前提交完成
+（一次性工具 `Vuna.SigExport`，`vuna sig-export`）。
+
+**精化器补强（本阶段发现并修）**：
+
+1. **HM 泛化签名的两类问题**：`{a} -> ...` 全隐式前缀的全局值必须在引用处实例化
+   （`unifyErr : Result a`）；`==` 在无 Eq 实例时退回泛型结构比较（`bi_eq_generic`），
+   否则 `List String` 等比较没有实例可搜。HM 推断出的 `tNNN` 类型变量直接走泛型比较。
+2. **字典提升（M20.5）的索引 bug**：字典 binder 应插在**所有隐式 binder 之后**；插入
+   TPi 链时 cod 的移位 cutoff = 剩余 binder 数（`shift 0 1` 只对 cod 根成立）；body 的
+   替换要在 `insertLamBinder` **之后**做、`q = argIdx + 2`。修好后 `Base.Map` /
+   `Base.List.mem` 等基库重新通过，`findMethodNamed` 一类的双类型参数函数不再把字典
+   实参错当类型实参。
+3. **通配 `let` 的移位**：`let _ = e in body` 落成 `(\_ => body) e` 时，body 的 de Bruijn
+   索引要 `shift 0 1`；否则引用外层定义参数的 term 会指向错误的 binder（擦除检查报
+   「type-level binding used at runtime」）。
+4. **字面量 case**：`case s of "x" => ...; v => ...` 的比较用 `bi_eq_str`/`bi_eq_int`
+   特化名（此前留裸 `==`，codegen 默认映射成 `bi_eq_int`，字符串比较生成非法 OCaml）；
+   兜底变量要真正绑定到 scrutinee（`(\v => body) scrut`）。
+5. **嵌套模式 + 变量兜底**：精化器内联兜底体到更深 binder 作用域会错位，改用 DtMatch
+   模式矩阵降级（`multiToCaseExpr` + `let`），按名字重新精化。
+6. **推断位置也要特化** `==`/比较运算符（`inferApp` 的 globals 分支），否则 `if` 分支里
+   生成的 term 与 check 位置不一致。
+7. **覆盖率放行**：TCB 三包跳过穷尽性报错（对齐 HM 只告警 + `-w -a`），记录在 roadmap
+   决策表。
+
+**性能**：`checkSolsScoped` 原来在**每次 `convEc`** 扫全部元变量作用域，是编译器包
+的主要瓶颈（180s 只走到第 800/1900 个定义）。改为只复核**本次新增**的解（解表前插，
+旧表头 id 作分界），并在程序级做一次全表兜底；字典目标在定义体与实例体之后各收敛一轮。
+`check --dt compiler` 从 >10min 降到**约 7s**，`check --dt .` **约 13s**（最终实测，含前几轮修掉的
+dict-lifting 过度实例化）。
+
+**codegen 补强**：`getArgs` / `readDir` 把 OCaml list 桥接回程序的 `List` 归纳族；
+`prim_runIn` 参数反向桥接；**零运行时参数定义包 thunk**（与 HM 一致），避免
+`help = let _ = print ... in 0` 在模块初始化时执行。

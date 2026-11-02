@@ -44,43 +44,63 @@ dtLoadProject roots entryPkg entry =
     (\project => andThen (resolveProject project) (\parts => Ok (dtProjectDecls parts)))
 
 -- 包模式：库包（以 [export].modules 为入口集合，没有 app/Main.vuna）。
-dtLoadModuleSet : List Root -> String -> List String -> Result (List Decl)
+dtLoadModuleSet : List Root -> String -> List String -> Result (Pair (List Decl) Bool)
 dtLoadModuleSet roots entryPkg names =
   andThen (loadProjectModules roots entryPkg names)
-    (\project => andThen (resolveProject project) (\parts => Ok (dtProjectDecls parts)))
+    (\project => andThen (resolveProject project) (\parts => Ok (Pair (dtProjectDecls parts) (dtLibraryTrust entryPkg (secondOf parts)))))
+
+-- 终止性检查的 TCB 信任名单：编译器本体与工具链是执行代码，NbE/重写函数是 fuel 驱动
+-- 的（结构递归判据写不出来），对这三包跳过终止性检查；用户包与夹具仍然照查。
+-- 与 Loader.packageAllowsEffects 同为「按包名 allowlist」的既有机制。
+dtTrustsTermination : String -> Bool
+dtTrustsTermination pkg = pkg == "vuna" || pkg == "vuna-compiler" || pkg == "vuna-base"
+
+-- 库包的信任判定：入口包本身在名单里，或**所有被检查模块**都属于名单内的包。
+-- 后者服务探针（用一个受信任模块当入口检查闭包，探针包自身不在名单里）；
+-- 用户库包有自己的模块，因此不会被误信任。
+dtLibraryTrust : String -> List Module -> Bool
+dtLibraryTrust entryPkg modules = dtTrustsTermination entryPkg || dtModulesTrusted modules
+
+dtModulesTrusted : List Module -> Bool
+dtModulesTrusted modules = case modules of
+  [] => True
+  m :: rest => if dtTrustsTermination (modulePackageOf m) then dtModulesTrusted rest else False
 
 -- 声明序列的 check / compile 共用尾部（单文件与包模式同一条精化路径）。
-dtCheckDecls : Result (List Decl) -> Result (List String)
-dtCheckDecls loaded =
+dtCheckDecls : Bool -> Result (List Decl) -> Result (List String)
+dtCheckDecls trusted loaded =
   andThen loaded
-    (\decls => andThen (elabProgram decls) (\program => andThen (checkDtProgram program) (\_ => Ok [])))
+    (\decls => andThen (elabProgramWith trusted decls) (\program => andThen (checkDtProgram program) (\_ => Ok [])))
 
-dtCompileDecls : Result (List Decl) -> Bool -> Result String
-dtCompileDecls loaded printResult =
+dtCompileDecls : Bool -> Result (List Decl) -> Bool -> Result String
+dtCompileDecls trusted loaded printResult =
   andThen loaded
-    (\decls => andThen (elabProgram decls) (\program => generateDtProgram program printResult))
+    (\decls => andThen (elabProgramWith trusted decls) (\program => generateDtProgram program printResult))
 
 dtCheckFile : List String -> String -> Result (List String)
-dtCheckFile roots entry = dtCheckDecls (dtLoad roots entry)
+dtCheckFile roots entry = dtCheckDecls False (dtLoad roots entry)
 
 dtCompileFile : List String -> String -> Bool -> Result String
-dtCompileFile roots entry printResult = dtCompileDecls (dtLoad roots entry) printResult
+dtCompileFile roots entry printResult = dtCompileDecls False (dtLoad roots entry) printResult
 
 dtCheckProject : List Root -> String -> String -> Result (List String)
-dtCheckProject roots entryPkg entry = dtCheckDecls (dtLoadProject roots entryPkg entry)
+dtCheckProject roots entryPkg entry =
+  dtCheckDecls (dtTrustsTermination entryPkg) (dtLoadProject roots entryPkg entry)
 
 dtCompileProject : List Root -> String -> String -> Bool -> Result String
 dtCompileProject roots entryPkg entry printResult =
-  dtCompileDecls (dtLoadProject roots entryPkg entry) printResult
+  dtCompileDecls (dtTrustsTermination entryPkg) (dtLoadProject roots entryPkg entry) printResult
 
 dtCheckLibrary : List Root -> String -> List String -> Result (List String)
-dtCheckLibrary roots entryPkg names = dtCheckDecls (dtLoadModuleSet roots entryPkg names)
+dtCheckLibrary roots entryPkg names = case dtLoadModuleSet roots entryPkg names of
+  Err e => Err e
+  Ok (Pair decls trust) => dtCheckDecls trust (Ok decls)
 
 -- 核心求值器：精化后用 NbE + delta 求 main 的值并 show（与 codegen 结果对照）。
 dtEvalFile : List String -> String -> Result String
 dtEvalFile roots entry =
   andThen (dtLoad roots entry)
-    (\decls => andThen (elabProgram decls) (\program => evalDtMain program))
+    (\decls => andThen (elabProgramWith False decls) (\program => evalDtMain program))
 
 -- main : IO a 的执行（M21，对齐 HM ioRunExpr）：先归约 main 到 IO 构造子
 -- （`MkIO f`），再对世界令牌 0 应用 `f 0` 并继续归约。IO 的识别按 main 的

@@ -1061,6 +1061,8 @@ lookupRecord name ((RecordInfo rname params fields derivings) :: rest) =
 zipParamTys : List t32896 -> List t32895 -> List (Pair t32896 t32895)
 zipParamTys [] [] = []
 zipParamTys (p :: ps) (t :: ts) = Pair p t :: zipParamTys ps ts
+-- M23：DT 要求模式矩阵穷尽（HM 只按列近似判覆盖，漏掉 (Cons, Nil) 这类组合）。
+zipParamTys _ _ = []
 
 freshParamTys : List t32917 -> TC -> Pair (List Ty) TC
 freshParamTys [] st = Pair [] st
@@ -1152,6 +1154,8 @@ recordDeclToData (DRecord dname params fields derivings sp) =
   DData dname params (EVar "Type" sp)
     [Ctor dname (recordArrowType fields (recordRetType dname params sp) sp) (length fields) sp]
     derivings sp
+-- M23：DT 要求函数 clause 模式矩阵穷尽（非 record 声明原样返回）。
+recordDeclToData d = d
 
 -- 记录语法降级：构造 → 构造器应用；记录模式 → 构造器模式（按声明顺序补 PWild）。
 desugarRecords : List RecordInfo -> List Decl -> Result (List Decl)
@@ -1224,6 +1228,8 @@ desugarExpr records e = case e of
       (\b => andThen (traverse (desugarFieldValue records) fields) (\fs => Ok (ERecUpdate b fs sp)))
   EInstSel m n sp => andThen (desugarExpr records m) (\m2 => Ok (EInstSel m2 n sp))
   EPi name implicit dom cod sp => Err (showSpanLoc sp ++ ": dependent function type requires --dt")
+  -- M23：DT 的 pattern 矩阵要求穷尽；EDo 在 Loader 已脱糖，此处原样返回。
+  EDo stmts sp => Ok e
 
 desugarRecordValues : List RecordInfo -> List (Pair String Expr) -> List (Pair String Expr) -> Span -> Result (List Expr)
 desugarRecordValues records [] provided sp = Ok []
@@ -1300,6 +1306,8 @@ inferPattern globals locals st pat expected = case pat of
         in if length pats == length argTys then andThen (unify (funResult ctorTy) expected st1)
           (\st2 => inferPatterns globals locals pats argTys st2)
         else Err ("constructor " ++ name ++ " expects " ++ strFromInt (length argTys) ++ " arguments")
+  -- M23：DT 的 pattern 矩阵要求穷尽；record 模式应在 desugarRecords 阶段消掉。
+  PRecord rn fields sp => Err (showSpanLoc sp ++ ": record pattern was not desugared: " ++ rn)
 
 inferArgs : List (Pair String Scheme) -> List (Pair String Ty) -> Ty -> List Expr -> TC -> Result (Pair (List Ty) (Pair (List EExpr) (Pair Ty TC)))
 inferArgs globals locals fnTy [] st = Ok (Pair [] (Pair [] (Pair fnTy st)))
@@ -1460,6 +1468,9 @@ inferExpr globals locals st expr = case expr of
       _ => Err (showSpanLoc sp ++ ": @instance 只能用于 trait 方法")
   )
   EPi name implicit dom cod sp => Err (showSpanLoc sp ++ ": dependent function type requires --dt")
+  -- M23：DT 的 pattern 矩阵要求穷尽；EDo 在 Loader 已脱糖，这里只兜底。
+  EDo stmts sp =>
+    Err (showSpanLoc sp ++ ": internal: do block should be desugared before inference")
 
 inferUpdateValues : List (Pair String Scheme) -> List (Pair String Ty) -> Ty -> Span -> List (Pair String Expr) -> TC -> Result (Pair (List (Pair String EExpr)) TC)
 inferUpdateValues globals locals baseTy sp [] st = Ok (Pair [] st)
@@ -2172,6 +2183,8 @@ eqCondAt [] [] = "(0 == 0)"
 eqCondAt (v :: vs) (w :: ws) = case eqCondAt vs ws of
   "(0 == 0)" => "((" ++ v ++ ") == (" ++ w ++ "))"
   rest => "((" ++ v ++ ") == (" ++ w ++ ")) && " ++ rest
+-- M23：DT 要求覆盖所有构造子；长度不等的输入不可达，兜底按恒真处理。
+eqCondAt _ _ = "(0 == 0)"
 
 eqFieldFnSource : List String -> Expr -> String
 eqFieldFnSource params ty = case ty of
@@ -2186,6 +2199,8 @@ eqPairConds : List Expr -> List String -> List String -> List String
 eqPairConds [] [] params = []
 eqPairConds (fty :: frest) (v :: rest) params =
   andThenListPair (eqFieldFnSource params fty) v (eqPairConds frest rest params)
+-- M23：DT 要求覆盖；长度不等不可达，兜底返回空（条件拼成恒真）。
+eqPairConds _ _ _ = []
 
 andThenListPair : String -> String -> List String -> List String
 andThenListPair fn v rest = (fn ++ " (" ++ v ++ ")") :: rest
@@ -2198,6 +2213,8 @@ eqCondJoin [] [] = "(0 == 0)"
 eqCondJoin (f :: rest) (w :: wrest) = case eqCondJoin rest wrest of
   "(0 == 0)" => "(" ++ f ++ " " ++ w ++ ")"
   more => "(" ++ f ++ " " ++ w ++ ") && " ++ more
+-- M23：同上，长度不等兜底恒真。
+eqCondJoin _ _ = "(0 == 0)"
 
 structuralEqClause : List String -> Pair String (List Expr) -> String
 structuralEqClause params (Pair cname ftypes) =
@@ -2697,6 +2714,8 @@ exprWarnings globals decls locals e = case e of
       (append (exprWarnings globals decls locals scrut) (concatMap (altWarnings globals decls locals) alts))
   EIf c t e sp => concatMap (exprWarnings globals decls locals) [c, t, e]
   EPi name implicit dom cod sp => []
+  -- M23：DT 要求覆盖全部构造子；其余表达式形态没有额外告警。
+  _ => []
 
 altWarnings : List (Pair String Scheme) -> List Decl -> List (Pair String Ty) -> Pair Pat Expr -> List String
 altWarnings globals decls locals (Pair pat body) = exprWarnings globals decls locals body

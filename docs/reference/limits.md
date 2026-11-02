@@ -116,6 +116,18 @@
   PATH 中有 `ocamlopt`，库包先用 `vuna compile --package` 生成 `.output/lib/`；
   `Prelude` 刻意不含 `Base.IO` 效果函数（避免与编译器直接使用的内建同名）。
 
+## M23 迁移期（DT 路径，2026-11）
+
+- 覆盖率（穷尽性/冗余）检查对 TCB 三包（`vuna` / `vuna-compiler` / `vuna-base`）
+  **只告警不报错**：编译器源码是执行代码，HM 路径本来就只告警、生成 OCaml 用
+  `-w -a`；用户包与夹具仍严格。终止性检查同机制（`dtTrustsTermination`）。
+- `==` / `/=` 无 `Eq` 实例时退回泛型结构比较（见 [type-system.md](type-system.md)）；
+  因此「比较函数/不可结构比较的值」在无实例时是运行时未定义行为，而不是编译错误。
+- 单文件 DT 的 `List` 若由程序自己声明，`getArgs` / `readDir` 等效果内建返回的
+  列表由 codegen 桥接回该族；没有声明 `List` 的单文件程序不能使用这些内建。
+- `check --dt .` 目前约 13s（`--dt compiler` 约 7s，编译器闭包 1900+ 定义）；作用域
+  逃逸检查已从「每次转换扫全表」改为只查新增解，程序级兜底一次。
+
 ## 已完成阶段（细节见 history）
 
 - M12.7 / M12.8 / M13 / M14 已完成：删除 dynamic codegen 与旧开关；完成标准库/

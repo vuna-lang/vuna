@@ -67,8 +67,46 @@ litAltExprGo table clauses pos restParams fuel = case clauses of
     PWild psp => buildColumnExpr table (stripFirstCol clauses) restParams (fuel - 1)
     _ =>
       andThen (litAltExprGo table rest pos restParams (fuel - 1))
-        (\restExpr => andThen (buildColumnExpr table [Pair ps body] restParams (fuel - 1)) (\bodyExpr => Ok (EIf (EApp (EVar "==" (Span "" 0 0 0 0)) [EVar pos (Span "" 0 0 0 0), litPatExpr p] (patSpan p)) bodyExpr restExpr (patSpan p))))
+        (\restExpr => andThen (buildColumnExpr table (litBranchClauses p pos clauses) restParams (fuel - 1)) (\bodyExpr => Ok (EIf (EApp (EVar "==" (Span "" 0 0 0 0)) [EVar pos (Span "" 0 0 0 0), litPatExpr p] (patSpan p)) bodyExpr restExpr (patSpan p))))
+  -- M23：该字面量分支的子矩阵不只是「当前行 + 剩余列」——同一字面量的后续行与
+  -- 变量/通配行也匹配这个字面量，必须一起进入子矩阵，否则内层列会缺分支
+  -- （`TCon "a" [] => ...; TCon "b" _ => ...; TCon _ _ => ...` 报 missing Cons，
+  -- 且 `f "a" [] = 1; f "a" _ = 2; f _ _ = 3` 会丢掉第二条同字面量分支）。
   (Pair [] body) :: rest => Err "DT: clause has more patterns than the function arity"
+
+-- 字面量分支的子矩阵：同字面量的行 + 变量/通配行（它们也匹配该字面量），保持原顺序；
+-- 其它字面量的行不匹配这个值。变量/通配行要把该列的头变量改名成 scrutinee 位置名
+-- (pos)，否则体里对该变量的引用在「字面量分支的兜底」里没有 binder（TCon n args 的 n）。
+litBranchClauses : Pat -> String -> List (Pair (List Pat) Expr) -> List (Pair (List Pat) Expr)
+litBranchClauses lit pos clauses = filterLitBranch lit pos clauses []
+
+filterLitBranch : Pat -> String -> List (Pair (List Pat) Expr) -> List (Pair (List Pat) Expr) -> List (Pair (List Pat) Expr)
+filterLitBranch lit pos rows acc = case rows of
+  [] => reverse acc
+  (Pair (p :: ps) body) :: rest =>
+    if litPatMatches lit p then filterLitBranch lit pos rest (Pair ps (literalBranchBody pos p body) :: acc)
+    else filterLitBranch lit pos rest acc
+  (Pair [] body) :: rest => filterLitBranch lit pos rest acc
+
+-- 同字面量行直接用体；变量/通配行把该列的头变量改写成位置名。
+literalBranchBody : String -> Pat -> Expr -> Expr
+literalBranchBody pos p body = case p of
+  PVar nm psp => renameExpr nm pos body
+  _ => body
+
+litPatMatches : Pat -> Pat -> Bool
+litPatMatches lit p = case lit of
+  PInt n sp => case p of
+    PInt m sp2 => n == m
+    PVar nm psp => True
+    PWild psp => True
+    _ => False
+  PStr s sp => case p of
+    PStr t sp2 => s == t
+    PVar nm psp => True
+    PWild psp => True
+    _ => False
+  _ => False
 
 -- 把字面量模式还原成表达式（Int / String）。
 litPatExpr : Pat -> Expr
@@ -202,6 +240,10 @@ renameExpr oldName newName e = case e of
     EIf (renameExpr oldName newName c) (renameExpr oldName newName t)
       (renameExpr oldName newName e2) sp
   EField b f sp => EField (renameExpr oldName newName b) f sp
+  ERecord rn fields sp => ERecord rn (map (renameFieldValue oldName newName) fields) sp
+  ERecUpdate b fields sp =>
+    ERecUpdate (renameExpr oldName newName b) (map (renameFieldValue oldName newName) fields) sp
+  EInstSel m meth sp => EInstSel (renameExpr oldName newName m) meth sp
   EDo stmts sp => EDo stmts sp
 
 renameExprUnless : String -> String -> List String -> Expr -> Expr
@@ -210,6 +252,10 @@ renameExprUnless oldName newName names body =
 
 renameBind : String -> String -> Pair Pat Expr -> Pair Pat Expr
 renameBind oldName newName bind = Pair (firstOf bind) (renameExpr oldName newName (secondOf bind))
+
+renameFieldValue : String -> String -> Pair String Expr -> Pair String Expr
+renameFieldValue oldName newName field =
+  Pair (firstOf field) (renameExpr oldName newName (secondOf field))
 
 bindNames : List (Pair Pat Expr) -> List String
 bindNames [] = []
@@ -296,6 +342,7 @@ clausesForCtor cname freshSubs pos (c :: rest) = case c of
     PVar nm psp =>
       Pair (append freshSubs ps) (renameExpr nm pos body) :: clausesForCtor cname freshSubs pos rest
     PWild psp => Pair (append freshSubs ps) body :: clausesForCtor cname freshSubs pos rest
+    _ => clausesForCtor cname freshSubs pos rest
   Pair [] body => clausesForCtor cname freshSubs pos rest
 
 filterFallback : List (Pair (List Pat) Expr) -> List (Pair (List Pat) Expr)

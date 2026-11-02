@@ -479,7 +479,7 @@ ctorOrLitPattern toks = case toks of
         Just s => True
         Nothing => False
 
-scanBody : List String -> t2449 -> Int -> Int -> Int -> List String -> CaseBody
+scanBody : List String -> List PTok -> Int -> Int -> Int -> List String -> CaseBody
 scanBody lines toks lastLine n indent acc = if n > lastLine then CaseBody n (reverse acc)
 else
   let
@@ -488,7 +488,7 @@ else
   else if indentOf line > indent then scanBody lines toks lastLine (n + 1) indent (line :: acc)
   else CaseBody n (reverse acc)
 
-blockBodyOk : List String -> List PTok -> t2498 -> Int -> Int -> Int -> Bool
+blockBodyOk : List String -> List PTok -> Int -> Int -> Int -> Int -> Bool
 blockBodyOk lines toks lastLine start stop indent =
   if start >= stop then False
   else if bodyIndentOk lines start stop indent && noSiblingAlt lines toks start stop indent then True
@@ -626,7 +626,7 @@ headOfTokens : List PTok -> PTok
 headOfTokens [] = PTok TEof (Pos 1 1)
 headOfTokens (t :: rest) = t
 
-inlineShape : List String -> t2832 -> Int -> Int -> Int -> String -> Enclosing -> List PTok -> String -> PTok -> List PTok -> List Finding
+inlineShape : List String -> List PTok -> Int -> Int -> Int -> String -> Enclosing -> List PTok -> String -> PTok -> List PTok -> List Finding
 inlineShape lines toks lastLine caseLine indent var enclosing patToks patText arrow bodyToks =
   let
     altLine = caseLine + 1

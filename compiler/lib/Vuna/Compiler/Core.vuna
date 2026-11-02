@@ -280,9 +280,15 @@ applyCaseAlt c args [] = VCase (VCon c args) []
 applyCaseAlt c args (alt :: rest) = if vCaseAltName alt == c then case vCaseAltClosure alt of
   Clos env body => eval (append (reverse args) env) body
 else if vCaseAltName alt == "" then case vCaseAltClosure alt of
-  -- 兜底分支（源码里写的是变量/通配，精化后名字为空串）
-  Clos env body => eval env body
+  -- 兜底分支（源码里写的是变量/通配，精化后名字为空串）。变量兜底带一个 binder，
+  -- 要把 scrutinee 压进环境；通配兜底无 binder。
+  Clos env body => eval (catchAllEnv alt (VCon c args) env) body
 else applyCaseAlt c args rest
+
+catchAllEnv : VCaseAlt -> Value -> List Value -> List Value
+catchAllEnv alt scrut env = case vCaseAltBinders alt of
+  [] => env
+  _ => scrut :: env
 
 evalIf : Value -> Value -> Value -> Value
 evalIf c th el = case c of
@@ -339,7 +345,7 @@ else case v of
   VNeutral n => case n of
     NGlobal g sp => case defLookup g defs of
       Just body => force defs sols (fuel - 1) (applySpine (eval [] body) sp)
-      Nothing => case primReduce g sp of
+      Nothing => case primReduce defs sols g sp of
         Just v2 => force defs sols (fuel - 1) v2
         Nothing => v
     _ => v
@@ -368,6 +374,8 @@ isPrimitiveName g =
     || g == "bi_neq_int"
     || g == "bi_eq_str"
     || g == "bi_neq_str"
+    || g == "bi_eq_generic"
+    || g == "bi_neq_generic"
     || g == "strFromInt"
     || g == "strLength"
 
@@ -463,8 +471,8 @@ strPrim3 ([a, b, c]) f = case asStr a of
   Nothing => Nothing
 strPrim3 sp f = Nothing
 
-primReduce : String -> List Value -> Maybe Value
-primReduce g sp = case g of
+primReduce : List (Pair String Term) -> List (Pair Int Value) -> String -> List Value -> Maybe Value
+primReduce defs sols g sp = case g of
   "+" => intPrim2 sp (\a, b => VInt (a + b))
   "-" => intPrim2 sp (\a, b => VInt (a - b))
   "*" => intPrim2 sp (\a, b => VInt (a * b))
@@ -485,6 +493,10 @@ primReduce g sp = case g of
   "bi_neq_int" => intPrim2 sp (\a, b => VBool (notBool (a == b)))
   "bi_eq_str" => strPrim2 sp (\a, b => VBool (strEq a b))
   "bi_neq_str" => strPrim2 sp (\a, b => VBool (notBool (strEq a b)))
+  -- M23：泛型 == / /= 兜底（没有 Eq 字典时按运行时结构比较，语义对齐 HM 的
+  -- bi_eq_generic）。签名带一个擦除的类型实参，spine 形如 [ty, a, b]。
+  "bi_eq_generic" => genericEqPrim defs sols sp False
+  "bi_neq_generic" => genericEqPrim defs sols sp True
   "strFromInt" => intPrim1 sp (\n => VStr (strFromInt n))
   "strLength" => strPrim1 sp (\s => VInt (strLength s))
   -- M22.2：比较运算符的内建特化（`<` / `<=` / `>` / `>=`）与泛型 compare 变体，
@@ -498,6 +510,43 @@ primReduce g sp = case g of
   "bi_gt_generic" => genericPrim2 sp (\o => o > 0)
   "bi_ge_generic" => genericPrim2 sp (\o => o >= 0)
   _ => Nothing
+
+genericEqPrim : List (Pair String Term) -> List (Pair Int Value) -> List Value -> Bool -> Maybe Value
+genericEqPrim defs sols sp neg = case sp of
+  [ty, a, b] =>
+    Just
+      (VBool (if neg then notBool (valueEqDeep defs sols defaultFuel a b) else valueEqDeep defs sols defaultFuel a b))
+  _ => Nothing
+
+valueEqDeep : List (Pair String Term) -> List (Pair Int Value) -> Int -> Value -> Value -> Bool
+valueEqDeep defs sols fuel a b = if fuel <= 0 then False
+else case force defs sols fuel a of
+  VInt x => case force defs sols fuel b of
+    VInt y => x == y
+    _ => False
+  VStr x => case force defs sols fuel b of
+    VStr y => strEq x y
+    _ => False
+  VBool x => case force defs sols fuel b of
+    VBool y => if x then y else notBool y
+    _ => False
+  VType x => case force defs sols fuel b of
+    VType y => levelToInt x == levelToInt y
+    _ => False
+  VCon c args => case force defs sols fuel b of
+    VCon c2 args2 => if c == c2 then valueListEqDeep defs sols (fuel - 1) args args2 else False
+    _ => False
+  _ => False
+
+valueListEqDeep : List (Pair String Term) -> List (Pair Int Value) -> Int -> List Value -> List Value -> Bool
+valueListEqDeep defs sols fuel xs ys = case xs of
+  [] => case ys of
+    [] => True
+    _ => False
+  a :: rest => case ys of
+    [] => False
+    b :: rest2 =>
+      if valueEqDeep defs sols fuel a b then valueListEqDeep defs sols fuel rest rest2 else False
 
 notBool : Bool -> Bool
 notBool b = if b then False else True
@@ -529,7 +578,7 @@ normalizeNeutral defs sols fuel n = case n of
       sp2 = map (normalize defs sols fuel) sp
     in case defLookup g defs of
       Just body => normalize defs sols (fuel - 1) (applySpine (eval [] body) sp2)
-      Nothing => case primReduce g sp2 of
+      Nothing => case primReduce defs sols g sp2 of
         Just v2 => normalize defs sols (fuel - 1) v2
         Nothing => VNeutral (NGlobal g sp2)
 
@@ -632,7 +681,9 @@ convBoth defs sols depth a b = case a of
       in conv defs sols (depth + 1) (applyClosure clo v) (applyClosure clo2 v)
     _ => etaRight defs sols depth name clo b
   VNeutral n => case b of
-    VNeutral n2 => convNeutral defs sols depth n n2 a b
+    -- 预置 Bool 桩与 Base.Bool.Bool 视为同一类型（嵌套位置也要相等：`Result (Pair Bool _)`）。
+    VNeutral n2 =>
+      if isBoolNeutral n && isBoolNeutral n2 then Ok sols else convNeutral defs sols depth n n2 a b
     VLam name2 rig2 clo2 => etaLeft defs sols depth a name2 clo2
     _ => mismatchAt depth a b
   VInt n => case b of
@@ -671,6 +722,15 @@ etaRight defs sols depth name clo b =
   let
     v = freshVar name depth
   in conv defs sols (depth + 1) (applyClosure clo v) (applyValue b v)
+
+isBoolTyName : String -> Bool
+isBoolTyName n = if n == "Bool" then True else n == "Base.Bool.Bool"
+
+isBoolNeutral : Neutral -> Bool
+isBoolNeutral n = case n of
+  NGlobal g sp => if sp == [] then isBoolTyName g else False
+  NVar name lvl sp => if sp == [] then isBoolTyName name else False
+  _ => False
 
 convNeutral : List (Pair String Term) -> List (Pair Int Value) -> Int -> Neutral -> Neutral -> Value -> Value -> Result (List (Pair Int Value))
 convNeutral defs sols depth n1 n2 v1 v2 = case n1 of
@@ -1007,23 +1067,39 @@ substMetaVarAlt m name q depth (CaseAlt bn bs b) =
 insertDictBinder : String -> Int -> Term -> Term -> Term
 insertDictBinder name idx dictDom t = insertDictBinderGo name idx dictDom 0 t
 
+-- 在 telescope 里插入 binder（插在第 idx+1 个 binder 之后）：cod 根处深度恰好是 idx+1，
+-- 其中 0..idx 号索引都指向插入点之前的 binder，索引全部 +1；`shift 0 1` 在嵌套 binder
+-- 内会把 cutoff 自动抬高 1，正好让「插入点之后才绑定的变量」保持不变。
 insertDictBinderGo : String -> Int -> Term -> Int -> Term -> Term
 insertDictBinderGo name idx dictDom depth t = case t of
   TPi n i r d c =>
-    if depth == idx then TPi n i r d (TPi name True Rig1 dictDom (shift depth 1 c))
+    if depth == idx then TPi n i r d (TPi name True Rig1 dictDom (shift 0 1 c))
     else TPi n i r d (insertDictBinderGo name idx dictDom (depth + 1) c)
   _ => t
 
+cutoffOf : Int -> Int -> Int
+cutoffOf total idx = if total - (idx + 1) <= 0 then 0 else total - (idx + 1)
+
+countPis : Term -> Int
+countPis t = case t of
+  TPi n i r d c => 1 + countPis c
+  _ => 0
+
 -- M20 字典提升：在 `TLam` 链索引 `idx` 的绑定子后插入 `TLam d`。
 insertLamBinder : String -> Int -> Term -> Term
-insertLamBinder name idx t = insertLamBinderGo name idx 0 t
+insertLamBinder name idx t = insertLamBinderGo name idx (countLams t) 0 t
 
-insertLamBinderGo : String -> Int -> Int -> Term -> Term
-insertLamBinderGo name idx depth t = case t of
+insertLamBinderGo : String -> Int -> Int -> Int -> Term -> Term
+insertLamBinderGo name idx total depth t = case t of
   TLam n r b =>
-    if depth == idx then TLam n r (TLam name Rig1 (insertLamBinderGo name idx (depth + 1) b))
-    else TLam n r (insertLamBinderGo name idx (depth + 1) b)
+    if depth == idx then TLam n r (TLam name Rig1 (shift (cutoffOf total idx) 1 b))
+    else TLam n r (insertLamBinderGo name idx total (depth + 1) b)
   _ => t
+
+countLams : Term -> Int
+countLams t = case t of
+  TLam n r b => 1 + countLams b
+  _ => 0
 
 -- 项里是否有自由变量（`i >= depth` 的 `TVar`）。闭项无自由变量。
 hasFreeTermVar : Int -> Term -> Bool

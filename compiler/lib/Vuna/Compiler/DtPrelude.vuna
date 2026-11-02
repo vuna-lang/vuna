@@ -175,6 +175,7 @@ preludeGlobals : List (Pair String Term)
 -- M23：效果内建的**公开名**与 `prim_*` 内部名都进 prelude。编译器与工具链源码
 -- 直接用公开名（`readFile` / `fileExists` / `print`），`Base.IO` 用 `prim_*`
 -- 实现公开 API；两套名字同类型，codegen 都落到同一个 `dtp_*` 运行时函数。
+-- M23：无 Eq 实例时的泛型结构比较兜底（语义对齐 HM 的 bi_eq_generic）。
 preludeGlobals =
   [ Pair "Int" (TType levelZero),
     Pair "String" (TType levelZero),
@@ -184,6 +185,8 @@ preludeGlobals =
     Pair "*" (fun2 intTy intTy intTy),
     Pair "/" (fun2 intTy intTy intTy),
     Pair "==" polyEqTy,
+    Pair "bi_eq_generic" polyEqTy,
+    Pair "bi_neq_generic" polyEqTy,
     Pair "/=" polyEqTy,
     Pair "<" (fun2 intTy intTy boolTy),
     Pair "<=" (fun2 intTy intTy boolTy),

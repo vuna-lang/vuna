@@ -141,6 +141,8 @@ recordDeclToData (DRecord dname params fields derivings sp) ctor =
   DData dname params (EVar "Type" sp)
     [Ctor ctor (recordArrowType fields (recordRetType dname params sp) sp) (length fields) sp]
     derivings sp
+-- M23：DT 要求函数 clause 覆盖所有构造子（非 record 声明原样返回）。
+recordDeclToData d ctor = d
 
 -- 记录语法降级：构造 → 构造器应用；记录模式 → 构造器模式（按声明顺序补 PWild）。
 desugarRecords : List RecordInfo -> List Decl -> Result (List Decl)

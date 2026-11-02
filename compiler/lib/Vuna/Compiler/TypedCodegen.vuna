@@ -1350,35 +1350,44 @@ declSplitName d = case d of
     Just n => n
     Nothing => ""
 
-routeDataTable : SplitCtx -> List Decl -> List (Pair String String)
-routeDataTable ctx decls = concatMap (\d => case d of
+routeDataOne : SplitCtx -> Decl -> List (Pair String String)
+routeDataOne ctx d = case d of
   DData n ps kind cs ds sp => [Pair n (routeOf ctx n)]
   _ => []
-) decls
+
+routeDataTable : SplitCtx -> List Decl -> List (Pair String String)
+routeDataTable ctx decls = concatMap (routeDataOne ctx) decls
 
 routeData : SplitCtx -> String -> List Decl
 routeData ctx route =
   let
     names = uniqueNames (map firstOf (filter (\p => secondOf p == route) (ctxRoutedDatas ctx)))
-  in filter (\d => case d of
-    DData n ps kind cs ds sp => memName n names
-    _ => False
-  ) (ctxElabDecls ctx)
+  in filter (isRoutedData ctx names) (ctxElabDecls ctx)
 
-routeFunTable : SplitCtx -> List Decl -> List (Pair String String)
-routeFunTable ctx decls = concatMap (\d => case d of
+isRoutedData : SplitCtx -> List String -> Decl -> Bool
+isRoutedData ctx names d = case d of
+  DData n ps kind cs ds sp => memName n names
+  _ => False
+
+routeFunOne : SplitCtx -> Decl -> List (Pair String String)
+routeFunOne ctx d = case d of
   DFun n ps b sp => [Pair n (routeOf ctx n)]
   _ => []
-) decls
+
+routeFunTable : SplitCtx -> List Decl -> List (Pair String String)
+routeFunTable ctx decls = concatMap (routeFunOne ctx) decls
 
 routeFunNames : SplitCtx -> String -> List String
 routeFunNames ctx route =
   uniqueNames (map firstOf (filter (\p => secondOf p == route) (ctxRoutedFuns ctx)))
 
 checkRoutes : SplitCtx -> Result Int
-checkRoutes ctx = case filter (\d => routeOf ctx (declSplitName d) == "#unknown") (ctxElabDecls ctx) of
+checkRoutes ctx = case filter (isUnknownRoute ctx) (ctxElabDecls ctx) of
   [] => Ok 0
   d :: rest => Err ("split mode: cannot assign declaration " ++ declSplitName d ++ " to a module")
+
+isUnknownRoute : SplitCtx -> Decl -> Bool
+isUnknownRoute ctx d = routeOf ctx (declSplitName d) == "#unknown"
 
 -- ---------------------------------------------------------------- 拓扑序
 importNameOf : Import -> String

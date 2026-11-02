@@ -78,7 +78,9 @@ checkErasure typeNames binders t = case t of
     Just (Pair n rig) =>
       if rigIsErased rig then Err ("DT: type-level binding `" ++ name ++ "` is used at runtime (M13 limitation)")
       else Ok 0
-    Nothing => Err ("DT: internal: unbound runtime variable " ++ name)
+    Nothing =>
+      Err
+        ("DT: internal: unbound runtime variable " ++ name ++ " (index " ++ strFromInt i ++ ", binders " ++ strFromInt (length binders) ++ ")")
   TGlobal name =>
     if memName name typeNames then Err ("DT: type-level name `" ++ name ++ "` is used at runtime (M13 limitation)")
     else Ok 0
@@ -380,6 +382,8 @@ dtRuntime =
     ++ "let bi_neq_int (a : int) (b : int) = a <> b\n"
     ++ "let bi_eq_str (a : string) (b : string) = a = b\n"
     ++ "let bi_neq_str (a : string) (b : string) = a <> b\n"
+    ++ "let bi_eq_generic (a : 'a) (b : 'a) = a = b\n"
+    ++ "let bi_neq_generic (a : 'a) (b : 'a) = a <> b\n"
     ++ "let bi_strFromInt (n : int) = string_of_int n\n"
     ++ "let bi_strLength (s : string) = String.length s\n"
     ++ "let bi_strUnpack (s : string) = List.init (String.length s) (fun i -> Char.code s.[i])\n"
@@ -466,6 +470,18 @@ dtListBridge datas = case findListFamilyData datas of
           ++ " (x, rest) -> x :: to_list rest in\n"
           ++ "  let cs = to_list xs in\n"
           ++ "  String.init (List.length cs) (fun i -> Char.chr (List.nth cs i))\n"
+          ++ "\nlet dtp_listOf xs = List.fold_right (fun x acc -> "
+          ++ consMl
+          ++ " (x, acc)) xs "
+          ++ nilMl
+          ++ "\n"
+          ++ "let dtp_ocamlOf xs =\n"
+          ++ "  let rec go l = match l with "
+          ++ nilMl
+          ++ " -> [] | "
+          ++ consMl
+          ++ " (x, rest) -> x :: go rest in\n"
+          ++ "  go xs\n"
 
 findFamilyCtor : String -> List DtCtor -> Maybe DtCtor
 findFamilyCtor _ [] = Nothing
@@ -499,6 +515,8 @@ globalRef name = case name of
   "bi_neq_int" => Ok "bi_neq_int"
   "bi_eq_str" => Ok "bi_eq_str"
   "bi_neq_str" => Ok "bi_neq_str"
+  "bi_eq_generic" => Ok "bi_eq_generic"
+  "bi_neq_generic" => Ok "bi_neq_generic"
   "bi_lt_int" => Ok "bi_lt_int"
   "bi_le_int" => Ok "bi_le_int"
   "bi_gt_int" => Ok "bi_gt_int"
@@ -515,7 +533,7 @@ globalRef name = case name of
   "print" => Ok "dtp_print"
   "readFile" => Ok "dtp_readFile"
   "writeFile" => Ok "dtp_writeFile"
-  "readDir" => Ok "dtp_readDir"
+  "readDir" => Ok "(fun p -> dtp_listOf (dtp_readDir p))"
   "isDirectory" => Ok "dtp_isDirectory"
   "makeDir" => Ok "dtp_makeDir"
   "removeFile" => Ok "dtp_removeFile"
@@ -523,12 +541,12 @@ globalRef name = case name of
   "fileMtime" => Ok "dtp_fileMtime"
   "fileSize" => Ok "dtp_fileSize"
   "exit" => Ok "dtp_exit"
-  "getArgs" => Ok "(dtp_getArgs ())"
+  "getArgs" => Ok "(dtp_listOf (dtp_getArgs ()))"
   "readLine" => Ok "(dtp_readLine ())"
   "prim_print" => Ok "dtp_print"
   "prim_readFile" => Ok "dtp_readFile"
   "prim_writeFile" => Ok "dtp_writeFile"
-  "prim_readDir" => Ok "dtp_readDir"
+  "prim_readDir" => Ok "(fun p -> dtp_listOf (dtp_readDir p))"
   "prim_isDirectory" => Ok "dtp_isDirectory"
   "prim_makeDir" => Ok "dtp_makeDir"
   "prim_removeFile" => Ok "dtp_removeFile"
@@ -536,8 +554,8 @@ globalRef name = case name of
   "prim_fileMtime" => Ok "dtp_fileMtime"
   "prim_fileSize" => Ok "dtp_fileSize"
   "prim_exit" => Ok "dtp_exit"
-  "prim_runIn" => Ok "dtp_runIn"
-  "prim_getArgs" => Ok "(dtp_getArgs ())"
+  "prim_runIn" => Ok "(fun dir args -> dtp_runIn dir (dtp_ocamlOf args))"
+  "prim_getArgs" => Ok "(dtp_listOf (dtp_getArgs ()))"
   "prim_readLine" => Ok "(dtp_readLine ())"
   _ => Ok (valueName name)
 
@@ -546,7 +564,9 @@ globalRef name = case name of
 genGlobalRef : GenSt -> String -> Result (Pair String GenSt)
 genGlobalRef st name = case lookupPair name (gsCtors st) of
   Just family => Ok (Pair (ctorOcamlName family name) st)
-  Nothing => andThen (globalRef name) (\r => Ok (Pair r st))
+  Nothing =>
+    if memName name (gsThunks st) then Ok (Pair ("(" ++ valueName name ++ " ())") st)
+    else andThen (globalRef name) (\r => Ok (Pair r st))
 
 -- ---------------------------------------------------------------
 -- 变体类型声明（族 → OCaml type）
@@ -810,16 +830,21 @@ genTypeDecls datas = case datas of
 -- 生成状态：族名表、构造子 → 族表、fresh 变量计数（case 分支绑定子用去重名）。
 -- binder 环境是「最近绑定在前」的 (OCaml 变量名, 是否擦除)，TVar 靠 index 解析。
 data GenSt : Type where
-  GenSt : List String -> List (Pair String String) -> Int -> GenSt
+  GenSt : List String -> List (Pair String String) -> Int -> List String -> GenSt
 
 gsCtors : GenSt -> List (Pair String String)
-gsCtors (GenSt families ctors next) = ctors
+gsCtors (GenSt families ctors next thunks) = ctors
 
 gsNext : GenSt -> Int
-gsNext (GenSt families ctors next) = next
+gsNext (GenSt families ctors next thunks) = next
+
+-- M23：零运行时参数的顶层定义要像 HM path 一样包成 thunk（`fun () -> body`），
+-- 否则带效果的值定义（`help = let _ = print ... in 0`）会在模块初始化时就执行。
+gsThunks : GenSt -> List String
+gsThunks (GenSt families ctors next thunks) = thunks
 
 gsPutNext : GenSt -> Int -> GenSt
-gsPutNext (GenSt families ctors next) n = GenSt families ctors n
+gsPutNext (GenSt families ctors next thunks) n = GenSt families ctors n thunks
 
 ctorTableOfData : DtData -> List (Pair String String)
 ctorTableOfData d = map (\c => Pair (dtCtorName c) (dtCtorFamily c)) (dtDataCtors d)
@@ -828,8 +853,20 @@ ctorTableOf : List DtData -> List (Pair String String)
 ctorTableOf [] = []
 ctorTableOf (d :: rest) = append (ctorTableOfData d) (ctorTableOf rest)
 
-mkGenSt : List DtData -> GenSt
-mkGenSt datas = GenSt (map dtDataName datas) (ctorTableOf datas) 0
+mkGenSt : List DtData -> List DtDef -> GenSt
+mkGenSt datas defs = GenSt (map dtDataName datas) (ctorTableOf datas) 0 (thunkNames defs)
+
+-- 运行时参数个数为 0 的定义（无 TLam 或只有擦除 TLam）→ thunk。
+runtimeArity : Term -> Int
+runtimeArity t = case t of
+  TLam n r b => if rigIsErased r then runtimeArity b else 1 + runtimeArity b
+  _ => 0
+
+thunkNames : List DtDef -> List String
+thunkNames defs = map (\d => dtDefName d) (filter thunkable defs)
+
+thunkable : DtDef -> Bool
+thunkable d = if dtDefName d == "main" then False else runtimeArity (dtDefBody d) == 0
 
 -- M21：Bool 族不进运行时表示。`True` / `False` 与 `if` 统一是 OCaml bool
 -- （Elab 把 Bool 族的构造子精化成 `TBool`），所以不生成变体类型与变体构造子，
@@ -948,8 +985,11 @@ genArm : GenSt -> List (Pair String Rig) -> CaseAlt -> Result (Pair String GenSt
 genArm st outer alt = if caseAltName alt == "" then
   let
     bound = altEnv st outer (caseAltBinders alt)
+    patText = case aePats bound of
+      [] => "_"
+      p :: rest => p
   in andThen (genTerm (aeSt bound) (aeEnv bound) (caseAltBody alt)) (\p => case p of
-    Pair b st2 => Ok (Pair ("  | _ -> " ++ b ++ "\n") st2)
+    Pair b st2 => Ok (Pair ("  | " ++ patText ++ " -> " ++ b ++ "\n") st2)
   )
 else case lookupPair (caseAltName alt) (gsCtors st) of
   Nothing => Err ("DT: internal: unknown constructor " ++ caseAltName alt)
@@ -993,7 +1033,9 @@ joinWith sep (x :: rest) = x ++ sep ++ joinWith sep rest
 
 genGroupDef : GenSt -> DtDef -> Result (Pair String GenSt)
 genGroupDef st d = andThen (genTerm st [] (dtDefBody d)) (\p => case p of
-  Pair body st2 => Ok (Pair (valueName (dtDefName d) ++ " = " ++ body) st2)
+  Pair body st2 =>
+    Ok
+      (Pair (valueName (dtDefName d) ++ " = " ++ (if memName (dtDefName d) (gsThunks st) then "fun () -> " else "") ++ body) st2)
 )
 
 genGroupBodies : GenSt -> List DtDef -> Result (Pair (List String) GenSt)
@@ -1077,7 +1119,7 @@ genProgramBody program =
     datas = firstOf program
     defs = secondOf program
   in andThen (prepareDtProgram program) (\p => case p of
-    Pair runtime groups => andThen (genTypeDecls (runtimeDatas datas)) (\typeText => andThen (genGroups (depAdjacency runtime) (mkGenSt (runtimeDatas datas)) groups) (\q => case q of
+    Pair runtime groups => andThen (genTypeDecls (runtimeDatas datas)) (\typeText => andThen (genGroups (depAdjacency runtime) (mkGenSt (runtimeDatas datas) runtime) groups) (\q => case q of
       Pair bodies st2 =>
         Ok
           (Pair (dtRuntime ++ "\n" ++ typeText ++ dtListBridge datas ++ joinWith "\n\n" bodies) (Pair runtime (defTable defs)))

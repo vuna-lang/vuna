@@ -90,7 +90,7 @@ vuna **尚未发布任何版本**：没有外部用户、没有下游生态、�
 | M22.1 | 已完成 | 包目录 `check` / `compile --dt` + 依赖序加载 | — |
 | M22.2 | 已完成 | 库名统一、模式矩阵、泛型比较、Bool 去桩、`Base.Sort` | — |
 | M22.3 | 已完成 | rig 驱动擦除、`build`/`seed --dt`、metrics | — |
-| M23 | 未开始 | 全仓源码与夹具迁移；签名回填 | 签名量、夹具迁移 |
+| M23 | 进行中 | 全仓源码与夹具迁移；签名回填（`check --dt .` / `build --dt .` 已通，夹具迁移/interp 切换待做） | 夹具迁移、interp 语义切换 |
 | M24 | 未开始 | seed 切换、HM 删除、`--dt` 默认化 | 前置 M22.x + M23 |
 | M24.5 | 未开始 | 等式搬运与精化器补强 | 跨形参等式不可写 |
 | M24.6 | 未开始 | 编译器本体 DT 大重构（分级） | 第三级依赖 M24.5 |
@@ -332,6 +332,9 @@ fuel 消耗，需同步 `dt_elab` 基准；若第 3 项做不动，M24.6 的范�
 | `Show` / `Eq` / `Ord` 与 Bool 桩由编译器内建 | M10.5 / M19 | 库为唯一来源：`Base.{Show,Eq,Ord}` + `Base.Bool`，编译器只留语法/表示特化；Bool 去桩在 M22.2、trait 库化排 M24.7 | 消除双份定义与 5 处短名桥接 hack；与已库化的 `List` / `Monad` 对齐 |
 | M22 一号两用（roadmap=擦除/codegen；git log=泛型实例约束） | M22 | 先拆 M22.1–M22.5，再按可开工依赖重排：泛型实例→M20.5（已完成）、trait 投影并入 M21、包目录→M22.1、库名/Bool 去桩→M22.2、擦除/codegen→M22.3 | 编号顺序 = 可开工顺序；M21 自包含 `do` / trait 投影，不再依赖更晚阶段 |
 | Bool 去桩后 prelude 不再有 `Bool` 类型名 | 本文 M22.2 验收草案 | 只去 `True`/`False` **值**桩；保留 `Pair "Bool" (TType 0)` 类型别名 | 内建 trait（Show/Eq/Ord）方法签名与不含 `data Bool` 的单文件程序仍需要一个 Bool 类型名；数据定义仍以 `Base.Bool` 为唯一权威，值构造子与 `case`/`if` 全按族短名解析 |
+| 覆盖率/穷尽性检查对所有包严格 | M14 起 | TCB 三包（`vuna` / `vuna-compiler` / `vuna-base`）**只告警不报错**，其余包严格 | 编译器源码是执行代码而不是被证明的定理；HM 路径本来就只告警、生成 OCaml 用 `-w -a`。与「终止性检查按包名 allowlist 跳过」同一机制，见 `dtTrustsTermination` |
+| 非 `Int`/`String` 的 `==` 必须解析到 Eq 实例，否则报错 | M19 / M22 | 没有实例时**退回泛型结构比较**（`bi_eq_generic`，OCaml 结构化相等），与 HM 的运行时 `=` 对齐；HM 推断出的类型变量（`tNNN`）直接走泛型 | 编译器源码里大量「比较列表/记录」不写 `deriving`；不退回就无法迁移，而终态要删除 HM。有实例时仍优先字典 |
+| 零参数定义的初始化时机 | M12 | DT codegen 对**零运行时参数**的顶层定义包成 thunk（`fun () -> body`），引用处补 `()`；`main` 例外 | HM codegen 一直这样做（`help = let _ = print ... in 0` 不能在建表时执行）；不补则 DT 产物在启动时打印所有帮助/错误文本 |
 | M22.3 的 DT 输出模型要求逐模块 `.ml`/`.mli` + `build.sh`（与 `seed/` 同形） | 本文 M22.3 草案 | 本轮只做**单文件** `main.ml` + `build.sh`；逐模块切分与 `seed` 的文件集形状推迟到 **M24** 的 seed 切换 | seed 轮换发生在 M24，届时与 HM 删除一起做；单文件形状已足以验证 `build --dt` / `seed --dt` 入口、擦除与 codegen 接线；先做 split 会与 M24 的迁移一次性收益重复 |
 ## 研究储备（不排期）
 

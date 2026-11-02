@@ -72,7 +72,7 @@ isNilList : List t8787 -> Bool
 isNilList [] = True
 isNilList (x :: rest) = False
 
-mapMaybeStrings : (t8793 -> Maybe t8792) -> List t8793 -> Maybe (List t8792)
+mapMaybeStrings : (Expr -> Maybe String) -> List Expr -> Maybe (List String)
 mapMaybeStrings f [] = Just []
 mapMaybeStrings f (x :: rest) = case f x of
   Nothing => Nothing
@@ -180,10 +180,10 @@ commentLeadLines indent c = case commentKind c of
     else [spaces indent ++ "{-" ++ commentText c ++ "-}"]
 
 -- 位置比较与附件表 ------------------------------------------------
-posBefore : t9114 -> t9113 -> t9114 -> t9113 -> Bool
+posBefore : Int -> Int -> Int -> Int -> Bool
 posBefore l1 c1 l2 c2 = l1 < l2 || l1 == l2 && c1 < c2
 
-posBeforeOrEq : t9133 -> t9132 -> t9133 -> t9132 -> Bool
+posBeforeOrEq : Int -> Int -> Int -> Int -> Bool
 posBeforeOrEq l1 c1 l2 c2 = l1 < l2 || l1 == l2 && c1 <= c2
 
 -- 注释起点是否落在条目 span 内。
@@ -204,27 +204,27 @@ enclosingFold best (sp :: rest) csp = if containsPos sp (spanStartLine csp) (spa
     if betterNext sp b then enclosingFold (Just sp) rest csp else enclosingFold best rest csp
 else enclosingFold best rest csp
 
-sameKey : Pair t9212 t9211 -> Pair t9212 t9211 -> Bool
+sameKey : Pair Int Int -> Pair Int Int -> Bool
 sameKey (Pair l c) (Pair l2 c2) = l == l2 && c == c2
 
 -- 附件表：条目起点 (行, 列) -> (前置注释, 行尾注释)。
-lookupSlot : List (Pair (Pair t9229 t9228) t9227) -> t9229 -> t9228 -> Maybe t9227
+lookupSlot : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Int -> Maybe (Pair (List Comment) (List Comment))
 lookupSlot at line col = case at of
   [] => Nothing
   (Pair key slot) :: rest =>
     if sameKey key (Pair line col) then Just slot else lookupSlot rest line col
 
-leadOf : List (Pair (Pair t9257 t9256) (Pair (List t9255) t9254)) -> t9257 -> t9256 -> List t9255
+leadOf : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Int -> List Comment
 leadOf at line col = case lookupSlot at line col of
   Nothing => []
   Just slot => firstOf slot
 
-trailOf : List (Pair (Pair t9276 t9275) (Pair t9274 (List t9273))) -> t9276 -> t9275 -> List t9273
+trailOf : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Int -> List Comment
 trailOf at line col = case lookupSlot at line col of
   Nothing => []
   Just slot => secondOf slot
 
-addToSlot : Pair t9294 t9293 -> Bool -> t9292 -> List (Pair (Pair t9294 t9293) (Pair (List t9292) (List t9292))) -> List (Pair (Pair t9294 t9293) (Pair (List t9292) (List t9292)))
+addToSlot : Pair Int Int -> Bool -> Comment -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment)))
 addToSlot key isTrail comment at = case at of
   [] => if isTrail then [Pair key (Pair [] [comment])] else [Pair key (Pair [comment] [])]
   (Pair k slot) :: rest => if sameKey k key then
@@ -310,7 +310,7 @@ nextAnchorWithFallback anchors csp = case bestNextAnchor anchors csp of
       else Just enc
 
 -- 条目定位：收集所有可挂注释的语法条目 span（源码顺序）。
-traitMethodAnchor : Pair t9658 Expr -> Span
+traitMethodAnchor : Pair String Expr -> Span
 traitMethodAnchor (Pair name ty) = exprSpan ty
 
 importAnchor : Import -> Span
@@ -335,19 +335,19 @@ declAnchors d = case d of
   DTrait name params methods sp => sp :: map traitMethodAnchor methods
   DInstance mname isDefault head methods sp => sp :: concatMap declAnchors methods
 
-bindingAnchor : Pair Pat t9721 -> Span
+bindingAnchor : Pair Pat Expr -> Span
 bindingAnchor (Pair pat value) = patSpan pat
 
-bindingValueAnchors : Pair t9726 Expr -> List Span
+bindingValueAnchors : Pair Pat Expr -> List Span
 bindingValueAnchors (Pair pat value) = exprAnchors value
 
-altAnchor : Pair Pat t9731 -> Span
+altAnchor : Pair Pat Expr -> Span
 altAnchor (Pair pat body) = patSpan pat
 
-altBodyAnchors : Pair t9736 Expr -> List Span
+altBodyAnchors : Pair Pat Expr -> List Span
 altBodyAnchors (Pair pat body) = exprAnchors body
 
-fieldExprAnchors : Pair t9741 Expr -> List Span
+fieldExprAnchors : Pair String Expr -> List Span
 fieldExprAnchors (Pair fname value) = exprAnchors value
 
 doStmtAnchors : DoStmt -> List Span
@@ -380,11 +380,11 @@ anchorSpans hdr imports decls =
   append (headerAnchors hdr) (append (map importAnchor imports) (concatMap declAnchors decls))
 
 -- 把附件表应用到条目渲染结果上：前置注释在上，行尾注释追加到最后一行。
-leadingLines : List (Pair (Pair Int Int) (Pair (List Comment) t9854)) -> Span -> Int -> List String
+leadingLines : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Span -> Int -> List String
 leadingLines at sp indent =
   concatMap (\c => commentLeadLines indent c) (leadOf at (spanStartLine sp) (spanStartCol sp))
 
-trailingOn : List (Pair (Pair Int Int) (Pair t9874 (List Comment))) -> Span -> List String -> List String
+trailingOn : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Span -> List String -> List String
 trailingOn at sp lines = case trailOf at (spanStartLine sp) (spanStartCol sp) of
   [] => lines
   cs => foldl (\acc, c => appendLast (" " ++ inlineCommentText c) acc) lines cs
@@ -565,7 +565,7 @@ inlinePi minPrec name implicit dom cod = case inlinePrec 0 dom of
       in Just (wrapPrec (minPrec > 1) (binder ++ " -> " ++ c))
 
 -- 域/余域含块结构时的兜底布局（DT 类型一般走 inlinePi；这里只保证不丢字符）。
-renderPiBlock : List (Pair (Pair Int Int) (Pair (List t10442) (List t10441))) -> Int -> Bool -> String -> Expr -> Expr -> List String
+renderPiBlock : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Bool -> String -> Expr -> Expr -> List String
 renderPiBlock at lineInd implicit name dom cod =
   let
     openTxt = if implicit then "{" ++ name ++ " : " else "(" ++ name ++ " : "
@@ -658,19 +658,19 @@ lastLineOf (x :: rest) = lastLineOf rest
 -- lineInd = 该表达式起始物理行的缩进（0 基），块内缩进 = lineInd + 2。
 -- 返回 List String：首行不含缩进，续行是绝对缩进。
 -- ---------------------------------------------------------------
-renderExpr : List (Pair (Pair Int Int) (Pair (List t10653) (List t10652))) -> Int -> Expr -> List String
+renderExpr : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Expr -> List String
 renderExpr at lineInd e = case inlinePrec 0 e of
   Just s => if fitsLine lineInd s then [s] else renderWide at lineInd e
   Nothing => renderBlock at lineInd e
 
 -- 类型表达式不折行（保持签名/字段类型紧凑，避免 `->` 链被打断）。
-renderTypeExpr : List (Pair (Pair Int Int) (Pair (List t10678) (List t10677))) -> Int -> Expr -> List String
+renderTypeExpr : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Expr -> List String
 renderTypeExpr at lineInd e = case inlinePrec 0 e of
   Just s => [s]
   Nothing => renderBlock at lineInd e
 
 -- 行内放不下时的折行形式。
-renderWide : List (Pair (Pair Int Int) (Pair (List t10696) (List t10695))) -> Int -> Expr -> List String
+renderWide : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Expr -> List String
 renderWide at lineInd e = case e of
   EIf c t el sp => renderIf at lineInd c t el
   EApp fn args sp => case listExprElems (EApp fn args sp) of
@@ -686,28 +686,28 @@ renderExprInline e = case inlinePrec 0 e of
   Nothing => ""
 
 -- 列表字面量折行：`[ a,` / `  b` / `]`（最后一个元素后不加逗号）。
-renderListBlock : List (Pair (Pair Int Int) (Pair (List t10749) (List t10748))) -> Int -> List String -> List String
+renderListBlock : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> List String -> List String
 renderListBlock at lineInd [] = ["[]"]
 renderListBlock at lineInd (first :: rest) =
   append ["[ " ++ first ++ (if isNilList rest then "" else ",")]
     (renderListBlockRest at lineInd rest)
 
-renderListBlockRest : List (Pair (Pair Int Int) (Pair (List t10781) (List t10780))) -> Int -> List String -> List String
+renderListBlockRest : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> List String -> List String
 renderListBlockRest at lineInd [] = [spaces lineInd ++ "]"]
 renderListBlockRest at lineInd ([s]) = [spaces (lineInd + 2) ++ s, spaces lineInd ++ "]"]
 renderListBlockRest at lineInd (s :: rest) =
   (spaces (lineInd + 2) ++ s ++ ",") :: renderListBlockRest at lineInd rest
 
-renderAtomExpr : List (Pair (Pair Int Int) (Pair (List t10833) (List t10832))) -> Int -> Expr -> List String
+renderAtomExpr : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Expr -> List String
 renderAtomExpr at lineInd e = case inlineAtom e of
   Just s => [s]
   Nothing => parenWrapInd at lineInd e
 
-parenWrapInd : List (Pair (Pair Int Int) (Pair (List t10850) (List t10849))) -> Int -> Expr -> List String
+parenWrapInd : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Expr -> List String
 parenWrapInd at lineInd e =
   append (prefixFirst "(" (renderBlock at lineInd e)) [spaces lineInd ++ ")"]
 
-renderBlock : List (Pair (Pair Int Int) (Pair (List t10872) (List t10871))) -> Int -> Expr -> List String
+renderBlock : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Expr -> List String
 renderBlock at lineInd e = case e of
   ECase scrut alts sp => renderCase at lineInd scrut alts
   ELet binds body rec_ sp => renderLet at lineInd binds body
@@ -724,7 +724,7 @@ renderBlock at lineInd e = case e of
   EInt n sp => [strFromInt n]
   EStr s sp => [renderStr s]
 
-renderScrut : List (Pair (Pair Int Int) (Pair (List t10971) (List t10970))) -> Int -> Expr -> List String
+renderScrut : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Expr -> List String
 renderScrut at lineInd e = case inlineExpr e of
   Just s => [s]
   Nothing => parenWrapInd at lineInd e
@@ -741,7 +741,7 @@ renderAlt : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> I
 renderAlt at altInd (Pair pat body) =
   attachAt at (patSpan pat) altInd (renderAltBody at altInd pat body)
 
-renderAltBody : List (Pair (Pair Int Int) (Pair (List t11032) (List t11031))) -> Int -> Pat -> Expr -> List String
+renderAltBody : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Pat -> Expr -> List String
 renderAltBody at altInd pat body = case body of
   ELet binds inner recFlag sp =>
     (spaces altInd ++ renderPat pat ++ " =>")
@@ -756,14 +756,14 @@ renderAltBody at altInd pat body = case body of
           :: prefixFirst (spaces (altInd + 2)) (renderExpr at (altInd + 2) body)
       Nothing => prefixFirst prefix (renderExpr at altInd body)
 
-renderWhenBody : List (Pair (Pair Int Int) (Pair (List t11109) (List t11108))) -> Int -> String -> Expr -> List String
+renderWhenBody : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> String -> Expr -> List String
 renderWhenBody at lineInd keyword e = case e of
   ELet binds inner recFlag sp =>
     (spaces lineInd ++ keyword)
       :: prefixFirst (spaces (lineInd + 2)) (renderExpr at (lineInd + 2) e)
   _ => prefixFirst (spaces lineInd ++ keyword ++ " ") (renderExpr at lineInd e)
 
-renderIf : List (Pair (Pair Int Int) (Pair (List t11145) (List t11144))) -> Int -> Expr -> Expr -> Expr -> List String
+renderIf : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Expr -> Expr -> Expr -> List String
 renderIf at lineInd c t el =
   let
     condLines = prefixFirst "if " (renderScrut at lineInd c)
@@ -794,7 +794,7 @@ renderLetBinding : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment)
 renderLetBinding at bindInd (Pair pat value) =
   attachAt at (patSpan pat) bindInd (renderBindingValue at bindInd (renderPat pat ++ " =") value)
 
-renderBindingValue : List (Pair (Pair Int Int) (Pair (List t11272) (List t11271))) -> Int -> String -> Expr -> List String
+renderBindingValue : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> String -> Expr -> List String
 renderBindingValue at lineInd prefixText value = case value of
   ELet binds inner recFlag sp =>
     (spaces lineInd ++ prefixText)
@@ -813,7 +813,7 @@ renderDoStmt : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -
 renderDoStmt at stmtInd stmt =
   attachAt at (doStmtSpan stmt) stmtInd (renderDoStmtBody at stmtInd stmt)
 
-renderDoStmtBody : List (Pair (Pair Int Int) (Pair (List t11383) (List t11382))) -> Int -> DoStmt -> List String
+renderDoStmtBody : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> DoStmt -> List String
 renderDoStmtBody at stmtInd stmt = case stmt of
   DBind pat value sp =>
     let
@@ -826,7 +826,7 @@ renderDoStmtBody at stmtInd stmt = case stmt of
       Nothing => prefixFirst prefix (renderExpr at stmtInd value)
   DExpr value sp => prefixFirst (spaces stmtInd) (renderExpr at stmtInd value)
 
-renderAppBlock : List (Pair (Pair Int Int) (Pair (List t11446) (List t11445))) -> Int -> Expr -> List Expr -> List String
+renderAppBlock : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Expr -> List Expr -> List String
 renderAppBlock at lineInd fn args = case fn of
   EVar "bind" bsp => case args of
     [a, b] => renderInfixBlock at lineInd 1 1 ">>=" a b
@@ -838,7 +838,7 @@ renderAppBlock at lineInd fn args = case fn of
     Nothing => renderApplyBlock at lineInd fn args
   _ => renderApplyBlock at lineInd fn args
 
-renderInfixBlock : List (Pair (Pair Int Int) (Pair (List t11505) (List t11504))) -> Int -> Int -> Int -> String -> Expr -> Expr -> List String
+renderInfixBlock : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Int -> Int -> String -> Expr -> Expr -> List String
 renderInfixBlock at lineInd p assoc op a b = case inlineInfix 0 p assoc op a b of
   Just s =>
     if fitsLine lineInd s then [s]
@@ -878,19 +878,19 @@ flattenInfixRight p op e = case matchInfixNode p op e of
   Nothing => [e]
   Just (Pair l r) => l :: flattenInfixRight p op r
 
-renderInfixChain : List (Pair (Pair Int Int) (Pair (List t11676) (List t11675))) -> Int -> Int -> Int -> String -> List Expr -> List String
+renderInfixChain : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Int -> Int -> String -> List Expr -> List String
 renderInfixChain at lineInd p assoc op operands = case operands of
   [] => []
   first :: rest =>
     append (renderChainFirst at lineInd (p + 1) first)
       (concatMap (\o => renderChainRest at lineInd (p + 1) op o) rest)
 
-renderChainFirst : List (Pair (Pair Int Int) (Pair (List t11712) (List t11711))) -> Int -> Int -> Expr -> List String
+renderChainFirst : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Int -> Expr -> List String
 renderChainFirst at lineInd minPrec e = case inlinePrec minPrec e of
   Just s => if fitsLine lineInd s then [s] else renderWideOperand at lineInd minPrec e
   Nothing => parenWrapInd at lineInd e
 
-renderWideOperand : List (Pair (Pair Int Int) (Pair (List t11739) (List t11738))) -> Int -> Int -> Expr -> List String
+renderWideOperand : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Int -> Expr -> List String
 renderWideOperand at lineInd minPrec e =
   if minPrec > 0 then [renderExprInlineOperand minPrec e] else renderWide at lineInd e
 
@@ -899,18 +899,18 @@ renderExprInlineOperand minPrec e = case inlinePrec minPrec e of
   Just s => s
   Nothing => ""
 
-renderChainRest : List (Pair (Pair Int Int) (Pair (List t11765) (List t11764))) -> Int -> Int -> String -> Expr -> List String
+renderChainRest : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Int -> String -> Expr -> List String
 renderChainRest at lineInd minPrec op e = case inlinePrec minPrec e of
   Just s => [spaces (lineInd + 2) ++ opText op ++ " " ++ s]
   Nothing =>
     prefixFirst (spaces (lineInd + 2) ++ opText op ++ " ") (parenWrapInd at (lineInd + 2) e)
 
-renderOperand : List (Pair (Pair Int Int) (Pair (List t11807) (List t11806))) -> Int -> Int -> Expr -> List String
+renderOperand : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Int -> Expr -> List String
 renderOperand at lineInd minPrec e = case inlinePrec minPrec e of
   Just s => [s]
   Nothing => parenWrapInd at lineInd e
 
-renderApplyBlock : List (Pair (Pair Int Int) (Pair (List t11826) (List t11825))) -> Int -> Expr -> List Expr -> List String
+renderApplyBlock : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Expr -> List Expr -> List String
 renderApplyBlock at lineInd fn args =
   let
     headLines = renderApplyHead at lineInd fn
@@ -937,18 +937,18 @@ lastLineWidth lineInd lines =
 fitsLineWidth : Int -> String -> Bool
 fitsLineWidth currentWidth t = currentWidth + 1 + strWidth t <= maxWidth
 
-renderApplyHead : List (Pair (Pair Int Int) (Pair (List t11940) (List t11939))) -> Int -> Expr -> List String
+renderApplyHead : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Expr -> List String
 renderApplyHead at lineInd fn = case fn of
   EInstSel base inst sp => appendLast (" @" ++ inst) (renderAtomExpr at lineInd base)
   _ => renderAtomExpr at lineInd fn
 
-appendApplyArgs : List (Pair (Pair Int Int) (Pair (List t11959) (List t11958))) -> Int -> List String -> List Expr -> List String
+appendApplyArgs : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> List String -> List Expr -> List String
 appendApplyArgs at lineInd lines args = case args of
   [] => lines
   a :: rest =>
     appendApplyArgs at lineInd (appendBefore " " lines (renderAtomExpr at lineInd a)) rest
 
-renderRecordBlock : List (Pair (Pair Int Int) (Pair (List t11981) (List t11980))) -> Int -> String -> List (Pair String Expr) -> List String
+renderRecordBlock : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> String -> List (Pair String Expr) -> List String
 renderRecordBlock at lineInd name fields = case fields of
   [] => [name ++ " { }"]
   first :: rest =>
@@ -957,17 +957,17 @@ renderRecordBlock at lineInd name fields = case fields of
       withRest = appendFieldBlocks at lineInd start rest
     in appendLast " }" withRest
 
-appendFieldBlocks : List (Pair (Pair Int Int) (Pair (List t12017) (List t12016))) -> Int -> List String -> List (Pair String Expr) -> List String
+appendFieldBlocks : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> List String -> List (Pair String Expr) -> List String
 appendFieldBlocks at lineInd lines fields = case fields of
   [] => lines
   f :: rest =>
     appendFieldBlocks at lineInd (appendBefore ", " lines (renderFieldBlock at lineInd f)) rest
 
-renderFieldBlock : List (Pair (Pair Int Int) (Pair (List t12039) (List t12038))) -> Int -> Pair String Expr -> List String
+renderFieldBlock : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Pair String Expr -> List String
 renderFieldBlock at lineInd (Pair fname value) =
   prefixFirst (fname ++ " = ") (renderAtomExpr at lineInd value)
 
-renderRecUpdateBlock : List (Pair (Pair Int Int) (Pair (List t12055) (List t12054))) -> Int -> Expr -> List (Pair String Expr) -> List String
+renderRecUpdateBlock : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Expr -> List (Pair String Expr) -> List String
 renderRecUpdateBlock at lineInd base fields =
   let
     start = appendBefore " " ["{"] (renderAtomExpr at lineInd base)
@@ -994,7 +994,7 @@ renderDeclBody at lineInd decl = case decl of
   DTrait name params methods sp => renderTraitDecl at name params methods
   DInstance mname isDefault head methods sp => renderInstanceDecl at mname head methods
 
-renderSigDecl : List (Pair (Pair Int Int) (Pair (List t12149) (List t12148))) -> Int -> String -> Expr -> List String
+renderSigDecl : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> String -> Expr -> List String
 renderSigDecl at lineInd name ty =
   prefixFirst (spaces lineInd ++ name ++ " : ") (renderTypeExpr at lineInd ty)
 
@@ -1057,7 +1057,7 @@ renderInstanceDecl at mname head methods =
 
 -- 函数子句 / instance 方法子句 / where 绑定子句共用。
 -- where 块（parser desugar 成 ELet .. True）优先按 where 形式还原。
-renderClause : List (Pair (Pair Int Int) (Pair (List t12377) (List t12376))) -> Int -> String -> List Pat -> Expr -> List String
+renderClause : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> String -> List Pat -> Expr -> List String
 renderClause at lineInd name pats body =
   let
     headerBase = spaces lineInd ++ name ++ joinSpace (map renderPatAtom pats) ++ " ="
@@ -1088,7 +1088,7 @@ renderWhereBinding : List (Pair (Pair Int Int) (Pair (List Comment) (List Commen
 renderWhereBinding at lineInd (Pair pat value) =
   attachAt at (patSpan pat) lineInd (renderWhereBindingBody at lineInd pat value)
 
-renderWhereBindingBody : List (Pair (Pair Int Int) (Pair (List t12533) (List t12532))) -> Int -> Pat -> Expr -> List String
+renderWhereBindingBody : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Pat -> Expr -> List String
 renderWhereBindingBody at lineInd pat value = case pat of
   PVar name psp => case value of
     ELam ps inner lsp => renderClause at lineInd name (map (\n => PVar n dummySpan) ps) inner
@@ -1120,13 +1120,13 @@ declNamed d n = case d of
 -- ---------------------------------------------------------------
 -- 模块头 / import / 文件组装
 -- ---------------------------------------------------------------
-renderModDecl : List (Pair (Pair Int Int) (Pair (List t12630) (List t12629))) -> ModDecl -> List String
+renderModDecl : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> ModDecl -> List String
 renderModDecl at (ModDecl name explicit items sp) =
   if explicit then renderExplicitModDecl at name (sortExports items)
   else ["module " ++ name ++ " where"]
 
 -- 空导出列表（`module M () where`）与短列表保持单行；超宽或含项注释时逐项一行。
-renderExplicitModDecl : List (Pair (Pair Int Int) (Pair (List t12648) (List t12647))) -> String -> List ExportItem -> List String
+renderExplicitModDecl : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> String -> List ExportItem -> List String
 renderExplicitModDecl at name [] = ["module " ++ name ++ " () where"]
 renderExplicitModDecl at name sorted =
   let
@@ -1135,7 +1135,7 @@ renderExplicitModDecl at name sorted =
   else renderExportListBlock at name sorted
 
 -- 多行导出列表（逗号前置）：首项 `( a`，其余 `, b`，收尾 `) where`。
-renderExportListBlock : List (Pair (Pair Int Int) (Pair (List t12696) (List t12695))) -> String -> List ExportItem -> List String
+renderExportListBlock : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> String -> List ExportItem -> List String
 renderExportListBlock at name items =
   append ["module " ++ name] (append (renderExportLines at items) ["  ) where"])
 
@@ -1168,7 +1168,7 @@ exportRank item = case item of
 exportKey : ExportItem -> String
 exportKey item = strFromInt (exportRank item) ++ renderExportItem item
 
-strLeChars : List t12785 -> List t12785 -> Bool
+strLeChars : List Int -> List Int -> Bool
 strLeChars [] [] = True
 strLeChars [] (y :: ys) = True
 strLeChars (x :: xs) [] = False
@@ -1184,7 +1184,7 @@ sortExports : List ExportItem -> List ExportItem
 sortExports items = sortBy exportKeyLe items
 
 -- 导出项是否挂了注释（前置或行尾）：有注释时强制多行，避免单行把后续项注释掉。
-itemHasComments : List (Pair (Pair Int Int) (Pair (List t12829) (List t12828))) -> ExportItem -> Bool
+itemHasComments : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> ExportItem -> Bool
 itemHasComments at item =
   let
     sp = exportItemSpan item
@@ -1192,7 +1192,7 @@ itemHasComments at item =
     Nothing => False
     Just slot => not (isNilList (firstOf slot)) || not (isNilList (secondOf slot))
 
-anyItemHasComments : List (Pair (Pair Int Int) (Pair (List t12858) (List t12857))) -> List ExportItem -> Bool
+anyItemHasComments : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> List ExportItem -> Bool
 anyItemHasComments at [] = False
 anyItemHasComments at (item :: rest) =
   if itemHasComments at item then True else anyItemHasComments at rest
@@ -1226,7 +1226,7 @@ renderSourceSections hdr imports decls at eof =
     renderEofComments eof
   ]
 
-filterSections : List (List t12949) -> List (List t12949)
+filterSections : List (List String) -> List (List String)
 filterSections [] = []
 filterSections (section :: rest) = case section of
   [] => filterSections rest

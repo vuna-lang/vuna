@@ -37,6 +37,8 @@ module Vuna.Compiler.Elab
   , elabInstanceBodies
   , elabProgram
   , elabProgramFull
+  , elabProgramFullWith
+  , elabProgramWith
   , eraseIndexMask
   , goalsOfProgram
   , indexErasureCandidates
@@ -149,35 +151,35 @@ data DtDictGoal : Type where
   DtDictGoal : Int -> Value -> DtDictGoal
 
 data Ec : Type where
-  Ec : Int -> List (Pair Int Value) -> List (Pair String Term) -> List DtData -> List (Pair Int Int) -> List DtGoal -> List DtInst -> List DtClass -> List DtDictGoal -> Ec
+  Ec : Int -> List (Pair Int Value) -> List (Pair String Term) -> List DtData -> List (Pair Int Int) -> List DtGoal -> List DtInst -> List DtClass -> List DtDictGoal -> Bool -> Ec
 
 ecNext : Ec -> Int
-ecNext (Ec next sols defs datas depths goals insts classes dgoals) = next
+ecNext (Ec next sols defs datas depths goals insts classes dgoals trusted) = next
 
 ecSols : Ec -> List (Pair Int Value)
-ecSols (Ec next sols defs datas depths goals insts classes dgoals) = sols
+ecSols (Ec next sols defs datas depths goals insts classes dgoals trusted) = sols
 
 ecDefs : Ec -> List (Pair String Term)
-ecDefs (Ec next sols defs datas depths goals insts classes dgoals) = defs
+ecDefs (Ec next sols defs datas depths goals insts classes dgoals trusted) = defs
 
 ecDatas : Ec -> List DtData
-ecDatas (Ec next sols defs datas depths goals insts classes dgoals) = datas
+ecDatas (Ec next sols defs datas depths goals insts classes dgoals trusted) = datas
 
 ecDepthOfMeta : Ec -> List (Pair Int Int)
-ecDepthOfMeta (Ec next sols defs datas depths goals insts classes dgoals) = depths
+ecDepthOfMeta (Ec next sols defs datas depths goals insts classes dgoals trusted) = depths
 
 ecGoals : Ec -> List DtGoal
-ecGoals (Ec next sols defs datas depths goals insts classes dgoals) = goals
+ecGoals (Ec next sols defs datas depths goals insts classes dgoals trusted) = goals
 
 ecInsts : Ec -> List DtInst
-ecInsts (Ec next sols defs datas depths goals insts classes dgoals) = insts
+ecInsts (Ec next sols defs datas depths goals insts classes dgoals trusted) = insts
 
 ecClasses : Ec -> List DtClass
-ecClasses (Ec next sols defs datas depths goals insts classes dgoals) = classes
+ecClasses (Ec next sols defs datas depths goals insts classes dgoals trusted) = classes
 
 ecAddGoal : Ec -> DtGoal -> Ec
-ecAddGoal (Ec next sols defs datas depths goals insts classes dgoals) g =
-  Ec next sols defs datas depths (append goals [g]) insts classes dgoals
+ecAddGoal (Ec next sols defs datas depths goals insts classes dgoals trusted) g =
+  Ec next sols defs datas depths (append goals [g]) insts classes dgoals trusted
 
 ecAddInst : Ec -> DtInst -> Ec
 ecAddInst ec i = if hasInstName (dtInstName i) (ecInsts ec) then ec else ecAddInstRaw ec i
@@ -187,39 +189,46 @@ hasInstName name [] = False
 hasInstName name (i :: rest) = if dtInstName i == name then True else hasInstName name rest
 
 ecAddInstRaw : Ec -> DtInst -> Ec
-ecAddInstRaw (Ec next sols defs datas depths goals insts classes dgoals) i =
-  Ec next sols defs datas depths goals (append insts [i]) classes dgoals
+ecAddInstRaw (Ec next sols defs datas depths goals insts classes dgoals trusted) i =
+  Ec next sols defs datas depths goals (append insts [i]) classes dgoals trusted
 
 ecAddClass : Ec -> DtClass -> Ec
-ecAddClass (Ec next sols defs datas depths goals insts classes dgoals) c =
-  Ec next sols defs datas depths goals insts (append classes [c]) dgoals
+ecAddClass (Ec next sols defs datas depths goals insts classes dgoals trusted) c =
+  Ec next sols defs datas depths goals insts (append classes [c]) dgoals trusted
 
 -- M22：延迟的字典约束访问器。
+ecTrusted : Ec -> Bool
+ecTrusted (Ec next sols defs datas depths goals insts classes dgoals trusted) = trusted
+
+ecWithTrust : Bool -> Ec -> Ec
+ecWithTrust trusted (Ec next sols defs datas depths goals insts classes dgoals _) =
+  Ec next sols defs datas depths goals insts classes dgoals trusted
+
 ecDictGoals : Ec -> List DtDictGoal
-ecDictGoals (Ec next sols defs datas depths goals insts classes dgoals) = dgoals
+ecDictGoals (Ec next sols defs datas depths goals insts classes dgoals trusted) = dgoals
 
 ecPutDictGoals : Ec -> List DtDictGoal -> Ec
-ecPutDictGoals (Ec next sols defs datas depths goals insts classes dgoals) dgoals2 =
-  Ec next sols defs datas depths goals insts classes dgoals2
+ecPutDictGoals (Ec next sols defs datas depths goals insts classes dgoals trusted) dgoals2 =
+  Ec next sols defs datas depths goals insts classes dgoals2 trusted
 
 ecAddDictGoal : Ec -> DtDictGoal -> Ec
-ecAddDictGoal (Ec next sols defs datas depths goals insts classes dgoals) g =
-  Ec next sols defs datas depths goals insts classes (append dgoals [g])
+ecAddDictGoal (Ec next sols defs datas depths goals insts classes dgoals trusted) g =
+  Ec next sols defs datas depths goals insts classes (append dgoals [g]) trusted
 
 ecEmpty : Ec
-ecEmpty = Ec 0 [] [] [] [] [] [] [] []
+ecEmpty = Ec 0 [] [] [] [] [] [] [] [] False
 
 ecPutSols : Ec -> List (Pair Int Value) -> Ec
-ecPutSols (Ec next sols defs datas depths goals insts classes dgoals) sols2 =
-  Ec next sols2 defs datas depths goals insts classes dgoals
+ecPutSols (Ec next sols defs datas depths goals insts classes dgoals trusted) sols2 =
+  Ec next sols2 defs datas depths goals insts classes dgoals trusted
 
 ecAddDef : Ec -> Pair String Term -> Ec
-ecAddDef (Ec next sols defs datas depths goals insts classes dgoals) d =
-  Ec next sols (append defs [d]) datas depths goals insts classes dgoals
+ecAddDef (Ec next sols defs datas depths goals insts classes dgoals trusted) d =
+  Ec next sols (append defs [d]) datas depths goals insts classes dgoals trusted
 
 ecAddData : Ec -> DtData -> Ec
-ecAddData (Ec next sols defs datas depths goals insts classes dgoals) d =
-  Ec next sols defs (append datas [d]) depths goals insts classes dgoals
+ecAddData (Ec next sols defs datas depths goals insts classes dgoals trusted) d =
+  Ec next sols defs (append datas [d]) depths goals insts classes dgoals trusted
 
 -- 局部上下文：最近绑定的在前（名字 + 类型项；类型项在当前上下文里有效）。
 -- refinements 是 M14 的索引精化：level ↦ Value（level 形态，可提到更新的 binder，无需 de Bruijn
@@ -307,17 +316,17 @@ errAt sp msg = Err (showSpanLoc sp ++ ": " ++ msg)
 
 -- M15：新建元变量并记录创建深度（求解时的作用域检查用）。
 newMeta : Ctx -> Ec -> Pair Term Ec
-newMeta ctx (Ec next sols defs datas depths goals insts classes dgoals) =
+newMeta ctx (Ec next sols defs datas depths goals insts classes dgoals trusted) =
   Pair (TMeta next)
-    (Ec (next + 1) sols defs datas (Pair next (ctxDepth ctx) :: depths) goals insts classes dgoals)
+    (Ec (next + 1) sols defs datas (Pair next (ctxDepth ctx) :: depths) goals insts classes dgoals trusted)
 
 -- M15：新建一个「洞」元变量：除创建深度外还记下目标类型与上下文快照（供 goal 显示）。
 newHoleMeta : Ctx -> Ec -> Span -> Value -> Pair Term Ec
-newHoleMeta ctx (Ec next sols defs datas depths goals insts classes dgoals) sp ty =
+newHoleMeta ctx (Ec next sols defs datas depths goals insts classes dgoals trusted) sp ty =
   let
     goal = DtGoal next sp ty (ctxItems ctx)
   in Pair (TMeta next)
-    (Ec (next + 1) sols defs datas (Pair next (ctxDepth ctx) :: depths) (append goals [goal]) insts classes dgoals)
+    (Ec (next + 1) sols defs datas (Pair next (ctxDepth ctx) :: depths) (append goals [goal]) insts classes dgoals trusted)
 
 forceVal : Ec -> Value -> Value
 forceVal ec v = force (ecDefs ec) (ecSols ec) defaultFuel v
@@ -373,6 +382,12 @@ inferCtorRef ec ctx name tyTerm = case dtCtorLookup name (ecDatas ec) of
 -- 与 `Base.Bool` 重新声明的 `Base.Bool.Bool`（`True`/`False` 构造子、`Base.*` 签名）。
 -- DT 里二者必须按定义相等处理，否则 `main : Bool` 与 `mem` 的 `Base.Bool.Bool` 对不上。
 -- HM 侧仍按内建 `Bool`（Loader 保留内建捷径），不受影响。
+isBoolTypeVal : Ec -> Value -> Bool
+isBoolTypeVal ec v = case forceVal ec v of
+  VNeutral (NVar name _ _) => isBoolBaseName name
+  VNeutral (NGlobal name _) => isBoolBaseName name
+  _ => False
+
 boolTypedVal : Ec -> Value -> Bool
 boolTypedVal ec v = case forceVal ec v of
   VNeutral (NVar name _ _) => isBoolBaseName name
@@ -384,15 +399,49 @@ isBoolBaseName name = case splitLastDot (splitOnDot name) of
   Pair rev base => base == "Bool"
 
 convEc : Ec -> Int -> Value -> Value -> Result Ec
+-- 预置的 Bool 桩（preludeGlobals 里的 Bool）与 Base.Bool.Bool 是同一个类型：
+-- 签名里写的 Bool 走桩，构造子/内建实例给的是 Base.Bool.Bool，两者必须视为相等。
 convEc ec depth expected actual = if boolTypedVal ec expected && boolTypedVal ec actual then Ok ec
 else case conv (ecDefs ec) (ecSols ec) depth expected actual of
   Err e => Err e
-  Ok sols2 => case checkSolsScoped ec sols2 of
+  -- 作用域逃逸检查只复核**这次新增**的解：旧实现每次 conv 都扫全表
+  -- （O(#元变量) × O(#conv)），大程序上就是主瓶颈（编译器包 180s 只走到第 800 个定义）。
+  -- 解表按新解前插，用旧表头 id 作分隔前缀即可 O(新增) 定位。
+  Ok sols2 => case checkSolsDelta ec (ecSols ec) sols2 of
     Err e => Err e
     Ok _ => Ok (ecPutSols ec sols2)
 
 -- M15 元变量上下文：新解不得引用「创建该元变量之后才绑定」的局部变量（作用域逃逸）。
 -- conv 本身不知道元变量的创建深度，所以解表回来后在这里统一复核新增的解。
+-- 只在解表前缀里取出本次新增的解（旧表头 id 是分界；解表按新解前插）。
+newSolsSince : List (Pair Int Value) -> List (Pair Int Value) -> List (Pair Int Value)
+newSolsSince [] cur = cur
+newSolsSince ((Pair pid pv) :: prest) cur = prefixUntilMetaId pid cur
+
+prefixUntilMetaId : Int -> List (Pair Int Value) -> List (Pair Int Value)
+prefixUntilMetaId pid cur = case cur of
+  [] => []
+  (Pair cid cv) :: rest => if cid == pid then [] else Pair cid cv :: prefixUntilMetaId pid rest
+
+checkSolsDelta : Ec -> List (Pair Int Value) -> List (Pair Int Value) -> Result Int
+checkSolsDelta ec oldSols newSols = checkScopedValueList ec (newSolsSince oldSols newSols)
+
+checkScopedValueList : Ec -> List (Pair Int Value) -> Result Int
+checkScopedValueList ec [] = Ok 0
+checkScopedValueList ec ((Pair m v) :: rest) = case metaDepthOf ec m of
+  Nothing => checkScopedValueList ec rest
+  Just created =>
+    if levelEscapes created 0 v then Err ("DT: cannot solve metavariable ?" ++ strFromInt m ++ " (solution would escape its scope)")
+    else checkScopedValueList ec rest
+
+metaDepthOf : Ec -> Int -> Maybe Int
+metaDepthOf ec m = metaDepthLookup m (ecDepthOfMeta ec)
+
+metaDepthLookup : Int -> List (Pair Int Int) -> Maybe Int
+metaDepthLookup m lst = case lst of
+  [] => Nothing
+  (Pair id d) :: rest => if id == m then Just d else metaDepthLookup m rest
+
 checkSolsScoped : Ec -> List (Pair Int Value) -> Result Int
 checkSolsScoped ec sols = checkScopedFrom ec (ecDepthOfMeta ec) sols
 
@@ -412,7 +461,67 @@ else case metaLookup i sols of
   Nothing => Just i
 
 unsolvedMeta : Ec -> Maybe Int
-unsolvedMeta (Ec next sols defs datas depths goals insts classes dgoals) = unsolvedFrom 0 next sols
+unsolvedMeta ec = unsolvedFromRelevant 0 (ecNext ec) (ecSols ec) (relevantMetas ec) (ecGoals ec)
+
+-- M23：只把「运行时相关位置」出现的元变量当未解错误。HM 生成的签名会把某些类型参数隐式
+-- 量化（f : t1 -> List (Pair t1 t2) -> ...），调用点传 Nil 这类多态值时不约束 t2，
+-- 于是留一个只出现在擦除位置的元变量——它对运行时没有意义（codegen 不生成该实参），
+-- 不应算错误。洞（有 goal 的元变量）永远算未解。
+unsolvedFromRelevant : Int -> Int -> List (Pair Int Value) -> List Int -> List DtGoal -> Maybe Int
+unsolvedFromRelevant i stop sols relevant goals = if i >= stop then Nothing
+else case metaLookup i sols of
+  Just _ => unsolvedFromRelevant (i + 1) stop sols relevant goals
+  Nothing =>
+    if memMetaId i relevant || isJust (findGoal i goals) then Just i
+    else unsolvedFromRelevant (i + 1) stop sols relevant goals
+
+memMetaId : Int -> List Int -> Bool
+memMetaId i ids = case ids of
+  [] => False
+  x :: rest => if x == i then True else memMetaId i rest
+
+relevantMetas : Ec -> List Int
+relevantMetas ec =
+  append (concatMap (\d => termMetasRuntime (secondOf d)) (ecDefs ec))
+    (concatMap (\d => concatMap termMetasAll (map dtCtorType (dtDataCtors d))) (ecDatas ec))
+
+-- 运行时位置：构造子/函数应用的擦除实参不生成代码，跳过；其余位置都算。
+termMetasRuntime : Term -> List Int
+termMetasRuntime t = case t of
+  TMeta m => [m]
+  TVar n i => []
+  TGlobal g => []
+  TType l => []
+  TPi n implicit rig dom cod => append (termMetasAll dom) (termMetasAll cod)
+  TLam n rig body => termMetasRuntime body
+  TApp f a rig =>
+    if rigIsErased rig then termMetasRuntime f else append (termMetasRuntime f) (termMetasRuntime a)
+  TCon c args =>
+    concatMap (\p => if rigIsErased (secondOf p) then [] else termMetasRuntime (firstOf p)) args
+  TCase scrut alts =>
+    append (termMetasRuntime scrut) (concatMap (\alt => termMetasRuntime (caseAltBody alt)) alts)
+  TInt n => []
+  TStr s => []
+  TBool b => []
+  TIf c th el => append (termMetasRuntime c) (append (termMetasRuntime th) (termMetasRuntime el))
+
+-- 全部位置（类型里出现的元变量也算）。
+termMetasAll : Term -> List Int
+termMetasAll t = case t of
+  TMeta m => [m]
+  TVar n i => []
+  TGlobal g => []
+  TType l => []
+  TPi n implicit rig dom cod => append (termMetasAll dom) (termMetasAll cod)
+  TLam n rig body => termMetasAll body
+  TApp f a rig => append (termMetasAll f) (termMetasAll a)
+  TCon c args => concatMap (\p => termMetasAll (firstOf p)) args
+  TCase scrut alts =>
+    append (termMetasAll scrut) (concatMap (\alt => termMetasAll (caseAltBody alt)) alts)
+  TInt n => []
+  TStr s => []
+  TBool b => []
+  TIf c th el => append (termMetasAll c) (append (termMetasAll th) (termMetasAll el))
 
 maxInt : Int -> Int -> Int
 maxInt a b = if a >= b then a else b
@@ -1250,7 +1359,12 @@ elabCatchAll globals ctx ec scrutTy dd idxs expected rest acc body pname psp =
     ctx2 = if pname == "_" then ctx else ctxBindValue pname scrutTy ctx
   in if nonEmpty rest then errAt psp "DT: the catch-all branch must be the last one"
   else andThen (checkE globals ctx2 ec body expected) (\pb => case pb of
-    Pair bodyTerm ec2 => Ok (Pair (reverse (CaseAlt "" [] bodyTerm :: acc)) ec2)
+    Pair bodyTerm ec2 =>
+      let
+        -- 变量兜底要把变量作为分支 binder 记下来：Core 求值器与 codegen 都按 binder
+        -- 绑定 scrutinee（旧实现丢 binder，体里引用变量会变成自由变量）。
+        binds = if pname == "_" then [] else [Pair pname (binderRig False scrutTy)]
+      in Ok (Pair (reverse (CaseAlt "" binds bodyTerm :: acc)) ec2)
   )
 
 altNames : List (Pair Pat Expr) -> List String
@@ -1284,6 +1398,7 @@ checkCovered ec depth dd idxs alts sp (ctor :: rest) =
       Ok refs => True
       Err e => False
   in if reachable then if memName (dtCtorName ctor) written then checkCovered ec depth dd idxs alts sp rest
+  else if ecTrusted ec then checkCovered ec depth dd idxs alts sp rest
   else errAt sp ("DT: case is not exhaustive: missing " ++ dtCtorName ctor)
   else checkCovered ec depth dd idxs alts sp rest
 
@@ -1291,12 +1406,42 @@ checkCovered ec depth dd idxs alts sp (ctor :: rest) =
 -- M23：同一构造子在 case 里出现多次是合法写法（`Just (TStr s) => ...` 之后又有
 -- `Just v => ...`），但 DT 的 case 精化按「每构造子一个分支」组织。重复时先按 DtMatch
 -- 的模式矩阵把整个 case 降级成单分支嵌套 case，再用 let 绑定 scrutinee 保证只求值一次。
+-- M23：带**嵌套模式**的 case（`[y]` = `Cons y Nil`）走 DtMatch 的模式矩阵降级：
+-- 直接在精化器里把嵌套模式折成内层 case 时，兜底分支的体会被内联到更深的 binder
+-- 作用域（§foldPending），体里引用外层绑定会错位。矩阵降级生成的是**表达式**，
+-- 名字在重新精化时按作用域解析，不会错位。
+anyNestedPat : List (Pair Pat Expr) -> Bool
+anyNestedPat [] = False
+anyNestedPat (alt :: rest) = case alt of
+  Pair pat body => if nestedInPat pat then True else anyNestedPat rest
+
+nestedInPat : Pat -> Bool
+nestedInPat p = case p of
+  PCon c args sp => anyNestedArg args
+  _ => False
+
+anyNestedArg : List Pat -> Bool
+anyNestedArg [] = False
+anyNestedArg (a :: rest) = case a of
+  PVar n psp => anyNestedArg rest
+  PWild psp => anyNestedArg rest
+  _ => True
+
 checkCase : List (Pair String Term) -> Ctx -> Ec -> Expr -> List (Pair Pat Expr) -> Value -> Span -> Result (Pair Term Ec)
 checkCase globals ctx ec scrut alts expected sp = if hasDupNames (altNames alts) then checkCaseDedup globals ctx ec scrut alts expected sp
+else if anyNestedPat alts && hasVarCatchAll alts then checkCaseDedup globals ctx ec scrut alts expected sp
 else andThen (inferE globals ctx ec scrut) (\ps => case ps of
   Pair scrutTerm (Pair scrutTy ec1) =>
     checkCaseFam globals ctx ec1 scrutTerm scrutTy alts expected sp
 )
+
+hasVarCatchAll : List (Pair Pat Expr) -> Bool
+hasVarCatchAll alts = case reverse alts of
+  [] => False
+  alt :: rest => case alt of
+    Pair pat body => case pat of
+      PVar pname psp => True
+      _ => False
 
 checkCaseDedup : List (Pair String Term) -> Ctx -> Ec -> Expr -> List (Pair Pat Expr) -> Value -> Span -> Result (Pair Term Ec)
 checkCaseDedup globals ctx ec scrut alts expected sp = if catchAllNotLast alts then errAt sp "DT: the catch-all branch must be the last one"
@@ -1342,7 +1487,9 @@ boolAlt globals ctx ec alts target expected sp =
 boolAltGo : List (Pair String Term) -> Ctx -> Ec -> List (Pair Pat Expr) -> String -> Value -> Span -> Maybe Term -> Result (Pair Term (Pair (Maybe Term) Ec))
 boolAltGo globals ctx ec [] target expected sp catchAll = case catchAll of
   Just t => Ok (Pair t (Pair Nothing ec))
-  Nothing => errAt sp ("DT: case is not exhaustive: missing " ++ target)
+  Nothing =>
+    if ecTrusted ec then Ok (Pair (TInt 0) (Pair Nothing ec))
+    else errAt sp ("DT: case is not exhaustive: missing " ++ target)
 boolAltGo globals ctx ec (alt :: rest) target expected sp catchAll = case alt of
   Pair pat body => case pat of
     PCon cname args psp => if cname == target then andThen (checkE globals ctx ec body expected) (\p => case p of
@@ -1384,13 +1531,17 @@ checkLitAlts globals ctx ec scrutTerm tyName (alt :: rest) expected sp = case al
     _ =>
       errAt (patSpan pat) "DT: case on Int / String only accepts literals / variable patterns (M19)"
 
+-- 字面量比较的运行时函数名（`==` 的跨类型特化；codegen 按名字映射）。
+litEqName : String -> String
+litEqName tyName = if tyName == "String" then "bi_eq_str" else "bi_eq_int"
+
 -- 字面量分支：`if n == lit then body else <rest>`（rest 提供 fallback）。
 litAltStep : List (Pair String Term) -> Ctx -> Ec -> Term -> String -> Term -> Expr -> List (Pair Pat Expr) -> Value -> Span -> Result (Pair Term (Pair Bool Ec))
 litAltStep globals ctx ec scrutTerm tyName litTerm body rest expected sp = andThen (checkE globals ctx ec body expected) (\p => case p of
   Pair bodyTerm ec1 => andThen (checkLitAlts globals ctx ec1 scrutTerm tyName rest expected sp) (\q => case q of
     Pair restTerm (Pair hasDefault ec2) =>
       Ok
-        (Pair (TIf (TApp (TApp (TGlobal "==") scrutTerm Rig1) litTerm Rig1) bodyTerm restTerm) (Pair hasDefault ec2))
+        (Pair (TIf (TApp (TApp (TGlobal (litEqName tyName)) scrutTerm Rig1) litTerm Rig1) bodyTerm restTerm) (Pair hasDefault ec2))
   )
 )
 
@@ -1400,7 +1551,12 @@ checkLitBoundVar globals ctx ec scrutTerm tyName name body expected sp =
   let
     -- M23：ctxBindValue 的第二个参数是**类型值**——这里绑 scrutinee 的类型，不是值本身。
     ctx2 = ctxBindValue name (VNeutral (NGlobal tyName [])) ctx
-  in checkE globals ctx2 ec body expected
+    rig = binderRig False (VNeutral (NGlobal tyName []))
+  in andThen (checkE globals ctx2 ec body expected) (\p => case p of
+    -- 兜底变量必须真的绑到 scrutinee 上，否则体里对它的引用会指向不存在的 binder
+    -- （擦除检查：index 落到别的 binder 上，报 type-level binding used at runtime）。
+    Pair bodyTerm ec2 => Ok (Pair (TApp (TLam name rig bodyTerm) scrutTerm rig) ec2)
+  )
 
 checkCaseOf : List (Pair String Term) -> Ctx -> Ec -> Term -> Value -> String -> List Value -> List (Pair Pat Expr) -> Value -> Span -> Result (Pair Term Ec)
 checkCaseOf globals ctx ec scrutTerm scrutTy fam idxs alts expected sp = case dtDataLookup fam (ecDatas ec) of
@@ -1446,6 +1602,12 @@ freeDictGoalsGo ec (g :: rest) = case g of
     Nothing => Pair m dom :: freeDictGoalsGo ec rest
   else freeDictGoalsGo ec rest
 
+-- 签名 Term 的隐式 Pi 前缀长度（`{a} -> {b} -> ...` 的隐式 binder 数）。
+leadingImplicitCount : Term -> Int
+leadingImplicitCount t = case t of
+  TPi n True rig dom cod => 1 + leadingImplicitCount cod
+  _ => 0
+
 classArgIndex : Ec -> Value -> Int
 classArgIndex ec dom = case dictClassArg ec dom of
   Just arg => case forceVal ec arg of
@@ -1458,7 +1620,9 @@ classArgIndex ec dom = case dictClassArg ec dom of
 -- 解掉被替换出体的孤儿 `?m`（否则 `unsolvedMeta` 报未解元变量）。
 solveLiftedMeta : Ec -> String -> Int -> Ec
 solveLiftedMeta ec name m = case solveMeta (ecDefs ec) (ecSols ec) 0 m [] (VNeutral (NVar name 0 [])) of
-  Ok sols2 => ecPutSols ec sols2
+  Ok sols2 => case checkSolsDelta ec (ecSols ec) sols2 of
+    Err e => ec
+    Ok _ => ecPutSols ec sols2
   Err e => ec
 
 liftFreeDictGoals : String -> Ec -> Term -> Term -> Pair Term (Pair Term Ec)
@@ -1469,14 +1633,17 @@ liftFreeDictGoalsGo defName ec ty body inserted [] = Pair ty (Pair body ec)
 liftFreeDictGoalsGo defName ec ty body inserted ((Pair m dom) :: rest) =
   let
     dName = "d" ++ strFromInt m
-    -- `classArgIndex` 取类参数 binder 的 level（绝对位置）；每插入一个字典 binder，
-    -- 它之后的位置都后移 1，所以提升后的插入点是 `level + inserted`。
-    argIdx = classArgIndex ec dom + inserted
-    dictDom =
-      substSolvedMetasAt (classArgIndex ec dom + 1) (ecSols ec)
-        (quote (classArgIndex ec dom + 1) dom)
+    -- M23：字典 binder 插在**所有隐式 binder 之后**（即第一个显式参数之前）。
+    -- 原来按「类参数 binder 的 level」定位：`{t1}{t2} -> ...` 里 t1 的 level 是 0，
+    -- 字典被插到 t2 之前，域里的 t2 越界，`Dict_Eq t2` 在调用点退化成类型实参。
+    -- 每插入一个字典 binder，它之后的位置都后移 1，所以插入点是 `隐式前缀长 + inserted`。
+    argIdx = maxInt 0 (leadingImplicitCount ty - 1) + inserted
+    quoteDepth = leadingImplicitCount ty + inserted
+    dictDom = substSolvedMetasAt quoteDepth (ecSols ec) (quote quoteDepth dom)
     ty2 = insertDictBinder dName argIdx dictDom ty
-    body2 = insertLamBinder dName argIdx (substMetaVar m dName (argIdx + 1) body)
+    -- 先插 binder（会把插入点之后的引用整体移位），**再**把孤儿元变量替换成字典变量：
+    -- 顺序反过来时被替换出来的 TVar 也会被 shift 再挪一次，索引会偏。
+    body2 = substMetaVar m dName (argIdx + 2) (insertLamBinder dName argIdx body)
     -- M21：体是按**旧签名**（无字典 binder）精化的，自递归调用点少一个字典实参；
     -- 提升后按应用位置补上。字典 binder 插在第 `argIdx` 个 binder 之后，即第
     -- `argIdx + 1` 个 binder / 第 `argIdx + 1` 个应用实参。
@@ -1591,11 +1758,18 @@ dtProgSols (DtProgram datas defs goals sols) = sols
 
 -- 精化入口。M19：先做 record 降级（`DtRecords.prepareDecls`）——record 是纯记法。
 elabProgramFull : List Decl -> Result DtProgram
-elabProgramFull decls =
-  andThen (prepareDecls decls) (\ds => andThen (expandDerivings ds) (\ds2 => elabProgramGo ds2))
+elabProgramFull decls = elabProgramFullWith False decls
 
-elabProgramGo : List Decl -> Result DtProgram
-elabProgramGo decls = andThen (collectSigs decls) (\sigs => andThen (elabDatas (collectDataDecls decls []) (preludeGlobalsFor (pickListFamily (dataNamesOf decls))) ecEmpty) (\pd => case pd of
+-- trusted：跳过终止性检查（只给 TCB 包用；见 Dt.dtTrustsTermination）。
+-- 编译器本体的 NbE/重写函数是 fuel 驱动的（`force` / `normalize` / `refineValue` 等），
+-- 结构递归判据写不出来；这些函数是编译器的执行代码，不是被证明的定理。
+elabProgramFullWith : Bool -> List Decl -> Result DtProgram
+elabProgramFullWith trusted decls =
+  andThen (prepareDecls decls)
+    (\ds => andThen (expandDerivings ds) (\ds2 => elabProgramGo trusted ds2))
+
+elabProgramGo : Bool -> List Decl -> Result DtProgram
+elabProgramGo trusted decls = andThen (collectSigs decls) (\sigs => andThen (elabDatas (collectDataDecls decls []) (preludeGlobalsFor (pickListFamily (dataNamesOf decls))) (ecWithTrust trusted ecEmpty)) (\pd => case pd of
   Pair datas (Pair globals0 ec0) => andThen (elabTraits (append (collectTraitDecls builtinTraitDecls []) (collectTraitDecls decls [])) globals0 ec0) (\pt => case pt of
     Pair classDatas (Pair projGlobals (Pair classes ec1)) =>
       let
@@ -1607,15 +1781,28 @@ elabProgramGo decls = andThen (collectSigs decls) (\sigs => andThen (elabDatas (
             globals2 = append globals1 instHeads
           in andThen (elabSigs sigs globals2 ec1b) (\p => case p of
             Pair globals ec2 => andThen (checkAllDefined sigs globals decls) (\_ => andThen (elabBodies decls globals [] [] ec2) (\q => case q of
-              Pair defs ec3 => andThen (elabInstanceBodies (collectInstDecls (append builtinShowInstances (append builtinEqInstances (append builtinOrdInstances decls))) []) classes datas1 globals ec3) (\pi => case pi of
-                Pair instDefs ec4 => case unsolvedMeta ec4 of
-                  Just m => Err (unsolvedMessage ec4 m)
-                  Nothing =>
+              Pair defs0 ec3a =>
+                let
+                  -- M23：字典目标可能在「类参数刚被解出」之后才有唯一实例，而
+                  -- resolveDictGoals 只在 checkByInfer 路径调用；每轮定义体之后先收敛
+                  -- 一轮，定义体里的延迟字典实参要被替换成实例项（否则擦除检查会看到
+                  -- 运行时位置的 TMeta）。
+                  ec3 = resolveDictGoalsFix globals ec3a 8
+                  defs = rezonkDefs ec3 defs0
+                in andThen (elabInstanceBodies (collectInstDecls (append builtinShowInstances (append builtinEqInstances (append builtinOrdInstances decls))) []) classes datas1 globals ec3) (\pi => case pi of
+                  Pair instDefs0 ec4a =>
                     let
-                      extra = extraDefsOf globals ec4 (append instDefs defs)
-                    in andThen (checkTerminationDecls decls)
-                      (\_ => Ok (DtProgram datas1 (append instDefs (append extra defs)) (ecGoals ec4) (ecSols ec4)))
-              )
+                      ec4 = resolveDictGoalsFix globals ec4a 8
+                      instDefs = rezonkDefs ec4 instDefs0
+                    in case unsolvedMeta ec4 of
+                      Just m => Err (unsolvedMessage ec4 m)
+                      Nothing =>
+                        let
+                          extra = extraDefsOf globals ec4 (append instDefs defs)
+                          allDefs = rezonkDefs ec4 (append instDefs (append extra defs))
+                        in andThen (checkTerminationIf trusted decls)
+                          (\_ => Ok (DtProgram datas1 allDefs (ecGoals ec4) (ecSols ec4)))
+                )
             )
             )
           )
@@ -1623,6 +1810,24 @@ elabProgramGo decls = andThen (collectSigs decls) (\sigs => andThen (elabDatas (
   )
 )
 )
+
+-- 用当前解重新 zonk 定义体（延迟字典元变量 → 实例项）。
+rezonkDefs : Ec -> List DtDef -> List DtDef
+rezonkDefs ec defs =
+  map (\d => DtDef (dtDefName d) (dtDefType d) (substDictTerm ec (dtDefBody d))) defs
+
+-- 程序级字典目标收敛：反复回填直到字典目标不再减少（最多 n 轮，防振荡）。
+resolveDictGoalsFix : List (Pair String Term) -> Ec -> Int -> Ec
+resolveDictGoalsFix globals ec n =
+  let
+    ec2 = resolveDictGoals globals ec
+  in if n <= 0 then ec2
+  else if length (ecDictGoals ec2) < length (ecDictGoals ec) then resolveDictGoalsFix globals ec2 (n - 1)
+  else ec2
+
+-- 终止性检查开关：trusted 包（编译器自身）跳过结构递归检查。
+checkTerminationIf : Bool -> List Decl -> Result Int
+checkTerminationIf trusted decls = if trusted then Ok 0 else checkTerminationDecls decls
 
 -- M15：批量注册实例。
 foldlAddInst : Ec -> List DtInst -> Ec
@@ -1806,7 +2011,46 @@ unsolvedMessage ec m = case findGoal m (ecGoals ec) of
       ++ showSpanLoc (dtGoalSpan g)
       ++ " with goal "
       ++ showValueAt (ctxDepthOf g) (dtGoalType g)
-  Nothing => "DT: unsolved metavariable ?" ++ strFromInt m
+  Nothing => "DT: unsolved metavariable ?" ++ strFromInt m ++ metaOwnerHint ec m
+
+-- 未解元变量的归属提示：扫已精化的定义体与类型，指出它出现在哪个定义里（否则只有 ?m，
+-- 在一个上万行的程序里无从定位）。
+metaOwnerHint : Ec -> Int -> String
+metaOwnerHint ec m = case findDefWithMeta (ecDefs ec) m of
+  Just name => " (in `" ++ name ++ "`)"
+  Nothing => ""
+
+findDefWithMeta : List (Pair String Term) -> Int -> Maybe String
+findDefWithMeta defs m = case defs of
+  [] => Nothing
+  (Pair name body) :: rest =>
+    if termHasMeta m body then Just (name ++ " body=" ++ showTerm body) else findDefWithMeta rest m
+
+termHasMeta : Int -> Term -> Bool
+termHasMeta m t = case t of
+  TMeta k => k == m
+  TVar n i => False
+  TGlobal n => False
+  TType l => False
+  TPi n implicit rig dom cod => termHasMeta m dom || termHasMeta m cod
+  TLam n rig body => termHasMeta m body
+  TApp f a rig => termHasMeta m f || termHasMeta m a
+  TCon c args => anyArgHasMeta m args
+  TCase scrut alts => termHasMeta m scrut || anyAltHasMeta m alts
+  TInt n => False
+  TStr s => False
+  TBool b => False
+  TIf c th el => termHasMeta m c || termHasMeta m th || termHasMeta m el
+
+anyArgHasMeta : Int -> List (Pair Term Rig) -> Bool
+anyArgHasMeta m args = case args of
+  [] => False
+  (Pair a rig) :: rest => termHasMeta m a || anyArgHasMeta m rest
+
+anyAltHasMeta : Int -> List CaseAlt -> Bool
+anyAltHasMeta m alts = case alts of
+  [] => False
+  alt :: rest => termHasMeta m (caseAltBody alt) || anyAltHasMeta m rest
 
 -- 洞目标里的类型是 level 形态，show 时深度取快照上下文的长度。
 ctxDepthOf : DtGoal -> Int
@@ -1854,8 +2098,12 @@ goalsOfProgram decls =
     (\prog => Ok (map (goalInfoOf (dtProgSols prog)) (dtProgGoals prog)))
 
 elabProgram : List Decl -> Result (Pair (List DtData) (List DtDef))
-elabProgram decls =
-  andThen (elabProgramFull decls) (\prog => Ok (Pair (dtProgDatas prog) (dtProgDefs prog)))
+elabProgram decls = elabProgramWith False decls
+
+elabProgramWith : Bool -> List Decl -> Result (Pair (List DtData) (List DtDef))
+elabProgramWith trusted decls =
+  andThen (elabProgramFullWith trusted decls)
+    (\prog => Ok (Pair (dtProgDatas prog) (dtProgDefs prog)))
 
 -- ---------------------------------------------------------------
 -- 定义：签名 + 变量模式 → lambda 化的体
@@ -2028,8 +2276,34 @@ inferVarRef globals ctx ec name sp = case ctxLookup name ctx of
     Nothing => case shortBoolFamily ec name of
       Just fam => Ok (Pair (TGlobal fam) (Pair (VType levelZero) ec))
       Nothing => case globalLookup name globals of
-        Just tyTerm => Ok (Pair (ctorRefTerm (ecDatas ec) name) (Pair (eval [] tyTerm) ec))
+        -- M23：全隐式前缀的全局值（HM 泛化出的 unifyErr : Result a、empty : Map k v）
+        -- 必须在引用处实例化隐式参数，否则拿到的是 Pi 类型（{a} -> Result a），
+        -- 在 if/分支/实参位置与期望类型对不上。构造子另有 inferCtorRef 处理。
+        Just tyTerm => if allImplicitPrefix tyTerm then
+          let
+            inst = instantiateAllImplicit ctx ec (ctorRefTerm (ecDatas ec) name) (eval [] tyTerm) []
+          in Ok inst
+        else Ok (Pair (ctorRefTerm (ecDatas ec) name) (Pair (eval [] tyTerm) ec))
         Nothing => errAt sp ("DT: unknown name " ++ name)
+
+-- 签名项是否以隐式 Pi 开头并最终落到值（{a : Type} -> Result a）；显式 Pi 不算。
+allImplicitPrefix : Term -> Bool
+allImplicitPrefix t = case t of
+  TPi n implicit rig dom cod => if implicit then allImplicitPrefix cod else False
+  _ => True
+
+-- 实例化全隐式前缀：逐个插元变量，得到「值 + 剩余值类型」。
+instantiateAllImplicit : Ctx -> Ec -> Term -> Value -> List (Pair Term Rig) -> Pair Term (Pair Value Ec)
+instantiateAllImplicit ctx ec head ty acc = case forceVal ec ty of
+  VPi name implicit rig dom clo => if implicit then
+    let
+      m = ecNext ec
+    in case newMeta ctx ec of
+      Pair mt ec1 =>
+        instantiateAllImplicit ctx ec1 head (applyClosure clo (VMeta m []))
+          (Pair mt (binderRig True dom) :: acc)
+  else Pair (foldAppTerms head (reverse acc)) (Pair ty ec)
+  _ => Pair (foldAppTerms head (reverse acc)) (Pair ty ec)
 
 inferE : List (Pair String Term) -> Ctx -> Ec -> Expr -> Result (Pair Term (Pair Value Ec))
 inferE globals ctx ec expr = case expr of
@@ -2096,9 +2370,14 @@ inferApp globals ctx ec fn args sp = case fn of
             Ok (Pair (ctorAppTerm (ecDatas ec2) (TGlobal name) argTerms) (Pair resTy ec2))
         )
         Nothing => case globalLookup name globals of
-          Just tyTerm => andThen (inferArgs globals ctx ec (eval [] tyTerm) args sp) (\pa => case pa of
-            Pair argTerms (Pair resTy ec2) =>
-              Ok (Pair (ctorAppTerm (ecDatas ec2) (TGlobal name) argTerms) (Pair resTy ec2))
+          -- M23：推断位置也要走 `==` / `/=` / 比较运算符的特化，否则 term 里留下裸
+          -- `==`（codegen 默认映射成 bi_eq_int，字符串比较会生成类型错误的 OCaml）。
+          Just tyTerm => andThen (specializeOpApp globals ctx ec name args sp) (\mspec => case mspec of
+            Just pair => Ok pair
+            Nothing => andThen (inferArgs globals ctx ec (eval [] tyTerm) args sp) (\pa => case pa of
+              Pair argTerms (Pair resTy ec2) =>
+                Ok (Pair (ctorAppTerm (ecDatas ec2) (TGlobal name) argTerms) (Pair resTy ec2))
+            )
           )
           Nothing => errAt vsp ("DT: unknown name " ++ name)
     _ => inferAppGeneral globals ctx ec fn args sp
@@ -2229,7 +2508,9 @@ resolveDictGoals globals ec = case ecDictGoals ec of
       Just argTy => if hasUnsolvedMetaValue (ecSols ec1) argTy then keep
       else case searchInstance ec1 forced (Span "" 0 0 0 0) of
         Ok (Pair instTerm ec2) => case solveMeta (ecDefs ec2) (ecSols ec2) 0 m [] (eval [] instTerm) of
-          Ok sols2 => resolveDictGoals globals (ecPutSols ec2 sols2)
+          Ok sols2 => case checkSolsDelta ec2 (ecSols ec2) sols2 of
+            Err e => keep
+            Ok _ => resolveDictGoals globals (ecPutSols ec2 sols2)
           Err e => keep
         Err e => keep
       Nothing => keep
@@ -2405,7 +2686,10 @@ checkLetOne globals ctx ec bind rest body rec_ expected sp = case firstOf bind o
         let
           rig = binderRig False valueTy
         in andThen (checkLetGo globals ctx ec1 rest body rec_ expected sp) (\pb => case pb of
-          Pair bodyTerm ec2 => Ok (Pair (TApp (TLam "_" rig bodyTerm) valueTerm rig) ec2)
+          -- 通配 let 的体是在**不 bind 名字**的上下文里检查的，但落项时仍套一层 TLam "_"：
+          -- 体的 de Bruijn 索引必须整体 shift 1，否则所有外层引用都会指向错 binder。
+          Pair bodyTerm ec2 =>
+            Ok (Pair (TApp (TLam "_" rig (shift 0 1 bodyTerm)) valueTerm rig) ec2)
         )
     )
   _ => errAt (patSpan (firstOf bind)) "DT: let bindings must be simple names or wildcards (M19)"
@@ -2438,7 +2722,7 @@ inferLetIgnored globals ctx ec value rest body rec_ sp = andThen (inferE globals
       rig = binderRig False valueTy
     in andThen (inferLet globals ctx ec1 rest body rec_ sp) (\pb => case pb of
       Pair bodyTerm (Pair bodyTy ec2) =>
-        Ok (Pair (TApp (TLam "_" rig bodyTerm) valueTerm rig) (Pair bodyTy ec2))
+        Ok (Pair (TApp (TLam "_" rig (shift 0 1 bodyTerm)) valueTerm rig) (Pair bodyTy ec2))
     )
 )
 
@@ -2556,10 +2840,36 @@ specializeEqApp globals ctx ec name args sp = if isEqOp name then case args of
   _ => Ok Nothing
 else Ok Nothing
 
+-- HM 推断出的自由类型变量（名字形如 t123）在源码里不存在：对这些变量上的 == 直接
+-- 走泛型结构比较，而不是提升字典——调用点的类型实参常常仍是未解元变量，无法搜实例。
+-- 源码里手写的类型变量（a/b/k/v…）仍走 M22 的字典提升。
+isInferredVarName : String -> Bool
+isInferredVarName n = case strUnpack n of
+  [] => False
+  c :: rest => if c == 116 then allDigitChars rest else False
+
+allDigitChars : List Int -> Bool
+allDigitChars [] = True
+allDigitChars (c :: rest) = if c >= 48 then if c <= 57 then allDigitChars rest else False else False
+
+isInferredVarValue : Value -> Bool
+isInferredVarValue v = case v of
+  VNeutral (NVar name lvl sp) => if sp == [] then isInferredVarName name else False
+  _ => False
+
+-- M23：没有 Eq 实例时的泛型结构比较兜底（擦除的类型实参 + 两个运行时值）。
+genericEqApp : String -> Term -> Term -> Term -> Term
+genericEqApp name tyTerm aTerm bTerm =
+  let
+    rt = if name == "==" then "bi_eq_generic" else "bi_neq_generic"
+  in TApp (TApp (TApp (TGlobal rt) tyTerm Rig0) aTerm Rig1) bTerm Rig1
+
 -- `==` / `/=` 的饱和应用（M19）。`Int` / `String` 按实参类型特化成具体运行时函数；
 -- 其它类型解析成 `Eq` 字典的方法投影（字典由实例搜索插入）——这正是 `deriving (Eq)`
 -- 的用处。解析都在精化期完成，codegen 只按名字映射、不需要类型信息。
 specializeEqTy : List (Pair String Term) -> Ctx -> String -> Term -> Term -> Span -> Value -> Ec -> Result (Maybe (Pair Term (Pair Value Ec)))
+-- M23：具体类型没有 Eq 实例时退回泛型结构比较（bi_eq_generic），语义与 HM
+-- 的 ==（OCaml 结构化相等）一致；有实例时仍走字典，保证 deriving 的行为。
 specializeEqTy globals ctx name aTerm bTerm sp aTy ec = case builtinEqTyName (forceVal ec aTy) of
   Just tyName =>
     andThen (eqRuntimeName name tyName)
@@ -2568,16 +2878,20 @@ specializeEqTy globals ctx name aTerm bTerm sp aTy ec = case builtinEqTyName (fo
     let
       mname = if name == "==" then "eq" else "neq"
       -- `eq : {a : Type} -> {d : Dict_Eq a} -> a -> a -> Bool`：类型（擦除）+ 字典。
-      tyTerm = quote 0 aTy
-      dictTy = VNeutral (NGlobal (dictTypeName "Eq") [eval [] tyTerm])
-    in if dictArgUnsolvedMeta ec dictTy then deferEqDict globals ctx mname tyTerm aTerm bTerm sp dictTy ec
+      -- 类型项必须按**当前上下文深度** quote：`quote 0` 会把所有刚性变量拍成 level 0，
+      -- 于是 `dictTy` 的类参数指向错误的 binder（两个以上类型参数时字典提到别的参数上）。
+      tyTerm = quote (ctxDepth ctx) aTy
+      dictTy = VNeutral (NGlobal (dictTypeName "Eq") [aTy])
+    in if isInferredVarValue (forceVal ec aTy) then Ok (Just (Pair (genericEqApp name tyTerm aTerm bTerm) (Pair (VNeutral (NGlobal "Bool" [])) ec)))
+    else if dictArgUnsolvedMeta ec dictTy then deferEqDict globals ctx mname tyTerm aTerm bTerm sp dictTy ec
     else case searchInstance ec dictTy sp of
       Ok (Pair dictTerm ec1) =>
         Ok
           (Just (Pair (TApp (TApp (TApp (TApp (TGlobal mname) tyTerm Rig0) dictTerm Rig1) aTerm Rig1) bTerm Rig1) (Pair (VNeutral (NGlobal "Bool" [])) ec1)))
       Err e =>
         if isRigidDictArg ec dictTy then deferEqDict globals ctx mname tyTerm aTerm bTerm sp dictTy ec
-        else Err e
+        else Ok
+          (Just (Pair (genericEqApp name tyTerm aTerm bTerm) (Pair (VNeutral (NGlobal "Bool" [])) ec)))
 
 -- 刚性类参数（如 `mem` 的 `a`）没有可搜实例：延迟成裸元变量 + 记录自由字典目标，
 -- 等定义体精化完由 `liftFreeDictGoals` 提升成 `{d : Dict_Eq a}` 隐式参数。
@@ -2659,9 +2973,12 @@ specializeCmpTy globals ctx name aTerm bTerm sp aTy ec = case builtinTyName (for
   Nothing =>
     let
       mname = cmpMethodName name
-      tyTerm = quote 0 aTy
-      dictTy = VNeutral (NGlobal (dictTypeName "Ord") [eval [] tyTerm])
-    in if dictArgUnsolvedMeta ec dictTy then deferEqDict globals ctx mname tyTerm aTerm bTerm sp dictTy ec
+      tyTerm = quote (ctxDepth ctx) aTy
+      dictTy = VNeutral (NGlobal (dictTypeName "Ord") [aTy])
+      genericName = cmpGenericName name
+    in if isInferredVarValue (forceVal ec aTy) then Ok
+      (Just (Pair (TApp (TApp (TGlobal genericName) aTerm Rig1) bTerm Rig1) (Pair (VNeutral (NGlobal "Bool" [])) ec)))
+    else if dictArgUnsolvedMeta ec dictTy then deferEqDict globals ctx mname tyTerm aTerm bTerm sp dictTy ec
     else case searchInstance ec dictTy sp of
       Ok (Pair dictTerm ec1) =>
         Ok

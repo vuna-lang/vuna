@@ -336,10 +336,12 @@ fieldSymbols sMod fields comments =
 
 -- trait 方法没有独立 span：位置归到所属 trait 声明（line/col），
 -- 保证所有符号的行号都指向真实源码位置（不造假 0）。
+methodSymbol : String -> Int -> Int -> Pair String Expr -> Sym
+methodSymbol sMod line col (Pair name ty) =
+  Sym sMod name "method" (name ++ " : " ++ renderTy ty) "" line col
+
 methodSymbols : String -> List (Pair String Expr) -> Int -> Int -> List Sym
-methodSymbols sMod methods line col = map (\m => case m of
-  Pair name ty => Sym sMod name "method" (name ++ " : " ++ renderTy ty) "" line col
-) methods
+methodSymbols sMod methods line col = map (methodSymbol sMod line col) methods
 
 -- 同名符号合并：多子句函数会产生重复 DFun，只保留第一条（行号取首子句）。
 dedupeSymbols : List Sym -> List Sym
@@ -379,12 +381,21 @@ namesInDecl d = case d of
   DFun name pats body sp => namesInExpr body
   DData name params kind ctors derivings sp => concatMap (\c => namesInExpr (ctorType c)) ctors
   DRecord name params fields derivings sp => concatMap (\f => namesInExpr (fieldType f)) fields
-  DTrait name params methods sp => concatMap (\m => case m of
-    Pair n ty => namesInExpr ty
-  ) methods
+  DTrait name params methods sp => concatMap namesInMethod methods
   DInstance name isDefault head methods sp =>
     append (namesInExpr head) (concatMap namesInDecl methods)
   _ => []
+
+namesInMethod : Pair String Expr -> List String
+namesInMethod (Pair n ty) = namesInExpr ty
+
+namesInBind : Pair Pat Expr -> List String
+namesInBind (Pair p x) = namesInExpr x
+
+namesInDoStmt : DoStmt -> List String
+namesInDoStmt s = case s of
+  DBind p x tsp => namesInExpr x
+  DExpr x tsp => namesInExpr x
 
 namesInExpr : Expr -> List String
 namesInExpr e = case e of
@@ -394,28 +405,14 @@ namesInExpr e = case e of
   ELam ps body sp => namesInExpr body
   EApp f args sp => append (namesInExpr f) (concatMap namesInExpr args)
   EPi n i dom cod sp => append (namesInExpr dom) (namesInExpr cod)
-  ELet binds body isRec sp => append (concatMap (\b => case b of
-    Pair p x => namesInExpr x
-  ) binds
-  ) (namesInExpr body)
-  ECase scrut alts sp => append (namesInExpr scrut) (concatMap (\a => case a of
-    Pair p x => namesInExpr x
-  ) alts
-  )
+  ELet binds body isRec sp => append (concatMap namesInBind binds) (namesInExpr body)
+  ECase scrut alts sp => append (namesInExpr scrut) (concatMap namesInBind alts)
   EIf c t e2 sp => append (namesInExpr c) (append (namesInExpr t) (namesInExpr e2))
   EField r fname sp => namesInExpr r
-  ERecord tn fields sp => concatMap (\f => case f of
-    Pair n x => namesInExpr x
-  ) fields
-  ERecUpdate r fields sp => append (namesInExpr r) (concatMap (\f => case f of
-    Pair n x => namesInExpr x
-  ) fields
-  )
+  ERecord tn fields sp => concatMap namesInMethod fields
+  ERecUpdate r fields sp => append (namesInExpr r) (concatMap namesInMethod fields)
   EInstSel r mname sp => namesInExpr r
-  EDo stmts sp => concatMap (\s => case s of
-    DBind p x tsp => namesInExpr x
-    DExpr x tsp => namesInExpr x
-  ) stmts
+  EDo stmts sp => concatMap namesInDoStmt stmts
 
 -- ---------------------------------------------------------------
 -- 全量构建
@@ -467,7 +464,7 @@ accRefs (Acc ms syms refs warns) = refs
 accWarns : Acc -> List String
 accWarns (Acc ms syms refs warns) = warns
 
-indexPackage : t7689 -> String -> List String -> Acc -> Acc
+indexPackage : String -> String -> List String -> Acc -> Acc
 indexPackage dir pkgName files acc = foldFiles dir pkgName files acc
 
 foldFiles : String -> String -> List String -> Acc -> Acc
@@ -520,7 +517,7 @@ refsPath repo = cacheDir repo ++ "/refs.txt"
 scanFile : String -> Pair String (Pair Int Int)
 scanFile path = Pair path (Pair (strLength (readFile path)) (fileMtime path))
 
-scanRoot : Pair String t7831 -> List (Pair String (Pair Int Int))
+scanRoot : Pair String String -> List (Pair String (Pair Int Int))
 scanRoot root = map scanFile (packageSources (firstOf root))
 
 scanSources : String -> List (Pair String (Pair Int Int))
@@ -537,7 +534,7 @@ manifestLine entry =
 manifestText : List (Pair String (Pair Int Int)) -> String
 manifestText entries = join "\n" (map manifestLine entries) ++ "\n"
 
-manifestMatches : String -> List (Pair String (Pair t7884 t7883)) -> Bool
+manifestMatches : String -> List (Pair String (Pair Int Int)) -> Bool
 manifestMatches repo entries =
   if fileExists (manifestPath repo) then parseManifestLines (splitOnNewline (readFile (manifestPath repo))) == entries
   else False
