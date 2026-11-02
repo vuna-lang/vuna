@@ -302,11 +302,12 @@ M18 当时的完整论证保留在 [docs/reference/m18-migration.md](reference/m
   跨形参等式（`append`）、scrutinee 精化反射进 goal（`rep`）、用「分支不可能」免写分支
   （`lookupEnv`）都还不行。**这构成了 M24.5 的全部范围。**
 - **反面（同样重要）**：拓扑序见证、元变量上下文索引化、终止性 `Acc` 见证三个「看起来
-  很 DT」的方向实测收益低于成本，已显式记入 roadmap 的「明确不划算」，防止后人重做。
+  很 DT」的方向实测收益低于成本，已显式记入 [dt-core.md](dt-core.md) §6.3（原 roadmap
+  M24.6 的「明确不划算」小节，随本阶段完成归档），防止后人重做。
 
 同时发现两个与 DT 无关的真 bug：`Pkg` 按包名去重会静默丢弃重名成员的整支依赖
 （实测重名 workspace 全部静默 `exit 0`）；`Loader` 用 `Nothing => []` 把「模块未加载」
-伪装成「无导出」。两者都记入 M24.6 的「顺手修掉」。
+伪装成「无导出」。两者都记入 M24.6 的「顺手修掉」（M24.5/M24.6 的落地结果见文末两节）。
 
 > 过程中有一份实验报告得出「`subst` 也写不出来」的结论，复核后发现是该夹具漏掉了
 > 穿过 binder 时的 `shift u`；修正后通过。教训已写进
@@ -998,3 +999,215 @@ stage1 重生成逐字节一致 → TCB 断言 → 替换 `seed/`。rotation 后
 - `Core.valueEqDeep` 用 `force` 而非 `normalize` 强制实参（见 §4）。
 - `where` 内递归/前向引用不保留（见 §3）。
 - kind 诊断仍为通用 `type mismatch`（HM 专属文案已消失）。
+
+## M24.5：等式搬运与精化器补强（2026-11）
+
+### 1. 目标与实测基线
+
+本阶段不加用户可见语法糖，只补精化器「给出索引等式」的能力，让 M24.6 的编译器本体
+重构真的能写。原依据是 [reference/dt-parity.md](reference/dt-parity.md) §6 的实测表：
+旧精化器只在「`case` 打在被索引族本身、且 goal 的索引就是该形参」时精化 goal，
+`append` / `rep` / `lookupEnv` 这类跨形参 / 裸形参形态写不出。§6.1 已改成 M24.5 前/后
+两列的能力表（每行都有夹具）。
+
+### 2. 关键实现与修复（`Elab`）
+
+1. **scrutinee 反射**（`reflectScrutinee` / `ctorValueIn`）：旧实现只把构造子的**结果
+   索引**与 scrutinee 的索引合一；`case n of ...`（裸 `Nat` 形参）或包装族因此拿不到
+   任何等式，goal 里的 `n` 不会被精化成 `Zero` / `Succ k`。现在索引合一之后，再把
+   `evalCtx ctx scrutTerm`（只对 `NVar` 且 spine 为空的中性变量）与构造子结果值
+   `VCon c [telescope 值]` 再合一一次，refs 同时喂 `refineValue expected` 与
+   `ctxRefine`。Bool / Int / String 的 case 走各自专用降级路径，不受影响。
+2. **不可达分支按上下文省略**（`branchReachable` / `ctxHasEmptyBinder`）：判据两层——
+   ① 构造子结果索引与 scrutinee 索引合一失败（M14 既有）；② 分支 telescope 绑定 +
+   索引合一后，分支上下文里有 binder 的类型是**空归纳族**（如进 `ENil` 分支时
+   `n ↦ Zero`，于是 `i : Fin Zero`）。任何一层判不可达都允许省略该分支；写出来的
+   不可达分支仍报错（索引不可达报 `this branch is impossible (index constraints are
+   unsatisfiable)`，空族上下文报 `... (its context contains an empty inductive family)`）。
+   空族判定只在索引**全刚性**时生效；索引含中性项（`Fin (plus x Zero)`）时保守判非空。
+   **性能约束**：可达性只对**没写出来**的构造子计算（写出的分支跳过），否则
+   `vuna check .` 会从 ~90s 掉到 400s+。
+3. **隐式族参数版 `Eq` 构造的元变量内联**（`inlineSolvedMetas`）：`data Eq :
+   {a : Type} -> a -> a -> Type` + `Refl : {a : Type} -> (x : a) -> Eq x x` 时，结果类型
+   `Eq x x` 里的隐式族参数由检查器插成元变量、检查期解成构造子自己的 `a`；旧实现把这个
+   level 形态的解留在 `dtCtorType` 里，使用点按另一份上下文求值就变成悬空变量
+   （`constructor Refl: type mismatch: expected Nat, got a`）。现在构造子类型 / 族 kind /
+   签名在登记前把**检查期已解**的元变量按当前 binder 深度 quote 内联（解越界时不内联，
+   保守）。族 kind 与签名同样会被存进 `globals` 在别处求值，因此一起处理。
+4. **定义性相等扩展到 `plus`**：`plus Zero n` 经 delta + case 归约到 `n`，一个 `Refl`
+   收尾（`plusZero`）；`plus n Zero` 的归纳步靠反射把 goal 精化成
+   `Eq (Succ k) (Succ (plus k Zero))`，再用归纳假设 + `cong`（`plusZeroR`）。
+   `append` 的旧文档 ❌ 被实测推翻：分支精化 + `plus` 定义性相等已经足够。
+
+### 3. 新夹具
+
+- 正例 `dt/46_rep`（scrutinee 反射：`case` 打在裸 `Nat` 形参上）、`dt/47_lookup_env`
+  （空族上下文的 `ENil` 分支省略）、`dt/48_eq_defeq`（`plusZero` 的定义性相等）、
+  `dt/49_eq_induction`（反射 + `cong` 的归纳证明）、`dt/50_eq_transport`
+  （值级 `sym`/`trans`/`subst` 与 Type 级 `cast`、索引级 `castLen`）。
+- 反例 `dt_err/36_diff_index_case`（两个索引不同时仍要求写分支）、
+  `37_impossible_branch`（写出索引不可达分支）、`38_empty_ctx_branch`（写出空族上下文
+  分支仍必须报错）。
+
+### 4. 边界（详见 [reference/dt-parity.md](reference/dt-parity.md) §6.3）
+
+- 隐式**值**参数 `{x : a}` 不支持（报 `implicit parameters must be types or inductive
+  families`）；证明辅助函数要把类型与值参数都写成显式（`cong`/`sym`/`trans` 夹具如此）。
+- 构造子当函数值**部分应用**不参与 `conv`（`cong ... Succ ...` 与饱和应用产生的 `VCon`
+  对不上，报 `expected (Succ n), got (Succ n)`）；用 lambda 或包装函数绕过。
+- `Ctx n -> Fin n -> Tm n` 这类**取回依赖索引的值**仍写不出（需要「按位置变化的类型
+  族」）；空族判定在索引含中性项时保守。
+- 没有隐式等式搜索，等式要显式传参；类型当运行时值会被擦除检查拦下。
+- 本阶段发现但未修的预存在 codegen 缺陷：类型级函数（`sel : Nat -> Type`）被当运行时
+  定义、产物出现未定义的 `v_Int` / `v_String` —— 记为 M24.6 的修复项（§M24.6、dt-core §6.4）。
+
+### 5. 验证
+
+- 新夹具三路（`interp` / `check` / `compile` + ocamlopt）全绿；全量测试随 M24.6/M24.7
+  继续增量，最终 **1076 checks**（见 M24.7 §4）。
+- `vuna check .` 自检通过；`dt_elab` 基准不回归（可达性只对缺失构造子计算）。
+
+## M24.6：编译器本体 DT 大重构（2026-11）
+
+### 1. 分级与重新裁定
+
+原计划三级：字段形状单一真源 / `Expr : Phase -> Type` / Core 的 de Bruijn 索引化。
+M24 单路径落地后复核，只有第一级按原样落地，后两级**重新裁定**：
+
+- **L1（字段形状 + 护栏）全部落地**（见 §2–§3）。
+- **L2** 改为**入口护栏**：M24 后单文件 codegen 只接受 `DtProgram`（Elab 输出），不再
+  接触 `Decl`/`Expr`；唯一还读 `Decl` 的是 split 的模块归属表。因此原 `Expr : Phase ->
+  Type` phantom index 没有落点；改为 `generateDtSplitProgram` 入口调用
+  `checkResolvedModules`，要求每个模块的声明名带模块前缀（Loader 保证的 resolved 形态），
+  未 resolve 的裸声明一旦被喂进 codegen 会在入口被拒绝。单文件 / REPL / LSP 的 parsed
+  入口不经过该函数。
+- **L3** 只做**护栏 + 语言侧证据**：`Core.varIndex` 越界返回 `-1`、
+  `checkAllDefScopes` 验证运行时定义体的 de Bruijn 作用域；`Env : Nat -> Type` + `Fin`
+  total lookup 的骨架作为夹具记录（`dt/47_lookup_env` 的缺席分支省略）。`Core.eval`
+  的 `List Value` 环境与 `Clos` 捕获环境**不换**索引表示——M24.5 后「取回依赖索引的
+  值」仍写不出，索引化的核心收益不成立；而 `Clos` 需要存在式长度并改写 eval /
+  applyClosure 全部调用点，风险与收益不匹配。按「每级完成即停」原则收窄。
+
+两处裁定都记入 roadmap「决策变更」（M24.6 第二级 / 第三级两行）。
+
+### 2. L1：构造子字段形状的单一真源
+
+- `CoreCodegen.ctorKeepFlags` 从构造子 telescope 的 rig 算出 keep flags（`True` =
+  该 binder 进运行时表示），`mkGenSt` 把它作为 `gsCtorShapes` 带入生成状态。
+- 类型声明（`ctorFieldTexts`）、构造子应用（`genConApp`/`alignCtorArgs`）与 case 分支
+  绑定（`genArm`/`altEnvChecked`）三处都消费同一份 flags，并在使用点校验长度与
+  rig 一致；不一致报 `DT: internal: constructor shape ...`，不再静默少字段/错位
+  （旧实现三处各自 `if erased`，字段数 / telescope 长度 / 绑定数无交叉校验）。
+- 两种合法约定：普通构造子用**全 telescope**（含擦除隐式位），字典构造子
+  `MkDict_C` 只用**保留字段**；`alignCtorArgs` / `caseAltBinders` 按长度择一并逐位校验。
+
+### 3. L1 附带护栏与修复
+
+- `Core.varIndex` 越界返回 `-1`（旧实现静默当成最外层变量 index 0，错得无声）；
+  `checkAllDefScopes` 对**全部**定义体（含已整体擦除的类型级定义）做作用域验证，
+  越界/负 index 在 check 期报 `DT: internal: out-of-scope de Bruijn index ...`。
+- `ensureUniqueOcamlNames`：对实际生成的 `v_*` / `t_*` / `C_*` 名字做族内去重
+  （`sanitizeName` 的转义本身是前缀码；护栏防未来改动引入碰撞）。
+- **OCaml 保留字**：lambda binder 是唯一直接写裸标识符的地方，`ocamlBinderName` 对
+  `method` / `type` 等保留字统一加 `_` 后缀；值 / 类型 / 构造子名分别有
+  `v_` / `t_` / `C_` 前缀，不会撞保留字。
+- **类型族整体擦除**：`isTypeLevelDef` 改用 `isTypeForming`（类型 force 后以宇宙收尾的
+  Pi 链 `... -> Type`），`sel : Nat -> Type` 一类不再生成运行时定义（旧判据只看裸
+  `Type`，生成未定义的 `v_Int`/`v_String`，`ocamlopt` 才炸）。正例 `dt/51`/`52`；在
+  运行时定义里把擦除的族参数当值用仍报错（`dt_err/39`）；旧的三个「类型级 Pi 体用类型
+  参数」负例（`dt_err/09`、`18`、`19`）语义纠正后删除。
+- **split entry data 存量 bug**：`splitMainFile` 原来只发 entry defs、不发 entry datas；
+  `app/Main.vuna` 里声明的 `data` 生成的 `C_*` 引用在 `Main.ml` 里未定义（默认单文件
+  `build` 不复现，`build --split`/`seed` 的 `ocamlopt` 才报 Unbound constructor）。
+  现在 `Main.ml` 先发 `genTypeDeclsOf entryDatas` 再发 defs；夹具
+  `test/corpus/packages/05_entry_data`。
+
+### 4. 新夹具与设计记录
+
+- 正例 `dt/45_ctor_shape`（隐式族参数 / 显式索引 / 运行时字段 / record 构造子 / 参数化
+  data / 宇宙域字段的构造子形状与 case 绑定）、`dt/51_type_family`、
+  `dt/52_type_family`；负例 `dt_err/39_type_family_runtime_use`；包夹具
+  `packages/05_entry_data`（`build --split` 的 entry data 回归）。
+- 设计细节写进 [docs/dt-core.md](dt-core.md) §6.1–§6.4（字段形状、L2/L3 裁定、类型族），
+  roadmap 不再保留已完成阶段的详细段落。
+
+### 5. 验证
+
+- `dt/45` 三路、`dt/51`/`52` 的 `interp`/`compile`+ocamlopt、`packages/05_entry_data`
+  的 `build --split` 全部通过；`vuna check .` 自检通过；全量测试随 M24.7 收尾为
+  **1076 checks**（见 M24.7 §4）；rotated seed 的 stage1 == stage2。
+
+## M24.7：Eq / Ord / Show 库化（2026-11）
+
+### 1. 第一波：库模块落地（过渡态）
+
+- 新增 `base/lib/Base/Show.vuna` / `Eq.vuna` / `Ord.vuna`：trait 声明 + `Int` / `String` /
+  `Bool` 实例，方法面与编译器内建逐位对齐（`show : a -> String`；`eq` / `neq`；
+  `lt` / `le` / `gt` / `ge`）。`Show Bool` 用 `if` 输出 `True`/`False`；`Eq Bool` 方法体
+  用析取（`Bool == Bool` 会落到该实例，不能自递归）；`Ord` 的方法体直接写比较运算符
+  （`Int` 走精化期特化，`String`/`Bool` 走泛型运行时，不会自递归）。
+- 更新 `base/vuna.toml` `[export]`、`Base.vuna` 门面与 `Prelude.vuna`（Prelude 增重导出
+  `Base.{Show,Eq,Ord}`，包模式自动可见）；seed 闭包 37 → 40 个 `.ml`。
+- 第一波只落地库模块，编译器仍注入同形内建 trait/实例、`Loader` 短名放行仍生效
+  （过渡态）。
+
+### 2. 第二波：删除内建、收敛到库
+
+- **`DtDerive`**：删除 `builtinTraitDecls` / `builtinShowInstances` /
+  `builtinEqInstances` / `builtinOrdInstances`；`expandDerivings` 用 `DData` 里**已由
+  Loader 解析**的 derivings 名（如 `Base.Show.Show`）生成实例头，按类名最后一段分派
+  （`Show`/`Eq`/`Ord`），方法体里对同类方法的递归调用用解析后的投影全局名
+  （`Base.Show.show` 等）——`Loader` 短名放行已删除，裸名再也解析不到。
+- **`Elab`**：`==` / `/=` 的字典名与方法投影名从 `ecClasses` 按短名 `Eq` 查
+  （`findClassByShortName` / `classMethodProjection`），不再硬编码 `Dict_Eq` / `eq`；
+  比较运算符同理查 `Ord`；参数化字典的类参数按当前上下文深度 quote，避免刚性变量错位。
+- **兜底语义**：具体类型没有 `Eq` 实例时 `==`/`/=` 退回 `bi_eq_generic`；程序里没有
+  `Eq` 类（单文件 / 未 import）同样退回。`<`/`<=`/`>`/`>=` 的运行时特化改用
+  `cmpBuiltinTyName`（只认 `Int`/`String`/`Bool`）——**修复用户 `data` 上 `<`**：
+  旧实现把任何零参全局（含用户 data 族名）都当内建类型，`deriving (Ord)` 的
+  `Red < Blue` 报 `DT: '<' is not defined for C3 (Ord instance required)`；现在走
+  `Ord` 字典，无 `Ord` 类时退回泛型比较。
+- **`Loader`**：删除 `isBuiltinTraitName` / `isPreludeTraitMethod` 与
+  `dtPreludeNames` 里的 `show`/`eq`/`neq`/`lt`/`le`/`gt`/`ge`；裸名只能经 import 的
+  导出表解析，unbound 诊断追加可操作提示（`trait Show is not in scope; add
+  \`import Base.Show\`` 等）。
+- **`Loader` 防御性修复**：`moduleDecls` / `exportsOf` 的 `Nothing => []` 改为
+  `loader: internal: module ... is not loaded`——旧实现把「加载器状态不一致」伪装成
+  「没有这个导出」，错误被静默吞掉。
+- **`Pkg` 包名唯一性校验**：包名参与 `Loader` 的「同包永远可见」与 effectful 内建
+  allowlist 判定，同名不同目录是配置错误。新增 `checkUniquePackageNames`（同名同目录的
+  diamond 合法；同名不同目录报 `duplicate package name ...`），旧实现 `dependencyRoots`
+  按包名去重会静默丢弃整支依赖；夹具 `packages/93_duplicate_name`。
+
+### 3. 单文件 / 裸 `--root` 的 import 约定
+
+- 包模式仍自动导入 `Prelude`；单文件 / 裸 `--root` 模式不再自动可见 trait 与实例：
+  需要 `--root <repo>/base/lib`（测试里 `--root ../base/lib`）并在文件头显式
+  `import Prelude`（或按需 `import Base.Show` / `Base.Eq` / `Base.Ord`）。
+- `test/run-tests.sh` 的单文件循环统一加 `BASE_ROOT="--root ../base/lib"`；需要
+  `show` / `==` / 比较 / `deriving` 的夹具补 `import Prelude`（只用 `Int`/`String` 原语
+  或泛型兜底比较的夹具可以省略）。包目录夹具（`corpus/packages/`、`corpus/dt_pkg/`）
+  不受影响。
+
+### 4. 验证
+
+- `test/run-tests.sh`：**1076 checks 全绿**（34 个编号段）；`vuna check .`、
+  `vuna check compiler`、`vuna fmt --check`、`vuna lint`、`nix/index-check.sh`、
+  `vuna-package` 全绿；`nix/metrics.budget` 与 `nix/context.budget` 通过。
+- seed rotation：**40 个 `.ml` / 41 文件**（`Base_dShow` / `Base_dEq` / `Base_dOrd` 进入
+  闭包，`Vuna_builtins` 变空），stage1 == stage2 fixed point；`nix build .#vuna-seed` /
+  `.#vuna-compiler` / `.#vuna` 从新 seed 重建通过（`nix flake check` 由 Lead 在收尾时
+  复跑）。
+- `nix/metrics.budget` 与 `nix/context.budget` 通过：metrics 实测 seed 闭包 40 个 `.ml`
+  （bytes 1184619 / lines 11867 / longlines 3513 / letrec 495 / ctorcount 3591，均在
+  预算内；删内建 trait/实例后 codegen 产物回降）；`context.budget` 的 `max_ref_lines`
+  随 dt-parity §6 重标定到 208（实际 203），入口文档与 `max_module_lines` 不变。
+
+### 5. 边界与遗留
+
+- 单文件 / 裸模式必须显式 import（见 §3）；缺 import 时诊断给可操作提示。
+- 具体类型无实例时 `==` / 比较的 generic 兜底语义见
+  [reference/limits.md](reference/limits.md)；`deriving` 对参数化 data 仍只支持 `Eq`。
+- `monad/04_kind_generic` 的多隐式参数字典仍是 `.nointerp` + `.nocompile`
+  （`liftFreeDictGoals` binder 记账 bug 未修）；`Core.valueEqDeep` 仍用 `force` 而非
+  `normalize` 强制实参（见 M24 §4）。

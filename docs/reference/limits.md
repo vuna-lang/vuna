@@ -23,11 +23,13 @@
   LSP / package manager / Index 在根包侧，**永不进入 seed 闭包**。
 - `do` / Monad / IO 组合子已在 M11 实现；DT 自 M13 起步，M14 索引族、M15 隐式/
   接口/洞、M16 终止性、M17 工具链、M18.5–M18.6 擦除修复与表示层定型、M19–M22
-  语言面/多文件/效应、M23 夹具迁移与 `interp` 核心求值、M24 单路径收尾。**当前阻碍
-  按阶段登记在 [docs/roadmap.md](../roadmap.md)**。仍是边界的几条：
+  语言面/多文件/效应、M23 夹具迁移与 `interp` 核心求值、M24 单路径收尾、M24.5 等式
+  搬运、M24.6 编译器本体最小重构、M24.7 trait 库化。**当前阻碍按阶段登记在
+  [docs/roadmap.md](../roadmap.md)**。仍是边界的几条：
   - **单文件 / 无库模式没有隐式 `Bool`**：单文件程序用 `True`/`False` 需自己
-    `data Bool`（与 `List` 约定一致）；`Bool` 类型名仍是 prelude 类型别名（内建 trait
-    签名需要），数据定义在包模式下以 `Base.Bool` 为权威。
+    `data Bool`（与 `List` 约定一致）或经 `Prelude` 使用 `Base.Bool`；`Bool` 类型名仍
+    是 prelude 类型别名（prelude 里 `==` / 比较的签名需要），数据定义在包模式下以
+    `Base.Bool` 为权威。
   - **擦除由 rig 判据驱动**：`Rig0`（隐式 binder / `Type` 域）不进运行时表示，`Rig1`
     （显式值、显式索引 `(n : Nat)`）保留字段（`17_erase` / `dt/38_explicit_index` 锁定
     两侧）；不做整程序使用分析，「想擦但被读」的显式索引不会自动擦除（可改成隐式
@@ -53,9 +55,29 @@
     夹具的 `main` 用 `Int`/`String`（数据覆盖点留在被调函数里）。
   - **`strUnpack`/`strPack` 在核心求值器不归约**：codegen 侧已补齐（无 `List` 族时
     映射 `bi_strUnpack`/`bi_strPack`），但 interp 不归约；相关夹具用 `.nointerp` 标记。
-  - **参数化 data 的派生实例**：`deriving (Eq)` 可用但走通用结构比较兜底（需要 `Eq` 字典
-    的场景如 `mem (List (Maybe2 Int))` 仍可能缺实例）；`deriving (Show)` / `(Ord)` 只支持
-    非参数化类型（参数化时显式报错）。
+  - **单文件 / 裸 `--root` 模式需显式 import trait 模块（M24.7）**：`Prelude` 不自动
+    注入，`Show` / `Eq` / `Ord` 及其实例需要 `--root <repo>/base/lib` 并在文件头
+    `import Prelude`；只用 `Int`/`String` 原语或泛型兜底比较的夹具可以省略 import；
+    包目录模式仍自动导入 `Prelude`。
+  - **`==` / 比较在无实例时的兜底**：具体类型没有可用 `Eq` 实例时 `==` / `/=` 退回
+    运行时结构比较（`bi_eq_generic`）；程序里没有 `Eq` 类（单文件 / 未 import）同样
+    退回。刚性类型变量保持 M22 语义（搜不到实例时提升成隐式字典参数，实例优先）。
+    `<` / `<=` / `>` / `>=` 只对 `Int` 做运行时特化、`String`/`Bool` 走泛型运行时；
+    **其它具体类型**（含用户 `data`）必须走 `Ord` 字典，无 `Ord` 类时同样退回泛型比较。
+  - **`deriving` 对参数化 data 仍只支持 `Eq`**：`deriving (Eq)` 可用（走通用结构比较
+    兜底，需要 `Eq` 字典的场景如 `mem (List (Maybe2 Int))` 仍可能缺实例）；
+    `deriving (Show)` / `(Ord)` 只支持非参数化类型（参数化时显式报错）。
+  - **OCaml 保留字**：codegen 只对 lambda binder 的裸标识符加 `_` 后缀转义
+    （`method` / `type` 等可以作 vuna 标识符）；用户值 / 类型 / 构造子名分别有
+    `v_` / `t_` / `C_` 前缀，不会撞 OCaml 保留字。
+  - **类型族（结果以 `Type` 收尾的 Pi 链，如 `sel : Nat -> Type`）整体擦除（M24.6）**：
+    不生成运行时定义；在运行时定义里把擦除的族参数当值用报错
+    （`dt_err/39_type_family_runtime_use`）。
+  - **等式搬运边界（M24.5）**：隐式**值**参数 `{x : a}` 不支持（类型/值参数都要写显式）；
+    构造子当函数值部分应用不参与 `conv`（`cong ... Succ ...` 与饱和 `VCon` 对不上，
+    可用 lambda 或包装函数绕过）；`Ctx n -> Fin n -> Tm n` 这类**依赖索引取值**仍写
+    不出（按位置变化的类型族没有表达手段）；空族判定在索引含中性项时保守。详见
+    [dt-parity.md](dt-parity.md) §6.3。
   - **命名实例 `@inst` 不参与自动实例搜索**：default 实例按 (trait, 类型) 唯一；命名实例
     只能用 `@name` 显式选择（`@M.name` 需已导入）。
   - **高阶 kind 与多隐式参数的推断**：高阶 kind 的 **check** 已支持（`m a` 推断
@@ -69,11 +91,9 @@
   - **覆盖率（穷尽性/冗余）检查对 TCB 三包**（`vuna` / `vuna-compiler` / `vuna-base`）
     **只告警不报错**（编译器源码是执行代码）；用户包与夹具仍严格。终止性检查同机制
     （`dtTrustsTermination`）。
-  - **`==` / `/=` 在具体类型无可用 `Eq` 实例时退回泛型结构比较**（见
-    [type-system.md](type-system.md)）；刚性类型变量保持 M22 语义（提升成隐式字典参数，
-    实例优先）。「比较函数/不可结构比较的值」在无实例时是运行时未定义行为，而不是编译
-    错误。单文件程序的 `List` 若由程序自己声明，`getArgs` / `readDir` 等效果内建返回的
-    列表由 codegen 桥接回该族；没有声明 `List` 的单文件程序不能使用这些内建。
+  - **单文件 `List` 桥接**：单文件程序的 `List` 若由程序自己声明，`getArgs` / `readDir`
+    等效果内建返回的列表由 codegen 桥接回该族；没有声明 `List` 的单文件程序不能使用
+    这些内建。
   完整 DT 主线见 [docs/roadmap.md](../roadmap.md)、设计边界见 [docs/dt-core.md](../dt-core.md)、
   工具链见 [dt-tooling.md](dt-tooling.md)；种子轮换是手动流程（发版/不兼容变更时），日常
   工具链改动不需要 rotation；`test/run-tests.sh` 以 golden 比对为主。
@@ -120,7 +140,8 @@
 
 ## 已完成阶段（细节见 history）
 
-- M12.7 / M12.8 / M13–M24 已完成：删除 dynamic codegen 与旧开关；标准库/编译器命名空间
-  收敛、`Prelude` 自动导入与 `.output` 构建；DT 地基与全部语言能力落地；单路径收尾
-  （删除第二套检查器、seed 改由 DT split codegen 生成）。依赖类型主线（M13–M18）见
+- M12.7 / M12.8 / M13–M24.7 已完成：删除 dynamic codegen 与旧开关；标准库/编译器命名
+  空间收敛、`Prelude` 自动导入与 `.output` 构建；DT 地基与全部语言能力落地；单路径
+  收尾（删除第二套检查器、seed 改由 DT split codegen 生成）；M24.5 等式搬运、M24.6
+  编译器本体最小重构、M24.7 `Show`/`Eq`/`Ord` 库化。依赖类型主线（M13–M18）见
   [docs/roadmap.md](../roadmap.md)；每个阶段的细节见 [docs/history.md](../history.md)。

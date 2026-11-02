@@ -1,0 +1,23 @@
+-- 反例：上下文是空归纳族的分支虽然可以**省略**，写出来仍然必须报错
+-- （ENil 分支里 `n = Zero`，于是 `i : Fin Zero`，分支体无从构造）。
+data Nat : Type where
+  Zero : Nat
+  Succ : Nat -> Nat
+
+data Fin : Nat -> Type where
+  FZero : {n : Nat} -> Fin (Succ n)
+  FSucc : {n : Nat} -> Fin n -> Fin (Succ n)
+
+data Env : Type -> Nat -> Type where
+  ENil : {a : Type} -> Env a Zero
+  ECons : {a : Type} -> {n : Nat} -> a -> Env a n -> Env a (Succ n)
+
+bad : {a : Type} -> {n : Nat} -> Env a n -> Fin n -> a
+bad env i = case env of
+  ENil => i
+  ECons x rest => case i of
+    FZero => x
+    FSucc j => bad rest j
+
+main : Int
+main = 0

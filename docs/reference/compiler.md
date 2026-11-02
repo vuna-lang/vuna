@@ -28,7 +28,7 @@ import 闭包就是 `seed/` 的内容；工具链（fmt/lint/repl/doc/test/lsp�
 | `Vuna.Compiler.CompilerCli` | 编译器自己的 CLI（`vuna-compiler`） | `runCompilerCli`、`compilerUsageLines` |
 | `Vuna.Compiler.Core` | DT core 类型论表示、NbE 求值与定义性相等 | `eval`、`quote`、`conv`、`normalize`、`defaultFuel` |
 | `Vuna.Compiler.Elab` | DT 双向精化器（一阶元变量、类型级隐式插入、索引族、洞目标） | `elabProgramFull`、`goalsOfProgram` |
-| `Vuna.Compiler.DtKind` / `DtTerm` / `DtPrelude` / `DtQuant` | DT 支撑模块：trait 类参数 kind 推断、终止性检查（surface AST）、内建类型与实例名、签名自由类型变量量化 | `methodArgRigsOf`、`checkTerminationDecls`、`quantifyTopSig` |
+| `Vuna.Compiler.DtKind` / `DtTerm` / `DtPrelude` / `DtQuant` | DT 支撑模块：trait 类参数 kind 推断、终止性检查（surface AST）、内建类型名与运算符特化辅助、签名自由类型变量量化 | `methodArgRigsOf`、`checkTerminationDecls`、`quantifyTopSig` |
 | `Vuna.Compiler.DtMatch` | 多 clause 模式矩阵降级：构造子列 → `case`、字面量列 → `if` 链（纯 Ast→Ast 变换，从 Elab 拆出守模块预算） | `multiToExpr`、`buildColumnExpr` |
 | `Vuna.Compiler.DtRecords` / `DtDerive` | `record` / `deriving` 的 DT 降级（单构造器 `data`、派生实例）；在 `Elab` 前跑 | — |
 | `Vuna.Compiler.CoreCodegen` | 擦除检查 + OCaml 生成：单文件路径与逐模块 split（runtime prelude 在 `dtRuntime`） | `checkDtProgram`、`generateDtProgram`、`generateDtSplitProgram` |
@@ -105,16 +105,20 @@ flags `-g -w -a+39 -warn-error +39`）做模块级增量构建，最后按依赖
 `DtProgram`，产出 `List SplitFile`：
 
 1. `Vuna_runtime.ml`：`dtRuntime`；
-2. `Vuna_builtins.ml`：内建类 `Dict_Show/Eq/Ord`、内建实例（`Show_Show_` / `Eq_Eq_` /
-   `Ord_Ord_` 前缀）与内建类方法投影；
+2. `Vuna_builtins.ml`：split 生成器保留的编译单元；M24.7 删除旧内建 trait/实例后为空
+   （只 `open Vuna_runtime`），保留它是为了让文件集形状稳定；
 3. 每个源码模块一个 `<Module>.ml`（依赖序，文件头 `open` runtime / builtins 与更早
    模块）；`List` 桥接放在声明 `List` 族的模块文件里；
-4. `Main.ml`：entry decls 的 defs + `main` 钩子；
+4. `Main.ml`：entry decls 的 datas + defs + `main` 钩子（M24.6：入口文件里的 `data`
+   也必须发进来）；
 5. `build.sh`：不在生成器内，由 CLI 侧（`SplitCli.buildSplit` / `seedSplit`）用
    `Split.buildScript` 写盘（干净构建 / 增量构建）。
 
 文件划分只由源码顺序与名字决定，不依赖时间/环境（确定性）；无法归属的
-`DtDef` / `DtData` 报清晰错误，不静默丢弃。
+`DtDef` / `DtData` 报清晰错误，不静默丢弃。M24.6 起生成链还有三条护栏：构造子字段
+形状以 telescope 的 keep flags 为**单一真源**（类型声明 / 构造子应用 / case 绑定三处
+消费并校验）、`checkResolvedModules` 在 split 入口拒绝未带模块前缀的 parsed 声明、
+`ensureUniqueOcamlNames` 对实际生成的 `v_*` / `t_*` / `C_*` 名字做族内去重。
 
 ## 机器无关指标
 

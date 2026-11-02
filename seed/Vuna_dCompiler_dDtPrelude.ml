@@ -4,9 +4,12 @@ open Base_dPair
 open Base_dBool
 open Base_dMonad
 open Base_dMaybe
+open Base_dEq
 open Base_dList
 open Base_dResult
 open Base_dString
+open Base_dShow
+open Base_dOrd
 open Prelude
 open Vuna_dCompiler_dCommon
 open Vuna_dCompiler_dToml
@@ -124,3 +127,16 @@ let rec v_Vuna_dCompiler_dDtPrelude_dpickListFamily = (fun mc0 -> (match mc0 wit
   | C_Base_dList_dList_Nil -> "List"
   | _ -> failwith "DT: impossible branch"
 ))
+
+let v_Vuna_dCompiler_dDtPrelude_dcmpBuiltinTyName = (fun v -> ((fun nd_uscrut -> (match nd_uscrut with
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__32) -> (if ((bi_eq_str dtb__32) "Int") then (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust ("Int")) else (if ((bi_eq_str dtb__32) "String") then (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust ("String")) else (if ((bi_eq_str dtb__32) "Bool") then (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust ("Bool")) else C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing)))
+  | _ -> C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing
+)) (v_Vuna_dCompiler_dDtPrelude_dbuiltinTyName v)))
+
+let rec v_Vuna_dCompiler_dDtPrelude_dclassMethodProjectionGo = (fun mc0 -> (fun mc1 -> (fun mc2 -> (match mc1 with
+  | C_Base_dList_dList_Cons (dtb__33, dtb__34) -> (if ((bi_eq_str (v_Vuna_dCompiler_dDtPrelude_dbaseNameOf (v_Base_dPair_dfirstOf dtb__33))) mc0) then (v_Base_dPair_dfirstOf dtb__33) else (((v_Vuna_dCompiler_dDtPrelude_dclassMethodProjectionGo mc0) dtb__34) mc2))
+  | C_Base_dList_dList_Nil -> mc2
+  | _ -> failwith "DT: impossible branch"
+))))
+
+let v_Vuna_dCompiler_dDtPrelude_dclassMethodProjection = (fun methods -> (fun short -> (((v_Vuna_dCompiler_dDtPrelude_dclassMethodProjectionGo short) methods) short)))

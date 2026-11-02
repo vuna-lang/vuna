@@ -20,6 +20,9 @@
   `Base.List`）；loader 按「本包 lib + 依赖包 lib（DFS 后序、按包名去重）」解析
   import，跨包只认依赖包 `[export]` 列表，隐藏模块报
   `is not exported by package ...`。包模式自动注入 `Prelude` import（见 [stdlib.md](stdlib.md)）。
+- **依赖图内包名唯一（M24.7）**：包名参与「同包永远可见」与 effectful 内建 allowlist
+  判定，因此同名不同目录是配置错误。同名同目录的 diamond 依赖合法；同名不同目录在加载
+  期报 `duplicate package name ...`（M24.7 前的旧实现会按包名去重、静默丢弃整支依赖）。
 - 编译器 CLI（`compiler/lib/Vuna/Compiler/CompilerCli.vuna`）：`vuna-compiler` 提供
   `compile/check/build/seed`，入口 `compiler/app/Main.vuna`；**seed 只由这个入口的闭包
   生成**。产品 CLI（`lib/Vuna/Cli.vuna`）通过 in-process 调库实现同样的命令，并追加

@@ -47,8 +47,17 @@ findDtDef : String -> List DtDef -> Maybe DtDef
 findDtDef name [] = Nothing
 findDtDef name (d :: rest) = if dtDefName d == name then Just d else findDtDef name rest
 
+-- 类型级定义的判据：定义**类型** force 后以宇宙收尾（`Type` 或 `... -> Type` 的 Pi 链）。
+-- 旧实现只看 `isTypeValue`（仅裸 `Type`），于是 `sel : Nat -> Type` 一类类型族被判成
+-- 运行时定义，生成的 OCaml 里出现未定义的 `v_Int`/`v_String`（M24.5 发现的预存在 bug）。
+isTypeForming : Value -> Bool
+isTypeForming v = case v of
+  VType l => True
+  VPi name implicit rig dom clo => isTypeForming (applyClosure clo (VNeutral (NVar name 0 [])))
+  _ => False
+
 isTypeLevelDef : List (Pair String Term) -> DtDef -> Bool
-isTypeLevelDef table d = isTypeValue (force table [] defaultFuel (eval [] (dtDefType d)))
+isTypeLevelDef table d = isTypeForming (force table [] defaultFuel (eval [] (dtDefType d)))
 
 partitionDefs : List (Pair String Term) -> List DtDef -> Pair (List DtDef) (List String)
 partitionDefs table defs = partitionDefsGo table defs [] []
@@ -315,7 +324,75 @@ groupDefsOf defs (n :: rest) = case lookupDtDef defs n of
   Nothing => groupDefsOf defs rest
   Just d => d :: groupDefsOf defs rest
 
--- check / compile 共用的准备阶段：分区 + 擦除检查 + SCC 分组。
+-- M24.6 第一级：OCaml 名字编码的单射性护栏。`sanitizeName` 的转义是前缀码
+-- （'_' 只会以 `_d/_u/_p/_h` 形式出现），理论上已单射；这里仍对**实际生成的**
+-- value/type/ctor 名字做去重校验，任何未来改动引入碰撞都在 check 期报错，而不是
+-- 静默覆盖（三族前缀 v_/t_/C_ 互不相同，只需族内校验）。
+checkNoDupOcamlNames : String -> List String -> Result Int
+checkNoDupOcamlNames kind [] = Ok 0
+checkNoDupOcamlNames kind (n :: rest) =
+  if memName n rest then Err ("DT: internal: OCaml name collision among " ++ kind ++ "s: `" ++ n ++ "`")
+  else checkNoDupOcamlNames kind rest
+
+ensureUniqueOcamlNames : List DtData -> List DtDef -> Result Int
+ensureUniqueOcamlNames datas defs =
+  let
+    runtime = runtimeDatas datas
+    valueNames = map (\d => valueName (dtDefName d)) defs
+    typeNames = map (\d => typeName (dtDataName d)) runtime
+    ctorNames =
+      concatMap (\d => map (\c => ctorOcamlName (dtCtorFamily c) (dtCtorName c)) (dtDataCtors d))
+        runtime
+  in andThen (checkNoDupOcamlNames "value" valueNames)
+    (\_ => andThen (checkNoDupOcamlNames "type" typeNames) (\_ => checkNoDupOcamlNames "constructor" ctorNames))
+
+-- M24.6 第三级（重新裁定后的最小落地）：de Bruijn index 的作用域护栏。
+-- `Core.varIndex` 越界已改为返回 -1（不再静默指向 0）；这里对**全部**定义体
+-- （含类型级定义，它们现在整体擦除、不再过擦除检查）做一次作用域验证，任何
+-- 越界/负 index 都在 check 期报内部错误，而不是在 codegen/OCaml 阶段才炸。
+checkTermScopes : Int -> Term -> Result Int
+checkTermScopes depth t = case t of
+  TVar name i =>
+    if i >= 0 then if i < depth then Ok 0
+    else Err
+      ("DT: internal: out-of-scope de Bruijn index " ++ strFromInt i ++ " (depth " ++ strFromInt depth ++ ")")
+    else Err ("DT: internal: negative de Bruijn index " ++ strFromInt i)
+  TGlobal name => Ok 0
+  TInt n => Ok 0
+  TStr s => Ok 0
+  TBool b => Ok 0
+  TType l => Ok 0
+  TMeta m => Ok 0
+  TApp f a rig =>
+    if rigIsErased rig then checkTermScopes depth f
+    else andThen (checkTermScopes depth f) (\_ => checkTermScopes depth a)
+  TCon c args => checkTermScopesArgs depth args
+  TLam name rig body => checkTermScopes (depth + 1) body
+  TPi name implicit rig dom cod =>
+    andThen (checkTermScopes depth dom) (\_ => checkTermScopes (depth + 1) cod)
+  TIf c th el =>
+    andThen (checkTermScopes depth c)
+      (\_ => andThen (checkTermScopes depth th) (\_ => checkTermScopes depth el))
+  TCase scrut alts => andThen (checkTermScopes depth scrut) (\_ => checkAltScopes depth alts)
+
+checkTermScopesArgs : Int -> List (Pair Term Rig) -> Result Int
+checkTermScopesArgs depth [] = Ok 0
+checkTermScopesArgs depth ((Pair arg rig) :: rest) =
+  if rigIsErased rig then checkTermScopesArgs depth rest
+  else andThen (checkTermScopes depth arg) (\_ => checkTermScopesArgs depth rest)
+
+checkAltScopes : Int -> List CaseAlt -> Result Int
+checkAltScopes depth [] = Ok 0
+checkAltScopes depth (alt :: rest) =
+  andThen (checkTermScopes (depth + length (caseAltBinders alt)) (caseAltBody alt))
+    (\_ => checkAltScopes depth rest)
+
+checkAllDefScopes : List DtDef -> Result Int
+checkAllDefScopes [] = Ok 0
+checkAllDefScopes (d :: rest) =
+  andThen (checkTermScopes 0 (dtDefBody d)) (\_ => checkAllDefScopes rest)
+
+-- check / compile 共用的准备阶段：名字护栏 + 分区 + 擦除检查 + SCC 分组。
 -- 返回 (运行时定义（源码顺序）, 已按依赖排序的分组)。
 prepareDtProgram : Pair (List DtData) (List DtDef) -> Result (Pair (List DtDef) (List (List DtDef)))
 prepareDtProgram program =
@@ -328,8 +405,8 @@ prepareDtProgram program =
     Pair runtime typeNames =>
       let
         allTypeNames = append typeNames familyNames
-      in andThen (checkAllErasure allTypeNames runtime)
-        (\_ => andThen (groupRuntimeDefs runtime) (\groups => Ok (Pair runtime groups)))
+      in andThen (checkAllDefScopes runtime)
+        (\_ => andThen (ensureUniqueOcamlNames datas runtime) (\_ => andThen (checkAllErasure allTypeNames runtime) (\_ => andThen (groupRuntimeDefs runtime) (\groups => Ok (Pair runtime groups)))))
 
 -- ---------------------------------------------------------------
 -- OCaml 生成
@@ -775,26 +852,47 @@ renderFieldTy levels table datas lvl dom slot = case dom of
         Nothing => Pair (typeParamName slot) (slot + 1)
   _ => Pair (typeParamName slot) (slot + 1)
 
-ctorFieldTexts : List Int -> List (Pair String (List Int)) -> List DtData -> List (Pair String Rig) -> Int -> Value -> Int -> Pair (List String) Int
-ctorFieldTexts levels table datas [] lvl v slot = Pair [] slot
-ctorFieldTexts levels table datas ((Pair name rig) :: rest) lvl v slot = case v of
+-- 构造子字段形状的**唯一真源**（M24.6 第一级）：从 telescope 的 rig 算出 keep flags
+-- （True = 该 binder 进运行时表示）。类型声明、构造子应用、case 分支绑定三处都消费
+-- 同一份 flags，并在使用点校验长度 / 擦除标志一致；三处各自 `if erased` 漂移会静默
+-- 错编译（字段数、telescope 长度、绑定数三者没有交叉校验）。
+ctorKeepFlags : DtCtor -> List Bool
+ctorKeepFlags c = map (\b => not (rigIsErased (secondOf b))) (dtCtorTelescope c)
+
+flagMatchesRig : Bool -> Rig -> Bool
+flagMatchesRig keep rig = if keep then not (rigIsErased rig) else rigIsErased rig
+
+ctorShapeOf : List DtData -> List (Pair String (List Bool))
+ctorShapeOf [] = []
+ctorShapeOf (d :: rest) =
+  append (map (\c => Pair (dtCtorName c) (ctorKeepFlags c)) (dtDataCtors d)) (ctorShapeOf rest)
+
+ctorFieldTexts : List Int -> List (Pair String (List Int)) -> List DtData -> List Bool -> List (Pair String Rig) -> Int -> Value -> Int -> Result (Pair (List String) Int)
+ctorFieldTexts levels table datas keepFlags [] lvl v slot = Ok (Pair [] slot)
+ctorFieldTexts levels table datas [] (_ :: _) lvl v slot =
+  Err "DT: internal: constructor shape has more binders than its telescope"
+ctorFieldTexts levels table datas (keep :: flags) ((Pair name rig) :: rest) lvl v slot = if flagMatchesRig keep rig then case v of
   VPi pname implicit _ dom clo =>
     let
       next = applyClosure clo (VNeutral (NVar pname lvl []))
-    in if rigIsErased rig then ctorFieldTexts levels table datas rest (lvl + 1) next slot
-    else case renderFieldTy levels table datas lvl dom slot of
-      Pair text slot2 => case ctorFieldTexts levels table datas rest (lvl + 1) next slot2 of
-        Pair texts slot3 => Pair (text :: texts) slot3
-  _ => Pair [] slot
+    in if keep then case renderFieldTy levels table datas lvl dom slot of
+      Pair text slot2 => andThen (ctorFieldTexts levels table datas flags rest (lvl + 1) next slot2) (\p => case p of
+        Pair texts slot3 => Ok (Pair (text :: texts) slot3)
+      )
+    else ctorFieldTexts levels table datas flags rest (lvl + 1) next slot
+  _ => Err "DT: internal: constructor telescope does not match its type"
+else Err "DT: internal: constructor keep flag disagrees with telescope rig"
 
-ctorArityNeed : List Int -> List (Pair String (List Int)) -> List DtData -> DtCtor -> Int
+ctorArityNeed : List Int -> List (Pair String (List Int)) -> List DtData -> DtCtor -> Result Int
 ctorArityNeed levels table datas c =
-  secondOf (ctorFieldTexts levels table datas (dtCtorTelescope c) 0 (eval [] (dtCtorType c)) (length levels))
-    - length levels
+  andThen
+    (ctorFieldTexts levels table datas (ctorKeepFlags c) (dtCtorTelescope c) 0 (eval [] (dtCtorType c)) (length levels))
+    (\p => Ok (secondOf p - length levels))
 
-dataArityNeed : List Int -> List (Pair String (List Int)) -> List DtData -> List DtCtor -> Int
+dataArityNeed : List Int -> List (Pair String (List Int)) -> List DtData -> List DtCtor -> Result Int
 dataArityNeed levels table datas ctors =
-  length levels + maxIntList (map (ctorArityNeed levels table datas) ctors)
+  andThen (traverse (ctorArityNeed levels table datas) ctors)
+    (\ns => Ok (length levels + maxIntList ns))
 
 maxIntList : List Int -> Int
 maxIntList [] = 0
@@ -814,16 +912,16 @@ parenOne t = "(" ++ t ++ ")"
 
 genCtorDecl : List Int -> List (Pair String (List Int)) -> List DtData -> DtCtor -> Result String
 genCtorDecl levels table datas c =
-  Ok
-    (ctorDeclText (ctorOcamlName (dtCtorFamily c) (dtCtorName c)) (firstOf (ctorFieldTexts levels table datas (dtCtorTelescope c) 0 (eval [] (dtCtorType c)) (length levels))))
+  andThen
+    (ctorFieldTexts levels table datas (ctorKeepFlags c) (dtCtorTelescope c) 0 (eval [] (dtCtorType c)) (length levels))
+    (\p => Ok (ctorDeclText (ctorOcamlName (dtCtorFamily c) (dtCtorName c)) (firstOf p)))
 
 genDataDecl : List (Pair String (List Int)) -> List DtData -> DtData -> Result String
 genDataDecl table datas d =
   let
     levels = lookupUsed table (dtDataName d)
-    arity = dataArityNeed levels table datas (dtDataCtors d)
-  in andThen (traverse (genCtorDecl levels table datas) (dtDataCtors d))
-    (\cs => Ok (typeParamDecl arity ++ typeName (dtDataName d) ++ " = " ++ ctorBodyText cs))
+  in andThen (dataArityNeed levels table datas (dtDataCtors d))
+    (\arity => andThen (traverse (genCtorDecl levels table datas) (dtDataCtors d)) (\cs => Ok (typeParamDecl arity ++ typeName (dtDataName d) ++ " = " ++ ctorBodyText cs)))
 
 ctorBodyText : List String -> String
 ctorBodyText [] = "|"
@@ -841,28 +939,33 @@ genTypeDecls datas = case datas of
 -- 项 → OCaml
 -- ---------------------------------------------------------------
 --
--- 生成状态：族名表、构造子 → 族表、fresh 变量计数（case 分支绑定子用去重名）。
+-- 生成状态：族名表、构造子 → 族表、构造子形状表、fresh 变量计数、thunk 名表。
 -- binder 环境是「最近绑定在前」的 (OCaml 变量名, 是否擦除)，TVar 靠 index 解析。
+-- M24.6：`gsCtorShapes` 是构造子字段形状的唯一真源，构造子应用与 case 分支都按它
+-- 校验/生成（见 `ctorKeepFlags`）。
 data GenSt : Type where
-  GenSt : List String -> List (Pair String String) -> Int -> List String -> GenSt
+  GenSt : List String -> List (Pair String String) -> List (Pair String (List Bool)) -> Int -> List String -> GenSt
 
 gsCtors : GenSt -> List (Pair String String)
-gsCtors (GenSt families ctors next thunks) = ctors
+gsCtors (GenSt families ctors shapes next thunks) = ctors
+
+gsCtorShapes : GenSt -> List (Pair String (List Bool))
+gsCtorShapes (GenSt families ctors shapes next thunks) = shapes
 
 -- 程序声明的族名表（`strUnpack` / `strPack` 的映射要看有没有 List 族）。
 gsFamilies : GenSt -> List String
-gsFamilies (GenSt families ctors next thunks) = families
+gsFamilies (GenSt families ctors shapes next thunks) = families
 
 gsNext : GenSt -> Int
-gsNext (GenSt families ctors next thunks) = next
+gsNext (GenSt families ctors shapes next thunks) = next
 
 -- M23：零运行时参数的顶层定义要像 HM path 一样包成 thunk（`fun () -> body`），
 -- 否则带效果的值定义（`help = let _ = print ... in 0`）会在模块初始化时就执行。
 gsThunks : GenSt -> List String
-gsThunks (GenSt families ctors next thunks) = thunks
+gsThunks (GenSt families ctors shapes next thunks) = thunks
 
 gsPutNext : GenSt -> Int -> GenSt
-gsPutNext (GenSt families ctors next thunks) n = GenSt families ctors n thunks
+gsPutNext (GenSt families ctors shapes next thunks) n = GenSt families ctors shapes n thunks
 
 ctorTableOfData : DtData -> List (Pair String String)
 ctorTableOfData d = map (\c => Pair (dtCtorName c) (dtCtorFamily c)) (dtDataCtors d)
@@ -872,7 +975,8 @@ ctorTableOf [] = []
 ctorTableOf (d :: rest) = append (ctorTableOfData d) (ctorTableOf rest)
 
 mkGenSt : List DtData -> List DtDef -> GenSt
-mkGenSt datas defs = GenSt (map dtDataName datas) (ctorTableOf datas) 0 (thunkNames defs)
+mkGenSt datas defs =
+  GenSt (map dtDataName datas) (ctorTableOf datas) (ctorShapeOf datas) 0 (thunkNames defs)
 
 -- 运行时参数个数为 0 的定义（无 TLam 或只有擦除 TLam）→ thunk。
 runtimeArity : Term -> Int
@@ -921,6 +1025,51 @@ else
 altEnv : GenSt -> List (Pair String Rig) -> List (Pair String Rig) -> AltEnv
 altEnv st outer tele = altEnvGo st outer tele []
 
+-- 构造子分支的绑定环境：按**构造子形状**（keep flags）决定哪些 telescope 位置进 pattern。
+-- 与实参一样有两种合法约定：
+--   1. **全 telescope**（普通 case：`caseAltBinders` 含擦除占位，body 的 de Bruijn index
+--      按完整 telescope 数）；
+--   2. **仅保留字段**（Elab 生成的字典投影分支：只绑方法字段，body index 按字段数）。
+-- 按 binders 长度落在哪个口径选择，并逐位校验 rig 与形状一致。
+altEnvChecked : GenSt -> String -> List (Pair String Rig) -> List (Pair String Rig) -> List Bool -> Result AltEnv
+altEnvChecked st label outer binders flags =
+  if length binders == length flags then altEnvFull st label outer binders flags []
+  else if length binders == countKept flags then altEnvKept st label outer binders []
+  else Err
+    ("DT: internal: constructor " ++ label ++ ": case branch binder count matches neither full telescope nor kept fields")
+
+countKept : List Bool -> Int
+countKept [] = 0
+countKept (k :: rest) = if k then 1 + countKept rest else countKept rest
+
+altEnvFull : GenSt -> String -> List (Pair String Rig) -> List (Pair String Rig) -> List Bool -> List String -> Result AltEnv
+altEnvFull st label outer binders flags pats = case binders of
+  [] => case flags of
+    [] => Ok (AltEnv outer (reverse pats) st)
+    _ :: _ =>
+      Err
+        ("DT: internal: constructor " ++ label ++ ": case branch has fewer binders than its shape")
+  (Pair name rig) :: rest => case flags of
+    [] =>
+      Err ("DT: internal: constructor " ++ label ++ ": case branch has more binders than its shape")
+    keep :: flags2 => if flagMatchesRig keep rig then if keep then
+      let
+        fresh = gsNext st
+        nm = "dtb__" ++ strFromInt fresh
+      in altEnvFull (gsPutNext st (fresh + 1)) label (Pair nm Rig1 :: outer) rest flags2 (nm :: pats)
+    else altEnvFull st label (Pair "" Rig0 :: outer) rest flags2 pats
+    else Err
+      ("DT: internal: constructor " ++ label ++ ": case branch binder rig disagrees with its shape")
+
+altEnvKept : GenSt -> String -> List (Pair String Rig) -> List (Pair String Rig) -> List String -> Result AltEnv
+altEnvKept st label outer [] pats = Ok (AltEnv outer (reverse pats) st)
+altEnvKept st label outer ((Pair name rig) :: rest) pats = if rigIsErased rig then Err ("DT: internal: constructor " ++ label ++ ": kept-field branch has an erased binder")
+else
+  let
+    fresh = gsNext st
+    nm = "dtb__" ++ strFromInt fresh
+  in altEnvKept (gsPutNext st (fresh + 1)) label (Pair nm Rig1 :: outer) rest (nm :: pats)
+
 genTerm : GenSt -> List (Pair String Rig) -> Term -> Result (Pair String GenSt)
 genTerm st binders t = case t of
   TVar name i => case binderAt i binders of
@@ -939,21 +1088,93 @@ genTerm st binders t = case t of
       )
     )
   )
-  TLam name rig body => if rigIsErased rig then andThen (genTerm st (Pair "" Rig0 :: binders) body) (\p => case p of
-    Pair b st2 => Ok (Pair b st2)
-  )
-  else
-    let
-      ocName = sanitizeName name
-    in andThen (genTerm st (Pair ocName Rig1 :: binders) body) (\p => case p of
-      Pair b st2 => Ok (Pair ("(fun " ++ ocName ++ " -> " ++ b ++ ")") st2)
-    )
+  TLam name rig body => genTermLam st binders name rig body
   TApp f a rig => genApp st binders f a rig
   TCon c args => genConApp st binders c args
   TCase scrut alts => genCase st binders scrut alts
   TPi name implicit rig dom cod => Err "DT: a type is used at runtime (M13 limitation)"
   TType l => Err "DT: a type is used at runtime (M13 limitation)"
   TMeta m => Err ("DT: unsolved metavariable in runtime code" ++ showMetaHint m)
+
+-- M24.6：lambda binder 是唯一直接写裸标识符的地方（值/类型/构造子名都有 v_/t_/C_ 前缀，
+-- 不会撞 OCaml 保留字）。vuna 允许 `method` / `type` 一类标识符，OCaml 不允许，这里统一
+-- 加后缀 `_` 转义，保证「能 check 就能 compile」。
+ocamlReservedWords : List String
+ocamlReservedWords =
+  [ "and",
+    "as",
+    "assert",
+    "asr",
+    "begin",
+    "class",
+    "constraint",
+    "do",
+    "done",
+    "downto",
+    "else",
+    "end",
+    "exception",
+    "external",
+    "false",
+    "for",
+    "fun",
+    "function",
+    "functor",
+    "if",
+    "in",
+    "include",
+    "inherit",
+    "initializer",
+    "land",
+    "lazy",
+    "let",
+    "lor",
+    "lsl",
+    "lsr",
+    "lxor",
+    "match",
+    "method",
+    "mod",
+    "module",
+    "mutable",
+    "new",
+    "nonrec",
+    "object",
+    "of",
+    "open",
+    "or",
+    "private",
+    "rec",
+    "sig",
+    "struct",
+    "then",
+    "to",
+    "true",
+    "try",
+    "type",
+    "val",
+    "virtual",
+    "when",
+    "while",
+    "with"
+  ]
+
+ocamlBinderName : String -> String
+ocamlBinderName name =
+  let
+    oc = sanitizeName name
+  in if memName oc ocamlReservedWords then oc ++ "_" else oc
+
+genTermLam : GenSt -> List (Pair String Rig) -> String -> Rig -> Term -> Result (Pair String GenSt)
+genTermLam st binders name rig body = if rigIsErased rig then andThen (genTerm st (Pair "" Rig0 :: binders) body) (\p => case p of
+  Pair b st2 => Ok (Pair b st2)
+)
+else
+  let
+    ocName = ocamlBinderName name
+  in andThen (genTerm st (Pair ocName Rig1 :: binders) body) (\p => case p of
+    Pair b st2 => Ok (Pair ("(fun " ++ ocName ++ " -> " ++ b ++ ")") st2)
+  )
 
 -- 应用：精化器可能把饱和的构造子应用表示成嵌套 `TApp (TApp (TCon c []) a) b`。
 -- 这种形态必须先折叠成 `TCon c [a, b]`，否则 OCaml 侧会把它当成 curried 调用
@@ -975,10 +1196,26 @@ conAppText name [] = name
 conAppText name ([a]) = "(" ++ name ++ " (" ++ a ++ "))"
 conAppText name args = "(" ++ name ++ " (" ++ joinWith ", " args ++ "))"
 
+-- 构造子实参对齐（M24.6 第一级）：TCon 的实参有两种合法约定：
+--   1. **全 telescope**（含擦除位，普通构造子经 `inferArgs` 插入隐式后如此）；
+--   2. **仅保留字段**（字典构造子 `MkDict_C` 只带方法实现，省略擦除的类参数）。
+-- 两种都按 shape 归一成「运行时实参列表」（全部非擦除），供 `genConArgs` 生成。
+alignCtorArgs : String -> List Bool -> List (Pair Term Rig) -> Result (List (Pair Term Rig))
+alignCtorArgs label [] [] = Ok []
+alignCtorArgs label [] (_ :: _) =
+  Err ("DT: internal: constructor " ++ label ++ ": application has more arguments than its shape")
+alignCtorArgs label (keep :: flags) [] =
+  if keep then Err ("DT: internal: constructor " ++ label ++ ": application has fewer arguments than its shape")
+  else alignCtorArgs label flags []
+alignCtorArgs label (keep :: flags) ((Pair arg rig) :: rest) =
+  if keep then if rigIsErased rig then Err ("DT: internal: constructor " ++ label ++ ": runtime field marked erased")
+  else andThen (alignCtorArgs label flags rest) (\ts => Ok (Pair arg rig :: ts))
+  else if rigIsErased rig then alignCtorArgs label flags rest
+  else alignCtorArgs label flags (Pair arg rig :: rest)
+
 genConArgs : GenSt -> List (Pair String Rig) -> List (Pair Term Rig) -> Result (Pair (List String) GenSt)
 genConArgs st binders [] = Ok (Pair [] st)
-genConArgs st binders ((Pair arg rig) :: rest) = if rigIsErased rig then genConArgs st binders rest
-else andThen (genTerm st binders arg) (\p => case p of
+genConArgs st binders ((Pair arg rig) :: rest) = andThen (genTerm st binders arg) (\p => case p of
   Pair text st2 => andThen (genConArgs st2 binders rest) (\q => case q of
     Pair texts st3 => Ok (Pair (text :: texts) st3)
   )
@@ -987,9 +1224,12 @@ else andThen (genTerm st binders arg) (\p => case p of
 genConApp : GenSt -> List (Pair String Rig) -> String -> List (Pair Term Rig) -> Result (Pair String GenSt)
 genConApp st binders c args = case lookupPair c (gsCtors st) of
   Nothing => Err ("DT: internal: unknown constructor " ++ c)
-  Just family => andThen (genConArgs st binders args) (\p => case p of
-    Pair argTexts st2 => Ok (Pair (conAppText (ctorOcamlName family c) argTexts) st2)
-  )
+  Just family => case lookupPair c (gsCtorShapes st) of
+    Nothing => Err ("DT: internal: no shape for constructor " ++ c)
+    Just flags => andThen (alignCtorArgs c flags args) (\runtimeArgs => andThen (genConArgs st binders runtimeArgs) (\p => case p of
+      Pair argTexts st2 => Ok (Pair (conAppText (ctorOcamlName family c) argTexts) st2)
+    )
+    )
 
 hasFallbackAlt : List CaseAlt -> Bool
 hasFallbackAlt [] = False
@@ -1011,15 +1251,15 @@ genArm st outer alt = if caseAltName alt == "" then
   )
 else case lookupPair (caseAltName alt) (gsCtors st) of
   Nothing => Err ("DT: internal: unknown constructor " ++ caseAltName alt)
-  Just family =>
-    let
-      bound = altEnv st outer (caseAltBinders alt)
-    in andThen (genTerm (aeSt bound) (aeEnv bound) (caseAltBody alt)) (\p => case p of
+  Just family => case lookupPair (caseAltName alt) (gsCtorShapes st) of
+    Nothing => Err ("DT: internal: no shape for constructor " ++ caseAltName alt)
+    Just flags => andThen (altEnvChecked st (caseAltName alt) outer (caseAltBinders alt) flags) (\bound => andThen (genTerm (aeSt bound) (aeEnv bound) (caseAltBody alt)) (\p => case p of
       Pair b st2 =>
         let
           cname = ctorOcamlName family (caseAltName alt)
           patText = armPatternText cname (aePats bound)
         in Ok (Pair ("  | " ++ patText ++ " -> " ++ b ++ "\n") st2)
+    )
     )
 
 genArms : GenSt -> List (Pair String Rig) -> List CaseAlt -> Result (Pair String GenSt)
@@ -1481,16 +1721,35 @@ splitMainHook allDatas allDefs printResult = case findDtDef "main" allDefs of
         genDtHook "" table innerTy (ioRunText (Pair allDatas allDefs) mainRef) printResult
       Nothing => genDtHook "" table (dtDefType mainDef) mainRef printResult
 
-splitMainFile : List DtData -> List DtDef -> List (Pair String String) -> Bool -> List String -> Result SplitFile
-splitMainFile allDatas allDefs defPairs printResult opens =
+splitMainFile : List DtData -> List DtDef -> List (Pair String String) -> List (Pair String String) -> Bool -> List String -> Result SplitFile
+splitMainFile allDatas allDefs defPairs dataPairs printResult opens =
   let
     entryDefs = defsInUnit defPairs entryOwner allDefs
-  in andThen (groupRuntimeDefs entryDefs) (\groups => andThen (genGroups (depAdjacency entryDefs) (mkGenSt allDatas allDefs) groups) (\p => case p of
+    entryDatas = datasInUnit dataPairs entryOwner allDatas
+  in andThen (genTypeDeclsOf allDatas entryDatas) (\typeText => andThen (groupRuntimeDefs entryDefs) (\groups => andThen (genGroups (depAdjacency entryDefs) (mkGenSt allDatas allDefs) groups) (\p => case p of
     Pair bodies _ =>
       andThen (splitMainHook allDatas allDefs printResult)
-        (\hook => Ok (SplitFile "Main.ml" (openHeader opens ++ joinWith "\n\n" bodies ++ "\n" ++ hook)))
+        (\hook => Ok (SplitFile "Main.ml" (openHeader opens ++ typeText ++ joinWith "\n\n" bodies ++ "\n" ++ hook)))
   )
   )
+  )
+
+-- M24.6 第二级（重新裁定后的最小落地）：codegen 只接受 **Loader-resolved** 的模块声明。
+-- M24 之后 codegen 的单一文件路径只吃 `DtProgram`（Elab 输出），唯一还接触 `Decl`
+-- 的是 split 的归属表；这里在该边界上校验「模块声明名必须带模块前缀」（Loader 保证
+-- 的 resolved 形态）。任何人把 parse 后的裸声明喂进来都会在这里被拒，而不是生成
+-- 归属错误/静默丢定义的 split 产物。单文件/REPL/LSP 的 parsed 入口不经过本函数。
+firstUnresolvedDeclName : List String -> Maybe String
+firstUnresolvedDeclName [] = Nothing
+firstUnresolvedDeclName (n :: rest) = if containsDot n then firstUnresolvedDeclName rest else Just n
+
+checkResolvedModules : List (Pair String (List Decl)) -> Result Int
+checkResolvedModules [] = Ok 0
+checkResolvedModules ((Pair mname decls) :: rest) = case firstUnresolvedDeclName (splitDeclNames decls) of
+  Just n =>
+    Err
+      ("DT: internal: module " ++ mname ++ " has an unresolved declaration name `" ++ n ++ "` (codegen requires Loader-resolved decls)")
+  Nothing => checkResolvedModules rest
 
 generateDtSplitProgram : List (Pair String (List Decl)) -> List Decl -> DtProgram -> Bool -> Result (List SplitFile)
 generateDtSplitProgram modules entryDecls prog printResult =
@@ -1499,21 +1758,24 @@ generateDtSplitProgram modules entryDecls prog printResult =
     allDefs = dtProgDefs prog
     runtimeAll = runtimeDatas allDatas
     table = defTable allDefs
-  in case partitionDefs table allDefs of
+  in andThen (checkResolvedModules modules) (\_ => case partitionDefs table allDefs of
     Pair runtime typeNames =>
       let
         allTypeNames = append typeNames (map dtDataName allDatas)
         meta = splitMetaOf modules entryDecls
-      in andThen (checkAllErasure allTypeNames runtime) (\_ => andThen (nameOwnerPairsOfDefs meta runtime) (\defPairs => andThen (nameOwnerPairsOfDatas meta allDatas) (\dataPairs => let
+      in andThen (checkAllDefScopes runtime) (\_ => andThen (ensureUniqueOcamlNames allDatas runtime) (\_ => andThen (checkAllErasure allTypeNames runtime) (\_ => andThen (nameOwnerPairsOfDefs meta runtime) (\defPairs => andThen (nameOwnerPairsOfDatas meta allDatas) (\dataPairs => let
         builtinDatas = datasInUnit dataPairs builtinOwner runtimeAll
         builtinDefs = defsInUnit defPairs builtinOwner runtime
       in andThen (splitUnitText runtimeAll runtime builtinDatas builtinDefs "" [runtimeUnit]) (\builtinText => andThen (splitModuleFiles runtimeAll runtime defPairs dataPairs [] modules) (\moduleFiles => let
         unitNames = map (\p => splitUnitOfModule (firstOf p)) modules
       in andThen
-        (splitMainFile runtimeAll runtime defPairs printResult (append [runtimeUnit, builtinUnit] unitNames))
+        (splitMainFile runtimeAll runtime defPairs dataPairs printResult (append [runtimeUnit, builtinUnit] unitNames))
         (\mainFile => Ok (SplitFile "Vuna_runtime.ml" dtRuntime :: SplitFile "Vuna_builtins.ml" builtinText :: append moduleFiles [mainFile]))
       )
       )
       )
       )
       )
+      )
+      )
+  )

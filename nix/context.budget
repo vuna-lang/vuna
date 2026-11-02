@@ -36,5 +36,8 @@ coldstart_bytes 29200
 agents_lines 104
 arch_lines 178
 readme_lines 168
-max_ref_lines 168
-max_module_lines 3360
+#   - M24.5：dt-parity.md §6 重写（实测能力表 + 边界）到 203 行；Elab 新增 scrutinee 反射、
+#     不可达分支、inlineSolvedMetas（3348 → 3513）。按实测重标定 max_ref 208 / max_module 3530；
+#     入口文档（coldstart/agents/arch/readme）不变。
+max_ref_lines 208
+max_module_lines 3530

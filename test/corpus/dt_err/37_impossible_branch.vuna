@@ -1,0 +1,16 @@
+-- 反例：索引已排除的分支不能写出来（`Vec a (Succ m)` 上写 Nil）。
+data Nat : Type where
+  Zero : Nat
+  Succ : Nat -> Nat
+
+data Vec : Type -> Nat -> Type where
+  Nil : {a : Type} -> Vec a Zero
+  Cons : {a : Type} -> {n : Nat} -> a -> Vec a n -> Vec a (Succ n)
+
+bad : {a : Type} -> {m : Nat} -> Vec a (Succ m) -> Int
+bad xs = case xs of
+  Nil => 0
+  Cons x rest => 1
+
+main : Int
+main = 0

@@ -119,8 +119,8 @@ for file in "$HERE"/run/*.vuna; do
   else
     ok
   fi
-  before=$(cd "$REPO" && "$VUNA" interp "$file" 2>&1)
-  after=$(cd "$REPO" && "$VUNA" interp "$formatted" 2>&1)
+  before=$(cd "$REPO" && "$VUNA" interp --root base/lib "$file" 2>&1)
+  after=$(cd "$REPO" && "$VUNA" interp --root base/lib "$formatted" 2>&1)
   expected_text=$(cat "$expected")
   check_eq "$name (interp golden)" "$expected_text" "$before"
   check_eq "$name (interp after format)" "$before" "$after"
@@ -147,7 +147,7 @@ for file in "$HERE"/typed/*.vuna; do
   expected_text=$(cat "$expected")
   # 原文件
   rm -f "$tmp/t1.ml" "$tmp/t1.exe"
-  if ! ( cd "$REPO" && "$VUNA" compile "$file" "$tmp/t1.ml" ) >"$tmp/t1.log" 2>&1; then
+  if ! ( cd "$REPO" && "$VUNA" compile --root base/lib "$file" "$tmp/t1.ml" ) >"$tmp/t1.log" 2>&1; then
     bad "$name (typed compile)"
     cat "$tmp/t1.log"
     continue
@@ -161,7 +161,7 @@ for file in "$HERE"/typed/*.vuna; do
   check_eq "$name (typed golden)" "$expected_text" "$before"
   # 格式化后的文件
   rm -f "$tmp/t2.ml" "$tmp/t2.exe"
-  if ! ( cd "$REPO" && "$VUNA" compile "$formatted" "$tmp/t2.ml" ) >"$tmp/t2.log" 2>&1; then
+  if ! ( cd "$REPO" && "$VUNA" compile --root base/lib "$formatted" "$tmp/t2.ml" ) >"$tmp/t2.log" 2>&1; then
     bad "$name (typed compile after format)"
     cat "$tmp/t2.log"
     continue

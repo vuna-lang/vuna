@@ -1,0 +1,15 @@
+-- 反例：两个 Vec 的索引不同（n / m），只写 Cons 分支应报缺 Nil。
+data Nat : Type where
+  Zero : Nat
+  Succ : Nat -> Nat
+
+data Vec : Type -> Nat -> Type where
+  Nil : {a : Type} -> Vec a Zero
+  Cons : {a : Type} -> {n : Nat} -> a -> Vec a n -> Vec a (Succ n)
+
+bad : {a : Type} -> {n : Nat} -> {m : Nat} -> Vec a n -> Vec a m -> Int
+bad xs ys = case xs of
+  Cons x rest => 0
+
+main : Int
+main = 0

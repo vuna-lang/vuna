@@ -660,8 +660,12 @@ quoteNeutral depth n = case n of
   NVar name level sp => applyTermSpine (TVar name (varIndex depth level)) (map (quote depth) sp)
   NGlobal g sp => applyTermSpine (TGlobal g) (map (quote depth) sp)
 
+-- M24.6 第一级：越界的 level 以前被静默当成最外层变量（index 0），错得无声。
+-- quote 是纯函数、不返回 Result；这里对越界返回负 index（-1），后续
+-- `binderAt` / 擦除检查会把它报成 "unbound runtime variable" 而不是悄悄指向 0。
+-- 正常路径（level < depth）不变。
 varIndex : Int -> Int -> Int
-varIndex depth level = if level < depth then depth - level - 1 else 0
+varIndex depth level = if level < depth then depth - level - 1 else 0 - 1
 
 applyTermSpine : Term -> List Term -> Term
 applyTermSpine head [] = head

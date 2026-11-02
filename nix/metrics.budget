@@ -48,15 +48,15 @@
 # 导出列表纳入 fmt（显式列表逐项一行）：模块头展开使源码行号整体下移，`vuna_fail`
 #   内嵌的行列号数字变长，生成 .ml 的 bytes +84、>100 列行 +2；codegen 本身未变。
 #   按实测重新标定：bytes 1425629 / longlines 5014。
-bytes 1165000
-lines 11550
+bytes 1190000
+lines 11900
 maxline 8000
-longlines 3450
-letrec 480
+longlines 3520
+letrec 496
 strcat 0
-eqint 125
-zeroarg 95
-ctorcount 3550
+eqint 122
+zeroarg 80
+ctorcount 3620
 # M23 夹具迁移与 interp 切换：编译器源码新增 DT 能力（零参构造子求值、record update 降级、
 #   参数化 record、@inst 选择、实例诊断、&&|| 短路、REPL 表达式求值、DtDerive/CoreCodegen
 #   修正）约 250 行；且本预算自 751ba49（Elab +467 行）起就已失效——HEAD 实测已是
@@ -70,3 +70,9 @@ ctorcount 3550
 #   按实测重新标定：files 37 / bytes 1155561 / lines 11468 / maxline 7778 /
 #   longlines 3414 / letrec 472 / strcat 0 / eqint 118 / zeroarg 89 / ctorcount 3471。
 #   预算保留少量余量；ctorcount 上升来自 DT 字典/内建实例显式进 split 产物。
+# M24.6/M24.7 波 1：CoreCodegen 构造子形状三重一致性 + 名字碰撞护栏（+~30 行），
+#   base 新增 Base.{Show,Eq,Ord} 三个模块进入 seed 闭包（37 → 40 .ml），按实测重新标定：
+#   files 40 / bytes 1186570 / lines 11843 / longlines 3503 / letrec 487 /
+#   zeroarg 98 / ctorcount 3549。M24.5 + 类型族擦除修复后按实测再标定：
+#   bytes 1195051 / lines 11922 / longlines 3527 / letrec 493 / ctorcount 3587。
+#   M24.7 波 2 删除内建 trait/实例后预计回降，届时再标定。

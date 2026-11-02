@@ -1,6 +1,4 @@
-data Bool : Type where
-  True : Bool
-  False : Bool
+import Prelude
 
 data Dummy : Type where
   D : Dummy

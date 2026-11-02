@@ -1,0 +1,14 @@
+-- M24.6 回归：`build --split` 必须把 app/Main.vuna 里声明的 data 类型也发进 Main.ml。
+-- 旧实现 `splitMainFile` 只发 entry defs、不发 entry datas，生成 `C_Color_Red` 未定义
+-- （`ocamlopt` 才报 Unbound constructor；单文件默认 build 不复现）。
+data Color : Type where
+  Red : Color
+  Blue : Color
+
+pick : Color
+pick = Red
+
+main : Int
+main = case pick of
+  Red => 1
+  Blue => 2

@@ -1,4 +1,6 @@
 -- M23：`@instance` 命名实例选择。默认实例照常参与自动搜索；命名实例只能 `@name` 选中。
+import Prelude
+
 trait Pretty a where
   pretty : a -> String
 

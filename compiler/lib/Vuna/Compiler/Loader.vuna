@@ -181,18 +181,27 @@ _joinNames [] = ""
 _joinNames ([x]) = x
 _joinNames (x :: rest) = x ++ ", " ++ _joinNames rest
 
-moduleDecls : List Module -> String -> List Decl
+-- M24.7：查一个**必须已加载**的模块。旧实现把「模块未加载」当成「空表」
+-- （`moduleDecls` / `exportsOf` 的 `Nothing => []`）：调用方只看到「没有这个导出」，
+-- 于是一个加载器状态不一致被伪装成普通的「名字不存在」，错误被静默吞掉。
+-- 现在缺模块直接返回清晰的 Err（这是内部不变量，不是用户源码错误）。
+missingModule : String -> Result a
+missingModule name =
+  Err
+    ("loader: internal: module " ++ name ++ " is not loaded (import list and module table disagree)")
+
+moduleDecls : List Module -> String -> Result (List Decl)
 moduleDecls modules name = case findModule modules name of
-  Just (Module mname mpkg imports imps decls exports) => decls
-  Nothing => []
+  Just (Module mname mpkg imports imps decls exports) => Ok decls
+  Nothing => missingModule name
 
-moduleCtors : List Module -> String -> List String
-moduleCtors modules name = ctorsOf (moduleDecls modules name)
+moduleCtors : List Module -> String -> Result (List String)
+moduleCtors modules name = andThen (moduleDecls modules name) (\decls => Ok (ctorsOf decls))
 
-exportsOf : List Module -> String -> List ExportEntry
+exportsOf : List Module -> String -> Result (List ExportEntry)
 exportsOf modules name = case findModule modules name of
-  Just (Module mname mpkg imports imps decls exports) => exports
-  Nothing => []
+  Just (Module mname mpkg imports imps decls exports) => Ok exports
+  Nothing => missingModule name
 
 entryKind : ExportEntry -> String
 entryKind e = e.kind
@@ -223,36 +232,39 @@ findExportCtor entries name = lookupExport ["ctor"] name entries
 findExportType : List ExportEntry -> String -> Maybe ExportEntry
 findExportType entries name = lookupExport ["type"] name entries
 
-modulesExportingValueFrom : List Module -> List String -> String -> List (Pair String ExportEntry)
+modulesExportingValueFrom : List Module -> List String -> String -> Result (List (Pair String ExportEntry))
 modulesExportingValueFrom modules names name = case names of
-  [] => []
-  m :: rest => case findExportValue (exportsOf modules m) name of
-    Just e => Pair m e :: modulesExportingValueFrom modules rest name
+  [] => Ok []
+  m :: rest => andThen (exportsOf modules m) (\es => case findExportValue es name of
+    Just e => andThen (modulesExportingValueFrom modules rest name) (\more => Ok (Pair m e :: more))
     Nothing => modulesExportingValueFrom modules rest name
+  )
 
-modulesExportingValue : List Module -> List Import -> String -> List (Pair String ExportEntry)
+modulesExportingValue : List Module -> List Import -> String -> Result (List (Pair String ExportEntry))
 modulesExportingValue modules imports name =
   modulesExportingValueFrom modules (openModuleNames imports) name
 
-modulesExportingCtorFrom : List Module -> List String -> String -> List (Pair String ExportEntry)
+modulesExportingCtorFrom : List Module -> List String -> String -> Result (List (Pair String ExportEntry))
 modulesExportingCtorFrom modules names name = case names of
-  [] => []
-  m :: rest => case findExportCtor (exportsOf modules m) name of
-    Just e => Pair m e :: modulesExportingCtorFrom modules rest name
+  [] => Ok []
+  m :: rest => andThen (exportsOf modules m) (\es => case findExportCtor es name of
+    Just e => andThen (modulesExportingCtorFrom modules rest name) (\more => Ok (Pair m e :: more))
     Nothing => modulesExportingCtorFrom modules rest name
+  )
 
-modulesExportingCtor : List Module -> List Import -> String -> List (Pair String ExportEntry)
+modulesExportingCtor : List Module -> List Import -> String -> Result (List (Pair String ExportEntry))
 modulesExportingCtor modules imports name =
   modulesExportingCtorFrom modules (openModuleNames imports) name
 
-modulesExportingTypeFrom : List Module -> List String -> String -> List (Pair String ExportEntry)
+modulesExportingTypeFrom : List Module -> List String -> String -> Result (List (Pair String ExportEntry))
 modulesExportingTypeFrom modules names name = case names of
-  [] => []
-  m :: rest => case findExportType (exportsOf modules m) name of
-    Just e => Pair m e :: modulesExportingTypeFrom modules rest name
+  [] => Ok []
+  m :: rest => andThen (exportsOf modules m) (\es => case findExportType es name of
+    Just e => andThen (modulesExportingTypeFrom modules rest name) (\more => Ok (Pair m e :: more))
     Nothing => modulesExportingTypeFrom modules rest name
+  )
 
-modulesExportingType : List Module -> List Import -> String -> List (Pair String ExportEntry)
+modulesExportingType : List Module -> List Import -> String -> Result (List (Pair String ExportEntry))
 modulesExportingType modules imports name =
   modulesExportingTypeFrom modules (openModuleNames imports) name
 
@@ -317,14 +329,14 @@ isBuiltinName name = case builtinArity name of
   Just arity => True
   Nothing => False
 
-isBuiltinTraitName : String -> Bool
-isBuiltinTraitName name = name == "Show" || name == "Eq" || name == "Ord"
-
 -- DT prelude 里在 Loader 阶段必须放行的名字（M20）。
 --
 -- DT 单文件时这些名字由 `DtPrelude.preludeGlobals` 直接提供，Loader 不参与；M20 起
--- `--dt` 复用 Loader，于是 `Int` / `String` / `Bool` / 运算符号 / `str*` / 内建 trait
--- 都要能被解析。这里只放行**纯解析**，语义仍由 `Elab` 的 prelude 决定。
+-- `--dt` 复用 Loader，于是 `Int` / `String` / `Bool` / 运算符号 / `str*` 都要能被解析。
+-- 这里只放行**纯解析**，语义仍由 `Elab` 的 prelude 决定。
+--
+-- M24.7：`show` / `eq` / `neq` / `lt` / `le` / `gt` / `ge` 已从放行表移除——trait 与
+-- 实例迁到库（`Base.Show` / `Base.Eq` / `Base.Ord`），裸名必须经 import 的导出表解析。
 isDtPreludeName : String -> Bool
 isDtPreludeName name = memName name dtPreludeNames
 
@@ -351,25 +363,24 @@ dtPreludeNames =
     "strFromInt",
     "strUnpack",
     "strPack",
-    "strLength",
-    "show",
-    "eq",
-    "neq",
-    "lt",
-    "le",
-    "gt",
-    "ge"
+    "strLength"
   ]
 
-isPreludeTraitMethod : String -> Bool
-isPreludeTraitMethod name =
-  name == "show"
-    || name == "eq"
-    || name == "neq"
-    || name == "lt"
-    || name == "le"
-    || name == "gt"
-    || name == "ge"
+-- M24.7：trait 迁到库后，缺 import 是最常见的错误来源。除了常规的
+-- unbound/unknown 诊断，再给一条可操作提示（单文件 / 未 import 的场景）。
+traitImportHint : String -> String
+traitImportHint name = case name of
+  "Show" => " (trait Show is not in scope; add `import Base.Show`)"
+  "Eq" => " (trait Eq is not in scope; add `import Base.Eq`)"
+  "Ord" => " (trait Ord is not in scope; add `import Base.Ord`)"
+  "show" => " (trait method show; add `import Base.Show`)"
+  "eq" => " (trait method eq; add `import Base.Eq`)"
+  "neq" => " (trait method neq; add `import Base.Eq`)"
+  "lt" => " (trait method lt; add `import Base.Ord`)"
+  "le" => " (trait method le; add `import Base.Ord`)"
+  "gt" => " (trait method gt; add `import Base.Ord`)"
+  "ge" => " (trait method ge; add `import Base.Ord`)"
+  _ => ""
 
 resolveQualified : List Module -> String -> List Import -> String -> Result String
 resolveQualified modules label imports name = case splitLastDot (splitOnDot name) of
@@ -379,9 +390,10 @@ resolveQualified modules label imports name = case splitLastDot (splitOnDot name
     in case findImportPrefix imports prefix of
       Nothing => Err (label ++ ": module " ++ prefix ++ " is not imported")
       Just m => if isGlobalCtor base then Ok base
-      else case findExportValue (exportsOf modules m) base of
+      else andThen (exportsOf modules m) (\es => case findExportValue es base of
         Just e => Ok (entryTarget e)
         Nothing => Err (label ++ ": " ++ base ++ " is not exported by " ++ m)
+      )
 
 -- 模式里的限定名只认构造器：`M.foo`（foo 是函数）必须报错，不能按值解析成构造器。
 resolveQualifiedCtor : List Module -> String -> List Import -> String -> Result String
@@ -392,9 +404,10 @@ resolveQualifiedCtor modules label imports name = case splitLastDot (splitOnDot 
     in case findImportPrefix imports prefix of
       Nothing => Err (label ++ ": module " ++ prefix ++ " is not imported")
       Just m => if isGlobalCtor base then Ok base
-      else case findExportCtor (exportsOf modules m) base of
+      else andThen (exportsOf modules m) (\es => case findExportCtor es base of
         Just e => Ok (entryTarget e)
         Nothing => Err (label ++ ": constructor " ++ base ++ " is not exported by " ++ m)
+      )
 
 -- 带点表达式的解析（M10.5）：先按「最长可解析模块前缀」尝试限定名/限定值+字段链，
 -- 否则按「变量/顶层名 + 字段链」处理。`p.x`、`M.point.x`、`Vuna.Compiler.Parser.parseSource` 都走这里。
@@ -427,15 +440,16 @@ dropSegs n (x :: rest) = if n <= 0 then x :: rest else dropSegs (n - 1) rest
 resolveQualifiedPath : List Module -> String -> List Import -> List String -> Int -> Span -> Result (Maybe Expr)
 resolveQualifiedPath modules label imports segs n sp = if n <= 1 then Ok Nothing
 else case findImportPrefix imports (joinDots (takeSegs (n - 1) segs)) of
-  Just m => case dropSegs (n - 1) segs of
+  Just m => andThen (exportsOf modules m) (\es => case dropSegs (n - 1) segs of
     [member] => if isGlobalCtor member then Ok (Just (EVar member sp))
-    else case findExportValue (exportsOf modules m) member of
+    else case findExportValue es member of
       Just e => Ok (Just (EVar (entryTarget e) sp))
       Nothing => Err (label ++ ": " ++ member ++ " is not exported by " ++ m)
-    member :: rest => case findExportValue (exportsOf modules m) member of
+    member :: rest => case findExportValue es member of
       Just e => Ok (Just (foldFieldChain (EVar (entryTarget e) sp) rest sp))
       Nothing => Err (label ++ ": " ++ member ++ " is not exported by " ++ m)
     [] => Ok Nothing
+  )
   Nothing => resolveQualifiedPath modules label imports segs (n - 1) sp
 
 resolveGlobal : List Module -> String -> String -> List String -> List Import -> List String -> String -> Result String
@@ -443,25 +457,28 @@ resolveGlobal modules label prefix own imports scope name = if memName name scop
 else if isGlobalCtor name then Ok name
 else if containsDot name then resolveQualified modules label imports name
 else if memName name own then Ok (mangle prefix name)
-else if isEffectfulBuiltin name then case modulesExportingValue modules imports name of
+else if isEffectfulBuiltin name then andThen (modulesExportingValue modules imports name) (\pairs => case pairs of
   [] => Ok name
-  pairs => andThen (unifyEntryPairs label "name" name pairs) (\p => Ok (entryTarget (secondOf p)))
+  _ => andThen (unifyEntryPairs label "name" name pairs) (\p => Ok (entryTarget (secondOf p)))
+)
 else if isBuiltinName name then Ok name
-else if isBuiltinTraitName name then Ok name
-else if isPreludeTraitMethod name then Ok name
 else if isDtPreludeName name then Ok name
-else case modulesExportingValue modules imports name of
-  [] => Err (label ++ ": unbound variable " ++ name ++ suggest name (append own scope))
-  pairs => andThen (unifyEntryPairs label "name" name pairs) (\p => Ok (entryTarget (secondOf p)))
+else andThen (modulesExportingValue modules imports name) (\pairs => case pairs of
+  [] =>
+    Err
+      (label ++ ": unbound variable " ++ name ++ suggest name (append own scope) ++ traitImportHint name)
+  _ => andThen (unifyEntryPairs label "name" name pairs) (\p => Ok (entryTarget (secondOf p)))
+)
 
 resolveCtor : List Module -> String -> String -> List String -> List Import -> String -> Result String
 resolveCtor modules label prefix ownCtors imports name = if isGlobalCtor name then Ok name
 else if containsDot name then resolveQualifiedCtor modules label imports name
 else if memName name ownCtors then Ok (mangle prefix name)
-else case modulesExportingCtor modules imports name of
+else andThen (modulesExportingCtor modules imports name) (\pairs => case pairs of
   [] => Err (label ++ ": unknown constructor " ++ name ++ suggest name ownCtors)
-  pairs =>
+  _ =>
     andThen (unifyEntryPairs label "constructor" name pairs) (\p => Ok (entryTarget (secondOf p)))
+)
 
 checkBinder : String -> String -> Result String
 checkBinder label name =
@@ -633,7 +650,6 @@ startsUpperName name = case strUnpack name of
 resolveTypeName : List Module -> String -> String -> List String -> List Import -> String -> Result String
 resolveTypeName modules label prefix ownTypes imports name = if memName name ownTypes then Ok (mangle prefix name)
 else if name == "Int" || name == "String" || name == "Bool" || name == "Type" || name == "->" then Ok name
-else if isBuiltinTraitName name then Ok name
 else if isLowerTypeName name then Ok name
 else if containsDot name then case splitLastDot (splitOnDot name) of
   Pair revPrefix base =>
@@ -641,12 +657,14 @@ else if containsDot name then case splitLastDot (splitOnDot name) of
       typePrefix = joinDots revPrefix
     in case findImportPrefix imports typePrefix of
       Nothing => Err (label ++ ": module " ++ typePrefix ++ " is not imported")
-      Just m => case findExportType (exportsOf modules m) base of
+      Just m => andThen (exportsOf modules m) (\es => case findExportType es base of
         Just e => Ok (entryTarget e)
         Nothing => Err (label ++ ": type " ++ base ++ " is not exported by " ++ m)
-else case modulesExportingType modules imports name of
-  [] => Err (label ++ ": unknown type " ++ name)
-  pairs => andThen (unifyEntryPairs label "type" name pairs) (\p => Ok (entryTarget (secondOf p)))
+      )
+else andThen (modulesExportingType modules imports name) (\pairs => case pairs of
+  [] => Err (label ++ ": unknown type " ++ name ++ traitImportHint name)
+  _ => andThen (unifyEntryPairs label "type" name pairs) (\p => Ok (entryTarget (secondOf p)))
+)
 
 resolveTypeExpr : List Module -> String -> String -> List String -> List Import -> Expr -> Result Expr
 resolveTypeExpr modules label prefix ownTypes imports ty = case ty of
@@ -906,11 +924,12 @@ refEntryList pub (Just (ExportRef k tgt parent)) =
 ownOrImportedTypeRef : List Module -> String -> List Decl -> List Import -> String -> Result (Maybe ExportRef)
 ownOrImportedTypeRef modules prefix decls imports name = case findOwnData name decls of
   Just (Pair dname ctorNames) => Ok (Just (ExportRef "type" (mangle prefix dname) ""))
-  Nothing => case modulesExportingType modules imports name of
+  Nothing => andThen (modulesExportingType modules imports name) (\pairs => case pairs of
     [] => Ok Nothing
-    pairs => case unifyEntryPairs prefix "type" name pairs of
-      Err e => Err e
-      Ok p => Ok (Just (ExportRef "type" (entryTarget (secondOf p)) ""))
+    _ =>
+      andThen (unifyEntryPairs prefix "type" name pairs)
+        (\p => Ok (Just (ExportRef "type" (entryTarget (secondOf p)) "")))
+  )
 
 ownOrImportedValueRef : List Module -> String -> List Decl -> List Import -> String -> Result (Maybe ExportRef)
 ownOrImportedValueRef modules prefix decls imports name = case findOwnFn name decls of
@@ -923,14 +942,13 @@ ownOrImportedValueRef2 : List Module -> String -> List Decl -> List Import -> St
 ownOrImportedValueRef2 modules prefix decls imports name = case findOwnCtorName name decls of
   Just (Pair dname cname) =>
     Ok (Just (ExportRef "ctor" (mangle prefix cname) (mangle prefix dname)))
-  Nothing => case modulesExportingValue modules imports name of
+  Nothing => andThen (modulesExportingValue modules imports name) (\pairs => case pairs of
     [] => Ok Nothing
-    pairs => case unifyEntryPairs prefix "name" name pairs of
-      Err e => Err e
-      Ok p =>
-        let
-          e = secondOf p
-        in Ok (Just (ExportRef (entryKind e) (entryTarget e) (entryParent e)))
+    _ => andThen (unifyEntryPairs prefix "name" name pairs) (\p => let
+      e = secondOf p
+    in Ok (Just (ExportRef (entryKind e) (entryTarget e) (entryParent e)))
+    )
+  )
 
 exportBare : List Module -> String -> List Decl -> List Import -> String -> Span -> Result (List ExportEntry)
 exportBare modules prefix decls imports name sp = case splitLastDot (splitOnDot name) of
@@ -956,18 +974,19 @@ exportBare modules prefix decls imports name sp = case splitLastDot (splitOnDot 
         Just m => exportSelective modules prefix m base name sp
 
 exportSelective : List Module -> String -> String -> String -> String -> Span -> Result (List ExportEntry)
-exportSelective modules prefix m base name sp = case findExportValue (exportsOf modules m) base of
-  Just e => case findExportType (exportsOf modules m) base of
+exportSelective modules prefix m base name sp = andThen (exportsOf modules m) (\es => case findExportValue es base of
+  Just e => case findExportType es base of
     Just te =>
       Ok
         [ExportEntry { kind = entryKind e, public = base, target = entryTarget e, parent = entryParent e }, ExportEntry { kind = "type", public = base, target = entryTarget te, parent = "" }]
     Nothing =>
       Ok
         [ExportEntry { kind = entryKind e, public = base, target = entryTarget e, parent = entryParent e }]
-  Nothing => case findExportType (exportsOf modules m) base of
+  Nothing => case findExportType es base of
     Just te =>
       Ok [ExportEntry { kind = "type", public = base, target = entryTarget te, parent = "" }]
     Nothing => Err (prefix ++ ": " ++ showSpanLoc sp ++ ": cannot export unknown name " ++ name)
+)
 
 exportTypeAll : List Module -> String -> List Decl -> List Import -> String -> Span -> Result (List ExportEntry)
 exportTypeAll modules prefix decls imports name sp = case splitLastDot (splitOnDot name) of
@@ -977,36 +996,36 @@ exportTypeAll modules prefix decls imports name sp = case splitLastDot (splitOnD
       Just (Pair dname ctorNames) =>
         Ok
           (ExportEntry { kind = "type", public = name, target = mangle prefix dname, parent = "" } :: ownCtorEntries prefix dname ctorNames)
-      Nothing => case modulesExportingType modules imports name of
+      Nothing => andThen (modulesExportingType modules imports name) (\pairs => case pairs of
         [] => Err (prefix ++ ": " ++ showSpanLoc sp ++ ": cannot export unknown name " ++ name)
-        pairs => case unifyEntryPairs prefix "type" name pairs of
-          Err e => Err e
-          Ok p =>
-            let
-              m = firstOf p
-            in let
-              tgt = entryTarget (secondOf p)
-            in Ok
-              (ExportEntry { kind = "type", public = name, target = tgt, parent = "" } :: ctorEntriesOfType tgt (exportsOf modules m))
+        _ => andThen (unifyEntryPairs prefix "type" name pairs) (\p => let
+          m = firstOf p
+        in let
+          tgt = entryTarget (secondOf p)
+        in andThen (exportsOf modules m)
+          (\es => Ok (ExportEntry { kind = "type", public = name, target = tgt, parent = "" } :: ctorEntriesOfType tgt es))
+        )
+      )
     _ =>
       let
         mprefix = joinDots revPrefix
       in case findImportPrefix imports mprefix of
         Nothing =>
           Err (prefix ++ ": " ++ showSpanLoc sp ++ ": module " ++ mprefix ++ " is not imported")
-        Just m => case findExportType (exportsOf modules m) base of
+        Just m => andThen (exportsOf modules m) (\es => case findExportType es base of
           Just e =>
             Ok
-              (ExportEntry { kind = "type", public = base, target = entryTarget e, parent = "" } :: ctorEntriesOfType (entryTarget e) (exportsOf modules m))
+              (ExportEntry { kind = "type", public = base, target = entryTarget e, parent = "" } :: ctorEntriesOfType (entryTarget e) es)
           Nothing =>
             Err
               (prefix ++ ": " ++ showSpanLoc sp ++ ": type " ++ base ++ " is not exported by " ++ m)
+        )
 
 exportItemEntries : List Module -> String -> List Decl -> List Import -> ExportItem -> Result (List ExportEntry)
 exportItemEntries modules prefix decls imports item = case item of
   XModule name sp => case findImportPrefix imports name of
     Nothing => Err (prefix ++ ": " ++ showSpanLoc sp ++ ": module " ++ name ++ " is not imported")
-    Just m => Ok (exportsOf modules m)
+    Just m => exportsOf modules m
   XTypeAll name sp => exportTypeAll modules prefix decls imports name sp
   XBare name sp => exportBare modules prefix decls imports name sp
 

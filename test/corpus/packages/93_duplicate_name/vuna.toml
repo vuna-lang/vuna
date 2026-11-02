@@ -1,0 +1,10 @@
+[package]
+name = "rootpkg"
+version = "0.1.0"
+
+[workspace]
+members = ["p1", "p2"]
+
+[dependencies]
+p1 = "p1"
+p2 = "p2"

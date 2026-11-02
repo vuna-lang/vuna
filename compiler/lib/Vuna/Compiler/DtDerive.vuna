@@ -1,122 +1,38 @@
-module Vuna.Compiler.DtDerive
-  ( builtinEqInstances
-  , builtinOrdInstances
-  , builtinShowInstances
-  , builtinTraitDecls
-  , expandDerivings
-  ) where
+module Vuna.Compiler.DtDerive (expandDerivings) where
 
--- Vuna.Compiler.DtDerive：`deriving` 的**实例生成**（M19）。
+-- Vuna.Compiler.DtDerive：`deriving` 的**实例生成**（M19；M24.7 改为库里的 trait）。
 --
 -- `deriving (Show, Eq)` 不需要新的精化规则：它等价于一条手写 `instance`，方法体按 data
 -- 的构造子骨架机械生成。因此这里把它展开成 `DInstance`，交给既有的实例精化（M15 的
 -- 字典编码 + 实例搜索）处理。
 --
--- 生成规则（与 HM 的语义一致，`test/corpus/traits/0{3,4,5}_*` 覆盖）：
+-- M24.7：trait 声明、方法投影与内建类型实例的权威定义都在 `Base.Show` / `Base.Eq` /
+-- `Base.Ord`（编译器不再注入内建 trait/实例）。本模块拿到的 derivings 名字已经由
+-- Loader 解析过：包模式经 `Prelude` 重导出得到完整类名（`Base.Show.Show`），单文件里
+-- 自己声明的 trait 则保持无前缀（`Show`）。因此：
+--   - 实例头用**解析后的完整类名**；
+--   - 构造子的分派按类名**最后一段**（`Show` / `Eq` / `Ord`）；
+--   - 方法体里对同类方法的递归调用（`show` / `eq` / `lt` / `le`）必须用解析后的
+--     **投影全局名**（`Base.Show.show` …）：Loader 的短名放行已删除，裸名再也解析不到。
+--
+-- 生成规则（与 M19 一致，`test/corpus/traits/0{3,4,5}_*` 覆盖）：
 --   Show：`show (C x1 ..) = "(" ++ "C" ++ " " ++ show x1 ++ .. ++ ")"`；零参 ⇒ `"C"`。
 --   Eq  ：`eq (C x1 ..) (C y1 ..) = x1 == y1 && ..`；不同构造子 ⇒ `False`。
 --   Ord ：先按**声明顺序**比构造子索引，同构造子再逐字段比。
---
--- 依赖两项前置（都在 M19 完成）：同 trait 多实例能正确解析（否则 `Show Int` 与
--- `Show Color` 互相干扰）、`==` 对非内建类型走 `Eq` 实例。
 import Vuna.Compiler.Common
 import Vuna.Compiler.Ast
 
--- ---------------------------------------------------------------
--- 内建 trait 声明
--- ---------------------------------------------------------------
---
--- `deriving (Show)` 展开出的实例需要 `Show` 存在。DT 的内建 trait 与用户写法一致，
--- 因此直接给出等价声明交给既有的 `elabTrait` 走字典编码——没有内建特例。
-builtinTraitDecls : List Decl
-builtinTraitDecls = [showTrait, eqTrait, ordTrait]
+-- 类名最后一段：`Base.Show.Show` → `Show`；派生规则按它分派（找不到的类报不支持）。
+traitShortName : String -> String
+traitShortName tname = secondOf (splitLastDot (splitOnDot tname))
 
-showTrait : Decl
-showTrait = DTrait "Show" ["a"] [Pair "show" (fn1 (EVar "a" noSpan) (EVar "String" noSpan))] noSpan
-
-eqTrait : Decl
-eqTrait = DTrait "Eq" ["a"] [Pair "eq" cmpTy, Pair "neq" cmpTy] noSpan
-
-ordTrait : Decl
-ordTrait =
-  DTrait "Ord" ["a"] [Pair "lt" cmpTy, Pair "le" cmpTy, Pair "gt" cmpTy, Pair "ge" cmpTy] noSpan
-
-cmpTy : Expr
-cmpTy = fn1 (EVar "a" noSpan) (fn1 (EVar "a" noSpan) (EVar "Bool" noSpan))
-
-fn1 : Expr -> Expr -> Expr
-fn1 a b = EPi "_" False a b noSpan
-
-noSpan : Span
-noSpan = Span "" 0 0 0 0
-
--- ---------------------------------------------------------------
--- 内建类型的 Show 实例
--- ---------------------------------------------------------------
---
--- 派生 `Show` 的字段展示是**递归**的：`show (MkPair 1 2)` 内部要对 `Int` 字段再调
--- `show`。`Int` / `String` / `Bool` 因此也需要 `Show` 实例。`Eq` 不需要——`==` 对
--- 内建类型走精化期特化（`bi_eq_int` 等），不经过实例搜索。
-builtinShowInstances : List Decl
-builtinShowInstances = [showIntInstance, showStringInstance, showBoolInstance]
-
-showIntInstance : Decl
-showIntInstance =
-  DInstance Nothing False (head "Int")
-    [DFun "show" [PVar "sx" noSpan] (EApp (EVar "strFromInt" noSpan) [EVar "sx" noSpan] noSpan) noSpan]
-    noSpan
-
-showStringInstance : Decl
-showStringInstance =
-  DInstance Nothing False (head "String")
-    [DFun "show" [PVar "sx" noSpan] (EApp (EVar "++" noSpan) [EStr "\"" noSpan, EApp (EVar "++" noSpan) [EVar "sx" noSpan, EStr "\"" noSpan] noSpan] noSpan) noSpan]
-    noSpan
-
--- M23：派生方法体不再引用源码里的 `True` / `False`（M22.2 已去掉 prelude 的值桩，
--- 权威定义在 `Base.Bool`，而派生实例可能出现在不 import Base.Bool 的程序里）。
--- 用 Int 上的 `==`（精化期特化成 `bi_eq_int`）产生 Bool：`1 == 1` / `0 == 1`。
--- 这样派生 Eq/Ord 与源码是否声明 Bool 构造子无关。
-boolTrue : Span -> Expr
-boolTrue sp = EApp (EVar "==" sp) [EInt 1 sp, EInt 1 sp] sp
-
-boolFalse : Span -> Expr
-boolFalse sp = EApp (EVar "==" sp) [EInt 0 sp, EInt 1 sp] sp
-
-showBoolInstance : Decl
-showBoolInstance =
-  DInstance Nothing False (head "Bool")
-    [DFun "show" [PVar "sx" noSpan] (EIf (EVar "sx" noSpan) (EStr "True" noSpan) (EStr "False" noSpan) noSpan) noSpan]
-    noSpan
-
-head : String -> Expr
-head tn = EApp (EVar "Show" noSpan) [EVar tn noSpan] noSpan
-
--- ---------------------------------------------------------------
--- 内建类型的 Eq 实例
--- ---------------------------------------------------------------
---
--- M22 泛型实例约束求解后，`mem : {d : Dict_Eq a} -> a -> List a -> Bool` 在具体类型上
--- 实例化时，调用方要把 `Dict_Eq Int` / `Dict_Eq String` 交给 `d`。`Int` / `String` 的
--- `eq` / `neq` 直接复用 `==` / `/=`（它们在精化期特化到 `bi_eq_int` / `bi_eq_str`，不走
--- 实例搜索）。`Bool` 不在此列——`builtinEqTyName` 只认 Int / String，`Bool == Bool` 会
--- 撞上本实例造成自递归，需要的话以后用直接析取补。
-builtinEqInstances : List Decl
-builtinEqInstances = [eqIntInstance, eqStringInstance]
-
-eqIntInstance : Decl
-eqIntInstance =
-  DInstance Nothing False (eqHead "Int")
-    [DFun "eq" [PVar "x" noSpan, PVar "y" noSpan] (EApp (EVar "==" noSpan) [EVar "x" noSpan, EVar "y" noSpan] noSpan) noSpan, DFun "neq" [PVar "x" noSpan, PVar "y" noSpan] (EApp (EVar "/=" noSpan) [EVar "x" noSpan, EVar "y" noSpan] noSpan) noSpan]
-    noSpan
-
-eqStringInstance : Decl
-eqStringInstance =
-  DInstance Nothing False (eqHead "String")
-    [DFun "eq" [PVar "x" noSpan, PVar "y" noSpan] (EApp (EVar "==" noSpan) [EVar "x" noSpan, EVar "y" noSpan] noSpan) noSpan, DFun "neq" [PVar "x" noSpan, PVar "y" noSpan] (EApp (EVar "/=" noSpan) [EVar "x" noSpan, EVar "y" noSpan] noSpan) noSpan]
-    noSpan
-
-eqHead : String -> Expr
-eqHead tn = EApp (EVar "Eq" noSpan) [EVar tn noSpan] noSpan
+-- 类方法的投影全局名：Loader 把 trait 方法 mangle 成 `<模块前缀>.<方法短名>`
+-- （`resolveTraitMethod`）；单文件内联 trait 没有模块前缀时就是短名。
+traitMethodGlobal : String -> String -> String
+traitMethodGlobal tname methodName = case splitLastDot (splitOnDot tname) of
+  Pair rev base => case rev of
+    [] => methodName
+    _ => joinDots rev ++ "." ++ methodName
 
 -- ---------------------------------------------------------------
 -- 展开 `deriving (T1, T2)` ⇒ 等价 instance 声明
@@ -155,71 +71,77 @@ derivingsForGo dname params ctors (t :: rest) sp acc = case params of
     andThen (deriveInstance dname params ctors t sp)
       (\decl => derivingsForGo dname params ctors rest sp (decl :: acc))
   _ =>
-    if t == "Eq" then derivingsForGo dname params ctors rest sp acc
+    if traitShortName t == "Eq" then derivingsForGo dname params ctors rest sp acc
     else Err
-      (showSpanLoc sp ++ ": DT: deriving " ++ t ++ " is only supported for non-parameterized data types (M23)")
+      (showSpanLoc sp ++ ": DT: deriving " ++ traitShortName t ++ " is only supported for non-parameterized data types (M23)")
 
--- 单个 trait 的实例声明。
+-- 单个类的实例声明。`tn` 是 Loader 解析后的完整类名；方法名（`show` / `eq` / ...）由
+-- `elabInstance` 按类方法的最后一段匹配，因此实例里仍写短名。
 deriveInstance : String -> List String -> List Ctor -> String -> Span -> Result Decl
 deriveInstance dname params ctors tn sp =
   let
     hd = instHead tn dname params sp
-  in case tn of
+  in case traitShortName tn of
     "Show" =>
       let
-        ms = [DFun "show" [PVar "sx" sp] (showBody ctors "sx" sp) sp]
+        proj = traitMethodGlobal tn "show"
+        ms = [DFun "show" [PVar "sx" sp] (showBody proj ctors "sx" sp) sp]
       in Ok (DInstance Nothing False hd ms sp)
     "Eq" =>
       let
+        eqProj = traitMethodGlobal tn "eq"
         ms =
           [ DFun "eq" [PVar "sx" sp, PVar "sy" sp] (eqBody ctors sp) sp,
-            DFun "neq" [PVar "sx" sp, PVar "sy" sp] (neqBody sp) sp
+            DFun "neq" [PVar "sx" sp, PVar "sy" sp] (neqBody eqProj sp) sp
           ]
       in Ok (DInstance Nothing False hd ms sp)
     "Ord" =>
       let
+        ltProj = traitMethodGlobal tn "lt"
+        leProj = traitMethodGlobal tn "le"
         ms =
           [ DFun "lt" [PVar "sx" sp, PVar "sy" sp] (ordBody ctors sp) sp,
-            DFun "le" [PVar "sx" sp, PVar "sy" sp] (leBody ctors sp) sp,
-            DFun "gt" [PVar "sx" sp, PVar "sy" sp] (gtBody ctors sp) sp,
-            DFun "ge" [PVar "sx" sp, PVar "sy" sp] (geBody ctors sp) sp
+            DFun "le" [PVar "sx" sp, PVar "sy" sp] (leBody ltProj sp) sp,
+            DFun "gt" [PVar "sx" sp, PVar "sy" sp] (gtBody ltProj sp) sp,
+            DFun "ge" [PVar "sx" sp, PVar "sy" sp] (geBody leProj sp) sp
           ]
       in Ok (DInstance Nothing False hd ms sp)
-    _ => Err (showSpanLoc sp ++ ": cannot derive `" ++ tn ++ "` (supported: Show, Eq, Ord)")
+    kind => Err (showSpanLoc sp ++ ": cannot derive `" ++ kind ++ "` (supported: Show, Eq, Ord)")
 
--- `T <Data> a1 .. an` 形态的实例头。
+-- `T <Data> a1 .. an` 形态的实例头（`T` 是解析后的完整类名）。
 instHead : String -> String -> List String -> Span -> Expr
 instHead tn dname params sp = EApp (EVar tn sp) (EVar dname sp :: map (\p => EVar p sp) params) sp
 
 -- ---------------------------------------------------------------
 -- Show
 -- ---------------------------------------------------------------
-showBody : List Ctor -> String -> Span -> Expr
-showBody ctors scrut sp = ECase (EVar scrut sp) (showAlts ctors sp) sp
+showBody : String -> List Ctor -> String -> Span -> Expr
+showBody proj ctors scrut sp = ECase (EVar scrut sp) (showAlts proj ctors sp) sp
 
-showAlts : List Ctor -> Span -> List (Pair Pat Expr)
-showAlts [] sp = []
-showAlts (c :: rest) sp = case c of
+showAlts : String -> List Ctor -> Span -> List (Pair Pat Expr)
+showAlts proj [] sp = []
+showAlts proj (c :: rest) sp = case c of
   Ctor cn ty ar cnsp =>
     let
       vs = varNames "fa" ar
       pat = PCon cn (map (\v => PVar v sp) vs) sp
-    in Pair pat (showCtor cn vs sp) :: showAlts rest sp
+    in Pair pat (showCtor proj cn vs sp) :: showAlts proj rest sp
 
 -- 零参 ⇒ `"C"`；否则 `"(C " ++ show f0 ++ " " ++ .. ++ ")"`。
-showCtor : String -> List String -> Span -> Expr
-showCtor cn [] sp = EStr cn sp
-showCtor cn vs sp = EApp (EVar "++" sp) [EStr ("(" ++ cn ++ " ") sp, showFields vs sp] sp
+showCtor : String -> String -> List String -> Span -> Expr
+showCtor proj cn [] sp = EStr cn sp
+showCtor proj cn vs sp = EApp (EVar "++" sp) [EStr ("(" ++ cn ++ " ") sp, showFields proj vs sp] sp
 
-showFields : List String -> Span -> Expr
-showFields [] sp = EStr ")" sp
-showFields (v :: rest) sp = case rest of
-  [] => EApp (EVar "++" sp) [showOne v sp, EStr ")" sp] sp
+showFields : String -> List String -> Span -> Expr
+showFields proj [] sp = EStr ")" sp
+showFields proj (v :: rest) sp = case rest of
+  [] => EApp (EVar "++" sp) [showOne proj v sp, EStr ")" sp] sp
   _ =>
-    EApp (EVar "++" sp) [showOne v sp, EApp (EVar "++" sp) [EStr " " sp, showFields rest sp] sp] sp
+    EApp (EVar "++" sp)
+      [showOne proj v sp, EApp (EVar "++" sp) [EStr " " sp, showFields proj rest sp] sp] sp
 
-showOne : String -> Span -> Expr
-showOne v sp = EApp (EVar "show" sp) [EVar v sp] sp
+showOne : String -> String -> Span -> Expr
+showOne proj v sp = EApp (EVar proj sp) [EVar v sp] sp
 
 -- ---------------------------------------------------------------
 -- Eq
@@ -251,10 +173,10 @@ conjFields (f :: fs) (g :: gs) sp = case fs of
   _ => EApp (EVar "&&" sp) [EApp (EVar "==" sp) [EVar f sp, EVar g sp] sp, conjFields fs gs sp] sp
 conjFields fs gs sp = boolFalse sp
 
--- `neq sx sy = if eq sx sy then False else True`
-neqBody : Span -> Expr
-neqBody sp =
-  EIf (EApp (EVar "eq" sp) [EVar "sx" sp, EVar "sy" sp] sp) (boolFalse sp) (boolTrue sp) sp
+-- `neq sx sy = if eq sx sy then False else True`（`eq` 用解析后的投影名）。
+neqBody : String -> Span -> Expr
+neqBody eqProj sp =
+  EIf (EApp (EVar eqProj sp) [EVar "sx" sp, EVar "sy" sp] sp) (boolFalse sp) (boolTrue sp) sp
 
 -- ---------------------------------------------------------------
 -- Ord（构造子按声明顺序为序，同构造子逐字段比）
@@ -301,11 +223,11 @@ ltFields (f :: fs) (g :: gs) sp = case fs of
 ltFields _ _ sp = boolFalse sp
 
 -- `le sx sy = lt sx sy || !(lt sy sx)`——只用 `lt` 派生，不依赖 `Eq` 实例
--- （`deriving (Ord)` 不要求同时 derive `Eq`）。
-leBody : List Ctor -> Span -> Expr
-leBody ctors sp =
+-- （`deriving (Ord)` 不要求同时 derive `Eq`）。`lt` 用解析后的投影名。
+leBody : String -> Span -> Expr
+leBody ltProj sp =
   EApp (EVar "||" sp)
-    [EApp (EVar "lt" sp) [EVar "sx" sp, EVar "sy" sp] sp, EIf (EApp (EVar "lt" sp) [EVar "sy" sp, EVar "sx" sp] sp) (boolFalse sp) (boolTrue sp) sp]
+    [EApp (EVar ltProj sp) [EVar "sx" sp, EVar "sy" sp] sp, EIf (EApp (EVar ltProj sp) [EVar "sy" sp, EVar "sx" sp] sp) (boolFalse sp) (boolTrue sp) sp]
     sp
 
 varNames : String -> Int -> List String
@@ -316,33 +238,21 @@ varNamesAt prefix i n =
   if i >= n then [] else (prefix ++ strFromInt i) :: varNamesAt prefix (i + 1) n
 
 -- `gt sx sy = lt sy sx`；`ge sx sy = le sy sx`（都用已生成的 `lt` / `le`）。
-gtBody : List Ctor -> Span -> Expr
-gtBody ctors sp = EApp (EVar "lt" sp) [EVar "sy" sp, EVar "sx" sp] sp
+gtBody : String -> Span -> Expr
+gtBody ltProj sp = EApp (EVar ltProj sp) [EVar "sy" sp, EVar "sx" sp] sp
 
-geBody : List Ctor -> Span -> Expr
-geBody ctors sp = EApp (EVar "le" sp) [EVar "sy" sp, EVar "sx" sp] sp
+geBody : String -> Span -> Expr
+geBody leProj sp = EApp (EVar leProj sp) [EVar "sy" sp, EVar "sx" sp] sp
 
 -- ---------------------------------------------------------------
--- 内建类型的 Ord 实例
+-- 派生体里产生 Bool 的辅助
 -- ---------------------------------------------------------------
--- `mergeSort : List a -> List a` 里的 `x <= y` 在 `a` 上是刚性的，会提升成
--- `{d : Dict_Ord a}`；调用点若是 `List Int` / `List String` / `List Bool`，实例搜索
--- 需要这三个内建实例。方法体直接写比较运算符：`Int` 走精化期内建特化，
--- `String` / `Bool` 走泛型 `compare`。
-builtinOrdInstances : List Decl
-builtinOrdInstances = [ordIntInstance, ordStringInstance, ordBoolInstance]
+-- 派生方法体不再引用源码里的 `True` / `False`（M22.2 已去掉 prelude 的值桩，
+-- 权威定义在 `Base.Bool`，而派生实例可能出现在不 import Base.Bool 的程序里）。
+-- 用 Int 上的 `==`（精化期特化成 `bi_eq_int`）产生 Bool：`1 == 1` / `0 == 1`。
+-- 这样派生 Eq/Ord 与源码是否声明 Bool 构造子无关。
+boolTrue : Span -> Expr
+boolTrue sp = EApp (EVar "==" sp) [EInt 1 sp, EInt 1 sp] sp
 
-ordIntInstance : Decl
-ordIntInstance = ordInstanceOf "Int" noSpan
-
-ordStringInstance : Decl
-ordStringInstance = ordInstanceOf "String" noSpan
-
-ordBoolInstance : Decl
-ordBoolInstance = ordInstanceOf "Bool" noSpan
-
-ordInstanceOf : String -> Span -> Decl
-ordInstanceOf tn sp =
-  DInstance Nothing False (EApp (EVar "Ord" sp) [EVar tn sp] sp)
-    [DFun "lt" [PVar "x" sp, PVar "y" sp] (EApp (EVar "<" sp) [EVar "x" sp, EVar "y" sp] sp) sp, DFun "le" [PVar "x" sp, PVar "y" sp] (EApp (EVar "<=" sp) [EVar "x" sp, EVar "y" sp] sp) sp, DFun "gt" [PVar "x" sp, PVar "y" sp] (EApp (EVar ">" sp) [EVar "x" sp, EVar "y" sp] sp) sp, DFun "ge" [PVar "x" sp, PVar "y" sp] (EApp (EVar ">=" sp) [EVar "x" sp, EVar "y" sp] sp) sp]
-    sp
+boolFalse : Span -> Expr
+boolFalse sp = EApp (EVar "==" sp) [EInt 0 sp, EInt 1 sp] sp

@@ -1,0 +1,48 @@
+-- M24.5：值级 Eq 的 sym / trans / subst，以及「按等式搬运类型/索引」的 cast。
+-- 全部靠 `case Refl` 的索引精化：Refl 的结果索引把两个索引合一，goal 里的索引随之替换。
+data Nat : Type where
+  Zero : Nat
+  Succ : Nat -> Nat
+
+data Eq : {a : Type} -> a -> a -> Type where
+  Refl : {a : Type} -> (x : a) -> Eq x x
+
+data Vec : Type -> Nat -> Type where
+  Nil : {a : Type} -> Vec a Zero
+  Cons : {a : Type} -> {n : Nat} -> a -> Vec a n -> Vec a (Succ n)
+
+sym : (a : Type) -> (x : a) -> (y : a) -> Eq x y -> Eq y x
+sym a x y e = case e of
+  Refl z => Refl z
+
+trans : (a : Type) -> (x : a) -> (y : a) -> (z : a) -> Eq x y -> Eq y z -> Eq x z
+trans a x y z e1 e2 = case e1 of
+  Refl w => e2
+
+subst : (a : Type) -> (p : a -> Type) -> (x : a) -> (y : a) -> Eq x y -> p x -> p y
+subst a p x y e px = case e of
+  Refl z => px
+
+-- Type 级 cast：把 `a` 上的值搬到 `b`（`Eq a b` 的隐式族参数解成 Type）
+cast : (a : Type) -> (b : Type) -> Eq a b -> a -> b
+cast a b e x = case e of
+  Refl t => x
+
+-- 索引级 cast：按 `Eq (Succ Zero) n` 把 `Vec Int (Succ Zero)` 搬到 `Vec Int n`
+castLen : (n : Nat) -> Eq (Succ Zero) n -> Vec Int (Succ Zero) -> Vec Int n
+castLen n e v = case e of
+  Refl t => v
+
+-- sym + trans 组合出绕一圈的值级等式
+roundTrip : (n : Nat) -> Eq n n
+roundTrip n = trans Nat n n n (Refl n) (sym Nat n n (Refl n))
+
+vhead : (n : Nat) -> Vec Int (Succ n) -> Int
+vhead n xs = case xs of
+  Cons y ys => y
+
+one : Vec Int (Succ Zero)
+one = Cons 9 (Nil)
+
+main : Int
+main = vhead Zero (castLen (Succ Zero) (roundTrip (Succ Zero)) one)

@@ -118,48 +118,86 @@ compile」在此失效，DT 存在能产出错误程序的通道。修复方式�
 限制与测试面：[limits.md](limits.md)、[testing.md](testing.md)；审计原始数据：
 `.local/audit-a/REPORT.md`、`.local/audit-a/repro.sh`、`.local/audit-b/`。
 
-## 6. 索引精化的能力边界（M24.5 的依据）
+## 6. 索引精化的能力边界（M24.5 实测更新）
 
 要判断「编译器本体能否用 DT 重写」，关键不是 DT 有多少语法，而是**精化器能在多大范围内
-给出索引等式**。本节是 2026-11 的实测结论，每行都有可复现夹具。
+给出索引等式**。本节是 2026-11（M24.5）的实测结论，每行都有可复现夹具。
 
-### 6.1 可写与不可写的分界
+### 6.1 能力表（M24.5 后）
 
-| 形态 | 结果 | 说明 |
-| --- | --- | --- |
-| `wkVar : Var n -> Var (Succ n)` | ✅ | 弱化，索引只往后推一位 |
-| `wkTerm : Term n -> Term (Succ n)`（穿过 binder） | ✅ | 递归时上下文变 `Succ (Succ n)`，goal 仍单一形参 |
-| `subst : Term (Succ n) -> Term n -> Term n`（穿过 binder 时 lift 目标项） | ✅ | `interp` 可求值；这是「DT 能写编译器」的关键正面证据 |
-| `vhead : Vec a (Succ n) -> a` / `idv : Vec a n -> Vec a n` | ✅ | `case` 打在被索引族本身，goal 索引随分支精化 |
-| `get : Env n -> Fin n -> Nat` | ✅ | 取出**不依赖索引**的值 |
-| `lookupEnv : Env n -> Fin n -> Tm n` | ❌ `expected (Succ n), got n` | 取出**依赖索引**的值 |
-| `append : Vec a n -> Vec a m -> Vec a (plus n m)` | ❌ `expected (Zero), got m` | 需要在**两个形参**间搬运等式 |
-| `rep : (k : Nat) -> a -> Vec a k` | ❌ `expected k, got (Zero)` | `case` 打在裸 `Nat` 形参上，goal 里含该形参 |
+| 形态 | M24.5 前 | M24.5 后 | 说明 / 夹具 |
+| --- | --- | --- | --- |
+| `wkVar : Var n -> Var (Succ n)` | ✅ | ✅ | 弱化，索引只往后推一位 |
+| `wkTerm : Term n -> Term (Succ n)`（穿过 binder） | ✅ | ✅ | 递归时上下文变 `Succ (Succ n)`，goal 仍单一形参 |
+| `subst : Term (Succ n) -> Term n -> Term n`（穿过 binder 时 lift 目标项） | ✅ | ✅ | `interp` 可求值；这是「DT 能写编译器」的关键正面证据 |
+| `vhead : Vec a (Succ n) -> a` / `idv : Vec a n -> Vec a n` | ✅ | ✅ | `case` 打在被索引族本身，goal 索引随分支精化 |
+| `get : Env n -> Fin n -> Nat` | ✅ | ✅ | 取出**不依赖索引**的值 |
+| `rep : (k : Nat) -> a -> Vec a k` | ❌ `expected k, got (Zero)` | ✅ | **scrutinee 反射**：`case` 打在裸 `Nat` 形参上时，把 scrutinee 的值与构造子结果值合一（`dt/46_rep`） |
+| `lookupEnv : Env n -> Fin n -> a`（只写 `ECons` 分支） | ❌ `missing ENil` | ✅ | **不可达分支按上下文省略**：进 `ENil` 分支时 `n ↦ Zero`，于是 `i : Fin Zero` 是空族，分支不可达；覆盖率允许省略（`dt/47_lookup_env`） |
+| `plusZero : (n) -> Eq (plus Zero n) n` | 未测 | ✅ | **定义性相等**：`plus Zero n` 经 delta + case 归约到 `n`，一个 `Refl` 收尾（`dt/48_eq_defeq`） |
+| `plusZeroR : (n) -> Eq n (plus n Zero)`（归纳 + `cong`） | ❌ | ✅ | 反射把 `Succ k` 分支的 goal 精化成 `Eq (Succ k) (Succ (plus k Zero))`，再用归纳假设 + `cong`（`dt/49_eq_induction`） |
+| 值级 `Eq` 的 `sym` / `trans` / `subst` | 部分 | ✅ | 全部靠 `case Refl` 的索引合一（`dt/50_eq_transport`） |
+| Type 级 `cast : Eq a b -> a -> b` / 索引级 `castLen` | ✅ | ✅ | `Eq` 的隐式族参数解成 `Type` 时即类型之间的等式（`dt/50_eq_transport`） |
+| `append : Vec a n -> Vec a m -> Vec a (plus n m)` | ❌ `expected (Zero), got m` | ✅ | **旧文档的 ❌ 是错的**：分支精化 + `plus` 的定义性相等已经足够（`case xs of Nil => ys; Cons x rest => Cons x (app rest ys)`） |
+| 取出**依赖索引**的值（`Ctx n -> Fin n -> Tm n` 形态） | ❌ | ❌ | 递归步拿到的是 `Ctx n'`（不是 `Ctx (Succ _)`），要「按位置变化的类型族」；这是索引设计的形态问题，不是精化器缺陷 |
 
-### 6.2 边界的一句话表述
+### 6.2 M24.5 修掉的实现缺陷
 
-**精化器只在「`case` 打在被索引族本身、且 goal 的索引就是该 case 精化的那个形参」时
-提供等式。** 一旦需要
+三处都在 `Elab`，夹具见 `test/corpus/dt/46..50` 与 `dt_err/36..38`：
 
-1. 两个**不同形参**之间的等式（`append` 的 `n` 与 `m`），或
-2. 把 `case` 的**scrutinee** 精化反射进 goal（`rep` 的裸 `Nat`），或
-3. 用「某分支不可能」来**免除**写该分支（`lookupEnv` 的 `ENil` 分支里 `Fin Zero` 为空，
-   现在能判不可能，但不能据此跳过）
+1. **scrutinee 反射**（`elabConAlt` 新增 `reflectScrutinee`、`ctorValueIn`）：旧实现只把构造子的
+   **结果索引**与 scrutinee 的索引合一；族没有索引（裸 `Nat`）或包装族时拿不到任何等式。现在
+   在索引合一之后，把 `evalCtx ctx scrutTerm`（只对 `NVar` 且 spine 为空的中性变量）与
+   构造子结果值 `VCon c [telescope 值]` 再合一一次，refs 同时喂 `refineValue expected` 与
+   `ctxRefine`。Bool / Int / String 的 case 走各自专用降级路径，不受影响。
+2. **分支可达性**（`checkCovered` 的 `branchReachable`）：两层判据——索引合一失败（M14 既有），
+   或分支 telescope 绑定 + 合一后**分支上下文里有 binder 的类型是空归纳族**（如 `Fin Zero`）。
+   任何一层判不可达都允许省略该分支。空族判定只在**索引全刚性**（构造子/字面量/宇宙）时生效，
+   索引里出现中性项（`Fin (plus x Zero)`）时保守判非空、仍要求写分支。写出的不可达分支仍然
+   报错：索引不可达给 `this branch is impossible (index constraints are unsatisfiable)`，
+   上下文含空族给 `this branch is impossible (its context contains an empty inductive family)`。
+3. **隐式族参数版 `Eq` 构造**（`inlineSolvedMetas`）：`data Eq : {a : Type} -> a -> a -> Type`
+   配 `Refl : {a : Type} -> (x : a) -> Eq x x` 时，结果类型 `Eq x x` 里的隐式族参数由检查器插成
+   元变量、检查期解成构造子自己的 `a`。旧实现把这个 level 形态的解留在 `dtCtorType` 里，使用点
+   按另一份上下文求值就变成悬空变量（`constructor Refl: type mismatch: expected Nat, got a`）。
+   现在构造子类型 / 族 kind / 签名在登记前都把**检查期已解**的元变量内联成具体项。
 
-就写不出来。这三条正是「按索引编程」的核心手法，也是 M24.5 要补的东西。
+> 性能约束：可达性只在**没写出来的构造子**上计算（写出的分支直接跳过）。否则每个 case 的每个
+> 构造子都要模拟一次分支，`vuna check .` 会从 ~90s 掉到 400s+。
 
-### 6.3 对计划的含义
+### 6.3 剩余边界（写 M24.6 时要记住）
 
-- **「用 DT 重写编译器」不是幻想，但也不是照抄**。弱化、替换、按族 case 都已是可行的；
-  卡住的是 `append`/`Env` 这类**跨索引等式**。
-- 因此 M24.6「Core 索引化」的范围**由 M24.5 的能力决定**：M24.5 补齐等式搬运后，
-  `Env`/`lookup` 与 `append` 才可写；否则只能做到「`Env` 存不依赖索引的值」这一层。
-- **不要先动 Term 层**：实测收益集中在 `Env`/`lookup`/弱化/替换这一层，把 `Term` 的
-  Pi/Lam 结构整体索引化成本极高且收益递减。
+1. **隐式值参数仍不允许**：`{x : a}`（域是类型变量）报 `implicit parameters must be types or
+   inductive families`。证明辅助函数要把类型与值参数写成**显式**（`cong`/`sym`/`trans` 夹具即如此）。
+2. **构造子当函数值传递不一致**：`cong ... Succ ...` 里 `Succ` 部分应用留在 `TGlobal`
+   （求值成 `NGlobal`），与饱和应用产生的 `VCon` 走不到一起（`expected (Succ n), got (Succ n)`）。
+   用 lambda（`\m => Succ m`）或包装函数 `succF : Nat -> Nat` 绕过。
+3. **空族判定的保守性**：见 §6.2 第 2 条，索引含中性项时不判空。
+4. **类型当运行时值会被擦除检查拦下**：`Refl Nat`（`Nat` 落在值位置）在 `check` 就报
+   `type-level name Nat is used at runtime`；Type 级 `cast` 只能定义/检查，不能拿类型本身构造等式。
+5. **没有隐式等式搜索**：等式要显式传参（`Eq x y -> ...`），没有 `auto`/`unify` 搜索。
+6. **依赖索引值取回仍是设计问题**：`Ctx n -> Fin n -> Tm n` 这类要「按位置变化的类型族」，
+   当前 DT 没有表达手段；M24.6 第三级因此只保留护栏（`Env`/`Vec` 只存**不依赖索引**
+   的值，见 [dt-core.md](../dt-core.md) §6.3）。
+7. **类型级函数的 codegen 缺陷（M24.6 已修）**：`sel : Nat -> Type` 这类返回 `Type` 的
+   函数曾因 `isTypeLevelDef` 只看裸 `Type` 被判成运行时定义，生成的 OCaml 出现未定义
+   标识符（`v_Int` / `v_String`）。M24.6 改用 `isTypeForming`（`... -> Type` Pi 链整体
+   擦除），正例 `dt/51`/`52`、负例 `dt_err/39`；细节见 [dt-core.md](../dt-core.md) §6.4。
+
+### 6.4 对计划的含义（更新）
+
+- **「用 DT 重写编译器」不是幻想，但也不是照抄**。弱化、替换、按族 case、`rep`/`lookupEnv`/
+  `append`、归纳证明（`plusZeroR`）都已可写；不再是「卡在跨索引等式」。
+- M24.6 第三级（`Env : Nat -> Type` + `Fin` total lookup）**按 §6.3 第 6 条收窄**：`Fin` 索引的
+  边界检查可写、`lookup` 的 `ENil` 分支可省；但「取回依赖索引的值」需要重新设计 Env 的载体，
+  不在本波内完成。
+- **不要先动 Term 层**：实测收益集中在 `Env`/`lookup`/弱化/替换这一层，把 `Term` 的 Pi/Lam
+  结构整体索引化成本极高且收益递减。
 - 三个「看起来诱人但不划算」的项（拓扑序见证、元变量上下文索引化、终止性 `Acc` 见证）
-  的记录见 [docs/roadmap.md](../roadmap.md) M24.6 的「明确不划算」小节。
+  的记录见 [docs/history.md](../history.md) M24.6 与 [dt-core.md](../dt-core.md) §6.3。
 
-> **口径提示**：本节结论来自 2026-11 的一轮实验（`.local/audit-c/`，77 个夹具）。
-> 早期有一份报告认为「`subst` 也写不出来」，复核后发现是那份夹具漏了穿过 binder 时的
-> `shift u`（`subst` 的目标项必须先弱化），修正后通过。**引用「DT 写不了编译器」这类
-> 结论前请先复核夹具本身是否正确。**
+> **口径提示**：§6.1 的结论来自 M24.5 的一轮实测：`test/corpus/dt/46..50`、`dt_err/36..38`
+> 与 `_scratch/` 实验（`d_append`、`b_fin_ctx`、`l_rep` 等，原始审计在 `.local/audit-c/`，77 个
+> 夹具）。早期报告里的 `append` ❌ 已在 M23/M24 修复但文档未更新——引用旧表前请先复核夹具。
+> 另外，早期有一份报告认为「`subst` 也写不出来」，复核后发现是那份夹具漏了穿过 binder 时的
+> `shift u`（`subst` 的目标项必须先弱化），修正后通过。

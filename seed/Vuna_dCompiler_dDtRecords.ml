@@ -4,9 +4,12 @@ open Base_dPair
 open Base_dBool
 open Base_dMonad
 open Base_dMaybe
+open Base_dEq
 open Base_dList
 open Base_dResult
 open Base_dString
+open Base_dShow
+open Base_dOrd
 open Prelude
 open Vuna_dCompiler_dCommon
 open Vuna_dCompiler_dToml
@@ -69,16 +72,16 @@ let rec v_Vuna_dCompiler_dDtRecords_dfieldNamesOf = (fun mc0 -> (match mc0 with
   | _ -> failwith "DT: impossible branch"
 ))
 
-let rec v_Vuna_dCompiler_dDtRecords_dfieldIndexAt = (fun d4162 -> (fun mc0 -> (fun mc1 -> (fun mc2 -> (match mc1 with
+let rec v_Vuna_dCompiler_dDtRecords_dfieldIndexAt = (fun d4098 -> (fun mc0 -> (fun mc1 -> (fun mc2 -> (match mc1 with
   | C_Base_dList_dList_Cons (dtb__36, dtb__37) -> (match dtb__36 with
-  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__38, dtb__39) -> (if (((v_eq d4162) dtb__38) mc0) then (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (mc2)) else ((((v_Vuna_dCompiler_dDtRecords_dfieldIndexAt d4162) mc0) dtb__37) ((bi_add mc2) 1)))
+  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__38, dtb__39) -> (if (((v_Base_dEq_deq d4098) dtb__38) mc0) then (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (mc2)) else ((((v_Vuna_dCompiler_dDtRecords_dfieldIndexAt d4098) mc0) dtb__37) ((bi_add mc2) 1)))
   | _ -> failwith "DT: impossible branch"
 )
   | C_Base_dList_dList_Nil -> C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing
   | _ -> failwith "DT: impossible branch"
 )))))
 
-let v_Vuna_dCompiler_dDtRecords_dfieldIndex = (fun d4169 -> (fun fname -> (fun fields -> ((((v_Vuna_dCompiler_dDtRecords_dfieldIndexAt d4169) fname) fields) 0))))
+let v_Vuna_dCompiler_dDtRecords_dfieldIndex = (fun d4105 -> (fun fname -> (fun fields -> ((((v_Vuna_dCompiler_dDtRecords_dfieldIndexAt d4105) fname) fields) 0))))
 
 let rec v_Vuna_dCompiler_dDtRecords_dlookupProvided = (fun mc0 -> (fun mc1 -> (match mc1 with
   | C_Base_dList_dList_Cons (dtb__40, dtb__41) -> (match dtb__40 with

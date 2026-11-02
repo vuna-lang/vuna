@@ -1,0 +1,4 @@
+module N (n) where
+
+n : Int
+n = 1

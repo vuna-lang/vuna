@@ -1,0 +1,44 @@
+-- M24.6 第一级：构造子字段形状的单一真源（telescope keep flags）。
+-- 覆盖：隐式族参数（擦除）+ 显式索引（保留）+ 运行时字段、record 构造子、
+-- 参数化 data、显式宇宙域字段（擦除）与 case 分支绑定。
+data Nat : Type where
+  Zero : Nat
+  Succ : Nat -> Nat
+
+data Vec : Type -> Nat -> Type where
+  Nil : {a : Type} -> Vec a Zero
+  Cons : {a : Type} -> (n : Nat) -> a -> Vec a n -> Vec a (Succ n)
+
+record Point where
+  x : Int
+  y : Int
+
+data Pair2 : Type -> Type -> Type where
+  MkPair2 : {a : Type} -> {b : Type} -> a -> b -> Pair2 a b
+
+data Proxy : Type where
+  MkProxy : (t : Type) -> Proxy
+
+sumVec : {n : Nat} -> Vec Int n -> Int
+sumVec xs = case xs of
+  [] => 0
+  Cons m y ys => y + sumVec ys
+
+sumPoint : Point -> Int
+sumPoint p = case p of
+  Point { x = a, y = b } => a + b
+
+pairTag : {a : Type} -> {b : Type} -> Pair2 a b -> Int
+pairTag p = case p of
+  MkPair2 x y => 1
+
+proxyTag : Proxy -> Int
+proxyTag p = case p of
+  MkProxy t => 42
+
+main : Int
+main =
+  sumVec (Cons (Succ (Succ Zero)) 3 (Cons (Succ Zero) 4 (Cons Zero 5 [])))
+    + sumPoint Point { x = 10, y = 20 }
+    + pairTag (MkPair2 1 2)
+    + proxyTag (MkProxy Int)

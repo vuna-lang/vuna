@@ -1,6 +1,4 @@
-data Bool : Type where
-  True : Bool
-  False : Bool
+import Prelude
 
 data Pair2 : Type where
   MkPair : Int -> Int -> Pair2

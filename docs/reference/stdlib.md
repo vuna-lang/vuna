@@ -13,9 +13,12 @@
 | `Base.Sort` | 稳定归并排序 `mergeSort` / `sortBy` |
 | `Base.Map` | 关联表实现的抽象 Map（empty/insert/lookup/remove/keys/values/size/...） |
 | `Base.Monad` | `Functor` / `Monad` trait |
+| `Base.Show` | `Show` trait（`show : a -> String`）+ `Int` / `String` / `Bool` 实例 |
+| `Base.Eq` | `Eq` trait（`eq` / `neq : a -> a -> Bool`）+ `Int` / `String` / `Bool` 实例 |
+| `Base.Ord` | `Ord` trait（`lt` / `le` / `gt` / `ge : a -> a -> Bool`）+ `Int` / `String` / `Bool` 实例 |
 | `Base.IO` | 抽象 `IO a` 与 IO 组合子（实例 + print/readFile/writeFile/getArgs/exit） |
 | `Base` | 包门面：整模块重导出以上模块（`import Base` 即可用） |
-| `Prelude` | 顶层模块（`base/lib/Prelude.vuna`）：重导出 `Base.Pair` / `Bool` / `List` / `Maybe` / `Result` / `String` / `Monad`，**包模式自动导入**；刻意不含 `Base.IO` 的效果函数（`print`/`readFile` 等与编译器直接使用的内建同名），需要 IO 时显式 `import Base.IO`；`--root` 原始模式不自动导入 |
+| `Prelude` | 顶层模块（`base/lib/Prelude.vuna`）：重导出 `Base.Pair` / `Bool` / `Eq` / `Ord` / `Show` / `List` / `Maybe` / `Result` / `String` / `Monad`，**包模式自动导入**；刻意不含 `Base.IO` 的效果函数（`print`/`readFile` 等与编译器直接使用的内建同名），需要 IO 时显式 `import Base.IO`；`--root` 原始模式不自动导入 |
 
 跨包使用时只可见 `base/vuna.toml` `[export]` 列出的模块；抽象类型（`Map`、`IO`）
 的构造器保持私有。`Map` / `Sort` 不在 `Prelude` 里，需要显式 import。
@@ -25,8 +28,12 @@
 ```vuna
 module Base (module Base.Pair, module Base.Bool, module Base.List, module Base.Maybe,
              module Base.Result, module Base.String, module Base.Sort, module Base.Map,
-             module Base.Monad, module Base.IO) where
+             module Base.Monad, module Base.IO, module Base.Show, module Base.Eq,
+             module Base.Ord) where
 module Base.Bool (Bool(..), not, and, or, xor, bool) where
+module Base.Show (Show(..)) where
+module Base.Eq (Eq(..)) where
+module Base.Ord (Ord(..)) where
 module Base.List (List(..), append, reverse, length, map, filter, foldl, foldr, concatMap,
                   flatMap, mem, memName, lookupPair, zip, take, drop, range, mapMaybe) where
 module Base.Maybe (Maybe(..), fromMaybe, isJust, isNothing, maybe, mapJust) where
@@ -51,16 +58,27 @@ module Base.IO (IO, print, println, readFile, writeFile, readLine, readDir, ...)
 - `Base.IO` 刻意不在 `Prelude` 中：`print` / `readFile` 等名字与编译器直接使用的
   effectful 内建同名，自动导入会让编译器源码产生歧义。
 
-## 内建与库的边界（规划）
+## 内建与库的边界
 
 - **`Bool` 归 `Base.Bool`**：`data Bool` 是唯一权威定义（DT 的 `if` / 字面量模式按
   「族短名 Bool」识别，不另存一份定义）。编译器的 DT prelude 桩（`DtPrelude` 的
   `Bool` / `True` / `False`）随 **M22.2** 删除；单文件 / 无库模式按 `List` 的既有约定
-  自行声明 `data Bool`。
+  自行声明 `data Bool`，或经 `Prelude` 使用 `Base.Bool`。
 - **`Int` / `String` 是语言原语**：没有 `data` 声明，字面量、算术与 `str*` 由编译器提供。
-- **`Show` / `Eq` / `Ord` 当前由编译器合成**（`DtDerive` 的内建 trait + 内建实例、
-  `Loader` 的名字放行表），**M24.7** 迁到 `Base.Show` / `Base.Eq` / `Base.Ord`；
-  之后编译器只保留 `deriving` 展开机制与 `==` 的 Int/String 特化。
+- **`Show` / `Eq` / `Ord` 在库（M24.7 完成）**：trait 声明、方法投影与
+  `Int` / `String` / `Bool` 实例全部在 `Base.Show` / `Base.Eq` / `Base.Ord`，包模式下
+  随 `Prelude` 自动导入。编译器只保留**机制**——`deriving (Show, Eq, Ord)` 的展开、
+  `==` / `/=` 的 `Int`/`String` 运行时特化与 `<` / `<=` / `>` / `>=` 的 `Int` 特化
+  （比较的 `String` / `Bool` 走泛型运行时）、以及 `if` / 字面量等语法；`Loader` 不再放行
+  `show` / `eq` / `lt` 等
+  短名，裸名必须经 import 的导出表解析。`Show Bool` 用 `if` 输出 `True` / `False`；
+  `Eq Bool` 方法体用析取（`Bool == Bool` 会落到该实例，不能自递归）。
+- **单文件 / 裸 `--root` 模式（M24.7 起）**：`Prelude` 不自动注入，`Show` / `Eq` /
+  `Ord` 及其实例需要 `--root <repo>/base/lib`（测试里是 `--root ../base/lib`）并在
+  文件头显式 `import Prelude`；缺 import 时诊断会提示加对应 import。包目录模式不受
+  影响（仍自动导入 `Prelude`）。
+- 编译器 split 输出里的 `Vuna_builtins` 编译单元在旧内建 trait/实例删除后为空（只保留
+  文件集形状）。
 - 阶段状态与当前阻碍见 [docs/roadmap.md](../roadmap.md) 的「阶段状态总览」。
 
 ## 已知边界

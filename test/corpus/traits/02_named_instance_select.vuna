@@ -1,3 +1,5 @@
+import Prelude
+
 trait Pretty a where
   pretty : a -> String
 

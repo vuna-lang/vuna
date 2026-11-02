@@ -40,8 +40,11 @@ vuna **尚未发布任何版本**：没有外部用户、没有下游生态、�
 - M21–M22.3：`main : IO a` / `do` / `Base.IO`、包目录入口、库名统一与模式矩阵、Bool 去桩、擦除判据接线、`build`/`seed --dt` 与 metrics 重标定。
 - M23：全仓源码与夹具迁移——签名回填、`check --dt .` / `build --dt .` 通过、`test/corpus` 全量切 DT、`vuna interp` 改为精化后核心求值（删除 `Vuna.Eval`）。
 - M24：单一 DT 路径落地——DT 逐模块 split codegen 与 seed 轮换（38 文件、无 `.mli`）、删除 `Typecheck`/`TypedCodegen`/`SigExport`、`--dt` 与 `compile --package` 移除、LSP 诊断改 DT、`where` 绑定显式签名、`tNNN` 签名清理与名字启发式删除。
+- M24.5：等式搬运与精化器补强——scrutinee 反射、空归纳族上下文的不可达分支省略、隐式族参数 `Eq` 构造的元变量内联、`plus` 定义性相等；新夹具 dt/46–50 与 dt_err/36–38。
+- M24.6：编译器本体 DT 最小重构——构造子字段形状以 keep flags 为单一真源（三处消费并校验）、de Bruijn 作用域 / OCaml 名字去重 / `checkResolvedModules` 护栏、类型族整体擦除、`splitMainFile` 补 entry data；L2 重新裁定为入口护栏、L3 只做护栏 + 夹具（`Core.eval` 环境不索引化）。
+- M24.7：`Show`/`Eq`/`Ord` 库化——`Base.{Show,Eq,Ord}`（含 `Int`/`String`/`Bool` 实例）成为唯一来源，删 `DtDerive` 内建 trait/实例、`Elab` 注入与 `Loader` 短名放行；`deriving` 用解析后类名、`==`/比较按短名查类 + 泛型兜底；修复用户 data 上 `<` 与 `Loader`/`Pkg` 防御性 bug；单文件需 `--root base/lib` + 显式 `import Prelude`。
 
-> 阶段细节见 [history.md](history.md)（「已完成里程碑细节」+ M21–M24 各节）；本文件只保留
+> 阶段细节见 [history.md](history.md)（「已完成里程碑细节」+ M21–M24.7 各节）；本文件只保留
 > 一句话摘要，不再保留已完成阶段的目标/范围/验收段落。
 
 ## 终态（本路线图的目标）
@@ -77,12 +80,12 @@ vuna **尚未发布任何版本**：没有外部用户、没有下游生态、�
 - 编译器自检通过；新增阶段更新 README / AGENTS 的约束、`docs/history.md` 与 roadmap 完成摘要。
 - **新增 DT 能力必须同时给 `test/corpus/dt*` 正例与反例**，否则计入未完成。
 
-## 路线阶段（M24–M24.7：单一路径收尾与 DT 大重构）
+## 路线阶段
 
 ### 阶段状态总览
 
 阶段按编号顺序推进；依赖写在每个阶段的「前置」里。**当前阻碍登记在未完成阶段内**，完成
-阶段整段删除、只在本表保留一句话摘要；已完成的 M13–M23 细节见 [history.md](history.md)。
+阶段整段删除、只在本表保留一句话摘要；已完成的 M13–M24.7 细节见 [history.md](history.md)。
 
 | 阶段 | 状态 | 关键交付 | 当前阻碍 / 备注 |
 | --- | --- | --- | --- |
@@ -95,144 +98,13 @@ vuna **尚未发布任何版本**：没有外部用户、没有下游生态、�
 | M22.3 | 已完成 | rig 驱动擦除、`build`/`seed --dt`、metrics | — |
 | M23 | 已完成 | 全仓源码与夹具迁移、签名回填、`interp` 改核心求值（删除 `Vuna.Eval`） | — |
 | M24 | 已完成 | DT split seed 与轮换、删除 HM/`--dt`/`compile --package`、单路径 CLI/LSP、`where` 签名、`tNNN` 清理 | — |
-| M24.5 | 未开始 | 等式搬运与精化器补强 | 跨形参等式不可写 |
-| M24.6 | 未开始 | 编译器本体 DT 大重构（分级） | 第三级依赖 M24.5 |
-| M24.7 | 未开始 | Eq/Ord/Show 库化 | 前置 M24 |
+| M24.5 | 已完成 | 等式搬运与精化器补强（scrutinee 反射、空族不可达分支、`Eq` 元变量内联、`plus` 定义性相等） | — |
+| M24.6 | 已完成 | 编译器本体最小重构（构造子形状单一真源、de Bruijn/名字/入口护栏、类型族擦除、split entry data） | — |
+| M24.7 | 已完成 | `Show`/`Eq`/`Ord` 库化（`Base.{Show,Eq,Ord}`）、删内建 trait/实例与 Loader 放行、单文件显式 import | — |
 
-> **已完成阶段（M21–M24）**：细节见 [history.md](history.md) 的对应归档节。完成时保留的
+> **已完成阶段（M21–M24.7）**：细节见 [history.md](history.md) 的对应归档节。完成时保留的
 > 例外（Bool 类型别名、`where` 保留并改为「带签名的顺序 let」）见「决策变更」；本文件不保留
 > 已完成阶段的目标/范围/验收段落。
-
-
-### M24.5：等式搬运与精化器补强（大重构的语言前置）
-
-**目标**：补齐「按索引编程」缺的那一块，让 M24.6 的编译器本体重构**真的能写**。
-本阶段不加用户可见语法糖，只加精化器给出等式的能力。
-
-> **为什么单列**：实测确认（见 [dt-parity.md](reference/dt-parity.md) §6），当前精化器只在
-> 「`case` 打在被索引族本身、且 goal 的索引就是同一个形参」时精化 goal。
-> 一旦需要在**两个不同形参**之间搬运等式，就报 `type mismatch: expected n, got (Succ n)`。
-> 这恰好是 `append`、`Env`/`lookup`、`rep` 这类定义的核心形态。
-
-**范围**（按依赖顺序，每项都要正反例）：
-
-1. **归纳类型的等式类型**：让 `Eq a b` 是一个可被 `case` 精化的索引族（现在
-   `test/corpus/dt/12_eq.vuna` 里 `Eq` 只是普通族，`Refl` 不能把两个**形参**合一）。
-   目标形态：`case p of Refl => ...` 之后，`p : Eq a b` 让 `a` 与 `b` 在 goal 里可互换。
-2. **等式搬运（`subst` / `cong` / `sym` / `trans`）**：上面三条必须能在**索引族上**用，
-   而不只是 `Type` 上。这是 `append : Vec a n -> Vec a m -> Vec a (plus n m)` 的前提。
-3. **定义性相等扩展到 `plus` 一类类型级函数**：现在 `unifyIdx` 靠 delta 展开 + fuel，
-   能处理 `Succ`，但 `plus Zero m` 与 `m` 的相等需要更稳的归约（或在 `case` 分支里
-   给出「`n` 已被精化为 `Zero`，所以 `plus n m` 归约成 `m`」的等式）。
-4. **不可达分支的等式传递**：`Env`/`Fin` 的 `ENil` 分支里 `Fin Zero` 是空类型，
-   现在能判「不可能」，但**不能**让「不可能 ⇒ 该分支随便写」；补上这条后
-   `lookupEnv` 才能只写 `ECons` 分支。
-
-**实测基线**（当前 HEAD，供验收对照）：
-
-| 夹具形态 | 现状 |
-| --- | --- |
-| `wkVar` / `wkTerm`（弱化，同形参） | ✅ 通过 |
-| `subst`（单变量替换，穿过 binder 时 lift） | ✅ 通过，`interp` 可求值 |
-| `vhead` / `idv`（case 打在被索引族本身） | ✅ 通过 |
-| `get`（`Env n` + `Fin n` 取**不依赖索引**的值） | ✅ 通过 |
-| `lookupEnv`（返回 `Tm n`，值依赖索引） | ❌ `expected (Succ n), got n` |
-| `append` / `rep` / `constRight`（跨形参等式） | ❌ `expected (Zero), got m` 等 |
-
-**验收**：上表后三行全部转为通过；`Vec`/`Fin`/`Env`/`Tm` 四个族上的等式搬运正反例；
-`test/corpus/dt/` 新增夹具固定这四种形态。
-
-**前置**：M24（单路径稳定）。**风险**：等式搬运会显著增加 `unifyIdx` 的复杂度与
-fuel 消耗，需同步 `dt_elab` 基准；若第 3 项做不动，M24.6 的范围要相应缩减到
-「只索引化不依赖跨形参等式的那部分」（见 M24.6 的分级）。
-
-### M24.6：编译器本体 DT 大重构
-
-**目标**：在 seed 已由 DT 生成的前提下，用上 DT 的全部语言特性重写编译器核心，
-把「靠约定 + 显式检查 + 注释」维持的不变量改由类型保证。
-
-> **这是重写，不是翻译**：目标不是把现有 HM 风格代码逐行改写，而是重新设计数据结构，
-> 让非法状态不可表示。允许删除现有函数、合并模块、改变内部接口——**没有兼容义务**。
-
-**分级推进**（按实测收益排序，每级独立可交付、独立绿灯）：
-
-**第一级：几乎零增量，与既有阶段合流**
-
-- **擦除判据 → 字段形状的三重一致性**：现在 `ctorFieldTys` / `genConApp` / `altEnv`
-  各自独立 `if erased`，字段数、telescope 长度、绑定数三者无交叉校验，违反即静默
-  错编译。DT 形态：`Ctor : (k : Nat) -> Telescope k` + `Binds : Nat -> Type`，
-  用共享的 `k` 强制。**已实测可表达**（`TKeep`/`TDrop`/`countKeep` 模式）。
-- **`varIndex` 的 `else 0` 兜底**：越界被静默当成最外层变量，错得无声。不必上 DT，
-  改成返回 `Maybe` 或断言即可（M18.6 已把 `Level` 不透明化，顺路做）。
-- **OCaml 名编码单射性**：`sanitizeName` + `ctorOcamlName` 的 `_`/`.`/`'` 编码无分隔
-  逃逸，理论上存在碰撞。属实现 bug，直接加长度前缀修掉。
-
-**第二级：phantom index 做编译阶段标记（最便宜的高收益项）**
-
-- `Loader` 现在靠调用顺序与 `mangle` 命名前缀保证「codegen 只吃已 resolve 的声明」，
-  无类型约束。DT 形态：`data Expr : Phase -> Type`、`codegen : Expr Resolved -> String`。
-  **已实测**：反例「把未 resolve 的名字喂给 codegen」被拒（`expected Resolved, got Parsed`）。
-- 收益：单点改造，模块边界上的类型保证；代价低。
-
-**第三级：Core 的 de Bruijn 索引化（部分可行，范围受 M24.5 约束）**
-
-- **可做**：`Env : Nat -> Type` + `Fin` 提供 total 的 `lookup`（无 `Maybe`、无 `else 0`）；
-  弱化与单变量替换已实测可写（`wkVar` / `wkTerm` / `subst` 全通过）。
-- **受限于 M24.5**：`Env` 的值若依赖索引（如返回 `Tm n`），或需要在两个形参间搬运
-  等式，当前写不出来。**M24.5 完成前不要动这部分**，否则会写出大量 `type mismatch`。
-- 明确**不做**：把 `Term` 的 Pi/Lam 结构整体索引化。实测其收益主要在 `Env`/`lookup`
-  这一层，Term 层索引化成本极高而收益递减。
-
-**明确不划算（审计结论，不要做）**
-
-- **拓扑序见证**：`jj2` 形态可表达，但 `orderGroups` 已经显式报错（触发即错），
-  不满足「靠约定维持、违反则静默出错」的判据。
-- **元变量上下文索引化**：需要 `conv` 全线签名带深度，成本极高；且现有
-  `checkSolsScoped` 是事后全量复核，属「已有检查」。
-- **终止性/`Acc` 见证**：当前终止性检查已能报错，且 `Acc` 式证明会拖慢精化。
-
-**顺手修掉的真 bug（不是 DT 收益，但被本次审计发现）**
-
-- **包名唯一性**：`Pkg.dependencyRoots` 按包名去重，workspace 内重名成员会**静默丢弃
-  整支依赖**；实测三个重名工作区全部 `check` 静默 `exit 0`。短期加显式校验即可，
-  不必上 DT。
-- **`Loader` 的 `Nothing => []` 静默空表**：把「模块未加载」伪装成「无导出」，
-  应改为 `Err`。
-
-**验收**：第一、二级全部落地并有测试；第三级在 M24.5 能力范围内完成，超出的部分
-在 [dt-core.md](dt-core.md) 记录边界；每个「明确不划算」项在文档里留一行理由，
-防止后人重做；两个真 bug 修复并加回归测试；`nix flake check` 全绿，`dt_elab` 基准不回归。
-
-**前置**：M24.5（第三级依赖它；第一、二级可提前到 M24 期间做）。
-**风险**：这是**唯一一个「做错了会浪费很多时间」的阶段**——索引化的诱惑很大，
-但实测表明「Term 层整体索引化」与「元变量索引化」收益远低于成本。严格按分级推进，
-每级完成即停，不要在第三级上无限深入。
-
-### M24.7：Eq / Ord / Show 库化（内建边界收敛）
-
-**目标**：把 `Show` / `Eq` / `Ord` 从编译器合成迁到 `base`，消除「内建 trait + 内建实例
-+ Loader 放行表」的多处定义；编译器只保留语法与运行时表示特化（`==` 的 Int/String 特化、
-`True`/`False` 构造子名、`deriving` 展开机制）。
-
-**范围**：
-
-- 新增 `base/lib/Base/Show.vuna` / `Base/Eq.vuna` / `Base/Ord.vuna`：trait 声明 +
-  `Int` / `String` / `Bool` 实例（`Show Bool` 用 `if`，`Eq Bool` 用析取避免自递归）；
-  更新 `base/vuna.toml` 的 `[export]`、`Base.vuna` 门面与 `Prelude.vuna`。
-- 删除 `DtDerive` 的 `builtinTraitDecls` / `builtinShowInstances` / `builtinEqInstances`；
-  `expandDerivings` 改为使用 `DData` 里**已由 Loader 解析**的 derivings 名（如
-  `Base.Show.Show`）生成实例头，方法名按 `trait 名 + "." + 方法名` 推导。
-- `Elab` 中 `==` / `/=` 的实例搜索（`dictTypeName "Eq"` 硬编码）改为按短名 `Eq` 查类表。
-- 删除 `Loader.isBuiltinTraitName` / `isPreludeTraitMethod` 放行，改为经 import / Prelude
-  解析；单文件 / 无库模式需要显式 import（与 M22.2 的 Bool 约定一致）。
-- `Typecheck` 的 `builtinTraitDecls` / `builtinMethodRefs` 在 M24 已随 HM 删除，无需处理。
-
-**验收**：`DtDerive` / `Loader` 中不再有 Show/Eq/Ord 的定义或放行；`deriving` 在
-`import Base.Show` 下工作；base 的实例参与实例搜索；seed 自举与全量测试全绿；`docs/` 的
-内建清单收敛到「Int/String 原语 + 语法」。
-
-**前置**：M24（HM 删除后）。**风险**：`deriving` 展开依赖 trait 已解析，缺 import 时要
-给可解释错误；单文件夹具在 M22.2 已补 `data Bool` / `--root`。
 
 ## 后续大阶段（M25–M28）
 
@@ -245,7 +117,7 @@ fuel 消耗，需同步 `dt_elab` 基准；若第 3 项做不动，M24.6 的范�
 
 **验收**：签名匹配正/反例、抽象泄露反例、functor 示例；seed 闭包不变。
 
-**前置**：M24.6（重构期内不动模块语义）。**优先级**：中。
+**前置**：M24.6（已完成）。**优先级**：中。
 
 ### M26：运行时与多后端
 
@@ -294,7 +166,7 @@ fuel 消耗，需同步 `dt_elab` 基准；若第 3 项做不动，M24.6 的范�
 | 原 M19（效应）/ M20（模块 v3）/ M21（运行时）/ M22（生态）/ M23（并发） | 本文旧版 | 依次改为 M21 / M25 / M26 / M28 / M27 | 让位于单路径迁移主线 |
 | `Show` / `Eq` / `Ord` 与 Bool 桩由编译器内建 | M10.5 / M19 | 库为唯一来源：`Base.{Show,Eq,Ord}` + `Base.Bool`，编译器只留语法/表示特化；Bool 去桩在 M22.2、trait 库化排 M24.7 | 消除双份定义与 5 处短名桥接 hack；与已库化的 `List` / `Monad` 对齐 |
 | M22 一号两用（roadmap=擦除/codegen；git log=泛型实例约束） | M22 | 先拆 M22.1–M22.5，再按可开工依赖重排：泛型实例→M20.5（已完成）、trait 投影并入 M21、包目录→M22.1、库名/Bool 去桩→M22.2、擦除/codegen→M22.3 | 编号顺序 = 可开工顺序；M21 自包含 `do` / trait 投影，不再依赖更晚阶段 |
-| Bool 去桩后 prelude 不再有 `Bool` 类型名 | 本文 M22.2 验收草案 | 只去 `True`/`False` **值**桩；保留 `Pair "Bool" (TType 0)` 类型别名 | 内建 trait（Show/Eq/Ord）方法签名与不含 `data Bool` 的单文件程序仍需要一个 Bool 类型名；数据定义仍以 `Base.Bool` 为唯一权威，值构造子与 `case`/`if` 全按族短名解析 |
+| Bool 去桩后 prelude 不再有 `Bool` 类型名 | 本文 M22.2 验收草案 | 只去 `True`/`False` **值**桩；保留 `Bool` 类型别名 | prelude 里 `==` / 比较的签名与不含 `data Bool` 的单文件程序仍需要一个 Bool 类型名（M24.7 后 trait 本身在 `Base.{Show,Eq,Ord}`，不再依赖此别名）；数据定义仍以 `Base.Bool` 为唯一权威 |
 | 覆盖率/穷尽性检查对所有包严格 | M14 起 | TCB 三包（`vuna` / `vuna-compiler` / `vuna-base`）**只告警不报错**，其余包严格 | 编译器源码是执行代码而不是被证明的定理；HM 路径本来就只告警、生成 OCaml 用 `-w -a`。与「终止性检查按包名 allowlist 跳过」同一机制，见 `dtTrustsTermination` |
 | 非 `Int`/`String` 的 `==` 必须解析到 Eq 实例，否则报错 | M19 / M22 | 没有实例时**退回泛型结构比较**（`bi_eq_generic`，OCaml 结构化相等），与 HM 的运行时 `=` 对齐；**M24 删 HM 后不再产生 `tNNN` 推断变量，名字启发式直接删除**：刚性类型变量仍走 M22 字典提升/延迟提升（实例优先），泛型结构比较只作「具体类型无实例」兜底 | 编译器源码里大量「比较列表/记录」不写 `deriving`；不退回就无法迁移。有实例时仍优先字典；「刚性变量一律 generic」会旁路 M22 提升并让 interp 走 `Core.valueEqDeep` 的 `force` 薄弱点，实测回归，故不做 |
 | 零参数定义的初始化时机 | M12 | DT codegen 对**零运行时参数**的顶层定义包成 thunk（`fun () -> body`），引用处补 `()`；`main` 例外 | HM codegen 一直这样做（`help = let _ = print ... in 0` 不能在建表时执行）；不补则 DT 产物在启动时打印所有帮助/错误文本 |
@@ -308,6 +180,9 @@ fuel 消耗，需同步 `dt_elab` 基准；若第 3 项做不动，M24.6 的范�
 | `where` 子句（parser 支持、仅夹具使用） | M12 起 | M23 不进 DT（夹具改写为等价顶层 helper）；**M24 改为保留并新增显式签名语法**：每个 where 绑定必须写 `name : Ty`，语义是局部**顺序 let**（后定义可用前者，无前向/自/互递归；递归放顶层定义组），parser/Fmt 的 where 支持保留 | 顶层签名必填后 where 局部绑定无法推断；给 where 绑定补显式签名后 DT 可直接按 checking 模式精化，成本低且保留记法 ergonomics。递归语义不做：顶层定义组已支持互递归/自递归/前向引用，where 只作局部辅助 |
 | `where` 内支持递归/前向引用（HM 的 `ELet rec=True` 语义） | M12–M23 | **不保留**：where 绑定按书写顺序可见；顶层定义组仍是互递归/自递归/前向引用的唯一入口 | 递归 where 需要 Core 的 fixpoint 载体（`TLetRec`）或 lambda lifting，成本与风险远大于收益；终态语言要求「不用的特性直接删/简化」 |
 | DT 的 record update / 参数化 record / 命名实例 `@inst` / 实例诊断留到 M24.6 的大重构 | M19 / M22.3 规划 | **M23 随夹具迁移补齐**（`DtRecords` 降级 update、构造器名去 `Mk` 前缀、`Elab.inferInstSel`、重复实例 / 未知方法诊断） | 夹具迁移是终态语言的验收面；这些是已保留特性的必要部分，留到 M24.6 会让「夹具全绿」与「特性语义」互相矛盾 |
+| M24.6 第二级：`Expr : Phase -> Type` phantom index（Parsed/Resolved 编译期标记） | M24.6 规划 | **重新裁定为入口护栏**：M24 后 codegen 只接受 `DtProgram`，唯一读 `Decl` 的 split 归属表在入口用 `checkResolvedModules` 校验「声明名带模块前缀」；不再为 Expr 引入 phase 参数 | 原风险（未 resolve 的 Expr 进 codegen）在单路径架构下不存在：解析结果经 Loader→Elab→DtProgram 才到 codegen。引入 Phase 会穿透 Fmt/Index/LSP/REPL 全部 Expr 匹配，收益接近零 |
+| M24.6 第三级：Core 的 `Env : Nat -> Type` + `Fin` total lookup 全面索引化 | M24.6 规划 | **只做护栏 + 语言侧证据**：`Core.varIndex` 越界返回 -1、`checkAllDefScopes` 验证运行时定义体作用域；`Env`/`Fin` 形态作为夹具记录（47_lookup_env）；`Core.eval` 的 `List Value` 环境与 `Clos` 捕获**不换**索引表示 | M24.5 后「依赖索引取值」（`Ctx n -> Fin n -> Tm n`）仍写不出，索引化的核心收益不成立；`Clos` 需要存在式长度、改写 eval/applyClosure 全部调用点，风险与收益不匹配。「每级完成即停，不要在第三级无限深入」|
+| 类型族（结果类型以 `Type` 收尾的函数，如 `sel : Nat -> Type`）按运行时定义处理 | M14–M24.5 | **整体擦除**：`isTypeLevelDef` 改用 `isTypeForming`（宇宙或 `... -> Type` Pi 链）；三个旧负例（`dt_err/09`、`18`、`19`）语义纠正后删除，新增正例 51/52 与「运行时定义里把擦除参数当值用」负例 39 | 旧判据只看裸 `Type`，导致类型族生成未定义 `v_Int`/`v_String`（check 过、ocamlopt 才炸）；类型族本身在类型层求值，不产生运行时定义 |
 ## 研究储备（不排期）
 
 > 「表示层已预留」的项，M18.6 完成后可直接接入，不需要重做 Core/Codegen 骨架。

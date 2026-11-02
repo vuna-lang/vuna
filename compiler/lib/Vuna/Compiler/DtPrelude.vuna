@@ -2,6 +2,8 @@ module Vuna.Compiler.DtPrelude
   ( boolTy
   , builtinEqTyName
   , builtinTyName
+  , classMethodProjection
+  , cmpBuiltinTyName
   , eqRuntimeName
   , fun2
   , intTy
@@ -284,3 +286,25 @@ pickListFamily (n :: rest) = if baseNameOf n == "List" then n else pickListFamil
 baseNameOf : String -> String
 baseNameOf name = case splitLastDot (splitOnDot name) of
   Pair rev base => base
+
+-- ---------------------------------------------------------------
+-- M24.7：trait 库化后的类/方法查找辅助（放在本模块是为了压 Elab 的行数预算）
+-- ---------------------------------------------------------------
+-- 比较运算符的运行时特化只认 Int / String / Bool；其它类型（用户 data / 刚性变量）
+-- 必须走 Ord 字典。旧实现用 `builtinTyName` 把任何零参全局（含用户 data 族名）都当
+-- 「内建类型」，于是 `Red < Blue` 只报 "not defined"、派生 Ord 实例用不上。
+cmpBuiltinTyName : Value -> Maybe String
+cmpBuiltinTyName v = case builtinTyName v of
+  Just "Int" => Just "Int"
+  Just "String" => Just "String"
+  Just "Bool" => Just "Bool"
+  _ => Nothing
+
+-- 类方法（按短名）的投影全局名：Loader 把 trait 方法 mangle 成 `<模块前缀>.<方法短名>`。
+classMethodProjection : List (Pair String Term) -> String -> String
+classMethodProjection methods short = classMethodProjectionGo short methods short
+
+classMethodProjectionGo : String -> List (Pair String Term) -> String -> String
+classMethodProjectionGo short [] fallback = fallback
+classMethodProjectionGo short (m :: rest) fallback =
+  if baseNameOf (firstOf m) == short then firstOf m else classMethodProjectionGo short rest fallback

@@ -4,9 +4,12 @@ open Base_dPair
 open Base_dBool
 open Base_dMonad
 open Base_dMaybe
+open Base_dEq
 open Base_dList
 open Base_dResult
 open Base_dString
+open Base_dShow
+open Base_dOrd
 open Prelude
 open Vuna_dCompiler_dCommon
 open Vuna_dCompiler_dToml
@@ -366,7 +369,7 @@ let v_Vuna_dCompiler_dCore_dgenericCmp = (fun a -> (fun b -> (match a with
   | _ -> C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing
 )
   | C_Vuna_dCompiler_dCore_dValue_Vuna_dCompiler_dCore_dVBool (dtb__135) -> (match b with
-  | C_Vuna_dCompiler_dCore_dValue_Vuna_dCompiler_dCore_dVBool (dtb__136) -> (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust ((if ((bi_eq_generic dtb__135) dtb__136) then 0 else (if dtb__135 then 1 else ((bi_sub 0) 1)))))
+  | C_Vuna_dCompiler_dCore_dValue_Vuna_dCompiler_dCore_dVBool (dtb__136) -> (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust ((if (((v_Base_dEq_deq (v_Base_dEq_dBase_dEq_dEq_uBase_dEq_dEq_uBool ())) dtb__135) dtb__136) then 0 else (if dtb__135 then 1 else ((bi_sub 0) 1)))))
   | _ -> C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing
 )
   | _ -> C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing
@@ -435,7 +438,7 @@ let rec v_Vuna_dCompiler_dCore_dargValsAt = (fun mc0 -> (fun mc1 -> (fun mc2 -> 
   | _ -> failwith "DT: impossible branch"
 ))))
 
-let v_Vuna_dCompiler_dCore_dvarIndex = (fun depth -> (fun level -> (if ((bi_lt_int level) depth) then ((bi_sub ((bi_sub depth) level)) 1) else 0)))
+let v_Vuna_dCompiler_dCore_dvarIndex = (fun depth -> (fun level -> (if ((bi_lt_int level) depth) then ((bi_sub ((bi_sub depth) level)) 1) else ((bi_sub 0) 1))))
 
 let rec v_Vuna_dCompiler_dCore_dapplyTermSpine = (fun mc0 -> (fun mc1 -> (match mc1 with
   | C_Base_dList_dList_Cons (dtb__159, dtb__160) -> ((v_Vuna_dCompiler_dCore_dapplyTermSpine (C_Vuna_dCompiler_dCore_dTerm_Vuna_dCompiler_dCore_dTApp (mc0, dtb__159, C_Vuna_dCompiler_dCore_dRig_Vuna_dCompiler_dCore_dRig1))) dtb__160)
@@ -966,7 +969,7 @@ and v_Vuna_dCompiler_dCore_dconvBoth = (fun defs -> (fun sols -> (fun depth -> (
   | _ -> (((v_Vuna_dCompiler_dCore_dmismatchAt depth) a) b)
 )
   | C_Vuna_dCompiler_dCore_dValue_Vuna_dCompiler_dCore_dVPi (dtb__607, dtb__608, dtb__609, dtb__610, dtb__611) -> (match b with
-  | C_Vuna_dCompiler_dCore_dValue_Vuna_dCompiler_dCore_dVPi (dtb__612, dtb__613, dtb__614, dtb__615, dtb__616) -> (if ((bi_eq_generic dtb__608) dtb__613) then ((v_Base_dResult_dandThen (((((v_Vuna_dCompiler_dCore_dconv defs) sols) depth) dtb__610) dtb__615)) (fun sols2 -> ((fun v -> (((((v_Vuna_dCompiler_dCore_dconv defs) sols2) ((bi_add depth) 1)) ((v_Vuna_dCompiler_dCore_dapplyClosure dtb__611) v)) ((v_Vuna_dCompiler_dCore_dapplyClosure dtb__616) v))) ((v_Vuna_dCompiler_dCore_dfreshVar dtb__607) depth)))) else (((v_Vuna_dCompiler_dCore_dmismatchAt depth) a) b))
+  | C_Vuna_dCompiler_dCore_dValue_Vuna_dCompiler_dCore_dVPi (dtb__612, dtb__613, dtb__614, dtb__615, dtb__616) -> (if (((v_Base_dEq_deq (v_Base_dEq_dBase_dEq_dEq_uBase_dEq_dEq_uBool ())) dtb__608) dtb__613) then ((v_Base_dResult_dandThen (((((v_Vuna_dCompiler_dCore_dconv defs) sols) depth) dtb__610) dtb__615)) (fun sols2 -> ((fun v -> (((((v_Vuna_dCompiler_dCore_dconv defs) sols2) ((bi_add depth) 1)) ((v_Vuna_dCompiler_dCore_dapplyClosure dtb__611) v)) ((v_Vuna_dCompiler_dCore_dapplyClosure dtb__616) v))) ((v_Vuna_dCompiler_dCore_dfreshVar dtb__607) depth)))) else (((v_Vuna_dCompiler_dCore_dmismatchAt depth) a) b))
   | _ -> (((v_Vuna_dCompiler_dCore_dmismatchAt depth) a) b)
 )
   | C_Vuna_dCompiler_dCore_dValue_Vuna_dCompiler_dCore_dVLam (dtb__617, dtb__618, dtb__619) -> (match b with
@@ -987,7 +990,7 @@ and v_Vuna_dCompiler_dCore_dconvBoth = (fun defs -> (fun sols -> (fun depth -> (
   | _ -> (((v_Vuna_dCompiler_dCore_dmismatchAt depth) a) b)
 )
   | C_Vuna_dCompiler_dCore_dValue_Vuna_dCompiler_dCore_dVBool (dtb__632) -> (match b with
-  | C_Vuna_dCompiler_dCore_dValue_Vuna_dCompiler_dCore_dVBool (dtb__633) -> (if ((bi_eq_generic dtb__632) dtb__633) then (C_Base_dResult_dResult_Base_dResult_dOk (sols)) else (((v_Vuna_dCompiler_dCore_dmismatchAt depth) a) b))
+  | C_Vuna_dCompiler_dCore_dValue_Vuna_dCompiler_dCore_dVBool (dtb__633) -> (if (((v_Base_dEq_deq (v_Base_dEq_dBase_dEq_dEq_uBase_dEq_dEq_uBool ())) dtb__632) dtb__633) then (C_Base_dResult_dResult_Base_dResult_dOk (sols)) else (((v_Vuna_dCompiler_dCore_dmismatchAt depth) a) b))
   | _ -> (((v_Vuna_dCompiler_dCore_dmismatchAt depth) a) b)
 )
   | C_Vuna_dCompiler_dCore_dValue_Vuna_dCompiler_dCore_dVCon (dtb__634, dtb__635) -> (match b with

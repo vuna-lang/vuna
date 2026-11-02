@@ -7,8 +7,8 @@
 
 vuna 原生测试按编号章节组织（**34 个章节**：编号到 35，第 12 段已删除；34a–34d 归在
 第 34 段内，`--list` 列 34 行），用 `vuna` / `vuna-seed` 驱动，不依赖外部 vuna 实现，
-但需要 `ocamlopt` 作为 codegen 后端。当前 **1026 checks**（结尾 `vuna tests passed
-(1026 checks)`；seed rotation 后重跑可能微调，以脚本输出为准）。
+但需要 `ocamlopt` 作为 codegen 后端。当前 **1076 checks**（结尾 `vuna tests passed
+(1076 checks)`；seed rotation 后重跑可能微调，以脚本输出为准）。
 
 ```console
 sh test/run-tests.sh        # 需要 PATH 中有 vuna 与 vuna-seed
@@ -28,6 +28,14 @@ nix run .#vuna-run-tests [-- --list | --only 34 | --only dt | --vuna stable]
 所有语言夹具与包构建都走 DT（`interp` = DT 精化 + 核心求值，`check` / `compile` =
 DT 精化 + 擦除 codegen，`build` / `build --split` / `seed` = DT codegen）。没有按检查器
 分支的段。
+
+**单文件夹具的库根与 Prelude**（M24.7）：`Show` / `Eq` / `Ord` 的 trait 声明与内建类型
+实例已收进 `vuna-base`（`Base.Show` / `Base.Eq` / `Base.Ord`，经 `Prelude` 重导出），
+单文件/无包上下文模式不再自动注入它们。因此 `test/run-tests.sh` 的单文件循环统一加
+`--root ../base/lib`（脚本里的 `BASE_ROOT`）；夹具需要 `show` / `==` / 比较 / `deriving`
+或自带实例时，必须在文件头显式 `import Prelude`。只用 Int/String 原语、泛型兜底比较
+（`==` 无 Eq 类时退化为结构比较）的夹具可以不 import。包目录夹具（`corpus/packages/`、
+`corpus/dt_pkg/`）不受影响：包模式仍自动导入 Prelude。
 
 ## corpus 分类
 
@@ -65,7 +73,8 @@ DT 精化 + 擦除 codegen，`build` / `build --split` / `seed` = DT codegen）�
   模块头导出列表排序、`where` 签名行与幂等；
 - `corpus/packages/`：`build` / `build --split` / `test` 的 workspace 正例与缺依赖、
   依赖环、隐藏模块错误例；包构建走 DT，`vuna test` 走 DT 核心求值；`03_reexport` 覆盖
-  facade 重导出；
+  facade 重导出；`05_entry_data` 覆盖「入口文件里声明 data」的 `build --split` 回归，
+  `93_duplicate_name` 覆盖同名包显式报错；
 - `corpus/err/`、`corpus/run_err/`：解析/求值错误片段；`run_err` 的 `.err` 是 DT 诊断
   子串（非穷尽、if 条件类型、参数过多、clause 数不匹配、let 绑定模式等），
   `03_div_zero` 是产物运行期负例（运行断言 `division by zero`），`07_main_arity` 用
@@ -79,10 +88,10 @@ DT 精化 + 擦除 codegen，`build` / `build --split` / `seed` = DT codegen）�
   与检查器无关）；
 - `corpus/lsp/smoke.sh`：`vuna lsp` 的 JSON-RPC 冒烟（诊断来自 DT 精化 + `goalsOfProgram`
   洞目标）；
-- `corpus/dt/*`（44 个正例）、`corpus/dt_err/*`（34 个负例，其中
-  `35_where_no_sig` 是 M24 新增）、`corpus/dt_base/`（8）、`corpus/dt_io/`（1）、
-  `corpus/dt_pkg/`（3 个包目录）、`corpus/dt_root/`：DT 专项夹具，见
-  [dt.md](dt.md) 的夹具一节。
+- `corpus/dt/*`（53 个正例）、`corpus/dt_err/*`（35 个负例，其中
+  `35_where_no_sig` 是 M24 新增，`36`–`38` 与 `dt/45`–`52` 是 M24.5/M24.6 新增）、
+  `corpus/dt_base/`（8）、`corpus/dt_io/`（1）、`corpus/dt_pkg/`（3 个包目录）、
+  `corpus/dt_root/`：DT 专项夹具，见 [dt.md](dt.md) 的夹具一节。
 
 ## Nix checks 清单
 

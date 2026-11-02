@@ -78,17 +78,18 @@
   show，`Eq` 支持参数化类型，`Ord` 支持可比较类型；derive 与手写同名 default 冲突报
   `duplicate instance`；实例里出现 trait 未声明的方法报
   （`instance has unknown method`）；
-- 内置 trait：`Show`（`show`）、`Eq`（`eq` / `neq` 对应 `==` / `/=`）、`Ord`
-  （`lt` / `le` / `gt` / `ge` 对应 `<` / `<=` / `>` / `>=`）；运算符在类型确定时
-  静态派发到实例方法。内建/结构回退：`Eq` 覆盖 data/record/`List`；`Show` 覆盖
-  `Int` / `String` / `Bool` 与非参数化 data/record；`Ord` 的运行时内建回退只覆盖
-  `Int` / `String` / `Bool`（`Int` 用原生比较，`String` / `Bool` 走运行时结构比较），
-  其它类型报 `no instance Ord ...`；
+- **`Show` / `Eq` / `Ord` 是库里的普通 trait（M24.7）**：声明、方法投影与
+  `Int` / `String` / `Bool` 实例都在 `Base.Show` / `Base.Eq` / `Base.Ord`，包模式下随
+  `Prelude` 自动导入；单文件 / 裸 `--root` 模式要显式 `import Prelude`（并
+  `--root <repo>/base/lib`）。`show` / `eq` / `lt` 等短名不再由编译器放行，必须经
+  import 解析。`deriving` 的展开用 Loader 解析后的完整类名（如 `Base.Show.Show`）。
 - **结构回退**：`==` / `/=` 在**具体类型**且没有可用 `Eq` 实例时退回运行时结构比较
-  （`bi_eq_generic`，核心求值器/擦除 codegen 同一语义），编译器源码因此可以在不写
-  `deriving` 的前提下比较列表/记录；比较发生在**刚性类型变量**上时保持 M22 语义——
+  （`bi_eq_generic`，核心求值器/擦除 codegen 同一语义）；程序里没有 `Eq` 类
+  （单文件 / 未 import）时同样退回。比较发生在**刚性类型变量**上时保持 M22 语义——
   搜不到实例时提升成隐式字典参数（`deferEqDict`），实例（含 `deriving (Eq)` 生成的）
-  仍优先。有实例时仍优先字典，`deriving (Eq)` 的行为不变。
+  仍优先。`<` / `<=` / `>` / `>=` 对 `Int` 做运行时特化、`String`/`Bool` 走泛型
+  运行时，其它具体类型（含用户 `data`）走 `Ord` 字典、无 `Ord` 类时退回泛型比较。
+  `deriving (Eq)` 的行为不变。
 - 实现（M10.5c）与限制：具体类型的调用点仍走**静态派发**；当方法调用点类型是
   **裸类型变量**时（如 `showIt x = show x`）做**方法级字典穿参**——类型检查给该函数
   增加方法函数参数（字典按 trait 方法扁平化），调用点静态传入具体实例方法或调用者的
@@ -107,7 +108,9 @@
   （含方法），显式导出列表需 `Trait(..)` 才导出方法；命名实例名按普通值名导出/限定
   （显式列表里可写 `fancy`，app 侧用 `@M.fancy` 选择）；
 - 实现：`==` / `/=` / `<` / `<=` / `>` / `>=` 由 `Eq` / `Ord` trait 承担（删除旧的
-  `specializeCmp` 特化）；Show 由 `DtDerive` 生成（record 用源名、String 带引号）。
+  `specializeCmp` 特化）；trait 字典名与方法投影名从类表按短名取（M24.7 起不硬编码
+  `Dict_Eq` / `eq`）。`deriving (Show)` 的展示体按构造子骨架生成（record 用源名、
+  String 带引号），方法调用走库里的 `show` 投影。
 
 ## do、Monad 与 Functor（M11）
 

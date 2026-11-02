@@ -4,6 +4,7 @@ open Base_dPair
 open Base_dBool
 open Base_dMonad
 open Base_dMaybe
+open Base_dEq
 type 'a0 t_Base_dList_dList = C_Base_dList_dList_Nil | C_Base_dList_dList_Cons of ('a0) * ('a0 t_Base_dList_dList)
 
 
@@ -76,7 +77,7 @@ let v_Base_dList_dBase_dMonad_dMonad_uBase_dMonad_dMonad_uBase_dList_dList = fun
 let v_Base_dList_dflatMap = (fun f -> (fun xs -> ((v_Base_dList_dconcatMap f) xs)))
 
 let rec v_Base_dList_dmem = (fun d27 -> (fun mc0 -> (fun mc1 -> (match mc1 with
-  | C_Base_dList_dList_Cons (dtb__16, dtb__17) -> (if (((v_eq d27) mc0) dtb__16) then true else (((v_Base_dList_dmem d27) mc0) dtb__17))
+  | C_Base_dList_dList_Cons (dtb__16, dtb__17) -> (if (((v_Base_dEq_deq d27) mc0) dtb__16) then true else (((v_Base_dList_dmem d27) mc0) dtb__17))
   | C_Base_dList_dList_Nil -> false
   | _ -> failwith "DT: impossible branch"
 ))))

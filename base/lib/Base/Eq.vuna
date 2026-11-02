@@ -1,0 +1,29 @@
+module Base.Eq (Eq(..)) where
+
+-- Base.Eq：`Eq` trait 与内建类型实例（M24.7：从编译器合成迁到库）。
+--
+-- 方法与编译器内建 `Eq` 的方法面**逐位对齐**（`eq` / `neq`，参数顺序与返回类型
+-- 相同）：下一波删除 `DtDerive` 的内建 trait/实例、并把 `==` / `/=` 的实例搜索从
+-- 硬编码短名切到类表后，这两个方法就是 `==` / `/=` 的字典字段。
+--
+-- `Int` / `String` 的 `eq` / `neq` 复用 `==` / `/=`：它们在精化期特化成
+-- `bi_eq_int` / `bi_eq_str`（不走实例搜索），因此不会自递归。
+import Base.Bool
+
+trait Eq a where
+  eq : a -> a -> Bool
+  neq : a -> a -> Bool
+
+instance Eq Int where
+  eq x y = x == y
+  neq x y = x /= y
+
+instance Eq String where
+  eq x y = x == y
+  neq x y = x /= y
+
+-- `Bool == Bool` 会走本实例（`==` 只对 Int / String 做精化期特化），因此方法体
+-- **不能用 `==` / `/=`：改写为析取；`not` 来自 Base.Bool。
+instance Eq Bool where
+  eq x y = x && y || not x && not y
+  neq x y = x && not y || not x && y

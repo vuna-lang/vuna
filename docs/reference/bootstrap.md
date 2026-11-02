@@ -37,9 +37,9 @@ Nix 侧的对应关系：`packages.vuna-seed`、`packages.vuna-compiler`、`pack
 种子（`seed/`）**提交入库**，是构建输入而不是构建产物。种子是**多文件文件集**：
 每个 vuna 模块对应一个 OCaml 模块（`.ml`），外加共享 runtime / 内建模块与
 `build.sh`。种子**只覆盖 compiler 包**（`compiler/app/Main.vuna` 的 import 闭包）：
-工具链（fmt/lint/repl/doc/test/lsp）由编译器编译出来，不在信任锚点里。M24 rotation
-后文件集约 38 个（37 个 `.ml` + `build.sh`，无 `.mli`；最终以 `seed/` 实际内容为准）。
-唯一的硬性不变量：
+工具链（fmt/lint/repl/doc/test/lsp）由编译器编译出来，不在信任锚点里。M24.7 rotation
+后文件集为 **41 个（40 个 `.ml` + `build.sh`）**，无 `.mli`（最终以 `seed/` 实际内容
+为准）。唯一的硬性不变量：
 
 > **当前入库的种子必须能编译当前的 vuna 源码。**
 
@@ -118,12 +118,13 @@ Main
 ```
 
 - `Vuna_runtime`：`CoreCodegen.dtRuntime`（`bi_*` 等运行时）。
-- `Vuna_builtins`：内建类 `Dict_Show/Eq/Ord` 的 data、内建实例（`Show_Show_` /
-  `Eq_Eq_` / `Ord_Ord_` 前缀）与内建类的方法投影（`show`/`eq`/`neq`/`lt`/`le`/`gt`/`ge`）。
+- `Vuna_builtins`：split 生成器保留的编译单元；M24.7 删除旧内建 trait/实例后内容为空
+  （只 `open Vuna_runtime`），保留它是为了让文件集形状稳定。
 - 每个源码模块一个 `<Module>.ml`（依赖序；OCaml 编译单元名 = 模块名点转 `_d`），
   文件头 `open` runtime / builtins 与所有更早模块；`List` 桥接（`dtp_unpack/pack`）
   放在声明 `List` 族的模块文件里。
-- `Main.ml`：entry decls 与 `main` 钩子。**不生成 `.mli`**。
+- `Main.ml`：entry decls 的 datas + defs 与 `main` 钩子（M24.6 修复：入口文件里声明的
+  `data` 也必须发进 `Main.ml`）。**不生成 `.mli`**。
 
 `seed/build.sh` 由 codegen 生成：干净构建一次 `ocamlopt` 编译全部 `.ml` 并链接；
 增量构建按 `.ml`/`.cmi` 时间戳逐模块重编（`compile <module>` 行可被脚本断言）。

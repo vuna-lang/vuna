@@ -1,4 +1,6 @@
 -- M19：只支持派生 Show / Eq / Ord；其它名字必须报可解释错误。
+import Prelude
+
 data Color : Type where
   Red : Color
 deriving (Functor)

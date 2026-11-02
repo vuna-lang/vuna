@@ -61,13 +61,16 @@ sym a b e = case e of
 - **隐式索引推断（M15）**。构造子/函数的索引 binder 可写隐式（`{n : Nat}`），调用点由
   实参或期望类型反推；推断仍受一阶限制（`FSucc FZero` 单独作实参且外层无期望类型时可能
   报 `DT: unsolved metavariable`）。
-- **接口与实例（M15/M21/M23）**。`trait` / `instance` 走字典编码（`data Dict_C` + 方法投影
-  + 实例搜索）；`Show`/`Eq` 直接可用，缺失/歧义实例有明确诊断；M21 起库定义 trait 的投影
-  跨模块可见（`Base.IO` 重导出 `Functor(..)` / `Monad(..)`，`do`/`bind`/`pure`/`fmap`
-  可用），实例方法支持构造子形参与多 clause。M23 起 `@inst`（含 `@M.inst`）可用，重复实例
-  （含 `deriving` 生成的）报 `duplicate instance`、未知方法报 `instance has unknown method`；
-  参数化 data 的 `deriving (Eq)` 可用（通用结构比较兜底，需要 `Eq` 字典的场景仍可能缺实例），
-  `deriving (Show)` / `(Ord)` 只支持非参数化类型。多参数接口仍报
+- **接口与实例（M15/M21/M23/M24.7）**。`trait` / `instance` 走字典编码（`data Dict_C` +
+  方法投影 + 实例搜索）；`Show` / `Eq` / `Ord` 是库里的普通 trait（`Base.Show` /
+  `Base.Eq` / `Base.Ord`），包模式下随 `Prelude` 自动可见，单文件 / 裸 `--root` 模式
+  需显式 `import Prelude` 并 `--root <repo>/base/lib`。缺失/歧义实例有明确诊断；M21 起
+  库定义 trait 的投影跨模块可见（`Base.IO` 重导出 `Functor(..)` / `Monad(..)`，
+  `do`/`bind`/`pure`/`fmap` 可用），实例方法支持构造子形参与多 clause。M23 起 `@inst`
+  （含 `@M.inst`）可用，重复实例（含 `deriving` 生成的）报 `duplicate instance`、未知
+  方法报 `instance has unknown method`；参数化 data 的 `deriving (Eq)` 可用（通用结构
+  比较兜底，需要 `Eq` 字典的场景仍可能缺实例），`deriving (Show)` / `(Ord)` 只支持
+  非参数化类型。多参数接口仍报
   `interfaces must have exactly one parameter (M15 limitation)`。
 - **record（M15 降级，M23 补齐）**。`record` 声明、构造、字段访问、字段更新
   （`{ p | x = ... }`，可多字段）与参数化记录（`record Pair a b`）都先在 `DtRecords` 降成
@@ -92,10 +95,20 @@ sym a b e = case e of
   降级成嵌套 `if` 链，因此**必须有一个变量/通配兜底分支**。
 - **Bool（M21/M22.2）**。`data Bool` 的 `True`/`False` 精化成核心 `TBool`，Bool 族不生成
   OCaml 变体，`if`/`case`/`main : Bool` 按族**短名**识别；`True`/`False` 必须来自
-  `Base.Bool` 或本地 `data Bool`，prelude 只保留 `Bool` 类型别名（内建 trait 签名需要）。
-- **内建泛化（M19/M22.2）**。`==`/`/=` 与 `<`/`<=`/`>`/`>=` 在饱和应用处按实参类型特化：
-  `Int`/`String` 走具体运行时，其它类型走 `Eq`/`Ord` 字典（缺失给诊断）；刚性类型参数
-  延迟提升成 `{d : Dict_C a}`，内建 Int/String/Bool 实例 + `deriving (Ord)` 参与搜索。
+  `Base.Bool` 或本地 `data Bool`，prelude 只保留 `Bool` 类型别名（prelude 里 `==` /
+  比较的签名需要它）。
+- **内建泛化（M19/M22.2/M24.7）**。`==`/`/=` 与 `<`/`<=`/`>`/`>=` 在饱和应用处按实参
+  类型特化：`Int` 走具体运行时，`String`/`Bool` 的 `==` 走 `bi_eq_str`/泛型、比较走
+  泛型运行时；其它类型（含用户 data）走 `Eq`/`Ord` 字典——具体类型无实例或程序里没有
+  对应类（单文件 / 未 import）时退回泛型运行时兜底。刚性类型参数延迟提升成
+  `{d : Dict_C a}`；库里的 `Int`/`String`/`Bool` 实例与 `deriving` 实例参与搜索。
+- **等式搬运与不可达分支（M24.5）**。`case` 打在裸形参或包装族上时，把 scrutinee 的
+  值与构造子结果值再合一（`dt/46_rep`）；分支上下文含空归纳族（如 `Fin Zero`）时该
+  分支可省略（`dt/47_lookup_env`）；`plus` 一类类型级函数的定义性相等可用于 `Refl`
+  收尾，归纳步靠反射 + `cong`（`dt/48`–`50`）。剩余边界见 [dt-parity.md](dt-parity.md) §6.3。
+- **类型族（M24.6）**。结果类型以 `Type` 收尾的函数（`sel : Nat -> Type`、
+  `Id : (a : Type) -> Type`）整体擦除、不生成运行时定义；正例 `dt/51`/`52`，在运行时
+  定义里把擦除族参数当值用报错（`dt_err/39`）。
 - **可达性**：签名把索引**细化**（`Vec a (Succ m)`）时不可统一的分支可省略（否则报
   `this branch is impossible`）；泛化索引（`Vec a n`）漏写报 `case is not exhaustive`。
 - **`data` kind** 必须是 `... -> Type` 箭头链，构造子结果类型回到本族；族名与完整 Pi
@@ -135,7 +148,7 @@ DT 精化 + 核心求值，入口只能是单文件（可用 `--root` 加载依�
 `test/run-tests.sh` 第 34 段（`interp` / `check` / `compile` + `ocamlopt` 三路）。
 `.nointerp` 夹具跳过 interp，只做 `compile` + 运行（效果/不可归约）。
 
-- 正例 `test/corpus/dt/`（44 个）：按阶段 M13 `01_id`–`08_if`、M14 `09_nat`–`12_eq`、
+- 正例 `test/corpus/dt/`（53 个）：按阶段 M13 `01_id`–`08_if`、M14 `09_nat`–`12_eq`、
   M15 `13_iface`–`15_goal`、M16 `16_total`/`17_erase`、M18–M18.6 `18_ctx`–`21_level`、
   M19 `22_let`–`31_deriving_ord`、M20 `32_parametric_data`、M20.5 `36_multi_clause`、
   M21 `33_poly_fn_field`/`34_io_do`/`35_io_main`/`37_instance_ctor_pat`（`34_io_do` /
@@ -144,7 +157,12 @@ DT 精化 + 核心求值，入口只能是单文件（可用 `--root` 加载依�
   M23 `39_generic_eq`（无 `Eq` 实例时的泛型 `==` 兜底）、`40_record_update`（record
   update 降级）、`41_record_parametric`（参数化 record kind + swap）、
   `42_named_instance`（`@inst` 命名实例选择）、`43_deriving_parametric_eq`（参数化
-  data 派生 `Eq`）、`44_short_circuit`（`&&`/`||` 短路，右侧 `1/0` 不求值）。
+  data 派生 `Eq`）、`44_short_circuit`（`&&`/`||` 短路，右侧 `1/0` 不求值）；
+  M24.5 `46_rep`（scrutinee 反射）/`47_lookup_env`（空族上下文省略分支）/
+  `48_eq_defeq`（`plus` 定义性相等）/`49_eq_induction`（归纳 + `cong`）/
+  `50_eq_transport`（`sym`/`trans`/`subst`/`cast`）；M24.6 `45_ctor_shape`（构造子
+  字段形状）、`51_type_family`/`52_type_family`（类型族整体擦除）；M24.7
+  `53_derived_ord_operator`（deriving(Ord) 后 `<`/`<=` 走 Ord 字典）。
 - 正例 `test/corpus/dt_base/`（8 个，`--root ../base/lib`）：M21 的 `Base.IO`/`do`/
   trait 投影与 `Base.IO` API 类型面；`06_base_string`（`str*` 的 `List` 族桥接）、
   `01_io_do`/`02_io_api`/`03_fmap_bind`（效果动作）与 `06_base_string` 带 `.nointerp`
@@ -155,9 +173,11 @@ DT 精化 + 核心求值，入口只能是单文件（可用 `--root` 加载依�
   `interp --root` 多文件夹具。
 - 正例 `test/corpus/dt_io/`（1 个）：`main : IO a` 的编译产物真正执行 `Base.IO` 效果
   （核心求值器不执行效果，所以只比产物输出）。
-- 负例 `test/corpus/dt_err/`（34 个）：M13–M23 的诊断夹具（`duplicate instance`、
+- 负例 `test/corpus/dt_err/`（35 个）：M13–M23 的诊断夹具（`duplicate instance`、
   `instance has unknown method`、`deriving_parametric_show`、`record_update_ambiguous`
-  等），M24 新增 `35_where_no_sig`（期望片段 `needs a type signature`）。
+  等），M24 新增 `35_where_no_sig`（期望片段 `needs a type signature`）；M24.5 新增
+  `36_diff_index_case`/`37_impossible_branch`/`38_empty_ctx_branch`，M24.6 新增
+  `39_type_family_runtime_use`（类型族擦除后的运行时误用）。
 - `where` 签名正例在 `test/corpus/typed_ok/06_where_fwd`、`07_where_mutual`、
   `08_where_self`（局部辅助函数 / 顶层递归的对照）与 `corpus/fmt` 的 where 黄金例。
 

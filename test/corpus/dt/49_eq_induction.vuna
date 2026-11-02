@@ -1,0 +1,28 @@
+-- M24.5：归纳 + cong + 反射 —— `plusZeroR` 需要在 `Succ k` 分支里把 goal 精化成
+-- `Eq (Succ k) (Succ (plus k Zero))`，再用归纳假设 `plusZeroR k` 与 cong 收尾。
+data Nat : Type where
+  Zero : Nat
+  Succ : Nat -> Nat
+
+data Eq : {a : Type} -> a -> a -> Type where
+  Refl : {a : Type} -> (x : a) -> Eq x x
+
+plus : Nat -> Nat -> Nat
+plus a b = case a of
+  Zero => b
+  Succ k => Succ (plus k b)
+
+cong : (a : Type) -> (b : Type) -> (x : a) -> (y : a) -> (f : a -> b) -> Eq x y -> Eq (f x) (f y)
+cong a b x y f e = case e of
+  Refl z => Refl (f z)
+
+succF : Nat -> Nat
+succF m = Succ m
+
+plusZeroR : (n : Nat) -> Eq n (plus n Zero)
+plusZeroR n = case n of
+  Zero => Refl Zero
+  Succ k => cong Nat Nat k (plus k Zero) succF (plusZeroR k)
+
+main : Int
+main = 7

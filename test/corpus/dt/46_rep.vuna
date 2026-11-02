@@ -1,0 +1,26 @@
+-- M24.5：scrutinee 反射 —— case 打在**裸 Nat 形参**上时，把 scrutinee 的值与构造子结果值
+-- 合一，goal 里的 k 才会精化成 `Zero` / `Succ j`。`rep`（按索引参数量化递归）因此在
+-- 没有 `Vec a k` 索引可合一时也能通过。
+data Nat : Type where
+  Zero : Nat
+  Succ : Nat -> Nat
+
+data Vec : Type -> Nat -> Type where
+  Nil : (a : Type) -> Vec a Zero
+  Cons : (a : Type) -> (n : Nat) -> a -> Vec a n -> Vec a (Succ n)
+
+rep : (a : Type) -> (k : Nat) -> a -> Vec a k
+rep a k x = case k of
+  Zero => Nil a
+  Succ j => Cons a j x (rep a j x)
+
+vlen : (a : Type) -> (k : Nat) -> Vec a k -> Int
+vlen a k xs = case xs of
+  Nil b => 0
+  Cons b m y ys => 1 + vlen b m ys
+
+three : Nat
+three = Succ (Succ (Succ Zero))
+
+main : Int
+main = vlen Int three (rep Int three 9)

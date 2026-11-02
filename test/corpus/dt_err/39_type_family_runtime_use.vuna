@@ -1,0 +1,7 @@
+-- 反例：类型族自身要擦除，但其**运行时**定义里不能把擦除的类型参数当值用。
+-- 这里 `f` 是运行时定义（结果 Int），`a` 是 Rig0，`a == a` 把类型放到了值位置。
+f : (a : Type) -> Int
+f a = if a == a then 1 else 0
+
+main : Int
+main = f Int

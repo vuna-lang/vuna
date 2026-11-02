@@ -8,6 +8,9 @@ module Base.Sort (mergeSort, sortBy) where
 -- 稳定性与排序结果不变，DT / HM 两条路径都成立。
 import Base.List
 import Base.Bool
+-- M24.7：`mergeSort` 的 `<=` 在刚性类型上提升成 Dict_Ord；显式 import 保证类存在与
+-- split 单元顺序。
+import Base.Ord
 
 insertBy : (a -> a -> Bool) -> a -> List a -> List a
 insertBy le y [] = [y]

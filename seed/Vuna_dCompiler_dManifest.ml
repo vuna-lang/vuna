@@ -4,9 +4,12 @@ open Base_dPair
 open Base_dBool
 open Base_dMonad
 open Base_dMaybe
+open Base_dEq
 open Base_dList
 open Base_dResult
 open Base_dString
+open Base_dShow
+open Base_dOrd
 open Prelude
 open Vuna_dCompiler_dCommon
 open Vuna_dCompiler_dToml
@@ -59,7 +62,7 @@ let v_Vuna_dCompiler_dManifest_dmanifestErr = (fun path -> (fun msg -> (if ((bi_
 
 let rec v_Vuna_dCompiler_dManifest_dsameSection = (fun d268 -> (fun mc0 -> (fun mc1 -> (match mc0 with
   | C_Base_dList_dList_Cons (dtb__49, dtb__50) -> (match mc1 with
-  | C_Base_dList_dList_Cons (dtb__51, dtb__52) -> (if (((v_eq d268) dtb__49) dtb__51) then (((v_Vuna_dCompiler_dManifest_dsameSection d268) dtb__50) dtb__52) else false)
+  | C_Base_dList_dList_Cons (dtb__51, dtb__52) -> (if (((v_Base_dEq_deq d268) dtb__49) dtb__51) then (((v_Vuna_dCompiler_dManifest_dsameSection d268) dtb__50) dtb__52) else false)
   | _ -> false
 )
   | C_Base_dList_dList_Nil -> (match mc1 with
@@ -100,7 +103,7 @@ let v_Vuna_dCompiler_dManifest_dorEmptyList = (fun maybe -> (match maybe with
 ))
 
 let v_Vuna_dCompiler_dManifest_dcheckOneEntry = (fun mc0 -> (fun mc1 -> (match mc1 with
-  | C_Vuna_dCompiler_dToml_dTomlEntry_Vuna_dCompiler_dToml_dTomlEntry (dtb__59, dtb__60, dtb__61, dtb__62) -> (if (((v_Vuna_dCompiler_dManifest_dsameSection (v_Eq_uEq_uString ())) dtb__59) C_Base_dList_dList_Nil) then (C_Base_dResult_dResult_Base_dResult_dErr ((((v_Vuna_dCompiler_dManifest_datLine mc0) dtb__62) ((bi_concat "unexpected top-level key \"") ((bi_concat dtb__60) "\""))))) else (if (((v_Vuna_dCompiler_dManifest_dsameSection (v_Eq_uEq_uString ())) dtb__59) (C_Base_dList_dList_Cons ("package", C_Base_dList_dList_Nil))) then (if (if (if ((bi_eq_str dtb__60) "name") then true else ((bi_eq_str dtb__60) "version")) then true else ((bi_eq_str dtb__60) "edition")) then (C_Base_dResult_dResult_Base_dResult_dOk (0)) else (C_Base_dResult_dResult_Base_dResult_dErr ((((v_Vuna_dCompiler_dManifest_datLine mc0) dtb__62) ((bi_concat "unknown key \"") ((bi_concat dtb__60) "\" in [package]")))))) else (if (((v_Vuna_dCompiler_dManifest_dsameSection (v_Eq_uEq_uString ())) dtb__59) (C_Base_dList_dList_Cons ("workspace", C_Base_dList_dList_Nil))) then (if ((bi_eq_str dtb__60) "members") then (C_Base_dResult_dResult_Base_dResult_dOk (0)) else (C_Base_dResult_dResult_Base_dResult_dErr ((((v_Vuna_dCompiler_dManifest_datLine mc0) dtb__62) ((bi_concat "unknown key \"") ((bi_concat dtb__60) "\" in [workspace]")))))) else (if (((v_Vuna_dCompiler_dManifest_dsameSection (v_Eq_uEq_uString ())) dtb__59) (C_Base_dList_dList_Cons ("export", C_Base_dList_dList_Nil))) then (if ((bi_eq_str dtb__60) "modules") then (C_Base_dResult_dResult_Base_dResult_dOk (0)) else (C_Base_dResult_dResult_Base_dResult_dErr ((((v_Vuna_dCompiler_dManifest_datLine mc0) dtb__62) ((bi_concat "unknown key \"") ((bi_concat dtb__60) "\" in [export]")))))) else (if (((v_Vuna_dCompiler_dManifest_dsameSection (v_Eq_uEq_uString ())) dtb__59) (C_Base_dList_dList_Cons ("dependencies", C_Base_dList_dList_Nil))) then (C_Base_dResult_dResult_Base_dResult_dOk (0)) else (C_Base_dResult_dResult_Base_dResult_dErr ((((v_Vuna_dCompiler_dManifest_datLine mc0) dtb__62) ((bi_concat "unknown section [") ((bi_concat (v_Vuna_dCompiler_dCommon_djoinDots dtb__59)) "]"))))))))))
+  | C_Vuna_dCompiler_dToml_dTomlEntry_Vuna_dCompiler_dToml_dTomlEntry (dtb__59, dtb__60, dtb__61, dtb__62) -> (if (((v_Vuna_dCompiler_dManifest_dsameSection (v_Base_dEq_dBase_dEq_dEq_uBase_dEq_dEq_uString ())) dtb__59) C_Base_dList_dList_Nil) then (C_Base_dResult_dResult_Base_dResult_dErr ((((v_Vuna_dCompiler_dManifest_datLine mc0) dtb__62) ((bi_concat "unexpected top-level key \"") ((bi_concat dtb__60) "\""))))) else (if (((v_Vuna_dCompiler_dManifest_dsameSection (v_Base_dEq_dBase_dEq_dEq_uBase_dEq_dEq_uString ())) dtb__59) (C_Base_dList_dList_Cons ("package", C_Base_dList_dList_Nil))) then (if (if (if ((bi_eq_str dtb__60) "name") then true else ((bi_eq_str dtb__60) "version")) then true else ((bi_eq_str dtb__60) "edition")) then (C_Base_dResult_dResult_Base_dResult_dOk (0)) else (C_Base_dResult_dResult_Base_dResult_dErr ((((v_Vuna_dCompiler_dManifest_datLine mc0) dtb__62) ((bi_concat "unknown key \"") ((bi_concat dtb__60) "\" in [package]")))))) else (if (((v_Vuna_dCompiler_dManifest_dsameSection (v_Base_dEq_dBase_dEq_dEq_uBase_dEq_dEq_uString ())) dtb__59) (C_Base_dList_dList_Cons ("workspace", C_Base_dList_dList_Nil))) then (if ((bi_eq_str dtb__60) "members") then (C_Base_dResult_dResult_Base_dResult_dOk (0)) else (C_Base_dResult_dResult_Base_dResult_dErr ((((v_Vuna_dCompiler_dManifest_datLine mc0) dtb__62) ((bi_concat "unknown key \"") ((bi_concat dtb__60) "\" in [workspace]")))))) else (if (((v_Vuna_dCompiler_dManifest_dsameSection (v_Base_dEq_dBase_dEq_dEq_uBase_dEq_dEq_uString ())) dtb__59) (C_Base_dList_dList_Cons ("export", C_Base_dList_dList_Nil))) then (if ((bi_eq_str dtb__60) "modules") then (C_Base_dResult_dResult_Base_dResult_dOk (0)) else (C_Base_dResult_dResult_Base_dResult_dErr ((((v_Vuna_dCompiler_dManifest_datLine mc0) dtb__62) ((bi_concat "unknown key \"") ((bi_concat dtb__60) "\" in [export]")))))) else (if (((v_Vuna_dCompiler_dManifest_dsameSection (v_Base_dEq_dBase_dEq_dEq_uBase_dEq_dEq_uString ())) dtb__59) (C_Base_dList_dList_Cons ("dependencies", C_Base_dList_dList_Nil))) then (C_Base_dResult_dResult_Base_dResult_dOk (0)) else (C_Base_dResult_dResult_Base_dResult_dErr ((((v_Vuna_dCompiler_dManifest_datLine mc0) dtb__62) ((bi_concat "unknown section [") ((bi_concat (v_Vuna_dCompiler_dCommon_djoinDots dtb__59)) "]"))))))))))
   | _ -> failwith "DT: impossible branch"
 )))
 
@@ -117,7 +120,7 @@ let rec v_Vuna_dCompiler_dManifest_dcheckEntries = (fun path -> (fun entries -> 
 let rec v_Vuna_dCompiler_dManifest_dcollectDependenciesAcc = (fun path -> (fun entries -> (fun acc -> (match entries with
   | C_Base_dList_dList_Nil -> (C_Base_dResult_dResult_Base_dResult_dOk ((v_Base_dList_dreverse acc)))
   | C_Base_dList_dList_Cons (dtb__67, dtb__68) -> (match dtb__67 with
-  | C_Vuna_dCompiler_dToml_dTomlEntry_Vuna_dCompiler_dToml_dTomlEntry (dtb__69, dtb__70, dtb__71, dtb__72) -> (if (((v_Vuna_dCompiler_dManifest_dsameSection (v_Eq_uEq_uString ())) dtb__69) (C_Base_dList_dList_Cons ("dependencies", C_Base_dList_dList_Nil))) then (match dtb__71 with
+  | C_Vuna_dCompiler_dToml_dTomlEntry_Vuna_dCompiler_dToml_dTomlEntry (dtb__69, dtb__70, dtb__71, dtb__72) -> (if (((v_Vuna_dCompiler_dManifest_dsameSection (v_Base_dEq_dBase_dEq_dEq_uBase_dEq_dEq_uString ())) dtb__69) (C_Base_dList_dList_Cons ("dependencies", C_Base_dList_dList_Nil))) then (match dtb__71 with
   | C_Vuna_dCompiler_dToml_dTomlValue_Vuna_dCompiler_dToml_dTStr (dtb__73) -> (((v_Vuna_dCompiler_dManifest_dcollectDependenciesAcc path) dtb__68) (C_Base_dList_dList_Cons ((C_Base_dPair_dPair_Base_dPair_dPair (dtb__70, dtb__73)), acc)))
   | _ -> (C_Base_dResult_dResult_Base_dResult_dErr ((((v_Vuna_dCompiler_dManifest_datLine path) dtb__72) ((bi_concat "dependency \"") ((bi_concat dtb__70) "\" must have a string relative path")))))
 ) else (((v_Vuna_dCompiler_dManifest_dcollectDependenciesAcc path) dtb__68) acc))

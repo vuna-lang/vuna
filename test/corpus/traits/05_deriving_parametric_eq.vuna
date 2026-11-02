@@ -1,3 +1,5 @@
+import Prelude
+
 data Maybe2 a : Type where
   Nothing2 : Maybe2 a
   Just2 : a -> Maybe2 a

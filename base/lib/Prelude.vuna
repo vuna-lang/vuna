@@ -1,10 +1,13 @@
 module Prelude
   ( module Base.Bool
+  , module Base.Eq
   , module Base.List
   , module Base.Maybe
   , module Base.Monad
+  , module Base.Ord
   , module Base.Pair
   , module Base.Result
+  , module Base.Show
   , module Base.String
   ) where
 
@@ -14,8 +17,14 @@ module Prelude
 -- 刻意不重导出 Base.IO：print/readFile/writeFile/getArgs/exit 与编译器直接
 -- 使用的效果内建同名，若进入隐式 import 会把工具链里的内建调用解析成
 -- Base.IO 的 IO 动作。需要 IO 时显式 `import Base.IO`。
+--
+-- M24.7：Show / Eq / Ord 的 trait 声明与内建类型实例在库里（Base.Show /
+-- Base.Eq / Base.Ord），因此随 Prelude 自动可见，用户程序不必显式 import。
 import Base.Pair
 import Base.Bool
+import Base.Show
+import Base.Eq
+import Base.Ord
 import Base.List
 import Base.Maybe
 import Base.Result

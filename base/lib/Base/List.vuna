@@ -25,6 +25,9 @@ import Base.Pair
 import Base.Maybe
 import Base.Bool
 import Base.Monad
+-- M24.7：`mem` 的 `==` 在刚性类型上提升成 Dict_Eq；显式 import Base.Eq 既保证类存在，
+-- 也让 split 产物有正确的单元依赖顺序（生成代码引用 Base.Eq.eq 投影）。
+import Base.Eq
 
 data List a : Type where
   Nil : List a

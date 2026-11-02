@@ -193,9 +193,47 @@ loadPackageWalk stack depName dir =
         Ok dependencies => Ok (Package manifest dependencies normalized)
       else Err (mismatchMessage depName name)
 
+-- ---------------------------------------------------------------- 包名唯一性（M24.7）
+-- 包名不是纯标签，它参与两项语义判定：
+--   - `Loader.rootAllows` 的「同包永远可见」（`rootName root == importerPkg`）；
+--   - `Loader.packageAllowsEffects` 的效果内建 allowlist。
+-- 因此同一依赖图里两个**不同目录**共用包名是配置错误。旧实现 `dependencyRoots`
+-- 只按包名去重：后出现的那支依赖（连同它自己的整支依赖）被静默丢弃，模块解析
+-- 悄悄退化到前一个同名包（实测 `check` 输出 exit 0）。现在加载后显式校验：
+-- 同名同目录（diamond 依赖）合法，同名不同目录直接报错。
+collectPackageIds : Package -> List (Pair String String)
+collectPackageIds package =
+  Pair (packageName package) (packageDir package)
+    :: collectDependencyIds (packageDependencies package)
+
+collectDependencyIds : List Package -> List (Pair String String)
+collectDependencyIds packages = case packages of
+  [] => []
+  package :: rest => append (collectPackageIds package) (collectDependencyIds rest)
+
+lookupPackageDir : String -> List (Pair String String) -> Maybe String
+lookupPackageDir name ids = case ids of
+  [] => Nothing
+  (Pair n dir) :: rest => if n == name then Just dir else lookupPackageDir name rest
+
+checkUniqueNamesGo : List (Pair String String) -> List (Pair String String) -> Result Int
+checkUniqueNamesGo seen ids = case ids of
+  [] => Ok 0
+  (Pair name dir) :: rest => case lookupPackageDir name seen of
+    Nothing => checkUniqueNamesGo (Pair name dir :: seen) rest
+    Just prevDir =>
+      if prevDir == dir then checkUniqueNamesGo seen rest
+      else Err
+        ("pkg: duplicate package name \"" ++ name ++ "\" in " ++ prevDir ++ " and " ++ dir ++ " (package names must be unique within a dependency graph)")
+
+checkUniquePackageNames : List Package -> Result Int
+checkUniquePackageNames packages = checkUniqueNamesGo [] (collectDependencyIds packages)
+
 -- 加载 dir/vuna.toml 及其 [dependencies] 路径依赖（递归、含循环检测）。
 loadPackage : String -> Result Package
-loadPackage dir = loadPackageWalk [] Nothing dir
+loadPackage dir =
+  andThen (loadPackageWalk [] Nothing dir)
+    (\package => andThen (checkUniquePackageNames [package]) (\_ => Ok package))
 
 -- ---------------------------------------------------------------- workspace
 loadMembers : String -> List String -> Result (List Package)
@@ -208,6 +246,8 @@ loadMembers baseDir members = case members of
       Ok memberPackages => Ok (memberPackage :: memberPackages)
 
 -- 根包 + [workspace].members（顺序同 manifest）；没有 members 时只含根包。
+-- 每个成员自己的依赖图已由 loadPackage 校验；这里再校验并集，捕获跨成员的
+-- 同名不同目录冲突。
 workspacePackages : String -> Result (List Package)
 workspacePackages rootBaseDir =
   let
@@ -216,7 +256,9 @@ workspacePackages rootBaseDir =
     Err e => Err e
     Ok rootPackage => case loadMembers base (manifestMembers (packageManifest rootPackage)) of
       Err e => Err e
-      Ok members => Ok (rootPackage :: members)
+      Ok members =>
+        andThen (checkUniquePackageNames (rootPackage :: members))
+          (\_ => Ok (rootPackage :: members))
 
 -- ---------------------------------------------------------------- 模块根
 dependencyRootOf : Package -> Root
@@ -224,6 +266,8 @@ dependencyRootOf package =
   Root (packageDir package ++ "/lib") (packageName package) (packageExports package)
 
 -- DFS 后序：先深依赖、再直接依赖本体；按包名去重（首次出现保留）。
+-- 包名唯一性由 `checkUniquePackageNames` 在加载期保证（同名 ⇒ 同目录），所以
+-- 按名字去重不会再丢掉不同目录的依赖。
 -- 返回 (更新后的 seen, 根列表)。
 dependencyRoots : List String -> List Package -> Pair (List String) (List Root)
 dependencyRoots seen packages = case packages of

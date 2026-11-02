@@ -4,6 +4,7 @@ open Base_dPair
 open Base_dBool
 open Base_dMonad
 open Base_dMaybe
+open Base_dEq
 open Base_dList
 open Base_dResult
 let rec v_Base_dString_djoin = (fun mc0 -> (fun mc1 -> (match mc1 with

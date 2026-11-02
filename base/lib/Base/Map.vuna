@@ -8,6 +8,9 @@ module Base.Map (Map, empty, fromList, insert, keys, lookup, remove, size, toLis
 import Base.List
 import Base.Pair
 import Base.Maybe
+-- M24.7：`_insertPair` 等对刚性 key 的 `==` 提升成 Dict_Eq（见上），显式 import 保证
+-- 类存在与 split 单元顺序。
+import Base.Eq
 
 data Map k v : Type where
   MkMap : List (Pair k v) -> Map k v

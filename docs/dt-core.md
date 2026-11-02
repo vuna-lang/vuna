@@ -132,6 +132,62 @@ data Term where
    不依赖其他 codegen。
 5. `main` 必须是 `Int` / `String` / `Bool`；`--no-print` 时只 `ignore`。
 
+### 6.1 M24.6 第一级：字段形状的单一真源（已落地）
+
+`CoreCodegen.ctorKeepFlags` 从构造子 telescope 的 rig 算出一份 keep flags
+（`True` = 该 binder 进运行时表示），`mkGenSt` 把它作为 `gsCtorShapes` 带入生成状态。
+类型声明（`ctorFieldTexts`）、构造子应用（`genConApp`/`alignCtorArgs`）与 case 分支绑定
+（`genArm`/`altEnvChecked`）三处都消费同一份 flags，并在使用点校验：
+
+- 类型声明：flags 与 telescope 逐位一致；长度不一致 → `DT: internal: constructor shape ...`
+  错误（不再静默少字段/错位）。
+- 构造子应用：`TCon` 实参允许两种合法约定——**全 telescope**（普通构造子，含擦除隐式位）
+  或**仅保留字段**（字典构造子 `MkDict_C` 只带方法实现）；`alignCtorArgs` 归一后逐位
+  校验 rig，再生成运行时实参。
+- case 分支：`caseAltBinders` 同样允许两种约定（普通 case 是全 telescope、Elab 生成的
+  字典投影分支是仅字段），按长度择一并校验 rig。
+
+同级的另外两个护栏：`Core.varIndex` 对越界 level 返回 `-1`（而不是静默 `0`），后续
+`binderAt`/擦除检查会报「unbound runtime variable」；`ensureUniqueOcamlNames` 对实际生成的
+`v_*` / `t_*` / `C_*` 名字做族内去重（`sanitizeName` 的转义本身是前缀码，此护栏防未来改动）。
+
+### 6.2 M24.6 第二级：codegen 的「已 resolve」边界（重新裁定）
+
+M24 之后单一文件 codegen 的入口只接受 `DtProgram`（Elab 输出），不再接触 `Decl`/`Expr`；
+唯一还读 `Decl` 的是 split 的模块归属表。因此原计划的 `Expr : Phase -> Type` phantom index
+在本架构下**没有落点**（没有「未 resolve 的 Expr 可以进 codegen」这条路径）。M24.6 的最小
+落地改为：`generateDtSplitProgram` 在入口调用 `checkResolvedModules`，要求每个模块的声明名
+带模块前缀（Loader 保证的 resolved 形态）；parse 后的裸声明一旦被喂进 codegen 会在这里
+被拒绝。单文件 / REPL / LSP 的 parsed 入口不经过该函数。此裁定记入 roadmap 决策变更。
+
+### 6.3 M24.6 第三级：Core 的 de Bruijn 索引化（重新裁定的边界）
+
+原计划把 Core 的运行环境改成 `Env : Nat -> Type` + `Fin` total lookup。M24.5 落地后复核：
+
+- **可写**：`Env : Nat -> Type`（存**不依赖索引**的值）+ `Fin` 弱化/total lookup 的骨架
+  已可写（语言侧证据：`test/corpus/dt/47_lookup_env.vuna` 的 `Env`/`Fin` 缺席分支省略；
+  `test/corpus/dt/02_data.vuna` 等索引族夹具）。
+- **不可写**：`Ctx n -> Fin n -> Tm n` 这种「取回类型**依赖索引**的值」仍缺表达手段——递归步
+  需要把上下文从 `Ctx n` 精化成 `Ctx (Succ k)` 并取出 `Tm (Succ k)`，当前精化器只能在
+  goal 索引与 case 精化形参之间搬等式，写不出「按位置变化的类型族」。这是 M24.5 的硬边界
+  （见 [dt-parity.md](reference/dt-parity.md) §6.3）。
+- **已落地的替代护栏**：`Core.varIndex` 越界返回 `-1`；`CoreCodegen.checkAllDefScopes` 对
+  运行时会生成的定义体（跳过擦除实参，擦除位置允许 quote 阶段留下的 -1）做一次 de Bruijn
+  作用域验证；任何越界在 check 期报 `DT: internal: ...`，不再静默指向最外层变量。
+- **明确不做**：把 `Core.eval` 的 `List Value` 环境与 `Clos` 捕获环境整体换成索引 `Env n`。
+  收益是 lookup 从 `Maybe` 变 total，但 `Clos` 需要存在式长度（`Clos : {n} -> Env n ->
+  Term -> Closure`）并改写 eval/applyClosure 全部调用点；且 motivating case（依赖索引取值）
+  本来写不出来。按「每级完成即停」原则只保留上述护栏，边界记录在此。
+
+### 6.4 M24.6 附带修复：类型族整体擦除
+
+`isTypeLevelDef` 原来只看裸 `Type`（`isTypeValue`），于是 `sel : Nat -> Type` 一类**类型族**
+被判成运行时定义，生成的 OCaml 出现未定义的 `v_Int`/`v_String`（`ocamlopt` 才炸）。现在用
+`isTypeForming`：类型 force 后以宇宙收尾的 Pi 链（`... -> Type`）整体擦除。正例
+`test/corpus/dt/51_type_family.vuna`、`52_type_family.vuna`；运行时定义里把擦除参数当值用
+仍然报错（`dt_err/39_type_family_runtime_use.vuna`）。旧的三个「类型级 Pi 体用类型参数」
+负例（`dt_err/09`、`18`、`19`）语义已纠正：它们现在是合法的类型族，已删除。
+
 ## 7. 与旧路径的边界（历史）
 
 本节记录 M13/M14 时期 DT 与当时另一条路径的边界，**已不适用**（终态只有 DT）：
