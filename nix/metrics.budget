@@ -42,13 +42,13 @@
 #   build --dt 与 seed --dt 入口）：编译器源码显著增长，seed 闭包 36 → 37 个模块
 #   （`vuna compile --package compiler` 闭包）。随后把 M16 终止性检查从 Elab 抽成
 #   `Vuna.Compiler.DtTerm`（冷启动上下文预算要求单模块 ≤2540 行），闭包 38 个模块、
-#   总分块量不变、单模块行数下降。按实测重新标定：bytes 1425475 / lines 13462 /
-#   longlines 5011 / letrec 727 / strcat 355 / zeroarg 51 / ctorcount 2778。
+#   总分块量不变、单模块行数下降。按实测重新标定：bytes 1425545 / lines 13466 /
+#   longlines 5012 / letrec 727 / strcat 355 / zeroarg 51 / ctorcount 2778。
 #   这是 HM 路径编译器源码的规模，不是 DT 产物口径。
-bytes 1425475
-lines 13462
+bytes 1425545
+lines 13466
 maxline 12400
-longlines 5011
+longlines 5012
 letrec 727
 strcat 355
 eqint 32
