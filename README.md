@@ -2,17 +2,15 @@
 
 vuna 是一个函数式编程语言，本仓库是它的编译器与工具链。
 
-> **vuna 尚未发布任何版本**：没有外部用户、没有下游生态、没有历史包袱。全部源码都在
-> 本仓库内，**任何设计、接口、命令、实现、哲学都允许被推翻**。终态是**单一依赖类型路径**
-> （HM 检查器与 codegen 将被删除），见 [docs/roadmap.md](docs/roadmap.md)。
+> **vuna 尚未发布任何版本**：没有外部用户、下游生态与历史包袱，全部源码都在本仓库内，
+> **任何设计、接口、命令、实现、哲学都允许被推翻**。终态是**单一依赖类型路径**（HM 检查器
+> 与 codegen 将被删除），见 [docs/roadmap.md](docs/roadmap.md)。
 
-编译器完全用 vuna 自己写：编译器包 `compiler/`（`vuna-compiler`，模块 `Vuna.Compiler.*`，
-含 Ast/Lexer/Parser/Loader/Typecheck/TypedCodegen/Core/Elab 与编译器驱动）+ 根包 `vuna`
-（产品 CLI 与工具链 fmt/lint/repl/doc/test），标准库在独立的成员包 `base/`
-（`vuna-base`，模块 `Base.*`，模块根 `base/lib/`）。`seed/` 只由 compiler 包的入口闭包
-生成——**可固化成种子的部分与产品工具链明确分开**。仓库通过提交入库的 OCaml 种子自举，
-构建、测试和语言演进都不依赖外部编译器。早期用于启动自举的 OCaml 实现 `vunax` 已在
-M6 完成后删除；需要查看历史可从 git log 找到。
+编译器完全用 vuna 自己写：编译器包 `compiler/`（`vuna-compiler`，模块 `Vuna.Compiler.*`）
++ 根包 `vuna`（产品 CLI 与工具链 fmt/lint/repl/doc/test）+ 成员包 `base/`（`vuna-base`，
+模块根 `base/lib/`）。`seed/` 只由 compiler 包的入口闭包生成——**可固化成种子的部分与产品
+工具链明确分开**。仓库通过提交入库的 OCaml 种子自举，构建、测试和语言演进都不依赖外部
+编译器；早期启动用的 OCaml 实现 `vunax` 已在 M6 后删除（历史见 git log）。
 
 > **AI agent 请先读 [AGENTS.md](AGENTS.md)**；架构与改动定位见
 > [docs/architecture.md](docs/architecture.md)。本 README 只保留定位、上手、目录、
@@ -25,7 +23,7 @@ nix develop                                    # OCaml 工具链 + vuna-seed
 nix build .#vuna --out-link result             # 产品 CLI（stage 1）
 ./result/bin/vuna help
 
-# 单文件：写、查、解释执行、生成 OCaml 并编译运行
+# 单文件：写、查、求值、生成 OCaml 并编译运行
 cat > hello.vuna <<'EOF'
 main : Int
 main = 1 + 2 * 3
@@ -49,10 +47,9 @@ nix run .#vuna-run-tests -- --list                  # 列出章节（--only <章
 ./result/bin/vuna doc                          # 生成 docs/api.md（gitignored）
 ```
 
-自己新建一个包时：`vuna.toml`（`[package]` + `[dependencies]`）加 `app/Main.vuna`，
-入口写 `main : IO a`；`println` / `readFile` 等效果 API 来自 `Base.IO`
-（`import Base.IO`，包需依赖 `vuna-base`）。完整包格式见
-[docs/reference/packages.md](docs/reference/packages.md)，示例见 `examples/multi/`。
+自己新建一个包时：`vuna.toml`（`[package]` + `[dependencies]`）加 `app/Main.vuna`，入口写
+`main : IO a`；`println` / `readFile` 等效果 API 来自 `Base.IO`（`import Base.IO`，包需依赖
+`vuna-base`）。完整包格式见 [packages.md](docs/reference/packages.md)，示例见 `examples/multi/`。
 
 不知道用哪个编译器时：优先本地 `./result/bin/vuna`；本地没有或编译不过，一律
 `nix run vuna -- <subcommand>`（注册表别名指向 `github:vuna-lang/vuna`）。
@@ -80,14 +77,12 @@ vuna build [--no-compile] [DIR]           # 包级 codegen + ocamlopt → .outpu
 vuna build --split OUT [DIR]              # 扁平分离编译
 vuna seed [OUT [DIR]]                     # 生成扁平多文件 seed 文件集
 vuna lint [--fix] <file.vuna>...
-vuna interp [--dt] [--root DIR]... <file.vuna>
-vuna test [DIR]                           # 解释执行 test/*.vuna（main : String，空串通过）
+vuna interp [--root DIR]... <file.vuna>   # 精化后核心求值（纯；不执行效果）
+vuna test [DIR]                           # 运行 test/*.vuna（DT 核心求值，main : String 空串通过）
 vuna fmt [--check] [PATH]...
 vuna repl [--root DIR]...
 vuna doc [DIR [OUT]]                      # 默认 DIR/docs/api.md
-vuna map [--modules]                      # 模块总览（索引缓存在 .local/index/）
-vuna map --find <Module.name>             # 定位符号：定义位置 + 签名
-vuna map --impact <Module.name>           # 改动影响面：引用者模块 + 建议测试
+vuna map [--modules | --find <M.name> | --impact <M.name>]  # 模块总览 / 定位符号 / 改动影响面
 vuna api <Module.name>                    # 某模块的签名面（含注释与行号）
 vuna help, -h
 ```
@@ -95,10 +90,13 @@ vuna help, -h
 `vuna-compiler` 是同一套编译器命令的独立 CLI（seed 的来源），参数与 `vuna` 的同名命令一致。
 `vuna` 的编译命令直接调用 `Vuna.Compiler.CompilerCli` 的库实现（in-process 调库，不 fork
 `vuna-compiler`）；`vuna build` 通过受限的进程执行内建调用 `.output/build.sh`（ocamlopt），
-除此之外无额外运行时依赖。`vuna interp` 保留“不检查执行”的调试语义（普通程序直接求值；
-record / trait / deriving 程序会先类型检查并降级）。省略 `--root` 时使用当前目录包的模块根；
-`--root` 用于原始文件模式（编译器自举、测试夹具）显式指定模块根。包模式会自动导入
-`Prelude`。命令语义与包格式见 [packages.md](docs/reference/packages.md)，语言语义见
+除此之外无额外运行时依赖。`vuna interp` 自 M23 起是**DT 精化 + 核心求值**（`--dt` 开关
+已移除）：先按 DT 检查再求 `main` 的值，只展示 `Int`/`String`/`Bool`；任何
+`main : IO a` 一律明确报错（核心求值器不执行效果），请改用 `compile` + 运行产物。
+省略 `--root` 时使用当前目录包的模块根；`--root` 用于原始文件模式（编译器自举、
+测试夹具）显式指定模块根。包模式会自动导入 `Prelude`。`check --dt` / `compile --dt`
+是 M23 后语言夹具的唯一检查路径（HM 代码路径保留到 M24）。命令语义与包格式见
+[packages.md](docs/reference/packages.md)，语言语义见
 [language.md](docs/reference/language.md)。
 
 ## 目录结构
@@ -133,9 +131,10 @@ record / trait / deriving 程序会先类型检查并降级）。省略 `--root`
    `nix/tcb-forbidden.txt` 断言；
 4. **效果内建按包 allowlist**：只有 `vuna` / `vuna-compiler` / `vuna-base` 可直接调用
    effectful 内建，其余包必须经 `Base.IO`（`Vuna.Compiler.Loader.packageAllowsEffects`）；
-5. **迁移期双路径零回归，终态单路径**：M18.5–M23 期间 HM（interp + typed + split）与 DT
-   （core evaluator + 擦除 codegen）都必须保持通过；**M24 之后 HM 模块删除**、`--dt`
-   开关消失，只剩一条路径。当前处于迁移期；
+5. **迁移期双路径只在源码/包构建上守门，夹具已切 DT**：M23 起语言夹具与 `vuna interp`
+   只走 DT（`check --dt` / `compile --dt` / 核心求值）；HM（`Typecheck` / `TypedCodegen`）
+   保留到 M24 才删除，期间 `vuna check .`（HM 自检）与 HM 包构建段仍守门；**M24 之后
+   HM 模块删除**、`--dt` 开关消失，只剩一条路径；
 6. 编译器自检通过：`vuna check .` 能检查自身源码（`checks.vuna-typecheck`）；
 7. `seed/` 下所有文件都是生成物，禁止手改；只能通过 seed rotation 更新。
 

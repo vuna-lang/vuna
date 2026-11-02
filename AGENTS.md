@@ -16,8 +16,7 @@
 1. `AGENTS.md`（本文件）——不变量、纪律、常用命令；
 2. [`docs/architecture.md`](docs/architecture.md)——子系统地图：哪条链路、入口符号、连带改动、测试标签；
 3. 需要时再下钻：[`docs/reference/`](docs/reference/)（language / type-system / stdlib / packages /
-   compiler / bootstrap / testing / limits / dt）、[`docs/roadmap.md`](docs/roadmap.md)、
-   [`docs/dt-core.md`](docs/dt-core.md)、[`docs/history.md`](docs/history.md)。
+   compiler / bootstrap / testing / limits / dt）、[roadmap](docs/roadmap.md)、[dt-core](docs/dt-core.md)、[history](docs/history.md)。
 
 **定位符号**用 `vuna map --find` / `--impact` / `vuna api`（用法见技能
 `.agents/skills/repo-navigation/SKILL.md`）。**不要做的事**：通读全仓；读 `seed/` 或
@@ -44,9 +43,11 @@
 5. **效果内建按包 allowlist**：只有 `vuna` / `vuna-compiler` / `vuna-base` 可直接调用
    effectful 内建（`print`/`readFile`/`exit`/`prim_*` 等），其余包必须经 `Base.IO`
    （`Vuna.Compiler.Loader.packageAllowsEffects`）；
-6. **迁移期双路径零回归，终态单路径**：M18.5–M23 期间 HM（interp + typed + split）与
-   DT（core evaluator + 擦除 codegen）都必须保持通过；**M24 之后 HM 模块删除**，
-   `--dt` 开关消失，只剩一条路径。当前处于迁移期，先按双路径守门；
+6. **迁移期双路径只在源码/包构建上守门，夹具已切 DT**：M23 起语言夹具与 `vuna interp`
+   只走 DT（`check --dt` / `compile --dt` / 核心求值，效果夹具用 `.nointerp` 标记）；
+   HM（`Typecheck` / `TypedCodegen`）代码路径保留到 M24 才删除，期间 `vuna check .`
+   （HM 自检）与 HM 包构建段（第 28/29/33 段）继续守门。**M24 之后 HM 模块删除**，
+   `--dt` 开关消失，只剩一条路径；
 7. 编译器自检通过：`vuna check .` 必须能检查自身源码（`checks.vuna-typecheck`）。
 
 ## 纪律
@@ -75,7 +76,7 @@ nix run .#vuna-run-tests [-- --list | --only dt]   # 原生测试；nix run .#vu
 vuna check .                         # 包级类型检查（自检）；vuna build . → .output/bin/<包名>
 vuna fmt --check <PATH>...           # 格式化检查（务必显式给路径）；vuna lint <file>...
 vuna doc [DIR [OUT]]                 # API 文档（默认 DIR/docs/api.md，gitignored）
-vuna interp <file.vuna>              # 解释执行（调试语义）
+vuna interp <file.vuna>              # DT 精化 + 核心求值（纯；只展示 Int/String/Bool）
 vuna seed seed compiler              # 重新生成 seed（正式流程用 nix/seed-rotate.sh）
 ```
 
@@ -83,7 +84,7 @@ vuna seed seed compiler              # 重新生成 seed（正式流程用 nix/s
 
 `compiler/` = 编译器包（模块 `Vuna.Compiler.*`，入口 `app/Main.vuna`，**进 seed**）；
 `base/` = 标准库 `vuna-base`（`Base.*` + `Prelude`，**进 seed**）；`lib/` = 根包工具链
-（Cli/Interp/Eval/Files/Fmt/Lint/Repl/Doc/Index/TestRunner，**不进 seed**）；`app/` = 产品
+（Cli/Interp/Files/Fmt/Lint/Repl/Doc/Index/Lsp/TestRunner，**不进 seed**）；`app/` = 产品
 CLI 入口；`seed/` = 提交入库的多文件 OCaml 信任锚点（生成物，禁止手改、别读）；`test/` =
 `run-tests.sh` + `corpus/` 夹具；`nix/` = 构建图（packages/checks）+ rotate/metrics/bench；`docs/` = 分层文档。
 

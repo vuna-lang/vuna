@@ -78,8 +78,10 @@ git add seed/ && git commit
 3. **`seed/` 只含 compiler 包入口闭包**：工具链（fmt/lint/repl/doc/test、未来的
    LSP / package manager / Index）不进 TCB；
 4. 编译器自检：当前编译器必须能类型检查自己的源码（`checks.vuna-typecheck`）；
-5. **HM 路径与 `--dt` 路径零回归**：interp + typed + split 三路径语义与产物不变，
-   DT 是显式 opt-in。
+5. **迁移期双路径只在源码/包构建上守门，夹具已切 DT**：M23 起语言夹具与
+   `vuna interp` 只走 DT（`check --dt` / `compile --dt` / 核心求值）；HM
+   （`TypedCodegen` / `Split` 生成与 typed 包构建）保留到 M24 才删除，期间仍守
+   `vuna check .` 与 HM 包构建段零回归。
 
 ## 效应内建的包级 allowlist
 

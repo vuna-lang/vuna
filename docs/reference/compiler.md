@@ -16,7 +16,7 @@ import 闭包就是 `seed/` 的内容；工具链（fmt/lint/repl/doc/test）在
 | `Vuna.Compiler.Ast` | 语法类型与 AST helper（`Expr`/`Decl`/`Pat`/`Ctor`/`Import`/`ModDecl`） | `clausesFor`、`funArity`、`declNames` |
 | `Vuna.Compiler.Lexer` | 字符游标、token 与位置；注释单独 lex 出来供 formatter 使用 | `lexSource`、`lexComments` |
 | `Vuna.Compiler.Parser` | offside layout parser → AST + imports | `parseSource`、`parseExpressionSource` |
-| `Vuna.Compiler.Builtins` | 内建函数名字与元数（供 Loader/Eval 共用） | `builtinArity` |
+| `Vuna.Compiler.Builtins` | 内建函数名字与元数（供 Loader 识别内建名） | `builtinArity` |
 | `Vuna.Compiler.Toml` | TOML 子集解析器 | `parseToml`、`lookupEntry` |
 | `Vuna.Compiler.Manifest` | `vuna.toml` 的语义模型与结构校验（不做 I/O） | `parseManifest`、`validateManifest` |
 | `Vuna.Compiler.Pkg` | 包 / workspace 解析层：manifest 图、依赖 DAG、模块根（不碰 Loader / CLI） | `loadPackage`、`workspacePackages`、`packageRoots` |
@@ -32,7 +32,7 @@ import 闭包就是 `seed/` 的内容；工具链（fmt/lint/repl/doc/test）在
 | `Vuna.Compiler.Elab` | DT 双向精化器（一阶元变量、类型级隐式插入、M14 索引族） | `elabProgram` |
 | `Vuna.Compiler.DtMatch` | 多 clause 模式矩阵降级：构造子列 → `case`、字面量列 → `if` 链（纯 Ast→Ast 变换，从 Elab 拆出守模块预算） | `multiToExpr`、`buildColumnExpr` |
 | `Vuna.Compiler.CoreCodegen` | DT 擦除检查与 OCaml 生成 | `checkDtProgram`、`generateDtProgram` |
-| `Vuna.Compiler.Dt` | DT 单文件 facade（供 `Compile` / `CompilerCli` / `Interp` 使用） | `dtCheckFile`、`dtCompileFile`、`dtEvalFile` |
+| `Vuna.Compiler.Dt` | DT facade（供 `Compile` / `CompilerCli` / `Vuna.Interp` / `Vuna.Repl` 使用） | `dtCheckFile`、`dtCompileFile`、`dtEvalFile`、`dtEvalExpr` |
 
 `compiler/vuna.toml` 的 `[export]` 只列编译器模块；`Process` 刻意不导出。
 
@@ -41,20 +41,19 @@ import 闭包就是 `seed/` 的内容；工具链（fmt/lint/repl/doc/test）在
 | 模块 | 职责 |
 | --- | --- |
 | `Vuna.Cli` | 产品 CLI：工具命令分发 + in-process 调 compiler 命令（`runCli`） |
-| `Vuna.Interp` | 解释器 facade（依赖 `Vuna.Eval`；工具链侧，不进 seed 闭包） |
-| `Vuna.Eval` | 值表示、内建函数、求值器与 `show` |
+| `Vuna.Interp` | 解释器 facade（M23 起走 DT 精化 + 核心求值，调 `Dt.dtEvalFile`；工具链侧，不进 seed 闭包） |
 | `Vuna.Files` | 目录遍历小工具（fmt/doc/test 共用，`collectVunaFiles`） |
 | `Vuna.Fmt` | 源码格式化器（`vuna fmt`，parse → 规范打印） |
 | `Vuna.Lint` | 风格检查与自动修复（`vuna lint`） |
-| `Vuna.Repl` | 交互式 REPL（`vuna repl`） |
+| `Vuna.Repl` | 交互式 REPL（`vuna repl`；表达式经 DT 求值，顶层定义需先写签名） |
 | `Vuna.Doc` | API 文档生成（`vuna doc`，扫描 `lib/` 输出 Markdown） |
 | `Vuna.Index` | 源码符号索引（`vuna map` / `vuna api`；parse 级，缓存在 `.local/index/`） |
 | `Vuna.Process` | 工具链侧进程执行入口（与 `Vuna.Compiler.Process.runIn` 同名） |
-| `Vuna.TestRunner` | 包内测试运行器（`vuna test`，解释执行 `test/*.vuna`） |
+| `Vuna.TestRunner` | 包内测试运行器（`vuna test`，经 `Vuna.Interp` 走 DT 核心求值） |
 
 这些模块永不进入 seed（见 [bootstrap.md](bootstrap.md) 的 TCB 边界）。
 
-## HM 主路径
+## HM 主路径（迁移期保留，M24 删除）
 
 `loadProgram → checkProgramInfoElab → generateProgramTyped`，由
 `Vuna.Compiler.Compile` 的 `compileFileTyped*` / `checkFile*` 组合：
@@ -67,13 +66,19 @@ import 闭包就是 `seed/` 的内容；工具链（fmt/lint/repl/doc/test）在
 `checkFile` 只做类型检查并返回穷尽性/冗余警告，不生成代码。包级检查用
 `checkPackageIn`：以 `[export].modules` 为根，不经过 `app/Main.vuna`。
 
+M23 起这条路径**不再服务解释器与语言夹具**（`vuna interp` 与 `check --dt` /
+`compile --dt` 走 DT）；它仍用于产品 CLI 自检（`vuna check .`）、HM 包构建段
+（`build` / `compile --package` / `--split`，M24 前）与 `vuna-compiler` 自身构建。
+
 ## codegen 的表示
 
-只有一条 codegen（typed，M12.7 起 dynamic codegen 已删除）：
+M12.7 起 dynamic codegen 已删除；迁移期（M23）并存两条 codegen：HM 的
+`TypedCodegen`（本节，M24 删除）与 DT 的 `CoreCodegen` 擦除型 codegen（见下节）。
+语言夹具只走 DT，HM codegen 仍用于产品 CLI 自检与 HM 包构建。
 
-- `TypedCodegen`：用类型信息生成原生 OCaml 类型与代码——用户
-  `data` 编译成 OCaml 变体、`Int/String/Bool/List` 映射到原生类型、`case` 编译成
-  OCaml `match`、构造器直接构造变体，没有动态 `value` 包装。
+HM typed codegen 用类型信息生成原生 OCaml 类型与代码——用户
+`data` 编译成 OCaml 变体、`Int/String/Bool/List` 映射到原生类型、`case` 编译成
+OCaml `match`、构造器直接构造变体，没有动态 `value` 包装。
 
 typed codegen 只用 OCaml 标准库，不依赖解释循环。代码质量优化：
 
@@ -84,7 +89,7 @@ typed codegen 只用 OCaml 标准库，不依赖解释循环。代码质量优�
   `bi_eq_int` / `bi_eq_str` / `bi_eq_bool` / `bi_*_int` 等单态 helper，
   避免多态 `caml_equal` / `caml_less_than`（多态函数里的比较仍保留通用 `bi_eq`）；
 - **短路**：`a && b` / `a || b` 生成 OCaml `if`，左侧能决定结果时不求值右侧；
-  解释器同样短路；
+  解释器（DT 核心求值器）与 DT codegen 保持同一短路语义；
 - **字符串拼接**：同层 `++` 链编译期折叠相邻字面量，3 段以上生成按序求值的
   `let` 绑定 + `String.concat "" [...]`（线性时间，不再是右嵌套 `^`）；
 - **输出收尾**：单子句全变量模式直接生成 `fun x y -> ...`（省 match/元组）、
@@ -101,8 +106,11 @@ typed codegen 只用 OCaml 标准库，不依赖解释循环。代码质量优�
 ## DT 路径
 
 `Core`（Core TT + NbE）→ `Elab`（双向精化）→ `CoreCodegen`（擦除 + OCaml 生成），
-由 `Dt` facade 串起来（`dtCheckFile` / `dtCompileFile` / `dtEvalFile`）。这条路径
-不经过 Loader，只支持单文件。详见 [dt.md](dt.md) 与 [docs/dt-core.md](../dt-core.md)。
+由 `Dt` facade 串起来（`dtCheckFile` / `dtCompileFile` / `dtEvalFile`）。M20 起这条
+路径复用 Loader（支持 `import` / `--root` 多文件），M22.1 起支持包目录；M23 起它是
+**语言夹具的唯一检查路径**，`vuna interp` 也走这里（`dtEvalFile`：精化后用 NbE
+求 `main` 的值，纯求值、不执行效果）。详见 [dt.md](dt.md) 与
+[docs/dt-core.md](../dt-core.md)。
 
 ## 机器无关指标
 

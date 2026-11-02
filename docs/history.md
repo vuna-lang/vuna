@@ -774,7 +774,9 @@ HM build 零回归）；`--only 34` 与全量测试全绿；`dt/38_explicit_inde
 
 **仍存边界**：DT 输出尚未逐模块切分（M24 seed 切换前置）；`seed/` 仍由 HM 生成，未轮换。
 
-## M23 进展：三包源码迁到 DT 下通过（2026-11）
+## M23：全仓源码与夹具迁移（2026-11）
+
+### 1. 三包源码迁到 DT 下通过
 
 **目标推进**：`vuna check --dt .`（root/lib/app + compiler/base 依赖闭包）与
 `vuna build --dt .` 首次全仓通过；`compiler/.output/bin/vuna-compiler` 与
@@ -813,3 +815,88 @@ dict-lifting 过度实例化）。
 **codegen 补强**：`getArgs` / `readDir` 把 OCaml list 桥接回程序的 `List` 归纳族；
 `prim_runIn` 参数反向桥接；**零运行时参数定义包 thunk**（与 HM 一致），避免
 `help = let _ = print ... in 0` 在模块初始化时执行。
+
+### 2. 夹具迁移与 `vuna interp` 切换
+
+**`vuna interp` 改为精化后核心求值**：`Vuna.Interp` facade 从「Loader + HM `Typecheck` +
+`Vuna.Eval` 免检求值」改为直接调用 `Dt.dtEvalFile`；删除 542 行的 `Vuna.Eval`；`interp`
+的 `--dt` 开关移除（传入报 removed、退出码 2），`--root` 保留。求值是纯的：**任何
+`main : IO a` 一律报** `DT: interp cannot execute effects (main : IO a); compile and run the
+program instead`（不做「纯动作求值、效果丢弃」的错误二分）。`vuna test` 与 `vuna repl`
+随之切到同一求值器；REPL 通过新增的 `Dt.dtEvalExpr`（program 源码 + 表达式源码，进口
+`Loader.loadProgramRawOrderedSource`、`Elab.inferE` 推断表达式类型后 show）求值，顶层定义
+仍须先写签名。
+
+**夹具迁移**：`test/corpus/` 全部语言夹具改为 DT 断言路径（`interp` / `check --dt` /
+`compile --dt` + ocamlopt），HM 只保留为源码自检（`vuna check .`）与包构建段（第 28/29/33、
+34d 零回归），M24 再切/删。具体：
+
+- 补全夹具顶层签名（签名工具 `sig-export` 的同款要求，测试文件同样适用）；
+- `main` 返回数据的夹具改写为 `Int`/`String` 并保留被调函数覆盖（`run/03` 加 `toInt`、
+  `run/13` 加 `sum`、`records/08` 改字段和、`modules/11` 改 `area`、`modules/23` 增
+  `unT` 选择性再导出、`type_modules/01` 加 `toInt`）；
+- 效果/不可归约夹具加 `.nointerp`（`run/16`、`run/17`、`run/10`、`stdlib/03`、
+  `stdlib/07`、`stdlib/09`、`stdlib/10`、`dt_base/01`–`03`；`stdlib/06` 为既有）；
+  多隐式参数字典的 `monad/04` 另加 `.nocompile`，只断言 `check --dt`；
+- 负例 `.err` 全部改为 DT 实际诊断的稳定片段；interp 与 `compile --dt` 文案不同时用
+  `.cerr`（`run_err/07`）。原「运行时匹配失败」夹具（`run_err/02`、`10`）在 DT 下成为
+  静态覆盖错误；`run_err/03` 改为「产物运行期负例」（运行非 0、stderr 含
+  `division by zero`）；
+- 删除 `traits/96_deriving_ord`（DT 支持 Ord 派生，正向覆盖在 `dt/31`）；
+  `records/95_unresolved_record_type` 改写为 `95_ambiguous_field`（DT 在同场景报
+  `ambiguous field`）；原 runner 第 12 段与段 2 重复，删除后 runner 为 **34 个编号段**
+  （34a–34d 在段 34 内）；
+- 夹具规模：`corpus/dt` 正例 **44**、`corpus/dt_err` 反例 **33**（新增 dt/40–44：
+  record update、参数化 record、命名实例、参数化 Eq 派生、短路；dt_err/30–34：重复实例、
+  未知方法、`@inst` 误用、参数化 Show 拒绝、update 歧义）。
+
+### 3. 夹具迁移驱动的 DT 能力补齐
+
+- **零运行时参数构造子**：`Elab` 对 telescope 只剩擦除 binder 的构造子（`Nil`）生成
+  `TCon`，并用隐式元变量填满 telescope 实参（VCon 实参与 case binder 逐位对齐）。修好
+  `range` / `split` / `lines` 一类「递归产出 `Nil`」的核心归约（`stdlib/05` 恢复三路一致）。
+- **record**：`DtRecords` 把 `{ r | x = ... }` 降级成「case + 重建构造子」（字段名唯一定位
+  record、歧义/未知报错）；参数化 record 的 family kind 由参数补齐；构造子名**去掉 `Mk`
+  前缀**（DT 已支持与族同名的构造子），派生 `Show` 因此输出 `(Point 1 2)` 而非内部名。
+- **命名实例 `@inst`**：`Elab.inferInstSel` 按名取实例字典，生成 eta 展开的方法投影
+  （裸 `case` 当函数应用不会 β 归约）；命名实例不参与自动搜索（与 HM 一致）。
+- **实例诊断**：同 head 的默认实例（含 `deriving` 生成、跨模块）报 `duplicate instance`；
+  实例含未声明方法报 `instance has unknown method`；缺方法检查提前到方法体精化之前。
+- **`deriving`**：生成体不再引用源码 `True`/`False`（改用 Int `==` 产生 Bool）；`Show
+  String` 加引号对齐 HM；参数化 data 的 Eq 走通用结构比较兜底，Show/Ord 参数化派生显式
+  拒绝并给清晰错误。
+- **`&&` / `||` 短路**：精化期降级成 `TIf`（`a && b` ⇒ `if a then b else False`），
+  core 求值与 codegen 自动一致；`False && (1/0 == 0)` 不再触发除零。
+- **除零**：`Core` 对 `a / 0` 不归约（interp 报 `main does not reduce to a value`），
+  产物为 `failwith "division by zero"`；两个入口的可观测差异记录在 limits。
+- **`strPack`/`strUnpack` codegen**：按程序是否声明 `List` 族映射到 `dtp_*` 桥接或
+  `bi_str*`，修掉未声明 List 时生成未绑定 OCaml 名的问题。
+- **元变量/字典**：`DtQuant`/`DtKind` 按签名中名字的应用次数推断高阶 kind（
+  `monad/04` 的 `m : Type -> Type` check 通过）；`dtEvalExpr` 与 `loadProgramRawOrderedSource`
+  支撑 REPL 内存求值。
+
+### 4. 已知边界与遗留（M24 处理）
+
+- **多隐式参数 + 字典**：`liftFreeDictGoals` 逐调用点插字典 binder 的记账有 bug（
+  `bindPair` 生成 3 个字典参数、`(v_bind d) d` 实参错位），影响 interp 与擦除 codegen；
+  `monad/04_kind_generic` 用 `.nointerp` + `.nocompile` 保留 check 覆盖，修复留 M24。
+- **`where` 子句**：DT 精化器不能在无期望类型时推断 lambda；M23 把相关夹具改写为等价
+  顶层函数，**终态不保留该语法**（M24 随 HM 删除 parser/Fmt 的 where 支持，见 roadmap
+  决策表）。
+- **`main` 展示**：interp 只展示 `Int`/`String`/`Bool`，不展示 data/record 值（夹具已改写）。
+- **效果程序**：interp 不执行效果（任何 `main : IO a` 报错），`test`/`repl` 同；REPL 定义
+  须先写签名。
+- **kind 诊断**：`instance Monad Int` 一类报通用 `type mismatch`，HM 的 kind 专属文案消失
+  （`monad/90`、`stdlib/92` 的 `.err` 已相应改写）。
+- **`@inst`** 只能显式选择命名实例，不参与自动搜索；参数化 `deriving (Show/Ord)` 不支持，
+  参数化 Eq 走通用结构比较（需字典的场景仍可能缺实例）。
+- HM（`Typecheck`/`TypedCodegen`/`Split`）代码路径保留到 M24；`seed/` 未轮换。
+
+### 5. 验证
+
+- `vuna check --dt .`（约 13s）与 `vuna build --dt .` 全仓通过；`vuna check .`（HM 自检）通过。
+- `test/run-tests.sh`：**1019 checks 全绿**（34 个编号段；含 dt 44 / dt_err 33 三路互拍）。
+- `nix flake check`：9 项全绿（`context-budget` 按本轮实测重新标定 max_module_lines，原因见
+  `nix/context.budget` 标定历史）。
+- `vuna fmt --check` 与 `vuna lint` 干净；旧 seed 能编译新编译器源码（stage1 由 `nix build`
+  验证），`seed-selfhost` 的 stage1 == stage2 由 CI 保持。

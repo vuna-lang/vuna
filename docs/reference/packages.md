@@ -32,14 +32,15 @@
     复用已有 `.output`）；
   - `vuna build --split OUT [DIR]`：旧的扁平分离编译 codegen（逐模块 `.ml/.mli` +
     `build.sh` 写到 OUT），遇到不支持构造不回退；
-  - `vuna test [DIR]`：解释执行 `test/*.vuna`，`main : String` 空串通过，非空为失败信息；
+  - `vuna test [DIR]`：经 `Vuna.Interp` 用 DT 核心求值执行 `test/*.vuna`，
+    `main : String` 空串通过，非空为失败信息（不走效果）；
   - `vuna fmt [--check] [PATH]...`：`Vuna.Fmt` 格式化（2 空格缩进、幂等、可重新
     parse；M11.6 起**保留行注释/块注释**，超过 100 列时在 RHS、列表字面量、
     函数应用参数与中缀链处折行；模块头显式导出列表逐项一行并按名排序，项注释随项
     移动）；省略 PATH 时格式化 workspace 内所有包的
     `lib/app/test`（拆包后自动覆盖 `compiler/lib`）；
-  - `vuna repl [--root DIR]...`：行式 REPL，定义累积、表达式立即走完整
-    loader/类型检查/解释器路径（支持 import/记录/trait/do）；
+  - `vuna repl [--root DIR]...`：行式 REPL，定义累积、表达式经 DT 求值
+    （支持 import/记录/trait/do；顶层定义必须先写签名）；
   - `vuna doc [DIR] [OUT]`：扫描 `lib/` 生成 Markdown API 文档（默认
     `DIR/docs/api.md`，仓库的 `docs/api.md` 是生成物、gitignored）；
   - `vuna map [--modules]` / `vuna map --find <Module.name>` / `vuna map --impact
@@ -52,7 +53,8 @@
   退出码用 `exit`）；`vuna build --split` 同样按可执行入口处理。普通用户包不能
   直接调用 effectful 内建（`print` / `readFile` / ...），只能经 `Base.IO`；编译器、
   产品 CLI、`vuna-base` 自身在包级 allowlist 内，`--root` 原始文件模式与 `vuna interp`
-  保留给调试/测试。
+  保留给调试/测试；M23 起 `vuna interp` 是纯核心求值（不执行效果），效果程序用
+  `compile` + 运行产物。
 
 ## 包格式速查
 
@@ -112,8 +114,8 @@ modules = [
 | `vuna build --split OUT [DIR]` | 扁平分离编译到 OUT（逐模块 `.ml/.mli` + `build.sh`） |
 | `vuna seed [OUT [DIR]]` | 生成多文件 seed 文件集（默认 `OUT=seed`） |
 | `vuna lint [--fix] <file.vuna>...` | 风格检查与自动修复 |
-| `vuna interp [--dt] [--root DIR]... <file.vuna>` | 解释执行（调试语义） |
-| `vuna test [DIR]` | 解释执行包内 `test/*.vuna`（`main : String`，空串通过） |
+| `vuna interp [--root DIR]... <file.vuna>` | DT 精化 + 核心求值（纯；只展示 `Int`/`String`/`Bool`） |
+| `vuna test [DIR]` | 用 DT 核心求值执行包内 `test/*.vuna`（`main : String`，空串通过） |
 | `vuna fmt [--check] [PATH]...` | 格式化 |
 | `vuna repl [--root DIR]...` | 交互式 REPL |
 | `vuna doc [DIR [OUT]]` | 生成 Markdown API 文档 |
@@ -122,7 +124,8 @@ modules = [
 | `vuna help`, `vuna -h` | 用法 |
 
 每个命令都必须显式书写，不再支持“无子命令 = compile”的旧式回退。`vuna interp`
-取代了原来的独立 `vuna-interp` 二进制。省略 `--root` 时使用当前目录包的模块根；
+取代了原来的独立 `vuna-interp` 二进制，自 M23 起不再接受 `--dt`（总是 DT 精化 +
+核心求值）。省略 `--root` 时使用当前目录包的模块根；
 `--root` 仍用于原始文件模式（例如编译器自举、测试夹具）显式指定模块根。
 
 ## 相关阅读

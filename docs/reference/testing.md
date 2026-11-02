@@ -1,168 +1,136 @@
 # 测试体系（testing）
 
-本文覆盖 `test/run-tests.sh` 的原生测试、corpus 分类、Nix checks 清单、性能基准与
-本地开发环境。种子不变量与 rotation 见 [bootstrap.md](bootstrap.md)。
+本文覆盖 `test/run-tests.sh` 的原生测试、corpus 分类、Nix checks、性能基准与本地开发。
+种子不变量与 rotation 见 [bootstrap.md](bootstrap.md)。
 
 ## 原生测试：`test/run-tests.sh`
 
-`test/run-tests.sh` 是 vuna 原生测试（35 个章节，当前约 680 checks；确切数字看结尾
-`vuna tests passed (N checks)` 输出），用 `vuna` / `vuna-seed`
-驱动，不依赖外部 vuna 实现；但运行测试需要 OCaml 编译器（`ocamlopt`）作为代码生成后端：
+vuna 原生测试（34 个编号章节，第 34 段另含 34a–34d 四个子块、不能单独 `--only` 过滤；
+当前 1019 checks，确切数看结尾 `vuna tests passed (N checks)` 输出），用 `vuna` /
+`vuna-seed` 驱动，不依赖外部 vuna 实现，但需要 `ocamlopt` 作为 codegen 后端。
 
 ```console
-sh test/run-tests.sh          # 需要 PATH 中有 vuna 与 vuna-seed
+sh test/run-tests.sh        # 需要 PATH 中有 vuna 与 vuna-seed
 ```
 
-环境变量：`VUNA`（stage 1 产品 CLI）、`VUNA_SEED`（stage 0 种子编译器）、
-`OCAMLOPT`（默认 `ocamlopt`）。脚本开头会 `cd "$(dirname "$0")"`，
-并以相对路径引用 `corpus/...` 与 `../base/lib`，所以从仓库根 `sh test/run-tests.sh`
-即可（不需要手工切到 `test/`）。
-
-推荐入口（由 `nix/run-tests.nix` 提供；runner 是包装，不修改 `test/run-tests.sh`，
-无参数时行为与直接跑原脚本完全等价）：
+环境变量：`VUNA`（stage 1 产品 CLI）、`VUNA_SEED`（stage 0 种子编译器）、`OCAMLOPT`
+（默认 `ocamlopt`）。脚本会 `cd "$(dirname "$0")"`，从仓库根直接跑即可。推荐入口
+（`nix/run-tests.nix` 包装，不修改原脚本；无参数等价于直接跑）：
 
 ```console
-nix run .#vuna-run-tests                 # 等价于 sh test/run-tests.sh
-nix run .#vuna-run-tests -- --list       # 列出全部章节
-nix run .#vuna-run-tests -- --only dt    # 只跑 DT 相关章节
-nix run .#vuna-run-tests -- --vuna stable  # 编译器改用注册表别名 vuna（远端稳定版）
+nix run .#vuna-run-tests [-- --list | --only 34 | --only dt | --vuna stable]
 ```
 
-`--only` 支持重复与逗号分隔（`--only 34` 按章节序号匹配）；`VUNA` / `VUNA_SEED`
-环境变量可直接覆盖编译器（覆盖时不再调用 `nix build`）。
+`--only` 支持重复与逗号分隔（纯数字按章节序号匹配）；`VUNA` / `VUNA_SEED` 可直接覆盖
+编译器（覆盖时不再调用 `nix build`）。
+
+M23 起第 1–11、13–27、30、34 段走 DT 路径（`interp` = DT 精化 + 核心求值，
+`check --dt` / `compile --dt`）；第 28/29/33 段与 34d 的 HM 包构建零回归保留到 M24。
 
 ## corpus 分类
 
-- `corpus/run/*.vuna`：`vuna interp` 输出 vs `.out` golden；编译器生成→`ocamlopt`→运行再比对；
-- `corpus/modules/` 01–29 正例（runner glob `[012][0-9]_*`）：跨模块函数/数据/嵌套 import
-  的解释器与 typed codegen 结果（含多根夹具）；覆盖 M10 显式导出列表、
-  重导出、抽象类型、空导出集与包门面路径共存；20–29 补充无头模块重导出、same-target
-  去重、选择性类型/构造器重导出、两级门面、qualified import 重导出、多行模块头、
-  私有类型封装、`_` 私有构造器在定义模块内匹配；
-- `corpus/modules/` 70–99 反例（runner glob `[789][0-9]_*`）：M10 的 `_` 隐私（私有值/
-  类型/构造器跨模块使用、私有构造器 `(..)` 不公开）、隐藏构造器跨模块构造/模式匹配、
-  重导出抽象性、重导出同名冲突、限定名函数当构造器模式、空导出集语义、入口文件模块头、
-  导出未知名、模块名不匹配、重复导出、显式导出 `_` 名、裸 `_` 顶层名，以及缺失模块、
-  跨根歧义、循环导入、未限定引用/未导入、同名不同定义歧义、未导出名字、非法模块名、
-  别名冲突、import 不传递；错误用例在 interp / typed codegen 两条路径都要求错误片段、
-  不写输出文件；typed 路径同时断言非 0 退出；
-- `corpus/records/` 记录（M10.5a）：01–05 正例在 interp / typed codegen
-  两条路径比对 golden；90–95 错误例两条路径都要求错误片段与非 0 退出，typed 还要求
-  不写输出文件；跨模块正例 `0*_*/`（`Point(..)` 可构造/模式匹配，`Point` 保持抽象）、
-  跨模块错误 `9*_*/`（抽象记录构造器不可见）同样覆盖两条路径；
-- `corpus/traits/` trait（M10.5b/c，runner 第 22–25 段）：正例 01–13 两条路径
-  （interp / typed codegen）比对 golden（含 11/12 泛型字典穿参、13
-  多类型 default 实例）；跨模块 08 覆盖无头模块全导出（含命名实例），10 覆盖显式导出
-  `Trait(..)`；错误例 90–96、98 两条路径都要求错误片段、非 0 退出、不写输出文件
-  （含孤儿默认、重复实例、未知 `@`、head 不符、缺/未知方法、`deriving Ord`、显式
-  只写 `Trait` 不写 `(..)` 时方法不可见）；
-- `corpus/monad/`（M11，runner 第 26 段）：`do` / `>>=` / `>>` 在 Maybe/List 上的
-  正例两条路径，含高阶 kind 泛型函数（`bindPair : m a -> m b -> m (Pair a b)`）与
-  kind 不符、无 Monad、do 块结尾非法、do 绑定模式非法等错误例；
-- `corpus/stdlib/`（M11 起的标准库夹具，目录名沿用；源模块在 `base/`）：
-  `--root ../base/lib` 下 `Base.*` 各模块与 do/IO 的正例两条路径、错误例；另有
-  `test/corpus/fmt/check.sh`（第 32 段）覆盖格式化 golden、注释保留（行/块/嵌套/行尾）、
-  行宽折行、模块头显式导出列表的逐项一行/排序与幂等；
-- `corpus/packages/`（M11.5，第 28–29 段）：`vuna compile --package` / `vuna build` /
-  `vuna test` 的 workspace 正例（跨包 import + `[export]` + `app/Main.vuna` 入口）与
-  缺依赖、依赖环、隐藏模块错误例；M12.5 增加 `03_reexport`（facade 包重导出标准库
-  `base`、只依赖 facade 的包使用 List/Maybe，覆盖 compiler 包门面的三包链路）；
-  第 30–31 段覆盖 fmt 前后语义一致、`vuna doc`、`vuna repl`；
-- `corpus/err/*.vuna`、`corpus/run_err/*.vuna`：解析/求值错误片段；
-- `corpus/type_ok`、`corpus/type_err`：单文件类型检查正/反例；
-- `corpus/type_modules/0*`、`9*`：跨模块类型检查正/反例；
-- `corpus/typed_ok`：默认 typed 单文件原生 OCaml 生成、编译运行与 golden 比对；
-- `corpus/modules/` 01–29 的 typed 版本：默认 typed + `--root` 跨模块生成与运行；
-- `corpus/lint/*.vuna`：`vuna lint` 检测 golden 与退出码；
-- `corpus/fix/*.vuna`：`vuna lint --fix` 结果、退出码与幂等性；
-- 统一 CLI：`help`、无参、子命令要求、已删除参数提示、错误退出码、`vuna interp` 缺文件；
-- `vuna-seed` 编译 `12_fact` 的种子冒烟；
-- 第 33 段（M12.8）：包级 `compile --package`——`.output/{lib,app}` + `build.sh`
-  增量编译、输出与单文件一致、无改动不重编、touch 单个模块只重编它；
-- 第 34 段（M13–M22）DT：`corpus/dt/*.vuna`（38 个）三路（`interp --dt` / `check --dt` /
-  `compile --dt`+ocamlopt）与 golden 一致，并断言 `interp` 输出 == 编译产物输出；
-  `corpus/dt_err/*.vuna`（29 个）两条路径都要求错误片段、非 0 退出且不写输出文件；
-  34a `corpus/dt_base/*.vuna`（8 个，`--root ../base/lib`）三路 + interp==run 对拍
-  （`Base.IO`/`do`/trait 投影、`Base.String`、`Base.Sort`+`Map`、`import Base` 门面；
-  `06_base_string` 带 `.nointerp`——核心求值器尚无 `strUnpack`/`strPack` 归约）；
-  34b `corpus/dt_io/*.vuna` 只跑 check + compile+ocamlopt（核心求值器不执行效果）；
-  34c `corpus/dt_pkg/` 包目录：`01_exec` 三路（42）、`02_lib` 库包 check 通过 / compile
-  清晰报错、`03_bad` 无 `vuna.toml` 清晰错误、不存在路径与 `interp --dt <dir>` 清晰错误；
-  34d DT `build`/`seed` 入口：`build --dt` 产 `.output/{main.ml,build.sh,bin/<pkg>}` 并
-  运行 golden、`--no-compile` 只写源码、`--split` / `seed --dt` 的 `build.sh` 可运行、
-  `seed --dt seed` 被拒绝、库包清晰错误、HM `build` 零回归、`seed --dt` 缺 OUT exit 2；
-  `--dt` CLI 约束：M20 起支持 `import`/`--root`，M22.1 起 `check`/`compile` 接受包目录，
-  M22.3 起 `build`/`seed` 也接受（单文件输出；逐模块切分与 `seed/` 轮换留 M24）。
+语言夹具只走 DT：`interp`（DT 精化 + 核心求值）、`check --dt`、`compile --dt` +
+ocamlopt。`<base>.vuna.nointerp` 标记跳过 interp 对拍，只做 `compile --dt` + 运行，用于
+效果程序（`main : IO a`）与核心求值器不可归约的夹具（`strUnpack`/`strPack`、多隐式参数
+字典）；`.nocompile` 跳过 codegen（仅 `monad/04_kind_generic`，只断言 `check --dt`）。
+负例 `.err` 是 DT 实际诊断的稳定子串；interp 与 compile 文案不同时用 `.cerr`。
+
+- `corpus/run/*.vuna`：`interp` 输出 vs `.out` golden；`compile --dt`→ocamlopt→运行再比对；
+  `.nointerp`（`10_string_pack`、`16_file_exists`、`17_file_meta`）只跑后者；
+- `corpus/modules/` 01–29 正例（glob `[012][0-9]_*`）：跨模块函数/数据/嵌套 import 的
+  `interp` 与 `compile --dt` 结果（含多根夹具）；覆盖显式导出列表、重导出、抽象类型、
+  空导出集、包门面、无头模块重导出、same-target 去重、选择性重导出、两级门面、qualified
+  import 重导出、多行模块头、私有类型封装、`_` 私有构造器在定义模块内匹配；
+- `corpus/modules/` 70–99 反例（glob `[789][0-9]_*`）：`_` 隐私、隐藏构造器跨模块构造/
+  匹配、重导出抽象性与同名冲突、空导出集、入口文件模块头、非法/重复/未知名导出、缺失
+  模块、跨根歧义、循环导入、非法模块名、别名冲突、import 不传递；`interp` 与
+  `compile --dt` 都要求错误片段、非 0 退出、不写输出文件；
+- `corpus/records/` 记录：01–05、08 正例两条路径比对 golden（M23 起 record update 与
+  参数化 record 由 `DtRecords` 支持）；90–95 反例两条路径都要求错误片段、非 0 退出、
+  compile 不写输出；跨模块 `0*_*/`（`Point(..)` 可构造/匹配，`Point` 保持抽象）与
+  `9*_*/`（抽象构造器不可见）同样覆盖；原 `95_unresolved_record_type` 已删除，改为
+  `95_ambiguous_field`（歧义字段）；
+- `corpus/traits/` trait：正例 01–13 两条路径比对 golden（含泛型字典穿参、多类型 default、
+  02 命名实例 `@fancy`、08 跨模块 `@M.fancy`）；错误例 90–95、98 两条路径都要求错误片段、
+  非 0 退出、不写输出（孤儿默认、重复实例、未知 `@`、head 不符、缺/未知方法、显式只写
+  `Trait` 不写 `(..)`）；HM 专属负例 `96_deriving_ord` 已删除（DT 正例见
+  `dt/31_deriving_ord`）；
+- `corpus/monad/`：`do` / `>>=` / `>>` 在 Maybe/List 上的正例两条路径，含高阶 kind 泛型
+  `bindPair : m a -> m b -> m (Pair a b)`；`04_kind_generic` 带 `.nointerp` +
+  `.nocompile`（多隐式参数字典，只断言 `check --dt`）；错误例覆盖 kind 不符、无 Monad、
+  do 结尾/绑定模式非法；
+- `corpus/stdlib/`（`--root ../base/lib`）：`Base.*` 与 do/IO 正例两条路径、错误例；效果
+  夹具 `03_do_io`、`09_io`、`10_package` 与 `strUnpack`/`strPack` 的 `07_string` 带
+  `.nointerp`；另有 `test/corpus/fmt/check.sh`（第 32 段）覆盖格式化 golden、注释保留、
+  行宽折行、模块头导出列表排序与幂等；
+- `corpus/packages/`（第 28–29 段）：`compile --package` / `build` / `test` 的 workspace
+  正例与缺依赖、依赖环、隐藏模块错误例；M23 起包构建仍走 HM，`vuna test` 已随 interp
+  走 DT，并额外断言 `check --dt`；`03_reexport` 覆盖 facade 重导出；
+- `corpus/err/`、`corpus/run_err/`：解析/求值错误片段；`run_err` 的 `.err` 是 DT 诊断
+  子串（非穷尽、if 条件类型、参数过多、clause 数不匹配、let 绑定模式等），
+  `03_div_zero` 改为产物运行期负例（运行断言 `division by zero`），`07_main_arity` 用
+  `.cerr` 区分 compile 文案；
+- `corpus/type_ok`、`corpus/type_err`、`corpus/type_modules/`、`corpus/typed_ok`：M23 起
+  以 `check --dt` / `compile --dt` + 运行断言（HM typed 不再检查语言夹具；`where` 夹具
+  已改写为顶层 helper，M24 随 HM 决定 `typed_ok` 去向）；
+- `corpus/lint/`、`corpus/fix/`：`vuna lint` / `lint --fix` golden、退出码与幂等（工具链，
+  DT 无关）；第 14 段统一 CLI（含 `interp --dt` 的 removed 提示）；第 13 段 `vuna-seed`
+  编译 `run/12_fact` 冒烟（seed 仍是 HM 产物）；第 17 段 M9 静态诊断；第 30 段 fmt 前后
+  DT 语义一致与幂等；第 31 段 `doc` / `repl` 冒烟（REPL 顶层定义先输签名行）；
+- 第 33 段：包级 `compile --package` 的 `.output/{lib,app}` + `build.sh` 增量编译、输出
+  一致、无改动不重编、touch 单模块只重编（HM Split 模型保留到 M24）；
+- 第 34 段 DT：`corpus/dt/*.vuna`（44 个）三路（`interp` / `check --dt` / `compile --dt`
+  + ocamlopt）与 golden 一致，并断言 `interp` 输出 == 编译产物输出；`corpus/dt_err/`
+  （33 个）两条路径都要求错误片段、非 0 退出、不写输出。M23 新增 `dt/39_generic_eq`–
+  `44_short_circuit`（泛型 `==` 兜底、record update、参数化 record、`@inst`、参数化
+  derived `Eq`、`&&`/`||` 短路）与 `dt_err/30_duplicate_instance`–
+  `34_record_update_ambiguous`；34a `dt_base/`（8 个，`--root ../base/lib`）三路 + 对拍
+  （`01/02/03/06` 带 `.nointerp`）；34b `dt_io/` 只跑 check + compile+ocamlopt；34c
+  `dt_pkg/` 包目录（`01_exec` 三路、`02_lib` check 过 / compile 清晰报错、`03_bad` 无
+  `vuna.toml`）与 `interp <包目录>` 清晰错误；34d `build --dt` / `seed --dt` 入口与
+  `--dt` CLI 约束（HM `build` 零回归，M24 删除该部分）；
+- 第 35 段：`vuna goal` 洞目标显示 + `corpus/lsp/smoke.sh` 冒烟。
 
 ## Nix checks 清单
 
-`nix flake check` 覆盖（定义在 `nix/checks/default.nix`；每个 check 的主体是
-`nix/checks/<name>.sh`，在 fileset 暂存的最小工作树里运行）：
+`nix flake check` 覆盖（`nix/checks/default.nix`；主体是 `nix/checks/<name>.sh`）：
+`seed-selfhost`（seed→stage0→stage1→stage2 逐字节一致、TCB 黑名单、增量构建与行为抽查）、
+`vuna-tests`（沙箱跑上述原生测试）、`vuna-typecheck` / `vuna-lint`（`vuna check .` 自检、
+lint 零 finding）、`vuna-fmt`（workspace 全包与 `examples/`）、`vuna-package`
+（`examples/multi` 的 build/test/fmt/doc + 根包构建）、`vuna-metrics`（codegen 指标对
+`nix/metrics.budget`）、`vuna-index`（`map` / `--find` / `--impact` / `api` 与缓存失效）、
+`context-budget`（入口文档字节数与单模块行数对 `nix/context.budget`）。
 
-- `checks.seed-selfhost`：seed → stage0 → stage1 → stage2，`diff -r` 逐字节一致；
-  按 `nix/tcb-forbidden.txt` 断言不含工具模块；查增量构建与 `12_fact` / `--dt` 行为抽查；
-- `checks.vuna-tests`：在沙箱里跑上述原生测试；
-- `checks.vuna-typecheck` / `checks.vuna-lint`：`vuna check .` 自检、`vuna lint` 零 finding；
-- `checks.vuna-fmt`：`vuna fmt --check` 覆盖 workspace 全包与 `examples/`（源码必须等于
-  规范输出）；
-- `checks.vuna-package`：`examples/multi` 的 build / test / fmt / doc + 根包 package 构建；
-- `checks.vuna-metrics`：机器无关 codegen 指标对 `nix/metrics.budget`；
-- `checks.vuna-index`：`vuna map` / `--find` / `--impact` / `api` 与索引缓存失效；
-- `checks.context-budget`：入口文档字节数与单模块行数对 `nix/context.budget`。
-
-## Nix 命令
+## Nix 命令与本地开发
 
 ```console
-nix build             # 默认 = vuna（产品 CLI）
-nix build .#vuna-compiler # stage 1 编译器（从 compiler/ 分离编译）
-nix build .#vuna-seed # stage 0 种子编译器（从多文件 seed/ 构建）
-nix flake check       # 全部 checks（tests/package/metrics/typecheck/lint/index/context/seed-selfhost）
-nix fmt               # nixfmt-tree 格式化 .nix
+nix build                  # 默认 = vuna；.#vuna-compiler / .#vuna-seed 同理
+nix flake check            # 全部 checks
+nix develop                # 全量开发环境（工具链 + vuna-seed）；.#ocaml 只有 OCaml 工具链
+nix build .#vuna --out-link result-vuna      # 产品 CLI（stage 1）
+nix build .#vuna-compiler --out-link result-compiler  # 编译器 CLI
+nix build .#vuna-seed --out-link result-seed          # stage 0 种子
+VUNA=$PWD/result-vuna/bin/vuna VUNA_SEED=$PWD/result-compiler/bin/vuna-compiler \
+  sh test/run-tests.sh
 ```
 
-## 本地开发
-
-```console
-nix develop                                            # 全量开发环境（工具链 + vuna-seed）
-nix develop .#ocaml                                    # 只含 OCaml 工具链（不依赖 seed/）
-nix build .#vuna --out-link result-vuna                # 产品 CLI
-nix build .#vuna-compiler --out-link result-compiler   # 编译器 CLI（stage 1）
-nix build .#vuna-seed --out-link result-seed           # stage 0 种子编译器
-VUNA=$PWD/result-vuna/bin/vuna \
-VUNA_SEED=$PWD/result-compiler/bin/vuna-compiler \
-sh test/run-tests.sh
-```
-
-`devShells.default` = `ocaml` / `ocamlopt` + `vuna-seed`；`devShells.ocaml` 只有工具链，
+`devShells.default` = `ocaml`/`ocamlopt` + `vuna-seed`；`devShells.ocaml` 只有工具链，
 种子重建或损坏时用它。stage 1 的 `vuna` 不进任何 devShell，避免种子失效时连 shell 都
-进不去。`vuna-compiler` 可独立使用；`VUNA_SEED` 只需要一个能 `compile` 的编译器。
+进不去；`VUNA_SEED` 只需要一个能 `compile` 的编译器。
 
 ## 性能基准（手动）
 
-`nix run .#vuna-bench` 是**手动**性能基准，用来在优化前后快速测量收益；不是 CI check，
-结果依赖机器，不参与 `nix flake check`。默认测量 `vuna`（产品 CLI），
-`--compiler seed` 改测 `vuna-seed`（stage 0 编译器）。
+`nix run .#vuna-bench` 是**手动**基准（不是 CI check，结果依赖机器）：默认测 `vuna`，
+`--compiler seed` 改测 `vuna-seed`；`--quick` 快速冒烟，`--runs N --save F` 存档，
+`--baseline F` 与历史对比，`--with-tests` 额外跑全部 checks，`--json` 输出机器可读报告。
 
-```console
-nix run .#vuna-bench -- --quick                 # 快速冒烟（runs=1）
-nix run .#vuna-bench -- --runs 5 --save .local/bench/base.json
-# 修改代码后与基线对比：
-nix run .#vuna-bench -- --baseline .local/bench/base.json
-nix run .#vuna-bench -- --compiler seed         # 改测 seed 编译器
-nix run .#vuna-bench -- --with-tests            # 额外跑全部 checks
-```
-
-报告包含：三级构建性能（seed → vuna-compiler → vuna 的 ocamlopt 时间）、编译性能
-（seed/vuna 自编译 compiler 闭包与产品闭包、corpus 批量编译、tiny 程序、
-DT 精化 + 擦除 codegen（`dt_elab`））、编译吞吐、
-生成产物的 bytes/lines/最长行/超长行/行尾空白、
-codegen 健康度计数（`let rec`、`String.concat ""`、`bi_eq_int/_str/_bool`、零参 rec
-thunk）、以及 fixed point / seed 一致性 / 可选 tests 状态。`--json` 输出机器可读
-报告，`--baseline` 输出与历史报告的 delta。所有中间产物写入临时目录
-（`TMPDIR` 可覆盖），不会写入仓库。
+报告包含三级构建（seed → vuna-compiler → vuna 的 ocamlopt 时间）、编译性能（自编译
+compiler 闭包、corpus 批量、tiny 程序、DT 精化 + 擦除 codegen）、吞吐、产物
+bytes/lines/最长行/行尾空白、codegen 健康度计数（`let rec`、`String.concat ""`、
+`bi_eq_int/_str/_bool`、零参 rec thunk）、fixed point / seed 一致性与可选 tests 状态。
+中间产物写入临时目录（`TMPDIR` 可覆盖），不写入仓库。
 
 ## 相关阅读
 
-- 种子不变量与 rotation：[bootstrap.md](bootstrap.md)
-- 编译器模块职责：[compiler.md](compiler.md)
+- 种子不变量与 rotation：[bootstrap.md](bootstrap.md)；编译器模块职责：[compiler.md](compiler.md)
 - 改动定位与建议测试标签：[architecture.md](../architecture.md)

@@ -13,13 +13,16 @@
   （`-> || && == /= < <= > >= ++ + - * / :: >>= >>`）；
 - layout：offside 规则；顶层声明、`data` 构造器块、`case` 分支、`let` 绑定按块列
   对齐，表达式跨行必须缩进超过所在块列；
-- `main` 必须是零参数定义；`show` 负责把值变成字符串；
+- `main` 必须是零参数定义；`show` 负责把值变成字符串。`vuna interp` 只展示
+  `Int`/`String`/`Bool` 的 `main` 值（M23 起 interp 走 DT 核心求值，见 [limits.md](limits.md)）；
 - 内建：`+ - * /`、`== /= < <= > >=`、`&& ||`、`++`、`strLength`、`strUnpack`、
   `strPack`、`strFromInt`，IO 内建 `readFile` / `writeFile` / `print` / `getArgs`，
   文件/目录 `fileExists` / `readDir` / `isDirectory` / `makeDir` / `removeFile`，
   REPL 用 `readLine`，以及 `exit`；
-- `&&` / `||` 短路求值：先求左操作数，左侧能决定结果时不求值右侧（解释器与
-  两种 codegen 一致）；
+- `&&` / `||` 短路求值：先求左操作数，左侧能决定结果时不求值右侧（核心求值器与
+  两条 codegen 一致）；
+- `where` 语法在终态不保留（DT 路径 M23 起不再提供 `where` 语义，夹具已改写为等价
+  顶层 helper；M24 随 HM 删除 parser/`Fmt` 支持，见 [limits.md](limits.md)）；
 - 布尔值与列表约定：`True` / `False` / `Cons` / `Nil` 是内建相邻的全局构造器；
   程序需要自己声明 `data Bool` / `data List` 才能对它们做模式匹配。
 

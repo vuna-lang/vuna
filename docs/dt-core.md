@@ -11,7 +11,7 @@ split）语义与产物保持不变。
   `compiler/lib/Vuna/Compiler/Elab.vuna`（双向精化器）、
   `compiler/lib/Vuna/Compiler/CoreCodegen.vuna`（擦除 + OCaml 生成）、
   `compiler/lib/Vuna/Compiler/Dt.vuna`（单文件 facade）。
-- 入口：`vuna compile --dt` / `vuna check --dt` / `vuna interp --dt`。
+- 入口：`vuna compile --dt` / `vuna check --dt` / `vuna interp`。
 - 只支持单文件：不经过 Loader、不支持 `import`、不支持包模式、不接入
   `build` / `split` / `seed`（M17 前 roadmap 允许 split 回退）。
 
@@ -136,7 +136,7 @@ data Term where
 - 只共享 `Vuna.Compiler.Ast` / `Vuna.Compiler.Parser` / `Vuna.Fmt` 与 `Base.*`；
   `EPi` 在 HM 的 loader 里报 `dependent function type requires --dt`。
 - `Vuna.Compiler.Dt` 是唯一对外 facade（`compiler/vuna.toml` 的 `[export]`）；
-  核心求值器通过 `vuna interp --dt` 暴露，用于与 codegen 结果做一致性测试。
+  核心求值器通过 `vuna interp` 暴露（M23 起为默认 DT 语义，不再需要 `--dt`），用于与 codegen 结果做一致性测试。
 - M13/M14 的 DT 不进入 `build` / `seed` / `split`；seed 仍只由 HM typed codegen 生成
   （DT 模块是普通 HM 源码，随 compiler 闭包进入 TCB）。
 - M14 的 `data` / `case` 走同一套 `Ast` / `Parser`（`DData` 新增 kind 字段、`ECase`
@@ -422,7 +422,7 @@ M13 的 `data` / `case` / 递归不再报“不支持”；`record` / `trait` / 
 - 终止性**不在 M14 检查**：递归定义依赖 `force` 的 delta 展开步数上限
   （`defaultFuel = 512`）保证不挂死；超出即停下并报“无法归约”类错误。真正的
   termination 留 M16。
-- 求值器（`interp --dt`）同样靠 fuel 收敛；类型级递归（如 `Plus` 用于索引）在
+- 求值器（`vuna interp`）同样靠 fuel 收敛；类型级递归（如 `Plus` 用于索引）在
   `unifyIdx` 比较前已被 `force` 归约到构造子，因此常见用例不需要很大的 fuel。
 
 ## 21. 代码生成
@@ -465,7 +465,7 @@ M13 的 `data` / `case` / 递归不再报“不支持”；`record` / `trait` / 
 > 完整清单见 [reference/dt.md](reference/dt.md)。
 
 正例 `test/corpus/dt/` 共 12 个（M13 的 `01_id`–`08_if` + M14 的四个）；
-数值是 `interp --dt` / `compile --dt` 的 golden：
+数值是 `vuna interp` / `compile --dt` 的 golden：
 
 - `09_nat.vuna`：`Nat` + 递归 `plus` / `toInt`，输出 `5`；
 - `10_vec.vuna`：`Vec` 的 `vhead`（只写 `Cons`）/ `vtail` / `vlen`，输出 `4`；
