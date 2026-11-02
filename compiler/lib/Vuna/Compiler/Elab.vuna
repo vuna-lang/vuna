@@ -1847,10 +1847,10 @@ inferVarRef globals ctx ec name sp = case ctxLookup name ctx of
 
 inferE : List (Pair String Term) -> Ctx -> Ec -> Expr -> Result (Pair Term (Pair Value Ec))
 inferE globals ctx ec expr = case expr of
-  EVar name sp =>
-    if name == "Type" then Ok (Pair (TType levelZero) (Pair (VType (levelSucc levelZero)) ec))
-    else if name == "_" then errAt sp "DT: cannot infer the type of a hole; give it an expected type"
-    else inferVarRef globals ctx ec name sp
+  EVar name sp => case name of
+    "Type" => Ok (Pair (TType levelZero) (Pair (VType (levelSucc levelZero)) ec))
+    "_" => errAt sp "DT: cannot infer the type of a hole; give it an expected type"
+    _ => inferVarRef globals ctx ec name sp
   EInt n sp => Ok (Pair (TInt n) (Pair (VNeutral (NGlobal "Int" [])) ec))
   EStr s sp => Ok (Pair (TStr s) (Pair (VNeutral (NGlobal "String" [])) ec))
   EPi name implicit dom cod sp => inferPi globals ctx ec name implicit dom cod sp
