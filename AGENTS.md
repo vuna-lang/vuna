@@ -9,7 +9,7 @@
 决策）；「两条路径并存」「保留兼容层」「以后可能有人依赖」都不构成保留理由——评估一个
 遗留物只看一条：**它在终态里还成立吗**。推翻旧决策时不要静默改写历史，在 roadmap 的
 「决策变更」表记一行、细节进 `docs/history.md`。当前路线由此确定：**终态是单一 DT
-路径，HM 检查器与 codegen 将被删除**（roadmap「终态」与 M18.5–M24）。
+路径，HM 检查器与 codegen 将被删除**（roadmap「终态」与「阶段状态总览」）。
 
 ## 阅读顺序
 
@@ -92,14 +92,14 @@ CLI 入口；`seed/` = 提交入库的多文件 OCaml 信任锚点（生成物�
 - 子系统地图、改动定位：[`docs/architecture.md`](docs/architecture.md)
 - 语言语义：[language.md](docs/reference/language.md)、[type-system.md](docs/reference/type-system.md)、
   [stdlib.md](docs/reference/stdlib.md)、[packages.md](docs/reference/packages.md)、
-  [dt.md](docs/reference/dt.md)、[dt-parity.md](docs/reference/dt-parity.md)（DT 取代 HM 的落差证据）
+  [dt.md](docs/reference/dt.md)、[dt-parity.md](docs/reference/dt-parity.md)（历史证据）
 - 编译器实现与 codegen：[compiler.md](docs/reference/compiler.md)；DT 工具链（洞目标、LSP、
   错误索引）：[dt-tooling.md](docs/reference/dt-tooling.md)
 - 仓库探索（按场景选工具、探索后落盘）：技能 `.agents/skills/repo-navigation/SKILL.md`
 - 自举与种子：[bootstrap.md](docs/reference/bootstrap.md)；测试与 CI：[testing.md](docs/reference/testing.md)；
   已知边界：[limits.md](docs/reference/limits.md)
-- 路线图 / 历史：[docs/roadmap.md](docs/roadmap.md)、[docs/history.md](docs/history.md)、
-  [docs/dt-core.md](docs/dt-core.md)
+- 路线图 / 历史 / DT 状态：[docs/roadmap.md](docs/roadmap.md)（「阶段状态总览」）、
+  [docs/history.md](docs/history.md)、[docs/dt-core.md](docs/dt-core.md)
 
 > 文档分层规则：`README.md` 只保留定位/上手/目录/硬约束/导航；细节在 `docs/reference/`；
 > roadmap 的「已完成」只保留一句话摘要，历史细节在 `docs/history.md`。

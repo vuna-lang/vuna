@@ -152,14 +152,14 @@ record / trait / deriving 程序会先类型检查并降级）。省略 `--root`
 | [docs/reference/type-system.md](docs/reference/type-system.md) | 记录类型、trait 与实例、`do` / Monad / Functor |
 | [docs/reference/stdlib.md](docs/reference/stdlib.md) | 标准库 `vuna-base` 模块清单与 `Prelude` 自动导入 |
 | [docs/reference/packages.md](docs/reference/packages.md) | `vuna.toml` 包格式、workspace / 依赖 DAG、工具链命令一览 |
-| [docs/reference/dt.md](docs/reference/dt.md) | DT 子集（M14）：索引归纳族、依赖模式匹配、硬边界与夹具 |
-| [docs/reference/dt-parity.md](docs/reference/dt-parity.md) | DT 取代 HM 的能力落差证据表（含 lambda 擦除缺陷与用量统计） |
+| [docs/reference/dt.md](docs/reference/dt.md) | DT 子集：索引归纳族、依赖模式匹配、硬边界与夹具（当前状态见 roadmap 总览） |
+| [docs/reference/dt-parity.md](docs/reference/dt-parity.md) | DT 取代 HM 的历史证据表（含 lambda 擦除缺陷与用量统计；当前状态见 roadmap 总览） |
 | [docs/reference/compiler.md](docs/reference/compiler.md) | 编译器模块职责、codegen 表示与优化、机器无关指标 |
 | [docs/reference/bootstrap.md](docs/reference/bootstrap.md) | 种子策略、rotation 流程、fixed point、TCB 边界 |
 | [docs/reference/testing.md](docs/reference/testing.md) | 测试体系、corpus 分类、nix checks 清单、性能基准 |
 | [docs/reference/limits.md](docs/reference/limits.md) | 当前限制与已知边界（编译模型 / IO / 工具链细节） |
 | [docs/history.md](docs/history.md) | 里程碑历史与已完成阶段细节 |
-| [docs/roadmap.md](docs/roadmap.md) | 路线图：终态（单一 DT 路径）+ M18.5–M28 规划 + 决策变更表 |
+| [docs/roadmap.md](docs/roadmap.md) | 路线图：终态（单一 DT 路径）+ M21–M24.7 阶段状态总览与当前阻碍 + 决策变更表 |
 | [docs/dt-core.md](docs/dt-core.md) | DT 核心类型论与精化器设计稿（M13–M14） |
 
 文档分层规则：README 只保留定位/上手/目录/硬约束/导航；细节在 `docs/reference/`；

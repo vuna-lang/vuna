@@ -222,6 +222,51 @@ git 历史里）。各里程碑对应的模块与设计见 [docs/architecture.md
   （输出 `42`）、`35_io_main.vuna`（`main : IO String`，输出 `"hello"`）；全量
   `test/run-tests.sh` 849 项通过。
 
+## 编号修正：M22 拆分与两次重排（2026-11）
+
+roadmap 重整时发现 `M22` 一号两用：roadmap 里 M22 是「擦除判据接线与统一 codegen」，
+但 2026-11 的提交 `feat(dt): defer dict metas` / `lift generic dict constraints` /
+`lower multi-clause ctor patterns and check Base.List` 都把泛型实例约束工作标成了 M22。
+处理分两步：
+
+1. 先拆为 M22.1–M22.5（泛型实例 / 包目录 / 库名 / trait 投影 / 擦除 codegen）；
+2. 再按**可开工依赖顺序**重排。第一次重排把 trait 投影放到了 M22.4，导致 M21 的 `do`
+   阻碍要等更晚阶段——阶段依赖倒置。最终把 trait 投影并回 **M21**（`do` 本来就是 M21
+   的范围），已完成的基础工作前移为 **M20.5**，M22 只保留三个未开始阶段。
+
+| 现编号 | 内容 | 原编号 |
+| --- | --- | --- |
+| M20.5 | 泛型实例约束求解（已完成） | M22.5（`git log` 记为 M22） |
+| M21 | 效应与 IO 的 DT 化（含 trait 投影与实例方法模式） | M21 + M22.2 |
+| M22.1 | 包目录与 CLI 入口（`check` / `compile --dt`） | M22.4 |
+| M22.2 | 库名统一与精化缺口（含 Bool 去桩） | M22.3 |
+| M22.3 | 擦除判据接线与统一 codegen | M22.1 |
+
+历史提交信息保持原样、不回写；以本文与 roadmap 的编号为准。
+
+## DT 阻碍实况核对（2026-11）
+
+为避免文档继续引用过时结论，用当前源码构建的 `.output/bin/vuna`（HEAD `18818be`）跑了
+一轮只读探针。**注意 `./result/bin/vuna` 可能是旧构建**，不能作为基准。
+
+| 探针 | 结果 |
+| --- | --- |
+| 单文件 `test/corpus/dt/*`（36）/ `dt_err/*`（28） | 全绿（抽样 `30_deriving` 输出 1） |
+| `import Base.{Pair,Bool,List,Maybe,Result,Monad,IO}` + 简单使用 | 通过 |
+| `import Base.Bool` + `if True` / `not False` | 通过 |
+| `import Base.List` + `mem 1 (Cons 1 Nil)` | 通过 |
+| `import Base.IO` + `main : IO Int` + `print` | 通过 |
+| `import Base.String` / `Prelude` | 失败：`expected (List Int), got (Base.List.List ?2)` |
+| `import Base.Map` / `Base` | 失败：`DT: unknown name Base.List.List` |
+| `import Base.Sort` | 失败：`case is not exhaustive: missing Cons` |
+| `fmap` / `do`（降级成 `bind`） | 失败：`unbound variable fmap` / `unbound variable bind` |
+| `instance FMap Box where fmp g (MkBox x) = ...` | 失败：`definition parameters must be variables (M13)` |
+| `check --dt base/lib`（包目录） | 崩溃：`Fatal error: exception Failure("readFile: ...")` |
+
+这些失败项已分别登记为 roadmap 的 M21（trait 投影）/ M22.2（库名）/ M22.1（包目录）的「当前阻碍」。旧文档里
+「M20 9/10、M22 让 Base.List 全量通过」的说法只在特定写法下成立，不能外推到 `base` 的
+全部模块。
+
 ## 决策变更：M18 迁移动机失效（2026-11）
 
 M18 的结论是「编译器本体暂不全量迁移到 DT」，依据是四条理由，其中两条是**硬前提**：

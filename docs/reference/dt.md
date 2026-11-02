@@ -1,11 +1,10 @@
 # 语言参考：DT 子集（M19，实验性）
 
-`--dt` 打开与 HM 并存的依赖类型（DT）路径：Core TT + NbE + 双向精化器 +
-擦除型 codegen。M14 在 M13（依赖函数 + 一阶元变量）之上加入**索引归纳族**与
-**依赖模式匹配**（`data` + `case`），并因此解除了递归定义限制。DT 仍是
-**单文件、自包含、显式 opt-in**：不经过模块 Loader，不支持 `import` / 包模式，
-也不进入 `build` / `build --split` / `seed`；HM 路径（interp + typed + split）
-语义与产物不变。设计与边界见 [docs/dt-core.md](../dt-core.md)。
+`--dt` 打开依赖类型（DT）路径：Core TT + NbE + 双向精化器 + 擦除型 codegen。
+M14 加入**索引归纳族**与**依赖模式匹配**（`data` + `case`），解除递归定义限制；
+M20 起**复用 Loader**，支持多文件、`import` 与 `--root`。DT 仍是**显式 opt-in**：
+包目录与 `build` / `build --split` / `seed` 不接受 `--dt`；HM 路径语义与产物不变。
+设计与边界见 [docs/dt-core.md](../dt-core.md)，阶段状态与阻碍见 [roadmap.md](../roadmap.md)。
 
 ```vuna
 id : (a : Type) -> a -> a
@@ -91,36 +90,34 @@ trans a b c p q = case p of
   实参而外层没有期望类型）时仍可能报 `DT: unsolved metavariable`。
 - **接口与实例（M15）**。`trait` / `instance` 走字典编码：`trait Pretty a` →
   `data Dict_Pretty : Type -> Type`，方法投影把字典当隐式参数，调用点的实例由**实例
-  搜索**自动插入。`Show`/`Eq` 这类单参数接口直接可用；缺失/歧义实例有明确诊断。
+  搜索**自动插入。`Show`/`Eq` 这类单参数接口直接可用；缺失/歧义实例有明确诊断。**已知缺口**：库定义
+  trait 的方法投影跨模块不可见（`fmap`/`bind` unbound，`do` 因此不可用），见 M21。
   多参数接口报 `DT: interfaces must have exactly one parameter (M15 limitation)`。
 - **终止性检查（M16）**。自递归函数必须结构递归：每个递归调用至少有一个实参是同一
   形参的真子项（`case` 分支里构造子的字段算子项）。否则报
   `DT: cannot prove termination of <f> (recursive call does not structurally decrease)`。
-  互递归按「每个分量至少一次下降」近似，复杂尺寸变化矩阵不做。
+  **互递归不查**（只做逐调用结构下降），跨调用循环可能被接受，见
+  [limits.md](limits.md)。
 - **擦除规则**：binder 的域是**宇宙**（`a : Type`）⇒ 擦除；域是**归纳族**（`n : Nat`
   这类索引）⇒ **保留运行时表示**。所以 `Vec a n` 的值是一条带长度索引字段的链表
-  （`type 'a t_Vec = C_Vec_Nil | C_Vec_Cons of 'a t_Nat * 'a * 'a t_Vec`）；
-  M16 探测确认索引**不能无条件擦除**（`vlen` 把长度索引当递归参数读）；完整擦除需整程序
-  使用分析。
+  （`type 'a t_Vec = ...`）；索引**不能无条件擦除**（`vlen` 把长度当递归参数读），
+  完整擦除需整程序使用分析（M22.3）。
 - **`case` 分支与模式（M19）**。分支必须绑定构造子的全部显式 telescope binder（族参数
   与索引也各占一个位置，即使分支体不用）；**嵌套构造子模式已支持**（`Succ (Succ k)`，
   精化期改写成内层 case，因此内层同样要过覆盖检查）；兜底 `_ => ...`（变量模式等价）
   只能放**最后一个**分支。
 - **多 clause 与方程左端模式（M19）**。`f p1 = e1` / `f p2 = e2` 保留语法，精化期合成
-  单个 lambda + case 表达式树（标准模式矩阵，实现独立在 `Vuna.Compiler.DtMatch`），因此
-  同一构造子的多个 clause、变量兜底、`f (Just x)` 与 `f (Just (Just y))` 共存都成立；
-  多 clause 的参数个数必须一致。
-  **当前边界（M22 收尾）**：多列覆盖拆分与跨模块构造子名仍有限制，写法与绕法见
-  [limits.md](limits.md)。
+  单个 lambda + case 表达式树（标准模式矩阵，实现在 `Vuna.Compiler.DtMatch`）；同一构造子
+  多 clause、变量兜底、嵌套模式共存都成立，参数个数必须一致。**当前边界（M22.2）**：
+  多列覆盖拆分与跨模块构造子名仍有限制，见 [limits.md](limits.md)。
 - **`let` 与推断位 `case`（M19）**。`let ... in`（含 `where` 块）脱糖为
   `(\x => body) e`；`case` 可以出现在推断位（函数实参、`if` 分支、`let` 的 value），
   做法是建元变量当期望类型。
 - **内建类型上的字面量模式（M19）**。`Bool` 的 `case` 降级成 `if`；`Int` / `String`
   的字面量分支降级成嵌套 `if` 链，因此**必须有一个变量/通配兜底分支**（值域穷尽不了）。
-- **内建泛化（M19）**。`==` / `/=` 带隐式类型参数（`{a : Type} -> a -> a -> Bool`），
-  精化到饱和应用时按第一个实参类型特化成 `bi_eq_int` / `bi_eq_str` 这类运行时函数；
-  非 `Int` / `String` 报 `is only defined for Int and String`；`strFromInt` 等已进
-  prelude（定义表在 `DtPrelude.vuna`）。
+- **内建泛化（M19）**。`==` / `/=` 带隐式类型参数（`{a : Type} -> a -> a -> Bool`），精化到
+  饱和应用时按第一个实参类型特化成 `bi_eq_int` / `bi_eq_str`；非 `Int` / `String` 报
+  `is only defined for Int and String`；`strFromInt` 等已进 prelude（`DtPrelude.vuna`）。
 - **可达性决定分支能否省略**：若函数签名把索引**细化**（如 `Vec a (Succ m)`），
   与该索引不可统一的分支（`Nil`）**可以省略**，写了报 `this branch is impossible`；
   签名是**泛化**索引（`Vec a n`）时所有构造子都可达，漏写报 `case is not exhaustive`。
@@ -144,7 +141,8 @@ vuna interp --dt file.vuna           # 核心求值器（NbE + delta）求值 ma
 ```
 
 M20 起 `--dt` **复用 Loader**：支持多文件 / `import` / `--root`，参数化 `data Foo a : Type`
-也可用；**包目录模式**仍是缺口，`build` / `seed` 不支持 `--dt`。HM 路径语义与产物不变。
+也可用；**包目录模式**与 `build` / `seed` 仍不支持 `--dt`（M22.1）。HM 路径语义与产物
+不变。
 
 ## 测试夹具
 
@@ -153,16 +151,17 @@ M20 起 `--dt` **复用 Loader**：支持多文件 / `import` / `--root`，参�
 - 正例 `test/corpus/dt/` 共 **36** 个：M13 `01_id`–`08_if`；M14 `09_nat`/`10_vec`/`11_fin`/`12_eq`；
   M15 `13_iface`/`14_solve`/`15_goal`；M16 `16_total`/`17_erase`；M18 `18_ctx`；
   M18.5 `19_lam`；M18.6 `20_rig`/`21_level`；M19 `22_let` 起共 10 个（`22_let`–`31_deriving_ord`）；
-  M20 `32_parametric_data`（`data Foo a : Type` 写法 + 构造子字段引用族参数）；M21 `33_poly_fn_field`（函数字段被索引精化）、`34_io_do`/`35_io_main`（main : IO a 执行：按类型识别 IO、取构造子末实参 `f` 后对世界令牌 0 应用 `f 0`；do 用具体 bind/pure）；M22 `36_multi_clause`（多 clause 模式矩阵：双构造子参数、构造子+通配混合列、单 clause 构造子形参、零参构造子值）。数值见各 `.out` 文件。
+  M20 `32_parametric_data`（`data Foo a : Type` 写法 + 构造子字段引用族参数）；M21 `33_poly_fn_field`（函数字段被索引精化）、`34_io_do`/`35_io_main`（main : IO a 执行：按类型识别 IO、取构造子末实参 `f` 后对世界令牌 0 应用 `f 0`；do 用具体 bind/pure）；M20.5 `36_multi_clause`（多 clause 模式矩阵：双构造子参数、构造子+通配混合列、单 clause 构造子形参、零参构造子值）。数值见各 `.out` 文件。
 - 负例 `test/corpus/dt_err/` 共 **28** 个：M13 的 `01_universe`、`02_conv`、
   `03_hole`、`05_import`、`06_unknown`、`07_lambda`、`08_arity`、`09_runtime_type`、
   `11_implicit_non_type`；M14 `04_nonexhaustive`/`10_impossible`/`12_case_int`/
   `13_unknown_ctor`/`14_bad_ctor_result`/`15_nested_pat`；M16 `16_nonterm`/`17_nested_total`；
   M18.5 `18_lam_type_used`；M18.6 `19_rig_type_runtime`；M19 `20_let_bad_pat` 起共 7 个；
-  M21 `27_poly_fn_field_err`（函数字段精化失败路径）；M22 `28_multi_clause_coverage`（多 clause 覆盖不足）。
+  M21 `27_poly_fn_field_err`（函数字段精化失败路径）；M20.5 `28_multi_clause_coverage`（多 clause 覆盖不足）。
 
 ## 相关阅读
 
 - 设计与实现细节（Core TT / NbE / 精化规则 / 覆盖率）：[docs/dt-core.md](../dt-core.md)
 - 与 HM 路径的边界：[architecture.md](../architecture.md)
-- DT 后续阶段（M18.5–M24 单路径迁移）：[docs/roadmap.md](../roadmap.md)；能力落差证据：[dt-parity.md](dt-parity.md)
+- DT 阶段状态与当前阻碍：[docs/roadmap.md](../roadmap.md)（「阶段状态总览」+ 各阶段
+  「当前阻碍」）；历史能力落差证据：[dt-parity.md](dt-parity.md)

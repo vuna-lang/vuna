@@ -108,7 +108,7 @@ data Term where
 **擦除判据（M18.5 起全仓唯一入口）**：`Elab.erasedBinder implicit dom = implicit || isTypeValue dom`。
 隐式 binder 恒擦除（隐式实参由精化器插入，运行时不传）；显式 binder **只有域是宇宙
 （`Type`）才擦除**，索引域（`{n : Nat}` 这类归纳族）保留运行时表示——它们可能被当递归
-参数读回来（`vlen`），安全擦除需要整程序使用分析（M22 只接判据入口，不做分析）。
+参数读回来（`vlen`），安全擦除需要整程序使用分析（M22.3 只接判据入口，不做分析）。
 六处判据点 `teleOf` / `checkBinders` / `bindOnePattern` / `checkLam` / `inferArgs` /
 `bindCtorBinder` 一律走它；M24.6 第一级要把「字段数 / telescope 长度 / 绑定数」的三重
 一致性升级成类型保证。M18.5 之前 `checkLam` 无条件写 `erased = True`，导致 lambda 形参
@@ -127,7 +127,7 @@ data Term where
    不依赖 `TypedCodegen`。
 5. `main` 必须是 `Int` / `String` / `Bool`；`--no-print` 时只 `ignore`。
 
-## 7. 与 HM 路径的边界
+## 7. 与 HM 路径的边界（迁移期；M24 后 HM 删除）
 
 - 只共享 `Vuna.Compiler.Ast` / `Vuna.Compiler.Parser` / `Vuna.Fmt` 与 `Base.*`；
   `EPi` 在 HM 的 loader 里报 `dependent function type requires --dt`。
@@ -439,28 +439,20 @@ M13 的 `data` / `case` / 递归不再报“不支持”；`record` / `trait` / 
    仍报错；类型级定义整体不生成代码。
 7. DT codegen 的错误仍**不带 span**（M16 统一补位置）。
 
-## 22. 已知限制（M14 之后）
+## 22. 当时的限制（M14 之后，历史快照）
 
-- **不支持隐式索引推断（M15）**。M14 要求索引 binder 写成**显式**形式
-  （`data Vec : Type -> Nat -> Type` + 构造子 `Cons : (a : Type) -> (n : Nat) -> ...`）；
-  `{n : Nat} -> ...` 这种隐式索引靠调用点自动求解（例如 `FSucc FZero` 反推 `n`）
-  不属于 M14 的能力。若用 `{...}` 写构造子，只有期望类型已经把索引**完全确定**
-  （闭合解）时才可能通过，一旦要从调用点反推索引或在解里引入局部变量，就会报
-  `DT: unsolved metavariable ?k` 或 `type mismatch`；这是 M15 的工作。
-- 索引值**保留运行时表示**（`Vec a n` 的值带长度字段）；证明/索引的完整擦除分析属
-  M16。
-- **case 不能出现在推断位置**：必须有已知的结果类型（通常来自函数签名）。
-- 只有**一阶（闭合）元变量解**；高阶/开放解仍属 M15。
-- 仍不支持 `let`、record、trait/instance、`do`、嵌套模式、多 clause 函数。
-- DT 仍是**单文件、`--dt` opt-in**；无 import / 模块头 / 包 / `build` / `split` /
-  `seed` 集成（留 M17；M14 只做单文件路径，split 回退仍按硬约束显式记录）。
-- DT 代码生成的错误仍不带 span（M16 统一）。
-- 递归终止性靠 delta 展开步数上限（`defaultFuel = 512`）保证不挂死，而不是终止性
-  检查；超出即停下并报“无法归约”类错误。
-- 类型级求值不专门做：族的类型级应用保持中性，只有 `force` 会按需 delta 展开。
+> 本节是 M14 的边界记录，**不反映当前状态**。M19 已补齐 `let`、推断位 `case`、嵌套模式、
+> 多 clause、`record`、`deriving` 与内建字面量模式；M20 已接入多文件 / `import` / `--root`；
+> M20.5 已补更高阶统一与字典延迟。当前阶段状态与阻碍见 [docs/roadmap.md](roadmap.md)。
+
+- M14 要求索引 binder 写成显式形式（隐式索引推断属 M15，已实现）；
+- 索引值保留运行时表示（显式索引；完整擦除属 M22.3）；
+- 一阶闭合元变量解；更高阶形态由 M20.5 的 `solveMetaHo` 覆盖常见情况；
+- 当时不支持 `let` / record / trait / `do` / 嵌套模式 / 多 clause（均已实现）；
+- 递归终止性靠 `force` 的 fuel 上限，而不是结构性检查（M16 起有检查）；
 - 无 cumulativity / universe polymorphism（M13 起未变）。
 
-## 23. M14 测试夹具
+## 23. M14 测试夹具（历史快照）
 
 > **本节的数字是 M14 当时的快照。** 当前实测为 **21 正例 / 19 反例**（M15 追加
 > `13_iface`/`14_solve`/`15_goal`，M16 追加 `16_total`/`17_erase` 与反例
@@ -525,7 +517,7 @@ QTT（量化类型理论）与宇宙多态在将来落地时只替换「判据�
 1. **`Core` 之外不得对 `Rig` / `Level` 做模式匹配**，只能用访问器与构造器；新增用法先补访问器。
    当前违反数为 0：`Elab` / `CoreCodegen` 只出现 `Rig0` / `Rig1` 构造与 `rigIsErased` 读。
 2. **擦除判定只有一个入口**：`Elab.binderRig`（构造 Rig）与 `Core.rigIsErased`（读 Rig）。
-   M22 会把它升级成可替换的 `eraseMask`，使「rig 驱动」与未来的「使用分析驱动」可互换。
+   M22.3 会把它升级成可替换的 `eraseMask`，使「rig 驱动」与未来的「使用分析驱动」可互换。
 3. `Level` 的算术（`succ` / `max`）只在 `Core` 内部实现；`Elab` 经 `checkType` 返回的
    `Level` 与访问器拿层级，不自己算。当前违反数为 0。
 4. 破坏上述任一条时，须在本节记录例外与理由。
@@ -537,8 +529,8 @@ QTT 落地的增量工作是：语法加 multiplicity 标注（`Parser` / `Ast` 
 模块系统、`Loader` / `Pkg`、seed 自举链。
 
 注意 QTT 的判据与 M16 探索的「整程序使用分析」是**两套不同方案**：前者按 binder 的
-multiplicity 静态擦除，后者按运行时是否读取判定。M22 因此只接判据入口，不投入实现
-使用分析——这是 [docs/roadmap.md](roadmap.md) M22 与「决策变更」的记录内容。
+multiplicity 静态擦除，后者按运行时是否读取判定。M22.3 因此只接判据入口，不投入实现
+使用分析——这是 [docs/roadmap.md](roadmap.md) M22.3 与「决策变更」的记录内容。
 
 ### 24.5 擦除 binder 的运行时位置语义（M19 已统一）
 

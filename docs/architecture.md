@@ -8,7 +8,8 @@ codegen 要点见 [compiler.md](reference/compiler.md)，语言语义见 [langua
 > **迁移期提示（2026-11 起）**：本文描述的是**当前**的双路径状态。终态是**单一 DT 路径**——
 > 第 1 节的 HM 主路径（`Typecheck` / `TypedCodegen`）将被删除，第 2 节的 DT 路径成为唯一
 > 路径且接入包模式。迁移期间两条路径都要守（零回归），但新增能力只往 DT 侧加。
-> 计划见 [docs/roadmap.md](roadmap.md)，能力落差见 [dt-parity.md](reference/dt-parity.md)。
+> 计划与阶段状态见 [docs/roadmap.md](roadmap.md)（「阶段状态总览」），历史证据见
+> [dt-parity.md](reference/dt-parity.md)。
 
 ## 仓库分层
 
@@ -66,41 +67,40 @@ codegen 要点见 [compiler.md](reference/compiler.md)，语言语义见 [langua
 第 7–10 段（类型检查正反例、跨模块）、第 11–12 段（typed codegen 单文件/跨模块）、
 第 18–27 段（记录、trait、do/Monad、stdlib）。
 
-## 2. DT 路径：Core → Elab → CoreCodegen（+ Dt facade）
+## 2. DT 路径：Loader → Elab → CoreCodegen（+ Dt facade）
 
-> **终态唯一路径**。M18.5–M24 逐步补齐语言面、多文件、效应与 codegen，最终接管 seed。
+> **终态唯一路径**（M21–M24.7 补齐效应 / codegen / 包入口 / 库化，最终接管 seed；
+> 阶段状态与阻碍见 [docs/roadmap.md](roadmap.md)）。
 
-**何时该看这里**：改 `--dt` 相关语法、精化规则、索引 unification、擦除 codegen；
-HM 路径的任何改动都不应该需要动这里，反之亦然。
+**何时该看这里**：改 `--dt` 语法、精化规则、索引 unification、擦除 codegen。
 
 **数据流**：
 ```text
 .vuna + --dt（M20 起支持 import / --root）
- → Vuna.Compiler.Parser.parseSource          （与 HM 共用 parser）
- → Vuna.Compiler.Elab.elabProgram            （双向精化 + 一阶元变量 + 索引族）
- → Vuna.Compiler.DtMatch.multiToExpr         （clause 模式矩阵 → lambda + case）
- → Vuna.Compiler.Core eval/quote/conv         （NbE、定义性相等、delta 展开 fuel）
- → Vuna.Compiler.CoreCodegen.checkDtProgram  （擦除检查）
- → Vuna.Compiler.CoreCodegen.generateDtProgram（擦除型 OCaml 生成）
+ → Parser.parseSource                  （与 HM 共用 parser）
+ → Loader.loadProgramRaw               （入口 + 依赖模块的声明拼接）
+ → Elab.elabProgramFull                （精化入口：DtRecords.prepareDecls →
+     DtDerive.expandDerivings → elabProgramGo；body 内走 DtMatch.multiToExpr 与 Core 的
+     NbE / 索引合一 / 实例搜索）
+ → CoreCodegen.checkDtProgram          （擦除检查）
+ → CoreCodegen.generateDtProgram       （擦除型 OCaml 生成）
  → ocamlopt
 ```
 
 **入口符号**：
-- `Vuna.Compiler.Dt.dtCheckFile` / `dtCompileFile` / `dtEvalFile`（单文件 facade）
-- `Vuna.Compiler.Elab.elabProgram` / `elabProgramFull`（带洞目标与解表）；`goalsOfProgram`
-  供 `vuna goal` 与 LSP hover；`checkTerminationDecls` 做终止性
-- `Vuna.Compiler.DtMatch.multiToExpr` / `buildColumnExpr`：多 clause 函数体 → 单表达式
-  （构造子列 `case`、字面量列 `if` 链；仅依赖 Ast/Common）
-- `Vuna.Compiler.Core.eval` / `quote` / `conv` / `normalize` / `defaultFuel`
-- `Vuna.Compiler.CoreCodegen.checkDtProgram` / `generateDtProgram`
-- 经 `Vuna.Compiler.Compile.compileFileDt` / `checkFileDt` 与 `Vuna.Compiler.CompilerCli`
-  暴露给 CLI（`compile --dt` / `check --dt` / `interp --dt`）
+- `Dt.dtCheckFile` / `dtCompileFile` / `dtEvalFile`（文件 facade）；`Loader.loadProgramRaw`
+  （`--dt` / `--root` 原始模式的声明来源）
+- `Elab.elabProgram` / `elabProgramFull`（洞目标与解表；`goalsOfProgram` 供 goal/LSP；
+  `checkTerminationDecls` 做终止性）；内部依次调 `DtRecords.prepareDecls` →
+  `DtDerive.expandDerivings` → `elabProgramGo`
+- `DtMatch.multiToExpr` / `buildColumnExpr`（多 clause → 单表达式）；`Core.eval` / `quote` /
+  `conv` / `normalize` / `defaultFuel`；`CoreCodegen.checkDtProgram` / `generateDtProgram`
+- 经 `Compile.compileFileDt` / `checkFileDt` 与 `CompilerCli` 暴露给 CLI（`--dt` 三条命令）
 
-**边界**：`--dt` 已支持 `import`/`--root`（M20）；包目录模式与 `build`/`seed` 仍不支持。
-
-**通常连带改动**：`Core`（Term/Value）→ `Elab`（精化/覆盖率）→ `CoreCodegen`（擦除与生成）三处同步；见 [dt-core.md](dt-core.md)。
-
-**建议测试标签**：第 34–35 段（`corpus/dt` 与 `dt_err`，三路互拍；数量见 [testing.md](reference/testing.md)）。
+**边界**：`--dt` 支持 `import` / `--root`（M20）；**包目录模式与 `build` / `seed` 仍不支持**
+（M22.1）。已知阻碍：trait 方法投影跨模块（M21）、`str*` / `List` 与 `Base.Map` /
+`Base.Sort` 精化（M22.2）——见 roadmap 各阶段的「当前阻碍」。
+**通常连带改动**：`Core` → `Elab` → `CoreCodegen` 三处同步（见 [dt-core.md](dt-core.md)）；测试第 34–35 段（三路互拍，见 [testing.md](reference/testing.md)）。
 
 ## 3. 包与 workspace：Toml → Manifest → Pkg → Loader
 

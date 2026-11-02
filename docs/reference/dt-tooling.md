@@ -132,11 +132,17 @@ $ vuna doc <dir> <out.md>
 
 ## 5. 尚未实现（M17 之后）
 
+> 阶段状态与当前阻碍见 [docs/roadmap.md](../roadmap.md) 的「阶段状态总览」与各阶段
+> 「当前阻碍」；这里只列工具链自身缺口。
+
 - **case splitting**：按洞的目标类型自动展开 `case` 分支（需要与编辑器协议配合）。
-- **DT 与包/模块集成**：DT 仍是单文件 `--dt` opt-in，`build` / `split` / `seed` 不接受
-  `--dt`（留 M18）。
-- **完整擦除**：索引仍保留运行时表示（见 [dt.md](dt.md) 与 M16 的记录）。
+- **包目录与 `build` / `seed`**：`--dt` 已支持 `import` / `--root`（M20），包目录与
+  `build` / `seed` 仍不支持（M22.1）。
+- **trait 方法投影跨模块**：`fmap` / `bind` 在 `--dt` 下 unbound（M21）。
+- **库名统一与精化缺口**：`str*` 与 `List`、`Base.Map` / `Base.Sort`（M22.2）。
+- **完整擦除**：显式索引仍保留运行时表示（M22.3）。
 - `rewrite` / `with` 等证明工程 ergonomics：研究储备，未排期。
+
 
 ## 相关阅读
 

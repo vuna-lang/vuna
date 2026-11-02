@@ -125,7 +125,7 @@ three = Extend (Extend (Extend Empty "a") "b") "c"
 也就是说：**编译器能跑 DT，但编译器本身还没跑在 DT 上**。这个边界是 M18 决策的直接
 结果，不是遗漏。
 
-## 6. 后续路线建议
+## 6. 后续路线建议（M18 当时的排序；已被 [docs/roadmap.md](../roadmap.md) 取代）
 
 按优先级：
 

@@ -1,7 +1,7 @@
 # DT 与 HM 的能力落差（dt-parity）
 
-本文是**事实表**，不是计划：记录「要让 DT 取代 HM，DT 还缺什么」，是
-[docs/roadmap.md](../roadmap.md) M18.5–M24 的证据基础。计划见 roadmap，DT 语义见
+本文是**历史证据表**，不是计划：记录「要让 DT 取代 HM，DT 还缺什么」，是
+[docs/roadmap.md](../roadmap.md) 的阶段证据；**当前阶段状态与阻碍以 roadmap 的「阶段状态总览」为准**。计划见 roadmap，DT 语义见
 [dt.md](dt.md)，设计边界见 [docs/dt-core.md](../dt-core.md) §7 / §22。
 
 **口径**：vuna 无发布、无外部用户，全部源码都在本仓库内，所以每项都是「**取代时必须在新
@@ -14,27 +14,25 @@
 
 | # | 能力缺口 | 当前行为 / 错误文案 | compiler/lib | base/lib | lib | 归属 |
 |---|---|---|---|---|---|---|
-| 1 | ~~lambda 形参无条件擦除~~（含 `f = | 8 | DT prelude 无 List/Pair/Maybe/Result，无 `print` / `readFile` / `exit` / `getArgs`（`DtPrelude.preludeGlobals` / `preludeNames`） | `DT: unknown name <name>` | List 1064、Pair 1845、Maybe 65、Result 175；print 42、readFile 13、exit 9 | 79/30/17/18；5/5/5/5 | 132/286/27/21；48/11/8 | M21 |x => ...`、`case` 分支里的闭包） | **M18.5 已修复**：统一判据 `Elab.erasedBinder`——隐式 binder 恒擦除，显式 binder 仅宇宙域擦除；既有反例 `07_lambda` / `09_runtime_type` 之外新增 `18_lam_type_used` | 739（691 含具名参数） | 18 | 104 | M18.5（已完成） |
+| 1 | ~~lambda 形参无条件擦除~~（含 lambda 体与 `case` 分支里的闭包） | **M18.5 已修复**：统一判据 `Elab.erasedBinder`——隐式 binder 恒擦除，显式 binder 仅宇宙域擦除；反例 `07_lambda` / `09_runtime_type` / `18_lam_type_used` | 739（691 含具名参数） | 18 | 104 | M18.5（已完成） |
 | 2 | 无签名顶层定义 | `Elab.elabBodies`：`DT: expected a type signature for <name>` | 1083 / 1649 defs | 0 / 85 | 574 / 710 | M23（签名工具） |
 | 3 | ~~多 clause 函数~~ | **M19 已实现**：合成单个 lambda + case 表达式树（标准模式矩阵） | 399 名 / 978 行 | 24 / 51 | 123 / 266 | M19（已完成） |
 | 4 | ~~方程左端模式~~（构造子/字面量/列表） | **M19 已实现**：随多 clause 一起，模式矩阵展开 | 832 defs（单 clause 433） | 36 | 302 | M19（已完成） |
 | 5 | ~~`let` 表达式~~（`where` 块 desugar 成 `ELet`） | **M19 已实现**：脱糖为 `(\\x => body) e` | 296 | 4 | 189 | M19（已完成） |
 | 6 | ~~`case` 在推断位~~ | **M19 已实现**：元变量作期望类型 | 132 | 2 | 29 | M19（已完成） |
 | 7 | ~~`case` 嵌套构造子模式~~ | **M19 已实现**：改写成内层 case | 410 alts | 1 | 91 | M19（已完成） |
-| 8 | DT prelude 只有 Int/String/Bool + 算术比较 + `++` / `&&` / `\|\|` + `str*`：无 List/Pair/Maybe/Result，无 `print` / `readFile` / `exit` / `getArgs`（`DtPrelude.preludeGlobals` / `preludeNames`） | `DT: unknown name <name>` | List 1064、Pair 1845、Maybe 65、Result 175；print 42、readFile 13、exit 9 | 79/30/17/18；5/5/5/5 | 132/286/27/21；48/11/8 | M21 |
+| 8 | DT prelude 的容器与 IO 原语 | `DT: unknown name <name>` | List 1064、Pair 1845、Maybe 65、Result 175；print 42、readFile 13、exit 9 | 79/30/17/18；5/5/5/5 | 132/286/27/21；48/11/8 | **M22.2**（`str*`/`prim_*` 已进 prelude；容器来自 base，`String`/`Map`/`Sort` 探针仍失败） |
 | 9 | ~~`==` / `/=` 只对 Int~~ | **M19 已实现**：隐式类型参数 + 精化期按实参类型特化（`bi_eq_str` 等） | 155 处字符串比较 | 0 | 52 | M19（已完成） |
 | 10 | ~~`case` 只接受归纳族~~ | **M19 已实现**：Bool 降级 if，Int/String 降级 if 链（需兜底） | 4（Bool 分支） | 0 | 0 | M19（已完成） |
 | 11 | 非结构递归（算术递减 / fuel 式） | `Elab.checkTermBody`：`DT: cannot prove termination of <f> ...` | 41（`Elab` 14、`Core` 13、`Loader` 5、余 9） | 3 | 20 | M19 风险项 |
-| 12 | ~~单文件~~：无 `import` / `--root` / `data Foo a` | **M20 已实现**：复用 Loader（`loadProgramRaw`）、参数化 `data`、签名类型变量隐式量化。剩余包目录与泛型实例约束 | 20 模块头 / 64 import | 12 / 33 | 13 / 64 | M20（9/10） |
-| 13 | `main` 只能是 Int/String/Bool，无 `main : IO a` | `CoreCodegen.mainShowErr`：`DT: main must return Int, String or Bool (M13 limitation)` | 两入口均 `main : IO Int` | — | — | M21 |
+| 12 | ~~单文件~~：无 `import` / `--root` / `data Foo a` | **M20 已实现**：复用 Loader（`loadProgramRaw`）、参数化 `data`、签名类型变量隐式量化。剩余包目录归 M22.1 | 20 模块头 / 64 import | 12 / 33 | 13 / 64 | M20（已完成） |
+| 13 | `main` 只能是 Int/String/Bool，无 `main : IO a` | `CoreCodegen.mainShowErr`：`DT: main must return Int, String or Bool (M13 limitation)` | 两入口均 `main : IO Int` | — | — | M21（部分：已落地） |
 | 14 | ~~`record` 声明 / 字段访问 / 更新 / 模式~~ | **M19 已实现**：精化前统一降级成单构造子 data（`DtRecords.vuna`），构造子名 `Mk<R>` | 1 声明、14 构造、4 字段读取（另有 `fmt/` 夹具） | 0 | 0 | M19（已完成） |
 | 15 | ~~`deriving`~~ | **M19 已实现**：展开成等价 instance（`DtDerive.vuna`），生成 Show/Eq/Ord 方法体 | 1（`Loader.ExportEntry`）+ `traits/` 13 个夹具 | 0 | 0 | M19（已完成） |
-| 16 | `do` 块 | `Elab.inferE` EDo：`DT: do blocks are not supported yet (M19)` | 0（`compiler/app/Main.vuna` 1 处） | 0 | 1（`app/Main.vuna`） | M21 |
+| 16 | `do` 块 | `Elab.inferE` EDo：`DT: do blocks are not supported yet (M19)` | 0（`compiler/app/Main.vuna` 1 处） | 0 | 1（`app/Main.vuna`） | M21（部分：本阶段的投影工作） |
 | 17 | ~~隐式索引 binder 一律擦除~~ | **M18.5 已修复**：隐式 binder 仍恒擦除（这是正确语义——隐式实参由精化器插入），但**显式索引 binder** 恢复参与运行时表示 | — | — | — | M18.5（已完成） |
 
-第 1 项曾是该表唯一的 **bug**，M18.5 已修、第 17 项随之收敛；**M19 完成第 3–7、9、10、14、15 项**，第 8 项的 `str*` 也已落地（剩余容器与 IO 原语归 M21）。第 2 项是**迁移工作量**而非
-语言缺陷（§5 ②）；第 8/13/16 项构成「编译器本体不可能用 DT 写」的硬边界；第 14/15 项
-**保留并补齐**——它们有 `fmt/` 与 `traits/` 夹具覆盖（决策见 roadmap「决策变更」）。
+第 1 项曾是该表唯一的 **bug**，M18.5 已修、第 17 项随之收敛；**M19 完成第 3–7、9、10、14、15 项**。第 2 项是**迁移工作量**而非语言缺陷（§5 ②）；第 8/13/16 项是「编译器本体不可能用 DT 写」的硬边界——effectful 内建与 `main : IO a` 已在 M21 落地，`do` 的 trait 投影归 M21，容器 / `String` / `Sort` 归 M22.2。第 14/15 项**保留并补齐**——它们有 `fmt/` 与 `traits/` 夹具覆盖（决策见 roadmap「决策变更」）。
 
 **M18.6 的表示层改动不在本表内**：它不加能力、不改行为，只把 `erased : Bool` 换成三值
 `Rig`、`TType : Int` 换成不透明 `Level`（见 [dt-core.md](../dt-core.md) §24）。
@@ -97,7 +95,7 @@ compile」在此失效，DT 存在能产出错误程序的通道。修复方式�
 2. **多 clause 399 名 / 978 行**是逐文件去重口径；跨文件拼接是 421 名 / 1050 行（同名碰撞）。
 3. **`let` 296 是 `compiler/lib` 的量**，`lib` 是 189——勿混列读取。
 
-测试面：DT 正例 35 / 负例 27，见 [testing.md](testing.md)。
+测试面：DT 正例 36 / 负例 28，见 [testing.md](testing.md)。
 
 ## 5. 对计划的三条推论
 
@@ -110,12 +108,12 @@ compile」在此失效，DT 存在能产出错误程序的通道。修复方式�
 
 **③ 擦除与 metrics 重标定必须排在切换 seed 之前。** `seed/` 由 HM split codegen 生成，DT
 产物形状完全不同（单文件、无 `.mli`、每产物带 28 行 runtime 前导）。所以「DT 能编译自己」
-（M23）与「DT codegen 产出 seed 需要的形状 + 新预算」（M22）必须都在 M24 的 seed 切换之前
+（M23）与「DT codegen 产出 seed 需要的形状 + 新预算」（M22.3）必须都在 M24 的 seed 切换之前
 完成；顺序反了会拿 HM 的预算衡量 DT 产物，得到无意义的门槛。
 
 ## 相关阅读
 
-阶段划分与验收：[roadmap.md](../roadmap.md)（M18.5–M24）；DT 语义与设计：[dt.md](dt.md)、
+当前阶段状态与阻碍：[roadmap.md](../roadmap.md)（「阶段状态总览」）；DT 语义与设计：[dt.md](dt.md)、
 [dt-core.md](../dt-core.md)；被推翻的 M18 决策原文：[m18-migration.md](m18-migration.md)；
 限制与测试面：[limits.md](limits.md)、[testing.md](testing.md)；审计原始数据：
 `.local/audit-a/REPORT.md`、`.local/audit-a/repro.sh`、`.local/audit-b/`。
