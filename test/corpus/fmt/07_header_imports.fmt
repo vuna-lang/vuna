@@ -1,4 +1,10 @@
-module Vuna.Sample (Point(..), Shape, area, module Vuna.Compiler.Common, Vuna.Compiler.Parser.parseSource) where
+module Vuna.Sample
+  ( Point(..)
+  , Shape
+  , Vuna.Compiler.Parser.parseSource
+  , area
+  , module Vuna.Compiler.Common
+  ) where
 
 import Vuna.Compiler.Common
 import qualified Vuna.Compiler.Parser as P

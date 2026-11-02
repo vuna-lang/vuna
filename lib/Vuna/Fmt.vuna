@@ -3,6 +3,9 @@ module Vuna.Fmt (formatSource) where
 -- Vuna.Fmt：vuna 源码格式化器（parse → 规范打印）。
 -- 输出约定：2 空格缩进、顶层声明之间一个空行、文件末尾一个换行、无行尾空白；
 -- format(parse(x)) 可重新 parse 且幂等（format(format(x)) == format(x)）。
+-- 导出列表（M10 模块头）：导出项按字面文本的 ASCII 字典序排序，`module B` 整模块
+-- 重导出统一排最后；单行超过 maxWidth 或列表内含注释时逐项一行（逗号前置），
+-- 否则保持单行。项级注释随项移动。
 -- 注释保留（M11.6）：注释不在 AST 里，格式化器单独 lex 出注释，按源码位置
 -- 挂到最近的「条目」（顶部声明/import/构造器/记录字段/trait 方法/let 与 where
 -- 绑定/case 分支/do 语句）：单独成行的注释成为下一条目的前置注释，写在同一行
@@ -12,6 +15,7 @@ import Vuna.Compiler.Common
 import Vuna.Compiler.Ast
 import Vuna.Compiler.Parser
 import Vuna.Compiler.Lexer
+import Base.Sort
 
 -- ---------------------------------------------------------------
 -- 行 / 字符串小工具
@@ -261,7 +265,11 @@ importAnchor imp = importSpan imp
 
 headerAnchors hdr = case hdr of
   Nothing => []
-  Just m => [modDeclSpan m]
+  Just m => append [modDeclSpan m] (modDeclItemAnchors m)
+
+-- 导出项也作为注释锚点：排序时项注释随项移动。
+modDeclItemAnchors m = case m of
+  ModDecl _ _ items _ => map exportItemSpan items
 
 declAnchors d = case d of
   DData name params kind ctors derivings sp => sp :: map ctorSpan ctors
@@ -955,14 +963,67 @@ declNamed d n = case d of
 -- ---------------------------------------------------------------
 -- 模块头 / import / 文件组装
 -- ---------------------------------------------------------------
-renderModDecl (ModDecl name explicit items sp) =
-  if explicit then "module " ++ name ++ " (" ++ joinComma (map renderExportItem items) ++ ") where"
-  else "module " ++ name ++ " where"
+renderModDecl at (ModDecl name explicit items sp) =
+  if explicit then renderExplicitModDecl at name (sortExports items)
+  else ["module " ++ name ++ " where"]
+
+-- 空导出列表（`module M () where`）与短列表保持单行；超宽或含项注释时逐项一行。
+renderExplicitModDecl at name [] = ["module " ++ name ++ " () where"]
+renderExplicitModDecl at name sorted =
+  let
+    oneLine = "module " ++ name ++ " (" ++ joinComma (map renderExportItem sorted) ++ ") where"
+  in if fitsLine 0 oneLine && not (anyItemHasComments at sorted) then [oneLine]
+  else renderExportListBlock at name sorted
+
+-- 多行导出列表（逗号前置）：首项 `( a`，其余 `, b`，收尾 `) where`。
+renderExportListBlock at name items =
+  append ["module " ++ name] (append (renderExportLines at items) ["  ) where"])
+
+renderExportLines at [] = []
+renderExportLines at (first :: rest) =
+  append (renderExportLine at "  ( " first) (renderExportRest at rest)
+
+renderExportRest at [] = []
+renderExportRest at (item :: rest) =
+  append (renderExportLine at "  , " item) (renderExportRest at rest)
+
+renderExportLine at prefixText item =
+  attachAt at (exportItemSpan item) 2 [prefixText ++ renderExportItem item]
 
 renderExportItem item = case item of
   XBare name sp => name
   XTypeAll name sp => name ++ "(..)"
   XModule name sp => "module " ++ name
+
+-- 排序键：分组前缀（`module B` = 1，其余 = 0）++ 字面文本；稳定排序保证幂等。
+exportRank item = case item of
+  XModule _ _ => 1
+  _ => 0
+
+exportKey item = strFromInt (exportRank item) ++ renderExportItem item
+
+strLeChars [] [] = True
+strLeChars [] (y :: ys) = True
+strLeChars (x :: xs) [] = False
+strLeChars (x :: xs) (y :: ys) = if x < y then True else if x > y then False else strLeChars xs ys
+
+strLe a b = strLeChars (strUnpack a) (strUnpack b)
+
+exportKeyLe a b = strLe (exportKey a) (exportKey b)
+
+sortExports items = sortBy exportKeyLe items
+
+-- 导出项是否挂了注释（前置或行尾）：有注释时强制多行，避免单行把后续项注释掉。
+itemHasComments at item =
+  let
+    sp = exportItemSpan item
+  in case lookupSlot at (spanStartLine sp) (spanStartCol sp) of
+    Nothing => False
+    Just slot => not (isNilList (firstOf slot)) || not (isNilList (secondOf slot))
+
+anyItemHasComments at [] = False
+anyItemHasComments at (item :: rest) =
+  if itemHasComments at item then True else anyItemHasComments at rest
 
 renderImport (Import name isQualified alias sp) =
   "import " ++ (if isQualified then "qualified " else "") ++ name ++ aliasSuffix alias
@@ -973,7 +1034,7 @@ aliasSuffix maybeAlias = case maybeAlias of
 
 renderHeader at maybeHeader = case maybeHeader of
   Nothing => []
-  Just m => attachAt at (modDeclSpan m) 0 [renderModDecl m]
+  Just m => attachAt at (modDeclSpan m) 0 (renderModDecl at m)
 
 renderImportLine at imp = attachAt at (importSpan imp) 0 [renderImport imp]
 
