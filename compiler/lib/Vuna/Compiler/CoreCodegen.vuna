@@ -561,12 +561,24 @@ globalRef name = case name of
 
 -- 零参构造子（True/False 之外的 user 构造子）作为普通值引用时，OCaml 里就是裸构造子；
 -- 但只有 datas 表知道它是构造子，所以生成入口先查构造子表，再回落到 globalRef。
+--
+-- M23：`strUnpack` / `strPack` 的映射依赖程序**有没有声明 List 族**：
+--   - 有 List 族：走 `dtListBridge` 生成的 `dtp_unpack` / `dtp_pack`（int list ↔ 族构造子）；
+--   - 没有 List 族（`run/10_string_pack` 这类单文件程序）：`List` 只是 prelude 签名里的
+--     不透明类型，直接用 OCaml int list 的实现 `bi_strUnpack` / `bi_strPack`。
+-- 旧实现无条件映射 `dtp_*`，没声明 List 族时那两个 helper 不生成 → 产物有未绑定名。
 genGlobalRef : GenSt -> String -> Result (Pair String GenSt)
 genGlobalRef st name = case lookupPair name (gsCtors st) of
   Just family => Ok (Pair (ctorOcamlName family name) st)
   Nothing =>
     if memName name (gsThunks st) then Ok (Pair ("(" ++ valueName name ++ " ())") st)
+    else if name == "strUnpack" then if hasListFamily (gsFamilies st) then Ok (Pair "dtp_unpack" st) else Ok (Pair "bi_strUnpack" st)
+    else if name == "strPack" then if hasListFamily (gsFamilies st) then Ok (Pair "dtp_pack" st) else Ok (Pair "bi_strPack" st)
     else andThen (globalRef name) (\r => Ok (Pair r st))
+
+hasListFamily : List String -> Bool
+hasListFamily [] = False
+hasListFamily (f :: rest) = if lastName f == "List" then True else hasListFamily rest
 
 -- ---------------------------------------------------------------
 -- 变体类型声明（族 → OCaml type）
@@ -834,6 +846,10 @@ data GenSt : Type where
 
 gsCtors : GenSt -> List (Pair String String)
 gsCtors (GenSt families ctors next thunks) = ctors
+
+-- 程序声明的族名表（`strUnpack` / `strPack` 的映射要看有没有 List 族）。
+gsFamilies : GenSt -> List String
+gsFamilies (GenSt families ctors next thunks) = families
 
 gsNext : GenSt -> Int
 gsNext (GenSt families ctors next thunks) = next

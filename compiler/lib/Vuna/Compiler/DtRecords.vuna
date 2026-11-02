@@ -34,9 +34,8 @@ module Vuna.Compiler.DtRecords
 import Vuna.Compiler.Common
 import Vuna.Compiler.Ast
 
--- 记录声明信息。第五个字段是**构造子名**：HM 路径沿用记录名（历史行为，构造子在独立
--- 的值命名空间里不冲突）；DT 路径用 `Mk<R>`（DT 的 globals 是一张表，类型名与构造子
--- 同名会让 `Point 1 2` 被解析成「把类型当函数应用」）。
+-- 记录声明信息。第五个字段是**构造子名**：与记录名同名（M23 起；Elab 让值位置先查
+-- 构造子表、类型位置走 globals，两者同名不再冲突）。
 data RecordInfo : Type where
   RecordInfo : String -> List String -> List (Pair String Expr) -> List String -> String -> RecordInfo
 
@@ -216,7 +215,7 @@ desugarExpr records e = case e of
       else andThen (desugarRecordValues records fdefs fields sp) (\vs => Ok (EApp (EVar ctor sp) vs sp))
   ERecUpdate base fields sp =>
     andThen (desugarExpr records base)
-      (\b => andThen (traverse (desugarFieldValue records) fields) (\fs => Ok (ERecUpdate b fs sp)))
+      (\b => andThen (traverse (desugarFieldValue records) fields) (\fs => andThen (desugarRecUpdate records b fs sp) (\e2 => Ok e2)))
   EInstSel m n sp => andThen (desugarExpr records m) (\m2 => Ok (EInstSel m2 n sp))
   -- EPi 的可用性由各自的检查器判定（HM 报错、DT 支持），降级这里只做结构递归。
   EPi name implicit dom cod sp =>
@@ -234,6 +233,51 @@ desugarRecordValues records ((Pair fname fty) :: rest) provided sp = case lookup
 desugarFieldValue : List RecordInfo -> Pair String Expr -> Result (Pair String Expr)
 desugarFieldValue records (Pair fname v) =
   andThen (desugarExpr records v) (\v2 => Ok (Pair fname v2))
+
+-- ---------------------------------------------------------------
+-- 记录更新 `{ p | x = 40, y = 1 }` 的降级
+-- ---------------------------------------------------------------
+-- 与字段访问同构：`case base of <ctor> v0 .. vn => <ctor> (更新值 | 旧字段绑定)`。
+-- 只改**更新字段**位置，其余字段原样搬运。record 按字段名定位：
+--   - 首个更新字段没有任何 record 声明 ⇒ unknown field；
+--   - 多个 record 都声明它 ⇒ ambiguous field（与字段访问同一措辞）；
+--   - 唯一候选但其余更新字段不在它里面 ⇒ unknown field。
+-- 模式绑定子用 `vuna_ru<i>` 前缀，降低与用户表达式里同名变量发生捕获的概率
+-- （记录更新右侧表达式按外层作用域求值）。
+desugarRecUpdate : List RecordInfo -> Expr -> List (Pair String Expr) -> Span -> Result Expr
+desugarRecUpdate records base fields sp = case fields of
+  [] => Err (showSpanLoc sp ++ ": record update needs at least one field")
+  (Pair fname fv) :: rest => if hasDuplicateFieldNames fields then Err (duplicateFieldMsg sp)
+  else case recordsWithField fname records of
+    [] => Err (unknownFieldMsg sp fname)
+    [one] => desugarRecUpdateWith one base fields sp
+    _ => Err (showSpanLoc sp ++ ": ambiguous field " ++ fname ++ " (declared by multiple records)")
+
+desugarRecUpdateWith : RecordInfo -> Expr -> List (Pair String Expr) -> Span -> Result Expr
+desugarRecUpdateWith info base fields sp = case info of
+  RecordInfo rname params fdefs derivings ctor => if hasUnknownFields (fieldNamesOf fdefs) fields then Err (firstUnknownFieldMsg sp (fieldNamesOf fdefs) fields)
+  else
+    let
+      vars = recUpdateVars (length fdefs)
+      pats = map (\v => PVar v sp) vars
+      args = recUpdateArgs fdefs fields vars 0 sp
+      pat = PCon ctor pats sp
+    in Ok (ECase base [Pair pat (EApp (EVar ctor sp) args sp)] sp)
+
+recUpdateVars : Int -> List String
+recUpdateVars n = recUpdateVarsAt 0 n
+
+recUpdateVarsAt : Int -> Int -> List String
+recUpdateVarsAt i n =
+  if i >= n then [] else ("vuna_ru" ++ strFromInt i) :: recUpdateVarsAt (i + 1) n
+
+recUpdateArgs : List (Pair String Expr) -> List (Pair String Expr) -> List String -> Int -> Span -> List Expr
+recUpdateArgs [] provided vars i sp = []
+recUpdateArgs fields provided [] i sp = []
+recUpdateArgs ((Pair fname fty) :: rest) provided (v :: vs) i sp = (case lookupProvided fname provided of
+  Just e => e
+  Nothing => EVar v sp
+) :: recUpdateArgs rest provided vs (i + 1) sp
 
 desugarBind : List RecordInfo -> Pair Pat Expr -> Result (Pair Pat Expr)
 desugarBind records (Pair pat value) =
@@ -279,7 +323,10 @@ prepareDecls decls0 =
     decls = secondOf split
   in desugarRecords records decls
 
--- DT 的构造子命名策略：`Mk<R>`（globals 是一张表，类型名与构造子同名会让 `Point 1 2`
--- 被解析成「把类型当函数应用」）。
+-- 记录的构造子名：记录名本身。
+-- M23：旧实现用 `Mk<R>` 前缀，避免「类型名与构造子同名」被当成「把类型当函数应用」。
+-- 现在 Elab 在值位置先查构造子表、类型位置走 globals（`checkType` / `checkAppUnderType`），
+-- 同名不再冲突（`data Pair where Pair : ...` 的写法本身也被支持），所以恢复同名——
+-- 派生 `Show` 才能输出 `(Point 1 2)` 而不是泄漏内部名 `(MkPoint 1 2)`。
 ctorName : String -> String
-ctorName dname = "Mk" ++ dname
+ctorName dname = dname

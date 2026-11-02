@@ -1,0 +1,10 @@
+-- M23：同一个 head 的默认实例只允许一个；`deriving (Show)` 与手写实例撞车必须报错。
+data Color : Type where
+  Red : Color
+deriving (Show)
+
+instance Show Color where
+  show c = "color"
+
+main : Int
+main = 1

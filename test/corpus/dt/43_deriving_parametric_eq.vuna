@@ -1,0 +1,9 @@
+-- M23：参数化 data 的 `deriving (Eq)`。DT 的字典是单态编码，无法表达
+-- 「对所有 a：Eq (Maybe2 a)」，因此不生成实例；具体类型上的 `==` / `/=` 走通用结构比较兜底。
+data Maybe2 a : Type where
+  Nothing2 : Maybe2 a
+  Just2 : a -> Maybe2 a
+deriving (Eq)
+
+main : Int
+main = if (Just2 1 == Just2 1) && (Nothing2 /= Just2 2) then 42 else 0

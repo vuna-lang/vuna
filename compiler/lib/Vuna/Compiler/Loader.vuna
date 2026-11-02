@@ -10,6 +10,7 @@ module Vuna.Compiler.Loader
   , loadProgramOrdered
   , loadProgramRaw
   , loadProgramRawOrdered
+  , loadProgramRawOrderedSource
   , loadProject
   , loadProjectModules
   , moduleAllImportsOf
@@ -1322,3 +1323,16 @@ loadProgramOrdered roots entryPkg entry =
 
 loadProgramRawOrdered : List String -> String -> Result (List Decl)
 loadProgramRawOrdered roots entry = loadProgramOrdered (map rawRoot roots) "" entry
+
+-- 入口以**源码字符串**给出（REPL 的表达式求值）：与 `loadProgramRawOrdered` 同构，
+-- 只是入口不落盘（`import` 仍按 roots 从磁盘解析）。raw 模式的入口包为空，
+-- 因此不注入隐式 Prelude，与 `--root` 单文件路径的行为一致。
+loadProgramRawOrderedSource : List String -> String -> String -> Result (List Decl)
+loadProgramRawOrderedSource roots label source = andThen (parseSource label source) (\src => case src of
+  Source hdr imports decls => case hdr of
+    Just (ModDecl dname hasList items sp) =>
+      Err ("module header is not allowed in entry source (" ++ label ++ ")")
+    Nothing =>
+      andThen (validateImports "<entry>" imports)
+        (\_ => andThen (loadAll (map rawRoot roots) "" [] [] imports) (\modules => orderedProjectDecls (Project decls imports [] modules "")))
+)

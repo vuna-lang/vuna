@@ -4,6 +4,7 @@ module Vuna.Compiler.Dt
   , dtCheckProject
   , dtCompileFile
   , dtCompileProject
+  , dtEvalExpr
   , dtEvalFile
   ) where
 
@@ -102,10 +103,39 @@ dtEvalFile roots entry =
   andThen (dtLoad roots entry)
     (\decls => andThen (elabProgramWith False decls) (\program => evalDtMain program))
 
--- main : IO a 的执行（M21，对齐 HM ioRunExpr）：先归约 main 到 IO 构造子
--- （`MkIO f`），再对世界令牌 0 应用 `f 0` 并继续归约。IO 的识别按 main 的
--- **类型**（`isIOType`，族名 `IO`，含 `Base.IO.IO` 这类带模块前缀的名字）；
--- 纯值的 main 仍按 VInt/VStr/VBool 直接显示。
+-- REPL 的表达式求值（M23）：roots + program 源码 + 表达式源码。
+-- program 里的定义必须有签名（REPL 用户逐行输入签名）；表达式在程序的环境
+-- （globals / 实例 / 字典解表）里精化，再求值并 show。program 的 import 仍按 roots
+-- 从磁盘解析（`loadProgramRawOrderedSource`），所以 REPL 可以把 import 行一起缓冲进来。
+--
+-- 表达式的名字解析**必须**经过 Loader（`import Base.List` 后写 `length xs` 得到的是
+-- `Base.List.length`）：因此把表达式拼成一条合成定义 `vuna_repl_expr = <expr>` 一起
+-- 加载，取回解析/限定后的体，再把这条合成定义从声明表里摘掉、交给 DT 精化。
+dtEvalExpr : List String -> String -> String -> Result String
+dtEvalExpr roots program exprSource =
+  andThen
+    (loadProgramRawOrderedSource roots "<repl>" (program ++ "\n" ++ replExprName ++ " = " ++ exprSource ++ "\n"))
+    (\decls => andThen (splitReplExpr decls) (\p => andThen (elabProgramFull (firstOf p)) (\prog => dtEvalExprIn prog (secondOf p))))
+
+-- 合成定义的唯一名字：只在 `dtEvalExpr` 内部出现，摘除时按名字识别。
+replExprName : String
+replExprName = "vuna_repl_expr"
+
+-- 取出合成定义并还原成表达式；它一定是加载后的最后一条声明（追加在源码末尾）。
+splitReplExpr : List Decl -> Result (Pair (List Decl) Expr)
+splitReplExpr decls = case reverse decls of
+  (DFun n pats body sp) :: rest =>
+    if n == replExprName then Ok (Pair (reverse rest) body)
+    else Err "DT: internal: REPL expression definition is not last"
+  _ => Err "DT: internal: REPL expression was not parsed as a definition"
+
+-- 核心求值器对 `main` 的求值边界（M23 终态契约）：
+--   - 纯 `main : Int/String/Bool`：核心求值并展示值；
+--   - `main : IO a`：**一律报错**。核心求值器是纯的、不执行效果；即使动作结果不依赖
+--     效果（`do print "hi"; pure 7`），效果也会被静默丢弃——误导用户。所以不做
+--     「尝试归约、卡住才报错」这种不可靠的判定。效果程序只走 compile + 运行
+--     （夹具用 `.nointerp` 标记）。IO 的识别按 main 的**类型**（族名 `IO`，含
+--     `Base.IO.IO` 这类模块前缀）。
 evalDtMain : Pair (List DtData) (List DtDef) -> Result String
 evalDtMain (Pair _ defs) = case findMainDef defs of
   Nothing => Err "DT: no main definition"
@@ -113,11 +143,7 @@ evalDtMain (Pair _ defs) = case findMainDef defs of
     let
       table = defTableOf defs
       mainVal = normalize table [] defaultFuel (VNeutral (NGlobal "main" []))
-    in if isIOType (dtDefType mainDef) then case mainVal of
-      VCon _ args => case reverse args of
-        f :: _ => Ok (showValueResult (normalize table [] defaultFuel (applyValue f (VInt 0))))
-        [] => Err "DT: main : IO a but its constructor has no arguments"
-      _ => Err "DT: main does not reduce to an IO action"
+    in if isIOType (dtDefType mainDef) then Err "DT: interp cannot execute effects (main : IO a); compile and run the program instead"
     else case mainVal of
       VInt n => Ok (strFromInt n)
       VStr s => Ok (showValue mainVal)
@@ -135,12 +161,6 @@ isIOType t = case t of
   TApp fn _ _ => isIOType fn
   TGlobal g => lastName g == "IO"
   _ => False
-
--- IO 动作的结果与普通 main 的结果统一显示：Int 用 strFromInt，其余交给 showValue。
-showValueResult : Value -> String
-showValueResult v = case v of
-  VInt n => strFromInt n
-  _ => showValue v
 
 findMainDef : List DtDef -> Maybe DtDef
 findMainDef [] = Nothing

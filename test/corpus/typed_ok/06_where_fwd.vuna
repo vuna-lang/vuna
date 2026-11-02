@@ -1,7 +1,10 @@
+-- M23：DT 暂不支持 where 子句，原来的局部辅助函数改为顶层定义，
+-- 保留「前向引用 + 捕获外层参数」的覆盖点。
+h : Int -> Int -> Int
+h z base = z * base
+
 g : Int -> Int -> Int
-g x y = x + h x where
-  h z = z * base2
-  base2 = y + 1
+g x y = x + h x (y + 1)
 
 main : Int
 main = g 3 5

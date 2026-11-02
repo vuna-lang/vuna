@@ -9,6 +9,7 @@ module Vuna.Compiler.DtQuant (definedNames, quantifyTopSig, quantifyTraitSig) wh
 -- 纯 AST 变换（只依赖 `Ast`），因此独立成模块——`Elab` 的模块行数是硬门槛。
 import Vuna.Compiler.Common
 import Vuna.Compiler.Ast
+import Vuna.Compiler.DtKind
 
 -- 把 trait 方法签名里的自由小写名量化为隐式类型参数。
 -- `boundInScope` 给出「这个名字已在上下文里」的判定（trait 的类参数不算自由变量，
@@ -26,6 +27,19 @@ keepOut inScope (n :: rest) = if inScope n then keepOut inScope rest else n :: k
 quantify : List String -> Expr -> Span -> Expr
 quantify [] e sp = e
 quantify (n :: rest) e sp = EPi n True (EVar "Type" sp) (quantify rest e sp) sp
+
+-- 顶层签名的自由名按**用法**给 kind：名字在签名里被应用了 k 个实参 ⇒ `Type -> ... -> Type`
+-- （`bindPair : m a -> m b -> m (Pair a b)` 的 `m`）。旧实现一律绑 `Type`，于是 `m a`
+-- 报 "too many arguments (not a function)"。规则与 trait 类参数（`DtKind.classParamKind`）
+-- 同一套，只是作用在任意自由名上。
+quantifyTopKinds : List String -> Expr -> Expr -> Span -> Expr
+quantifyTopKinds [] sigExpr e sp = e
+quantifyTopKinds (n :: rest) sigExpr e sp =
+  EPi n True (kindArrowExpr (exprMaxAppArity n sigExpr) sp) (quantifyTopKinds rest sigExpr e sp) sp
+
+kindArrowExpr : Int -> Span -> Expr
+kindArrowExpr k sp =
+  if k <= 0 then EVar "Type" sp else EPi "_" False (EVar "Type" sp) (kindArrowExpr (k - 1) sp) sp
 
 piBoundNames : Expr -> List String
 piBoundNames e = case e of
@@ -70,10 +84,11 @@ dropName b [] = []
 dropName b (n :: rest) = if n == b then dropName b rest else n :: dropName b rest
 
 -- 顶层签名里要量化的自由名字：额外排除本程序另有定义的名字（`vapp` 这类会被误
--- 当类型变量）与内建 prelude 名。
+-- 当类型变量）与内建 prelude 名。每个名字的 kind 按它在签名里的应用次数推断。
 quantifyTopSig : List String -> Expr -> Span -> Expr
 quantifyTopSig defined ty sp =
-  quantify (keepOutList (append defined topPreludeNames) (freeNames (\n => False) ty)) ty sp
+  quantifyTopKinds (keepOutList (append defined topPreludeNames) (freeNames (\n => False) ty)) ty ty
+    sp
 
 keepOutList : List String -> List String -> List String
 keepOutList banned [] = []

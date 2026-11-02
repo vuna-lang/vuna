@@ -1,3 +1,4 @@
 import Vuna.Extra
 
+main : Int
 main = Vuna.Extra.answer

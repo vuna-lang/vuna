@@ -1,3 +1,4 @@
 import qualified Vuna.Math as M
 
+main : Int
 main = M.double 21

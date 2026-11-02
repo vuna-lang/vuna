@@ -1,3 +1,4 @@
 import Vuna.Math
 
+main : Int
 main = double 21

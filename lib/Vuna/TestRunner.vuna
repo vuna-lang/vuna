@@ -4,7 +4,8 @@ module Vuna.TestRunner (runTests) where
 --
 -- 约定：包 `test/` 下每个 `*.vuna` 是一个测试模块，`main : String`；
 -- 返回空串表示通过，返回非空串表示失败（打印失败信息）。
--- 用解释器 + 降级路径执行，能覆盖 trait/record/do；代码生成路径的验证留给 CI 脚本。
+-- M23 起用 DT 精化后的核心求值执行（`Vuna.Interp`），因此测试模块的顶层定义同样
+-- 必须写签名；代码生成路径的验证留给 CI 脚本。
 import Vuna.Compiler.Common
 import Vuna.Compiler.Pkg
 import Vuna.Files

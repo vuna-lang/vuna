@@ -1,4 +1,4 @@
 import Vuna.Shape
 
-main : Shape
-main = Vuna.Shape.mkCircle 2
+main : Int
+main = Vuna.Shape.area (Vuna.Shape.mkCircle 2)

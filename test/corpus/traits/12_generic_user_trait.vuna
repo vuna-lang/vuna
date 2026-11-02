@@ -10,6 +10,7 @@ instance Pretty Color where
     Red => "red"
     Blue => "blue"
 
+render : a -> String
 render x = pretty x
 
 main : String

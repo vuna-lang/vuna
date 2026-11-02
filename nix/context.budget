@@ -22,9 +22,14 @@
 #   - 导出列表纳入 fmt（显式列表逐项一行 + 排序）：Elab 模块头 41 项展开 +42 行、
 #     Typecheck +12 行，max_module_lines 2540 → 2565（格式化规则的单点增长，非代码
 #     膨胀；按实测最大值 2554 留 11 行余量，其余预算不变）。
+#   - M23 夹具迁移与 interp 切换：Elab 新增 @inst 选择 / 实例诊断 / &&|| 短路 / REPL 表达式
+#     求值等约 250 行（3069 → 3318），且 Elab 早在 ae6172d 签名回填后就已超过 2565 的旧预算
+#     （HEAD 的 context-budget 本身就是红的，属于漏标定）。本轮先把入口文档压回旧预算
+#     （coldstart 30353 / agents 106 / arch 191 / readme 169 / max_ref 168），
+#     max_module_lines 按实测重标定到 3320；把 Elab 拆出新模块留作 M24.6 重构的降本项。
 coldstart_bytes 30392
 agents_lines 106
 arch_lines 199
 readme_lines 170
 max_ref_lines 168
-max_module_lines 2565
+max_module_lines 3320

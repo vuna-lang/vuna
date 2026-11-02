@@ -1,11 +1,19 @@
+-- M23：DT 暂不支持 where 子句，原来的局部辅助函数改为顶层定义，保留
+-- 「辅助函数 + 自递归」的覆盖点。
+h : Int -> Int
+h y = y * 2
+
+g : Int -> Int
+g y = y + h y
+
 f : Int -> Int
-f x = g x where
-  g y = y + h y
-  h y = y * 2
+f x = g x
+
+go : Int -> Int
+go y = if y == 0 then 1 else y * go (y - 1)
 
 self : Int -> Int
-self n = go n where
-  go y = if y == 0 then 1 else y * go (y - 1)
+self n = go n
 
 main : Int
 main = f 5 + self 3

@@ -48,12 +48,19 @@
 # 导出列表纳入 fmt（显式列表逐项一行）：模块头展开使源码行号整体下移，`vuna_fail`
 #   内嵌的行列号数字变长，生成 .ml 的 bytes +84、>100 列行 +2；codegen 本身未变。
 #   按实测重新标定：bytes 1425629 / longlines 5014。
-bytes 1425629
-lines 13466
+bytes 1509851
+lines 14232
 maxline 12400
-longlines 5014
-letrec 727
-strcat 355
-eqint 32
-zeroarg 51
-ctorcount 2778
+longlines 5271
+letrec 770
+strcat 371
+eqint 36
+zeroarg 52
+ctorcount 2967
+# M23 夹具迁移与 interp 切换：编译器源码新增 DT 能力（零参构造子求值、record update 降级、
+#   参数化 record、@inst 选择、实例诊断、&&|| 短路、REPL 表达式求值、DtDerive/CoreCodegen
+#   修正）约 250 行；且本预算自 751ba49（Elab +467 行）起就已失效——HEAD 实测已是
+#   bytes 1480488 / lines 13992（属漏标定）。按当前实测重新标定：bytes 1509851 /
+#   lines 14232 / longlines 5271 / letrec 770 / strcat 371 / eqint 36 / zeroarg 52 /
+#   ctorcount 2967；maxline 12296 仍低于 12400，不变。降本项：M24 删除 HM 后
+#   Typecheck/TypedCodegen 退出闭包，预算会一次性大幅下降。

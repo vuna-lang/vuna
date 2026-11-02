@@ -1,0 +1,8 @@
+-- M23：参数化 data 只能派生 Eq（Show/Ord 的字段展示/比较需要 a 的字典，单态字典表达不了）。
+data Maybe2 a : Type where
+  Nothing2 : Maybe2 a
+  Just2 : a -> Maybe2 a
+deriving (Show)
+
+main : Int
+main = 1

@@ -4,8 +4,8 @@
 # 结构（本目录）：
 #   *.vuna + *.fmt          —— 格式化 golden：format 结果与 .fmt 逐字节一致，
 #                              且 format→parse→format 幂等（probe check）。
-#   run/*.vuna + *.out      —— 可解释程序：格式化前后 `vuna interp` 输出一致且等于 golden。
-#   typed/*.vuna + *.out    —— typed codegen 程序（覆盖 where 等解释器不支持的构造）：
+#   run/*.vuna + *.out      —— 可解释程序：格式化前后 `vuna interp`（DT 核心求值）输出一致且等于 golden。
+#   typed/*.vuna + *.out    —— 编译期语义程序（辅助函数 / 自递归；M23 起 where 语义夹具已改写成顶层定义）：
 #                              格式化前后 typed 生成、ocamlopt 编译、运行输出一致且等于 golden。
 #   _probe.vuna             —— 探针源码（下划线开头，不当作输入），由本脚本用 VUNA 编译。
 #

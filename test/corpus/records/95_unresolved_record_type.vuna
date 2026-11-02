@@ -1,4 +1,0 @@
-f p = p.x
-
-main : Int
-main = 0

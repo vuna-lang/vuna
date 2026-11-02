@@ -23,6 +23,7 @@ module Vuna.Compiler.Elab
   , dtDefBody
   , dtDefName
   , dtDefType
+  , dtEvalExprIn
   , dtGoalCtx
   , dtGoalInfoCtx
   , dtGoalInfoGoal
@@ -134,15 +135,20 @@ dtClassMethods (DtClass name params projs fieldTys) = projs
 dtClassFieldTys : DtClass -> List Term
 dtClassFieldTys (DtClass name params projs fieldTys) = fieldTys
 
--- M15：已注册实例：定义名 + 实例头类型项（`Show Int` 这类闭合项）。
+-- M15：已注册实例：定义名 + 实例头类型项（`Show Int` 这类闭合项）+ 是否命名实例。
+-- M23：`as name` 的命名实例**不参与**自动实例搜索（只能 `@name` 选中，与 HM 一致），
+-- 否则 `instance Pretty Color` 与 `instance Pretty Color as fancy` 会撞成歧义。
 data DtInst : Type where
-  DtInst : String -> Term -> DtInst
+  DtInst : String -> Term -> Bool -> DtInst
 
 dtInstName : DtInst -> String
-dtInstName (DtInst name head) = name
+dtInstName (DtInst name head named) = name
 
 dtInstHead : DtInst -> Term
-dtInstHead (DtInst name head) = head
+dtInstHead (DtInst name head named) = head
+
+dtInstNamed : DtInst -> Bool
+dtInstNamed (DtInst name head named) = named
 
 -- 精化状态：下一个元变量编号、已解元变量（level 形态的 Value）、已精化的定义体、
 -- 已声明的归纳族（M14：case 精化需要知道族的构造子 telescope）。
@@ -341,13 +347,30 @@ hasNoExplicitPi ec v = case forceVal ec v of
   VPi _ False _ dom clo => False
   _ => True
 
-instantiateNullaryCtor : Ec -> Ctx -> Value -> Result (Pair Value Ec)
+-- 实例化零参构造子的隐式参数，返回「剩余类型 + 依次新建的元变量项」。
+-- 元变量项要作为 `TCon` 的擦除实参保留：核心求值器的 `VCon` 实参表与构造子
+-- telescope **逐位对齐**（case 分支按 telescope 绑定子压环境），少一个擦除实参就会让
+-- 分支体里的变量索引整体偏移（`foldl` 的 `Nil` 分支取到错误的值）。
+instantiateNullaryCtor : Ec -> Ctx -> Value -> Result (Pair Value (Pair (List Term) Ec))
 instantiateNullaryCtor ec ctx v = case forceVal ec v of
   VPi _ True _ dom clo => if isIndexDomain ec dom then case newMeta ctx ec of
-    Pair metaTerm ec1 =>
-      instantiateNullaryCtor ec1 ctx (applyClosure clo (eval (ctxEnv ctx) metaTerm))
-  else Ok (Pair v ec)
-  _ => Ok (Pair v ec)
+    Pair metaTerm ec1 => andThen (instantiateNullaryCtor ec1 ctx (applyClosure clo (eval (ctxEnv ctx) metaTerm))) (\p => case p of
+      Pair ty (Pair metas ec2) => Ok (Pair ty (Pair (metaTerm :: metas) ec2))
+    )
+  else Ok (Pair v (Pair [] ec))
+  _ => Ok (Pair v (Pair [] ec))
+
+-- 零参构造子的项：`TCon name [擦除实参...]`。元变量个数必须与 telescope 等长才
+-- 能保持 VCon 实参对齐；长度对不上（隐式非索引参数等边缘形态）退回 `TGlobal`。
+nullaryCtorTerm : DtCtor -> List Term -> Term
+nullaryCtorTerm ctor metas =
+  if length metas == length (dtCtorTelescope ctor) then TCon (dtCtorName ctor) (zipTeleRigs metas (dtCtorTelescope ctor))
+  else TGlobal (dtCtorName ctor)
+
+zipTeleRigs : List Term -> List (Pair String Rig) -> List (Pair Term Rig)
+zipTeleRigs [] bs = []
+zipTeleRigs ms [] = []
+zipTeleRigs (m :: ms) (b :: bs) = Pair m (secondOf b) :: zipTeleRigs ms bs
 
 -- M21：Bool 的统一运行时表示。`Base.Bool` / 单文件 `data Bool` 的构造子
 -- `True` / `False` 一律精化成核心的 `TBool`，codegen 出 OCaml 的 `true` / `false`；
@@ -373,7 +396,7 @@ inferCtorRef ec ctx name tyTerm = case dtCtorLookup name (ecDatas ec) of
     let
       ctorTy = eval [] tyTerm
     in if hasNoExplicitPi ec ctorTy then case instantiateNullaryCtor ec ctx ctorTy of
-      Ok (Pair instTy ec1) => Ok (Pair (ctorRefTerm (ecDatas ec) name) (Pair instTy ec1))
+      Ok (Pair instTy (Pair metas ec1)) => Ok (Pair (nullaryCtorTerm ctor metas) (Pair instTy ec1))
       Err e => Err e
     else Ok (Pair (ctorRefTerm (ecDatas ec) name) (Pair ctorTy ec))
   Nothing => Ok (Pair (ctorRefTerm (ecDatas ec) name) (Pair (eval [] tyTerm) ec))
@@ -1014,17 +1037,21 @@ elabInstance globals classes datas ec ds = case ds of
       Nothing => errAt msp "DT: instance head must be an interface application (e.g. Show Int)"
       Just cname => case findClass cname classes of
         Nothing => errAt msp ("DT: unknown interface " ++ cname ++ " in instance head")
-        Just cls => andThen (elabInstanceMethods globals cls (instanceHeadTerm headExpr) ec methods msp) (\p => case p of
-          Pair fieldTerms (Pair fieldArgs ec1) =>
-            let
-              iname = instanceName (dtClassName cls) mname headExpr
-              headTerm = instanceHeadTerm headExpr
-              dctor = dictCtorName (dtClassName cls)
-              dictTerm = TCon dctor fieldArgs
-              dictTyTerm = ctorResultType cls headTerm
-            in Ok
-              (Pair [Pair iname dictTyTerm] (ecAddDef (ecAddInst ec1 (DtInst iname dictTyTerm)) (Pair iname dictTerm)))
-        )
+        Just cls => case firstUnknownInstanceMethod cls methods of
+          Just n => errAt msp ("DT: instance has unknown method " ++ n)
+          Nothing => case firstMissingInstanceMethod cls methods of
+            Just m => errAt msp "DT: instance is missing an implementation for an interface method"
+            Nothing => andThen (elabInstanceMethods globals cls (instanceHeadTerm headExpr) ec methods msp) (\p => case p of
+              Pair fieldTerms (Pair fieldArgs ec1) =>
+                let
+                  iname = instanceName (dtClassName cls) mname headExpr
+                  headTerm = instanceHeadTerm headExpr
+                  dctor = dictCtorName (dtClassName cls)
+                  dictTerm = TCon dctor fieldArgs
+                  dictTyTerm = ctorResultType cls headTerm
+                in Ok
+                  (Pair [Pair iname dictTyTerm] (ecAddDef (ecAddInst ec1 (DtInst iname dictTyTerm (instanceIsNamed mname))) (Pair iname dictTerm)))
+            )
     _ => errAt dsp "DT: internal: expected an instance declaration"
 
 -- 实例头 `Show Int` 的类型项（`Dict_Show Int`）。
@@ -1034,6 +1061,35 @@ instanceHeadTerm e = case e of
   EApp fn (a :: rest) sp => TGlobal (argNameOf a)
   EVar n sp => TGlobal n
   _ => TGlobal "Int"
+
+-- 实例里出现 trait 没声明的方法 ⇒ 硬错误（旧实现静默忽略多余方法）。
+firstUnknownInstanceMethod : DtClass -> List Decl -> Maybe String
+firstUnknownInstanceMethod cls methods =
+  firstUnknownInstanceMethodGo (map (\m => baseNameOf (firstOf m)) (dtClassMethods cls)) methods
+
+firstUnknownInstanceMethodGo : List String -> List Decl -> Maybe String
+firstUnknownInstanceMethodGo known [] = Nothing
+firstUnknownInstanceMethodGo known (d :: rest) = case d of
+  DFun n pats body sp =>
+    if memName (baseNameOf n) known then firstUnknownInstanceMethodGo known rest else Just n
+  _ => firstUnknownInstanceMethodGo known rest
+
+-- 缺方法要在**精化方法体之前**判定：方法体本身可能还有类型错误（例如跨模块 trait
+-- 的泛型方法参数被写错类型），先报体错误会把「缺实现」这个更根本的诊断盖掉。
+firstMissingInstanceMethod : DtClass -> List Decl -> Maybe String
+firstMissingInstanceMethod cls methods = firstMissingInstanceMethodGo (dtClassMethods cls) methods
+
+firstMissingInstanceMethodGo : List (Pair String Term) -> List Decl -> Maybe String
+firstMissingInstanceMethodGo [] decls = Nothing
+firstMissingInstanceMethodGo (m :: rest) decls =
+  if hasMethodClauses (baseNameOf (firstOf m)) decls then firstMissingInstanceMethodGo rest decls
+  else Just (firstOf m)
+
+hasMethodClauses : String -> List Decl -> Bool
+hasMethodClauses name [] = False
+hasMethodClauses name (d :: rest) = case d of
+  DFun n pats body sp => if baseNameOf n == name then True else hasMethodClauses name rest
+  _ => hasMethodClauses name rest
 
 -- 实例注册用的头类型：`Dict_C <arg>`，供实例搜索按头统一。
 ctorResultType : DtClass -> Term -> Term
@@ -1741,20 +1797,63 @@ hasFunClause name (d :: rest) = case d of
   _ => hasFunClause name rest
 
 -- M15：完整精化，额外返回洞目标与最终状态（供 `vuna goal` / LSP 的洞显示）。
+-- M23：还带上收尾时的 globals / 实例表 / 类表 / 元变量游标——REPL 的表达式求值要在
+-- 与程序相同的环境里精化一条表达式（`dtEvalExprIn`），这些状态不属于「定义」但对
+-- 精化是必需的。
 data DtProgram : Type where
-  DtProgram : List DtData -> List DtDef -> List DtGoal -> List (Pair Int Value) -> DtProgram
+  DtProgram : List DtData -> List DtDef -> List DtGoal -> List (Pair Int Value) -> List (Pair String Term) -> List DtInst -> List DtClass -> Int -> DtProgram
 
 dtProgDatas : DtProgram -> List DtData
-dtProgDatas (DtProgram datas defs goals sols) = datas
+dtProgDatas (DtProgram datas defs goals sols globals insts classes next) = datas
 
 dtProgDefs : DtProgram -> List DtDef
-dtProgDefs (DtProgram datas defs goals sols) = defs
+dtProgDefs (DtProgram datas defs goals sols globals insts classes next) = defs
 
 dtProgGoals : DtProgram -> List DtGoal
-dtProgGoals (DtProgram datas defs goals sols) = goals
+dtProgGoals (DtProgram datas defs goals sols globals insts classes next) = goals
 
 dtProgSols : DtProgram -> List (Pair Int Value)
-dtProgSols (DtProgram datas defs goals sols) = sols
+dtProgSols (DtProgram datas defs goals sols globals insts classes next) = sols
+
+dtProgGlobals : DtProgram -> List (Pair String Term)
+dtProgGlobals (DtProgram datas defs goals sols globals insts classes next) = globals
+
+dtProgInsts : DtProgram -> List DtInst
+dtProgInsts (DtProgram datas defs goals sols globals insts classes next) = insts
+
+dtProgClasses : DtProgram -> List DtClass
+dtProgClasses (DtProgram datas defs goals sols globals insts classes next) = classes
+
+dtProgNext : DtProgram -> Int
+dtProgNext (DtProgram datas defs goals sols globals insts classes next) = next
+
+-- ---------------------------------------------------------------
+-- M23：REPL 表达式求值（`Vuna.Compiler.Dt.dtEvalExpr` 的下半段）
+-- ---------------------------------------------------------------
+-- 在**已精化程序**的环境（globals / 实例表 / 类表 / 解表）里精化并求值一条表达式。
+-- 新元变量从程序的元变量游标之后分配，因此程序阶段遗留的 meta 只可能已解
+-- （`elabProgramGo` 已校验过）；表达式自己留下的未解 meta 单独报清晰错误。
+-- 字典约束（`==` 等）用与定义体相同的收敛回填，最后在 defs + 解表上归一化并 show。
+dtEvalExprIn : DtProgram -> Expr -> Result String
+dtEvalExprIn prog expr = case prog of
+  DtProgram datas defs goals sols globals insts classes next =>
+    let
+      ec0 =
+        Ec next sols (map (\d => Pair (dtDefName d) (dtDefBody d)) defs) datas [] [] insts classes
+          [] False
+    in andThen (inferE globals emptyCtx ec0 expr) (\p => case p of
+      Pair term (Pair ty ec1) =>
+        let
+          ec2 = resolveDictGoalsFix globals ec1 8
+          sols2 = ecSols ec2
+        in case unsolvedFrom next (ecNext ec2) sols2 of
+          Just m =>
+            errAt (exprSpan expr)
+              ("DT: cannot infer a type for this expression (unsolved metavariable ?" ++ strFromInt m ++ "); add a type annotation")
+          Nothing => case normalize (map (\d => Pair (dtDefName d) (dtDefBody d)) defs) sols2 defaultFuel (eval [] term) of
+            VInt n => Ok (strFromInt n)
+            v => Ok (showValue v)
+    )
 
 -- 精化入口。M19：先做 record 降级（`DtRecords.prepareDecls`）——record 是纯记法。
 elabProgramFull : List Decl -> Result DtProgram
@@ -1801,7 +1900,7 @@ elabProgramGo trusted decls = andThen (collectSigs decls) (\sigs => andThen (ela
                           extra = extraDefsOf globals ec4 (append instDefs defs)
                           allDefs = rezonkDefs ec4 (append instDefs (append extra defs))
                         in andThen (checkTerminationIf trusted decls)
-                          (\_ => Ok (DtProgram datas1 allDefs (ecGoals ec4) (ecSols ec4)))
+                          (\_ => Ok (DtProgram datas1 allDefs (ecGoals ec4) (ecSols ec4) globals (ecInsts ec4) (ecClasses ec4) (ecNext ec4)))
                 )
             )
             )
@@ -1835,13 +1934,16 @@ foldlAddInst ec [] = ec
 foldlAddInst ec (i :: rest) = foldlAddInst (ecAddInst ec i) rest
 
 -- 实例头（`Dict_C <arg>`）的签名先入 globals：实例方法体要按它 check。
+-- M23：同一个 head 只允许注册一次——`deriving` 生成的实例与手写实例、两个模块各自的
+-- 默认实例都会撞上；旧实现按**名字**去重且静默丢弃，重复实例被无声接受。现在按 head
+-- 定义性相等判定并报 "duplicate instance"。
 checkInstanceHeads : List (Pair Decl Span) -> List DtClass -> List (Pair String Term) -> Ec -> Result (Pair (List (Pair String Term)) Ec)
-checkInstanceHeads decls classes globals ec = checkInstanceHeadsGo decls classes globals ec [] []
+checkInstanceHeads decls classes globals ec = checkInstanceHeadsGo decls classes globals ec [] [] []
 
-checkInstanceHeadsGo : List (Pair Decl Span) -> List DtClass -> List (Pair String Term) -> Ec -> List (Pair String Term) -> List DtInst -> Result (Pair (List (Pair String Term)) Ec)
-checkInstanceHeadsGo [] classes globals ec acc insts =
+checkInstanceHeadsGo : List (Pair Decl Span) -> List DtClass -> List (Pair String Term) -> Ec -> List (Pair String Term) -> List DtInst -> List DtInst -> Result (Pair (List (Pair String Term)) Ec)
+checkInstanceHeadsGo [] classes globals ec acc insts seen =
   Ok (Pair (reverse acc) (foldlAddInst ec (reverse insts)))
-checkInstanceHeadsGo (d :: rest) classes globals ec acc insts = case d of
+checkInstanceHeadsGo (d :: rest) classes globals ec acc insts seen = case d of
   Pair decl dsp => case decl of
     DInstance mname isDefault headExpr methods msp => case instanceHeadName headExpr of
       Nothing => errAt msp "DT: instance head must be an interface application (e.g. Show Int)"
@@ -1851,9 +1953,39 @@ checkInstanceHeadsGo (d :: rest) classes globals ec acc insts = case d of
           let
             iname = instanceName (dtClassName cls) mname headExpr
             ty = ctorResultType cls (instanceHeadTerm headExpr)
-          in checkInstanceHeadsGo rest classes globals ec (Pair iname ty :: acc)
-            (DtInst iname ty :: insts)
-    _ => checkInstanceHeadsGo rest classes globals ec acc insts
+            named = instanceIsNamed mname
+          in case findDuplicateInstance ec iname named ty seen of
+            Just other => errAt msp ("DT: duplicate instance " ++ iname)
+            Nothing =>
+              checkInstanceHeadsGo rest classes globals ec (Pair iname ty :: acc)
+                (DtInst iname ty named :: insts) (DtInst iname ty named :: seen)
+    _ => checkInstanceHeadsGo rest classes globals ec acc insts seen
+
+-- 实例是否命名（`as name`）。Loader 把无 `as` 的实例命名成 `<prefix>#default`，
+-- 因此「匿名」= 名字最后一段以 `#` 开头（与 `instanceName` 同一判据）。
+instanceIsNamed : Maybe String -> Bool
+instanceIsNamed Nothing = False
+instanceIsNamed (Just n) = not (anonInstName n)
+
+-- 重复判定：同名实例，或**两个默认（匿名）实例的 head 定义性相等**。
+-- 匿名实例的名字由模块前缀参与派生，因此跨模块的同一个 head（`Base.Maybe` 的
+-- `Monad Maybe` 与用户程序再写一次）名字不同、head 相同——必须按 head 判。
+-- `as name` 的命名实例允许与默认实例共存（`@name` 选择它们，traits/02）。
+findDuplicateInstance : Ec -> String -> Bool -> Term -> List DtInst -> Maybe DtInst
+findDuplicateInstance ec name named ty seen =
+  if hasInstName name seen then Just (DtInst name ty named) else findDefaultDup ec named ty seen
+
+findDefaultDup : Ec -> Bool -> Term -> List DtInst -> Maybe DtInst
+findDefaultDup ec named ty [] = Nothing
+findDefaultDup ec named ty (i :: rest) =
+  if named then Nothing
+  else if dtInstNamed i then findDefaultDup ec named ty rest
+  else if headsEqual ec ty (dtInstHead i) then Just i else findDefaultDup ec named ty rest
+
+headsEqual : Ec -> Term -> Term -> Bool
+headsEqual ec a b = case conv (ecDefs ec) (ecSols ec) 0 (eval [] a) (eval [] b) of
+  Ok _ => True
+  Err e => False
 
 -- 实例方法体（在顶层定义之后精化）。
 elabInstanceBodies : List (Pair Decl Span) -> List DtClass -> List DtData -> List (Pair String Term) -> Ec -> Result (Pair (List DtDef) Ec)
@@ -2330,7 +2462,7 @@ inferE globals ctx ec expr = case expr of
   EField base fname sp => errAt sp "DT: record field access is not supported yet (M15)"
   ERecord rname fields sp => errAt sp "DT: records are not supported yet (M15)"
   ERecUpdate base fields sp => errAt sp "DT: record update is not supported yet (M15)"
-  EInstSel meth iname sp => errAt sp "DT: instance selection is not supported yet (M15)"
+  EInstSel meth iname sp => inferInstSel globals ctx ec meth iname sp
   EDo stmts sp => errAt sp "DT: do blocks are not supported yet (M19)"
 
 inferPi : List (Pair String Term) -> Ctx -> Ec -> String -> Bool -> Expr -> Expr -> Span -> Result (Pair Term (Pair Value Ec))
@@ -2399,6 +2531,9 @@ inferAppGeneralGo globals ctx ec fn args sp = andThen (inferE globals ctx ec fn)
 )
 
 -- 引用一个名字：零参构造子必须直接是 TCon（否则求值器给不出 VCon，case 命不中）。
+-- M23：**运行时零参**的构造子（telescope 只剩擦除 binder，如 `Nil : {a : Type} -> List a`）
+-- 走 `inferCtorRef` 的 `nullaryCtorTerm`——那里能拿到实例化隐式参数用的元变量项，
+-- 保证 `TCon` 实参与 telescope 逐位对齐（求值器的 VCon 依赖这个对齐）。
 ctorRefTerm : List DtData -> String -> Term
 ctorRefTerm datas name = case dtCtorLookup name datas of
   Just ctor =>
@@ -2485,9 +2620,10 @@ isDictValue ec v = case v of
 isDictFamily : Ec -> String -> Bool
 isDictFamily ec g = memName g (map (\c => dictTypeName (dtClassName c)) (ecClasses ec))
 
--- 实例搜索：找头能统一到目标字典类型的实例。零个 ⇒ 报缺失，多个 ⇒ 报歧义。
+-- 实例搜索：找头能统一到目标字典类型的**默认**实例。零个 ⇒ 报缺失，多个 ⇒ 报歧义。
+-- M23：命名实例（`as name`）不参与自动搜索，只能 `method @name` 显式选中（与 HM 一致）。
 searchInstance : Ec -> Value -> Span -> Result (Pair Term Ec)
-searchInstance ec dom sp = case filterInstances ec dom (ecInsts ec) (ecSols ec) of
+searchInstance ec dom sp = case filterInstances ec dom (filter (\i => not (dtInstNamed i)) (ecInsts ec)) (ecSols ec) of
   Pair [] sols => errAt sp ("DT: no instance found for " ++ showValue dom)
   Pair ([i]) sols => Ok (Pair (TGlobal (dtInstName i)) (ecPutSols ec sols))
   Pair cands sols =>
@@ -2543,6 +2679,89 @@ joinInstNames (i :: rest) = dtInstName i ++ joinRestInstNames rest
 joinRestInstNames : List DtInst -> String
 joinRestInstNames [] = ""
 joinRestInstNames (i :: rest) = ", " ++ dtInstName i ++ joinRestInstNames rest
+
+-- ---------------------------------------------------------------
+-- M23：`@inst` 命名实例选择
+-- ---------------------------------------------------------------
+-- `method @Instance args..`：不走实例搜索，直接取**指定实例**的方法实现。
+-- DT 的实例是字典值（`MkDict_C <方法字段...>`），方法字段顺序 = 类的方法声明顺序；
+-- 但顶层定义体精化时实例体还没生成（顺序是「定义体 → 实例体」），所以这里构造
+-- 「对实例字典做 case 取第 k 个字段」的投影项（字典名是全局引用，求值/codegen 时
+-- 定义已就位），签名用类的方法类型把类参数替换成实例头实参（与实例方法体一致）。
+inferInstSel : List (Pair String Term) -> Ctx -> Ec -> Expr -> String -> Span -> Result (Pair Term (Pair Value Ec))
+inferInstSel globals ctx ec meth iname sp = case methodNameOf meth of
+  Nothing =>
+    errAt sp "DT: @instance can only be used with a trait method (write `method @instance`)"
+  Just mname => case instNamedLookup iname (ecInsts ec) of
+    Nothing => errAt sp ("DT: unknown named instance " ++ iname)
+    Just inst => case instClassOfDict (instDictName inst) (ecClasses ec) of
+      Nothing => errAt sp ("DT: instance " ++ iname ++ " is not an instance of a trait")
+      Just cls => case classMethodIndex mname (dtClassMethods cls) of
+        Nothing => errAt sp ("DT: `" ++ mname ++ "` is not a method of trait " ++ dtClassName cls)
+        Just k =>
+          let
+            nFields = length (dtClassMethods cls)
+            fty = classFieldTyAt k (dtClassFieldTys cls)
+            instTy = substClassParam (paramNameOf (dtClassParams cls)) (instHeadArg inst) fty
+            -- **eta 展开**成 `\x0 .. \x(ar-1) => case <dict> of MkDict_C f0..fn => f_k x0..x(ar-1)`。
+            -- 不能只给裸 `case`：`case` 是值，核心求值器对「把卡住的 case 当函数应用」不会 β
+            -- 归约（call-by-name 下 VCase 没有应用规则），`pretty @fancy Blue` 会卡住。
+            -- 展开后应用先 β 归约，case 在体内被 force，字典的 delta 展开再命中断言分支。
+            rigs = methodArgRigsOf binderRig fty
+            fieldVar = TVar (fieldVarName k) (nFields - 1 - k)
+            applied = foldAppTerms fieldVar (methodArgTerms rigs nFields)
+            alt = CaseAlt (dictCtorName (dtClassName cls)) (fieldBinderNames nFields) applied
+            proj = methodArgLams rigs 0 (TCase (TGlobal iname) [alt])
+          in Ok (Pair proj (Pair (eval [] instTy) ec))
+
+methodNameOf : Expr -> Maybe String
+methodNameOf e = case e of
+  EVar n sp => Just n
+  _ => Nothing
+
+instNamedLookup : String -> List DtInst -> Maybe DtInst
+instNamedLookup name [] = Nothing
+instNamedLookup name (i :: rest) =
+  if dtInstNamed i && dtInstName i == name then Just i else instNamedLookup name rest
+
+-- 实例头 `Dict_C <arg>` 的字典族名。
+instDictName : DtInst -> Maybe String
+instDictName inst = case flattenTaggedApp (dtInstHead inst) of
+  Just (Pair g args) => Just g
+  Nothing => Nothing
+
+-- 实例头实参（单参数接口；`Dict_C arg`）。
+instHeadArg : DtInst -> Term
+instHeadArg inst = case flattenTaggedApp (dtInstHead inst) of
+  Just (Pair g args) => case args of
+    a :: rest => firstOf a
+    [] => TGlobal "Int"
+  Nothing => TGlobal "Int"
+
+instClassOfDict : Maybe String -> List DtClass -> Maybe DtClass
+instClassOfDict Nothing classes = Nothing
+instClassOfDict (Just g) classes = findClassByDict g classes
+
+findClassByDict : String -> List DtClass -> Maybe DtClass
+findClassByDict g [] = Nothing
+findClassByDict g (c :: rest) =
+  if dictTypeName (dtClassName c) == g then Just c else findClassByDict g rest
+
+-- 方法在类里的字段下标（方法名允许带模块前缀，按最后一段匹配）。
+classMethodIndex : String -> List (Pair String Term) -> Maybe Int
+classMethodIndex mname methods = classMethodIndexGo mname methods 0
+
+classMethodIndexGo : String -> List (Pair String Term) -> Int -> Maybe Int
+classMethodIndexGo mname [] i = Nothing
+classMethodIndexGo mname (m :: rest) i =
+  if methodNameMatches mname (firstOf m) then Just i else classMethodIndexGo mname rest (i + 1)
+
+methodNameMatches : String -> String -> Bool
+methodNameMatches a b = if a == b then True else baseNameOf a == baseNameOf b
+
+classFieldTyAt : Int -> List Term -> Term
+classFieldTyAt i [] = TGlobal "Int"
+classFieldTyAt i (t :: rest) = if i <= 0 then t else classFieldTyAt (i - 1) rest
 
 -- 用后续显式实参约束 `Dict_C ?a` 里的类参数。M22：先取字典族的**类参数 kind**，
 -- 实参头部与它 kind 不匹配（`Monad ?m` 被 `41 : Int` 解成 `?m = Int`）或头部不是
@@ -2987,12 +3206,38 @@ specializeCmpTy globals ctx name aTerm bTerm sp aTy ec = case builtinTyName (for
         if isRigidDictArg ec dictTy then deferEqDict globals ctx mname tyTerm aTerm bTerm sp dictTy ec
         else Err e
 
--- 统一入口：先试 `==` / `/=`，再试比较运算符。
+-- 统一入口：先试 `==` / `/=`，再试比较运算符，最后试 `&&` / `||` 的短路降级。
 specializeOpApp : List (Pair String Term) -> Ctx -> Ec -> String -> List Expr -> Span -> Result (Maybe (Pair Term (Pair Value Ec)))
 specializeOpApp globals ctx ec name args sp = andThen (specializeEqApp globals ctx ec name args sp) (\r => case r of
   Just pair => Ok (Just pair)
-  Nothing => specializeCmpApp globals ctx ec name args sp
+  Nothing => andThen (specializeCmpApp globals ctx ec name args sp) (\r2 => case r2 of
+    Just pair => Ok (Just pair)
+    Nothing => specializeBoolApp globals ctx ec name args sp
+  )
 )
+
+-- ---------------------------------------------------------------
+-- M23：`&&` / `||` 的**短路**降级
+-- ---------------------------------------------------------------
+-- 旧实现把 `&&` / `||` 当普通全局严格求值：`False && (1/0 == 0)` 会真去算右边，而编译
+-- 产物（HM 的 `if`）是短路的——反复求值/异常行为三路不一致。这里在精化期把饱和应用
+-- 降成 `TIf`：`a && b` ⇒ `if a then b else False`、`a || b` ⇒ `if a then True else b`。
+-- 核心求值器与 codegen 都只需处理 TIf/if，短路语义自动一致，不在 Core/CoreCodegen
+-- 各打一份补丁。
+specializeBoolApp : List (Pair String Term) -> Ctx -> Ec -> String -> List Expr -> Span -> Result (Maybe (Pair Term (Pair Value Ec)))
+specializeBoolApp globals ctx ec name args sp = if name == "&&" || name == "||" then case args of
+  [a, b] => andThen (checkE globals ctx ec a (VNeutral (NGlobal "Bool" []))) (\pa => case pa of
+    Pair aTerm ec1 => andThen (checkE globals ctx ec1 b (VNeutral (NGlobal "Bool" []))) (\pb => case pb of
+      Pair bTerm ec2 =>
+        Ok
+          (Just (Pair (boolShortCircuit name aTerm bTerm) (Pair (VNeutral (NGlobal "Bool" [])) ec2)))
+    )
+  )
+  _ => errAt sp ("DT: `" ++ name ++ "` needs exactly two arguments")
+else Ok Nothing
+
+boolShortCircuit : String -> Term -> Term -> Term
+boolShortCircuit name a b = if name == "&&" then TIf a b (TBool False) else TIf a (TBool True) b
 
 checkAppGeneral : List (Pair String Term) -> Ctx -> Ec -> Expr -> List Expr -> Value -> Span -> Result (Pair Term Ec)
 checkAppGeneral globals ctx ec fn args expected sp = case fn of
@@ -3034,10 +3279,14 @@ elabFunDef globals ec clauses expected sp = case clauses of
     andThen (multiToExpr (ctorFamilyTable ec) clauses)
       (\bodyExpr => checkDef globals ec [] bodyExpr expected sp)
 
--- 构造子类型是否已显式带（隐式）类型参数。
+-- 构造子类型是否已**显式写出**族参数 binder。
+-- 判据是「首个 EPi 的 binder 有名字」（显式 `(a : Type) ->` 或隐式 `{a : Type} ->`）：
+-- 这类构造子自己绑定了族参数，不能再前置一份（否则出现重复 binder，codegen 的
+-- 运行时类型参数表与构造子 telescope 对不上）。record 降级生成的构造子类型用
+-- 匿名显式 `EPi "_" False` 写字段，因此仍要走 `prependFamParams`。
 hasFamParams : Expr -> Bool
 hasFamParams e = case e of
-  EPi n implicit dom cod sp => True
+  EPi n implicit dom cod sp => n /= "_"
   _ => False
 
 -- 模块限定名的最后一段（`Base.Monad.fmap` → `fmap`）。

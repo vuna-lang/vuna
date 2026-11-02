@@ -1,1 +1,1 @@
-has kind * but trait Monad expects a type constructor
+type mismatch

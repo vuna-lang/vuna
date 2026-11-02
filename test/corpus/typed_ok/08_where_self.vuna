@@ -1,6 +1,10 @@
+-- M23：DT 暂不支持 where 子句，原来的局部自递归函数改为顶层定义，
+-- 保留「自递归 + 顶层辅助函数」的覆盖点。
+g : Int -> Int
+g y = if y == 0 then 1 else y * g (y - 1)
+
 f : Int -> Int
-f x = g x where
-  g y = if y == 0 then 1 else y * g (y - 1)
+f x = g x
 
 main : Int
 main = f 5

@@ -1,3 +1,4 @@
 import Helper
 
+main : Int
 main = triple 14

@@ -402,6 +402,17 @@ intPrim2 ([a, b]) f = case asInt a of
   Nothing => Nothing
 intPrim2 sp f = Nothing
 
+-- M23：除法在除数为 0 时**不归约**。核心求值器表达不了运行时异常（编译产物由 OCaml
+-- 抛 `Division_by_zero`），静默返回 0 会与产物/三路对照不一致；不归约让 `main` 报
+-- "does not reduce to a value"，把差异限制在「核心求值器不能表达异常」这条已知边界里。
+intPrim2Div : List Value -> Maybe Value
+intPrim2Div ([a, b]) = case asInt a of
+  Just x => case asInt b of
+    Just y => if y == 0 then Nothing else Just (VInt (x / y))
+    Nothing => Nothing
+  Nothing => Nothing
+intPrim2Div sp = Nothing
+
 boolPrim2 : List Value -> (Bool -> Bool -> Value) -> Maybe Value
 boolPrim2 ([a, b]) f = case asBool a of
   Just x => case asBool b of
@@ -476,7 +487,7 @@ primReduce defs sols g sp = case g of
   "+" => intPrim2 sp (\a, b => VInt (a + b))
   "-" => intPrim2 sp (\a, b => VInt (a - b))
   "*" => intPrim2 sp (\a, b => VInt (a * b))
-  "/" => intPrim2 sp (\a, b => if b == 0 then VInt 0 else VInt (a / b))
+  "/" => intPrim2Div sp
   "==" => intPrim2 sp (\a, b => VBool (a == b))
   "/=" => intPrim2 sp (\a, b => VBool (notBool (a == b)))
   "<" => intPrim2 sp (\a, b => VBool (a < b))
@@ -535,6 +546,15 @@ else case force defs sols fuel a of
     _ => False
   VCon c args => case force defs sols fuel b of
     VCon c2 args2 => if c == c2 then valueListEqDeep defs sols (fuel - 1) args args2 else False
+    _ => False
+  -- 构造子实参表包含**擦除**的类型/索引实参（VCon 不带 rig，比较时无法区分）。它们对
+  -- 运行时结构相等没有意义，却常是未解/已解的元变量或类型中立值：按「同一个元变量」
+  -- 或「同一个中立值的显示形态」判等即可（`Just2 1 == Just2 1` 的首个实参就是 `?m`）。
+  VMeta m sp => case force defs sols fuel b of
+    VMeta m2 sp2 => m == m2
+    _ => False
+  VNeutral n => case force defs sols fuel b of
+    VNeutral n2 => showValue (VNeutral n) == showValue (VNeutral n2)
     _ => False
   _ => False
 
