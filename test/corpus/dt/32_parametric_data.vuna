@@ -7,7 +7,7 @@
 --   绑进上下文，否则报 `unknown name a`。
 --
 -- `vuna-base` 里 7 个模块都用这种写法（`data List a` / `data Maybe a` / ...），
--- 因此它是 M20「base 全模块 check --dt」的前置。
+-- 因此它是 M20「base 全模块 check」的前置。
 data Wrap a : Type where
   MkWrap : a -> Wrap a
 

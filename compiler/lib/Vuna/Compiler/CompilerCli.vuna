@@ -2,12 +2,9 @@ module Vuna.Compiler.CompilerCli (compilerUsageLines, runCompilerCli, runCompile
 
 -- Vuna.Compiler.CompilerCli：编译器自己的 CLI（vuna-compiler）。
 --
--- 只包含“把源码变成 OCaml / seed”需要的命令：compile / check / build / seed；
+-- M24 起唯一路径是 DT（精化 + 擦除 codegen）：compile / check / build / seed。
 -- 工具命令（lint / interp / test / fmt / repl / doc）在 Vuna.Cli。
 -- compiler/app/Main.vuna 的入口闭包就是 seed 闭包。
---
--- CLI 只有 typed codegen 一条路径；旧的 dynamic 开关（--no-typecheck /
--- --typecheck / --typed）已删除。--no-print 只用于 compile 的调试/测试场景。
 import Vuna.Compiler.Common
 import Vuna.Compiler.Pkg
 import Vuna.Compiler.Compile
@@ -18,29 +15,20 @@ compilerUsageLines : String -> String
 compilerUsageLines prog =
   "  "
     ++ prog
-    ++ " compile [--dt] [--no-print] [--root DIR]... (<entry.vuna> | <package-dir>) [out.ml]\n"
+    ++ " compile [--no-print] [--root DIR]... (<entry.vuna> | <package-dir>) [out.ml]\n"
     ++ "  "
     ++ prog
-    ++ " compile --package [--out OUT] [DIR]   包级 codegen 到 OUT（默认 DIR/.output）\n"
+    ++ " check [--root DIR]... (<entry.vuna> | <package-dir>)\n"
     ++ "  "
     ++ prog
-    ++ " check [--dt] [--root DIR]... (<entry.vuna> | <package-dir>)\n"
+    ++ " build [--no-compile] [DIR]    包级 DT 单文件 codegen + ocamlopt → .output/bin/<name>\n"
     ++ "  "
     ++ prog
-    ++ " build [--dt] [--no-compile] [DIR]    包级 compile + ocamlopt → .output/bin/<name>\n"
+    ++ " build --split OUT [DIR]        逐模块 DT codegen：OUT/<Module>.ml... + build.sh\n"
     ++ "  "
     ++ prog
-    ++ " build --split OUT [DIR]        分离编译：逐模块 OCaml 源码 + build.sh 写到 OUT\n"
-    ++ "  "
-    ++ prog
-    ++ " build --dt --split OUT [DIR]   DT 单文件：OUT/main.ml + OUT/build.sh（M22.3a）\n"
-    ++ "  "
-    ++ prog
-    ++ " seed [OUT [DIR]]               生成多文件 seed（默认 OUT=seed，DIR=.）\n"
-    ++ "  "
-    ++ prog
-    ++ " seed --dt OUT [DIR]            DT 单文件：OUT/main.ml + OUT/build.sh（显式 OUT，不写 seed/）\n"
-    ++ "  --dt                            experimental DT (core TT): file or package dir (build/seed only package dir)\n"
+    ++ " seed OUT [DIR]                 同 build --split（seed rotation 用）\n"
+    ++ "  --no-print                     compile 不打印结果钩子（调试/测试用）\n"
     ++ "  "
     ++ prog
     ++ " help, -h\n"
@@ -63,11 +51,7 @@ runCompilerCliFor1 prog args = case args of
     "build" => buildArgs prog rest
     "seed" => seedArgs prog rest
     "help" => helpFor prog
-    "--no-typecheck" => removedFlag prog arg
-    "--typecheck" => removedFlag prog arg
-    "--typed" => removedFlag prog arg
-    "--out" => removedFlag prog arg
-    _ => if startsWith "-" arg then missingCommand prog arg else unknownCommand prog arg
+    _ => if startsWith "-" arg then removedFlag prog arg else unknownCommand prog arg
 
 anyHelp : List String -> Bool
 anyHelp [] = False
@@ -85,22 +69,6 @@ usageErr prog =
     _ = print (compilerUsage prog)
   in 2
 
-missingCommand : String -> String -> Int
-missingCommand prog arg =
-  let
-    msg =
-      "error: missing command before `"
-        ++ arg
-        ++ "`\n"
-        ++ "run `"
-        ++ prog
-        ++ " help` (or `"
-        ++ prog
-        ++ " compile ...`)\n"
-  in let
-    _ = print msg
-  in 2
-
 unknownCommand : String -> String -> Int
 unknownCommand prog arg =
   let
@@ -109,10 +77,12 @@ unknownCommand prog arg =
 
 removedHint : String -> String
 removedHint flag = case flag of
-  "--no-typecheck" => "use `vuna interp` for unchecked execution"
-  "--typecheck" => "typed codegen is always enabled"
-  "--typed" => "typed codegen is always enabled"
+  "--dt" => "DT is the only path; drop the flag"
+  "--package" => "use `build`, `build --split`, or `seed`"
   "--out" => "use the positional OUT argument"
+  "--no-typecheck" => "checking is always enabled"
+  "--typecheck" => "checking is always enabled"
+  "--typed" => "DT is the only path"
   _ => ""
 
 removedFlag : String -> String -> Int
@@ -123,174 +93,89 @@ removedFlag prog flag = case removedHint flag of
       _ = print ("error: " ++ flag ++ " has been removed; " ++ hint ++ "\n")
     in 2
 
-invalidFlag : String -> String -> Int
-invalidFlag prog flag = case flag of
-  "--no-print" =>
-    let
-      _ =
-        print "error: --no-print is only valid for `compile`; `build` never prints main's result\n"
-    in 2
-  _ => removedFlag prog flag
-
-anyDt : List String -> Bool
-anyDt [] = False
-anyDt (arg :: rest) = if arg == "--dt" then True else anyDt rest
-
-dtCmdErr : t629 -> Int
-dtCmdErr prog =
+printErrText : String -> Int
+printErrText e =
   let
-    _ =
-      print
-        "error: --dt is not supported by `compile --package` (use build --dt, build --dt --split, or seed --dt)\n"
-  in 2
-
--- DT 路径的通用错误：路径既不是文件也不是目录（目录模式见 checkDtPackage / compileDtPackage）。
-dtPathErr : String -> Int
-dtPathErr path =
-  let
-    _ = print ("error: no such file or package directory: " ++ path ++ "\n")
+    _ = print e
   in 1
 
--- ---------------------------------------------------------------
--- compile / check（文件模式）
--- ---------------------------------------------------------------
-compileArgs : String -> List String -> Int
-compileArgs prog args = case args of
-  "--package" :: rest => packageParse prog Nothing Nothing rest
-  _ => compileParse prog True False False [] args
+printErr : String -> Int
+printErr e = printErrText ("error: " ++ e ++ "\n")
 
--- compile --package [--out OUT] [DIR]
-packageParse : String -> Maybe String -> Maybe String -> List String -> Int
-packageParse prog dir out args = case args of
-  [] => packageRun prog (defaultDir dir) (defaultPackageOut dir out)
-  arg :: rest => case arg of
-    "--out" => packageOutArg prog dir out rest
-    "--dt" => dtCmdErr prog
-    _ => if startsWith "-" arg then removedFlag prog arg
-    else case dir of
-      Nothing => packageParse prog (Just arg) out rest
-      Just _ => usageErr prog
-
-packageOutArg : String -> Maybe String -> Maybe String -> List String -> Int
-packageOutArg prog dir out rest = case rest of
-  value :: rest2 => case out of
-    Nothing => packageParse prog dir (Just value) rest2
-    Just _ => usageErr prog
-  [] => usageErr prog
-
-defaultPackageOut : Maybe String -> Maybe String -> String
-defaultPackageOut dir out = case out of
-  Just out2 => out2
-  Nothing => defaultDir dir ++ "/.output"
-
-packageRun : String -> String -> String -> Int
-packageRun prog dir out = case compilePackage dir out of
-  Err e =>
-    let
-      _ = print ("error: " ++ e ++ "\n")
-    in 1
-  Ok n =>
-    let
-      _ = print ("wrote " ++ strFromInt n ++ " files to " ++ out ++ "\n")
-    in 0
-
-compileParse : String -> Bool -> Bool -> Bool -> List Root -> List String -> Int
-compileParse prog printResult dt hasRoot roots args = case args of
-  [] => usageErr prog
-  arg :: rest => case arg of
-    "--dt" => compileParse prog printResult True hasRoot roots rest
-    "--no-print" => compileParse prog False dt hasRoot roots rest
-    "--root" =>
-      rootArg prog roots rest (\roots2, rest2 => compileParse prog printResult dt True roots2 rest2)
-    _ =>
-      if startsWith "-" arg then removedFlag prog arg
-      else compileEmit prog printResult dt hasRoot roots arg rest
+printWarnings : List String -> Int
+printWarnings [] = 0
+printWarnings (w :: rest) =
+  let
+    _ = print (w ++ "\n")
+  in printWarnings rest
 
 rootArg : String -> List Root -> List String -> (List Root -> List String -> Int) -> Int
 rootArg prog roots rest k = case rest of
   dir :: rest2 => k (append roots [rawRoot dir]) rest2
   [] => usageErr prog
 
-compileEmit : String -> Bool -> Bool -> Bool -> List Root -> String -> List String -> Int
-compileEmit prog printResult dt hasRoot roots entry rest = if dt then compileDtEmit prog printResult roots entry rest
-else
-  let
-    actualRoots = effectiveRoots roots
-  in case compileFileTyped actualRoots entry printResult of
-    Ok code => case rest of
-      [] =>
-        let
-          _ = print code
-        in 0
-      [out] =>
-        let
-          _ = writeFile out code
-        in 0
-      _ => usageErr prog
-    Err e =>
-      let
-        _ = print ("error: " ++ e ++ "\n")
-      in 1
+defaultDir : Maybe String -> String
+defaultDir dir = case dir of
+  Just dir2 => dir2
+  Nothing => "."
 
--- DT 编译入口（M22.1）：目录 = 包，文件 = 单文件 / --root 模式。
--- 先 fileExists 再 isDirectory：内建 isDirectory 对不存在的路径会抛异常。
-compileDtEmit : String -> Bool -> List Root -> String -> List String -> Int
-compileDtEmit prog printResult roots entry rest =
-  if fileExists entry then if isDirectory entry then compileDtPackage prog printResult entry rest
-  else compileDtFile prog printResult roots entry rest
-  else dtPathErr entry
+defaultOutDir : String -> String
+defaultOutDir dir = dir ++ "/.output"
 
-compileDtFile : String -> Bool -> List Root -> String -> List String -> Int
-compileDtFile prog printResult roots entry rest = case compileFileDt (map rootDir roots) entry printResult of
-  Ok code => emitDtCode prog code rest
-  Err e =>
-    let
-      _ = print ("error: " ++ e ++ "\n")
-    in 1
+-- 路径既不是文件也不是目录时的统一错误（先 fileExists 再 isDirectory：
+-- 内建 isDirectory 对不存在的路径会抛异常）。
+dtPathErr : String -> Int
+dtPathErr path = printErr ("no such file or package directory: " ++ path)
 
-compileDtPackage : String -> Bool -> String -> List String -> Int
-compileDtPackage prog printResult dir rest = case dtExecutablePackage "compile" dir of
-  Err e => printDtErr e
-  Ok pkg => compileDtPkgEntry prog printResult pkg rest
-
-compileDtPkgEntry : String -> Bool -> Package -> List String -> Int
-compileDtPkgEntry prog printResult pkg rest = case compileProjectDt (packageRoots pkg) (packageName pkg) (packageEntry pkg) printResult of
-  Ok code => emitDtCode prog code rest
-  Err e =>
-    let
-      _ = print ("error: " ++ e ++ "\n")
-    in 1
-
--- 带 `error: ` 前缀打印并返回 1（DT 包路径错误的统一出口）。
-printDtErr : String -> Int
-printDtErr e =
-  let
-    _ = print ("error: " ++ e ++ "\n")
-  in 1
-
--- DT 可执行包解析（compile / build / seed --dt 共用）：路径必须是目录、能读
--- vuna.toml、且有 app/Main.vuna；库包与单文件入口都给出清晰错误。
-dtExecutablePackage : String -> String -> Result Package
-dtExecutablePackage label dir =
-  if fileExists dir then dtExecutablePackageAt label dir
+-- 可执行包解析：必须是目录、能读 vuna.toml、且有 app/Main.vuna。
+executablePackage : String -> String -> Result Package
+executablePackage label dir =
+  if fileExists dir then if isDirectory dir then executablePackageAt label dir
+  else Err (label ++ ": expects a package directory, not a file: " ++ dir)
   else Err ("no such file or package directory: " ++ dir)
 
-dtExecutablePackageAt : String -> String -> Result Package
-dtExecutablePackageAt label dir =
-  if isDirectory dir then andThen (loadPackage dir)
-    (\pkg => if fileExists (packageEntry pkg) then Ok pkg else Err (dtNoMainMsg label pkg))
-  else Err
-    (label ++ ": expects a package directory, not a file: " ++ dir ++ " (use `compile --dt` for single files)")
+executablePackageAt : String -> String -> Result Package
+executablePackageAt label dir =
+  andThen (loadPackage dir)
+    (\pkg => if fileExists (packageEntry pkg) then Ok pkg else Err (label ++ ": library package " ++ packageName pkg ++ " has no app/Main.vuna (executable package required)"))
 
-dtNoMainMsg : String -> Package -> String
-dtNoMainMsg label pkg =
-  label
-    ++ ": library package "
-    ++ packageName pkg
-    ++ " has no app/Main.vuna (executable package required)"
+-- ---------------------------------------------------------------
+-- compile：文件（单文件 / --root）或包目录，DT 单文件输出
+-- ---------------------------------------------------------------
+compileArgs : String -> List String -> Int
+compileArgs prog args = compileParse prog True [] args
 
-emitDtCode : String -> String -> List String -> Int
-emitDtCode prog code rest = case rest of
+compileParse : String -> Bool -> List Root -> List String -> Int
+compileParse prog printResult roots args = case args of
+  [] => usageErr prog
+  arg :: rest => case arg of
+    "--no-print" => compileParse prog False roots rest
+    "--root" =>
+      rootArg prog roots rest (\roots2, rest2 => compileParse prog printResult roots2 rest2)
+    _ =>
+      if startsWith "-" arg then removedFlag prog arg
+      else compileEmit prog printResult roots arg rest
+
+compileEmit : String -> Bool -> List Root -> String -> List String -> Int
+compileEmit prog printResult roots entry rest =
+  if fileExists entry then if isDirectory entry then compilePkg prog printResult entry rest
+  else compileFile prog printResult roots entry rest
+  else dtPathErr entry
+
+compileFile : String -> Bool -> List Root -> String -> List String -> Int
+compileFile prog printResult roots entry rest = case compileFileDt (map rootDir (effectiveRoots roots)) entry printResult of
+  Ok code => emitCode prog code rest
+  Err e => printErr e
+
+compilePkg : String -> Bool -> String -> List String -> Int
+compilePkg prog printResult dir rest = case executablePackage "compile" dir of
+  Err e => printErr e
+  Ok pkg => case compileProjectDt (packageRoots pkg) (packageName pkg) (packageEntry pkg) printResult of
+    Ok code => emitCode prog code rest
+    Err e => printErr e
+
+emitCode : String -> String -> List String -> Int
+emitCode prog code rest = case rest of
   [] =>
     let
       _ = print code
@@ -301,107 +186,38 @@ emitDtCode prog code rest = case rest of
     in 0
   _ => usageErr prog
 
+-- ---------------------------------------------------------------
+-- check：文件或包目录（可执行包走项目路径，库包走 [export].modules）
+-- ---------------------------------------------------------------
 checkArgs : String -> List String -> Int
-checkArgs prog args = checkParse prog False False [] args
+checkArgs prog args = checkParse prog [] args
 
-checkParse : String -> Bool -> Bool -> List Root -> List String -> Int
-checkParse prog dt hasRoot roots args = case args of
-  "--dt" :: rest => checkParse prog True hasRoot roots rest
-  "--root" :: rest =>
-    rootArg prog roots rest (\roots2, rest2 => checkParse prog dt True roots2 rest2)
+checkParse : String -> List Root -> List String -> Int
+checkParse prog roots args = case args of
+  [] => usageErr prog
+  "--root" :: rest => rootArg prog roots rest (\roots2, rest2 => checkParse prog roots2 rest2)
   [arg] =>
     if startsWith "-" arg then removedFlag prog arg
-    else if dt then checkEmitDt roots arg
-    else if isDirectory arg then checkPackage arg else checkEmit (effectiveRoots roots) arg
+    else if fileExists arg then if isDirectory arg then checkPkg arg else checkFile (effectiveRoots roots) arg
+    else dtPathErr arg
   _ => usageErr prog
 
--- DT check 入口（M22.1）：目录 = 包，文件 = 单文件 / --root 模式。
--- 先 fileExists 再 isDirectory：内建 isDirectory 对不存在的路径会抛异常。
-checkEmitDt : List Root -> String -> Int
-checkEmitDt roots path =
-  if fileExists path then if isDirectory path then checkDtPackage path else checkDtFile roots path
-  else dtPathErr path
-
-checkDtFile : List Root -> String -> Int
-checkDtFile roots path = case checkFileDt (map rootDir roots) path of
-  Err e =>
-    let
-      _ = print ("error: " ++ e ++ "\n")
-    in 1
+checkFile : List Root -> String -> Int
+checkFile roots path = case checkFileDt (map rootDir roots) path of
+  Err e => printErr e
   Ok warnings =>
     let
       _ = printWarnings warnings
     in 0
 
--- 包目录：可执行包（app/Main.vuna）走项目路径，库包走 [export].modules。
-checkDtPackage : String -> Int
-checkDtPackage dir = case loadPackage dir of
-  Err e =>
-    let
-      _ = print ("error: " ++ e ++ "\n")
-    in 1
-  Ok pkg => if fileExists (packageEntry pkg) then checkDtPkgEntry pkg else checkDtPkgLibrary pkg
-
-checkDtPkgEntry : Package -> Int
-checkDtPkgEntry pkg = case checkProjectDt (packageRoots pkg) (packageName pkg) (packageEntry pkg) of
-  Err e =>
-    let
-      _ = print ("error: " ++ e ++ "\n")
-    in 1
-  Ok warnings =>
-    let
-      _ = printWarnings warnings
-    in 0
-
-checkDtPkgLibrary : Package -> Int
-checkDtPkgLibrary pkg = case packageExports pkg of
-  Nothing =>
-    let
-      _ =
-        print ("error: check: library package " ++ packageName pkg ++ " has no [export].modules\n")
-    in 1
-  Just names => case checkLibraryDt (packageRoots pkg) (packageName pkg) names of
-    Err e =>
-      let
-        _ = print ("error: " ++ e ++ "\n")
-      in 1
-    Ok warnings =>
-      let
-        _ = printWarnings warnings
-      in 0
-
-checkEmit : List Root -> String -> Int
-checkEmit roots path = case checkFile roots path of
-  Err e =>
-    let
-      _ = print ("error: " ++ e ++ "\n")
-    in 1
-  Ok warnings =>
-    let
-      _ = printWarnings warnings
-    in 0
-
-printWarnings : List String -> Int
-printWarnings [] = 0
-printWarnings (w :: rest) =
-  let
-    _ = print (w ++ "\n")
-  in printWarnings rest
-
-checkPackage : String -> Int
-checkPackage dir = case loadPackage dir of
-  Err e =>
-    let
-      _ = print ("error: " ++ e ++ "\n")
-    in 1
+checkPkg : String -> Int
+checkPkg dir = case loadPackage dir of
+  Err e => printErr e
   Ok pkg => if fileExists (packageEntry pkg) then checkPkgEntry pkg else checkPkgLibrary pkg
 
 checkPkgEntry : Package -> Int
-checkPkgEntry pkg = case checkFileIn (packageName pkg) (packageRoots pkg) (packageEntry pkg) of
-  Err e =>
-    let
-      _ = print ("error: " ++ e ++ "\n")
-    in 1
+checkPkgEntry pkg = case checkProjectDt (packageRoots pkg) (packageName pkg) (packageEntry pkg) of
+  Err e => printErr e
   Ok warnings =>
     let
       _ = printWarnings warnings
@@ -409,74 +225,65 @@ checkPkgEntry pkg = case checkFileIn (packageName pkg) (packageRoots pkg) (packa
 
 checkPkgLibrary : Package -> Int
 checkPkgLibrary pkg = case packageExports pkg of
-  Nothing =>
-    let
-      _ =
-        print ("error: check: library package " ++ packageName pkg ++ " has no [export].modules\n")
-    in 1
-  Just names => case checkPackageIn (packageName pkg) (packageRoots pkg) names of
-    Err e =>
-      let
-        _ = print ("error: " ++ e ++ "\n")
-      in 1
+  Nothing => printErr ("check: library package " ++ packageName pkg ++ " has no [export].modules")
+  Just names => case checkLibraryDt (packageRoots pkg) (packageName pkg) names of
+    Err e => printErr e
     Ok warnings =>
       let
         _ = printWarnings warnings
       in 0
 
 -- ---------------------------------------------------------------
--- build（包模式）
--- 含 `--dt` 时走 DT 单文件输出模型（M22.3a），HM 分支保持不变。
+-- build：默认 DT 单文件；--split 走逐模块输出
 -- ---------------------------------------------------------------
 buildArgs : String -> List String -> Int
-buildArgs prog args = if anyDt args then buildDtArgs prog args
-else case args of
-  ["--split"] => usageErr prog
-  "--split" :: outDir :: rest => buildSplitCmd prog outDir rest
-  _ => buildParse prog Nothing False args
+buildArgs prog args = buildParse prog False Nothing Nothing args
 
--- DT build 参数：--dt（可重复，跳过）、--no-compile、--split OUT、一个 DIR。
-buildDtArgs : String -> List String -> Int
-buildDtArgs prog args = buildDtParse prog False Nothing Nothing args
-
-buildDtParse : String -> Bool -> Maybe String -> Maybe String -> List String -> Int
-buildDtParse prog noCompile splitOut dir args = case args of
-  [] => buildDtRun prog (defaultDir dir) noCompile splitOut
-  "--dt" :: rest => buildDtParse prog noCompile splitOut dir rest
-  "--no-compile" :: rest => buildDtParse prog True splitOut dir rest
-  "--split" :: rest => buildDtSplitArg prog noCompile splitOut dir rest
-  arg :: rest => if startsWith "-" arg then invalidFlag prog arg
+buildParse : String -> Bool -> Maybe String -> Maybe String -> List String -> Int
+buildParse prog noCompile splitOut dir args = case args of
+  [] => buildRun prog (defaultDir dir) noCompile splitOut
+  "--no-compile" :: rest => buildParse prog True splitOut dir rest
+  "--split" :: rest => case rest of
+    out :: more => if startsWith "-" out then removedFlag prog out
+    else case splitOut of
+      Nothing => buildParse prog noCompile (Just out) dir more
+      Just _ => usageErr prog
+    [] => usageErr prog
+  arg :: rest => if startsWith "-" arg then removedFlag prog arg
   else case dir of
-    Nothing => buildDtParse prog noCompile splitOut (Just arg) rest
+    Nothing => buildParse prog noCompile splitOut (Just arg) rest
     Just _ => usageErr prog
 
-buildDtSplitArg : String -> Bool -> Maybe String -> Maybe String -> List String -> Int
-buildDtSplitArg prog noCompile splitOut dir rest = case rest of
-  outDir :: more => if startsWith "-" outDir then invalidFlag prog outDir
-  else case splitOut of
-    Nothing => buildDtParse prog noCompile (Just outDir) dir more
-    Just _ => usageErr prog
-  [] => usageErr prog
+buildRun : String -> String -> Bool -> Maybe String -> Int
+buildRun prog dir noCompile splitOut = case splitOut of
+  Just outDir => buildSplitRun outDir dir
+  Nothing => buildDefault dir noCompile
 
-buildDtRun : String -> String -> Bool -> Maybe String -> Int
-buildDtRun prog dir noCompile splitOut = case splitOut of
-  Just outDir => buildDtSplitTo outDir dir
-  Nothing => buildDtPackage prog dir noCompile
-
--- build --dt [--no-compile] [DIR]：codegen 到 .output/main.ml（+ build.sh），
--- 除非 --no-compile 否则再 ocamlopt 到 .output/bin/<pkg-name>。
-buildDtPackage : String -> String -> Bool -> Int
-buildDtPackage prog dir noCompile = case dtExecutablePackage "build" dir of
-  Err e => printDtErr e
+buildDefault : String -> Bool -> Int
+buildDefault dir noCompile = case executablePackage "build" dir of
+  Err e => printErr e
   Ok pkg => case writeDtOutput (defaultOutDir dir) pkg of
-    Err e => printDtErr e
+    Err e => printErr e
     Ok n =>
       let
         _ = print ("wrote " ++ strFromInt n ++ " files to " ++ defaultOutDir dir ++ "\n")
-      in if noCompile then 0 else buildDtBinary dir pkg
+      in if noCompile then 0 else buildBinary dir pkg
 
-buildDtBinary : String -> Package -> Int
-buildDtBinary dir pkg =
+writeDtOutput : String -> Package -> Result Int
+writeDtOutput outDir pkg = andThen (dtProjectFiles (packageRoots pkg) (packageName pkg) (packageEntry pkg) True) (\files => let
+  _ = makeDir outDir
+in Ok (writeFiles outDir files)
+)
+
+writeFiles : String -> List (Pair String String) -> Int
+writeFiles dir [] = 0
+writeFiles dir (f :: rest) =
+  let
+    _ = writeFile (dir ++ "/" ++ firstOf f) (secondOf f)
+  in 1 + writeFiles dir rest
+
+buildBinary : String -> Package -> Int
+buildBinary dir pkg =
   let
     outDir = defaultOutDir dir
     name = packageName pkg
@@ -484,7 +291,9 @@ buildDtBinary dir pkg =
     binPath = outDir ++ "/bin/" ++ name
     _ = makeDir (outDir ++ "/bin")
     _ = removeFile binPath
-    code = runIn dir (dtOcamloptArgs binRel (".output/" ++ dtMainFile))
+    code =
+      runIn dir
+        ["ocamlopt", "-w", "-a", "-I", "+unix", "-o", binRel, "unix.cmxa", ".output/main.ml"]
   in if code == 0 then
     let
       _ = print ("built " ++ dir ++ "/" ++ binRel ++ "\n")
@@ -493,215 +302,55 @@ buildDtBinary dir pkg =
     let
       _ = removeFile binPath
     in let
-      _ = print ("error: build --dt: ocamlopt failed (exit " ++ strFromInt code ++ ")\n")
+      _ = print ("error: build: ocamlopt failed (exit " ++ strFromInt code ++ ")\n")
     in 1
 
-dtOcamloptArgs : String -> String -> List String
-dtOcamloptArgs binRel mainRel =
-  ["ocamlopt", "-w", "-a", "-I", "+unix", "-o", binRel, "unix.cmxa", mainRel]
+buildSplitRun : String -> String -> Int
+buildSplitRun outDir dir = case executablePackage "build --split" dir of
+  Err e => printErr e
+  Ok pkg =>
+    let
+      _ = makeDir outDir
+    in case buildSplit dir outDir of
+      Err e => printErr e
+      Ok n =>
+        let
+          _ = print ("wrote " ++ strFromInt n ++ " files to " ++ outDir ++ "\n")
+        in 0
 
--- build --dt --split OUT [DIR]：只产源码（main.ml + build.sh），不跑 ocamlopt。
-buildDtSplitTo : String -> String -> Int
-buildDtSplitTo outDir dir = if isSeedOutputPath outDir then printDtErr (seedOutputMsg outDir)
-else case dtExecutablePackage "build" dir of
-  Err e => printDtErr e
-  Ok pkg => case writeDtOutput outDir pkg of
-    Err e => printDtErr e
-    Ok n =>
-      let
-        _ = print ("wrote " ++ strFromInt n ++ " files to " ++ outDir ++ "\n")
-      in 0
-
--- 写出 DT 单文件输出（main.ml + build.sh）；OUT 不存在时创建。
-writeDtOutput : String -> Package -> Result Int
-writeDtOutput outDir pkg = andThen (dtProjectFiles (packageRoots pkg) (packageName pkg) (packageEntry pkg) True) (\files => let
-  _ = makeDir outDir
-in Ok (writeDtOutputFiles outDir files)
-)
-
-writeDtOutputFiles : String -> List (Pair String String) -> Int
-writeDtOutputFiles dir [] = 0
-writeDtOutputFiles dir (f :: rest) =
-  let
-    _ = writeFile (dir ++ "/" ++ firstOf f) (secondOf f)
-  in let
-    n = writeDtOutputFiles dir rest
-  in n + 1
-
--- seed/ 是提交入库的 HM 信任锚点：DT 输出尚未逐模块切分，不能写这里。
--- 判据按路径段：OUT=seed、seed/...、或最后一段为 seed（绝对路径同样拒绝）。
-isSeedOutputPath : String -> Bool
-isSeedOutputPath path =
-  let
-    trimmed = stripTrailingSlashes path
-  in trimmed == "seed" || startsWith "seed/" trimmed || lastPathSegment trimmed == "seed"
-
-stripTrailingSlashes : String -> String
-stripTrailingSlashes path =
-  if endsWith "/" path then stripTrailingSlashes (substring 0 (strLength path - 1) path) else path
-
-lastPathSegment : String -> String
-lastPathSegment path = baseName (stripTrailingSlashes path)
-
-seedOutputMsg : String -> String
-seedOutputMsg path =
-  "refusing to write DT output to "
-    ++ path
-    ++ " (seed/ is the committed HM trust anchor; DT output is a single main.ml + build.sh and seed rotation switches in M24)"
-
-buildSplitCmd : String -> String -> List String -> Int
-buildSplitCmd prog outDir args = case args of
-  [] => splitRun outDir "."
-  [dir] => if startsWith "-" dir then invalidFlag prog dir else splitRun outDir dir
-  _ => usageErr prog
-
-splitRun : String -> String -> Int
-splitRun outDir dir =
-  let
-    _ = makeDir outDir
-  in case buildSplit dir outDir of
-    Err e =>
-      let
-        _ = print ("error: " ++ e ++ "\n")
-      in 1
-    Ok n =>
-      let
-        _ = print ("wrote " ++ strFromInt n ++ " files to " ++ outDir ++ "\n")
-      in 0
-
+-- ---------------------------------------------------------------
+-- seed：显式 OUT 的逐模块 DT 输出（seed rotation 用）
+-- ---------------------------------------------------------------
 seedArgs : String -> List String -> Int
-seedArgs prog args = if anyDt args then seedDtArgs prog args
-else case args of
-  [] => seedRun "seed" "."
-  out :: rest => if startsWith "-" out then invalidFlag prog out
-  else case rest of
-    [] => seedRun out "."
-    [dir] => if startsWith "-" dir then invalidFlag prog dir else seedRun out dir
-    _ => usageErr prog
+seedArgs prog args = seedParse prog Nothing Nothing args
 
--- DT seed 参数：必须显式给 OUT（避免默认写 seed/），DIR 可省略。
-seedDtArgs : String -> List String -> Int
-seedDtArgs prog args = seedDtParse prog Nothing Nothing args
-
-seedDtParse : String -> Maybe String -> Maybe String -> List String -> Int
-seedDtParse prog out dir args = case args of
+seedParse : String -> Maybe String -> Maybe String -> List String -> Int
+seedParse prog out dir args = case args of
   [] => case out of
-    Nothing => seedDtOutErr
-    Just outDir => seedDtRun outDir (defaultDir dir)
-  "--dt" :: rest => seedDtParse prog out dir rest
-  arg :: rest => if startsWith "-" arg then invalidFlag prog arg
+    Nothing => seedOutErr
+    Just outDir => seedRun outDir (defaultDir dir)
+  arg :: rest => if startsWith "-" arg then removedFlag prog arg
   else case out of
-    Nothing => seedDtParse prog (Just arg) dir rest
+    Nothing => seedParse prog (Just arg) dir rest
     Just _ => case dir of
-      Nothing => seedDtParse prog out (Just arg) rest
+      Nothing => seedParse prog out (Just arg) rest
       Just _ => usageErr prog
 
-seedDtOutErr : Int
-seedDtOutErr =
+seedOutErr : Int
+seedOutErr =
   let
-    _ =
-      print
-        "error: seed --dt requires an explicit OUT directory (DT seed output is main.ml + build.sh; seed rotation switches in M24)\n"
+    _ = print "error: seed requires an explicit OUT directory\n"
   in 2
 
--- seed --dt OUT [DIR]：与 build --dt --split 相同形状（main.ml + build.sh，不跑 ocamlopt），
--- 且拒绝写 seed/（M24 之前 seed rotation 仍走 HM）。
-seedDtRun : String -> String -> Int
-seedDtRun outDir dir = if isSeedOutputPath outDir then printDtErr (seedOutputMsg outDir)
-else case dtExecutablePackage "seed" dir of
-  Err e => printDtErr e
-  Ok pkg => case writeDtOutput outDir pkg of
-    Err e => printDtErr e
-    Ok n =>
-      let
-        _ = print ("wrote " ++ strFromInt n ++ " files to " ++ outDir ++ "\n")
-      in 0
-
 seedRun : String -> String -> Int
-seedRun out dir =
-  let
-    _ = makeDir out
-  in case seedSplit dir out of
-    Err e =>
-      let
-        _ = print ("error: " ++ e ++ "\n")
-      in 1
-    Ok n =>
-      let
-        _ = print ("wrote " ++ strFromInt n ++ " files to " ++ out ++ "\n")
-      in 0
-
-buildParse : String -> Maybe String -> Bool -> List String -> Int
-buildParse prog dir noCompile args = case args of
-  [] => buildRun prog (defaultDir dir) noCompile
-  arg :: rest => case arg of
-    "--no-compile" => buildParse prog dir True rest
-    _ => if startsWith "-" arg then invalidFlag prog arg
-    else case dir of
-      Nothing => buildParse prog (Just arg) noCompile rest
-      Just _ => usageErr prog
-
-defaultDir : Maybe String -> String
-defaultDir dir = case dir of
-  Just dir2 => dir2
-  Nothing => "."
-
-defaultOutDir : String -> String
-defaultOutDir dir = dir ++ "/.output"
-
-scriptArg : String -> String
-scriptArg out = if startsWith "/" out then out else "../" ++ out
-
-buildRun : String -> String -> Bool -> Int
-buildRun prog dir noCompile = case loadPackage dir of
-  Err e =>
+seedRun outDir dir = case executablePackage "seed" dir of
+  Err e => printErr e
+  Ok pkg =>
     let
-      _ = print ("error: " ++ e ++ "\n")
-    in 1
-  Ok pkg => buildPackage prog dir noCompile pkg
-
-buildPackage : String -> String -> Bool -> Package -> Int
-buildPackage prog dir noCompile pkg =
-  if fileExists (packageEntry pkg) then buildExecutable dir noCompile pkg else errNoMain
-
-errNoMain : Int
-errNoMain =
-  let
-    _ = print "error: build: package has no app/Main.vuna (use compile --package for libraries)\n"
-  in 1
-
-buildExecutable : String -> Bool -> Package -> Int
-buildExecutable dir noCompile pkg =
-  let
-    name = packageName pkg
-  in let
-    outDir = defaultOutDir dir
-  in if noCompile then runBuildScript dir name outDir
-  else case compilePackage dir outDir of
-    Err e =>
-      let
-        _ = print ("error: " ++ e ++ "\n")
-      in 1
-    Ok n =>
-      let
-        _ = print ("wrote " ++ strFromInt n ++ " files to .output\n")
-      in runBuildScript dir name outDir
-
-buildScriptArgs : String -> List String
-buildScriptArgs bin = ["sh", ".output/build.sh", scriptArg bin]
-
-runBuildScript : String -> String -> String -> Int
-runBuildScript dir name outDir = if fileExists (outDir ++ "/build.sh") then
-  let
-    bin = ".output/bin/" ++ name
-  in let
-    code = runIn dir (buildScriptArgs bin)
-  in if code == 0 then
-    let
-      _ = print ("built " ++ dir ++ "/" ++ bin ++ "\n")
-    in 0
-  else code
-else
-  let
-    _ = print ("error: build: missing " ++ outDir ++ "/build.sh; run compile --package first\n")
-  in 1
+      _ = makeDir outDir
+    in case seedSplit dir outDir of
+      Err e => printErr e
+      Ok n =>
+        let
+          _ = print ("wrote " ++ strFromInt n ++ " files to " ++ outDir ++ "\n")
+        in 0

@@ -54,7 +54,7 @@ let
       cp -r ${../compiler} compiler
       cp -r ${../base} base
       chmod -R u+w .
-      ${vuna-seed}/bin/vuna-seed compile --package --out stage1 compiler
+      ${vuna-seed}/bin/vuna-seed seed stage1 compiler
       sh stage1/build.sh "$out/bin/vuna-compiler"
     '';
   };

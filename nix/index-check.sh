@@ -20,13 +20,13 @@ bad() { printf 'FAIL: %s\n' "$1" >&2; fail=1; }
 # 0) 从干净缓存开始，确保下面测的是真实重建路径。
 rm -rf .local/index
 
-# 1) 总览：退出 0、非空、含三个已知包。
+# 1) 总览：退出 0、非空、含已知包与模块。
 if ! out=$("$VUNA" map 2>&1); then
   bad "vuna map exited non-zero: $out"
 else
   case "$out" in
-    *"Vuna.Compiler.Typecheck"*) : ;;
-    *) bad "vuna map output missing Vuna.Compiler.Typecheck" ;;
+    *"Vuna.Compiler.Elab"*) : ;;
+    *) bad "vuna map output missing Vuna.Compiler.Elab" ;;
   esac
   case "$out" in
     *"Base.IO"*) : ;;
@@ -42,12 +42,12 @@ else
   bad "index cache manifest.txt not written"
 fi
 
-# 3) --find 全名：命中且有行号。
-if ! found=$("$VUNA" map --find Vuna.Compiler.Typecheck.checkProgramInfoElab 2>&1); then
+# 3) --find 全名：命中且有行号。M24：HM 删除后改用仍然存在的 DT 精化入口。
+if ! found=$("$VUNA" map --find Vuna.Compiler.Elab.elabProgramFull 2>&1); then
   bad "map --find <full name> failed: $found"
 else
   case "$found" in
-    *"Vuna.Compiler.Typecheck.checkProgramInfoElab"*) : ;;
+    *"Vuna.Compiler.Elab.elabProgramFull"*) : ;;
     *) bad "map --find output missing symbol name: $found" ;;
   esac
   # 形如 (...(2623:1)...)，必须带 行:列
@@ -66,7 +66,7 @@ else
 fi
 
 # 5) --impact：给出引用者与测试标签。
-if ! imp=$("$VUNA" map --impact Vuna.Compiler.Typecheck.checkProgramInfoElab 2>&1); then
+if ! imp=$("$VUNA" map --impact Vuna.Compiler.Elab.elabProgramFull 2>&1); then
   bad "map --impact failed: $imp"
 else
   case "$imp" in

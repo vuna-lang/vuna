@@ -10,6 +10,7 @@ module Vuna.Compiler.Ast
   , DTrait
   , Decl
   , DoStmt
+  , EAnn
   , EApp
   , ECase
   , EDo
@@ -98,6 +99,10 @@ data Expr : Type where
   ERecUpdate : Expr -> List (Pair String Expr) -> Span -> Expr
   EInstSel : Expr -> String -> Span -> Expr
   EDo : List DoStmt -> Span -> Expr
+  -- M24：表达式类型标注。只由 parser 的 where 绑定签名生成（`g : Int -> Int` 行
+  -- 绑定到随后的 `g ... = ...` 子句），Elab 精化时据此把 where 组按签名递归提升；
+  -- 普通表达式位置不产生它，Fmt 在非 where 位置把它当透明括号渲染。
+  EAnn : Expr -> Expr -> Span -> Expr
 
 -- do 语句（M11）：`pat <- expr` 或裸表达式；最后一条必须是裸表达式。
 data DoStmt : Type where
@@ -157,6 +162,7 @@ exprSpan expr = case expr of
   ERecUpdate base fields sp => sp
   EInstSel meth name sp => sp
   EDo stmts sp => sp
+  EAnn inner ty sp => sp
 
 doStmtSpan : DoStmt -> Span
 doStmtSpan stmt = case stmt of

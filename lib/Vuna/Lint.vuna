@@ -78,7 +78,7 @@ caseBodyEnd (CaseBody stop lines) = stop
 caseBodyLines : CaseBody -> List String
 caseBodyLines (CaseBody stop lines) = lines
 
-isNilList : List t1423 -> Bool
+isNilList : List a -> Bool
 isNilList [] = True
 isNilList (x :: rest) = False
 
@@ -129,17 +129,17 @@ nthLine (line :: rest) n = if n <= 1 then line else nthLine rest (n - 1)
 lineAt : List String -> Int -> String
 lineAt lines n = nthLine lines n
 
-takeChars : Int -> List t1550 -> List t1550
+takeChars : Int -> List a -> List a
 takeChars n [] = []
 takeChars n (c :: rest) = if n <= 0 then [] else c :: takeChars (n - 1) rest
 
-dropChars : Int -> List t1570 -> List t1570
+dropChars : Int -> List a -> List a
 dropChars n chars = if n <= 0 then chars
 else case chars of
   [] => []
   c :: rest => dropChars (n - 1) rest
 
-sliceChars : Int -> Int -> List t1584 -> List t1584
+sliceChars : Int -> Int -> List a -> List a
 sliceChars start count chars = takeChars count (dropChars start chars)
 
 sliceLine : Int -> Int -> String -> String
@@ -253,11 +253,11 @@ tokIntOf tok = case tok of
   PTok (TInt x) p => Just x
   _ => Nothing
 
-headToken : List t1801 -> Maybe t1801
+headToken : List a -> Maybe a
 headToken [] = Nothing
 headToken (t :: rest) = Just t
 
-lastToken : List t1809 -> Maybe t1809
+lastToken : List a -> Maybe a
 lastToken [] = Nothing
 lastToken ([t]) = Just t
 lastToken (t :: rest) = lastToken rest
@@ -280,7 +280,7 @@ hasSym : List PTok -> String -> Bool
 hasSym [] sym = False
 hasSym (t :: rest) sym = if tokIsSym t sym then True else hasSym rest sym
 
-tailOf : List t1874 -> List t1874
+tailOf : List a -> List a
 tailOf [] = []
 tailOf (t :: rest) = rest
 
@@ -758,17 +758,17 @@ collectEdits (f :: rest) acc = case findingEdit f of
   Nothing => collectEdits rest acc
   Just e => collectEdits rest (e :: acc)
 
-takeList : Int -> List t3328 -> List t3328
+takeList : Int -> List a -> List a
 takeList n [] = []
 takeList n (x :: rest) = if n <= 0 then [] else x :: takeList (n - 1) rest
 
-dropList : Int -> List t3348 -> List t3348
+dropList : Int -> List a -> List a
 dropList n lines = if n <= 0 then lines
 else case lines of
   [] => []
   x :: rest => dropList (n - 1) rest
 
-replaceRange : Int -> Int -> List t3362 -> List t3362 -> List t3362
+replaceRange : Int -> Int -> List a -> List a -> List a
 replaceRange start stop newLines lines =
   append (takeList (start - 1) lines) (append newLines (dropList stop lines))
 

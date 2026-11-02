@@ -24,16 +24,15 @@ module Vuna.Lsp (runLsp, runLspTool) where
 -- 诊断策略（不做包解析，M17 第一版的已知边界）：
 --   1. `parseSource` 失败 ⇒ 一条 parse 诊断（parse 错误无位置，范围取 0:0-0:0）；
 --   2. 文件含 `import` ⇒ 跳过类型检查，只保留 parse 诊断；
---   3. 否则 `checkProgramInfoElab` + `exhaustiveWarningsFor`：错误 severity 1、
---      穷尽性/冗余模式警告 severity 2；`<file>:<line>:<col>: msg` 的 1-based
+--   3. 否则 DT 精化（`elabProgramWith`）：错误 severity 1；
+--      `<file>:<line>:<col>: msg` 的 1-based
 --      位置转成 LSP 的 0-based 范围。
 --
--- 洞目标：DT 与 HM 是两条独立前端，hover 单独跑 `goalsOfProgram`（DT 精化器），
+-- 洞目标：hover 跑 `goalsOfProgram`（DT 精化器），
 -- 命中请求位置的洞时返回目标类型与绑定的上下文。可插拔点是 `dtGoalsOf`。
 import Vuna.Compiler.Common
 import Vuna.Compiler.Ast
 import Vuna.Compiler.Parser
-import Vuna.Compiler.Typecheck
 import Vuna.Compiler.Elab
 import Vuna.Json
 
@@ -186,10 +185,9 @@ diagOfMessage severity message =
 diagnosticsFor : String -> String -> List Diag
 diagnosticsFor uri text = case parseSource uri text of
   Err e => [Diag 0 0 0 0 severityError e]
-  Ok (Source hdr imports decls) => if isNilList imports then case checkProgramInfoElab decls of
+  Ok (Source hdr imports decls) => if isNilList imports then case elabProgramWith False decls of
     Err e => [diagOfMessage severityError e]
-    Ok (Pair globals elabDecls) =>
-      map (diagOfMessage severityWarning) (exhaustiveWarningsFor globals elabDecls)
+    Ok _ => []
   else []
 
 publishDiagnostics : String -> Int -> List Diag -> Json

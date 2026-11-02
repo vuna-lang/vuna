@@ -6,6 +6,7 @@ module Vuna.Compiler.Dt
   , dtCompileProject
   , dtEvalExpr
   , dtEvalFile
+  , dtSplitProject
   ) where
 
 -- Vuna.Compiler.Dt：DT 路径的 facade（供 Compile / CompilerCli / Interp 使用）。
@@ -27,6 +28,7 @@ import Vuna.Compiler.Loader
 import Vuna.Compiler.Core
 import Vuna.Compiler.Elab
 import Vuna.Compiler.CoreCodegen
+import Vuna.Compiler.Split
 
 -- 入口 + 全部依赖模块的声明（单文件 / --root 原始模式）。
 dtLoad : List String -> String -> Result (List Decl)
@@ -169,3 +171,21 @@ findMainDef (d :: rest) = if dtDefName d == "main" then Just d else findMainDef 
 defTableOf : List DtDef -> List (Pair String Term)
 defTableOf [] = []
 defTableOf (d :: rest) = Pair (dtDefName d) (dtDefBody d) :: defTableOf rest
+
+-- M24：包级逐模块 split 输出（`build --split` / `seed`）。与单文件路径共用同一次精化，
+-- 只是生成器把 datas/defs 按声明归属切到各模块文件；模块列表按依赖序（Loader 的
+-- modules 是依赖者在前的反序，这里 reverse）。
+dtProjectParts : List Root -> String -> String -> Result (Pair (List Decl) (List Module))
+dtProjectParts roots entryPkg entry =
+  andThen (loadProject roots entryPkg entry)
+    (\project => andThen (resolveProject project) (\parts => Ok (Pair (firstOf parts) (reverse (secondOf parts)))))
+
+dtSplitProject : List Root -> String -> String -> Bool -> Result (List SplitFile)
+dtSplitProject roots entryPkg entry printResult = andThen (dtProjectParts roots entryPkg entry) (\parts => let
+  entryDecls = firstOf parts
+  modules = secondOf parts
+  allDecls = append (concatMap moduleDeclsOf modules) entryDecls
+  trusted = dtTrustsTermination entryPkg
+in andThen (elabProgramFullWith trusted allDecls)
+  (\program => generateDtSplitProgram (map (\m => Pair (moduleNameOf m) (moduleDeclsOf m)) modules) entryDecls program printResult)
+)

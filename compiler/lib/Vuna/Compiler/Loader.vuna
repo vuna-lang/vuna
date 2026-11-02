@@ -147,7 +147,7 @@ importAliases imports = case imports of
     Nothing => importAliases rest
     Just alias => Pair alias (importName imp) :: importAliases rest
 
-checkImportAliases : String -> List String -> List (Pair String String) -> Result (List t39906)
+checkImportAliases : String -> List String -> List (Pair String String) -> Result (List a)
 checkImportAliases label moduleNames aliases = case aliases of
   [] => Ok []
   (Pair alias m) :: rest =>
@@ -157,7 +157,7 @@ checkImportAliases label moduleNames aliases = case aliases of
     else checkImportAliases label moduleNames rest
     else Err (label ++ ": invalid module alias " ++ alias)
 
-validateImports : String -> List Import -> Result (List t39959)
+validateImports : String -> List Import -> Result (List a)
 validateImports label imports =
   if hasDuplicateName (importModuleNames imports) then Err (label ++ ": duplicate import")
   else checkImportAliases label (importModuleNames imports) (importAliases imports)
@@ -257,7 +257,7 @@ modulesExportingType modules imports name =
   modulesExportingTypeFrom modules (openModuleNames imports) name
 
 -- 重导出时同名可能来自多个模块；只要 target 相同就不是歧义（门面伞模块常见）。
-sameTargetRest : ExportEntry -> List (Pair t40195 ExportEntry) -> Bool
+sameTargetRest : ExportEntry -> List (Pair a ExportEntry) -> Bool
 sameTargetRest e pairs = case pairs of
   [] => True
   (Pair m e2) :: rest => if entryTarget e == entryTarget e2 then sameTargetRest e rest else False
@@ -416,11 +416,11 @@ foldFieldChain : Expr -> List String -> Span -> Expr
 foldFieldChain base [] sp = base
 foldFieldChain base (f :: rest) sp = foldFieldChain (EField base f sp) rest sp
 
-takeSegs : Int -> List t40754 -> List t40754
+takeSegs : Int -> List a -> List a
 takeSegs n [] = []
 takeSegs n (x :: rest) = if n <= 0 then [] else x :: takeSegs (n - 1) rest
 
-dropSegs : Int -> List t40774 -> List t40774
+dropSegs : Int -> List a -> List a
 dropSegs n [] = []
 dropSegs n (x :: rest) = if n <= 0 then x :: rest else dropSegs (n - 1) rest
 
@@ -585,6 +585,10 @@ resolveExpr modules label prefix own ownCtors imports scope expr = case expr of
   )
   EDo stmts sp =>
     andThen (desugarDo stmts) (\e => resolveExpr modules label prefix own ownCtors imports scope e)
+  -- M24：where 绑定签名（`g : Int -> Int`）降级成 `EAnn value ty`；值与类型都做名字解析。
+  EAnn value ty sp =>
+    andThen (resolveExpr modules label prefix own ownCtors imports scope value)
+      (\v2 => andThen (resolveExpr modules label prefix own ownCtors imports scope ty) (\t2 => Ok (EAnn v2 t2 sp)))
 
 -- do（M11）在这里 desugar 成 bind/pure 的普通应用，后续类型检查与 codegen 无需认识 do。
 -- 最后一条裸表达式即块结果（`do e` = `e`）；裸语句用 `bind e (\_ -> rest)` 顺序化。
@@ -776,7 +780,7 @@ findCtorNamed name ctors = case ctors of
   [] => Nothing
   c :: rest => if ctorName c == name then Just (ctorName c) else findCtorNamed name rest
 
-findMethodNamed : t43025 -> List (Pair t43025 t43024) -> Maybe t43025
+findMethodNamed : a -> List (Pair a b) -> Maybe a
 findMethodNamed name methods = case methods of
   [] => Nothing
   (Pair mname ty) :: rest => if mname == name then Just mname else findMethodNamed name rest
@@ -1039,7 +1043,7 @@ memExportEntries e entries = case entries of
   [] => False
   e2 :: rest => if sameExportEntry e e2 then True else memExportEntries e rest
 
-checkExportDuplicates : String -> List ExportEntry -> Result (List t43924)
+checkExportDuplicates : String -> List ExportEntry -> Result (List a)
 checkExportDuplicates prefix [] = Ok []
 checkExportDuplicates prefix (e :: rest) =
   if hasConflictingExport e rest then Err (prefix ++ ": duplicate export " ++ entryPublic e)
@@ -1086,7 +1090,7 @@ explicitExports modules prefix decls imports (item :: rest) =
   andThen (exportItemEntries modules prefix decls imports item)
     (\es => andThen (explicitExports modules prefix decls imports rest) (\tail => Ok (dedupeExportEntries (append es tail))))
 
-validateModuleHeader : String -> Maybe ModDecl -> Result (List t44081)
+validateModuleHeader : String -> Maybe ModDecl -> Result (List a)
 validateModuleHeader label hdr = case hdr of
   Nothing => Ok []
   Just (ModDecl declared hasList items sp) =>
@@ -1232,7 +1236,7 @@ isEffectfulBuiltin name =
     || name == "prim_exit"
     || name == "prim_runIn"
 
-firstEffect : List (Maybe t44762) -> Maybe t44762
+firstEffect : List (Maybe a) -> Maybe a
 firstEffect [] = Nothing
 firstEffect (Nothing :: rest) = firstEffect rest
 firstEffect ((Just n) :: rest) = Just n
@@ -1254,6 +1258,8 @@ effExpr e = case e of
   -- M20：`EPi` 是 DT 的核心语法，这里只做结构递归（类型层不算 effect）。
   EPi name implicit dom cod sp => firstEffect [effExpr dom, effExpr cod]
   EDo stmts sp => firstEffect (map effDo stmts)
+  -- M24：where 绑定签名 `EAnn value ty`；类型层不算 effect，只看值。
+  EAnn value ty sp => effExpr value
 
 effBinds : List (Pair Pat Expr) -> Maybe String
 effBinds [] = Nothing

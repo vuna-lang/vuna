@@ -132,12 +132,12 @@ manifestNameString manifest = case manifestName manifest of
 
 -- ---------------------------------------------------------------- 加载包
 -- 依赖链栈：每个元素是 (规范化目录, 包名)；只用于循环检测。
-memStackDir : t50924 -> List (Pair t50924 t50923) -> Bool
+memStackDir : a -> List (Pair a b) -> Bool
 memStackDir dir stack = case stack of
   [] => False
   pair :: rest => if firstOf pair == dir then True else memStackDir dir rest
 
-cyclePrefix : t50940 -> List (Pair t50940 t50939) -> Maybe (List (Pair t50940 t50939))
+cyclePrefix : a -> List (Pair a b) -> Maybe (List (Pair a b))
 cyclePrefix dir stack = case stack of
   [] => Nothing
   pair :: rest => if firstOf pair == dir then Just [pair]
@@ -153,7 +153,7 @@ cycleMessage dir depName stack = case depName of
     Just prefix =>
       "pkg: dependency cycle: " ++ joinArrows (append (map secondOf (reverse prefix)) [dep])
 
-dependencyNameOk : Maybe t51003 -> t51003 -> Bool
+dependencyNameOk : Maybe a -> a -> Bool
 dependencyNameOk depName actual = case depName of
   Nothing => True
   Just expected => expected == actual

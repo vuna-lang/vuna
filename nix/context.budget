@@ -27,9 +27,14 @@
 #     （HEAD 的 context-budget 本身就是红的，属于漏标定）。本轮先把入口文档压回旧预算
 #     （coldstart 30353 / agents 106 / arch 191 / readme 169 / max_ref 168），
 #     max_module_lines 按实测重标定到 3320；把 Elab 拆出新模块留作 M24.6 重构的降本项。
-coldstart_bytes 30392
-agents_lines 106
-arch_lines 199
-readme_lines 170
+#   - M24 单路径收尾：删除 HM（Typecheck/TypedCodegen）与双路径文档后入口文档整体变短，
+#     按实测下调 coldstart 29104 / agents 103 / arch 176 / readme 166（max_ref 168 不变）。
+#     max_module_lines 3320 → 3360：Elab 新增 where 绑定签名与 EAnn 检查（新语言特性，
+#     +30 行）属有意特性增长而非文档/格式膨胀，按实测最大值 3348 留 12 行余量；Elab 拆
+#     模块仍是 M24.6 重构的降本项。
+coldstart_bytes 29200
+agents_lines 104
+arch_lines 178
+readme_lines 168
 max_ref_lines 168
-max_module_lines 3320
+max_module_lines 3360

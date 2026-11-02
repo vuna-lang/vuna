@@ -1,17 +1,11 @@
--- M23：DT 暂不支持 where 子句，原来的局部辅助函数改为顶层互递归定义
--- （保留递归调用覆盖点；golden 随之改为 2）。
-data Bool : Type where
-  False : Bool
-  True : Bool
-
-isEven : Int -> Bool
-isEven n = if n == 0 then True else isOdd (n - 1)
-
-isOdd : Int -> Bool
-isOdd n = if n == 0 then False else isEven (n - 1)
-
-check : Bool -> Int
-check b = if b then 1 else 0
+-- M24：where 是带签名的局部顺序 let，不再覆盖互递归（互递归放顶层定义组）。
+-- 覆盖点：多条 where 绑定按顺序依赖（g 使用先定义的 h 并捕获外层参数 x）。
+f : Int -> Int -> Int
+f x y = g y where
+  h : Int -> Int
+  h n = n * 2
+  g : Int -> Int
+  g n = n + h n + x
 
 main : Int
-main = check (isEven 10) + check (isOdd 7)
+main = f 1 5

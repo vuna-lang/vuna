@@ -1,12 +1,14 @@
 #!/bin/sh
 # vuna 原生测试：只用 vuna / vuna-seed 驱动。
 #
-# M23 起语言夹具与解释器只走 DT 路径：
-#   * 夹具检查/生成用 `check --dt` / `compile --dt`；`vuna interp` = DT 精化 + 核心求值；
+# M24 起只有一条 DT 路径（HM 检查器与 codegen 已删除，`--dt` 开关已移除）：
+#   * 夹具检查/生成用 `check` / `compile`；`vuna interp` = DT 精化 + 核心求值；
 #   * `interp` 是纯求值器（不执行效果），`main` 只展示 Int/String/Bool；
-#     效果/不可归约夹具带 `<file>.vuna.nointerp` 标记 → 跳过 interp，只做 compile --dt + 运行；
+#     效果/不可归约夹具带 `<file>.vuna.nointerp` 标记 → 跳过 interp，只做 compile + 运行；
 #   * 负例的 `.err` 是 DT 实际诊断的稳定片段（个别命令文案不同时用 `.cerr` 给 compile 用）；
-#   * HM 只保留在源码自检与包 HM 构建段（28/29/33、34d 的零回归），M24 删除。
+#   * 包/构建段（28/29/33/34d）用 DT 的 build / build --split / seed；
+#   * DT 的 main 钩子会打印 main 的返回值：纯值 main 打印值；`main : IO a` 先执行效果，
+#     再打印效果后的返回值（夹具用 `exit 0` 收尾，让 golden 只含业务输出）。
 #
 # 环境变量（默认取 PATH 中的同名命令）：
 #   VUNA        当前编译器（stage 1）
@@ -75,11 +77,11 @@ compile_and_run_roots() { # name compiler flags entry expected root...
   check_eq "$name run" "$expected" "$actual"
 }
 
-compile_and_run() { # name compiler root entry expected（DT 路径：compile --dt）
-  compile_and_run_roots "$1" "$2" "--dt" "$4" "$5" --root "$3"
+compile_and_run() { # name compiler root entry expected（DT 路径：compile）
+  compile_and_run_roots "$1" "$2" "" "$4" "$5" --root "$3"
 }
 
-# 单文件负例：interp（DT）与 compile --dt 都要报错、含片段、且不写输出文件。
+# 单文件负例：interp（DT）与 compile 都要报错、含片段、且不写输出文件。
 expect_dt_error() { # name file root...
   name=$1
   file=$2
@@ -95,7 +97,7 @@ expect_dt_error() { # name file root...
   if [ "$code" -ne 0 ]; then ok; else bad "$name (interp error exit)" "non-zero" "$code"; fi
 
   rm -f "$tmp/neg_compile.ml"
-  actual=$("$VUNA" compile --dt "$@" "$file" "$tmp/neg_compile.ml" 2>&1)
+  actual=$("$VUNA" compile "$@" "$file" "$tmp/neg_compile.ml" 2>&1)
   code=$?
   check_contains "$name (compile error)" "$actual" "$compile_fragment"
   if [ "$code" -ne 0 ]; then ok; else bad "$name (compile error exit)" "non-zero" "$code"; fi
@@ -120,7 +122,7 @@ expect_dt_dir_error() { # name dir root...
   if [ "$code" -ne 0 ]; then ok; else bad "$name (interp error exit)" "non-zero" "$code"; fi
 
   rm -f "$tmp/neg_dir_compile.ml"
-  actual=$("$VUNA" compile --dt "$@" "$entry" "$tmp/neg_dir_compile.ml" 2>&1)
+  actual=$("$VUNA" compile "$@" "$entry" "$tmp/neg_dir_compile.ml" 2>&1)
   code=$?
   check_contains "$name (compile error)" "$actual" "$fragment"
   if [ "$code" -ne 0 ]; then ok; else bad "$name (compile error exit)" "non-zero" "$code"; fi
@@ -131,7 +133,7 @@ expect_dt_dir_error() { # name dir root...
   fi
 }
 
-# 1) corpus/run：interp（DT 核心求值）vs golden；compile --dt → ocamlopt → 运行 vs golden。
+# 1) corpus/run：interp（DT 核心求值）vs golden；compile → ocamlopt → 运行 vs golden。
 #    .nointerp 夹具（效果/不可归约）只跑编译产物。
 for file in corpus/run/*.vuna; do
   base=${file%.vuna}
@@ -146,34 +148,34 @@ for file in corpus/run/*.vuna; do
     check_eq "$file (interp)" "$expected" "$actual"
   fi
   if [ -n "$extra" ]; then
-    compile_and_run_roots "$file (compiler)" "$VUNA" "--dt" "$file" "$expected" $extra --root .
+    compile_and_run_roots "$file (compiler)" "$VUNA" "" "$file" "$expected" $extra --root .
   else
     compile_and_run "$file (compiler)" "$VUNA" "." "$file" "$expected"
   fi
 done
 
-# 2) 模块夹具：DT 精化后核心求值 + compile --dt 都要读取模块并得到 expected.out（正例 01–29）
+# 2) 模块夹具：DT 精化后核心求值 + compile 都要读取模块并得到 expected.out（正例 01–29）
 for dir in corpus/modules/[012][0-9]_*; do
   expected=$(cat "$dir/expected.out")
   actual=$("$VUNA" interp --root "$dir/lib" --root "$dir/app" "$dir/app/Main.vuna" 2>&1)
   check_eq "$dir (interp)" "$expected" "$actual"
-  compile_and_run_roots "$dir (compiler)" "$VUNA" "--dt" "$dir/app/Main.vuna" "$expected" --root "$dir/lib" --root "$dir/app"
+  compile_and_run_roots "$dir (compiler)" "$VUNA" "" "$dir/app/Main.vuna" "$expected" --root "$dir/lib" --root "$dir/app"
 done
 
-# 3) 模块错误：DT interp / compile --dt 两条路径都要因同一原因失败、给出含片段的错误，
+# 3) 模块错误：DT interp / compile 都要因同一原因失败、给出含片段的错误，
 #    且不写输出文件（错误例 70–99）
 for dir in corpus/modules/[789][0-9]_*; do
   expect_dt_dir_error "$dir" "$dir" --root "$dir/lib" --root "$dir/app"
 done
 
-# 4) 解析错误：vuna interp 输出含片段（解析层 HM/DT 共用）
+# 4) 解析错误：vuna interp 输出含片段（解析层 Parser/Lexer，与检查/生成共用）
 for file in corpus/err/*.vuna; do
   fragment=$(cat "${file%.vuna}.err")
   actual=$("$VUNA" interp "$file" 2>&1)
   check_contains "$file (parse error)" "$actual" "$fragment"
 done
 
-# 5) 求值/编译错误：DT interp 与 compile --dt 都要给出含片段的错误
+# 5) 求值/编译错误：DT interp 与 compile 都要给出含片段的错误
 #    （run_err/03_div_zero 是产物运行期负例，单独在段 6 处理）
 for file in corpus/run_err/*.vuna; do
   case "$file" in
@@ -187,7 +189,7 @@ done
 div=corpus/run_err/03_div_zero.vuna
 div_frag=$(cat "${div%.vuna}.err")
 rm -f "$tmp/div.ml" "$tmp/div.exe"
-if ! div_out=$("$VUNA" compile --dt "$div" "$tmp/div.ml" 2>&1); then
+if ! div_out=$("$VUNA" compile "$div" "$tmp/div.ml" 2>&1); then
   bad "$div (compile)" "exit 0" "$div_out"
 elif ! "$OCAMLOPT" -w -a -I +unix -o "$tmp/div.exe" unix.cmxa "$tmp/div.ml" >"$tmp/div.log" 2>&1; then
   bad "$div (ocamlopt)" "" "$(cat "$tmp/div.log")"
@@ -198,38 +200,38 @@ else
   if [ "$div_code" -ne 0 ]; then ok; else bad "$div (runtime error exit)" "non-zero" "$div_code"; fi
 fi
 
-# 7) 类型检查通过的程序：check --dt + compile --dt + 运行比对 golden
+# 7) 类型检查通过的程序：check + compile + 运行比对 golden
 for file in corpus/type_ok/*.vuna; do
   base=${file%.vuna}
-  "$VUNA" check --dt "$file" >/dev/null 2>&1
-  check_eq "$file (check --dt exit)" "0" "$?"
+  "$VUNA" check "$file" >/dev/null 2>&1
+  check_eq "$file (check exit)" "0" "$?"
   rm -f "$tmp/typed.ml" "$tmp/typed.exe"
-  if ! type_out=$("$VUNA" compile --dt "$file" "$tmp/typed.ml" 2>&1); then
-    bad "$file (compile --dt)" "exit 0" "$type_out"
+  if ! type_out=$("$VUNA" compile "$file" "$tmp/typed.ml" 2>&1); then
+    bad "$file (compile)" "exit 0" "$type_out"
   elif [ -n "$type_out" ]; then
-    bad "$file (compile --dt output)" "" "$type_out"
+    bad "$file (compile output)" "" "$type_out"
   elif ! "$OCAMLOPT" -w -a -I +unix -o "$tmp/typed.exe" unix.cmxa "$tmp/typed.ml" >"$tmp/typed.log" 2>&1; then
-    bad "$file (compile --dt ocamlopt)" "" "$(cat "$tmp/typed.log")"
+    bad "$file (compile ocamlopt)" "" "$(cat "$tmp/typed.log")"
   else
     actual=$("$tmp/typed.exe" 2>&1)
-    check_eq "$file (compile --dt run)" "$(cat "$base.out")" "$actual"
+    check_eq "$file (compile run)" "$(cat "$base.out")" "$actual"
   fi
 done
 
-# 8) 类型错误：check --dt 与 compile --dt 都必须报含片段的错误，且不写输出文件
+# 8) 类型错误：check 与 compile 都必须报含片段的错误，且不写输出文件
 for file in corpus/type_err/*.vuna; do
   fragment=$(cat "${file%.vuna}.err")
-  actual=$("$VUNA" check --dt "$file" 2>&1)
-  check_contains "$file (check --dt error)" "$actual" "$fragment"
-  "$VUNA" check --dt "$file" >/dev/null 2>&1
+  actual=$("$VUNA" check "$file" 2>&1)
+  check_contains "$file (check error)" "$actual" "$fragment"
+  "$VUNA" check "$file" >/dev/null 2>&1
   code=$?
-  if [ "$code" -ne 0 ]; then ok; else bad "$file (check --dt error exit)" "non-zero" "$code"; fi
+  if [ "$code" -ne 0 ]; then ok; else bad "$file (check error exit)" "non-zero" "$code"; fi
   rm -f "$tmp/type_err.ml"
-  actual=$("$VUNA" compile --dt "$file" "$tmp/type_err.ml" 2>&1)
-  check_contains "$file (compile --dt error)" "$actual" "$fragment"
-  "$VUNA" compile --dt "$file" "$tmp/type_err.ml" >/dev/null 2>&1
+  actual=$("$VUNA" compile "$file" "$tmp/type_err.ml" 2>&1)
+  check_contains "$file (compile error)" "$actual" "$fragment"
+  "$VUNA" compile "$file" "$tmp/type_err.ml" >/dev/null 2>&1
   code=$?
-  if [ "$code" -ne 0 ]; then ok; else bad "$file (compile --dt error exit)" "non-zero" "$code"; fi
+  if [ "$code" -ne 0 ]; then ok; else bad "$file (compile error exit)" "non-zero" "$code"; fi
   if [ -e "$tmp/type_err.ml" ]; then
     bad "$file (no output file)" "absent" "present"
   else
@@ -237,37 +239,37 @@ for file in corpus/type_err/*.vuna; do
   fi
 done
 
-# 9) 跨模块类型检查正例：导入模块后用其类型与构造器（check --dt + compile --dt + 运行）
+# 9) 跨模块类型检查正例：导入模块后用其类型与构造器（check + compile + 运行）
 for dir in corpus/type_modules/0*; do
-  "$VUNA" check --dt --root "$dir/lib" "$dir/app/Main.vuna" >/dev/null 2>&1
-  check_eq "$dir (module check --dt exit)" "0" "$?"
+  "$VUNA" check --root "$dir/lib" "$dir/app/Main.vuna" >/dev/null 2>&1
+  check_eq "$dir (module check exit)" "0" "$?"
   rm -f "$tmp/tm.ml" "$tmp/tm.exe"
-  if ! tm_out=$("$VUNA" compile --dt --root "$dir/lib" "$dir/app/Main.vuna" "$tmp/tm.ml" 2>&1); then
-    bad "$dir (module compile --dt)" "exit 0" "$tm_out"
+  if ! tm_out=$("$VUNA" compile --root "$dir/lib" "$dir/app/Main.vuna" "$tmp/tm.ml" 2>&1); then
+    bad "$dir (module compile)" "exit 0" "$tm_out"
   elif [ -n "$tm_out" ]; then
-    bad "$dir (module compile --dt output)" "" "$tm_out"
+    bad "$dir (module compile output)" "" "$tm_out"
   elif ! "$OCAMLOPT" -w -a -I +unix -o "$tmp/tm.exe" unix.cmxa "$tmp/tm.ml" >"$tmp/tm.log" 2>&1; then
-    bad "$dir (module compile --dt ocamlopt)" "" "$(cat "$tmp/tm.log")"
+    bad "$dir (module compile ocamlopt)" "" "$(cat "$tmp/tm.log")"
   else
     actual=$("$tmp/tm.exe" 2>&1)
-    check_eq "$dir (module compile --dt run)" "$(cat "$dir/expected.out")" "$actual"
+    check_eq "$dir (module compile run)" "$(cat "$dir/expected.out")" "$actual"
   fi
 done
 
-# 10) 跨模块类型错误：check --dt / compile --dt 都要含片段、非 0、不写输出文件
+# 10) 跨模块类型错误：check / compile 都要含片段、非 0、不写输出文件
 for dir in corpus/type_modules/9*; do
   fragment=$(cat "$dir/expected.err")
-  actual=$("$VUNA" check --dt --root "$dir/lib" "$dir/app/Main.vuna" 2>&1)
-  check_contains "$dir (module check --dt error)" "$actual" "$fragment"
-  "$VUNA" check --dt --root "$dir/lib" "$dir/app/Main.vuna" >/dev/null 2>&1
+  actual=$("$VUNA" check --root "$dir/lib" "$dir/app/Main.vuna" 2>&1)
+  check_contains "$dir (module check error)" "$actual" "$fragment"
+  "$VUNA" check --root "$dir/lib" "$dir/app/Main.vuna" >/dev/null 2>&1
   code=$?
-  if [ "$code" -ne 0 ]; then ok; else bad "$dir (module check --dt error exit)" "non-zero" "$code"; fi
+  if [ "$code" -ne 0 ]; then ok; else bad "$dir (module check error exit)" "non-zero" "$code"; fi
   rm -f "$tmp/tm_err.ml"
-  actual=$("$VUNA" compile --dt --root "$dir/lib" "$dir/app/Main.vuna" "$tmp/tm_err.ml" 2>&1)
-  check_contains "$dir (module compile --dt error)" "$actual" "$fragment"
-  "$VUNA" compile --dt --root "$dir/lib" "$dir/app/Main.vuna" "$tmp/tm_err.ml" >/dev/null 2>&1
+  actual=$("$VUNA" compile --root "$dir/lib" "$dir/app/Main.vuna" "$tmp/tm_err.ml" 2>&1)
+  check_contains "$dir (module compile error)" "$actual" "$fragment"
+  "$VUNA" compile --root "$dir/lib" "$dir/app/Main.vuna" "$tmp/tm_err.ml" >/dev/null 2>&1
   code=$?
-  if [ "$code" -ne 0 ]; then ok; else bad "$dir (module compile --dt error exit)" "non-zero" "$code"; fi
+  if [ "$code" -ne 0 ]; then ok; else bad "$dir (module compile error exit)" "non-zero" "$code"; fi
   if [ -e "$tmp/tm_err.ml" ]; then
     bad "$dir (no output file)" "absent" "present"
   else
@@ -275,32 +277,32 @@ for dir in corpus/type_modules/9*; do
   fi
 done
 
-# 11) typed codegen（M8a）夹具：check --dt + compile --dt（DT 擦除 codegen）+ 运行比对 golden
+# 11) typed codegen（M8a）夹具：check + compile（DT 擦除 codegen）+ 运行比对 golden
 #     （与段 7 的 type_ok 覆盖点部分重复，M24 可合并；M23 保留）
 for file in corpus/typed_ok/*.vuna; do
   base=${file%.vuna}
-  "$VUNA" check --dt "$file" >/dev/null 2>&1
-  check_eq "$file (check --dt exit)" "0" "$?"
+  "$VUNA" check "$file" >/dev/null 2>&1
+  check_eq "$file (check exit)" "0" "$?"
   rm -f "$tmp/typedgen.ml" "$tmp/typedgen.exe"
-  if ! typed_out=$("$VUNA" compile --dt "$file" "$tmp/typedgen.ml" 2>&1); then
-    bad "$file (compile --dt)" "exit 0" "$typed_out"
+  if ! typed_out=$("$VUNA" compile "$file" "$tmp/typedgen.ml" 2>&1); then
+    bad "$file (compile)" "exit 0" "$typed_out"
   elif [ -n "$typed_out" ]; then
-    bad "$file (compile --dt output)" "" "$typed_out"
+    bad "$file (compile output)" "" "$typed_out"
   elif ! "$OCAMLOPT" -w -a -I +unix -o "$tmp/typedgen.exe" unix.cmxa "$tmp/typedgen.ml" >"$tmp/typedgen.log" 2>&1; then
-    bad "$file (compile --dt ocamlopt)" "" "$(cat "$tmp/typedgen.log")"
+    bad "$file (compile ocamlopt)" "" "$(cat "$tmp/typedgen.log")"
   else
     actual=$("$tmp/typedgen.exe" 2>&1)
-    check_eq "$file (compile --dt run)" "$(cat "$base.out")" "$actual"
+    check_eq "$file (compile run)" "$(cat "$base.out")" "$actual"
   fi
 done
 
-# （原第 12 段 M23 删除）跨模块 typed codegen 与段 2 重复：段 2 已改为 compile --dt + 运行，覆盖同一路径。
+# （原第 12 段 M23 删除）跨模块 typed codegen 与段 2 重复：段 2 已改为 compile + 运行，覆盖同一路径。
 
-# 13) 种子冒烟：vuna-seed 编译一个程序并运行（seed 仍是 HM 产物，M24 随 seed 切换）
+# 13) 种子冒烟：vuna-seed（提交入库的信任锚点，M24 起由 DT split 生成）编译并运行一个程序。
 fact=corpus/run/12_fact.vuna
 compile_and_run_roots "$fact (vuna-seed)" "$VUNA_SEED" "" "$fact" "$(cat "${fact%.vuna}.out")" --root .
 
-# 14) 统一 CLI：help、退出码、子命令要求、已删除参数
+# 14) 统一 CLI：help、退出码、子命令要求、已删除参数（M24：DT 是唯一路径，`--dt` 全删）
 help_out=$("$VUNA" help 2>&1)
 check_contains "vuna help" "$help_out" "usage:"
 "$VUNA" >/dev/null 2>&1
@@ -319,13 +321,19 @@ old_nt=$("$VUNA" compile --no-typecheck corpus/run/01_arithmetic.vuna 2>&1)
 check_contains "vuna removed --no-typecheck" "$old_nt" "has been removed"
 old_ty=$("$VUNA" --typed corpus/run/01_arithmetic.vuna 2>&1)
 check_contains "vuna removed --typed" "$old_ty" "has been removed"
+# M24：`--dt` 不再属于任何命令（DT 是唯一路径），与 `compile --package` 一并报 removed。
+for dt_cmd in compile check build seed interp; do
+  dt_msg=$("$VUNA" "$dt_cmd" --dt 2>&1)
+  dt_code=$?
+  check_contains "vuna $dt_cmd removed --dt" "$dt_msg" "removed"
+  check_eq "vuna $dt_cmd removed --dt exit" "2" "$dt_code"
+done
+old_pkg=$("$VUNA" compile --package corpus/run/01_arithmetic.vuna 2>&1)
+pkg_code=$?
+check_contains "vuna removed compile --package" "$old_pkg" "error"
+if [ "$pkg_code" -ne 0 ]; then ok; else bad "vuna removed compile --package exit" "non-zero" "$pkg_code"; fi
 "$VUNA" interp /no/such/file.vuna >/dev/null 2>&1
 check_eq "vuna interp missing exit" "2" "$?"
-# M23：interp 不再接受 --dt（DT 是唯一解释器语义）
-old_dt=$("$VUNA" interp --dt corpus/run/01_arithmetic.vuna 2>&1)
-check_contains "vuna interp removed --dt" "$old_dt" "no longer takes --dt"
-"$VUNA" interp --dt corpus/run/01_arithmetic.vuna >/dev/null 2>&1
-check_eq "vuna interp removed --dt exit" "2" "$?"
 "$VUNA" lint >/dev/null 2>&1
 check_eq "vuna lint no args exit" "2" "$?"
 
@@ -360,7 +368,7 @@ for file in corpus/fix/*.vuna; do
   check_eq "$file (fix idempotent)" "$(cat "$once")" "$(cat "$work")"
 done
 
-# 17) M9 诊断：运行时错误位置（interp 已切 DT → 非穷尽在静态报错）、穷尽性/冗余、退出码
+# 17) M9 诊断：穷尽性/模式诊断与退出码（M24 起 interp 与 check/compile 共用 DT 静态诊断）
 mkdir -p "$tmp/m9"
 cat > "$tmp/m9/loc.vuna" <<'EOF'
 data Maybe : Type where
@@ -378,18 +386,17 @@ check_contains "m9 interp non-exhaustive" "$loc_i" "case is not exhaustive"
 "$VUNA" interp "$tmp/m9/loc.vuna" >/dev/null 2>&1
 m9_interp_code=$?
 if [ "$m9_interp_code" -ne 0 ]; then ok; else bad "m9 interp non-exhaustive exit" "non-zero" "$m9_interp_code"; fi
-# HM 路径的诊断仍由 HM codegen 覆盖到 M24 删除（运行时位置）
-rm -f "$tmp/m9/loc.ml" "$tmp/m9/loc.exe"
-if ! "$VUNA" compile "$tmp/m9/loc.vuna" "$tmp/m9/loc.ml" >/dev/null 2>&1; then
-  bad "m9 typed codegen" "exit 0" "compile failed"
-elif ! "$OCAMLOPT" -w -a -I +unix -o "$tmp/m9/loc.exe" unix.cmxa "$tmp/m9/loc.ml" >/dev/null 2>&1; then
-  bad "m9 typed ocamlopt" "" "ocamlopt failed"
+# M24：DT 只有静态穷尽性诊断（HM 的运行时 `no matching clause` 位置随 HM codegen 删除），
+# 因此 compile 也必须在此报同一静态错误、且不写输出文件。
+rm -f "$tmp/m9/loc.ml"
+loc_c=$("$VUNA" compile "$tmp/m9/loc.vuna" "$tmp/m9/loc.ml" 2>&1)
+loc_code=$?
+check_contains "m9 compile non-exhaustive" "$loc_c" "case is not exhaustive"
+if [ "$loc_code" -ne 0 ]; then ok; else bad "m9 compile non-exhaustive exit" "non-zero" "$loc_code"; fi
+if [ -e "$tmp/m9/loc.ml" ]; then
+  bad "m9 compile non-exhaustive no output" "absent" "present"
 else
-  loc_c=$("$tmp/m9/loc.exe" 2>&1)
-  check_contains "m9 typed location" "$loc_c" "$tmp/m9/loc.vuna:6:1: no matching clause"
-  "$tmp/m9/loc.exe" >/dev/null 2>&1
-  m9_run_code=$?
-  if [ "$m9_run_code" -ne 0 ]; then ok; else bad "m9 typed runtime exit" "non-zero" "$m9_run_code"; fi
+  ok
 fi
 
 cat > "$tmp/m9/ne_case.vuna" <<'EOF'
@@ -405,7 +412,7 @@ main : Int
 main = g Nothing
 EOF
 ne=$("$VUNA" check "$tmp/m9/ne_case.vuna" 2>&1)
-check_contains "m9 non-exhaustive case" "$ne" "non-exhaustive case"
+check_contains "m9 non-exhaustive case" "$ne" "case is not exhaustive"
 
 cat > "$tmp/m9/ne_fun.vuna" <<'EOF'
 data Maybe : Type where
@@ -419,7 +426,7 @@ main : Int
 main = f Nothing
 EOF
 nef=$("$VUNA" check "$tmp/m9/ne_fun.vuna" 2>&1)
-check_contains "m9 non-exhaustive function" "$nef" "non-exhaustive function clauses"
+check_contains "m9 non-exhaustive function" "$nef" "case is not exhaustive"
 
 cat > "$tmp/m9/red.vuna" <<'EOF'
 data B : Type where
@@ -435,8 +442,9 @@ g x = case x of
 main : Int
 main = g T
 EOF
+# DT 的模式诊断：catch-all 之后还有分支 → 静态报错（HM 的 redundant pattern 警告已随 HM 删除）。
 rd=$("$VUNA" check "$tmp/m9/red.vuna" 2>&1)
-check_contains "m9 redundant pattern" "$rd" "redundant pattern"
+check_contains "m9 catch-all not last" "$rd" "catch-all branch must be the last one"
 
 cat > "$tmp/m9/ok.vuna" <<'EOF'
 data Maybe : Type where
@@ -465,7 +473,7 @@ if [ "$m9_check_code" -ne 0 ]; then ok; else bad "m9 check type err exit" "non-z
 m9_compile_code=$?
 if [ "$m9_compile_code" -ne 0 ]; then ok; else bad "m9 compile type err exit" "non-zero" "$m9_compile_code"; fi
 
-# 18) 记录正例（M10.5 Phase R）：interp（DT）+ compile --dt 两条路径
+# 18) 记录正例（M10.5 Phase R）：interp（DT）+ compile
 for file in corpus/records/0*.vuna; do
   base=${file%.vuna}
   expected=$(cat "$base.out")
@@ -474,39 +482,39 @@ for file in corpus/records/0*.vuna; do
     check_eq "$file (record interp)" "$expected" "$actual"
   fi
   rm -f "$tmp/rec_typed.ml" "$tmp/rec_typed.exe"
-  if ! rec_out=$("$VUNA" compile --dt "$file" "$tmp/rec_typed.ml" 2>&1); then
-    bad "$file (record compile --dt)" "exit 0" "$rec_out"
+  if ! rec_out=$("$VUNA" compile "$file" "$tmp/rec_typed.ml" 2>&1); then
+    bad "$file (record compile)" "exit 0" "$rec_out"
   elif [ -n "$rec_out" ]; then
-    bad "$file (record compile --dt output)" "" "$rec_out"
+    bad "$file (record compile output)" "" "$rec_out"
   elif ! "$OCAMLOPT" -w -a -I +unix -o "$tmp/rec_typed.exe" unix.cmxa "$tmp/rec_typed.ml" >"$tmp/rec_typed.log" 2>&1; then
-    bad "$file (record compile --dt ocamlopt)" "" "$(cat "$tmp/rec_typed.log")"
+    bad "$file (record compile ocamlopt)" "" "$(cat "$tmp/rec_typed.log")"
   else
     actual=$("$tmp/rec_typed.exe" 2>&1)
-    check_eq "$file (record compile --dt run)" "$expected" "$actual"
+    check_eq "$file (record compile run)" "$expected" "$actual"
   fi
 done
 
-# 19) 记录错误（M10.5 Phase R）：DT interp / compile --dt 都失败、含片段、不写输出文件
+# 19) 记录错误（M10.5 Phase R）：DT interp / compile 都失败、含片段、不写输出文件
 for file in corpus/records/9*.vuna; do
   expect_dt_error "$file" "$file"
 done
 
-# 20) 跨模块记录正例：导出 Point(..) 可构造/模式匹配；导出 Point 保持抽象（两条路径）
+# 20) 跨模块记录正例：导出 Point(..) 可构造/模式匹配；导出 Point 保持抽象（interp + compile）
 for dir in corpus/records/0*_*/; do
   dir=${dir%/}
   expected=$(cat "$dir/expected.out")
   actual=$("$VUNA" interp --root "$dir/lib" --root "$dir/app" "$dir/app/Main.vuna" 2>&1)
   check_eq "$dir (record module interp)" "$expected" "$actual"
-  compile_and_run_roots "$dir (record module compile --dt)" "$VUNA" "--dt" "$dir/app/Main.vuna" "$expected" --root "$dir/lib" --root "$dir/app"
+  compile_and_run_roots "$dir (record module compile)" "$VUNA" "" "$dir/app/Main.vuna" "$expected" --root "$dir/lib" --root "$dir/app"
 done
 
-# 21) 跨模块记录错误：抽象记录的构造器不可见（两条路径都失败、含片段、不写输出文件）
+# 21) 跨模块记录错误：抽象记录的构造器不可见（interp 与 compile 都失败、含片段、不写输出文件）
 for dir in corpus/records/9*_*/; do
   dir=${dir%/}
   expect_dt_dir_error "$dir" "$dir" --root "$dir/lib" --root "$dir/app"
 done
 
-# 22) trait 正例（M10.5b）：interp（DT）+ compile --dt 两条路径
+# 22) trait 正例（M10.5b）：interp（DT）+ compile
 for file in corpus/traits/[01][0-9]_*.vuna; do
   base=${file%.vuna}
   expected=$(cat "$base.out")
@@ -515,47 +523,47 @@ for file in corpus/traits/[01][0-9]_*.vuna; do
     check_eq "$file (trait interp)" "$expected" "$actual"
   fi
   rm -f "$tmp/tr_typed.ml" "$tmp/tr_typed.exe"
-  if ! tr_out=$("$VUNA" compile --dt "$file" "$tmp/tr_typed.ml" 2>&1); then
-    bad "$file (trait compile --dt)" "exit 0" "$tr_out"
+  if ! tr_out=$("$VUNA" compile "$file" "$tmp/tr_typed.ml" 2>&1); then
+    bad "$file (trait compile)" "exit 0" "$tr_out"
   elif [ -n "$tr_out" ]; then
-    bad "$file (trait compile --dt output)" "" "$tr_out"
+    bad "$file (trait compile output)" "" "$tr_out"
   elif ! "$OCAMLOPT" -w -a -I +unix -o "$tmp/tr_typed.exe" unix.cmxa "$tmp/tr_typed.ml" >"$tmp/tr_typed.log" 2>&1; then
-    bad "$file (trait compile --dt ocamlopt)" "" "$(cat "$tmp/tr_typed.log")"
+    bad "$file (trait compile ocamlopt)" "" "$(cat "$tmp/tr_typed.log")"
   else
     actual=$("$tmp/tr_typed.exe" 2>&1)
-    check_eq "$file (trait compile --dt run)" "$expected" "$actual"
+    check_eq "$file (trait compile run)" "$expected" "$actual"
   fi
 done
 
-# 23) trait 错误（M10.5b）：DT interp / compile --dt 都失败、含片段、不写输出文件
+# 23) trait 错误（M10.5b）：DT interp / compile 都失败、含片段、不写输出文件
 for file in corpus/traits/9[0-9]_*.vuna; do
   expect_dt_error "$file" "$file"
 done
 
-# 24) 跨模块 trait 正例：无头模块全导出（含命名实例）/ header 显式 Trait(..) 两条路径
+# 24) 跨模块 trait 正例：无头模块全导出（含命名实例）/ header 显式 Trait(..)（interp + compile）
 for dir in corpus/traits/[01][0-9]_*/; do
   dir=${dir%/}
   expected=$(cat "$dir/expected.out")
   actual=$("$VUNA" interp --root "$dir/lib" --root "$dir/app" "$dir/app/Main.vuna" 2>&1)
   check_eq "$dir (trait module interp)" "$expected" "$actual"
-  compile_and_run_roots "$dir (trait module compile --dt)" "$VUNA" "--dt" "$dir/app/Main.vuna" "$expected" --root "$dir/lib" --root "$dir/app"
+  compile_and_run_roots "$dir (trait module compile)" "$VUNA" "" "$dir/app/Main.vuna" "$expected" --root "$dir/lib" --root "$dir/app"
 done
 
-# 25) 跨模块 trait 错误：显式导出只写 Trait 不写 (..) → app 用方法 unbound（两条路径）
+# 25) 跨模块 trait 错误：显式导出只写 Trait 不写 (..) → app 用方法 unbound（interp 与 compile）
 for dir in corpus/traits/9[0-9]_*/; do
   dir=${dir%/}
   expect_dt_dir_error "$dir" "$dir" --root "$dir/lib" --root "$dir/app"
 done
 
-# 26) do / Monad / 高阶 kind（M11）：正例 check --dt + interp + compile --dt 两条路径；
-#     错误例两条路径都失败、含片段、不写输出文件。
+# 26) do / Monad / 高阶 kind（M11）：正例 check + interp + compile；
+#     错误例都失败、含片段、不写输出文件。
 #     `.nointerp`：核心求值不执行效果/不归约 → 跳过 interp；
-#     `.nocompile`：擦除 codegen 尚不支持（多隐式参数字典 binder）→ 只断言 check --dt。
+#     `.nocompile`：擦除 codegen 尚不支持（多隐式参数字典 binder）→ 只断言 check。
 for file in corpus/monad/[01][0-9]_*.vuna; do
   base=${file%.vuna}
   expected=$(cat "$base.out")
-  "$VUNA" check --dt "$file" >/dev/null 2>&1
-  check_eq "$file (monad check --dt exit)" "0" "$?"
+  "$VUNA" check "$file" >/dev/null 2>&1
+  check_eq "$file (monad check exit)" "0" "$?"
   if [ -f "$file.nocompile" ]; then
     continue
   fi
@@ -564,15 +572,15 @@ for file in corpus/monad/[01][0-9]_*.vuna; do
     check_eq "$file (monad interp)" "$expected" "$actual"
   fi
   rm -f "$tmp/monad_typed.ml" "$tmp/monad_typed.exe"
-  if ! mon_out=$("$VUNA" compile --dt "$file" "$tmp/monad_typed.ml" 2>&1); then
-    bad "$file (monad compile --dt)" "exit 0" "$mon_out"
+  if ! mon_out=$("$VUNA" compile "$file" "$tmp/monad_typed.ml" 2>&1); then
+    bad "$file (monad compile)" "exit 0" "$mon_out"
   elif [ -n "$mon_out" ]; then
-    bad "$file (monad compile --dt output)" "" "$mon_out"
+    bad "$file (monad compile output)" "" "$mon_out"
   elif ! "$OCAMLOPT" -w -a -I +unix -o "$tmp/monad_typed.exe" unix.cmxa "$tmp/monad_typed.ml" >"$tmp/monad_typed.log" 2>&1; then
-    bad "$file (monad compile --dt ocamlopt)" "" "$(cat "$tmp/monad_typed.log")"
+    bad "$file (monad compile ocamlopt)" "" "$(cat "$tmp/monad_typed.log")"
   else
     actual=$("$tmp/monad_typed.exe" 2>&1)
-    check_eq "$file (monad compile --dt run)" "$expected" "$actual"
+    check_eq "$file (monad compile run)" "$expected" "$actual"
   fi
 done
 
@@ -580,8 +588,8 @@ for file in corpus/monad/9[0-9]_*.vuna; do
   expect_dt_error "$file" "$file"
 done
 
-# 27) stdlib（M11）：正例两条路径（--root ../base/lib，.nointerp 跳过 interp）；
-#     错误例两条路径都失败、含片段、不写输出文件
+# 27) stdlib（M11）：正例（interp + compile，--root ../base/lib，.nointerp 跳过 interp）；
+#     错误例都失败、含片段、不写输出文件
 for file in corpus/stdlib/[01][0-9]_*.vuna; do
   base=${file%.vuna}
   expected=$(cat "$base.out")
@@ -590,15 +598,15 @@ for file in corpus/stdlib/[01][0-9]_*.vuna; do
     check_eq "$file (stdlib interp)" "$expected" "$actual"
   fi
   rm -f "$tmp/stdlib_typed.ml" "$tmp/stdlib_typed.exe"
-  if ! std_out=$("$VUNA" compile --dt --root ../base/lib "$file" "$tmp/stdlib_typed.ml" 2>&1); then
-    bad "$file (stdlib compile --dt)" "exit 0" "$std_out"
+  if ! std_out=$("$VUNA" compile --root ../base/lib "$file" "$tmp/stdlib_typed.ml" 2>&1); then
+    bad "$file (stdlib compile)" "exit 0" "$std_out"
   elif [ -n "$std_out" ]; then
-    bad "$file (stdlib compile --dt output)" "" "$std_out"
+    bad "$file (stdlib compile output)" "" "$std_out"
   elif ! "$OCAMLOPT" -w -a -I +unix -o "$tmp/stdlib_typed.exe" unix.cmxa "$tmp/stdlib_typed.ml" >"$tmp/stdlib_typed.log" 2>&1; then
-    bad "$file (stdlib compile --dt ocamlopt)" "" "$(cat "$tmp/stdlib_typed.log")"
+    bad "$file (stdlib compile ocamlopt)" "" "$(cat "$tmp/stdlib_typed.log")"
   else
     actual=$("$tmp/stdlib_typed.exe" 2>&1)
-    check_eq "$file (stdlib compile --dt run)" "$expected" "$actual"
+    check_eq "$file (stdlib compile run)" "$expected" "$actual"
   fi
 done
 
@@ -606,45 +614,52 @@ for file in corpus/stdlib/9[0-9]_*.vuna; do
   expect_dt_error "$file" "$file" --root ../base/lib
 done
 
-# 28) 包模式（M11.5/M12.8）：workspace + 依赖包 + [export] + app/Main.vuna 入口
-#     正例：vuna compile --package 生成 .output → build.sh 链接 → 运行比对 golden
-#     （包 HM 构建路径 M23 保留，M24 切 DT；`vuna test` 已随 interp 走 DT）
+# 28) 包模式（M11.5/M12.8/M24）：workspace + 依赖包 + [export] + app/Main.vuna 入口。
+#     正例：`vuna build` 走 DT 单文件 → .output/{main.ml,build.sh,bin/<pkg>} → 运行比对 golden；
+#     `vuna check` / `vuna test` 也已是 DT（包 check = DT 精化；test = DT 核心求值）。
 for dir in corpus/packages/[01][0-9]_*/; do
   dir=${dir%/}
   expected=$(cat "$dir/expected.out")
-  pkg_out_dir=$tmp/pkg-out-$(basename "$dir")
-  rm -rf "$pkg_out_dir"
-  if ! pkg_out=$("$VUNA" compile --package --out "$pkg_out_dir" "$dir" 2>&1); then
-    bad "$dir (package compile)" "exit 0" "$pkg_out"
-  elif ! ( cd "$pkg_out_dir" && OCAMLOPT="$OCAMLOPT" sh build.sh bin/prog ) >"$tmp/pkg.log" 2>&1; then
-    bad "$dir (package build)" "" "$(cat "$tmp/pkg.log")"
+  rm -rf "$dir/.output"
+  if ! pkg_out=$("$VUNA" build "$dir" 2>&1); then
+    bad "$dir (package build)" "exit 0" "$pkg_out"
+  elif [ ! -f "$dir/.output/main.ml" ] || [ ! -f "$dir/.output/build.sh" ]; then
+    bad "$dir (package layout)" "main.ml+build.sh" "missing"
   else
-    actual=$("$pkg_out_dir/bin/prog" 2>&1)
-    check_eq "$dir (package run)" "$expected" "$actual"
+    pkg_bin=
+    for b in "$dir"/.output/bin/*; do
+      if [ -x "$b" ]; then pkg_bin=$b; fi
+    done
+    if [ -z "$pkg_bin" ]; then
+      bad "$dir (package bin)" "executable under .output/bin" "missing"
+    else
+      actual=$("$pkg_bin" 2>&1)
+      check_eq "$dir (package run)" "$expected" "$actual"
+    fi
   fi
-  "$VUNA" check --dt "$dir" >/dev/null 2>&1
-  check_eq "$dir (package check --dt)" "0" "$?"
-  test_out=$("$VUNA" test "$dir" 2>&1)
-  check_contains "$dir (package test)" "$test_out" "1 passed, 0 failed"
   "$VUNA" check "$dir" >/dev/null 2>&1
   check_eq "$dir (package check)" "0" "$?"
+  test_out=$("$VUNA" test "$dir" 2>&1)
+  check_contains "$dir (package test)" "$test_out" "1 passed, 0 failed"
+  rm -rf "$dir/.output"
 done
 
-# 29) 包模式错误：缺依赖 / 依赖环 / 隐藏模块（[export] 限制）→ 非 0、含片段、不写产物
+# 29) 包模式错误：缺依赖 / 依赖环 / 隐藏模块（[export] 限制）→ 非 0、含片段、不写产物。
+#     `vuna build` 在写 .output 前就做包解析与 DT 精化，失败不得留下任何产物。
 for dir in corpus/packages/9[0-9]_*/; do
   dir=${dir%/}
   fragment=$(cat "$dir/expected.err")
-  pkg_err_dir=$tmp/pkg-err-out-$(basename "$dir")
-  rm -rf "$pkg_err_dir"
-  actual=$("$VUNA" compile --package --out "$pkg_err_dir" "$dir" 2>&1)
+  rm -rf "$dir/.output"
+  actual=$("$VUNA" build "$dir" 2>&1)
   pkg_code=$?
   check_contains "$dir (package error)" "$actual" "$fragment"
   if [ "$pkg_code" -ne 0 ]; then ok; else bad "$dir (package error exit)" "non-zero" "$pkg_code"; fi
-  if [ -e "$pkg_err_dir/lib" ] || [ -e "$pkg_err_dir/app" ]; then
+  if [ -e "$dir/.output" ]; then
     bad "$dir (package no output files)" "absent" "present"
   else
     ok
   fi
+  rm -rf "$dir/.output"
 done
 
 # 30) fmt（M11.5/M11.6）：格式化后仍可解释（DT 语义）且输出不变；fmt 幂等
@@ -669,57 +684,57 @@ check_contains "vuna repl eval" "$repl_out" "42"
 printf ':q\n' | "$VUNA" repl >/dev/null 2>&1
 check_eq "vuna repl exit" "0" "$?"
 
-# 32) fmt golden 自测（test/corpus/fmt/check.sh：临时合并模块根；interp 已随 DT）
+# 32) fmt golden 自测（test/corpus/fmt/check.sh：把工具链/编译器/base 合成为临时包编译探针；interp 已随 DT）
 VUNA="$VUNA" OCAMLOPT="$OCAMLOPT" sh corpus/fmt/check.sh >"$tmp/fmt_check.log" 2>&1
 fmt_code=$?
 if [ "$fmt_code" -eq 0 ]; then ok; else bad "fmt corpus" "exit 0" "$(tail -3 "$tmp/fmt_check.log")"; fi
 
-# 33) M12.8 包级 compile：.output/{lib,app} → build.sh 增量编译 → 输出一致
-#     （HM Split 输出模型 M23 保留，M24 删除）
+# 33) M24 包级 split：`vuna build --split OUT` 走 DT 逐模块 codegen
+#     → OUT/<Module>.ml... + build.sh；build.sh 增量编译（无改动不重编；touch 模块只重编受影响者）。
 for pkg in corpus/packages/[01][0-9]_*/; do
   pkg=${pkg%/}
   split_dir=$tmp/split-$(basename "$pkg")
   rm -rf "$split_dir"
-  mkdir -p "$split_dir"
-  if ! split_out=$("$VUNA" compile --package --out "$split_dir" "$pkg" 2>&1); then
-    bad "$pkg (package generate)" "exit 0" "$split_out"
+  if ! split_out=$("$VUNA" build --split "$split_dir" "$pkg" 2>&1); then
+    bad "$pkg (package split)" "exit 0" "$split_out"
     continue
   fi
-  if [ ! -f "$split_dir/build.sh" ] || [ ! -f "$split_dir/app/Main.ml" ]; then
-    bad "$pkg (package layout)" "lib+app+build.sh" "missing"
+  if [ ! -f "$split_dir/build.sh" ] || [ ! -f "$split_dir/Main.ml" ]; then
+    bad "$pkg (package split layout)" "Main.ml+build.sh" "missing"
     continue
   fi
   ok
+  mkdir -p "$split_dir/bin"
   ( cd "$split_dir" && OCAMLOPT="$OCAMLOPT" sh build.sh bin/prog ) >"$tmp/split_build.log" 2>&1
-  check_eq "$pkg (package build exit)" "0" "$?"
+  check_eq "$pkg (package split build exit)" "0" "$?"
   actual=$("$split_dir/bin/prog" 2>&1)
-  check_eq "$pkg (package run)" "$(cat "$pkg/expected.out")" "$actual"
+  check_eq "$pkg (package split run)" "$(cat "$pkg/expected.out")" "$actual"
 done
 
-# 增量构建行为用 01_workspace 验证
+# 增量构建行为用 01_workspace 验证（DT split 的编译单元 = sanitizeName 后的模块名）。
 split_dir=$tmp/split-01_workspace
 ( cd "$split_dir" && OCAMLOPT="$OCAMLOPT" sh build.sh bin/prog ) >"$tmp/split_noop.log" 2>&1
 if grep -q '^compile ' "$tmp/split_noop.log"; then
-  bad "package incremental noop" "no compile lines" "$(cat "$tmp/split_noop.log")"
+  bad "package split incremental noop" "no compile lines" "$(cat "$tmp/split_noop.log")"
 else
   ok
 fi
-touch "$split_dir/lib/Vuna_dHello.ml"
+touch "$split_dir/Vuna_dHello.ml"
 ( cd "$split_dir" && OCAMLOPT="$OCAMLOPT" sh build.sh bin/prog ) >"$tmp/split_inc.log" 2>&1
-check_contains "package incremental module" "$(cat "$tmp/split_inc.log")" "compile Vuna_dHello"
+check_contains "package split incremental module" "$(cat "$tmp/split_inc.log")" "compile Vuna_dHello"
 if grep -q '^compile Vuna_runtime' "$tmp/split_inc.log"; then
-  bad "package incremental runtime untouched" "no runtime compile" "$(cat "$tmp/split_inc.log")"
+  bad "package split incremental runtime untouched" "no runtime compile" "$(cat "$tmp/split_inc.log")"
 else
   ok
 fi
 
 
-# 34) DT（M13）：interp（DT 精化 + 核心求值）/ compile --dt（擦除 codegen）与 golden 一致
+# 34) DT 核心路径（M13）：interp（DT 精化 + 核心求值）/ compile（DT codegen）与 golden 一致
 #
-# M18.5 追加：核心求值器与擦除 codegen 必须语义一致——同一夹具 `interp` 的输出
-# 与 `compile`+`ocamlopt` 产物的输出逐字节相同（不依赖 golden，直接对拍两条路径）。
-# M23：interp 的 DT 语义成为唯一路径，`--dt` 从 interp 移除；`main : IO a` 的夹具
-# （核心求值器不执行效果）带 `.nointerp` 标记，跳过 interp 只做 check+compile+run。
+# M18.5 追加：核心求值器与 codegen 必须语义一致——同一夹具 `interp` 的输出
+# 与 `compile`+`ocamlopt` 产物的输出逐字节相同（不依赖 golden，直接对拍 interp 与 codegen）。
+# M24：DT 是唯一路径（`--dt` 已删）；`main : IO a` 的夹具（核心求值器不执行效果）
+# 带 `.nointerp` 标记，跳过 interp 只做 check+compile+run。
 for file in corpus/dt/*.vuna; do
   base=${file%.vuna}
   expected=$(cat "$base.out")
@@ -731,10 +746,10 @@ for file in corpus/dt/*.vuna; do
     interp_out=$actual
     have_interp=1
   fi
-  "$VUNA" check --dt "$file" >/dev/null 2>&1
+  "$VUNA" check "$file" >/dev/null 2>&1
   check_eq "$file (dt check exit)" "0" "$?"
   rm -f "$tmp/dt.ml" "$tmp/dt.exe"
-  if ! dt_out=$("$VUNA" compile --dt "$file" "$tmp/dt.ml" 2>&1); then
+  if ! dt_out=$("$VUNA" compile "$file" "$tmp/dt.ml" 2>&1); then
     bad "$file (dt compile)" "exit 0" "$dt_out"
   elif [ -n "$dt_out" ]; then
     bad "$file (dt compile output)" "" "$dt_out"
@@ -749,15 +764,15 @@ for file in corpus/dt/*.vuna; do
   fi
 done
 
-# DT 错误：check --dt 与 compile --dt 都失败、含片段、不写输出文件
+# DT 错误：check 与 compile 都失败、含片段、不写输出文件
 for file in corpus/dt_err/*.vuna; do
   fragment=$(cat "${file%.vuna}.err")
-  actual=$("$VUNA" check --dt "$file" 2>&1)
+  actual=$("$VUNA" check "$file" 2>&1)
   dt_code=$?
   check_contains "$file (dt error)" "$actual" "$fragment"
   if [ "$dt_code" -ne 0 ]; then ok; else bad "$file (dt error exit)" "non-zero" "$dt_code"; fi
   rm -f "$tmp/dt_err_compile.ml"
-  actual=$("$VUNA" compile --dt "$file" "$tmp/dt_err_compile.ml" 2>&1)
+  actual=$("$VUNA" compile "$file" "$tmp/dt_err_compile.ml" 2>&1)
   dt_code=$?
   check_contains "$file (dt compile error)" "$actual" "$fragment"
   if [ "$dt_code" -ne 0 ]; then ok; else bad "$file (dt compile error exit)" "non-zero" "$dt_code"; fi
@@ -775,7 +790,7 @@ done
 for file in corpus/dt_base/*.vuna; do
   base=${file%.vuna}
   expected=$(cat "$base.out")
-  "$VUNA" check --dt --root ../base/lib "$file" >/dev/null 2>&1
+  "$VUNA" check --root ../base/lib "$file" >/dev/null 2>&1
   check_eq "$file (dt base check exit)" "0" "$?"
   rm -f "$tmp/dt_base.ml" "$tmp/dt_base.exe"
   interp_out=""
@@ -785,7 +800,7 @@ for file in corpus/dt_base/*.vuna; do
     check_eq "$file (dt base interp)" "$expected" "$interp_out"
     have_interp=1
   fi
-  if ! dt_out=$("$VUNA" compile --dt --root ../base/lib "$file" "$tmp/dt_base.ml" 2>&1); then
+  if ! dt_out=$("$VUNA" compile --root ../base/lib "$file" "$tmp/dt_base.ml" 2>&1); then
     bad "$file (dt base compile)" "exit 0" "$dt_out"
   elif [ -n "$dt_out" ]; then
     bad "$file (dt base compile output)" "" "$dt_out"
@@ -802,14 +817,14 @@ done
 
 # 34b) DT 效果（M21）：`main : IO a` 的编译产物真正执行 Base.IO 效果。
 # core evaluator 是纯求值器（不跑效果），所以效果夹具只要求「编译产物输出 == golden」，
-# 并额外要求 `check --dt` 通过。
+# 并额外要求 `check` 通过。
 for file in corpus/dt_io/*.vuna; do
   base=${file%.vuna}
   expected=$(cat "$base.out")
-  "$VUNA" check --dt --root ../base/lib "$file" >/dev/null 2>&1
+  "$VUNA" check --root ../base/lib "$file" >/dev/null 2>&1
   check_eq "$file (dt io check exit)" "0" "$?"
   rm -f "$tmp/dt_io.ml" "$tmp/dt_io.exe"
-  if ! dt_out=$("$VUNA" compile --dt --root ../base/lib "$file" "$tmp/dt_io.ml" 2>&1); then
+  if ! dt_out=$("$VUNA" compile --root ../base/lib "$file" "$tmp/dt_io.ml" 2>&1); then
     bad "$file (dt io compile)" "exit 0" "$dt_out"
   elif [ -n "$dt_out" ]; then
     bad "$file (dt io compile output)" "" "$dt_out"
@@ -821,12 +836,12 @@ for file in corpus/dt_io/*.vuna; do
   fi
 done
 
-# 34c) DT 包目录（M22.1）：check --dt / compile --dt 接受包目录（loadProject + resolveProject）
+# 34c) DT 包目录（M22.1）：check / compile 接受包目录（loadProject + resolveProject）
 exec_pkg=corpus/dt_pkg/01_exec
-"$VUNA" check --dt "$exec_pkg" >/dev/null 2>&1
+"$VUNA" check "$exec_pkg" >/dev/null 2>&1
 check_eq "$exec_pkg (dt pkg check exit)" "0" "$?"
 rm -f "$tmp/dt_pkg.ml" "$tmp/dt_pkg.exe"
-if ! dt_pkg_out=$("$VUNA" compile --dt "$exec_pkg" "$tmp/dt_pkg.ml" 2>&1); then
+if ! dt_pkg_out=$("$VUNA" compile "$exec_pkg" "$tmp/dt_pkg.ml" 2>&1); then
   bad "$exec_pkg (dt pkg compile)" "exit 0" "$dt_pkg_out"
 elif [ -n "$dt_pkg_out" ]; then
   bad "$exec_pkg (dt pkg compile output)" "" "$dt_pkg_out"
@@ -839,10 +854,10 @@ fi
 
 # 库包：check 通过；compile 清晰报错（非崩溃），且不写输出文件
 lib_pkg=corpus/dt_pkg/02_lib
-"$VUNA" check --dt "$lib_pkg" >/dev/null 2>&1
+"$VUNA" check "$lib_pkg" >/dev/null 2>&1
 check_eq "$lib_pkg (dt lib check exit)" "0" "$?"
 rm -f "$tmp/dt_lib.ml"
-lib_err=$("$VUNA" compile --dt "$lib_pkg" "$tmp/dt_lib.ml" 2>&1)
+lib_err=$("$VUNA" compile "$lib_pkg" "$tmp/dt_lib.ml" 2>&1)
 lib_code=$?
 check_contains "$lib_pkg (dt lib compile error)" "$lib_err" "library package"
 if [ "$lib_code" -ne 0 ]; then ok; else bad "$lib_pkg (dt lib compile exit)" "non-zero" "$lib_code"; fi
@@ -854,94 +869,82 @@ fi
 
 # 非法目录 / 不存在的路径：清晰错误而非 Fatal error
 bad_pkg=corpus/dt_pkg/03_bad
-bad_err=$("$VUNA" check --dt "$bad_pkg" 2>&1)
+bad_err=$("$VUNA" check "$bad_pkg" 2>&1)
 bad_code=$?
 check_contains "$bad_pkg (dt bad dir error)" "$bad_err" "missing vuna.toml"
 if [ "$bad_code" -ne 0 ]; then ok; else bad "$bad_pkg (dt bad dir exit)" "non-zero" "$bad_code"; fi
-missing_err=$("$VUNA" check --dt corpus/dt_pkg/99_missing 2>&1)
+missing_err=$("$VUNA" check corpus/dt_pkg/99_missing 2>&1)
 check_contains "dt pkg missing path error" "$missing_err" "no such file or package directory"
 check_contains "dt pkg missing path no fatal" "$missing_err" "error:"
 
-# interp 只接受单文件：包目录给出清晰错误（M22.1）；M23 起不再有 `--dt`
+# interp 只接受单文件：包目录给出清晰错误（M22.1）。
 interp_err=$("$VUNA" interp "$exec_pkg" 2>&1)
 check_contains "dt interp package dir error" "$interp_err" "single file"
-# DT CLI：M20 起 `--dt` 接受 --root（复用 Loader）；M22.1 起 check/compile 接受包目录；
-# build/seed 的 --dt 入口见 34d（M22.3a）。
+# M24：check/compile 默认就是 DT，且接受 --root 与包目录；help 不再宣传 `--dt`。
 help_out=$("$VUNA" help 2>&1)
-check_contains "dt help" "$help_out" "--dt"
+case "$help_out" in
+  *--dt*) bad "dt help no --dt" "absent" "help still mentions --dt" ;;
+  *) ok ;;
+esac
 dt_multi_out=$("$VUNA" interp --root corpus/dt_root corpus/dt_root/Main.vuna 2>&1)
 check_eq "dt interp --root exit" "0" "$?"
 check_eq "dt interp --root output" "42" "$dt_multi_out"
-"$VUNA" seed --dt >/dev/null 2>&1
+"$VUNA" seed >/dev/null 2>&1
 check_eq "dt seed requires OUT exit" "2" "$?"
 
-# 34d) DT build / seed 入口（M22.3a）：build --dt 产可执行 bin；--split / seed --dt
-#      产单文件 main.ml + build.sh；seed --dt 拒绝写 seed/；HM build 零回归。
+# 34d) 构建入口（M22.3a / M24）：`build` 产可执行 bin；`build --split` / `seed OUT [DIR]`
+#      产逐模块源码 + build.sh（seed 轮换用，OUT 必须显式给出）。
 dt_src=corpus/dt_pkg/01_exec
 dt_pkg=$tmp/dt-build-pkg
 rm -rf "$dt_pkg"
 cp -R "$dt_src" "$dt_pkg"
 dt_expected=$(cat "$dt_src/expected.out")
 
-if ! dt_build_out=$("$VUNA" build --dt "$dt_pkg" 2>&1); then
-  bad "$dt_src (dt build)" "exit 0" "$dt_build_out"
+if ! dt_build_out=$("$VUNA" build "$dt_pkg" 2>&1); then
+  bad "$dt_src (build)" "exit 0" "$dt_build_out"
 elif [ ! -x "$dt_pkg/.output/bin/dtpkg-exec" ]; then
-  bad "$dt_src (dt build bin)" "executable" "missing"
+  bad "$dt_src (build bin)" "executable" "missing"
 else
-  check_eq "$dt_src (dt build run)" "$dt_expected" "$("$dt_pkg/.output/bin/dtpkg-exec" 2>&1)"
+  check_eq "$dt_src (build run)" "$dt_expected" "$("$dt_pkg/.output/bin/dtpkg-exec" 2>&1)"
 fi
 
 rm -rf "$dt_pkg/.output"
-"$VUNA" build --dt --no-compile "$dt_pkg" >/dev/null 2>&1
-check_eq "$dt_src (dt build --no-compile exit)" "0" "$?"
+"$VUNA" build --no-compile "$dt_pkg" >/dev/null 2>&1
+check_eq "$dt_src (build --no-compile exit)" "0" "$?"
 if [ -e "$dt_pkg/.output/main.ml" ] && [ -e "$dt_pkg/.output/build.sh" ] && [ ! -e "$dt_pkg/.output/bin" ]; then
   ok
 else
-  bad "$dt_src (dt build --no-compile layout)" "main.ml+build.sh, no bin" "unexpected"
+  bad "$dt_src (build --no-compile layout)" "main.ml+build.sh, no bin" "unexpected"
 fi
 
 dt_split=$tmp/dt-split
 rm -rf "$dt_split"
-if ! dt_split_out=$("$VUNA" build --dt --split "$dt_split" "$dt_pkg" 2>&1); then
-  bad "$dt_src (dt build --split)" "exit 0" "$dt_split_out"
-elif ! ( cd "$dt_split" && sh build.sh ) >"$tmp/dt_split.log" 2>&1; then
-  bad "$dt_src (dt build --split build.sh)" "exit 0" "$(cat "$tmp/dt_split.log")"
+if ! dt_split_out=$("$VUNA" build --split "$dt_split" "$dt_pkg" 2>&1); then
+  bad "$dt_src (build --split)" "exit 0" "$dt_split_out"
+elif [ ! -f "$dt_split/build.sh" ] || [ ! -f "$dt_split/Main.ml" ]; then
+  bad "$dt_src (build --split layout)" "Main.ml+build.sh" "missing"
+elif ! ( cd "$dt_split" && sh build.sh prog ) >"$tmp/dt_split.log" 2>&1; then
+  bad "$dt_src (build --split build.sh)" "exit 0" "$(cat "$tmp/dt_split.log")"
 else
-  check_eq "$dt_src (dt build --split run)" "$dt_expected" "$("$dt_split/main" 2>&1)"
+  check_eq "$dt_src (build --split run)" "$dt_expected" "$("$dt_split/prog" 2>&1)"
 fi
 
 dt_seed=$tmp/dt-seed
 rm -rf "$dt_seed"
-if ! dt_seed_out=$("$VUNA" seed --dt "$dt_seed" "$dt_pkg" 2>&1); then
-  bad "$dt_src (dt seed)" "exit 0" "$dt_seed_out"
-elif ! ( cd "$dt_seed" && sh build.sh ) >"$tmp/dt_seed.log" 2>&1; then
-  bad "$dt_src (dt seed build.sh)" "exit 0" "$(cat "$tmp/dt_seed.log")"
+if ! dt_seed_out=$("$VUNA" seed "$dt_seed" "$dt_pkg" 2>&1); then
+  bad "$dt_src (seed)" "exit 0" "$dt_seed_out"
+elif [ ! -f "$dt_seed/build.sh" ] || [ ! -f "$dt_seed/Main.ml" ]; then
+  bad "$dt_src (seed layout)" "Main.ml+build.sh" "missing"
+elif ! ( cd "$dt_seed" && sh build.sh prog ) >"$tmp/dt_seed.log" 2>&1; then
+  bad "$dt_src (seed build.sh)" "exit 0" "$(cat "$tmp/dt_seed.log")"
 else
-  check_eq "$dt_src (dt seed run)" "$dt_expected" "$("$dt_seed/main" 2>&1)"
+  check_eq "$dt_src (seed run)" "$dt_expected" "$("$dt_seed/prog" 2>&1)"
 fi
 
-seed_refuse=$("$VUNA" seed --dt ../seed "$dt_pkg" 2>&1)
-seed_refuse_code=$?
-check_contains "$dt_src (dt seed refuses seed/)" "$seed_refuse" "refusing to write DT output"
-if [ "$seed_refuse_code" -ne 0 ]; then ok; else bad "$dt_src (dt seed refuses seed/ exit)" "non-zero" "$seed_refuse_code"; fi
-if [ -e ../seed/main.ml ]; then
-  bad "$dt_src (dt seed no seed/ write)" "absent" "present"
-else
-  ok
-fi
-
-dt_lib_err=$("$VUNA" build --dt corpus/dt_pkg/02_lib 2>&1)
+dt_lib_err=$("$VUNA" build corpus/dt_pkg/02_lib 2>&1)
 dt_lib_code=$?
-check_contains "$dt_src (dt build library error)" "$dt_lib_err" "library package"
-if [ "$dt_lib_code" -ne 0 ]; then ok; else bad "$dt_src (dt build library exit)" "non-zero" "$dt_lib_code"; fi
-
-# HM build 零回归
-hm_pkg=corpus/packages/01_workspace
-rm -rf "$hm_pkg/.output"
-"$VUNA" build "$hm_pkg" >/dev/null 2>&1
-check_eq "$hm_pkg (hm build)" "0" "$?"
-check_eq "$hm_pkg (hm build run)" "$(cat "$hm_pkg/expected.out")" "$("$hm_pkg/.output/bin/app" 2>&1)"
-rm -rf "$hm_pkg/.output"
+check_contains "$dt_src (build library error)" "$dt_lib_err" "library package"
+if [ "$dt_lib_code" -ne 0 ]; then ok; else bad "$dt_src (build library exit)" "non-zero" "$dt_lib_code"; fi
 
 # DT fmt round-trip：Pi 语法格式化后仍解析为同一程序且幂等
 cp corpus/dt/03_compose.vuna "$tmp/dt_fmt.vuna"

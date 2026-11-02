@@ -1,60 +1,48 @@
 open Vuna_runtime
+open Vuna_builtins
 open Base_dPair
 open Base_dBool
 open Base_dMonad
-type   'p0 t_Base_dMaybe_dMaybe =
-    C_Base_dMaybe_dNothing
-  | C_Base_dMaybe_dJust of ('p0)
-let show_Base_dMaybe_dMaybe : 'p0. ('p0 -> string) -> ('p0) t_Base_dMaybe_dMaybe -> string = fun s0 v -> match v with
-  | C_Base_dMaybe_dNothing -> "Nothing"
-  | C_Base_dMaybe_dJust f0 -> show_ctor "Just" [(s0) f0]
-let v_Base_dMaybe_dfromMaybe = fun d m -> (match m with
-  | C_Base_dMaybe_dNothing -> d
-  | C_Base_dMaybe_dJust (x) -> x
-  | _ -> vuna_fail "base/lib/Base/Maybe.vuna" 14 17 ("case pattern match failure"))
+type 'a0 t_Base_dMaybe_dMaybe = C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust of ('a0)
 
-let v_Base_dMaybe_disJust = fun m -> (match m with
-  | C_Base_dMaybe_dNothing -> false
-  | C_Base_dMaybe_dJust (_) -> true
-  | _ -> vuna_fail "base/lib/Base/Maybe.vuna" 19 12 ("case pattern match failure"))
+let v_Base_dMaybe_dBase_dMonad_dFunctor_uBase_dMonad_dFunctor_uBase_dMaybe_dMaybe = fun () -> (C_Dict_uBase_dMonad_dFunctor_MkDict_uBase_dMonad_dFunctor ((fun f -> (fun m -> (match m with
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__0) -> (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust ((f dtb__0)))
+  | _ -> failwith "DT: impossible branch"
+)))))
 
-let v_Base_dMaybe_disNothing = fun m -> (match m with
-  | C_Base_dMaybe_dNothing -> true
-  | C_Base_dMaybe_dJust (_) -> false
-  | _ -> vuna_fail "base/lib/Base/Maybe.vuna" 24 15 ("case pattern match failure"))
+let v_Base_dMaybe_dBase_dMonad_dMonad_uBase_dMonad_dMonad_uBase_dMaybe_dMaybe = fun () -> (C_Dict_uBase_dMonad_dMonad_MkDict_uBase_dMonad_dMonad ((fun m -> (fun f -> (match m with
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__1) -> (f dtb__1)
+  | _ -> failwith "DT: impossible branch"
+))), (fun x -> (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (x)))))
 
-let v_Base_dMaybe_dmaybe = fun d f m -> (match m with
-  | C_Base_dMaybe_dNothing -> d
-  | C_Base_dMaybe_dJust (x) -> f x
-  | _ -> vuna_fail "base/lib/Base/Maybe.vuna" 29 15 ("case pattern match failure"))
+let v_Base_dMaybe_dfromMaybe = (fun d -> (fun m -> (match m with
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> d
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__2) -> dtb__2
+  | _ -> failwith "DT: impossible branch"
+)))
 
-let v_Base_dMaybe_dmapJust = fun f m -> (match m with
-  | C_Base_dMaybe_dNothing -> C_Base_dMaybe_dNothing
-  | C_Base_dMaybe_dJust (x) -> C_Base_dMaybe_dJust (f x)
-  | _ -> vuna_fail "base/lib/Base/Maybe.vuna" 34 15 ("case pattern match failure"))
+let v_Base_dMaybe_disJust = (fun m -> (match m with
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> false
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__3) -> true
+  | _ -> failwith "DT: impossible branch"
+))
 
-let v_vuna_uinst_ud_uBase_uMaybe_uMaybe_ufmap = fun f m -> (match m with
-  | C_Base_dMaybe_dNothing -> C_Base_dMaybe_dNothing
-  | C_Base_dMaybe_dJust (x) -> C_Base_dMaybe_dJust (f x)
-  | _ -> vuna_fail "base/lib/Base/Maybe.vuna" 41 14 ("case pattern match failure"))
+let v_Base_dMaybe_disNothing = (fun m -> (match m with
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> true
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__4) -> false
+  | _ -> failwith "DT: impossible branch"
+))
 
-let v_vuna_uinst_ud_uBase_uMaybe_uMaybe_upure = fun x -> C_Base_dMaybe_dJust (x)
+let v_Base_dMaybe_dmaybe = (fun d -> (fun f -> (fun m -> (match m with
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> d
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__5) -> (f dtb__5)
+  | _ -> failwith "DT: impossible branch"
+))))
 
-let v_vuna_uinst_ud_uBase_uMaybe_uMaybe_ubind = fun m f -> (match m with
-  | C_Base_dMaybe_dNothing -> C_Base_dMaybe_dNothing
-  | C_Base_dMaybe_dJust (x) -> f x
-  | _ -> vuna_fail "base/lib/Base/Maybe.vuna" 46 14 ("case pattern match failure"))
-
-let v_vuna_ueq_uBase_uMaybe_uMaybe = fun x y -> (match x with
-  | C_Base_dMaybe_dNothing -> (match y with
-  | C_Base_dMaybe_dNothing -> v_vuna_ueq_uint 0 0
-  | _ -> v_vuna_ueq_uint 0 1
-  | _ -> vuna_fail "<generated>" 518 25 ("case pattern match failure"))
-  | C_Base_dMaybe_dJust (v0) -> (match y with
-  | C_Base_dMaybe_dJust (w0) -> v_vuna_ueq_ugeneric v0 w0
-  | _ -> v_vuna_ueq_uint 0 1
-  | _ -> vuna_fail "<generated>" 521 25 ("case pattern match failure"))
-  | _ -> v_vuna_ueq_uint 0 1
-  | _ -> vuna_fail "<generated>" 517 32 ("case pattern match failure"))
-
-let v_vuna_uneq_uBase_uMaybe_uMaybe = fun x y -> if v_vuna_ueq_uBase_uMaybe_uMaybe x y then v_vuna_ueq_uint 0 1 else v_vuna_ueq_uint 0 0
+let v_Base_dMaybe_dmapJust = (fun f -> (fun m -> (match m with
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__6) -> (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust ((f dtb__6)))
+  | _ -> failwith "DT: impossible branch"
+)))

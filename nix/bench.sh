@@ -277,10 +277,10 @@ cat "$SELF_OUT_SRC"/*.ml >"$WORK/self_concat.ml"
 cat "$STAGE1_SRC"/*.ml >"$WORK/stage1_concat.ml"
 cat seed/*.ml >"$WORK/seed_concat.ml"
 
-printf 'main = 40 + 2\n' >tiny.vuna
+printf 'main : Int\nmain = 40 + 2\n' >tiny.vuna
 measure tiny_compile "$SELF_BIN" compile --root compiler/lib --root lib --root base/lib --root app --no-print tiny.vuna "$WORK/tiny.ml"
-# M13：DT 精化 + 擦除 codegen 基准（单文件，Pi + 类型擦除）
-measure dt_elab "$SELF_BIN" compile --dt --no-print test/corpus/dt/03_compose.vuna "$WORK/dt.ml"
+# DT 精化 + 擦除 codegen 基准（单文件，Pi + 类型擦除；M24 起是唯一 codegen 路径）
+measure dt_elab "$SELF_BIN" compile --no-print test/corpus/dt/03_compose.vuna "$WORK/dt.ml"
 
 # ---- corpus 批量编译（单次计时，内部循环） --------------------------------
 cat >"$WORK/corpus.sh" <<'EOS'

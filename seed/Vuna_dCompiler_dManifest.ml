@@ -1,196 +1,227 @@
 open Vuna_runtime
+open Vuna_builtins
 open Base_dPair
 open Base_dBool
 open Base_dMonad
 open Base_dMaybe
 open Base_dList
-open Base_dIO
 open Base_dResult
 open Base_dString
 open Prelude
 open Vuna_dCompiler_dCommon
 open Vuna_dCompiler_dToml
-type   t_Vuna_dCompiler_dManifest_dManifest =
-    C_Vuna_dCompiler_dManifest_dManifest of ((string) t_Base_dMaybe_dMaybe) * ((string) t_Base_dMaybe_dMaybe) * ((string) t_Base_dMaybe_dMaybe) * ((string) list) * (((string) list) t_Base_dMaybe_dMaybe) * (((string, string) t_Base_dPair_dPair) list) * (string)
-let show_Vuna_dCompiler_dManifest_dManifest v =
-  match v with
-  | C_Vuna_dCompiler_dManifest_dManifest (f0, f1, f2, f3, f4, f5, f6) -> show_ctor "Manifest" [((show_Base_dMaybe_dMaybe show_vstring)) f0; ((show_Base_dMaybe_dMaybe show_vstring)) f1; ((show_Base_dMaybe_dMaybe show_vstring)) f2; ((fun v -> let rec go = function [] -> "Nil" | x :: xs -> "(Cons " ^ (show_vstring) x ^ " " ^ go xs ^ ")" in go v)) f3; ((show_Base_dMaybe_dMaybe (fun v -> let rec go = function [] -> "Nil" | x :: xs -> "(Cons " ^ (show_vstring) x ^ " " ^ go xs ^ ")" in go v))) f4; ((fun v -> let rec go = function [] -> "Nil" | x :: xs -> "(Cons " ^ ((show_Base_dPair_dPair show_vstring show_vstring)) x ^ " " ^ go xs ^ ")" in go v)) f5; (show_vstring) f6]
-let v_Vuna_dCompiler_dManifest_dmanifestName = fun a0 -> match a0 with
-  | (C_Vuna_dCompiler_dManifest_dManifest (name, version, edition, members, exports, deps, path)) -> name
-  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Manifest.vuna" 18 1 ("no matching clause for Vuna.Compiler.Manifest.manifestName")
+type t_Vuna_dCompiler_dManifest_dManifest = C_Vuna_dCompiler_dManifest_dManifest_Vuna_dCompiler_dManifest_dManifest of (string t_Base_dMaybe_dMaybe) * (string t_Base_dMaybe_dMaybe) * (string t_Base_dMaybe_dMaybe) * (string t_Base_dList_dList) * (string t_Base_dList_dList t_Base_dMaybe_dMaybe) * ((string, string) t_Base_dPair_dPair t_Base_dList_dList) * (string)
 
-let v_Vuna_dCompiler_dManifest_dmanifestVersion = fun a0 -> match a0 with
-  | (C_Vuna_dCompiler_dManifest_dManifest (name, version, edition, members, exports, deps, path)) -> version
-  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Manifest.vuna" 21 1 ("no matching clause for Vuna.Compiler.Manifest.manifestVersion")
+let v_Vuna_dCompiler_dManifest_dmanifestName = (fun mc0 -> (match mc0 with
+  | C_Vuna_dCompiler_dManifest_dManifest_Vuna_dCompiler_dManifest_dManifest (dtb__0, dtb__1, dtb__2, dtb__3, dtb__4, dtb__5, dtb__6) -> dtb__0
+  | _ -> failwith "DT: impossible branch"
+))
 
-let v_Vuna_dCompiler_dManifest_dmanifestEdition = fun a0 -> match a0 with
-  | (C_Vuna_dCompiler_dManifest_dManifest (name, version, edition, members, exports, deps, path)) -> edition
-  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Manifest.vuna" 24 1 ("no matching clause for Vuna.Compiler.Manifest.manifestEdition")
+let v_Vuna_dCompiler_dManifest_dmanifestVersion = (fun mc0 -> (match mc0 with
+  | C_Vuna_dCompiler_dManifest_dManifest_Vuna_dCompiler_dManifest_dManifest (dtb__7, dtb__8, dtb__9, dtb__10, dtb__11, dtb__12, dtb__13) -> dtb__8
+  | _ -> failwith "DT: impossible branch"
+))
 
-let v_Vuna_dCompiler_dManifest_dmanifestMembers = fun a0 -> match a0 with
-  | (C_Vuna_dCompiler_dManifest_dManifest (name, version, edition, members, exports, deps, path)) -> members
-  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Manifest.vuna" 27 1 ("no matching clause for Vuna.Compiler.Manifest.manifestMembers")
+let v_Vuna_dCompiler_dManifest_dmanifestEdition = (fun mc0 -> (match mc0 with
+  | C_Vuna_dCompiler_dManifest_dManifest_Vuna_dCompiler_dManifest_dManifest (dtb__14, dtb__15, dtb__16, dtb__17, dtb__18, dtb__19, dtb__20) -> dtb__16
+  | _ -> failwith "DT: impossible branch"
+))
 
-let v_Vuna_dCompiler_dManifest_dmanifestExports = fun a0 -> match a0 with
-  | (C_Vuna_dCompiler_dManifest_dManifest (name, version, edition, members, exports, deps, path)) -> exports
-  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Manifest.vuna" 30 1 ("no matching clause for Vuna.Compiler.Manifest.manifestExports")
+let v_Vuna_dCompiler_dManifest_dmanifestMembers = (fun mc0 -> (match mc0 with
+  | C_Vuna_dCompiler_dManifest_dManifest_Vuna_dCompiler_dManifest_dManifest (dtb__21, dtb__22, dtb__23, dtb__24, dtb__25, dtb__26, dtb__27) -> dtb__24
+  | _ -> failwith "DT: impossible branch"
+))
 
-let v_Vuna_dCompiler_dManifest_dmanifestDependencies = fun a0 -> match a0 with
-  | (C_Vuna_dCompiler_dManifest_dManifest (name, version, edition, members, exports, deps, path)) -> deps
-  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Manifest.vuna" 33 1 ("no matching clause for Vuna.Compiler.Manifest.manifestDependencies")
+let v_Vuna_dCompiler_dManifest_dmanifestExports = (fun mc0 -> (match mc0 with
+  | C_Vuna_dCompiler_dManifest_dManifest_Vuna_dCompiler_dManifest_dManifest (dtb__28, dtb__29, dtb__30, dtb__31, dtb__32, dtb__33, dtb__34) -> dtb__32
+  | _ -> failwith "DT: impossible branch"
+))
 
-let v_Vuna_dCompiler_dManifest_dmanifestPath = fun a0 -> match a0 with
-  | (C_Vuna_dCompiler_dManifest_dManifest (name, version, edition, members, exports, deps, path)) -> path
-  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Manifest.vuna" 36 1 ("no matching clause for Vuna.Compiler.Manifest.manifestPath")
+let v_Vuna_dCompiler_dManifest_dmanifestDependencies = (fun mc0 -> (match mc0 with
+  | C_Vuna_dCompiler_dManifest_dManifest_Vuna_dCompiler_dManifest_dManifest (dtb__35, dtb__36, dtb__37, dtb__38, dtb__39, dtb__40, dtb__41) -> dtb__40
+  | _ -> failwith "DT: impossible branch"
+))
 
-let v_Vuna_dCompiler_dManifest_disDigitChar = fun c -> (if (v_vuna_uge_uint c 48) then (v_vuna_ule_uint c 57) else false)
+let v_Vuna_dCompiler_dManifest_dmanifestPath = (fun mc0 -> (match mc0 with
+  | C_Vuna_dCompiler_dManifest_dManifest_Vuna_dCompiler_dManifest_dManifest (dtb__42, dtb__43, dtb__44, dtb__45, dtb__46, dtb__47, dtb__48) -> dtb__48
+  | _ -> failwith "DT: impossible branch"
+))
 
-let v_Vuna_dCompiler_dManifest_disUpperAlphaChar = fun c -> (if (v_vuna_uge_uint c 65) then (v_vuna_ule_uint c 90) else false)
+let v_Vuna_dCompiler_dManifest_disDigitChar = (fun c -> (if ((bi_ge_int c) 48) then ((bi_le_int c) 57) else false))
 
-let v_Vuna_dCompiler_dManifest_disLowerAlphaChar = fun c -> (if (v_vuna_uge_uint c 97) then (v_vuna_ule_uint c 122) else false)
+let v_Vuna_dCompiler_dManifest_disUpperAlphaChar = (fun c -> (if ((bi_ge_int c) 65) then ((bi_le_int c) 90) else false))
 
-let v_Vuna_dCompiler_dManifest_datLine = fun path line msg -> if v_vuna_ueq_ustr path "" then (let vuna_cat0' = ("line ") in (let vuna_cat1' = (bi_str_from_int line) in (let vuna_cat2' = (": ") in (let vuna_cat3' = (msg) in String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'; vuna_cat3'])))) else (let vuna_cat0' = (path) in (let vuna_cat1' = (":") in (let vuna_cat2' = (bi_str_from_int line) in (let vuna_cat3' = (": ") in (let vuna_cat4' = (msg) in String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'; vuna_cat3'; vuna_cat4'])))))
+let v_Vuna_dCompiler_dManifest_disLowerAlphaChar = (fun c -> (if ((bi_ge_int c) 97) then ((bi_le_int c) 122) else false))
 
-let v_Vuna_dCompiler_dManifest_dmanifestErr = fun path msg -> if v_vuna_ueq_ustr path "" then msg else (let vuna_cat0' = (path) in (let vuna_cat1' = (": ") in (let vuna_cat2' = (msg) in String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'])))
+let v_Vuna_dCompiler_dManifest_datLine = (fun path -> (fun line -> (fun msg -> (if ((bi_eq_str path) "") then ((bi_concat "line ") ((bi_concat (bi_strFromInt line)) ((bi_concat ": ") msg))) else ((bi_concat path) ((bi_concat ":") ((bi_concat (bi_strFromInt line)) ((bi_concat ": ") msg))))))))
 
-let rec v_Vuna_dCompiler_dManifest_dsameSection = fun a0 a1 -> match (a0, a1) with
-  | ([], []) -> true
-  | ((x) :: (xs), (y) :: (ys)) -> if v_vuna_ueq_ugeneric x y then v_Vuna_dCompiler_dManifest_dsameSection xs ys else false
-  | (_, _) -> false
-  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Manifest.vuna" 52 1 ("no matching clause for Vuna.Compiler.Manifest.sameSection")
+let v_Vuna_dCompiler_dManifest_dmanifestErr = (fun path -> (fun msg -> (if ((bi_eq_str path) "") then msg else ((bi_concat path) ((bi_concat ": ") msg)))))
 
-let v_Vuna_dCompiler_dManifest_dfieldLoc = fun path section key entries -> (match v_Vuna_dCompiler_dToml_dlookupEntryLine section key entries with
-  | C_Base_dMaybe_dJust (line) -> if v_vuna_ueq_ustr path "" then (let vuna_cat0' = ("line ") in (let vuna_cat1' = (bi_str_from_int line) in (let vuna_cat2' = (": ") in String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2']))) else (let vuna_cat0' = (path) in (let vuna_cat1' = (":") in (let vuna_cat2' = (bi_str_from_int line) in (let vuna_cat3' = (": ") in String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'; vuna_cat3']))))
-  | C_Base_dMaybe_dNothing -> if v_vuna_ueq_ustr path "" then "" else ((path) ^ (": "))
-  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Manifest.vuna" 56 37 ("case pattern match failure"))
+let rec v_Vuna_dCompiler_dManifest_dsameSection = (fun d268 -> (fun mc0 -> (fun mc1 -> (match mc0 with
+  | C_Base_dList_dList_Cons (dtb__49, dtb__50) -> (match mc1 with
+  | C_Base_dList_dList_Cons (dtb__51, dtb__52) -> (if (((v_eq d268) dtb__49) dtb__51) then (((v_Vuna_dCompiler_dManifest_dsameSection d268) dtb__50) dtb__52) else false)
+  | _ -> false
+)
+  | C_Base_dList_dList_Nil -> (match mc1 with
+  | C_Base_dList_dList_Nil -> true
+  | _ -> false
+)
+  | _ -> failwith "DT: impossible branch"
+))))
 
-let v_Vuna_dCompiler_dManifest_dstringField = fun path section key entries -> (match v_Vuna_dCompiler_dToml_dlookupEntry section key entries with
-  | C_Base_dMaybe_dNothing -> C_Base_dResult_dOk (C_Base_dMaybe_dNothing)
-  | C_Base_dMaybe_dJust (C_Vuna_dCompiler_dToml_dTStr (s)) -> C_Base_dResult_dOk (C_Base_dMaybe_dJust (s))
-  | C_Base_dMaybe_dJust (value) -> C_Base_dResult_dErr ((let vuna_cat0' = (v_Vuna_dCompiler_dManifest_dfieldLoc path section key entries) in (let vuna_cat1' = ("expected a string for \"") in (let vuna_cat2' = (key) in (let vuna_cat3' = ("\"") in String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'; vuna_cat3'])))))
-  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Manifest.vuna" 62 40 ("case pattern match failure"))
+let v_Vuna_dCompiler_dManifest_dfieldLoc = (fun path -> (fun section -> (fun key -> (fun entries -> (match (((v_Vuna_dCompiler_dToml_dlookupEntryLine section) key) entries) with
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__53) -> (if ((bi_eq_str path) "") then ((bi_concat "line ") ((bi_concat (bi_strFromInt dtb__53)) ": ")) else ((bi_concat path) ((bi_concat ":") ((bi_concat (bi_strFromInt dtb__53)) ": "))))
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> (if ((bi_eq_str path) "") then "" else ((bi_concat path) ": "))
+  | _ -> failwith "DT: impossible branch"
+)))))
 
-let v_Vuna_dCompiler_dManifest_dstringListField = fun path section key entries -> (match v_Vuna_dCompiler_dToml_dlookupEntry section key entries with
-  | C_Base_dMaybe_dNothing -> C_Base_dResult_dOk (C_Base_dMaybe_dNothing)
-  | C_Base_dMaybe_dJust (C_Vuna_dCompiler_dToml_dTList (xs)) -> C_Base_dResult_dOk (C_Base_dMaybe_dJust (xs))
-  | C_Base_dMaybe_dJust (value) -> C_Base_dResult_dErr ((let vuna_cat0' = (v_Vuna_dCompiler_dManifest_dfieldLoc path section key entries) in (let vuna_cat1' = ("expected an array of strings for \"") in (let vuna_cat2' = (key) in (let vuna_cat3' = ("\"") in String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'; vuna_cat3'])))))
-  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Manifest.vuna" 67 44 ("case pattern match failure"))
+let v_Vuna_dCompiler_dManifest_dstringField = (fun path -> (fun section -> (fun key -> (fun entries -> ((fun nd_uscrut -> (match nd_uscrut with
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__54) -> (match dtb__54 with
+  | C_Vuna_dCompiler_dToml_dTomlValue_Vuna_dCompiler_dToml_dTStr (dtb__55) -> (C_Base_dResult_dResult_Base_dResult_dOk ((C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__55))))
+  | _ -> (C_Base_dResult_dResult_Base_dResult_dErr (((bi_concat ((((v_Vuna_dCompiler_dManifest_dfieldLoc path) section) key) entries)) ((bi_concat "expected a string for \"") ((bi_concat key) "\"")))))
+)
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> (C_Base_dResult_dResult_Base_dResult_dOk (C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing))
+  | _ -> failwith "DT: impossible branch"
+)) (((v_Vuna_dCompiler_dToml_dlookupEntry section) key) entries))))))
 
-let v_Vuna_dCompiler_dManifest_dorEmptyList = fun maybe -> (match maybe with
-  | C_Base_dMaybe_dNothing -> []
-  | C_Base_dMaybe_dJust (xs) -> xs
-  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Manifest.vuna" 73 21 ("case pattern match failure"))
+let v_Vuna_dCompiler_dManifest_dstringListField = (fun path -> (fun section -> (fun key -> (fun entries -> ((fun nd_uscrut -> (match nd_uscrut with
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__56) -> (match dtb__56 with
+  | C_Vuna_dCompiler_dToml_dTomlValue_Vuna_dCompiler_dToml_dTList (dtb__57) -> (C_Base_dResult_dResult_Base_dResult_dOk ((C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__57))))
+  | _ -> (C_Base_dResult_dResult_Base_dResult_dErr (((bi_concat ((((v_Vuna_dCompiler_dManifest_dfieldLoc path) section) key) entries)) ((bi_concat "expected an array of strings for \"") ((bi_concat key) "\"")))))
+)
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> (C_Base_dResult_dResult_Base_dResult_dOk (C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing))
+  | _ -> failwith "DT: impossible branch"
+)) (((v_Vuna_dCompiler_dToml_dlookupEntry section) key) entries))))))
 
-let v_Vuna_dCompiler_dManifest_dcheckOneEntry = fun a0 a1 -> match (a0, a1) with
-  | (path, C_Vuna_dCompiler_dToml_dTomlEntry (section, key, value, line)) -> if v_Vuna_dCompiler_dManifest_dsameSection section [] then C_Base_dResult_dErr (v_Vuna_dCompiler_dManifest_datLine path line ((let vuna_cat0' = ("unexpected top-level key \"") in (let vuna_cat1' = (key) in (let vuna_cat2' = ("\"") in String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2']))))) else if v_Vuna_dCompiler_dManifest_dsameSection section (("package") :: ([])) then if (if ((if (v_vuna_ueq_ustr key "name") then true else (v_vuna_ueq_ustr key "version"))) then true else (v_vuna_ueq_ustr key "edition")) then C_Base_dResult_dOk (0) else C_Base_dResult_dErr (v_Vuna_dCompiler_dManifest_datLine path line ((let vuna_cat0' = ("unknown key \"") in (let vuna_cat1' = (key) in (let vuna_cat2' = ("\" in [package]") in String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2']))))) else if v_Vuna_dCompiler_dManifest_dsameSection section (("workspace") :: ([])) then if v_vuna_ueq_ustr key "members" then C_Base_dResult_dOk (0) else C_Base_dResult_dErr (v_Vuna_dCompiler_dManifest_datLine path line ((let vuna_cat0' = ("unknown key \"") in (let vuna_cat1' = (key) in (let vuna_cat2' = ("\" in [workspace]") in String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2']))))) else if v_Vuna_dCompiler_dManifest_dsameSection section (("export") :: ([])) then if v_vuna_ueq_ustr key "modules" then C_Base_dResult_dOk (0) else C_Base_dResult_dErr (v_Vuna_dCompiler_dManifest_datLine path line ((let vuna_cat0' = ("unknown key \"") in (let vuna_cat1' = (key) in (let vuna_cat2' = ("\" in [export]") in String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2']))))) else if v_Vuna_dCompiler_dManifest_dsameSection section (("dependencies") :: ([])) then C_Base_dResult_dOk (0) else C_Base_dResult_dErr (v_Vuna_dCompiler_dManifest_datLine path line ((let vuna_cat0' = ("unknown section [") in (let vuna_cat1' = (v_Vuna_dCompiler_dCommon_djoinDots section) in (let vuna_cat2' = ("]") in String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'])))))
-  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Manifest.vuna" 78 1 ("no matching clause for Vuna.Compiler.Manifest.checkOneEntry")
+let v_Vuna_dCompiler_dManifest_dorEmptyList = (fun maybe -> (match maybe with
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> C_Base_dList_dList_Nil
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__58) -> dtb__58
+  | _ -> failwith "DT: impossible branch"
+))
 
-let rec v_Vuna_dCompiler_dManifest_dcheckEntries = fun path entries -> (match entries with
-  | [] -> C_Base_dResult_dOk (0)
-  | (entry) :: (rest) -> (match v_Vuna_dCompiler_dManifest_dcheckOneEntry path entry with
-  | C_Base_dResult_dErr (e) -> C_Base_dResult_dErr (e)
-  | C_Base_dResult_dOk (ok) -> v_Vuna_dCompiler_dManifest_dcheckEntries path rest
-  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Manifest.vuna" 91 20 ("case pattern match failure"))
-  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Manifest.vuna" 89 29 ("case pattern match failure"))
+let v_Vuna_dCompiler_dManifest_dcheckOneEntry = (fun mc0 -> (fun mc1 -> (match mc1 with
+  | C_Vuna_dCompiler_dToml_dTomlEntry_Vuna_dCompiler_dToml_dTomlEntry (dtb__59, dtb__60, dtb__61, dtb__62) -> (if (((v_Vuna_dCompiler_dManifest_dsameSection (v_Eq_uEq_uString ())) dtb__59) C_Base_dList_dList_Nil) then (C_Base_dResult_dResult_Base_dResult_dErr ((((v_Vuna_dCompiler_dManifest_datLine mc0) dtb__62) ((bi_concat "unexpected top-level key \"") ((bi_concat dtb__60) "\""))))) else (if (((v_Vuna_dCompiler_dManifest_dsameSection (v_Eq_uEq_uString ())) dtb__59) (C_Base_dList_dList_Cons ("package", C_Base_dList_dList_Nil))) then (if (if (if ((bi_eq_str dtb__60) "name") then true else ((bi_eq_str dtb__60) "version")) then true else ((bi_eq_str dtb__60) "edition")) then (C_Base_dResult_dResult_Base_dResult_dOk (0)) else (C_Base_dResult_dResult_Base_dResult_dErr ((((v_Vuna_dCompiler_dManifest_datLine mc0) dtb__62) ((bi_concat "unknown key \"") ((bi_concat dtb__60) "\" in [package]")))))) else (if (((v_Vuna_dCompiler_dManifest_dsameSection (v_Eq_uEq_uString ())) dtb__59) (C_Base_dList_dList_Cons ("workspace", C_Base_dList_dList_Nil))) then (if ((bi_eq_str dtb__60) "members") then (C_Base_dResult_dResult_Base_dResult_dOk (0)) else (C_Base_dResult_dResult_Base_dResult_dErr ((((v_Vuna_dCompiler_dManifest_datLine mc0) dtb__62) ((bi_concat "unknown key \"") ((bi_concat dtb__60) "\" in [workspace]")))))) else (if (((v_Vuna_dCompiler_dManifest_dsameSection (v_Eq_uEq_uString ())) dtb__59) (C_Base_dList_dList_Cons ("export", C_Base_dList_dList_Nil))) then (if ((bi_eq_str dtb__60) "modules") then (C_Base_dResult_dResult_Base_dResult_dOk (0)) else (C_Base_dResult_dResult_Base_dResult_dErr ((((v_Vuna_dCompiler_dManifest_datLine mc0) dtb__62) ((bi_concat "unknown key \"") ((bi_concat dtb__60) "\" in [export]")))))) else (if (((v_Vuna_dCompiler_dManifest_dsameSection (v_Eq_uEq_uString ())) dtb__59) (C_Base_dList_dList_Cons ("dependencies", C_Base_dList_dList_Nil))) then (C_Base_dResult_dResult_Base_dResult_dOk (0)) else (C_Base_dResult_dResult_Base_dResult_dErr ((((v_Vuna_dCompiler_dManifest_datLine mc0) dtb__62) ((bi_concat "unknown section [") ((bi_concat (v_Vuna_dCompiler_dCommon_djoinDots dtb__59)) "]"))))))))))
+  | _ -> failwith "DT: impossible branch"
+)))
 
-let rec v_Vuna_dCompiler_dManifest_dcollectDependenciesAcc = fun path entries acc -> (match entries with
-  | [] -> C_Base_dResult_dOk (v_Base_dList_dreverse acc)
-  | (C_Vuna_dCompiler_dToml_dTomlEntry (section, key, value, line)) :: (rest) -> if v_Vuna_dCompiler_dManifest_dsameSection section (("dependencies") :: ([])) then (match value with
-  | C_Vuna_dCompiler_dToml_dTStr (rel) -> v_Vuna_dCompiler_dManifest_dcollectDependenciesAcc path rest ((C_Base_dPair_dPair (key, rel)) :: (acc))
-  | _ -> C_Base_dResult_dErr (v_Vuna_dCompiler_dManifest_datLine path line ((let vuna_cat0' = ("dependency \"") in (let vuna_cat1' = (key) in (let vuna_cat2' = ("\" must have a string relative path") in String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'])))))
-  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Manifest.vuna" 99 94 ("case pattern match failure")) else v_Vuna_dCompiler_dManifest_dcollectDependenciesAcc path rest acc
-  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Manifest.vuna" 97 43 ("case pattern match failure"))
+let rec v_Vuna_dCompiler_dManifest_dcheckEntries = (fun path -> (fun entries -> (match entries with
+  | C_Base_dList_dList_Nil -> (C_Base_dResult_dResult_Base_dResult_dOk (0))
+  | C_Base_dList_dList_Cons (dtb__63, dtb__64) -> (match ((v_Vuna_dCompiler_dManifest_dcheckOneEntry path) dtb__63) with
+  | C_Base_dResult_dResult_Base_dResult_dErr (dtb__65) -> (C_Base_dResult_dResult_Base_dResult_dErr (dtb__65))
+  | C_Base_dResult_dResult_Base_dResult_dOk (dtb__66) -> ((v_Vuna_dCompiler_dManifest_dcheckEntries path) dtb__64)
+  | _ -> failwith "DT: impossible branch"
+)
+  | _ -> failwith "DT: impossible branch"
+)))
 
-let v_Vuna_dCompiler_dManifest_dcollectDependencies = fun path entries -> v_Vuna_dCompiler_dManifest_dcollectDependenciesAcc path entries []
+let rec v_Vuna_dCompiler_dManifest_dcollectDependenciesAcc = (fun path -> (fun entries -> (fun acc -> (match entries with
+  | C_Base_dList_dList_Nil -> (C_Base_dResult_dResult_Base_dResult_dOk ((v_Base_dList_dreverse acc)))
+  | C_Base_dList_dList_Cons (dtb__67, dtb__68) -> (match dtb__67 with
+  | C_Vuna_dCompiler_dToml_dTomlEntry_Vuna_dCompiler_dToml_dTomlEntry (dtb__69, dtb__70, dtb__71, dtb__72) -> (if (((v_Vuna_dCompiler_dManifest_dsameSection (v_Eq_uEq_uString ())) dtb__69) (C_Base_dList_dList_Cons ("dependencies", C_Base_dList_dList_Nil))) then (match dtb__71 with
+  | C_Vuna_dCompiler_dToml_dTomlValue_Vuna_dCompiler_dToml_dTStr (dtb__73) -> (((v_Vuna_dCompiler_dManifest_dcollectDependenciesAcc path) dtb__68) (C_Base_dList_dList_Cons ((C_Base_dPair_dPair_Base_dPair_dPair (dtb__70, dtb__73)), acc)))
+  | _ -> (C_Base_dResult_dResult_Base_dResult_dErr ((((v_Vuna_dCompiler_dManifest_datLine path) dtb__72) ((bi_concat "dependency \"") ((bi_concat dtb__70) "\" must have a string relative path")))))
+) else (((v_Vuna_dCompiler_dManifest_dcollectDependenciesAcc path) dtb__68) acc))
+  | _ -> failwith "DT: impossible branch"
+)
+  | _ -> failwith "DT: impossible branch"
+))))
 
-let v_Vuna_dCompiler_dManifest_dbuildManifest = fun path entries -> v_Base_dResult_dandThen (v_Vuna_dCompiler_dManifest_dcheckEntries path entries) (fun checked -> v_Base_dResult_dandThen (v_Vuna_dCompiler_dManifest_dstringField path (("package") :: ([])) "name" entries) (fun name -> v_Base_dResult_dandThen (v_Vuna_dCompiler_dManifest_dstringField path (("package") :: ([])) "version" entries) (fun version -> v_Base_dResult_dandThen (v_Vuna_dCompiler_dManifest_dstringField path (("package") :: ([])) "edition" entries) (fun edition -> v_Base_dResult_dandThen (v_Vuna_dCompiler_dManifest_dstringListField path (("workspace") :: ([])) "members" entries) (fun members -> v_Base_dResult_dandThen (v_Vuna_dCompiler_dManifest_dstringListField path (("export") :: ([])) "modules" entries) (fun exports -> v_Base_dResult_dandThen (v_Vuna_dCompiler_dManifest_dcollectDependencies path entries) (fun deps -> C_Base_dResult_dOk (C_Vuna_dCompiler_dManifest_dManifest (name, version, edition, v_Vuna_dCompiler_dManifest_dorEmptyList members, exports, deps, path)))))))))
+let v_Vuna_dCompiler_dManifest_dcollectDependencies = (fun path -> (fun entries -> (((v_Vuna_dCompiler_dManifest_dcollectDependenciesAcc path) entries) C_Base_dList_dList_Nil)))
 
-let v_Vuna_dCompiler_dManifest_dparseManifest = fun path contents -> v_Base_dResult_dandThen (v_Vuna_dCompiler_dToml_dparseTomlAt path contents) (fun entries -> v_Vuna_dCompiler_dManifest_dbuildManifest path entries)
+let v_Vuna_dCompiler_dManifest_dbuildManifest = (fun path -> (fun entries -> ((v_Base_dResult_dandThen ((v_Vuna_dCompiler_dManifest_dcheckEntries path) entries)) (fun checked -> ((v_Base_dResult_dandThen ((((v_Vuna_dCompiler_dManifest_dstringField path) (C_Base_dList_dList_Cons ("package", C_Base_dList_dList_Nil))) "name") entries)) (fun name -> ((v_Base_dResult_dandThen ((((v_Vuna_dCompiler_dManifest_dstringField path) (C_Base_dList_dList_Cons ("package", C_Base_dList_dList_Nil))) "version") entries)) (fun version -> ((v_Base_dResult_dandThen ((((v_Vuna_dCompiler_dManifest_dstringField path) (C_Base_dList_dList_Cons ("package", C_Base_dList_dList_Nil))) "edition") entries)) (fun edition -> ((v_Base_dResult_dandThen ((((v_Vuna_dCompiler_dManifest_dstringListField path) (C_Base_dList_dList_Cons ("workspace", C_Base_dList_dList_Nil))) "members") entries)) (fun members -> ((v_Base_dResult_dandThen ((((v_Vuna_dCompiler_dManifest_dstringListField path) (C_Base_dList_dList_Cons ("export", C_Base_dList_dList_Nil))) "modules") entries)) (fun exports -> ((v_Base_dResult_dandThen ((v_Vuna_dCompiler_dManifest_dcollectDependencies path) entries)) (fun deps -> (C_Base_dResult_dResult_Base_dResult_dOk ((C_Vuna_dCompiler_dManifest_dManifest_Vuna_dCompiler_dManifest_dManifest (name, version, edition, (v_Vuna_dCompiler_dManifest_dorEmptyList members), exports, deps, path))))))))))))))))))))
 
-let rec v_Vuna_dCompiler_dManifest_dvalidPackageChars = fun a0 -> match a0 with
-  | ([]) -> true
-  | ((c) :: (rest)) -> if (if ((if (v_Vuna_dCompiler_dManifest_disLowerAlphaChar c) then true else (v_Vuna_dCompiler_dManifest_disDigitChar c))) then true else (v_vuna_ueq_uint c 45)) then v_Vuna_dCompiler_dManifest_dvalidPackageChars rest else false
-  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Manifest.vuna" 115 1 ("no matching clause for Vuna.Compiler.Manifest.validPackageChars")
+let v_Vuna_dCompiler_dManifest_dparseManifest = (fun path -> (fun contents -> ((v_Base_dResult_dandThen ((v_Vuna_dCompiler_dToml_dparseTomlAt path) contents)) (fun entries -> ((v_Vuna_dCompiler_dManifest_dbuildManifest path) entries)))))
 
-let v_Vuna_dCompiler_dManifest_dvalidPackageName = fun name -> v_Vuna_dCompiler_dManifest_dvalidPackageChars (bi_str_unpack name)
+let rec v_Vuna_dCompiler_dManifest_dvalidPackageChars = (fun mc0 -> (match mc0 with
+  | C_Base_dList_dList_Cons (dtb__74, dtb__75) -> (if (if (if (v_Vuna_dCompiler_dManifest_disLowerAlphaChar dtb__74) then true else (v_Vuna_dCompiler_dManifest_disDigitChar dtb__74)) then true else ((bi_eq_int dtb__74) 45)) then (v_Vuna_dCompiler_dManifest_dvalidPackageChars dtb__75) else false)
+  | C_Base_dList_dList_Nil -> true
+  | _ -> failwith "DT: impossible branch"
+))
 
-let rec v_Vuna_dCompiler_dManifest_dvalidModuleTail = fun a0 -> match a0 with
-  | ([]) -> true
-  | ((c) :: (rest)) -> if (if ((if ((if (v_Vuna_dCompiler_dManifest_disUpperAlphaChar c) then true else (v_Vuna_dCompiler_dManifest_disLowerAlphaChar c))) then true else (v_Vuna_dCompiler_dManifest_disDigitChar c))) then true else (v_vuna_ueq_uint c 95)) then v_Vuna_dCompiler_dManifest_dvalidModuleTail rest else false
-  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Manifest.vuna" 130 1 ("no matching clause for Vuna.Compiler.Manifest.validModuleTail")
+let v_Vuna_dCompiler_dManifest_dvalidPackageName = (fun name -> (v_Vuna_dCompiler_dManifest_dvalidPackageChars (dtp_unpack name)))
 
-let v_Vuna_dCompiler_dManifest_dvalidModuleSegmentChars = fun a0 -> match a0 with
-  | ([]) -> false
-  | ((c) :: (rest)) -> if v_Vuna_dCompiler_dManifest_disUpperAlphaChar c then v_Vuna_dCompiler_dManifest_dvalidModuleTail rest else false
-  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Manifest.vuna" 127 1 ("no matching clause for Vuna.Compiler.Manifest.validModuleSegmentChars")
+let rec v_Vuna_dCompiler_dManifest_dvalidModuleTail = (fun mc0 -> (match mc0 with
+  | C_Base_dList_dList_Cons (dtb__76, dtb__77) -> (if (if (if (if (v_Vuna_dCompiler_dManifest_disUpperAlphaChar dtb__76) then true else (v_Vuna_dCompiler_dManifest_disLowerAlphaChar dtb__76)) then true else (v_Vuna_dCompiler_dManifest_disDigitChar dtb__76)) then true else ((bi_eq_int dtb__76) 95)) then (v_Vuna_dCompiler_dManifest_dvalidModuleTail dtb__77) else false)
+  | C_Base_dList_dList_Nil -> true
+  | _ -> failwith "DT: impossible branch"
+))
 
-let v_Vuna_dCompiler_dManifest_dvalidModuleSegment = fun seg -> v_Vuna_dCompiler_dManifest_dvalidModuleSegmentChars (bi_str_unpack seg)
+let v_Vuna_dCompiler_dManifest_dvalidModuleSegmentChars = (fun mc0 -> (match mc0 with
+  | C_Base_dList_dList_Cons (dtb__78, dtb__79) -> (if (v_Vuna_dCompiler_dManifest_disUpperAlphaChar dtb__78) then (v_Vuna_dCompiler_dManifest_dvalidModuleTail dtb__79) else false)
+  | C_Base_dList_dList_Nil -> false
+  | _ -> failwith "DT: impossible branch"
+))
 
-let rec v_Vuna_dCompiler_dManifest_dvalidModuleSegments = fun a0 -> match a0 with
-  | ([]) -> true
-  | ((seg) :: (rest)) -> if v_Vuna_dCompiler_dManifest_dvalidModuleSegment seg then v_Vuna_dCompiler_dManifest_dvalidModuleSegments rest else false
-  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Manifest.vuna" 121 1 ("no matching clause for Vuna.Compiler.Manifest.validModuleSegments")
+let v_Vuna_dCompiler_dManifest_dvalidModuleSegment = (fun seg -> (v_Vuna_dCompiler_dManifest_dvalidModuleSegmentChars (dtp_unpack seg)))
 
-let v_Vuna_dCompiler_dManifest_dvalidModuleName = fun name -> v_Vuna_dCompiler_dManifest_dvalidModuleSegments (v_Vuna_dCompiler_dCommon_dsplitOnDot name)
+let rec v_Vuna_dCompiler_dManifest_dvalidModuleSegments = (fun mc0 -> (match mc0 with
+  | C_Base_dList_dList_Cons (dtb__80, dtb__81) -> (if (v_Vuna_dCompiler_dManifest_dvalidModuleSegment dtb__80) then (v_Vuna_dCompiler_dManifest_dvalidModuleSegments dtb__81) else false)
+  | C_Base_dList_dList_Nil -> true
+  | _ -> failwith "DT: impossible branch"
+))
 
-let v_Vuna_dCompiler_dManifest_dvalidateName = fun path name -> (match name with
-  | C_Base_dMaybe_dNothing -> C_Base_dResult_dErr (v_Vuna_dCompiler_dManifest_dmanifestErr path "missing [package] name")
-  | C_Base_dMaybe_dJust (n) -> if v_vuna_ueq_ustr n "" then C_Base_dResult_dErr (v_Vuna_dCompiler_dManifest_dmanifestErr path "package name must not be empty") else if v_Vuna_dCompiler_dManifest_dvalidPackageName n then C_Base_dResult_dOk (0) else C_Base_dResult_dErr (v_Vuna_dCompiler_dManifest_dmanifestErr path ((let vuna_cat0' = ("invalid package name \"") in (let vuna_cat1' = (n) in (let vuna_cat2' = ("\" (allowed characters: a-z, 0-9, '-')") in String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'])))))
-  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Manifest.vuna" 135 26 ("case pattern match failure"))
+let v_Vuna_dCompiler_dManifest_dvalidModuleName = (fun name -> (v_Vuna_dCompiler_dManifest_dvalidModuleSegments (v_Vuna_dCompiler_dCommon_dsplitOnDot name)))
 
-let v_Vuna_dCompiler_dManifest_dvalidateVersion = fun path version -> (match version with
-  | C_Base_dMaybe_dNothing -> C_Base_dResult_dErr (v_Vuna_dCompiler_dManifest_dmanifestErr path "missing [package] version")
-  | C_Base_dMaybe_dJust (v) -> if v_vuna_ueq_ustr v "" then C_Base_dResult_dErr (v_Vuna_dCompiler_dManifest_dmanifestErr path "package version must not be empty") else C_Base_dResult_dOk (0)
-  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Manifest.vuna" 143 32 ("case pattern match failure"))
+let v_Vuna_dCompiler_dManifest_dvalidateName = (fun path -> (fun name -> (match name with
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> (C_Base_dResult_dResult_Base_dResult_dErr (((v_Vuna_dCompiler_dManifest_dmanifestErr path) "missing [package] name")))
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__82) -> (if ((bi_eq_str dtb__82) "") then (C_Base_dResult_dResult_Base_dResult_dErr (((v_Vuna_dCompiler_dManifest_dmanifestErr path) "package name must not be empty"))) else (if (v_Vuna_dCompiler_dManifest_dvalidPackageName dtb__82) then (C_Base_dResult_dResult_Base_dResult_dOk (0)) else (C_Base_dResult_dResult_Base_dResult_dErr (((v_Vuna_dCompiler_dManifest_dmanifestErr path) ((bi_concat "invalid package name \"") ((bi_concat dtb__82) "\" (allowed characters: a-z, 0-9, '-')")))))))
+  | _ -> failwith "DT: impossible branch"
+)))
 
-let v_Vuna_dCompiler_dManifest_dvalidateEdition = fun path edition -> (match edition with
-  | C_Base_dMaybe_dNothing -> C_Base_dResult_dOk (0)
-  | C_Base_dMaybe_dJust (e) -> if v_vuna_ueq_ustr e "" then C_Base_dResult_dErr (v_Vuna_dCompiler_dManifest_dmanifestErr path "package edition must not be empty") else C_Base_dResult_dOk (0)
-  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Manifest.vuna" 147 32 ("case pattern match failure"))
+let v_Vuna_dCompiler_dManifest_dvalidateVersion = (fun path -> (fun version -> (match version with
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> (C_Base_dResult_dResult_Base_dResult_dErr (((v_Vuna_dCompiler_dManifest_dmanifestErr path) "missing [package] version")))
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__83) -> (if ((bi_eq_str dtb__83) "") then (C_Base_dResult_dResult_Base_dResult_dErr (((v_Vuna_dCompiler_dManifest_dmanifestErr path) "package version must not be empty"))) else (C_Base_dResult_dResult_Base_dResult_dOk (0)))
+  | _ -> failwith "DT: impossible branch"
+)))
 
-let rec v_Vuna_dCompiler_dManifest_dvalidateMembers = fun path members -> (match members with
-  | [] -> C_Base_dResult_dOk (0)
-  | (m) :: (rest) -> if v_vuna_ueq_ustr m "" then C_Base_dResult_dErr (v_Vuna_dCompiler_dManifest_dmanifestErr path "workspace member must not be empty") else v_Vuna_dCompiler_dManifest_dvalidateMembers path rest
-  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Manifest.vuna" 151 32 ("case pattern match failure"))
+let v_Vuna_dCompiler_dManifest_dvalidateEdition = (fun path -> (fun edition -> (match edition with
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> (C_Base_dResult_dResult_Base_dResult_dOk (0))
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__84) -> (if ((bi_eq_str dtb__84) "") then (C_Base_dResult_dResult_Base_dResult_dErr (((v_Vuna_dCompiler_dManifest_dmanifestErr path) "package edition must not be empty"))) else (C_Base_dResult_dResult_Base_dResult_dOk (0)))
+  | _ -> failwith "DT: impossible branch"
+)))
 
-let rec v_Vuna_dCompiler_dManifest_dvalidateModules = fun path modules -> (match modules with
-  | [] -> C_Base_dResult_dOk (0)
-  | (m) :: (rest) -> if v_Vuna_dCompiler_dManifest_dvalidModuleName m then v_Vuna_dCompiler_dManifest_dvalidateModules path rest else C_Base_dResult_dErr (v_Vuna_dCompiler_dManifest_dmanifestErr path ((let vuna_cat0' = ("invalid export module \"") in (let vuna_cat1' = (m) in (let vuna_cat2' = ("\" (segments must match [A-Z][A-Za-z0-9_]*)") in String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2'])))))
-  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Manifest.vuna" 157 32 ("case pattern match failure"))
+let rec v_Vuna_dCompiler_dManifest_dvalidateMembers = (fun path -> (fun members -> (match members with
+  | C_Base_dList_dList_Nil -> (C_Base_dResult_dResult_Base_dResult_dOk (0))
+  | C_Base_dList_dList_Cons (dtb__85, dtb__86) -> (if ((bi_eq_str dtb__85) "") then (C_Base_dResult_dResult_Base_dResult_dErr (((v_Vuna_dCompiler_dManifest_dmanifestErr path) "workspace member must not be empty"))) else ((v_Vuna_dCompiler_dManifest_dvalidateMembers path) dtb__86))
+  | _ -> failwith "DT: impossible branch"
+)))
 
-let v_Vuna_dCompiler_dManifest_dvalidateExports = fun path exports -> (match exports with
-  | C_Base_dMaybe_dNothing -> C_Base_dResult_dOk (0)
-  | C_Base_dMaybe_dJust (modules) -> v_Vuna_dCompiler_dManifest_dvalidateModules path modules
-  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Manifest.vuna" 164 32 ("case pattern match failure"))
+let rec v_Vuna_dCompiler_dManifest_dvalidateModules = (fun path -> (fun modules -> (match modules with
+  | C_Base_dList_dList_Nil -> (C_Base_dResult_dResult_Base_dResult_dOk (0))
+  | C_Base_dList_dList_Cons (dtb__87, dtb__88) -> (if (v_Vuna_dCompiler_dManifest_dvalidModuleName dtb__87) then ((v_Vuna_dCompiler_dManifest_dvalidateModules path) dtb__88) else (C_Base_dResult_dResult_Base_dResult_dErr (((v_Vuna_dCompiler_dManifest_dmanifestErr path) ((bi_concat "invalid export module \"") ((bi_concat dtb__87) "\" (segments must match [A-Z][A-Za-z0-9_]*)"))))))
+  | _ -> failwith "DT: impossible branch"
+)))
 
-let rec v_Vuna_dCompiler_dManifest_dvalidateDepsSeen = fun path seen deps -> (match deps with
-  | [] -> C_Base_dResult_dOk (0)
-  | (C_Base_dPair_dPair (name, rel)) :: (rest) -> if v_vuna_ueq_ustr name "" then C_Base_dResult_dErr (v_Vuna_dCompiler_dManifest_dmanifestErr path "dependency name must not be empty") else if v_vuna_ueq_ustr rel "" then C_Base_dResult_dErr (v_Vuna_dCompiler_dManifest_dmanifestErr path ((let vuna_cat0' = ("dependency \"") in (let vuna_cat1' = (name) in (let vuna_cat2' = ("\" path must not be empty") in String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2']))))) else if v_Base_dList_dmemName name seen then C_Base_dResult_dErr (v_Vuna_dCompiler_dManifest_dmanifestErr path ((let vuna_cat0' = ("duplicate dependency \"") in (let vuna_cat1' = (name) in (let vuna_cat2' = ("\"") in String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2']))))) else v_Vuna_dCompiler_dManifest_dvalidateDepsSeen path ((name) :: (seen)) rest
-  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Manifest.vuna" 170 35 ("case pattern match failure"))
+let v_Vuna_dCompiler_dManifest_dvalidateExports = (fun path -> (fun exports -> (match exports with
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> (C_Base_dResult_dResult_Base_dResult_dOk (0))
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__89) -> ((v_Vuna_dCompiler_dManifest_dvalidateModules path) dtb__89)
+  | _ -> failwith "DT: impossible branch"
+)))
 
-let v_Vuna_dCompiler_dManifest_dvalidateDependencies = fun path deps -> v_Vuna_dCompiler_dManifest_dvalidateDepsSeen path [] deps
+let rec v_Vuna_dCompiler_dManifest_dvalidateDepsSeen = (fun path -> (fun seen -> (fun deps -> (match deps with
+  | C_Base_dList_dList_Nil -> (C_Base_dResult_dResult_Base_dResult_dOk (0))
+  | C_Base_dList_dList_Cons (dtb__90, dtb__91) -> (match dtb__90 with
+  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__92, dtb__93) -> (if ((bi_eq_str dtb__92) "") then (C_Base_dResult_dResult_Base_dResult_dErr (((v_Vuna_dCompiler_dManifest_dmanifestErr path) "dependency name must not be empty"))) else (if ((bi_eq_str dtb__93) "") then (C_Base_dResult_dResult_Base_dResult_dErr (((v_Vuna_dCompiler_dManifest_dmanifestErr path) ((bi_concat "dependency \"") ((bi_concat dtb__92) "\" path must not be empty"))))) else (if ((v_Base_dList_dmemName dtb__92) seen) then (C_Base_dResult_dResult_Base_dResult_dErr (((v_Vuna_dCompiler_dManifest_dmanifestErr path) ((bi_concat "duplicate dependency \"") ((bi_concat dtb__92) "\""))))) else (((v_Vuna_dCompiler_dManifest_dvalidateDepsSeen path) (C_Base_dList_dList_Cons (dtb__92, seen))) dtb__91))))
+  | _ -> failwith "DT: impossible branch"
+)
+  | _ -> failwith "DT: impossible branch"
+))))
 
-let v_Vuna_dCompiler_dManifest_dvalidateManifest = fun a0 -> match a0 with
-  | (C_Vuna_dCompiler_dManifest_dManifest (name, version, edition, members, exports, deps, path)) -> v_Base_dResult_dandThen (v_Vuna_dCompiler_dManifest_dvalidateName path name) (fun okName -> v_Base_dResult_dandThen (v_Vuna_dCompiler_dManifest_dvalidateVersion path version) (fun okVersion -> v_Base_dResult_dandThen (v_Vuna_dCompiler_dManifest_dvalidateEdition path edition) (fun okEdition -> v_Base_dResult_dandThen (v_Vuna_dCompiler_dManifest_dvalidateMembers path members) (fun okMembers -> v_Base_dResult_dandThen (v_Vuna_dCompiler_dManifest_dvalidateExports path exports) (fun okExports -> v_Base_dResult_dandThen (v_Vuna_dCompiler_dManifest_dvalidateDependencies path deps) (fun okDeps -> C_Base_dResult_dOk (C_Vuna_dCompiler_dManifest_dManifest (name, version, edition, members, exports, deps, path))))))))
-  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Manifest.vuna" 179 1 ("no matching clause for Vuna.Compiler.Manifest.validateManifest")
+let v_Vuna_dCompiler_dManifest_dvalidateDependencies = (fun path -> (fun deps -> (((v_Vuna_dCompiler_dManifest_dvalidateDepsSeen path) C_Base_dList_dList_Nil) deps)))
 
-let v_Vuna_dCompiler_dManifest_ddirResult = fun dir -> if v_vuna_ueq_ustr dir "" then "/" else dir
+let v_Vuna_dCompiler_dManifest_dvalidateManifest = (fun mc0 -> (match mc0 with
+  | C_Vuna_dCompiler_dManifest_dManifest_Vuna_dCompiler_dManifest_dManifest (dtb__94, dtb__95, dtb__96, dtb__97, dtb__98, dtb__99, dtb__100) -> ((v_Base_dResult_dandThen ((v_Vuna_dCompiler_dManifest_dvalidateName dtb__100) dtb__94)) (fun okName -> ((v_Base_dResult_dandThen ((v_Vuna_dCompiler_dManifest_dvalidateVersion dtb__100) dtb__95)) (fun okVersion -> ((v_Base_dResult_dandThen ((v_Vuna_dCompiler_dManifest_dvalidateEdition dtb__100) dtb__96)) (fun okEdition -> ((v_Base_dResult_dandThen ((v_Vuna_dCompiler_dManifest_dvalidateMembers dtb__100) dtb__97)) (fun okMembers -> ((v_Base_dResult_dandThen ((v_Vuna_dCompiler_dManifest_dvalidateExports dtb__100) dtb__98)) (fun okExports -> ((v_Base_dResult_dandThen ((v_Vuna_dCompiler_dManifest_dvalidateDependencies dtb__100) dtb__99)) (fun okDeps -> (C_Base_dResult_dResult_Base_dResult_dOk ((C_Vuna_dCompiler_dManifest_dManifest_Vuna_dCompiler_dManifest_dManifest (dtb__94, dtb__95, dtb__96, dtb__97, dtb__98, dtb__99, dtb__100))))))))))))))))
+  | _ -> failwith "DT: impossible branch"
+))
 
-let rec v_Vuna_dCompiler_dManifest_ddirFromRev = fun a0 -> match a0 with
-  | ([]) -> "."
-  | ((c) :: (rest)) -> if v_vuna_ueq_uint c 47 then v_Vuna_dCompiler_dManifest_ddirResult (bi_str_pack (v_Base_dList_dreverse rest)) else v_Vuna_dCompiler_dManifest_ddirFromRev rest
-  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Manifest.vuna" 187 1 ("no matching clause for Vuna.Compiler.Manifest.dirFromRev")
+let v_Vuna_dCompiler_dManifest_ddirResult = (fun dir -> (if ((bi_eq_str dir) "") then "/" else dir))
 
-let v_Vuna_dCompiler_dManifest_dmanifestDir = fun path -> v_Vuna_dCompiler_dManifest_ddirFromRev (v_Base_dList_dreverse (bi_str_unpack path))
+let rec v_Vuna_dCompiler_dManifest_ddirFromRev = (fun mc0 -> (match mc0 with
+  | C_Base_dList_dList_Cons (dtb__101, dtb__102) -> (if ((bi_eq_int dtb__101) 47) then (v_Vuna_dCompiler_dManifest_ddirResult (dtp_pack (v_Base_dList_dreverse dtb__102))) else (v_Vuna_dCompiler_dManifest_ddirFromRev dtb__102))
+  | C_Base_dList_dList_Nil -> "."
+  | _ -> failwith "DT: impossible branch"
+))
 
-let v_Vuna_dCompiler_dManifest_dresolveManifestPath = fun manifest rel -> (let dir = v_Vuna_dCompiler_dManifest_dmanifestDir (v_Vuna_dCompiler_dManifest_dmanifestPath manifest) in if v_Base_dString_dstartsWith "/" rel then rel else if v_vuna_ueq_ustr dir "." then rel else (let vuna_cat0' = (dir) in (let vuna_cat1' = ("/") in (let vuna_cat2' = (rel) in String.concat "" [vuna_cat0'; vuna_cat1'; vuna_cat2']))))
+let v_Vuna_dCompiler_dManifest_dmanifestDir = (fun path -> (v_Vuna_dCompiler_dManifest_ddirFromRev (v_Base_dList_dreverse (dtp_unpack path))))
 
-let v_vuna_ueq_uVuna_uCompiler_uManifest_uManifest = fun x y -> (match x with
-  | C_Vuna_dCompiler_dManifest_dManifest (v0, v1, v2, v3, v4, v5, v6) -> (match y with
-  | C_Vuna_dCompiler_dManifest_dManifest (w0, w1, w2, w3, w4, w5, w6) -> (if ((if ((if ((if ((if ((if (v_vuna_ueq_uBase_uMaybe_uMaybe v0 w0) then (v_vuna_ueq_uBase_uMaybe_uMaybe v1 w1) else false)) then (v_vuna_ueq_uBase_uMaybe_uMaybe v2 w2) else false)) then (v_vuna_ueq_uBase_uList_uList v3 w3) else false)) then (v_vuna_ueq_uBase_uMaybe_uMaybe v4 w4) else false)) then (v_vuna_ueq_uBase_uList_uList v5 w5) else false)) then (v_vuna_ueq_ustr v6 w6) else false)
-  | _ -> v_vuna_ueq_uint 0 1
-  | _ -> vuna_fail "<generated>" 423 59 ("case pattern match failure"))
-  | _ -> v_vuna_ueq_uint 0 1
-  | _ -> vuna_fail "<generated>" 422 47 ("case pattern match failure"))
-
-let v_vuna_uneq_uVuna_uCompiler_uManifest_uManifest = fun x y -> if v_vuna_ueq_uVuna_uCompiler_uManifest_uManifest x y then v_vuna_ueq_uint 0 1 else v_vuna_ueq_uint 0 0
+let v_Vuna_dCompiler_dManifest_dresolveManifestPath = (fun manifest -> (fun rel -> ((fun dir -> (if ((v_Base_dString_dstartsWith "/") rel) then rel else (if ((bi_eq_str dir) ".") then rel else ((bi_concat dir) ((bi_concat "/") rel))))) (v_Vuna_dCompiler_dManifest_dmanifestDir (v_Vuna_dCompiler_dManifest_dmanifestPath manifest)))))

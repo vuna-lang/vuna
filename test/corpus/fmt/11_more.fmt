@@ -41,6 +41,7 @@ bodyCase n =
     0 => base
     _ => n + base
   where
+    base : Int
     base = 1
 
 bindChain = (\a => a) >>= (\b => b)

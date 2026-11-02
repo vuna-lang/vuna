@@ -900,3 +900,101 @@ program instead`（不做「纯动作求值、效果丢弃」的错误二分）�
   `nix/context.budget` 标定历史）。
 - `vuna fmt --check` 与 `vuna lint` 干净；旧 seed 能编译新编译器源码（stage1 由 `nix build`
   验证），`seed-selfhost` 的 stage1 == stage2 由 CI 保持。
+
+## M24：单一 DT 路径落地（2026-11）
+
+### 1. DT 逐模块 split codegen 与 seed 轮换
+
+**目标推进**：seed 不再由 HM typed codegen 生成，改由 DT 擦除 codegen 的**逐模块 split**
+输出生成；`--dt` 开关消失，check/compile/build/seed/interp 全部走 DT。
+
+**生成器**（`CoreCodegen.generateDtSplitProgram`）：
+
+- 整程序先按 DT 精化，再按「声明归属」把 datas/defs 切到模块文件；归属表由 Loader 的
+  module 声明构造（数据/签名/函数/trait/实例名 + 派生实例名按 `Elab.instanceName` 同规则
+  展开，`DRecord` 的 deriving 也算）。名字归属优先级：精确声明名 → 内建类投影/内建实例
+  （`Vuna_builtins`）→ `Show_Show_<data>` 等派生实例前缀反查 data 所属模块 → 带点名字按
+  模块前缀 → entry 声明（`Main`）→ 报清晰错误（不静默丢定义）。
+- 文件集：`Vuna_runtime.ml`（`dtRuntime`）+ `Vuna_builtins.ml`（内建 `Dict_Show/Eq/Ord`
+  与内建实例/投影）+ 每个源码模块一个 `<Module>.ml`（依赖序，`open` 所有更早模块）+
+  `Main.ml`（entry defs + main 钩子）+ `build.sh`。**不生成 `.mli`**：跨模块引用靠全局
+  唯一 OCaml 名字（`v_<sanitized global name>`、`C_<family>_<ctor>`、`t_<family>`）与
+  `open` 链；`build.sh` 复用 `Split` 的增量构建脚本（无 `.mli` 时干净构建只编 `.ml`）。
+- 每个模块内类型用 `genTypeDeclsOf allDatas subset`（族间参数推断仍用全量 datas，只 emit
+  本模块族）；运行时定义按模块子集重新做 SCC 分组（跨模块依赖由模块依赖序保证，不会成环）；
+  零运行时参数定义仍包 thunk（`main` 例外）；List 族的 `strUnpack/strPack` 桥接跟在声明
+  List 的模块末尾（后续模块 open 后可用）。
+- `SplitCli` 重写为 DT split CLI：`buildSplit`/`seedSplit` → `Dt.dtSplitProject`（Loaders
+  `loadProject` + `resolveProject`，modules 反序成依赖序）→ `writeSplitFiles` + `build.sh`。
+  `Compile`/`CompilerCli` 同步删 HM 入口。
+
+**rotation**：`sh nix/seed-rotate.sh ./result/bin/vuna` 一次性通过——旧 seed 编译新源码 →
+新编译器 `seed` 生成 38 文件（37 `.ml` + `build.sh`，0 `.mli`）→ 新 seed 构建 stage1 →
+stage1 重生成逐字节一致 → TCB 断言 → 替换 `seed/`。rotation 后 `nix build .#vuna-seed`、
+`.#vuna-compiler`、`.#vuna` 全部从新 seed 重建通过；`nix flake check` 9 项全绿。
+
+### 2. HM 删除与单路径 CLI / LSP
+
+- 删除 `Vuna.Compiler.Typecheck`、`Vuna.Compiler.TypedCodegen`、`Vuna.SigExport`（一次性
+  签名工具）；`compiler/vuna.toml` 移除 Typecheck/TypedCodegen；仓库内无任何引用。
+- CLI 收敛（`CompilerCli` 重写，352 行）：`compile [--no-print] [--root]... (file|pkgdir)
+  [out.ml]`、`check [--root]... (file|pkgdir)`、`build [--no-compile] [DIR]`（默认 DT
+  单文件 `main.ml` + `build.sh` + `.output/bin/<name>`）、`build --split OUT [DIR]`、
+  `seed OUT [DIR]`（必须显式 OUT）。`--dt` 全部 removed（exit 2，含 interp），
+  `compile --package` 删除；`nix/packages.nix` 的 stage1 改为 `vuna-seed seed stage1
+  compiler`（旧 HM seed 也支持 `seed`，新旧形状一致）。
+- LSP：`diagnosticsFor` 改为 parse + `Elab.elabProgramWith`（DT 精化错误，severity 1），
+  删除 `checkProgramInfoElab`/`exhaustiveWarningsFor` 的 HM 诊断分支；hover 仍
+  `goalsOfProgram`；含 `import` 时仍跳过类型检查。
+- `nix/checks/vuna-metrics.sh` 口径从 `compile --package` 改为 `vuna seed` 聚合 DT split
+  产物，`nix/metrics.budget` 按实测重标定（files 37 / bytes 1165000 / lines 11550 /
+  longlines 3450 / letrec 480 / eqint 125 / zeroarg 95 / ctorcount 3550）；
+  `seed-selfhost.sh`/`vuna-package.sh`/`bench.sh`/`index-check.sh` 同步新 CLI；
+  `nix/tcb-forbidden.txt` 无需改（HM 模块从未以短名列入，DT split 命名规则不变）。
+
+### 3. `where` 绑定显式签名语法（保留 where）
+
+- AST 新增 `EAnn : Expr -> Expr -> Span -> Expr`（表达式类型标注）；Parser 的 where 块
+  允许签名行 `name : Ty`（同名子句前；重复/悬空/顺序错误有带位置的 parse 错误），降级为
+  `ELet ... True`，绑定值 = `EAnn value ty`（函数子句为 `EAnn (ELam ...) ty`）。
+- Elab：`checkWhereSigs` 要求 where 的每个绑定有签名（缺失报
+  `DT: where binding `<g>` needs a type signature (write `<g> : <type>` before the clause)`）；
+  `ELet ... True` 按**顺序 let** 精化（不做 ctx 预绑定/递归组）；`inferE/checkE` 支持
+  `EAnn`（checkType ty → 按 eval ty checking）。Loader/DtRecords/DtMatch/DtTerm/Index/
+  Fmt 补 `EAnn` 遍历；Fmt 在 where 绑定前渲染签名行、非 where 位置透明渲染。
+- **语义决策**：where 是局部顺序 let，不支持前向/自/互递归（递归放顶层定义组，顶层组
+  仍支持互递归/自递归/前向引用）。夹具 `typed_ok/06..08` 改为新语义（捕获外层参数 /
+  多绑定顺序依赖 / 单绑定+case），`fmt/05`、`fmt/15`、`fmt/typed/01_where` 加签名；
+  新增负例 `dt_err/35_where_no_sig`。
+
+### 4. `tNNN` 签名清理与名字启发式删除
+
+- 删除 HM 后剩余 9 文件 77 处 `t<数字>` 类型变量（Loader 15、DtRecords 13、Pkg 10、Toml 6、
+  Manifest 4、Elab 4、Lint 20、Fmt 3、Index 2），按每个签名内首次出现顺序改为 `a`/`b`/`c`…；
+  全仓 `\bt[0-9]{3,}\b` 归零。
+- `Elab.isInferredVarName`/`isInferredVarValue`/`allDigitChars` 与 `specializeEqTy`/
+  `specializeCmpTy` 的名字分支删除。**终态语义**：HM 删除后不再产生 `tNNN`；刚性类型
+  变量保持 M22 字典提升/延迟提升（实例/deriving 优先）；`bi_*_generic` 只作「具体类型
+  无实例」兜底。曾试「刚性变量一律 genericEqApp」，实测两个回归：自定义 `instance Eq`
+  被旁路（`mem` 从 T 变 F），以及 `Core.valueEqDeep` 用 `force` 不是 `normalize` 使
+  `range` 递归在 interp 下卡住（`stdlib/05` 变 F）。`force→normalize` 留待后续（非本阶段）。
+
+### 5. 验证
+
+- `nix flake check`：9 项全绿（tests/package/metrics/typecheck/lint/index/context-budget/
+  seed-selfhost/fmt）。
+- `test/run-tests.sh`：**1026 checks 全绿**（34 个编号段；全仓 0 处 `--dt`；段 28/29/33/34d
+  全部走新 DT CLI；包夹具 golden 不变——`main : IO Int` 的 do 末加 `exit 0`；段 13 由
+  新 DT seed 自举编译并跑出 120）。
+- `vuna check .`（DT 自检）、`vuna check compiler`、`vuna build .`（DT 单文件产物可运行并
+  自检）、`vuna fmt --check`、`vuna lint`、LSP 冒烟、`nix/index-check.sh` 全部通过。
+- `nix/context.budget` 按实测重标定（max_module_lines 3400 等）；`docs/` 双路径表述清零
+  （历史文档除外，已标注）。
+
+### 6. 已知边界（留后续）
+
+- `monad/04_kind_generic` 的多隐式参数字典仍是 `.nointerp` + `.nocompile`（
+  `liftFreeDictGoals` binder 记账 bug 未修）。
+- `Core.valueEqDeep` 用 `force` 而非 `normalize` 强制实参（见 §4）。
+- `where` 内递归/前向引用不保留（见 §3）。
+- kind 诊断仍为通用 `type mismatch`（HM 专属文案已消失）。

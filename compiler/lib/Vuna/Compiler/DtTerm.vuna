@@ -46,6 +46,8 @@ funMentions name e = case e of
   ERecUpdate base fields sp => funMentions name base
   EInstSel meth iname sp => funMentions name meth
   EDo stmts sp => funMentionsStmts name stmts
+  -- M24：where 绑定签名（`EAnn value ty`）；类型层不算调用。
+  EAnn value ty sp => funMentions name value
 
 funMentionsList : String -> List Expr -> Bool
 funMentionsList name [] = False

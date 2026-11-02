@@ -6,10 +6,10 @@
 
 **vuna 尚未发布任何版本**：没有外部用户、下游生态与历史包袱，全部源码都在本仓库内。
 因此**任何设计、接口、命令、实现、哲学都允许被推翻**（包括本文件与 roadmap 已写下的
-决策）；「两条路径并存」「保留兼容层」「以后可能有人依赖」都不构成保留理由——评估一个
-遗留物只看一条：**它在终态里还成立吗**。推翻旧决策时不要静默改写历史，在 roadmap 的
-「决策变更」表记一行、细节进 `docs/history.md`。当前路线由此确定：**终态是单一 DT
-路径，HM 检查器与 codegen 将被删除**（roadmap「终态」与「阶段状态总览」）。
+决策）；「保留兼容层」「以后可能有人依赖」不构成保留理由——评估一个遗留物只看一条：
+**它在终态里还成立吗**。推翻旧决策时不要静默改写历史，在 roadmap 的「决策变更」表记
+一行、细节进 `docs/history.md`。当前路线由此确定：**终态是单一 DT 路径，已在 M24 落地**
+（唯一检查器与 codegen，roadmap「终态」与「阶段状态总览」）。
 
 ## 阅读顺序
 
@@ -38,16 +38,13 @@
 1. **当前 seed 必须能编译当前源码**——`seed/` 是提交入库的信任锚点；
 2. **seed rotation 后 stage1 == stage2**（文件集逐字节一致，fixed point）；
 3. **`seed/` 只含 compiler 包入口闭包**（`compiler/app/Main.vuna` 的 import 闭包）；
-4. **工具链不进 TCB**：`fmt`/`lint`/`repl`/`doc`/`test`/`Index`（以及未来的 LSP、
+4. **工具链不进 TCB**：`fmt`/`lint`/`repl`/`doc`/`test`/`Index`/`LSP`（以及未来的
    package manager）永不进入 seed 闭包；黑名单见 `nix/tcb-forbidden.txt`；
 5. **效果内建按包 allowlist**：只有 `vuna` / `vuna-compiler` / `vuna-base` 可直接调用
    effectful 内建（`print`/`readFile`/`exit`/`prim_*` 等），其余包必须经 `Base.IO`
    （`Vuna.Compiler.Loader.packageAllowsEffects`）；
-6. **迁移期双路径只在源码/包构建上守门，夹具已切 DT**：M23 起语言夹具与 `vuna interp`
-   只走 DT（`check --dt` / `compile --dt` / 核心求值，效果夹具用 `.nointerp` 标记）；
-   HM（`Typecheck` / `TypedCodegen`）代码路径保留到 M24 才删除，期间 `vuna check .`
-   （HM 自检）与 HM 包构建段（第 28/29/33 段）继续守门。**M24 之后 HM 模块删除**，
-   `--dt` 开关消失，只剩一条路径；
+6. **唯一路径**：语言夹具、`vuna interp`、包构建与 seed 全部走 DT（精化 + 擦除
+   codegen，`vuna check .` 也是 DT 自检）；没有可切换的检查器，也没有第二套 codegen；
 7. 编译器自检通过：`vuna check .` 必须能检查自身源码（`checks.vuna-typecheck`）。
 
 ## 纪律
@@ -75,9 +72,9 @@ nix flake check                      # tests/package/metrics/typecheck/lint/seed
 nix run .#vuna-run-tests [-- --list | --only dt]   # 原生测试；nix run .#vuna-bench -- --quick
 vuna check .                         # 包级类型检查（自检）；vuna build . → .output/bin/<包名>
 vuna fmt --check <PATH>...           # 格式化检查（务必显式给路径）；vuna lint <file>...
-vuna doc [DIR [OUT]]                 # API 文档（默认 DIR/docs/api.md，gitignored）
+vuna doc [--with-comments] [DIR [OUT]]  # API 文档（默认 DIR/docs/api.md，gitignored）
 vuna interp <file.vuna>              # DT 精化 + 核心求值（纯；只展示 Int/String/Bool）
-vuna seed seed compiler              # 重新生成 seed（正式流程用 nix/seed-rotate.sh）
+vuna seed <OUT> compiler             # 逐模块 DT split（必须显式 OUT；正式流程用 nix/seed-rotate.sh）
 ```
 
 ## 目录速览

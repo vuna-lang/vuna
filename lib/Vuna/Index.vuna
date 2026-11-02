@@ -155,7 +155,7 @@ dropPrefix : String -> String -> String
 dropPrefix prefix s =
   if startsWith prefix s then substring (strLength prefix) (strLength s - strLength prefix) s else s
 
-takeLast : Int -> List t6903 -> List t6903
+takeLast : Int -> List a -> List a
 takeLast n xs =
   let
     len = length xs
@@ -413,6 +413,7 @@ namesInExpr e = case e of
   ERecUpdate r fields sp => append (namesInExpr r) (concatMap namesInMethod fields)
   EInstSel r mname sp => namesInExpr r
   EDo stmts sp => concatMap namesInDoStmt stmts
+  EAnn value ty sp => append (namesInExpr value) (namesInExpr ty)
 
 -- ---------------------------------------------------------------
 -- 全量构建

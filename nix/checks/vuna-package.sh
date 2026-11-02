@@ -3,6 +3,9 @@
 #
 # 由 nix/checks/default.nix 的 mkCheck 调用：cwd 是已暂存的工作树，
 # $VUNA / $VUNA_COMPILER 由 Nix 注入。
+#
+# M24：`build` 默认走 DT 单文件 codegen（.output/{main.ml,build.sh,bin/<pkg>}），
+# examples/multi 的 main 用 `exit 0` 收尾，输出与 golden 一致。
 set -eu
 
 OUT=${1:?usage: vuna-package.sh OUT}
@@ -13,6 +16,7 @@ OUT=${1:?usage: vuna-package.sh OUT}
 "$VUNA_COMPILER" help | grep -q "vuna-compiler compile"
 
 # 多包示例：workspace 根包 + 成员依赖包 + base 路径依赖。
+rm -rf examples/multi/.output
 "$VUNA" build examples/multi
 test "$(examples/multi/.output/bin/multi)" = 'hi hi hi|n2 n1'
 
@@ -25,6 +29,7 @@ grep -q "1 passed, 0 failed" "$OUT/test.log"
 "$VUNA" doc examples/multi/greet "$OUT/api.md"
 grep -q "## Greet" "$OUT/api.md"
 
-# 仓库自身（根包）也走 package 模式构建。
+# 仓库自身（根包）也走 DT build（.output/bin/<包名> 仍须可用）。
+rm -rf .output
 "$VUNA" build .
 ./.output/bin/vuna help | grep -q usage

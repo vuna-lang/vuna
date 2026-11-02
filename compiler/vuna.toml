@@ -17,8 +17,6 @@ modules = [
   "Vuna.Compiler.Manifest",
   "Vuna.Compiler.Pkg",
   "Vuna.Compiler.Loader",
-  "Vuna.Compiler.Typecheck",
-  "Vuna.Compiler.TypedCodegen",
   "Vuna.Compiler.Core",
   "Vuna.Compiler.DtPrelude",
   "Vuna.Compiler.DtQuant",

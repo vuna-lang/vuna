@@ -1,5 +1,9 @@
 import Vuna.Box
 import Base.IO
 
+-- DT 的 build 会先执行 IO 效果、再打印 main 的返回值；do 块末用 `exit 0` 结束，
+-- 让 golden 只含业务输出（不依赖「是否打印返回值」这一 CLI 细节）。
 main : IO Int
-main = print (strFromInt (boxValue (makeBox 42)))
+main = do
+  _ <- print (strFromInt (boxValue (makeBox 42)))
+  exit 0

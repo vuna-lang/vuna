@@ -60,16 +60,16 @@ lookupRecord name ((RecordInfo rname params fields derivings ctor) :: rest) =
   if rname == name then Just (RecordInfo rname params fields derivings ctor)
   else lookupRecord name rest
 
-fieldNamesOf : List (Pair t13941 t13940) -> List t13941
+fieldNamesOf : List (Pair a b) -> List a
 fieldNamesOf [] = []
 fieldNamesOf ((Pair n t) :: rest) = n :: fieldNamesOf rest
 
-fieldIndexAt : t13956 -> List (Pair t13956 t13955) -> Int -> Maybe Int
+fieldIndexAt : a -> List (Pair a b) -> Int -> Maybe Int
 fieldIndexAt fname [] i = Nothing
 fieldIndexAt fname ((Pair n t) :: rest) i =
   if n == fname then Just i else fieldIndexAt fname rest (i + 1)
 
-fieldIndex : t13981 -> List (Pair t13981 t13980) -> Maybe Int
+fieldIndex : a -> List (Pair a b) -> Maybe Int
 fieldIndex fname fields = fieldIndexAt fname fields 0
 
 lookupProvided : String -> List (Pair String a) -> Maybe a
@@ -91,17 +91,17 @@ unknownFieldMsg sp fname = showSpanLoc sp ++ ": unknown field " ++ fname
 duplicateFieldMsg : Span -> String
 duplicateFieldMsg sp = showSpanLoc sp ++ ": duplicate field"
 
-hasUnknownFields : List String -> List (Pair String t14039) -> Bool
+hasUnknownFields : List String -> List (Pair String a) -> Bool
 hasUnknownFields fieldNames [] = False
 hasUnknownFields fieldNames ((Pair n v) :: rest) =
   if memName n fieldNames then hasUnknownFields fieldNames rest else True
 
-firstUnknownFieldMsg : Span -> List String -> List (Pair String t14053) -> String
+firstUnknownFieldMsg : Span -> List String -> List (Pair String a) -> String
 firstUnknownFieldMsg sp fieldNames [] = unknownFieldMsg sp ""
 firstUnknownFieldMsg sp fieldNames ((Pair n v) :: rest) =
   if memName n fieldNames then firstUnknownFieldMsg sp fieldNames rest else unknownFieldMsg sp n
 
-checkProvidedFields : List String -> List (Pair String t14075) -> Span -> Result (List t14074)
+checkProvidedFields : List String -> List (Pair String a) -> Span -> Result (List b)
 checkProvidedFields fieldNames [] sp = Ok []
 checkProvidedFields fieldNames ((Pair n v) :: rest) sp =
   if memName n fieldNames then checkProvidedFields fieldNames rest sp
@@ -221,6 +221,10 @@ desugarExpr records e = case e of
   EPi name implicit dom cod sp =>
     andThen (desugarExpr records dom)
       (\d2 => andThen (desugarExpr records cod) (\c2 => Ok (EPi name implicit d2 c2 sp)))
+  -- M24：where 绑定签名（`EAnn value ty`）两边都做结构递归（record 可出现在值里）。
+  EAnn value ty sp =>
+    andThen (desugarExpr records value)
+      (\v2 => andThen (desugarExpr records ty) (\t2 => Ok (EAnn v2 t2 sp)))
 
 desugarRecordValues : List RecordInfo -> List (Pair String Expr) -> List (Pair String Expr) -> Span -> Result (List Expr)
 desugarRecordValues records [] provided sp = Ok []

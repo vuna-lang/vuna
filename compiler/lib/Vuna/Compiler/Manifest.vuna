@@ -67,7 +67,7 @@ atLine path line msg =
 manifestErr : String -> String -> String
 manifestErr path msg = if path == "" then msg else path ++ ": " ++ msg
 
-sameSection : List t51323 -> List t51323 -> Bool
+sameSection : List a -> List a -> Bool
 sameSection [] [] = True
 sameSection (x :: xs) (y :: ys) = if x == y then sameSection xs ys else False
 sameSection _ _ = False
@@ -92,7 +92,7 @@ stringListField path section key entries = case lookupEntry section key entries 
   Just value =>
     Err (fieldLoc path section key entries ++ "expected an array of strings for \"" ++ key ++ "\"")
 
-orEmptyList : Maybe (List t51427) -> List t51427
+orEmptyList : Maybe (List a) -> List a
 orEmptyList maybe = case maybe of
   Nothing => []
   Just xs => xs

@@ -18,6 +18,7 @@ withWhere : Int -> Int
 withWhere n = base
   where
     -- where 绑定前置
+    base : Int -- 签名行尾
     base = n + 1
 
 run : Int -> Int

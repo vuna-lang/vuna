@@ -3,11 +3,11 @@
 vuna 是一个函数式编程语言，本仓库是它的编译器与工具链。
 
 > **vuna 尚未发布任何版本**：没有外部用户、下游生态与历史包袱，全部源码都在本仓库内，
-> **任何设计、接口、命令、实现、哲学都允许被推翻**。终态是**单一依赖类型路径**（HM 检查器
-> 与 codegen 将被删除），见 [docs/roadmap.md](docs/roadmap.md)。
+> **任何设计、接口、命令、实现、哲学都允许被推翻**。终态是**单一依赖类型路径**（唯一
+> 检查器与 codegen），见 [docs/roadmap.md](docs/roadmap.md)。
 
 编译器完全用 vuna 自己写：编译器包 `compiler/`（`vuna-compiler`，模块 `Vuna.Compiler.*`）
-+ 根包 `vuna`（产品 CLI 与工具链 fmt/lint/repl/doc/test）+ 成员包 `base/`（`vuna-base`，
++ 根包 `vuna`（产品 CLI 与工具链 fmt/lint/repl/doc/test/lsp）+ 成员包 `base/`（`vuna-base`，
 模块根 `base/lib/`）。`seed/` 只由 compiler 包的入口闭包生成——**可固化成种子的部分与产品
 工具链明确分开**。仓库通过提交入库的 OCaml 种子自举，构建、测试和语言演进都不依赖外部
 编译器；早期启动用的 OCaml 实现 `vunax` 已在 M6 后删除（历史见 git log）。
@@ -59,29 +59,28 @@ nix run .#vuna-run-tests -- --list                  # 列出章节（--only <章
 | 工具 | 作用 |
 | --- | --- |
 | `vuna-seed` | stage 0：从多文件种子 `seed/`（`seed/build.sh` + ocamlopt）构建的种子编译器 |
-| `vuna-compiler` | stage 1 编译器（从 `compiler/` 包级 codegen + ocamlopt）：`compile/check/build[--split]/seed` + `compile --package` |
+| `vuna-compiler` | stage 1 编译器（从 `compiler/` 做 DT split codegen + ocamlopt）：`compile/check/build/seed` |
 | `vuna` | 产品 CLI：工具链 + 编译器命令（in-process 调用 compiler 库） |
 
-自举链：`seed/` →（`seed/build.sh` + ocamlopt）→ `vuna-seed` →（`compile --package`）→
-`vuna-compiler` →（`build .`）→ `vuna`；再用 `build --split` 生成两级文件集，
+自举链：`seed/` →（`seed/build.sh` + ocamlopt）→ `vuna-seed` →（`seed`，DT split）→
+`vuna-compiler` →（`build .`，DT 单文件）→ `vuna`；再用 `build --split` 生成两级文件集，
 逐字节相等即 fixed point。链条图、rotation 流程与不变量见
 [bootstrap.md](docs/reference/bootstrap.md)。
 
 命令一览（每个命令都必须显式书写，不再支持“无子命令 = compile”的旧式回退）：
 
 ```console
-vuna compile [--dt] [--no-print] [--root DIR]... <entry.vuna> [out.ml]
-vuna compile --package [--out OUT] [DIR]  # 包级 codegen（默认 OUT=DIR/.output）
-vuna check [--dt] [--root DIR]... (<entry.vuna> | <package-dir>)
-vuna build [--no-compile] [DIR]           # 包级 codegen + ocamlopt → .output/bin/<包名>
-vuna build --split OUT [DIR]              # 扁平分离编译
-vuna seed [OUT [DIR]]                     # 生成扁平多文件 seed 文件集
+vuna compile [--no-print] [--root DIR]... <entry.vuna> [out.ml]
+vuna check [--root DIR]... (<entry.vuna> | <package-dir>)
+vuna build [--no-compile] [DIR]           # 单文件 DT codegen + ocamlopt → .output/bin/<包名>
+vuna build --split OUT [DIR]              # 逐模块 DT codegen（.ml + build.sh）
+vuna seed OUT [DIR]                       # 逐模块 seed 文件集（必须显式 OUT）
 vuna lint [--fix] <file.vuna>...
 vuna interp [--root DIR]... <file.vuna>   # 精化后核心求值（纯；不执行效果）
 vuna test [DIR]                           # 运行 test/*.vuna（DT 核心求值，main : String 空串通过）
 vuna fmt [--check] [PATH]...
 vuna repl [--root DIR]...
-vuna doc [DIR [OUT]]                      # 默认 DIR/docs/api.md
+vuna doc [--with-comments] [DIR [OUT]]    # 默认 DIR/docs/api.md
 vuna map [--modules | --find <M.name> | --impact <M.name>]  # 模块总览 / 定位符号 / 改动影响面
 vuna api <Module.name>                    # 某模块的签名面（含注释与行号）
 vuna help, -h
@@ -89,13 +88,13 @@ vuna help, -h
 
 `vuna-compiler` 是同一套编译器命令的独立 CLI（seed 的来源），参数与 `vuna` 的同名命令一致。
 `vuna` 的编译命令直接调用 `Vuna.Compiler.CompilerCli` 的库实现（in-process 调库，不 fork
-`vuna-compiler`）；`vuna build` 通过受限的进程执行内建调用 `.output/build.sh`（ocamlopt），
-除此之外无额外运行时依赖。`vuna interp` 自 M23 起是**DT 精化 + 核心求值**（`--dt` 开关
-已移除）：先按 DT 检查再求 `main` 的值，只展示 `Int`/`String`/`Bool`；任何
-`main : IO a` 一律明确报错（核心求值器不执行效果），请改用 `compile` + 运行产物。
+`vuna-compiler`）；`vuna build` 通过受限的进程执行内建（`prim_runIn`）调用 `ocamlopt`
+编译 `.output/main.ml` → `.output/bin/<包名>`（同时产出 `.output/build.sh` 供手动重建），
+除此之外无额外运行时依赖。`vuna interp` 是**DT 精化 + 核心求值**：先按 DT 检查再求 `main`
+的值，只展示 `Int`/`String`/`Bool`；任何 `main : IO a` 一律明确报错（核心求值器不执行
+效果），请改用 `compile` + 运行产物。所有编译命令都走同一条 DT 链，没有可切换的检查器。
 省略 `--root` 时使用当前目录包的模块根；`--root` 用于原始文件模式（编译器自举、
-测试夹具）显式指定模块根。包模式会自动导入 `Prelude`。`check --dt` / `compile --dt`
-是 M23 后语言夹具的唯一检查路径（HM 代码路径保留到 M24）。命令语义与包格式见
+测试夹具）显式指定模块根。包模式会自动导入 `Prelude`。命令语义与包格式见
 [packages.md](docs/reference/packages.md)，语言语义见
 [language.md](docs/reference/language.md)。
 
@@ -126,15 +125,13 @@ vuna help, -h
 
 1. **当前 seed 必须能编译当前源码**——`seed/` 是提交入库的信任锚点；
 2. **seed rotation 后 stage1 == stage2**（文件集逐字节一致，fixed point）；
-3. **`seed/` 只含 compiler 包入口闭包**：工具链（fmt/lint/repl/doc/test，以及未来的
-   `Index` / LSP / package manager）不进 TCB；`checks.seed-selfhost` 按
+3. **`seed/` 只含 compiler 包入口闭包**：工具链（fmt/lint/repl/doc/test/Index/LSP，
+   以及未来的 package manager）不进 TCB；`checks.seed-selfhost` 按
    `nix/tcb-forbidden.txt` 断言；
 4. **效果内建按包 allowlist**：只有 `vuna` / `vuna-compiler` / `vuna-base` 可直接调用
    effectful 内建，其余包必须经 `Base.IO`（`Vuna.Compiler.Loader.packageAllowsEffects`）；
-5. **迁移期双路径只在源码/包构建上守门，夹具已切 DT**：M23 起语言夹具与 `vuna interp`
-   只走 DT（`check --dt` / `compile --dt` / 核心求值）；HM（`Typecheck` / `TypedCodegen`）
-   保留到 M24 才删除，期间 `vuna check .`（HM 自检）与 HM 包构建段仍守门；**M24 之后
-   HM 模块删除**、`--dt` 开关消失，只剩一条路径；
+5. **唯一路径**：语言夹具、`vuna interp`、包构建与 seed 全部走 DT（精化 + 擦除
+   codegen，`vuna check .` 也是 DT 自检）；没有可切换的检查器，也没有第二套 codegen；
 6. 编译器自检通过：`vuna check .` 能检查自身源码（`checks.vuna-typecheck`）；
 7. `seed/` 下所有文件都是生成物，禁止手改；只能通过 seed rotation 更新。
 
@@ -146,7 +143,7 @@ vuna help, -h
 | 文档 | 内容 |
 | --- | --- |
 | [AGENTS.md](AGENTS.md) | AI agent 唯一固定入口：阅读顺序、不变量、纪律、命令速查 |
-| [docs/architecture.md](docs/architecture.md) | 子系统地图：HM / DT / 包 / 工具链 / 自举五条链路，入口符号、连带改动、测试标签 |
+| [docs/architecture.md](docs/architecture.md) | 子系统地图：编译链（DT 精化 + 擦除 codegen）/ 包 / 工具链 / LSP / 自举，入口符号、连带改动、测试标签 |
 | [docs/reference/language.md](docs/reference/language.md) | core-v0 语法、模块系统、import 与导出规则 |
 | [docs/reference/type-system.md](docs/reference/type-system.md) | 记录类型、trait 与实例、`do` / Monad / Functor |
 | [docs/reference/stdlib.md](docs/reference/stdlib.md) | 标准库 `vuna-base` 模块清单与 `Prelude` 自动导入 |

@@ -1,14 +1,14 @@
-# 语言参考：DT 子集（M23）
+# 语言参考：DT（依赖类型）
 
-`--dt` 打开依赖类型（DT）路径：Core TT + NbE + 双向精化器 + 擦除型 codegen。
-M14 加入**索引归纳族**与**依赖模式匹配**；M20 起**复用 Loader**（多文件 / `import` /
-`--root`）；M21 起 `main : IO a`、`do` 与 `Base.IO` 可用；M22.1 起 `check` / `compile --dt`
-接受**包目录**，M22.2 起 `base` 全部模块可精化，M22.3 起 `build` / `seed` 也接受 `--dt`。
-M23 起 **`vuna interp` 默认走 DT**（DT 精化 + 核心求值，`--dt` 开关移除），语言夹具只走
-DT 检查路径；record update、参数化 record、命名实例选择 `@inst`、实例重复/未知方法诊断、
-`DtDerive` 的 Bool 常量与参数化 `Eq` 等能力补齐。`--dt` 开关只剩在
-`check` / `compile` / `build` / `seed` 上，单一路径是终态（HM 在 M24 删除）；设计与边界见
-[dt-core.md](../dt-core.md)，阶段状态见 [roadmap.md](../roadmap.md)。
+DT 是 vuna 唯一类型检查器与 codegen 路径：Core TT + NbE + 双向精化器 + 擦除型
+codegen。M14 加入**索引归纳族**与**依赖模式匹配**；M20 起**复用 Loader**（多文件 /
+`import` / `--root`）；M21 起 `main : IO a`、`do` 与 `Base.IO` 可用；M22.1 起 `check` /
+`compile` 接受**包目录**，M22.2 起 `base` 全部模块可精化，M22.3 起 `build` / `seed`
+也走 DT；M23 起语言夹具只走 DT、`vuna interp` 改为精化后的核心求值，record update、
+参数化 record、命名实例选择 `@inst`、实例重复/未知方法诊断、`DtDerive` 的 Bool 常量与
+参数化 `Eq` 等能力补齐；M24 起旧检查器与旧 codegen 删除，`vuna seed` 由 DT 逐模块
+split codegen 生成。设计与边界见 [dt-core.md](../dt-core.md)，阶段状态见
+[roadmap.md](../roadmap.md)。
 
 ```vuna
 id : (a : Type) -> a -> a
@@ -72,8 +72,10 @@ sym a b e = case e of
 - **record（M15 降级，M23 补齐）**。`record` 声明、构造、字段访问、字段更新
   （`{ p | x = ... }`，可多字段）与参数化记录（`record Pair a b`）都先在 `DtRecords` 降成
   单构造器 `data` 再精化；`deriving (Show, Eq)` 由 `DtDerive` 生成（`Show` 用记录源名且
-  仅非参数化、`Eq` 支持参数化），`Ord` 派生支持非参数化类型。**`where` 语法在终态不保留**
-  （M23 夹具已改写为等价顶层 helper，M24 随 HM 删除语法支持，见 [limits.md](limits.md)）。
+  仅非参数化、`Eq` 支持参数化），`Ord` 派生支持非参数化类型。
+- **`where` 子句（M24）**。where 绑定是**带签名的局部顺序 let**：每个绑定必须在子句前
+  写显式签名（缺签名报 `DT: ... needs a type signature`），只能引用它之前的绑定；不支持
+  前向引用 / 自递归 / 互递归（递归放顶层定义组）。语法见 [language.md](language.md)。
 - **终止性检查（M16）**。自递归函数必须结构递归（每个递归调用至少有一个实参是同一形参
   的真子项），否则报 `cannot prove termination ...`；互递归不查，见 [limits.md](limits.md)。
 - **擦除规则（M16/M22.3）**。运行时表示只由 `Core.rigIsErased` 判定：隐式 binder 与 `Type`
@@ -98,43 +100,42 @@ sym a b e = case e of
   `this branch is impossible`）；泛化索引（`Vec a n`）漏写报 `case is not exhaustive`。
 - **`data` kind** 必须是 `... -> Type` 箭头链，构造子结果类型回到本族；族名与完整 Pi
   构造子类型进 `globals`，类型级 `Vec a n` 是中性应用（只在 unification 时比较）。
-- **`main`**：`check --dt` 不要求 `main`，`compile --dt` 要求；`main` 可为
-  `Int`/`String`/`Bool` 或 `IO a`（M21：取 IO 末字段后 `f 0`）。M23 起 `vuna interp`
-  默认走 DT 核心求值器，只展示 `Int`/`String`/`Bool` 的值（`show` 语义，字符串带引号）；
+- **`main`**：`check` 不要求 `main`，`compile` 要求；`main` 可为
+  `Int`/`String`/`Bool` 或 `IO a`（M21：取 IO 末字段后 `f 0`）。`vuna interp` 是 DT
+  核心求值器，只展示 `Int`/`String`/`Bool` 的值（`show` 语义，字符串带引号）；
   **任何 `main : IO a` 一律不能 interp**，报
   `DT: interp cannot execute effects (main : IO a); compile and run the program instead`
-  并提示改用 `compile` + 运行产物；数据值 `main` 的夹具已改为
+  并提示改用 `compile` + 运行产物；数据值 `main` 的夹具用
   `Int`/`String`（见 [limits.md](limits.md)）。
-- **`strUnpack` / `strPack`**：M23 起没有声明 `List` 族时也映射到运行时桥接
+- **`strUnpack` / `strPack`**：没有声明 `List` 族时也映射到运行时桥接
   `bi_strUnpack` / `bi_strPack`；但核心求值器不归约这两个内建，用到它们的夹具用
-  `.nointerp` 标记，只做 `compile --dt` + 运行。
+  `.nointerp` 标记，只做 `compile` + 运行。
 - 洞 `_` 未解时诊断带位置与目标类型（`DT: unsolved hole <loc> with goal <ty>`），
   `vuna goal` 可列出全部洞（[dt-tooling.md](dt-tooling.md)）。
 
 ## 命令与边界
 
 ```console
-vuna check --dt <file.vuna | package-dir>            # 精化 + 擦除检查
-vuna compile --dt <file.vuna | package-dir> out.ml   # 擦除并生成 OCaml
-vuna interp [--root DIR]... <file.vuna>              # DT 精化 + 核心求值 main（纯；单文件）
-vuna build --dt [--no-compile] [DIR]                 # 包级 → .output/{main.ml,build.sh,bin/<pkg>}
-vuna build --dt --split OUT [DIR]                    # 只产 OUT/main.ml + OUT/build.sh
-vuna seed --dt OUT [DIR]                             # 同上；必须显式 OUT，拒绝写 seed/
+vuna check <file.vuna | package-dir>            # 精化 + 擦除检查
+vuna compile [--no-print] <file.vuna | package-dir> out.ml   # 擦除并生成 OCaml
+vuna interp [--root DIR]... <file.vuna>         # DT 精化 + 核心求值 main（纯；单文件）
+vuna build [--no-compile] [DIR]                 # 单文件输出模型 → .output/{main.ml,build.sh,bin/<pkg>}
+vuna build --split OUT [DIR]                    # 逐模块：OUT/<Module>.ml... + OUT/build.sh
+vuna seed OUT [DIR]                             # 同上（seed 轮换用；必须显式 OUT）
 ```
 
-`--dt` 复用 Loader：多文件 / `import` / `--root` / 包目录都可用（M22.1）；`build --dt`
-与 `seed --dt` 于 M22.3 接线，输出是**整程序单文件** `main.ml` + `build.sh`，逐模块切分
-留到 M24 的 seed 切换（[roadmap.md](../roadmap.md)「决策变更」）。`vuna interp` 自 M23 起
-不再接受 `--dt`（传了报 `interp no longer takes --dt`、退出码 2）：它总是 DT 精化 +
-核心求值，入口只能是单文件（可用 `--root` 加载依赖模块；包目录入口是 `check` /
-`compile`）。HM 路径语义与产物不变。
+DT 复用 Loader：多文件 / `import` / `--root` / 包目录都可用；`build` 与 `seed` 走同一
+DT codegen，`build` 产单文件 `main.ml` + `build.sh`，`seed` / `build --split` 产逐模块
+`.ml` + `build.sh`（无 `.mli`，见 [bootstrap.md](bootstrap.md)）。`vuna interp` 总走
+DT 精化 + 核心求值，入口只能是单文件（可用 `--root` 加载依赖模块；包目录入口是
+`check` / `compile`）。
 
 ## 测试夹具
 
-`test/run-tests.sh` 第 34 段（`interp` / `check --dt` / `compile --dt` + `ocamlopt` 三路；interp
-已无 `--dt`）。`.nointerp` 夹具跳过 interp，只做 `compile --dt` + 运行（效果/不可归约）。
+`test/run-tests.sh` 第 34 段（`interp` / `check` / `compile` + `ocamlopt` 三路）。
+`.nointerp` 夹具跳过 interp，只做 `compile` + 运行（效果/不可归约）。
 
-- 正例 `test/corpus/dt/`（**44** 个）：按阶段 M13 `01_id`–`08_if`、M14 `09_nat`–`12_eq`、
+- 正例 `test/corpus/dt/`（44 个）：按阶段 M13 `01_id`–`08_if`、M14 `09_nat`–`12_eq`、
   M15 `13_iface`–`15_goal`、M16 `16_total`/`17_erase`、M18–M18.6 `18_ctx`–`21_level`、
   M19 `22_let`–`31_deriving_ord`、M20 `32_parametric_data`、M20.5 `36_multi_clause`、
   M21 `33_poly_fn_field`/`34_io_do`/`35_io_main`/`37_instance_ctor_pat`（`34_io_do` /
@@ -144,26 +145,25 @@ vuna seed --dt OUT [DIR]                             # 同上；必须显式 OUT
   update 降级）、`41_record_parametric`（参数化 record kind + swap）、
   `42_named_instance`（`@inst` 命名实例选择）、`43_deriving_parametric_eq`（参数化
   data 派生 `Eq`）、`44_short_circuit`（`&&`/`||` 短路，右侧 `1/0` 不求值）。
-- 正例 `test/corpus/dt_base/`（`--root ../base/lib`，**8** 个）：M21 的 `Base.IO`/`do`/
+- 正例 `test/corpus/dt_base/`（8 个，`--root ../base/lib`）：M21 的 `Base.IO`/`do`/
   trait 投影与 `Base.IO` API 类型面；`06_base_string`（`str*` 的 `List` 族桥接）、
   `01_io_do`/`02_io_api`/`03_fmap_bind`（效果动作）与 `06_base_string` 带 `.nointerp`
   （interp 不执行效果、不归约 `strUnpack`/`strPack`）；`07_base_sort_map`（Ord 泛型比较
   + Map，`123`）、`08_base_facade`（`import Base`，`2`）。
-- 正例 `test/corpus/dt_pkg/`（M22.1，3 个）：`01_exec`（运行 `42`）、`02_lib`（库包
+- 正例 `test/corpus/dt_pkg/`（3 个包目录）：`01_exec`（运行 `42`）、`02_lib`（库包
   check 通过、compile 清晰报错）、`03_bad`（无 `vuna.toml`）；`corpus/dt_root/` 是
   `interp --root` 多文件夹具。
-- 正例 `test/corpus/dt_io/`（M21，1 个）：`main : IO a` 的编译产物真正执行
-  `Base.IO` 效果（核心求值器不执行效果，所以只比产物输出）。
-- 负例 `test/corpus/dt_err/`（**33** 个）：M13 `01_universe`–`11_implicit_non_type`、
-  M14 `04_nonexhaustive`–`15_nested_pat`、M16 `16_nonterm`/`17_nested_total`、
-  M18.5 `18_lam_type_used`、M18.6 `19_rig_type_runtime`、M19 `20_let_bad_pat` 起、
-  M20.5 `28_multi_clause_coverage`、M21 `27_poly_fn_field_err`/`29_instance_ctor_pat_coverage`、
-  M23 `30_duplicate_instance`（`duplicate instance`）、`31_instance_unknown_method`
-  （`instance has unknown method`）、`32_inst_sel_wrong_method`、`33_deriving_parametric_show`、
-  `34_record_update_ambiguous`（`ambiguous field`）。
+- 正例 `test/corpus/dt_io/`（1 个）：`main : IO a` 的编译产物真正执行 `Base.IO` 效果
+  （核心求值器不执行效果，所以只比产物输出）。
+- 负例 `test/corpus/dt_err/`（34 个）：M13–M23 的诊断夹具（`duplicate instance`、
+  `instance has unknown method`、`deriving_parametric_show`、`record_update_ambiguous`
+  等），M24 新增 `35_where_no_sig`（期望片段 `needs a type signature`）。
+- `where` 签名正例在 `test/corpus/typed_ok/06_where_fwd`、`07_where_mutual`、
+  `08_where_self`（局部辅助函数 / 顶层递归的对照）与 `corpus/fmt` 的 where 黄金例。
 
 ## 相关阅读
 
-- 设计与实现细节：[docs/dt-core.md](../dt-core.md)；工具链：[dt-tooling.md](dt-tooling.md)
-- 与 HM 路径的边界：[architecture.md](../architecture.md)；能力落差证据：[dt-parity.md](dt-parity.md)
-- DT 阶段状态：[docs/roadmap.md](../roadmap.md)；已知限制：[limits.md](limits.md)
+- 设计与实现细节：[dt-core.md](../dt-core.md)；工具链：[dt-tooling.md](dt-tooling.md)
+- 编译链与改动定位：[architecture.md](../architecture.md)；能力落差证据（历史）：
+  [dt-parity.md](dt-parity.md)
+- DT 阶段状态：[roadmap.md](../roadmap.md)；已知限制：[limits.md](limits.md)

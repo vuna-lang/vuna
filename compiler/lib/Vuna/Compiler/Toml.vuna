@@ -72,7 +72,7 @@ locPrefix : String -> Int -> String
 locPrefix path line =
   if path == "" then "line " ++ strFromInt line ++ ": " else path ++ ":" ++ strFromInt line ++ ": "
 
-failAt : String -> Int -> String -> Result t52095
+failAt : String -> Int -> String -> Result a
 failAt path line msg = Err (locPrefix path line ++ msg)
 
 -- 跳过空格/制表符。
@@ -257,12 +257,12 @@ expectEolAfterComment path cs = case skipComment cs of
       if c == 10 then Ok (TomlCursor rest (line + 1) 1)
       else failAt path line "unexpected character after comment"
 
-samePath : List t52825 -> List t52825 -> Bool
+samePath : List a -> List a -> Bool
 samePath [] [] = True
 samePath (x :: xs) (y :: ys) = if x == y then samePath xs ys else False
 samePath _ _ = False
 
-memSectionPath : List t52842 -> List (List t52842) -> Bool
+memSectionPath : List a -> List (List a) -> Bool
 memSectionPath section seen = case seen of
   [] => False
   s :: rest => if samePath section s then True else memSectionPath section rest
@@ -298,7 +298,7 @@ parseKeyLine path cs section seen entries = case parseBareKey path cs of
           entries
         else failAt path (cursorLine cs) ("expected '=' after key \"" ++ key ++ "\"")
 
-parseSectionLine : String -> TomlCursor -> t52971 -> List (List String) -> List TomlEntry -> Result (List TomlEntry)
+parseSectionLine : String -> TomlCursor -> a -> List (List String) -> List TomlEntry -> Result (List TomlEntry)
 parseSectionLine path cs section seen entries = case parseSectionPath path (advanceCursor cs) of
   Err e => Err e
   Ok (Pair newSection afterHeader) => if memSectionPath newSection seen then failAt path (cursorLine cs) ("duplicate section [" ++ joinDots newSection ++ "]")

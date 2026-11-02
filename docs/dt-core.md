@@ -1,9 +1,10 @@
-# DT 核心类型论与精化器设计（M13–M14）
+# DT 核心类型论与精化器设计（M13–M14 设计稿）
 
-本文是 M13/M14 的设计稿与实现边界说明。M13 在 HM 路径之外新增一条**独立、显式
-opt-in** 的依赖类型（DT）子集路径：Core TT + NbE + 双向精化器 + 擦除型 codegen；
-M14 在同一路径上加入索引归纳族与依赖模式匹配（见 §11）。HM 路径（interp / typed /
-split）语义与产物保持不变。
+本文是 M13/M14 的设计稿与实现边界说明，记录 DT 路径如何从**独立、显式 opt-in** 的
+依赖类型（DT）子集长成**唯一路径**：Core TT + NbE + 双向精化器 + 擦除型 codegen；
+M14 在同一路径上加入索引归纳族与依赖模式匹配（见 §11）。文中的阶段编号、限制快照与
+性能数字都是当时的记录；现行语义以 [reference/dt.md](reference/dt.md) 与
+[roadmap.md](roadmap.md) 为准。
 
 ## 1. 范围
 
@@ -11,9 +12,9 @@ split）语义与产物保持不变。
   `compiler/lib/Vuna/Compiler/Elab.vuna`（双向精化器）、
   `compiler/lib/Vuna/Compiler/CoreCodegen.vuna`（擦除 + OCaml 生成）、
   `compiler/lib/Vuna/Compiler/Dt.vuna`（单文件 facade）。
-- 入口：`vuna compile --dt` / `vuna check --dt` / `vuna interp`。
-- 只支持单文件：不经过 Loader、不支持 `import`、不支持包模式、不接入
-  `build` / `split` / `seed`（M17 前 roadmap 允许 split 回退）。
+- 入口：`vuna compile` / `vuna check` / `vuna interp`（当时是 opt-in 子集，现已无开关）。
+- 只支持单文件（M13 时）：不经过 Loader、不支持 `import`、不支持包模式、不接入
+  `build` / `split` / `seed`（后续阶段补齐，见 §9）。
 
 **非目标（M13 不做）**：cumulativity / universe polymorphism、索引归纳族与依赖模式
 匹配（M14 已落地，见 §11）、接口/实例搜索/洞目标显示（M15）、终止性与覆盖性（M16）、
@@ -122,25 +123,28 @@ data Term where
 1. 按「类型 force 后是否为 `VType _`」区分类型级定义与运行时定义；类型级定义
    不生成运行时代码（如 `Endo`、`f : (a:Type) -> Type`）。
 2. 擦除检查：运行时项引用被擦除绑定 / 类型级定义 / `TPi` 时报错
-   （`check --dt` 与 `compile --dt` 都跑）。
+   （`check` 与 `compile` 都跑）。
 3. 运行时定义按 `TGlobal` 依赖拓扑排序；M13 里有环 = 递归 → 报错；M14 起改为
    SCC 分组并用 `let rec ... and ...` 生成（见 §20）。
 4. 生成逻辑：擦除绑定不生成参数、擦除实参不生成参数；`TGlobal` → `v_<name>`；
    prelude 运算符映射到 `bi_add` / `bi_eq_int` / `bi_concat` 等既有运行时名字；
    输出自包含的最小 DT runtime（`bi_*` + `dt_show_string` / `dt_show_bool`），
-   不依赖 `TypedCodegen`。
+   不依赖其他 codegen。
 5. `main` 必须是 `Int` / `String` / `Bool`；`--no-print` 时只 `ignore`。
 
-## 7. 与 HM 路径的边界（迁移期；M24 后 HM 删除）
+## 7. 与旧路径的边界（历史）
+
+本节记录 M13/M14 时期 DT 与当时另一条路径的边界，**已不适用**（终态只有 DT）：
 
 - 只共享 `Vuna.Compiler.Ast` / `Vuna.Compiler.Parser` / `Vuna.Fmt` 与 `Base.*`；
-  `EPi` 在 HM 的 loader 里报 `dependent function type requires --dt`。
+  当时 `EPi` 在另一条链的 loader 里报 `dependent function type requires the DT path`。
 - `Vuna.Compiler.Dt` 是唯一对外 facade（`compiler/vuna.toml` 的 `[export]`）；
-  核心求值器通过 `vuna interp` 暴露（M23 起为默认 DT 语义，不再需要 `--dt`），用于与 codegen 结果做一致性测试。
-- M13/M14 的 DT 不进入 `build` / `seed` / `split`；seed 仍只由 HM typed codegen 生成
-  （DT 模块是普通 HM 源码，随 compiler 闭包进入 TCB）。
+  核心求值器通过 `vuna interp` 暴露，用于与 codegen 结果做一致性测试（M23 起为默认
+  且唯一的 DT 语义）。
+- M13/M14 的 DT 当时不进入 `build` / `seed` / `split`；seed 仍由旧 typed codegen 生成
+  （DT 模块是普通源码，随 compiler 闭包进入 TCB）。M24 起 seed 由 DT split codegen 生成。
 - M14 的 `data` / `case` 走同一套 `Ast` / `Parser`（`DData` 新增 kind 字段、`ECase`
-  复用 HM 的 case 语法），因此 HM 路径的解析行为不变；HM 的 `case` 仍是原有语义。
+  复用已有 case 语法），因此解析行为不变。
 
 ## 8. 诊断
 
@@ -162,16 +166,16 @@ data Term where
 
 ## 10. 基准（本机参考，非 CI 门槛）
 
-`nix run .#vuna-bench -- --quick` 新增 `dt_elab` 项：对
+`nix run .#vuna-bench -- --quick` 的 `dt_elab` 项：对
 `test/corpus/dt/03_compose.vuna`（Pi + 3 个类型参数擦除 + compose）跑
-`compile --dt --no-print`（精化 + 擦除检查 + codegen）的耗时。
+`compile --no-print`（精化 + 擦除检查 + codegen）的耗时。
 
 - 本机（M13 完成时）：`dt_elab` ≈ **2 ms**；对照同一报告的
   `compiler_self_compile` ≈ **2.8 s**、`seed_build` ≈ **1.5 s**、
-  `corpus_compile`（16 个 HM 夹具批量编译）≈ **0.5 s**。
+  `corpus_compile`（16 个夹具批量编译）≈ **0.5 s**。
 - 时间依赖机器，只用于回归对比（`--baseline` / `--json`），不进入
   `nix flake check`；机器无关指标仍由 `nix/metrics.budget` 约束 seed 闭包的
-  HM codegen 产物（M13 后 bytes 867732 / lines 9049）。
+  codegen 产物（M13 后 bytes 867732 / lines 9049）。
 - M14 后 DT 夹具从 8 个增加到 12 个（新增 `09_nat` / `10_vec` / `11_fin` /
   `12_eq`），精化与 codegen 的路径也变了（构造子/变体/match）：`dt_elab` 的
   M14 新数字**待重新基准**（由 Lead 在合并后补测）。
@@ -233,8 +237,8 @@ data Eq : Type -> Type -> Type where
 - 构造子应用要**写全**族参数/索引（显式 binder 不会被省略）：`Cons Int Zero 1 (Nil Int)`。
 - 族的类型级应用（`Vec a n`）保持**中性** `TGlobal "Vec" [..]`，不做类型级求值；
   索引只在 unification 时按定义性相等比较。
-- 注意 `Nil` / `Cons` 同时是 HM 的 list 语法糖：写 `[]` / `x :: xs` 与写
-  `Nil` / `Cons x xs` 解析成同一个 `PCon`，`vuna fmt` 会按 HM 语法糖渲染成前者；
+- 注意 `Nil` / `Cons` 同时是 list 语法糖：写 `[]` / `x :: xs` 与写
+  `Nil` / `Cons x xs` 解析成同一个 `PCon`，`vuna fmt` 会按语法糖渲染成前者；
   文档示例保留构造子名以突出“这就是用户声明的族”。
 
 `case`：
@@ -465,7 +469,7 @@ M13 的 `data` / `case` / 递归不再报“不支持”；`record` / `trait` / 
 > 完整清单见 [reference/dt.md](reference/dt.md)。
 
 正例 `test/corpus/dt/` 共 12 个（M13 的 `01_id`–`08_if` + M14 的四个）；
-数值是 `vuna interp` / `compile --dt` 的 golden：
+数值是 `vuna interp` / `compile` 的 golden：
 
 - `09_nat.vuna`：`Nat` + 递归 `plus` / `toInt`，输出 `5`；
 - `10_vec.vuna`：`Vec` 的 `vhead`（只写 `Cons`）/ `vtail` / `vlen`，输出 `4`；
@@ -494,7 +498,7 @@ QTT（量化类型理论）与宇宙多态在将来落地时只替换「判据�
 ### 24.1 已落地（M18.6 完成）
 
 两项表示层改动已经在 `Core` 里定型，**行为与 M18.5 完全一致**——全部 DT 夹具的
-`compile --dt` 产物与改前逐字节相同（`diff -r` 验证），`test/run-tests.sh` 742 checks 全绿。
+`compile` 产物与改前逐字节相同（`diff -r` 验证），当时 `test/run-tests.sh` 742 checks 全绿。
 
 | 改前 | 改后 | 映射 |
 | --- | --- | --- |
@@ -547,7 +551,7 @@ M19 尝试补 `trait Functor f`（类参数是 `Type -> Type` 的高阶 kind）�
 
 两者在普通场景下恰好自洽（擦除位既不生成形参、也不被运行时引用），但一旦擦除位夹在
 运行时参数**中间**（`fmap : (a : Type) -> (b : Type) -> (a -> b) -> f a -> f b` 的投影），
-「lambda 链里有没有这一层」在两条路径上就得到不同答案，实例投影因此错位。
+「lambda 链里有没有这一层」在求值器与 codegen 上就得到不同答案，实例投影因此错位。
 
 **结论与修复**（M19 已落地）：根因不是「占不占位置」这个抽象问题，而是**精化器生成的项
 本身不自洽**——`trait` 投影的 lambda 链与应用点一律写 `Rig1`，而方法签名里 `a : Type`

@@ -26,15 +26,15 @@ cp -r s1 b1
 diff -r s1 s2
 sh nix/tcb-check.sh nix/tcb-forbidden.txt s2
 
-# 行为抽查：stage1 编译器编译并运行一个程序。
+# 行为抽查：stage1 编译器（DT 单文件 codegen）编译并运行一个程序。
 cp test/corpus/run/12_fact.vuna fact.vuna
 ./vuna-stage1 compile --root compiler/lib fact.vuna fact.ml
 ocamlopt -g -w -a+39 -warn-error +39 -I +unix -o fact unix.cmxa fact.ml
 test "$(./fact)" = "120"
 
-# DT 行为抽查：Pi + 擦除 codegen 在 seed 构建的 stage1 上可用。
+# DT 行为抽查：Pi 类型与擦除 codegen（M24 起是唯一 codegen）在 seed 构建的 stage1 上可用。
 cp test/corpus/dt/01_id.vuna dt_id.vuna
-./vuna-stage1 compile --dt dt_id.vuna dt_id.ml
+./vuna-stage1 compile dt_id.vuna dt_id.ml
 ocamlopt -g -w -a+39 -warn-error +39 -I +unix -o dt_id unix.cmxa dt_id.ml
 test "$(./dt_id)" = "42"
 

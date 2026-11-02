@@ -245,6 +245,7 @@ renameExpr oldName newName e = case e of
     ERecUpdate (renameExpr oldName newName b) (map (renameFieldValue oldName newName) fields) sp
   EInstSel m meth sp => EInstSel (renameExpr oldName newName m) meth sp
   EDo stmts sp => EDo stmts sp
+  EAnn value ty sp => EAnn (renameExpr oldName newName value) (renameExpr oldName newName ty) sp
 
 renameExprUnless : String -> String -> List String -> Expr -> Expr
 renameExprUnless oldName newName names body =

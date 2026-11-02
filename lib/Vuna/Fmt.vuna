@@ -49,7 +49,7 @@ firstLine : List String -> String
 firstLine [] = ""
 firstLine (l :: rest) = l
 
-restLines : List t8729 -> List t8729
+restLines : List a -> List a
 restLines [] = []
 restLines (l :: rest) = rest
 
@@ -68,7 +68,7 @@ appendBefore sep lines argLines = case argLines of
   [] => lines
   a :: rest => append (appendLast (sep ++ a) lines) rest
 
-isNilList : List t8787 -> Bool
+isNilList : List a -> Bool
 isNilList [] = True
 isNilList (x :: rest) = False
 
@@ -374,6 +374,8 @@ exprAnchors e = case e of
   ERecUpdate base fields sp => append (exprAnchors base) (concatMap fieldExprAnchors fields)
   EInstSel base inst sp => exprAnchors base
   EDo stmts sp => concatMap doStmtAnchors stmts
+  -- M24：where 绑定签名行（`g : Int -> Int`）本身是注释锚点（前置/行尾注释挂签名行）。
+  EAnn value ty sp => sp :: exprAnchors value
 
 anchorSpans : Maybe ModDecl -> List Import -> List Decl -> List Span
 anchorSpans hdr imports decls =
@@ -540,6 +542,9 @@ inlinePrec minPrec e = case e of
     Nothing => Nothing
     Just b => Just (b ++ " @" ++ inst)
   EDo stmts sp => Nothing
+  -- M24：非 where 位置（例如 `let` 绑定值）的 `EAnn` 透明渲染内部表达式：
+  -- 表达式位置没有 `: Ty` 语法，输出标注会让 fmt 产物无法重新 parse。
+  EAnn value ty sp => inlinePrec minPrec value
 
 wrapPrec : Bool -> String -> String
 wrapPrec need s = if need then "(" ++ s ++ ")" else s
@@ -720,6 +725,7 @@ renderBlock at lineInd e = case e of
   ERecUpdate base fields sp => renderRecUpdateBlock at lineInd base fields
   EInstSel base inst sp => appendLast (" @" ++ inst) (renderAtomExpr at lineInd base)
   EDo stmts sp => renderDo at lineInd stmts
+  EAnn value ty sp => renderExpr at lineInd value
   EVar name sp => [name]
   EInt n sp => [strFromInt n]
   EStr s sp => [renderStr s]
@@ -1085,8 +1091,18 @@ renderWhereBindings : List (Pair (Pair Int Int) (Pair (List Comment) (List Comme
 renderWhereBindings at lineInd binds = concatMap (\b => renderWhereBinding at lineInd b) binds
 
 renderWhereBinding : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Pair Pat Expr -> List String
-renderWhereBinding at lineInd (Pair pat value) =
-  attachAt at (patSpan pat) lineInd (renderWhereBindingBody at lineInd pat value)
+renderWhereBinding at lineInd (Pair pat value) = case value of
+  -- M24：带签名的 where 绑定先输出 `name : Ty` 独立一行，再按原格式输出子句。
+  EAnn inner ty annSp =>
+    append (attachAt at annSp lineInd (renderWhereSigLine at lineInd pat ty))
+      (attachAt at (patSpan pat) lineInd (renderWhereBindingBody at lineInd pat inner))
+  _ => attachAt at (patSpan pat) lineInd (renderWhereBindingBody at lineInd pat value)
+
+-- where 绑定签名行：`g : Int -> Int`（缩进与 where 绑定一致，类型不折行）。
+renderWhereSigLine : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Pat -> Expr -> List String
+renderWhereSigLine at lineInd pat ty = case pat of
+  PVar name psp => prefixFirst (spaces lineInd ++ name ++ " : ") (renderTypeExpr at lineInd ty)
+  _ => prefixFirst (spaces lineInd ++ renderPat pat ++ " : ") (renderTypeExpr at lineInd ty)
 
 renderWhereBindingBody : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Pat -> Expr -> List String
 renderWhereBindingBody at lineInd pat value = case pat of

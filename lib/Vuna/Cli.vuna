@@ -22,7 +22,6 @@ import Vuna.Repl
 import Vuna.Doc
 import Vuna.TestRunner
 import Vuna.Lsp
-import Vuna.SigExport
 import qualified Vuna.Lint
 
 toolUsageLines : String -> String
@@ -62,9 +61,6 @@ toolUsageLines prog =
     ++ " goal <file.vuna>                   列出 DT 洞的目标与上下文（M17）\n"
     ++ "  "
     ++ prog
-    ++ " sig-export <dir>                    导出无签名定义的 DT 签名（M23 一次性工具）\n"
-    ++ "  "
-    ++ prog
     ++ " lsp                                 启动 LSP server（JSON-RPC over stdio）\n"
 
 usageFor : String -> String
@@ -91,7 +87,6 @@ runCli1 args = case args of
     "api" => apiArgs rest
     "lsp" => Vuna.Lsp.runLspTool rest
     "goal" => goalArgs rest
-    "sig-export" => sigExportArgs rest
     "help" => help
     _ => if startsWith "-" arg then runCompilerCliFor "vuna" args else unknownCommand "vuna" arg
 
@@ -128,7 +123,7 @@ interpParse : List Root -> List String -> Int
 interpParse roots args = case args of
   "--dt" :: rest =>
     let
-      _ = print "error: interp no longer takes --dt; DT is the only interpreter semantics\n"
+      _ = print "error: --dt has been removed; interp always uses DT core evaluation\n"
     in 2
   "--root" :: rest => rootArg roots rest (\roots2, rest2 => interpParse roots2 rest2)
   [path] => if startsWith "-" path then usageError else interpFile (effectiveRoots roots) path
@@ -370,14 +365,6 @@ runApi modName = withIndex (\index => case renderApi index modName of
 )
 
 -- ---------------------------------------------------------------
--- sig-export（M23：一次性签名导出工具，M24 删除）
--- `vuna sig-export <package-dir>` 用 HM 推断结果列出无签名定义的 DT 签名。
--- ---------------------------------------------------------------
-sigExportArgs : List String -> Int
-sigExportArgs args = case args of
-  [dir] => if startsWith "-" dir then usageError else runSigExport dir
-  _ => usageError
-
 -- ---------------------------------------------------------------
 -- goal（M17：洞目标显示）
 -- `vuna goal <file.vuna>` 列出 DT 文件里每个洞 `_` 的位置、目标类型与上下文。

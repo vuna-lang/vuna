@@ -6,7 +6,9 @@ module Vuna.Compiler.Elab
   , DtGoal
   , DtGoalInfo
   , DtProgram
+  , anonInstName
   , checkInstanceHeads
+  , derivedInstName
   , dictCtorName
   , dictTypeName
   , dtClassFieldTys
@@ -43,6 +45,8 @@ module Vuna.Compiler.Elab
   , eraseIndexMask
   , goalsOfProgram
   , indexErasureCandidates
+  , instPrefixOf
+  , instanceName
   ) where
 
 -- Vuna.Compiler.Elab：DT 精化器（双向检查 + 一阶元变量 + 类型级隐式插入 + M14 索引族）。
@@ -554,7 +558,7 @@ globalLookup name [] = Nothing
 globalLookup name ((Pair n ty) :: rest) = if name == n then Just ty else globalLookup name rest
 
 -- ---------------------------------------------------------------
-memSig : List (Pair t6609 t6608) -> t6609 -> Bool
+memSig : List (Pair a b) -> a -> Bool
 memSig [] name = False
 memSig ((Pair n ty) :: rest) name = if n == name then True else memSig rest name
 
@@ -2464,6 +2468,19 @@ inferE globals ctx ec expr = case expr of
   ERecUpdate base fields sp => errAt sp "DT: record update is not supported yet (M15)"
   EInstSel meth iname sp => inferInstSel globals ctx ec meth iname sp
   EDo stmts sp => errAt sp "DT: do blocks are not supported yet (M19)"
+  EAnn value ty sp => inferAnn globals ctx ec value ty sp
+
+-- M24：where 绑定签名 `EAnn value ty`（parser 从 `name : Ty` 行生成）。
+-- 先检查 ty 是合法类型，再把 value 按该类型 check；推导位返回 eval ty 作为类型。
+inferAnn : List (Pair String Term) -> Ctx -> Ec -> Expr -> Expr -> Span -> Result (Pair Term (Pair Value Ec))
+inferAnn globals ctx ec value ty sp = andThen (checkType globals ctx ec ty) (\pt => case pt of
+  Pair tyTerm (Pair _ ec1) =>
+    let
+      tyVal = eval (ctxEnv ctx) tyTerm
+    in andThen (checkE globals ctx ec1 value tyVal) (\p => case p of
+      Pair term ec2 => Ok (Pair term (Pair tyVal ec2))
+    )
+)
 
 inferPi : List (Pair String Term) -> Ctx -> Ec -> String -> Bool -> Expr -> Expr -> Span -> Result (Pair Term (Pair Value Ec))
 inferPi globals ctx ec name implicit dom cod sp = andThen (checkType globals ctx ec dom) (\pd => case pd of
@@ -2866,6 +2883,10 @@ checkE globals ctx ec expr expected = case expr of
   EIf c t e sp => checkByInfer globals ctx ec expr expected
   ECase scrut alts csp => checkCase globals ctx ec scrut alts expected csp
   ELet binds body rec_ sp => checkLet globals ctx ec binds body rec_ expected sp
+  -- M24：`EAnn` 在 check 位等价于「按标注类型检查内部表达式」。
+  EAnn value ty sp => andThen (checkType globals ctx ec ty) (\pt => case pt of
+    Pair tyTerm (Pair _ ec1) => checkE globals ctx ec1 value (eval (ctxEnv ctx) tyTerm)
+  )
   _ => checkByInfer globals ctx ec expr expected
 
 -- ---------------------------------------------------------------
@@ -2876,7 +2897,27 @@ checkE globals ctx ec expr expected = case expr of
 -- 与函数参数自动一致。后续绑定可见前面（顺序 let），不互递归；构造子模式 let 等价 case。
 checkLet : List (Pair String Term) -> Ctx -> Ec -> List (Pair Pat Expr) -> Expr -> Bool -> Value -> Span -> Result (Pair Term Ec)
 checkLet globals ctx ec binds body rec_ expected sp =
-  checkLetGo globals ctx ec binds body rec_ expected sp
+  if rec_ then andThen (checkWhereSigs binds) (\_ => checkLetGo globals ctx ec binds body rec_ expected sp)
+  else checkLetGo globals ctx ec binds body rec_ expected sp
+
+-- M24：`where` 块（parser 生成的 `ELet binds body True`）是**带签名的局部顺序 let**：
+-- 每个绑定必须由 `name : Ty` 行标注（parser 已降级成 `EAnn value ty`），这里校验齐全。
+-- 语言决策：where 内部不支持自递归/互递归（递归放顶层定义组），所以这里不做预绑定，
+-- 按顺序 let 精化即可；缺签名给明确诊断，而不是落到「lambda 的类型无法推断」。
+checkWhereSigs : List (Pair Pat Expr) -> Result Int
+checkWhereSigs [] = Ok 0
+checkWhereSigs (bind :: rest) = case secondOf bind of
+  EAnn value ty annSp => checkWhereSigs rest
+  _ =>
+    let
+      name = whereBindingName (firstOf bind)
+    in errAt (patSpan (firstOf bind))
+      ("DT: where binding `" ++ name ++ "` needs a type signature (write `" ++ name ++ " : <type>` before the clause)")
+
+whereBindingName : Pat -> String
+whereBindingName pat = case pat of
+  PVar name sp => name
+  _ => "_"
 
 checkLetGo : List (Pair String Term) -> Ctx -> Ec -> List (Pair Pat Expr) -> Expr -> Bool -> Value -> Span -> Result (Pair Term Ec)
 checkLetGo globals ctx ec [] body rec_ expected sp = checkE globals ctx ec body expected
@@ -2915,7 +2956,12 @@ checkLetOne globals ctx ec bind rest body rec_ expected sp = case firstOf bind o
 
 -- M19：推断位的 `let`（嵌套 let 的 value 位置就是推断位）。
 inferLet : List (Pair String Term) -> Ctx -> Ec -> List (Pair Pat Expr) -> Expr -> Bool -> Span -> Result (Pair Term (Pair Value Ec))
-inferLet globals ctx ec binds body rec_ sp = case binds of
+inferLet globals ctx ec binds body rec_ sp =
+  if rec_ then andThen (checkWhereSigs binds) (\_ => inferLetGo globals ctx ec binds body rec_ sp)
+  else inferLetGo globals ctx ec binds body rec_ sp
+
+inferLetGo : List (Pair String Term) -> Ctx -> Ec -> List (Pair Pat Expr) -> Expr -> Bool -> Span -> Result (Pair Term (Pair Value Ec))
+inferLetGo globals ctx ec binds body rec_ sp = case binds of
   [] => inferE globals ctx ec body
   (Pair pat value) :: rest => case pat of
     PVar name psp => inferLetBound globals ctx ec name value rest body rec_ sp
@@ -3059,23 +3105,11 @@ specializeEqApp globals ctx ec name args sp = if isEqOp name then case args of
   _ => Ok Nothing
 else Ok Nothing
 
--- HM 推断出的自由类型变量（名字形如 t123）在源码里不存在：对这些变量上的 == 直接
--- 走泛型结构比较，而不是提升字典——调用点的类型实参常常仍是未解元变量，无法搜实例。
--- 源码里手写的类型变量（a/b/k/v…）仍走 M22 的字典提升。
-isInferredVarName : String -> Bool
-isInferredVarName n = case strUnpack n of
-  [] => False
-  c :: rest => if c == 116 then allDigitChars rest else False
-
-allDigitChars : List Int -> Bool
-allDigitChars [] = True
-allDigitChars (c :: rest) = if c >= 48 then if c <= 57 then allDigitChars rest else False else False
-
-isInferredVarValue : Value -> Bool
-isInferredVarValue v = case v of
-  VNeutral (NVar name lvl sp) => if sp == [] then isInferredVarName name else False
-  _ => False
-
+-- M24：这里原来按「名字形如 t<数字> 的 HM 推断变量」决定 `==` / 比较运算直接走
+-- generic 运行时（跳过字典）。HM 删除后这种变量名不再产生，名字启发式整体移除。
+-- 刚性类型变量保持 M22 语义：搜不到实例时由 `deferEqDict` 提升成隐式字典参数
+-- （`deriving (Eq)` / 手写实例仍然生效）；`bi_*_generic` 兜底只留给「具体类型且
+-- 没有对应实例」。签名清理后类型变量有稳定语义名，不再需要按名字判定来源。
 -- M23：没有 Eq 实例时的泛型结构比较兜底（擦除的类型实参 + 两个运行时值）。
 genericEqApp : String -> Term -> Term -> Term -> Term
 genericEqApp name tyTerm aTerm bTerm =
@@ -3101,8 +3135,7 @@ specializeEqTy globals ctx name aTerm bTerm sp aTy ec = case builtinEqTyName (fo
       -- 于是 `dictTy` 的类参数指向错误的 binder（两个以上类型参数时字典提到别的参数上）。
       tyTerm = quote (ctxDepth ctx) aTy
       dictTy = VNeutral (NGlobal (dictTypeName "Eq") [aTy])
-    in if isInferredVarValue (forceVal ec aTy) then Ok (Just (Pair (genericEqApp name tyTerm aTerm bTerm) (Pair (VNeutral (NGlobal "Bool" [])) ec)))
-    else if dictArgUnsolvedMeta ec dictTy then deferEqDict globals ctx mname tyTerm aTerm bTerm sp dictTy ec
+    in if dictArgUnsolvedMeta ec dictTy then deferEqDict globals ctx mname tyTerm aTerm bTerm sp dictTy ec
     else case searchInstance ec dictTy sp of
       Ok (Pair dictTerm ec1) =>
         Ok
@@ -3194,10 +3227,7 @@ specializeCmpTy globals ctx name aTerm bTerm sp aTy ec = case builtinTyName (for
       mname = cmpMethodName name
       tyTerm = quote (ctxDepth ctx) aTy
       dictTy = VNeutral (NGlobal (dictTypeName "Ord") [aTy])
-      genericName = cmpGenericName name
-    in if isInferredVarValue (forceVal ec aTy) then Ok
-      (Just (Pair (TApp (TApp (TGlobal genericName) aTerm Rig1) bTerm Rig1) (Pair (VNeutral (NGlobal "Bool" [])) ec)))
-    else if dictArgUnsolvedMeta ec dictTy then deferEqDict globals ctx mname tyTerm aTerm bTerm sp dictTy ec
+    in if dictArgUnsolvedMeta ec dictTy then deferEqDict globals ctx mname tyTerm aTerm bTerm sp dictTy ec
     else case searchInstance ec dictTy sp of
       Ok (Pair dictTerm ec1) =>
         Ok
