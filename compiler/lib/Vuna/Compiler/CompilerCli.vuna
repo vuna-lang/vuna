@@ -18,7 +18,7 @@ compilerUsageLines : String -> String
 compilerUsageLines prog =
   "  "
     ++ prog
-    ++ " compile [--dt] [--no-print] [--root DIR]... <entry.vuna> [out.ml]\n"
+    ++ " compile [--dt] [--no-print] [--root DIR]... (<entry.vuna> | <package-dir>) [out.ml]\n"
     ++ "  "
     ++ prog
     ++ " compile --package [--out OUT] [DIR]   包级 codegen 到 OUT（默认 DIR/.output）\n"
@@ -34,7 +34,7 @@ compilerUsageLines prog =
     ++ "  "
     ++ prog
     ++ " seed [OUT [DIR]]               生成多文件 seed（默认 OUT=seed，DIR=.）\n"
-    ++ "  --dt                            experimental DT (core TT) single-file pipeline (M13)\n"
+    ++ "  --dt                            experimental DT (core TT) pipeline: file or package dir (M22.1)\n"
     ++ "  "
     ++ prog
     ++ " help, -h\n"
@@ -123,18 +123,14 @@ anyDt (arg :: rest) = if arg == "--dt" then True else anyDt rest
 
 dtCmdErr prog =
   let
-    _ = print "error: --dt is only supported by compile/check/interp (M13 single-file mode)\n"
+    _ = print "error: --dt is only supported by compile/check/interp\n"
   in 2
 
-dtRootErr prog =
+-- DT 路径的通用错误：路径既不是文件也不是目录（目录模式见 checkDtPackage / compileDtPackage）。
+dtPathErr path =
   let
-    _ = print "error: --dt does not support --root yet (DT single-file mode)\n"
-  in 2
-
-dtDirErr prog =
-  let
-    _ = print "error: --dt only supports a single file (DT packages come later)\n"
-  in 2
+    _ = print ("error: no such file or package directory: " ++ path ++ "\n")
+  in 1
 
 -- ---------------------------------------------------------------
 -- compile / check（文件模式）
@@ -189,21 +185,7 @@ rootArg prog roots rest k = case rest of
   dir :: rest2 => k (append roots [rawRoot dir]) rest2
   [] => usageErr prog
 
-compileEmit prog printResult dt hasRoot roots entry rest = if dt then case compileFileDt (map rootDir roots) entry printResult of
-  Ok code => case rest of
-    [] =>
-      let
-        _ = print code
-      in 0
-    [out] =>
-      let
-        _ = writeFile out code
-      in 0
-    _ => usageErr prog
-  Err e =>
-    let
-      _ = print ("error: " ++ e ++ "\n")
-    in 1
+compileEmit prog printResult dt hasRoot roots entry rest = if dt then compileDtEmit prog printResult roots entry rest
 else
   let
     actualRoots = effectiveRoots roots
@@ -223,6 +205,55 @@ else
         _ = print ("error: " ++ e ++ "\n")
       in 1
 
+-- DT 编译入口（M22.1）：目录 = 包，文件 = 单文件 / --root 模式。
+-- 先 fileExists 再 isDirectory：内建 isDirectory 对不存在的路径会抛异常。
+compileDtEmit prog printResult roots entry rest =
+  if fileExists entry then if isDirectory entry then compileDtPackage prog printResult entry rest
+  else compileDtFile prog printResult roots entry rest
+  else dtPathErr entry
+
+compileDtFile prog printResult roots entry rest = case compileFileDt (map rootDir roots) entry printResult of
+  Ok code => emitDtCode prog code rest
+  Err e =>
+    let
+      _ = print ("error: " ++ e ++ "\n")
+    in 1
+
+compileDtPackage prog printResult dir rest = case loadPackage dir of
+  Err e =>
+    let
+      _ = print ("error: " ++ e ++ "\n")
+    in 1
+  Ok pkg =>
+    if fileExists (packageEntry pkg) then compileDtPkgEntry prog printResult pkg rest
+    else dtNoMainErr pkg
+
+compileDtPkgEntry prog printResult pkg rest = case compileProjectDt (packageRoots pkg) (packageName pkg) (packageEntry pkg) printResult of
+  Ok code => emitDtCode prog code rest
+  Err e =>
+    let
+      _ = print ("error: " ++ e ++ "\n")
+    in 1
+
+-- 库包没有入口（app/Main.vuna），DT 无从生成 main。
+dtNoMainErr pkg =
+  let
+    _ =
+      print
+        ("error: compile: library package " ++ packageName pkg ++ " has no app/Main.vuna (nothing to compile)\n")
+  in 1
+
+emitDtCode prog code rest = case rest of
+  [] =>
+    let
+      _ = print code
+    in 0
+  [out] =>
+    let
+      _ = writeFile out code
+    in 0
+  _ => usageErr prog
+
 checkArgs prog args = checkParse prog False False [] args
 
 checkParse prog dt hasRoot roots args = case args of
@@ -231,11 +262,17 @@ checkParse prog dt hasRoot roots args = case args of
     rootArg prog roots rest (\roots2, rest2 => checkParse prog dt True roots2 rest2)
   [arg] =>
     if startsWith "-" arg then removedFlag prog arg
-    else if dt then checkEmitDt (map rootDir roots) arg
+    else if dt then checkEmitDt roots arg
     else if isDirectory arg then checkPackage arg else checkEmit (effectiveRoots roots) arg
   _ => usageErr prog
 
-checkEmitDt roots path = case checkFileDt roots path of
+-- DT check 入口（M22.1）：目录 = 包，文件 = 单文件 / --root 模式。
+-- 先 fileExists 再 isDirectory：内建 isDirectory 对不存在的路径会抛异常。
+checkEmitDt roots path =
+  if fileExists path then if isDirectory path then checkDtPackage path else checkDtFile roots path
+  else dtPathErr path
+
+checkDtFile roots path = case checkFileDt (map rootDir roots) path of
   Err e =>
     let
       _ = print ("error: " ++ e ++ "\n")
@@ -244,6 +281,40 @@ checkEmitDt roots path = case checkFileDt roots path of
     let
       _ = printWarnings warnings
     in 0
+
+-- 包目录：可执行包（app/Main.vuna）走项目路径，库包走 [export].modules。
+checkDtPackage dir = case loadPackage dir of
+  Err e =>
+    let
+      _ = print ("error: " ++ e ++ "\n")
+    in 1
+  Ok pkg => if fileExists (packageEntry pkg) then checkDtPkgEntry pkg else checkDtPkgLibrary pkg
+
+checkDtPkgEntry pkg = case checkProjectDt (packageRoots pkg) (packageName pkg) (packageEntry pkg) of
+  Err e =>
+    let
+      _ = print ("error: " ++ e ++ "\n")
+    in 1
+  Ok warnings =>
+    let
+      _ = printWarnings warnings
+    in 0
+
+checkDtPkgLibrary pkg = case packageExports pkg of
+  Nothing =>
+    let
+      _ =
+        print ("error: check: library package " ++ packageName pkg ++ " has no [export].modules\n")
+    in 1
+  Just names => case checkLibraryDt (packageRoots pkg) (packageName pkg) names of
+    Err e =>
+      let
+        _ = print ("error: " ++ e ++ "\n")
+      in 1
+    Ok warnings =>
+      let
+        _ = printWarnings warnings
+      in 0
 
 checkEmit roots path = case checkFile roots path of
   Err e =>

@@ -1,4 +1,4 @@
-module Vuna.Compiler.Loader (Module, moduleNameOf, modulePackageOf, moduleImportsOf, moduleImplicitImportsOf, moduleAllImportsOf, moduleDeclsOf, moduleExportsOf, ExportEntry, entryKind, entryPublic, entryTarget, entryParent, Project, projectEntryDecls, projectEntryImports, projectEntryAllImports, projectModules, loadProject, loadProjectModules, resolveProject, loadProgram, loadProgramRaw) where
+module Vuna.Compiler.Loader (Module, moduleNameOf, modulePackageOf, moduleImportsOf, moduleImplicitImportsOf, moduleAllImportsOf, moduleDeclsOf, moduleExportsOf, ExportEntry, entryKind, entryPublic, entryTarget, entryParent, Project, projectEntryDecls, projectEntryImports, projectEntryAllImports, projectModules, loadProject, loadProjectModules, resolveProject, loadProgram, loadProgramRaw, loadProgramOrdered, loadProgramRawOrdered) where
 
 -- Vuna.Compiler.Loader：模块加载、名字解析与 flatten。
 import Vuna.Compiler.Common
@@ -259,9 +259,6 @@ dtPreludeNames =
     "_",
     "Int",
     "String",
-    "Bool",
-    "True",
-    "False",
     "+",
     "-",
     "*",
@@ -1133,3 +1130,23 @@ tyShape ty = case ty of
   ECase s alts _ => "case"
   EIf c t e _ => "if"
   EDo stmts _ => "do"
+
+-- ---------------------------------------------------------------
+-- DT 用的 flatten：按**依赖顺序**拼接声明
+-- ---------------------------------------------------------------
+-- `loadProgram` 为了 HM 产物稳定，保持「入口声明在前、依赖模块按加载顺序」的历史
+-- 顺序；DT 精化器按声明顺序建 globals（data → trait → sig → body），必须**被依赖
+-- 模块在前**，否则 `Base.Map` 的 data 会先于 `Base.List` 精化、报
+-- `DT: unknown name Base.List.List`。Loader 的 modules 列表是「依赖在前」的反序
+-- （每个模块出现在它依赖的模块之前），reverse 后即为拓扑序。
+orderedProjectDecls : Project -> Result (List Decl)
+orderedProjectDecls p =
+  andThen (resolveProject p)
+    (\r => Ok (append (concatMap moduleDeclsOf (reverse (secondOf r))) (firstOf r)))
+
+loadProgramOrdered : List Root -> String -> String -> Result (List Decl)
+loadProgramOrdered roots entryPkg entry =
+  andThen (loadProject roots entryPkg entry) orderedProjectDecls
+
+loadProgramRawOrdered : List String -> String -> Result (List Decl)
+loadProgramRawOrdered roots entry = loadProgramOrdered (map rawRoot roots) "" entry

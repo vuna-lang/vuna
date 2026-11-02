@@ -1,4 +1,4 @@
-module Vuna.Compiler.Compile (effectiveRoots, compileFileTyped, compileFileTypedExec, checkFile, compileFileTypedIn, compileFileTypedExecIn, checkFileIn, checkPackageIn, compileFileDt, checkFileDt) where
+module Vuna.Compiler.Compile (effectiveRoots, compileFileTyped, compileFileTypedExec, checkFile, compileFileTypedIn, compileFileTypedExecIn, checkFileIn, checkPackageIn, compileFileDt, checkFileDt, checkProjectDt, compileProjectDt, checkLibraryDt) where
 
 -- Vuna.Compiler.Compile：编译入口（供 CompilerCli / CLI / 测试使用）。
 --
@@ -66,3 +66,15 @@ compileFileDt roots entry printResult = dtCompileFile roots entry printResult
 
 checkFileDt : List String -> String -> Result (List String)
 checkFileDt roots entry = dtCheckFile roots entry
+
+-- M22.1：包目录。roots / entryPkg 由调用方从 Pkg.packageRoots / packageName 取。
+checkProjectDt : List Root -> String -> String -> Result (List String)
+checkProjectDt roots entryPkg entry = dtCheckProject roots entryPkg entry
+
+compileProjectDt : List Root -> String -> String -> Bool -> Result String
+compileProjectDt roots entryPkg entry printResult =
+  dtCompileProject roots entryPkg entry printResult
+
+-- 库包（无 app/Main.vuna）：以 [export].modules 为入口集合做 check。
+checkLibraryDt : List Root -> String -> List String -> Result (List String)
+checkLibraryDt roots entryPkg names = dtCheckLibrary roots entryPkg names

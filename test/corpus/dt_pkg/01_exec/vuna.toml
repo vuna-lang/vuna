@@ -1,0 +1,9 @@
+# M22.1 夹具：可执行包（app/Main.vuna + lib/ 模块）。
+# check --dt / compile --dt 走包目录：loadProject + resolveProject。
+[package]
+name = "dtpkg-exec"
+version = "0.1.0"
+edition = "2026"
+
+[export]
+modules = ["Answer", "Util"]

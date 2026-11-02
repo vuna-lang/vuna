@@ -118,11 +118,21 @@ interpParse dt hasRoot roots args = case args of
   "--root" :: rest => rootArg roots rest (\roots2, rest2 => interpParse dt True roots2 rest2)
   [path] =>
     if startsWith "-" path then usageError
-    else if dt then interpDtEmit (map rootDir roots) path
-    else interpEmit (effectiveRoots roots) path
+    else if dt then interpDtEmit (map rootDir roots) path else interpEmit (effectiveRoots roots) path
   _ => usageError
 
-interpDtEmit roots path = case dtEvalFile roots path of
+-- DT 解释器只接受单文件（M20）；包目录的 DT 入口是 check / compile（M22.1）。
+-- 先 fileExists 再 isDirectory：内建 isDirectory 对不存在的路径会抛异常。
+interpDtEmit roots path =
+  if fileExists path then if isDirectory path then interpDtDirErr path else interpDtFile roots path
+  else interpDtFile roots path
+
+interpDtDirErr path =
+  let
+    _ = print ("error: interp --dt takes a single file, not a package directory: " ++ path ++ "\n")
+  in 2
+
+interpDtFile roots path = case dtEvalFile roots path of
   Err e =>
     let
       _ = print ("error: " ++ e ++ "\n")

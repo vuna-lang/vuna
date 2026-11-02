@@ -1,4 +1,4 @@
-module Vuna.Compiler.Dt (dtCheckFile, dtCompileFile, dtEvalFile) where
+module Vuna.Compiler.Dt (dtCheckFile, dtCompileFile, dtEvalFile, dtCheckProject, dtCompileProject, dtCheckLibrary) where
 
 -- Vuna.Compiler.Dt：DT 路径的 facade（供 Compile / CompilerCli / Interp 使用）。
 --
@@ -6,30 +6,68 @@ module Vuna.Compiler.Dt (dtCheckFile, dtCompileFile, dtEvalFile) where
 -- 不经过 Loader、拒绝模块头与 import。**M20 起改为复用 `Loader`**：多文件、`import`、
 -- `--root` 与包目录都能用，名字解析完全交给既有 Loader（不新建平行 Loader）。
 --
--- 声明列表是「入口文件 + 所有依赖模块」的拼接（`loadProgramRaw` 的形状）：DT 精化器
--- 按**整程序**精化，模块边界对精化不构成约束——M22 的分离编译才需要保留模块信息，
--- 届时再换成 `loadProject` + `resolveProject` 的模块级形状。
+-- 两条加载形状：
+--   - 单文件 / `--root`：`loadProgramRaw`（入口声明 + 依赖模块，历史顺序不变）；
+--   - 包目录（M22.1）：`loadProject` / `loadProjectModules` + `resolveProject`，
+--     再按**依赖顺序**拼接（见 `dtProjectDecls`）。
+-- DT 精化器按**整程序**精化，模块边界对精化不构成约束。
 import Vuna.Compiler.Common
 import Vuna.Compiler.Ast
 import Vuna.Compiler.Parser
+import Vuna.Compiler.Pkg
 import Vuna.Compiler.Loader
 import Vuna.Compiler.Core
 import Vuna.Compiler.Elab
 import Vuna.Compiler.CoreCodegen
 
--- 入口 + 全部依赖模块的声明。
+-- 入口 + 全部依赖模块的声明（单文件 / --root 原始模式）。
 dtLoad : List String -> String -> Result (List Decl)
-dtLoad roots entry = loadProgramRaw roots entry
+dtLoad roots entry = loadProgramRawOrdered roots entry
 
-dtCheckFile : List String -> String -> Result (List String)
-dtCheckFile roots entry =
-  andThen (dtLoad roots entry)
+-- 项目声明的拼接顺序：Loader 的 modules 列表是「依赖在前」的**反序**（依赖者先
+-- 出现，被依赖者靠后），DT 精化要求定义先于使用，因此先 reverse modules 再逐模块
+-- 拼接，入口声明放最后。
+dtProjectDecls : Pair (List Decl) (List Module) -> List Decl
+dtProjectDecls parts = append (concatMap moduleDeclsOf (reverse (secondOf parts))) (firstOf parts)
+
+-- 包模式：可执行包（app/Main.vuna 为入口，root/包名来自 Pkg.packageRoots / packageName）。
+dtLoadProject : List Root -> String -> String -> Result (List Decl)
+dtLoadProject roots entryPkg entry =
+  andThen (loadProject roots entryPkg entry)
+    (\project => andThen (resolveProject project) (\parts => Ok (dtProjectDecls parts)))
+
+-- 包模式：库包（以 [export].modules 为入口集合，没有 app/Main.vuna）。
+dtLoadModuleSet : List Root -> String -> List String -> Result (List Decl)
+dtLoadModuleSet roots entryPkg names =
+  andThen (loadProjectModules roots entryPkg names)
+    (\project => andThen (resolveProject project) (\parts => Ok (dtProjectDecls parts)))
+
+-- 声明序列的 check / compile 共用尾部（单文件与包模式同一条精化路径）。
+dtCheckDecls : Result (List Decl) -> Result (List String)
+dtCheckDecls loaded =
+  andThen loaded
     (\decls => andThen (elabProgram decls) (\program => andThen (checkDtProgram program) (\_ => Ok [])))
 
-dtCompileFile : List String -> String -> Bool -> Result String
-dtCompileFile roots entry printResult =
-  andThen (dtLoad roots entry)
+dtCompileDecls : Result (List Decl) -> Bool -> Result String
+dtCompileDecls loaded printResult =
+  andThen loaded
     (\decls => andThen (elabProgram decls) (\program => generateDtProgram program printResult))
+
+dtCheckFile : List String -> String -> Result (List String)
+dtCheckFile roots entry = dtCheckDecls (dtLoad roots entry)
+
+dtCompileFile : List String -> String -> Bool -> Result String
+dtCompileFile roots entry printResult = dtCompileDecls (dtLoad roots entry) printResult
+
+dtCheckProject : List Root -> String -> String -> Result (List String)
+dtCheckProject roots entryPkg entry = dtCheckDecls (dtLoadProject roots entryPkg entry)
+
+dtCompileProject : List Root -> String -> String -> Bool -> Result String
+dtCompileProject roots entryPkg entry printResult =
+  dtCompileDecls (dtLoadProject roots entryPkg entry) printResult
+
+dtCheckLibrary : List Root -> String -> List String -> Result (List String)
+dtCheckLibrary roots entryPkg names = dtCheckDecls (dtLoadModuleSet roots entryPkg names)
 
 -- 核心求值器：精化后用 NbE + delta 求 main 的值并 show（与 codegen 结果对照）。
 dtEvalFile : List String -> String -> Result String
