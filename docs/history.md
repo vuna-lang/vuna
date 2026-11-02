@@ -369,6 +369,29 @@ M18 当时的完整论证保留在 [docs/reference/m18-migration.md](reference/m
   语义）；`vuna build` 需要 PATH 中有 `ocamlopt`，库包先用 `vuna compile --package`
   生成 `.output/lib/`；seed 61 个文件 / ~1.2 MB。
 
+
+### M13–M20.5：DT 主线（从 roadmap 归档）
+
+> 本小节是原 roadmap「已完成」列表里的阶段摘要，随 roadmap 清理移入；更早的 M1–M12.8
+> 见「里程碑一览」与上面的里程碑细节。
+
+- M13：DT 地基——新增 Core TT（`Type`/Pi/应用/lambda/if，NbE + beta/delta/eta，非累积宇宙）、双向精化器（一阶 metavariable、类型级隐式插入、delta 类型别名）、擦除型 DT codegen 与 `interp --dt` 核心求值器；`--dt` 单文件 opt-in（compile/check/interp），HM 路径零改动；新增 `docs/dt-core.md` 设计稿；seed 57 个文件 / ~0.92 MB。
+- M14：索引族与依赖模式匹配——Core 增加 `TCon` / `TCase`（值域 `VCon` / `VCase`），`data F : <kind> where` 的索引归纳族（构造子写完整显式 telescope，宇宙域 binder 擦除、索引保留运行时表示），`case` 做索引 unification 与分支可达性/覆盖率判定（不可满足分支可合法省略、写错则拒绝），解除递归定义限制（SCC 分组，终止靠 delta 展开 fuel）；核心求值器与擦除型 codegen 同步扩展（运行时族 → OCaml 变体、构造子名加族前缀、`TCase` → `match` + 不可能分支 `failwith`）；新增 `test/corpus/dt/09_nat` / `10_vec` / `11_fin` / `12_eq` 正例与 `dt_err` 反例；隐式索引推断留 M15，仍是单文件 `--dt` opt-in，split/包集成留 M17。
+- M15：隐式参数、接口与洞——元变量上下文（作用域逃逸检查）、隐式索引推断、trait/instance 字典编码 + 实例搜索、洞目标显示（`unsolved hole <loc> with goal <ty>`）。
+- M16：终止性与覆盖性——surface AST 上的结构化递归终止性检查（`DT: cannot prove termination of <f>`），覆盖性边界固定；索引擦除分析落地为诊断（探测确认索引不能无条件擦，需整程序使用分析）。
+- M17：DT 工具链——`vuna goal` 洞目标/上下文、`vuna lsp`（JSON-RPC over stdio：诊断、Full 同步、洞 hover，27 项冒烟断言）、`vuna doc` 支持接口与隐式签名；`Lsp`/`Json` 不进入 TCB。
+- M18：自举迁移决策——seed rotation（stage1 == stage2）；用 DT 表达 de Bruijn 上下文良构（`Ctx a (Succ n)` 静态排除越界）；当时的结论「编译器本体暂不全量迁移」**已被推翻**，见「决策变更」。
+- M18.5：DT 可靠性修复——lambda 形参擦除 bug（形参被无条件标为 erased：运行时使用时硬报错、未使用时静默少生成一层 `fun`）；擦除判据收敛为全仓唯一入口 `Elab.erasedBinder`（隐式恒擦 / 显式仅宇宙域擦），六处判据点统一；`run-tests.sh` 第 34 段加「同夹具 `interp` 输出 == 编译产物输出」逐夹具对拍；正例 `19_lam`、反例 `18_lam_type_used`。
+- M18.6：核心表示层定型（QTT 预留）——`erased : Bool` 换成三值 `Rig`（`Rig0`/`Rig1`/`RigOmega`，`RigOmega` 在类型里存在但不产生）、`TType : Int` 换成不透明 `Level`；访问器分三层（构造 `rigOfBinder`/`levelSucc`/`levelMax`、判定 `rigIsErased`、展示比较 `levelToInt`/`levelEq`/`levelLt`）；`Core` 之外对 `Rig`/`Level` 模式匹配数为 0；**行为零变化**（全部 DT 夹具 `compile --dt` 产物逐字节相同）；正例 `20_rig`/`21_level`、反例 `19_rig_type_runtime`。
+- M19：DT 语言面 parity（9/9，完成）——`let`（检查位 + 推断位脱糖为 `(\\x => body) e`，296 处）、推断位 `case`（元变量作期望类型，132 处）、嵌套构造子模式（改写成内层 case，410 分支）、多 clause 与方程左端模式（标准模式矩阵，399 名 / 978 行）、内建字面量模式（Bool→if，Int/String→if 链）、内建泛化（`==` / `/=` 隐式类型参数 + 精化期按实参类型特化、`str*` 进 prelude）、trait 高阶 kind（类参数 kind 从方法签名推断，投影 multiplicity 两侧统一）、`record`（声明/构造/字段访问/模式/更新，精化前统一降级）；`deriving`（展开成等价 instance，内建 Show/Eq/Ord trait 与内建 Show 实例）；顺带修掉
+核心求值器两个缺陷（`normalizeCase` 不进分支体、`applyCaseAlt` 不处理兜底）与一条
+M15 遗留缺陷（同 trait 多实例；细节见本文件后文各里程碑节）。
+- M20：DT 多文件与模块集成——`--dt` 复用 `Loader`（`loadProgramRaw`、`import` / `--root`）、
+  参数化 `data Foo a : Type`、签名类型变量隐式量化；剩余包目录归 M22.1。
+- M20.5：泛型实例约束求解——`Core.solveMetaHo`（更高阶元变量按模式求解）、`Elab` 的
+  字典延迟约束（`dgoals` / `resolveDictGoals`）、`constrainDictDom` 的 kind 检查；
+  `Base.List.mem` 的 `Eq a` 与 `do` 的具体 bind/pure 打通。`git log` 的提交标为 M22。
+
 ## 相关阅读
 
 - 路线图（终态 + M18.5–M28 规划 + 决策变更表）：[docs/roadmap.md](roadmap.md)

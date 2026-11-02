@@ -5,7 +5,7 @@
 ## 维护规则
 
 - **已完成阶段整段删除**：阶段完成后，删除该阶段的目标、范围、验收、设计要点、实现状态等详细段落，正文中不再保留。
-- **已完成阶段一句话**：只在「已完成」列表中保留一句话摘要（阶段编号 + 核心交付物）；需要历史细节时查 git 历史。
+- **已完成阶段一句话**：只在「已完成」列表与状态表保留一句话摘要（阶段编号 + 核心交付物）；历史细节见 [history.md](history.md)（git 历史留底）。
 - **未完成阶段保留细节**：保留目标、范围、验收，可继续补充设计要点与前置条件。
 - **新增阶段先写入「下一步 / 待办」**，完成后按上述规则收敛。
 - **研究储备与并行轨道不占 M 编号**；研究储备进入排期时再分配编号。
@@ -29,41 +29,18 @@ vuna **尚未发布任何版本**：没有外部用户、没有下游生态、�
 
 ## 已完成
 
-- M1：offside layout parser。
-- M2：call-by-value 求值器。
-- M3：自解释器。
-- M4：动态 value 表示 codegen 与编译版解释器。
-- M5：文件即模块、import / qualified / alias、模块名与循环检查。
-- M6：vuna 自写 codegen 与 seed 固定点。
-- M7：HM 类型检查、模块类型名解析、顶层推断与编译器自检。
-- M8：原生 OCaml typed codegen（data → variant，Int/String/Bool/List 原生），typed 默认并完成 typed 自举。
-- M9：诊断与语言可用性——全链路 span、运行时错误 `文件:行:列`、穷尽性/冗余检查、非 0 退出码。
-- M10：模块系统 v2——模块头与显式导出列表、抽象类型、`module B` / `B.name` 重导出、`_` 前缀隐私与模块路径不变式。
-- M10.5：类型表达力——记录类型与 trait（单参数、相干默认、命名实例、孤儿检查、`deriving`），内置 `Show` / `Eq` / `Ord` 与方法级字典穿参。
-- M11：标准库——独立标准库成员包（现 `vuna-base`，当时叫 `vuna-stdlib`；模块现 `Base.*`），高阶 kind 与一般约束泛化，`do` 语法糖与 IO 组合子，编译器成为标准库首个用户。
-- M11.5：包管理与工具链——`vuna.toml`、workspace 与依赖 DAG、`[export]` 跨包可见性、三目录约定，以及 `build` / `test` / `fmt` / `repl` / `doc`。
-- M12：性能与编译模型——分离编译（vuna 模块 → OCaml `.ml` / `.mli`）与 ocamlopt 模块级增量构建，seed 改为多文件文件集，新增机器无关指标门槛。
-- M11.6：fmt 完善——注释保留与 100 列行宽折行。
-- M12.5：工具链与自举边界拆分——编译器独立为成员包 `vuna-compiler`，seed 只含编译器入口闭包（63 → 49 个文件），工具链移出 TCB；同期修复编译性能（AVL 类型替换 / 路由表 / 快速 seed 构建，compiler 闭包 build --split ~32s → ~2s）。
-- M12.6：main / IO 语义——可执行入口 `main : IO a` 由运行时执行（无公开 runner），用户包与 `vuna interp`/`--root` 入口都不能直接调用 effectful 内建（只能经 `Base.IO`，当时叫 `Vuna.IO`）；IO 组合统一走 Functor/Monad trait（`fmap`/`bind`/`pure`、`>>=`、`do`），效果 API 直接 IO 化（print/getArgs/readFile 等返回 IO，内部 prim_*）；seed 51 个文件 / ~0.86 MB；`vuna interp` / `vuna test` 保留纯 main 结果 show 的调试约定。
-- M12.7：DT 前置清理——删除 dynamic codegen（`Vuna.Codegen`）与 `--no-typecheck` / `--typecheck` / `--typed` / `build --no-print` / `--out` / 裸 compile 回退，typed 成为唯一 codegen；`check` 改为纯类型检查（单次 typecheck），clause arity 诊断统一到 typecheck；默认模块根改为当前包；seed 49 个文件 / ~0.81 MB。
-- M13：DT 地基——新增 Core TT（`Type`/Pi/应用/lambda/if，NbE + beta/delta/eta，非累积宇宙）、双向精化器（一阶 metavariable、类型级隐式插入、delta 类型别名）、擦除型 DT codegen 与 `interp --dt` 核心求值器；`--dt` 单文件 opt-in（compile/check/interp），HM 路径零改动；新增 `docs/dt-core.md` 设计稿；seed 57 个文件 / ~0.92 MB。
-- M12.8：命名空间、Prelude 与包级构建——标准库改为 `vuna-base` / `Base.*`，编译器模块迁到 `Vuna.Compiler.*`（门面 `Vuna.Compiler.Common`）；新增顶层 `Prelude`（重导出 Pair/Bool/List/Maybe/Result/String/Monad，不含 `Base.IO` 效果函数），包模式自动导入、原始 `--root` 模式不导入；新增 `vuna compile --package`（`.output/{lib,app}`）与 `vuna build`（ocamlopt → `.output/bin/<包名>`），`--split` / `seed` 保留扁平分离 codegen；seed 61 个文件 / ~1.2 MB。
-- M14：索引族与依赖模式匹配——Core 增加 `TCon` / `TCase`（值域 `VCon` / `VCase`），`data F : <kind> where` 的索引归纳族（构造子写完整显式 telescope，宇宙域 binder 擦除、索引保留运行时表示），`case` 做索引 unification 与分支可达性/覆盖率判定（不可满足分支可合法省略、写错则拒绝），解除递归定义限制（SCC 分组，终止靠 delta 展开 fuel）；核心求值器与擦除型 codegen 同步扩展（运行时族 → OCaml 变体、构造子名加族前缀、`TCase` → `match` + 不可能分支 `failwith`）；新增 `test/corpus/dt/09_nat` / `10_vec` / `11_fin` / `12_eq` 正例与 `dt_err` 反例；隐式索引推断留 M15，仍是单文件 `--dt` opt-in，split/包集成留 M17。
-- M15：隐式参数、接口与洞——元变量上下文（作用域逃逸检查）、隐式索引推断、trait/instance 字典编码 + 实例搜索、洞目标显示（`unsolved hole <loc> with goal <ty>`）。
-- M16：终止性与覆盖性——surface AST 上的结构化递归终止性检查（`DT: cannot prove termination of <f>`），覆盖性边界固定；索引擦除分析落地为诊断（探测确认索引不能无条件擦，需整程序使用分析）。
-- M17：DT 工具链——`vuna goal` 洞目标/上下文、`vuna lsp`（JSON-RPC over stdio：诊断、Full 同步、洞 hover，27 项冒烟断言）、`vuna doc` 支持接口与隐式签名；`Lsp`/`Json` 不进入 TCB。
-- M18：自举迁移决策——seed rotation（stage1 == stage2）；用 DT 表达 de Bruijn 上下文良构（`Ctx a (Succ n)` 静态排除越界）；当时的结论「编译器本体暂不全量迁移」**已被推翻**，见「决策变更」。
-- M18.5：DT 可靠性修复——lambda 形参擦除 bug（形参被无条件标为 erased：运行时使用时硬报错、未使用时静默少生成一层 `fun`）；擦除判据收敛为全仓唯一入口 `Elab.erasedBinder`（隐式恒擦 / 显式仅宇宙域擦），六处判据点统一；`run-tests.sh` 第 34 段加「同夹具 `interp` 输出 == 编译产物输出」逐夹具对拍；正例 `19_lam`、反例 `18_lam_type_used`。
-- M18.6：核心表示层定型（QTT 预留）——`erased : Bool` 换成三值 `Rig`（`Rig0`/`Rig1`/`RigOmega`，`RigOmega` 在类型里存在但不产生）、`TType : Int` 换成不透明 `Level`；访问器分三层（构造 `rigOfBinder`/`levelSucc`/`levelMax`、判定 `rigIsErased`、展示比较 `levelToInt`/`levelEq`/`levelLt`）；`Core` 之外对 `Rig`/`Level` 模式匹配数为 0；**行为零变化**（全部 DT 夹具 `compile --dt` 产物逐字节相同）；正例 `20_rig`/`21_level`、反例 `19_rig_type_runtime`。
-- M19：DT 语言面 parity（9/9，完成）——`let`（检查位 + 推断位脱糖为 `(\\x => body) e`，296 处）、推断位 `case`（元变量作期望类型，132 处）、嵌套构造子模式（改写成内层 case，410 分支）、多 clause 与方程左端模式（标准模式矩阵，399 名 / 978 行）、内建字面量模式（Bool→if，Int/String→if 链）、内建泛化（`==` / `/=` 隐式类型参数 + 精化期按实参类型特化、`str*` 进 prelude）、trait 高阶 kind（类参数 kind 从方法签名推断，投影 multiplicity 两侧统一）、`record`（声明/构造/字段访问/模式/更新，精化前统一降级）；`deriving`（展开成等价 instance，内建 Show/Eq/Ord trait 与内建 Show 实例）；顺带修掉
-核心求值器两个缺陷（`normalizeCase` 不进分支体、`applyCaseAlt` 不处理兜底）与一条
-M15 遗留缺陷（同 trait 多实例，细节见 [history.md](history.md)）。
-- M20：DT 多文件与模块集成——`--dt` 复用 `Loader`（`loadProgramRaw`、`import` / `--root`）、
-  参数化 `data Foo a : Type`、签名类型变量隐式量化；剩余包目录归 M22.1。
-- M20.5：泛型实例约束求解——`Core.solveMetaHo`（更高阶元变量按模式求解）、`Elab` 的
-  字典延迟约束（`dgoals` / `resolveDictGoals`）、`constrainDictDom` 的 kind 检查；
-  `Base.List.mem` 的 `Eq a` 与 `do` 的具体 bind/pure 打通。`git log` 的提交标为 M22。
+- M1–M8：parser / CBV 求值器 / 自解释器 / 动态 codegen / 文件即模块 / 自写 codegen 与 seed 固定点 / HM 类型检查 / typed codegen 自举。
+- M9：全链路 span 与诊断、穷尽性/冗余检查、非 0 退出码。
+- M10 / M10.5：模块系统 v2（显式导出、抽象类型、重导出）与 record + trait/deriving。
+- M11 / M11.5：标准库成员包 `vuna-base`、包管理与工具链（`vuna.toml`、workspace、`build`/`test`/`fmt`/`repl`/`doc`）。
+- M12 / M12.5–M12.8：分离编译与 ocamlopt 增量构建、seed 多文件与指标门槛、编译器独立成员包（工具链移出 TCB）、`main : IO a` 语义、`Base.*`/`Prelude` 与 `compile --package`/`build`。
+- M13–M18.6：DT 地基、索引族与依赖模式匹配、隐式参数/接口/洞、终止性与覆盖、DT 工具链、seed rotation 决策、擦除判据修复、表示层定型（rig/Level）。
+- M19 / M20：DT 语言面 parity（let/推断位 case/嵌套与多 clause/字面量模式/record/deriving）与复用 Loader 走出单文件。
+- M20.5：泛型实例约束求解（`solveMetaHo`、字典延迟、`Base.List.mem`）。
+- M21–M22.3：`main : IO a` / `do` / `Base.IO`、包目录入口、库名统一与模式矩阵、Bool 去桩、擦除判据接线、`build`/`seed --dt` 与 metrics 重标定。
+
+> 阶段细节见 [history.md](history.md)（「已完成里程碑细节」+ M21–M22.3 各节）；本文件只保留
+> 一句话摘要，不再保留已完成阶段的目标/范围/验收段落。
 
 ## 终态（本路线图的目标）
 
@@ -97,204 +74,30 @@ M15 遗留缺陷（同 trait 多实例，细节见 [history.md](history.md)）�
 - 编译器自检通过；新增阶段更新 README / AGENTS 的约束、`docs/history.md` 与 roadmap 完成摘要。
 - **新增 DT 能力必须同时给 `test/corpus/dt*` 正例与反例**，否则计入未完成。
 
-## 路线阶段（M21–M24.7：走向单一路径与 DT 大重构）
+## 路线阶段（M23–M24.7：走向单一路径与 DT 大重构）
 
 ### 阶段状态总览
 
-阶段按编号顺序推进；依赖写在每个阶段的「前置」里。**当前阻碍登记在阶段内**，阶段完成
-即删除或降为历史摘要；已完成的 M13–M20 细节见 [history.md](history.md)。
+阶段按编号顺序推进；依赖写在每个阶段的「前置」里。**当前阻碍登记在未完成阶段内**，完成
+阶段整段删除、只在本表保留一句话摘要；已完成的 M13–M22.3 细节见 [history.md](history.md)。
 
-| 阶段 | 状态 | 关键交付 | 当前阻碍 |
+| 阶段 | 状态 | 关键交付 | 当前阻碍 / 备注 |
 | --- | --- | --- | --- |
 | M13–M18.6 | 已完成 | DT 地基、索引族、trait/实例、终止性、工具链、擦除修复、表示层定型 | — |
-| M19 / M20 | 已完成 | 语言面 parity；复用 Loader 走出单文件 | 细节见 [history.md](history.md) |
-| M20.5 | 已完成 | 泛型实例约束求解（`solveMetaHo`、字典延迟、`mem`） | —（`git log` 里记作 M22） |
-| M21 | 已完成 | `main : IO a` 执行、`do` / trait 投影（Base.IO 重导出）、实例方法模式矩阵、Bool 统一表示、effectful 内建进 codegen | — |
-| M22.1 | 已完成 | 包目录 `check` / `compile --dt`（`loadProject` + 依赖序拼接）、CLI 清晰错误、`dtRootErr`/`dtDirErr` 删除 | — |
-| M22.2 | 已完成 | `str*` 的 `List` 族别名、跨模块族名（依赖序加载）、模式矩阵族覆盖 + 嵌套兜底下沉、泛型 `<`/`<=` 与内建 Ord 实例、Bool 值去桩、`Base.Sort` 结构递归化 | —（Bool 仍留 prelude 类型别名，见「决策变更」） |
-| M22.3 | 已完成 | rig 驱动擦除（`rigIsErased` 唯一入口，显式索引反例 `dt/38`）、`build --dt` / `build --dt --split` / `seed --dt` 入口（单文件 `main.ml` + `build.sh`）、metrics 重标定 | —（逐模块 split 推迟到 M24，见「决策变更」） |
+| M19 / M20 | 已完成 | 语言面 parity；复用 Loader 走出单文件 | — |
+| M20.5 | 已完成 | 泛型实例约束求解（`solveMetaHo`、字典延迟、`mem`） | — |
+| M21 | 已完成 | `main : IO a`、`do` / trait 投影、实例方法矩阵、Bool 统一表示 | — |
+| M22.1 | 已完成 | 包目录 `check` / `compile --dt` + 依赖序加载 | — |
+| M22.2 | 已完成 | 库名统一、模式矩阵、泛型比较、Bool 去桩、`Base.Sort` | — |
+| M22.3 | 已完成 | rig 驱动擦除、`build`/`seed --dt`、metrics | — |
 | M23 | 未开始 | 全仓源码与夹具迁移；签名回填 | 签名量、夹具迁移 |
 | M24 | 未开始 | seed 切换、HM 删除、`--dt` 默认化 | 前置 M22.x + M23 |
 | M24.5 | 未开始 | 等式搬运与精化器补强 | 跨形参等式不可写 |
 | M24.6 | 未开始 | 编译器本体 DT 大重构（分级） | 第三级依赖 M24.5 |
 | M24.7 | 未开始 | Eq/Ord/Show 库化 | 前置 M24 |
 
-### M21：效应与 IO 的 DT 化
-
-**目标**：DT 程序能表达 `main : IO a`、`do` 块与 effectful 内建，达到现有 `Base.IO` 的可用性。
-
-**范围**：`do` 精化（desugar 到 bind/pure 或直接精化）；`IO` 作为普通 `data` 在 DT 下成立；
-effectful 内建进 DT prelude；**trait 方法投影跨模块可见**（`fmap` / `bind` / `pure`，
-`do` 的降级产物依赖它）；**实例方法体的模式矩阵**（实例方法支持构造子形参）；包级
-allowlist 语义保留；`main : IO a` 的执行语义对齐现有 `ioRunExpr`。可选的代数效应方向
-不在此阶段。
-
-**已完成（2026-11）**：
-
-- `main : IO a` 的执行：`Dt.evalDtMain` 与 `CoreCodegen.generateDtProgram` 按 main 的
-  **类型**识别 IO（族名 `IO`，含 `Base.IO.IO` 前缀形态），取构造子**末实参** `f`（隐式
-  族参数也进值表示，不能按位置取第一个）后对世界令牌 0 应用 `f 0` 并继续归约，与 HM
-  `ioRunExpr` 一致。正例 `dt/34_io_do`、`dt/35_io_main`。
-- 多态族构造子的函数类型字段被索引精化：`Elab.varTypeValue` / `evalCtx` 把精化代入
-  **求值环境**再 `eval`，而不是对 `VPi`/`VLam` 递归——闭包捕获环境，域与余域都递归
-  精化。正例 `dt/33_poly_fn_field`（输出 `1`），反例 `dt_err/27_poly_fn_field_err`
-  （`expected Bool, got Int`）。`Base.IO` 的 `MkIO : (Int -> a) -> IO a` 由此解锁。
-- effectful 内建（`prim_*`）签名已进 DT prelude。
-
-**已完成（2026-11，收尾）**：
-
-- **trait 方法投影跨模块可见**：`Base.IO` 模块头重导出 `Functor(..)` / `Monad(..)`
-  （Loader 的 `T(..)` 重导出规则会把方法投影条目一起带出），因此 `import Base.IO`
-  后 `do` / `bind` / `pure` / `fmap` 直接可用；`import Base.Monad` 路径不变。HM 路径
-  同一份重导出零回归。正例 `test/corpus/dt_base/01_io_do`、`03_fmap_bind`、`04_monad_trait`。
-- **实例方法体的模式矩阵**：`elabInstanceMethod` 不再要求全变量形参——多 clause 与
-  构造子形参统一走 `elabFunDef`（`DtMatch.multiToExpr` + 覆盖判定）。顺带修掉
-  「同一个方法的第二条 clause 被忽略」（按方法名收集全部 clause，名字按末段匹配模
-  块限定投影名）。正例 `dt/37_instance_ctor_pat`，反例
-  `dt_err/29_instance_ctor_pat_coverage`。
-- **匿名实例名唯一化**：Loader 给无名实例加模块前缀（`Base.IO.#default`），旧判定
-  按「名字以 # 开头」看不到匿名性，`instance Functor IO` 与 `instance Monad IO` 的
-  字典互相覆盖；改为按「类名 + 头实参」派生（`Base.IO.Monad_IO`）。内建 Show/Eq
-  实例头提前到定义体之前注册，字典提升后的签名回写 globals。
-- **泛型字典提升支持自递归**：字典 binder 插入位置改用类参数的 binder level（并修掉
-  `insertDictBinder` 对域的错误 shift）；体里按旧签名精化的自递归调用点补字典实参
-  （`insertDictCalls`）；已提升的目标不再被后续每个定义重复提升。`Base.List.mem`
-  / `memName` 这类 `{d : Dict_Eq a}` 提升后的递归定义可生成可编译的 OCaml。
-- **effectful 内建进 DT codegen**：`prim_*` 补 `dtp_*` 运行时实现与名字映射，
-  `prim_getArgs` / `prim_readLine` 在引用点展开；`main : IO a` 的钩子对装箱前的 `f`
-  取末字段后 `f 0`。`corpus/dt_io/01_print` 编译运行输出 `hello7`。
-- **Bool 统一运行时表示**（M22.2 的 Bool 去桩前置）：`data Bool`（`Base.Bool.Bool`
-  或单文件声明）的 `True`/`False` 一律精化成核心 `TBool`，Bool 族不生成 OCaml 变体、
-  构造子不进构造子表；`if` / `case` 按族短名识别，`main : Bool` 按短名选显示函数。
-  `if True then 1 else 0` 的 `interp --dt` 与编译产物现在都是 `1`。
-- **codegen 变体类型按「用到的族参数」渲染**：每族只把字段类型里真正出现的类型参数
-  计入 OCaml 类型参数；字段类型为族应用的复用族参数（递归族因此不会在 OCaml 侧产生
-  occurs check），字典/函数字段各占独立不透明参数，**显式 Pi 字段结构化渲染**
-  （`MkIO` 的字段成为 `int -> 'a0`，顶层 `IO` 值不再有不可泛化的弱类型变量）。
-- **其它精化修复**：`inferPi` 的显式 `(a : Type)` binder 现在按「域是宇宙」判据擦除
-  （`binderRig`）；字典构造子字段 Pi 链逐字段 `shift`（`Eq`/`Ord` 多方法签名不再把
-  类参数指到前一个字段上）；Base 门面重复重导出同一目标不再误报 duplicate export。
-
-**验收**：`test/corpus/dt_base/`（`import Base.IO` / `Base.Monad` / `Base.Maybe` 的
-`do`、trait 投影、实例方法构造子形参、`Base.IO` 全部 API 类型面）三路（interp /
-check / compile+run）全绿；`test/corpus/dt_io/`（效果执行）编译运行输出与 golden
-一致；`dt/37` 正例与 `dt_err/29` 反例；`Base.IO` 全部 API 在 `check --dt` 下可用。
-`app/Main.vuna` / `compiler/app/Main.vuna` 等价程序的**全量** DT 化依赖 record 与全库
-迁移，验收拆到 M22.2 / M23（见「决策变更」）。
-
-**前置**：M20.5（已完成）。**风险**：投影命名变更会影响 `deriving` 展开（生成体的
-方法名），需要同步 M24.7 的 trait 库化方案。
-
-### M22.1：包目录与 CLI 入口（`check` / `compile --dt`）
-
-**目标**：让 `--dt` 接受包目录，后续阶段都能在真实包上验证。
-
-**已完成（2026-11）**：
-
-- `check --dt <pkg-dir>` / `compile --dt <pkg-dir>` 走 `loadProject` / `loadProjectModules`
-  + `resolveProject`：可执行包（有 `app/Main.vuna`）同时拿到入口声明，库包按
-  `[export].modules` 只做 `check`（`compile` 给「library package ... has no app/Main.vuna」）。
-- **依赖序拼接**：`Dt.dtProjectDecls` = `reverse modules` 的声明 + 入口声明（Loader 的
-  modules 是「依赖在前」的反序）；`Loader.loadProgramOrdered` / `loadProgramRawOrdered`
-  提供同一顺序给单文件 / `--root` 路径，`Base.Map` 的 `Base.List.List` 前向引用因此
-  不再报 `unknown name`。
-- CLI：删除死代码 `dtRootErr` / `dtDirErr`；`check` / `compile --dt` 先 `fileExists` 再
-  `isDirectory` 分派（内建 `isDirectory` 对不存在路径会抛 Fatal error）；不存在路径报
-  `no such file or package directory: X`，坏目录报 `missing vuna.toml`，
-  `interp --dt <dir>` 报 `interp --dt takes a single file, not a package directory`。
-- usage 文案：`compile` 增加 `| <package-dir>`，`--dt` 说明改为 file 或 package dir。
-- 夹具 `test/corpus/dt_pkg/`：`01_exec`（Util→Answer 覆盖依赖序、运行输出 42）、
-  `02_lib`（库包 check 通过、compile 清晰报错且不写输出文件）、`03_bad`（无 `vuna.toml`）。
-
-**验收**：包目录 `check --dt` / `compile --dt` 可用并可运行；错误路径全为清晰错误而非
-Fatal error；单文件 / `--root` 路径零回归（`run-tests.sh` 34c 段覆盖 11 项检查）。
-
-**前置**：M21（已完成）。**风险**（已处理）：`--dt` 与 HM 的 CLI 解析共用路径，改动以
-分支分派为主，HM 包模式（28/29/33 段）零回归。
-
-### M22.2：库名统一与精化缺口（含 Bool 去桩）
-
-**目标**：`base` 的所有模块在 `--dt` 下可精化，且 `Bool` 只有一个权威数据定义。
-
-**已完成（2026-11）**：
-
-- **`str*` 与 `List` 的族名统一**：`DtPrelude.rewriteFamilyName` 把 prelude 静态签名里的
-  裸 `List` 重绑到程序实际声明的族名（`preludeGlobalsFor`）；`strUnpack` / `strPack` 的
-  签名因此与 `Base.List.List` 一致。codegen 侧用 `dtListBridge` 生成
-  `dtp_unpack` / `dtp_pack`，在 OCaml `int list` 与程序自声明的 `List` 变体之间转换。
-- **跨模块族名**：依赖序拼接（见 M22.1）+ `Base.Map` 的辅助函数移到大写公开函数之前
-  （前向引用看到的是提升字典参数前的旧签名），`import Base.Map` / `Base` 的
-  `unknown name Base.List.List` 消失。
-- **模式矩阵的两处缺口**（`DtMatch` / `Elab`）：
-  - 构造子列的族覆盖判定：`Elab.ctorFamilyTable` 把「族 → 全部构造子」传给
-    `DtMatch`；该列构造子已全覆盖时不再生成通配兜底，修掉 `mergeBy le [] ys` 一类
-    `missing Cons` 假覆盖错误；
-  - 嵌套模式的兜底**下沉**：源级 `case` 的嵌套模式折叠成内层 case 时，把后续 `_` 分支
-    的体一并作为每层内层 case 的通配分支（`foldPending` 带 fallback），
-    `case xs of (x :: Nil) => ...; _ => ...` 不再报 `missing Cons`。
-- **泛型比较**：`<` / `<=` / `>` / `>=` 的饱和应用按实参类型特化（`Int` → `bi_*_int`，
-  `String` / `Bool` → `bi_*_generic`，其它类型 → `Ord` 字典投影，刚性参数延迟提升成
-  `{d : Dict_Ord a}`）；补 `builtinOrdInstances`（Int/String/Bool），并给 DT core
-  evaluator 加对应归约，`mergeSort` 这类库函数在三条路径都能跑。
-- **Bool 去桩**：`DtPrelude.preludeGlobals` / `preludeNames`、`Loader.dtPreludeNames`、
-  `DtQuant.topPreludeNames` 删掉 `True` / `False`（值构造子）；`Base.Bool` 是唯一数据
-  定义，`True` / `False` / `Bool` 按族短名解析（`Elab.shortBoolFamily`）。**保留**
-  `Pair "Bool" (TType 0)` 这一条**类型别名**：内建 trait 的方法签名与不含 `data Bool`
-  的单文件程序需要它（见「决策变更」）。
-- **`Base.Sort` 结构递归化**：归并排序的 `sortBy le (take half xs)` 过不了 DT 终止性
-  检查（只接受形参真子项），改成插入排序（`sortBy` 按 tail 递归、`insertBy` 插入），
-  排序结果与稳定性不变，HM / DT 两条路径都成立。
-- 另有支撑修复：`Core.solveMeta` 对「同一个未解元变量统一自己」短路（避免 occurs check
-  误报）；字典提升的 `dictDom` 用 `substSolvedMetasAt` 按定义上下文深度重写（`mergeSort`
-  的提升签名曾残留 `Dict_Ord ?67`）；`inferArgs` 的隐式字典 binder 在类参数未解时延迟而
-  不提前实例搜索。
-
-**验收**：`import Base.String` / `Base.Map` / `Base.Sort` / `Base` / `Prelude` 的探针在
-`--dt` 下通过；`Base.IO` 全 API 类型面通过；新增 `dt_base/06`（String）、`07`
-（Sort+Map，运行 123）、`08`（`import Base` 门面，运行 2）；`run-tests.sh` 全绿
-（910 checks）。Bool 值去桩后单文件夹具补 `data Bool`（08/25/26/30/31）。
-
-**前置**：M22.1（已完成）。**风险**：名字统一改动了 `DtPrelude` 静态签名与 `Elab` 的
-Bool 解析，已同步单文件夹具与 `dt.md` / `limits.md`。
-
-### M22.3：擦除判据接线与统一 codegen
-
-**目标**：擦除由 rig 判据驱动（`Rig0` 即擦），DT codegen 产出 `build` / `build --split` /
-`seed` 需要的输出形状，并重标定机器无关指标。
-
-> **定位由 QTT 决策确定**：QTT 的擦除判据是 multiplicity 0（`Rig0` 即擦），不是整程序
-> 使用分析。因此本阶段**不投入做 `indexReads` 启发式**，只把「判据 → codegen 字段形状」
-> 接好，让 M18.6 的三值 rig 直接驱动擦除。
-
-**已完成（2026-11）**：
-
-- **rig 驱动擦除**：绑定/实参是否进运行时表示只由 `Core.rigIsErased` 判定（全仓唯一
-  入口；`Rig` 的构造与判定都在 `Core`，其它模块只用访问器）。隐式 binder（含族参数、
-  隐式索引 `{n : Nat}`）是 `Rig0` → 擦除：`17_erase` 的 `Vec` 产物没有长度字段；
-  显式索引 binder（`(n : Nat)`）是 `Rig1` → 保留运行时字段，`vlen` 类定义能把它读回来
-  （新夹具 `dt/38_explicit_index`：产物是 `C_Vec_Cons of t_Nat * 'a0 * ...`，运行 1）。
-- **codegen 对齐**：`ctorFieldTexts` / `genConArgs` / `altEnvGo` / `genTerm` 统一按
-  `rigIsErased` 跳过擦除位（M18.5/M21 已接；本阶段补了显式索引反例夹具，锁定“不误擦”）。
-- **DT 输出模型**：`Compile.dtProjectFiles` 产出 `main.ml` + `build.sh`（`cd "$(dirname
-  "$0")"` + `ocamlopt -w -a -I +unix unix.cmxa main.ml -o main`）。**逐模块 `.ml/.mli`
-  切分本轮不做**（见「决策变更」），留到 M24 的 seed 切换。
-- **入口接线**：`build --dt [--no-compile] [DIR]` → `.output/main.ml`(+`build.sh`)，再
-  `ocamlopt` 到 `.output/bin/<pkg>`；`build --dt --split OUT` / `seed --dt OUT` 只产源码
-  两份文件（不跑 ocamlopt）；`seed --dt` 必须显式 OUT，且拒绝写 `seed/`（HM 信任锚点，
-  轮换在 M24 切换）；库包 / 单文件入口 / 缺失路径均为清晰错误；HM 的 `build` / `seed`
-  分支未动、零回归。
-- **metrics 重标定**：M21/M22 的编译器源码增长（Elab/CoreCodegen/DtPrelude 等）后按实测
-  重设 `nix/metrics.budget`（37 个 `.ml`，明细见该文件 M22.3 注释）。
-
-**验收**：`17_erase`（隐式索引消失）与 `dt/38_explicit_index`（显式索引保留、`vlen`
-可读）通过；全部 DT 夹具 `interp` 与 `compile`+`ocamlopt` 对拍一致；`build --dt`
-产出可运行 bin、`build --dt --split` / `seed --dt` 产出可编译文件集；`seed --dt seed`
-被拒绝；`run-tests.sh` 34d 段覆盖这些路径；新预算落库；擦除判定 grep 只剩
-`Core.rigIsErased`。
-
-**前置**：M21（`do` / trait 投影）、M22.1（包目录与 CLI 入口）、M22.2（库模块可精化）。
-**风险**：误擦导致运行时崩溃（显式索引反例已锁定）；逐模块切分推迟后，M24 的 seed
-切换仍需实现 split 输出模型。
+> **已完成阶段（M21–M22.3）**：细节见 [history.md](history.md) 的对应归档节。完成时保留的
+> 两个例外（Bool 类型别名、逐模块 split 推迟到 M24）见「决策变更」；本文件不保留已完成阶段的目标/范围/验收段落。
 
 
 ### M23：全仓源码与夹具迁移
@@ -317,7 +120,7 @@ Bool 解析，已同步单文件夹具与 `dt.md` / `limits.md`。
 夹具在新路径全绿；[language.md](reference/language.md) / [type-system.md](reference/type-system.md) /
 [limits.md](reference/limits.md) 同步。
 
-**前置**：M21–M22.3（M19/M20 已完成）。**风险**：这是最大的一块机械
+**前置**：M21–M22.3（已完成）。**风险**：这是最大的一块机械
 工作量；按包分批，每批独立绿灯再进下一批。
 
 ### M24：seed 切换、HM 删除与工具链统一
