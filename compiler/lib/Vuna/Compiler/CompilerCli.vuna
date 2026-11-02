@@ -27,14 +27,20 @@ compilerUsageLines prog =
     ++ " check [--dt] [--root DIR]... (<entry.vuna> | <package-dir>)\n"
     ++ "  "
     ++ prog
-    ++ " build [--no-compile] [DIR]    包级 compile + ocamlopt → .output/bin/<name>\n"
+    ++ " build [--dt] [--no-compile] [DIR]    包级 compile + ocamlopt → .output/bin/<name>\n"
     ++ "  "
     ++ prog
     ++ " build --split OUT [DIR]        分离编译：逐模块 OCaml 源码 + build.sh 写到 OUT\n"
     ++ "  "
     ++ prog
+    ++ " build --dt --split OUT [DIR]   DT 单文件：OUT/main.ml + OUT/build.sh（M22.3a）\n"
+    ++ "  "
+    ++ prog
     ++ " seed [OUT [DIR]]               生成多文件 seed（默认 OUT=seed，DIR=.）\n"
-    ++ "  --dt                            experimental DT (core TT) pipeline: file or package dir (M22.1)\n"
+    ++ "  "
+    ++ prog
+    ++ " seed --dt OUT [DIR]            DT 单文件：OUT/main.ml + OUT/build.sh（显式 OUT，不写 seed/）\n"
+    ++ "  --dt                            experimental DT (core TT): file or package dir (build/seed only package dir)\n"
     ++ "  "
     ++ prog
     ++ " help, -h\n"
@@ -52,8 +58,8 @@ runCompilerCliFor1 prog args = case args of
   arg :: rest => case arg of
     "compile" => compileArgs prog rest
     "check" => checkArgs prog rest
-    "build" => if anyDt rest then dtCmdErr prog else buildArgs prog rest
-    "seed" => if anyDt rest then dtCmdErr prog else seedArgs prog rest
+    "build" => buildArgs prog rest
+    "seed" => seedArgs prog rest
     "help" => helpFor prog
     "--no-typecheck" => removedFlag prog arg
     "--typecheck" => removedFlag prog arg
@@ -123,7 +129,9 @@ anyDt (arg :: rest) = if arg == "--dt" then True else anyDt rest
 
 dtCmdErr prog =
   let
-    _ = print "error: --dt is only supported by compile/check/interp\n"
+    _ =
+      print
+        "error: --dt is not supported by `compile --package` (use build --dt, build --dt --split, or seed --dt)\n"
   in 2
 
 -- DT 路径的通用错误：路径既不是文件也不是目录（目录模式见 checkDtPackage / compileDtPackage）。
@@ -219,14 +227,9 @@ compileDtFile prog printResult roots entry rest = case compileFileDt (map rootDi
       _ = print ("error: " ++ e ++ "\n")
     in 1
 
-compileDtPackage prog printResult dir rest = case loadPackage dir of
-  Err e =>
-    let
-      _ = print ("error: " ++ e ++ "\n")
-    in 1
-  Ok pkg =>
-    if fileExists (packageEntry pkg) then compileDtPkgEntry prog printResult pkg rest
-    else dtNoMainErr pkg
+compileDtPackage prog printResult dir rest = case dtExecutablePackage "compile" dir of
+  Err e => printDtErr e
+  Ok pkg => compileDtPkgEntry prog printResult pkg rest
 
 compileDtPkgEntry prog printResult pkg rest = case compileProjectDt (packageRoots pkg) (packageName pkg) (packageEntry pkg) printResult of
   Ok code => emitDtCode prog code rest
@@ -235,13 +238,30 @@ compileDtPkgEntry prog printResult pkg rest = case compileProjectDt (packageRoot
       _ = print ("error: " ++ e ++ "\n")
     in 1
 
--- 库包没有入口（app/Main.vuna），DT 无从生成 main。
-dtNoMainErr pkg =
+-- 带 `error: ` 前缀打印并返回 1（DT 包路径错误的统一出口）。
+printDtErr e =
   let
-    _ =
-      print
-        ("error: compile: library package " ++ packageName pkg ++ " has no app/Main.vuna (nothing to compile)\n")
+    _ = print ("error: " ++ e ++ "\n")
   in 1
+
+-- DT 可执行包解析（compile / build / seed --dt 共用）：路径必须是目录、能读
+-- vuna.toml、且有 app/Main.vuna；库包与单文件入口都给出清晰错误。
+dtExecutablePackage : String -> String -> Result Package
+dtExecutablePackage label dir =
+  if fileExists dir then dtExecutablePackageAt label dir
+  else Err ("no such file or package directory: " ++ dir)
+
+dtExecutablePackageAt label dir =
+  if isDirectory dir then andThen (loadPackage dir)
+    (\pkg => if fileExists (packageEntry pkg) then Ok pkg else Err (dtNoMainMsg label pkg))
+  else Err
+    (label ++ ": expects a package directory, not a file: " ++ dir ++ " (use `compile --dt` for single files)")
+
+dtNoMainMsg label pkg =
+  label
+    ++ ": library package "
+    ++ packageName pkg
+    ++ " has no app/Main.vuna (executable package required)"
 
 emitDtCode prog code rest = case rest of
   [] =>
@@ -367,11 +387,116 @@ checkPkgLibrary pkg = case packageExports pkg of
 
 -- ---------------------------------------------------------------
 -- build（包模式）
+-- 含 `--dt` 时走 DT 单文件输出模型（M22.3a），HM 分支保持不变。
 -- ---------------------------------------------------------------
-buildArgs prog args = case args of
+buildArgs prog args = if anyDt args then buildDtArgs prog args
+else case args of
   ["--split"] => usageErr prog
   "--split" :: outDir :: rest => buildSplitCmd prog outDir rest
   _ => buildParse prog Nothing False args
+
+-- DT build 参数：--dt（可重复，跳过）、--no-compile、--split OUT、一个 DIR。
+buildDtArgs prog args = buildDtParse prog False Nothing Nothing args
+
+buildDtParse prog noCompile splitOut dir args = case args of
+  [] => buildDtRun prog (defaultDir dir) noCompile splitOut
+  "--dt" :: rest => buildDtParse prog noCompile splitOut dir rest
+  "--no-compile" :: rest => buildDtParse prog True splitOut dir rest
+  "--split" :: rest => buildDtSplitArg prog noCompile splitOut dir rest
+  arg :: rest => if startsWith "-" arg then invalidFlag prog arg
+  else case dir of
+    Nothing => buildDtParse prog noCompile splitOut (Just arg) rest
+    Just _ => usageErr prog
+
+buildDtSplitArg prog noCompile splitOut dir rest = case rest of
+  outDir :: more => if startsWith "-" outDir then invalidFlag prog outDir
+  else case splitOut of
+    Nothing => buildDtParse prog noCompile (Just outDir) dir more
+    Just _ => usageErr prog
+  [] => usageErr prog
+
+buildDtRun prog dir noCompile splitOut = case splitOut of
+  Just outDir => buildDtSplitTo outDir dir
+  Nothing => buildDtPackage prog dir noCompile
+
+-- build --dt [--no-compile] [DIR]：codegen 到 .output/main.ml（+ build.sh），
+-- 除非 --no-compile 否则再 ocamlopt 到 .output/bin/<pkg-name>。
+buildDtPackage prog dir noCompile = case dtExecutablePackage "build" dir of
+  Err e => printDtErr e
+  Ok pkg => case writeDtOutput (defaultOutDir dir) pkg of
+    Err e => printDtErr e
+    Ok n =>
+      let
+        _ = print ("wrote " ++ strFromInt n ++ " files to " ++ defaultOutDir dir ++ "\n")
+      in if noCompile then 0 else buildDtBinary dir pkg
+
+buildDtBinary dir pkg =
+  let
+    outDir = defaultOutDir dir
+    name = packageName pkg
+    binRel = ".output/bin/" ++ name
+    binPath = outDir ++ "/bin/" ++ name
+    _ = makeDir (outDir ++ "/bin")
+    _ = removeFile binPath
+    code = runIn dir (dtOcamloptArgs binRel (".output/" ++ dtMainFile))
+  in if code == 0 then
+    let
+      _ = print ("built " ++ dir ++ "/" ++ binRel ++ "\n")
+    in 0
+  else
+    let
+      _ = removeFile binPath
+    in let
+      _ = print ("error: build --dt: ocamlopt failed (exit " ++ strFromInt code ++ ")\n")
+    in 1
+
+dtOcamloptArgs : String -> String -> List String
+dtOcamloptArgs binRel mainRel =
+  ["ocamlopt", "-w", "-a", "-I", "+unix", "-o", binRel, "unix.cmxa", mainRel]
+
+-- build --dt --split OUT [DIR]：只产源码（main.ml + build.sh），不跑 ocamlopt。
+buildDtSplitTo outDir dir = if isSeedOutputPath outDir then printDtErr (seedOutputMsg outDir)
+else case dtExecutablePackage "build" dir of
+  Err e => printDtErr e
+  Ok pkg => case writeDtOutput outDir pkg of
+    Err e => printDtErr e
+    Ok n =>
+      let
+        _ = print ("wrote " ++ strFromInt n ++ " files to " ++ outDir ++ "\n")
+      in 0
+
+-- 写出 DT 单文件输出（main.ml + build.sh）；OUT 不存在时创建。
+writeDtOutput : String -> Package -> Result Int
+writeDtOutput outDir pkg = andThen (dtProjectFiles (packageRoots pkg) (packageName pkg) (packageEntry pkg) True) (\files => let
+  _ = makeDir outDir
+in Ok (writeDtOutputFiles outDir files)
+)
+
+writeDtOutputFiles : String -> List (Pair String String) -> Int
+writeDtOutputFiles dir [] = 0
+writeDtOutputFiles dir (f :: rest) =
+  let
+    _ = writeFile (dir ++ "/" ++ firstOf f) (secondOf f)
+  in let
+    n = writeDtOutputFiles dir rest
+  in n + 1
+
+-- seed/ 是提交入库的 HM 信任锚点：DT 输出尚未逐模块切分，不能写这里。
+-- 判据按路径段：OUT=seed、seed/...、或最后一段为 seed（绝对路径同样拒绝）。
+isSeedOutputPath path =
+  let
+    trimmed = stripTrailingSlashes path
+  in trimmed == "seed" || startsWith "seed/" trimmed || lastPathSegment trimmed == "seed"
+
+stripTrailingSlashes path =
+  if endsWith "/" path then stripTrailingSlashes (substring 0 (strLength path - 1) path) else path
+
+lastPathSegment path = baseName (stripTrailingSlashes path)
+
+seedOutputMsg path =
+  "refusing to write DT output to "
+    ++ path
+    ++ " (seed/ is the committed HM trust anchor; DT output is a single main.ml + build.sh and seed rotation switches in M24)"
 
 buildSplitCmd prog outDir args = case args of
   [] => splitRun outDir "."
@@ -391,13 +516,48 @@ splitRun outDir dir =
         _ = print ("wrote " ++ strFromInt n ++ " files to " ++ outDir ++ "\n")
       in 0
 
-seedArgs prog args = case args of
+seedArgs prog args = if anyDt args then seedDtArgs prog args
+else case args of
   [] => seedRun "seed" "."
   out :: rest => if startsWith "-" out then invalidFlag prog out
   else case rest of
     [] => seedRun out "."
     [dir] => if startsWith "-" dir then invalidFlag prog dir else seedRun out dir
     _ => usageErr prog
+
+-- DT seed 参数：必须显式给 OUT（避免默认写 seed/），DIR 可省略。
+seedDtArgs prog args = seedDtParse prog Nothing Nothing args
+
+seedDtParse prog out dir args = case args of
+  [] => case out of
+    Nothing => seedDtOutErr
+    Just outDir => seedDtRun outDir (defaultDir dir)
+  "--dt" :: rest => seedDtParse prog out dir rest
+  arg :: rest => if startsWith "-" arg then invalidFlag prog arg
+  else case out of
+    Nothing => seedDtParse prog (Just arg) dir rest
+    Just _ => case dir of
+      Nothing => seedDtParse prog out (Just arg) rest
+      Just _ => usageErr prog
+
+seedDtOutErr =
+  let
+    _ =
+      print
+        "error: seed --dt requires an explicit OUT directory (DT seed output is main.ml + build.sh; seed rotation switches in M24)\n"
+  in 2
+
+-- seed --dt OUT [DIR]：与 build --dt --split 相同形状（main.ml + build.sh，不跑 ocamlopt），
+-- 且拒绝写 seed/（M24 之前 seed rotation 仍走 HM）。
+seedDtRun outDir dir = if isSeedOutputPath outDir then printDtErr (seedOutputMsg outDir)
+else case dtExecutablePackage "seed" dir of
+  Err e => printDtErr e
+  Ok pkg => case writeDtOutput outDir pkg of
+    Err e => printDtErr e
+    Ok n =>
+      let
+        _ = print ("wrote " ++ strFromInt n ++ " files to " ++ outDir ++ "\n")
+      in 0
 
 seedRun out dir =
   let

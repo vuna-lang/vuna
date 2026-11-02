@@ -713,3 +713,32 @@ metrics 重标定都留给 M22.3；DT core evaluator 不支持 `strUnpack`/`strP
 带这两个内建的夹具用 `.nointerp` 约定跳过）；延迟字典目标在最终仍无解时报
 `unsolved metavariable`（而非「缺实例」），诊断细化留待后续；多列覆盖的进一步统一
 （`dt_err/25` 期望文本随诊断变化已更新）。
+
+## M22.3：擦除判据接线与统一 codegen（2026-11）
+
+**目标**：擦除由 rig 判据驱动，DT codegen 产出 `build` / `seed` 需要的输出形状，重标定
+机器无关指标。
+
+1. **擦除判据单入口**：运行时表示只由 `Core.rigIsErased` 判定（`Rig` 的构造与判定仅在
+   `Core`，其它模块只用访问器）；codegen 的 `ctorFieldTexts` / `genConArgs` / `altEnvGo` /
+   `genTerm` 等 15 处跳过擦除位全部走它。隐式 binder（族参数、隐式索引 `{n : Nat}`）是
+   `Rig0` → 擦除：`17_erase` 的 `Vec` 产物没有长度字段；显式索引 `(n : Nat)` 是 `Rig1`
+   → 保留运行时字段，`vlen` 类定义能把它读回来。新增正例 `dt/38_explicit_index`：产物是
+   `C_Vec_Cons of t_Nat * 'a0 * ...`、运行输出 1，锁定“不误擦”的一侧。
+2. **DT 输出模型**：`Compile.dtProjectFiles` 统一产出整程序单文件 `main.ml` +
+   `build.sh`（`cd "$(dirname "$0")"` + `ocamlopt -w -a -I +unix unix.cmxa main.ml -o main`）；
+   逐模块 `.ml`/`.mli` 切分**推迟到 M24 的 seed 切换**（roadmap「决策变更」记一行）。
+3. **build / seed 入口**：`build --dt [--no-compile] [DIR]` → `.output/{main.ml,build.sh}`
+   →（默认）`ocamlopt` 到 `.output/bin/<pkg>`；`build --dt --split OUT` 与
+   `seed --dt OUT` 只写两份源码、不跑 ocamlopt；`seed --dt` 必须显式 OUT 且拒绝写
+   `seed/`（HM 信任锚点，轮换在 M24 切换）；库包 / 单文件入口 / 缺失路径都给出清晰错误。
+   HM 的 `build` / `seed` 分支未动（零回归），`compile --package --dt` 仍被明确拒绝。
+4. **metrics 重标定**：M21/M22 的编译器源码增长后按实测重设 `nix/metrics.budget`
+   （seed 闭包 37 个模块：bytes 1424318 / lines 13426 / longlines 5009 / letrec 727 /
+   strcat 355 / zeroarg 51 / ctorcount 2778；`sh nix/metrics.sh` within budget）。
+
+**验证**：`test/run-tests.sh` 新增 34d 段（build --dt 运行、--no-compile 布局、
+--split / seed --dt 的 build.sh 可运行、seed --dt 拒绝 seed/、缺 OUT exit 2、库包错误、
+HM build 零回归）；`--only 34` 与全量测试全绿；`dt/38_explicit_index` 三路一致。
+
+**仍存边界**：DT 输出尚未逐模块切分（M24 seed 切换前置）；`seed/` 仍由 HM 生成，未轮换。

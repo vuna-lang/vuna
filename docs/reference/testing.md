@@ -97,9 +97,14 @@ nix run .#vuna-run-tests -- --vuna stable  # 编译器改用注册表别名 vuna
   `compile --dt`+ocamlopt/运行（输出 42）、`02_lib` 库包 check 通过且 compile 清晰报错
   不写输出、`03_bad` 无 `vuna.toml` 清晰错误、不存在路径与 `interp --dt <dir>` 的清晰
   错误；
+  第 34d 段（M22.3a）：DT 的 `build` / `seed` 入口——`build --dt` 产
+  `.output/{main.ml,build.sh,bin/<pkg>}` 并运行输出 golden、`--no-compile` 只写两份
+  源码、`build --dt --split OUT` 与 `seed --dt OUT` 的 `build.sh` 可编译运行、
+  `seed --dt seed` 被拒绝（不写 `seed/`）、库包给清晰错误、HM `build` 零回归；
+  另断言 `seed --dt` 缺 OUT 时 exit 2；
   另有 `--dt` CLI 约束（M20 起 `interp`/`check` 支持 `import` 与 `--root`；M22.1 起
-  `check`/`compile --dt` 支持包目录；`build` / `seed` 仍不支持 `--dt`）——剩余约束随
-  M22.3/M23/M24 拆除。
+  `check`/`compile --dt` 支持包目录；M22.3 起 `build`/`seed` 也接受 `--dt`，输出是
+  单文件 `main.ml` + `build.sh`）——逐模块切分与 `seed/` 轮换留到 M24。
 
 ## Nix checks 清单
 

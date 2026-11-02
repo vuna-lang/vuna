@@ -845,16 +845,83 @@ check_contains "dt pkg missing path no fatal" "$missing_err" "error:"
 # interp --dt 只接受单文件：包目录给出清晰错误（M22.1）
 interp_err=$("$VUNA" interp --dt "$exec_pkg" 2>&1)
 check_contains "dt interp package dir error" "$interp_err" "single file"
-# DT CLI：M20 起 `--dt` 接受 --root（复用 Loader）；build / seed 仍不支持 --dt
+# DT CLI：M20 起 `--dt` 接受 --root（复用 Loader）；M22.1 起 check/compile 接受包目录；
+# build/seed 的 --dt 入口见 34d（M22.3a）。
 help_out=$("$VUNA" help 2>&1)
 check_contains "dt help" "$help_out" "--dt"
 dt_multi_out=$("$VUNA" interp --dt --root corpus/dt_root corpus/dt_root/Main.vuna 2>&1)
 check_eq "dt interp --root exit" "0" "$?"
 check_eq "dt interp --root output" "42" "$dt_multi_out"
-"$VUNA" build --dt . >/dev/null 2>&1
-check_eq "dt build exit" "2" "$?"
 "$VUNA" seed --dt >/dev/null 2>&1
-check_eq "dt seed exit" "2" "$?"
+check_eq "dt seed requires OUT exit" "2" "$?"
+
+# 34d) DT build / seed 入口（M22.3a）：build --dt 产可执行 bin；--split / seed --dt
+#      产单文件 main.ml + build.sh；seed --dt 拒绝写 seed/；HM build 零回归。
+dt_src=corpus/dt_pkg/01_exec
+dt_pkg=$tmp/dt-build-pkg
+rm -rf "$dt_pkg"
+cp -R "$dt_src" "$dt_pkg"
+dt_expected=$(cat "$dt_src/expected.out")
+
+if ! dt_build_out=$("$VUNA" build --dt "$dt_pkg" 2>&1); then
+  bad "$dt_src (dt build)" "exit 0" "$dt_build_out"
+elif [ ! -x "$dt_pkg/.output/bin/dtpkg-exec" ]; then
+  bad "$dt_src (dt build bin)" "executable" "missing"
+else
+  check_eq "$dt_src (dt build run)" "$dt_expected" "$("$dt_pkg/.output/bin/dtpkg-exec" 2>&1)"
+fi
+
+rm -rf "$dt_pkg/.output"
+"$VUNA" build --dt --no-compile "$dt_pkg" >/dev/null 2>&1
+check_eq "$dt_src (dt build --no-compile exit)" "0" "$?"
+if [ -e "$dt_pkg/.output/main.ml" ] && [ -e "$dt_pkg/.output/build.sh" ] && [ ! -e "$dt_pkg/.output/bin" ]; then
+  ok
+else
+  bad "$dt_src (dt build --no-compile layout)" "main.ml+build.sh, no bin" "unexpected"
+fi
+
+dt_split=$tmp/dt-split
+rm -rf "$dt_split"
+if ! dt_split_out=$("$VUNA" build --dt --split "$dt_split" "$dt_pkg" 2>&1); then
+  bad "$dt_src (dt build --split)" "exit 0" "$dt_split_out"
+elif ! ( cd "$dt_split" && sh build.sh ) >"$tmp/dt_split.log" 2>&1; then
+  bad "$dt_src (dt build --split build.sh)" "exit 0" "$(cat "$tmp/dt_split.log")"
+else
+  check_eq "$dt_src (dt build --split run)" "$dt_expected" "$("$dt_split/main" 2>&1)"
+fi
+
+dt_seed=$tmp/dt-seed
+rm -rf "$dt_seed"
+if ! dt_seed_out=$("$VUNA" seed --dt "$dt_seed" "$dt_pkg" 2>&1); then
+  bad "$dt_src (dt seed)" "exit 0" "$dt_seed_out"
+elif ! ( cd "$dt_seed" && sh build.sh ) >"$tmp/dt_seed.log" 2>&1; then
+  bad "$dt_src (dt seed build.sh)" "exit 0" "$(cat "$tmp/dt_seed.log")"
+else
+  check_eq "$dt_src (dt seed run)" "$dt_expected" "$("$dt_seed/main" 2>&1)"
+fi
+
+seed_refuse=$("$VUNA" seed --dt ../seed "$dt_pkg" 2>&1)
+seed_refuse_code=$?
+check_contains "$dt_src (dt seed refuses seed/)" "$seed_refuse" "refusing to write DT output"
+if [ "$seed_refuse_code" -ne 0 ]; then ok; else bad "$dt_src (dt seed refuses seed/ exit)" "non-zero" "$seed_refuse_code"; fi
+if [ -e ../seed/main.ml ]; then
+  bad "$dt_src (dt seed no seed/ write)" "absent" "present"
+else
+  ok
+fi
+
+dt_lib_err=$("$VUNA" build --dt corpus/dt_pkg/02_lib 2>&1)
+dt_lib_code=$?
+check_contains "$dt_src (dt build library error)" "$dt_lib_err" "library package"
+if [ "$dt_lib_code" -ne 0 ]; then ok; else bad "$dt_src (dt build library exit)" "non-zero" "$dt_lib_code"; fi
+
+# HM build 零回归
+hm_pkg=corpus/packages/01_workspace
+rm -rf "$hm_pkg/.output"
+"$VUNA" build "$hm_pkg" >/dev/null 2>&1
+check_eq "$hm_pkg (hm build)" "0" "$?"
+check_eq "$hm_pkg (hm build run)" "$(cat "$hm_pkg/expected.out")" "$("$hm_pkg/.output/bin/app" 2>&1)"
+rm -rf "$hm_pkg/.output"
 
 # DT fmt round-trip：Pi 语法格式化后仍解析为同一程序且幂等
 cp corpus/dt/03_compose.vuna "$tmp/dt_fmt.vuna"

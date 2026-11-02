@@ -100,10 +100,12 @@ codegen 要点见 [compiler.md](reference/compiler.md)，语言语义见 [langua
 **边界**：`--dt` 支持 `import` / `--root`（M20）；`main : IO a`、`do`、effectful 内建与
 `Base.IO` 可用（M21）；`check` / `compile --dt` 接受包目录（M22.1，含库包 check 与依赖序
 拼接），`base` 全部模块可精化（M22.2：`Base.String` / `Map` / `Sort` / 门面 `Base` /
-`Prelude`；Bool 值构造子已去桩、只留 prelude 类型别名）；`build` / `seed` 仍不支持
-`--dt`（M22.3）。M21 统一了 Bool 的运行时表示（`TBool`）并把字典提升扩展到自递归定义；
+`Prelude`；Bool 值构造子已去桩、只留 prelude 类型别名）；`build --dt` / `build --dt
+--split` / `seed --dt` 接线（M22.3，输出是**整程序单文件** `main.ml` + `build.sh`，逐模块
+切分留 M24）。M21 统一了 Bool 的运行时表示（`TBool`）并把字典提升扩展到自递归定义；
 M22.2 补齐模式矩阵的族覆盖与嵌套兜底下沉、泛型比较（`Ord` 字典 + 内建实例）、`str*` 的
-`List` 族桥接（`dtp_unpack` / `dtp_pack`）；codegen 变体类型的字段形状由「用到的族参数 +
+`List` 族桥接（`dtp_unpack` / `dtp_pack`）；M22.3 把擦除判据收敛到 `Core.rigIsErased`
+（唯一的运行时表示判据）并重标定 metrics；codegen 变体类型的字段形状由「用到的族参数 +
 不透明字段参数」决定（见 [dt-core.md](dt-core.md)）。
 
 **通常连带改动**：`Core` → `Elab` → `CoreCodegen` 三处同步（见 [dt-core.md](dt-core.md)）；测试第 34–35 段（三路互拍，见 [testing.md](reference/testing.md)）。

@@ -1,4 +1,4 @@
-module Vuna.Compiler.Compile (effectiveRoots, compileFileTyped, compileFileTypedExec, checkFile, compileFileTypedIn, compileFileTypedExecIn, checkFileIn, checkPackageIn, compileFileDt, checkFileDt, checkProjectDt, compileProjectDt, checkLibraryDt) where
+module Vuna.Compiler.Compile (effectiveRoots, compileFileTyped, compileFileTypedExec, checkFile, compileFileTypedIn, compileFileTypedExecIn, checkFileIn, checkPackageIn, compileFileDt, checkFileDt, checkProjectDt, compileProjectDt, checkLibraryDt, dtMainFile, dtProjectFiles) where
 
 -- Vuna.Compiler.Compile：编译入口（供 CompilerCli / CLI / 测试使用）。
 --
@@ -78,3 +78,32 @@ compileProjectDt roots entryPkg entry printResult =
 -- 库包（无 app/Main.vuna）：以 [export].modules 为入口集合做 check。
 checkLibraryDt : List Root -> String -> List String -> Result (List String)
 checkLibraryDt roots entryPkg names = dtCheckLibrary roots entryPkg names
+
+-- ---------------------------------------------------------------
+-- M22.3a：DT 输出模型（整程序单文件 main.ml + build.sh）
+--
+-- DT codegen 目前只产出整程序单文件 OCaml；逐模块 .ml/.mli 切分留 M24 的 seed 切换
+-- （见 roadmap「决策变更」）。在此之前 build --dt / build --dt --split / seed --dt
+-- 共用这一份输出形状：main.ml（main 结果打印钩子由 printResult 控制）+ build.sh。
+-- ---------------------------------------------------------------
+dtMainFile : String
+dtMainFile = "main.ml"
+
+dtBuildScriptName : String
+dtBuildScriptName = "build.sh"
+
+-- 单文件构建脚本：只依赖 ocamlopt；`cd` 到脚本所在目录，便于从仓库根直接
+-- `sh OUT/build.sh`（与 HM 的 buildScript 行为对齐）。
+dtBuildScript : String
+dtBuildScript =
+  "#!/bin/sh\n"
+    ++ "# 由 vuna 生成：DT 单文件输出（M22.3a；逐模块切分留 M24）。\n"
+    ++ "set -e\n"
+    ++ "cd \"$(dirname \"$0\")\"\n"
+    ++ "ocamlopt -w -a -I +unix unix.cmxa main.ml -o main\n"
+
+-- DT 包输出文件集（文件名 + 内容），供 build --dt --split / seed --dt 落盘。
+dtProjectFiles : List Root -> String -> String -> Bool -> Result (List (Pair String String))
+dtProjectFiles roots entryPkg entry printResult =
+  andThen (dtCompileProject roots entryPkg entry printResult)
+    (\code => Ok [Pair dtMainFile code, Pair dtBuildScriptName dtBuildScript])

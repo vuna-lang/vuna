@@ -105,10 +105,14 @@ data Term where
 
 ## 6. 擦除与 codegen
 
-**擦除判据（M18.5 起全仓唯一入口）**：`Elab.erasedBinder implicit dom = implicit || isTypeValue dom`。
-隐式 binder 恒擦除（隐式实参由精化器插入，运行时不传）；显式 binder **只有域是宇宙
-（`Type`）才擦除**，索引域（`{n : Nat}` 这类归纳族）保留运行时表示——它们可能被当递归
-参数读回来（`vlen`），安全擦除需要整程序使用分析（M22.3 只接判据入口，不做分析）。
+**擦除判据（M18.5 起全仓唯一入口）**：`Elab.erasedBinder implicit dom = implicit || isTypeValue dom`
+——M22.3 之后这条规则收敛成 `Core.rigIsErased`：`Rig0` binder 不进运行时表示、`Rig1`
+进；`Rig` 的构造/判定只存在于 `Core`，其它模块只用访问器（codegen 侧所有跳过擦除位的
+判断都走 `rigIsErased`，grep 可验证）。隐式 binder（含族参数、隐式索引 `{n : Nat}`）恒
+`Rig0`；显式 binder 只有域是宇宙（`Type`）才是 `Rig0`，显式索引 `(n : Nat)` 是 `Rig1`、
+保留运行时字段（`vlen` 可把它读回来）——两侧分别由 `test/corpus/dt/17_erase.vuna` 与
+`test/corpus/dt/38_explicit_index.vuna` 锁定。本阶段**不做**整程序使用分析：想擦除的索引
+写成隐式 binder 即可，代价是分支体读不到它。
 六处判据点 `teleOf` / `checkBinders` / `bindOnePattern` / `checkLam` / `inferArgs` /
 `bindCtorBinder` 一律走它；M24.6 第一级要把「字段数 / telescope 长度 / 绑定数」的三重
 一致性升级成类型保证。M18.5 之前 `checkLam` 无条件写 `erased = True`，导致 lambda 形参

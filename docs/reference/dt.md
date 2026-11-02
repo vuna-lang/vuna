@@ -157,24 +157,31 @@ trans a b c p q = case p of
 vuna check --dt <file.vuna | package-dir>            # 精化 + 擦除检查（不生成代码）
 vuna compile --dt <file.vuna | package-dir> out.ml   # 擦除并生成 OCaml（main : Int/String/Bool/IO a）
 vuna interp --dt file.vuna                           # 核心求值器（NbE + delta）求值 main（单文件）
+vuna build --dt [--no-compile] [DIR]                 # 包级 DT 单文件输出 → .output/{main.ml,build.sh,bin/<pkg>}
+vuna build --dt --split OUT [DIR]                    # 只产 OUT/main.ml + OUT/build.sh（不跑 ocamlopt）
+vuna seed --dt OUT [DIR]                             # 同上；必须显式 OUT，拒绝写 seed/
 ```
 
 M20 起 `--dt` **复用 Loader**：支持多文件 / `import` / `--root`，参数化 `data Foo a : Type`
 也可用；M22.1 起 `check` / `compile --dt` 接受**包目录**（可执行包同时加载入口，库包只
-`check`；不存在路径 / 坏目录 / `interp --dt <dir>` 都是清晰错误）。`build` / `seed` 仍不
-支持 `--dt`（M22.3）。HM 路径语义与产物不变。
+`check`；不存在路径 / 坏目录 / `interp --dt <dir>` 都是清晰错误）。M22.3 起
+`build --dt` / `build --dt --split` / `seed --dt` 接线：DT codegen 目前只产**整程序单文件**
+`main.ml` + `build.sh`，逐模块 `.ml`/`.mli` 切分留到 M24 的 seed 切换（见
+[roadmap.md](../roadmap.md)「决策变更」）；`seed --dt` 必须显式给 OUT 且拒绝写 `seed/`
+（HM 信任锚点）。HM 路径语义与产物不变。
 
 ## 测试夹具
 
 `test/run-tests.sh` 第 34 段三条路径（`interp --dt` / `check --dt` / `compile --dt` + `ocamlopt`）。
 
-- 正例 `test/corpus/dt/` 共 **37** 个：M13 `01_id`–`08_if`；M14 `09_nat`/`10_vec`/`11_fin`/`12_eq`；
+- 正例 `test/corpus/dt/` 共 **38** 个：M13 `01_id`–`08_if`；M14 `09_nat`/`10_vec`/`11_fin`/`12_eq`；
   M15 `13_iface`/`14_solve`/`15_goal`；M16 `16_total`/`17_erase`；M18 `18_ctx`；
   M18.5 `19_lam`；M18.6 `20_rig`/`21_level`；M19 `22_let` 起共 10 个（`22_let`–`31_deriving_ord`）；
   M20 `32_parametric_data`（`data Foo a : Type` 写法 + 构造子字段引用族参数）；M21
   `33_poly_fn_field`（函数字段被索引精化）、`34_io_do`/`35_io_main`（main : IO a 执行）、
-  `37_instance_ctor_pat`（实例方法多 clause + 构造子形参）；M20.5 `36_multi_clause`。
-  数值见各 `.out` 文件。
+  `37_instance_ctor_pat`（实例方法多 clause + 构造子形参）；M20.5 `36_multi_clause`；
+  M22.3 `38_explicit_index`（显式索引 binder `(n : Nat)` 是 Rig1、保留运行时字段，
+  `vlen` 读索引；对照 `17_erase` 的隐式索引擦除）。数值见各 `.out` 文件。
 - 正例 `test/corpus/dt_base/`（M21/M22.2，`--root ../base/lib`，**8** 个）：M21 的
   `import Base.IO` 后 `do`/`bind`/`pure`/`fmap` 可用、`Base.IO` 全部 API 的类型面、
   `import Base.Monad` + `Base.Maybe` 的 trait 投影与实例方法构造子形参；M22.2 新增

@@ -32,12 +32,18 @@
 # M21 main : IO a 执行 + 具体 bind/pure 的 do（`Dt.evalDtMain` / `CoreCodegen` 的
 #   ioResultTy / ioRunText / genDtHook）：seed 闭包 36 个模块，bytes 1304369 /
 #   lines 12324 / longlines 4576 / letrec 677 / ctorcount 2536，按实测重新标定。
-bytes 1305000
-lines 12340
+# M22.1–M22.3（DT 包入口 / 库名统一与模式矩阵 / Bool 去桩 / 泛型比较与 Ord 实例 /
+#   build --dt 与 seed --dt 入口）：编译器源码显著增长（Elab 的矩阵族覆盖、字典提升、
+#   比较特化，CoreCodegen 的 List 桥接与比较运行时，Compile/CompilerCli 的输出模型与
+#   入口），seed 闭包 36 → 37 个模块（`vuna compile --package compiler` 闭包），按实测
+#   重新标定：bytes 1424318 / lines 13426 / longlines 5009 / letrec 727 / strcat 355 /
+#   zeroarg 51 / ctorcount 2778。这是 HM 路径编译器源码的规模，不是 DT 产物口径。
+bytes 1424318
+lines 13426
 maxline 12400
-longlines 4580
-letrec 680
-strcat 330
-eqint 35
-zeroarg 40
-ctorcount 2545
+longlines 5009
+letrec 727
+strcat 355
+eqint 32
+zeroarg 51
+ctorcount 2778

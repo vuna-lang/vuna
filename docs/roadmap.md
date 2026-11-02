@@ -112,7 +112,7 @@ M15 遗留缺陷（同 trait 多实例，细节见 [history.md](history.md)）�
 | M21 | 已完成 | `main : IO a` 执行、`do` / trait 投影（Base.IO 重导出）、实例方法模式矩阵、Bool 统一表示、effectful 内建进 codegen | — |
 | M22.1 | 已完成 | 包目录 `check` / `compile --dt`（`loadProject` + 依赖序拼接）、CLI 清晰错误、`dtRootErr`/`dtDirErr` 删除 | — |
 | M22.2 | 已完成 | `str*` 的 `List` 族别名、跨模块族名（依赖序加载）、模式矩阵族覆盖 + 嵌套兜底下沉、泛型 `<`/`<=` 与内建 Ord 实例、Bool 值去桩、`Base.Sort` 结构递归化 | —（Bool 仍留 prelude 类型别名，见「决策变更」） |
-| M22.3 | 未开始 | 擦除判据接线 + 统一 codegen + `build`/`seed` 入口 + metrics | 显式索引仍保留运行时字段 |
+| M22.3 | 已完成 | rig 驱动擦除（`rigIsErased` 唯一入口，显式索引反例 `dt/38`）、`build --dt` / `build --dt --split` / `seed --dt` 入口（单文件 `main.ml` + `build.sh`）、metrics 重标定 | —（逐模块 split 推迟到 M24，见「决策变更」） |
 | M23 | 未开始 | 全仓源码与夹具迁移；签名回填 | 签名量、夹具迁移 |
 | M24 | 未开始 | seed 切换、HM 删除、`--dt` 默认化 | 前置 M22.x + M23 |
 | M24.5 | 未开始 | 等式搬运与精化器补强 | 跨形参等式不可写 |
@@ -259,38 +259,43 @@ Bool 解析，已同步单文件夹具与 `dt.md` / `limits.md`。
 
 ### M22.3：擦除判据接线与统一 codegen
 
-**目标**：擦除真正改写运行时表示，且**判据是可替换的**；DT codegen 产出 `build` /
-`build --split` / `seed` 需要的全部形状，并重标定机器无关指标。
+**目标**：擦除由 rig 判据驱动（`Rig0` 即擦），DT codegen 产出 `build` / `build --split` /
+`seed` 需要的输出形状，并重标定机器无关指标。
 
-> **本阶段的定位由 QTT 决策确定**：QTT 很可能要做，而 QTT 的擦除判据是 multiplicity 0
-> （`Rig0` 即擦），不是整程序使用分析。因此本阶段**不投入做整程序 `indexReads` 启发式**，
-> 而是把「判据 → codegen 字段形状」这条线接好，让 M18.6 引入的 rig 直接驱动擦除。
-> 若最终不做 QTT，再回来补启发式分析也不会推翻本阶段成果。
+> **定位由 QTT 决策确定**：QTT 的擦除判据是 multiplicity 0（`Rig0` 即擦），不是整程序
+> 使用分析。因此本阶段**不投入做 `indexReads` 启发式**，只把「判据 → codegen 字段形状」
+> 接好，让 M18.6 的三值 rig 直接驱动擦除。
 
-**范围**：
+**已完成（2026-11）**：
 
-- **rig 驱动擦除**：`Rig0` binder 不进运行时表示；把 M18.6 的三值 rig 一路贯到
-  `DtData` / `DtCtor` 的字段判定（现在 `dtCtorTelescope` 的 `erased` 标志）；
-- **codegen 三处对齐**：`ctorFieldTys`、`genConApp`、`alignAltBinders`；反例保护
-  （保守判定下 `vlen` 类仍必须保留字段，不得误擦）；
-- **判据接口化**：擦除判定收成单一入口（`eraseMask` 之类），使「rig 驱动」与未来的
-  「使用分析驱动」可互换，codegen 不感知来源；
-- **DT 输出模型对齐 `Split`**：逐模块 `.ml` / `.mli` + `build.sh`，`--split` 产物形状与
-  `seed/` 一致；`build --dt` / `seed --dt` 入口接线（依赖 M22.1 的 CLI 包目录）。
-- **metrics 重标定**：codegen 换代后必须重设 `nix/metrics.budget`，不能沿用 HM 预算衡量
-  （DT 产物无 `.mli`、runtime 前缀不同、ctor 计数口径不同）。
+- **rig 驱动擦除**：绑定/实参是否进运行时表示只由 `Core.rigIsErased` 判定（全仓唯一
+  入口；`Rig` 的构造与判定都在 `Core`，其它模块只用访问器）。隐式 binder（含族参数、
+  隐式索引 `{n : Nat}`）是 `Rig0` → 擦除：`17_erase` 的 `Vec` 产物没有长度字段；
+  显式索引 binder（`(n : Nat)`）是 `Rig1` → 保留运行时字段，`vlen` 类定义能把它读回来
+  （新夹具 `dt/38_explicit_index`：产物是 `C_Vec_Cons of t_Nat * 'a0 * ...`，运行 1）。
+- **codegen 对齐**：`ctorFieldTexts` / `genConArgs` / `altEnvGo` / `genTerm` 统一按
+  `rigIsErased` 跳过擦除位（M18.5/M21 已接；本阶段补了显式索引反例夹具，锁定“不误擦”）。
+- **DT 输出模型**：`Compile.dtProjectFiles` 产出 `main.ml` + `build.sh`（`cd "$(dirname
+  "$0")"` + `ocamlopt -w -a -I +unix unix.cmxa main.ml -o main`）。**逐模块 `.ml/.mli`
+  切分本轮不做**（见「决策变更」），留到 M24 的 seed 切换。
+- **入口接线**：`build --dt [--no-compile] [DIR]` → `.output/main.ml`(+`build.sh`)，再
+  `ocamlopt` 到 `.output/bin/<pkg>`；`build --dt --split OUT` / `seed --dt OUT` 只产源码
+  两份文件（不跑 ocamlopt）；`seed --dt` 必须显式 OUT，且拒绝写 `seed/`（HM 信任锚点，
+  轮换在 M24 切换）；库包 / 单文件入口 / 缺失路径均为清晰错误；HM 的 `build` / `seed`
+  分支未动、零回归。
+- **metrics 重标定**：M21/M22 的编译器源码增长（Elab/CoreCodegen/DtPrelude 等）后按实测
+  重设 `nix/metrics.budget`（37 个 `.ml`，明细见该文件 M22.3 注释）。
 
-**当前阻碍**：擦除判据尚未接到 codegen——显式索引/证明仍保留运行时字段（`Vec a n` 的
-`Cons` 带 `t_Nat` 长度字段）；详见 [m16-design.md](reference/m16-design.md) §3。
-`build` / `seed` 仍不接受 `--dt`。
-
-**验收**：显式标 `Rig0` 的索引在产物中消失（`17_erase` 一类夹具）；`vlen` 不被误擦；
-全部 DT 夹具 `interp` 与 `compile`+`ocamlopt` 逐字节一致；`build --dt` / `seed --dt`
-产出可编译文件集；新预算落库；擦除判定只有一个入口（grep 可验证）。
+**验收**：`17_erase`（隐式索引消失）与 `dt/38_explicit_index`（显式索引保留、`vlen`
+可读）通过；全部 DT 夹具 `interp` 与 `compile`+`ocamlopt` 对拍一致；`build --dt`
+产出可运行 bin、`build --dt --split` / `seed --dt` 产出可编译文件集；`seed --dt seed`
+被拒绝；`run-tests.sh` 34d 段覆盖这些路径；新预算落库；擦除判定 grep 只剩
+`Core.rigIsErased`。
 
 **前置**：M21（`do` / trait 投影）、M22.1（包目录与 CLI 入口）、M22.2（库模块可精化）。
-**风险**：误擦导致运行时崩溃；保守判定可能收益有限；判据接口若设计得太窄，QTT 落地时
-仍需改动 codegen。
+**风险**：误擦导致运行时崩溃（显式索引反例已锁定）；逐模块切分推迟后，M24 的 seed
+切换仍需实现 split 输出模型。
+
 
 ### M23：全仓源码与夹具迁移
 
@@ -304,7 +309,7 @@ Bool 解析，已同步单文件夹具与 `dt.md` / `limits.md`。
   `if` / `case` 按族短名识别，`Base.Bool` 是唯一权威定义）；M23 只随 `base` 迁移同步
   注释与文档（[dt.md](reference/dt.md) / [limits.md](reference/limits.md)）。
 - 逐包迁移，顺序 `base` → `lib` → `compiler`（依赖顺序），每包独立可验证。
-- 夹具迁移：`test/corpus/` 按新路径重写 / 替换 / 删除（DT 正例 36 / 负例 28）；
+- 夹具迁移：`test/corpus/` 按新路径重写 / 替换 / 删除（DT 正例 38 / 负例 29）；
   HM 专属段按新语义重写（`traits/` 与 `fmt/` 的 record/deriving 夹具要保留语义，不删特性）。
 - `vuna interp` 语义切到「精化后核心求值」，免检调试语义正式取消。
 
@@ -524,7 +529,7 @@ fuel 消耗，需同步 `dt_elab` 基准；若第 3 项做不动，M24.6 的范�
 | `Show` / `Eq` / `Ord` 与 Bool 桩由编译器内建 | M10.5 / M19 | 库为唯一来源：`Base.{Show,Eq,Ord}` + `Base.Bool`，编译器只留语法/表示特化；Bool 去桩在 M22.2、trait 库化排 M24.7 | 消除双份定义与 5 处短名桥接 hack；与已库化的 `List` / `Monad` 对齐 |
 | M22 一号两用（roadmap=擦除/codegen；git log=泛型实例约束） | M22 | 先拆 M22.1–M22.5，再按可开工依赖重排：泛型实例→M20.5（已完成）、trait 投影并入 M21、包目录→M22.1、库名/Bool 去桩→M22.2、擦除/codegen→M22.3 | 编号顺序 = 可开工顺序；M21 自包含 `do` / trait 投影，不再依赖更晚阶段 |
 | Bool 去桩后 prelude 不再有 `Bool` 类型名 | 本文 M22.2 验收草案 | 只去 `True`/`False` **值**桩；保留 `Pair "Bool" (TType 0)` 类型别名 | 内建 trait（Show/Eq/Ord）方法签名与不含 `data Bool` 的单文件程序仍需要一个 Bool 类型名；数据定义仍以 `Base.Bool` 为唯一权威，值构造子与 `case`/`if` 全按族短名解析 |
-
+| M22.3 的 DT 输出模型要求逐模块 `.ml`/`.mli` + `build.sh`（与 `seed/` 同形） | 本文 M22.3 草案 | 本轮只做**单文件** `main.ml` + `build.sh`；逐模块切分与 `seed` 的文件集形状推迟到 **M24** 的 seed 切换 | seed 轮换发生在 M24，届时与 HM 删除一起做；单文件形状已足以验证 `build --dt` / `seed --dt` 入口、擦除与 codegen 接线；先做 split 会与 M24 的迁移一次性收益重复 |
 ## 研究储备（不排期）
 
 > 「表示层已预留」的项，M18.6 完成后可直接接入，不需要重做 Core/Codegen 骨架。

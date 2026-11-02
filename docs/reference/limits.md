@@ -27,10 +27,15 @@
   - **单文件 / 无库模式没有隐式 `Bool`**：`--dt` 单文件程序用 `True` / `False` 需自己
     `data Bool`（与 `List` 的既有约定一致）；`Bool` **类型名**仍是 prelude 类型别名（内建
     trait 签名需要），但数据定义在包模式下以 `Base.Bool` 为权威。
-  - **`build` / `seed` 不接受 `--dt`**：`check --dt` / `compile --dt` 已支持文件、`--root`
-    与包目录（M22.1）；`build`/`seed` 的入口接线归 M22.3。
-  - **显式索引仍保留运行时字段**（完整擦除需整程序使用分析，见
-    [m16-design.md](m16-design.md) §3），归 M22.3。
+  - **DT 输出尚非逐模块 `Split`**：`build --dt` / `build --dt --split` / `seed --dt` 产
+    **整程序单文件** `main.ml` + `build.sh`（可直接 ocamlopt），逐模块 `.ml`/`.mli` 切分
+    与 `seed/` 轮换留到 M24（见 [roadmap.md](../roadmap.md)「决策变更」）；`seed --dt`
+    必须显式 OUT 且拒绝写 `seed/`。
+  - **擦除由 rig 判据驱动**：`Rig0`（隐式 binder / `Type` 域）不进运行时表示，`Rig1`
+    （显式值、显式索引 `(n : Nat)`）保留字段——`17_erase` 与 `dt/38_explicit_index`
+    锁定两侧；不做整程序使用分析，因此“想擦但被读”的显式索引不会被自动擦除（用户可把
+    索引写成隐式 `{n : Nat}` 来擦除，代价是分支体读不到它）。详见
+    [m16-design.md](m16-design.md) §3。
   - **终止性只接受结构递归**：递归调用必须是形参的真子项；`sortBy le (take half xs)`
     这类非结构递归要改写成结构递归（`Base.Sort` 已改成插入排序），互递归与跨调用
     size-change 不查（可能放过死循环程序）。
