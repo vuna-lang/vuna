@@ -40,28 +40,37 @@ import Vuna.Compiler.Ast
 data RecordInfo : Type where
   RecordInfo : String -> List String -> List (Pair String Expr) -> List String -> String -> RecordInfo
 
+recordInfoName : RecordInfo -> String
 recordInfoName (RecordInfo name params fields derivings ctor) = name
 
+recordInfoParams : RecordInfo -> List String
 recordInfoParams (RecordInfo name params fields derivings ctor) = params
 
+recordInfoFields : RecordInfo -> List (Pair String Expr)
 recordInfoFields (RecordInfo name params fields derivings ctor) = fields
 
+recordInfoDerivings : RecordInfo -> List String
 recordInfoDerivings (RecordInfo name params fields derivings ctor) = derivings
 
+recordInfoCtor : RecordInfo -> String
 recordInfoCtor (RecordInfo name params fields derivings ctor) = ctor
 
+lookupRecord : String -> List RecordInfo -> Maybe RecordInfo
 lookupRecord name [] = Nothing
 lookupRecord name ((RecordInfo rname params fields derivings ctor) :: rest) =
   if rname == name then Just (RecordInfo rname params fields derivings ctor)
   else lookupRecord name rest
 
+fieldNamesOf : List (Pair t13941 t13940) -> List t13941
 fieldNamesOf [] = []
 fieldNamesOf ((Pair n t) :: rest) = n :: fieldNamesOf rest
 
+fieldIndexAt : t13956 -> List (Pair t13956 t13955) -> Int -> Maybe Int
 fieldIndexAt fname [] i = Nothing
 fieldIndexAt fname ((Pair n t) :: rest) i =
   if n == fname then Just i else fieldIndexAt fname rest (i + 1)
 
+fieldIndex : t13981 -> List (Pair t13981 t13980) -> Maybe Int
 fieldIndex fname fields = fieldIndexAt fname fields 0
 
 lookupProvided : String -> List (Pair String a) -> Maybe a
@@ -74,20 +83,26 @@ hasDuplicateFieldNames ((Pair n e) :: rest) = case lookupProvided n rest of
   Just _ => True
   Nothing => hasDuplicateFieldNames rest
 
+missingFieldMsg : Span -> String -> String
 missingFieldMsg sp fname = showSpanLoc sp ++ ": missing field " ++ fname
 
+unknownFieldMsg : Span -> String -> String
 unknownFieldMsg sp fname = showSpanLoc sp ++ ": unknown field " ++ fname
 
+duplicateFieldMsg : Span -> String
 duplicateFieldMsg sp = showSpanLoc sp ++ ": duplicate field"
 
+hasUnknownFields : List String -> List (Pair String t14039) -> Bool
 hasUnknownFields fieldNames [] = False
 hasUnknownFields fieldNames ((Pair n v) :: rest) =
   if memName n fieldNames then hasUnknownFields fieldNames rest else True
 
+firstUnknownFieldMsg : Span -> List String -> List (Pair String t14053) -> String
 firstUnknownFieldMsg sp fieldNames [] = unknownFieldMsg sp ""
 firstUnknownFieldMsg sp fieldNames ((Pair n v) :: rest) =
   if memName n fieldNames then firstUnknownFieldMsg sp fieldNames rest else unknownFieldMsg sp n
 
+checkProvidedFields : List String -> List (Pair String t14075) -> Span -> Result (List t14074)
 checkProvidedFields fieldNames [] sp = Ok []
 checkProvidedFields fieldNames ((Pair n v) :: rest) sp =
   if memName n fieldNames then checkProvidedFields fieldNames rest sp
@@ -104,19 +119,24 @@ recordsOfDecls ctorOf (d :: rest) = case recordsOfDecls ctorOf rest of
       in Pair (info :: recs) (recordDeclToData d (ctorOf dname) :: ds)
     _ => Pair recs (d :: ds)
 
+recordFieldPair : Field -> Pair String Expr
 recordFieldPair (Field fname ty sp) = Pair fname ty
 
 -- 记录的构造子名：`Mk<R>`。
 -- 记录声明降级：单构造子 DData。构造子名由 `ctor` 参数给出（见上面的策略说明）。
+recordParamVarExprs : List String -> Span -> List Expr
 recordParamVarExprs params sp = map (\p => EVar p sp) params
 
+recordRetType : String -> List String -> Span -> Expr
 recordRetType dname params sp = EApp (EVar dname sp) (recordParamVarExprs params sp) sp
 
 -- 构造子类型用一等的 `EPi` 表示（不是 `EVar "->"` 的语法编码）：这是记录降级的
 -- **输出**，交给下游检查器，不应当依赖某个检查器对箭头语法的特殊处理。
+recordArrowType : List Field -> Expr -> Span -> Expr
 recordArrowType [] ret sp = ret
 recordArrowType (f :: fs) ret sp = EPi "_" False (fieldType f) (recordArrowType fs ret sp) sp
 
+recordDeclToData : Decl -> String -> Decl
 recordDeclToData (DRecord dname params fields derivings sp) ctor =
   DData dname params (EVar "Type" sp)
     [Ctor ctor (recordArrowType fields (recordRetType dname params sp) sp) (length fields) sp]
@@ -139,6 +159,7 @@ desugarRecordDecl records d = case d of
       (\ms => Ok (DInstance iname isDefault head ms sp))
   DSig name ty sp => Ok d
 
+desugarPattern : List RecordInfo -> Pat -> Result Pat
 desugarPattern records pat = case pat of
   PWild sp => Ok (PWild sp)
   PVar n sp => Ok (PVar n sp)
@@ -153,6 +174,7 @@ desugarPattern records pat = case pat of
       else if hasUnknownFields (fieldNamesOf fdefs) fields then Err (firstUnknownFieldMsg sp (fieldNamesOf fdefs) fields)
       else andThen (desugarRecordPatternFields records fdefs fields sp) (\ps => Ok (PCon ctor ps sp))
 
+desugarRecordPatternFields : List RecordInfo -> List (Pair String Expr) -> List (Pair String Pat) -> Span -> Result (List Pat)
 desugarRecordPatternFields records [] provided sp = Ok []
 desugarRecordPatternFields records ((Pair fname fty) :: rest) provided sp = case lookupProvided fname provided of
   Nothing =>

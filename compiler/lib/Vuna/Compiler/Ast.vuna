@@ -37,6 +37,7 @@ module Vuna.Compiler.Ast
   , PWild
   , Pat
   , Source
+  , SourceFile
   , XBare
   , XModule
   , XTypeAll
@@ -131,6 +132,7 @@ data SourceFile : Type where
   Source : Maybe ModDecl -> List Import -> List Decl -> SourceFile
 
 -- 各节点的源码 span 访问器。
+patSpan : Pat -> Span
 patSpan pat = case pat of
   PVar name sp => sp
   PWild sp => sp
@@ -139,6 +141,7 @@ patSpan pat = case pat of
   PStr s sp => sp
   PRecord name fields sp => sp
 
+exprSpan : Expr -> Span
 exprSpan expr = case expr of
   EVar name sp => sp
   EInt n sp => sp
@@ -155,14 +158,17 @@ exprSpan expr = case expr of
   EInstSel meth name sp => sp
   EDo stmts sp => sp
 
+doStmtSpan : DoStmt -> Span
 doStmtSpan stmt = case stmt of
   DBind pat expr sp => sp
   DExpr expr sp => sp
 
+doStmtExpr : DoStmt -> Expr
 doStmtExpr stmt = case stmt of
   DBind pat expr sp => expr
   DExpr expr sp => expr
 
+declSpan : Decl -> Span
 declSpan decl = case decl of
   DData name params kind ctors derivings sp => sp
   DSig name ty sp => sp
@@ -171,52 +177,68 @@ declSpan decl = case decl of
   DTrait name params methods sp => sp
   DInstance name isDefault head methods sp => sp
 
+ctorSpan : Ctor -> Span
 ctorSpan (Ctor name ty arity sp) = sp
 
+fieldSpan : Field -> Span
 fieldSpan (Field name ty sp) = sp
 
+fieldName : Field -> String
 fieldName (Field name ty sp) = name
 
+fieldType : Field -> Expr
 fieldType (Field name ty sp) = ty
 
 data Import : Type where
   Import : String -> Bool -> Maybe String -> Span -> Import
 
+importSpan : Import -> Span
 importSpan (Import name isQualified alias sp) = sp
 
+modDeclSpan : ModDecl -> Span
 modDeclSpan (ModDecl name explicit items sp) = sp
 
+exportItemSpan : ExportItem -> Span
 exportItemSpan item = case item of
   XBare name sp => sp
   XTypeAll name sp => sp
   XModule name sp => sp
 
+collectClauses : List Decl -> String -> List (Pair (List Pat) Expr)
 collectClauses [] name = []
 collectClauses (d :: rest) name = case d of
   DFun n pats body _ =>
     if n == name then Pair pats body :: collectClauses rest name else collectClauses rest name
   _ => collectClauses rest name
 
+clausesFor : List Decl -> String -> List (Pair (List Pat) Expr)
 clausesFor decls name = collectClauses decls name
 
+funArity : String -> List Decl -> Maybe Int
 funArity name decls = case clausesFor decls name of
   [] => Nothing
   (Pair pats body) :: _ => Just (length pats)
 
+ctorName : Ctor -> String
 ctorName (Ctor name ty arity _) = name
 
+ctorType : Ctor -> Expr
 ctorType (Ctor name ty arity _) = ty
 
+typeArity : Expr -> Int
 typeArity ty = case ty of
   EApp (EVar "->" _) ([x, rest]) _ => 1 + typeArity rest
   _ => 0
 
+ctorArityOf : Ctor -> Int
 ctorArityOf (Ctor name ty arity _) = arity
 
+lookupCtorArity : String -> List Ctor -> Maybe Int
 lookupCtorArity name ctors = case ctors of
   [] => Nothing
   c :: rest => if ctorName c == name then Just (ctorArityOf c) else lookupCtorArity name rest
 
+ctorArity : String -> List Decl -> Maybe Int
 ctorArity name decls = case decls of
   [] => Nothing
   d :: rest => case d of
@@ -227,6 +249,7 @@ ctorArity name decls = case decls of
       if name == dname then Just (length fields) else ctorArity name rest
     _ => ctorArity name rest
 
+declNames : Decl -> List String
 declNames d = case d of
   DFun name pats body _ => [name]
   DSig name ty _ => [name]
@@ -240,30 +263,37 @@ declNames d = case d of
 -- 顶层可见名字（M20：把 data / record / trait 的**类型名**也算进来）。
 -- Loader 用它判断「是不是本模块声明的名字」；DT 的类型名可以在值层位置出现
 -- （`Vec Nat n` 的 `Nat`），所以必须一并认出来。语义仍由下游检查器决定。
+topNames : List Decl -> List String
 topNames decls = concatMap declNames decls
 
+declAllNames : Decl -> List String
 declAllNames d = case d of
   DData dname params kind ctors derivings _ => dname :: map ctorName ctors
   DRecord dname params fields derivings _ => [dname]
   DTrait tname params methods _ => tname :: map firstOf methods
   _ => declNames d
 
+_declCtors : Decl -> List String
 _declCtors d = case d of
   DData dname params kind ctors derivings _ => map ctorName ctors
   DRecord dname params fields derivings _ => [dname]
   DTrait tname params methods _ => map firstOf methods
   _ => []
 
+ctorsOf : List Decl -> List String
 ctorsOf decls = concatMap _declCtors decls
 
+declTypeNames : Decl -> List String
 declTypeNames d = case d of
   DData name params kind ctors derivings _ => [name]
   DRecord name params fields derivings _ => [name]
   DTrait name params methods _ => [name]
   _ => []
 
+typeNamesOf : List Decl -> List String
 typeNamesOf decls = concatMap declTypeNames decls
 
+declDerivings : Decl -> List String
 declDerivings d = case d of
   DData name params kind ctors derivings _ => derivings
   DRecord name params fields derivings _ => derivings

@@ -38,23 +38,29 @@ currentPackageRoots = case loadPackage "." of
   Err _ => []
   Ok pkg => packageRoots pkg
 
+compileFileTyped : List Root -> String -> Bool -> Result String
 compileFileTyped roots entry printResult = compileFileTypedIn "" roots entry printResult
 
+compileFileTypedIn : String -> List Root -> String -> Bool -> Result String
 compileFileTypedIn entryPkg roots entry printResult = andThen (loadProgram roots entryPkg entry) (\decls => andThen (checkProgramInfoElab decls) (\p => case p of
   Pair globals elabDecls => generateProgramTyped elabDecls globals printResult
 )
 )
 
+compileFileTypedExec : List Root -> String -> Result String
 compileFileTypedExec roots entry = compileFileTypedExecIn "" roots entry
 
+compileFileTypedExecIn : String -> List Root -> String -> Result String
 compileFileTypedExecIn entryPkg roots entry = andThen (loadProgram roots entryPkg entry) (\decls => andThen (checkProgramInfoElab decls) (\p => case p of
   Pair globals elabDecls => generateProgramTypedExec elabDecls globals
 )
 )
 
 -- 诊断：typecheck + 穷尽性/冗余警告（非致命）。返回警告列表。
+checkFile : List Root -> String -> Result (List String)
 checkFile roots entry = checkFileIn "" roots entry
 
+checkFileIn : String -> List Root -> String -> Result (List String)
 checkFileIn entryPkg roots entry = case loadProgram roots entryPkg entry of
   Err e => Err e
   Ok decls => case checkProgramInfoElab decls of

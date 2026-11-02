@@ -23,9 +23,11 @@ runTests pkg roots =
       _ = print ("error: test directory not found: " ++ testDir ++ "\n")
     in 2
 
+testFiles : List String -> List String
 testFiles [] = []
 testFiles (name :: rest) = if endsWith ".vuna" name then name :: testFiles rest else testFiles rest
 
+runTestFiles : List Root -> String -> String -> List String -> Int -> Int -> Int
 runTestFiles roots pkgName dir [] pass fail =
   let
     _ = print ("\n" ++ strFromInt pass ++ " passed, " ++ strFromInt fail ++ " failed\n")

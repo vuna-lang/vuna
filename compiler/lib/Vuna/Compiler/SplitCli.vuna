@@ -58,6 +58,7 @@ seedSplit dir outDir = buildSplit dir outDir
 -- ---------------------------------------------------------------
 -- 包级 compile：.output/{lib,app}
 -- ---------------------------------------------------------------
+prepareProject : Package -> Bool -> Result SplitInput
 prepareProject pkg True = case loadProject (packageRoots pkg) (packageName pkg) (packageEntry pkg) of
   Err e => Err e
   Ok project => finishPrepare project
@@ -69,6 +70,7 @@ prepareProject pkg False = case packageExports pkg of
     Err e => Err e
     Ok project => finishPrepare project
 
+finishPrepare : Project -> Result SplitInput
 finishPrepare project = case resolveProject project of
   Err e => Err e
   Ok parts =>
@@ -83,6 +85,7 @@ finishPrepare project = case resolveProject project of
       Ok (Pair (Pair globals elabDecls) owners) =>
         Ok (SplitInput modules entryDecls elabDecls globals owners)
 
+writePackageFiles : String -> List SplitFile -> Result Int
 writePackageFiles outDir files =
   let
     libFiles = filter (\f => splitName f /= "Main.ml") files
@@ -91,6 +94,7 @@ writePackageFiles outDir files =
   in andThen (writeSplitFilesChanged (outDir ++ "/lib") libFiles)
     (\n => andThen (writeMainFiles (outDir ++ "/app") mainFiles) (\m => Ok (n + m)))
 
+writeMainFiles : String -> List SplitFile -> Result Int
 writeMainFiles dir [] = Ok 0
 writeMainFiles dir (f :: rest) = andThen (writeMainFiles dir rest) (\n => let
   _ = writeFile (dir ++ "/" ++ splitName f) (splitText f)
@@ -102,13 +106,16 @@ compilePackage dir outDir = case loadPackage dir of
   Err e => Err e
   Ok pkg => compilePkg outDir pkg (fileExists (packageEntry pkg))
 
+compilePkg : String -> Package -> Bool -> Result Int
 compilePkg outDir pkg hasMain =
   andThen (prepareProject pkg hasMain) (\input => compilePrepared outDir hasMain input)
 
+compilePrepared : String -> Bool -> SplitInput -> Result Int
 compilePrepared outDir hasMain (SplitInput modules entryDecls elabDecls globals owners) =
   andThen (generateFiles hasMain modules entryDecls elabDecls globals owners)
     (\files => writeCompiled outDir hasMain files)
 
+writeCompiled : String -> Bool -> List SplitFile -> Result Int
 writeCompiled outDir hasMain files =
   let
     _ = makeDir outDir
@@ -125,6 +132,7 @@ writeCompiled outDir hasMain files =
   in Ok n
   )
 
+generateFiles : Bool -> List Module -> List Decl -> List Decl -> List (Pair String Scheme) -> List (Pair String String) -> Result (List SplitFile)
 generateFiles hasMain modules entryDecls elabDecls globals owners =
   if hasMain then generateSplitProgram modules entryDecls elabDecls globals owners
   else generateSplitLibraryProgram modules entryDecls elabDecls globals owners

@@ -10,42 +10,54 @@ data PState : Type where
 
 -- vuna 源码 parser（offside layout）
 -- ---------------------------------------------------------------
+posOf : PTok -> Pos
 posOf (PTok t p) = p
 
+tokOf : PTok -> Tok
 tokOf (PTok t p) = t
 
+fileOf : PState -> String
 fileOf (PState file toks last) = file
 
 -- 从起始状态 st 到结束状态 st2 的 span：起点=当前 token，终点=最后消费的 token。
+spanOf : PState -> PState -> Span
 spanOf st st2 =
   Span (fileOf st) (posLine (peekPos st)) (posCol (peekPos st)) (posLine (lastPos st2))
     (posCol (lastPos st2))
 
+peekTok : PState -> PTok
 peekTok (PState file toks last) = case toks of
   t :: rest => t
   [] => PTok TEof (Pos 1 1)
 
+peekPos : PState -> Pos
 peekPos st = posOf (peekTok st)
 
+lastPos : PState -> Pos
 lastPos (PState file toks last) = last
 
+advance : PState -> PState
 advance (PState file toks last) = case toks of
   t :: rest => case t of
     PTok TEof p => PState file toks last
     _ => PState file rest (posOf t)
   [] => PState file toks last
 
+isEof : PState -> Bool
 isEof st = case peekTok st of
   PTok TEof p => True
   _ => False
 
 -- 让下一个 token 视作「与上一 token 同一行」：do 语句块里新起一行的裸表达式
 -- 需要这一点，否则首 token 会被 canContinue 判成缩进不足。
+toksOf : PState -> List PTok
 toksOf (PState file toks last) = toks
 
+sameLineState : PState -> PState
 sameLineState st = case peekPos st of
   Pos line col => PState (fileOf st) (toksOf st) (Pos line 0)
 
+atSym : PState -> String -> Bool
 atSym st s = case peekTok st of
   PTok (TSym x) p => x == s
   _ => False
@@ -66,32 +78,39 @@ binderHeadName st = case peekTok st of
     _ => Nothing
   _ => Nothing
 
+atKw : PState -> String -> Bool
 atKw st k = case peekTok st of
   PTok (TKw x) p => x == k
   _ => False
 
+canContinue : PState -> Int -> Bool
 canContinue st blockCol = case peekPos st of
   Pos line col => case lastPos st of
     Pos lastLine lastCol => line == lastLine || col > blockCol
 
+expectSym : PState -> String -> Result (Pair Int PState)
 expectSym st s = case peekTok st of
   PTok (TSym x) p => if x == s then Ok (Pair 0 (advance st)) else Err ("expected " ++ s)
   _ => Err ("expected " ++ s)
 
+expectKw : PState -> String -> Result (Pair Int PState)
 expectKw st k = case peekTok st of
   PTok (TKw x) p => if x == k then Ok (Pair 0 (advance st)) else Err ("expected " ++ k)
   _ => Err ("expected " ++ k)
 
+expectIdent : PState -> Result (Pair String PState)
 expectIdent st = case peekTok st of
   PTok (TIdent x) p => Ok (Pair x (advance st))
   _ => Err "expected identifier"
 
+upperFirst : String -> Bool
 upperFirst s = case strUnpack s of
   c :: rest => c >= 65 && c <= 90
   [] => False
 
 -- `_` 前缀私有构造器（如 `_C`）在模式里也要能当构造器用：`_` 开头的标识符
 -- 若紧随大写字母，按构造器解析；单独的 `_` 仍是通配符，`_x` 仍是变量。
+underscoreCtorName : String -> Bool
 underscoreCtorName s = case strUnpack s of
   c :: rest => if c == 95 then case rest of
     c2 :: rest2 => c2 >= 65 && c2 <= 90
@@ -99,8 +118,10 @@ underscoreCtorName s = case strUnpack s of
   else False
   [] => False
 
+ctorPatternStart : String -> Bool
 ctorPatternStart name = upperFirst name || underscoreCtorName name
 
+startsAtom : PState -> Bool
 startsAtom st = case peekTok st of
   PTok (TIdent x) p => True
   PTok (TInt x) p => True
@@ -110,6 +131,7 @@ startsAtom st = case peekTok st of
   PTok (TSym "[") p => True
   _ => False
 
+startsPatternAtom : PState -> Bool
 startsPatternAtom st = case peekTok st of
   PTok (TIdent x) p => True
   PTok (TInt x) p => True
@@ -118,6 +140,7 @@ startsPatternAtom st = case peekTok st of
   PTok (TSym "[") p => True
   _ => False
 
+infixInfo : String -> Maybe (Pair Int Int)
 infixInfo "->" = Just (Pair 1 1)
 infixInfo "||" = Just (Pair 2 0)
 infixInfo "&&" = Just (Pair 3 0)
@@ -137,18 +160,22 @@ infixInfo ">>=" = Just (Pair 1 1)
 infixInfo ">>" = Just (Pair 1 0)
 infixInfo _ = Nothing
 
+opExpr : String -> Span -> Expr
 opExpr "::" sp = EVar "Cons" sp
 opExpr ">>=" sp = EVar "bind" sp
 opExpr op sp = EVar op sp
 
 -- `>>` 是 do 的派生：`a >> b` = `bind a (\_ -> b)`。
+mkInfixExpr : String -> Expr -> Expr -> Span -> Expr
 mkInfixExpr ">>" lhs rhs sp = EApp (EVar "bind" sp) [lhs, ELam ["vuna_seq_ignore"] rhs sp] sp
 mkInfixExpr op lhs rhs sp = EApp (opExpr op sp) [lhs, rhs] sp
 
+countArrows : Expr -> Int
 countArrows e = case e of
   EApp (EVar "->" _) ([x, rest]) _ => 1 + countArrows rest
   _ => 0
 
+terminatesExpression : PTok -> Bool
 terminatesExpression tok = case tok of
   PTok (TSym ")") p => True
   PTok (TSym "]") p => True
@@ -158,6 +185,7 @@ terminatesExpression tok = case tok of
   PTok (TKw "then") p => True
   _ => False
 
+badCaseIndent : PState -> Int -> Bool
 badCaseIndent st altCol = if isEof st then False
 else case peekPos st of
   Pos line col => if col > altCol then case terminatesExpression (peekTok st) of
@@ -165,6 +193,7 @@ else case peekPos st of
     False => True
   else False
 
+parseSource : String -> String -> Result SourceFile
 parseSource file source =
   andThen (lexSource source)
     (\toks => andThen (parseSourceFile (PState file toks (Pos 1 0))) (\p => Ok (firstOf p)))
@@ -176,6 +205,7 @@ parseExpressionSource source =
     (\toks => step (parseExpr (PState "<expr>" toks (Pos 1 0)) 0 0) (\e, st => if isEof st then Ok e else Err "expected end of expression"))
 
 -- 可选模块头（M10）：`module M (导出项, ...) where`；列表省略 = 导出全部。
+parseSourceFile : PState -> Result (Pair SourceFile PState)
 parseSourceFile st = step (parseModDecl st) (\hdr, st1 => step (parseImports st1) (\imports, st2 => if isEof st2 then Ok (Pair (Source hdr imports []) st2)
 else case peekPos st2 of
   Pos line col =>
@@ -184,19 +214,23 @@ else case peekPos st2 of
 )
 )
 
+parseModDecl : PState -> Result (Pair (Maybe ModDecl) PState)
 parseModDecl st =
   if atKw st "module" then step (expectKw st "module")
     (\_, st1 => step (expectIdent st1) (\name, st2 => if atSym st2 "(" then step (parseExportItems st2) (\items, st3 => step (expectKw st3 "where") (\_, st4 => Ok (Pair (Just (ModDecl name True items (spanOf st st4))) st4))) else step (expectKw st2 "where") (\_, st3 => Ok (Pair (Just (ModDecl name False [] (spanOf st st3))) st3))))
   else Ok (Pair Nothing st)
 
+parseExportItems : PState -> Result (Pair (List ExportItem) PState)
 parseExportItems st =
   step (expectSym st "(")
     (\_, st1 => if atSym st1 ")" then Ok (Pair [] (advance st1)) else parseExportItemsFrom st1)
 
+parseExportItemsFrom : PState -> Result (Pair (List ExportItem) PState)
 parseExportItemsFrom st =
   step (parseExportItem st)
     (\item, st1 => if atSym st1 "," then step (parseExportItemsFrom (advance st1)) (\rest, st2 => Ok (Pair (item :: rest) st2)) else step (expectSym st1 ")") (\_, st2 => Ok (Pair [item] st2)))
 
+parseExportItem : PState -> Result (Pair ExportItem PState)
 parseExportItem st = case peekTok st of
   PTok (TKw "module") p =>
     step (expectKw st "module")
@@ -209,19 +243,23 @@ parseExportItem st = case peekTok st of
     else Ok (Pair (XBare name (spanOf st st1)) st1)
   _ => Err "expected an export item"
 
+parseImportSpec : PState -> Result (Pair Import PState)
 parseImportSpec st =
   step (expectKw st "import")
     (\_, st1 => if atKw st1 "qualified" then step (expectKw st1 "qualified") (\_, st2 => parseImportAlias st2 True) else parseImportAlias st1 False)
 
+parseImportAlias : PState -> Bool -> Result (Pair Import PState)
 parseImportAlias st isQualified =
   step (expectIdent st)
     (\name, st1 => if atKw st1 "as" then step (expectKw st1 "as") (\_, st2 => step (expectIdent st2) (\alias, st3 => Ok (Pair (Import name isQualified (Just alias) (spanOf st st3)) st3))) else Ok (Pair (Import name isQualified Nothing (spanOf st st1)) st1))
 
+parseImports : PState -> Result (Pair (List Import) PState)
 parseImports st =
   if atKw st "import" then step (parseImportSpec st)
     (\imp, st1 => step (parseImports st1) (\rest, st2 => Ok (Pair (imp :: rest) st2)))
   else Ok (Pair [] st)
 
+parseDecls : PState -> Int -> Result (Pair (List Decl) PState)
 parseDecls st blockCol = if isEof st then Ok (Pair [] st)
 else case peekPos st of
   Pos line col =>
@@ -229,6 +267,7 @@ else case peekPos st of
       (\decl, st1 => step (parseDecls st1 blockCol) (\rest, st2 => Ok (Pair (decl :: rest) st2)))
     else Err ("expected a declaration at column " ++ strFromInt blockCol)
 
+parseDecl : PState -> Int -> Result (Pair Decl PState)
 parseDecl st blockCol = case peekTok st of
   PTok (TKw "data") p => parseData st blockCol p
   PTok (TKw "record") p => parseRecord st blockCol p
@@ -240,10 +279,12 @@ parseDecl st blockCol = case peekTok st of
     in if atSym st1 ":" then parseSignature st1 blockCol name p else parseClause st1 blockCol name p
   _ => Err "expected a top-level declaration"
 
+parseSignature : PState -> Int -> String -> Pos -> Result (Pair Decl PState)
 parseSignature st blockCol name namePos =
   step (expectSym st ":")
     (\_, st1 => step (parseExpr st1 blockCol 0) (\ty, st2 => Ok (Pair (DSig name ty (Span (fileOf st) (posLine namePos) (posCol namePos) (posLine (lastPos st2)) (posCol (lastPos st2)))) st2)))
 
+parseClause : PState -> Int -> String -> Pos -> Result (Pair Decl PState)
 parseClause st blockCol name namePos = step (parseClausePatterns st blockCol) (\pats, st1 => step (expectSym st1 "=") (\_, st2 => step (parseExpr st2 blockCol 0) (\body, st3 => step (parseWhere st3 blockCol) (\wheres, st4 => let
   body2 = case wheres of
     [] => body
@@ -256,6 +297,7 @@ in Ok
 )
 
 -- where 块：`body where\n  <bindings>`，解析后 desugar 成 ELet（绑定对 body 可见）。
+parseWhere : PState -> Int -> Result (Pair (List (Pair Pat Expr)) PState)
 parseWhere st blockCol = case peekTok st of
   PTok (TKw "where") p =>
     if posCol p > blockCol then step (Ok (Pair 0 (advance st)))
@@ -263,10 +305,12 @@ parseWhere st blockCol = case peekTok st of
     else Ok (Pair [] st)
   _ => Ok (Pair [] st)
 
+parseWhereBindings : PState -> Int -> Result (Pair (List (Pair Pat Expr)) PState)
 parseWhereBindings st whereCol = if isEof st then Ok (Pair [] st)
 else case peekPos st of
   Pos line col => if col > whereCol then parseWhereBindingsAt st col else Ok (Pair [] st)
 
+parseWhereBindingsAt : PState -> Int -> Result (Pair (List (Pair Pat Expr)) PState)
 parseWhereBindingsAt st bindCol = if isEof st then Ok (Pair [] st)
 else case peekPos st of
   Pos line col =>
@@ -275,6 +319,7 @@ else case peekPos st of
     else if col > bindCol then Err "unexpected indentation in where block" else Ok (Pair [] st)
 
 -- 单条 where 绑定：`pat = expr` 或函数子句 `name pats = expr`（desugar 成 λ）。
+parseWhereBinding : PState -> Int -> Result (Pair (Pair Pat Expr) PState)
 parseWhereBinding st bindCol = step (parsePatternSingle st bindCol) (\pat, st1 => case pat of
   PVar name _ =>
     if startsPatternAtom st1 && canContinue st1 bindCol then step (parseClausePatterns st1 bindCol)
@@ -283,35 +328,42 @@ parseWhereBinding st bindCol = step (parsePatternSingle st bindCol) (\pat, st1 =
   _ => parseWhereValue st1 pat bindCol
 )
 
+parseWhereValue : PState -> Pat -> Int -> Result (Pair (Pair Pat Expr) PState)
 parseWhereValue st pat blockCol =
   step (expectSym st "=")
     (\_, st1 => step (parseExpr st1 blockCol 0) (\value, st2 => Ok (Pair (Pair pat value) st2)))
 
 -- λ 参数名：where 函数子句的参数必须是简单变量名。
+lamNames : List Pat -> Result (List String)
 lamNames [] = Ok []
 lamNames ((PVar n _) :: rest) = case lamNames rest of
   Ok ns => Ok (n :: ns)
   Err e => Err e
 lamNames (_ :: _) = Err "where function arguments must be simple names"
 
+parseClausePatterns : PState -> Int -> Result (Pair (List Pat) PState)
 parseClausePatterns st blockCol =
   if startsPatternAtom st && canContinue st blockCol then step (parsePatternAtom st blockCol)
     (\pat, st1 => step (parseClausePatterns st1 blockCol) (\rest, st2 => Ok (Pair (pat :: rest) st2)))
   else Ok (Pair [] st)
 
+parseData : PState -> Int -> Pos -> Result (Pair Decl PState)
 parseData st blockCol kwPos =
   step (expectKw st "data")
     (\_, st1 => step (expectIdent st1) (\name, st2 => step (parseParams st2) (\params, st3 => step (expectSym st3 ":") (\_, st4 => step (parseExpr st4 blockCol 0) (\ty, st5 => step (expectKw st5 "where") (\_, st6 => step (parseCtors st6 blockCol) (\ctors, st7 => step (parseDeriving st7) (\derivings, st8 => Ok (Pair (DData name params ty ctors derivings (Span (fileOf st) (posLine kwPos) (posCol kwPos) (posLine (lastPos st8)) (posCol (lastPos st8)))) st8)))))))))
 
 -- 记录声明（M10.5）：`record Name params where` + 缩进字段 `f : Ty`，可跟 deriving。
+parseRecord : PState -> Int -> Pos -> Result (Pair Decl PState)
 parseRecord st blockCol kwPos =
   step (expectKw st "record")
     (\_, st1 => step (expectIdent st1) (\name, st2 => step (parseParams st2) (\params, st3 => step (expectKw st3 "where") (\_, st4 => step (parseFields st4 blockCol) (\fields, st5 => step (parseDeriving st5) (\derivings, st6 => Ok (Pair (DRecord name params fields derivings (Span (fileOf st) (posLine kwPos) (posCol kwPos) (posLine (lastPos st6)) (posCol (lastPos st6)))) st6)))))))
 
+parseFields : PState -> Int -> Result (Pair (List Field) PState)
 parseFields st blockCol = if isEof st then Ok (Pair [] st)
 else case peekPos st of
   Pos line col => if col > blockCol then parseFieldList st col else Ok (Pair [] st)
 
+parseFieldList : PState -> Int -> Result (Pair (List Field) PState)
 parseFieldList st fieldCol = if isEof st then Ok (Pair [] st)
 else case peekPos st of
   Pos line col =>
@@ -320,24 +372,29 @@ else case peekPos st of
     else if col > fieldCol then Err "unexpected indentation in record block" else Ok (Pair [] st)
 
 -- deriving (TraitA, TraitB)；可出现在 data/record 的构造器/字段块之后。
+parseDeriving : PState -> Result (Pair (List String) PState)
 parseDeriving st =
   if atKw st "deriving" then step (expectKw st "deriving")
     (\_, st1 => step (expectSym st1 "(") (\_, st2 => if atSym st2 ")" then Ok (Pair [] (advance st2)) else step (parseDerivingNames st2) (\names, st3 => Ok (Pair names st3))))
   else Ok (Pair [] st)
 
+parseDerivingNames : PState -> Result (Pair (List String) PState)
 parseDerivingNames st =
   step (expectIdent st)
     (\name, st1 => if atSym st1 "," then step (parseDerivingNames (advance st1)) (\rest, st2 => Ok (Pair (name :: rest) st2)) else step (expectSym st1 ")") (\_, st2 => Ok (Pair [name] st2)))
 
 -- trait 声明（M10.5）：`trait Name params where` + 缩进方法签名 `m : Ty`。
+parseTrait : PState -> Int -> Pos -> Result (Pair Decl PState)
 parseTrait st blockCol kwPos =
   step (expectKw st "trait")
     (\_, st1 => step (expectIdent st1) (\name, st2 => step (parseParams st2) (\params, st3 => step (expectKw st3 "where") (\_, st4 => step (parseMethodSigs st4 blockCol) (\methods, st5 => Ok (Pair (DTrait name params methods (Span (fileOf st) (posLine kwPos) (posCol kwPos) (posLine (lastPos st5)) (posCol (lastPos st5)))) st5))))))
 
+parseMethodSigs : PState -> Int -> Result (Pair (List (Pair String Expr)) PState)
 parseMethodSigs st blockCol = if isEof st then Ok (Pair [] st)
 else case peekPos st of
   Pos line col => if col > blockCol then parseMethodSigList st col else Ok (Pair [] st)
 
+parseMethodSigList : PState -> Int -> Result (Pair (List (Pair String Expr)) PState)
 parseMethodSigList st methodCol = if isEof st then Ok (Pair [] st)
 else case peekPos st of
   Pos line col =>
@@ -346,6 +403,7 @@ else case peekPos st of
     else if col > methodCol then Err "unexpected indentation in trait block" else Ok (Pair [] st)
 
 -- instance 声明（M10.5）：`instance Head [as name] where` + 缩进方法定义。
+parseInstance : PState -> Int -> Pos -> Result (Pair Decl PState)
 parseInstance st blockCol kwPos = step (expectKw st "instance") (\_, st1 => step (parseExpr st1 blockCol 0) (\head, st2 => step (parseInstanceName st2) (\name, st3 => step (expectKw st3 "where") (\_, st4 => step (parseInstanceBody st4 blockCol) (\methods, st5 => let
   isDefault = instanceIsDefault name
 in Ok
@@ -356,19 +414,23 @@ in Ok
 )
 )
 
+instanceIsDefault : Maybe String -> Bool
 instanceIsDefault name = case name of
   Nothing => True
   Just _ => False
 
+parseInstanceName : PState -> Result (Pair (Maybe String) PState)
 parseInstanceName st =
   if atKw st "as" then step (expectKw st "as")
     (\_, st1 => step (expectIdent st1) (\name, st2 => Ok (Pair (Just name) st2)))
   else Ok (Pair Nothing st)
 
+parseInstanceBody : PState -> Int -> Result (Pair (List Decl) PState)
 parseInstanceBody st blockCol = if isEof st then Ok (Pair [] st)
 else case peekPos st of
   Pos line col => if col > blockCol then parseInstanceDeclList st col else Ok (Pair [] st)
 
+parseInstanceDeclList : PState -> Int -> Result (Pair (List Decl) PState)
 parseInstanceDeclList st declCol = if isEof st then Ok (Pair [] st)
 else case peekPos st of
   Pos line col =>
@@ -376,6 +438,7 @@ else case peekPos st of
       (\decl, st1 => step (parseInstanceDeclList st1 declCol) (\rest, st2 => Ok (Pair (decl :: rest) st2)))
     else if col > declCol then Err "unexpected indentation in instance block" else Ok (Pair [] st)
 
+parseInstanceDecl : PState -> Int -> Result (Pair Decl PState)
 parseInstanceDecl st blockCol = case peekTok st of
   PTok (TIdent name) p =>
     let
@@ -383,15 +446,18 @@ parseInstanceDecl st blockCol = case peekTok st of
     in if atSym st1 ":" then parseSignature st1 blockCol name p else parseClause st1 blockCol name p
   _ => Err "expected an instance method"
 
+parseParams : PState -> Result (Pair (List String) PState)
 parseParams st = case peekTok st of
   PTok (TIdent name) p =>
     step (parseParams (advance st)) (\rest, st1 => Ok (Pair (name :: rest) st1))
   _ => Ok (Pair [] st)
 
+parseCtors : PState -> Int -> Result (Pair (List Ctor) PState)
 parseCtors st blockCol = if isEof st then Ok (Pair [] st)
 else case peekPos st of
   Pos line col => if col > blockCol then parseCtorList st col else Ok (Pair [] st)
 
+parseCtorList : PState -> Int -> Result (Pair (List Ctor) PState)
 parseCtorList st ctorCol = if isEof st then Ok (Pair [] st)
 else case peekPos st of
   Pos line col =>
@@ -399,11 +465,13 @@ else case peekPos st of
       (\name, st1 => step (expectSym st1 ":") (\_, st2 => step (parseExpr st2 ctorCol 0) (\ty, st3 => step (parseCtorList st3 ctorCol) (\rest, st4 => Ok (Pair (Ctor name ty (countArrows ty) (spanOf st st3) :: rest) st4)))))
     else if col > ctorCol then Err "unexpected indentation in data block" else Ok (Pair [] st)
 
+parseExpr : PState -> Int -> Int -> Result (Pair Expr PState)
 parseExpr st blockCol minPrec =
   if isEof st then Err "unexpected end of input"
   else if canContinue st blockCol then step (parseLhs st blockCol) (\lhs, st1 => parseInfix st1 blockCol minPrec lhs)
   else Err "expression is not indented enough"
 
+parseInfix : PState -> Int -> Int -> Expr -> Result (Pair Expr PState)
 parseInfix st blockCol minPrec lhs = case peekTok st of
   PTok (TSym op) p => case infixInfo op of
     Just (Pair prec assoc) => if prec >= minPrec && canContinue st blockCol then
@@ -415,6 +483,7 @@ parseInfix st blockCol minPrec lhs = case peekTok st of
     Nothing => Ok (Pair lhs st)
   _ => Ok (Pair lhs st)
 
+parseLhs : PState -> Int -> Result (Pair Expr PState)
 parseLhs st blockCol = case peekTok st of
   PTok (TSym "\\") p => parseLambda st blockCol
   PTok (TKw "let") p => parseLet st blockCol
@@ -423,6 +492,7 @@ parseLhs st blockCol = case peekTok st of
   PTok (TKw "do") p => parseDo st blockCol
   _ => parseApplication st blockCol
 
+parseApplication : PState -> Int -> Result (Pair Expr PState)
 parseApplication st blockCol = step (parseAtom st blockCol) (\first, st1 => step (parseInstanceSelector st1 blockCol first) (\first2, st2 => step (parseArgs st2 blockCol) (\args, st3 => case args of
   [] => Ok (Pair first2 st3)
   _ => Ok (Pair (EApp first2 args (spanOf st st3)) st3)
@@ -431,31 +501,37 @@ parseApplication st blockCol = step (parseAtom st blockCol) (\first, st1 => step
 )
 
 -- `method @instance`：显式命名实例选择（M10.5）。
+parseInstanceSelector : PState -> Int -> Expr -> Result (Pair Expr PState)
 parseInstanceSelector st blockCol first =
   if atSym st "@" then step (expectSym st "@")
     (\_, st1 => step (expectIdent st1) (\name, st2 => Ok (Pair (EInstSel first name (spanFromExpr first st2)) st2)))
   else Ok (Pair first st)
 
+spanFromExpr : Expr -> PState -> Span
 spanFromExpr e st2 =
   let
     sp = exprSpan e
   in Span (spanFile sp) (spanStartLine sp) (spanStartCol sp) (posLine (lastPos st2))
     (posCol (lastPos st2))
 
+parseArgs : PState -> Int -> Result (Pair (List Expr) PState)
 parseArgs st blockCol =
   if startsAtom st && canContinue st blockCol then step (parseAtom st blockCol)
     (\arg, st1 => step (parseArgs st1 blockCol) (\rest, st2 => Ok (Pair (arg :: rest) st2)))
   else Ok (Pair [] st)
 
+parseAtom : PState -> Int -> Result (Pair Expr PState)
 parseAtom st blockCol =
   step (parseAtomBase st blockCol) (\base, st1 => parseFieldSuffix st1 blockCol base)
 
 -- 字段访问后缀：`e.f` / `(e).f`；`p.x` 因 lexer 合成单 token 由 loader 拆分。
+parseFieldSuffix : PState -> Int -> Expr -> Result (Pair Expr PState)
 parseFieldSuffix st blockCol base =
   if atSym st "." then step (expectSym st ".")
     (\_, st1 => step (expectIdent st1) (\fname, st2 => parseFieldSuffix st2 blockCol (EField base fname (spanFromExpr base st2))))
   else Ok (Pair base st)
 
+parseAtomBase : PState -> Int -> Result (Pair Expr PState)
 parseAtomBase st blockCol = case peekTok st of
   PTok (TIdent name) p =>
     let
@@ -481,49 +557,60 @@ parseAtomBase st blockCol = case peekTok st of
 
 -- DT（M13）Pi binder：`(x : A) -> B` 或 `{x : A} -> B`。
 -- 进入时已在开括号处；binder 名先由 lookahead 确认，再要求 `->`。
+parsePiBinder : PState -> Int -> String -> Bool -> String -> String -> Result (Pair Expr PState)
 parsePiBinder st blockCol name implicit openSym closeSym =
   if containsDot name then Err "pi binder name must be a simple identifier"
   else step (expectSym st openSym)
     (\_, st1 => step (expectIdent st1) (\name2, st2 => step (expectSym st2 ":") (\_, st3 => step (parseExpr st3 blockCol 0) (\dom, st4 => step (expectSym st4 closeSym) (\_, st5 => step (expectSym st5 "->") (\_, st6 => step (parseExpr st6 blockCol 1) (\cod, st7 => Ok (Pair (EPi name2 implicit dom cod (spanOf st st7)) st7))))))))
 
 -- `{ f = e, ... }`：构造与更新的公共字段列表（进入时已在 `{` 之后）。
+parseRecordAssignments : PState -> Int -> Result (Pair (List (Pair String Expr)) PState)
 parseRecordAssignments st blockCol =
   if atSym st "}" then Ok (Pair [] (advance st))
   else step (parseRecordAssignList st blockCol) (\fs, st1 => Ok (Pair fs st1))
 
+parseRecordAssignList : PState -> Int -> Result (Pair (List (Pair String Expr)) PState)
 parseRecordAssignList st blockCol =
   step (expectIdent st)
     (\fname, st1 => step (expectSym st1 "=") (\_, st2 => step (parseExpr st2 blockCol 0) (\value, st3 => if atSym st3 "," then step (parseRecordAssignList (advance st3) blockCol) (\rest, st4 => Ok (Pair (Pair fname value :: rest) st4)) else step (expectSym st3 "}") (\_, st4 => Ok (Pair [Pair fname value] st4)))))
 
+parseListExpr : PState -> Int -> Result (Pair Expr PState)
 parseListExpr st blockCol =
   step (expectSym st "[")
     (\_, st1 => if atSym st1 "]" then Ok (Pair (EVar "Nil" (spanOf st (advance st1))) (advance st1)) else step (parseListExprElems st1 blockCol) (\elems, st2 => Ok (Pair (foldCons (spanOf st st2) elems) st2)))
 
+parseListExprElems : PState -> Int -> Result (Pair (List Expr) PState)
 parseListExprElems st blockCol =
   step (parseExpr st blockCol 0)
     (\e, st1 => if atSym st1 "," then step (parseListExprElems (advance st1) blockCol) (\rest, st2 => Ok (Pair (e :: rest) st2)) else if atSym st1 "]" then Ok (Pair [e] (advance st1)) else Err "expected , or ]")
 
+foldCons : Span -> List Expr -> Expr
 foldCons sp [] = EVar "Nil" sp
 foldCons sp (e :: rest) = EApp (EVar "Cons" sp) [e, foldCons sp rest] sp
 
+parseLambda : PState -> Int -> Result (Pair Expr PState)
 parseLambda st blockCol =
   step (expectSym st "\\")
     (\_, st1 => step (expectIdent st1) (\first, st2 => step (parseLambdaParams st2 [first]) (\params, st3 => step (expectSym st3 "=>") (\_, st4 => step (parseExpr st4 blockCol 0) (\body, st5 => Ok (Pair (ELam params body (spanOf st st5)) st5))))))
 
+parseLambdaParams : PState -> List String -> Result (Pair (List String) PState)
 parseLambdaParams st acc =
   if atSym st "," then step (expectIdent (advance st)) (\name, st1 => parseLambdaParams st1 (append acc [name]))
   else Ok (Pair acc st)
 
+parseLet : PState -> Int -> Result (Pair Expr PState)
 parseLet st blockCol =
   step (expectKw st "let")
     (\_, st1 => step (parseLetBindings st1 blockCol) (\binds, st2 => step (expectKw st2 "in") (\_, st3 => step (parseExpr st3 blockCol 0) (\body, st4 => Ok (Pair (ELet binds body False (spanOf st st4)) st4)))))
 
+parseLetBindings : PState -> Int -> Result (Pair (List (Pair Pat Expr)) PState)
 parseLetBindings st blockCol = if isEof st then Err "expected a let binding"
 else if atKw st "in" then Err "expected a let binding"
 else case peekPos st of
   Pos line col =>
     if col <= blockCol then Err "let binding is not indented enough" else parseLetBindingsAt st col
 
+parseLetBindingsAt : PState -> Int -> Result (Pair (List (Pair Pat Expr)) PState)
 parseLetBindingsAt st declCol = if isEof st then Ok (Pair [] st)
 else if atKw st "in" then Ok (Pair [] st)
 else case peekPos st of
@@ -532,10 +619,12 @@ else case peekPos st of
       (\pat, st1 => step (expectSym st1 "=") (\_, st2 => step (parseExpr st2 declCol 0) (\value, st3 => step (parseLetBindingsAt st3 declCol) (\rest, st4 => Ok (Pair (Pair pat value :: rest) st4)))))
     else Ok (Pair [] st)
 
+parseCase : PState -> Int -> Result (Pair Expr PState)
 parseCase st blockCol =
   step (expectKw st "case")
     (\_, st1 => step (parseExpr st1 blockCol 0) (\scrut, st2 => step (expectKw st2 "of") (\_, st3 => step (parseCaseAlts st3 blockCol) (\alts, st4 => Ok (Pair (ECase scrut alts (spanOf st st4)) st4)))))
 
+parseCaseAlts : PState -> Int -> Result (Pair (List (Pair Pat Expr)) PState)
 parseCaseAlts st blockCol = if isEof st then Err "case expression needs an alternative"
 else case peekPos st of
   Pos line col => if col <= blockCol then Err "case alternative is not indented enough"
@@ -545,6 +634,7 @@ else case peekPos st of
     _ => Ok (Pair alts st2)
   )
 
+parseAltList : PState -> Int -> Result (Pair (List (Pair Pat Expr)) PState)
 parseAltList st altCol = if isEof st then Ok (Pair [] st)
 else case peekPos st of
   Pos line col =>
@@ -552,12 +642,14 @@ else case peekPos st of
       (\pat, st1 => step (expectSym st1 "=>") (\_, st2 => step (parseExpr st2 altCol 0) (\body, st3 => step (parseAltList st3 altCol) (\rest, st4 => Ok (Pair (Pair pat body :: rest) st4)))))
     else Ok (Pair [] st)
 
+parseIf : PState -> Int -> Result (Pair Expr PState)
 parseIf st blockCol =
   step (expectKw st "if")
     (\_, st1 => step (parseExpr st1 blockCol 0) (\cond, st2 => step (expectKw st2 "then") (\_, st3 => step (parseExpr st3 blockCol 0) (\yes, st4 => step (expectKw st4 "else") (\_, st5 => step (parseExpr st5 blockCol 0) (\no, st6 => Ok (Pair (EIf cond yes no (spanOf st st6)) st6)))))))
 
 -- do 块（M11）：`do` + 缩进对齐的语句，语句是 `pat <- expr` 或裸表达式；
 -- 最后一条必须是裸表达式（do 本身不引入 pure，最后表达式即块结果）。
+parseDo : PState -> Int -> Result (Pair Expr PState)
 parseDo st blockCol = step (expectKw st "do") (\_, st1 => if isEof st1 then Err "do block needs at least one statement"
 else case peekPos st1 of
   Pos line col => if col <= blockCol then Err "do block statement is not indented enough"
@@ -567,6 +659,7 @@ else case peekPos st1 of
   )
 )
 
+parseDoStmts : PState -> Int -> List DoStmt -> Result (Pair (List DoStmt) PState)
 parseDoStmts st stmtCol acc = if isEof st then Ok (Pair (reverse acc) st)
 else case peekPos st of
   Pos line col => if col < stmtCol then Ok (Pair (reverse acc) st)
@@ -579,6 +672,7 @@ else case peekPos st of
       else parseDoStmts st1 stmtCol (stmt :: acc)
   )
 
+parseDoStmt : PState -> Int -> Result (Pair DoStmt PState)
 parseDoStmt st stmtCol = case parsePatternSingle st stmtCol of
   Ok (Pair pat st1) =>
     if atSym st1 "<-" then step (expectSym st1 "<-")
@@ -586,15 +680,19 @@ parseDoStmt st stmtCol = case parsePatternSingle st stmtCol of
     else parseDoExprStmt st stmtCol
   Err _ => parseDoExprStmt st stmtCol
 
+parseDoExprStmt : PState -> Int -> Result (Pair DoStmt PState)
 parseDoExprStmt st stmtCol =
   step (parseExpr (sameLineState st) stmtCol 0) (\e, st1 => Ok (Pair (DExpr e (spanOf st st1)) st1))
 
+parsePatternSingle : PState -> Int -> Result (Pair Pat PState)
 parsePatternSingle st blockCol = parsePatternCons st blockCol
 
+parsePatternCons : PState -> Int -> Result (Pair Pat PState)
 parsePatternCons st blockCol =
   step (parsePatternHead st blockCol)
     (\lhs, st1 => if atSym st1 "::" && canContinue st1 blockCol then step (parsePatternCons (advance st1) blockCol) (\rhs, st2 => Ok (Pair (PCon "Cons" [lhs, rhs] (spanOf st st2)) st2)) else Ok (Pair lhs st1))
 
+parsePatternHead : PState -> Int -> Result (Pair Pat PState)
 parsePatternHead st blockCol = case peekTok st of
   PTok (TIdent name) p =>
     let
@@ -606,14 +704,17 @@ parsePatternHead st blockCol = case peekTok st of
     else parsePatternAtom st blockCol
   _ => parsePatternAtom st blockCol
 
+parseRecordPatternFields : PState -> Int -> Result (Pair (List (Pair String Pat)) PState)
 parseRecordPatternFields st blockCol =
   step (expectSym st "{") (\_, st1 => parseRecordPatternList st1 blockCol)
 
+parseRecordPatternList : PState -> Int -> Result (Pair (List (Pair String Pat)) PState)
 parseRecordPatternList st blockCol =
   if atSym st "}" then Ok (Pair [] (advance st))
   else step (parseRecordPatternField st blockCol)
     (\f, st1 => if atSym st1 "," then step (parseRecordPatternList (advance st1) blockCol) (\rest, st2 => Ok (Pair (f :: rest) st2)) else step (expectSym st1 "}") (\_, st2 => Ok (Pair [f] st2)))
 
+parseRecordPatternField : PState -> Int -> Result (Pair (Pair String Pat) PState)
 parseRecordPatternField st blockCol = case peekTok st of
   PTok (TIdent fname) p =>
     let
@@ -624,11 +725,13 @@ parseRecordPatternField st blockCol = case peekTok st of
       (Pair (Pair fname (PVar fname (Span (fileOf st) (posLine p) (posCol p) (posLine p) (posCol p)))) st1)
   _ => Err "expected a record field pattern"
 
+parsePatternAtoms : PState -> Int -> Result (Pair (List Pat) PState)
 parsePatternAtoms st blockCol =
   if startsPatternAtom st && canContinue st blockCol then step (parsePatternAtom st blockCol)
     (\pat, st1 => step (parsePatternAtoms st1 blockCol) (\rest, st2 => Ok (Pair (pat :: rest) st2)))
   else Ok (Pair [] st)
 
+parsePatternAtom : PState -> Int -> Result (Pair Pat PState)
 parsePatternAtom st blockCol = case peekTok st of
   PTok (TIdent "_") p => Ok (Pair (PWild (spanOf st (advance st))) (advance st))
   PTok (TIdent name) p =>
@@ -642,13 +745,16 @@ parsePatternAtom st blockCol = case peekTok st of
   PTok (TSym "[") p => parseListPattern st blockCol
   _ => Err "expected pattern"
 
+parseListPattern : PState -> Int -> Result (Pair Pat PState)
 parseListPattern st blockCol =
   step (expectSym st "[")
     (\_, st1 => if atSym st1 "]" then Ok (Pair (PCon "Nil" [] (spanOf st (advance st1))) (advance st1)) else step (parseListPatternElems st1 blockCol) (\pats, st2 => Ok (Pair (foldPCon (spanOf st st2) pats) st2)))
 
+parseListPatternElems : PState -> Int -> Result (Pair (List Pat) PState)
 parseListPatternElems st blockCol =
   step (parsePatternSingle st blockCol)
     (\pat, st1 => if atSym st1 "," then step (parseListPatternElems (advance st1) blockCol) (\rest, st2 => Ok (Pair (pat :: rest) st2)) else if atSym st1 "]" then Ok (Pair [pat] (advance st1)) else Err "expected , or ]")
 
+foldPCon : Span -> List Pat -> Pat
 foldPCon sp [] = PCon "Nil" [] sp
 foldPCon sp (p :: rest) = PCon "Cons" [p, foldPCon sp rest] sp

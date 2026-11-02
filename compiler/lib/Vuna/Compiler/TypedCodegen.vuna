@@ -16,13 +16,17 @@ import Vuna.Compiler.Split
 
 -- OCaml 标识符 / 字符串字面量转义（原 Vuna.Codegen 的共享 helper；
 -- dynamic codegen 删除后并入 typed codegen）。
+sanitizeChar : Int -> List Int
 sanitizeChar c =
   if c == 46 then [95, 100] else if c == 95 then [95, 117] else if c == 39 then [95, 112] else [c]
 
+sanitizeName : String -> String
 sanitizeName name = strPack (concatMap sanitizeChar (strUnpack name))
 
+ocamlPad3 : String -> String
 ocamlPad3 s = if strLength s == 1 then "00" ++ s else if strLength s == 2 then "0" ++ s else s
 
+ocamlEscapeChar : Int -> List Int
 ocamlEscapeChar c =
   if c == 34 then [92, 34]
   else if c == 92 then [92, 92]
@@ -31,50 +35,68 @@ ocamlEscapeChar c =
   else if c == 13 then [92, 114]
   else if c >= 32 && c <= 126 then [c] else strUnpack ("\\" ++ ocamlPad3 (strFromInt c))
 
+ocamlString : String -> String
 ocamlString s = "\"" ++ strPack (concatMap ocamlEscapeChar (strUnpack s)) ++ "\""
 
+joinWith : String -> List String -> String
 joinWith sep [] = ""
 joinWith sep ([x]) = x
 joinWith sep (x :: rest) = x ++ sep ++ joinWith sep rest
 
+lastName : String -> String
 lastName name = case splitLastDot (splitOnDot name) of
   Pair rev base => base
 
+isBoolName : String -> Bool
 isBoolName name = lastName name == "Bool"
 
+isListName : String -> Bool
 isListName name = lastName name == "List"
 
+typeNameOf : String -> String
 typeNameOf name = "t_" ++ sanitizeName name
 
+ctorNameOf : String -> String
 ctorNameOf name = "C_" ++ sanitizeName name
 
+valueName : String -> String
 valueName name = "v_" ++ sanitizeName name
 
+showNameOf : String -> String
 showNameOf name = "show_" ++ sanitizeName name
 
+paramVar : Int -> String
 paramVar i = "'p" ++ strFromInt i
 
+showParamVar : Int -> String
 showParamVar i = "s" ++ strFromInt i
 
+paramMapAt : List t22231 -> Int -> List (Pair t22231 String)
 paramMapAt [] i = []
 paramMapAt (p :: rest) i = Pair p (paramVar i) :: paramMapAt rest (i + 1)
 
+paramMap : List t22252 -> List (Pair t22252 String)
 paramMap params = paramMapAt params 0
 
+showParamMapAt : List t22257 -> Int -> List (Pair t22257 String)
 showParamMapAt [] i = []
 showParamMapAt (p :: rest) i = Pair p (showParamVar i) :: showParamMapAt rest (i + 1)
 
+showParamMap : List t22278 -> List (Pair t22278 String)
 showParamMap params = showParamMapAt params 0
 
+lookupParam : t22284 -> List (Pair t22284 t22283) -> Maybe t22283
 lookupParam name [] = Nothing
 lookupParam name ((Pair n v) :: rest) = if n == name then Just v else lookupParam name rest
 
+dataDecls : List Decl -> List Decl
 dataDecls decls = case decls of
   [] => []
   d :: rest => case d of
     DData name params kind ctors _ _ => d :: dataDecls rest
     _ => dataDecls rest
 
+nonSpecialData : List Decl -> List Decl
 nonSpecialData decls = case dataDecls decls of
   [] => []
   d :: rest => case d of
@@ -82,15 +104,18 @@ nonSpecialData decls = case dataDecls decls of
       if isBoolName name || isListName name then nonSpecialData rest else d :: nonSpecialData rest
     _ => nonSpecialData rest
 
+lookupData : List Decl -> String -> Maybe Decl
 lookupData decls name = case decls of
   [] => Nothing
   d :: rest => case d of
     DData dn ps kind cs _ _ => if dn == name then Just d else lookupData rest name
     _ => lookupData rest name
 
+mapResult : (t22342 -> Result t22341) -> List t22342 -> Result (List t22341)
 mapResult f [] = Ok []
 mapResult f (x :: rest) = andThen (f x) (\y => andThen (mapResult f rest) (\ys => Ok (y :: ys)))
 
+ocamlType : List Decl -> List (Pair String String) -> Expr -> Result String
 ocamlType decls params expr = case expr of
   EVar name _ => if name == "Int" then Ok "int"
   else if name == "String" then Ok "string"
@@ -118,32 +143,41 @@ ocamlType decls params expr = case expr of
     _ => Err "typed codegen: invalid type application"
   _ => Err "typed codegen: invalid type expression"
 
+appType : List String -> String -> String
 appType [] name = name
 appType ([x]) name = "(" ++ x ++ ") " ++ name
 appType args name = "(" ++ joinWith ", " args ++ ") " ++ name
 
+splitArrows : Expr -> List Expr
 splitArrows expr = case expr of
   EApp (EVar "->" _) ([a, b]) _ => a :: splitArrows b
   _ => []
 
+genParams : Int -> List String
 genParams n = map (\i => "a" ++ strFromInt i) (range 0 n)
 
+range : Int -> Int -> List Int
 range i n = if i >= n then [] else i :: range (i + 1) n
 
+genData : List Decl -> Decl -> Result String
 genData decls (DData name params kind ctors _ _) =
   andThen (mapResult (genCtor decls (paramMap params)) ctors)
     (\cs => Ok ("  " ++ dataPrefix params ++ typeNameOf name ++ " =\n    " ++ joinWith "\n  | " cs))
 
+dataPrefix : List String -> String
 dataPrefix params = case params of
   [] => ""
   [p] => paramVar 0 ++ " "
   _ => "(" ++ joinWith ", " (paramVars params) ++ ") "
 
+paramVarsAt : List t22587 -> Int -> List String
 paramVarsAt [] i = []
 paramVarsAt (p :: rest) i = paramVar i :: paramVarsAt rest (i + 1)
 
+paramVars : List String -> List String
 paramVars params = paramVarsAt params 0
 
+genCtor : List Decl -> List (Pair String String) -> Ctor -> Result String
 genCtor decls pmap (Ctor name ty arity _) = case splitArrows ty of
   [] => Ok (ctorNameOf name)
   [only] => andThen (ocamlType decls pmap only) (\t => Ok (ctorNameOf name ++ " of (" ++ t ++ ")"))
@@ -151,14 +185,17 @@ genCtor decls pmap (Ctor name ty arity _) = case splitArrows ty of
     andThen (mapResult (ocamlType decls pmap) fields)
       (\ts => Ok (ctorNameOf name ++ " of " ++ joinWith " * " (map (\t => "(" ++ t ++ ")") ts)))
 
+genTypeDecls : List Decl -> Result String
 genTypeDecls decls = genTypeDeclsOf decls (nonSpecialData decls)
 
+genTypeDeclsOf : List Decl -> List Decl -> Result String
 genTypeDeclsOf decls ds = case ds of
   [] => Ok ""
   _ =>
     andThen (mapResult (genData decls) ds)
       (\parts => Ok ("type " ++ joinWith "\nand " parts ++ "\n"))
 
+showForType : List Decl -> List (Pair String String) -> Expr -> Result String
 showForType decls params expr = case expr of
   EVar name _ => if name == "Int" then Ok "string_of_int"
   else if name == "String" then Ok "show_vstring"
@@ -184,6 +221,7 @@ showForType decls params expr = case expr of
     _ => Err "typed codegen: invalid show type application"
   _ => Err "typed codegen: invalid show type"
 
+showForTy : t22786 -> Ty -> Result String
 showForTy decls ty = case ty of
   TVar i => Ok "(fun _ -> \"<value>\")"
   TFun a b => Ok "(fun _ -> \"<function>\")"
@@ -201,15 +239,19 @@ showForTy decls ty = case ty of
   else andThen (mapResult (showForTy decls) args)
     (\ss => Ok ("(" ++ showNameOf name ++ " " ++ joinWith " " ss ++ ")"))
 
+fieldVars : Int -> List String
 fieldVars n = map (\i => "f" ++ strFromInt i) (range 0 n)
 
+genShowFields : List Decl -> List (Pair String String) -> List Expr -> List String -> Result (List String)
 genShowFields decls pmap [] [] = Ok []
 genShowFields decls pmap (f :: fs) (v :: vs) =
   andThen (showForType decls pmap f)
     (\s => andThen (genShowFields decls pmap fs vs) (\ss => Ok (("(" ++ s ++ ") " ++ v) :: ss)))
 
+genShowCtor : List Decl -> List (Pair String String) -> Ctor -> Result String
 genShowCtor decls pmap (Ctor name ty arity _) = genShowCtorWith decls pmap name (splitArrows ty)
 
+genShowCtorWith : List Decl -> List (Pair String String) -> String -> List Expr -> Result String
 genShowCtorWith decls pmap name fields = andThen (genShowFields decls pmap fields (fieldVars (length fields))) (\shows => case fieldVars (length fields) of
   [] => Ok ("  | " ++ ctorNameOf name ++ " -> " ++ ocamlString (lastName name))
   [v] =>
@@ -220,6 +262,7 @@ genShowCtorWith decls pmap name fields = andThen (genShowFields decls pmap field
       ("  | " ++ ctorNameOf name ++ " (" ++ joinWith ", " vars ++ ") -> show_ctor " ++ ocamlString (lastName name) ++ " [" ++ joinWith "; " shows ++ "]")
 )
 
+genShowFunc : List Decl -> Decl -> Result String
 genShowFunc decls (DData name params kind ctors _ _) =
   genShowFuncWith decls (showParamMap params) params name ctors
 
@@ -234,6 +277,7 @@ genShowBody pmap params name arms = case map pairSecond pmap of
     Ok
       (showNameOf name ++ " : " ++ showAnnotation params name ++ " = fun " ++ joinWith " " (append pvars ["v"]) ++ " -> match v with\n" ++ joinWith "\n" arms)
 
+showAnnotation : List String -> String -> String
 showAnnotation params name =
   let
     vars = paramVars params
@@ -241,36 +285,45 @@ showAnnotation params name =
     ++ ". "
     ++ joinWith " -> " (append (map (\v => "(" ++ v ++ " -> string)") vars) [appType vars (typeNameOf name), "string"])
 
+pairSecond : Pair String String -> String
 pairSecond (Pair _ v) = v
 
+showDeclFnName : Decl -> String
 showDeclFnName d = case d of
   DData name params kind ctors derivings sp => showNameOf name
   _ => ""
 
+showFnNames : List Decl -> List String
 showFnNames decls = map showDeclFnName (nonSpecialData decls)
 
 -- 只有 show 函数之间真的互相引用时才用 let rec；纯字段单类型用 let，
 -- 避免 OCaml warning 39（unused rec flag）。
+codeRefsOther : String -> String -> List String -> Bool
 codeRefsOther self code [] = False
 codeRefsOther self code (n :: rest) =
   if n == self then codeRefsOther self code rest
   else if containsName (strUnpack n) (strUnpack code) then True else codeRefsOther self code rest
 
+countName : List t23142 -> List t23142 -> Int
 countName needle [] = 0
 countName needle (c :: rest) =
   if startsWith needle (c :: rest) then 1 + countName needle (drop (length needle) (c :: rest))
   else countName needle rest
 
 -- 自身名字在生成代码里出现超过 1 次 = 自递归（第 1 次是签名/定义处）。
+selfRecursive : String -> String -> Bool
 selfRecursive name code = countName (strUnpack name) (strUnpack code) > 1
 
+partsNeedRec : List Decl -> List String -> List String -> Bool
 partsNeedRec [] [] names = False
 partsNeedRec (d :: ds) (code :: rest) names =
   if codeRefsOther (showDeclFnName d) code names then True
   else if selfRecursive (showDeclFnName d) code then True else partsNeedRec ds rest names
 
+genShowDecls : List Decl -> Result String
 genShowDecls decls = genShowDeclsOf decls (nonSpecialData decls)
 
+genShowDeclsOf : List Decl -> List Decl -> Result String
 genShowDeclsOf decls ds = case ds of
   [] => Ok ""
   _ => andThen (mapResult (genShowFunc decls) ds) (\parts => let
@@ -300,6 +353,7 @@ genPat pat = case pat of
       _ => Ok (ctorNameOf name ++ " (" ++ joinWith ", " ps ++ ")")
     )
 
+patVars : Pat -> List String
 patVars pat = case pat of
   PWild _ => []
   PVar name _ => [name]
@@ -312,6 +366,7 @@ genArgs decls env args = mapResult (genExpr decls env) args
 
 -- 应用代码的括号最小化：只给非原子实参/函数加括号。
 -- 原子包括：局部变量、字面量、零参构造器/内置/顶层函数名。
+isAtomicExpr : List Decl -> List String -> Expr -> Bool
 isAtomicExpr decls env e = case e of
   EVar name _ => if memName name env then True
   else case ctorArity name decls of
@@ -328,13 +383,16 @@ isAtomicExpr decls env e = case e of
   EStr s _ => True
   _ => False
 
+formatArg : List Decl -> List String -> Expr -> String -> String
 formatArg decls env e code = if isAtomicExpr decls env e then code else "(" ++ code ++ ")"
 
+applyArgs : List Decl -> List String -> List String -> List Expr -> String
 applyArgs decls env [] [] = ""
 applyArgs decls env (c :: cs) (e :: es) =
   " " ++ formatArg decls env e c ++ applyArgs decls env cs es
 applyArgs decls env _ _ = ""
 
+genAppAware : List Decl -> List String -> Expr -> List Expr -> String -> List String -> String
 genAppAware decls env fn args fCode argCodes =
   let
     head = if isAtomicExpr decls env fn then fCode else "(" ++ fCode ++ ")"
@@ -342,13 +400,16 @@ genAppAware decls env fn args fCode argCodes =
 
 -- ++ 链：展平、折叠相邻字符串字面量、n-ary 线性拼接。
 -- 展平同时处理右结合（parser 默认）与显式左括号两种嵌套。
+concatFlatten : Expr -> List Expr
 concatFlatten e = case e of
   EApp (EVar "++" _) ([a, b]) _ => append (concatFlatten a) (concatFlatten b)
   _ => [e]
 
 -- 折叠出的合成字面量不需要真实源码位置，使用空 span。
+noLocSpan : Span
 noLocSpan = Span "" 0 0 0 0
 
+foldStringLiterals : List Expr -> List Expr
 foldStringLiterals [] = []
 foldStringLiterals ((EStr s _) :: rest) = case foldStringLiterals rest of
   (EStr s2 _) :: rest2 => EStr (s ++ s2) noLocSpan :: rest2
@@ -356,15 +417,18 @@ foldStringLiterals ((EStr s _) :: rest) = case foldStringLiterals rest of
 foldStringLiterals (e :: rest) = e :: foldStringLiterals rest
 
 -- 零参纯值 hoist：结构化纯度分析；零参定义互引用时用 seen 防环。
+zeroArgBody : List Decl -> String -> Maybe Expr
 zeroArgBody decls name = case funArity name decls of
   Just 0 => case clausesFor decls name of
     [Pair [] body] => Just body
     _ => Nothing
   _ => Nothing
 
+allPureExpr : List Decl -> List String -> List Expr -> Bool
 allPureExpr decls seen [] = True
 allPureExpr decls seen (e :: rest) = pureExpr decls seen e && allPureExpr decls seen rest
 
+pureExpr : List Decl -> List String -> Expr -> Bool
 pureExpr decls seen e = case e of
   EInt n _ => True
   EStr s _ => True
@@ -384,34 +448,42 @@ pureExpr decls seen e = case e of
     _ => False
   _ => False
 
+isPureZeroArg : List Decl -> String -> Bool
 isPureZeroArg decls name = case zeroArgBody decls name of
   Just body => pureExpr decls [name] body
   Nothing => False
 
 -- 零参定义的引用：纯值已 hoist 成普通 let，直接引用；否则仍按 thunk 调用。
+zeroArgRef : List Decl -> String -> String
 zeroArgRef decls name = if isPureZeroArg decls name then valueName name else valueName name ++ " ()"
 
+concatBindingName : Int -> String
 concatBindingName i = "vuna_cat" ++ strFromInt i ++ "'"
 
+concatBindings : List Decl -> List String -> Int -> List Expr -> Result (List (Pair String String))
 concatBindings decls env i [] = Ok []
 concatBindings decls env i (e :: rest) =
   andThen (genExpr decls env e)
     (\code => andThen (concatBindings decls env (i + 1) rest) (\binds => Ok (Pair (concatBindingName i) code :: binds)))
 
+wrapConcatBindings : List (Pair String String) -> String -> String
 wrapConcatBindings [] body = body
 wrapConcatBindings ((Pair n code) :: rest) body =
   "(let " ++ n ++ " = (" ++ code ++ ") in " ++ wrapConcatBindings rest body ++ ")"
 
 -- 三段以上：先按从左到右的顺序求值到 let 绑定（保持副作用顺序），
 -- 再用 String.concat 线性拼接，避免右嵌套 ^ 的 O(n^2) 前缀复制。
+genConcatN : List Decl -> List String -> List Expr -> Result String
 genConcatN decls env pieces =
   andThen (concatBindings decls env 0 pieces)
     (\binds => Ok (wrapConcatBindings binds ("String.concat \"\" [" ++ joinWith "; " (map firstOf binds) ++ "]")))
 
+genCall : List Decl -> List String -> Expr -> List Expr -> Result String
 genCall decls env fn args =
   andThen (genExpr decls env fn)
     (\f => andThen (genArgs decls env args) (\as2 => Ok (genAppAware decls env fn args f as2)))
 
+builtinName : String -> Maybe String
 builtinName "+" = Just "bi_add"
 builtinName "+" = Just "bi_add"
 builtinName "-" = Just "bi_sub"
@@ -553,6 +625,7 @@ genAlt decls env (Pair pat body) =
     (\p => andThen (genExpr decls (append (patVars pat) env) body) (\b => Ok ("  | " ++ p ++ " -> " ++ b)))
 
 -- 生成兜底分支，报告 `文件:行:列`。
+genCatchAll : Span -> String -> String
 genCatchAll (Span f sl sc el ec) msg =
   if sl == 0 then "  | _ -> vuna_fail \"\" 0 0 (" ++ ocamlString msg ++ ")"
   else "  | _ -> vuna_fail "
@@ -565,18 +638,22 @@ genCatchAll (Span f sl sc el ec) msg =
     ++ ocamlString msg
     ++ ")"
 
+genLetBinds : List Decl -> List String -> List (Pair Pat Expr) -> Expr -> Bool -> Result String
 genLetBinds decls env binds body False = genBinds decls env binds body
 genLetBinds decls env binds body True = genRecBinds decls env binds body
 
 -- 递归 let（where 块）：`let rec name = value and ... in body`，所有绑定名互见。
+genRecBinds : List Decl -> List String -> List (Pair Pat Expr) -> Expr -> Result String
 genRecBinds decls env binds body =
   andThen (genRecDefs decls (append (recBindNames binds) env) binds)
     (\defs => andThen (genExpr decls (append (recBindNames binds) env) body) (\b => Ok ("let rec " ++ joinWith "\nand " defs ++ " in " ++ b)))
 
+recBindNames : List (Pair Pat Expr) -> List String
 recBindNames [] = []
 recBindNames ((Pair (PVar name _) _) :: rest) = name :: recBindNames rest
 recBindNames ((Pair _ _) :: _) = []
 
+genRecDefs : List Decl -> List String -> List (Pair Pat Expr) -> Result (List String)
 genRecDefs decls env [] = Ok []
 genRecDefs decls env ((Pair (PVar name _) value) :: rest) =
   andThen (genExpr decls env value)
@@ -594,24 +671,29 @@ genClause decls env (Pair pats body) =
   andThen (mapResult genPat pats)
     (\ps => andThen (genExpr decls (append (concatMap patVars pats) env) body) (\b => Ok ("  | (" ++ joinWith ", " ps ++ ") -> " ++ b)))
 
+isIrrefutable : Pat -> Bool
 isIrrefutable p = case p of
   PVar _ _ => True
   PWild _ => True
   _ => False
 
+isVarPattern : Pat -> Bool
 isVarPattern p = case p of
   PVar _ _ => True
   PWild _ => True
   _ => False
 
+allVarPatterns : List Pat -> Bool
 allVarPatterns [] = True
 allVarPatterns (p :: rest) = isVarPattern p && allVarPatterns rest
 
+patParam : Pat -> String
 patParam p = case p of
   PVar name _ => sanitizeName name
   _ => "_"
 
 -- 单子句且模式全是变量/通配时，直接生成 fun，省掉 match 与元组打包。
+funSpan : List Decl -> String -> Span
 funSpan decls name = case decls of
   [] => noLocSpan
   d :: rest => case d of
@@ -642,12 +724,15 @@ genFunction decls name = case funArity name decls of
       ("fun " ++ joinWith " " params ++ " -> match " ++ matched ++ " with\n" ++ joinWith "\n" (append arms [genCatchAll (funSpan decls name) ("no matching clause for " ++ name)]))
     )
 
+functionNames : List Decl -> List String
 functionNames decls = uniqueNames (map declFunName decls)
 
+declFunName : Decl -> String
 declFunName d = case d of
   DFun name pats body _ => name
   _ => ""
 
+uniqueNames : List String -> List String
 uniqueNames [] = []
 uniqueNames (name :: rest) =
   if name == "" then uniqueNames rest
@@ -743,30 +828,37 @@ allIn names allowed = case names of
 groupReady : List (Pair String (List String)) -> List String -> List String -> Bool
 groupReady adj group emitted = allIn (groupDeps adj group) emitted
 
+pickReady : List (Pair String (List String)) -> List (List String) -> List String -> Maybe (Pair (List String) (List (List String)))
 pickReady adj groups emitted = pickReadyAcc adj groups [] emitted
 
+pickReadyAcc : List (Pair String (List String)) -> List (List String) -> List (List String) -> List String -> Maybe (Pair (List String) (List (List String)))
 pickReadyAcc adj [] before emitted = Nothing
 pickReadyAcc adj (g :: rest) before emitted =
   if groupReady adj g emitted then Just (Pair g (append (reverse before) rest))
   else pickReadyAcc adj rest (g :: before) emitted
 
+orderGroups : List (Pair String (List String)) -> List (List String) -> Result (List (List String))
 orderGroups adj groups = orderGroupsAcc adj groups []
 
+orderGroupsAcc : List (Pair String (List String)) -> List (List String) -> List String -> Result (List (List String))
 orderGroupsAcc adj [] emitted = Ok []
 orderGroupsAcc adj remaining emitted = case pickReady adj remaining emitted of
   Nothing => Err "typed codegen: dependency cycle between groups"
   Just (Pair g rest) =>
     andThen (orderGroupsAcc adj rest (append g emitted)) (\tail => Ok (g :: tail))
 
+genGroupDef : List Decl -> String -> Result String
 genGroupDef decls name =
   andThen (genFunction decls name) (\body => Ok (valueName name ++ " = " ++ body))
 
 -- 单函数 SCC 且不引用自身时用 let；多函数 SCC（互递归）或自递归才用 let rec。
+groupNeedsRec : List Decl -> List String -> Bool
 groupNeedsRec decls group = case group of
   [] => False
   [n] => memName n (genFunctionRefs decls n)
   _ => True
 
+genGroup : List Decl -> List String -> Result String
 genGroup decls group =
   andThen (mapResult (genGroupDef decls) group)
     (\defs => Ok ((if groupNeedsRec decls group then "let rec " else "let ") ++ joinWith "\nand " defs))
@@ -799,6 +891,7 @@ unionNames : List String -> List String -> List String
 unionNames [] ys = ys
 unionNames (x :: rest) ys = if memName x ys then unionNames rest ys else x :: unionNames rest ys
 
+genTop : List Decl -> Result String
 genTop decls = genTopNames decls (functionNames decls)
 
 genTopNames : List Decl -> List String -> Result String
@@ -818,6 +911,7 @@ genTopNames decls names = case names of
         in andThen (orderGroups adj groups)
           (\ordered => andThen (mapResult (genGroup decls) ordered) (\parts => Ok (joinWith "\n\n" parts ++ "\n")))
 
+runtimePrelude : List (Pair String String)
 runtimePrelude =
   [ Pair "vuna_fail" "let vuna_fail file line col msg =\n  if line = 0 then failwith msg\n  else failwith (file ^ \":\" ^ string_of_int line ^ \":\" ^ string_of_int col ^ \": \" ^ msg)\n",
     Pair "bi_add" "let bi_add a b = a + b\n",
@@ -874,51 +968,64 @@ runtimePrelude =
     Pair "show_vlist" "let rec show_vlist (show_elem : 'a -> string) (v : 'a list) : string =\n  match v with\n  | [] -> \"Nil\"\n  | x :: xs -> \"(Cons \" ^ show_elem x ^ \" \" ^ show_vlist show_elem xs ^ \")\"\n"
   ]
 
+runtimeCodeTyped : String
 runtimeCodeTyped = "\n" ++ joinWith "" (map secondOf runtimePrelude)
 
 -- 小程序里 prelude 占比很高：按名字扫描裁剪，只保留生成体引用到的 helper。
 -- 大程序（如编译器自身）保持完整 prelude，避免扫描开销。
+startsWith : List t25786 -> List t25786 -> Bool
 startsWith [] hay = True
 startsWith (c :: cs) [] = False
 startsWith (c :: cs) (h :: hs) = if c == h then startsWith cs hs else False
 
+containsName : List Int -> List Int -> Bool
 containsName needle [] = False
 containsName needle (h :: hs) = if startsWith needle (h :: hs) then True else containsName needle hs
 
+filterRuntime : List (Pair String t25818) -> List Int -> List (Pair String t25818)
 filterRuntime [] bodyChars = []
 filterRuntime ((Pair name chunk) :: rest) bodyChars =
   if containsName (strUnpack name) bodyChars then Pair name chunk :: filterRuntime rest bodyChars
   else filterRuntime rest bodyChars
 
+chunkNameOf : Pair t25845 t25844 -> t25845
 chunkNameOf (Pair n c) = n
 
+chunkTextOf : Pair t25850 t25849 -> t25849
 chunkTextOf (Pair n c) = c
 
+chunkNamesOf : List (Pair t25855 t25854) -> List t25855
 chunkNamesOf chunks = map chunkNameOf chunks
 
+neededByChunks : List (Pair t25863 String) -> List String
 neededByChunks chunks =
   concatMap
     (\ch => filterNames (\n => containsName (strUnpack n) (strUnpack (chunkTextOf ch))) (map chunkNameOf runtimePrelude))
     chunks
 
+expandRuntime : List (Pair String String) -> List (Pair String String)
 expandRuntime included = case missingChunks included of
   [] => included
   missing => expandRuntime (append included missing)
 
+missingChunks : List (Pair String String) -> List (Pair String String)
 missingChunks included =
   filterNames2 (\n => notIn n (chunkNamesOf included) && memName n (neededByChunks included))
     (map chunkNameOf runtimePrelude) runtimePrelude
 
+filterNames2 : (String -> Bool) -> List String -> List (Pair String String) -> List (Pair String String)
 filterNames2 pred names all = case all of
   [] => []
   ch :: rest =>
     if pred (chunkNameOf ch) then ch :: filterNames2 pred names rest
     else filterNames2 pred names rest
 
+keepChunks : List String -> List (Pair String t25934) -> List (Pair String t25934)
 keepChunks names [] = []
 keepChunks names (ch :: rest) =
   if memName (chunkNameOf ch) names then ch :: keepChunks names rest else keepChunks names rest
 
+runtimeForBody : String -> String
 runtimeForBody body = if strLength body > 20000 then runtimeCodeTyped
 else
   let
@@ -929,16 +1036,21 @@ else
 -- 生成代码的轻量 pretty printer
 -- 只在字符串字面量之外插入换行/缩进，语义不变；输出确定，fixed point 可复现。
 -- ---------------------------------------------------------------
+indentSpaces : Int -> String
 indentSpaces n = joinWith "" (map (\_ => " ") (range 0 n))
 
+indentWidth : Int -> Int
 indentWidth depth = if depth > 12 then 24 else depth * 2
 
+emitStr : String -> List Int -> List Int
 emitStr str acc = append (reverse (strUnpack str)) acc
 
+trimTrailing : List Int -> List Int
 trimTrailing [] = []
 trimTrailing (c :: rest) = if c == 32 then trimTrailing rest else c :: rest
 
 -- prev 记录上一个输出的字符（0 = 行首），用来识别 in/else 关键字边界。
+formatChars : List Int -> Int -> Int -> Bool -> Bool -> Int -> List Int -> List Int
 formatChars [] col depth inStr escaped prev acc = acc
 formatChars (c :: rest) col depth inStr escaped prev acc = if inStr then if escaped then formatChars rest (col + 1) depth True False c (c :: acc)
 else if c == 92 then formatChars rest (col + 1) depth True True c (c :: acc)
@@ -969,15 +1081,19 @@ else if c == 32 && col > 100 then
     (emitStr ("\n" ++ indentSpaces width) (trimTrailing acc))
 else formatChars rest (col + 1) depth False False c (c :: acc)
 
+formatOutput : String -> String
 formatOutput s = strPack (reverse (trimTrailing (formatChars (strUnpack s) 0 0 False False 0 [])))
 
 -- 长字符串按真实换行输出（OCaml 字符串字面量允许换行），避免几 KB 的单行字面量。
+typedString : String -> String
 typedString s =
   if strLength s > 80 then "\"" ++ joinWith "" (escapeLong (strUnpack s)) ++ "\"" else ocamlString s
 
+padCode : Int -> String
 padCode c =
   if c < 10 then "00" ++ strFromInt c else if c < 100 then "0" ++ strFromInt c else strFromInt c
 
+escapeChar : Int -> String
 escapeChar c =
   if c == 34 then "\\\""
   else if c == 92 then "\\\\"
@@ -985,9 +1101,11 @@ escapeChar c =
   else if c == 9 then "\t"
   else if c < 32 then "\\" ++ padCode c else if c > 126 then "\\" ++ padCode c else strPack [c]
 
+escapeLong : List Int -> List String
 escapeLong [] = []
 escapeLong (c :: rest) = escapeChar c :: escapeLong rest
 
+typedMainSuffix : List Decl -> String -> Bool -> String
 typedMainSuffix decls showMain printResult =
   if printResult then "let () = print_endline (" ++ showMain ++ " (" ++ zeroArgRef decls "main" ++ "))\n"
   else "let () = ignore (" ++ zeroArgRef decls "main" ++ ")\n"
@@ -995,16 +1113,19 @@ typedMainSuffix decls showMain printResult =
 -- main : IO a 的两种执行方式：
 --   exec（vuna build / vuna seed）：执行动作，忽略结果（退出码由 exitIO 控制）；
 --   permissive（compile / interp / test）：执行动作并 show 结果，保持测试/调试输出。
+isIOType : Ty -> Bool
 isIOType ty = case ty of
   TCon n args => lastName n == "IO"
   _ => False
 
+ioResultTy : Ty -> Maybe Ty
 ioResultTy ty = case ty of
   TCon n args => case args of
     [a] => Just a
     _ => Nothing
   _ => Nothing
 
+ioCtorOf : List Decl -> Maybe String
 ioCtorOf decls = case decls of
   [] => Nothing
   d :: rest => case d of
@@ -1014,9 +1135,11 @@ ioCtorOf decls = case decls of
     else ioCtorOf rest
     _ => ioCtorOf rest
 
+ioRunExpr : List Decl -> String -> String
 ioRunExpr decls ctor =
   "match " ++ zeroArgRef decls "main" ++ " with " ++ ctorNameOf ctor ++ " __iof -> __iof 0"
 
+ioTypeNameOf : List Decl -> Maybe String
 ioTypeNameOf decls = case decls of
   [] => Nothing
   d :: rest => case d of
@@ -1024,16 +1147,19 @@ ioTypeNameOf decls = case decls of
       if lastName n == "IO" then Just n else ioTypeNameOf rest
     _ => ioTypeNameOf rest
 
+ioOwnerModule : List Decl -> String
 ioOwnerModule decls = case ioTypeNameOf decls of
   Nothing => ""
   Just n => case splitLastDot (splitOnDot n) of
     Pair revPrefix base => joinDots revPrefix
 
+ioExecSuffix : List Decl -> String -> String
 ioExecSuffix decls ctor = "let () = ignore (" ++ ioRunExpr decls ctor ++ ")\n"
 
 -- 分离编译时 IO 构造器在 Base.IO 模块里是抽象的，Main.ml 不能直接 match。
 -- 由代码生成器在 IO 模块的 .ml/.mli 里注入一个只存在于生成代码中的执行器；
 -- vuna 源码无法引用它（不是语言 API），因此不构成绕开 IO 的逃逸口。
+ioExecSuffixSplit : List Decl -> t26454 -> String
 ioExecSuffixSplit decls ctor =
   "let () = ignore ("
     ++ sanitizeName (ioOwnerModule decls)
@@ -1041,10 +1167,12 @@ ioExecSuffixSplit decls ctor =
     ++ zeroArgRef decls "main"
     ++ "))\n"
 
+injectIOHelperOne : String -> t26470 -> t26469 -> String -> String -> SplitFile -> SplitFile
 injectIOHelperOne target ctorN typeN helperMl helperMli f =
   if splitName f == target ++ ".ml" then SplitFile (splitName f) (splitText f ++ helperMl)
   else if splitName f == target ++ ".mli" then SplitFile (splitName f) (splitText f ++ helperMli) else f
 
+injectIOHelper : List Decl -> List SplitFile -> List SplitFile
 injectIOHelper decls files = case ioTypeNameOf decls of
   Nothing => files
   Just tyName => case ioCtorOf decls of
@@ -1058,6 +1186,7 @@ injectIOHelper decls files = case ioTypeNameOf decls of
         helperMli = "\nval __vuna_run_io : ('a) " ++ typeN ++ " -> ('a)\n"
       in map (injectIOHelperOne target ctorN typeN helperMl helperMli) files
 
+ioPermSuffix : List Decl -> String -> String -> Bool -> String
 ioPermSuffix decls ctor showResult printResult =
   if printResult then "let () = let __io_r = ("
     ++ ioRunExpr decls ctor
@@ -1066,6 +1195,7 @@ ioPermSuffix decls ctor showResult printResult =
     ++ " __io_r)\n"
   else ioExecSuffix decls ctor
 
+mainSuffix : List Decl -> List (Pair String Scheme) -> Bool -> Bool -> Result String
 mainSuffix decls globals printResult exec = case lookupScheme "main" globals of
   Nothing => Err "typed codegen: no main definition"
   Just (Scheme qs cons ty) => case ty of
@@ -1081,6 +1211,7 @@ mainSuffix decls globals printResult exec = case lookupScheme "main" globals of
     else if exec then Err "typed codegen: executable main must have type IO a (use Base.IO)"
     else andThen (showForTy decls ty) (\showMain => Ok (typedMainSuffix decls showMain printResult))
 
+generateProgramTypedMode : List Decl -> List (Pair String Scheme) -> Bool -> Bool -> Result String
 generateProgramTypedMode decls globals printResult exec = andThen (mainSuffix decls globals printResult exec) (\suffix => andThen (genTypeDecls decls) (\types => andThen (genShowDecls decls) (\shows => andThen (genTop decls) (\tops => let
   core = types ++ "\n" ++ shows ++ "\n" ++ tops
 in Ok (formatOutput (runtimeForBody (core ++ suffix) ++ "\n" ++ core ++ suffix))
@@ -1089,9 +1220,11 @@ in Ok (formatOutput (runtimeForBody (core ++ suffix) ++ "\n" ++ core ++ suffix))
 )
 )
 
+generateProgramTyped : List Decl -> List (Pair String Scheme) -> Bool -> Result String
 generateProgramTyped decls globals printResult =
   generateProgramTypedMode decls globals printResult False
 
+generateProgramTypedExec : List Decl -> List (Pair String Scheme) -> Result String
 generateProgramTypedExec decls globals = generateProgramTypedMode decls globals False True
 
 -- ---------------------------------------------------------------
@@ -1105,84 +1238,108 @@ generateProgramTypedExec decls globals = generateProgramTypedMode decls globals 
 data SplitCtx : Type where
   SplitCtx : List Module -> List Decl -> List Decl -> List (Pair String Scheme) -> List (Pair String String) -> List String -> List String -> List String -> List (Pair String String) -> List (Pair String String) -> SplitCtx
 
+ctxModules : SplitCtx -> List Module
 ctxModules (SplitCtx modules entryDecls elabDecls globals owners entryNames definedNames runtimeSafe routedFuns routedDatas) =
   modules
 
+ctxEntryDecls : SplitCtx -> List Decl
 ctxEntryDecls (SplitCtx modules entryDecls elabDecls globals owners entryNames definedNames runtimeSafe routedFuns routedDatas) =
   entryDecls
 
+ctxElabDecls : SplitCtx -> List Decl
 ctxElabDecls (SplitCtx modules entryDecls elabDecls globals owners entryNames definedNames runtimeSafe routedFuns routedDatas) =
   elabDecls
 
+ctxGlobals : SplitCtx -> List (Pair String Scheme)
 ctxGlobals (SplitCtx modules entryDecls elabDecls globals owners entryNames definedNames runtimeSafe routedFuns routedDatas) =
   globals
 
+ctxOwners : SplitCtx -> List (Pair String String)
 ctxOwners (SplitCtx modules entryDecls elabDecls globals owners entryNames definedNames runtimeSafe routedFuns routedDatas) =
   owners
 
+ctxEntryNames : SplitCtx -> List String
 ctxEntryNames (SplitCtx modules entryDecls elabDecls globals owners entryNames definedNames runtimeSafe routedFuns routedDatas) =
   entryNames
 
+ctxDefinedNames : SplitCtx -> List String
 ctxDefinedNames (SplitCtx modules entryDecls elabDecls globals owners entryNames definedNames runtimeSafe routedFuns routedDatas) =
   definedNames
 
+ctxRuntimeSafe : SplitCtx -> List String
 ctxRuntimeSafe (SplitCtx modules entryDecls elabDecls globals owners entryNames definedNames runtimeSafe routedFuns routedDatas) =
   runtimeSafe
 
+ctxRoutedFuns : SplitCtx -> List (Pair String String)
 ctxRoutedFuns (SplitCtx modules entryDecls elabDecls globals owners entryNames definedNames runtimeSafe routedFuns routedDatas) =
   routedFuns
 
+ctxRoutedDatas : SplitCtx -> List (Pair String String)
 ctxRoutedDatas (SplitCtx modules entryDecls elabDecls globals owners entryNames definedNames runtimeSafe routedFuns routedDatas) =
   routedDatas
 
+splitPrefixOf : String -> String
 splitPrefixOf name = case splitLastDot (splitOnDot name) of
   Pair rev base => joinDots rev
 
+isBuiltinTypeCon : String -> Bool
 isBuiltinTypeCon name = name == "Int" || name == "String" || name == "Bool" || name == "List"
 
+runtimeTyOk : Ty -> Bool
 runtimeTyOk ty = case ty of
   TVar i => True
   TCon name args => isBuiltinTypeCon name && allRuntimeTyOk args
   TFun a b => runtimeTyOk a && runtimeTyOk b
   TApp head args => False
 
+allRuntimeTyOk : List Ty -> Bool
 allRuntimeTyOk [] = True
 allRuntimeTyOk (t :: rest) = runtimeTyOk t && allRuntimeTyOk rest
 
+runtimeSchemeOk : Scheme -> Bool
 runtimeSchemeOk (Scheme qs cons ty) = case cons of
   [] => runtimeTyOk ty
   _ => False
 
+refsAllSafe : List String -> List String -> Bool
 refsAllSafe safe [] = True
 refsAllSafe safe (r :: rest) = memName r safe && refsAllSafe safe rest
 
+definedRefs : SplitCtx -> String -> List String
 definedRefs ctx name =
   filter (\r => memName r (ctxDefinedNames ctx)) (genFunctionRefs (ctxElabDecls ctx) name)
 
+runtimeSafeLoop : SplitCtx -> List String -> List String
 runtimeSafeLoop ctx safe =
   let
     safe2 = filter (\n => refsAllSafe safe (definedRefs ctx n)) safe
   in if length safe2 == length safe then safe else runtimeSafeLoop ctx safe2
 
+runtimeSafeOf : SplitCtx -> List String -> List String
 runtimeSafeOf ctx candidates =
   runtimeSafeLoop ctx
     (filter (\n => runtimeSchemeOk (lookupSchemeDefault (ctxGlobals ctx) n)) candidates)
 
+lookupSchemeDefault : List (Pair String Scheme) -> String -> Scheme
 lookupSchemeDefault globals name = case lookupScheme name globals of
   Nothing => Scheme [] [] (TCon "Int" [])
   Just scheme => scheme
 
+routeModuleOf : SplitCtx -> String -> String
 routeModuleOf ctx name = routeModuleIn (ctxModules ctx) name
 
+routeModuleIn : List Module -> String -> String
 routeModuleIn modules name = case modules of
   [] => "#unknown"
   m :: rest => if memName name (moduleOwnNames m) then moduleNameOf m else routeModuleIn rest name
 
+routeOf : SplitCtx -> String -> String
 routeOf ctx name = case lookupPair name (ctxOwners ctx) of
   Just owner =>
     if owner == "" then if memName name (ctxRuntimeSafe ctx) then "#runtime" else "#main" else owner
   Nothing => if memName name (ctxEntryNames ctx) then "#entry" else routeModuleOf ctx name
 
+declSplitName : Decl -> String
 declSplitName d = case d of
   DData n ps kind cs ds sp => n
   DRecord n ps fs ds sp => n
@@ -1193,11 +1350,13 @@ declSplitName d = case d of
     Just n => n
     Nothing => ""
 
+routeDataTable : SplitCtx -> List Decl -> List (Pair String String)
 routeDataTable ctx decls = concatMap (\d => case d of
   DData n ps kind cs ds sp => [Pair n (routeOf ctx n)]
   _ => []
 ) decls
 
+routeData : SplitCtx -> String -> List Decl
 routeData ctx route =
   let
     names = uniqueNames (map firstOf (filter (\p => secondOf p == route) (ctxRoutedDatas ctx)))
@@ -1206,85 +1365,107 @@ routeData ctx route =
     _ => False
   ) (ctxElabDecls ctx)
 
+routeFunTable : SplitCtx -> List Decl -> List (Pair String String)
 routeFunTable ctx decls = concatMap (\d => case d of
   DFun n ps b sp => [Pair n (routeOf ctx n)]
   _ => []
 ) decls
 
+routeFunNames : SplitCtx -> String -> List String
 routeFunNames ctx route =
   uniqueNames (map firstOf (filter (\p => secondOf p == route) (ctxRoutedFuns ctx)))
 
+checkRoutes : SplitCtx -> Result Int
 checkRoutes ctx = case filter (\d => routeOf ctx (declSplitName d) == "#unknown") (ctxElabDecls ctx) of
   [] => Ok 0
   d :: rest => Err ("split mode: cannot assign declaration " ++ declSplitName d ++ " to a module")
 
 -- ---------------------------------------------------------------- 拓扑序
+importNameOf : Import -> String
 importNameOf (Import name isQualified alias sp) = name
 
+findModuleByName : List Module -> String -> Maybe Module
 findModuleByName modules name = case modules of
   [] => Nothing
   m :: rest => if moduleNameOf m == name then Just m else findModuleByName rest name
 
+topoOrder : List Module -> Result (List Module)
 topoOrder modules = topoAll modules modules [] []
 
+topoAll : List Module -> List Module -> List String -> List Module -> Result (List Module)
 topoAll all [] visited order = Ok order
 topoAll all (m :: rest) visited order =
   andThen (topoVisit all m visited order) (\p => topoAll all rest (firstOf p) (secondOf p))
 
+topoDeps : List Module -> List Import -> List String -> List Module -> Result (Pair (List String) (List Module))
 topoDeps all [] visited order = Ok (Pair visited order)
 topoDeps all (imp :: rest) visited order = case findModuleByName all (importNameOf imp) of
   Nothing => Err ("split mode: imported module " ++ importNameOf imp ++ " is not loaded")
   Just dep =>
     andThen (topoVisit all dep visited order) (\p => topoDeps all rest (firstOf p) (secondOf p))
 
+topoVisit : List Module -> Module -> List String -> List Module -> Result (Pair (List String) (List Module))
 topoVisit all m visited order =
   if memName (moduleNameOf m) visited then Ok (Pair visited order)
   else andThen (topoDeps all (moduleAllImportsOf m) (moduleNameOf m :: visited) order)
     (\p => Ok (Pair (firstOf p) (append (secondOf p) [m])))
 
 -- ---------------------------------------------------------------- 模块划分
+moduleOwnNames : Module -> List String
 moduleOwnNames m =
   uniqueNames
     (append (topNames (moduleDeclsOf m)) (append (typeNamesOf (moduleDeclsOf m)) (ctorsOf (moduleDeclsOf m))))
 
+ocamlModName : Module -> String
 ocamlModName m = sanitizeName (moduleNameOf m)
 
 -- 整模块重导出检测：entry 相等 → X 的全部导出都在 B 的导出表里。
+entryEq : ExportEntry -> ExportEntry -> Bool
 entryEq a b =
   entryKind a == entryKind b
     && entryPublic a == entryPublic b
     && entryTarget a == entryTarget b
     && entryParent a == entryParent b
 
+entryMem : ExportEntry -> List ExportEntry -> Bool
 entryMem e [] = False
 entryMem e (x :: rest) = if entryEq e x then True else entryMem e rest
 
+entriesSubset : List ExportEntry -> List ExportEntry -> Bool
 entriesSubset [] supers = True
 entriesSubset (e :: rest) supers = entryMem e supers && entriesSubset rest supers
 
+entriesNonEmpty : List t27147 -> Bool
 entriesNonEmpty [] = False
 entriesNonEmpty (e :: rest) = True
 
+importsHave : t27152 -> List Import -> String -> Bool
 importsHave earlier imps name = case imps of
   [] => False
   imp :: rest => if importNameOf imp == name then True else importsHave earlier rest name
 
+directImportsOf : List Module -> List Import -> List Module
 directImportsOf earlier imps = filter (\m => importsHave earlier imps (moduleNameOf m)) earlier
 
+coversModule : Module -> Module -> Bool
 coversModule x y =
   entriesNonEmpty (moduleExportsOf x) && entriesSubset (moduleExportsOf x) (moduleExportsOf y)
 
+coveredBy : List Module -> Module -> Bool
 coveredBy kept x = case kept of
   [] => False
   z :: rest => if coversModule x z then True else coveredBy rest x
 
+maximalIncludes : List Module -> List Module
 maximalIncludes candidates = reverse (maximalIncludesGo candidates [])
 
+maximalIncludesGo : List Module -> List Module -> List Module
 maximalIncludesGo [] kept = kept
 maximalIncludesGo (x :: rest) kept =
   if coveredBy kept x then maximalIncludesGo rest kept
   else maximalIncludesGo rest (x :: filter (\z => not (coversModule z x)) kept)
 
+includeModulesOf : Module -> List Module -> List Module
 includeModulesOf m earlier =
   let
     exports = moduleExportsOf m
@@ -1295,13 +1476,16 @@ includeModulesOf m earlier =
         directs
   in maximalIncludes candidates
 
+coveredByInclude : ExportEntry -> List Module -> Bool
 coveredByInclude e includes = case includes of
   [] => False
   x :: rest => if entryMem e (moduleExportsOf x) then True else coveredByInclude e rest
 
+entryOwnedBy : Module -> ExportEntry -> Bool
 entryOwnedBy m e =
   splitPrefixOf (entryTarget e) == moduleNameOf m || memName (entryTarget e) (moduleOwnNames m)
 
+checkForeignExports : Module -> List Module -> Result Int
 checkForeignExports m includes =
   let
     foreign = filter (\e => not (entryOwnedBy m e)) (moduleExportsOf m)
@@ -1312,23 +1496,29 @@ checkForeignExports m includes =
         ("split mode: selective re-export of \"" ++ entryPublic e ++ "\" from module " ++ moduleNameOf m ++ " is not supported")
 
 -- ---------------------------------------------------------------- OCaml 头
+openHeader : List Module -> String
 openHeader earlier =
   "open Vuna_runtime\n" ++ joinWith "" (map (\m => "open " ++ ocamlModName m ++ "\n") earlier)
 
+includesIn : List Module -> List Module -> List Module
 includesIn earlier includes =
   filter (\m => memName (moduleNameOf m) (map moduleNameOf includes)) earlier
 
+mlIncludeText : List Module -> List Module -> String
 mlIncludeText earlier includes =
   joinWith "" (map (\m => "include " ++ ocamlModName m ++ "\n") (includesIn earlier includes))
 
+mliIncludeText : List Module -> List Module -> String
 mliIncludeText earlier includes =
   joinWith ""
     (map (\m => "include module type of struct include " ++ ocamlModName m ++ " end\n") (includesIn earlier includes))
 
 -- ---------------------------------------------------------------- 类型 / 值签名渲染
+builtinTyArgs : List t27361 -> t27360 -> Result t27360
 builtinTyArgs [] base = Ok base
 builtinTyArgs args base = Err "split mode: builtin type cannot be applied"
 
+renderTy : t27371 -> Ty -> Result String
 renderTy ctx ty = case ty of
   TVar i => Ok ("'a" ++ strFromInt i)
   TFun a b =>
@@ -1345,20 +1535,24 @@ renderTy ctx ty = case ty of
   else andThen (mapResult (renderTy ctx) args) (\ts => Ok (appType ts (typeNameOf name)))
 
 -- 类型里的自由类型变量（用于校验 globals Scheme 的 qs 是否覆盖它们）。
+tyVarsIn : Ty -> List Int
 tyVarsIn ty = case ty of
   TVar i => [i]
   TCon name args => concatMap tyVarsIn args
   TFun a b => append (tyVarsIn a) (tyVarsIn b)
   TApp head args => append (tyVarsIn head) (concatMap tyVarsIn args)
 
+memIntList : t27483 -> List t27483 -> Bool
 memIntList x xs = case xs of
   [] => False
   y :: rest => if x == y then True else memIntList x rest
 
+allVarsBound : List t27494 -> List t27494 -> Bool
 allVarsBound qs [] = True
 allVarsBound qs (v :: rest) = memIntList v qs && allVarsBound qs rest
 
 -- 返回 Nothing 表示该名字没有可导出的运行期定义（trait 方法 / 命名实例等）。
+renderValueType : SplitCtx -> String -> Result (Maybe String)
 renderValueType ctx name = case lookupScheme name (ctxGlobals ctx) of
   Nothing => Ok Nothing
   Just (Scheme qs cons ty) => case cons of
@@ -1372,19 +1566,23 @@ renderValueType ctx name = case lookupScheme name (ctxGlobals ctx) of
       Err
         ("split mode: unsupported constraint (dictionary parameter) in exported value \"" ++ name ++ "\"")
 
+showValType : List String -> String -> String
 showValType params name = case params of
   [] => typeNameOf name ++ " -> string"
   _ => showAnnotation params name
 
+findExportByTarget : String -> String -> List ExportEntry -> Maybe ExportEntry
 findExportByTarget kind target exports = case exports of
   [] => Nothing
   e :: rest =>
     if entryKind e == kind && entryTarget e == target then Just e
     else findExportByTarget kind target rest
 
+ctorExportsOf : String -> List ExportEntry -> List ExportEntry
 ctorExportsOf target exports =
   filter (\e => entryKind e == "ctor" && entryParent e == target) exports
 
+mliTypePart : SplitCtx -> List ExportEntry -> Decl -> Result String
 mliTypePart ctx exports d = case d of
   DData name params kind ctors derivings sp => case ctorExportsOf name exports of
     [] => Ok (dataPrefix params ++ typeNameOf name)
@@ -1393,44 +1591,53 @@ mliTypePart ctx exports d = case d of
       else Err ("split mode: partial constructor export of type " ++ name ++ " is not supported")
   _ => Err "split mode: invalid type declaration"
 
+genMliTypes : SplitCtx -> List ExportEntry -> List Decl -> Result String
 genMliTypes ctx exports datas = case nonSpecialData datas of
   [] => Ok ""
   ds =>
     andThen (mapResult (mliTypePart ctx exports) ds)
       (\parts => Ok ("type " ++ joinWith "\nand " parts ++ "\n"))
 
+concatMapResult : (t27683 -> Result (List t27682)) -> List t27683 -> Result (List t27682)
 concatMapResult f [] = Ok []
 concatMapResult f (x :: rest) =
   andThen (f x) (\ys => andThen (concatMapResult f rest) (\zs => Ok (append ys zs)))
 
+exportValLine : SplitCtx -> Module -> ExportEntry -> Result (List String)
 exportValLine ctx m e = if entryKind e == "val" && entryOwnedBy m e then case renderValueType ctx (entryTarget e) of
   Err err => Err err
   Ok Nothing => Ok []
   Ok (Just ty) => Ok ["val " ++ valueName (entryTarget e) ++ " : " ++ ty ++ "\n"]
 else Ok []
 
+generatedValLine : SplitCtx -> String -> Result (List String)
 generatedValLine ctx name = case renderValueType ctx name of
   Err err => Err err
   Ok Nothing => Ok []
   Ok (Just ty) => Ok ["val " ++ valueName name ++ " : " ++ ty ++ "\n"]
 
+showValLine : t27785 -> Decl -> Result (List String)
 showValLine ctx d = case d of
   DData name params kind ctors derivings sp =>
     Ok ["val " ++ showNameOf name ++ " : " ++ showValType params name ++ "\n"]
   _ => Ok []
 
+ownersOfPart : SplitCtx -> String -> List String
 ownersOfPart ctx part =
   uniqueNames (map firstOf (filter (\p => secondOf p == part) (ctxOwners ctx)))
 
+genMliVals : SplitCtx -> Module -> List Decl -> Result (List String)
 genMliVals ctx m datas =
   andThen (concatMapResult (exportValLine ctx m) (moduleExportsOf m))
     (\exported => andThen (concatMapResult (generatedValLine ctx) (ownersOfPart ctx (moduleNameOf m))) (\generated => andThen (concatMapResult (showValLine ctx) (nonSpecialData datas)) (\shows => Ok (append exported (append generated shows)))))
 
 -- ---------------------------------------------------------------- 各文件
+genModuleTops : SplitCtx -> List String -> Result String
 genModuleTops ctx names = case names of
   [] => Ok ""
   _ => genTopNames (ctxElabDecls ctx) names
 
+splitModuleMl : SplitCtx -> List Module -> Module -> Result String
 splitModuleMl ctx earlier m =
   let
     part = moduleNameOf m
@@ -1440,6 +1647,7 @@ splitModuleMl ctx earlier m =
   in andThen (checkForeignExports m includes)
     (\ok => andThen (genTypeDeclsOf (ctxElabDecls ctx) (nonSpecialData datas)) (\types => andThen (genShowDeclsOf (ctxElabDecls ctx) (nonSpecialData datas)) (\shows => andThen (genModuleTops ctx names) (\tops => Ok (openHeader earlier ++ mlIncludeText earlier includes ++ types ++ shows ++ tops)))))
 
+splitModuleMli : SplitCtx -> List Module -> Module -> Result String
 splitModuleMli ctx earlier m =
   let
     datas = routeData ctx (moduleNameOf m)
@@ -1448,19 +1656,23 @@ splitModuleMli ctx earlier m =
   in andThen (genMliTypes ctx exports datas)
     (\types => andThen (genMliVals ctx m datas) (\vals => Ok (openHeader earlier ++ mliIncludeText earlier includes ++ types ++ joinWith "" vals)))
 
+splitModuleFiles : SplitCtx -> List Module -> Result (List SplitFile)
 splitModuleFiles ctx ordered = splitModuleFilesGo ctx ordered []
 
+splitModuleFilesGo : SplitCtx -> List Module -> List Module -> Result (List SplitFile)
 splitModuleFilesGo ctx ordered earlier = case ordered of
   [] => Ok []
   m :: rest =>
     andThen (splitModuleMli ctx earlier m)
       (\mli => andThen (splitModuleMl ctx earlier m) (\ml => andThen (splitModuleFilesGo ctx rest (append earlier [m])) (\more => Ok (SplitFile (ocamlModName m ++ ".mli") mli :: SplitFile (ocamlModName m ++ ".ml") ml :: more))))
 
+splitRuntimeFile : SplitCtx -> Result String
 splitRuntimeFile ctx = case routeFunNames ctx "#runtime" of
   [] => Ok runtimeCodeTyped
   names =>
     andThen (genTopNames (ctxElabDecls ctx) names) (\tops => Ok (runtimeCodeTyped ++ "\n" ++ tops))
 
+splitMainSuffix : SplitCtx -> Result String
 splitMainSuffix ctx = case lookupScheme "main" (ctxGlobals ctx) of
   Nothing => Err "typed codegen: no main definition"
   Just (Scheme qs cons ty) => case ty of
@@ -1470,6 +1682,7 @@ splitMainSuffix ctx = case lookupScheme "main" (ctxGlobals ctx) of
       Just ctor => Ok (ioExecSuffixSplit (ctxElabDecls ctx) ctor)
     else Err "typed codegen: executable main must have type IO a (use Base.IO)"
 
+splitMainFile : SplitCtx -> List Module -> Result String
 splitMainFile ctx ordered =
   let
     entryData = routeData ctx "#entry"
@@ -1486,6 +1699,7 @@ generateSplitLibraryProgram : List Module -> List Decl -> List Decl -> List (Pai
 generateSplitLibraryProgram modules entryDecls elabDecls globals owners =
   generateSplitProgramIn False modules entryDecls elabDecls globals owners
 
+generateSplitProgramIn : Bool -> List Module -> List Decl -> List Decl -> List (Pair String Scheme) -> List (Pair String String) -> Result (List SplitFile)
 generateSplitProgramIn includeMain modules entryDecls elabDecls globals owners =
   let
     entryNames =

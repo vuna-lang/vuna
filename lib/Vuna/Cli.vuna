@@ -23,6 +23,7 @@ import Vuna.Repl
 import Vuna.Doc
 import Vuna.TestRunner
 import Vuna.Lsp
+import Vuna.SigExport
 import qualified Vuna.Lint
 
 toolUsageLines : String -> String
@@ -62,13 +63,18 @@ toolUsageLines prog =
     ++ " goal <file.vuna>                   列出 DT 洞的目标与上下文（M17）\n"
     ++ "  "
     ++ prog
+    ++ " sig-export <dir>                    导出无签名定义的 DT 签名（M23 一次性工具）\n"
+    ++ "  "
+    ++ prog
     ++ " lsp                                 启动 LSP server（JSON-RPC over stdio）\n"
 
+usageFor : String -> String
 usageFor prog = "usage:\n" ++ compilerUsageLines prog ++ toolUsageLines prog
 
 runCli : List String -> Int
 runCli args = if anyHelp args then help else runCli1 args
 
+runCli1 : List String -> Int
 runCli1 args = case args of
   [] => usageError
   arg :: rest => case arg of
@@ -86,6 +92,7 @@ runCli1 args = case args of
     "api" => apiArgs rest
     "lsp" => Vuna.Lsp.runLspTool rest
     "goal" => goalArgs rest
+    "sig-export" => sigExportArgs rest
     "help" => help
     _ => if startsWith "-" arg then runCompilerCliFor "vuna" args else unknownCommand "vuna" arg
 
@@ -93,16 +100,19 @@ anyHelp : List String -> Bool
 anyHelp [] = False
 anyHelp (arg :: rest) = if arg == "-h" || arg == "--help" then True else anyHelp rest
 
+help : Int
 help =
   let
     _ = print (usageFor "vuna")
   in 0
 
+usageError : Int
 usageError =
   let
     _ = print (usageFor "vuna")
   in 2
 
+unknownCommand : String -> String -> Int
 unknownCommand prog arg =
   let
     _ = print ("error: unknown command `" ++ arg ++ "`\n" ++ "run `" ++ prog ++ " help`\n")
@@ -111,8 +121,10 @@ unknownCommand prog arg =
 -- ---------------------------------------------------------------
 -- interp
 -- ---------------------------------------------------------------
+interpArgs : List String -> Int
 interpArgs args = interpParse False False [] args
 
+interpParse : Bool -> Bool -> List Root -> List String -> Int
 interpParse dt hasRoot roots args = case args of
   "--dt" :: rest => interpParse True hasRoot roots rest
   "--root" :: rest => rootArg roots rest (\roots2, rest2 => interpParse dt True roots2 rest2)
@@ -123,15 +135,18 @@ interpParse dt hasRoot roots args = case args of
 
 -- DT 解释器只接受单文件（M20）；包目录的 DT 入口是 check / compile（M22.1）。
 -- 先 fileExists 再 isDirectory：内建 isDirectory 对不存在的路径会抛异常。
+interpDtEmit : List String -> String -> Int
 interpDtEmit roots path =
   if fileExists path then if isDirectory path then interpDtDirErr path else interpDtFile roots path
   else interpDtFile roots path
 
+interpDtDirErr : String -> Int
 interpDtDirErr path =
   let
     _ = print ("error: interp --dt takes a single file, not a package directory: " ++ path ++ "\n")
   in 2
 
+interpDtFile : List String -> String -> Int
 interpDtFile roots path = case dtEvalFile roots path of
   Err e =>
     let
@@ -142,10 +157,12 @@ interpDtFile roots path = case dtEvalFile roots path of
       _ = print (output ++ "\n")
     in 0
 
+rootArg : List Root -> List String -> (List Root -> List String -> Int) -> Int
 rootArg roots rest k = case rest of
   dir :: rest2 => k (append roots [rawRoot dir]) rest2
   [] => usageError
 
+interpEmit : List Root -> String -> Int
 interpEmit roots path =
   let
     output = interpretFile roots path
@@ -156,11 +173,13 @@ interpEmit roots path =
 -- ---------------------------------------------------------------
 -- test（包模式）
 -- ---------------------------------------------------------------
+testArgs : List String -> Int
 testArgs args = case args of
   [] => testRun "."
   [dir] => if startsWith "-" dir then usageError else testRun dir
   _ => usageError
 
+testRun : String -> Int
 testRun dir = case loadPackage dir of
   Err e =>
     let
@@ -171,14 +190,17 @@ testRun dir = case loadPackage dir of
 -- ---------------------------------------------------------------
 -- fmt
 -- ---------------------------------------------------------------
+fmtArgs : List String -> Int
 fmtArgs args = fmtParse False [] args
 
+fmtParse : Bool -> List String -> List String -> Int
 fmtParse check paths args = case args of
   [] => fmtRun check paths
   arg :: rest => case arg of
     "--check" => fmtParse True paths rest
     _ => if startsWith "-" arg then usageError else fmtParse check (append paths [arg]) rest
 
+fmtRun : Bool -> List String -> Int
 fmtRun check [] = fmtFiles check (concatMap expandPath fmtDefaultTargets) 0
 fmtRun check paths = fmtFiles check (concatMap expandPath paths) 0
 
@@ -190,14 +212,18 @@ fmtDefaultTargets = case findManifestDir "." of
     Err e => [dir ++ "/lib", dir ++ "/app", dir ++ "/test"]
     Ok pkgs => existingTargets (concatMap packageTargets pkgs) []
 
+packageTargets : Package -> List String
 packageTargets pkg = [packageDir pkg ++ "/lib", packageDir pkg ++ "/app", packageDir pkg ++ "/test"]
 
+existingTargets : List String -> List String -> List String
 existingTargets [] acc = reverse acc
 existingTargets (path :: rest) acc =
   if pathExistsDir path then existingTargets rest (path :: acc) else existingTargets rest acc
 
+expandPath : String -> List String
 expandPath path = if pathExistsDir path then collectVunaFiles path else [path]
 
+fmtFiles : Bool -> List String -> Int -> Int
 fmtFiles check [] changed = if check && changed > 0 then
   let
     _ = print (strFromInt changed ++ " file(s) need formatting\n")
@@ -226,8 +252,10 @@ fmtFiles check (path :: rest) changed =
 -- ---------------------------------------------------------------
 -- repl
 -- ---------------------------------------------------------------
+replArgs : List String -> Int
 replArgs args = replParse [] args
 
+replParse : List Root -> List String -> Int
 replParse roots args = case args of
   "--root" :: rest => rootArg roots rest (\roots2, rest2 => replParse roots2 rest2)
   [] => runRepl (effectiveRoots roots)
@@ -236,14 +264,17 @@ replParse roots args = case args of
 -- ---------------------------------------------------------------
 -- doc
 -- ---------------------------------------------------------------
+docArgs : List String -> Int
 docArgs args = case args of
   [] => docRun "." "docs/api.md"
   [dir] => if startsWith "-" dir then usageError else docRun dir (docDefaultOut dir)
   [dir, out] => if startsWith "-" dir || startsWith "-" out then usageError else docRun dir out
   _ => usageError
 
+docDefaultOut : String -> String
 docDefaultOut dir = if dir == "." then "docs/api.md" else dir ++ "/docs/api.md"
 
+docRun : String -> String -> Int
 docRun dir out = runDoc dir out
 
 -- ---------------------------------------------------------------
@@ -251,8 +282,10 @@ docRun dir out = runDoc dir out
 -- 索引缓存在 .local/index/，每次调用自动按 mtime+size 判定新鲜度，
 -- 没有「刷新索引」命令；详见 Vuna.Index。
 -- ---------------------------------------------------------------
+mapArgs : List String -> Int
 mapArgs args = mapParse False False False Nothing args
 
+mapParse : Bool -> Bool -> Bool -> Maybe String -> List String -> Int
 mapParse modulesOnly findMode impactMode query args = case args of
   [] => case query of
     Nothing => printOverview modulesOnly
@@ -270,6 +303,7 @@ mapParse modulesOnly findMode impactMode query args = case args of
     else mapParse modulesOnly findMode impactMode (Just arg) rest
 
 -- 索引根默认为当前目录（workspace 根）。
+withIndex : (Index -> Int) -> Int
 withIndex f = case loadOrBuild "." of
   Err e =>
     let
@@ -277,6 +311,7 @@ withIndex f = case loadOrBuild "." of
     in 1
   Ok index => f index
 
+printOverview : Bool -> Int
 printOverview modulesOnly = withIndex (\index => let
   text = if modulesOnly then renderModules index else renderOverview index
 in let
@@ -284,6 +319,7 @@ in let
 in 0
 )
 
+runFind : String -> Int
 runFind query = withIndex (\index => case findSymbol index query of
   Err e =>
     let
@@ -304,6 +340,7 @@ runFind query = withIndex (\index => case findSymbol index query of
 )
 
 -- 一行：全名 + 文件:行 + 签名。
+symLineText : Sym -> String
 symLineText s =
   symFullName s
     ++ "  ("
@@ -313,6 +350,7 @@ symLineText s =
     ++ ")"
     ++ (if symSig s == "" then "" else "  " ++ symSig s)
 
+runImpact : String -> Int
 runImpact query = withIndex (\index => case impactOf index query of
   Err e =>
     let
@@ -324,10 +362,12 @@ runImpact query = withIndex (\index => case impactOf index query of
     in 0
 )
 
+apiArgs : List String -> Int
 apiArgs args = case args of
   [modName] => runApi modName
   _ => usageError
 
+runApi : String -> Int
 runApi modName = withIndex (\index => case renderApi index modName of
   Err e =>
     let
@@ -340,13 +380,24 @@ runApi modName = withIndex (\index => case renderApi index modName of
 )
 
 -- ---------------------------------------------------------------
+-- sig-export（M23：一次性签名导出工具，M24 删除）
+-- `vuna sig-export <package-dir>` 用 HM 推断结果列出无签名定义的 DT 签名。
+-- ---------------------------------------------------------------
+sigExportArgs : List String -> Int
+sigExportArgs args = case args of
+  [dir] => if startsWith "-" dir then usageError else runSigExport dir
+  _ => usageError
+
+-- ---------------------------------------------------------------
 -- goal（M17：洞目标显示）
 -- `vuna goal <file.vuna>` 列出 DT 文件里每个洞 `_` 的位置、目标类型与上下文。
 -- ---------------------------------------------------------------
+goalArgs : List String -> Int
 goalArgs args = case args of
   [file] => if startsWith "-" file then usageError else goalRun file
   _ => usageError
 
+goalRun : String -> Int
 goalRun file = case goalsOfFile file of
   Err e =>
     let
@@ -357,11 +408,13 @@ goalRun file = case goalsOfFile file of
       _ = print (goalHeader file (length infos) ++ renderGoals file infos)
     in 0
 
+goalsOfFile : String -> Result (List DtGoalInfo)
 goalsOfFile file = if fileExists file then case parseSource file (readFile file) of
   Err e => Err e
   Ok (Source _ _ decls) => goalsOfProgram decls
 else Err ("file not found: " ++ file)
 
+renderGoals : String -> List DtGoalInfo -> String
 renderGoals file [] = ""
 renderGoals file (i :: rest) =
   showSpanLoc (dtGoalInfoSpan i)
@@ -371,8 +424,10 @@ renderGoals file (i :: rest) =
     ++ renderGoalCtx (dtGoalInfoCtx i)
     ++ renderGoals file rest
 
+renderGoalCtx : List (Pair String String) -> String
 renderGoalCtx [] = ""
 renderGoalCtx (e :: rest) = case e of
   Pair n ty => "  " ++ n ++ " : " ++ ty ++ "\n" ++ renderGoalCtx rest
 
+goalHeader : String -> Int -> String
 goalHeader file n = if n == 0 then file ++ ": no holes\n" else ""

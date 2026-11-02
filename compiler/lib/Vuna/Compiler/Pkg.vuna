@@ -73,6 +73,7 @@ packageExports : Package -> Maybe (List String)
 packageExports package = manifestExports (packageManifest package)
 
 -- ---------------------------------------------------------------- 路径工具
+splitSlashChars : List Int -> List String -> List Int -> List String
 splitSlashChars chars acc seg = case chars of
   [] => reverse (strPack (reverse seg) :: acc)
   c :: rest =>
@@ -83,12 +84,14 @@ splitOnSlash : String -> List String
 splitOnSlash path = splitSlashChars (strUnpack path) [] []
 
 -- 把段列表按 lexical 规则折叠；acc 为反向累积的已处理段。
+normalizeParent : Bool -> List String -> List String -> List String
 normalizeParent absolute acc rest = case acc of
   [] => if absolute then normalizeAcc absolute rest [] else normalizeAcc absolute rest [".."]
   prev :: prevRest =>
     if prev == ".." then normalizeAcc absolute rest (".." :: acc)
     else normalizeAcc absolute rest prevRest
 
+normalizeAcc : Bool -> List String -> List String -> List String
 normalizeAcc absolute segments acc = case segments of
   [] => acc
   seg :: rest => case seg of
@@ -122,16 +125,19 @@ loadManifestAt path = if fileExists path then case parseManifest path (readFile 
     Ok validated => Ok validated
 else Err ("pkg: missing vuna.toml in " ++ normalizeDir (manifestDir path))
 
+manifestNameString : Manifest -> String
 manifestNameString manifest = case manifestName manifest of
   Nothing => ""
   Just name => name
 
 -- ---------------------------------------------------------------- 加载包
 -- 依赖链栈：每个元素是 (规范化目录, 包名)；只用于循环检测。
+memStackDir : t50924 -> List (Pair t50924 t50923) -> Bool
 memStackDir dir stack = case stack of
   [] => False
   pair :: rest => if firstOf pair == dir then True else memStackDir dir rest
 
+cyclePrefix : t50940 -> List (Pair t50940 t50939) -> Maybe (List (Pair t50940 t50939))
 cyclePrefix dir stack = case stack of
   [] => Nothing
   pair :: rest => if firstOf pair == dir then Just [pair]
@@ -139,6 +145,7 @@ cyclePrefix dir stack = case stack of
     Nothing => Nothing
     Just prefix => Just (pair :: prefix)
 
+cycleMessage : String -> Maybe String -> List (Pair String String) -> String
 cycleMessage dir depName stack = case depName of
   Nothing => "pkg: dependency cycle at " ++ dir
   Just dep => case cyclePrefix dir stack of
@@ -146,10 +153,12 @@ cycleMessage dir depName stack = case depName of
     Just prefix =>
       "pkg: dependency cycle: " ++ joinArrows (append (map secondOf (reverse prefix)) [dep])
 
+dependencyNameOk : Maybe t51003 -> t51003 -> Bool
 dependencyNameOk depName actual = case depName of
   Nothing => True
   Just expected => expected == actual
 
+mismatchMessage : Maybe String -> String -> String
 mismatchMessage depName actual = case depName of
   Nothing => "pkg: package name mismatch"
   Just expected =>
@@ -160,6 +169,7 @@ mismatchMessage depName actual = case depName of
       ++ " but found "
       ++ actual
 
+loadDependencyList : List (Pair String String) -> String -> List (Pair String String) -> Result (List Package)
 loadDependencyList stack baseDir deps = case deps of
   [] => Ok []
   (Pair depName rel) :: rest => case loadPackageWalk stack (Just depName) (joinPath baseDir rel) of
@@ -168,6 +178,7 @@ loadDependencyList stack baseDir deps = case deps of
       Err e => Err e
       Ok dependencies => Ok (dependency :: dependencies)
 
+loadPackageWalk : List (Pair String String) -> Maybe String -> String -> Result Package
 loadPackageWalk stack depName dir =
   let
     normalized = normalizeDir dir
@@ -187,6 +198,7 @@ loadPackage : String -> Result Package
 loadPackage dir = loadPackageWalk [] Nothing dir
 
 -- ---------------------------------------------------------------- workspace
+loadMembers : String -> List String -> Result (List Package)
 loadMembers baseDir members = case members of
   [] => Ok []
   rel :: rest => case loadPackage (joinPath baseDir rel) of
@@ -207,11 +219,13 @@ workspacePackages rootBaseDir =
       Ok members => Ok (rootPackage :: members)
 
 -- ---------------------------------------------------------------- 模块根
+dependencyRootOf : Package -> Root
 dependencyRootOf package =
   Root (packageDir package ++ "/lib") (packageName package) (packageExports package)
 
 -- DFS 后序：先深依赖、再直接依赖本体；按包名去重（首次出现保留）。
 -- 返回 (更新后的 seen, 根列表)。
+dependencyRoots : List String -> List Package -> Pair (List String) (List Root)
 dependencyRoots seen packages = case packages of
   [] => Pair seen []
   package :: rest => if memName (packageName package) seen then dependencyRoots seen rest
@@ -234,10 +248,12 @@ packageEntry : Package -> String
 packageEntry package = packageDir package ++ "/app/Main.vuna"
 
 -- ---------------------------------------------------------------- 查找
+findManifestUp : String -> String -> Result String
 findManifestUp start dir =
   if fileExists (dir ++ "/vuna.toml") then Ok dir
   else findManifestUpStep start dir (manifestDir dir)
 
+findManifestUpStep : String -> String -> String -> Result String
 findManifestUpStep start dir parent =
   if parent == dir then Err ("pkg: no vuna.toml found from " ++ start ++ " (searched upward)")
   else findManifestUp start parent

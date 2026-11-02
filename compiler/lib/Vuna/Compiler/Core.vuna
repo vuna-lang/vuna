@@ -185,10 +185,13 @@ data Term : Type where
 data CaseAlt : Type where
   CaseAlt : String -> List (Pair String Rig) -> Term -> CaseAlt
 
+caseAltName : CaseAlt -> String
 caseAltName (CaseAlt name binders body) = name
 
+caseAltBinders : CaseAlt -> List (Pair String Rig)
 caseAltBinders (CaseAlt name binders body) = binders
 
+caseAltBody : CaseAlt -> Term
 caseAltBody (CaseAlt name binders body) = body
 
 data Closure : Type where
@@ -217,10 +220,13 @@ data Value : Type where
 data VCaseAlt : Type where
   VCaseAlt : String -> List (Pair String Rig) -> Closure -> VCaseAlt
 
+vCaseAltName : VCaseAlt -> String
 vCaseAltName (VCaseAlt name binders clo) = name
 
+vCaseAltBinders : VCaseAlt -> List (Pair String Rig)
 vCaseAltBinders (VCaseAlt name binders clo) = binders
 
+vCaseAltClosure : VCaseAlt -> Closure
 vCaseAltClosure (VCaseAlt name binders clo) = clo
 
 defaultFuel : Int
@@ -585,6 +591,7 @@ quoteNeutral depth n = case n of
   NVar name level sp => applyTermSpine (TVar name (varIndex depth level)) (map (quote depth) sp)
   NGlobal g sp => applyTermSpine (TGlobal g) (map (quote depth) sp)
 
+varIndex : Int -> Int -> Int
 varIndex depth level = if level < depth then depth - level - 1 else 0
 
 applyTermSpine : Term -> List Term -> Term
@@ -653,11 +660,13 @@ convBoth defs sols depth a b = case a of
     _ => mismatchAt depth a b
   _ => mismatchAt depth a b
 
+etaLeft : List (Pair String Term) -> List (Pair Int Value) -> Int -> Value -> String -> Closure -> Result (List (Pair Int Value))
 etaLeft defs sols depth a name clo =
   let
     v = freshVar name depth
   in conv defs sols (depth + 1) (applyValue a v) (applyClosure clo v)
 
+etaRight : List (Pair String Term) -> List (Pair Int Value) -> Int -> String -> Closure -> Value -> Result (List (Pair Int Value))
 etaRight defs sols depth name clo b =
   let
     v = freshVar name depth
@@ -674,6 +683,7 @@ convNeutral defs sols depth n1 n2 v1 v2 = case n1 of
       if g == g2 then convSpines defs sols depth sp sp2 v1 v2 else mismatchAt depth v1 v2
     _ => mismatchAt depth v1 v2
 
+convSpines : List (Pair String Term) -> List (Pair Int Value) -> Int -> List Value -> List Value -> Value -> Value -> Result (List (Pair Int Value))
 convSpines defs sols depth [] [] v1 v2 = Ok sols
 convSpines defs sols depth (a :: xs) (b :: ys) v1 v2 =
   andThen (conv defs sols depth a b) (\sols2 => convSpines defs sols2 depth xs ys v1 v2)

@@ -40,19 +40,25 @@ import Vuna.Json
 -- ---------------------------------------------------------------
 -- 常量
 -- ---------------------------------------------------------------
+lspServerName : String
 lspServerName = "vuna-lsp"
 
+lspServerVersion : String
 lspServerVersion = "0.1.0"
 
 -- LSP 的 TextDocumentSyncKind.Full = 1
+syncKindFull : Int
 syncKindFull = 1
 
 -- DiagnosticSeverity：1 = Error、2 = Warning、3 = Information、4 = Hint
+severityError : Int
 severityError = 1
 
+severityWarning : Int
 severityWarning = 2
 
 -- JSON-RPC 2.0 错误码
+errMethodNotFound : Int
 errMethodNotFound = 0 - 32601
 
 -- ---------------------------------------------------------------
@@ -128,16 +134,22 @@ lspRange sl sc el ec = JObj [Pair "start" (lspPosition sl sc), Pair "end" (lspPo
 data Diag : Type where
   Diag : Int -> Int -> Int -> Int -> Int -> String -> Diag
 
+diagStartLine : Diag -> Int
 diagStartLine (Diag sl sc el ec sev msg) = sl
 
+diagStartCol : Diag -> Int
 diagStartCol (Diag sl sc el ec sev msg) = sc
 
+diagEndLine : Diag -> Int
 diagEndLine (Diag sl sc el ec sev msg) = el
 
+diagEndCol : Diag -> Int
 diagEndCol (Diag sl sc el ec sev msg) = ec
 
+diagSeverity : Diag -> Int
 diagSeverity (Diag sl sc el ec sev msg) = sev
 
+diagMessage : Diag -> String
 diagMessage (Diag sl sc el ec sev msg) = msg
 
 diagJson : Diag -> Json
@@ -191,10 +203,13 @@ publishDiagnostics uri version diags =
 data Doc : Type where
   Doc : String -> Int -> String -> Doc
 
+docUri : Doc -> String
 docUri (Doc uri version text) = uri
 
+docVersion : Doc -> Int
 docVersion (Doc uri version text) = version
 
+docText : Doc -> String
 docText (Doc uri version text) = text
 
 docLookup : String -> List Doc -> Maybe Doc
@@ -265,10 +280,13 @@ hoverFor line col text = case dtGoalsOf text of
 data LspState : Type where
   LspState : List Doc -> Bool -> List String -> LspState
 
+stateDocs : LspState -> List Doc
 stateDocs (LspState docs shutdownReq logs) = docs
 
+stateShutdown : LspState -> Bool
 stateShutdown (LspState docs shutdownReq logs) = shutdownReq
 
+stateLogs : LspState -> List String
 stateLogs (LspState docs shutdownReq logs) = logs
 
 setDocs : List Doc -> LspState -> LspState

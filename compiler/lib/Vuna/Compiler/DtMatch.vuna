@@ -1,4 +1,4 @@
-module Vuna.Compiler.DtMatch (allVarPats, multiToExpr) where
+module Vuna.Compiler.DtMatch (allVarPats, multiToCaseExpr, multiToExpr) where
 
 -- Vuna.Compiler.DtMatch：把「多 clause + 构造子/字面量模式」的函数体降级成核心表达式。
 --
@@ -28,6 +28,12 @@ multiToExpr table clauses = case arityOf clauses of
     let
       names = paramNames n
     in andThen (buildColumnExpr table clauses names 200) (\body => Ok (wrapLambdas names body))
+
+-- 与 multiToExpr 同一套模式矩阵，但不包 lambda：`name` 是已在作用域里的位置名，
+-- 直接返回以它为 scrutinee 的嵌套 case 体。供 Elab 的 case 去重降级使用
+-- （先把 scrutinee 用 let 绑定成 name，保证只求值一次）。
+multiToCaseExpr : List (Pair String (List String)) -> List (Pair (List Pat) Expr) -> String -> Result Expr
+multiToCaseExpr table clauses name = buildColumnExpr table clauses [name] 200
 
 arityOf : List (Pair (List Pat) Expr) -> Maybe Int
 arityOf [] = Nothing
@@ -83,15 +89,25 @@ else case params of
     else if hasCtorHead clauses then ctorColumn table clauses pos restParams fuel
     else litAltExpr table clauses pos restParams (fuel - 1)
 
+-- 合成 case 的位置：用首个 clause 的模式 span，让覆盖性错误能指回源码
+-- （M23：此前用空 span，DT 的穷尽性诊断会报错在 :0:0）。
+firstPatSpan : List (Pair (List Pat) Expr) -> Span
+firstPatSpan clauses = case clauses of
+  (Pair (p :: ps) body) :: rest => patSpan p
+  _ => Span "" 0 0 0 0
+
 -- 构造子列：每个构造子一个分支。**该族构造子已经全覆盖时不再生成兜底分支**——
 -- 变量/通配 head 的 clause 已经被 `clausesForCtor` 分发进每个构造子分支，
 -- 再补一个 `_` 兜底只会把「剩余列在兜底里匹配不全」暴露成假的覆盖错误
 -- （`mergeBy le [] ys` / `mergeBy le xs []` / `mergeBy le (x::xs) (y::ys)`
 -- 曾报 `missing Cons`）。族信息由 Elab 传入（`ctorTable`）。
 ctorColumn : List (Pair String (List String)) -> List (Pair (List Pat) Expr) -> String -> List String -> Int -> Result Expr
-ctorColumn table clauses pos restParams fuel =
-  andThen (ctorAltList table clauses pos restParams (fuel - 1))
-    (\alts => if familyCovered table (ctorHeads clauses) then Ok (ECase (EVar pos (Span "" 0 0 0 0)) alts (Span "" 0 0 0 0)) else andThen (fallbackAltList table pos clauses restParams (fuel - 1)) (\fb => Ok (ECase (EVar pos (Span "" 0 0 0 0)) (append alts fb) (Span "" 0 0 0 0))))
+ctorColumn table clauses pos restParams fuel = andThen (ctorAltList table clauses pos restParams (fuel - 1)) (\alts => let
+  caseSp = firstPatSpan clauses
+in if familyCovered table (ctorHeads clauses) then Ok (ECase (EVar pos caseSp) alts caseSp)
+else andThen (fallbackAltList table pos clauses restParams (fuel - 1))
+  (\fb => Ok (ECase (EVar pos caseSp) (append alts fb) caseSp))
+)
 
 -- 构造子名 → 所属族的构造子表；找不到族时按「未覆盖」处理（保守）。
 familyOfCtor : List (Pair String (List String)) -> String -> Maybe (List String)

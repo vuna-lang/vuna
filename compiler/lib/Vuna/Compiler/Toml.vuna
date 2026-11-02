@@ -30,61 +30,79 @@ data TomlEntry : Type where
 data TomlCursor : Type where
   TomlCursor : List Int -> Int -> Int -> TomlCursor
 
+cursorChars : TomlCursor -> List Int
 cursorChars (TomlCursor chars line col) = chars
 
+cursorLine : TomlCursor -> Int
 cursorLine (TomlCursor chars line col) = line
 
+cursorCol : TomlCursor -> Int
 cursorCol (TomlCursor chars line col) = col
 
+advanceCursor : TomlCursor -> TomlCursor
 advanceCursor (TomlCursor [] line col) = TomlCursor [] line col
 advanceCursor (TomlCursor (c :: rest) line col) =
   if c == 10 then TomlCursor rest (line + 1) 1 else TomlCursor rest line (col + 1)
 
 -- 字符分类（vuna 没有字符字面量，统一用 char code）。
+isDigitChar : Int -> Bool
 isDigitChar c = c >= 48 && c <= 57
 
+isUpperAlphaChar : Int -> Bool
 isUpperAlphaChar c = c >= 65 && c <= 90
 
+isLowerAlphaChar : Int -> Bool
 isLowerAlphaChar c = c >= 97 && c <= 122
 
+isAlphaChar : Int -> Bool
 isAlphaChar c = isUpperAlphaChar c || isLowerAlphaChar c
 
+isBareKeyChar : Int -> Bool
 isBareKeyChar c = isAlphaChar c || isDigitChar c || c == 95 || c == 45
 
+isBlankChar : Int -> Bool
 isBlankChar c = c == 32 || c == 9
 
 -- 统一行尾：去掉 CR，避免 CRLF 把行号数两遍（TOML 基本字符串里本来也不允许裸 CR）。
+stripCR : List Int -> List Int
 stripCR [] = []
 stripCR (c :: rest) = if c == 13 then stripCR rest else c :: stripCR rest
 
+locPrefix : String -> Int -> String
 locPrefix path line =
   if path == "" then "line " ++ strFromInt line ++ ": " else path ++ ":" ++ strFromInt line ++ ": "
 
+failAt : String -> Int -> String -> Result t52095
 failAt path line msg = Err (locPrefix path line ++ msg)
 
 -- 跳过空格/制表符。
+skipBlank : TomlCursor -> TomlCursor
 skipBlank cs = case cursorChars cs of
   [] => cs
   c :: rest => if isBlankChar c then skipBlank (advanceCursor cs) else cs
 
 -- 跳过 `#` 开头的行注释，停在行尾换行符（不消费换行）或 EOF。
+skipComment : TomlCursor -> TomlCursor
 skipComment cs = case cursorChars cs of
   [] => cs
   c :: rest => if c == 10 then cs else skipComment (advanceCursor cs)
 
 -- 跳过空白/换行/注释，用于文件顶层与数组内部的间隙。
+skipGap : TomlCursor -> TomlCursor
 skipGap cs = case cursorChars cs of
   [] => cs
   c :: rest =>
     if isBlankChar c || c == 10 then skipGap (advanceCursor cs)
     else if c == 35 then skipGap (skipComment cs) else cs
 
+collectBareKey : TomlCursor -> List Int -> Pair String TomlCursor
 collectBareKey cs acc = case cursorChars cs of
   [] => Pair (strPack (reverse acc)) cs
   c :: rest =>
     if isBareKeyChar c then collectBareKey (advanceCursor cs) (c :: acc)
     else Pair (strPack (reverse acc)) cs
 
+parseBareKey : String -> TomlCursor -> Result (Pair String TomlCursor)
 parseBareKey path cs = case cursorChars cs of
   [] => failAt path (cursorLine cs) "expected a key"
   c :: rest => if isBareKeyChar c then case collectBareKey cs [] of
@@ -92,10 +110,12 @@ parseBareKey path cs = case cursorChars cs of
   else failAt path (cursorLine cs) "expected a key"
 
 -- basic string：返回原始字符串与游标（不含两侧引号）。
+parseStringValue : String -> TomlCursor -> Result (Pair String TomlCursor)
 parseStringValue path cs = case cursorChars cs of
   [] => failAt path (cursorLine cs) "unterminated basic string"
   c :: rest => parseStringChars path cs (advanceCursor cs) []
 
+parseStringChars : String -> TomlCursor -> TomlCursor -> List Int -> Result (Pair String TomlCursor)
 parseStringChars path startCs cs acc = case cursorChars cs of
   [] => failAt path (cursorLine startCs) "unterminated basic string"
   c :: rest =>
@@ -104,6 +124,7 @@ parseStringChars path startCs cs acc = case cursorChars cs of
     else if c == 92 then parseStringEscape path startCs (advanceCursor cs) acc
     else parseStringChars path startCs (advanceCursor cs) (c :: acc)
 
+parseStringEscape : String -> TomlCursor -> TomlCursor -> List Int -> Result (Pair String TomlCursor)
 parseStringEscape path startCs cs acc = case cursorChars cs of
   [] => failAt path (cursorLine startCs) "unterminated escape sequence"
   c :: rest =>
@@ -117,6 +138,7 @@ parseStringEscape path startCs cs acc = case cursorChars cs of
     else failAt path (cursorLine cs) ("unknown escape sequence \\" ++ strPack [c])
 
 -- 整数：可选前导 '-'，至少一位十进制数字；小数点/尾随字母报错。
+parseInteger : String -> TomlCursor -> Result (Pair Int TomlCursor)
 parseInteger path cs = case cursorChars cs of
   [] => failAt path (cursorLine cs) "expected an integer"
   c :: rest =>
@@ -124,12 +146,14 @@ parseInteger path cs = case cursorChars cs of
     else if isDigitChar c then parseIntegerDigits path cs cs 0 0 False
     else failAt path (cursorLine cs) "expected an integer"
 
+parseIntegerDigits : String -> TomlCursor -> TomlCursor -> Int -> Int -> Bool -> Result (Pair Int TomlCursor)
 parseIntegerDigits path startCs cs count acc negative = case cursorChars cs of
   [] => finishInteger path startCs cs count acc negative
   c :: rest =>
     if isDigitChar c then parseIntegerDigits path startCs (advanceCursor cs) (count + 1) (acc * 10 + (c - 48)) negative
     else finishInteger path startCs cs count acc negative
 
+finishInteger : String -> TomlCursor -> TomlCursor -> Int -> Int -> Bool -> Result (Pair Int TomlCursor)
 finishInteger path startCs cs count acc negative = if count == 0 then failAt path (cursorLine startCs) "expected digits for integer"
 else case cursorChars cs of
   [] => Ok (Pair (makeInteger acc negative) cs)
@@ -138,18 +162,22 @@ else case cursorChars cs of
     else if isBareKeyChar c then failAt path (cursorLine startCs) "invalid integer literal"
     else Ok (Pair (makeInteger acc negative) cs)
 
+makeInteger : Int -> Bool -> Int
 makeInteger acc negative = if negative then 0 - acc else acc
 
+parseIntValue : String -> TomlCursor -> Result (Pair TomlValue TomlCursor)
 parseIntValue path cs = case parseInteger path cs of
   Err e => Err e
   Ok (Pair n afterInteger) => Ok (Pair (TInt n) afterInteger)
 
 -- 精确匹配一个 TOML 单词（true/false），且后面不能紧跟裸键字符。
+matchChars : List Int -> TomlCursor -> Maybe TomlCursor
 matchChars [] cs = Just cs
 matchChars (want :: wants) cs = case cursorChars cs of
   [] => Nothing
   c :: rest => if c == want then matchChars wants (advanceCursor cs) else Nothing
 
+matchWord : String -> TomlCursor -> Maybe TomlCursor
 matchWord word cs = case matchChars (strUnpack word) cs of
   Nothing => Nothing
   Just after => case cursorChars after of
@@ -157,10 +185,12 @@ matchWord word cs = case matchChars (strUnpack word) cs of
     c :: rest => if isBareKeyChar c then Nothing else Just after
 
 -- 字符串数组：字符串可空、可跨行，元素间允许空格/换行/注释，允许尾逗号。
+parseStringArray : String -> TomlCursor -> Result (Pair TomlValue TomlCursor)
 parseStringArray path cs = case cursorChars cs of
   [] => failAt path (cursorLine cs) "unterminated array"
   c :: rest => parseArrayItems path (advanceCursor cs) []
 
+parseArrayItems : String -> TomlCursor -> List String -> Result (Pair TomlValue TomlCursor)
 parseArrayItems path cs acc = case skipGap cs of
   TomlCursor chars line col => case chars of
     [] => failAt path line "unterminated array"
@@ -169,6 +199,7 @@ parseArrayItems path cs acc = case skipGap cs of
       else if c == 34 then parseArrayString path (TomlCursor chars line col) acc
       else failAt path line "expected a string in array"
 
+parseArrayString : String -> TomlCursor -> List String -> Result (Pair TomlValue TomlCursor)
 parseArrayString path cs acc = case parseStringValue path cs of
   Err e => Err e
   Ok (Pair s afterString) => case skipGap afterString of
@@ -179,6 +210,7 @@ parseArrayString path cs acc = case parseStringValue path cs of
         else if c == 93 then Ok (Pair (TList (reverse (s :: acc))) (advanceCursor (TomlCursor chars line col)))
         else failAt path line "expected ',' or ']' in array"
 
+parseValue : String -> TomlCursor -> Result (Pair TomlValue TomlCursor)
 parseValue path cs = case cursorChars cs of
   [] => failAt path (cursorLine cs) "expected a value"
   c :: rest => if c == 34 then case parseStringValue path cs of
@@ -194,8 +226,10 @@ parseValue path cs = case cursorChars cs of
       Nothing => failAt path (cursorLine cs) "expected a value"
 
 -- [section] / [section.sub]：段之间允许空格，例如 [ a . b ]。
+parseSectionPath : String -> TomlCursor -> Result (Pair (List String) TomlCursor)
 parseSectionPath path cs = parseSectionSegments path cs []
 
+parseSectionSegments : String -> TomlCursor -> List String -> Result (Pair (List String) TomlCursor)
 parseSectionSegments path cs acc = case parseBareKey path (skipBlank cs) of
   Err e => Err e
   Ok (Pair seg afterSeg) => case skipBlank afterSeg of
@@ -206,6 +240,7 @@ parseSectionSegments path cs acc = case parseBareKey path (skipBlank cs) of
         else if c == 93 then Ok (Pair (reverse (seg :: acc)) (TomlCursor rest line (col + 1)))
         else failAt path line "expected '.' or ']' in section header"
 
+expectEol : String -> TomlCursor -> Result TomlCursor
 expectEol path cs = case skipBlank cs of
   TomlCursor chars line col => case chars of
     [] => Ok (TomlCursor chars line col)
@@ -214,6 +249,7 @@ expectEol path cs = case skipBlank cs of
       else if c == 35 then expectEolAfterComment path (TomlCursor chars line col)
       else failAt path (cursorLine cs) "unexpected character at end of line"
 
+expectEolAfterComment : String -> TomlCursor -> Result TomlCursor
 expectEolAfterComment path cs = case skipComment cs of
   TomlCursor chars line col => case chars of
     [] => Ok (TomlCursor chars line col)
@@ -221,23 +257,28 @@ expectEolAfterComment path cs = case skipComment cs of
       if c == 10 then Ok (TomlCursor rest (line + 1) 1)
       else failAt path line "unexpected character after comment"
 
+samePath : List t52825 -> List t52825 -> Bool
 samePath [] [] = True
 samePath (x :: xs) (y :: ys) = if x == y then samePath xs ys else False
 samePath _ _ = False
 
+memSectionPath : List t52842 -> List (List t52842) -> Bool
 memSectionPath section seen = case seen of
   [] => False
   s :: rest => if samePath section s then True else memSectionPath section rest
 
+sectionSuffix : List String -> String
 sectionSuffix section = case section of
   [] => ""
   first :: rest => " in [" ++ joinDots section ++ "]"
 
+hasEntry : List String -> String -> List TomlEntry -> Bool
 hasEntry section key entries = case entries of
   [] => False
   (TomlEntry s k v line) :: rest =>
     if samePath section s && k == key then True else hasEntry section key rest
 
+parseEntryValue : String -> TomlCursor -> Int -> String -> List String -> List (List String) -> List TomlEntry -> Result (List TomlEntry)
 parseEntryValue path cs keyLine key section seen entries = case parseValue path (skipBlank cs) of
   Err e => Err e
   Ok (Pair value afterValue) => case expectEol path afterValue of
@@ -246,6 +287,7 @@ parseEntryValue path cs keyLine key section seen entries = case parseValue path 
       if hasEntry section key entries then failAt path keyLine ("duplicate key \"" ++ key ++ "\"" ++ sectionSuffix section)
       else parseTomlLoop path afterLine section seen (TomlEntry section key value keyLine :: entries)
 
+parseKeyLine : String -> TomlCursor -> List String -> List (List String) -> List TomlEntry -> Result (List TomlEntry)
 parseKeyLine path cs section seen entries = case parseBareKey path cs of
   Err e => Err e
   Ok (Pair key afterKey) => case skipBlank afterKey of
@@ -256,6 +298,7 @@ parseKeyLine path cs section seen entries = case parseBareKey path cs of
           entries
         else failAt path (cursorLine cs) ("expected '=' after key \"" ++ key ++ "\"")
 
+parseSectionLine : String -> TomlCursor -> t52971 -> List (List String) -> List TomlEntry -> Result (List TomlEntry)
 parseSectionLine path cs section seen entries = case parseSectionPath path (advanceCursor cs) of
   Err e => Err e
   Ok (Pair newSection afterHeader) => if memSectionPath newSection seen then failAt path (cursorLine cs) ("duplicate section [" ++ joinDots newSection ++ "]")
@@ -263,8 +306,10 @@ parseSectionLine path cs section seen entries = case parseSectionPath path (adva
     Err e => Err e
     Ok afterLine => parseTomlLoop path afterLine newSection (newSection :: seen) entries
 
+parseTomlLoop : String -> TomlCursor -> List String -> List (List String) -> List TomlEntry -> Result (List TomlEntry)
 parseTomlLoop path cs section seen entries = parseTomlLoopAt path (skipGap cs) section seen entries
 
+parseTomlLoopAt : String -> TomlCursor -> List String -> List (List String) -> List TomlEntry -> Result (List TomlEntry)
 parseTomlLoopAt path cs section seen entries = case cursorChars cs of
   [] => Ok (reverse entries)
   c :: rest =>

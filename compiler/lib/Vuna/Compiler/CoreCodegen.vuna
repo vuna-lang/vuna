@@ -467,6 +467,7 @@ dtListBridge datas = case findListFamilyData datas of
           ++ "  let cs = to_list xs in\n"
           ++ "  String.init (List.length cs) (fun i -> Char.chr (List.nth cs i))\n"
 
+findFamilyCtor : String -> List DtCtor -> Maybe DtCtor
 findFamilyCtor _ [] = Nothing
 findFamilyCtor n (c :: rest) =
   if lastName (dtCtorName c) == n then Just c else findFamilyCtor n rest
@@ -510,6 +511,20 @@ globalRef name = case name of
   "strUnpack" => Ok "dtp_unpack"
   "strPack" => Ok "dtp_pack"
   "strLength" => Ok "bi_strLength"
+  -- M23：效果内建的公开名与 `prim_*` 内部名都映射到同一组 `dtp_*` 运行时函数。
+  "print" => Ok "dtp_print"
+  "readFile" => Ok "dtp_readFile"
+  "writeFile" => Ok "dtp_writeFile"
+  "readDir" => Ok "dtp_readDir"
+  "isDirectory" => Ok "dtp_isDirectory"
+  "makeDir" => Ok "dtp_makeDir"
+  "removeFile" => Ok "dtp_removeFile"
+  "fileExists" => Ok "dtp_fileExists"
+  "fileMtime" => Ok "dtp_fileMtime"
+  "fileSize" => Ok "dtp_fileSize"
+  "exit" => Ok "dtp_exit"
+  "getArgs" => Ok "(dtp_getArgs ())"
+  "readLine" => Ok "(dtp_readLine ())"
   "prim_print" => Ok "dtp_print"
   "prim_readFile" => Ok "dtp_readFile"
   "prim_writeFile" => Ok "dtp_writeFile"
@@ -797,10 +812,13 @@ genTypeDecls datas = case datas of
 data GenSt : Type where
   GenSt : List String -> List (Pair String String) -> Int -> GenSt
 
+gsCtors : GenSt -> List (Pair String String)
 gsCtors (GenSt families ctors next) = ctors
 
+gsNext : GenSt -> Int
 gsNext (GenSt families ctors next) = next
 
+gsPutNext : GenSt -> Int -> GenSt
 gsPutNext (GenSt families ctors next) n = GenSt families ctors n
 
 ctorTableOfData : DtData -> List (Pair String String)
@@ -827,10 +845,13 @@ runtimeDatas datas = filter (\d => if isBoolFamilyName (dtDataName d) then False
 data AltEnv : Type where
   AltEnv : List (Pair String Rig) -> List String -> GenSt -> AltEnv
 
+aeEnv : AltEnv -> List (Pair String Rig)
 aeEnv (AltEnv env pats st) = env
 
+aePats : AltEnv -> List String
 aePats (AltEnv env pats st) = pats
 
+aeSt : AltEnv -> GenSt
 aeSt (AltEnv env pats st) = st
 
 altEnvGo : GenSt -> List (Pair String Rig) -> List (Pair String Rig) -> List String -> AltEnv
