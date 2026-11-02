@@ -6,8 +6,12 @@ plus : Nat -> Nat -> Nat
 plus Z y = y
 plus (S x) y = S (plus x y)
 
+toInt : Nat -> Int
+toInt Z = 0
+toInt (S n) = 1 + toInt n
+
 two : Nat
 two = S (S Z)
 
-main : Nat
-main = plus two two
+main : Int
+main = toInt (plus two two)

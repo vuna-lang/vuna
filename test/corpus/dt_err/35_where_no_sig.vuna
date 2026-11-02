@@ -1,0 +1,7 @@
+-- M24：where 绑定必须写显式签名（带签名的 where 是顺序 let 语义）。
+f : Int -> Int
+f x = g x where
+  g y = y + 1
+
+main : Int
+main = f 1

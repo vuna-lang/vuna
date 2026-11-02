@@ -1,4 +1,22 @@
-module Base.IO (IO, print, println, readFile, writeFile, readLine, readDir, isDirectory, makeDir, removeFile, fileExists, fileMtime, fileSize, getArgs, exit) where
+module Base.IO
+  ( Functor(..)
+  , IO
+  , Monad(..)
+  , exit
+  , fileExists
+  , fileMtime
+  , fileSize
+  , getArgs
+  , isDirectory
+  , makeDir
+  , print
+  , println
+  , readDir
+  , readFile
+  , readLine
+  , removeFile
+  , writeFile
+  ) where
 
 -- Base.IO：抽象 IO 动作与效果 API（M11-C / M12.6）。
 -- 表示是「世界令牌 Int -> a」的挂起函数；构造器 MkIO 私有。
@@ -8,6 +26,7 @@ module Base.IO (IO, print, println, readFile, writeFile, readLine, readDir, isDi
 -- 这里的效果函数就是用户可见的 print / readFile / getArgs / exit：
 -- 它们直接返回 IO，内部由 prim_* 原语实现；普通包不能调用 prim_*。
 import Base.List
+import Base.Bool
 import Base.Monad
 
 data IO a : Type where
@@ -18,12 +37,14 @@ ioPure : a -> IO a
 ioPure x = MkIO (\w => x)
 
 ioBind : IO a -> (a -> IO b) -> IO b
-ioBind (MkIO f) k = MkIO (\w => case k (f w) of
-  MkIO g => g w
-)
+ioBind io k = case io of
+  MkIO f => MkIO (\w => case k (f w) of
+    MkIO g => g w
+  )
 
 ioFmap : (a -> b) -> IO a -> IO b
-ioFmap f (MkIO g) = MkIO (\w => f (g w))
+ioFmap f io = case io of
+  MkIO g => MkIO (\w => f (g w))
 
 print : String -> IO Int
 print s = MkIO (\w => prim_print s)

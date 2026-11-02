@@ -1,10 +1,10 @@
 open Vuna_runtime
+open Vuna_builtins
 open Base_dPair
 open Base_dBool
 open Base_dMonad
 open Base_dMaybe
 open Base_dList
-open Base_dIO
 open Base_dResult
 open Base_dString
 open Prelude
@@ -15,67 +15,4 @@ open Vuna_dCompiler_dPkg
 open Vuna_dCompiler_dAst
 open Vuna_dCompiler_dLexer
 open Vuna_dCompiler_dParser
-let v_Vuna_dCompiler_dBuiltins_dbuiltinArity = fun a0 -> match a0 with
-  | ("+") -> C_Base_dMaybe_dJust (2)
-  | ("-") -> C_Base_dMaybe_dJust (2)
-  | ("*") -> C_Base_dMaybe_dJust (2)
-  | ("/") -> C_Base_dMaybe_dJust (2)
-  | ("==") -> C_Base_dMaybe_dJust (2)
-  | ("/=") -> C_Base_dMaybe_dJust (2)
-  | ("<") -> C_Base_dMaybe_dJust (2)
-  | ("<=") -> C_Base_dMaybe_dJust (2)
-  | (">") -> C_Base_dMaybe_dJust (2)
-  | (">=") -> C_Base_dMaybe_dJust (2)
-  | ("&&") -> C_Base_dMaybe_dJust (2)
-  | ("||") -> C_Base_dMaybe_dJust (2)
-  | ("++") -> C_Base_dMaybe_dJust (2)
-  | ("bi_show_string") -> C_Base_dMaybe_dJust (1)
-  | ("bi_eq_generic") -> C_Base_dMaybe_dJust (2)
-  | ("bi_neq_generic") -> C_Base_dMaybe_dJust (2)
-  | ("bi_lt_generic") -> C_Base_dMaybe_dJust (2)
-  | ("bi_le_generic") -> C_Base_dMaybe_dJust (2)
-  | ("bi_gt_generic") -> C_Base_dMaybe_dJust (2)
-  | ("bi_ge_generic") -> C_Base_dMaybe_dJust (2)
-  | ("bi_eq_int") -> C_Base_dMaybe_dJust (2)
-  | ("bi_neq_int") -> C_Base_dMaybe_dJust (2)
-  | ("bi_lt_int") -> C_Base_dMaybe_dJust (2)
-  | ("bi_le_int") -> C_Base_dMaybe_dJust (2)
-  | ("bi_gt_int") -> C_Base_dMaybe_dJust (2)
-  | ("bi_ge_int") -> C_Base_dMaybe_dJust (2)
-  | ("bi_eq_str") -> C_Base_dMaybe_dJust (2)
-  | ("bi_neq_str") -> C_Base_dMaybe_dJust (2)
-  | ("bi_eq_bool") -> C_Base_dMaybe_dJust (2)
-  | ("bi_neq_bool") -> C_Base_dMaybe_dJust (2)
-  | ("strLength") -> C_Base_dMaybe_dJust (1)
-  | ("strUnpack") -> C_Base_dMaybe_dJust (1)
-  | ("strPack") -> C_Base_dMaybe_dJust (1)
-  | ("strFromInt") -> C_Base_dMaybe_dJust (1)
-  | ("readFile") -> C_Base_dMaybe_dJust (1)
-  | ("writeFile") -> C_Base_dMaybe_dJust (2)
-  | ("print") -> C_Base_dMaybe_dJust (1)
-  | ("getArgs") -> C_Base_dMaybe_dJust (0)
-  | ("readLine") -> C_Base_dMaybe_dJust (0)
-  | ("readDir") -> C_Base_dMaybe_dJust (1)
-  | ("isDirectory") -> C_Base_dMaybe_dJust (1)
-  | ("makeDir") -> C_Base_dMaybe_dJust (1)
-  | ("removeFile") -> C_Base_dMaybe_dJust (1)
-  | ("fileExists") -> C_Base_dMaybe_dJust (1)
-  | ("fileMtime") -> C_Base_dMaybe_dJust (1)
-  | ("fileSize") -> C_Base_dMaybe_dJust (1)
-  | ("exit") -> C_Base_dMaybe_dJust (1)
-  | ("prim_readFile") -> C_Base_dMaybe_dJust (1)
-  | ("prim_writeFile") -> C_Base_dMaybe_dJust (2)
-  | ("prim_print") -> C_Base_dMaybe_dJust (1)
-  | ("prim_getArgs") -> C_Base_dMaybe_dJust (0)
-  | ("prim_readLine") -> C_Base_dMaybe_dJust (0)
-  | ("prim_readDir") -> C_Base_dMaybe_dJust (1)
-  | ("prim_isDirectory") -> C_Base_dMaybe_dJust (1)
-  | ("prim_makeDir") -> C_Base_dMaybe_dJust (1)
-  | ("prim_removeFile") -> C_Base_dMaybe_dJust (1)
-  | ("prim_fileExists") -> C_Base_dMaybe_dJust (1)
-  | ("prim_fileMtime") -> C_Base_dMaybe_dJust (1)
-  | ("prim_fileSize") -> C_Base_dMaybe_dJust (1)
-  | ("prim_exit") -> C_Base_dMaybe_dJust (1)
-  | ("prim_runIn") -> C_Base_dMaybe_dJust (2)
-  | (_) -> C_Base_dMaybe_dNothing
-  | _ -> vuna_fail "compiler/lib/Vuna/Compiler/Builtins.vuna" 6 1 ("no matching clause for Vuna.Compiler.Builtins.builtinArity")
+let v_Vuna_dCompiler_dBuiltins_dbuiltinArity = (fun mc0 -> (if ((bi_eq_str mc0) "+") then (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (2)) else (if ((bi_eq_str mc0) "-") then (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (2)) else (if ((bi_eq_str mc0) "*") then (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (2)) else (if ((bi_eq_str mc0) "/") then (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (2)) else (if ((bi_eq_str mc0) "==") then (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (2)) else (if ((bi_eq_str mc0) "/=") then (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (2)) else (if ((bi_eq_str mc0) "<") then (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (2)) else (if ((bi_eq_str mc0) "<=") then (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (2)) else (if ((bi_eq_str mc0) ">") then (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (2)) else (if ((bi_eq_str mc0) ">=") then (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (2)) else (if ((bi_eq_str mc0) "&&") then (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (2)) else (if ((bi_eq_str mc0) "||") then (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (2)) else (if ((bi_eq_str mc0) "++") then (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (2)) else (if ((bi_eq_str mc0) "bi_show_string") then (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (1)) else (if ((bi_eq_str mc0) "bi_eq_generic") then (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (2)) else (if ((bi_eq_str mc0) "bi_neq_generic") then (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (2)) else (if ((bi_eq_str mc0) "bi_lt_generic") then (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (2)) else (if ((bi_eq_str mc0) "bi_le_generic") then (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (2)) else (if ((bi_eq_str mc0) "bi_gt_generic") then (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (2)) else (if ((bi_eq_str mc0) "bi_ge_generic") then (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (2)) else (if ((bi_eq_str mc0) "bi_eq_int") then (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (2)) else (if ((bi_eq_str mc0) "bi_neq_int") then (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (2)) else (if ((bi_eq_str mc0) "bi_lt_int") then (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (2)) else (if ((bi_eq_str mc0) "bi_le_int") then (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (2)) else (if ((bi_eq_str mc0) "bi_gt_int") then (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (2)) else (if ((bi_eq_str mc0) "bi_ge_int") then (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (2)) else (if ((bi_eq_str mc0) "bi_eq_str") then (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (2)) else (if ((bi_eq_str mc0) "bi_neq_str") then (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (2)) else (if ((bi_eq_str mc0) "bi_eq_bool") then (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (2)) else (if ((bi_eq_str mc0) "bi_neq_bool") then (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (2)) else (if ((bi_eq_str mc0) "strLength") then (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (1)) else (if ((bi_eq_str mc0) "strUnpack") then (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (1)) else (if ((bi_eq_str mc0) "strPack") then (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (1)) else (if ((bi_eq_str mc0) "strFromInt") then (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (1)) else (if ((bi_eq_str mc0) "readFile") then (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (1)) else (if ((bi_eq_str mc0) "writeFile") then (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (2)) else (if ((bi_eq_str mc0) "print") then (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (1)) else (if ((bi_eq_str mc0) "getArgs") then (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (0)) else (if ((bi_eq_str mc0) "readLine") then (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (0)) else (if ((bi_eq_str mc0) "readDir") then (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (1)) else (if ((bi_eq_str mc0) "isDirectory") then (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (1)) else (if ((bi_eq_str mc0) "makeDir") then (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (1)) else (if ((bi_eq_str mc0) "removeFile") then (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (1)) else (if ((bi_eq_str mc0) "fileExists") then (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (1)) else (if ((bi_eq_str mc0) "fileMtime") then (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (1)) else (if ((bi_eq_str mc0) "fileSize") then (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (1)) else (if ((bi_eq_str mc0) "exit") then (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (1)) else (if ((bi_eq_str mc0) "prim_readFile") then (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (1)) else (if ((bi_eq_str mc0) "prim_writeFile") then (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (2)) else (if ((bi_eq_str mc0) "prim_print") then (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (1)) else (if ((bi_eq_str mc0) "prim_getArgs") then (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (0)) else (if ((bi_eq_str mc0) "prim_readLine") then (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (0)) else (if ((bi_eq_str mc0) "prim_readDir") then (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (1)) else (if ((bi_eq_str mc0) "prim_isDirectory") then (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (1)) else (if ((bi_eq_str mc0) "prim_makeDir") then (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (1)) else (if ((bi_eq_str mc0) "prim_removeFile") then (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (1)) else (if ((bi_eq_str mc0) "prim_fileExists") then (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (1)) else (if ((bi_eq_str mc0) "prim_fileMtime") then (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (1)) else (if ((bi_eq_str mc0) "prim_fileSize") then (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (1)) else (if ((bi_eq_str mc0) "prim_exit") then (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (1)) else (if ((bi_eq_str mc0) "prim_runIn") then (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (2)) else C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))

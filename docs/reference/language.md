@@ -13,15 +13,55 @@
   （`-> || && == /= < <= > >= ++ + - * / :: >>= >>`）；
 - layout：offside 规则；顶层声明、`data` 构造器块、`case` 分支、`let` 绑定按块列
   对齐，表达式跨行必须缩进超过所在块列；
-- `main` 必须是零参数定义；`show` 负责把值变成字符串；
+- `main` 必须是零参数定义；`show` 负责把值变成字符串。`vuna interp` 只展示
+  `Int`/`String`/`Bool` 的 `main` 值（interp 是 DT 精化后的纯核心求值，见 [limits.md](limits.md)）；
 - 内建：`+ - * /`、`== /= < <= > >=`、`&& ||`、`++`、`strLength`、`strUnpack`、
   `strPack`、`strFromInt`，IO 内建 `readFile` / `writeFile` / `print` / `getArgs`，
   文件/目录 `fileExists` / `readDir` / `isDirectory` / `makeDir` / `removeFile`，
   REPL 用 `readLine`，以及 `exit`；
-- `&&` / `||` 短路求值：先求左操作数，左侧能决定结果时不求值右侧（解释器与
-  两种 codegen 一致）；
+- `&&` / `||` 短路求值：先求左操作数，左侧能决定结果时不求值右侧（核心求值器与
+  codegen 一致）；
+- `where` 子句：函数体后可跟缩进的 `where` 块，**每个 where 绑定必须在子句前写显式
+  类型签名**；where 绑定是带签名的**局部顺序 let**，只能引用它之前定义的绑定（见下节）；
 - 布尔值与列表约定：`True` / `False` / `Cons` / `Nil` 是内建相邻的全局构造器；
   程序需要自己声明 `data Bool` / `data List` 才能对它们做模式匹配。
+
+## `where` 绑定与显式签名
+
+`where` 块内每个绑定先写一行签名（`name : Ty`），紧跟它的子句（`name pats = expr`）：
+
+```vuna
+f : Int -> Int
+f x = g x where
+  h : Int -> Int
+  h y = y * 2
+  g : Int -> Int
+  g y = h y + 1
+```
+
+- **每个 where 绑定都必须有签名行，且签名必须写在对应子句之前**；没有签名的绑定不会
+  退回无签名 lambda 推断，而是直接报错。诊断（`errAt` / parser 都会带
+  `文件:行:列:` 前缀）：
+
+  ```text
+  DT: where binding `f` needs a type signature (write `f : <type>` before the clause)
+  DT: unknown name h                          -- 引用了后面才定义的 where 绑定 h
+  DT: unknown name f                          -- where 绑定自递归
+  duplicate where signature for `g`
+  where signature for `g` must come before its clause
+  where signature for `g` has no definition
+  where binding `g` has more than one clause; a signature can annotate only one
+  ```
+
+- where 绑定是**局部顺序 let**：每个绑定只能引用**它之前**的绑定，不支持前向引用、
+  自递归或互递归；需要递归 / 互相引用时把函数放进顶层定义组（顶层定义组支持互递归、
+  自递归与前向引用）；
+- 绑定值按签名以 checking 模式精化（先检查签名是合法类型，再按该类型检查值），
+  因此不需要推断无签名 lambda 的类型；
+- 通配绑定 `_ = expr` 写不了签名，因此会报缺签名诊断；需要局部绑定时用命名绑定；
+- where 绑定的名字只在该函数体内可见（不导出、不参与模块导出列表），与顶层定义同名
+  时以局部绑定为准；
+- `vuna fmt` 会保留签名行并按「签名行 + 子句」输出（幂等），`where` 块缩进 2 空格。
 
 ## 模块系统
 
@@ -55,8 +95,17 @@
   ```vuna
   module Vuna.Math where           -- 省略导出列表 = 导出全部（v0 兼容）
   module Vuna.Math () where        -- 显式导出空集
-  module Vuna.Math (three, Nat(..), module Vuna.Compiler.Common, Vuna.Compiler.Lexer.lexSource) where
+  module Vuna.Math
+    ( three
+    , Nat(..)
+    , module Vuna.Compiler.Common
+    , Vuna.Compiler.Lexer.lexSource
+    ) where
   ```
+
+  `vuna fmt` 会把显式导出列表规范为：导出项按字面文本的 ASCII 字典序排序（`module B`
+  整模块重导出排最后）；单行超过 100 列或列表内含注释时逐项一行（逗号前置），否则保持
+  单行。排序只影响书写顺序——导出仍是集合，语义不变。
 
   模块名必须与路径推导出的模块名一致（`lib/Vuna/Math.vuna` ⇔ `Vuna.Math`），不一致是
   硬错误。导出项按「类型名/值名」两套命名空间解析（`module B` 是整模块重导出，不属于

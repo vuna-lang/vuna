@@ -1,54 +1,168 @@
-module Vuna.Compiler.Dt (dtCheckFile, dtCompileFile, dtEvalFile) where
+module Vuna.Compiler.Dt
+  ( dtCheckFile
+  , dtCheckLibrary
+  , dtCheckProject
+  , dtCompileFile
+  , dtCompileProject
+  , dtEvalExpr
+  , dtEvalFile
+  , dtSplitProject
+  ) where
 
--- Vuna.Compiler.Dt：M13 的 DT 单文件 facade（供 Compile / CompilerCli / Interp 使用）。
+-- Vuna.Compiler.Dt：DT 路径的 facade（供 Compile / CompilerCli / Interp 使用）。
 --
--- DT 路径只读一个文件：parseSource → Vuna.Compiler.Elab →（check / codegen / 核心求值）。
--- 不经过 Loader：M13 的 DT 是自包含单文件，不支持 import / 包模式 / 模块头。
+-- M13 时 DT 是单文件自包含：parseSource → Elab →（check / codegen / 核心求值），
+-- 不经过 Loader、拒绝模块头与 import。**M20 起改为复用 `Loader`**：多文件、`import`、
+-- `--root` 与包目录都能用，名字解析完全交给既有 Loader（不新建平行 Loader）。
+--
+-- 两条加载形状：
+--   - 单文件 / `--root`：`loadProgramRaw`（入口声明 + 依赖模块，历史顺序不变）；
+--   - 包目录（M22.1）：`loadProject` / `loadProjectModules` + `resolveProject`，
+--     再按**依赖顺序**拼接（见 `dtProjectDecls`）。
+-- DT 精化器按**整程序**精化，模块边界对精化不构成约束。
 import Vuna.Compiler.Common
 import Vuna.Compiler.Ast
 import Vuna.Compiler.Parser
+import Vuna.Compiler.Pkg
+import Vuna.Compiler.Loader
 import Vuna.Compiler.Core
 import Vuna.Compiler.Elab
 import Vuna.Compiler.CoreCodegen
+import Vuna.Compiler.Split
 
-dtLoad : String -> Result (List Decl)
-dtLoad entry = if fileExists entry then case parseSource entry (readFile entry) of
+-- 入口 + 全部依赖模块的声明（单文件 / --root 原始模式）。
+dtLoad : List String -> String -> Result (List Decl)
+dtLoad roots entry = loadProgramRawOrdered roots entry
+
+-- 项目声明的拼接顺序：Loader 的 modules 列表是「依赖在前」的**反序**（依赖者先
+-- 出现，被依赖者靠后），DT 精化要求定义先于使用，因此先 reverse modules 再逐模块
+-- 拼接，入口声明放最后。
+dtProjectDecls : Pair (List Decl) (List Module) -> List Decl
+dtProjectDecls parts = append (concatMap moduleDeclsOf (reverse (secondOf parts))) (firstOf parts)
+
+-- 包模式：可执行包（app/Main.vuna 为入口，root/包名来自 Pkg.packageRoots / packageName）。
+dtLoadProject : List Root -> String -> String -> Result (List Decl)
+dtLoadProject roots entryPkg entry =
+  andThen (loadProject roots entryPkg entry)
+    (\project => andThen (resolveProject project) (\parts => Ok (dtProjectDecls parts)))
+
+-- 包模式：库包（以 [export].modules 为入口集合，没有 app/Main.vuna）。
+dtLoadModuleSet : List Root -> String -> List String -> Result (Pair (List Decl) Bool)
+dtLoadModuleSet roots entryPkg names =
+  andThen (loadProjectModules roots entryPkg names)
+    (\project => andThen (resolveProject project) (\parts => Ok (Pair (dtProjectDecls parts) (dtLibraryTrust entryPkg (secondOf parts)))))
+
+-- 终止性检查的 TCB 信任名单：编译器本体与工具链是执行代码，NbE/重写函数是 fuel 驱动
+-- 的（结构递归判据写不出来），对这三包跳过终止性检查；用户包与夹具仍然照查。
+-- 与 Loader.packageAllowsEffects 同为「按包名 allowlist」的既有机制。
+dtTrustsTermination : String -> Bool
+dtTrustsTermination pkg = pkg == "vuna" || pkg == "vuna-compiler" || pkg == "vuna-base"
+
+-- 库包的信任判定：入口包本身在名单里，或**所有被检查模块**都属于名单内的包。
+-- 后者服务探针（用一个受信任模块当入口检查闭包，探针包自身不在名单里）；
+-- 用户库包有自己的模块，因此不会被误信任。
+dtLibraryTrust : String -> List Module -> Bool
+dtLibraryTrust entryPkg modules = dtTrustsTermination entryPkg || dtModulesTrusted modules
+
+dtModulesTrusted : List Module -> Bool
+dtModulesTrusted modules = case modules of
+  [] => True
+  m :: rest => if dtTrustsTermination (modulePackageOf m) then dtModulesTrusted rest else False
+
+-- 声明序列的 check / compile 共用尾部（单文件与包模式同一条精化路径）。
+dtCheckDecls : Bool -> Result (List Decl) -> Result (List String)
+dtCheckDecls trusted loaded =
+  andThen loaded
+    (\decls => andThen (elabProgramWith trusted decls) (\program => andThen (checkDtProgram program) (\_ => Ok [])))
+
+dtCompileDecls : Bool -> Result (List Decl) -> Bool -> Result String
+dtCompileDecls trusted loaded printResult =
+  andThen loaded
+    (\decls => andThen (elabProgramWith trusted decls) (\program => generateDtProgram program printResult))
+
+dtCheckFile : List String -> String -> Result (List String)
+dtCheckFile roots entry = dtCheckDecls False (dtLoad roots entry)
+
+dtCompileFile : List String -> String -> Bool -> Result String
+dtCompileFile roots entry printResult = dtCompileDecls False (dtLoad roots entry) printResult
+
+dtCheckProject : List Root -> String -> String -> Result (List String)
+dtCheckProject roots entryPkg entry =
+  dtCheckDecls (dtTrustsTermination entryPkg) (dtLoadProject roots entryPkg entry)
+
+dtCompileProject : List Root -> String -> String -> Bool -> Result String
+dtCompileProject roots entryPkg entry printResult =
+  dtCompileDecls (dtTrustsTermination entryPkg) (dtLoadProject roots entryPkg entry) printResult
+
+dtCheckLibrary : List Root -> String -> List String -> Result (List String)
+dtCheckLibrary roots entryPkg names = case dtLoadModuleSet roots entryPkg names of
   Err e => Err e
-  Ok (Source hdr imports decls) => case hdr of
-    Just m =>
-      Err (showSpanLoc (modDeclSpan m) ++ ": DT: module header is not allowed in entry file")
-    Nothing => case imports of
-      [] => Ok decls
-      _ => Err "DT: imports are not supported yet (single-file mode)"
-else Err ("entry file not found: " ++ entry)
-
-dtCheckFile : String -> Result (List String)
-dtCheckFile entry =
-  andThen (dtLoad entry)
-    (\decls => andThen (elabProgram decls) (\program => andThen (checkDtProgram program) (\_ => Ok [])))
-
-dtCompileFile : String -> Bool -> Result String
-dtCompileFile entry printResult =
-  andThen (dtLoad entry)
-    (\decls => andThen (elabProgram decls) (\program => generateDtProgram program printResult))
+  Ok (Pair decls trust) => dtCheckDecls trust (Ok decls)
 
 -- 核心求值器：精化后用 NbE + delta 求 main 的值并 show（与 codegen 结果对照）。
-dtEvalFile : String -> Result String
-dtEvalFile entry =
-  andThen (dtLoad entry) (\decls => andThen (elabProgram decls) (\program => evalDtMain program))
+dtEvalFile : List String -> String -> Result String
+dtEvalFile roots entry =
+  andThen (dtLoad roots entry)
+    (\decls => andThen (elabProgramWith False decls) (\program => evalDtMain program))
 
+-- REPL 的表达式求值（M23）：roots + program 源码 + 表达式源码。
+-- program 里的定义必须有签名（REPL 用户逐行输入签名）；表达式在程序的环境
+-- （globals / 实例 / 字典解表）里精化，再求值并 show。program 的 import 仍按 roots
+-- 从磁盘解析（`loadProgramRawOrderedSource`），所以 REPL 可以把 import 行一起缓冲进来。
+--
+-- 表达式的名字解析**必须**经过 Loader（`import Base.List` 后写 `length xs` 得到的是
+-- `Base.List.length`）：因此把表达式拼成一条合成定义 `vuna_repl_expr = <expr>` 一起
+-- 加载，取回解析/限定后的体，再把这条合成定义从声明表里摘掉、交给 DT 精化。
+dtEvalExpr : List String -> String -> String -> Result String
+dtEvalExpr roots program exprSource =
+  andThen
+    (loadProgramRawOrderedSource roots "<repl>" (program ++ "\n" ++ replExprName ++ " = " ++ exprSource ++ "\n"))
+    (\decls => andThen (splitReplExpr decls) (\p => andThen (elabProgramFull (firstOf p)) (\prog => dtEvalExprIn prog (secondOf p))))
+
+-- 合成定义的唯一名字：只在 `dtEvalExpr` 内部出现，摘除时按名字识别。
+replExprName : String
+replExprName = "vuna_repl_expr"
+
+-- 取出合成定义并还原成表达式；它一定是加载后的最后一条声明（追加在源码末尾）。
+splitReplExpr : List Decl -> Result (Pair (List Decl) Expr)
+splitReplExpr decls = case reverse decls of
+  (DFun n pats body sp) :: rest =>
+    if n == replExprName then Ok (Pair (reverse rest) body)
+    else Err "DT: internal: REPL expression definition is not last"
+  _ => Err "DT: internal: REPL expression was not parsed as a definition"
+
+-- 核心求值器对 `main` 的求值边界（M23 终态契约）：
+--   - 纯 `main : Int/String/Bool`：核心求值并展示值；
+--   - `main : IO a`：**一律报错**。核心求值器是纯的、不执行效果；即使动作结果不依赖
+--     效果（`do print "hi"; pure 7`），效果也会被静默丢弃——误导用户。所以不做
+--     「尝试归约、卡住才报错」这种不可靠的判定。效果程序只走 compile + 运行
+--     （夹具用 `.nointerp` 标记）。IO 的识别按 main 的**类型**（族名 `IO`，含
+--     `Base.IO.IO` 这类模块前缀）。
 evalDtMain : Pair (List DtData) (List DtDef) -> Result String
-evalDtMain (Pair datas defs) = case findMainDef defs of
+evalDtMain (Pair _ defs) = case findMainDef defs of
   Nothing => Err "DT: no main definition"
   Just mainDef =>
     let
       table = defTableOf defs
       mainVal = normalize table [] defaultFuel (VNeutral (NGlobal "main" []))
-    in case mainVal of
+    in if isIOType (dtDefType mainDef) then Err "DT: interp cannot execute effects (main : IO a); compile and run the program instead"
+    else case mainVal of
       VInt n => Ok (strFromInt n)
       VStr s => Ok (showValue mainVal)
       VBool b => Ok (showValue mainVal)
       _ => Err "DT: main does not reduce to a value"
+
+-- 族名（去掉模块前缀）：`Base.IO.IO` → `IO`。
+lastName : String -> String
+lastName name = case splitLastDot (splitOnDot name) of
+  Pair rev base => base
+
+-- main 的类型是不是 `IO a`（族名对得上，含模块前缀形态）。
+isIOType : Term -> Bool
+isIOType t = case t of
+  TApp fn _ _ => isIOType fn
+  TGlobal g => lastName g == "IO"
+  _ => False
 
 findMainDef : List DtDef -> Maybe DtDef
 findMainDef [] = Nothing
@@ -57,3 +171,21 @@ findMainDef (d :: rest) = if dtDefName d == "main" then Just d else findMainDef 
 defTableOf : List DtDef -> List (Pair String Term)
 defTableOf [] = []
 defTableOf (d :: rest) = Pair (dtDefName d) (dtDefBody d) :: defTableOf rest
+
+-- M24：包级逐模块 split 输出（`build --split` / `seed`）。与单文件路径共用同一次精化，
+-- 只是生成器把 datas/defs 按声明归属切到各模块文件；模块列表按依赖序（Loader 的
+-- modules 是依赖者在前的反序，这里 reverse）。
+dtProjectParts : List Root -> String -> String -> Result (Pair (List Decl) (List Module))
+dtProjectParts roots entryPkg entry =
+  andThen (loadProject roots entryPkg entry)
+    (\project => andThen (resolveProject project) (\parts => Ok (Pair (firstOf parts) (reverse (secondOf parts)))))
+
+dtSplitProject : List Root -> String -> String -> Bool -> Result (List SplitFile)
+dtSplitProject roots entryPkg entry printResult = andThen (dtProjectParts roots entryPkg entry) (\parts => let
+  entryDecls = firstOf parts
+  modules = secondOf parts
+  allDecls = append (concatMap moduleDeclsOf modules) entryDecls
+  trusted = dtTrustsTermination entryPkg
+in andThen (elabProgramFullWith trusted allDecls)
+  (\program => generateDtSplitProgram (map (\m => Pair (moduleNameOf m) (moduleDeclsOf m)) modules) entryDecls program printResult)
+)

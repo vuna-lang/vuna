@@ -17,10 +17,12 @@ showIt c = case c of
 
 instance Pretty Color where
   pretty c = helper c where
+    helper : Color -> String
     helper x = "c:" ++ showIt x
 
 runM : Int -> Maybe
 runM n = run n where
+  run : Int -> Maybe
   run x = do
     y <- Just x
     Just y

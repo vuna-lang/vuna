@@ -1,4 +1,14 @@
-module Vuna.Compiler.Split (SplitFile(..), splitName, splitText, splitInitFiles, writeSplitFiles, writeSplitFilesChanged, splitCompileOrder, buildScript, buildScriptPackage) where
+module Vuna.Compiler.Split
+  ( SplitFile(..)
+  , buildScript
+  , buildScriptPackage
+  , splitCompileOrder
+  , splitInitFiles
+  , splitName
+  , splitText
+  , writeSplitFiles
+  , writeSplitFilesChanged
+  ) where
 
 -- Vuna.Compiler.Split：分离编译（M12）的输出文件模型与构建脚本生成。
 --
@@ -14,11 +24,14 @@ import Vuna.Compiler.Common
 data SplitFile : Type where
   SplitFile : String -> String -> SplitFile
 
+splitName : SplitFile -> String
 splitName (SplitFile name text) = name
 
+splitText : SplitFile -> String
 splitText (SplitFile name text) = text
 
 -- 先结束条目（.mli/.ml 文件名列表），供 CLI/脚本使用。
+splitInitFiles : List SplitFile -> List String
 splitInitFiles [] = []
 splitInitFiles (f :: rest) = splitName f :: splitInitFiles rest
 
@@ -50,6 +63,7 @@ splitCompileOrder [] = []
 splitCompileOrder (name :: rest) =
   if endsWith ".ml" name then stripMl name :: splitCompileOrder rest else splitCompileOrder rest
 
+stripMl : String -> String
 stripMl name = substring 0 (strLength name - 3) name
 
 -- 构建脚本；names 是编译单元（无扩展名）顺序，最后 Link 到 "$OUT"。
@@ -108,16 +122,20 @@ buildScript names =
     ++ "\n"
     ++ "echo \"built $OUT\"\n"
 
+spaceJoin : List String -> String
 spaceJoin [] = ""
 spaceJoin (name :: rest) = name ++ " " ++ spaceJoin rest
 
+depsSuffix : List String -> String
 depsSuffix [] = ""
 depsSuffix (dep :: rest) = " " ++ dep ++ depsSuffix rest
 
+compileCalls : List String -> List String -> String
 compileCalls [] prev = ""
 compileCalls (name :: rest) prev =
   "compile_mod " ++ name ++ depsSuffix prev ++ "\n" ++ compileCalls rest (name :: prev)
 
+joinCmxs : List String -> String
 joinCmxs [] = ""
 joinCmxs ([name]) = name ++ ".cmx"
 joinCmxs (name :: rest) = name ++ ".cmx " ++ joinCmxs rest
@@ -126,16 +144,20 @@ joinCmxs (name :: rest) = name ++ ".cmx " ++ joinCmxs rest
 -- .output 布局（lib/ + app/）的构建脚本。
 -- names 是 lib 编译单元顺序（不含 Main）；hasMain 为 True 时链接 app/Main.ml。
 -- ---------------------------------------------------------------
+pSpaceJoin : List String -> String
 pSpaceJoin [] = ""
 pSpaceJoin (name :: rest) = name ++ " " ++ pSpaceJoin rest
 
+pDepsSuffix : List String -> String
 pDepsSuffix [] = ""
 pDepsSuffix (dep :: rest) = " lib/" ++ dep ++ pDepsSuffix rest
 
+pCompileCalls : List String -> List String -> String
 pCompileCalls [] prev = ""
 pCompileCalls (name :: rest) prev =
   "compile_mod " ++ name ++ pDepsSuffix prev ++ "\n" ++ pCompileCalls rest (name :: prev)
 
+pJoinCmxs : List String -> String
 pJoinCmxs [] = ""
 pJoinCmxs ([name]) = "lib/" ++ name ++ ".cmx"
 pJoinCmxs (name :: rest) = "lib/" ++ name ++ ".cmx " ++ pJoinCmxs rest

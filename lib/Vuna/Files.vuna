@@ -1,4 +1,4 @@
-module Vuna.Files (collectVunaFiles, collectSourceFiles, pathExistsDir, pathExistsFile) where
+module Vuna.Files (collectSourceFiles, collectVunaFiles, pathExistsDir, pathExistsFile) where
 
 -- Vuna.Files：目录遍历工具（fmt / doc / test / Index 共用）。
 -- 只依赖 readDir / isDirectory / fileExists 内建；readDir 返回字典序，遍历顺序确定。
@@ -14,6 +14,7 @@ import Vuna.Compiler.Common
 -- 既不该被格式化，也不该被 doc / test 扫描。
 -- `corpus` 也跳过：test/corpus/ 下的 .vuna 是**夹具**，大量是故意不合法的源码
 -- （解析错误、缩进错误、类型错误用例），格式化器 / 文档生成器不应该扫它们。
+skipGenerated : String -> Bool
 skipGenerated name =
   name == ".git"
     || name == ".local"
@@ -29,6 +30,7 @@ skipGenerated name =
 collectVunaFiles : String -> List String
 collectVunaFiles dir = if pathExistsDir dir then concatMap (walkVuna dir) (readDir dir) else []
 
+walkVuna : String -> String -> List String
 walkVuna dir name = case name of
   "." => []
   ".." => []
@@ -43,6 +45,7 @@ walkVuna dir name = case name of
 collectSourceFiles : String -> List String
 collectSourceFiles dir = if pathExistsDir dir then concatMap (walkAny dir) (readDir dir) else []
 
+walkAny : String -> String -> List String
 walkAny dir name = case name of
   "." => []
   ".." => []
@@ -53,6 +56,8 @@ walkAny dir name = case name of
     in if pathExistsDir path then collectSourceFiles path else [path]
 
 -- 安全的目录判定：不存在返回 False，而不是抛异常。
+pathExistsDir : String -> Bool
 pathExistsDir path = pathExistsFile path && isDirectory path
 
+pathExistsFile : String -> Bool
 pathExistsFile path = fileExists path

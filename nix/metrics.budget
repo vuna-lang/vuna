@@ -1,6 +1,6 @@
 # codegen 机器无关指标预算（M12 回归门槛；超预算 = CI 失败）。
-# 指标聚合自包级 compile（`vuna compile --package`）的 **compiler 包闭包**（seed 闭包）。
-# 有意改变 codegen 后，用 `vuna compile --package --out out compiler && sh nix/metrics.sh out` 复测并更新本文件。
+# 指标聚合自 `vuna seed` 的 **compiler 包闭包 DT split 产物**（M24 起；旧口径为 `compile --package`）。
+# 有意改变 codegen 后，用 `vuna seed out compiler && sh nix/metrics.sh out` 复测并更新本文件。
 # M12.5：种子只覆盖 compiler 包后，按 seed 闭包重新标定（不再含工具链生成代码）。
 # M12.6：main : IO / 效果内建包级限制 / IO API 与 prim_* 原语后重新标定。
 # M12.7：删除 dynamic codegen 后按 typed 单路径重新标定（闭包 -1 个 .ml，约 -54 KB）。
@@ -27,12 +27,46 @@
 # M19 deriving（展开成等价 instance + 内建 Show/Eq/Ord trait 与内建 Show 实例）与
 #   同 trait 多实例修复：seed 闭包 35 个模块，bytes 1289038 / lines 12147 /
 #   longlines 4523 / letrec 664 / zeroarg 34 / ctorcount 2504，按实测重新标定。
-bytes 1295000
-lines 12200
-maxline 12400
-longlines 4540
-letrec 680
-strcat 330
-eqint 35
-zeroarg 40
-ctorcount 2520
+# M20 参数化 data + 签名类型变量量化（`DtQuant` 模块）：seed 闭包 36 个模块，
+#   bytes 1299063 / lines 12263 / longlines 4556 / letrec 674 / ctorcount 2522。
+# M21 main : IO a 执行 + 具体 bind/pure 的 do（`Dt.evalDtMain` / `CoreCodegen` 的
+#   ioResultTy / ioRunText / genDtHook）：seed 闭包 36 个模块，bytes 1304369 /
+#   lines 12324 / longlines 4576 / letrec 677 / ctorcount 2536，按实测重新标定。
+# M22.1–M22.3（DT 包入口 / 库名统一与模式矩阵 / Bool 去桩 / 泛型比较与 Ord 实例 /
+#   build --dt 与 seed --dt 入口）：编译器源码显著增长（Elab 的矩阵族覆盖、字典提升、
+#   比较特化，CoreCodegen 的 List 桥接与比较运行时，Compile/CompilerCli 的输出模型与
+#   入口），seed 闭包 36 → 37 个模块（`vuna compile --package compiler` 闭包），按实测
+#   重新标定：bytes 1424318 / lines 13426 / longlines 5009 / letrec 727 / strcat 355 /
+#   zeroarg 51 / ctorcount 2778。这是 HM 路径编译器源码的规模，不是 DT 产物口径。
+# M22.1–M22.3（DT 包入口 / 库名统一与模式矩阵 / Bool 去桩 / 泛型比较与 Ord 实例 /
+#   build --dt 与 seed --dt 入口）：编译器源码显著增长，seed 闭包 36 → 37 个模块
+#   （`vuna compile --package compiler` 闭包）。随后把 M16 终止性检查从 Elab 抽成
+#   `Vuna.Compiler.DtTerm`（冷启动上下文预算要求单模块 ≤2540 行），闭包 38 个模块、
+#   总分块量不变、单模块行数下降。按实测重新标定：bytes 1425545 / lines 13466 /
+#   longlines 5012 / letrec 727 / strcat 355 / zeroarg 51 / ctorcount 2778。
+#   这是 HM 路径编译器源码的规模，不是 DT 产物口径。
+# 导出列表纳入 fmt（显式列表逐项一行）：模块头展开使源码行号整体下移，`vuna_fail`
+#   内嵌的行列号数字变长，生成 .ml 的 bytes +84、>100 列行 +2；codegen 本身未变。
+#   按实测重新标定：bytes 1425629 / longlines 5014。
+bytes 1165000
+lines 11550
+maxline 8000
+longlines 3450
+letrec 480
+strcat 0
+eqint 125
+zeroarg 95
+ctorcount 3550
+# M23 夹具迁移与 interp 切换：编译器源码新增 DT 能力（零参构造子求值、record update 降级、
+#   参数化 record、@inst 选择、实例诊断、&&|| 短路、REPL 表达式求值、DtDerive/CoreCodegen
+#   修正）约 250 行；且本预算自 751ba49（Elab +467 行）起就已失效——HEAD 实测已是
+#   bytes 1480488 / lines 13992（属漏标定）。按当前实测重新标定：bytes 1509851 /
+#   lines 14232 / longlines 5271 / letrec 770 / strcat 371 / eqint 36 / zeroarg 52 /
+#   ctorcount 2967；maxline 12296 仍低于 12400，不变。降本项：M24 删除 HM 后
+#   Typecheck/TypedCodegen 退出闭包，预算会一次性大幅下降。
+# M24：删除 HM（Typecheck/TypedCodegen）后指标口径改为 `vuna seed`（DT 逐模块 split 生成
+#   compiler 包闭包），不再等价于 `compile --package`。闭包从 38 个模块降到 37 个 .ml
+#   （Vuna_runtime/Vuna_builtins + Base_*/Prelude + 编译器模块 + Main，无 .mli）。
+#   按实测重新标定：files 37 / bytes 1155561 / lines 11468 / maxline 7778 /
+#   longlines 3414 / letrec 472 / strcat 0 / eqint 118 / zeroarg 89 / ctorcount 3471。
+#   预算保留少量余量；ctorcount 上升来自 DT 字典/内建实例显式进 split 产物。

@@ -1,0 +1,17 @@
+-- M23：record update 在 DtRecords 里降级成 `case + 重建构造子`（按字段名唯一定位 record）。
+record Point where
+  x : Int
+  y : Int
+
+p : Point
+p = Point { x = 1, y = 2 }
+
+q : Point
+q = { p | x = 40 }
+
+r : Point
+r = { q | y = 1 }
+
+-- q.x = 40、r.y = 1、p.y = 2（未被更新的字段原样搬运）。
+main : Int
+main = q.x + r.y + p.y

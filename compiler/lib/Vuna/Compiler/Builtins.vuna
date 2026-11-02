@@ -3,6 +3,7 @@ module Vuna.Compiler.Builtins (builtinArity) where
 -- Vuna.Compiler.Builtins：内建函数的名字与元数（供 Loader/Eval 共用）。
 import Vuna.Compiler.Common
 
+builtinArity : String -> Maybe Int
 builtinArity "+" = Just 2
 builtinArity "-" = Just 2
 builtinArity "*" = Just 2

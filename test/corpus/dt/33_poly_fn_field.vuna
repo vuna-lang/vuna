@@ -1,0 +1,15 @@
+-- M21：多态族的构造子字段是函数类型时，字段类型必须被索引精化。
+-- `MkWrap : {a : Type} -> (a -> Int) -> Wrap a` 里字段 `g : a -> Int`；在
+-- `case w of MkWrap g`（w : Wrap Int）分支里 `a` 被精化成 `Int`，于是 `g : Int -> Int`。
+-- 此前 `refineValue` 对 VPi 不递归（`_ => v`），`g 0` 报 `expected a, got Int`；
+-- 修复：在**取用点**（varTypeValue / evalCtx）把精化代入**求值环境**再 eval，
+-- 闭包自然携带精化后的环境，域与余域都递归精化。
+data Wrap : Type -> Type where
+  MkWrap : {a : Type} -> (a -> Int) -> Wrap a
+
+getInt : Wrap Int -> Int
+getInt w = case w of
+  MkWrap g => g 0
+
+main : Int
+main = getInt (MkWrap (\x => x + 1))

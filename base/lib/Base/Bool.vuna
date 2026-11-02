@@ -1,4 +1,4 @@
-module Base.Bool (Bool(..), not, and, or, xor, bool) where
+module Base.Bool (Bool(..), and, bool, not, or, xor) where
 
 -- Base.Bool：布尔类型与逻辑辅助函数。无依赖模块。
 data Bool : Type where

@@ -3,6 +3,7 @@ import M
 g : T -> Int
 g t = case t of
   A => 1
+  _ => 0
 
 main : Int
 main = f (mk 41) + g A

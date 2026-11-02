@@ -10,4 +10,5 @@ pick : Color -> Int
 pick Red = 1
 pick Blue = 2
 
+triple : Int -> Int
 triple x = x + x + x

@@ -51,6 +51,18 @@ module Base.IO (IO, print, println, readFile, writeFile, readLine, readDir, ...)
 - `Base.IO` 刻意不在 `Prelude` 中：`print` / `readFile` 等名字与编译器直接使用的
   effectful 内建同名，自动导入会让编译器源码产生歧义。
 
+## 内建与库的边界（规划）
+
+- **`Bool` 归 `Base.Bool`**：`data Bool` 是唯一权威定义（DT 的 `if` / 字面量模式按
+  「族短名 Bool」识别，不另存一份定义）。编译器的 DT prelude 桩（`DtPrelude` 的
+  `Bool` / `True` / `False`）随 **M22.2** 删除；单文件 / 无库模式按 `List` 的既有约定
+  自行声明 `data Bool`。
+- **`Int` / `String` 是语言原语**：没有 `data` 声明，字面量、算术与 `str*` 由编译器提供。
+- **`Show` / `Eq` / `Ord` 当前由编译器合成**（`DtDerive` 的内建 trait + 内建实例、
+  `Loader` 的名字放行表），**M24.7** 迁到 `Base.Show` / `Base.Eq` / `Base.Ord`；
+  之后编译器只保留 `deriving` 展开机制与 `==` 的 Int/String 特化。
+- 阶段状态与当前阻碍见 [docs/roadmap.md](../roadmap.md) 的「阶段状态总览」。
+
 ## 已知边界
 
 - `Map` 是关联表（assoc list）实现的抽象类型，无平衡树；

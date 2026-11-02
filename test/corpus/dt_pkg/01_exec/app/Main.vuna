@@ -1,0 +1,5 @@
+import Util
+
+-- M22.1：包内跨模块引用（Util 依赖 Answer），验证 DT 按依赖顺序拼接声明。
+main : Int
+main = incAnswer

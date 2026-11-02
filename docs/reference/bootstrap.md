@@ -10,44 +10,49 @@ seed/（提交入库的多文件 OCaml 信任锚点：**compiler 包**入口的�
   │  seed/build.sh + ocamlopt（ocamlopt -c 逐模块 + 链接）
   ▼
 vuna-seed（stage 0 编译器）
-  │  vuna-seed compile --package --out stage1 compiler   （包级 codegen）
-  │  sh stage1/build.sh vuna-compiler                     （ocamlopt 链接 stage 1）
+  │  vuna-seed build --split s1 compiler   （DT split codegen：逐模块 .ml + build.sh）
+  │  sh s1/build.sh ../vuna-stage1         （ocamlopt 链接 stage 1）
   ▼
-vuna-compiler（stage 1 编译器）
-  │  vuna-compiler build .          （对根包 compile --package → .output/lib + app/Main.ml，
-  │                                  ──ocamlopt──▶ .output/bin/vuna）
+stage 1 编译器
+  │  ./vuna-stage1 build --split s2 compiler   （再生成一级文件集）
   ▼
-vuna（产品 CLI）
-  │  vuna-compiler build --split s1 compiler   （扁平分离 codegen，生成 stage 1 文件集）
-  │  vuna-compiler build --split s2 compiler   （stage 1 再生成 stage 2 文件集）
-  ▼
-stage1 == stage2（文件集合逐字节）即 fixed point
+s1 == s2（文件集合逐字节）即 fixed point
+  └ 另外：vuna-compiler build .            （DT 单文件 codegen → .output/main.ml，
+                                          ──ocamlopt──▶ .output/bin/vuna，产品 CLI）
 ```
 
+`nix/seed-rotate.sh` 用当前产品 CLI 生成临时种子后，也会用该种子构建出的编译器
+重新 `build --split` 并与种子 `diff -r`，同样要求逐字节一致后才替换 `seed/`。
+
+seed 与 split 文件集都由 **DT split codegen** 生成（`CoreCodegen.generateDtSplitProgram`，
+包级入口 `Dt.dtSplitProject`；输出模型是 `Split.SplitFile` + `Split.buildScript`）：
+每个源码模块一个 `.ml`，另有共享 runtime / 内建模块与 `build.sh`；**不生成 `.mli`**。
+单文件 DT codegen（`CoreCodegen.generateDtProgram`）只服务 `compile` / `build`。
+
 Nix 侧的对应关系：`packages.vuna-seed`、`packages.vuna-compiler`、`packages.vuna`
-分别构建 stage 0 / stage 1 / 产品 CLI；`checks.seed-selfhost`（别名
-`checks.fixed-point`）守整条链。
+分别构建 stage 0 / stage 1 / 产品 CLI；`checks.seed-selfhost` 守整条链。
 
 ## 种子策略
 
-种子（`seed/`）**提交入库**，是构建输入而不是构建产物。M12 起种子是**多文件文件集**：
-每个 vuna 模块对应一个 OCaml 模块（`.ml` + `.mli`），外加共享 runtime 与 `build.sh`。
-M12.5 起种子**只覆盖 compiler 包**（`compiler/app/Main.vuna` 的 import 闭包）：工具链
-（fmt/lint/repl/doc/test）由编译器编译出来，不在信任锚点里。当前 61 个文件（60 个
-源码/清单 + `build.sh`）、约 1.2 MB（M13 起含 DT 模块 Core/Elab/CoreCodegen/Dt，
-M12.8 起含 `Base_*` 与 `Prelude`）。唯一的硬性不变量：
+种子（`seed/`）**提交入库**，是构建输入而不是构建产物。种子是**多文件文件集**：
+每个 vuna 模块对应一个 OCaml 模块（`.ml`），外加共享 runtime / 内建模块与
+`build.sh`。种子**只覆盖 compiler 包**（`compiler/app/Main.vuna` 的 import 闭包）：
+工具链（fmt/lint/repl/doc/test/lsp）由编译器编译出来，不在信任锚点里。M24 rotation
+后文件集约 38 个（37 个 `.ml` + `build.sh`，无 `.mli`；最终以 `seed/` 实际内容为准）。
+唯一的硬性不变量：
 
 > **当前入库的种子必须能编译当前的 vuna 源码。**
 
 - 种子**不需要**与源码同步：日常修改 `lib/`、`app/`、`test/`、`base/`（以及只在
   CLI 侧的工具改动）不重新生成种子；只有 `compiler/` 的变更才可能需要 rotation；
-- 种子只通过 **seed rotation** 更新：用当前产品 CLI 对 compiler 包做分离编译，把生成的
-  多文件文件集提交为新 `seed/`（`nix/seed-rotate.sh` 会顺带验证种子自生成 fixed point）；
+- 种子只通过 **seed rotation** 更新：用当前产品 CLI 对 compiler 包做 DT split
+  codegen，在临时目录完成 TCB 与 fixed point 校验后才替换 `seed/`
+  （`nix/seed-rotate.sh`，失败不破坏工作树）；
 - 种子比源码旧是正常状态，但必须始终保持“能编译当前源码”的能力；
-- CI 用 `checks.seed-selfhost` 守这条不变量：`seed/build.sh` → `vuna-seed`；种子对
-  **compiler 包**分离编译得到 stage1 文件集并构建；stage1 再生成 stage2 文件集，
-  `diff -r` 逐字节一致；同时断言 seed/stage1/stage2 都不含工具模块、检查增量构建
-  （无改动不重编、touch 一个模块只重编它）与行为抽查；`checks.fixed-point` 与它同一派生；
+- CI 用 `checks.seed-selfhost` 守这条不变量：`seed/` 由 `packages.vuna-seed` 构建；
+  种子对 **compiler 包**做 DT split 得到 stage1 文件集并构建；stage1 再生成 stage2
+  文件集，`diff -r` 逐字节一致；同时按 `nix/tcb-forbidden.txt` 断言 seed/stage1/stage2
+  都不含工具模块，并检查增量构建（无改动不重编、touch 一个模块只重编它）与行为抽查；
 - 如果新特性会让源码超出旧种子能编译的语法子集，必须先把特性实现成旧语法可编译的
   形式，rotate 种子后再在编译器源码里使用新语法；
 - `seed/` 下所有文件都是生成物，禁止手改。
@@ -57,24 +62,16 @@ M12.8 起含 `Base_*` 与 `Prelude`）。唯一的硬性不变量：
 ```console
 # 前提：当前源码能被当前种子编译（nix flake check 通过）
 nix build .#vuna --out-link result
-sh nix/seed-rotate.sh ./result/bin/vuna   # vuna seed seed compiler + 自生成 fixed point
+sh nix/seed-rotate.sh ./result/bin/vuna   # 生成到临时目录 → TCB + fixed point 校验 → 替换 seed/
 nix flake check                           # seed-selfhost 等全部通过
 git diff seed/                            # 确认变化可解释（文件集 + 路径/代码变化）
 git add seed/ && git commit
 ```
 
-`nix/seed-rotate.sh` 的实际步骤：`rm -rf seed && mkdir seed` →
-`vuna seed seed compiler` → 断言重生成的文件集与刚生成的一致（fixed point 自检）→
-断言不含工具模块。它同时检查 `seed/` 只含 compiler 闭包：
-
-```console
-for tool in Cli Fmt Lint Doc Repl TestRunner Files Eval Interp Process Codegen; do
-  [ -e "seed/Vuna_d$tool.ml" ] && fail
-done
-```
-
-（`Index` 等后续工具模块落地后同样追加进这个清单，见 `flake.nix` 与
-`nix/seed-rotate.sh` 的 `forbidden` 列表。）
+`nix/seed-rotate.sh` 在临时目录完成全部生成与校验：`vuna seed "$tmp/seed" compiler` →
+按 `nix/tcb-forbidden.txt` 断言 TCB → 用该种子构建并验证自生成 fixed point → 全部通过后
+才 `rm -rf seed && cp -r "$tmp/seed" seed`，因此中间失败不会破坏当前信任锚点。TCB 黑名单
+只有 `nix/tcb-forbidden.txt` 一份（由 `nix/tcb-check.sh` 断言），新增工具模块时追加到那里。
 
 注意：种子必须从仓库根、以 `compiler` 为包目录生成（脚本已固定这一点），这样产物里
 嵌入的源码路径保持一致。如果改的是**现有语法的语义**（而非新增语法），旧种子会按旧
@@ -84,11 +81,12 @@ done
 
 1. **当前 seed 必须能编译当前源码**——`checks.seed-selfhost` 守；
 2. **rotation 后 stage1 == stage2**（文件集逐字节），即 fixed point；
-3. **`seed/` 只含 compiler 包入口闭包**：工具链（fmt/lint/repl/doc/test、未来的
-   LSP / package manager / Index）不进 TCB；
-4. 编译器自检：当前编译器必须能类型检查自己的源码（`checks.vuna-typecheck`）；
-5. **HM 路径与 `--dt` 路径零回归**：interp + typed + split 三路径语义与产物不变，
-   DT 是显式 opt-in。
+3. **`seed/` 只含 compiler 包入口闭包**：工具链（fmt/lint/repl/doc/test/lsp/index）
+   不进 TCB；
+4. 编译器自检：当前编译器必须能类型检查自己的源码（`checks.vuna-typecheck`，
+   `vuna check .` 走 DT）；
+5. **唯一路径**：语言夹具、`vuna interp`、包构建与 seed 全部走 DT（精化 + 擦除 codegen），
+   没有可切换的检查器，也没有第二套 codegen。
 
 ## 效应内建的包级 allowlist
 
@@ -106,24 +104,29 @@ done
 
 ## 种子文件集（当前）
 
-`seed/` 由 `vuna seed seed compiler` 生成，文件集按依赖序排列，`seed/build.sh`
-的 `MODULES` 列出全部编译单元：
+`seed/` 由 `vuna seed <tmp>/seed compiler`（`nix/seed-rotate.sh` 在临时目录执行，
+校验通过后替换 `seed/`）产出，文件集按依赖序排列，`seed/build.sh` 的 `MODULES`
+列出全部编译单元（下列为形状示意，最终清单与数量以 `seed/` 实际内容为准）：
 
 ```text
 Vuna_runtime
-Base_dPair Base_dBool Base_dMonad Base_dMaybe Base_dList Base_dIO Base_dResult Base_dString
+Vuna_builtins
+Base_dPair ... Base_dString          （vuna-base 模块，依赖序）
 Prelude
-Vuna_dCompiler_dCommon Vuna_dCompiler_dToml Vuna_dCompiler_dManifest Vuna_dCompiler_dPkg
-Vuna_dCompiler_dAst Vuna_dCompiler_dLexer Vuna_dCompiler_dParser Vuna_dCompiler_dBuiltins
-Vuna_dCompiler_dLoader Vuna_dCompiler_dTypecheck Vuna_dCompiler_dSplit
-Vuna_dCompiler_dTypedCodegen Vuna_dCompiler_dCore Vuna_dCompiler_dElab
-Vuna_dCompiler_dCoreCodegen Vuna_dCompiler_dDt Vuna_dCompiler_dCompile
-Vuna_dCompiler_dSplitCli Vuna_dCompiler_dProcess Vuna_dCompiler_dCompilerCli
+Vuna_dCompiler_dCommon ... Vuna_dCompiler_dCompilerCli   （编译器模块，依赖序）
 Main
 ```
 
-`seed/build.sh` 由 codegen 生成：干净构建一次 `ocamlopt` 编译全部 `.mli`/`.ml` 并链接；
-增量构建按 `.ml`/`.mli`/`.cmi` 时间戳逐模块重编（`compile <module>` 行可被脚本断言）。
+- `Vuna_runtime`：`CoreCodegen.dtRuntime`（`bi_*` 等运行时）。
+- `Vuna_builtins`：内建类 `Dict_Show/Eq/Ord` 的 data、内建实例（`Show_Show_` /
+  `Eq_Eq_` / `Ord_Ord_` 前缀）与内建类的方法投影（`show`/`eq`/`neq`/`lt`/`le`/`gt`/`ge`）。
+- 每个源码模块一个 `<Module>.ml`（依赖序；OCaml 编译单元名 = 模块名点转 `_d`），
+  文件头 `open` runtime / builtins 与所有更早模块；`List` 桥接（`dtp_unpack/pack`）
+  放在声明 `List` 族的模块文件里。
+- `Main.ml`：entry decls 与 `main` 钩子。**不生成 `.mli`**。
+
+`seed/build.sh` 由 codegen 生成：干净构建一次 `ocamlopt` 编译全部 `.ml` 并链接；
+增量构建按 `.ml`/`.cmi` 时间戳逐模块重编（`compile <module>` 行可被脚本断言）。
 编译 flag 统一为 `-g -w -a+39 -warn-error +39`（warning 39 = unused rec，设 warn-error），
 并链接 `unix.cmxa`（`fileMtime`/`fileSize` 内建用 `Unix.stat`）。
 

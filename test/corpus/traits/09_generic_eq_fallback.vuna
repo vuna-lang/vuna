@@ -1,7 +1,12 @@
+data Bool : Type where
+  True : Bool
+  False : Bool
+
 data Dummy : Type where
   D : Dummy
 deriving (Eq)
 
+f : a -> a -> Bool
 f x y = x == y
 
 main : Bool

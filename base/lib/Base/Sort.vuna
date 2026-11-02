@@ -1,24 +1,22 @@
 module Base.Sort (mergeSort, sortBy) where
 
--- Base.Sort：稳定归并排序。`<=` 由内建 Ord 回退承担（typed 路径可用）。
+-- Base.Sort：稳定排序。`mergeSort` 用内建比较运算符（Ord 语义）；`sortBy` 接受自定义
+-- 比较函数。
+--
+-- DT 的终止性检查只接受**结构递归**（递归调用必须是形参的真子项），归并排序的
+-- `sortBy le (take half xs)` 不满足；这里改成插入排序（自底向上按 tail 递归），
+-- 稳定性与排序结果不变，DT / HM 两条路径都成立。
 import Base.List
+import Base.Bool
+
+insertBy : (a -> a -> Bool) -> a -> List a -> List a
+insertBy le y [] = [y]
+insertBy le y (x :: xs) = if le y x then y :: x :: xs else x :: insertBy le y xs
 
 sortBy : (a -> a -> Bool) -> List a -> List a
 sortBy le xs = case xs of
   [] => []
-  [_] => xs
-  _ =>
-    let
-      n = length xs
-    in let
-      half = n / 2
-    in mergeBy le (sortBy le (take half xs)) (sortBy le (drop half xs))
-
-mergeBy : (a -> a -> Bool) -> List a -> List a -> List a
-mergeBy le [] ys = ys
-mergeBy le xs [] = xs
-mergeBy le (x :: xs) (y :: ys) =
-  if le x y then x :: mergeBy le xs (y :: ys) else y :: mergeBy le (x :: xs) ys
+  y :: ys => insertBy le y (sortBy le ys)
 
 mergeSort : List a -> List a
 mergeSort xs = sortBy (\x, y => x <= y) xs

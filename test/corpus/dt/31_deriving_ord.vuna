@@ -1,4 +1,8 @@
 -- M19：`deriving (Ord)`——构造子按声明顺序为序，同构造子逐字段比较。
+data Bool : Type where
+  False : Bool
+  True : Bool
+
 data C3 : Type where
   Low : C3
   Mid : C3

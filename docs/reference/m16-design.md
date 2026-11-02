@@ -1,5 +1,7 @@
 # M16 设计闸门：终止性、覆盖性与擦除
 
+> **历史文档（M16 当时记录）**：文中 `--dt` 与另一条路径已在 M24 删除，现行语义见
+> [dt.md](dt.md) / [limits.md](limits.md)；本文只保留设计推理与当时的边界证据。
 > 基线 `ec97707`。**终止性已落地并验证**；覆盖性 M14 已有，M16 固定回归 + 划边界 + 收紧两处；
 > **索引/证明擦除只做诊断、不改运行时表示**；`partial` 例外未落地。只覆盖 `--dt` 单文件路径；
 > HM 路径（interp + typed + split）不受影响、`nix/metrics.budget` 不变。非目标（M17/M18）：
@@ -154,9 +156,9 @@ termReads env t = case t of
 
 ## 5. 性能预算（`nix/metrics.budget` 不变）
 
-预算聚合 `vuna compile --package` 的 **compiler 包闭包**（seed 闭包），是 **HM typed codegen** 的产物；擦除只改 `--dt` 单文件输出，不进 seed、不进包级 compile，故 M16 **不需要重新标定**（bytes 1120000 / lines 10500 / maxline 12400 / longlines 3890 / letrec 575 / strcat 320 / eqint 35 / zeroarg 30 / ctorcount 2200）。`dt_elab` 基准（`nix/bench.sh` 的 `compile --dt --no-print test/corpus/dt/03_compose.vuna`）不得回归：`docs/dt-core.md` §10 记录 M13 完成时约 2 ms，本机实测 3–4 ms（5 次取样 `3/4/3/4/3` ms，`date +%s%N` 计时）；§3.3 的 `indexReads` 是一次线性遍历，量级远小于精化本身。`nix run .#bench -- --quick` 是手动基准（不进 CI）。
+预算聚合 `vuna compile --package` 的 **compiler 包闭包**（seed 闭包），是 **HM typed codegen** 的产物；擦除只改 `--dt` 单文件输出，不进 seed、不进包级 compile，故 M16 **不需要重新标定**（bytes 1120000 / lines 10500 / maxline 12400 / longlines 3890 / letrec 575 / strcat 320 / eqint 35 / zeroarg 30 / ctorcount 2200）。`dt_elab` 基准（`nix/bench.sh` 的 `compile --dt --no-print test/corpus/dt/03_compose.vuna`）不得回归：`docs/dt-core.md` §10 记录 M13 完成时约 2 ms，本机实测 3–4 ms（5 次取样 `3/4/3/4/3` ms，`date +%s%N` 计时）；§3.3 的 `indexReads` 是一次线性遍历，量级远小于精化本身。`nix run .#vuna-bench -- --quick` 是手动基准（不进 CI）。
 
-## 6. 已知例外（进 limits）
+## 6. 已知例外（M16 当时的记录；已迁入 limits 与 roadmap M22.x）
 
 1. 互递归与跨调用 size-change 不查 ⇒ 可能接受死循环程序（`check --dt` 通过、运行时挂死）。
 2. 嵌套模式、多 clause 不支持 ⇒ 覆盖性只在「单层构造子模式 + 单 equation」内成立。

@@ -1,0 +1,5 @@
+module Lib where
+
+-- M22.1：库包夹具模块，没有 main，只能 check 不能 compile。
+double : Int -> Int
+double x = x + x

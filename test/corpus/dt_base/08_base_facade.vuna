@@ -1,0 +1,5 @@
+-- M22.2：`import Base` 门面（全部模块重导出）在 DT 下可用。
+import Base
+
+main : Int
+main = length (mergeSort [2, 1])

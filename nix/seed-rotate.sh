@@ -8,8 +8,8 @@
 # seed 只覆盖 compiler 包（compiler/app/Main.vuna 的 import 闭包），
 # 工具链（fmt/lint/repl/doc/test）不在种子里。
 #
-# 轮换后：nix flake check 应通过（seed-selfhost 校验 stage1 == stage2 文件集、
-# 增量构建、行为抽查）；检查 git diff seed/ 的变化可解释后提交。
+# 生成与校验全部在临时目录完成：只有 TCB 断言与 fixed point 都通过后才替换 seed/，
+# 因此失败不会破坏工作树里的信任锚点。
 set -eu
 cd "$(dirname "$0")/.."
 VUNA=${1:-./result/bin/vuna}
@@ -23,29 +23,24 @@ VUNA=${1:-./result/bin/vuna}
 tmp=$(mktemp -d "${TMPDIR:-/tmp}/vuna-seed-rotate.XXXXXX") || exit 1
 trap 'rm -rf "$tmp"' EXIT INT TERM
 
-rm -rf seed
-mkdir -p seed
-"$VUNA" seed seed compiler
-echo "seed-rotate: 已生成 seed/（$(ls seed | wc -l | tr -d ' ') 个文件）"
+# 从仓库根以包目录 "compiler" 生成，保证嵌入的文件路径与提交后的 seed/ 一致。
+"$VUNA" seed "$tmp/seed" compiler
 
 # 种子必须只含 compiler 闭包：工具模块与旧 dynamic codegen 一旦出现都算错误。
-for tool in Cli Fmt Lint Doc Repl TestRunner Files Eval Interp Process Codegen Index Lsp Json; do
-  if [ -e "seed/Vuna_d$tool.ml" ]; then
-    echo "seed-rotate: 错误：seed 包含不允许的模块 Vuna.$tool" >&2
-    exit 1
-  fi
-done
+sh nix/tcb-check.sh nix/tcb-forbidden.txt "$tmp/seed"
 
-# 用种子源码构建 vuna-seed，并验证它能逐字节重生成同一文件集。
-cp -r seed "$tmp/seed"
-sh "$tmp/seed/build.sh" "$tmp/vuna-seed"
-mkdir -p "$tmp/regen"
-# 从仓库根以包目录 "compiler" 生成，保证嵌入的文件路径与 seed/ 一致。
+# 用生成的种子构建（在副本里构建，避免 .cmi/.cmx 污染待比较的文件集），
+# 并验证它能逐字节重生成同一文件集（fixed point）。
+cp -r "$tmp/seed" "$tmp/build-seed"
+sh "$tmp/build-seed/build.sh" "$tmp/vuna-seed"
 "$tmp/vuna-seed" build --split "$tmp/regen" compiler
-if diff -r seed "$tmp/regen" >/dev/null 2>&1; then
-  echo "seed-rotate: 种子自生成 fixed point 通过（文件集逐字节一致）"
-else
-  echo "seed-rotate: 错误：种子重生成的文件集与 seed/ 不一致" >&2
-  diff -r seed "$tmp/regen" | head -20 >&2
+if ! diff -r "$tmp/seed" "$tmp/regen" >/dev/null 2>&1; then
+  echo "seed-rotate: 错误：种子重生成的文件集与生成结果不一致" >&2
+  diff -r "$tmp/seed" "$tmp/regen" | head -20 >&2
   exit 1
 fi
+
+# 全部校验通过后再替换仓库里的 seed/。
+rm -rf seed
+cp -r "$tmp/seed" seed
+echo "seed-rotate: 已生成 seed/（$(ls seed | wc -l | tr -d ' ') 个文件），fixed point 通过"

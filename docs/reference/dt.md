@@ -1,166 +1,169 @@
-# 语言参考：DT 子集（M19，实验性）
+# 语言参考：DT（依赖类型）
 
-`--dt` 打开与 HM 并存的依赖类型（DT）路径：Core TT + NbE + 双向精化器 +
-擦除型 codegen。M14 在 M13（依赖函数 + 一阶元变量）之上加入**索引归纳族**与
-**依赖模式匹配**（`data` + `case`），并因此解除了递归定义限制。DT 仍是
-**单文件、自包含、显式 opt-in**：不经过模块 Loader，不支持 `import` / 包模式，
-也不进入 `build` / `build --split` / `seed`；HM 路径（interp + typed + split）
-语义与产物不变。设计与边界见 [docs/dt-core.md](../dt-core.md)。
+DT 是 vuna 唯一类型检查器与 codegen 路径：Core TT + NbE + 双向精化器 + 擦除型
+codegen。M14 加入**索引归纳族**与**依赖模式匹配**；M20 起**复用 Loader**（多文件 /
+`import` / `--root`）；M21 起 `main : IO a`、`do` 与 `Base.IO` 可用；M22.1 起 `check` /
+`compile` 接受**包目录**，M22.2 起 `base` 全部模块可精化，M22.3 起 `build` / `seed`
+也走 DT；M23 起语言夹具只走 DT、`vuna interp` 改为精化后的核心求值，record update、
+参数化 record、命名实例选择 `@inst`、实例重复/未知方法诊断、`DtDerive` 的 Bool 常量与
+参数化 `Eq` 等能力补齐；M24 起旧检查器与旧 codegen 删除，`vuna seed` 由 DT 逐模块
+split codegen 生成。设计与边界见 [dt-core.md](../dt-core.md)，阶段状态见
+[roadmap.md](../roadmap.md)。
 
 ```vuna
 id : (a : Type) -> a -> a
 id a x = x
 
--- 索引归纳族：Nat / Vec / Fin / Eq 都是用户声明的，没有内置 Nat
+-- 索引归纳族：Nat / Vec 都是用户声明的，没有内置 Nat
 data Nat : Type where
   Zero : Nat
   Succ : Nat -> Nat
 
--- 族头只写 kind，箭头个数 = 族的参数/索引个数；构造子用完整 telescope 重绑它们,
--- 前 arity 个 binder 对应族的参数/索引，其余是字段。
--- 注意：M14 的索引 binder 一律写成**显式**（`(n : Nat)`）——隐式索引推断属于 M15。
+-- 族头只写 kind，箭头个数 = 族参数/索引个数；构造子用完整 telescope 重绑它们，
+-- 前 arity 个 binder 对应族参数/索引，其余是字段。
 data Vec : Type -> Nat -> Type where
-  Nil  : (a : Type) -> Vec a Zero
+  Nil : (a : Type) -> Vec a Zero
   Cons : (a : Type) -> (n : Nat) -> a -> Vec a n -> Vec a (Succ n)
 
--- 递归定义在 M14 已解禁（靠 delta 展开 fuel 终止）
+-- 递归定义已解禁（delta 展开 + 终止性检查）
 plus : Nat -> Nat -> Nat
 plus a b = case a of
-  Zero   => b
+  Zero => b
   Succ k => Succ (plus k b)
 
--- 构造子应用要写全族参数/索引（显式 binder 不会被省略）。
--- 「类型参数」域是宇宙（如 `a : Type`）⇒ 擦除；
--- 「索引」域是归纳族（如 `n : Nat`）⇒ 保留运行时表示，所以 Vec 的值带长度字段。
+-- 构造子应用要写全族参数/索引；`a : Type` 域擦除，`n : Nat` 索引保留运行时表示。
 three : Vec Int (Succ (Succ (Succ Zero)))
 three = Cons Int (Succ (Succ Zero)) 1 (Cons Int (Succ Zero) 2 (Cons Int Zero 3 (Nil Int)))
-
-vlength : (a : Type) -> (n : Nat) -> Vec a n -> Nat
-vlength a n xs = case xs of
-  Nil b              => Zero
-  Cons b m y ys      => Succ (vlength b m ys)
 ```
 
-依赖模式匹配：`case` 对索引做 unification，只有可达分支才要求写出。
-
 ```vuna
--- vhead 只写 Cons：Nil 的结果索引 Vec a Zero 与 scrutinee 的 Vec a (Succ n)
--- 不可统一，因此该分支不可能，覆盖率检查合法地跳过它。
+-- 依赖模式匹配：case 对索引做 unification，只有可达分支要求写出。
+-- `vhead` 的 Nil 分支结果索引 Vec a Zero 与 Vec a (Succ n) 不可统一 ⇒ 可省略。
 vhead : (a : Type) -> (n : Nat) -> Vec a (Succ n) -> a
 vhead a n xs = case xs of
   Cons b m x rest => x
-```
 
-```vuna
--- Fin：上界索引让 FZero 只存在于 Succ n
+-- Fin / Eq：索引让 FZero 只存在于 Succ n；Refl 把两个索引统一成一个。
 data Fin : Nat -> Type where
   FZero : (n : Nat) -> Fin (Succ n)
   FSucc : (n : Nat) -> Fin n -> Fin (Succ n)
 
--- Vec a (Succ m) 与 Fin (Succ m) 同时排掉 Nil 与 FZero 两个不可能分支。
-findex : (a : Type) -> (m : Nat) -> Vec a (Succ m) -> Fin (Succ m) -> a
-findex a m xs i = case xs of
-  Cons b k x rest => case i of
-    FZero j   => x
-    FSucc j h => x
-```
-
-```vuna
--- Eq：Refl 把两个索引统一成一个，sym/trans 不需要额外的证明构造
 data Eq : Type -> Type -> Type where
   Refl : (a : Type) -> Eq a a
 
 sym : (a : Type) -> (b : Type) -> Eq a b -> Eq b a
 sym a b e = case e of
   Refl c => Refl c
-
-trans : (a : Type) -> (b : Type) -> (c : Type) -> Eq a b -> Eq b c -> Eq a c
-trans a b c p q = case p of
-  Refl d => q
 ```
 
-几条硬边界，写代码前值得先知道（M19 之后的状态）：
+几条硬边界，写代码前值得先知道：
 
-- **隐式索引推断可用（M15）**。构造子/函数的索引 binder 现在可以写隐式
-  （`Cons : {a : Type} -> {n : Nat} -> ...`），调用点由实参或期望类型反推：
-  ```vuna
-  three : Vec Int (Succ (Succ (Succ Zero)))
-  three = vapp (Cons 1 (Cons 2 Nil)) (Cons 3 Nil)
-  ```
-  推断仍受一阶限制：需要在**构造子推断位置**从内层实参反推（`FSucc FZero` 单独作为
-  实参而外层没有期望类型）时仍可能报 `DT: unsolved metavariable`。
-- **接口与实例（M15）**。`trait` / `instance` 走字典编码：`trait Pretty a` →
-  `data Dict_Pretty : Type -> Type`，方法投影把字典当隐式参数，调用点的实例由**实例
-  搜索**自动插入。`Show`/`Eq` 这类单参数接口直接可用；缺失/歧义实例有明确诊断。
-  多参数接口报 `DT: interfaces must have exactly one parameter (M15 limitation)`。
-- **终止性检查（M16）**。自递归函数必须结构递归：每个递归调用至少有一个实参是同一
-  形参的真子项（`case` 分支里构造子的字段算子项）。否则报
-  `DT: cannot prove termination of <f> (recursive call does not structurally decrease)`。
-  互递归按「每个分量至少一次下降」近似，复杂尺寸变化矩阵不做。
-- **擦除规则**：binder 的域是**宇宙**（`a : Type`）⇒ 擦除；域是**归纳族**（`n : Nat`
-  这类索引）⇒ **保留运行时表示**。所以 `Vec a n` 的值是一条带长度索引字段的链表
-  （`type 'a t_Vec = C_Vec_Nil | C_Vec_Cons of 'a t_Nat * 'a * 'a t_Vec`）。
-  M16 探测确认索引**不能无条件擦除**（`vlen` 把长度索引当递归参数传下去，运行时真的
-  读它）；完整擦除需要整程序使用分析，仍是后续工作。
-- **`case` 分支与模式（M19）**。分支必须绑定构造子的全部显式 telescope binder（族参数
-  与索引也各占一个位置，即使分支体不用）；**嵌套构造子模式已支持**（`Succ (Succ k)`，
-  精化期改写成内层 case，因此内层同样要过覆盖检查）；兜底 `_ => ...`（变量模式等价）
-  只能放**最后一个**分支。
-- **多 clause 与方程左端模式（M19）**。`f p1 = e1` / `f p2 = e2` 保留语法，精化期合成
-  单个 lambda + case 表达式树（标准模式矩阵），因此同一构造子的多个 clause、变量兜底、
-  `f (Just x)` 与 `f (Just (Just y))` 共存都成立；多 clause 的参数个数必须一致。
-- **`let` 与推断位 `case`（M19）**。`let ... in`（含 `where` 块）脱糖为
-  `(\x => body) e`；`case` 可以出现在推断位（函数实参、`if` 分支、`let` 的 value），
-  做法是建元变量当期望类型。
-- **内建类型上的字面量模式（M19）**。`Bool` 的 `case` 降级成 `if`；`Int` / `String`
-  的字面量分支降级成嵌套 `if` 链，因此**必须有一个变量/通配兜底分支**（值域穷尽不了）。
-- **内建泛化（M19）**。`==` / `/=` 带隐式类型参数（`{a : Type} -> a -> a -> Bool`），
-  精化到饱和应用时按第一个实参类型特化成 `bi_eq_int` / `bi_eq_str` 这类运行时函数；
-  非 `Int` / `String` 报 `is only defined for Int and String`。`strFromInt` /
-  `strUnpack` / `strPack` / `strLength` 已进 prelude（定义表在 `DtPrelude.vuna`）。
-- **可达性决定分支能否省略**：若函数签名把索引**细化**（如 `Vec a (Succ m)`），
-  与该索引不可统一的分支（`Nil`）**可以省略**，写了则报
-  `DT: this branch is impossible`；若签名是**泛化**索引（`Vec a n`），则所有构造子
-  都可达，必须写全，漏写报 `DT: case is not exhaustive: missing <C>`。
-- **`data` 的 kind 必须是 `... -> Type` 的箭头链**，构造子的结果类型必须回到本族
-  （否则报 `DT: constructor <C> does not return <F>`）。族名本身按 kind 入
-  `globals`，每个构造子挂**完整 Pi 类型**；类型级 `Vec a n` 是**中性应用**，不做
-  类型级求值（只在索引 unification 时按定义性相等比较）。
-- **`check --dt` 不要求 `main`**（库文件可直接 check），`compile --dt` 要求 `main`
-  且其类型为 `Int` / `String` / `Bool`。
-- 元变量求解支持引用创建时已存在的局部变量（作用域检查会拒绝逃逸解）；高阶/开放解
-  仍不支持。
-- 洞 `_` 未解时的诊断带**位置与目标类型**：`DT: unsolved hole <loc> with goal <ty>`；
-  `vuna goal` 可列出全部洞（见 [dt-tooling.md](dt-tooling.md)）。
+- **隐式索引推断（M15）**。构造子/函数的索引 binder 可写隐式（`{n : Nat}`），调用点由
+  实参或期望类型反推；推断仍受一阶限制（`FSucc FZero` 单独作实参且外层无期望类型时可能
+  报 `DT: unsolved metavariable`）。
+- **接口与实例（M15/M21/M23）**。`trait` / `instance` 走字典编码（`data Dict_C` + 方法投影
+  + 实例搜索）；`Show`/`Eq` 直接可用，缺失/歧义实例有明确诊断；M21 起库定义 trait 的投影
+  跨模块可见（`Base.IO` 重导出 `Functor(..)` / `Monad(..)`，`do`/`bind`/`pure`/`fmap`
+  可用），实例方法支持构造子形参与多 clause。M23 起 `@inst`（含 `@M.inst`）可用，重复实例
+  （含 `deriving` 生成的）报 `duplicate instance`、未知方法报 `instance has unknown method`；
+  参数化 data 的 `deriving (Eq)` 可用（通用结构比较兜底，需要 `Eq` 字典的场景仍可能缺实例），
+  `deriving (Show)` / `(Ord)` 只支持非参数化类型。多参数接口仍报
+  `interfaces must have exactly one parameter (M15 limitation)`。
+- **record（M15 降级，M23 补齐）**。`record` 声明、构造、字段访问、字段更新
+  （`{ p | x = ... }`，可多字段）与参数化记录（`record Pair a b`）都先在 `DtRecords` 降成
+  单构造器 `data` 再精化；`deriving (Show, Eq)` 由 `DtDerive` 生成（`Show` 用记录源名且
+  仅非参数化、`Eq` 支持参数化），`Ord` 派生支持非参数化类型。
+- **`where` 子句（M24）**。where 绑定是**带签名的局部顺序 let**：每个绑定必须在子句前
+  写显式签名（缺签名报 `DT: ... needs a type signature`），只能引用它之前的绑定；不支持
+  前向引用 / 自递归 / 互递归（递归放顶层定义组）。语法见 [language.md](language.md)。
+- **终止性检查（M16）**。自递归函数必须结构递归（每个递归调用至少有一个实参是同一形参
+  的真子项），否则报 `cannot prove termination ...`；互递归不查，见 [limits.md](limits.md)。
+- **擦除规则（M16/M22.3）**。运行时表示只由 `Core.rigIsErased` 判定：隐式 binder 与 `Type`
+  域擦除（`Rig0`），显式值 / 显式索引 `(n : Nat)` 保留（`Rig1`）——`Vec a n` 的隐式索引
+  版本无长度字段，显式索引版本保留（`vlen` 可读）；不做整程序使用分析。
+- **`case` 分支与模式（M19）**。分支绑定构造子的全部显式 telescope binder；嵌套构造子
+  模式改写成内层 case（内层同样过覆盖检查）；兜底 `_ => ...` 只能放**最后一个**分支。
+- **多 clause 与方程左端模式（M19/M22.2）**。`f p1 = e1` / `f p2 = e2` 精化成单 lambda +
+  case 树（`DtMatch`）；变量兜底、嵌套模式共存，参数个数必须一致；M22.2 起矩阵按族的
+  构造子集合判覆盖（全覆盖不再补通配兜底），源级 `case` 的嵌套模式把后续 `_` 下沉。
+- **`let` / 推断位 `case`（M19）**。`let ... in` 脱糖为 `(\x => body) e`；`case` 可出现在
+  推断位（实参、`if` 分支、let value），做法是建元变量当期望类型。
+- **内建字面量模式（M19）**。`Bool` 的 `case` 降级成 `if`；`Int` / `String` 字面量分支
+  降级成嵌套 `if` 链，因此**必须有一个变量/通配兜底分支**。
+- **Bool（M21/M22.2）**。`data Bool` 的 `True`/`False` 精化成核心 `TBool`，Bool 族不生成
+  OCaml 变体，`if`/`case`/`main : Bool` 按族**短名**识别；`True`/`False` 必须来自
+  `Base.Bool` 或本地 `data Bool`，prelude 只保留 `Bool` 类型别名（内建 trait 签名需要）。
+- **内建泛化（M19/M22.2）**。`==`/`/=` 与 `<`/`<=`/`>`/`>=` 在饱和应用处按实参类型特化：
+  `Int`/`String` 走具体运行时，其它类型走 `Eq`/`Ord` 字典（缺失给诊断）；刚性类型参数
+  延迟提升成 `{d : Dict_C a}`，内建 Int/String/Bool 实例 + `deriving (Ord)` 参与搜索。
+- **可达性**：签名把索引**细化**（`Vec a (Succ m)`）时不可统一的分支可省略（否则报
+  `this branch is impossible`）；泛化索引（`Vec a n`）漏写报 `case is not exhaustive`。
+- **`data` kind** 必须是 `... -> Type` 箭头链，构造子结果类型回到本族；族名与完整 Pi
+  构造子类型进 `globals`，类型级 `Vec a n` 是中性应用（只在 unification 时比较）。
+- **`main`**：`check` 不要求 `main`，`compile` 要求；`main` 可为
+  `Int`/`String`/`Bool` 或 `IO a`（M21：取 IO 末字段后 `f 0`）。`vuna interp` 是 DT
+  核心求值器，只展示 `Int`/`String`/`Bool` 的值（`show` 语义，字符串带引号）；
+  **任何 `main : IO a` 一律不能 interp**，报
+  `DT: interp cannot execute effects (main : IO a); compile and run the program instead`
+  并提示改用 `compile` + 运行产物；数据值 `main` 的夹具用
+  `Int`/`String`（见 [limits.md](limits.md)）。
+- **`strUnpack` / `strPack`**：没有声明 `List` 族时也映射到运行时桥接
+  `bi_strUnpack` / `bi_strPack`；但核心求值器不归约这两个内建，用到它们的夹具用
+  `.nointerp` 标记，只做 `compile` + 运行。
+- 洞 `_` 未解时诊断带位置与目标类型（`DT: unsolved hole <loc> with goal <ty>`），
+  `vuna goal` 可列出全部洞（[dt-tooling.md](dt-tooling.md)）。
 
 ## 命令与边界
 
 ```console
-vuna check --dt file.vuna            # 精化 + 擦除检查（不生成代码）
-vuna compile --dt file.vuna out.ml   # 擦除并生成 OCaml（main : Int/String/Bool）
-vuna interp --dt file.vuna           # 核心求值器（NbE + delta）求值 main
+vuna check <file.vuna | package-dir>            # 精化 + 擦除检查
+vuna compile [--no-print] <file.vuna | package-dir> out.ml   # 擦除并生成 OCaml
+vuna interp [--root DIR]... <file.vuna>         # DT 精化 + 核心求值 main（纯；单文件）
+vuna build [--no-compile] [DIR]                 # 单文件输出模型 → .output/{main.ml,build.sh,bin/<pkg>}
+vuna build --split OUT [DIR]                    # 逐模块：OUT/<Module>.ml... + OUT/build.sh
+vuna seed OUT [DIR]                             # 同上（seed 轮换用；必须显式 OUT）
 ```
 
-`--dt` 不支持 `--root` 与包目录；`build` / `seed` 不支持 `--dt`。DT 路径与 HM 路径
-互不影响：HM 的 interp + typed + split 语义与产物保持不变。
+DT 复用 Loader：多文件 / `import` / `--root` / 包目录都可用；`build` 与 `seed` 走同一
+DT codegen，`build` 产单文件 `main.ml` + `build.sh`，`seed` / `build --split` 产逐模块
+`.ml` + `build.sh`（无 `.mli`，见 [bootstrap.md](bootstrap.md)）。`vuna interp` 总走
+DT 精化 + 核心求值，入口只能是单文件（可用 `--root` 加载依赖模块；包目录入口是
+`check` / `compile`）。
 
 ## 测试夹具
 
-`test/run-tests.sh` 第 34 段，三条路径（`interp --dt` / `check --dt` / `compile --dt` +
-`ocamlopt`）都跑：
+`test/run-tests.sh` 第 34 段（`interp` / `check` / `compile` + `ocamlopt` 三路）。
+`.nointerp` 夹具跳过 interp，只做 `compile` + 运行（效果/不可归约）。
 
-- 正例 `test/corpus/dt/` 共 **31** 个：M13 `01_id`–`08_if`；M14 `09_nat`/`10_vec`/`11_fin`/`12_eq`；
-  M15 `13_iface`/`14_solve`/`15_goal`；M16 `16_total`/`17_erase`；M18 `18_ctx`；
-  M18.5 `19_lam`；M18.6 `20_rig`/`21_level`；M19 `22_let` 起共 10 个（`22_let`–`31_deriving_ord`）。
-  数值见各 `.out` 文件。
-- 负例 `test/corpus/dt_err/` 共 **26** 个：M13 的 `01_universe`、`02_conv`、
-  `03_hole`、`05_import`、`06_unknown`、`07_lambda`、`08_arity`、`09_runtime_type`、
-  `11_implicit_non_type`；M14 `04_nonexhaustive`/`10_impossible`/`12_case_int`/
-  `13_unknown_ctor`/`14_bad_ctor_result`/`15_nested_pat`；M16 `16_nonterm`/`17_nested_total`；
-  M18.5 `18_lam_type_used`；M18.6 `19_rig_type_runtime`；M19 `20_let_bad_pat` 起共 7 个。
+- 正例 `test/corpus/dt/`（44 个）：按阶段 M13 `01_id`–`08_if`、M14 `09_nat`–`12_eq`、
+  M15 `13_iface`–`15_goal`、M16 `16_total`/`17_erase`、M18–M18.6 `18_ctx`–`21_level`、
+  M19 `22_let`–`31_deriving_ord`、M20 `32_parametric_data`、M20.5 `36_multi_clause`、
+  M21 `33_poly_fn_field`/`34_io_do`/`35_io_main`/`37_instance_ctor_pat`（`34_io_do` /
+  `35_io_main` 是 `main : IO a`，带 `.nointerp`）、M22.3
+  `38_explicit_index`（显式索引是 Rig1、保留字段，对照 `17_erase` 的隐式索引擦除）、
+  M23 `39_generic_eq`（无 `Eq` 实例时的泛型 `==` 兜底）、`40_record_update`（record
+  update 降级）、`41_record_parametric`（参数化 record kind + swap）、
+  `42_named_instance`（`@inst` 命名实例选择）、`43_deriving_parametric_eq`（参数化
+  data 派生 `Eq`）、`44_short_circuit`（`&&`/`||` 短路，右侧 `1/0` 不求值）。
+- 正例 `test/corpus/dt_base/`（8 个，`--root ../base/lib`）：M21 的 `Base.IO`/`do`/
+  trait 投影与 `Base.IO` API 类型面；`06_base_string`（`str*` 的 `List` 族桥接）、
+  `01_io_do`/`02_io_api`/`03_fmap_bind`（效果动作）与 `06_base_string` 带 `.nointerp`
+  （interp 不执行效果、不归约 `strUnpack`/`strPack`）；`07_base_sort_map`（Ord 泛型比较
+  + Map，`123`）、`08_base_facade`（`import Base`，`2`）。
+- 正例 `test/corpus/dt_pkg/`（3 个包目录）：`01_exec`（运行 `42`）、`02_lib`（库包
+  check 通过、compile 清晰报错）、`03_bad`（无 `vuna.toml`）；`corpus/dt_root/` 是
+  `interp --root` 多文件夹具。
+- 正例 `test/corpus/dt_io/`（1 个）：`main : IO a` 的编译产物真正执行 `Base.IO` 效果
+  （核心求值器不执行效果，所以只比产物输出）。
+- 负例 `test/corpus/dt_err/`（34 个）：M13–M23 的诊断夹具（`duplicate instance`、
+  `instance has unknown method`、`deriving_parametric_show`、`record_update_ambiguous`
+  等），M24 新增 `35_where_no_sig`（期望片段 `needs a type signature`）。
+- `where` 签名正例在 `test/corpus/typed_ok/06_where_fwd`、`07_where_mutual`、
+  `08_where_self`（局部辅助函数 / 顶层递归的对照）与 `corpus/fmt` 的 where 黄金例。
 
 ## 相关阅读
 
-- 设计与实现细节（Core TT / NbE / 精化规则 / 覆盖率）：[docs/dt-core.md](../dt-core.md)
-- 与 HM 路径的边界：[architecture.md](../architecture.md)
-- DT 后续阶段（M18.5–M24 单路径迁移）：[docs/roadmap.md](../roadmap.md)；能力落差证据：[dt-parity.md](dt-parity.md)
+- 设计与实现细节：[dt-core.md](../dt-core.md)；工具链：[dt-tooling.md](dt-tooling.md)
+- 编译链与改动定位：[architecture.md](../architecture.md)；能力落差证据（历史）：
+  [dt-parity.md](dt-parity.md)
+- DT 阶段状态：[roadmap.md](../roadmap.md)；已知限制：[limits.md](limits.md)

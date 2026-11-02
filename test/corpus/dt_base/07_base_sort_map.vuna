@@ -1,0 +1,11 @@
+-- M22.2：`Base.Sort`（Ord 泛型比较的实例搜索）与 `Base.Map` 可用。
+import Base.Sort
+import Base.Map
+
+main : Int
+main =
+  let
+    xs = mergeSort [3, 1, 2]
+  in case xs of
+    [a, b, c] => a * 100 + b * 10 + c
+    _ => 0

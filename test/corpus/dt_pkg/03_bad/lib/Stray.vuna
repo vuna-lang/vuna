@@ -1,0 +1,5 @@
+module Stray where
+
+-- M22.1 反例：目录里没有 vuna.toml，不是合法包。
+stray : Int
+stray = 0

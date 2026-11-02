@@ -13,6 +13,7 @@ instance Pretty C1 where
 instance Pretty C2 where
   pretty c = "b"
 
+render : a -> String
 render x = pretty x
 
 main : String

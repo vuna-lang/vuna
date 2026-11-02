@@ -1,4 +1,4 @@
 import Vuna.Nat
 
-main : Nat
-main = plus (S Z) (S (S Z))
+main : Int
+main = toInt (plus (S Z) (S (S Z)))

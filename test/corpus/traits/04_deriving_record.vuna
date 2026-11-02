@@ -1,7 +1,13 @@
+data Bool : Type where
+  True : Bool
+  False : Bool
+
 record Point where
   x : Int
   y : Int
 deriving (Show, Eq)
 
 main : String
-main = show (Point { x = 1, y = 2 }) ++ (if Point { x = 1, y = 2 } == Point { x = 1, y = 2 } then "/eq" else "/ne")
+main =
+  show Point { x = 1, y = 2 }
+    ++ (if Point { x = 1, y = 2 } == Point { x = 1, y = 2 } then "/eq" else "/ne")

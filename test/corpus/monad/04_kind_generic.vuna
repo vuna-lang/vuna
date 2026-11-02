@@ -1,5 +1,9 @@
 -- M11：高阶 kind + 一般约束泛化。`bindPair : m a -> m b -> m (Pair a b)` 的
 -- 签名里 m 是类型构造器变量；调用点分别传入 Maybe 与 List 的字典。
+-- M23 限制：`check` 已支持该签名推断（DtQuant 按应用次数推断 m : Type -> Type），
+-- 但含多隐式参数字典的定义，核心求值与擦除 codegen 尚不可用（liftFreeDictGoals 的
+-- binder 插入/去重缺陷，M24 处理；见 docs/reference/limits.md）。因此本夹具带
+-- `.nointerp` + `.nocompile` 标记，runner 只断言 `check`。
 trait Monad m where
   bind : m a -> (a -> m b) -> m b
   pure : a -> m a

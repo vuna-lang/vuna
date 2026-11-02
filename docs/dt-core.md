@@ -1,9 +1,10 @@
-# DT 核心类型论与精化器设计（M13–M14）
+# DT 核心类型论与精化器设计（M13–M14 设计稿）
 
-本文是 M13/M14 的设计稿与实现边界说明。M13 在 HM 路径之外新增一条**独立、显式
-opt-in** 的依赖类型（DT）子集路径：Core TT + NbE + 双向精化器 + 擦除型 codegen；
-M14 在同一路径上加入索引归纳族与依赖模式匹配（见 §11）。HM 路径（interp / typed /
-split）语义与产物保持不变。
+本文是 M13/M14 的设计稿与实现边界说明，记录 DT 路径如何从**独立、显式 opt-in** 的
+依赖类型（DT）子集长成**唯一路径**：Core TT + NbE + 双向精化器 + 擦除型 codegen；
+M14 在同一路径上加入索引归纳族与依赖模式匹配（见 §11）。文中的阶段编号、限制快照与
+性能数字都是当时的记录；现行语义以 [reference/dt.md](reference/dt.md) 与
+[roadmap.md](roadmap.md) 为准。
 
 ## 1. 范围
 
@@ -11,9 +12,9 @@ split）语义与产物保持不变。
   `compiler/lib/Vuna/Compiler/Elab.vuna`（双向精化器）、
   `compiler/lib/Vuna/Compiler/CoreCodegen.vuna`（擦除 + OCaml 生成）、
   `compiler/lib/Vuna/Compiler/Dt.vuna`（单文件 facade）。
-- 入口：`vuna compile --dt` / `vuna check --dt` / `vuna interp --dt`。
-- 只支持单文件：不经过 Loader、不支持 `import`、不支持包模式、不接入
-  `build` / `split` / `seed`（M17 前 roadmap 允许 split 回退）。
+- 入口：`vuna compile` / `vuna check` / `vuna interp`（当时是 opt-in 子集，现已无开关）。
+- 只支持单文件（M13 时）：不经过 Loader、不支持 `import`、不支持包模式、不接入
+  `build` / `split` / `seed`（后续阶段补齐，见 §9）。
 
 **非目标（M13 不做）**：cumulativity / universe polymorphism、索引归纳族与依赖模式
 匹配（M14 已落地，见 §11）、接口/实例搜索/洞目标显示（M15）、终止性与覆盖性（M16）、
@@ -105,10 +106,14 @@ data Term where
 
 ## 6. 擦除与 codegen
 
-**擦除判据（M18.5 起全仓唯一入口）**：`Elab.erasedBinder implicit dom = implicit || isTypeValue dom`。
-隐式 binder 恒擦除（隐式实参由精化器插入，运行时不传）；显式 binder **只有域是宇宙
-（`Type`）才擦除**，索引域（`{n : Nat}` 这类归纳族）保留运行时表示——它们可能被当递归
-参数读回来（`vlen`），安全擦除需要整程序使用分析（M22 只接判据入口，不做分析）。
+**擦除判据（M18.5 起全仓唯一入口）**：`Elab.erasedBinder implicit dom = implicit || isTypeValue dom`
+——M22.3 之后这条规则收敛成 `Core.rigIsErased`：`Rig0` binder 不进运行时表示、`Rig1`
+进；`Rig` 的构造/判定只存在于 `Core`，其它模块只用访问器（codegen 侧所有跳过擦除位的
+判断都走 `rigIsErased`，grep 可验证）。隐式 binder（含族参数、隐式索引 `{n : Nat}`）恒
+`Rig0`；显式 binder 只有域是宇宙（`Type`）才是 `Rig0`，显式索引 `(n : Nat)` 是 `Rig1`、
+保留运行时字段（`vlen` 可把它读回来）——两侧分别由 `test/corpus/dt/17_erase.vuna` 与
+`test/corpus/dt/38_explicit_index.vuna` 锁定。本阶段**不做**整程序使用分析：想擦除的索引
+写成隐式 binder 即可，代价是分支体读不到它。
 六处判据点 `teleOf` / `checkBinders` / `bindOnePattern` / `checkLam` / `inferArgs` /
 `bindCtorBinder` 一律走它；M24.6 第一级要把「字段数 / telescope 长度 / 绑定数」的三重
 一致性升级成类型保证。M18.5 之前 `checkLam` 无条件写 `erased = True`，导致 lambda 形参
@@ -118,25 +123,28 @@ data Term where
 1. 按「类型 force 后是否为 `VType _`」区分类型级定义与运行时定义；类型级定义
    不生成运行时代码（如 `Endo`、`f : (a:Type) -> Type`）。
 2. 擦除检查：运行时项引用被擦除绑定 / 类型级定义 / `TPi` 时报错
-   （`check --dt` 与 `compile --dt` 都跑）。
+   （`check` 与 `compile` 都跑）。
 3. 运行时定义按 `TGlobal` 依赖拓扑排序；M13 里有环 = 递归 → 报错；M14 起改为
    SCC 分组并用 `let rec ... and ...` 生成（见 §20）。
 4. 生成逻辑：擦除绑定不生成参数、擦除实参不生成参数；`TGlobal` → `v_<name>`；
    prelude 运算符映射到 `bi_add` / `bi_eq_int` / `bi_concat` 等既有运行时名字；
    输出自包含的最小 DT runtime（`bi_*` + `dt_show_string` / `dt_show_bool`），
-   不依赖 `TypedCodegen`。
+   不依赖其他 codegen。
 5. `main` 必须是 `Int` / `String` / `Bool`；`--no-print` 时只 `ignore`。
 
-## 7. 与 HM 路径的边界
+## 7. 与旧路径的边界（历史）
+
+本节记录 M13/M14 时期 DT 与当时另一条路径的边界，**已不适用**（终态只有 DT）：
 
 - 只共享 `Vuna.Compiler.Ast` / `Vuna.Compiler.Parser` / `Vuna.Fmt` 与 `Base.*`；
-  `EPi` 在 HM 的 loader 里报 `dependent function type requires --dt`。
+  当时 `EPi` 在另一条链的 loader 里报 `dependent function type requires the DT path`。
 - `Vuna.Compiler.Dt` 是唯一对外 facade（`compiler/vuna.toml` 的 `[export]`）；
-  核心求值器通过 `vuna interp --dt` 暴露，用于与 codegen 结果做一致性测试。
-- M13/M14 的 DT 不进入 `build` / `seed` / `split`；seed 仍只由 HM typed codegen 生成
-  （DT 模块是普通 HM 源码，随 compiler 闭包进入 TCB）。
+  核心求值器通过 `vuna interp` 暴露，用于与 codegen 结果做一致性测试（M23 起为默认
+  且唯一的 DT 语义）。
+- M13/M14 的 DT 当时不进入 `build` / `seed` / `split`；seed 仍由旧 typed codegen 生成
+  （DT 模块是普通源码，随 compiler 闭包进入 TCB）。M24 起 seed 由 DT split codegen 生成。
 - M14 的 `data` / `case` 走同一套 `Ast` / `Parser`（`DData` 新增 kind 字段、`ECase`
-  复用 HM 的 case 语法），因此 HM 路径的解析行为不变；HM 的 `case` 仍是原有语义。
+  复用已有 case 语法），因此解析行为不变。
 
 ## 8. 诊断
 
@@ -158,16 +166,16 @@ data Term where
 
 ## 10. 基准（本机参考，非 CI 门槛）
 
-`nix run .#bench -- --quick` 新增 `dt_elab` 项：对
+`nix run .#vuna-bench -- --quick` 的 `dt_elab` 项：对
 `test/corpus/dt/03_compose.vuna`（Pi + 3 个类型参数擦除 + compose）跑
-`compile --dt --no-print`（精化 + 擦除检查 + codegen）的耗时。
+`compile --no-print`（精化 + 擦除检查 + codegen）的耗时。
 
 - 本机（M13 完成时）：`dt_elab` ≈ **2 ms**；对照同一报告的
   `compiler_self_compile` ≈ **2.8 s**、`seed_build` ≈ **1.5 s**、
-  `corpus_compile`（16 个 HM 夹具批量编译）≈ **0.5 s**。
+  `corpus_compile`（16 个夹具批量编译）≈ **0.5 s**。
 - 时间依赖机器，只用于回归对比（`--baseline` / `--json`），不进入
   `nix flake check`；机器无关指标仍由 `nix/metrics.budget` 约束 seed 闭包的
-  HM codegen 产物（M13 后 bytes 867732 / lines 9049）。
+  codegen 产物（M13 后 bytes 867732 / lines 9049）。
 - M14 后 DT 夹具从 8 个增加到 12 个（新增 `09_nat` / `10_vec` / `11_fin` /
   `12_eq`），精化与 codegen 的路径也变了（构造子/变体/match）：`dt_elab` 的
   M14 新数字**待重新基准**（由 Lead 在合并后补测）。
@@ -229,8 +237,8 @@ data Eq : Type -> Type -> Type where
 - 构造子应用要**写全**族参数/索引（显式 binder 不会被省略）：`Cons Int Zero 1 (Nil Int)`。
 - 族的类型级应用（`Vec a n`）保持**中性** `TGlobal "Vec" [..]`，不做类型级求值；
   索引只在 unification 时按定义性相等比较。
-- 注意 `Nil` / `Cons` 同时是 HM 的 list 语法糖：写 `[]` / `x :: xs` 与写
-  `Nil` / `Cons x xs` 解析成同一个 `PCon`，`vuna fmt` 会按 HM 语法糖渲染成前者；
+- 注意 `Nil` / `Cons` 同时是 list 语法糖：写 `[]` / `x :: xs` 与写
+  `Nil` / `Cons x xs` 解析成同一个 `PCon`，`vuna fmt` 会按语法糖渲染成前者；
   文档示例保留构造子名以突出“这就是用户声明的族”。
 
 `case`：
@@ -418,7 +426,7 @@ M13 的 `data` / `case` / 递归不再报“不支持”；`record` / `trait` / 
 - 终止性**不在 M14 检查**：递归定义依赖 `force` 的 delta 展开步数上限
   （`defaultFuel = 512`）保证不挂死；超出即停下并报“无法归约”类错误。真正的
   termination 留 M16。
-- 求值器（`interp --dt`）同样靠 fuel 收敛；类型级递归（如 `Plus` 用于索引）在
+- 求值器（`vuna interp`）同样靠 fuel 收敛；类型级递归（如 `Plus` 用于索引）在
   `unifyIdx` 比较前已被 `force` 归约到构造子，因此常见用例不需要很大的 fuel。
 
 ## 21. 代码生成
@@ -439,28 +447,20 @@ M13 的 `data` / `case` / 递归不再报“不支持”；`record` / `trait` / 
    仍报错；类型级定义整体不生成代码。
 7. DT codegen 的错误仍**不带 span**（M16 统一补位置）。
 
-## 22. 已知限制（M14 之后）
+## 22. 当时的限制（M14 之后，历史快照）
 
-- **不支持隐式索引推断（M15）**。M14 要求索引 binder 写成**显式**形式
-  （`data Vec : Type -> Nat -> Type` + 构造子 `Cons : (a : Type) -> (n : Nat) -> ...`）；
-  `{n : Nat} -> ...` 这种隐式索引靠调用点自动求解（例如 `FSucc FZero` 反推 `n`）
-  不属于 M14 的能力。若用 `{...}` 写构造子，只有期望类型已经把索引**完全确定**
-  （闭合解）时才可能通过，一旦要从调用点反推索引或在解里引入局部变量，就会报
-  `DT: unsolved metavariable ?k` 或 `type mismatch`；这是 M15 的工作。
-- 索引值**保留运行时表示**（`Vec a n` 的值带长度字段）；证明/索引的完整擦除分析属
-  M16。
-- **case 不能出现在推断位置**：必须有已知的结果类型（通常来自函数签名）。
-- 只有**一阶（闭合）元变量解**；高阶/开放解仍属 M15。
-- 仍不支持 `let`、record、trait/instance、`do`、嵌套模式、多 clause 函数。
-- DT 仍是**单文件、`--dt` opt-in**；无 import / 模块头 / 包 / `build` / `split` /
-  `seed` 集成（留 M17；M14 只做单文件路径，split 回退仍按硬约束显式记录）。
-- DT 代码生成的错误仍不带 span（M16 统一）。
-- 递归终止性靠 delta 展开步数上限（`defaultFuel = 512`）保证不挂死，而不是终止性
-  检查；超出即停下并报“无法归约”类错误。
-- 类型级求值不专门做：族的类型级应用保持中性，只有 `force` 会按需 delta 展开。
+> 本节是 M14 的边界记录，**不反映当前状态**。M19 已补齐 `let`、推断位 `case`、嵌套模式、
+> 多 clause、`record`、`deriving` 与内建字面量模式；M20 已接入多文件 / `import` / `--root`；
+> M20.5 已补更高阶统一与字典延迟。当前阶段状态与阻碍见 [docs/roadmap.md](roadmap.md)。
+
+- M14 要求索引 binder 写成显式形式（隐式索引推断属 M15，已实现）；
+- 索引值保留运行时表示（显式索引；完整擦除属 M22.3）；
+- 一阶闭合元变量解；更高阶形态由 M20.5 的 `solveMetaHo` 覆盖常见情况；
+- 当时不支持 `let` / record / trait / `do` / 嵌套模式 / 多 clause（均已实现）；
+- 递归终止性靠 `force` 的 fuel 上限，而不是结构性检查（M16 起有检查）；
 - 无 cumulativity / universe polymorphism（M13 起未变）。
 
-## 23. M14 测试夹具
+## 23. M14 测试夹具（历史快照）
 
 > **本节的数字是 M14 当时的快照。** 当前实测为 **21 正例 / 19 反例**（M15 追加
 > `13_iface`/`14_solve`/`15_goal`，M16 追加 `16_total`/`17_erase` 与反例
@@ -469,7 +469,7 @@ M13 的 `data` / `case` / 递归不再报“不支持”；`record` / `trait` / 
 > 完整清单见 [reference/dt.md](reference/dt.md)。
 
 正例 `test/corpus/dt/` 共 12 个（M13 的 `01_id`–`08_if` + M14 的四个）；
-数值是 `interp --dt` / `compile --dt` 的 golden：
+数值是 `vuna interp` / `compile` 的 golden：
 
 - `09_nat.vuna`：`Nat` + 递归 `plus` / `toInt`，输出 `5`；
 - `10_vec.vuna`：`Vec` 的 `vhead`（只写 `Cons`）/ `vtail` / `vlen`，输出 `4`；
@@ -498,7 +498,7 @@ QTT（量化类型理论）与宇宙多态在将来落地时只替换「判据�
 ### 24.1 已落地（M18.6 完成）
 
 两项表示层改动已经在 `Core` 里定型，**行为与 M18.5 完全一致**——全部 DT 夹具的
-`compile --dt` 产物与改前逐字节相同（`diff -r` 验证），`test/run-tests.sh` 742 checks 全绿。
+`compile` 产物与改前逐字节相同（`diff -r` 验证），当时 `test/run-tests.sh` 742 checks 全绿。
 
 | 改前 | 改后 | 映射 |
 | --- | --- | --- |
@@ -525,7 +525,7 @@ QTT（量化类型理论）与宇宙多态在将来落地时只替换「判据�
 1. **`Core` 之外不得对 `Rig` / `Level` 做模式匹配**，只能用访问器与构造器；新增用法先补访问器。
    当前违反数为 0：`Elab` / `CoreCodegen` 只出现 `Rig0` / `Rig1` 构造与 `rigIsErased` 读。
 2. **擦除判定只有一个入口**：`Elab.binderRig`（构造 Rig）与 `Core.rigIsErased`（读 Rig）。
-   M22 会把它升级成可替换的 `eraseMask`，使「rig 驱动」与未来的「使用分析驱动」可互换。
+   M22.3 会把它升级成可替换的 `eraseMask`，使「rig 驱动」与未来的「使用分析驱动」可互换。
 3. `Level` 的算术（`succ` / `max`）只在 `Core` 内部实现；`Elab` 经 `checkType` 返回的
    `Level` 与访问器拿层级，不自己算。当前违反数为 0。
 4. 破坏上述任一条时，须在本节记录例外与理由。
@@ -537,8 +537,8 @@ QTT 落地的增量工作是：语法加 multiplicity 标注（`Parser` / `Ast` 
 模块系统、`Loader` / `Pkg`、seed 自举链。
 
 注意 QTT 的判据与 M16 探索的「整程序使用分析」是**两套不同方案**：前者按 binder 的
-multiplicity 静态擦除，后者按运行时是否读取判定。M22 因此只接判据入口，不投入实现
-使用分析——这是 [docs/roadmap.md](roadmap.md) M22 与「决策变更」的记录内容。
+multiplicity 静态擦除，后者按运行时是否读取判定。M22.3 因此只接判据入口，不投入实现
+使用分析——这是 [docs/roadmap.md](roadmap.md) M22.3 与「决策变更」的记录内容。
 
 ### 24.5 擦除 binder 的运行时位置语义（M19 已统一）
 
@@ -551,7 +551,7 @@ M19 尝试补 `trait Functor f`（类参数是 `Type -> Type` 的高阶 kind）�
 
 两者在普通场景下恰好自洽（擦除位既不生成形参、也不被运行时引用），但一旦擦除位夹在
 运行时参数**中间**（`fmap : (a : Type) -> (b : Type) -> (a -> b) -> f a -> f b` 的投影），
-「lambda 链里有没有这一层」在两条路径上就得到不同答案，实例投影因此错位。
+「lambda 链里有没有这一层」在求值器与 codegen 上就得到不同答案，实例投影因此错位。
 
 **结论与修复**（M19 已落地）：根因不是「占不占位置」这个抽象问题，而是**精化器生成的项
 本身不自洽**——`trait` 投影的 lambda 链与应用点一律写 `Rig1`，而方法签名里 `a : Type`
@@ -603,3 +603,44 @@ main = nameOf MkA ++ "/" ++ nameOf MkB   -- 修复前：type mismatch: expected 
 **为什么重要**：这条缺陷会挡住 M23 全仓迁移（真实代码里到处是同 trait 多实例），也是
 `deriving` 的前置。回归夹具：正例 `dt/29_multi_instance`（同 trait 两个实例、正序与
 反序调用都对）、反例 `dt_err/25_no_instance`（缺实例必须报明确错误）。
+
+## 已知缺口：多态族的构造子字段类型不被索引精化（2026-11 探明并修复）
+
+`case` 分支里，构造子的字段 binder 按 `bindCtorTele` 绑定、再经 `unifyIdxList` 把
+结果索引与 scrutinee 的索引统一，产出 `level ↦ value` 的 refs，分支体的期望类型
+由 `refineValue refs` 精化。**当字段类型本身引用族参数时，这个精化落不到字段上**：
+
+```vuna
+data Wrap : Type -> Type where
+  MkWrap : {a : Type} -> (a -> Int) -> Wrap a
+
+run : Wrap Int -> Int
+run w = case w of
+  MkWrap f => f 41        -- 修复前: type mismatch: expected a, got Int
+```
+
+**根因（已确证）**：`Elab.refineValue` 的兜底分支是 `_ => v`，**`VPi` 与 `VLam` 都不
+递归**。字段类型 `a -> Int` 求值后是 `VPi`，于是精化直接原样返回，refs 里的
+`高层a ↦ Int` 永远替换不到它里面。纯变量字段（类型是 `NVar`）能精化成功，正因为它
+走的是 `VNeutral / NVar` 分支——这也解释了为什么 `unwrap : Wrap a -> a` 能过而
+`f 41` 不能。
+
+**修法（已落地）**：不在**结果**上做 `refineValue`（对 `VPi`/`VLam` 的 `_ => v`
+不递归），而是在**取用点**把精化代入**求值环境**再 `eval`——`Elab.varTypeValue` /
+`Elab.evalCtx` 改为先 `map (refineValue refs) (ctxEnvAt ...)` 得到精化后的环境，再
+`eval`。闭包（`Clos env body`）捕获的是**环境**，`applyClosure` 用 `v :: env` 求值，
+因此精化后的环境自然被闭包携带：`VPi` 的**域**在 `eval` 时精化，**余域**在
+`applyClosure` 时精化，嵌套函数类型递归成立。这避免了给 `refineValue` 加
+`VPi`/`VLam` 分支（此前尝试 `refineClosureDown` + `freshVarValue`，因 `quote` 深度
+错位让 `compose` 这类三层 Pi 的 `b`/`c` 错位，10 个既有夹具回归，已放弃）。
+
+**不是 M20 引入的**：`data Wrap : Type -> Type` + 显式 `{a : Type}` 的写法在 M20 之前
+就失败（M20 的参数化 `data Foo a` 只是让这种写法更常见）。
+
+**为什么它是 M21 的硬前置**：`Base.IO` 的 `MkIO : (Int -> a) -> IO a` 正是这个形状，
+`ioBind` / `ioFmap` 的 `case ... of MkIO g => ...` 全部踩同一个坑。
+
+**回归夹具（已补）**：正例 `test/corpus/dt/33_poly_fn_field.vuna`（`Wrap Int` 里
+`g 0` 得 `1`）；负例 `test/corpus/dt_err/27_poly_fn_field_err.vuna`（`Wrap Bool` 里
+`g 0` 报 `expected Bool, got Int`，确保精化真的替换而非跳过）。全量
+`test/run-tests.sh` 841 项通过。

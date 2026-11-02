@@ -1,0 +1,33 @@
+-- M20：参数化 `data Foo a : Type`（C 风格写法）在 DT 下可用。
+--
+-- 与 `data Foo : Type -> Type` 写法等价，但参数写在族名后。两个后果都处理了：
+-- - kind 里没有参数（裸 `Type`）⇒ `prependParams` 把参数作为**显式** binder 并进
+--   kind，否则 `Foo a` 在构造子类型里被当成「把非函数应用」；
+-- - 构造子字段引用族参数（`MkWrap : a -> ...`）⇒ `ctorParamCtx` 按族的 kind 把参数
+--   绑进上下文，否则报 `unknown name a`。
+--
+-- `vuna-base` 里 7 个模块都用这种写法（`data List a` / `data Maybe a` / ...），
+-- 因此它是 M20「base 全模块 check」的前置。
+data Wrap a : Type where
+  MkWrap : a -> Wrap a
+
+data Pair3 a b : Type where
+  MkPair3 : a -> b -> Pair3 a b
+
+-- 参数化族的**构造**与**匹配**（不需要跨参数统一）。
+made : Wrap Int
+made = MkWrap 41
+
+matched : Int
+matched = case made of
+  MkWrap v => v
+
+twice : Pair3 Int Int
+twice = MkPair3 20 21
+
+sumPair : Int
+sumPair = case twice of
+  MkPair3 a b => a + b
+
+main : Int
+main = matched + sumPair

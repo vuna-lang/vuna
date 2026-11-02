@@ -1,4 +1,4 @@
-module Base.Result (Result(..), traverse, andThen, step, mapResult, mapError, withDefault) where
+module Base.Result (Result(..), andThen, mapError, mapResult, step, traverse, withDefault) where
 
 -- Base.Result：成功/失败结果类型与组合子（Base 语义迁移 + 常用补充）。
 -- 说明：`step` 处理 `Result (Pair a b)`，因此额外依赖 Base.Pair（叶模块，无环）。

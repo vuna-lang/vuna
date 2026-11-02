@@ -1,0 +1,19 @@
+# TCB blacklist：seed/ 只允许 compiler 包（compiler/app/Main.vuna 的 import 闭包），
+# 工具链与 dynamic codegen 永不进入信任锚点。
+#
+# 每行一个模块名（不带 Vuna. 前缀），空行与 # 注释忽略；
+# nix/tcb-check.sh 断言 <dir>/Vuna_d<name>.ml 不存在。
+# 新增工具模块时必须追加到这里；删除模块后也同步移除，避免清单腐化。
+Cli
+Fmt
+Lint
+Doc
+Repl
+TestRunner
+Files
+Interp
+Process
+Codegen
+Index
+Lsp
+Json

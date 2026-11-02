@@ -1,0 +1,13 @@
+module Vuna.Demo
+  -- 类型
+  ( Apple(..)
+  -- 值
+  , zebra -- 行尾注释
+  {- 整模块重导出 -}
+  , module Base.Bool
+  ) where
+
+import Base.Bool
+
+zebra : Int
+zebra = 1

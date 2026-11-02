@@ -3,6 +3,6 @@ twice f x = f (f x)
 
 main : Int
 main =
-  let base = 10
-      step = \x => x + base
-  in twice step 0
+  let
+    base = 10
+  in twice (\x => x + base) 0

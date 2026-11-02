@@ -1,4 +1,10 @@
-module Vuna.Compiler.DtDerive (builtinTraitDecls, builtinShowInstances, expandDerivings) where
+module Vuna.Compiler.DtDerive
+  ( builtinEqInstances
+  , builtinOrdInstances
+  , builtinShowInstances
+  , builtinTraitDecls
+  , expandDerivings
+  ) where
 
 -- Vuna.Compiler.DtDerive：`deriving` 的**实例生成**（M19）。
 --
@@ -62,8 +68,19 @@ showIntInstance =
 
 showStringInstance : Decl
 showStringInstance =
-  DInstance Nothing False (head "String") [DFun "show" [PVar "sx" noSpan] (EVar "sx" noSpan) noSpan]
+  DInstance Nothing False (head "String")
+    [DFun "show" [PVar "sx" noSpan] (EApp (EVar "++" noSpan) [EStr "\"" noSpan, EApp (EVar "++" noSpan) [EVar "sx" noSpan, EStr "\"" noSpan] noSpan] noSpan) noSpan]
     noSpan
+
+-- M23：派生方法体不再引用源码里的 `True` / `False`（M22.2 已去掉 prelude 的值桩，
+-- 权威定义在 `Base.Bool`，而派生实例可能出现在不 import Base.Bool 的程序里）。
+-- 用 Int 上的 `==`（精化期特化成 `bi_eq_int`）产生 Bool：`1 == 1` / `0 == 1`。
+-- 这样派生 Eq/Ord 与源码是否声明 Bool 构造子无关。
+boolTrue : Span -> Expr
+boolTrue sp = EApp (EVar "==" sp) [EInt 1 sp, EInt 1 sp] sp
+
+boolFalse : Span -> Expr
+boolFalse sp = EApp (EVar "==" sp) [EInt 0 sp, EInt 1 sp] sp
 
 showBoolInstance : Decl
 showBoolInstance =
@@ -73,6 +90,33 @@ showBoolInstance =
 
 head : String -> Expr
 head tn = EApp (EVar "Show" noSpan) [EVar tn noSpan] noSpan
+
+-- ---------------------------------------------------------------
+-- 内建类型的 Eq 实例
+-- ---------------------------------------------------------------
+--
+-- M22 泛型实例约束求解后，`mem : {d : Dict_Eq a} -> a -> List a -> Bool` 在具体类型上
+-- 实例化时，调用方要把 `Dict_Eq Int` / `Dict_Eq String` 交给 `d`。`Int` / `String` 的
+-- `eq` / `neq` 直接复用 `==` / `/=`（它们在精化期特化到 `bi_eq_int` / `bi_eq_str`，不走
+-- 实例搜索）。`Bool` 不在此列——`builtinEqTyName` 只认 Int / String，`Bool == Bool` 会
+-- 撞上本实例造成自递归，需要的话以后用直接析取补。
+builtinEqInstances : List Decl
+builtinEqInstances = [eqIntInstance, eqStringInstance]
+
+eqIntInstance : Decl
+eqIntInstance =
+  DInstance Nothing False (eqHead "Int")
+    [DFun "eq" [PVar "x" noSpan, PVar "y" noSpan] (EApp (EVar "==" noSpan) [EVar "x" noSpan, EVar "y" noSpan] noSpan) noSpan, DFun "neq" [PVar "x" noSpan, PVar "y" noSpan] (EApp (EVar "/=" noSpan) [EVar "x" noSpan, EVar "y" noSpan] noSpan) noSpan]
+    noSpan
+
+eqStringInstance : Decl
+eqStringInstance =
+  DInstance Nothing False (eqHead "String")
+    [DFun "eq" [PVar "x" noSpan, PVar "y" noSpan] (EApp (EVar "==" noSpan) [EVar "x" noSpan, EVar "y" noSpan] noSpan) noSpan, DFun "neq" [PVar "x" noSpan, PVar "y" noSpan] (EApp (EVar "/=" noSpan) [EVar "x" noSpan, EVar "y" noSpan] noSpan) noSpan]
+    noSpan
+
+eqHead : String -> Expr
+eqHead tn = EApp (EVar "Eq" noSpan) [EVar tn noSpan] noSpan
 
 -- ---------------------------------------------------------------
 -- 展开 `deriving (T1, T2)` ⇒ 等价 instance 声明
@@ -98,9 +142,22 @@ derivingsFor dname params ctors derivings sp = derivingsForGo dname params ctors
 
 derivingsForGo : String -> List String -> List Ctor -> List String -> Span -> List Decl -> Result (List Decl)
 derivingsForGo dname params ctors [] sp acc = Ok (reverse acc)
-derivingsForGo dname params ctors (t :: rest) sp acc =
-  andThen (deriveInstance dname params ctors t sp)
-    (\decl => derivingsForGo dname params ctors rest sp (decl :: acc))
+-- M23：参数化 data 的派生。
+--   - Eq：DT 的字典是**单态**编码（`Dict_Eq p` 只服务一个具体 p），无法表达
+--     「对所有 a：Eq (Maybe2 a)」。因此不生成实例：`==` / `/=` 在具体类型上会走
+--     精化期的**通用结构比较**兜底（`bi_eq_generic`，语义对齐 HM 的 OCaml 结构相等），
+--     traits/05 的 `Just2 1 == Just2 1` 因此可用。代价：需要 Eq 字典的场景（例如
+--     `mem` 作用在 `List (Maybe2 Int)` 上）仍找不到实例——记入 limits.md。
+--   - Show / Ord：派生体里的字段比较/展示需要 `Dict_Show a` / `Dict_Ord a`，
+--     单态字典同样表达不了；直接报清晰错误（HM 对参数化 Show 也是拒绝的）。
+derivingsForGo dname params ctors (t :: rest) sp acc = case params of
+  [] =>
+    andThen (deriveInstance dname params ctors t sp)
+      (\decl => derivingsForGo dname params ctors rest sp (decl :: acc))
+  _ =>
+    if t == "Eq" then derivingsForGo dname params ctors rest sp acc
+    else Err
+      (showSpanLoc sp ++ ": DT: deriving " ++ t ++ " is only supported for non-parameterized data types (M23)")
 
 -- 单个 trait 的实例声明。
 deriveInstance : String -> List String -> List Ctor -> String -> Span -> Result Decl
@@ -183,21 +240,21 @@ eqAlt c sp = case c of
 eqInner : String -> Int -> Span -> List (Pair Pat Expr)
 eqInner cn ar sp =
   [ Pair (PCon cn (map (\v => PVar v sp) (varNames "fb" ar)) sp) (conjFields (varNames "fa" ar) (varNames "fb" ar) sp),
-    Pair (PWild sp) (EVar "False" sp)
+    Pair (PWild sp) (boolFalse sp)
   ]
 
 -- `f0 == g0 && f1 == g1 && ..`；无字段 ⇒ `True`。
 conjFields : List String -> List String -> Span -> Expr
-conjFields [] gs sp = EVar "True" sp
+conjFields [] gs sp = boolTrue sp
 conjFields (f :: fs) (g :: gs) sp = case fs of
   [] => EApp (EVar "==" sp) [EVar f sp, EVar g sp] sp
   _ => EApp (EVar "&&" sp) [EApp (EVar "==" sp) [EVar f sp, EVar g sp] sp, conjFields fs gs sp] sp
-conjFields fs gs sp = EVar "False" sp
+conjFields fs gs sp = boolFalse sp
 
 -- `neq sx sy = if eq sx sy then False else True`
 neqBody : Span -> Expr
 neqBody sp =
-  EIf (EApp (EVar "eq" sp) [EVar "sx" sp, EVar "sy" sp] sp) (EVar "False" sp) (EVar "True" sp) sp
+  EIf (EApp (EVar "eq" sp) [EVar "sx" sp, EVar "sy" sp] sp) (boolFalse sp) (boolTrue sp) sp
 
 -- ---------------------------------------------------------------
 -- Ord（构造子按声明顺序为序，同构造子逐字段比）
@@ -228,25 +285,27 @@ ordInnerGo i ar (c :: rest) j sp = case c of
       pat = PCon cn (map (\v => PVar v sp) gs) sp
       body =
         if j == i then ltFields (varNames "fa" ar) gs sp
-        else if j < i then EVar "False" sp else EVar "True" sp
+        else if j < i then boolFalse sp else boolTrue sp
     in Pair pat body :: ordInnerGo i ar rest (j + 1) sp
 
 -- 逐字段 `<`：`f0 < g0 || (f0 == g0 && (f1 < g1 || ..))`；无字段 ⇒ False。
 ltFields : List String -> List String -> Span -> Expr
-ltFields [] gs sp = EVar "False" sp
+ltFields [] gs sp = boolFalse sp
 ltFields (f :: fs) (g :: gs) sp = case fs of
   [] => EApp (EVar "<" sp) [EVar f sp, EVar g sp] sp
   _ =>
     EApp (EVar "||" sp)
       [EApp (EVar "<" sp) [EVar f sp, EVar g sp] sp, EApp (EVar "&&" sp) [EApp (EVar "==" sp) [EVar f sp, EVar g sp] sp, ltFields fs gs sp] sp]
       sp
+-- M23：字段数不匹配的组合走不到（derive 生成的字段表按构造子对齐），但 DT 要求模式矩阵穷尽。
+ltFields _ _ sp = boolFalse sp
 
 -- `le sx sy = lt sx sy || !(lt sy sx)`——只用 `lt` 派生，不依赖 `Eq` 实例
 -- （`deriving (Ord)` 不要求同时 derive `Eq`）。
 leBody : List Ctor -> Span -> Expr
 leBody ctors sp =
   EApp (EVar "||" sp)
-    [EApp (EVar "lt" sp) [EVar "sx" sp, EVar "sy" sp] sp, EIf (EApp (EVar "lt" sp) [EVar "sy" sp, EVar "sx" sp] sp) (EVar "False" sp) (EVar "True" sp) sp]
+    [EApp (EVar "lt" sp) [EVar "sx" sp, EVar "sy" sp] sp, EIf (EApp (EVar "lt" sp) [EVar "sy" sp, EVar "sx" sp] sp) (boolFalse sp) (boolTrue sp) sp]
     sp
 
 varNames : String -> Int -> List String
@@ -262,3 +321,28 @@ gtBody ctors sp = EApp (EVar "lt" sp) [EVar "sy" sp, EVar "sx" sp] sp
 
 geBody : List Ctor -> Span -> Expr
 geBody ctors sp = EApp (EVar "le" sp) [EVar "sy" sp, EVar "sx" sp] sp
+
+-- ---------------------------------------------------------------
+-- 内建类型的 Ord 实例
+-- ---------------------------------------------------------------
+-- `mergeSort : List a -> List a` 里的 `x <= y` 在 `a` 上是刚性的，会提升成
+-- `{d : Dict_Ord a}`；调用点若是 `List Int` / `List String` / `List Bool`，实例搜索
+-- 需要这三个内建实例。方法体直接写比较运算符：`Int` 走精化期内建特化，
+-- `String` / `Bool` 走泛型 `compare`。
+builtinOrdInstances : List Decl
+builtinOrdInstances = [ordIntInstance, ordStringInstance, ordBoolInstance]
+
+ordIntInstance : Decl
+ordIntInstance = ordInstanceOf "Int" noSpan
+
+ordStringInstance : Decl
+ordStringInstance = ordInstanceOf "String" noSpan
+
+ordBoolInstance : Decl
+ordBoolInstance = ordInstanceOf "Bool" noSpan
+
+ordInstanceOf : String -> Span -> Decl
+ordInstanceOf tn sp =
+  DInstance Nothing False (EApp (EVar "Ord" sp) [EVar tn sp] sp)
+    [DFun "lt" [PVar "x" sp, PVar "y" sp] (EApp (EVar "<" sp) [EVar "x" sp, EVar "y" sp] sp) sp, DFun "le" [PVar "x" sp, PVar "y" sp] (EApp (EVar "<=" sp) [EVar "x" sp, EVar "y" sp] sp) sp, DFun "gt" [PVar "x" sp, PVar "y" sp] (EApp (EVar ">" sp) [EVar "x" sp, EVar "y" sp] sp) sp, DFun "ge" [PVar "x" sp, PVar "y" sp] (EApp (EVar ">=" sp) [EVar "x" sp, EVar "y" sp] sp) sp]
+    sp

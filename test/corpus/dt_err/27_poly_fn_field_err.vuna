@@ -1,0 +1,13 @@
+-- M21（负例）：函数类型字段的索引精化必须**真的**替换索引 binder。
+-- 这里 `w : Wrap Bool`，分支里 `a` 精化成 `Bool`，`g : Bool -> Int`；
+-- `g 0` 的实参 `0 : Int` 与域 `Bool` 不匹配，必须报错（若精化失效会报
+-- `expected a, got Int`，同样失败，但那是错误的方向）。
+data Wrap : Type -> Type where
+  MkWrap : {a : Type} -> (a -> Int) -> Wrap a
+
+getBool : Wrap Bool -> Int
+getBool w = case w of
+  MkWrap g => g 0
+
+main : Int
+main = getBool (MkWrap (\x => x + 1))

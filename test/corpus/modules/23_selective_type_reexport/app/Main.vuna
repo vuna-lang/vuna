@@ -1,4 +1,4 @@
 import Facade
 
-main : Facade.T
-main = Facade.mk 42
+main : Int
+main = Facade.unT (Facade.mk 42)

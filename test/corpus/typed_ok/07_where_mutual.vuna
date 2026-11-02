@@ -1,7 +1,11 @@
-f : Int -> Int
-f x = g x where
-  g y = y + h y
-  h y = y * 2
+-- M24：where 是带签名的局部顺序 let，不再覆盖互递归（互递归放顶层定义组）。
+-- 覆盖点：多条 where 绑定按顺序依赖（g 使用先定义的 h 并捕获外层参数 x）。
+f : Int -> Int -> Int
+f x y = g y where
+  h : Int -> Int
+  h n = n * 2
+  g : Int -> Int
+  g n = n + h n + x
 
 main : Int
-main = f 5
+main = f 1 5

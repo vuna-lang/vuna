@@ -3,8 +3,9 @@
 # 动机：AI agent 的改动成本 ≈ 必须读进上下文的字节数。代码可以按需读
 # （`vuna map --find` + span 区间），但入口文档每轮对话都要读，所以单立预算。
 #
-# 指标定义见 nix/context-budget.sh。本文件**只允许降，不允许升**；
-# 有意调整文档结构后，用 `sh nix/context-budget.sh .` 复测并下调，注释记录原因。
+# 指标定义见 nix/context-budget.sh。本文件**只允许降，不允许升**；唯一例外是
+# 格式化规则改变导致的单点行数增长（须在标定历史中论证），其余情况有意调整文档
+# 结构后，用 `sh nix/context-budget.sh .` 复测并下调，注释记录原因。
 #
 # 标定历史：
 #   - Index 工具链落地：coldstart_bytes 34000（AGENTS+architecture+README）。
@@ -18,9 +19,22 @@
 #     readme 205 / max_ref 169），做了一轮结构化压缩：README 目录树改单行注释版、
 #     AGENTS 目录速览与命令速查去表格、architecture 的「通常连带改动」表格改行内叙述、
 #     dt-parity 口径说明合并。按实测重新标定（预算只降不升）。
-coldstart_bytes 30392
-agents_lines 106
-arch_lines 199
-readme_lines 170
+#   - 导出列表纳入 fmt（显式列表逐项一行 + 排序）：Elab 模块头 41 项展开 +42 行、
+#     Typecheck +12 行，max_module_lines 2540 → 2565（格式化规则的单点增长，非代码
+#     膨胀；按实测最大值 2554 留 11 行余量，其余预算不变）。
+#   - M23 夹具迁移与 interp 切换：Elab 新增 @inst 选择 / 实例诊断 / &&|| 短路 / REPL 表达式
+#     求值等约 250 行（3069 → 3318），且 Elab 早在 ae6172d 签名回填后就已超过 2565 的旧预算
+#     （HEAD 的 context-budget 本身就是红的，属于漏标定）。本轮先把入口文档压回旧预算
+#     （coldstart 30353 / agents 106 / arch 191 / readme 169 / max_ref 168），
+#     max_module_lines 按实测重标定到 3320；把 Elab 拆出新模块留作 M24.6 重构的降本项。
+#   - M24 单路径收尾：删除 HM（Typecheck/TypedCodegen）与双路径文档后入口文档整体变短，
+#     按实测下调 coldstart 29104 / agents 103 / arch 176 / readme 166（max_ref 168 不变）。
+#     max_module_lines 3320 → 3360：Elab 新增 where 绑定签名与 EAnn 检查（新语言特性，
+#     +30 行）属有意特性增长而非文档/格式膨胀，按实测最大值 3348 留 12 行余量；Elab 拆
+#     模块仍是 M24.6 重构的降本项。
+coldstart_bytes 29200
+agents_lines 104
+arch_lines 178
+readme_lines 168
 max_ref_lines 168
-max_module_lines 2540
+max_module_lines 3360

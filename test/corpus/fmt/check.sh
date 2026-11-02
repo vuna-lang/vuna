@@ -4,8 +4,8 @@
 # 结构（本目录）：
 #   *.vuna + *.fmt          —— 格式化 golden：format 结果与 .fmt 逐字节一致，
 #                              且 format→parse→format 幂等（probe check）。
-#   run/*.vuna + *.out      —— 可解释程序：格式化前后 `vuna interp` 输出一致且等于 golden。
-#   typed/*.vuna + *.out    —— typed codegen 程序（覆盖 where 等解释器不支持的构造）：
+#   run/*.vuna + *.out      —— 可解释程序：格式化前后 `vuna interp`（DT 核心求值）输出一致且等于 golden。
+#   typed/*.vuna + *.out    —— 编译期语义程序（辅助函数 / 自递归；M23 起 where 语义夹具已改写成顶层定义）：
 #                              格式化前后 typed 生成、ocamlopt 编译、运行输出一致且等于 golden。
 #   _probe.vuna             —— 探针源码（下划线开头，不当作输入），由本脚本用 VUNA 编译。
 #
@@ -37,16 +37,27 @@ check_eq() { # name expected actual
   if [ "$2" = "$3" ]; then ok; else bad "$1"; printf '  expected: %s\n  actual:   %s\n' "$2" "$3"; fi
 }
 
-# ---- 合并模块根（root Vuna 工具链 + compiler 的 Vuna/Compiler + base 的 Base），编译探针 ----
-mkdir -p "$tmp/root/Vuna/Compiler" "$tmp/root/Base"
-cp "$REPO/lib/Vuna"/*.vuna "$tmp/root/Vuna/"
-cp "$REPO/compiler/lib/Vuna/Compiler"/*.vuna "$tmp/root/Vuna/Compiler/"
-cp "$REPO/base/lib/Base"/*.vuna "$tmp/root/Base/"
-cp "$REPO/base/lib/Base.vuna" "$tmp/root/Base.vuna"
-cp "$REPO/base/lib/Prelude.vuna" "$tmp/root/Prelude.vuna"
-chmod -R u+w "$tmp/root" 2>/dev/null || true
-cp "$HERE/_probe.vuna" "$tmp/probe.vuna"
-if ! ( cd "$REPO" && "$VUNA" compile --no-print --root "$tmp/root" "$tmp/probe.vuna" "$tmp/probe.ml" ) >"$tmp/probe.log" 2>&1; then
+# ---- 探针包：把 root Vuna 工具链 + compiler 的 Vuna/Compiler + base 的 Base 合成一个
+#      临时包（包名 `vuna`，与真实工具链一致，属于终止性检查的 TCB 信任名单），
+#      用当前编译器的包模式 DT 路径编译探针。
+#      注：探针编译的是编译器/工具链本体，必须按 TCB 信任处理；单文件 `--root` 模式
+#      不带包上下文，会触发对 Vuna.Compiler.Lexer 等 fuel/NbE 辅助函数的终止性检查。 ----
+pkg="$tmp/probe-pkg"
+mkdir -p "$pkg/lib/Vuna/Compiler" "$pkg/lib/Base" "$pkg/app"
+cp "$REPO/lib/Vuna"/*.vuna "$pkg/lib/Vuna/"
+cp "$REPO/compiler/lib/Vuna/Compiler"/*.vuna "$pkg/lib/Vuna/Compiler/"
+cp "$REPO/base/lib/Base"/*.vuna "$pkg/lib/Base/"
+cp "$REPO/base/lib/Base.vuna" "$pkg/lib/Base.vuna"
+cp "$REPO/base/lib/Prelude.vuna" "$pkg/lib/Prelude.vuna"
+cp "$HERE/_probe.vuna" "$pkg/app/Main.vuna"
+cat >"$pkg/vuna.toml" <<'EOF'
+[package]
+name = "vuna"
+version = "0.1.0"
+edition = "2026"
+EOF
+chmod -R u+w "$pkg" 2>/dev/null || true
+if ! ( cd "$REPO" && "$VUNA" compile --no-print "$pkg" "$tmp/probe.ml" ) >"$tmp/probe.log" 2>&1; then
   echo "fmt: probe compile failed:"
   cat "$tmp/probe.log"
   exit 1

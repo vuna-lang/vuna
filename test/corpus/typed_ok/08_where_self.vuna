@@ -1,6 +1,11 @@
-f : Int -> Int
-f x = g x where
-  g y = if y == 0 then 1 else y * g (y - 1)
+-- M24：where 是带签名的局部顺序 let，不再覆盖局部自递归（自递归放顶层定义组）。
+-- 覆盖点：单条带签名的局部绑定 + case 分支。
+classify : Int -> String
+classify n = helper n where
+  helper : Int -> String
+  helper m = case m of
+    0 => "zero"
+    _ => if m < 0 then "neg" else "pos"
 
-main : Int
-main = f 5
+main : String
+main = classify 5

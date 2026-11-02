@@ -1,11 +1,16 @@
+-- M24：where 是「带签名的局部顺序 let」（不支持 where 内递归/前向引用）。
+-- 覆盖：局部辅助函数捕获外层参数 + 多条绑定顺序依赖。
 f : Int -> Int
 f x = g x where
-  g y = y + h y
+  h : Int -> Int
   h y = y * 2
+  g : Int -> Int
+  g y = y + h y
 
 self : Int -> Int
 self n = go n where
-  go y = if y == 0 then 1 else y * go (y - 1)
+  go : Int -> Int
+  go y = y * n
 
 main : Int
 main = f 5 + self 3

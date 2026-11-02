@@ -1,4 +1,17 @@
-module Vuna.Compiler.Manifest (Manifest(..), parseManifest, validateManifest, manifestName, manifestVersion, manifestEdition, manifestMembers, manifestExports, manifestDependencies, manifestPath, manifestDir, resolveManifestPath) where
+module Vuna.Compiler.Manifest
+  ( Manifest(..)
+  , manifestDependencies
+  , manifestDir
+  , manifestEdition
+  , manifestExports
+  , manifestMembers
+  , manifestName
+  , manifestPath
+  , manifestVersion
+  , parseManifest
+  , resolveManifestPath
+  , validateManifest
+  ) where
 
 -- Vuna.Compiler.Manifest：vuna.toml 的语义模型（M11.5 包管理基础件）。
 -- 表约定：
@@ -36,45 +49,56 @@ manifestPath : Manifest -> String
 manifestPath (Manifest name version edition members exports deps path) = path
 
 -- 字符分类（与 Toml 内部约定一致；vuna 无字符字面量，统一用 char code）。
+isDigitChar : Int -> Bool
 isDigitChar c = c >= 48 && c <= 57
 
+isUpperAlphaChar : Int -> Bool
 isUpperAlphaChar c = c >= 65 && c <= 90
 
+isLowerAlphaChar : Int -> Bool
 isLowerAlphaChar c = c >= 97 && c <= 122
 
 -- 错误定位：解析期的错误带 `path:line: `，纯结构校验错误带 `path: `。
+atLine : String -> Int -> String -> String
 atLine path line msg =
   if path == "" then "line " ++ strFromInt line ++ ": " ++ msg
   else path ++ ":" ++ strFromInt line ++ ": " ++ msg
 
+manifestErr : String -> String -> String
 manifestErr path msg = if path == "" then msg else path ++ ": " ++ msg
 
+sameSection : List a -> List a -> Bool
 sameSection [] [] = True
 sameSection (x :: xs) (y :: ys) = if x == y then sameSection xs ys else False
 sameSection _ _ = False
 
+fieldLoc : String -> List String -> String -> List TomlEntry -> String
 fieldLoc path section key entries = case lookupEntryLine section key entries of
   Just line =>
     if path == "" then "line " ++ strFromInt line ++ ": "
     else path ++ ":" ++ strFromInt line ++ ": "
   Nothing => if path == "" then "" else path ++ ": "
 
+stringField : String -> List String -> String -> List TomlEntry -> Result (Maybe String)
 stringField path section key entries = case lookupEntry section key entries of
   Nothing => Ok Nothing
   Just (TStr s) => Ok (Just s)
   Just value => Err (fieldLoc path section key entries ++ "expected a string for \"" ++ key ++ "\"")
 
+stringListField : String -> List String -> String -> List TomlEntry -> Result (Maybe (List String))
 stringListField path section key entries = case lookupEntry section key entries of
   Nothing => Ok Nothing
   Just (TList xs) => Ok (Just xs)
   Just value =>
     Err (fieldLoc path section key entries ++ "expected an array of strings for \"" ++ key ++ "\"")
 
+orEmptyList : Maybe (List a) -> List a
 orEmptyList maybe = case maybe of
   Nothing => []
   Just xs => xs
 
 -- 只接受约定表；未知表 / 未知 key 报带行号的错误（防止字段拼写错误被静默忽略）。
+checkOneEntry : String -> TomlEntry -> Result Int
 checkOneEntry path (TomlEntry section key value line) =
   if sameSection section [] then Err (atLine path line ("unexpected top-level key \"" ++ key ++ "\""))
   else if sameSection section ["package"] then if key == "name" || key == "version" || key == "edition" then Ok 0
@@ -86,14 +110,17 @@ checkOneEntry path (TomlEntry section key value line) =
   else if sameSection section ["dependencies"] then Ok 0
   else Err (atLine path line ("unknown section [" ++ joinDots section ++ "]"))
 
+checkEntries : String -> List TomlEntry -> Result Int
 checkEntries path entries = case entries of
   [] => Ok 0
   entry :: rest => case checkOneEntry path entry of
     Err e => Err e
     Ok ok => checkEntries path rest
 
+collectDependencies : String -> List TomlEntry -> Result (List (Pair String String))
 collectDependencies path entries = collectDependenciesAcc path entries []
 
+collectDependenciesAcc : String -> List TomlEntry -> List (Pair String String) -> Result (List (Pair String String))
 collectDependenciesAcc path entries acc = case entries of
   [] => Ok (reverse acc)
   (TomlEntry section key value line) :: rest => if sameSection section ["dependencies"] then case value of
@@ -101,6 +128,7 @@ collectDependenciesAcc path entries acc = case entries of
     _ => Err (atLine path line ("dependency \"" ++ key ++ "\" must have a string relative path"))
   else collectDependenciesAcc path rest acc
 
+buildManifest : String -> List TomlEntry -> Result Manifest
 buildManifest path entries =
   andThen (checkEntries path entries)
     (\checked => andThen (stringField path ["package"] "name" entries) (\name => andThen (stringField path ["package"] "version" entries) (\version => andThen (stringField path ["package"] "edition" entries) (\edition => andThen (stringListField path ["workspace"] "members" entries) (\members => andThen (stringListField path ["export"] "modules" entries) (\exports => andThen (collectDependencies path entries) (\deps => Ok (Manifest name version edition (orEmptyList members) exports deps path))))))))
@@ -110,28 +138,36 @@ parseManifest path contents =
   andThen (parseTomlAt path contents) (\entries => buildManifest path entries)
 
 -- 结构校验（不检查文件存在性）。
+validPackageName : String -> Bool
 validPackageName name = validPackageChars (strUnpack name)
 
+validPackageChars : List Int -> Bool
 validPackageChars [] = True
 validPackageChars (c :: rest) =
   if isLowerAlphaChar c || isDigitChar c || c == 45 then validPackageChars rest else False
 
+validModuleName : String -> Bool
 validModuleName name = validModuleSegments (splitOnDot name)
 
+validModuleSegments : List String -> Bool
 validModuleSegments [] = True
 validModuleSegments (seg :: rest) =
   if validModuleSegment seg then validModuleSegments rest else False
 
+validModuleSegment : String -> Bool
 validModuleSegment seg = validModuleSegmentChars (strUnpack seg)
 
+validModuleSegmentChars : List Int -> Bool
 validModuleSegmentChars [] = False
 validModuleSegmentChars (c :: rest) = if isUpperAlphaChar c then validModuleTail rest else False
 
+validModuleTail : List Int -> Bool
 validModuleTail [] = True
 validModuleTail (c :: rest) =
   if isUpperAlphaChar c || isLowerAlphaChar c || isDigitChar c || c == 95 then validModuleTail rest
   else False
 
+validateName : String -> Maybe String -> Result Int
 validateName path name = case name of
   Nothing => Err (manifestErr path "missing [package] name")
   Just n =>
@@ -140,20 +176,24 @@ validateName path name = case name of
     else Err
       (manifestErr path ("invalid package name \"" ++ n ++ "\" (allowed characters: a-z, 0-9, '-')"))
 
+validateVersion : String -> Maybe String -> Result Int
 validateVersion path version = case version of
   Nothing => Err (manifestErr path "missing [package] version")
   Just v => if v == "" then Err (manifestErr path "package version must not be empty") else Ok 0
 
+validateEdition : String -> Maybe String -> Result Int
 validateEdition path edition = case edition of
   Nothing => Ok 0
   Just e => if e == "" then Err (manifestErr path "package edition must not be empty") else Ok 0
 
+validateMembers : String -> List String -> Result Int
 validateMembers path members = case members of
   [] => Ok 0
   m :: rest =>
     if m == "" then Err (manifestErr path "workspace member must not be empty")
     else validateMembers path rest
 
+validateModules : String -> List String -> Result Int
 validateModules path modules = case modules of
   [] => Ok 0
   m :: rest =>
@@ -161,12 +201,15 @@ validateModules path modules = case modules of
     else Err
       (manifestErr path ("invalid export module \"" ++ m ++ "\" (segments must match [A-Z][A-Za-z0-9_]*)"))
 
+validateExports : String -> Maybe (List String) -> Result Int
 validateExports path exports = case exports of
   Nothing => Ok 0
   Just modules => validateModules path modules
 
+validateDependencies : String -> List (Pair String String) -> Result Int
 validateDependencies path deps = validateDepsSeen path [] deps
 
+validateDepsSeen : String -> List String -> List (Pair String String) -> Result Int
 validateDepsSeen path seen deps = case deps of
   [] => Ok 0
   (Pair name rel) :: rest =>
@@ -184,9 +227,11 @@ validateManifest (Manifest name version edition members exports deps path) =
 manifestDir : String -> String
 manifestDir path = dirFromRev (reverse (strUnpack path))
 
+dirFromRev : List Int -> String
 dirFromRev [] = "."
 dirFromRev (c :: rest) = if c == 47 then dirResult (strPack (reverse rest)) else dirFromRev rest
 
+dirResult : String -> String
 dirResult dir = if dir == "" then "/" else dir
 
 -- 依赖路径的相对解析基础：manifest 目录 + 相对路径。

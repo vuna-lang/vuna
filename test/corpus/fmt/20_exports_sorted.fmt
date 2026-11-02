@@ -1,0 +1,16 @@
+module Vuna.Zeta
+  ( Alpha(..)
+  , Gamma
+  , Vuna.Compiler.Parser.parseSource
+  , beta
+  , zeta
+  , module Base.Bool
+  , module Base.List
+  ) where
+
+import Base.Bool
+import Base.List
+import Vuna.Compiler.Parser
+
+zeta : Int
+zeta = 1

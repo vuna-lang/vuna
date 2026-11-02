@@ -1,4 +1,19 @@
-module Vuna.Compiler.DtPrelude (preludeNames, preludeGlobals, intTy, strTy, boolTy, fun2, isEqOp, builtinTyName, builtinEqTyName, eqRuntimeName, polyEqTy) where
+module Vuna.Compiler.DtPrelude
+  ( boolTy
+  , builtinEqTyName
+  , builtinTyName
+  , eqRuntimeName
+  , fun2
+  , intTy
+  , isEqOp
+  , pickListFamily
+  , polyEqTy
+  , preludeGlobals
+  , preludeGlobalsFor
+  , preludeNames
+  , prependParams
+  , strTy
+  ) where
 
 -- Vuna.Compiler.DtPrelude：DT 的**内置定义表**（M19 起独立成模块）。
 --
@@ -13,16 +28,14 @@ import Vuna.Compiler.Common
 import Vuna.Compiler.Core
 
 -- ---------------------------------------------------------------
--- 内置 prelude：只有类型常量、Bool 值与 Int/String/Bool 运算符。
+-- 内置 prelude：Int / String 类型常量、运算符与 str* 内建（Bool 的权威定义是
+-- `Base.Bool`，见 M22.2 去桩；单文件模式需自己声明 `data Bool`）。
 -- 名字与 TypedCodegen 的 runtime helper 一一对应（codegen 按名字映射）。
 -- ---------------------------------------------------------------
 preludeNames : List String
 preludeNames =
   [ "Int",
     "String",
-    "Bool",
-    "True",
-    "False",
     "+",
     "-",
     "*",
@@ -52,7 +65,9 @@ boolTy : Term
 boolTy = TGlobal "Bool"
 
 fun2 : Term -> Term -> Term -> Term
-fun2 a b c = TPi "_" False Rig1 a (TPi "_" False Rig1 b c)
+-- `b` / `c` 在第一个 / 第二个 `_` binder 作用域内使用，需按外层深度移位
+-- （`polyEqTy` 的 `{a} -> a -> a -> Bool` 第二/三个 `a` 引用外层 `{a}`）。
+fun2 a b c = TPi "_" False Rig1 a (TPi "_" False Rig1 (shift 0 1 b) (shift 0 2 c))
 
 -- ---------------------------------------------------------------
 -- M19：内建泛化（`==` / `/=` 跨类型）与 str* 进 prelude
@@ -104,18 +119,74 @@ strPackTy = TPi "_" False Rig1 (TApp (TGlobal "List") intTy Rig1) strTy
 strLengthTy : Term
 strLengthTy = TPi "_" False Rig1 strTy intTy
 
+-- 效果内建的 DT 签名（与 HM `builtinTypes` 对齐）。`List` 是 Base.List 的 data，
+-- 精化期已按模块限定（`Base.List.List`）进 globals（`elabData` 把 data 名与构造子
+-- 加进 globals），所以这里用限定名；这些名字只进 `preludeGlobals`、不进
+-- `preludeNames`（不阻止程序另定义同名；Base.IO 只用不定义）。
+listOfTy : Term -> Term
+listOfTy t = TApp (TGlobal "Base.List.List") t Rig1
+
+primReadFileTy : Term
+primReadFileTy = TPi "_" False Rig1 strTy strTy
+
+primWriteFileTy : Term
+primWriteFileTy = fun2 strTy strTy intTy
+
+primPrintTy : Term
+primPrintTy = TPi "_" False Rig1 strTy intTy
+
+primGetArgsTy : Term
+primGetArgsTy = listOfTy strTy
+
+primReadLineTy : Term
+primReadLineTy = strTy
+
+primReadDirTy : Term
+primReadDirTy = TPi "_" False Rig1 strTy (listOfTy strTy)
+
+primIsDirectoryTy : Term
+primIsDirectoryTy = TPi "_" False Rig1 strTy boolTy
+
+primMakeDirTy : Term
+primMakeDirTy = TPi "_" False Rig1 strTy intTy
+
+primRemoveFileTy : Term
+primRemoveFileTy = TPi "_" False Rig1 strTy intTy
+
+primFileExistsTy : Term
+primFileExistsTy = TPi "_" False Rig1 strTy boolTy
+
+primFileMtimeTy : Term
+primFileMtimeTy = TPi "_" False Rig1 strTy intTy
+
+primFileSizeTy : Term
+primFileSizeTy = TPi "_" False Rig1 strTy intTy
+
+primExitTy : Term
+primExitTy = TPi "_" False Rig1 intTy intTy
+
+primRunInTy : Term
+primRunInTy = fun2 strTy (listOfTy strTy) intTy
+
 preludeGlobals : List (Pair String Term)
+-- Bool 只留**类型**别名：内建 trait（Show/Eq/Ord）签名与 `if` 判据要用它；
+-- `True` / `False` 值构造子已去桩（权威定义在 `Base.Bool`），单文件模式需自声明
+-- `data Bool`（Loader 不再放行裸 `Bool`）。
+-- M23：效果内建的**公开名**与 `prim_*` 内部名都进 prelude。编译器与工具链源码
+-- 直接用公开名（`readFile` / `fileExists` / `print`），`Base.IO` 用 `prim_*`
+-- 实现公开 API；两套名字同类型，codegen 都落到同一个 `dtp_*` 运行时函数。
+-- M23：无 Eq 实例时的泛型结构比较兜底（语义对齐 HM 的 bi_eq_generic）。
 preludeGlobals =
   [ Pair "Int" (TType levelZero),
     Pair "String" (TType levelZero),
     Pair "Bool" (TType levelZero),
-    Pair "True" boolTy,
-    Pair "False" boolTy,
     Pair "+" (fun2 intTy intTy intTy),
     Pair "-" (fun2 intTy intTy intTy),
     Pair "*" (fun2 intTy intTy intTy),
     Pair "/" (fun2 intTy intTy intTy),
     Pair "==" polyEqTy,
+    Pair "bi_eq_generic" polyEqTy,
+    Pair "bi_neq_generic" polyEqTy,
     Pair "/=" polyEqTy,
     Pair "<" (fun2 intTy intTy boolTy),
     Pair "<=" (fun2 intTy intTy boolTy),
@@ -127,7 +198,34 @@ preludeGlobals =
     Pair "strFromInt" strFromIntTy,
     Pair "strUnpack" strUnpackTy,
     Pair "strPack" strPackTy,
-    Pair "strLength" strLengthTy
+    Pair "strLength" strLengthTy,
+    Pair "readFile" primReadFileTy,
+    Pair "writeFile" primWriteFileTy,
+    Pair "print" primPrintTy,
+    Pair "getArgs" primGetArgsTy,
+    Pair "readLine" primReadLineTy,
+    Pair "readDir" primReadDirTy,
+    Pair "isDirectory" primIsDirectoryTy,
+    Pair "makeDir" primMakeDirTy,
+    Pair "removeFile" primRemoveFileTy,
+    Pair "fileExists" primFileExistsTy,
+    Pair "fileMtime" primFileMtimeTy,
+    Pair "fileSize" primFileSizeTy,
+    Pair "exit" primExitTy,
+    Pair "prim_readFile" primReadFileTy,
+    Pair "prim_writeFile" primWriteFileTy,
+    Pair "prim_print" primPrintTy,
+    Pair "prim_getArgs" primGetArgsTy,
+    Pair "prim_readLine" primReadLineTy,
+    Pair "prim_readDir" primReadDirTy,
+    Pair "prim_isDirectory" primIsDirectoryTy,
+    Pair "prim_makeDir" primMakeDirTy,
+    Pair "prim_removeFile" primRemoveFileTy,
+    Pair "prim_fileExists" primFileExistsTy,
+    Pair "prim_fileMtime" primFileMtimeTy,
+    Pair "prim_fileSize" primFileSizeTy,
+    Pair "prim_exit" primExitTy,
+    Pair "prim_runIn" primRunInTy
   ]
 
 -- 只认内建可特化类型（`Int` / `String`）；其它类型在 DT 里走 `Eq` 实例。
@@ -136,3 +234,53 @@ builtinEqTyName v = case builtinTyName v of
   Just "Int" => Just "Int"
   Just "String" => Just "String"
   _ => Nothing
+
+-- 族名后的参数作为**隐式** binder 前置到 kind（`data List a : Type` 的 `a` + `Type`
+-- ⇒ `{a : Type} -> Type`）。与 `data List : Type -> Type` 的既有写法（构造子用
+-- `{a : Type}` 隐式参数）保持一致——`List Int` 的 `Int` 由实参或期望类型反推。
+prependParams : List String -> Term -> Term
+prependParams [] kindTerm = kindTerm
+prependParams (p :: rest) kindTerm =
+  TPi p False Rig1 (TType levelZero) (prependParams rest kindTerm)
+
+-- ---------------------------------------------------------------
+-- M22.2：`str*` 签名里的 `List` 按**实际族名**绑定
+-- ---------------------------------------------------------------
+--
+-- `strUnpack : String -> List Int` 里的 `List` 是「族短名」，而模块模式下族名是
+-- `Base.List.List`；两者必须指同一个类型，否则 `import Base.String` 报
+-- `expected (List Int), got (Base.List.List ?2)`。
+-- 这里把 prelude 里出现的裸 `TGlobal "List"` 重写成程序里实际声明的族名
+-- （没有声明时保持 `List`，单文件自声明 `data List` 的写法不变）。
+-- M22.2：把 prelude 里的族短名（`List` / `Bool`）重绑到程序里的实际族名。
+-- `Bool` 没有声明时保留短名（prelude 的 `Bool` 类型别名只为内建 trait 的签名服务）。
+rewriteFamilyName : String -> String -> Term -> Term
+rewriteFamilyName old newName t = case t of
+  TGlobal g => if g == old then TGlobal newName else t
+  TPi n i r d c => TPi n i r (rewriteFamilyName old newName d) (rewriteFamilyName old newName c)
+  TLam n r b => TLam n r (rewriteFamilyName old newName b)
+  TApp f a r => TApp (rewriteFamilyName old newName f) (rewriteFamilyName old newName a) r
+  TCon c args =>
+    TCon c (map (\p => Pair (rewriteFamilyName old newName (firstOf p)) (secondOf p)) args)
+  TCase s alts => TCase (rewriteFamilyName old newName s) (map (rewriteAltFamily old newName) alts)
+  TIf c th el =>
+    TIf (rewriteFamilyName old newName c) (rewriteFamilyName old newName th)
+      (rewriteFamilyName old newName el)
+  _ => t
+
+rewriteAltFamily : String -> String -> CaseAlt -> CaseAlt
+rewriteAltFamily old newName alt = case alt of
+  CaseAlt n bs b => CaseAlt n bs (rewriteFamilyName old newName b)
+
+preludeGlobalsFor : String -> List (Pair String Term)
+preludeGlobalsFor listFam =
+  map (\p => Pair (firstOf p) (rewriteFamilyName "List" listFam (secondOf p))) preludeGlobals
+
+-- 从候选数据族名里挑 `List` 族（短名匹配；没有就保留裸名）。
+pickListFamily : List String -> String
+pickListFamily [] = "List"
+pickListFamily (n :: rest) = if baseNameOf n == "List" then n else pickListFamily rest
+
+baseNameOf : String -> String
+baseNameOf name = case splitLastDot (splitOnDot name) of
+  Pair rev base => base

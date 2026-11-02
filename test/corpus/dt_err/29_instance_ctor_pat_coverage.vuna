@@ -1,0 +1,15 @@
+-- M21 反例：实例方法的构造子形参走模式矩阵后仍然要做覆盖判定。
+trait MapOne f where
+  mapOne : (a -> a) -> f a -> f a
+
+data Twice a : Type where
+  TwiceOne : a -> Twice a
+  TwiceTwo : a -> a -> Twice a
+
+instance MapOne Twice where
+  mapOne g (TwiceOne x) = TwiceOne (g x)
+
+main : Int
+main = case mapOne (\x => x + 1) (TwiceTwo 40 41) of
+  TwiceOne x => x
+  TwiceTwo x y => x + y

@@ -1,4 +1,30 @@
-module Vuna.Compiler.Common (module Base.Pair, module Base.Bool, module Base.List, module Base.Maybe, module Base.Result, module Base.String, Pos, Span, posLine, posCol, spanFile, spanStartLine, spanStartCol, spanEndLine, spanEndCol, showSpanLoc, suggest, containsDot, splitOnDot, splitLastDot, joinDots, joinSlashes, joinArrows, splitPath, baseName) where
+module Vuna.Compiler.Common
+  ( Pos
+  , Span
+  , baseName
+  , containsDot
+  , joinArrows
+  , joinDots
+  , joinSlashes
+  , posCol
+  , posLine
+  , showSpanLoc
+  , spanEndCol
+  , spanEndLine
+  , spanFile
+  , spanStartCol
+  , spanStartLine
+  , splitLastDot
+  , splitOnDot
+  , splitPath
+  , suggest
+  , module Base.Bool
+  , module Base.List
+  , module Base.Maybe
+  , module Base.Pair
+  , module Base.Result
+  , module Base.String
+  ) where
 
 -- Vuna.Compiler.Common：编译器门面（M11）。
 -- 通用类型与 helper 的唯一真源已迁到 stdlib/（Base.Pair/Bool/List/Maybe/Result/String），
@@ -20,21 +46,29 @@ data Pos : Type where
 data Span : Type where
   Span : String -> Int -> Int -> Int -> Int -> Span
 
+posLine : Pos -> Int
 posLine (Pos l c) = l
 
+posCol : Pos -> Int
 posCol (Pos l c) = c
 
+spanFile : Span -> String
 spanFile (Span f sl sc el ec) = f
 
+spanStartLine : Span -> Int
 spanStartLine (Span f sl sc el ec) = sl
 
+spanStartCol : Span -> Int
 spanStartCol (Span f sl sc el ec) = sc
 
+spanEndLine : Span -> Int
 spanEndLine (Span f sl sc el ec) = el
 
+spanEndCol : Span -> Int
 spanEndCol (Span f sl sc el ec) = ec
 
 -- 把 span 渲染成 `文件:行:列`（错误信息前缀）。
+showSpanLoc : Span -> String
 showSpanLoc (Span f sl sc el ec) = f ++ ":" ++ strFromInt sl ++ ":" ++ strFromInt sc
 
 memChar : Int -> List Int -> Bool
@@ -81,6 +115,7 @@ joinArrows (x :: rest) = x ++ " -> " ++ joinArrows rest
 splitPath : String -> Pair String String
 splitPath path = splitPathChars (strUnpack path) []
 
+splitPathChars : List Int -> List Int -> Pair String String
 splitPathChars [] acc =
   let
     chars = reverse acc
@@ -97,6 +132,7 @@ suggest name [] = ""
 suggest name (c :: rest) =
   if _similarName name c then " (did you mean " ++ c ++ "?)" else suggest name rest
 
+_similarName : String -> String -> Bool
 _similarName a b = if a == b then False
 else if startsWith a b then True
 else if startsWith b a then True
@@ -107,8 +143,10 @@ else
     lb = strUnpack b
   in lengthDiffLE (length la) (length lb) 2 && prefixLen2 la lb >= 2
 
+prefixLen2 : List Int -> List Int -> Int
 prefixLen2 [] _ = 0
 prefixLen2 _ [] = 0
 prefixLen2 (x :: xs) (y :: ys) = if x == y then 1 + prefixLen2 xs ys else 0
 
+lengthDiffLE : Int -> Int -> Int -> Bool
 lengthDiffLE la lb n = if la >= lb then la - lb <= n else lb - la <= n

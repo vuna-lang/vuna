@@ -1,0 +1,10 @@
+data Nat : Type where
+  Zero : Nat
+  Succ : Nat -> Nat
+
+-- 多 clause 函数少写 Succ 子句：降级出的 case 仍必须做覆盖检查。
+toInt : Nat -> Int
+toInt Zero = 0
+
+main : Int
+main = toInt Zero

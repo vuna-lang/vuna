@@ -26,3 +26,4 @@
 - 入口纪律与不变量：[AGENTS.md](../../AGENTS.md)
 - 子系统地图与链路入口符号：[architecture.md](../architecture.md)
 - 已知边界汇总：[reference/limits.md](limits.md)
+- DT 阶段状态与当前阻碍：[docs/roadmap.md](../roadmap.md)（「阶段状态总览」）

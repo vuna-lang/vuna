@@ -1,4 +1,23 @@
-module Base.List (List(..), append, reverse, length, map, filter, foldl, foldr, concatMap, flatMap, mem, memName, lookupPair, zip, take, drop, range, mapMaybe) where
+module Base.List
+  ( List(..)
+  , append
+  , concatMap
+  , drop
+  , filter
+  , flatMap
+  , foldl
+  , foldr
+  , length
+  , lookupPair
+  , map
+  , mapMaybe
+  , mem
+  , memName
+  , range
+  , reverse
+  , take
+  , zip
+  ) where
 
 -- Base.List：列表类型与常用操作（Base 语义迁移 + 常用补充）。
 -- import Base.Bool 只为让 `data Bool` 声明进入程序（typed codegen 生成 True/False 表达式所需）。
@@ -59,12 +78,11 @@ memName name (x :: rest) = if x == name then True else memName name rest
 
 lookupPair : String -> List (Pair String v) -> Maybe v
 lookupPair name [] = Nothing
-lookupPair name ((Pair k v) :: rest) = if k == name then Just v else lookupPair name rest
+lookupPair name (p :: rest) = if firstOf p == name then Just (secondOf p) else lookupPair name rest
 
 zip : List a -> List b -> List (Pair a b)
-zip [] ys = []
-zip xs [] = []
 zip (x :: xs) (y :: ys) = Pair x y :: zip xs ys
+zip _ _ = []
 
 take : Int -> List a -> List a
 take n [] = []

@@ -1,18 +1,34 @@
+-- where 绑定必须带签名行（`name : Ty`），签名行写在同名子句之前。
 f : Int -> Int
 f x = g x where
-  g y = y + h y
+  h : Int -> Int
   h y = y * 2
+  g : Int -> Int
+  g y = y + h y
 
 classify : Int -> String
 classify n = helper n where
+  helper : Int -> String
   helper m = case m of
     0 => "zero"
     _ => if m < 0 then "neg" else "pos"
 
 outer : Int -> Int
 outer x = y + 1 where
-  y = x * base
+  base : Int
   base = 10
+  y : Int
+  y = x * base
+
+-- 多行 where：签名行与绑定同缩进，选择也要能重新格式化。
+bodyCase : Int -> Int
+bodyCase n =
+  case n of
+    0 => base
+    _ => n + base
+  where
+    base : Int
+    base = 1
 
 main : Int
-main = f 3 + outer 2
+main = f 3 + outer 2 + bodyCase 2

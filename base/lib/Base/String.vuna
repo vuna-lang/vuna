@@ -1,7 +1,24 @@
-module Base.String (split, join, lines, unlines, trim, trimLeft, trimRight, contains, startsWith, endsWith, repeat, substring) where
+module Base.String
+  ( contains
+  , endsWith
+  , join
+  , lines
+  , repeat
+  , split
+  , startsWith
+  , substring
+  , trim
+  , trimLeft
+  , trimRight
+  , unlines
+  ) where
 
 -- Base.String：字符串工具。底层只使用 strUnpack/strPack/strLength/++ 与 Base.List。
 -- import Base.Bool 只为让 `data Bool` 声明进入程序（typed codegen 生成 True/False 表达式所需）。
+--
+-- split 的两段递归都必须是**结构递归**（DT 终止性检查）：`splitAcc` 每次只吃一个字符，
+-- 匹配到分隔符后交给 `skipSep` 按剩余字符数逐个跳过（两段各自只对 tail 递归；
+-- 跨函数互调用不要求结构下降，见 docs/reference/limits.md 的终止性一节）。
 import Base.List
 import Base.Bool
 
@@ -11,10 +28,16 @@ split sep text =
   else splitAcc (strUnpack sep) (strUnpack text) [] []
 
 splitAcc : List Int -> List Int -> List Int -> List String -> List String
-splitAcc sep chars acc parts = if _startsWithChars sep chars then splitAcc sep (drop (length sep) chars) [] (strPack (reverse acc) :: parts)
-else case chars of
+splitAcc sep chars acc parts = case chars of
   [] => reverse (strPack (reverse acc) :: parts)
-  c :: rest => splitAcc sep rest (c :: acc) parts
+  c :: rest =>
+    if _startsWithChars sep chars then skipSep sep chars (length sep) [] (strPack (reverse acc) :: parts)
+    else splitAcc sep rest (c :: acc) parts
+
+skipSep : List Int -> List Int -> Int -> List Int -> List String -> List String
+skipSep sep chars n acc parts = case chars of
+  [] => reverse (strPack (reverse acc) :: parts)
+  c :: rest => if n <= 0 then splitAcc sep chars acc parts else skipSep sep rest (n - 1) acc parts
 
 join : String -> List String -> String
 join sep [] = ""

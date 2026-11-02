@@ -1,4 +1,4 @@
-module Vuna.Compiler.DtKind (classParamKind, arityFun, methodArgRigsOf) where
+module Vuna.Compiler.DtKind (arityFun, classParamKind, exprMaxAppArity, methodArgRigsOf) where
 
 -- Vuna.Compiler.DtKind：trait 类参数的 **kind 推断**（M19）。
 --
@@ -45,10 +45,6 @@ exprMaxAppArity pname e = case e of
   ERecUpdate b fields sp => exprMaxAppArity pname b
   EInstSel b m sp => exprMaxAppArity pname b
   _ => 0
-
--- k 个箭头指向宇宙（`Type -> ... -> Type`）。
-arityFun : Int -> Term -> Term
-arityFun n res = if n <= 0 then res else TPi "_" False Rig1 (TType levelZero) (arityFun (n - 1) res)
 
 -- 方法的显式参数各自的 multiplicity（M19）：逐 binder 按域判断，判据由调用方传入
 -- （`Elab` 的 `binderRig`——`DtKind` 不重复定义擦除规则，保持单一入口）。

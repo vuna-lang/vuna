@@ -1,0 +1,14 @@
+-- M23：参数化 record 的族 kind 是 `Type -> Type`（构造子字段能引用族参数），
+-- 且与参数化 data 一样支持字段访问 / 记录构造 / 记录模式。
+record Pair a b where
+  fst : a
+  snd : b
+
+swap : Pair a b -> Pair b a
+swap p = Pair { fst = p.snd, snd = p.fst }
+
+r : Pair Int Int
+r = swap (Pair { fst = 1, snd = 41 })
+
+main : Int
+main = r.fst + r.snd

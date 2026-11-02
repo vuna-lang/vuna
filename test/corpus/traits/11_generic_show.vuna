@@ -1,7 +1,12 @@
+data Bool : Type where
+  True : Bool
+  False : Bool
+
 data Dummy : Type where
   D : Dummy
 deriving (Eq)
 
+showIt : a -> String
 showIt x = show x
 
 main : String

@@ -1,4 +1,32 @@
-module Vuna.Index (Index(..), Sym(..), ModuleInfo(..), buildIndex, loadOrBuild, renderOverview, renderModules, findSymbol, impactOf, renderApi, renderDocWithComments, listAllSymbols, symModule, symName, symKind, symSig, symDoc, symLine, symCol, symFullName, modName, modPackage, modPath, modBytes, modDecls, indexModules, indexSymbols) where
+module Vuna.Index
+  ( Index(..)
+  , ModuleInfo(..)
+  , Sym(..)
+  , buildIndex
+  , findSymbol
+  , impactOf
+  , indexModules
+  , indexSymbols
+  , listAllSymbols
+  , loadOrBuild
+  , modBytes
+  , modDecls
+  , modName
+  , modPackage
+  , modPath
+  , renderApi
+  , renderDocWithComments
+  , renderModules
+  , renderOverview
+  , symCol
+  , symDoc
+  , symFullName
+  , symKind
+  , symLine
+  , symModule
+  , symName
+  , symSig
+  ) where
 
 -- Vuna.Index：源码符号索引（工具链模块，**永不进 seed 闭包**）。
 --
@@ -31,95 +59,127 @@ import Vuna.Compiler.Pkg
 data ModuleInfo : Type where
   ModuleInfo : String -> String -> String -> Int -> Int -> ModuleInfo
 
+modName : ModuleInfo -> String
 modName (ModuleInfo m p path bytes decls) = m
 
+modPackage : ModuleInfo -> String
 modPackage (ModuleInfo m p path bytes decls) = p
 
+modPath : ModuleInfo -> String
 modPath (ModuleInfo m p path bytes decls) = path
 
+modBytes : ModuleInfo -> Int
 modBytes (ModuleInfo m p path bytes decls) = bytes
 
+modDecls : ModuleInfo -> Int
 modDecls (ModuleInfo m p path bytes decls) = decls
 
 -- 符号：模块全名、名字、种类、签名、文档注释、起始行列。
 data Sym : Type where
   Sym : String -> String -> String -> String -> String -> Int -> Int -> Sym
 
+symModule : Sym -> String
 symModule (Sym sMod sName sKind sSig sDoc sLine sCol) = sMod
 
+symName : Sym -> String
 symName (Sym sMod sName sKind sSig sDoc sLine sCol) = sName
 
+symKind : Sym -> String
 symKind (Sym sMod sName sKind sSig sDoc sLine sCol) = sKind
 
+symSig : Sym -> String
 symSig (Sym sMod sName sKind sSig sDoc sLine sCol) = sSig
 
+symDoc : Sym -> String
 symDoc (Sym sMod sName sKind sSig sDoc sLine sCol) = sDoc
 
+symLine : Sym -> Int
 symLine (Sym sMod sName sKind sSig sDoc sLine sCol) = sLine
 
+symCol : Sym -> Int
 symCol (Sym sMod sName sKind sSig sDoc sLine sCol) = sCol
 
+symFullName : Sym -> String
 symFullName (Sym sMod sName sKind sSig sDoc sLine sCol) = sMod ++ "." ++ sName
 
 -- 索引：模块 + 符号 + 反向边（reader 模块 → 被引用的名字）。
 data Index : Type where
   Index : List ModuleInfo -> List Sym -> List (Pair String String) -> Index
 
+indexModules : Index -> List ModuleInfo
 indexModules (Index ms syms refs) = ms
 
+indexSymbols : Index -> List Sym
 indexSymbols (Index ms syms refs) = syms
 
+indexRefs : Index -> List (Pair String String)
 indexRefs (Index ms syms refs) = refs
 
 -- ---------------------------------------------------------------
 -- 小型 helper（本模块自用，避免污染 Base）
 -- ---------------------------------------------------------------
+splitChars : Int -> List Int -> List String -> List Int -> List String
 splitChars sep [] acc seg = reverse (strPack (reverse seg) :: acc)
 splitChars sep (c :: rest) acc seg =
   if c == sep then splitChars sep rest (strPack (reverse seg) :: acc) []
   else splitChars sep rest acc (c :: seg)
 
+splitOnNewline : String -> List String
 splitOnNewline s = splitChars 10 (strUnpack s) [] []
 
+splitOnTab : String -> List String
 splitOnTab s = splitChars 9 (strUnpack s) [] []
 
+dropLeadingSpaces : List Int -> List Int
 dropLeadingSpaces [] = []
 dropLeadingSpaces (c :: rest) = if c == 32 || c == 9 then dropLeadingSpaces rest else c :: rest
 
+trimStart : String -> String
 trimStart s = strPack (dropLeadingSpaces (strUnpack s))
 
+trimEnd : String -> String
 trimEnd s = strPack (reverse (dropLeadingSpaces (reverse (strUnpack s))))
 
+trimBoth : String -> String
 trimBoth s = trimEnd (trimStart s)
 
+parseInt : String -> Maybe Int
 parseInt s = parseIntGo (strUnpack s) 0
 
+parseIntGo : List Int -> Int -> Maybe Int
 parseIntGo [] acc = Just acc
 parseIntGo (c :: rest) acc =
   if c >= 48 && c <= 57 then parseIntGo rest (acc * 10 + (c - 48)) else Nothing
 
+dropPrefix : String -> String -> String
 dropPrefix prefix s =
   if startsWith prefix s then substring (strLength prefix) (strLength s - strLength prefix) s else s
 
+takeLast : Int -> List a -> List a
 takeLast n xs =
   let
     len = length xs
   in if len <= n then xs else drop (len - n) xs
 
 -- 去重（保持首次出现顺序），累加器版本，避免对 rest 反复递归计算。
+distinct : List String -> List String
 distinct xs = distinctGo xs []
 
+distinctGo : List String -> List String -> List String
 distinctGo [] acc = reverse acc
 distinctGo (x :: rest) acc =
   if memName x acc then distinctGo rest acc else distinctGo rest (x :: acc)
 
 -- 把可能含 TAB / 换行的文本压成单行（写入缓存用）。
+flattenText : String -> String
 flattenText s = joinWith " " (splitOnNewline (replaceTabs (strUnpack s) []))
 
+replaceTabs : List Int -> List Int -> String
 replaceTabs [] acc = strPack (reverse acc)
 replaceTabs (c :: rest) acc =
   if c == 9 || c == 13 then replaceTabs rest (32 :: acc) else replaceTabs rest (c :: acc)
 
+joinWith : String -> List String -> String
 joinWith sep [] = ""
 joinWith sep ([x]) = x
 joinWith sep (x :: rest) = x ++ sep ++ joinWith sep rest
@@ -127,6 +187,7 @@ joinWith sep (x :: rest) = x ++ sep ++ joinWith sep rest
 -- ---------------------------------------------------------------
 -- 目录遍历
 -- ---------------------------------------------------------------
+skipDir : String -> Bool
 skipDir name =
   name == "."
     || name == ".."
@@ -144,6 +205,7 @@ skipDir name =
 collectVuna : String -> List String
 collectVuna dir = concatMap (walkVuna dir) (readDir dir)
 
+walkVuna : String -> String -> List String
 walkVuna dir name = if skipDir name then []
 else
   let
@@ -151,14 +213,17 @@ else
   in if dirExists path then collectVuna path else if endsWith ".vuna" name then [path] else []
 
 -- isDirectory 对不存在的路径会抛异常，必须先判存在。
+dirExists : String -> Bool
 dirExists path = fileExists path && isDirectory path
 
 -- 包的索引范围：<pkg>/lib 与 <pkg>/app（模块源码）。刻意不扫 test/ 与 examples/
 -- （夹具含故意不合法的语法，不是模块源码）。
+packageSources : String -> List String
 packageSources dir =
   append (if dirExists (dir ++ "/lib") then collectVuna (dir ++ "/lib") else [])
     (if dirExists (dir ++ "/app") then collectVuna (dir ++ "/app") else [])
 
+packageDirs : String -> List (Pair String String)
 packageDirs repo = case findManifestDir repo of
   Err e => [Pair repo ""]
   Ok dir => case workspacePackages dir of
@@ -181,31 +246,37 @@ renderTy ty = case ty of
     in binder ++ " -> " ++ renderTy cod
   _ => renderTyPlain ty
 
+renderTyPlain : Expr -> String
 renderTyPlain ty = case ty of
   EApp f args sp => renderTyAtom f ++ " " ++ join " " (map renderTyArg args)
   EInt n sp => strFromInt n
   EStr s sp => "\"" ++ s ++ "\""
   _ => "_"
 
+renderTyArg : Expr -> String
 renderTyArg ty = case ty of
   EVar name sp => name
   _ => "(" ++ renderTy ty ++ ")"
 
+renderTyAtom : Expr -> String
 renderTyAtom ty = case ty of
   EVar name sp => name
   _ => "(" ++ renderTy ty ++ ")"
 
+paramSuffix : List String -> String
 paramSuffix [] = ""
 paramSuffix params = " " ++ join " " params
 
 -- ---------------------------------------------------------------
 -- 注释 → 文档
 -- ---------------------------------------------------------------
+commentBody : Comment -> String
 commentBody c = case commentKind c of
   CLine => trimBoth (commentText c)
   CBlock => trimBoth (commentText c)
 
 -- 声明行之前紧邻（行距 <= 2）的最后一条注释，作为该符号的文档。
+nearBefore : List Comment -> Int -> String
 nearBefore comments atLine = case takeLast 1 (filter (\c => spanEndLine (commentSpan c) < atLine) comments) of
   [] => ""
   [c] => if atLine - spanEndLine (commentSpan c) <= 2 then commentBody c else ""
@@ -214,17 +285,22 @@ nearBefore comments atLine = case takeLast 1 (filter (\c => spanEndLine (comment
 -- ---------------------------------------------------------------
 -- 符号抽取
 -- ---------------------------------------------------------------
+declLine : Decl -> Int
 declLine d = spanStartLine (declSpan d)
 
+declCol : Decl -> Int
 declCol d = spanStartCol (declSpan d)
 
+signatureOf : String -> List Decl -> String
 signatureOf name [] = ""
 signatureOf name (d :: rest) = case d of
   DSig n ty sp => if n == name then renderTy ty else signatureOf name rest
   _ => signatureOf name rest
 
+symbolsOfModule : String -> List Decl -> List Comment -> List Sym
 symbolsOfModule sMod decls comments = concatMap (symbolsOfDecl sMod decls comments) decls
 
+symbolsOfDecl : String -> List Decl -> List Comment -> Decl -> List Sym
 symbolsOfDecl sMod decls comments d =
   let
     line = declLine d
@@ -246,11 +322,13 @@ symbolsOfDecl sMod decls comments d =
       Just n => [Sym sMod n "instance" "instance" doc line col]
       Nothing => []
 
+ctorSymbols : String -> List Ctor -> List Comment -> List Sym
 ctorSymbols sMod ctors comments =
   map
     (\c => Sym sMod (ctorName c) "ctor" (ctorName c ++ " : " ++ renderTy (ctorType c)) (nearBefore comments (spanStartLine (ctorSpan c))) (spanStartLine (ctorSpan c)) (spanStartCol (ctorSpan c)))
     ctors
 
+fieldSymbols : String -> List Field -> List Comment -> List Sym
 fieldSymbols sMod fields comments =
   map
     (\f => Sym sMod (fieldName f) "field" (fieldName f ++ " : " ++ renderTy (fieldType f)) (nearBefore comments (spanStartLine (fieldSpan f))) (spanStartLine (fieldSpan f)) (spanStartCol (fieldSpan f)))
@@ -258,13 +336,18 @@ fieldSymbols sMod fields comments =
 
 -- trait 方法没有独立 span：位置归到所属 trait 声明（line/col），
 -- 保证所有符号的行号都指向真实源码位置（不造假 0）。
-methodSymbols sMod methods line col = map (\m => case m of
-  Pair name ty => Sym sMod name "method" (name ++ " : " ++ renderTy ty) "" line col
-) methods
+methodSymbol : String -> Int -> Int -> Pair String Expr -> Sym
+methodSymbol sMod line col (Pair name ty) =
+  Sym sMod name "method" (name ++ " : " ++ renderTy ty) "" line col
+
+methodSymbols : String -> List (Pair String Expr) -> Int -> Int -> List Sym
+methodSymbols sMod methods line col = map (methodSymbol sMod line col) methods
 
 -- 同名符号合并：多子句函数会产生重复 DFun，只保留第一条（行号取首子句）。
+dedupeSymbols : List Sym -> List Sym
 dedupeSymbols syms = dedupeGo syms [] []
 
+dedupeGo : List Sym -> List String -> List Sym -> List Sym
 dedupeGo [] seen acc = reverse acc
 dedupeGo (s :: rest) seen acc =
   if memName (symFullName s) seen then dedupeGo rest seen acc
@@ -274,10 +357,12 @@ dedupeGo (s :: rest) seen acc =
 -- 模块名
 -- ---------------------------------------------------------------
 -- 模块全名：源码模块头优先；无模块头时按路径推导。
+moduleNameOf : String -> String -> Maybe ModDecl -> String
 moduleNameOf dir path srcHdr = case srcHdr of
   Just (ModDecl name explicit items sp) => name
   Nothing => segmentModule dir path
 
+segmentModule : String -> String -> String
 segmentModule dir path =
   let
     rel = dropPrefix (dir ++ "/lib/") path
@@ -288,19 +373,31 @@ segmentModule dir path =
 -- ---------------------------------------------------------------
 -- 引用抽取（语法级，保守：收集所有出现过的变量名）
 -- ---------------------------------------------------------------
+namesInDecls : List Decl -> List String
 namesInDecls decls = distinct (concatMap namesInDecl decls)
 
+namesInDecl : Decl -> List String
 namesInDecl d = case d of
   DFun name pats body sp => namesInExpr body
   DData name params kind ctors derivings sp => concatMap (\c => namesInExpr (ctorType c)) ctors
   DRecord name params fields derivings sp => concatMap (\f => namesInExpr (fieldType f)) fields
-  DTrait name params methods sp => concatMap (\m => case m of
-    Pair n ty => namesInExpr ty
-  ) methods
+  DTrait name params methods sp => concatMap namesInMethod methods
   DInstance name isDefault head methods sp =>
     append (namesInExpr head) (concatMap namesInDecl methods)
   _ => []
 
+namesInMethod : Pair String Expr -> List String
+namesInMethod (Pair n ty) = namesInExpr ty
+
+namesInBind : Pair Pat Expr -> List String
+namesInBind (Pair p x) = namesInExpr x
+
+namesInDoStmt : DoStmt -> List String
+namesInDoStmt s = case s of
+  DBind p x tsp => namesInExpr x
+  DExpr x tsp => namesInExpr x
+
+namesInExpr : Expr -> List String
 namesInExpr e = case e of
   EVar n sp => [n]
   EInt n sp => []
@@ -308,28 +405,15 @@ namesInExpr e = case e of
   ELam ps body sp => namesInExpr body
   EApp f args sp => append (namesInExpr f) (concatMap namesInExpr args)
   EPi n i dom cod sp => append (namesInExpr dom) (namesInExpr cod)
-  ELet binds body isRec sp => append (concatMap (\b => case b of
-    Pair p x => namesInExpr x
-  ) binds
-  ) (namesInExpr body)
-  ECase scrut alts sp => append (namesInExpr scrut) (concatMap (\a => case a of
-    Pair p x => namesInExpr x
-  ) alts
-  )
+  ELet binds body isRec sp => append (concatMap namesInBind binds) (namesInExpr body)
+  ECase scrut alts sp => append (namesInExpr scrut) (concatMap namesInBind alts)
   EIf c t e2 sp => append (namesInExpr c) (append (namesInExpr t) (namesInExpr e2))
   EField r fname sp => namesInExpr r
-  ERecord tn fields sp => concatMap (\f => case f of
-    Pair n x => namesInExpr x
-  ) fields
-  ERecUpdate r fields sp => append (namesInExpr r) (concatMap (\f => case f of
-    Pair n x => namesInExpr x
-  ) fields
-  )
+  ERecord tn fields sp => concatMap namesInMethod fields
+  ERecUpdate r fields sp => append (namesInExpr r) (concatMap namesInMethod fields)
   EInstSel r mname sp => namesInExpr r
-  EDo stmts sp => concatMap (\s => case s of
-    DBind p x tsp => namesInExpr x
-    DExpr x tsp => namesInExpr x
-  ) stmts
+  EDo stmts sp => concatMap namesInDoStmt stmts
+  EAnn value ty sp => append (namesInExpr value) (namesInExpr ty)
 
 -- ---------------------------------------------------------------
 -- 全量构建
@@ -337,13 +421,17 @@ namesInExpr e = case e of
 data Built : Type where
   Built : List ModuleInfo -> List Sym -> List (Pair String String) -> Built
 
+builtModules : Built -> List ModuleInfo
 builtModules (Built ms syms refs) = ms
 
+builtSymbols : Built -> List Sym
 builtSymbols (Built ms syms refs) = syms
 
+builtRefs : Built -> List (Pair String String)
 builtRefs (Built ms syms refs) = refs
 
 -- 索引一个文件。parse 失败返回 Err（调用方转成 warning），不中断整体。
+indexOne : String -> String -> String -> Result Built
 indexOne dir pkgName path =
   let
     source = readFile path
@@ -365,26 +453,34 @@ indexOne dir pkgName path =
 data Acc : Type where
   Acc : List ModuleInfo -> List Sym -> List (Pair String String) -> List String -> Acc
 
+accModules : Acc -> List ModuleInfo
 accModules (Acc ms syms refs warns) = ms
 
+accSymbols : Acc -> List Sym
 accSymbols (Acc ms syms refs warns) = syms
 
+accRefs : Acc -> List (Pair String String)
 accRefs (Acc ms syms refs warns) = refs
 
+accWarns : Acc -> List String
 accWarns (Acc ms syms refs warns) = warns
 
+indexPackage : String -> String -> List String -> Acc -> Acc
 indexPackage dir pkgName files acc = foldFiles dir pkgName files acc
 
+foldFiles : String -> String -> List String -> Acc -> Acc
 foldFiles dir pkgName [] acc = acc
 foldFiles dir pkgName (path :: rest) acc =
   foldFiles dir pkgName rest (indexFileInto dir pkgName path acc)
 
+indexFileInto : String -> String -> String -> Acc -> Acc
 indexFileInto dir pkgName path acc = case indexOne dir pkgName path of
   Err e => Acc (accModules acc) (accSymbols acc) (accRefs acc) (e :: accWarns acc)
   Ok b =>
     Acc (append (accModules acc) (builtModules b)) (append (accSymbols acc) (builtSymbols b))
       (append (accRefs acc) (builtRefs b)) (accWarns acc)
 
+collectAll : List (Pair String String) -> Acc -> Acc
 collectAll [] acc = acc
 collectAll (root :: rest) acc =
   let
@@ -403,23 +499,32 @@ buildIndex repo =
 -- ---------------------------------------------------------------
 -- 缓存读写
 -- ---------------------------------------------------------------
+cacheDir : String -> String
 cacheDir repo = repo ++ "/.local/index"
 
+manifestPath : String -> String
 manifestPath repo = cacheDir repo ++ "/manifest.txt"
 
+modulesPath : String -> String
 modulesPath repo = cacheDir repo ++ "/modules.txt"
 
+symbolsPath : String -> String
 symbolsPath repo = cacheDir repo ++ "/symbols.txt"
 
+refsPath : String -> String
 refsPath repo = cacheDir repo ++ "/refs.txt"
 
 -- 磁盘上的当前文件元数据（path, bytes, mtime）。只读内容算 bytes，不 parse。
+scanFile : String -> Pair String (Pair Int Int)
 scanFile path = Pair path (Pair (strLength (readFile path)) (fileMtime path))
 
+scanRoot : Pair String String -> List (Pair String (Pair Int Int))
 scanRoot root = map scanFile (packageSources (firstOf root))
 
+scanSources : String -> List (Pair String (Pair Int Int))
 scanSources repo = concatMap scanRoot (packageDirs repo)
 
+manifestLine : Pair String (Pair Int Int) -> String
 manifestLine entry =
   firstOf entry
     ++ "\t"
@@ -427,15 +532,19 @@ manifestLine entry =
     ++ "\t"
     ++ strFromInt (secondOf (secondOf entry))
 
+manifestText : List (Pair String (Pair Int Int)) -> String
 manifestText entries = join "\n" (map manifestLine entries) ++ "\n"
 
+manifestMatches : String -> List (Pair String (Pair Int Int)) -> Bool
 manifestMatches repo entries =
   if fileExists (manifestPath repo) then parseManifestLines (splitOnNewline (readFile (manifestPath repo))) == entries
   else False
 
+parseManifestLines : List String -> List (Pair String (Pair Int Int))
 parseManifestLines [] = []
 parseManifestLines (line :: rest) = append (parseManifestLine line) (parseManifestLines rest)
 
+parseManifestLine : String -> List (Pair String (Pair Int Int))
 parseManifestLine line = case splitOnTab line of
   [path, bytes, mtime] => case parseInt bytes of
     Just b => case parseInt mtime of
@@ -447,6 +556,7 @@ parseManifestLine line = case splitOnTab line of
 -- 写缓存：`.local` 在干净 clone / Nix 沙箱里可能不存在，而 makeDir 只建一层，
 -- 所以要逐级创建（先 .local，再 .local/index）。缓存是纯优化：写不进去时
 -- 索引本身仍然可用（本次调用已返回内存索引），只是下次会重建。
+ensureCacheDir : String -> Int
 ensureCacheDir repo =
   let
     local = repo ++ "/.local"
@@ -454,11 +564,13 @@ ensureCacheDir repo =
     _ = if dirExists local then 0 else makeDir local
   in if dirExists (cacheDir repo) then 0 else makeDir (cacheDir repo)
 
+parentDir : String -> String
 parentDir path =
   let
     p = firstOf (splitPath path)
   in if p == "" then "." else p
 
+saveIndex : String -> List (Pair String (Pair Int Int)) -> Index -> Int
 saveIndex repo entries index =
   let
     _ = ensureCacheDir repo
@@ -472,19 +584,24 @@ saveIndex repo entries index =
     in writeFile (refsPath repo) (refsText index)
   else 0
 
+loadIndexFromCache : String -> Index
 loadIndexFromCache repo =
   Index (parseModules (parseLines (readOrEmpty (modulesPath repo))))
     (parseSymbols (parseLines (readOrEmpty (symbolsPath repo))))
     (parseRefs (parseLines (readOrEmpty (refsPath repo))))
 
+readOrEmpty : String -> String
 readOrEmpty path = if fileExists path then readFile path else ""
 
+parseLines : String -> List String
 parseLines text = filterNonEmpty (splitOnNewline text)
 
+filterNonEmpty : List String -> List String
 filterNonEmpty [] = []
 filterNonEmpty (line :: rest) =
   if line == "" then filterNonEmpty rest else line :: filterNonEmpty rest
 
+parseModules : List String -> List ModuleInfo
 parseModules [] = []
 parseModules (line :: rest) = case splitOnTab line of
   [m, p, path, bytes, decls] => case parseInt bytes of
@@ -494,6 +611,7 @@ parseModules (line :: rest) = case splitOnTab line of
     Nothing => parseModules rest
   _ => parseModules rest
 
+parseSymbols : List String -> List Sym
 parseSymbols [] = []
 parseSymbols (line :: rest) = case splitOnTab line of
   [m, n, k, ln, col, sg, doc] => case parseInt ln of
@@ -503,6 +621,7 @@ parseSymbols (line :: rest) = case splitOnTab line of
     Nothing => parseSymbols rest
   _ => parseSymbols rest
 
+parseRefs : List String -> List (Pair String String)
 parseRefs [] = []
 parseRefs (line :: rest) = case splitOnTab line of
   [m, n] => Pair m n :: parseRefs rest
@@ -515,6 +634,7 @@ loadOrBuild repo =
     entries = scanSources repo
   in if manifestMatches repo entries then Ok (loadIndexFromCache repo) else saveAndReturn repo entries
 
+saveAndReturn : String -> List (Pair String (Pair Int Int)) -> Result Index
 saveAndReturn repo entries = case buildIndex repo of
   Err e => Err e
   Ok index =>
@@ -525,8 +645,10 @@ saveAndReturn repo entries = case buildIndex repo of
 -- ---------------------------------------------------------------
 -- 序列化（写缓存用）
 -- ---------------------------------------------------------------
+modulesText : Index -> String
 modulesText index = join "\n" (map moduleLine (indexModules index)) ++ "\n"
 
+moduleLine : ModuleInfo -> String
 moduleLine m =
   modName m
     ++ "\t"
@@ -538,8 +660,10 @@ moduleLine m =
     ++ "\t"
     ++ strFromInt (modDecls m)
 
+symbolsText : Index -> String
 symbolsText index = join "\n" (map symLine0 (indexSymbols index)) ++ "\n"
 
+symLine0 : Sym -> String
 symLine0 s =
   symModule s
     ++ "\t"
@@ -555,20 +679,24 @@ symLine0 s =
     ++ "\t"
     ++ flattenText (symDoc s)
 
+refsText : Index -> String
 refsText index = join "\n" (map refLine (indexRefs index)) ++ "\n"
 
+refLine : Pair String String -> String
 refLine r = firstOf r ++ "\t" ++ secondOf r
 
 -- ---------------------------------------------------------------
 -- 渲染
 -- ---------------------------------------------------------------
 -- 总览：按包分组的模块表。
+renderOverview : Index -> String
 renderOverview index =
   let
     ms = indexModules index
     pkgs = distinct (map modPackage ms)
   in join "\n" (map (overviewSection ms) pkgs) ++ "\n"
 
+overviewSection : List ModuleInfo -> String -> String
 overviewSection ms pkg =
   let
     mine = filter (\m => modPackage m == pkg) ms
@@ -578,16 +706,19 @@ overviewSection ms pkg =
     ++ "\n\n"
     ++ join "\n" (map (\m => "  " ++ modName m ++ "  " ++ strFromInt (modBytes m) ++ "B" ++ "  " ++ strFromInt (modDecls m) ++ " decls") mine)
 
+renderModules : Index -> String
 renderModules index =
   join "\n" (map (\m => modName m ++ "  " ++ modPath m) (indexModules index)) ++ "\n"
 
 -- 某模块的 API 面（签名 + 行号 + 注释）。
+renderApi : Index -> String -> Result String
 renderApi index modQuery =
   let
     syms = filter (\s => symModule s == modQuery) (indexSymbols index)
   in if syms == [] then Err ("no such module: " ++ modQuery)
   else Ok ("## " ++ modQuery ++ "\n\n" ++ join "\n" (map apiRow syms))
 
+apiRow : Sym -> String
 apiRow s =
   "  "
     ++ symName s
@@ -598,11 +729,13 @@ apiRow s =
     ++ (if symDoc s == "" then "" else "\n      " ++ symDoc s)
 
 -- `vuna doc --with-comments`：模块 + 签名 + 紧邻注释。
+renderDocWithComments : Index -> String
 renderDocWithComments index =
   let
     mods = distinct (map symModule (indexSymbols index))
   in join "\n" (map (docSection index) mods)
 
+docSection : Index -> String -> String
 docSection index modQuery =
   let
     syms =
@@ -611,6 +744,7 @@ docSection index modQuery =
         (indexSymbols index)
   in "## " ++ modQuery ++ "\n\n```vuna\n" ++ join "\n" (map docRow syms) ++ "```\n"
 
+docRow : Sym -> String
 docRow s =
   (if symDoc s == "" then "" else "-- " ++ symDoc s ++ "\n")
     ++ symName s
@@ -630,6 +764,7 @@ findSymbol index query =
     _ :: _ => Ok exact
     [] => findByBare syms query
 
+findByBare : List Sym -> String -> Result (List Sym)
 findByBare syms query =
   let
     bare = filter (\s => symName s == query) syms
@@ -637,6 +772,7 @@ findByBare syms query =
     _ :: _ => Ok bare
     [] => findBySuffix syms query
 
+findBySuffix : List Sym -> String -> Result (List Sym)
 findBySuffix syms query =
   let
     suffix = "." ++ query
@@ -657,8 +793,10 @@ impactOf index query = case findSymbol index query of
     in Ok
       ("symbol: " ++ join ", " (map symFullName syms) ++ "\n" ++ "readers: " ++ join ", " readers ++ "\n" ++ "tests: " ++ testTagsFor syms ++ "\n")
 
+testTagsFor : List Sym -> String
 testTagsFor syms = tagsOfKinds (map symKind syms)
 
+tagsOfKinds : List String -> String
 tagsOfKinds kinds =
   if memName "trait" kinds then "traits, run"
   else if memName "data" kinds || memName "record" kinds then "records, run" else "run, stdlib"

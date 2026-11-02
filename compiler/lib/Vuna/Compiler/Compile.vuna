@@ -1,14 +1,20 @@
-module Vuna.Compiler.Compile (effectiveRoots, compileFileTyped, compileFileTypedExec, checkFile, compileFileTypedIn, compileFileTypedExecIn, checkFileIn, checkPackageIn, compileFileDt, checkFileDt) where
+module Vuna.Compiler.Compile
+  ( checkFileDt
+  , checkLibraryDt
+  , checkProjectDt
+  , compileFileDt
+  , compileProjectDt
+  , dtBuildScriptName
+  , dtMainFile
+  , dtProjectFiles
+  , effectiveRoots
+  ) where
 
--- Vuna.Compiler.Compile：编译入口（供 CompilerCli / CLI / 测试使用）。
---
--- 只保留 typed codegen 一条 HM 路径；checkFile* 只做类型检查与诊断，不生成代码。
--- M13 起另有 DT 单文件路径（compileFileDt / checkFileDt，见 Vuna.Compiler.Dt）。
+-- Vuna.Compiler.Compile：编译入口（供 CompilerCli / 测试使用）。唯一路径是 DT：
+-- 精化（Elab）→ 擦除检查 + OCaml 生成（CoreCodegen）；checkFile* 只检查不产码。
 import Vuna.Compiler.Common
 import Vuna.Compiler.Pkg
 import Vuna.Compiler.Loader
-import Vuna.Compiler.Typecheck
-import Vuna.Compiler.TypedCodegen
 import Vuna.Compiler.Dt
 
 -- 未显式给 --root 时使用当前目录包的模块根（vuna.toml）；
@@ -22,47 +28,40 @@ currentPackageRoots = case loadPackage "." of
   Err _ => []
   Ok pkg => packageRoots pkg
 
-compileFileTyped roots entry printResult = compileFileTypedIn "" roots entry printResult
+checkFileDt : List String -> String -> Result (List String)
+checkFileDt roots entry = dtCheckFile roots entry
 
-compileFileTypedIn entryPkg roots entry printResult = andThen (loadProgram roots entryPkg entry) (\decls => andThen (checkProgramInfoElab decls) (\p => case p of
-  Pair globals elabDecls => generateProgramTyped elabDecls globals printResult
-)
-)
+compileFileDt : List String -> String -> Bool -> Result String
+compileFileDt roots entry printResult = dtCompileFile roots entry printResult
 
-compileFileTypedExec roots entry = compileFileTypedExecIn "" roots entry
+checkProjectDt : List Root -> String -> String -> Result (List String)
+checkProjectDt roots entryPkg entry = dtCheckProject roots entryPkg entry
 
-compileFileTypedExecIn entryPkg roots entry = andThen (loadProgram roots entryPkg entry) (\decls => andThen (checkProgramInfoElab decls) (\p => case p of
-  Pair globals elabDecls => generateProgramTypedExec elabDecls globals
-)
-)
+compileProjectDt : List Root -> String -> String -> Bool -> Result String
+compileProjectDt roots entryPkg entry printResult =
+  dtCompileProject roots entryPkg entry printResult
 
--- 诊断：typecheck + 穷尽性/冗余警告（非致命）。返回警告列表。
-checkFile roots entry = checkFileIn "" roots entry
-
-checkFileIn entryPkg roots entry = case loadProgram roots entryPkg entry of
-  Err e => Err e
-  Ok decls => case checkProgramInfoElab decls of
-    Err e => Err e
-    Ok (Pair globals elabDecls) => Ok (exhaustiveWarningsFor globals elabDecls)
-
--- 库包检查：以 [export].modules 为根，不走 app/Main.vuna。
-checkPackageIn : String -> List Root -> List String -> Result (List String)
-checkPackageIn entryPkg roots names = case loadProjectModules roots entryPkg names of
-  Err e => Err e
-  Ok project => case resolveProject project of
-    Err e => Err e
-    Ok parts =>
-      let
-        flat = append (firstOf parts) (concatMap moduleDeclsOf (secondOf parts))
-      in case checkProgramInfoElab flat of
-        Err e => Err e
-        Ok (Pair globals elabDecls) => Ok (exhaustiveWarningsFor globals elabDecls)
+checkLibraryDt : List Root -> String -> List String -> Result (List String)
+checkLibraryDt roots entryPkg names = dtCheckLibrary roots entryPkg names
 
 -- ---------------------------------------------------------------
--- M13：DT 单文件路径（不经过 Loader；单文件自包含）
+-- DT 单文件包输出（build 默认形状）：main.ml + build.sh
 -- ---------------------------------------------------------------
-compileFileDt : String -> Bool -> Result String
-compileFileDt entry printResult = dtCompileFile entry printResult
+dtMainFile : String
+dtMainFile = "main.ml"
 
-checkFileDt : String -> Result (List String)
-checkFileDt entry = dtCheckFile entry
+dtBuildScriptName : String
+dtBuildScriptName = "build.sh"
+
+dtBuildScript : String
+dtBuildScript =
+  "#!/bin/sh\n"
+    ++ "# 由 vuna 生成：DT 单文件输出。\n"
+    ++ "set -e\n"
+    ++ "cd \"$(dirname \"$0\")\"\n"
+    ++ "ocamlopt -w -a -I +unix unix.cmxa main.ml -o main\n"
+
+dtProjectFiles : List Root -> String -> String -> Bool -> Result (List (Pair String String))
+dtProjectFiles roots entryPkg entry printResult =
+  andThen (dtCompileProject roots entryPkg entry printResult)
+    (\code => Ok [Pair dtMainFile code, Pair dtBuildScriptName dtBuildScript])

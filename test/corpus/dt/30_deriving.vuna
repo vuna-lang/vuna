@@ -5,6 +5,10 @@
 --
 -- 前置两项都在 M19 完成：同 trait 多实例能正确解析（`Show Int` 与 `Show Color` 共存）、
 -- `==` 对非内建类型走 `Eq` 实例。
+data Bool : Type where
+  False : Bool
+  True : Bool
+
 data Color : Type where
   Red : Color
   Blue : Color

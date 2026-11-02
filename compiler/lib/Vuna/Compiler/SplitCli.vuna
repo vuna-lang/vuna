@@ -1,130 +1,29 @@
-module Vuna.Compiler.SplitCli (SplitInput, buildSplit, seedSplit, compilePackage) where
+module Vuna.Compiler.SplitCli (buildSplit, seedSplit) where
 
--- Vuna.Compiler.SplitCli：包模式的分离编译入口（M12）。
---   vuna build --split OUTDIR [DIR]   → 包编译成逐模块 OCaml 源码 + build.sh（写到 OUTDIR）
---   vuna seed OUTDIR                  → 同上（生成 seed 文件集，供种子轮换）
--- 若程序含分离编译暂不支持的构造（如需要 trait 字典参数的泛型函数），返回 Err；
--- split 本身不回退，调用方可用 `vuna build` 的单文件 typed 路径。
+-- Vuna.Compiler.SplitCli：包模式的分离编译入口（M24：DT split 输出）。
+--   vuna build --split OUTDIR [DIR]   → 逐模块 DT codegen 到 OUTDIR + build.sh
+--   vuna seed OUTDIR [DIR]            → 同上（seed rotation 用）
+--
+-- 输出模型由 Vuna.Compiler.Split（SplitFile / build.sh）承载；生成器在
+-- Vuna.Compiler.CoreCodegen.generateDtSplitProgram，包级加载/精化在 Vuna.Compiler.Dt。
 import Vuna.Compiler.Common
-import Vuna.Compiler.Ast
 import Vuna.Compiler.Pkg
-import Vuna.Compiler.Loader
-import Vuna.Compiler.Typecheck
-import Vuna.Compiler.TypedCodegen
+import Vuna.Compiler.Dt
 import Vuna.Compiler.Split
 
-data SplitInput : Type where
-  SplitInput : List Module -> List Decl -> List Decl -> List (Pair String Scheme) -> List (Pair String String) -> SplitInput
-
-prepareSplit : String -> Result SplitInput
-prepareSplit dir = case loadPackage dir of
-  Err e => Err e
-  Ok pkg =>
-    let
-      roots = packageRoots pkg
-    in let
-      entry = packageEntry pkg
-    in case loadProject roots (packageName pkg) entry of
-      Err e => Err e
-      Ok project => case resolveProject project of
-        Err e => Err e
-        Ok parts =>
-          let
-            entryDecls = firstOf parts
-          in let
-            modules = secondOf parts
-          in let
-            flat = append entryDecls (concatMap moduleDeclsOf modules)
-          in case checkProgramInfoElabOwners flat of
-            Err e => Err e
-            Ok (Pair (Pair globals elabDecls) owners) =>
-              Ok (SplitInput modules entryDecls elabDecls globals owners)
-
--- 生成 split 文件；成功后写盘并生成 build.sh。返回写出的源码文件数。
 buildSplit : String -> String -> Result Int
-buildSplit dir outDir = andThen (prepareSplit dir) (\input => case input of
-  SplitInput modules entryDecls elabDecls globals owners => andThen (generateSplitProgram modules entryDecls elabDecls globals owners) (\files => andThen (writeSplitFiles outDir files) (\n => let
-    order = splitCompileOrder (splitInitFiles files)
-  in let
-    _ = writeFile (outDir ++ "/build.sh") (buildScript order)
-  in Ok n
-  )
-  )
-)
+buildSplit dir outDir = case loadPackage dir of
+  Err e => Err e
+  Ok pkg => splitPackage pkg outDir
 
 seedSplit : String -> String -> Result Int
 seedSplit dir outDir = buildSplit dir outDir
 
--- ---------------------------------------------------------------
--- 包级 compile：.output/{lib,app}
--- ---------------------------------------------------------------
-prepareProject pkg True = case loadProject (packageRoots pkg) (packageName pkg) (packageEntry pkg) of
-  Err e => Err e
-  Ok project => finishPrepare project
-prepareProject pkg False = case packageExports pkg of
-  Nothing =>
-    Err
-      ("compile --package: library package " ++ packageName pkg ++ " has no app/Main.vuna and no [export].modules")
-  Just names => case loadProjectModules (packageRoots pkg) (packageName pkg) names of
-    Err e => Err e
-    Ok project => finishPrepare project
-
-finishPrepare project = case resolveProject project of
-  Err e => Err e
-  Ok parts =>
-    let
-      entryDecls = firstOf parts
-    in let
-      modules = secondOf parts
-    in let
-      flat = append entryDecls (concatMap moduleDeclsOf modules)
-    in case checkProgramInfoElabOwners flat of
-      Err e => Err e
-      Ok (Pair (Pair globals elabDecls) owners) =>
-        Ok (SplitInput modules entryDecls elabDecls globals owners)
-
-writePackageFiles outDir files =
-  let
-    libFiles = filter (\f => splitName f /= "Main.ml") files
-  in let
-    mainFiles = filter (\f => splitName f == "Main.ml") files
-  in andThen (writeSplitFilesChanged (outDir ++ "/lib") libFiles)
-    (\n => andThen (writeMainFiles (outDir ++ "/app") mainFiles) (\m => Ok (n + m)))
-
-writeMainFiles dir [] = Ok 0
-writeMainFiles dir (f :: rest) = andThen (writeMainFiles dir rest) (\n => let
-  _ = writeFile (dir ++ "/" ++ splitName f) (splitText f)
-in Ok (n + 1)
+splitPackage : Package -> String -> Result Int
+splitPackage pkg outDir = andThen (dtSplitProject (packageRoots pkg) (packageName pkg) (packageEntry pkg) True) (\files => andThen (writeSplitFiles outDir files) (\n => let
+  order = splitCompileOrder (splitInitFiles files)
+in let
+  _ = writeFile (outDir ++ "/build.sh") (buildScript order)
+in Ok n
 )
-
-compilePackage : String -> String -> Result Int
-compilePackage dir outDir = case loadPackage dir of
-  Err e => Err e
-  Ok pkg => compilePkg outDir pkg (fileExists (packageEntry pkg))
-
-compilePkg outDir pkg hasMain =
-  andThen (prepareProject pkg hasMain) (\input => compilePrepared outDir hasMain input)
-
-compilePrepared outDir hasMain (SplitInput modules entryDecls elabDecls globals owners) =
-  andThen (generateFiles hasMain modules entryDecls elabDecls globals owners)
-    (\files => writeCompiled outDir hasMain files)
-
-writeCompiled outDir hasMain files =
-  let
-    _ = makeDir outDir
-  in let
-    _ = makeDir (outDir ++ "/lib")
-  in let
-    _ = if hasMain then makeDir (outDir ++ "/app") else 0
-  in andThen (writePackageFiles outDir files) (\n => let
-    libFiles = filter (\f => splitName f /= "Main.ml") files
-  in let
-    order = splitCompileOrder (splitInitFiles libFiles)
-  in let
-    _ = writeFile (outDir ++ "/build.sh") (buildScriptPackage order hasMain)
-  in Ok n
-  )
-
-generateFiles hasMain modules entryDecls elabDecls globals owners =
-  if hasMain then generateSplitProgram modules entryDecls elabDecls globals owners
-  else generateSplitLibraryProgram modules entryDecls elabDecls globals owners
+)

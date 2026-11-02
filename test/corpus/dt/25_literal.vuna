@@ -1,4 +1,8 @@
 -- M19：内建类型上的字面量模式（Bool 降级成 if；Int 降级成嵌套 if 链）。
+data Bool : Type where
+  False : Bool
+  True : Bool
+
 data Nat : Type where
   Zero : Nat
   Succ : Nat -> Nat

@@ -1,7 +1,10 @@
-module Inner (T, mk) where
+module Inner (T, mk, unT) where
 
 data T : Type where
   MkT : Int -> T
 
 mk : Int -> T
 mk n = MkT n
+
+unT : T -> Int
+unT (MkT n) = n
