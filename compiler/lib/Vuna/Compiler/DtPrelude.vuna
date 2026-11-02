@@ -1,4 +1,4 @@
-module Vuna.Compiler.DtPrelude (preludeNames, preludeGlobals, intTy, strTy, boolTy, fun2, isEqOp, builtinTyName, builtinEqTyName, eqRuntimeName, polyEqTy, prependParams) where
+module Vuna.Compiler.DtPrelude (preludeNames, preludeGlobals, preludeGlobalsFor, pickListFamily, intTy, strTy, boolTy, fun2, isEqOp, builtinTyName, builtinEqTyName, eqRuntimeName, polyEqTy, prependParams) where
 
 -- Vuna.Compiler.DtPrelude：DT 的**内置定义表**（M19 起独立成模块）。
 --
@@ -13,16 +13,14 @@ import Vuna.Compiler.Common
 import Vuna.Compiler.Core
 
 -- ---------------------------------------------------------------
--- 内置 prelude：只有类型常量、Bool 值与 Int/String/Bool 运算符。
+-- 内置 prelude：Int / String 类型常量、运算符与 str* 内建（Bool 的权威定义是
+-- `Base.Bool`，见 M22.2 去桩；单文件模式需自己声明 `data Bool`）。
 -- 名字与 TypedCodegen 的 runtime helper 一一对应（codegen 按名字映射）。
 -- ---------------------------------------------------------------
 preludeNames : List String
 preludeNames =
   [ "Int",
     "String",
-    "Bool",
-    "True",
-    "False",
     "+",
     "-",
     "*",
@@ -142,12 +140,13 @@ primExitTy = TPi "_" False Rig1 intTy intTy
 primRunInTy = fun2 strTy (listOfTy strTy) intTy
 
 preludeGlobals : List (Pair String Term)
+-- Bool 只留**类型**别名：内建 trait（Show/Eq/Ord）签名与 `if` 判据要用它；
+-- `True` / `False` 值构造子已去桩（权威定义在 `Base.Bool`），单文件模式需自声明
+-- `data Bool`（Loader 不再放行裸 `Bool`）。
 preludeGlobals =
   [ Pair "Int" (TType levelZero),
     Pair "String" (TType levelZero),
     Pair "Bool" (TType levelZero),
-    Pair "True" boolTy,
-    Pair "False" boolTy,
     Pair "+" (fun2 intTy intTy intTy),
     Pair "-" (fun2 intTy intTy intTy),
     Pair "*" (fun2 intTy intTy intTy),
@@ -195,3 +194,45 @@ prependParams : List String -> Term -> Term
 prependParams [] kindTerm = kindTerm
 prependParams (p :: rest) kindTerm =
   TPi p False Rig1 (TType levelZero) (prependParams rest kindTerm)
+
+-- ---------------------------------------------------------------
+-- M22.2：`str*` 签名里的 `List` 按**实际族名**绑定
+-- ---------------------------------------------------------------
+--
+-- `strUnpack : String -> List Int` 里的 `List` 是「族短名」，而模块模式下族名是
+-- `Base.List.List`；两者必须指同一个类型，否则 `import Base.String` 报
+-- `expected (List Int), got (Base.List.List ?2)`。
+-- 这里把 prelude 里出现的裸 `TGlobal "List"` 重写成程序里实际声明的族名
+-- （没有声明时保持 `List`，单文件自声明 `data List` 的写法不变）。
+-- M22.2：把 prelude 里的族短名（`List` / `Bool`）重绑到程序里的实际族名。
+-- `Bool` 没有声明时保留短名（prelude 的 `Bool` 类型别名只为内建 trait 的签名服务）。
+rewriteFamilyName : String -> String -> Term -> Term
+rewriteFamilyName old newName t = case t of
+  TGlobal g => if g == old then TGlobal newName else t
+  TPi n i r d c => TPi n i r (rewriteFamilyName old newName d) (rewriteFamilyName old newName c)
+  TLam n r b => TLam n r (rewriteFamilyName old newName b)
+  TApp f a r => TApp (rewriteFamilyName old newName f) (rewriteFamilyName old newName a) r
+  TCon c args =>
+    TCon c (map (\p => Pair (rewriteFamilyName old newName (firstOf p)) (secondOf p)) args)
+  TCase s alts => TCase (rewriteFamilyName old newName s) (map (rewriteAltFamily old newName) alts)
+  TIf c th el =>
+    TIf (rewriteFamilyName old newName c) (rewriteFamilyName old newName th)
+      (rewriteFamilyName old newName el)
+  _ => t
+
+rewriteAltFamily : String -> String -> CaseAlt -> CaseAlt
+rewriteAltFamily old newName alt = case alt of
+  CaseAlt n bs b => CaseAlt n bs (rewriteFamilyName old newName b)
+
+preludeGlobalsFor : String -> List (Pair String Term)
+preludeGlobalsFor listFam =
+  map (\p => Pair (firstOf p) (rewriteFamilyName "List" listFam (secondOf p))) preludeGlobals
+
+-- 从候选数据族名里挑 `List` 族（短名匹配；没有就保留裸名）。
+pickListFamily : List String -> String
+pickListFamily [] = "List"
+pickListFamily (n :: rest) = if baseNameOf n == "List" then n else pickListFamily rest
+
+baseNameOf : String -> String
+baseNameOf name = case splitLastDot (splitOnDot name) of
+  Pair rev base => base

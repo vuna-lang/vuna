@@ -1,10 +1,12 @@
-# 语言参考：DT 子集（M21，实验性）
+# 语言参考：DT 子集（M22.2，实验性）
 
 `--dt` 打开依赖类型（DT）路径：Core TT + NbE + 双向精化器 + 擦除型 codegen。
 M14 加入**索引归纳族**与**依赖模式匹配**（`data` + `case`），解除递归定义限制；
 M20 起**复用 Loader**，支持多文件、`import` 与 `--root`；M21 起 `main : IO a`、`do`、
-effectful 内建与 `Base.IO` 可用。DT 仍是**显式 opt-in**：包目录（M22.1 进行中）与
-`build` / `build --split` / `seed` 不接受 `--dt`；HM 路径语义与产物不变。
+effectful 内建与 `Base.IO` 可用；M22.1 起 `check` / `compile --dt` 接受**包目录**，
+M22.2 起 `base` 全部模块（`Base.String` / `Map` / `Sort` / 门面 `Base` / `Prelude`）可精化。
+DT 仍是**显式 opt-in**：`build` / `build --split` / `seed` 不接受 `--dt`（M22.3）；
+HM 路径语义与产物不变。
 设计与边界见 [docs/dt-core.md](../dt-core.md)，阶段状态与阻碍见 [roadmap.md](../roadmap.md)。
 
 ```vuna
@@ -111,20 +113,28 @@ trans a b c p q = case p of
   只能放**最后一个**分支。
 - **多 clause 与方程左端模式（M19）**。`f p1 = e1` / `f p2 = e2` 保留语法，精化期合成
   单个 lambda + case 表达式树（标准模式矩阵，实现在 `Vuna.Compiler.DtMatch`）；同一构造子
-  多 clause、变量兜底、嵌套模式共存都成立，参数个数必须一致。**当前边界（M22.2）**：
-  多列覆盖拆分与跨模块构造子名仍有限制，见 [limits.md](limits.md)。
+  多 clause、变量兜底、嵌套模式共存都成立，参数个数必须一致。M22.2 起矩阵按**族的构造子
+  集合**判断列覆盖：该列构造子已全覆盖时不再补通配兜底（`mergeBy` 一类多列子句的假
+  `missing Cons` 消失）；源级 `case` 的嵌套模式折叠会把后续 `_` 分支下沉为每层内层 case
+  的兜底。**仍有限制**：终止性只接受结构递归（见 [limits.md](limits.md)）。
 - **`let` 与推断位 `case`（M19）**。`let ... in`（含 `where` 块）脱糖为
   `(\x => body) e`；`case` 可以出现在推断位（函数实参、`if` 分支、`let` 的 value），
   做法是建元变量当期望类型。
 - **内建类型上的字面量模式（M19）**。`Bool` 的 `case` 降级成 `if`；`Int` / `String`
   的字面量分支降级成嵌套 `if` 链，因此**必须有一个变量/通配兜底分支**（值域穷尽不了）。
-- **Bool 的运行时表示已统一（M21）**：`data Bool`（`Base.Bool.Bool` 或单文件声明）的
-  `True` / `False` 精化成核心 `TBool`，Bool 族不生成 OCaml 变体，`if` / `case` /
-  `main : Bool` 按族**短名**识别。prelude 里剩余的 `Bool` / `True` / `False` 桩只服务
-  单文件无库模式，去桩在 M22.2。
-- **内建泛化（M19）**。`==` / `/=` 带隐式类型参数（`{a : Type} -> a -> a -> Bool`），精化到
-  饱和应用时按第一个实参类型特化成 `bi_eq_int` / `bi_eq_str`；非 `Int` / `String` 报
-  `is only defined for Int and String`；`strFromInt` 等已进 prelude（`DtPrelude.vuna`）。
+- **Bool 的运行时表示已统一（M21）**，**值构造子已在 M22.2 去桩**：`data Bool`
+  （`Base.Bool.Bool` 或单文件声明）的 `True` / `False` 精化成核心 `TBool`，Bool 族不生成
+  OCaml 变体，`if` / `case` / `main : Bool` 按族**短名**识别；`True` / `False` 不再由
+  prelude 提供，必须来自 `Base.Bool` 或本地 `data Bool`。prelude 只保留 `Pair "Bool"
+  (TType 0)` 这一条**类型别名**（内建 trait 方法签名与不含 `data Bool` 的程序需要它），
+  Bool 的**数据定义**仍以 `Base.Bool` 为唯一权威（决策见 [roadmap.md](../roadmap.md)
+  「决策变更」）。
+- **内建泛化（M19/M22.2）**。`==` / `/=` 带隐式类型参数（`{a : Type} -> a -> a -> Bool`），
+  饱和应用按实参类型特化：`Int` / `String` 走 `bi_*_int` / `bi_*_str`，其它类型走 `Eq`
+  字典投影（无实例给出缺失诊断）。`<` / `<=` / `>` / `>=` 同理：`Int` → `bi_*_int`，
+  `String` / `Bool` → `bi_*_generic`，其它类型走 `Ord` 字典（内建 Int/String/Bool 实例 +
+  `deriving (Ord)`）；刚性类型参数延迟提升成 `{d : Dict_Ord a}`。`strFromInt` 等已进
+  prelude（`DtPrelude.vuna`）。
 - **可达性决定分支能否省略**：若函数签名把索引**细化**（如 `Vec a (Succ m)`），
   与该索引不可统一的分支（`Nil`）**可以省略**，写了报 `this branch is impossible`；
   签名是**泛化**索引（`Vec a n`）时所有构造子都可达，漏写报 `case is not exhaustive`。
@@ -144,14 +154,15 @@ trans a b c p q = case p of
 ## 命令与边界
 
 ```console
-vuna check --dt file.vuna            # 精化 + 擦除检查（不生成代码）
-vuna compile --dt file.vuna out.ml   # 擦除并生成 OCaml（main : Int/String/Bool）
-vuna interp --dt file.vuna           # 核心求值器（NbE + delta）求值 main
+vuna check --dt <file.vuna | package-dir>            # 精化 + 擦除检查（不生成代码）
+vuna compile --dt <file.vuna | package-dir> out.ml   # 擦除并生成 OCaml（main : Int/String/Bool/IO a）
+vuna interp --dt file.vuna                           # 核心求值器（NbE + delta）求值 main（单文件）
 ```
 
 M20 起 `--dt` **复用 Loader**：支持多文件 / `import` / `--root`，参数化 `data Foo a : Type`
-也可用；**包目录模式**与 `build` / `seed` 仍不支持 `--dt`（M22.1）。HM 路径语义与产物
-不变。
+也可用；M22.1 起 `check` / `compile --dt` 接受**包目录**（可执行包同时加载入口，库包只
+`check`；不存在路径 / 坏目录 / `interp --dt <dir>` 都是清晰错误）。`build` / `seed` 仍不
+支持 `--dt`（M22.3）。HM 路径语义与产物不变。
 
 ## 测试夹具
 
@@ -164,10 +175,17 @@ M20 起 `--dt` **复用 Loader**：支持多文件 / `import` / `--root`，参�
   `33_poly_fn_field`（函数字段被索引精化）、`34_io_do`/`35_io_main`（main : IO a 执行）、
   `37_instance_ctor_pat`（实例方法多 clause + 构造子形参）；M20.5 `36_multi_clause`。
   数值见各 `.out` 文件。
-- 正例 `test/corpus/dt_base/`（M21，`--root ../base/lib`，5 个）：`import Base.IO` 后
-  `do`/`bind`/`pure`/`fmap` 可用、`Base.IO` 全部 API 的类型面、`import Base.Monad` +
-  `Base.Maybe` 的 trait 投影与实例方法构造子形参。三条路径（interp / check /
-  compile+run）与 golden 与 interp==run 对拍全绿。
+- 正例 `test/corpus/dt_base/`（M21/M22.2，`--root ../base/lib`，**8** 个）：M21 的
+  `import Base.IO` 后 `do`/`bind`/`pure`/`fmap` 可用、`Base.IO` 全部 API 的类型面、
+  `import Base.Monad` + `Base.Maybe` 的 trait 投影与实例方法构造子形参；M22.2 新增
+  `06_base_string`（`import Base.String`，`join`/`split` 走 `dtp_unpack`/`dtp_pack`
+  桥接）、`07_base_sort_map`（`Base.Sort` 的 Ord 泛型比较 + `Base.Map`，运行 `123`）、
+  `08_base_facade`（`import Base` 门面，运行 `2`）。三条路径（interp / check /
+  compile+run）与 golden 与 interp==run 对拍；带 `.nointerp` 标记的夹具（`06`）只比
+  check / compile / run——核心求值器还没有 `strUnpack` / `strPack` 的归约。
+- 正例 `test/corpus/dt_pkg/`（M22.1，包目录，3 个）：`01_exec`（可执行包，运行 `42`）、
+  `02_lib`（库包：check 通过、compile 清晰报错且不写输出）、`03_bad`（无 `vuna.toml`，
+  清晰错误）。
 - 正例 `test/corpus/dt_io/`（M21，效果执行，1 个）：`main : IO a` 的编译产物真正执行
   `Base.IO` 效果（`print`）。核心求值器不执行效果，所以这一段只比编译产物输出。
 - 负例 `test/corpus/dt_err/` 共 **29** 个：M13 的 `01_universe`、`02_conv`、

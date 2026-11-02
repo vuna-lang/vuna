@@ -1,4 +1,4 @@
-module Vuna.Compiler.DtDerive (builtinTraitDecls, builtinShowInstances, builtinEqInstances, expandDerivings) where
+module Vuna.Compiler.DtDerive (builtinTraitDecls, builtinShowInstances, builtinEqInstances, builtinOrdInstances, expandDerivings) where
 
 -- Vuna.Compiler.DtDerive：`deriving` 的**实例生成**（M19）。
 --
@@ -289,3 +289,28 @@ gtBody ctors sp = EApp (EVar "lt" sp) [EVar "sy" sp, EVar "sx" sp] sp
 
 geBody : List Ctor -> Span -> Expr
 geBody ctors sp = EApp (EVar "le" sp) [EVar "sy" sp, EVar "sx" sp] sp
+
+-- ---------------------------------------------------------------
+-- 内建类型的 Ord 实例
+-- ---------------------------------------------------------------
+-- `mergeSort : List a -> List a` 里的 `x <= y` 在 `a` 上是刚性的，会提升成
+-- `{d : Dict_Ord a}`；调用点若是 `List Int` / `List String` / `List Bool`，实例搜索
+-- 需要这三个内建实例。方法体直接写比较运算符：`Int` 走精化期内建特化，
+-- `String` / `Bool` 走泛型 `compare`。
+builtinOrdInstances : List Decl
+builtinOrdInstances = [ordIntInstance, ordStringInstance, ordBoolInstance]
+
+ordIntInstance : Decl
+ordIntInstance = ordInstanceOf "Int" noSpan
+
+ordStringInstance : Decl
+ordStringInstance = ordInstanceOf "String" noSpan
+
+ordBoolInstance : Decl
+ordBoolInstance = ordInstanceOf "Bool" noSpan
+
+ordInstanceOf : String -> Span -> Decl
+ordInstanceOf tn sp =
+  DInstance Nothing False (EApp (EVar "Ord" sp) [EVar tn sp] sp)
+    [DFun "lt" [PVar "x" sp, PVar "y" sp] (EApp (EVar "<" sp) [EVar "x" sp, EVar "y" sp] sp) sp, DFun "le" [PVar "x" sp, PVar "y" sp] (EApp (EVar "<=" sp) [EVar "x" sp, EVar "y" sp] sp) sp, DFun "gt" [PVar "x" sp, PVar "y" sp] (EApp (EVar ">" sp) [EVar "x" sp, EVar "y" sp] sp) sp, DFun "ge" [PVar "x" sp, PVar "y" sp] (EApp (EVar ">=" sp) [EVar "x" sp, EVar "y" sp] sp) sp]
+    sp

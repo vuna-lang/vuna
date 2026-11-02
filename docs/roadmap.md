@@ -110,8 +110,8 @@ M15 遗留缺陷（同 trait 多实例，细节见 [history.md](history.md)）�
 | M19 / M20 | 已完成 | 语言面 parity；复用 Loader 走出单文件 | 细节见 [history.md](history.md) |
 | M20.5 | 已完成 | 泛型实例约束求解（`solveMetaHo`、字典延迟、`mem`） | —（`git log` 里记作 M22） |
 | M21 | 已完成 | `main : IO a` 执行、`do` / trait 投影（Base.IO 重导出）、实例方法模式矩阵、Bool 统一表示、effectful 内建进 codegen | — |
-| M22.1 | 未开始 | 包目录与 CLI 入口（`check` / `compile --dt`） | 目录被当文件读并崩溃 |
-| M22.2 | 未开始 | 库名统一与精化缺口（`str*`/`List`、跨模块族名、`Sort`、Bool 去桩） | `Base.String` / `Base.Map` / `Base.Sort` 探针失败 |
+| M22.1 | 已完成 | 包目录 `check` / `compile --dt`（`loadProject` + 依赖序拼接）、CLI 清晰错误、`dtRootErr`/`dtDirErr` 删除 | — |
+| M22.2 | 已完成 | `str*` 的 `List` 族别名、跨模块族名（依赖序加载）、模式矩阵族覆盖 + 嵌套兜底下沉、泛型 `<`/`<=` 与内建 Ord 实例、Bool 值去桩、`Base.Sort` 结构递归化 | —（Bool 仍留 prelude 类型别名，见「决策变更」） |
 | M22.3 | 未开始 | 擦除判据接线 + 统一 codegen + `build`/`seed` 入口 + metrics | 显式索引仍保留运行时字段 |
 | M23 | 未开始 | 全仓源码与夹具迁移；签名回填 | 签名量、夹具迁移 |
 | M24 | 未开始 | seed 切换、HM 删除、`--dt` 默认化 | 前置 M22.x + M23 |
@@ -189,53 +189,73 @@ check / compile+run）全绿；`test/corpus/dt_io/`（效果执行）编译运�
 
 **目标**：让 `--dt` 接受包目录，后续阶段都能在真实包上验证。
 
-**范围**：
+**已完成（2026-11）**：
 
-- `check --dt <pkg-dir>` / `compile --dt <pkg-dir>` 走 `loadProject` / `packageRoots`
-  （当前把目录当文件读，直接 `Fatal error: readFile ...`）。
-- CLI 死代码：`CompilerCli.dtRootErr` / `dtDirErr` 定义但无调用点；`--dt --root` 实际
-  可用而文案仍写「does not support --root」。要么接线（给出清晰错误），要么删除。
-- `build --dt` / `seed --dt` 的入口接线放 M22.3（依赖 codegen 输出模型）。
+- `check --dt <pkg-dir>` / `compile --dt <pkg-dir>` 走 `loadProject` / `loadProjectModules`
+  + `resolveProject`：可执行包（有 `app/Main.vuna`）同时拿到入口声明，库包按
+  `[export].modules` 只做 `check`（`compile` 给「library package ... has no app/Main.vuna」）。
+- **依赖序拼接**：`Dt.dtProjectDecls` = `reverse modules` 的声明 + 入口声明（Loader 的
+  modules 是「依赖在前」的反序）；`Loader.loadProgramOrdered` / `loadProgramRawOrdered`
+  提供同一顺序给单文件 / `--root` 路径，`Base.Map` 的 `Base.List.List` 前向引用因此
+  不再报 `unknown name`。
+- CLI：删除死代码 `dtRootErr` / `dtDirErr`；`check` / `compile --dt` 先 `fileExists` 再
+  `isDirectory` 分派（内建 `isDirectory` 对不存在路径会抛 Fatal error）；不存在路径报
+  `no such file or package directory: X`，坏目录报 `missing vuna.toml`，
+  `interp --dt <dir>` 报 `interp --dt takes a single file, not a package directory`。
+- usage 文案：`compile` 增加 `| <package-dir>`，`--dt` 说明改为 file 或 package dir。
+- 夹具 `test/corpus/dt_pkg/`：`01_exec`（Util→Answer 覆盖依赖序、运行输出 42）、
+  `02_lib`（库包 check 通过、compile 清晰报错且不写输出文件）、`03_bad`（无 `vuna.toml`）。
 
-**当前阻碍**：`check --dt base/lib` 把目录当文件读并崩溃。
+**验收**：包目录 `check --dt` / `compile --dt` 可用并可运行；错误路径全为清晰错误而非
+Fatal error；单文件 / `--root` 路径零回归（`run-tests.sh` 34c 段覆盖 11 项检查）。
 
-**验收**：包目录 `check --dt` / `compile --dt` 可用；不接受的形式给出清晰错误而非崩溃；
-`dtRootErr` / `dtDirErr` 有调用点或被删除。
-
-**前置**：M21（`do` / trait 投影完成后再验证包模式）。**风险**：`--dt` 与 HM 的 CLI
-解析共用路径，改动要保证 HM 分支零回归。
+**前置**：M21（已完成）。**风险**（已处理）：`--dt` 与 HM 的 CLI 解析共用路径，改动以
+分支分派为主，HM 包模式（28/29/33 段）零回归。
 
 ### M22.2：库名统一与精化缺口（含 Bool 去桩）
 
-**目标**：`base` 的所有模块在 `--dt` 下可精化，且 `Bool` 只有一个权威定义。
+**目标**：`base` 的所有模块在 `--dt` 下可精化，且 `Bool` 只有一个权威数据定义。
 
-**范围**（按可独立验证的顺序）：
+**已完成（2026-11）**：
 
-- **`str*` 与 `List` 的名统一**：`DtPrelude` 里 `strUnpack` / `strPack` 的签名用裸
-  `List`，而程序里的类型是 `Base.List.List`——`import Base.String` 报
-  `expected (List Int), got (Base.List.List ?2)`。按「族短名 / 实际族名」绑定，或让
-  `str*` 的签名在精化后按 globals 里的 `List` 族重写。
-- **跨模块族名**：`Base.Map` / `Base` 报 `DT: unknown name Base.List.List`——`Map.vuna`
-  对 `Base.List.List` 的引用没有在导入方解析；检查 `Loader` 的限定名解析与 `elabData`
-  的 globals 命名。
-- **`Sort` 覆盖判定**：`Base.Sort` 报 `case is not exhaustive: missing Cons`——多列
-  覆盖拆分（`zip xs []` 这类列间独立子句）在 `DtMatch` 的模式矩阵里仍会漏分支；
-  见 [limits.md](reference/limits.md) 的「多列 clause 覆盖判定」。
-- **Bool 去桩**：删除 `DtPrelude.preludeNames` / `preludeGlobals` 里的 `Bool` /
-  `True` / `False`，`if` 条件与 `case` 按「族短名 Bool」识别，构造子的运行时表示统一为
-  `VBool`/`TBool`；`Base.Bool` 成为唯一权威定义（与 `List` 的既有约定一致）。单文件
-  DT 夹具补 `data Bool` 或改用 `--root base/lib`。去桩后 `str*` 与 `List` 的静态签名
-  可按同一套「实际族名」逻辑处理，因此与上面两项放在同一阶段。
-
-**当前阻碍（2026-11 探针）**：`Base.String` / `Base.Map` / `Base.Sort` 三个失败探针；
-Bool 桩与 `Base.Bool.Bool` 双表示（`Elab.boolTypedVal` 一类桥接）。
+- **`str*` 与 `List` 的族名统一**：`DtPrelude.rewriteFamilyName` 把 prelude 静态签名里的
+  裸 `List` 重绑到程序实际声明的族名（`preludeGlobalsFor`）；`strUnpack` / `strPack` 的
+  签名因此与 `Base.List.List` 一致。codegen 侧用 `dtListBridge` 生成
+  `dtp_unpack` / `dtp_pack`，在 OCaml `int list` 与程序自声明的 `List` 变体之间转换。
+- **跨模块族名**：依赖序拼接（见 M22.1）+ `Base.Map` 的辅助函数移到大写公开函数之前
+  （前向引用看到的是提升字典参数前的旧签名），`import Base.Map` / `Base` 的
+  `unknown name Base.List.List` 消失。
+- **模式矩阵的两处缺口**（`DtMatch` / `Elab`）：
+  - 构造子列的族覆盖判定：`Elab.ctorFamilyTable` 把「族 → 全部构造子」传给
+    `DtMatch`；该列构造子已全覆盖时不再生成通配兜底，修掉 `mergeBy le [] ys` 一类
+    `missing Cons` 假覆盖错误；
+  - 嵌套模式的兜底**下沉**：源级 `case` 的嵌套模式折叠成内层 case 时，把后续 `_` 分支
+    的体一并作为每层内层 case 的通配分支（`foldPending` 带 fallback），
+    `case xs of (x :: Nil) => ...; _ => ...` 不再报 `missing Cons`。
+- **泛型比较**：`<` / `<=` / `>` / `>=` 的饱和应用按实参类型特化（`Int` → `bi_*_int`，
+  `String` / `Bool` → `bi_*_generic`，其它类型 → `Ord` 字典投影，刚性参数延迟提升成
+  `{d : Dict_Ord a}`）；补 `builtinOrdInstances`（Int/String/Bool），并给 DT core
+  evaluator 加对应归约，`mergeSort` 这类库函数在三条路径都能跑。
+- **Bool 去桩**：`DtPrelude.preludeGlobals` / `preludeNames`、`Loader.dtPreludeNames`、
+  `DtQuant.topPreludeNames` 删掉 `True` / `False`（值构造子）；`Base.Bool` 是唯一数据
+  定义，`True` / `False` / `Bool` 按族短名解析（`Elab.shortBoolFamily`）。**保留**
+  `Pair "Bool" (TType 0)` 这一条**类型别名**：内建 trait 的方法签名与不含 `data Bool`
+  的单文件程序需要它（见「决策变更」）。
+- **`Base.Sort` 结构递归化**：归并排序的 `sortBy le (take half xs)` 过不了 DT 终止性
+  检查（只接受形参真子项），改成插入排序（`sortBy` 按 tail 递归、`insertBy` 插入），
+  排序结果与稳定性不变，HM / DT 两条路径都成立。
+- 另有支撑修复：`Core.solveMeta` 对「同一个未解元变量统一自己」短路（避免 occurs check
+  误报）；字典提升的 `dictDom` 用 `substSolvedMetasAt` 按定义上下文深度重写（`mergeSort`
+  的提升签名曾残留 `Dict_Ord ?67`）；`inferArgs` 的隐式字典 binder 在类参数未解时延迟而
+  不提前实例搜索。
 
 **验收**：`import Base.String` / `Base.Map` / `Base.Sort` / `Base` / `Prelude` 的探针在
-`--dt` 下通过；Bool 去桩后单文件夹具与包模式全绿；`preludeGlobals` 不再出现
-`Bool` / `True` / `False`。
+`--dt` 下通过；`Base.IO` 全 API 类型面通过；新增 `dt_base/06`（String）、`07`
+（Sort+Map，运行 123）、`08`（`import Base` 门面，运行 2）；`run-tests.sh` 全绿
+（910 checks）。Bool 值去桩后单文件夹具补 `data Bool`（08/25/26/30/31）。
 
-**前置**：M22.1（包目录入口用于逐包验证）。**风险**：名字统一会改动 `DtPrelude` 的
-静态签名表与 `Elab` 的布尔桥接，需同步单文件夹具。
+**前置**：M22.1（已完成）。**风险**：名字统一改动了 `DtPrelude` 静态签名与 `Elab` 的
+Bool 解析，已同步单文件夹具与 `dt.md` / `limits.md`。
 
 ### M22.3：擦除判据接线与统一 codegen
 
@@ -503,6 +523,7 @@ fuel 消耗，需同步 `dt_elab` 基准；若第 3 项做不动，M24.6 的范�
 | 原 M19（效应）/ M20（模块 v3）/ M21（运行时）/ M22（生态）/ M23（并发） | 本文旧版 | 依次改为 M21 / M25 / M26 / M28 / M27 | 让位于单路径迁移主线 |
 | `Show` / `Eq` / `Ord` 与 Bool 桩由编译器内建 | M10.5 / M19 | 库为唯一来源：`Base.{Show,Eq,Ord}` + `Base.Bool`，编译器只留语法/表示特化；Bool 去桩在 M22.2、trait 库化排 M24.7 | 消除双份定义与 5 处短名桥接 hack；与已库化的 `List` / `Monad` 对齐 |
 | M22 一号两用（roadmap=擦除/codegen；git log=泛型实例约束） | M22 | 先拆 M22.1–M22.5，再按可开工依赖重排：泛型实例→M20.5（已完成）、trait 投影并入 M21、包目录→M22.1、库名/Bool 去桩→M22.2、擦除/codegen→M22.3 | 编号顺序 = 可开工顺序；M21 自包含 `do` / trait 投影，不再依赖更晚阶段 |
+| Bool 去桩后 prelude 不再有 `Bool` 类型名 | 本文 M22.2 验收草案 | 只去 `True`/`False` **值**桩；保留 `Pair "Bool" (TType 0)` 类型别名 | 内建 trait（Show/Eq/Ord）方法签名与不含 `data Bool` 的单文件程序仍需要一个 Bool 类型名；数据定义仍以 `Base.Bool` 为唯一权威，值构造子与 `case`/`if` 全按族短名解析 |
 
 ## 研究储备（不排期）
 

@@ -21,13 +21,13 @@ allVarPats (p :: rest) = case p of
   PWild _ => allVarPats rest
   _ => False
 
-multiToExpr : List (Pair (List Pat) Expr) -> Result Expr
-multiToExpr clauses = case arityOf clauses of
+multiToExpr : List (Pair String (List String)) -> List (Pair (List Pat) Expr) -> Result Expr
+multiToExpr table clauses = case arityOf clauses of
   Nothing => Err "DT: function has no clauses"
   Just n =>
     let
       names = paramNames n
-    in andThen (buildColumnExpr clauses names 200) (\body => Ok (wrapLambdas names body))
+    in andThen (buildColumnExpr table clauses names 200) (\body => Ok (wrapLambdas names body))
 
 arityOf : List (Pair (List Pat) Expr) -> Maybe Int
 arityOf [] = Nothing
@@ -48,20 +48,20 @@ wrapLambdas (n :: rest) body = ELam [n] (wrapLambdas rest body) (Span "" 0 0 0 0
 -- 按列递归。params 是**尚未消耗**的位置名（与剩余模式列一一对应）。该列含内建字面量模式
 -- （Int / String）：生成嵌套 if 链——`f 0 = a; f 1 = b; f n = c` → `if pos == 0 then a else
 -- if pos == 1 then b else c`；变量/通配 clause 在字面量之后提供 fallback（体按剩余列递归构建）。
-litAltExpr : List (Pair (List Pat) Expr) -> String -> List String -> Int -> Result Expr
-litAltExpr clauses pos restParams fuel = litAltExprGo clauses pos restParams fuel
+litAltExpr : List (Pair String (List String)) -> List (Pair (List Pat) Expr) -> String -> List String -> Int -> Result Expr
+litAltExpr table clauses pos restParams fuel = litAltExprGo table clauses pos restParams fuel
 
-litAltExprGo : List (Pair (List Pat) Expr) -> String -> List String -> Int -> Result Expr
-litAltExprGo clauses pos restParams fuel = case clauses of
+litAltExprGo : List (Pair String (List String)) -> List (Pair (List Pat) Expr) -> String -> List String -> Int -> Result Expr
+litAltExprGo table clauses pos restParams fuel = case clauses of
   [] => Err "DT: case on Int / String needs a variable or wildcard branch as fallback (M19)"
   (Pair (p :: ps) body) :: rest => case p of
     PVar pname psp =>
-      andThen (buildColumnExpr (stripFirstCol clauses) restParams (fuel - 1))
+      andThen (buildColumnExpr table (stripFirstCol clauses) restParams (fuel - 1))
         (\inner => Ok (renameExpr pname pos inner))
-    PWild psp => buildColumnExpr (stripFirstCol clauses) restParams (fuel - 1)
+    PWild psp => buildColumnExpr table (stripFirstCol clauses) restParams (fuel - 1)
     _ =>
-      andThen (litAltExprGo rest pos restParams (fuel - 1))
-        (\restExpr => andThen (buildColumnExpr [Pair ps body] restParams (fuel - 1)) (\bodyExpr => Ok (EIf (EApp (EVar "==" (Span "" 0 0 0 0)) [EVar pos (Span "" 0 0 0 0), litPatExpr p] (patSpan p)) bodyExpr restExpr (patSpan p))))
+      andThen (litAltExprGo table rest pos restParams (fuel - 1))
+        (\restExpr => andThen (buildColumnExpr table [Pair ps body] restParams (fuel - 1)) (\bodyExpr => Ok (EIf (EApp (EVar "==" (Span "" 0 0 0 0)) [EVar pos (Span "" 0 0 0 0), litPatExpr p] (patSpan p)) bodyExpr restExpr (patSpan p))))
   (Pair [] body) :: rest => Err "DT: clause has more patterns than the function arity"
 
 -- 把字面量模式还原成表达式（Int / String）。
@@ -71,19 +71,44 @@ litPatExpr p = case p of
   PStr s sp => EStr s sp
   _ => EInt 0 (Span "" 0 0 0 0)
 
-buildColumnExpr : List (Pair (List Pat) Expr) -> List String -> Int -> Result Expr
-buildColumnExpr clauses params fuel = if fuel <= 0 then Err "DT: pattern matrix recursion ran out of fuel"
+buildColumnExpr : List (Pair String (List String)) -> List (Pair (List Pat) Expr) -> List String -> Int -> Result Expr
+buildColumnExpr table clauses params fuel = if fuel <= 0 then Err "DT: pattern matrix recursion ran out of fuel"
 else if allEmptyPats clauses then Ok (bodyOfFirst clauses)
 else case params of
   [] => Err "DT: clause has more patterns than the function arity"
   pos :: restParams =>
-    if allVarHeads clauses then andThen (buildColumnExpr (stripFirstCol clauses) restParams (fuel - 1))
+    if allVarHeads clauses then andThen (buildColumnExpr table (stripFirstCol clauses) restParams (fuel - 1))
       (\inner => Ok (renameFirstVars clauses pos inner))
-    else if allCtorHeads clauses then andThen (ctorAltList clauses pos restParams (fuel - 1))
-      (\alts => andThen (fallbackAltList clauses restParams (fuel - 1)) (\fb => Ok (ECase (EVar pos (Span "" 0 0 0 0)) (append alts fb) (Span "" 0 0 0 0))))
-    else if hasCtorHead clauses then andThen (ctorAltList clauses pos restParams (fuel - 1))
-      (\alts => andThen (fallbackAltList clauses restParams (fuel - 1)) (\fb => Ok (ECase (EVar pos (Span "" 0 0 0 0)) (append alts fb) (Span "" 0 0 0 0))))
-    else litAltExpr clauses pos restParams (fuel - 1)
+    else if allCtorHeads clauses then ctorColumn table clauses pos restParams fuel
+    else if hasCtorHead clauses then ctorColumn table clauses pos restParams fuel
+    else litAltExpr table clauses pos restParams (fuel - 1)
+
+-- 构造子列：每个构造子一个分支。**该族构造子已经全覆盖时不再生成兜底分支**——
+-- 变量/通配 head 的 clause 已经被 `clausesForCtor` 分发进每个构造子分支，
+-- 再补一个 `_` 兜底只会把「剩余列在兜底里匹配不全」暴露成假的覆盖错误
+-- （`mergeBy le [] ys` / `mergeBy le xs []` / `mergeBy le (x::xs) (y::ys)`
+-- 曾报 `missing Cons`）。族信息由 Elab 传入（`ctorTable`）。
+ctorColumn : List (Pair String (List String)) -> List (Pair (List Pat) Expr) -> String -> List String -> Int -> Result Expr
+ctorColumn table clauses pos restParams fuel =
+  andThen (ctorAltList table clauses pos restParams (fuel - 1))
+    (\alts => if familyCovered table (ctorHeads clauses) then Ok (ECase (EVar pos (Span "" 0 0 0 0)) alts (Span "" 0 0 0 0)) else andThen (fallbackAltList table pos clauses restParams (fuel - 1)) (\fb => Ok (ECase (EVar pos (Span "" 0 0 0 0)) (append alts fb) (Span "" 0 0 0 0))))
+
+-- 构造子名 → 所属族的构造子表；找不到族时按「未覆盖」处理（保守）。
+familyOfCtor : List (Pair String (List String)) -> String -> Maybe (List String)
+familyOfCtor [] ctor = Nothing
+familyOfCtor (p :: rest) ctor =
+  if memName ctor (secondOf p) then Just (secondOf p) else familyOfCtor rest ctor
+
+familyCovered : List (Pair String (List String)) -> List String -> Bool
+familyCovered table heads = case heads of
+  [] => False
+  h :: rest => case familyOfCtor table h of
+    Nothing => False
+    Just ctors => allNamesIn ctors heads
+
+allNamesIn : List String -> List String -> Bool
+allNamesIn [] heads = True
+allNamesIn (c :: rest) heads = if memName c heads then allNamesIn rest heads else False
 
 -- 该列至少有一个构造子模式（与变量/通配混合时也要走构造子分支 + 兜底，
 -- 不能落到 `litAltExpr`——它不会展开构造子子模式，丢失子模式绑定）。
@@ -194,21 +219,21 @@ renameAlt oldName newName alt =
 -- **分支 pattern 的子模式一律用新鲜变量**（`_sc<i>`）：这样 `bindCtorTele` 不会折叠
 -- 任何嵌套模式，位置名与 body 里的引用完全可控；子模式的真实形态交给内层
 -- `buildColumnExpr` 用 case 表达。比依赖 `bindCtorTele` 的 `_np<N>` 编号稳健。
-ctorAltList : List (Pair (List Pat) Expr) -> String -> List String -> Int -> Result (List (Pair Pat Expr))
-ctorAltList clauses pos restParams fuel =
-  ctorAltListGo clauses (ctorHeads clauses) pos restParams fuel
+ctorAltList : List (Pair String (List String)) -> List (Pair (List Pat) Expr) -> String -> List String -> Int -> Result (List (Pair Pat Expr))
+ctorAltList table clauses pos restParams fuel =
+  ctorAltListGo table clauses (ctorHeads clauses) pos restParams fuel
 
-ctorAltListGo : List (Pair (List Pat) Expr) -> List String -> String -> List String -> Int -> Result (List (Pair Pat Expr))
-ctorAltListGo clauses [] pos restParams fuel = Ok []
-ctorAltListGo clauses (cname :: rest) pos restParams fuel =
+ctorAltListGo : List (Pair String (List String)) -> List (Pair (List Pat) Expr) -> List String -> String -> List String -> Int -> Result (List (Pair Pat Expr))
+ctorAltListGo table clauses [] pos restParams fuel = Ok []
+ctorAltListGo table clauses (cname :: rest) pos restParams fuel =
   let
     subpatCount = ctorSubPatCount clauses cname
     freshSubs = subNamesFor pos subpatCount
     subParams = append freshSubs restParams
     branchPats = map (\n => PVar n (Span "" 0 0 0 0)) freshSubs
     expanded = clausesForCtor cname branchPats pos clauses
-  in andThen (buildColumnExpr expanded subParams (fuel - 1))
-    (\bodyExpr => andThen (ctorAltListGo clauses rest pos restParams (fuel - 1)) (\tail => Ok (Pair (PCon cname branchPats (Span "" 0 0 0 0)) bodyExpr :: tail)))
+  in andThen (buildColumnExpr table expanded subParams (fuel - 1))
+    (\bodyExpr => andThen (ctorAltListGo table clauses rest pos restParams (fuel - 1)) (\tail => Ok (Pair (PCon cname branchPats (Span "" 0 0 0 0)) bodyExpr :: tail)))
 
 -- 该构造子在本列各 clause 里的子模式个数（取第一个匹配 clause 的长度）。
 ctorSubPatCount : List (Pair (List Pat) Expr) -> String -> Int
@@ -263,9 +288,21 @@ filterFallback (c :: rest) = case c of
   Pair (p :: ps) body => if isVarPatD p then c :: filterFallback rest else filterFallback rest
   Pair [] body => filterFallback rest
 
-fallbackAltList : List (Pair (List Pat) Expr) -> List String -> Int -> Result (List (Pair Pat Expr))
-fallbackAltList clauses restParams fuel = case filterFallback clauses of
+-- 兜底分支：变量/通配 head 的 clause 在**这一列**被通配吃掉，体里对该变量的引用
+-- 要改写成外层 scrutinee 位置名（`pos`）。M22.2 修：旧实现直接拿原始体，变量名
+-- 在通配分支里没有 binder（`join sep (x :: rest)` 的 `rest` 曾报 unknown name）。
+fallbackAltList : List (Pair String (List String)) -> String -> List (Pair (List Pat) Expr) -> List String -> Int -> Result (List (Pair Pat Expr))
+fallbackAltList table pos clauses restParams fuel = case prepFallbacks pos (filterFallback clauses) of
   [] => Ok []
   fbs =>
-    andThen (buildColumnExpr (stripFirstCol fbs) restParams (fuel - 1))
+    andThen (buildColumnExpr table fbs restParams (fuel - 1))
       (\bodyExpr => Ok [Pair (PWild (Span "" 0 0 0 0)) bodyExpr])
+
+prepFallbacks : String -> List (Pair (List Pat) Expr) -> List (Pair (List Pat) Expr)
+prepFallbacks pos [] = []
+prepFallbacks pos (c :: rest) = case c of
+  Pair (p :: ps) body => case p of
+    PVar nm psp => Pair ps (renameExpr nm pos body) :: prepFallbacks pos rest
+    PWild psp => Pair ps body :: prepFallbacks pos rest
+    _ => c :: prepFallbacks pos rest
+  Pair [] body => c :: prepFallbacks pos rest

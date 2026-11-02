@@ -633,3 +633,83 @@ dt_io 两个新段）。`docs/reference/dt.md`、`limits.md`、`testing.md` 同�
 （`import Base.String` 失败）；`Base.Map`/`Base` 的跨模块族名解析；`Base.Sort` 的多列
 覆盖；prelude 里 `Bool`/`True`/`False` 桩尚未删除（表示已统一，权威定义已是
 `Base.Bool`）；`build`/`seed` 仍不接受 `--dt`；擦除判据尚未接线到 codegen。
+
+## M22.1：包目录与 CLI 入口（2026-11）
+
+**目标**：`--dt` 接受包目录，让后续阶段在真实包上验证。改动集中在 `Dt.vuna`、
+`Compile.vuna`、`CompilerCli.vuna`、`lib/Vuna/Cli.vuna` 与新增夹具 `test/corpus/dt_pkg/`。
+
+1. **包模式加载**：新增 `Dt.dtProjectDecls`（`reverse modules` 的声明 + 入口声明；
+   Loader 的 modules 是依赖在前的反序）、`dtLoadProject` / `dtLoadModuleSet`、
+   `dtCheckProject` / `dtCompileProject` / `dtCheckLibrary`，`Compile` 侧加三个包装；
+   `check --dt <dir>` 与 `compile --dt <dir>` 走 `loadProject` / `loadProjectModules` +
+   `resolveProject`。库包（无 `app/Main.vuna`）可 `check`，`compile` 报
+   `library package ... has no app/Main.vuna` 且不写输出文件。
+2. **CLI 分派与错误**：删除死代码 `dtRootErr` / `dtDirErr`；`check` / `compile --dt`
+   先 `fileExists` 再 `isDirectory`（内建 `isDirectory` 对不存在路径会抛
+   `Fatal error: readFile ...`）；新增 `dtPathErr`（`no such file or package directory`）、
+   `dtNoMainErr`；`interp --dt <dir>` 由 Fatal error 改为
+   `interp --dt takes a single file, not a package directory`。usage 与 `--dt` 文案同步。
+3. **依赖序加载进 Loader**：`orderedProjectDecls` / `loadProgramOrdered` /
+   `loadProgramRawOrdered` 按「被依赖模块在前」拼接；`Dt.dtLoad`（单文件 / `--root`）
+   改用 `loadProgramRawOrdered`。HM 的 `loadProgram` 保持「入口在前」的历史输出顺序，
+   零回归。
+4. **夹具**：`dt_pkg/01_exec`（可执行包，`Util` 依赖 `Answer` 覆盖依赖序，运行输出
+   `42`）、`02_lib`（库包）、`03_bad`（目录无 `vuna.toml`）；`run-tests.sh` 新增 34c
+   段（11 项检查：check/compile/run、库包清晰报错、坏目录、不存在路径、interp 单文件
+   检查）。
+
+**验证**：包目录 check/compile/run 全绿；单文件与 `--root` 路径零回归；HM 包模式
+（28/29/33 段）零回归。
+
+## M22.2：库名统一与精化缺口（2026-11）
+
+**目标**：`base` 全部模块在 `--dt` 下可精化，Bool 只有一个权威数据定义。
+
+1. **`str*` 的 `List` 族名**：`DtPrelude.rewriteFamilyName` 把 prelude 静态签名里的裸
+   `TGlobal "List"` 重绑到实际族名（`preludeGlobalsFor`），修掉
+   `expected (List Int), got (Base.List.List ?2)`。codegen 侧 `dtListBridge` 按实际族
+   生成 `dtp_unpack` / `dtp_pack`（`strUnpack` 语义是 OCaml `int list`，而 DT 的
+   `List` 是程序自声明变体），`globalRef` 映射到它们。
+2. **跨模块族名**：依赖序拼接（M22.1）+ `Base.Map` 辅助函数移到公开函数之前
+   （前向引用看到的是提升字典参数前的旧签名，`_insertPair` 少一个字典实参导致 OCaml
+   类型错），`unknown name Base.List.List` 消失。
+3. **模式矩阵的两处缺口**：`Elab.ctorFamilyTable` 把「族 → 构造子集合」传给
+   `DtMatch`，列内构造子已全覆盖时不补通配分支（修 `mergeBy le [] ys` /
+   `mergeBy xs []` / `mergeBy (x::xs) (y::ys)` 的 `missing Cons` 假覆盖）；
+   源级 `case` 的嵌套模式折叠（`foldPending`）把后续 `_` 分支的体作为每层内层 case
+   的通配分支（修 `case xs of (x :: Nil) => ...; _ => ...`）。另修：折叠出的内层
+   case 的隐式族参数 binder 与用户变量同名会把体里的变量解析成 `Type`
+   （`bindCtorGo` 改为 `name ++ "#fam"`）。
+4. **泛型比较与内建 Ord 实例**：`<` / `<=` / `>` / `>=` 饱和应用按实参类型特化
+   （Int → `bi_*_int`；String/Bool → `bi_*_generic`；其它 → `Ord` 字典投影；刚性参数
+   延迟提升成 `{d : Dict_Ord a}`），新增 `builtinOrdInstances`；DT core evaluator 补
+   `bi_*_int` / `bi_*_generic` 归约（`mergeSort` 三路可跑）。字典提升的 `dictDom` 用
+   `substSolvedMetasAt` 按定义上下文深度重写（此前 `mergeSort` 的提升签名残留
+   `Dict_Ord ?67`，调用点变成悬挂 rigid 变量、报 `no instance found`）。
+5. **隐式字典 binder 的类参数未解时延迟**：`inferArgs` 的 dict 分支在类参数是未解
+   元变量时不做实例搜索（否则被第一个内建实例提前定死，`srt (\x, y => x <= y) xs`
+   报 occurs check）；`Core.solveMeta` 对「同一个未解元变量统一自己」短路，避免
+   `?m := ?m` 误报无限链。
+6. **Bool 去桩**：`DtPrelude.preludeGlobals` / `preludeNames`、`Loader.dtPreludeNames`、
+   `DtQuant.topPreludeNames` 去掉 `True` / `False` 值桩；`Base.Bool` 是唯一数据定义，
+   `Bool` / `True` / `False` 按族短名解析（新增 `Elab.shortBoolFamily`）。
+   **保留** `Pair "Bool" (TType 0)` 类型别名：内建 trait 方法签名与不含 `data Bool`
+   的单文件程序仍需要 Bool 类型名；数据定义与构造子仍只来自 `Base.Bool`。
+   单文件夹具补 `data Bool`（08/25/26/30/31）。
+7. **`Base.Sort` 结构递归化**：归并排序的 `sortBy le (take half xs)` 过不了 DT 终止性
+   检查（只接受形参真子项），改为插入排序（`sortBy` 按 tail 递归 + `insertBy`），
+   排序结果与稳定性不变；`mergeSort` 用内建 `<=`（Ord 泛型比较）。
+8. **lib 侧小修**：`Base.IO` / `Base.Sort` 补 `import Base.Bool`（Bool 值去桩后类型
+   需要显式 import；`Loader` 仍保留 `Bool` 作为 HM 内建类型名）。
+
+**验证**：`Base.String` / `Base.Map` / `Base.Sort` / `Base` / `Prelude` 探针在 `--dt`
+下通过；新增 `dt_base/06_base_string`（check+compile+run；core evaluator 尚无
+`strUnpack` 归约，夹具带 `.nointerp`）、`07_base_sort_map`（123）、`08_base_facade`（2）；
+`run-tests.sh` **910 项全绿**。
+
+**仍存边界**：`build --dt` / `seed --dt`、擦除判据接线、统一 codegen 输出模型与
+metrics 重标定都留给 M22.3；DT core evaluator 不支持 `strUnpack`/`strPack`（interp 对
+带这两个内建的夹具用 `.nointerp` 约定跳过）；延迟字典目标在最终仍无解时报
+`unsolved metavariable`（而非「缺实例」），诊断细化留待后续；多列覆盖的进一步统一
+（`dt_err/25` 期望文本随诊断变化已更新）。

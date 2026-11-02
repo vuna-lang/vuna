@@ -1,0 +1,5 @@
+-- M22.2：`Base.String` 在 DT 下可用（str* 的 `List` 短名绑定到 `Base.List.List`）。
+import Base.String
+
+main : String
+main = join "-" (split "" "abc")

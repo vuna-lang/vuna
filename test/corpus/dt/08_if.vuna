@@ -1,3 +1,7 @@
+data Bool : Type where
+  False : Bool
+  True : Bool
+
 isZero : Int -> Bool
 isZero n = n == 0
 

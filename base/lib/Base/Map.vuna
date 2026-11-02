@@ -2,12 +2,29 @@ module Base.Map (Map, empty, insert, lookup, remove, keys, values, size, fromLis
 
 -- Base.Map：基于 assoc list 的抽象映射类型。
 -- 模块头只导出 Map（不含构造器 MkMap），跨模块只能通过 API 使用。
+--
+-- 辅助函数必须定义在公开函数**之前**：`_insertPair` 的 `==` 会把 `Dict_Eq k` 提升成
+-- 隐式参数，调用点要看到提升后的签名才能补字典实参（前向引用看到的是旧签名）。
 import Base.List
 import Base.Pair
 import Base.Maybe
 
 data Map k v : Type where
   MkMap : List (Pair k v) -> Map k v
+
+_insertPair : k -> v -> List (Pair k v) -> List (Pair k v)
+_insertPair key value [] = [Pair key value]
+_insertPair key value ((Pair k2 v2) :: rest) =
+  if k2 == key then Pair key value :: rest else Pair k2 v2 :: _insertPair key value rest
+
+_lookupPair : k -> List (Pair k v) -> Maybe v
+_lookupPair key [] = Nothing
+_lookupPair key ((Pair k2 v2) :: rest) = if k2 == key then Just v2 else _lookupPair key rest
+
+_removePair : k -> List (Pair k v) -> List (Pair k v)
+_removePair key [] = []
+_removePair key ((Pair k2 v2) :: rest) =
+  if k2 == key then rest else Pair k2 v2 :: _removePair key rest
 
 empty : Map k v
 empty = MkMap []
@@ -35,17 +52,3 @@ fromList pairs = MkMap pairs
 
 toList : Map k v -> List (Pair k v)
 toList (MkMap pairs) = pairs
-
-_insertPair : k -> v -> List (Pair k v) -> List (Pair k v)
-_insertPair key value [] = [Pair key value]
-_insertPair key value ((Pair k2 v2) :: rest) =
-  if k2 == key then Pair key value :: rest else Pair k2 v2 :: _insertPair key value rest
-
-_lookupPair : k -> List (Pair k v) -> Maybe v
-_lookupPair key [] = Nothing
-_lookupPair key ((Pair k2 v2) :: rest) = if k2 == key then Just v2 else _lookupPair key rest
-
-_removePair : k -> List (Pair k v) -> List (Pair k v)
-_removePair key [] = []
-_removePair key ((Pair k2 v2) :: rest) =
-  if k2 == key then rest else Pair k2 v2 :: _removePair key rest

@@ -388,6 +388,10 @@ dtRuntime =
     ++ "let bi_le_int (a : int) (b : int) = a <= b\n"
     ++ "let bi_gt_int (a : int) (b : int) = a > b\n"
     ++ "let bi_ge_int (a : int) (b : int) = a >= b\n"
+    ++ "let bi_lt_generic (a : 'a) (b : 'a) = compare a b < 0\n"
+    ++ "let bi_le_generic (a : 'a) (b : 'a) = compare a b <= 0\n"
+    ++ "let bi_gt_generic (a : 'a) (b : 'a) = compare a b > 0\n"
+    ++ "let bi_ge_generic (a : 'a) (b : 'a) = compare a b >= 0\n"
     ++ "let bi_concat a b = a ^ b\n"
     ++ "let bi_and a b = a && b\n"
     ++ "let bi_or a b = a || b\n"
@@ -430,6 +434,48 @@ dtPrimRuntime =
 
 -- M19：`==` / `/=` 的跨类型特化（精化期已按实参类型重写成 `bi_eq_int` / `bi_eq_str`
 -- 这类名字），以及 str* 内建。codegen 只做名字映射、不感知类型——M18.6 的
+-- M22.2：`strUnpack` / `strPack` 的运行时桥接。
+-- Core 的 `strUnpack` 语义是「OCaml int list」，而 DT 路径里 `List` 是程序自己声明的
+-- 归纳族（`Base.List.List` 在 OCaml 里是变体类型 `t_Base_dList_dList`）。这两个 helper
+-- 按实际族名生成，把 int list ↔ 族构造子互转；`globalRef` 把 `strUnpack`/`strPack`
+-- 映射到它们（桥接只服务 Int 元素，与 prelude 签名 `List Int` 一致）。
+dtListBridge : List DtData -> String
+dtListBridge datas = case findListFamilyData datas of
+  Nothing => ""
+  Just dd => case findFamilyCtor "Nil" (dtDataCtors dd) of
+    Nothing => ""
+    Just nilC => case findFamilyCtor "Cons" (dtDataCtors dd) of
+      Nothing => ""
+      Just consC =>
+        let
+          famName = dtDataName dd
+          nilMl = ctorOcamlName famName (dtCtorName nilC)
+          consMl = ctorOcamlName famName (dtCtorName consC)
+        in "\nlet dtp_unpack (s : string) =\n"
+          ++ "  let cs = List.init (String.length s) (fun i -> Char.code s.[i]) in\n"
+          ++ "  List.fold_right (fun x acc -> "
+          ++ consMl
+          ++ " (x, acc)) cs "
+          ++ nilMl
+          ++ "\n"
+          ++ "let dtp_pack xs =\n"
+          ++ "  let rec to_list xs = match xs with "
+          ++ nilMl
+          ++ " -> [] | "
+          ++ consMl
+          ++ " (x, rest) -> x :: to_list rest in\n"
+          ++ "  let cs = to_list xs in\n"
+          ++ "  String.init (List.length cs) (fun i -> Char.chr (List.nth cs i))\n"
+
+findFamilyCtor _ [] = Nothing
+findFamilyCtor n (c :: rest) =
+  if lastName (dtCtorName c) == n then Just c else findFamilyCtor n rest
+
+findListFamilyData : List DtData -> Maybe DtData
+findListFamilyData [] = Nothing
+findListFamilyData (d :: rest) =
+  if lastName (dtDataName d) == "List" then Just d else findListFamilyData rest
+
 -- 「codegen 不感知判定来源」不被破坏。
 globalRef : String -> Result String
 globalRef name = case name of
@@ -452,9 +498,17 @@ globalRef name = case name of
   "bi_neq_int" => Ok "bi_neq_int"
   "bi_eq_str" => Ok "bi_eq_str"
   "bi_neq_str" => Ok "bi_neq_str"
+  "bi_lt_int" => Ok "bi_lt_int"
+  "bi_le_int" => Ok "bi_le_int"
+  "bi_gt_int" => Ok "bi_gt_int"
+  "bi_ge_int" => Ok "bi_ge_int"
+  "bi_lt_generic" => Ok "bi_lt_generic"
+  "bi_le_generic" => Ok "bi_le_generic"
+  "bi_gt_generic" => Ok "bi_gt_generic"
+  "bi_ge_generic" => Ok "bi_ge_generic"
   "strFromInt" => Ok "bi_strFromInt"
-  "strUnpack" => Ok "bi_strUnpack"
-  "strPack" => Ok "bi_strPack"
+  "strUnpack" => Ok "dtp_unpack"
+  "strPack" => Ok "dtp_pack"
   "strLength" => Ok "bi_strLength"
   "prim_print" => Ok "dtp_print"
   "prim_readFile" => Ok "dtp_readFile"
@@ -630,7 +684,8 @@ renderTypeArg levels table datas v = case v of
       "Int" => "int"
       "String" => "string"
       "Bool" => "bool"
-      _ => case findDtData g datas of
+      _ => if lastName g == "Bool" then "bool"
+      else case findDtData g datas of
         Just gd => familyTyText g (renderFamilyArgs levels table datas (lookupUsed table g) sp)
         Nothing => "unit"
   _ => "unit"
@@ -1004,7 +1059,7 @@ genProgramBody program =
     Pair runtime groups => andThen (genTypeDecls (runtimeDatas datas)) (\typeText => andThen (genGroups (depAdjacency runtime) (mkGenSt (runtimeDatas datas)) groups) (\q => case q of
       Pair bodies st2 =>
         Ok
-          (Pair (dtRuntime ++ "\n" ++ typeText ++ joinWith "\n\n" bodies) (Pair runtime (defTable defs)))
+          (Pair (dtRuntime ++ "\n" ++ typeText ++ dtListBridge datas ++ joinWith "\n\n" bodies) (Pair runtime (defTable defs)))
     )
     )
   )

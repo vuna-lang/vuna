@@ -1,4 +1,4 @@
-module Vuna.Compiler.Core (Rig, Rig0, Rig1, RigOmega, rigIsErased, rigIsLinear, rigIsOmega, rigOfBinder, Level, levelZero, levelSucc, levelMax, levelToInt, levelOfInt, levelEq, levelLt, Term, TVar, TMeta, TGlobal, TType, TPi, TLam, TApp, TCon, TCase, CaseAlt, caseAltName, caseAltBinders, caseAltBody, TInt, TStr, TBool, TIf, Value, VType, VPi, VLam, VNeutral, VMeta, VCon, VCase, VCaseAlt, vCaseAltName, vCaseAltBinders, vCaseAltClosure, VInt, VStr, VBool, VIf, Neutral, NVar, NGlobal, Closure, Clos, eval, applyClosure, applyValue, applySpine, shift, quote, evalCase, force, normalize, conv, solveMeta, defaultFuel, isTypeValue, typeLevelOf, metaLookup, defLookup, substSolvedMetas, substVarAt, levelEscapes, substMetaVar, insertDictBinder, insertLamBinder, hasUnsolvedMetaValue, showTerm, showValue, showValueAt) where
+module Vuna.Compiler.Core (Rig, Rig0, Rig1, RigOmega, rigIsErased, rigIsLinear, rigIsOmega, rigOfBinder, Level, levelZero, levelSucc, levelMax, levelToInt, levelOfInt, levelEq, levelLt, Term, TVar, TMeta, TGlobal, TType, TPi, TLam, TApp, TCon, TCase, CaseAlt, caseAltName, caseAltBinders, caseAltBody, TInt, TStr, TBool, TIf, Value, VType, VPi, VLam, VNeutral, VMeta, VCon, VCase, VCaseAlt, vCaseAltName, vCaseAltBinders, vCaseAltClosure, VInt, VStr, VBool, VIf, Neutral, NVar, NGlobal, Closure, Clos, eval, applyClosure, applyValue, applySpine, shift, quote, evalCase, force, normalize, conv, solveMeta, defaultFuel, isTypeValue, typeLevelOf, metaLookup, defLookup, substSolvedMetas, substSolvedMetasAt, substVarAt, levelEscapes, substMetaVar, insertDictBinder, insertLamBinder, hasUnsolvedMetaValue, showTerm, showValue, showValueAt) where
 
 -- Vuna.Compiler.Core：M13 的 core 类型论表示、NbE 求值与定义性相等。
 --
@@ -342,6 +342,28 @@ strPrim1 sp f = Nothing
 strEq : String -> String -> Bool
 strEq a b = a == b
 
+genericCmp : Value -> Value -> Maybe Int
+genericCmp a b = case a of
+  VInt x => case b of
+    VInt y => Just (cmpInt x y)
+    _ => Nothing
+  VStr x => case b of
+    VStr y => Just (if x == y then 0 else if x < y then 0 - 1 else 1)
+    _ => Nothing
+  VBool x => case b of
+    VBool y => Just (if x == y then 0 else if x then 1 else 0 - 1)
+    _ => Nothing
+  _ => Nothing
+
+cmpInt : Int -> Int -> Int
+cmpInt a b = if a == b then 0 else if a < b then 0 - 1 else 1
+
+genericPrim2 : List Value -> (Int -> Bool) -> Maybe Value
+genericPrim2 ([a, b]) pred = case genericCmp a b of
+  Just o => Just (VBool (pred o))
+  Nothing => Nothing
+genericPrim2 sp pred = Nothing
+
 strPrim3 : List Value -> (String -> String -> String -> Value) -> Maybe Value
 strPrim3 ([a, b, c]) f = case asStr a of
   Just x => case asStr b of
@@ -376,6 +398,16 @@ primReduce g sp = case g of
   "bi_neq_str" => strPrim2 sp (\a, b => VBool (notBool (strEq a b)))
   "strFromInt" => intPrim1 sp (\n => VStr (strFromInt n))
   "strLength" => strPrim1 sp (\s => VInt (strLength s))
+  -- M22.2：比较运算符的内建特化（`<` / `<=` / `>` / `>=`）与泛型 compare 变体，
+  -- 让 DT core evaluator 能归约 `mergeSort` 一类用 Ord 的库函数。
+  "bi_lt_int" => intPrim2 sp (\a, b => VBool (a < b))
+  "bi_le_int" => intPrim2 sp (\a, b => VBool (a <= b))
+  "bi_gt_int" => intPrim2 sp (\a, b => VBool (a > b))
+  "bi_ge_int" => intPrim2 sp (\a, b => VBool (a >= b))
+  "bi_lt_generic" => genericPrim2 sp (\o => o < 0)
+  "bi_le_generic" => genericPrim2 sp (\o => o <= 0)
+  "bi_gt_generic" => genericPrim2 sp (\o => o > 0)
+  "bi_ge_generic" => genericPrim2 sp (\o => o >= 0)
   _ => Nothing
 
 notBool : Bool -> Bool
@@ -607,12 +639,20 @@ solveMeta : List (Pair String Term) -> List (Pair Int Value) -> Int -> Int -> Li
 solveMeta defs sols depth m sp rhs = case sp of
   [] => case metaLookup m sols of
     Just t => conv defs sols depth (applySpine t []) rhs
-    Nothing =>
-      let
-        t = quote depth rhs
-      in if hasMeta m 0 t then Err ("cannot solve metavariable ?" ++ strFromInt m ++ " (occurs check)")
-      else Ok (Pair m rhs :: sols)
+    Nothing => case rhs of
+      -- 同一个未解元变量统一自己（`?m` vs `?m`）是恒真约束，不能走 occurs 检查
+      -- （那会把 `?m := ?m` 判成无限链）。HOF 实参把带隐式 binder 的签名
+      -- 实例化成同两个元变量时会出现（`srt cmp xs` 一类）。
+      VMeta n [] => if n == m then Ok sols else solveMetaNew defs sols depth m rhs
+      _ => solveMetaNew defs sols depth m rhs
   _ => solveMetaHo defs sols depth m sp rhs
+
+solveMetaNew : List (Pair String Term) -> List (Pair Int Value) -> Int -> Int -> Value -> Result (List (Pair Int Value))
+solveMetaNew defs sols depth m rhs =
+  let
+    t = quote depth rhs
+  in if hasMeta m 0 t then Err ("cannot solve metavariable ?" ++ strFromInt m ++ " (occurs check)")
+  else Ok (Pair m rhs :: sols)
 
 -- 更高阶求解（M13 扩展）：只在「头一致」的安全形状上做提取/对齐，其余仍报 M13。
 solveMetaHo : List (Pair String Term) -> List (Pair Int Value) -> Int -> Int -> List Value -> Value -> Result (List (Pair Int Value))
@@ -818,6 +858,34 @@ substSolvedAlt sols (CaseAlt n bs b) = CaseAlt n bs (substSolvedMetas sols b)
 
 -- M20 字典提升：替换 `?m` 为 `TVar d (depth - q)`（`q` = 插入点外侧绑定子数，含类参数绑定子）。
 -- `depth` 是 `?m` 出现处深度（de Bruijn）；用于把延迟的字典元变量变成提升后的字典绑定子变量。
+-- M22.2：和 `substSolvedMetas` 相同，但解按**给定深度** quote。字典提升要在定义体的
+-- binder 上下文里重写目标类型（`?a` 已解成定义自己的刚性变量），必须按那个深度取
+-- de Bruijn index；深度 0 的版本会把解里的 `NVar` 拍成越界变量（`mergeSort` 的
+-- 字典签名曾变成 `{d : Dict_Ord ?67}`）。
+substSolvedMetasAt : Int -> List (Pair Int Value) -> Term -> Term
+substSolvedMetasAt d sols t = case sols of
+  [] => t
+  _ => substSolvedMetasAtGo d sols t
+
+substSolvedMetasAtGo : Int -> List (Pair Int Value) -> Term -> Term
+substSolvedMetasAtGo depth sols t = case t of
+  TMeta m => case metaLookup m sols of
+    Just v => quote depth v
+    Nothing => t
+  TPi n i r d c => TPi n i r (substSolvedMetasAtGo depth sols d) (substSolvedMetasAtGo depth sols c)
+  TLam n r b => TLam n r (substSolvedMetasAtGo depth sols b)
+  TApp f a r => TApp (substSolvedMetasAtGo depth sols f) (substSolvedMetasAtGo depth sols a) r
+  TCon c args =>
+    TCon c (map (\p => Pair (substSolvedMetasAtGo depth sols (firstOf p)) (secondOf p)) args)
+  TCase s alts => TCase (substSolvedMetasAtGo depth sols s) (map (substSolvedAltAt depth sols) alts)
+  TIf c th el =>
+    TIf (substSolvedMetasAtGo depth sols c) (substSolvedMetasAtGo depth sols th)
+      (substSolvedMetasAtGo depth sols el)
+  _ => t
+
+substSolvedAltAt : Int -> List (Pair Int Value) -> CaseAlt -> CaseAlt
+substSolvedAltAt depth sols (CaseAlt n bs b) = CaseAlt n bs (substSolvedMetasAtGo depth sols b)
+
 substMetaVar : Int -> String -> Int -> Term -> Term
 substMetaVar m name q t = substMetaVarGo m name q 0 t
 

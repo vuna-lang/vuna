@@ -8,6 +8,7 @@ module Base.IO (IO, Functor(..), Monad(..), print, println, readFile, writeFile,
 -- 这里的效果函数就是用户可见的 print / readFile / getArgs / exit：
 -- 它们直接返回 IO，内部由 prim_* 原语实现；普通包不能调用 prim_*。
 import Base.List
+import Base.Bool
 import Base.Monad
 
 data IO a : Type where

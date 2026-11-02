@@ -1,4 +1,8 @@
 -- M19：内建泛化——`==` / `/=` 跨类型（按实参类型特化），str* 系列进 DT prelude。
+data Bool : Type where
+  False : Bool
+  True : Bool
+
 data Nat : Type where
   Zero : Nat
   Succ : Nat -> Nat

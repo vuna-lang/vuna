@@ -750,15 +750,21 @@ done
 
 # 34a) DT + Base 库（M21）：`--root ../base/lib` 下 import Base.* 的三路一致性。
 # 全部夹具都是纯计算（core evaluator 不执行效果），因此可保留 interp == run 对拍。
+# 例外：core evaluator 还不支持 strUnpack / strPack（`List` 族与 OCaml list 的桥接只在
+# codegen 侧），带 `.nointerp` 标记的夹具只要求 check + compile + run。
 for file in corpus/dt_base/*.vuna; do
   base=${file%.vuna}
   expected=$(cat "$base.out")
-  actual=$("$VUNA" interp --dt --root ../base/lib "$file" 2>&1)
-  check_eq "$file (dt base interp)" "$expected" "$actual"
-  interp_out=$actual
   "$VUNA" check --dt --root ../base/lib "$file" >/dev/null 2>&1
   check_eq "$file (dt base check exit)" "0" "$?"
   rm -f "$tmp/dt_base.ml" "$tmp/dt_base.exe"
+  interp_out=""
+  have_interp=0
+  if [ ! -f "$file.nointerp" ]; then
+    interp_out=$("$VUNA" interp --dt --root ../base/lib "$file" 2>&1)
+    check_eq "$file (dt base interp)" "$expected" "$interp_out"
+    have_interp=1
+  fi
   if ! dt_out=$("$VUNA" compile --dt --root ../base/lib "$file" "$tmp/dt_base.ml" 2>&1); then
     bad "$file (dt base compile)" "exit 0" "$dt_out"
   elif [ -n "$dt_out" ]; then
@@ -768,7 +774,9 @@ for file in corpus/dt_base/*.vuna; do
   else
     actual=$("$tmp/dt_base.exe" 2>&1)
     check_eq "$file (dt base run)" "$expected" "$actual"
-    check_eq "$file (dt base interp == run)" "$interp_out" "$actual"
+    if [ "$have_interp" -eq 1 ]; then
+      check_eq "$file (dt base interp == run)" "$interp_out" "$actual"
+    fi
   fi
 done
 
@@ -792,6 +800,51 @@ for file in corpus/dt_io/*.vuna; do
     check_eq "$file (dt io run)" "$expected" "$actual"
   fi
 done
+
+# 34c) DT 包目录（M22.1）：check --dt / compile --dt 接受包目录（loadProject + resolveProject）
+exec_pkg=corpus/dt_pkg/01_exec
+"$VUNA" check --dt "$exec_pkg" >/dev/null 2>&1
+check_eq "$exec_pkg (dt pkg check exit)" "0" "$?"
+rm -f "$tmp/dt_pkg.ml" "$tmp/dt_pkg.exe"
+if ! dt_pkg_out=$("$VUNA" compile --dt "$exec_pkg" "$tmp/dt_pkg.ml" 2>&1); then
+  bad "$exec_pkg (dt pkg compile)" "exit 0" "$dt_pkg_out"
+elif [ -n "$dt_pkg_out" ]; then
+  bad "$exec_pkg (dt pkg compile output)" "" "$dt_pkg_out"
+elif ! "$OCAMLOPT" -w -a -I +unix -o "$tmp/dt_pkg.exe" unix.cmxa "$tmp/dt_pkg.ml" >"$tmp/dt_pkg.log" 2>&1; then
+  bad "$exec_pkg (dt pkg ocamlopt)" "" "$(cat "$tmp/dt_pkg.log")"
+else
+  actual=$("$tmp/dt_pkg.exe" 2>&1)
+  check_eq "$exec_pkg (dt pkg run)" "$(cat "$exec_pkg/expected.out")" "$actual"
+fi
+
+# 库包：check 通过；compile 清晰报错（非崩溃），且不写输出文件
+lib_pkg=corpus/dt_pkg/02_lib
+"$VUNA" check --dt "$lib_pkg" >/dev/null 2>&1
+check_eq "$lib_pkg (dt lib check exit)" "0" "$?"
+rm -f "$tmp/dt_lib.ml"
+lib_err=$("$VUNA" compile --dt "$lib_pkg" "$tmp/dt_lib.ml" 2>&1)
+lib_code=$?
+check_contains "$lib_pkg (dt lib compile error)" "$lib_err" "library package"
+if [ "$lib_code" -ne 0 ]; then ok; else bad "$lib_pkg (dt lib compile exit)" "non-zero" "$lib_code"; fi
+if [ -e "$tmp/dt_lib.ml" ]; then
+  bad "$lib_pkg (dt lib no output file)" "absent" "present"
+else
+  ok
+fi
+
+# 非法目录 / 不存在的路径：清晰错误而非 Fatal error
+bad_pkg=corpus/dt_pkg/03_bad
+bad_err=$("$VUNA" check --dt "$bad_pkg" 2>&1)
+bad_code=$?
+check_contains "$bad_pkg (dt bad dir error)" "$bad_err" "missing vuna.toml"
+if [ "$bad_code" -ne 0 ]; then ok; else bad "$bad_pkg (dt bad dir exit)" "non-zero" "$bad_code"; fi
+missing_err=$("$VUNA" check --dt corpus/dt_pkg/99_missing 2>&1)
+check_contains "dt pkg missing path error" "$missing_err" "no such file or package directory"
+check_contains "dt pkg missing path no fatal" "$missing_err" "error:"
+
+# interp --dt 只接受单文件：包目录给出清晰错误（M22.1）
+interp_err=$("$VUNA" interp --dt "$exec_pkg" 2>&1)
+check_contains "dt interp package dir error" "$interp_err" "single file"
 # DT CLI：M20 起 `--dt` 接受 --root（复用 Loader）；build / seed 仍不支持 --dt
 help_out=$("$VUNA" help 2>&1)
 check_contains "dt help" "$help_out" "--dt"

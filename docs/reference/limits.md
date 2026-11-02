@@ -24,17 +24,21 @@
   语言面/多文件/效应：`--dt` 路径（Core TT + 精化器 + 擦除 codegen + `interp --dt` +
   `vuna goal` + `vuna lsp`）。**当前阻碍按阶段登记在 [docs/roadmap.md](../roadmap.md)
   的「阶段状态总览」与各阶段「当前阻碍」**；仍是边界的几条：
-  - **单文件 / 无库模式没有隐式 `Bool`**：`--dt` 单文件程序用 `Bool` 需自己 `data Bool`
-    （与 `List` 的既有约定一致）；包模式下 `Base.Bool` 是权威定义，去桩归 M23。
-  - **包目录与 `build` / `seed` 不接受 `--dt`**：`check --dt <pkg-dir>` 当前会把目录当
-    文件读并崩溃，归 M22.1。
-  - **trait 方法投影不跨模块**：`fmap` / `bind` 在 `--dt` 下 unbound，`do` 因此不可用，
-    归 M21。
-  - **`str*` 与 `List` 名不一致、`Base.Map` / `Base.Sort` 精化缺口**：归 M22.2。
+  - **单文件 / 无库模式没有隐式 `Bool`**：`--dt` 单文件程序用 `True` / `False` 需自己
+    `data Bool`（与 `List` 的既有约定一致）；`Bool` **类型名**仍是 prelude 类型别名（内建
+    trait 签名需要），但数据定义在包模式下以 `Base.Bool` 为权威。
+  - **`build` / `seed` 不接受 `--dt`**：`check --dt` / `compile --dt` 已支持文件、`--root`
+    与包目录（M22.1）；`build`/`seed` 的入口接线归 M22.3。
   - **显式索引仍保留运行时字段**（完整擦除需整程序使用分析，见
     [m16-design.md](m16-design.md) §3），归 M22.3。
-  - **互递归与跨调用 size-change 不查**（终止性只做逐调用结构下降，可能放过死循环程序）。
-  - **多列 clause 的覆盖判定与跨模块构造子名**：归 M22.2。
+  - **终止性只接受结构递归**：递归调用必须是形参的真子项；`sortBy le (take half xs)`
+    这类非结构递归要改写成结构递归（`Base.Sort` 已改成插入排序），互递归与跨调用
+    size-change 不查（可能放过死循环程序）。
+  - **`interp --dt` 的核心求值器不支持 `strUnpack` / `strPack`**：这两个内建只在 codegen
+    侧有 `List` 族桥接（`dtp_unpack` / `dtp_pack`）；用到它们的夹具在 `run-tests.sh` 用
+    `.nointerp` 标记跳过 interp 对拍（check / compile / run 仍全绿）。
+  - **延迟字典目标的最终诊断**：类参数始终未解时，报 `unsolved metavariable`（而非
+    「缺实例」）；`missingInstance` 级的诊断细化留待后续。
   - **无签名顶层定义不支持**（M23 用一次性导出工具回填签名）。
   - **高阶/开放元变量解**：`solveMetaHo` 已覆盖常见形状（M20.5），其余仍受限。
   完整 DT 主线见 [docs/roadmap.md](../roadmap.md)、设计边界见

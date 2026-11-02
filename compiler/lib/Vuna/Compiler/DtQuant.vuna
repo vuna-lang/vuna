@@ -84,9 +84,6 @@ topPreludeNames : List String
 topPreludeNames =
   [ "Int",
     "String",
-    "Bool",
-    "True",
-    "False",
     "+",
     "-",
     "*",
