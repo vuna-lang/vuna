@@ -114,10 +114,16 @@ vuna **尚未发布任何版本**：没有外部用户、没有下游生态、�
 - CLI：`--dt` 成为默认并移除开关，`CompilerCli` / `Cli` 用法行同步；
 - `nix/tcb-forbidden.txt` 与 `nix/seed-rotate.sh` / `nix/checks/` 同步（删掉的模块名要移除，避免清单腐化）；
 - LSP：`goalsOfProgram` 成为唯一诊断来源，删除 HM 诊断分支；
+- 签名清理：M23 的 `sig-export` 把 HM 推断名 `tNNN` 原样写进了源码签名（254 处 / 12 文件）。
+  其中 176 处随 `Typecheck` / `TypedCodegen` 删除消失；存活模块（`Loader` / `Pkg` /
+  `DtRecords` / `Lint` / `Fmt` / `Index` / `Manifest` / `Toml` / `Elab` / `CompilerCli`）
+  按签名重命名为 `a` / `b` / `c`，并把 `Elab.isInferredVarName` 的名字启发式换成语义规则
+  （`==` / `/=` 走 Eq 字典提升还是通用结构比较的口径在删 HM 前定稿）；
 - 文档收尾：[architecture.md](architecture.md) 的五条链路收敛，双路径表述全部删除。
 
 **验收**：`nix flake check` 全绿；`vuna check .` / `vuna build .` 在单路径下通过；仓库中不再有
-`Typecheck` / `TypedCodegen` 模块；`docs/` 里不再出现「HM 路径与 DT 路径」这类并列表述。
+`Typecheck` / `TypedCodegen` 模块；源码签名里不再有 `t<数字>` 形式的类型变量名、
+`Elab` 不再按名字判断 HM 推断变量；`docs/` 里不再出现「HM 路径与 DT 路径」这类并列表述。
 
 **前置**：M23。**风险**：seed 切换不可逆，必须先在分支验证 fixed point 再合入。
 

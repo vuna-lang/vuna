@@ -74,6 +74,10 @@
   - **延迟字典目标的最终诊断**：类参数始终未解时报 `unsolved metavariable`（而非「缺
     实例」）；`missingInstance` 级诊断细化留待后续。**DT 要求顶层定义有类型签名**：M23 已
     回填全仓签名，新增代码同样要写，否则报 `DT: expected a type signature for ...`。
+  - **签名里的 `tNNN` 是 M23 `sig-export` 的工具遗留**：那批由 HM 推断结果生成的签名把元变量名
+    原样写了进去（`t6609` 一类，254 处 / 12 文件）；它们是隐式量化的普通类型变量，不影响语义，
+    但会出现在 `vuna api` 与部分错误信息里。`Elab.isInferredVarName` 目前按名字把这类变量上的
+    `==` / `/=` 退回通用结构比较；重命名必须与去掉该名字启发式一起做，计划见 roadmap M24。
   - **高阶/开放元变量解**：`solveMetaHo` 覆盖常见形状（M20.5），其余仍受限。
   完整 DT 主线见 [docs/roadmap.md](../roadmap.md)、设计边界见 [docs/dt-core.md](../dt-core.md)、
   工具链见 [dt-tooling.md](dt-tooling.md)；种子轮换是手动流程（发版/不兼容变更时），日常
