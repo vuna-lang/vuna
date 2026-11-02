@@ -28,7 +28,7 @@
 1. **优先**本地 `./result/bin/vuna`（`nix build .#vuna --out-link result` 的产物）；
 2. 本地不存在或编译不过：**一律** `nix run vuna -- <subcommand>`（`nix registry list` 里的
    别名 `flake:vuna github:vuna-lang/vuna`，即远端稳定版）；
-3. 测试：`nix run .#run-tests`（`nix/run-tests.nix`；`--list` / `--only <章节>` 过滤，
+3. 测试：`nix run .#vuna-run-tests`（`nix/run-tests.nix`；`--list` / `--only <章节>` 过滤，
    无参数等价 `sh test/run-tests.sh`）。
 
 `vuna-seed`（stage 0）来自 `nix build .#vuna-seed`，stage 1 是 `nix build .#vuna-compiler`；
@@ -40,8 +40,7 @@
 2. **seed rotation 后 stage1 == stage2**（文件集逐字节一致，fixed point）；
 3. **`seed/` 只含 compiler 包入口闭包**（`compiler/app/Main.vuna` 的 import 闭包）；
 4. **工具链不进 TCB**：`fmt`/`lint`/`repl`/`doc`/`test`/`Index`（以及未来的 LSP、
-   package manager）永不进入 seed 闭包；blacklist 见 `nix/seed-rotate.sh` 与 `flake.nix`
-   的 `forbidden` 清单：`Cli Fmt Lint Doc Repl TestRunner Files Eval Interp Process Codegen Index Lsp Json`；
+   package manager）永不进入 seed 闭包；黑名单见 `nix/tcb-forbidden.txt`；
 5. **效果内建按包 allowlist**：只有 `vuna` / `vuna-compiler` / `vuna-base` 可直接调用
    effectful 内建（`print`/`readFile`/`exit`/`prim_*` 等），其余包必须经 `Base.IO`
    （`Vuna.Compiler.Loader.packageAllowsEffects`）；
@@ -72,7 +71,7 @@
 ```console
 nix build .#vuna --out-link result   # 产品 CLI；.#vuna-compiler / .#vuna-seed 同理
 nix flake check                      # tests/package/metrics/typecheck/lint/seed-selfhost
-nix run .#run-tests [-- --list | --only dt]   # 原生测试；nix run .#bench -- --quick 性能基准
+nix run .#vuna-run-tests [-- --list | --only dt]   # 原生测试；nix run .#vuna-bench -- --quick
 vuna check .                         # 包级类型检查（自检）；vuna build . → .output/bin/<包名>
 vuna fmt --check <PATH>...           # 格式化检查（务必显式给路径）；vuna lint <file>...
 vuna doc [DIR [OUT]]                 # API 文档（默认 DIR/docs/api.md，gitignored）
@@ -86,7 +85,7 @@ vuna seed seed compiler              # 重新生成 seed（正式流程用 nix/s
 `base/` = 标准库 `vuna-base`（`Base.*` + `Prelude`，**进 seed**）；`lib/` = 根包工具链
 （Cli/Interp/Eval/Files/Fmt/Lint/Repl/Doc/Index/TestRunner，**不进 seed**）；`app/` = 产品
 CLI 入口；`seed/` = 提交入库的多文件 OCaml 信任锚点（生成物，禁止手改、别读）；`test/` =
-`run-tests.sh` + `corpus/` 夹具；`nix/` = rotate/metrics/bench/run-tests；`docs/` = 分层文档。
+`run-tests.sh` + `corpus/` 夹具；`nix/` = 构建图（packages/checks）+ rotate/metrics/bench；`docs/` = 分层文档。
 
 ## 文档导航
 

@@ -56,7 +56,7 @@
   `build.sh` 增量粒度是模块（.cmi 依赖时间戳），无跨包并行构建与依赖哈希；
   `vuna build --split` 暂不会自动回退单文件（遇到不支持构造报错，需改用
   `vuna build` 的包级 / `vuna compile --package` 路径）；基准时间测量仍手动
-  （`nix run .#bench`），CI 只守机器无关指标；
+  （`nix run .#vuna-bench`），CI 只守机器无关指标；
 - M12.5 边界：编译器是独立成员包 `vuna-compiler`，`seed/` 只由 compiler 包入口闭包
   生成，工具链不在 TCB；产品 CLI `vuna` 仍是单一二进制（in-process 调 compiler 库，
   不 fork `vuna-compiler` 进程）。M12.8 的 `vuna build` 通过受限进程执行内建

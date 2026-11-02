@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # vuna-bench: 手动性能基准（构建 / 编译 / 产物尺寸）。
-# 由 flake app `nix run .#bench` 提供；不是 CI check，不写入仓库。
+# 由 `nix run .#vuna-bench` 提供；不是 CI check，不写入仓库。
 set -euo pipefail
 
 RUNS=3
@@ -119,7 +119,7 @@ REPO=$PWD
 [ -f "$REPO/app/Main.vuna" ] || die "run from the repo root (app/Main.vuna not found)"
 [ -d "$REPO/compiler/lib/Vuna/Compiler" ] || die "run from the repo root (compiler/lib/Vuna/Compiler not found)"
 [ -d "$REPO/lib/Vuna" ] || die "run from the repo root (lib/Vuna not found)"
-command -v ocamlopt >/dev/null 2>&1 || die "ocamlopt not found (use: nix run .#bench)"
+command -v ocamlopt >/dev/null 2>&1 || die "ocamlopt not found (use: nix run .#vuna-bench)"
 
 abspath() {
   case $1 in

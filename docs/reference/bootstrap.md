@@ -25,8 +25,7 @@ stage1 == stage2（文件集合逐字节）即 fixed point
 ```
 
 Nix 侧的对应关系：`packages.vuna-seed`、`packages.vuna-compiler`、`packages.vuna`
-分别构建 stage 0 / stage 1 / 产品 CLI；`checks.seed-selfhost`（别名
-`checks.fixed-point`）守整条链。
+分别构建 stage 0 / stage 1 / 产品 CLI；`checks.seed-selfhost` 守整条链。
 
 ## 种子策略
 
@@ -41,13 +40,13 @@ M12.8 起含 `Base_*` 与 `Prelude`）。唯一的硬性不变量：
 
 - 种子**不需要**与源码同步：日常修改 `lib/`、`app/`、`test/`、`base/`（以及只在
   CLI 侧的工具改动）不重新生成种子；只有 `compiler/` 的变更才可能需要 rotation；
-- 种子只通过 **seed rotation** 更新：用当前产品 CLI 对 compiler 包做分离编译，把生成的
-  多文件文件集提交为新 `seed/`（`nix/seed-rotate.sh` 会顺带验证种子自生成 fixed point）；
+- 种子只通过 **seed rotation** 更新：用当前产品 CLI 对 compiler 包做分离编译，在临时目录
+  完成 TCB 与 fixed point 校验后才替换 `seed/`（`nix/seed-rotate.sh`，失败不破坏工作树）；
 - 种子比源码旧是正常状态，但必须始终保持“能编译当前源码”的能力；
-- CI 用 `checks.seed-selfhost` 守这条不变量：`seed/build.sh` → `vuna-seed`；种子对
+- CI 用 `checks.seed-selfhost` 守这条不变量：`seed/` 由 `packages.vuna-seed` 构建；种子对
   **compiler 包**分离编译得到 stage1 文件集并构建；stage1 再生成 stage2 文件集，
-  `diff -r` 逐字节一致；同时断言 seed/stage1/stage2 都不含工具模块、检查增量构建
-  （无改动不重编、touch 一个模块只重编它）与行为抽查；`checks.fixed-point` 与它同一派生；
+  `diff -r` 逐字节一致；同时按 `nix/tcb-forbidden.txt` 断言 seed/stage1/stage2 都不含工具
+  模块，并检查增量构建（无改动不重编、touch 一个模块只重编它）与行为抽查；
 - 如果新特性会让源码超出旧种子能编译的语法子集，必须先把特性实现成旧语法可编译的
   形式，rotate 种子后再在编译器源码里使用新语法；
 - `seed/` 下所有文件都是生成物，禁止手改。
@@ -57,24 +56,16 @@ M12.8 起含 `Base_*` 与 `Prelude`）。唯一的硬性不变量：
 ```console
 # 前提：当前源码能被当前种子编译（nix flake check 通过）
 nix build .#vuna --out-link result
-sh nix/seed-rotate.sh ./result/bin/vuna   # vuna seed seed compiler + 自生成 fixed point
+sh nix/seed-rotate.sh ./result/bin/vuna   # 生成到临时目录 → TCB + fixed point 校验 → 替换 seed/
 nix flake check                           # seed-selfhost 等全部通过
 git diff seed/                            # 确认变化可解释（文件集 + 路径/代码变化）
 git add seed/ && git commit
 ```
 
-`nix/seed-rotate.sh` 的实际步骤：`rm -rf seed && mkdir seed` →
-`vuna seed seed compiler` → 断言重生成的文件集与刚生成的一致（fixed point 自检）→
-断言不含工具模块。它同时检查 `seed/` 只含 compiler 闭包：
-
-```console
-for tool in Cli Fmt Lint Doc Repl TestRunner Files Eval Interp Process Codegen; do
-  [ -e "seed/Vuna_d$tool.ml" ] && fail
-done
-```
-
-（`Index` 等后续工具模块落地后同样追加进这个清单，见 `flake.nix` 与
-`nix/seed-rotate.sh` 的 `forbidden` 列表。）
+`nix/seed-rotate.sh` 在临时目录完成全部生成与校验：`vuna seed "$tmp/seed" compiler` →
+按 `nix/tcb-forbidden.txt` 断言 TCB → 用该种子构建并验证自生成 fixed point → 全部通过后
+才 `rm -rf seed && cp -r "$tmp/seed" seed`，因此中间失败不会破坏当前信任锚点。TCB 黑名单
+只有 `nix/tcb-forbidden.txt` 一份（由 `nix/tcb-check.sh` 断言），新增工具模块时追加到那里。
 
 注意：种子必须从仓库根、以 `compiler` 为包目录生成（脚本已固定这一点），这样产物里
 嵌入的源码路径保持一致。如果改的是**现有语法的语义**（而非新增语法），旧种子会按旧

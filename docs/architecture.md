@@ -142,9 +142,8 @@ vuna.toml
 - `Vuna.Process.runIn`（与 `Vuna.Compiler.Process.runIn` 同名，工具链侧实现）
 
 **TCB 边界（硬约束）**：工具链永不进入 seed。`compiler/app/Main.vuna` 的 import 闭包
-不含任何 `Vuna.*` 工具模块；`nix/seed-rotate.sh` 与 `flake.nix` 用同一 blacklist 断言：
-`Cli Fmt Lint Doc Repl TestRunner Files Eval Interp Process Codegen Index Lsp Json`。新增工具模块
-时必须同步这个清单，否则 `checks.seed-selfhost` 会在 TCB 泄漏时失败。
+不含任何 `Vuna.*` 工具模块；`nix/tcb-forbidden.txt` 是唯一黑名单（`nix/tcb-check.sh` 断言，
+seed rotation 与 `checks.seed-selfhost` 共用）。新增工具模块时必须追加，否则 check 会失败。
 
 **效应内建的包级 allowlist**：`Vuna.Compiler.Loader.packageAllowsEffects` 只放行
 `vuna` / `vuna-compiler` / `vuna-base` 三个包直接调用 effectful 内建；其余包必须经
@@ -167,7 +166,7 @@ seed/（提交入库，compiler 包入口闭包；seed/build.sh + ocamlopt）→
  → vuna-compiler build --split s1/s2 compiler → diff -r s1 s2（fixed point）
 ```
 **入口符号 / 命令**：`vuna seed`（`SplitCli.seedSplit`）、`build --split`（`buildSplit`）、
-`nix/seed-rotate.sh`、`flake.nix` 的 packages 与 `checks.seed-selfhost`。
+`nix/seed-rotate.sh`、`nix/packages.nix` 与 `nix/checks/`（`checks.seed-selfhost`）。
 **硬不变量**：当前 seed 必须能编译当前源码；rotation 后 stage1 == stage2；seed 只含
 compiler 包入口闭包。
 
@@ -175,7 +174,7 @@ compiler 包入口闭包。
 或 `nix build .#vuna-seed`）；新语法先以旧语法落地 → rotate → 再用。详见
 [bootstrap.md](reference/bootstrap.md)。
 
-**建议测试标签**：`checks.seed-selfhost`（= `fixed-point`）、第 13 段（种子冒烟）。
+**建议测试标签**：`checks.seed-selfhost`、第 13 段（种子冒烟）。
 
 ## 改一处 → 跑什么（速查）
 

@@ -154,7 +154,7 @@ termReads env t = case t of
 
 ## 5. 性能预算（`nix/metrics.budget` 不变）
 
-预算聚合 `vuna compile --package` 的 **compiler 包闭包**（seed 闭包），是 **HM typed codegen** 的产物；擦除只改 `--dt` 单文件输出，不进 seed、不进包级 compile，故 M16 **不需要重新标定**（bytes 1120000 / lines 10500 / maxline 12400 / longlines 3890 / letrec 575 / strcat 320 / eqint 35 / zeroarg 30 / ctorcount 2200）。`dt_elab` 基准（`nix/bench.sh` 的 `compile --dt --no-print test/corpus/dt/03_compose.vuna`）不得回归：`docs/dt-core.md` §10 记录 M13 完成时约 2 ms，本机实测 3–4 ms（5 次取样 `3/4/3/4/3` ms，`date +%s%N` 计时）；§3.3 的 `indexReads` 是一次线性遍历，量级远小于精化本身。`nix run .#bench -- --quick` 是手动基准（不进 CI）。
+预算聚合 `vuna compile --package` 的 **compiler 包闭包**（seed 闭包），是 **HM typed codegen** 的产物；擦除只改 `--dt` 单文件输出，不进 seed、不进包级 compile，故 M16 **不需要重新标定**（bytes 1120000 / lines 10500 / maxline 12400 / longlines 3890 / letrec 575 / strcat 320 / eqint 35 / zeroarg 30 / ctorcount 2200）。`dt_elab` 基准（`nix/bench.sh` 的 `compile --dt --no-print test/corpus/dt/03_compose.vuna`）不得回归：`docs/dt-core.md` §10 记录 M13 完成时约 2 ms，本机实测 3–4 ms（5 次取样 `3/4/3/4/3` ms，`date +%s%N` 计时）；§3.3 的 `indexReads` 是一次线性遍历，量级远小于精化本身。`nix run .#vuna-bench -- --quick` 是手动基准（不进 CI）。
 
 ## 6. 已知例外（进 limits）
 

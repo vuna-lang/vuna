@@ -42,8 +42,8 @@ examples/multi/.output/bin/multi               # -> hi hi hi|n2 n1
 ./result/bin/vuna test examples/multi          # 跑包内 test/*.vuna（main : String，空串通过）
 
 # 测试 / 格式化 / 文档
-nix run .#run-tests                            # 原生测试（= sh test/run-tests.sh）
-nix run .#run-tests -- --list                  # 列出章节（--only <章节> 只跑某段）
+nix run .#vuna-run-tests                            # 原生测试（= sh test/run-tests.sh）
+nix run .#vuna-run-tests -- --list                  # 列出章节（--only <章节> 只跑某段）
 ./result/bin/vuna fmt --check examples/multi   # 格式化检查（也可逐个给文件/目录）
 ./result/bin/vuna lint compiler/lib/Vuna/Compiler/*.vuna   # 风格检查（必须给路径）
 ./result/bin/vuna doc                          # 生成 docs/api.md（gitignored）
@@ -112,10 +112,10 @@ record / trait / deriving 程序会先类型检查并降级）。省略 `--root`
 ├── seed/      # compiler 闭包的多文件自举信任锚点（生成物，禁止手改）
 ├── test/      # run-tests.sh + corpus/ 夹具
 ├── examples/  # 多包示例
-├── nix/       # seed-rotate.sh、metrics、bench、run-tests
+├── nix/       # 构建图（packages/checks）+ rotate/metrics/bench
 ├── docs/      # 分层文档（见 AGENTS.md 导航）
 ├── vuna.toml  # workspace 根（同时是产品 CLI 包）；members: compiler/base
-└── flake.nix  # vuna-seed / vuna-compiler / vuna、devShell、checks
+└── flake.nix  # 输入与 outputs 委托（构建图在 nix/）
 ```
 
 逐模块职责见 [docs/architecture.md](docs/architecture.md)。仓库本身是一个 workspace
@@ -129,8 +129,8 @@ record / trait / deriving 程序会先类型检查并降级）。省略 `--root`
 1. **当前 seed 必须能编译当前源码**——`seed/` 是提交入库的信任锚点；
 2. **seed rotation 后 stage1 == stage2**（文件集逐字节一致，fixed point）；
 3. **`seed/` 只含 compiler 包入口闭包**：工具链（fmt/lint/repl/doc/test，以及未来的
-   `Index` / LSP / package manager）不进 TCB；`checks.seed-selfhost` 用 blacklist
-   `Cli Fmt Lint Doc Repl TestRunner Files Eval Interp Process Codegen` 断言；
+   `Index` / LSP / package manager）不进 TCB；`checks.seed-selfhost` 按
+   `nix/tcb-forbidden.txt` 断言；
 4. **效果内建按包 allowlist**：只有 `vuna` / `vuna-compiler` / `vuna-base` 可直接调用
    effectful 内建，其余包必须经 `Base.IO`（`Vuna.Compiler.Loader.packageAllowsEffects`）；
 5. **迁移期双路径零回归，终态单路径**：M18.5–M23 期间 HM（interp + typed + split）与 DT

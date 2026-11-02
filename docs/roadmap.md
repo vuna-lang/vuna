@@ -85,7 +85,7 @@ M15 遗留缺陷（同 trait 多实例，见下方）。
 
 ## 阶段共同门槛
 
-- `nix flake check`（vuna-tests / vuna-package / vuna-metrics / vuna-typecheck / vuna-lint / seed-selfhost / fixed-point）通过。
+- `nix flake check`（vuna-tests / vuna-package / vuna-metrics / vuna-typecheck / vuna-lint / vuna-index / context-budget / seed-selfhost）通过。
 - 迁移期登记：M18.5–M23 期间旧路径零回归；M24 起单路径，门槛改为「唯一路径全绿」。
 - DT 代码：核心求值器与擦除 codegen 语义一致（同夹具 `interp` 与 `compile`+`ocamlopt` 输出逐字节相同）。
 - 当前种子能编译当前源码；rotation 后 stage1 == stage2；seed 仍只含 compiler 包闭包。
@@ -304,7 +304,7 @@ effectful 内建进 DT prelude；包级 allowlist 语义保留；`main : IO a` �
 - rotation：先用旧 seed 编译新源码 → `nix/seed-rotate.sh` → 验证 stage1 == stage2；
 - 删除 `Typecheck`、`TypedCodegen`（`Split` 的**输出模型**保留，只换生成器）；
 - CLI：`--dt` 成为默认并移除开关，`CompilerCli` / `Cli` 用法行同步；
-- `nix/seed-rotate.sh` 与 `flake.nix` 的 forbidden 清单同步（删掉的模块名要移除，避免清单腐化）；
+- `nix/tcb-forbidden.txt` 与 `nix/seed-rotate.sh` / `nix/checks/` 同步（删掉的模块名要移除，避免清单腐化）；
 - LSP：`goalsOfProgram` 成为唯一诊断来源，删除 HM 诊断分支；
 - 文档收尾：[architecture.md](architecture.md) 的五条链路收敛，双路径表述全部删除。
 

@@ -5,7 +5,7 @@
 
 ## 原生测试：`test/run-tests.sh`
 
-`test/run-tests.sh` 是 vuna 原生测试（34 个章节，当前约 680 checks；确切数字看结尾
+`test/run-tests.sh` 是 vuna 原生测试（35 个章节，当前约 680 checks；确切数字看结尾
 `vuna tests passed (N checks)` 输出），用 `vuna` / `vuna-seed`
 驱动，不依赖外部 vuna 实现；但运行测试需要 OCaml 编译器（`ocamlopt`）作为代码生成后端：
 
@@ -22,10 +22,10 @@ sh test/run-tests.sh          # 需要 PATH 中有 vuna 与 vuna-seed
 无参数时行为与直接跑原脚本完全等价）：
 
 ```console
-nix run .#run-tests                 # 等价于 sh test/run-tests.sh
-nix run .#run-tests -- --list       # 列出全部章节
-nix run .#run-tests -- --only dt    # 只跑 DT 相关章节
-nix run .#run-tests -- --vuna stable  # 编译器改用注册表别名 vuna（远端稳定版）
+nix run .#vuna-run-tests                 # 等价于 sh test/run-tests.sh
+nix run .#vuna-run-tests -- --list       # 列出全部章节
+nix run .#vuna-run-tests -- --only dt    # 只跑 DT 相关章节
+nix run .#vuna-run-tests -- --vuna stable  # 编译器改用注册表别名 vuna（远端稳定版）
 ```
 
 `--only` 支持重复与逗号分隔（`--only 34` 按章节序号匹配）；`VUNA` / `VUNA_SEED`
@@ -89,27 +89,17 @@ nix run .#run-tests -- --vuna stable  # 编译器改用注册表别名 vuna（�
 
 ## Nix checks 清单
 
-`nix flake check` 覆盖（定义在 `flake.nix` 的 `checks`）：
+`nix flake check` 覆盖（定义在 `nix/checks/default.nix`；每个 check 的主体是
+`nix/checks/<name>.sh`，在 fileset 暂存的最小工作树里运行）：
 
+- `checks.seed-selfhost`：seed → stage0 → stage1 → stage2，`diff -r` 逐字节一致；
+  按 `nix/tcb-forbidden.txt` 断言不含工具模块；查增量构建与 `12_fact` / `--dt` 行为抽查；
 - `checks.vuna-tests`：在沙箱里跑上述原生测试；
-- `checks.vuna-typecheck`：用当前编译器类型检查自己的源码（`vuna check .`）；
-- `checks.vuna-lint`：对 `compiler/lib/Vuna/Compiler/*.vuna`、`lib/Vuna/*.vuna`、
-  `base/lib/Base/*.vuna`、`base/lib/*.vuna` 与 `app/*.vuna` 跑 `vuna lint`，
-  要求零 finding；
-- `checks.vuna-package`：在沙箱里用 `vuna build` 构建 `examples/multi`（workspace +
-  成员包 + `base` 依赖）、运行并比对输出，跑 `vuna test` / `vuna fmt --check` /
-  `vuna doc`，并用 package 模式构建编译器自身；
-- `checks.seed-selfhost`（M12/M12.5）：`seed/` 构建 `vuna-seed` →
-  `vuna-seed build --split` 对 **compiler 包**生成 stage 1 文件集 →
-  构建 stage 1 `vuna-compiler` → 再生成 stage 2 文件集，
-  `diff -r` 逐字节一致；另用 `compile --package` 构建 `vuna-compiler`、
-  `vuna-compiler build .` 构建产品 CLI；断言 seed/stage1/stage2 都不含工具模块与
-  dynamic codegen；另查增量构建（无改动不重编、touch 模块只重编它）与
-  `12_fact` → `120`；DT 行为抽查（`compile --dt` → `42`）；
-- `checks.vuna-metrics`（M12）：机器无关 codegen 指标（bytes/lines/最长行/超长行/
-  `let rec`/拼接/比较特化/ctor 计数）对 **compiler 闭包** 聚合，对比
-  `nix/metrics.budget`，超预算失败；
-- `checks.fixed-point`：与 `seed-selfhost` 同一派生。
+- `checks.vuna-typecheck` / `checks.vuna-lint`：`vuna check .` 自检、`vuna lint` 零 finding；
+- `checks.vuna-package`：`examples/multi` 的 build / test / fmt / doc + 根包 package 构建；
+- `checks.vuna-metrics`：机器无关 codegen 指标对 `nix/metrics.budget`；
+- `checks.vuna-index`：`vuna map` / `--find` / `--impact` / `api` 与索引缓存失效；
+- `checks.context-budget`：入口文档字节数与单模块行数对 `nix/context.budget`。
 
 ## Nix 命令
 
@@ -117,39 +107,40 @@ nix run .#run-tests -- --vuna stable  # 编译器改用注册表别名 vuna（�
 nix build             # 默认 = vuna（产品 CLI）
 nix build .#vuna-compiler # stage 1 编译器（从 compiler/ 分离编译）
 nix build .#vuna-seed # stage 0 种子编译器（从多文件 seed/ 构建）
-nix flake check       # vuna-tests / vuna-package / vuna-metrics / vuna-typecheck / vuna-lint / seed-selfhost
+nix flake check       # 全部 checks（tests/package/metrics/typecheck/lint/index/context/seed-selfhost）
 nix fmt               # nixfmt-tree 格式化 .nix
 ```
 
 ## 本地开发
 
 ```console
-nix develop
-nix build .#vuna --out-link result-vuna           # 产品 CLI
-nix build .#vuna-compiler --out-link result-compiler  # 编译器 CLI（stage 1）
-nix build .#vuna-seed --out-link result-seed      # stage 0 种子编译器
+nix develop                                            # 全量开发环境（工具链 + vuna-seed）
+nix develop .#ocaml                                    # 只含 OCaml 工具链（不依赖 seed/）
+nix build .#vuna --out-link result-vuna                # 产品 CLI
+nix build .#vuna-compiler --out-link result-compiler   # 编译器 CLI（stage 1）
+nix build .#vuna-seed --out-link result-seed           # stage 0 种子编译器
 VUNA=$PWD/result-vuna/bin/vuna \
 VUNA_SEED=$PWD/result-compiler/bin/vuna-compiler \
 sh test/run-tests.sh
 ```
 
-devShell 提供 `ocaml` / `ocamlopt` 工具链和 `vuna-seed`；stage 1 的 `vuna` 不进
-devShell，避免种子失效时连 shell 都进不去。`vuna-compiler` 可独立使用；
-`VUNA_SEED` 只需要一个能 `compile` 的编译器，stage 0 或 stage 1 均可。
+`devShells.default` = `ocaml` / `ocamlopt` + `vuna-seed`；`devShells.ocaml` 只有工具链，
+种子重建或损坏时用它。stage 1 的 `vuna` 不进任何 devShell，避免种子失效时连 shell 都
+进不去。`vuna-compiler` 可独立使用；`VUNA_SEED` 只需要一个能 `compile` 的编译器。
 
 ## 性能基准（手动）
 
-`nix run .#bench` 是**手动**性能基准，用来在优化前后快速测量收益；不是 CI check，
+`nix run .#vuna-bench` 是**手动**性能基准，用来在优化前后快速测量收益；不是 CI check，
 结果依赖机器，不参与 `nix flake check`。默认测量 `vuna`（产品 CLI），
-`--compiler boot` 改测 `vuna-seed`（stage 0 编译器）。
+`--compiler seed` 改测 `vuna-seed`（stage 0 编译器）。
 
 ```console
-nix run .#bench -- --quick                 # 快速冒烟（runs=1）
-nix run .#bench -- --runs 5 --save .local/bench/base.json
+nix run .#vuna-bench -- --quick                 # 快速冒烟（runs=1）
+nix run .#vuna-bench -- --runs 5 --save .local/bench/base.json
 # 修改代码后与基线对比：
-nix run .#bench -- --baseline .local/bench/base.json
-nix run .#bench -- --compiler boot         # 改测 seed 编译器
-nix run .#bench -- --with-tests            # 额外跑全部 checks
+nix run .#vuna-bench -- --baseline .local/bench/base.json
+nix run .#vuna-bench -- --compiler seed         # 改测 seed 编译器
+nix run .#vuna-bench -- --with-tests            # 额外跑全部 checks
 ```
 
 报告包含：三级构建性能（seed → vuna-compiler → vuna 的 ocamlopt 时间）、编译性能

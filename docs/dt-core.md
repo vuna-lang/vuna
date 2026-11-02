@@ -158,7 +158,7 @@ data Term where
 
 ## 10. 基准（本机参考，非 CI 门槛）
 
-`nix run .#bench -- --quick` 新增 `dt_elab` 项：对
+`nix run .#vuna-bench -- --quick` 新增 `dt_elab` 项：对
 `test/corpus/dt/03_compose.vuna`（Pi + 3 个类型参数擦除 + compose）跑
 `compile --dt --no-print`（精化 + 擦除检查 + codegen）的耗时。
 
