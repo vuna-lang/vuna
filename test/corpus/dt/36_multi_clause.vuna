@@ -1,0 +1,46 @@
+-- M22：多 clause 函数的模式矩阵降级（构造子 + 通配混合列、零参构造子、构造子形参）。
+--
+-- `multiToExpr`/`buildColumnExpr`（现 `Vuna.Compiler.DtMatch`）把 clause 矩阵降成
+-- lambda + 嵌套 case：构造子列编成 `case`，变量/通配列改写成位置名，通配子句同时
+-- 供构造子分支与兜底使用。覆盖三件事：
+-- ① 两个构造子参数的函数（`add`）：两列都按构造子分发；
+-- ② 构造子 + 通配混合列（`zipD`）：具体子句在前、`_ _` 兜底在后；
+-- ③ 单 clause 的构造子形参（`firstOf`/`secondOf`）与零参构造子值（`Zero`/`Nil`）。
+data Nat : Type where
+  Zero : Nat
+  Succ : Nat -> Nat
+
+data List a : Type where
+  Nil : List a
+  Cons : a -> List a -> List a
+
+data Pair a b : Type where
+  MkPair : a -> b -> Pair a b
+
+add : Nat -> Nat -> Nat
+add Zero y = y
+add (Succ x) y = Succ (add x y)
+
+toInt : Nat -> Int
+toInt Zero = 0
+toInt (Succ k) = 1 + toInt k
+
+zipD : List a -> List b -> List (Pair a b)
+zipD (x :: xs) (y :: ys) = MkPair x y :: zipD xs ys
+zipD _ _ = []
+
+firstOf : Pair a b -> a
+firstOf (MkPair x y) = x
+
+secondOf : Pair a b -> b
+secondOf (MkPair x y) = y
+
+len : List a -> Int
+len [] = 0
+len (x :: xs) = 1 + len xs
+
+main : Int
+main = toInt (add (Succ (Succ Zero)) (Succ Zero))
+     + firstOf (MkPair 40 2)
+     + secondOf (MkPair 40 2)
+     + len (zipD (Cons 1 (Cons 2 Nil)) (Cons 3 (Cons 4 Nil)))

@@ -68,17 +68,17 @@ codegen 要点见 [compiler.md](reference/compiler.md)，语言语义见 [langua
 
 ## 2. DT 路径：Core → Elab → CoreCodegen（+ Dt facade）
 
-> **终态唯一路径**。当前仍是单文件 `--dt` opt-in，M18.5–M24 逐步补齐语言面、多文件、
-> 效应与 codegen，最终接管 seed。
+> **终态唯一路径**。M18.5–M24 逐步补齐语言面、多文件、效应与 codegen，最终接管 seed。
 
 **何时该看这里**：改 `--dt` 相关语法、精化规则、索引 unification、擦除 codegen；
 HM 路径的任何改动都不应该需要动这里，反之亦然。
 
 **数据流**：
 ```text
-单文件 .vuna + --dt
- → Vuna.Compiler.Parser.parseSource          （与 HM 共用 surface parser）
+.vuna + --dt（M20 起支持 import / --root）
+ → Vuna.Compiler.Parser.parseSource          （与 HM 共用 parser）
  → Vuna.Compiler.Elab.elabProgram            （双向精化 + 一阶元变量 + 索引族）
+ → Vuna.Compiler.DtMatch.multiToExpr         （clause 模式矩阵 → lambda + case）
  → Vuna.Compiler.Core eval/quote/conv         （NbE、定义性相等、delta 展开 fuel）
  → Vuna.Compiler.CoreCodegen.checkDtProgram  （擦除检查）
  → Vuna.Compiler.CoreCodegen.generateDtProgram（擦除型 OCaml 生成）
@@ -89,19 +89,18 @@ HM 路径的任何改动都不应该需要动这里，反之亦然。
 - `Vuna.Compiler.Dt.dtCheckFile` / `dtCompileFile` / `dtEvalFile`（单文件 facade）
 - `Vuna.Compiler.Elab.elabProgram` / `elabProgramFull`（带洞目标与解表）；`goalsOfProgram`
   供 `vuna goal` 与 LSP hover；`checkTerminationDecls` 做终止性
+- `Vuna.Compiler.DtMatch.multiToExpr` / `buildColumnExpr`：多 clause 函数体 → 单表达式
+  （构造子列 `case`、字面量列 `if` 链；仅依赖 Ast/Common）
 - `Vuna.Compiler.Core.eval` / `quote` / `conv` / `normalize` / `defaultFuel`
 - `Vuna.Compiler.CoreCodegen.checkDtProgram` / `generateDtProgram`
 - 经 `Vuna.Compiler.Compile.compileFileDt` / `checkFileDt` 与 `Vuna.Compiler.CompilerCli`
   暴露给 CLI（`compile --dt` / `check --dt` / `interp --dt`）
 
-**边界**（M19–M24 逐条拆除）：DT 不经过 Loader，不支持 `import`/`--root`/包模式，
-不进入 `build`/`build --split`/`seed`；HM 路径语义与产物必须不变。
+**边界**：`--dt` 已支持 `import`/`--root`（M20）；包目录模式与 `build`/`seed` 仍不支持。
 
-**通常连带改动**：`Core`（Term/Value 构造子）→ `Elab`（精化/覆盖率）→ `CoreCodegen`
-（擦除与生成）三处必须同步；设计边界见 [dt-core.md](dt-core.md)。
+**通常连带改动**：`Core`（Term/Value）→ `Elab`（精化/覆盖率）→ `CoreCodegen`（擦除与生成）三处同步；见 [dt-core.md](dt-core.md)。
 
-**建议测试标签**：第 34–35 段（`corpus/dt` 与 `dt_err` 夹具，三路 `interp`/`check`/
-`compile --dt`；数量见 [testing.md](reference/testing.md)）。
+**建议测试标签**：第 34–35 段（`corpus/dt` 与 `dt_err`，三路互拍；数量见 [testing.md](reference/testing.md)）。
 
 ## 3. 包与 workspace：Toml → Manifest → Pkg → Loader
 

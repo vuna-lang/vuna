@@ -30,6 +30,7 @@ import 闭包就是 `seed/` 的内容；工具链（fmt/lint/repl/doc/test）在
 | `Vuna.Compiler.CompilerCli` | 编译器自己的 CLI（`vuna-compiler`） | `runCompilerCli`、`compilerUsageLines` |
 | `Vuna.Compiler.Core` | DT core 类型论表示、NbE 求值与定义性相等 | `eval`、`quote`、`conv`、`normalize`、`defaultFuel` |
 | `Vuna.Compiler.Elab` | DT 双向精化器（一阶元变量、类型级隐式插入、M14 索引族） | `elabProgram` |
+| `Vuna.Compiler.DtMatch` | 多 clause 模式矩阵降级：构造子列 → `case`、字面量列 → `if` 链（纯 Ast→Ast 变换，从 Elab 拆出守模块预算） | `multiToExpr`、`buildColumnExpr` |
 | `Vuna.Compiler.CoreCodegen` | DT 擦除检查与 OCaml 生成 | `checkDtProgram`、`generateDtProgram` |
 | `Vuna.Compiler.Dt` | DT 单文件 facade（供 `Compile` / `CompilerCli` / `Interp` 使用） | `dtCheckFile`、`dtCompileFile`、`dtEvalFile` |
 

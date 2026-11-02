@@ -99,16 +99,19 @@ trans a b c p q = case p of
   互递归按「每个分量至少一次下降」近似，复杂尺寸变化矩阵不做。
 - **擦除规则**：binder 的域是**宇宙**（`a : Type`）⇒ 擦除；域是**归纳族**（`n : Nat`
   这类索引）⇒ **保留运行时表示**。所以 `Vec a n` 的值是一条带长度索引字段的链表
-  （`type 'a t_Vec = C_Vec_Nil | C_Vec_Cons of 'a t_Nat * 'a * 'a t_Vec`）。
-  M16 探测确认索引**不能无条件擦除**（`vlen` 把长度索引当递归参数传下去，运行时真的
-  读它）；完整擦除需要整程序使用分析，仍是后续工作。
+  （`type 'a t_Vec = C_Vec_Nil | C_Vec_Cons of 'a t_Nat * 'a * 'a t_Vec`）；
+  M16 探测确认索引**不能无条件擦除**（`vlen` 把长度索引当递归参数读）；完整擦除需整程序
+  使用分析。
 - **`case` 分支与模式（M19）**。分支必须绑定构造子的全部显式 telescope binder（族参数
   与索引也各占一个位置，即使分支体不用）；**嵌套构造子模式已支持**（`Succ (Succ k)`，
   精化期改写成内层 case，因此内层同样要过覆盖检查）；兜底 `_ => ...`（变量模式等价）
   只能放**最后一个**分支。
 - **多 clause 与方程左端模式（M19）**。`f p1 = e1` / `f p2 = e2` 保留语法，精化期合成
-  单个 lambda + case 表达式树（标准模式矩阵），因此同一构造子的多个 clause、变量兜底、
-  `f (Just x)` 与 `f (Just (Just y))` 共存都成立；多 clause 的参数个数必须一致。
+  单个 lambda + case 表达式树（标准模式矩阵，实现独立在 `Vuna.Compiler.DtMatch`），因此
+  同一构造子的多个 clause、变量兜底、`f (Just x)` 与 `f (Just (Just y))` 共存都成立；
+  多 clause 的参数个数必须一致。
+  **当前边界（M22 收尾）**：多列覆盖拆分与跨模块构造子名仍有限制，写法与绕法见
+  [limits.md](limits.md)。
 - **`let` 与推断位 `case`（M19）**。`let ... in`（含 `where` 块）脱糖为
   `(\x => body) e`；`case` 可以出现在推断位（函数实参、`if` 分支、`let` 的 value），
   做法是建元变量当期望类型。
@@ -116,12 +119,11 @@ trans a b c p q = case p of
   的字面量分支降级成嵌套 `if` 链，因此**必须有一个变量/通配兜底分支**（值域穷尽不了）。
 - **内建泛化（M19）**。`==` / `/=` 带隐式类型参数（`{a : Type} -> a -> a -> Bool`），
   精化到饱和应用时按第一个实参类型特化成 `bi_eq_int` / `bi_eq_str` 这类运行时函数；
-  非 `Int` / `String` 报 `is only defined for Int and String`。`strFromInt` /
-  `strUnpack` / `strPack` / `strLength` 已进 prelude（定义表在 `DtPrelude.vuna`）。
+  非 `Int` / `String` 报 `is only defined for Int and String`；`strFromInt` 等已进
+  prelude（定义表在 `DtPrelude.vuna`）。
 - **可达性决定分支能否省略**：若函数签名把索引**细化**（如 `Vec a (Succ m)`），
-  与该索引不可统一的分支（`Nil`）**可以省略**，写了则报
-  `DT: this branch is impossible`；若签名是**泛化**索引（`Vec a n`），则所有构造子
-  都可达，必须写全，漏写报 `DT: case is not exhaustive: missing <C>`。
+  与该索引不可统一的分支（`Nil`）**可以省略**，写了报 `this branch is impossible`；
+  签名是**泛化**索引（`Vec a n`）时所有构造子都可达，漏写报 `case is not exhaustive`。
 - **`data` 的 kind 必须是 `... -> Type` 的箭头链**，构造子的结果类型必须回到本族
   （否则报 `DT: constructor <C> does not return <F>`）。族名本身按 kind 入
   `globals`，每个构造子挂**完整 Pi 类型**；类型级 `Vec a n` 是**中性应用**，不做
@@ -141,25 +143,23 @@ vuna compile --dt file.vuna out.ml   # 擦除并生成 OCaml（main : Int/String
 vuna interp --dt file.vuna           # 核心求值器（NbE + delta）求值 main
 ```
 
-M20 起 `--dt` **复用 Loader**：支持多文件 / `import` / `--root`（`interp --dt --root <dir>
-<entry>`），包目录模式与参数化 `data Foo a` 仍是缺口。`build` / `seed` 不支持 `--dt`。
-DT 路径与 HM 路径互不影响：HM 的 interp + typed + split 语义与产物保持不变。
+M20 起 `--dt` **复用 Loader**：支持多文件 / `import` / `--root`，参数化 `data Foo a : Type`
+也可用；**包目录模式**仍是缺口，`build` / `seed` 不支持 `--dt`。HM 路径语义与产物不变。
 
 ## 测试夹具
 
-`test/run-tests.sh` 第 34 段，三条路径（`interp --dt` / `check --dt` / `compile --dt` +
-`ocamlopt`）都跑：
+`test/run-tests.sh` 第 34 段三条路径（`interp --dt` / `check --dt` / `compile --dt` + `ocamlopt`）。
 
-- 正例 `test/corpus/dt/` 共 **35** 个：M13 `01_id`–`08_if`；M14 `09_nat`/`10_vec`/`11_fin`/`12_eq`；
+- 正例 `test/corpus/dt/` 共 **36** 个：M13 `01_id`–`08_if`；M14 `09_nat`/`10_vec`/`11_fin`/`12_eq`；
   M15 `13_iface`/`14_solve`/`15_goal`；M16 `16_total`/`17_erase`；M18 `18_ctx`；
   M18.5 `19_lam`；M18.6 `20_rig`/`21_level`；M19 `22_let` 起共 10 个（`22_let`–`31_deriving_ord`）；
-  M20 `32_parametric_data`（`data Foo a : Type` 写法 + 构造子字段引用族参数）；M21 `33_poly_fn_field`（函数字段被索引精化）、`34_io_do`/`35_io_main`（main : IO a 执行：按类型识别 IO、取构造子末实参 `f` 后对世界令牌 0 应用 `f 0`；do 用具体 bind/pure）。
-  数值见各 `.out` 文件。
-- 负例 `test/corpus/dt_err/` 共 **27** 个：M13 的 `01_universe`、`02_conv`、
+  M20 `32_parametric_data`（`data Foo a : Type` 写法 + 构造子字段引用族参数）；M21 `33_poly_fn_field`（函数字段被索引精化）、`34_io_do`/`35_io_main`（main : IO a 执行：按类型识别 IO、取构造子末实参 `f` 后对世界令牌 0 应用 `f 0`；do 用具体 bind/pure）；M22 `36_multi_clause`（多 clause 模式矩阵：双构造子参数、构造子+通配混合列、单 clause 构造子形参、零参构造子值）。数值见各 `.out` 文件。
+- 负例 `test/corpus/dt_err/` 共 **28** 个：M13 的 `01_universe`、`02_conv`、
   `03_hole`、`05_import`、`06_unknown`、`07_lambda`、`08_arity`、`09_runtime_type`、
   `11_implicit_non_type`；M14 `04_nonexhaustive`/`10_impossible`/`12_case_int`/
   `13_unknown_ctor`/`14_bad_ctor_result`/`15_nested_pat`；M16 `16_nonterm`/`17_nested_total`；
-  M18.5 `18_lam_type_used`；M18.6 `19_rig_type_runtime`；M19 `20_let_bad_pat` 起共 7 个；M21 `27_poly_fn_field_err`（函数字段精化失败路径）。
+  M18.5 `18_lam_type_used`；M18.6 `19_rig_type_runtime`；M19 `20_let_bad_pat` 起共 7 个；
+  M21 `27_poly_fn_field_err`（函数字段精化失败路径）；M22 `28_multi_clause_coverage`（多 clause 覆盖不足）。
 
 ## 相关阅读
 

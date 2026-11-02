@@ -433,3 +433,84 @@ point 通过。新增局部夹具 `_scratch/m22_monad.vuna`（本地 `IO` + 泛�
   （属 M21「effectful 内建进 DT prelude」）；
 - `mem : a -> List a -> Bool`：刚性签名变量 `a` 上的 `Eq a` 约束推断（签名缺 `Eq a`，
   DT 需在签名推断并补隐式 `{d : Dict_Eq a}`，失败回退重精化）。
+
+### M22 实现进展：多 clause 模式矩阵修复，`Base.List` 全量 check 通过
+
+目标：让 `vuna check --dt --root base/lib` 能完整精化 `Base.List`（`mem`、`zip`、
+`lookupPair`、`take`/`drop` 等），并把 DT 的多 clause/构造子模式路径补到「标准模式矩阵」
+该有的样子。逐层剥出的缺陷与修法：
+
+1. **零参构造子被当成函数**。`take`/`drop`/`zip` 的 `[]`、`Just`/`Nothing` 等零参（或
+   只有隐式参数的）构造子，`inferE (EVar "Nil")` 直接返回 `eval tyTerm`
+   （`{a} -> List a`），于是 `[1,2,3]` 报 `expected List Int, got Int`。修法：
+   `inferCtorRef` + `instantiateNullaryCtor`——**只对「整条类型链没有显式 Pi」的构造子**
+   把隐式类型/族参数实例化成元变量，`Cons`/`Just` 这类有显式参数的保持多态类型。
+2. **`if` 条件写死 prelude 桩 `Bool`**。`inferE (EIf)` 用
+   `checkE ... (NGlobal "Bool")` 检查条件，`Base.List.filter` 的 `if p x`
+   （`p : a -> Base.Bool.Bool`）报 `expected Bool, got Base.Bool.Bool`。修法：先
+   `inferE` 条件再判 `isBoolType`（按末端段名同时接受 prelude 桩与真实
+   `Base.Bool.Bool`），两分支各自推断后 `convEc`。
+3. **构造子与族同名**（`data Pair a b where Pair : a -> b -> Pair a b`）。
+   `checkAppCtor` 原来用 `globalLookup`，拿到的是**族的 kind**
+   （`Type -> Type -> Type`）而不是构造子类型，报 `expected Type, got Int`；反过来
+   `Pair` 出现在类型位置时又被当构造子。修法：`checkAppCtor` 改用
+   `dtCtorLookup` + `dtCtorType`；`checkApp` 在 `expected` 是宇宙（`isSortVal`）时走
+   `checkAppGeneral`。
+4. **单 clause 的构造子形参**（`firstOf (Pair a b) = a`）：M13「定义参数必须是变量」。
+   修法：`elabFunDef` 先判 `allVarPats`，否则把整条 clause 矩阵交给 `multiToExpr`
+   降级（与多 clause 同一条路径）。
+5. **构造子 + 通配混合列**（`zip (x :: xs) (y :: ys) = ...; zip _ _ = []`）：
+   `buildColumnExpr` 原先把这种列落到 `litAltExpr`，而它的 `PWild` 分支只
+   `stripFirstCol`、不展开构造子子模式 → 丢 `x`/`xs`/`y`/`ys` 绑定，报
+   `:0:0: expected List a, got Int`。修法：加 `hasCtorHead`，混合列也走
+   `ctorAltList` + `fallbackAltList`；同时 `clausesForCtor` 把变量/通配子句**分发进
+   每个构造子分支**（用该分支的新鲜子名占位，并把体里对该变量的引用改写成该列
+   scrutinee），否则嵌套 case 缺分支、覆盖检查报 `missing <C>`。
+6. **`zip` 的 `expected a, got b`（本轮最深的一个）**。修完 5 之后错误从有位置的
+   `:0:0` 变成无位置的类型串位：`a` 被当成 `b`。根因是 `ctorAltList` 每层递归都用
+   `_sc0/_sc1` 当新鲜子模式名——**层间同名**：内层 case 的 binder 遮蔽外层，外层
+   `renameFirstVars` 又把外层变量（`y`）改写进内层 binder（`_sc1`），`x`/`y` 的类型
+   因此互换。修法：`subNamesFor pos` 让新鲜名带**本列位置名**
+   （`_sc_mc0_0`、`_sc_mc1_0`……），层间不再撞名。
+7. **`Bool` 的双重身份**。`Base.Bool` 重新声明了 `data Bool`（`Base.Bool.Bool`），而
+   prelude 内建 `Bool` 仍是类型注解与内建算子的默认（HM 的 `if` 判据 `TCon "Bool"`、
+   求值器 `evalIf` 只认 `VCon "True"/"False"`）。DT 里两者混用时（`main : Bool` 对
+   `mem ... : Base.Bool.Bool`）报 `expected Base.Bool.Bool, got Bool`。修法：**只在 DT
+   精化器**里让 `convEc` 把两侧都是布尔头的值视为定义相等（`boolTypedVal` + 末段名
+   `Bool`），并在 `inferVarRef` 里把「本程序数据构造子」排在「全局签名」之前
+   （`True`/`False` 与 `preludeGlobals` 的桩同名，先查全局会拿到桩类型）。
+   期间试过更"正统"的做法——改 Loader 让 `Bool` 统一解析到 `Base.Bool.Bool`、构造子
+   声明一律 mangle——DT 侧可行，但 **HM 回归**：`Eval.evalIf` 只认裸 `VCon "True"`，
+   `interp --root base/lib` 的 stdlib 夹具大面积报 `no matching clause` / 挂死
+   （`corpus/stdlib/08_sort_map` 空转），违反「迁移期 HM 零回归」，已整体回退 Loader
+   到 HEAD；跨模块构造子 mangle 的完整方案留给 M23。
+8. **模块预算**。以上改动让 `Elab.vuna` 从 2539 涨到 2634（预算 2540）。按 35281c2 的
+   先例做拆分：把纯语法的「多 clause 模式矩阵 → lambda + case」整块
+   （`multiToExpr`/`buildColumnExpr`/`ctorAltList`/`renameExpr` 等，只依赖
+   `Common` + `Ast`）移到新模块 `Vuna.Compiler.DtMatch`，并删掉拆分后变死的
+   `firstCtorPats` 与旧 `subNames`；`Elab.vuna` 降到 2403 行。
+
+**验证**：`_scratch/m22_allops.vuna` 覆盖 `Base.List` 全部导出（`append`/`reverse`/
+`length`/`map`/`filter`/`foldl`/`foldr`/`concatMap`/`flatMap`/`mem`/`memName`/
+`lookupPair`/`zip`/`take`/`drop`/`range`/`mapMaybe`）在
+`check --dt --root base/lib` 下全绿（`filter (\x => x > 1)` 也能过，`Bool` 等价短路
+生效）；`zip` 夹具从报错转为通过。新增语料正例
+`test/corpus/dt/36_multi_clause.vuna`（双构造子参数、构造子+通配混合列、单 clause
+构造子形参、零参构造子值，三路输出 `47`）与负例
+`test/corpus/dt_err/28_multi_clause_coverage.vuna`（多 clause 覆盖不足 → `missing Succ`）。
+`Base.List.lookupPair` 从嵌套模式 `(Pair k v) :: rest` 改为 `firstOf`/`secondOf`
+（见下条边界）；`List.zip` 写成「具体子句 + `_ _` 兜底」（用户指出的顺序问题：
+具体子句必须在前，否则被通配遮蔽）。`test/run-tests.sh` **858 项全绿**（含新夹具）；
+`nix build .#vuna-compiler`（HEAD 种子编译当前源码）通过；`sh nix/context-budget.sh .`
+在预算内（`Elab.vuna` 2403 行、`max_module` 仍是 `Typecheck.vuna` 2529）。
+
+**仍存边界（下一阶段处理，已同步 limits.md / dt.md）**：
+- **多列覆盖拆分**：模式矩阵按列下降、不按列间依赖拆矩阵，`zip [] ys = [];
+  zip xs [] = []; zip (x :: xs) (y :: ys) = ...` 报 `missing Cons`；
+- **跨模块构造子名**：`case`/模式按源名匹配 `dtDataCtors` 的限定名，导入模块里对
+  导入族写 `case`（含嵌套模式降级出的 case）报
+  `DT: unknown constructor <C> in case <F>`；`Base.List.lookupPair` 因此用访问器绕开；
+- **真实 `Base.Bool.Bool` 值只在检查层可用**：`evalIf` 只归约 `VBool`、内建算子按
+  裸 `True`/`False` 产生值，所以 `interp --dt`/codegen 下真实 Bool 的 `if` 仍不归约
+  （例：`import Base.Bool; main = if True then 1 else 0` 能 check、interp 报
+  `main does not reduce to a value`），M23 接 codegen 前需统一 Bool 表示。

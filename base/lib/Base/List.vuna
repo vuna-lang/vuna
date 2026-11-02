@@ -59,12 +59,11 @@ memName name (x :: rest) = if x == name then True else memName name rest
 
 lookupPair : String -> List (Pair String v) -> Maybe v
 lookupPair name [] = Nothing
-lookupPair name ((Pair k v) :: rest) = if k == name then Just v else lookupPair name rest
+lookupPair name (p :: rest) = if firstOf p == name then Just (secondOf p) else lookupPair name rest
 
 zip : List a -> List b -> List (Pair a b)
-zip [] ys = []
-zip xs [] = []
 zip (x :: xs) (y :: ys) = Pair x y :: zip xs ys
+zip _ _ = []
 
 take : Int -> List a -> List a
 take n [] = []

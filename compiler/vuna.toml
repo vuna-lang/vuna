@@ -23,6 +23,7 @@ modules = [
   "Vuna.Compiler.DtPrelude",
   "Vuna.Compiler.DtQuant",
   "Vuna.Compiler.DtKind",
+  "Vuna.Compiler.DtMatch",
   "Vuna.Compiler.Elab",
   "Vuna.Compiler.CoreCodegen",
   "Vuna.Compiler.Dt",

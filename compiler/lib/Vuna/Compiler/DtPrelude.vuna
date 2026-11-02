@@ -52,7 +52,9 @@ boolTy : Term
 boolTy = TGlobal "Bool"
 
 fun2 : Term -> Term -> Term -> Term
-fun2 a b c = TPi "_" False Rig1 a (TPi "_" False Rig1 b c)
+-- `b` / `c` 在第一个 / 第二个 `_` binder 作用域内使用，需按外层深度移位
+-- （`polyEqTy` 的 `{a} -> a -> a -> Bool` 第二/三个 `a` 引用外层 `{a}`）。
+fun2 a b c = TPi "_" False Rig1 a (TPi "_" False Rig1 (shift 0 1 b) (shift 0 2 c))
 
 -- ---------------------------------------------------------------
 -- M19：内建泛化（`==` / `/=` 跨类型）与 str* 进 prelude
