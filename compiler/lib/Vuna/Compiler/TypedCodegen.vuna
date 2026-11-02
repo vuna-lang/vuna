@@ -1,4 +1,9 @@
-module Vuna.Compiler.TypedCodegen (generateProgramTyped, generateProgramTypedExec, generateSplitProgram, generateSplitLibraryProgram) where
+module Vuna.Compiler.TypedCodegen
+  ( generateProgramTyped
+  , generateProgramTypedExec
+  , generateSplitLibraryProgram
+  , generateSplitProgram
+  ) where
 
 -- Vuna.Compiler.TypedCodegen：用类型信息生成原生 OCaml 类型（M8a）。
 -- 目前覆盖 Int/String/Bool/List、函数/lambda/let/case/if、用户 data 类型、

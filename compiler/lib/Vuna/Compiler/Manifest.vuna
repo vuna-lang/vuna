@@ -1,4 +1,17 @@
-module Vuna.Compiler.Manifest (Manifest(..), parseManifest, validateManifest, manifestName, manifestVersion, manifestEdition, manifestMembers, manifestExports, manifestDependencies, manifestPath, manifestDir, resolveManifestPath) where
+module Vuna.Compiler.Manifest
+  ( Manifest(..)
+  , manifestDependencies
+  , manifestDir
+  , manifestEdition
+  , manifestExports
+  , manifestMembers
+  , manifestName
+  , manifestPath
+  , manifestVersion
+  , parseManifest
+  , resolveManifestPath
+  , validateManifest
+  ) where
 
 -- Vuna.Compiler.Manifest：vuna.toml 的语义模型（M11.5 包管理基础件）。
 -- 表约定：

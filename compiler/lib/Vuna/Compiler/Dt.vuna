@@ -1,4 +1,11 @@
-module Vuna.Compiler.Dt (dtCheckFile, dtCompileFile, dtEvalFile, dtCheckProject, dtCompileProject, dtCheckLibrary) where
+module Vuna.Compiler.Dt
+  ( dtCheckFile
+  , dtCheckLibrary
+  , dtCheckProject
+  , dtCompileFile
+  , dtCompileProject
+  , dtEvalFile
+  ) where
 
 -- Vuna.Compiler.Dt：DT 路径的 facade（供 Compile / CompilerCli / Interp 使用）。
 --

@@ -1,4 +1,19 @@
-module Vuna.Compiler.DtPrelude (preludeNames, preludeGlobals, preludeGlobalsFor, pickListFamily, intTy, strTy, boolTy, fun2, isEqOp, builtinTyName, builtinEqTyName, eqRuntimeName, polyEqTy, prependParams) where
+module Vuna.Compiler.DtPrelude
+  ( boolTy
+  , builtinEqTyName
+  , builtinTyName
+  , eqRuntimeName
+  , fun2
+  , intTy
+  , isEqOp
+  , pickListFamily
+  , polyEqTy
+  , preludeGlobals
+  , preludeGlobalsFor
+  , preludeNames
+  , prependParams
+  , strTy
+  ) where
 
 -- Vuna.Compiler.DtPrelude：DT 的**内置定义表**（M19 起独立成模块）。
 --

@@ -164,6 +164,22 @@ in
     script = ./vuna-lint.sh;
   };
 
+  vuna-fmt = mkCheck {
+    name = "vuna-fmt";
+    srcs = [
+      ../../compiler
+      ../../base
+      ../../lib
+      ../../app
+      ../../examples
+      ../../vuna.toml
+    ];
+    env = {
+      VUNA = "${vuna}/bin/vuna";
+    };
+    script = ./vuna-fmt.sh;
+  };
+
   vuna-index = mkCheck {
     name = "vuna-index";
     srcs = [

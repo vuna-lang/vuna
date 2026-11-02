@@ -1,4 +1,4 @@
-module Base.Map (Map, empty, insert, lookup, remove, keys, values, size, fromList, toList) where
+module Base.Map (Map, empty, fromList, insert, keys, lookup, remove, size, toList, values) where
 
 -- Base.Map：基于 assoc list 的抽象映射类型。
 -- 模块头只导出 Map（不含构造器 MkMap），跨模块只能通过 API 使用。

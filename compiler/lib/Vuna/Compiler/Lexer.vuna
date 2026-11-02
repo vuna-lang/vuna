@@ -1,4 +1,25 @@
-module Vuna.Compiler.Lexer (TIdent, TKw, TInt, TStr, TSym, TEof, PTok, isUpperChar, isLowerChar, isIdentStart, isDigit, lexSource, CKind, CLine, CBlock, Comment, commentKind, commentText, commentSpan, lexComments) where
+module Vuna.Compiler.Lexer
+  ( CBlock
+  , CKind
+  , CLine
+  , Comment
+  , PTok
+  , TEof
+  , TIdent
+  , TInt
+  , TKw
+  , TStr
+  , TSym
+  , commentKind
+  , commentSpan
+  , commentText
+  , isDigit
+  , isIdentStart
+  , isLowerChar
+  , isUpperChar
+  , lexComments
+  , lexSource
+  ) where
 
 -- vuna 源码 lexer：字符游标、token 与 pos。
 import Vuna.Compiler.Common

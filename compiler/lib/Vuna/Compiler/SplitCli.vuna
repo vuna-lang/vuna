@@ -1,4 +1,4 @@
-module Vuna.Compiler.SplitCli (SplitInput, buildSplit, seedSplit, compilePackage) where
+module Vuna.Compiler.SplitCli (SplitInput, buildSplit, compilePackage, seedSplit) where
 
 -- Vuna.Compiler.SplitCli：包模式的分离编译入口（M12）。
 --   vuna build --split OUTDIR [DIR]   → 包编译成逐模块 OCaml 源码 + build.sh（写到 OUTDIR）

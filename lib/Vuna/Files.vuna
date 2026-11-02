@@ -1,4 +1,4 @@
-module Vuna.Files (collectVunaFiles, collectSourceFiles, pathExistsDir, pathExistsFile) where
+module Vuna.Files (collectSourceFiles, collectVunaFiles, pathExistsDir, pathExistsFile) where
 
 -- Vuna.Files：目录遍历工具（fmt / doc / test / Index 共用）。
 -- 只依赖 readDir / isDirectory / fileExists 内建；readDir 返回字典序，遍历顺序确定。

@@ -1,4 +1,32 @@
-module Vuna.Index (Index(..), Sym(..), ModuleInfo(..), buildIndex, loadOrBuild, renderOverview, renderModules, findSymbol, impactOf, renderApi, renderDocWithComments, listAllSymbols, symModule, symName, symKind, symSig, symDoc, symLine, symCol, symFullName, modName, modPackage, modPath, modBytes, modDecls, indexModules, indexSymbols) where
+module Vuna.Index
+  ( Index(..)
+  , ModuleInfo(..)
+  , Sym(..)
+  , buildIndex
+  , findSymbol
+  , impactOf
+  , indexModules
+  , indexSymbols
+  , listAllSymbols
+  , loadOrBuild
+  , modBytes
+  , modDecls
+  , modName
+  , modPackage
+  , modPath
+  , renderApi
+  , renderDocWithComments
+  , renderModules
+  , renderOverview
+  , symCol
+  , symDoc
+  , symFullName
+  , symKind
+  , symLine
+  , symModule
+  , symName
+  , symSig
+  ) where
 
 -- Vuna.Index：源码符号索引（工具链模块，**永不进 seed 闭包**）。
 --

@@ -1,4 +1,17 @@
-module Base.String (split, join, lines, unlines, trim, trimLeft, trimRight, contains, startsWith, endsWith, repeat, substring) where
+module Base.String
+  ( contains
+  , endsWith
+  , join
+  , lines
+  , repeat
+  , split
+  , startsWith
+  , substring
+  , trim
+  , trimLeft
+  , trimRight
+  , unlines
+  ) where
 
 -- Base.String：字符串工具。底层只使用 strUnpack/strPack/strLength/++ 与 Base.List。
 -- import Base.Bool 只为让 `data Bool` 声明进入程序（typed codegen 生成 True/False 表达式所需）。

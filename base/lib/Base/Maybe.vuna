@@ -1,4 +1,4 @@
-module Base.Maybe (Maybe(..), fromMaybe, isJust, isNothing, maybe, mapJust) where
+module Base.Maybe (Maybe(..), fromMaybe, isJust, isNothing, mapJust, maybe) where
 
 -- Base.Maybe：可选值类型与消除/映射函数（不依赖 List）。
 -- 依赖 Base.Bool 只为让 `data Bool` 声明进入程序：typed codegen 要求

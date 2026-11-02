@@ -1,4 +1,4 @@
-module Vuna.Compiler.DtKind (classParamKind, arityFun, methodArgRigsOf) where
+module Vuna.Compiler.DtKind (arityFun, classParamKind, methodArgRigsOf) where
 
 -- Vuna.Compiler.DtKind：trait 类参数的 **kind 推断**（M19）。
 --

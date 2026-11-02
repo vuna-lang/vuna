@@ -62,7 +62,7 @@ nix run .#vuna-run-tests -- --vuna stable  # 编译器改用注册表别名 vuna
 - `corpus/stdlib/`（M11 起的标准库夹具，目录名沿用；源模块在 `base/`）：
   `--root ../base/lib` 下 `Base.*` 各模块与 do/IO 的正例两条路径、错误例；另有
   `test/corpus/fmt/check.sh`（第 32 段）覆盖格式化 golden、注释保留（行/块/嵌套/行尾）、
-  行宽折行与幂等；
+  行宽折行、模块头显式导出列表的逐项一行/排序与幂等；
 - `corpus/packages/`（M11.5，第 28–29 段）：`vuna compile --package` / `vuna build` /
   `vuna test` 的 workspace 正例（跨包 import + `[export]` + `app/Main.vuna` 入口）与
   缺依赖、依赖环、隐藏模块错误例；M12.5 增加 `03_reexport`（facade 包重导出标准库
@@ -103,6 +103,8 @@ nix run .#vuna-run-tests -- --vuna stable  # 编译器改用注册表别名 vuna
   按 `nix/tcb-forbidden.txt` 断言不含工具模块；查增量构建与 `12_fact` / `--dt` 行为抽查；
 - `checks.vuna-tests`：在沙箱里跑上述原生测试；
 - `checks.vuna-typecheck` / `checks.vuna-lint`：`vuna check .` 自检、`vuna lint` 零 finding；
+- `checks.vuna-fmt`：`vuna fmt --check` 覆盖 workspace 全包与 `examples/`（源码必须等于
+  规范输出）；
 - `checks.vuna-package`：`examples/multi` 的 build / test / fmt / doc + 根包 package 构建；
 - `checks.vuna-metrics`：机器无关 codegen 指标对 `nix/metrics.budget`；
 - `checks.vuna-index`：`vuna map` / `--find` / `--impact` / `api` 与索引缓存失效；

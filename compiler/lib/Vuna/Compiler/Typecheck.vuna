@@ -1,4 +1,16 @@
-module Vuna.Compiler.Typecheck (Ty, TVar, TCon, TFun, TApp, Scheme, lookupScheme, checkClauseArities, checkProgramInfoElab, checkProgramInfoElabOwners, exhaustiveWarningsFor) where
+module Vuna.Compiler.Typecheck
+  ( Scheme
+  , TApp
+  , TCon
+  , TFun
+  , TVar
+  , Ty
+  , checkClauseArities
+  , checkProgramInfoElab
+  , checkProgramInfoElabOwners
+  , exhaustiveWarningsFor
+  , lookupScheme
+  ) where
 
 -- Vuna.Compiler.Typecheck：core-v0 的 Hindley-Milner 风格类型检查。
 -- M7b 先覆盖单文件程序与显式顶层签名；模块类型名解析与自检在 M7c 处理。

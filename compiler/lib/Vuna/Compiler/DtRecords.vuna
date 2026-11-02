@@ -1,4 +1,25 @@
-module Vuna.Compiler.DtRecords (RecordInfo, recordInfoName, recordInfoParams, recordInfoFields, recordInfoDerivings, recordInfoCtor, lookupRecord, fieldNamesOf, fieldIndex, lookupProvided, hasDuplicateFieldNames, missingFieldMsg, unknownFieldMsg, duplicateFieldMsg, firstUnknownFieldMsg, checkProvidedFields, recordsOfDecls, recordDeclToData, desugarRecords, prepareDecls) where
+module Vuna.Compiler.DtRecords
+  ( RecordInfo
+  , checkProvidedFields
+  , desugarRecords
+  , duplicateFieldMsg
+  , fieldIndex
+  , fieldNamesOf
+  , firstUnknownFieldMsg
+  , hasDuplicateFieldNames
+  , lookupProvided
+  , lookupRecord
+  , missingFieldMsg
+  , prepareDecls
+  , recordDeclToData
+  , recordInfoCtor
+  , recordInfoDerivings
+  , recordInfoFields
+  , recordInfoName
+  , recordInfoParams
+  , recordsOfDecls
+  , unknownFieldMsg
+  ) where
 
 -- Vuna.Compiler.Records：`record` 的**语法降级**（M19 提取成共享模块）。
 --

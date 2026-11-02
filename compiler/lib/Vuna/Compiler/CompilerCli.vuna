@@ -1,4 +1,4 @@
-module Vuna.Compiler.CompilerCli (runCompilerCli, runCompilerCliFor, compilerUsageLines) where
+module Vuna.Compiler.CompilerCli (compilerUsageLines, runCompilerCli, runCompilerCliFor) where
 
 -- Vuna.Compiler.CompilerCli：编译器自己的 CLI（vuna-compiler）。
 --

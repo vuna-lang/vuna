@@ -1,4 +1,11 @@
-module Vuna.Compiler.Toml (TomlValue(..), TomlEntry(..), parseToml, parseTomlAt, lookupEntry, lookupEntryLine) where
+module Vuna.Compiler.Toml
+  ( TomlEntry(..)
+  , TomlValue(..)
+  , lookupEntry
+  , lookupEntryLine
+  , parseToml
+  , parseTomlAt
+  ) where
 
 -- Vuna.Compiler.Toml：TOML 子集解析器（M11.5 包管理基础件）。
 -- 支持：# 行注释（字符串内的 # 不算）、空行、[section]、[section.sub]、

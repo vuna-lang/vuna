@@ -1,4 +1,23 @@
-module Vuna.Compiler.Pkg (Root(..), rawRoot, rootDir, rootName, rootPackage, rootExports, Package(..), loadManifestAt, loadPackage, workspacePackages, packageRoots, packageEntry, packageManifest, packageDependencies, packageName, packageDir, packageExports, findManifestDir) where
+module Vuna.Compiler.Pkg
+  ( Package(..)
+  , Root(..)
+  , findManifestDir
+  , loadManifestAt
+  , loadPackage
+  , packageDependencies
+  , packageDir
+  , packageEntry
+  , packageExports
+  , packageManifest
+  , packageName
+  , packageRoots
+  , rawRoot
+  , rootDir
+  , rootExports
+  , rootName
+  , rootPackage
+  , workspacePackages
+  ) where
 
 -- Vuna.Compiler.Pkg：M11.5 包 / workspace 解析层（不碰 Loader / CLI）。
 -- 每个包 = 带 vuna.toml 的目录；workspace 根同时是子包（Cargo 风格：

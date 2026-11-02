@@ -1,4 +1,46 @@
-module Vuna.Compiler.Elab (DtDef, dtDefName, dtDefType, dtDefBody, DtCtor, dtCtorName, dtCtorFamily, dtCtorTelescope, dtCtorType, DtData, dtDataName, dtDataParams, dtDataCtors, DtClass, dtClassName, dtClassParams, dtClassMethods, dtClassFieldTys, DtGoal, dtGoalMeta, dtGoalSpan, dtGoalType, dtGoalCtx, DtProgram, dtProgDatas, dtProgDefs, dtProgGoals, dtProgSols, DtGoalInfo, dtGoalInfoSpan, dtGoalInfoGoal, dtGoalInfoCtx, elabProgram, elabProgramFull, goalsOfProgram, checkInstanceHeads, elabInstanceBodies, dictTypeName, dictCtorName, eraseIndexMask, indexErasureCandidates) where
+module Vuna.Compiler.Elab
+  ( DtClass
+  , DtCtor
+  , DtData
+  , DtDef
+  , DtGoal
+  , DtGoalInfo
+  , DtProgram
+  , checkInstanceHeads
+  , dictCtorName
+  , dictTypeName
+  , dtClassFieldTys
+  , dtClassMethods
+  , dtClassName
+  , dtClassParams
+  , dtCtorFamily
+  , dtCtorName
+  , dtCtorTelescope
+  , dtCtorType
+  , dtDataCtors
+  , dtDataName
+  , dtDataParams
+  , dtDefBody
+  , dtDefName
+  , dtDefType
+  , dtGoalCtx
+  , dtGoalInfoCtx
+  , dtGoalInfoGoal
+  , dtGoalInfoSpan
+  , dtGoalMeta
+  , dtGoalSpan
+  , dtGoalType
+  , dtProgDatas
+  , dtProgDefs
+  , dtProgGoals
+  , dtProgSols
+  , elabInstanceBodies
+  , elabProgram
+  , elabProgramFull
+  , eraseIndexMask
+  , goalsOfProgram
+  , indexErasureCandidates
+  ) where
 
 -- Vuna.Compiler.Elab：DT 精化器（双向检查 + 一阶元变量 + 类型级隐式插入 + M14 索引族）。
 -- 输入是 parser 的原始声明（不经 Loader）：名字解析在精化器里完成。

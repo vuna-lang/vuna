@@ -1,4 +1,4 @@
-module Vuna.Compiler.Parser (parseSource, parseExpressionSource) where
+module Vuna.Compiler.Parser (parseExpressionSource, parseSource) where
 
 -- vuna 源码 parser：offside layout，返回 AST 与 imports。
 import Vuna.Compiler.Common

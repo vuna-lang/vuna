@@ -1,4 +1,10 @@
-module Vuna.Compiler.DtDerive (builtinTraitDecls, builtinShowInstances, builtinEqInstances, builtinOrdInstances, expandDerivings) where
+module Vuna.Compiler.DtDerive
+  ( builtinEqInstances
+  , builtinOrdInstances
+  , builtinShowInstances
+  , builtinTraitDecls
+  , expandDerivings
+  ) where
 
 -- Vuna.Compiler.DtDerive：`deriving` 的**实例生成**（M19）。
 --

@@ -1,4 +1,12 @@
-module Prelude (module Base.Pair, module Base.Bool, module Base.List, module Base.Maybe, module Base.Result, module Base.String, module Base.Monad) where
+module Prelude
+  ( module Base.Bool
+  , module Base.List
+  , module Base.Maybe
+  , module Base.Monad
+  , module Base.Pair
+  , module Base.Result
+  , module Base.String
+  ) where
 
 -- Prelude：默认导入（自动 import）的精选门面。
 --

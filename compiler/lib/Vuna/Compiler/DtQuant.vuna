@@ -1,4 +1,4 @@
-module Vuna.Compiler.DtQuant (quantifyTraitSig, quantifyTopSig, definedNames) where
+module Vuna.Compiler.DtQuant (definedNames, quantifyTopSig, quantifyTraitSig) where
 
 -- Vuna.Compiler.DtQuant：把签名里的**自由小写名**量化为隐式类型参数（M20）。
 --

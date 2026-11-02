@@ -35,7 +35,8 @@
   - `vuna test [DIR]`：解释执行 `test/*.vuna`，`main : String` 空串通过，非空为失败信息；
   - `vuna fmt [--check] [PATH]...`：`Vuna.Fmt` 格式化（2 空格缩进、幂等、可重新
     parse；M11.6 起**保留行注释/块注释**，超过 100 列时在 RHS、列表字面量、
-    函数应用参数与中缀链处折行）；省略 PATH 时格式化 workspace 内所有包的
+    函数应用参数与中缀链处折行；模块头显式导出列表逐项一行并按名排序，项注释随项
+    移动）；省略 PATH 时格式化 workspace 内所有包的
     `lib/app/test`（拆包后自动覆盖 `compiler/lib`）；
   - `vuna repl [--root DIR]...`：行式 REPL，定义累积、表达式立即走完整
     loader/类型检查/解释器路径（支持 import/记录/trait/do）；

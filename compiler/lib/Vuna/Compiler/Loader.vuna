@@ -1,4 +1,30 @@
-module Vuna.Compiler.Loader (Module, moduleNameOf, modulePackageOf, moduleImportsOf, moduleImplicitImportsOf, moduleAllImportsOf, moduleDeclsOf, moduleExportsOf, ExportEntry, entryKind, entryPublic, entryTarget, entryParent, Project, projectEntryDecls, projectEntryImports, projectEntryAllImports, projectModules, loadProject, loadProjectModules, resolveProject, loadProgram, loadProgramRaw, loadProgramOrdered, loadProgramRawOrdered) where
+module Vuna.Compiler.Loader
+  ( ExportEntry
+  , Module
+  , Project
+  , entryKind
+  , entryParent
+  , entryPublic
+  , entryTarget
+  , loadProgram
+  , loadProgramOrdered
+  , loadProgramRaw
+  , loadProgramRawOrdered
+  , loadProject
+  , loadProjectModules
+  , moduleAllImportsOf
+  , moduleDeclsOf
+  , moduleExportsOf
+  , moduleImplicitImportsOf
+  , moduleImportsOf
+  , moduleNameOf
+  , modulePackageOf
+  , projectEntryAllImports
+  , projectEntryDecls
+  , projectEntryImports
+  , projectModules
+  , resolveProject
+  ) where
 
 -- Vuna.Compiler.Loader：模块加载、名字解析与 flatten。
 import Vuna.Compiler.Common

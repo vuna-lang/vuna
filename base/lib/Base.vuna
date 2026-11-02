@@ -1,4 +1,15 @@
-module Base (module Base.Pair, module Base.Bool, module Base.List, module Base.Maybe, module Base.Result, module Base.String, module Base.Sort, module Base.Map, module Base.Monad, module Base.IO) where
+module Base
+  ( module Base.Bool
+  , module Base.IO
+  , module Base.List
+  , module Base.Map
+  , module Base.Maybe
+  , module Base.Monad
+  , module Base.Pair
+  , module Base.Result
+  , module Base.Sort
+  , module Base.String
+  ) where
 
 -- Vuna：stdlib 包门面（M11-C）。整模块重导出核心模块，保留各模块的抽象性
 -- （例如 Map/IO 的构造器不因门面而公开）。编译器/用户程序可以只 `import Vuna`。

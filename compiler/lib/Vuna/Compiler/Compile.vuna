@@ -1,4 +1,20 @@
-module Vuna.Compiler.Compile (effectiveRoots, compileFileTyped, compileFileTypedExec, checkFile, compileFileTypedIn, compileFileTypedExecIn, checkFileIn, checkPackageIn, compileFileDt, checkFileDt, checkProjectDt, compileProjectDt, checkLibraryDt, dtMainFile, dtProjectFiles) where
+module Vuna.Compiler.Compile
+  ( checkFile
+  , checkFileDt
+  , checkFileIn
+  , checkLibraryDt
+  , checkPackageIn
+  , checkProjectDt
+  , compileFileDt
+  , compileFileTyped
+  , compileFileTypedExec
+  , compileFileTypedExecIn
+  , compileFileTypedIn
+  , compileProjectDt
+  , dtMainFile
+  , dtProjectFiles
+  , effectiveRoots
+  ) where
 
 -- Vuna.Compiler.Compile：编译入口（供 CompilerCli / CLI / 测试使用）。
 --

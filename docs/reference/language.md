@@ -55,8 +55,17 @@
   ```vuna
   module Vuna.Math where           -- 省略导出列表 = 导出全部（v0 兼容）
   module Vuna.Math () where        -- 显式导出空集
-  module Vuna.Math (three, Nat(..), module Vuna.Compiler.Common, Vuna.Compiler.Lexer.lexSource) where
+  module Vuna.Math
+    ( three
+    , Nat(..)
+    , module Vuna.Compiler.Common
+    , Vuna.Compiler.Lexer.lexSource
+    ) where
   ```
+
+  `vuna fmt` 会把显式导出列表规范为：导出项按字面文本的 ASCII 字典序排序（`module B`
+  整模块重导出排最后）；单行超过 100 列或列表内含注释时逐项一行（逗号前置），否则保持
+  单行。排序只影响书写顺序——导出仍是集合，语义不变。
 
   模块名必须与路径推导出的模块名一致（`lib/Vuna/Math.vuna` ⇔ `Vuna.Math`），不一致是
   硬错误。导出项按「类型名/值名」两套命名空间解析（`module B` 是整模块重导出，不属于

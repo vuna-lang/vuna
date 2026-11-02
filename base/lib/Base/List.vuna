@@ -1,4 +1,23 @@
-module Base.List (List(..), append, reverse, length, map, filter, foldl, foldr, concatMap, flatMap, mem, memName, lookupPair, zip, take, drop, range, mapMaybe) where
+module Base.List
+  ( List(..)
+  , append
+  , concatMap
+  , drop
+  , filter
+  , flatMap
+  , foldl
+  , foldr
+  , length
+  , lookupPair
+  , map
+  , mapMaybe
+  , mem
+  , memName
+  , range
+  , reverse
+  , take
+  , zip
+  ) where
 
 -- Base.List：列表类型与常用操作（Base 语义迁移 + 常用补充）。
 -- import Base.Bool 只为让 `data Bool` 声明进入程序（typed codegen 生成 True/False 表达式所需）。
