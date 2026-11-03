@@ -1,7 +1,8 @@
 # 限制与已知边界
 
 本文汇总当前实现的限制与边界条件（原 README「限制与路线」节迁入）。后续规划见
-[docs/roadmap.md](../roadmap.md)，DT 设计见 [docs/dt-core.md](../dt-core.md)。
+[docs/roadmap.md](../roadmap.md)，逐条债务 / 缺陷与所属阶段见 [debt.md](debt.md)，
+DT 设计见 [docs/dt-core.md](../dt-core.md)。
 
 ## 编译模型
 
@@ -88,9 +89,10 @@
     实例」）；`missingInstance` 级诊断细化留待后续。**DT 要求顶层定义有类型签名**：新增
     代码同样要写，否则报 `DT: expected a type signature for ...`。
   - **高阶/开放元变量解**：`solveMetaHo` 覆盖常见形状（M20.5），其余仍受限。
-  - **覆盖率（穷尽性/冗余）检查对 TCB 三包**（`vuna` / `vuna-compiler` / `vuna-base`）
-    **只告警不报错**（编译器源码是执行代码）；用户包与夹具仍严格。终止性检查同机制
-    （`dtTrustsTermination`）。
+  - **覆盖率（穷尽性/冗余）与终止性检查对 TCB 三包**（`vuna` / `vuna-compiler` /
+    `vuna-base`）**实际是静默跳过**：按包名字符串 allowlist 判定，既不报错也不输出任何
+    warning（无 warning 通道）；用户包与夹具仍严格。已登记 debt **B01/B17**，M25 改为
+    显式、可审计、不可伪造的信任声明（manifest / seed 构建期 flag）。
   - **单文件 `List` 桥接**：单文件程序的 `List` 若由程序自己声明，`getArgs` / `readDir`
     等效果内建返回的列表由 codegen 桥接回该族；没有声明 `List` 的单文件程序不能使用
     这些内建。
@@ -103,8 +105,10 @@
 - 可执行入口（`vuna build` / `--split` / `seed`）要求 `main : IO a`，由运行时执行动作
   （没有公开的 `runIO` / `unsafeRunIO`）；普通用户包不能直接调用 effectful 内建
   （`print` / `readFile` / `exit` / ...），只能经 `Base.IO`（编译器 / 产品 CLI /
-  `vuna-base` 自身在包级 allowlist 内）；`vuna interp` / `vuna test` / `--root` 的**入口
-  文件**同样禁止直接调用 effectful 内建（只有被加载的 base/compiler 模块内部可用）。
+  `vuna-base` 自身在包级 allowlist 内）；该 allowlist 按**包名字符串**判定、可伪造，
+  raw `--root` 的依赖模块也能绕过——debt **B16**，M25/M27 改为 capability / 显式声明。
+  `vuna interp` / `vuna test` / `--root` 的**入口文件**同样禁止直接调用 effectful 内建
+  （只有被加载的 base/compiler 模块内部可用）。
   `vuna interp` 只做**纯**核心求值：任何 `main : IO a` 一律报错并提示 `compile` +
   运行产物；纯 `main : Int/String/Bool` 结果 show 仍保留为调试约定。IO 组合统一用
   `Functor`/`Monad` trait（`fmap`/`bind`/`pure`、`>>=`、`do`），不导出
@@ -126,10 +130,11 @@
   名）；只处理从行首 `if` 起始的规范布局；多行分支 if 链、非最后子句/alt 上的冗余 `case`
   只报告不自动修复；`--fix` 遇到注释、tab、CRLF 也跳过。`vuna lint` **必须显式给路径**，
   无参数是用法错误（退出码 2）。
-- `vuna fmt --check` 省略 PATH 时按 workspace 包约定扫描各包 `lib/app/test`；若某包缺其中
-  某个目录（本仓库 `compiler/` 没有 `test/`、`base/` 没有 `app/`），当前会抛
-  `Failure("isDirectory: ...")`。**workaround：显式给 PATH**（`checks.vuna-package` 的
-  fmt 检查都是显式传目录）。
+- `vuna fmt --check` 省略 PATH 时按 workspace 包约定扫描各包 `lib/app/test`（缺目录的
+  崩溃已修）；但**非包目录 / 不存在路径仍会抛宿主异常**（如
+  `Failure("readFile: lib")`），`vuna map` 在同类场景会静默输出空结果。登记 debt **C12**，
+  M30 在 CLI 错误层统一改成可操作诊断。`vuna doc` 也忽略包的 `[export]`（输出全部模块），usage 已删除未实现的注释开关——
+  debt **C13**，M30 修。
 
 ## 命名与构建（M12.8）
 

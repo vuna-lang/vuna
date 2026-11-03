@@ -110,7 +110,7 @@ fi
 
 # 8) 缓存自动失效：touch 一个源文件后，manifest 必须被重写（内容变化）。
 before=$(cat .local/index/manifest.txt)
-touch compiler/lib/Vuna/Compiler/Builtins.vuna
+touch compiler/lib/Vuna/Compiler/Loader/Resolve.vuna
 "$VUNA" map >/dev/null 2>&1 || bad "vuna map after touch failed"
 after=$(cat .local/index/manifest.txt)
 if [ "$before" = "$after" ]; then

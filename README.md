@@ -80,7 +80,7 @@ vuna interp [--root DIR]... <file.vuna>   # 精化后核心求值（纯；不执
 vuna test [DIR]                           # 运行 test/*.vuna（DT 核心求值，main : String 空串通过）
 vuna fmt [--check] [PATH]...
 vuna repl [--root DIR]...
-vuna doc [--with-comments] [DIR [OUT]]    # 默认 DIR/docs/api.md
+vuna doc [DIR [OUT]]                      # 默认 DIR/docs/api.md
 vuna map [--modules | --find <M.name> | --impact <M.name>]  # 模块总览 / 定位符号 / 改动影响面
 vuna api <Module.name>                    # 某模块的签名面（含注释与行号）
 vuna help, -h
@@ -154,8 +154,9 @@ vuna help, -h
 | [docs/reference/bootstrap.md](docs/reference/bootstrap.md) | 种子策略、rotation 流程、fixed point、TCB 边界 |
 | [docs/reference/testing.md](docs/reference/testing.md) | 测试体系、corpus 分类、nix checks 清单、性能基准 |
 | [docs/reference/limits.md](docs/reference/limits.md) | 当前限制与已知边界（编译模型 / IO / 工具链细节） |
+| [docs/reference/debt.md](docs/reference/debt.md) | 技术债务与缺陷登记（A 旧架构 / B 临时决定 / C bug / D 未实现 / E 基建，按 M25–M30 关闭） |
 | [docs/history.md](docs/history.md) | 里程碑历史与已完成阶段细节 |
-| [docs/roadmap.md](docs/roadmap.md) | 路线图：终态（单一 DT 路径）+ M21–M24.7 阶段状态总览与当前阻碍 + 决策变更表 |
+| [docs/roadmap.md](docs/roadmap.md) | 路线图：终态 + 正本清源阶段（M25–M30）+ 不排期轨道（F1–F4）+ 决策变更表 |
 | [docs/dt-core.md](docs/dt-core.md) | DT 核心类型论与精化器设计稿（M13–M14） |
 
 文档分层规则：README 只保留定位/上手/目录/硬约束/导航；细节在 `docs/reference/`；

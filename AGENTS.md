@@ -68,11 +68,11 @@
 
 ```console
 nix build .#vuna --out-link result   # 产品 CLI；.#vuna-compiler / .#vuna-seed 同理
-nix flake check                      # tests/package/metrics/typecheck/lint/seed-selfhost
+nix flake check                      # 12 项：3 packages + 9 checks
 nix run .#vuna-run-tests [-- --list | --only dt]   # 原生测试；nix run .#vuna-bench -- --quick
 vuna check .                         # 包级类型检查（自检）；vuna build . → .output/bin/<包名>
 vuna fmt --check <PATH>...           # 格式化检查（务必显式给路径）；vuna lint <file>...
-vuna doc [--with-comments] [DIR [OUT]]  # API 文档（默认 DIR/docs/api.md，gitignored）
+vuna doc [DIR [OUT]]                  # API 文档（默认 DIR/docs/api.md，gitignored）
 vuna interp <file.vuna>              # DT 精化 + 核心求值（纯；只展示 Int/String/Bool）
 vuna seed <OUT> compiler             # 逐模块 DT split（必须显式 OUT；正式流程用 nix/seed-rotate.sh）
 ```
@@ -96,6 +96,7 @@ CLI 入口；`seed/` = 提交入库的多文件 OCaml 信任锚点（生成物�
 - 仓库探索（按场景选工具、探索后落盘）：技能 `.agents/skills/repo-navigation/SKILL.md`
 - 自举与种子：[bootstrap.md](docs/reference/bootstrap.md)；测试与 CI：[testing.md](docs/reference/testing.md)；
   已知边界：[limits.md](docs/reference/limits.md)
+- 技术债务与缺陷登记：[debt.md](docs/reference/debt.md)（M25–M30 关闭清单，A/B/C/D/E 五类）
 - 路线图 / 历史 / DT 状态：[docs/roadmap.md](docs/roadmap.md)（「阶段状态总览」）、
   [docs/history.md](docs/history.md)、[docs/dt-core.md](docs/dt-core.md)
 

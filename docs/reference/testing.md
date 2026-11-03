@@ -95,14 +95,18 @@ DT 精化 + 擦除 codegen，`build` / `build --split` / `seed` = DT codegen）�
 
 ## Nix checks 清单
 
-`nix flake check` 覆盖（`nix/checks/default.nix`；主体是 `nix/checks/<name>.sh`）：
+`nix flake check` 实测 **12 项**：3 个 package 构建（`vuna` / `vuna-compiler` /
+`vuna-seed`）+ 9 个 check 语义项（`context-budget`、`seed-selfhost`、`vuna-fmt`、
+`vuna-index`、`vuna-lint`、`vuna-metrics`、`vuna-package`、`vuna-tests`、
+`vuna-typecheck`；主体是 `nix/checks/<name>.sh`）。语义项：
 `seed-selfhost`（seed→stage0→stage1→stage2 逐字节一致、TCB 黑名单、增量构建与行为抽查）、
 `vuna-tests`（沙箱跑上述原生测试）、`vuna-typecheck` / `vuna-lint`（`vuna check .` 自检、
 lint 零 finding）、`vuna-fmt`（workspace 全包与 `examples/`）、`vuna-package`
 （`examples/multi` 的 build/test/fmt/doc + 根包构建）、`vuna-metrics`（seed 闭包的
 codegen 指标对 `nix/metrics.budget`）、`vuna-index`（`map` / `--find` / `--impact` /
 `api` 与缓存失效）、`context-budget`（入口文档字节数与单模块行数对 `nix/context.budget`）。
-M24 后这些 check 的脚本已按单路径 CLI（无 `compile --package`）更新。
+M24 后这些 check 的脚本已按单路径 CLI（无 `compile --package`）更新；此前文档
+口径漏算 3 个 package 构建（debt C24/E02）。
 
 ## Nix 命令与本地开发
 
@@ -111,11 +115,15 @@ nix build                  # 默认 = vuna；.#vuna-compiler / .#vuna-seed 同�
 nix flake check            # 全部 checks
 nix develop                # 全量开发环境（工具链 + vuna-seed）；.#ocaml 只有 OCaml 工具链
 nix build .#vuna --out-link result-vuna      # 产品 CLI（stage 1）
-nix build .#vuna-compiler --out-link result-compiler  # 编译器 CLI
-nix build .#vuna-seed --out-link result-seed          # stage 0 种子
-VUNA=$PWD/result-vuna/bin/vuna VUNA_SEED=$PWD/result-compiler/bin/vuna-compiler \
+nix build .#vuna-compiler --out-link result-compiler  # 编译器 CLI（stage 1）
+nix build .#vuna-seed --out-link result-seed          # stage 0 种子编译器
+VUNA=$PWD/result-vuna/bin/vuna VUNA_SEED=$PWD/result-seed/bin/vuna-seed \
   sh test/run-tests.sh
 ```
+
+**`result*` 可能过期**：out-link 只是手工指到某次构建，源码/seed 变了不会自动更新
+（实测 `result` 与 `result-seed` 可差上百行）。跑测试或基准前先重建对应的
+`nix build ... --out-link`；这是 debt **E03**，M25 会加新鲜度检查与统一入口。
 
 `devShells.default` = `ocaml`/`ocamlopt` + `vuna-seed`；`devShells.ocaml` 只有工具链，
 种子重建或损坏时用它。stage 1 的 `vuna` 不进任何 devShell，避免种子失效时连 shell 都

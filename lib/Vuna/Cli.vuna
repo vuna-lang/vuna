@@ -43,7 +43,7 @@ toolUsageLines prog =
     ++ " repl [--root DIR]...                 交互式 REPL\n"
     ++ "  "
     ++ prog
-    ++ " doc [--with-comments] [DIR [OUT]]    生成 API 文档（默认 OUT=DIR/docs/api.md）\n"
+    ++ " doc [DIR [OUT]]    生成 API 文档（默认 OUT=DIR/docs/api.md）\n"
     ++ "  "
     ++ prog
     ++ " map [--modules]                      模块总览（索引缓存在 .local/index/，自动新鲜度判定）\n"

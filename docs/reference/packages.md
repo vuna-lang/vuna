@@ -123,7 +123,7 @@ modules = [
 | `vuna test [DIR]` | 用 DT 核心求值执行包内 `test/*.vuna`（`main : String`，空串通过） |
 | `vuna fmt [--check] [PATH]...` | 格式化 |
 | `vuna repl [--root DIR]...` | 交互式 REPL |
-| `vuna doc [--with-comments] [DIR [OUT]]` | 生成 Markdown API 文档 |
+| `vuna doc [DIR [OUT]]` | 生成 Markdown API 文档 |
 | `vuna map [--modules]` / `--find` / `--impact` | 源码符号索引（定义、引用者、建议测试） |
 | `vuna api <Module.name>` | 某模块的签名面（含注释与行号） |
 | `vuna help`, `vuna -h` | 用法 |

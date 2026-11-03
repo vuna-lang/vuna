@@ -1302,6 +1302,86 @@ M24.7 之后 `compiler/lib/Vuna/Compiler/` 是 25 个扁平模块，四个超大
 - `base/` 保持不动是**有意决定**：公开模块名 = API，重组会破坏所有用户 import；
   非公开实现如果要拆，只能在 `Base.*` 内部拆分并保持导出面。
 - 代码注释里把这次重组标为「M25 前从 Loader.vuna 拆出」/「M25 重组」；本文档统一称
-  **M24 后维护**，roadmap 的 M25 是模块系统 v3，两者无关（不要把重组当 M25 交付）。
+  **M24 后维护**，roadmap 的 **F1（原 M25）**是模块系统 v3，两者无关（不要把重组当
+  M25/F1 交付）。
 - 旧模块名只保留在历史叙述（本目录及 `dt-parity.md` 的「原 X」注释）中；当前模块面
   以 `compiler/vuna.toml` 的 `[export]` 与本文 §3 为准。
+
+## M24 后维护：审计与路线图重排（2026-11）
+
+### 1. 四份只读审计 → 债务账本
+
+`M24` 单路径与源码重组之后，仍有一批「为兼容旧 HM / 旧架构而保留的妥协」「迁移期临时
+决定」「可复现 bug」「未实现能力」「基建缺口」散落在代码与文档里。本轮做了四份只读审计
+（语言核心 39 条、codegen/loader/driver 27 条、库/包/工具链 38 条、测试/CI 28 条），合并
+去重后落盘为 [reference/debt.md](reference/debt.md)（**141 行，91 条**）：
+
+| 组 | 主题 | 条数 |
+| --- | --- | --- |
+| A | 旧架构 / 兼容妥协（HM 遗留） | 15（A01–A15） |
+| B | 升级期临时决定 / 精化器折中 | 18（B01–B18） |
+| C | 可复现缺陷（bug） | 25（C01–C25） |
+| D | 未实现能力 / 语言缺口 | 18（D01–D18） |
+| E | 验证 / CI / 文档基建缺口 | 15（E01–E15） |
+
+每条给证据（可复现命令或 file:line）与归属阶段；编号以 debt.md 实际内容为准。审计证据
+原文较长，留在 gitignored 的 `_scratch/audit-*.md`，不提交。
+
+### 2. 路线图重排：M25–M30 正本清源 + F1–F4
+
+原 roadmap 把 M25–M28 当「功能扩张」顺序阶段（模块系统 v3 / 运行时 / 并发 / 生态）。
+审计结论是：M24 只完成了「路径唯一」，旧架构与迁移折中仍在多处透出，先扩张会把债务
+固化。因此重排为：
+
+- **M25 健全性与验证基建**（信任边界、诊断通道、语义一致性、CI/seed 漂移/result 新鲜度）；
+- **M26 单一路径与装配收敛**；**M27 内置/原语/效应边界**；**M28 类型系统地基**；
+  **M29 相等/实例/证明 ergonomics**；**M30 工具链与包**；
+- 原 M25–M28 的能力项改为**不排期的 F1–F4**（模块系统 v3 / 运行时与多后端 / 效应并发 /
+  生态），只保留方向与前置条件。
+
+已完成阶段只保留一句话摘要，目标/范围/验收细节收敛到 history。**M 编号 = 可排期阶段、
+F 编号 = 未来轨道不占 M 编号** 的语义变更已记入 roadmap「决策变更」；debt.md 是阶段
+「范围」的关闭清单（每阶段列 debt ID）。
+
+### 3. 本轮顺手修
+
+- 删除 tracked 的 0 字节 `compiler/lib/Vuna/Compiler/Builtins.vuna`（重组遗留的幻影模块，
+  debt C14）；
+- `nix/tcb-check.sh` 改为**前缀匹配**：原规则只查 `Vuna_d<短名>.ml`，重组后的嵌套模块
+  （如 `Vuna_dFmt_dExpr.ml`）漏检（debt C09）；
+- `nix/index-check.sh` 探针改用**真实源文件**（`Loader/Resolve.vuna`），不再硬编码旧符号 /
+  touch 空模块（debt C10）；
+- CLI usage 删除未实现的 `doc --with-comments` 宣传（debt C13 的一半；`doc` 忽略
+  `[export]` 仍留 M30）。
+
+### 4. 本轮文档同步（与 debt/roadmap 对齐）
+
+- `docs/reference/limits.md`：删除过时的 `fmt --check` isDirectory 崩溃 workaround，
+  改为「非包目录 / 不存在路径仍抛宿主异常、`map` 静默空输出」（debt C12）；TCB「只告警」
+  改为事实「静默跳过、无 warning 通道」（debt B01/B17）；补 effect allowlist 包名可伪造
+  （debt B16）；`doc --with-comments` 与 `[export]`（debt C13）。
+- `docs/reference/testing.md`：flake check 清单改为实测 **12 项**（3 个 package：
+  `vuna` / `vuna-compiler` / `vuna-seed` + 9 个 check 语义项），并修正示例里
+  `VUNA_SEED` 指向（`result-seed/bin/vuna-seed`）；补 `result*` 可能过期、先
+  `nix build ... --out-link`（debt E03）。
+- `README.md` / `AGENTS.md` / `docs/reference/packages.md`：删除 `doc --with-comments`
+  宣传（改为 `vuna doc [DIR [OUT]]`）；AGENTS 文档导航与 README 导航表加 debt.md 链接；
+  AGENTS 的 flake 注释改为 12 项。
+- 此前 history 中「`nix flake check` 9 项全绿」是文档口径错误：实际一直是 12 项
+  （3 packages + 9 checks，debt C24/E02）；历史段落保留原样，现行清单以 testing.md 为准。
+
+### 5. 验证
+
+- 1076 checks / 34 段、53 dt 正例 / 35 dt_err 负例不变；seed 55 `.ml` / 56 文件不变。
+- `sh nix/context-budget.sh .` 绿：coldstart 28402/29200、agents 104/104、arch 155/178、
+  readme 167/168、max_ref 204/208、max_module 823/840；相对链接与代码围栏自查通过。
+- `nix flake check`（12 项）由 Lead 本轮收尾复跑；`vuna check .` / fmt / lint / index 不受
+  纯文档改动影响。
+
+### 6. 边界与遗留
+
+- debt.md 是「哪些妥协还在、由谁在哪个阶段关闭」的唯一账本；新增债务必须带证据与阶段，
+  关闭时改阶段列而不删条目。
+- M25–M30 的具体范围以 roadmap 为准；本轮只做文档一致性，没有关闭任何运行时债务
+  （C09/C10/C14 已修，其余登记待排期）。
+- 审计原文与探针在 `_scratch/`（gitignored）；需要复核时按 debt 证据列重跑。
