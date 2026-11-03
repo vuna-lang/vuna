@@ -11,9 +11,9 @@ type 'a0 t_Dict_uBase_dShow_dShow = C_Dict_uBase_dShow_dShow_MkDict_uBase_dShow_
 
 let v_Base_dShow_dBase_dShow_dShow_uBase_dShow_dShow_uInt = (C_Dict_uBase_dShow_dShow_MkDict_uBase_dShow_dShow ((fun x -> (bi_strFromInt x))))
 
-let v_Base_dShow_dBase_dShow_dShow_uBase_dShow_dShow_uString = (C_Dict_uBase_dShow_dShow_MkDict_uBase_dShow_dShow ((fun s -> ((bi_concat "\"") ((bi_concat s) "\"")))))
+let v_Base_dShow_dBase_dShow_dShow_uBase_dShow_dShow_uString = (C_Dict_uBase_dShow_dShow_MkDict_uBase_dShow_dShow ((fun s -> (dt_show_string s))))
 
-let v_Base_dShow_dBase_dShow_dShow_uBase_dShow_dShow_uBool = (C_Dict_uBase_dShow_dShow_MkDict_uBase_dShow_dShow ((fun b -> (if b then "True" else "False"))))
+let v_Base_dShow_dBase_dShow_dShow_uBase_dShow_dShow_uBase_dBool_dBool = (C_Dict_uBase_dShow_dShow_MkDict_uBase_dShow_dShow ((fun b -> (if b then "True" else "False"))))
 
 let v_Base_dShow_dshow = (fun _ud -> (fun x0 -> (match _ud with
   | C_Dict_uBase_dShow_dShow_MkDict_uBase_dShow_dShow (dtb__0) -> (dtb__0 x0)

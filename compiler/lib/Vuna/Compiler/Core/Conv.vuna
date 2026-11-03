@@ -8,8 +8,6 @@ module Vuna.Compiler.Core.Conv
   , convValueLists
   , etaLeft
   , etaRight
-  , isBoolNeutral
-  , isBoolTyName
   , mismatchAt
   , solveMeta
   , solveMetaHead
@@ -105,10 +103,7 @@ else case a of
       in convFuel (fuel - 1) defs sols (depth + 1) (applyClosure clo v) (applyClosure clo2 v)
     _ => etaRightFuel (fuel - 1) defs sols depth name clo b
   VNeutral n => case b of
-    -- 预置 Bool 桩与 Base.Bool.Bool 视为同一类型（嵌套位置也要相等：`Result (Pair Bool _)`）。
-    VNeutral n2 =>
-      if isBoolNeutral n && isBoolNeutral n2 then Ok sols
-      else convNeutralFuel (fuel - 1) defs sols depth n n2 a b
+    VNeutral n2 => convNeutralFuel (fuel - 1) defs sols depth n n2 a b
     VLam name2 rig2 clo2 => etaLeftFuel (fuel - 1) defs sols depth a name2 clo2
     _ => mismatchAt depth a b
   VInt n => case b of
@@ -155,15 +150,6 @@ else
   let
     v = freshVar name depth
   in convFuel (fuel - 1) defs sols (depth + 1) (applyClosure clo v) (applyValue b v)
-
-isBoolTyName : String -> Bool
-isBoolTyName n = if n == "Bool" then True else n == "Base.Bool.Bool"
-
-isBoolNeutral : Neutral -> Bool
-isBoolNeutral n = case n of
-  NGlobal g sp => if sp == [] then isBoolTyName g else False
-  NVar name lvl sp => if sp == [] then isBoolTyName name else False
-  _ => False
 
 convNeutralFuel : Int -> HashTbl Term -> Sols -> Int -> Neutral -> Neutral -> Value -> Value -> Result Sols
 convNeutralFuel fuel defs sols depth n1 n2 v1 v2 = if fuel <= 0 then Err "DT: internal: conv fuel exhausted"

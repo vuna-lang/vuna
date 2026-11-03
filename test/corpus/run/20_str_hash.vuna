@@ -1,0 +1,3 @@
+-- M27 / C19：strHash 是固定 1024 桶的 byte 哈希（interp 与 runtime 同公式）。
+main : Int
+main = strHash "abc"

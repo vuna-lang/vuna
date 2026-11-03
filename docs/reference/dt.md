@@ -98,16 +98,18 @@ sym a b e = case e of
   推断位（实参、`if` 分支、let value），做法是建元变量当期望类型。
 - **内建字面量模式（M19）**。`Bool` 的 `case` 降级成 `if`；`Int` / `String` 字面量分支
   降级成嵌套 `if` 链，因此**必须有一个变量/通配兜底分支**。
-- **Bool（M21/M22.2）**。`data Bool` 的 `True`/`False` 精化成核心 `TBool`，Bool 族不生成
-  OCaml 变体，`if`/`case`/`main : Bool` 按族**短名**识别；`True`/`False` 必须来自
-  `Base.Bool` 或本地 `data Bool`，prelude 只保留 `Bool` 类型别名（prelude 里 `==` /
-  比较的签名需要它）。
+- **Bool（M21/M22.2/M27）**。`Bool` 是 base 的普通 `data` 声明，canonical 身份是完整
+  符号 `Base.Bool.Bool`（`True` / `False` = `Base.Bool.True` / `Base.Bool.False`）；
+  `True`/`False` 精化成核心 `TBool`，canonical Bool 族不生成 OCaml 变体（运行时表示就是
+  OCaml `bool`）。`if` / 字面量 `case` / `main : Bool` 一律按 canonical 符号判定，
+  **不再有族短名（`lastName`）判定、`Base.Bool` 双身份或 prelude 桩**。用户写的同名
+  `data Bool` 是另一个普通族（模块内 mangle 成 `<Module>.Bool`），不受特殊对待。
 - **内建泛化（M19/M22.2/M24.7）**。`==`/`/=` 与 `<`/`<=`/`>`/`>=` 在饱和应用处按实参
-  类型特化：`Int` 走具体运行时，`String`/`Bool` 的 `==` 走 `bi_eq_str`/泛型、比较走
-  泛型运行时；其它类型（含用户 data）走 `Eq`/`Ord` 字典——具体类型无实例或没有
-  对应类可见（只可能出现在显式绕开 `Prelude` 的上下文）时退回泛型运行时兜底。刚性类型
-  参数延迟提升成 `{d : Dict_C a}`；库里的 `Int`/`String`/`Bool` 实例与 `deriving`
-  实例参与搜索。
+  类型特化：`Int` 走具体运行时，`String` 的 `==` 走 `bi_eq_str`，`Bool` 走库的 `Eq Bool`
+  实例，比较的 `String`/`Bool` 走泛型运行时；其它类型（含用户 data）走 `Eq`/`Ord`
+  字典——具体类型无实例或没有对应类可见（只可能出现在显式绕开 `Prelude` 的上下文）时
+  退回泛型运行时兜底。刚性类型参数延迟提升成 `{d : Dict_C a}`；库里的
+  `Int`/`String`/`Bool` 实例与 `deriving` 实例参与搜索。
 - **等式搬运与不可达分支（M24.5）**。`case` 打在裸形参或包装族上时，把 scrutinee 的
   值与构造子结果值再合一（`dt/46_rep`）；分支上下文含空归纳族（如 `Fin Zero`）时该
   分支可省略（`dt/47_lookup_env`）；`plus` 一类类型级函数的定义性相等可用于 `Refl`
@@ -120,15 +122,19 @@ sym a b e = case e of
 - **`data` kind** 必须是 `... -> Type` 箭头链，构造子结果类型回到本族；族名与完整 Pi
   构造子类型进 `globals`，类型级 `Vec a n` 是中性应用（只在 unification 时比较）。
 - **`main`**：`check` 不要求 `main`，`compile` 要求；`main` 可为
-  `Int`/`String`/`Bool` 或 `IO a`（M21：取 IO 末字段后 `f 0`）。`vuna interp` 是 DT
-  核心求值器，只展示 `Int`/`String`/`Bool` 的值（`show` 语义，字符串带引号）；
-  **任何 `main : IO a` 一律不能 interp**，报
-  `DT: interp cannot execute effects (main : IO a); compile and run the program instead`
+  `Int`/`String`/`Bool` 或 `IO a`（`IO` 的判定只认 canonical `Base.IO.IO`；M21：取 IO
+  末字段后 `f 0`）。`vuna interp` 是 DT 核心求值器，只展示 `Int`/`String`/`Bool` 的值，
+  与产物用同一展示语义（`String` 走 `strShow` 转义，见
+  [primitives.md](primitives.md)）；**任何 `main : IO a` 一律不能 interp**，报
+  `interp cannot execute effects (main : IO a); compile and run the program instead`
   并提示改用 `compile` + 运行产物；数据值 `main` 的夹具用
   `Int`/`String`（见 [limits.md](limits.md)）。
-- **`strUnpack` / `strPack`**：没有声明 `List` 族时也映射到运行时桥接
-  `bi_strUnpack` / `bi_strPack`；但核心求值器不归约这两个内建，用到它们的夹具用
-  `.nointerp` 标记，只做 `compile` + 运行。
+- **`str*` 与 interp 边界分类**。返回/接收 `List` 的原语（`strUnpack` / `strPack` /
+  `strConcatMany` / `strSubstTemplate`）映射到 List 桥接 helper，桥接只为 canonical
+  `Base.List.List` 生成（`Codegen.Term.dtListBridge`）；核心求值器**不归约**它们
+  （List 桥接依赖该族的构造子表示），`a / 0` 与全部效果原语同样不归约——这是显式分类，
+  不是静默错值。用到它们的夹具用 `.nointerp` 标记，只做 `compile` + 运行。完整表见
+  [primitives.md](primitives.md) 的 interp 归约边界一节。
 - 洞 `_` 未解时诊断带位置与目标类型（`DT: unsolved hole <loc> with goal <ty>`），
   `vuna goal` 可列出全部洞（[dt-tooling.md](dt-tooling.md)）。
 

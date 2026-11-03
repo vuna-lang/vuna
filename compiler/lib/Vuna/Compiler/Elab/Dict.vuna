@@ -50,6 +50,7 @@ import Vuna.Compiler.Elab.Meta
 import Vuna.Compiler.Elab.Prelude
 import Vuna.Compiler.Elab.Sig
 import Vuna.Compiler.Elab.Types
+import Vuna.Compiler.Intrinsics
 import Vuna.Compiler.Frontend.Ast
 
 classArgIndex : Ec -> Value -> Int
@@ -329,15 +330,9 @@ ctorFieldsComparable t = case t of
   TPi name implicit rig dom cod => if termHasPi dom then False else ctorFieldsComparable cod
   _ => True
 
-nameBase : String -> String
-nameBase n = case splitLastDot (splitOnDot n) of
-  Pair rev base => base
-
 dataByName : List DtData -> String -> Maybe DtData
 dataByName [] name = Nothing
-dataByName (d :: rest) name =
-  if dtDataName d == name || nameBase (dtDataName d) == nameBase name then Just d
-  else dataByName rest name
+dataByName (d :: rest) name = if dtDataName d == name then Just d else dataByName rest name
 
 typeComparable : Ec -> Int -> List String -> Value -> Bool
 typeComparable ec fuel seen v = if fuel <= 0 then False
@@ -360,10 +355,7 @@ else case forceVal ec v of
   VApp f a => False
 
 primitiveComparable : String -> Bool
-primitiveComparable g =
-  let
-    base = nameBase g
-  in base == "Int" || base == "String" || base == "Bool"
+primitiveComparable g = g == intTypeName || g == strTypeName || g == boolTypeName
 
 dataComparable : Ec -> Int -> List String -> String -> List Value -> Bool
 dataComparable ec fuel seen name args = if memName name seen then True
@@ -386,7 +378,8 @@ allCtorsComparable ec fuel seen params (c :: rest) =
 
 -- 泛型相等兜底只对可安全结构比较的类型开放；否则要求在源码里有 Eq 实例。
 genericEqSafe : String -> Term -> Term -> Term -> Span -> Value -> Ec -> Result (Maybe (Pair Term (Pair Value Ec)))
-genericEqSafe name tyTerm aTerm bTerm sp aTy ec = if typeComparable ec 64 [] aTy then Ok (Just (Pair (genericEqApp name tyTerm aTerm bTerm) (Pair (VNeutral (NGlobal "Bool" [])) ec)))
+genericEqSafe name tyTerm aTerm bTerm sp aTy ec = if typeComparable ec 64 [] aTy then Ok
+  (Just (Pair (genericEqApp name tyTerm aTerm bTerm) (Pair (VNeutral (NGlobal boolTypeName [])) ec)))
 else
   let
     st = showValue (forceVal ec aTy)
@@ -398,7 +391,7 @@ specializeEqTy : List (Pair String Term) -> Ctx -> String -> Term -> Term -> Spa
 specializeEqTy globals ctx name aTerm bTerm sp aTy ec = case builtinEqTyName (forceVal ec aTy) of
   Just tyName =>
     andThen (eqRuntimeName name tyName)
-      (\rt => Ok (Just (Pair (TApp (TApp (TGlobal rt) aTerm Rig1) bTerm Rig1) (Pair (VNeutral (NGlobal "Bool" [])) ec))))
+      (\rt => Ok (Just (Pair (TApp (TApp (TGlobal rt) aTerm Rig1) bTerm Rig1) (Pair (VNeutral (NGlobal boolTypeName [])) ec))))
   Nothing => case findClassByShortName "Eq" (ecClasses ec) of
     Nothing => genericEqSafe name (quote (ctxDepth ctx) aTy) aTerm bTerm sp aTy ec
     Just cls =>
@@ -412,7 +405,7 @@ specializeEqTy globals ctx name aTerm bTerm sp aTy ec = case builtinEqTyName (fo
       else case searchInstance ec dictTy sp of
         Ok (Pair dictTerm ec1) =>
           Ok
-            (Just (Pair (TApp (TApp (TApp (TApp (TGlobal mname) tyTerm Rig0) dictTerm Rig1) aTerm Rig1) bTerm Rig1) (Pair (VNeutral (NGlobal "Bool" [])) ec1)))
+            (Just (Pair (TApp (TApp (TApp (TApp (TGlobal mname) tyTerm Rig0) dictTerm Rig1) aTerm Rig1) bTerm Rig1) (Pair (VNeutral (NGlobal boolTypeName [])) ec1)))
         Err e =>
           if isRigidDictArg ec dictTy then deferEqDict globals ctx mname tyTerm aTerm bTerm sp dictTy ec
           else genericEqSafe name tyTerm aTerm bTerm sp aTy ec
@@ -426,7 +419,7 @@ deferEqDict globals ctx mname tyTerm aTerm bTerm sp dictTy ec =
   in case newMeta ctx ec of
     Pair metaTerm ec1 =>
       Ok
-        (Just (Pair (TApp (TApp (TApp (TApp (TGlobal mname) tyTerm Rig0) metaTerm Rig1) aTerm Rig1) bTerm Rig1) (Pair (VNeutral (NGlobal "Bool" [])) (ecAddDictGoal ec1 (DtDictGoal m dictTy)))))
+        (Just (Pair (TApp (TApp (TApp (TApp (TGlobal mname) tyTerm Rig0) metaTerm Rig1) aTerm Rig1) bTerm Rig1) (Pair (VNeutral (NGlobal boolTypeName [])) (ecAddDictGoal ec1 (DtDictGoal m dictTy)))))
 
 -- ---------------------------------------------------------------
 -- M22.2：`<` / `<=` / `>` / `>=` 的饱和应用按实参类型特化
@@ -455,7 +448,9 @@ cmpRuntimeName sp name tyName = case tyName of
     ">" => Ok "bi_gt_int"
     _ => Ok "bi_ge_int"
   "String" => Ok (cmpGenericName name)
-  "Bool" => Ok (cmpGenericName name)
+  _ =>
+    if tyName == boolTypeName then Ok (cmpGenericName name)
+    else tcErr2 sp (OpNotDefinedFor name tyName) name tyName
   _ => tcErr2 sp (OpNotDefinedFor name tyName) name tyName
 
 cmpGenericName : String -> String
@@ -483,11 +478,11 @@ specializeCmpTy : List (Pair String Term) -> Ctx -> String -> Term -> Term -> Sp
 specializeCmpTy globals ctx name aTerm bTerm sp aTy ec = case cmpBuiltinTyName (forceVal ec aTy) of
   Just tyName =>
     andThen (cmpRuntimeName sp name tyName)
-      (\rt => Ok (Just (Pair (TApp (TApp (TGlobal rt) aTerm Rig1) bTerm Rig1) (Pair (VNeutral (NGlobal "Bool" [])) ec))))
+      (\rt => Ok (Just (Pair (TApp (TApp (TGlobal rt) aTerm Rig1) bTerm Rig1) (Pair (VNeutral (NGlobal boolTypeName [])) ec))))
   Nothing => case findClassByShortName "Ord" (ecClasses ec) of
     Nothing =>
       Ok
-        (Just (Pair (TApp (TApp (TGlobal (cmpGenericName name)) aTerm Rig1) bTerm Rig1) (Pair (VNeutral (NGlobal "Bool" [])) ec)))
+        (Just (Pair (TApp (TApp (TGlobal (cmpGenericName name)) aTerm Rig1) bTerm Rig1) (Pair (VNeutral (NGlobal boolTypeName [])) ec)))
     Just cls =>
       let
         mname = classMethodProjection (dtClassMethods cls) (cmpMethodName name)
@@ -497,7 +492,7 @@ specializeCmpTy globals ctx name aTerm bTerm sp aTy ec = case cmpBuiltinTyName (
       else case searchInstance ec dictTy sp of
         Ok (Pair dictTerm ec1) =>
           Ok
-            (Just (Pair (TApp (TApp (TApp (TApp (TGlobal mname) tyTerm Rig0) dictTerm Rig1) aTerm Rig1) bTerm Rig1) (Pair (VNeutral (NGlobal "Bool" [])) ec1)))
+            (Just (Pair (TApp (TApp (TApp (TApp (TGlobal mname) tyTerm Rig0) dictTerm Rig1) aTerm Rig1) bTerm Rig1) (Pair (VNeutral (NGlobal boolTypeName [])) ec1)))
         Err e =>
           if isRigidDictArg ec dictTy then deferEqDict globals ctx mname tyTerm aTerm bTerm sp dictTy ec
           else Err e

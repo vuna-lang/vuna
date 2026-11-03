@@ -7,8 +7,8 @@
 ## 包管理与工具链（M11.5 / M12.5）
 
 - 包元信息用 `vuna.toml`（TOML 子集）：`[package]`（name/version/edition）、
-  `[workspace]`（members）、`[export]`（modules）、`[dependencies]`
-  （依赖名 = 相对路径，暂不做 registry）。
+  `[workspace]`（members）、`[export]`（modules）、`[capabilities]`（effects，M27 效应
+  能力声明）、`[dependencies]`（依赖名 = 相对路径，暂不做 registry）。
 - **workspace 根即一个包**（Cargo 风格）：根 `vuna.toml` 同时含 `[workspace]` 与
   `[package]`；成员是子目录，各自有自己的 `vuna.toml`。本仓库 = 根包 `vuna`（产品
   CLI）+ 成员包 `vuna-compiler`（编译器）+ 成员包 `vuna-base`（标准库）；依赖图
@@ -23,9 +23,9 @@
   base 上下文（`VUNA_BASE` 覆盖，否则按可执行文件相对布局探测），且这类 ad-hoc 单文件
   与包内模块一样**自动注入 `Prelude`**（见 [stdlib.md](stdlib.md)）。**目录入口**
   （`check/build <dir>`）只认该目录自己的 manifest，不向上找。
-- **依赖图内包名唯一（M24.7）**：包名参与「同包永远可见」与 effectful 内建 allowlist
-  判定，因此同名不同目录是配置错误。同名同目录的 diamond 依赖合法；同名不同目录在加载
-  期报 `duplicate package name ...`（M24.7 前的旧实现会按包名去重、静默丢弃整支依赖）。
+- **依赖图内包名唯一（M24.7）**：包名参与「同包永远可见」判定，因此同名不同目录是
+  配置错误。同名同目录的 diamond 依赖合法；同名不同目录在加载期报
+  `duplicate package name ...`（M24.7 前的旧实现会按包名去重、静默丢弃整支依赖）。
 - 编译器 CLI（`compiler/lib/Vuna/Compiler/Driver/CompilerCli.vuna`）：`vuna-compiler` 提供
   `compile/check/build`，入口 `compiler/app/Main.vuna`；**seed 只由这个入口的闭包
   生成**。产品 CLI（`lib/Vuna/Cli.vuna`）通过 in-process 调库实现同样的命令，并追加
@@ -58,9 +58,26 @@
 - 示例：`examples/multi/` 是多包 workspace（根包 + 成员包 `greet` + `base` 路径依赖），
   `checks.vuna-package` 在 Nix 沙箱里构建并运行它，验证包管理路径可复现。
 - 可执行入口：`vuna build` 要求入口 `main : IO a`（运行时执行动作，退出码用 `exit`）。
-  普通用户包不能直接调用 effectful 内建（`print` / `readFile` / ...），只能经 `Base.IO`；
-  编译器、产品 CLI、`vuna-base` 自身在包级 allowlist 内；`vuna interp` 是纯核心求值
-  （不执行效果），效果程序用 `compile` + 运行产物。
+  效果内建只有 `prim_*` 名（M27 删除 `print` / `readFile` 等裸名）：包必须在 manifest
+  显式声明能力才能直接调用，未声明的包只能经 `Base.IO`（推荐路径）；`vuna interp` 是
+  纯核心求值（不执行效果），效果程序用 `compile` + 运行产物。
+
+## 效应能力（M27）
+
+- 包在 `[capabilities] effects` 里**显式声明**可直接使用的 effectful 内建能力：合法值
+  `console` / `fs` / `process` / `env` / `clock`（可任意子集）。`Frontend.Manifest` 只做
+  结构校验（空名字 / 重复名字分别报错），合法能力名与放行判定在 Loader：未知名字报
+  `unknown capability ...`（typo 不静默降级）；`manifestCapabilities` 是读取入口。
+- 能力按**包**生效：同包所有模块共享本包 manifest 的能力；`PackageContext` / `Root` /
+  `Module` / `Project` 都携带能力，`Loader.Resolve.checkEffectsBuiltins` 按
+  `Vuna.Compiler.Intrinsics` 里每个内建声明的能力位检查。**没有按包名/路由的 allowlist**，
+  能力声明不可由调用参数伪造；检查覆盖整个源文件（包括未求值的定义），不只看 `main`。
+- 未声明能力的包（普通用户包、`test/corpus` 夹具）只能经 `Base.IO` 使用效果。
+  `Base.IO` 是 base 包对 `prim_*` 的普通封装，也是推荐路径；它自身在 `vuna-base` 的
+  能力声明内。
+- 本仓库声明：根包 `vuna` 与 `vuna-compiler` 声明全部五个能力（CLI/工具链与编译器直接
+  使用 `prim_*`）；`vuna-base` 只声明 `console` / `fs` / `process`（`Base.IO` 的封装面）。
+  无 manifest 的 ad-hoc 文件没有能力，直接调用 effectful 内建即被拒。
 
 ## 包格式速查
 
@@ -77,6 +94,10 @@ members = ["compiler", "base"]
 [dependencies]
 vuna-compiler = "compiler"
 vuna-base = "base"
+
+# M27：直接使用 effectful 内建（本包 = 产品 CLI/工具链）的能力声明
+[capabilities]
+effects = ["console", "fs", "process", "env", "clock"]
 ```
 
 ```toml
@@ -103,7 +124,9 @@ modules = [
 ]
 ```
 
-（`vuna-base` 不在 `[dependencies]` 里依赖别的包；上例的 `[dependencies]` 段从略。）
+（`vuna-base` 不在 `[dependencies]` 里依赖别的包；上例的 `[dependencies]` 段从略。
+`vuna-base` 的 `[capabilities] effects` 只列 `["console", "fs", "process"]`：`Base.IO`
+封装了这些能力对应的 `prim_*`。）
 
 `[export]` 的每个名字都是模块全名；`[dependencies]` 的值是相对该包目录的路径
 （lexical 规范化，不做 realpath）。manifest 只被解析与校验（`Vuna.Compiler.Frontend.Manifest`），
@@ -138,4 +161,5 @@ modules = [
 
 - 模块系统与 import 解析：[language.md](language.md)
 - `Prelude` 与标准库包：[stdlib.md](stdlib.md)
+- 内建/原语的声明面与效应语义：[primitives.md](primitives.md)
 - 测试命令的环境变量与 nix 入口：[testing.md](testing.md)

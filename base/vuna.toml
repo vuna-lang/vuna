@@ -4,6 +4,7 @@ name = "vuna-base"
 version = "0.1.0"
 edition = "2026"
 
+
 [export]
 modules = [
   "Base",
@@ -24,3 +25,7 @@ modules = [
   "Base.IO",
   "Prelude"
 ]
+
+# M27：效应能力声明（Base.IO 包装 prim_*）。
+[capabilities]
+effects = ["console", "fs", "process"]

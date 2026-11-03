@@ -14,6 +14,7 @@ module Vuna.Compiler.Elab.Sig
 import Vuna.Compiler.Common
 import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Core
+import Vuna.Compiler.Intrinsics
 
 -- ---------------------------------------------------------------------------
 -- 类参数 kind 推断（原 Elab/Kind.vuna）
@@ -157,37 +158,7 @@ keepOutTbl banned (n :: rest) =
   if tblMem n banned then keepOutTbl banned rest else n :: keepOutTbl banned rest
 
 topPreludeNames : List String
-topPreludeNames =
-  [ "Int",
-    "String",
-    "+",
-    "-",
-    "*",
-    "/",
-    "==",
-    "/=",
-    "<",
-    "<=",
-    ">",
-    ">=",
-    "++",
-    "&&",
-    "||",
-    "strFromInt",
-    "strUnpack",
-    "strPack",
-    "strLength",
-    "show",
-    "eq",
-    "neq",
-    "lt",
-    "le",
-    "gt",
-    "ge",
-    "Type",
-    "->",
-    "_"
-  ]
+topPreludeNames = append ["Type", "->", "_"] (append typeIntrinsicNames preludeValueNames)
 
 -- 本程序里另有定义（DFun）的顶层名字：签名里的这些名字不是类型变量。
 definedNames : List Decl -> List String

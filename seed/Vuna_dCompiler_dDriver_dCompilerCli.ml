@@ -25,6 +25,7 @@ open Vuna_dCompiler_dFrontend_dParser_dSupport
 open Vuna_dCompiler_dFrontend_dParser
 open Vuna_dCompiler_dLoader_dDiagnostics
 open Vuna_dCompiler_dLoader_dModules
+open Vuna_dCompiler_dIntrinsics
 open Vuna_dCompiler_dLoader_dResolve
 open Vuna_dCompiler_dLoader_dFlatten
 open Vuna_dCompiler_dLoader
@@ -65,8 +66,8 @@ let v_Vuna_dCompiler_dDriver_dCompilerCli_dcompilerUsageLines = (fun prog -> ((b
 let v_Vuna_dCompiler_dDriver_dCompilerCli_dcompilerUsage = (fun prog -> ((bi_concat "usage:\n") (v_Vuna_dCompiler_dDriver_dCompilerCli_dcompilerUsageLines prog)))
 
 let rec v_Vuna_dCompiler_dDriver_dCompilerCli_danyHelp = (fun mc0 -> (match mc0 with
-  | C_Base_dList_dList_Cons (dtb__0, dtb__1) -> (if (if ((bi_eq_str dtb__0) "-h") then true else ((bi_eq_str dtb__0) "--help")) then true else (v_Vuna_dCompiler_dDriver_dCompilerCli_danyHelp dtb__1))
-  | C_Base_dList_dList_Nil -> false
+  | C_Base_dList_dList_Base_dList_dCons (dtb__0, dtb__1) -> (if (if ((bi_eq_str dtb__0) "-h") then true else ((bi_eq_str dtb__0) "--help")) then true else (v_Vuna_dCompiler_dDriver_dCompilerCli_danyHelp dtb__1))
+  | C_Base_dList_dList_Base_dList_dNil -> false
   | _ -> failwith "DT: impossible branch"
 ))
 
@@ -93,8 +94,8 @@ let v_Vuna_dCompiler_dDriver_dCompilerCli_dprintErrText = (fun e -> ((fun _u -> 
 let v_Vuna_dCompiler_dDriver_dCompilerCli_dprintErr = (fun e -> (v_Vuna_dCompiler_dDriver_dCompilerCli_dprintErrText ((bi_concat "error: ") ((bi_concat e) "\n"))))
 
 let rec v_Vuna_dCompiler_dDriver_dCompilerCli_dprintWarnings = (fun mc0 -> (match mc0 with
-  | C_Base_dList_dList_Cons (dtb__3, dtb__4) -> ((fun _u -> (v_Vuna_dCompiler_dDriver_dCompilerCli_dprintWarnings dtb__4)) (dtp_print ((bi_concat dtb__3) "\n")))
-  | C_Base_dList_dList_Nil -> 0
+  | C_Base_dList_dList_Base_dList_dCons (dtb__3, dtb__4) -> ((fun _u -> (v_Vuna_dCompiler_dDriver_dCompilerCli_dprintWarnings dtb__4)) (dtp_print ((bi_concat dtb__3) "\n")))
+  | C_Base_dList_dList_Base_dList_dNil -> 0
   | _ -> failwith "DT: impossible branch"
 ))
 
@@ -149,7 +150,7 @@ let v_Vuna_dCompiler_dDriver_dCompilerCli_dcompileFinish = (fun prog -> (fun pri
 )))))
 
 let rec v_Vuna_dCompiler_dDriver_dCompilerCli_dcompileParse = (fun prog -> (fun printResult -> (fun entry -> (fun outDir -> (fun args -> ((fun nd_uscrut -> (match nd_uscrut with
-  | C_Base_dList_dList_Cons (dtb__17, dtb__18) -> (if ((bi_eq_str dtb__17) "--no-print") then (((((v_Vuna_dCompiler_dDriver_dCompilerCli_dcompileParse prog) false) entry) outDir) dtb__18) else (if ((v_Base_dString_dstartsWith "-") dtb__17) then ((v_Vuna_dCompiler_dDriver_dCompilerCli_dremovedFlag prog) dtb__17) else (match entry with
+  | C_Base_dList_dList_Base_dList_dCons (dtb__17, dtb__18) -> (if ((bi_eq_str dtb__17) "--no-print") then (((((v_Vuna_dCompiler_dDriver_dCompilerCli_dcompileParse prog) false) entry) outDir) dtb__18) else (if ((v_Base_dString_dstartsWith "-") dtb__17) then ((v_Vuna_dCompiler_dDriver_dCompilerCli_dremovedFlag prog) dtb__17) else (match entry with
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> (((((v_Vuna_dCompiler_dDriver_dCompilerCli_dcompileParse prog) printResult) (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__17))) outDir) dtb__18)
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__19) -> (match outDir with
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> (((((v_Vuna_dCompiler_dDriver_dCompilerCli_dcompileParse prog) printResult) entry) (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__17))) dtb__18)
@@ -158,7 +159,7 @@ let rec v_Vuna_dCompiler_dDriver_dCompilerCli_dcompileParse = (fun prog -> (fun 
 )
   | _ -> failwith "DT: impossible branch"
 )))
-  | C_Base_dList_dList_Nil -> ((((v_Vuna_dCompiler_dDriver_dCompilerCli_dcompileFinish prog) printResult) entry) outDir)
+  | C_Base_dList_dList_Base_dList_dNil -> ((((v_Vuna_dCompiler_dDriver_dCompilerCli_dcompileFinish prog) printResult) entry) outDir)
   | _ -> failwith "DT: impossible branch"
 )) args))))))
 
@@ -187,9 +188,9 @@ let v_Vuna_dCompiler_dDriver_dCompilerCli_dcheckFileEntry = (fun path -> (match 
 let v_Vuna_dCompiler_dDriver_dCompilerCli_dcheckEmit = (fun path -> (if (dtp_fileExists path) then (if (dtp_isDirectory path) then (v_Vuna_dCompiler_dDriver_dCompilerCli_dcheckPkgDir path) else (v_Vuna_dCompiler_dDriver_dCompilerCli_dcheckFileEntry path)) else (v_Vuna_dCompiler_dDriver_dCompilerCli_ddtPathErr path)))
 
 let v_Vuna_dCompiler_dDriver_dCompilerCli_dcheckArgs = (fun prog -> (fun args -> (match args with
-  | C_Base_dList_dList_Nil -> (v_Vuna_dCompiler_dDriver_dCompilerCli_dusageErr prog)
-  | C_Base_dList_dList_Cons (dtb__29, dtb__30) -> (if ((v_Base_dString_dstartsWith "-") dtb__29) then ((v_Vuna_dCompiler_dDriver_dCompilerCli_dremovedFlag prog) dtb__29) else (match dtb__30 with
-  | C_Base_dList_dList_Nil -> (v_Vuna_dCompiler_dDriver_dCompilerCli_dcheckEmit dtb__29)
+  | C_Base_dList_dList_Base_dList_dNil -> (v_Vuna_dCompiler_dDriver_dCompilerCli_dusageErr prog)
+  | C_Base_dList_dList_Base_dList_dCons (dtb__29, dtb__30) -> (if ((v_Base_dString_dstartsWith "-") dtb__29) then ((v_Vuna_dCompiler_dDriver_dCompilerCli_dremovedFlag prog) dtb__29) else (match dtb__30 with
+  | C_Base_dList_dList_Base_dList_dNil -> (v_Vuna_dCompiler_dDriver_dCompilerCli_dcheckEmit dtb__29)
   | _ -> (v_Vuna_dCompiler_dDriver_dCompilerCli_dusageErr prog)
 ))
   | _ -> failwith "DT: impossible branch"
@@ -212,28 +213,28 @@ let v_Vuna_dCompiler_dDriver_dCompilerCli_dbuildRun = (fun noCompile -> (fun dir
 ))))
 
 let rec v_Vuna_dCompiler_dDriver_dCompilerCli_dbuildParse = (fun prog -> (fun noCompile -> (fun out -> (fun dir -> (fun args -> ((fun nd_uscrut -> (match nd_uscrut with
-  | C_Base_dList_dList_Cons (dtb__37, dtb__38) -> (if ((bi_eq_str dtb__37) "--no-compile") then (((((v_Vuna_dCompiler_dDriver_dCompilerCli_dbuildParse prog) true) out) dir) dtb__38) else (if ((bi_eq_str dtb__37) "--out") then (match dtb__38 with
-  | C_Base_dList_dList_Cons (dtb__39, dtb__40) -> (if ((v_Base_dString_dstartsWith "-") dtb__39) then ((v_Vuna_dCompiler_dDriver_dCompilerCli_dremovedFlag prog) dtb__39) else (match out with
+  | C_Base_dList_dList_Base_dList_dCons (dtb__37, dtb__38) -> (if ((bi_eq_str dtb__37) "--no-compile") then (((((v_Vuna_dCompiler_dDriver_dCompilerCli_dbuildParse prog) true) out) dir) dtb__38) else (if ((bi_eq_str dtb__37) "--out") then (match dtb__38 with
+  | C_Base_dList_dList_Base_dList_dCons (dtb__39, dtb__40) -> (if ((v_Base_dString_dstartsWith "-") dtb__39) then ((v_Vuna_dCompiler_dDriver_dCompilerCli_dremovedFlag prog) dtb__39) else (match out with
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> (((((v_Vuna_dCompiler_dDriver_dCompilerCli_dbuildParse prog) noCompile) (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__39))) dir) dtb__40)
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__41) -> (v_Vuna_dCompiler_dDriver_dCompilerCli_dusageErr prog)
   | _ -> failwith "DT: impossible branch"
 ))
-  | C_Base_dList_dList_Nil -> (v_Vuna_dCompiler_dDriver_dCompilerCli_dusageErr prog)
+  | C_Base_dList_dList_Base_dList_dNil -> (v_Vuna_dCompiler_dDriver_dCompilerCli_dusageErr prog)
   | _ -> failwith "DT: impossible branch"
 ) else (if ((v_Base_dString_dstartsWith "-") dtb__37) then ((v_Vuna_dCompiler_dDriver_dCompilerCli_dremovedFlag prog) dtb__37) else (match dir with
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> (((((v_Vuna_dCompiler_dDriver_dCompilerCli_dbuildParse prog) noCompile) out) (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__37))) dtb__38)
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__42) -> (v_Vuna_dCompiler_dDriver_dCompilerCli_dusageErr prog)
   | _ -> failwith "DT: impossible branch"
 ))))
-  | C_Base_dList_dList_Nil -> (((v_Vuna_dCompiler_dDriver_dCompilerCli_dbuildRun noCompile) (v_Vuna_dCompiler_dDriver_dCompilerCli_ddefaultDir dir)) ((v_Vuna_dCompiler_dDriver_dCompilerCli_ddefaultOutDir out) (v_Vuna_dCompiler_dDriver_dCompilerCli_ddefaultDir dir)))
+  | C_Base_dList_dList_Base_dList_dNil -> (((v_Vuna_dCompiler_dDriver_dCompilerCli_dbuildRun noCompile) (v_Vuna_dCompiler_dDriver_dCompilerCli_ddefaultDir dir)) ((v_Vuna_dCompiler_dDriver_dCompilerCli_ddefaultOutDir out) (v_Vuna_dCompiler_dDriver_dCompilerCli_ddefaultDir dir)))
   | _ -> failwith "DT: impossible branch"
 )) args))))))
 
 let v_Vuna_dCompiler_dDriver_dCompilerCli_dbuildArgs = (fun prog -> (fun args -> (((((v_Vuna_dCompiler_dDriver_dCompilerCli_dbuildParse prog) false) C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing) C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing) args)))
 
 let v_Vuna_dCompiler_dDriver_dCompilerCli_drunCompilerCliFor1 = (fun prog -> (fun args -> (match args with
-  | C_Base_dList_dList_Nil -> (v_Vuna_dCompiler_dDriver_dCompilerCli_dusageErr prog)
-  | C_Base_dList_dList_Cons (dtb__43, dtb__44) -> (if ((bi_eq_str dtb__43) "compile") then ((v_Vuna_dCompiler_dDriver_dCompilerCli_dcompileArgs prog) dtb__44) else (if ((bi_eq_str dtb__43) "check") then ((v_Vuna_dCompiler_dDriver_dCompilerCli_dcheckArgs prog) dtb__44) else (if ((bi_eq_str dtb__43) "build") then ((v_Vuna_dCompiler_dDriver_dCompilerCli_dbuildArgs prog) dtb__44) else (if ((bi_eq_str dtb__43) "seed") then (((v_Vuna_dCompiler_dDriver_dCompilerCli_dremovedCommand prog) "seed") "use `build --out OUT [DIR]` or `compile DIR OUT`") else (if ((bi_eq_str dtb__43) "help") then (v_Vuna_dCompiler_dDriver_dCompilerCli_dhelpFor prog) else (if ((v_Base_dString_dstartsWith "-") dtb__43) then ((v_Vuna_dCompiler_dDriver_dCompilerCli_dremovedFlag prog) dtb__43) else ((v_Vuna_dCompiler_dDriver_dCompilerCli_dunknownCommand prog) dtb__43)))))))
+  | C_Base_dList_dList_Base_dList_dNil -> (v_Vuna_dCompiler_dDriver_dCompilerCli_dusageErr prog)
+  | C_Base_dList_dList_Base_dList_dCons (dtb__43, dtb__44) -> (if ((bi_eq_str dtb__43) "compile") then ((v_Vuna_dCompiler_dDriver_dCompilerCli_dcompileArgs prog) dtb__44) else (if ((bi_eq_str dtb__43) "check") then ((v_Vuna_dCompiler_dDriver_dCompilerCli_dcheckArgs prog) dtb__44) else (if ((bi_eq_str dtb__43) "build") then ((v_Vuna_dCompiler_dDriver_dCompilerCli_dbuildArgs prog) dtb__44) else (if ((bi_eq_str dtb__43) "seed") then (((v_Vuna_dCompiler_dDriver_dCompilerCli_dremovedCommand prog) "seed") "use `build --out OUT [DIR]` or `compile DIR OUT`") else (if ((bi_eq_str dtb__43) "help") then (v_Vuna_dCompiler_dDriver_dCompilerCli_dhelpFor prog) else (if ((v_Base_dString_dstartsWith "-") dtb__43) then ((v_Vuna_dCompiler_dDriver_dCompilerCli_dremovedFlag prog) dtb__43) else ((v_Vuna_dCompiler_dDriver_dCompilerCli_dunknownCommand prog) dtb__43)))))))
   | _ -> failwith "DT: impossible branch"
 )))
 

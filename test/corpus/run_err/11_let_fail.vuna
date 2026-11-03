@@ -1,6 +1,2 @@
-data Bool : Type where
-  False : Bool
-  True : Bool
-
 main : Int
 main = let True = False in 0

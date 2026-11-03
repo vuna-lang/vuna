@@ -18,9 +18,9 @@ trait Show a where
 instance Show Int where
   show x = strFromInt x
 
--- 与既有内建实例的语义一致：带引号展示。
+-- 与 runtime 展示共用同一实现（M27：`strShow` 是唯一转义源）。
 instance Show String where
-  show s = "\"" ++ s ++ "\""
+  show s = strShow s
 
 -- `Bool` 用 `if` 输出 True/False（与内建实例一致）；不能写 `show True`，那会自递归。
 -- import Base.Bool 让 `data Bool` 声明进入程序（typed codegen 需要）。

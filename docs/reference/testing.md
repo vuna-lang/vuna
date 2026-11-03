@@ -7,9 +7,9 @@
 
 vuna 原生测试按编号章节组织（**38 个章节**：编号到 39，第 12 段已删除；34a–34d 归在
 第 34 段内，`--list` 列 38 行），用 `vuna` / `vuna-seed` 驱动，不依赖外部 vuna 实现，
-但需要 `ocamlopt` 作为 codegen 后端。当前 **1152 checks**（结尾
-`vuna tests passed (N checks)`；错误码段与 seed rotation 后可能微调，以脚本输出为准），
-全量运行约 **1m21s**（本机读数；nix check 内含完整工具链，墙钟与机器相关）。
+但需要 `ocamlopt` 作为 codegen 后端。M27 实测 **1188 checks 全绿**（含第 13 段 seed
+冒烟；`VUNA_SEED` 指向 rotation 后的 `vuna-seed`），全量运行约 **1m29s**（本机读数；
+nix check 内含完整工具链，墙钟与机器相关）。
 
 ```console
 sh test/run-tests.sh        # 需要 PATH 中有 vuna 与 vuna-seed
@@ -17,7 +17,8 @@ sh test/run-tests.sh        # 需要 PATH 中有 vuna 与 vuna-seed
 
 环境变量：`VUNA`（stage 1 产品 CLI）、`VUNA_SEED`（stage 0 种子编译器）、`OCAMLOPT`
 （默认 `ocamlopt`）。脚本会 `cd "$(dirname "$0")"`，从仓库根直接跑即可；并导出
-**`VUNA_BASE="$PWD/../base"`**——无 manifest 的 ad-hoc 夹具靠它定位 base 上下文（见下节）。
+**`VUNA_BASE="$PWD/../base"`**——runner 写进 `$tmp` 的**无 manifest 临时夹具**靠它定位
+base 上下文（corpus 内的夹具由 `test/corpus/vuna.toml` 给出包上下文）。
 推荐入口（`nix/run-tests.nix` 包装，不修改原脚本；无参数等价于直接跑）：
 
 ```console
@@ -32,8 +33,8 @@ DT 精化 + 擦除 codegen，`build` = DT 逐模块 codegen + `build.sh`）。�
 分支的段，也没有第二套 codegen 输出模型。
 
 **compile 是目录化产物（M26）**：`compile <entry|pkg-dir> OUTDIR` 写逐模块 `.ml` +
-`build.sh`，成功静默。脚本里的 `compile_dir` helper 负责「codegen 到临时目录 → 执行
-`build.sh` → 运行产物比对」，不再有单文件 `.ml` 的写法。
+`build.sh`，成功静默。脚本里的 `compile_dir_bin` / `compile_dir_and_run` helper 负责
+「codegen 到临时目录 → 执行 `build.sh` → 运行产物比对」，不再有单文件 `.ml` 的写法。
 
 ## corpus 的包上下文与 `VUNA_BASE`
 
@@ -41,15 +42,17 @@ DT 精化 + 擦除 codegen，`build` = DT 逐模块 codegen + `build.sh`）。�
 `[dependencies] vuna-base = "../../base"`，没有 `[export]`/`[workspace]` 成员）：
 
 - corpus 下的夹具文件**没有自己的 manifest** 时，向上找最近 manifest 即
-  `test/corpus/vuna.toml`，import 的可见范围 = 本包 `lib/` + `vuna-base` 依赖闭包；
+  `test/corpus/vuna.toml`：**单文件夹具也是 corpus 包内的 ad-hoc 入口**（包上下文，
+  import 可见范围 = 本包 `lib/` + `vuna-base` 依赖闭包）；真正的 base-only 上下文只出现在
+  runner 写进 `$tmp`、没有任何 manifest 祖先的临时夹具；
 - 需要跨模块/需要多包语义的模块夹具（`corpus/modules/*`、`records/`、`traits/`、
-  `type_modules/`）各自补 `vuna.toml`（默认只依赖 `vuna-base`）；
-- **ad-hoc 单文件夹具**（`corpus/run/`、`dt/` 等单个 `.vuna`）没有 manifest，加载时只有
-  **base 上下文**：base 由脚本导出的 `VUNA_BASE` 指向仓库 `base/`，否则按可执行文件
-  相对布局探测（`<exeDir>/base`、`../base`、`../../base`、`../../../base`）；
+  `type_modules/`、`packages/*`）各自补 `vuna.toml`（默认只依赖 `vuna-base`）；
+- `VUNA_BASE` 由脚本导出给无 manifest 的临时夹具；corpus 内的夹具通过 `vuna-base`
+  依赖获得 base；
 - 两类上下文都**自动注入 `Prelude`**（M26 起 ad-hoc 单文件与包内模块一致），因此夹具
-  需要 `show` / `==` / 比较 / `deriving` 时直接可用，不必再手动 import；显式
-  `import Prelude` 仍合法（不重复注入）；
+  需要 `show` / `==` / 比较 / `deriving` 时直接可用；显式 `import Prelude` 仍合法；
+- 夹具 manifest 都**不声明 `[capabilities]`**：corpus 代码只能经 `Base.IO` 使用效果；
+  能力正/反例在 `packages/{07_effect_capability,96_effect_no_capability,97_unknown_capability}`；
 - `test/corpus/fmt/check.sh` 与主 runner 用同一套约定（`VUNA_BASE` + 目录化 compile），
   不再接受模块根参数。
 
@@ -57,12 +60,15 @@ DT 精化 + 擦除 codegen，`build` = DT 逐模块 codegen + `build.sh`）。�
 
 语言夹具只走 DT：`interp`（DT 精化 + 核心求值）、`check`、`compile` + ocamlopt。
 `<base>.vuna.nointerp` 标记跳过 interp 对拍，只做 `compile` + 运行，用于效果程序
-（`main : IO a`）与核心求值器不可归约的夹具（`strUnpack`/`strPack`、多隐式参数
-字典）；`.nocompile` 跳过 codegen（仅 `monad/04_kind_generic`，只断言 `check`）。
-负例 `.err` 是 DT 实际诊断的稳定子串；interp 与 compile 文案不同时用 `.cerr`。
+（`main : IO a`）与核心求值器不可归约的夹具（`strUnpack`/`strPack`/`strConcatMany`/
+`strSubstTemplate`、多隐式参数字典；M27 起这些内建的 interp 不归约是显式分类）；
+`.nocompile` 跳过 codegen（仅 `monad/04_kind_generic`，只断言 `check`）。当前 15 个
+`.nointerp`（`dt/34`、`dt/35`、`dt/56`、`dt_base/01`–`03`/`06`、`monad/04_kind_generic`、
+`run/10`/`16`/`17`、`stdlib/03`/`07`/`09`/`10`）。负例 `.err` 是稳定诊断子串，interp/compile 文案不同时用 `.cerr`。
 
 - `corpus/run/*.vuna`：`interp` 输出 vs `.out` golden；`compile`→ocamlopt→运行再比对；
-  `.nointerp`（`10_string_pack`、`16_file_exists`、`17_file_meta`）只跑后者；
+  `.nointerp`（`10_string_pack`、`16_file_exists`、`17_file_meta`）只跑后者；M27 新增
+  `18_int_overflow` / `19_string_utf8` / `20_str_hash`（纯值语义 golden）；
 - `corpus/modules/` 01–29 正例：跨模块函数/数据/嵌套 import 的 `interp` 与 `compile`
   结果（原“多根”夹具已迁移为**同包多模块**夹具，Helper 在 `lib/`；不再有“多根”
   概念）；覆盖显式导出列表、重导出、抽象类型、空导出集、包门面、无头模块
@@ -95,7 +101,9 @@ DT 精化 + 擦除 codegen，`build` = DT 逐模块 codegen + `build.sh`）。�
   断言 `Main.ml` 含入口 data 的 OCaml 构造子名，见 E14）；`06_entry_trait` 覆盖入口
   trait 的归属与产物；`93_duplicate_name` 覆盖同名包显式报错；
   `94_ambiguous_module` 覆盖包上下文下的歧义模块；`95_cross_dep` 覆盖依赖方向的
-  负例（依赖包不能 import 消费包模块）；
+  负例（依赖包不能 import 消费包模块）；M27 新增 `07_effect_capability`（声明
+  `[capabilities] effects` 后可直接调 `prim_*`）与负例 `96_effect_no_capability`
+  （未声明能力）、`97_unknown_capability`（未知能力名）；
 - `corpus/err/`、`corpus/run_err/`：解析/求值错误片段；`run_err` 的 `.err` 是 DT 诊断
   子串（非穷尽、if 条件类型、参数过多、clause 数不匹配、let 绑定模式等），
   `03_div_zero` 是产物运行期负例（运行断言 `division by zero`），`07_main_arity` 用
@@ -113,25 +121,29 @@ DT 精化 + 擦除 codegen，`build` = DT 逐模块 codegen + `build.sh`）。�
 - `corpus/lsp/smoke.sh`：`vuna lsp` 的 JSON-RPC 冒烟（诊断来自 DT 精化 +
   `goalsOfProgram` 洞目标）；**M26 未改 LSP 加载语义**（仍 parse 级、含 import 跳过类型
   检查），冒烟只锁当前行为；
-- `corpus/dt/*`（53 个正例）、`corpus/dt_err/*`（35 个负例，其中
+- `corpus/dt/*`（56 个正例：M27 新增 `54_user_bool_data`、`55_user_io_data`、
+  `56_user_list_data`（`.nointerp`），覆盖用户本地 `data Bool`/`IO`/`List` 与 canonical
+  `Base.*` 身份并存）、`corpus/dt_err/*`（35 个负例，其中
   `35_where_no_sig` 是 M24 新增，`36`–`38` 与 `dt/45`–`52` 是 M24.5/M24.6 新增）、
   `corpus/dt_base/`（8）、`corpus/dt_io/`（1）、`corpus/dt_pkg/`（3 个包目录）、
   `corpus/dt_ad_hoc/`（包内 ad-hoc 单文件，原 `dt_root`）：DT 专项夹具，见
   [dt.md](dt.md) 的夹具一节。
 - `corpus/term/` / `corpus/term_err/`：M25 终止性正反例（HOF/where/互递归/SCT/fuel），
-  第 37 段；错误码文档段（第 36 段）用 `vuna gen-errors` 检查 TC/CG/LN/FX 分区与幂等。
+  第 37 段；错误码段（第 36 段）用 `vuna gen-errors`（真源是诊断域枚举）检查
+  TC/CG/LN/FX 分区与幂等。
 - **第 38 段：API / 产物快照**。把重构后必须稳定的对外面与 codegen 形状落成入库基准：
   `test/snapshots/{exports.txt,modules.txt,split-*.txt}` 分别锁导出面、模块清单与关键
   split 产物（`split-05_entry_data.txt` / `split-06_entry_trait.txt` / `split-dt_ad_hoc.txt`
   等逐文件 `type t_`/`let v_` 名字清单）。golden 由
   `test/snapshots/update.sh` 重新生成（**有意变更才更新**，diff 必须可解释），断言是
   「生成结果与 golden 逐字节一致」，对应 debt C21/E14/E15 的根修。
-- **第 39 段：包上下文回归**。覆盖 M26 的语义边界：无 manifest 的文件只可见 base
-  （`VUNA_BASE` 生效、找不到 base 明确报错）；目录入口只认该目录自己的 manifest、
+- **第 39 段：包上下文与能力回归**。覆盖 M26/M27 的语义边界：无 manifest 的文件只可见
+  base（`VUNA_BASE` 生效、找不到 base 明确报错）；目录入口只认该目录自己的 manifest、
   不向上找；ad-hoc 单文件自动注入 Prelude；依赖方向（`95_cross_dep`：依赖包不能 import
   消费包模块）在所有入口上下文都被拒（`build` / `check` / `compile` 三入口）；
   环境根 / raw 模式与 `--split` / `seed` 已删除（removed-hint 非 0 退出 + 可操作提示），
-  且 `vuna help` 不再宣传已删路径。
+  且 `vuna help` 不再宣传已删路径；M27 起 39c 用 `prim_print` 断言无 manifest 上下文报
+  `requires capability`（能力必须显式声明）。
 
 ## Nix checks 清单
 
@@ -148,6 +160,8 @@ DT 精化 + 擦除 codegen，`build` = DT 逐模块 codegen + `build.sh`）。�
 `nix/context.budget`）。
 M24 后这些 check 的脚本已按单路径 CLI（无 `compile --package`）更新；M26 起 metrics /
 seed-selfhost 的生成命令改为 `build --no-compile --out`（不再有 `seed` 子命令）。
+M27 已完成两轮 seed rotation（`seed/` 66 个 `.ml`），`checks.seed-selfhost` 与原生测试
+第 13 段使用 rotation 后的种子，均为绿。
 
 ## Nix 命令与本地开发
 
@@ -165,7 +179,7 @@ VUNA=$PWD/result-vuna/bin/vuna VUNA_SEED=$PWD/result-seed/bin/vuna-seed \
 
 **`result*` 可能过期**：out-link 只是手工指到某次构建，源码/seed 变了不会自动更新
 （实测 `result` 与 `result-seed` 可差上百行）。跑测试或基准前先重建对应的
-`nix build ... --out-link`；这是 debt **E03**，M25 会加新鲜度检查与统一入口。
+`nix build ... --out-link`；这是 debt **E03**，尚未关闭。
 
 `devShells.default` = `ocaml`/`ocamlopt` + `vuna-seed`；`devShells.ocaml` 只有工具链，
 种子重建或损坏时用它。stage 1 的 `vuna` 不进任何 devShell，避免种子失效时连 shell 都

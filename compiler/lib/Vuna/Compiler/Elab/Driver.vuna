@@ -196,7 +196,7 @@ elabProgramFull decls =
 elabProgramGo : List Decl -> Result DtProgram
 elabProgramGo decls = andThen (collectSigs decls) (\sigs => let
   _ = stamp "collectSigs-done"
-in andThen (elabDatas (collectDataDecls decls []) (preludeGlobalsFor (pickListFamily (dataNamesOf decls))) ecEmpty) (\pd => case pd of
+in andThen (elabDatas (collectDataDecls decls []) preludeGlobals ecEmpty) (\pd => case pd of
   Pair datas (Pair globals0 ec0) =>
     let
       _ = stamp "datas-done"

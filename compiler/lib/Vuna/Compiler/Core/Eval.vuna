@@ -26,7 +26,6 @@ module Vuna.Compiler.Core.Eval
   , intPrim1
   , intPrim2
   , intPrim2Div
-  , isPrimitiveName
   , lookupEnv
   , normalize
   , normalizeCase
@@ -67,6 +66,7 @@ module Vuna.Compiler.Core.Eval
 -- M24 后维护（源码重组）：从原 Core.vuna 拆出；依赖 Core.Term 的表示层与纯数据操作。
 import Vuna.Compiler.Common
 import Vuna.Compiler.Core.Term
+import Vuna.Compiler.Intrinsics
 
 -- ---------------------------------------------------------------
 -- 环境与求值（beta）
@@ -209,33 +209,6 @@ else case v of
   _ => v
 
 -- ---------------------------------------------------------------
--- prelude 运算符的原语归约（Int/String/Bool 字面量上）。
--- 只用于内置运算符；用户定义的全局由 delta 展开处理。
--- ---------------------------------------------------------------
-isPrimitiveName : String -> Bool
-isPrimitiveName g =
-  g == "+"
-    || g == "-"
-    || g == "*"
-    || g == "/"
-    || g == "=="
-    || g == "/="
-    || g == "<"
-    || g == "<="
-    || g == ">"
-    || g == ">="
-    || g == "++"
-    || g == "&&"
-    || g == "||"
-    || g == "bi_eq_int"
-    || g == "bi_neq_int"
-    || g == "bi_eq_str"
-    || g == "bi_neq_str"
-    || g == "bi_eq_generic"
-    || g == "bi_neq_generic"
-    || g == "strFromInt"
-    || g == "strLength"
-
 asInt : Value -> Maybe Int
 asInt v = case v of
   VInt n => Just n
@@ -339,60 +312,71 @@ strPrim3 ([a, b, c]) f = case asStr a of
   Nothing => Nothing
 strPrim3 sp f = Nothing
 
--- primReduce 的廉价前置判定：force 会对**每个**中性全局头调 primReduce，实测单次 check
--- 有 1500 万次（绝大多数是数据族名，如 `Base.List.List`/`String`/`Int`）。primReduce
--- 原先是 40 个字符串分支顺序比较，判空要几百纳秒；这里先用首字符筛掉「不可能是内建」
--- 的名字（数据族名首字母大写且不是 T/F），命中不了就一次返回。
-couldBePrim : String -> Bool
-couldBePrim g =
-  let
-    c = strAt g 0
-  in if c < 0 then False
-  else if c >= 97 then c <= 122
-  else if c == 84 then True
-  else if c == 70 then True else if c >= 38 then c <= 47 else c == 60 || c == 62 || c == 124
-
+-- 内建归约：唯一真源是 `Vuna.Compiler.Intrinsics` 的名字表 + 归约标签（M27）。
+-- 表查找是 O(1) 哈希（不再需要首字符预筛）。
 primReduce : HashTbl Term -> Sols -> Int -> String -> List Value -> Maybe Value
 primReduce defs sols fuel g sp = if fuel <= 0 then Nothing
-else if notBool (couldBePrim g) then Nothing
-else case g of
-  "+" => intPrim2 sp (\a, b => VInt (a + b))
-  "-" => intPrim2 sp (\a, b => VInt (a - b))
-  "*" => intPrim2 sp (\a, b => VInt (a * b))
-  "/" => intPrim2Div sp
-  "==" => intPrim2 sp (\a, b => VBool (a == b))
-  "/=" => intPrim2 sp (\a, b => VBool (notBool (a == b)))
-  "<" => intPrim2 sp (\a, b => VBool (a < b))
-  "<=" => intPrim2 sp (\a, b => VBool (a <= b))
-  ">" => intPrim2 sp (\a, b => VBool (a > b))
-  ">=" => intPrim2 sp (\a, b => VBool (a >= b))
-  "++" => strPrim2 sp (\a, b => VStr (a ++ b))
-  "True" => primConst sp (VBool True)
-  "False" => primConst sp (VBool False)
-  "&&" => boolPrim2 sp (\a, b => VBool (a && b))
-  "||" => boolPrim2 sp (\a, b => VBool (a || b))
-  -- M19：`==` / `/=` 的跨类型特化名与 str* 内建（精化期按实参类型重写）。
-  "bi_eq_int" => intPrim2 sp (\a, b => VBool (a == b))
-  "bi_neq_int" => intPrim2 sp (\a, b => VBool (notBool (a == b)))
-  "bi_eq_str" => strPrim2 sp (\a, b => VBool (strEq a b))
-  "bi_neq_str" => strPrim2 sp (\a, b => VBool (notBool (strEq a b)))
-  -- M23：泛型 == / /= 兜底（没有 Eq 字典时按运行时结构比较，语义对齐 HM 的
-  -- bi_eq_generic）。签名带一个擦除的类型实参，spine 形如 [ty, a, b]。
-  "bi_eq_generic" => genericEqPrim defs sols (fuel - 1) sp False
-  "bi_neq_generic" => genericEqPrim defs sols (fuel - 1) sp True
-  "strFromInt" => intPrim1 sp (\n => VStr (strFromInt n))
-  "strLength" => strPrim1 sp (\s => VInt (strLength s))
-  -- M22.2：比较运算符的内建特化（`<` / `<=` / `>` / `>=`）与泛型 compare 变体，
-  -- 让 DT core evaluator 能归约 `mergeSort` 一类用 Ord 的库函数。
-  "bi_lt_int" => intPrim2 sp (\a, b => VBool (a < b))
-  "bi_le_int" => intPrim2 sp (\a, b => VBool (a <= b))
-  "bi_gt_int" => intPrim2 sp (\a, b => VBool (a > b))
-  "bi_ge_int" => intPrim2 sp (\a, b => VBool (a >= b))
-  "bi_lt_generic" => genericPrim2 sp (\o => o < 0)
-  "bi_le_generic" => genericPrim2 sp (\o => o <= 0)
-  "bi_gt_generic" => genericPrim2 sp (\o => o > 0)
-  "bi_ge_generic" => genericPrim2 sp (\o => o >= 0)
+else case findIntrinsic g of
+  Just i => case intrinsicOp i of
+    OpAdd => intPrim2 sp (\a, b => VInt (a + b))
+    OpSub => intPrim2 sp (\a, b => VInt (a - b))
+    OpMul => intPrim2 sp (\a, b => VInt (a * b))
+    OpDiv => intPrim2Div sp
+    OpEqInt => intPrim2 sp (\a, b => VBool (a == b))
+    OpNeqInt => intPrim2 sp (\a, b => VBool (notBool (a == b)))
+    OpLtInt => intPrim2 sp (\a, b => VBool (a < b))
+    OpLeInt => intPrim2 sp (\a, b => VBool (a <= b))
+    OpGtInt => intPrim2 sp (\a, b => VBool (a > b))
+    OpGeInt => intPrim2 sp (\a, b => VBool (a >= b))
+    OpEqStr => strPrim2 sp (\a, b => VBool (strEq a b))
+    OpNeqStr => strPrim2 sp (\a, b => VBool (notBool (strEq a b)))
+    OpLtGeneric => genericPrim2 sp (\o => o < 0)
+    OpLeGeneric => genericPrim2 sp (\o => o <= 0)
+    OpGtGeneric => genericPrim2 sp (\o => o > 0)
+    OpGeGeneric => genericPrim2 sp (\o => o >= 0)
+    OpEqGeneric => genericEqPrim defs sols (fuel - 1) sp False
+    OpNeqGeneric => genericEqPrim defs sols (fuel - 1) sp True
+    OpConcat => strPrim2 sp (\a, b => VStr (a ++ b))
+    OpAnd => boolPrim2 sp (\a, b => VBool (a && b))
+    OpOr => boolPrim2 sp (\a, b => VBool (a || b))
+    OpStrFromInt => intPrim1 sp (\n => VStr (strFromInt n))
+    OpStrLength => strPrim1 sp (\s => VInt (strLength s))
+    OpStrHash => strPrim1 sp (\s => VInt (strHashOf s))
+    OpStrAt => atPrim sp
+    OpStrShow => strPrim1 sp (\s => VStr (showCoreString s))
+    -- interp 边界（显式分类，见 docs/reference/primitives.md）：List 桥接依赖 base 的
+    -- `Base.List.List` 构造子表示，核心求值器无法安全构造；除零/运行期失败同理。
+    OpStrUnpack => Nothing
+    OpStrPack => Nothing
+    OpStrConcatMany => Nothing
+    OpStrSubstTemplate => Nothing
+    OpNone => Nothing
+  Nothing => Nothing
+
+-- `strHash`：固定 1024 桶（与 runtime `dtp_strHash` 同一公式）。
+strHashOf : String -> Int
+strHashOf s = strHashChars (strUnpack s) 0
+
+strHashChars : List Int -> Int -> Int
+strHashChars [] h = h
+strHashChars (c :: rest) h = strHashChars rest (h * 33 + c - (h * 33 + c) / 1024 * 1024)
+
+-- `strAt`：按字节取；越界返回 -1（与 runtime `dtp_strAt` 一致）。
+atPrim : List Value -> Maybe Value
+atPrim sp = case sp of
+  [a, b] => case asStr a of
+    Just s => case asInt b of
+      Just i => Just (VInt (strAtBytes s i))
+      Nothing => Nothing
+    Nothing => Nothing
   _ => Nothing
+
+strAtBytes : String -> Int -> Int
+strAtBytes s i = if i < 0 || i >= strLength s then 0 - 1 else nthByte (strUnpack s) i
+
+nthByte : List Int -> Int -> Int
+nthByte [] i = 0 - 1
+nthByte (c :: rest) i = if i <= 0 then c else nthByte rest (i - 1)
 
 genericEqPrim : HashTbl Term -> Sols -> Int -> List Value -> Bool -> Maybe Value
 genericEqPrim defs sols fuel sp neg = if fuel <= 0 then Nothing

@@ -11,7 +11,7 @@ module Vuna.Interp (interpretExpr, interpretFile) where
 -- test runner）负责从文件、cwd 或包构造上下文。
 --
 -- 求值是**纯**的：不执行效果。`main : IO a` 只对纯动作（例如 `pure n`）能求出值；
--- 真正带 `print` / 文件效果的 `main` 请用 `compile` + 运行产物（见 dt.md）。
+-- 真正带 `prim_print` / 文件效果的 `main` 请用 `compile` + 运行产物（见 dt.md）。
 -- 该模块只被 CLI / REPL / test runner 使用，不属于编译器 seed 闭包。
 import Vuna.Compiler.Common
 import Vuna.Compiler.Packages.Pkg

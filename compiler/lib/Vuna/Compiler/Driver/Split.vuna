@@ -34,7 +34,7 @@ splitInitFiles (f :: rest) = splitName f :: splitInitFiles rest
 writeSplitFiles : String -> List SplitFile -> Result Int
 writeSplitFiles dir [] = Ok 0
 writeSplitFiles dir (f :: rest) = andThen (writeSplitFiles dir rest) (\n => let
-  _ = writeFile (dir ++ "/" ++ splitName f) (splitText f)
+  _ = prim_writeFile (dir ++ "/" ++ splitName f) (splitText f)
 in Ok (n + 1)
 )
 

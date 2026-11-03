@@ -20,7 +20,7 @@ runDoc dir outPath =
     in case docModules files of
       Err e =>
         let
-          _ = print ("error: " ++ e ++ "\n")
+          _ = prim_print ("error: " ++ e ++ "\n")
         in 2
       Ok sections =>
         let
@@ -29,15 +29,15 @@ runDoc dir outPath =
         in let
           parent = firstOf (splitPath outPath)
         in let
-          _ = if parent == "" then 0 else makeDir parent
+          _ = if parent == "" then 0 else prim_makeDir parent
         in let
-          _ = writeFile outPath content
+          _ = prim_writeFile outPath content
         in let
-          _ = print ("wrote " ++ outPath ++ " (" ++ strFromInt (length files) ++ " modules)\n")
+          _ = prim_print ("wrote " ++ outPath ++ " (" ++ strFromInt (length files) ++ " modules)\n")
         in 0
   else
     let
-      _ = print ("error: no such directory: " ++ dir ++ "\n")
+      _ = prim_print ("error: no such directory: " ++ dir ++ "\n")
     in 2
 
 docModules : List String -> Result (List String)
@@ -47,7 +47,7 @@ docModules (path :: rest) =
     (\section => andThen (docModules rest) (\sections => Ok (section :: sections)))
 
 docModule : String -> Result String
-docModule path = case parseSource path (readFile path) of
+docModule path = case parseSource path (prim_readFile path) of
   Err e => Err (path ++ ": " ++ e)
   Ok (Source hdr imports decls) =>
     Ok (moduleHeaderLine path hdr ++ "\n\n```vuna\n" ++ join "\n" (declLines decls) ++ "\n```\n")

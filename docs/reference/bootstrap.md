@@ -39,9 +39,11 @@ Nix 侧的对应关系：`packages.vuna-seed`、`packages.vuna-compiler`、`pack
 每个 vuna 模块对应一个 OCaml 模块（`.ml`），外加共享 runtime 模块与
 `build.sh`。种子**只覆盖 compiler 包**（`compiler/app/Main.vuna` 的 import 闭包）：
 工具链（fmt/lint/repl/doc/test/lsp）由编译器编译出来，不在信任锚点里。源码模块重组
-（compiler 25 → 49 模块）又删除空 `Vuna_builtins` unit 后，文件集为 **66 个
-（65 个 `.ml` + `build.sh`）**，无 `.mli`（最终以 `seed/` 实际内容与
-`nix/seed-count.txt` 为准）。唯一的硬性不变量：
+（compiler 25 → 49 模块，M27 加到 50）又删除空 `Vuna_builtins` unit 后，文件集为 66 个
+（65 个 `.ml` + `build.sh`），无 `.mli`（最终以 `seed/` 实际内容与
+`nix/seed-count.txt` 为准）。M27 新增 `Vuna.Compiler.Intrinsics` 并完成两轮 rotation 后，
+当前入库 `seed/` 为 **66 个 `.ml` / 67 个文件**（`seed-count.txt` = 66，含
+`Vuna_dCompiler_dIntrinsics.ml`）。唯一的硬性不变量：
 
 > **当前入库的种子必须能编译当前的 vuna 源码，且与当前源码的生成结果同步。**
 
@@ -82,6 +84,11 @@ fixed point → 全部通过后才 `rm -rf seed && cp -r "$tmp/seed" seed`，因
 嵌入的源码路径保持一致。如果改的是**现有语法的语义**（而非新增语法），旧种子会按旧
 语义编译新编译器，需要确认没有 seed 语义偏差；必要时先 rotate，再让编译器源码依赖新语义。
 
+M27 的 rotation 按两步完成：先把单一内建声明面（`Vuna.Compiler.Intrinsics`）与 manifest
+能力声明以旧种子可编译的形式落地并 rotate，再用 `strShow` 收掉 `Show String` 的转义
+不一致后二次 rotate（语义见 [primitives.md](primitives.md)）。两次 rotation 的 fixed
+point 均已通过，`seed/` 与当前源码同步。
+
 ## 硬不变量
 
 1. **当前 seed 必须能编译当前源码，且与源码同步**（`diff -r seed s1`）——`checks.seed-selfhost` 守；
@@ -93,20 +100,27 @@ fixed point → 全部通过后才 `rm -rf seed && cp -r "$tmp/seed" seed`，因
 5. **唯一路径**：语言夹具、`vuna interp`、包构建与 seed 全部走 DT（精化 + 擦除 codegen），
    没有可切换的检查器，也没有第二套 codegen。
 
-## 效应内建的包级 allowlist
+## 效应能力（capabilities）
 
-`seed/` 里没有工具链模块，但编译器自身需要文件 IO。规则在
-`compiler/lib/Vuna/Compiler/Loader/Resolve.vuna` 的 `packageAllowsEffects`：
+`seed/` 里没有工具链模块，但编译器自身需要文件 IO。M27 起效应边界是 manifest 里的
+**显式能力声明**，不是按包名 allowlist：
 
-- 允许直接调用 effectful 内建的包：`vuna`、`vuna-compiler`、`vuna-base`；
-- 其余包只能经 `Base.IO` 的 IO API 使用效果，纯代码里直接 `print` / `readFile` 报
-  `effectful builtin ... is not available in package ...`；
-- M26 起每个源文件只有包上下文一种来源（不再有 `entryPkg = ""` 的 raw 模式分支）；
-  base 定位用的 `prim_getenv` / `prim_getcwd` / `prim_execPath` 也按 effectful 内建
-  统一受限（只有 TCB 三包可用）。
+- 包在 `vuna.toml` 的 `[capabilities] effects` 里声明 `console` / `fs` / `process` /
+  `env` / `clock` 的任意子集（合法名与放行判定在 `Vuna.Compiler.Intrinsics` +
+  `Loader.Resolve.checkEffectsBuiltins`；未知/重复能力名直接报错）；
+- 效果原语只有 `prim_*` 名；每个内建的能力位、签名与 runtime 名同源在
+  `Vuna.Compiler.Intrinsics`。未声明能力的包只能经 `Base.IO` 使用效果；
+- 仓库内三个包的能力声明见各自 `vuna.toml`：根包与 `vuna-compiler` 五个能力，
+  `vuna-base` 只声明 `console` / `fs` / `process`（`Base.IO` 的封装面）；`test/corpus`
+  与夹具 manifest 不声明能力，只能经 `Base.IO`；
+- 能力随包上下文传递（`PackageContext` / `Root` / `Module` / `Project`），无 manifest 的
+  ad-hoc 文件没有能力；
+- M26 起每个源文件只有包上下文一种来源（不再有 raw 模式分支）；base 定位用的
+  `prim_getenv` / `prim_getcwd` / `prim_execPath` 需要 `env` 能力，与其它 effectful
+  内建走同一套检查。
 
 `Driver.CompilerCli.runIn`（`prim_runIn`，原独立 `Process` 模块已删除）是唯一的进程
-执行入口，同样受 allowlist 限制。
+执行入口，需要 `process` 能力。
 
 ## 种子文件集（当前）
 
@@ -119,29 +133,33 @@ fixed point → 全部通过后才 `rm -rf seed && cp -r "$tmp/seed" seed`，因
 Vuna_runtime
 Base_dPair ... Base_dString          （vuna-base 模块，依赖序）
 Prelude
-Vuna_dCompiler_dCommon ... Vuna_dCompiler_dFrontend_dParser
+Vuna_dCompiler_dCommon ... Vuna_dCompiler_dIntrinsics ...
   ... Vuna_dCompiler_dElab_dTerm ... Vuna_dCompiler_dDriver_dCompilerCli
-                                     （编译器 49 模块，依赖序；点转 _d）
+                                     （编译器 50 模块，依赖序；点转 _d）
 Main
 ```
 
-- `Vuna_runtime`：`Codegen.Term.dtRuntime`（`bi_*` 等运行时）。
+- `Vuna_runtime`：`Codegen.Term.dtRuntime`（`bi_*` / `dtp_*` 等运行时）。
 - 每个源码模块一个 `<Module>.ml`（依赖序；OCaml 编译单元名 = 模块名点转 `_d`），
   文件头 `open` runtime 与所有更早模块；`List` 桥接（`dtp_unpack/pack`）
-  放在声明 `List` 族的模块文件里。
+  放在声明 `List` 族的模块文件里；`Vuna_dCompiler_dIntrinsics.ml` 是内建声明的唯一
+  真源（M27）。
 - `Main.ml`：entry decls 的 datas + defs 与 `main` 钩子（M24.6 修复：入口文件里声明的
   `data` 也必须发进 `Main.ml`）。**不生成 `.mli`**。
 - M26 删除了空 `Vuna_builtins` unit（A02）：文件集从 66 个 `.ml` 收敛到 **65 个 `.ml`
-  / 66 个文件**（含 `build.sh`），不再保留“只为形状稳定”的空编译单元。
+  / 66 个文件**（含 `build.sh`），不再保留“只为形状稳定”的空编译单元。M27 新增
+  `Intrinsics` 模块并完成 rotation 后为 **66 个 `.ml` / 67 个文件**（当前入库状态）。
 
 `seed/build.sh` 由 codegen 生成：干净构建一次 `ocamlopt` 编译全部 `.ml` 并链接；
 增量构建按 `.ml`/`.cmi` 时间戳逐模块重编（`compile <module>` 行可被脚本断言）。
 编译 flag 统一为 `-g -w -a+39 -warn-error +39`（warning 39 = unused rec，设 warn-error），
-并链接 `unix.cmxa`（`fileMtime`/`fileSize` 内建用 `Unix.stat`）。
+并链接 `unix.cmxa`——M27 的 runtime 仍无条件依赖 Unix（`Unix.stat` / `gettimeofday` /
+`readlink` 等；语义与分类见 [primitives.md](primitives.md)）。
 
 ## 相关阅读
 
 - 编译器模块职责：[compiler.md](compiler.md)
+- 内建声明面、原语语义与效应能力：[primitives.md](primitives.md)
 - 子系统数据流与改动定位：[architecture.md](../architecture.md)
 - 测试与 CI 门槛：[testing.md](testing.md)
 - 路线图中的阶段门槛与硬约束：[docs/roadmap.md](../roadmap.md)

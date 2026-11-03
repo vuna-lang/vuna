@@ -39,7 +39,7 @@ module Vuna.Index
 --   - `symbols.txt`  每行 `module <TAB> name <TAB> kind <TAB> line <TAB> col <TAB> sig <TAB> doc`；
 --   - `refs.txt`     每行 `module <TAB> name`（模块引用了哪些名字，预先算好的反向边）。
 --
--- 新鲜度：每次调用先遍历目录 + 逐个 `fileSize`/`fileMtime`（不读文件内容），
+-- 新鲜度：每次调用先遍历目录 + 逐个 `prim_fileSize`/`prim_fileMtime`（不读文件内容），
 -- 与 manifest 完全一致就直接从 `*.txt` 回读索引；否则全量重建并写回。
 -- 因此**没有「刷新索引」命令**：`vuna map` / `vuna api` 自己判定。
 -- 缓存不可写时降级为纯内存构建（不报错）。

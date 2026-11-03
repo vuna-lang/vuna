@@ -41,16 +41,16 @@ replFuelBound = 1073741824
 runRepl : PackageContext -> Int
 runRepl ctx =
   let
-    _ = print ("vuna repl\n" ++ replHelp)
+    _ = prim_print ("vuna repl\n" ++ replHelp)
   in replLoop replFuelBound ctx "" ""
 
 replLoop : Int -> PackageContext -> String -> String -> Int
 replLoop fuel ctx imports defs = if fuel <= 0 then 0
 else
   let
-    _ = print replPrompt
+    _ = prim_print replPrompt
   in let
-    line = readLine
+    line = prim_readLine
   in if line == "" then 0 else replHandle (fuel - 1) ctx imports defs (trim line)
 
 replHandle : Int -> PackageContext -> String -> String -> String -> Int
@@ -61,11 +61,11 @@ else case line of
   ":quit" => 0
   ":reset" =>
     let
-      _ = print "已清空\n"
+      _ = prim_print "已清空\n"
     in replLoop (fuel - 1) ctx "" ""
   ":help" =>
     let
-      _ = print replHelp
+      _ = prim_print replHelp
     in replLoop (fuel - 1) ctx imports defs
   _ =>
     if startsWith "import " line then replAddImport (fuel - 1) ctx imports defs line
@@ -79,7 +79,7 @@ else
   in case parseSource replTempFile (imports2 ++ defs) of
     Err e =>
       let
-        _ = print ("parse error: " ++ e ++ "\n")
+        _ = prim_print ("parse error: " ++ e ++ "\n")
       in replLoop (fuel - 1) ctx imports defs
     Ok _ => replLoop (fuel - 1) ctx imports2 defs
 
@@ -96,7 +96,7 @@ replEvalExpr fuel ctx imports defs line = if fuel <= 0 then 0
 else case parseExpressionSource line of
   Err e =>
     let
-      _ = print ("错误: " ++ e ++ "\n")
+      _ = prim_print ("错误: " ++ e ++ "\n")
     in replLoop (fuel - 1) ctx imports defs
   Ok _ =>
     let
@@ -104,5 +104,5 @@ else case parseExpressionSource line of
     in let
       output = interpretExpr ctx program line
     in let
-      _ = print (output ++ "\n")
+      _ = prim_print (output ++ "\n")
     in replLoop (fuel - 1) ctx imports defs

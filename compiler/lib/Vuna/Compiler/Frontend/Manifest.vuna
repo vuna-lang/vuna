@@ -1,5 +1,6 @@
 module Vuna.Compiler.Frontend.Manifest
   ( Manifest(..)
+  , manifestCapabilities
   , manifestDependencies
   , manifestDir
   , manifestEdition
@@ -18,35 +19,42 @@ module Vuna.Compiler.Frontend.Manifest
 --   [package]     name / version / edition（edition 可选）
 --   [workspace]   members = ["stdlib", "app"]（可选）
 --   [export]      modules = ["Base.List"]（可选；值必须是字符串数组）
+--   [capabilities] effects = ["console", "fs"]（可选；M27 效应能力声明，值必须是
+--                 字符串数组；合法能力名的语义校验由 Loader 负责）
 --   [dependencies] <dep-name> = "<相对路径>"
 -- parseManifest 只解析，不检查文件是否存在；validateManifest 做结构校验。
--- 本模块不做文件 I/O：调用方用自己的 readFile 读入内容后传入。
+-- 本模块不做文件 I/O：调用方用自己的 prim_readFile 读入内容后传入。
 import Vuna.Compiler.Common
 import Vuna.Compiler.Frontend.Toml
 
 data Manifest : Type where
-  Manifest : Maybe String -> Maybe String -> Maybe String -> List String -> Maybe (List String) -> List (Pair String String) -> String -> Manifest
+  Manifest : Maybe String -> Maybe String -> Maybe String -> List String -> Maybe (List String) -> List (Pair String String) -> List String -> String -> Manifest
 
 manifestName : Manifest -> Maybe String
-manifestName (Manifest name version edition members exports deps path) = name
+manifestName (Manifest name version edition members exports deps caps path) = name
 
 manifestVersion : Manifest -> Maybe String
-manifestVersion (Manifest name version edition members exports deps path) = version
+manifestVersion (Manifest name version edition members exports deps caps path) = version
 
 manifestEdition : Manifest -> Maybe String
-manifestEdition (Manifest name version edition members exports deps path) = edition
+manifestEdition (Manifest name version edition members exports deps caps path) = edition
 
 manifestMembers : Manifest -> List String
-manifestMembers (Manifest name version edition members exports deps path) = members
+manifestMembers (Manifest name version edition members exports deps caps path) = members
 
 manifestExports : Manifest -> Maybe (List String)
-manifestExports (Manifest name version edition members exports deps path) = exports
+manifestExports (Manifest name version edition members exports deps caps path) = exports
 
 manifestDependencies : Manifest -> List (Pair String String)
-manifestDependencies (Manifest name version edition members exports deps path) = deps
+manifestDependencies (Manifest name version edition members exports deps caps path) = deps
+
+-- M27：manifest 的 `[capabilities].effects` 声明；空列表表示该包没有直接使用
+-- effectful 内建的能力（只能经 Base.IO）。
+manifestCapabilities : Manifest -> List String
+manifestCapabilities (Manifest name version edition members exports deps caps path) = caps
 
 manifestPath : Manifest -> String
-manifestPath (Manifest name version edition members exports deps path) = path
+manifestPath (Manifest name version edition members exports deps caps path) = path
 
 -- 字符分类（与 Toml 内部约定一致；vuna 无字符字面量，统一用 char code）。
 isDigitChar : Int -> Bool
@@ -107,6 +115,8 @@ checkOneEntry path (TomlEntry section key value line) =
   else Err (atLine path line ("unknown key \"" ++ key ++ "\" in [workspace]"))
   else if sameSection section ["export"] then if key == "modules" then Ok 0
   else Err (atLine path line ("unknown key \"" ++ key ++ "\" in [export]"))
+  else if sameSection section ["capabilities"] then if key == "effects" then Ok 0
+  else Err (atLine path line ("unknown key \"" ++ key ++ "\" in [capabilities]"))
   else if sameSection section ["dependencies"] then Ok 0
   else Err (atLine path line ("unknown section [" ++ joinDots section ++ "]"))
 
@@ -131,7 +141,7 @@ collectDependenciesAcc path entries acc = case entries of
 buildManifest : String -> List TomlEntry -> Result Manifest
 buildManifest path entries =
   andThen (checkEntries path entries)
-    (\checked => andThen (stringField path ["package"] "name" entries) (\name => andThen (stringField path ["package"] "version" entries) (\version => andThen (stringField path ["package"] "edition" entries) (\edition => andThen (stringListField path ["workspace"] "members" entries) (\members => andThen (stringListField path ["export"] "modules" entries) (\exports => andThen (collectDependencies path entries) (\deps => Ok (Manifest name version edition (orEmptyList members) exports deps path))))))))
+    (\checked => andThen (stringField path ["package"] "name" entries) (\name => andThen (stringField path ["package"] "version" entries) (\version => andThen (stringField path ["package"] "edition" entries) (\edition => andThen (stringListField path ["workspace"] "members" entries) (\members => andThen (stringListField path ["export"] "modules" entries) (\exports => andThen (collectDependencies path entries) (\deps => andThen (stringListField path ["capabilities"] "effects" entries) (\caps => Ok (Manifest name version edition (orEmptyList members) exports deps (orEmptyList caps) path)))))))))
 
 parseManifest : String -> String -> Result Manifest
 parseManifest path contents =
@@ -218,10 +228,23 @@ validateDepsSeen path seen deps = case deps of
     else if memName name seen then Err (manifestErr path ("duplicate dependency \"" ++ name ++ "\""))
     else validateDepsSeen path (name :: seen) rest
 
+-- M27：能力声明只做结构校验（非空、无重复）；合法能力名的语义表在 Loader 侧，
+-- 这里不重复一份名字表（避免两处真源漂移）。
+validateCapabilities : String -> List String -> Result Int
+validateCapabilities path caps = validateCapsSeen path [] caps
+
+validateCapsSeen : String -> List String -> List String -> Result Int
+validateCapsSeen path seen caps = case caps of
+  [] => Ok 0
+  c :: rest =>
+    if c == "" then Err (manifestErr path "capability name must not be empty")
+    else if memName c seen then Err (manifestErr path ("duplicate capability \"" ++ c ++ "\""))
+    else validateCapsSeen path (c :: seen) rest
+
 validateManifest : Manifest -> Result Manifest
-validateManifest (Manifest name version edition members exports deps path) =
+validateManifest (Manifest name version edition members exports deps caps path) =
   andThen (validateName path name)
-    (\okName => andThen (validateVersion path version) (\okVersion => andThen (validateEdition path edition) (\okEdition => andThen (validateMembers path members) (\okMembers => andThen (validateExports path exports) (\okExports => andThen (validateDependencies path deps) (\okDeps => Ok (Manifest name version edition members exports deps path)))))))
+    (\okName => andThen (validateVersion path version) (\okVersion => andThen (validateEdition path edition) (\okEdition => andThen (validateMembers path members) (\okMembers => andThen (validateExports path exports) (\okExports => andThen (validateDependencies path deps) (\okDeps => andThen (validateCapabilities path caps) (\okCaps => Ok (Manifest name version edition members exports deps caps path))))))))
 
 -- manifest 所在目录：`a/b/vuna.toml` -> `a/b`；没有目录成分 -> "."。
 manifestDir : String -> String

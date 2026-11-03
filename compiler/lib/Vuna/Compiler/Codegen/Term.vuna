@@ -20,6 +20,7 @@ import Vuna.Compiler.Common
 import Vuna.Compiler.Core
 import Vuna.Compiler.Diagnostics
 import Vuna.Compiler.Elab
+import Vuna.Compiler.Intrinsics
 import Vuna.Compiler.Codegen.Decl
 import Vuna.Compiler.Codegen.Erase
 
@@ -71,8 +72,8 @@ dtRuntime =
     ++ dtPrimRuntime
 
 -- M21：effectful 内建（`prim_*`）的 DT 运行时实现。
--- 签名在 `Elab.Prelude.preludeGlobals`（`prim_*` 只进 globals、不进 `preludeNames`），
--- 这里补 OCaml 侧实现；`prim_getArgs` / `prim_readLine` 在 Base.IO 里是**值**，
+-- 签名在 `Elab.Prelude.preludeGlobals`，这里补 OCaml 侧实现（对应 Intrinsics 的
+-- `intrinsicRuntime` 字段）；`prim_getArgs` / `prim_readLine` 在 Base.IO 里是**值**，
 -- 所以在引用点展开成 `dtp_*(()`，与 Codegen 的既有处理一致（每次求值都重新读）。
 dtPrimRuntime : String
 dtPrimRuntime =
@@ -107,9 +108,9 @@ dtPrimRuntime =
 dtListBridge : List DtData -> String
 dtListBridge datas = case findListFamilyData datas of
   Nothing => ""
-  Just dd => case findFamilyCtor "Nil" (dtDataCtors dd) of
+  Just dd => case findFamilyCtor (dtDataCtors dd) listNilCtor of
     Nothing => ""
-    Just nilC => case findFamilyCtor "Cons" (dtDataCtors dd) of
+    Just nilC => case findFamilyCtor (dtDataCtors dd) listConsCtor of
       Nothing => ""
       Just consC =>
         let
@@ -163,110 +164,33 @@ dtListBridge datas = case findListFamilyData datas of
           ++ "    end else (Buffer.add_char buf tmpl.[i]; go (i + 1))\n"
           ++ "  in go 0; Buffer.contents buf\n"
 
-findFamilyCtor : String -> List DtCtor -> Maybe DtCtor
-findFamilyCtor _ [] = Nothing
-findFamilyCtor n (c :: rest) =
-  if lastName (dtCtorName c) == n then Just c else findFamilyCtor n rest
+findFamilyCtor : List DtCtor -> String -> Maybe DtCtor
+findFamilyCtor [] name = Nothing
+findFamilyCtor (c :: rest) name = if dtCtorName c == name then Just c else findFamilyCtor rest name
 
 findListFamilyData : List DtData -> Maybe DtData
 findListFamilyData [] = Nothing
 findListFamilyData (d :: rest) =
-  if lastName (dtDataName d) == "List" then Just d else findListFamilyData rest
+  if dtDataName d == listFamilyName then Just d else findListFamilyData rest
 
--- 「codegen 不感知判定来源」不被破坏。
+-- 全局名 → runtime 表达式：唯一真源是 `Vuna.Compiler.Intrinsics`（M27）。
+-- 内部 `bi_*` 也在这张表里（visible=False）；codegen 只做名字映射、不感知类型。
 globalRef : String -> Result String
-globalRef name = case name of
-  "True" => Ok "true"
-  "False" => Ok "false"
-  "+" => Ok "bi_add"
-  "-" => Ok "bi_sub"
-  "*" => Ok "bi_mul"
-  "/" => Ok "bi_div"
-  "==" => Ok "bi_eq_int"
-  "/=" => Ok "bi_neq_int"
-  "<" => Ok "bi_lt_int"
-  "<=" => Ok "bi_le_int"
-  ">" => Ok "bi_gt_int"
-  ">=" => Ok "bi_ge_int"
-  "++" => Ok "bi_concat"
-  "&&" => Ok "bi_and"
-  "||" => Ok "bi_or"
-  "bi_eq_int" => Ok "bi_eq_int"
-  "bi_neq_int" => Ok "bi_neq_int"
-  "bi_eq_str" => Ok "bi_eq_str"
-  "bi_neq_str" => Ok "bi_neq_str"
-  "bi_eq_generic" => Ok "bi_eq_generic"
-  "bi_neq_generic" => Ok "bi_neq_generic"
-  "bi_lt_int" => Ok "bi_lt_int"
-  "bi_le_int" => Ok "bi_le_int"
-  "bi_gt_int" => Ok "bi_gt_int"
-  "bi_ge_int" => Ok "bi_ge_int"
-  "bi_lt_generic" => Ok "bi_lt_generic"
-  "bi_le_generic" => Ok "bi_le_generic"
-  "bi_gt_generic" => Ok "bi_gt_generic"
-  "bi_ge_generic" => Ok "bi_ge_generic"
-  "strFromInt" => Ok "bi_strFromInt"
-  "strUnpack" => Ok "dtp_unpack"
-  "strPack" => Ok "dtp_pack"
-  "strLength" => Ok "bi_strLength"
-  "strConcatMany" => Ok "dtp_concatMany"
-  "strSubstTemplate" => Ok "dtp_substTemplate"
-  "timeUs" => Ok "(dtp_timeUs ())"
-  "strHash" => Ok "dtp_strHash"
-  "strAt" => Ok "dtp_strAt"
-  -- M23：效果内建的公开名与 `prim_*` 内部名都映射到同一组 `dtp_*` 运行时函数。
-  "print" => Ok "dtp_print"
-  "readFile" => Ok "dtp_readFile"
-  "writeFile" => Ok "dtp_writeFile"
-  "readDir" => Ok "(fun p -> dtp_listOf (dtp_readDir p))"
-  "isDirectory" => Ok "dtp_isDirectory"
-  "makeDir" => Ok "dtp_makeDir"
-  "removeFile" => Ok "dtp_removeFile"
-  "fileExists" => Ok "dtp_fileExists"
-  "fileMtime" => Ok "dtp_fileMtime"
-  "fileSize" => Ok "dtp_fileSize"
-  "exit" => Ok "dtp_exit"
-  "getArgs" => Ok "(dtp_listOf (dtp_getArgs ()))"
-  "readLine" => Ok "(dtp_readLine ())"
-  "prim_print" => Ok "dtp_print"
-  "prim_readFile" => Ok "dtp_readFile"
-  "prim_writeFile" => Ok "dtp_writeFile"
-  "prim_readDir" => Ok "(fun p -> dtp_listOf (dtp_readDir p))"
-  "prim_isDirectory" => Ok "dtp_isDirectory"
-  "prim_makeDir" => Ok "dtp_makeDir"
-  "prim_removeFile" => Ok "dtp_removeFile"
-  "prim_fileExists" => Ok "dtp_fileExists"
-  "prim_fileMtime" => Ok "dtp_fileMtime"
-  "prim_fileSize" => Ok "dtp_fileSize"
-  "prim_exit" => Ok "dtp_exit"
-  "prim_runIn" => Ok "(fun dir args -> dtp_runIn dir (dtp_ocamlOf args))"
-  "prim_getArgs" => Ok "(dtp_listOf (dtp_getArgs ()))"
-  "prim_readLine" => Ok "(dtp_readLine ())"
-  -- M26：base 定位原语（只读；只有 prim_* 名）。
-  "prim_getenv" => Ok "dtp_getenv"
-  "prim_getcwd" => Ok "(dtp_getcwd ())"
-  "prim_execPath" => Ok "(dtp_execPath ())"
-  _ => Ok (valueName name)
+globalRef name = case findIntrinsic name of
+  Just i => Ok (intrinsicRuntime i)
+  Nothing => Ok (valueName name)
 
--- 零参构造子（True/False 之外的 user 构造子）作为普通值引用时，OCaml 里就是裸构造子；
--- 但只有 datas 表知道它是构造子，所以生成入口先查构造子表，再回落到 globalRef。
---
--- M23：`strUnpack` / `strPack` 的映射依赖程序**有没有声明 List 族**：
---   - 有 List 族：走 `dtListBridge` 生成的 `dtp_unpack` / `dtp_pack`（int list ↔ 族构造子）；
---   - 没有 List 族（`run/10_string_pack` 这类单文件程序）：`List` 只是 prelude 签名里的
---     不透明类型，直接用 OCaml int list 的实现 `bi_strUnpack` / `bi_strPack`。
--- 旧实现无条件映射 `dtp_*`，没声明 List 族时那两个 helper 不生成 → 产物有未绑定名。
+-- 零参 user 构造子作为普通值引用时，OCaml 里就是裸构造子；只有 datas 表知道它是
+-- 构造子，所以生成入口先查构造子表，再回落到 Intrinsics/值名。
 genGlobalRef : GenSt -> String -> Result (Pair String GenSt)
 genGlobalRef st name = case lookupPair name (gsCtors st) of
   Just family => Ok (Pair (ctorOcamlName family name) st)
-  Nothing =>
-    if name == "strUnpack" then if hasListFamily (gsFamilies st) then Ok (Pair "dtp_unpack" st) else Ok (Pair "bi_strUnpack" st)
-    else if name == "strPack" then if hasListFamily (gsFamilies st) then Ok (Pair "dtp_pack" st) else Ok (Pair "bi_strPack" st)
-    else andThen (globalRef name) (\r => Ok (Pair r st))
-
-hasListFamily : List String -> Bool
-hasListFamily [] = False
-hasListFamily (f :: rest) = if lastName f == "List" then True else hasListFamily rest
+  Nothing => case findIntrinsic name of
+    Just i =>
+      if needsListBridge i then if memName listFamilyName (gsFamilies st) then Ok (Pair (intrinsicRuntime i) st)
+      else cgErr1 (ListBridgeRequired name) name
+      else Ok (Pair (intrinsicRuntime i) st)
+    Nothing => Ok (Pair (valueName name) st)
 
 -- 项 → OCaml
 -- ---------------------------------------------------------------
@@ -591,7 +515,7 @@ genGroups adj st (g :: rest) = andThen (genGroup adj st g) (\p => case p of
 )
 
 -- main 的展示方式（类型 force 后必须是 Int/String/Bool）。
--- 按族**短名**识别：Bool 的权威定义是 `Base.Bool.Bool`，也接受单文件 `data Bool`。
+-- 按 canonical 符号识别：Int / String 是 primitive 类型，Bool 是 `Base.Bool.Bool`。
 mainShow : List (Pair String Term) -> Term -> Result (Pair String String)
 mainShow table tyTerm = case force (tblFromList table) solsEmpty defaultFuel (eval [] tyTerm) of
   VNeutral n => case n of
@@ -599,18 +523,18 @@ mainShow table tyTerm = case force (tblFromList table) solsEmpty defaultFuel (ev
     _ => mainShowErr
   _ => mainShowErr
 
--- 把 `IO a` 拆成内层类型 `a`；不是 `IO ...` 则 Nothing。
+-- 把 `IO a` 拆成内层类型 `a`；不是 **base 的 canonical IO** 则 Nothing（M27：完整符号身份）。
 ioResultTy : Term -> Maybe Term
 ioResultTy t = case t of
   TApp fn arg _ => case fn of
-    TGlobal g => if lastName g == "IO" then Just arg else Nothing
+    TGlobal g => if g == ioFamilyName then Just arg else Nothing
     _ => Nothing
   _ => Nothing
 
--- 找 IO 族的（族名, 构造子名），用于生成 `match main with C_IO_MkIO f -> f 0`。
+-- 找 canonical IO 族的（族名, 构造子名），用于生成 `match main with C_IO_MkIO f -> f 0`。
 ioCtorOf : List DtData -> Maybe (Pair String String)
 ioCtorOf [] = Nothing
-ioCtorOf (d :: rest) = if lastName (dtDataName d) == "IO" then firstCtorOf d else ioCtorOf rest
+ioCtorOf (d :: rest) = if dtDataName d == ioFamilyName then firstCtorOf d else ioCtorOf rest
 
 firstCtorOf : DtData -> Maybe (Pair String String)
 firstCtorOf d = case dtDataCtors d of
@@ -618,11 +542,10 @@ firstCtorOf d = case dtDataCtors d of
   [] => Nothing
 
 mainShowForName : String -> Result (Pair String String)
-mainShowForName g = case lastName g of
-  "Int" => Ok (Pair "string_of_int" "int")
-  "String" => Ok (Pair "dt_show_string" "string")
-  "Bool" => Ok (Pair "dt_show_bool" "bool")
-  _ => mainShowErr
+mainShowForName g =
+  if g == intTypeName then Ok (Pair "string_of_int" "int")
+  else if g == strTypeName then Ok (Pair "dt_show_string" "string")
+  else if g == boolTypeName then Ok (Pair "dt_show_bool" "bool") else mainShowErr
 
 mainShowErr : Result (Pair String String)
 mainShowErr = cgErr0 MainReturnType

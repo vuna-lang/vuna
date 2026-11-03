@@ -1,0 +1,13 @@
+-- M27 / C18：用户 `data Bool` 是普通 data（声明身份是 `Bool`，与 canonical
+-- `Base.Bool.Bool` 不同）；`if` 仍只接受 canonical Bool，`==` 走泛型结构比较。
+data Bool : Type where
+  Yes : Bool
+  No : Bool
+
+neg : Bool -> Bool
+neg b = case b of
+  Yes => No
+  No => Yes
+
+main : Int
+main = if (neg Yes == No) then 1 else 2

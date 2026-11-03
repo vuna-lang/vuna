@@ -1040,13 +1040,14 @@ EOF
 ctx_comp=$("$VUNA" check "$ctx/use_compiler.vuna" 2>&1)
 check_contains "context compiler not visible" "$ctx_comp" "LD_ModuleNotFound"
 
-# 39c) 效果边界：无包名（ad-hoc）上下文不能直接调 effectful 内建，必须经 Base.IO。
+# 39c) 效应边界（M27）：能力必须显式声明；无 manifest 的 ad-hoc 上下文没有能力，
+# 直接调 effectful 内建（只有 prim_* 名）被拒，必须经 Base.IO 或声明能力。
 cat > "$ctx/effect.vuna" <<'EOF'
 main : Int
-main = print "x"
+main = prim_print "x"
 EOF
 ctx_effect=$("$VUNA" check "$ctx/effect.vuna" 2>&1)
-check_contains "context effect rejected" "$ctx_effect" "use Base.IO"
+check_contains "context effect rejected" "$ctx_effect" "requires capability"
 
 # 39d) 纯值程序在 base-only 上下文通过。
 cat > "$ctx/simple.vuna" <<'EOF'

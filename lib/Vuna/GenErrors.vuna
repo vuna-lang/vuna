@@ -73,11 +73,11 @@ runGenErrors root =
     outPath = root ++ "/docs/.generated/errors.md"
     parent = parentOf outPath
   in let
-    _ = if parent == "" then 0 else makeDir parent
+    _ = if parent == "" then 0 else prim_makeDir parent
   in let
-    _ = writeFile outPath (renderDoc allEntries)
+    _ = prim_writeFile outPath (renderDoc allEntries)
   in let
-    _ = print ("wrote " ++ outPath ++ " (" ++ strFromInt (length allEntries) ++ " codes)\n")
+    _ = prim_print ("wrote " ++ outPath ++ " (" ++ strFromInt (length allEntries) ++ " codes)\n")
   in 0
 
 -- 取路径的父目录（按 `/` 分割，去最后一段）。

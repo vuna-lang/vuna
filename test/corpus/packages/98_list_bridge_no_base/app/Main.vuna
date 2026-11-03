@@ -1,0 +1,4 @@
+-- M27：没有 base 依赖时，依赖 canonical Base.List.List 桥接的内建必须报清晰错误，
+-- 而不是 check 通过、ocamlopt 才 Unbound。
+main : Int
+main = strLength (strPack (strUnpack "AB"))

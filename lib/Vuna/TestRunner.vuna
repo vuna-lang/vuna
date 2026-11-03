@@ -19,11 +19,11 @@ runTests pkg =
     testDir = packageDir pkg ++ "/test"
   in if pathExistsDir testDir then
     let
-      files = testFiles (readDir testDir)
+      files = testFiles (prim_readDir testDir)
     in runTestFiles (packageContext pkg) testDir files 0 0
   else
     let
-      _ = print ("error: test directory not found: " ++ testDir ++ "\n")
+      _ = prim_print ("error: test directory not found: " ++ testDir ++ "\n")
     in 2
 
 testFiles : List String -> List String
@@ -33,7 +33,7 @@ testFiles (name :: rest) = if endsWith ".vuna" name then name :: testFiles rest 
 runTestFiles : PackageContext -> String -> List String -> Int -> Int -> Int
 runTestFiles ctx dir [] pass fail =
   let
-    _ = print ("\n" ++ strFromInt pass ++ " passed, " ++ strFromInt fail ++ " failed\n")
+    _ = prim_print ("\n" ++ strFromInt pass ++ " passed, " ++ strFromInt fail ++ " failed\n")
   in if fail == 0 then 0 else 1
 runTestFiles ctx dir (name :: rest) pass fail =
   let
@@ -42,9 +42,9 @@ runTestFiles ctx dir (name :: rest) pass fail =
     output = interpretFile ctx path
   in if output == "\"\"" then
     let
-      _ = print ("ok   " ++ name ++ "\n")
+      _ = prim_print ("ok   " ++ name ++ "\n")
     in runTestFiles ctx dir rest (pass + 1) fail
   else
     let
-      _ = print ("FAIL " ++ name ++ ": " ++ output ++ "\n")
+      _ = prim_print ("FAIL " ++ name ++ ": " ++ output ++ "\n")
     in runTestFiles ctx dir rest pass (fail + 1)

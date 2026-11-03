@@ -6,25 +6,35 @@
 
 ## core-v0 语法
 
-- 类型：`Int` / `String`、`data` 声明的代数数据类型、函数；类型签名会被解析但擦除；
+- 类型：`Int` / `String`（语言 primitive 类型）、`data` 声明的代数数据类型、函数；
+  类型签名参与 DT 精化，运行时是否保留由擦除判据（`Rig`）决定；
 - 语法：Idris2 风格 `data ... where`、多子句函数、`case ... of`、`let ... in`、
   lambda、`if then else`、`do` 块（M11）、整数/字符串字面量、`[..]` 与
   `x :: xs` 列表糖、中缀运算符
   （`-> || && == /= < <= > >= ++ + - * / :: >>= >>`）；
 - layout：offside 规则；顶层声明、`data` 构造器块、`case` 分支、`let` 绑定按块列
   对齐，表达式跨行必须缩进超过所在块列；
-- `main` 必须是零参数定义；`show` 负责把值变成字符串。`vuna interp` 只展示
-  `Int`/`String`/`Bool` 的 `main` 值（interp 是 DT 精化后的纯核心求值，见 [limits.md](limits.md)）；
-- 内建：`+ - * /`、`== /= < <= > >=`、`&& ||`、`++`、`strLength`、`strUnpack`、
-  `strPack`、`strFromInt`，IO 内建 `readFile` / `writeFile` / `print` / `getArgs`，
-  文件/目录 `fileExists` / `readDir` / `isDirectory` / `makeDir` / `removeFile`，
-  REPL 用 `readLine`，以及 `exit`；
+- `main` 必须是零参数定义；展示由编译器钩子完成（`Int` → 十进制、`String` → `strShow`、
+  `Bool` → `True` / `False`）。`show` 是 `Base.Show` 的 trait 方法，不是 `main` 的展示
+  钩子。`vuna interp` 只展示 `Int`/`String`/`Bool` 的 `main` 值（interp 是 DT 精化后的
+  纯核心求值，见 [limits.md](limits.md)）；
+- 内建值（`Vuna.Compiler.Intrinsics.allIntrinsics` 里用户可见的项）：`+ - * /`、
+  `== /= < <= > >=`、`&& ||`、`++`、`strFromInt` / `strUnpack` / `strPack` /
+  `strLength` / `strConcatMany` / `strSubstTemplate` / `strHash` / `strAt` / `strShow`、
+  `timeUs`。宽度、编码、转义与 interp 边界见 [primitives.md](primitives.md)；
+- 效果原语**只有 `prim_*` 名**（`prim_print` / `prim_readFile` / `prim_getArgs` /
+  `prim_getenv` / …，旧的公开名已删除）：用户经 `Base.IO` 的 IO 动作使用，或在
+  `vuna.toml` 用 `[capabilities].effects` 声明能力后直接调用；见
+  [primitives.md](primitives.md) 的效果原语与能力一节；
 - `&&` / `||` 短路求值：先求左操作数，左侧能决定结果时不求值右侧（核心求值器与
   codegen 一致）；
 - `where` 子句：函数体后可跟缩进的 `where` 块，**每个 where 绑定必须在子句前写显式
   类型签名**；where 绑定是带签名的**局部顺序 let**，只能引用它之前定义的绑定（见下节）；
-- 布尔值与列表约定：`True` / `False` / `Cons` / `Nil` 是内建相邻的全局构造器；
-  程序需要自己声明 `data Bool` / `data List` 才能对它们做模式匹配。
+- 类型身份：`Int` / `String` 是语言 primitive 类型；`Bool` / `List` / `IO` 是 base 的
+  普通 `data` 声明（canonical 身份 `Base.Bool.Bool` / `Base.List.List` / `Base.IO.IO`，
+  经自动注入的 `Prelude` 可见）。用户写同名 `data` 是普通声明，不与 canonical 冲突。
+  `True` / `False` / `Cons` / `Nil` 与其他构造子一样**按声明身份**解析，没有「内建全局
+  构造子放行」；身份规则见 [primitives.md](primitives.md)。
 
 ## `where` 绑定与显式签名
 
@@ -135,11 +145,11 @@ f x = g x where
   `Vuna.Compiler.Frontend.Parser`）能在同一个根下共存、没有歧义，包门面可以直接命名为
   `Base` 或 `Vuna`；
 - 模块导出只算聚合层；包级隐藏（哪些模块对外公开）留给 M11.5 的根 manifest；
-- 非限定名的查找顺序：局部绑定 → 全局构造器 → 本模块顶层定义 → builtin →
-  已自动 open 的 import 导出。两个 open import 导出同名但指向不同定义时，裸名报歧义
-  （指向同一定义的重复导出不算歧义，例如原模块与它的门面重导出）；写全名或 alias
-  即可消歧；import 只提供目标模块**导出列表**中的名字（省略模块头 = 全部导出，
-  `_` 前缀除外）；
+- 非限定名的查找顺序（值）：局部绑定 → 本模块构造子 → 本模块顶层定义 → 内建（intrinsic）
+  → 已自动 open 的 import 导出（先值项、再构造子）。两个 open import 导出同名但指向不同
+  定义时，裸名报歧义（指向同一定义的重复导出不算歧义，例如原模块与它的门面重导出）；
+  写全名或 alias 即可消歧；import 只提供目标模块**导出列表**中的名字（省略模块头 =
+  全部导出，`_` 前缀除外）；
 - 限定名用**完整模块名**或 alias，永远不会歧义，但同样只解析目标模块的导出项；
   注意 import 只算直接依赖，**不传递**：
   A import B，C import A 看不到 B 的名字——除非 A 用 `module B` / `B.name` 显式重导出，

@@ -1,0 +1,11 @@
+-- M27 / C18：用户 `data IO` 是普通 data；`main : Int`（不是 canonical `Base.IO.IO`）
+-- 因此不走 IO 执行 hook，按普通值展示。
+data IO a : Type where
+  MkIO : (Int -> a) -> IO a
+
+run : IO Int -> Int
+run io = case io of
+  MkIO f => f 0
+
+main : Int
+main = run (MkIO (\w => 42))

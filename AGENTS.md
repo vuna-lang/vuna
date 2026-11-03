@@ -8,25 +8,24 @@
 因此**任何设计、接口、命令、实现、哲学都允许被推翻**（包括本文件与 roadmap 已写下的
 决策）；「保留兼容层」「以后可能有人依赖」不构成保留理由——评估一个遗留物只看一条：
 **它在终态里还成立吗**。推翻旧决策时不要静默改写历史，在 roadmap 的「决策变更」表记
-一行、里程碑记录进 `docs/history.md`（实现细节在 git 历史）。当前路线由此确定：**终态是单一 DT 路径，已在 M24 落地**
-（唯一检查器与 codegen，roadmap「终态」与「阶段状态总览」）。
+一行、里程碑记录进 `docs/history.md`（实现细节在 git 历史）。当前路线：**终态单一 DT
+路径，已在 M24 落地**（唯一检查器与 codegen，见 roadmap「阶段状态总览」）。
 
 ## 阅读顺序
 
 1. `AGENTS.md`（本文件）——不变量、纪律、常用命令；
 2. [`docs/architecture.md`](docs/architecture.md)——子系统地图：哪条链路、入口符号、连带改动、测试标签；
-3. 需要时再下钻：[`docs/reference/`](docs/reference/)（language / type-system / stdlib / packages /
-   compiler / bootstrap / testing / limits / dt）、[roadmap](docs/roadmap.md)、[dt-core](docs/dt-core.md)、[history](docs/history.md)。
+3. 需要时再下钻：[`docs/reference/`](docs/reference/)（各语言/包/编译器/测试参考页）、
+   [roadmap](docs/roadmap.md)、[dt-core](docs/dt-core.md)、[history](docs/history.md)。
 
-**定位符号**用 `vuna map --find` / `--impact` / `vuna api`（用法见技能
-`.agents/skills/repo-navigation/SKILL.md`）。**不要做的事**：通读全仓；读 `seed/` 或
-`docs/api.md`（生成物）。
+**定位符号**用 `vuna map --find` / `--impact` / `vuna api`（规程见 repo-navigation 技能）。
+**不要做的事**：通读全仓；读 `seed/` 或 `docs/api.md`（生成物）。
 
 ## 编译器选取规则
 
 1. **优先**本地 `./result/bin/vuna`（`nix build .#vuna --out-link result` 的产物）；
-2. 本地不存在或编译不过：**一律** `nix run vuna -- <subcommand>`（`nix registry list` 里的
-   别名 `flake:vuna github:vuna-lang/vuna`，即远端稳定版）；
+2. 本地不存在或编译不过：**一律** `nix run vuna -- <subcommand>`（`nix registry list`
+   里的别名，即远端稳定版）；
 3. 测试：`nix run .#vuna-run-tests`（`nix/run-tests.nix`；`--list` / `--only <章节>` 过滤，
    无参数等价 `sh test/run-tests.sh`）。
 
@@ -40,9 +39,9 @@
 3. **`seed/` 只含 compiler 包入口闭包**（`compiler/app/Main.vuna` 的 import 闭包）；
 4. **工具链不进 TCB**：`fmt`/`lint`/`repl`/`doc`/`test`/`Index`/`LSP`（以及未来的
    package manager）永不进入 seed 闭包；黑名单见 `nix/tcb-forbidden.txt`；
-5. **效果内建按包 allowlist**：只有 `vuna` / `vuna-compiler` / `vuna-base` 可直接调用
-   effectful 内建（`print`/`readFile`/`exit`/`prim_*` 等），其余包必须经 `Base.IO`
-   （`Vuna.Compiler.Loader.Resolve.packageAllowsEffects`）；
+5. **效应内建按 manifest 显式能力**：包声明 `[capabilities] effects`
+   （`console`/`fs`/`process`/`env`/`clock`）才能直接调 effectful `prim_*`，否则经
+   `Base.IO`（唯一真源 `Vuna.Compiler.Intrinsics` + `Loader.Resolve.checkEffectsBuiltins`）；
 6. **唯一路径**：语言夹具、`vuna interp`、包构建与 seed 全部走 DT（精化 + 擦除
    codegen，`vuna check .` 也是 DT 自检）；没有可切换的检查器，也没有第二套 codegen；
 7. 编译器自检通过：`vuna check .` 必须能检查自身源码（`checks.vuna-typecheck`）。
@@ -90,7 +89,8 @@ CLI 入口；`seed/` = 提交入库的多文件 OCaml 信任锚点（生成物�
 - 子系统地图、改动定位：[`docs/architecture.md`](docs/architecture.md)
 - 语言语义：[language.md](docs/reference/language.md)、[type-system.md](docs/reference/type-system.md)、
   [stdlib.md](docs/reference/stdlib.md)、[packages.md](docs/reference/packages.md)、
-  [dt.md](docs/reference/dt.md)、[dt-parity.md](docs/reference/dt-parity.md)（历史证据）
+  [dt.md](docs/reference/dt.md)、[primitives.md](docs/reference/primitives.md)（内建/原语/能力）、
+  [dt-parity.md](docs/reference/dt-parity.md)（历史证据）
 - 编译器实现与 codegen：[compiler.md](docs/reference/compiler.md)；DT 工具链（洞目标、LSP、
   错误码体系与错误索引；`vuna gen-errors` 生成 `docs/.generated/errors.md`）：[dt-tooling.md](docs/reference/dt-tooling.md)
 - 仓库探索（按场景选工具、探索后落盘）：技能 `.agents/skills/repo-navigation/SKILL.md`

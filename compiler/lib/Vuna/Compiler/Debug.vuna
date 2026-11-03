@@ -8,11 +8,11 @@ module Vuna.Compiler.Debug (debugOn, note, noteInt, sampleKey, stamp, stampSampl
 --                         相减即阶段耗时；打点本身 ~1µs，所以可以逐定义、逐阶段打点
 --                         （旧实现 shell `date` 要 5ms，只能 1/64 采样）；
 --   `DEBUG <text>`        任意诊断文本（表规模等）。
--- 关闭时每次调用只花一次 `getArgs`（微秒级），可长期留在生产代码里。
+-- 关闭时每次调用只花一次 `prim_getArgs`（微秒级），可长期留在生产代码里。
 import Vuna.Compiler.Common
 
 args : List String
-args = getArgs
+args = prim_getArgs
 
 debugOn : Bool
 debugOn = memName "--debug-perf" args

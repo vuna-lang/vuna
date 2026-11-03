@@ -1,0 +1,6 @@
+module Base.Bool (Bool(..)) where
+
+-- 伪造 canonical 符号：canonical 族只能由 vuna-base 以固定构造子集合声明。
+data Bool : Type where
+  Yes : Bool
+  No : Bool

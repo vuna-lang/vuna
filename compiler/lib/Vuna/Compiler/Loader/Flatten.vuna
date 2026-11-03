@@ -172,7 +172,7 @@ isRecordTarget modules decls prefix target = case splitLastDot (splitOnDot targe
       m = joinDots revPrefix
     in if m == prefix then isRecordDecl base decls
     else case findModule modules m of
-      Just (Module mname mpkg mimports mimps dcs exports) => isRecordDecl base dcs
+      Just (Module mname mpkg mimports mimps dcs exports mcaps) => isRecordDecl base dcs
       Nothing => False
 
 isRecordDecl : String -> List Decl -> Bool
@@ -447,24 +447,24 @@ else case findModule modules name of
     path = firstOf found
   in let
     root = secondOf found
-  in andThen (parseSource path (readFile path)) (\src => case src of
+  in andThen (parseSource path (prim_readFile path)) (\src => case src of
     Source hdr imports decls =>
       andThen (validateModuleHeader name hdr)
-        (\_ => andThen (validateImports name imports) (\_ => andThen (implicitPrelude roots (rootName root) name imports) (\implicit => andThen (loadAll (fuel - 1) roots (rootName root) modules (name :: stack) (append imports implicit)) (\modules2 => andThen (computeExports modules2 name hdr imports decls) (\exports => Ok (Module name (rootName root) imports implicit decls exports :: modules2))))))
+        (\_ => andThen (validateImports name imports) (\_ => andThen (implicitPrelude roots (rootName root) name imports) (\implicit => andThen (loadAll (fuel - 1) roots (rootName root) modules (name :: stack) (append imports implicit)) (\modules2 => andThen (computeExports modules2 name hdr imports decls) (\exports => Ok (Module name (rootName root) imports implicit decls exports (rootCapabilities root) :: modules2))))))
   )
   )
   else ldErr1 (InvalidModuleName name) name
 
 -- 包上下文入口：ctx 给出模块根（自己 lib 在最前 + 依赖闭包）与导入方包名
--- （决定同包/跨包导出可见性、效果内建 allowlist）。
+-- （决定同包/跨包导出可见性与 manifest 能力声明）。
 -- loadProject 返回 flatten 前的形态（入口声明 + 依赖模块列表），供分离编译使用。
 loadProject : PackageContext -> String -> Result Project
-loadProject ctx entry = if fileExists entry then andThen (parseSource entry (readFile entry)) (\src => case src of
+loadProject ctx entry = if prim_fileExists entry then andThen (parseSource entry (prim_readFile entry)) (\src => case src of
   Source hdr imports decls => case hdr of
     Just (ModDecl dname hasList items sp) => ldErr1 (ModuleHeaderInEntryFile entry) entry
     Nothing =>
       andThen (validateImports "<entry>" imports)
-        (\_ => andThen (implicitPrelude (contextRoots ctx) (contextPackageName ctx) "" imports) (\implicit => andThen (loadAll 1048576 (contextRoots ctx) (contextPackageName ctx) [] [] (append imports implicit)) (\modules => Ok (Project decls imports implicit modules (contextPackageName ctx)))))
+        (\_ => andThen (implicitPrelude (contextRoots ctx) (contextPackageName ctx) "" imports) (\implicit => andThen (loadAll 1048576 (contextRoots ctx) (contextPackageName ctx) [] [] (append imports implicit)) (\modules => Ok (Project decls imports implicit modules (contextPackageName ctx) (contextCapabilities ctx)))))
 )
 else ldErr1 (EntryFileNotFound entry) entry
 
@@ -474,7 +474,7 @@ loadProjectModules ctx names =
   let
     entryImports = map (\n => Import n False Nothing (Span "" 0 0 0 0)) names
   in andThen (loadAll 1048576 (contextRoots ctx) (contextPackageName ctx) [] [] entryImports)
-    (\modules => Ok (Project [] [] [] modules (contextPackageName ctx)))
+    (\modules => Ok (Project [] [] [] modules (contextPackageName ctx) (contextCapabilities ctx)))
 
 -- 入口以**源码字符串**给出（REPL 的表达式求值）：入口不落盘（import 仍按上下文的
 -- roots 从磁盘解析）；隐式 Prelude 与文件入口同规则（ad-hoc 单文件也自动注入）。
@@ -484,18 +484,18 @@ loadProjectSource ctx label source = andThen (parseSource label source) (\src =>
     Just (ModDecl dname hasList items sp) => ldErr1 (ModuleHeaderInEntrySource label) label
     Nothing =>
       andThen (validateImports "<entry>" imports)
-        (\_ => andThen (implicitPrelude (contextRoots ctx) (contextPackageName ctx) "" imports) (\implicit => andThen (loadAll 1048576 (contextRoots ctx) (contextPackageName ctx) [] [] (append imports implicit)) (\modules => Ok (Project decls imports implicit modules (contextPackageName ctx)))))
+        (\_ => andThen (implicitPrelude (contextRoots ctx) (contextPackageName ctx) "" imports) (\implicit => andThen (loadAll 1048576 (contextRoots ctx) (contextPackageName ctx) [] [] (append imports implicit)) (\modules => Ok (Project decls imports implicit modules (contextPackageName ctx) (contextCapabilities ctx)))))
 )
 
 -- 返回逐模块已解析（未 flatten）的声明，供 M12 分离编译使用。
 resolveProject : Project -> Result (Pair (List Decl) (List Module))
-resolveProject (Project decls imports implicit modules entryPkg) =
-  andThen (resolveEntry modules entryPkg (append imports implicit) decls)
+resolveProject (Project decls imports implicit modules entryPkg entryCaps) =
+  andThen (resolveEntry modules entryPkg entryCaps (append imports implicit) decls)
     (\entryDecls => andThen (resolveModulesKeep modules) (\modules2 => Ok (Pair entryDecls modules2)))
 
 resolveModulesKeep : List Module -> Result (List Module)
 resolveModulesKeep [] = Ok []
-resolveModulesKeep ((Module name pkg imports implicit decls exports) :: rest) =
+resolveModulesKeep ((Module name pkg imports implicit decls exports mcaps) :: rest) =
   andThen
-    (andThen (resolveProgram (Module name pkg imports implicit decls exports :: rest) name name (append (topNames decls) (typeNamesOf decls)) (ctorsOf decls) (append (ctorsOf decls) (append (topNames decls) (typeNamesOf decls))) (append imports implicit) decls) (\d => checkEffectsBuiltins name pkg d))
-    (\d1 => andThen (resolveModulesKeep rest) (\d2 => Ok (Module name pkg imports implicit d1 exports :: d2)))
+    (andThen (resolveProgram (Module name pkg imports implicit decls exports mcaps :: rest) name name (append (topNames decls) (typeNamesOf decls)) (ctorsOf decls) (append (ctorsOf decls) (append (topNames decls) (typeNamesOf decls))) (append imports implicit) decls) (\d => checkEffectsBuiltins name pkg mcaps d))
+    (\d1 => andThen (resolveModulesKeep rest) (\d2 => Ok (Module name pkg imports implicit d1 exports mcaps :: d2)))

@@ -95,7 +95,7 @@ collectVuna dir = collectVunaGo 1048576 dir
 -- 目录树递归（符号链接可成环）用显式 fuel 守卫；每次下钻一层消耗 1。
 collectVunaGo : Int -> String -> List String
 collectVunaGo fuel dir =
-  if fuel <= 0 then [] else concatMap (walkVunaGo (fuel - 1) dir) (readDir dir)
+  if fuel <= 0 then [] else concatMap (walkVunaGo (fuel - 1) dir) (prim_readDir dir)
 
 walkVunaGo : Int -> String -> String -> List String
 walkVunaGo fuel dir name = if fuel <= 0 then []
@@ -106,9 +106,9 @@ else
   in if dirExists path then collectVunaGo (fuel - 1) path
   else if endsWith ".vuna" name then [path] else []
 
--- isDirectory 对不存在的路径会抛异常，必须先判存在。
+-- prim_isDirectory 对不存在的路径会抛异常，必须先判存在。
 dirExists : String -> Bool
-dirExists path = fileExists path && isDirectory path
+dirExists path = prim_fileExists path && prim_isDirectory path
 
 -- 包的索引范围：<pkg>/lib 与 <pkg>/app（模块源码）。刻意不扫 test/ 与 examples/
 -- （夹具含故意不合法的语法，不是模块源码）。
@@ -328,9 +328,9 @@ builtRefs (Built ms syms refs) = refs
 indexOne : String -> String -> String -> Result Built
 indexOne dir pkgName path =
   let
-    source = readFile path
+    source = prim_readFile path
     bytes = strLength source
-    stamp = fileMtime path
+    stamp = prim_fileMtime path
   in case parseSource path source of
     Err e => Err (path ++ ": " ++ e)
     Ok (Source srcHdr imports decls) =>
@@ -410,7 +410,7 @@ refsPath repo = cacheDir repo ++ "/refs.txt"
 
 -- 磁盘上的当前文件元数据（path, bytes, mtime）。只读内容算 bytes，不 parse。
 scanFile : String -> Pair String (Pair Int Int)
-scanFile path = Pair path (Pair (strLength (readFile path)) (fileMtime path))
+scanFile path = Pair path (Pair (strLength (prim_readFile path)) (prim_fileMtime path))
 
 scanRoot : Pair String String -> List (Pair String (Pair Int Int))
 scanRoot root = map scanFile (packageSources (firstOf root))
@@ -431,7 +431,7 @@ manifestText entries = join "\n" (map manifestLine entries) ++ "\n"
 
 manifestMatches : String -> List (Pair String (Pair Int Int)) -> Bool
 manifestMatches repo entries =
-  if fileExists (manifestPath repo) then parseManifestLines (splitOnNewline (readFile (manifestPath repo))) == entries
+  if prim_fileExists (manifestPath repo) then parseManifestLines (splitOnNewline (prim_readFile (manifestPath repo))) == entries
   else False
 
 parseManifestLines : List String -> List (Pair String (Pair Int Int))
@@ -447,7 +447,7 @@ parseManifestLine line = case splitOnTab line of
     Nothing => []
   _ => []
 
--- 写缓存：`.local` 在干净 clone / Nix 沙箱里可能不存在，而 makeDir 只建一层，
+-- 写缓存：`.local` 在干净 clone / Nix 沙箱里可能不存在，而 prim_makeDir 只建一层，
 -- 所以要逐级创建（先 .local，再 .local/index）。缓存是纯优化：写不进去时
 -- 索引本身仍然可用（本次调用已返回内存索引），只是下次会重建。
 ensureCacheDir : String -> Int
@@ -455,8 +455,8 @@ ensureCacheDir repo =
   let
     local = repo ++ "/.local"
   in let
-    _ = if dirExists local then 0 else makeDir local
-  in if dirExists (cacheDir repo) then 0 else makeDir (cacheDir repo)
+    _ = if dirExists local then 0 else prim_makeDir local
+  in if dirExists (cacheDir repo) then 0 else prim_makeDir (cacheDir repo)
 
 parentDir : String -> String
 parentDir path =
@@ -470,12 +470,12 @@ saveIndex repo entries index =
     _ = ensureCacheDir repo
   in if dirExists (cacheDir repo) then
     let
-      _ = writeFile (manifestPath repo) (manifestText entries)
+      _ = prim_writeFile (manifestPath repo) (manifestText entries)
     in let
-      _ = writeFile (modulesPath repo) (modulesText index)
+      _ = prim_writeFile (modulesPath repo) (modulesText index)
     in let
-      _ = writeFile (symbolsPath repo) (symbolsText index)
-    in writeFile (refsPath repo) (refsText index)
+      _ = prim_writeFile (symbolsPath repo) (symbolsText index)
+    in prim_writeFile (refsPath repo) (refsText index)
   else 0
 
 loadIndexFromCache : String -> Index
@@ -485,7 +485,7 @@ loadIndexFromCache repo =
     (parseRefs (parseLines (readOrEmpty (refsPath repo))))
 
 readOrEmpty : String -> String
-readOrEmpty path = if fileExists path then readFile path else ""
+readOrEmpty path = if prim_fileExists path then prim_readFile path else ""
 
 parseLines : String -> List String
 parseLines text = filterNonEmpty (splitOnNewline text)

@@ -25,6 +25,7 @@ open Vuna_dCompiler_dFrontend_dParser_dSupport
 open Vuna_dCompiler_dFrontend_dParser
 open Vuna_dCompiler_dLoader_dDiagnostics
 open Vuna_dCompiler_dLoader_dModules
+open Vuna_dCompiler_dIntrinsics
 open Vuna_dCompiler_dLoader_dResolve
 open Vuna_dCompiler_dLoader_dFlatten
 open Vuna_dCompiler_dLoader
@@ -69,4 +70,4 @@ let v_Vuna_dCompiler_dDriver_dCompile_dcompileToDir = (fun ctx -> (fun entry -> 
 
 let v_Vuna_dCompiler_dDriver_dCompile_dbuildSplit = (fun dir -> (fun outDir -> ((v_Base_dResult_dandThen (v_Vuna_dCompiler_dPackages_dPkg_dloadPackage dir)) (fun pkg -> ((((v_Vuna_dCompiler_dDriver_dCompile_dcompileToDir (v_Vuna_dCompiler_dPackages_dPkg_dpackageContext pkg)) (v_Vuna_dCompiler_dPackages_dPkg_dpackageEntry pkg)) true) outDir)))))
 
-let v_Vuna_dCompiler_dDriver_dCompile_drunBuildScript = (fun dir -> (fun out -> (fun name -> ((fun code -> (if ((bi_eq_int code) 0) then (C_Base_dResult_dResult_Base_dResult_dOk (0)) else (C_Base_dResult_dResult_Base_dResult_dErr (((bi_concat "build: ") ((bi_concat name) ((bi_concat ": `sh build.sh ") ((bi_concat out) ((bi_concat "` failed in ") ((bi_concat dir) ((bi_concat " (exit ") ((bi_concat (bi_strFromInt code)) ")")))))))))))) (((fun dir args -> dtp_runIn dir (dtp_ocamlOf args)) dir) (C_Base_dList_dList_Cons ("sh", (C_Base_dList_dList_Cons ("build.sh", (C_Base_dList_dList_Cons (out, C_Base_dList_dList_Nil)))))))))))
+let v_Vuna_dCompiler_dDriver_dCompile_drunBuildScript = (fun dir -> (fun out -> (fun name -> ((fun code -> (if ((bi_eq_int code) 0) then (C_Base_dResult_dResult_Base_dResult_dOk (0)) else (C_Base_dResult_dResult_Base_dResult_dErr (((bi_concat "build: ") ((bi_concat name) ((bi_concat ": `sh build.sh ") ((bi_concat out) ((bi_concat "` failed in ") ((bi_concat dir) ((bi_concat " (exit ") ((bi_concat (bi_strFromInt code)) ")")))))))))))) (((fun dir args -> dtp_runIn dir (dtp_ocamlOf args)) dir) (C_Base_dList_dList_Base_dList_dCons ("sh", (C_Base_dList_dList_Base_dList_dCons ("build.sh", (C_Base_dList_dList_Base_dList_dCons (out, C_Base_dList_dList_Base_dList_dNil)))))))))))

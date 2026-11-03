@@ -60,27 +60,27 @@ anyHelp (arg :: rest) = if arg == "-h" || arg == "--help" then True else anyHelp
 helpFor : String -> Int
 helpFor prog =
   let
-    _ = print (compilerUsage prog)
+    _ = prim_print (compilerUsage prog)
   in 0
 
 usageErr : String -> Int
 usageErr prog =
   let
-    _ = print (compilerUsage prog)
+    _ = prim_print (compilerUsage prog)
   in 2
 
 unknownCommand : String -> String -> Int
 unknownCommand prog arg =
   let
     _ =
-      print
+      prim_print
         ("error: unknown command `" ++ arg ++ "`\n" ++ "run `" ++ prog ++ " help` for the command list\n")
   in 2
 
 removedCommand : String -> String -> String -> Int
 removedCommand prog cmd hint =
   let
-    _ = print ("error: `" ++ cmd ++ "` has been removed; " ++ hint ++ "\n")
+    _ = prim_print ("error: `" ++ cmd ++ "` has been removed; " ++ hint ++ "\n")
   in 2
 
 -- 被删除 flag 的可操作提示（Vuna.Cli 的工具命令复用同一张表）。
@@ -105,13 +105,13 @@ removedFlag prog flag = case removedFlagHint flag of
   Nothing => usageErr prog
   Just hint =>
     let
-      _ = print ("error: " ++ flag ++ " has been removed; " ++ hint ++ "\n")
+      _ = prim_print ("error: " ++ flag ++ " has been removed; " ++ hint ++ "\n")
     in 2
 
 printErrText : String -> Int
 printErrText e =
   let
-    _ = print e
+    _ = prim_print e
   in 1
 
 printErr : String -> Int
@@ -121,7 +121,7 @@ printWarnings : List String -> Int
 printWarnings [] = 0
 printWarnings (w :: rest) =
   let
-    _ = print (w ++ "\n")
+    _ = prim_print (w ++ "\n")
   in printWarnings rest
 
 defaultDir : Maybe String -> String
@@ -136,22 +136,22 @@ defaultOutDir out dir = case out of
   Just outDir => outDir
   Nothing => dir ++ "/.output"
 
--- 路径既不是文件也不是目录时的统一错误（先 fileExists 再 isDirectory：
--- 内建 isDirectory 对不存在的路径会抛异常）。
+-- 路径既不是文件也不是目录时的统一错误（先 prim_fileExists 再 prim_isDirectory：
+-- 内建 prim_isDirectory 对不存在的路径会抛异常）。
 dtPathErr : String -> Int
 dtPathErr path = printErr ("no such file or package directory: " ++ path)
 
 -- 可执行包解析：必须是目录、能读 vuna.toml、且有 app/Main.vuna。
 executablePackage : String -> String -> Result Package
 executablePackage label dir =
-  if fileExists dir then if isDirectory dir then executablePackageAt label dir
+  if prim_fileExists dir then if prim_isDirectory dir then executablePackageAt label dir
   else Err (label ++ ": expects a package directory, not a file: " ++ dir)
   else Err ("no such file or package directory: " ++ dir)
 
 executablePackageAt : String -> String -> Result Package
 executablePackageAt label dir =
   andThen (loadPackage dir)
-    (\pkg => if fileExists (packageEntry pkg) then Ok pkg else Err (label ++ ": library package " ++ packageName pkg ++ " has no app/Main.vuna (executable package required)"))
+    (\pkg => if prim_fileExists (packageEntry pkg) then Ok pkg else Err (label ++ ": library package " ++ packageName pkg ++ " has no app/Main.vuna (executable package required)"))
 
 -- ---------------------------------------------------------------
 -- compile：文件入口（最近的 vuna.toml 包上下文 / 无 manifest 的 base-only）
@@ -180,7 +180,7 @@ compileFinish prog printResult entry outDir = case entry of
 
 compileRun : Bool -> String -> String -> Int
 compileRun printResult entry outDir =
-  if fileExists entry then if isDirectory entry then compilePkgDir printResult entry outDir
+  if prim_fileExists entry then if prim_isDirectory entry then compilePkgDir printResult entry outDir
   else compileFileEntry printResult entry outDir
   else dtPathErr entry
 
@@ -211,7 +211,7 @@ checkArgs prog args = case args of
 
 checkEmit : String -> Int
 checkEmit path =
-  if fileExists path then if isDirectory path then checkPkgDir path else checkFileEntry path
+  if prim_fileExists path then if prim_isDirectory path then checkPkgDir path else checkFileEntry path
   else dtPathErr path
 
 checkPkgDir : String -> Int
@@ -264,10 +264,10 @@ buildRun noCompile dir outDir = case executablePackage "build" dir of
 buildLinked : String -> String -> Int
 buildLinked outDir name =
   let
-    _ = makeDir (outDir ++ "/bin")
+    _ = prim_makeDir (outDir ++ "/bin")
   in case runBuildScript outDir ("bin/" ++ name) name of
     Err e => printErr e
     Ok _ =>
       let
-        _ = print ("built " ++ outDir ++ "/bin/" ++ name ++ "\n")
+        _ = prim_print ("built " ++ outDir ++ "/bin/" ++ name ++ "\n")
       in 0

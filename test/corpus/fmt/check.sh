@@ -60,6 +60,9 @@ cat >"$pkg/vuna.toml" <<'EOF'
 name = "vuna"
 version = "0.1.0"
 edition = "2026"
+
+[capabilities]
+effects = ["console", "fs", "process", "env", "clock"]
 EOF
 chmod -R u+w "$pkg" 2>/dev/null || true
 # M26：compile 产目录（Vuna_runtime.ml + 模块 + Main.ml + build.sh），不是单文件 .ml。

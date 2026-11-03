@@ -58,6 +58,7 @@ import Vuna.Compiler.Elab.Dict
 import Vuna.Compiler.Elab.Match
 import Vuna.Compiler.Elab.Meta
 import Vuna.Compiler.Elab.Prelude
+import Vuna.Compiler.Intrinsics
 import Vuna.Compiler.Elab.Types
 import Vuna.Compiler.Elab.Term.Support
 import Vuna.Compiler.Frontend.Ast
@@ -139,7 +140,7 @@ checkCaseFamFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Term -> Value 
 checkCaseFamFuel fuel globals ctx ec scrutTerm scrutTy alts expected sp = if fuel <= 0 then Err "DT: internal: inference fuel exhausted"
 else case forceVal ec scrutTy of
   VNeutral (NGlobal fam idxs) =>
-    if isBoolBaseName fam && idxs == [] then checkBoolCaseFuel (fuel - 1) globals ctx ec scrutTerm alts expected sp
+    if fam == boolTypeName && idxs == [] then checkBoolCaseFuel (fuel - 1) globals ctx ec scrutTerm alts expected sp
     else if fam == "Int" then checkLitCaseFuel (fuel - 1) globals ctx ec scrutTerm "Int" alts expected sp
     else if fam == "String" then checkLitCaseFuel (fuel - 1) globals ctx ec scrutTerm "String" alts expected sp
     else checkCaseOfFuel (fuel - 1) globals ctx ec scrutTerm scrutTy fam idxs alts expected sp
@@ -148,10 +149,10 @@ else case forceVal ec scrutTy of
 -- M19：Bool 上的 case 降级成 if（`True` / `False` 是零参构造子形态的模式）。
 checkBoolCaseFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Term -> List (Pair Pat Expr) -> Value -> Span -> Result (Pair Term Ec)
 checkBoolCaseFuel fuel globals ctx ec scrutTerm alts expected sp = if fuel <= 0 then Err "DT: internal: inference fuel exhausted"
-else andThen (boolAltFuel (fuel - 1) globals ctx ec alts "True" expected sp) (\p => case p of
+else andThen (boolAltFuel (fuel - 1) globals ctx ec alts boolTrueCtor expected sp) (\p => case p of
   Pair trueBody (Pair catchAll ec1) => case catchAll of
     Just falseBody => Ok (Pair (TIf scrutTerm trueBody falseBody) ec1)
-    Nothing => andThen (boolAltFuel (fuel - 1) globals ctx ec alts "False" expected sp) (\q => case q of
+    Nothing => andThen (boolAltFuel (fuel - 1) globals ctx ec alts boolFalseCtor expected sp) (\q => case q of
       Pair falseBody (Pair _ ec2) => Ok (Pair (TIf scrutTerm trueBody falseBody) ec2)
     )
 )
@@ -268,17 +269,17 @@ else
 -- 推断收下真实 `Base.Bool.Bool` 条件（`Base.List.filter` 的 `if p x`）。
 checkCondBoolFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Expr -> Span -> Result (Pair Term Ec)
 checkCondBoolFuel fuel globals ctx ec c sp = if fuel <= 0 then Err "DT: internal: inference fuel exhausted"
-else case checkEFuel (fuel - 1) globals ctx ec c (VNeutral (NGlobal "Bool" [])) of
+else case checkEFuel (fuel - 1) globals ctx ec c (VNeutral (NGlobal boolTypeName [])) of
   Ok pc => Ok pc
   Err _ => andThen (inferEFuel (fuel - 1) globals ctx ec c) (\pc => case pc of
     Pair cTerm (Pair cTy ec1) =>
       if isBoolType cTy then Ok (Pair cTerm ec1)
-      else errAt sp ("if condition must be Bool (got " ++ showValueAt (ctxDepth ctx) cTy ++ ")")
+      else errAt sp
+        ("if condition must be " ++ boolTypeName ++ " (got " ++ showValueAt (ctxDepth ctx) cTy ++ ")")
   )
 
 -- 变量解析顺序：局部上下文 → 本程序的数据构造子 → 全局签名。构造子必须排在全局之前：
--- `True`/`False` 与 prelude 桩同名（`preludeGlobals` 里有 `True : Bool`），先查全局会拿到
--- 桩类型，与 `Base.Bool.Bool` 注解对不上。
+-- 本程序数据构造子（canonical Bool 的 `Base.Bool.True/False` 精化成 `TBool`）先于全局签名。
 inferEFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Expr -> Result (Pair Term (Pair Value Ec))
 inferEFuel fuel globals ctx ec expr = if fuel <= 0 then Err "DT: internal: inference fuel exhausted"
 else case expr of
@@ -641,7 +642,7 @@ else
 -- 类型位置的裸名字：与类型同名的零参构造子（`data T : Type where T : ...`）不能抢走
 -- 类型名——`inferEFuel (fuel - 1)` 的 `inferVarRef` 为了让值位置的构造子优先总先查构造子表，于是
 -- `T` 在类型位置会被解释成构造子类型。类型位置只认「kind 是宇宙」的全局项：先查
--- 全局（族名/类型别名），kind 不是宇宙再退回推断（保留 `Bool` 短名族等既有通路）。
+-- 全局（族名/类型别名），kind 不是宇宙再退回推断。
 checkTypeFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Expr -> Result (Pair Term (Pair Level Ec))
 checkTypeFuel fuel globals ctx ec expr = if fuel <= 0 then Err "DT: internal: inference fuel exhausted"
 else case expr of
@@ -762,11 +763,11 @@ else andThen (specializeEqAppFuel (fuel - 1) globals ctx ec name args sp) (\r =>
 specializeBoolAppFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> String -> List Expr -> Span -> Result (Maybe (Pair Term (Pair Value Ec)))
 specializeBoolAppFuel fuel globals ctx ec name args sp = if fuel <= 0 then Err "DT: internal: inference fuel exhausted"
 else if name == "&&" || name == "||" then case args of
-  [a, b] => andThen (checkEFuel (fuel - 1) globals ctx ec a (VNeutral (NGlobal "Bool" []))) (\pa => case pa of
-    Pair aTerm ec1 => andThen (checkEFuel (fuel - 1) globals ctx ec1 b (VNeutral (NGlobal "Bool" []))) (\pb => case pb of
+  [a, b] => andThen (checkEFuel (fuel - 1) globals ctx ec a (VNeutral (NGlobal boolTypeName []))) (\pa => case pa of
+    Pair aTerm ec1 => andThen (checkEFuel (fuel - 1) globals ctx ec1 b (VNeutral (NGlobal boolTypeName []))) (\pb => case pb of
       Pair bTerm ec2 =>
         Ok
-          (Just (Pair (boolShortCircuit name aTerm bTerm) (Pair (VNeutral (NGlobal "Bool" [])) ec2)))
+          (Just (Pair (boolShortCircuit name aTerm bTerm) (Pair (VNeutral (NGlobal boolTypeName [])) ec2)))
     )
   )
   _ => tcErr1 sp (NeedsTwoArgs name) name

@@ -152,4 +152,5 @@
   可执行包/`vuna build` 要求 `main : IO a`；`vuna interp`/`vuna test` 保留
   “显示纯 main 结果”的调试约定，但 interp 是纯核心求值——效果不会真正执行，
   **任何 `main : IO a` 一律报错**（只展示 `Int`/`String`/`Bool`），需要效果时用
-  `compile` + 运行产物；入口代码里同样不能直接调用 effectful 内建。
+  `compile` + 运行产物；入口代码在**未声明能力**时不能直接调用 effectful 内建（声明
+  `[capabilities] effects` 后可以，见 [primitives.md](primitives.md)）。

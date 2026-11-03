@@ -24,6 +24,7 @@ import Vuna.Compiler.Packages.Pkg
 import Vuna.Compiler.Loader
 import Vuna.Compiler.Core
 import Vuna.Compiler.Elab
+import Vuna.Compiler.Intrinsics
 import Vuna.Compiler.Codegen
 import Vuna.Compiler.Driver.Split
 
@@ -113,7 +114,7 @@ splitReplExpr decls = case reverse decls of
 -- 核心求值器对 `main` 的求值边界（M23 终态契约）：
 --   - 纯 `main : Int/String/Bool`：核心求值并展示值；
 --   - `main : IO a`：**一律报错**。核心求值器是纯的、不执行效果；即使动作结果不依赖
---     效果（`do print "hi"; pure 7`），效果也会被静默丢弃——误导用户。所以不做
+--     效果（`do prim_print "hi"; pure 7`），效果也会被静默丢弃——误导用户。所以不做
 --     「尝试归约、卡住才报错」这种不可靠的判定。效果程序只走 compile + 运行
 --     （夹具用 `.nointerp` 标记）。IO 的识别按 main 的**类型**（族名 `IO`，含
 --     `Base.IO.IO` 这类模块前缀）。
@@ -131,16 +132,11 @@ evalDtMain (Pair _ defs) = case findMainDef defs of
       VBool b => Ok (showValue mainVal)
       _ => cgErr0 MainNotValue
 
--- 族名（去掉模块前缀）：`Base.IO.IO` → `IO`。
-lastName : String -> String
-lastName name = case splitLastDot (splitOnDot name) of
-  Pair rev base => base
-
--- main 的类型是不是 `IO a`（族名对得上，含模块前缀形态）。
+-- main 的类型是不是 base 的 canonical `IO a`（完整符号 `Base.IO.IO`，M27）。
 isIOType : Term -> Bool
 isIOType t = case t of
   TApp fn _ _ => isIOType fn
-  TGlobal g => lastName g == "IO"
+  TGlobal g => g == ioFamilyName
   _ => False
 
 findMainDef : List DtDef -> Maybe DtDef

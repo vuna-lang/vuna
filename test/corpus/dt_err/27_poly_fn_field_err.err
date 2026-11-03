@@ -1,1 +1,1 @@
-expected Bool, got Int
+expected Base.Bool.Bool, got Int

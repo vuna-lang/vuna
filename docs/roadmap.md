@@ -63,6 +63,13 @@ vuna 尚未发布任何版本：没有外部用户、下游生态与历史包袱
   unit → seed 65 `.ml` / 66 文件，零参顶层定义改为求值一次；入口 data/trait 归属身份
   收口（A13/C08），API/产物快照与上下文回归入库（C21/E14/E15）；LSP 本次未改加载
   语义（仍 parse 级、含 import 跳过类型检查，D13/M30 接同一 `contextForFile`）。
+- M27：内置、原语与效应边界——单一声明面 `Vuna.Compiler.Intrinsics`（名字/签名/arity/
+  归约标签/能力/runtime 名），Loader/Elab/Codegen/Eval 全部消费它；内置身份改按**完整
+  声明符号**（canonical `Base.Bool.Bool` / `Base.List.List` / `Base.IO.IO`），删
+  `lastName`/`isGlobalCtor`/Bool 双身份；效果原语只保留 `prim_*`，包用 manifest
+  `[capabilities] effects` 显式声明能力（替代包名 allowlist）；原语语义规范落
+  `docs/reference/primitives.md`（Int 63 位回绕、String UTF-8 字节串、除零与 `str*`
+  的 interp 边界显式分类、`strShow` 统一 `Show String`）；seed 66 `.ml` / 67 文件。
 
 ## 终态（目标）
 
@@ -107,39 +114,13 @@ vuna 尚未发布任何版本：没有外部用户、下游生态与历史包袱
 | 阶段 | 主题 | 依赖 | 状态 | 关闭的债务（示例） |
 | --- | --- | --- | --- | --- |
 | M26 | 包上下文统一（删除 roots）与单一路径 | — | 已完成 | A01–A06、A13、A15–A16、C08、C21、E14–E15 |
-| M27 | 内置、原语与效应边界 | M26 | 待排期 | A07–A11、C16–C19、D16 |
+| M27 | 内置、原语与效应边界 | M26 | 已完成 | A07–A11、B16、C16–C19、D16 |
 | M28 | 类型系统地基 | M27 | 待排期 | B05–B10、B15、D05–D10 |
 | M29 | 相等、实例与证明 ergonomics | M28 | 待排期 | A14、B11–B14、C05、D11–D12 |
 | M30 | 工具链与包 | —（可与 M27–M29 并行） | 待排期 | C11–C13、C25、D13–D15、D17–D18、E08 |
 | F1–F4 | 模块 v3 / 运行时 / 效应并发 / 生态 | 不排期 | 不排期 | D01–D04 |
 
-## 可排期阶段（M27 起）
-
-### M27：内置、原语与效应边界
-
-**目标**：内置实体不再靠「短名/lastName」；`Bool`/`List`/`IO` 回到普通声明或明确的
-primitive 接口；效应只能经显式能力；原语语义写成规范。
-
-**范围**（debt）：
-- 内置身份：`Bool` 类型桩与 `Base.Bool` 双身份（A07）、`lastName` 短名特判（A08）、全局
-  构造子名（A09）→ 按编译期 symbol/declaration 判定；用户 `data Bool`/`data IO`/`data List`
-  行为正确（C17/C18）。
-- 内建声明单一真源：`Elab.Prelude` 硬编码 globals、4 份内建表、幽灵名（A10/A11）→ 一个
-  intrinsic/primitive 声明面；删公开名与 `prim_*` 双份；runtime 只保留 primitive。
-- 效应边界：effect allowlist → capability/显式声明（B16）；`Base.IO` 的 `prim_*` 接口与
-  runtime Unix 依赖决策（A11/A12）；raw root 绕过已随 M26 删除环境根关闭（B16 剩余的是
-  “按包名字符串 allowlist”，本阶段改成 capability/显式声明）。
-- 原语语义规范：Int 溢出/宽度、String 编码（字节 vs 码点）、除零、`Show String` 转义
-  一致性（C16/C19/D16）；M26 新增的 `prim_getenv` / `prim_getcwd` / `prim_execPath`
-  （只有 `prim_*` 名、effectful、仅 TCB 三包可用；`/proc/self/exe` 为 Linux 假设）也在
-  本阶段写成规范；interp 对 `str*`/除零行为与 codegen 对齐或明确分类。
-- Prelude shim：`Elab.Prelude` 硬编码容器/IO 签名与 List 族重绑（A10）删除或改为
-  加载真实 base（与 M26 包上下文决策联动）。
-
-**验收**：`grep` 不到短名内置特判；intrinsic 表只有一份；用户同名 data 不冲突；效果尝试在
-任何包名/路由下都得到一致错误；原语语义有规范与正/反例。
-
-**前置**：M26。**决策点**：Int/String 语义；IO/effects 接口是否在 M27 就改为声明式。
+## 可排期阶段（M28 起）
 
 ### M28：类型系统地基
 
@@ -248,11 +229,11 @@ DT 验证库（Vec/Fin/Map/Set/排序/证明组合子）；包 registry、版本
 - **type-as-value**：引入 type codes（类型作为一等值）vs 只保留 `cast` 组合子——M29。
 - **无 manifest 时的 base 定位**：已定并落地（M26）**可执行文件相对布局 + `VUNA_BASE` 覆盖**；
   找不到 base 时明确报错，不退回纯内建。定位由 `Pkg.locateBase` 用
-  `prim_getenv` / `prim_getcwd` / `prim_execPath` 三个内部原语实现（语义规范归 M27）。
+  `prim_getenv` / `prim_getcwd` / `prim_execPath` 三个内部原语实现（语义规范见 [primitives.md](reference/primitives.md)）。
 - **ad-hoc 单文件语义**：已定并落地（M26）**自动注入 Prelude**（与包内模块一致；显式
   import 仍可用）。
-- **Int/String 语义**：固定宽度 + UTF-8 字节串 vs 大整数/Unicode 码点——M27。
-- **IO/effects 边界**：`Base.IO` thunk 留到 F3，还是 M27 就改为声明式 intrinsic 接口。
+- **IO/effects 边界**：已定并落地（M27）**保留 `Base.IO` thunk + `prim_*` primitive 面**；
+  声明式效应接口留 F3（A12）。
 - **检查豁免**：已执行（M25）：删除按包名豁免（终止性/覆盖率），不再设计信任声明；若个别定义
   确实不可判定，只能显式逐条标注并跟踪，目标清零。
 
@@ -298,4 +279,10 @@ DT 验证库（Vec/Fin/Map/Set/排序/证明组合子）；包 registry、版本
 - 已完成阶段细节：[history.md](history.md)
 - 子系统地图：[architecture.md](architecture.md)；DT 语义与设计边界：[dt.md](reference/dt.md)、
   [dt-core.md](dt-core.md)；自举链：[bootstrap.md](reference/bootstrap.md)；测试与 CI：
+| Bool 双身份（prelude 类型桩 + `Base.Bool` data）与短名内置身份 | **M27：内置实体按完整声明符号判定**——Bool/List/IO 都是 base 普通 data（canonical `Base.Bool.Bool` / `Base.List.List` / `Base.IO.IO`），删 `lastName`/`isGlobalCtor`/Bool 桩；用户同名 data 是普通 data | 短名判定在用户同名 data 上必然误判；完整符号是 Loader 已 mangle 的唯一身份，无需第二套特判 |
+| 公开效果名与 `prim_*` 双份 | **M27：只保留 `prim_*` primitive 面**；用户经 `Base.IO`（IO 动作）或在自己 manifest 声明能力后直接调 `prim_*` | 双份名字无语义差异，只有维护成本；`prim_*` 才是 runtime 的 primitive 接口 |
+| 效果 allowlist 按包名字符串（`vuna`/`vuna-compiler`/`vuna-base`） | **M27：manifest `[capabilities] effects = [...]` 显式能力**，按包声明、未知能力名报错；无 manifest 无能力 | 包名是普通字符串、可伪造；能力是显式、可审计的声明（权限策略），不再随包名路由漂移 |
+| Int/String 语义未定 | **M27：Int = 固定宽度 63 位（补码回绕）；String = UTF-8 字节串**；除零与 `strUnpack`/`strPack` 等 interp 不归约项**显式分类**并写规范 | 宿主 OCaml 表示与大整数/码点不可兼得；先钉死可实现语义，Unicode 语义留 F2/F4 |
+| `Show String` 两套转义（runtime vs `Base.Show`） | **M27：`strShow` 是唯一实现**（runtime `dt_show_string`）；`Base.Show` String 实例与 `main : String` 展示共用 | 同一语义只能有一个实现；两套必然漂移 |
+| 生成 runtime 去掉 Unix 依赖（多后端目标） | **M27 决策：保留单个 OCaml runtime 的无条件 Unix 依赖**（`Unix.stat`/`gettimeofday`/`readlink`，`build.sh` 链接 `unix.cmxa`），作为 runtime 契约写入 `primitives.md`；无 Unix 后端归 F2 | 当前唯一后端就是 OCaml + Unix（base 定位还需要 `/proc/self/exe`）；抽象后端会引入 IR 与第二套语义，属 F2 的范围，不应在 M27 半途引入 |
   [testing.md](reference/testing.md)；已知限制：[limits.md](reference/limits.md)

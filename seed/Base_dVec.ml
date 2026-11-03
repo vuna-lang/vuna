@@ -35,8 +35,8 @@ let rec v_Base_dVec_dvlen = (fun xs -> (match xs with
 ))
 
 let rec v_Base_dVec_dvecToList = (fun mc0 -> (match mc0 with
-  | C_Base_dVec_dVec_Base_dVec_dVCons (dtb__6, dtb__7) -> (C_Base_dList_dList_Cons (dtb__6, (v_Base_dVec_dvecToList dtb__7)))
-  | C_Base_dVec_dVec_Base_dVec_dVNil -> C_Base_dList_dList_Nil
+  | C_Base_dVec_dVec_Base_dVec_dVCons (dtb__6, dtb__7) -> (C_Base_dList_dList_Base_dList_dCons (dtb__6, (v_Base_dVec_dvecToList dtb__7)))
+  | C_Base_dVec_dVec_Base_dVec_dVNil -> C_Base_dList_dList_Base_dList_dNil
   | _ -> failwith "DT: impossible branch"
 ))
 

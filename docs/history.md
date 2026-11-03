@@ -289,3 +289,39 @@
   类型检查；D13/M30 会把 LSP 接到与 CLI 相同的 `contextForFile`。
 - **基线**：seed 65 `.ml` / 66 文件、`nix flake check` 全绿（测试断言数与套件
   耗时见 [reference/testing.md](reference/testing.md)）。
+
+## M27：内置、原语与效应边界（2026-11）
+
+- **单一内建声明面**：新增 `Vuna.Compiler.Intrinsics`（声明名、IType 签名形状、arity、
+  `IntrinsicOp` 归约标签、能力、runtime 表达式、是否用户可见）。Loader（解析/放行/
+  能力检查）、`Elab.Prelude`（prelude globals）、`Codegen.Term`（名字 → runtime）、
+  `Core.Eval`（归约）全部消费同一张表；删除 Loader 的 `builtinArity` /
+  `dtPreludeNames` / `isEffectfulBuiltin` 手写清单、`Codegen.Term.globalRef` 大 case、
+  `Elab.Sig.topPreludeNames` 过期副本与 `Core.Eval.isPrimitiveName` 死代码（A10/A11）。
+- **内置身份按完整声明符号**：Bool 回到 base 普通 data（canonical `Base.Bool.Bool`，
+  `True`/`False` 精化成 `TBool`）；List/IO 同样是 base 普通 data（canonical
+  `Base.List.List` / `Base.IO.IO`）。`Loader.Modules.isGlobalCtor` 删除，构造子一律
+  mangle 后按声明/导出身份解析；Codegen/Elab/Driver 的 `lastName`/短名判据全部替换为
+  canonical 常量；List 桥接只认 `Base.List.List`，IO main hook 只认 `Base.IO.IO`
+  （A07/A08/A09/C17/C18）。
+- **效应边界**：效果原语只保留 `prim_*`（公开名 `readFile`/`print`/… 删除，工具链源码
+  改调 primitive）；包用 `vuna.toml` 的 `[capabilities] effects = ["console","fs",
+  "process","env","clock"]` 显式声明能力，`PackageContext`/`Root`/`Module`/`Project`
+  携带能力表，`Loader.Resolve.checkEffectsBuiltins` 按 Intrinsics 的能力位检查；删除
+  `packageAllowsEffects` 包名 allowlist，未知能力名报错（B16）。
+- **原语语义规范**：新增 `docs/reference/primitives.md`——Int 固定 63 位补码回绕；
+  String 是 UTF-8 字节串（`strLength`/`strAt` 按字节）；`/0` 产物运行期 Failure、
+  interp 不归约；`strUnpack`/`strPack`/`strConcatMany`/`strSubstTemplate` 等 interp
+  不归约项显式分类；`strShow`（`dt_show_string`）成为 `Show String` 与 `main : String`
+  展示的唯一转义实现；`strHash`/`strAt`/`strLength` 在 interp 与 runtime 同公式；
+  runtime 的 Unix 依赖、`prim_getenv`/`getcwd`/`execPath` 语义写入规范（C16/C19/D16）。
+- **测试**：新增 `dt/54_user_bool_data`（用户 data Bool 是普通 data）、`55_user_io_data`、
+  `56_user_list_data`（用户 data List 与 base List 并存，C17 正例）、`run/18_int_overflow`、
+  `19_string_utf8`、`20_str_hash`；`packages/07_effect_capability`（正例）、
+  `96_effect_no_capability`、`97_unknown_capability`（负例）；单文件 Bool 夹具迁移到 base
+  Bool，`dt/34_io_do`/`35_io_main` 改用 `import Base.IO`；第 39c 段改为 `prim_print` +
+  `requires capability`。快照按新模块面/实例名重生成。
+- **自举**：新内建声明面与能力先以旧种子可编译的形式落地并 rotation（seed 66 `.ml` /
+  67 文件），第二轮加入 `strShow` 使用后再 rotation；`seed-count.txt` 自动更新。
+- **基线**：seed 66 `.ml` / 67 文件、`nix flake check` 全绿（测试断言数与套件耗时见
+  [reference/testing.md](reference/testing.md)）。

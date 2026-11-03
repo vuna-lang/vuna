@@ -27,7 +27,7 @@ printFinding path fixMode f =
         ++ suffix
         ++ "\n"
   in let
-    _ = print text
+    _ = prim_print text
   in 0
 
 printFindings : String -> Bool -> List Finding -> Int
@@ -44,7 +44,7 @@ lintUsage = "usage: vuna lint [--fix] <file.vuna>...\n"
 lintUsageError : Int -> Int
 lintUsageError _ =
   let
-    _ = print lintUsage
+    _ = prim_print lintUsage
   in 2
 
 reportFindings : String -> Bool -> List Finding -> Int
@@ -57,36 +57,36 @@ fixReport : String -> String -> List Finding -> Int
 fixReport path source findings = case fixLoop source findings 8 0 of
   Err e =>
     let
-      _ = print (path ++ ": error: " ++ e ++ "\n")
+      _ = prim_print (path ++ ": error: " ++ e ++ "\n")
     in 2
   Ok (Pair count newSource) => if count == 0 then reportFindings path True findings
   else
     let
-      _ = writeFile path newSource
+      _ = prim_writeFile path newSource
     in case lintSource newSource of
       Err e =>
         let
-          _ = print (path ++ ": error: " ++ e ++ "\n")
+          _ = prim_print (path ++ ": error: " ++ e ++ "\n")
         in 2
       Ok remaining =>
         let
-          _ = print (path ++ ": fixed " ++ strFromInt count ++ " finding(s)\n")
+          _ = prim_print (path ++ ": fixed " ++ strFromInt count ++ " finding(s)\n")
         in reportFindings path True remaining
 
 lintExisting : Bool -> String -> String -> Int
 lintExisting doFix path source = case lintSource source of
   Err e =>
     let
-      _ = print (path ++ ": error: " ++ e ++ "\n")
+      _ = prim_print (path ++ ": error: " ++ e ++ "\n")
     in 2
   Ok findings =>
     if doFix then fixReport path source findings else reportFindings path False findings
 
 lintOne : Bool -> String -> Int
-lintOne doFix path = if fileExists path then lintExisting doFix path (readFile path)
+lintOne doFix path = if prim_fileExists path then lintExisting doFix path (prim_readFile path)
 else
   let
-    _ = print (path ++ ": error: file not found\n")
+    _ = prim_print (path ++ ": error: file not found\n")
   in 2
 
 lintFiles : Bool -> List String -> Int

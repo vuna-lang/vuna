@@ -2,9 +2,6 @@ module Vuna.Compiler.Elab.Meta
   ( DataHead(..)
   , baseNameOf
   , binderRig
-  , boolCtorTerm
-  , boolCtorValue
-  , boolTypedVal
   , checkScopedFrom
   , checkScopedValueList
   , checkSolsDelta
@@ -31,7 +28,6 @@ module Vuna.Compiler.Elab.Meta
   , fieldBinderGo
   , fieldBinderNames
   , fieldVarName
-  , findBoolFamily
   , findCatchAllBody
   , findClassByShortName
   , findCtorIn
@@ -49,10 +45,8 @@ module Vuna.Compiler.Elab.Meta
   , inlineSolvedMetaAlt
   , inlineSolvedMetas
   , instantiateNullaryCtor
-  , isBoolBaseName
   , isBoolGlobal
   , isBoolType
-  , isBoolTypeVal
   , isDataHead
   , isIndexDomain
   , isSortVal
@@ -78,7 +72,6 @@ module Vuna.Compiler.Elab.Meta
   , prependFamParams
   , relevantMetas
   , resultSpine
-  , shortBoolFamily
   , spineOfType
   , splitKind
   , substClassParam
@@ -100,6 +93,7 @@ import Vuna.Compiler.Debug
 import Vuna.Compiler.Core
 import Vuna.Compiler.Diagnostics
 import Vuna.Compiler.Elab.Prelude
+import Vuna.Compiler.Intrinsics
 import Vuna.Compiler.Elab.Sig
 import Vuna.Compiler.Elab.Types
 import Vuna.Compiler.Frontend.Ast
@@ -147,14 +141,11 @@ zipTeleRigs [] bs = []
 zipTeleRigs ms [] = []
 zipTeleRigs (m :: ms) (b :: bs) = Pair m (secondOf b) :: zipTeleRigs ms bs
 
--- M21：Bool 的统一运行时表示。`Base.Bool` / 单文件 `data Bool` 的构造子
--- `True` / `False` 一律精化成核心的 `TBool`，codegen 出 OCaml 的 `true` / `false`；
--- 族本身不生成变体声明（`Bool` 的运行时表示就是 OCaml bool）。
--- 这样 `if`、内建算子返回的 `Bool`、与 `data Bool` 的构造子就是同一个表示。
+-- M27：Bool 是 base 的普通 data 声明，身份 = 完整符号 `Base.Bool.Bool`；canonical 族的
+-- `True` / `False` 精化成核心 `TBool`（OCaml bool），用户 `data Bool` 是普通 data。
 boolCtorValue : String -> Maybe Bool
-boolCtorValue name = case splitLastDot (splitOnDot name) of
-  Pair rev base =>
-    if base == "True" then Just True else if base == "False" then Just False else Nothing
+boolCtorValue name =
+  if name == boolTrueCtor then Just True else if name == boolFalseCtor then Just False else Nothing
 
 boolCtorTerm : String -> Term
 boolCtorTerm name = case boolCtorValue name of
@@ -162,11 +153,14 @@ boolCtorTerm name = case boolCtorValue name of
   Just False => TBool False
   Nothing => TGlobal name
 
+isBoolFamilyName : String -> Bool
+isBoolFamilyName name = name == boolTypeName
+
 -- `inferE (EVar ctor)`：零参构造子（`Nil`/`Nothing` 等）的隐式类型参数实例化成元变量，
 -- 使其类型为 `List ?m`/`Maybe ?m`（值），而非 `{a}->List a`（函数）。
 inferCtorRef : Ec -> Ctx -> String -> Term -> Result (Pair Term (Pair Value Ec))
 inferCtorRef ec ctx name tyTerm = case dtCtorLookup name (ecDatas ec) of
-  Just ctor => if isBoolBaseName (dtCtorFamily ctor) then Ok (Pair (boolCtorTerm name) (Pair (VNeutral (NGlobal (dtCtorFamily ctor) [])) ec))
+  Just ctor => if isBoolFamilyName (dtCtorFamily ctor) then Ok (Pair (boolCtorTerm (dtCtorName ctor)) (Pair (VNeutral (NGlobal boolTypeName [])) ec))
   else
     let
       ctorTy = eval [] tyTerm
@@ -176,31 +170,9 @@ inferCtorRef ec ctx name tyTerm = case dtCtorLookup name (ecDatas ec) of
     else Ok (Pair (ctorRefTerm (ecDatas ec) name) (Pair ctorTy ec))
   Nothing => Ok (Pair (ctorRefTerm (ecDatas ec) name) (Pair (eval [] tyTerm) ec))
 
--- `Bool` 的双重身份：prelude 桩 `Bool`（类型注解、内建算子返回类型、内建的 `if`）
--- 与 `Base.Bool` 重新声明的 `Base.Bool.Bool`（`True`/`False` 构造子、`Base.*` 签名）。
--- DT 里二者必须按定义相等处理，否则 `main : Bool` 与 `mem` 的 `Base.Bool.Bool` 对不上。
--- HM 侧仍按内建 `Bool`（Loader 保留内建捷径），不受影响。
-isBoolTypeVal : Ec -> Value -> Bool
-isBoolTypeVal ec v = case forceVal ec v of
-  VNeutral (NVar name _ _) => isBoolBaseName name
-  VNeutral (NGlobal name _) => isBoolBaseName name
-  _ => False
-
-boolTypedVal : Ec -> Value -> Bool
-boolTypedVal ec v = case forceVal ec v of
-  VNeutral (NVar name _ _) => isBoolBaseName name
-  VNeutral (NGlobal name _) => isBoolBaseName name
-  _ => False
-
-isBoolBaseName : String -> Bool
-isBoolBaseName name = case splitLastDot (splitOnDot name) of
-  Pair rev base => base == "Bool"
-
+-- 定义性相等（唯一入口；Bool 与其它 primitive 类型一样按同名全局比较）。
 convEc : Ec -> Int -> Value -> Value -> Result Ec
--- 预置的 Bool 桩（preludeGlobals 里的 Bool）与 Base.Bool.Bool 是同一个类型：
--- 签名里写的 Bool 走桩，构造子/内建实例给的是 Base.Bool.Bool，两者必须视为相等。
-convEc ec depth expected actual = if boolTypedVal ec expected && boolTypedVal ec actual then Ok ec
-else case conv (ecDefTbl ec) (ecSolsP ec) depth expected actual of
+convEc ec depth expected actual = case conv (ecDefTbl ec) (ecSolsP ec) depth expected actual of
   Err e => Err e
   -- 作用域逃逸检查只复核**这次新增**的解：旧实现每次 conv 都扫全表
   -- （O(#元变量) × O(#conv)），大程序上就是主瓶颈（编译器包 180s 只走到第 800 个定义）。
@@ -365,7 +337,6 @@ collectSigsInto banned seen acc (d :: rest) = case d of
   DTrait name params methods sp => collectSigsInto banned seen acc rest
   DInstance mname isDefault head methods sp => collectSigsInto banned seen acc rest
 
---
 -- 已精化的族按源顺序积累在 Ec 的 datas 里（case 精化需要族的 ctor telescope）。
 -- 收集 data 声明（按源顺序）。
 collectDataDecls : List Decl -> List (Pair Decl Span) -> List (Pair Decl Span)
@@ -374,7 +345,6 @@ collectDataDecls (d :: rest) acc = case d of
   DData dname params kind ctors derivings sp => collectDataDecls rest (Pair d sp :: acc)
   _ => collectDataDecls rest acc
 
--- M22.2：程序里声明的数据族名（Loader 已限定），用于把 prelude 的族短名（`List`）
 -- 绑到实际族上。
 dataNamesOf : List Decl -> List String
 dataNamesOf [] = []
@@ -688,9 +658,7 @@ freshVarValue name level = VNeutral (NVar name level [])
 -- ---------------------------------------------------------------
 -- 双向检查
 -- ---------------------------------------------------------------
--- `if` 条件 / `Bool` 判定：`Bool` 既可以是 prelude 桩（`NGlobal "Bool"`）也可以是
--- `Base.Bool.Bool`（真实布尔），二者都要视为布尔类型（否则 `Base.List.filter` 的
--- `if p x` 会报 expected Bool, got Base.Bool.Bool）。
+-- `if` 条件 / `Bool` 判定：只认 canonical `Base.Bool.Bool`（`NGlobal boolTypeName`）。
 isBoolType : Value -> Bool
 isBoolType v = case v of
   VNeutral n => isBoolGlobal (neutralHeadName n)
@@ -702,8 +670,7 @@ neutralHeadName n = case n of
   NGlobal name _ => name
 
 isBoolGlobal : String -> Bool
-isBoolGlobal name = case splitLastDot (splitOnDot name) of
-  Pair rev base => base == "Bool"
+isBoolGlobal name = name == boolTypeName
 
 -- 名字既是构造子又是数据类型（如 `data Pair a b where Pair : a -> b -> Pair a b`）：
 -- 在类型位置（expected 是宇宙）应走 `checkAppGeneral`，值位置走 `checkAppCtor`。
@@ -719,7 +686,7 @@ isSortVal ec v = case forceVal ec v of
 ctorRefTerm : List DtData -> String -> Term
 ctorRefTerm datas name = case dtCtorLookup name datas of
   Just ctor =>
-    if isBoolBaseName (dtCtorFamily ctor) then boolCtorTerm name
+    if isBoolFamilyName (dtCtorFamily ctor) then boolCtorTerm (dtCtorName ctor)
     else if dtCtorTelescope ctor == [] then TCon name [] else TGlobal name
   Nothing => TGlobal name
 
@@ -728,7 +695,7 @@ ctorRefTerm datas name = case dtCtorLookup name datas of
 ctorAppTerm : List DtData -> Term -> List (Pair Term Rig) -> Term
 ctorAppTerm datas (TGlobal g) args = case dtCtorLookup g datas of
   Just ctor =>
-    if isBoolBaseName (dtCtorFamily ctor) then boolCtorTerm g
+    if isBoolFamilyName (dtCtorFamily ctor) then boolCtorTerm g
     else if length args >= length (dtCtorTelescope ctor) then TCon g args
     else foldAppTerms (TGlobal g) args
   Nothing => foldAppTerms (TGlobal g) args
@@ -765,13 +732,3 @@ findCatchAllBody (alt :: rest) = case alt of
   Pair pat body => case pat of
     PCon cname args psp => findCatchAllBody rest
     _ => Just body
-
--- `Bool` 短名 → 程序里实际声明的 Bool 族（短名匹配；供内建 trait 声明/内建实例使用，
--- 它们不经过 Loader，AST 里写的是裸 `Bool`）。
-shortBoolFamily : Ec -> String -> Maybe String
-shortBoolFamily ec name = if name == "Bool" then findBoolFamily (ecDatas ec) else Nothing
-
-findBoolFamily : List DtData -> Maybe String
-findBoolFamily [] = Nothing
-findBoolFamily (d :: rest) =
-  if baseNameOf (dtDataName d) == "Bool" then Just (dtDataName d) else findBoolFamily rest

@@ -1,0 +1,6 @@
+-- M27 / C16：`Show String` 与 main 展示共用同一个转义实现（intrinsic `strShow`）：
+-- 双引号包裹并转义 `"`、`\`、`\n`、`\t`、`\r`。这里直接比较展示结果与期望字面量。
+import Base.Show
+
+main : Int
+main = if show "a\nb" == "\"a\\nb\"" then 1 else 2

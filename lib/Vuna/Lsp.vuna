@@ -4,9 +4,9 @@ module Vuna.Lsp (runLsp, runLspTool) where
 --
 -- 传输：JSON-RPC 2.0 over stdio，帧格式 `Content-Length: N\r\n\r\n<json>`。
 --   - **stdout 只写协议帧**；日志统一走 stderr，且在内存里累积、退出时一次写出
---     （`writeFile "/dev/stderr"` 每次打开都会截断，逐行写会把前面的行冲掉）。
---   - stdin 只有行级内建（`readLine`，等价 OCaml `input_line`），没有字节级读。
---     读取层因此维护字节缓冲：每 `readLine` 一次就把「该行 + "\n"」并入缓冲，
+--     （`prim_writeFile "/dev/stderr"` 每次打开都会截断，逐行写会把前面的行冲掉）。
+--   - stdin 只有行级内建（`prim_readLine`，等价 OCaml `input_line`），没有字节级读。
+--     读取层因此维护字节缓冲：每 `prim_readLine` 一次就把「该行 + "\n"」并入缓冲，
 --     这等价于逐字节重建输入（`input_line` 只剥掉 `\n`，行尾 `\r` 会保留），
 --     所以按 `Content-Length` 截取正文是字节精确的。
 --
@@ -103,7 +103,7 @@ sendFrame : Json -> Int
 sendFrame payload =
   let
     body = renderJson payload
-  in print ("Content-Length: " ++ strFromInt (strLength body) ++ "\r\n\r\n" ++ body)
+  in prim_print ("Content-Length: " ++ strFromInt (strLength body) ++ "\r\n\r\n" ++ body)
 
 responseOk : Json -> Json -> Json
 responseOk id body = JObj [Pair "jsonrpc" (JStr "2.0"), Pair "id" id, Pair "result" body]
@@ -303,7 +303,7 @@ logLine s = "[vuna-lsp] " ++ s ++ "\n"
 flushLogs : LspState -> Int
 flushLogs st = case stateLogs st of
   [] => 0
-  logs => writeFile "/dev/stderr" (join "" (map logLine (reverse logs)))
+  logs => prim_writeFile "/dev/stderr" (join "" (map logLine (reverse logs)))
 
 -- ---------------------------------------------------------------
 -- capabilities
@@ -431,7 +431,7 @@ dispatch methodName msg state = case methodName of
 -- ---------------------------------------------------------------
 -- 从 stdin 再读一行并入缓冲；Nothing = EOF。
 --
--- 难点：`readLine` 在 EOF 返回 ""，与「真正的空行」无法区分。而 **LF-only 帧**
+-- 难点：`prim_readLine` 在 EOF 返回 ""，与「真正的空行」无法区分。而 **LF-only 帧**
 -- （client 用 `\n` 分隔 header）的 header 结束符正好是一个空行，必须保留它的
 -- `\n` 才能被 splitHeaders 识别成 `\n\n`。所以这里做一次 lookahead：
 --   - 读到非空行 ⇒ 直接并入「行 + "\n"」；
@@ -442,11 +442,11 @@ dispatch methodName msg state = case methodName of
 readMore : String -> Maybe String
 readMore pending =
   let
-    line = readLine
+    line = prim_readLine
   in if line /= "" then Just (pending ++ line ++ "\n")
   else
     let
-      next = readLine
+      next = prim_readLine
     in if next == "" then Nothing else Just (pending ++ "\n" ++ next ++ "\n")
 
 -- 找子串 needle 从 start 起的字节偏移；找不到返回 -1。

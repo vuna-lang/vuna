@@ -14,7 +14,7 @@ let v_Base_dOrd_dBase_dOrd_dOrd_uBase_dOrd_dOrd_uInt = (C_Dict_uBase_dOrd_dOrd_M
 
 let v_Base_dOrd_dBase_dOrd_dOrd_uBase_dOrd_dOrd_uString = (C_Dict_uBase_dOrd_dOrd_MkDict_uBase_dOrd_dOrd ((fun x -> (fun y -> ((bi_lt_generic x) y))), (fun x -> (fun y -> ((bi_le_generic x) y))), (fun x -> (fun y -> ((bi_gt_generic x) y))), (fun x -> (fun y -> ((bi_ge_generic x) y)))))
 
-let v_Base_dOrd_dBase_dOrd_dOrd_uBase_dOrd_dOrd_uBool = (C_Dict_uBase_dOrd_dOrd_MkDict_uBase_dOrd_dOrd ((fun x -> (fun y -> ((bi_lt_generic x) y))), (fun x -> (fun y -> ((bi_le_generic x) y))), (fun x -> (fun y -> ((bi_gt_generic x) y))), (fun x -> (fun y -> ((bi_ge_generic x) y)))))
+let v_Base_dOrd_dBase_dOrd_dOrd_uBase_dOrd_dOrd_uBase_dBool_dBool = (C_Dict_uBase_dOrd_dOrd_MkDict_uBase_dOrd_dOrd ((fun x -> (fun y -> ((bi_lt_generic x) y))), (fun x -> (fun y -> ((bi_le_generic x) y))), (fun x -> (fun y -> ((bi_gt_generic x) y))), (fun x -> (fun y -> ((bi_ge_generic x) y)))))
 
 let v_Base_dOrd_dlt = (fun _ud -> (fun x0 -> (fun x1 -> (match _ud with
   | C_Dict_uBase_dOrd_dOrd_MkDict_uBase_dOrd_dOrd (dtb__0, dtb__1, dtb__2, dtb__3) -> ((dtb__0 x0) x1)

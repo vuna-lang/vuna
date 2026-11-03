@@ -15,6 +15,7 @@ edition = "2026"
 modules = [
   "Vuna.Compiler.Common",
   "Vuna.Compiler.Diagnostics",
+  "Vuna.Compiler.Intrinsics",
   "Vuna.Compiler.Frontend.Diagnostics",
   "Vuna.Compiler.Loader.Diagnostics",
   "Vuna.Compiler.Frontend.Ast",
@@ -65,3 +66,7 @@ modules = [
 
 [dependencies]
 vuna-base = "../base"
+
+# M27：效应能力声明（编译器自身直接使用 effectful 内建）。
+[capabilities]
+effects = ["console", "fs", "process", "env", "clock"]

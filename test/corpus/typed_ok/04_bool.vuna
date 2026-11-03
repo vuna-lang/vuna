@@ -1,6 +1,2 @@
-data Bool : Type where
-  True : Bool
-  False : Bool
-
 main : Int
 main = if True then 1 else 2

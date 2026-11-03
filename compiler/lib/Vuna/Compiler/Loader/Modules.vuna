@@ -17,9 +17,9 @@ module Vuna.Compiler.Loader.Modules
   , findModuleFile
   , importModuleNames
   , importName
-  , isGlobalCtor
   , mangle
   , moduleAllImportsOf
+  , moduleCapabilities
   , moduleDeclsOf
   , moduleExportsOf
   , moduleImplicitImportsOf
@@ -30,6 +30,7 @@ module Vuna.Compiler.Loader.Modules
   , modulesExportingType
   , modulesExportingValue
   , projectEntryAllImports
+  , projectEntryCapabilities
   , projectEntryDecls
   , projectEntryImports
   , projectEntryPkg
@@ -54,48 +55,54 @@ import Vuna.Compiler.Packages.Pkg
 -- 显式 import 与自动注入的 Prelude（隐式 import）分开保存：
 -- 名字解析与 codegen 拓扑序用 all；模块重导出/include 只认显式 import。
 data Module : Type where
-  Module : String -> String -> List Import -> List Import -> List Decl -> List ExportEntry -> Module
+  Module : String -> String -> List Import -> List Import -> List Decl -> List ExportEntry -> List String -> Module
 
 -- 已加载项目：入口声明/import + 依赖模块列表（M12 分离编译用；保持 flatten 前的形态）。
 -- entryPkg 用于按包限制 effectful 内建（M12.6：普通包只能通过 Base.IO 使用效果）。
 data Project : Type where
-  Project : List Decl -> List Import -> List Import -> List Module -> String -> Project
+  Project : List Decl -> List Import -> List Import -> List Module -> String -> List String -> Project
 
 moduleNameOf : Module -> String
-moduleNameOf (Module n p is imps ds es) = n
+moduleNameOf (Module n p is imps ds es cs) = n
 
 modulePackageOf : Module -> String
-modulePackageOf (Module n p is imps ds es) = p
+modulePackageOf (Module n p is imps ds es cs) = p
 
 moduleImportsOf : Module -> List Import
-moduleImportsOf (Module n p is imps ds es) = is
+moduleImportsOf (Module n p is imps ds es cs) = is
 
 moduleImplicitImportsOf : Module -> List Import
-moduleImplicitImportsOf (Module n p is imps ds es) = imps
+moduleImplicitImportsOf (Module n p is imps ds es cs) = imps
 
 moduleAllImportsOf : Module -> List Import
-moduleAllImportsOf (Module n p is imps ds es) = append is imps
+moduleAllImportsOf (Module n p is imps ds es cs) = append is imps
 
 moduleDeclsOf : Module -> List Decl
-moduleDeclsOf (Module n p is imps ds es) = ds
+moduleDeclsOf (Module n p is imps ds es cs) = ds
 
 moduleExportsOf : Module -> List ExportEntry
-moduleExportsOf (Module n p is imps ds es) = es
+moduleExportsOf (Module n p is imps ds es cs) = es
+
+moduleCapabilities : Module -> List String
+moduleCapabilities (Module n p is imps ds es cs) = cs
 
 projectEntryDecls : Project -> List Decl
-projectEntryDecls (Project ds is imps ms pkg) = ds
+projectEntryDecls (Project ds is imps ms pkg pcaps) = ds
 
 projectEntryImports : Project -> List Import
-projectEntryImports (Project ds is imps ms pkg) = is
+projectEntryImports (Project ds is imps ms pkg pcaps) = is
 
 projectEntryAllImports : Project -> List Import
-projectEntryAllImports (Project ds is imps ms pkg) = append is imps
+projectEntryAllImports (Project ds is imps ms pkg pcaps) = append is imps
 
 projectModules : Project -> List Module
-projectModules (Project ds is imps ms pkg) = ms
+projectModules (Project ds is imps ms pkg pcaps) = ms
 
 projectEntryPkg : Project -> String
-projectEntryPkg (Project ds is imps ms pkg) = pkg
+projectEntryPkg (Project ds is imps ms pkg pcaps) = pkg
+
+projectEntryCapabilities : Project -> List String
+projectEntryCapabilities (Project ds is imps ms pkg pcaps) = pcaps
 
 -- 模块导出表（M10）。每条是「本模块公开名 → 定义处带模块前缀的名字」。
 -- kind 用字符串区分两套命名空间：val（函数/值）、ctor（构造器）、type（类型名）。
@@ -133,9 +140,6 @@ validModuleName : String -> Bool
 validModuleName name = case splitOnDot name of
   [] => False
   segs => allSegmentsValid segs
-
-isGlobalCtor : String -> Bool
-isGlobalCtor name = name == "True" || name == "False" || name == "Cons" || name == "Nil"
 
 mangle : String -> String -> String
 mangle prefix name = if prefix == "" then name else prefix ++ "." ++ name
@@ -208,7 +212,7 @@ missingModule name =
 
 moduleDecls : List Module -> String -> Result (List Decl)
 moduleDecls modules name = case findModule modules name of
-  Just (Module mname mpkg imports imps decls exports) => Ok decls
+  Just (Module mname mpkg imports imps decls exports mcaps) => Ok decls
   Nothing => missingModule name
 
 moduleCtors : List Module -> String -> Result (List String)
@@ -216,7 +220,7 @@ moduleCtors modules name = andThen (moduleDecls modules name) (\decls => Ok (cto
 
 exportsOf : List Module -> String -> Result (List ExportEntry)
 exportsOf modules name = case findModule modules name of
-  Just (Module mname mpkg imports imps decls exports) => Ok exports
+  Just (Module mname mpkg imports imps decls exports mcaps) => Ok exports
   Nothing => missingModule name
 
 entryKind : ExportEntry -> String
@@ -312,7 +316,7 @@ collectModuleFiles roots name importerPkg allowed hidden = case roots of
   root :: rest =>
     let
       path = modulePath root name
-    in if fileExists path then if rootAllows importerPkg root name then collectModuleFiles rest name importerPkg (Pair path root :: allowed) hidden
+    in if prim_fileExists path then if rootAllows importerPkg root name then collectModuleFiles rest name importerPkg (Pair path root :: allowed) hidden
     else collectModuleFiles rest name importerPkg allowed (rootName root :: hidden)
     else collectModuleFiles rest name importerPkg allowed hidden
 
@@ -336,8 +340,8 @@ findModuleFile roots name importerPkg = case collectModuleFiles roots name impor
 findModule : List Module -> String -> Maybe Module
 findModule modules name = case modules of
   [] => Nothing
-  (Module mname mpkg imports imps decls exports) :: rest =>
-    if mname == name then Just (Module mname mpkg imports imps decls exports)
+  (Module mname mpkg imports imps decls exports mcaps) :: rest =>
+    if mname == name then Just (Module mname mpkg imports imps decls exports mcaps)
     else findModule rest name
 
 refKind : ExportRef -> String

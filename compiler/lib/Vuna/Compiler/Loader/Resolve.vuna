@@ -11,6 +11,7 @@ import Vuna.Compiler.Common
 import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Frontend.Lexer
 import Vuna.Compiler.Loader.Modules
+import Vuna.Compiler.Intrinsics
 
 -- 解析器递归显式 fuel：下降证明只认同一参数位置的严格递减，而这里
 -- 递归既沿表达式子项也沿绑定列表/作用域前进，单测度表达不了；用 fuel + 递减。
@@ -18,81 +19,11 @@ import Vuna.Compiler.Loader.Modules
 resolveFuelBound : Int
 resolveFuelBound = 1073741824
 
--- 内建函数的名字与元数（原 `Vuna.Compiler.Loader.Builtins`，M24 后维护（源码重组）合并进本模块）。
+-- 内建函数的名字与元数：唯一真源是 `Vuna.Compiler.Intrinsics`（M27）。
 builtinArity : String -> Maybe Int
-builtinArity "+" = Just 2
-builtinArity "-" = Just 2
-builtinArity "*" = Just 2
-builtinArity "/" = Just 2
-builtinArity "==" = Just 2
-builtinArity "/=" = Just 2
-builtinArity "<" = Just 2
-builtinArity "<=" = Just 2
-builtinArity ">" = Just 2
-builtinArity ">=" = Just 2
-builtinArity "&&" = Just 2
-builtinArity "||" = Just 2
-builtinArity "++" = Just 2
-builtinArity "bi_show_string" = Just 1
-builtinArity "bi_eq_generic" = Just 2
-builtinArity "bi_neq_generic" = Just 2
-builtinArity "bi_lt_generic" = Just 2
-builtinArity "bi_le_generic" = Just 2
-builtinArity "bi_gt_generic" = Just 2
-builtinArity "bi_ge_generic" = Just 2
-builtinArity "bi_eq_int" = Just 2
-builtinArity "bi_neq_int" = Just 2
-builtinArity "bi_lt_int" = Just 2
-builtinArity "bi_le_int" = Just 2
-builtinArity "bi_gt_int" = Just 2
-builtinArity "bi_ge_int" = Just 2
-builtinArity "bi_eq_str" = Just 2
-builtinArity "bi_neq_str" = Just 2
-builtinArity "bi_eq_bool" = Just 2
-builtinArity "bi_neq_bool" = Just 2
-builtinArity "strLength" = Just 1
-builtinArity "strConcatMany" = Just 1
-builtinArity "strSubstTemplate" = Just 2
-builtinArity "timeUs" = Just 0
-builtinArity "strHash" = Just 1
-builtinArity "strAt" = Just 2
-builtinArity "strUnpack" = Just 1
-builtinArity "strPack" = Just 1
-builtinArity "strFromInt" = Just 1
-builtinArity "readFile" = Just 1
-builtinArity "writeFile" = Just 2
-builtinArity "print" = Just 1
-builtinArity "getArgs" = Just 0
-builtinArity "readLine" = Just 0
-builtinArity "readDir" = Just 1
-builtinArity "isDirectory" = Just 1
-builtinArity "makeDir" = Just 1
-builtinArity "removeFile" = Just 1
-builtinArity "fileExists" = Just 1
-builtinArity "fileMtime" = Just 1
-builtinArity "fileSize" = Just 1
-builtinArity "exit" = Just 1
--- 效果原语的内部名字：stdlib Base.IO 用它们实现公开的 IO API；
--- 普通包不可直接调用（Loader 的 effectful 包级限制覆盖 prim_*）。
-builtinArity "prim_readFile" = Just 1
-builtinArity "prim_writeFile" = Just 2
-builtinArity "prim_print" = Just 1
-builtinArity "prim_getArgs" = Just 0
-builtinArity "prim_readLine" = Just 0
-builtinArity "prim_readDir" = Just 1
-builtinArity "prim_isDirectory" = Just 1
-builtinArity "prim_makeDir" = Just 1
-builtinArity "prim_removeFile" = Just 1
-builtinArity "prim_fileExists" = Just 1
-builtinArity "prim_fileMtime" = Just 1
-builtinArity "prim_fileSize" = Just 1
-builtinArity "prim_exit" = Just 1
-builtinArity "prim_runIn" = Just 2
--- M26：包上下文/base 定位所需的只读原语（只有 prim_* 名、无公开别名；语义规范归 M27）。
-builtinArity "prim_getenv" = Just 1
-builtinArity "prim_getcwd" = Just 0
-builtinArity "prim_execPath" = Just 0
-builtinArity _ = Nothing
+builtinArity name = case findIntrinsic name of
+  Just i => if intrinsicVisible i then Just (intrinsicArity i) else Nothing
+  Nothing => Nothing
 
 isBuiltinName : String -> Bool
 isBuiltinName name = case builtinArity name of
@@ -111,35 +42,7 @@ isDtPreludeName : String -> Bool
 isDtPreludeName name = memName name dtPreludeNames
 
 dtPreludeNames : List String
-dtPreludeNames =
-  [ "Type",
-    "->",
-    "_",
-    "Int",
-    "String",
-    "+",
-    "-",
-    "*",
-    "/",
-    "==",
-    "/=",
-    "<",
-    "<=",
-    ">",
-    ">=",
-    "++",
-    "&&",
-    "||",
-    "strFromInt",
-    "strUnpack",
-    "strPack",
-    "strLength",
-    "strConcatMany",
-    "strSubstTemplate",
-    "timeUs",
-    "strHash",
-    "strAt"
-  ]
+dtPreludeNames = append ["Type", "->", "_"] (append typeIntrinsicNames preludeValueNames)
 
 -- M24.7：trait 迁到库后，缺 import 是最常见的错误来源。除了常规的
 -- unbound/unknown 诊断，再给一条可操作提示（单文件 / 未 import 的场景）。
@@ -164,10 +67,11 @@ resolveQualified modules label imports name = case splitLastDot (splitOnDot name
       prefix = joinDots revPrefix
     in case findImportPrefix imports prefix of
       Nothing => Err (label ++ ": module " ++ prefix ++ " is not imported")
-      Just m => if isGlobalCtor base then Ok base
-      else andThen (exportsOf modules m) (\es => case findExportValue es base of
+      Just m => andThen (exportsOf modules m) (\es => case findExportValue es base of
         Just e => Ok (entryTarget e)
-        Nothing => Err (label ++ ": " ++ base ++ " is not exported by " ++ m)
+        Nothing => case findExportCtor es base of
+          Just e => Ok (entryTarget e)
+          Nothing => Err (label ++ ": " ++ base ++ " is not exported by " ++ m)
       )
 
 -- 模式里的限定名只认构造器：`M.foo`（foo 是函数）必须报错，不能按值解析成构造器。
@@ -178,16 +82,15 @@ resolveQualifiedCtor modules label imports name = case splitLastDot (splitOnDot 
       prefix = joinDots revPrefix
     in case findImportPrefix imports prefix of
       Nothing => Err (label ++ ": module " ++ prefix ++ " is not imported")
-      Just m => if isGlobalCtor base then Ok base
-      else andThen (exportsOf modules m) (\es => case findExportCtor es base of
+      Just m => andThen (exportsOf modules m) (\es => case findExportCtor es base of
         Just e => Ok (entryTarget e)
         Nothing => Err (label ++ ": constructor " ++ base ++ " is not exported by " ++ m)
       )
 
 -- 带点表达式的解析（M10.5）：先按「最长可解析模块前缀」尝试限定名/限定值+字段链，
 -- 否则按「变量/顶层名 + 字段链」处理。`p.x`、`M.point.x`、`Vuna.Compiler.Frontend.Parser.parseSource` 都走这里。
-resolveDottedExpr : List Module -> String -> String -> List String -> List Import -> List String -> String -> Span -> Result Expr
-resolveDottedExpr modules label prefix own imports scope name sp = case splitOnDot name of
+resolveDottedExpr : List Module -> String -> String -> List String -> List String -> List Import -> List String -> String -> Span -> Result Expr
+resolveDottedExpr modules label prefix own ownCtors imports scope name sp = case splitOnDot name of
   [] => Err (label ++ ": invalid dotted name " ++ name)
   head :: rest => if memName head scope then Ok (foldFieldChain (EVar head sp) rest sp)
   else andThen (resolveQualifiedPath modules label imports (splitOnDot name) (length (splitOnDot name)) sp) (\q => case q of
@@ -196,7 +99,7 @@ resolveDottedExpr modules label prefix own imports scope name sp = case splitOnD
       if memName head own then Ok (foldFieldChain (EVar (mangle prefix head) sp) rest sp)
       else if isBuiltinName head then Ok (foldFieldChain (EVar head sp) rest sp)
       else if startsUpperName head then Err (label ++ ": module " ++ head ++ " is not imported")
-      else andThen (resolveGlobal modules label prefix own imports scope head)
+      else andThen (resolveGlobal modules label prefix own ownCtors imports scope head)
         (\n => Ok (foldFieldChain (EVar n sp) rest sp))
   )
 
@@ -216,10 +119,11 @@ resolveQualifiedPath : List Module -> String -> List Import -> List String -> In
 resolveQualifiedPath modules label imports segs n sp = if n < 1 then Ok Nothing
 else case findImportPrefix imports (joinDots (takeSegs (n - 1) segs)) of
   Just m => andThen (exportsOf modules m) (\es => case dropSegs (n - 1) segs of
-    [member] => if isGlobalCtor member then Ok (Just (EVar member sp))
-    else case findExportValue es member of
+    [member] => case findExportValue es member of
       Just e => Ok (Just (EVar (entryTarget e) sp))
-      Nothing => Err (label ++ ": " ++ member ++ " is not exported by " ++ m)
+      Nothing => case findExportCtor es member of
+        Just e => Ok (Just (EVar (entryTarget e) sp))
+        Nothing => Err (label ++ ": " ++ member ++ " is not exported by " ++ m)
     member :: rest => case findExportValue es member of
       Just e => Ok (Just (foldFieldChain (EVar (entryTarget e) sp) rest sp))
       Nothing => Err (label ++ ": " ++ member ++ " is not exported by " ++ m)
@@ -227,28 +131,27 @@ else case findImportPrefix imports (joinDots (takeSegs (n - 1) segs)) of
   )
   Nothing => resolveQualifiedPath modules label imports segs (n - 1) sp
 
-resolveGlobal : List Module -> String -> String -> List String -> List Import -> List String -> String -> Result String
-resolveGlobal modules label prefix own imports scope name = if memName name scope then Ok name
-else if isGlobalCtor name then Ok name
+resolveGlobal : List Module -> String -> String -> List String -> List String -> List Import -> List String -> String -> Result String
+resolveGlobal modules label prefix own ownCtors imports scope name = if memName name scope then Ok name
+else if memName name ownCtors then Ok (mangle prefix name)
 else if containsDot name then resolveQualified modules label imports name
 else if memName name own then Ok (mangle prefix name)
-else if isEffectfulBuiltin name then andThen (modulesExportingValue modules imports name) (\pairs => case pairs of
-  [] => Ok name
-  _ => andThen (unifyEntryPairs label "name" name pairs) (\p => Ok (entryTarget (secondOf p)))
-)
 else if isBuiltinName name then Ok name
 else if isDtPreludeName name then Ok name
 else andThen (modulesExportingValue modules imports name) (\pairs => case pairs of
-  [] =>
-    Err
-      (label ++ ": unbound variable " ++ name ++ suggest name (append own scope) ++ traitImportHint name)
+  [] => andThen (modulesExportingCtor modules imports name) (\cpairs => case cpairs of
+    [] =>
+      Err
+        (label ++ ": unbound variable " ++ name ++ suggest name (append own scope) ++ traitImportHint name)
+    _ => andThen (unifyEntryPairs label "name" name cpairs) (\p => Ok (entryTarget (secondOf p)))
+  )
   _ => andThen (unifyEntryPairs label "name" name pairs) (\p => Ok (entryTarget (secondOf p)))
 )
 
 resolveCtor : List Module -> String -> String -> List String -> List Import -> String -> Result String
-resolveCtor modules label prefix ownCtors imports name = if isGlobalCtor name then Ok name
-else if containsDot name then resolveQualifiedCtor modules label imports name
+resolveCtor modules label prefix ownCtors imports name = if containsDot name then resolveQualifiedCtor modules label imports name
 else if memName name ownCtors then Ok (mangle prefix name)
+else if isIntrinsicName name then Ok name
 else andThen (modulesExportingCtor modules imports name) (\pairs => case pairs of
   [] => Err (label ++ ": unknown constructor " ++ name ++ suggest name ownCtors)
   _ =>
@@ -347,8 +250,9 @@ resolveExpr : Int -> List Module -> String -> String -> List String -> List Stri
 resolveExpr fuel modules label prefix own ownCtors imports scope expr = if fuel <= 0 then Err "DT: resolve fuel exhausted (internal: resolver made no progress)"
 else case expr of
   EVar name sp =>
-    if containsDot name then resolveDottedExpr modules label prefix own imports scope name sp
-    else andThen (resolveGlobal modules label prefix own imports scope name) (\n => Ok (EVar n sp))
+    if containsDot name then resolveDottedExpr modules label prefix own ownCtors imports scope name sp
+    else andThen (resolveGlobal modules label prefix own ownCtors imports scope name)
+      (\n => Ok (EVar n sp))
   EInt n sp => Ok (EInt n sp)
   EStr s sp => Ok (EStr s sp)
   ELam params body sp =>
@@ -382,7 +286,7 @@ else case expr of
   ERecUpdate base fields sp =>
     andThen (resolveExpr (fuel - 1) modules label prefix own ownCtors imports scope base)
       (\b => andThen (traverse (\dtv => resolveFieldValue (fuel - 1) modules label prefix own ownCtors imports scope dtv) fields) (\fs => Ok (ERecUpdate b fs sp)))
-  EInstSel meth name sp => andThen (resolveExpr (fuel - 1) modules label prefix own ownCtors imports scope meth) (\m2 => case resolveGlobal modules label prefix own imports scope name of
+  EInstSel meth name sp => andThen (resolveExpr (fuel - 1) modules label prefix own ownCtors imports scope meth) (\m2 => case resolveGlobal modules label prefix own ownCtors imports scope name of
     Err e => Err (label ++ ": unknown instance name " ++ name ++ " (@" ++ name ++ ")")
     Ok n2 => Ok (EInstSel m2 n2 sp)
   )
@@ -417,8 +321,7 @@ resolveFieldValue fuel modules label prefix own ownCtors imports scope (Pair fna
 
 resolveCtorDecl : String -> String -> String -> Result String
 resolveCtorDecl label prefix ctor =
-  if isGlobalCtor ctor then Ok ctor
-  else andThen (checkTopName label ctor) (\_ => Ok (mangle prefix ctor))
+  andThen (checkTopName label ctor) (\_ => Ok (mangle prefix ctor))
 
 isLowerTypeName : String -> Bool
 isLowerTypeName name = case strUnpack name of
@@ -437,7 +340,8 @@ startsUpperName name = case strUnpack name of
 -- Base.Bool.Bool`（族名对不上）。因此 `ownTypes` 的判定必须排在内建名之前。
 resolveTypeName : List Module -> String -> String -> List String -> List Import -> String -> Result String
 resolveTypeName modules label prefix ownTypes imports name = if memName name ownTypes then Ok (mangle prefix name)
-else if name == "Int" || name == "String" || name == "Bool" || name == "Type" || name == "->" then Ok name
+else if isIntrinsicTypeName name then Ok name
+else if name == "Type" || name == "->" then Ok name
 else if isLowerTypeName name then Ok name
 else if containsDot name then case splitLastDot (splitOnDot name) of
   Pair revPrefix base =>
@@ -535,62 +439,71 @@ resolveProgram : List Module -> String -> String -> List String -> List String -
 resolveProgram modules label prefix own ownCtors ownTypes imports decls =
   traverse (resolveDecl modules label prefix own ownCtors ownTypes imports) decls
 
-resolveEntry : List Module -> String -> List Import -> List Decl -> Result (List Decl)
-resolveEntry modules entryPkg imports decls =
-  andThen
-    (resolveProgram modules "<entry>" "" (append (topNames decls) (typeNamesOf decls)) (ctorsOf decls) (append (ctorsOf decls) (append (topNames decls) (typeNamesOf decls))) imports decls)
-    (\d => checkEffectsBuiltins "<entry>" entryPkg d)
+-- 入口文件（ad-hoc，无模块前缀）的构造子不 mangle：必须在全文件内唯一，否则同名
+-- 构造子会静默共用一个全局名（M27 / A09 防御）。
+entryCtorNames : List Decl -> List String
+entryCtorNames [] = []
+entryCtorNames (d :: rest) = case d of
+  DData _ _ _ ctors _ _ => append (map ctorName ctors) (entryCtorNames rest)
+  _ => entryCtorNames rest
+
+firstDupName : List String -> Maybe String
+firstDupName [] = Nothing
+firstDupName (x :: rest) = if memName x rest then Just x else firstDupName rest
+
+checkEntryCtors : String -> List Decl -> Result Int
+checkEntryCtors label decls = case firstDupName (entryCtorNames decls) of
+  Just n =>
+    Err
+      (label ++ ": duplicate constructor " ++ n ++ " (entry-file constructors share one global namespace)")
+  Nothing => Ok 0
+
+resolveEntry : List Module -> String -> List String -> List Import -> List Decl -> Result (List Decl)
+resolveEntry modules entryPkg entryCaps imports decls =
+  andThen (checkEntryCtors "<entry>" decls)
+    (\_ => andThen (resolveProgram modules "<entry>" "" (append (topNames decls) (typeNamesOf decls)) (ctorsOf decls) (append (ctorsOf decls) (append (topNames decls) (typeNamesOf decls))) imports decls) (\d => checkEffectsBuiltins "<entry>" entryPkg entryCaps d))
 
 resolveModules : List Module -> Result (List Decl)
 resolveModules modules = case modules of
   [] => Ok []
-  (Module name mpkg imports imps decls exports) :: rest =>
+  (Module name mpkg imports imps decls exports mcaps) :: rest =>
     andThen
-      (andThen (resolveProgram modules name name (append (topNames decls) (typeNamesOf decls)) (ctorsOf decls) (append (ctorsOf decls) (append (topNames decls) (typeNamesOf decls))) (append imports imps) decls) (\d => checkEffectsBuiltins name mpkg d))
+      (andThen (resolveProgram modules name name (append (topNames decls) (typeNamesOf decls)) (ctorsOf decls) (append (ctorsOf decls) (append (topNames decls) (typeNamesOf decls))) (append imports imps) decls) (\d => checkEffectsBuiltins name mpkg mcaps d))
       (\d1 => andThen (resolveModules rest) (\d2 => Ok (append d1 d2)))
 
 -- ---------------------------------------------------------------
--- effectful 内建的包级限制（M12.6）
--- 编译器 / 产品 CLI / stdlib 自己需要直接做文件 IO，允许使用纯内建；
--- 普通用户包只能通过 Base.IO 的 IO API 使用效果，不能在纯代码里直接 print/readFile。
--- M26：ad-hoc（pkg==""，无 manifest 的 base-only 上下文）不再有旁路：入口与依赖
--- 模块一律按空包名判定，效果尝试一律被拒。
+-- 效应能力（M27）：包在 vuna.toml 的 [capabilities].effects 里显式声明能力；
+-- 内建所需能力在 Intrinsics 表里。普通包不声明能力，只能经 Base.IO 使用效果；
+-- 不存在任何按包名/路由的 allowlist。
 -- ---------------------------------------------------------------
-packageAllowsEffects : String -> Bool
-packageAllowsEffects pkg = pkg == "vuna" || pkg == "vuna-compiler" || pkg == "vuna-base"
+capabilityError : String -> String -> Result a
+capabilityError label name =
+  Err (label ++ ": unknown capability \"" ++ name ++ "\" (known: console, fs, process, env, clock)")
+
+checkCapabilities : String -> List String -> Result Int
+checkCapabilities label caps = case caps of
+  [] => Ok 0
+  name :: rest => checkOneCapability label name rest
+
+checkOneCapability : String -> String -> List String -> Result Int
+checkOneCapability label name rest = case parseCapability name of
+  Just _ => checkCapabilities label rest
+  Nothing => capabilityError label name
 
 isEffectfulBuiltin : String -> Bool
-isEffectfulBuiltin name =
-  name == "print"
-    || name == "readFile"
-    || name == "writeFile"
-    || name == "getArgs"
-    || name == "readLine"
-    || name == "readDir"
-    || name == "isDirectory"
-    || name == "makeDir"
-    || name == "removeFile"
-    || name == "fileExists"
-    || name == "fileMtime"
-    || name == "fileSize"
-    || name == "exit"
-    || name == "prim_print"
-    || name == "prim_readFile"
-    || name == "prim_writeFile"
-    || name == "prim_getArgs"
-    || name == "prim_readLine"
-    || name == "prim_readDir"
-    || name == "prim_isDirectory"
-    || name == "prim_makeDir"
-    || name == "prim_removeFile"
-    || name == "prim_fileExists"
-    || name == "prim_fileMtime"
-    || name == "prim_fileSize"
-    || name == "prim_exit"
-    || name == "prim_runIn"
-    || name == "prim_getenv"
-    || name == "prim_getcwd"
-    || name == "prim_execPath"
+isEffectfulBuiltin name = case findIntrinsic name of
+  Just i => isEffectfulIntrinsic i
+  Nothing => False
+
+allowsEffect : List String -> String -> Bool
+allowsEffect caps name = case findIntrinsic name of
+  Just i => effectAllowed caps i
+  Nothing => True
+
+effectAllowed : List String -> Intrinsic -> Bool
+effectAllowed caps i = case intrinsicCapability i of
+  Nothing => True
+  Just c => memName (capabilityName c) caps
 
 firstEffect : List (Maybe a) -> Maybe a
 firstEffect [] = Nothing
@@ -610,7 +523,7 @@ effExpr e = case e of
   EField base fname sp => effExpr base
   ERecord name fields sp => effFields fields
   ERecUpdate base fields sp => firstEffect [effExpr base, effFields fields]
-  EInstSel meth iname sp => Nothing
+  EInstSel meth iname sp => effExpr meth
   -- M20：`EPi` 是 DT 的核心语法，这里只做结构递归（类型层不算 effect）。
   EPi name implicit dom cod sp => firstEffect [effExpr dom, effExpr cod]
   EDo stmts sp => effDos stmts
@@ -658,13 +571,18 @@ effDecls (d :: rest) = firstEffect [effDecl d, effDecls rest]
 packageLabelForEffects : String -> String
 packageLabelForEffects pkg = if pkg == "" then "ad-hoc file (no package)" else "package " ++ pkg
 
-checkEffectsBuiltins : String -> String -> List Decl -> Result (List Decl)
-checkEffectsBuiltins label pkg decls = if packageAllowsEffects pkg then Ok decls
-else case effDecls decls of
+checkEffectsBuiltins : String -> String -> List String -> List Decl -> Result (List Decl)
+checkEffectsBuiltins label pkg caps decls = andThen (checkCapabilities label caps) (\_ => case effDecls decls of
   Nothing => Ok decls
-  Just name =>
-    Err
-      (label ++ ": effectful builtin `" ++ name ++ "` is not available in " ++ packageLabelForEffects pkg ++ " (use Base.IO)")
+  Just name => if allowsEffect caps name then Ok decls
+  else case findIntrinsic name of
+    Just i => case intrinsicCapability i of
+      Just c =>
+        Err
+          (label ++ ": effectful builtin `" ++ name ++ "` requires capability `" ++ capabilityName c ++ "` in " ++ packageLabelForEffects pkg ++ " (declare [capabilities] effects = [\"" ++ capabilityName c ++ "\"] or use Base.IO)")
+      Nothing => Ok decls
+    Nothing => Ok decls
+)
 
 tyShape : Expr -> String
 tyShape ty = case ty of

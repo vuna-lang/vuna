@@ -6,7 +6,6 @@ module Vuna.Compiler.Codegen.Decl
   , flagMatchesRig
   , genTypeDeclsOf
   , joinWith
-  , lastName
   , ocamlBinderName
   , ocamlString
   , runtimeDatas
@@ -26,6 +25,7 @@ module Vuna.Compiler.Codegen.Decl
 import Vuna.Compiler.Common
 import Vuna.Compiler.Core
 import Vuna.Compiler.Elab
+import Vuna.Compiler.Intrinsics
 
 sanitizeChar : Int -> List Int
 -- `#` 出现在 Loader 生成的匿名实例名里（`#default`、`#fancy`），OCaml 标识符不允许。
@@ -145,10 +145,6 @@ interpose sep [] = []
 interpose sep ([x]) = [x]
 interpose sep (x :: rest) = x :: sep :: interpose sep rest
 
-lastName : String -> String
-lastName name = case splitLastDot (splitOnDot name) of
-  Pair rev base => base
-
 -- ---------------------------------------------------------------
 -- 变体类型声明（族 → OCaml type）
 -- ---------------------------------------------------------------
@@ -164,7 +160,7 @@ lastName name = case splitLastDot (splitOnDot name) of
 --     `pure : a -> m a`），共用参数会把它们错误统一；异构 `Pair a b` 同理；
 --   * **没被用到的族参数不生成**：`IO a` 的字段是函数 `Int -> a`（整体不透明），
 --     所以 `IO` 的 OCaml 类型没有类型参数，也就不会在每个顶层 `IO` 值上留下
---     不可泛化的弱变量（旧实现里 `readFile "x"` 得到 `('a,_weak) t_IO` 直接报错）。
+--     不可泛化的弱变量（旧实现里 `prim_readFile "x"` 得到 `('a,_weak) t_IO` 直接报错）。
 --
 -- 「用到」的判定与字段渲染必须用同一张表，否则声明与实参位置会漂移。表用不动点计算
 -- （族之间可互相引用）：初始全空，按渲染位置收集引用，单调增长到稳定。
@@ -323,16 +319,13 @@ else case v of
     NVar name lvl sp => case levelSlot levels lvl of
       Just s => typeParamName s
       Nothing => "unit"
-    NGlobal g sp => case g of
-      "Int" => "int"
-      "String" => "string"
-      "Bool" => "bool"
-      _ => if lastName g == "Bool" then "bool"
-      else case findDtData g datas of
-        Just gd =>
-          familyTyText g
-            (renderFamilyArgsFuel (fuel - 1) levels table datas (lookupUsed table g) sp)
-        Nothing => "unit"
+    NGlobal g sp => if g == intTypeName then "int"
+    else if g == strTypeName then "string"
+    else if g == boolTypeName then "bool"
+    else case findDtData g datas of
+      Just gd =>
+        familyTyText g (renderFamilyArgsFuel (fuel - 1) levels table datas (lookupUsed table g) sp)
+      Nothing => "unit"
   _ => "unit"
 
 -- 单个字段的 OCaml 类型 + 下一个不透明参数槽。
@@ -365,14 +358,13 @@ renderFieldTy levels table datas lvl dom slot = case dom of
     NVar name lvl2 sp => case levelSlot levels lvl2 of
       Just s => Pair (typeParamName s) slot
       Nothing => Pair (typeParamName slot) (slot + 1)
-    NGlobal g sp => case g of
-      "Int" => Pair "int" slot
-      "String" => Pair "string" slot
-      "Bool" => Pair "bool" slot
-      _ => case findDtData g datas of
-        Just gd =>
-          Pair (familyTyText g (renderFamilyArgs levels table datas (lookupUsed table g) sp)) slot
-        Nothing => Pair (typeParamName slot) (slot + 1)
+    NGlobal g sp => if g == intTypeName then Pair "int" slot
+    else if g == strTypeName then Pair "string" slot
+    else if g == boolTypeName then Pair "bool" slot
+    else case findDtData g datas of
+      Just gd =>
+        Pair (familyTyText g (renderFamilyArgs levels table datas (lookupUsed table g) sp)) slot
+      Nothing => Pair (typeParamName slot) (slot + 1)
   _ => Pair (typeParamName slot) (slot + 1)
 
 -- 构造子字段形状的**唯一真源**（M24.6 第一级）：从 telescope 的 rig 算出 keep flags
@@ -450,11 +442,10 @@ ctorBodyText : List String -> String
 ctorBodyText [] = "|"
 ctorBodyText cs = joinWith " | " cs
 
--- M21：Bool 族不进运行时表示。`True` / `False` 与 `if` 统一是 OCaml bool
--- （Elab 把 Bool 族的构造子精化成 `TBool`），所以不生成变体类型与变体构造子，
--- 构造子表里也不放 Bool——引用会回落到 `globalRef` 的 `true` / `false`。
+-- M27：canonical Bool 族的运行时表示就是 OCaml bool（构造子精化成 `TBool`），
+-- 因此不生成变体声明；用户 `data Bool`（mangle 后是另一个族）照常生成。
 isBoolFamilyName : String -> Bool
-isBoolFamilyName name = lastName name == "Bool"
+isBoolFamilyName name = name == boolTypeName
 
 runtimeDatas : List DtData -> List DtData
 runtimeDatas datas = filter (\d => if isBoolFamilyName (dtDataName d) then False else True) datas

@@ -12,7 +12,7 @@ import Vuna.Compiler.Driver.Split
 
 -- 包级 check：可执行包检查 app/Main.vuna；库包检查 [export].modules。
 checkPackage : Package -> Result (List String)
-checkPackage pkg = if fileExists (packageEntry pkg) then dtCheck (packageContext pkg) (packageEntry pkg)
+checkPackage pkg = if prim_fileExists (packageEntry pkg) then dtCheck (packageContext pkg) (packageEntry pkg)
 else case packageExports pkg of
   Nothing =>
     Err
@@ -23,11 +23,11 @@ else case packageExports pkg of
 -- outDir 在 codegen 成功后才创建（精化失败不留产物）。
 compileToDir : PackageContext -> String -> Bool -> String -> Result Int
 compileToDir ctx entry printResult outDir = andThen (dtSplitProject ctx entry printResult) (\files => let
-  _ = makeDir outDir
+  _ = prim_makeDir outDir
 in andThen (writeSplitFiles outDir files) (\n => let
   order = splitCompileOrder (splitInitFiles files)
 in let
-  _ = writeFile (outDir ++ "/build.sh") (buildScript order)
+  _ = prim_writeFile (outDir ++ "/build.sh") (buildScript order)
 in Ok n
 )
 )

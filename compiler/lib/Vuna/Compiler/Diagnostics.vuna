@@ -157,6 +157,7 @@ data CgErr : Nat -> Type where
   NoMain : CgErr Zero
   TypeUsedAtRuntime : CgErr Zero
   -- arity 1
+  ListBridgeRequired : String -> CgErr (Succ Zero)
   RecursiveValueDefinition : String -> CgErr (Succ Zero)
   TypeLevelBindingRuntime : String -> CgErr (Succ Zero)
   TypeLevelNameRuntime : String -> CgErr (Succ Zero)
@@ -248,6 +249,7 @@ cgCode MainNotValue = "CG_MainNotValue"
 cgCode MainReturnType = "CG_MainReturnType"
 cgCode NoMain = "CG_NoMain"
 cgCode TypeUsedAtRuntime = "CG_TypeUsedAtRuntime"
+cgCode (ListBridgeRequired _) = "CG_ListBridgeRequired"
 cgCode (RecursiveValueDefinition _) = "CG_RecursiveValueDefinition"
 cgCode (TypeLevelBindingRuntime _) = "CG_TypeLevelBindingRuntime"
 cgCode (TypeLevelNameRuntime _) = "CG_TypeLevelNameRuntime"
@@ -351,6 +353,8 @@ cgTemplate MainNotValue = "main does not reduce to a value"
 cgTemplate MainReturnType = "main must return Int, String or Bool (M13 limitation)"
 cgTemplate NoMain = "no main definition"
 cgTemplate TypeUsedAtRuntime = "a type is used at runtime (M13 limitation)"
+cgTemplate (ListBridgeRequired _) =
+  "builtin `<0>` requires the canonical `Base.List.List` declaration from vuna-base (no base dependency in this package)"
 cgTemplate (RecursiveValueDefinition _) =
   "top-level value definition `<0>` cannot be recursive; make it a function or remove the cycle"
 cgTemplate (TypeLevelBindingRuntime _) = "type-level binding `<0>` is used at runtime"
@@ -471,6 +475,7 @@ cgAll =
     CgEntry (cgCode MainReturnType) (cgTemplate MainReturnType) "main 返回类型受限",
     CgEntry (cgCode NoMain) (cgTemplate NoMain) "入口缺少 main 定义",
     CgEntry (cgCode TypeUsedAtRuntime) (cgTemplate TypeUsedAtRuntime) "类型被运行时使用（M13 限制）",
+    CgEntry (cgCode (ListBridgeRequired "")) (cgTemplate (ListBridgeRequired "")) "内建需要 canonical Base.List.List 桥接但包没有 base 依赖",
     CgEntry (cgCode (RecursiveValueDefinition "")) (cgTemplate (RecursiveValueDefinition "")) "递归组里的零参值定义无法安全落地",
     CgEntry (cgCode (TypeLevelBindingRuntime "")) (cgTemplate (TypeLevelBindingRuntime "")) "类型级绑定被运行时使用（M13 限制）",
     CgEntry (cgCode (TypeLevelNameRuntime "")) (cgTemplate (TypeLevelNameRuntime "")) "类型级名字被运行时使用",

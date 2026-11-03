@@ -16,9 +16,9 @@
 | `Base.Show` | `Show` trait（`show : a -> String`）+ `Int` / `String` / `Bool` 实例 |
 | `Base.Eq` | `Eq` trait（`eq` / `neq : a -> a -> Bool`）+ `Int` / `String` / `Bool` 实例 |
 | `Base.Ord` | `Ord` trait（`lt` / `le` / `gt` / `ge : a -> a -> Bool`）+ `Int` / `String` / `Bool` 实例 |
-| `Base.IO` | 抽象 `IO a` 与 IO 组合子（实例 + print/readFile/writeFile/getArgs/exit） |
+| `Base.IO` | 抽象 `IO a` 与 IO 组合子（实例 + print/readFile/writeFile/getArgs/exit，内部包装 `prim_*` 效果原语） |
 | `Base` | 包门面：整模块重导出以上模块（`import Base` 即可用） |
-| `Prelude` | 顶层模块（`base/lib/Prelude.vuna`）：重导出 `Base.Pair` / `Bool` / `Eq` / `Ord` / `Show` / `List` / `Maybe` / `Result` / `String` / `Monad`，**包上下文内所有源文件（含无 manifest 的 ad-hoc 单文件）自动导入**；显式 `import` 时不再重复注入；刻意不含 `Base.IO` 的效果函数（`print`/`readFile` 等与编译器直接使用的内建同名），需要 IO 时显式 `import Base.IO` |
+| `Prelude` | 顶层模块（`base/lib/Prelude.vuna`）：重导出 `Base.Pair` / `Bool` / `Eq` / `Ord` / `Show` / `List` / `Maybe` / `Result` / `String` / `Monad`，**包上下文内所有源文件（含无 manifest 的 ad-hoc 单文件）自动导入**；显式 `import` 时不再重复注入；刻意不含 `Base.IO`（效果 API 需显式 import，效果面不进入自动注入） |
 
 跨包使用时只可见 `base/vuna.toml` `[export]` 列出的模块；抽象类型（`Map`、`IO`）
 的构造器保持私有。`Map` / `Sort` 不在 `Prelude` 里，需要显式 import。
@@ -55,30 +55,42 @@ module Base.IO (IO, print, println, readFile, writeFile, readLine, readDir, ...)
 - `base/lib/` 是 vuna 模块根，不是 OCaml 库目录；
 - `Prelude` 是唯一自动注入的模块：包上下文内所有源文件（含无 manifest 的 ad-hoc 单文件）
   都自动导入；不需要也不再有第二套加载模式；
-- `Base.IO` 刻意不在 `Prelude` 中：`print` / `readFile` 等名字与编译器直接使用的
-  effectful 内建同名，自动导入会让编译器源码产生歧义。
+- `Base.IO` 刻意不在 `Prelude` 中：效果 API 需要显式 `import Base.IO`，效果面不随
+  自动注入进入每个源文件。
 
 ## 内建与库的边界
 
-- **`Bool` 归 `Base.Bool`**：`data Bool` 是唯一权威定义（DT 的 `if` / 字面量模式按
-  「族短名 Bool」识别，不另存一份定义）。编译器的 DT prelude 桩（`Elab.Prelude`，原
-  `DtPrelude` 的 `Bool` / `True` / `False`）随 **M22.2** 删除；包上下文（含 ad-hoc
-  单文件）经自动注入的 `Prelude` 使用 `Base.Bool`，需要自定义语义时再自行声明
-  `data Bool`。
-- **`Int` / `String` 是语言原语**：没有 `data` 声明，字面量、算术与 `str*` 由编译器提供。
-- **`Show` / `Eq` / `Ord` 在库（M24.7 完成）**：trait 声明、方法投影与
-  `Int` / `String` / `Bool` 实例全部在 `Base.Show` / `Base.Eq` / `Base.Ord`，包模式下
-  随 `Prelude` 自动导入。编译器只保留**机制**——`deriving (Show, Eq, Ord)` 的展开、
-  `==` / `/=` 的 `Int`/`String` 运行时特化与 `<` / `<=` / `>` / `>=` 的 `Int` 特化
-  （比较的 `String` / `Bool` 走泛型运行时）、以及 `if` / 字面量等语法；`Loader` 不再放行
-  `show` / `eq` / `lt` 等
-  短名，裸名必须经 import 的导出表解析。`Show Bool` 用 `if` 输出 `True` / `False`；
-  `Eq Bool` 方法体用析取（`Bool == Bool` 会落到该实例，不能自递归）。
+权威语义（宽度、编码、转义、错误行为、interp 边界）见 [primitives.md](primitives.md)；
+这里只划「编译器提供什么、库提供什么」。
+
+- **`Int` / `String` 是语言 primitive 类型**：没有 `data` 声明，字面量、算术与 `str*`
+  由编译器提供（唯一真源 `Vuna.Compiler.Intrinsics`）；`data Int` / `data String` 是重定义
+  错误。注意 `String` 是 UTF-8 字节串、`Int` 是固定的 63 位（见 primitives.md）。
+- **`Bool` 归 `Base.Bool`**：`data Bool` 是唯一权威定义，canonical 身份
+  `Base.Bool.Bool`；`True` / `False` 精化为 `TBool`，codegen 表示是 OCaml `bool`，不生成
+  变体。`if` / `case` / `main : Bool` 按 canonical 符号判定，不再有短名判定或 prelude
+  桩。用户写同名 `data Bool` 是普通 data，不与 canonical 冲突。
+- **`List` / `IO` 也是 base 的普通 `data` 声明**：canonical 身份
+  `Base.List.List` / `Base.IO.IO`。返回或接收 `List` 的原语（`strUnpack` / `strPack` /
+  `prim_readDir` / `prim_getArgs`）经 List 桥接 helper（`dtp_unpack` / `dtp_pack` /
+  `dtp_listOf`）落地，桥接只为 canonical `Base.List.List` 生成；`Prelude` 自动注入
+  `Base.List`，所以正常上下文里总可用。
+- **`Show` / `Eq` / `Ord` 在库**：trait 声明、方法投影与 `Int` / `String` / `Bool` 实例
+  全在 `Base.Show` / `Base.Eq` / `Base.Ord`，随 `Prelude` 自动导入。编译器只保留**机制**：
+  `deriving (Show, Eq, Ord)` 的展开、`==` / `/=` 与比较的 `Int` / `String` 运行时特化、
+  `if` / 字面量等语法。字符串展示只有一个实现 `strShow`——`Base.Show` 的 `String` 实例
+  是 `show s = strShow s`，库不再另写一套转义；`Show Bool` 用 `if` 输出 `True` / `False`，
+  `Eq Bool` 方法体用析取（不能自递归）。
+- **效果原语只有 `prim_*` 名**：旧的公开名（`print` / `readFile` / `exit` / …）已删除，
+  公开名与 `prim_*` 的双份不复存在。`Base.IO` 是默认用户面（把 `prim_*` 包成 `IO` 动作），
+  并在 `base/vuna.toml` 声明 `[capabilities].effects = ["console", "fs", "process"]`；
+  普通包不声明能力就只能经 `Base.IO`，声明能力后可直接调用 `prim_*`。能力是**权限声明**，
+  不是检查豁免（`Loader.Resolve.checkEffectsBuiltins`）。
 - **ad-hoc 单文件与包内模块一致（M26）**：`Prelude` 自动注入，`Show` / `Eq` / `Ord`
-  及其实例开箱可用；诊断在缺少显式 import 时仍会提示加对应 import。不再有需要手动指定
-  模块根的“原始文件模式”。
+  及其实例开箱可用；诊断在缺少显式 import 时仍会提示加对应 import。ad-hoc 文件没有能力，
+  效果只能经 `Base.IO`。
 - split 输出（`compile` / `build` 目录）的编译单元只有 `Vuna_runtime` + 各源码模块 +
-  `Main`：M26 删除了空 `Vuna_builtins` unit，seed 因此是 65 个 `.ml`。
+  `Main`：M26 删除了空 `Vuna_builtins` unit；M27 新增内建声明模块后 seed 为 66 个 `.ml`。
 - 阶段状态与当前阻碍见 [docs/roadmap.md](../roadmap.md) 的「阶段状态总览」。
 
 ## 已知边界

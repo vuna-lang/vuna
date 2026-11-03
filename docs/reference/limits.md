@@ -8,9 +8,12 @@ DT 设计见 [docs/dt-core.md](../dt-core.md)。
 
 - 只有一条编译链：`Loader → DT 精化（Elab） → 擦除 codegen（Codegen）`。
   `check` / `compile` / `build` 与语言夹具全部走它，没有可切换的检查器。
-- codegen 只用 OCaml 标准库、不依赖解释循环；已做 Kosaraju SCC 分组、比较运算符
+- codegen 不依赖解释循环；已做 Kosaraju SCC 分组、比较运算符
   特化（`bi_eq_int` 等）、`&&`/`||` 短路降级；**零参顶层定义求值一次**（M26：直接
-  `let v_x = body`，不再包 thunk、调用点也不再补 `()`）。
+  `let v_x = body`，不再包 thunk、调用点也不再补 `()`）。生成的 runtime
+  （`Vuna_runtime.ml`）**无条件**内嵌 Unix（`Unix.stat` / `gettimeofday` /
+  `readlink "/proc/self/exe"`），`build.sh` 无条件链接 `unix.cmxa`——见
+  [primitives.md](primitives.md) 的 runtime 契约。
 - 输出模型只有一种：**逐模块 split**（`vuna compile ENTRY OUTDIR` 与
   `vuna build` 都产依赖序的 `<Module>.ml` + `Vuna_runtime.ml` + `Main.ml` + `build.sh`，
   **不生成 `.mli`**）。`compile` 只 codegen 到目录、成功静默；`build` 默认输出到 `<PKG-DIR>/.output`（PKG-DIR 缺省当前目录，
@@ -30,9 +33,10 @@ DT 设计见 [docs/dt-core.md](../dt-core.md)。
   搬运、M24.6 编译器本体最小重构、M24.7 trait 库化、**M26 包上下文统一与单一
   codegen 输出模型**。**当前阻碍按阶段登记在
   [docs/roadmap.md](../roadmap.md)**。仍是边界的几条：
-  - **ad-hoc 单文件与包内模块同一语义（M26）**：自动注入 `Prelude`，`Bool`/`True`/
-    `False` 来自 `Base.Bool`；`Bool` 类型名仍是 prelude 类型别名（prelude 里 `==` /
-    比较的签名需要）。需要自定义语义时自行 `data Bool`（与 `List` 约定一致）。
+  - **身份按声明符号判定（M27）**：`Int` / `String` 是 language primitive 类型；`Bool` /
+    `List` / `IO` 是 base 的普通 `data` 声明，canonical 身份分别是 `Base.Bool.Bool` /
+    `Base.List.List` / `Base.IO.IO`。没有短名判定、没有 prelude 桩、没有全局构造子放行；
+    用户同名 `data` 是普通声明。原语语义与身份常量表见 [primitives.md](primitives.md)。
   - **擦除由 rig 判据驱动**：`Rig0`（隐式 binder / `Type` 域）不进运行时表示，`Rig1`
     （显式值、显式索引 `(n : Nat)`）保留字段（`17_erase` / `dt/38_explicit_index` 锁定
     两侧）；不做整程序使用分析，「想擦但被读」的显式索引不会自动擦除（可改成隐式
@@ -46,10 +50,8 @@ DT 设计见 [docs/dt-core.md](../dt-core.md)。
     与无下降的互递归仍会被拒；HOF 递归（`map (\x => f x)`）、`where` 绑定体里调外层
     函数、`Cons x (f x)` 这类藏在实参里的递归都会被检查（旧实现只递归函数头，这些是
     静默通过）。每个 SCC 的每个环都必须有严格下降边（去掉严格边后无环）。
-    **没有包级豁免之外的分层**：依赖模块与入口模块用同一套判据；基库为此改了两处
+    **没有包级豁免**：依赖模块、入口模块与编译器包用同一套判据；基库为此改了两处
     实现（`Base.List.range` 改倒计数、`Base.String.split` 两段递归共享显式 fuel）。
-    编译器包（`Vuna.Compiler.*`）仍由包级 trust 跳过终止性检查，其 conv/eval/parser
-    等递归留给 M25.2c（详见 [debt.md](debt.md)）。
   - **`where` 绑定必须写签名且是顺序 let**：每个绑定都要在子句前写签名（缺签名报
     `DT: where binding ... needs a type signature`），只能引用之前的绑定——不支持前向
     引用 / 自递归 / 互递归（引用报 `DT: unknown name ...`），递归与互相引用放顶层定义组。
@@ -63,12 +65,16 @@ DT 设计见 [docs/dt-core.md](../dt-core.md)。
     表达式走 DT 表达式接口（推断表达式类型后求值）。
   - **除零语义**：核心求值器对 `a / 0` **不归约**（`interp` 报 `main does not reduce to a
     value`），`compile` 产物运行时 `failwith "division by zero"`（未捕获异常，退出码
-    2）；测试用 `compile` + 运行断言（`run_err/03_div_zero`）。
-  - **`main` 的数据值展示限制**：`interp` 只展示 `Int`/`String`/`Bool`（`show` 语义，
-    字符串带引号）；返回 data/record 的 `main` 报 `main does not reduce to a value`。
-    夹具的 `main` 用 `Int`/`String`（数据覆盖点留在被调函数里）。
-  - **`strUnpack`/`strPack` 在核心求值器不归约**：codegen 侧已补齐（无 `List` 族时
-    映射 `bi_strUnpack`/`bi_strPack`），但 interp 不归约；相关夹具用 `.nointerp` 标记。
+    2）；测试用 `compile` + 运行断言（`run_err/03_div_zero`）。这是显式分类而非静默 0，
+    完整边界见 [primitives.md](primitives.md) 的 interp 归约边界。
+  - **`main` 的数据值展示限制**：`interp` 只展示 `Int`/`String`/`Bool`，与产物同一展示
+    语义（`String` 走 `strShow` 转义，见 [primitives.md](primitives.md)）；返回
+    data/record 的 `main` 报 `main does not reduce to a value`。夹具的 `main` 用
+    `Int`/`String`（数据覆盖点留在被调函数里）。
+  - **interp 不归约的原语按类分类**：返回/接收 `List` 的 `strUnpack` / `strPack` /
+    `strConcatMany` / `strSubstTemplate`（List 桥接依赖 `Base.List.List` 构造子表示）、
+    `/0`、以及全部效果原语；其余 `str*`（`strFromInt` / `strLength` / `strHash` /
+    `strAt` / `strShow`）已实现且与 runtime 同公式。相关夹具用 `.nointerp` 标记。
   - **`Prelude` 自动注入（M24.7/M26）**：包上下文内所有源文件（含 ad-hoc 单文件）自动
     导入 `Prelude`，`Show` / `Eq` / `Ord` 及其实例开箱可用；显式 `import` 仍可补充。
     缺 import 的诊断只在显式绕开 `Prelude` 的上下文出现。
@@ -106,29 +112,34 @@ DT 设计见 [docs/dt-core.md](../dt-core.md)。
     与工具链源码通过 SCT + 显式 fuel/结构递归达标，不再有「可信包静默跳过」路径。
     工具链/前端/加载器的状态机用输入规模线性 fuel 或内存内不可达上界（debt C26/C27/C28），
     正常输入不触发；触发时是明确的 internal 错误，不会静默改变语义。
-  - **`List` 桥接**：源程序若自己声明 `List` 族，`getArgs` / `readDir`
-    等效果内建返回的列表由 codegen 桥接回该族；经 `Prelude`/`Base.List` 使用库的
-    `List` 时由库的族承接；上下文里没有可用 `List` 族时不能使用这些内建。
+  - **`List` 桥接**：返回或接收 `List` 的原语（`strUnpack` / `strPack` /
+    `strConcatMany` / `strSubstTemplate` / `prim_getArgs` / `prim_readDir`）由 codegen
+    映射到桥接 helper，桥接只为 canonical `Base.List.List` 生成；`Prelude` 自动注入
+    `Base.List`，因此正常上下文总可用，闭包里没有该族时这些原语不可用。
   完整 DT 主线见 [docs/roadmap.md](../roadmap.md)、设计边界见 [docs/dt-core.md](../dt-core.md)、
   工具链见 [dt-tooling.md](dt-tooling.md)；种子轮换是手动流程（发版/不兼容变更时），日常
   工具链改动不需要 rotation；`test/run-tests.sh` 以 golden 比对为主。
 
-## main 与 IO（M12.6）
+## main 与 IO
 
-- 可执行入口（`vuna build`）要求 `main : IO a`，由运行时执行动作
-  （没有公开的 `runIO` / `unsafeRunIO`）；普通用户包不能直接调用 effectful 内建
-  （`print` / `readFile` / `exit` / ...），只能经 `Base.IO`（编译器 / 产品 CLI /
-  `vuna-base` 自身在包级 allowlist 内）；该 allowlist 按**包名字符串**判定、可伪造
-  ——debt **B16**，M27 改为 capability / 显式声明。
-  `vuna interp` / `vuna test` 的**入口文件**同样禁止直接调用 effectful 内建
-  （只有被加载的 base/compiler 模块内部可用）。
-  `vuna interp` 只做**纯**核心求值：任何 `main : IO a` 一律报错并提示 `compile` +
-  运行产物；纯 `main : Int/String/Bool` 结果 show 仍保留为调试约定。IO 组合统一用
-  `Functor`/`Monad` trait（`fmap`/`bind`/`pure`、`>>=`、`do`），不导出
-  `bindIO`/`pureIO`/`fmapIO`；效果 API 直接返回 IO，内部由不导出的 `prim_*` 原语实现。
-  当前 `IO` 仍是库层 thunk 表示，不是完整的 effect 类型系统（见 [docs/roadmap.md](../roadmap.md)）。
-- IO 失败（如 `readFile` 缺失文件）抛宿主异常，但入口文件缺失返回普通错误；CLI 用 `exit`
-  内建返回非 0 退出码（compile 错误 1、lint 有 finding 1、用法/解析/IO 错误 2）。
+- 可执行入口（`vuna build`）要求 `main : IO a`（`IO` 判定只认 canonical `Base.IO.IO`），
+  由运行时执行动作（没有公开的 `runIO` / `unsafeRunIO`）。
+- **效果靠显式能力**：效果原语只有 `prim_*` 名（`prim_print` / `prim_readFile` / …，
+  旧公开名已删除）。普通包不能直接调用它们，只能经 `Base.IO`；要在源码里直接调用，必须
+  在 `vuna.toml` 的 `[capabilities].effects` 声明对应能力（`console` / `fs` / `process` /
+  `env` / `clock`）。无 manifest 的 ad-hoc 文件没有能力。未声明时报
+  `` requires capability `<cap>` ... ``
+  （`Loader.Resolve.checkEffectsBuiltins`）。这是**权限声明**，不是检查豁免；不再存在按
+  包名字符串判定的 allowlist。完整表见 [primitives.md](primitives.md)。
+  `vuna interp` / `vuna test` 的**入口文件**同样受限。
+- `vuna interp` 只做**纯**核心求值：任何 `main : IO a` 一律报错并提示 `compile` +
+  运行产物；纯 `main : Int/String/Bool` 的结果展示仍保留为调试约定（`String` 走
+  `strShow` 转义）。IO 组合统一用 `Functor`/`Monad` trait（`fmap`/`bind`/`pure`、`>>=`、
+  `do`），不导出 `bindIO`/`pureIO`/`fmapIO`；`Base.IO` API 直接返回 IO，内部包装
+  `prim_*` 效果原语。当前 `IO` 仍是库层 thunk 表示，不是完整的 effect 类型系统（见
+  [docs/roadmap.md](../roadmap.md)）。
+- IO 失败（如读缺失文件）在产物里抛宿主异常，但入口文件缺失返回普通错误；CLI 用
+  `prim_exit` 返回非 0 退出码（compile 错误 1、lint 有 finding 1、用法/解析/IO 错误 2）。
 
 ## 工具链细节
 
@@ -154,7 +165,7 @@ DT 设计见 [docs/dt-core.md](../dt-core.md)。
 - 标准库包名 `vuna-base`、模块根 `Base.*`，编译器模块 `Vuna.Compiler.*`（门面
   `Vuna.Compiler.Common`）；包上下文内所有源文件（含 ad-hoc 单文件）自动导入
   `Prelude`；`vuna build` 需要 PATH 中有 `ocamlopt`；`Prelude` 刻意不含 `Base.IO`
-  效果函数。
+  （效果 API 需显式 import）。
 
 ## 已完成阶段（细节见 history）
 

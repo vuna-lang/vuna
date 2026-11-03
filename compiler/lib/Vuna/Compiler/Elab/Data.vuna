@@ -34,6 +34,7 @@ import Vuna.Compiler.Elab.Meta
 import Vuna.Compiler.Elab.Prelude
 import Vuna.Compiler.Elab.Term
 import Vuna.Compiler.Elab.Types
+import Vuna.Compiler.Intrinsics
 import Vuna.Compiler.Frontend.Ast
 
 -- 精化一个构造子：类型是「Pi 链 → F r1..rk」。
@@ -134,10 +135,26 @@ elabDataBodies decls heads globals ec acc = case decls of
             Pair dctors ec2 =>
               let
                 dd = DtData dname tele dctors
-              in elabDataBodies rest heads (append globals (ctorGlobals dctors)) (ecAddData ec2 dd)
-                (dd :: acc)
+              in case canonicalCtorsFor dname of
+                Just expected =>
+                  if sameCtorSet expected (map dtCtorName dctors) then elabDataBodies rest heads (append globals (ctorGlobals dctors)) (ecAddData ec2 dd)
+                    (dd :: acc)
+                  else tcErr1 dsp2 (CannotRedefineBuiltin dname) dname
+                Nothing =>
+                  elabDataBodies rest heads (append globals (ctorGlobals dctors)) (ecAddData ec2 dd)
+                    (dd :: acc)
           )
       _ => elabDataBodies rest heads globals ec acc
+
+-- canonical 族（`Base.Bool.Bool` / `Base.List.List` / `Base.IO.IO`）只能以固定的构造子
+-- 集合声明：伪造同名族会让精化与 codegen 的 canonical 判定失配（M27 防御）。
+sameCtorSet : List String -> List String -> Bool
+sameCtorSet expected actual =
+  if length expected == length actual then allIn expected actual else False
+
+allIn : List String -> List String -> Bool
+allIn [] actual = True
+allIn (e :: rest) actual = if memName e actual then allIn rest actual else False
 
 -- 两阶段精化所有 data 声明（M23：允许 data 之间的前向引用与互递归）。
 elabDatas : List (Pair Decl Span) -> List (Pair String Term) -> Ec -> Result (Pair (List DtData) (Pair (List (Pair String Term)) Ec))
