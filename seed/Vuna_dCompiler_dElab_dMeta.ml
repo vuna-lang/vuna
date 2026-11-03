@@ -1,5 +1,4 @@
 open Vuna_runtime
-open Vuna_builtins
 open Base_dPair
 open Base_dBool
 open Base_dMonad
@@ -15,20 +14,20 @@ open Vuna_dCompiler_dCommon
 open Vuna_dCompiler_dFrontend_dToml
 open Vuna_dCompiler_dFrontend_dManifest
 open Vuna_dCompiler_dPackages_dPkg
+open Vuna_dCompiler_dDebug
 open Base_dNat
 open Base_dVec
-open Vuna_dCompiler_dLoader_dDiagnostics
+open Vuna_dCompiler_dDiagnostics
 open Vuna_dCompiler_dFrontend_dAst
 open Vuna_dCompiler_dFrontend_dDiagnostics
 open Vuna_dCompiler_dFrontend_dLexer
 open Vuna_dCompiler_dFrontend_dParser_dSupport
 open Vuna_dCompiler_dFrontend_dParser
+open Vuna_dCompiler_dLoader_dDiagnostics
 open Vuna_dCompiler_dLoader_dModules
 open Vuna_dCompiler_dLoader_dResolve
 open Vuna_dCompiler_dLoader_dFlatten
 open Vuna_dCompiler_dLoader
-open Vuna_dCompiler_dDebug
-open Vuna_dCompiler_dDiagnostics
 open Vuna_dCompiler_dCore_dTerm
 open Vuna_dCompiler_dCore_dEval
 open Vuna_dCompiler_dCore_dConv
@@ -234,9 +233,9 @@ let v_Vuna_dCompiler_dElab_dMeta_dglobalsLookup = (fun name -> (fun globals -> (
   | _ -> failwith "DT: impossible branch"
 ))))
 
-let rec v_Vuna_dCompiler_dElab_dMeta_dmemSig = (fun d5131 -> (fun mc0 -> (fun mc1 -> (match mc0 with
+let rec v_Vuna_dCompiler_dElab_dMeta_dmemSig = (fun d5142 -> (fun mc0 -> (fun mc1 -> (match mc0 with
   | C_Base_dList_dList_Cons (dtb__113, dtb__114) -> (match dtb__113 with
-  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__115, dtb__116) -> (if (((v_Base_dEq_deq d5131) dtb__115) mc1) then true else (((v_Vuna_dCompiler_dElab_dMeta_dmemSig d5131) dtb__114) mc1))
+  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__115, dtb__116) -> (if (((v_Base_dEq_deq d5142) dtb__115) mc1) then true else (((v_Vuna_dCompiler_dElab_dMeta_dmemSig d5142) dtb__114) mc1))
   | _ -> failwith "DT: impossible branch"
 )
   | C_Base_dList_dList_Nil -> false
@@ -254,7 +253,7 @@ let rec v_Vuna_dCompiler_dElab_dMeta_dmemDefName = (fun mc0 -> (fun mc1 -> (matc
 
 let rec v_Vuna_dCompiler_dElab_dMeta_dcollectSigsInto = (fun mc0 -> (fun mc1 -> (fun mc2 -> (fun mc3 -> (match mc3 with
   | C_Base_dList_dList_Cons (dtb__121, dtb__122) -> (match dtb__121 with
-  | C_Vuna_dCompiler_dFrontend_dAst_dDecl_Vuna_dCompiler_dFrontend_dAst_dDSig (dtb__123, dtb__124, dtb__125) -> (if ((v_Base_dList_dmemName dtb__123) (v_Vuna_dCompiler_dElab_dPrelude_dpreludeNames ())) then (((v_Vuna_dCompiler_dDiagnostics_dtcErr1 dtb__125) (C_Vuna_dCompiler_dDiagnostics_dTcErr_Vuna_dCompiler_dDiagnostics_dCannotRedefineBuiltin (dtb__123))) dtb__123) else (if ((v_Vuna_dCompiler_dCommon_dtblMem dtb__123) mc1) then (((v_Vuna_dCompiler_dDiagnostics_dtcErr1 dtb__125) (C_Vuna_dCompiler_dDiagnostics_dTcErr_Vuna_dCompiler_dDiagnostics_dDuplicateSignature (dtb__123))) dtb__123) else ((((v_Vuna_dCompiler_dElab_dMeta_dcollectSigsInto mc0) (((v_Vuna_dCompiler_dCommon_dtblInsert dtb__123) true) mc1)) (C_Base_dList_dList_Cons ((C_Base_dPair_dPair_Base_dPair_dPair (dtb__123, (((v_Vuna_dCompiler_dElab_dSig_dquantifyTopSig mc0) dtb__124) dtb__125))), mc2))) dtb__122)))
+  | C_Vuna_dCompiler_dFrontend_dAst_dDecl_Vuna_dCompiler_dFrontend_dAst_dDSig (dtb__123, dtb__124, dtb__125) -> (if ((v_Base_dList_dmemName dtb__123) v_Vuna_dCompiler_dElab_dPrelude_dpreludeNames) then (((v_Vuna_dCompiler_dDiagnostics_dtcErr1 dtb__125) (C_Vuna_dCompiler_dDiagnostics_dTcErr_Vuna_dCompiler_dDiagnostics_dCannotRedefineBuiltin (dtb__123))) dtb__123) else (if ((v_Vuna_dCompiler_dCommon_dtblMem dtb__123) mc1) then (((v_Vuna_dCompiler_dDiagnostics_dtcErr1 dtb__125) (C_Vuna_dCompiler_dDiagnostics_dTcErr_Vuna_dCompiler_dDiagnostics_dDuplicateSignature (dtb__123))) dtb__123) else ((((v_Vuna_dCompiler_dElab_dMeta_dcollectSigsInto mc0) (((v_Vuna_dCompiler_dCommon_dtblInsert dtb__123) true) mc1)) (C_Base_dList_dList_Cons ((C_Base_dPair_dPair_Base_dPair_dPair (dtb__123, (((v_Vuna_dCompiler_dElab_dSig_dquantifyTopSig mc0) dtb__124) dtb__125))), mc2))) dtb__122)))
   | C_Vuna_dCompiler_dFrontend_dAst_dDecl_Vuna_dCompiler_dFrontend_dAst_dDFun (dtb__126, dtb__127, dtb__128, dtb__129) -> ((((v_Vuna_dCompiler_dElab_dMeta_dcollectSigsInto mc0) mc1) mc2) dtb__122)
   | C_Vuna_dCompiler_dFrontend_dAst_dDecl_Vuna_dCompiler_dFrontend_dAst_dDData (dtb__130, dtb__131, dtb__132, dtb__133, dtb__134, dtb__135) -> ((((v_Vuna_dCompiler_dElab_dMeta_dcollectSigsInto mc0) mc1) mc2) dtb__122)
   | C_Vuna_dCompiler_dFrontend_dAst_dDecl_Vuna_dCompiler_dFrontend_dAst_dDRecord (dtb__136, dtb__137, dtb__138, dtb__139, dtb__140) -> ((v_Vuna_dCompiler_dElab_dTypes_derrAt dtb__140) "DT: internal: record was not desugared")
@@ -266,7 +265,7 @@ let rec v_Vuna_dCompiler_dElab_dMeta_dcollectSigsInto = (fun mc0 -> (fun mc1 -> 
   | _ -> failwith "DT: impossible branch"
 )))))
 
-let v_Vuna_dCompiler_dElab_dMeta_dcollectSigs = (fun decls -> ((fun banned -> ((((v_Vuna_dCompiler_dElab_dMeta_dcollectSigsInto banned) (v_Vuna_dCompiler_dCommon_dtblEmpty ())) C_Base_dList_dList_Nil) decls)) (v_Vuna_dCompiler_dElab_dSig_dtopQuantBanned (v_Vuna_dCompiler_dElab_dSig_ddefinedNames decls))))
+let v_Vuna_dCompiler_dElab_dMeta_dcollectSigs = (fun decls -> ((fun banned -> ((((v_Vuna_dCompiler_dElab_dMeta_dcollectSigsInto banned) v_Vuna_dCompiler_dCommon_dtblEmpty) C_Base_dList_dList_Nil) decls)) (v_Vuna_dCompiler_dElab_dSig_dtopQuantBanned (v_Vuna_dCompiler_dElab_dSig_ddefinedNames decls))))
 
 let rec v_Vuna_dCompiler_dElab_dMeta_dcollectDataDecls = (fun mc0 -> (fun mc1 -> (match mc0 with
   | C_Base_dList_dList_Cons (dtb__150, dtb__151) -> (match dtb__150 with

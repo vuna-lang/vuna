@@ -2,12 +2,15 @@
 
 DT 是 vuna 唯一类型检查器与 codegen 路径：Core TT + NbE + 双向精化器 + 擦除型
 codegen。M14 加入**索引归纳族**与**依赖模式匹配**；M20 起**复用 Loader**（多文件 /
-`import` / `--root`）；M21 起 `main : IO a`、`do` 与 `Base.IO` 可用；M22.1 起 `check` /
-`compile` 接受**包目录**，M22.2 起 `base` 全部模块可精化，M22.3 起 `build` / `seed`
-也走 DT；M23 起语言夹具只走 DT、`vuna interp` 改为精化后的核心求值，record update、
+`import` / 包上下文）；M21 起 `main : IO a`、`do` 与 `Base.IO` 可用；M22.1 起 `check` /
+`compile` 接受**包目录**，M22.2 起 `base` 全部模块可精化，M22.3 起 `build` 也走 DT；M23
+起语言夹具只走 DT、`vuna interp` 改为精化后的核心求值，record update、
 参数化 record、命名实例选择 `@inst`、实例重复/未知方法诊断、`Elab.Derive`（原
-`DtDerive`）的 Bool 常量与参数化 `Eq` 等能力补齐；M24 起旧检查器与旧 codegen 删除，
-`vuna seed` 由 DT 逐模块 split codegen 生成。设计与边界见 [dt-core.md](../dt-core.md)，
+`DtDerive`）的 Bool 常量与参数化 `Eq` 等能力补齐；M24 起旧检查器与旧 codegen 删除。
+M26 起每个源文件只有**唯一包上下文**（最近 `vuna.toml` + 依赖闭包；无 manifest 只有
+base 上下文，ad-hoc 单文件自动注入 `Prelude`），删除环境根与「单文件 / 包」两套加载
+语义，`compile`/`build` 统一产出逐模块 `.ml` + `build.sh`（`seed` 子命令由
+`build --no-compile --out` 取代）。设计与边界见 [dt-core.md](../dt-core.md)，
 阶段状态见 [roadmap.md](../roadmap.md)。
 
 ```vuna
@@ -63,8 +66,8 @@ sym a b e = case e of
   报 `DT: unsolved metavariable`）。
 - **接口与实例（M15/M21/M23/M24.7）**。`trait` / `instance` 走字典编码（`data Dict_C` +
   方法投影 + 实例搜索）；`Show` / `Eq` / `Ord` 是库里的普通 trait（`Base.Show` /
-  `Base.Eq` / `Base.Ord`），包模式下随 `Prelude` 自动可见，单文件 / 裸 `--root` 模式
-  需显式 `import Prelude` 并 `--root <repo>/base/lib`。缺失/歧义实例有明确诊断；M21 起
+  `Base.Eq` / `Base.Ord`），包上下文（含 ad-hoc 单文件）随自动注入的 `Prelude` 可见。
+  缺失/歧义实例有明确诊断；M21 起
   库定义 trait 的投影跨模块可见（`Base.IO` 重导出 `Functor(..)` / `Monad(..)`，
   `do`/`bind`/`pure`/`fmap` 可用），实例方法支持构造子形参与多 clause。M23 起 `@inst`
   （含 `@M.inst`）可用，重复实例（含 `deriving` 生成的）报 `duplicate instance`、未知
@@ -101,9 +104,10 @@ sym a b e = case e of
   比较的签名需要它）。
 - **内建泛化（M19/M22.2/M24.7）**。`==`/`/=` 与 `<`/`<=`/`>`/`>=` 在饱和应用处按实参
   类型特化：`Int` 走具体运行时，`String`/`Bool` 的 `==` 走 `bi_eq_str`/泛型、比较走
-  泛型运行时；其它类型（含用户 data）走 `Eq`/`Ord` 字典——具体类型无实例或程序里没有
-  对应类（单文件 / 未 import）时退回泛型运行时兜底。刚性类型参数延迟提升成
-  `{d : Dict_C a}`；库里的 `Int`/`String`/`Bool` 实例与 `deriving` 实例参与搜索。
+  泛型运行时；其它类型（含用户 data）走 `Eq`/`Ord` 字典——具体类型无实例或没有
+  对应类可见（只可能出现在显式绕开 `Prelude` 的上下文）时退回泛型运行时兜底。刚性类型
+  参数延迟提升成 `{d : Dict_C a}`；库里的 `Int`/`String`/`Bool` 实例与 `deriving`
+  实例参与搜索。
 - **等式搬运与不可达分支（M24.5）**。`case` 打在裸形参或包装族上时，把 scrutinee 的
   值与构造子结果值再合一（`dt/46_rep`）；分支上下文含空归纳族（如 `Fin Zero`）时该
   分支可省略（`dt/47_lookup_env`）；`plus` 一类类型级函数的定义性相等可用于 `Refl`
@@ -131,19 +135,16 @@ sym a b e = case e of
 ## 命令与边界
 
 ```console
-vuna check <file.vuna | package-dir>            # 精化 + 擦除检查
-vuna compile [--no-print] <file.vuna | package-dir> out.ml   # 擦除并生成 OCaml
-vuna interp [--root DIR]... <file.vuna>         # DT 精化 + 核心求值 main（纯；单文件）
-vuna build [--no-compile] [DIR]                 # 单文件输出模型 → .output/{main.ml,build.sh,bin/<pkg>}
-vuna build --split OUT [DIR]                    # 逐模块：OUT/<Module>.ml... + OUT/build.sh
-vuna seed OUT [DIR]                             # 同上（seed 轮换用；必须显式 OUT）
+vuna check <file.vuna | package-dir>                     # 精化 + 擦除检查
+vuna compile [--no-print] <file.vuna | package-dir> OUTDIR  # 擦除并逐模块生成 OCaml 目录
+vuna interp <file.vuna>                                  # DT 精化 + 核心求值 main（纯）
+vuna build [--no-compile] [--out DIR] [package-dir]      # 逐模块 codegen（默认 `<PKG-DIR>/.output`）→ 输出目录/bin/<pkg>
 ```
 
-DT 复用 Loader：多文件 / `import` / `--root` / 包目录都可用；`build` 与 `seed` 走同一
-DT codegen，`build` 产单文件 `main.ml` + `build.sh`，`seed` / `build --split` 产逐模块
-`.ml` + `build.sh`（无 `.mli`，见 [bootstrap.md](bootstrap.md)）。`vuna interp` 总走
-DT 精化 + 核心求值，入口只能是单文件（可用 `--root` 加载依赖模块；包目录入口是
-`check` / `compile`）。
+DT 复用 Loader：多文件 / `import` / 包上下文都可用；codegen 只有一种输出模型（逐模块
+`.ml` + `build.sh`，`Vuna_runtime` + 各模块 + `Main`，无 `.mli`，见
+[bootstrap.md](bootstrap.md)）。`vuna interp` 总走 DT 精化 + 核心求值，入口是单个源文件
+（按最近 `vuna.toml` 获得包上下文，无则 base-only）；包目录入口给 `check` / `compile`。
 
 ## 测试夹具
 
@@ -165,14 +166,16 @@ DT 精化 + 核心求值，入口只能是单文件（可用 `--root` 加载依�
   `50_eq_transport`（`sym`/`trans`/`subst`/`cast`）；M24.6 `45_ctor_shape`（构造子
   字段形状）、`51_type_family`/`52_type_family`（类型族整体擦除）；M24.7
   `53_derived_ord_operator`（deriving(Ord) 后 `<`/`<=` 走 Ord 字典）。
-- 正例 `test/corpus/dt_base/`（8 个，`--root ../base/lib`）：M21 的 `Base.IO`/`do`/
+- 正例 `test/corpus/dt_base/`（8 个，所在 corpus 包上下文 `test/corpus/vuna.toml`，
+  只依赖 `base`）：M21 的 `Base.IO`/`do`/
   trait 投影与 `Base.IO` API 类型面；`06_base_string`（`str*` 的 `List` 族桥接）、
   `01_io_do`/`02_io_api`/`03_fmap_bind`（效果动作）与 `06_base_string` 带 `.nointerp`
   （interp 不执行效果、不归约 `strUnpack`/`strPack`）；`07_base_sort_map`（Ord 泛型比较
   + Map，`123`）、`08_base_facade`（`import Base`，`2`）。
 - 正例 `test/corpus/dt_pkg/`（3 个包目录）：`01_exec`（运行 `42`）、`02_lib`（库包
-  check 通过、compile 清晰报错）、`03_bad`（无 `vuna.toml`）；`corpus/dt_root/` 是
-  `interp --root` 多文件夹具。
+  check 通过、compile 清晰报错）、`03_bad`（无 `vuna.toml`）；`corpus/dt_ad_hoc/` 是
+  **包内 ad-hoc 单文件**夹具（包根 `Main.vuna` + `lib/Lib.vuna`，验证自动注入 Prelude
+  与最近 manifest 上下文）。
 - 正例 `test/corpus/dt_io/`（1 个）：`main : IO a` 的编译产物真正执行 `Base.IO` 效果
   （核心求值器不执行效果，所以只比产物输出）。
 - 负例 `test/corpus/dt_err/`（35 个）：M13–M23 的诊断夹具（`duplicate instance`、

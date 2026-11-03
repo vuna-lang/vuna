@@ -8,8 +8,8 @@ data Eq : {a : Type} -> a -> a -> Type where
   Refl : {a : Type} -> (x : a) -> Eq x x
 
 data Vec : Type -> Nat -> Type where
-  Nil : {a : Type} -> Vec a Zero
-  Cons : {a : Type} -> {n : Nat} -> a -> Vec a n -> Vec a (Succ n)
+  VNil : {a : Type} -> Vec a Zero
+  VCons : {a : Type} -> {n : Nat} -> a -> Vec a n -> Vec a (Succ n)
 
 sym : (a : Type) -> (x : a) -> (y : a) -> Eq x y -> Eq y x
 sym a x y e = case e of
@@ -39,10 +39,10 @@ roundTrip n = trans Nat n n n (Refl n) (sym Nat n n (Refl n))
 
 vhead : (n : Nat) -> Vec Int (Succ n) -> Int
 vhead n xs = case xs of
-  Cons y ys => y
+  VCons y ys => y
 
 one : Vec Int (Succ Zero)
-one = Cons 9 (Nil)
+one = VCons 9 (VNil)
 
 main : Int
 main = vhead Zero (castLen (Succ Zero) (roundTrip (Succ Zero)) one)

@@ -1,5 +1,6 @@
 module Vuna.Compiler.Codegen.Term
-  ( dtListBridge
+  ( GenSt
+  , dtListBridge
   , dtRuntime
   , findListFamilyData
   , genDtHook
@@ -11,8 +12,8 @@ module Vuna.Compiler.Codegen.Term
 
 -- Vuna.Compiler.Codegen.Term：项 → OCaml（擦除驱动）+ DT 运行时前缀。
 --
--- 生成状态 GenSt（族/构造子表、构造子形状、fresh 变量计数、thunk 名表）是生成期唯一
--- 可变状态；case 分支绑定按构造子形状（keep flags）校验后进入 binder 环境。`dtRuntime`
+-- 生成状态 GenSt（族/构造子表、构造子形状、fresh 变量计数）是生成期唯一可变状态；
+-- case 分支绑定按构造子形状（keep flags）校验后进入 binder 环境。`dtRuntime`
 -- 是产物开头的 OCaml 帮助函数（bi_* / show / dtp_*），`dtListBridge` 只在程序声明了
 -- List 族时生成 int list ↔ 变体族的桥接。
 import Vuna.Compiler.Common
@@ -88,6 +89,9 @@ dtPrimRuntime =
     ++ "let dtp_fileMtime path =\n  try int_of_float (Unix.stat path).Unix.st_mtime with _ -> 0\n"
     ++ "let dtp_fileSize path =\n  try (Unix.stat path).Unix.st_size with _ -> 0\n"
     ++ "let dtp_timeUs () = int_of_float (Unix.gettimeofday () *. 1000000.0)\n"
+    ++ "let dtp_getenv k = try Sys.getenv k with Not_found -> \"\"\n"
+    ++ "let dtp_getcwd () = try Sys.getcwd () with _ -> \".\"\n"
+    ++ "let dtp_execPath () = try Unix.readlink \"/proc/self/exe\" with _ -> Sys.executable_name\n"
     ++ "let dtp_strHash (s : string) =\n  let h = ref 0 in\n  String.iter (fun c -> h := ((!h * 33) + Char.code c) land 1023) s;\n  !h\n"
     ++ "let dtp_strAt (s : string) (i : int) = if i < 0 || i >= String.length s then -1 else Char.code s.[i]\n"
     ++ "let dtp_exit n = exit n\n"
@@ -238,6 +242,10 @@ globalRef name = case name of
   "prim_runIn" => Ok "(fun dir args -> dtp_runIn dir (dtp_ocamlOf args))"
   "prim_getArgs" => Ok "(dtp_listOf (dtp_getArgs ()))"
   "prim_readLine" => Ok "(dtp_readLine ())"
+  -- M26：base 定位原语（只读；只有 prim_* 名）。
+  "prim_getenv" => Ok "dtp_getenv"
+  "prim_getcwd" => Ok "(dtp_getcwd ())"
+  "prim_execPath" => Ok "(dtp_execPath ())"
   _ => Ok (valueName name)
 
 -- 零参构造子（True/False 之外的 user 构造子）作为普通值引用时，OCaml 里就是裸构造子；
@@ -252,8 +260,7 @@ genGlobalRef : GenSt -> String -> Result (Pair String GenSt)
 genGlobalRef st name = case lookupPair name (gsCtors st) of
   Just family => Ok (Pair (ctorOcamlName family name) st)
   Nothing =>
-    if memName name (gsThunks st) then Ok (Pair ("(" ++ valueName name ++ " ())") st)
-    else if name == "strUnpack" then if hasListFamily (gsFamilies st) then Ok (Pair "dtp_unpack" st) else Ok (Pair "bi_strUnpack" st)
+    if name == "strUnpack" then if hasListFamily (gsFamilies st) then Ok (Pair "dtp_unpack" st) else Ok (Pair "bi_strUnpack" st)
     else if name == "strPack" then if hasListFamily (gsFamilies st) then Ok (Pair "dtp_pack" st) else Ok (Pair "bi_strPack" st)
     else andThen (globalRef name) (\r => Ok (Pair r st))
 
@@ -264,33 +271,28 @@ hasListFamily (f :: rest) = if lastName f == "List" then True else hasListFamily
 -- 项 → OCaml
 -- ---------------------------------------------------------------
 --
--- 生成状态：族名表、构造子 → 族表、构造子形状表、fresh 变量计数、thunk 名表。
+-- 生成状态：族名表、构造子 → 族表、构造子形状表、fresh 变量计数。
 -- binder 环境是「最近绑定在前」的 (OCaml 变量名, 是否擦除)，TVar 靠 index 解析。
 -- M24.6：`gsCtorShapes` 是构造子字段形状的唯一真源，构造子应用与 case 分支都按它
 -- 校验/生成（见 `ctorKeepFlags`）。
 data GenSt : Type where
-  GenSt : List String -> List (Pair String String) -> List (Pair String (List Bool)) -> Int -> List String -> GenSt
+  GenSt : List String -> List (Pair String String) -> List (Pair String (List Bool)) -> Int -> GenSt
 
 gsCtors : GenSt -> List (Pair String String)
-gsCtors (GenSt families ctors shapes next thunks) = ctors
+gsCtors (GenSt families ctors shapes next) = ctors
 
 gsCtorShapes : GenSt -> List (Pair String (List Bool))
-gsCtorShapes (GenSt families ctors shapes next thunks) = shapes
+gsCtorShapes (GenSt families ctors shapes next) = shapes
 
 -- 程序声明的族名表（`strUnpack` / `strPack` 的映射要看有没有 List 族）。
 gsFamilies : GenSt -> List String
-gsFamilies (GenSt families ctors shapes next thunks) = families
+gsFamilies (GenSt families ctors shapes next) = families
 
 gsNext : GenSt -> Int
-gsNext (GenSt families ctors shapes next thunks) = next
-
--- M23：零运行时参数的顶层定义要像 HM path 一样包成 thunk（`fun () -> body`），
--- 否则带效果的值定义（`help = let _ = print ... in 0`）会在模块初始化时就执行。
-gsThunks : GenSt -> List String
-gsThunks (GenSt families ctors shapes next thunks) = thunks
+gsNext (GenSt families ctors shapes next) = next
 
 gsPutNext : GenSt -> Int -> GenSt
-gsPutNext (GenSt families ctors shapes next thunks) n = GenSt families ctors shapes n thunks
+gsPutNext (GenSt families ctors shapes next) n = GenSt families ctors shapes n
 
 ctorTableOfData : DtData -> List (Pair String String)
 ctorTableOfData d = map (\c => Pair (dtCtorName c) (dtCtorFamily c)) (dtDataCtors d)
@@ -299,21 +301,15 @@ ctorTableOf : List DtData -> List (Pair String String)
 ctorTableOf [] = []
 ctorTableOf (d :: rest) = append (ctorTableOfData d) (ctorTableOf rest)
 
-mkGenSt : List DtData -> List DtDef -> GenSt
-mkGenSt datas defs =
-  GenSt (map dtDataName datas) (ctorTableOf datas) (ctorShapeOf datas) 0 (thunkNames defs)
+mkGenSt : List DtData -> GenSt
+mkGenSt datas = GenSt (map dtDataName datas) (ctorTableOf datas) (ctorShapeOf datas) 0
 
--- 运行时参数个数为 0 的定义（无 TLam 或只有擦除 TLam）→ thunk。
+-- 运行时参数个数为 0 的定义（无 TLam 或只有擦除 TLam）。A05 后零参定义就是普通值
+-- 绑定（`let v_x = body`，模块初始化时求值），这里只用于递归值守卫的判据。
 runtimeArity : Term -> Int
 runtimeArity t = case t of
   TLam n r b => if rigIsErased r then runtimeArity b else 1 + runtimeArity b
   _ => 0
-
-thunkNames : List DtDef -> List String
-thunkNames defs = map (\d => dtDefName d) (filter thunkable defs)
-
-thunkable : DtDef -> Bool
-thunkable d = if dtDefName d == "main" then False else runtimeArity (dtDefBody d) == 0
 
 -- case 分支的绑定环境：全部 telescope binder 都进环境（擦除的用占位名 + True），
 -- 顺序为 telescope 表面顺序的逆序；pattern 只保留未擦除的 fresh 名。
@@ -542,9 +538,7 @@ else andThen (genTermFuel (fuel - 1) st binders scrut) (\p => case p of
 -- ---------------------------------------------------------------
 genGroupDef : GenSt -> DtDef -> Result (Pair String GenSt)
 genGroupDef st d = andThen (genTerm st [] (dtDefBody d)) (\p => case p of
-  Pair body st2 =>
-    Ok
-      (Pair (valueName (dtDefName d) ++ " = " ++ (if memName (dtDefName d) (gsThunks st) then "fun () -> " else "") ++ body) st2)
+  Pair body st2 => Ok (Pair (valueName (dtDefName d) ++ " = " ++ body) st2)
 )
 
 genGroupBodies : GenSt -> List DtDef -> Result (Pair (List String) GenSt)
@@ -561,11 +555,31 @@ groupNeedsRec adjT [] = False
 groupNeedsRec adjT ([d]) = memName (dtDefName d) (neighborsOf adjT (dtDefName d))
 groupNeedsRec adjT group = True
 
+-- A05：零运行时参数的定义现在是普通值绑定（`let v_x = body`，模块初始化时求值），
+-- 而 OCaml 的 `let rec` 只接受函数或构造子应用作右值。递归组里出现其它形态的零参
+-- 定义时，环无法安全落地，必须在生成前报 `CG_RecursiveValueDefinition`（带定义名）。
+-- 擦除 lambda 会在生成时消失，所以先剥掉再判定「真正落盘的右值形状」。
+recursiveValueAllowed : Term -> Bool
+recursiveValueAllowed t = case t of
+  TLam n rig b => if rigIsErased rig then recursiveValueAllowed b else True
+  TCon c args => True
+  _ => False
+
+firstBadRecursiveValue : List DtDef -> Maybe String
+firstBadRecursiveValue [] = Nothing
+firstBadRecursiveValue (d :: rest) =
+  if runtimeArity (dtDefBody d) == 0 then if recursiveValueAllowed (dtDefBody d) then firstBadRecursiveValue rest else Just (dtDefName d)
+  else firstBadRecursiveValue rest
+
 genGroup : HashTbl (List String) -> GenSt -> List DtDef -> Result (Pair String GenSt)
-genGroup adj st group = andThen (genGroupBodies st group) (\p => case p of
-  Pair defs st2 =>
-    Ok
-      (Pair ((if groupNeedsRec adj group then "let rec " else "let ") ++ joinWith "\nand " defs) st2)
+genGroup adj st group = if groupNeedsRec adj group then case firstBadRecursiveValue group of
+  Just name => cgErr1 (RecursiveValueDefinition name) name
+  Nothing => genGroupLet st group True
+else genGroupLet st group False
+
+genGroupLet : GenSt -> List DtDef -> Bool -> Result (Pair String GenSt)
+genGroupLet st group isRec = andThen (genGroupBodies st group) (\p => case p of
+  Pair defs st2 => Ok (Pair ((if isRec then "let rec " else "let ") ++ joinWith "\nand " defs) st2)
 )
 
 genGroups : HashTbl (List String) -> GenSt -> List (List DtDef) -> Result (Pair (List String) GenSt)

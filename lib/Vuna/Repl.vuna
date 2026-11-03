@@ -36,41 +36,43 @@ replHelp =
 replFuelBound : Int
 replFuelBound = 1073741824
 
-runRepl : List Root -> Int
-runRepl roots =
+-- M26：REPL 的模块解析来自**包上下文**（CLI 用 `contextForDir "."`：cwd 在包内
+-- 就用最近 vuna.toml 的依赖闭包，cwd 不是包时退化成 base-only；不再有环境根 flag）。
+runRepl : PackageContext -> Int
+runRepl ctx =
   let
     _ = print ("vuna repl\n" ++ replHelp)
-  in replLoop replFuelBound roots "" ""
+  in replLoop replFuelBound ctx "" ""
 
-replLoop : Int -> List Root -> String -> String -> Int
-replLoop fuel roots imports defs = if fuel <= 0 then 0
+replLoop : Int -> PackageContext -> String -> String -> Int
+replLoop fuel ctx imports defs = if fuel <= 0 then 0
 else
   let
     _ = print replPrompt
   in let
     line = readLine
-  in if line == "" then 0 else replHandle (fuel - 1) roots imports defs (trim line)
+  in if line == "" then 0 else replHandle (fuel - 1) ctx imports defs (trim line)
 
-replHandle : Int -> List Root -> String -> String -> String -> Int
-replHandle fuel roots imports defs line = if fuel <= 0 then 0
+replHandle : Int -> PackageContext -> String -> String -> String -> Int
+replHandle fuel ctx imports defs line = if fuel <= 0 then 0
 else case line of
-  "" => replLoop (fuel - 1) roots imports defs
+  "" => replLoop (fuel - 1) ctx imports defs
   ":q" => 0
   ":quit" => 0
   ":reset" =>
     let
       _ = print "已清空\n"
-    in replLoop (fuel - 1) roots "" ""
+    in replLoop (fuel - 1) ctx "" ""
   ":help" =>
     let
       _ = print replHelp
-    in replLoop (fuel - 1) roots imports defs
+    in replLoop (fuel - 1) ctx imports defs
   _ =>
-    if startsWith "import " line then replAddImport (fuel - 1) roots imports defs line
-    else replDefineOrEval (fuel - 1) roots imports defs line
+    if startsWith "import " line then replAddImport (fuel - 1) ctx imports defs line
+    else replDefineOrEval (fuel - 1) ctx imports defs line
 
-replAddImport : Int -> List Root -> String -> String -> String -> Int
-replAddImport fuel roots imports defs line = if fuel <= 0 then 0
+replAddImport : Int -> PackageContext -> String -> String -> String -> Int
+replAddImport fuel ctx imports defs line = if fuel <= 0 then 0
 else
   let
     imports2 = imports ++ line ++ "\n"
@@ -78,29 +80,29 @@ else
     Err e =>
       let
         _ = print ("parse error: " ++ e ++ "\n")
-      in replLoop (fuel - 1) roots imports defs
-    Ok _ => replLoop (fuel - 1) roots imports2 defs
+      in replLoop (fuel - 1) ctx imports defs
+    Ok _ => replLoop (fuel - 1) ctx imports2 defs
 
-replDefineOrEval : Int -> List Root -> String -> String -> String -> Int
-replDefineOrEval fuel roots imports defs line = if fuel <= 0 then 0
+replDefineOrEval : Int -> PackageContext -> String -> String -> String -> Int
+replDefineOrEval fuel ctx imports defs line = if fuel <= 0 then 0
 else case parseSource replTempFile (imports ++ defs ++ line ++ "\n") of
   Ok (Source hdr imp decls) => case hdr of
-    Just md => replEvalExpr (fuel - 1) roots imports defs line
-    Nothing => replLoop (fuel - 1) roots imports (defs ++ line ++ "\n")
-  Err e => replEvalExpr (fuel - 1) roots imports defs line
+    Just md => replEvalExpr (fuel - 1) ctx imports defs line
+    Nothing => replLoop (fuel - 1) ctx imports (defs ++ line ++ "\n")
+  Err e => replEvalExpr (fuel - 1) ctx imports defs line
 
-replEvalExpr : Int -> List Root -> String -> String -> String -> Int
-replEvalExpr fuel roots imports defs line = if fuel <= 0 then 0
+replEvalExpr : Int -> PackageContext -> String -> String -> String -> Int
+replEvalExpr fuel ctx imports defs line = if fuel <= 0 then 0
 else case parseExpressionSource line of
   Err e =>
     let
       _ = print ("错误: " ++ e ++ "\n")
-    in replLoop (fuel - 1) roots imports defs
+    in replLoop (fuel - 1) ctx imports defs
   Ok _ =>
     let
       program = imports ++ "\n" ++ defs
     in let
-      output = interpretExpr roots program line
+      output = interpretExpr ctx program line
     in let
       _ = print (output ++ "\n")
-    in replLoop (fuel - 1) roots imports defs
+    in replLoop (fuel - 1) ctx imports defs

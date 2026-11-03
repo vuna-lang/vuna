@@ -1,22 +1,17 @@
-data Bool : Type where
-  False : Bool
-  True : Bool
-
-data List a : Type where
-  Nil : List a
-  Cons : a -> List a -> List a
+-- M26：Prelude 自动注入 → `List` 用 base 的（删掉本地 data List / 无用的本地 data Bool）；
+-- 本地 `Maybe` 改名 `MyMaybe`（构造子 MyNothing/MyJust），避开 base 的 Maybe/Just/Nothing。
+-- 本地同名 data 的解析优先级见 A07/A08/A09/C17（M27）。
+data MyMaybe : Type where
+  MyNothing : MyMaybe
+  MyJust : Int -> MyMaybe
 
 data Pair a b : Type where
   Pair : a -> b -> Pair a b
 
-data Maybe : Type where
-  Nothing : Maybe
-  Just : Int -> Maybe
-
-lookup : List (Pair String Int) -> String -> Maybe
-lookup Nil key = Nothing
+lookup : List (Pair String Int) -> String -> MyMaybe
+lookup Nil key = MyNothing
 lookup (Cons (Pair k v) rest) key =
-  if k == key then Just v else lookup rest key
+  if k == key then MyJust v else lookup rest key
 
 sumAll : List Int -> Int
 sumAll Nil = 0
@@ -24,5 +19,5 @@ sumAll (Cons x xs) = x + sumAll xs
 
 main : Int
 main = case lookup [Pair "a" 1, Pair "b" 2] "b" of
-  Nothing => 0
-  Just v => v + sumAll [1, 2, 3]
+  MyNothing => 0
+  MyJust v => v + sumAll [1, 2, 3]

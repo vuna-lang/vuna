@@ -7,30 +7,32 @@ DT 设计见 [docs/dt-core.md](../dt-core.md)。
 ## 编译模型
 
 - 只有一条编译链：`Loader → DT 精化（Elab） → 擦除 codegen（Codegen）`。
-  `check` / `compile` / `build` / `seed` 与语言夹具全部走它，没有可切换的检查器。
+  `check` / `compile` / `build` 与语言夹具全部走它，没有可切换的检查器。
 - codegen 只用 OCaml 标准库、不依赖解释循环；已做 Kosaraju SCC 分组、比较运算符
-  特化（`bi_eq_int` 等）、`&&`/`||` 短路降级、零参顶层定义 thunk 化。
-- 输出模型有两种：**单文件**（`vuna compile` 产一个 `.ml`；`vuna build` 产
-  `.output/main.ml` + `build.sh` + `bin/<包名>`）与**逐模块 split**（`vuna build --split
-  OUT`、`vuna seed OUT` → 依赖序 `<Module>.ml` + `build.sh`，**不生成 `.mli`**）。
-  单文件路径是 split 的回归基线（两者产物行为按夹具对拍）。
+  特化（`bi_eq_int` 等）、`&&`/`||` 短路降级；**零参顶层定义求值一次**（M26：直接
+  `let v_x = body`，不再包 thunk、调用点也不再补 `()`）。
+- 输出模型只有一种：**逐模块 split**（`vuna compile ENTRY OUTDIR` 与
+  `vuna build` 都产依赖序的 `<Module>.ml` + `Vuna_runtime.ml` + `Main.ml` + `build.sh`，
+  **不生成 `.mli`**）。`compile` 只 codegen 到目录、成功静默；`build` 默认输出到 `<PKG-DIR>/.output`（PKG-DIR 缺省当前目录，
+  `--out DIR` 可改），随后执行 `build.sh` 链接出 `DIR/bin/<包名>`。
+  单文件 `.ml` 产物、`--split` 开关与 `seed` 子命令（原 A01/A15）已删除。
 - 构建：`build.sh` 的增量粒度是模块（`.ml`/`.cmx` 及依赖 `.cmi` 时间戳），无跨包并行
-  与依赖哈希；split 不回退：无法归属到模块的声明报清晰错误，不会静默丢弃或改用单文件
-  输出。基准测量仍手动（`nix run .#vuna-bench`），CI 只守机器无关指标。
+  与依赖哈希；split 不回退：无法归属到模块的声明报清晰错误，不会静默丢弃。
+  基准测量仍手动（`nix run .#vuna-bench`），CI 只守机器无关指标。
 - 编译器是独立成员包 `vuna-compiler`，`seed/` 只由 compiler 包入口闭包生成，工具链
   不在 TCB；产品 CLI `vuna` 是单一二进制（in-process 调 compiler 库，不 fork
-  `vuna-compiler`）；`vuna build` 通过受限进程执行内建（`prim_runIn`）调 ocamlopt 编
-  `.output/main.ml`（同时产出 `.output/build.sh` 供手动重建），不是 vuna 进程转发；
+  `vuna-compiler`）；`vuna build` 在 codegen 后执行生成的 `build.sh`（受限进程执行内建
+  `prim_runIn` 调 `ocamlopt`），不是 vuna 进程转发；
   LSP / package manager / Index 在根包侧，**永不进入 seed 闭包**。
 - `do` / Monad / IO 组合子已在 M11 实现；DT 自 M13 起步，M14 索引族、M15 隐式/
   接口/洞、M16 终止性、M17 工具链、M18.5–M18.6 擦除修复与表示层定型、M19–M22
   语言面/多文件/效应、M23 夹具迁移与 `interp` 核心求值、M24 单路径收尾、M24.5 等式
-  搬运、M24.6 编译器本体最小重构、M24.7 trait 库化。**当前阻碍按阶段登记在
+  搬运、M24.6 编译器本体最小重构、M24.7 trait 库化、**M26 包上下文统一与单一
+  codegen 输出模型**。**当前阻碍按阶段登记在
   [docs/roadmap.md](../roadmap.md)**。仍是边界的几条：
-  - **单文件 / 无库模式没有隐式 `Bool`**：单文件程序用 `True`/`False` 需自己
-    `data Bool`（与 `List` 约定一致）或经 `Prelude` 使用 `Base.Bool`；`Bool` 类型名仍
-    是 prelude 类型别名（prelude 里 `==` / 比较的签名需要），数据定义在包模式下以
-    `Base.Bool` 为权威。
+  - **ad-hoc 单文件与包内模块同一语义（M26）**：自动注入 `Prelude`，`Bool`/`True`/
+    `False` 来自 `Base.Bool`；`Bool` 类型名仍是 prelude 类型别名（prelude 里 `==` /
+    比较的签名需要）。需要自定义语义时自行 `data Bool`（与 `List` 约定一致）。
   - **擦除由 rig 判据驱动**：`Rig0`（隐式 binder / `Type` 域）不进运行时表示，`Rig1`
     （显式值、显式索引 `(n : Nat)`）保留字段（`17_erase` / `dt/38_explicit_index` 锁定
     两侧）；不做整程序使用分析，「想擦但被读」的显式索引不会自动擦除（可改成隐式
@@ -67,13 +69,13 @@ DT 设计见 [docs/dt-core.md](../dt-core.md)。
     夹具的 `main` 用 `Int`/`String`（数据覆盖点留在被调函数里）。
   - **`strUnpack`/`strPack` 在核心求值器不归约**：codegen 侧已补齐（无 `List` 族时
     映射 `bi_strUnpack`/`bi_strPack`），但 interp 不归约；相关夹具用 `.nointerp` 标记。
-  - **单文件 / 裸 `--root` 模式需显式 import trait 模块（M24.7）**：`Prelude` 不自动
-    注入，`Show` / `Eq` / `Ord` 及其实例需要 `--root <repo>/base/lib` 并在文件头
-    `import Prelude`；只用 `Int`/`String` 原语或泛型兜底比较的夹具可以省略 import；
-    包目录模式仍自动导入 `Prelude`。
+  - **`Prelude` 自动注入（M24.7/M26）**：包上下文内所有源文件（含 ad-hoc 单文件）自动
+    导入 `Prelude`，`Show` / `Eq` / `Ord` 及其实例开箱可用；显式 `import` 仍可补充。
+    缺 import 的诊断只在显式绕开 `Prelude` 的上下文出现。
   - **`==` / 比较在无实例时的兜底**：具体类型没有可用 `Eq` 实例时 `==` / `/=` 退回
-    运行时结构比较（`bi_eq_generic`）；程序里没有 `Eq` 类（单文件 / 未 import）同样
-    退回。刚性类型变量保持 M22 语义（搜不到实例时提升成隐式字典参数，实例优先）。
+    运行时结构比较（`bi_eq_generic`）；没有 `Eq` 类可见（只可能出现在显式绕开
+    `Prelude` 的上下文）同样退回。刚性类型变量保持 M22 语义（搜不到实例时提升成
+    隐式字典参数，实例优先）。
     `<` / `<=` / `>` / `>=` 只对 `Int` 做运行时特化、`String`/`Bool` 走泛型运行时；
     **其它具体类型**（含用户 `data`）必须走 `Ord` 字典，无 `Ord` 类时同样退回泛型比较。
   - **`deriving` 对参数化 data 仍只支持 `Eq`**：`deriving (Eq)` 可用（走通用结构比较
@@ -104,21 +106,21 @@ DT 设计见 [docs/dt-core.md](../dt-core.md)。
     与工具链源码通过 SCT + 显式 fuel/结构递归达标，不再有「可信包静默跳过」路径。
     工具链/前端/加载器的状态机用输入规模线性 fuel 或内存内不可达上界（debt C26/C27/C28），
     正常输入不触发；触发时是明确的 internal 错误，不会静默改变语义。
-  - **单文件 `List` 桥接**：单文件程序的 `List` 若由程序自己声明，`getArgs` / `readDir`
-    等效果内建返回的列表由 codegen 桥接回该族；没有声明 `List` 的单文件程序不能使用
-    这些内建。
+  - **`List` 桥接**：源程序若自己声明 `List` 族，`getArgs` / `readDir`
+    等效果内建返回的列表由 codegen 桥接回该族；经 `Prelude`/`Base.List` 使用库的
+    `List` 时由库的族承接；上下文里没有可用 `List` 族时不能使用这些内建。
   完整 DT 主线见 [docs/roadmap.md](../roadmap.md)、设计边界见 [docs/dt-core.md](../dt-core.md)、
   工具链见 [dt-tooling.md](dt-tooling.md)；种子轮换是手动流程（发版/不兼容变更时），日常
   工具链改动不需要 rotation；`test/run-tests.sh` 以 golden 比对为主。
 
 ## main 与 IO（M12.6）
 
-- 可执行入口（`vuna build` / `--split` / `seed`）要求 `main : IO a`，由运行时执行动作
+- 可执行入口（`vuna build`）要求 `main : IO a`，由运行时执行动作
   （没有公开的 `runIO` / `unsafeRunIO`）；普通用户包不能直接调用 effectful 内建
   （`print` / `readFile` / `exit` / ...），只能经 `Base.IO`（编译器 / 产品 CLI /
-  `vuna-base` 自身在包级 allowlist 内）；该 allowlist 按**包名字符串**判定、可伪造，
-  raw `--root` 的依赖模块也能绕过——debt **B16**，M25/M27 改为 capability / 显式声明。
-  `vuna interp` / `vuna test` / `--root` 的**入口文件**同样禁止直接调用 effectful 内建
+  `vuna-base` 自身在包级 allowlist 内）；该 allowlist 按**包名字符串**判定、可伪造
+  ——debt **B16**，M27 改为 capability / 显式声明。
+  `vuna interp` / `vuna test` 的**入口文件**同样禁止直接调用 effectful 内建
   （只有被加载的 base/compiler 模块内部可用）。
   `vuna interp` 只做**纯**核心求值：任何 `main : IO a` 一律报错并提示 `compile` +
   运行产物；纯 `main : Int/String/Bool` 结果 show 仍保留为调试约定。IO 组合统一用
@@ -150,9 +152,9 @@ DT 设计见 [docs/dt-core.md](../dt-core.md)。
 ## 命名与构建（M12.8）
 
 - 标准库包名 `vuna-base`、模块根 `Base.*`，编译器模块 `Vuna.Compiler.*`（门面
-  `Vuna.Compiler.Common`）；包模式自动导入 `Prelude`，原始 `--root` 模式不导入（保持
-  自举/夹具的显式 import 语义）；`vuna build` 需要 PATH 中有 `ocamlopt`；`Prelude`
-  刻意不含 `Base.IO` 效果函数。
+  `Vuna.Compiler.Common`）；包上下文内所有源文件（含 ad-hoc 单文件）自动导入
+  `Prelude`；`vuna build` 需要 PATH 中有 `ocamlopt`；`Prelude` 刻意不含 `Base.IO`
+  效果函数。
 
 ## 已完成阶段（细节见 history）
 

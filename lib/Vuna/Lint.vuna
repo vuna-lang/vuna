@@ -40,8 +40,9 @@ printFindings path fixMode (f :: rest) =
 lintUsage : String
 lintUsage = "usage: vuna lint [--fix] <file.vuna>...\n"
 
-lintUsageError : Int
-lintUsageError =
+-- A05：零参顶层定义在模块初始化时求值；打印 usage 是动作，函数化（调用点传 0）。
+lintUsageError : Int -> Int
+lintUsageError _ =
   let
     _ = print lintUsage
   in 2
@@ -99,10 +100,10 @@ lintFiles doFix (path :: rest) =
 
 lintArgs : Bool -> List String -> List String -> Int
 lintArgs doFix files args = case args of
-  [] => if isNilList files then lintUsageError else lintFiles doFix (reverse files)
+  [] => if isNilList files then lintUsageError 0 else lintFiles doFix (reverse files)
   arg :: rest =>
     if arg == "--fix" then lintArgs True files rest
-    else if startsWith "-" arg then lintUsageError else lintArgs doFix (arg :: files) rest
+    else if startsWith "-" arg then lintUsageError 0 else lintArgs doFix (arg :: files) rest
 
 runLint : List String -> Int
 runLint args = lintArgs False [] args

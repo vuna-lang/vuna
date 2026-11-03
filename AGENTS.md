@@ -74,7 +74,7 @@ vuna check .                         # 包级类型检查（自检）；vuna bui
 vuna fmt --check <PATH>...           # 格式化检查（务必显式给路径）；vuna lint <file>...
 vuna doc [DIR [OUT]] | gen-errors [ROOT]  # API 文档 / 错误码文档（默认 docs/api.md / docs/.generated/errors.md，gitignored）
 vuna interp <file.vuna>              # DT 精化 + 核心求值（纯；只展示 Int/String/Bool）
-vuna seed <OUT> compiler             # 逐模块 DT split（必须显式 OUT；正式流程用 nix/seed-rotate.sh）
+vuna build --no-compile --out <OUT> compiler   # 逐模块 DT codegen 到目录（= vuna compile compiler <OUT>；rotation 用 nix/seed-rotate.sh）
 ```
 
 ## 目录速览

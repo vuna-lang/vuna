@@ -119,18 +119,21 @@ tblEmpty / tblInsert k v / tblLookup k / tblFromList pairs / tblInsertAll pairs
 6. check/build 的 10s 目标需要上面 1–2 项（NbE 共享 / conv 快速路径）落地，而不是继续找
    整表扫描或消息格式化的边角成本。
 
-**构建口径必须一致（踩到的坑）**：同一份源码，`vuna build .`（单文件 `main.ml`）产出的
-编译器比 `nix build .#vuna`（seed 多文件 split 编译）慢约 35%（21.6s vs 16.0s，同一版本源码）。
-原因在 OCaml 侧：17k 行单编译单元与 66 个小模块的优化/inlining 结果不同。所以「修前/修后」
-必须在同一口径下比；发现存量与 `result` 读数对不上时，先确认测的是哪种产物。
+**构建口径必须一致（踩到的坑）**：同一份源码，`vuna build .`（M26 前的单文件
+`main.ml` 产物）产出的编译器比 `nix build .#vuna`（seed 多文件 split 编译）慢约 35%
+（21.6s vs 16.0s，同一版本源码）。原因在 OCaml 侧：17k 行单编译单元与 66 个小模块的
+优化/inlining 结果不同。所以「修前/修后」必须在同一口径下比；发现存量与 `result` 读数
+对不上时，先确认测的是哪种产物。**M26 起这条差异已消失**：`compile`/`build`/seed 只有
+逐模块 split 一种产物，下面保留的读数是历史口径。
 
 ## 6. 测量规程（在技能之外补充）
 
 - **探针必须隔离**：每个探针包一套自己的 `vuna.toml` + `lib/...`。历史事故：两个并行脚本
   共用同一探针目录，`vuna.toml` 被覆盖成「整编译器」的 export 列表，读数整体作废，
   而且看起来像「固定 45s 的神秘成本」。
-- **单文件模式 vs 包模式**不是同一条路径：包模式走 `loadProjectModules`/`resolveProject`
-  与导出表，单文件模式下模块头根本不允许。两者读数不可互推。
+- **（M26 前）单文件模式 vs 包模式**不是同一条路径：包模式走 `loadProjectModules`/`resolveProject`
+  与导出表，单文件模式下模块头根本不允许。两者读数不可互推；M26 起只有包上下文
+  一条路径，此条仅用于解释历史读数。
 - 用 `OCAMLRUNPARAM=s=...` 快速判断 GC 敏感性（注意：产物里 `Gc.set` 会覆盖环境变量，
   要比较不同 minor heap 大小得改代码重建）。
 - 阶段定位优先用 `stamp`；per-def/热路径趋势用 `stampSample`；不要用「等大 case 跑完」定位。

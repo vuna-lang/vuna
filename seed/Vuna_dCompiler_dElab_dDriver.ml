@@ -1,5 +1,4 @@
 open Vuna_runtime
-open Vuna_builtins
 open Base_dPair
 open Base_dBool
 open Base_dMonad
@@ -15,20 +14,20 @@ open Vuna_dCompiler_dCommon
 open Vuna_dCompiler_dFrontend_dToml
 open Vuna_dCompiler_dFrontend_dManifest
 open Vuna_dCompiler_dPackages_dPkg
+open Vuna_dCompiler_dDebug
 open Base_dNat
 open Base_dVec
-open Vuna_dCompiler_dLoader_dDiagnostics
+open Vuna_dCompiler_dDiagnostics
 open Vuna_dCompiler_dFrontend_dAst
 open Vuna_dCompiler_dFrontend_dDiagnostics
 open Vuna_dCompiler_dFrontend_dLexer
 open Vuna_dCompiler_dFrontend_dParser_dSupport
 open Vuna_dCompiler_dFrontend_dParser
+open Vuna_dCompiler_dLoader_dDiagnostics
 open Vuna_dCompiler_dLoader_dModules
 open Vuna_dCompiler_dLoader_dResolve
 open Vuna_dCompiler_dLoader_dFlatten
 open Vuna_dCompiler_dLoader
-open Vuna_dCompiler_dDebug
-open Vuna_dCompiler_dDiagnostics
 open Vuna_dCompiler_dCore_dTerm
 open Vuna_dCompiler_dCore_dEval
 open Vuna_dCompiler_dCore_dConv
@@ -54,7 +53,7 @@ type t_Vuna_dCompiler_dElab_dDriver_dDtGoalInfo = C_Vuna_dCompiler_dElab_dDriver
 
 let rec v_Vuna_dCompiler_dElab_dDriver_delabSigsGo = (fun mc0 -> (fun mc1 -> (fun mc2 -> (fun mc3 -> (match mc0 with
   | C_Base_dList_dList_Cons (dtb__0, dtb__1) -> (match dtb__0 with
-  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__2, dtb__3) -> ((v_Base_dResult_dandThen ((((v_Vuna_dCompiler_dElab_dTerm_dcheckType mc1) (v_Vuna_dCompiler_dElab_dTypes_demptyCtx ())) mc2) dtb__3)) (fun p -> (match p with
+  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__2, dtb__3) -> ((v_Base_dResult_dandThen ((((v_Vuna_dCompiler_dElab_dTerm_dcheckType mc1) v_Vuna_dCompiler_dElab_dTypes_demptyCtx) mc2) dtb__3)) (fun p -> (match p with
   | C_Base_dPair_dPair_Base_dPair_dPair (dtb__4, dtb__5) -> (match dtb__5 with
   | C_Base_dPair_dPair_Base_dPair_dPair (dtb__6, dtb__7) -> ((fun sigTy -> ((((v_Vuna_dCompiler_dElab_dDriver_delabSigsGo dtb__1) (C_Base_dList_dList_Cons ((C_Base_dPair_dPair_Base_dPair_dPair (dtb__2, sigTy)), mc1))) ((v_Vuna_dCompiler_dElab_dTypes_decPutGlobalsTbl dtb__7) (((v_Vuna_dCompiler_dCommon_dtblInsert dtb__2) sigTy) (v_Vuna_dCompiler_dElab_dTypes_decGlobalsTbl dtb__7)))) (C_Base_dList_dList_Cons ((C_Base_dPair_dPair_Base_dPair_dPair (dtb__2, sigTy)), mc3)))) (((v_Vuna_dCompiler_dElab_dMeta_dinlineSolvedMetas dtb__7) 0) dtb__4))
   | _ -> failwith "DT: impossible branch"
@@ -82,7 +81,7 @@ let rec v_Vuna_dCompiler_dElab_dDriver_dclausesTblGo = (fun mc0 -> (fun mc1 -> (
   | _ -> failwith "DT: impossible branch"
 )))
 
-let v_Vuna_dCompiler_dElab_dDriver_dclausesTblOf = (fun decls -> ((v_Vuna_dCompiler_dElab_dDriver_dclausesTblGo decls) (v_Vuna_dCompiler_dCommon_dtblEmpty ())))
+let v_Vuna_dCompiler_dElab_dDriver_dclausesTblOf = (fun decls -> ((v_Vuna_dCompiler_dElab_dDriver_dclausesTblGo decls) v_Vuna_dCompiler_dCommon_dtblEmpty))
 
 let v_Vuna_dCompiler_dElab_dDriver_dclausesOfTbl = (fun ec -> (fun decls -> (fun name -> (match ((v_Vuna_dCompiler_dCommon_dtblLookup name) (v_Vuna_dCompiler_dElab_dTypes_decClausesTbl ec)) with
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__15) -> dtb__15
@@ -139,11 +138,11 @@ let v_Vuna_dCompiler_dElab_dDriver_drezonkDefs = (fun ec -> (fun defs -> ((v_Bas
 let rec v_Vuna_dCompiler_dElab_dDriver_dresolveDictGoalsFix = (fun globals -> (fun ec -> (fun n -> ((fun ec2 -> (if ((bi_le_int n) 0) then ec2 else (if ((bi_lt_int (v_Base_dList_dlength (v_Vuna_dCompiler_dElab_dTypes_decDictGoals ec2))) (v_Base_dList_dlength (v_Vuna_dCompiler_dElab_dTypes_decDictGoals ec))) then (((v_Vuna_dCompiler_dElab_dDriver_dresolveDictGoalsFix globals) ec2) ((bi_sub n) 1)) else ec2))) ((v_Vuna_dCompiler_dElab_dDict_dresolveDictGoals globals) ec)))))
 
 let v_Vuna_dCompiler_dElab_dDriver_ddtEvalExprIn = (fun prog -> (fun expr -> (match prog with
-  | C_Vuna_dCompiler_dElab_dTypes_dDtProgram_Vuna_dCompiler_dElab_dTypes_dDtProgram (dtb__37, dtb__38, dtb__39, dtb__40, dtb__41, dtb__42, dtb__43, dtb__44) -> ((fun ec0 -> ((v_Base_dResult_dandThen ((((v_Vuna_dCompiler_dElab_dTerm_dinferE dtb__41) (v_Vuna_dCompiler_dElab_dTypes_demptyCtx ())) ec0) expr)) (fun p -> (match p with
+  | C_Vuna_dCompiler_dElab_dTypes_dDtProgram_Vuna_dCompiler_dElab_dTypes_dDtProgram (dtb__37, dtb__38, dtb__39, dtb__40, dtb__41, dtb__42, dtb__43, dtb__44) -> ((fun ec0 -> ((v_Base_dResult_dandThen ((((v_Vuna_dCompiler_dElab_dTerm_dinferE dtb__41) v_Vuna_dCompiler_dElab_dTypes_demptyCtx) ec0) expr)) (fun p -> (match p with
   | C_Base_dPair_dPair_Base_dPair_dPair (dtb__45, dtb__46) -> (match dtb__46 with
   | C_Base_dPair_dPair_Base_dPair_dPair (dtb__47, dtb__48) -> ((fun ec2 -> ((fun sols2 -> (match (((v_Vuna_dCompiler_dElab_dMeta_dunsolvedFrom dtb__44) (v_Vuna_dCompiler_dElab_dTypes_decNext ec2)) sols2) with
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__49) -> (((v_Vuna_dCompiler_dDiagnostics_dtcErr1 (v_Vuna_dCompiler_dFrontend_dAst_dexprSpan expr)) (C_Vuna_dCompiler_dDiagnostics_dTcErr_Vuna_dCompiler_dDiagnostics_dUnsolvedMetavarInfer ((bi_strFromInt dtb__49)))) (bi_strFromInt dtb__49))
-  | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> (match ((((v_Vuna_dCompiler_dCore_dEval_dnormalize (v_Vuna_dCompiler_dCommon_dtblFromList ((v_Base_dList_dmap (fun d -> (C_Base_dPair_dPair_Base_dPair_dPair ((v_Vuna_dCompiler_dElab_dTypes_ddtDefName d), (v_Vuna_dCompiler_dElab_dTypes_ddtDefBody d))))) dtb__38))) (v_Vuna_dCompiler_dElab_dTypes_decSolsP ec2)) (v_Vuna_dCompiler_dCore_dTerm_ddefaultFuel ())) ((v_Vuna_dCompiler_dCore_dEval_deval C_Base_dList_dList_Nil) dtb__45)) with
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> (match ((((v_Vuna_dCompiler_dCore_dEval_dnormalize (v_Vuna_dCompiler_dCommon_dtblFromList ((v_Base_dList_dmap (fun d -> (C_Base_dPair_dPair_Base_dPair_dPair ((v_Vuna_dCompiler_dElab_dTypes_ddtDefName d), (v_Vuna_dCompiler_dElab_dTypes_ddtDefBody d))))) dtb__38))) (v_Vuna_dCompiler_dElab_dTypes_decSolsP ec2)) v_Vuna_dCompiler_dCore_dTerm_ddefaultFuel) ((v_Vuna_dCompiler_dCore_dEval_deval C_Base_dList_dList_Nil) dtb__45)) with
   | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVInt (dtb__50) -> (C_Base_dResult_dResult_Base_dResult_dOk ((bi_strFromInt dtb__50)))
   | dtb__51 -> (C_Base_dResult_dResult_Base_dResult_dOk ((v_Vuna_dCompiler_dCore_dEval_dshowValue dtb__51)))
 )
@@ -152,7 +151,7 @@ let v_Vuna_dCompiler_dElab_dDriver_ddtEvalExprIn = (fun prog -> (fun expr -> (ma
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
-)))) (C_Vuna_dCompiler_dElab_dTypes_dEc_Vuna_dCompiler_dElab_dTypes_dEc (dtb__44, dtb__40, (v_Base_dList_dreverse ((v_Base_dList_dmap (fun d -> (C_Base_dPair_dPair_Base_dPair_dPair ((v_Vuna_dCompiler_dElab_dTypes_ddtDefName d), (v_Vuna_dCompiler_dElab_dTypes_ddtDefBody d))))) dtb__38)), dtb__37, C_Base_dList_dList_Nil, C_Base_dList_dList_Nil, dtb__42, dtb__43, C_Base_dList_dList_Nil, (v_Vuna_dCompiler_dCommon_dtblFromList ((v_Base_dList_dmap (fun d -> (C_Base_dPair_dPair_Base_dPair_dPair ((v_Vuna_dCompiler_dElab_dTypes_ddtDefName d), (v_Vuna_dCompiler_dElab_dTypes_ddtDefBody d))))) dtb__38)), (v_Vuna_dCompiler_dCommon_dtblFromList dtb__41), (v_Vuna_dCompiler_dElab_dTypes_dsolsToTbl dtb__40), (v_Vuna_dCompiler_dCommon_dtblEmpty ()), true, (v_Vuna_dCompiler_dCommon_dtblEmpty ()))))
+)))) (C_Vuna_dCompiler_dElab_dTypes_dEc_Vuna_dCompiler_dElab_dTypes_dEc (dtb__44, dtb__40, (v_Base_dList_dreverse ((v_Base_dList_dmap (fun d -> (C_Base_dPair_dPair_Base_dPair_dPair ((v_Vuna_dCompiler_dElab_dTypes_ddtDefName d), (v_Vuna_dCompiler_dElab_dTypes_ddtDefBody d))))) dtb__38)), dtb__37, C_Base_dList_dList_Nil, C_Base_dList_dList_Nil, dtb__42, dtb__43, C_Base_dList_dList_Nil, (v_Vuna_dCompiler_dCommon_dtblFromList ((v_Base_dList_dmap (fun d -> (C_Base_dPair_dPair_Base_dPair_dPair ((v_Vuna_dCompiler_dElab_dTypes_ddtDefName d), (v_Vuna_dCompiler_dElab_dTypes_ddtDefBody d))))) dtb__38)), (v_Vuna_dCompiler_dCommon_dtblFromList dtb__41), (v_Vuna_dCompiler_dElab_dTypes_dsolsToTbl dtb__40), v_Vuna_dCompiler_dCommon_dtblEmpty, true, v_Vuna_dCompiler_dCommon_dtblEmpty)))
   | _ -> failwith "DT: impossible branch"
 )))
 
@@ -225,7 +224,7 @@ let v_Vuna_dCompiler_dElab_dDriver_dunsolvedMessage = (fun ec -> (fun m -> (matc
   | _ -> failwith "DT: impossible branch"
 )))
 
-let v_Vuna_dCompiler_dElab_dDriver_delabProgramGo = (fun decls -> ((v_Base_dResult_dandThen (v_Vuna_dCompiler_dElab_dMeta_dcollectSigs decls)) (fun sigs -> ((fun _u -> ((v_Base_dResult_dandThen (((v_Vuna_dCompiler_dElab_dData_delabDatas ((v_Vuna_dCompiler_dElab_dMeta_dcollectDataDecls decls) C_Base_dList_dList_Nil)) (v_Vuna_dCompiler_dElab_dPrelude_dpreludeGlobalsFor (v_Vuna_dCompiler_dElab_dPrelude_dpickListFamily (v_Vuna_dCompiler_dElab_dMeta_ddataNamesOf decls)))) (v_Vuna_dCompiler_dElab_dTypes_decEmpty ()))) (fun pd -> (match pd with
+let v_Vuna_dCompiler_dElab_dDriver_delabProgramGo = (fun decls -> ((v_Base_dResult_dandThen (v_Vuna_dCompiler_dElab_dMeta_dcollectSigs decls)) (fun sigs -> ((fun _u -> ((v_Base_dResult_dandThen (((v_Vuna_dCompiler_dElab_dData_delabDatas ((v_Vuna_dCompiler_dElab_dMeta_dcollectDataDecls decls) C_Base_dList_dList_Nil)) (v_Vuna_dCompiler_dElab_dPrelude_dpreludeGlobalsFor (v_Vuna_dCompiler_dElab_dPrelude_dpickListFamily (v_Vuna_dCompiler_dElab_dMeta_ddataNamesOf decls)))) v_Vuna_dCompiler_dElab_dTypes_decEmpty)) (fun pd -> (match pd with
   | C_Base_dPair_dPair_Base_dPair_dPair (dtb__93, dtb__94) -> (match dtb__94 with
   | C_Base_dPair_dPair_Base_dPair_dPair (dtb__95, dtb__96) -> ((fun _u -> ((v_Base_dResult_dandThen (((v_Vuna_dCompiler_dElab_dTrait_delabTraits ((v_Vuna_dCompiler_dElab_dMeta_dcollectTraitDecls decls) C_Base_dList_dList_Nil)) dtb__95) dtb__96)) (fun pt -> (match pt with
   | C_Base_dPair_dPair_Base_dPair_dPair (dtb__97, dtb__98) -> (match dtb__98 with
@@ -240,7 +239,7 @@ let v_Vuna_dCompiler_dElab_dDriver_delabProgramGo = (fun decls -> ((v_Base_dResu
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__112) -> (C_Base_dPair_dPair_Base_dPair_dPair ((v_Base_dPair_dfirstOf g), dtb__112))
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> g
   | _ -> failwith "DT: impossible branch"
-))) dtb__105))) ((v_Vuna_dCompiler_dCommon_dtblInsertAll ((v_Base_dList_dmap (fun x -> (C_Base_dPair_dPair_Base_dPair_dPair ((v_Vuna_dCompiler_dElab_dTypes_ddtDefName x), (v_Vuna_dCompiler_dElab_dTypes_ddtDefType x))))) allDefs)) (v_Vuna_dCompiler_dCommon_dtblEmpty ())))) ((v_Vuna_dCompiler_dElab_dDriver_drezonkDefs ec4) ((v_Base_dList_dappend instDefs) ((v_Base_dList_dappend extra) defs))))) (((v_Vuna_dCompiler_dElab_dTrait_dextraDefsOf dtb__105) ec4) ((v_Base_dList_dappend instDefs) defs)))
+))) dtb__105))) ((v_Vuna_dCompiler_dCommon_dtblInsertAll ((v_Base_dList_dmap (fun x -> (C_Base_dPair_dPair_Base_dPair_dPair ((v_Vuna_dCompiler_dElab_dTypes_ddtDefName x), (v_Vuna_dCompiler_dElab_dTypes_ddtDefType x))))) allDefs)) v_Vuna_dCompiler_dCommon_dtblEmpty))) ((v_Vuna_dCompiler_dElab_dDriver_drezonkDefs ec4) ((v_Base_dList_dappend instDefs) ((v_Base_dList_dappend extra) defs))))) (((v_Vuna_dCompiler_dElab_dTrait_dextraDefsOf dtb__105) ec4) ((v_Base_dList_dappend instDefs) defs)))
   | _ -> failwith "DT: impossible branch"
 )) (v_Vuna_dCompiler_dDebug_dstamp "instbodies-done"))) ((v_Vuna_dCompiler_dElab_dDriver_drezonkDefs ec4) dtb__109))) (((v_Vuna_dCompiler_dElab_dDriver_dresolveDictGoalsFix dtb__105) dtb__110) 8))
   | _ -> failwith "DT: impossible branch"
@@ -279,7 +278,7 @@ let v_Vuna_dCompiler_dElab_dDriver_ddtGoalInfoCtx = (fun mc0 -> (match mc0 with
   | _ -> failwith "DT: impossible branch"
 ))
 
-let v_Vuna_dCompiler_dElab_dDriver_dzonkGoal = (fun sols -> (fun v -> ((((v_Vuna_dCompiler_dCore_dEval_dforce (v_Vuna_dCompiler_dCommon_dtblEmpty ())) (v_Vuna_dCompiler_dCore_dTerm_dsolsFromList sols)) (v_Vuna_dCompiler_dCore_dTerm_ddefaultFuel ())) v)))
+let v_Vuna_dCompiler_dElab_dDriver_dzonkGoal = (fun sols -> (fun v -> ((((v_Vuna_dCompiler_dCore_dEval_dforce v_Vuna_dCompiler_dCommon_dtblEmpty) (v_Vuna_dCompiler_dCore_dTerm_dsolsFromList sols)) v_Vuna_dCompiler_dCore_dTerm_ddefaultFuel) v)))
 
 let rec v_Vuna_dCompiler_dElab_dDriver_dctxEntriesAt = (fun mc0 -> (fun mc1 -> (fun mc2 -> (match mc0 with
   | C_Base_dList_dList_Cons (dtb__122, dtb__123) -> (match dtb__122 with

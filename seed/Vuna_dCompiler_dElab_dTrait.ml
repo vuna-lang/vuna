@@ -1,5 +1,4 @@
 open Vuna_runtime
-open Vuna_builtins
 open Base_dPair
 open Base_dBool
 open Base_dMonad
@@ -15,20 +14,20 @@ open Vuna_dCompiler_dCommon
 open Vuna_dCompiler_dFrontend_dToml
 open Vuna_dCompiler_dFrontend_dManifest
 open Vuna_dCompiler_dPackages_dPkg
+open Vuna_dCompiler_dDebug
 open Base_dNat
 open Base_dVec
-open Vuna_dCompiler_dLoader_dDiagnostics
+open Vuna_dCompiler_dDiagnostics
 open Vuna_dCompiler_dFrontend_dAst
 open Vuna_dCompiler_dFrontend_dDiagnostics
 open Vuna_dCompiler_dFrontend_dLexer
 open Vuna_dCompiler_dFrontend_dParser_dSupport
 open Vuna_dCompiler_dFrontend_dParser
+open Vuna_dCompiler_dLoader_dDiagnostics
 open Vuna_dCompiler_dLoader_dModules
 open Vuna_dCompiler_dLoader_dResolve
 open Vuna_dCompiler_dLoader_dFlatten
 open Vuna_dCompiler_dLoader
-open Vuna_dCompiler_dDebug
-open Vuna_dCompiler_dDiagnostics
 open Vuna_dCompiler_dCore_dTerm
 open Vuna_dCompiler_dCore_dEval
 open Vuna_dCompiler_dCore_dConv
@@ -65,7 +64,7 @@ let rec v_Vuna_dCompiler_dElab_dTrait_dclassFieldTysGo = (fun mc0 -> (fun mc1 ->
   | _ -> failwith "DT: impossible branch"
 ))))))
 
-let v_Vuna_dCompiler_dElab_dTrait_dclassFieldTys = (fun globals -> (fun ec -> (fun params -> (fun methods -> (((((v_Vuna_dCompiler_dElab_dTrait_dclassFieldTysGo globals) (((v_Vuna_dCompiler_dElab_dTrait_dbindClassParams params) methods) (v_Vuna_dCompiler_dElab_dTypes_demptyCtx ()))) ec) methods) C_Base_dList_dList_Nil)))))
+let v_Vuna_dCompiler_dElab_dTrait_dclassFieldTys = (fun globals -> (fun ec -> (fun params -> (fun methods -> (((((v_Vuna_dCompiler_dElab_dTrait_dclassFieldTysGo globals) (((v_Vuna_dCompiler_dElab_dTrait_dbindClassParams params) methods) v_Vuna_dCompiler_dElab_dTypes_demptyCtx)) ec) methods) C_Base_dList_dList_Nil)))))
 
 let rec v_Vuna_dCompiler_dElab_dTrait_dfoldlAddDef = (fun mc0 -> (fun mc1 -> (match mc1 with
   | C_Base_dList_dList_Cons (dtb__10, dtb__11) -> ((v_Vuna_dCompiler_dElab_dTrait_dfoldlAddDef ((v_Vuna_dCompiler_dElab_dTypes_decAddDef mc0) dtb__10)) dtb__11)
@@ -456,7 +455,7 @@ and v_Vuna_dCompiler_dElab_dTrait_dbindOnePatternFuel = (fun fuel -> (fun global
 
 let v_Vuna_dCompiler_dElab_dTrait_dcheckBinders = (fun a1 -> (fun a2 -> (fun a3 -> (fun a4 -> (fun a5 -> (fun a6 -> (fun a7 -> ((((((((v_Vuna_dCompiler_dElab_dTrait_dcheckBindersFuel 512) a1) a2) a3) a4) a5) a6) a7))))))))
 
-let v_Vuna_dCompiler_dElab_dTrait_dcheckDef = (fun globals -> (fun ec -> (fun pats -> (fun body -> (fun expected -> (fun sp -> (((((((v_Vuna_dCompiler_dElab_dTrait_dcheckBinders globals) (v_Vuna_dCompiler_dElab_dTypes_demptyCtx ())) ec) pats) body) expected) sp)))))))
+let v_Vuna_dCompiler_dElab_dTrait_dcheckDef = (fun globals -> (fun ec -> (fun pats -> (fun body -> (fun expected -> (fun sp -> (((((((v_Vuna_dCompiler_dElab_dTrait_dcheckBinders globals) v_Vuna_dCompiler_dElab_dTypes_demptyCtx) ec) pats) body) expected) sp)))))))
 
 let v_Vuna_dCompiler_dElab_dTrait_delabFunDef = (fun globals -> (fun ec -> (fun clauses -> (fun expected -> (fun sp -> ((fun key -> (match clauses with
   | C_Base_dList_dList_Nil -> ((v_Vuna_dCompiler_dDiagnostics_dtcErr0 sp) C_Vuna_dCompiler_dDiagnostics_dTcErr_Vuna_dCompiler_dDiagnostics_dFunctionNoClauses)

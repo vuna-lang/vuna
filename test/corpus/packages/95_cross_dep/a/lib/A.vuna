@@ -1,0 +1,5 @@
+module A (aval) where
+
+-- consumer a 自己的模块：只有 a 的包上下文（a 的依赖闭包）能看到它。
+aval : Int
+aval = 42

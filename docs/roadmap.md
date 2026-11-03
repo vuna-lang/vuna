@@ -1,6 +1,6 @@
 # Vuna 路线图
 
-本文记录 vuna 的当前基线与**可排期阶段**（M26 起）以及**不排期的未来轨道**（F1–F4）。
+本文记录 vuna 的当前基线与**可排期阶段**（M27 起）以及**不排期的未来轨道**（F1–F4）。
 逐条技术债务、临时决定与可复现缺陷登记在 [reference/debt.md](reference/debt.md)；
 里程碑历史在 [history.md](history.md)（各阶段实现细节在 git 历史）。
 
@@ -55,6 +55,14 @@ vuna 尚未发布任何版本：没有外部用户、下游生态与历史包袱
   `LdDiag`、`Vuna.Lint.Diagnostics` 的 `LintRule`），构造子携带模板、arity 由 `Nat` 索引
   在编译期锁定；`vuna gen-errors` 遍历枚举表生成 `docs/.generated/errors.md`
   （gitignored、幂等，131 码）；lint 输出 `[LN_XXX] 规则: 消息`。
+- M26：包上下文统一与单一 codegen 输出模型——删除环境根（roots）与 `List Root` 公共 API，
+  每个源文件由最近 `vuna.toml` + 依赖闭包解析（无 manifest 只有 base：`VUNA_BASE` 或可
+  执行文件相对布局），目录入口不向上找 manifest，ad-hoc 单文件自动注入 Prelude；删除单
+  文件 codegen、`--split` 开关与 `seed` 子命令（`compile`/`build` 统一产逐模块 `.ml` +
+  `build.sh`，`build` 默认 `<PKG-DIR>/.output`、`--out` 可改），删除空 `Vuna_builtins`
+  unit → seed 65 `.ml` / 66 文件，零参顶层定义改为求值一次；入口 data/trait 归属身份
+  收口（A13/C08），API/产物快照与上下文回归入库（C21/E14/E15）；LSP 本次未改加载
+  语义（仍 parse 级、含 import 跳过类型检查，D13/M30 接同一 `contextForFile`）。
 
 ## 终态（目标）
 
@@ -62,8 +70,8 @@ vuna 尚未发布任何版本：没有外部用户、下游生态与历史包袱
 
 - **类型理论**：依赖类型 + 归纳族；QTT 可替换的表示层（rig/Level 已预留），宇宙与擦除
   判据在 M28 定型。
-- **路径**：`Parser → Loader → DT 精化 → 擦除 codegen → OCaml`；单文件只是「一个 unit 的
-  split」，不再有第二套装配/加载语义。
+- **路径**：`Parser → Loader → DT 精化 → 擦除 codegen → OCaml`；单文件只是包内 ad-hoc
+  入口，与包内模块走同一装配/codegen，不再有第二套加载语义。
 - **可信性**：不存在「跳过检查但不告知」的通道；任何放行都是显式、可审计、有诊断的。
 - **语言面**：顶层签名必填；不用的特性直接删；不保留兼容层。`record`/`deriving`/多 clause/
   `do`/trait 保留，但降到普通 data/case/字典语义之上，不靠短名特判。
@@ -96,46 +104,16 @@ vuna 尚未发布任何版本：没有外部用户、下游生态与历史包袱
 
 ## 阶段状态总览
 
-| 阶段 | 主题 | 依赖 | 关闭的债务（示例） |
-| --- | --- | --- | --- |
-| M26 | 包上下文统一（删除 roots）与单一路径 | — | A01–A06、A13、A15–A16、C08、C21、E14–E15 |
-| M27 | 内置、原语与效应边界 | M26 | A07–A11、C16–C19、D16 |
-| M28 | 类型系统地基 | M27 | B05–B10、B15、D05–D10 |
-| M29 | 相等、实例与证明 ergonomics | M28 | A14、B11–B14、C05、D11–D12 |
-| M30 | 工具链与包 | —（可与 M26–M29 并行） | C11–C13、C25、D13–D15、D17–D18、E08 |
-| F1–F4 | 模块 v3 / 运行时 / 效应并发 / 生态 | 不排期 | D01–D04 |
+| 阶段 | 主题 | 依赖 | 状态 | 关闭的债务（示例） |
+| --- | --- | --- | --- | --- |
+| M26 | 包上下文统一（删除 roots）与单一路径 | — | 已完成 | A01–A06、A13、A15–A16、C08、C21、E14–E15 |
+| M27 | 内置、原语与效应边界 | M26 | 待排期 | A07–A11、C16–C19、D16 |
+| M28 | 类型系统地基 | M27 | 待排期 | B05–B10、B15、D05–D10 |
+| M29 | 相等、实例与证明 ergonomics | M28 | 待排期 | A14、B11–B14、C05、D11–D12 |
+| M30 | 工具链与包 | —（可与 M27–M29 并行） | 待排期 | C11–C13、C25、D13–D15、D17–D18、E08 |
+| F1–F4 | 模块 v3 / 运行时 / 效应并发 / 生态 | 不排期 | 不排期 | D01–D04 |
 
-## 可排期阶段（M26 起）
-
-### M26：包上下文统一（删除 roots）与单一路径
-
-**目标**：每个 vuna 源文件只有唯一的**包上下文**（最近的 `vuna.toml` + 其依赖闭包），
-删除 `--root`/`rawRoot`/`List Root` 这套环境根；单文件 = 包内 ad-hoc 入口，
-无 manifest 时只有 base 上下文（base 定位：可执行文件相对布局 + `VUNA_BASE` 覆盖）；ad-hoc 单文件
-**自动注入 Prelude**；依赖方向由包上下文决定，不再用「过滤 roots」打补丁；
-单文件与 split 收敛成同一装配计划，清掉 HM 时代死 API/死代码。
-
-**范围**（debt）：
-- 统一装配：单文件 = 单 unit 的 split；删除重复 prepare/hook/`build.sh` 生成器（A01）；
-  删除空 `Vuna_builtins` unit（A02）；`seed` 与 `build --split` 关系收敛（A15）。
-- resolved identity：Elab 在 `DtProgram` 上给出 owner/实例身份；split 只消费结构（A13）；`checkResolvedModules` 覆盖 entryDecls（C08）；入口 trait/实例可 seed。
-- **包上下文取代 roots**（A06/A16/E16）：Pkg 提供「最近 manifest → 包 + 模块根 + 依赖边」；
-  Loader 解析 imports 时按**导入方包的依赖闭包**决定可见性（不是全局 roots 列表）。删除
-  `--root`、`rawRoot`、`loadProgramRaw*` 与 `List Root` 公共 API；无 manifest 的文件只有 base
-  上下文（base 定位方式见待决策）；单文件是包内 ad-hoc 入口，LSP/REPL/TestRunner 同源。
-- 死代码清理：Loader 门面死 API（A03）、Driver/Split 的 HM `lib+app` 生成器与死 writer（A04）。
-- 初始化语义：零参定义 thunk/求值一次明确化，去掉调用点补 `()` 的约定（A05）。
-- 夹具迁移：`test/corpus` 建独立包上下文（只依赖 base），需要 lib/app 的模块夹具补 manifest；
-  runner 删除全部 `--root`。
-- 重构不变性：加 API/导出面快照与关键 split 产物断言（C21/E14/E15）。
-
-**验收**：seed 文件集确定（删除 builtins 后 54 `.ml`）；任意包（含入口 data/trait）可
-`build --split`/`seed`；无字符串归属表；死导出清零；旧 seed 可编译新源码。
-**关键回归**：源码/测试/文档中 `--root` 零出现；两包实验（依赖包 import 消费包模块）在
-所有入口上下文都被拒；无 manifest 文件只可见 base；LSP/REPL 与 CLI 同上下文。
-
-**前置**：—。**决策点**：thunk 语义（其余已定：base = 可执行文件相对布局 + `VUNA_BASE`
-覆盖；ad-hoc 单文件自动注入 Prelude）。
+## 可排期阶段（M27 起）
 
 ### M27：内置、原语与效应边界
 
@@ -149,11 +127,14 @@ primitive 接口；效应只能经显式能力；原语语义写成规范。
 - 内建声明单一真源：`Elab.Prelude` 硬编码 globals、4 份内建表、幽灵名（A10/A11）→ 一个
   intrinsic/primitive 声明面；删公开名与 `prim_*` 双份；runtime 只保留 primitive。
 - 效应边界：effect allowlist → capability/显式声明（B16）；`Base.IO` 的 `prim_*` 接口与
-  runtime Unix 依赖决策（A11/A12）；raw root 绕过关闭（与 M26 协同）。
+  runtime Unix 依赖决策（A11/A12）；raw root 绕过已随 M26 删除环境根关闭（B16 剩余的是
+  “按包名字符串 allowlist”，本阶段改成 capability/显式声明）。
 - 原语语义规范：Int 溢出/宽度、String 编码（字节 vs 码点）、除零、`Show String` 转义
-  一致性（C16/C19/D16）；interp 对 `str*`/除零行为与 codegen 对齐或明确分类。
-- 单文件 prelude shim：`Elab.Prelude` 硬编码容器/IO 签名与 List 族重绑（A10）删除或改为
-  加载真实 base（与 M26 模式决策联动）。
+  一致性（C16/C19/D16）；M26 新增的 `prim_getenv` / `prim_getcwd` / `prim_execPath`
+  （只有 `prim_*` 名、effectful、仅 TCB 三包可用；`/proc/self/exe` 为 Linux 假设）也在
+  本阶段写成规范；interp 对 `str*`/除零行为与 codegen 对齐或明确分类。
+- Prelude shim：`Elab.Prelude` 硬编码容器/IO 签名与 List 族重绑（A10）删除或改为
+  加载真实 base（与 M26 包上下文决策联动）。
 
 **验收**：`grep` 不到短名内置特判；intrinsic 表只有一份；用户同名 data 不冲突；效果尝试在
 任何包名/路由下都得到一致错误；原语语义有规范与正/反例。
@@ -265,9 +246,11 @@ DT 验证库（Vec/Fin/Map/Set/排序/证明组合子）；包 registry、版本
 - **擦除/QTT**：整程序使用分析 + multiplicity 标注 vs 继续 rig 显式标注——M28。
 - **相等**：强制 Eq 字典 vs 类型导向结构比较；若保留兜底，其可比较类型域如何定义——M25 已做安全域限制，M29 定稿。
 - **type-as-value**：引入 type codes（类型作为一等值）vs 只保留 `cast` 组合子——M29。
-- **无 manifest 时的 base 定位**：已定 **可执行文件相对布局 + `VUNA_BASE` 覆盖**（M26 实现；
-  找不到 base 时明确报错，不退回纯内建）。
-- **ad-hoc 单文件语义**：已定**自动注入 Prelude**（与包内模块一致；显式 import 仍可用）。
+- **无 manifest 时的 base 定位**：已定并落地（M26）**可执行文件相对布局 + `VUNA_BASE` 覆盖**；
+  找不到 base 时明确报错，不退回纯内建。定位由 `Pkg.locateBase` 用
+  `prim_getenv` / `prim_getcwd` / `prim_execPath` 三个内部原语实现（语义规范归 M27）。
+- **ad-hoc 单文件语义**：已定并落地（M26）**自动注入 Prelude**（与包内模块一致；显式
+  import 仍可用）。
 - **Int/String 语义**：固定宽度 + UTF-8 字节串 vs 大整数/Unicode 码点——M27。
 - **IO/effects 边界**：`Base.IO` thunk 留到 F3，还是 M27 就改为声明式 intrinsic 接口。
 - **检查豁免**：已执行（M25）：删除按包名豁免（终止性/覆盖率），不再设计信任声明；若个别定义
@@ -291,7 +274,10 @@ DT 验证库（Vec/Fin/Map/Set/排序/证明组合子）；包 registry、版本
 | M24.6 三级 Core Env 索引化 | 只做作用域护栏 + 夹具，`Core.eval` 不换索引表示 | 依赖索引取值仍写不出，索引化收益不成立 |
 | 类型族按运行时定义 | 整体擦除（`... -> Type`），运行时用擦除参数报错 | check 过而 ocamlopt 才炸的存量 bug（M24.6） |
 | compiler 25 个扁平模块 | 目录即层 + 门面 + 叶子（40 模块），工具链同法拆分 | 单模块阅读成本 3530 → ≤~800 行；index/seed 模块面稳定 |
-| 模块可见性由 `--root`/环境 roots 决定，单文件是第二套加载语义 | **删除 roots 概念**（M26）：以最近 `vuna.toml` 的包上下文解析；无 manifest 时只有 base（可执行文件相对布局 + `VUNA_BASE` 覆盖）；单文件=包内 ad-hoc 入口且自动注入 Prelude | 环境 roots 既掩盖依赖方向（依赖包可 import 消费包模块），又带来 raw 模式绕过与双语义；包上下文是唯一正确模型，不用“过滤 roots”打补丁 |
+| 模块可见性由环境根（roots）决定，单文件是第二套加载语义 | **删除 roots 概念**（M26）：以最近 `vuna.toml` 的包上下文解析；无 manifest 时只有 base（可执行文件相对布局 + `VUNA_BASE` 覆盖）；单文件=包内 ad-hoc 入口且自动注入 Prelude | 环境 roots 既掩盖依赖方向（依赖包可 import 消费包模块），又带来 raw 模式绕过与双语义；包上下文是唯一正确模型，不用“过滤 roots”打补丁 |
+| 单文件 codegen 与逐模块 split 两套输出模型（`compile` 产单 `.ml`，split 是可选开关，`seed` 是另一条命令） | **只保留逐模块 split**（M26）：`Vuna_runtime` + 各模块 + `Main` + `build.sh`；删除单文件生成器、`--split` 开关与 `seed` 子命令 | 两套生成器重复 prepare/hook/`build.sh` 装配且行为漂移；单文件产物是十几万字符的单一编译单元，难以优化与回归；只留一种产物让 seed/测试/基准同口径 |
+| `compile` 写单文件、`build` 隐式 `.output`、`seed` 单独一套参数解析 | `compile <entry\|pkg-dir> OUTDIR` 只 codegen（OUTDIR 必填、成功静默）；`build [--no-compile] [--out DIR] [PKG-DIR]` 默认 `<PKG-DIR>/.output`，codegen 后跑 `build.sh` → `DIR/bin/<包名>`（M26） | 一个输出模型对应一个显式目录参数；CLI 不再为每个命令各写一套路径/打印/错误逻辑 |
+| 无 manifest 时 base 靠环境根列表/调用参数传入 | 落地为 `Pkg.locateBase`：`VUNA_BASE` 覆盖 → 可执行文件相对布局四级探测 → 明确报错；依赖 3 个新原语 `prim_getenv` / `prim_getcwd` / `prim_execPath`（只有 `prim_*` 名、无公开别名；effectful、仅 TCB 三包可用；`/proc/self/exe` 为 Linux 假设）（M26） | 环境根已删除；定位信息必须来自编译器自身运行环境而不是调用参数；原语语义规范归 M27 |
 | 原 M25–M28（模块 v3/运行时/并发/生态）为顺序阶段 | 改为 **F1–F4 不排期**；M25 起先做正本清源（本文件） | M24 审计显示旧架构与迁移折中仍是主要风险，先修地基再扩张 |
 | 检查豁免（按包名跳过终止性/覆盖率）重设计为可审计信任 | **已删除**（M25）：检查器改进 + 源码修复达标；不维护名单 | 任何“可信名单”都会重新变成静默绕过；宁可让编译器源码接受与用户代码相同的检查 |
 | 「完成即删除细节」只记 history | 另立 [debt.md](reference/debt.md) 债务账本，roadmap 按债务排阶段 | 让「哪些妥协还在、由谁在哪个阶段关闭」可审计、不丢账 |

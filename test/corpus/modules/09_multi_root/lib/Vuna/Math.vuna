@@ -1,3 +1,0 @@
--- lib 侧模块：验证 --root lib 命中。
-double : Int -> Int
-double x = x + x

@@ -1,5 +1,4 @@
 open Vuna_runtime
-open Vuna_builtins
 type ('a0, 'a1) t_Base_dPair_dPair = C_Base_dPair_dPair_Base_dPair_dPair of ('a0) * ('a1)
 
 let v_Base_dPair_dfirstOf = (fun mc0 -> (match mc0 with

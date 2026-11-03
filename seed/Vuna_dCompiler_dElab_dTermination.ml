@@ -1,5 +1,4 @@
 open Vuna_runtime
-open Vuna_builtins
 open Base_dPair
 open Base_dBool
 open Base_dMonad
@@ -15,20 +14,20 @@ open Vuna_dCompiler_dCommon
 open Vuna_dCompiler_dFrontend_dToml
 open Vuna_dCompiler_dFrontend_dManifest
 open Vuna_dCompiler_dPackages_dPkg
+open Vuna_dCompiler_dDebug
 open Base_dNat
 open Base_dVec
-open Vuna_dCompiler_dLoader_dDiagnostics
+open Vuna_dCompiler_dDiagnostics
 open Vuna_dCompiler_dFrontend_dAst
 open Vuna_dCompiler_dFrontend_dDiagnostics
 open Vuna_dCompiler_dFrontend_dLexer
 open Vuna_dCompiler_dFrontend_dParser_dSupport
 open Vuna_dCompiler_dFrontend_dParser
+open Vuna_dCompiler_dLoader_dDiagnostics
 open Vuna_dCompiler_dLoader_dModules
 open Vuna_dCompiler_dLoader_dResolve
 open Vuna_dCompiler_dLoader_dFlatten
 open Vuna_dCompiler_dLoader
-open Vuna_dCompiler_dDebug
-open Vuna_dCompiler_dDiagnostics
 open Vuna_dCompiler_dCore_dTerm
 open Vuna_dCompiler_dCore_dEval
 open Vuna_dCompiler_dCore_dConv
@@ -110,7 +109,7 @@ let v_Vuna_dCompiler_dElab_dTermination_dadjOf = (fun n -> (fun g -> (match ((v_
   | _ -> failwith "DT: impossible branch"
 )))
 
-let v_Vuna_dCompiler_dElab_dTermination_dadjTblOf = (fun g -> ((v_Vuna_dCompiler_dCommon_dtblInsertAll g) (v_Vuna_dCompiler_dCommon_dtblEmpty ())))
+let v_Vuna_dCompiler_dElab_dTermination_dadjTblOf = (fun g -> ((v_Vuna_dCompiler_dCommon_dtblInsertAll g) v_Vuna_dCompiler_dCommon_dtblEmpty))
 
 let rec v_Vuna_dCompiler_dElab_dTermination_daddSrcs = (fun mc0 -> (fun mc1 -> (fun mc2 -> (match mc1 with
   | C_Base_dList_dList_Cons (dtb__68, dtb__69) -> ((fun cur -> (((v_Vuna_dCompiler_dElab_dTermination_daddSrcs mc0) dtb__69) (((v_Vuna_dCompiler_dCommon_dtblInsert dtb__68) (C_Base_dList_dList_Cons (mc0, cur))) mc2))) (match ((v_Vuna_dCompiler_dCommon_dtblLookup dtb__68) mc2) with
@@ -127,7 +126,7 @@ let rec v_Vuna_dCompiler_dElab_dTermination_dreverseAdjOf = (fun mc0 -> (match m
   | C_Base_dPair_dPair_Base_dPair_dPair (dtb__73, dtb__74) -> (((v_Vuna_dCompiler_dElab_dTermination_daddSrcs dtb__73) dtb__74) (v_Vuna_dCompiler_dElab_dTermination_dreverseAdjOf dtb__72))
   | _ -> failwith "DT: impossible branch"
 )
-  | C_Base_dList_dList_Nil -> (v_Vuna_dCompiler_dCommon_dtblEmpty ())
+  | C_Base_dList_dList_Nil -> v_Vuna_dCompiler_dCommon_dtblEmpty
   | _ -> failwith "DT: impossible branch"
 ))
 
@@ -201,7 +200,7 @@ let rec v_Vuna_dCompiler_dElab_dTermination_ddfsAll = (fun mc0 -> (fun mc1 -> (f
   | _ -> failwith "DT: impossible branch"
 ))))))
 
-let v_Vuna_dCompiler_dElab_dTermination_dpostOrder = (fun gT -> (fun g -> (fun nodes -> (((((v_Vuna_dCompiler_dElab_dTermination_ddfsAll nodes) ((v_Vuna_dCompiler_dElab_dTermination_dgraphFuel g) nodes)) gT) (v_Vuna_dCompiler_dCommon_dtblEmpty ())) C_Base_dList_dList_Nil))))
+let v_Vuna_dCompiler_dElab_dTermination_dpostOrder = (fun gT -> (fun g -> (fun nodes -> (((((v_Vuna_dCompiler_dElab_dTermination_ddfsAll nodes) ((v_Vuna_dCompiler_dElab_dTermination_dgraphFuel g) nodes)) gT) v_Vuna_dCompiler_dCommon_dtblEmpty) C_Base_dList_dList_Nil))))
 
 let rec v_Vuna_dCompiler_dElab_dTermination_dcollectComp = (fun stack -> (fun fuel -> (fun rg -> (fun assigned -> (fun comp -> (if ((bi_le_int fuel) 0) then (C_Base_dPair_dPair_Base_dPair_dPair (assigned, comp)) else (match stack with
   | C_Base_dList_dList_Nil -> (C_Base_dPair_dPair_Base_dPair_dPair (assigned, comp))
@@ -416,4 +415,4 @@ let rec v_Vuna_dCompiler_dElab_dTermination_dcheckSccs = (fun mc0 -> (fun mc1 ->
   | _ -> failwith "DT: impossible branch"
 )))))))
 
-let v_Vuna_dCompiler_dElab_dTermination_dcheckTerminationDecls = (fun decls -> ((fun defs -> ((fun ctors -> ((fun projs -> ((fun facts -> ((fun g -> ((fun gT -> ((fun nodes -> ((fun rgT -> ((fun fuel -> ((fun post -> ((fun comps -> ((((((v_Vuna_dCompiler_dElab_dTermination_dcheckSccs (v_Base_dList_dreverse comps)) defs) ctors) projs) gT) facts)) (((((v_Vuna_dCompiler_dElab_dTermination_dsccOf post) fuel) rgT) (v_Vuna_dCompiler_dCommon_dtblEmpty ())) C_Base_dList_dList_Nil))) (((v_Vuna_dCompiler_dElab_dTermination_dpostOrder gT) g) nodes))) ((v_Vuna_dCompiler_dElab_dTermination_dgraphFuel g) nodes))) (v_Vuna_dCompiler_dElab_dTermination_dreverseAdjOf g))) (v_Vuna_dCompiler_dElab_dTermination_dMeasure_ddefNames defs))) (v_Vuna_dCompiler_dElab_dTermination_dadjTblOf g))) (v_Vuna_dCompiler_dElab_dTermination_dcallGraph defs))) (((v_Vuna_dCompiler_dElab_dTermination_dMeasure_dcomputePosFacts defs) 16) C_Base_dList_dList_Nil))) (v_Vuna_dCompiler_dElab_dTermination_dMeasure_dprojectionsOf defs))) (v_Vuna_dCompiler_dElab_dTermination_dMeasure_dctorNamesOf decls))) (v_Vuna_dCompiler_dElab_dTermination_dMeasure_dgroupDefs decls)))
+let v_Vuna_dCompiler_dElab_dTermination_dcheckTerminationDecls = (fun decls -> ((fun defs -> ((fun ctors -> ((fun projs -> ((fun facts -> ((fun g -> ((fun gT -> ((fun nodes -> ((fun rgT -> ((fun fuel -> ((fun post -> ((fun comps -> ((((((v_Vuna_dCompiler_dElab_dTermination_dcheckSccs (v_Base_dList_dreverse comps)) defs) ctors) projs) gT) facts)) (((((v_Vuna_dCompiler_dElab_dTermination_dsccOf post) fuel) rgT) v_Vuna_dCompiler_dCommon_dtblEmpty) C_Base_dList_dList_Nil))) (((v_Vuna_dCompiler_dElab_dTermination_dpostOrder gT) g) nodes))) ((v_Vuna_dCompiler_dElab_dTermination_dgraphFuel g) nodes))) (v_Vuna_dCompiler_dElab_dTermination_dreverseAdjOf g))) (v_Vuna_dCompiler_dElab_dTermination_dMeasure_ddefNames defs))) (v_Vuna_dCompiler_dElab_dTermination_dadjTblOf g))) (v_Vuna_dCompiler_dElab_dTermination_dcallGraph defs))) (((v_Vuna_dCompiler_dElab_dTermination_dMeasure_dcomputePosFacts defs) 16) C_Base_dList_dList_Nil))) (v_Vuna_dCompiler_dElab_dTermination_dMeasure_dprojectionsOf defs))) (v_Vuna_dCompiler_dElab_dTermination_dMeasure_dctorNamesOf decls))) (v_Vuna_dCompiler_dElab_dTermination_dMeasure_dgroupDefs decls)))

@@ -1,5 +1,4 @@
 open Vuna_runtime
-open Vuna_builtins
 open Base_dPair
 open Base_dBool
 open Base_dMonad
@@ -15,20 +14,20 @@ open Vuna_dCompiler_dCommon
 open Vuna_dCompiler_dFrontend_dToml
 open Vuna_dCompiler_dFrontend_dManifest
 open Vuna_dCompiler_dPackages_dPkg
+open Vuna_dCompiler_dDebug
 open Base_dNat
 open Base_dVec
-open Vuna_dCompiler_dLoader_dDiagnostics
+open Vuna_dCompiler_dDiagnostics
 open Vuna_dCompiler_dFrontend_dAst
 open Vuna_dCompiler_dFrontend_dDiagnostics
 open Vuna_dCompiler_dFrontend_dLexer
 open Vuna_dCompiler_dFrontend_dParser_dSupport
 open Vuna_dCompiler_dFrontend_dParser
+open Vuna_dCompiler_dLoader_dDiagnostics
 open Vuna_dCompiler_dLoader_dModules
 open Vuna_dCompiler_dLoader_dResolve
 open Vuna_dCompiler_dLoader_dFlatten
 open Vuna_dCompiler_dLoader
-open Vuna_dCompiler_dDebug
-open Vuna_dCompiler_dDiagnostics
 open Vuna_dCompiler_dCore_dTerm
 open Vuna_dCompiler_dCore_dEval
 let v_Vuna_dCompiler_dCore_dConv_disNilList = (fun mc0 -> (match mc0 with
@@ -107,14 +106,14 @@ let rec v_Vuna_dCompiler_dCore_dConv_dconvFuel = (fun fuel -> (fun defs -> (fun 
   | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVMeta (dtb__37, dtb__38) -> (((((((v_Vuna_dCompiler_dCore_dConv_dsolveMetaFuel ((bi_sub fuel) 1)) defs) sols) depth) dtb__37) dtb__38) a2)
   | _ -> ((((((v_Vuna_dCompiler_dCore_dConv_dconvBothFuel ((bi_sub fuel) 1)) defs) sols) depth) a2) y2)
 )
-)) ((((v_Vuna_dCompiler_dCore_dEval_dforce defs) sols) (v_Vuna_dCompiler_dCore_dTerm_ddefaultFuel ())) b))) ((((v_Vuna_dCompiler_dCore_dEval_dforce defs) sols) (v_Vuna_dCompiler_dCore_dTerm_ddefaultFuel ())) a))))))))))
+)) ((((v_Vuna_dCompiler_dCore_dEval_dforce defs) sols) v_Vuna_dCompiler_dCore_dTerm_ddefaultFuel) b))) ((((v_Vuna_dCompiler_dCore_dEval_dforce defs) sols) v_Vuna_dCompiler_dCore_dTerm_ddefaultFuel) a))))))))))
 and v_Vuna_dCompiler_dCore_dConv_dconvBothFuel = (fun fuel -> (fun defs -> (fun sols -> (fun depth -> (fun a -> (fun b -> (if ((bi_le_int fuel) 0) then (C_Base_dResult_dResult_Base_dResult_dErr ("DT: internal: conv fuel exhausted")) else (match a with
   | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVType (dtb__39) -> (match b with
   | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVType (dtb__40) -> (if ((bi_eq_generic dtb__39) dtb__40) then (C_Base_dResult_dResult_Base_dResult_dOk (sols)) else (((v_Vuna_dCompiler_dCore_dConv_dmismatchAt depth) a) b))
   | _ -> (((v_Vuna_dCompiler_dCore_dConv_dmismatchAt depth) a) b)
 )
   | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVPi (dtb__41, dtb__42, dtb__43, dtb__44, dtb__45) -> (match b with
-  | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVPi (dtb__46, dtb__47, dtb__48, dtb__49, dtb__50) -> (if (((v_Base_dEq_deq (v_Base_dEq_dBase_dEq_dEq_uBase_dEq_dEq_uBool ())) dtb__42) dtb__47) then ((v_Base_dResult_dandThen ((((((v_Vuna_dCompiler_dCore_dConv_dconvFuel ((bi_sub fuel) 1)) defs) sols) depth) dtb__44) dtb__49)) (fun sols2 -> ((fun v -> ((((((v_Vuna_dCompiler_dCore_dConv_dconvFuel ((bi_sub fuel) 1)) defs) sols2) ((bi_add depth) 1)) ((v_Vuna_dCompiler_dCore_dEval_dapplyClosure dtb__45) v)) ((v_Vuna_dCompiler_dCore_dEval_dapplyClosure dtb__50) v))) ((v_Vuna_dCompiler_dCore_dEval_dfreshVar dtb__41) depth)))) else (((v_Vuna_dCompiler_dCore_dConv_dmismatchAt depth) a) b))
+  | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVPi (dtb__46, dtb__47, dtb__48, dtb__49, dtb__50) -> (if (((v_Base_dEq_deq v_Base_dEq_dBase_dEq_dEq_uBase_dEq_dEq_uBool) dtb__42) dtb__47) then ((v_Base_dResult_dandThen ((((((v_Vuna_dCompiler_dCore_dConv_dconvFuel ((bi_sub fuel) 1)) defs) sols) depth) dtb__44) dtb__49)) (fun sols2 -> ((fun v -> ((((((v_Vuna_dCompiler_dCore_dConv_dconvFuel ((bi_sub fuel) 1)) defs) sols2) ((bi_add depth) 1)) ((v_Vuna_dCompiler_dCore_dEval_dapplyClosure dtb__45) v)) ((v_Vuna_dCompiler_dCore_dEval_dapplyClosure dtb__50) v))) ((v_Vuna_dCompiler_dCore_dEval_dfreshVar dtb__41) depth)))) else (((v_Vuna_dCompiler_dCore_dConv_dmismatchAt depth) a) b))
   | _ -> (((v_Vuna_dCompiler_dCore_dConv_dmismatchAt depth) a) b)
 )
   | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVLam (dtb__51, dtb__52, dtb__53) -> (match b with
@@ -135,7 +134,7 @@ and v_Vuna_dCompiler_dCore_dConv_dconvBothFuel = (fun fuel -> (fun defs -> (fun 
   | _ -> (((v_Vuna_dCompiler_dCore_dConv_dmismatchAt depth) a) b)
 )
   | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVBool (dtb__66) -> (match b with
-  | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVBool (dtb__67) -> (if (((v_Base_dEq_deq (v_Base_dEq_dBase_dEq_dEq_uBase_dEq_dEq_uBool ())) dtb__66) dtb__67) then (C_Base_dResult_dResult_Base_dResult_dOk (sols)) else (((v_Vuna_dCompiler_dCore_dConv_dmismatchAt depth) a) b))
+  | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVBool (dtb__67) -> (if (((v_Base_dEq_deq v_Base_dEq_dBase_dEq_dEq_uBase_dEq_dEq_uBool) dtb__66) dtb__67) then (C_Base_dResult_dResult_Base_dResult_dOk (sols)) else (((v_Vuna_dCompiler_dCore_dConv_dmismatchAt depth) a) b))
   | _ -> (((v_Vuna_dCompiler_dCore_dConv_dmismatchAt depth) a) b)
 )
   | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVCon (dtb__68, dtb__69) -> (match b with

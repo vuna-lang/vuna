@@ -250,3 +250,42 @@
   docstring 生成错误码文档（`ROOT/docs/.generated/errors.md`，gitignored、幂等、勿手改）。
 - `test/run-tests.sh` 新增错误码段（分区 + 幂等）；错误码约定见
   `docs/reference/dt-tooling.md` 第 4 节。
+
+## M26：包上下文统一与单一 codegen 输出模型（2026-11）
+
+- **包上下文唯一**：`Pkg.PackageContext`（抽象，不导出构造子）+ `contextForFile`（向上找
+  最近 `vuna.toml` + 依赖闭包）/ `contextForDir`（工具/REPL 从 cwd 取上下文）/ `locateBase`；
+  删除环境根：`--root`、`rawRoot`、`List Root` / `Root` 公共构造子、`loadProgram*` 门面
+  API，以及 `Driver.Dt` / `Driver.Compile` 的单文件入口。Loader 的 import 可见性由
+  **导入方包的依赖闭包**决定（方向回归 `packages/95_cross_dep`）。
+- **无 manifest = base-only**：`locateBase` 先读 `VUNA_BASE`，否则按可执行文件相对布局
+  `<exeDir>/base`、`../base`、`../../base`、`../../../base` 探测，找不到时明确报出尝试
+  路径。为此新增内部原语 `prim_getenv` / `prim_getcwd` / `prim_execPath`（只有 `prim_*`
+  名、无公开别名；effectful、仅 TCB 三包可用；`/proc/self/exe` 为 Linux 假设，语义规范
+  归 M27）。ad-hoc 单文件与包内模块一样自动注入 Prelude（删除 `implicitPrelude` 对
+  `importerPkg==""` 的旁路）。
+- **两阶段 seed rotation**：先把新原语/包上下文以旧种子可编译的形式落地并 rotate，再在
+  装配统一、删除空 builtins unit 后二次 rotate；最终 seed **65 `.ml` / 66 文件**
+  （`nix/seed-count.txt`），`Vuna_builtins` unit 删除（A02）。
+- **唯一输出模型**：删除单文件 codegen（`Codegen.Program` → `Codegen.Assembly`，只保留
+  同一 `DtProgram` 的装配），`Codegen.Split` 成为唯一生成器（`Vuna_runtime.ml` + 各模块 +
+  `Main.ml` + `build.sh`，无 `.mli`）；`compile <entry|pkg-dir> OUTDIR` 只 codegen、OUTDIR
+  必填且成功静默；`build [--no-compile] [--out DIR] [PKG-DIR]` 默认 `<PKG-DIR>/.output`，之后
+  执行 `build.sh` → `DIR/bin/<包名>`；`--split` / `seed` 子命令删除并给可操作提示
+  （A01/A15）。
+- **装配与归属身份**：`checkResolvedModules` 同时校验 entryDecls（不带点、非空、不重复）
+  与每个 `DtDef` / `DtData` 的归属（C08）；Split 改用 `Elab.instanceName` /
+  `derivedInstName` + `Derive.instHead`，删除字符串归属表（A13）；入口 data/trait 可进
+  产物（`packages/05_entry_data`、`06_entry_trait`）。
+- **语义收口**：零参顶层定义改为求值一次（不再包 thunk、调用点不补 `()`；零参递归组里
+  非构造子 RHS 报 `CG_RecursiveValueDefinition`，A05）；Loader 门面死 API 与
+  `Driver.Split` 的 HM `lib+app` 生成器/死 writer 清理（A03/A04）。
+- **测试与快照**：corpus 建独立包上下文（`test/corpus/vuna.toml`，依赖 `vuna-base`），
+  模块夹具按需各自补 manifest；runner 删除 `BASE_ROOT` 与全部根参数、导出 `VUNA_BASE`、
+  compile 改为目录化 helper；新增第 38 段 API/产物快照（`test/snapshots/` +
+  `update.sh`，C21/E14/E15）与第 39 段包上下文回归；`09_multi_root` 改为同包多模块、
+  `89_ambiguous` → `packages/94_ambiguous_module`、`dt_root` → `dt_ad_hoc`。
+- **LSP 边界（如实记录）**：本次未改 LSP 加载语义——仍 parse 级、含 `import` 的文件跳过
+  类型检查；D13/M30 会把 LSP 接到与 CLI 相同的 `contextForFile`。
+- **基线**：seed 65 `.ml` / 66 文件、`nix flake check` 全绿（测试断言数与套件
+  耗时见 [reference/testing.md](reference/testing.md)）。

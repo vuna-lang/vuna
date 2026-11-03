@@ -1,11 +1,14 @@
-module Vuna.Interp (interpretExpr, interpretFile, interpretFileIn) where
+module Vuna.Interp (interpretExpr, interpretFile) where
 
 -- Vuna.Interp：解释器 facade（工具链侧；编译入口见 Vuna.Compiler.Driver.Compile）。
 --
--- M23 起 `vuna interp` 的语义是**精化后的核心求值**：按 Loader 加载（单文件 /
--- `import` / `--root`），经 DT 精化器检查，再用 Core 的 NbE 求 `main` 的值。
--- 「不检查直接执行」的调试语义已取消（roadmap 决策变更）；因此子句元数、类型、
--- 覆盖性等错误都在求值前报出，错误位置与 `check` 一致。
+-- M23 起 `vuna interp` 的语义是**精化后的核心求值**：按包上下文（最近 vuna.toml
+-- 的依赖闭包；无 manifest 时 base-only）加载，经 DT 精化器检查，再用 Core 的 NbE 求
+-- `main` 的值。「不检查直接执行」的调试语义已取消（roadmap 决策变更）；因此子句元数、
+-- 类型、覆盖性等错误都在求值前报出，错误位置与 `check` 一致。
+--
+-- M26：入口吃 `PackageContext`（不再有环境根 / `List Root`）；调用方（CLI / REPL /
+-- test runner）负责从文件、cwd 或包构造上下文。
 --
 -- 求值是**纯**的：不执行效果。`main : IO a` 只对纯动作（例如 `pure n`）能求出值；
 -- 真正带 `print` / 文件效果的 `main` 请用 `compile` + 运行产物（见 dt.md）。
@@ -14,19 +17,14 @@ import Vuna.Compiler.Common
 import Vuna.Compiler.Packages.Pkg
 import Vuna.Compiler.Driver.Dt
 
-interpretFile : List Root -> String -> String
-interpretFile roots entry = interpretFileIn "" roots entry
-
--- `entryPkg` 只服务包模式的 HM 解释器；DT 核心求值按 roots 加载，忽略包名。
--- 保留参数是为了让 CLI / test runner 的调用形状与 M24 前一致。
-interpretFileIn : String -> List Root -> String -> String
-interpretFileIn entryPkg roots entry = case dtEvalFile (map rootDir roots) entry of
+interpretFile : PackageContext -> String -> String
+interpretFile ctx entry = case dtEvalFile ctx entry of
   Err e => "error: " ++ e
   Ok output => output
 
 -- REPL 用：program（imports + 定义，定义必须已写签名）与表达式都在内存里求值，
 -- 不需要临时文件；表达式类型由 DT 精化器推断，值用 showValue 展示。
-interpretExpr : List Root -> String -> String -> String
-interpretExpr roots program expr = case dtEvalExpr (map rootDir roots) program expr of
+interpretExpr : PackageContext -> String -> String -> String
+interpretExpr ctx program expr = case dtEvalExpr ctx program expr of
   Err e => "error: " ++ e
   Ok output => output

@@ -1,5 +1,4 @@
 open Vuna_runtime
-open Vuna_builtins
 open Base_dPair
 open Base_dBool
 open Base_dMonad
@@ -15,6 +14,7 @@ open Vuna_dCompiler_dCommon
 open Vuna_dCompiler_dFrontend_dToml
 open Vuna_dCompiler_dFrontend_dManifest
 open Vuna_dCompiler_dPackages_dPkg
+open Vuna_dCompiler_dDebug
 open Base_dNat
 type 'a0 t_Base_dVec_dVec = C_Base_dVec_dVec_Base_dVec_dVNil | C_Base_dVec_dVec_Base_dVec_dVCons of ('a0) * ('a0 t_Base_dVec_dVec)
 

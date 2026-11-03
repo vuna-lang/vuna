@@ -1,4 +1,4 @@
-module Vuna.Compiler.Elab.Derive (expandDerivings) where
+module Vuna.Compiler.Elab.Derive (expandDerivings, instHead) where
 
 -- Vuna.Compiler.Elab.Derive：`deriving` 的**实例生成**（M19；M24.7 改为库里的 trait）。
 --

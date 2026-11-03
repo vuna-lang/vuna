@@ -1,0 +1,3 @@
+-- 同包 lib/ 模块：验证包上下文的 lib 模块根命中。
+double : Int -> Int
+double x = x + x

@@ -1,6 +1,7 @@
 module Vuna.Compiler.Elab
   ( Data.eraseIndexMask
   , Data.indexErasureCandidates
+  , Derive.instHead
   , Driver.DtGoalInfo
   , Driver.dtEvalExprIn
   , Driver.dtGoalInfoCtx
@@ -60,3 +61,4 @@ import Vuna.Compiler.Elab.Meta as Meta
 import Vuna.Compiler.Elab.Data as Data
 import Vuna.Compiler.Elab.Trait as Trait
 import Vuna.Compiler.Elab.Driver as Driver
+import Vuna.Compiler.Elab.Derive as Derive

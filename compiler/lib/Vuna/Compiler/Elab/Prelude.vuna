@@ -184,6 +184,17 @@ primExitTy = TPi "_" False Rig1 intTy intTy
 primRunInTy : Term
 primRunInTy = fun2 strTy (listOfTy strTy) intTy
 
+-- M26：base 定位原语。只有 prim_* 名、不进 preludeNames；`prim_getenv` 缺失时返回 ""，
+-- `prim_getcwd` / `prim_execPath` 是 0 参值（与 `prim_getArgs` 同形）。
+primGetenvTy : Term
+primGetenvTy = TPi "_" False Rig1 strTy strTy
+
+primGetcwdTy : Term
+primGetcwdTy = strTy
+
+primExecPathTy : Term
+primExecPathTy = strTy
+
 preludeGlobals : List (Pair String Term)
 -- Bool 只留**类型**别名：内建 trait（Show/Eq/Ord）签名与 `if` 判据要用它；
 -- `True` / `False` 值构造子已去桩（权威定义在 `Base.Bool`），单文件模式需自声明
@@ -246,7 +257,10 @@ preludeGlobals =
     Pair "prim_fileMtime" primFileMtimeTy,
     Pair "prim_fileSize" primFileSizeTy,
     Pair "prim_exit" primExitTy,
-    Pair "prim_runIn" primRunInTy
+    Pair "prim_runIn" primRunInTy,
+    Pair "prim_getenv" primGetenvTy,
+    Pair "prim_getcwd" primGetcwdTy,
+    Pair "prim_execPath" primExecPathTy
   ]
 
 -- 只认内建可特化类型（`Int` / `String`）；其它类型在 DT 里走 `Eq` 实例。

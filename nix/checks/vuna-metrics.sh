@@ -4,13 +4,13 @@
 # 由 nix/checks/default.nix 的 mkCheck 调用：cwd 是已暂存的工作树，
 # $1 是输出目录，$VUNA 由 Nix 注入。
 #
-# M24：`compile --package` 已删除，指标口径改为 `vuna seed`（DT 逐模块 split 生成
-# compiler 包闭包），聚合 OUT/self 下全部 .ml。
+# M24：`compile --package` 已删除，指标口径改为 compiler 包的 DT 逐模块 split 生成。
+# M26：包级输出只有 split 一种模型（`build --no-compile --out`），聚合 OUT/self 下全部 .ml。
 set -eu
 
 OUT=${1:?usage: vuna-metrics.sh OUT}
 : "${VUNA:?VUNA 未设置}"
 
-"$VUNA" seed "$OUT/self" compiler
+"$VUNA" build --no-compile --out "$OUT/self" compiler
 sh nix/metrics.sh "$OUT/self" nix/metrics.budget >"$OUT/metrics.txt"
 cat "$OUT/metrics.txt"

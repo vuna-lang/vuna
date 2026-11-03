@@ -552,9 +552,11 @@ abnormalExit state =
 lspFuelBound : Int
 lspFuelBound = 1073741824
 
-runLsp : Int
-runLsp = lspLoop lspFuelBound "" (logTo "starting" (LspState [] False []))
+-- A05：零参顶层定义在模块初始化时求值，所以「动作」必须函数化。
+-- runLsp 是读 stdin 的 LSP 帧循环：若留成零参值，任何子命令启动都会跑它。
+runLsp : Int -> Int
+runLsp _ = lspLoop lspFuelBound "" (logTo "starting" (LspState [] False []))
 
 -- CLI 入口：与其它工具命令一致，返回退出码（由 Vuna.Cli 插入分发）。
 runLspTool : List String -> Int
-runLspTool args = runLsp
+runLspTool args = runLsp 0

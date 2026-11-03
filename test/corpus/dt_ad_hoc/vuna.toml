@@ -1,0 +1,10 @@
+# M26：原 `corpus/dt_root`（多根夹具）迁移为包上下文夹具。
+# Main.vuna 是包根上的 **ad-hoc 单文件入口**（不在 lib/app 里），
+# 依赖模块走同包 lib/ 模块根——不再需要 `--root dt_root`。
+[package]
+name = "fix-dt-ad-hoc"
+version = "0.1.0"
+edition = "2026"
+
+[dependencies]
+vuna-base = "../../../base"

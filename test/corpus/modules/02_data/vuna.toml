@@ -1,0 +1,9 @@
+# M26 夹具隔离：本夹具自定义 `data List`（Nil/Cons）验证跨模块 data。
+# 若依赖 vuna-base，隐式 Prelude 会把 `Base.List` 的 Nil/Cons 带进程序；
+# M26 仍按「全局构造子名」解析 Nil/Cons（debt A09，M27 关闭），本地构造子会被
+# 解析到 Base.List 上而报类型不匹配。因此本包**故意**不依赖 vuna-base（无 Prelude
+# 注入），保持夹具原始语义。
+[package]
+name = "fix-02-data"
+version = "0.1.0"
+edition = "2026"

@@ -1,0 +1,10 @@
+# M26：目录型夹具的独立包上下文（只依赖 vuna-base）。
+# 夹具在 corpus 包内，但 modules/records/traits/type_modules 每个目录是一个独立包：
+# 入口 app/Main.vuna + lib/ 模块根，base 经 [dependencies] 进入可见性闭包。
+[package]
+name = "fix-11-abstract-type"
+version = "0.1.0"
+edition = "2026"
+
+[dependencies]
+vuna-base = "../../../../base"

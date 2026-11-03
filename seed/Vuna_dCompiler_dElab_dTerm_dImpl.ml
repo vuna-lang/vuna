@@ -1,5 +1,4 @@
 open Vuna_runtime
-open Vuna_builtins
 open Base_dPair
 open Base_dBool
 open Base_dMonad
@@ -15,20 +14,20 @@ open Vuna_dCompiler_dCommon
 open Vuna_dCompiler_dFrontend_dToml
 open Vuna_dCompiler_dFrontend_dManifest
 open Vuna_dCompiler_dPackages_dPkg
+open Vuna_dCompiler_dDebug
 open Base_dNat
 open Base_dVec
-open Vuna_dCompiler_dLoader_dDiagnostics
+open Vuna_dCompiler_dDiagnostics
 open Vuna_dCompiler_dFrontend_dAst
 open Vuna_dCompiler_dFrontend_dDiagnostics
 open Vuna_dCompiler_dFrontend_dLexer
 open Vuna_dCompiler_dFrontend_dParser_dSupport
 open Vuna_dCompiler_dFrontend_dParser
+open Vuna_dCompiler_dLoader_dDiagnostics
 open Vuna_dCompiler_dLoader_dModules
 open Vuna_dCompiler_dLoader_dResolve
 open Vuna_dCompiler_dLoader_dFlatten
 open Vuna_dCompiler_dLoader
-open Vuna_dCompiler_dDebug
-open Vuna_dCompiler_dDiagnostics
 open Vuna_dCompiler_dCore_dTerm
 open Vuna_dCompiler_dCore_dEval
 open Vuna_dCompiler_dCore_dConv
@@ -46,14 +45,14 @@ let rec v_Vuna_dCompiler_dElab_dTerm_dImpl_delabConAltFuel = (fun fuel -> (fun f
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__0) -> ((v_Base_dResult_dandThen (((v_Vuna_dCompiler_dElab_dCase_dbindCtorTele ctx) (v_Vuna_dCompiler_dElab_dTypes_ddtCtorType dtb__0)) args)) (fun p -> (match p with
   | C_Base_dPair_dPair_Base_dPair_dPair (dtb__1, dtb__2) -> (match dtb__2 with
   | C_Base_dPair_dPair_Base_dPair_dPair (dtb__3, dtb__4) -> (match dtb__4 with
-  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__5, dtb__6) -> (if (v_Vuna_dCompiler_dElab_dMeta_dnonEmpty dtb__6) then (((v_Vuna_dCompiler_dDiagnostics_dtcErr1 psp) (C_Vuna_dCompiler_dDiagnostics_dTcErr_Vuna_dCompiler_dDiagnostics_dBranchTooManyArgs (cname))) cname) else ((v_Base_dResult_dandThen ((((((v_Vuna_dCompiler_dElab_dCase_dunifyIdxList ec) C_Base_dList_dList_Nil) (v_Vuna_dCompiler_dElab_dTypes_dctxDepth dtb__1)) (v_Vuna_dCompiler_dCore_dTerm_ddefaultFuel ())) ((v_Vuna_dCompiler_dElab_dCase_dctorResultValsIn dtb__1) dtb__0)) ((v_Base_dList_dmap ((v_Vuna_dCompiler_dElab_dTypes_drefineValue C_Base_dList_dList_Nil) (v_Vuna_dCompiler_dCore_dTerm_ddefaultFuel ()))) idxs))) (fun refsIdx -> ((v_Base_dResult_dandThen (((((v_Vuna_dCompiler_dElab_dCase_dreflectScrutinee ec) (v_Vuna_dCompiler_dElab_dTypes_dctxDepth dtb__1)) refsIdx) ((v_Vuna_dCompiler_dElab_dCase_dctorValueIn dtb__1) dtb__0)) scrutVal)) (fun refs2 -> ((fun refinedExpected -> ((fun branchCtx2 -> ((fun body2 -> (match ((((((v_Vuna_dCompiler_dElab_dTerm_dImpl_dcheckEFuel ((bi_sub fuel) 1)) globals) branchCtx2) ec) body2) refinedExpected) with
+  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__5, dtb__6) -> (if (v_Vuna_dCompiler_dElab_dMeta_dnonEmpty dtb__6) then (((v_Vuna_dCompiler_dDiagnostics_dtcErr1 psp) (C_Vuna_dCompiler_dDiagnostics_dTcErr_Vuna_dCompiler_dDiagnostics_dBranchTooManyArgs (cname))) cname) else ((v_Base_dResult_dandThen ((((((v_Vuna_dCompiler_dElab_dCase_dunifyIdxList ec) C_Base_dList_dList_Nil) (v_Vuna_dCompiler_dElab_dTypes_dctxDepth dtb__1)) v_Vuna_dCompiler_dCore_dTerm_ddefaultFuel) ((v_Vuna_dCompiler_dElab_dCase_dctorResultValsIn dtb__1) dtb__0)) ((v_Base_dList_dmap ((v_Vuna_dCompiler_dElab_dTypes_drefineValue C_Base_dList_dList_Nil) v_Vuna_dCompiler_dCore_dTerm_ddefaultFuel)) idxs))) (fun refsIdx -> ((v_Base_dResult_dandThen (((((v_Vuna_dCompiler_dElab_dCase_dreflectScrutinee ec) (v_Vuna_dCompiler_dElab_dTypes_dctxDepth dtb__1)) refsIdx) ((v_Vuna_dCompiler_dElab_dCase_dctorValueIn dtb__1) dtb__0)) scrutVal)) (fun refs2 -> ((fun refinedExpected -> ((fun branchCtx2 -> ((fun body2 -> (match ((((((v_Vuna_dCompiler_dElab_dTerm_dImpl_dcheckEFuel ((bi_sub fuel) 1)) globals) branchCtx2) ec) body2) refinedExpected) with
   | C_Base_dResult_dResult_Base_dResult_dErr (dtb__7) -> (if ((v_Vuna_dCompiler_dElab_dCase_dctxHasEmptyBinder ec) branchCtx2) then ((v_Vuna_dCompiler_dDiagnostics_dtcErr0 psp) C_Vuna_dCompiler_dDiagnostics_dTcErr_Vuna_dCompiler_dDiagnostics_dImpossibleBranchEmptyCtx) else (C_Base_dResult_dResult_Base_dResult_dErr (dtb__7)))
   | C_Base_dResult_dResult_Base_dResult_dOk (dtb__8) -> (match dtb__8 with
   | C_Base_dPair_dPair_Base_dPair_dPair (dtb__9, dtb__10) -> (C_Base_dResult_dResult_Base_dResult_dOk ((C_Base_dPair_dPair_Base_dPair_dPair ((C_Vuna_dCompiler_dCore_dTerm_dCaseAlt_Vuna_dCompiler_dCore_dTerm_dCaseAlt (cname, dtb__3, dtb__9)), dtb__10))))
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
-)) (((v_Vuna_dCompiler_dElab_dCase_dfoldPending fb) dtb__5) body))) ((v_Vuna_dCompiler_dElab_dTypes_dctxRefine dtb__1) refs2))) (((v_Vuna_dCompiler_dElab_dTypes_drefineValue refs2) (v_Vuna_dCompiler_dCore_dTerm_ddefaultFuel ())) expected)))))))
+)) (((v_Vuna_dCompiler_dElab_dCase_dfoldPending fb) dtb__5) body))) ((v_Vuna_dCompiler_dElab_dTypes_dctxRefine dtb__1) refs2))) (((v_Vuna_dCompiler_dElab_dTypes_drefineValue refs2) v_Vuna_dCompiler_dCore_dTerm_ddefaultFuel) expected)))))))
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
@@ -209,7 +208,7 @@ and v_Vuna_dCompiler_dElab_dTerm_dImpl_dcheckCondBoolFuel = (fun fuel -> (fun gl
   | _ -> failwith "DT: impossible branch"
 ))))))))
 and v_Vuna_dCompiler_dElab_dTerm_dImpl_dinferEFuel = (fun fuel -> (fun globals -> (fun ctx -> (fun ec -> (fun expr -> (if ((bi_le_int fuel) 0) then (C_Base_dResult_dResult_Base_dResult_dErr ("DT: internal: inference fuel exhausted")) else (match expr with
-  | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEVar (dtb__98, dtb__99) -> (if ((bi_eq_str dtb__98) "Type") then (C_Base_dResult_dResult_Base_dResult_dOk ((C_Base_dPair_dPair_Base_dPair_dPair ((C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTType ((v_Vuna_dCompiler_dCore_dTerm_dlevelZero ()))), (C_Base_dPair_dPair_Base_dPair_dPair ((C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVType ((v_Vuna_dCompiler_dCore_dTerm_dlevelSucc (v_Vuna_dCompiler_dCore_dTerm_dlevelZero ())))), ec)))))) else (if ((bi_eq_str dtb__98) "_") then ((v_Vuna_dCompiler_dDiagnostics_dtcErr0 dtb__99) C_Vuna_dCompiler_dDiagnostics_dTcErr_Vuna_dCompiler_dDiagnostics_dHoleNoExpectedType) else (((((v_Vuna_dCompiler_dElab_dTerm_dSupport_dinferVarRef globals) ctx) ec) dtb__98) dtb__99)))
+  | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEVar (dtb__98, dtb__99) -> (if ((bi_eq_str dtb__98) "Type") then (C_Base_dResult_dResult_Base_dResult_dOk ((C_Base_dPair_dPair_Base_dPair_dPair ((C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTType (v_Vuna_dCompiler_dCore_dTerm_dlevelZero)), (C_Base_dPair_dPair_Base_dPair_dPair ((C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVType ((v_Vuna_dCompiler_dCore_dTerm_dlevelSucc v_Vuna_dCompiler_dCore_dTerm_dlevelZero))), ec)))))) else (if ((bi_eq_str dtb__98) "_") then ((v_Vuna_dCompiler_dDiagnostics_dtcErr0 dtb__99) C_Vuna_dCompiler_dDiagnostics_dTcErr_Vuna_dCompiler_dDiagnostics_dHoleNoExpectedType) else (((((v_Vuna_dCompiler_dElab_dTerm_dSupport_dinferVarRef globals) ctx) ec) dtb__98) dtb__99)))
   | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEInt (dtb__100, dtb__101) -> (C_Base_dResult_dResult_Base_dResult_dOk ((C_Base_dPair_dPair_Base_dPair_dPair ((C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTInt (dtb__100)), (C_Base_dPair_dPair_Base_dPair_dPair ((C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVNeutral ((C_Vuna_dCompiler_dCore_dTerm_dNeutral_Vuna_dCompiler_dCore_dTerm_dNGlobal ("Int", C_Base_dList_dList_Nil)))), ec))))))
   | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEStr (dtb__102, dtb__103) -> (C_Base_dResult_dResult_Base_dResult_dOk ((C_Base_dPair_dPair_Base_dPair_dPair ((C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTStr (dtb__102)), (C_Base_dPair_dPair_Base_dPair_dPair ((C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVNeutral ((C_Vuna_dCompiler_dCore_dTerm_dNeutral_Vuna_dCompiler_dCore_dTerm_dNGlobal ("String", C_Base_dList_dList_Nil)))), ec))))))
   | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEPi (dtb__104, dtb__105, dtb__106, dtb__107, dtb__108) -> (((((((((v_Vuna_dCompiler_dElab_dTerm_dImpl_dinferPiFuel ((bi_sub fuel) 1)) globals) ctx) ec) dtb__104) dtb__105) dtb__106) dtb__107) dtb__108)

@@ -55,7 +55,7 @@ modules = [
   "Vuna.Compiler.Codegen.Decl",
   "Vuna.Compiler.Codegen.Erase",
   "Vuna.Compiler.Codegen.Term",
-  "Vuna.Compiler.Codegen.Program",
+  "Vuna.Compiler.Codegen.Assembly",
   "Vuna.Compiler.Codegen.Split",
   "Vuna.Compiler.Driver.Split",
   "Vuna.Compiler.Driver.Dt",

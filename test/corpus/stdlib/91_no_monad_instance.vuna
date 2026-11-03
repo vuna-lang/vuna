@@ -1,0 +1,13 @@
+-- M26 反例：显式 `import Base.Monad` 只让 trait/方法可见，不提供实例。
+-- `data Box a` 没有 `Monad` 实例 → do 的实例字典解不出来。
+-- （旧夹具断言「没有 import Base.Monad 时 bind 不可见」；M26 起 Prelude 恒注入，
+--  该错误已不可达，因此负例改为「缺实例」。覆盖由 monad/90、stdlib/92/93 共同承担。）
+import Base.Monad
+
+data Box a : Type where
+  MkBox : a -> Box a
+
+main : Box Int
+main = do
+  x <- MkBox 1
+  pure (x + 1)

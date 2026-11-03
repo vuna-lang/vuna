@@ -65,18 +65,21 @@ f x = g x where
 
 ## 模块系统
 
-- **文件 = 模块**，模块根默认 `lib/`；`--root` 可重复，按出现顺序组成模块根列表
-  （如 `--root lib --root app`），`compiler/lib/Vuna/Compiler/Frontend/Parser.vuna` ⇔
-  模块 `Vuna.Compiler.Frontend.Parser`；
-- 模块按根顺序查找；同名模块出现在多个根时是硬错误（不静默覆盖）；
+- **文件 = 模块**，加载语义由**包上下文**唯一决定：文件向上找最近的 `vuna.toml`，可用
+  模块根 = 该包 `lib/` + 依赖闭包各包的 `lib/`，`compiler/lib/Vuna/Compiler/Frontend/Parser.vuna`
+  ⇔ 模块 `Vuna.Compiler.Frontend.Parser`；
+- **无 manifest 的文件只有 base 上下文**：base 由 `VUNA_BASE` 覆盖，否则按可执行文件
+  相对布局探测 `<exeDir>/base`、`<exeDir>/../base`、`<exeDir>/../../base`、
+  `<exeDir>/../../../base`，都找不到时明确报错；这类 ad-hoc 单文件与包内模块一样
+  **自动导入 `Prelude`**（显式 `import` 仍可用）；
+- 模块按可用根查找；同名模块出现在多个根时是硬错误（不静默覆盖）；
 - 路径段必须匹配 `[A-Z][A-Za-z0-9_]*`，路径/文件名与模块名**精确一致**，没有大小写映射；
-- 入口文件可以在模块根外（如 `app/Main.vuna`），它本身不是模块，不能写模块头；
+- 入口文件可以在模块根外（如 `app/Main.vuna`），它本身不是模块，不能写模块头；目录入口
+  （`check/build <dir>`）只认该目录自己的 `vuna.toml`，**不向上找**；
 - 包模式下模块根由 `vuna.toml` 解析：本包 `lib/` + 依赖包 `lib/`（按依赖 DAG 排序，
   跨包只看得见依赖包 `[export]` 里的模块）；`app/` 是纯入口目录，不再作为模块根；
-  包模式下每个模块（入口文件除外）**自动导入 `Prelude`**（依赖包 `base` 的顶层模块），
+  包内每个模块（入口文件除外）**自动导入 `Prelude`**（依赖包 `base` 的顶层模块），
   显式 `import Prelude` 时不再重复注入，Prelude 自身不注入；
-- 原始文件模式下 `--root` 可重复（如标准库夹具用 `--root ../base/lib`），且**不自动
-  导入 Prelude**（只按显式 import 解析）；
 - `import` 只能在文件顶部，是**直接依赖**；循环导入、重复 import、重复 alias 都是硬错误；
 - import 的四种形式：
 
@@ -143,4 +146,4 @@ f x = g x where
   这是受控例外，只有显式写出的名字经 A 重新可见；
 - loader 解析 import 图、做名字解析后 **flatten** 成一个 program（内部名字带模块前缀，
   如 `Vuna.Compiler.Frontend.Parser.parseSource`），解释器与 codegen 复用同一份实现；`show` 只显示
-  最后一段，所以输出与单文件程序一致。
+  最后一段，所以输出与包内程序一致。

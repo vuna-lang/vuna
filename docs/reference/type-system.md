@@ -68,7 +68,7 @@
   ```
 
 - 上面的 `main : String` 是 `vuna test` / 纯 `vuna interp` 的调试约定；可执行包
-  （`vuna build` / `--split`）要求 `main : IO a`（M12.6）。`vuna interp` 走 DT 核心
+  （`vuna build`）要求 `main : IO a`（M12.6）。`vuna interp` 走 DT 核心
   求值，任何 `main : IO a` 一律报错（见 [limits.md](limits.md)）。
 - trait 只支持单参数；default 实例按 (trait, 类型) 全局唯一（重复报
   `duplicate instance`，含 `deriving` 生成的实例）；
@@ -79,13 +79,13 @@
   `duplicate instance`；实例里出现 trait 未声明的方法报
   （`instance has unknown method`）；
 - **`Show` / `Eq` / `Ord` 是库里的普通 trait（M24.7）**：声明、方法投影与
-  `Int` / `String` / `Bool` 实例都在 `Base.Show` / `Base.Eq` / `Base.Ord`，包模式下随
-  `Prelude` 自动导入；单文件 / 裸 `--root` 模式要显式 `import Prelude`（并
-  `--root <repo>/base/lib`）。`show` / `eq` / `lt` 等短名不再由编译器放行，必须经
+  `Int` / `String` / `Bool` 实例都在 `Base.Show` / `Base.Eq` / `Base.Ord`，包上下文内所有
+  源文件（含 ad-hoc 单文件）随自动注入的 `Prelude` 可用；显式 `import` 仍可覆盖/补充。
+  `show` / `eq` / `lt` 等短名不再由编译器放行，必须经
   import 解析。`deriving` 的展开用 Loader 解析后的完整类名（如 `Base.Show.Show`）。
 - **结构回退**：`==` / `/=` 在**具体类型**且没有可用 `Eq` 实例时退回运行时结构比较
-  （`bi_eq_generic`，核心求值器/擦除 codegen 同一语义）；程序里没有 `Eq` 类
-  （单文件 / 未 import）时同样退回。比较发生在**刚性类型变量**上时保持 M22 语义——
+  （`bi_eq_generic`，核心求值器/擦除 codegen 同一语义）；程序里没有 `Eq` 类可见
+  （只可能发生在显式绕开 `Prelude` 的上下文）时同样退回。比较发生在**刚性类型变量**上时保持 M22 语义——
   搜不到实例时提升成隐式字典参数（`deferEqDict`），实例（含 `deriving (Eq)` 生成的）
   仍优先。`<` / `<=` / `>` / `>=` 对 `Int` 做运行时特化、`String`/`Bool` 走泛型
   运行时，其它具体类型（含用户 `data`）走 `Ord` 字典、无 `Ord` 类时退回泛型比较。

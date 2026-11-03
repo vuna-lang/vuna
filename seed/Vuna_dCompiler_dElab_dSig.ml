@@ -1,5 +1,4 @@
 open Vuna_runtime
-open Vuna_builtins
 open Base_dPair
 open Base_dBool
 open Base_dMonad
@@ -15,27 +14,27 @@ open Vuna_dCompiler_dCommon
 open Vuna_dCompiler_dFrontend_dToml
 open Vuna_dCompiler_dFrontend_dManifest
 open Vuna_dCompiler_dPackages_dPkg
+open Vuna_dCompiler_dDebug
 open Base_dNat
 open Base_dVec
-open Vuna_dCompiler_dLoader_dDiagnostics
+open Vuna_dCompiler_dDiagnostics
 open Vuna_dCompiler_dFrontend_dAst
 open Vuna_dCompiler_dFrontend_dDiagnostics
 open Vuna_dCompiler_dFrontend_dLexer
 open Vuna_dCompiler_dFrontend_dParser_dSupport
 open Vuna_dCompiler_dFrontend_dParser
+open Vuna_dCompiler_dLoader_dDiagnostics
 open Vuna_dCompiler_dLoader_dModules
 open Vuna_dCompiler_dLoader_dResolve
 open Vuna_dCompiler_dLoader_dFlatten
 open Vuna_dCompiler_dLoader
-open Vuna_dCompiler_dDebug
-open Vuna_dCompiler_dDiagnostics
 open Vuna_dCompiler_dCore_dTerm
 open Vuna_dCompiler_dCore_dEval
 open Vuna_dCompiler_dCore_dConv
 open Vuna_dCompiler_dCore
 open Vuna_dCompiler_dElab_dTypes
 open Vuna_dCompiler_dElab_dPrelude
-let rec v_Vuna_dCompiler_dElab_dSig_darityFun = (fun n -> (fun res -> (if ((bi_le_int n) 0) then res else (C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTPi ("_", false, C_Vuna_dCompiler_dCore_dTerm_dRig_Vuna_dCompiler_dCore_dTerm_dRig1, (C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTType ((v_Vuna_dCompiler_dCore_dTerm_dlevelZero ()))), ((v_Vuna_dCompiler_dElab_dSig_darityFun ((bi_sub n) 1)) res))))))
+let rec v_Vuna_dCompiler_dElab_dSig_darityFun = (fun n -> (fun res -> (if ((bi_le_int n) 0) then res else (C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTPi ("_", false, C_Vuna_dCompiler_dCore_dTerm_dRig_Vuna_dCompiler_dCore_dTerm_dRig1, (C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTType (v_Vuna_dCompiler_dCore_dTerm_dlevelZero)), ((v_Vuna_dCompiler_dElab_dSig_darityFun ((bi_sub n) 1)) res))))))
 
 let rec v_Vuna_dCompiler_dElab_dSig_dmaxIntList = (fun mc0 -> (match mc0 with
   | C_Base_dList_dList_Cons (dtb__0, dtb__1) -> (if ((bi_ge_int dtb__0) (v_Vuna_dCompiler_dElab_dSig_dmaxIntList dtb__1)) then dtb__0 else (v_Vuna_dCompiler_dElab_dSig_dmaxIntList dtb__1))
@@ -62,7 +61,7 @@ let rec v_Vuna_dCompiler_dElab_dSig_dexprMaxAppArity = (fun pname -> (fun e -> (
 
 let v_Vuna_dCompiler_dElab_dSig_dmethodMaxAppArity = (fun pname -> (fun methods -> (v_Vuna_dCompiler_dElab_dSig_dmaxIntList ((v_Base_dList_dmap (fun m -> ((v_Vuna_dCompiler_dElab_dSig_dexprMaxAppArity pname) (v_Base_dPair_dsecondOf m)))) methods))))
 
-let v_Vuna_dCompiler_dElab_dSig_dclassParamKind = (fun pname -> (fun methods -> ((v_Vuna_dCompiler_dElab_dSig_darityFun ((v_Vuna_dCompiler_dElab_dSig_dmethodMaxAppArity pname) methods)) (C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTType ((v_Vuna_dCompiler_dCore_dTerm_dlevelZero ()))))))
+let v_Vuna_dCompiler_dElab_dSig_dclassParamKind = (fun pname -> (fun methods -> ((v_Vuna_dCompiler_dElab_dSig_darityFun ((v_Vuna_dCompiler_dElab_dSig_dmethodMaxAppArity pname) methods)) (C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTType (v_Vuna_dCompiler_dCore_dTerm_dlevelZero)))))
 
 let rec v_Vuna_dCompiler_dElab_dSig_dmethodArgRigsOfGo = (fun rigOf -> (fun ty -> (fun env -> (match ty with
   | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTPi (dtb__38, dtb__39, dtb__40, dtb__41, dtb__42) -> ((fun domVal -> ((fun v -> (C_Base_dList_dList_Cons (((rigOf dtb__39) domVal), (((v_Vuna_dCompiler_dElab_dSig_dmethodArgRigsOfGo rigOf) dtb__42) (C_Base_dList_dList_Cons (v, env)))))) (C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVNeutral ((C_Vuna_dCompiler_dCore_dTerm_dNeutral_Vuna_dCompiler_dCore_dTerm_dNVar (dtb__38, (v_Base_dList_dlength env), C_Base_dList_dList_Nil)))))) ((v_Vuna_dCompiler_dCore_dEval_deval env) dtb__41))
@@ -149,9 +148,9 @@ let rec v_Vuna_dCompiler_dElab_dSig_dkeepOutTbl = (fun mc0 -> (fun mc1 -> (match
 
 let v_Vuna_dCompiler_dElab_dSig_dquantifyTopSig = (fun banned -> (fun ty -> (fun sp -> ((((v_Vuna_dCompiler_dElab_dSig_dquantifyTopKinds ((v_Vuna_dCompiler_dElab_dSig_dkeepOutTbl banned) ((v_Vuna_dCompiler_dElab_dSig_dfreeNames (fun n -> false)) ty))) ty) ty) sp))))
 
-let v_Vuna_dCompiler_dElab_dSig_dtopPreludeNames = fun () -> (C_Base_dList_dList_Cons ("Int", (C_Base_dList_dList_Cons ("String", (C_Base_dList_dList_Cons ("+", (C_Base_dList_dList_Cons ("-", (C_Base_dList_dList_Cons ("*", (C_Base_dList_dList_Cons ("/", (C_Base_dList_dList_Cons ("==", (C_Base_dList_dList_Cons ("/=", (C_Base_dList_dList_Cons ("<", (C_Base_dList_dList_Cons ("<=", (C_Base_dList_dList_Cons (">", (C_Base_dList_dList_Cons (">=", (C_Base_dList_dList_Cons ("++", (C_Base_dList_dList_Cons ("&&", (C_Base_dList_dList_Cons ("||", (C_Base_dList_dList_Cons ("strFromInt", (C_Base_dList_dList_Cons ("strUnpack", (C_Base_dList_dList_Cons ("strPack", (C_Base_dList_dList_Cons ("strLength", (C_Base_dList_dList_Cons ("show", (C_Base_dList_dList_Cons ("eq", (C_Base_dList_dList_Cons ("neq", (C_Base_dList_dList_Cons ("lt", (C_Base_dList_dList_Cons ("le", (C_Base_dList_dList_Cons ("gt", (C_Base_dList_dList_Cons ("ge", (C_Base_dList_dList_Cons ("Type", (C_Base_dList_dList_Cons ("->", (C_Base_dList_dList_Cons ("_", C_Base_dList_dList_Nil))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
+let v_Vuna_dCompiler_dElab_dSig_dtopPreludeNames = (C_Base_dList_dList_Cons ("Int", (C_Base_dList_dList_Cons ("String", (C_Base_dList_dList_Cons ("+", (C_Base_dList_dList_Cons ("-", (C_Base_dList_dList_Cons ("*", (C_Base_dList_dList_Cons ("/", (C_Base_dList_dList_Cons ("==", (C_Base_dList_dList_Cons ("/=", (C_Base_dList_dList_Cons ("<", (C_Base_dList_dList_Cons ("<=", (C_Base_dList_dList_Cons (">", (C_Base_dList_dList_Cons (">=", (C_Base_dList_dList_Cons ("++", (C_Base_dList_dList_Cons ("&&", (C_Base_dList_dList_Cons ("||", (C_Base_dList_dList_Cons ("strFromInt", (C_Base_dList_dList_Cons ("strUnpack", (C_Base_dList_dList_Cons ("strPack", (C_Base_dList_dList_Cons ("strLength", (C_Base_dList_dList_Cons ("show", (C_Base_dList_dList_Cons ("eq", (C_Base_dList_dList_Cons ("neq", (C_Base_dList_dList_Cons ("lt", (C_Base_dList_dList_Cons ("le", (C_Base_dList_dList_Cons ("gt", (C_Base_dList_dList_Cons ("ge", (C_Base_dList_dList_Cons ("Type", (C_Base_dList_dList_Cons ("->", (C_Base_dList_dList_Cons ("_", C_Base_dList_dList_Nil))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
 
-let v_Vuna_dCompiler_dElab_dSig_dtopQuantBanned = (fun defined -> (v_Vuna_dCompiler_dCommon_dtblOfNames ((v_Base_dList_dappend defined) (v_Vuna_dCompiler_dElab_dSig_dtopPreludeNames ()))))
+let v_Vuna_dCompiler_dElab_dSig_dtopQuantBanned = (fun defined -> (v_Vuna_dCompiler_dCommon_dtblOfNames ((v_Base_dList_dappend defined) v_Vuna_dCompiler_dElab_dSig_dtopPreludeNames)))
 
 let rec v_Vuna_dCompiler_dElab_dSig_ddefinedNames = (fun mc0 -> (match mc0 with
   | C_Base_dList_dList_Cons (dtb__100, dtb__101) -> (match dtb__100 with

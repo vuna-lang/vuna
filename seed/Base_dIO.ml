@@ -1,5 +1,4 @@
 open Vuna_runtime
-open Vuna_builtins
 open Base_dPair
 open Base_dBool
 open Base_dMonad
@@ -15,20 +14,20 @@ open Vuna_dCompiler_dCommon
 open Vuna_dCompiler_dFrontend_dToml
 open Vuna_dCompiler_dFrontend_dManifest
 open Vuna_dCompiler_dPackages_dPkg
+open Vuna_dCompiler_dDebug
 open Base_dNat
 open Base_dVec
-open Vuna_dCompiler_dLoader_dDiagnostics
+open Vuna_dCompiler_dDiagnostics
 open Vuna_dCompiler_dFrontend_dAst
 open Vuna_dCompiler_dFrontend_dDiagnostics
 open Vuna_dCompiler_dFrontend_dLexer
 open Vuna_dCompiler_dFrontend_dParser_dSupport
 open Vuna_dCompiler_dFrontend_dParser
+open Vuna_dCompiler_dLoader_dDiagnostics
 open Vuna_dCompiler_dLoader_dModules
 open Vuna_dCompiler_dLoader_dResolve
 open Vuna_dCompiler_dLoader_dFlatten
 open Vuna_dCompiler_dLoader
-open Vuna_dCompiler_dDebug
-open Vuna_dCompiler_dDiagnostics
 open Vuna_dCompiler_dCore_dTerm
 open Vuna_dCompiler_dCore_dEval
 open Vuna_dCompiler_dCore_dConv
@@ -55,7 +54,7 @@ open Vuna_dCompiler_dElab
 open Vuna_dCompiler_dCodegen_dDecl
 open Vuna_dCompiler_dCodegen_dErase
 open Vuna_dCompiler_dCodegen_dTerm
-open Vuna_dCompiler_dCodegen_dProgram
+open Vuna_dCompiler_dCodegen_dAssembly
 open Vuna_dCompiler_dDriver_dSplit
 open Vuna_dCompiler_dCodegen_dSplit
 open Vuna_dCompiler_dCodegen
@@ -74,14 +73,14 @@ let v_Base_dIO_dioBind = (fun io -> (fun k -> (match io with
   | _ -> failwith "DT: impossible branch"
 )))
 
-let v_Base_dIO_dBase_dMonad_dMonad_uBase_dMonad_dMonad_uBase_dIO_dIO = fun () -> (C_Dict_uBase_dMonad_dMonad_MkDict_uBase_dMonad_dMonad ((fun io -> (fun k -> ((v_Base_dIO_dioBind io) k))), (fun x -> (v_Base_dIO_dioPure x))))
+let v_Base_dIO_dBase_dMonad_dMonad_uBase_dMonad_dMonad_uBase_dIO_dIO = (C_Dict_uBase_dMonad_dMonad_MkDict_uBase_dMonad_dMonad ((fun io -> (fun k -> ((v_Base_dIO_dioBind io) k))), (fun x -> (v_Base_dIO_dioPure x))))
 
 let v_Base_dIO_dioFmap = (fun f -> (fun io -> (match io with
   | C_Base_dIO_dIO_Base_dIO_dMkIO (dtb__2) -> (C_Base_dIO_dIO_Base_dIO_dMkIO ((fun w -> (f (dtb__2 w)))))
   | _ -> failwith "DT: impossible branch"
 )))
 
-let v_Base_dIO_dBase_dMonad_dFunctor_uBase_dMonad_dFunctor_uBase_dIO_dIO = fun () -> (C_Dict_uBase_dMonad_dFunctor_MkDict_uBase_dMonad_dFunctor ((fun f -> (fun io -> ((v_Base_dIO_dioFmap f) io)))))
+let v_Base_dIO_dBase_dMonad_dFunctor_uBase_dMonad_dFunctor_uBase_dIO_dIO = (C_Dict_uBase_dMonad_dFunctor_MkDict_uBase_dMonad_dFunctor ((fun f -> (fun io -> ((v_Base_dIO_dioFmap f) io)))))
 
 let v_Base_dIO_dprint = (fun s -> (C_Base_dIO_dIO_Base_dIO_dMkIO ((fun w -> (dtp_print s)))))
 
@@ -91,7 +90,7 @@ let v_Base_dIO_dreadFile = (fun path -> (C_Base_dIO_dIO_Base_dIO_dMkIO ((fun w -
 
 let v_Base_dIO_dwriteFile = (fun path -> (fun contents -> (C_Base_dIO_dIO_Base_dIO_dMkIO ((fun w -> ((dtp_writeFile path) contents))))))
 
-let v_Base_dIO_dreadLine = fun () -> (C_Base_dIO_dIO_Base_dIO_dMkIO ((fun w -> (dtp_readLine ()))))
+let v_Base_dIO_dreadLine = (C_Base_dIO_dIO_Base_dIO_dMkIO ((fun w -> (dtp_readLine ()))))
 
 let v_Base_dIO_dreadDir = (fun path -> (C_Base_dIO_dIO_Base_dIO_dMkIO ((fun w -> ((fun p -> dtp_listOf (dtp_readDir p)) path)))))
 
@@ -107,6 +106,6 @@ let v_Base_dIO_dfileMtime = (fun path -> (C_Base_dIO_dIO_Base_dIO_dMkIO ((fun w 
 
 let v_Base_dIO_dfileSize = (fun path -> (C_Base_dIO_dIO_Base_dIO_dMkIO ((fun w -> (dtp_fileSize path)))))
 
-let v_Base_dIO_dgetArgs = fun () -> (C_Base_dIO_dIO_Base_dIO_dMkIO ((fun w -> (dtp_listOf (dtp_getArgs ())))))
+let v_Base_dIO_dgetArgs = (C_Base_dIO_dIO_Base_dIO_dMkIO ((fun w -> (dtp_listOf (dtp_getArgs ())))))
 
 let v_Base_dIO_dexit = (fun code -> (C_Base_dIO_dIO_Base_dIO_dMkIO ((fun w -> (dtp_exit code)))))

@@ -6,19 +6,21 @@ module Vuna.TestRunner (runTests) where
 -- 返回空串表示通过，返回非空串表示失败（打印失败信息）。
 -- M23 起用 DT 精化后的核心求值执行（`Vuna.Interp`），因此测试模块的顶层定义同样
 -- 必须写签名；代码生成路径的验证留给 CI 脚本。
+-- M26：入口是 `Package`，内部用 `Pkg.packageContext` 构造包上下文（不再有环境根 flag）；
+-- 测试模块与包内模块走同一套模块可见性规则。
 import Vuna.Compiler.Common
 import Vuna.Compiler.Packages.Pkg
 import Vuna.Files
 import Vuna.Interp
 
-runTests : Package -> List Root -> Int
-runTests pkg roots =
+runTests : Package -> Int
+runTests pkg =
   let
     testDir = packageDir pkg ++ "/test"
   in if pathExistsDir testDir then
     let
       files = testFiles (readDir testDir)
-    in runTestFiles roots (packageName pkg) testDir files 0 0
+    in runTestFiles (packageContext pkg) testDir files 0 0
   else
     let
       _ = print ("error: test directory not found: " ++ testDir ++ "\n")
@@ -28,21 +30,21 @@ testFiles : List String -> List String
 testFiles [] = []
 testFiles (name :: rest) = if endsWith ".vuna" name then name :: testFiles rest else testFiles rest
 
-runTestFiles : List Root -> String -> String -> List String -> Int -> Int -> Int
-runTestFiles roots pkgName dir [] pass fail =
+runTestFiles : PackageContext -> String -> List String -> Int -> Int -> Int
+runTestFiles ctx dir [] pass fail =
   let
     _ = print ("\n" ++ strFromInt pass ++ " passed, " ++ strFromInt fail ++ " failed\n")
   in if fail == 0 then 0 else 1
-runTestFiles roots pkgName dir (name :: rest) pass fail =
+runTestFiles ctx dir (name :: rest) pass fail =
   let
     path = dir ++ "/" ++ name
   in let
-    output = interpretFileIn pkgName roots path
+    output = interpretFile ctx path
   in if output == "\"\"" then
     let
       _ = print ("ok   " ++ name ++ "\n")
-    in runTestFiles roots pkgName dir rest (pass + 1) fail
+    in runTestFiles ctx dir rest (pass + 1) fail
   else
     let
       _ = print ("FAIL " ++ name ++ ": " ++ output ++ "\n")
-    in runTestFiles roots pkgName dir rest pass (fail + 1)
+    in runTestFiles ctx dir rest pass (fail + 1)

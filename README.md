@@ -23,19 +23,19 @@ nix develop                                    # OCaml 工具链 + vuna-seed
 nix build .#vuna --out-link result             # 产品 CLI（stage 1）
 ./result/bin/vuna help
 
-# 单文件：写、查、求值、生成 OCaml 并编译运行
+# ad-hoc 单文件：无 manifest 时自动用 base 上下文并注入 Prelude
 cat > hello.vuna <<'EOF'
 main : Int
 main = 1 + 2 * 3
 EOF
-./result/bin/vuna check hello.vuna             # 类型检查
-./result/bin/vuna interp hello.vuna            # -> 7
-./result/bin/vuna compile hello.vuna hello.ml  # 生成 OCaml
-ocamlopt -o hello hello.ml && ./hello          # -> 7
+./result/bin/vuna check hello.vuna               # 类型检查
+./result/bin/vuna interp hello.vuna              # -> 7
+./result/bin/vuna compile hello.vuna hello-out   # 逐模块 .ml + build.sh 写到 hello-out/
+sh hello-out/build.sh hello && ./hello-out/hello # -> 7
 
-# 包模式：可执行入口 main : IO a（IO 来自 vuna-base 依赖），构建产出 .output/bin/<包名>
+# 包模式：目录入口只认该目录自己的 vuna.toml；可执行入口 main : IO a，构建产出 DIR/bin/<包名>
 ./result/bin/vuna build examples/multi         # 现成的多包示例（根包 + greet + base 依赖）
-examples/multi/.output/bin/multi               # -> hi hi hi|n2 n1
+examples/multi/.output/bin/multi               # -> hi hi hi|n2 n1（--out 可覆盖输出目录）
 ./result/bin/vuna check examples/multi         # 包级类型检查
 ./result/bin/vuna test examples/multi          # 跑包内 test/*.vuna（main : String，空串通过）
 
@@ -47,9 +47,8 @@ nix run .#vuna-run-tests -- --list                  # 列出章节（--only <章
 ./result/bin/vuna doc                          # 生成 docs/api.md（gitignored）
 ```
 
-自己新建一个包时：`vuna.toml`（`[package]` + `[dependencies]`）加 `app/Main.vuna`，入口写
-`main : IO a`；`println` / `readFile` 等效果 API 来自 `Base.IO`（`import Base.IO`，包需依赖
-`vuna-base`）。完整包格式见 [packages.md](docs/reference/packages.md)，示例见 `examples/multi/`。
+自己新建包：`vuna.toml` + `app/Main.vuna`，入口 `main : IO a`；效果 API 来自 `Base.IO`
+（需依赖 `vuna-base`）。格式见 [packages.md](docs/reference/packages.md)，示例见 `examples/multi/`。
 
 不知道用哪个编译器时：优先本地 `./result/bin/vuna`；本地没有或编译不过，一律
 `nix run vuna -- <subcommand>`（注册表别名指向 `github:vuna-lang/vuna`）。
@@ -59,43 +58,42 @@ nix run .#vuna-run-tests -- --list                  # 列出章节（--only <章
 | 工具 | 作用 |
 | --- | --- |
 | `vuna-seed` | stage 0：从多文件种子 `seed/`（`seed/build.sh` + ocamlopt）构建的种子编译器 |
-| `vuna-compiler` | stage 1 编译器（从 `compiler/` 做 DT split codegen + ocamlopt）：`compile/check/build/seed` |
+| `vuna-compiler` | stage 1 编译器（从 `compiler/` 做 DT 逐模块 codegen + ocamlopt）：`compile/check/build` |
 | `vuna` | 产品 CLI：工具链 + 编译器命令（in-process 调用 compiler 库） |
 
-自举链：`seed/` →（`seed/build.sh` + ocamlopt）→ `vuna-seed` →（`seed`，DT split）→
-`vuna-compiler` →（`build .`，DT 单文件）→ `vuna`；再用 `build --split` 生成两级文件集，
-逐字节相等即 fixed point。链条图、rotation 流程与不变量见
-[bootstrap.md](docs/reference/bootstrap.md)。
+自举链：`seed/` →（`seed/build.sh` + ocamlopt）→ `vuna-seed` →（`build --no-compile --out s1 compiler`）
+→ stage1 →（`build --no-compile --out s2 compiler`）→ 两级文件集逐字节相等即 fixed point；
+stage1 的 `vuna-compiler build .` 产出 `.output/bin/vuna`。流程见 [bootstrap.md](docs/reference/bootstrap.md)。
 
 命令一览（每个命令都必须显式书写，不再支持“无子命令 = compile”的旧式回退）：
 
 ```console
-vuna compile [--no-print] [--root DIR]... <entry.vuna> [out.ml]
-vuna check [--root DIR]... (<entry.vuna> | <package-dir>)
-vuna build [--no-compile] [DIR]           # 单文件 DT codegen + ocamlopt → .output/bin/<包名>
-vuna build --split OUT [DIR]              # 逐模块 DT codegen（.ml + build.sh）
-vuna seed OUT [DIR]                       # 逐模块 seed 文件集（必须显式 OUT）
+vuna compile [--no-print] (<entry.vuna> | <package-dir>) OUTDIR  # 逐模块 codegen 到目录；成功静默
+vuna check (<entry.vuna> | <package-dir>)
+vuna build [--no-compile] [--out DIR] [PKG-DIR]  # 默认 `<PKG-DIR>/.output`；跑 build.sh → 输出目录/bin/<包名>
 vuna lint [--fix] <file.vuna>...
-vuna interp [--root DIR]... <file.vuna>   # 精化后核心求值（纯；不执行效果）
+vuna interp <file.vuna>                   # 精化后核心求值（纯；不执行效果）
 vuna test [DIR]                           # 运行 test/*.vuna（DT 核心求值，main : String 空串通过）
 vuna fmt [--check] [PATH]...
-vuna repl [--root DIR]...
+vuna repl
 vuna doc [DIR [OUT]]                      # 默认 DIR/docs/api.md
-vuna map [--modules | --find <M.name> | --impact <M.name>]  # 模块总览 / 定位符号 / 改动影响面
-vuna api <Module.name>                    # 某模块的签名面（含注释与行号）
+vuna map [...] | vuna api <Module.name>  # 模块总览 / 定位符号 / 改动影响面 / 签名面
 vuna help, -h
 ```
 
 `vuna-compiler` 是同一套编译器命令的独立 CLI（seed 的来源），参数与 `vuna` 的同名命令一致。
 `vuna` 的编译命令直接调用 `Vuna.Compiler.Driver.CompilerCli` 的库实现（in-process 调库，不 fork
-`vuna-compiler`）；`vuna build` 通过受限的进程执行内建（`prim_runIn`）调用 `ocamlopt`
-编译 `.output/main.ml` → `.output/bin/<包名>`（同时产出 `.output/build.sh` 供手动重建），
-除此之外无额外运行时依赖。`vuna interp` 是**DT 精化 + 核心求值**：先按 DT 检查再求 `main`
-的值，只展示 `Int`/`String`/`Bool`；任何 `main : IO a` 一律明确报错（核心求值器不执行
-效果），请改用 `compile` + 运行产物。所有编译命令都走同一条 DT 链，没有可切换的检查器。
-省略 `--root` 时使用当前目录包的模块根；`--root` 用于原始文件模式（编译器自举、
-测试夹具）显式指定模块根。包模式会自动导入 `Prelude`。命令语义与包格式见
-[packages.md](docs/reference/packages.md)，语言语义见
+`vuna-compiler`）；`vuna build` 在 codegen 后执行生成的 `build.sh`（内部经受限的进程执行内建
+`prim_runIn` 调 `ocamlopt`），产出 `DIR/bin/<包名>`，除此之外无额外运行时依赖。`vuna interp`
+是**DT 精化 + 核心求值**：先按 DT 检查再求 `main` 的值，只展示 `Int`/`String`/`Bool`；任何
+`main : IO a` 一律明确报错（核心求值器不执行效果），请改用 `compile` + 运行产物。
+
+**包上下文是唯一的加载语义**：每个源文件向上找最近的 `vuna.toml`（该包 + 依赖闭包解析
+import）；无 manifest 时只有 base 上下文（`VUNA_BASE` 覆盖，否则按可执行文件相对布局
+`<exeDir>/base`、`../base`、`../../base`、`../../../base` 探测，失败明确报错），ad-hoc 单
+文件与包内模块一样自动注入 `Prelude`。目录入口（`check/build <dir>`）只认该目录自己的
+manifest，不向上找。环境根开关、raw 模式、`--split` 与 `seed` 均已删除（提示见上）。命令
+语义与包格式见 [packages.md](docs/reference/packages.md)，语言语义见
 [language.md](docs/reference/language.md)。
 
 ## 目录结构

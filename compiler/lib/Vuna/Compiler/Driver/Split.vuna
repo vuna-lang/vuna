@@ -1,13 +1,9 @@
 module Vuna.Compiler.Driver.Split
   ( SplitFile(..)
   , buildScript
-  , buildScriptPackage
   , splitCompileOrder
   , splitInitFiles
-  , splitName
-  , splitText
   , writeSplitFiles
-  , writeSplitFilesChanged
   ) where
 
 -- Vuna.Compiler.Driver.Split：分离编译（M12）的输出文件模型与构建脚本生成。
@@ -41,21 +37,6 @@ writeSplitFiles dir (f :: rest) = andThen (writeSplitFiles dir rest) (\n => let
   _ = writeFile (dir ++ "/" ++ splitName f) (splitText f)
 in Ok (n + 1)
 )
-
--- 写前比较：内容不变不落盘，保护 .cmx 时间戳，让增量构建生效。
-writeSplitFilesChanged : String -> List SplitFile -> Result Int
-writeSplitFilesChanged dir [] = Ok 0
-writeSplitFilesChanged dir (f :: rest) =
-  let
-    path = dir ++ "/" ++ splitName f
-  in let
-    text = splitText f
-  in let
-    unchanged = fileExists path && readFile path == text
-  in andThen (writeSplitFilesChanged dir rest) (\n => let
-    _ = if unchanged then 0 else writeFile path text
-  in Ok (if unchanged then n else n + 1)
-  )
 
 -- 编译单元顺序：按输出顺序取 .ml（跳过 .mli 与 Vuna_runtime.ml 之后不重复）。
 splitCompileOrder : List String -> List String
@@ -139,92 +120,3 @@ joinCmxs : List String -> String
 joinCmxs [] = ""
 joinCmxs ([name]) = name ++ ".cmx"
 joinCmxs (name :: rest) = name ++ ".cmx " ++ joinCmxs rest
-
--- ---------------------------------------------------------------
--- .output 布局（lib/ + app/）的构建脚本。
--- names 是 lib 编译单元顺序（不含 Main）；hasMain 为 True 时链接 app/Main.ml。
--- ---------------------------------------------------------------
-pSpaceJoin : List String -> String
-pSpaceJoin [] = ""
-pSpaceJoin (name :: rest) = name ++ " " ++ pSpaceJoin rest
-
-pDepsSuffix : List String -> String
-pDepsSuffix [] = ""
-pDepsSuffix (dep :: rest) = " lib/" ++ dep ++ pDepsSuffix rest
-
-pCompileCalls : List String -> List String -> String
-pCompileCalls [] prev = ""
-pCompileCalls (name :: rest) prev =
-  "compile_mod " ++ name ++ pDepsSuffix prev ++ "\n" ++ pCompileCalls rest (name :: prev)
-
-pJoinCmxs : List String -> String
-pJoinCmxs [] = ""
-pJoinCmxs ([name]) = "lib/" ++ name ++ ".cmx"
-pJoinCmxs (name :: rest) = "lib/" ++ name ++ ".cmx " ++ pJoinCmxs rest
-
-buildScriptPackage : List String -> Bool -> String
-buildScriptPackage names hasMain =
-  "#!/bin/sh\n"
-    ++ "# 由 vuna 生成：包级 compile 的构建脚本。用法: ./build.sh [OUT]\n"
-    ++ "# 布局：lib/ 为模块，app/Main.ml 为入口；增量判定按 lib/ 内时间戳。\n"
-    ++ "set -eu\n"
-    ++ "cd \"$(dirname \"$0\")\"\n"
-    ++ "OUT=${1:-bin/program}\n"
-    ++ "FLAGS=\"-g -w -a+39 -warn-error +39\"\n"
-    ++ "OCAMLOPT=${OCAMLOPT:-ocamlopt}\n"
-    ++ "command -v \"$OCAMLOPT\" >/dev/null 2>&1 || { echo \"error: ocamlopt not found (set OCAMLOPT)\" >&2; exit 127; }\n"
-    ++ "MODULES=\""
-    ++ pSpaceJoin names
-    ++ "\"\n"
-    ++ "mkdir -p \"$(dirname \"$OUT\")\"\n"
-    ++ "if ["
-    ++ (if hasMain then " \"${1:-}\" = \"--clean\" ]; then rm -f lib/*.cmx lib/*.cmi lib/*.o app/*.cmx app/*.cmi app/*.o; fi\n" else " \"${1:-}\" = \"--clean\" ]; then rm -f lib/*.cmx lib/*.cmi lib/*.o; fi\n")
-    ++ "clean=1\n"
-    ++ "for m in $MODULES; do\n"
-    ++ "  if [ -f \"lib/$m.cmx\" ]; then clean=0; fi\n"
-    ++ "done\n"
-    ++ "if [ \"$clean\" -eq 1 ] && ["
-    ++ (if hasMain then " -f \"app/Main.ml\"" else " 1 -eq 1")
-    ++ " ]; then\n"
-    ++ "  SOURCES=\"\"\n"
-    ++ "  for m in $MODULES; do\n"
-    ++ "    if [ -f \"lib/$m.mli\" ]; then SOURCES=\"$SOURCES lib/$m.mli\"; fi\n"
-    ++ "    SOURCES=\"$SOURCES lib/$m.ml\"\n"
-    ++ "  done\n"
-    ++ "  if ["
-    ++ (if hasMain then " -f \"app/Main.ml\"" else " 1 -eq 0")
-    ++ " ]; then\n"
-    ++ "    $OCAMLOPT $FLAGS -I lib -I +unix -o \"$OUT\" unix.cmxa $SOURCES app/Main.ml\n"
-    ++ "    echo \"built $OUT\"\n"
-    ++ "    exit 0\n"
-    ++ "  fi\n"
-    ++ "  for m in $MODULES; do\n"
-    ++ "    if [ -f \"lib/$m.mli\" ]; then $OCAMLOPT $FLAGS -I lib -I +unix -c \"lib/$m.mli\"; fi\n"
-    ++ "    $OCAMLOPT $FLAGS -I lib -I +unix -c \"lib/$m.ml\"\n"
-    ++ "  done\n"
-    ++ "  echo \"compiled lib modules\"\n"
-    ++ "  exit 0\n"
-    ++ "fi\n"
-    ++ "compile_mod() {\n"
-    ++ "  base=$1\n"
-    ++ "  shift\n"
-    ++ "  path=\"lib/$base\"\n"
-    ++ "  stale=0\n"
-    ++ "  [ -f \"$path.cmx\" ] || stale=1\n"
-    ++ "  if [ \"$stale\" -eq 0 ] && [ \"$path.ml\" -nt \"$path.cmx\" ]; then stale=1; fi\n"
-    ++ "  if [ -f \"$path.mli\" ]; then\n"
-    ++ "    [ -f \"$path.cmi\" ] || stale=1\n"
-    ++ "    if [ \"$stale\" -eq 0 ] && [ \"$path.mli\" -nt \"$path.cmi\" ]; then stale=1; fi\n"
-    ++ "  fi\n"
-    ++ "  for dep in \"$@\"; do\n"
-    ++ "    if [ \"$stale\" -eq 0 ] && [ -f \"$dep.cmi\" ] && [ \"$dep.cmi\" -nt \"$path.cmx\" ]; then stale=1; fi\n"
-    ++ "    if [ \"$stale\" -eq 1 ]; then break; fi\n"
-    ++ "  done\n"
-    ++ "  if [ \"$stale\" -eq 1 ]; then\n"
-    ++ "    echo \"compile $base\"\n"
-    ++ "    if [ -f \"$path.mli\" ]; then $OCAMLOPT $FLAGS -I lib -I +unix -c \"$path.mli\"; fi\n"
-    ++ "    $OCAMLOPT $FLAGS -I lib -I +unix -c \"$path.ml\"\n"
-    ++ "  fi\n"
-    ++ "}\n"
-    ++ pCompileCalls names []
-    ++ (if hasMain then "if [ -f \"app/Main.cmx\" ] && [ \"app/Main.ml\" -nt \"app/Main.cmx\" ]; then rm -f app/Main.cmx; fi\n" ++ "if [ ! -f \"app/Main.cmx\" ]; then\n" ++ "  echo \"compile app/Main\"\n" ++ "  $OCAMLOPT $FLAGS -I lib -I +unix -c app/Main.ml\n" ++ "fi\n" ++ "$OCAMLOPT $FLAGS -I lib -I +unix -o \"$OUT\" unix.cmxa " ++ pJoinCmxs names ++ " app/Main.cmx\n" ++ "echo \"built $OUT\"\n" else "echo \"compiled lib modules\"\n")

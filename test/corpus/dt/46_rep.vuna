@@ -6,18 +6,18 @@ data Nat : Type where
   Succ : Nat -> Nat
 
 data Vec : Type -> Nat -> Type where
-  Nil : (a : Type) -> Vec a Zero
-  Cons : (a : Type) -> (n : Nat) -> a -> Vec a n -> Vec a (Succ n)
+  VNil : (a : Type) -> Vec a Zero
+  VCons : (a : Type) -> (n : Nat) -> a -> Vec a n -> Vec a (Succ n)
 
 rep : (a : Type) -> (k : Nat) -> a -> Vec a k
 rep a k x = case k of
-  Zero => Nil a
-  Succ j => Cons a j x (rep a j x)
+  Zero => VNil a
+  Succ j => VCons a j x (rep a j x)
 
 vlen : (a : Type) -> (k : Nat) -> Vec a k -> Int
 vlen a k xs = case xs of
-  Nil b => 0
-  Cons b m y ys => 1 + vlen b m ys
+  VNil b => 0
+  VCons b m y ys => 1 + vlen b m ys
 
 three : Nat
 three = Succ (Succ (Succ Zero))

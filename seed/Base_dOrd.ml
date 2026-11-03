@@ -1,5 +1,4 @@
 open Vuna_runtime
-open Vuna_builtins
 open Base_dPair
 open Base_dBool
 open Base_dMonad
@@ -11,11 +10,11 @@ open Base_dString
 open Base_dShow
 type 'a0 t_Dict_uBase_dOrd_dOrd = C_Dict_uBase_dOrd_dOrd_MkDict_uBase_dOrd_dOrd of (('a0) -> ('a0) -> bool) * (('a0) -> ('a0) -> bool) * (('a0) -> ('a0) -> bool) * (('a0) -> ('a0) -> bool)
 
-let v_Base_dOrd_dBase_dOrd_dOrd_uBase_dOrd_dOrd_uInt = fun () -> (C_Dict_uBase_dOrd_dOrd_MkDict_uBase_dOrd_dOrd ((fun x -> (fun y -> ((bi_lt_int x) y))), (fun x -> (fun y -> ((bi_le_int x) y))), (fun x -> (fun y -> ((bi_gt_int x) y))), (fun x -> (fun y -> ((bi_ge_int x) y)))))
+let v_Base_dOrd_dBase_dOrd_dOrd_uBase_dOrd_dOrd_uInt = (C_Dict_uBase_dOrd_dOrd_MkDict_uBase_dOrd_dOrd ((fun x -> (fun y -> ((bi_lt_int x) y))), (fun x -> (fun y -> ((bi_le_int x) y))), (fun x -> (fun y -> ((bi_gt_int x) y))), (fun x -> (fun y -> ((bi_ge_int x) y)))))
 
-let v_Base_dOrd_dBase_dOrd_dOrd_uBase_dOrd_dOrd_uString = fun () -> (C_Dict_uBase_dOrd_dOrd_MkDict_uBase_dOrd_dOrd ((fun x -> (fun y -> ((bi_lt_generic x) y))), (fun x -> (fun y -> ((bi_le_generic x) y))), (fun x -> (fun y -> ((bi_gt_generic x) y))), (fun x -> (fun y -> ((bi_ge_generic x) y)))))
+let v_Base_dOrd_dBase_dOrd_dOrd_uBase_dOrd_dOrd_uString = (C_Dict_uBase_dOrd_dOrd_MkDict_uBase_dOrd_dOrd ((fun x -> (fun y -> ((bi_lt_generic x) y))), (fun x -> (fun y -> ((bi_le_generic x) y))), (fun x -> (fun y -> ((bi_gt_generic x) y))), (fun x -> (fun y -> ((bi_ge_generic x) y)))))
 
-let v_Base_dOrd_dBase_dOrd_dOrd_uBase_dOrd_dOrd_uBool = fun () -> (C_Dict_uBase_dOrd_dOrd_MkDict_uBase_dOrd_dOrd ((fun x -> (fun y -> ((bi_lt_generic x) y))), (fun x -> (fun y -> ((bi_le_generic x) y))), (fun x -> (fun y -> ((bi_gt_generic x) y))), (fun x -> (fun y -> ((bi_ge_generic x) y)))))
+let v_Base_dOrd_dBase_dOrd_dOrd_uBase_dOrd_dOrd_uBool = (C_Dict_uBase_dOrd_dOrd_MkDict_uBase_dOrd_dOrd ((fun x -> (fun y -> ((bi_lt_generic x) y))), (fun x -> (fun y -> ((bi_le_generic x) y))), (fun x -> (fun y -> ((bi_gt_generic x) y))), (fun x -> (fun y -> ((bi_ge_generic x) y)))))
 
 let v_Base_dOrd_dlt = (fun _ud -> (fun x0 -> (fun x1 -> (match _ud with
   | C_Dict_uBase_dOrd_dOrd_MkDict_uBase_dOrd_dOrd (dtb__0, dtb__1, dtb__2, dtb__3) -> ((dtb__0 x0) x1)

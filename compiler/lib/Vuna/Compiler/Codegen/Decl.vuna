@@ -4,7 +4,6 @@ module Vuna.Compiler.Codegen.Decl
   , ctorOcamlName
   , ctorShapeOf
   , flagMatchesRig
-  , genTypeDecls
   , genTypeDeclsOf
   , joinWith
   , lastName
@@ -23,7 +22,7 @@ module Vuna.Compiler.Codegen.Decl
 -- 构造子字段渲染、keep flags）都在这里；不依赖其它 Codegen 子模块。
 --
 -- 类型参数分配规则与字段渲染必须共用同一份「用到哪些族参数」表（不动点计算），
--- 否则声明与实参位置会漂移；详见 genTypeDecls 上方的注释。
+-- 否则声明与实参位置会漂移；详见 genTypeDeclsOf 上方的注释。
 import Vuna.Compiler.Common
 import Vuna.Compiler.Core
 import Vuna.Compiler.Elab
@@ -450,15 +449,6 @@ genDataDecl table datas d =
 ctorBodyText : List String -> String
 ctorBodyText [] = "|"
 ctorBodyText cs = joinWith " | " cs
-
-genTypeDecls : List DtData -> Result String
-genTypeDecls datas = case datas of
-  [] => Ok ""
-  _ =>
-    let
-      table = usedTableFix datas (map (\d => Pair (dtDataName d) []) datas)
-    in andThen (traverse (genDataDecl table datas) datas)
-      (\parts => Ok ("type " ++ joinWith "\nand " parts ++ "\n\n"))
 
 -- M21：Bool 族不进运行时表示。`True` / `False` 与 `if` 统一是 OCaml bool
 -- （Elab 把 Bool 族的构造子精化成 `TBool`），所以不生成变体类型与变体构造子，

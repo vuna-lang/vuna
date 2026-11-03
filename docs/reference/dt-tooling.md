@@ -72,6 +72,10 @@ LSP **不做包解析**：
 3. **含 `import` 的文件跳过类型检查**（缺 import 解析），只保留 parse 诊断；
 4. hover 用同一精化链的 `Elab.Driver.goalsOfProgram` 取洞目标与上下文（可插拔点是 `dtGoalsOf`）。
 
+**M26 边界（如实记录）**：本次只统一了编译器/CLI 的包上下文，**LSP 加载语义未改**——
+仍是 parse 级、含 `import` 的文件不做类型检查；D13/M30 会把 LSP 接到与 CLI 相同的
+`Pkg.contextForFile` 上（届时含 import 的文件也能进 DT 精化）。
+
 ### 编辑器冒烟
 
 `test/corpus/lsp/smoke.sh` 是自包含脚本（只依赖 POSIX sh + 传入的 vuna），
@@ -171,7 +175,7 @@ $ vuna doc <dir> <out.md>
 
 - **case splitting**：按洞的目标类型自动展开 `case` 分支（需要与编辑器协议配合）。
 - `rewrite` / `with` 等证明工程 ergonomics：研究储备，未排期。
-- LSP 的包解析（当前含 `import` 的文件跳过类型检查）。
+- LSP 的包解析（当前含 `import` 的文件跳过类型检查；D13/M30 接同一 `contextForFile`）。
 - 更细的字典目标诊断（当前未解类参数报 `unsolved metavariable`）。
 
 ## 相关阅读

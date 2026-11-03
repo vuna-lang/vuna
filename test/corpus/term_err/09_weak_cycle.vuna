@@ -1,13 +1,15 @@
--- M25.2b 负例：SCC 里存在「全 =」的环（a <-> b），另有带下降的环 a -> c -> a。
+-- M25.2b 负例：SCC 里存在「全 =」的环（pa <-> pb），另有带下降的环 pa -> pc -> pa。
 -- 去掉严格边后仍有环 ⇒ 必须拒绝（每个环都要严格下降）。
-a : Int -> Int
-a n = if n <= 0 then 0 else if n > 100 then b n else c (n - 1)
+-- M26：顶层名由 a/b/c 改为 pa/pb/pc——a/b/c 这类小写名会撞 base 模块签名里隐式量化的
+-- 类型变量（banned 名集是 program-wide 的，缺陷登记为 C29，M28 修）；只改名字、语义不变。
+pa : Int -> Int
+pa n = if n <= 0 then 0 else if n > 100 then pb n else pc (n - 1)
 
-b : Int -> Int
-b n = a n
+pb : Int -> Int
+pb n = pa n
 
-c : Int -> Int
-c n = a n
+pc : Int -> Int
+pc n = pa n
 
 main : Int
 main = 0

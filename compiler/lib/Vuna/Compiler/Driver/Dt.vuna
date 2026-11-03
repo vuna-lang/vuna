@@ -1,9 +1,6 @@
 module Vuna.Compiler.Driver.Dt
-  ( dtCheckFile
+  ( dtCheck
   , dtCheckLibrary
-  , dtCheckProject
-  , dtCompileFile
-  , dtCompileProject
   , dtEvalExpr
   , dtEvalFile
   , dtSplitProject
@@ -12,14 +9,12 @@ module Vuna.Compiler.Driver.Dt
 -- Vuna.Compiler.Driver.Dt：DT 路径的 facade（供 Compile / CompilerCli / Interp 使用）。
 --
 -- M13 时 DT 是单文件自包含：parseSource → Elab →（check / codegen / 核心求值），
--- 不经过 Loader、拒绝模块头与 import。**M20 起改为复用 `Loader`**：多文件、`import`、
--- `--root` 与包目录都能用，名字解析完全交给既有 Loader（不新建平行 Loader）。
---
--- 两条加载形状：
---   - 单文件 / `--root`：`loadProgramRaw`（入口声明 + 依赖模块，历史顺序不变）；
---   - 包目录（M22.1）：`loadProject` / `loadProjectModules` + `resolveProject`，
---     再按**依赖顺序**拼接（见 `dtProjectDecls`）。
--- DT 精化器按**整程序**精化，模块边界对精化不构成约束。
+-- 不经过 Loader。**M20 起改为复用 `Loader`**：多文件、`import`、包目录都能用，
+-- 名字解析完全交给既有 Loader（不新建平行 Loader）。
+-- **M26**：入口统一吃 `PackageContext`（最近 vuna.toml + 依赖闭包；无 manifest 时
+-- base-only）；旧环境根 / 单文件原始模式的 `dtCheckFile` / `dtCompileFile` 已删除。
+-- 唯一 codegen 入口是 `dtSplitProject`（逐模块 split 输出模型）；DT 精化器按
+-- **整程序**精化，模块边界对精化不构成约束。
 import Vuna.Compiler.Common
 import Vuna.Compiler.Debug
 import Vuna.Compiler.Diagnostics
@@ -32,22 +27,18 @@ import Vuna.Compiler.Elab
 import Vuna.Compiler.Codegen
 import Vuna.Compiler.Driver.Split
 
--- 入口 + 全部依赖模块的声明（单文件 / --root 原始模式）。
-dtLoad : List String -> String -> Result (List Decl)
-dtLoad roots entry = loadProgramRawOrdered roots entry
-
 -- 项目声明的拼接顺序：Loader 的 modules 列表是「依赖在前」的**反序**（依赖者先
 -- 出现，被依赖者靠后），DT 精化要求定义先于使用，因此先 reverse modules 再逐模块
 -- 拼接，入口声明放最后。
 dtProjectDecls : Pair (List Decl) (List Module) -> List Decl
 dtProjectDecls parts = append (concatMap moduleDeclsOf (reverse (secondOf parts))) (firstOf parts)
 
--- 包模式：可执行包（app/Main.vuna 为入口，root/包名来自 Pkg.packageRoots / packageName）。
-dtLoadProject : List Root -> String -> String -> Result (List Decl)
-dtLoadProject roots entryPkg entry =
+-- 可执行包：入口文件 + 依赖模块（模块可见性由上下文的 roots 决定）。
+dtLoad : PackageContext -> String -> Result (List Decl)
+dtLoad ctx entry =
   let
     _ = stamp "load-start"
-  in andThen (loadProject roots entryPkg entry) (\project => let
+  in andThen (loadProject ctx entry) (\project => let
     _ = stamp "load-modules-done"
   in andThen (resolveProject project) (\parts => let
     _ = stamp "resolve-done"
@@ -55,12 +46,12 @@ dtLoadProject roots entryPkg entry =
   )
   )
 
--- 包模式：库包（以 [export].modules 为入口集合，没有 app/Main.vuna）。
-dtLoadModuleSet : List Root -> String -> List String -> Result (List Decl)
-dtLoadModuleSet roots entryPkg names =
+-- 库包：以 [export].modules 为入口集合（没有 app/Main.vuna）。
+dtLoadModules : PackageContext -> List String -> Result (List Decl)
+dtLoadModules ctx names =
   let
     _ = stamp "load-start"
-  in andThen (loadProjectModules roots entryPkg names) (\project => let
+  in andThen (loadProjectModules ctx names) (\project => let
     _ = stamp "load-modules-done"
   in andThen (resolveProject project) (\parts => let
     _ = stamp "resolve-done"
@@ -68,7 +59,7 @@ dtLoadModuleSet roots entryPkg names =
   )
   )
 
--- 声明序列的 check / compile 共用尾部（单文件与包模式同一条精化路径）。
+-- 声明序列的 check 尾部（入口与库包同一条精化路径）。
 dtCheckDecls : Result (List Decl) -> Result (List String)
 dtCheckDecls loaded = andThen loaded (\decls => let
   _ = stamp "decls-ready"
@@ -81,53 +72,31 @@ in Ok []
 )
 )
 
-dtCompileDecls : Result (List Decl) -> Bool -> Result String
-dtCompileDecls loaded printResult = andThen loaded (\decls => let
-  _ = stamp "decls-ready"
-in andThen (elabProgram decls) (\program => let
-  _ = stamp "elab-done"
-in andThen (generateDtProgram program printResult) (\code => let
-  _ = stamp "codegen-done"
-in Ok code
-)
-)
-)
+dtCheck : PackageContext -> String -> Result (List String)
+dtCheck ctx entry = dtCheckDecls (dtLoad ctx entry)
 
-dtCheckFile : List String -> String -> Result (List String)
-dtCheckFile roots entry = dtCheckDecls (dtLoad roots entry)
-
-dtCompileFile : List String -> String -> Bool -> Result String
-dtCompileFile roots entry printResult = dtCompileDecls (dtLoad roots entry) printResult
-
-dtCheckProject : List Root -> String -> String -> Result (List String)
-dtCheckProject roots entryPkg entry = dtCheckDecls (dtLoadProject roots entryPkg entry)
-
-dtCompileProject : List Root -> String -> String -> Bool -> Result String
-dtCompileProject roots entryPkg entry printResult =
-  dtCompileDecls (dtLoadProject roots entryPkg entry) printResult
-
-dtCheckLibrary : List Root -> String -> List String -> Result (List String)
-dtCheckLibrary roots entryPkg names = dtCheckDecls (dtLoadModuleSet roots entryPkg names)
+dtCheckLibrary : PackageContext -> List String -> Result (List String)
+dtCheckLibrary ctx names = dtCheckDecls (dtLoadModules ctx names)
 
 -- 核心求值器：精化后用 NbE + delta 求 main 的值并 show（与 codegen 结果对照）。
-dtEvalFile : List String -> String -> Result String
-dtEvalFile roots entry =
-  andThen (dtLoad roots entry)
+dtEvalFile : PackageContext -> String -> Result String
+dtEvalFile ctx entry =
+  andThen (dtLoad ctx entry)
     (\decls => andThen (elabProgram decls) (\program => evalDtMain program))
 
--- REPL 的表达式求值（M23）：roots + program 源码 + 表达式源码。
+-- REPL 的表达式求值（M23）：上下文 + program 源码 + 表达式源码。
 -- program 里的定义必须有签名（REPL 用户逐行输入签名）；表达式在程序的环境
--- （globals / 实例 / 字典解表）里精化，再求值并 show。program 的 import 仍按 roots
--- 从磁盘解析（`loadProgramRawOrderedSource`），所以 REPL 可以把 import 行一起缓冲进来。
+-- （globals / 实例 / 字典解表）里精化，再求值并 show。program 的 import 按上下文
+-- 的 roots 从磁盘解析（`loadProjectSource`），所以 REPL 可以把 import 行一起缓冲进来。
 --
 -- 表达式的名字解析**必须**经过 Loader（`import Base.List` 后写 `length xs` 得到的是
 -- `Base.List.length`）：因此把表达式拼成一条合成定义 `vuna_repl_expr = <expr>` 一起
 -- 加载，取回解析/限定后的体，再把这条合成定义从声明表里摘掉、交给 DT 精化。
-dtEvalExpr : List String -> String -> String -> Result String
-dtEvalExpr roots program exprSource =
+dtEvalExpr : PackageContext -> String -> String -> Result String
+dtEvalExpr ctx program exprSource =
   andThen
-    (loadProgramRawOrderedSource roots "<repl>" (program ++ "\n" ++ replExprName ++ " = " ++ exprSource ++ "\n"))
-    (\decls => andThen (splitReplExpr decls) (\p => andThen (elabProgramFull (firstOf p)) (\prog => dtEvalExprIn prog (secondOf p))))
+    (loadProjectSource ctx "<repl>" (program ++ "\n" ++ replExprName ++ " = " ++ exprSource ++ "\n"))
+    (\project => andThen (resolveProject project) (\parts => andThen (splitReplExpr (dtProjectDecls parts)) (\p => andThen (elabProgramFull (firstOf p)) (\prog => dtEvalExprIn prog (secondOf p)))))
 
 -- 合成定义的唯一名字：只在 `dtEvalExpr` 内部出现，摘除时按名字识别。
 replExprName : String
@@ -182,19 +151,15 @@ defTableOf : List DtDef -> List (Pair String Term)
 defTableOf [] = []
 defTableOf (d :: rest) = Pair (dtDefName d) (dtDefBody d) :: defTableOf rest
 
--- M24：包级逐模块 split 输出（`build --split` / `seed`）。与单文件路径共用同一次精化，
--- 只是生成器把 datas/defs 按声明归属切到各模块文件；模块列表按依赖序（Loader 的
--- modules 是依赖者在前的反序，这里 reverse）。
-dtProjectParts : List Root -> String -> String -> Result (Pair (List Decl) (List Module))
-dtProjectParts roots entryPkg entry =
-  andThen (loadProject roots entryPkg entry)
-    (\project => andThen (resolveProject project) (\parts => Ok (Pair (firstOf parts) (reverse (secondOf parts)))))
-
-dtSplitProject : List Root -> String -> String -> Bool -> Result (List SplitFile)
-dtSplitProject roots entryPkg entry printResult = andThen (dtProjectParts roots entryPkg entry) (\parts => let
+-- M26：唯一 codegen 入口 = 逐模块 split（`compile` / `build` / seed rotation 共用）。
+-- 与单文件路径共用同一次精化，生成器把 datas/defs 按声明归属切到各模块文件；
+-- 模块列表按依赖序（Loader 的 modules 是依赖者在前的反序，这里 reverse）。
+dtSplitProject : PackageContext -> String -> Bool -> Result (List SplitFile)
+dtSplitProject ctx entry printResult = andThen (loadProject ctx entry) (\project => andThen (resolveProject project) (\parts => let
   entryDecls = firstOf parts
-  modules = secondOf parts
+  modules = reverse (secondOf parts)
   allDecls = append (concatMap moduleDeclsOf modules) entryDecls
 in andThen (elabProgramFull allDecls)
   (\program => generateDtSplitProgram (map (\m => Pair (moduleNameOf m) (moduleDeclsOf m)) modules) entryDecls program printResult)
+)
 )

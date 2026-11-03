@@ -1,5 +1,5 @@
 -- M11：高阶 kind + 一般约束泛化。`bindPair : m a -> m b -> m (Pair a b)` 的
--- 签名里 m 是类型构造器变量；调用点分别传入 Maybe 与 List 的字典。
+-- 签名里 m 是类型构造器变量；调用点分别传入 Maybe 与 LList 的字典。
 -- M23 限制：`check` 已支持该签名推断（Elab.Sig 按应用次数推断 m : Type -> Type），
 -- 但含多隐式参数字典的定义，核心求值与擦除 codegen 尚不可用（liftFreeDictGoals 的
 -- binder 插入/去重缺陷，M24 处理；见 docs/reference/limits.md）。因此本夹具带
@@ -12,20 +12,20 @@ data Maybe a : Type where
   Nothing : Maybe a
   Just : a -> Maybe a
 
-data List a : Type where
-  Nil : List a
-  Cons : a -> List a -> List a
+data LList a : Type where
+  LNil : LList a
+  LCons : a -> LList a -> LList a
 
 data Pair a b : Type where
   Pair : a -> b -> Pair a b
 
-append : List a -> List a -> List a
-append Nil ys = ys
-append (Cons x xs) ys = Cons x (append xs ys)
+append : LList a -> LList a -> LList a
+append LNil ys = ys
+append (LCons x xs) ys = LCons x (append xs ys)
 
-concatMap : (a -> List b) -> List a -> List b
-concatMap f Nil = Nil
-concatMap f (Cons x xs) = append (f x) (concatMap f xs)
+concatMap : (a -> LList b) -> LList a -> LList b
+concatMap f LNil = LNil
+concatMap f (LCons x xs) = append (f x) (concatMap f xs)
 
 instance Monad Maybe where
   bind m f = case m of
@@ -33,9 +33,9 @@ instance Monad Maybe where
     Just x => f x
   pure x = Just x
 
-instance Monad List where
+instance Monad LList where
   bind xs f = concatMap f xs
-  pure x = Cons x Nil
+  pure x = LCons x LNil
 
 bindPair : m a -> m b -> m (Pair a b)
 bindPair ma mb = do
@@ -48,9 +48,9 @@ showM m = case m of
   Nothing => "Nothing"
   Just (Pair a b) => "Just " ++ strFromInt a ++ ":" ++ strFromInt b
 
-showL : List (Pair Int Int) -> String
-showL Nil = "[]"
-showL (Cons (Pair a b) rest) = strFromInt a ++ ":" ++ strFromInt b ++ " " ++ showL rest
+showL : LList (Pair Int Int) -> String
+showL LNil = "[]"
+showL (LCons (Pair a b) rest) = strFromInt a ++ ":" ++ strFromInt b ++ " " ++ showL rest
 
 main : String
-main = showM (bindPair (Just 1) (Just 2)) ++ "/" ++ showL (bindPair (Cons 1 (Cons 2 Nil)) (Cons 3 Nil))
+main = showM (bindPair (Just 1) (Just 2)) ++ "/" ++ showL (bindPair (LCons 1 (LCons 2 LNil)) (LCons 3 LNil))

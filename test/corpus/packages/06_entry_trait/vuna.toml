@@ -1,0 +1,10 @@
+# M26 夹具：入口文件（app/Main.vuna）里同时声明 data + trait + instance + deriving，
+# 验证「入口声明可 build」（E14/E15：单文件与 split 收敛成同一装配计划后，
+# 入口的 data/trait/实例也要正确发进 Main.ml 并参与归属表）。
+[package]
+name = "entry-trait"
+version = "0.1.0"
+edition = "2026"
+
+[dependencies]
+vuna-base = "../../../../base"

@@ -76,6 +76,9 @@ let dtp_fileMtime path =
 let dtp_fileSize path =
   try (Unix.stat path).Unix.st_size with _ -> 0
 let dtp_timeUs () = int_of_float (Unix.gettimeofday () *. 1000000.0)
+let dtp_getenv k = try Sys.getenv k with Not_found -> ""
+let dtp_getcwd () = try Sys.getcwd () with _ -> "."
+let dtp_execPath () = try Unix.readlink "/proc/self/exe" with _ -> Sys.executable_name
 let dtp_strHash (s : string) =
   let h = ref 0 in
   String.iter (fun c -> h := ((!h * 33) + Char.code c) land 1023) s;

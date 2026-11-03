@@ -1,5 +1,4 @@
 open Vuna_runtime
-open Vuna_builtins
 open Base_dPair
 open Base_dBool
 open Base_dMonad
@@ -161,7 +160,7 @@ let rec v_Vuna_dCompiler_dCommon_dhashChars = (fun mc0 -> (fun mc1 -> (match mc0
   | _ -> failwith "DT: impossible branch"
 )))
 
-let v_Vuna_dCompiler_dCommon_dtblEmpty = fun () -> (C_Vuna_dCompiler_dCommon_dHashTbl_Vuna_dCompiler_dCommon_dMkHashTbl (((v_Vuna_dCompiler_dCommon_dreplicate 32) ((v_Vuna_dCompiler_dCommon_dreplicate 32) C_Base_dList_dList_Nil))))
+let v_Vuna_dCompiler_dCommon_dtblEmpty = (C_Vuna_dCompiler_dCommon_dHashTbl_Vuna_dCompiler_dCommon_dMkHashTbl (((v_Vuna_dCompiler_dCommon_dreplicate 32) ((v_Vuna_dCompiler_dCommon_dreplicate 32) C_Base_dList_dList_Nil))))
 
 let v_Vuna_dCompiler_dCommon_dtblInsert = (fun key -> (fun v -> (fun tbl -> (match tbl with
   | C_Vuna_dCompiler_dCommon_dHashTbl_Vuna_dCompiler_dCommon_dMkHashTbl (dtb__60) -> ((fun b -> ((fun oi -> ((fun ii -> ((fun outer -> ((fun inner -> (C_Vuna_dCompiler_dCommon_dHashTbl_Vuna_dCompiler_dCommon_dMkHashTbl ((((v_Vuna_dCompiler_dCommon_dputNth oi) (((v_Vuna_dCompiler_dCommon_dputNth ii) (C_Base_dList_dList_Cons ((C_Base_dPair_dPair_Base_dPair_dPair (key, v)), inner))) outer)) dtb__60)))) (((v_Vuna_dCompiler_dCommon_dnthOr ii) C_Base_dList_dList_Nil) outer))) (((v_Vuna_dCompiler_dCommon_dnthOr oi) ((v_Vuna_dCompiler_dCommon_dreplicate 32) C_Base_dList_dList_Nil)) dtb__60))) ((bi_sub b) ((bi_mul oi) 32)))) ((bi_div b) 32))) (v_Vuna_dCompiler_dCommon_dhashStr key))
@@ -189,7 +188,7 @@ let v_Vuna_dCompiler_dCommon_dtblMem = (fun n -> (fun t -> (match ((v_Vuna_dComp
 )))
 
 let rec v_Vuna_dCompiler_dCommon_dtblFromList = (fun pairs -> (match pairs with
-  | C_Base_dList_dList_Nil -> (v_Vuna_dCompiler_dCommon_dtblEmpty ())
+  | C_Base_dList_dList_Nil -> v_Vuna_dCompiler_dCommon_dtblEmpty
   | C_Base_dList_dList_Cons (dtb__67, dtb__68) -> (match dtb__67 with
   | C_Base_dPair_dPair_Base_dPair_dPair (dtb__69, dtb__70) -> (((v_Vuna_dCompiler_dCommon_dtblInsert dtb__69) dtb__70) (v_Vuna_dCompiler_dCommon_dtblFromList dtb__68))
   | _ -> failwith "DT: impossible branch"
@@ -206,4 +205,4 @@ let rec v_Vuna_dCompiler_dCommon_dtblInsertAll = (fun pairs -> (fun tbl -> (matc
   | _ -> failwith "DT: impossible branch"
 )))
 
-let v_Vuna_dCompiler_dCommon_dtblOfNames = (fun xs -> ((v_Vuna_dCompiler_dCommon_dtblInsertAll ((v_Base_dList_dmap (fun n -> (C_Base_dPair_dPair_Base_dPair_dPair (n, true)))) xs)) (v_Vuna_dCompiler_dCommon_dtblEmpty ())))
+let v_Vuna_dCompiler_dCommon_dtblOfNames = (fun xs -> ((v_Vuna_dCompiler_dCommon_dtblInsertAll ((v_Base_dList_dmap (fun n -> (C_Base_dPair_dPair_Base_dPair_dPair (n, true)))) xs)) v_Vuna_dCompiler_dCommon_dtblEmpty))

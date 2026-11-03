@@ -18,7 +18,7 @@
 | `Base.Ord` | `Ord` trait（`lt` / `le` / `gt` / `ge : a -> a -> Bool`）+ `Int` / `String` / `Bool` 实例 |
 | `Base.IO` | 抽象 `IO a` 与 IO 组合子（实例 + print/readFile/writeFile/getArgs/exit） |
 | `Base` | 包门面：整模块重导出以上模块（`import Base` 即可用） |
-| `Prelude` | 顶层模块（`base/lib/Prelude.vuna`）：重导出 `Base.Pair` / `Bool` / `Eq` / `Ord` / `Show` / `List` / `Maybe` / `Result` / `String` / `Monad`，**包模式自动导入**；刻意不含 `Base.IO` 的效果函数（`print`/`readFile` 等与编译器直接使用的内建同名），需要 IO 时显式 `import Base.IO`；`--root` 原始模式不自动导入 |
+| `Prelude` | 顶层模块（`base/lib/Prelude.vuna`）：重导出 `Base.Pair` / `Bool` / `Eq` / `Ord` / `Show` / `List` / `Maybe` / `Result` / `String` / `Monad`，**包上下文内所有源文件（含无 manifest 的 ad-hoc 单文件）自动导入**；显式 `import` 时不再重复注入；刻意不含 `Base.IO` 的效果函数（`print`/`readFile` 等与编译器直接使用的内建同名），需要 IO 时显式 `import Base.IO` |
 
 跨包使用时只可见 `base/vuna.toml` `[export]` 列出的模块；抽象类型（`Map`、`IO`）
 的构造器保持私有。`Map` / `Sort` 不在 `Prelude` 里，需要显式 import。
@@ -53,8 +53,8 @@ module Base.IO (IO, print, println, readFile, writeFile, readLine, readDir, ...)
 ## 标准库与自举的关系
 
 - `base/lib/` 是 vuna 模块根，不是 OCaml 库目录；
-- `Prelude` 是唯一自动注入的模块，只在包模式生效；原始 `--root` 模式（自举、夹具）
-  保持显式 import 语义；
+- `Prelude` 是唯一自动注入的模块：包上下文内所有源文件（含无 manifest 的 ad-hoc 单文件）
+  都自动导入；不需要也不再有第二套加载模式；
 - `Base.IO` 刻意不在 `Prelude` 中：`print` / `readFile` 等名字与编译器直接使用的
   effectful 内建同名，自动导入会让编译器源码产生歧义。
 
@@ -62,8 +62,9 @@ module Base.IO (IO, print, println, readFile, writeFile, readLine, readDir, ...)
 
 - **`Bool` 归 `Base.Bool`**：`data Bool` 是唯一权威定义（DT 的 `if` / 字面量模式按
   「族短名 Bool」识别，不另存一份定义）。编译器的 DT prelude 桩（`Elab.Prelude`，原
-  `DtPrelude` 的 `Bool` / `True` / `False`）随 **M22.2** 删除；单文件 / 无库模式按
-  `List` 的既有约定自行声明 `data Bool`，或经 `Prelude` 使用 `Base.Bool`。
+  `DtPrelude` 的 `Bool` / `True` / `False`）随 **M22.2** 删除；包上下文（含 ad-hoc
+  单文件）经自动注入的 `Prelude` 使用 `Base.Bool`，需要自定义语义时再自行声明
+  `data Bool`。
 - **`Int` / `String` 是语言原语**：没有 `data` 声明，字面量、算术与 `str*` 由编译器提供。
 - **`Show` / `Eq` / `Ord` 在库（M24.7 完成）**：trait 声明、方法投影与
   `Int` / `String` / `Bool` 实例全部在 `Base.Show` / `Base.Eq` / `Base.Ord`，包模式下
@@ -73,12 +74,11 @@ module Base.IO (IO, print, println, readFile, writeFile, readLine, readDir, ...)
   `show` / `eq` / `lt` 等
   短名，裸名必须经 import 的导出表解析。`Show Bool` 用 `if` 输出 `True` / `False`；
   `Eq Bool` 方法体用析取（`Bool == Bool` 会落到该实例，不能自递归）。
-- **单文件 / 裸 `--root` 模式（M24.7 起）**：`Prelude` 不自动注入，`Show` / `Eq` /
-  `Ord` 及其实例需要 `--root <repo>/base/lib`（测试里是 `--root ../base/lib`）并在
-  文件头显式 `import Prelude`；缺 import 时诊断会提示加对应 import。包目录模式不受
-  影响（仍自动导入 `Prelude`）。
-- 编译器 split 输出里的 `Vuna_builtins` 编译单元在旧内建 trait/实例删除后为空（只保留
-  文件集形状）。
+- **ad-hoc 单文件与包内模块一致（M26）**：`Prelude` 自动注入，`Show` / `Eq` / `Ord`
+  及其实例开箱可用；诊断在缺少显式 import 时仍会提示加对应 import。不再有需要手动指定
+  模块根的“原始文件模式”。
+- split 输出（`compile` / `build` 目录）的编译单元只有 `Vuna_runtime` + 各源码模块 +
+  `Main`：M26 删除了空 `Vuna_builtins` unit，seed 因此是 65 个 `.ml`。
 - 阶段状态与当前阻碍见 [docs/roadmap.md](../roadmap.md) 的「阶段状态总览」。
 
 ## 已知边界

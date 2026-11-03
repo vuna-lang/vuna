@@ -187,8 +187,11 @@ else
   mkdir -p "$WORK/src/test/corpus"
   cp -r test/corpus/run "$WORK/src/test/corpus/"
   cp -r test/corpus/dt "$WORK/src/test/corpus/"
+  cp test/corpus/vuna.toml "$WORK/src/test/corpus/"
 fi
 cd "$WORK/src"
+# M26：包上下文取代 `--root`；工作副本的 base 位置（无 manifest 的临时夹具用）。
+export VUNA_BASE="$WORK/src/base"
 
 log() {
   printf '%s\n' "$*" >>"$WORK/cmd.log"
@@ -258,10 +261,10 @@ SELF_OUT_SRC=$WORK/selfsrc
 SELF_COMPILER_SRC=$WORK/selfcompilersrc
 
 measure seed_build sh seed/build.sh "$SEED_BIN"
-measure seed_compile "$SEED_BIN" build --split "$STAGE1_SRC" compiler
+measure seed_compile "$SEED_BIN" compile compiler "$STAGE1_SRC"
 cp -r "$STAGE1_SRC" "$STAGE1_BUILD"
 measure stage1_build sh "$STAGE1_BUILD/build.sh" "$VUNA_COMPILER_BIN"
-measure product_compile "$VUNA_COMPILER_BIN" build --split "$PRODUCT_SRC" .
+measure product_compile "$VUNA_COMPILER_BIN" compile . "$PRODUCT_SRC"
 cp -r "$PRODUCT_SRC" "$PRODUCT_BUILD"
 measure product_build sh "$PRODUCT_BUILD/build.sh" "$VUNA_BIN"
 
@@ -271,16 +274,16 @@ else
   SELF_BIN=$SEED_BIN
 fi
 
-measure compiler_self_compile "$SELF_BIN" build --split "$SELF_OUT_SRC" .
-measure compiler_closure_compile "$SELF_BIN" build --split "$SELF_COMPILER_SRC" compiler
+measure compiler_self_compile "$SELF_BIN" compile . "$SELF_OUT_SRC"
+measure compiler_closure_compile "$SELF_BIN" compile compiler "$SELF_COMPILER_SRC"
 cat "$SELF_OUT_SRC"/*.ml >"$WORK/self_concat.ml"
 cat "$STAGE1_SRC"/*.ml >"$WORK/stage1_concat.ml"
 cat seed/*.ml >"$WORK/seed_concat.ml"
 
 printf 'main : Int\nmain = 40 + 2\n' >tiny.vuna
-measure tiny_compile "$SELF_BIN" compile --root compiler/lib --root lib --root base/lib --root app --no-print tiny.vuna "$WORK/tiny.ml"
+measure tiny_compile "$SELF_BIN" compile --no-print tiny.vuna "$WORK/tinyout"
 # DT 精化 + 擦除 codegen 基准（单文件，Pi + 类型擦除；M24 起是唯一 codegen 路径）
-measure dt_elab "$SELF_BIN" compile --no-print test/corpus/dt/03_compose.vuna "$WORK/dt.ml"
+measure dt_elab "$SELF_BIN" compile --no-print test/corpus/dt/03_compose.vuna "$WORK/dtelab"
 
 # ---- corpus 批量编译（单次计时，内部循环） --------------------------------
 cat >"$WORK/corpus.sh" <<'EOS'
@@ -290,8 +293,8 @@ rm -rf "$CORPUS_OUT"
 mkdir -p "$CORPUS_OUT"
 : >"$CORPUS_FAIL"
 for f in test/corpus/run/*.vuna; do
-  out="$CORPUS_OUT/$(basename "$f" .vuna).ml"
-  if ! "$CORPUS_BIN" compile --root compiler/lib --root lib --root base/lib --root app --no-print "$f" "$out" >>"$CORPUS_LOG" 2>&1; then
+  out="$CORPUS_OUT/$(basename "$f" .vuna)"
+  if ! "$CORPUS_BIN" compile --no-print "$f" "$out" >>"$CORPUS_LOG" 2>&1; then
     printf '%s\n' "$f" >>"$CORPUS_FAIL"
   fi
 done
@@ -336,10 +339,11 @@ collect_stats() {
   COUNT["${key}_rec_zero_arg"]=$(grep -cE '^let rec [A-Za-z0-9_]+ = fun \(\) ->' "$f" || true)
 }
 
+cat "$WORK/tinyout"/*.ml >"$WORK/tiny_concat.ml"
 collect_stats seed "$WORK/seed_concat.ml"
 collect_stats stage1 "$WORK/stage1_concat.ml"
 collect_stats self "$WORK/self_concat.ml"
-collect_stats tiny "$WORK/tiny.ml"
+collect_stats tiny "$WORK/tiny_concat.ml"
 
 # ---- 状态 ----------------------------------------------------------------
 FIXED_POINT=skipped

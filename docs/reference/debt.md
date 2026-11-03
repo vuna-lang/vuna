@@ -21,22 +21,22 @@ M25–M30 为可排期阶段，F1–F4 为不排期未来轨道）。
 
 | ID | 摘要 | 证据 | 阶段 |
 | --- | --- | --- | --- |
-| A01 | 单文件与 split 两套输出模型、两套 prepare/hook/`build.sh` 装配代码重复 | `Codegen/Program.vuna` vs `Codegen/Split.vuna`；`Decl.genTypeDecls`/`genTypeDeclsOf` | M26 |
-| A02 | 空 `Vuna_builtins.ml` 仍被生成、编译、`open`（M15 内建实例容器遗留） | `Codegen/Split.vuna` 无条件写该 unit；`seed/Vuna_builtins.ml` 2 行 | M26 |
-| A03 | `Loader` 门面保留 HM 时代死 API（`loadProgram*` 等零调用导出） | `grep loadProgram` 仅定义/注释 | M26 |
-| A04 | `Driver.Split` 留整套 HM `lib/+app/` 布局生成器与死 writer（~90 行零调用） | `buildScriptPackage`/`writeSplitFilesChanged` 等 | M26 |
-| A05 | 零参定义统一包 thunk（call-by-name），没有「顶层值求值一次」语义 | `Codegen/Term.vuna` thunk 约定；B 组 | M26 |
-| A06 | `--root`/`rawRoot` 是第二套加载语义：不注入 Prelude、不校验 export、可绕 effect allowlist；**计划删除 roots 概念**（M26：最近 `vuna.toml` 包上下文；无 manifest 只可见 base；单文件=包内 ad-hoc 入口） | `Loader/Flatten.implicitPrelude` 对 `importerPkg==""` 返回空；探针 | M26 |
+| A01 | 单文件与 split 两套输出模型、两套 prepare/hook/`build.sh` 装配代码重复 | `Codegen/Program.vuna` vs `Codegen/Split.vuna`；`Decl.genTypeDecls`/`genTypeDeclsOf` | 已修（M26：`Codegen.Assembly` + 唯一 split 生成器，单文件生成器删除） |
+| A02 | 空 `Vuna_builtins.ml` 仍被生成、编译、`open`（M15 内建实例容器遗留） | `Codegen/Split.vuna` 无条件写该 unit；`seed/Vuna_builtins.ml` 2 行 | 已修（M26：unit 删除，seed 65 `.ml`） |
+| A03 | `Loader` 门面保留 HM 时代死 API（`loadProgram*` 等零调用导出） | `grep loadProgram` 仅定义/注释 | 已修（M26：门面只保留 `loadProject*`/`resolveProject`） |
+| A04 | `Driver.Split` 留整套 HM `lib/+app/` 布局生成器与死 writer（~90 行零调用） | `buildScriptPackage`/`writeSplitFilesChanged` 等 | 已修（M26：HM 生成器与死 writer 删除，只留 `SplitFile`/`buildScript`） |
+| A05 | 零参定义统一包 thunk（call-by-name），没有「顶层值求值一次」语义 | `Codegen/Term.vuna` thunk 约定；B 组 | 已修（M26：`let v_x = body` 求值一次；零参递归非构造子 RHS 报 `CG_RecursiveValueDefinition`） |
+| A06 | 环境根/raw 模式是第二套加载语义：不注入 Prelude、不校验 export、可绕 effect allowlist | `Loader/Flatten.implicitPrelude` 旧兜底（`importerPkg==""` 返回空）；探针 | 已修（M26：删除 roots 与 raw 模式；最近 `vuna.toml` 包上下文唯一，无 manifest 只可见 base，单文件=包内 ad-hoc 入口并注入 Prelude） |
 | A07 | `Bool` 双重身份：prelude 类型桩（无构造子）+ `Base.Bool` 真值，`if`/case/conv 多处特判 | `Elab/Prelude.boolTy`、`Core/Conv.isBoolTyName`、`Elab/Meta.boolCtor*` | M27 |
 | A08 | 内置实体靠 `lastName` 短名特判：用户 `data Bool`/`data IO`/`data List` 被误当内建 | `Codegen/Decl.vuna`、`Elab/Dict.vuna` 短名判据；探针 | M27 |
 | A09 | `True`/`False`/`Cons`/`Nil` 等构造子名是**全局**的，用户同名构造子解析错 | `Loader/Modules.vuna` 导出裸构造子；探针 | M27 |
-| A10 | `Elab.Prelude` 硬编码 globals（Int/String/Bool 类型、`str*`、`prim_*`）；内建表 4 处重复；Loader 有幽灵名 | `Elab/Prelude.preludeGlobals` 等 | M27 |
-| A11 | 公开名与 `prim_*` 是同一内建的双份名字；生成 runtime 无条件下嵌 Unix | `Elab/Prelude` 双份表；`Codegen/Term.dtRuntime` | M27 |
+| A10 | `Elab.Prelude` 硬编码 globals（Int/String/Bool 类型、`str*`、`prim_*`）；内建表 4 处重复；Loader 有幽灵名 | `Elab/Prelude.preludeGlobals` 等；**M26 新增** `prim_getenv`/`prim_getcwd`/`prim_execPath`（只有 `prim_*` 名、无公开别名；`/proc/self/exe` 为 Linux 假设），语义规范归 M27 | M27 |
+| A11 | 公开名与 `prim_*` 是同一内建的双份名字；生成 runtime 无条件下嵌 Unix | `Elab/Prelude` 双份表；`Codegen/Term.dtRuntime`；**M26 新增** `prim_getenv`/`prim_getcwd`/`prim_execPath`（只有 `prim_*` 名、无公开别名；`/proc/self/exe` 为 Linux 假设），语义规范归 M27 | M27 |
 | A12 | `IO a` 是 thunk 表示（`Int -> a`）、无 `runIO`，仅 `main` 处由生成 hook 执行 | `Base/IO.vuna`；`Codegen/Term` main hook | F3（接口清理 M27） |
-| A13 | `Split` 仍匹配 M24.7 前的 `Show_Show_` 实例名前缀（死兜底），与 Elab 命名规则脱节 | `Codegen/Split.vuna` `isBuiltinInstanceName` | M26 |
+| A13 | `Split` 仍匹配 M24.7 前的 `Show_Show_` 实例名前缀（死兜底），与 Elab 命名规则脱节 | `Codegen/Split.vuna` `isBuiltinInstanceName` | 已修（M26：改用 `Elab.instanceName`/`derivedInstName` + `Derive.instHead`，字符串归属表删除） |
 | A14 | 记录/trait 投影全部降级成 `case`，诊断 span 指向生成代码（来源信息丢失） | `Elab/Records.prepareDecls`、`Elab/Dict` 投影 eta 展开 | M28 |
-| A15 | `seed` 与 `build --split` 是同一命令的两个名字；CLI 参数解析各自手写；包模式下 `--root` 被静默忽略 | `Driver/CompilerCli.vuna` seedRun/buildSplitRun；Design | M26 |
-| A16 | 跨包 import 方向不校验：Loader 的 roots 是扁平列表、selfRoot 不过滤 import；依赖包模块可以 import 消费包模块（实测 a→b、compiler→`Vuna.Json` 在 root 上下文通过）；**根修=删除 roots、按导入方包依赖闭包解析**（M26） | `Pkg.packageRoots` 的 selfRoot `Nothing` + `Loader.rootAllows`；`_scratch/crossdep`、crossprobe | M26 |
+| A15 | `seed` 与 `build --split` 是同一命令的两个名字；CLI 参数解析各自手写；包模式下根参数被静默忽略 | `Driver/CompilerCli.vuna` seedRun/buildSplitRun；Design | 已修（M26：`seed`/`--split` 删除，统一 `compile`/`build --out` 参数解析） |
+| A16 | 跨包 import 方向不校验：Loader 的 roots 是扁平列表、selfRoot 不过滤 import；依赖包模块可以 import 消费包模块（实测 a→b、compiler→`Vuna.Json` 在 root 上下文通过）；**根修=删除 roots、按导入方包依赖闭包解析**（M26） | `Pkg.packageRoots` 的 selfRoot `Nothing` + `Loader.rootAllows`；`_scratch/crossdep`、crossprobe | 已修（M26：`PackageContext` 依赖闭包解析，两包方向回归 `packages/95_cross_dep`） |
 
 ## B. 升级期临时决定 / 精化器折中
 
@@ -57,10 +57,10 @@ M25–M30 为可排期阶段，F1–F4 为不排期未来轨道）。
 | B13 | 依赖索引取值（`Ctx n -> Fin n -> Tm n`）无表达手段 | `dt-parity.md` §6.3；探针 `p3_dep_lookup` | M29 |
 | B14 | 类型当运行时值被擦除检查拦下（`Refl Nat` 失败），无 type codes | `Codegen/Erase` rig 检查；探针 | M29（决策） |
 | B15 | 字面量 case 必须有兜底；无冗余/不可达分支诊断 | `Elab/Term.checkLitCase` | M28 |
-| B16 | 效果 allowlist 按包名字符串（可伪造）；raw root 依赖模块可调 `prim_*`；**这是权限策略不是检查豁免**：M27 用 manifest 声明 capability 替换（或按决策删除） | `Loader/Resolve.packageAllowsEffects`；探针 | M27 |
+| B16 | 效果 allowlist 按包名字符串（可伪造）；raw root 依赖模块可调 `prim_*`（**M26 已随删除环境根关闭**，剩下的是包名字符串判定）；**这是权限策略不是检查豁免**：M27 用 manifest 声明 capability 替换（或按决策删除） | `Loader/Resolve.packageAllowsEffects`；探针 | M27 |
 | B17 | case/终止性「只告警」的文档与实现不符（实际静默跳过、无 warning）；随 B01 删除豁免后不再需要「告警」语义 | `docs/reference/limits.md` vs `Elab/Case.ecTrusted` | 已修（M25：删除豁免；无 warning 通道） |
 | B18 | 解析层只有单一命名空间：同名 type/ctor/global 靠多处特判兜住，与导出层双命名空间不一致 | `Elab/Term.inferVarRef`、`Elab/Records` 注释 | M28 |
-| B19 | `Vuna.Compiler.Diagnostics` 单模块承载 74 个 TC 构造子的 code/模板，split codegen 把 74 臂 `match` 生成为单行 34912 字符（`nix/metrics.budget` maxline 因此从 8250 上调到 35500）；可拆成 Tc/Cg/元数据子模块降低单行与单模块规模 | `seed/Vuna_dCompiler_dDiagnostics.ml`；`nix/metrics.budget`；`vuna seed out compiler && sh nix/metrics.sh out` | M30 |
+| B19 | `Vuna.Compiler.Diagnostics` 单模块承载 74 个 TC 构造子的 code/模板，split codegen 把 74 臂 `match` 生成为单行 34912 字符（`nix/metrics.budget` maxline 因此从 8250 上调到 35500）；可拆成 Tc/Cg/元数据子模块降低单行与单模块规模 | `seed/Vuna_dCompiler_dDiagnostics.ml`；`nix/metrics.budget`；`vuna build --no-compile --out out compiler && sh nix/metrics.sh out` | M30 |
 
 ## C. 可复现缺陷（bug）
 
@@ -73,7 +73,7 @@ M25–M30 为可排期阶段，F1–F4 为不排期未来轨道）。
 | C05 | `monad/04_kind_generic`：compile 产出的字典 binder 多态错误（`'b occurs inside t_Dict_uMonad`），`.nocompile` 整段跳过掩盖 | `Elab/Trait.liftFreeDictGoals` 记账；探针产物 | M29（标记清理 M25） |
 | C06 | `Core.applyValue` 没有 `VCase` 分支，落到 `_ => f` **静默丢实参** | `Core/Eval.vuna`；Elab 靠 eta 展开规避 | 已修（M25：VApp 卡住应用） |
 | C07 | 作用域护栏只验运行时 defs 且跳过擦除位；类型级定义/擦除位可带越界 index | `Codegen/Erase.checkAllDefScopes` | 部分修复（M25：全部定义；擦除位仍按约定跳过） |
-| C08 | `checkResolvedModules` 只校验模块声明，不校验 entryDecls | `Codegen/Split.vuna` | M26 |
+| C08 | `checkResolvedModules` 只校验模块声明，不校验 entryDecls | `Codegen/Split.vuna` | 已修（M26：entryDecls 不带点/非空/不重复 + 每个 DtDef/DtData 必须有归属） |
 | C09 | `tcb-check.sh` 只匹配 `Vuna_d<短名>.ml`，重组后嵌套模块（`Vuna_dFmt_dExpr.ml`）漏检 | 已修：改为前缀匹配（2026-11 本轮） | 已修 |
 | C10 | `index-check.sh` 用硬编码符号 + touch 空模块，重组后漂移 | 已修：探针改为真实源文件 `Loader/Resolve.vuna`（本轮） | 已修 |
 | C11 | Index 缓存只按 `(size, mtime 秒)` 判新，同秒等长内容变更不失效；缓存写非原子无锁 | `Index/Scan.vuna`；探针 `idx2` | M30 |
@@ -86,7 +86,7 @@ M25–M30 为可排期阶段，F1–F4 为不排期未来轨道）。
 | C18 | 用户自声明 `data IO`/`data Bool` 与内建短名冲突（被当内建） | 探针；同 A08 | M27 |
 | C19 | 语义边界不一致：interp 不归约 `strPack/strUnpack`、除零卡住；Int 静默 63 位溢出；String 按字节 | `Core/Eval`、`Core/Term`；探针 | M27 |
 | C20 | 用户可见错误带里程碑编号（"M13 limitation"/"M14"/"M19"）与 `DT: internal:` 文案 | `grep -rn "M1[0-9] limitation\|DT: internal"` | 部分修复（M25：删里程碑编号；internal 前缀仍留作编译器不变量诊断） |
-| C21 | 重组后的对外 API/行为不变性没有入库夹具（只有一次性对拍） | `git show --stat 82e4891 -- test/` | M26 |
+| C21 | 重组后的对外 API/行为不变性没有入库夹具（只有一次性对拍） | `git show --stat 82e4891 -- test/` | 已修（M26：`test/snapshots/*` + `update.sh`，第 38 段快照断言） |
 | C22 | `metrics.sh` 用 `cat` 无分隔拼接：无尾换行文件导致 lines/maxline 失真 | `nix/metrics.sh`；探针 `met` | M25 |
 | C23 | `test/run-tests.sh` 965 行 shell、无 timeout、夹具/段数无守卫；`.nocompile` 语义过期 | `test/run-tests.sh`；附录清单 | M25 |
 | C24 | 无 CI 配置；flake check 实际 12 项文档/提交信息写 9；无 eval-cache/keep-going 封装 | `nix eval .#checks`；文档 | M25 |
@@ -94,6 +94,7 @@ M25–M30 为可排期阶段，F1–F4 为不排期未来轨道）。
 | C26 | `Base.String.split` 为过检查改成显式 fuel 守卫，正确性依赖 `4*len+4` 外部论证（终止性本身由守卫保证） | `base/lib/Base/String.vuna`；M25.2b | M30（换结构递归或证明界） |
 | C27 | 前端/加载器状态机改用输入规模线性 fuel 初值（`8*len+64`/`128*tokens+1024`/1M/1G）；合法输入不触发依赖预算余量，无静态上界证明 | `Frontend/{Lexer,Parser,Toml}`、`Pkg`、`Loader`；M25.2c-front | M30（结构递归化或证明界） |
 | C28 | 工具链（Json/Fmt/Files/Index/Lint/Repl/Lsp）状态机/渲染互递归改用 fuel 或 `Base.List.range` 结构递归；fuel 上界靠输入规模/不可达值，无静态证明 | `lib/Vuna/{Json,Fmt,Fmt.Expr,Files,Index.Scan,Lint.Rules,Repl,Lsp}`；M25.2c-toolchain | M30（结构递归化或证明界） |
+| C29 | 顶层签名的隐式类型参数 banned 名集是 program-wide 的：entry 顶层小写名与 base 模块签名类型变量同名时，base 报 `unknown name a/v`（跨模块类型变量捕获） | `Elab/Sig.quantifyTopSig`；夹具 `test/corpus/dt/17_*`、`test/corpus/term_err/09_*`（M26 发现；夹具侧已改名规避） | M28（banned 集按模块作用域/按签名局部计算） |
 
 ## D. 未实现能力 / 语言缺口
 
@@ -135,9 +136,9 @@ M25–M30 为可排期阶段，F1–F4 为不排期未来轨道）。
 | E11 | 特殊标记清单与跳过原因未在 testing.md 成表 | M25 |
 | E12 | 文档过期：`fmt --check` 崩溃已修但 limits 仍写；`--with-comments`；checks 数量 | M25→已随本波修 |
 | E13 | `docs/.local`、`test/.local` 曾被索引缓存污染（审计探针产生，已清理；应加入 .gitignore/防护） | M25 |
-| E14 | `packages/05_entry_data` 只断言运行结果，未直接断言 `Main.ml` 含 `C_Color` | M26 |
-| E15 | 重组/拆分的行为不变性没有入库夹具（一次性 diff） | M26 |
-| E16 | CI 没有分入口上下文的依赖方向回归：root 上下文会掩盖 compiler→root 误 import（实测 `vuna check .` 通过、seed 才失败）；base→compiler 方向需 `vuna check base` 才能暴露 | M25 |
+| E14 | `packages/05_entry_data` 只断言运行结果，未直接断言 `Main.ml` 含 `C_Color` | 已修（M26：第 38 段/产物断言直接 grep `Main.ml` 的入口 data 构造子名） |
+| E15 | 重组/拆分的行为不变性没有入库夹具（一次性 diff） | 已修（M26：`test/snapshots/{exports.txt,modules.txt,split-*.txt}` 入库） |
+| E16 | CI 没有分入口上下文的依赖方向回归：root 上下文会掩盖 compiler→root 误 import（实测 `vuna check .` 通过、seed 才失败）；base→compiler 方向需 `vuna check base` 才能暴露（M26 已删除 root 上下文，方向回归进第 39 段；CI 入口仍按 E01） | M25 |
 
 ## 报告映射
 

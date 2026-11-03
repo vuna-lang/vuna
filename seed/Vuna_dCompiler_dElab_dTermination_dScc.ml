@@ -1,5 +1,4 @@
 open Vuna_runtime
-open Vuna_builtins
 open Base_dPair
 open Base_dBool
 open Base_dMonad
@@ -15,20 +14,20 @@ open Vuna_dCompiler_dCommon
 open Vuna_dCompiler_dFrontend_dToml
 open Vuna_dCompiler_dFrontend_dManifest
 open Vuna_dCompiler_dPackages_dPkg
+open Vuna_dCompiler_dDebug
 open Base_dNat
 open Base_dVec
-open Vuna_dCompiler_dLoader_dDiagnostics
+open Vuna_dCompiler_dDiagnostics
 open Vuna_dCompiler_dFrontend_dAst
 open Vuna_dCompiler_dFrontend_dDiagnostics
 open Vuna_dCompiler_dFrontend_dLexer
 open Vuna_dCompiler_dFrontend_dParser_dSupport
 open Vuna_dCompiler_dFrontend_dParser
+open Vuna_dCompiler_dLoader_dDiagnostics
 open Vuna_dCompiler_dLoader_dModules
 open Vuna_dCompiler_dLoader_dResolve
 open Vuna_dCompiler_dLoader_dFlatten
 open Vuna_dCompiler_dLoader
-open Vuna_dCompiler_dDebug
-open Vuna_dCompiler_dDiagnostics
 open Vuna_dCompiler_dCore_dTerm
 open Vuna_dCompiler_dCore_dEval
 open Vuna_dCompiler_dCore_dConv
@@ -282,7 +281,7 @@ let rec v_Vuna_dCompiler_dElab_dTermination_dScc_dedgesEqCanon = (fun mc0 -> (fu
 )
   | C_Base_dList_dList_Cons (dtb__158, dtb__159) -> (match mc1 with
   | C_Base_dList_dList_Nil -> false
-  | C_Base_dList_dList_Cons (dtb__160, dtb__161) -> (if ((bi_eq_int (v_Vuna_dCompiler_dElab_dTermination_dScc_dedgeFrom dtb__158)) (v_Vuna_dCompiler_dElab_dTermination_dScc_dedgeFrom dtb__160)) then (if ((bi_eq_int (v_Vuna_dCompiler_dElab_dTermination_dScc_dedgeTo dtb__158)) (v_Vuna_dCompiler_dElab_dTermination_dScc_dedgeTo dtb__160)) then (if (((v_Base_dEq_deq (v_Base_dEq_dBase_dEq_dEq_uBase_dEq_dEq_uBool ())) (v_Vuna_dCompiler_dElab_dTermination_dScc_dscStrictEdge dtb__158)) (v_Vuna_dCompiler_dElab_dTermination_dScc_dscStrictEdge dtb__160)) then ((v_Vuna_dCompiler_dElab_dTermination_dScc_dedgesEqCanon dtb__159) dtb__161) else false) else false) else false)
+  | C_Base_dList_dList_Cons (dtb__160, dtb__161) -> (if ((bi_eq_int (v_Vuna_dCompiler_dElab_dTermination_dScc_dedgeFrom dtb__158)) (v_Vuna_dCompiler_dElab_dTermination_dScc_dedgeFrom dtb__160)) then (if ((bi_eq_int (v_Vuna_dCompiler_dElab_dTermination_dScc_dedgeTo dtb__158)) (v_Vuna_dCompiler_dElab_dTermination_dScc_dedgeTo dtb__160)) then (if (((v_Base_dEq_deq v_Base_dEq_dBase_dEq_dEq_uBase_dEq_dEq_uBool) (v_Vuna_dCompiler_dElab_dTermination_dScc_dscStrictEdge dtb__158)) (v_Vuna_dCompiler_dElab_dTermination_dScc_dscStrictEdge dtb__160)) then ((v_Vuna_dCompiler_dElab_dTermination_dScc_dedgesEqCanon dtb__159) dtb__161) else false) else false) else false)
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
@@ -320,7 +319,7 @@ let rec v_Vuna_dCompiler_dElab_dTermination_dScc_dgraphsOK = (fun mc0 -> (match 
   | _ -> failwith "DT: impossible branch"
 ))
 
-let v_Vuna_dCompiler_dElab_dTermination_dScc_dtableGraphCap = fun () -> 512
+let v_Vuna_dCompiler_dElab_dTermination_dScc_dtableGraphCap = 512
 
 let rec v_Vuna_dCompiler_dElab_dTermination_dScc_dtableLookup = (fun mc0 -> (fun mc1 -> (match mc1 with
   | C_Base_dList_dList_Cons (dtb__170, dtb__171) -> (match dtb__170 with
@@ -357,7 +356,7 @@ let rec v_Vuna_dCompiler_dElab_dTermination_dScc_dtableAddPair = (fun mc0 -> (fu
 
 let v_Vuna_dCompiler_dElab_dTermination_dScc_dtableAdd = (fun f -> (fun g -> (fun edges -> (fun table -> (match ((v_Vuna_dCompiler_dElab_dTermination_dScc_dtableLookup (C_Base_dPair_dPair_Base_dPair_dPair (f, g))) table) with
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> (C_Base_dPair_dPair_Base_dPair_dPair (((((v_Vuna_dCompiler_dElab_dTermination_dScc_dtableAddPair f) g) edges) table), true))
-  | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__184) -> (if ((v_Vuna_dCompiler_dElab_dTermination_dScc_dgraphListHas edges) dtb__184) then (C_Base_dPair_dPair_Base_dPair_dPair (table, true)) else (if ((bi_ge_int (v_Base_dList_dlength dtb__184)) (v_Vuna_dCompiler_dElab_dTermination_dScc_dtableGraphCap ())) then (C_Base_dPair_dPair_Base_dPair_dPair (table, false)) else (C_Base_dPair_dPair_Base_dPair_dPair (((((v_Vuna_dCompiler_dElab_dTermination_dScc_dtableAddPair f) g) edges) table), true))))
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__184) -> (if ((v_Vuna_dCompiler_dElab_dTermination_dScc_dgraphListHas edges) dtb__184) then (C_Base_dPair_dPair_Base_dPair_dPair (table, true)) else (if ((bi_ge_int (v_Base_dList_dlength dtb__184)) v_Vuna_dCompiler_dElab_dTermination_dScc_dtableGraphCap) then (C_Base_dPair_dPair_Base_dPair_dPair (table, false)) else (C_Base_dPair_dPair_Base_dPair_dPair (((((v_Vuna_dCompiler_dElab_dTermination_dScc_dtableAddPair f) g) edges) table), true))))
   | _ -> failwith "DT: impossible branch"
 )))))
 

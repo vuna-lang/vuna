@@ -1,5 +1,4 @@
 open Vuna_runtime
-open Vuna_builtins
 open Base_dPair
 open Base_dBool
 open Base_dMonad
@@ -15,20 +14,20 @@ open Vuna_dCompiler_dCommon
 open Vuna_dCompiler_dFrontend_dToml
 open Vuna_dCompiler_dFrontend_dManifest
 open Vuna_dCompiler_dPackages_dPkg
+open Vuna_dCompiler_dDebug
 open Base_dNat
 open Base_dVec
-open Vuna_dCompiler_dLoader_dDiagnostics
+open Vuna_dCompiler_dDiagnostics
 open Vuna_dCompiler_dFrontend_dAst
 open Vuna_dCompiler_dFrontend_dDiagnostics
 open Vuna_dCompiler_dFrontend_dLexer
 open Vuna_dCompiler_dFrontend_dParser_dSupport
 open Vuna_dCompiler_dFrontend_dParser
+open Vuna_dCompiler_dLoader_dDiagnostics
 open Vuna_dCompiler_dLoader_dModules
 open Vuna_dCompiler_dLoader_dResolve
 open Vuna_dCompiler_dLoader_dFlatten
 open Vuna_dCompiler_dLoader
-open Vuna_dCompiler_dDebug
-open Vuna_dCompiler_dDiagnostics
 open Vuna_dCompiler_dCore_dTerm
 open Vuna_dCompiler_dCore_dEval
 open Vuna_dCompiler_dCore_dConv
@@ -70,9 +69,9 @@ let v_Vuna_dCompiler_dCodegen_dDecl_dtypeName = (fun name -> ((bi_concat "t_") (
 
 let v_Vuna_dCompiler_dCodegen_dDecl_dctorOcamlName = (fun family -> (fun ctor -> ((bi_concat "C_") ((bi_concat (v_Vuna_dCompiler_dCodegen_dDecl_dsanitizeName family)) ((bi_concat "_") (v_Vuna_dCompiler_dCodegen_dDecl_dsanitizeName ctor))))))
 
-let v_Vuna_dCompiler_dCodegen_dDecl_docamlReservedWords = fun () -> (C_Base_dList_dList_Cons ("and", (C_Base_dList_dList_Cons ("as", (C_Base_dList_dList_Cons ("assert", (C_Base_dList_dList_Cons ("asr", (C_Base_dList_dList_Cons ("begin", (C_Base_dList_dList_Cons ("class", (C_Base_dList_dList_Cons ("constraint", (C_Base_dList_dList_Cons ("do", (C_Base_dList_dList_Cons ("done", (C_Base_dList_dList_Cons ("downto", (C_Base_dList_dList_Cons ("else", (C_Base_dList_dList_Cons ("end", (C_Base_dList_dList_Cons ("exception", (C_Base_dList_dList_Cons ("external", (C_Base_dList_dList_Cons ("false", (C_Base_dList_dList_Cons ("for", (C_Base_dList_dList_Cons ("fun", (C_Base_dList_dList_Cons ("function", (C_Base_dList_dList_Cons ("functor", (C_Base_dList_dList_Cons ("if", (C_Base_dList_dList_Cons ("in", (C_Base_dList_dList_Cons ("include", (C_Base_dList_dList_Cons ("inherit", (C_Base_dList_dList_Cons ("initializer", (C_Base_dList_dList_Cons ("land", (C_Base_dList_dList_Cons ("lazy", (C_Base_dList_dList_Cons ("let", (C_Base_dList_dList_Cons ("lor", (C_Base_dList_dList_Cons ("lsl", (C_Base_dList_dList_Cons ("lsr", (C_Base_dList_dList_Cons ("lxor", (C_Base_dList_dList_Cons ("match", (C_Base_dList_dList_Cons ("method", (C_Base_dList_dList_Cons ("mod", (C_Base_dList_dList_Cons ("module", (C_Base_dList_dList_Cons ("mutable", (C_Base_dList_dList_Cons ("new", (C_Base_dList_dList_Cons ("nonrec", (C_Base_dList_dList_Cons ("object", (C_Base_dList_dList_Cons ("of", (C_Base_dList_dList_Cons ("open", (C_Base_dList_dList_Cons ("or", (C_Base_dList_dList_Cons ("private", (C_Base_dList_dList_Cons ("rec", (C_Base_dList_dList_Cons ("sig", (C_Base_dList_dList_Cons ("struct", (C_Base_dList_dList_Cons ("then", (C_Base_dList_dList_Cons ("to", (C_Base_dList_dList_Cons ("true", (C_Base_dList_dList_Cons ("try", (C_Base_dList_dList_Cons ("type", (C_Base_dList_dList_Cons ("val", (C_Base_dList_dList_Cons ("virtual", (C_Base_dList_dList_Cons ("when", (C_Base_dList_dList_Cons ("while", (C_Base_dList_dList_Cons ("with", C_Base_dList_dList_Nil))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
+let v_Vuna_dCompiler_dCodegen_dDecl_docamlReservedWords = (C_Base_dList_dList_Cons ("and", (C_Base_dList_dList_Cons ("as", (C_Base_dList_dList_Cons ("assert", (C_Base_dList_dList_Cons ("asr", (C_Base_dList_dList_Cons ("begin", (C_Base_dList_dList_Cons ("class", (C_Base_dList_dList_Cons ("constraint", (C_Base_dList_dList_Cons ("do", (C_Base_dList_dList_Cons ("done", (C_Base_dList_dList_Cons ("downto", (C_Base_dList_dList_Cons ("else", (C_Base_dList_dList_Cons ("end", (C_Base_dList_dList_Cons ("exception", (C_Base_dList_dList_Cons ("external", (C_Base_dList_dList_Cons ("false", (C_Base_dList_dList_Cons ("for", (C_Base_dList_dList_Cons ("fun", (C_Base_dList_dList_Cons ("function", (C_Base_dList_dList_Cons ("functor", (C_Base_dList_dList_Cons ("if", (C_Base_dList_dList_Cons ("in", (C_Base_dList_dList_Cons ("include", (C_Base_dList_dList_Cons ("inherit", (C_Base_dList_dList_Cons ("initializer", (C_Base_dList_dList_Cons ("land", (C_Base_dList_dList_Cons ("lazy", (C_Base_dList_dList_Cons ("let", (C_Base_dList_dList_Cons ("lor", (C_Base_dList_dList_Cons ("lsl", (C_Base_dList_dList_Cons ("lsr", (C_Base_dList_dList_Cons ("lxor", (C_Base_dList_dList_Cons ("match", (C_Base_dList_dList_Cons ("method", (C_Base_dList_dList_Cons ("mod", (C_Base_dList_dList_Cons ("module", (C_Base_dList_dList_Cons ("mutable", (C_Base_dList_dList_Cons ("new", (C_Base_dList_dList_Cons ("nonrec", (C_Base_dList_dList_Cons ("object", (C_Base_dList_dList_Cons ("of", (C_Base_dList_dList_Cons ("open", (C_Base_dList_dList_Cons ("or", (C_Base_dList_dList_Cons ("private", (C_Base_dList_dList_Cons ("rec", (C_Base_dList_dList_Cons ("sig", (C_Base_dList_dList_Cons ("struct", (C_Base_dList_dList_Cons ("then", (C_Base_dList_dList_Cons ("to", (C_Base_dList_dList_Cons ("true", (C_Base_dList_dList_Cons ("try", (C_Base_dList_dList_Cons ("type", (C_Base_dList_dList_Cons ("val", (C_Base_dList_dList_Cons ("virtual", (C_Base_dList_dList_Cons ("when", (C_Base_dList_dList_Cons ("while", (C_Base_dList_dList_Cons ("with", C_Base_dList_dList_Nil))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
 
-let v_Vuna_dCompiler_dCodegen_dDecl_docamlBinderName = (fun name -> ((fun oc -> (if ((v_Base_dList_dmemName oc) (v_Vuna_dCompiler_dCodegen_dDecl_docamlReservedWords ())) then ((bi_concat oc) "_") else oc)) (v_Vuna_dCompiler_dCodegen_dDecl_dsanitizeName name)))
+let v_Vuna_dCompiler_dCodegen_dDecl_docamlBinderName = (fun name -> ((fun oc -> (if ((v_Base_dList_dmemName oc) v_Vuna_dCompiler_dCodegen_dDecl_docamlReservedWords) then ((bi_concat oc) "_") else oc)) (v_Vuna_dCompiler_dCodegen_dDecl_dsanitizeName name)))
 
 let rec v_Vuna_dCompiler_dCodegen_dDecl_dinterpose = (fun mc0 -> (fun mc1 -> (match mc1 with
   | C_Base_dList_dList_Cons (dtb__0, dtb__1) -> (match dtb__1 with
@@ -339,11 +338,6 @@ let v_Vuna_dCompiler_dCodegen_dDecl_dctorBodyText = (fun mc0 -> (match mc0 with
 ))
 
 let v_Vuna_dCompiler_dCodegen_dDecl_dgenDataDecl = (fun table -> (fun datas -> (fun d -> ((fun levels -> ((v_Base_dResult_dandThen ((((v_Vuna_dCompiler_dCodegen_dDecl_ddataArityNeed levels) table) datas) (v_Vuna_dCompiler_dElab_dTypes_ddtDataCtors d))) (fun arity -> ((v_Base_dResult_dandThen ((v_Base_dResult_dtraverse (((v_Vuna_dCompiler_dCodegen_dDecl_dgenCtorDecl levels) table) datas)) (v_Vuna_dCompiler_dElab_dTypes_ddtDataCtors d))) (fun cs -> (C_Base_dResult_dResult_Base_dResult_dOk (((bi_concat (v_Vuna_dCompiler_dCodegen_dDecl_dtypeParamDecl arity)) ((bi_concat (v_Vuna_dCompiler_dCodegen_dDecl_dtypeName (v_Vuna_dCompiler_dElab_dTypes_ddtDataName d))) ((bi_concat " = ") (v_Vuna_dCompiler_dCodegen_dDecl_dctorBodyText cs))))))))))) ((v_Vuna_dCompiler_dCodegen_dDecl_dlookupUsed table) (v_Vuna_dCompiler_dElab_dTypes_ddtDataName d))))))
-
-let v_Vuna_dCompiler_dCodegen_dDecl_dgenTypeDecls = (fun datas -> (match datas with
-  | C_Base_dList_dList_Nil -> (C_Base_dResult_dResult_Base_dResult_dOk (""))
-  | _ -> ((fun table -> ((v_Base_dResult_dandThen ((v_Base_dResult_dtraverse ((v_Vuna_dCompiler_dCodegen_dDecl_dgenDataDecl table) datas)) datas)) (fun parts -> (C_Base_dResult_dResult_Base_dResult_dOk (((bi_concat "type ") ((bi_concat ((v_Vuna_dCompiler_dCodegen_dDecl_djoinWith "\nand ") parts)) "\n\n"))))))) ((v_Vuna_dCompiler_dCodegen_dDecl_dusedTableFix datas) ((v_Base_dList_dmap (fun d -> (C_Base_dPair_dPair_Base_dPair_dPair ((v_Vuna_dCompiler_dElab_dTypes_ddtDataName d), C_Base_dList_dList_Nil)))) datas)))
-))
 
 let v_Vuna_dCompiler_dCodegen_dDecl_disBoolFamilyName = (fun name -> ((bi_eq_str (v_Vuna_dCompiler_dCodegen_dDecl_dlastName name)) "Bool"))
 

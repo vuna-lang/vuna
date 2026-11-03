@@ -1,19 +1,17 @@
 module Vuna.Compiler.Loader.Flatten
-  ( loadProgram
-  , loadProgramOrdered
-  , loadProgramRaw
-  , loadProgramRawOrdered
-  , loadProgramRawOrderedSource
-  , loadProject
+  ( loadProject
   , loadProjectModules
+  , loadProjectSource
   , resolveProject
   ) where
 
 -- Vuna.Compiler.Loader.Flatten：模块导出表计算、加载流程与 flatten（M24 后维护（源码重组）从 Loader.vuna 拆出）。
 --
 -- 依赖 `Loader.Modules`（模块/导出表）与 `Loader.Resolve`（名字解析）：先算每个模块的
--- 导出表，再按 import 图递归加载（含隐式 Prelude）；`loadProgram*` 负责把入口 + 依赖
--- 模块的声明按历史顺序拼接，`loadProgram*Ordered` 按依赖顺序拼接供 DT 精化。
+-- 导出表，再按 import 图递归加载（含隐式 Prelude）。
+-- M26：入口统一吃 `PackageContext`（最近 manifest 的包 + 依赖闭包 roots）；旧的
+-- 旧的历史顺序拼接/flatten 死路径已删除，DT 精化由 `Driver.Dt` 按
+-- 「依赖序列 + 入口声明」拼接。
 import Vuna.Compiler.Loader.Diagnostics
 import Vuna.Compiler.Common
 import Vuna.Compiler.Frontend.Ast
@@ -408,12 +406,14 @@ computeExports modules prefix hdr imports decls = case hdr of
 showCycle : String -> List String -> String
 showCycle name stack = joinArrows (reverse (name :: stack))
 
--- 自动注入的 Prelude：只从依赖包取，且原始 --root 模式不注入。
--- 显式 import Prelude 时不再重复注入；Prelude 自身不注入（避免环）。
+-- 自动注入的 Prelude：从导入方所在包可见的依赖包取。
+-- 显式 import Prelude 时不再重复注入；Prelude 自身不注入（避免环）；当前包自己
+-- 的 Prelude 不算候选（`implicitPreludeDeps` 按包名过滤）。
+-- M26：ad-hoc（importerPkg==""）不再绕过——无 manifest 的单文件同样是包上下文
+-- （base-only），自动注入 base 的 Prelude；没有 base 依赖的包没有候选，于是不注入。
 implicitPrelude : List Root -> String -> String -> List Import -> Result (List Import)
 implicitPrelude roots importerPkg currentName imports =
-  if importerPkg == "" then Ok []
-  else if currentName == "Prelude" then Ok []
+  if currentName == "Prelude" then Ok []
   else if memName "Prelude" (importModuleNames imports) then Ok []
   else implicitPreludeFrom roots importerPkg
 
@@ -455,25 +455,37 @@ else case findModule modules name of
   )
   else ldErr1 (InvalidModuleName name) name
 
--- 包模式入口：entryPkg 是入口文件所属包（决定同包/跨包导出可见性）。
+-- 包上下文入口：ctx 给出模块根（自己 lib 在最前 + 依赖闭包）与导入方包名
+-- （决定同包/跨包导出可见性、效果内建 allowlist）。
 -- loadProject 返回 flatten 前的形态（入口声明 + 依赖模块列表），供分离编译使用。
-loadProject : List Root -> String -> String -> Result Project
-loadProject roots entryPkg entry = if fileExists entry then andThen (parseSource entry (readFile entry)) (\src => case src of
+loadProject : PackageContext -> String -> Result Project
+loadProject ctx entry = if fileExists entry then andThen (parseSource entry (readFile entry)) (\src => case src of
   Source hdr imports decls => case hdr of
     Just (ModDecl dname hasList items sp) => ldErr1 (ModuleHeaderInEntryFile entry) entry
     Nothing =>
       andThen (validateImports "<entry>" imports)
-        (\_ => andThen (implicitPrelude roots entryPkg "" imports) (\implicit => andThen (loadAll 1048576 roots entryPkg [] [] (append imports implicit)) (\modules => Ok (Project decls imports implicit modules entryPkg))))
+        (\_ => andThen (implicitPrelude (contextRoots ctx) (contextPackageName ctx) "" imports) (\implicit => andThen (loadAll 1048576 (contextRoots ctx) (contextPackageName ctx) [] [] (append imports implicit)) (\modules => Ok (Project decls imports implicit modules (contextPackageName ctx)))))
 )
 else ldErr1 (EntryFileNotFound entry) entry
 
 -- 库包入口：不带 app/Main.vuna 的包，以 [export].modules 作为根模块集合。
-loadProjectModules : List Root -> String -> List String -> Result Project
-loadProjectModules roots entryPkg names =
+loadProjectModules : PackageContext -> List String -> Result Project
+loadProjectModules ctx names =
   let
     entryImports = map (\n => Import n False Nothing (Span "" 0 0 0 0)) names
-  in andThen (loadAll 1048576 roots entryPkg [] [] entryImports)
-    (\modules => Ok (Project [] [] [] modules entryPkg))
+  in andThen (loadAll 1048576 (contextRoots ctx) (contextPackageName ctx) [] [] entryImports)
+    (\modules => Ok (Project [] [] [] modules (contextPackageName ctx)))
+
+-- 入口以**源码字符串**给出（REPL 的表达式求值）：入口不落盘（import 仍按上下文的
+-- roots 从磁盘解析）；隐式 Prelude 与文件入口同规则（ad-hoc 单文件也自动注入）。
+loadProjectSource : PackageContext -> String -> String -> Result Project
+loadProjectSource ctx label source = andThen (parseSource label source) (\src => case src of
+  Source hdr imports decls => case hdr of
+    Just (ModDecl dname hasList items sp) => ldErr1 (ModuleHeaderInEntrySource label) label
+    Nothing =>
+      andThen (validateImports "<entry>" imports)
+        (\_ => andThen (implicitPrelude (contextRoots ctx) (contextPackageName ctx) "" imports) (\implicit => andThen (loadAll 1048576 (contextRoots ctx) (contextPackageName ctx) [] [] (append imports implicit)) (\modules => Ok (Project decls imports implicit modules (contextPackageName ctx)))))
+)
 
 -- 返回逐模块已解析（未 flatten）的声明，供 M12 分离编译使用。
 resolveProject : Project -> Result (Pair (List Decl) (List Module))
@@ -487,45 +499,3 @@ resolveModulesKeep ((Module name pkg imports implicit decls exports) :: rest) =
   andThen
     (andThen (resolveProgram (Module name pkg imports implicit decls exports :: rest) name name (append (topNames decls) (typeNamesOf decls)) (ctorsOf decls) (append (ctorsOf decls) (append (topNames decls) (typeNamesOf decls))) (append imports implicit) decls) (\d => checkEffectsBuiltins name pkg d))
     (\d1 => andThen (resolveModulesKeep rest) (\d2 => Ok (Module name pkg imports implicit d1 exports :: d2)))
-
--- flatten：入口先解析，再按加载顺序解析各模块后拼接（与历史输出保持一致）。
-loadProgram : List Root -> String -> String -> Result (List Decl)
-loadProgram roots entryPkg entry =
-  andThen (loadProject roots entryPkg entry)
-    (\p => andThen (resolveProject p) (\r => Ok (append (firstOf r) (concatMap moduleDeclsOf (secondOf r)))))
-
--- 原始 --root DIR 模式：所有根同属空包名，不限制导出。
-loadProgramRaw : List String -> String -> Result (List Decl)
-loadProgramRaw roots entry = loadProgram (map rawRoot roots) "" entry
-
--- ---------------------------------------------------------------
--- DT 用的 flatten：按**依赖顺序**拼接声明
--- ---------------------------------------------------------------
--- `loadProgram` 为了 HM 产物稳定，保持「入口声明在前、依赖模块按加载顺序」的历史
--- 顺序；DT 精化器按声明顺序建 globals（data → trait → sig → body），必须**被依赖
--- 模块在前**，否则 `Base.Map` 的 data 会先于 `Base.List` 精化、报
--- `DT: unknown name Base.List.List`。Loader 的 modules 列表是「依赖在前」的反序
--- （每个模块出现在它依赖的模块之前），reverse 后即为拓扑序。
-orderedProjectDecls : Project -> Result (List Decl)
-orderedProjectDecls p =
-  andThen (resolveProject p)
-    (\r => Ok (append (concatMap moduleDeclsOf (reverse (secondOf r))) (firstOf r)))
-
-loadProgramOrdered : List Root -> String -> String -> Result (List Decl)
-loadProgramOrdered roots entryPkg entry =
-  andThen (loadProject roots entryPkg entry) orderedProjectDecls
-
-loadProgramRawOrdered : List String -> String -> Result (List Decl)
-loadProgramRawOrdered roots entry = loadProgramOrdered (map rawRoot roots) "" entry
-
--- 入口以**源码字符串**给出（REPL 的表达式求值）：与 `loadProgramRawOrdered` 同构，
--- 只是入口不落盘（`import` 仍按 roots 从磁盘解析）。raw 模式的入口包为空，
--- 因此不注入隐式 Prelude，与 `--root` 单文件路径的行为一致。
-loadProgramRawOrderedSource : List String -> String -> String -> Result (List Decl)
-loadProgramRawOrderedSource roots label source = andThen (parseSource label source) (\src => case src of
-  Source hdr imports decls => case hdr of
-    Just (ModDecl dname hasList items sp) => ldErr1 (ModuleHeaderInEntrySource label) label
-    Nothing =>
-      andThen (validateImports "<entry>" imports)
-        (\_ => andThen (loadAll 1048576 (map rawRoot roots) "" [] [] imports) (\modules => orderedProjectDecls (Project decls imports [] modules "")))
-)

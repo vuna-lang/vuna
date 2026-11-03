@@ -88,6 +88,10 @@ builtinArity "prim_fileMtime" = Just 1
 builtinArity "prim_fileSize" = Just 1
 builtinArity "prim_exit" = Just 1
 builtinArity "prim_runIn" = Just 2
+-- M26：包上下文/base 定位所需的只读原语（只有 prim_* 名、无公开别名；语义规范归 M27）。
+builtinArity "prim_getenv" = Just 1
+builtinArity "prim_getcwd" = Just 0
+builtinArity "prim_execPath" = Just 0
 builtinArity _ = Nothing
 
 isBuiltinName : String -> Bool
@@ -549,7 +553,8 @@ resolveModules modules = case modules of
 -- effectful 内建的包级限制（M12.6）
 -- 编译器 / 产品 CLI / stdlib 自己需要直接做文件 IO，允许使用纯内建；
 -- 普通用户包只能通过 Base.IO 的 IO API 使用效果，不能在纯代码里直接 print/readFile。
--- （--root 原始模式 entryPkg = ""，保留给解释器/测试夹具的调试路径。）
+-- M26：ad-hoc（pkg==""，无 manifest 的 base-only 上下文）不再有旁路：入口与依赖
+-- 模块一律按空包名判定，效果尝试一律被拒。
 -- ---------------------------------------------------------------
 packageAllowsEffects : String -> Bool
 packageAllowsEffects pkg = pkg == "vuna" || pkg == "vuna-compiler" || pkg == "vuna-base"
@@ -583,6 +588,9 @@ isEffectfulBuiltin name =
     || name == "prim_fileSize"
     || name == "prim_exit"
     || name == "prim_runIn"
+    || name == "prim_getenv"
+    || name == "prim_getcwd"
+    || name == "prim_execPath"
 
 firstEffect : List (Maybe a) -> Maybe a
 firstEffect [] = Nothing
@@ -646,14 +654,17 @@ effDecls : List Decl -> Maybe String
 effDecls [] = Nothing
 effDecls (d :: rest) = firstEffect [effDecl d, effDecls rest]
 
+-- 效果被拒的上下文描述：ad-hoc 文件（无 manifest、base-only 上下文）没有包名。
+packageLabelForEffects : String -> String
+packageLabelForEffects pkg = if pkg == "" then "ad-hoc file (no package)" else "package " ++ pkg
+
 checkEffectsBuiltins : String -> String -> List Decl -> Result (List Decl)
 checkEffectsBuiltins label pkg decls = if packageAllowsEffects pkg then Ok decls
-else if pkg == "" && label /= "<entry>" then Ok decls
 else case effDecls decls of
   Nothing => Ok decls
   Just name =>
     Err
-      (label ++ ": effectful builtin `" ++ name ++ "` is not available in package " ++ pkg ++ " (use Base.IO)")
+      (label ++ ": effectful builtin `" ++ name ++ "` is not available in " ++ packageLabelForEffects pkg ++ " (use Base.IO)")
 
 tyShape : Expr -> String
 tyShape ty = case ty of

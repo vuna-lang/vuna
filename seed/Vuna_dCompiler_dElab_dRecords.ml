@@ -1,5 +1,4 @@
 open Vuna_runtime
-open Vuna_builtins
 open Base_dPair
 open Base_dBool
 open Base_dMonad
@@ -15,20 +14,20 @@ open Vuna_dCompiler_dCommon
 open Vuna_dCompiler_dFrontend_dToml
 open Vuna_dCompiler_dFrontend_dManifest
 open Vuna_dCompiler_dPackages_dPkg
+open Vuna_dCompiler_dDebug
 open Base_dNat
 open Base_dVec
-open Vuna_dCompiler_dLoader_dDiagnostics
+open Vuna_dCompiler_dDiagnostics
 open Vuna_dCompiler_dFrontend_dAst
 open Vuna_dCompiler_dFrontend_dDiagnostics
 open Vuna_dCompiler_dFrontend_dLexer
 open Vuna_dCompiler_dFrontend_dParser_dSupport
 open Vuna_dCompiler_dFrontend_dParser
+open Vuna_dCompiler_dLoader_dDiagnostics
 open Vuna_dCompiler_dLoader_dModules
 open Vuna_dCompiler_dLoader_dResolve
 open Vuna_dCompiler_dLoader_dFlatten
 open Vuna_dCompiler_dLoader
-open Vuna_dCompiler_dDebug
-open Vuna_dCompiler_dDiagnostics
 open Vuna_dCompiler_dCore_dTerm
 open Vuna_dCompiler_dCore_dEval
 open Vuna_dCompiler_dCore_dConv
@@ -91,16 +90,16 @@ let rec v_Vuna_dCompiler_dElab_dRecords_dfieldNamesOf = (fun mc0 -> (match mc0 w
   | _ -> failwith "DT: impossible branch"
 ))
 
-let rec v_Vuna_dCompiler_dElab_dRecords_dfieldIndexAt = (fun d7006 -> (fun mc0 -> (fun mc1 -> (fun mc2 -> (match mc1 with
+let rec v_Vuna_dCompiler_dElab_dRecords_dfieldIndexAt = (fun d7017 -> (fun mc0 -> (fun mc1 -> (fun mc2 -> (match mc1 with
   | C_Base_dList_dList_Cons (dtb__36, dtb__37) -> (match dtb__36 with
-  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__38, dtb__39) -> (if (((v_Base_dEq_deq d7006) dtb__38) mc0) then (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (mc2)) else ((((v_Vuna_dCompiler_dElab_dRecords_dfieldIndexAt d7006) mc0) dtb__37) ((bi_add mc2) 1)))
+  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__38, dtb__39) -> (if (((v_Base_dEq_deq d7017) dtb__38) mc0) then (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (mc2)) else ((((v_Vuna_dCompiler_dElab_dRecords_dfieldIndexAt d7017) mc0) dtb__37) ((bi_add mc2) 1)))
   | _ -> failwith "DT: impossible branch"
 )
   | C_Base_dList_dList_Nil -> C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing
   | _ -> failwith "DT: impossible branch"
 )))))
 
-let v_Vuna_dCompiler_dElab_dRecords_dfieldIndex = (fun d7013 -> (fun fname -> (fun fields -> ((((v_Vuna_dCompiler_dElab_dRecords_dfieldIndexAt d7013) fname) fields) 0))))
+let v_Vuna_dCompiler_dElab_dRecords_dfieldIndex = (fun d7024 -> (fun fname -> (fun fields -> ((((v_Vuna_dCompiler_dElab_dRecords_dfieldIndexAt d7024) fname) fields) 0))))
 
 let rec v_Vuna_dCompiler_dElab_dRecords_dlookupProvided = (fun mc0 -> (fun mc1 -> (match mc1 with
   | C_Base_dList_dList_Cons (dtb__40, dtb__41) -> (match dtb__40 with

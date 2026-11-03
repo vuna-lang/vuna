@@ -1,5 +1,4 @@
 open Vuna_runtime
-open Vuna_builtins
 open Base_dPair
 open Base_dBool
 open Base_dMonad
@@ -67,7 +66,7 @@ let rec v_Base_dList_dmap = (fun mc0 -> (fun mc1 -> (match mc1 with
   | _ -> failwith "DT: impossible branch"
 )))
 
-let v_Base_dList_dBase_dMonad_dFunctor_uBase_dMonad_dFunctor_uBase_dList_dList = fun () -> (C_Dict_uBase_dMonad_dFunctor_MkDict_uBase_dMonad_dFunctor ((fun f -> (fun xs -> ((v_Base_dList_dmap f) xs)))))
+let v_Base_dList_dBase_dMonad_dFunctor_uBase_dMonad_dFunctor_uBase_dList_dList = (C_Dict_uBase_dMonad_dFunctor_MkDict_uBase_dMonad_dFunctor ((fun f -> (fun xs -> ((v_Base_dList_dmap f) xs)))))
 
 let rec v_Base_dList_dfilter = (fun mc0 -> (fun mc1 -> (match mc1 with
   | C_Base_dList_dList_Cons (dtb__8, dtb__9) -> (if (mc0 dtb__8) then (C_Base_dList_dList_Cons (dtb__8, ((v_Base_dList_dfilter mc0) dtb__9))) else ((v_Base_dList_dfilter mc0) dtb__9))
@@ -93,7 +92,7 @@ let rec v_Base_dList_dconcatMap = (fun mc0 -> (fun mc1 -> (match mc1 with
   | _ -> failwith "DT: impossible branch"
 )))
 
-let v_Base_dList_dBase_dMonad_dMonad_uBase_dMonad_dMonad_uBase_dList_dList = fun () -> (C_Dict_uBase_dMonad_dMonad_MkDict_uBase_dMonad_dMonad ((fun xs -> (fun f -> ((v_Base_dList_dconcatMap f) xs))), (fun x -> (C_Base_dList_dList_Cons (x, C_Base_dList_dList_Nil)))))
+let v_Base_dList_dBase_dMonad_dMonad_uBase_dMonad_dMonad_uBase_dList_dList = (C_Dict_uBase_dMonad_dMonad_MkDict_uBase_dMonad_dMonad ((fun xs -> (fun f -> ((v_Base_dList_dconcatMap f) xs))), (fun x -> (C_Base_dList_dList_Cons (x, C_Base_dList_dList_Nil)))))
 
 let v_Base_dList_dflatMap = (fun f -> (fun xs -> ((v_Base_dList_dconcatMap f) xs)))
 

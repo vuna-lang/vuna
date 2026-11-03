@@ -1,0 +1,11 @@
+# M26：corpus 是一个独立包上下文（只依赖 vuna-base）。
+# 单文件夹具（corpus/run/*.vuna、corpus/dt/*.vuna 等）的最近 manifest 就是本文件：
+# 无 `--root` 时代的环境根由这里取代，base 经 [dependencies] 进入可见性闭包，
+# ad-hoc 入口自动注入 Prelude（M26 语义）。
+[package]
+name = "vuna-corpus"
+version = "0.1.0"
+edition = "2026"
+
+[dependencies]
+vuna-base = "../../base"

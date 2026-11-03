@@ -95,6 +95,7 @@ in
       ../../lib
       ../../compiler
       ../../app
+      ../../vuna.toml
     ];
     env = {
       VUNA = "${vuna}/bin/vuna";

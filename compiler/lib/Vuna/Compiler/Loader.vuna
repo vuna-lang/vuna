@@ -6,13 +6,9 @@ module Vuna.Compiler.Loader
   , entryParent
   , entryPublic
   , entryTarget
-  , loadProgram
-  , loadProgramOrdered
-  , loadProgramRaw
-  , loadProgramRawOrdered
-  , loadProgramRawOrderedSource
   , loadProject
   , loadProjectModules
+  , loadProjectSource
   , moduleAllImportsOf
   , moduleDeclsOf
   , moduleExportsOf
@@ -32,7 +28,9 @@ module Vuna.Compiler.Loader
 -- 实现分三层（依赖单向，无环）：
 --   - `Loader.Modules`：Module / Project / ExportEntry / ExportRef 与模块图查询；
 --   - `Loader.Resolve`：名字解析 + effectful 内建包级限制（原 Loader.Builtins 已并入）；
---   - `Loader.Flatten`：导出表计算、加载流程、flatten 与 ordered 变体。
+--   - `Loader.Flatten`：导出表计算、加载流程与 resolveProject。
+-- M26：入口统一吃 `PackageContext`（`Vuna.Compiler.Packages.Pkg`）——模块可见性由
+-- 包上下文的 roots 决定；旧的环境根 API 已删除。
 -- 门面按名重导出原来的公开 API（语义/抽象性不变：Module/Project 的构造器保持公开、
 -- ExportEntry 只公开类型）。
 import Vuna.Compiler.Loader.Flatten

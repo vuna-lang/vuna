@@ -6,8 +6,8 @@ data Nat : Type where
   Succ : Nat -> Nat
 
 data Vec : Type -> Nat -> Type where
-  Nil : {a : Type} -> Vec a Zero
-  Cons : {a : Type} -> (n : Nat) -> a -> Vec a n -> Vec a (Succ n)
+  VNil : {a : Type} -> Vec a Zero
+  VCons : {a : Type} -> (n : Nat) -> a -> Vec a n -> Vec a (Succ n)
 
 record Point where
   x : Int
@@ -21,8 +21,8 @@ data Proxy : Type where
 
 sumVec : {n : Nat} -> Vec Int n -> Int
 sumVec xs = case xs of
-  [] => 0
-  Cons m y ys => y + sumVec ys
+  VNil => 0
+  VCons m y ys => y + sumVec ys
 
 sumPoint : Point -> Int
 sumPoint p = case p of
@@ -38,7 +38,7 @@ proxyTag p = case p of
 
 main : Int
 main =
-  sumVec (Cons (Succ (Succ Zero)) 3 (Cons (Succ Zero) 4 (Cons Zero 5 [])))
+  sumVec (VCons (Succ (Succ Zero)) 3 (VCons (Succ Zero) 4 (VCons Zero 5 VNil)))
     + sumPoint Point { x = 10, y = 20 }
     + pairTag (MkPair2 1 2)
     + proxyTag (MkProxy Int)
