@@ -32,7 +32,7 @@ import Vuna.Compiler.Core
 -- ---------------------------------------------------------------
 -- 内置 prelude：Int / String 类型常量、运算符与 str* 内建（Bool 的权威定义是
 -- `Base.Bool`，见 M22.2 去桩；单文件模式需自己声明 `data Bool`）。
--- 名字与 TypedCodegen 的 runtime helper 一一对应（codegen 按名字映射）。
+-- 名字与 Codegen.Term 的 runtime helper 一一对应（codegen 按名字映射）。
 -- ---------------------------------------------------------------
 preludeNames : List String
 preludeNames =

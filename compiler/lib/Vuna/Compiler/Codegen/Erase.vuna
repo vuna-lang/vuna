@@ -1,0 +1,398 @@
+module Vuna.Compiler.Codegen.Erase
+  ( binderAt
+  , checkAllDefScopes
+  , checkAllErasure
+  , defTable
+  , depAdjacency
+  , ensureUniqueOcamlNames
+  , findDtDef
+  , flattenConApp
+  , groupRuntimeDefs
+  , neighborsOf
+  , partitionDefs
+  , showMetaHint
+  ) where
+
+-- Vuna.Compiler.Codegen.Erase：擦除检查、依赖分析与 SCC 分组。
+--
+-- 输入是 Elab 产出的 `DtProgram` 定义表（项上自带擦除标志），本模块负责：
+--   - 类型级 / 运行时定义分区（isTypeForming / partitionDefs）；
+--   - 运行时项的擦除检查（运行时位置不得出现被擦除绑定 / 类型 / 类型级定义）；
+--   - de Bruijn 作用域护栏与 OCaml 名字单射性护栏；
+--   - 运行时依赖图与 SCC 分组（决定 `let` / `let rec ... and ...` 的生成顺序）。
+-- 纯分析，不产生 OCaml 文本。
+import Vuna.Compiler.Common
+import Vuna.Compiler.Core
+import Vuna.Compiler.Elab
+import Vuna.Compiler.Codegen.Decl
+
+-- ---------------------------------------------------------------
+-- 构造子应用的标准形态
+-- ---------------------------------------------------------------
+--
+-- 精化器可能把饱和的构造子应用表示成嵌套 `TApp (TApp (TCon c []) a) b`，
+-- 也可能直接给 `TCon c [a, b]`。这里统一折叠成 (构造子名, 实参列表)：
+-- 擦除/依赖分析按实参自带的擦除标志判断，生成侧好一次性 tupled 出来。
+flattenConApp : Term -> Maybe (Pair String (List (Pair Term Rig)))
+flattenConApp t = case t of
+  TApp f a rig => case flattenConApp f of
+    Just (Pair c args) => Just (Pair c (append args [Pair a rig]))
+    Nothing => Nothing
+  TCon c args => Just (Pair c args)
+  _ => Nothing
+
+-- ---------------------------------------------------------------
+-- 预处理：分区（类型级 / 运行时）、擦除检查、依赖拓扑排序
+-- ---------------------------------------------------------------
+defTable : List DtDef -> List (Pair String Term)
+defTable [] = []
+defTable (d :: rest) = Pair (dtDefName d) (dtDefBody d) :: defTable rest
+
+findDtDef : String -> List DtDef -> Maybe DtDef
+findDtDef name [] = Nothing
+findDtDef name (d :: rest) = if dtDefName d == name then Just d else findDtDef name rest
+
+-- 类型级定义的判据：定义**类型** force 后以宇宙收尾（`Type` 或 `... -> Type` 的 Pi 链）。
+-- 旧实现只看 `isTypeValue`（仅裸 `Type`），于是 `sel : Nat -> Type` 一类类型族被判成
+-- 运行时定义，生成的 OCaml 里出现未定义的 `v_Int`/`v_String`（M24.5 发现的预存在 bug）。
+isTypeForming : Value -> Bool
+isTypeForming v = case v of
+  VType l => True
+  VPi name implicit rig dom clo => isTypeForming (applyClosure clo (VNeutral (NVar name 0 [])))
+  _ => False
+
+isTypeLevelDef : List (Pair String Term) -> DtDef -> Bool
+isTypeLevelDef table d = isTypeForming (force table [] defaultFuel (eval [] (dtDefType d)))
+
+partitionDefs : List (Pair String Term) -> List DtDef -> Pair (List DtDef) (List String)
+partitionDefs table defs = partitionDefsGo table defs [] []
+
+partitionDefsGo : List (Pair String Term) -> List DtDef -> List DtDef -> List String -> Pair (List DtDef) (List String)
+partitionDefsGo table [] runtime typeNames = Pair (reverse runtime) (reverse typeNames)
+partitionDefsGo table (d :: rest) runtime typeNames =
+  if isTypeLevelDef table d then partitionDefsGo table rest runtime (dtDefName d :: typeNames)
+  else partitionDefsGo table rest (d :: runtime) typeNames
+
+checkAllErasure : List String -> List DtDef -> Result Int
+checkAllErasure typeNames [] = Ok 0
+checkAllErasure typeNames (d :: rest) =
+  andThen (checkOneErasure typeNames d) (\_ => checkAllErasure typeNames rest)
+
+-- 报错带上定义名：同一份程序里哪个函数有问题要能一眼看出来。
+checkOneErasure : List String -> DtDef -> Result Int
+checkOneErasure typeNames d = case checkErasure typeNames [] (dtDefBody d) of
+  Err e => Err ("in `" ++ dtDefName d ++ "`: " ++ e)
+  Ok n => Ok n
+
+-- binders：最近绑定在前（名字 + 是否擦除）。
+showMetaHint : Int -> String
+showMetaHint m = " ?" ++ strFromInt m
+
+checkErasure : List String -> List (Pair String Rig) -> Term -> Result Int
+checkErasure typeNames binders t = case t of
+  TVar name i => case binderAt i binders of
+    Just (Pair n rig) =>
+      if rigIsErased rig then Err ("DT: type-level binding `" ++ name ++ "` is used at runtime (M13 limitation)")
+      else Ok 0
+    Nothing =>
+      Err
+        ("DT: internal: unbound runtime variable " ++ name ++ " (index " ++ strFromInt i ++ ", binders " ++ strFromInt (length binders) ++ ")")
+  TGlobal name =>
+    if memName name typeNames then Err ("DT: type-level name `" ++ name ++ "` is used at runtime (M13 limitation)")
+    else Ok 0
+  TType l => Err "DT: a type is used at runtime (M13 limitation)"
+  TPi name implicit rig dom cod => Err "DT: a type is used at runtime (M13 limitation)"
+  TMeta m => Err ("DT: unsolved metavariable in runtime code" ++ showMetaHint m)
+  TLam name rig body => checkErasure typeNames (Pair name rig :: binders) body
+  TApp f a rig => case flattenConApp t of
+    -- 嵌套在构造子上的应用按构造子实参检查（实参自带擦除标志，比 TApp 的更准）。
+    Just (Pair c args) => checkConArgsErasure typeNames binders args
+    Nothing =>
+      if rigIsErased rig then checkErasure typeNames binders f
+      else andThen (checkErasure typeNames binders f) (\_ => checkErasure typeNames binders a)
+  -- M14：构造子应用只看非擦除实参（擦除实参是族参数/索引，允许是类型项）。
+  TCon c args => checkConArgsErasure typeNames binders args
+  -- M14：case 的分支把「完整 telescope（表面顺序）」压栈后再检查分支体。
+  TCase scrut alts =>
+    andThen (checkErasure typeNames binders scrut) (\_ => checkAltErasure typeNames binders alts)
+  TInt n => Ok 0
+  TStr s => Ok 0
+  TBool b => Ok 0
+  TIf c th el =>
+    andThen (checkErasure typeNames binders c)
+      (\_ => andThen (checkErasure typeNames binders th) (\_ => checkErasure typeNames binders el))
+
+checkConArgsErasure : List String -> List (Pair String Rig) -> List (Pair Term Rig) -> Result Int
+checkConArgsErasure typeNames binders [] = Ok 0
+checkConArgsErasure typeNames binders ((Pair arg rig) :: rest) =
+  if rigIsErased rig then checkConArgsErasure typeNames binders rest
+  else andThen (checkErasure typeNames binders arg) (\_ => checkConArgsErasure typeNames binders rest)
+
+checkAltErasure : List String -> List (Pair String Rig) -> List CaseAlt -> Result Int
+checkAltErasure typeNames binders [] = Ok 0
+checkAltErasure typeNames binders (alt :: rest) =
+  let
+    altBinders = caseAltBinders alt
+    env = append (reverse altBinders) binders
+  in andThen (checkErasure typeNames env (caseAltBody alt))
+    (\_ => checkAltErasure typeNames binders rest)
+
+binderAt : Int -> List (Pair String Rig) -> Maybe (Pair String Rig)
+binderAt i [] = Nothing
+binderAt i (b :: rest) = if i <= 0 then Just b else binderAt (i - 1) rest
+
+-- 依赖：运行时会用到的 TGlobal（擦除实参里的不算）。
+termDepsInto : List String -> List String -> Term -> List String
+termDepsInto runtimeNames acc t = case t of
+  TGlobal name => if memName name runtimeNames then addName name acc else acc
+  TVar name i => acc
+  TMeta m => acc
+  TType l => acc
+  TPi name implicit rig dom cod => acc
+  TLam name rig body => termDepsInto runtimeNames acc body
+  TApp f a rig => case flattenConApp t of
+    Just (Pair c args) => termDepsArgs runtimeNames acc args
+    Nothing =>
+      if rigIsErased rig then termDepsInto runtimeNames acc f
+      else termDepsInto runtimeNames (termDepsInto runtimeNames acc f) a
+  TCon c args => termDepsArgs runtimeNames acc args
+  TCase scrut alts => termDepsAlts runtimeNames (termDepsInto runtimeNames acc scrut) alts
+  TInt n => acc
+  TStr s => acc
+  TBool b => acc
+  TIf c th el =>
+    termDepsInto runtimeNames (termDepsInto runtimeNames (termDepsInto runtimeNames acc c) th) el
+
+termDepsArgs : List String -> List String -> List (Pair Term Rig) -> List String
+termDepsArgs runtimeNames acc [] = acc
+termDepsArgs runtimeNames acc ((Pair arg rig) :: rest) =
+  if rigIsErased rig then termDepsArgs runtimeNames acc rest
+  else termDepsArgs runtimeNames (termDepsInto runtimeNames acc arg) rest
+
+termDepsAlts : List String -> List String -> List CaseAlt -> List String
+termDepsAlts runtimeNames acc [] = acc
+termDepsAlts runtimeNames acc (alt :: rest) =
+  termDepsAlts runtimeNames (termDepsInto runtimeNames acc (caseAltBody alt)) rest
+
+addName : String -> List String -> List String
+addName name [] = [name]
+addName name (x :: rest) = if x == name then x :: rest else x :: addName name rest
+
+runtimeNamesOf : List DtDef -> List String
+runtimeNamesOf [] = []
+runtimeNamesOf (d :: rest) = dtDefName d :: runtimeNamesOf rest
+
+lookupDtDef : List DtDef -> String -> Maybe DtDef
+lookupDtDef defs name = findDtDef name defs
+
+-- ---------------------------------------------------------------
+-- SCC 分组（M14：替代 M13 的「递归 = 报错」）
+-- ---------------------------------------------------------------
+--
+-- 按 Kosaraju 分组（与 Codegen 的既有实现同构）：先在正向依赖图上求完成顺序，再在反向图
+-- 上按该顺序收集分量，最后按依赖就绪顺序排列分量。分量内成员按源码顺序排列，
+-- 保证同一输入产出逐字节稳定的 OCaml。
+neighborsOf : List (Pair String (List String)) -> String -> List String
+neighborsOf adj name = case adj of
+  [] => []
+  (Pair n ns) :: rest => if n == name then ns else neighborsOf rest name
+
+dependentsOf : String -> List (Pair String (List String)) -> List String
+dependentsOf name [] = []
+dependentsOf name ((Pair n ns) :: rest) =
+  let
+    dep = dependentsOf name rest
+  in if memName name ns then n :: dep else dep
+
+reverseAdj : List String -> List (Pair String (List String)) -> List (Pair String (List String))
+reverseAdj names adj = map (\n => Pair n (dependentsOf n adj)) names
+
+foldNeighborsPost : List (Pair String (List String)) -> List String -> List String -> List String -> Pair (List String) (List String)
+foldNeighborsPost adj [] visited order = Pair visited order
+foldNeighborsPost adj (m :: rest) visited order = if memName m visited then foldNeighborsPost adj rest visited order
+else case dfsPost adj m (m :: visited) order of
+  Pair visited2 order2 => foldNeighborsPost adj rest visited2 order2
+
+dfsPost : List (Pair String (List String)) -> String -> List String -> List String -> Pair (List String) (List String)
+dfsPost adj n visited order = case foldNeighborsPost adj (neighborsOf adj n) visited order of
+  Pair visited2 order2 => Pair visited2 (n :: order2)
+
+postOrder : List (Pair String (List String)) -> List String -> List String -> List String -> Pair (List String) (List String)
+postOrder adj nodes visited order = case nodes of
+  [] => Pair visited order
+  n :: rest => if memName n visited then postOrder adj rest visited order
+  else case dfsPost adj n (n :: visited) order of
+    Pair visited2 order2 => postOrder adj rest visited2 order2
+
+foldNeighborsCollect : List (Pair String (List String)) -> List String -> List String -> List String -> Pair (List String) (List String)
+foldNeighborsCollect revAdj [] visited comp = Pair visited comp
+foldNeighborsCollect revAdj (m :: rest) visited comp = if memName m visited then foldNeighborsCollect revAdj rest visited comp
+else case dfsCollect revAdj m (m :: visited) comp of
+  Pair visited2 comp2 => foldNeighborsCollect revAdj rest visited2 comp2
+
+dfsCollect : List (Pair String (List String)) -> String -> List String -> List String -> Pair (List String) (List String)
+dfsCollect revAdj n visited comp = case foldNeighborsCollect revAdj (neighborsOf revAdj n) visited comp of
+  Pair visited2 comp2 => Pair visited2 (n :: comp2)
+
+collectComps : List (Pair String (List String)) -> List String -> List String -> List (List String) -> List (List String)
+collectComps revAdj nodes visited comps = case nodes of
+  [] => comps
+  n :: rest => if memName n visited then collectComps revAdj rest visited comps
+  else case dfsCollect revAdj n (n :: visited) [] of
+    Pair visited2 comp => collectComps revAdj rest visited2 (comp :: comps)
+
+componentOf : List (List String) -> String -> Maybe (List String)
+componentOf [] name = Nothing
+componentOf (g :: rest) name = if memName name g then Just g else componentOf rest name
+
+-- 按 names 首次出现顺序产出 SCC，组内成员按 names 顺序排列。
+groupsFromComps : List (List String) -> List String -> List (List String)
+groupsFromComps comps names = groupsFromCompsGo comps names names []
+
+groupsFromCompsGo : List (List String) -> List String -> List String -> List String -> List (List String)
+groupsFromCompsGo comps allNames [] emitted = []
+groupsFromCompsGo comps allNames (n :: rest) emitted = if memName n emitted then groupsFromCompsGo comps allNames rest emitted
+else case componentOf comps n of
+  Just g =>
+    filterNames (\m => memName m g) allNames
+      :: groupsFromCompsGo comps allNames rest (append g emitted)
+  Nothing => groupsFromCompsGo comps allNames rest emitted
+
+filterNames : (String -> Bool) -> List String -> List String
+filterNames pred names = case names of
+  [] => []
+  n :: rest => if pred n then n :: filterNames pred rest else filterNames pred rest
+
+notIn : String -> List String -> Bool
+notIn name names = if memName name names then False else True
+
+uniqueNames : List String -> List String
+uniqueNames [] = []
+uniqueNames (name :: rest) =
+  if name == "" then uniqueNames rest
+  else if memName name rest then uniqueNames rest else name :: uniqueNames rest
+
+groupDeps : List (Pair String (List String)) -> List String -> List String
+groupDeps adj group =
+  filterNames (\n => notIn n group) (uniqueNames (concatMap (neighborsOf adj) group))
+
+allIn : List String -> List String -> Bool
+allIn names allowed = case names of
+  [] => True
+  n :: rest => if memName n allowed then allIn rest allowed else False
+
+groupReady : List (Pair String (List String)) -> List String -> List String -> Bool
+groupReady adj group emitted = allIn (groupDeps adj group) emitted
+
+pickReady : List (Pair String (List String)) -> List (List String) -> List String -> Maybe (Pair (List String) (List (List String)))
+pickReady adj groups emitted = pickReadyAcc adj groups [] emitted
+
+pickReadyAcc : List (Pair String (List String)) -> List (List String) -> List (List String) -> List String -> Maybe (Pair (List String) (List (List String)))
+pickReadyAcc adj [] before emitted = Nothing
+pickReadyAcc adj (g :: rest) before emitted =
+  if groupReady adj g emitted then Just (Pair g (append (reverse before) rest))
+  else pickReadyAcc adj rest (g :: before) emitted
+
+orderGroups : List (Pair String (List String)) -> List (List String) -> Result (List (List String))
+orderGroups adj groups = orderGroupsAcc adj groups []
+
+orderGroupsAcc : List (Pair String (List String)) -> List (List String) -> List String -> Result (List (List String))
+orderGroupsAcc adj [] emitted = Ok []
+orderGroupsAcc adj remaining emitted = case pickReady adj remaining emitted of
+  Nothing => Err "DT: dependency cycle between runtime definitions"
+  Just (Pair g rest) =>
+    andThen (orderGroupsAcc adj rest (append g emitted)) (\tail => Ok (g :: tail))
+
+-- 运行时定义的依赖邻接表（只保留运行时会用到的 TGlobal 边）。
+depAdjacency : List DtDef -> List (Pair String (List String))
+depAdjacency defs =
+  let
+    names = runtimeNamesOf defs
+  in map (\d => Pair (dtDefName d) (termDepsInto names [] (dtDefBody d))) defs
+
+groupRuntimeDefs : List DtDef -> Result (List (List DtDef))
+groupRuntimeDefs defs =
+  let
+    names = runtimeNamesOf defs
+    adj = depAdjacency defs
+    revAdj = reverseAdj names adj
+  in case postOrder adj names [] [] of
+    Pair _ order =>
+      let
+        comps = collectComps revAdj order [] []
+        groups = groupsFromComps comps names
+      in andThen (orderGroups adj groups) (\ordered => Ok (map (groupDefsOf defs) ordered))
+
+groupDefsOf : List DtDef -> List String -> List DtDef
+groupDefsOf defs [] = []
+groupDefsOf defs (n :: rest) = case lookupDtDef defs n of
+  Nothing => groupDefsOf defs rest
+  Just d => d :: groupDefsOf defs rest
+
+-- M24.6 第一级：OCaml 名字编码的单射性护栏。`sanitizeName` 的转义是前缀码
+-- （'_' 只会以 `_d/_u/_p/_h` 形式出现），理论上已单射；这里仍对**实际生成的**
+-- value/type/ctor 名字做去重校验，任何未来改动引入碰撞都在 check 期报错，而不是
+-- 静默覆盖（三族前缀 v_/t_/C_ 互不相同，只需族内校验）。
+checkNoDupOcamlNames : String -> List String -> Result Int
+checkNoDupOcamlNames kind [] = Ok 0
+checkNoDupOcamlNames kind (n :: rest) =
+  if memName n rest then Err ("DT: internal: OCaml name collision among " ++ kind ++ "s: `" ++ n ++ "`")
+  else checkNoDupOcamlNames kind rest
+
+ensureUniqueOcamlNames : List DtData -> List DtDef -> Result Int
+ensureUniqueOcamlNames datas defs =
+  let
+    runtime = runtimeDatas datas
+    valueNames = map (\d => valueName (dtDefName d)) defs
+    typeNames = map (\d => typeName (dtDataName d)) runtime
+    ctorNames =
+      concatMap (\d => map (\c => ctorOcamlName (dtCtorFamily c) (dtCtorName c)) (dtDataCtors d))
+        runtime
+  in andThen (checkNoDupOcamlNames "value" valueNames)
+    (\_ => andThen (checkNoDupOcamlNames "type" typeNames) (\_ => checkNoDupOcamlNames "constructor" ctorNames))
+
+-- M24.6 第三级（重新裁定后的最小落地）：de Bruijn index 的作用域护栏。
+-- `Core.varIndex` 越界已改为返回 -1（不再静默指向 0）；这里对**全部**定义体
+-- （含类型级定义，它们现在整体擦除、不再过擦除检查）做一次作用域验证，任何
+-- 越界/负 index 都在 check 期报内部错误，而不是在 codegen/OCaml 阶段才炸。
+checkTermScopes : Int -> Term -> Result Int
+checkTermScopes depth t = case t of
+  TVar name i =>
+    if i >= 0 then if i < depth then Ok 0
+    else Err
+      ("DT: internal: out-of-scope de Bruijn index " ++ strFromInt i ++ " (depth " ++ strFromInt depth ++ ")")
+    else Err ("DT: internal: negative de Bruijn index " ++ strFromInt i)
+  TGlobal name => Ok 0
+  TInt n => Ok 0
+  TStr s => Ok 0
+  TBool b => Ok 0
+  TType l => Ok 0
+  TMeta m => Ok 0
+  TApp f a rig =>
+    if rigIsErased rig then checkTermScopes depth f
+    else andThen (checkTermScopes depth f) (\_ => checkTermScopes depth a)
+  TCon c args => checkTermScopesArgs depth args
+  TLam name rig body => checkTermScopes (depth + 1) body
+  TPi name implicit rig dom cod =>
+    andThen (checkTermScopes depth dom) (\_ => checkTermScopes (depth + 1) cod)
+  TIf c th el =>
+    andThen (checkTermScopes depth c)
+      (\_ => andThen (checkTermScopes depth th) (\_ => checkTermScopes depth el))
+  TCase scrut alts => andThen (checkTermScopes depth scrut) (\_ => checkAltScopes depth alts)
+
+checkTermScopesArgs : Int -> List (Pair Term Rig) -> Result Int
+checkTermScopesArgs depth [] = Ok 0
+checkTermScopesArgs depth ((Pair arg rig) :: rest) =
+  if rigIsErased rig then checkTermScopesArgs depth rest
+  else andThen (checkTermScopes depth arg) (\_ => checkTermScopesArgs depth rest)
+
+checkAltScopes : Int -> List CaseAlt -> Result Int
+checkAltScopes depth [] = Ok 0
+checkAltScopes depth (alt :: rest) =
+  andThen (checkTermScopes (depth + length (caseAltBinders alt)) (caseAltBody alt))
+    (\_ => checkAltScopes depth rest)
+
+checkAllDefScopes : List DtDef -> Result Int
+checkAllDefScopes [] = Ok 0
+checkAllDefScopes (d :: rest) =
+  andThen (checkTermScopes 0 (dtDefBody d)) (\_ => checkAllDefScopes rest)

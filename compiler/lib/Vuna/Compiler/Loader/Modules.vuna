@@ -1,0 +1,346 @@
+module Vuna.Compiler.Loader.Modules
+  ( ExportEntry(..)
+  , ExportRef
+  , Module
+  , Project
+  , collectModuleFiles
+  , entryKind
+  , entryParent
+  , entryPublic
+  , entryTarget
+  , exportsOf
+  , findExportCtor
+  , findExportType
+  , findExportValue
+  , findImportPrefix
+  , findModule
+  , findModuleFile
+  , importModuleNames
+  , importName
+  , isGlobalCtor
+  , mangle
+  , moduleAllImportsOf
+  , moduleDeclsOf
+  , moduleExportsOf
+  , moduleImplicitImportsOf
+  , moduleImportsOf
+  , moduleNameOf
+  , modulePackageOf
+  , modulesExportingCtor
+  , modulesExportingType
+  , modulesExportingValue
+  , projectEntryAllImports
+  , projectEntryDecls
+  , projectEntryImports
+  , projectEntryPkg
+  , projectModules
+  , unifyEntryPairs
+  , validModuleName
+  , validateImports
+  ) where
+
+-- Vuna.Compiler.Loader.Modules：加载器的**数据与模块图**（叶子层，无跨 Loader 子模块依赖）。
+--
+-- 只放：Module / Project / ExportEntry / ExportRef 的类型与访问器、import 表的纯函数
+-- 校验、模块根查找（`findModuleFile`）、模块表与导出表的查询。名字解析在 Resolve，
+-- 导出表计算、加载流程与 flatten 在 Flatten；门面 `Vuna.Compiler.Loader` 保持原 API。
+import Vuna.Compiler.Common
+import Vuna.Compiler.Frontend.Ast
+import Vuna.Compiler.Frontend.Lexer
+import Base.Eq
+import Vuna.Compiler.Packages.Pkg
+
+-- 显式 import 与自动注入的 Prelude（隐式 import）分开保存：
+-- 名字解析与 codegen 拓扑序用 all；模块重导出/include 只认显式 import。
+data Module : Type where
+  Module : String -> String -> List Import -> List Import -> List Decl -> List ExportEntry -> Module
+
+-- 已加载项目：入口声明/import + 依赖模块列表（M12 分离编译用；保持 flatten 前的形态）。
+-- entryPkg 用于按包限制 effectful 内建（M12.6：普通包只能通过 Base.IO 使用效果）。
+data Project : Type where
+  Project : List Decl -> List Import -> List Import -> List Module -> String -> Project
+
+moduleNameOf : Module -> String
+moduleNameOf (Module n p is imps ds es) = n
+
+modulePackageOf : Module -> String
+modulePackageOf (Module n p is imps ds es) = p
+
+moduleImportsOf : Module -> List Import
+moduleImportsOf (Module n p is imps ds es) = is
+
+moduleImplicitImportsOf : Module -> List Import
+moduleImplicitImportsOf (Module n p is imps ds es) = imps
+
+moduleAllImportsOf : Module -> List Import
+moduleAllImportsOf (Module n p is imps ds es) = append is imps
+
+moduleDeclsOf : Module -> List Decl
+moduleDeclsOf (Module n p is imps ds es) = ds
+
+moduleExportsOf : Module -> List ExportEntry
+moduleExportsOf (Module n p is imps ds es) = es
+
+projectEntryDecls : Project -> List Decl
+projectEntryDecls (Project ds is imps ms pkg) = ds
+
+projectEntryImports : Project -> List Import
+projectEntryImports (Project ds is imps ms pkg) = is
+
+projectEntryAllImports : Project -> List Import
+projectEntryAllImports (Project ds is imps ms pkg) = append is imps
+
+projectModules : Project -> List Module
+projectModules (Project ds is imps ms pkg) = ms
+
+projectEntryPkg : Project -> String
+projectEntryPkg (Project ds is imps ms pkg) = pkg
+
+-- 模块导出表（M10）。每条是「本模块公开名 → 定义处带模块前缀的名字」。
+-- kind 用字符串区分两套命名空间：val（函数/值）、ctor（构造器）、type（类型名）。
+-- ctor 条目额外记录所属数据类型的定义名，供 `T(..)` 重导出保持源模块的抽象性。
+-- 模块导出表条目：公开名、定义处名字、所属类型（仅 ctor）。
+record ExportEntry where
+  kind : String
+  public : String
+  target : String
+  parent : String
+deriving (Eq)
+
+data ExportRef : Type where
+  ExportRef : String -> String -> String -> ExportRef
+
+allIdentChars : List Int -> Bool
+allIdentChars chars = case chars of
+  [] => True
+  c :: rest => if isIdentStart c || isDigit c then allIdentChars rest else False
+
+validSegment : String -> Bool
+validSegment seg = case strUnpack seg of
+  [] => False
+  c :: rest => isUpperChar c && allIdentChars rest
+
+allSegmentsValid : List String -> Bool
+allSegmentsValid segs = case segs of
+  [] => False
+  seg :: rest => if validSegment seg then case rest of
+    [] => True
+    _ => allSegmentsValid rest
+  else False
+
+validModuleName : String -> Bool
+validModuleName name = case splitOnDot name of
+  [] => False
+  segs => allSegmentsValid segs
+
+isGlobalCtor : String -> Bool
+isGlobalCtor name = name == "True" || name == "False" || name == "Cons" || name == "Nil"
+
+mangle : String -> String -> String
+mangle prefix name = if prefix == "" then name else prefix ++ "." ++ name
+
+importName : Import -> String
+importName (Import name isQualified alias sp) = name
+
+importIsQualified : Import -> Bool
+importIsQualified (Import name isQualified alias sp) = isQualified
+
+importAlias : Import -> Maybe String
+importAlias (Import name isQualified alias sp) = alias
+
+importModuleNames : List Import -> List String
+importModuleNames imports = map importName imports
+
+hasDuplicateName : List String -> Bool
+hasDuplicateName [] = False
+hasDuplicateName (x :: rest) = if memName x rest then True else hasDuplicateName rest
+
+importAliases : List Import -> List (Pair String String)
+importAliases imports = case imports of
+  [] => []
+  imp :: rest => case importAlias imp of
+    Nothing => importAliases rest
+    Just alias => Pair alias (importName imp) :: importAliases rest
+
+checkImportAliases : String -> List String -> List (Pair String String) -> Result (List a)
+checkImportAliases label moduleNames aliases = case aliases of
+  [] => Ok []
+  (Pair alias m) :: rest =>
+    if validSegment alias then if memName alias (map firstOf rest) then Err (label ++ ": duplicate module alias " ++ alias)
+    else if memName alias moduleNames then if alias == m then checkImportAliases label moduleNames rest
+    else Err (label ++ ": module alias " ++ alias ++ " conflicts with an imported module")
+    else checkImportAliases label moduleNames rest
+    else Err (label ++ ": invalid module alias " ++ alias)
+
+validateImports : String -> List Import -> Result (List a)
+validateImports label imports =
+  if hasDuplicateName (importModuleNames imports) then Err (label ++ ": duplicate import")
+  else checkImportAliases label (importModuleNames imports) (importAliases imports)
+
+openModuleNames : List Import -> List String
+openModuleNames imports = case imports of
+  [] => []
+  imp :: rest =>
+    if importIsQualified imp then openModuleNames rest else importName imp :: openModuleNames rest
+
+findImportPrefix : List Import -> String -> Maybe String
+findImportPrefix imports prefix = case imports of
+  [] => Nothing
+  imp :: rest => if importName imp == prefix then Just (importName imp)
+  else case importAlias imp of
+    Just alias => if alias == prefix then Just (importName imp) else findImportPrefix rest prefix
+    Nothing => findImportPrefix rest prefix
+
+_joinNames : List String -> String
+_joinNames [] = ""
+_joinNames ([x]) = x
+_joinNames (x :: rest) = x ++ ", " ++ _joinNames rest
+
+-- M24.7：查一个**必须已加载**的模块。旧实现把「模块未加载」当成「空表」
+-- （`moduleDecls` / `exportsOf` 的 `Nothing => []`）：调用方只看到「没有这个导出」，
+-- 于是一个加载器状态不一致被伪装成普通的「名字不存在」，错误被静默吞掉。
+-- 现在缺模块直接返回清晰的 Err（这是内部不变量，不是用户源码错误）。
+missingModule : String -> Result a
+missingModule name =
+  Err
+    ("loader: internal: module " ++ name ++ " is not loaded (import list and module table disagree)")
+
+moduleDecls : List Module -> String -> Result (List Decl)
+moduleDecls modules name = case findModule modules name of
+  Just (Module mname mpkg imports imps decls exports) => Ok decls
+  Nothing => missingModule name
+
+moduleCtors : List Module -> String -> Result (List String)
+moduleCtors modules name = andThen (moduleDecls modules name) (\decls => Ok (ctorsOf decls))
+
+exportsOf : List Module -> String -> Result (List ExportEntry)
+exportsOf modules name = case findModule modules name of
+  Just (Module mname mpkg imports imps decls exports) => Ok exports
+  Nothing => missingModule name
+
+entryKind : ExportEntry -> String
+entryKind e = e.kind
+
+entryPublic : ExportEntry -> String
+entryPublic e = e.public
+
+entryTarget : ExportEntry -> String
+entryTarget e = e.target
+
+entryParent : ExportEntry -> String
+entryParent e = e.parent
+
+-- 按命名空间查公开名：kinds 是允许的 kind 列表（val / ctor / type）。
+lookupExport : List String -> String -> List ExportEntry -> Maybe ExportEntry
+lookupExport kinds name entries = case entries of
+  [] => Nothing
+  e :: rest =>
+    if memName (entryKind e) kinds && entryPublic e == name then Just e
+    else lookupExport kinds name rest
+
+findExportValue : List ExportEntry -> String -> Maybe ExportEntry
+findExportValue entries name = lookupExport ["val", "ctor"] name entries
+
+findExportCtor : List ExportEntry -> String -> Maybe ExportEntry
+findExportCtor entries name = lookupExport ["ctor"] name entries
+
+findExportType : List ExportEntry -> String -> Maybe ExportEntry
+findExportType entries name = lookupExport ["type"] name entries
+
+modulesExportingValueFrom : List Module -> List String -> String -> Result (List (Pair String ExportEntry))
+modulesExportingValueFrom modules names name = case names of
+  [] => Ok []
+  m :: rest => andThen (exportsOf modules m) (\es => case findExportValue es name of
+    Just e => andThen (modulesExportingValueFrom modules rest name) (\more => Ok (Pair m e :: more))
+    Nothing => modulesExportingValueFrom modules rest name
+  )
+
+modulesExportingValue : List Module -> List Import -> String -> Result (List (Pair String ExportEntry))
+modulesExportingValue modules imports name =
+  modulesExportingValueFrom modules (openModuleNames imports) name
+
+modulesExportingCtorFrom : List Module -> List String -> String -> Result (List (Pair String ExportEntry))
+modulesExportingCtorFrom modules names name = case names of
+  [] => Ok []
+  m :: rest => andThen (exportsOf modules m) (\es => case findExportCtor es name of
+    Just e => andThen (modulesExportingCtorFrom modules rest name) (\more => Ok (Pair m e :: more))
+    Nothing => modulesExportingCtorFrom modules rest name
+  )
+
+modulesExportingCtor : List Module -> List Import -> String -> Result (List (Pair String ExportEntry))
+modulesExportingCtor modules imports name =
+  modulesExportingCtorFrom modules (openModuleNames imports) name
+
+modulesExportingTypeFrom : List Module -> List String -> String -> Result (List (Pair String ExportEntry))
+modulesExportingTypeFrom modules names name = case names of
+  [] => Ok []
+  m :: rest => andThen (exportsOf modules m) (\es => case findExportType es name of
+    Just e => andThen (modulesExportingTypeFrom modules rest name) (\more => Ok (Pair m e :: more))
+    Nothing => modulesExportingTypeFrom modules rest name
+  )
+
+modulesExportingType : List Module -> List Import -> String -> Result (List (Pair String ExportEntry))
+modulesExportingType modules imports name =
+  modulesExportingTypeFrom modules (openModuleNames imports) name
+
+-- 重导出时同名可能来自多个模块；只要 target 相同就不是歧义（门面伞模块常见）。
+sameTargetRest : ExportEntry -> List (Pair a ExportEntry) -> Bool
+sameTargetRest e pairs = case pairs of
+  [] => True
+  (Pair m e2) :: rest => if entryTarget e == entryTarget e2 then sameTargetRest e rest else False
+
+unifyEntryPairs : String -> String -> String -> List (Pair String ExportEntry) -> Result (Pair String ExportEntry)
+unifyEntryPairs label kindLabel name [] = Err (label ++ ": unknown " ++ kindLabel ++ " " ++ name)
+unifyEntryPairs label kindLabel name (p :: rest) =
+  if sameTargetRest (secondOf p) rest then Ok p
+  else Err
+    (label ++ ": ambiguous " ++ kindLabel ++ " " ++ name ++ " (imported from " ++ _joinNames (map firstOf (p :: rest)) ++ "); qualify it")
+
+modulePath : Root -> String -> String
+modulePath root name = rootDir root ++ "/" ++ joinSlashes (splitOnDot name) ++ ".vuna"
+
+-- 当前导入方所在包能否看到该 root 中的模块：同包永远可见；跨包只认 [export] 列表。
+rootAllows : String -> Root -> String -> Bool
+rootAllows importerPkg root name = case rootExports root of
+  Nothing => True
+  Just mods => rootName root == importerPkg || memName name mods
+
+collectModuleFiles : List Root -> String -> String -> List (Pair String Root) -> List String -> Pair (List (Pair String Root)) (List String)
+collectModuleFiles roots name importerPkg allowed hidden = case roots of
+  [] => Pair (reverse allowed) (reverse hidden)
+  root :: rest =>
+    let
+      path = modulePath root name
+    in if fileExists path then if rootAllows importerPkg root name then collectModuleFiles rest name importerPkg (Pair path root :: allowed) hidden
+    else collectModuleFiles rest name importerPkg allowed (rootName root :: hidden)
+    else collectModuleFiles rest name importerPkg allowed hidden
+
+_joinRootDirs : List Root -> String
+_joinRootDirs roots = _joinNames (map rootDir roots)
+
+candidateDir : Pair String Root -> String
+candidateDir candidate = rootDir (secondOf candidate)
+
+findModuleFile : List Root -> String -> String -> Result (Pair String Root)
+findModuleFile roots name importerPkg = case collectModuleFiles roots name importerPkg [] [] of
+  Pair allowed hidden => case allowed of
+    [] => case hidden of
+      [] => Err ("module " ++ name ++ " not found (roots: " ++ _joinRootDirs roots ++ ")")
+      pkgs => Err ("module " ++ name ++ " is not exported by package " ++ _joinNames hidden)
+    [only] => Ok only
+    candidates =>
+      Err
+        ("ambiguous module " ++ name ++ " (found in: " ++ _joinNames (map candidateDir allowed) ++ ")")
+
+findModule : List Module -> String -> Maybe Module
+findModule modules name = case modules of
+  [] => Nothing
+  (Module mname mpkg imports imps decls exports) :: rest =>
+    if mname == name then Just (Module mname mpkg imports imps decls exports)
+    else findModule rest name
+
+refKind : ExportRef -> String
+refKind (ExportRef k tgt parent) = k
+
+refTarget : ExportRef -> String
+refTarget (ExportRef k tgt parent) = tgt

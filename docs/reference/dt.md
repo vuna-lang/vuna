@@ -5,10 +5,10 @@ codegen。M14 加入**索引归纳族**与**依赖模式匹配**；M20 起**复�
 `import` / `--root`）；M21 起 `main : IO a`、`do` 与 `Base.IO` 可用；M22.1 起 `check` /
 `compile` 接受**包目录**，M22.2 起 `base` 全部模块可精化，M22.3 起 `build` / `seed`
 也走 DT；M23 起语言夹具只走 DT、`vuna interp` 改为精化后的核心求值，record update、
-参数化 record、命名实例选择 `@inst`、实例重复/未知方法诊断、`DtDerive` 的 Bool 常量与
-参数化 `Eq` 等能力补齐；M24 起旧检查器与旧 codegen 删除，`vuna seed` 由 DT 逐模块
-split codegen 生成。设计与边界见 [dt-core.md](../dt-core.md)，阶段状态见
-[roadmap.md](../roadmap.md)。
+参数化 record、命名实例选择 `@inst`、实例重复/未知方法诊断、`Elab.Derive`（原
+`DtDerive`）的 Bool 常量与参数化 `Eq` 等能力补齐；M24 起旧检查器与旧 codegen 删除，
+`vuna seed` 由 DT 逐模块 split codegen 生成。设计与边界见 [dt-core.md](../dt-core.md)，
+阶段状态见 [roadmap.md](../roadmap.md)。
 
 ```vuna
 id : (a : Type) -> a -> a
@@ -73,9 +73,10 @@ sym a b e = case e of
   非参数化类型。多参数接口仍报
   `interfaces must have exactly one parameter (M15 limitation)`。
 - **record（M15 降级，M23 补齐）**。`record` 声明、构造、字段访问、字段更新
-  （`{ p | x = ... }`，可多字段）与参数化记录（`record Pair a b`）都先在 `DtRecords` 降成
-  单构造器 `data` 再精化；`deriving (Show, Eq)` 由 `DtDerive` 生成（`Show` 用记录源名且
-  仅非参数化、`Eq` 支持参数化），`Ord` 派生支持非参数化类型。
+  （`{ p | x = ... }`，可多字段）与参数化记录（`record Pair a b`）都先在 `Elab.Records`
+  （原 `DtRecords`）降成单构造器 `data` 再精化；`deriving (Show, Eq)` 由 `Elab.Derive`
+  （原 `DtDerive`）生成（`Show` 用记录源名且仅非参数化、`Eq` 支持参数化），`Ord` 派生
+  支持非参数化类型。
 - **`where` 子句（M24）**。where 绑定是**带签名的局部顺序 let**：每个绑定必须在子句前
   写显式签名（缺签名报 `DT: ... needs a type signature`），只能引用它之前的绑定；不支持
   前向引用 / 自递归 / 互递归（递归放顶层定义组）。语法见 [language.md](language.md)。
@@ -87,8 +88,9 @@ sym a b e = case e of
 - **`case` 分支与模式（M19）**。分支绑定构造子的全部显式 telescope binder；嵌套构造子
   模式改写成内层 case（内层同样过覆盖检查）；兜底 `_ => ...` 只能放**最后一个**分支。
 - **多 clause 与方程左端模式（M19/M22.2）**。`f p1 = e1` / `f p2 = e2` 精化成单 lambda +
-  case 树（`DtMatch`）；变量兜底、嵌套模式共存，参数个数必须一致；M22.2 起矩阵按族的
-  构造子集合判覆盖（全覆盖不再补通配兜底），源级 `case` 的嵌套模式把后续 `_` 下沉。
+  case 树（`Elab.Match`，原 `DtMatch`）；变量兜底、嵌套模式共存，参数个数必须一致；M22.2
+  起矩阵按族的构造子集合判覆盖（全覆盖不再补通配兜底），源级 `case` 的嵌套模式把后续 `_`
+  下沉。
 - **`let` / 推断位 `case`（M19）**。`let ... in` 脱糖为 `(\x => body) e`；`case` 可出现在
   推断位（实参、`if` 分支、let value），做法是建元变量当期望类型。
 - **内建字面量模式（M19）**。`Bool` 的 `case` 降级成 `if`；`Int` / `String` 字面量分支

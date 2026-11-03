@@ -1,0 +1,717 @@
+module Vuna.Compiler.Elab.Meta
+  ( DataHead(..)
+  , baseNameOf
+  , binderRig
+  , boolCtorTerm
+  , boolCtorValue
+  , boolTypedVal
+  , checkScopedFrom
+  , checkScopedValueList
+  , checkSolsDelta
+  , checkSolsScoped
+  , collectDataDecls
+  , collectInstDecls
+  , collectSigs
+  , collectSigsInto
+  , collectTraitDecls
+  , convEc
+  , ctorAppTerm
+  , ctorFamilyTable
+  , ctorGlobals
+  , ctorRefTerm
+  , dataHeadArity
+  , dataHeadKind
+  , dataHeadName
+  , dataNamesOf
+  , dictCtorName
+  , dictTypeName
+  , dropParams
+  , dtCtorLookup
+  , dtDataLookup
+  , fieldBinderGo
+  , fieldBinderNames
+  , fieldVarName
+  , findBoolFamily
+  , findCatchAllBody
+  , findClassByShortName
+  , findCtorIn
+  , flattenTaggedApp
+  , foldAppTerms
+  , freshVarValue
+  , globalLookup
+  , hasFamParams
+  , hasNoExplicitPi
+  , hasOutOfScopeVar
+  , hasOutOfScopeVarAlts
+  , hasOutOfScopeVarArgs
+  , inferCtorRef
+  , inlineSolvedMetaAlt
+  , inlineSolvedMetas
+  , instantiateNullaryCtor
+  , isBoolBaseName
+  , isBoolGlobal
+  , isBoolType
+  , isBoolTypeVal
+  , isDataHead
+  , isIndexDomain
+  , isSortVal
+  , isTypeLayerValue
+  , kindWellFormed
+  , litEqName
+  , lookupDataHead
+  , maxInt
+  , memDefName
+  , memMetaId
+  , memSig
+  , metaDepthLookup
+  , metaDepthOf
+  , methodArgLams
+  , methodArgTerms
+  , methodArgTermsGo
+  , neutralHeadName
+  , newSolsSince
+  , nonEmpty
+  , nullaryCtorTerm
+  , paramNameOf
+  , prefixUntilMetaId
+  , prependFamParams
+  , relevantMetas
+  , resultSpine
+  , shortBoolFamily
+  , spineOfType
+  , splitKind
+  , substClassParam
+  , teleOf
+  , teleOfType
+  , termMetasAll
+  , termMetasRuntime
+  , typeLayerRig
+  , unsolvedFrom
+  , zipTeleRigs
+  ) where
+
+-- Vuna.Compiler.Elab.Meta：Elab 的共享工具层：值/构造子引用（零参构造子、Bool 专用表示）、convEc 与元变量解的作用域复核、
+-- 全局签名表与 UTC 收集、dt data/ctor 查找、telescope 与结果 spine 计算、已解元变量内联、
+-- 擦除判据（binderRig / isIndexDomain 等）、以及 trait/instance 的命名辅助。
+-- 拆自 M24 的单一 `Elab.vuna`（按真实调用图切；门面仍是 `Vuna.Compiler.Elab`）。
+import Vuna.Compiler.Common
+import Vuna.Compiler.Core
+import Vuna.Compiler.Elab.Prelude
+import Vuna.Compiler.Elab.Sig
+import Vuna.Compiler.Elab.Types
+import Vuna.Compiler.Frontend.Ast
+
+-- 引用零参（无显式参数）构造子时，其隐式类型/族参数必须实例化成元变量；
+-- 否则 `inferE (EVar "Nil")` 会给出 `{a}->List a`（函数类型），而 `Nil` 是值。
+-- 仅在「整个类型链没有显式 Pi」（纯零参构造子）时实例化；`Cons`/`Just` 等有显式
+-- 参数的构造子保持多态类型（应用时由 `inferArgsGo` 实例化）。
+hasNoExplicitPi : Ec -> Value -> Bool
+hasNoExplicitPi ec v = case forceVal ec v of
+  VPi _ True _ dom clo => hasNoExplicitPi ec (applyClosure clo (forceVal ec dom))
+  VPi _ False _ dom clo => False
+  _ => True
+
+-- 实例化零参构造子的隐式参数，返回「剩余类型 + 依次新建的元变量项」。
+-- 元变量项要作为 `TCon` 的擦除实参保留：核心求值器的 `VCon` 实参表与构造子
+-- telescope **逐位对齐**（case 分支按 telescope 绑定子压环境），少一个擦除实参就会让
+-- 分支体里的变量索引整体偏移（`foldl` 的 `Nil` 分支取到错误的值）。
+instantiateNullaryCtor : Ec -> Ctx -> Value -> Result (Pair Value (Pair (List Term) Ec))
+instantiateNullaryCtor ec ctx v = case forceVal ec v of
+  VPi _ True _ dom clo => if isIndexDomain ec dom then case newMeta ctx ec of
+    Pair metaTerm ec1 => andThen (instantiateNullaryCtor ec1 ctx (applyClosure clo (eval (ctxEnv ctx) metaTerm))) (\p => case p of
+      Pair ty (Pair metas ec2) => Ok (Pair ty (Pair (metaTerm :: metas) ec2))
+    )
+  else Ok (Pair v (Pair [] ec))
+  _ => Ok (Pair v (Pair [] ec))
+
+-- 零参构造子的项：`TCon name [擦除实参...]`。元变量个数必须与 telescope 等长才
+-- 能保持 VCon 实参对齐；长度对不上（隐式非索引参数等边缘形态）退回 `TGlobal`。
+nullaryCtorTerm : DtCtor -> List Term -> Term
+nullaryCtorTerm ctor metas =
+  if length metas == length (dtCtorTelescope ctor) then TCon (dtCtorName ctor) (zipTeleRigs metas (dtCtorTelescope ctor))
+  else TGlobal (dtCtorName ctor)
+
+zipTeleRigs : List Term -> List (Pair String Rig) -> List (Pair Term Rig)
+zipTeleRigs [] bs = []
+zipTeleRigs ms [] = []
+zipTeleRigs (m :: ms) (b :: bs) = Pair m (secondOf b) :: zipTeleRigs ms bs
+
+-- M21：Bool 的统一运行时表示。`Base.Bool` / 单文件 `data Bool` 的构造子
+-- `True` / `False` 一律精化成核心的 `TBool`，codegen 出 OCaml 的 `true` / `false`；
+-- 族本身不生成变体声明（`Bool` 的运行时表示就是 OCaml bool）。
+-- 这样 `if`、内建算子返回的 `Bool`、与 `data Bool` 的构造子就是同一个表示。
+boolCtorValue : String -> Maybe Bool
+boolCtorValue name = case splitLastDot (splitOnDot name) of
+  Pair rev base =>
+    if base == "True" then Just True else if base == "False" then Just False else Nothing
+
+boolCtorTerm : String -> Term
+boolCtorTerm name = case boolCtorValue name of
+  Just True => TBool True
+  Just False => TBool False
+  Nothing => TGlobal name
+
+-- `inferE (EVar ctor)`：零参构造子（`Nil`/`Nothing` 等）的隐式类型参数实例化成元变量，
+-- 使其类型为 `List ?m`/`Maybe ?m`（值），而非 `{a}->List a`（函数）。
+inferCtorRef : Ec -> Ctx -> String -> Term -> Result (Pair Term (Pair Value Ec))
+inferCtorRef ec ctx name tyTerm = case dtCtorLookup name (ecDatas ec) of
+  Just ctor => if isBoolBaseName (dtCtorFamily ctor) then Ok (Pair (boolCtorTerm name) (Pair (VNeutral (NGlobal (dtCtorFamily ctor) [])) ec))
+  else
+    let
+      ctorTy = eval [] tyTerm
+    in if hasNoExplicitPi ec ctorTy then case instantiateNullaryCtor ec ctx ctorTy of
+      Ok (Pair instTy (Pair metas ec1)) => Ok (Pair (nullaryCtorTerm ctor metas) (Pair instTy ec1))
+      Err e => Err e
+    else Ok (Pair (ctorRefTerm (ecDatas ec) name) (Pair ctorTy ec))
+  Nothing => Ok (Pair (ctorRefTerm (ecDatas ec) name) (Pair (eval [] tyTerm) ec))
+
+-- `Bool` 的双重身份：prelude 桩 `Bool`（类型注解、内建算子返回类型、内建的 `if`）
+-- 与 `Base.Bool` 重新声明的 `Base.Bool.Bool`（`True`/`False` 构造子、`Base.*` 签名）。
+-- DT 里二者必须按定义相等处理，否则 `main : Bool` 与 `mem` 的 `Base.Bool.Bool` 对不上。
+-- HM 侧仍按内建 `Bool`（Loader 保留内建捷径），不受影响。
+isBoolTypeVal : Ec -> Value -> Bool
+isBoolTypeVal ec v = case forceVal ec v of
+  VNeutral (NVar name _ _) => isBoolBaseName name
+  VNeutral (NGlobal name _) => isBoolBaseName name
+  _ => False
+
+boolTypedVal : Ec -> Value -> Bool
+boolTypedVal ec v = case forceVal ec v of
+  VNeutral (NVar name _ _) => isBoolBaseName name
+  VNeutral (NGlobal name _) => isBoolBaseName name
+  _ => False
+
+isBoolBaseName : String -> Bool
+isBoolBaseName name = case splitLastDot (splitOnDot name) of
+  Pair rev base => base == "Bool"
+
+convEc : Ec -> Int -> Value -> Value -> Result Ec
+-- 预置的 Bool 桩（preludeGlobals 里的 Bool）与 Base.Bool.Bool 是同一个类型：
+-- 签名里写的 Bool 走桩，构造子/内建实例给的是 Base.Bool.Bool，两者必须视为相等。
+convEc ec depth expected actual = if boolTypedVal ec expected && boolTypedVal ec actual then Ok ec
+else case conv (ecDefs ec) (ecSols ec) depth expected actual of
+  Err e => Err e
+  -- 作用域逃逸检查只复核**这次新增**的解：旧实现每次 conv 都扫全表
+  -- （O(#元变量) × O(#conv)），大程序上就是主瓶颈（编译器包 180s 只走到第 800 个定义）。
+  -- 解表按新解前插，用旧表头 id 作分隔前缀即可 O(新增) 定位。
+  Ok sols2 => case checkSolsDelta ec (ecSols ec) sols2 of
+    Err e => Err e
+    Ok _ => Ok (ecPutSols ec sols2)
+
+-- M15 元变量上下文：新解不得引用「创建该元变量之后才绑定」的局部变量（作用域逃逸）。
+-- conv 本身不知道元变量的创建深度，所以解表回来后在这里统一复核新增的解。
+-- 只在解表前缀里取出本次新增的解（旧表头 id 是分界；解表按新解前插）。
+newSolsSince : List (Pair Int Value) -> List (Pair Int Value) -> List (Pair Int Value)
+newSolsSince [] cur = cur
+newSolsSince ((Pair pid pv) :: prest) cur = prefixUntilMetaId pid cur
+
+prefixUntilMetaId : Int -> List (Pair Int Value) -> List (Pair Int Value)
+prefixUntilMetaId pid cur = case cur of
+  [] => []
+  (Pair cid cv) :: rest => if cid == pid then [] else Pair cid cv :: prefixUntilMetaId pid rest
+
+checkSolsDelta : Ec -> List (Pair Int Value) -> List (Pair Int Value) -> Result Int
+checkSolsDelta ec oldSols newSols = checkScopedValueList ec (newSolsSince oldSols newSols)
+
+checkScopedValueList : Ec -> List (Pair Int Value) -> Result Int
+checkScopedValueList ec [] = Ok 0
+checkScopedValueList ec ((Pair m v) :: rest) = case metaDepthOf ec m of
+  Nothing => checkScopedValueList ec rest
+  Just created =>
+    if levelEscapes created 0 v then Err ("DT: cannot solve metavariable ?" ++ strFromInt m ++ " (solution would escape its scope)")
+    else checkScopedValueList ec rest
+
+metaDepthOf : Ec -> Int -> Maybe Int
+metaDepthOf ec m = metaDepthLookup m (ecDepthOfMeta ec)
+
+metaDepthLookup : Int -> List (Pair Int Int) -> Maybe Int
+metaDepthLookup m lst = case lst of
+  [] => Nothing
+  (Pair id d) :: rest => if id == m then Just d else metaDepthLookup m rest
+
+checkSolsScoped : Ec -> List (Pair Int Value) -> Result Int
+checkSolsScoped ec sols = checkScopedFrom ec (ecDepthOfMeta ec) sols
+
+checkScopedFrom : Ec -> List (Pair Int Int) -> List (Pair Int Value) -> Result Int
+checkScopedFrom ec [] sols = Ok 0
+checkScopedFrom ec ((Pair m created) :: rest) sols = case metaLookup m sols of
+  Nothing => checkScopedFrom ec rest sols
+  Just v =>
+    if levelEscapes created 0 v then Err ("DT: cannot solve metavariable ?" ++ strFromInt m ++ " (solution would escape its scope)")
+    else checkScopedFrom ec rest sols
+
+-- 未解元变量：返回第一个未解的编号。
+unsolvedFrom : Int -> Int -> List (Pair Int Value) -> Maybe Int
+unsolvedFrom i stop sols = if i >= stop then Nothing
+else case metaLookup i sols of
+  Just _ => unsolvedFrom (i + 1) stop sols
+  Nothing => Just i
+
+memMetaId : Int -> List Int -> Bool
+memMetaId i ids = case ids of
+  [] => False
+  x :: rest => if x == i then True else memMetaId i rest
+
+relevantMetas : Ec -> List Int
+relevantMetas ec =
+  append (concatMap (\d => termMetasRuntime (secondOf d)) (ecDefs ec))
+    (concatMap (\d => concatMap termMetasAll (map dtCtorType (dtDataCtors d))) (ecDatas ec))
+
+-- 运行时位置：构造子/函数应用的擦除实参不生成代码，跳过；其余位置都算。
+termMetasRuntime : Term -> List Int
+termMetasRuntime t = case t of
+  TMeta m => [m]
+  TVar n i => []
+  TGlobal g => []
+  TType l => []
+  TPi n implicit rig dom cod => append (termMetasAll dom) (termMetasAll cod)
+  TLam n rig body => termMetasRuntime body
+  TApp f a rig =>
+    if rigIsErased rig then termMetasRuntime f else append (termMetasRuntime f) (termMetasRuntime a)
+  TCon c args =>
+    concatMap (\p => if rigIsErased (secondOf p) then [] else termMetasRuntime (firstOf p)) args
+  TCase scrut alts =>
+    append (termMetasRuntime scrut) (concatMap (\alt => termMetasRuntime (caseAltBody alt)) alts)
+  TInt n => []
+  TStr s => []
+  TBool b => []
+  TIf c th el => append (termMetasRuntime c) (append (termMetasRuntime th) (termMetasRuntime el))
+
+-- 全部位置（类型里出现的元变量也算）。
+termMetasAll : Term -> List Int
+termMetasAll t = case t of
+  TMeta m => [m]
+  TVar n i => []
+  TGlobal g => []
+  TType l => []
+  TPi n implicit rig dom cod => append (termMetasAll dom) (termMetasAll cod)
+  TLam n rig body => termMetasAll body
+  TApp f a rig => append (termMetasAll f) (termMetasAll a)
+  TCon c args => concatMap (\p => termMetasAll (firstOf p)) args
+  TCase scrut alts =>
+    append (termMetasAll scrut) (concatMap (\alt => termMetasAll (caseAltBody alt)) alts)
+  TInt n => []
+  TStr s => []
+  TBool b => []
+  TIf c th el => append (termMetasAll c) (append (termMetasAll th) (termMetasAll el))
+
+maxInt : Int -> Int -> Int
+maxInt a b = if a >= b then a else b
+
+globalLookup : String -> List (Pair String Term) -> Maybe Term
+globalLookup name [] = Nothing
+globalLookup name ((Pair n ty) :: rest) = if name == n then Just ty else globalLookup name rest
+
+-- ---------------------------------------------------------------
+memSig : List (Pair a b) -> a -> Bool
+memSig [] name = False
+memSig ((Pair n ty) :: rest) name = if n == name then True else memSig rest name
+
+memDefName : String -> List (Pair String Term) -> Bool
+memDefName name [] = False
+memDefName name ((Pair n ty) :: rest) = if n == name then True else memDefName name rest
+
+collectSigs : List Decl -> Result (List (Pair String Expr))
+collectSigs decls = collectSigsInto (definedNames decls) [] decls
+
+-- 声明收集（M20：签名里的自由小写名量化为隐式类型参数，见 `Elab.Sig.quantifyTopSig`）。
+-- `allDefs` 是**整个程序**的定义名（不能只看后面：`plus` 可能定义在引用它的签名之前）。
+collectSigsInto : List String -> List (Pair String Expr) -> List Decl -> Result (List (Pair String Expr))
+collectSigsInto allDefs acc [] = Ok (reverse acc)
+collectSigsInto allDefs acc (d :: rest) = case d of
+  DSig name ty sp =>
+    if memName name preludeNames then errAt sp ("DT: cannot redefine builtin " ++ name)
+    else if memSig acc name then errAt sp ("DT: duplicate signature for " ++ name)
+    else collectSigsInto allDefs (Pair name (quantifyTopSig allDefs ty sp) :: acc) rest
+  DFun name pats body sp => collectSigsInto allDefs acc rest
+  DData name params kind ctors derivings sp => collectSigsInto allDefs acc rest
+  DRecord name params fields derivings sp => errAt sp "DT: internal: record was not desugared"
+  DTrait name params methods sp => collectSigsInto allDefs acc rest
+  DInstance mname isDefault head methods sp => collectSigsInto allDefs acc rest
+
+--
+-- 已精化的族按源顺序积累在 Ec 的 datas 里（case 精化需要族的 ctor telescope）。
+-- 收集 data 声明（按源顺序）。
+collectDataDecls : List Decl -> List (Pair Decl Span) -> List (Pair Decl Span)
+collectDataDecls [] acc = reverse acc
+collectDataDecls (d :: rest) acc = case d of
+  DData dname params kind ctors derivings sp => collectDataDecls rest (Pair d sp :: acc)
+  _ => collectDataDecls rest acc
+
+-- M22.2：程序里声明的数据族名（Loader 已限定），用于把 prelude 的族短名（`List`）
+-- 绑到实际族上。
+dataNamesOf : List Decl -> List String
+dataNamesOf [] = []
+dataNamesOf (d :: rest) = case d of
+  DData dname params kind ctors derivings sp => dname :: dataNamesOf rest
+  _ => dataNamesOf rest
+
+nonEmpty : List a -> Bool
+nonEmpty [] = False
+nonEmpty (_ :: _) = True
+
+-- 族的 kind 必须是「箭头链 + 宇宙结尾」。
+kindWellFormed : Term -> Bool
+kindWellFormed ty = case ty of
+  TPi name implicit rig dom cod => kindWellFormed cod
+  TType l => True
+  _ => False
+
+-- 族的参数/索引 telescope：binder 名 + 是否擦除（域是宇宙）。
+splitKind : Term -> List (Pair String Rig)
+splitKind ty = case ty of
+  TPi name implicit _ dom cod => Pair name (binderRig implicit (eval [] dom)) :: splitKind cod
+  _ => []
+
+dtDataLookup : String -> List DtData -> Maybe DtData
+dtDataLookup name [] = Nothing
+dtDataLookup name (d :: rest) = if dtDataName d == name then Just d else dtDataLookup name rest
+
+findCtorIn : String -> List DtCtor -> Maybe DtCtor
+findCtorIn name [] = Nothing
+findCtorIn name (c :: rest) = if dtCtorName c == name then Just c else findCtorIn name rest
+
+dtCtorLookup : String -> List DtData -> Maybe DtCtor
+dtCtorLookup name [] = Nothing
+dtCtorLookup name (d :: rest) = case findCtorIn name (dtDataCtors d) of
+  Just c => Just c
+  Nothing => dtCtorLookup name rest
+
+-- 构造子类型的 telescope：逐个 binder 求值域。
+-- 隐式 binder（族参数/索引）一律擦除；显式 binder 只有在域是宇宙时才擦除。
+teleOfType : Term -> List (Pair String Rig)
+teleOfType ty = teleOf ty []
+
+teleOf : Term -> List Value -> List (Pair String Rig)
+teleOf ty env = case ty of
+  TPi name implicit rig dom cod =>
+    let
+      domVal = eval env dom
+      v = VNeutral (NVar name (length env) [])
+      rig = binderRig implicit domVal
+    in Pair name rig :: teleOf cod (v :: env)
+  _ => []
+
+-- 结果类型 `F r1..rk` 的「头 + 实参」。
+spineOfType : Term -> Pair String (List Term)
+spineOfType t = case t of
+  TApp f a erased => case spineOfType f of
+    Pair h args => Pair h (append args [a])
+  TGlobal g => Pair g []
+  _ => Pair "" []
+
+resultSpine : Term -> Pair String (List Term)
+resultSpine ty = case ty of
+  TPi name implicit rig dom cod => resultSpine cod
+  _ => spineOfType ty
+
+-- ---------------------------------------------------------------
+-- M24.5：把「检查期已解」的元变量内联进**会被存下来**的项（构造子类型 / 族 kind / 签名）
+-- ---------------------------------------------------------------
+-- 典型来源：`data Eq : {a : Type} -> a -> a -> Type` 的构造子写
+-- `Refl : {a : Type} -> (x : a) -> Eq x x`——结果类型 `Eq x x` 里隐式族参数由检查器插成
+-- 元变量 `?m`，检查时解成构造子自己的 `a`（level 形态的局部变量）。若把 `?m` 留在
+-- dtCtorType 里，使用点按另一份上下文求值时解出来的 `a` 就是悬空变量
+-- （曾报 `constructor Refl: type mismatch: expected Nat, got a`）。
+-- 解是 level 形态：按**当前 binder 深度** quote 成项即可；解里出现越界 index（负数）说明
+-- 它引用了当前项作用域外的变量，此时不内联（保守，留原元变量）。
+inlineSolvedMetas : Ec -> Int -> Term -> Term
+inlineSolvedMetas ec depth t = case t of
+  TMeta m => case metaLookup m (ecSols ec) of
+    Just v =>
+      let
+        q = quote depth v
+      in if hasOutOfScopeVar q then t else inlineSolvedMetas ec depth q
+    Nothing => t
+  TPi n i r d c => TPi n i r (inlineSolvedMetas ec depth d) (inlineSolvedMetas ec (depth + 1) c)
+  TLam n r b => TLam n r (inlineSolvedMetas ec (depth + 1) b)
+  TApp f a r => TApp (inlineSolvedMetas ec depth f) (inlineSolvedMetas ec depth a) r
+  TCon c args =>
+    TCon c (map (\p => Pair (inlineSolvedMetas ec depth (firstOf p)) (secondOf p)) args)
+  TCase s alts => TCase (inlineSolvedMetas ec depth s) (map (inlineSolvedMetaAlt ec depth) alts)
+  TIf c th el =>
+    TIf (inlineSolvedMetas ec depth c) (inlineSolvedMetas ec depth th)
+      (inlineSolvedMetas ec depth el)
+  _ => t
+
+inlineSolvedMetaAlt : Ec -> Int -> CaseAlt -> CaseAlt
+inlineSolvedMetaAlt ec depth (CaseAlt n bs b) =
+  CaseAlt n bs (inlineSolvedMetas ec (depth + length bs) b)
+
+-- quote 出来的项里出现负 index：解引用了当前项作用域外的变量，不能内联。
+hasOutOfScopeVar : Term -> Bool
+hasOutOfScopeVar t = case t of
+  TVar name i => i < 0
+  TPi n i r d c => hasOutOfScopeVar d || hasOutOfScopeVar c
+  TLam n r b => hasOutOfScopeVar b
+  TApp f a r => hasOutOfScopeVar f || hasOutOfScopeVar a
+  TCon c args => hasOutOfScopeVarArgs args
+  TCase s alts => hasOutOfScopeVar s || hasOutOfScopeVarAlts alts
+  TIf c th el => hasOutOfScopeVar c || hasOutOfScopeVar th || hasOutOfScopeVar el
+  _ => False
+
+hasOutOfScopeVarArgs : List (Pair Term Rig) -> Bool
+hasOutOfScopeVarArgs [] = False
+hasOutOfScopeVarArgs ((Pair a rig) :: rest) = hasOutOfScopeVar a || hasOutOfScopeVarArgs rest
+
+hasOutOfScopeVarAlts : List CaseAlt -> Bool
+hasOutOfScopeVarAlts [] = False
+hasOutOfScopeVarAlts ((CaseAlt n bs b) :: rest) = hasOutOfScopeVar b || hasOutOfScopeVarAlts rest
+
+-- 族的 kind 里的参数个数，补成隐式 `EPi`。
+prependFamParams : Term -> Expr -> Span -> Expr
+prependFamParams kindTerm tyExpr sp = case kindTerm of
+  TPi n implicit rigB dom cod => EPi n True (EVar "Type" sp) (prependFamParams cod tyExpr sp) sp
+  _ => tyExpr
+
+-- 剥掉外层 Pi（`resultSpine` 需要看返回类型）。
+dropParams : Term -> Term
+dropParams t = case t of
+  TPi n implicit rigB dom cod => dropParams cod
+  _ => t
+
+ctorGlobals : List DtCtor -> List (Pair String Term)
+ctorGlobals [] = []
+ctorGlobals (c :: rest) = Pair (dtCtorName c) (dtCtorType c) :: ctorGlobals rest
+
+-- 一个 data 头的两阶段精化结果（M23）：族名、完整 kind、参数个数。
+data DataHead : Type where
+  DataHead : String -> Term -> Int -> DataHead
+
+dataHeadName : DataHead -> String
+dataHeadName (DataHead n k a) = n
+
+dataHeadKind : DataHead -> Term
+dataHeadKind (DataHead n k a) = k
+
+dataHeadArity : DataHead -> Int
+dataHeadArity (DataHead n k a) = a
+
+lookupDataHead : String -> List DataHead -> Maybe (Pair Term Int)
+lookupDataHead name heads = case heads of
+  [] => Nothing
+  h :: rest =>
+    if dataHeadName h == name then Just (Pair (dataHeadKind h) (dataHeadArity h))
+    else lookupDataHead name rest
+
+-- ---------------------------------------------------------------
+-- M15：接口（trait）与实例（instance）——字典编码
+-- ---------------------------------------------------------------
+-- 不新增 Core 节点，全部落到既有 data / 隐式 Pi / 构造子上：
+-- `trait Show a` ⇒ `data Dict_Show : Type -> Type` + 方法投影
+-- `show : {a : Type} -> {d : Dict_Show a} -> a -> String`（字典当隐式参数穿进来）。
+-- 实例搜索发生在隐式 binder 的域是接口字典时：在已注册实例里找头能统一到 `Dict_C args`
+-- 的那一个并插入；找不到 ⇒ 明确缺失诊断。设计见 `docs/dt-core.md`。
+dictTypeName : String -> String
+dictTypeName cname = "Dict_" ++ cname
+
+dictCtorName : String -> String
+dictCtorName cname = "MkDict_" ++ cname
+
+-- 收集 trait / instance 声明（按源顺序）。
+collectTraitDecls : List Decl -> List (Pair Decl Span) -> List (Pair Decl Span)
+collectTraitDecls [] acc = reverse acc
+collectTraitDecls (d :: rest) acc = case d of
+  DTrait tname params methods sp => collectTraitDecls rest (Pair d sp :: acc)
+  _ => collectTraitDecls rest acc
+
+collectInstDecls : List Decl -> List (Pair Decl Span) -> List (Pair Decl Span)
+collectInstDecls [] acc = reverse acc
+collectInstDecls (d :: rest) acc = case d of
+  DInstance mname isDefault head methods sp => collectInstDecls rest (Pair d sp :: acc)
+  _ => collectInstDecls rest acc
+
+-- 单参数接口的参数名（elabTrait 已校验 length params == 1）。
+paramNameOf : List String -> String
+paramNameOf [] = "_"
+paramNameOf (p :: rest) = p
+
+-- 方法参数 x_i 的 (项, rig)：index = n + (ar - 1 - i)。
+methodArgTerms : List Rig -> Int -> List (Pair Term Rig)
+methodArgTerms rigs nFields = methodArgTermsGo rigs nFields 0 (length rigs)
+
+methodArgTermsGo : List Rig -> Int -> Int -> Int -> List (Pair Term Rig)
+methodArgTermsGo rigs nFields i arity = case rigs of
+  [] => []
+  rig :: rest =>
+    Pair (TVar ("x" ++ strFromInt i) (nFields + (arity - 1 - i))) rig
+      :: methodArgTermsGo rest nFields (i + 1) arity
+
+-- 逐层 lambda 绑定方法参数（x_0 最外），每层用各自 rig。
+methodArgLams : List Rig -> Int -> Term -> Term
+methodArgLams [] i body = body
+methodArgLams (rig :: rest) i body =
+  TLam ("x" ++ strFromInt i) rig (methodArgLams rest (i + 1) body)
+
+-- 方法显式参数的 multiplicity 表：逐 binder 按域判断（域是宇宙 ⇒ Rig0 擦除）。
+fieldVarName : Int -> String
+fieldVarName i = "f" ++ strFromInt i
+
+fieldBinderNames : Int -> List (Pair String Rig)
+fieldBinderNames n = fieldBinderGo n 0 []
+
+fieldBinderGo : Int -> Int -> List (Pair String Rig) -> List (Pair String Rig)
+fieldBinderGo n i acc =
+  if i >= n then reverse acc else fieldBinderGo n (i + 1) (Pair (fieldVarName i) Rig1 :: acc)
+
+-- M24.7：按**短名**查类（库里的类名带模块前缀，如 `Base.Eq.Eq`；`==` / `<` 的字典
+-- 查找从 `ecClasses` 按最后一段反查，找不到时调用方退回泛型运行时兜底）。
+findClassByShortName : String -> List DtClass -> Maybe DtClass
+findClassByShortName short [] = Nothing
+findClassByShortName short (c :: rest) =
+  if baseNameOf (dtClassName c) == short then Just c else findClassByShortName short rest
+
+-- 把方法类型里对类参数的引用（de Bruijn 0）替换成实例头实参。
+-- 字段类型是在 `{a : Type}` 之下检查的闭合项，所以类参数恒为 index 0；
+-- 这里按 **索引** 替换（不按名字），避免上游换名失效。
+substClassParam : String -> Term -> Term -> Term
+substClassParam pname arg ty = substVarAt 0 arg ty
+
+-- 字面量比较的运行时函数名（`==` 的跨类型特化；codegen 按名字映射）。
+litEqName : String -> String
+litEqName tyName = if tyName == "String" then "bi_eq_str" else "bi_eq_int"
+
+flattenTaggedApp : Term -> Maybe (Pair String (List (Pair Term Rig)))
+flattenTaggedApp t = case t of
+  TApp f a rig => case flattenTaggedApp f of
+    Just (Pair g args) => Just (Pair g (append args [Pair a rig]))
+    Nothing => Nothing
+  TGlobal g => Just (Pair g [])
+  _ => Nothing
+
+-- M14：隐式 binder 的域可以是：宇宙、已声明归纳族（`{n : Nat}` 这类索引），或**高阶 kind**
+-- （`{f : Type -> Type}`，M19 起 `trait Mapper f` 需要）。其它类型（Int/String/…）仍
+-- 拒绝：隐式实参不参与运行时计算。
+isIndexDomain : Ec -> Value -> Bool
+isIndexDomain ec dom =
+  isTypeValue dom || isTypeLayerValue dom || isDataHead (ecDatas ec) (forceVal ec dom)
+
+-- ---------------------------------------------------------------
+-- 擦除判据（M18.5：全仓唯一入口）
+-- ---------------------------------------------------------------
+-- 规则：**只有域是宇宙（`Type`）的 binder 才擦除**；隐式 binder 恒擦除（精化器插入隐式实参，
+-- 运行时不传）。索引（`{n : Nat}` 这类归纳族域）**保留运行时表示**——它们可能被当成递归参数
+-- 读回来（见 `vlen`），安全擦除需要整程序使用分析（M22）。
+-- 这个词是全仓唯一判据：`teleOf` / `checkBinders` / `bindOnePattern` / `checkLam` / `inferArgs` /
+-- `bindCtorBinder` 六处都必须走它，否则「字段数 / telescope 长度 / 绑定数」三处各自漂移。
+binderRig : Bool -> Value -> Rig
+binderRig implicit dom = rigOfBinder implicit (isTypeValue dom)
+
+-- 域在「类型层」（M19）：宇宙，或**域全是宇宙的 Pi 链**（`Type -> Type` 这类高阶 kind）。
+-- 用于**实参**与**定义参数**的 multiplicity——`applyTwice Box ...` 里的 `Box` 是类型
+-- 构造器，必须擦除，否则 codegen 报「type-level name is used at runtime」。
+--
+-- 判据必须是递归的：值层函数类型 `a -> b` 也是 Pi，但它的域是**类型变量**（不是宇宙），
+-- 因此不被误判为类型层（否则函数参数会被擦掉，`03_compose` / `04_apply` 直接崩）。
+typeLayerRig : Bool -> Value -> Rig
+typeLayerRig implicit dom = if implicit then Rig0 else if isTypeLayerValue dom then Rig0 else Rig1
+
+isTypeLayerValue : Value -> Bool
+isTypeLayerValue v = case v of
+  VType l => True
+  VPi pname implicit rig dom clo =>
+    isTypeLayerValue dom && isTypeLayerValue (applyClosure clo (VNeutral (NVar pname 0 [])))
+  _ => False
+
+isDataHead : List DtData -> Value -> Bool
+isDataHead datas v = case v of
+  VNeutral n => case n of
+    NGlobal g sp => case dtDataLookup g datas of
+      Just _ => True
+      Nothing => False
+    _ => False
+  _ => False
+
+freshVarValue : String -> Int -> Value
+freshVarValue name level = VNeutral (NVar name level [])
+
+-- ---------------------------------------------------------------
+-- 双向检查
+-- ---------------------------------------------------------------
+-- `if` 条件 / `Bool` 判定：`Bool` 既可以是 prelude 桩（`NGlobal "Bool"`）也可以是
+-- `Base.Bool.Bool`（真实布尔），二者都要视为布尔类型（否则 `Base.List.filter` 的
+-- `if p x` 会报 expected Bool, got Base.Bool.Bool）。
+isBoolType : Value -> Bool
+isBoolType v = case v of
+  VNeutral n => isBoolGlobal (neutralHeadName n)
+  _ => False
+
+neutralHeadName : Neutral -> String
+neutralHeadName n = case n of
+  NVar name _ _ => name
+  NGlobal name _ => name
+
+isBoolGlobal : String -> Bool
+isBoolGlobal name = case splitLastDot (splitOnDot name) of
+  Pair rev base => base == "Bool"
+
+-- 名字既是构造子又是数据类型（如 `data Pair a b where Pair : a -> b -> Pair a b`）：
+-- 在类型位置（expected 是宇宙）应走 `checkAppGeneral`，值位置走 `checkAppCtor`。
+isSortVal : Ec -> Value -> Bool
+isSortVal ec v = case forceVal ec v of
+  VType _ => True
+  _ => False
+
+-- 引用一个名字：零参构造子必须直接是 TCon（否则求值器给不出 VCon，case 命不中）。
+-- M23：**运行时零参**的构造子（telescope 只剩擦除 binder，如 `Nil : {a : Type} -> List a`）
+-- 走 `inferCtorRef` 的 `nullaryCtorTerm`——那里能拿到实例化隐式参数用的元变量项，
+-- 保证 `TCon` 实参与 telescope 逐位对齐（求值器的 VCon 依赖这个对齐）。
+ctorRefTerm : List DtData -> String -> Term
+ctorRefTerm datas name = case dtCtorLookup name datas of
+  Just ctor =>
+    if isBoolBaseName (dtCtorFamily ctor) then boolCtorTerm name
+    else if dtCtorTelescope ctor == [] then TCon name [] else TGlobal name
+  Nothing => TGlobal name
+
+-- 构造子应用必须饱和成 TCon，求值器才能给 case 造出 VCon（中性 NGlobal 命不中分支）。
+-- 未饱和的部分应用（柯里化）保持 TApp：此时 case 会卡住，与 HM 语义一致。
+ctorAppTerm : List DtData -> Term -> List (Pair Term Rig) -> Term
+ctorAppTerm datas (TGlobal g) args = case dtCtorLookup g datas of
+  Just ctor =>
+    if isBoolBaseName (dtCtorFamily ctor) then boolCtorTerm g
+    else if length args >= length (dtCtorTelescope ctor) then TCon g args
+    else foldAppTerms (TGlobal g) args
+  Nothing => foldAppTerms (TGlobal g) args
+ctorAppTerm datas fn args = foldAppTerms fn args
+
+foldAppTerms : Term -> List (Pair Term Rig) -> Term
+foldAppTerms fn [] = fn
+foldAppTerms fn ((Pair arg erased) :: rest) = foldAppTerms (TApp fn arg erased) rest
+
+-- 构造子类型是否已**显式写出**族参数 binder。
+-- 判据是「首个 EPi 的 binder 有名字」（显式 `(a : Type) ->` 或隐式 `{a : Type} ->`）：
+-- 这类构造子自己绑定了族参数，不能再前置一份（否则出现重复 binder，codegen 的
+-- 运行时类型参数表与构造子 telescope 对不上）。record 降级生成的构造子类型用
+-- 匿名显式 `EPi "_" False` 写字段，因此仍要走 `prependFamParams`。
+hasFamParams : Expr -> Bool
+hasFamParams e = case e of
+  EPi n implicit dom cod sp => n /= "_"
+  _ => False
+
+-- 模块限定名的最后一段（`Base.Monad.fmap` → `fmap`）。
+baseNameOf : String -> String
+baseNameOf name = case splitLastDot (splitOnDot name) of
+  Pair rev base => base
+
+-- M22.2：构造子名 → 族的全部构造子（`Elab.Match` 的模式矩阵用它判断「这一列的构造子
+-- 是否已经全覆盖」——全覆盖时不再补通配兜底，避免把剩余列的匹配不全暴露成假覆盖）。
+ctorFamilyTable : Ec -> List (Pair String (List String))
+ctorFamilyTable ec = map (\d => Pair (dtDataName d) (map dtCtorName (dtDataCtors d))) (ecDatas ec)
+
+-- 后续分支里的兜底体（`case` 最后一个变量/通配分支），供嵌套模式的折叠使用。
+findCatchAllBody : List (Pair Pat Expr) -> Maybe Expr
+findCatchAllBody [] = Nothing
+findCatchAllBody (alt :: rest) = case alt of
+  Pair pat body => case pat of
+    PCon cname args psp => findCatchAllBody rest
+    _ => Just body
+
+-- `Bool` 短名 → 程序里实际声明的 Bool 族（短名匹配；供内建 trait 声明/内建实例使用，
+-- 它们不经过 Loader，AST 里写的是裸 `Bool`）。
+shortBoolFamily : Ec -> String -> Maybe String
+shortBoolFamily ec name = if name == "Bool" then findBoolFamily (ecDatas ec) else Nothing
+
+findBoolFamily : List DtData -> Maybe String
+findBoolFamily [] = Nothing
+findBoolFamily (d :: rest) =
+  if baseNameOf (dtDataName d) == "Bool" then Just (dtDataName d) else findBoolFamily rest

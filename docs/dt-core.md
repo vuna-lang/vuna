@@ -8,10 +8,10 @@ M14 在同一路径上加入索引归纳族与依赖模式匹配（见 §11）�
 
 ## 1. 范围
 
-- 新增模块：`compiler/lib/Vuna/Compiler/Core.vuna`（core 语法/值/NbE/转换）、
-  `compiler/lib/Vuna/Compiler/Elab.vuna`（双向精化器）、
-  `compiler/lib/Vuna/Compiler/CoreCodegen.vuna`（擦除 + OCaml 生成）、
-  `compiler/lib/Vuna/Compiler/Dt.vuna`（单文件 facade）。
+- 新增模块（源码模块重组后按层拆分：门面 + `X/` 叶子）：`Core.vuna`（core 语法/值/
+  NbE/转换；`Core/{Term,Eval,Conv}`）、`Elab.vuna`（双向精化器；`Elab/*`）、
+  `Codegen.vuna`（擦除 + OCaml 生成；`Codegen/{Decl,Erase,Term,Program,Split}`）、
+  `Driver/Dt.vuna`（单文件 facade）。
 - 入口：`vuna compile` / `vuna check` / `vuna interp`（当时是 opt-in 子集，现已无开关）。
 - 只支持单文件（M13 时）：不经过 Loader、不支持 `import`、不支持包模式、不接入
   `build` / `split` / `seed`（后续阶段补齐，见 §9）。
@@ -134,22 +134,25 @@ data Term where
 
 ### 6.1 M24.6 第一级：字段形状的单一真源（已落地）
 
-`CoreCodegen.ctorKeepFlags` 从构造子 telescope 的 rig 算出一份 keep flags
-（`True` = 该 binder 进运行时表示），`mkGenSt` 把它作为 `gsCtorShapes` 带入生成状态。
-类型声明（`ctorFieldTexts`）、构造子应用（`genConApp`/`alignCtorArgs`）与 case 分支绑定
-（`genArm`/`altEnvChecked`）三处都消费同一份 flags，并在使用点校验：
+`Codegen.Decl.ctorKeepFlags` 从构造子 telescope 的 rig 算出一份 keep flags
+（`True` = 该 binder 进运行时表示），`Codegen.Term.mkGenSt` 把它作为 `gsCtorShapes` 带入
+生成状态。
+类型声明（`Codegen.Decl.ctorFieldTexts`）、构造子应用（`Codegen.Term.genConApp`/
+`alignCtorArgs`）与 case 分支绑定（`Codegen.Term.genArm`/`altEnvChecked`）三处都消费
+同一份 flags，并在使用点校验：
 
 - 类型声明：flags 与 telescope 逐位一致；长度不一致 → `DT: internal: constructor shape ...`
   错误（不再静默少字段/错位）。
 - 构造子应用：`TCon` 实参允许两种合法约定——**全 telescope**（普通构造子，含擦除隐式位）
   或**仅保留字段**（字典构造子 `MkDict_C` 只带方法实现）；`alignCtorArgs` 归一后逐位
   校验 rig，再生成运行时实参。
-- case 分支：`caseAltBinders` 同样允许两种约定（普通 case 是全 telescope、Elab 生成的
-  字典投影分支是仅字段），按长度择一并校验 rig。
+- case 分支：`Core.Term.caseAltBinders` 同样允许两种约定（普通 case 是全 telescope、
+  Elab 生成的字典投影分支是仅字段），按长度择一并校验 rig。
 
 同级的另外两个护栏：`Core.varIndex` 对越界 level 返回 `-1`（而不是静默 `0`），后续
-`binderAt`/擦除检查会报「unbound runtime variable」；`ensureUniqueOcamlNames` 对实际生成的
-`v_*` / `t_*` / `C_*` 名字做族内去重（`sanitizeName` 的转义本身是前缀码，此护栏防未来改动）。
+`binderAt`/擦除检查会报「unbound runtime variable」；`Codegen.Erase.ensureUniqueOcamlNames`
+对实际生成的 `v_*` / `t_*` / `C_*` 名字做族内去重（`sanitizeName` 的转义本身是前缀码，
+此护栏防未来改动）。
 
 ### 6.2 M24.6 第二级：codegen 的「已 resolve」边界（重新裁定）
 
@@ -171,7 +174,7 @@ M24 之后单一文件 codegen 的入口只接受 `DtProgram`（Elab 输出）�
   需要把上下文从 `Ctx n` 精化成 `Ctx (Succ k)` 并取出 `Tm (Succ k)`，当前精化器只能在
   goal 索引与 case 精化形参之间搬等式，写不出「按位置变化的类型族」。这是 M24.5 的硬边界
   （见 [dt-parity.md](reference/dt-parity.md) §6.3）。
-- **已落地的替代护栏**：`Core.varIndex` 越界返回 `-1`；`CoreCodegen.checkAllDefScopes` 对
+- **已落地的替代护栏**：`Core.varIndex` 越界返回 `-1`；`Codegen.Erase.checkAllDefScopes` 对
   运行时会生成的定义体（跳过擦除实参，擦除位置允许 quote 阶段留下的 -1）做一次 de Bruijn
   作用域验证；任何越界在 check 期报 `DT: internal: ...`，不再静默指向最外层变量。
 - **明确不做**：把 `Core.eval` 的 `List Value` 环境与 `Clos` 捕获环境整体换成索引 `Env n`。
@@ -192,9 +195,9 @@ M24 之后单一文件 codegen 的入口只接受 `DtProgram`（Elab 输出）�
 
 本节记录 M13/M14 时期 DT 与当时另一条路径的边界，**已不适用**（终态只有 DT）：
 
-- 只共享 `Vuna.Compiler.Ast` / `Vuna.Compiler.Parser` / `Vuna.Fmt` 与 `Base.*`；
+- 只共享 `Vuna.Compiler.Ast` / `Vuna.Compiler.Parser`（现 `Frontend.*`）/ `Vuna.Fmt` 与 `Base.*`；
   当时 `EPi` 在另一条链的 loader 里报 `dependent function type requires the DT path`。
-- `Vuna.Compiler.Dt` 是唯一对外 facade（`compiler/vuna.toml` 的 `[export]`）；
+- `Driver.Dt`（原 `Vuna.Compiler.Dt`）是唯一对外 facade（`compiler/vuna.toml` 的 `[export]`）；
   核心求值器通过 `vuna interp` 暴露，用于与 codegen 结果做一致性测试（M23 起为默认
   且唯一的 DT 语义）。
 - M13/M14 的 DT 当时不进入 `build` / `seed` / `split`；seed 仍由旧 typed codegen 生成
@@ -331,7 +334,7 @@ vhead a n xs = case xs of
 ## 13. Core 表示：TCon / TCase / VCon / VCase
 
 ```vuna
--- compiler/lib/Vuna/Compiler/Core.vuna（M14 新增）
+-- compiler/lib/Vuna/Compiler/Core.vuna（M14 新增；现为 Core/ 门面 + 叶子）
 data Term where
   ...
   TCon  : String -> List (Pair Term Bool) -> Term            -- 构造子名 + 实参（自携擦除标志）
@@ -362,7 +365,7 @@ data VCaseAlt : Type where
 ## 14. 声明表示：DtData / DtCtor
 
 ```vuna
--- compiler/lib/Vuna/Compiler/Elab.vuna
+-- compiler/lib/Vuna/Compiler/Elab.vuna（现 `Elab/Types.vuna`）
 data DtCtor : Type where
   DtCtor : String -> String -> List (Pair String Bool) -> Term -> DtCtor
   -- 构造子名 + 所属族 + 完整 telescope（含族参数）+ 闭合类型项
@@ -487,7 +490,8 @@ M13 的 `data` / `case` / 递归不再报“不支持”；`record` / `trait` / 
 
 ## 21. 代码生成
 
-`compiler/lib/Vuna/Compiler/CoreCodegen.vuna`：
+`compiler/lib/Vuna/Compiler/Codegen/{Decl,Erase,Term,Program,Split}.vuna`（门面
+`Codegen.vuna`）：
 
 1. **变体表示**：每个「运行时族」生成一个 OCaml 变体类型。只有**宇宙域**的族参数
    成为 OCaml 类型参数（如 `type 'a t_Vec = ...`）；非宇宙参数（如 `Nat` 索引）
@@ -548,7 +552,7 @@ M13 的 `data` / `case` / 递归不再报“不支持”；`record` / `trait` / 
 
 本节记录**核心类型论表示层**的定型决定：这些决定本身不增加用户可见能力，目的是让
 QTT（量化类型理论）与宇宙多态在将来落地时只替换「判据」与「层级实现」，而不必重做
-`Core` / `Elab` / `CoreCodegen` 的骨架。背景见 [docs/roadmap.md](roadmap.md) 的 M18.6
+`Core` / `Elab` / `Codegen` 的骨架。背景见 [docs/roadmap.md](roadmap.md) 的 M18.6
 与 [reference/dt-parity.md](reference/dt-parity.md)。
 
 ### 24.1 已落地（M18.6 完成）
@@ -562,7 +566,7 @@ QTT（量化类型理论）与宇宙多态在将来落地时只替换「判据�
 | `TType : Int` / `VType : Int` | `TType : Level` / `VType : Level`（不透明） | 内部是 `MkLevel Int`，但只有 `Core` 可见 |
 | 直接解构 | 经访问器 | 见 §24.2 |
 
-改动面（实测）：`Core` / `Elab` / `CoreCodegen` 三文件 48 处 `Pair Term Bool` /
+改动面（实测）：`Core` / `Elab` / `Codegen`（原 `CoreCodegen`）48 处 `Pair Term Bool` /
 `Pair String Bool` 换成 `Rig`；`VType` / `TType` 的解构与构造共 20 余处改走 `Level`。
 
 ### 24.2 三个 accessor 层
@@ -579,7 +583,7 @@ QTT（量化类型理论）与宇宙多态在将来落地时只替换「判据�
 ### 24.3 不变量（M18.6 起生效，后续阶段必须保持）
 
 1. **`Core` 之外不得对 `Rig` / `Level` 做模式匹配**，只能用访问器与构造器；新增用法先补访问器。
-   当前违反数为 0：`Elab` / `CoreCodegen` 只出现 `Rig0` / `Rig1` 构造与 `rigIsErased` 读。
+   当前违反数为 0：`Elab` / `Codegen` 只出现 `Rig0` / `Rig1` 构造与 `rigIsErased` 读。
 2. **擦除判定只有一个入口**：`Elab.binderRig`（构造 Rig）与 `Core.rigIsErased`（读 Rig）。
    M22.3 会把它升级成可替换的 `eraseMask`，使「rig 驱动」与未来的「使用分析驱动」可互换。
 3. `Level` 的算术（`succ` / `max`）只在 `Core` 内部实现；`Elab` 经 `checkType` 返回的
@@ -601,7 +605,7 @@ multiplicity 静态擦除，后者按运行时是否读取判定。M22.3 因此�
 M19 尝试补 `trait Functor f`（类参数是 `Type -> Type` 的高阶 kind）时，暴露出一条**尚未
 统一**的语义：`Rig0` binder 在运行时到底占不占一个位置？
 
-- `CoreCodegen.genTerm` 的 `TLam` 分支：`rigIsErased` ⇒ **不生成** OCaml 形参，但
+- `Codegen.Term.genTerm` 的 `TLam` 分支：`rigIsErased` ⇒ **不生成** OCaml 形参，但
   `binders` 里**保留**一个占位项（`Pair "" Rig0`），因此 `binderAt` 的 index 仍把它算进去；
 - `Core.eval` / `applyValue`：`VLam` 不管 rig，**照样收一个实参**。
 

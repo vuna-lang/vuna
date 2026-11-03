@@ -48,15 +48,15 @@
 # 导出列表纳入 fmt（显式列表逐项一行）：模块头展开使源码行号整体下移，`vuna_fail`
 #   内嵌的行列号数字变长，生成 .ml 的 bytes +84、>100 列行 +2；codegen 本身未变。
 #   按实测重新标定：bytes 1425629 / longlines 5014。
-bytes 1190000
-lines 11900
-maxline 8000
-longlines 3520
+bytes 1290000
+lines 12600
+maxline 8250
+longlines 3760
 letrec 496
 strcat 0
-eqint 122
-zeroarg 80
-ctorcount 3620
+eqint 120
+zeroarg 76
+ctorcount 3600
 # M23 夹具迁移与 interp 切换：编译器源码新增 DT 能力（零参构造子求值、record update 降级、
 #   参数化 record、@inst 选择、实例诊断、&&|| 短路、REPL 表达式求值、DtDerive/CoreCodegen
 #   修正）约 250 行；且本预算自 751ba49（Elab +467 行）起就已失效——HEAD 实测已是
@@ -76,3 +76,10 @@ ctorcount 3620
 #   zeroarg 98 / ctorcount 3549。M24.5 + 类型族擦除修复后按实测再标定：
 #   bytes 1195051 / lines 11922 / longlines 3527 / letrec 493 / ctorcount 3587。
 #   M24.7 波 2 删除内建 trait/实例后预计回降，届时再标定。
+# M25 源码重组（模块布局，无语义变化）：compiler 按层分目录并把 4 个超大模块拆成
+#   门面 + 叶子模块（Elab 3529→9+6、Codegen 1781→5+1、Loader 1363→3+1、Core 1227→3+1），
+#   合并 Kind+Quant→Sig、Builtins→Resolve、SplitCli→Compile、Process→CompilerCli，
+#   工具链 Fmt/Lint/Index 同样拆分并删除死模块 Vuna.Process。seed 闭包 40 → 55 .ml
+#   （每个子模块的 export/import 头是固定开销，代码内容原样搬迁）；按实测重新标定：
+#   files 55 / bytes 1285679 / lines 12569 / maxline 8152 / longlines 3730 / letrec 495 /
+#   eqint 118 / zeroarg 74 / ctorcount 3591。单模块行数降到 823（Frontend.Parser）。

@@ -1,0 +1,551 @@
+module Vuna.Compiler.Core.Eval
+  ( applyCaseAlt
+  , applyClosure
+  , applyClosureBinder
+  , applySpine
+  , applyTermSpine
+  , applyValue
+  , argValsAt
+  , asBool
+  , asInt
+  , asStr
+  , boolPrim2
+  , catchAllEnv
+  , cmpInt
+  , eval
+  , evalAlt
+  , evalAlts
+  , evalArgTerms
+  , evalCase
+  , evalIf
+  , force
+  , freshVar
+  , genericCmp
+  , genericEqPrim
+  , genericPrim2
+  , intPrim1
+  , intPrim2
+  , intPrim2Div
+  , isPrimitiveName
+  , lookupEnv
+  , normalize
+  , normalizeCase
+  , normalizeIf
+  , normalizeNeutral
+  , primConst
+  , primReduce
+  , quote
+  , quoteArgValues
+  , quoteCaseAlt
+  , quoteNeutral
+  , showValue
+  , showValueAt
+  , spineAppend
+  , strEq
+  , strPrim1
+  , strPrim2
+  , strPrim3
+  , substSolvedAlt
+  , substSolvedAltAt
+  , substSolvedMetas
+  , substSolvedMetasAt
+  , substSolvedMetasAtGo
+  , valueEqDeep
+  , valueListEqDeep
+  , varIndex
+  ) where
+
+-- Vuna.Compiler.Core.Eval：NbE 求值与 quote。
+--
+-- 包含：beta 求值（eval/apply*）、delta 展开（force）、prelude 原语归约
+-- （primReduce）、深度正规化（normalize，interp 展示 main 用）、quote（值 → 项）
+-- 以及「已解元变量代入项」（substSolvedMetas*）。
+--
+-- 定义性相等（beta + delta + eta）在 Vuna.Compiler.Core.Conv；本模块是它的下游依赖。
+-- M24 后维护（源码重组）：从原 Core.vuna 拆出；依赖 Core.Term 的表示层与纯数据操作。
+import Vuna.Compiler.Common
+import Vuna.Compiler.Core.Term
+
+-- ---------------------------------------------------------------
+-- 环境与求值（beta）
+-- ---------------------------------------------------------------
+lookupEnv : Int -> List Value -> Maybe Value
+lookupEnv i [] = Nothing
+lookupEnv i (v :: rest) = if i <= 0 then Just v else lookupEnv (i - 1) rest
+
+eval : List Value -> Term -> Value
+eval env t = case t of
+  TVar name i => case lookupEnv i env of
+    Just v => v
+    Nothing => VNeutral (NVar name i [])
+  TMeta m => VMeta m []
+  TGlobal g => VNeutral (NGlobal g [])
+  TType l => VType l
+  TPi name implicit rig dom cod => VPi name implicit rig (eval env dom) (Clos env cod)
+  TLam name rig body => VLam name rig (Clos env body)
+  TApp f a rig => applyValue (eval env f) (eval env a)
+  TCon c args => VCon c (evalArgTerms env args)
+  TCase scrut alts => evalCase (eval env scrut) (evalAlts env alts)
+  TInt n => VInt n
+  TStr s => VStr s
+  TBool b => VBool b
+  TIf c th el => evalIf (eval env c) (eval env th) (eval env el)
+
+evalAlt : List Value -> CaseAlt -> VCaseAlt
+evalAlt env (CaseAlt name binders body) = VCaseAlt name binders (Clos env body)
+
+evalAlts : List Value -> List CaseAlt -> List VCaseAlt
+evalAlts env [] = []
+evalAlts env (alt :: rest) = evalAlt env alt :: evalAlts env rest
+
+evalArgTerms : List Value -> List (Pair Term Rig) -> List Value
+evalArgTerms env [] = []
+evalArgTerms env ((Pair a rig) :: rest) = eval env a :: evalArgTerms env rest
+
+-- case 求值：命中构造子则把该构造子的实参绑进分支闭包，否则卡住。
+-- 构造子实参按「最近绑定在前」入环境（与 ctxBind 的 de Bruijn 约定一致）。
+evalCase : Value -> List VCaseAlt -> Value
+evalCase scrut alts = case scrut of
+  VCon c args => applyCaseAlt c args alts
+  _ => VCase scrut alts
+
+applyCaseAlt : String -> List Value -> List VCaseAlt -> Value
+applyCaseAlt c args [] = VCase (VCon c args) []
+applyCaseAlt c args (alt :: rest) = if vCaseAltName alt == c then case vCaseAltClosure alt of
+  Clos env body => eval (append (reverse args) env) body
+else if vCaseAltName alt == "" then case vCaseAltClosure alt of
+  -- 兜底分支（源码里写的是变量/通配，精化后名字为空串）。变量兜底带一个 binder，
+  -- 要把 scrutinee 压进环境；通配兜底无 binder。
+  Clos env body => eval (catchAllEnv alt (VCon c args) env) body
+else applyCaseAlt c args rest
+
+catchAllEnv : VCaseAlt -> Value -> List Value -> List Value
+catchAllEnv alt scrut env = case vCaseAltBinders alt of
+  [] => env
+  _ => scrut :: env
+
+evalIf : Value -> Value -> Value -> Value
+evalIf c th el = case c of
+  VBool b => if b then th else el
+  _ => VIf c th el
+
+spineAppend : Neutral -> Value -> Neutral
+spineAppend n a = case n of
+  NVar name level sp => NVar name level (append sp [a])
+  NGlobal g sp => NGlobal g (append sp [a])
+
+applyValue : Value -> Value -> Value
+applyValue f a = case f of
+  VLam name rig (Clos env body) => eval (a :: env) body
+  VNeutral n => VNeutral (spineAppend n a)
+  VMeta m sp => VMeta m (append sp [a])
+  _ => f
+
+applyClosure : Closure -> Value -> Value
+applyClosure (Clos env body) v = eval (v :: env) body
+
+applySpine : Value -> List Value -> Value
+applySpine v [] = v
+applySpine v (a :: rest) = applySpine (applyValue v a) rest
+
+-- ---------------------------------------------------------------
+-- delta 展开：已解元变量 + 有定义的全局（带步数上限，避免递归定义挂死）
+-- ---------------------------------------------------------------
+force : List (Pair String Term) -> List (Pair Int Value) -> Int -> Value -> Value
+force defs sols fuel v = if fuel <= 0 then v
+else case v of
+  VMeta m sp => case metaLookup m sols of
+    Just t => force defs sols (fuel - 1) (applySpine t sp)
+    Nothing => v
+  VCase scrut alts =>
+    let
+      s2 = force defs sols (fuel - 1) scrut
+    in case s2 of
+      VCon c args => case alts of
+        [] => VCase s2 []
+        _ => force defs sols (fuel - 1) (applyCaseAlt c args alts)
+      _ => VCase s2 alts
+  VNeutral n => case n of
+    NGlobal g sp => case defLookup g defs of
+      Just body => force defs sols (fuel - 1) (applySpine (eval [] body) sp)
+      Nothing => case primReduce defs sols g sp of
+        Just v2 => force defs sols (fuel - 1) v2
+        Nothing => v
+    _ => v
+  _ => v
+
+-- ---------------------------------------------------------------
+-- prelude 运算符的原语归约（Int/String/Bool 字面量上）。
+-- 只用于内置运算符；用户定义的全局由 delta 展开处理。
+-- ---------------------------------------------------------------
+isPrimitiveName : String -> Bool
+isPrimitiveName g =
+  g == "+"
+    || g == "-"
+    || g == "*"
+    || g == "/"
+    || g == "=="
+    || g == "/="
+    || g == "<"
+    || g == "<="
+    || g == ">"
+    || g == ">="
+    || g == "++"
+    || g == "&&"
+    || g == "||"
+    || g == "bi_eq_int"
+    || g == "bi_neq_int"
+    || g == "bi_eq_str"
+    || g == "bi_neq_str"
+    || g == "bi_eq_generic"
+    || g == "bi_neq_generic"
+    || g == "strFromInt"
+    || g == "strLength"
+
+asInt : Value -> Maybe Int
+asInt v = case v of
+  VInt n => Just n
+  _ => Nothing
+
+asStr : Value -> Maybe String
+asStr v = case v of
+  VStr s => Just s
+  _ => Nothing
+
+asBool : Value -> Maybe Bool
+asBool v = case v of
+  VBool b => Just b
+  _ => Nothing
+
+intPrim2 : List Value -> (Int -> Int -> Value) -> Maybe Value
+intPrim2 ([a, b]) f = case asInt a of
+  Just x => case asInt b of
+    Just y => Just (f x y)
+    Nothing => Nothing
+  Nothing => Nothing
+intPrim2 sp f = Nothing
+
+-- M23：除法在除数为 0 时**不归约**。核心求值器表达不了运行时异常（编译产物由 OCaml
+-- 抛 `Division_by_zero`），静默返回 0 会与产物/三路对照不一致；不归约让 `main` 报
+-- "does not reduce to a value"，把差异限制在「核心求值器不能表达异常」这条已知边界里。
+intPrim2Div : List Value -> Maybe Value
+intPrim2Div ([a, b]) = case asInt a of
+  Just x => case asInt b of
+    Just y => if y == 0 then Nothing else Just (VInt (x / y))
+    Nothing => Nothing
+  Nothing => Nothing
+intPrim2Div sp = Nothing
+
+boolPrim2 : List Value -> (Bool -> Bool -> Value) -> Maybe Value
+boolPrim2 ([a, b]) f = case asBool a of
+  Just x => case asBool b of
+    Just y => Just (f x y)
+    Nothing => Nothing
+  Nothing => Nothing
+boolPrim2 sp f = Nothing
+
+-- 零参 prelude 常量：True/False 在 globals 里是 TGlobal，需要在求值时归约成 VBool。
+primConst : List Value -> Value -> Maybe Value
+primConst [] v = Just v
+primConst sp v = Nothing
+
+strPrim2 : List Value -> (String -> String -> Value) -> Maybe Value
+strPrim2 ([a, b]) f = case asStr a of
+  Just x => case asStr b of
+    Just y => Just (f x y)
+    Nothing => Nothing
+  Nothing => Nothing
+strPrim2 sp f = Nothing
+
+intPrim1 : List Value -> (Int -> Value) -> Maybe Value
+intPrim1 ([a]) f = case asInt a of
+  Just x => Just (f x)
+  Nothing => Nothing
+intPrim1 sp f = Nothing
+
+strPrim1 : List Value -> (String -> Value) -> Maybe Value
+strPrim1 ([a]) f = case asStr a of
+  Just x => Just (f x)
+  Nothing => Nothing
+strPrim1 sp f = Nothing
+
+-- 字符串相等（`==` 的跨类型特化用）。
+strEq : String -> String -> Bool
+strEq a b = a == b
+
+genericCmp : Value -> Value -> Maybe Int
+genericCmp a b = case a of
+  VInt x => case b of
+    VInt y => Just (cmpInt x y)
+    _ => Nothing
+  VStr x => case b of
+    VStr y => Just (if x == y then 0 else if x < y then 0 - 1 else 1)
+    _ => Nothing
+  VBool x => case b of
+    VBool y => Just (if x == y then 0 else if x then 1 else 0 - 1)
+    _ => Nothing
+  _ => Nothing
+
+cmpInt : Int -> Int -> Int
+cmpInt a b = if a == b then 0 else if a < b then 0 - 1 else 1
+
+genericPrim2 : List Value -> (Int -> Bool) -> Maybe Value
+genericPrim2 ([a, b]) pred = case genericCmp a b of
+  Just o => Just (VBool (pred o))
+  Nothing => Nothing
+genericPrim2 sp pred = Nothing
+
+strPrim3 : List Value -> (String -> String -> String -> Value) -> Maybe Value
+strPrim3 ([a, b, c]) f = case asStr a of
+  Just x => case asStr b of
+    Just y => case asStr c of
+      Just z => Just (f x y z)
+      Nothing => Nothing
+    Nothing => Nothing
+  Nothing => Nothing
+strPrim3 sp f = Nothing
+
+primReduce : List (Pair String Term) -> List (Pair Int Value) -> String -> List Value -> Maybe Value
+primReduce defs sols g sp = case g of
+  "+" => intPrim2 sp (\a, b => VInt (a + b))
+  "-" => intPrim2 sp (\a, b => VInt (a - b))
+  "*" => intPrim2 sp (\a, b => VInt (a * b))
+  "/" => intPrim2Div sp
+  "==" => intPrim2 sp (\a, b => VBool (a == b))
+  "/=" => intPrim2 sp (\a, b => VBool (notBool (a == b)))
+  "<" => intPrim2 sp (\a, b => VBool (a < b))
+  "<=" => intPrim2 sp (\a, b => VBool (a <= b))
+  ">" => intPrim2 sp (\a, b => VBool (a > b))
+  ">=" => intPrim2 sp (\a, b => VBool (a >= b))
+  "++" => strPrim2 sp (\a, b => VStr (a ++ b))
+  "True" => primConst sp (VBool True)
+  "False" => primConst sp (VBool False)
+  "&&" => boolPrim2 sp (\a, b => VBool (a && b))
+  "||" => boolPrim2 sp (\a, b => VBool (a || b))
+  -- M19：`==` / `/=` 的跨类型特化名与 str* 内建（精化期按实参类型重写）。
+  "bi_eq_int" => intPrim2 sp (\a, b => VBool (a == b))
+  "bi_neq_int" => intPrim2 sp (\a, b => VBool (notBool (a == b)))
+  "bi_eq_str" => strPrim2 sp (\a, b => VBool (strEq a b))
+  "bi_neq_str" => strPrim2 sp (\a, b => VBool (notBool (strEq a b)))
+  -- M23：泛型 == / /= 兜底（没有 Eq 字典时按运行时结构比较，语义对齐 HM 的
+  -- bi_eq_generic）。签名带一个擦除的类型实参，spine 形如 [ty, a, b]。
+  "bi_eq_generic" => genericEqPrim defs sols sp False
+  "bi_neq_generic" => genericEqPrim defs sols sp True
+  "strFromInt" => intPrim1 sp (\n => VStr (strFromInt n))
+  "strLength" => strPrim1 sp (\s => VInt (strLength s))
+  -- M22.2：比较运算符的内建特化（`<` / `<=` / `>` / `>=`）与泛型 compare 变体，
+  -- 让 DT core evaluator 能归约 `mergeSort` 一类用 Ord 的库函数。
+  "bi_lt_int" => intPrim2 sp (\a, b => VBool (a < b))
+  "bi_le_int" => intPrim2 sp (\a, b => VBool (a <= b))
+  "bi_gt_int" => intPrim2 sp (\a, b => VBool (a > b))
+  "bi_ge_int" => intPrim2 sp (\a, b => VBool (a >= b))
+  "bi_lt_generic" => genericPrim2 sp (\o => o < 0)
+  "bi_le_generic" => genericPrim2 sp (\o => o <= 0)
+  "bi_gt_generic" => genericPrim2 sp (\o => o > 0)
+  "bi_ge_generic" => genericPrim2 sp (\o => o >= 0)
+  _ => Nothing
+
+genericEqPrim : List (Pair String Term) -> List (Pair Int Value) -> List Value -> Bool -> Maybe Value
+genericEqPrim defs sols sp neg = case sp of
+  [ty, a, b] =>
+    Just
+      (VBool (if neg then notBool (valueEqDeep defs sols defaultFuel a b) else valueEqDeep defs sols defaultFuel a b))
+  _ => Nothing
+
+valueEqDeep : List (Pair String Term) -> List (Pair Int Value) -> Int -> Value -> Value -> Bool
+valueEqDeep defs sols fuel a b = if fuel <= 0 then False
+else case force defs sols fuel a of
+  VInt x => case force defs sols fuel b of
+    VInt y => x == y
+    _ => False
+  VStr x => case force defs sols fuel b of
+    VStr y => strEq x y
+    _ => False
+  VBool x => case force defs sols fuel b of
+    VBool y => if x then y else notBool y
+    _ => False
+  VType x => case force defs sols fuel b of
+    VType y => levelToInt x == levelToInt y
+    _ => False
+  VCon c args => case force defs sols fuel b of
+    VCon c2 args2 => if c == c2 then valueListEqDeep defs sols (fuel - 1) args args2 else False
+    _ => False
+  -- 构造子实参表包含**擦除**的类型/索引实参（VCon 不带 rig，比较时无法区分）。它们对
+  -- 运行时结构相等没有意义，却常是未解/已解的元变量或类型中立值：按「同一个元变量」
+  -- 或「同一个中立值的显示形态」判等即可（`Just2 1 == Just2 1` 的首个实参就是 `?m`）。
+  VMeta m sp => case force defs sols fuel b of
+    VMeta m2 sp2 => m == m2
+    _ => False
+  VNeutral n => case force defs sols fuel b of
+    VNeutral n2 => showValue (VNeutral n) == showValue (VNeutral n2)
+    _ => False
+  _ => False
+
+valueListEqDeep : List (Pair String Term) -> List (Pair Int Value) -> Int -> List Value -> List Value -> Bool
+valueListEqDeep defs sols fuel xs ys = case xs of
+  [] => case ys of
+    [] => True
+    _ => False
+  a :: rest => case ys of
+    [] => False
+    b :: rest2 =>
+      if valueEqDeep defs sols fuel a b then valueListEqDeep defs sols fuel rest rest2 else False
+
+-- ---------------------------------------------------------------
+-- 深度正规化（interp --dt 展示 main 用）：先 force，再递归 spine / if 分支。
+-- 与 force 不同，它会继续深入中立项的实参，因此 `inc (dbl 20)` 能算成 41。
+-- ---------------------------------------------------------------
+normalize : List (Pair String Term) -> List (Pair Int Value) -> Int -> Value -> Value
+normalize defs sols fuel v = if fuel <= 0 then v
+else case force defs sols fuel v of
+  VNeutral n => normalizeNeutral defs sols fuel n
+  VIf c th el => normalizeIf defs sols fuel c th el
+  VCase scrut alts => normalizeCase defs sols fuel scrut alts
+  other => other
+
+-- case 正规化：scrutinee 归约到构造子就走该分支并继续正规化（分支体里可能还有
+-- case——嵌套模式展开出来的内层匹配就是这种形态）；否则只正规化 scrutinee、保持卡住。
+normalizeCase : List (Pair String Term) -> List (Pair Int Value) -> Int -> Value -> List VCaseAlt -> Value
+normalizeCase defs sols fuel scrut alts = case normalize defs sols (fuel - 1) scrut of
+  VCon c args => normalize defs sols (fuel - 1) (applyCaseAlt c args alts)
+  s2 => VCase s2 alts
+
+normalizeNeutral : List (Pair String Term) -> List (Pair Int Value) -> Int -> Neutral -> Value
+normalizeNeutral defs sols fuel n = case n of
+  NVar name level sp => VNeutral (NVar name level (map (normalize defs sols fuel) sp))
+  NGlobal g sp =>
+    let
+      sp2 = map (normalize defs sols fuel) sp
+    in case defLookup g defs of
+      Just body => normalize defs sols (fuel - 1) (applySpine (eval [] body) sp2)
+      Nothing => case primReduce defs sols g sp2 of
+        Just v2 => normalize defs sols (fuel - 1) v2
+        Nothing => VNeutral (NGlobal g sp2)
+
+normalizeIf : List (Pair String Term) -> List (Pair Int Value) -> Int -> Value -> Value -> Value -> Value
+normalizeIf defs sols fuel c th el = case normalize defs sols (fuel - 1) c of
+  VBool b => normalize defs sols (fuel - 1) (if b then th else el)
+  VNeutral n =>
+    VIf (VNeutral n) (normalize defs sols (fuel - 1) th) (normalize defs sols (fuel - 1) el)
+  other => VIf other (normalize defs sols (fuel - 1) th) (normalize defs sols (fuel - 1) el)
+
+-- ---------------------------------------------------------------
+-- quote：值 → 项（level 转 de Bruijn index）
+-- ---------------------------------------------------------------
+quote : Int -> Value -> Term
+quote depth v = case v of
+  VType l => TType l
+  VPi name implicit rig dom cod =>
+    TPi name implicit rig (quote depth dom)
+      (quote (depth + 1) (applyClosure cod (freshVar name depth)))
+  VLam name rig clo => TLam name rig (quote (depth + 1) (applyClosure clo (freshVar name depth)))
+  VNeutral n => quoteNeutral depth n
+  VMeta m sp => applyTermSpine (TMeta m) (map (quote depth) sp)
+  VCon c args => TCon c (quoteArgValues depth args)
+  VCase scrut alts => TCase (quote depth scrut) (map (quoteCaseAlt depth) alts)
+  VInt n => TInt n
+  VStr s => TStr s
+  VBool b => TBool b
+  VIf c th el => TIf (quote depth c) (quote depth th) (quote depth el)
+
+-- 分支绑定子的 level 约定：第一个实参 level 最低（quote 后 index 最大）。
+quoteCaseAlt : Int -> VCaseAlt -> CaseAlt
+quoteCaseAlt depth (VCaseAlt name binders clo) =
+  let
+    n = length binders
+    argVals = argValsAt binders depth 0
+    body = quote (depth + n) (applyClosureBinder clo argVals)
+  in CaseAlt name binders body
+
+quoteArgValues : Int -> List Value -> List (Pair Term Rig)
+quoteArgValues depth [] = []
+quoteArgValues depth (a :: rest) = Pair (quote depth a) Rig1 :: quoteArgValues depth rest
+
+argValsAt : List (Pair String Rig) -> Int -> Int -> List Value
+argValsAt [] depth i = []
+argValsAt ((Pair name rig) :: rest) depth i =
+  freshVar name (depth + i) :: argValsAt rest depth (i + 1)
+
+-- 逐个把实参喂给闭包：闭包 env 是分支外环境，实参按 arg0 先喂的顺序。
+applyClosureBinder : Closure -> List Value -> Value
+applyClosureBinder clo [] = VCon "_alt" []
+applyClosureBinder clo (a :: rest) = case clo of
+  Clos env body => applyClosureBinder (Clos (a :: env) body) rest
+
+freshVar : String -> Int -> Value
+freshVar name level = VNeutral (NVar name level [])
+
+quoteNeutral : Int -> Neutral -> Term
+quoteNeutral depth n = case n of
+  NVar name level sp => applyTermSpine (TVar name (varIndex depth level)) (map (quote depth) sp)
+  NGlobal g sp => applyTermSpine (TGlobal g) (map (quote depth) sp)
+
+-- M24.6 第一级：越界的 level 以前被静默当成最外层变量（index 0），错得无声。
+-- quote 是纯函数、不返回 Result；这里对越界返回负 index（-1），后续
+-- `binderAt` / 擦除检查会把它报成 "unbound runtime variable" 而不是悄悄指向 0。
+-- 正常路径（level < depth）不变。
+varIndex : Int -> Int -> Int
+varIndex depth level = if level < depth then depth - level - 1 else 0 - 1
+
+applyTermSpine : Term -> List Term -> Term
+applyTermSpine head [] = head
+applyTermSpine head (a :: rest) = applyTermSpine (TApp head a Rig1) rest
+
+-- M22：把「已解且闭」的元变量在项里替换成其实例项（`TMeta m` → `quote 0` 的解）。
+-- 字典元变量是运行时实参（Rig1），codegen 会对残留的 `TMeta` 报错；只有擦除的
+-- 类型/索引元变量（Rig0）可留在项里。字典解（实例构造子）是闭的，`quote 0` 安全；
+-- 带自由变量（非闭）的解跳过——它们只可能是擦除元变量，codegen 跳过。
+substSolvedMetas : List (Pair Int Value) -> Term -> Term
+substSolvedMetas sols t = case t of
+  TMeta m => case metaLookup m sols of
+    Just v =>
+      let
+        soln = quote 0 v
+      in if hasFreeTermVar 0 soln then t else soln
+    Nothing => t
+  TPi n i r d c => TPi n i r (substSolvedMetas sols d) (substSolvedMetas sols c)
+  TLam n r b => TLam n r (substSolvedMetas sols b)
+  TApp f a r => TApp (substSolvedMetas sols f) (substSolvedMetas sols a) r
+  TCon c args => TCon c (map (\p => Pair (substSolvedMetas sols (firstOf p)) (secondOf p)) args)
+  TCase s alts => TCase (substSolvedMetas sols s) (map (substSolvedAlt sols) alts)
+  TIf c th el => TIf (substSolvedMetas sols c) (substSolvedMetas sols th) (substSolvedMetas sols el)
+  _ => t
+
+substSolvedAlt : List (Pair Int Value) -> CaseAlt -> CaseAlt
+substSolvedAlt sols (CaseAlt n bs b) = CaseAlt n bs (substSolvedMetas sols b)
+
+-- M20 字典提升：替换 `?m` 为 `TVar d (depth - q)`（`q` = 插入点外侧绑定子数，含类参数绑定子）。
+-- `depth` 是 `?m` 出现处深度（de Bruijn）；用于把延迟的字典元变量变成提升后的字典绑定子变量。
+-- M22.2：和 `substSolvedMetas` 相同，但解按**给定深度** quote。字典提升要在定义体的
+-- binder 上下文里重写目标类型（`?a` 已解成定义自己的刚性变量），必须按那个深度取
+-- de Bruijn index；深度 0 的版本会把解里的 `NVar` 拍成越界变量（`mergeSort` 的
+-- 字典签名曾变成 `{d : Dict_Ord ?67}`）。
+substSolvedMetasAt : Int -> List (Pair Int Value) -> Term -> Term
+substSolvedMetasAt d sols t = case sols of
+  [] => t
+  _ => substSolvedMetasAtGo d sols t
+
+substSolvedMetasAtGo : Int -> List (Pair Int Value) -> Term -> Term
+substSolvedMetasAtGo depth sols t = case t of
+  TMeta m => case metaLookup m sols of
+    Just v => quote depth v
+    Nothing => t
+  TPi n i r d c => TPi n i r (substSolvedMetasAtGo depth sols d) (substSolvedMetasAtGo depth sols c)
+  TLam n r b => TLam n r (substSolvedMetasAtGo depth sols b)
+  TApp f a r => TApp (substSolvedMetasAtGo depth sols f) (substSolvedMetasAtGo depth sols a) r
+  TCon c args =>
+    TCon c (map (\p => Pair (substSolvedMetasAtGo depth sols (firstOf p)) (secondOf p)) args)
+  TCase s alts => TCase (substSolvedMetasAtGo depth sols s) (map (substSolvedAltAt depth sols) alts)
+  TIf c th el =>
+    TIf (substSolvedMetasAtGo depth sols c) (substSolvedMetasAtGo depth sols th)
+      (substSolvedMetasAtGo depth sols el)
+  _ => t
+
+substSolvedAltAt : Int -> List (Pair Int Value) -> CaseAlt -> CaseAlt
+substSolvedAltAt depth sols (CaseAlt n bs b) = CaseAlt n bs (substSolvedMetasAtGo depth sols b)
+
+showValueAt : Int -> Value -> String
+showValueAt depth v = showTerm (quote depth v)
+
+showValue : Value -> String
+showValue v = showValueAt 0 v

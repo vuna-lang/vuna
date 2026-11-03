@@ -1,5 +1,6 @@
 module Vuna.Compiler.Driver.Compile
-  ( checkFileDt
+  ( buildSplit
+  , checkFileDt
   , checkLibraryDt
   , checkProjectDt
   , compileFileDt
@@ -8,14 +9,17 @@ module Vuna.Compiler.Driver.Compile
   , dtMainFile
   , dtProjectFiles
   , effectiveRoots
+  , seedSplit
   ) where
 
 -- Vuna.Compiler.Driver.Compile：编译入口（供 CompilerCli / 测试使用）。唯一路径是 DT：
--- 精化（Elab）→ 擦除检查 + OCaml 生成（CoreCodegen）；checkFile* 只检查不产码。
+-- 精化（Elab）→ 擦除检查 + OCaml 生成（Codegen）；checkFile* 只检查不产码。
+-- 包模式 split（build --split / seed）也在这里（原 SplitCli，M24）。
 import Vuna.Compiler.Common
 import Vuna.Compiler.Packages.Pkg
 import Vuna.Compiler.Loader
 import Vuna.Compiler.Driver.Dt
+import Vuna.Compiler.Driver.Split
 
 -- 未显式给 --root 时使用当前目录包的模块根（vuna.toml）；
 -- 当前目录不是包则没有默认根，原始文件模式需显式 --root。
@@ -65,3 +69,23 @@ dtProjectFiles : List Root -> String -> String -> Bool -> Result (List (Pair Str
 dtProjectFiles roots entryPkg entry printResult =
   andThen (dtCompileProject roots entryPkg entry printResult)
     (\code => Ok [Pair dtMainFile code, Pair dtBuildScriptName dtBuildScript])
+
+-- ---------------------------------------------------------------
+-- 包模式分离编译（原 Driver.SplitCli，M24）
+-- ---------------------------------------------------------------
+buildSplit : String -> String -> Result Int
+buildSplit dir outDir = case loadPackage dir of
+  Err e => Err e
+  Ok pkg => splitPackage pkg outDir
+
+seedSplit : String -> String -> Result Int
+seedSplit dir outDir = buildSplit dir outDir
+
+splitPackage : Package -> String -> Result Int
+splitPackage pkg outDir = andThen (dtSplitProject (packageRoots pkg) (packageName pkg) (packageEntry pkg) True) (\files => andThen (writeSplitFiles outDir files) (\n => let
+  order = splitCompileOrder (splitInitFiles files)
+in let
+  _ = writeFile (outDir ++ "/build.sh") (buildScript order)
+in Ok n
+)
+)

@@ -1,0 +1,602 @@
+module Vuna.Fmt.Expr
+  ( inlineExpr
+  , inlinePrec
+  , parenWrapInd
+  , renderBindingValue
+  , renderExpr
+  , renderPat
+  , renderPatAtom
+  , renderTypeExpr
+  ) where
+
+-- Vuna.Fmt.Expr：表达式 / 模式 / 块级布局的打印（M24 后维护·源码重组，从 Vuna.Fmt 拆出）。
+--
+-- 单行形式（inlinePrec，按运算符优先级补括号；case/let/do 返回 Nothing）与块级形式
+-- （renderExpr → renderBlock/renderWide，按 maxWidth 折行）共用同一份模式与中缀表。
+-- 注释锚点由 Vuna.Fmt.Comment 提供（attachAt）。
+import Vuna.Compiler.Common
+import Vuna.Compiler.Frontend.Ast
+import Vuna.Compiler.Frontend.Lexer
+import Vuna.Fmt.Comment
+import Vuna.Fmt.Util
+
+-- ---------------------------------------------------------------
+-- 字符串字面量：按 lexer 支持的转义重新编码
+-- ---------------------------------------------------------------
+escapeChar : Int -> String
+escapeChar c =
+  if c == 34 then strPack [92, 34]
+  else if c == 92 then strPack [92, 92]
+  else if c == 10 then strPack [92, 110]
+  else if c == 9 then strPack [92, 116] else if c == 13 then strPack [92, 114] else strPack [c]
+
+renderStr : String -> String
+renderStr s = strPack [34] ++ concatStrings (map escapeChar (strUnpack s)) ++ strPack [34]
+
+-- ---------------------------------------------------------------
+-- 模式（模式没有块结构，统一输出单行，必要时加括号）
+-- ---------------------------------------------------------------
+patListElemsOf : String -> List Pat -> Maybe (List Pat)
+patListElemsOf name pats = if name == "Nil" then if isNilList pats then Just [] else Nothing
+else if name == "Cons" then case pats of
+  [a, rest] => case patListElems rest of
+    Just elems => Just (a :: elems)
+    Nothing => Nothing
+  _ => Nothing
+else Nothing
+
+patListElems : Pat -> Maybe (List Pat)
+patListElems pat = case pat of
+  PCon name pats sp => patListElemsOf name pats
+  _ => Nothing
+
+renderPat : Pat -> String
+renderPat pat = case pat of
+  PVar name sp => name
+  PWild sp => "_"
+  PInt n sp => strFromInt n
+  PStr s sp => renderStr s
+  PCon name pats sp => renderConPat name pats
+  PRecord name fields sp => renderRecPat name fields
+
+renderConPat : String -> List Pat -> String
+renderConPat name pats = case patListElemsOf name pats of
+  Just elems => "[" ++ joinComma (map renderPat elems) ++ "]"
+  Nothing =>
+    if name == "Cons" then renderConsPat pats
+    else if name == "Nil" && isNilList pats then "[]"
+    else if isNilList pats then name else name ++ joinSpace (map renderPatAtom pats)
+
+renderConsPat : List Pat -> String
+renderConsPat pats = case pats of
+  [a, b] => renderPatAtom a ++ " :: " ++ renderPatConsTail b
+  _ => "Cons" ++ joinSpace (map renderPatAtom pats)
+
+renderPatConsTail : Pat -> String
+renderPatConsTail pat = case pat of
+  PCon name pats sp => if name == "Cons" then case pats of
+    [a, b] => renderPatAtom a ++ " :: " ++ renderPatConsTail b
+    _ => renderPatAtom pat
+  else renderPatAtom pat
+  _ => renderPatAtom pat
+
+renderPatAtom : Pat -> String
+renderPatAtom pat = case pat of
+  PVar name sp => name
+  PWild sp => "_"
+  PInt n sp => strFromInt n
+  PStr s sp => renderStr s
+  PCon name [] sp => if name == "Nil" then "[]" else name
+  PCon name pats sp => "(" ++ renderConPat name pats ++ ")"
+  PRecord name fields sp => "(" ++ renderRecPat name fields ++ ")"
+
+renderRecPat : String -> List (Pair String Pat) -> String
+renderRecPat name fields =
+  if isNilList fields then name ++ " { }"
+  else name ++ " { " ++ joinComma (map renderRecPatField fields) ++ " }"
+
+renderRecPatField : Pair String Pat -> String
+renderRecPatField (Pair fname pat) = case pat of
+  PVar n sp => if n == fname then fname else fname ++ " = " ++ renderPat pat
+  _ => fname ++ " = " ++ renderPat pat
+
+-- ---------------------------------------------------------------
+-- 单行表达式：inlineExpr / inlinePrec / inlineAtom
+-- inlinePrec 按运算符优先级决定是否补括号；块结构（case/let/do）返回 Nothing。
+-- ---------------------------------------------------------------
+infixPrec : String -> Maybe (Pair Int Int)
+infixPrec op = case op of
+  "->" => Just (Pair 1 1)
+  ">>=" => Just (Pair 1 1)
+  "||" => Just (Pair 2 0)
+  "&&" => Just (Pair 3 0)
+  "==" => Just (Pair 4 0)
+  "/=" => Just (Pair 4 0)
+  "<" => Just (Pair 4 0)
+  "<=" => Just (Pair 4 0)
+  ">" => Just (Pair 4 0)
+  ">=" => Just (Pair 4 0)
+  "++" => Just (Pair 5 1)
+  "+" => Just (Pair 6 0)
+  "-" => Just (Pair 6 0)
+  "*" => Just (Pair 7 0)
+  "/" => Just (Pair 7 0)
+  "::" => Just (Pair 8 1)
+  "Cons" => Just (Pair 8 1)
+  _ => Nothing
+
+opText : String -> String
+opText op = if op == "Cons" then "::" else op
+
+listExprElems : Expr -> Maybe (List Expr)
+listExprElems e = case e of
+  EVar "Nil" sp => Just []
+  EApp (EVar "Cons" csp) ([a, rest]) sp => case listExprElems rest of
+    Just elems => Just (a :: elems)
+    Nothing => Nothing
+  _ => Nothing
+
+inlineExpr : Expr -> Maybe String
+inlineExpr e = inlinePrec 0 e
+
+inlinePrec : Int -> Expr -> Maybe String
+inlinePrec minPrec e = case e of
+  EVar name sp => if name == "Nil" then Just "[]" else Just name
+  EInt n sp => Just (strFromInt n)
+  EStr s sp => Just (renderStr s)
+  ELam ps body sp => case inlinePrec 0 body of
+    Nothing => Nothing
+    Just b => Just (wrapPrec (minPrec > 0) ("\\" ++ joinComma ps ++ " => " ++ b))
+  EApp fn args sp => case listExprElems (EApp fn args sp) of
+    Just elems => case mapMaybeStrings (\x => inlineExpr x) elems of
+      Nothing => Nothing
+      Just ss => Just ("[" ++ joinComma ss ++ "]")
+    Nothing => inlineApp minPrec fn args
+  EPi name implicit dom cod sp => inlinePi minPrec name implicit dom cod
+  ELet binds body rec_ sp => Nothing
+  ECase scrut alts sp => Nothing
+  EIf c t el sp => case inlinePrec 0 c of
+    Nothing => Nothing
+    Just cs => case inlinePrec 0 t of
+      Nothing => Nothing
+      Just ts => case inlinePrec 0 el of
+        Nothing => Nothing
+        Just es => Just (wrapPrec (minPrec > 0) ("if " ++ cs ++ " then " ++ ts ++ " else " ++ es))
+  EField base f sp => case inlineAtom base of
+    Nothing => Nothing
+    Just b => Just (b ++ "." ++ f)
+  ERecord name fields sp => case inlineFields fields of
+    Nothing => Nothing
+    Just ss => case fields of
+      [] => Just (name ++ " { }")
+      _ => Just (name ++ " { " ++ joinComma ss ++ " }")
+  ERecUpdate base fields sp => case inlinePrec 0 base of
+    Nothing => Nothing
+    Just b => case inlineFields fields of
+      Nothing => Nothing
+      Just ss => case fields of
+        [] => Just ("{ " ++ b ++ " }")
+        _ => Just ("{ " ++ b ++ " | " ++ joinComma ss ++ " }")
+  EInstSel base inst sp => case inlineAtom base of
+    Nothing => Nothing
+    Just b => Just (b ++ " @" ++ inst)
+  EDo stmts sp => Nothing
+  -- M24：非 where 位置（例如 `let` 绑定值）的 `EAnn` 透明渲染内部表达式：
+  -- 表达式位置没有 `: Ty` 语法，输出标注会让 fmt 产物无法重新 parse。
+  EAnn value ty sp => inlinePrec minPrec value
+
+wrapPrec : Bool -> String -> String
+wrapPrec need s = if need then "(" ++ s ++ ")" else s
+
+inlineFields : List (Pair String Expr) -> Maybe (List String)
+inlineFields [] = Just []
+inlineFields ((Pair fname value) :: rest) = case inlinePrec 0 value of
+  Nothing => Nothing
+  Just v => case inlineFields rest of
+    Nothing => Nothing
+    Just ss => Just ((fname ++ " = " ++ v) :: ss)
+
+-- DT（M13）命名 Pi：`(x : A) -> B` 与隐式 `{x : A} -> B`；`->` 右结合。
+inlinePi : Int -> String -> Bool -> Expr -> Expr -> Maybe String
+inlinePi minPrec name implicit dom cod = case inlinePrec 0 dom of
+  Nothing => Nothing
+  Just d => case inlinePrec 1 cod of
+    Nothing => Nothing
+    Just c =>
+      let
+        binder =
+          if implicit then "{" ++ name ++ " : " ++ d ++ "}" else "(" ++ name ++ " : " ++ d ++ ")"
+      in Just (wrapPrec (minPrec > 1) (binder ++ " -> " ++ c))
+
+-- 域/余域含块结构时的兜底布局（DT 类型一般走 inlinePi；这里只保证不丢字符）。
+renderPiBlock : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Bool -> String -> Expr -> Expr -> List String
+renderPiBlock at lineInd implicit name dom cod =
+  let
+    openTxt = if implicit then "{" ++ name ++ " : " else "(" ++ name ++ " : "
+    closeTxt = if implicit then "}" else ")"
+    domLines =
+      appendLast (" " ++ closeTxt ++ " ->") (prefixFirst openTxt (renderExpr at lineInd dom))
+  in append domLines (prefixFirst (spaces (lineInd + 2)) (renderExpr at (lineInd + 2) cod))
+
+inlineApp : Int -> Expr -> List Expr -> Maybe String
+inlineApp minPrec fn args = case fn of
+  EVar "bind" bsp => case args of
+    [a, b] => inlineInfix minPrec 1 1 ">>=" a b
+    _ => inlineApply minPrec fn args
+  EVar op sp => case infixPrec op of
+    Just (Pair p assoc) => case args of
+      [a, b] => inlineInfix minPrec p assoc op a b
+      _ => inlineApply minPrec fn args
+    Nothing => inlineApply minPrec fn args
+  _ => inlineApply minPrec fn args
+
+inlineInfix : Int -> Int -> Int -> String -> Expr -> Expr -> Maybe String
+inlineInfix minPrec p assoc op a b =
+  let
+    leftMin = if assoc == 0 then p else p + 1
+    rightMin = if assoc == 0 then p + 1 else p
+  in case inlinePrec leftMin a of
+    Nothing => Nothing
+    Just lhsText => case inlinePrec rightMin b of
+      Nothing => Nothing
+      Just rhsText => Just (wrapPrec (p < minPrec) (lhsText ++ " " ++ opText op ++ " " ++ rhsText))
+
+inlineApply : Int -> Expr -> List Expr -> Maybe String
+inlineApply minPrec fn args = case inlineApplyHead fn of
+  Nothing => Nothing
+  Just headText => case mapMaybeStrings (\a => inlineAtom a) args of
+    Nothing => Nothing
+    Just argTexts =>
+      Just (wrapPrec (9 < minPrec) (headText ++ concatStrings (map (\a => " " ++ a) argTexts)))
+
+inlineApplyHead : Expr -> Maybe String
+inlineApplyHead fn = case fn of
+  EInstSel base inst sp => case inlineAtom base of
+    Nothing => Nothing
+    Just b => Just (b ++ " @" ++ inst)
+  _ => inlineAtom fn
+
+inlineAtom : Expr -> Maybe String
+inlineAtom e = case inlinePrec 0 e of
+  Nothing => Nothing
+  Just s => if atomForm e then Just s else Just ("(" ++ s ++ ")")
+
+atomForm : Expr -> Bool
+atomForm e = case e of
+  EVar name sp => True
+  EInt n sp => True
+  EStr s sp => True
+  EField base f sp => True
+  ERecord name fields sp => True
+  ERecUpdate base fields sp => True
+  EApp fn args sp => case listExprElems (EApp fn args sp) of
+    Just elems => True
+    Nothing => False
+  _ => False
+
+-- ---------------------------------------------------------------
+-- 块级表达式（含 case/let/do 或含块结构的子表达式）；
+-- lineInd = 该表达式起始物理行的缩进（0 基），块内缩进 = lineInd + 2。
+-- 返回 List String：首行不含缩进，续行是绝对缩进。
+-- ---------------------------------------------------------------
+renderExpr : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Expr -> List String
+renderExpr at lineInd e = case inlinePrec 0 e of
+  Just s => if fitsLine lineInd s then [s] else renderWide at lineInd e
+  Nothing => renderBlock at lineInd e
+
+-- 类型表达式不折行（保持签名/字段类型紧凑，避免 `->` 链被打断）。
+renderTypeExpr : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Expr -> List String
+renderTypeExpr at lineInd e = case inlinePrec 0 e of
+  Just s => [s]
+  Nothing => renderBlock at lineInd e
+
+-- 行内放不下时的折行形式。
+renderWide : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Expr -> List String
+renderWide at lineInd e = case e of
+  EIf c t el sp => renderIf at lineInd c t el
+  EApp fn args sp => case listExprElems (EApp fn args sp) of
+    Just elems => case mapMaybeStrings (\x => inlineExpr x) elems of
+      Just ss => renderListBlock at lineInd ss
+      Nothing => renderAppBlock at lineInd fn args
+    Nothing => renderAppBlock at lineInd fn args
+  _ => [renderExprInline e]
+
+renderExprInline : Expr -> String
+renderExprInline e = case inlinePrec 0 e of
+  Just s => s
+  Nothing => ""
+
+-- 列表字面量折行：`[ a,` / `  b` / `]`（最后一个元素后不加逗号）。
+renderListBlock : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> List String -> List String
+renderListBlock at lineInd [] = ["[]"]
+renderListBlock at lineInd (first :: rest) =
+  append ["[ " ++ first ++ (if isNilList rest then "" else ",")]
+    (renderListBlockRest at lineInd rest)
+
+renderListBlockRest : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> List String -> List String
+renderListBlockRest at lineInd [] = [spaces lineInd ++ "]"]
+renderListBlockRest at lineInd ([s]) = [spaces (lineInd + 2) ++ s, spaces lineInd ++ "]"]
+renderListBlockRest at lineInd (s :: rest) =
+  (spaces (lineInd + 2) ++ s ++ ",") :: renderListBlockRest at lineInd rest
+
+renderAtomExpr : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Expr -> List String
+renderAtomExpr at lineInd e = case inlineAtom e of
+  Just s => [s]
+  Nothing => parenWrapInd at lineInd e
+
+parenWrapInd : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Expr -> List String
+parenWrapInd at lineInd e =
+  append (prefixFirst "(" (renderBlock at lineInd e)) [spaces lineInd ++ ")"]
+
+renderBlock : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Expr -> List String
+renderBlock at lineInd e = case e of
+  ECase scrut alts sp => renderCase at lineInd scrut alts
+  ELet binds body rec_ sp => renderLet at lineInd binds body
+  EIf c t el sp => renderIf at lineInd c t el
+  EApp fn args sp => renderAppBlock at lineInd fn args
+  EPi name implicit dom cod sp => renderPiBlock at lineInd implicit name dom cod
+  ELam ps body sp => prefixFirst ("\\" ++ joinComma ps ++ " => ") (renderExpr at lineInd body)
+  EField base f sp => appendLast ("." ++ f) (renderAtomExpr at lineInd base)
+  ERecord name fields sp => renderRecordBlock at lineInd name fields
+  ERecUpdate base fields sp => renderRecUpdateBlock at lineInd base fields
+  EInstSel base inst sp => appendLast (" @" ++ inst) (renderAtomExpr at lineInd base)
+  EDo stmts sp => renderDo at lineInd stmts
+  EAnn value ty sp => renderExpr at lineInd value
+  EVar name sp => [name]
+  EInt n sp => [strFromInt n]
+  EStr s sp => [renderStr s]
+
+renderScrut : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Expr -> List String
+renderScrut at lineInd e = case inlineExpr e of
+  Just s => [s]
+  Nothing => parenWrapInd at lineInd e
+
+renderCase : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Expr -> List (Pair Pat Expr) -> List String
+renderCase at lineInd scrut alts =
+  let
+    headLines = appendLast " of" (prefixFirst "case " (renderScrut at lineInd scrut))
+    altInd = lineInd + 2
+    altLines = concatMap (\alt => renderAlt at altInd alt) alts
+  in append headLines altLines
+
+renderAlt : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Pair Pat Expr -> List String
+renderAlt at altInd (Pair pat body) =
+  attachAt at (patSpan pat) altInd (renderAltBody at altInd pat body)
+
+renderAltBody : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Pat -> Expr -> List String
+renderAltBody at altInd pat body = case body of
+  ELet binds inner recFlag sp =>
+    (spaces altInd ++ renderPat pat ++ " =>")
+      :: prefixFirst (spaces (altInd + 2)) (renderExpr at (altInd + 2) body)
+  _ =>
+    let
+      prefix = spaces altInd ++ renderPat pat ++ " => "
+    in case inlinePrec 0 body of
+      Just s =>
+        if strWidth (prefix ++ s) <= maxWidth then [prefix ++ s]
+        else (spaces altInd ++ renderPat pat ++ " =>")
+          :: prefixFirst (spaces (altInd + 2)) (renderExpr at (altInd + 2) body)
+      Nothing => prefixFirst prefix (renderExpr at altInd body)
+
+renderWhenBody : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> String -> Expr -> List String
+renderWhenBody at lineInd keyword e = case e of
+  ELet binds inner recFlag sp =>
+    (spaces lineInd ++ keyword)
+      :: prefixFirst (spaces (lineInd + 2)) (renderExpr at (lineInd + 2) e)
+  _ => prefixFirst (spaces lineInd ++ keyword ++ " ") (renderExpr at lineInd e)
+
+renderIf : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Expr -> Expr -> Expr -> List String
+renderIf at lineInd c t el =
+  let
+    condLines = prefixFirst "if " (renderScrut at lineInd c)
+    thenLines = case t of
+      ELet binds inner recFlag sp =>
+        append (appendLast " then" condLines)
+          (prefixFirst (spaces (lineInd + 2)) (renderExpr at (lineInd + 2) t))
+      _ =>
+        let
+          tLines = renderExpr at lineInd t
+        in append (appendLast (" then " ++ firstLine tLines) condLines) (restLines tLines)
+    elseLines = renderWhenBody at lineInd "else" el
+  in append thenLines elseLines
+
+renderLet : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> List (Pair Pat Expr) -> Expr -> List String
+renderLet at lineInd binds body = case binds of
+  [] => "let" :: prefixFirst (spaces lineInd ++ "in ") (renderExpr at lineInd body)
+  first :: rest =>
+    let
+      bindInd = lineInd + 2
+      bindingLines =
+        append (renderLetBinding at bindInd first)
+          (concatMap (\b => renderLetBinding at bindInd b) rest)
+    in append ("let" :: bindingLines)
+      (prefixFirst (spaces lineInd ++ "in ") (renderExpr at lineInd body))
+
+renderLetBinding : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Pair Pat Expr -> List String
+renderLetBinding at bindInd (Pair pat value) =
+  attachAt at (patSpan pat) bindInd (renderBindingValue at bindInd (renderPat pat ++ " =") value)
+
+renderBindingValue : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> String -> Expr -> List String
+renderBindingValue at lineInd prefixText value = case value of
+  ELet binds inner recFlag sp =>
+    (spaces lineInd ++ prefixText)
+      :: prefixFirst (spaces (lineInd + 2)) (renderExpr at (lineInd + 2) value)
+  _ => case inlinePrec 0 value of
+    Just s =>
+      if strWidth (spaces lineInd ++ prefixText ++ " " ++ s) <= maxWidth then [spaces lineInd ++ prefixText ++ " " ++ s]
+      else (spaces lineInd ++ prefixText)
+        :: prefixFirst (spaces (lineInd + 2)) (renderExpr at (lineInd + 2) value)
+    Nothing => prefixFirst (spaces lineInd ++ prefixText ++ " ") (renderExpr at lineInd value)
+
+renderDo : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> List DoStmt -> List String
+renderDo at lineInd stmts = "do" :: concatMap (\s => renderDoStmt at (lineInd + 2) s) stmts
+
+renderDoStmt : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> DoStmt -> List String
+renderDoStmt at stmtInd stmt =
+  attachAt at (doStmtSpan stmt) stmtInd (renderDoStmtBody at stmtInd stmt)
+
+renderDoStmtBody : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> DoStmt -> List String
+renderDoStmtBody at stmtInd stmt = case stmt of
+  DBind pat value sp =>
+    let
+      prefix = spaces stmtInd ++ renderPat pat ++ " <- "
+    in case inlinePrec 0 value of
+      Just s =>
+        if strWidth (prefix ++ s) <= maxWidth then [prefix ++ s]
+        else (spaces stmtInd ++ renderPat pat ++ " <-")
+          :: prefixFirst (spaces (stmtInd + 2)) (renderExpr at (stmtInd + 2) value)
+      Nothing => prefixFirst prefix (renderExpr at stmtInd value)
+  DExpr value sp => prefixFirst (spaces stmtInd) (renderExpr at stmtInd value)
+
+renderAppBlock : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Expr -> List Expr -> List String
+renderAppBlock at lineInd fn args = case fn of
+  EVar "bind" bsp => case args of
+    [a, b] => renderInfixBlock at lineInd 1 1 ">>=" a b
+    _ => renderApplyBlock at lineInd fn args
+  EVar op sp => case infixPrec op of
+    Just (Pair p assoc) => case args of
+      [a, b] => renderInfixBlock at lineInd p assoc op a b
+      _ => renderApplyBlock at lineInd fn args
+    Nothing => renderApplyBlock at lineInd fn args
+  _ => renderApplyBlock at lineInd fn args
+
+renderInfixBlock : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Int -> Int -> String -> Expr -> Expr -> List String
+renderInfixBlock at lineInd p assoc op a b = case inlineInfix 0 p assoc op a b of
+  Just s =>
+    if fitsLine lineInd s then [s]
+    else renderInfixChain at lineInd p assoc op (infixChainOperands p assoc op a b)
+  Nothing =>
+    let
+      leftMin = if assoc == 0 then p else p + 1
+      rightMin = if assoc == 0 then p + 1 else p
+      lhsLines = renderOperand at lineInd leftMin a
+      rhsLines = renderOperand at lineInd rightMin b
+    in case rhsLines of
+      [] => lhsLines
+      r :: rest => append (appendLast (" " ++ opText op ++ " " ++ r) lhsLines) rest
+
+-- 中缀链：运算符放续行行首（续行缩进 lineInd+2，满足 parser 的 offside 约束）。
+infixChainOperands : Int -> Int -> String -> Expr -> Expr -> List Expr
+infixChainOperands p assoc op a b =
+  if assoc == 1 then a :: flattenInfixRight p op b else append (flattenInfixLeft p op a) [b]
+
+matchInfixNode : Int -> String -> Expr -> Maybe (Pair Expr Expr)
+matchInfixNode p op e = case e of
+  EApp (EVar name sp) ([l, r]) sp2 =>
+    let
+      op2 = if name == "bind" then ">>=" else name
+    in case infixPrec op2 of
+      Just (Pair p2 assoc2) => if p2 == p && op2 == op then Just (Pair l r) else Nothing
+      Nothing => Nothing
+  _ => Nothing
+
+flattenInfixLeft : Int -> String -> Expr -> List Expr
+flattenInfixLeft p op e = case matchInfixNode p op e of
+  Nothing => [e]
+  Just (Pair l r) => append (flattenInfixLeft p op l) [r]
+
+flattenInfixRight : Int -> String -> Expr -> List Expr
+flattenInfixRight p op e = case matchInfixNode p op e of
+  Nothing => [e]
+  Just (Pair l r) => l :: flattenInfixRight p op r
+
+renderInfixChain : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Int -> Int -> String -> List Expr -> List String
+renderInfixChain at lineInd p assoc op operands = case operands of
+  [] => []
+  first :: rest =>
+    append (renderChainFirst at lineInd (p + 1) first)
+      (concatMap (\o => renderChainRest at lineInd (p + 1) op o) rest)
+
+renderChainFirst : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Int -> Expr -> List String
+renderChainFirst at lineInd minPrec e = case inlinePrec minPrec e of
+  Just s => if fitsLine lineInd s then [s] else renderWideOperand at lineInd minPrec e
+  Nothing => parenWrapInd at lineInd e
+
+renderWideOperand : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Int -> Expr -> List String
+renderWideOperand at lineInd minPrec e =
+  if minPrec > 0 then [renderExprInlineOperand minPrec e] else renderWide at lineInd e
+
+renderExprInlineOperand : Int -> Expr -> String
+renderExprInlineOperand minPrec e = case inlinePrec minPrec e of
+  Just s => s
+  Nothing => ""
+
+renderChainRest : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Int -> String -> Expr -> List String
+renderChainRest at lineInd minPrec op e = case inlinePrec minPrec e of
+  Just s => [spaces (lineInd + 2) ++ opText op ++ " " ++ s]
+  Nothing =>
+    prefixFirst (spaces (lineInd + 2) ++ opText op ++ " ") (parenWrapInd at (lineInd + 2) e)
+
+renderOperand : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Int -> Expr -> List String
+renderOperand at lineInd minPrec e = case inlinePrec minPrec e of
+  Just s => [s]
+  Nothing => parenWrapInd at lineInd e
+
+renderApplyBlock : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Expr -> List Expr -> List String
+renderApplyBlock at lineInd fn args =
+  let
+    headLines = renderApplyHead at lineInd fn
+  in case mapMaybeStrings (\a => inlineAtom a) args of
+    Nothing => appendApplyArgs at lineInd headLines args
+    Just texts => case headLines of
+      [h] =>
+        if fitsLine lineInd (h ++ concatStrings (map (\t => " " ++ t) texts)) then appendApplyArgs at lineInd headLines args
+        else packApplyArgs lineInd [h] texts
+      _ => appendApplyArgs at lineInd headLines args
+
+-- 贪心折行：尽量把参数放在当前行，放不下就新起一行（缩进 lineInd+2）。
+packApplyArgs : Int -> List String -> List String -> List String
+packApplyArgs lineInd lines [] = lines
+packApplyArgs lineInd lines (t :: rest) =
+  if fitsLineWidth (lastLineWidth lineInd lines) t then packApplyArgs lineInd (appendLast (" " ++ t) lines) rest
+  else packApplyArgs lineInd (append lines [spaces (lineInd + 2) ++ t]) rest
+
+lastLineWidth : Int -> List String -> Int
+lastLineWidth lineInd lines =
+  if isNilList (restLines lines) then lineInd + strWidth (lastLineOf lines)
+  else strWidth (lastLineOf lines)
+
+fitsLineWidth : Int -> String -> Bool
+fitsLineWidth currentWidth t = currentWidth + 1 + strWidth t <= maxWidth
+
+renderApplyHead : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Expr -> List String
+renderApplyHead at lineInd fn = case fn of
+  EInstSel base inst sp => appendLast (" @" ++ inst) (renderAtomExpr at lineInd base)
+  _ => renderAtomExpr at lineInd fn
+
+appendApplyArgs : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> List String -> List Expr -> List String
+appendApplyArgs at lineInd lines args = case args of
+  [] => lines
+  a :: rest =>
+    appendApplyArgs at lineInd (appendBefore " " lines (renderAtomExpr at lineInd a)) rest
+
+renderRecordBlock : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> String -> List (Pair String Expr) -> List String
+renderRecordBlock at lineInd name fields = case fields of
+  [] => [name ++ " { }"]
+  first :: rest =>
+    let
+      start = appendBefore " " [name ++ " {"] (renderFieldBlock at lineInd first)
+      withRest = appendFieldBlocks at lineInd start rest
+    in appendLast " }" withRest
+
+appendFieldBlocks : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> List String -> List (Pair String Expr) -> List String
+appendFieldBlocks at lineInd lines fields = case fields of
+  [] => lines
+  f :: rest =>
+    appendFieldBlocks at lineInd (appendBefore ", " lines (renderFieldBlock at lineInd f)) rest
+
+renderFieldBlock : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Pair String Expr -> List String
+renderFieldBlock at lineInd (Pair fname value) =
+  prefixFirst (fname ++ " = ") (renderAtomExpr at lineInd value)
+
+renderRecUpdateBlock : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Expr -> List (Pair String Expr) -> List String
+renderRecUpdateBlock at lineInd base fields =
+  let
+    start = appendBefore " " ["{"] (renderAtomExpr at lineInd base)
+  in case fields of
+    [] => appendLast " }" start
+    first :: rest =>
+      let
+        start2 = appendBefore " | " start (renderFieldBlock at lineInd first)
+        withRest = appendFieldBlocks at lineInd start2 rest
+      in appendLast " }" withRest

@@ -12,8 +12,6 @@ module Vuna.Compiler.Driver.CompilerCli
 import Vuna.Compiler.Common
 import Vuna.Compiler.Packages.Pkg
 import Vuna.Compiler.Driver.Compile
-import Vuna.Compiler.Driver.SplitCli
-import Vuna.Compiler.Driver.Process
 
 compilerUsageLines : String -> String
 compilerUsageLines prog =
@@ -358,3 +356,8 @@ seedRun outDir dir = case executablePackage "seed" dir of
         let
           _ = print ("wrote " ++ strFromInt n ++ " files to " ++ outDir ++ "\n")
         in 0
+
+-- 进程执行入口（原 Driver.Process）：prim_runIn 是受包级 allowlist 限制的效果内建，
+-- 普通用户包不能直接调用；只供编译器 CLI 调 ocamlopt 用。
+runIn : String -> List String -> Int
+runIn dir args = prim_runIn dir args

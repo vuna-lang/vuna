@@ -1,0 +1,217 @@
+module Vuna.Compiler.Core.Conv
+  ( conv
+  , convBoth
+  , convCaseAlts
+  , convNeutral
+  , convOneAlt
+  , convSpines
+  , convValueLists
+  , etaLeft
+  , etaRight
+  , isBoolNeutral
+  , isBoolTyName
+  , mismatchAt
+  , solveMeta
+  , solveMetaHead
+  , solveMetaHo
+  , solveMetaNew
+  , splitAtVals
+  ) where
+
+-- Vuna.Compiler.Core.Conv：定义性相等（beta + delta + eta）与一阶元变量求解。
+--
+-- 返回更新后的元变量解表。元变量求解是 M13 的一阶子集：只接受空 spine、闭合解、
+-- occurs check；高阶元变量与带局部绑定的解报 M13 限制（M15 补齐）。
+-- M24 后维护（源码重组）：从原 Core.vuna 拆出；依赖 Core.Term（表示层）与 Core.Eval（force/quote/show）。
+import Vuna.Compiler.Common
+import Vuna.Compiler.Core.Term
+import Vuna.Compiler.Core.Eval
+
+-- ---------------------------------------------------------------
+-- 定义性相等（beta + delta + eta）与一阶元变量求解
+-- 返回更新后的元变量解表。
+-- ---------------------------------------------------------------
+conv : List (Pair String Term) -> List (Pair Int Value) -> Int -> Value -> Value -> Result (List (Pair Int Value))
+conv defs sols depth a b =
+  let
+    a2 = force defs sols defaultFuel a
+    y2 = force defs sols defaultFuel b
+  in case a2 of
+    VMeta m sp => solveMeta defs sols depth m sp y2
+    _ => case y2 of
+      VMeta m sp => solveMeta defs sols depth m sp a2
+      _ => convBoth defs sols depth a2 y2
+
+convBoth : List (Pair String Term) -> List (Pair Int Value) -> Int -> Value -> Value -> Result (List (Pair Int Value))
+convBoth defs sols depth a b = case a of
+  VType i => case b of
+    VType j => if i == j then Ok sols else mismatchAt depth a b
+    _ => mismatchAt depth a b
+  VPi name implicit rig dom cod => case b of
+    VPi name2 implicit2 rig2 dom2 cod2 => if implicit == implicit2 then andThen (conv defs sols depth dom dom2) (\sols2 => let
+      v = freshVar name depth
+    in conv defs sols2 (depth + 1) (applyClosure cod v) (applyClosure cod2 v)
+    )
+    else mismatchAt depth a b
+    _ => mismatchAt depth a b
+  VLam name rig clo => case b of
+    VLam name2 rig2 clo2 =>
+      let
+        v = freshVar name depth
+      in conv defs sols (depth + 1) (applyClosure clo v) (applyClosure clo2 v)
+    _ => etaRight defs sols depth name clo b
+  VNeutral n => case b of
+    -- 预置 Bool 桩与 Base.Bool.Bool 视为同一类型（嵌套位置也要相等：`Result (Pair Bool _)`）。
+    VNeutral n2 =>
+      if isBoolNeutral n && isBoolNeutral n2 then Ok sols else convNeutral defs sols depth n n2 a b
+    VLam name2 rig2 clo2 => etaLeft defs sols depth a name2 clo2
+    _ => mismatchAt depth a b
+  VInt n => case b of
+    VInt m => if n == m then Ok sols else mismatchAt depth a b
+    _ => mismatchAt depth a b
+  VStr s => case b of
+    VStr s2 => if s == s2 then Ok sols else mismatchAt depth a b
+    _ => mismatchAt depth a b
+  VBool x => case b of
+    VBool y => if x == y then Ok sols else mismatchAt depth a b
+    _ => mismatchAt depth a b
+  VCon c args => case b of
+    VCon c2 args2 =>
+      if c == c2 then convValueLists defs sols depth args args2 else mismatchAt depth a b
+    _ => mismatchAt depth a b
+  VCase scrut alts => case b of
+    VCase scrut2 alts2 =>
+      andThen (conv defs sols depth scrut scrut2)
+        (\sols2 => convCaseAlts defs sols2 depth alts alts2)
+    _ => mismatchAt depth a b
+  VIf c th el => case b of
+    VIf c2 th2 el2 =>
+      andThen (conv defs sols depth c c2)
+        (\sols2 => andThen (conv defs sols2 depth th th2) (\sols3 => conv defs sols3 depth el el2))
+    _ => mismatchAt depth a b
+  _ => mismatchAt depth a b
+
+etaLeft : List (Pair String Term) -> List (Pair Int Value) -> Int -> Value -> String -> Closure -> Result (List (Pair Int Value))
+etaLeft defs sols depth a name clo =
+  let
+    v = freshVar name depth
+  in conv defs sols (depth + 1) (applyValue a v) (applyClosure clo v)
+
+etaRight : List (Pair String Term) -> List (Pair Int Value) -> Int -> String -> Closure -> Value -> Result (List (Pair Int Value))
+etaRight defs sols depth name clo b =
+  let
+    v = freshVar name depth
+  in conv defs sols (depth + 1) (applyClosure clo v) (applyValue b v)
+
+isBoolTyName : String -> Bool
+isBoolTyName n = if n == "Bool" then True else n == "Base.Bool.Bool"
+
+isBoolNeutral : Neutral -> Bool
+isBoolNeutral n = case n of
+  NGlobal g sp => if sp == [] then isBoolTyName g else False
+  NVar name lvl sp => if sp == [] then isBoolTyName name else False
+  _ => False
+
+convNeutral : List (Pair String Term) -> List (Pair Int Value) -> Int -> Neutral -> Neutral -> Value -> Value -> Result (List (Pair Int Value))
+convNeutral defs sols depth n1 n2 v1 v2 = case n1 of
+  NVar name level sp => case n2 of
+    NVar name2 level2 sp2 =>
+      if level == level2 then convSpines defs sols depth sp sp2 v1 v2 else mismatchAt depth v1 v2
+    _ => mismatchAt depth v1 v2
+  NGlobal g sp => case n2 of
+    NGlobal g2 sp2 =>
+      if g == g2 then convSpines defs sols depth sp sp2 v1 v2 else mismatchAt depth v1 v2
+    _ => mismatchAt depth v1 v2
+
+convSpines : List (Pair String Term) -> List (Pair Int Value) -> Int -> List Value -> List Value -> Value -> Value -> Result (List (Pair Int Value))
+convSpines defs sols depth [] [] v1 v2 = Ok sols
+convSpines defs sols depth (a :: xs) (b :: ys) v1 v2 =
+  andThen (conv defs sols depth a b) (\sols2 => convSpines defs sols2 depth xs ys v1 v2)
+convSpines defs sols depth _ _ v1 v2 = mismatchAt depth v1 v2
+
+convValueLists : List (Pair String Term) -> List (Pair Int Value) -> Int -> List Value -> List Value -> Result (List (Pair Int Value))
+convValueLists defs sols depth [] [] = Ok sols
+convValueLists defs sols depth (a :: xs) (b :: ys) =
+  andThen (conv defs sols depth a b) (\sols2 => convValueLists defs sols2 depth xs ys)
+convValueLists defs sols depth _ _ = Err "type mismatch: constructor arguments differ in length"
+
+-- 卡住的 case 相等：scrutinee 相等 + 每个构造子名的分支绑定数相同且分支体相等。
+convCaseAlts : List (Pair String Term) -> List (Pair Int Value) -> Int -> List VCaseAlt -> List VCaseAlt -> Result (List (Pair Int Value))
+convCaseAlts defs sols depth [] [] = Ok sols
+convCaseAlts defs sols depth (a :: rest) (b :: rest2) = if vCaseAltName a == vCaseAltName b then if length (vCaseAltBinders a) == length (vCaseAltBinders b) then case convOneAlt defs sols depth a b of
+  Err e => Err e
+  Ok sols2 => convCaseAlts defs sols2 depth rest rest2
+else Err ("type mismatch: case branch " ++ vCaseAltName a ++ " binds a different number of variables")
+else Err ("type mismatch: case branch " ++ vCaseAltName a ++ " vs " ++ vCaseAltName b)
+convCaseAlts defs sols depth _ _ = Err "type mismatch: case branches differ in number"
+
+convOneAlt : List (Pair String Term) -> List (Pair Int Value) -> Int -> VCaseAlt -> VCaseAlt -> Result (List (Pair Int Value))
+convOneAlt defs sols depth a b =
+  let
+    bs = vCaseAltBinders a
+    n = length bs
+    args = argValsAt bs depth 0
+  in conv defs sols (depth + n) (applyClosureBinder (vCaseAltClosure a) args)
+    (applyClosureBinder (vCaseAltClosure b) args)
+
+mismatchAt : Int -> Value -> Value -> Result a
+mismatchAt depth a b =
+  Err ("type mismatch: expected " ++ showValueAt depth a ++ ", got " ++ showValueAt depth b)
+
+-- 一阶求解：spine 必须为空。解是 level 形态的 Value，可以提到当前上下文里的局部变量
+-- （M14 的索引精化需要 `n ↦ Zero` 这类提到分支绑定子的解）；是否越界由精化器按
+-- 上下文的允许 level 上界检查（见 Elab.solveIdx）。
+-- M13 扩展（更高阶）：`?m sp` 与 `rhs` 头一致时按 head 提取，元-元对齐时解 `?m`。
+splitAtVals : Int -> List Value -> Pair (List Value) (List Value)
+splitAtVals 0 xs = Pair [] xs
+splitAtVals n [] = Pair [] []
+splitAtVals n (x :: xs) = case splitAtVals (n - 1) xs of
+  Pair a b => Pair (x :: a) b
+
+solveMeta : List (Pair String Term) -> List (Pair Int Value) -> Int -> Int -> List Value -> Value -> Result (List (Pair Int Value))
+solveMeta defs sols depth m sp rhs = case sp of
+  [] => case metaLookup m sols of
+    Just t => conv defs sols depth (applySpine t []) rhs
+    Nothing => case rhs of
+      -- 同一个未解元变量统一自己（`?m` vs `?m`）是恒真约束，不能走 occurs 检查
+      -- （那会把 `?m := ?m` 判成无限链）。HOF 实参把带隐式 binder 的签名
+      -- 实例化成同两个元变量时会出现（`srt cmp xs` 一类）。
+      VMeta n [] => if n == m then Ok sols else solveMetaNew defs sols depth m rhs
+      _ => solveMetaNew defs sols depth m rhs
+  _ => solveMetaHo defs sols depth m sp rhs
+
+solveMetaNew : List (Pair String Term) -> List (Pair Int Value) -> Int -> Int -> Value -> Result (List (Pair Int Value))
+solveMetaNew defs sols depth m rhs =
+  let
+    t = quote depth rhs
+  in if hasMeta m 0 t then Err ("cannot solve metavariable ?" ++ strFromInt m ++ " (occurs check)")
+  else Ok (Pair m rhs :: sols)
+
+-- 更高阶求解（M13 扩展）：只在「头一致」的安全形状上做提取/对齐，其余仍报 M13。
+solveMetaHo : List (Pair String Term) -> List (Pair Int Value) -> Int -> Int -> List Value -> Value -> Result (List (Pair Int Value))
+solveMetaHo defs sols depth m sp rhs = case rhs of
+  VMeta n sp2 => case metaLookup n sols of
+    Just t => conv defs sols depth (applySpine (VMeta m sp) []) (applySpine t sp2)
+    Nothing =>
+      if m == n then convSpines defs sols depth sp sp2 (VMeta m sp) rhs
+      else andThen (solveMeta defs sols depth m [] (VMeta n []))
+        (\sols2 => convSpines defs sols2 depth sp sp2 (VMeta m sp) rhs)
+  -- `?m sp = ?m sp2`：同头，只统一 spine。
+  -- `?m sp = ?n sp2`：元-元对齐，`?m = ?n` 再统一 spine。
+  VNeutral n => case n of
+    NGlobal g args => solveMetaHead defs sols depth m sp (VNeutral n) (VNeutral (NGlobal g [])) args
+    NVar name level args =>
+      solveMetaHead defs sols depth m sp (VNeutral n) (VNeutral (NVar name level [])) args
+    _ => Err ("cannot solve higher-order metavariable ?" ++ strFromInt m ++ " (M13 limitation)")
+  _ => Err ("cannot solve higher-order metavariable ?" ++ strFromInt m ++ " (M13 limitation)")
+
+-- `?m sp = head args`（|args| >= |sp|）：`?m = head (take extra args)` 再统一剩余 spine。
+solveMetaHead : List (Pair String Term) -> List (Pair Int Value) -> Int -> Int -> List Value -> Value -> Value -> List Value -> Result (List (Pair Int Value))
+solveMetaHead defs sols depth m sp whole headVal args = if length args >= length sp then
+  let
+    extra = length args - length sp
+  in case splitAtVals extra args of
+    Pair headArgs tailArgs =>
+      andThen (solveMeta defs sols depth m [] (applySpine headVal headArgs))
+        (\sols2 => convSpines defs sols2 depth sp tailArgs (VMeta m sp) whole)
+else Err ("cannot solve higher-order metavariable ?" ++ strFromInt m ++ " (M13 limitation)")

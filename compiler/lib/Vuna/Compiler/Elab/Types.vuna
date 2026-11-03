@@ -1,0 +1,397 @@
+module Vuna.Compiler.Elab.Types
+  ( Ctx(..)
+  , DtClass(..)
+  , DtCtor(..)
+  , DtData(..)
+  , DtDef(..)
+  , DtDictGoal(..)
+  , DtGoal(..)
+  , DtInst(..)
+  , DtProgram(..)
+  , Ec(..)
+  , ctxBind
+  , ctxBindValue
+  , ctxDepth
+  , ctxEnv
+  , ctxEnvAt
+  , ctxItems
+  , ctxLookup
+  , ctxLookupAt
+  , ctxRefine
+  , dtClassFieldTys
+  , dtClassMethods
+  , dtClassName
+  , dtClassParams
+  , dtCtorFamily
+  , dtCtorName
+  , dtCtorTelescope
+  , dtCtorType
+  , dtDataCtors
+  , dtDataName
+  , dtDataParams
+  , dtDefBody
+  , dtDefName
+  , dtDefType
+  , dtGoalCtx
+  , dtGoalMeta
+  , dtGoalSpan
+  , dtGoalType
+  , dtInstHead
+  , dtInstName
+  , dtInstNamed
+  , dtProgClasses
+  , dtProgDatas
+  , dtProgDefs
+  , dtProgGlobals
+  , dtProgGoals
+  , dtProgInsts
+  , dtProgNext
+  , dtProgSols
+  , ecAddClass
+  , ecAddData
+  , ecAddDef
+  , ecAddDictGoal
+  , ecAddGoal
+  , ecAddInst
+  , ecAddInstRaw
+  , ecClasses
+  , ecDatas
+  , ecDefs
+  , ecDepthOfMeta
+  , ecDictGoals
+  , ecEmpty
+  , ecGoals
+  , ecInsts
+  , ecNext
+  , ecPutDictGoals
+  , ecPutSols
+  , ecSols
+  , ecTrusted
+  , ecWithTrust
+  , emptyCtx
+  , errAt
+  , evalCtx
+  , forceVal
+  , hasInstName
+  , newHoleMeta
+  , newMeta
+  , refineLookup
+  , refineValue
+  , varTypeValue
+  ) where
+
+-- Vuna.Compiler.Elab.Types：Elab 的数据定义与共享状态：DtDef/DtCtor/DtData/DtGoal/DtClass/DtInst/DtDictGoal/DtProgram
+-- 等精化结果、Ec 环境与 Ctx 局部上下文、以及「上下文环境求值 / 索引精化代入」的基础设施。
+-- 数据定义只在这里（叶子模块），其余模块只做模式匹配与访问器调用。
+-- 拆自 M24 的单一 `Elab.vuna`（按真实调用图切；门面仍是 `Vuna.Compiler.Elab`）。
+import Vuna.Compiler.Common
+import Vuna.Compiler.Core
+import Vuna.Compiler.Frontend.Ast
+
+-- 一个 DT 定义：名字、类型项、体项（均为闭项；体带擦除标志）。
+data DtDef : Type where
+  DtDef : String -> Term -> Term -> DtDef
+
+dtDefName : DtDef -> String
+dtDefName (DtDef name ty body) = name
+
+dtDefType : DtDef -> Term
+dtDefType (DtDef name ty body) = ty
+
+dtDefBody : DtDef -> Term
+dtDefBody (DtDef name ty body) = body
+
+-- M14：一个构造子。telescope 是「族参数 + 字段」的完整 binder 表（名字 / 擦除标志），
+-- 类型项是闭合的（`{a : Type} -> {n : Nat} -> a -> Vec a n -> Vec a (Succ n)` 形态）。
+data DtCtor : Type where
+  DtCtor : String -> String -> List (Pair String Rig) -> Term -> DtCtor
+
+dtCtorName : DtCtor -> String
+dtCtorName (DtCtor name family tele ty) = name
+
+dtCtorFamily : DtCtor -> String
+dtCtorFamily (DtCtor name family tele ty) = family
+
+dtCtorTelescope : DtCtor -> List (Pair String Rig)
+dtCtorTelescope (DtCtor name family tele ty) = tele
+
+dtCtorType : DtCtor -> Term
+dtCtorType (DtCtor name family tele ty) = ty
+
+-- M14：一个归纳族（索引族）。params 来自 kind 的 Pi binder（域是宇宙的擦除）。
+data DtData : Type where
+  DtData : String -> List (Pair String Rig) -> List DtCtor -> DtData
+
+dtDataName : DtData -> String
+dtDataName (DtData name params ctors) = name
+
+dtDataParams : DtData -> List (Pair String Rig)
+dtDataParams (DtData name params ctors) = params
+
+dtDataCtors : DtData -> List DtCtor
+dtDataCtors (DtData name params ctors) = ctors
+
+-- M15：一个洞的目标。编号、位置、目标类型（level 形态）、绑定时上下文快照。
+data DtGoal : Type where
+  DtGoal : Int -> Span -> Value -> List (Pair String Term) -> DtGoal
+
+dtGoalMeta : DtGoal -> Int
+dtGoalMeta (DtGoal m sp ty ctx) = m
+
+dtGoalSpan : DtGoal -> Span
+dtGoalSpan (DtGoal m sp ty ctx) = sp
+
+dtGoalType : DtGoal -> Value
+dtGoalType (DtGoal m sp ty ctx) = ty
+
+dtGoalCtx : DtGoal -> List (Pair String Term)
+dtGoalCtx (DtGoal m sp ty ctx) = ctx
+
+-- M15：接口（trait）声明。参数名表、方法（名字 + 完整投影类型项）。
+data DtClass : Type where
+  DtClass : String -> List String -> List (Pair String Term) -> List Term -> DtClass
+
+dtClassName : DtClass -> String
+dtClassName (DtClass name params projs fieldTys) = name
+
+dtClassParams : DtClass -> List String
+dtClassParams (DtClass name params projs fieldTys) = params
+
+dtClassMethods : DtClass -> List (Pair String Term)
+dtClassMethods (DtClass name params projs fieldTys) = projs
+
+dtClassFieldTys : DtClass -> List Term
+dtClassFieldTys (DtClass name params projs fieldTys) = fieldTys
+
+-- M15：已注册实例：定义名 + 实例头类型项（`Show Int` 这类闭合项）+ 是否命名实例。
+-- M23：`as name` 的命名实例**不参与**自动实例搜索（只能 `@name` 选中，与 HM 一致），
+-- 否则 `instance Pretty Color` 与 `instance Pretty Color as fancy` 会撞成歧义。
+data DtInst : Type where
+  DtInst : String -> Term -> Bool -> DtInst
+
+dtInstName : DtInst -> String
+dtInstName (DtInst name head named) = name
+
+dtInstHead : DtInst -> Term
+dtInstHead (DtInst name head named) = head
+
+dtInstNamed : DtInst -> Bool
+dtInstNamed (DtInst name head named) = named
+
+-- 精化状态：下一个元变量编号、已解元变量（level 形态的 Value）、已精化的定义体、
+-- 已声明的归纳族（M14：case 精化需要知道族的构造子 telescope）。
+-- M22：`dgoals` 是延迟的字典约束——类参数未解时延迟成裸元变量，解后由 `resolveDictGoals` 回填。
+data DtDictGoal : Type where
+  DtDictGoal : Int -> Value -> DtDictGoal
+
+data Ec : Type where
+  Ec : Int -> List (Pair Int Value) -> List (Pair String Term) -> List DtData -> List (Pair Int Int) -> List DtGoal -> List DtInst -> List DtClass -> List DtDictGoal -> Bool -> Ec
+
+ecNext : Ec -> Int
+ecNext (Ec next sols defs datas depths goals insts classes dgoals trusted) = next
+
+ecSols : Ec -> List (Pair Int Value)
+ecSols (Ec next sols defs datas depths goals insts classes dgoals trusted) = sols
+
+ecDefs : Ec -> List (Pair String Term)
+ecDefs (Ec next sols defs datas depths goals insts classes dgoals trusted) = defs
+
+ecDatas : Ec -> List DtData
+ecDatas (Ec next sols defs datas depths goals insts classes dgoals trusted) = datas
+
+ecDepthOfMeta : Ec -> List (Pair Int Int)
+ecDepthOfMeta (Ec next sols defs datas depths goals insts classes dgoals trusted) = depths
+
+ecGoals : Ec -> List DtGoal
+ecGoals (Ec next sols defs datas depths goals insts classes dgoals trusted) = goals
+
+ecInsts : Ec -> List DtInst
+ecInsts (Ec next sols defs datas depths goals insts classes dgoals trusted) = insts
+
+ecClasses : Ec -> List DtClass
+ecClasses (Ec next sols defs datas depths goals insts classes dgoals trusted) = classes
+
+ecAddGoal : Ec -> DtGoal -> Ec
+ecAddGoal (Ec next sols defs datas depths goals insts classes dgoals trusted) g =
+  Ec next sols defs datas depths (append goals [g]) insts classes dgoals trusted
+
+ecAddInst : Ec -> DtInst -> Ec
+ecAddInst ec i = if hasInstName (dtInstName i) (ecInsts ec) then ec else ecAddInstRaw ec i
+
+hasInstName : String -> List DtInst -> Bool
+hasInstName name [] = False
+hasInstName name (i :: rest) = if dtInstName i == name then True else hasInstName name rest
+
+ecAddInstRaw : Ec -> DtInst -> Ec
+ecAddInstRaw (Ec next sols defs datas depths goals insts classes dgoals trusted) i =
+  Ec next sols defs datas depths goals (append insts [i]) classes dgoals trusted
+
+ecAddClass : Ec -> DtClass -> Ec
+ecAddClass (Ec next sols defs datas depths goals insts classes dgoals trusted) c =
+  Ec next sols defs datas depths goals insts (append classes [c]) dgoals trusted
+
+-- M22：延迟的字典约束访问器。
+ecTrusted : Ec -> Bool
+ecTrusted (Ec next sols defs datas depths goals insts classes dgoals trusted) = trusted
+
+ecWithTrust : Bool -> Ec -> Ec
+ecWithTrust trusted (Ec next sols defs datas depths goals insts classes dgoals _) =
+  Ec next sols defs datas depths goals insts classes dgoals trusted
+
+ecDictGoals : Ec -> List DtDictGoal
+ecDictGoals (Ec next sols defs datas depths goals insts classes dgoals trusted) = dgoals
+
+ecPutDictGoals : Ec -> List DtDictGoal -> Ec
+ecPutDictGoals (Ec next sols defs datas depths goals insts classes dgoals trusted) dgoals2 =
+  Ec next sols defs datas depths goals insts classes dgoals2 trusted
+
+ecAddDictGoal : Ec -> DtDictGoal -> Ec
+ecAddDictGoal (Ec next sols defs datas depths goals insts classes dgoals trusted) g =
+  Ec next sols defs datas depths goals insts classes (append dgoals [g]) trusted
+
+ecEmpty : Ec
+ecEmpty = Ec 0 [] [] [] [] [] [] [] [] False
+
+ecPutSols : Ec -> List (Pair Int Value) -> Ec
+ecPutSols (Ec next sols defs datas depths goals insts classes dgoals trusted) sols2 =
+  Ec next sols2 defs datas depths goals insts classes dgoals trusted
+
+ecAddDef : Ec -> Pair String Term -> Ec
+ecAddDef (Ec next sols defs datas depths goals insts classes dgoals trusted) d =
+  Ec next sols (append defs [d]) datas depths goals insts classes dgoals trusted
+
+ecAddData : Ec -> DtData -> Ec
+ecAddData (Ec next sols defs datas depths goals insts classes dgoals trusted) d =
+  Ec next sols defs (append datas [d]) depths goals insts classes dgoals trusted
+
+-- 局部上下文：最近绑定的在前（名字 + 类型项；类型项在当前上下文里有效）。
+-- refinements 是 M14 的索引精化：level ↦ Value（level 形态，可提到更新的 binder，无需 de Bruijn
+-- 搬运）。求值环境构造时代入，于是所有类型的求值/相等检查自动享受精化。
+data Ctx : Type where
+  Ctx : List (Pair String Term) -> List (Pair Int Value) -> Ctx
+
+ctxItems : Ctx -> List (Pair String Term)
+ctxItems (Ctx items refs) = items
+
+ctxDepth : Ctx -> Int
+ctxDepth ctx = length (ctxItems ctx)
+
+ctxBind : String -> Term -> Ctx -> Ctx
+ctxBind name ty (Ctx items refs) = Ctx (Pair name ty :: items) refs
+
+-- 把一个 Value 形态的类型重新 quote 成项再入上下文（Pi 值里的域只有 Value）。
+ctxBindValue : String -> Value -> Ctx -> Ctx
+ctxBindValue name dom ctx = ctxBind name (quote (ctxDepth ctx) dom) ctx
+
+-- 记录一批精化（不做链式化简，代入在 ctxEnv 里做）。
+ctxRefine : Ctx -> List (Pair Int Value) -> Ctx
+ctxRefine (Ctx items refs) more = Ctx items (append refs more)
+
+ctxLookupAt : String -> List (Pair String Term) -> Int -> Maybe (Pair Int Term)
+ctxLookupAt name [] idx = Nothing
+ctxLookupAt name ((Pair n ty) :: rest) idx =
+  if n == name then Just (Pair idx ty) else ctxLookupAt name rest (idx + 1)
+
+ctxLookup : String -> Ctx -> Maybe (Pair Int Term)
+ctxLookup name ctx = ctxLookupAt name (ctxItems ctx) 0
+
+-- 上下文的求值环境：binder 的 level 从底部开始，与 quote 约定一致。
+ctxEnvAt : List (Pair String Term) -> Int -> Int -> List Value
+ctxEnvAt [] idx depth = []
+ctxEnvAt ((Pair name ty) :: rest) idx depth =
+  VNeutral (NVar name (depth - idx - 1) []) :: ctxEnvAt rest (idx + 1) depth
+
+ctxEnv : Ctx -> List Value
+ctxEnv (Ctx items refs) = ctxEnvAt items 0 (length items)
+
+-- M14：把精化代入一个值。精化是「level ↦ Value」，而求值环境里的 binder 都是中性变量，
+-- 求值后做一次重写即可（索引位置上出现的基本是中性变量或构造子值）。resolveLevel 处理链式精化。
+refineValue : List (Pair Int Value) -> Int -> Value -> Value
+refineValue refs fuel v = if fuel <= 0 then v
+else case v of
+  VNeutral n => case n of
+    NVar name lvl sp =>
+      let
+        sp2 = map (refineValue refs (fuel - 1)) sp
+      in case refineLookup lvl refs of
+        Just r => applySpine (refineValue refs (fuel - 1) r) sp2
+        Nothing => VNeutral (NVar name lvl sp2)
+    NGlobal g sp => VNeutral (NGlobal g (map (refineValue refs (fuel - 1)) sp))
+  VCon c args => VCon c (map (refineValue refs (fuel - 1)) args)
+  VCase scrut alts => VCase (refineValue refs (fuel - 1) scrut) alts
+  VIf c th el =>
+    VIf (refineValue refs (fuel - 1) c) (refineValue refs (fuel - 1) th)
+      (refineValue refs (fuel - 1) el)
+  VMeta m sp => VMeta m (map (refineValue refs (fuel - 1)) sp)
+  _ => v
+
+refineLookup : Int -> List (Pair Int Value) -> Maybe Value
+refineLookup lvl [] = Nothing
+refineLookup lvl ((Pair l v) :: rest) = if l == lvl then Just v else refineLookup lvl rest
+
+-- M21：在取用点把精化代入求值环境再 eval（闭包捕获环境，域/余域递归精化）。见 history.md。
+evalCtx : Ctx -> Term -> Value
+evalCtx (Ctx items refs) ty =
+  eval (map (refineValue refs defaultFuel) (ctxEnvAt items 0 (length items))) ty
+
+-- 局部变量 i 的类型：存储时按「绑定时上下文」，取用时需要 weaken (i+1)。
+varTypeValue : Ctx -> Int -> Term -> Value
+varTypeValue (Ctx items refs) idx ty =
+  eval (map (refineValue refs defaultFuel) (ctxEnvAt items 0 (length items))) (shift 0 (idx + 1) ty)
+
+emptyCtx : Ctx
+emptyCtx = Ctx [] []
+
+-- ---------------------------------------------------------------
+-- 错误 / 状态 helper
+-- ---------------------------------------------------------------
+errAt : Span -> String -> Result a
+errAt sp msg = Err (showSpanLoc sp ++ ": " ++ msg)
+
+-- M15：新建元变量并记录创建深度（求解时的作用域检查用）。
+newMeta : Ctx -> Ec -> Pair Term Ec
+newMeta ctx (Ec next sols defs datas depths goals insts classes dgoals trusted) =
+  Pair (TMeta next)
+    (Ec (next + 1) sols defs datas (Pair next (ctxDepth ctx) :: depths) goals insts classes dgoals trusted)
+
+-- M15：新建一个「洞」元变量：除创建深度外还记下目标类型与上下文快照（供 goal 显示）。
+newHoleMeta : Ctx -> Ec -> Span -> Value -> Pair Term Ec
+newHoleMeta ctx (Ec next sols defs datas depths goals insts classes dgoals trusted) sp ty =
+  let
+    goal = DtGoal next sp ty (ctxItems ctx)
+  in Pair (TMeta next)
+    (Ec (next + 1) sols defs datas (Pair next (ctxDepth ctx) :: depths) (append goals [goal]) insts classes dgoals trusted)
+
+forceVal : Ec -> Value -> Value
+forceVal ec v = force (ecDefs ec) (ecSols ec) defaultFuel v
+
+-- M15：完整精化，额外返回洞目标与最终状态（供 `vuna goal` / LSP 的洞显示）。
+-- M23：还带上收尾时的 globals / 实例表 / 类表 / 元变量游标——REPL 的表达式求值要在
+-- 与程序相同的环境里精化一条表达式（`dtEvalExprIn`），这些状态不属于「定义」但对
+-- 精化是必需的。
+data DtProgram : Type where
+  DtProgram : List DtData -> List DtDef -> List DtGoal -> List (Pair Int Value) -> List (Pair String Term) -> List DtInst -> List DtClass -> Int -> DtProgram
+
+dtProgDatas : DtProgram -> List DtData
+dtProgDatas (DtProgram datas defs goals sols globals insts classes next) = datas
+
+dtProgDefs : DtProgram -> List DtDef
+dtProgDefs (DtProgram datas defs goals sols globals insts classes next) = defs
+
+dtProgGoals : DtProgram -> List DtGoal
+dtProgGoals (DtProgram datas defs goals sols globals insts classes next) = goals
+
+dtProgSols : DtProgram -> List (Pair Int Value)
+dtProgSols (DtProgram datas defs goals sols globals insts classes next) = sols
+
+dtProgGlobals : DtProgram -> List (Pair String Term)
+dtProgGlobals (DtProgram datas defs goals sols globals insts classes next) = globals
+
+dtProgInsts : DtProgram -> List DtInst
+dtProgInsts (DtProgram datas defs goals sols globals insts classes next) = insts
+
+dtProgClasses : DtProgram -> List DtClass
+dtProgClasses (DtProgram datas defs goals sols globals insts classes next) = classes
+
+dtProgNext : DtProgram -> Int
+dtProgNext (DtProgram datas defs goals sols globals insts classes next) = next

@@ -12,7 +12,7 @@ module Vuna.Compiler.Driver.Split
 
 -- Vuna.Compiler.Driver.Split：分离编译（M12）的输出文件模型与构建脚本生成。
 --
--- TypedCodegen.generateSplitProgram 产出 `List SplitFile`（相对文件名 + 内容）；
+-- Codegen.Split.generateDtSplitProgram 产出 `List SplitFile`（相对文件名 + 内容）；
 -- 本模块负责落盘并生成增量构建脚本：
 --   - 编译顺序由 generateSplitProgram 给定（Vuna_runtime → 依赖拓扑序模块 → Main）；
 --   - 每模块 .ml/.mli 变化、或任一更早模块的 .cmi 比本模块 .cmx 新 → 只重编本模块

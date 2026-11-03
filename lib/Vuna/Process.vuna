@@ -1,7 +1,0 @@
-module Vuna.Process (runIn) where
-
--- Vuna.Process：根包工具链内部的进程执行入口。
-import Vuna.Compiler.Common
-
-runIn : String -> List String -> Int
-runIn dir args = prim_runIn dir args

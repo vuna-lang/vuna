@@ -24,10 +24,11 @@ s1 == s2（文件集合逐字节）即 fixed point
 `nix/seed-rotate.sh` 用当前产品 CLI 生成临时种子后，也会用该种子构建出的编译器
 重新 `build --split` 并与种子 `diff -r`，同样要求逐字节一致后才替换 `seed/`。
 
-seed 与 split 文件集都由 **DT split codegen** 生成（`CoreCodegen.generateDtSplitProgram`，
-包级入口 `Dt.dtSplitProject`；输出模型是 `Split.SplitFile` + `Split.buildScript`）：
+seed 与 split 文件集都由 **DT split codegen** 生成（`Codegen.Split.generateDtSplitProgram`，
+包级入口 `Driver.Dt.dtSplitProject`；输出模型是 `Driver.Split.SplitFile` +
+`Driver.Split.buildScript`）：
 每个源码模块一个 `.ml`，另有共享 runtime / 内建模块与 `build.sh`；**不生成 `.mli`**。
-单文件 DT codegen（`CoreCodegen.generateDtProgram`）只服务 `compile` / `build`。
+单文件 DT codegen（`Codegen.Program.generateDtProgram`）只服务 `compile` / `build`。
 
 Nix 侧的对应关系：`packages.vuna-seed`、`packages.vuna-compiler`、`packages.vuna`
 分别构建 stage 0 / stage 1 / 产品 CLI；`checks.seed-selfhost` 守整条链。
@@ -37,9 +38,9 @@ Nix 侧的对应关系：`packages.vuna-seed`、`packages.vuna-compiler`、`pack
 种子（`seed/`）**提交入库**，是构建输入而不是构建产物。种子是**多文件文件集**：
 每个 vuna 模块对应一个 OCaml 模块（`.ml`），外加共享 runtime / 内建模块与
 `build.sh`。种子**只覆盖 compiler 包**（`compiler/app/Main.vuna` 的 import 闭包）：
-工具链（fmt/lint/repl/doc/test/lsp）由编译器编译出来，不在信任锚点里。M24.7 rotation
-后文件集为 **41 个（40 个 `.ml` + `build.sh`）**，无 `.mli`（最终以 `seed/` 实际内容
-为准）。唯一的硬性不变量：
+工具链（fmt/lint/repl/doc/test/lsp）由编译器编译出来，不在信任锚点里。源码模块重组
+（compiler 25 → 40 模块）后文件集为 **56 个（55 个 `.ml` + `build.sh`）**，无 `.mli`
+（最终以 `seed/` 实际内容为准）。唯一的硬性不变量：
 
 > **当前入库的种子必须能编译当前的 vuna 源码。**
 
@@ -91,7 +92,7 @@ git add seed/ && git commit
 ## 效应内建的包级 allowlist
 
 `seed/` 里没有工具链模块，但编译器自身需要文件 IO。规则在
-`compiler/lib/Vuna/Compiler/Loader.vuna` 的 `packageAllowsEffects`：
+`compiler/lib/Vuna/Compiler/Loader/Resolve.vuna` 的 `packageAllowsEffects`：
 
 - 允许直接调用 effectful 内建的包：`vuna`、`vuna-compiler`、`vuna-base`；
 - 其余包只能经 `Base.IO` 的 IO API 使用效果，纯代码里直接 `print` / `readFile` 报
@@ -99,8 +100,8 @@ git add seed/ && git commit
 - `--root` 原始模式 `entryPkg = ""`：入口文件之外（被加载的模块）不受限，入口文件受限
   （调试/夹具路径）。
 
-`Vuna.Compiler.Process.runIn`（`prim_runIn`）是唯一的进程执行内建，同样受 allowlist
-限制，且 `Process` 不进 `compiler/vuna.toml` 的 `[export]`。
+`Driver.CompilerCli.runIn`（`prim_runIn`，原独立 `Process` 模块已删除）是唯一的进程
+执行入口，同样受 allowlist 限制。
 
 ## 种子文件集（当前）
 
@@ -113,11 +114,13 @@ Vuna_runtime
 Vuna_builtins
 Base_dPair ... Base_dString          （vuna-base 模块，依赖序）
 Prelude
-Vuna_dCompiler_dCommon ... Vuna_dCompiler_dCompilerCli   （编译器模块，依赖序）
+Vuna_dCompiler_dCommon ... Vuna_dCompiler_dFrontend_dParser
+  ... Vuna_dCompiler_dElab_dTerm ... Vuna_dCompiler_dDriver_dCompilerCli
+                                     （编译器 40 模块，依赖序；点转 _d）
 Main
 ```
 
-- `Vuna_runtime`：`CoreCodegen.dtRuntime`（`bi_*` 等运行时）。
+- `Vuna_runtime`：`Codegen.Term.dtRuntime`（`bi_*` 等运行时）。
 - `Vuna_builtins`：split 生成器保留的编译单元；M24.7 删除旧内建 trait/实例后内容为空
   （只 `open Vuna_runtime`），保留它是为了让文件集形状稳定。
 - 每个源码模块一个 `<Module>.ml`（依赖序；OCaml 编译单元名 = 模块名点转 `_d`），

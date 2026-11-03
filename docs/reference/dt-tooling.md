@@ -27,7 +27,7 @@ test/corpus/dt/15_goal.vuna:7:11: goal Type
 DT: unsolved hole <文件>:<行>:<列> with goal <目标类型>
 ```
 
-实现入口：`Vuna.Compiler.Elab.goalsOfProgram`（返回 `List DtGoalInfo`，含 span、
+实现入口：`Vuna.Compiler.Elab.Driver.goalsOfProgram`（返回 `List DtGoalInfo`，含 span、
 目标类型文本与上下文条目），CLI 侧在 `Vuna.Cli.goalArgs`。
 
 ## 2. LSP server（`vuna lsp`）
@@ -67,10 +67,10 @@ Content-Length: <字节数>\r\n
 LSP **不做包解析**：
 
 1. `parseSource` 失败 ⇒ 只发一条 parse 诊断；
-2. 解析成功 ⇒ 走 **DT 精化**（`Elab.elabProgramWith`，与 `goalsOfProgram` 同源；含覆盖性
+2. 解析成功 ⇒ 走 **DT 精化**（`Elab.Driver.elabProgramWith`，与 `goalsOfProgram` 同源；含覆盖性
    检查），把 `<file>:<line>:<col>: message` 转成 LSP range（**0-based**，所以行列各减 1）；
 3. **含 `import` 的文件跳过类型检查**（缺 import 解析），只保留 parse 诊断；
-4. hover 用同一精化链的 `Elab.goalsOfProgram` 取洞目标与上下文（可插拔点是 `dtGoalsOf`）。
+4. hover 用同一精化链的 `Elab.Driver.goalsOfProgram` 取洞目标与上下文（可插拔点是 `dtGoalsOf`）。
 
 ### 编辑器冒烟
 

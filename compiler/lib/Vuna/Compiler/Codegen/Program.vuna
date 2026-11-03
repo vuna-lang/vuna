@@ -1,0 +1,65 @@
+module Vuna.Compiler.Codegen.Program (checkDtProgram, generateDtProgram) where
+
+-- Vuna.Compiler.Codegen.Program：单文件产物的装配与两个检查/生成入口。
+--
+-- `prepareDtProgram` 是 check / compile 共用的准备阶段（名字护栏 + 分区 + 擦除检查 +
+-- SCC 分组）；`genProgramBody` 生成「运行时前缀 + 类型声明 + List 桥接 + 函数定义」，
+-- 再由入口按 main 的类型追加输出钩子。check 只跑到 genProgramBody，保证「能 check
+-- 就能 compile」。
+import Vuna.Compiler.Common
+import Vuna.Compiler.Core
+import Vuna.Compiler.Elab
+import Vuna.Compiler.Codegen.Decl
+import Vuna.Compiler.Codegen.Erase
+import Vuna.Compiler.Codegen.Term
+
+-- check / compile 共用的准备阶段：名字护栏 + 分区 + 擦除检查 + SCC 分组。
+-- 返回 (运行时定义（源码顺序）, 已按依赖排序的分组)。
+prepareDtProgram : Pair (List DtData) (List DtDef) -> Result (Pair (List DtDef) (List (List DtDef)))
+prepareDtProgram program =
+  let
+    datas = firstOf program
+    defs = secondOf program
+    table = defTable defs
+    familyNames = map dtDataName datas
+  in case partitionDefs table defs of
+    Pair runtime typeNames =>
+      let
+        allTypeNames = append typeNames familyNames
+      in andThen (checkAllDefScopes runtime)
+        (\_ => andThen (ensureUniqueOcamlNames datas runtime) (\_ => andThen (checkAllErasure allTypeNames runtime) (\_ => andThen (groupRuntimeDefs runtime) (\groups => Ok (Pair runtime groups)))))
+
+-- 生成主体（不含 main 钩子）：类型声明 + 按 SCC 顺序的函数定义。
+-- check / compile 共用这一份，保证两者的判定完全一致。
+genProgramBody : Pair (List DtData) (List DtDef) -> Result (Pair String (Pair (List DtDef) (List (Pair String Term))))
+genProgramBody program =
+  let
+    datas = firstOf program
+    defs = secondOf program
+  in andThen (prepareDtProgram program) (\p => case p of
+    Pair runtime groups => andThen (genTypeDecls (runtimeDatas datas)) (\typeText => andThen (genGroups (depAdjacency runtime) (mkGenSt (runtimeDatas datas) runtime) groups) (\q => case q of
+      Pair bodies st2 =>
+        Ok
+          (Pair (dtRuntime ++ "\n" ++ typeText ++ dtListBridge datas ++ joinWith "\n\n" bodies) (Pair runtime (defTable defs)))
+    )
+    )
+  )
+
+generateDtProgram : Pair (List DtData) (List DtDef) -> Bool -> Result String
+generateDtProgram program printResult = andThen (genProgramBody program) (\p => case p of
+  Pair bodyText (Pair runtime table) => case findDtDef "main" runtime of
+    Nothing => Err "DT: no main definition"
+    Just mainDef =>
+      let
+        mainTy = dtDefType mainDef
+        mainRef = valueName "main"
+      in case ioResultTy mainTy of
+        Just innerTy => genDtHook bodyText table innerTy (ioRunText program mainRef) printResult
+        Nothing => genDtHook bodyText table mainTy mainRef printResult
+)
+
+-- `vuna check --dt` 跑一遍完整生成主体（丢弃产物），保证「能 check 就能 compile」：
+-- 擦除检查、构造子引用、SCC 分组、类型声明与函数生成都在这一步走到。
+-- main 的存在与返回类型只在 generate 阶段要求，这样没有 main 的库文件也能 check。
+checkDtProgram : Pair (List DtData) (List DtDef) -> Result Int
+checkDtProgram program = andThen (genProgramBody program) (\_ => Ok 0)

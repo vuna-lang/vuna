@@ -61,9 +61,9 @@ module Base.IO (IO, print, println, readFile, writeFile, readLine, readDir, ...)
 ## 内建与库的边界
 
 - **`Bool` 归 `Base.Bool`**：`data Bool` 是唯一权威定义（DT 的 `if` / 字面量模式按
-  「族短名 Bool」识别，不另存一份定义）。编译器的 DT prelude 桩（`DtPrelude` 的
-  `Bool` / `True` / `False`）随 **M22.2** 删除；单文件 / 无库模式按 `List` 的既有约定
-  自行声明 `data Bool`，或经 `Prelude` 使用 `Base.Bool`。
+  「族短名 Bool」识别，不另存一份定义）。编译器的 DT prelude 桩（`Elab.Prelude`，原
+  `DtPrelude` 的 `Bool` / `True` / `False`）随 **M22.2** 删除；单文件 / 无库模式按
+  `List` 的既有约定自行声明 `data Bool`，或经 `Prelude` 使用 `Base.Bool`。
 - **`Int` / `String` 是语言原语**：没有 `data` 声明，字面量、算术与 `str*` 由编译器提供。
 - **`Show` / `Eq` / `Ord` 在库（M24.7 完成）**：trait 声明、方法投影与
   `Int` / `String` / `Bool` 实例全部在 `Base.Show` / `Base.Eq` / `Base.Ord`，包模式下

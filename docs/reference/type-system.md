@@ -30,9 +30,9 @@
   ```
 
   字段访问写作 `p.x`，支持链式（如 `s.start.x`）；
-- 实现上记录在类型检查阶段降级为单构造器 `data`（DT 路径由 `DtRecords` 做同样的
-  降级，M23 起含 record update 与参数化 record）：构造 = 构造器应用，字段访问/更新 =
-  内联 `case`，所以核心求值器与 codegen 行为一致；
+- 实现上记录在类型检查阶段降级为单构造器 `data`（DT 路径由 `Elab.Records`（原
+  `DtRecords`）做同样的降级，M23 起含 record update 与参数化 record）：构造 = 构造器
+  应用，字段访问/更新 = 内联 `case`，所以核心求值器与 codegen 行为一致；
 - 字段访问/更新的 base 类型必须可推断；推断不出时报
   `cannot resolve record type ... add a type signature`，给函数参数补类型签名即可；
 - 导出遵循模块规则：`T` 只导出记录类型（构造器隐藏，跨模块不能构造/模式匹配，即抽象），
@@ -101,9 +101,10 @@
   支持字典穿参）并报错；**高阶 kind**（`Ty.TApp` + kind 元数）与**一般约束泛化**
   （trait 参数本身是类型构造器变量，如 `Monad m` 的字典穿参）已在 M11 实现；
   default 实例的可见性按整个程序（flatten）计算，未做 import 图级细化；
-- **求值与降级**：`vuna interp` 一律先经 DT 精化（`DtRecords` / `DtDerive`
-  做记录、trait、deriving 降级），再用核心求值器求 `main` 的值；类型/覆盖性错误在
-  求值前报出。`vuna test` / `vuna repl` 与 `interp` 共用同一核心求值器；
+- **求值与降级**：`vuna interp` 一律先经 DT 精化（`Elab.Records` / `Elab.Derive` 做
+  记录、trait、deriving 降级；原 `DtRecords` / `DtDerive`），再用核心求值器求 `main`
+  的值；类型/覆盖性错误在求值前报出。`vuna test` / `vuna repl` 与 `interp` 共用同一
+  核心求值器；
 - 命名空间与导出：trait 名在类型命名空间、方法名在值命名空间；无模块头 = 全部导出
   （含方法），显式导出列表需 `Trait(..)` 才导出方法；命名实例名按普通值名导出/限定
   （显式列表里可写 `fancy`，app 侧用 `@M.fancy` 选择）；

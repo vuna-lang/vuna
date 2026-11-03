@@ -42,10 +42,11 @@ vuna **尚未发布任何版本**：没有外部用户、没有下游生态、�
 - M24：单一 DT 路径落地——DT 逐模块 split codegen 与 seed 轮换（38 文件、无 `.mli`）、删除 `Typecheck`/`TypedCodegen`/`SigExport`、`--dt` 与 `compile --package` 移除、LSP 诊断改 DT、`where` 绑定显式签名、`tNNN` 签名清理与名字启发式删除。
 - M24.5：等式搬运与精化器补强——scrutinee 反射、空归纳族上下文的不可达分支省略、隐式族参数 `Eq` 构造的元变量内联、`plus` 定义性相等；新夹具 dt/46–50 与 dt_err/36–38。
 - M24.6：编译器本体 DT 最小重构——构造子字段形状以 keep flags 为单一真源（三处消费并校验）、de Bruijn 作用域 / OCaml 名字去重 / `checkResolvedModules` 护栏、类型族整体擦除、`splitMainFile` 补 entry data；L2 重新裁定为入口护栏、L3 只做护栏 + 夹具（`Core.eval` 环境不索引化）。
-- M24.7：`Show`/`Eq`/`Ord` 库化——`Base.{Show,Eq,Ord}`（含 `Int`/`String`/`Bool` 实例）成为唯一来源，删 `DtDerive` 内建 trait/实例、`Elab` 注入与 `Loader` 短名放行；`deriving` 用解析后类名、`==`/比较按短名查类 + 泛型兜底；修复用户 data 上 `<` 与 `Loader`/`Pkg` 防御性 bug；单文件需 `--root base/lib` + 显式 `import Prelude`。
+- M24.7：`Show`/`Eq`/`Ord` 库化——`Base.{Show,Eq,Ord}`（含 `Int`/`String`/`Bool` 实例）成为唯一来源，删 `Elab.Derive`（原 `DtDerive`）内建 trait/实例、`Elab` 注入与 `Loader` 短名放行；`deriving` 用解析后类名、`==`/比较按短名查类 + 泛型兜底；修复用户 data 上 `<` 与 `Loader`/`Pkg` 防御性 bug；单文件需 `--root base/lib` + 显式 `import Prelude`。
+- M24 后维护：源码模块重组——compiler 按层分目录（`Frontend`/`Packages`/`Loader`/`Core`/`Elab`/`Codegen`/`Driver`，25→40 模块，门面 + 叶子、数据定义只在叶子）；`Kind`+`Quant`→`Elab.Sig`、`Builtins`→`Loader.Resolve`、`SplitCli`→`Driver.Compile`、`Process`→`Driver.CompilerCli`；根包 Fmt/Lint/Index 同样拆分并删除 `Vuna.Process`；`base/` 公开 API 不动。seed 55 个 `.ml`、全量 1076 checks、fixed point（细节见 history）。
 
-> 阶段细节见 [history.md](history.md)（「已完成里程碑细节」+ M21–M24.7 各节）；本文件只保留
-> 一句话摘要，不再保留已完成阶段的目标/范围/验收段落。
+> 阶段细节见 [history.md](history.md)（「已完成里程碑细节」+ M21–M24.7 各节 +「源码模块重组」
+> 维护节）；本文件只保留一句话摘要，不再保留已完成阶段的目标/范围/验收段落。
 
 ## 终态（本路线图的目标）
 
@@ -170,8 +171,8 @@ vuna **尚未发布任何版本**：没有外部用户、没有下游生态、�
 | 覆盖率/穷尽性检查对所有包严格 | M14 起 | TCB 三包（`vuna` / `vuna-compiler` / `vuna-base`）**只告警不报错**，其余包严格 | 编译器源码是执行代码而不是被证明的定理；HM 路径本来就只告警、生成 OCaml 用 `-w -a`。与「终止性检查按包名 allowlist 跳过」同一机制，见 `dtTrustsTermination` |
 | 非 `Int`/`String` 的 `==` 必须解析到 Eq 实例，否则报错 | M19 / M22 | 没有实例时**退回泛型结构比较**（`bi_eq_generic`，OCaml 结构化相等），与 HM 的运行时 `=` 对齐；**M24 删 HM 后不再产生 `tNNN` 推断变量，名字启发式直接删除**：刚性类型变量仍走 M22 字典提升/延迟提升（实例优先），泛型结构比较只作「具体类型无实例」兜底 | 编译器源码里大量「比较列表/记录」不写 `deriving`；不退回就无法迁移。有实例时仍优先字典；「刚性变量一律 generic」会旁路 M22 提升并让 interp 走 `Core.valueEqDeep` 的 `force` 薄弱点，实测回归，故不做 |
 | 零参数定义的初始化时机 | M12 | DT codegen 对**零运行时参数**的顶层定义包成 thunk（`fun () -> body`），引用处补 `()`；`main` 例外 | HM codegen 一直这样做（`help = let _ = print ... in 0` 不能在建表时执行）；不补则 DT 产物在启动时打印所有帮助/错误文本 |
-| M22.3 的 DT 输出模型要求逐模块 `.ml`/`.mli` + `build.sh`（与 `seed/` 同形） | 本文 M22.3 草案 | 本轮只做**单文件** `main.ml` + `build.sh`；逐模块切分与 `seed` 的文件集形状推迟到 **M24**。M24 已落地 DT 逐模块 split（`CoreCodegen.generateDtSplitProgram`），且**不生成 `.mli`**：`seed` = `Vuna_runtime.ml` + `Vuna_builtins.ml` + 逐模块 `.ml` + `Main.ml` + `build.sh`（38 文件） | seed 轮换发生在 M24，与 HM 删除一起做一次性收益最大；`.mli` 只是 HM 时代的抽象边界，DT split 靠全局唯一名字 + open 链即可，去掉后 seed 更小、生成器更简单 |
-| seed 由 HM typed codegen 生成（`compile --package` 的 lib/app 布局） | M12–M23 | **M24 起 seed 由 DT split codegen 生成**（`SplitCli.buildSplit`/`seedSplit` → `Dt.dtSplitProject`）；`compile --package` 删除，`build` 默认 DT 单文件、`build --split` 与 `seed` 产逐模块 split | 终态只有一套 codegen；HM 产物与 DT 产物语义不同源，seed 必须来自终态路径才能自证 |
+| M22.3 的 DT 输出模型要求逐模块 `.ml`/`.mli` + `build.sh`（与 `seed/` 同形） | 本文 M22.3 草案 | 本轮只做**单文件** `main.ml` + `build.sh`；逐模块切分与 `seed` 的文件集形状推迟到 **M24**。M24 已落地 DT 逐模块 split（`Codegen.Split.generateDtSplitProgram`（原 `CoreCodegen`）），且**不生成 `.mli`**：`seed` = `Vuna_runtime.ml` + `Vuna_builtins.ml` + 逐模块 `.ml` + `Main.ml` + `build.sh`（38 文件） | seed 轮换发生在 M24，与 HM 删除一起做一次性收益最大；`.mli` 只是 HM 时代的抽象边界，DT split 靠全局唯一名字 + open 链即可，去掉后 seed 更小、生成器更简单 |
+| seed 由 HM typed codegen 生成（`compile --package` 的 lib/app 布局） | M12–M23 | **M24 起 seed 由 DT split codegen 生成**（`Driver.Compile.buildSplit`/`seedSplit`（原 `SplitCli`）→ `Driver.Dt.dtSplitProject`）；`compile --package` 删除，`build` 默认 DT 单文件、`build --split` 与 `seed` 产逐模块 split | 终态只有一套 codegen；HM 产物与 DT 产物语义不同源，seed 必须来自终态路径才能自证 |
 | metrics 口径 = `compile --package` 的 HM 产物 | M12–M23 | **M24 起改为 `vuna seed` 的 DT split 产物聚合**，并按实测重标定 `nix/metrics.budget` | HM 删除后旧口径已不存在；seed 闭包才是 TCB 关心的 codegen 面 |
 | `--dt` 开关 + HM 为默认检查器 | M13–M23 | **M24 删除 `--dt`**：check/compile/build/seed/interp 全部 DT，`--dt` 报 removed（exit 2）；LSP 诊断改 `Elab`（`goalsOfProgram` 同源），删除 HM 诊断分支 | 终态唯一路径不需要开关；保留开关意味着两套语义永远要维护 |
 | 一次性签名导出工具 `Vuna.SigExport`（`vuna sig-export`） | M23 | **M24 用完即删**（`tNNN` 回填完成、HM 删除后不再需要） | 「一次性工具用完即弃」；它依赖 HM 推断结果，HM 删除后无法运行 |
@@ -179,10 +180,11 @@ vuna **尚未发布任何版本**：没有外部用户、没有下游生态、�
 | interp 对效果程序：旧 `Vuna.Eval` 可直接执行 `print` / 文件效果 | M12.6 | 核心求值器是纯的：任何 `main : IO a` 一律报「不能执行效果」，效果程序用 `compile` + 运行；夹具用 `.nointerp` 跳过 interp | 纯 NbE 无法可靠区分「效果被丢弃」与纯计算，静默丢效果会误导调试；单路径下不应保留第二套执行语义 |
 | `where` 子句（parser 支持、仅夹具使用） | M12 起 | M23 不进 DT（夹具改写为等价顶层 helper）；**M24 改为保留并新增显式签名语法**：每个 where 绑定必须写 `name : Ty`，语义是局部**顺序 let**（后定义可用前者，无前向/自/互递归；递归放顶层定义组），parser/Fmt 的 where 支持保留 | 顶层签名必填后 where 局部绑定无法推断；给 where 绑定补显式签名后 DT 可直接按 checking 模式精化，成本低且保留记法 ergonomics。递归语义不做：顶层定义组已支持互递归/自递归/前向引用，where 只作局部辅助 |
 | `where` 内支持递归/前向引用（HM 的 `ELet rec=True` 语义） | M12–M23 | **不保留**：where 绑定按书写顺序可见；顶层定义组仍是互递归/自递归/前向引用的唯一入口 | 递归 where 需要 Core 的 fixpoint 载体（`TLetRec`）或 lambda lifting，成本与风险远大于收益；终态语言要求「不用的特性直接删/简化」 |
-| DT 的 record update / 参数化 record / 命名实例 `@inst` / 实例诊断留到 M24.6 的大重构 | M19 / M22.3 规划 | **M23 随夹具迁移补齐**（`DtRecords` 降级 update、构造器名去 `Mk` 前缀、`Elab.inferInstSel`、重复实例 / 未知方法诊断） | 夹具迁移是终态语言的验收面；这些是已保留特性的必要部分，留到 M24.6 会让「夹具全绿」与「特性语义」互相矛盾 |
+| DT 的 record update / 参数化 record / 命名实例 `@inst` / 实例诊断留到 M24.6 的大重构 | M19 / M22.3 规划 | **M23 随夹具迁移补齐**（`Elab.Records`（原 `DtRecords`）降级 update、构造器名去 `Mk` 前缀、`Elab.inferInstSel`、重复实例 / 未知方法诊断） | 夹具迁移是终态语言的验收面；这些是已保留特性的必要部分，留到 M24.6 会让「夹具全绿」与「特性语义」互相矛盾 |
 | M24.6 第二级：`Expr : Phase -> Type` phantom index（Parsed/Resolved 编译期标记） | M24.6 规划 | **重新裁定为入口护栏**：M24 后 codegen 只接受 `DtProgram`，唯一读 `Decl` 的 split 归属表在入口用 `checkResolvedModules` 校验「声明名带模块前缀」；不再为 Expr 引入 phase 参数 | 原风险（未 resolve 的 Expr 进 codegen）在单路径架构下不存在：解析结果经 Loader→Elab→DtProgram 才到 codegen。引入 Phase 会穿透 Fmt/Index/LSP/REPL 全部 Expr 匹配，收益接近零 |
 | M24.6 第三级：Core 的 `Env : Nat -> Type` + `Fin` total lookup 全面索引化 | M24.6 规划 | **只做护栏 + 语言侧证据**：`Core.varIndex` 越界返回 -1、`checkAllDefScopes` 验证运行时定义体作用域；`Env`/`Fin` 形态作为夹具记录（47_lookup_env）；`Core.eval` 的 `List Value` 环境与 `Clos` 捕获**不换**索引表示 | M24.5 后「依赖索引取值」（`Ctx n -> Fin n -> Tm n`）仍写不出，索引化的核心收益不成立；`Clos` 需要存在式长度、改写 eval/applyClosure 全部调用点，风险与收益不匹配。「每级完成即停，不要在第三级无限深入」|
 | 类型族（结果类型以 `Type` 收尾的函数，如 `sel : Nat -> Type`）按运行时定义处理 | M14–M24.5 | **整体擦除**：`isTypeLevelDef` 改用 `isTypeForming`（宇宙或 `... -> Type` Pi 链）；三个旧负例（`dt_err/09`、`18`、`19`）语义纠正后删除，新增正例 51/52 与「运行时定义里把擦除参数当值用」负例 39 | 旧判据只看裸 `Type`，导致类型族生成未定义 `v_Int`/`v_String`（check 过、ocamlopt 才炸）；类型族本身在类型层求值，不产生运行时定义 |
+| 源码模块布局：compiler 25 个扁平模块（Elab 3529 行、CoreCodegen（现 `Codegen`）1781 行等） | M24 后维护（不占 M25 编号） | **目录即层 + 门面模式**：`compiler/lib` 按 Frontend/Packages/Loader/Core/Elab/Codegen/Driver 重排为 40 模块，超大模块拆成「门面 + `X/` 叶子」，数据定义只在叶子；`base/` 公开模块（15 个）不动（模块名即公开 API），只拆 compiler/lib 与工具链实现 | 单模块阅读成本从 3530 行降到 ≤~800 行（现最大 823），seed 模块面稳定便于 index/metrics/seed-selfhost；base 是用户可见 API，重组会破坏所有 import |
 ## 研究储备（不排期）
 
 > 「表示层已预留」的项，M18.6 完成后可直接接入，不需要重做 Core/Codegen 骨架。

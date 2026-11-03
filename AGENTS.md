@@ -42,7 +42,7 @@
    package manager）永不进入 seed 闭包；黑名单见 `nix/tcb-forbidden.txt`；
 5. **效果内建按包 allowlist**：只有 `vuna` / `vuna-compiler` / `vuna-base` 可直接调用
    effectful 内建（`print`/`readFile`/`exit`/`prim_*` 等），其余包必须经 `Base.IO`
-   （`Vuna.Compiler.Loader.packageAllowsEffects`）；
+   （`Vuna.Compiler.Loader.Resolve.packageAllowsEffects`）；
 6. **唯一路径**：语言夹具、`vuna interp`、包构建与 seed 全部走 DT（精化 + 擦除
    codegen，`vuna check .` 也是 DT 自检）；没有可切换的检查器，也没有第二套 codegen；
 7. 编译器自检通过：`vuna check .` 必须能检查自身源码（`checks.vuna-typecheck`）。

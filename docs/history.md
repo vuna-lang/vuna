@@ -1211,3 +1211,97 @@ M24 单路径落地后复核，只有第一级按原样落地，后两级**重�
 - `monad/04_kind_generic` 的多隐式参数字典仍是 `.nointerp` + `.nocompile`
   （`liftFreeDictGoals` binder 记账 bug 未修）；`Core.valueEqDeep` 仍用 `force` 而非
   `normalize` 强制实参（见 M24 §4）。
+
+## M24 后续维护：源码模块重组（2026-11）
+
+### 1. 动机
+
+M24.7 之后 `compiler/lib/Vuna/Compiler/` 是 25 个扁平模块，四个超大模块吃掉几乎所有
+阅读与维护成本：`Elab.vuna` 3529 行、`CoreCodegen.vuna` 1781 行、`Loader.vuna`
+1363 行、`Core.vuna` 1227 行；同时 `DtKind` / `DtQuant` / `DtPrelude` / `DtMatch` /
+`DtRecords` / `DtDerive` / `SplitCli` / `Process` 这些「小但独立」的模块没有层次归属，
+`Index` 的 `--find` / `--impact` 与模块面检查也要求稳定的模块边界。根包工具链的
+`Fmt.vuna`（约 1200 行）与 `Lint` / `Index` 是同样的形态。
+
+### 2. 原则
+
+- **目录即层**：目录 = 依赖层次；同层可互相 import，上层依赖下层，反向禁止。
+- **门面模式**：每层 `X.vuna` 只 import 子模块 + 选择性重导出，**对外名字面与拆分前
+  逐项一致**（外部只需 import 门面，不感知叶子）；实现只在 `X/` 叶子。
+- **数据定义只在叶子**：`Core.Term`、`Elab.Types` 等是数据的唯一真源，门面不定义数据。
+- **控制流按 SCC 内聚，不硬拆**：`Elab.Term`（infer/check 与 case 互递归）、
+  `Elab.Meta`（共享工具层）保持整体；否则要新造大量中间接口。
+- **每模块 ≤~800 行**：超了就按「数据/工具/入口」切开。
+- **`base/` 公开 API 不动**：base 的 15 个模块名就是用户可见 API（一概念一模块），
+  重组只发生在 `compiler/lib` 与根包工具链实现。
+
+### 3. 旧 → 新模块映射
+
+| 旧模块（M24.7，25 个） | 新模块（40 个） | 说明 |
+| --- | --- | --- |
+| `Ast` / `Lexer` / `Parser` / `Toml` / `Manifest` | `Frontend.{Ast,Lexer,Parser,Toml,Manifest}` | 归入 Frontend 层 |
+| `Builtins` | `Loader.Resolve`（合并） | 内建元数并入名字解析层 |
+| `Pkg` | `Packages.Pkg` | 归入 Packages 层 |
+| `Loader` | `Loader` 门面 + `Loader/{Modules,Resolve,Flatten}` | 数据/模块图、名字解析、flatten 三层 |
+| `Core` | `Core` 门面 + `Core/{Term,Eval,Conv}` | 表示层、NbE、定义性相等 |
+| `Elab` | `Elab` 门面 + `Elab/{Types,Meta,Case,Dict,Term,Data,Trait,Driver}` | 精化状态/工具/case/字典/项/数据/trait/入口 |
+| `DtKind` + `DtQuant` | `Elab.Sig`（合并） | 类参数 kind 推断 + 签名自由名量化 |
+| `DtPrelude` | `Elab.Prelude` | 内置定义表 |
+| `DtMatch` | `Elab.Match` | 多 clause/模式矩阵降级 |
+| `DtRecords` | `Elab.Records` | record 语法降级 |
+| `DtDerive` | `Elab.Derive` | deriving 实例生成 |
+| （无） | `Elab.Termination` | 终止性检查（原独立模块，归入 Elab 层） |
+| `CoreCodegen` | `Codegen` 门面 + `Codegen/{Decl,Erase,Term,Program,Split}` | 名字/类型声明、擦除与 SCC、项生成、单文件、split |
+| `Split` | `Driver.Split` | 输出模型 + build.sh |
+| `SplitCli` | `Driver.Compile`（合并） | `buildSplit` / `seedSplit` 并入编译入口 |
+| `Process` | `Driver.CompilerCli`（合并） | `runIn` 并入 CLI（`Vuna.Process` 已删除） |
+| `Compile` | `Driver.Compile` | 编译入口 |
+| `CompilerCli` | `Driver.CompilerCli` | 编译器 CLI |
+| `Dt` | `Driver.Dt` | DT facade |
+| 根包 `Fmt` | `Fmt` 门面 + `Fmt/{Comment,Decl,Expr,Util}` | 注释保留 / 声明 / 表达式 / 小工具 |
+| 根包 `Lint` | `Lint` 门面 + `Lint/{Rules,Fix}` | 规则与修复 |
+| 根包 `Index` | `Index` 门面 + `Index/{Types,Scan,Query,Render}` | 数据/扫描/查询/渲染 |
+| `Vuna.Process`（根包） | 删除 | `runIn` 在 `Driver.CompilerCli`，工具链不再有独立进程模块 |
+
+`base/lib` 的 15 个公开模块（13 个 `Base/*` + `Base` 门面 + `Prelude`）保持不变。
+
+### 4. 规模变化（实测）
+
+- compiler 模块数 **25 → 40**；源码行数 **12956 → 13853（+897）**——主要是模块头 +
+  门面重导出 + 新模块的接口行，逻辑没有净增。
+- seed 闭包 **40 → 55 个 `.ml`**（文件集 41 → 56，含 `build.sh`）；stage1 == stage2
+  逐字节 fixed point。新增的 `Vuna_dCompiler_dFrontend_d*` / `dLoader_d*` /
+  `dElab_d*` / `dCodegen_d*` / `dDriver_d*` 就是拆分后的模块。
+- 单模块最大值 **3529 → 823 行**（`Elab` → `Frontend/Parser`）；`max_module_lines`
+  预算 3530 → 840（实测 823）。依次为 `Frontend/Parser` 823、`Elab/Term` 804、
+  `Elab/Meta` 717、`Elab/Trait` 701。
+- 文档同步后的 context 实测：coldstart 28076/29200、agents 103/104、arch 155/178、
+  readme 166/168、max_ref 204/208、max_module 823/840（架构文档按新布局重写后
+  coldstart/arch 反而回降；README/AGENTS 只做等价替换、行数不变）。
+- metrics（seed 闭包）：bytes 1285679 / lines 12569 / maxline 8152 / longlines 3730 /
+  letrec 495 / eqint 118 / zeroarg 74 / ctorcount 3591；预算已按实测更新为
+  1290000 / 12600 / 8250 / 3760 / 496 / 120 / 76 / 3600。
+
+### 5. 验证
+
+- **1076 checks**（34 段）全绿；`vuna check .`、`vuna fmt --check`、`vuna lint`、
+  `vuna index` 全绿。
+- **旧 seed 能编译新源码**：`nix build .#vuna-seed` 通过；rotation 后 55 `.ml` /
+  56 文件 fixed point；`nix flake check` 由 Lead 收尾复跑。
+- 模块名解析面：`vuna map --find Vuna.Compiler.Elab.Driver.elabProgramFull` 等新符号
+  可用（`nix/index-check.sh` 已改用定义模块全名，门面前缀不再作为 `--find` 键）。
+
+### 6. 边界与遗留
+
+- **`Elab.Term` 804 行**是当前最大的控制流模块：`inferE`/`checkE`/case 规则共 48 个
+  定义的 SCC（双向检查与 case 精化互递归），再拆需要新造大量接口，暂不硬拆。
+- **`Loader.Resolve` 624 行**含名字解析 + 内建元数 + effect allowlist；若继续降本，
+  可把 `builtinArity` 拆回独立叶子（但会重新引入「微模块」问题）。
+- 若还要继续压 `max_module_lines`，优先拆 `Elab.Meta` / `Elab.Term`（工具层 vs 规则层），
+  其次是 `Loader.Resolve` / `Codegen.Term`（名字编码 vs 生成）。
+- `base/` 保持不动是**有意决定**：公开模块名 = API，重组会破坏所有用户 import；
+  非公开实现如果要拆，只能在 `Base.*` 内部拆分并保持导出面。
+- 代码注释里把这次重组标为「M25 前从 Loader.vuna 拆出」/「M25 重组」；本文档统一称
+  **M24 后维护**，roadmap 的 M25 是模块系统 v3，两者无关（不要把重组当 M25 交付）。
+- 旧模块名只保留在历史叙述（本目录及 `dt-parity.md` 的「原 X」注释）中；当前模块面
+  以 `compiler/vuna.toml` 的 `[export]` 与本文 §3 为准。

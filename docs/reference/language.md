@@ -66,8 +66,8 @@ f x = g x where
 ## 模块系统
 
 - **文件 = 模块**，模块根默认 `lib/`；`--root` 可重复，按出现顺序组成模块根列表
-  （如 `--root lib --root app`），`compiler/lib/Vuna/Compiler/Parser.vuna` ⇔ 模块
-  `Vuna.Compiler.Parser`；
+  （如 `--root lib --root app`），`compiler/lib/Vuna/Compiler/Frontend/Parser.vuna` ⇔
+  模块 `Vuna.Compiler.Frontend.Parser`；
 - 模块按根顺序查找；同名模块出现在多个根时是硬错误（不静默覆盖）；
 - 路径段必须匹配 `[A-Z][A-Za-z0-9_]*`，路径/文件名与模块名**精确一致**，没有大小写映射；
 - 入口文件可以在模块根外（如 `app/Main.vuna`），它本身不是模块，不能写模块头；
@@ -81,10 +81,10 @@ f x = g x where
 - import 的四种形式：
 
   ```vuna
-  import Vuna.Compiler.Ast              -- 依赖 + 自动 open：EVar 可直接用
-  import qualified Vuna.Compiler.Ast    -- 只依赖：必须写 Vuna.Compiler.Ast.EVar
-  import Vuna.Compiler.Parser as P      -- 依赖 + open，并可用 P.parseSource
-  import qualified Vuna.Compiler.Lexer as L  -- 只依赖，并可用 L.PTok
+  import Vuna.Compiler.Frontend.Ast              -- 依赖 + 自动 open：EVar 可直接用
+  import qualified Vuna.Compiler.Frontend.Ast    -- 只依赖：必须写 Vuna.Compiler.Frontend.Ast.EVar
+  import Vuna.Compiler.Frontend.Parser as P      -- 依赖 + open，并可用 P.parseSource
+  import qualified Vuna.Compiler.Frontend.Lexer as L  -- 只依赖，并可用 L.PTok
   ```
 
   alias 只是额外的限定前缀，原全名仍然可用；alias 必须是单个大写段、全文件唯一，
@@ -99,7 +99,7 @@ f x = g x where
     ( three
     , Nat(..)
     , module Vuna.Compiler.Common
-    , Vuna.Compiler.Lexer.lexSource
+    , Vuna.Compiler.Frontend.Lexer.lexSource
     ) where
   ```
 
@@ -128,8 +128,8 @@ f x = g x where
 - **抽象类型**：导出项 `T` 只导出类型、不导出构造器，跨模块既不能构造也不能模式匹配；
   要公开构造器必须写 `T(..)`；
 - **模块路径不变式**：模块路径的最后一段是文件名、中间段是目录，目录本身不是模块。
-  因此 `lib/Vuna.vuna`（模块 `Vuna`）与 `lib/Vuna/Compiler/Parser.vuna`（模块
-  `Vuna.Compiler.Parser`）能在同一个根下共存、没有歧义，包门面可以直接命名为
+  因此 `lib/Vuna.vuna`（模块 `Vuna`）与 `lib/Vuna/Compiler/Frontend/Parser.vuna`（模块
+  `Vuna.Compiler.Frontend.Parser`）能在同一个根下共存、没有歧义，包门面可以直接命名为
   `Base` 或 `Vuna`；
 - 模块导出只算聚合层；包级隐藏（哪些模块对外公开）留给 M11.5 的根 manifest；
 - 非限定名的查找顺序：局部绑定 → 全局构造器 → 本模块顶层定义 → builtin →
@@ -142,5 +142,5 @@ f x = g x where
   A import B，C import A 看不到 B 的名字——除非 A 用 `module B` / `B.name` 显式重导出，
   这是受控例外，只有显式写出的名字经 A 重新可见；
 - loader 解析 import 图、做名字解析后 **flatten** 成一个 program（内部名字带模块前缀，
-  如 `Vuna.Compiler.Parser.parse`），解释器与 codegen 复用同一份实现；`show` 只显示
+  如 `Vuna.Compiler.Frontend.Parser.parseSource`），解释器与 codegen 复用同一份实现；`show` 只显示
   最后一段，所以输出与单文件程序一致。

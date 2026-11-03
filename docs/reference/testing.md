@@ -56,8 +56,8 @@ DT 精化 + 擦除 codegen，`build` / `build --split` / `seed` = DT codegen）�
   导入、非法模块名、别名冲突、import 不传递；`interp` 与 `compile` 都要求错误片段、
   非 0 退出、不写输出文件；
 - `corpus/records/` 记录：01–05、08 正例 `interp` 与 `compile` 比对 golden
-  （record update 与参数化 record 由 `DtRecords` 支持）；90–95 反例要求错误片段、非 0
-  退出、compile 不写输出；跨模块 `0*_*/`（`Point(..)` 可构造/匹配，`Point` 保持抽象）与
+  （record update 与参数化 record 由 `Elab.Records`（原 `DtRecords`）支持）；90–95
+  反例要求错误片段、非 0 退出、compile 不写输出；跨模块 `0*_*/`（`Point(..)` 可构造/匹配，`Point` 保持抽象）与
   `9*_*/`（抽象构造器不可见）同样覆盖；`95_ambiguous_field` 覆盖歧义字段；
 - `corpus/traits/` trait：正例 01–13 `interp` 与 `compile` 比对 golden（含泛型字典穿参、
   多类型 default、02 命名实例 `@fancy`、08 跨模块 `@M.fancy`）；错误例 90–95、98 要求

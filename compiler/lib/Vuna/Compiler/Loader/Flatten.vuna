@@ -1,0 +1,509 @@
+module Vuna.Compiler.Loader.Flatten
+  ( loadProgram
+  , loadProgramOrdered
+  , loadProgramRaw
+  , loadProgramRawOrdered
+  , loadProgramRawOrderedSource
+  , loadProject
+  , loadProjectModules
+  , resolveProject
+  ) where
+
+-- Vuna.Compiler.Loader.Flatten：模块导出表计算、加载流程与 flatten（M24 后维护（源码重组）从 Loader.vuna 拆出）。
+--
+-- 依赖 `Loader.Modules`（模块/导出表）与 `Loader.Resolve`（名字解析）：先算每个模块的
+-- 导出表，再按 import 图递归加载（含隐式 Prelude）；`loadProgram*` 负责把入口 + 依赖
+-- 模块的声明按历史顺序拼接，`loadProgram*Ordered` 按依赖顺序拼接供 DT 精化。
+import Vuna.Compiler.Common
+import Vuna.Compiler.Frontend.Ast
+import Vuna.Compiler.Frontend.Parser
+import Vuna.Compiler.Loader.Modules
+import Vuna.Compiler.Loader.Resolve
+import Vuna.Compiler.Packages.Pkg
+
+-- ---------------------------------------------------------------
+-- 模块导出表计算（M10）
+-- ---------------------------------------------------------------
+isPrivateName : String -> Bool
+isPrivateName name = startsWith "_" name
+
+privateExportMsg : String -> Span -> String -> String
+privateExportMsg prefix sp name =
+  prefix
+    ++ ": "
+    ++ showSpanLoc sp
+    ++ ": cannot export private name "
+    ++ name
+    ++ " (names starting with _ are module-private)"
+
+-- 本模块里与导出相关的「数据类型」信息：类型名 + 公开构造器名列表。
+-- data / record / trait 都按同一套 T / T(..) 规则导出（trait 的方法是它的「构造器」）。
+findOwnData : String -> List Decl -> Maybe (Pair String (List String))
+findOwnData name decls = case decls of
+  [] => Nothing
+  d :: rest => case d of
+    DData dname params kind ctors derivings sp =>
+      if dname == name then Just (Pair dname (map ctorName ctors)) else findOwnData name rest
+    DRecord dname params fields derivings sp =>
+      if dname == name then Just (Pair dname [dname]) else findOwnData name rest
+    DTrait tname params methods sp =>
+      if tname == name then Just (Pair tname (map firstOf methods)) else findOwnData name rest
+    _ => findOwnData name rest
+
+findOwnFn : String -> List Decl -> Maybe String
+findOwnFn name decls = case decls of
+  [] => Nothing
+  d :: rest => case d of
+    DFun n pats body sp => if n == name then Just name else findOwnFn name rest
+    DSig n ty sp => if n == name then Just name else findOwnFn name rest
+    _ => findOwnFn name rest
+
+findCtorNamed : String -> List Ctor -> Maybe String
+findCtorNamed name ctors = case ctors of
+  [] => Nothing
+  c :: rest => if ctorName c == name then Just (ctorName c) else findCtorNamed name rest
+
+findMethodNamed : a -> List (Pair a b) -> Maybe a
+findMethodNamed name methods = case methods of
+  [] => Nothing
+  (Pair mname ty) :: rest => if mname == name then Just mname else findMethodNamed name rest
+
+findOwnInstanceName : String -> List Decl -> Maybe String
+findOwnInstanceName name decls = case decls of
+  [] => Nothing
+  d :: rest => case d of
+    DInstance iname isDefault head methods sp => if isDefault then findOwnInstanceName name rest
+    else case iname of
+      Just n => if n == name then Just n else findOwnInstanceName name rest
+      Nothing => findOwnInstanceName name rest
+    _ => findOwnInstanceName name rest
+
+findOwnCtorName : String -> List Decl -> Maybe (Pair String String)
+findOwnCtorName name decls = case decls of
+  [] => Nothing
+  d :: rest => case d of
+    DData dname params kind ctors derivings sp => case findCtorNamed name ctors of
+      Just cname => Just (Pair dname cname)
+      Nothing => findOwnCtorName name rest
+    DRecord dname params fields derivings sp =>
+      if dname == name then Just (Pair dname dname) else findOwnCtorName name rest
+    DTrait tname params methods sp => case findMethodNamed name methods of
+      Just mname => Just (Pair tname mname)
+      Nothing => findOwnCtorName name rest
+    _ => findOwnCtorName name rest
+
+ownCtorEntries : String -> String -> List String -> List ExportEntry
+ownCtorEntries prefix dname names = case names of
+  [] => []
+  cname :: rest =>
+    if isPrivateName cname then ownCtorEntries prefix dname rest
+    else ExportEntry { kind = "ctor", public = cname, target = mangle prefix cname, parent = mangle prefix dname }
+      :: ownCtorEntries prefix dname rest
+
+-- 从某模块的导出表里取某数据类型的构造器条目：重导出 `T(..)` 时只重新公开
+-- 源模块本来就公开的构造器，从而保持源模块的抽象性。
+ctorEntriesOfType : String -> List ExportEntry -> List ExportEntry
+ctorEntriesOfType typeTarget entries = case entries of
+  [] => []
+  e :: rest =>
+    if entryKind e == "ctor" && entryParent e == typeTarget then e :: ctorEntriesOfType typeTarget rest
+    else ctorEntriesOfType typeTarget rest
+
+declImplicitExports : String -> Decl -> List ExportEntry
+declImplicitExports prefix d = case d of
+  DData dname params kind ctors derivings sp =>
+    if isPrivateName dname then []
+    else ExportEntry { kind = "type", public = dname, target = mangle prefix dname, parent = "" }
+      :: ownCtorEntries prefix dname (map ctorName ctors)
+  DRecord dname params fields derivings sp =>
+    if isPrivateName dname then []
+    else ExportEntry { kind = "type", public = dname, target = mangle prefix dname, parent = "" }
+      :: ownCtorEntries prefix dname [dname]
+  DTrait tname params methods sp =>
+    if isPrivateName tname then []
+    else ExportEntry { kind = "type", public = tname, target = mangle prefix tname, parent = "" }
+      :: ownCtorEntries prefix tname (map firstOf methods)
+  DInstance iname isDefault head methods sp => if isDefault then []
+  else case iname of
+    Nothing => []
+    Just name =>
+      if isPrivateName name then []
+      else [ExportEntry { kind = "val", public = name, target = mangle prefix name, parent = "" }]
+  DSig name ty sp =>
+    if isPrivateName name then []
+    else [ExportEntry { kind = "val", public = name, target = mangle prefix name, parent = "" }]
+  DFun name pats body sp =>
+    if isPrivateName name then []
+    else [ExportEntry { kind = "val", public = name, target = mangle prefix name, parent = "" }]
+
+implicitExports : String -> List Decl -> List ExportEntry
+implicitExports prefix decls = dedupeImplicitExports (concatMap (declImplicitExports prefix) decls)
+
+-- 没有模块头 = 导出全部：类型签名 DSig 与子句 DFun 会为同一个函数各产生一条
+-- val 条目，必须去重，否则重导出该模块时会在 duplicate export 检查里误报。
+dedupeImplicitExports : List ExportEntry -> List ExportEntry
+dedupeImplicitExports [] = []
+dedupeImplicitExports (e :: rest) =
+  if hasSamePublicKind e rest then dedupeImplicitExports rest else e :: dedupeImplicitExports rest
+
+-- 裸名导出时，若名字是 **record 类型** 且与其同名构造器 target 相同，只导出类型、
+-- 不导出构造器：抽象记录必须写 T(..) 才公开构造器。（普通 data 里 ctor 与类型同名
+-- 的情形保持 v0 语义：裸名两者都导出。）
+typeRefDominates : List Module -> List Decl -> String -> Maybe ExportRef -> Maybe ExportRef -> Bool
+typeRefDominates modules decls prefix tr vr = case tr of
+  Just (ExportRef tk tt tp) => case vr of
+    Just (ExportRef vk vt vp) =>
+      if tk == "type" && vk == "ctor" && tt == vt then isRecordTarget modules decls prefix tt
+      else False
+    Nothing => False
+  Nothing => False
+
+isRecordTarget : List Module -> List Decl -> String -> String -> Bool
+isRecordTarget modules decls prefix target = case splitLastDot (splitOnDot target) of
+  Pair revPrefix base =>
+    let
+      m = joinDots revPrefix
+    in if m == prefix then isRecordDecl base decls
+    else case findModule modules m of
+      Just (Module mname mpkg mimports mimps dcs exports) => isRecordDecl base dcs
+      Nothing => False
+
+isRecordDecl : String -> List Decl -> Bool
+isRecordDecl dname decls = case decls of
+  [] => False
+  d :: rest => case d of
+    DRecord dn params fields derivings sp => if dn == dname then True else isRecordDecl dname rest
+    _ => isRecordDecl dname rest
+
+refEntryList : String -> Maybe ExportRef -> List ExportEntry
+refEntryList pub Nothing = []
+refEntryList pub (Just (ExportRef k tgt parent)) =
+  [ExportEntry { kind = k, public = pub, target = tgt, parent = parent }]
+
+ownOrImportedTypeRef : List Module -> String -> List Decl -> List Import -> String -> Result (Maybe ExportRef)
+ownOrImportedTypeRef modules prefix decls imports name = case findOwnData name decls of
+  Just (Pair dname ctorNames) => Ok (Just (ExportRef "type" (mangle prefix dname) ""))
+  Nothing => andThen (modulesExportingType modules imports name) (\pairs => case pairs of
+    [] => Ok Nothing
+    _ =>
+      andThen (unifyEntryPairs prefix "type" name pairs)
+        (\p => Ok (Just (ExportRef "type" (entryTarget (secondOf p)) "")))
+  )
+
+ownOrImportedValueRef : List Module -> String -> List Decl -> List Import -> String -> Result (Maybe ExportRef)
+ownOrImportedValueRef modules prefix decls imports name = case findOwnFn name decls of
+  Just fn => Ok (Just (ExportRef "val" (mangle prefix fn) ""))
+  Nothing => case findOwnInstanceName name decls of
+    Just iname => Ok (Just (ExportRef "val" (mangle prefix iname) ""))
+    Nothing => ownOrImportedValueRef2 modules prefix decls imports name
+
+ownOrImportedValueRef2 : List Module -> String -> List Decl -> List Import -> String -> Result (Maybe ExportRef)
+ownOrImportedValueRef2 modules prefix decls imports name = case findOwnCtorName name decls of
+  Just (Pair dname cname) =>
+    Ok (Just (ExportRef "ctor" (mangle prefix cname) (mangle prefix dname)))
+  Nothing => andThen (modulesExportingValue modules imports name) (\pairs => case pairs of
+    [] => Ok Nothing
+    _ => andThen (unifyEntryPairs prefix "name" name pairs) (\p => let
+      e = secondOf p
+    in Ok (Just (ExportRef (entryKind e) (entryTarget e) (entryParent e)))
+    )
+  )
+
+exportBare : List Module -> String -> List Decl -> List Import -> String -> Span -> Result (List ExportEntry)
+exportBare modules prefix decls imports name sp = case splitLastDot (splitOnDot name) of
+  Pair revPrefix base => case revPrefix of
+    [] => if isPrivateName name then Err (privateExportMsg prefix sp name)
+    else andThen (ownOrImportedTypeRef modules prefix decls imports name) (\tr => andThen (ownOrImportedValueRef modules prefix decls imports name) (\vr => case tr of
+      Nothing => case vr of
+        Nothing => Err (prefix ++ ": " ++ showSpanLoc sp ++ ": cannot export unknown name " ++ name)
+        Just _ => Ok (refEntryList name vr)
+      Just _ => case vr of
+        Nothing => Ok (refEntryList name tr)
+        Just _ =>
+          if typeRefDominates modules decls prefix tr vr then Ok (refEntryList name tr)
+          else Ok (append (refEntryList name tr) (refEntryList name vr))
+    )
+    )
+    _ =>
+      let
+        mprefix = joinDots revPrefix
+      in case findImportPrefix imports mprefix of
+        Nothing =>
+          Err (prefix ++ ": " ++ showSpanLoc sp ++ ": module " ++ mprefix ++ " is not imported")
+        Just m => exportSelective modules prefix m base name sp
+
+exportSelective : List Module -> String -> String -> String -> String -> Span -> Result (List ExportEntry)
+exportSelective modules prefix m base name sp = andThen (exportsOf modules m) (\es => case findExportValue es base of
+  Just e => case findExportType es base of
+    Just te =>
+      Ok
+        [ExportEntry { kind = entryKind e, public = base, target = entryTarget e, parent = entryParent e }, ExportEntry { kind = "type", public = base, target = entryTarget te, parent = "" }]
+    Nothing =>
+      Ok
+        [ExportEntry { kind = entryKind e, public = base, target = entryTarget e, parent = entryParent e }]
+  Nothing => case findExportType es base of
+    Just te =>
+      Ok [ExportEntry { kind = "type", public = base, target = entryTarget te, parent = "" }]
+    Nothing => Err (prefix ++ ": " ++ showSpanLoc sp ++ ": cannot export unknown name " ++ name)
+)
+
+exportTypeAll : List Module -> String -> List Decl -> List Import -> String -> Span -> Result (List ExportEntry)
+exportTypeAll modules prefix decls imports name sp = case splitLastDot (splitOnDot name) of
+  Pair revPrefix base => case revPrefix of
+    [] => if isPrivateName name then Err (privateExportMsg prefix sp name)
+    else case findOwnData name decls of
+      Just (Pair dname ctorNames) =>
+        Ok
+          (ExportEntry { kind = "type", public = name, target = mangle prefix dname, parent = "" } :: ownCtorEntries prefix dname ctorNames)
+      Nothing => andThen (modulesExportingType modules imports name) (\pairs => case pairs of
+        [] => Err (prefix ++ ": " ++ showSpanLoc sp ++ ": cannot export unknown name " ++ name)
+        _ => andThen (unifyEntryPairs prefix "type" name pairs) (\p => let
+          m = firstOf p
+        in let
+          tgt = entryTarget (secondOf p)
+        in andThen (exportsOf modules m)
+          (\es => Ok (ExportEntry { kind = "type", public = name, target = tgt, parent = "" } :: ctorEntriesOfType tgt es))
+        )
+      )
+    _ =>
+      let
+        mprefix = joinDots revPrefix
+      in case findImportPrefix imports mprefix of
+        Nothing =>
+          Err (prefix ++ ": " ++ showSpanLoc sp ++ ": module " ++ mprefix ++ " is not imported")
+        Just m => andThen (exportsOf modules m) (\es => case findExportType es base of
+          Just e =>
+            Ok
+              (ExportEntry { kind = "type", public = base, target = entryTarget e, parent = "" } :: ctorEntriesOfType (entryTarget e) es)
+          Nothing =>
+            Err
+              (prefix ++ ": " ++ showSpanLoc sp ++ ": type " ++ base ++ " is not exported by " ++ m)
+        )
+
+exportItemEntries : List Module -> String -> List Decl -> List Import -> ExportItem -> Result (List ExportEntry)
+exportItemEntries modules prefix decls imports item = case item of
+  XModule name sp => case findImportPrefix imports name of
+    Nothing => Err (prefix ++ ": " ++ showSpanLoc sp ++ ": module " ++ name ++ " is not imported")
+    Just m => exportsOf modules m
+  XTypeAll name sp => exportTypeAll modules prefix decls imports name sp
+  XBare name sp => exportBare modules prefix decls imports name sp
+
+hasSamePublicKind : ExportEntry -> List ExportEntry -> Bool
+hasSamePublicKind e entries = case entries of
+  [] => False
+  e2 :: rest =>
+    if entryKind e == entryKind e2 && entryPublic e == entryPublic e2 then True
+    else hasSamePublicKind e rest
+
+-- 冲突判定：同名同 kind 但**定义处不同**才算重复导出。同一个定义经两条路径重导出
+-- （门面同时导出 Base.Monad 与 Base.IO，两者都重导出 `Functor(..)`）不是冲突。
+hasConflictingExport : ExportEntry -> List ExportEntry -> Bool
+hasConflictingExport e entries = case entries of
+  [] => False
+  e2 :: rest =>
+    if entryKind e == entryKind e2 && entryPublic e == entryPublic e2 && entryTarget e /= entryTarget e2 then True
+    else hasConflictingExport e rest
+
+sameExportEntry : ExportEntry -> ExportEntry -> Bool
+sameExportEntry e e2 =
+  entryKind e == entryKind e2
+    && entryPublic e == entryPublic e2
+    && entryTarget e == entryTarget e2
+    && entryParent e == entryParent e2
+
+dedupeExportEntries : List ExportEntry -> List ExportEntry
+dedupeExportEntries [] = []
+dedupeExportEntries (e :: rest) =
+  if memExportEntries e rest then dedupeExportEntries rest else e :: dedupeExportEntries rest
+
+memExportEntries : ExportEntry -> List ExportEntry -> Bool
+memExportEntries e entries = case entries of
+  [] => False
+  e2 :: rest => if sameExportEntry e e2 then True else memExportEntries e rest
+
+checkExportDuplicates : String -> List ExportEntry -> Result (List a)
+checkExportDuplicates prefix [] = Ok []
+checkExportDuplicates prefix (e :: rest) =
+  if hasConflictingExport e rest then Err (prefix ++ ": duplicate export " ++ entryPublic e)
+  else checkExportDuplicates prefix rest
+
+-- 显式导出列表里「同一个名字写了两遍」是错误（`module M (foo, foo)`）；
+-- 但同一个**定义**经不同模块重导出（门面同时导出 Base.Monad 与 Base.IO，两者都
+-- 重导出 `Functor(..)`）不是冲突——条目按 target 去重即可。
+exportItemKey : ExportItem -> String
+exportItemKey item = case item of
+  XBare n sp => "bare:" ++ n
+  XTypeAll n sp => "typeall:" ++ n
+  XModule n sp => "module:" ++ n
+
+duplicateExportItem : List ExportItem -> Maybe String
+duplicateExportItem [] = Nothing
+duplicateExportItem (item :: rest) =
+  if memExportItemKey (exportItemKey item) rest then Just (exportItemName item)
+  else duplicateExportItem rest
+
+memExportItemKey : String -> List ExportItem -> Bool
+memExportItemKey key items = case items of
+  [] => False
+  item :: rest => if exportItemKey item == key then True else memExportItemKey key rest
+
+exportItemName : ExportItem -> String
+exportItemName item = case item of
+  XBare n sp => n
+  XTypeAll n sp => n
+  XModule n sp => n
+
+checkExportItemDuplicates : String -> List ExportItem -> Result Int
+checkExportItemDuplicates prefix [] = Ok 0
+checkExportItemDuplicates prefix (item :: rest) = case duplicateExportItem (item :: rest) of
+  Just n => Err (prefix ++ ": duplicate export " ++ n)
+  Nothing => checkExportItemDuplicates prefix rest
+
+explicitExports : List Module -> String -> List Decl -> List Import -> List ExportItem -> Result (List ExportEntry)
+explicitExports modules prefix decls imports [] = Ok []
+explicitExports modules prefix decls imports (item :: rest) =
+  andThen (checkExportItemDuplicates prefix (item :: rest))
+    (\_ => andThen (exportItemEntries modules prefix decls imports item) (\es => andThen (explicitExports modules prefix decls imports rest) (\tail => Ok (dedupeExportEntries (append es tail)))))
+explicitExports modules prefix decls imports (item :: rest) =
+  andThen (exportItemEntries modules prefix decls imports item)
+    (\es => andThen (explicitExports modules prefix decls imports rest) (\tail => Ok (dedupeExportEntries (append es tail))))
+
+validateModuleHeader : String -> Maybe ModDecl -> Result (List a)
+validateModuleHeader label hdr = case hdr of
+  Nothing => Ok []
+  Just (ModDecl declared hasList items sp) =>
+    if declared == label then Ok []
+    else Err (label ++ ": " ++ showSpanLoc sp ++ ": module name mismatch: source declares " ++ declared)
+
+computeExports : List Module -> String -> Maybe ModDecl -> List Import -> List Decl -> Result (List ExportEntry)
+computeExports modules prefix hdr imports decls = case hdr of
+  Nothing => Ok (implicitExports prefix decls)
+  Just (ModDecl declared hasList items sp) =>
+    if hasList then andThen (explicitExports modules prefix decls imports items)
+      (\es => andThen (checkExportDuplicates prefix es) (\_ => Ok es))
+    else Ok (implicitExports prefix decls)
+
+showCycle : String -> List String -> String
+showCycle name stack = joinArrows (reverse (name :: stack))
+
+-- 自动注入的 Prelude：只从依赖包取，且原始 --root 模式不注入。
+-- 显式 import Prelude 时不再重复注入；Prelude 自身不注入（避免环）。
+implicitPrelude : List Root -> String -> String -> List Import -> Result (List Import)
+implicitPrelude roots importerPkg currentName imports =
+  if importerPkg == "" then Ok []
+  else if currentName == "Prelude" then Ok []
+  else if memName "Prelude" (importModuleNames imports) then Ok []
+  else implicitPreludeFrom roots importerPkg
+
+implicitPreludeFrom : List Root -> String -> Result (List Import)
+implicitPreludeFrom roots importerPkg = case collectModuleFiles roots "Prelude" importerPkg [] [] of
+  Pair allowed hidden =>
+    implicitPreludeDeps importerPkg (filter (\c => rootName (secondOf c) /= importerPkg) allowed)
+
+implicitPreludeDeps : String -> List (Pair String Root) -> Result (List Import)
+implicitPreludeDeps importerPkg deps = case deps of
+  [] => Ok []
+  [_] => Ok [Import "Prelude" False Nothing (Span "" 0 0 0 0)]
+  _ =>
+    Err
+      ("ambiguous implicit Prelude (found in: " ++ joinArrows (map (\c => rootName (secondOf c)) deps) ++ ")")
+
+loadAll : List Root -> String -> List Module -> List String -> List Import -> Result (List Module)
+loadAll roots importerPkg modules stack imports = case imports of
+  [] => Ok modules
+  imp :: rest =>
+    andThen (loadModule roots importerPkg modules stack (importName imp))
+      (\modules2 => loadAll roots importerPkg modules2 stack rest)
+
+loadModule : List Root -> String -> List Module -> List String -> String -> Result (List Module)
+loadModule roots importerPkg modules stack name = case findModule modules name of
+  Just m => Ok modules
+  Nothing => if memName name stack then Err ("import cycle: " ++ showCycle name stack)
+  else if validModuleName name then andThen (findModuleFile roots name importerPkg) (\found => let
+    path = firstOf found
+  in let
+    root = secondOf found
+  in andThen (parseSource path (readFile path)) (\src => case src of
+    Source hdr imports decls =>
+      andThen (validateModuleHeader name hdr)
+        (\_ => andThen (validateImports name imports) (\_ => andThen (implicitPrelude roots (rootName root) name imports) (\implicit => andThen (loadAll roots (rootName root) modules (name :: stack) (append imports implicit)) (\modules2 => andThen (computeExports modules2 name hdr imports decls) (\exports => Ok (Module name (rootName root) imports implicit decls exports :: modules2))))))
+  )
+  )
+  else Err ("invalid module name: " ++ name)
+
+-- 包模式入口：entryPkg 是入口文件所属包（决定同包/跨包导出可见性）。
+-- loadProject 返回 flatten 前的形态（入口声明 + 依赖模块列表），供分离编译使用。
+loadProject : List Root -> String -> String -> Result Project
+loadProject roots entryPkg entry = if fileExists entry then andThen (parseSource entry (readFile entry)) (\src => case src of
+  Source hdr imports decls => case hdr of
+    Just (ModDecl dname hasList items sp) =>
+      Err ("module header is not allowed in entry file (" ++ entry ++ ")")
+    Nothing =>
+      andThen (validateImports "<entry>" imports)
+        (\_ => andThen (implicitPrelude roots entryPkg "" imports) (\implicit => andThen (loadAll roots entryPkg [] [] (append imports implicit)) (\modules => Ok (Project decls imports implicit modules entryPkg))))
+)
+else Err ("entry file not found: " ++ entry)
+
+-- 库包入口：不带 app/Main.vuna 的包，以 [export].modules 作为根模块集合。
+loadProjectModules : List Root -> String -> List String -> Result Project
+loadProjectModules roots entryPkg names =
+  let
+    entryImports = map (\n => Import n False Nothing (Span "" 0 0 0 0)) names
+  in andThen (loadAll roots entryPkg [] [] entryImports)
+    (\modules => Ok (Project [] [] [] modules entryPkg))
+
+-- 返回逐模块已解析（未 flatten）的声明，供 M12 分离编译使用。
+resolveProject : Project -> Result (Pair (List Decl) (List Module))
+resolveProject (Project decls imports implicit modules entryPkg) =
+  andThen (resolveEntry modules entryPkg (append imports implicit) decls)
+    (\entryDecls => andThen (resolveModulesKeep modules) (\modules2 => Ok (Pair entryDecls modules2)))
+
+resolveModulesKeep : List Module -> Result (List Module)
+resolveModulesKeep [] = Ok []
+resolveModulesKeep ((Module name pkg imports implicit decls exports) :: rest) =
+  andThen
+    (andThen (resolveProgram (Module name pkg imports implicit decls exports :: rest) name name (append (topNames decls) (typeNamesOf decls)) (ctorsOf decls) (append (ctorsOf decls) (append (topNames decls) (typeNamesOf decls))) (append imports implicit) decls) (\d => checkEffectsBuiltins name pkg d))
+    (\d1 => andThen (resolveModulesKeep rest) (\d2 => Ok (Module name pkg imports implicit d1 exports :: d2)))
+
+-- flatten：入口先解析，再按加载顺序解析各模块后拼接（与历史输出保持一致）。
+loadProgram : List Root -> String -> String -> Result (List Decl)
+loadProgram roots entryPkg entry =
+  andThen (loadProject roots entryPkg entry)
+    (\p => andThen (resolveProject p) (\r => Ok (append (firstOf r) (concatMap moduleDeclsOf (secondOf r)))))
+
+-- 原始 --root DIR 模式：所有根同属空包名，不限制导出。
+loadProgramRaw : List String -> String -> Result (List Decl)
+loadProgramRaw roots entry = loadProgram (map rawRoot roots) "" entry
+
+-- ---------------------------------------------------------------
+-- DT 用的 flatten：按**依赖顺序**拼接声明
+-- ---------------------------------------------------------------
+-- `loadProgram` 为了 HM 产物稳定，保持「入口声明在前、依赖模块按加载顺序」的历史
+-- 顺序；DT 精化器按声明顺序建 globals（data → trait → sig → body），必须**被依赖
+-- 模块在前**，否则 `Base.Map` 的 data 会先于 `Base.List` 精化、报
+-- `DT: unknown name Base.List.List`。Loader 的 modules 列表是「依赖在前」的反序
+-- （每个模块出现在它依赖的模块之前），reverse 后即为拓扑序。
+orderedProjectDecls : Project -> Result (List Decl)
+orderedProjectDecls p =
+  andThen (resolveProject p)
+    (\r => Ok (append (concatMap moduleDeclsOf (reverse (secondOf r))) (firstOf r)))
+
+loadProgramOrdered : List Root -> String -> String -> Result (List Decl)
+loadProgramOrdered roots entryPkg entry =
+  andThen (loadProject roots entryPkg entry) orderedProjectDecls
+
+loadProgramRawOrdered : List String -> String -> Result (List Decl)
+loadProgramRawOrdered roots entry = loadProgramOrdered (map rawRoot roots) "" entry
+
+-- 入口以**源码字符串**给出（REPL 的表达式求值）：与 `loadProgramRawOrdered` 同构，
+-- 只是入口不落盘（`import` 仍按 roots 从磁盘解析）。raw 模式的入口包为空，
+-- 因此不注入隐式 Prelude，与 `--root` 单文件路径的行为一致。
+loadProgramRawOrderedSource : List String -> String -> String -> Result (List Decl)
+loadProgramRawOrderedSource roots label source = andThen (parseSource label source) (\src => case src of
+  Source hdr imports decls => case hdr of
+    Just (ModDecl dname hasList items sp) =>
+      Err ("module header is not allowed in entry source (" ++ label ++ ")")
+    Nothing =>
+      andThen (validateImports "<entry>" imports)
+        (\_ => andThen (loadAll (map rawRoot roots) "" [] [] imports) (\modules => orderedProjectDecls (Project decls imports [] modules "")))
+)

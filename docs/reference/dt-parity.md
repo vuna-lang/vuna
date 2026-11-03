@@ -24,12 +24,12 @@
 | 8 | DT prelude 的容器与 IO 原语 | `DT: unknown name <name>` | List 1064、Pair 1845、Maybe 65、Result 175；print 42、readFile 13、exit 9 | 79/30/17/18；5/5/5/5 | 132/286/27/21；48/11/8 | **M22.2**（`str*`/`prim_*` 已进 prelude；容器来自 base，`String`/`Map`/`Sort` 探针仍失败） |
 | 9 | ~~`==` / `/=` 只对 Int~~ | **M19 已实现**：隐式类型参数 + 精化期按实参类型特化（`bi_eq_str` 等） | 155 处字符串比较 | 0 | 52 | M19（已完成） |
 | 10 | ~~`case` 只接受归纳族~~ | **M19 已实现**：Bool 降级 if，Int/String 降级 if 链（需兜底） | 4（Bool 分支） | 0 | 0 | M19（已完成） |
-| 11 | 非结构递归（算术递减 / fuel 式） | `Elab.checkTermBody`：`DT: cannot prove termination of <f> ...` | 41（`Elab` 14、`Core` 13、`Loader` 5、余 9） | 3 | 20 | M19 风险项 |
+| 11 | 非结构递归（算术递减 / fuel 式） | `Elab.Termination.checkTermBody`：`DT: cannot prove termination of <f> ...` | 41（`Elab` 14、`Core` 13、`Loader` 5、余 9） | 3 | 20 | M19 风险项 |
 | 12 | ~~单文件~~：无 `import` / `--root` / `data Foo a` | **M20 已实现**：复用 Loader（`loadProgramRaw`）、参数化 `data`、签名类型变量隐式量化。剩余包目录归 M22.1 | 20 模块头 / 64 import | 12 / 33 | 13 / 64 | M20（已完成） |
-| 13 | `main` 只能是 Int/String/Bool，无 `main : IO a` | `CoreCodegen.mainShowErr`：`DT: main must return Int, String or Bool (M13 limitation)` | 两入口均 `main : IO Int` | — | — | M21（部分：已落地） |
-| 14 | ~~`record` 声明 / 字段访问 / 更新 / 模式~~ | **M19 已实现**：精化前统一降级成单构造子 data（`DtRecords.vuna`），构造子名 `Mk<R>` | 1 声明、14 构造、4 字段读取（另有 `fmt/` 夹具） | 0 | 0 | M19（已完成） |
-| 15 | ~~`deriving`~~ | **M19 已实现**：展开成等价 instance（`DtDerive.vuna`），生成 Show/Eq/Ord 方法体 | 1（`Loader.ExportEntry`）+ `traits/` 13 个夹具 | 0 | 0 | M19（已完成） |
-| 16 | `do` 块 | `Elab.inferE` EDo：`DT: do blocks are not supported yet (M19)` | 0（`compiler/app/Main.vuna` 1 处） | 0 | 1（`app/Main.vuna`） | M21（部分：本阶段的投影工作） |
+| 13 | `main` 只能是 Int/String/Bool，无 `main : IO a` | `Codegen.Term.mainShowErr`（原 `CoreCodegen`）：`DT: main must return Int, String or Bool (M13 limitation)` | 两入口均 `main : IO Int` | — | — | M21（部分：已落地） |
+| 14 | ~~`record` 声明 / 字段访问 / 更新 / 模式~~ | **M19 已实现**：精化前统一降级成单构造子 data（`Elab/Records.vuna`，原 `DtRecords`），构造子名 `Mk<R>` | 1 声明、14 构造、4 字段读取（另有 `fmt/` 夹具） | 0 | 0 | M19（已完成） |
+| 15 | ~~`deriving`~~ | **M19 已实现**：展开成等价 instance（`Elab/Derive.vuna`，原 `DtDerive`），生成 Show/Eq/Ord 方法体 | 1（`Loader.ExportEntry`）+ `traits/` 13 个夹具 | 0 | 0 | M19（已完成） |
+| 16 | `do` 块 | `Elab.Term.inferE` EDo：`DT: do blocks are not supported yet (M19)` | 0（`compiler/app/Main.vuna` 1 处） | 0 | 1（`app/Main.vuna`） | M21（部分：本阶段的投影工作） |
 | 17 | ~~隐式索引 binder 一律擦除~~ | **M18.5 已修复**：隐式 binder 仍恒擦除（这是正确语义——隐式实参由精化器插入），但**显式索引 binder** 恢复参与运行时表示 | — | — | — | M18.5（已完成） |
 
 第 1 项曾是该表唯一的 **bug**，M18.5 已修、第 17 项随之收敛；**M19 完成第 3–7、9、10、14、15 项**。第 2 项是**迁移工作量**而非语言缺陷（§5 ②）；第 8/13/16 项是「编译器本体不可能用 DT 写」的硬边界——effectful 内建与 `main : IO a` 已在 M21 落地，`do` 的 trait 投影归 M21，容器 / `String` / `Sort` 归 M22.2。第 14/15 项**保留并补齐**——它们有 `fmt/` 与 `traits/` 夹具覆盖（决策见 roadmap「决策变更」）。
@@ -55,8 +55,9 @@
 
 ## 3. lambda 擦除缺陷（M18.5 已修复，留作样本）
 
-`Elab.checkLam` 曾把**每个** lambda 形参标成 `erased = True`，`CoreCodegen.genTerm` 的
-`TLam` 分支配套「擦除即不生成形参」。于是任何 lambda 形参都被当成类型级变量，产生两条
+`Elab.Term.checkLam`（原 `Elab.checkLam`）曾把**每个** lambda 形参标成
+`erased = True`，`Codegen.Term.genTerm`（原 `CoreCodegen.genTerm`）的 `TLam` 分支配套
+「擦除即不生成形参」。于是任何 lambda 形参都被当成类型级变量，产生两条
 失败路径——两路都已被 `test/corpus/dt/19_lam.vuna` 固化为回归夹具。
 
 **路径 A：形参在运行时被使用 → 直接报错**（修复前）：
@@ -80,9 +81,9 @@ let v_main = ((v_apply2 7) 1)     (* 少一层 fun：7 被当成函数 *)
 (* Error: The constant 7 has type int but an expression was expected of type 'a -> 'b *)
 ```
 
-路径 B 是审计中唯一**违反类型系统基本保证**的发现：`CoreCodegen` 注释里「能 check 就能
+路径 B 是审计中唯一**违反类型系统基本保证**的发现：`Codegen` 注释里（原 `CoreCodegen`）「能 check 就能
 compile」在此失效，DT 存在能产出错误程序的通道。修复方式是把判据收敛成全仓唯一入口
-`Elab.erasedBinder implicit dom = implicit || isTypeValue dom`，六处判据点
+`Elab.erasedBinder implicit dom = implicit || isTypeValue dom`（M22.3 后由 eraseMask 取代），六处判据点
 （`teleOf` / `checkBinders` / `bindOnePattern` / `checkLam` / `inferArgs` / `bindCtorBinder`）
 全部改走它；`test/run-tests.sh` 第 34 段同时加了「同夹具 `interp` 输出 == 编译产物输出」的
 逐夹具对拍断言，保证语义一致性不靠人工比对。

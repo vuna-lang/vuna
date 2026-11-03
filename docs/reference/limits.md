@@ -5,7 +5,7 @@
 
 ## 编译模型
 
-- 只有一条编译链：`Loader → DT 精化（Elab） → 擦除 codegen（CoreCodegen）`。
+- 只有一条编译链：`Loader → DT 精化（Elab） → 擦除 codegen（Codegen）`。
   `check` / `compile` / `build` / `seed` 与语言夹具全部走它，没有可切换的检查器。
 - codegen 只用 OCaml 标准库、不依赖解释循环；已做 Kosaraju SCC 分组、比较运算符
   特化（`bi_eq_int` 等）、`&&`/`||` 短路降级、零参顶层定义 thunk 化。

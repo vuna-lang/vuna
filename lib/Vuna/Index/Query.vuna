@@ -1,0 +1,58 @@
+module Vuna.Index.Query (findSymbol, impactOf, listAllSymbols) where
+
+-- Vuna.Index.Query：符号查找（全名/裸名/后缀）与改动影响面（M24 后维护·源码重组）。
+-- 影响面来自 Scan 预先算好的 refs 反向边，不重新解析源码。
+import Vuna.Compiler.Common
+import Vuna.Index.Types
+
+-- ---------------------------------------------------------------
+-- 查找与影响面
+-- ---------------------------------------------------------------
+findSymbol : Index -> String -> Result (List Sym)
+findSymbol index query =
+  let
+    syms = indexSymbols index
+    exact = filter (\s => symFullName s == query) syms
+  in case exact of
+    _ :: _ => Ok exact
+    [] => findByBare syms query
+
+findByBare : List Sym -> String -> Result (List Sym)
+findByBare syms query =
+  let
+    bare = filter (\s => symName s == query) syms
+  in case bare of
+    _ :: _ => Ok bare
+    [] => findBySuffix syms query
+
+findBySuffix : List Sym -> String -> Result (List Sym)
+findBySuffix syms query =
+  let
+    suffix = "." ++ query
+    hits = filter (\s => endsWith suffix (symFullName s)) syms
+  in case hits of
+    [] => Err ("no such symbol: " ++ query)
+    _ => Ok hits
+
+-- 影响面：引用该符号的模块（来自 refs 反向边）+ 建议测试标签。
+impactOf : Index -> String -> Result String
+impactOf index query = case findSymbol index query of
+  Err e => Err e
+  Ok syms =>
+    let
+      names = map symName syms
+      refs = indexRefs index
+      readers = distinct (map firstOf (filter (\r => memName (secondOf r) names) refs))
+    in Ok
+      ("symbol: " ++ join ", " (map symFullName syms) ++ "\n" ++ "readers: " ++ join ", " readers ++ "\n" ++ "tests: " ++ testTagsFor syms ++ "\n")
+
+testTagsFor : List Sym -> String
+testTagsFor syms = tagsOfKinds (map symKind syms)
+
+tagsOfKinds : List String -> String
+tagsOfKinds kinds =
+  if memName "trait" kinds then "traits, run"
+  else if memName "data" kinds || memName "record" kinds then "records, run" else "run, stdlib"
+
+listAllSymbols : Index -> List Sym
+listAllSymbols index = indexSymbols index

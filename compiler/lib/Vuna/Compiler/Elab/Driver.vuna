@@ -1,0 +1,317 @@
+module Vuna.Compiler.Elab.Driver
+  ( DtGoalInfo(..)
+  , anyAltHasMeta
+  , anyArgHasMeta
+  , checkAllDefined
+  , checkTerminationIf
+  , ctxDepthOf
+  , ctxEntriesAt
+  , ctxEntriesOf
+  , dtEvalExprIn
+  , dtGoalInfoCtx
+  , dtGoalInfoGoal
+  , dtGoalInfoSpan
+  , elabBodies
+  , elabProgram
+  , elabProgramFull
+  , elabProgramFullWith
+  , elabProgramGo
+  , elabProgramWith
+  , elabSigs
+  , findDefWithMeta
+  , findGoal
+  , goalInfoOf
+  , goalsOfProgram
+  , hasFunClause
+  , metaOwnerHint
+  , resolveDictGoalsFix
+  , rezonkDefs
+  , termHasMeta
+  , unsolvedFromRelevant
+  , unsolvedMessage
+  , unsolvedMeta
+  , zonkGoal
+  ) where
+
+-- Vuna.Compiler.Elab.Driver：精化入口与程序组装：签名 → data/trait/instance → 定义体 → zonk/终止性检查 → DtProgram；
+-- 以及目标（goal）收集与未解元变量的诊断（zonkGoal/goalsOfProgram/elabProgram*）。
+-- 拆自 M24 的单一 `Elab.vuna`（按真实调用图切；门面仍是 `Vuna.Compiler.Elab`）。
+import Vuna.Compiler.Common
+import Vuna.Compiler.Core
+import Vuna.Compiler.Elab.Data
+import Vuna.Compiler.Elab.Derive
+import Vuna.Compiler.Elab.Dict
+import Vuna.Compiler.Elab.Meta
+import Vuna.Compiler.Elab.Prelude
+import Vuna.Compiler.Elab.Records
+import Vuna.Compiler.Elab.Term
+import Vuna.Compiler.Elab.Termination
+import Vuna.Compiler.Elab.Trait
+import Vuna.Compiler.Elab.Types
+import Vuna.Compiler.Frontend.Ast
+
+unsolvedMeta : Ec -> Maybe Int
+unsolvedMeta ec = unsolvedFromRelevant 0 (ecNext ec) (ecSols ec) (relevantMetas ec) (ecGoals ec)
+
+-- M23：只把「运行时相关位置」出现的元变量当未解错误。HM 生成的签名会把某些类型参数隐式
+-- 量化（f : t1 -> List (Pair t1 t2) -> ...），调用点传 Nil 这类多态值时不约束 t2，
+-- 于是留一个只出现在擦除位置的元变量——它对运行时没有意义（codegen 不生成该实参），
+-- 不应算错误。洞（有 goal 的元变量）永远算未解。
+unsolvedFromRelevant : Int -> Int -> List (Pair Int Value) -> List Int -> List DtGoal -> Maybe Int
+unsolvedFromRelevant i stop sols relevant goals = if i >= stop then Nothing
+else case metaLookup i sols of
+  Just _ => unsolvedFromRelevant (i + 1) stop sols relevant goals
+  Nothing =>
+    if memMetaId i relevant || isJust (findGoal i goals) then Just i
+    else unsolvedFromRelevant (i + 1) stop sols relevant goals
+
+-- ---------------------------------------------------------------
+-- 精化入口
+-- ---------------------------------------------------------------
+-- 按源顺序精化签名：每个签名只对「prelude + 之前的签名」可见。
+elabSigs : List (Pair String Expr) -> List (Pair String Term) -> Ec -> Result (Pair (List (Pair String Term)) Ec)
+elabSigs [] globals ec = Ok (Pair globals ec)
+elabSigs ((Pair name tyExpr) :: rest) globals ec = andThen (checkType globals emptyCtx ec tyExpr) (\p => case p of
+  -- M24.5：签名会被存进 globals 在**别处**求值，检查期已解元变量必须内联（与构造子类型同因）：
+  -- `dup : (a : Type) -> (x : a) -> Eq x x` 的结果里 Eq 的隐式族参数解成签名自己的 `a`，
+  -- 留在签名里会在调用点变成悬空变量（`expected Nat, got a`）。
+  Pair tyTerm0 (Pair sortLvl ec1) =>
+    elabSigs rest (append globals [Pair name (inlineSolvedMetas ec1 0 tyTerm0)]) ec1
+)
+
+elabBodies : List Decl -> List (Pair String Term) -> List (Pair String Term) -> List DtDef -> Ec -> Result (Pair (List DtDef) Ec)
+elabBodies [] globals doneDefs acc ec = Ok (Pair (reverse acc) ec)
+elabBodies (d :: rest) globals doneDefs acc ec = case d of
+  DFun name pats body sp => case globalLookup name globals of
+    Nothing => errAt sp ("DT: expected a type signature for " ++ name)
+    Just tyTerm => if memDefName name doneDefs then elabBodies rest globals doneDefs acc ec
+    else andThen (elabFunDef globals ec (clausesFor (d :: rest) name) (eval [] tyTerm) sp) (\p => case p of
+      Pair bodyTerm ec1 =>
+        let
+          lifted = liftFreeDictGoals name ec1 tyTerm bodyTerm
+          liftedTy = firstOf lifted
+          liftedBody = firstOf (secondOf lifted)
+          liftedEc = secondOf (secondOf lifted)
+          cleanTerm = substDictTerm liftedEc liftedBody
+          globals2 = replaceGlobalType name liftedTy globals
+        in elabBodies rest globals2 (Pair name liftedTy :: doneDefs)
+          (DtDef name liftedTy cleanTerm :: acc) (ecAddDef liftedEc (Pair name cleanTerm))
+    )
+  _ => elabBodies rest globals doneDefs acc ec
+
+-- 每个签名都必须有定义（M13 不支持公理/未定义顶层）。
+checkAllDefined : List (Pair String Expr) -> List (Pair String Term) -> List Decl -> Result (List String)
+checkAllDefined [] globals decls = Ok []
+checkAllDefined ((Pair name tyExpr) :: rest) globals decls = if hasFunClause name decls then case globalLookup name globals of
+  Nothing => Err ("DT: signature for " ++ name ++ " has no definition")
+  Just ty => checkAllDefined rest globals decls
+else Err ("DT: signature for " ++ name ++ " has no definition")
+
+hasFunClause : String -> List Decl -> Bool
+hasFunClause name [] = False
+hasFunClause name (d :: rest) = case d of
+  DFun n pats body sp => if n == name then True else hasFunClause name rest
+  _ => hasFunClause name rest
+
+-- ---------------------------------------------------------------
+-- M23：REPL 表达式求值（`Vuna.Compiler.Driver.Dt.dtEvalExpr` 的下半段）
+-- ---------------------------------------------------------------
+-- 在**已精化程序**的环境（globals / 实例表 / 类表 / 解表）里精化并求值一条表达式。
+-- 新元变量从程序的元变量游标之后分配，因此程序阶段遗留的 meta 只可能已解
+-- （`elabProgramGo` 已校验过）；表达式自己留下的未解 meta 单独报清晰错误。
+-- 字典约束（`==` 等）用与定义体相同的收敛回填，最后在 defs + 解表上归一化并 show。
+dtEvalExprIn : DtProgram -> Expr -> Result String
+dtEvalExprIn prog expr = case prog of
+  DtProgram datas defs goals sols globals insts classes next =>
+    let
+      ec0 =
+        Ec next sols (map (\d => Pair (dtDefName d) (dtDefBody d)) defs) datas [] [] insts classes
+          [] False
+    in andThen (inferE globals emptyCtx ec0 expr) (\p => case p of
+      Pair term (Pair ty ec1) =>
+        let
+          ec2 = resolveDictGoalsFix globals ec1 8
+          sols2 = ecSols ec2
+        in case unsolvedFrom next (ecNext ec2) sols2 of
+          Just m =>
+            errAt (exprSpan expr)
+              ("DT: cannot infer a type for this expression (unsolved metavariable ?" ++ strFromInt m ++ "); add a type annotation")
+          Nothing => case normalize (map (\d => Pair (dtDefName d) (dtDefBody d)) defs) sols2 defaultFuel (eval [] term) of
+            VInt n => Ok (strFromInt n)
+            v => Ok (showValue v)
+    )
+
+-- 精化入口。M19：先做 record 降级（`Elab.Records.prepareDecls`）——record 是纯记法。
+elabProgramFull : List Decl -> Result DtProgram
+elabProgramFull decls = elabProgramFullWith False decls
+
+-- trusted：跳过终止性检查（只给 TCB 包用；见 Dt.dtTrustsTermination）。
+-- 编译器本体的 NbE/重写函数是 fuel 驱动的（`force` / `normalize` / `refineValue` 等），
+-- 结构递归判据写不出来；这些函数是编译器的执行代码，不是被证明的定理。
+elabProgramFullWith : Bool -> List Decl -> Result DtProgram
+elabProgramFullWith trusted decls =
+  andThen (prepareDecls decls)
+    (\ds => andThen (expandDerivings ds) (\ds2 => elabProgramGo trusted ds2))
+
+elabProgramGo : Bool -> List Decl -> Result DtProgram
+elabProgramGo trusted decls = andThen (collectSigs decls) (\sigs => andThen (elabDatas (collectDataDecls decls []) (preludeGlobalsFor (pickListFamily (dataNamesOf decls))) (ecWithTrust trusted ecEmpty)) (\pd => case pd of
+  Pair datas (Pair globals0 ec0) => andThen (elabTraits (collectTraitDecls decls []) globals0 ec0) (\pt => case pt of
+    Pair classDatas (Pair projGlobals (Pair classes ec1)) =>
+      let
+        globals1 = append globals0 projGlobals
+        datas1 = append datas classDatas
+      in andThen (checkInstanceHeads (collectInstDecls decls []) classes globals1 ec1) (\pih => case pih of
+        Pair instHeads ec1b =>
+          let
+            globals2 = append globals1 instHeads
+          in andThen (elabSigs sigs globals2 ec1b) (\p => case p of
+            Pair globals ec2 => andThen (checkAllDefined sigs globals decls) (\_ => andThen (elabBodies decls globals [] [] ec2) (\q => case q of
+              Pair defs0 ec3a =>
+                let
+                  -- M23：字典目标可能在「类参数刚被解出」之后才有唯一实例，而
+                  -- resolveDictGoals 只在 checkByInfer 路径调用；每轮定义体之后先收敛
+                  -- 一轮，定义体里的延迟字典实参要被替换成实例项（否则擦除检查会看到
+                  -- 运行时位置的 TMeta）。
+                  ec3 = resolveDictGoalsFix globals ec3a 8
+                  defs = rezonkDefs ec3 defs0
+                in andThen (elabInstanceBodies (collectInstDecls decls []) classes datas1 globals ec3) (\pi => case pi of
+                  Pair instDefs0 ec4a =>
+                    let
+                      ec4 = resolveDictGoalsFix globals ec4a 8
+                      instDefs = rezonkDefs ec4 instDefs0
+                    in case unsolvedMeta ec4 of
+                      Just m => Err (unsolvedMessage ec4 m)
+                      Nothing =>
+                        let
+                          extra = extraDefsOf globals ec4 (append instDefs defs)
+                          allDefs = rezonkDefs ec4 (append instDefs (append extra defs))
+                        in andThen (checkTerminationIf trusted decls)
+                          (\_ => Ok (DtProgram datas1 allDefs (ecGoals ec4) (ecSols ec4) globals (ecInsts ec4) (ecClasses ec4) (ecNext ec4)))
+                )
+            )
+            )
+          )
+      )
+  )
+)
+)
+
+-- 用当前解重新 zonk 定义体（延迟字典元变量 → 实例项）。
+rezonkDefs : Ec -> List DtDef -> List DtDef
+rezonkDefs ec defs =
+  map (\d => DtDef (dtDefName d) (dtDefType d) (substDictTerm ec (dtDefBody d))) defs
+
+-- 程序级字典目标收敛：反复回填直到字典目标不再减少（最多 n 轮，防振荡）。
+resolveDictGoalsFix : List (Pair String Term) -> Ec -> Int -> Ec
+resolveDictGoalsFix globals ec n =
+  let
+    ec2 = resolveDictGoals globals ec
+  in if n <= 0 then ec2
+  else if length (ecDictGoals ec2) < length (ecDictGoals ec) then resolveDictGoalsFix globals ec2 (n - 1)
+  else ec2
+
+-- 终止性检查开关：trusted 包（编译器自身）跳过结构递归检查。
+checkTerminationIf : Bool -> List Decl -> Result Int
+checkTerminationIf trusted decls = if trusted then Ok 0 else checkTerminationDecls decls
+
+-- M15：未解元变量若来自洞，报洞的目标（而不是光秃秃的编号）。
+unsolvedMessage : Ec -> Int -> String
+unsolvedMessage ec m = case findGoal m (ecGoals ec) of
+  Just g =>
+    "DT: unsolved hole "
+      ++ showSpanLoc (dtGoalSpan g)
+      ++ " with goal "
+      ++ showValueAt (ctxDepthOf g) (dtGoalType g)
+  Nothing => "DT: unsolved metavariable ?" ++ strFromInt m ++ metaOwnerHint ec m
+
+-- 未解元变量的归属提示：扫已精化的定义体与类型，指出它出现在哪个定义里（否则只有 ?m，
+-- 在一个上万行的程序里无从定位）。
+metaOwnerHint : Ec -> Int -> String
+metaOwnerHint ec m = case findDefWithMeta (ecDefs ec) m of
+  Just name => " (in `" ++ name ++ "`)"
+  Nothing => ""
+
+findDefWithMeta : List (Pair String Term) -> Int -> Maybe String
+findDefWithMeta defs m = case defs of
+  [] => Nothing
+  (Pair name body) :: rest =>
+    if termHasMeta m body then Just (name ++ " body=" ++ showTerm body) else findDefWithMeta rest m
+
+termHasMeta : Int -> Term -> Bool
+termHasMeta m t = case t of
+  TMeta k => k == m
+  TVar n i => False
+  TGlobal n => False
+  TType l => False
+  TPi n implicit rig dom cod => termHasMeta m dom || termHasMeta m cod
+  TLam n rig body => termHasMeta m body
+  TApp f a rig => termHasMeta m f || termHasMeta m a
+  TCon c args => anyArgHasMeta m args
+  TCase scrut alts => termHasMeta m scrut || anyAltHasMeta m alts
+  TInt n => False
+  TStr s => False
+  TBool b => False
+  TIf c th el => termHasMeta m c || termHasMeta m th || termHasMeta m el
+
+anyArgHasMeta : Int -> List (Pair Term Rig) -> Bool
+anyArgHasMeta m args = case args of
+  [] => False
+  (Pair a rig) :: rest => termHasMeta m a || anyArgHasMeta m rest
+
+anyAltHasMeta : Int -> List CaseAlt -> Bool
+anyAltHasMeta m alts = case alts of
+  [] => False
+  alt :: rest => termHasMeta m (caseAltBody alt) || anyAltHasMeta m rest
+
+-- 洞目标里的类型是 level 形态，show 时深度取快照上下文的长度。
+ctxDepthOf : DtGoal -> Int
+ctxDepthOf g = length (dtGoalCtx g)
+
+findGoal : Int -> List DtGoal -> Maybe DtGoal
+findGoal m [] = Nothing
+findGoal m (g :: rest) = if dtGoalMeta g == m then Just g else findGoal m rest
+
+-- M15：面向工具链的洞目标查询（LSP / `vuna goal` 用）。
+data DtGoalInfo : Type where
+  DtGoalInfo : Span -> String -> List (Pair String String) -> DtGoalInfo
+
+dtGoalInfoSpan : DtGoalInfo -> Span
+dtGoalInfoSpan (DtGoalInfo sp goal ctx) = sp
+
+dtGoalInfoGoal : DtGoalInfo -> String
+dtGoalInfoGoal (DtGoalInfo sp goal ctx) = goal
+
+dtGoalInfoCtx : DtGoalInfo -> List (Pair String String)
+dtGoalInfoCtx (DtGoalInfo sp goal ctx) = ctx
+
+goalInfoOf : List (Pair Int Value) -> DtGoal -> DtGoalInfo
+goalInfoOf sols g =
+  DtGoalInfo (dtGoalSpan g) (showValueAt (ctxDepthOf g) (zonkGoal sols (dtGoalType g)))
+    (ctxEntriesOf (dtGoalCtx g))
+
+-- 洞目标里的类型可能仍含已解元变量：用当前解表 force 一遍再 show。
+zonkGoal : List (Pair Int Value) -> Value -> Value
+zonkGoal sols v = force [] sols defaultFuel v
+
+-- 上下文条目（名字 + 类型）用于显示：类型项按快照深度用中性环境求值后 show。
+ctxEntriesOf : List (Pair String Term) -> List (Pair String String)
+ctxEntriesOf items = ctxEntriesAt items 0 (length items)
+
+ctxEntriesAt : List (Pair String Term) -> Int -> Int -> List (Pair String String)
+ctxEntriesAt [] idx depth = []
+ctxEntriesAt ((Pair name ty) :: rest) idx depth =
+  Pair name (showValueAt depth (eval (ctxEnvAt (Pair name ty :: rest) 0 depth) (shift 0 (idx + 1) ty)))
+    :: ctxEntriesAt rest (idx + 1) depth
+
+goalsOfProgram : List Decl -> Result (List DtGoalInfo)
+goalsOfProgram decls =
+  andThen (elabProgramFull decls)
+    (\prog => Ok (map (goalInfoOf (dtProgSols prog)) (dtProgGoals prog)))
+
+elabProgram : List Decl -> Result (Pair (List DtData) (List DtDef))
+elabProgram decls = elabProgramWith False decls
+
+elabProgramWith : Bool -> List Decl -> Result (Pair (List DtData) (List DtDef))
+elabProgramWith trusted decls =
+  andThen (elabProgramFullWith trusted decls)
+    (\prog => Ok (Pair (dtProgDatas prog) (dtProgDefs prog)))

@@ -1,0 +1,453 @@
+module Vuna.Compiler.Elab.Case
+  ( BindAcc(..)
+  , Pending(..)
+  , allCtorsUnsatisfiable
+  , allCtorsUnsatisfiableGo
+  , altNames
+  , anyNestedArg
+  , anyNestedPat
+  , baBinders
+  , baPending
+  , bindCtorBinder
+  , bindCtorGo
+  , bindCtorTele
+  , branchReachable
+  , catchAllNotLast
+  , checkCaseDone
+  , checkCoverage
+  , checkCovered
+  , ctorExplicitArity
+  , ctorResultTerms
+  , ctorResultVals
+  , ctorResultValsIn
+  , ctorValueIn
+  , ctxHasEmptyBinder
+  , ctxHasEmptyBinderAt
+  , foldPending
+  , freshPatName
+  , freshTeleVals
+  , hasCatchAll
+  , hasDupNames
+  , hasVarCatchAll
+  , isEmptyFamilyValue
+  , isRigidVal
+  , mkPendingBinder
+  , nestedInPat
+  , occursLevel
+  , occursLevelClo
+  , occursLevelList
+  , pendingName
+  , pendingPat
+  , reflectScrutinee
+  , rigidIdxVals
+  , teleValsFrom
+  , unifyErr
+  , unifyIdx
+  , unifyIdxConv
+  , unifyIdxList
+  , unifyIdxRigid
+  , wildArgs
+  ) where
+
+-- Vuna.Compiler.Elab.Case：case 精化的**基础设施**：索引合一（unifyIdx）、构造子结果值（scrutinee 反射）、
+-- 模式 telescope 绑定（bindCtorTele）、嵌套模式（Pending/foldPending）、覆盖率与分支可达性
+-- （含上下文空归纳族的判定）。case 的检查规则本身与 `checkE` 互递归，留在 `Elab.Term`。
+-- 拆自 M24 的单一 `Elab.vuna`（按真实调用图切；门面仍是 `Vuna.Compiler.Elab`）。
+import Vuna.Compiler.Common
+import Vuna.Compiler.Core
+import Vuna.Compiler.Elab.Meta
+import Vuna.Compiler.Elab.Types
+import Vuna.Compiler.Frontend.Ast
+
+-- ---------------------------------------------------------------
+-- M14：索引合一（unifyIdx）
+-- ---------------------------------------------------------------
+-- 只做索引层面的一阶合一：把 case 分支构造子的结果索引与 scrutinee 的索引对齐。
+-- 可合一 ⇒ 产出精化表（level ↦ Value），分支体内所有类型求值都带上它；
+-- 不可合一 ⇒ 该分支不可达：省略即合法（覆盖率跳过），写出即报错。
+-- 方向约定：优先精化 **level 更大**（更内层）的变量，于是 ctor 一侧的新鲜变量精化成
+-- scrutinee 的真实变量（`m ↦ n`），不会把真实变量解到分支作用域外（level 形态，无需 de Bruijn）。
+unifyErr : Result a
+unifyErr = Err "DT: this branch is impossible (index constraints are unsatisfiable)"
+
+unifyIdxList : Ec -> List (Pair Int Value) -> Int -> Int -> List Value -> List Value -> Result (List (Pair Int Value))
+unifyIdxList ec acc depth fuel [] [] = Ok acc
+unifyIdxList ec acc depth fuel (x :: xs) (y :: ys) =
+  andThen (unifyIdx ec acc depth (fuel - 1) x y)
+    (\acc2 => unifyIdxList ec acc2 depth (fuel - 1) xs ys)
+unifyIdxList ec acc depth fuel _ _ = unifyErr
+
+unifyIdx : Ec -> List (Pair Int Value) -> Int -> Int -> Value -> Value -> Result (List (Pair Int Value))
+unifyIdx ec acc depth fuel a b = if fuel <= 0 then Err "DT: index unification ran out of reduction fuel"
+else
+  let
+    a2 = force (ecDefs ec) (ecSols ec) defaultFuel (refineValue acc defaultFuel a)
+    b2 = force (ecDefs ec) (ecSols ec) defaultFuel (refineValue acc defaultFuel b)
+  in case a2 of
+    VNeutral (NVar an al []) => case b2 of
+      VNeutral (NVar bn bl []) =>
+        if al == bl then Ok acc
+        else if al < bl then if occursLevel bl a2 then unifyErr else Ok (Pair bl a2 :: acc)
+        else if occursLevel al b2 then unifyErr else Ok (Pair al b2 :: acc)
+      _ => if occursLevel al b2 then unifyErr else Ok (Pair al b2 :: acc)
+    _ => case b2 of
+      VNeutral (NVar bn bl []) => if occursLevel bl a2 then unifyErr else Ok (Pair bl a2 :: acc)
+      _ => unifyIdxRigid ec acc depth a2 b2
+
+-- occurs check：精化成自己会导致无限链。
+occursLevel : Int -> Value -> Bool
+occursLevel lvl v = case v of
+  VNeutral n => case n of
+    NVar name l sp => l == lvl || occursLevelList lvl sp
+    NGlobal g sp => occursLevelList lvl sp
+  VPi name implicit rig dom clo => occursLevel lvl dom || occursLevelClo lvl clo
+  VLam name rig clo => occursLevelClo lvl clo
+  VMeta m sp => occursLevelList lvl sp
+  VCon c args => occursLevelList lvl args
+  VCase scrut alts => occursLevel lvl scrut
+  VIf c th el => occursLevel lvl c || occursLevel lvl th || occursLevel lvl el
+  VType l => False
+  VInt n => False
+  VStr s => False
+  VBool b => False
+
+occursLevelList : Int -> List Value -> Bool
+occursLevelList lvl [] = False
+occursLevelList lvl (v :: rest) = occursLevel lvl v || occursLevelList lvl rest
+
+occursLevelClo : Int -> Closure -> Bool
+occursLevelClo lvl clo = case clo of
+  Clos env body => occursLevelList lvl env
+
+-- 刚性位置：构造子/中性头按结构递归，其余回落到 conv 的相等性判定。
+unifyIdxRigid : Ec -> List (Pair Int Value) -> Int -> Value -> Value -> Result (List (Pair Int Value))
+unifyIdxRigid ec acc depth a b = case a of
+  VCon c xs => case b of
+    VCon c2 ys => if c == c2 then unifyIdxList ec acc depth defaultFuel xs ys else unifyErr
+    _ => unifyErr
+  VNeutral (NGlobal g sp) => case b of
+    VNeutral (NGlobal g2 sp2) =>
+      if g == g2 then unifyIdxList ec acc depth defaultFuel sp sp2
+      else unifyIdxConv ec acc depth a b
+    _ => unifyIdxConv ec acc depth a b
+  VType i => case b of
+    VType j => if levelEq i j then Ok acc else unifyErr
+    _ => unifyErr
+  VInt n => case b of
+    VInt m => if n == m then Ok acc else unifyErr
+    _ => unifyErr
+  VStr s => case b of
+    VStr s2 => if s == s2 then Ok acc else unifyErr
+    _ => unifyErr
+  VBool x => case b of
+    VBool y => if x == y then Ok acc else unifyErr
+    _ => unifyErr
+  _ => unifyIdxConv ec acc depth a b
+
+-- conv 回落：只判定相等（索引里的 meta 求解读 M15）。
+unifyIdxConv : Ec -> List (Pair Int Value) -> Int -> Value -> Value -> Result (List (Pair Int Value))
+unifyIdxConv ec acc depth a b = case conv (ecDefs ec) (ecSols ec) depth a b of
+  Ok sols2 => Ok acc
+  Err e => unifyErr
+
+-- 构造子结果索引的新鲜实例（可达性分析 / 分支合一用）。
+freshTeleVals : List (Pair String Rig) -> Int -> Int -> List Value
+freshTeleVals [] base i = []
+freshTeleVals ((Pair name erased) :: rest) base i =
+  VNeutral (NVar name (base + i) []) :: freshTeleVals rest base (i + 1)
+
+ctorResultVals : DtCtor -> Int -> List Value
+ctorResultVals c base =
+  let
+    tele = dtCtorTelescope c
+    env = reverse (freshTeleVals tele base 0)
+  in map (\t => eval env t) (ctorResultTerms c)
+
+-- 分支里的结果索引：用分支上下文（含已绑定的构造子字段）求值。
+-- 于是 `Cons b m y ys` 的结果索引 `Vec b (Succ m)` 里出现的就是这些真实 binder，
+-- 合一 `b ↦ a`、`Succ m ↦ n` 后分支体的类型自动被精化。
+ctorResultValsIn : Ctx -> DtCtor -> List Value
+ctorResultValsIn ctx c = map (\t => evalCtx ctx t) (ctorResultTerms c)
+
+ctorResultTerms : DtCtor -> List Term
+ctorResultTerms c = case resultSpine (dtCtorType c) of
+  Pair head args => args
+
+-- M24.5：分支里构造子的**值** `VCon c [telescope 各 binder 的值]`。
+-- bindCtorTele 刚把 telescope 绑到分支上下文末尾，binder i（telescope 顺序）的 level 是
+-- `depth - n + i`，按该顺序排列即 VCon 实参顺序（与求值器 / TCon 实参对齐约定一致）。
+ctorValueIn : Ctx -> DtCtor -> Value
+ctorValueIn ctx c =
+  VCon (dtCtorName c)
+    (teleValsFrom (ctxDepth ctx - length (dtCtorTelescope c)) (length (dtCtorTelescope c)))
+
+teleValsFrom : Int -> Int -> List Value
+teleValsFrom low k =
+  if k <= 0 then [] else VNeutral (NVar "_tele" low []) :: teleValsFrom (low + 1) (k - 1)
+
+-- M24.5：**scrutinee 反射**。旧实现只把构造子的结果**索引**与 scrutinee 的索引合一，
+-- 于是 `case n of ...`（n 是裸 Nat 形参、族没有索引）或「包装族」上完全拿不到等式，
+-- goal 里的 n 不会被精化成 `Zero` / `Succ k`。这里在索引合一之后，再把 scrutinee 的
+-- **值**（`evalCtx ctx scrutTerm`）与构造子结果值（`ctorValueIn`）合一，得到的 refs 同时
+-- 用于 `refineValue expected` 与 `ctxRefine`。
+-- 只对**中性变量**（`NVar` 且 spine 为空）反射：非变量 scrutinee（`f x`、字面量、别的
+-- 分支绑定子……）拿不到等式，保持旧行为；Bool/Int/String 的 case 走各自的专用路径，
+-- 不会到这里。
+reflectScrutinee : Ec -> Int -> List (Pair Int Value) -> Value -> Value -> Result (List (Pair Int Value))
+reflectScrutinee ec depth refs ctorVal scrutVal = case force (ecDefs ec) (ecSols ec) defaultFuel (refineValue refs defaultFuel scrutVal) of
+  VNeutral n => case n of
+    NVar name lvl [] => unifyIdx ec refs depth defaultFuel (VNeutral n) ctorVal
+    _ => Ok refs
+  _ => Ok refs
+
+-- ---------------------------------------------------------------
+-- M14：case 精化 + 覆盖率
+-- ---------------------------------------------------------------
+-- M19：嵌套构造子模式。做法是**把嵌套模式改写成嵌套 case**：
+-- `Cons a (Succ k) rest => body` 变成 `Cons a x1 rest => case x1 of Succ k => body`。
+-- 不需要新的精化规则或 Core 构造子——内层 case 走既有的索引合一与覆盖率检查，语义与手写
+-- 嵌套 case 一致，天然支持任意深度。绑定 telescope 时把非变量子模式收集成「新鲜 binder +
+-- 待匹配 (pat, var)」，分支体精化前把待匹配列表折成由内向外的内层 case。
+data Pending : Type where
+  Pending : Pat -> String -> Pending
+
+pendingPat : Pending -> Pat
+pendingPat (Pending p n) = p
+
+pendingName : Pending -> String
+pendingName (Pending p n) = n
+
+-- bindCtorGo 的累加器：telescope 绑定子（逆序）+ 待展开的嵌套模式（正序）。
+data BindAcc : Type where
+  BindAcc : List (Pair String Rig) -> List Pending -> BindAcc
+
+baBinders : BindAcc -> List (Pair String Rig)
+baBinders (BindAcc bs ps) = bs
+
+baPending : BindAcc -> List Pending
+baPending (BindAcc bs ps) = ps
+
+bindCtorTele : Ctx -> Term -> List Pat -> Result (Pair Ctx (Pair (List (Pair String Rig)) (Pair (List Pending) (List Pat))))
+bindCtorTele ctx ty subpats = bindCtorGo ctx ty subpats (BindAcc [] [])
+
+bindCtorGo : Ctx -> Term -> List Pat -> BindAcc -> Result (Pair Ctx (Pair (List (Pair String Rig)) (Pair (List Pending) (List Pat))))
+bindCtorGo ctx ty subpats acc = case ty of
+  TPi name implicit rig dom cod =>
+    let
+      domVal = eval (ctxEnv ctx) dom
+    in if implicit then
+      let
+        -- 隐式族参数只服务类型层，用带前缀的新名字绑定，避免和用户模式变量/外层变量同名
+        -- 造成遮蔽：嵌套模式的折叠会以内层 case 包住用户体，内层 ctor 的隐式 `a`
+        -- 若与用户绑定的 `a` 同名，体里的 `a` 会被解析成 Type。
+        famName = name ++ "#fam"
+        ctx2 = ctxBindValue famName domVal ctx
+      in bindCtorGo ctx2 cod subpats (BindAcc (Pair famName Rig0 :: baBinders acc) (baPending acc))
+    else case subpats of
+      [] => Err "DT: case branch has too few arguments for its constructor"
+      p :: rest => case p of
+        PVar pname psp => bindCtorBinder ctx domVal cod pname rest acc
+        PWild psp => bindCtorBinder ctx domVal cod "_" rest acc
+        PCon cname args psp =>
+          let
+            -- 嵌套模式：绑一个新鲜名字占位，把 (子模式, 名字) 记下来稍后折成内层 case。
+            fresh = freshPatName (length (baPending acc))
+            ctx2 = ctxBindValue fresh domVal ctx
+          in bindCtorGo ctx2 cod rest
+            (BindAcc (Pair fresh (binderRig False domVal) :: baBinders acc) (append (baPending acc) [Pending p fresh]))
+        -- M23：嵌套字面量模式（`EApp (EVar "->" _) [x, y] _`、`Just 0`）同样折成
+        -- 内层 case——字面量 case 在 DT 里降级成 if 链，需要外层兜底体提供 else。
+        PInt n psp => mkPendingBinder ctx domVal cod p rest acc
+        PStr s psp => mkPendingBinder ctx domVal cod p rest acc
+        _ => errAt (patSpan p) "DT: nested patterns must be constructor patterns (M19)"
+  _ => Ok (Pair ctx (Pair (reverse (baBinders acc)) (Pair (baPending acc) subpats)))
+
+-- 嵌套模式的通用处理：绑新鲜名字、记 Pending，继续绑 telescope。
+mkPendingBinder : Ctx -> Value -> Term -> Pat -> List Pat -> BindAcc -> Result (Pair Ctx (Pair (List (Pair String Rig)) (Pair (List Pending) (List Pat))))
+mkPendingBinder ctx domVal cod p rest acc =
+  let
+    fresh = freshPatName (length (baPending acc))
+    ctx2 = ctxBindValue fresh domVal ctx
+  in bindCtorGo ctx2 cod rest
+    (BindAcc (Pair fresh (binderRig False domVal) :: baBinders acc) (append (baPending acc) [Pending p fresh]))
+
+freshPatName : Int -> String
+freshPatName i = "_np" ++ strFromInt i
+
+bindCtorBinder : Ctx -> Value -> Term -> String -> List Pat -> BindAcc -> Result (Pair Ctx (Pair (List (Pair String Rig)) (Pair (List Pending) (List Pat))))
+bindCtorBinder ctx domVal cod binderName rest acc =
+  let
+    ctx2 = ctxBindValue binderName domVal ctx
+  in bindCtorGo ctx2 cod rest
+    (BindAcc (Pair binderName (binderRig False domVal) :: baBinders acc) (baPending acc))
+
+-- 折成内层 case：`[Pending p1 v1, Pending p2 v2]` + body
+-- → `case v1 of p1 => (case v2 of p2 => body)`（收集顺序即由外到内）。
+-- **兜底分支要一并下沉**：`case xs of (x :: Nil) => a; _ => b` 里外层已进入 Cons 分支，
+-- 尾表不是 Nil 时必须落到 `b`；旧实现只建 `case tail of Nil => a`，覆盖检查报
+-- `missing Cons`（且运行时无处可落）。每一层内层 case 都带上同一个兜底体（Expr 而非
+-- Term，按名字重新精化，各层上下文自然不同）。
+foldPending : Maybe Expr -> List Pending -> Expr -> Expr
+foldPending fb [] body = body
+foldPending fb (p :: rest) body =
+  let
+    ps = patSpan (pendingPat p)
+    patAlt = Pair (pendingPat p) (foldPending fb rest body)
+  in case fb of
+    Just fbExpr => ECase (EVar (pendingName p) ps) [patAlt, Pair (PWild ps) fbExpr] ps
+    Nothing => ECase (EVar (pendingName p) ps) [patAlt] ps
+
+altNames : List (Pair Pat Expr) -> List String
+altNames [] = []
+altNames (alt :: rest) = case alt of
+  Pair pat body => case pat of
+    PCon cname args psp => cname :: altNames rest
+    _ => altNames rest
+
+hasCatchAll : List (Pair Pat Expr) -> Bool
+hasCatchAll [] = False
+hasCatchAll (alt :: rest) = case alt of
+  Pair pat body => case pat of
+    PCon cname args psp => hasCatchAll rest
+    _ => True
+
+hasDupNames : List String -> Bool
+hasDupNames [] = False
+hasDupNames (x :: rest) = memName x rest || hasDupNames rest
+
+-- ---------------------------------------------------------------------------
+-- M24.5：分支可达性（覆盖率跳过不可达分支）
+-- ---------------------------------------------------------------------------
+-- 判据两层（任何一层判「不可达」都允许省略该分支）：
+--  ① 构造子结果索引与 scrutinee 索引合一失败（M14 既有规则）——如 `Vec a (Succ n)` 上的 Nil；
+--  ② 分支 telescope 绑定 + 索引合一之后，**分支上下文里有 binder 的类型是空归纳族**——
+--     如 `lookupEnv env i = case env of ECons ... => ...`：进 ENil 分支时 n 精化成 Zero，
+--     于是 `i : Fin Zero`。空类型上的 binder 说明这条分支永远进不去，体也无从构造。
+-- 实现沿用分支精化的 machinery：bindCtorTele 绑哑通配（只借它的绑定与求值），不产生项。
+branchReachable : Ctx -> Ec -> List Value -> DtCtor -> Bool
+branchReachable ctx ec idxs ctor = case bindCtorTele ctx (dtCtorType ctor) (wildArgs (ctorExplicitArity (dtCtorType ctor))) of
+  Err e => True
+  Ok (Pair branchCtx (Pair binders (Pair pending leftover))) => if nonEmpty leftover then True
+  else case unifyIdxList ec [] (ctxDepth branchCtx) defaultFuel (ctorResultValsIn branchCtx ctor) (map (refineValue [] defaultFuel) idxs) of
+    Err e => False
+    Ok refs => not (ctxHasEmptyBinder ec (ctxRefine branchCtx refs))
+
+wildArgs : Int -> List Pat
+wildArgs n = if n <= 0 then [] else PWild (Span "" 0 0 0 0) :: wildArgs (n - 1)
+
+-- 构造子类型的显式 binder 个数 = case 分支要写的模式个数（隐式 binder 由 bindCtorTele 自理）。
+ctorExplicitArity : Term -> Int
+ctorExplicitArity t = case t of
+  TPi n implicit rig dom cod =>
+    if implicit then ctorExplicitArity cod else 1 + ctorExplicitArity cod
+  _ => 0
+
+-- 分支上下文里是否有 binder 的类型求值后是空归纳族。
+ctxHasEmptyBinder : Ec -> Ctx -> Bool
+ctxHasEmptyBinder ec ctx = ctxHasEmptyBinderAt ec ctx 0 (ctxItems ctx)
+
+ctxHasEmptyBinderAt : Ec -> Ctx -> Int -> List (Pair String Term) -> Bool
+ctxHasEmptyBinderAt ec ctx idx items = case items of
+  [] => False
+  (Pair name ty) :: rest =>
+    if isEmptyFamilyValue ec (ctxDepth ctx) (varTypeValue ctx idx ty) then True
+    else ctxHasEmptyBinderAt ec ctx (idx + 1) rest
+
+-- 值是不是「空归纳族」：族已知，且**每个**构造子的结果索引都与这些索引合一失败
+-- （`Fin Zero`、零构造子的族都算）。合一是本地试算、不提交，所以只会误判成「非空」（保守）。
+isEmptyFamilyValue : Ec -> Int -> Value -> Bool
+isEmptyFamilyValue ec depth v = case forceVal ec v of
+  VNeutral n => case n of
+    -- 只有**索引全刚性**时才敢判空：索引里出现中性项（`Fin (plus x Zero)`）时，「合一一律失败」
+    -- 并不代表类型空（`plus x Zero` 也许能算到 `Succ k`，只是现在卡住）。这类情况保守判非空，
+    -- 于是覆盖率仍要求写分支（宁可多要一个分支，不可放过真的非穷尽）。
+    NGlobal g sp => if not (rigidIdxVals sp) then False
+    else case dtDataLookup g (ecDatas ec) of
+      Just dd => allCtorsUnsatisfiable ec dd sp depth
+      Nothing => False
+    _ => False
+  _ => False
+
+rigidIdxVals : List Value -> Bool
+rigidIdxVals [] = True
+rigidIdxVals (x :: rest) = isRigidVal x && rigidIdxVals rest
+
+isRigidVal : Value -> Bool
+isRigidVal v = case v of
+  VCon c args => rigidIdxVals args
+  VType l => True
+  VInt n => True
+  VStr s => True
+  VBool b => True
+  _ => False
+
+allCtorsUnsatisfiable : Ec -> DtData -> List Value -> Int -> Bool
+allCtorsUnsatisfiable ec dd idxs depth = allCtorsUnsatisfiableGo ec (dtDataCtors dd) idxs depth
+
+allCtorsUnsatisfiableGo : Ec -> List DtCtor -> List Value -> Int -> Bool
+allCtorsUnsatisfiableGo ec [] idxs depth = True
+allCtorsUnsatisfiableGo ec (ctor :: rest) idxs depth = case unifyIdxList ec [] depth defaultFuel (ctorResultVals ctor depth) idxs of
+  Ok refs => False
+  Err e => allCtorsUnsatisfiableGo ec rest idxs depth
+
+-- 覆盖率：可达的构造子必须都出现；不可达的可以省略（写了会被 elabConAlt 拒）。
+-- 性能：**已写出的分支直接跳过**（不跑可达性），只有「没写的构造子」才需要判可达性——
+-- 否则每个 case 的每个构造子都要模拟一次分支（绑定 telescope + 上下文空类型检查），
+-- 编译器自检会慢 4 倍以上。
+checkCoverage : Ctx -> Ec -> DtData -> List Value -> List (Pair Pat Expr) -> Span -> Result Int
+checkCoverage ctx ec dd idxs alts sp =
+  checkCovered ctx ec dd idxs (altNames alts) alts sp (dtDataCtors dd)
+
+checkCovered : Ctx -> Ec -> DtData -> List Value -> List String -> List (Pair Pat Expr) -> Span -> List DtCtor -> Result Int
+checkCovered ctx ec dd idxs written alts sp [] = Ok 0
+checkCovered ctx ec dd idxs written alts sp (ctor :: rest) =
+  if memName (dtCtorName ctor) written then checkCovered ctx ec dd idxs written alts sp rest
+  else if ecTrusted ec then checkCovered ctx ec dd idxs written alts sp rest
+  else if branchReachable ctx ec idxs ctor then errAt sp ("DT: case is not exhaustive: missing " ++ dtCtorName ctor)
+  else checkCovered ctx ec dd idxs written alts sp rest
+
+-- case：先验 scrutinee 是归纳族，再逐分支精化，最后查覆盖率。
+-- M23：同一构造子在 case 里出现多次是合法写法（`Just (TStr s) => ...` 之后又有
+-- `Just v => ...`），但 DT 的 case 精化按「每构造子一个分支」组织。重复时先按 Elab.Match
+-- 的模式矩阵把整个 case 降级成单分支嵌套 case，再用 let 绑定 scrutinee 保证只求值一次。
+-- M23：带**嵌套模式**的 case（`[y]` = `Cons y Nil`）走 Elab.Match 的模式矩阵降级：
+-- 直接在精化器里把嵌套模式折成内层 case 时，兜底分支的体会被内联到更深的 binder
+-- 作用域（§foldPending），体里引用外层绑定会错位。矩阵降级生成的是**表达式**，
+-- 名字在重新精化时按作用域解析，不会错位。
+anyNestedPat : List (Pair Pat Expr) -> Bool
+anyNestedPat [] = False
+anyNestedPat (alt :: rest) = case alt of
+  Pair pat body => if nestedInPat pat then True else anyNestedPat rest
+
+nestedInPat : Pat -> Bool
+nestedInPat p = case p of
+  PCon c args sp => anyNestedArg args
+  _ => False
+
+anyNestedArg : List Pat -> Bool
+anyNestedArg [] = False
+anyNestedArg (a :: rest) = case a of
+  PVar n psp => anyNestedArg rest
+  PWild psp => anyNestedArg rest
+  _ => True
+
+hasVarCatchAll : List (Pair Pat Expr) -> Bool
+hasVarCatchAll alts = case reverse alts of
+  [] => False
+  alt :: rest => case alt of
+    Pair pat body => case pat of
+      PVar pname psp => True
+      _ => False
+
+catchAllNotLast : List (Pair Pat Expr) -> Bool
+catchAllNotLast alts = case alts of
+  [] => False
+  alt :: rest => case alt of
+    Pair pat body => case pat of
+      PCon cname args psp => catchAllNotLast rest
+      _ => nonEmpty rest
+
+checkCaseDone : Ec -> Ctx -> DtData -> List Value -> List (Pair Pat Expr) -> Value -> Span -> Term -> List CaseAlt -> Result (Pair Term Ec)
+checkCaseDone ec ctx dd idxs alts expected sp scrutTerm altTerms =
+  if hasCatchAll alts then Ok (Pair (TCase scrutTerm altTerms) ec)
+  else andThen (checkCoverage ctx ec dd idxs alts sp) (\_ => Ok (Pair (TCase scrutTerm altTerms) ec))

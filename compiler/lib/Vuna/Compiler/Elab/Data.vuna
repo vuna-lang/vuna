@@ -1,0 +1,225 @@
+module Vuna.Compiler.Elab.Data
+  ( candidateNames
+  , candidateOf
+  , ctorFieldGo
+  , ctorFieldTerms
+  , elabCtor
+  , elabCtors
+  , elabDataBodies
+  , elabDataHead
+  , elabDataHeads
+  , elabDataHeadsNoProgress
+  , elabDataHeadsRound
+  , elabDatas
+  , eraseIndexMask
+  , eraseMaskGo
+  , indexErasureCandidates
+  , paramUsedInFieldTys
+  , termUsesVar
+  , termUsesVarAlts
+  , termUsesVarArgs
+  , usedInCtor
+  , usedInCtors
+  , usedInTele
+  , usedInTeleGo
+  ) where
+
+-- Vuna.Compiler.Elab.Data：data 声明与构造子/索引擦除：elabCtor/elabDataHead/elabDataHeads/elabDataBodies/elabDatas，
+-- 以及按「索引是否在字段类型里被使用」计算的擦除掩码（eraseIndexMask/indexErasureCandidates）。
+-- 拆自 M24 的单一 `Elab.vuna`（按真实调用图切；门面仍是 `Vuna.Compiler.Elab`）。
+import Vuna.Compiler.Common
+import Vuna.Compiler.Core
+import Vuna.Compiler.Elab.Meta
+import Vuna.Compiler.Elab.Prelude
+import Vuna.Compiler.Elab.Term
+import Vuna.Compiler.Elab.Types
+import Vuna.Compiler.Frontend.Ast
+
+-- 精化一个构造子：类型是「Pi 链 → F r1..rk」。
+elabCtor : List (Pair String Term) -> String -> Int -> Ec -> Ctor -> Result (Pair DtCtor Ec)
+elabCtor globals fam arity ec c = case c of
+  Ctor cname tyExpr arityHint csp =>
+    let
+      -- M20：`data Foo a : Type` 的构造子类型不写 `{a : Type} ->`，这里把族参数补成隐式
+      -- `EPi` 再检查（`a -> Foo a` ⇒ `{a : Type} -> a -> Foo a`），与显式写法形状一致。
+      famKind = case globalLookup fam globals of
+        Just k => k
+        Nothing => TType levelZero
+      tyExpr2 = if hasFamParams tyExpr then tyExpr else prependFamParams famKind tyExpr csp
+    in andThen (checkType globals emptyCtx ec tyExpr2) (\pk => case pk of
+      Pair tyTerm0 (Pair sort ec1) =>
+        let
+          tyTerm = inlineSolvedMetas ec1 0 tyTerm0
+        in case resultSpine (dropParams tyTerm) of
+          Pair head args =>
+            if head /= fam then errAt csp ("DT: constructor " ++ cname ++ " does not return " ++ fam)
+            else if length args /= arity then errAt csp
+              ("DT: constructor " ++ cname ++ " has the wrong number of indices for " ++ fam)
+            else Ok (Pair (DtCtor cname fam (teleOfType tyTerm) tyTerm) ec1)
+    )
+
+elabCtors : List (Pair String Term) -> String -> Int -> Ec -> List Ctor -> Result (Pair (List DtCtor) Ec)
+elabCtors globals fam arity ec [] = Ok (Pair [] ec)
+elabCtors globals fam arity ec (c :: rest) = andThen (elabCtor globals fam arity ec c) (\p => case p of
+  Pair dc ec1 => andThen (elabCtors globals fam arity ec1 rest) (\q => case q of
+    Pair dcs ec2 => Ok (Pair (dc :: dcs) ec2)
+  )
+)
+
+-- Phase A：只精化 kind、登记族名。构造子字段可以引用**后面**声明的族（AST 里
+-- `Field` 引用后面的 `Expr`、`Expr` 与 `DoStmt` 互递归），所以必须先登记所有族。
+-- kind 之间也可能互相引用（`data Vec : Type -> Nat -> Type`），用「一轮能算多少算多少」
+-- 的迭代处理：一轮无进展时把首个失败声明的真实错误抛出。
+elabDataHead : List (Pair String Term) -> Ec -> Pair Decl Span -> Result (Pair DataHead (Pair (List (Pair String Term)) Ec))
+elabDataHead globals ec ds = case ds of
+  Pair d dsp => case d of
+    DData dname writtenParams kindExpr ctors derivings dsp2 => if memName dname preludeNames then errAt dsp2 ("DT: cannot redefine builtin " ++ dname)
+    else andThen (checkType globals emptyCtx ec kindExpr) (\pk => case pk of
+      Pair kindTerm0 (Pair kindSort ec1) =>
+        let
+          -- M20：族名后的参数并进 kind（`data List a : Type`），否则 `List a` 在构造子
+          -- 类型里被当成「把非函数应用」。用显式 binder，与 `: Type -> Type` 写法一致。
+          -- M24.5：kind 也会被存进 globals 在别处求值，检查期已解元变量同样要内联。
+          fullKind = prependParams writtenParams (inlineSolvedMetas ec1 0 kindTerm0)
+          tele = splitKind fullKind
+          arity = length tele
+        in if not (kindWellFormed fullKind) then errAt dsp2 "DT: the kind of a data declaration must be a chain of arrows ending in Type"
+        else Ok (Pair (DataHead dname fullKind arity) (Pair [Pair dname fullKind] ec1))
+    )
+    _ => errAt dsp "DT: internal: expected a data declaration"
+
+elabDataHeadsRound : List (Pair Decl Span) -> List (Pair String Term) -> Ec -> List DataHead -> List (Pair Decl Span) -> Pair (List DataHead) (Pair (List (Pair String Term)) (Pair Ec (List (Pair Decl Span))))
+elabDataHeadsRound pending globals ec heads failed = case pending of
+  [] => Pair heads (Pair globals (Pair ec (reverse failed)))
+  ds :: rest => case elabDataHead globals ec ds of
+    Err _ => elabDataHeadsRound rest globals ec heads (ds :: failed)
+    Ok (Pair head (Pair delta ec1)) =>
+      elabDataHeadsRound rest (append globals delta) ec1 (head :: heads) failed
+
+elabDataHeads : List (Pair Decl Span) -> List (Pair String Term) -> Ec -> List DataHead -> Result (Pair (List DataHead) (Pair (List (Pair String Term)) Ec))
+elabDataHeads pending globals ec heads = case pending of
+  [] => Ok (Pair (reverse heads) (Pair globals ec))
+  _ => case elabDataHeadsRound pending globals ec heads [] of
+    Pair heads2 (Pair globals2 (Pair ec2 failed)) => case failed of
+      [] => Ok (Pair (reverse heads2) (Pair globals2 ec2))
+      _ =>
+        if length failed == length pending then elabDataHeadsNoProgress globals ec failed
+        else elabDataHeads failed globals2 ec2 heads2
+
+-- 一轮毫无进展：重跑首个失败声明，把它的真实错误报出去（通常是 kind 依赖成环）。
+elabDataHeadsNoProgress : List (Pair String Term) -> Ec -> List (Pair Decl Span) -> Result (Pair (List DataHead) (Pair (List (Pair String Term)) Ec))
+elabDataHeadsNoProgress globals ec failed = case failed of
+  [] => Err "DT: internal: no failed data declarations"
+  ds :: rest => case elabDataHead globals ec ds of
+    Err e => Err e
+    Ok _ => Err "DT: internal: data head registration made no progress"
+
+-- Phase B：所有族名都已就位，按源顺序精化构造子（构造子字段可引用任意已声明族，
+-- 含互递归族）。构造子 globals 仍按族逐批追加，索引项里的构造子按源码顺序可见。
+elabDataBodies : List (Pair Decl Span) -> List DataHead -> List (Pair String Term) -> Ec -> List DtData -> Result (Pair (List DtData) (Pair (List (Pair String Term)) Ec))
+elabDataBodies decls heads globals ec acc = case decls of
+  [] => Ok (Pair (reverse acc) (Pair globals ec))
+  ds :: rest => case ds of
+    Pair d dsp => case d of
+      DData dname writtenParams kindExpr ctors derivings dsp2 => case lookupDataHead dname heads of
+        Nothing => errAt dsp2 ("DT: internal: missing data head for " ++ dname)
+        Just (Pair fullKind arity) =>
+          let
+            tele = splitKind fullKind
+          in andThen (elabCtors globals dname arity ec ctors) (\q => case q of
+            Pair dctors ec2 =>
+              let
+                dd = DtData dname tele dctors
+              in elabDataBodies rest heads (append globals (ctorGlobals dctors)) (ecAddData ec2 dd)
+                (dd :: acc)
+          )
+      _ => elabDataBodies rest heads globals ec acc
+
+-- 两阶段精化所有 data 声明（M23：允许 data 之间的前向引用与互递归）。
+elabDatas : List (Pair Decl Span) -> List (Pair String Term) -> Ec -> Result (Pair (List DtData) (Pair (List (Pair String Term)) Ec))
+elabDatas decls globals ec = andThen (elabDataHeads decls globals ec []) (\p => case p of
+  Pair heads (Pair globals2 ec2) => elabDataBodies decls heads globals2 ec2 []
+)
+
+-- ===============================================================
+-- M16：索引擦除分析（诊断级，不改变 codegen）
+-- ===============================================================
+-- M13/M14 的擦除规则：binder 域是宇宙 ⇒ 擦除；域是归纳族（索引，如 `n : Nat`）⇒ **保留**运行时
+-- 表示（`Vec a n` 的每个 Cons 带一个 `t_Nat` 长度字段）。
+-- 索引**不能无条件擦**：`vlen a n xs = case xs of Cons b m y ys => 1 + vlen b m ys` 把索引 `m`
+-- 当递归参数传下去，运行时**真的被读取**；无条件擦除会让这类定义无法生成代码。
+-- 正确擦除需要整程序使用分析，M16 落地的是**分析 + 诊断**：`eraseIndexMask` 给出保守可擦判定，
+-- `indexNeedsRuntime` 给出是否真的被用到。详见 `docs/dt-core.md` 的「已知限制」。
+eraseIndexMask : DtData -> List Bool
+eraseIndexMask dd = eraseMaskGo dd (dtDataParams dd) 0 []
+
+eraseMaskGo : DtData -> List (Pair String Rig) -> Int -> List Bool -> List Bool
+eraseMaskGo dd [] i acc = reverse acc
+eraseMaskGo dd (p :: rest) i acc =
+  eraseMaskGo dd rest (i + 1) (not (paramUsedInFieldTys dd i) :: acc)
+
+paramUsedInFieldTys : DtData -> Int -> Bool
+paramUsedInFieldTys dd i = usedInCtors i (length (dtDataParams dd)) (dtDataCtors dd)
+
+usedInCtors : Int -> Int -> List DtCtor -> Bool
+usedInCtors i arity [] = False
+usedInCtors i arity (c :: rest) = usedInCtor i arity c || usedInCtors i arity rest
+
+usedInCtor : Int -> Int -> DtCtor -> Bool
+usedInCtor i arity c = usedInTele i arity 0 (ctorFieldTerms arity (dtCtorType c))
+
+-- 取构造子的字段域项（跳过前 arity 个族参数/索引 binder）。
+ctorFieldTerms : Int -> Term -> List Term
+ctorFieldTerms arity ty = ctorFieldGo arity ty []
+
+ctorFieldGo : Int -> Term -> List Term -> List Term
+ctorFieldGo arity t acc = case t of
+  TPi name implicit rig dom cod =>
+    if arity > 0 then ctorFieldGo (arity - 1) cod acc else ctorFieldGo 0 cod (dom :: acc)
+  _ => reverse acc
+
+usedInTele : Int -> Int -> Int -> List Term -> Bool
+usedInTele i arity k ts = usedInTeleGo (k + arity) ts
+
+usedInTeleGo : Int -> List Term -> Bool
+usedInTeleGo depth [] = False
+usedInTeleGo depth (t :: rest) = termUsesVar depth t || usedInTeleGo depth rest
+
+termUsesVar : Int -> Term -> Bool
+termUsesVar depth t = case t of
+  TVar n i => i == depth
+  TMeta m => False
+  TGlobal g => False
+  TType l => False
+  TPi n implicit rig dom cod => termUsesVar depth dom || termUsesVar (depth + 1) cod
+  TLam n erased body => termUsesVar (depth + 1) body
+  TApp f a erased => termUsesVar depth f || termUsesVar depth a
+  TCon c args => termUsesVarArgs depth args
+  TCase scrut alts => termUsesVar depth scrut || termUsesVarAlts depth alts
+  TInt n => False
+  TStr s => False
+  TBool b => False
+  TIf c th el => termUsesVar depth c || termUsesVar depth th || termUsesVar depth el
+
+termUsesVarArgs : Int -> List (Pair Term Rig) -> Bool
+termUsesVarArgs depth [] = False
+termUsesVarArgs depth ((Pair a erased) :: rest) = termUsesVar depth a || termUsesVarArgs depth rest
+
+termUsesVarAlts : Int -> List CaseAlt -> Bool
+termUsesVarAlts depth [] = False
+termUsesVarAlts depth (alt :: rest) =
+  termUsesVar (depth + length (caseAltBinders alt)) (caseAltBody alt) || termUsesVarAlts depth rest
+
+-- 诊断：返回「理论上可擦、但实际仍保留运行时表示」的族参数名表（供文档 / lint 用）。
+indexErasureCandidates : List DtData -> List (Pair String (List String))
+indexErasureCandidates [] = []
+indexErasureCandidates (d :: rest) = candidateOf d :: indexErasureCandidates rest
+
+candidateOf : DtData -> Pair String (List String)
+candidateOf d = Pair (dtDataName d) (candidateNames (dtDataParams d) (eraseIndexMask d))
+
+candidateNames : List (Pair String Rig) -> List Bool -> List String
+candidateNames [] ms = []
+candidateNames (p :: rest) [] = []
+candidateNames (p :: rest) (m :: ms) = case p of
+  Pair n e => if m then n :: candidateNames rest ms else candidateNames rest ms

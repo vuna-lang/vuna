@@ -1,0 +1,98 @@
+module Vuna.Index.Types
+  ( Index(..)
+  , ModuleInfo(..)
+  , Sym(..)
+  , distinct
+  , indexModules
+  , indexRefs
+  , indexSymbols
+  , modBytes
+  , modDecls
+  , modName
+  , modPackage
+  , modPath
+  , symCol
+  , symDoc
+  , symFullName
+  , symKind
+  , symLine
+  , symModule
+  , symName
+  , symSig
+  ) where
+
+-- Vuna.Index.Types：源码符号索引的数据模型与字段访问子（M24 后维护·源码重组）。
+-- 只含可序列化的纯数据；构建/查询/渲染分别在 Scan / Query / Render。
+import Vuna.Compiler.Common
+
+-- ---------------------------------------------------------------
+-- 数据模型
+-- ---------------------------------------------------------------
+-- 模块元信息（不含 AST，可安全序列化到缓存）。
+data ModuleInfo : Type where
+  ModuleInfo : String -> String -> String -> Int -> Int -> ModuleInfo
+
+modName : ModuleInfo -> String
+modName (ModuleInfo m p path bytes decls) = m
+
+modPackage : ModuleInfo -> String
+modPackage (ModuleInfo m p path bytes decls) = p
+
+modPath : ModuleInfo -> String
+modPath (ModuleInfo m p path bytes decls) = path
+
+modBytes : ModuleInfo -> Int
+modBytes (ModuleInfo m p path bytes decls) = bytes
+
+modDecls : ModuleInfo -> Int
+modDecls (ModuleInfo m p path bytes decls) = decls
+
+-- 符号：模块全名、名字、种类、签名、文档注释、起始行列。
+data Sym : Type where
+  Sym : String -> String -> String -> String -> String -> Int -> Int -> Sym
+
+symModule : Sym -> String
+symModule (Sym sMod sName sKind sSig sDoc sLine sCol) = sMod
+
+symName : Sym -> String
+symName (Sym sMod sName sKind sSig sDoc sLine sCol) = sName
+
+symKind : Sym -> String
+symKind (Sym sMod sName sKind sSig sDoc sLine sCol) = sKind
+
+symSig : Sym -> String
+symSig (Sym sMod sName sKind sSig sDoc sLine sCol) = sSig
+
+symDoc : Sym -> String
+symDoc (Sym sMod sName sKind sSig sDoc sLine sCol) = sDoc
+
+symLine : Sym -> Int
+symLine (Sym sMod sName sKind sSig sDoc sLine sCol) = sLine
+
+symCol : Sym -> Int
+symCol (Sym sMod sName sKind sSig sDoc sLine sCol) = sCol
+
+symFullName : Sym -> String
+symFullName (Sym sMod sName sKind sSig sDoc sLine sCol) = sMod ++ "." ++ sName
+
+-- 索引：模块 + 符号 + 反向边（reader 模块 → 被引用的名字）。
+data Index : Type where
+  Index : List ModuleInfo -> List Sym -> List (Pair String String) -> Index
+
+indexModules : Index -> List ModuleInfo
+indexModules (Index ms syms refs) = ms
+
+indexSymbols : Index -> List Sym
+indexSymbols (Index ms syms refs) = syms
+
+indexRefs : Index -> List (Pair String String)
+indexRefs (Index ms syms refs) = refs
+
+-- 去重（保持首次出现顺序）：Scan 的引用抽取与 Render 的分组共用。
+distinct : List String -> List String
+distinct xs = distinctGo xs []
+
+distinctGo : List String -> List String -> List String
+distinctGo [] acc = reverse acc
+distinctGo (x :: rest) acc =
+  if memName x acc then distinctGo rest acc else distinctGo rest (x :: acc)

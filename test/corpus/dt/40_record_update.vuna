@@ -1,4 +1,4 @@
--- M23：record update 在 DtRecords 里降级成 `case + 重建构造子`（按字段名唯一定位 record）。
+-- M23：record update 在 Elab.Records 里降级成 `case + 重建构造子`（按字段名唯一定位 record）。
 record Point where
   x : Int
   y : Int

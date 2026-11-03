@@ -59,7 +59,7 @@ done
 # ---- max_module_lines：源码模块最大行数（只统计 lib/、compiler/lib/、base/lib/） ----
 max_module_lines=0
 max_module_path=""
-for f in lib/Vuna/*.vuna compiler/lib/Vuna/Compiler/*.vuna base/lib/Base/*.vuna base/lib/*.vuna; do
+for f in $(find lib/Vuna compiler/lib/Vuna base/lib -name "*.vuna" | sort); do
   [ -f "$f" ] || continue
   n=$(lines_of "$f")
   if [ "$n" -gt "$max_module_lines" ]; then

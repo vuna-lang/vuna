@@ -43,7 +43,7 @@ examples/multi/.output/bin/multi               # -> hi hi hi|n2 n1
 nix run .#vuna-run-tests                            # 原生测试（= sh test/run-tests.sh）
 nix run .#vuna-run-tests -- --list                  # 列出章节（--only <章节> 只跑某段）
 ./result/bin/vuna fmt --check examples/multi   # 格式化检查（也可逐个给文件/目录）
-./result/bin/vuna lint compiler/lib/Vuna/Compiler/*.vuna   # 风格检查（必须给路径）
+./result/bin/vuna lint compiler/lib/Vuna/Compiler/Elab/Term.vuna   # 风格检查（必须给路径）
 ./result/bin/vuna doc                          # 生成 docs/api.md（gitignored）
 ```
 
@@ -87,7 +87,7 @@ vuna help, -h
 ```
 
 `vuna-compiler` 是同一套编译器命令的独立 CLI（seed 的来源），参数与 `vuna` 的同名命令一致。
-`vuna` 的编译命令直接调用 `Vuna.Compiler.CompilerCli` 的库实现（in-process 调库，不 fork
+`vuna` 的编译命令直接调用 `Vuna.Compiler.Driver.CompilerCli` 的库实现（in-process 调库，不 fork
 `vuna-compiler`）；`vuna build` 通过受限的进程执行内建（`prim_runIn`）调用 `ocamlopt`
 编译 `.output/main.ml` → `.output/bin/<包名>`（同时产出 `.output/build.sh` 供手动重建），
 除此之外无额外运行时依赖。`vuna interp` 是**DT 精化 + 核心求值**：先按 DT 检查再求 `main`
@@ -129,7 +129,7 @@ vuna help, -h
    以及未来的 package manager）不进 TCB；`checks.seed-selfhost` 按
    `nix/tcb-forbidden.txt` 断言；
 4. **效果内建按包 allowlist**：只有 `vuna` / `vuna-compiler` / `vuna-base` 可直接调用
-   effectful 内建，其余包必须经 `Base.IO`（`Vuna.Compiler.Loader.packageAllowsEffects`）；
+   effectful 内建，其余包必须经 `Base.IO`（`Vuna.Compiler.Loader.Resolve.packageAllowsEffects`）；
 5. **唯一路径**：语言夹具、`vuna interp`、包构建与 seed 全部走 DT（精化 + 擦除
    codegen，`vuna check .` 也是 DT 自检）；没有可切换的检查器，也没有第二套 codegen；
 6. 编译器自检通过：`vuna check .` 能检查自身源码（`checks.vuna-typecheck`）；

@@ -43,11 +43,11 @@ else
 fi
 
 # 3) --find 全名：命中且有行号。M24：HM 删除后改用仍然存在的 DT 精化入口。
-if ! found=$("$VUNA" map --find Vuna.Compiler.Elab.elabProgramFull 2>&1); then
+if ! found=$("$VUNA" map --find Vuna.Compiler.Elab.Driver.elabProgramFull 2>&1); then
   bad "map --find <full name> failed: $found"
 else
   case "$found" in
-    *"Vuna.Compiler.Elab.elabProgramFull"*) : ;;
+    *"Vuna.Compiler.Elab.Driver.elabProgramFull"*) : ;;
     *) bad "map --find output missing symbol name: $found" ;;
   esac
   # 形如 (...(2623:1)...)，必须带 行:列
@@ -66,7 +66,7 @@ else
 fi
 
 # 5) --impact：给出引用者与测试标签。
-if ! imp=$("$VUNA" map --impact Vuna.Compiler.Elab.elabProgramFull 2>&1); then
+if ! imp=$("$VUNA" map --impact Vuna.Compiler.Elab.Driver.elabProgramFull 2>&1); then
   bad "map --impact failed: $imp"
 else
   case "$imp" in
@@ -81,7 +81,7 @@ else
 fi
 
 # 6) api：某模块签名面含行号。
-if ! api=$("$VUNA" api Vuna.Compiler.Loader.Builtins 2>&1); then
+if ! api=$("$VUNA" api Vuna.Compiler.Loader.Resolve 2>&1); then
   bad "api failed: $api"
 else
   case "$api" in

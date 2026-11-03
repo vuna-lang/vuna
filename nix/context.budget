@@ -40,4 +40,8 @@ readme_lines 168
 #     不可达分支、inlineSolvedMetas（3348 → 3513）。按实测重标定 max_ref 208 / max_module 3530；
 #     入口文档（coldstart/agents/arch/readme）不变。
 max_ref_lines 208
-max_module_lines 3530
+max_module_lines 840
+#   - M25 源码重组：compiler/lib 按层分目录并把 Elab(3529)/Codegen(1781)/Loader(1363)/
+#     Core(1227) 拆成门面 + 叶子模块；单模块最大值从 Elab 3529 降到 Frontend/Parser 823。
+#     入口文档未改（coldstart/agents/arch/readme/max_ref 不变），只把 max_module_lines
+#     3530 → 840（按实测 823 留 17 行余量，属结构优化的降本项）。
