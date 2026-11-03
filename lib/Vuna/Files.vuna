@@ -28,32 +28,46 @@ skipGenerated name =
     || name == "corpus"
 
 collectVunaFiles : String -> List String
-collectVunaFiles dir = if pathExistsDir dir then concatMap (walkVuna dir) (readDir dir) else []
+collectVunaFiles dir = collectVunaFilesGo 1048576 dir
 
-walkVuna : String -> String -> List String
-walkVuna dir name = case name of
+-- 目录树是文件系统图（符号链接可成环），递归无法用结构下降证明；用显式 fuel 守卫。
+-- 每次进入下一层目录消耗 1，触底返回空列表（合法目录树远小于该上限）。
+collectVunaFilesGo : Int -> String -> List String
+collectVunaFilesGo fuel dir =
+  if fuel <= 0 then []
+  else if pathExistsDir dir then concatMap (walkVunaGo (fuel - 1) dir) (readDir dir) else []
+
+walkVunaGo : Int -> String -> String -> List String
+walkVunaGo fuel dir name = if fuel <= 0 then []
+else case name of
   "." => []
   ".." => []
   _ => if skipGenerated name then []
   else
     let
       path = dir ++ "/" ++ name
-    in if pathExistsDir path then collectVunaFiles path
+    in if pathExistsDir path then collectVunaFilesGo (fuel - 1) path
     else if endsWith ".vuna" name then [path] else []
 
 -- 递归收集目录下所有非隐藏项（文件与目录），用于通用遍历。
 collectSourceFiles : String -> List String
-collectSourceFiles dir = if pathExistsDir dir then concatMap (walkAny dir) (readDir dir) else []
+collectSourceFiles dir = collectSourceFilesGo 1048576 dir
 
-walkAny : String -> String -> List String
-walkAny dir name = case name of
+collectSourceFilesGo : Int -> String -> List String
+collectSourceFilesGo fuel dir =
+  if fuel <= 0 then []
+  else if pathExistsDir dir then concatMap (walkAnyGo (fuel - 1) dir) (readDir dir) else []
+
+walkAnyGo : Int -> String -> String -> List String
+walkAnyGo fuel dir name = if fuel <= 0 then []
+else case name of
   "." => []
   ".." => []
   _ => if skipGenerated name then []
   else
     let
       path = dir ++ "/" ++ name
-    in if pathExistsDir path then collectSourceFiles path else [path]
+    in if pathExistsDir path then collectSourceFilesGo (fuel - 1) path else [path]
 
 -- 安全的目录判定：不存在返回 False，而不是抛异常。
 pathExistsDir : String -> Bool

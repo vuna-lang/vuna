@@ -84,20 +84,19 @@ splitOnSlash : String -> List String
 splitOnSlash path = splitSlashChars (strUnpack path) [] []
 
 -- 把段列表按 lexical 规则折叠；acc 为反向累积的已处理段。
-normalizeParent : Bool -> List String -> List String -> List String
-normalizeParent absolute acc rest = case acc of
-  [] => if absolute then normalizeAcc absolute rest [] else normalizeAcc absolute rest [".."]
-  prev :: prevRest =>
-    if prev == ".." then normalizeAcc absolute rest (".." :: acc)
-    else normalizeAcc absolute rest prevRest
-
+-- `..` 分支原本拆到 normalizeParent，形成互递归且下降位置不一致；这里内联成
+-- 同一个对 `segments` 的结构递归（每个分支都只递归到 rest），终止性可直接证明。
 normalizeAcc : Bool -> List String -> List String -> List String
 normalizeAcc absolute segments acc = case segments of
   [] => acc
   seg :: rest => case seg of
     "" => normalizeAcc absolute rest acc
     "." => normalizeAcc absolute rest acc
-    ".." => normalizeParent absolute acc rest
+    ".." => case acc of
+      [] => if absolute then normalizeAcc absolute rest [] else normalizeAcc absolute rest [".."]
+      prev :: prevRest =>
+        if prev == ".." then normalizeAcc absolute rest (".." :: acc)
+        else normalizeAcc absolute rest prevRest
     _ => normalizeAcc absolute rest (seg :: acc)
 
 -- 目录字符串规范化（lexical，不解析符号链接）："a/./b/../c/" -> "a/c"。
@@ -169,17 +168,19 @@ mismatchMessage depName actual = case depName of
       ++ " but found "
       ++ actual
 
-loadDependencyList : List (Pair String String) -> String -> List (Pair String String) -> Result (List Package)
-loadDependencyList stack baseDir deps = case deps of
+loadDependencyList : Int -> List (Pair String String) -> String -> List (Pair String String) -> Result (List Package)
+loadDependencyList fuel stack baseDir deps = if fuel <= 0 then Err "DT: pkg fuel exhausted (internal: dependency graph too deep)"
+else case deps of
   [] => Ok []
-  (Pair depName rel) :: rest => case loadPackageWalk stack (Just depName) (joinPath baseDir rel) of
+  (Pair depName rel) :: rest => case loadPackageWalk (fuel - 1) stack (Just depName) (joinPath baseDir rel) of
     Err e => Err e
-    Ok dependency => case loadDependencyList stack baseDir rest of
+    Ok dependency => case loadDependencyList (fuel - 1) stack baseDir rest of
       Err e => Err e
       Ok dependencies => Ok (dependency :: dependencies)
 
-loadPackageWalk : List (Pair String String) -> Maybe String -> String -> Result Package
-loadPackageWalk stack depName dir =
+loadPackageWalk : Int -> List (Pair String String) -> Maybe String -> String -> Result Package
+loadPackageWalk fuel stack depName dir = if fuel <= 0 then Err "DT: pkg fuel exhausted (internal: dependency graph too deep)"
+else
   let
     normalized = normalizeDir dir
   in if memStackDir normalized stack then Err (cycleMessage normalized depName stack)
@@ -188,7 +189,7 @@ loadPackageWalk stack depName dir =
     Ok manifest =>
       let
         name = manifestNameString manifest
-      in if dependencyNameOk depName name then case loadDependencyList (Pair normalized name :: stack) normalized (manifestDependencies manifest) of
+      in if dependencyNameOk depName name then case loadDependencyList (fuel - 1) (Pair normalized name :: stack) normalized (manifestDependencies manifest) of
         Err e => Err e
         Ok dependencies => Ok (Package manifest dependencies normalized)
       else Err (mismatchMessage depName name)
@@ -232,7 +233,7 @@ checkUniquePackageNames packages = checkUniqueNamesGo [] (collectDependencyIds p
 -- 加载 dir/vuna.toml 及其 [dependencies] 路径依赖（递归、含循环检测）。
 loadPackage : String -> Result Package
 loadPackage dir =
-  andThen (loadPackageWalk [] Nothing dir)
+  andThen (loadPackageWalk 1048576 [] Nothing dir)
     (\package => andThen (checkUniquePackageNames [package]) (\_ => Ok package))
 
 -- ---------------------------------------------------------------- workspace
@@ -292,19 +293,21 @@ packageEntry : Package -> String
 packageEntry package = packageDir package ++ "/app/Main.vuna"
 
 -- ---------------------------------------------------------------- 查找
-findManifestUp : String -> String -> Result String
-findManifestUp start dir =
-  if fileExists (dir ++ "/vuna.toml") then Ok dir
-  else findManifestUpStep start dir (manifestDir dir)
+findManifestUp : Int -> String -> String -> Result String
+findManifestUp fuel start dir =
+  if fuel <= 0 then Err "DT: pkg fuel exhausted (internal: manifest search made no progress)"
+  else if fileExists (dir ++ "/vuna.toml") then Ok dir
+  else findManifestUpStep (fuel - 1) start dir (manifestDir dir)
 
-findManifestUpStep : String -> String -> String -> Result String
-findManifestUpStep start dir parent =
-  if parent == dir then Err ("pkg: no vuna.toml found from " ++ start ++ " (searched upward)")
-  else findManifestUp start parent
+findManifestUpStep : Int -> String -> String -> String -> Result String
+findManifestUpStep fuel start dir parent =
+  if fuel <= 0 then Err "DT: pkg fuel exhausted (internal: manifest search made no progress)"
+  else if parent == dir then Err ("pkg: no vuna.toml found from " ++ start ++ " (searched upward)")
+  else findManifestUp (fuel - 1) start parent
 
 -- 从 startDir 向上找第一个含 vuna.toml 的目录；返回规范化目录（不带尾部 "/"）。
 findManifestDir : String -> Result String
 findManifestDir startDir =
   let
     start = normalizeDir startDir
-  in findManifestUp start start
+  in findManifestUp (strLength start + 1) start start

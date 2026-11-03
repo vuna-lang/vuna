@@ -17,6 +17,7 @@ open Vuna_dCompiler_dFrontend_dManifest
 open Vuna_dCompiler_dPackages_dPkg
 open Vuna_dCompiler_dFrontend_dAst
 open Vuna_dCompiler_dFrontend_dLexer
+open Vuna_dCompiler_dFrontend_dParser_dSupport
 open Vuna_dCompiler_dFrontend_dParser
 open Vuna_dCompiler_dLoader_dModules
 open Vuna_dCompiler_dLoader_dResolve
@@ -33,11 +34,15 @@ open Vuna_dCompiler_dElab_dMeta
 open Vuna_dCompiler_dElab_dCase
 open Vuna_dCompiler_dElab_dDict
 open Vuna_dCompiler_dElab_dMatch
+open Vuna_dCompiler_dElab_dTerm_dSupport
+open Vuna_dCompiler_dElab_dTerm_dImpl
 open Vuna_dCompiler_dElab_dTerm
 open Vuna_dCompiler_dElab_dData
 open Vuna_dCompiler_dElab_dTrait
 open Vuna_dCompiler_dElab_dDerive
 open Vuna_dCompiler_dElab_dRecords
+open Vuna_dCompiler_dElab_dTermination_dMeasure
+open Vuna_dCompiler_dElab_dTermination_dScc
 open Vuna_dCompiler_dElab_dTermination
 open Vuna_dCompiler_dElab_dDriver
 open Vuna_dCompiler_dElab
@@ -236,10 +241,10 @@ let v_Vuna_dCompiler_dCodegen_dTerm_darmPatternText = (fun mc0 -> (fun mc1 -> (m
   | _ -> ((bi_concat mc0) ((bi_concat " (") ((bi_concat ((v_Vuna_dCompiler_dCodegen_dDecl_djoinWith ", ") mc1)) ")")))
 )))
 
-let rec v_Vuna_dCompiler_dCodegen_dTerm_dgenTerm = (fun st -> (fun binders -> (fun t -> (match t with
+let rec v_Vuna_dCompiler_dCodegen_dTerm_dgenTermFuel = (fun fuel -> (fun st -> (fun binders -> (fun t -> (if ((bi_le_int fuel) 0) then (C_Base_dResult_dResult_Base_dResult_dErr ("DT: internal: codegen fuel exhausted")) else (match t with
   | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTVar (dtb__84, dtb__85) -> (match ((v_Vuna_dCompiler_dCodegen_dErase_dbinderAt dtb__85) binders) with
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__86) -> (match dtb__86 with
-  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__87, dtb__88) -> (if (v_Vuna_dCompiler_dCore_dTerm_drigIsErased dtb__88) then (C_Base_dResult_dResult_Base_dResult_dErr (((bi_concat "[CG_TypeLevelBindingRuntime] DT: type-level binding `") ((bi_concat dtb__84) "` is used at runtime (M13 limitation)")))) else (C_Base_dResult_dResult_Base_dResult_dOk ((C_Base_dPair_dPair_Base_dPair_dPair (dtb__87, st)))))
+  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__87, dtb__88) -> (if (v_Vuna_dCompiler_dCore_dTerm_drigIsErased dtb__88) then (C_Base_dResult_dResult_Base_dResult_dErr (((bi_concat "[CG_TypeLevelBindingRuntime] DT: type-level binding `") ((bi_concat dtb__84) "` is used at runtime")))) else (C_Base_dResult_dResult_Base_dResult_dOk ((C_Base_dPair_dPair_Base_dPair_dPair (dtb__87, st)))))
   | _ -> failwith "DT: impossible branch"
 )
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> (C_Base_dResult_dResult_Base_dResult_dErr ("DT: internal: unbound runtime variable"))
@@ -249,9 +254,9 @@ let rec v_Vuna_dCompiler_dCodegen_dTerm_dgenTerm = (fun st -> (fun binders -> (f
   | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTInt (dtb__90) -> (C_Base_dResult_dResult_Base_dResult_dOk ((C_Base_dPair_dPair_Base_dPair_dPair ((bi_strFromInt dtb__90), st))))
   | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTStr (dtb__91) -> (C_Base_dResult_dResult_Base_dResult_dOk ((C_Base_dPair_dPair_Base_dPair_dPair ((v_Vuna_dCompiler_dCodegen_dDecl_docamlString dtb__91), st))))
   | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTBool (dtb__92) -> (C_Base_dResult_dResult_Base_dResult_dOk ((C_Base_dPair_dPair_Base_dPair_dPair ((v_Vuna_dCompiler_dCodegen_dDecl_dboolText dtb__92), st))))
-  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTIf (dtb__93, dtb__94, dtb__95) -> ((v_Base_dResult_dandThen (((v_Vuna_dCompiler_dCodegen_dTerm_dgenTerm st) binders) dtb__93)) (fun pc -> (match pc with
-  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__96, dtb__97) -> ((v_Base_dResult_dandThen (((v_Vuna_dCompiler_dCodegen_dTerm_dgenTerm dtb__97) binders) dtb__94)) (fun pt -> (match pt with
-  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__98, dtb__99) -> ((v_Base_dResult_dandThen (((v_Vuna_dCompiler_dCodegen_dTerm_dgenTerm dtb__99) binders) dtb__95)) (fun pe -> (match pe with
+  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTIf (dtb__93, dtb__94, dtb__95) -> ((v_Base_dResult_dandThen ((((v_Vuna_dCompiler_dCodegen_dTerm_dgenTermFuel ((bi_sub fuel) 1)) st) binders) dtb__93)) (fun pc -> (match pc with
+  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__96, dtb__97) -> ((v_Base_dResult_dandThen ((((v_Vuna_dCompiler_dCodegen_dTerm_dgenTermFuel ((bi_sub fuel) 1)) dtb__97) binders) dtb__94)) (fun pt -> (match pt with
+  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__98, dtb__99) -> ((v_Base_dResult_dandThen ((((v_Vuna_dCompiler_dCodegen_dTerm_dgenTermFuel ((bi_sub fuel) 1)) dtb__99) binders) dtb__95)) (fun pe -> (match pe with
   | C_Base_dPair_dPair_Base_dPair_dPair (dtb__100, dtb__101) -> (C_Base_dResult_dResult_Base_dResult_dOk ((C_Base_dPair_dPair_Base_dPair_dPair (((bi_concat "(if ") ((bi_concat dtb__96) ((bi_concat " then ") ((bi_concat dtb__98) ((bi_concat " else ") ((bi_concat dtb__100) ")")))))), dtb__101))))
   | _ -> failwith "DT: impossible branch"
 )))
@@ -259,63 +264,63 @@ let rec v_Vuna_dCompiler_dCodegen_dTerm_dgenTerm = (fun st -> (fun binders -> (f
 )))
   | _ -> failwith "DT: impossible branch"
 )))
-  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTLam (dtb__102, dtb__103, dtb__104) -> (((((v_Vuna_dCompiler_dCodegen_dTerm_dgenTermLam st) binders) dtb__102) dtb__103) dtb__104)
-  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTApp (dtb__105, dtb__106, dtb__107) -> (((((v_Vuna_dCompiler_dCodegen_dTerm_dgenApp st) binders) dtb__105) dtb__106) dtb__107)
-  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTCon (dtb__108, dtb__109) -> ((((v_Vuna_dCompiler_dCodegen_dTerm_dgenConApp st) binders) dtb__108) dtb__109)
-  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTCase (dtb__110, dtb__111) -> ((((v_Vuna_dCompiler_dCodegen_dTerm_dgenCase st) binders) dtb__110) dtb__111)
+  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTLam (dtb__102, dtb__103, dtb__104) -> ((((((v_Vuna_dCompiler_dCodegen_dTerm_dgenTermLamFuel ((bi_sub fuel) 1)) st) binders) dtb__102) dtb__103) dtb__104)
+  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTApp (dtb__105, dtb__106, dtb__107) -> ((((((v_Vuna_dCompiler_dCodegen_dTerm_dgenAppFuel ((bi_sub fuel) 1)) st) binders) dtb__105) dtb__106) dtb__107)
+  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTCon (dtb__108, dtb__109) -> (((((v_Vuna_dCompiler_dCodegen_dTerm_dgenConAppFuel ((bi_sub fuel) 1)) st) binders) dtb__108) dtb__109)
+  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTCase (dtb__110, dtb__111) -> (((((v_Vuna_dCompiler_dCodegen_dTerm_dgenCaseFuel ((bi_sub fuel) 1)) st) binders) dtb__110) dtb__111)
   | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTPi (dtb__112, dtb__113, dtb__114, dtb__115, dtb__116) -> (C_Base_dResult_dResult_Base_dResult_dErr ("[CG_TypeUsedAtRuntime] DT: a type is used at runtime (M13 limitation)"))
   | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTType (dtb__117) -> (C_Base_dResult_dResult_Base_dResult_dErr ("[CG_TypeUsedAtRuntime] DT: a type is used at runtime (M13 limitation)"))
   | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTMeta (dtb__118) -> (C_Base_dResult_dResult_Base_dResult_dErr (((bi_concat "[CG_UnsolvedMetavarRuntime] DT: unsolved metavariable in runtime code") (v_Vuna_dCompiler_dCodegen_dErase_dshowMetaHint dtb__118))))
   | _ -> failwith "DT: impossible branch"
-))))
-and v_Vuna_dCompiler_dCodegen_dTerm_dgenTermLam = (fun st -> (fun binders -> (fun name -> (fun rig -> (fun body -> (if (v_Vuna_dCompiler_dCore_dTerm_drigIsErased rig) then ((v_Base_dResult_dandThen (((v_Vuna_dCompiler_dCodegen_dTerm_dgenTerm st) (C_Base_dList_dList_Cons ((C_Base_dPair_dPair_Base_dPair_dPair ("", C_Vuna_dCompiler_dCore_dTerm_dRig_Vuna_dCompiler_dCore_dTerm_dRig0)), binders))) body)) (fun p -> (match p with
+))))))
+and v_Vuna_dCompiler_dCodegen_dTerm_dgenTermLamFuel = (fun fuel -> (fun st -> (fun binders -> (fun name -> (fun rig -> (fun body -> (if ((bi_le_int fuel) 0) then (C_Base_dResult_dResult_Base_dResult_dErr ("DT: internal: codegen fuel exhausted")) else (if (v_Vuna_dCompiler_dCore_dTerm_drigIsErased rig) then ((v_Base_dResult_dandThen ((((v_Vuna_dCompiler_dCodegen_dTerm_dgenTermFuel ((bi_sub fuel) 1)) st) (C_Base_dList_dList_Cons ((C_Base_dPair_dPair_Base_dPair_dPair ("", C_Vuna_dCompiler_dCore_dTerm_dRig_Vuna_dCompiler_dCore_dTerm_dRig0)), binders))) body)) (fun p -> (match p with
   | C_Base_dPair_dPair_Base_dPair_dPair (dtb__119, dtb__120) -> (C_Base_dResult_dResult_Base_dResult_dOk ((C_Base_dPair_dPair_Base_dPair_dPair (dtb__119, dtb__120))))
   | _ -> failwith "DT: impossible branch"
-))) else ((fun ocName -> ((v_Base_dResult_dandThen (((v_Vuna_dCompiler_dCodegen_dTerm_dgenTerm st) (C_Base_dList_dList_Cons ((C_Base_dPair_dPair_Base_dPair_dPair (ocName, C_Vuna_dCompiler_dCore_dTerm_dRig_Vuna_dCompiler_dCore_dTerm_dRig1)), binders))) body)) (fun p -> (match p with
+))) else ((fun ocName -> ((v_Base_dResult_dandThen ((((v_Vuna_dCompiler_dCodegen_dTerm_dgenTermFuel ((bi_sub fuel) 1)) st) (C_Base_dList_dList_Cons ((C_Base_dPair_dPair_Base_dPair_dPair (ocName, C_Vuna_dCompiler_dCore_dTerm_dRig_Vuna_dCompiler_dCore_dTerm_dRig1)), binders))) body)) (fun p -> (match p with
   | C_Base_dPair_dPair_Base_dPair_dPair (dtb__121, dtb__122) -> (C_Base_dResult_dResult_Base_dResult_dOk ((C_Base_dPair_dPair_Base_dPair_dPair (((bi_concat "(fun ") ((bi_concat ocName) ((bi_concat " -> ") ((bi_concat dtb__121) ")")))), dtb__122))))
   | _ -> failwith "DT: impossible branch"
-)))) (v_Vuna_dCompiler_dCodegen_dDecl_docamlBinderName name))))))))
-and v_Vuna_dCompiler_dCodegen_dTerm_dgenApp = (fun st -> (fun binders -> (fun f -> (fun a -> (fun rig -> (if (v_Vuna_dCompiler_dCore_dTerm_drigIsErased rig) then (((v_Vuna_dCompiler_dCodegen_dTerm_dgenTerm st) binders) f) else (match (v_Vuna_dCompiler_dCodegen_dErase_dflattenConApp (C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTApp (f, a, rig))) with
+)))) (v_Vuna_dCompiler_dCodegen_dDecl_docamlBinderName name))))))))))
+and v_Vuna_dCompiler_dCodegen_dTerm_dgenAppFuel = (fun fuel -> (fun st -> (fun binders -> (fun f -> (fun a -> (fun rig -> (if ((bi_le_int fuel) 0) then (C_Base_dResult_dResult_Base_dResult_dErr ("DT: internal: codegen fuel exhausted")) else (if (v_Vuna_dCompiler_dCore_dTerm_drigIsErased rig) then ((((v_Vuna_dCompiler_dCodegen_dTerm_dgenTermFuel ((bi_sub fuel) 1)) st) binders) f) else (match (v_Vuna_dCompiler_dCodegen_dErase_dflattenConApp (C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTApp (f, a, rig))) with
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__123) -> (match dtb__123 with
-  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__124, dtb__125) -> ((((v_Vuna_dCompiler_dCodegen_dTerm_dgenConApp st) binders) dtb__124) dtb__125)
+  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__124, dtb__125) -> (((((v_Vuna_dCompiler_dCodegen_dTerm_dgenConAppFuel ((bi_sub fuel) 1)) st) binders) dtb__124) dtb__125)
   | _ -> failwith "DT: impossible branch"
 )
-  | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> ((v_Base_dResult_dandThen (((v_Vuna_dCompiler_dCodegen_dTerm_dgenTerm st) binders) f)) (fun pf -> (match pf with
-  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__126, dtb__127) -> ((v_Base_dResult_dandThen (((v_Vuna_dCompiler_dCodegen_dTerm_dgenTerm dtb__127) binders) a)) (fun pa -> (match pa with
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> ((v_Base_dResult_dandThen ((((v_Vuna_dCompiler_dCodegen_dTerm_dgenTermFuel ((bi_sub fuel) 1)) st) binders) f)) (fun pf -> (match pf with
+  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__126, dtb__127) -> ((v_Base_dResult_dandThen ((((v_Vuna_dCompiler_dCodegen_dTerm_dgenTermFuel ((bi_sub fuel) 1)) dtb__127) binders) a)) (fun pa -> (match pa with
   | C_Base_dPair_dPair_Base_dPair_dPair (dtb__128, dtb__129) -> (C_Base_dResult_dResult_Base_dResult_dOk ((C_Base_dPair_dPair_Base_dPair_dPair (((bi_concat "(") ((bi_concat dtb__126) ((bi_concat " ") ((bi_concat dtb__128) ")")))), dtb__129))))
   | _ -> failwith "DT: impossible branch"
 )))
   | _ -> failwith "DT: impossible branch"
 )))
   | _ -> failwith "DT: impossible branch"
-)))))))
-and v_Vuna_dCompiler_dCodegen_dTerm_dgenConArgs = (fun mc0 -> (fun mc1 -> (fun mc2 -> (match mc2 with
+)))))))))
+and v_Vuna_dCompiler_dCodegen_dTerm_dgenConArgsFuel = (fun mc0 -> (fun mc1 -> (fun mc2 -> (fun mc3 -> (match mc3 with
   | C_Base_dList_dList_Cons (dtb__130, dtb__131) -> (match dtb__130 with
-  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__132, dtb__133) -> ((v_Base_dResult_dandThen (((v_Vuna_dCompiler_dCodegen_dTerm_dgenTerm mc0) mc1) dtb__132)) (fun p -> (match p with
-  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__134, dtb__135) -> ((v_Base_dResult_dandThen (((v_Vuna_dCompiler_dCodegen_dTerm_dgenConArgs dtb__135) mc1) dtb__131)) (fun q -> (match q with
+  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__132, dtb__133) -> (if ((bi_le_int mc0) 0) then (C_Base_dResult_dResult_Base_dResult_dErr ("DT: internal: codegen fuel exhausted")) else ((v_Base_dResult_dandThen ((((v_Vuna_dCompiler_dCodegen_dTerm_dgenTermFuel ((bi_sub mc0) 1)) mc1) mc2) dtb__132)) (fun p -> (match p with
+  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__134, dtb__135) -> ((v_Base_dResult_dandThen ((((v_Vuna_dCompiler_dCodegen_dTerm_dgenConArgsFuel ((bi_sub mc0) 1)) dtb__135) mc2) dtb__131)) (fun q -> (match q with
   | C_Base_dPair_dPair_Base_dPair_dPair (dtb__136, dtb__137) -> (C_Base_dResult_dResult_Base_dResult_dOk ((C_Base_dPair_dPair_Base_dPair_dPair ((C_Base_dList_dList_Cons (dtb__134, dtb__136)), dtb__137))))
   | _ -> failwith "DT: impossible branch"
 )))
   | _ -> failwith "DT: impossible branch"
-)))
+))))
   | _ -> failwith "DT: impossible branch"
 )
-  | C_Base_dList_dList_Nil -> (C_Base_dResult_dResult_Base_dResult_dOk ((C_Base_dPair_dPair_Base_dPair_dPair (C_Base_dList_dList_Nil, mc0))))
+  | C_Base_dList_dList_Nil -> (if ((bi_le_int mc0) 0) then (C_Base_dResult_dResult_Base_dResult_dErr ("DT: internal: codegen fuel exhausted")) else (C_Base_dResult_dResult_Base_dResult_dOk ((C_Base_dPair_dPair_Base_dPair_dPair (C_Base_dList_dList_Nil, mc1)))))
   | _ -> failwith "DT: impossible branch"
-))))
-and v_Vuna_dCompiler_dCodegen_dTerm_dgenConApp = (fun st -> (fun binders -> (fun c -> (fun args -> (match ((v_Base_dList_dlookupPair c) (v_Vuna_dCompiler_dCodegen_dTerm_dgsCtors st)) with
+)))))
+and v_Vuna_dCompiler_dCodegen_dTerm_dgenConAppFuel = (fun fuel -> (fun st -> (fun binders -> (fun c -> (fun args -> (if ((bi_le_int fuel) 0) then (C_Base_dResult_dResult_Base_dResult_dErr ("DT: internal: codegen fuel exhausted")) else (match ((v_Base_dList_dlookupPair c) (v_Vuna_dCompiler_dCodegen_dTerm_dgsCtors st)) with
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> (C_Base_dResult_dResult_Base_dResult_dErr (((bi_concat "DT: internal: unknown constructor ") c)))
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__138) -> (match ((v_Base_dList_dlookupPair c) (v_Vuna_dCompiler_dCodegen_dTerm_dgsCtorShapes st)) with
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> (C_Base_dResult_dResult_Base_dResult_dErr (((bi_concat "DT: internal: no shape for constructor ") c)))
-  | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__139) -> ((v_Base_dResult_dandThen (((v_Vuna_dCompiler_dCodegen_dTerm_dalignCtorArgs c) dtb__139) args)) (fun runtimeArgs -> ((v_Base_dResult_dandThen (((v_Vuna_dCompiler_dCodegen_dTerm_dgenConArgs st) binders) runtimeArgs)) (fun p -> (match p with
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__139) -> ((v_Base_dResult_dandThen (((v_Vuna_dCompiler_dCodegen_dTerm_dalignCtorArgs c) dtb__139) args)) (fun runtimeArgs -> ((v_Base_dResult_dandThen ((((v_Vuna_dCompiler_dCodegen_dTerm_dgenConArgsFuel ((bi_sub fuel) 1)) st) binders) runtimeArgs)) (fun p -> (match p with
   | C_Base_dPair_dPair_Base_dPair_dPair (dtb__140, dtb__141) -> (C_Base_dResult_dResult_Base_dResult_dOk ((C_Base_dPair_dPair_Base_dPair_dPair (((v_Vuna_dCompiler_dCodegen_dTerm_dconAppText ((v_Vuna_dCompiler_dCodegen_dDecl_dctorOcamlName dtb__138) c)) dtb__140), dtb__141))))
   | _ -> failwith "DT: impossible branch"
 )))))
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
-)))))
-and v_Vuna_dCompiler_dCodegen_dTerm_dgenArm = (fun st -> (fun outer -> (fun alt -> (if ((bi_eq_str (v_Vuna_dCompiler_dCore_dTerm_dcaseAltName alt)) "") then ((fun bound -> ((fun patText -> ((v_Base_dResult_dandThen (((v_Vuna_dCompiler_dCodegen_dTerm_dgenTerm (v_Vuna_dCompiler_dCodegen_dTerm_daeSt bound)) (v_Vuna_dCompiler_dCodegen_dTerm_daeEnv bound)) (v_Vuna_dCompiler_dCore_dTerm_dcaseAltBody alt))) (fun p -> (match p with
+)))))))
+and v_Vuna_dCompiler_dCodegen_dTerm_dgenArmFuel = (fun fuel -> (fun st -> (fun outer -> (fun alt -> (if ((bi_le_int fuel) 0) then (C_Base_dResult_dResult_Base_dResult_dErr ("DT: internal: codegen fuel exhausted")) else (if ((bi_eq_str (v_Vuna_dCompiler_dCore_dTerm_dcaseAltName alt)) "") then ((fun bound -> ((fun patText -> ((v_Base_dResult_dandThen ((((v_Vuna_dCompiler_dCodegen_dTerm_dgenTermFuel ((bi_sub fuel) 1)) (v_Vuna_dCompiler_dCodegen_dTerm_daeSt bound)) (v_Vuna_dCompiler_dCodegen_dTerm_daeEnv bound)) (v_Vuna_dCompiler_dCore_dTerm_dcaseAltBody alt))) (fun p -> (match p with
   | C_Base_dPair_dPair_Base_dPair_dPair (dtb__142, dtb__143) -> (C_Base_dResult_dResult_Base_dResult_dOk ((C_Base_dPair_dPair_Base_dPair_dPair (((bi_concat "  | ") ((bi_concat patText) ((bi_concat " -> ") ((bi_concat dtb__142) "\n")))), dtb__143))))
   | _ -> failwith "DT: impossible branch"
 )))) (match (v_Vuna_dCompiler_dCodegen_dTerm_daePats bound) with
@@ -326,92 +331,58 @@ and v_Vuna_dCompiler_dCodegen_dTerm_dgenArm = (fun st -> (fun outer -> (fun alt 
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> (C_Base_dResult_dResult_Base_dResult_dErr (((bi_concat "DT: internal: unknown constructor ") (v_Vuna_dCompiler_dCore_dTerm_dcaseAltName alt))))
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__146) -> (match ((v_Base_dList_dlookupPair (v_Vuna_dCompiler_dCore_dTerm_dcaseAltName alt)) (v_Vuna_dCompiler_dCodegen_dTerm_dgsCtorShapes st)) with
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> (C_Base_dResult_dResult_Base_dResult_dErr (((bi_concat "DT: internal: no shape for constructor ") (v_Vuna_dCompiler_dCore_dTerm_dcaseAltName alt))))
-  | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__147) -> ((v_Base_dResult_dandThen (((((v_Vuna_dCompiler_dCodegen_dTerm_daltEnvChecked st) (v_Vuna_dCompiler_dCore_dTerm_dcaseAltName alt)) outer) (v_Vuna_dCompiler_dCore_dTerm_dcaseAltBinders alt)) dtb__147)) (fun bound -> ((v_Base_dResult_dandThen (((v_Vuna_dCompiler_dCodegen_dTerm_dgenTerm (v_Vuna_dCompiler_dCodegen_dTerm_daeSt bound)) (v_Vuna_dCompiler_dCodegen_dTerm_daeEnv bound)) (v_Vuna_dCompiler_dCore_dTerm_dcaseAltBody alt))) (fun p -> (match p with
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__147) -> ((v_Base_dResult_dandThen (((((v_Vuna_dCompiler_dCodegen_dTerm_daltEnvChecked st) (v_Vuna_dCompiler_dCore_dTerm_dcaseAltName alt)) outer) (v_Vuna_dCompiler_dCore_dTerm_dcaseAltBinders alt)) dtb__147)) (fun bound -> ((v_Base_dResult_dandThen ((((v_Vuna_dCompiler_dCodegen_dTerm_dgenTermFuel ((bi_sub fuel) 1)) (v_Vuna_dCompiler_dCodegen_dTerm_daeSt bound)) (v_Vuna_dCompiler_dCodegen_dTerm_daeEnv bound)) (v_Vuna_dCompiler_dCore_dTerm_dcaseAltBody alt))) (fun p -> (match p with
   | C_Base_dPair_dPair_Base_dPair_dPair (dtb__148, dtb__149) -> ((fun cname -> ((fun patText -> (C_Base_dResult_dResult_Base_dResult_dOk ((C_Base_dPair_dPair_Base_dPair_dPair (((bi_concat "  | ") ((bi_concat patText) ((bi_concat " -> ") ((bi_concat dtb__148) "\n")))), dtb__149))))) ((v_Vuna_dCompiler_dCodegen_dTerm_darmPatternText cname) (v_Vuna_dCompiler_dCodegen_dTerm_daePats bound)))) ((v_Vuna_dCompiler_dCodegen_dDecl_dctorOcamlName dtb__146) (v_Vuna_dCompiler_dCore_dTerm_dcaseAltName alt)))
   | _ -> failwith "DT: impossible branch"
 )))))
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
-)))))
-and v_Vuna_dCompiler_dCodegen_dTerm_dgenArms = (fun mc0 -> (fun mc1 -> (fun mc2 -> (match mc2 with
-  | C_Base_dList_dList_Cons (dtb__150, dtb__151) -> ((v_Base_dResult_dandThen (((v_Vuna_dCompiler_dCodegen_dTerm_dgenArm mc0) mc1) dtb__150)) (fun p -> (match p with
-  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__152, dtb__153) -> ((v_Base_dResult_dandThen (((v_Vuna_dCompiler_dCodegen_dTerm_dgenArms dtb__153) mc1) dtb__151)) (fun q -> (match q with
+)))))))
+and v_Vuna_dCompiler_dCodegen_dTerm_dgenArmsFuel = (fun mc0 -> (fun mc1 -> (fun mc2 -> (fun mc3 -> (match mc3 with
+  | C_Base_dList_dList_Cons (dtb__150, dtb__151) -> (if ((bi_le_int mc0) 0) then (C_Base_dResult_dResult_Base_dResult_dErr ("DT: internal: codegen fuel exhausted")) else ((v_Base_dResult_dandThen ((((v_Vuna_dCompiler_dCodegen_dTerm_dgenArmFuel ((bi_sub mc0) 1)) mc1) mc2) dtb__150)) (fun p -> (match p with
+  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__152, dtb__153) -> ((v_Base_dResult_dandThen ((((v_Vuna_dCompiler_dCodegen_dTerm_dgenArmsFuel ((bi_sub mc0) 1)) dtb__153) mc2) dtb__151)) (fun q -> (match q with
   | C_Base_dPair_dPair_Base_dPair_dPair (dtb__154, dtb__155) -> (C_Base_dResult_dResult_Base_dResult_dOk ((C_Base_dPair_dPair_Base_dPair_dPair (((bi_concat dtb__152) dtb__154), dtb__155))))
   | _ -> failwith "DT: impossible branch"
 )))
   | _ -> failwith "DT: impossible branch"
-)))
-  | C_Base_dList_dList_Nil -> (C_Base_dResult_dResult_Base_dResult_dOk ((C_Base_dPair_dPair_Base_dPair_dPair ("", mc0))))
-  | _ -> failwith "DT: impossible branch"
 ))))
-and v_Vuna_dCompiler_dCodegen_dTerm_dgenCase = (fun st -> (fun binders -> (fun scrut -> (fun alts -> ((v_Base_dResult_dandThen (((v_Vuna_dCompiler_dCodegen_dTerm_dgenTerm st) binders) scrut)) (fun p -> (match p with
-  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__156, dtb__157) -> ((v_Base_dResult_dandThen (((v_Vuna_dCompiler_dCodegen_dTerm_dgenArms dtb__157) binders) alts)) (fun q -> (match q with
+  | C_Base_dList_dList_Nil -> (if ((bi_le_int mc0) 0) then (C_Base_dResult_dResult_Base_dResult_dErr ("DT: internal: codegen fuel exhausted")) else (C_Base_dResult_dResult_Base_dResult_dOk ((C_Base_dPair_dPair_Base_dPair_dPair ("", mc1)))))
+  | _ -> failwith "DT: impossible branch"
+)))))
+and v_Vuna_dCompiler_dCodegen_dTerm_dgenCaseFuel = (fun fuel -> (fun st -> (fun binders -> (fun scrut -> (fun alts -> (if ((bi_le_int fuel) 0) then (C_Base_dResult_dResult_Base_dResult_dErr ("DT: internal: codegen fuel exhausted")) else ((v_Base_dResult_dandThen ((((v_Vuna_dCompiler_dCodegen_dTerm_dgenTermFuel ((bi_sub fuel) 1)) st) binders) scrut)) (fun p -> (match p with
+  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__156, dtb__157) -> ((v_Base_dResult_dandThen ((((v_Vuna_dCompiler_dCodegen_dTerm_dgenArmsFuel ((bi_sub fuel) 1)) dtb__157) binders) alts)) (fun q -> (match q with
   | C_Base_dPair_dPair_Base_dPair_dPair (dtb__158, dtb__159) -> ((fun fallback -> (C_Base_dResult_dResult_Base_dResult_dOk ((C_Base_dPair_dPair_Base_dPair_dPair (((bi_concat "(match ") ((bi_concat dtb__156) ((bi_concat " with\n") ((bi_concat dtb__158) ((bi_concat fallback) ")"))))), dtb__159))))) (if (v_Vuna_dCompiler_dCodegen_dTerm_dhasFallbackAlt alts) then "" else "  | _ -> failwith \"DT: impossible branch\"\n"))
   | _ -> failwith "DT: impossible branch"
 )))
   | _ -> failwith "DT: impossible branch"
-)))))))
-
-let v_Vuna_dCompiler_dCodegen_dTerm_dgenGroupDef = (fun st -> (fun d -> ((v_Base_dResult_dandThen (((v_Vuna_dCompiler_dCodegen_dTerm_dgenTerm st) C_Base_dList_dList_Nil) (v_Vuna_dCompiler_dElab_dTypes_ddtDefBody d))) (fun p -> (match p with
-  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__160, dtb__161) -> (C_Base_dResult_dResult_Base_dResult_dOk ((C_Base_dPair_dPair_Base_dPair_dPair (((bi_concat (v_Vuna_dCompiler_dCodegen_dDecl_dvalueName (v_Vuna_dCompiler_dElab_dTypes_ddtDefName d))) ((bi_concat " = ") ((bi_concat (if ((v_Base_dList_dmemName (v_Vuna_dCompiler_dElab_dTypes_ddtDefName d)) (v_Vuna_dCompiler_dCodegen_dTerm_dgsThunks st)) then "fun () -> " else "")) dtb__160))), dtb__161))))
-  | _ -> failwith "DT: impossible branch"
-)))))
-
-let rec v_Vuna_dCompiler_dCodegen_dTerm_dgenGroupBodies = (fun mc0 -> (fun mc1 -> (match mc1 with
-  | C_Base_dList_dList_Cons (dtb__162, dtb__163) -> ((v_Base_dResult_dandThen ((v_Vuna_dCompiler_dCodegen_dTerm_dgenGroupDef mc0) dtb__162)) (fun p -> (match p with
-  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__164, dtb__165) -> ((v_Base_dResult_dandThen ((v_Vuna_dCompiler_dCodegen_dTerm_dgenGroupBodies dtb__165) dtb__163)) (fun q -> (match q with
-  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__166, dtb__167) -> (C_Base_dResult_dResult_Base_dResult_dOk ((C_Base_dPair_dPair_Base_dPair_dPair ((C_Base_dList_dList_Cons (dtb__164, dtb__166)), dtb__167))))
-  | _ -> failwith "DT: impossible branch"
-)))
-  | _ -> failwith "DT: impossible branch"
-)))
-  | C_Base_dList_dList_Nil -> (C_Base_dResult_dResult_Base_dResult_dOk ((C_Base_dPair_dPair_Base_dPair_dPair (C_Base_dList_dList_Nil, mc0))))
-  | _ -> failwith "DT: impossible branch"
-)))
+)))))))))
 
 let v_Vuna_dCompiler_dCodegen_dTerm_dgroupNeedsRec = (fun mc0 -> (fun mc1 -> (match mc1 with
-  | C_Base_dList_dList_Cons (dtb__168, dtb__169) -> (match dtb__169 with
-  | C_Base_dList_dList_Nil -> ((v_Base_dList_dmemName (v_Vuna_dCompiler_dElab_dTypes_ddtDefName dtb__168)) ((v_Vuna_dCompiler_dCodegen_dErase_dneighborsOf mc0) (v_Vuna_dCompiler_dElab_dTypes_ddtDefName dtb__168)))
+  | C_Base_dList_dList_Cons (dtb__160, dtb__161) -> (match dtb__161 with
+  | C_Base_dList_dList_Nil -> ((v_Base_dList_dmemName (v_Vuna_dCompiler_dElab_dTypes_ddtDefName dtb__160)) ((v_Vuna_dCompiler_dCodegen_dErase_dneighborsOf mc0) (v_Vuna_dCompiler_dElab_dTypes_ddtDefName dtb__160)))
   | _ -> true
 )
   | C_Base_dList_dList_Nil -> false
   | _ -> failwith "DT: impossible branch"
 )))
 
-let v_Vuna_dCompiler_dCodegen_dTerm_dgenGroup = (fun adj -> (fun st -> (fun group -> ((v_Base_dResult_dandThen ((v_Vuna_dCompiler_dCodegen_dTerm_dgenGroupBodies st) group)) (fun p -> (match p with
-  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__170, dtb__171) -> (C_Base_dResult_dResult_Base_dResult_dOk ((C_Base_dPair_dPair_Base_dPair_dPair (((bi_concat (if ((v_Vuna_dCompiler_dCodegen_dTerm_dgroupNeedsRec adj) group) then "let rec " else "let ")) ((v_Vuna_dCompiler_dCodegen_dDecl_djoinWith "\nand ") dtb__170)), dtb__171))))
-  | _ -> failwith "DT: impossible branch"
-))))))
-
-let rec v_Vuna_dCompiler_dCodegen_dTerm_dgenGroups = (fun mc0 -> (fun mc1 -> (fun mc2 -> (match mc2 with
-  | C_Base_dList_dList_Cons (dtb__172, dtb__173) -> ((v_Base_dResult_dandThen (((v_Vuna_dCompiler_dCodegen_dTerm_dgenGroup mc0) mc1) dtb__172)) (fun p -> (match p with
-  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__174, dtb__175) -> ((v_Base_dResult_dandThen (((v_Vuna_dCompiler_dCodegen_dTerm_dgenGroups mc0) dtb__175) dtb__173)) (fun q -> (match q with
-  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__176, dtb__177) -> (C_Base_dResult_dResult_Base_dResult_dOk ((C_Base_dPair_dPair_Base_dPair_dPair ((C_Base_dList_dList_Cons (dtb__174, dtb__176)), dtb__177))))
-  | _ -> failwith "DT: impossible branch"
-)))
-  | _ -> failwith "DT: impossible branch"
-)))
-  | C_Base_dList_dList_Nil -> (C_Base_dResult_dResult_Base_dResult_dOk ((C_Base_dPair_dPair_Base_dPair_dPair (C_Base_dList_dList_Nil, mc1))))
-  | _ -> failwith "DT: impossible branch"
-))))
-
 let v_Vuna_dCompiler_dCodegen_dTerm_dioResultTy = (fun t -> (match t with
-  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTApp (dtb__178, dtb__179, dtb__180) -> (match dtb__178 with
-  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTGlobal (dtb__181) -> (if ((bi_eq_str (v_Vuna_dCompiler_dCodegen_dDecl_dlastName dtb__181)) "IO") then (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__179)) else C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing)
+  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTApp (dtb__162, dtb__163, dtb__164) -> (match dtb__162 with
+  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTGlobal (dtb__165) -> (if ((bi_eq_str (v_Vuna_dCompiler_dCodegen_dDecl_dlastName dtb__165)) "IO") then (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__163)) else C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing)
   | _ -> C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing
 )
   | _ -> C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing
 ))
 
 let v_Vuna_dCompiler_dCodegen_dTerm_dfirstCtorOf = (fun d -> (match (v_Vuna_dCompiler_dElab_dTypes_ddtDataCtors d) with
-  | C_Base_dList_dList_Cons (dtb__182, dtb__183) -> (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust ((C_Base_dPair_dPair_Base_dPair_dPair ((v_Vuna_dCompiler_dElab_dTypes_ddtDataName d), (v_Vuna_dCompiler_dElab_dTypes_ddtCtorName dtb__182)))))
+  | C_Base_dList_dList_Cons (dtb__166, dtb__167) -> (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust ((C_Base_dPair_dPair_Base_dPair_dPair ((v_Vuna_dCompiler_dElab_dTypes_ddtDataName d), (v_Vuna_dCompiler_dElab_dTypes_ddtCtorName dtb__166)))))
   | C_Base_dList_dList_Nil -> C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing
   | _ -> failwith "DT: impossible branch"
 ))
 
 let rec v_Vuna_dCompiler_dCodegen_dTerm_dioCtorOf = (fun mc0 -> (match mc0 with
-  | C_Base_dList_dList_Cons (dtb__184, dtb__185) -> (if ((bi_eq_str (v_Vuna_dCompiler_dCodegen_dDecl_dlastName (v_Vuna_dCompiler_dElab_dTypes_ddtDataName dtb__184))) "IO") then (v_Vuna_dCompiler_dCodegen_dTerm_dfirstCtorOf dtb__184) else (v_Vuna_dCompiler_dCodegen_dTerm_dioCtorOf dtb__185))
+  | C_Base_dList_dList_Cons (dtb__168, dtb__169) -> (if ((bi_eq_str (v_Vuna_dCompiler_dCodegen_dDecl_dlastName (v_Vuna_dCompiler_dElab_dTypes_ddtDataName dtb__168))) "IO") then (v_Vuna_dCompiler_dCodegen_dTerm_dfirstCtorOf dtb__168) else (v_Vuna_dCompiler_dCodegen_dTerm_dioCtorOf dtb__169))
   | C_Base_dList_dList_Nil -> C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing
   | _ -> failwith "DT: impossible branch"
 ))
@@ -421,9 +392,9 @@ let v_Vuna_dCompiler_dCodegen_dTerm_dmainShowErr = fun () -> (C_Base_dResult_dRe
 let v_Vuna_dCompiler_dCodegen_dTerm_dmainShowForName = (fun g -> (if ((bi_eq_str (v_Vuna_dCompiler_dCodegen_dDecl_dlastName g)) "Int") then (C_Base_dResult_dResult_Base_dResult_dOk ((C_Base_dPair_dPair_Base_dPair_dPair ("string_of_int", "int")))) else (if ((bi_eq_str (v_Vuna_dCompiler_dCodegen_dDecl_dlastName g)) "String") then (C_Base_dResult_dResult_Base_dResult_dOk ((C_Base_dPair_dPair_Base_dPair_dPair ("dt_show_string", "string")))) else (if ((bi_eq_str (v_Vuna_dCompiler_dCodegen_dDecl_dlastName g)) "Bool") then (C_Base_dResult_dResult_Base_dResult_dOk ((C_Base_dPair_dPair_Base_dPair_dPair ("dt_show_bool", "bool")))) else (v_Vuna_dCompiler_dCodegen_dTerm_dmainShowErr ())))))
 
 let v_Vuna_dCompiler_dCodegen_dTerm_dmainShow = (fun table -> (fun tyTerm -> (match ((((v_Vuna_dCompiler_dCore_dEval_dforce table) C_Base_dList_dList_Nil) (v_Vuna_dCompiler_dCore_dTerm_ddefaultFuel ())) ((v_Vuna_dCompiler_dCore_dEval_deval C_Base_dList_dList_Nil) tyTerm)) with
-  | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVNeutral (dtb__186) -> (match dtb__186 with
-  | C_Vuna_dCompiler_dCore_dTerm_dNeutral_Vuna_dCompiler_dCore_dTerm_dNGlobal (dtb__187, dtb__188) -> (match dtb__188 with
-  | C_Base_dList_dList_Nil -> (v_Vuna_dCompiler_dCodegen_dTerm_dmainShowForName dtb__187)
+  | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVNeutral (dtb__170) -> (match dtb__170 with
+  | C_Vuna_dCompiler_dCore_dTerm_dNeutral_Vuna_dCompiler_dCore_dTerm_dNGlobal (dtb__171, dtb__172) -> (match dtb__172 with
+  | C_Base_dList_dList_Nil -> (v_Vuna_dCompiler_dCodegen_dTerm_dmainShowForName dtb__171)
   | _ -> (v_Vuna_dCompiler_dCodegen_dTerm_dmainShowErr ())
 )
   | _ -> (v_Vuna_dCompiler_dCodegen_dTerm_dmainShowErr ())
@@ -432,14 +403,65 @@ let v_Vuna_dCompiler_dCodegen_dTerm_dmainShow = (fun table -> (fun tyTerm -> (ma
 )))
 
 let v_Vuna_dCompiler_dCodegen_dTerm_dgenDtHook = (fun bodyText -> (fun table -> (fun tyTerm -> (fun mainExpr -> (fun printResult -> ((v_Base_dResult_dandThen ((v_Vuna_dCompiler_dCodegen_dTerm_dmainShow table) tyTerm)) (fun showPair -> (match showPair with
-  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__189, dtb__190) -> ((fun hook -> (C_Base_dResult_dResult_Base_dResult_dOk (((bi_concat bodyText) ((bi_concat "\n") hook))))) (if printResult then ((bi_concat "let () = print_endline (") ((bi_concat dtb__189) ((bi_concat " (") ((bi_concat mainExpr) "))\n")))) else ((bi_concat "let () = ignore (") ((bi_concat mainExpr) ")\n"))))
+  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__173, dtb__174) -> ((fun hook -> (C_Base_dResult_dResult_Base_dResult_dOk (((bi_concat bodyText) ((bi_concat "\n") hook))))) (if printResult then ((bi_concat "let () = print_endline (") ((bi_concat dtb__173) ((bi_concat " (") ((bi_concat mainExpr) "))\n")))) else ((bi_concat "let () = ignore (") ((bi_concat mainExpr) ")\n"))))
   | _ -> failwith "DT: impossible branch"
 ))))))))
 
 let v_Vuna_dCompiler_dCodegen_dTerm_dioRunText = (fun program -> (fun mainRef -> (match (v_Vuna_dCompiler_dCodegen_dTerm_dioCtorOf (v_Base_dPair_dfirstOf program)) with
-  | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__191) -> (match dtb__191 with
-  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__192, dtb__193) -> ((bi_concat "match ") ((bi_concat mainRef) ((bi_concat " with ") ((bi_concat ((v_Vuna_dCompiler_dCodegen_dDecl_dctorOcamlName dtb__192) dtb__193)) " f -> f 0"))))
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__175) -> (match dtb__175 with
+  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__176, dtb__177) -> ((bi_concat "match ") ((bi_concat mainRef) ((bi_concat " with ") ((bi_concat ((v_Vuna_dCompiler_dCodegen_dDecl_dctorOcamlName dtb__176) dtb__177)) " f -> f 0"))))
   | _ -> failwith "DT: impossible branch"
 )
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> mainRef
   | _ -> failwith "DT: impossible branch"
 )))
+
+let v_Vuna_dCompiler_dCodegen_dTerm_dgenTerm = (fun a1 -> (fun a2 -> (fun a3 -> ((((v_Vuna_dCompiler_dCodegen_dTerm_dgenTermFuel 512) a1) a2) a3))))
+
+let v_Vuna_dCompiler_dCodegen_dTerm_dgenGroupDef = (fun st -> (fun d -> ((v_Base_dResult_dandThen (((v_Vuna_dCompiler_dCodegen_dTerm_dgenTerm st) C_Base_dList_dList_Nil) (v_Vuna_dCompiler_dElab_dTypes_ddtDefBody d))) (fun p -> (match p with
+  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__178, dtb__179) -> (C_Base_dResult_dResult_Base_dResult_dOk ((C_Base_dPair_dPair_Base_dPair_dPair (((bi_concat (v_Vuna_dCompiler_dCodegen_dDecl_dvalueName (v_Vuna_dCompiler_dElab_dTypes_ddtDefName d))) ((bi_concat " = ") ((bi_concat (if ((v_Base_dList_dmemName (v_Vuna_dCompiler_dElab_dTypes_ddtDefName d)) (v_Vuna_dCompiler_dCodegen_dTerm_dgsThunks st)) then "fun () -> " else "")) dtb__178))), dtb__179))))
+  | _ -> failwith "DT: impossible branch"
+)))))
+
+let rec v_Vuna_dCompiler_dCodegen_dTerm_dgenGroupBodies = (fun mc0 -> (fun mc1 -> (match mc1 with
+  | C_Base_dList_dList_Cons (dtb__180, dtb__181) -> ((v_Base_dResult_dandThen ((v_Vuna_dCompiler_dCodegen_dTerm_dgenGroupDef mc0) dtb__180)) (fun p -> (match p with
+  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__182, dtb__183) -> ((v_Base_dResult_dandThen ((v_Vuna_dCompiler_dCodegen_dTerm_dgenGroupBodies dtb__183) dtb__181)) (fun q -> (match q with
+  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__184, dtb__185) -> (C_Base_dResult_dResult_Base_dResult_dOk ((C_Base_dPair_dPair_Base_dPair_dPair ((C_Base_dList_dList_Cons (dtb__182, dtb__184)), dtb__185))))
+  | _ -> failwith "DT: impossible branch"
+)))
+  | _ -> failwith "DT: impossible branch"
+)))
+  | C_Base_dList_dList_Nil -> (C_Base_dResult_dResult_Base_dResult_dOk ((C_Base_dPair_dPair_Base_dPair_dPair (C_Base_dList_dList_Nil, mc0))))
+  | _ -> failwith "DT: impossible branch"
+)))
+
+let v_Vuna_dCompiler_dCodegen_dTerm_dgenGroup = (fun adj -> (fun st -> (fun group -> ((v_Base_dResult_dandThen ((v_Vuna_dCompiler_dCodegen_dTerm_dgenGroupBodies st) group)) (fun p -> (match p with
+  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__186, dtb__187) -> (C_Base_dResult_dResult_Base_dResult_dOk ((C_Base_dPair_dPair_Base_dPair_dPair (((bi_concat (if ((v_Vuna_dCompiler_dCodegen_dTerm_dgroupNeedsRec adj) group) then "let rec " else "let ")) ((v_Vuna_dCompiler_dCodegen_dDecl_djoinWith "\nand ") dtb__186)), dtb__187))))
+  | _ -> failwith "DT: impossible branch"
+))))))
+
+let rec v_Vuna_dCompiler_dCodegen_dTerm_dgenGroups = (fun mc0 -> (fun mc1 -> (fun mc2 -> (match mc2 with
+  | C_Base_dList_dList_Cons (dtb__188, dtb__189) -> ((v_Base_dResult_dandThen (((v_Vuna_dCompiler_dCodegen_dTerm_dgenGroup mc0) mc1) dtb__188)) (fun p -> (match p with
+  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__190, dtb__191) -> ((v_Base_dResult_dandThen (((v_Vuna_dCompiler_dCodegen_dTerm_dgenGroups mc0) dtb__191) dtb__189)) (fun q -> (match q with
+  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__192, dtb__193) -> (C_Base_dResult_dResult_Base_dResult_dOk ((C_Base_dPair_dPair_Base_dPair_dPair ((C_Base_dList_dList_Cons (dtb__190, dtb__192)), dtb__193))))
+  | _ -> failwith "DT: impossible branch"
+)))
+  | _ -> failwith "DT: impossible branch"
+)))
+  | C_Base_dList_dList_Nil -> (C_Base_dResult_dResult_Base_dResult_dOk ((C_Base_dPair_dPair_Base_dPair_dPair (C_Base_dList_dList_Nil, mc1))))
+  | _ -> failwith "DT: impossible branch"
+))))
+
+let v_Vuna_dCompiler_dCodegen_dTerm_dgenTermLam = (fun a1 -> (fun a2 -> (fun a3 -> (fun a4 -> (fun a5 -> ((((((v_Vuna_dCompiler_dCodegen_dTerm_dgenTermLamFuel 512) a1) a2) a3) a4) a5))))))
+
+let v_Vuna_dCompiler_dCodegen_dTerm_dgenApp = (fun a1 -> (fun a2 -> (fun a3 -> (fun a4 -> (fun a5 -> ((((((v_Vuna_dCompiler_dCodegen_dTerm_dgenAppFuel 512) a1) a2) a3) a4) a5))))))
+
+let v_Vuna_dCompiler_dCodegen_dTerm_dgenConApp = (fun a1 -> (fun a2 -> (fun a3 -> (fun a4 -> (((((v_Vuna_dCompiler_dCodegen_dTerm_dgenConAppFuel 512) a1) a2) a3) a4)))))
+
+let v_Vuna_dCompiler_dCodegen_dTerm_dgenConArgs = (fun a1 -> (fun a2 -> (fun a3 -> ((((v_Vuna_dCompiler_dCodegen_dTerm_dgenConArgsFuel 512) a1) a2) a3))))
+
+let v_Vuna_dCompiler_dCodegen_dTerm_dgenArm = (fun a1 -> (fun a2 -> (fun a3 -> ((((v_Vuna_dCompiler_dCodegen_dTerm_dgenArmFuel 512) a1) a2) a3))))
+
+let v_Vuna_dCompiler_dCodegen_dTerm_dgenArms = (fun a1 -> (fun a2 -> (fun a3 -> ((((v_Vuna_dCompiler_dCodegen_dTerm_dgenArmsFuel 512) a1) a2) a3))))
+
+let v_Vuna_dCompiler_dCodegen_dTerm_dgenCase = (fun a1 -> (fun a2 -> (fun a3 -> (fun a4 -> (((((v_Vuna_dCompiler_dCodegen_dTerm_dgenCaseFuel 512) a1) a2) a3) a4)))))

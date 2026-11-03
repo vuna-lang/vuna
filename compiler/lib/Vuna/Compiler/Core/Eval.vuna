@@ -74,22 +74,28 @@ lookupEnv i [] = Nothing
 lookupEnv i (v :: rest) = if i <= 0 then Just v else lookupEnv (i - 1) rest
 
 eval : List Value -> Term -> Value
-eval env t = case t of
+eval env t = evalFuel 128 env t
+
+evalFuel : Int -> List Value -> Term -> Value
+evalFuel fuel env t = if fuel <= 0 then VType levelZero
+else case t of
   TVar name i => case lookupEnv i env of
     Just v => v
     Nothing => VNeutral (NVar name i [])
   TMeta m => VMeta m []
   TGlobal g => VNeutral (NGlobal g [])
   TType l => VType l
-  TPi name implicit rig dom cod => VPi name implicit rig (eval env dom) (Clos env cod)
+  TPi name implicit rig dom cod =>
+    VPi name implicit rig (evalFuel (fuel - 1) env dom) (Clos env cod)
   TLam name rig body => VLam name rig (Clos env body)
-  TApp f a rig => applyValue (eval env f) (eval env a)
-  TCon c args => VCon c (evalArgTerms env args)
-  TCase scrut alts => evalCase (eval env scrut) (evalAlts env alts)
+  TApp f a rig => applyValueFuel (fuel - 1) (evalFuel (fuel - 1) env f) (evalFuel (fuel - 1) env a)
+  TCon c args => VCon c (evalArgTermsFuel (fuel - 1) env args)
+  TCase scrut alts => evalCaseFuel (fuel - 1) (evalFuel (fuel - 1) env scrut) (evalAlts env alts)
   TInt n => VInt n
   TStr s => VStr s
   TBool b => VBool b
-  TIf c th el => evalIf (eval env c) (eval env th) (eval env el)
+  TIf c th el =>
+    evalIf (evalFuel (fuel - 1) env c) (evalFuel (fuel - 1) env th) (evalFuel (fuel - 1) env el)
 
 evalAlt : List Value -> CaseAlt -> VCaseAlt
 evalAlt env (CaseAlt name binders body) = VCaseAlt name binders (Clos env body)
@@ -99,25 +105,39 @@ evalAlts env [] = []
 evalAlts env (alt :: rest) = evalAlt env alt :: evalAlts env rest
 
 evalArgTerms : List Value -> List (Pair Term Rig) -> List Value
-evalArgTerms env [] = []
-evalArgTerms env ((Pair a rig) :: rest) = eval env a :: evalArgTerms env rest
+evalArgTerms env args = evalArgTermsFuel 128 env args
+
+evalArgTermsFuel : Int -> List Value -> List (Pair Term Rig) -> List Value
+evalArgTermsFuel fuel env args = if fuel <= 0 then []
+else case args of
+  [] => []
+  (Pair a rig) :: rest => evalFuel (fuel - 1) env a :: evalArgTermsFuel (fuel - 1) env rest
 
 -- case 求值：命中构造子则把该构造子的实参绑进分支闭包，否则卡住。
 -- 构造子实参按「最近绑定在前」入环境（与 ctxBind 的 de Bruijn 约定一致）。
 evalCase : Value -> List VCaseAlt -> Value
-evalCase scrut alts = case scrut of
-  VCon c args => applyCaseAlt c args alts
+evalCase scrut alts = evalCaseFuel 128 scrut alts
+
+evalCaseFuel : Int -> Value -> List VCaseAlt -> Value
+evalCaseFuel fuel scrut alts = if fuel <= 0 then VType levelZero
+else case scrut of
+  VCon c args => applyCaseAltFuel (fuel - 1) c args alts
   _ => VCase scrut alts
 
 applyCaseAlt : String -> List Value -> List VCaseAlt -> Value
-applyCaseAlt c args [] = VCase (VCon c args) []
-applyCaseAlt c args (alt :: rest) = if vCaseAltName alt == c then case vCaseAltClosure alt of
-  Clos env body => eval (append (reverse args) env) body
-else if vCaseAltName alt == "" then case vCaseAltClosure alt of
-  -- 兜底分支（源码里写的是变量/通配，精化后名字为空串）。变量兜底带一个 binder，
-  -- 要把 scrutinee 压进环境；通配兜底无 binder。
-  Clos env body => eval (catchAllEnv alt (VCon c args) env) body
-else applyCaseAlt c args rest
+applyCaseAlt c args alts = applyCaseAltFuel 128 c args alts
+
+applyCaseAltFuel : Int -> String -> List Value -> List VCaseAlt -> Value
+applyCaseAltFuel fuel c args alts = if fuel <= 0 then VType levelZero
+else case alts of
+  [] => VCase (VCon c args) []
+  alt :: rest => if vCaseAltName alt == c then case vCaseAltClosure alt of
+    Clos env body => evalFuel (fuel - 1) (append (reverse args) env) body
+  else if vCaseAltName alt == "" then case vCaseAltClosure alt of
+    -- 兜底分支（源码里写的是变量/通配，精化后名字为空串）。变量兜底带一个 binder，
+    -- 要把 scrutinee 压进环境；通配兜底无 binder。
+    Clos env body => evalFuel (fuel - 1) (catchAllEnv alt (VCon c args) env) body
+  else applyCaseAltFuel (fuel - 1) c args rest
 
 catchAllEnv : VCaseAlt -> Value -> List Value -> List Value
 catchAllEnv alt scrut env = case vCaseAltBinders alt of
@@ -135,11 +155,15 @@ spineAppend n a = case n of
   NGlobal g sp => NGlobal g (append sp [a])
 
 applyValue : Value -> Value -> Value
-applyValue f a = case f of
-  VLam name rig (Clos env body) => eval (a :: env) body
+applyValue f a = applyValueFuel 128 f a
+
+applyValueFuel : Int -> Value -> Value -> Value
+applyValueFuel fuel f a = if fuel <= 0 then VType levelZero
+else case f of
+  VLam name rig (Clos env body) => evalFuel (fuel - 1) (a :: env) body
   VNeutral n => VNeutral (spineAppend n a)
   VMeta m sp => VMeta m (append sp [a])
-  _ => f
+  _ => VApp f a
 
 applyClosure : Closure -> Value -> Value
 applyClosure (Clos env body) v = eval (v :: env) body
@@ -165,10 +189,18 @@ else case v of
         [] => VCase s2 []
         _ => force defs sols (fuel - 1) (applyCaseAlt c args alts)
       _ => VCase s2 alts
+  VApp f a =>
+    let
+      f2 = force defs sols (fuel - 1) f
+    in case f2 of
+      VLam name rig clo => force defs sols (fuel - 1) (applyClosure clo a)
+      VMeta m sp => force defs sols (fuel - 1) (VMeta m (append sp [a]))
+      VNeutral n => force defs sols (fuel - 1) (VNeutral (spineAppend n a))
+      _ => VApp f2 a
   VNeutral n => case n of
     NGlobal g sp => case defLookup g defs of
       Just body => force defs sols (fuel - 1) (applySpine (eval [] body) sp)
-      Nothing => case primReduce defs sols g sp of
+      Nothing => case primReduce defs sols (fuel - 1) g sp of
         Just v2 => force defs sols (fuel - 1) v2
         Nothing => v
     _ => v
@@ -305,8 +337,9 @@ strPrim3 ([a, b, c]) f = case asStr a of
   Nothing => Nothing
 strPrim3 sp f = Nothing
 
-primReduce : List (Pair String Term) -> List (Pair Int Value) -> String -> List Value -> Maybe Value
-primReduce defs sols g sp = case g of
+primReduce : List (Pair String Term) -> List (Pair Int Value) -> Int -> String -> List Value -> Maybe Value
+primReduce defs sols fuel g sp = if fuel <= 0 then Nothing
+else case g of
   "+" => intPrim2 sp (\a, b => VInt (a + b))
   "-" => intPrim2 sp (\a, b => VInt (a - b))
   "*" => intPrim2 sp (\a, b => VInt (a * b))
@@ -329,8 +362,8 @@ primReduce defs sols g sp = case g of
   "bi_neq_str" => strPrim2 sp (\a, b => VBool (notBool (strEq a b)))
   -- M23：泛型 == / /= 兜底（没有 Eq 字典时按运行时结构比较，语义对齐 HM 的
   -- bi_eq_generic）。签名带一个擦除的类型实参，spine 形如 [ty, a, b]。
-  "bi_eq_generic" => genericEqPrim defs sols sp False
-  "bi_neq_generic" => genericEqPrim defs sols sp True
+  "bi_eq_generic" => genericEqPrim defs sols (fuel - 1) sp False
+  "bi_neq_generic" => genericEqPrim defs sols (fuel - 1) sp True
   "strFromInt" => intPrim1 sp (\n => VStr (strFromInt n))
   "strLength" => strPrim1 sp (\s => VInt (strLength s))
   -- M22.2：比较运算符的内建特化（`<` / `<=` / `>` / `>=`）与泛型 compare 变体，
@@ -345,11 +378,12 @@ primReduce defs sols g sp = case g of
   "bi_ge_generic" => genericPrim2 sp (\o => o >= 0)
   _ => Nothing
 
-genericEqPrim : List (Pair String Term) -> List (Pair Int Value) -> List Value -> Bool -> Maybe Value
-genericEqPrim defs sols sp neg = case sp of
+genericEqPrim : List (Pair String Term) -> List (Pair Int Value) -> Int -> List Value -> Bool -> Maybe Value
+genericEqPrim defs sols fuel sp neg = if fuel <= 0 then Nothing
+else case sp of
   [ty, a, b] =>
     Just
-      (VBool (if neg then notBool (valueEqDeep defs sols defaultFuel a b) else valueEqDeep defs sols defaultFuel a b))
+      (VBool (if neg then notBool (valueEqDeep defs sols (fuel - 1) a b) else valueEqDeep defs sols (fuel - 1) a b))
   _ => Nothing
 
 valueEqDeep : List (Pair String Term) -> List (Pair Int Value) -> Int -> Value -> Value -> Bool
@@ -370,6 +404,9 @@ else case force defs sols fuel a of
   VCon c args => case force defs sols fuel b of
     VCon c2 args2 => if c == c2 then valueListEqDeep defs sols (fuel - 1) args args2 else False
     _ => False
+  VApp f a => case force defs sols fuel b of
+    VApp f2 a2 => valueEqDeep defs sols (fuel - 1) f f2 && valueEqDeep defs sols (fuel - 1) a a2
+    _ => False
   -- 构造子实参表包含**擦除**的类型/索引实参（VCon 不带 rig，比较时无法区分）。它们对
   -- 运行时结构相等没有意义，却常是未解/已解的元变量或类型中立值：按「同一个元变量」
   -- 或「同一个中立值的显示形态」判等即可（`Just2 1 == Just2 1` 的首个实参就是 `?m`）。
@@ -382,7 +419,8 @@ else case force defs sols fuel a of
   _ => False
 
 valueListEqDeep : List (Pair String Term) -> List (Pair Int Value) -> Int -> List Value -> List Value -> Bool
-valueListEqDeep defs sols fuel xs ys = case xs of
+valueListEqDeep defs sols fuel xs ys = if fuel <= 0 then False
+else case xs of
   [] => case ys of
     [] => True
     _ => False
@@ -395,71 +433,102 @@ valueListEqDeep defs sols fuel xs ys = case xs of
 -- 深度正规化（interp --dt 展示 main 用）：先 force，再递归 spine / if 分支。
 -- 与 force 不同，它会继续深入中立项的实参，因此 `inc (dbl 20)` 能算成 41。
 -- ---------------------------------------------------------------
-normalize : List (Pair String Term) -> List (Pair Int Value) -> Int -> Value -> Value
-normalize defs sols fuel v = if fuel <= 0 then v
+normalizeFuel : Int -> List (Pair String Term) -> List (Pair Int Value) -> Int -> Value -> Value
+normalizeFuel fuel defs sols fuel v = if fuel <= 0 then v
+else if fuel <= 0 then v
 else case force defs sols fuel v of
-  VNeutral n => normalizeNeutral defs sols fuel n
-  VIf c th el => normalizeIf defs sols fuel c th el
-  VCase scrut alts => normalizeCase defs sols fuel scrut alts
+  VNeutral n => normalizeNeutralFuel (fuel - 1) defs sols fuel n
+  VIf c th el => normalizeIfFuel (fuel - 1) defs sols fuel c th el
+  VCase scrut alts => normalizeCaseFuel (fuel - 1) defs sols fuel scrut alts
   other => other
 
 -- case 正规化：scrutinee 归约到构造子就走该分支并继续正规化（分支体里可能还有
 -- case——嵌套模式展开出来的内层匹配就是这种形态）；否则只正规化 scrutinee、保持卡住。
-normalizeCase : List (Pair String Term) -> List (Pair Int Value) -> Int -> Value -> List VCaseAlt -> Value
-normalizeCase defs sols fuel scrut alts = case normalize defs sols (fuel - 1) scrut of
-  VCon c args => normalize defs sols (fuel - 1) (applyCaseAlt c args alts)
+normalizeCaseFuel : Int -> List (Pair String Term) -> List (Pair Int Value) -> Int -> Value -> List VCaseAlt -> Value
+normalizeCaseFuel fuel defs sols fuel scrut alts = if fuel <= 0 then VCase scrut alts
+else if fuel <= 0 then VCase scrut alts
+else case normalizeFuel (fuel - 1) defs sols (fuel - 1) scrut of
+  VCon c args => normalizeFuel (fuel - 1) defs sols (fuel - 1) (applyCaseAlt c args alts)
   s2 => VCase s2 alts
 
-normalizeNeutral : List (Pair String Term) -> List (Pair Int Value) -> Int -> Neutral -> Value
-normalizeNeutral defs sols fuel n = case n of
-  NVar name level sp => VNeutral (NVar name level (map (normalize defs sols fuel) sp))
+normalizeNeutralFuel : Int -> List (Pair String Term) -> List (Pair Int Value) -> Int -> Neutral -> Value
+normalizeNeutralFuel fuel defs sols fuel n = if fuel <= 0 then VNeutral n
+else if fuel <= 0 then VNeutral n
+else case n of
+  NVar name level sp =>
+    VNeutral (NVar name level (map (normalizeFuel (fuel - 1) defs sols fuel) sp))
   NGlobal g sp =>
     let
-      sp2 = map (normalize defs sols fuel) sp
+      sp2 = map (normalizeFuel (fuel - 1) defs sols fuel) sp
     in case defLookup g defs of
-      Just body => normalize defs sols (fuel - 1) (applySpine (eval [] body) sp2)
-      Nothing => case primReduce defs sols g sp2 of
-        Just v2 => normalize defs sols (fuel - 1) v2
+      Just body => normalizeFuel (fuel - 1) defs sols (fuel - 1) (applySpine (eval [] body) sp2)
+      Nothing => case primReduce defs sols (fuel - 1) g sp2 of
+        Just v2 => normalizeFuel (fuel - 1) defs sols (fuel - 1) v2
         Nothing => VNeutral (NGlobal g sp2)
 
-normalizeIf : List (Pair String Term) -> List (Pair Int Value) -> Int -> Value -> Value -> Value -> Value
-normalizeIf defs sols fuel c th el = case normalize defs sols (fuel - 1) c of
-  VBool b => normalize defs sols (fuel - 1) (if b then th else el)
+normalizeIfFuel : Int -> List (Pair String Term) -> List (Pair Int Value) -> Int -> Value -> Value -> Value -> Value
+normalizeIfFuel fuel defs sols fuel c th el = if fuel <= 0 then VIf c th el
+else if fuel <= 0 then VIf c th el
+else case normalizeFuel (fuel - 1) defs sols (fuel - 1) c of
+  VBool b => normalizeFuel (fuel - 1) defs sols (fuel - 1) (if b then th else el)
   VNeutral n =>
-    VIf (VNeutral n) (normalize defs sols (fuel - 1) th) (normalize defs sols (fuel - 1) el)
-  other => VIf other (normalize defs sols (fuel - 1) th) (normalize defs sols (fuel - 1) el)
+    VIf (VNeutral n) (normalizeFuel (fuel - 1) defs sols (fuel - 1) th)
+      (normalizeFuel (fuel - 1) defs sols (fuel - 1) el)
+  other =>
+    VIf other (normalizeFuel (fuel - 1) defs sols (fuel - 1) th)
+      (normalizeFuel (fuel - 1) defs sols (fuel - 1) el)
 
 -- ---------------------------------------------------------------
 -- quote：值 → 项（level 转 de Bruijn index）
 -- ---------------------------------------------------------------
 quote : Int -> Value -> Term
-quote depth v = case v of
+quote depth v = quoteFuel 64 depth v
+
+quoteFuel : Int -> Int -> Value -> Term
+quoteFuel fuel depth v = if fuel <= 0 then TType levelZero
+else case v of
   VType l => TType l
   VPi name implicit rig dom cod =>
-    TPi name implicit rig (quote depth dom)
-      (quote (depth + 1) (applyClosure cod (freshVar name depth)))
-  VLam name rig clo => TLam name rig (quote (depth + 1) (applyClosure clo (freshVar name depth)))
-  VNeutral n => quoteNeutral depth n
-  VMeta m sp => applyTermSpine (TMeta m) (map (quote depth) sp)
-  VCon c args => TCon c (quoteArgValues depth args)
-  VCase scrut alts => TCase (quote depth scrut) (map (quoteCaseAlt depth) alts)
+    TPi name implicit rig (quoteFuel (fuel - 1) depth dom)
+      (quoteFuel (fuel - 1) (depth + 1) (applyClosure cod (freshVar name depth)))
+  VLam name rig clo =>
+    TLam name rig (quoteFuel (fuel - 1) (depth + 1) (applyClosure clo (freshVar name depth)))
+  VNeutral n => quoteNeutralFuel (fuel - 1) depth n
+  VMeta m sp => applyTermSpine (TMeta m) (map (\a => quoteFuel (fuel - 1) depth a) sp)
+  VCon c args => TCon c (quoteArgValuesFuel (fuel - 1) depth args)
+  VApp f a => TApp (quoteFuel (fuel - 1) depth f) (quoteFuel (fuel - 1) depth a) Rig1
+  VCase scrut alts =>
+    TCase (quoteFuel (fuel - 1) depth scrut)
+      (map (\alt => quoteCaseAltFuel (fuel - 1) depth alt) alts)
   VInt n => TInt n
   VStr s => TStr s
   VBool b => TBool b
-  VIf c th el => TIf (quote depth c) (quote depth th) (quote depth el)
+  VIf c th el =>
+    TIf (quoteFuel (fuel - 1) depth c) (quoteFuel (fuel - 1) depth th)
+      (quoteFuel (fuel - 1) depth el)
 
 -- 分支绑定子的 level 约定：第一个实参 level 最低（quote 后 index 最大）。
 quoteCaseAlt : Int -> VCaseAlt -> CaseAlt
-quoteCaseAlt depth (VCaseAlt name binders clo) =
-  let
-    n = length binders
-    argVals = argValsAt binders depth 0
-    body = quote (depth + n) (applyClosureBinder clo argVals)
-  in CaseAlt name binders body
+quoteCaseAlt depth alt = quoteCaseAltFuel 64 depth alt
+
+quoteCaseAltFuel : Int -> Int -> VCaseAlt -> CaseAlt
+quoteCaseAltFuel fuel depth alt0 = if fuel <= 0 then CaseAlt "" [] (TType levelZero)
+else case alt0 of
+  VCaseAlt name binders clo =>
+    let
+      n = length binders
+      argVals = argValsAt binders depth 0
+      body = quoteFuel (fuel - 1) (depth + n) (applyClosureBinder clo argVals)
+    in CaseAlt name binders body
 
 quoteArgValues : Int -> List Value -> List (Pair Term Rig)
-quoteArgValues depth [] = []
-quoteArgValues depth (a :: rest) = Pair (quote depth a) Rig1 :: quoteArgValues depth rest
+quoteArgValues depth vs = quoteArgValuesFuel 64 depth vs
+
+quoteArgValuesFuel : Int -> Int -> List Value -> List (Pair Term Rig)
+quoteArgValuesFuel fuel depth vs = if fuel <= 0 then []
+else case vs of
+  [] => []
+  a :: rest => Pair (quoteFuel (fuel - 1) depth a) Rig1 :: quoteArgValuesFuel (fuel - 1) depth rest
 
 argValsAt : List (Pair String Rig) -> Int -> Int -> List Value
 argValsAt [] depth i = []
@@ -476,9 +545,14 @@ freshVar : String -> Int -> Value
 freshVar name level = VNeutral (NVar name level [])
 
 quoteNeutral : Int -> Neutral -> Term
-quoteNeutral depth n = case n of
-  NVar name level sp => applyTermSpine (TVar name (varIndex depth level)) (map (quote depth) sp)
-  NGlobal g sp => applyTermSpine (TGlobal g) (map (quote depth) sp)
+quoteNeutral depth n = quoteNeutralFuel 64 depth n
+
+quoteNeutralFuel : Int -> Int -> Neutral -> Term
+quoteNeutralFuel fuel depth n = if fuel <= 0 then TType levelZero
+else case n of
+  NVar name level sp =>
+    applyTermSpine (TVar name (varIndex depth level)) (map (\a => quoteFuel (fuel - 1) depth a) sp)
+  NGlobal g sp => applyTermSpine (TGlobal g) (map (\a => quoteFuel (fuel - 1) depth a) sp)
 
 -- M24.6 第一级：越界的 level 以前被静默当成最外层变量（index 0），错得无声。
 -- quote 是纯函数、不返回 Result；这里对越界返回负 index（-1），后续
@@ -549,3 +623,15 @@ showValueAt depth v = showTerm (quote depth v)
 
 showValue : Value -> String
 showValue v = showValueAt 0 v
+
+normalize : List (Pair String Term) -> List (Pair Int Value) -> Int -> Value -> Value
+normalize a1 a2 a3 a4 = normalizeFuel 1024 a1 a2 a3 a4
+
+normalizeCase : List (Pair String Term) -> List (Pair Int Value) -> Int -> Value -> List VCaseAlt -> Value
+normalizeCase a1 a2 a3 a4 a5 = normalizeCaseFuel 1024 a1 a2 a3 a4 a5
+
+normalizeNeutral : List (Pair String Term) -> List (Pair Int Value) -> Int -> Neutral -> Value
+normalizeNeutral a1 a2 a3 a4 = normalizeNeutralFuel 1024 a1 a2 a3 a4
+
+normalizeIf : List (Pair String Term) -> List (Pair Int Value) -> Int -> Value -> Value -> Value -> Value
+normalizeIf a1 a2 a3 a4 a5 a6 = normalizeIfFuel 1024 a1 a2 a3 a4 a5 a6

@@ -39,21 +39,23 @@ Nix 侧的对应关系：`packages.vuna-seed`、`packages.vuna-compiler`、`pack
 每个 vuna 模块对应一个 OCaml 模块（`.ml`），外加共享 runtime / 内建模块与
 `build.sh`。种子**只覆盖 compiler 包**（`compiler/app/Main.vuna` 的 import 闭包）：
 工具链（fmt/lint/repl/doc/test/lsp）由编译器编译出来，不在信任锚点里。源码模块重组
-（compiler 25 → 40 模块）后文件集为 **56 个（55 个 `.ml` + `build.sh`）**，无 `.mli`
+（compiler 25 → 45 模块）后文件集为 **61 个（60 个 `.ml` + `build.sh`）**，无 `.mli`
 （最终以 `seed/` 实际内容为准）。唯一的硬性不变量：
 
-> **当前入库的种子必须能编译当前的 vuna 源码。**
+> **当前入库的种子必须能编译当前的 vuna 源码，且与当前源码的生成结果同步。**
 
-- 种子**不需要**与源码同步：日常修改 `lib/`、`app/`、`test/`、`base/`（以及只在
-  CLI 侧的工具改动）不重新生成种子；只有 `compiler/` 的变更才可能需要 rotation；
+- 种子**必须**与源码同步：修改 `compiler/` 或 `base/`（seed 闭包内）的任何源码都必须
+  rotation；只改 `lib/`、`app/`、`test/` 等工具链/夹具时不需要。CI 会拒绝「seed 落后但
+  fixed point 仍 PASS」的状态（debt C15/E05 的根修）；
 - 种子只通过 **seed rotation** 更新：用当前产品 CLI 对 compiler 包做 DT split
-  codegen，在临时目录完成 TCB 与 fixed point 校验后才替换 `seed/`
+  codegen，在临时目录完成 TCB、闭包数量与 fixed point 校验后才替换 `seed/`
   （`nix/seed-rotate.sh`，失败不破坏工作树）；
-- 种子比源码旧是正常状态，但必须始终保持“能编译当前源码”的能力；
+- **种子与源码同步是硬性要求**，不再接受「种子比源码旧是正常状态」；
 - CI 用 `checks.seed-selfhost` 守这条不变量：`seed/` 由 `packages.vuna-seed` 构建；
   种子对 **compiler 包**做 DT split 得到 stage1 文件集并构建；stage1 再生成 stage2
-  文件集，`diff -r` 逐字节一致；同时按 `nix/tcb-forbidden.txt` 断言 seed/stage1/stage2
-  都不含工具模块，并检查增量构建（无改动不重编、touch 一个模块只重编它）与行为抽查；
+  文件集，`diff -r` 逐字节一致；同时 `diff -r seed s1` 断言 seed 与当前源码同步，
+  按 `nix/tcb-forbidden.txt` 断言 seed/stage1/stage2 都不含工具模块，按
+  `nix/seed-count.txt` 断言闭包 .ml 数量，并检查增量构建与行为抽查；
 - 如果新特性会让源码超出旧种子能编译的语法子集，必须先把特性实现成旧语法可编译的
   形式，rotate 种子后再在编译器源码里使用新语法；
 - `seed/` 下所有文件都是生成物，禁止手改。
@@ -80,7 +82,7 @@ git add seed/ && git commit
 
 ## 硬不变量
 
-1. **当前 seed 必须能编译当前源码**——`checks.seed-selfhost` 守；
+1. **当前 seed 必须能编译当前源码，且与源码同步**（`diff -r seed s1`）——`checks.seed-selfhost` 守；
 2. **rotation 后 stage1 == stage2**（文件集逐字节），即 fixed point；
 3. **`seed/` 只含 compiler 包入口闭包**：工具链（fmt/lint/repl/doc/test/lsp/index）
    不进 TCB；

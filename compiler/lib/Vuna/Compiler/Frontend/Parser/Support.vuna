@@ -1,0 +1,236 @@
+module Vuna.Compiler.Frontend.Parser.Support
+  ( PState(..)
+  , advance
+  , atKw
+  , atSym
+  , badCaseIndent
+  , binderHeadName
+  , canContinue
+  , countArrows
+  , ctorPatternStart
+  , expectIdent
+  , expectKw
+  , expectSym
+  , fileOf
+  , infixInfo
+  , isEof
+  , lastPos
+  , mkInfixExpr
+  , nthTok
+  , opExpr
+  , peekPos
+  , peekTok
+  , peekTokAt
+  , posOf
+  , sameLineState
+  , spanOf
+  , startsAtom
+  , startsPatternAtom
+  , stateFuel
+  , terminatesExpression
+  , tokOf
+  , toksOf
+  , underscoreCtorName
+  , upperFirst
+  ) where
+
+-- Vuna.Compiler.Frontend.Parser.Support：parser 的状态类型（PState）与 token/游标
+-- 辅助（lookahead、advance、span、fuel、infix 表、token 分类）。解析规则留在
+-- `Parser.vuna`；拆出本模块是为满足 `nix/context.budget` 的 max_module_lines。
+import Vuna.Compiler.Common
+import Vuna.Compiler.Frontend.Ast
+import Vuna.Compiler.Frontend.Lexer
+
+data PState : Type where
+  PState : String -> List PTok -> Pos -> PState
+
+-- vuna 源码 parser（offside layout）
+-- ---------------------------------------------------------------
+posOf : PTok -> Pos
+posOf (PTok t p) = p
+
+tokOf : PTok -> Tok
+tokOf (PTok t p) = t
+
+fileOf : PState -> String
+fileOf (PState file toks last) = file
+
+-- 从起始状态 st 到结束状态 st2 的 span：起点=当前 token，终点=最后消费的 token。
+spanOf : PState -> PState -> Span
+spanOf st st2 =
+  Span (fileOf st) (posLine (peekPos st)) (posCol (peekPos st)) (posLine (lastPos st2))
+    (posCol (lastPos st2))
+
+peekTok : PState -> PTok
+peekTok (PState file toks last) = case toks of
+  t :: rest => t
+  [] => PTok TEof (Pos 1 1)
+
+peekPos : PState -> Pos
+peekPos st = posOf (peekTok st)
+
+lastPos : PState -> Pos
+lastPos (PState file toks last) = last
+
+advance : PState -> PState
+advance (PState file toks last) = case toks of
+  t :: rest => case t of
+    PTok TEof p => PState file toks last
+    _ => PState file rest (posOf t)
+  [] => PState file toks last
+
+isEof : PState -> Bool
+isEof st = case peekTok st of
+  PTok TEof p => True
+  _ => False
+
+-- 让下一个 token 视作「与上一 token 同一行」：do 语句块里新起一行的裸表达式
+-- 需要这一点，否则首 token 会被 canContinue 判成缩进不足。
+toksOf : PState -> List PTok
+toksOf (PState file toks last) = toks
+
+-- 显式 fuel：parser 的递归都经「返回新状态再递归」，无法用结构递归证明；
+-- 每个解析循环带 fuel 并在入口 `if fuel <= 0` 守卫，递归传 `fuel - 1`。
+-- 初始预算按剩余 token 数线性放大（每次合法循环至少消耗一个 token）。
+stateFuel : PState -> Int
+stateFuel st = 128 * length (toksOf st) + 1024
+
+sameLineState : PState -> PState
+sameLineState st = case peekPos st of
+  Pos line col => PState (fileOf st) (toksOf st) (Pos line 0)
+
+atSym : PState -> String -> Bool
+atSym st s = case peekTok st of
+  PTok (TSym x) p => x == s
+  _ => False
+
+-- 向后看第 n 个 token（0 = 当前）。M13 的 Pi binder 需要 2-token lookahead。
+nthTok : List PTok -> Int -> Maybe PTok
+nthTok [] n = Nothing
+nthTok (t :: rest) n = if n <= 0 then Just t else nthTok rest (n - 1)
+
+peekTokAt : PState -> Int -> Maybe PTok
+peekTokAt st n = nthTok (toksOf st) n
+
+-- bindhead：下一个 token 是 `标识符 :`（M13：`(x : A) -> B` / `{x : A} -> B`）。
+binderHeadName : PState -> Maybe String
+binderHeadName st = case peekTok st of
+  PTok (TIdent name) p => case peekTokAt st 1 of
+    Just (PTok (TSym ":") _) => Just name
+    _ => Nothing
+  _ => Nothing
+
+atKw : PState -> String -> Bool
+atKw st k = case peekTok st of
+  PTok (TKw x) p => x == k
+  _ => False
+
+canContinue : PState -> Int -> Bool
+canContinue st blockCol = case peekPos st of
+  Pos line col => case lastPos st of
+    Pos lastLine lastCol => line == lastLine || col > blockCol
+
+expectSym : PState -> String -> Result (Pair Int PState)
+expectSym st s = case peekTok st of
+  PTok (TSym x) p => if x == s then Ok (Pair 0 (advance st)) else Err ("expected " ++ s)
+  _ => Err ("expected " ++ s)
+
+expectKw : PState -> String -> Result (Pair Int PState)
+expectKw st k = case peekTok st of
+  PTok (TKw x) p => if x == k then Ok (Pair 0 (advance st)) else Err ("expected " ++ k)
+  _ => Err ("expected " ++ k)
+
+expectIdent : PState -> Result (Pair String PState)
+expectIdent st = case peekTok st of
+  PTok (TIdent x) p => Ok (Pair x (advance st))
+  _ => Err "expected identifier"
+
+upperFirst : String -> Bool
+upperFirst s = case strUnpack s of
+  c :: rest => c >= 65 && c <= 90
+  [] => False
+
+-- `_` 前缀私有构造器（如 `_C`）在模式里也要能当构造器用：`_` 开头的标识符
+-- 若紧随大写字母，按构造器解析；单独的 `_` 仍是通配符，`_x` 仍是变量。
+underscoreCtorName : String -> Bool
+underscoreCtorName s = case strUnpack s of
+  c :: rest => if c == 95 then case rest of
+    c2 :: rest2 => c2 >= 65 && c2 <= 90
+    [] => False
+  else False
+  [] => False
+
+ctorPatternStart : String -> Bool
+ctorPatternStart name = upperFirst name || underscoreCtorName name
+
+startsAtom : PState -> Bool
+startsAtom st = case peekTok st of
+  PTok (TIdent x) p => True
+  PTok (TInt x) p => True
+  PTok (TStr x) p => True
+  PTok (TKw "Type") p => True
+  PTok (TSym "(") p => True
+  PTok (TSym "[") p => True
+  _ => False
+
+startsPatternAtom : PState -> Bool
+startsPatternAtom st = case peekTok st of
+  PTok (TIdent x) p => True
+  PTok (TInt x) p => True
+  PTok (TStr x) p => True
+  PTok (TSym "(") p => True
+  PTok (TSym "[") p => True
+  _ => False
+
+infixInfo : String -> Maybe (Pair Int Int)
+infixInfo "->" = Just (Pair 1 1)
+infixInfo "||" = Just (Pair 2 0)
+infixInfo "&&" = Just (Pair 3 0)
+infixInfo "==" = Just (Pair 4 0)
+infixInfo "/=" = Just (Pair 4 0)
+infixInfo "<" = Just (Pair 4 0)
+infixInfo "<=" = Just (Pair 4 0)
+infixInfo ">" = Just (Pair 4 0)
+infixInfo ">=" = Just (Pair 4 0)
+infixInfo "++" = Just (Pair 5 1)
+infixInfo "+" = Just (Pair 6 0)
+infixInfo "-" = Just (Pair 6 0)
+infixInfo "*" = Just (Pair 7 0)
+infixInfo "/" = Just (Pair 7 0)
+infixInfo "::" = Just (Pair 8 1)
+infixInfo ">>=" = Just (Pair 1 1)
+infixInfo ">>" = Just (Pair 1 0)
+infixInfo _ = Nothing
+
+opExpr : String -> Span -> Expr
+opExpr "::" sp = EVar "Cons" sp
+opExpr ">>=" sp = EVar "bind" sp
+opExpr op sp = EVar op sp
+
+-- `>>` 是 do 的派生：`a >> b` = `bind a (\_ -> b)`。
+mkInfixExpr : String -> Expr -> Expr -> Span -> Expr
+mkInfixExpr ">>" lhs rhs sp = EApp (EVar "bind" sp) [lhs, ELam ["vuna_seq_ignore"] rhs sp] sp
+mkInfixExpr op lhs rhs sp = EApp (opExpr op sp) [lhs, rhs] sp
+
+countArrows : Expr -> Int
+countArrows e = case e of
+  EApp (EVar "->" _) ([x, rest]) _ => 1 + countArrows rest
+  _ => 0
+
+terminatesExpression : PTok -> Bool
+terminatesExpression tok = case tok of
+  PTok (TSym ")") p => True
+  PTok (TSym "]") p => True
+  PTok (TSym ",") p => True
+  PTok (TKw "else") p => True
+  PTok (TKw "in") p => True
+  PTok (TKw "then") p => True
+  _ => False
+
+badCaseIndent : PState -> Int -> Bool
+badCaseIndent st altCol = if isEof st then False
+else case peekPos st of
+  Pos line col => if col > altCol then case terminatesExpression (peekTok st) of
+    True => False
+    False => True
+  else False

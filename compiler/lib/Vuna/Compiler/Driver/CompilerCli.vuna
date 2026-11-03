@@ -111,11 +111,6 @@ printWarnings (w :: rest) =
     _ = print (w ++ "\n")
   in printWarnings rest
 
-rootArg : String -> List Root -> List String -> (List Root -> List String -> Int) -> Int
-rootArg prog roots rest k = case rest of
-  dir :: rest2 => k (append roots [rawRoot dir]) rest2
-  [] => usageErr prog
-
 defaultDir : Maybe String -> String
 defaultDir dir = case dir of
   Just dir2 => dir2
@@ -152,8 +147,9 @@ compileParse prog printResult roots args = case args of
   [] => usageErr prog
   arg :: rest => case arg of
     "--no-print" => compileParse prog False roots rest
-    "--root" =>
-      rootArg prog roots rest (\roots2, rest2 => compileParse prog printResult roots2 rest2)
+    "--root" => case rest of
+      dir :: rest2 => compileParse prog printResult (append roots [rawRoot dir]) rest2
+      [] => usageErr prog
     _ =>
       if startsWith "-" arg then removedFlag prog arg
       else compileEmit prog printResult roots arg rest
@@ -197,7 +193,9 @@ checkArgs prog args = checkParse prog [] args
 checkParse : String -> List Root -> List String -> Int
 checkParse prog roots args = case args of
   [] => usageErr prog
-  "--root" :: rest => rootArg prog roots rest (\roots2, rest2 => checkParse prog roots2 rest2)
+  "--root" :: rest => case rest of
+    dir :: rest2 => checkParse prog (append roots [rawRoot dir]) rest2
+    [] => usageErr prog
   [arg] =>
     if startsWith "-" arg then removedFlag prog arg
     else if fileExists arg then if isDirectory arg then checkPkg arg else checkFile (effectiveRoots roots) arg

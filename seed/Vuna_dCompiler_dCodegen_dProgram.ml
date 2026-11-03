@@ -17,6 +17,7 @@ open Vuna_dCompiler_dFrontend_dManifest
 open Vuna_dCompiler_dPackages_dPkg
 open Vuna_dCompiler_dFrontend_dAst
 open Vuna_dCompiler_dFrontend_dLexer
+open Vuna_dCompiler_dFrontend_dParser_dSupport
 open Vuna_dCompiler_dFrontend_dParser
 open Vuna_dCompiler_dLoader_dModules
 open Vuna_dCompiler_dLoader_dResolve
@@ -33,11 +34,15 @@ open Vuna_dCompiler_dElab_dMeta
 open Vuna_dCompiler_dElab_dCase
 open Vuna_dCompiler_dElab_dDict
 open Vuna_dCompiler_dElab_dMatch
+open Vuna_dCompiler_dElab_dTerm_dSupport
+open Vuna_dCompiler_dElab_dTerm_dImpl
 open Vuna_dCompiler_dElab_dTerm
 open Vuna_dCompiler_dElab_dData
 open Vuna_dCompiler_dElab_dTrait
 open Vuna_dCompiler_dElab_dDerive
 open Vuna_dCompiler_dElab_dRecords
+open Vuna_dCompiler_dElab_dTermination_dMeasure
+open Vuna_dCompiler_dElab_dTermination_dScc
 open Vuna_dCompiler_dElab_dTermination
 open Vuna_dCompiler_dElab_dDriver
 open Vuna_dCompiler_dElab
@@ -45,7 +50,7 @@ open Vuna_dCompiler_dCodegen_dDecl
 open Vuna_dCompiler_dCodegen_dErase
 open Vuna_dCompiler_dCodegen_dTerm
 let v_Vuna_dCompiler_dCodegen_dProgram_dprepareDtProgram = (fun program -> ((fun datas -> ((fun defs -> ((fun table -> ((fun familyNames -> (match ((v_Vuna_dCompiler_dCodegen_dErase_dpartitionDefs table) defs) with
-  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__0, dtb__1) -> ((fun allTypeNames -> ((v_Base_dResult_dandThen (v_Vuna_dCompiler_dCodegen_dErase_dcheckAllDefScopes dtb__0)) (fun _u -> ((v_Base_dResult_dandThen ((v_Vuna_dCompiler_dCodegen_dErase_densureUniqueOcamlNames datas) dtb__0)) (fun _u -> ((v_Base_dResult_dandThen ((v_Vuna_dCompiler_dCodegen_dErase_dcheckAllErasure allTypeNames) dtb__0)) (fun _u -> ((v_Base_dResult_dandThen (v_Vuna_dCompiler_dCodegen_dErase_dgroupRuntimeDefs dtb__0)) (fun groups -> (C_Base_dResult_dResult_Base_dResult_dOk ((C_Base_dPair_dPair_Base_dPair_dPair (dtb__0, groups))))))))))))) ((v_Base_dList_dappend dtb__1) familyNames))
+  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__0, dtb__1) -> ((fun allTypeNames -> ((v_Base_dResult_dandThen (v_Vuna_dCompiler_dCodegen_dErase_dcheckAllDefScopes defs)) (fun _u -> ((v_Base_dResult_dandThen ((v_Vuna_dCompiler_dCodegen_dErase_densureUniqueOcamlNames datas) dtb__0)) (fun _u -> ((v_Base_dResult_dandThen ((v_Vuna_dCompiler_dCodegen_dErase_dcheckAllErasure allTypeNames) dtb__0)) (fun _u -> ((v_Base_dResult_dandThen (v_Vuna_dCompiler_dCodegen_dErase_dgroupRuntimeDefs dtb__0)) (fun groups -> (C_Base_dResult_dResult_Base_dResult_dOk ((C_Base_dPair_dPair_Base_dPair_dPair (dtb__0, groups))))))))))))) ((v_Base_dList_dappend dtb__1) familyNames))
   | _ -> failwith "DT: impossible branch"
 )) ((v_Base_dList_dmap v_Vuna_dCompiler_dElab_dTypes_ddtDataName) datas))) (v_Vuna_dCompiler_dCodegen_dErase_ddefTable defs))) (v_Base_dPair_dsecondOf program))) (v_Base_dPair_dfirstOf program)))
 

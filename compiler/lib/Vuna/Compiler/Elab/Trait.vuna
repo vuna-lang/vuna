@@ -371,7 +371,6 @@ elabInstanceMethodsGo globals ec ((Pair mname fty) :: rest) pname headArg decls 
     clauses = methodClausesNamed mname decls
     instTy = substClassParam pname headArg fty
   in case clauses of
-    -- @code TC_InstanceMissingMethod
     [] =>
       errAt sp
         "[TC_InstanceMissingMethod] DT: instance is missing an implementation for an interface method"
@@ -474,34 +473,53 @@ insertDictCalls : String -> String -> Int -> Term -> Term
 insertDictCalls defName dName appPos t = injectDictGo defName dName appPos 0 t
 
 injectDictGo : String -> String -> Int -> Int -> Term -> Term
-injectDictGo defName dName appPos depth t = case t of
-  TLam n r b => TLam n r (injectDictGo defName dName appPos (depth + 1) b)
+injectDictGo defName dName appPos depth t = injectDictGoFuel 128 defName dName appPos depth t
+
+injectDictGoFuel : Int -> String -> String -> Int -> Int -> Term -> Term
+injectDictGoFuel fuel defName dName appPos depth t = if fuel <= 0 then t
+else case t of
+  TLam n r b => TLam n r (injectDictGoFuel (fuel - 1) defName dName appPos (depth + 1) b)
   TPi n i r d c =>
-    TPi n i r (injectDictGo defName dName appPos depth d)
-      (injectDictGo defName dName appPos (depth + 1) c)
+    TPi n i r (injectDictGoFuel (fuel - 1) defName dName appPos depth d)
+      (injectDictGoFuel (fuel - 1) defName dName appPos (depth + 1) c)
   TApp f a r => case flattenTaggedApp t of
-    Just (Pair g args) => rewriteTaggedSpine defName dName appPos depth g args
+    Just (Pair g args) => rewriteTaggedSpineFuel (fuel - 1) defName dName appPos depth g args
     Nothing =>
-      TApp (injectDictGo defName dName appPos depth f) (injectDictGo defName dName appPos depth a) r
+      TApp (injectDictGoFuel (fuel - 1) defName dName appPos depth f)
+        (injectDictGoFuel (fuel - 1) defName dName appPos depth a) r
   TCon c args =>
     TCon c
-      (map (\p => Pair (injectDictGo defName dName appPos depth (firstOf p)) (secondOf p)) args)
+      (map (\p => Pair (injectDictGoFuel (fuel - 1) defName dName appPos depth (firstOf p)) (secondOf p)) args)
   TCase scrut alts =>
-    TCase (injectDictGo defName dName appPos depth scrut)
-      (map (injectAltGo defName dName appPos depth) alts)
+    TCase (injectDictGoFuel (fuel - 1) defName dName appPos depth scrut)
+      (map (\alt => injectAltGoFuel (fuel - 1) defName dName appPos depth alt) alts)
   TIf c th el =>
-    TIf (injectDictGo defName dName appPos depth c) (injectDictGo defName dName appPos depth th)
-      (injectDictGo defName dName appPos depth el)
+    TIf (injectDictGoFuel (fuel - 1) defName dName appPos depth c)
+      (injectDictGoFuel (fuel - 1) defName dName appPos depth th)
+      (injectDictGoFuel (fuel - 1) defName dName appPos depth el)
   _ => t
 
 injectAltGo : String -> String -> Int -> Int -> CaseAlt -> CaseAlt
-injectAltGo defName dName appPos depth alt = case alt of
-  CaseAlt n bs b => CaseAlt n bs (injectDictGo defName dName appPos (depth + length bs) b)
+injectAltGo defName dName appPos depth alt = injectAltGoFuel 128 defName dName appPos depth alt
+
+injectAltGoFuel : Int -> String -> String -> Int -> Int -> CaseAlt -> CaseAlt
+injectAltGoFuel fuel defName dName appPos depth alt = if fuel <= 0 then alt
+else case alt of
+  CaseAlt n bs b =>
+    CaseAlt n bs (injectDictGoFuel (fuel - 1) defName dName appPos (depth + length bs) b)
 
 rewriteTaggedSpine : String -> String -> Int -> Int -> String -> List (Pair Term Rig) -> Term
 rewriteTaggedSpine defName dName appPos depth g args =
+  rewriteTaggedSpineFuel 128 defName dName appPos depth g args
+
+rewriteTaggedSpineFuel : Int -> String -> String -> Int -> Int -> String -> List (Pair Term Rig) -> Term
+rewriteTaggedSpineFuel fuel defName dName appPos depth g args = if fuel <= 0 then TGlobal g
+else
   let
-    args2 = map (\p => Pair (injectDictGo defName dName appPos depth (firstOf p)) (secondOf p)) args
+    args2 =
+      map
+        (\p => Pair (injectDictGoFuel (fuel - 1) defName dName appPos depth (firstOf p)) (secondOf p))
+        args
   in if g == defName && length args2 > appPos && depth > appPos then foldAppTerms (TGlobal g) (insertArgAt appPos (Pair (TVar dName (depth - appPos - 1)) Rig1) args2)
   else foldAppTerms (TGlobal g) args2
 
@@ -532,12 +550,10 @@ checkInstanceHeadsGo [] classes globals ec acc insts seen =
 checkInstanceHeadsGo (d :: rest) classes globals ec acc insts seen = case d of
   Pair decl dsp => case decl of
     DInstance mname isDefault headExpr methods msp => case instanceHeadName headExpr of
-      -- @code TC_InstanceHeadNotApp
       Nothing =>
         errAt msp
           "[TC_InstanceHeadNotApp] DT: instance head must be an interface application (e.g. Show Int)"
       Just cname => case findClass cname classes of
-        -- @code TC_UnknownInterface
         Nothing =>
           errAt msp ("[TC_UnknownInterface] DT: unknown interface " ++ cname ++ " in instance head")
         Just cls =>
@@ -650,28 +666,30 @@ defTypeOrDefault globals name = case globalLookup name globals of
 checkDef : List (Pair String Term) -> Ec -> List Pat -> Expr -> Value -> Span -> Result (Pair Term Ec)
 checkDef globals ec pats body expected sp = checkBinders globals emptyCtx ec pats body expected sp
 
-checkBinders : List (Pair String Term) -> Ctx -> Ec -> List Pat -> Expr -> Value -> Span -> Result (Pair Term Ec)
-checkBinders globals ctx ec [] body expected sp =
+checkBindersFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> List Pat -> Expr -> Value -> Span -> Result (Pair Term Ec)
+checkBindersFuel fuel globals ctx ec [] body expected sp = if fuel <= 0 then Err "DT: internal: binder check fuel exhausted"
+else
   let
     forced = forceVal ec expected
   in case forced of
     VPi name implicit rig dom clo =>
-      if implicit then if isIndexDomain ec dom then bindIndexBinder globals ctx ec name dom clo [] body sp
+      if implicit then if isIndexDomain ec dom then bindIndexBinderFuel (fuel - 1) globals ctx ec name dom clo [] body sp
       else errAt sp
-        "[TC_ImplicitParamKind] DT: implicit parameters must be types or inductive families (M14)"
+        "[TC_ImplicitParamKind] DT: implicit parameters must be types or inductive families (M15)"
       else checkBodyAtEnd globals ctx ec body expected sp
     -- @code TC_ImplicitParamKind
     _ => checkE globals ctx ec body expected
 
 -- 隐式索引 binder（`{n : Nat}`）：绑成擦除的 lambda（Rig0），体在扩展上下文里继续。
-bindIndexBinder : List (Pair String Term) -> Ctx -> Ec -> String -> Value -> Closure -> List Pat -> Expr -> Span -> Result (Pair Term Ec)
-bindIndexBinder globals ctx ec name dom clo pats body sp =
+bindIndexBinderFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> String -> Value -> Closure -> List Pat -> Expr -> Span -> Result (Pair Term Ec)
+bindIndexBinderFuel fuel globals ctx ec name dom clo pats body sp = if fuel <= 0 then Err "DT: internal: binder check fuel exhausted"
+else
   let
     lvl = ctxDepth ctx
     v = freshVarValue name lvl
     ctx2 = ctxBindValue name dom ctx
     expected2 = applyClosure clo v
-  in andThen (checkBinders globals ctx2 ec pats body expected2 sp) (\p => case p of
+  in andThen (checkBindersFuel (fuel - 1) globals ctx2 ec pats body expected2 sp) (\p => case p of
     Pair inner ec1 => Ok (Pair (TLam name Rig0 inner) ec1)
   )
 
@@ -682,17 +700,17 @@ checkBodyAtEnd globals ctx ec body expected sp = case body of
   -- @code TC_DefFewerParams
   _ => errAt sp "[TC_DefFewerParams] DT: definition has fewer parameters than its signature"
 
-checkBinders globals ctx ec (pat :: rest) body expected sp =
+checkBindersFuel fuel globals ctx ec (pat :: rest) body expected sp = if fuel <= 0 then Err "DT: internal: binder check fuel exhausted"
+else
   let
     forced = forceVal ec expected
   in case forced of
-    VPi name implicit rig dom clo => if implicit then if isIndexDomain ec dom then bindIndexBinder globals ctx ec name dom clo (pat :: rest) body sp
+    VPi name implicit rig dom clo => if implicit then if isIndexDomain ec dom then bindIndexBinderFuel (fuel - 1) globals ctx ec name dom clo (pat :: rest) body sp
     else errAt sp
-      "[TC_ImplicitParamKind] DT: implicit parameters must be types or inductive families (M14)"
+      "[TC_ImplicitParamKind] DT: implicit parameters must be types or inductive families (M15)"
     else case pat of
-      -- @code TC_ImplicitParamKind
-      PVar pname psp => bindOnePattern globals ctx ec pname rest body dom clo sp
-      PWild psp => bindOnePattern globals ctx ec "_" rest body dom clo sp
+      PVar pname psp => bindOnePatternFuel (fuel - 1) globals ctx ec pname rest body dom clo sp
+      PWild psp => bindOnePatternFuel (fuel - 1) globals ctx ec "_" rest body dom clo sp
       -- @code TC_DefParamsMustBeVars
       _ =>
         errAt (patSpan pat)
@@ -700,14 +718,15 @@ checkBinders globals ctx ec (pat :: rest) body expected sp =
     -- @code TC_DefMoreParams
     _ => errAt sp "[TC_DefMoreParams] DT: definition has more parameters than its signature"
 
-bindOnePattern : List (Pair String Term) -> Ctx -> Ec -> String -> List Pat -> Expr -> Value -> Closure -> Span -> Result (Pair Term Ec)
-bindOnePattern globals ctx ec pname pats body dom clo sp =
+bindOnePatternFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> String -> List Pat -> Expr -> Value -> Closure -> Span -> Result (Pair Term Ec)
+bindOnePatternFuel fuel globals ctx ec pname pats body dom clo sp = if fuel <= 0 then Err "DT: internal: binder check fuel exhausted"
+else
   let
     lvl = ctxDepth ctx
     v = freshVarValue pname lvl
     ctx2 = ctxBindValue pname dom ctx
     erasure = typeLayerRig False dom
-  in andThen (checkBinders globals ctx2 ec pats body (applyClosure clo v) sp) (\p => case p of
+  in andThen (checkBindersFuel (fuel - 1) globals ctx2 ec pats body (applyClosure clo v) sp) (\p => case p of
     Pair inner ec1 => Ok (Pair (TLam pname erasure inner) ec1)
   )
 
@@ -729,3 +748,12 @@ elabFunDef globals ec clauses expected sp = case clauses of
   _ =>
     andThen (multiToExpr (ctorFamilyTable ec) clauses)
       (\bodyExpr => checkDef globals ec [] bodyExpr expected sp)
+
+checkBinders : List (Pair String Term) -> Ctx -> Ec -> List Pat -> Expr -> Value -> Span -> Result (Pair Term Ec)
+checkBinders a1 a2 a3 a4 a5 a6 a7 = checkBindersFuel 512 a1 a2 a3 a4 a5 a6 a7
+
+bindIndexBinder : List (Pair String Term) -> Ctx -> Ec -> String -> Value -> Closure -> List Pat -> Expr -> Span -> Result (Pair Term Ec)
+bindIndexBinder a1 a2 a3 a4 a5 a6 a7 a8 a9 = bindIndexBinderFuel 512 a1 a2 a3 a4 a5 a6 a7 a8 a9
+
+bindOnePattern : List (Pair String Term) -> Ctx -> Ec -> String -> List Pat -> Expr -> Value -> Closure -> Span -> Result (Pair Term Ec)
+bindOnePattern a1 a2 a3 a4 a5 a6 a7 a8 a9 = bindOnePatternFuel 512 a1 a2 a3 a4 a5 a6 a7 a8 a9

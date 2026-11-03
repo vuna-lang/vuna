@@ -213,32 +213,45 @@ lookupUsed (p :: rest) name = if firstOf p == name then secondOf p else lookupUs
 -- 收集「在渲染位置上」引用了当前族哪些候选类型参数。
 -- `lvl` 是当前到达的 binder 深度（给 Pi 的闭包喂 fresh var 用）。
 collectUsedLevels : List Int -> List (Pair String (List Int)) -> List DtData -> Int -> Value -> List Int
-collectUsedLevels tps table datas lvl v = case v of
+collectUsedLevels tps table datas lvl v = collectUsedLevelsFuel 256 tps table datas lvl v
+
+collectUsedLevelsFuel : Int -> List Int -> List (Pair String (List Int)) -> List DtData -> Int -> Value -> List Int
+collectUsedLevelsFuel fuel tps table datas lvl v = if fuel <= 0 then []
+else case v of
   VPi name implicit rig dom clo =>
-    if implicit then collectUsedLevels tps table datas (lvl + 1) (applyClosure clo (VNeutral (NVar name lvl [])))
-    else append (collectUsedLevels tps table datas lvl dom)
-      (collectUsedLevels tps table datas (lvl + 1) (applyClosure clo (VNeutral (NVar name lvl []))))
+    if implicit then collectUsedLevelsFuel (fuel - 1) tps table datas (lvl + 1)
+      (applyClosure clo (VNeutral (NVar name lvl [])))
+    else append (collectUsedLevelsFuel (fuel - 1) tps table datas lvl dom)
+      (collectUsedLevelsFuel (fuel - 1) tps table datas (lvl + 1) (applyClosure clo (VNeutral (NVar name lvl []))))
   VNeutral n => case n of
     NVar name lvl2 sp =>
-      append (if memInt lvl2 tps then [lvl2] else []) (collectUsedSpine tps table datas lvl sp)
+      append (if memInt lvl2 tps then [lvl2] else [])
+        (collectUsedSpineFuel (fuel - 1) tps table datas lvl sp)
     NGlobal g sp => case findDtData g datas of
-      Just gd => collectFamilyArgs tps table datas lvl (lookupUsed table g) sp
-      Nothing => collectUsedSpine tps table datas lvl sp
+      Just gd => collectFamilyArgsFuel (fuel - 1) tps table datas lvl (lookupUsed table g) sp
+      Nothing => collectUsedSpineFuel (fuel - 1) tps table datas lvl sp
   _ => []
 
-collectUsedSpine : List Int -> List (Pair String (List Int)) -> List DtData -> Int -> List Value -> List Int
-collectUsedSpine tps table datas lvl [] = []
-collectUsedSpine tps table datas lvl (v :: rest) =
-  append (collectUsedLevels tps table datas lvl v) (collectUsedSpine tps table datas lvl rest)
+collectUsedSpineFuel : Int -> List Int -> List (Pair String (List Int)) -> List DtData -> Int -> List Value -> List Int
+collectUsedSpineFuel fuel tps table datas lvl [] = if fuel <= 0 then [] else []
+collectUsedSpineFuel fuel tps table datas lvl (v :: rest) =
+  if fuel <= 0 then []
+  else append (collectUsedLevelsFuel (fuel - 1) tps table datas lvl v)
+    (collectUsedSpineFuel (fuel - 1) tps table datas lvl rest)
 
 collectFamilyArgs : List Int -> List (Pair String (List Int)) -> List DtData -> Int -> List Int -> List Value -> List Int
-collectFamilyArgs tps table datas lvl usedPats args = case usedPats of
+collectFamilyArgs tps table datas lvl usedPats args =
+  collectFamilyArgsFuel 256 tps table datas lvl usedPats args
+
+collectFamilyArgsFuel : Int -> List Int -> List (Pair String (List Int)) -> List DtData -> Int -> List Int -> List Value -> List Int
+collectFamilyArgsFuel fuel tps table datas lvl usedPats args = if fuel <= 0 then []
+else case usedPats of
   [] => []
   i :: rest => case nthValue args i of
     Just arg =>
-      append (collectUsedLevels tps table datas lvl arg)
-        (collectFamilyArgs tps table datas lvl rest args)
-    Nothing => collectFamilyArgs tps table datas lvl rest args
+      append (collectUsedLevelsFuel (fuel - 1) tps table datas lvl arg)
+        (collectFamilyArgsFuel (fuel - 1) tps table datas lvl rest args)
+    Nothing => collectFamilyArgsFuel (fuel - 1) tps table datas lvl rest args
 
 ctorUsedLevels : List Int -> List (Pair String (List Int)) -> List DtData -> List (Pair String Rig) -> Int -> Value -> List Int
 ctorUsedLevels tps table datas [] lvl v = []
@@ -267,10 +280,14 @@ sameLevelTable (a :: rest) (b :: rest2) =
 sameLevelTable _ _ = False
 
 usedTableFix : List DtData -> List (Pair String (List Int)) -> List (Pair String (List Int))
-usedTableFix datas table =
+usedTableFix datas table = usedTableFixFuel 64 datas table
+
+usedTableFixFuel : Int -> List DtData -> List (Pair String (List Int)) -> List (Pair String (List Int))
+usedTableFixFuel fuel datas table = if fuel <= 0 then table
+else
   let
     next = map (\d => Pair (dtDataName d) (dataUsedLevels d table datas)) datas
-  in if sameLevelTable next table then next else usedTableFix datas next
+  in if sameLevelTable next table then next else usedTableFixFuel (fuel - 1) datas next
 
 -- 字段/类型实参渲染。
 familyTyText : String -> List String -> String
@@ -279,15 +296,25 @@ familyTyText name ([a]) = a ++ " " ++ typeName name
 familyTyText name args = "(" ++ joinWith ", " args ++ ") " ++ typeName name
 
 renderFamilyArgs : List Int -> List (Pair String (List Int)) -> List DtData -> List Int -> List Value -> List String
-renderFamilyArgs levels table datas usedPats args = case usedPats of
+renderFamilyArgs levels table datas usedPats args =
+  renderFamilyArgsFuel 256 levels table datas usedPats args
+
+renderFamilyArgsFuel : Int -> List Int -> List (Pair String (List Int)) -> List DtData -> List Int -> List Value -> List String
+renderFamilyArgsFuel fuel levels table datas usedPats args = if fuel <= 0 then []
+else case usedPats of
   [] => []
   i :: rest => case nthValue args i of
     Just arg =>
-      renderTypeArg levels table datas arg :: renderFamilyArgs levels table datas rest args
-    Nothing => renderFamilyArgs levels table datas rest args
+      renderTypeArgFuel (fuel - 1) levels table datas arg
+        :: renderFamilyArgsFuel (fuel - 1) levels table datas rest args
+    Nothing => renderFamilyArgsFuel (fuel - 1) levels table datas rest args
 
 renderTypeArg : List Int -> List (Pair String (List Int)) -> List DtData -> Value -> String
-renderTypeArg levels table datas v = case v of
+renderTypeArg levels table datas v = renderTypeArgFuel 256 levels table datas v
+
+renderTypeArgFuel : Int -> List Int -> List (Pair String (List Int)) -> List DtData -> Value -> String
+renderTypeArgFuel fuel levels table datas v = if fuel <= 0 then "unit"
+else case v of
   VNeutral n => case n of
     NVar name lvl sp => case levelSlot levels lvl of
       Just s => typeParamName s
@@ -298,7 +325,9 @@ renderTypeArg levels table datas v = case v of
       "Bool" => "bool"
       _ => if lastName g == "Bool" then "bool"
       else case findDtData g datas of
-        Just gd => familyTyText g (renderFamilyArgs levels table datas (lookupUsed table g) sp)
+        Just gd =>
+          familyTyText g
+            (renderFamilyArgsFuel (fuel - 1) levels table datas (lookupUsed table g) sp)
         Nothing => "unit"
   _ => "unit"
 
@@ -307,15 +336,19 @@ renderTypeArg levels table datas v = case v of
 -- OCaml 类型，顶层值就不会留下弱类型变量。带隐式量词的 Pi（trait 方法签名，如
 -- `bind : m a -> (a -> m b) -> m b`）整体不透明——方法级多态没法用 OCaml 类型表达。
 renderPiTy : List Int -> List (Pair String (List Int)) -> List DtData -> Int -> Value -> String
-renderPiTy levels table datas lvl v = case v of
+renderPiTy levels table datas lvl v = renderPiTyFuel 256 levels table datas lvl v
+
+renderPiTyFuel : Int -> List Int -> List (Pair String (List Int)) -> List DtData -> Int -> Value -> String
+renderPiTyFuel fuel levels table datas lvl v = if fuel <= 0 then renderTypeArg levels table datas v
+else case v of
   VPi name implicit rig dom clo =>
     let
       next = applyClosure clo (VNeutral (NVar name lvl []))
-    in if rigIsErased rig then renderPiTy levels table datas (lvl + 1) next
+    in if rigIsErased rig then renderPiTyFuel (fuel - 1) levels table datas (lvl + 1) next
     else "("
-      ++ renderPiTy levels table datas lvl dom
+      ++ renderPiTyFuel (fuel - 1) levels table datas lvl dom
       ++ ") -> "
-      ++ renderPiTy levels table datas (lvl + 1) next
+      ++ renderPiTyFuel (fuel - 1) levels table datas (lvl + 1) next
   _ => renderTypeArg levels table datas v
 
 -- 单个字段的 OCaml 类型 + 下一个不透明参数槽。
@@ -441,3 +474,6 @@ genTypeDeclsOf allDatas subset = case subset of
       table = usedTableFix allDatas (map (\d => Pair (dtDataName d) []) allDatas)
     in andThen (traverse (genDataDecl table allDatas) subset)
       (\parts => Ok ("type " ++ joinWith "\nand " parts ++ "\n\n"))
+
+collectUsedSpine : List Int -> List (Pair String (List Int)) -> List DtData -> Int -> List Value -> List Int
+collectUsedSpine a1 a2 a3 a4 a5 = collectUsedSpineFuel 512 a1 a2 a3 a4 a5

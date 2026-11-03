@@ -17,6 +17,7 @@ open Vuna_dCompiler_dFrontend_dManifest
 open Vuna_dCompiler_dPackages_dPkg
 open Vuna_dCompiler_dFrontend_dAst
 open Vuna_dCompiler_dFrontend_dLexer
+open Vuna_dCompiler_dFrontend_dParser_dSupport
 open Vuna_dCompiler_dFrontend_dParser
 open Vuna_dCompiler_dLoader_dModules
 open Vuna_dCompiler_dLoader_dResolve
@@ -33,11 +34,15 @@ open Vuna_dCompiler_dElab_dMeta
 open Vuna_dCompiler_dElab_dCase
 open Vuna_dCompiler_dElab_dDict
 open Vuna_dCompiler_dElab_dMatch
+open Vuna_dCompiler_dElab_dTerm_dSupport
+open Vuna_dCompiler_dElab_dTerm_dImpl
 open Vuna_dCompiler_dElab_dTerm
 open Vuna_dCompiler_dElab_dData
 open Vuna_dCompiler_dElab_dTrait
 open Vuna_dCompiler_dElab_dDerive
 open Vuna_dCompiler_dElab_dRecords
+open Vuna_dCompiler_dElab_dTermination_dMeasure
+open Vuna_dCompiler_dElab_dTermination_dScc
 open Vuna_dCompiler_dElab_dTermination
 type t_Vuna_dCompiler_dElab_dDriver_dDtGoalInfo = C_Vuna_dCompiler_dElab_dDriver_dDtGoalInfo_Vuna_dCompiler_dElab_dDriver_dDtGoalInfo of (t_Vuna_dCompiler_dCommon_dSpan) * (string) * ((string, string) t_Base_dPair_dPair t_Base_dList_dList)
 
@@ -112,11 +117,9 @@ let v_Vuna_dCompiler_dElab_dDriver_ddtEvalExprIn = (fun prog -> (fun expr -> (ma
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
-)))) (C_Vuna_dCompiler_dElab_dTypes_dEc_Vuna_dCompiler_dElab_dTypes_dEc (dtb__35, dtb__31, ((v_Base_dList_dmap (fun d -> (C_Base_dPair_dPair_Base_dPair_dPair ((v_Vuna_dCompiler_dElab_dTypes_ddtDefName d), (v_Vuna_dCompiler_dElab_dTypes_ddtDefBody d))))) dtb__29), dtb__28, C_Base_dList_dList_Nil, C_Base_dList_dList_Nil, dtb__33, dtb__34, C_Base_dList_dList_Nil, false)))
+)))) (C_Vuna_dCompiler_dElab_dTypes_dEc_Vuna_dCompiler_dElab_dTypes_dEc (dtb__35, dtb__31, ((v_Base_dList_dmap (fun d -> (C_Base_dPair_dPair_Base_dPair_dPair ((v_Vuna_dCompiler_dElab_dTypes_ddtDefName d), (v_Vuna_dCompiler_dElab_dTypes_ddtDefBody d))))) dtb__29), dtb__28, C_Base_dList_dList_Nil, C_Base_dList_dList_Nil, dtb__33, dtb__34, C_Base_dList_dList_Nil)))
   | _ -> failwith "DT: impossible branch"
 )))
-
-let v_Vuna_dCompiler_dElab_dDriver_dcheckTerminationIf = (fun trusted -> (fun decls -> (if trusted then (C_Base_dResult_dResult_Base_dResult_dOk (0)) else (v_Vuna_dCompiler_dElab_dTermination_dcheckTerminationDecls decls))))
 
 let rec v_Vuna_dCompiler_dElab_dDriver_dtermHasMeta = (fun m -> (fun t -> (match t with
   | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTMeta (dtb__43) -> ((bi_eq_int dtb__43) m)
@@ -171,11 +174,13 @@ let rec v_Vuna_dCompiler_dElab_dDriver_dfindGoal = (fun mc0 -> (fun mc1 -> (matc
   | _ -> failwith "DT: impossible branch"
 )))
 
-let rec v_Vuna_dCompiler_dElab_dDriver_dunsolvedFromRelevant = (fun i -> (fun stop -> (fun sols -> (fun relevant -> (fun goals -> (if ((bi_ge_int i) stop) then C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing else (match ((v_Vuna_dCompiler_dCore_dTerm_dmetaLookup i) sols) with
-  | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__82) -> (((((v_Vuna_dCompiler_dElab_dDriver_dunsolvedFromRelevant ((bi_add i) 1)) stop) sols) relevant) goals)
-  | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> (if (if ((v_Vuna_dCompiler_dElab_dMeta_dmemMetaId i) relevant) then true else (v_Base_dMaybe_disJust ((v_Vuna_dCompiler_dElab_dDriver_dfindGoal i) goals))) then (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (i)) else (((((v_Vuna_dCompiler_dElab_dDriver_dunsolvedFromRelevant ((bi_add i) 1)) stop) sols) relevant) goals))
+let rec v_Vuna_dCompiler_dElab_dDriver_dunsolvedFromRelevantGo = (fun remaining -> (fun stop -> (fun sols -> (fun relevant -> (fun goals -> (if ((bi_le_int remaining) 0) then C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing else ((fun i -> (match ((v_Vuna_dCompiler_dCore_dTerm_dmetaLookup i) sols) with
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__82) -> (((((v_Vuna_dCompiler_dElab_dDriver_dunsolvedFromRelevantGo ((bi_sub remaining) 1)) stop) sols) relevant) goals)
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> (if (if ((v_Vuna_dCompiler_dElab_dMeta_dmemMetaId i) relevant) then true else (v_Base_dMaybe_disJust ((v_Vuna_dCompiler_dElab_dDriver_dfindGoal i) goals))) then (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (i)) else (((((v_Vuna_dCompiler_dElab_dDriver_dunsolvedFromRelevantGo ((bi_sub remaining) 1)) stop) sols) relevant) goals))
   | _ -> failwith "DT: impossible branch"
-)))))))
+)) ((bi_sub stop) remaining))))))))
+
+let v_Vuna_dCompiler_dElab_dDriver_dunsolvedFromRelevant = (fun i -> (fun stop -> (fun sols -> (fun relevant -> (fun goals -> (((((v_Vuna_dCompiler_dElab_dDriver_dunsolvedFromRelevantGo ((bi_sub stop) i)) stop) sols) relevant) goals))))))
 
 let v_Vuna_dCompiler_dElab_dDriver_dunsolvedMeta = (fun ec -> (((((v_Vuna_dCompiler_dElab_dDriver_dunsolvedFromRelevant 0) (v_Vuna_dCompiler_dElab_dTypes_decNext ec)) (v_Vuna_dCompiler_dElab_dTypes_decSols ec)) (v_Vuna_dCompiler_dElab_dMeta_drelevantMetas ec)) (v_Vuna_dCompiler_dElab_dTypes_decGoals ec)))
 
@@ -185,7 +190,7 @@ let v_Vuna_dCompiler_dElab_dDriver_dunsolvedMessage = (fun ec -> (fun m -> (matc
   | _ -> failwith "DT: impossible branch"
 )))
 
-let v_Vuna_dCompiler_dElab_dDriver_delabProgramGo = (fun trusted -> (fun decls -> ((v_Base_dResult_dandThen (v_Vuna_dCompiler_dElab_dMeta_dcollectSigs decls)) (fun sigs -> ((v_Base_dResult_dandThen (((v_Vuna_dCompiler_dElab_dData_delabDatas ((v_Vuna_dCompiler_dElab_dMeta_dcollectDataDecls decls) C_Base_dList_dList_Nil)) (v_Vuna_dCompiler_dElab_dPrelude_dpreludeGlobalsFor (v_Vuna_dCompiler_dElab_dPrelude_dpickListFamily (v_Vuna_dCompiler_dElab_dMeta_ddataNamesOf decls)))) ((v_Vuna_dCompiler_dElab_dTypes_decWithTrust trusted) (v_Vuna_dCompiler_dElab_dTypes_decEmpty ())))) (fun pd -> (match pd with
+let v_Vuna_dCompiler_dElab_dDriver_delabProgramGo = (fun decls -> ((v_Base_dResult_dandThen (v_Vuna_dCompiler_dElab_dMeta_dcollectSigs decls)) (fun sigs -> ((v_Base_dResult_dandThen (((v_Vuna_dCompiler_dElab_dData_delabDatas ((v_Vuna_dCompiler_dElab_dMeta_dcollectDataDecls decls) C_Base_dList_dList_Nil)) (v_Vuna_dCompiler_dElab_dPrelude_dpreludeGlobalsFor (v_Vuna_dCompiler_dElab_dPrelude_dpickListFamily (v_Vuna_dCompiler_dElab_dMeta_ddataNamesOf decls)))) (v_Vuna_dCompiler_dElab_dTypes_decEmpty ()))) (fun pd -> (match pd with
   | C_Base_dPair_dPair_Base_dPair_dPair (dtb__84, dtb__85) -> (match dtb__85 with
   | C_Base_dPair_dPair_Base_dPair_dPair (dtb__86, dtb__87) -> ((v_Base_dResult_dandThen (((v_Vuna_dCompiler_dElab_dTrait_delabTraits ((v_Vuna_dCompiler_dElab_dMeta_dcollectTraitDecls decls) C_Base_dList_dList_Nil)) dtb__86) dtb__87)) (fun pt -> (match pt with
   | C_Base_dPair_dPair_Base_dPair_dPair (dtb__88, dtb__89) -> (match dtb__89 with
@@ -196,7 +201,7 @@ let v_Vuna_dCompiler_dElab_dDriver_delabProgramGo = (fun trusted -> (fun decls -
   | C_Base_dPair_dPair_Base_dPair_dPair (dtb__98, dtb__99) -> ((fun ec3 -> ((fun defs -> ((v_Base_dResult_dandThen (((((v_Vuna_dCompiler_dElab_dTrait_delabInstanceBodies ((v_Vuna_dCompiler_dElab_dMeta_dcollectInstDecls decls) C_Base_dList_dList_Nil)) dtb__92) datas1) dtb__96) ec3)) (fun pi -> (match pi with
   | C_Base_dPair_dPair_Base_dPair_dPair (dtb__100, dtb__101) -> ((fun ec4 -> ((fun instDefs -> (match (v_Vuna_dCompiler_dElab_dDriver_dunsolvedMeta ec4) with
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__102) -> (C_Base_dResult_dResult_Base_dResult_dErr (((v_Vuna_dCompiler_dElab_dDriver_dunsolvedMessage ec4) dtb__102)))
-  | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> ((fun extra -> ((fun allDefs -> ((v_Base_dResult_dandThen ((v_Vuna_dCompiler_dElab_dDriver_dcheckTerminationIf trusted) decls)) (fun _u -> (C_Base_dResult_dResult_Base_dResult_dOk ((C_Vuna_dCompiler_dElab_dTypes_dDtProgram_Vuna_dCompiler_dElab_dTypes_dDtProgram (datas1, allDefs, (v_Vuna_dCompiler_dElab_dTypes_decGoals ec4), (v_Vuna_dCompiler_dElab_dTypes_decSols ec4), dtb__96, (v_Vuna_dCompiler_dElab_dTypes_decInsts ec4), (v_Vuna_dCompiler_dElab_dTypes_decClasses ec4), (v_Vuna_dCompiler_dElab_dTypes_decNext ec4)))))))) ((v_Vuna_dCompiler_dElab_dDriver_drezonkDefs ec4) ((v_Base_dList_dappend instDefs) ((v_Base_dList_dappend extra) defs))))) (((v_Vuna_dCompiler_dElab_dTrait_dextraDefsOf dtb__96) ec4) ((v_Base_dList_dappend instDefs) defs)))
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> ((fun extra -> ((fun allDefs -> ((v_Base_dResult_dandThen (v_Vuna_dCompiler_dElab_dTermination_dcheckTerminationDecls decls)) (fun _u -> (C_Base_dResult_dResult_Base_dResult_dOk ((C_Vuna_dCompiler_dElab_dTypes_dDtProgram_Vuna_dCompiler_dElab_dTypes_dDtProgram (datas1, allDefs, (v_Vuna_dCompiler_dElab_dTypes_decGoals ec4), (v_Vuna_dCompiler_dElab_dTypes_decSols ec4), dtb__96, (v_Vuna_dCompiler_dElab_dTypes_decInsts ec4), (v_Vuna_dCompiler_dElab_dTypes_decClasses ec4), (v_Vuna_dCompiler_dElab_dTypes_decNext ec4)))))))) ((v_Vuna_dCompiler_dElab_dDriver_drezonkDefs ec4) ((v_Base_dList_dappend instDefs) ((v_Base_dList_dappend extra) defs))))) (((v_Vuna_dCompiler_dElab_dTrait_dextraDefsOf dtb__96) ec4) ((v_Base_dList_dappend instDefs) defs)))
   | _ -> failwith "DT: impossible branch"
 )) ((v_Vuna_dCompiler_dElab_dDriver_drezonkDefs ec4) dtb__100))) (((v_Vuna_dCompiler_dElab_dDriver_dresolveDictGoalsFix dtb__96) dtb__101) 8))
   | _ -> failwith "DT: impossible branch"
@@ -216,11 +221,9 @@ let v_Vuna_dCompiler_dElab_dDriver_delabProgramGo = (fun trusted -> (fun decls -
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
-)))))))
+))))))
 
-let v_Vuna_dCompiler_dElab_dDriver_delabProgramFullWith = (fun trusted -> (fun decls -> ((v_Base_dResult_dandThen (v_Vuna_dCompiler_dElab_dRecords_dprepareDecls decls)) (fun ds -> ((v_Base_dResult_dandThen (v_Vuna_dCompiler_dElab_dDerive_dexpandDerivings ds)) (fun ds2 -> ((v_Vuna_dCompiler_dElab_dDriver_delabProgramGo trusted) ds2)))))))
-
-let v_Vuna_dCompiler_dElab_dDriver_delabProgramFull = (fun decls -> ((v_Vuna_dCompiler_dElab_dDriver_delabProgramFullWith false) decls))
+let v_Vuna_dCompiler_dElab_dDriver_delabProgramFull = (fun decls -> ((v_Base_dResult_dandThen (v_Vuna_dCompiler_dElab_dRecords_dprepareDecls decls)) (fun ds -> ((v_Base_dResult_dandThen (v_Vuna_dCompiler_dElab_dDerive_dexpandDerivings ds)) (fun ds2 -> (v_Vuna_dCompiler_dElab_dDriver_delabProgramGo ds2))))))
 
 let v_Vuna_dCompiler_dElab_dDriver_ddtGoalInfoSpan = (fun mc0 -> (match mc0 with
   | C_Vuna_dCompiler_dElab_dDriver_dDtGoalInfo_Vuna_dCompiler_dElab_dDriver_dDtGoalInfo (dtb__103, dtb__104, dtb__105) -> dtb__103
@@ -254,6 +257,4 @@ let v_Vuna_dCompiler_dElab_dDriver_dgoalInfoOf = (fun sols -> (fun g -> (C_Vuna_
 
 let v_Vuna_dCompiler_dElab_dDriver_dgoalsOfProgram = (fun decls -> ((v_Base_dResult_dandThen (v_Vuna_dCompiler_dElab_dDriver_delabProgramFull decls)) (fun prog -> (C_Base_dResult_dResult_Base_dResult_dOk (((v_Base_dList_dmap (v_Vuna_dCompiler_dElab_dDriver_dgoalInfoOf (v_Vuna_dCompiler_dElab_dTypes_ddtProgSols prog))) (v_Vuna_dCompiler_dElab_dTypes_ddtProgGoals prog)))))))
 
-let v_Vuna_dCompiler_dElab_dDriver_delabProgramWith = (fun trusted -> (fun decls -> ((v_Base_dResult_dandThen ((v_Vuna_dCompiler_dElab_dDriver_delabProgramFullWith trusted) decls)) (fun prog -> (C_Base_dResult_dResult_Base_dResult_dOk ((C_Base_dPair_dPair_Base_dPair_dPair ((v_Vuna_dCompiler_dElab_dTypes_ddtProgDatas prog), (v_Vuna_dCompiler_dElab_dTypes_ddtProgDefs prog)))))))))
-
-let v_Vuna_dCompiler_dElab_dDriver_delabProgram = (fun decls -> ((v_Vuna_dCompiler_dElab_dDriver_delabProgramWith false) decls))
+let v_Vuna_dCompiler_dElab_dDriver_delabProgram = (fun decls -> ((v_Base_dResult_dandThen (v_Vuna_dCompiler_dElab_dDriver_delabProgramFull decls)) (fun prog -> (C_Base_dResult_dResult_Base_dResult_dOk ((C_Base_dPair_dPair_Base_dPair_dPair ((v_Vuna_dCompiler_dElab_dTypes_ddtProgDatas prog), (v_Vuna_dCompiler_dElab_dTypes_ddtProgDefs prog))))))))

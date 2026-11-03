@@ -99,6 +99,7 @@ builtinTyName v = case v of
 
 -- 按实参类型选运行时函数名。
 eqRuntimeName : String -> String -> Result String
+-- @code TC_NeedsTwoArgs
 eqRuntimeName op tyName = case tyName of
   "Int" => if op == "==" then Ok "bi_eq_int" else Ok "bi_neq_int"
   "String" => if op == "==" then Ok "bi_eq_str" else Ok "bi_neq_str"

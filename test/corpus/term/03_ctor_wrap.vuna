@@ -1,0 +1,18 @@
+-- M25.2a 正例：构造子包装的状态推进（lexer 形态：`Chars rest ...`）。
+-- 第 0 个实参是 `Chars rest (p + 1)`：rest 的路径是 [0, 1]（Chars 字段 0 的
+-- Cons 字段 1），首段 0 == 包装字段 0，所以「形参 cs 字段 0 的子树大小」严格下降。
+-- （这是 M25.2a 的 path 感知规则；旧实现只认裸变量子项，直接拒绝。）
+import Prelude
+
+data Chars : Type where
+  Chars : List Int -> Int -> Chars
+
+data Tok : Type where
+  TK : Int -> Tok
+
+collect : Chars -> List Tok
+collect (Chars Nil p) = Nil
+collect (Chars (Cons c rest) p) = Cons (TK c) (collect (Chars rest (p + 1)))
+
+main : Int
+main = 0

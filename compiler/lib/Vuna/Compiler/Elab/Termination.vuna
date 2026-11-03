@@ -1,173 +1,355 @@
 module Vuna.Compiler.Elab.Termination (checkTerminationDecls) where
 
--- Vuna.Compiler.Elab.Termination：DT 终止性检查（M16）。只分析自递归函数，规则是「体内每个
--- 自调用必须至少有一个实参是相应形参的真子项」。输入是 surface AST（`List Decl`），
--- 与精化状态无关，因此独立成模块，避免 `Elab` 单模块膨胀（冷启动上下文预算）。
+-- Vuna.Compiler.Elab.Termination：DT 终止性检查入口（M16 → M25.2a → M25.2b → M25.2c）。
+-- 判据细节见 `.Measure`（size/R2/投影/关系/弱环）与 `.Scc`（size-change）。
 import Vuna.Compiler.Common
 import Vuna.Compiler.Frontend.Ast
+import Vuna.Compiler.Elab.Termination.Measure
+import Vuna.Compiler.Elab.Termination.Scc
 
--- ===============================================================
--- M16：终止性检查（结构化递归，surface AST）
--- 只分析自递归函数。规则：体内每个自调用必须至少有一个实参是「对应形参的真子项」。
--- ===============================================================
--- size 表：变量名 ↦ (形参下标, 深度)；形参深度 0，构造子字段继承下标、深度+1。
--- `plus a b = case a of Zero => b | Succ k => Succ (plus k b)`：k 的 size=(0,1) ⇒ 下降 ⇒ 通过。
--- `loop n = loop n`：n 的 size=(0,0) ⇒ 拒绝。
-checkTerminationDecls : List Decl -> Result Int
-checkTerminationDecls decls = checkTermDeclsGo (funDefsOf decls)
+patNames : Pat -> List String
+patNames p = case p of
+  PVar n sp => [n]
+  PCon c ps sp => concatMap patNames ps
+  PRecord rn fields sp => concatMap (\q => patNames (secondOf q)) fields
+  PWild sp => []
+  _ => []
 
-funDefsOf : List Decl -> List (Pair String (Pair (List Pat) Expr))
-funDefsOf [] = []
-funDefsOf (d :: rest) = case d of
-  DFun name pats body sp => Pair name (Pair pats body) :: funDefsOf rest
-  _ => funDefsOf rest
+patsNames : List Pat -> List String
+patsNames ps = concatMap patNames ps
 
-checkTermDeclsGo : List (Pair String (Pair (List Pat) Expr)) -> Result Int
-checkTermDeclsGo [] = Ok 0
-checkTermDeclsGo (fd :: rest) = case fd of
-  Pair name (Pair pats body) =>
-    if funMentions name body then andThen (checkTermOne name pats body) (\_ => checkTermDeclsGo rest)
-    else checkTermDeclsGo rest
+refsOfStmt : List String -> DoStmt -> Pair (List String) (List String)
+refsOfStmt bound stmt = case stmt of
+  DBind pat e sp => Pair (patNames pat) (exprRefsB bound e)
+  DExpr e sp => Pair [] (exprRefsB bound e)
 
--- 体里是否出现对自身的调用（名字出现在表达式里）。
-funMentions : String -> Expr -> Bool
-funMentions name e = case e of
-  EVar n sp => n == name
-  EInt n sp => False
-  EStr s sp => False
-  ELam ns b sp => funMentions name b
-  EApp fn args sp => funMentions name fn || funMentionsList name args
-  EPi n implicit dom cod sp => funMentions name dom || funMentions name cod
-  ELet binds b rec_ sp => funMentions name b
-  ECase scrut alts sp => funMentions name scrut || funMentionsAlts name alts
-  EIf c t el sp => funMentions name c || funMentions name t || funMentions name el
-  EField base f sp => funMentions name base
-  ERecord rn fields sp => funMentionsFields name fields
-  ERecUpdate base fields sp => funMentions name base
-  EInstSel meth iname sp => funMentions name meth
-  EDo stmts sp => funMentionsStmts name stmts
-  -- M24：where 绑定签名（`EAnn value ty`）；类型层不算调用。
-  EAnn value ty sp => funMentions name value
+refsOfStmts : List String -> List DoStmt -> Pair (List String) (List String)
+refsOfStmts bound [] = Pair [] []
+refsOfStmts bound (st :: rest) = case refsOfStmt bound st of
+  Pair newNames refs => case refsOfStmts (append newNames bound) rest of
+    Pair newNames2 restRefs => Pair newNames2 (append refs restRefs)
 
-funMentionsList : String -> List Expr -> Bool
-funMentionsList name [] = False
-funMentionsList name (e :: rest) = funMentions name e || funMentionsList name rest
-
-funMentionsAlts : String -> List (Pair Pat Expr) -> Bool
-funMentionsAlts name [] = False
-funMentionsAlts name (a :: rest) = case a of
-  Pair p b => funMentions name b || funMentionsAlts name rest
-
-funMentionsFields : String -> List (Pair String Expr) -> Bool
-funMentionsFields name [] = False
-funMentionsFields name (f :: rest) = case f of
-  Pair fn fe => funMentions name fe || funMentionsFields name rest
-
-funMentionsStmts : String -> List DoStmt -> Bool
-funMentionsStmts name [] = False
-funMentionsStmts name (s :: rest) = funMentions name (doStmtExpr s) || funMentionsStmts name rest
-
--- 单个自递归定义。
-checkTermOne : String -> List Pat -> Expr -> Result Int
-checkTermOne fname pats body = checkTermBody fname (patSizeEntries pats) body
-
--- 顶层形参的尺寸表：递归进构造子模式，给子变量加深度（`Cons y rest` 的 `rest` → (i,1)）。
--- 这样 `mem x (Cons y rest) = ... mem x rest ...` 能证明 `rest` 严格下降。
-patSizeEntries : List Pat -> List (Pair String (Pair Int Int))
-patSizeEntries pats = patSizeGo pats 0
-
-patSizeGo : List Pat -> Int -> List (Pair String (Pair Int Int))
-patSizeGo [] i = []
-patSizeGo (p :: rest) i = case p of
-  PVar n sp => Pair n (Pair i 0) :: patSizeGo rest (i + 1)
-  PWild sp => Pair "_" (Pair i 0) :: patSizeGo rest (i + 1)
-  PCon cn ps sp =>
-    append (Pair "_" (Pair i 0) :: subSizeEntries (Pair i 0) ps) (patSizeGo rest (i + 1))
-  _ => Pair "_" (Pair i 0) :: patSizeGo rest (i + 1)
-
--- 遍历体：每个对 fname 的调用都必须有下降证据。
-checkTermBody : String -> List (Pair String (Pair Int Int)) -> Expr -> Result Int
-checkTermBody fname sizes e = case e of
-  EApp fn args sp => case callIndexes fname fn args of
-    Nothing => checkTermBody fname sizes fn
-    Just idxs =>
-      if anyDescends idxs args sizes then checkTermArgs fname sizes args
-      else Err
-        ("[TC_CannotProveTermination] DT: cannot prove termination of " ++ fname ++ " (recursive call does not structurally decrease)")
-  -- @code TC_CannotProveTermination
+exprRefsB : List String -> Expr -> List String
+exprRefsB bound e = case e of
+  EVar n sp => if memName n bound then [] else [n]
+  EInt n sp => []
+  EStr s sp => []
+  ELam ns b sp => exprRefsB (append ns bound) b
+  EApp fn args sp => append (exprRefsB bound fn) (concatMap (exprRefsB bound) args)
+  EPi n implicit dom cod sp => append (exprRefsB bound dom) (exprRefsB (n :: bound) cod)
+  ELet binds b rec_ sp =>
+    append (concatMap (\bd => exprRefsB bound (secondOf bd)) binds)
+      (exprRefsB (append (concatMap (\bd => patNames (firstOf bd)) binds) bound) b)
   ECase scrut alts sp =>
-    andThen (checkTermBody fname sizes scrut) (\_ => checkTermAlts fname sizes scrut alts)
-  EIf c t el sp =>
-    andThen (checkTermBody fname sizes c)
-      (\_ => andThen (checkTermBody fname sizes t) (\_ => checkTermBody fname sizes el))
-  ELam ns b sp => checkTermBody fname sizes b
-  ELet binds b rec_ sp => checkTermBody fname sizes b
-  _ => Ok 0
+    append (exprRefsB bound scrut)
+      (concatMap (\alt => exprRefsB (append (patNames (firstOf alt)) bound) (secondOf alt)) alts)
+  EIf c t el sp => append (exprRefsB bound c) (append (exprRefsB bound t) (exprRefsB bound el))
+  EField base f sp => exprRefsB bound base
+  ERecord rn fields sp => concatMap (\q => exprRefsB bound (secondOf q)) fields
+  ERecUpdate base fields sp =>
+    append (exprRefsB bound base) (concatMap (\q => exprRefsB bound (secondOf q)) fields)
+  EInstSel base meth sp => exprRefsB bound base
+  EDo stmts sp => secondOf (refsOfStmts bound stmts)
+  EAnn value ty sp => append (exprRefsB bound value) (exprRefsB bound ty)
 
-checkTermArgs : String -> List (Pair String (Pair Int Int)) -> List Expr -> Result Int
-checkTermArgs fname sizes [] = Ok 0
-checkTermArgs fname sizes (a :: rest) =
-  andThen (checkTermBody fname sizes a) (\_ => checkTermArgs fname sizes rest)
+refsOfDef : List (Pair (List Pat) Expr) -> List String
+refsOfDef clauses = dedup (concatMap (\c => exprRefsB (patsNames (firstOf c)) (secondOf c)) clauses)
 
-checkTermAlts : String -> List (Pair String (Pair Int Int)) -> Expr -> List (Pair Pat Expr) -> Result Int
-checkTermAlts fname sizes scrut [] = Ok 0
-checkTermAlts fname sizes scrut (a :: rest) = case a of
-  Pair pat body =>
-    andThen (checkTermBody fname (extendSizes sizes scrut pat) body)
-      (\_ => checkTermAlts fname sizes scrut rest)
+mapEdges : List String -> List (Pair String (List (Pair (List Pat) Expr))) -> List (Pair String (List String))
+mapEdges names [] = []
+mapEdges names (d :: rest) =
+  Pair (firstOf d) (filter (\r => memName r names) (refsOfDef (secondOf d))) :: mapEdges names rest
 
--- 调用形态：`fname a1 .. an`（裸 EVar 或无实参都算，索引表给出实参位置）。
-callIndexes : String -> Expr -> List Expr -> Maybe (List Int)
-callIndexes fname fn args = case fn of
-  EVar n sp => if n == fname then Just (rangeInt (length args)) else Nothing
-  _ => Nothing
+callGraph : List (Pair String (List (Pair (List Pat) Expr))) -> List (Pair String (List String))
+callGraph defs = mapEdges (defNames defs) defs
 
-rangeInt : Int -> List Int
-rangeInt n = rangeIntGo n 0
+adjOf : String -> List (Pair String (List String)) -> List String
+adjOf n g = case lookupPair n g of
+  Just xs => xs
+  Nothing => []
 
-rangeIntGo : Int -> Int -> List Int
-rangeIntGo n i = if i >= n then [] else i :: rangeIntGo n (i + 1)
+replacePair : String -> List String -> List (Pair String (List String)) -> List (Pair String (List String))
+replacePair n v [] = []
+replacePair n v ((Pair k xs) :: rest) =
+  if k == n then Pair n v :: rest else Pair k xs :: replacePair n v rest
 
--- 至少一个实参在其对应位置严格下降（源自同一形参、且深度 > 0）。
-anyDescends : List Int -> List Expr -> List (Pair String (Pair Int Int)) -> Bool
-anyDescends [] args sizes = False
-anyDescends (i :: rest) args sizes = case nthExpr args i of
-  Nothing => anyDescends rest args sizes
-  Just a => if argDescendsAt i a sizes then True else anyDescends rest args sizes
+addEdge : String -> String -> List (Pair String (List String)) -> List (Pair String (List String))
+addEdge n m acc = case lookupPair n acc of
+  Just xs => replacePair n (dedup (append xs [m])) acc
+  Nothing => Pair n [m] :: acc
 
-argDescendsAt : Int -> Expr -> List (Pair String (Pair Int Int)) -> Bool
-argDescendsAt i a sizes = case a of
-  EVar n sp => case sizeOfVar n sizes of
-    Just sz => case sz of
-      Pair base depth => base == i && depth > 0
-    Nothing => False
-  _ => False
+addEdges : String -> List String -> List (Pair String (List String)) -> List (Pair String (List String))
+addEdges src [] a = a
+addEdges src (d :: ds) a = addEdges src ds (addEdge d src a)
 
-nthExpr : List Expr -> Int -> Maybe Expr
-nthExpr [] i = Nothing
-nthExpr (e :: rest) i = if i <= 0 then Just e else nthExpr rest (i - 1)
+transposeGo : List (Pair String (List String)) -> List (Pair String (List String)) -> List (Pair String (List String))
+transposeGo [] acc = acc
+transposeGo ((Pair src dsts) :: rest) acc = transposeGo rest (addEdges src dsts acc)
 
--- 把模式的绑定变量加入 size 表。
-extendSizes : List (Pair String (Pair Int Int)) -> Expr -> Pat -> List (Pair String (Pair Int Int))
-extendSizes sizes scrut pat = case scrut of
-  EVar vname vsp => case sizeOfVar vname sizes of
-    Nothing => sizes
-    Just base => case pat of
-      PCon cname subpats psp => append sizes (subSizeEntries base subpats)
-      _ => sizes
-  _ => sizes
+transpose : List (Pair String (List String)) -> List (Pair String (List String))
+transpose g = transposeGo g []
 
-subSizeEntries : Pair Int Int -> List Pat -> List (Pair String (Pair Int Int))
-subSizeEntries base subpats = subSizeGo base subpats
+edgeCount : List (Pair String (List String)) -> Int
+edgeCount [] = 0
+edgeCount ((Pair n ds) :: rest) = length ds + edgeCount rest
 
-subSizeGo : Pair Int Int -> List Pat -> List (Pair String (Pair Int Int))
-subSizeGo base [] = []
-subSizeGo base (p :: rest) = case p of
-  PVar n sp => case base of
-    Pair b d => Pair n (Pair b (d + 1)) :: subSizeGo base rest
-  _ => subSizeGo base rest
+graphFuel : List (Pair String (List String)) -> List String -> Int
+graphFuel g nodes = 4 * length nodes + 4 * edgeCount g + 16
 
-sizeOfVar : String -> List (Pair String (Pair Int Int)) -> Maybe (Pair Int Int)
-sizeOfVar name [] = Nothing
-sizeOfVar name (s :: rest) = case s of
-  Pair n sz => if n == name then Just sz else sizeOfVar name rest
+-- 迭代 DFS 后序：steps 里 (n, False) = 访问，(n, True) = 发射。
+dfsPost : List (Pair String Bool) -> Int -> List (Pair String (List String)) -> List String -> List String -> Pair (List String) (List String)
+dfsPost steps fuel g visited post = if fuel <= 0 then Pair visited post
+else case steps of
+  [] => Pair visited post
+  (Pair n emit) :: rest =>
+    if emit then dfsPost rest (fuel - 1) g visited (n :: post)
+    else if memName n visited then dfsPost rest (fuel - 1) g visited post
+    else dfsPost (append (map (\m => Pair m False) (adjOf n g)) (Pair n True :: rest)) (fuel - 1) g
+      (n :: visited) post
+
+dfsAll : List String -> Int -> List (Pair String (List String)) -> List String -> List String -> List String
+dfsAll [] fuel g visited post = post
+dfsAll (n :: rest) fuel g visited post = if fuel <= 0 then post
+else if memName n visited then dfsAll rest (fuel - 1) g visited post
+else case dfsPost [Pair n False] fuel g visited post of
+  Pair v2 p2 => dfsAll rest (fuel - 1) g v2 p2
+
+postOrder : List (Pair String (List String)) -> List String -> List String
+postOrder g nodes = dfsAll nodes (graphFuel g nodes) g [] []
+
+collectComp : List String -> Int -> List (Pair String (List String)) -> List String -> List String -> Pair (List String) (List String)
+collectComp stack fuel rg assigned comp = if fuel <= 0 then Pair comp assigned
+else case stack of
+  [] => Pair comp assigned
+  m :: rest =>
+    if memName m assigned then collectComp rest (fuel - 1) rg assigned comp
+    else collectComp (append (adjOf m rg) rest) (fuel - 1) rg (m :: assigned) (m :: comp)
+
+sccOf : List String -> Int -> List (Pair String (List String)) -> List String -> List (List String) -> List (List String)
+sccOf [] fuel rg assigned comps = comps
+sccOf (n :: rest) fuel rg assigned comps = if fuel <= 0 then comps
+else if memName n assigned then sccOf rest (fuel - 1) rg assigned comps
+else case collectComp [n] (fuel - 1) rg assigned [] of
+  Pair comp assigned2 => sccOf rest (fuel - 1) rg assigned2 (comp :: comps)
+
+strWalk : Int -> List String -> List String -> List (Pair String (List Int)) -> Int -> List (Pair String (Pair Int (Pair Int (List Int)))) -> String -> List (Pair String Int) -> List String -> Expr -> Pair Bool (List (Pair (Pair String String) Int)) -> Pair Bool (List (Pair (Pair String String) Int))
+strWalk fuel comp ctors projs p sizes caller facts region e acc = if fuel <= 0 then acc
+else case e of
+  EApp fn args sp => strWalkEApp (fuel - 1) comp ctors projs p sizes caller facts region fn args acc
+  ECase scrut alts sp =>
+    strWalkAlts (fuel - 1) comp ctors projs p sizes caller facts region scrut alts
+      (strWalk (fuel - 1) comp ctors projs p sizes caller facts region scrut acc)
+  EIf c t el sp => case guardPosVar c of
+    Just v =>
+      let
+        acc1 = strWalk (fuel - 1) comp ctors projs p sizes caller facts region c acc
+        acc2 = strWalk (fuel - 1) comp ctors projs p sizes caller facts region t acc1
+      in strWalk (fuel - 1) comp ctors projs p sizes caller facts (v :: region) el acc2
+    Nothing =>
+      strWalk (fuel - 1) comp ctors projs p sizes caller facts region el
+        (strWalk (fuel - 1) comp ctors projs p sizes caller facts region t (strWalk (fuel - 1) comp ctors projs p sizes caller facts region c acc))
+  ELam ns b sp => strWalk (fuel - 1) comp ctors projs p sizes caller facts region b acc
+  ELet binds body rec_ sp =>
+    strWalk (fuel - 1) comp ctors projs p sizes caller facts region body
+      (strWalkBinds (fuel - 1) comp ctors projs p sizes caller facts region binds acc)
+  EPi n implicit dom cod sp =>
+    strWalk (fuel - 1) comp ctors projs p sizes caller facts region cod
+      (strWalk (fuel - 1) comp ctors projs p sizes caller facts region dom acc)
+  EField base f sp => strWalk (fuel - 1) comp ctors projs p sizes caller facts region base acc
+  ERecord rn fields sp =>
+    strWalkFields (fuel - 1) comp ctors projs p sizes caller facts region fields acc
+  ERecUpdate base fields sp =>
+    strWalkFields (fuel - 1) comp ctors projs p sizes caller facts region fields
+      (strWalk (fuel - 1) comp ctors projs p sizes caller facts region base acc)
+  EInstSel base meth sp => strWalk (fuel - 1) comp ctors projs p sizes caller facts region base acc
+  EDo stmts sp => strWalkStmts (fuel - 1) comp ctors projs p sizes caller facts region stmts acc
+  EAnn value ty sp =>
+    strWalk (fuel - 1) comp ctors projs p sizes caller facts region ty
+      (strWalk (fuel - 1) comp ctors projs p sizes caller facts region value acc)
+  EVar n sp => if memName n comp then markInvalid acc else acc
+  _ => acc
+
+strWalkEApp : Int -> List String -> List String -> List (Pair String (List Int)) -> Int -> List (Pair String (Pair Int (Pair Int (List Int)))) -> String -> List (Pair String Int) -> List String -> Expr -> List Expr -> Pair Bool (List (Pair (Pair String String) Int)) -> Pair Bool (List (Pair (Pair String String) Int))
+strWalkEApp fuel comp ctors projs p sizes caller facts region fn args acc = if fuel <= 0 then acc
+else case groupHead comp fn of
+  Just callee => case argRel p args sizes ctors projs caller facts region of
+    Nothing =>
+      markInvalid (strWalkArgs (fuel - 1) comp ctors projs p sizes caller facts region args acc)
+    Just rel =>
+      strWalkArgs (fuel - 1) comp ctors projs p sizes caller facts region args
+        (addEdgeMode caller callee rel acc)
+  Nothing => case fn of
+    EVar nm nsp =>
+      if isMapLike nm then strWalkEAppMap (fuel - 1) comp ctors projs p sizes caller facts region fn args acc
+      else strWalkApp (fuel - 1) comp ctors projs p sizes caller facts region fn args acc
+    _ => strWalkApp (fuel - 1) comp ctors projs p sizes caller facts region fn args acc
+
+strWalkEAppMap : Int -> List String -> List String -> List (Pair String (List Int)) -> Int -> List (Pair String (Pair Int (Pair Int (List Int)))) -> String -> List (Pair String Int) -> List String -> Expr -> List Expr -> Pair Bool (List (Pair (Pair String String) Int)) -> Pair Bool (List (Pair (Pair String String) Int))
+strWalkEAppMap fuel comp ctors projs p sizes caller facts region fn args acc = if fuel <= 0 then acc
+else case args of
+  [ELam ([v]) body lamsp, lst] =>
+    let
+      acc1 = strWalk (fuel - 1) comp ctors projs p sizes caller facts region lst acc
+      sizes2 = extendElemSizes sizes lst v
+    in strWalk (fuel - 1) comp ctors projs p sizes2 caller facts region body acc1
+  [cb, lst] => case cb of
+    EApp (EVar g gsp) pargs cbsp =>
+      if memName g comp then strWalkMapPartialInline (fuel - 1) comp ctors projs p sizes caller facts region g pargs lst
+        cbsp acc
+      else strWalkArgs (fuel - 1) comp ctors projs p sizes caller facts region args acc
+    EVar g gsp =>
+      if memName g comp then strWalkMapPartialInline (fuel - 1) comp ctors projs p sizes caller facts region g [] lst gsp
+        acc
+      else strWalkArgs (fuel - 1) comp ctors projs p sizes caller facts region args acc
+    _ => strWalkArgs (fuel - 1) comp ctors projs p sizes caller facts region args acc
+  _ => strWalkArgs (fuel - 1) comp ctors projs p sizes caller facts region args acc
+
+strWalkMapPartialInline : Int -> List String -> List String -> List (Pair String (List Int)) -> Int -> List (Pair String (Pair Int (Pair Int (List Int)))) -> String -> List (Pair String Int) -> List String -> String -> List Expr -> Expr -> Span -> Pair Bool (List (Pair (Pair String String) Int)) -> Pair Bool (List (Pair (Pair String String) Int))
+strWalkMapPartialInline fuel comp ctors projs p sizes caller facts region g pargs lst cbsp acc = if fuel <= 0 then acc
+else
+  let
+    acc1 = strWalk (fuel - 1) comp ctors projs p sizes caller facts region lst acc
+    elems = extendElemSizes sizes lst "$elem"
+    fullArgs = append pargs [EVar "$elem" cbsp]
+    acc2 = strWalkArgs (fuel - 1) comp ctors projs p sizes caller facts region pargs acc1
+  in case argRel p fullArgs elems ctors projs caller facts region of
+    Nothing => markInvalid acc2
+    Just rel => addEdgeMode caller g rel acc2
+
+strWalkApp : Int -> List String -> List String -> List (Pair String (List Int)) -> Int -> List (Pair String (Pair Int (Pair Int (List Int)))) -> String -> List (Pair String Int) -> List String -> Expr -> List Expr -> Pair Bool (List (Pair (Pair String String) Int)) -> Pair Bool (List (Pair (Pair String String) Int))
+strWalkApp fuel comp ctors projs p sizes caller facts region fn args acc =
+  if fuel <= 0 then acc
+  else strWalkArgs (fuel - 1) comp ctors projs p sizes caller facts region args
+    (strWalk (fuel - 1) comp ctors projs p sizes caller facts region fn acc)
+
+strWalkArgs : Int -> List String -> List String -> List (Pair String (List Int)) -> Int -> List (Pair String (Pair Int (Pair Int (List Int)))) -> String -> List (Pair String Int) -> List String -> List Expr -> Pair Bool (List (Pair (Pair String String) Int)) -> Pair Bool (List (Pair (Pair String String) Int))
+strWalkArgs fuel comp ctors projs p sizes caller facts region [] acc =
+  if fuel <= 0 then acc else acc
+strWalkArgs fuel comp ctors projs p sizes caller facts region (a :: rest) acc =
+  if fuel <= 0 then acc
+  else strWalkArgs (fuel - 1) comp ctors projs p sizes caller facts region rest
+    (strWalk (fuel - 1) comp ctors projs p sizes caller facts region a acc)
+
+strWalkAlts : Int -> List String -> List String -> List (Pair String (List Int)) -> Int -> List (Pair String (Pair Int (Pair Int (List Int)))) -> String -> List (Pair String Int) -> List String -> Expr -> List (Pair Pat Expr) -> Pair Bool (List (Pair (Pair String String) Int)) -> Pair Bool (List (Pair (Pair String String) Int))
+strWalkAlts fuel comp ctors projs p sizes caller facts region scrut [] acc =
+  if fuel <= 0 then acc else acc
+strWalkAlts fuel comp ctors projs p sizes caller facts region scrut ((Pair pat body) :: rest) acc =
+  if fuel <= 0 then acc
+  else strWalkAlts (fuel - 1) comp ctors projs p sizes caller facts region scrut rest
+    (strWalk (fuel - 1) comp ctors projs p (extendSizesStrict sizes scrut pat) caller facts region body acc)
+
+strWalkBinds : Int -> List String -> List String -> List (Pair String (List Int)) -> Int -> List (Pair String (Pair Int (Pair Int (List Int)))) -> String -> List (Pair String Int) -> List String -> List (Pair Pat Expr) -> Pair Bool (List (Pair (Pair String String) Int)) -> Pair Bool (List (Pair (Pair String String) Int))
+strWalkBinds fuel comp ctors projs p sizes caller facts region [] acc =
+  if fuel <= 0 then acc else acc
+strWalkBinds fuel comp ctors projs p sizes caller facts region ((Pair pat val) :: rest) acc =
+  if fuel <= 0 then acc
+  else strWalkBinds (fuel - 1) comp ctors projs p sizes caller facts region rest
+    (strWalk (fuel - 1) comp ctors projs p sizes caller facts region val acc)
+
+strWalkFields : Int -> List String -> List String -> List (Pair String (List Int)) -> Int -> List (Pair String (Pair Int (Pair Int (List Int)))) -> String -> List (Pair String Int) -> List String -> List (Pair String Expr) -> Pair Bool (List (Pair (Pair String String) Int)) -> Pair Bool (List (Pair (Pair String String) Int))
+strWalkFields fuel comp ctors projs p sizes caller facts region [] acc =
+  if fuel <= 0 then acc else acc
+strWalkFields fuel comp ctors projs p sizes caller facts region ((Pair fn fe) :: rest) acc =
+  if fuel <= 0 then acc
+  else strWalkFields (fuel - 1) comp ctors projs p sizes caller facts region rest
+    (strWalk (fuel - 1) comp ctors projs p sizes caller facts region fe acc)
+
+strWalkStmts : Int -> List String -> List String -> List (Pair String (List Int)) -> Int -> List (Pair String (Pair Int (Pair Int (List Int)))) -> String -> List (Pair String Int) -> List String -> List DoStmt -> Pair Bool (List (Pair (Pair String String) Int)) -> Pair Bool (List (Pair (Pair String String) Int))
+strWalkStmts fuel comp ctors projs p sizes caller facts region [] acc =
+  if fuel <= 0 then acc else acc
+strWalkStmts fuel comp ctors projs p sizes caller facts region (s :: rest) acc = if fuel <= 0 then acc
+else case s of
+  DBind pat e sp =>
+    strWalkStmts (fuel - 1) comp ctors projs p sizes caller facts region rest
+      (strWalk (fuel - 1) comp ctors projs p sizes caller facts region e acc)
+  DExpr e sp =>
+    strWalkStmts (fuel - 1) comp ctors projs p sizes caller facts region rest
+      (strWalk (fuel - 1) comp ctors projs p sizes caller facts region e acc)
+
+strClause : List String -> List String -> List (Pair String (List Int)) -> Int -> String -> List (Pair String Int) -> Pair (List Pat) Expr -> Pair Bool (List (Pair (Pair String String) Int))
+strClause comp ctors projs p caller facts clause =
+  strWalk 100000 comp ctors projs p (strSizeEntries (firstOf clause)) caller facts []
+    (secondOf clause) (Pair True [])
+
+groupMessage : List String -> String
+groupMessage comp = case comp of
+  [f] =>
+    "[TC_CannotProveTermination] DT: cannot prove termination of "
+      ++ f
+      ++ " (recursive call does not structurally decrease)"
+  -- @code TC_CannotProveTermination
+  _ =>
+    "[TC_CannotProveTermination] DT: cannot prove termination of recursive group {"
+      ++ joinComma comp
+      ++ "} (mutual recursion: no parameter position decreases on every recursive call)"
+
+collectClauses : List (Pair (List Pat) Expr) -> List String -> List String -> List (Pair String (List Int)) -> Int -> String -> List (Pair String Int) -> Pair Bool (List (Pair (Pair String String) Int)) -> Result (Pair Bool (List (Pair (Pair String String) Int)))
+collectClauses [] comp ctors projs p caller facts acc = Ok acc
+collectClauses (cl :: rest) comp ctors projs p caller facts acc = case firstOf acc of
+  False => Ok acc
+  True => case strClause comp ctors projs p caller facts cl of
+    Pair valid edges =>
+      if valid then collectClauses rest comp ctors projs p caller facts (Pair True (append (secondOf acc) edges))
+      else Ok (Pair False (secondOf acc))
+
+collectMeasure : List String -> List (Pair String (List (Pair (List Pat) Expr))) -> List String -> List (Pair String (List Int)) -> Int -> List (Pair String Int) -> List String -> Pair Bool (List (Pair (Pair String String) Int)) -> Result (Pair Bool (List (Pair (Pair String String) Int)))
+collectMeasure comp defs ctors projs p facts [] acc = Ok acc
+collectMeasure comp defs ctors projs p facts (n :: rest) acc =
+  andThen (collectClauses (clausesOfDef n defs) comp ctors projs p n facts acc)
+    (\acc2 => collectMeasure comp defs ctors projs p facts rest acc2)
+
+-- 同一对 (caller, callee) 的所有调用点都非零 ⇒ 该边严格。
+tryMeasure : List String -> List (Pair String (List (Pair (List Pat) Expr))) -> List String -> List (Pair String (List Int)) -> List (Pair String Int) -> Int -> Int -> Result Int
+tryMeasure comp defs ctors projs facts p maxP =
+  tryMeasureGo comp defs ctors projs facts (maxP - p) maxP
+
+tryMeasureGo : List String -> List (Pair String (List (Pair (List Pat) Expr))) -> List String -> List (Pair String (List Int)) -> List (Pair String Int) -> Int -> Int -> Result Int
+tryMeasureGo comp defs ctors projs facts remaining maxP = if remaining <= 0 then Err (groupMessage comp)
+else
+  let
+    p = maxP - remaining
+  in case collectMeasure comp defs ctors projs p facts comp (Pair True []) of
+    Err e => Err e
+    Ok res => case res of
+      Pair valid edges => if valid then
+        let
+          modes = filterModes (map secondOf edges)
+        in if notEmpty modes then if allSame modes then if hasWeakCycle comp edges then tryMeasureGo comp defs ctors projs facts (remaining - 1) maxP
+        else Ok 0
+        else tryMeasureGo comp defs ctors projs facts (remaining - 1) maxP
+        else tryMeasureGo comp defs ctors projs facts (remaining - 1) maxP
+      else tryMeasureGo comp defs ctors projs facts (remaining - 1) maxP
+
+checkStrictGroup : List String -> List (Pair String (List (Pair (List Pat) Expr))) -> List String -> List (Pair String (List Int)) -> List (Pair String Int) -> Result Int
+checkStrictGroup comp defs ctors projs facts = case tryMeasure comp defs ctors projs facts 0 (maxArityOf comp defs) of
+  Ok n => Ok n
+  Err e => case tryFuelThread comp defs ctors projs facts e of
+    Ok n => Ok n
+    Err e2 => sctCheck comp defs ctors projs facts e2
+
+checkComp : List String -> List (Pair String (List (Pair (List Pat) Expr))) -> List String -> List (Pair String (List Int)) -> List (Pair String (List String)) -> List (Pair String Int) -> Result Int
+checkComp comp defs ctors projs g facts = case comp of
+  [] => Ok 0
+  [f] => if memName f (adjOf f g) then checkStrictGroup comp defs ctors projs facts else Ok 0
+  _ => checkStrictGroup comp defs ctors projs facts
+
+checkSccs : List (List String) -> List (Pair String (List (Pair (List Pat) Expr))) -> List String -> List (Pair String (List Int)) -> List (Pair String (List String)) -> List (Pair String Int) -> Result Int
+checkSccs [] defs ctors projs g facts = Ok 0
+checkSccs (comp :: rest) defs ctors projs g facts =
+  andThen (checkComp comp defs ctors projs g facts)
+    (\n => andThen (checkSccs rest defs ctors projs g facts) (\m => Ok (n + m)))
+
+checkTerminationDecls : List Decl -> Result Int
+checkTerminationDecls decls =
+  let
+    defs = groupDefs decls
+    ctors = ctorNamesOf decls
+    projs = projectionsOf defs
+    facts = computePosFacts defs 16 []
+    g = callGraph defs
+    nodes = defNames defs
+    rg = transpose g
+    fuel = graphFuel g nodes
+    post = postOrder g nodes
+    comps = sccOf post fuel rg [] []
+  in checkSccs (reverse comps) defs ctors projs g facts

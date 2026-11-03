@@ -90,14 +90,21 @@ skipDir name =
     || name == ".vscode"
 
 collectVuna : String -> List String
-collectVuna dir = concatMap (walkVuna dir) (readDir dir)
+collectVuna dir = collectVunaGo 1048576 dir
 
-walkVuna : String -> String -> List String
-walkVuna dir name = if skipDir name then []
+-- 目录树递归（符号链接可成环）用显式 fuel 守卫；每次下钻一层消耗 1。
+collectVunaGo : Int -> String -> List String
+collectVunaGo fuel dir =
+  if fuel <= 0 then [] else concatMap (walkVunaGo (fuel - 1) dir) (readDir dir)
+
+walkVunaGo : Int -> String -> String -> List String
+walkVunaGo fuel dir name = if fuel <= 0 then []
+else if skipDir name then []
 else
   let
     path = dir ++ "/" ++ name
-  in if dirExists path then collectVuna path else if endsWith ".vuna" name then [path] else []
+  in if dirExists path then collectVunaGo (fuel - 1) path
+  else if endsWith ".vuna" name then [path] else []
 
 -- isDirectory 对不存在的路径会抛异常，必须先判存在。
 dirExists : String -> Bool

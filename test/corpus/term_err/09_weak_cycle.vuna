@@ -1,0 +1,13 @@
+-- M25.2b 负例：SCC 里存在「全 =」的环（a <-> b），另有带下降的环 a -> c -> a。
+-- 去掉严格边后仍有环 ⇒ 必须拒绝（每个环都要严格下降）。
+a : Int -> Int
+a n = if n <= 0 then 0 else if n > 100 then b n else c (n - 1)
+
+b : Int -> Int
+b n = a n
+
+c : Int -> Int
+c n = a n
+
+main : Int
+main = 0

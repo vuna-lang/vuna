@@ -197,7 +197,12 @@ textFromCol : String -> Int -> String
 textFromCol line col = trimBoth (strPack (dropChars (col - 1) (strUnpack line)))
 
 blankFill : Int -> Int -> List String
-blankFill n stop = if n > stop then [] else "" :: blankFill (n + 1) stop
+blankFill n stop = blankFillEach (range n (stop + 1))
+
+-- 计数器循环改为对 line 编号列表的结构递归（range 用倒计数实现，M25.2b 已可证）。
+blankFillEach : List Int -> List String
+blankFillEach [] = []
+blankFillEach (_ :: rest) = "" :: blankFillEach rest
 
 tailFromCol : String -> Int -> String
 tailFromCol line col = strPack (dropChars (col - 1) (strUnpack line))
@@ -293,10 +298,12 @@ filterTokLine (t :: rest) n =
   if tokLine t == n then t :: filterTokLine rest n else filterTokLine rest n
 
 bodyMentionsVar : List PTok -> String -> Int -> Int -> Bool
-bodyMentionsVar toks var start stop =
-  if start >= stop then False
-  else if countIdent var (tokensOnLine toks start) > 0 then True
-  else bodyMentionsVar toks var (start + 1) stop
+bodyMentionsVar toks var start stop = bodyMentionsVarGo toks var (range start stop)
+
+bodyMentionsVarGo : List PTok -> String -> List Int -> Bool
+bodyMentionsVarGo toks var [] = False
+bodyMentionsVarGo toks var (k :: rest) =
+  if countIdent var (tokensOnLine toks k) > 0 then True else bodyMentionsVarGo toks var rest
 
 hasSym : List PTok -> String -> Bool
 hasSym [] sym = False
@@ -405,28 +412,32 @@ makeChainFinding firstLine indent scrutinee acc defaultText lastLine =
     ]
 
 finishChain : List String -> List PTok -> Int -> Int -> Int -> Int -> String -> List LitBranch -> List Finding
-finishChain lines toks lastLine n indent firstLine scrutinee acc = if n > lastLine then []
-else
+finishChain lines toks lastLine n indent firstLine scrutinee acc =
+  finishChainGo lines toks indent firstLine scrutinee acc (range n (lastLine + 1))
+
+finishChainGo : List String -> List PTok -> Int -> Int -> String -> List LitBranch -> List Int -> List Finding
+finishChainGo lines toks indent firstLine scrutinee acc [] = []
+finishChainGo lines toks indent firstLine scrutinee acc (k :: rest) =
   let
-    line = lineAt lines n
+    line = lineAt lines k
   in let
-    ts = tokensOnLine toks n
+    ts = tokensOnLine toks k
   in if isNilList ts then []
   else if indentOf line /= indent then []
   else if hasComment line then []
   else case ts of
     [] => []
-    first :: rest => if tokIsKw first "else" then case rest of
+    first :: rest2 => if tokIsKw first "else" then case rest2 of
       [] => []
-      second :: rest2 => if tokIsKw second "if" then case parseIfHead rest2 line of
+      second :: rest3 => if tokIsKw second "if" then case parseIfHead rest3 line of
         Nothing => []
         Just head =>
-          if headName head == scrutinee then finishChain lines toks lastLine (n + 1) indent firstLine scrutinee
-            (LitBranch (headText head) (headExpr head) :: acc)
+          if headName head == scrutinee then finishChainGo lines toks indent firstLine scrutinee
+            (LitBranch (headText head) (headExpr head) :: acc) rest
           else []
-      else case finalElseText line first rest of
+      else case finalElseText line first rest2 of
         Nothing => []
-        Just text => makeChainFinding firstLine indent scrutinee acc text n
+        Just text => makeChainFinding firstLine indent scrutinee acc text k
     else []
 
 ifChainAt : List String -> List PTok -> Int -> Int -> List Finding
@@ -447,9 +458,12 @@ ifChainAt lines toks lastLine n =
     else []
 
 scanIfChains : List String -> List PTok -> Int -> Int -> List Finding
-scanIfChains lines toks n lastLine =
-  if n > lastLine then []
-  else append (ifChainAt lines toks lastLine n) (scanIfChains lines toks (n + 1) lastLine)
+scanIfChains lines toks n lastLine = scanIfChainsGo lines toks lastLine (range n (lastLine + 1))
+
+scanIfChainsGo : List String -> List PTok -> Int -> List Int -> List Finding
+scanIfChainsGo lines toks lastLine [] = []
+scanIfChainsGo lines toks lastLine (k :: rest) =
+  append (ifChainAt lines toks lastLine k) (scanIfChainsGo lines toks lastLine rest)
 
 caseVarOf : List PTok -> Maybe String
 caseVarOf toks = case toks of
@@ -508,13 +522,17 @@ ctorOrLitPattern toks = case toks of
         Nothing => False
 
 scanBody : List String -> List PTok -> Int -> Int -> Int -> List String -> CaseBody
-scanBody lines toks lastLine n indent acc = if n > lastLine then CaseBody n (reverse acc)
-else
+scanBody lines toks lastLine n indent acc =
+  scanBodyGo lines lastLine indent acc (range n (lastLine + 1))
+
+scanBodyGo : List String -> Int -> Int -> List String -> List Int -> CaseBody
+scanBodyGo lines lastLine indent acc [] = CaseBody (lastLine + 1) (reverse acc)
+scanBodyGo lines lastLine indent acc (k :: rest) =
   let
-    line = lineAt lines n
-  in if isBlankLine line then scanBody lines toks lastLine (n + 1) indent (line :: acc)
-  else if indentOf line > indent then scanBody lines toks lastLine (n + 1) indent (line :: acc)
-  else CaseBody n (reverse acc)
+    line = lineAt lines k
+  in if isBlankLine line then scanBodyGo lines lastLine indent (line :: acc) rest
+  else if indentOf line > indent then scanBodyGo lines lastLine indent (line :: acc) rest
+  else CaseBody k (reverse acc)
 
 blockBodyOk : List String -> List PTok -> Int -> Int -> Int -> Int -> Bool
 blockBodyOk lines toks lastLine start stop indent =
@@ -523,31 +541,40 @@ blockBodyOk lines toks lastLine start stop indent =
   else False
 
 bodyIndentOk : List String -> Int -> Int -> Int -> Bool
-bodyIndentOk lines n stop indent = if n >= stop then True
-else
+bodyIndentOk lines n stop indent = bodyIndentOkGo lines indent (range n stop)
+
+bodyIndentOkGo : List String -> Int -> List Int -> Bool
+bodyIndentOkGo lines indent [] = True
+bodyIndentOkGo lines indent (k :: rest) =
   let
-    line = lineAt lines n
-  in if isBlankLine line then bodyIndentOk lines (n + 1) stop indent
+    line = lineAt lines k
+  in if isBlankLine line then bodyIndentOkGo lines indent rest
   else if hasComment line || hasTabOrCR line then False
-  else if indentOf line < indent + 4 then False else bodyIndentOk lines (n + 1) stop indent
+  else if indentOf line < indent + 4 then False else bodyIndentOkGo lines indent rest
 
 noSiblingAlt : List String -> List PTok -> Int -> Int -> Int -> Bool
-noSiblingAlt lines toks n stop indent = if n >= stop then True
-else
+noSiblingAlt lines toks n stop indent = noSiblingAltGo lines toks indent (range n stop)
+
+noSiblingAltGo : List String -> List PTok -> Int -> List Int -> Bool
+noSiblingAltGo lines toks indent [] = True
+noSiblingAltGo lines toks indent (k :: rest) =
   let
-    line = lineAt lines n
+    line = lineAt lines k
   in let
-    ts = tokensOnLine toks n
-  in if isBlankLine line then noSiblingAlt lines toks (n + 1) stop indent
+    ts = tokensOnLine toks k
+  in if isBlankLine line then noSiblingAltGo lines toks indent rest
   else if indentOf line == indent + 2 && hasSym ts "=>" then False
-  else noSiblingAlt lines toks (n + 1) stop indent
+  else noSiblingAltGo lines toks indent rest
 
 nextNonBlank : List String -> Int -> Int -> Int
-nextNonBlank lines n lastLine = if n > lastLine then n
-else
+nextNonBlank lines n lastLine = nextNonBlankGo lines lastLine (range n (lastLine + 1))
+
+nextNonBlankGo : List String -> Int -> List Int -> Int
+nextNonBlankGo lines lastLine [] = lastLine + 1
+nextNonBlankGo lines lastLine (k :: rest) =
   let
-    line = lineAt lines n
-  in if isBlankLine line then nextNonBlank lines (n + 1) lastLine else n
+    line = lineAt lines k
+  in if isBlankLine line then nextNonBlankGo lines lastLine rest else k
 
 tailTokenCol : PTok -> Int
 tailTokenCol tok = tokCol tok + strLength (tokenText tok)
@@ -615,11 +642,14 @@ lastAltCheck lines toks lastLine stop indent =
     else if ind < indent - 2 then True else False
 
 linesClean : List String -> Int -> Int -> Bool
-linesClean lines start stop = if start > stop then True
-else
+linesClean lines start stop = linesCleanGo lines (range start (stop + 1))
+
+linesCleanGo : List String -> List Int -> Bool
+linesCleanGo lines [] = True
+linesCleanGo lines (k :: rest) =
   let
-    line = lineAt lines start
-  in if hasComment line || hasTabOrCR line then False else linesClean lines (start + 1) stop
+    line = lineAt lines k
+  in if hasComment line || hasTabOrCR line then False else linesCleanGo lines rest
 
 checkRedundantBody : List String -> List PTok -> Int -> Int -> Int -> String -> Enclosing -> List Finding
 checkRedundantBody lines toks lastLine caseLine indent var enclosing =
@@ -762,9 +792,12 @@ redundantCaseAt lines toks lastLine n =
       Just enclosing => checkRedundantBody lines toks lastLine n indent var enclosing
 
 scanRedundant : List String -> List PTok -> Int -> Int -> List Finding
-scanRedundant lines toks n lastLine =
-  if n > lastLine then []
-  else append (redundantCaseAt lines toks lastLine n) (scanRedundant lines toks (n + 1) lastLine)
+scanRedundant lines toks n lastLine = scanRedundantGo lines toks lastLine (range n (lastLine + 1))
+
+scanRedundantGo : List String -> List PTok -> Int -> List Int -> List Finding
+scanRedundantGo lines toks lastLine [] = []
+scanRedundantGo lines toks lastLine (k :: rest) =
+  append (redundantCaseAt lines toks lastLine k) (scanRedundantGo lines toks lastLine rest)
 
 sortFindings : List Finding -> List Finding
 sortFindings [] = []

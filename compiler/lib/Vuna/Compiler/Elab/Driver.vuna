@@ -3,7 +3,6 @@ module Vuna.Compiler.Elab.Driver
   , anyAltHasMeta
   , anyArgHasMeta
   , checkAllDefined
-  , checkTerminationIf
   , ctxDepthOf
   , ctxEntriesAt
   , ctxEntriesOf
@@ -14,9 +13,7 @@ module Vuna.Compiler.Elab.Driver
   , elabBodies
   , elabProgram
   , elabProgramFull
-  , elabProgramFullWith
   , elabProgramGo
-  , elabProgramWith
   , elabSigs
   , findDefWithMeta
   , findGoal
@@ -58,12 +55,19 @@ unsolvedMeta ec = unsolvedFromRelevant 0 (ecNext ec) (ecSols ec) (relevantMetas 
 -- 于是留一个只出现在擦除位置的元变量——它对运行时没有意义（codegen 不生成该实参），
 -- 不应算错误。洞（有 goal 的元变量）永远算未解。
 unsolvedFromRelevant : Int -> Int -> List (Pair Int Value) -> List Int -> List DtGoal -> Maybe Int
-unsolvedFromRelevant i stop sols relevant goals = if i >= stop then Nothing
-else case metaLookup i sols of
-  Just _ => unsolvedFromRelevant (i + 1) stop sols relevant goals
-  Nothing =>
-    if memMetaId i relevant || isJust (findGoal i goals) then Just i
-    else unsolvedFromRelevant (i + 1) stop sols relevant goals
+unsolvedFromRelevant i stop sols relevant goals =
+  unsolvedFromRelevantGo (stop - i) stop sols relevant goals
+
+unsolvedFromRelevantGo : Int -> Int -> List (Pair Int Value) -> List Int -> List DtGoal -> Maybe Int
+unsolvedFromRelevantGo remaining stop sols relevant goals = if remaining <= 0 then Nothing
+else
+  let
+    i = stop - remaining
+  in case metaLookup i sols of
+    Just _ => unsolvedFromRelevantGo (remaining - 1) stop sols relevant goals
+    Nothing =>
+      if memMetaId i relevant || isJust (findGoal i goals) then Just i
+      else unsolvedFromRelevantGo (remaining - 1) stop sols relevant goals
 
 -- ---------------------------------------------------------------
 -- 精化入口
@@ -129,7 +133,7 @@ dtEvalExprIn prog expr = case prog of
     let
       ec0 =
         Ec next sols (map (\d => Pair (dtDefName d) (dtDefBody d)) defs) datas [] [] insts classes
-          [] False
+          []
     in andThen (inferE globals emptyCtx ec0 expr) (\p => case p of
       Pair term (Pair ty ec1) =>
         let
@@ -146,19 +150,13 @@ dtEvalExprIn prog expr = case prog of
     )
 
 -- 精化入口。M19：先做 record 降级（`Elab.Records.prepareDecls`）——record 是纯记法。
+-- M25：没有 trusted/检查豁免；终止性对每个包、每个模块一致执行。
 elabProgramFull : List Decl -> Result DtProgram
-elabProgramFull decls = elabProgramFullWith False decls
+elabProgramFull decls =
+  andThen (prepareDecls decls) (\ds => andThen (expandDerivings ds) (\ds2 => elabProgramGo ds2))
 
--- trusted：跳过终止性检查（只给 TCB 包用；见 Dt.dtTrustsTermination）。
--- 编译器本体的 NbE/重写函数是 fuel 驱动的（`force` / `normalize` / `refineValue` 等），
--- 结构递归判据写不出来；这些函数是编译器的执行代码，不是被证明的定理。
-elabProgramFullWith : Bool -> List Decl -> Result DtProgram
-elabProgramFullWith trusted decls =
-  andThen (prepareDecls decls)
-    (\ds => andThen (expandDerivings ds) (\ds2 => elabProgramGo trusted ds2))
-
-elabProgramGo : Bool -> List Decl -> Result DtProgram
-elabProgramGo trusted decls = andThen (collectSigs decls) (\sigs => andThen (elabDatas (collectDataDecls decls []) (preludeGlobalsFor (pickListFamily (dataNamesOf decls))) (ecWithTrust trusted ecEmpty)) (\pd => case pd of
+elabProgramGo : List Decl -> Result DtProgram
+elabProgramGo decls = andThen (collectSigs decls) (\sigs => andThen (elabDatas (collectDataDecls decls []) (preludeGlobalsFor (pickListFamily (dataNamesOf decls))) ecEmpty) (\pd => case pd of
   Pair datas (Pair globals0 ec0) => andThen (elabTraits (collectTraitDecls decls []) globals0 ec0) (\pt => case pt of
     Pair classDatas (Pair projGlobals (Pair classes ec1)) =>
       let
@@ -189,7 +187,7 @@ elabProgramGo trusted decls = andThen (collectSigs decls) (\sigs => andThen (ela
                         let
                           extra = extraDefsOf globals ec4 (append instDefs defs)
                           allDefs = rezonkDefs ec4 (append instDefs (append extra defs))
-                        in andThen (checkTerminationIf trusted decls)
+                        in andThen (checkTerminationDecls decls)
                           (\_ => Ok (DtProgram datas1 allDefs (ecGoals ec4) (ecSols ec4) globals (ecInsts ec4) (ecClasses ec4) (ecNext ec4)))
                 )
             )
@@ -213,10 +211,6 @@ resolveDictGoalsFix globals ec n =
   in if n <= 0 then ec2
   else if length (ecDictGoals ec2) < length (ecDictGoals ec) then resolveDictGoalsFix globals ec2 (n - 1)
   else ec2
-
--- 终止性检查开关：trusted 包（编译器自身）跳过结构递归检查。
-checkTerminationIf : Bool -> List Decl -> Result Int
-checkTerminationIf trusted decls = if trusted then Ok 0 else checkTerminationDecls decls
 
 -- M15：未解元变量若来自洞，报洞的目标（而不是光秃秃的编号）。
 unsolvedMessage : Ec -> Int -> String
@@ -316,9 +310,5 @@ goalsOfProgram decls =
     (\prog => Ok (map (goalInfoOf (dtProgSols prog)) (dtProgGoals prog)))
 
 elabProgram : List Decl -> Result (Pair (List DtData) (List DtDef))
-elabProgram decls = elabProgramWith False decls
-
-elabProgramWith : Bool -> List Decl -> Result (Pair (List DtData) (List DtDef))
-elabProgramWith trusted decls =
-  andThen (elabProgramFullWith trusted decls)
-    (\prog => Ok (Pair (dtProgDatas prog) (dtProgDefs prog)))
+elabProgram decls =
+  andThen (elabProgramFull decls) (\prog => Ok (Pair (dtProgDatas prog) (dtProgDefs prog)))

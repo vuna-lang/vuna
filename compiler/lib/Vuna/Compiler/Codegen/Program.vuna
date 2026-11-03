@@ -26,7 +26,7 @@ prepareDtProgram program =
     Pair runtime typeNames =>
       let
         allTypeNames = append typeNames familyNames
-      in andThen (checkAllDefScopes runtime)
+      in andThen (checkAllDefScopes defs)
         (\_ => andThen (ensureUniqueOcamlNames datas runtime) (\_ => andThen (checkAllErasure allTypeNames runtime) (\_ => andThen (groupRuntimeDefs runtime) (\groups => Ok (Pair runtime groups)))))
 
 -- 生成主体（不含 main 钩子）：类型声明 + 按 SCC 顺序的函数定义。

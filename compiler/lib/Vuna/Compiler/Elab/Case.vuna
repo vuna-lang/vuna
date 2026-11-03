@@ -74,11 +74,15 @@ unifyErr =
     "[TC_ImpossibleBranchIndex] DT: this branch is impossible (index constraints are unsatisfiable)"
 
 unifyIdxList : Ec -> List (Pair Int Value) -> Int -> Int -> List Value -> List Value -> Result (List (Pair Int Value))
-unifyIdxList ec acc depth fuel [] [] = Ok acc
-unifyIdxList ec acc depth fuel (x :: xs) (y :: ys) =
+unifyIdxList ec acc depth fuel xs ys =
+  if fuel <= 0 then unifyErr else unifyIdxListGo ec acc depth fuel xs ys
+
+unifyIdxListGo : Ec -> List (Pair Int Value) -> Int -> Int -> List Value -> List Value -> Result (List (Pair Int Value))
+unifyIdxListGo ec acc depth fuel [] [] = Ok acc
+unifyIdxListGo ec acc depth fuel (x :: xs) (y :: ys) =
   andThen (unifyIdx ec acc depth (fuel - 1) x y)
     (\acc2 => unifyIdxList ec acc2 depth (fuel - 1) xs ys)
-unifyIdxList ec acc depth fuel _ _ = unifyErr
+unifyIdxListGo ec acc depth fuel _ _ = unifyErr
 
 unifyIdx : Ec -> List (Pair Int Value) -> Int -> Int -> Value -> Value -> Result (List (Pair Int Value))
 -- @code TC_IndexFuel
@@ -96,7 +100,7 @@ else
       _ => if occursLevel al b2 then unifyErr else Ok (Pair al b2 :: acc)
     _ => case b2 of
       VNeutral (NVar bn bl []) => if occursLevel bl a2 then unifyErr else Ok (Pair bl a2 :: acc)
-      _ => unifyIdxRigid ec acc depth a2 b2
+      _ => unifyIdxRigid ec acc depth (fuel - 1) a2 b2
 
 -- occurs check：精化成自己会导致无限链。
 occursLevel : Int -> Value -> Bool
@@ -108,6 +112,7 @@ occursLevel lvl v = case v of
   VLam name rig clo => occursLevelClo lvl clo
   VMeta m sp => occursLevelList lvl sp
   VCon c args => occursLevelList lvl args
+  VApp f a => occursLevel lvl f || occursLevel lvl a
   VCase scrut alts => occursLevel lvl scrut
   VIf c th el => occursLevel lvl c || occursLevel lvl th || occursLevel lvl el
   VType l => False
@@ -124,15 +129,15 @@ occursLevelClo lvl clo = case clo of
   Clos env body => occursLevelList lvl env
 
 -- 刚性位置：构造子/中性头按结构递归，其余回落到 conv 的相等性判定。
-unifyIdxRigid : Ec -> List (Pair Int Value) -> Int -> Value -> Value -> Result (List (Pair Int Value))
-unifyIdxRigid ec acc depth a b = case a of
+unifyIdxRigid : Ec -> List (Pair Int Value) -> Int -> Int -> Value -> Value -> Result (List (Pair Int Value))
+unifyIdxRigid ec acc depth fuel a b = if fuel <= 0 then unifyErr
+else case a of
   VCon c xs => case b of
-    VCon c2 ys => if c == c2 then unifyIdxList ec acc depth defaultFuel xs ys else unifyErr
+    VCon c2 ys => if c == c2 then unifyIdxList ec acc depth (fuel - 1) xs ys else unifyErr
     _ => unifyErr
   VNeutral (NGlobal g sp) => case b of
     VNeutral (NGlobal g2 sp2) =>
-      if g == g2 then unifyIdxList ec acc depth defaultFuel sp sp2
-      else unifyIdxConv ec acc depth a b
+      if g == g2 then unifyIdxList ec acc depth (fuel - 1) sp sp2 else unifyIdxConv ec acc depth a b
     _ => unifyIdxConv ec acc depth a b
   VType i => case b of
     VType j => if levelEq i j then Ok acc else unifyErr
@@ -412,7 +417,6 @@ checkCovered ctx ec dd idxs written alts sp [] = Ok 0
 -- @code TC_NotExhaustive
 checkCovered ctx ec dd idxs written alts sp (ctor :: rest) =
   if memName (dtCtorName ctor) written then checkCovered ctx ec dd idxs written alts sp rest
-  else if ecTrusted ec then checkCovered ctx ec dd idxs written alts sp rest
   else if branchReachable ctx ec idxs ctor then errAt sp ("[TC_NotExhaustive] DT: case is not exhaustive: missing " ++ dtCtorName ctor)
   else checkCovered ctx ec dd idxs written alts sp rest
 

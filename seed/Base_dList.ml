@@ -114,7 +114,9 @@ let rec v_Base_dList_ddrop = (fun mc0 -> (fun mc1 -> (match mc1 with
   | _ -> failwith "DT: impossible branch"
 )))
 
-let rec v_Base_dList_drange = (fun i -> (fun n -> (if ((bi_ge_int i) n) then C_Base_dList_dList_Nil else (C_Base_dList_dList_Cons (i, ((v_Base_dList_drange ((bi_add i) 1)) n))))))
+let rec v_Base_dList_drangeFrom = (fun i -> (fun k -> (if ((bi_le_int k) 0) then C_Base_dList_dList_Nil else (C_Base_dList_dList_Cons (i, ((v_Base_dList_drangeFrom ((bi_add i) 1)) ((bi_sub k) 1)))))))
+
+let v_Base_dList_drange = (fun i -> (fun n -> ((v_Base_dList_drangeFrom i) ((bi_sub n) i))))
 
 let rec v_Base_dList_dmapMaybe = (fun mc0 -> (fun mc1 -> (match mc1 with
   | C_Base_dList_dList_Cons (dtb__30, dtb__31) -> (match (mc0 dtb__30) with

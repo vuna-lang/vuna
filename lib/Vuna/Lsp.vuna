@@ -24,7 +24,7 @@ module Vuna.Lsp (runLsp, runLspTool) where
 -- 诊断策略（不做包解析，M17 第一版的已知边界）：
 --   1. `parseSource` 失败 ⇒ 一条 parse 诊断（parse 错误无位置，范围取 0:0-0:0）；
 --   2. 文件含 `import` ⇒ 跳过类型检查，只保留 parse 诊断；
---   3. 否则 DT 精化（`elabProgramWith`）：错误 severity 1；
+--   3. 否则 DT 精化（`elabProgram`）：错误 severity 1；
 --      `<file>:<line>:<col>: msg` 的 1-based
 --      位置转成 LSP 的 0-based 范围。
 --
@@ -185,7 +185,7 @@ diagOfMessage severity message =
 diagnosticsFor : String -> String -> List Diag
 diagnosticsFor uri text = case parseSource uri text of
   Err e => [Diag 0 0 0 0 severityError e]
-  Ok (Source hdr imports decls) => if isNilList imports then case elabProgramWith False decls of
+  Ok (Source hdr imports decls) => if isNilList imports then case elabProgram decls of
     Err e => [diagOfMessage severityError e]
     Ok _ => []
   else []
@@ -451,10 +451,14 @@ readMore pending =
 
 -- 找子串 needle 从 start 起的字节偏移；找不到返回 -1。
 findFrom : String -> Int -> String -> Int
-findFrom needle start hay =
-  if start + strLength needle > strLength hay then 0 - 1
-  else if substring start (strLength needle) hay == needle then start
-  else findFrom needle (start + 1) hay
+findFrom needle start hay = findFromGo needle hay (range start (strLength hay))
+
+-- 计数器循环改为对候选起点列表的结构递归（range 用倒计数实现）。
+findFromGo : String -> String -> List Int -> Int
+findFromGo needle hay [] = 0 - 1
+findFromGo needle hay (k :: rest) =
+  if k + strLength needle > strLength hay then 0 - 1
+  else if substring k (strLength needle) hay == needle then k else findFromGo needle hay rest
 
 crlfCrlf : String
 crlfCrlf = strPack [13, 10, 13, 10]
@@ -509,15 +513,16 @@ nextFrame pending = case splitHeaders pending of
 -- 主循环
 -- ---------------------------------------------------------------
 -- 返回值即进程退出码：收到 shutdown 后的 exit 退 0，否则退 1（LSP 约定）。
-lspLoop : String -> LspState -> Int
-lspLoop pending state = case nextFrame pending of
+lspLoop : Int -> String -> LspState -> Int
+lspLoop fuel pending state = if fuel <= 0 then abnormalExit (logTo "frame fuel exhausted (internal)" state)
+else case nextFrame pending of
   Nothing => case readMore pending of
     -- EOF 且从未收到 shutdown ⇒ 非正常断开，退 1。
     -- 注意 flushLogs 返回的是写入字节数，不能直接当退出码。
     Nothing => abnormalExit (logTo "input closed" state)
-    Just pending2 => lspLoop pending2 state
+    Just pending2 => lspLoop (fuel - 1) pending2 state
   Just (Pair body rest) => case parseJson body of
-    Err e => lspLoop rest (logTo ("malformed frame: " ++ e) state)
+    Err e => lspLoop (fuel - 1) rest (logTo ("malformed frame: " ++ e) state)
     Ok msg =>
       let
         result = handleFrame msg state
@@ -526,7 +531,7 @@ lspLoop pending state = case nextFrame pending of
         state2 = firstOf after
         frames = secondOf after
         _ = map sendFrame frames
-      in if shouldExit then exitCodeOf state2 else lspLoop rest state2
+      in if shouldExit then exitCodeOf state2 else lspLoop (fuel - 1) rest state2
 
 -- exit 之前是否收到过 shutdown。
 exitCodeOf : LspState -> Int
@@ -543,8 +548,12 @@ abnormalExit state =
     _ = flushLogs state
   in 1
 
+-- stdin 帧循环是「读帧→处理→再读」的无限状态机；用显式 fuel 守卫（1G 帧）。
+lspFuelBound : Int
+lspFuelBound = 1073741824
+
 runLsp : Int
-runLsp = lspLoop "" (logTo "starting" (LspState [] False []))
+runLsp = lspLoop lspFuelBound "" (logTo "starting" (LspState [] False []))
 
 -- CLI 入口：与其它工具命令一致，返回退出码（由 Vuna.Cli 插入分发）。
 runLspTool : List String -> Int

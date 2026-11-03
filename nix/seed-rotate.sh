@@ -43,4 +43,6 @@ fi
 # 全部校验通过后再替换仓库里的 seed/。
 rm -rf seed
 cp -r "$tmp/seed" seed
+# 闭包数量断言由 checks.seed-selfhost 读取；rotation 时自动同步，避免清单腐化。
+find seed -maxdepth 1 -type f -name '*.ml' | wc -l | tr -d ' ' >nix/seed-count.txt
 echo "seed-rotate: 已生成 seed/（$(ls seed | wc -l | tr -d ' ') 个文件），fixed point 通过"

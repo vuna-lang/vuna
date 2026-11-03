@@ -42,10 +42,10 @@ M25–M30 为可排期阶段，F1–F4 为不排期未来轨道）。
 
 | ID | 摘要 | 证据 | 阶段 |
 | --- | --- | --- | --- |
-| B01 | 检查豁免按包名字符串 allowlist：`vuna*` 包静默跳过终止性/覆盖率；无 warning；**计划删除而非维护**（M25 用检查器改进 + 源码修复达标） | `Driver/Dt.dtTrustsTermination`；对照探针 | M25 |
-| B02 | 覆盖率放行实现是插入 `TInt 0` 哨兵（而不是 bottom/absurd） | `Elab/Term.vuna`；trusted Bool 缺分支生成 `if ... else 0` | M25 |
+| B01 | 检查豁免按包名字符串 allowlist：`vuna*` 包静默跳过终止性/覆盖率；无 warning；**计划删除而非维护**（M25 用检查器改进 + 源码修复达标） | `Driver/Dt.dtTrustsTermination`；对照探针 | 已修（M25：删除豁免，compiler/base/toolchain 全量源码达标） |
+| B02 | 覆盖率放行实现是插入 `TInt 0` 哨兵（而不是 bottom/absurd） | `Elab/Term.vuna`；trusted Bool 缺分支生成 `if ... else 0` | 已修（M25：删除覆盖率豁免与哨兵） |
 | B03 | 终止性只查自递归，互递归不查；归约 fuel=512 静默截断 | `Elab/Termination`、`Core/Eval.force` | M25 |
-| B04 | 无 Eq 实例时 `==` 退回 OCaml 多态结构相等；interp 用另一套 `valueEqDeep` | `Elab/Dict.genericEqApp`、`Core/Eval.valueEqDeep` | M25（根修 M29） |
+| B04 | 无 Eq 实例时 `==` 退回 OCaml 多态结构相等；interp 用另一套 `valueEqDeep` | `Elab/Dict.genericEqApp`、`Core/Eval.valueEqDeep` | 部分修复（M25：泛型兜底限制在可安全结构比较类型；兜底删除 M29） |
 | B05 | 宇宙中间态：严格分层（`Type:Type` 不成立）但**无累积性**；data kind 的 level 不校验 | `Core/Conv.vuna` level 相等；`data Box5 : Type 5` 通过 | M28 |
 | B06 | 擦除判据 4 个谓词、按语法 rig 判定、不做整程序使用分析 | `Core/Term.rigOfBinder`、`Elab/Meta.{isIndexDomain,binderRig,typeLayerRig}` | M28 |
 | B07 | `solveMetaHo` 只覆盖少数形状；元变量深度是事后复核；存库项靠 `inlineSolvedMetas` 补洞 | `Core/Conv` 三条 M13 出口；`Elab/Meta.inlineSolvedMetas` | M28 |
@@ -58,20 +58,20 @@ M25–M30 为可排期阶段，F1–F4 为不排期未来轨道）。
 | B14 | 类型当运行时值被擦除检查拦下（`Refl Nat` 失败），无 type codes | `Codegen/Erase` rig 检查；探针 | M29（决策） |
 | B15 | 字面量 case 必须有兜底；无冗余/不可达分支诊断 | `Elab/Term.checkLitCase` | M28 |
 | B16 | 效果 allowlist 按包名字符串（可伪造）；raw root 依赖模块可调 `prim_*`；**这是权限策略不是检查豁免**：M27 用 manifest 声明 capability 替换（或按决策删除） | `Loader/Resolve.packageAllowsEffects`；探针 | M27 |
-| B17 | case/终止性「只告警」的文档与实现不符（实际静默跳过、无 warning）；随 B01 删除豁免后不再需要「告警」语义 | `docs/reference/limits.md` vs `Elab/Case.ecTrusted` | M25 |
+| B17 | case/终止性「只告警」的文档与实现不符（实际静默跳过、无 warning）；随 B01 删除豁免后不再需要「告警」语义 | `docs/reference/limits.md` vs `Elab/Case.ecTrusted` | 已修（M25：删除豁免；无 warning 通道） |
 | B18 | 解析层只有单一命名空间：同名 type/ctor/global 靠多处特判兜住，与导出层双命名空间不一致 | `Elab/Term.inferVarRef`、`Elab/Records` 注释 | M28 |
 
 ## C. 可复现缺陷（bug）
 
 | ID | 摘要 | 证据 | 阶段 |
 | --- | --- | --- | --- |
-| C01 | trusted 包 Bool case 缺分支生成 `if b then "t" else 0`（ocamlopt 类型错误） | 探针 `_scratch/audit-lead/booltrust`；`Elab/Term.vuna` | M25 |
-| C02 | 包名 `vuna-base` 的普通包跳过终止性/覆盖率（静默）、可直接调用效果内建 | 对照探针 trusted vs `user-lib` | M25 |
-| C03 | 非结构互递归 `ping n = pong n; pong n = ping n` 通过检查 | `Elab/Termination` 只分析自调用 | M25 |
+| C01 | trusted 包 Bool case 缺分支生成 `if b then "t" else 0`（ocamlopt 类型错误） | 探针 `_scratch/audit-lead/booltrust`；`Elab/Term.vuna` | 已修（M25：覆盖率豁免删除后必报错） |
+| C02 | 包名 `vuna-base` 的普通包跳过终止性/覆盖率（静默）、可直接调用效果内建 | 对照探针 trusted vs `user-lib` | 已修（M25：豁免删除，包名不再影响检查） |
+| C03 | 非结构互递归 `ping n = pong n; pong n = ping n` 通过检查 | `Elab/Termination` 只分析自调用 | 已修（M25：调用图/SCT + 每环严格） |
 | C04 | 含函数字段的值 `==`：`interp` 返回 0，编译产物抛 `Invalid_argument("compare: functional value")` | 探针 `p9`/`funeq` | M25（根修 M29） |
 | C05 | `monad/04_kind_generic`：compile 产出的字典 binder 多态错误（`'b occurs inside t_Dict_uMonad`），`.nocompile` 整段跳过掩盖 | `Elab/Trait.liftFreeDictGoals` 记账；探针产物 | M29（标记清理 M25） |
-| C06 | `Core.applyValue` 没有 `VCase` 分支，落到 `_ => f` **静默丢实参** | `Core/Eval.vuna`；Elab 靠 eta 展开规避 | M25 |
-| C07 | 作用域护栏只验运行时 defs 且跳过擦除位；类型级定义/擦除位可带越界 index | `Codegen/Erase.checkAllDefScopes` | M25 |
+| C06 | `Core.applyValue` 没有 `VCase` 分支，落到 `_ => f` **静默丢实参** | `Core/Eval.vuna`；Elab 靠 eta 展开规避 | 已修（M25：VApp 卡住应用） |
+| C07 | 作用域护栏只验运行时 defs 且跳过擦除位；类型级定义/擦除位可带越界 index | `Codegen/Erase.checkAllDefScopes` | 部分修复（M25：全部定义；擦除位仍按约定跳过） |
 | C08 | `checkResolvedModules` 只校验模块声明，不校验 entryDecls | `Codegen/Split.vuna` | M26 |
 | C09 | `tcb-check.sh` 只匹配 `Vuna_d<短名>.ml`，重组后嵌套模块（`Vuna_dFmt_dExpr.ml`）漏检 | 已修：改为前缀匹配（2026-11 本轮） | 已修 |
 | C10 | `index-check.sh` 用硬编码符号 + touch 空模块，重组后漂移 | 已修：探针改为真实源文件 `Loader/Resolve.vuna`（本轮） | 已修 |
@@ -79,17 +79,20 @@ M25–M30 为可排期阶段，F1–F4 为不排期未来轨道）。
 | C12 | `fmt --check` 在非包目录/子目录崩溃（`Failure("readFile: lib")`）；不存在路径抛异常；`map` 同场景静默空输出 | `lib/Vuna/Cli.vuna` fmtDefaultTargets；探针 | M30 |
 | C13 | `doc --with-comments` 在 usage/文档中宣传但 CLI 未解析（exit 2）；`doc` 忽略 `[export]`（出 41 模块） | `lib/Vuna/Cli.docArgs`；usage 已删该 flag（本轮） | M30 |
 | C14 | tracked 0 字节 `compiler/lib/Vuna/Compiler/Builtins.vuna` 被索引成幻影模块 | 已删（本轮）；index 扫描应跳过 0 字节/坏文件 | 已修 |
-| C15 | seed rotation 无漂移判据：fixed point PASS 时 `seed/` 仍可与源码生成差 5 行；`result*` 无新鲜度保障 | `nix/checks/seed-selfhost.sh`；探针 `rot` | M25 |
+| C15 | seed rotation 无漂移判据：fixed point PASS 时 `seed/` 仍可与源码生成差 5 行；`result*` 无新鲜度保障 | `nix/checks/seed-selfhost.sh`；探针 `rot` | 部分修复（seed drift diff 已加；result 新鲜度 M25） |
 | C16 | `Show String` 两套实现：runtime 转义 vs `Base.Show` 只加引号（转义不一致） | `Codegen/Term` vs `Base/Show.vuna`；探针 | M27 |
 | C17 | 自定义 `data List`（Empty/Link）时产物引用未生成的 `dtp_pack`，`ocamlopt` 报 Unbound value（check 却过） | List 桥接判据两处不一致；探针 | M27 |
 | C18 | 用户自声明 `data IO`/`data Bool` 与内建短名冲突（被当内建） | 探针；同 A08 | M27 |
 | C19 | 语义边界不一致：interp 不归约 `strPack/strUnpack`、除零卡住；Int 静默 63 位溢出；String 按字节 | `Core/Eval`、`Core/Term`；探针 | M27 |
-| C20 | 用户可见错误带里程碑编号（"M13 limitation"/"M14"/"M19"）与 `DT: internal:` 文案 | `grep -rn "M1[0-9] limitation\|DT: internal"` | M25 |
+| C20 | 用户可见错误带里程碑编号（"M13 limitation"/"M14"/"M19"）与 `DT: internal:` 文案 | `grep -rn "M1[0-9] limitation\|DT: internal"` | 部分修复（M25：删里程碑编号；internal 前缀仍留作编译器不变量诊断） |
 | C21 | 重组后的对外 API/行为不变性没有入库夹具（只有一次性对拍） | `git show --stat 82e4891 -- test/` | M26 |
 | C22 | `metrics.sh` 用 `cat` 无分隔拼接：无尾换行文件导致 lines/maxline 失真 | `nix/metrics.sh`；探针 `met` | M25 |
 | C23 | `test/run-tests.sh` 965 行 shell、无 timeout、夹具/段数无守卫；`.nocompile` 语义过期 | `test/run-tests.sh`；附录清单 | M25 |
 | C24 | 无 CI 配置；flake check 实际 12 项文档/提交信息写 9；无 eval-cache/keep-going 封装 | `nix eval .#checks`；文档 | M25 |
 | C25 | `[workspace]` 成员不是检查/构建单元（成员错误可被根 check 忽略）；manifest `version`/`edition` 死字段；构建非 hermetic | `Manifest`/`Pkg`/`Cli`；探针 | M30 |
+| C26 | `Base.String.split` 为过检查改成显式 fuel 守卫，正确性依赖 `4*len+4` 外部论证（终止性本身由守卫保证） | `base/lib/Base/String.vuna`；M25.2b | M30（换结构递归或证明界） |
+| C27 | 前端/加载器状态机改用输入规模线性 fuel 初值（`8*len+64`/`128*tokens+1024`/1M/1G）；合法输入不触发依赖预算余量，无静态上界证明 | `Frontend/{Lexer,Parser,Toml}`、`Pkg`、`Loader`；M25.2c-front | M30（结构递归化或证明界） |
+| C28 | 工具链（Json/Fmt/Files/Index/Lint/Repl/Lsp）状态机/渲染互递归改用 fuel 或 `Base.List.range` 结构递归；fuel 上界靠输入规模/不可达值，无静态证明 | `lib/Vuna/{Json,Fmt,Fmt.Expr,Files,Index.Scan,Lint.Rules,Repl,Lsp}`；M25.2c-toolchain | M30（结构递归化或证明界） |
 
 ## D. 未实现能力 / 语言缺口
 
@@ -118,11 +121,11 @@ M25–M30 为可排期阶段，F1–F4 为不排期未来轨道）。
 
 | ID | 摘要 | 阶段 |
 | --- | --- | --- |
-| E01 | 无 CI 入口；建议 `nix run .#vuna-ci` 封装 flake check（eval-cache=false、--keep-going、汇总） | M25 |
+| E01 | 无 CI 入口；建议 `nix run .#vuna-ci` 封装 flake check（eval-cache=false、--keep-going、汇总） | 部分修复（nix/ci.sh；托管 CI 未加） |
 | E02 | check 数量/清单漂移（文档写 9、实际 12）；无自动生成清单 | M25 |
 | E03 | `result`/`result-seed` 手工且可过期（实测两者差 176 行），文档仍推荐优先用 | M25 |
-| E04 | TCB 只有黑名单、无 allowlist/数量断言；seed 闭包可静默缩水 | M25 |
-| E05 | seed rotation 无漂移判据（见 C15） | M25 |
+| E04 | TCB 只有黑名单、无 allowlist/数量断言；seed 闭包可静默缩水 | 部分修复（nix/seed-count.txt 数量断言；完整 allowlist 未做） |
+| E05 | seed rotation 无漂移判据（见 C15） | 已修（seed-selfhost `diff -r seed s1`） |
 | E06 | 验证脚本改真实工作树（index-check touch、seed-rotate 非原子 `rm -rf seed`） | M25 |
 | E07 | metrics/context 预算手工、单边上限、历史注释长；缺 `--recalibrate` 生成器 | M25 |
 | E08 | benchmark 完全脱离 CI、无基线文件、JSON 用 sed 解析 | M30 |

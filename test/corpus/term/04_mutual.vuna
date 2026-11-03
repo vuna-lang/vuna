@@ -1,0 +1,19 @@
+-- M25.2a 正例：结构下降的互递归组（even/odd）必须被证明，而不是像旧实现那样静默跳过。
+data Nat : Type where
+  Zero : Nat
+  Succ : Nat -> Nat
+
+data MyBool : Type where
+  Yes : MyBool
+  No : MyBool
+
+even : Nat -> MyBool
+even Zero = Yes
+even (Succ k) = odd k
+
+odd : Nat -> MyBool
+odd Zero = No
+odd (Succ k) = even k
+
+main : Int
+main = 0

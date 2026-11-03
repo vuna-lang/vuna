@@ -68,6 +68,7 @@ let
       ../../test/corpus/dt/01_id.vuna
       ../../nix/tcb-check.sh
       ../../nix/tcb-forbidden.txt
+      ../../nix/seed-count.txt
     ];
     env = {
       VUNA_SEED = "${vuna-seed}/bin/vuna-seed";

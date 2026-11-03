@@ -24,6 +24,7 @@ module Vuna.Compiler.Core
   , TType
   , TVar
   , Term
+  , VApp
   , VBool
   , VCase
   , VCaseAlt

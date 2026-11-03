@@ -66,8 +66,6 @@ module Vuna.Compiler.Elab.Types
   , ecPutDictGoals
   , ecPutSols
   , ecSols
-  , ecTrusted
-  , ecWithTrust
   , emptyCtx
   , errAt
   , evalCtx
@@ -185,35 +183,35 @@ data DtDictGoal : Type where
   DtDictGoal : Int -> Value -> DtDictGoal
 
 data Ec : Type where
-  Ec : Int -> List (Pair Int Value) -> List (Pair String Term) -> List DtData -> List (Pair Int Int) -> List DtGoal -> List DtInst -> List DtClass -> List DtDictGoal -> Bool -> Ec
+  Ec : Int -> List (Pair Int Value) -> List (Pair String Term) -> List DtData -> List (Pair Int Int) -> List DtGoal -> List DtInst -> List DtClass -> List DtDictGoal -> Ec
 
 ecNext : Ec -> Int
-ecNext (Ec next sols defs datas depths goals insts classes dgoals trusted) = next
+ecNext (Ec next sols defs datas depths goals insts classes dgoals) = next
 
 ecSols : Ec -> List (Pair Int Value)
-ecSols (Ec next sols defs datas depths goals insts classes dgoals trusted) = sols
+ecSols (Ec next sols defs datas depths goals insts classes dgoals) = sols
 
 ecDefs : Ec -> List (Pair String Term)
-ecDefs (Ec next sols defs datas depths goals insts classes dgoals trusted) = defs
+ecDefs (Ec next sols defs datas depths goals insts classes dgoals) = defs
 
 ecDatas : Ec -> List DtData
-ecDatas (Ec next sols defs datas depths goals insts classes dgoals trusted) = datas
+ecDatas (Ec next sols defs datas depths goals insts classes dgoals) = datas
 
 ecDepthOfMeta : Ec -> List (Pair Int Int)
-ecDepthOfMeta (Ec next sols defs datas depths goals insts classes dgoals trusted) = depths
+ecDepthOfMeta (Ec next sols defs datas depths goals insts classes dgoals) = depths
 
 ecGoals : Ec -> List DtGoal
-ecGoals (Ec next sols defs datas depths goals insts classes dgoals trusted) = goals
+ecGoals (Ec next sols defs datas depths goals insts classes dgoals) = goals
 
 ecInsts : Ec -> List DtInst
-ecInsts (Ec next sols defs datas depths goals insts classes dgoals trusted) = insts
+ecInsts (Ec next sols defs datas depths goals insts classes dgoals) = insts
 
 ecClasses : Ec -> List DtClass
-ecClasses (Ec next sols defs datas depths goals insts classes dgoals trusted) = classes
+ecClasses (Ec next sols defs datas depths goals insts classes dgoals) = classes
 
 ecAddGoal : Ec -> DtGoal -> Ec
-ecAddGoal (Ec next sols defs datas depths goals insts classes dgoals trusted) g =
-  Ec next sols defs datas depths (append goals [g]) insts classes dgoals trusted
+ecAddGoal (Ec next sols defs datas depths goals insts classes dgoals) g =
+  Ec next sols defs datas depths (append goals [g]) insts classes dgoals
 
 ecAddInst : Ec -> DtInst -> Ec
 ecAddInst ec i = if hasInstName (dtInstName i) (ecInsts ec) then ec else ecAddInstRaw ec i
@@ -223,46 +221,38 @@ hasInstName name [] = False
 hasInstName name (i :: rest) = if dtInstName i == name then True else hasInstName name rest
 
 ecAddInstRaw : Ec -> DtInst -> Ec
-ecAddInstRaw (Ec next sols defs datas depths goals insts classes dgoals trusted) i =
-  Ec next sols defs datas depths goals (append insts [i]) classes dgoals trusted
+ecAddInstRaw (Ec next sols defs datas depths goals insts classes dgoals) i =
+  Ec next sols defs datas depths goals (append insts [i]) classes dgoals
 
 ecAddClass : Ec -> DtClass -> Ec
-ecAddClass (Ec next sols defs datas depths goals insts classes dgoals trusted) c =
-  Ec next sols defs datas depths goals insts (append classes [c]) dgoals trusted
-
--- M22：延迟的字典约束访问器。
-ecTrusted : Ec -> Bool
-ecTrusted (Ec next sols defs datas depths goals insts classes dgoals trusted) = trusted
-
-ecWithTrust : Bool -> Ec -> Ec
-ecWithTrust trusted (Ec next sols defs datas depths goals insts classes dgoals _) =
-  Ec next sols defs datas depths goals insts classes dgoals trusted
+ecAddClass (Ec next sols defs datas depths goals insts classes dgoals) c =
+  Ec next sols defs datas depths goals insts (append classes [c]) dgoals
 
 ecDictGoals : Ec -> List DtDictGoal
-ecDictGoals (Ec next sols defs datas depths goals insts classes dgoals trusted) = dgoals
+ecDictGoals (Ec next sols defs datas depths goals insts classes dgoals) = dgoals
 
 ecPutDictGoals : Ec -> List DtDictGoal -> Ec
-ecPutDictGoals (Ec next sols defs datas depths goals insts classes dgoals trusted) dgoals2 =
-  Ec next sols defs datas depths goals insts classes dgoals2 trusted
+ecPutDictGoals (Ec next sols defs datas depths goals insts classes dgoals) dgoals2 =
+  Ec next sols defs datas depths goals insts classes dgoals2
 
 ecAddDictGoal : Ec -> DtDictGoal -> Ec
-ecAddDictGoal (Ec next sols defs datas depths goals insts classes dgoals trusted) g =
-  Ec next sols defs datas depths goals insts classes (append dgoals [g]) trusted
+ecAddDictGoal (Ec next sols defs datas depths goals insts classes dgoals) g =
+  Ec next sols defs datas depths goals insts classes (append dgoals [g])
 
 ecEmpty : Ec
-ecEmpty = Ec 0 [] [] [] [] [] [] [] [] False
+ecEmpty = Ec 0 [] [] [] [] [] [] [] []
 
 ecPutSols : Ec -> List (Pair Int Value) -> Ec
-ecPutSols (Ec next sols defs datas depths goals insts classes dgoals trusted) sols2 =
-  Ec next sols2 defs datas depths goals insts classes dgoals trusted
+ecPutSols (Ec next sols defs datas depths goals insts classes dgoals) sols2 =
+  Ec next sols2 defs datas depths goals insts classes dgoals
 
 ecAddDef : Ec -> Pair String Term -> Ec
-ecAddDef (Ec next sols defs datas depths goals insts classes dgoals trusted) d =
-  Ec next sols (append defs [d]) datas depths goals insts classes dgoals trusted
+ecAddDef (Ec next sols defs datas depths goals insts classes dgoals) d =
+  Ec next sols (append defs [d]) datas depths goals insts classes dgoals
 
 ecAddData : Ec -> DtData -> Ec
-ecAddData (Ec next sols defs datas depths goals insts classes dgoals trusted) d =
-  Ec next sols defs (append datas [d]) depths goals insts classes dgoals trusted
+ecAddData (Ec next sols defs datas depths goals insts classes dgoals) d =
+  Ec next sols defs (append datas [d]) depths goals insts classes dgoals
 
 -- 局部上下文：最近绑定的在前（名字 + 类型项；类型项在当前上下文里有效）。
 -- refinements 是 M14 的索引精化：level ↦ Value（level 形态，可提到更新的 binder，无需 de Bruijn
@@ -318,6 +308,7 @@ else case v of
         Nothing => VNeutral (NVar name lvl sp2)
     NGlobal g sp => VNeutral (NGlobal g (map (refineValue refs (fuel - 1)) sp))
   VCon c args => VCon c (map (refineValue refs (fuel - 1)) args)
+  VApp f a => VApp (refineValue refs (fuel - 1) f) (refineValue refs (fuel - 1) a)
   VCase scrut alts => VCase (refineValue refs (fuel - 1) scrut) alts
   VIf c th el =>
     VIf (refineValue refs (fuel - 1) c) (refineValue refs (fuel - 1) th)
@@ -350,17 +341,17 @@ errAt sp msg = Err (showSpanLoc sp ++ ": " ++ msg)
 
 -- M15：新建元变量并记录创建深度（求解时的作用域检查用）。
 newMeta : Ctx -> Ec -> Pair Term Ec
-newMeta ctx (Ec next sols defs datas depths goals insts classes dgoals trusted) =
+newMeta ctx (Ec next sols defs datas depths goals insts classes dgoals) =
   Pair (TMeta next)
-    (Ec (next + 1) sols defs datas (Pair next (ctxDepth ctx) :: depths) goals insts classes dgoals trusted)
+    (Ec (next + 1) sols defs datas (Pair next (ctxDepth ctx) :: depths) goals insts classes dgoals)
 
 -- M15：新建一个「洞」元变量：除创建深度外还记下目标类型与上下文快照（供 goal 显示）。
 newHoleMeta : Ctx -> Ec -> Span -> Value -> Pair Term Ec
-newHoleMeta ctx (Ec next sols defs datas depths goals insts classes dgoals trusted) sp ty =
+newHoleMeta ctx (Ec next sols defs datas depths goals insts classes dgoals) sp ty =
   let
     goal = DtGoal next sp ty (ctxItems ctx)
   in Pair (TMeta next)
-    (Ec (next + 1) sols defs datas (Pair next (ctxDepth ctx) :: depths) (append goals [goal]) insts classes dgoals trusted)
+    (Ec (next + 1) sols defs datas (Pair next (ctxDepth ctx) :: depths) (append goals [goal]) insts classes dgoals)
 
 forceVal : Ec -> Value -> Value
 forceVal ec v = force (ecDefs ec) (ecSols ec) defaultFuel v

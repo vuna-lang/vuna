@@ -65,14 +65,13 @@ let rec v_Vuna_dCompiler_dPackages_dPkg_dsplitSlashChars = (fun chars -> (fun ac
 
 let v_Vuna_dCompiler_dPackages_dPkg_dsplitOnSlash = (fun path -> (((v_Vuna_dCompiler_dPackages_dPkg_dsplitSlashChars (dtp_unpack path)) C_Base_dList_dList_Nil) C_Base_dList_dList_Nil))
 
-let rec v_Vuna_dCompiler_dPackages_dPkg_dnormalizeParent = (fun absolute -> (fun acc -> (fun rest -> (match acc with
-  | C_Base_dList_dList_Nil -> (if absolute then (((v_Vuna_dCompiler_dPackages_dPkg_dnormalizeAcc absolute) rest) C_Base_dList_dList_Nil) else (((v_Vuna_dCompiler_dPackages_dPkg_dnormalizeAcc absolute) rest) (C_Base_dList_dList_Cons ("..", C_Base_dList_dList_Nil))))
-  | C_Base_dList_dList_Cons (dtb__21, dtb__22) -> (if ((bi_eq_str dtb__21) "..") then (((v_Vuna_dCompiler_dPackages_dPkg_dnormalizeAcc absolute) rest) (C_Base_dList_dList_Cons ("..", acc))) else (((v_Vuna_dCompiler_dPackages_dPkg_dnormalizeAcc absolute) rest) dtb__22))
-  | _ -> failwith "DT: impossible branch"
-))))
-and v_Vuna_dCompiler_dPackages_dPkg_dnormalizeAcc = (fun absolute -> (fun segments -> (fun acc -> (match segments with
+let rec v_Vuna_dCompiler_dPackages_dPkg_dnormalizeAcc = (fun absolute -> (fun segments -> (fun acc -> (match segments with
   | C_Base_dList_dList_Nil -> acc
-  | C_Base_dList_dList_Cons (dtb__23, dtb__24) -> (if ((bi_eq_str dtb__23) "") then (((v_Vuna_dCompiler_dPackages_dPkg_dnormalizeAcc absolute) dtb__24) acc) else (if ((bi_eq_str dtb__23) ".") then (((v_Vuna_dCompiler_dPackages_dPkg_dnormalizeAcc absolute) dtb__24) acc) else (if ((bi_eq_str dtb__23) "..") then (((v_Vuna_dCompiler_dPackages_dPkg_dnormalizeParent absolute) acc) dtb__24) else (((v_Vuna_dCompiler_dPackages_dPkg_dnormalizeAcc absolute) dtb__24) (C_Base_dList_dList_Cons (dtb__23, acc))))))
+  | C_Base_dList_dList_Cons (dtb__21, dtb__22) -> (if ((bi_eq_str dtb__21) "") then (((v_Vuna_dCompiler_dPackages_dPkg_dnormalizeAcc absolute) dtb__22) acc) else (if ((bi_eq_str dtb__21) ".") then (((v_Vuna_dCompiler_dPackages_dPkg_dnormalizeAcc absolute) dtb__22) acc) else (if ((bi_eq_str dtb__21) "..") then (match acc with
+  | C_Base_dList_dList_Nil -> (if absolute then (((v_Vuna_dCompiler_dPackages_dPkg_dnormalizeAcc absolute) dtb__22) C_Base_dList_dList_Nil) else (((v_Vuna_dCompiler_dPackages_dPkg_dnormalizeAcc absolute) dtb__22) (C_Base_dList_dList_Cons ("..", C_Base_dList_dList_Nil))))
+  | C_Base_dList_dList_Cons (dtb__23, dtb__24) -> (if ((bi_eq_str dtb__23) "..") then (((v_Vuna_dCompiler_dPackages_dPkg_dnormalizeAcc absolute) dtb__22) (C_Base_dList_dList_Cons ("..", acc))) else (((v_Vuna_dCompiler_dPackages_dPkg_dnormalizeAcc absolute) dtb__22) dtb__24))
+  | _ -> failwith "DT: impossible branch"
+) else (((v_Vuna_dCompiler_dPackages_dPkg_dnormalizeAcc absolute) dtb__22) (C_Base_dList_dList_Cons (dtb__21, acc))))))
   | _ -> failwith "DT: impossible branch"
 ))))
 
@@ -104,15 +103,15 @@ let v_Vuna_dCompiler_dPackages_dPkg_dmanifestNameString = (fun manifest -> (matc
   | _ -> failwith "DT: impossible branch"
 ))
 
-let rec v_Vuna_dCompiler_dPackages_dPkg_dmemStackDir = (fun d415 -> (fun dir -> (fun stack -> (match stack with
+let rec v_Vuna_dCompiler_dPackages_dPkg_dmemStackDir = (fun d451 -> (fun dir -> (fun stack -> (match stack with
   | C_Base_dList_dList_Nil -> false
-  | C_Base_dList_dList_Cons (dtb__32, dtb__33) -> (if (((v_Base_dEq_deq d415) (v_Base_dPair_dfirstOf dtb__32)) dir) then true else (((v_Vuna_dCompiler_dPackages_dPkg_dmemStackDir d415) dir) dtb__33))
+  | C_Base_dList_dList_Cons (dtb__32, dtb__33) -> (if (((v_Base_dEq_deq d451) (v_Base_dPair_dfirstOf dtb__32)) dir) then true else (((v_Vuna_dCompiler_dPackages_dPkg_dmemStackDir d451) dir) dtb__33))
   | _ -> failwith "DT: impossible branch"
 ))))
 
-let rec v_Vuna_dCompiler_dPackages_dPkg_dcyclePrefix = (fun d421 -> (fun dir -> (fun stack -> (match stack with
+let rec v_Vuna_dCompiler_dPackages_dPkg_dcyclePrefix = (fun d457 -> (fun dir -> (fun stack -> (match stack with
   | C_Base_dList_dList_Nil -> C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing
-  | C_Base_dList_dList_Cons (dtb__34, dtb__35) -> (if (((v_Base_dEq_deq d421) (v_Base_dPair_dfirstOf dtb__34)) dir) then (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust ((C_Base_dList_dList_Cons (dtb__34, C_Base_dList_dList_Nil)))) else (match (((v_Vuna_dCompiler_dPackages_dPkg_dcyclePrefix d421) dir) dtb__35) with
+  | C_Base_dList_dList_Cons (dtb__34, dtb__35) -> (if (((v_Base_dEq_deq d457) (v_Base_dPair_dfirstOf dtb__34)) dir) then (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust ((C_Base_dList_dList_Cons (dtb__34, C_Base_dList_dList_Nil)))) else (match (((v_Vuna_dCompiler_dPackages_dPkg_dcyclePrefix d457) dir) dtb__35) with
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__36) -> (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust ((C_Base_dList_dList_Cons (dtb__34, dtb__36))))
   | _ -> failwith "DT: impossible branch"
@@ -130,9 +129,9 @@ let v_Vuna_dCompiler_dPackages_dPkg_dcycleMessage = (fun dir -> (fun depName -> 
   | _ -> failwith "DT: impossible branch"
 ))))
 
-let v_Vuna_dCompiler_dPackages_dPkg_ddependencyNameOk = (fun d442 -> (fun depName -> (fun actual -> (match depName with
+let v_Vuna_dCompiler_dPackages_dPkg_ddependencyNameOk = (fun d478 -> (fun depName -> (fun actual -> (match depName with
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> true
-  | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__39) -> (((v_Base_dEq_deq d442) dtb__39) actual)
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__39) -> (((v_Base_dEq_deq d478) dtb__39) actual)
   | _ -> failwith "DT: impossible branch"
 ))))
 
@@ -142,12 +141,12 @@ let v_Vuna_dCompiler_dPackages_dPkg_dmismatchMessage = (fun depName -> (fun actu
   | _ -> failwith "DT: impossible branch"
 )))
 
-let rec v_Vuna_dCompiler_dPackages_dPkg_dloadDependencyList = (fun stack -> (fun baseDir -> (fun deps -> (match deps with
+let rec v_Vuna_dCompiler_dPackages_dPkg_dloadDependencyList = (fun fuel -> (fun stack -> (fun baseDir -> (fun deps -> (if ((bi_le_int fuel) 0) then (C_Base_dResult_dResult_Base_dResult_dErr ("DT: pkg fuel exhausted (internal: dependency graph too deep)")) else (match deps with
   | C_Base_dList_dList_Nil -> (C_Base_dResult_dResult_Base_dResult_dOk (C_Base_dList_dList_Nil))
   | C_Base_dList_dList_Cons (dtb__41, dtb__42) -> (match dtb__41 with
-  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__43, dtb__44) -> (match (((v_Vuna_dCompiler_dPackages_dPkg_dloadPackageWalk stack) (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__43))) ((v_Vuna_dCompiler_dPackages_dPkg_djoinPath baseDir) dtb__44)) with
+  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__43, dtb__44) -> (match ((((v_Vuna_dCompiler_dPackages_dPkg_dloadPackageWalk ((bi_sub fuel) 1)) stack) (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__43))) ((v_Vuna_dCompiler_dPackages_dPkg_djoinPath baseDir) dtb__44)) with
   | C_Base_dResult_dResult_Base_dResult_dErr (dtb__45) -> (C_Base_dResult_dResult_Base_dResult_dErr (dtb__45))
-  | C_Base_dResult_dResult_Base_dResult_dOk (dtb__46) -> (match (((v_Vuna_dCompiler_dPackages_dPkg_dloadDependencyList stack) baseDir) dtb__42) with
+  | C_Base_dResult_dResult_Base_dResult_dOk (dtb__46) -> (match ((((v_Vuna_dCompiler_dPackages_dPkg_dloadDependencyList ((bi_sub fuel) 1)) stack) baseDir) dtb__42) with
   | C_Base_dResult_dResult_Base_dResult_dErr (dtb__47) -> (C_Base_dResult_dResult_Base_dResult_dErr (dtb__47))
   | C_Base_dResult_dResult_Base_dResult_dOk (dtb__48) -> (C_Base_dResult_dResult_Base_dResult_dOk ((C_Base_dList_dList_Cons (dtb__46, dtb__48))))
   | _ -> failwith "DT: impossible branch"
@@ -157,16 +156,16 @@ let rec v_Vuna_dCompiler_dPackages_dPkg_dloadDependencyList = (fun stack -> (fun
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
-))))
-and v_Vuna_dCompiler_dPackages_dPkg_dloadPackageWalk = (fun stack -> (fun depName -> (fun dir -> ((fun normalized -> (if (((v_Vuna_dCompiler_dPackages_dPkg_dmemStackDir (v_Base_dEq_dBase_dEq_dEq_uBase_dEq_dEq_uString ())) normalized) stack) then (C_Base_dResult_dResult_Base_dResult_dErr ((((v_Vuna_dCompiler_dPackages_dPkg_dcycleMessage normalized) depName) stack))) else (match (v_Vuna_dCompiler_dPackages_dPkg_dloadManifestAt ((bi_concat normalized) "/vuna.toml")) with
+))))))
+and v_Vuna_dCompiler_dPackages_dPkg_dloadPackageWalk = (fun fuel -> (fun stack -> (fun depName -> (fun dir -> (if ((bi_le_int fuel) 0) then (C_Base_dResult_dResult_Base_dResult_dErr ("DT: pkg fuel exhausted (internal: dependency graph too deep)")) else ((fun normalized -> (if (((v_Vuna_dCompiler_dPackages_dPkg_dmemStackDir (v_Base_dEq_dBase_dEq_dEq_uBase_dEq_dEq_uString ())) normalized) stack) then (C_Base_dResult_dResult_Base_dResult_dErr ((((v_Vuna_dCompiler_dPackages_dPkg_dcycleMessage normalized) depName) stack))) else (match (v_Vuna_dCompiler_dPackages_dPkg_dloadManifestAt ((bi_concat normalized) "/vuna.toml")) with
   | C_Base_dResult_dResult_Base_dResult_dErr (dtb__49) -> (C_Base_dResult_dResult_Base_dResult_dErr (dtb__49))
-  | C_Base_dResult_dResult_Base_dResult_dOk (dtb__50) -> ((fun name -> (if (((v_Vuna_dCompiler_dPackages_dPkg_ddependencyNameOk (v_Base_dEq_dBase_dEq_dEq_uBase_dEq_dEq_uString ())) depName) name) then (match (((v_Vuna_dCompiler_dPackages_dPkg_dloadDependencyList (C_Base_dList_dList_Cons ((C_Base_dPair_dPair_Base_dPair_dPair (normalized, name)), stack))) normalized) (v_Vuna_dCompiler_dFrontend_dManifest_dmanifestDependencies dtb__50)) with
+  | C_Base_dResult_dResult_Base_dResult_dOk (dtb__50) -> ((fun name -> (if (((v_Vuna_dCompiler_dPackages_dPkg_ddependencyNameOk (v_Base_dEq_dBase_dEq_dEq_uBase_dEq_dEq_uString ())) depName) name) then (match ((((v_Vuna_dCompiler_dPackages_dPkg_dloadDependencyList ((bi_sub fuel) 1)) (C_Base_dList_dList_Cons ((C_Base_dPair_dPair_Base_dPair_dPair (normalized, name)), stack))) normalized) (v_Vuna_dCompiler_dFrontend_dManifest_dmanifestDependencies dtb__50)) with
   | C_Base_dResult_dResult_Base_dResult_dErr (dtb__51) -> (C_Base_dResult_dResult_Base_dResult_dErr (dtb__51))
   | C_Base_dResult_dResult_Base_dResult_dOk (dtb__52) -> (C_Base_dResult_dResult_Base_dResult_dOk ((C_Vuna_dCompiler_dPackages_dPkg_dPackage_Vuna_dCompiler_dPackages_dPkg_dPackage (dtb__50, dtb__52, normalized))))
   | _ -> failwith "DT: impossible branch"
 ) else (C_Base_dResult_dResult_Base_dResult_dErr (((v_Vuna_dCompiler_dPackages_dPkg_dmismatchMessage depName) name))))) (v_Vuna_dCompiler_dPackages_dPkg_dmanifestNameString dtb__50))
   | _ -> failwith "DT: impossible branch"
-))) (v_Vuna_dCompiler_dPackages_dPkg_dnormalizeDir dir)))))
+))) (v_Vuna_dCompiler_dPackages_dPkg_dnormalizeDir dir)))))))
 
 let rec v_Vuna_dCompiler_dPackages_dPkg_dcollectPackageIds = (fun package -> (C_Base_dList_dList_Cons ((C_Base_dPair_dPair_Base_dPair_dPair ((v_Vuna_dCompiler_dPackages_dPkg_dpackageName package), (v_Vuna_dCompiler_dPackages_dPkg_dpackageDir package))), (v_Vuna_dCompiler_dPackages_dPkg_dcollectDependencyIds (v_Vuna_dCompiler_dPackages_dPkg_dpackageDependencies package)))))
 and v_Vuna_dCompiler_dPackages_dPkg_dcollectDependencyIds = (fun packages -> (match packages with
@@ -199,7 +198,7 @@ let rec v_Vuna_dCompiler_dPackages_dPkg_dcheckUniqueNamesGo = (fun seen -> (fun 
 
 let v_Vuna_dCompiler_dPackages_dPkg_dcheckUniquePackageNames = (fun packages -> ((v_Vuna_dCompiler_dPackages_dPkg_dcheckUniqueNamesGo C_Base_dList_dList_Nil) (v_Vuna_dCompiler_dPackages_dPkg_dcollectDependencyIds packages)))
 
-let v_Vuna_dCompiler_dPackages_dPkg_dloadPackage = (fun dir -> ((v_Base_dResult_dandThen (((v_Vuna_dCompiler_dPackages_dPkg_dloadPackageWalk C_Base_dList_dList_Nil) C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing) dir)) (fun package -> ((v_Base_dResult_dandThen (v_Vuna_dCompiler_dPackages_dPkg_dcheckUniquePackageNames (C_Base_dList_dList_Cons (package, C_Base_dList_dList_Nil)))) (fun _u -> (C_Base_dResult_dResult_Base_dResult_dOk (package)))))))
+let v_Vuna_dCompiler_dPackages_dPkg_dloadPackage = (fun dir -> ((v_Base_dResult_dandThen ((((v_Vuna_dCompiler_dPackages_dPkg_dloadPackageWalk 1048576) C_Base_dList_dList_Nil) C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing) dir)) (fun package -> ((v_Base_dResult_dandThen (v_Vuna_dCompiler_dPackages_dPkg_dcheckUniquePackageNames (C_Base_dList_dList_Cons (package, C_Base_dList_dList_Nil)))) (fun _u -> (C_Base_dResult_dResult_Base_dResult_dOk (package)))))))
 
 let rec v_Vuna_dCompiler_dPackages_dPkg_dloadMembers = (fun baseDir -> (fun members -> (match members with
   | C_Base_dList_dList_Nil -> (C_Base_dResult_dResult_Base_dResult_dOk (C_Base_dList_dList_Nil))
@@ -246,7 +245,7 @@ let v_Vuna_dCompiler_dPackages_dPkg_dpackageRoots = (fun package -> ((fun selfNa
 
 let v_Vuna_dCompiler_dPackages_dPkg_dpackageEntry = (fun package -> ((bi_concat (v_Vuna_dCompiler_dPackages_dPkg_dpackageDir package)) "/app/Main.vuna"))
 
-let rec v_Vuna_dCompiler_dPackages_dPkg_dfindManifestUp = (fun start -> (fun dir -> (if (dtp_fileExists ((bi_concat dir) "/vuna.toml")) then (C_Base_dResult_dResult_Base_dResult_dOk (dir)) else (((v_Vuna_dCompiler_dPackages_dPkg_dfindManifestUpStep start) dir) (v_Vuna_dCompiler_dFrontend_dManifest_dmanifestDir dir)))))
-and v_Vuna_dCompiler_dPackages_dPkg_dfindManifestUpStep = (fun start -> (fun dir -> (fun parent -> (if ((bi_eq_str parent) dir) then (C_Base_dResult_dResult_Base_dResult_dErr (((bi_concat "pkg: no vuna.toml found from ") ((bi_concat start) " (searched upward)")))) else ((v_Vuna_dCompiler_dPackages_dPkg_dfindManifestUp start) parent)))))
+let rec v_Vuna_dCompiler_dPackages_dPkg_dfindManifestUp = (fun fuel -> (fun start -> (fun dir -> (if ((bi_le_int fuel) 0) then (C_Base_dResult_dResult_Base_dResult_dErr ("DT: pkg fuel exhausted (internal: manifest search made no progress)")) else (if (dtp_fileExists ((bi_concat dir) "/vuna.toml")) then (C_Base_dResult_dResult_Base_dResult_dOk (dir)) else ((((v_Vuna_dCompiler_dPackages_dPkg_dfindManifestUpStep ((bi_sub fuel) 1)) start) dir) (v_Vuna_dCompiler_dFrontend_dManifest_dmanifestDir dir)))))))
+and v_Vuna_dCompiler_dPackages_dPkg_dfindManifestUpStep = (fun fuel -> (fun start -> (fun dir -> (fun parent -> (if ((bi_le_int fuel) 0) then (C_Base_dResult_dResult_Base_dResult_dErr ("DT: pkg fuel exhausted (internal: manifest search made no progress)")) else (if ((bi_eq_str parent) dir) then (C_Base_dResult_dResult_Base_dResult_dErr (((bi_concat "pkg: no vuna.toml found from ") ((bi_concat start) " (searched upward)")))) else (((v_Vuna_dCompiler_dPackages_dPkg_dfindManifestUp ((bi_sub fuel) 1)) start) parent)))))))
 
-let v_Vuna_dCompiler_dPackages_dPkg_dfindManifestDir = (fun startDir -> ((fun start -> ((v_Vuna_dCompiler_dPackages_dPkg_dfindManifestUp start) start)) (v_Vuna_dCompiler_dPackages_dPkg_dnormalizeDir startDir)))
+let v_Vuna_dCompiler_dPackages_dPkg_dfindManifestDir = (fun startDir -> ((fun start -> (((v_Vuna_dCompiler_dPackages_dPkg_dfindManifestUp ((bi_add (bi_strLength start)) 1)) start) start)) (v_Vuna_dCompiler_dPackages_dPkg_dnormalizeDir startDir)))

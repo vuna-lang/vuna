@@ -48,15 +48,15 @@
 # 导出列表纳入 fmt（显式列表逐项一行）：模块头展开使源码行号整体下移，`vuna_fail`
 #   内嵌的行列号数字变长，生成 .ml 的 bytes +84、>100 列行 +2；codegen 本身未变。
 #   按实测重新标定：bytes 1425629 / longlines 5014。
-bytes 1290000
-lines 12600
+bytes 1560000
+lines 14700
 maxline 8250
-longlines 3760
-letrec 496
+longlines 4450
+letrec 590
 strcat 0
-eqint 120
-zeroarg 76
-ctorcount 3600
+eqint 150
+zeroarg 80
+ctorcount 4150
 # M23 夹具迁移与 interp 切换：编译器源码新增 DT 能力（零参构造子求值、record update 降级、
 #   参数化 record、@inst 选择、实例诊断、&&|| 短路、REPL 表达式求值、DtDerive/CoreCodegen
 #   修正）约 250 行；且本预算自 751ba49（Elab +467 行）起就已失效——HEAD 实测已是
@@ -83,3 +83,9 @@ ctorcount 3600
 #   （每个子模块的 export/import 头是固定开销，代码内容原样搬迁）；按实测重新标定：
 #   files 55 / bytes 1285679 / lines 12569 / maxline 8152 / longlines 3730 / letrec 495 /
 #   eqint 118 / zeroarg 74 / ctorcount 3591。单模块行数降到 823（Frontend.Parser）。
+# M25 正本清源（终止性检查删除按包名豁免）：compiler/base/toolchain 所有递归改成
+#   SCT 可证的显式 fuel/结构递归，`Elab.Term`/`Termination` 再拆子模块；seed 闭包
+#   55 → 60 .ml。按实测重新标定：files 60 / bytes 1524354 / lines 14514 /
+#   maxline 8152 / longlines 4379 / letrec 567 / eqint 137 / zeroarg 76 /
+#   ctorcount 4074。增长是检查器强制的显式终止性证据与模块头开销，不是 codegen
+#   回归；后续再优化 fuel 包装时重新收紧。

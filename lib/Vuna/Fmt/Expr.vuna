@@ -11,8 +11,8 @@ module Vuna.Fmt.Expr
 
 -- Vuna.Fmt.Expr：表达式 / 模式 / 块级布局的打印（M24 后维护·源码重组，从 Vuna.Fmt 拆出）。
 --
--- 单行形式（inlinePrec，按运算符优先级补括号；case/let/do 返回 Nothing）与块级形式
--- （renderExpr → renderBlock/renderWide，按 maxWidth 折行）共用同一份模式与中缀表。
+-- 单行形式（inlinePrecGo，按运算符优先级补括号；case/let/do 返回 Nothing）与块级形式
+-- （renderExprGo → renderBlockGo/renderWideGo，按 maxWidth 折行）共用同一份模式与中缀表。
 -- 注释锚点由 Vuna.Fmt.Comment 提供（attachAt）。
 import Vuna.Compiler.Common
 import Vuna.Compiler.Frontend.Ast
@@ -50,59 +50,87 @@ patListElems pat = case pat of
   PCon name pats sp => patListElemsOf name pats
   _ => Nothing
 
-renderPat : Pat -> String
-renderPat pat = case pat of
+-- 列表渲染改为显式结构递归：`map renderPatGo` 的 λ 没有 size 关系，SCT 会判成无下降环。
+renderPatElemsGo : Int -> List Pat -> String
+renderPatElemsGo fuel pats = if fuel <= 0 then ""
+else case pats of
+  [] => ""
+  [p] => renderPatGo (fuel - 1) p
+  p :: rest => renderPatGo (fuel - 1) p ++ ", " ++ renderPatElemsGo (fuel - 1) rest
+
+renderPatAtomsSpacedGo : Int -> List Pat -> String
+renderPatAtomsSpacedGo fuel pats = if fuel <= 0 then ""
+else case pats of
+  [] => ""
+  p :: rest => " " ++ renderPatAtomGo (fuel - 1) p ++ renderPatAtomsSpacedGo (fuel - 1) rest
+
+renderRecPatFieldsGo : Int -> List (Pair String Pat) -> String
+renderRecPatFieldsGo fuel fields = if fuel <= 0 then ""
+else case fields of
+  [] => ""
+  [f] => renderRecPatFieldGo (fuel - 1) f
+  f :: rest => renderRecPatFieldGo (fuel - 1) f ++ ", " ++ renderRecPatFieldsGo (fuel - 1) rest
+
+renderPatGo : Int -> Pat -> String
+renderPatGo fuel pat = if fuel <= 0 then ""
+else case pat of
   PVar name sp => name
   PWild sp => "_"
   PInt n sp => strFromInt n
   PStr s sp => renderStr s
-  PCon name pats sp => renderConPat name pats
-  PRecord name fields sp => renderRecPat name fields
+  PCon name pats sp => renderConPatGo (fuel - 1) name pats
+  PRecord name fields sp => renderRecPatGo (fuel - 1) name fields
 
-renderConPat : String -> List Pat -> String
-renderConPat name pats = case patListElemsOf name pats of
-  Just elems => "[" ++ joinComma (map renderPat elems) ++ "]"
+renderConPatGo : Int -> String -> List Pat -> String
+renderConPatGo fuel name pats = if fuel <= 0 then ""
+else case patListElemsOf name pats of
+  Just elems => "[" ++ renderPatElemsGo (fuel - 1) elems ++ "]"
   Nothing =>
-    if name == "Cons" then renderConsPat pats
+    if name == "Cons" then renderConsPatGo (fuel - 1) pats
     else if name == "Nil" && isNilList pats then "[]"
-    else if isNilList pats then name else name ++ joinSpace (map renderPatAtom pats)
+    else if isNilList pats then name else name ++ renderPatAtomsSpacedGo (fuel - 1) pats
 
-renderConsPat : List Pat -> String
-renderConsPat pats = case pats of
-  [a, b] => renderPatAtom a ++ " :: " ++ renderPatConsTail b
-  _ => "Cons" ++ joinSpace (map renderPatAtom pats)
+renderConsPatGo : Int -> List Pat -> String
+renderConsPatGo fuel pats = if fuel <= 0 then ""
+else case pats of
+  [a, b] => renderPatAtomGo (fuel - 1) a ++ " :: " ++ renderPatConsTailGo (fuel - 1) b
+  _ => "Cons" ++ renderPatAtomsSpacedGo (fuel - 1) pats
 
-renderPatConsTail : Pat -> String
-renderPatConsTail pat = case pat of
+renderPatConsTailGo : Int -> Pat -> String
+renderPatConsTailGo fuel pat = if fuel <= 0 then ""
+else case pat of
   PCon name pats sp => if name == "Cons" then case pats of
-    [a, b] => renderPatAtom a ++ " :: " ++ renderPatConsTail b
-    _ => renderPatAtom pat
-  else renderPatAtom pat
-  _ => renderPatAtom pat
+    [a, b] => renderPatAtomGo (fuel - 1) a ++ " :: " ++ renderPatConsTailGo (fuel - 1) b
+    _ => renderPatAtomGo (fuel - 1) pat
+  else renderPatAtomGo (fuel - 1) pat
+  _ => renderPatAtomGo (fuel - 1) pat
 
-renderPatAtom : Pat -> String
-renderPatAtom pat = case pat of
+renderPatAtomGo : Int -> Pat -> String
+renderPatAtomGo fuel pat = if fuel <= 0 then ""
+else case pat of
   PVar name sp => name
   PWild sp => "_"
   PInt n sp => strFromInt n
   PStr s sp => renderStr s
   PCon name [] sp => if name == "Nil" then "[]" else name
-  PCon name pats sp => "(" ++ renderConPat name pats ++ ")"
-  PRecord name fields sp => "(" ++ renderRecPat name fields ++ ")"
+  PCon name pats sp => "(" ++ renderConPatGo (fuel - 1) name pats ++ ")"
+  PRecord name fields sp => "(" ++ renderRecPatGo (fuel - 1) name fields ++ ")"
 
-renderRecPat : String -> List (Pair String Pat) -> String
-renderRecPat name fields =
-  if isNilList fields then name ++ " { }"
-  else name ++ " { " ++ joinComma (map renderRecPatField fields) ++ " }"
+renderRecPatGo : Int -> String -> List (Pair String Pat) -> String
+renderRecPatGo fuel name fields =
+  if fuel <= 0 then ""
+  else if isNilList fields then name ++ " { }"
+  else name ++ " { " ++ renderRecPatFieldsGo (fuel - 1) fields ++ " }"
 
-renderRecPatField : Pair String Pat -> String
-renderRecPatField (Pair fname pat) = case pat of
-  PVar n sp => if n == fname then fname else fname ++ " = " ++ renderPat pat
-  _ => fname ++ " = " ++ renderPat pat
+renderRecPatFieldGo : Int -> Pair String Pat -> String
+renderRecPatFieldGo fuel (Pair fname pat) = if fuel <= 0 then ""
+else case pat of
+  PVar n sp => if n == fname then fname else fname ++ " = " ++ renderPatGo (fuel - 1) pat
+  _ => fname ++ " = " ++ renderPatGo (fuel - 1) pat
 
 -- ---------------------------------------------------------------
--- 单行表达式：inlineExpr / inlinePrec / inlineAtom
--- inlinePrec 按运算符优先级决定是否补括号；块结构（case/let/do）返回 Nothing。
+-- 单行表达式：inlineExprGo / inlinePrecGo / inlineAtomGo
+-- inlinePrecGo 按运算符优先级决定是否补括号；块结构（case/let/do）返回 Nothing。
 -- ---------------------------------------------------------------
 infixPrec : String -> Maybe (Pair Int Int)
 infixPrec op = case op of
@@ -136,71 +164,75 @@ listExprElems e = case e of
     Nothing => Nothing
   _ => Nothing
 
-inlineExpr : Expr -> Maybe String
-inlineExpr e = inlinePrec 0 e
+inlineExprGo : Int -> Expr -> Maybe String
+inlineExprGo fuel e = if fuel <= 0 then Nothing else inlinePrecGo (fuel - 1) 0 e
 
-inlinePrec : Int -> Expr -> Maybe String
-inlinePrec minPrec e = case e of
+inlinePrecGo : Int -> Int -> Expr -> Maybe String
+inlinePrecGo fuel minPrec e = if fuel <= 0 then Nothing
+else case e of
   EVar name sp => if name == "Nil" then Just "[]" else Just name
   EInt n sp => Just (strFromInt n)
   EStr s sp => Just (renderStr s)
-  ELam ps body sp => case inlinePrec 0 body of
+  ELam ps body sp => case inlinePrecGo (fuel - 1) 0 body of
     Nothing => Nothing
     Just b => Just (wrapPrec (minPrec > 0) ("\\" ++ joinComma ps ++ " => " ++ b))
   EApp fn args sp => case listExprElems (EApp fn args sp) of
-    Just elems => case mapMaybeStrings (\x => inlineExpr x) elems of
+    Just elems => case mapMaybeStrings (\x => inlineExprGo (fuel - 1) x) elems of
       Nothing => Nothing
       Just ss => Just ("[" ++ joinComma ss ++ "]")
-    Nothing => inlineApp minPrec fn args
-  EPi name implicit dom cod sp => inlinePi minPrec name implicit dom cod
+    Nothing => inlineAppGo (fuel - 1) minPrec fn args
+  EPi name implicit dom cod sp => inlinePiGo (fuel - 1) minPrec name implicit dom cod
   ELet binds body rec_ sp => Nothing
   ECase scrut alts sp => Nothing
-  EIf c t el sp => case inlinePrec 0 c of
+  EIf c t el sp => case inlinePrecGo (fuel - 1) 0 c of
     Nothing => Nothing
-    Just cs => case inlinePrec 0 t of
+    Just cs => case inlinePrecGo (fuel - 1) 0 t of
       Nothing => Nothing
-      Just ts => case inlinePrec 0 el of
+      Just ts => case inlinePrecGo (fuel - 1) 0 el of
         Nothing => Nothing
         Just es => Just (wrapPrec (minPrec > 0) ("if " ++ cs ++ " then " ++ ts ++ " else " ++ es))
-  EField base f sp => case inlineAtom base of
+  EField base f sp => case inlineAtomGo (fuel - 1) base of
     Nothing => Nothing
     Just b => Just (b ++ "." ++ f)
-  ERecord name fields sp => case inlineFields fields of
+  ERecord name fields sp => case inlineFieldsGo (fuel - 1) fields of
     Nothing => Nothing
     Just ss => case fields of
       [] => Just (name ++ " { }")
       _ => Just (name ++ " { " ++ joinComma ss ++ " }")
-  ERecUpdate base fields sp => case inlinePrec 0 base of
+  ERecUpdate base fields sp => case inlinePrecGo (fuel - 1) 0 base of
     Nothing => Nothing
-    Just b => case inlineFields fields of
+    Just b => case inlineFieldsGo (fuel - 1) fields of
       Nothing => Nothing
       Just ss => case fields of
         [] => Just ("{ " ++ b ++ " }")
         _ => Just ("{ " ++ b ++ " | " ++ joinComma ss ++ " }")
-  EInstSel base inst sp => case inlineAtom base of
+  EInstSel base inst sp => case inlineAtomGo (fuel - 1) base of
     Nothing => Nothing
     Just b => Just (b ++ " @" ++ inst)
   EDo stmts sp => Nothing
   -- M24：非 where 位置（例如 `let` 绑定值）的 `EAnn` 透明渲染内部表达式：
   -- 表达式位置没有 `: Ty` 语法，输出标注会让 fmt 产物无法重新 parse。
-  EAnn value ty sp => inlinePrec minPrec value
+  EAnn value ty sp => inlinePrecGo (fuel - 1) minPrec value
 
 wrapPrec : Bool -> String -> String
 wrapPrec need s = if need then "(" ++ s ++ ")" else s
 
-inlineFields : List (Pair String Expr) -> Maybe (List String)
-inlineFields [] = Just []
-inlineFields ((Pair fname value) :: rest) = case inlinePrec 0 value of
-  Nothing => Nothing
-  Just v => case inlineFields rest of
+inlineFieldsGo : Int -> List (Pair String Expr) -> Maybe (List String)
+inlineFieldsGo fuel fields = if fuel <= 0 then Nothing
+else case fields of
+  [] => Just []
+  (Pair fname value) :: rest => case inlinePrecGo (fuel - 1) 0 value of
     Nothing => Nothing
-    Just ss => Just ((fname ++ " = " ++ v) :: ss)
+    Just v => case inlineFieldsGo (fuel - 1) rest of
+      Nothing => Nothing
+      Just ss => Just ((fname ++ " = " ++ v) :: ss)
 
 -- DT（M13）命名 Pi：`(x : A) -> B` 与隐式 `{x : A} -> B`；`->` 右结合。
-inlinePi : Int -> String -> Bool -> Expr -> Expr -> Maybe String
-inlinePi minPrec name implicit dom cod = case inlinePrec 0 dom of
+inlinePiGo : Int -> Int -> String -> Bool -> Expr -> Expr -> Maybe String
+inlinePiGo fuel minPrec name implicit dom cod = if fuel <= 0 then Nothing
+else case inlinePrecGo (fuel - 1) 0 dom of
   Nothing => Nothing
-  Just d => case inlinePrec 1 cod of
+  Just d => case inlinePrecGo (fuel - 1) 1 cod of
     Nothing => Nothing
     Just c =>
       let
@@ -208,56 +240,64 @@ inlinePi minPrec name implicit dom cod = case inlinePrec 0 dom of
           if implicit then "{" ++ name ++ " : " ++ d ++ "}" else "(" ++ name ++ " : " ++ d ++ ")"
       in Just (wrapPrec (minPrec > 1) (binder ++ " -> " ++ c))
 
--- 域/余域含块结构时的兜底布局（DT 类型一般走 inlinePi；这里只保证不丢字符）。
-renderPiBlock : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Bool -> String -> Expr -> Expr -> List String
-renderPiBlock at lineInd implicit name dom cod =
+-- 域/余域含块结构时的兜底布局（DT 类型一般走 inlinePiGo；这里只保证不丢字符）。
+renderPiBlockGo : Int -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Bool -> String -> Expr -> Expr -> List String
+renderPiBlockGo fuel at lineInd implicit name dom cod = if fuel <= 0 then []
+else
   let
     openTxt = if implicit then "{" ++ name ++ " : " else "(" ++ name ++ " : "
     closeTxt = if implicit then "}" else ")"
     domLines =
-      appendLast (" " ++ closeTxt ++ " ->") (prefixFirst openTxt (renderExpr at lineInd dom))
-  in append domLines (prefixFirst (spaces (lineInd + 2)) (renderExpr at (lineInd + 2) cod))
+      appendLast (" " ++ closeTxt ++ " ->")
+        (prefixFirst openTxt (renderExprGo (fuel - 1) at lineInd dom))
+  in append domLines
+    (prefixFirst (spaces (lineInd + 2)) (renderExprGo (fuel - 1) at (lineInd + 2) cod))
 
-inlineApp : Int -> Expr -> List Expr -> Maybe String
-inlineApp minPrec fn args = case fn of
+inlineAppGo : Int -> Int -> Expr -> List Expr -> Maybe String
+inlineAppGo fuel minPrec fn args = if fuel <= 0 then Nothing
+else case fn of
   EVar "bind" bsp => case args of
-    [a, b] => inlineInfix minPrec 1 1 ">>=" a b
-    _ => inlineApply minPrec fn args
+    [a, b] => inlineInfixGo (fuel - 1) minPrec 1 1 ">>=" a b
+    _ => inlineApplyGo (fuel - 1) minPrec fn args
   EVar op sp => case infixPrec op of
     Just (Pair p assoc) => case args of
-      [a, b] => inlineInfix minPrec p assoc op a b
-      _ => inlineApply minPrec fn args
-    Nothing => inlineApply minPrec fn args
-  _ => inlineApply minPrec fn args
+      [a, b] => inlineInfixGo (fuel - 1) minPrec p assoc op a b
+      _ => inlineApplyGo (fuel - 1) minPrec fn args
+    Nothing => inlineApplyGo (fuel - 1) minPrec fn args
+  _ => inlineApplyGo (fuel - 1) minPrec fn args
 
-inlineInfix : Int -> Int -> Int -> String -> Expr -> Expr -> Maybe String
-inlineInfix minPrec p assoc op a b =
+inlineInfixGo : Int -> Int -> Int -> Int -> String -> Expr -> Expr -> Maybe String
+inlineInfixGo fuel minPrec p assoc op a b = if fuel <= 0 then Nothing
+else
   let
     leftMin = if assoc == 0 then p else p + 1
     rightMin = if assoc == 0 then p + 1 else p
-  in case inlinePrec leftMin a of
+  in case inlinePrecGo (fuel - 1) leftMin a of
     Nothing => Nothing
-    Just lhsText => case inlinePrec rightMin b of
+    Just lhsText => case inlinePrecGo (fuel - 1) rightMin b of
       Nothing => Nothing
       Just rhsText => Just (wrapPrec (p < minPrec) (lhsText ++ " " ++ opText op ++ " " ++ rhsText))
 
-inlineApply : Int -> Expr -> List Expr -> Maybe String
-inlineApply minPrec fn args = case inlineApplyHead fn of
+inlineApplyGo : Int -> Int -> Expr -> List Expr -> Maybe String
+inlineApplyGo fuel minPrec fn args = if fuel <= 0 then Nothing
+else case inlineApplyHeadGo (fuel - 1) fn of
   Nothing => Nothing
-  Just headText => case mapMaybeStrings (\a => inlineAtom a) args of
+  Just headText => case mapMaybeStrings (\a => inlineAtomGo (fuel - 1) a) args of
     Nothing => Nothing
     Just argTexts =>
       Just (wrapPrec (9 < minPrec) (headText ++ concatStrings (map (\a => " " ++ a) argTexts)))
 
-inlineApplyHead : Expr -> Maybe String
-inlineApplyHead fn = case fn of
-  EInstSel base inst sp => case inlineAtom base of
+inlineApplyHeadGo : Int -> Expr -> Maybe String
+inlineApplyHeadGo fuel fn = if fuel <= 0 then Nothing
+else case fn of
+  EInstSel base inst sp => case inlineAtomGo (fuel - 1) base of
     Nothing => Nothing
     Just b => Just (b ++ " @" ++ inst)
-  _ => inlineAtom fn
+  _ => inlineAtomGo (fuel - 1) fn
 
-inlineAtom : Expr -> Maybe String
-inlineAtom e = case inlinePrec 0 e of
+inlineAtomGo : Int -> Expr -> Maybe String
+inlineAtomGo fuel e = if fuel <= 0 then Nothing
+else case inlinePrecGo (fuel - 1) 0 e of
   Nothing => Nothing
   Just s => if atomForm e then Just s else Just ("(" ++ s ++ ")")
 
@@ -279,30 +319,32 @@ atomForm e = case e of
 -- lineInd = 该表达式起始物理行的缩进（0 基），块内缩进 = lineInd + 2。
 -- 返回 List String：首行不含缩进，续行是绝对缩进。
 -- ---------------------------------------------------------------
-renderExpr : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Expr -> List String
-renderExpr at lineInd e = case inlinePrec 0 e of
-  Just s => if fitsLine lineInd s then [s] else renderWide at lineInd e
-  Nothing => renderBlock at lineInd e
+renderExprGo : Int -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Expr -> List String
+renderExprGo fuel at lineInd e = if fuel <= 0 then []
+else case inlinePrecGo formatFuelBound 0 e of
+  Just s => if fitsLine lineInd s then [s] else renderWideGo (fuel - 1) at lineInd e
+  Nothing => renderBlockGo (fuel - 1) at lineInd e
 
 -- 类型表达式不折行（保持签名/字段类型紧凑，避免 `->` 链被打断）。
 renderTypeExpr : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Expr -> List String
-renderTypeExpr at lineInd e = case inlinePrec 0 e of
+renderTypeExpr at lineInd e = case inlinePrecGo formatFuelBound 0 e of
   Just s => [s]
-  Nothing => renderBlock at lineInd e
+  Nothing => renderBlockGo formatFuelBound at lineInd e
 
 -- 行内放不下时的折行形式。
-renderWide : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Expr -> List String
-renderWide at lineInd e = case e of
-  EIf c t el sp => renderIf at lineInd c t el
+renderWideGo : Int -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Expr -> List String
+renderWideGo fuel at lineInd e = if fuel <= 0 then []
+else case e of
+  EIf c t el sp => renderIfGo (fuel - 1) at lineInd c t el
   EApp fn args sp => case listExprElems (EApp fn args sp) of
-    Just elems => case mapMaybeStrings (\x => inlineExpr x) elems of
+    Just elems => case mapMaybeStrings (\x => inlineExprGo formatFuelBound x) elems of
       Just ss => renderListBlock at lineInd ss
-      Nothing => renderAppBlock at lineInd fn args
-    Nothing => renderAppBlock at lineInd fn args
+      Nothing => renderAppBlockGo (fuel - 1) at lineInd fn args
+    Nothing => renderAppBlockGo (fuel - 1) at lineInd fn args
   _ => [renderExprInline e]
 
 renderExprInline : Expr -> String
-renderExprInline e = case inlinePrec 0 e of
+renderExprInline e = case inlinePrecGo formatFuelBound 0 e of
   Just s => s
   Nothing => ""
 
@@ -319,158 +361,179 @@ renderListBlockRest at lineInd ([s]) = [spaces (lineInd + 2) ++ s, spaces lineIn
 renderListBlockRest at lineInd (s :: rest) =
   (spaces (lineInd + 2) ++ s ++ ",") :: renderListBlockRest at lineInd rest
 
-renderAtomExpr : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Expr -> List String
-renderAtomExpr at lineInd e = case inlineAtom e of
+renderAtomExprGo : Int -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Expr -> List String
+renderAtomExprGo fuel at lineInd e = if fuel <= 0 then []
+else case inlineAtomGo formatFuelBound e of
   Just s => [s]
-  Nothing => parenWrapInd at lineInd e
+  Nothing => parenWrapIndGo (fuel - 1) at lineInd e
 
-parenWrapInd : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Expr -> List String
-parenWrapInd at lineInd e =
-  append (prefixFirst "(" (renderBlock at lineInd e)) [spaces lineInd ++ ")"]
+parenWrapIndGo : Int -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Expr -> List String
+parenWrapIndGo fuel at lineInd e =
+  if fuel <= 0 then []
+  else append (prefixFirst "(" (renderBlockGo (fuel - 1) at lineInd e)) [spaces lineInd ++ ")"]
 
-renderBlock : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Expr -> List String
-renderBlock at lineInd e = case e of
-  ECase scrut alts sp => renderCase at lineInd scrut alts
-  ELet binds body rec_ sp => renderLet at lineInd binds body
-  EIf c t el sp => renderIf at lineInd c t el
-  EApp fn args sp => renderAppBlock at lineInd fn args
-  EPi name implicit dom cod sp => renderPiBlock at lineInd implicit name dom cod
-  ELam ps body sp => prefixFirst ("\\" ++ joinComma ps ++ " => ") (renderExpr at lineInd body)
-  EField base f sp => appendLast ("." ++ f) (renderAtomExpr at lineInd base)
-  ERecord name fields sp => renderRecordBlock at lineInd name fields
-  ERecUpdate base fields sp => renderRecUpdateBlock at lineInd base fields
-  EInstSel base inst sp => appendLast (" @" ++ inst) (renderAtomExpr at lineInd base)
-  EDo stmts sp => renderDo at lineInd stmts
-  EAnn value ty sp => renderExpr at lineInd value
+renderBlockGo : Int -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Expr -> List String
+renderBlockGo fuel at lineInd e = if fuel <= 0 then []
+else case e of
+  ECase scrut alts sp => renderCaseGo (fuel - 1) at lineInd scrut alts
+  ELet binds body rec_ sp => renderLetGo (fuel - 1) at lineInd binds body
+  EIf c t el sp => renderIfGo (fuel - 1) at lineInd c t el
+  EApp fn args sp => renderAppBlockGo (fuel - 1) at lineInd fn args
+  EPi name implicit dom cod sp => renderPiBlockGo (fuel - 1) at lineInd implicit name dom cod
+  ELam ps body sp =>
+    prefixFirst ("\\" ++ joinComma ps ++ " => ") (renderExprGo (fuel - 1) at lineInd body)
+  EField base f sp => appendLast ("." ++ f) (renderAtomExprGo (fuel - 1) at lineInd base)
+  ERecord name fields sp => renderRecordBlockGo (fuel - 1) at lineInd name fields
+  ERecUpdate base fields sp => renderRecUpdateBlockGo (fuel - 1) at lineInd base fields
+  EInstSel base inst sp => appendLast (" @" ++ inst) (renderAtomExprGo (fuel - 1) at lineInd base)
+  EDo stmts sp => renderDoGo (fuel - 1) at lineInd stmts
+  EAnn value ty sp => renderExprGo (fuel - 1) at lineInd value
   EVar name sp => [name]
   EInt n sp => [strFromInt n]
   EStr s sp => [renderStr s]
 
-renderScrut : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Expr -> List String
-renderScrut at lineInd e = case inlineExpr e of
+renderScrutGo : Int -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Expr -> List String
+renderScrutGo fuel at lineInd e = if fuel <= 0 then []
+else case inlineExprGo formatFuelBound e of
   Just s => [s]
-  Nothing => parenWrapInd at lineInd e
+  Nothing => parenWrapIndGo (fuel - 1) at lineInd e
 
-renderCase : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Expr -> List (Pair Pat Expr) -> List String
-renderCase at lineInd scrut alts =
+renderCaseGo : Int -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Expr -> List (Pair Pat Expr) -> List String
+renderCaseGo fuel at lineInd scrut alts = if fuel <= 0 then []
+else
   let
-    headLines = appendLast " of" (prefixFirst "case " (renderScrut at lineInd scrut))
+    headLines = appendLast " of" (prefixFirst "case " (renderScrutGo (fuel - 1) at lineInd scrut))
     altInd = lineInd + 2
-    altLines = concatMap (\alt => renderAlt at altInd alt) alts
+    altLines = concatMap (\alt => renderAltGo (fuel - 1) at altInd alt) alts
   in append headLines altLines
 
-renderAlt : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Pair Pat Expr -> List String
-renderAlt at altInd (Pair pat body) =
-  attachAt at (patSpan pat) altInd (renderAltBody at altInd pat body)
+renderAltGo : Int -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Pair Pat Expr -> List String
+renderAltGo fuel at altInd (Pair pat body) =
+  if fuel <= 0 then []
+  else attachAt at (patSpan pat) altInd (renderAltBodyGo (fuel - 1) at altInd pat body)
 
-renderAltBody : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Pat -> Expr -> List String
-renderAltBody at altInd pat body = case body of
+renderAltBodyGo : Int -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Pat -> Expr -> List String
+renderAltBodyGo fuel at altInd pat body = if fuel <= 0 then []
+else case body of
   ELet binds inner recFlag sp =>
-    (spaces altInd ++ renderPat pat ++ " =>")
-      :: prefixFirst (spaces (altInd + 2)) (renderExpr at (altInd + 2) body)
+    (spaces altInd ++ renderPatGo formatFuelBound pat ++ " =>")
+      :: prefixFirst (spaces (altInd + 2)) (renderExprGo (fuel - 1) at (altInd + 2) body)
   _ =>
     let
-      prefix = spaces altInd ++ renderPat pat ++ " => "
-    in case inlinePrec 0 body of
+      prefix = spaces altInd ++ renderPatGo formatFuelBound pat ++ " => "
+    in case inlinePrecGo formatFuelBound 0 body of
       Just s =>
         if strWidth (prefix ++ s) <= maxWidth then [prefix ++ s]
-        else (spaces altInd ++ renderPat pat ++ " =>")
-          :: prefixFirst (spaces (altInd + 2)) (renderExpr at (altInd + 2) body)
-      Nothing => prefixFirst prefix (renderExpr at altInd body)
+        else (spaces altInd ++ renderPatGo formatFuelBound pat ++ " =>")
+          :: prefixFirst (spaces (altInd + 2)) (renderExprGo (fuel - 1) at (altInd + 2) body)
+      Nothing => prefixFirst prefix (renderExprGo (fuel - 1) at altInd body)
 
-renderWhenBody : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> String -> Expr -> List String
-renderWhenBody at lineInd keyword e = case e of
+renderWhenBodyGo : Int -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> String -> Expr -> List String
+renderWhenBodyGo fuel at lineInd keyword e = if fuel <= 0 then []
+else case e of
   ELet binds inner recFlag sp =>
     (spaces lineInd ++ keyword)
-      :: prefixFirst (spaces (lineInd + 2)) (renderExpr at (lineInd + 2) e)
-  _ => prefixFirst (spaces lineInd ++ keyword ++ " ") (renderExpr at lineInd e)
+      :: prefixFirst (spaces (lineInd + 2)) (renderExprGo (fuel - 1) at (lineInd + 2) e)
+  _ => prefixFirst (spaces lineInd ++ keyword ++ " ") (renderExprGo (fuel - 1) at lineInd e)
 
-renderIf : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Expr -> Expr -> Expr -> List String
-renderIf at lineInd c t el =
+renderIfGo : Int -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Expr -> Expr -> Expr -> List String
+renderIfGo fuel at lineInd c t el = if fuel <= 0 then []
+else
   let
-    condLines = prefixFirst "if " (renderScrut at lineInd c)
+    condLines = prefixFirst "if " (renderScrutGo (fuel - 1) at lineInd c)
     thenLines = case t of
       ELet binds inner recFlag sp =>
         append (appendLast " then" condLines)
-          (prefixFirst (spaces (lineInd + 2)) (renderExpr at (lineInd + 2) t))
+          (prefixFirst (spaces (lineInd + 2)) (renderExprGo (fuel - 1) at (lineInd + 2) t))
       _ =>
         let
-          tLines = renderExpr at lineInd t
+          tLines = renderExprGo (fuel - 1) at lineInd t
         in append (appendLast (" then " ++ firstLine tLines) condLines) (restLines tLines)
-    elseLines = renderWhenBody at lineInd "else" el
+    elseLines = renderWhenBodyGo (fuel - 1) at lineInd "else" el
   in append thenLines elseLines
 
-renderLet : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> List (Pair Pat Expr) -> Expr -> List String
-renderLet at lineInd binds body = case binds of
-  [] => "let" :: prefixFirst (spaces lineInd ++ "in ") (renderExpr at lineInd body)
+renderLetGo : Int -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> List (Pair Pat Expr) -> Expr -> List String
+renderLetGo fuel at lineInd binds body = if fuel <= 0 then []
+else case binds of
+  [] => "let" :: prefixFirst (spaces lineInd ++ "in ") (renderExprGo (fuel - 1) at lineInd body)
   first :: rest =>
     let
       bindInd = lineInd + 2
       bindingLines =
-        append (renderLetBinding at bindInd first)
-          (concatMap (\b => renderLetBinding at bindInd b) rest)
+        append (renderLetBindingGo (fuel - 1) at bindInd first)
+          (concatMap (\b => renderLetBindingGo (fuel - 1) at bindInd b) rest)
     in append ("let" :: bindingLines)
-      (prefixFirst (spaces lineInd ++ "in ") (renderExpr at lineInd body))
+      (prefixFirst (spaces lineInd ++ "in ") (renderExprGo (fuel - 1) at lineInd body))
 
-renderLetBinding : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Pair Pat Expr -> List String
-renderLetBinding at bindInd (Pair pat value) =
-  attachAt at (patSpan pat) bindInd (renderBindingValue at bindInd (renderPat pat ++ " =") value)
+renderLetBindingGo : Int -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Pair Pat Expr -> List String
+renderLetBindingGo fuel at bindInd (Pair pat value) =
+  if fuel <= 0 then []
+  else attachAt at (patSpan pat) bindInd
+    (renderBindingValueGo (fuel - 1) at bindInd (renderPatGo formatFuelBound pat ++ " =") value)
 
-renderBindingValue : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> String -> Expr -> List String
-renderBindingValue at lineInd prefixText value = case value of
+renderBindingValueGo : Int -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> String -> Expr -> List String
+renderBindingValueGo fuel at lineInd prefixText value = if fuel <= 0 then []
+else case value of
   ELet binds inner recFlag sp =>
     (spaces lineInd ++ prefixText)
-      :: prefixFirst (spaces (lineInd + 2)) (renderExpr at (lineInd + 2) value)
-  _ => case inlinePrec 0 value of
+      :: prefixFirst (spaces (lineInd + 2)) (renderExprGo (fuel - 1) at (lineInd + 2) value)
+  _ => case inlinePrecGo formatFuelBound 0 value of
     Just s =>
       if strWidth (spaces lineInd ++ prefixText ++ " " ++ s) <= maxWidth then [spaces lineInd ++ prefixText ++ " " ++ s]
       else (spaces lineInd ++ prefixText)
-        :: prefixFirst (spaces (lineInd + 2)) (renderExpr at (lineInd + 2) value)
-    Nothing => prefixFirst (spaces lineInd ++ prefixText ++ " ") (renderExpr at lineInd value)
+        :: prefixFirst (spaces (lineInd + 2)) (renderExprGo (fuel - 1) at (lineInd + 2) value)
+    Nothing =>
+      prefixFirst (spaces lineInd ++ prefixText ++ " ") (renderExprGo (fuel - 1) at lineInd value)
 
-renderDo : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> List DoStmt -> List String
-renderDo at lineInd stmts = "do" :: concatMap (\s => renderDoStmt at (lineInd + 2) s) stmts
+renderDoGo : Int -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> List DoStmt -> List String
+renderDoGo fuel at lineInd stmts =
+  if fuel <= 0 then []
+  else "do" :: concatMap (\s => renderDoStmtGo (fuel - 1) at (lineInd + 2) s) stmts
 
-renderDoStmt : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> DoStmt -> List String
-renderDoStmt at stmtInd stmt =
-  attachAt at (doStmtSpan stmt) stmtInd (renderDoStmtBody at stmtInd stmt)
+renderDoStmtGo : Int -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> DoStmt -> List String
+renderDoStmtGo fuel at stmtInd stmt =
+  if fuel <= 0 then []
+  else attachAt at (doStmtSpan stmt) stmtInd (renderDoStmtBodyGo (fuel - 1) at stmtInd stmt)
 
-renderDoStmtBody : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> DoStmt -> List String
-renderDoStmtBody at stmtInd stmt = case stmt of
+renderDoStmtBodyGo : Int -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> DoStmt -> List String
+renderDoStmtBodyGo fuel at stmtInd stmt = if fuel <= 0 then []
+else case stmt of
   DBind pat value sp =>
     let
-      prefix = spaces stmtInd ++ renderPat pat ++ " <- "
-    in case inlinePrec 0 value of
+      prefix = spaces stmtInd ++ renderPatGo formatFuelBound pat ++ " <- "
+    in case inlinePrecGo formatFuelBound 0 value of
       Just s =>
         if strWidth (prefix ++ s) <= maxWidth then [prefix ++ s]
-        else (spaces stmtInd ++ renderPat pat ++ " <-")
-          :: prefixFirst (spaces (stmtInd + 2)) (renderExpr at (stmtInd + 2) value)
-      Nothing => prefixFirst prefix (renderExpr at stmtInd value)
-  DExpr value sp => prefixFirst (spaces stmtInd) (renderExpr at stmtInd value)
+        else (spaces stmtInd ++ renderPatGo formatFuelBound pat ++ " <-")
+          :: prefixFirst (spaces (stmtInd + 2)) (renderExprGo (fuel - 1) at (stmtInd + 2) value)
+      Nothing => prefixFirst prefix (renderExprGo (fuel - 1) at stmtInd value)
+  DExpr value sp => prefixFirst (spaces stmtInd) (renderExprGo (fuel - 1) at stmtInd value)
 
-renderAppBlock : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Expr -> List Expr -> List String
-renderAppBlock at lineInd fn args = case fn of
+renderAppBlockGo : Int -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Expr -> List Expr -> List String
+renderAppBlockGo fuel at lineInd fn args = if fuel <= 0 then []
+else case fn of
   EVar "bind" bsp => case args of
-    [a, b] => renderInfixBlock at lineInd 1 1 ">>=" a b
-    _ => renderApplyBlock at lineInd fn args
+    [a, b] => renderInfixBlockGo (fuel - 1) at lineInd 1 1 ">>=" a b
+    _ => renderApplyBlockGo (fuel - 1) at lineInd fn args
   EVar op sp => case infixPrec op of
     Just (Pair p assoc) => case args of
-      [a, b] => renderInfixBlock at lineInd p assoc op a b
-      _ => renderApplyBlock at lineInd fn args
-    Nothing => renderApplyBlock at lineInd fn args
-  _ => renderApplyBlock at lineInd fn args
+      [a, b] => renderInfixBlockGo (fuel - 1) at lineInd p assoc op a b
+      _ => renderApplyBlockGo (fuel - 1) at lineInd fn args
+    Nothing => renderApplyBlockGo (fuel - 1) at lineInd fn args
+  _ => renderApplyBlockGo (fuel - 1) at lineInd fn args
 
-renderInfixBlock : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Int -> Int -> String -> Expr -> Expr -> List String
-renderInfixBlock at lineInd p assoc op a b = case inlineInfix 0 p assoc op a b of
+renderInfixBlockGo : Int -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Int -> Int -> String -> Expr -> Expr -> List String
+renderInfixBlockGo fuel at lineInd p assoc op a b = if fuel <= 0 then []
+else case inlineInfixGo formatFuelBound 0 p assoc op a b of
   Just s =>
     if fitsLine lineInd s then [s]
-    else renderInfixChain at lineInd p assoc op (infixChainOperands p assoc op a b)
+    else renderInfixChainGo (fuel - 1) at lineInd p assoc op (infixChainOperands p assoc op a b)
   Nothing =>
     let
       leftMin = if assoc == 0 then p else p + 1
       rightMin = if assoc == 0 then p + 1 else p
-      lhsLines = renderOperand at lineInd leftMin a
-      rhsLines = renderOperand at lineInd rightMin b
+      lhsLines = renderOperandGo (fuel - 1) at lineInd leftMin a
+      rhsLines = renderOperandGo (fuel - 1) at lineInd rightMin b
     in case rhsLines of
       [] => lhsLines
       r :: rest => append (appendLast (" " ++ opText op ++ " " ++ r) lhsLines) rest
@@ -480,69 +543,77 @@ infixChainOperands : Int -> Int -> String -> Expr -> Expr -> List Expr
 infixChainOperands p assoc op a b =
   if assoc == 1 then a :: flattenInfixRight p op b else append (flattenInfixLeft p op a) [b]
 
-matchInfixNode : Int -> String -> Expr -> Maybe (Pair Expr Expr)
-matchInfixNode p op e = case e of
+flattenInfixLeft : Int -> String -> Expr -> List Expr
+flattenInfixLeft p op e = case e of
   EApp (EVar name sp) ([l, r]) sp2 =>
     let
       op2 = if name == "bind" then ">>=" else name
     in case infixPrec op2 of
-      Just (Pair p2 assoc2) => if p2 == p && op2 == op then Just (Pair l r) else Nothing
-      Nothing => Nothing
-  _ => Nothing
-
-flattenInfixLeft : Int -> String -> Expr -> List Expr
-flattenInfixLeft p op e = case matchInfixNode p op e of
-  Nothing => [e]
-  Just (Pair l r) => append (flattenInfixLeft p op l) [r]
+      Just (Pair p2 assoc2) =>
+        if p2 == p && op2 == op then append (flattenInfixLeft p op l) [r] else [e]
+      Nothing => [e]
+  _ => [e]
 
 flattenInfixRight : Int -> String -> Expr -> List Expr
-flattenInfixRight p op e = case matchInfixNode p op e of
-  Nothing => [e]
-  Just (Pair l r) => l :: flattenInfixRight p op r
+flattenInfixRight p op e = case e of
+  EApp (EVar name sp) ([l, r]) sp2 =>
+    let
+      op2 = if name == "bind" then ">>=" else name
+    in case infixPrec op2 of
+      Just (Pair p2 assoc2) => if p2 == p && op2 == op then l :: flattenInfixRight p op r else [e]
+      Nothing => [e]
+  _ => [e]
 
-renderInfixChain : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Int -> Int -> String -> List Expr -> List String
-renderInfixChain at lineInd p assoc op operands = case operands of
+renderInfixChainGo : Int -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Int -> Int -> String -> List Expr -> List String
+renderInfixChainGo fuel at lineInd p assoc op operands = if fuel <= 0 then []
+else case operands of
   [] => []
   first :: rest =>
-    append (renderChainFirst at lineInd (p + 1) first)
-      (concatMap (\o => renderChainRest at lineInd (p + 1) op o) rest)
+    append (renderChainFirstGo (fuel - 1) at lineInd (p + 1) first)
+      (concatMap (\o => renderChainRestGo (fuel - 1) at lineInd (p + 1) op o) rest)
 
-renderChainFirst : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Int -> Expr -> List String
-renderChainFirst at lineInd minPrec e = case inlinePrec minPrec e of
-  Just s => if fitsLine lineInd s then [s] else renderWideOperand at lineInd minPrec e
-  Nothing => parenWrapInd at lineInd e
+renderChainFirstGo : Int -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Int -> Expr -> List String
+renderChainFirstGo fuel at lineInd minPrec e = if fuel <= 0 then []
+else case inlinePrecGo formatFuelBound minPrec e of
+  Just s => if fitsLine lineInd s then [s] else renderWideOperandGo (fuel - 1) at lineInd minPrec e
+  Nothing => parenWrapIndGo (fuel - 1) at lineInd e
 
-renderWideOperand : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Int -> Expr -> List String
-renderWideOperand at lineInd minPrec e =
-  if minPrec > 0 then [renderExprInlineOperand minPrec e] else renderWide at lineInd e
+renderWideOperandGo : Int -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Int -> Expr -> List String
+renderWideOperandGo fuel at lineInd minPrec e =
+  if fuel <= 0 then []
+  else if minPrec > 0 then [renderExprInlineOperand minPrec e] else renderWideGo (fuel - 1) at lineInd e
 
 renderExprInlineOperand : Int -> Expr -> String
-renderExprInlineOperand minPrec e = case inlinePrec minPrec e of
+renderExprInlineOperand minPrec e = case inlinePrecGo formatFuelBound minPrec e of
   Just s => s
   Nothing => ""
 
-renderChainRest : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Int -> String -> Expr -> List String
-renderChainRest at lineInd minPrec op e = case inlinePrec minPrec e of
+renderChainRestGo : Int -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Int -> String -> Expr -> List String
+renderChainRestGo fuel at lineInd minPrec op e = if fuel <= 0 then []
+else case inlinePrecGo formatFuelBound minPrec e of
   Just s => [spaces (lineInd + 2) ++ opText op ++ " " ++ s]
   Nothing =>
-    prefixFirst (spaces (lineInd + 2) ++ opText op ++ " ") (parenWrapInd at (lineInd + 2) e)
+    prefixFirst (spaces (lineInd + 2) ++ opText op ++ " ")
+      (parenWrapIndGo (fuel - 1) at (lineInd + 2) e)
 
-renderOperand : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Int -> Expr -> List String
-renderOperand at lineInd minPrec e = case inlinePrec minPrec e of
+renderOperandGo : Int -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Int -> Expr -> List String
+renderOperandGo fuel at lineInd minPrec e = if fuel <= 0 then []
+else case inlinePrecGo formatFuelBound minPrec e of
   Just s => [s]
-  Nothing => parenWrapInd at lineInd e
+  Nothing => parenWrapIndGo (fuel - 1) at lineInd e
 
-renderApplyBlock : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Expr -> List Expr -> List String
-renderApplyBlock at lineInd fn args =
+renderApplyBlockGo : Int -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Expr -> List Expr -> List String
+renderApplyBlockGo fuel at lineInd fn args = if fuel <= 0 then []
+else
   let
-    headLines = renderApplyHead at lineInd fn
-  in case mapMaybeStrings (\a => inlineAtom a) args of
-    Nothing => appendApplyArgs at lineInd headLines args
+    headLines = renderApplyHeadGo (fuel - 1) at lineInd fn
+  in case mapMaybeStrings (\a => inlineAtomGo formatFuelBound a) args of
+    Nothing => appendApplyArgsGo (fuel - 1) at lineInd headLines args
     Just texts => case headLines of
       [h] =>
-        if fitsLine lineInd (h ++ concatStrings (map (\t => " " ++ t) texts)) then appendApplyArgs at lineInd headLines args
+        if fitsLine lineInd (h ++ concatStrings (map (\t => " " ++ t) texts)) then appendApplyArgsGo (fuel - 1) at lineInd headLines args
         else packApplyArgs lineInd [h] texts
-      _ => appendApplyArgs at lineInd headLines args
+      _ => appendApplyArgsGo (fuel - 1) at lineInd headLines args
 
 -- 贪心折行：尽量把参数放在当前行，放不下就新起一行（缩进 lineInd+2）。
 packApplyArgs : Int -> List String -> List String -> List String
@@ -559,44 +630,85 @@ lastLineWidth lineInd lines =
 fitsLineWidth : Int -> String -> Bool
 fitsLineWidth currentWidth t = currentWidth + 1 + strWidth t <= maxWidth
 
-renderApplyHead : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Expr -> List String
-renderApplyHead at lineInd fn = case fn of
-  EInstSel base inst sp => appendLast (" @" ++ inst) (renderAtomExpr at lineInd base)
-  _ => renderAtomExpr at lineInd fn
+renderApplyHeadGo : Int -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Expr -> List String
+renderApplyHeadGo fuel at lineInd fn = if fuel <= 0 then []
+else case fn of
+  EInstSel base inst sp => appendLast (" @" ++ inst) (renderAtomExprGo (fuel - 1) at lineInd base)
+  _ => renderAtomExprGo (fuel - 1) at lineInd fn
 
-appendApplyArgs : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> List String -> List Expr -> List String
-appendApplyArgs at lineInd lines args = case args of
+appendApplyArgsGo : Int -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> List String -> List Expr -> List String
+appendApplyArgsGo fuel at lineInd lines args = if fuel <= 0 then []
+else case args of
   [] => lines
   a :: rest =>
-    appendApplyArgs at lineInd (appendBefore " " lines (renderAtomExpr at lineInd a)) rest
+    appendApplyArgsGo (fuel - 1) at lineInd
+      (appendBefore " " lines (renderAtomExprGo (fuel - 1) at lineInd a)) rest
 
-renderRecordBlock : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> String -> List (Pair String Expr) -> List String
-renderRecordBlock at lineInd name fields = case fields of
+renderRecordBlockGo : Int -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> String -> List (Pair String Expr) -> List String
+renderRecordBlockGo fuel at lineInd name fields = if fuel <= 0 then []
+else case fields of
   [] => [name ++ " { }"]
   first :: rest =>
     let
-      start = appendBefore " " [name ++ " {"] (renderFieldBlock at lineInd first)
-      withRest = appendFieldBlocks at lineInd start rest
+      start = appendBefore " " [name ++ " {"] (renderFieldBlockGo (fuel - 1) at lineInd first)
+      withRest = appendFieldBlocksGo (fuel - 1) at lineInd start rest
     in appendLast " }" withRest
 
-appendFieldBlocks : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> List String -> List (Pair String Expr) -> List String
-appendFieldBlocks at lineInd lines fields = case fields of
+appendFieldBlocksGo : Int -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> List String -> List (Pair String Expr) -> List String
+appendFieldBlocksGo fuel at lineInd lines fields = if fuel <= 0 then []
+else case fields of
   [] => lines
   f :: rest =>
-    appendFieldBlocks at lineInd (appendBefore ", " lines (renderFieldBlock at lineInd f)) rest
+    appendFieldBlocksGo (fuel - 1) at lineInd
+      (appendBefore ", " lines (renderFieldBlockGo (fuel - 1) at lineInd f)) rest
 
-renderFieldBlock : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Pair String Expr -> List String
-renderFieldBlock at lineInd (Pair fname value) =
-  prefixFirst (fname ++ " = ") (renderAtomExpr at lineInd value)
+renderFieldBlockGo : Int -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Pair String Expr -> List String
+renderFieldBlockGo fuel at lineInd (Pair fname value) =
+  if fuel <= 0 then []
+  else prefixFirst (fname ++ " = ") (renderAtomExprGo (fuel - 1) at lineInd value)
 
-renderRecUpdateBlock : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Expr -> List (Pair String Expr) -> List String
-renderRecUpdateBlock at lineInd base fields =
+renderRecUpdateBlockGo : Int -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Expr -> List (Pair String Expr) -> List String
+renderRecUpdateBlockGo fuel at lineInd base fields = if fuel <= 0 then []
+else
   let
-    start = appendBefore " " ["{"] (renderAtomExpr at lineInd base)
+    start = appendBefore " " ["{"] (renderAtomExprGo (fuel - 1) at lineInd base)
   in case fields of
     [] => appendLast " }" start
     first :: rest =>
       let
-        start2 = appendBefore " | " start (renderFieldBlock at lineInd first)
-        withRest = appendFieldBlocks at lineInd start2 rest
+        start2 = appendBefore " | " start (renderFieldBlockGo (fuel - 1) at lineInd first)
+        withRest = appendFieldBlocksGo (fuel - 1) at lineInd start2 rest
       in appendLast " }" withRest
+
+-- 渲染递归显式 fuel：块级布局既沿 AST 子项下降、也沿同一表达式的不同缩进/模式前进，
+-- 且大量递归经 concatMap/map 的 λ（无 size 关系）；用 fuel 守卫 + 同参数位递减。
+-- 上界远大于任何实际 AST 的渲染调用数（1G）。
+formatFuelBound : Int
+formatFuelBound = 1073741824
+
+-- 对外 API 保持不变：入口用固定预算调用内部 Go 版本。
+parenWrapInd : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Expr -> List String
+parenWrapInd at lineInd e = parenWrapIndGo formatFuelBound at lineInd e
+
+renderBindingValue : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> String -> Expr -> List String
+renderBindingValue at lineInd prefixText value =
+  renderBindingValueGo formatFuelBound at lineInd prefixText value
+
+renderExpr : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Expr -> List String
+renderExpr at lineInd e = renderExprGo formatFuelBound at lineInd e
+
+-- 单行渲染（inline*）同样经相互递归的 Maybe 链：用 fuel 守卫 + 同参数位递减。
+-- 对外 API 不变：inlineExpr/inlinePrec 用固定预算进入内部 Go 版本。
+inlineExpr : Expr -> Maybe String
+inlineExpr e = inlineExprGo formatFuelBound e
+
+inlinePrec : Int -> Expr -> Maybe String
+inlinePrec minPrec e = inlinePrecGo formatFuelBound minPrec e
+
+-- 模式渲染同样经相互递归的 Pat 链；用 fuel 守卫 + 同参数位递减。
+-- 对外 API 不变：renderPat/renderPatAtom 用固定预算进入内部 Go 版本。
+renderPat : Pat -> String
+renderPat pat = renderPatGo formatFuelBound pat
+
+renderPatAtom : Pat -> String
+renderPatAtom pat = renderPatAtomGo formatFuelBound pat

@@ -5,10 +5,10 @@
 
 ## 原生测试：`test/run-tests.sh`
 
-vuna 原生测试按编号章节组织（**35 个章节**：编号到 36，第 12 段已删除；34a–34d 归在
-第 34 段内，`--list` 列 35 行），用 `vuna` / `vuna-seed` 驱动，不依赖外部 vuna 实现，
-但需要 `ocamlopt` 作为 codegen 后端。当前 **1086 checks**（结尾 `vuna tests passed
-(1086 checks)`；seed rotation 后重跑可能微调，以脚本输出为准）。
+vuna 原生测试按编号章节组织（**37 个章节**：编号到 37，第 12 段已删除；34a–34d 归在
+第 34 段内，`--list` 列 37 行），用 `vuna` / `vuna-seed` 驱动，不依赖外部 vuna 实现，
+但需要 `ocamlopt` 作为 codegen 后端。当前 **1112 checks**（结尾 `vuna tests passed
+(N checks)`；错误码段与 seed rotation 后可能微调，以脚本输出为准）。
 
 ```console
 sh test/run-tests.sh        # 需要 PATH 中有 vuna 与 vuna-seed
@@ -95,6 +95,8 @@ DT 精化 + 擦除 codegen，`build` / `build --split` / `seed` = DT codegen）�
   `35_where_no_sig` 是 M24 新增，`36`–`38` 与 `dt/45`–`52` 是 M24.5/M24.6 新增）、
   `corpus/dt_base/`（8）、`corpus/dt_io/`（1）、`corpus/dt_pkg/`（3 个包目录）、
   `corpus/dt_root/`：DT 专项夹具，见 [dt.md](dt.md) 的夹具一节。
+- `corpus/term/` / `corpus/term_err/`：M25 终止性正反例（HOF/where/互递归/SCT/fuel），
+  第 37 段；错误码文档段（第 36 段）用 `vuna gen-errors` 检查 TC/CG/LN/FX 分区与幂等。
 
 ## Nix checks 清单
 
@@ -116,6 +118,7 @@ M24 后这些 check 的脚本已按单路径 CLI（无 `compile --package`）更
 ```console
 nix build                  # 默认 = vuna；.#vuna-compiler / .#vuna-seed 同理
 nix flake check            # 全部 checks
+sh nix/ci.sh               # CI 统一入口（eval-cache=false + --keep-going）
 nix develop                # 全量开发环境（工具链 + vuna-seed）；.#ocaml 只有 OCaml 工具链
 nix build .#vuna --out-link result-vuna      # 产品 CLI（stage 1）
 nix build .#vuna-compiler --out-link result-compiler  # 编译器 CLI（stage 1）

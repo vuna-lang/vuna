@@ -17,7 +17,9 @@ if [ -d "$SRC" ]; then
   files=$(find "$SRC" -name '*.ml' -type f | LC_ALL=C sort)
   [ -n "$files" ] || { echo "metrics: no .ml files under $SRC" >&2; exit 1; }
   : >"$ALL"
-  for f in $files; do cat "$f" >>"$ALL"; done
+  for f in $files; do awk '{ print }' "$f" >>"$ALL"; done
+  # 逐文件规范化换行：直接用 cat 拼接会让「无尾换行」的末行与下一文件首行粘成一行，
+  # 导致 lines/maxline/grep 计数失真。awk 按记录输出，等价于给缺失的尾换行补上。
   fcount=$(printf '%s\n' "$files" | wc -l | tr -d ' ')
 else
   cp "$SRC" "$ALL"

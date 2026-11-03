@@ -1,0 +1,80 @@
+module Vuna.Compiler.Elab.Term.Support
+  ( allImplicitPrefix
+  , checkWhereSigs
+  , inferVarRef
+  , instantiateAllImplicit
+  , instantiateAllImplicitFuel
+  , whereBindingName
+  ) where
+
+-- Vuna.Compiler.Elab.Term.Support（M25.2c 拆分）：Term 的非递归叶子 helper（无组内递归）。
+import Vuna.Compiler.Common
+import Vuna.Compiler.Core
+import Vuna.Compiler.Elab.Case
+import Vuna.Compiler.Elab.Dict
+import Vuna.Compiler.Elab.Match
+import Vuna.Compiler.Elab.Meta
+import Vuna.Compiler.Elab.Prelude
+import Vuna.Compiler.Elab.Types
+import Vuna.Compiler.Frontend.Ast
+
+inferVarRef : List (Pair String Term) -> Ctx -> Ec -> String -> Span -> Result (Pair Term (Pair Value Ec))
+inferVarRef globals ctx ec name sp = case ctxLookup name ctx of
+  Just (Pair idx tyTerm) => Ok (Pair (TVar name idx) (Pair (varTypeValue ctx idx tyTerm) ec))
+  Nothing => case dtCtorLookup name (ecDatas ec) of
+    Just ctor => inferCtorRef ec ctx name (dtCtorType ctor)
+    -- M22.2：`Bool` 是族短名。程序里真有 `data Bool` 时按实际族名解析（内建 trait
+    -- 声明/内建实例的 AST 仍写裸 `Bool`，它们不经过 Loader）；没有声明时退回
+    -- prelude 里的 `Bool` 类型别名（只服务内建 trait 签名，用户代码走 Loader 解析）。
+    Nothing => case shortBoolFamily ec name of
+      Just fam => Ok (Pair (TGlobal fam) (Pair (VType levelZero) ec))
+      Nothing => case globalLookup name globals of
+        -- M23：全隐式前缀的全局值（HM 泛化出的 unifyErr : Result a、empty : Map k v）
+        -- 必须在引用处实例化隐式参数，否则拿到的是 Pi 类型（{a} -> Result a），
+        -- 在 if/分支/实参位置与期望类型对不上。构造子另有 inferCtorRef 处理。
+        Just tyTerm => if allImplicitPrefix tyTerm then
+          let
+            inst = instantiateAllImplicit ctx ec (ctorRefTerm (ecDatas ec) name) (eval [] tyTerm) []
+          in Ok inst
+        else Ok (Pair (ctorRefTerm (ecDatas ec) name) (Pair (eval [] tyTerm) ec))
+        -- @code TC_UnknownName
+        Nothing => errAt sp ("[TC_UnknownName] DT: unknown name " ++ name)
+
+-- 签名项是否以隐式 Pi 开头并最终落到值（{a : Type} -> Result a）；显式 Pi 不算。
+allImplicitPrefix : Term -> Bool
+allImplicitPrefix t = case t of
+  TPi n implicit rig dom cod => if implicit then allImplicitPrefix cod else False
+  _ => True
+
+-- 实例化全隐式前缀：逐个插元变量，得到「值 + 剩余值类型」。
+instantiateAllImplicit : Ctx -> Ec -> Term -> Value -> List (Pair Term Rig) -> Pair Term (Pair Value Ec)
+instantiateAllImplicit ctx ec head ty acc = instantiateAllImplicitFuel 64 ctx ec head ty acc
+
+instantiateAllImplicitFuel : Int -> Ctx -> Ec -> Term -> Value -> List (Pair Term Rig) -> Pair Term (Pair Value Ec)
+instantiateAllImplicitFuel fuel ctx ec head ty acc = if fuel <= 0 then Pair (foldAppTerms head (reverse acc)) (Pair ty ec)
+else case forceVal ec ty of
+  VPi name implicit rig dom clo => if implicit then
+    let
+      m = ecNext ec
+    in case newMeta ctx ec of
+      Pair mt ec1 =>
+        instantiateAllImplicitFuel (fuel - 1) ctx ec1 head (applyClosure clo (VMeta m []))
+          (Pair mt (binderRig True dom) :: acc)
+  else Pair (foldAppTerms head (reverse acc)) (Pair ty ec)
+  _ => Pair (foldAppTerms head (reverse acc)) (Pair ty ec)
+
+checkWhereSigs : List (Pair Pat Expr) -> Result Int
+checkWhereSigs [] = Ok 0
+-- @code TC_WhereNeedsSig
+checkWhereSigs (bind :: rest) = case secondOf bind of
+  EAnn value ty annSp => checkWhereSigs rest
+  _ =>
+    let
+      name = whereBindingName (firstOf bind)
+    in errAt (patSpan (firstOf bind))
+      ("[TC_WhereNeedsSig] DT: where binding `" ++ name ++ "` needs a type signature (write `" ++ name ++ " : <type>` before the clause)")
+
+whereBindingName : Pat -> String
+whereBindingName pat = case pat of
+  PVar name sp => name
+  _ => "_"

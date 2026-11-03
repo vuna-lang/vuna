@@ -31,26 +31,28 @@ import Vuna.Compiler.Core.Eval
 -- 定义性相等（beta + delta + eta）与一阶元变量求解
 -- 返回更新后的元变量解表。
 -- ---------------------------------------------------------------
-conv : List (Pair String Term) -> List (Pair Int Value) -> Int -> Value -> Value -> Result (List (Pair Int Value))
-conv defs sols depth a b =
+convFuel : Int -> List (Pair String Term) -> List (Pair Int Value) -> Int -> Value -> Value -> Result (List (Pair Int Value))
+convFuel fuel defs sols depth a b = if fuel <= 0 then Err "DT: internal: conv fuel exhausted"
+else
   let
     a2 = force defs sols defaultFuel a
     y2 = force defs sols defaultFuel b
   in case a2 of
-    VMeta m sp => solveMeta defs sols depth m sp y2
+    VMeta m sp => solveMetaFuel (fuel - 1) defs sols depth m sp y2
     _ => case y2 of
-      VMeta m sp => solveMeta defs sols depth m sp a2
-      _ => convBoth defs sols depth a2 y2
+      VMeta m sp => solveMetaFuel (fuel - 1) defs sols depth m sp a2
+      _ => convBothFuel (fuel - 1) defs sols depth a2 y2
 
-convBoth : List (Pair String Term) -> List (Pair Int Value) -> Int -> Value -> Value -> Result (List (Pair Int Value))
-convBoth defs sols depth a b = case a of
+convBothFuel : Int -> List (Pair String Term) -> List (Pair Int Value) -> Int -> Value -> Value -> Result (List (Pair Int Value))
+convBothFuel fuel defs sols depth a b = if fuel <= 0 then Err "DT: internal: conv fuel exhausted"
+else case a of
   VType i => case b of
     VType j => if i == j then Ok sols else mismatchAt depth a b
     _ => mismatchAt depth a b
   VPi name implicit rig dom cod => case b of
-    VPi name2 implicit2 rig2 dom2 cod2 => if implicit == implicit2 then andThen (conv defs sols depth dom dom2) (\sols2 => let
+    VPi name2 implicit2 rig2 dom2 cod2 => if implicit == implicit2 then andThen (convFuel (fuel - 1) defs sols depth dom dom2) (\sols2 => let
       v = freshVar name depth
-    in conv defs sols2 (depth + 1) (applyClosure cod v) (applyClosure cod2 v)
+    in convFuel (fuel - 1) defs sols2 (depth + 1) (applyClosure cod v) (applyClosure cod2 v)
     )
     else mismatchAt depth a b
     _ => mismatchAt depth a b
@@ -58,13 +60,14 @@ convBoth defs sols depth a b = case a of
     VLam name2 rig2 clo2 =>
       let
         v = freshVar name depth
-      in conv defs sols (depth + 1) (applyClosure clo v) (applyClosure clo2 v)
-    _ => etaRight defs sols depth name clo b
+      in convFuel (fuel - 1) defs sols (depth + 1) (applyClosure clo v) (applyClosure clo2 v)
+    _ => etaRightFuel (fuel - 1) defs sols depth name clo b
   VNeutral n => case b of
     -- 预置 Bool 桩与 Base.Bool.Bool 视为同一类型（嵌套位置也要相等：`Result (Pair Bool _)`）。
     VNeutral n2 =>
-      if isBoolNeutral n && isBoolNeutral n2 then Ok sols else convNeutral defs sols depth n n2 a b
-    VLam name2 rig2 clo2 => etaLeft defs sols depth a name2 clo2
+      if isBoolNeutral n && isBoolNeutral n2 then Ok sols
+      else convNeutralFuel (fuel - 1) defs sols depth n n2 a b
+    VLam name2 rig2 clo2 => etaLeftFuel (fuel - 1) defs sols depth a name2 clo2
     _ => mismatchAt depth a b
   VInt n => case b of
     VInt m => if n == m then Ok sols else mismatchAt depth a b
@@ -77,31 +80,39 @@ convBoth defs sols depth a b = case a of
     _ => mismatchAt depth a b
   VCon c args => case b of
     VCon c2 args2 =>
-      if c == c2 then convValueLists defs sols depth args args2 else mismatchAt depth a b
+      if c == c2 then convValueListsFuel (fuel - 1) defs sols depth args args2
+      else mismatchAt depth a b
+    _ => mismatchAt depth a b
+  VApp f x => case b of
+    VApp f2 x2 =>
+      andThen (convFuel (fuel - 1) defs sols depth f f2)
+        (\sols2 => convFuel (fuel - 1) defs sols2 depth x x2)
     _ => mismatchAt depth a b
   VCase scrut alts => case b of
     VCase scrut2 alts2 =>
-      andThen (conv defs sols depth scrut scrut2)
-        (\sols2 => convCaseAlts defs sols2 depth alts alts2)
+      andThen (convFuel (fuel - 1) defs sols depth scrut scrut2)
+        (\sols2 => convCaseAltsFuel (fuel - 1) defs sols2 depth alts alts2)
     _ => mismatchAt depth a b
   VIf c th el => case b of
     VIf c2 th2 el2 =>
-      andThen (conv defs sols depth c c2)
-        (\sols2 => andThen (conv defs sols2 depth th th2) (\sols3 => conv defs sols3 depth el el2))
+      andThen (convFuel (fuel - 1) defs sols depth c c2)
+        (\sols2 => andThen (convFuel (fuel - 1) defs sols2 depth th th2) (\sols3 => convFuel (fuel - 1) defs sols3 depth el el2))
     _ => mismatchAt depth a b
   _ => mismatchAt depth a b
 
-etaLeft : List (Pair String Term) -> List (Pair Int Value) -> Int -> Value -> String -> Closure -> Result (List (Pair Int Value))
-etaLeft defs sols depth a name clo =
+etaLeftFuel : Int -> List (Pair String Term) -> List (Pair Int Value) -> Int -> Value -> String -> Closure -> Result (List (Pair Int Value))
+etaLeftFuel fuel defs sols depth a name clo = if fuel <= 0 then Err "DT: internal: conv fuel exhausted"
+else
   let
     v = freshVar name depth
-  in conv defs sols (depth + 1) (applyValue a v) (applyClosure clo v)
+  in convFuel (fuel - 1) defs sols (depth + 1) (applyValue a v) (applyClosure clo v)
 
-etaRight : List (Pair String Term) -> List (Pair Int Value) -> Int -> String -> Closure -> Value -> Result (List (Pair Int Value))
-etaRight defs sols depth name clo b =
+etaRightFuel : Int -> List (Pair String Term) -> List (Pair Int Value) -> Int -> String -> Closure -> Value -> Result (List (Pair Int Value))
+etaRightFuel fuel defs sols depth name clo b = if fuel <= 0 then Err "DT: internal: conv fuel exhausted"
+else
   let
     v = freshVar name depth
-  in conv defs sols (depth + 1) (applyClosure clo v) (applyValue b v)
+  in convFuel (fuel - 1) defs sols (depth + 1) (applyClosure clo v) (applyValue b v)
 
 isBoolTyName : String -> Bool
 isBoolTyName n = if n == "Bool" then True else n == "Base.Bool.Bool"
@@ -112,46 +123,63 @@ isBoolNeutral n = case n of
   NVar name lvl sp => if sp == [] then isBoolTyName name else False
   _ => False
 
-convNeutral : List (Pair String Term) -> List (Pair Int Value) -> Int -> Neutral -> Neutral -> Value -> Value -> Result (List (Pair Int Value))
-convNeutral defs sols depth n1 n2 v1 v2 = case n1 of
+convNeutralFuel : Int -> List (Pair String Term) -> List (Pair Int Value) -> Int -> Neutral -> Neutral -> Value -> Value -> Result (List (Pair Int Value))
+convNeutralFuel fuel defs sols depth n1 n2 v1 v2 = if fuel <= 0 then Err "DT: internal: conv fuel exhausted"
+else case n1 of
   NVar name level sp => case n2 of
     NVar name2 level2 sp2 =>
-      if level == level2 then convSpines defs sols depth sp sp2 v1 v2 else mismatchAt depth v1 v2
+      if level == level2 then convSpinesFuel (fuel - 1) defs sols depth sp sp2 v1 v2
+      else mismatchAt depth v1 v2
     _ => mismatchAt depth v1 v2
   NGlobal g sp => case n2 of
     NGlobal g2 sp2 =>
-      if g == g2 then convSpines defs sols depth sp sp2 v1 v2 else mismatchAt depth v1 v2
+      if g == g2 then convSpinesFuel (fuel - 1) defs sols depth sp sp2 v1 v2
+      else mismatchAt depth v1 v2
     _ => mismatchAt depth v1 v2
 
-convSpines : List (Pair String Term) -> List (Pair Int Value) -> Int -> List Value -> List Value -> Value -> Value -> Result (List (Pair Int Value))
-convSpines defs sols depth [] [] v1 v2 = Ok sols
-convSpines defs sols depth (a :: xs) (b :: ys) v1 v2 =
-  andThen (conv defs sols depth a b) (\sols2 => convSpines defs sols2 depth xs ys v1 v2)
-convSpines defs sols depth _ _ v1 v2 = mismatchAt depth v1 v2
+convSpinesFuel : Int -> List (Pair String Term) -> List (Pair Int Value) -> Int -> List Value -> List Value -> Value -> Value -> Result (List (Pair Int Value))
+convSpinesFuel fuel defs sols depth [] [] v1 v2 =
+  if fuel <= 0 then Err "DT: internal: conv fuel exhausted" else Ok sols
+convSpinesFuel fuel defs sols depth (a :: xs) (b :: ys) v1 v2 =
+  if fuel <= 0 then Err "DT: internal: conv fuel exhausted"
+  else andThen (convFuel (fuel - 1) defs sols depth a b)
+    (\sols2 => convSpinesFuel (fuel - 1) defs sols2 depth xs ys v1 v2)
+convSpinesFuel fuel defs sols depth _ _ v1 v2 =
+  if fuel <= 0 then Err "DT: internal: conv fuel exhausted" else mismatchAt depth v1 v2
 
-convValueLists : List (Pair String Term) -> List (Pair Int Value) -> Int -> List Value -> List Value -> Result (List (Pair Int Value))
-convValueLists defs sols depth [] [] = Ok sols
-convValueLists defs sols depth (a :: xs) (b :: ys) =
-  andThen (conv defs sols depth a b) (\sols2 => convValueLists defs sols2 depth xs ys)
-convValueLists defs sols depth _ _ = Err "type mismatch: constructor arguments differ in length"
+convValueListsFuel : Int -> List (Pair String Term) -> List (Pair Int Value) -> Int -> List Value -> List Value -> Result (List (Pair Int Value))
+convValueListsFuel fuel defs sols depth [] [] =
+  if fuel <= 0 then Err "DT: internal: conv fuel exhausted" else Ok sols
+convValueListsFuel fuel defs sols depth (a :: xs) (b :: ys) =
+  if fuel <= 0 then Err "DT: internal: conv fuel exhausted"
+  else andThen (convFuel (fuel - 1) defs sols depth a b)
+    (\sols2 => convValueListsFuel (fuel - 1) defs sols2 depth xs ys)
+convValueListsFuel fuel defs sols depth _ _ =
+  if fuel <= 0 then Err "DT: internal: conv fuel exhausted"
+  else Err "type mismatch: constructor arguments differ in length"
 
 -- 卡住的 case 相等：scrutinee 相等 + 每个构造子名的分支绑定数相同且分支体相等。
-convCaseAlts : List (Pair String Term) -> List (Pair Int Value) -> Int -> List VCaseAlt -> List VCaseAlt -> Result (List (Pair Int Value))
-convCaseAlts defs sols depth [] [] = Ok sols
-convCaseAlts defs sols depth (a :: rest) (b :: rest2) = if vCaseAltName a == vCaseAltName b then if length (vCaseAltBinders a) == length (vCaseAltBinders b) then case convOneAlt defs sols depth a b of
+convCaseAltsFuel : Int -> List (Pair String Term) -> List (Pair Int Value) -> Int -> List VCaseAlt -> List VCaseAlt -> Result (List (Pair Int Value))
+convCaseAltsFuel fuel defs sols depth [] [] =
+  if fuel <= 0 then Err "DT: internal: conv fuel exhausted" else Ok sols
+convCaseAltsFuel fuel defs sols depth (a :: rest) (b :: rest2) = if fuel <= 0 then Err "DT: internal: conv fuel exhausted"
+else if vCaseAltName a == vCaseAltName b then if length (vCaseAltBinders a) == length (vCaseAltBinders b) then case convOneAltFuel (fuel - 1) defs sols depth a b of
   Err e => Err e
-  Ok sols2 => convCaseAlts defs sols2 depth rest rest2
+  Ok sols2 => convCaseAltsFuel (fuel - 1) defs sols2 depth rest rest2
 else Err ("type mismatch: case branch " ++ vCaseAltName a ++ " binds a different number of variables")
 else Err ("type mismatch: case branch " ++ vCaseAltName a ++ " vs " ++ vCaseAltName b)
-convCaseAlts defs sols depth _ _ = Err "type mismatch: case branches differ in number"
+convCaseAltsFuel fuel defs sols depth _ _ =
+  if fuel <= 0 then Err "DT: internal: conv fuel exhausted"
+  else Err "type mismatch: case branches differ in number"
 
-convOneAlt : List (Pair String Term) -> List (Pair Int Value) -> Int -> VCaseAlt -> VCaseAlt -> Result (List (Pair Int Value))
-convOneAlt defs sols depth a b =
+convOneAltFuel : Int -> List (Pair String Term) -> List (Pair Int Value) -> Int -> VCaseAlt -> VCaseAlt -> Result (List (Pair Int Value))
+convOneAltFuel fuel defs sols depth a b = if fuel <= 0 then Err "DT: internal: conv fuel exhausted"
+else
   let
     bs = vCaseAltBinders a
     n = length bs
     args = argValsAt bs depth 0
-  in conv defs sols (depth + n) (applyClosureBinder (vCaseAltClosure a) args)
+  in convFuel (fuel - 1) defs sols (depth + n) (applyClosureBinder (vCaseAltClosure a) args)
     (applyClosureBinder (vCaseAltClosure b) args)
 
 mismatchAt : Int -> Value -> Value -> Result a
@@ -168,17 +196,18 @@ splitAtVals n [] = Pair [] []
 splitAtVals n (x :: xs) = case splitAtVals (n - 1) xs of
   Pair a b => Pair (x :: a) b
 
-solveMeta : List (Pair String Term) -> List (Pair Int Value) -> Int -> Int -> List Value -> Value -> Result (List (Pair Int Value))
-solveMeta defs sols depth m sp rhs = case sp of
+solveMetaFuel : Int -> List (Pair String Term) -> List (Pair Int Value) -> Int -> Int -> List Value -> Value -> Result (List (Pair Int Value))
+solveMetaFuel fuel defs sols depth m sp rhs = if fuel <= 0 then Err "DT: internal: conv fuel exhausted"
+else case sp of
   [] => case metaLookup m sols of
-    Just t => conv defs sols depth (applySpine t []) rhs
+    Just t => convFuel (fuel - 1) defs sols depth (applySpine t []) rhs
     Nothing => case rhs of
       -- 同一个未解元变量统一自己（`?m` vs `?m`）是恒真约束，不能走 occurs 检查
       -- （那会把 `?m := ?m` 判成无限链）。HOF 实参把带隐式 binder 的签名
       -- 实例化成同两个元变量时会出现（`srt cmp xs` 一类）。
       VMeta n [] => if n == m then Ok sols else solveMetaNew defs sols depth m rhs
       _ => solveMetaNew defs sols depth m rhs
-  _ => solveMetaHo defs sols depth m sp rhs
+  _ => solveMetaHoFuel (fuel - 1) defs sols depth m sp rhs
 
 solveMetaNew : List (Pair String Term) -> List (Pair Int Value) -> Int -> Int -> Value -> Result (List (Pair Int Value))
 solveMetaNew defs sols depth m rhs =
@@ -188,30 +217,70 @@ solveMetaNew defs sols depth m rhs =
   else Ok (Pair m rhs :: sols)
 
 -- 更高阶求解（M13 扩展）：只在「头一致」的安全形状上做提取/对齐，其余仍报 M13。
-solveMetaHo : List (Pair String Term) -> List (Pair Int Value) -> Int -> Int -> List Value -> Value -> Result (List (Pair Int Value))
-solveMetaHo defs sols depth m sp rhs = case rhs of
+solveMetaHoFuel : Int -> List (Pair String Term) -> List (Pair Int Value) -> Int -> Int -> List Value -> Value -> Result (List (Pair Int Value))
+solveMetaHoFuel fuel defs sols depth m sp rhs = if fuel <= 0 then Err "DT: internal: conv fuel exhausted"
+else case rhs of
   VMeta n sp2 => case metaLookup n sols of
-    Just t => conv defs sols depth (applySpine (VMeta m sp) []) (applySpine t sp2)
+    Just t => convFuel (fuel - 1) defs sols depth (applySpine (VMeta m sp) []) (applySpine t sp2)
     Nothing =>
-      if m == n then convSpines defs sols depth sp sp2 (VMeta m sp) rhs
-      else andThen (solveMeta defs sols depth m [] (VMeta n []))
-        (\sols2 => convSpines defs sols2 depth sp sp2 (VMeta m sp) rhs)
+      if m == n then convSpinesFuel (fuel - 1) defs sols depth sp sp2 (VMeta m sp) rhs
+      else andThen (solveMetaFuel (fuel - 1) defs sols depth m [] (VMeta n []))
+        (\sols2 => convSpinesFuel (fuel - 1) defs sols2 depth sp sp2 (VMeta m sp) rhs)
   -- `?m sp = ?m sp2`：同头，只统一 spine。
   -- `?m sp = ?n sp2`：元-元对齐，`?m = ?n` 再统一 spine。
   VNeutral n => case n of
-    NGlobal g args => solveMetaHead defs sols depth m sp (VNeutral n) (VNeutral (NGlobal g [])) args
+    NGlobal g args =>
+      solveMetaHeadFuel (fuel - 1) defs sols depth m sp (VNeutral n) (VNeutral (NGlobal g [])) args
     NVar name level args =>
-      solveMetaHead defs sols depth m sp (VNeutral n) (VNeutral (NVar name level [])) args
-    _ => Err ("cannot solve higher-order metavariable ?" ++ strFromInt m ++ " (M13 limitation)")
-  _ => Err ("cannot solve higher-order metavariable ?" ++ strFromInt m ++ " (M13 limitation)")
+      solveMetaHeadFuel (fuel - 1) defs sols depth m sp (VNeutral n) (VNeutral (NVar name level []))
+        args
+    _ => Err ("cannot solve higher-order metavariable ?" ++ strFromInt m ++ "")
+  _ => Err ("cannot solve higher-order metavariable ?" ++ strFromInt m ++ "")
 
 -- `?m sp = head args`（|args| >= |sp|）：`?m = head (take extra args)` 再统一剩余 spine。
-solveMetaHead : List (Pair String Term) -> List (Pair Int Value) -> Int -> Int -> List Value -> Value -> Value -> List Value -> Result (List (Pair Int Value))
-solveMetaHead defs sols depth m sp whole headVal args = if length args >= length sp then
+solveMetaHeadFuel : Int -> List (Pair String Term) -> List (Pair Int Value) -> Int -> Int -> List Value -> Value -> Value -> List Value -> Result (List (Pair Int Value))
+solveMetaHeadFuel fuel defs sols depth m sp whole headVal args = if fuel <= 0 then Err "DT: internal: conv fuel exhausted"
+else if length args >= length sp then
   let
     extra = length args - length sp
   in case splitAtVals extra args of
     Pair headArgs tailArgs =>
-      andThen (solveMeta defs sols depth m [] (applySpine headVal headArgs))
-        (\sols2 => convSpines defs sols2 depth sp tailArgs (VMeta m sp) whole)
-else Err ("cannot solve higher-order metavariable ?" ++ strFromInt m ++ " (M13 limitation)")
+      andThen (solveMetaFuel (fuel - 1) defs sols depth m [] (applySpine headVal headArgs))
+        (\sols2 => convSpinesFuel (fuel - 1) defs sols2 depth sp tailArgs (VMeta m sp) whole)
+else Err ("cannot solve higher-order metavariable ?" ++ strFromInt m ++ "")
+
+conv : List (Pair String Term) -> List (Pair Int Value) -> Int -> Value -> Value -> Result (List (Pair Int Value))
+conv a1 a2 a3 a4 a5 = convFuel 64 a1 a2 a3 a4 a5
+
+convBoth : List (Pair String Term) -> List (Pair Int Value) -> Int -> Value -> Value -> Result (List (Pair Int Value))
+convBoth a1 a2 a3 a4 a5 = convBothFuel 64 a1 a2 a3 a4 a5
+
+convCaseAlts : List (Pair String Term) -> List (Pair Int Value) -> Int -> List VCaseAlt -> List VCaseAlt -> Result (List (Pair Int Value))
+convCaseAlts a1 a2 a3 a4 a5 = convCaseAltsFuel 64 a1 a2 a3 a4 a5
+
+convOneAlt : List (Pair String Term) -> List (Pair Int Value) -> Int -> VCaseAlt -> VCaseAlt -> Result (List (Pair Int Value))
+convOneAlt a1 a2 a3 a4 a5 = convOneAltFuel 64 a1 a2 a3 a4 a5
+
+convValueLists : List (Pair String Term) -> List (Pair Int Value) -> Int -> List Value -> List Value -> Result (List (Pair Int Value))
+convValueLists a1 a2 a3 a4 a5 = convValueListsFuel 64 a1 a2 a3 a4 a5
+
+convNeutral : List (Pair String Term) -> List (Pair Int Value) -> Int -> Neutral -> Neutral -> Value -> Value -> Result (List (Pair Int Value))
+convNeutral a1 a2 a3 a4 a5 a6 a7 = convNeutralFuel 64 a1 a2 a3 a4 a5 a6 a7
+
+convSpines : List (Pair String Term) -> List (Pair Int Value) -> Int -> List Value -> List Value -> Value -> Value -> Result (List (Pair Int Value))
+convSpines a1 a2 a3 a4 a5 a6 a7 = convSpinesFuel 64 a1 a2 a3 a4 a5 a6 a7
+
+etaLeft : List (Pair String Term) -> List (Pair Int Value) -> Int -> Value -> String -> Closure -> Result (List (Pair Int Value))
+etaLeft a1 a2 a3 a4 a5 a6 = etaLeftFuel 64 a1 a2 a3 a4 a5 a6
+
+etaRight : List (Pair String Term) -> List (Pair Int Value) -> Int -> String -> Closure -> Value -> Result (List (Pair Int Value))
+etaRight a1 a2 a3 a4 a5 a6 = etaRightFuel 64 a1 a2 a3 a4 a5 a6
+
+solveMeta : List (Pair String Term) -> List (Pair Int Value) -> Int -> Int -> List Value -> Value -> Result (List (Pair Int Value))
+solveMeta a1 a2 a3 a4 a5 a6 = solveMetaFuel 64 a1 a2 a3 a4 a5 a6
+
+solveMetaHead : List (Pair String Term) -> List (Pair Int Value) -> Int -> Int -> List Value -> Value -> Value -> List Value -> Result (List (Pair Int Value))
+solveMetaHead a1 a2 a3 a4 a5 a6 a7 a8 = solveMetaHeadFuel 64 a1 a2 a3 a4 a5 a6 a7 a8
+
+solveMetaHo : List (Pair String Term) -> List (Pair Int Value) -> Int -> Int -> List Value -> Value -> Result (List (Pair Int Value))
+solveMetaHo a1 a2 a3 a4 a5 a6 = solveMetaHoFuel 64 a1 a2 a3 a4 a5 a6

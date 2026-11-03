@@ -983,6 +983,23 @@ cp "$errs_doc" "$tmp/errs1.md"
 diff "$tmp/errs1.md" "$errs_doc" >/dev/null 2>&1
 check_eq "gen-errors idempotent" "0" "$?"
 
+# 37) M25.2a 终止性检查：遍历补全（EApp 实参 / ELet 绑定 / where）+ 调用图/SCC。
+#     正例：check 通过（含结构下降、嵌套构造子、构造子包装、互递归、多 clause）；
+#     负例：check 非 0 且含诊断片段（HOF 递归 / where 外层递归 / Cons 实参隐藏递归在
+#     M25.2a 前是静默通过的，这些夹具锁住遍历补全的回归）。
+for file in corpus/term/*.vuna; do
+  term_out=$("$VUNA" check $BASE_ROOT "$file" 2>&1)
+  term_code=$?
+  if [ "$term_code" -eq 0 ]; then ok; else bad "$file (term ok)" "exit 0" "$term_out"; fi
+done
+for file in corpus/term_err/*.vuna; do
+  fragment=$(cat "${file%.vuna}.err")
+  actual=$("$VUNA" check $BASE_ROOT "$file" 2>&1)
+  term_code=$?
+  check_contains "$file (term error)" "$actual" "$fragment"
+  if [ "$term_code" -ne 0 ]; then ok; else bad "$file (term error exit)" "non-zero" "$term_code"; fi
+done
+
 if [ "$fail" -ne 0 ]; then
   printf '%s passed, %s failed\n' "$pass" "$fail"
   exit 1

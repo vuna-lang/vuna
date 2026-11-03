@@ -17,6 +17,7 @@ open Vuna_dCompiler_dFrontend_dManifest
 open Vuna_dCompiler_dPackages_dPkg
 open Vuna_dCompiler_dFrontend_dAst
 open Vuna_dCompiler_dFrontend_dLexer
+open Vuna_dCompiler_dFrontend_dParser_dSupport
 open Vuna_dCompiler_dFrontend_dParser
 open Vuna_dCompiler_dLoader_dModules
 open Vuna_dCompiler_dLoader_dResolve
@@ -33,6 +34,8 @@ open Vuna_dCompiler_dElab_dMeta
 open Vuna_dCompiler_dElab_dCase
 open Vuna_dCompiler_dElab_dDict
 open Vuna_dCompiler_dElab_dMatch
+open Vuna_dCompiler_dElab_dTerm_dSupport
+open Vuna_dCompiler_dElab_dTerm_dImpl
 open Vuna_dCompiler_dElab_dTerm
 open Vuna_dCompiler_dElab_dData
 open Vuna_dCompiler_dElab_dTrait
@@ -64,7 +67,9 @@ let v_Vuna_dCompiler_dElab_dDerive_dshowCtor = (fun mc0 -> (fun mc1 -> (fun mc2 
   | _ -> (C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEApp ((C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEVar ("++", mc3)), (C_Base_dList_dList_Cons ((C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEStr (((bi_concat "(") ((bi_concat mc1) " ")), mc3)), (C_Base_dList_dList_Cons ((((v_Vuna_dCompiler_dElab_dDerive_dshowFields mc0) mc2) mc3), C_Base_dList_dList_Nil)))), mc3))
 )))))
 
-let rec v_Vuna_dCompiler_dElab_dDerive_dvarNamesAt = (fun prefix -> (fun i -> (fun n -> (if ((bi_ge_int i) n) then C_Base_dList_dList_Nil else (C_Base_dList_dList_Cons (((bi_concat prefix) (bi_strFromInt i)), (((v_Vuna_dCompiler_dElab_dDerive_dvarNamesAt prefix) ((bi_add i) 1)) n)))))))
+let rec v_Vuna_dCompiler_dElab_dDerive_dvarNamesAtGo = (fun remaining -> (fun prefix -> (fun n -> (if ((bi_le_int remaining) 0) then C_Base_dList_dList_Nil else (C_Base_dList_dList_Cons (((bi_concat prefix) (bi_strFromInt ((bi_sub n) remaining))), (((v_Vuna_dCompiler_dElab_dDerive_dvarNamesAtGo ((bi_sub remaining) 1)) prefix) n)))))))
+
+let v_Vuna_dCompiler_dElab_dDerive_dvarNamesAt = (fun prefix -> (fun i -> (fun n -> (((v_Vuna_dCompiler_dElab_dDerive_dvarNamesAtGo ((bi_sub n) i)) prefix) n))))
 
 let v_Vuna_dCompiler_dElab_dDerive_dvarNames = (fun prefix -> (fun n -> (((v_Vuna_dCompiler_dElab_dDerive_dvarNamesAt prefix) 0) n)))
 
@@ -151,7 +156,7 @@ let v_Vuna_dCompiler_dElab_dDerive_dderiveInstance = (fun dname -> (fun params -
 let rec v_Vuna_dCompiler_dElab_dDerive_dderivingsForGo = (fun mc0 -> (fun mc1 -> (fun mc2 -> (fun mc3 -> (fun mc4 -> (fun mc5 -> (match mc3 with
   | C_Base_dList_dList_Cons (dtb__34, dtb__35) -> (match mc1 with
   | C_Base_dList_dList_Nil -> ((v_Base_dResult_dandThen (((((v_Vuna_dCompiler_dElab_dDerive_dderiveInstance mc0) mc1) mc2) dtb__34) mc4)) (fun decl -> ((((((v_Vuna_dCompiler_dElab_dDerive_dderivingsForGo mc0) mc1) mc2) dtb__35) mc4) (C_Base_dList_dList_Cons (decl, mc5)))))
-  | _ -> (if ((bi_eq_str (v_Vuna_dCompiler_dElab_dDerive_dtraitShortName dtb__34)) "Eq") then ((((((v_Vuna_dCompiler_dElab_dDerive_dderivingsForGo mc0) mc1) mc2) dtb__35) mc4) mc5) else (C_Base_dResult_dResult_Base_dResult_dErr (((bi_concat (v_Vuna_dCompiler_dCommon_dshowSpanLoc mc4)) ((bi_concat ": DT: deriving ") ((bi_concat (v_Vuna_dCompiler_dElab_dDerive_dtraitShortName dtb__34)) " is only supported for non-parameterized data types (M23)"))))))
+  | _ -> (if ((bi_eq_str (v_Vuna_dCompiler_dElab_dDerive_dtraitShortName dtb__34)) "Eq") then ((((((v_Vuna_dCompiler_dElab_dDerive_dderivingsForGo mc0) mc1) mc2) dtb__35) mc4) mc5) else (C_Base_dResult_dResult_Base_dResult_dErr (((bi_concat (v_Vuna_dCompiler_dCommon_dshowSpanLoc mc4)) ((bi_concat ": DT: deriving ") ((bi_concat (v_Vuna_dCompiler_dElab_dDerive_dtraitShortName dtb__34)) " is only supported for non-parameterized data types"))))))
 )
   | C_Base_dList_dList_Nil -> (C_Base_dResult_dResult_Base_dResult_dOk ((v_Base_dList_dreverse mc5)))
   | _ -> failwith "DT: impossible branch"

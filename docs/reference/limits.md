@@ -34,9 +34,20 @@ DT 设计见 [docs/dt-core.md](../dt-core.md)。
   - **擦除由 rig 判据驱动**：`Rig0`（隐式 binder / `Type` 域）不进运行时表示，`Rig1`
     （显式值、显式索引 `(n : Nat)`）保留字段（`17_erase` / `dt/38_explicit_index` 锁定
     两侧）；不做整程序使用分析，「想擦但被读」的显式索引不会自动擦除（可改成隐式
-    `{n : Nat}`，代价是分支体读不到）。详见 [dt-core.md](../dt-core.md) §6。
-  - **终止性只接受结构递归**：递归调用必须是形参的真子项；`sortBy le (take half xs)`
-    这类要改写成结构递归（`Base.Sort` 已改插入排序），互递归与跨调用 size-change 不查。
+`{n : Nat}`，代价是分支体读不到）。详见 [dt-core.md](../dt-core.md) §6。
+  - **终止性：结构下降 + 守卫 Int（M25.2a/M25.2b）**：递归调用（含互递归组内
+    调用）必须在某个固定测度位置上递减；测度可以是形参的真子项（含嵌套构造子模式、
+    `case` 分支、`f v` 形式的单 clause 投影/accessor），或**带守卫的 Int**：
+    `n - k`（k>0）且能证明 `n > 0`——证据来自 `if n <= 0 then … else …` 的 else 区，
+    或 SCC 入口假设（组内某函数的该形参在**所有**调用点都收到正数，可经 `normalize fuel`
+    这类同 fuel 转发传播）。无守卫的 `n - 1`、升序 `i + 1`（有界计数器规则尚未实现）
+    与无下降的互递归仍会被拒；HOF 递归（`map (\x => f x)`）、`where` 绑定体里调外层
+    函数、`Cons x (f x)` 这类藏在实参里的递归都会被检查（旧实现只递归函数头，这些是
+    静默通过）。每个 SCC 的每个环都必须有严格下降边（去掉严格边后无环）。
+    **没有包级豁免之外的分层**：依赖模块与入口模块用同一套判据；基库为此改了两处
+    实现（`Base.List.range` 改倒计数、`Base.String.split` 两段递归共享显式 fuel）。
+    编译器包（`Vuna.Compiler.*`）仍由包级 trust 跳过终止性检查，其 conv/eval/parser
+    等递归留给 M25.2c（详见 [debt.md](debt.md)）。
   - **`where` 绑定必须写签名且是顺序 let**：每个绑定都要在子句前写签名（缺签名报
     `DT: where binding ... needs a type signature`），只能引用之前的绑定——不支持前向
     引用 / 自递归 / 互递归（引用报 `DT: unknown name ...`），递归与互相引用放顶层定义组。
@@ -89,10 +100,10 @@ DT 设计见 [docs/dt-core.md](../dt-core.md)。
     实例」）；`missingInstance` 级诊断细化留待后续。**DT 要求顶层定义有类型签名**：新增
     代码同样要写，否则报 `DT: expected a type signature for ...`。
   - **高阶/开放元变量解**：`solveMetaHo` 覆盖常见形状（M20.5），其余仍受限。
-  - **覆盖率（穷尽性/冗余）与终止性检查对 TCB 三包**（`vuna` / `vuna-compiler` /
-    `vuna-base`）**实际是静默跳过**：按包名字符串 allowlist 判定，既不报错也不输出任何
-    warning（无 warning 通道）；用户包与夹具仍严格。已登记 debt **B01/B17**，M25 改为
-    显式、可审计、不可伪造的信任声明（manifest / seed 构建期 flag）。
+  - **覆盖率与终止性对所有包一致执行**：M25 已删除按包名跳过检查的豁免；编译器、base
+    与工具链源码通过 SCT + 显式 fuel/结构递归达标，不再有「可信包静默跳过」路径。
+    工具链/前端/加载器的状态机用输入规模线性 fuel 或内存内不可达上界（debt C26/C27/C28），
+    正常输入不触发；触发时是明确的 internal 错误，不会静默改变语义。
   - **单文件 `List` 桥接**：单文件程序的 `List` 若由程序自己声明，`getArgs` / `readDir`
     等效果内建返回的列表由 codegen 桥接回该族；没有声明 `List` 的单文件程序不能使用
     这些内建。

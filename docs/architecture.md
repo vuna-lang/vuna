@@ -8,9 +8,9 @@ codegen 要点见 [compiler.md](reference/compiler.md)，语义见 [language.md]
 ## 仓库分层
 
 ```text
-compiler/lib/Vuna/Compiler/   （40 个模块；目录即层：Frontend → Packages → Loader → Core → Elab → Codegen → Driver）
+compiler/lib/Vuna/Compiler/   （45 个模块；目录即层：Frontend → Packages → Loader → Core → Elab → Codegen → Driver）
 ├─ Common.vuna                公共门面（Base 类型 + Pos/Span/诊断）
-├─ Frontend/                  Ast Lexer Parser Toml Manifest   词法 / 语法 / vuna.toml
+├─ Frontend/                  Ast Lexer Parser Parser/Support Toml Manifest   词法 / 语法 / vuna.toml
 ├─ Packages/                  Pkg                              包图与模块根
 ├─ Loader.vuna + Loader/      Modules Resolve Flatten          模块图 / 名字解析 / flatten
 ├─ Core.vuna + Core/          Term Eval Conv                   Core TT / NbE / 定义性相等
@@ -28,8 +28,8 @@ compiler/lib/Vuna/Compiler/   （40 个模块；目录即层：Frontend → Pack
 **目录即层**：目录 = 依赖层次，上层可 import 下层、反向禁止（根上的 `Common` 被各层共享，不是一层）。**门面模式**：`X.vuna` 只
 import 子模块并选择性重导出（对外名字面与拆分前一致），实现只在叶子；**数据定义只在叶子**
 （`Core.Term`、`Elab.Types` 等），门面不定义数据。控制流模块按 SCC 内聚、不硬拆；目标每
-模块 ≤~800 行（当前最大 `Frontend.Parser` 823）。`compiler/` 是 seed 唯一来源（入口
-`compiler/app/Main.vuna` 的 import 闭包，55 个 `.ml`）；`lib/` 工具链与 `app/` 在 TCB 之外；
+模块 ≤~800 行（当前最大 `Elab.Termination` 811）。`compiler/` 是 seed 唯一来源（入口
+`compiler/app/Main.vuna` 的 import 闭包，60 个 `.ml`）；`lib/` 工具链与 `app/` 在 TCB 之外；
 `base/` 的模块名就是公开 API，保持 15 个不变。
 
 ## 1. 编译链：Frontend → Loader → Elab → Codegen

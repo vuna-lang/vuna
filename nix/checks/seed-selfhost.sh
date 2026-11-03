@@ -13,9 +13,26 @@ OUT=${1:?usage: seed-selfhost.sh OUT}
 # 提交入库的 seed 只能含 compiler 闭包（工具链与 dynamic codegen 都不在 TCB 里）。
 sh nix/tcb-check.sh nix/tcb-forbidden.txt seed
 
+# 闭包数量断言：只靠黑名单时 seed 静默缩水（漏模块）仍会绿；数量来自
+# `nix/seed-count.txt`，由 seed rotation 自动更新（见 nix/seed-rotate.sh）。
+EXPECTED_SEED_ML=$(sed -n '1p' nix/seed-count.txt)
+ACTUAL_SEED_ML=$(find seed -maxdepth 1 -type f -name '*.ml' | wc -l | tr -d ' ')
+if [ "$ACTUAL_SEED_ML" != "$EXPECTED_SEED_ML" ]; then
+  echo "seed-selfhost: seed 闭包 .ml 数量 $ACTUAL_SEED_ML != 期望 $EXPECTED_SEED_ML（seed 缩水或 seed-count.txt 过期；重新 rotation）" >&2
+  exit 1
+fi
+
 # 种子对 compiler 包分离编译 → stage1 源码集。
 "$VUNA_SEED" build --split s1 compiler
 sh nix/tcb-check.sh nix/tcb-forbidden.txt s1
+
+# 源码/seed 同步：fixed point 只证明生成器自洽，不证明 seed 与当前源码同步。
+# seed/ 必须等于「当前源码由 seed 生成的 s1」；否则 flake 绿也可能带着过期信任锚点。
+if ! diff -r seed s1 >/dev/null 2>&1; then
+  echo "seed-selfhost: seed/ 与当前源码生成结果不同步（先 sh nix/seed-rotate.sh ./result/bin/vuna）" >&2
+  diff -r seed s1 | head -20 >&2
+  exit 1
+fi
 
 # 在副本里构建 stage1，避免构建产物污染文件集比较。
 cp -r s1 b1

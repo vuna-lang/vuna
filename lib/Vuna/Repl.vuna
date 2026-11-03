@@ -31,61 +31,71 @@ replHelp =
     ++ "其他输入按 vuna 源码处理：`import ...` 与定义会被累积，表达式会立即求值。\n"
     ++ "注意：DT 顶层签名必填，定义请先输入签名行（如 `x : Int`）再输入定义行。\n"
 
+-- REPL 是「读一行→处理→再读一行」的无限状态机，递归不沿输入结构下降；
+-- 用显式 fuel 守卫（1G 行，实际不可达）。
+replFuelBound : Int
+replFuelBound = 1073741824
+
 runRepl : List Root -> Int
 runRepl roots =
   let
     _ = print ("vuna repl\n" ++ replHelp)
-  in replLoop roots "" ""
+  in replLoop replFuelBound roots "" ""
 
-replLoop : List Root -> String -> String -> Int
-replLoop roots imports defs =
+replLoop : Int -> List Root -> String -> String -> Int
+replLoop fuel roots imports defs = if fuel <= 0 then 0
+else
   let
     _ = print replPrompt
   in let
     line = readLine
-  in if line == "" then 0 else replHandle roots imports defs (trim line)
+  in if line == "" then 0 else replHandle (fuel - 1) roots imports defs (trim line)
 
-replHandle : List Root -> String -> String -> String -> Int
-replHandle roots imports defs line = case line of
-  "" => replLoop roots imports defs
+replHandle : Int -> List Root -> String -> String -> String -> Int
+replHandle fuel roots imports defs line = if fuel <= 0 then 0
+else case line of
+  "" => replLoop (fuel - 1) roots imports defs
   ":q" => 0
   ":quit" => 0
   ":reset" =>
     let
       _ = print "已清空\n"
-    in replLoop roots "" ""
+    in replLoop (fuel - 1) roots "" ""
   ":help" =>
     let
       _ = print replHelp
-    in replLoop roots imports defs
+    in replLoop (fuel - 1) roots imports defs
   _ =>
-    if startsWith "import " line then replAddImport roots imports defs line
-    else replDefineOrEval roots imports defs line
+    if startsWith "import " line then replAddImport (fuel - 1) roots imports defs line
+    else replDefineOrEval (fuel - 1) roots imports defs line
 
-replAddImport : List Root -> String -> String -> String -> Int
-replAddImport roots imports defs line =
+replAddImport : Int -> List Root -> String -> String -> String -> Int
+replAddImport fuel roots imports defs line = if fuel <= 0 then 0
+else
   let
     imports2 = imports ++ line ++ "\n"
   in case parseSource replTempFile (imports2 ++ defs) of
     Err e =>
       let
         _ = print ("parse error: " ++ e ++ "\n")
-      in replLoop roots imports defs
-    Ok _ => replLoop roots imports2 defs
+      in replLoop (fuel - 1) roots imports defs
+    Ok _ => replLoop (fuel - 1) roots imports2 defs
 
-replDefineOrEval : List Root -> String -> String -> String -> Int
-replDefineOrEval roots imports defs line = case parseSource replTempFile (imports ++ defs ++ line ++ "\n") of
+replDefineOrEval : Int -> List Root -> String -> String -> String -> Int
+replDefineOrEval fuel roots imports defs line = if fuel <= 0 then 0
+else case parseSource replTempFile (imports ++ defs ++ line ++ "\n") of
   Ok (Source hdr imp decls) => case hdr of
-    Just md => replEvalExpr roots imports defs line
-    Nothing => replLoop roots imports (defs ++ line ++ "\n")
-  Err e => replEvalExpr roots imports defs line
+    Just md => replEvalExpr (fuel - 1) roots imports defs line
+    Nothing => replLoop (fuel - 1) roots imports (defs ++ line ++ "\n")
+  Err e => replEvalExpr (fuel - 1) roots imports defs line
 
-replEvalExpr : List Root -> String -> String -> String -> Int
-replEvalExpr roots imports defs line = case parseExpressionSource line of
+replEvalExpr : Int -> List Root -> String -> String -> String -> Int
+replEvalExpr fuel roots imports defs line = if fuel <= 0 then 0
+else case parseExpressionSource line of
   Err e =>
     let
       _ = print ("错误: " ++ e ++ "\n")
-    in replLoop roots imports defs
+    in replLoop (fuel - 1) roots imports defs
   Ok _ =>
     let
       program = imports ++ "\n" ++ defs
@@ -93,4 +103,4 @@ replEvalExpr roots imports defs line = case parseExpressionSource line of
       output = interpretExpr roots program line
     in let
       _ = print (output ++ "\n")
-    in replLoop roots imports defs
+    in replLoop (fuel - 1) roots imports defs

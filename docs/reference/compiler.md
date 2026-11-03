@@ -7,11 +7,11 @@
 ## 模块地图
 
 `compiler/` 是编译器包（seed 的唯一来源）。入口 `compiler/app/Main.vuna` 的 import 闭包
-就是 `seed/` 的内容（55 个 `.ml`，文件集 56 个含 `build.sh`）；工具链（fmt/lint/repl/doc/test/lsp）在根包 `lib/`，
+就是 `seed/` 的内容（60 个 `.ml`，文件集 61 个含 `build.sh`）；工具链（fmt/lint/repl/doc/test/lsp）在根包 `lib/`，
 不在闭包里。代码按**目录即层**组织：Frontend → Packages → Loader → Core → Elab →
 Codegen → Driver，同层模块可互相 import，上层只能依赖下层。每层 `X.vuna` 是**门面**：
 只 import 子模块并选择性重导出（对外名字面与拆分前逐项一致），实现与数据定义都在
-`X/` 的叶子模块。全包 40 个模块，目标每模块 ≤~800 行（当前最大 `Frontend.Parser` 823）。
+`X/` 的叶子模块。全包 45 个模块，目标每模块 ≤~800 行（当前最大 806：根包 `Lint/Rules`；compiler 最大 801：`Elab/Term/Impl`）。
 
 | 模块 | 职责 | 关键入口 |
 | --- | --- | --- |
@@ -56,7 +56,7 @@ Codegen → Driver，同层模块可互相 import，上层只能依赖下层。�
 | `Driver.Compile` | 编译入口：默认模块根、单文件 / 包目录 / 包级检查与编译；**合并原 `SplitCli`** 的 `buildSplit`/`seedSplit` | `checkFileDt`、`compileProjectDt`、`buildSplit`、`seedSplit` |
 | `Driver.CompilerCli` | 编译器自己的 CLI（`vuna-compiler`）；**合并原 `Process`** 的 `runIn`（`prim_runIn`，受 allowlist 限制） | `runCompilerCli`、`compilerUsageLines`、`runIn` |
 
-`compiler/vuna.toml` 的 `[export]` 列出全部 40 个模块；工具链模块不在此包。
+`compiler/vuna.toml` 的 `[export]` 列出全部 45 个模块；工具链模块不在此包。
 原 `Driver.Process` 与根包 `Vuna.Process` 均已删除（`runIn` 并入 `Driver.CompilerCli`）。
 
 ## 根包工具链模块（`lib/`，不进 seed）

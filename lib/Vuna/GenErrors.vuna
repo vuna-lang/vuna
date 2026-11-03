@@ -62,15 +62,21 @@ scanFiles [] = []
 scanFiles (f :: rest) = append (scanFile f) (scanFiles rest)
 
 scanFile : String -> List Entry
-scanFile file = scanLines file (lines (readFile file))
-
-scanLines : String -> List String -> List Entry
-scanLines file [] = []
-scanLines file (l :: rest) = if startsWith "-- @" (trimLeft l) then
+scanFile file =
   let
-    pair = collectBlock (l :: rest)
-  in append (parseBlocks file (firstOf pair)) (scanLines file (secondOf pair))
-else scanLines file rest
+    ls = lines (readFile file)
+  in scanLinesFuel (length ls) file ls
+
+-- 终止性：块收集会一次吞掉多行，递归参数不是语法子项；用输入行数做 fuel 守卫。
+scanLinesFuel : Int -> String -> List String -> List Entry
+scanLinesFuel fuel file ls = if fuel <= 0 then []
+else case ls of
+  [] => []
+  l :: rest => if startsWith "-- @" (trimLeft l) then
+    let
+      pair = collectBlock (l :: rest)
+    in append (parseBlocks file (firstOf pair)) (scanLinesFuel (fuel - 1) file (secondOf pair))
+  else scanLinesFuel (fuel - 1) file rest
 
 -- 收集以 `-- @` 开头的连续注释行：返回（块行, 剩余行）。
 collectBlock : List String -> Pair (List String) (List String)

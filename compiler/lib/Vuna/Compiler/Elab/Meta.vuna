@@ -106,8 +106,12 @@ import Vuna.Compiler.Frontend.Ast
 -- 仅在「整个类型链没有显式 Pi」（纯零参构造子）时实例化；`Cons`/`Just` 等有显式
 -- 参数的构造子保持多态类型（应用时由 `inferArgsGo` 实例化）。
 hasNoExplicitPi : Ec -> Value -> Bool
-hasNoExplicitPi ec v = case forceVal ec v of
-  VPi _ True _ dom clo => hasNoExplicitPi ec (applyClosure clo (forceVal ec dom))
+hasNoExplicitPi ec v = hasNoExplicitPiFuel 128 ec v
+
+hasNoExplicitPiFuel : Int -> Ec -> Value -> Bool
+hasNoExplicitPiFuel fuel ec v = if fuel <= 0 then True
+else case forceVal ec v of
+  VPi _ True _ dom clo => hasNoExplicitPiFuel (fuel - 1) ec (applyClosure clo (forceVal ec dom))
   VPi _ False _ dom clo => False
   _ => True
 
@@ -116,9 +120,13 @@ hasNoExplicitPi ec v = case forceVal ec v of
 -- telescope **逐位对齐**（case 分支按 telescope 绑定子压环境），少一个擦除实参就会让
 -- 分支体里的变量索引整体偏移（`foldl` 的 `Nil` 分支取到错误的值）。
 instantiateNullaryCtor : Ec -> Ctx -> Value -> Result (Pair Value (Pair (List Term) Ec))
-instantiateNullaryCtor ec ctx v = case forceVal ec v of
+instantiateNullaryCtor ec ctx v = instantiateNullaryCtorFuel 64 ec ctx v
+
+instantiateNullaryCtorFuel : Int -> Ec -> Ctx -> Value -> Result (Pair Value (Pair (List Term) Ec))
+instantiateNullaryCtorFuel fuel ec ctx v = if fuel <= 0 then Ok (Pair v (Pair [] ec))
+else case forceVal ec v of
   VPi _ True _ dom clo => if isIndexDomain ec dom then case newMeta ctx ec of
-    Pair metaTerm ec1 => andThen (instantiateNullaryCtor ec1 ctx (applyClosure clo (eval (ctxEnv ctx) metaTerm))) (\p => case p of
+    Pair metaTerm ec1 => andThen (instantiateNullaryCtorFuel (fuel - 1) ec1 ctx (applyClosure clo (eval (ctxEnv ctx) metaTerm))) (\p => case p of
       Pair ty (Pair metas ec2) => Ok (Pair ty (Pair (metaTerm :: metas) ec2))
     )
   else Ok (Pair v (Pair [] ec))
@@ -246,10 +254,16 @@ checkScopedFrom ec ((Pair m created) :: rest) sols = case metaLookup m sols of
 
 -- 未解元变量：返回第一个未解的编号。
 unsolvedFrom : Int -> Int -> List (Pair Int Value) -> Maybe Int
-unsolvedFrom i stop sols = if i >= stop then Nothing
-else case metaLookup i sols of
-  Just _ => unsolvedFrom (i + 1) stop sols
-  Nothing => Just i
+unsolvedFrom i stop sols = unsolvedFromGo (stop - i) stop sols
+
+unsolvedFromGo : Int -> Int -> List (Pair Int Value) -> Maybe Int
+unsolvedFromGo remaining stop sols = if remaining <= 0 then Nothing
+else
+  let
+    i = stop - remaining
+  in case metaLookup i sols of
+    Just _ => unsolvedFromGo (remaining - 1) stop sols
+    Nothing => Just i
 
 memMetaId : Int -> List Int -> Bool
 memMetaId i ids = case ids of
@@ -422,27 +436,42 @@ resultSpine ty = case ty of
 -- 解是 level 形态：按**当前 binder 深度** quote 成项即可；解里出现越界 index（负数）说明
 -- 它引用了当前项作用域外的变量，此时不内联（保守，留原元变量）。
 inlineSolvedMetas : Ec -> Int -> Term -> Term
-inlineSolvedMetas ec depth t = case t of
+inlineSolvedMetas ec depth t = inlineSolvedMetasFuel 64 ec depth t
+
+inlineSolvedMetasFuel : Int -> Ec -> Int -> Term -> Term
+inlineSolvedMetasFuel fuel ec depth t = if fuel <= 0 then t
+else case t of
   TMeta m => case metaLookup m (ecSols ec) of
     Just v =>
       let
         q = quote depth v
-      in if hasOutOfScopeVar q then t else inlineSolvedMetas ec depth q
+      in if hasOutOfScopeVar q then t else inlineSolvedMetasFuel (fuel - 1) ec depth q
     Nothing => t
-  TPi n i r d c => TPi n i r (inlineSolvedMetas ec depth d) (inlineSolvedMetas ec (depth + 1) c)
-  TLam n r b => TLam n r (inlineSolvedMetas ec (depth + 1) b)
-  TApp f a r => TApp (inlineSolvedMetas ec depth f) (inlineSolvedMetas ec depth a) r
+  TPi n i r d c =>
+    TPi n i r (inlineSolvedMetasFuel (fuel - 1) ec depth d)
+      (inlineSolvedMetasFuel (fuel - 1) ec (depth + 1) c)
+  TLam n r b => TLam n r (inlineSolvedMetasFuel (fuel - 1) ec (depth + 1) b)
+  TApp f a r =>
+    TApp (inlineSolvedMetasFuel (fuel - 1) ec depth f) (inlineSolvedMetasFuel (fuel - 1) ec depth a)
+      r
   TCon c args =>
-    TCon c (map (\p => Pair (inlineSolvedMetas ec depth (firstOf p)) (secondOf p)) args)
-  TCase s alts => TCase (inlineSolvedMetas ec depth s) (map (inlineSolvedMetaAlt ec depth) alts)
+    TCon c
+      (map (\p => Pair (inlineSolvedMetasFuel (fuel - 1) ec depth (firstOf p)) (secondOf p)) args)
+  TCase s alts =>
+    TCase (inlineSolvedMetasFuel (fuel - 1) ec depth s)
+      (map (\alt => inlineSolvedMetaAltFuel (fuel - 1) ec depth alt) alts)
   TIf c th el =>
-    TIf (inlineSolvedMetas ec depth c) (inlineSolvedMetas ec depth th)
-      (inlineSolvedMetas ec depth el)
+    TIf (inlineSolvedMetasFuel (fuel - 1) ec depth c) (inlineSolvedMetasFuel (fuel - 1) ec depth th)
+      (inlineSolvedMetasFuel (fuel - 1) ec depth el)
   _ => t
 
 inlineSolvedMetaAlt : Ec -> Int -> CaseAlt -> CaseAlt
-inlineSolvedMetaAlt ec depth (CaseAlt n bs b) =
-  CaseAlt n bs (inlineSolvedMetas ec (depth + length bs) b)
+inlineSolvedMetaAlt ec depth alt = inlineSolvedMetaAltFuel 64 ec depth alt
+
+inlineSolvedMetaAltFuel : Int -> Ec -> Int -> CaseAlt -> CaseAlt
+inlineSolvedMetaAltFuel fuel ec depth alt0 = if fuel <= 0 then CaseAlt "" [] (TMeta 0)
+else case alt0 of
+  CaseAlt n bs b => CaseAlt n bs (inlineSolvedMetasFuel (fuel - 1) ec (depth + length bs) b)
 
 -- quote 出来的项里出现负 index：解引用了当前项作用域外的变量，不能内联。
 hasOutOfScopeVar : Term -> Bool
@@ -557,8 +586,12 @@ fieldBinderNames : Int -> List (Pair String Rig)
 fieldBinderNames n = fieldBinderGo n 0 []
 
 fieldBinderGo : Int -> Int -> List (Pair String Rig) -> List (Pair String Rig)
-fieldBinderGo n i acc =
-  if i >= n then reverse acc else fieldBinderGo n (i + 1) (Pair (fieldVarName i) Rig1 :: acc)
+fieldBinderGo n i acc = fieldBinderGoGo (n - i) n acc
+
+fieldBinderGoGo : Int -> Int -> List (Pair String Rig) -> List (Pair String Rig)
+fieldBinderGoGo remaining n acc =
+  if remaining <= 0 then reverse acc
+  else fieldBinderGoGo (remaining - 1) n (Pair (fieldVarName (n - remaining)) Rig1 :: acc)
 
 -- M24.7：按**短名**查类（库里的类名带模块前缀，如 `Base.Eq.Eq`；`==` / `<` 的字典
 -- 查找从 `ecClasses` 按最后一段反查，找不到时调用方退回泛型运行时兜底）。
@@ -613,10 +646,15 @@ typeLayerRig : Bool -> Value -> Rig
 typeLayerRig implicit dom = if implicit then Rig0 else if isTypeLayerValue dom then Rig0 else Rig1
 
 isTypeLayerValue : Value -> Bool
-isTypeLayerValue v = case v of
+isTypeLayerValue v = isTypeLayerValueFuel 128 v
+
+isTypeLayerValueFuel : Int -> Value -> Bool
+isTypeLayerValueFuel fuel v = if fuel <= 0 then False
+else case v of
   VType l => True
   VPi pname implicit rig dom clo =>
-    isTypeLayerValue dom && isTypeLayerValue (applyClosure clo (VNeutral (NVar pname 0 [])))
+    isTypeLayerValueFuel (fuel - 1) dom
+      && isTypeLayerValueFuel (fuel - 1) (applyClosure clo (VNeutral (NVar pname 0 [])))
   _ => False
 
 isDataHead : List DtData -> Value -> Bool

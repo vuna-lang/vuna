@@ -17,6 +17,7 @@ open Vuna_dCompiler_dFrontend_dManifest
 open Vuna_dCompiler_dPackages_dPkg
 open Vuna_dCompiler_dFrontend_dAst
 open Vuna_dCompiler_dFrontend_dLexer
+open Vuna_dCompiler_dFrontend_dParser_dSupport
 open Vuna_dCompiler_dFrontend_dParser
 open Vuna_dCompiler_dLoader_dModules
 open Vuna_dCompiler_dLoader_dResolve
@@ -33,11 +34,15 @@ open Vuna_dCompiler_dElab_dMeta
 open Vuna_dCompiler_dElab_dCase
 open Vuna_dCompiler_dElab_dDict
 open Vuna_dCompiler_dElab_dMatch
+open Vuna_dCompiler_dElab_dTerm_dSupport
+open Vuna_dCompiler_dElab_dTerm_dImpl
 open Vuna_dCompiler_dElab_dTerm
 open Vuna_dCompiler_dElab_dData
 open Vuna_dCompiler_dElab_dTrait
 open Vuna_dCompiler_dElab_dDerive
 open Vuna_dCompiler_dElab_dRecords
+open Vuna_dCompiler_dElab_dTermination_dMeasure
+open Vuna_dCompiler_dElab_dTermination_dScc
 open Vuna_dCompiler_dElab_dTermination
 open Vuna_dCompiler_dElab_dDriver
 open Vuna_dCompiler_dElab

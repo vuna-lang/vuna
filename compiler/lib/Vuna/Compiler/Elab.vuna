@@ -8,8 +8,6 @@ module Vuna.Compiler.Elab
   , Driver.dtGoalInfoSpan
   , Driver.elabProgram
   , Driver.elabProgramFull
-  , Driver.elabProgramFullWith
-  , Driver.elabProgramWith
   , Driver.goalsOfProgram
   , Meta.dictCtorName
   , Meta.dictTypeName

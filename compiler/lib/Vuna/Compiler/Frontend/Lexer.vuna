@@ -123,15 +123,16 @@ skipBlockComment depth cs = case cs of
       else skipBlockComment depth (Chars rest (advanceChar c p))
     [] => skipBlockComment depth (Chars rest (advanceChar c p))
 
-skipTrivia : Chars -> Result Chars
-skipTrivia cs = case cs of
+skipTrivia : Int -> Chars -> Result Chars
+skipTrivia fuel cs = if fuel <= 0 then Err "DT: lexer fuel exhausted (internal: lexer made no progress)"
+else case cs of
   Chars [] p => Ok cs
-  Chars (c :: rest) p => if isSpace c then skipTrivia (Chars rest (advanceChar c p))
+  Chars (c :: rest) p => if isSpace c then skipTrivia (fuel - 1) (Chars rest (advanceChar c p))
   else case rest of
-    c2 :: rest2 => if c == 45 && c2 == 45 then skipTrivia (skipLineComment (Chars rest (advanceChar c p)))
+    c2 :: rest2 => if c == 45 && c2 == 45 then skipTrivia (fuel - 1) (skipLineComment (Chars rest (advanceChar c p)))
     else if c == 123 && c2 == 45 then case skipBlockComment 1 (Chars rest (advanceChar c p)) of
       Err e => Err e
-      Ok cs2 => skipTrivia cs2
+      Ok cs2 => skipTrivia (fuel - 1) cs2
     else Ok cs
     [] => Ok cs
 
@@ -176,38 +177,45 @@ scanEscape (Chars (c :: rest) p) acc =
   else if c == 39 then scanString (Chars rest (advanceChar c p)) (39 :: acc)
   else Err "unknown escape sequence"
 
-lexChars : Chars -> Result (List PTok)
-lexChars cs = case skipTrivia cs of
+lexChars : Int -> Chars -> Result (List PTok)
+lexChars fuel cs = if fuel <= 0 then Err "DT: lexer fuel exhausted (internal: lexer made no progress)"
+else case skipTrivia (fuel - 1) cs of
   Err e => Err e
   Ok cs2 => case cs2 of
     Chars [] p => Ok [PTok TEof p]
-    Chars (c :: rest) p => lexToken c rest p
+    Chars (c :: rest) p => lexToken (fuel - 1) c rest p
 
-lexToken : Int -> List Int -> Pos -> Result (List PTok)
-lexToken c rest p = if isIdentStart c then case collectIdent (Chars rest (advanceChar c p)) [c] of
-  Pair name cs2 => case lexChars cs2 of
+lexToken : Int -> Int -> List Int -> Pos -> Result (List PTok)
+lexToken fuel c rest p = if fuel <= 0 then Err "DT: lexer fuel exhausted (internal: lexer made no progress)"
+else if isIdentStart c then case collectIdent (Chars rest (advanceChar c p)) [c] of
+  Pair name cs2 => case lexChars (fuel - 1) cs2 of
     Err e => Err e
     Ok toks => Ok (PTok (classifyIdent name) p :: toks)
 else if isDigit c then case collectInt (Chars rest (advanceChar c p)) (c - 48) of
-  Pair n cs2 => case lexChars cs2 of
+  Pair n cs2 => case lexChars (fuel - 1) cs2 of
     Err e => Err e
     Ok toks => Ok (PTok (TInt n) p :: toks)
 else if c == 34 then case scanString (Chars rest (advanceChar c p)) [] of
   Err e => Err e
-  Ok (Pair s cs2) => case lexChars cs2 of
+  Ok (Pair s cs2) => case lexChars (fuel - 1) cs2 of
     Err e => Err e
     Ok toks => Ok (PTok (TStr s) p :: toks)
-else if c == 40 || c == 41 || c == 91 || c == 93 || c == 44 || c == 123 || c == 125 then case lexChars (Chars rest (advanceChar c p)) of
+else if c == 40 || c == 41 || c == 91 || c == 93 || c == 44 || c == 123 || c == 125 then case lexChars (fuel - 1) (Chars rest (advanceChar c p)) of
   Err e => Err e
   Ok toks => Ok (PTok (TSym (strPack [c])) p :: toks)
 else if isOpChar c then case collectOp (Chars rest (advanceChar c p)) [c] of
-  Pair op cs2 => case lexChars cs2 of
+  Pair op cs2 => case lexChars (fuel - 1) cs2 of
     Err e => Err e
     Ok toks => Ok (PTok (TSym op) p :: toks)
 else Err "unexpected character"
 
 lexSource : String -> Result (List PTok)
-lexSource source = lexChars (Chars (strUnpack source) (Pos 1 1))
+lexSource source = lexChars (sourceFuel source) (Chars (strUnpack source) (Pos 1 1))
+
+-- 显式 fuel 的初值：lexChars→lexToken 每次 token 至少两次递归，另有逐字符 skipTrivia，
+-- 故按源串长度线性放大；64 兜住短输入。
+sourceFuel : String -> Int
+sourceFuel source = 8 * strLength source + 64
 
 -- ---------------------------------------------------------------
 -- 注释扫描（fmt 用）：注释不进入 token 流，但格式化器需要保留它们。
@@ -271,22 +279,26 @@ collectBlockBody (Chars (c :: rest) p) depth acc endP = case rest of
 commentSpanOf : Pos -> Pos -> Span
 commentSpanOf startP endP = Span "" (posLine startP) (posCol startP) (posLine endP) (posCol endP)
 
-scanComments : Chars -> List Comment -> Result (List Comment)
-scanComments (Chars [] p) acc = Ok (reverse acc)
-scanComments (Chars (c :: rest) p) acc = if c == 34 then case skipStringBody (Chars rest (advanceChar c p)) of
+scanComments : Int -> Chars -> List Comment -> Result (List Comment)
+scanComments fuel (Chars [] p) acc =
+  if fuel <= 0 then Err "DT: lexer fuel exhausted (internal: lexer made no progress)"
+  else Ok (reverse acc)
+scanComments fuel (Chars (c :: rest) p) acc = if fuel <= 0 then Err "DT: lexer fuel exhausted (internal: lexer made no progress)"
+else if c == 34 then case skipStringBody (Chars rest (advanceChar c p)) of
   Err e => Err e
-  Ok cs2 => scanComments cs2 acc
+  Ok cs2 => scanComments (fuel - 1) cs2 acc
 else case rest of
   c2 :: rest2 => if c == 45 && c2 == 45 then case collectLineBody (Chars rest2 (advanceChar c2 (advanceChar c p))) [] (advanceChar c2 p) of
     Pair text (Pair cs2 endP) =>
-      scanComments cs2 (Comment CLine (trimTrailingSpace text) (commentSpanOf p endP) :: acc)
+      scanComments (fuel - 1) cs2
+        (Comment CLine (trimTrailingSpace text) (commentSpanOf p endP) :: acc)
   else if c == 123 && c2 == 45 then case collectBlockBody (Chars rest2 (advanceChar c2 (advanceChar c p))) 1 [] (advanceChar c2 p) of
     Err e => Err e
     Ok (Pair text (Pair cs2 endP)) =>
-      scanComments cs2 (Comment CBlock text (commentSpanOf p endP) :: acc)
-  else scanComments (Chars rest (advanceChar c p)) acc
+      scanComments (fuel - 1) cs2 (Comment CBlock text (commentSpanOf p endP) :: acc)
+  else scanComments (fuel - 1) (Chars rest (advanceChar c p)) acc
   [] => Ok (reverse acc)
 
 -- 扫描整段源码里的注释（源码顺序），供格式化器按位置重新插入。
 lexComments : String -> Result (List Comment)
-lexComments source = scanComments (Chars (strUnpack source) (Pos 1 1)) []
+lexComments source = scanComments (sourceFuel source) (Chars (strUnpack source) (Pos 1 1)) []

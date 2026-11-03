@@ -1,0 +1,17 @@
+-- M25.2a 正例：普通结构递归（列表 / Nat）应被接受。
+import Prelude
+
+data Nat : Type where
+  Zero : Nat
+  Succ : Nat -> Nat
+
+length2 : List Int -> Int
+length2 Nil = 0
+length2 (Cons x rest) = 1 + length2 rest
+
+plus : Nat -> Nat -> Nat
+plus Zero b = b
+plus (Succ k) b = Succ (plus k b)
+
+main : Int
+main = length2 (Cons 1 (Cons 2 Nil))

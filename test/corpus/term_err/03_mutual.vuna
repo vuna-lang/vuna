@@ -1,0 +1,9 @@
+-- M25.2a 负例：互递归组无下降（旧实现完全不查互递归）。
+ping : Int -> Int
+ping n = pong n
+
+pong : Int -> Int
+pong n = ping n
+
+main : Int
+main = 0

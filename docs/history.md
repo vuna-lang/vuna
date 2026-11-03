@@ -221,11 +221,32 @@
   （输出 `42`）、`35_io_main.vuna`（`main : IO String`，输出 `"hello"`）；全量
   `test/run-tests.sh` 849 项通过。
 
-- M24 后维护（错误码体系，本波）：诊断加语义错误码前缀 `[TC_/CG_/LN_/FX_]`
-  （`TC_` Elab 精化/终止/覆盖、`CG_` Codegen/Driver/Dt、`LN_` lint 规则、`FX_` 修复规则
-  从可修复 `LN_` 推导）；同语义消息共享一个符号、符号只增不删（`(Mxx)` 不参与判定）；
-  lint 输出 `路径:行:列: [LN_XXX] 规则: 消息`，Elab/Codegen 输出 `文件:行:列: [CODE] DT: ...`；
-  新增 `vuna gen-errors [ROOT]` 从源码 `-- @code` docstring 生成错误码文档
-  （`ROOT/docs/.generated/errors.md`，gitignored、幂等、勿手改）；`test/run-tests.sh` 新增
-  第 36 段（gen-errors 分区 + 幂等断言）。错误码体系与符号约定见
+## M25：健全性与验证基建（2026-11）
+
+- **删除检查豁免**：去掉按包名跳过终止性/覆盖率的 `dtTrustsTermination`/`dtLibraryTrust`/
+  信任字段；compiler、base 与 root 工具链全部源码通过 **SCT（size-change termination）**
+  + 显式 fuel/结构递归检查；覆盖率豁免与 `TInt 0` 哨兵一并删除，缺分支一律报错。
+- **检查器**：调用图 + Kosaraju SCC、每环严格边、守卫 Int（`n>0` + `n-k`）、fuel-thread
+  规则、构造子包装/投影下降；修复旧遍历漏洞（`EApp` 实参、`let`/`where`、`EAnn` 不遍历，
+  互递归不查）；拆 `Elab/Termination`→`Measure`/`Scc`、`Elab/Term`→`Impl`/`Support`。
+- **内核**：`applyValue` 不再静默丢实参（新增 `VApp` 卡住应用）；作用域护栏覆盖全部定义；
+  泛型相等兜底只允许可安全结构比较的类型（函数/含函数字段 data/类型/元变量报错）。
+- **源码可达性**：前端状态机（Lexer/Parser/Toml/Pkg/Loader/CLI）与工具链（Json/Fmt/Files/
+  Index/Lint/Repl/Lsp）用输入规模 fuel 或 `Base.List.range` 结构递归达标；`Base.List.range`
+  改倒计数、`Base.String.split` 共享显式 fuel。
+- **验证基建**：`nix/ci.sh`（eval-cache=false + keep-going）、seed 闭包数量断言
+  `nix/seed-count.txt`、`checks.seed-selfhost` 的 `diff -r seed s1` 同步检查；seed 与源码
+  同步从「允许落后」改为硬不变量；metrics 预算按 SCT/fuel 结构增长重新标定。
+- **基线**：seed 60 `.ml` / 61 文件、1112 checks、`nix flake check` 全绿；诊断去掉里程碑
+  编号；`internal` 前缀只保留给编译器不变量。
+
+## M25 同期：统一错误码体系（main 3734036）
+
+- 诊断加语义错误码前缀 `[TC_/CG_/LN_/FX_]`（`TC_` Elab 精化/终止/覆盖、`CG_`
+  Codegen/Driver/Dt、`LN_` lint 规则、`FX_` 从可修复 `LN_` 推导）；同语义消息共享
+  一个符号、符号只增不删（`(Mxx)` 不参与判定）。
+- lint 输出 `路径:行:列: [LN_XXX] 规则: 消息`，Elab/Codegen 输出
+  `文件:行:列: [CODE] DT: ...`；新增 `vuna gen-errors [ROOT]` 从源码 `-- @code`
+  docstring 生成错误码文档（`ROOT/docs/.generated/errors.md`，gitignored、幂等、勿手改）。
+- `test/run-tests.sh` 新增错误码段（分区 + 幂等）；错误码约定见
   `docs/reference/dt-tooling.md` 第 4 节。

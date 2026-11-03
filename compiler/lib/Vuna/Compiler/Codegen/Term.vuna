@@ -355,12 +355,13 @@ else
     nm = "dtb__" ++ strFromInt fresh
   in altEnvKept (gsPutNext st (fresh + 1)) label (Pair nm Rig1 :: outer) rest (nm :: pats)
 
-genTerm : GenSt -> List (Pair String Rig) -> Term -> Result (Pair String GenSt)
-genTerm st binders t = case t of
+genTermFuel : Int -> GenSt -> List (Pair String Rig) -> Term -> Result (Pair String GenSt)
+genTermFuel fuel st binders t = if fuel <= 0 then Err "DT: internal: codegen fuel exhausted"
+else case t of
   TVar name i => case binderAt i binders of
     Just (Pair oc rig) =>
       if rigIsErased rig then Err
-        ("[CG_TypeLevelBindingRuntime] DT: type-level binding `" ++ name ++ "` is used at runtime (M13 limitation)")
+        ("[CG_TypeLevelBindingRuntime] DT: type-level binding `" ++ name ++ "` is used at runtime")
       else Ok (Pair oc st)
     -- @code CG_TypeLevelBindingRuntime
     Nothing => Err "DT: internal: unbound runtime variable"
@@ -368,46 +369,47 @@ genTerm st binders t = case t of
   TInt n => Ok (Pair (strFromInt n) st)
   TStr s => Ok (Pair (ocamlString s) st)
   TBool b => Ok (Pair (boolText b) st)
-  TIf c th el => andThen (genTerm st binders c) (\pc => case pc of
-    Pair gc st1 => andThen (genTerm st1 binders th) (\pt => case pt of
-      Pair gt st2 => andThen (genTerm st2 binders el) (\pe => case pe of
+  TIf c th el => andThen (genTermFuel (fuel - 1) st binders c) (\pc => case pc of
+    Pair gc st1 => andThen (genTermFuel (fuel - 1) st1 binders th) (\pt => case pt of
+      Pair gt st2 => andThen (genTermFuel (fuel - 1) st2 binders el) (\pe => case pe of
         Pair ge st3 => Ok (Pair ("(if " ++ gc ++ " then " ++ gt ++ " else " ++ ge ++ ")") st3)
       )
     )
   )
-  TLam name rig body => genTermLam st binders name rig body
-  TApp f a rig => genApp st binders f a rig
-  TCon c args => genConApp st binders c args
-  TCase scrut alts => genCase st binders scrut alts
+  TLam name rig body => genTermLamFuel (fuel - 1) st binders name rig body
+  TApp f a rig => genAppFuel (fuel - 1) st binders f a rig
+  TCon c args => genConAppFuel (fuel - 1) st binders c args
+  TCase scrut alts => genCaseFuel (fuel - 1) st binders scrut alts
   -- @code CG_TypeUsedAtRuntime
   TPi name implicit rig dom cod =>
     Err "[CG_TypeUsedAtRuntime] DT: a type is used at runtime (M13 limitation)"
-  -- @code CG_TypeUsedAtRuntime
   TType l => Err "[CG_TypeUsedAtRuntime] DT: a type is used at runtime (M13 limitation)"
   -- @code CG_UnsolvedMetavarRuntime
   TMeta m =>
     Err ("[CG_UnsolvedMetavarRuntime] DT: unsolved metavariable in runtime code" ++ showMetaHint m)
 
-genTermLam : GenSt -> List (Pair String Rig) -> String -> Rig -> Term -> Result (Pair String GenSt)
-genTermLam st binders name rig body = if rigIsErased rig then andThen (genTerm st (Pair "" Rig0 :: binders) body) (\p => case p of
+genTermLamFuel : Int -> GenSt -> List (Pair String Rig) -> String -> Rig -> Term -> Result (Pair String GenSt)
+genTermLamFuel fuel st binders name rig body = if fuel <= 0 then Err "DT: internal: codegen fuel exhausted"
+else if rigIsErased rig then andThen (genTermFuel (fuel - 1) st (Pair "" Rig0 :: binders) body) (\p => case p of
   Pair b st2 => Ok (Pair b st2)
 )
 else
   let
     ocName = ocamlBinderName name
-  in andThen (genTerm st (Pair ocName Rig1 :: binders) body) (\p => case p of
+  in andThen (genTermFuel (fuel - 1) st (Pair ocName Rig1 :: binders) body) (\p => case p of
     Pair b st2 => Ok (Pair ("(fun " ++ ocName ++ " -> " ++ b ++ ")") st2)
   )
 
 -- 应用：精化器可能把饱和的构造子应用表示成嵌套 `TApp (TApp (TCon c []) a) b`。
 -- 这种形态必须先折叠成 `TCon c [a, b]`，否则 OCaml 侧会把它当成 curried 调用
 -- （多变体构造子是 tupled 的，`C 1 2` 类型不对）。
-genApp : GenSt -> List (Pair String Rig) -> Term -> Term -> Rig -> Result (Pair String GenSt)
-genApp st binders f a rig = if rigIsErased rig then genTerm st binders f
+genAppFuel : Int -> GenSt -> List (Pair String Rig) -> Term -> Term -> Rig -> Result (Pair String GenSt)
+genAppFuel fuel st binders f a rig = if fuel <= 0 then Err "DT: internal: codegen fuel exhausted"
+else if rigIsErased rig then genTermFuel (fuel - 1) st binders f
 else case flattenConApp (TApp f a rig) of
-  Just (Pair c args) => genConApp st binders c args
-  Nothing => andThen (genTerm st binders f) (\pf => case pf of
-    Pair fs st1 => andThen (genTerm st1 binders a) (\pa => case pa of
+  Just (Pair c args) => genConAppFuel (fuel - 1) st binders c args
+  Nothing => andThen (genTermFuel (fuel - 1) st binders f) (\pf => case pf of
+    Pair fs st1 => andThen (genTermFuel (fuel - 1) st1 binders a) (\pa => case pa of
       Pair at st2 => Ok (Pair ("(" ++ fs ++ " " ++ at ++ ")") st2)
     )
   )
@@ -436,20 +438,23 @@ alignCtorArgs label (keep :: flags) ((Pair arg rig) :: rest) =
   else if rigIsErased rig then alignCtorArgs label flags rest
   else alignCtorArgs label flags (Pair arg rig :: rest)
 
-genConArgs : GenSt -> List (Pair String Rig) -> List (Pair Term Rig) -> Result (Pair (List String) GenSt)
-genConArgs st binders [] = Ok (Pair [] st)
-genConArgs st binders ((Pair arg rig) :: rest) = andThen (genTerm st binders arg) (\p => case p of
-  Pair text st2 => andThen (genConArgs st2 binders rest) (\q => case q of
+genConArgsFuel : Int -> GenSt -> List (Pair String Rig) -> List (Pair Term Rig) -> Result (Pair (List String) GenSt)
+genConArgsFuel fuel st binders [] =
+  if fuel <= 0 then Err "DT: internal: codegen fuel exhausted" else Ok (Pair [] st)
+genConArgsFuel fuel st binders ((Pair arg rig) :: rest) = if fuel <= 0 then Err "DT: internal: codegen fuel exhausted"
+else andThen (genTermFuel (fuel - 1) st binders arg) (\p => case p of
+  Pair text st2 => andThen (genConArgsFuel (fuel - 1) st2 binders rest) (\q => case q of
     Pair texts st3 => Ok (Pair (text :: texts) st3)
   )
 )
 
-genConApp : GenSt -> List (Pair String Rig) -> String -> List (Pair Term Rig) -> Result (Pair String GenSt)
-genConApp st binders c args = case lookupPair c (gsCtors st) of
+genConAppFuel : Int -> GenSt -> List (Pair String Rig) -> String -> List (Pair Term Rig) -> Result (Pair String GenSt)
+genConAppFuel fuel st binders c args = if fuel <= 0 then Err "DT: internal: codegen fuel exhausted"
+else case lookupPair c (gsCtors st) of
   Nothing => Err ("DT: internal: unknown constructor " ++ c)
   Just family => case lookupPair c (gsCtorShapes st) of
     Nothing => Err ("DT: internal: no shape for constructor " ++ c)
-    Just flags => andThen (alignCtorArgs c flags args) (\runtimeArgs => andThen (genConArgs st binders runtimeArgs) (\p => case p of
+    Just flags => andThen (alignCtorArgs c flags args) (\runtimeArgs => andThen (genConArgsFuel (fuel - 1) st binders runtimeArgs) (\p => case p of
       Pair argTexts st2 => Ok (Pair (conAppText (ctorOcamlName family c) argTexts) st2)
     )
     )
@@ -462,21 +467,22 @@ armPatternText : String -> List String -> String
 armPatternText cname [] = cname
 armPatternText cname pats = cname ++ " (" ++ joinWith ", " pats ++ ")"
 
-genArm : GenSt -> List (Pair String Rig) -> CaseAlt -> Result (Pair String GenSt)
-genArm st outer alt = if caseAltName alt == "" then
+genArmFuel : Int -> GenSt -> List (Pair String Rig) -> CaseAlt -> Result (Pair String GenSt)
+genArmFuel fuel st outer alt = if fuel <= 0 then Err "DT: internal: codegen fuel exhausted"
+else if caseAltName alt == "" then
   let
     bound = altEnv st outer (caseAltBinders alt)
     patText = case aePats bound of
       [] => "_"
       p :: rest => p
-  in andThen (genTerm (aeSt bound) (aeEnv bound) (caseAltBody alt)) (\p => case p of
+  in andThen (genTermFuel (fuel - 1) (aeSt bound) (aeEnv bound) (caseAltBody alt)) (\p => case p of
     Pair b st2 => Ok (Pair ("  | " ++ patText ++ " -> " ++ b ++ "\n") st2)
   )
 else case lookupPair (caseAltName alt) (gsCtors st) of
   Nothing => Err ("DT: internal: unknown constructor " ++ caseAltName alt)
   Just family => case lookupPair (caseAltName alt) (gsCtorShapes st) of
     Nothing => Err ("DT: internal: no shape for constructor " ++ caseAltName alt)
-    Just flags => andThen (altEnvChecked st (caseAltName alt) outer (caseAltBinders alt) flags) (\bound => andThen (genTerm (aeSt bound) (aeEnv bound) (caseAltBody alt)) (\p => case p of
+    Just flags => andThen (altEnvChecked st (caseAltName alt) outer (caseAltBinders alt) flags) (\bound => andThen (genTermFuel (fuel - 1) (aeSt bound) (aeEnv bound) (caseAltBody alt)) (\p => case p of
       Pair b st2 =>
         let
           cname = ctorOcamlName family (caseAltName alt)
@@ -485,17 +491,20 @@ else case lookupPair (caseAltName alt) (gsCtors st) of
     )
     )
 
-genArms : GenSt -> List (Pair String Rig) -> List CaseAlt -> Result (Pair String GenSt)
-genArms st binders [] = Ok (Pair "" st)
-genArms st binders (alt :: rest) = andThen (genArm st binders alt) (\p => case p of
-  Pair arm st2 => andThen (genArms st2 binders rest) (\q => case q of
+genArmsFuel : Int -> GenSt -> List (Pair String Rig) -> List CaseAlt -> Result (Pair String GenSt)
+genArmsFuel fuel st binders [] =
+  if fuel <= 0 then Err "DT: internal: codegen fuel exhausted" else Ok (Pair "" st)
+genArmsFuel fuel st binders (alt :: rest) = if fuel <= 0 then Err "DT: internal: codegen fuel exhausted"
+else andThen (genArmFuel (fuel - 1) st binders alt) (\p => case p of
+  Pair arm st2 => andThen (genArmsFuel (fuel - 1) st2 binders rest) (\q => case q of
     Pair arms st3 => Ok (Pair (arm ++ arms) st3)
   )
 )
 
-genCase : GenSt -> List (Pair String Rig) -> Term -> List CaseAlt -> Result (Pair String GenSt)
-genCase st binders scrut alts = andThen (genTerm st binders scrut) (\p => case p of
-  Pair scrutText st1 => andThen (genArms st1 binders alts) (\q => case q of
+genCaseFuel : Int -> GenSt -> List (Pair String Rig) -> Term -> List CaseAlt -> Result (Pair String GenSt)
+genCaseFuel fuel st binders scrut alts = if fuel <= 0 then Err "DT: internal: codegen fuel exhausted"
+else andThen (genTermFuel (fuel - 1) st binders scrut) (\p => case p of
+  Pair scrutText st1 => andThen (genArmsFuel (fuel - 1) st1 binders alts) (\q => case q of
     Pair arms st2 =>
       let
         fallback =
@@ -598,3 +607,28 @@ ioRunText : Pair (List DtData) (List DtDef) -> String -> String
 ioRunText program mainRef = case ioCtorOf (firstOf program) of
   Just (Pair family ctor) =>
     "match " ++ mainRef ++ " with " ++ ctorOcamlName family ctor ++ " f -> f 0"
+  Nothing => mainRef
+
+genTerm : GenSt -> List (Pair String Rig) -> Term -> Result (Pair String GenSt)
+genTerm a1 a2 a3 = genTermFuel 512 a1 a2 a3
+
+genTermLam : GenSt -> List (Pair String Rig) -> String -> Rig -> Term -> Result (Pair String GenSt)
+genTermLam a1 a2 a3 a4 a5 = genTermLamFuel 512 a1 a2 a3 a4 a5
+
+genApp : GenSt -> List (Pair String Rig) -> Term -> Term -> Rig -> Result (Pair String GenSt)
+genApp a1 a2 a3 a4 a5 = genAppFuel 512 a1 a2 a3 a4 a5
+
+genConApp : GenSt -> List (Pair String Rig) -> String -> List (Pair Term Rig) -> Result (Pair String GenSt)
+genConApp a1 a2 a3 a4 = genConAppFuel 512 a1 a2 a3 a4
+
+genConArgs : GenSt -> List (Pair String Rig) -> List (Pair Term Rig) -> Result (Pair (List String) GenSt)
+genConArgs a1 a2 a3 = genConArgsFuel 512 a1 a2 a3
+
+genArm : GenSt -> List (Pair String Rig) -> CaseAlt -> Result (Pair String GenSt)
+genArm a1 a2 a3 = genArmFuel 512 a1 a2 a3
+
+genArms : GenSt -> List (Pair String Rig) -> List CaseAlt -> Result (Pair String GenSt)
+genArms a1 a2 a3 = genArmsFuel 512 a1 a2 a3
+
+genCase : GenSt -> List (Pair String Rig) -> Term -> List CaseAlt -> Result (Pair String GenSt)
+genCase a1 a2 a3 a4 = genCaseFuel 512 a1 a2 a3 a4

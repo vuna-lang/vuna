@@ -11,6 +11,12 @@ import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Frontend.Lexer
 import Vuna.Compiler.Loader.Modules
 
+-- 解析器递归显式 fuel：下降证明只认同一参数位置的严格递减，而这里
+-- 递归既沿表达式子项也沿绑定列表/作用域前进，单测度表达不了；用 fuel + 递减。
+-- 上界远大于任何可由内存构造的 AST 的递归调用数（1G）。
+resolveFuelBound : Int
+resolveFuelBound = 1073741824
+
 -- 内建函数的名字与元数（原 `Vuna.Compiler.Loader.Builtins`，M24 后维护（源码重组）合并进本模块）。
 builtinArity : String -> Maybe Int
 builtinArity "+" = Just 2
@@ -192,7 +198,7 @@ dropSegs n [] = []
 dropSegs n (x :: rest) = if n <= 0 then x :: rest else dropSegs (n - 1) rest
 
 resolveQualifiedPath : List Module -> String -> List Import -> List String -> Int -> Span -> Result (Maybe Expr)
-resolveQualifiedPath modules label imports segs n sp = if n <= 1 then Ok Nothing
+resolveQualifiedPath modules label imports segs n sp = if n < 1 then Ok Nothing
 else case findImportPrefix imports (joinDots (takeSegs (n - 1) segs)) of
   Just m => andThen (exportsOf modules m) (\es => case dropSegs (n - 1) segs of
     [member] => if isGlobalCtor member then Ok (Just (EVar member sp))
@@ -246,74 +252,85 @@ checkTopName label name =
 resolveTopName : String -> String -> String -> Result String
 resolveTopName label prefix name = andThen (checkTopName label name) (\_ => Ok (mangle prefix name))
 
-resolvePattern : List Module -> String -> String -> List String -> List Import -> Pat -> Result (Pair Pat (List String))
-resolvePattern modules label prefix ownCtors imports pat = case pat of
+resolvePattern : Int -> List Module -> String -> String -> List String -> List Import -> Pat -> Result (Pair Pat (List String))
+resolvePattern fuel modules label prefix ownCtors imports pat = if fuel <= 0 then Err "DT: resolve fuel exhausted (internal: resolver made no progress)"
+else case pat of
   PWild sp => Ok (Pair (PWild sp) [])
   PVar name sp => andThen (checkBinder label name) (\_ => Ok (Pair (PVar name sp) [name]))
   PInt n sp => Ok (Pair (PInt n sp) [])
   PStr s sp => Ok (Pair (PStr s sp) [])
   PCon name pats sp =>
     andThen (resolveCtor modules label prefix ownCtors imports name)
-      (\name2 => andThen (traverse (resolvePattern modules label prefix ownCtors imports) pats) (\parts => Ok (Pair (PCon name2 (map firstOf parts) sp) (concatMap secondOf parts))))
+      (\name2 => andThen (traverse (\dtv => resolvePattern (fuel - 1) modules label prefix ownCtors imports dtv) pats) (\parts => Ok (Pair (PCon name2 (map firstOf parts) sp) (concatMap secondOf parts))))
   PRecord name fields sp =>
     andThen (resolveCtor modules label prefix ownCtors imports name)
-      (\name2 => andThen (traverse (resolveRecordPatternField modules label prefix ownCtors imports) fields) (\parts => Ok (Pair (PRecord name2 (map firstOf parts) sp) (concatMap secondOf parts))))
+      (\name2 => andThen (traverse (\dtv => resolveRecordPatternField (fuel - 1) modules label prefix ownCtors imports dtv) fields) (\parts => Ok (Pair (PRecord name2 (map firstOf parts) sp) (concatMap secondOf parts))))
 
-resolveRecordPatternField : List Module -> String -> String -> List String -> List Import -> Pair String Pat -> Result (Pair (Pair String Pat) (List String))
-resolveRecordPatternField modules label prefix ownCtors imports (Pair fname pat) = andThen (resolvePattern modules label prefix ownCtors imports pat) (\p => case p of
+resolveRecordPatternField : Int -> List Module -> String -> String -> List String -> List Import -> Pair String Pat -> Result (Pair (Pair String Pat) (List String))
+resolveRecordPatternField fuel modules label prefix ownCtors imports (Pair fname pat) = if fuel <= 0 then Err "DT: resolve fuel exhausted (internal: resolver made no progress)"
+else andThen (resolvePattern (fuel - 1) modules label prefix ownCtors imports pat) (\p => case p of
   Pair pat2 bound => Ok (Pair (Pair fname pat2) bound)
 )
 
-resolveAlt : List Module -> String -> String -> List String -> List String -> List Import -> List String -> Pair Pat Expr -> Result (Pair Pat Expr)
-resolveAlt modules label prefix own ownCtors imports scope (Pair pat body) = andThen (resolvePattern modules label prefix ownCtors imports pat) (\p => case p of
+resolveAlt : Int -> List Module -> String -> String -> List String -> List String -> List Import -> List String -> Pair Pat Expr -> Result (Pair Pat Expr)
+resolveAlt fuel modules label prefix own ownCtors imports scope (Pair pat body) = if fuel <= 0 then Err "DT: resolve fuel exhausted (internal: resolver made no progress)"
+else andThen (resolvePattern resolveFuelBound modules label prefix ownCtors imports pat) (\p => case p of
   Pair pat2 bound =>
-    andThen (resolveExpr modules label prefix own ownCtors imports (append bound scope) body)
+    andThen
+      (resolveExpr (fuel - 1) modules label prefix own ownCtors imports (append bound scope) body)
       (\body2 => Ok (Pair pat2 body2))
 )
 
-resolveLet : List Module -> String -> String -> List String -> List String -> List Import -> List String -> Bool -> List (Pair Pat Expr) -> Expr -> Result (Pair (List (Pair Pat Expr)) Expr)
-resolveLet modules label prefix own ownCtors imports scope rec_ binds body =
-  if rec_ then resolveRecLet modules label prefix own ownCtors imports scope binds body
-  else resolveLetSeq modules label prefix own ownCtors imports scope binds body
+resolveLet : Int -> List Module -> String -> String -> List String -> List String -> List Import -> List String -> Bool -> List (Pair Pat Expr) -> Expr -> Result (Pair (List (Pair Pat Expr)) Expr)
+resolveLet fuel modules label prefix own ownCtors imports scope rec_ binds body =
+  if fuel <= 0 then Err "DT: resolve fuel exhausted (internal: resolver made no progress)"
+  else if rec_ then resolveRecLet (fuel - 1) modules label prefix own ownCtors imports scope binds body
+  else resolveLetSeq (fuel - 1) modules label prefix own ownCtors imports scope binds body
 
-resolveLetSeq : List Module -> String -> String -> List String -> List String -> List Import -> List String -> List (Pair Pat Expr) -> Expr -> Result (Pair (List (Pair Pat Expr)) Expr)
-resolveLetSeq modules label prefix own ownCtors imports scope binds body = case binds of
+resolveLetSeq : Int -> List Module -> String -> String -> List String -> List String -> List Import -> List String -> List (Pair Pat Expr) -> Expr -> Result (Pair (List (Pair Pat Expr)) Expr)
+resolveLetSeq fuel modules label prefix own ownCtors imports scope binds body = if fuel <= 0 then Err "DT: resolve fuel exhausted (internal: resolver made no progress)"
+else case binds of
   [] =>
-    andThen (resolveExpr modules label prefix own ownCtors imports scope body)
+    andThen (resolveExpr (fuel - 1) modules label prefix own ownCtors imports scope body)
       (\b => Ok (Pair [] b))
-  (Pair pat value) :: rest => andThen (resolveExpr modules label prefix own ownCtors imports scope value) (\value2 => andThen (resolvePattern modules label prefix ownCtors imports pat) (\p => case p of
-    Pair pat2 bound => andThen (resolveLetSeq modules label prefix own ownCtors imports (append bound scope) rest body) (\r => case r of
+  (Pair pat value) :: rest => andThen (resolveExpr (fuel - 1) modules label prefix own ownCtors imports scope value) (\value2 => andThen (resolvePattern resolveFuelBound modules label prefix ownCtors imports pat) (\p => case p of
+    Pair pat2 bound => andThen (resolveLetSeq (fuel - 1) modules label prefix own ownCtors imports (append bound scope) rest body) (\r => case r of
       Pair binds2 body2 => Ok (Pair (Pair pat2 value2 :: binds2) body2)
     )
   )
   )
 
 -- 递归 let（where 块）：所有绑定名对全部 value 与 body 可见。
-resolveRecLet : List Module -> String -> String -> List String -> List String -> List Import -> List String -> List (Pair Pat Expr) -> Expr -> Result (Pair (List (Pair Pat Expr)) Expr)
-resolveRecLet modules label prefix own ownCtors imports scope binds body = case collectRecBinds modules label prefix ownCtors imports binds of
+resolveRecLet : Int -> List Module -> String -> String -> List String -> List String -> List Import -> List String -> List (Pair Pat Expr) -> Expr -> Result (Pair (List (Pair Pat Expr)) Expr)
+resolveRecLet fuel modules label prefix own ownCtors imports scope binds body = if fuel <= 0 then Err "DT: resolve fuel exhausted (internal: resolver made no progress)"
+else case collectRecBinds modules label prefix ownCtors imports binds of
   Err e => Err e
   Ok (Pair names pairs) =>
     let
       scope2 = append names scope
-    in andThen (resolveRecValues modules label prefix own ownCtors imports scope2 pairs)
-      (\values2 => andThen (resolveExpr modules label prefix own ownCtors imports scope2 body) (\b => Ok (Pair values2 b)))
+    in andThen (resolveRecValues (fuel - 1) modules label prefix own ownCtors imports scope2 pairs)
+      (\values2 => andThen (resolveExpr (fuel - 1) modules label prefix own ownCtors imports scope2 body) (\b => Ok (Pair values2 b)))
 
 collectRecBinds : List Module -> String -> String -> List String -> List Import -> List (Pair Pat Expr) -> Result (Pair (List String) (List (Pair Pat Expr)))
 collectRecBinds modules label prefix ownCtors imports [] = Ok (Pair [] [])
-collectRecBinds modules label prefix ownCtors imports ((Pair pat value) :: rest) = andThen (resolvePattern modules label prefix ownCtors imports pat) (\pr => case pr of
+collectRecBinds modules label prefix ownCtors imports ((Pair pat value) :: rest) = andThen (resolvePattern resolveFuelBound modules label prefix ownCtors imports pat) (\pr => case pr of
   Pair pat2 bound => andThen (collectRecBinds modules label prefix ownCtors imports rest) (\r => case r of
     Pair names tail => Ok (Pair (append bound names) (Pair pat2 value :: tail))
   )
 )
 
-resolveRecValues : List Module -> String -> String -> List String -> List String -> List Import -> List String -> List (Pair Pat Expr) -> Result (List (Pair Pat Expr))
-resolveRecValues modules label prefix own ownCtors imports scope [] = Ok []
-resolveRecValues modules label prefix own ownCtors imports scope ((Pair pat value) :: rest) =
-  andThen (resolveExpr modules label prefix own ownCtors imports scope value)
-    (\value2 => andThen (resolveRecValues modules label prefix own ownCtors imports scope rest) (\tail => Ok (Pair pat value2 :: tail)))
+resolveRecValues : Int -> List Module -> String -> String -> List String -> List String -> List Import -> List String -> List (Pair Pat Expr) -> Result (List (Pair Pat Expr))
+resolveRecValues fuel modules label prefix own ownCtors imports scope [] =
+  if fuel <= 0 then Err "DT: resolve fuel exhausted (internal: resolver made no progress)"
+  else Ok []
+resolveRecValues fuel modules label prefix own ownCtors imports scope ((Pair pat value) :: rest) =
+  if fuel <= 0 then Err "DT: resolve fuel exhausted (internal: resolver made no progress)"
+  else andThen (resolveExpr (fuel - 1) modules label prefix own ownCtors imports scope value)
+    (\value2 => andThen (resolveRecValues (fuel - 1) modules label prefix own ownCtors imports scope rest) (\tail => Ok (Pair pat value2 :: tail)))
 
-resolveExpr : List Module -> String -> String -> List String -> List String -> List Import -> List String -> Expr -> Result Expr
-resolveExpr modules label prefix own ownCtors imports scope expr = case expr of
+resolveExpr : Int -> List Module -> String -> String -> List String -> List String -> List Import -> List String -> Expr -> Result Expr
+resolveExpr fuel modules label prefix own ownCtors imports scope expr = if fuel <= 0 then Err "DT: resolve fuel exhausted (internal: resolver made no progress)"
+else case expr of
   EVar name sp =>
     if containsDot name then resolveDottedExpr modules label prefix own imports scope name sp
     else andThen (resolveGlobal modules label prefix own imports scope name) (\n => Ok (EVar n sp))
@@ -321,45 +338,46 @@ resolveExpr modules label prefix own ownCtors imports scope expr = case expr of
   EStr s sp => Ok (EStr s sp)
   ELam params body sp =>
     andThen (traverse (checkBinder label) params)
-      (\_ => andThen (resolveExpr modules label prefix own ownCtors imports (append params scope) body) (\b => Ok (ELam params b sp)))
+      (\_ => andThen (resolveExpr (fuel - 1) modules label prefix own ownCtors imports (append params scope) body) (\b => Ok (ELam params b sp)))
   EApp fn args sp =>
-    andThen (resolveExpr modules label prefix own ownCtors imports scope fn)
-      (\fn2 => andThen (traverse (\a => resolveExpr modules label prefix own ownCtors imports scope a) args) (\args2 => Ok (EApp fn2 args2 sp)))
+    andThen (resolveExpr (fuel - 1) modules label prefix own ownCtors imports scope fn)
+      (\fn2 => andThen (traverse (\a => resolveExpr (fuel - 1) modules label prefix own ownCtors imports scope a) args) (\args2 => Ok (EApp fn2 args2 sp)))
   -- M20：`EPi` 只做**结构递归解析**，不在这里判定「是否允许」。M13–M19 的 DT 是单文件、
   -- 不经 Loader，所以这条以前直接拒绝；M20 起 `--dt` 复用 Loader，而依赖类型是 DT 的
   -- 核心语法。放行判定的责任交给下游检查器：早期 HM 的 `Typecheck`（已删除）曾报
   -- `dependent function type requires --dt`（既有行为不变），DT 的 `Elab` 正常精化。
   EPi name implicit dom cod sp =>
-    andThen (resolveExpr modules label prefix own ownCtors imports scope dom)
-      (\dom2 => andThen (resolveExpr modules label prefix own ownCtors imports (append [name] scope) cod) (\cod2 => Ok (EPi name implicit dom2 cod2 sp)))
-  ELet binds body rec_ sp => andThen (resolveLet modules label prefix own ownCtors imports scope rec_ binds body) (\r => case r of
+    andThen (resolveExpr (fuel - 1) modules label prefix own ownCtors imports scope dom)
+      (\dom2 => andThen (resolveExpr (fuel - 1) modules label prefix own ownCtors imports (append [name] scope) cod) (\cod2 => Ok (EPi name implicit dom2 cod2 sp)))
+  ELet binds body rec_ sp => andThen (resolveLet (fuel - 1) modules label prefix own ownCtors imports scope rec_ binds body) (\r => case r of
     Pair binds2 body2 => Ok (ELet binds2 body2 rec_ sp)
   )
   ECase scrut alts sp =>
-    andThen (resolveExpr modules label prefix own ownCtors imports scope scrut)
-      (\scrut2 => andThen (traverse (resolveAlt modules label prefix own ownCtors imports scope) alts) (\alts2 => Ok (ECase scrut2 alts2 sp)))
+    andThen (resolveExpr (fuel - 1) modules label prefix own ownCtors imports scope scrut)
+      (\scrut2 => andThen (traverse (\dtv => resolveAlt (fuel - 1) modules label prefix own ownCtors imports scope dtv) alts) (\alts2 => Ok (ECase scrut2 alts2 sp)))
   EIf c t e sp =>
-    andThen (resolveExpr modules label prefix own ownCtors imports scope c)
-      (\c2 => andThen (resolveExpr modules label prefix own ownCtors imports scope t) (\t2 => andThen (resolveExpr modules label prefix own ownCtors imports scope e) (\e2 => Ok (EIf c2 t2 e2 sp))))
+    andThen (resolveExpr (fuel - 1) modules label prefix own ownCtors imports scope c)
+      (\c2 => andThen (resolveExpr (fuel - 1) modules label prefix own ownCtors imports scope t) (\t2 => andThen (resolveExpr (fuel - 1) modules label prefix own ownCtors imports scope e) (\e2 => Ok (EIf c2 t2 e2 sp))))
   EField base fname sp =>
-    andThen (resolveExpr modules label prefix own ownCtors imports scope base)
+    andThen (resolveExpr (fuel - 1) modules label prefix own ownCtors imports scope base)
       (\b => Ok (EField b fname sp))
   ERecord name fields sp =>
     andThen (resolveCtor modules label prefix ownCtors imports name)
-      (\name2 => andThen (traverse (resolveFieldValue modules label prefix own ownCtors imports scope) fields) (\fs => Ok (ERecord name2 fs sp)))
+      (\name2 => andThen (traverse (\dtv => resolveFieldValue (fuel - 1) modules label prefix own ownCtors imports scope dtv) fields) (\fs => Ok (ERecord name2 fs sp)))
   ERecUpdate base fields sp =>
-    andThen (resolveExpr modules label prefix own ownCtors imports scope base)
-      (\b => andThen (traverse (resolveFieldValue modules label prefix own ownCtors imports scope) fields) (\fs => Ok (ERecUpdate b fs sp)))
-  EInstSel meth name sp => andThen (resolveExpr modules label prefix own ownCtors imports scope meth) (\m2 => case resolveGlobal modules label prefix own imports scope name of
+    andThen (resolveExpr (fuel - 1) modules label prefix own ownCtors imports scope base)
+      (\b => andThen (traverse (\dtv => resolveFieldValue (fuel - 1) modules label prefix own ownCtors imports scope dtv) fields) (\fs => Ok (ERecUpdate b fs sp)))
+  EInstSel meth name sp => andThen (resolveExpr (fuel - 1) modules label prefix own ownCtors imports scope meth) (\m2 => case resolveGlobal modules label prefix own imports scope name of
     Err e => Err (label ++ ": unknown instance name " ++ name ++ " (@" ++ name ++ ")")
     Ok n2 => Ok (EInstSel m2 n2 sp)
   )
   EDo stmts sp =>
-    andThen (desugarDo stmts) (\e => resolveExpr modules label prefix own ownCtors imports scope e)
+    andThen (desugarDo stmts)
+      (\e => resolveExpr (fuel - 1) modules label prefix own ownCtors imports scope e)
   -- M24：where 绑定签名（`g : Int -> Int`）降级成 `EAnn value ty`；值与类型都做名字解析。
   EAnn value ty sp =>
-    andThen (resolveExpr modules label prefix own ownCtors imports scope value)
-      (\v2 => andThen (resolveExpr modules label prefix own ownCtors imports scope ty) (\t2 => Ok (EAnn v2 t2 sp)))
+    andThen (resolveExpr (fuel - 1) modules label prefix own ownCtors imports scope value)
+      (\v2 => andThen (resolveExpr (fuel - 1) modules label prefix own ownCtors imports scope ty) (\t2 => Ok (EAnn v2 t2 sp)))
 
 -- do（M11）在这里 desugar 成 bind/pure 的普通应用，后续类型检查与 codegen 无需认识 do。
 -- 最后一条裸表达式即块结果（`do e` = `e`）；裸语句用 `bind e (\_ -> rest)` 顺序化。
@@ -376,9 +394,10 @@ desugarDo ((DBind (PWild psp) e sp) :: rest) =
     (\tail => Ok (EApp (EVar "bind" sp) [e, ELam ["vuna_do_ignore"] tail sp] sp))
 desugarDo ((DBind pat e sp) :: rest) = Err "do bind pattern must be a variable or _"
 
-resolveFieldValue : List Module -> String -> String -> List String -> List String -> List Import -> List String -> Pair String Expr -> Result (Pair String Expr)
-resolveFieldValue modules label prefix own ownCtors imports scope (Pair fname value) =
-  andThen (resolveExpr modules label prefix own ownCtors imports scope value)
+resolveFieldValue : Int -> List Module -> String -> String -> List String -> List String -> List Import -> List String -> Pair String Expr -> Result (Pair String Expr)
+resolveFieldValue fuel modules label prefix own ownCtors imports scope (Pair fname value) =
+  if fuel <= 0 then Err "DT: resolve fuel exhausted (internal: resolver made no progress)"
+  else andThen (resolveExpr (fuel - 1) modules label prefix own ownCtors imports scope value)
     (\v => Ok (Pair fname v))
 
 resolveCtorDecl : String -> String -> String -> Result String
@@ -420,20 +439,21 @@ else andThen (modulesExportingType modules imports name) (\pairs => case pairs o
   _ => andThen (unifyEntryPairs label "type" name pairs) (\p => Ok (entryTarget (secondOf p)))
 )
 
-resolveTypeExpr : List Module -> String -> String -> List String -> List Import -> Expr -> Result Expr
-resolveTypeExpr modules label prefix ownTypes imports ty = case ty of
+resolveTypeExpr : Int -> List Module -> String -> String -> List String -> List Import -> Expr -> Result Expr
+resolveTypeExpr fuel modules label prefix ownTypes imports ty = if fuel <= 0 then Err "DT: resolve fuel exhausted (internal: resolver made no progress)"
+else case ty of
   -- M20：DT 的层级（`Type 1`）与洞（`_`）在这里只做结构放行，语义由下游检查器决定。
   EApp (EVar "Type" _) args _ => Ok ty
   EInt n sp => Ok ty
   EVar name sp =>
     andThen (resolveTypeName modules label prefix ownTypes imports name) (\n => Ok (EVar n sp))
   EApp fn args sp =>
-    andThen (resolveTypeExpr modules label prefix ownTypes imports fn)
-      (\fn2 => andThen (traverse (resolveTypeExpr modules label prefix ownTypes imports) args) (\args2 => Ok (EApp fn2 args2 sp)))
+    andThen (resolveTypeExpr (fuel - 1) modules label prefix ownTypes imports fn)
+      (\fn2 => andThen (traverse (\dtv => resolveTypeExpr (fuel - 1) modules label prefix ownTypes imports dtv) args) (\args2 => Ok (EApp fn2 args2 sp)))
   -- M20：同上——只做结构递归，允许与否交给下游检查器。
   EPi name implicit dom cod sp =>
-    andThen (resolveTypeExpr modules label prefix ownTypes imports dom)
-      (\dom2 => andThen (resolveTypeExpr modules label prefix ownTypes imports cod) (\cod2 => Ok (EPi name implicit dom2 cod2 sp)))
+    andThen (resolveTypeExpr (fuel - 1) modules label prefix ownTypes imports dom)
+      (\dom2 => andThen (resolveTypeExpr (fuel - 1) modules label prefix ownTypes imports cod) (\cod2 => Ok (EPi name implicit dom2 cod2 sp)))
   _ => Err (label ++ ": invalid type expression (" ++ tyShape ty ++ ")")
 
 resolveTypeTopName : String -> String -> String -> Result String
@@ -443,7 +463,7 @@ resolveTypeTopName label prefix name =
 resolveCtorSpec : List Module -> String -> String -> List String -> List Import -> Ctor -> Result Ctor
 resolveCtorSpec modules label prefix ownTypes imports (Ctor ctor ty arity sp) =
   andThen (resolveCtorDecl label prefix ctor)
-    (\c2 => andThen (resolveTypeExpr modules label prefix ownTypes imports ty) (\ty2 => Ok (Ctor c2 ty2 arity sp)))
+    (\c2 => andThen (resolveTypeExpr resolveFuelBound modules label prefix ownTypes imports ty) (\ty2 => Ok (Ctor c2 ty2 arity sp)))
 
 resolveDecl : List Module -> String -> String -> List String -> List String -> List String -> List Import -> Decl -> Result Decl
 resolveDecl modules label prefix own ownCtors ownTypes imports d = case d of
@@ -458,23 +478,23 @@ resolveDecl modules label prefix own ownCtors ownTypes imports d = case d of
       (\tn => andThen (traverse (resolveTraitMethod modules label prefix ownTypes imports) methods) (\ms => Ok (DTrait tn params ms sp)))
   DInstance iname isDefault head methods sp =>
     andThen (resolveInstanceName label prefix iname)
-      (\in2 => andThen (resolveTypeExpr modules label prefix ownTypes imports head) (\head2 => andThen (traverse (resolveInstanceMethod modules label prefix own ownCtors ownTypes imports) methods) (\ms => Ok (DInstance in2 isDefault head2 ms sp))))
+      (\in2 => andThen (resolveTypeExpr resolveFuelBound modules label prefix ownTypes imports head) (\head2 => andThen (traverse (resolveInstanceMethod modules label prefix own ownCtors ownTypes imports) methods) (\ms => Ok (DInstance in2 isDefault head2 ms sp))))
   DSig name ty sp =>
     andThen (resolveTopName label prefix name)
-      (\n => andThen (resolveTypeExpr modules label prefix ownTypes imports ty) (\ty2 => Ok (DSig n ty2 sp)))
+      (\n => andThen (resolveTypeExpr resolveFuelBound modules label prefix ownTypes imports ty) (\ty2 => Ok (DSig n ty2 sp)))
   DFun name pats body sp =>
     andThen (resolveTopName label prefix name)
-      (\n => andThen (traverse (resolvePattern modules label prefix ownCtors imports) pats) (\parts => andThen (resolveExpr modules label prefix own ownCtors imports (concatMap secondOf parts) body) (\b => Ok (DFun n (map firstOf parts) b sp))))
+      (\n => andThen (traverse (resolvePattern resolveFuelBound modules label prefix ownCtors imports) pats) (\parts => andThen (resolveExpr resolveFuelBound modules label prefix own ownCtors imports (concatMap secondOf parts) body) (\b => Ok (DFun n (map firstOf parts) b sp))))
 
 resolveRecordField : List Module -> String -> String -> List String -> List Import -> Field -> Result Field
 resolveRecordField modules label prefix ownTypes imports (Field fname ty sp) =
   andThen (checkBinder label fname)
-    (\_ => andThen (resolveTypeExpr modules label prefix ownTypes imports ty) (\ty2 => Ok (Field fname ty2 sp)))
+    (\_ => andThen (resolveTypeExpr resolveFuelBound modules label prefix ownTypes imports ty) (\ty2 => Ok (Field fname ty2 sp)))
 
 resolveTraitMethod : List Module -> String -> String -> List String -> List Import -> Pair String Expr -> Result (Pair String Expr)
 resolveTraitMethod modules label prefix ownTypes imports (Pair mname ty) =
   andThen (resolveTopName label prefix mname)
-    (\n => andThen (resolveTypeExpr modules label prefix ownTypes imports ty) (\ty2 => Ok (Pair n ty2)))
+    (\n => andThen (resolveTypeExpr resolveFuelBound modules label prefix ownTypes imports ty) (\ty2 => Ok (Pair n ty2)))
 
 -- 未命名实例（default）没有公开名字；给一个模块内私有的内部名字，便于校验孤儿规则。
 resolveInstanceName : String -> String -> Maybe String -> Result (Maybe String)
@@ -486,10 +506,10 @@ resolveInstanceMethod : List Module -> String -> String -> List String -> List S
 resolveInstanceMethod modules label prefix own ownCtors ownTypes imports d = case d of
   DSig name ty sp =>
     andThen (checkTopName label name)
-      (\_ => andThen (resolveTypeExpr modules label prefix ownTypes imports ty) (\ty2 => Ok (DSig name ty2 sp)))
+      (\_ => andThen (resolveTypeExpr resolveFuelBound modules label prefix ownTypes imports ty) (\ty2 => Ok (DSig name ty2 sp)))
   DFun name pats body sp =>
     andThen (checkTopName label name)
-      (\_ => andThen (traverse (resolvePattern modules label prefix ownCtors imports) pats) (\parts => andThen (resolveExpr modules label prefix own ownCtors imports (concatMap secondOf parts) body) (\b => Ok (DFun name (map firstOf parts) b sp))))
+      (\_ => andThen (traverse (resolvePattern resolveFuelBound modules label prefix ownCtors imports) pats) (\parts => andThen (resolveExpr resolveFuelBound modules label prefix own ownCtors imports (concatMap secondOf parts) body) (\b => Ok (DFun name (map firstOf parts) b sp))))
   _ => Err (label ++ ": instance body may only contain method signatures/definitions")
 
 resolveProgram : List Module -> String -> String -> List String -> List String -> List String -> List Import -> List Decl -> Result (List Decl)
@@ -560,7 +580,7 @@ effExpr e = case e of
   EInt n sp => Nothing
   EStr s sp => Nothing
   ELam ps body sp => effExpr body
-  EApp fn args sp => firstEffect (effExpr fn :: map effExpr args)
+  EApp fn args sp => firstEffect [effExpr fn, effExprs args]
   ELet binds body rec_ sp => firstEffect [effBinds binds, effExpr body]
   ECase scrut alts sp => firstEffect [effExpr scrut, effAlts alts]
   EIf c t el sp => firstEffect [effExpr c, effExpr t, effExpr el]
@@ -570,9 +590,14 @@ effExpr e = case e of
   EInstSel meth iname sp => Nothing
   -- M20：`EPi` 是 DT 的核心语法，这里只做结构递归（类型层不算 effect）。
   EPi name implicit dom cod sp => firstEffect [effExpr dom, effExpr cod]
-  EDo stmts sp => firstEffect (map effDo stmts)
+  EDo stmts sp => effDos stmts
   -- M24：where 绑定签名 `EAnn value ty`；类型层不算 effect，只看值。
   EAnn value ty sp => effExpr value
+
+-- 列表遍历显式写成结构递归（不用 map + λ）：终止性检查只能看到对列表尾的结构下降。
+effExprs : List Expr -> Maybe String
+effExprs [] = Nothing
+effExprs (e :: rest) = firstEffect [effExpr e, effExprs rest]
 
 effBinds : List (Pair Pat Expr) -> Maybe String
 effBinds [] = Nothing
@@ -591,15 +616,20 @@ effDo s = case s of
   DBind pat value sp => effExpr value
   DExpr value sp => effExpr value
 
+effDos : List DoStmt -> Maybe String
+effDos [] = Nothing
+effDos (s :: rest) = firstEffect [effDo s, effDos rest]
+
 effDecl : Decl -> Maybe String
 effDecl d = case d of
   DFun n pats body sp => effExpr body
   DTrait n ps methods sp => Nothing
-  DInstance iname isDefault headTy methods sp => firstEffect (map effDecl methods)
+  DInstance iname isDefault headTy methods sp => effDecls methods
   _ => Nothing
 
 effDecls : List Decl -> Maybe String
-effDecls decls = firstEffect (map effDecl decls)
+effDecls [] = Nothing
+effDecls (d :: rest) = firstEffect [effDecl d, effDecls rest]
 
 checkEffectsBuiltins : String -> String -> List Decl -> Result (List Decl)
 checkEffectsBuiltins label pkg decls = if packageAllowsEffects pkg then Ok decls

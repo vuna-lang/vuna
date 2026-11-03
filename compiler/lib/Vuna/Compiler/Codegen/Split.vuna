@@ -344,7 +344,7 @@ generateDtSplitProgram modules entryDecls prog printResult =
       let
         allTypeNames = append typeNames (map dtDataName allDatas)
         meta = splitMetaOf modules entryDecls
-      in andThen (checkAllDefScopes runtime) (\_ => andThen (ensureUniqueOcamlNames allDatas runtime) (\_ => andThen (checkAllErasure allTypeNames runtime) (\_ => andThen (nameOwnerPairsOfDefs meta runtime) (\defPairs => andThen (nameOwnerPairsOfDatas meta allDatas) (\dataPairs => let
+      in andThen (checkAllDefScopes allDefs) (\_ => andThen (ensureUniqueOcamlNames allDatas runtime) (\_ => andThen (checkAllErasure allTypeNames runtime) (\_ => andThen (nameOwnerPairsOfDefs meta runtime) (\defPairs => andThen (nameOwnerPairsOfDatas meta allDatas) (\dataPairs => let
         builtinDatas = datasInUnit dataPairs builtinOwner runtimeAll
         builtinDefs = defsInUnit defPairs builtinOwner runtime
       in andThen (splitUnitText runtimeAll runtime builtinDatas builtinDefs "" [runtimeUnit]) (\builtinText => andThen (splitModuleFiles runtimeAll runtime defPairs dataPairs [] modules) (\moduleFiles => let

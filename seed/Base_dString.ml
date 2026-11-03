@@ -50,18 +50,18 @@ let rec v_Base_dString_d_ustartsWithChars = (fun mc0 -> (fun mc1 -> (match mc0 w
   | _ -> failwith "DT: impossible branch"
 )))
 
-let rec v_Base_dString_dsplitAcc = (fun sep -> (fun chars -> (fun acc -> (fun parts -> (match chars with
+let rec v_Base_dString_dsplitAcc = (fun sep -> (fun chars -> (fun fuel -> (fun acc -> (fun parts -> (match chars with
   | C_Base_dList_dList_Nil -> (v_Base_dList_dreverse (C_Base_dList_dList_Cons ((dtp_pack (v_Base_dList_dreverse acc)), parts)))
-  | C_Base_dList_dList_Cons (dtb__10, dtb__11) -> (if ((v_Base_dString_d_ustartsWithChars sep) chars) then (((((v_Base_dString_dskipSep sep) chars) (v_Base_dList_dlength sep)) C_Base_dList_dList_Nil) (C_Base_dList_dList_Cons ((dtp_pack (v_Base_dList_dreverse acc)), parts))) else ((((v_Base_dString_dsplitAcc sep) dtb__11) (C_Base_dList_dList_Cons (dtb__10, acc))) parts))
-  | _ -> failwith "DT: impossible branch"
-)))))
-and v_Base_dString_dskipSep = (fun sep -> (fun chars -> (fun n -> (fun acc -> (fun parts -> (match chars with
-  | C_Base_dList_dList_Nil -> (v_Base_dList_dreverse (C_Base_dList_dList_Cons ((dtp_pack (v_Base_dList_dreverse acc)), parts)))
-  | C_Base_dList_dList_Cons (dtb__12, dtb__13) -> (if ((bi_le_int n) 0) then ((((v_Base_dString_dsplitAcc sep) chars) acc) parts) else (((((v_Base_dString_dskipSep sep) dtb__13) ((bi_sub n) 1)) acc) parts))
+  | C_Base_dList_dList_Cons (dtb__10, dtb__11) -> (if ((bi_le_int fuel) 0) then (v_Base_dList_dreverse (C_Base_dList_dList_Cons ((dtp_pack (v_Base_dList_dreverse acc)), parts))) else (if ((v_Base_dString_d_ustartsWithChars sep) chars) then ((((((v_Base_dString_dskipSep sep) chars) ((bi_sub fuel) 1)) (v_Base_dList_dlength sep)) C_Base_dList_dList_Nil) (C_Base_dList_dList_Cons ((dtp_pack (v_Base_dList_dreverse acc)), parts))) else (((((v_Base_dString_dsplitAcc sep) dtb__11) ((bi_sub fuel) 1)) (C_Base_dList_dList_Cons (dtb__10, acc))) parts)))
   | _ -> failwith "DT: impossible branch"
 ))))))
+and v_Base_dString_dskipSep = (fun sep -> (fun chars -> (fun fuel -> (fun n -> (fun acc -> (fun parts -> (match chars with
+  | C_Base_dList_dList_Nil -> (v_Base_dList_dreverse (C_Base_dList_dList_Cons ((dtp_pack (v_Base_dList_dreverse acc)), parts)))
+  | C_Base_dList_dList_Cons (dtb__12, dtb__13) -> (if ((bi_le_int fuel) 0) then (v_Base_dList_dreverse (C_Base_dList_dList_Cons ((dtp_pack (v_Base_dList_dreverse acc)), parts))) else (if ((bi_le_int n) 0) then (((((v_Base_dString_dsplitAcc sep) chars) ((bi_sub fuel) 1)) acc) parts) else ((((((v_Base_dString_dskipSep sep) dtb__13) ((bi_sub fuel) 1)) ((bi_sub n) 1)) acc) parts)))
+  | _ -> failwith "DT: impossible branch"
+)))))))
 
-let v_Base_dString_dsplit = (fun sep -> (fun text -> (if ((bi_eq_int (bi_strLength sep)) 0) then ((v_Base_dList_dmap (fun c -> (dtp_pack (C_Base_dList_dList_Cons (c, C_Base_dList_dList_Nil))))) (dtp_unpack text)) else ((((v_Base_dString_dsplitAcc (dtp_unpack sep)) (dtp_unpack text)) C_Base_dList_dList_Nil) C_Base_dList_dList_Nil))))
+let v_Base_dString_dsplit = (fun sep -> (fun text -> (if ((bi_eq_int (bi_strLength sep)) 0) then ((v_Base_dList_dmap (fun c -> (dtp_pack (C_Base_dList_dList_Cons (c, C_Base_dList_dList_Nil))))) (dtp_unpack text)) else (((((v_Base_dString_dsplitAcc (dtp_unpack sep)) (dtp_unpack text)) ((bi_add ((bi_mul 4) (bi_strLength text))) 4)) C_Base_dList_dList_Nil) C_Base_dList_dList_Nil))))
 
 let v_Base_dString_dlines = (fun s -> ((v_Base_dString_dsplit "\n") s))
 

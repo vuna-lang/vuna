@@ -73,7 +73,7 @@ derivingsForGo dname params ctors (t :: rest) sp acc = case params of
   _ =>
     if traitShortName t == "Eq" then derivingsForGo dname params ctors rest sp acc
     else Err
-      (showSpanLoc sp ++ ": DT: deriving " ++ traitShortName t ++ " is only supported for non-parameterized data types (M23)")
+      (showSpanLoc sp ++ ": DT: deriving " ++ traitShortName t ++ " is only supported for non-parameterized data types")
 
 -- 单个类的实例声明。`tn` 是 Loader 解析后的完整类名；方法名（`show` / `eq` / ...）由
 -- `elabInstance` 按类方法的最后一段匹配，因此实例里仍写短名。
@@ -234,8 +234,12 @@ varNames : String -> Int -> List String
 varNames prefix n = varNamesAt prefix 0 n
 
 varNamesAt : String -> Int -> Int -> List String
-varNamesAt prefix i n =
-  if i >= n then [] else (prefix ++ strFromInt i) :: varNamesAt prefix (i + 1) n
+varNamesAt prefix i n = varNamesAtGo (n - i) prefix n
+
+varNamesAtGo : Int -> String -> Int -> List String
+varNamesAtGo remaining prefix n =
+  if remaining <= 0 then []
+  else (prefix ++ strFromInt (n - remaining)) :: varNamesAtGo (remaining - 1) prefix n
 
 -- `gt sx sy = lt sy sx`；`ge sx sy = le sy sx`（都用已生成的 `lt` / `le`）。
 gtBody : String -> Span -> Expr

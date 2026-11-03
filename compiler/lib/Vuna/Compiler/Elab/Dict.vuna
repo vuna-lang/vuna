@@ -88,20 +88,24 @@ searchInstance ec dom sp = case filterInstances ec dom (filter (\i => not (dtIns
 -- M22：回填延迟的字典元变量。每个 `DtDictGoal m dom`：类参数已解（非元变量）且能搜到
 -- 唯一实例时解 `?m = <实例>`；仍未解或仍歧义则留到下一轮（幂等，可反复调用）。
 resolveDictGoals : List (Pair String Term) -> Ec -> Ec
-resolveDictGoals globals ec = case ecDictGoals ec of
+resolveDictGoals globals ec = resolveDictGoalsFuel 64 globals ec
+
+resolveDictGoalsFuel : Int -> List (Pair String Term) -> Ec -> Ec
+resolveDictGoalsFuel fuel globals ec = if fuel <= 0 then ec
+else case ecDictGoals ec of
   [] => ec
   (DtDictGoal m dom) :: rest =>
     let
       ec1 = ecPutDictGoals ec rest
       forced = forceVal ec1 dom
-      keep = ecAddDictGoal (resolveDictGoals globals ec1) (DtDictGoal m forced)
+      keep = ecAddDictGoal (resolveDictGoalsFuel (fuel - 1) globals ec1) (DtDictGoal m forced)
     in case dictClassArg ec1 forced of
       Just argTy => if hasUnsolvedMetaValue (ecSols ec1) argTy then keep
       else case searchInstance ec1 forced (Span "" 0 0 0 0) of
         Ok (Pair instTerm ec2) => case solveMeta (ecDefs ec2) (ecSols ec2) 0 m [] (eval [] instTerm) of
           Ok sols2 => case checkSolsDelta ec2 (ecSols ec2) sols2 of
             Err e => keep
-            Ok _ => resolveDictGoals globals (ecPutSols ec2 sols2)
+            Ok _ => resolveDictGoalsFuel (fuel - 1) globals (ecPutSols ec2 sols2)
           Err e => keep
         Err e => keep
       Nothing => keep
@@ -162,6 +166,7 @@ inferInstSel globals ctx ec meth iname sp = case methodNameOf meth of
         Nothing =>
           errAt sp
             ("[TC_OpOnlyIntString] DT: `" ++ mname ++ "` is not a method of trait " ++ dtClassName cls)
+        -- @code TC_NeedsTwoArgs
         Just k =>
           let
             nFields = length (dtClassMethods cls)
@@ -293,6 +298,100 @@ genericEqApp name tyTerm aTerm bTerm =
 -- `==` / `/=` 的饱和应用（M19）：`Int` / `String` 特化成具体运行时函数；其它类型解析成
 -- `Eq` 字典的方法投影（`deriving (Eq)` 的用处）。M24.7：方法投影名与字典名从库里
 -- 短名 `Eq` 的类表项取（`Base.Eq.Eq`），不用硬编码 `Dict_Eq`。
+--
+-- M25：泛型兜底（`bi_*_generic`，OCaml 多态相等）只允许「运行时表示可安全结构比较」的
+-- 类型：不能含函数/Pi、类型宇宙、元变量或未知抽象类型；含函数字段的 data 明确拒绝，
+-- 用户必须 `deriving (Eq)`/手写实例。这样不会再把「函数值相等」拖到运行时崩
+-- `Invalid_argument("compare: functional value")`。
+termHasPi : Term -> Bool
+termHasPi t = case t of
+  TPi name implicit rig dom cod => True
+  TApp f a rig => termHasPi f || termHasPi a
+  TCon c args => termHasPiArgs args
+  TIf c th el => termHasPi c || termHasPi th || termHasPi el
+  TCase scrut alts => termHasPi scrut
+  _ => False
+
+termHasPiArgs : List (Pair Term Rig) -> Bool
+termHasPiArgs [] = False
+termHasPiArgs ((Pair t rig) :: rest) = termHasPi t || termHasPiArgs rest
+
+-- 跳过 data 的族参数（kind 的 Pi binder），返回字段 telescope。
+dropDataParams : Int -> Term -> Term
+dropDataParams n t = if n <= 0 then t
+else case t of
+  TPi name implicit rig dom cod => dropDataParams (n - 1) cod
+  _ => t
+
+-- 字段 telescope 里只要出现函数类型的域就不可安全结构比较。
+ctorFieldsComparable : Term -> Bool
+ctorFieldsComparable t = case t of
+  TPi name implicit rig dom cod => if termHasPi dom then False else ctorFieldsComparable cod
+  _ => True
+
+nameBase : String -> String
+nameBase n = case splitLastDot (splitOnDot n) of
+  Pair rev base => base
+
+dataByName : List DtData -> String -> Maybe DtData
+dataByName [] name = Nothing
+dataByName (d :: rest) name =
+  if dtDataName d == name || nameBase (dtDataName d) == nameBase name then Just d
+  else dataByName rest name
+
+typeComparable : Ec -> Int -> List String -> Value -> Bool
+typeComparable ec fuel seen v = if fuel <= 0 then False
+else case forceVal ec v of
+  VInt n => True
+  VStr s => True
+  VBool b => True
+  VCon name args =>
+    if primitiveComparable name then True else dataComparable ec (fuel - 1) seen name args
+  VNeutral n => case n of
+    NGlobal g args =>
+      if primitiveComparable g then True else dataComparable ec (fuel - 1) seen g args
+    NVar name lvl sp => False
+  VType l => False
+  VPi name implicit rig dom cod => False
+  VLam name rig clo => False
+  VMeta m sp => False
+  VCase scrut alts => False
+  VIf c th el => False
+  VApp f a => False
+
+primitiveComparable : String -> Bool
+primitiveComparable g =
+  let
+    base = nameBase g
+  in base == "Int" || base == "String" || base == "Bool"
+
+dataComparable : Ec -> Int -> List String -> String -> List Value -> Bool
+dataComparable ec fuel seen name args = if memName name seen then True
+else case dataByName (ecDatas ec) name of
+  Nothing => True
+  Just d =>
+    if anyValueUnsafe ec fuel (name :: seen) args then False
+    else allCtorsComparable ec fuel (name :: seen) (dtDataParams d) (dtDataCtors d)
+
+anyValueUnsafe : Ec -> Int -> List String -> List Value -> Bool
+anyValueUnsafe ec fuel seen [] = False
+anyValueUnsafe ec fuel seen (x :: rest) =
+  if typeComparable ec fuel seen x then anyValueUnsafe ec fuel seen rest else True
+
+allCtorsComparable : Ec -> Int -> List String -> List (Pair String Rig) -> List DtCtor -> Bool
+allCtorsComparable ec fuel seen params [] = True
+allCtorsComparable ec fuel seen params (c :: rest) =
+  if ctorFieldsComparable (dropDataParams (length params) (dtCtorType c)) then allCtorsComparable ec fuel seen params rest
+  else False
+
+-- 泛型相等兜底只对可安全结构比较的类型开放；否则要求在源码里有 Eq 实例。
+genericEqSafe : String -> Term -> Term -> Term -> Span -> Value -> Ec -> Result (Maybe (Pair Term (Pair Value Ec)))
+-- @code TC_GenericEqNotComparable
+genericEqSafe name tyTerm aTerm bTerm sp aTy ec =
+  if typeComparable ec 64 [] aTy then Ok (Just (Pair (genericEqApp name tyTerm aTerm bTerm) (Pair (VNeutral (NGlobal "Bool" [])) ec)))
+  else errAt sp
+    ("[TC_GenericEqNotComparable] DT: cannot compare values of type " ++ showValue (forceVal ec aTy) ++ " with generic equality; add an Eq instance or deriving (Eq)")
+
 specializeEqTy : List (Pair String Term) -> Ctx -> String -> Term -> Term -> Span -> Value -> Ec -> Result (Maybe (Pair Term (Pair Value Ec)))
 -- M23：具体类型没有 Eq 实例时退回泛型结构比较（bi_eq_generic，语义与 HM 的 == 一致）；
 -- 程序里没有 Eq 类时（单文件 / 未 import）同样退回泛型。
@@ -301,9 +400,7 @@ specializeEqTy globals ctx name aTerm bTerm sp aTy ec = case builtinEqTyName (fo
     andThen (eqRuntimeName name tyName)
       (\rt => Ok (Just (Pair (TApp (TApp (TGlobal rt) aTerm Rig1) bTerm Rig1) (Pair (VNeutral (NGlobal "Bool" [])) ec))))
   Nothing => case findClassByShortName "Eq" (ecClasses ec) of
-    Nothing =>
-      Ok
-        (Just (Pair (genericEqApp name (quote (ctxDepth ctx) aTy) aTerm bTerm) (Pair (VNeutral (NGlobal "Bool" [])) ec)))
+    Nothing => genericEqSafe name (quote (ctxDepth ctx) aTy) aTerm bTerm sp aTy ec
     Just cls =>
       let
         mname = classMethodProjection (dtClassMethods cls) (if name == "==" then "eq" else "neq")
@@ -318,8 +415,7 @@ specializeEqTy globals ctx name aTerm bTerm sp aTy ec = case builtinEqTyName (fo
             (Just (Pair (TApp (TApp (TApp (TApp (TGlobal mname) tyTerm Rig0) dictTerm Rig1) aTerm Rig1) bTerm Rig1) (Pair (VNeutral (NGlobal "Bool" [])) ec1)))
         Err e =>
           if isRigidDictArg ec dictTy then deferEqDict globals ctx mname tyTerm aTerm bTerm sp dictTy ec
-          else Ok
-            (Just (Pair (genericEqApp name tyTerm aTerm bTerm) (Pair (VNeutral (NGlobal "Bool" [])) ec)))
+          else genericEqSafe name tyTerm aTerm bTerm sp aTy ec
 
 -- 刚性类参数（如 `mem` 的 `a`）没有可搜实例：延迟成裸元变量 + 记录自由字典目标，
 -- 等定义体精化完由 `liftFreeDictGoals` 提升成 `{d : Dict_Eq a}` 隐式参数。

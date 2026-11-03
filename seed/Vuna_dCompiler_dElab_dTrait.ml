@@ -17,6 +17,7 @@ open Vuna_dCompiler_dFrontend_dManifest
 open Vuna_dCompiler_dPackages_dPkg
 open Vuna_dCompiler_dFrontend_dAst
 open Vuna_dCompiler_dFrontend_dLexer
+open Vuna_dCompiler_dFrontend_dParser_dSupport
 open Vuna_dCompiler_dFrontend_dParser
 open Vuna_dCompiler_dLoader_dModules
 open Vuna_dCompiler_dLoader_dResolve
@@ -33,6 +34,8 @@ open Vuna_dCompiler_dElab_dMeta
 open Vuna_dCompiler_dElab_dCase
 open Vuna_dCompiler_dElab_dDict
 open Vuna_dCompiler_dElab_dMatch
+open Vuna_dCompiler_dElab_dTerm_dSupport
+open Vuna_dCompiler_dElab_dTerm_dImpl
 open Vuna_dCompiler_dElab_dTerm
 open Vuna_dCompiler_dElab_dData
 let rec v_Vuna_dCompiler_dElab_dTrait_dbindClassParams = (fun mc0 -> (fun mc1 -> (fun mc2 -> (match mc0 with
@@ -278,27 +281,29 @@ let v_Vuna_dCompiler_dElab_dTrait_dsolveLiftedMeta = (fun ec -> (fun name -> (fu
 
 let v_Vuna_dCompiler_dElab_dTrait_dinsertArgAt = (fun n -> (fun x -> (fun xs -> ((v_Base_dList_dappend ((v_Base_dList_dappend ((v_Base_dList_dtake n) xs)) (C_Base_dList_dList_Cons (x, C_Base_dList_dList_Nil)))) ((v_Base_dList_ddrop n) xs)))))
 
-let rec v_Vuna_dCompiler_dElab_dTrait_dinjectDictGo = (fun defName -> (fun dName -> (fun appPos -> (fun depth -> (fun t -> (match t with
-  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTLam (dtb__117, dtb__118, dtb__119) -> (C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTLam (dtb__117, dtb__118, (((((v_Vuna_dCompiler_dElab_dTrait_dinjectDictGo defName) dName) appPos) ((bi_add depth) 1)) dtb__119)))
-  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTPi (dtb__120, dtb__121, dtb__122, dtb__123, dtb__124) -> (C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTPi (dtb__120, dtb__121, dtb__122, (((((v_Vuna_dCompiler_dElab_dTrait_dinjectDictGo defName) dName) appPos) depth) dtb__123), (((((v_Vuna_dCompiler_dElab_dTrait_dinjectDictGo defName) dName) appPos) ((bi_add depth) 1)) dtb__124)))
+let rec v_Vuna_dCompiler_dElab_dTrait_dinjectDictGoFuel = (fun fuel -> (fun defName -> (fun dName -> (fun appPos -> (fun depth -> (fun t -> (if ((bi_le_int fuel) 0) then t else (match t with
+  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTLam (dtb__117, dtb__118, dtb__119) -> (C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTLam (dtb__117, dtb__118, ((((((v_Vuna_dCompiler_dElab_dTrait_dinjectDictGoFuel ((bi_sub fuel) 1)) defName) dName) appPos) ((bi_add depth) 1)) dtb__119)))
+  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTPi (dtb__120, dtb__121, dtb__122, dtb__123, dtb__124) -> (C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTPi (dtb__120, dtb__121, dtb__122, ((((((v_Vuna_dCompiler_dElab_dTrait_dinjectDictGoFuel ((bi_sub fuel) 1)) defName) dName) appPos) depth) dtb__123), ((((((v_Vuna_dCompiler_dElab_dTrait_dinjectDictGoFuel ((bi_sub fuel) 1)) defName) dName) appPos) ((bi_add depth) 1)) dtb__124)))
   | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTApp (dtb__125, dtb__126, dtb__127) -> (match (v_Vuna_dCompiler_dElab_dMeta_dflattenTaggedApp t) with
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__128) -> (match dtb__128 with
-  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__129, dtb__130) -> ((((((v_Vuna_dCompiler_dElab_dTrait_drewriteTaggedSpine defName) dName) appPos) depth) dtb__129) dtb__130)
+  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__129, dtb__130) -> (((((((v_Vuna_dCompiler_dElab_dTrait_drewriteTaggedSpineFuel ((bi_sub fuel) 1)) defName) dName) appPos) depth) dtb__129) dtb__130)
   | _ -> failwith "DT: impossible branch"
 )
-  | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> (C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTApp ((((((v_Vuna_dCompiler_dElab_dTrait_dinjectDictGo defName) dName) appPos) depth) dtb__125), (((((v_Vuna_dCompiler_dElab_dTrait_dinjectDictGo defName) dName) appPos) depth) dtb__126), dtb__127))
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> (C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTApp (((((((v_Vuna_dCompiler_dElab_dTrait_dinjectDictGoFuel ((bi_sub fuel) 1)) defName) dName) appPos) depth) dtb__125), ((((((v_Vuna_dCompiler_dElab_dTrait_dinjectDictGoFuel ((bi_sub fuel) 1)) defName) dName) appPos) depth) dtb__126), dtb__127))
   | _ -> failwith "DT: impossible branch"
 )
-  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTCon (dtb__131, dtb__132) -> (C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTCon (dtb__131, ((v_Base_dList_dmap (fun p -> (C_Base_dPair_dPair_Base_dPair_dPair ((((((v_Vuna_dCompiler_dElab_dTrait_dinjectDictGo defName) dName) appPos) depth) (v_Base_dPair_dfirstOf p)), (v_Base_dPair_dsecondOf p))))) dtb__132)))
-  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTCase (dtb__133, dtb__134) -> (C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTCase ((((((v_Vuna_dCompiler_dElab_dTrait_dinjectDictGo defName) dName) appPos) depth) dtb__133), ((v_Base_dList_dmap ((((v_Vuna_dCompiler_dElab_dTrait_dinjectAltGo defName) dName) appPos) depth)) dtb__134)))
-  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTIf (dtb__135, dtb__136, dtb__137) -> (C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTIf ((((((v_Vuna_dCompiler_dElab_dTrait_dinjectDictGo defName) dName) appPos) depth) dtb__135), (((((v_Vuna_dCompiler_dElab_dTrait_dinjectDictGo defName) dName) appPos) depth) dtb__136), (((((v_Vuna_dCompiler_dElab_dTrait_dinjectDictGo defName) dName) appPos) depth) dtb__137)))
+  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTCon (dtb__131, dtb__132) -> (C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTCon (dtb__131, ((v_Base_dList_dmap (fun p -> (C_Base_dPair_dPair_Base_dPair_dPair (((((((v_Vuna_dCompiler_dElab_dTrait_dinjectDictGoFuel ((bi_sub fuel) 1)) defName) dName) appPos) depth) (v_Base_dPair_dfirstOf p)), (v_Base_dPair_dsecondOf p))))) dtb__132)))
+  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTCase (dtb__133, dtb__134) -> (C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTCase (((((((v_Vuna_dCompiler_dElab_dTrait_dinjectDictGoFuel ((bi_sub fuel) 1)) defName) dName) appPos) depth) dtb__133), ((v_Base_dList_dmap (fun alt -> ((((((v_Vuna_dCompiler_dElab_dTrait_dinjectAltGoFuel ((bi_sub fuel) 1)) defName) dName) appPos) depth) alt))) dtb__134)))
+  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTIf (dtb__135, dtb__136, dtb__137) -> (C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTIf (((((((v_Vuna_dCompiler_dElab_dTrait_dinjectDictGoFuel ((bi_sub fuel) 1)) defName) dName) appPos) depth) dtb__135), ((((((v_Vuna_dCompiler_dElab_dTrait_dinjectDictGoFuel ((bi_sub fuel) 1)) defName) dName) appPos) depth) dtb__136), ((((((v_Vuna_dCompiler_dElab_dTrait_dinjectDictGoFuel ((bi_sub fuel) 1)) defName) dName) appPos) depth) dtb__137)))
   | _ -> t
-))))))
-and v_Vuna_dCompiler_dElab_dTrait_dinjectAltGo = (fun defName -> (fun dName -> (fun appPos -> (fun depth -> (fun alt -> (match alt with
-  | C_Vuna_dCompiler_dCore_dTerm_dCaseAlt_Vuna_dCompiler_dCore_dTerm_dCaseAlt (dtb__138, dtb__139, dtb__140) -> (C_Vuna_dCompiler_dCore_dTerm_dCaseAlt_Vuna_dCompiler_dCore_dTerm_dCaseAlt (dtb__138, dtb__139, (((((v_Vuna_dCompiler_dElab_dTrait_dinjectDictGo defName) dName) appPos) ((bi_add depth) (v_Base_dList_dlength dtb__139))) dtb__140)))
+))))))))
+and v_Vuna_dCompiler_dElab_dTrait_dinjectAltGoFuel = (fun fuel -> (fun defName -> (fun dName -> (fun appPos -> (fun depth -> (fun alt -> (if ((bi_le_int fuel) 0) then alt else (match alt with
+  | C_Vuna_dCompiler_dCore_dTerm_dCaseAlt_Vuna_dCompiler_dCore_dTerm_dCaseAlt (dtb__138, dtb__139, dtb__140) -> (C_Vuna_dCompiler_dCore_dTerm_dCaseAlt_Vuna_dCompiler_dCore_dTerm_dCaseAlt (dtb__138, dtb__139, ((((((v_Vuna_dCompiler_dElab_dTrait_dinjectDictGoFuel ((bi_sub fuel) 1)) defName) dName) appPos) ((bi_add depth) (v_Base_dList_dlength dtb__139))) dtb__140)))
   | _ -> failwith "DT: impossible branch"
-))))))
-and v_Vuna_dCompiler_dElab_dTrait_drewriteTaggedSpine = (fun defName -> (fun dName -> (fun appPos -> (fun depth -> (fun g -> (fun args -> ((fun args2 -> (if (if (if ((bi_eq_str g) defName) then ((bi_gt_int (v_Base_dList_dlength args2)) appPos) else false) then ((bi_gt_int depth) appPos) else false) then ((v_Vuna_dCompiler_dElab_dMeta_dfoldAppTerms (C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTGlobal (g))) (((v_Vuna_dCompiler_dElab_dTrait_dinsertArgAt appPos) (C_Base_dPair_dPair_Base_dPair_dPair ((C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTVar (dName, ((bi_sub ((bi_sub depth) appPos)) 1))), C_Vuna_dCompiler_dCore_dTerm_dRig_Vuna_dCompiler_dCore_dTerm_dRig1))) args2)) else ((v_Vuna_dCompiler_dElab_dMeta_dfoldAppTerms (C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTGlobal (g))) args2))) ((v_Base_dList_dmap (fun p -> (C_Base_dPair_dPair_Base_dPair_dPair ((((((v_Vuna_dCompiler_dElab_dTrait_dinjectDictGo defName) dName) appPos) depth) (v_Base_dPair_dfirstOf p)), (v_Base_dPair_dsecondOf p))))) args))))))))
+))))))))
+and v_Vuna_dCompiler_dElab_dTrait_drewriteTaggedSpineFuel = (fun fuel -> (fun defName -> (fun dName -> (fun appPos -> (fun depth -> (fun g -> (fun args -> (if ((bi_le_int fuel) 0) then (C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTGlobal (g)) else ((fun args2 -> (if (if (if ((bi_eq_str g) defName) then ((bi_gt_int (v_Base_dList_dlength args2)) appPos) else false) then ((bi_gt_int depth) appPos) else false) then ((v_Vuna_dCompiler_dElab_dMeta_dfoldAppTerms (C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTGlobal (g))) (((v_Vuna_dCompiler_dElab_dTrait_dinsertArgAt appPos) (C_Base_dPair_dPair_Base_dPair_dPair ((C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTVar (dName, ((bi_sub ((bi_sub depth) appPos)) 1))), C_Vuna_dCompiler_dCore_dTerm_dRig_Vuna_dCompiler_dCore_dTerm_dRig1))) args2)) else ((v_Vuna_dCompiler_dElab_dMeta_dfoldAppTerms (C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTGlobal (g))) args2))) ((v_Base_dList_dmap (fun p -> (C_Base_dPair_dPair_Base_dPair_dPair (((((((v_Vuna_dCompiler_dElab_dTrait_dinjectDictGoFuel ((bi_sub fuel) 1)) defName) dName) appPos) depth) (v_Base_dPair_dfirstOf p)), (v_Base_dPair_dsecondOf p))))) args))))))))))
+
+let v_Vuna_dCompiler_dElab_dTrait_dinjectDictGo = (fun defName -> (fun dName -> (fun appPos -> (fun depth -> (fun t -> ((((((v_Vuna_dCompiler_dElab_dTrait_dinjectDictGoFuel 128) defName) dName) appPos) depth) t))))))
 
 let v_Vuna_dCompiler_dElab_dTrait_dinsertDictCalls = (fun defName -> (fun dName -> (fun appPos -> (fun t -> (((((v_Vuna_dCompiler_dElab_dTrait_dinjectDictGo defName) dName) appPos) 0) t)))))
 
@@ -312,6 +317,10 @@ let rec v_Vuna_dCompiler_dElab_dTrait_dliftFreeDictGoalsGo = (fun mc0 -> (fun mc
 )))))))
 
 let v_Vuna_dCompiler_dElab_dTrait_dliftFreeDictGoals = (fun defName -> (fun ec -> (fun ty -> (fun body -> ((((((v_Vuna_dCompiler_dElab_dTrait_dliftFreeDictGoalsGo defName) ec) ty) body) 0) (v_Vuna_dCompiler_dElab_dTrait_dfreeDictGoals ec))))))
+
+let v_Vuna_dCompiler_dElab_dTrait_dinjectAltGo = (fun defName -> (fun dName -> (fun appPos -> (fun depth -> (fun alt -> ((((((v_Vuna_dCompiler_dElab_dTrait_dinjectAltGoFuel 128) defName) dName) appPos) depth) alt))))))
+
+let v_Vuna_dCompiler_dElab_dTrait_drewriteTaggedSpine = (fun defName -> (fun dName -> (fun appPos -> (fun depth -> (fun g -> (fun args -> (((((((v_Vuna_dCompiler_dElab_dTrait_drewriteTaggedSpineFuel 128) defName) dName) appPos) depth) g) args)))))))
 
 let rec v_Vuna_dCompiler_dElab_dTrait_dreplaceGlobalType = (fun mc0 -> (fun mc1 -> (fun mc2 -> (match mc2 with
   | C_Base_dList_dList_Cons (dtb__145, dtb__146) -> (if ((bi_eq_str (v_Base_dPair_dfirstOf dtb__145)) mc0) then (C_Base_dList_dList_Cons ((C_Base_dPair_dPair_Base_dPair_dPair (mc0, mc1)), dtb__146)) else (C_Base_dList_dList_Cons (dtb__145, (((v_Vuna_dCompiler_dElab_dTrait_dreplaceGlobalType mc0) mc1) dtb__146))))
@@ -415,29 +424,31 @@ let v_Vuna_dCompiler_dElab_dTrait_dcheckBodyAtEnd = (fun globals -> (fun ctx -> 
   | _ -> ((v_Vuna_dCompiler_dElab_dTypes_derrAt sp) "[TC_DefFewerParams] DT: definition has fewer parameters than its signature")
 )))))))
 
-let rec v_Vuna_dCompiler_dElab_dTrait_dcheckBinders = (fun mc0 -> (fun mc1 -> (fun mc2 -> (fun mc3 -> (fun mc4 -> (fun mc5 -> (fun mc6 -> (match mc3 with
-  | C_Base_dList_dList_Cons (dtb__181, dtb__182) -> ((fun forced -> (match forced with
-  | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVPi (dtb__183, dtb__184, dtb__185, dtb__186, dtb__187) -> (if dtb__184 then (if ((v_Vuna_dCompiler_dElab_dMeta_disIndexDomain mc2) dtb__186) then (((((((((v_Vuna_dCompiler_dElab_dTrait_dbindIndexBinder mc0) mc1) mc2) dtb__183) dtb__186) dtb__187) (C_Base_dList_dList_Cons (dtb__181, dtb__182))) mc4) mc6) else ((v_Vuna_dCompiler_dElab_dTypes_derrAt mc6) "[TC_ImplicitParamKind] DT: implicit parameters must be types or inductive families (M14)")) else (match dtb__181 with
-  | C_Vuna_dCompiler_dFrontend_dAst_dPat_Vuna_dCompiler_dFrontend_dAst_dPVar (dtb__188, dtb__189) -> (((((((((v_Vuna_dCompiler_dElab_dTrait_dbindOnePattern mc0) mc1) mc2) dtb__188) dtb__182) mc4) dtb__186) dtb__187) mc6)
-  | C_Vuna_dCompiler_dFrontend_dAst_dPat_Vuna_dCompiler_dFrontend_dAst_dPWild (dtb__190) -> (((((((((v_Vuna_dCompiler_dElab_dTrait_dbindOnePattern mc0) mc1) mc2) "_") dtb__182) mc4) dtb__186) dtb__187) mc6)
+let rec v_Vuna_dCompiler_dElab_dTrait_dcheckBindersFuel = (fun mc0 -> (fun mc1 -> (fun mc2 -> (fun mc3 -> (fun mc4 -> (fun mc5 -> (fun mc6 -> (fun mc7 -> (match mc4 with
+  | C_Base_dList_dList_Cons (dtb__181, dtb__182) -> (if ((bi_le_int mc0) 0) then (C_Base_dResult_dResult_Base_dResult_dErr ("DT: internal: binder check fuel exhausted")) else ((fun forced -> (match forced with
+  | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVPi (dtb__183, dtb__184, dtb__185, dtb__186, dtb__187) -> (if dtb__184 then (if ((v_Vuna_dCompiler_dElab_dMeta_disIndexDomain mc3) dtb__186) then ((((((((((v_Vuna_dCompiler_dElab_dTrait_dbindIndexBinderFuel ((bi_sub mc0) 1)) mc1) mc2) mc3) dtb__183) dtb__186) dtb__187) (C_Base_dList_dList_Cons (dtb__181, dtb__182))) mc5) mc7) else ((v_Vuna_dCompiler_dElab_dTypes_derrAt mc7) "[TC_ImplicitParamKind] DT: implicit parameters must be types or inductive families (M15)")) else (match dtb__181 with
+  | C_Vuna_dCompiler_dFrontend_dAst_dPat_Vuna_dCompiler_dFrontend_dAst_dPVar (dtb__188, dtb__189) -> ((((((((((v_Vuna_dCompiler_dElab_dTrait_dbindOnePatternFuel ((bi_sub mc0) 1)) mc1) mc2) mc3) dtb__188) dtb__182) mc5) dtb__186) dtb__187) mc7)
+  | C_Vuna_dCompiler_dFrontend_dAst_dPat_Vuna_dCompiler_dFrontend_dAst_dPWild (dtb__190) -> ((((((((((v_Vuna_dCompiler_dElab_dTrait_dbindOnePatternFuel ((bi_sub mc0) 1)) mc1) mc2) mc3) "_") dtb__182) mc5) dtb__186) dtb__187) mc7)
   | _ -> ((v_Vuna_dCompiler_dElab_dTypes_derrAt (v_Vuna_dCompiler_dFrontend_dAst_dpatSpan dtb__181)) "[TC_DefParamsMustBeVars] DT: definition parameters must be variables (M13)")
 ))
-  | _ -> ((v_Vuna_dCompiler_dElab_dTypes_derrAt mc6) "[TC_DefMoreParams] DT: definition has more parameters than its signature")
-)) ((v_Vuna_dCompiler_dElab_dTypes_dforceVal mc2) mc5))
-  | C_Base_dList_dList_Nil -> ((fun forced -> (match forced with
-  | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVPi (dtb__191, dtb__192, dtb__193, dtb__194, dtb__195) -> (if dtb__192 then (if ((v_Vuna_dCompiler_dElab_dMeta_disIndexDomain mc2) dtb__194) then (((((((((v_Vuna_dCompiler_dElab_dTrait_dbindIndexBinder mc0) mc1) mc2) dtb__191) dtb__194) dtb__195) C_Base_dList_dList_Nil) mc4) mc6) else ((v_Vuna_dCompiler_dElab_dTypes_derrAt mc6) "[TC_ImplicitParamKind] DT: implicit parameters must be types or inductive families (M14)")) else ((((((v_Vuna_dCompiler_dElab_dTrait_dcheckBodyAtEnd mc0) mc1) mc2) mc4) mc5) mc6))
-  | _ -> (((((v_Vuna_dCompiler_dElab_dTerm_dcheckE mc0) mc1) mc2) mc4) mc5)
-)) ((v_Vuna_dCompiler_dElab_dTypes_dforceVal mc2) mc5))
+  | _ -> ((v_Vuna_dCompiler_dElab_dTypes_derrAt mc7) "[TC_DefMoreParams] DT: definition has more parameters than its signature")
+)) ((v_Vuna_dCompiler_dElab_dTypes_dforceVal mc3) mc6)))
+  | C_Base_dList_dList_Nil -> (if ((bi_le_int mc0) 0) then (C_Base_dResult_dResult_Base_dResult_dErr ("DT: internal: binder check fuel exhausted")) else ((fun forced -> (match forced with
+  | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVPi (dtb__191, dtb__192, dtb__193, dtb__194, dtb__195) -> (if dtb__192 then (if ((v_Vuna_dCompiler_dElab_dMeta_disIndexDomain mc3) dtb__194) then ((((((((((v_Vuna_dCompiler_dElab_dTrait_dbindIndexBinderFuel ((bi_sub mc0) 1)) mc1) mc2) mc3) dtb__191) dtb__194) dtb__195) C_Base_dList_dList_Nil) mc5) mc7) else ((v_Vuna_dCompiler_dElab_dTypes_derrAt mc7) "[TC_ImplicitParamKind] DT: implicit parameters must be types or inductive families (M15)")) else ((((((v_Vuna_dCompiler_dElab_dTrait_dcheckBodyAtEnd mc1) mc2) mc3) mc5) mc6) mc7))
+  | _ -> (((((v_Vuna_dCompiler_dElab_dTerm_dcheckE mc1) mc2) mc3) mc5) mc6)
+)) ((v_Vuna_dCompiler_dElab_dTypes_dforceVal mc3) mc6)))
   | _ -> failwith "DT: impossible branch"
-))))))))
-and v_Vuna_dCompiler_dElab_dTrait_dbindIndexBinder = (fun globals -> (fun ctx -> (fun ec -> (fun name -> (fun dom -> (fun clo -> (fun pats -> (fun body -> (fun sp -> ((fun lvl -> ((fun v -> ((fun ctx2 -> ((fun expected2 -> ((v_Base_dResult_dandThen (((((((v_Vuna_dCompiler_dElab_dTrait_dcheckBinders globals) ctx2) ec) pats) body) expected2) sp)) (fun p -> (match p with
+)))))))))
+and v_Vuna_dCompiler_dElab_dTrait_dbindIndexBinderFuel = (fun fuel -> (fun globals -> (fun ctx -> (fun ec -> (fun name -> (fun dom -> (fun clo -> (fun pats -> (fun body -> (fun sp -> (if ((bi_le_int fuel) 0) then (C_Base_dResult_dResult_Base_dResult_dErr ("DT: internal: binder check fuel exhausted")) else ((fun lvl -> ((fun v -> ((fun ctx2 -> ((fun expected2 -> ((v_Base_dResult_dandThen ((((((((v_Vuna_dCompiler_dElab_dTrait_dcheckBindersFuel ((bi_sub fuel) 1)) globals) ctx2) ec) pats) body) expected2) sp)) (fun p -> (match p with
   | C_Base_dPair_dPair_Base_dPair_dPair (dtb__196, dtb__197) -> (C_Base_dResult_dResult_Base_dResult_dOk ((C_Base_dPair_dPair_Base_dPair_dPair ((C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTLam (name, C_Vuna_dCompiler_dCore_dTerm_dRig_Vuna_dCompiler_dCore_dTerm_dRig0, dtb__196)), dtb__197))))
   | _ -> failwith "DT: impossible branch"
-)))) ((v_Vuna_dCompiler_dCore_dEval_dapplyClosure clo) v))) (((v_Vuna_dCompiler_dElab_dTypes_dctxBindValue name) dom) ctx))) ((v_Vuna_dCompiler_dElab_dMeta_dfreshVarValue name) lvl))) (v_Vuna_dCompiler_dElab_dTypes_dctxDepth ctx)))))))))))
-and v_Vuna_dCompiler_dElab_dTrait_dbindOnePattern = (fun globals -> (fun ctx -> (fun ec -> (fun pname -> (fun pats -> (fun body -> (fun dom -> (fun clo -> (fun sp -> ((fun lvl -> ((fun v -> ((fun ctx2 -> ((fun erasure -> ((v_Base_dResult_dandThen (((((((v_Vuna_dCompiler_dElab_dTrait_dcheckBinders globals) ctx2) ec) pats) body) ((v_Vuna_dCompiler_dCore_dEval_dapplyClosure clo) v)) sp)) (fun p -> (match p with
+)))) ((v_Vuna_dCompiler_dCore_dEval_dapplyClosure clo) v))) (((v_Vuna_dCompiler_dElab_dTypes_dctxBindValue name) dom) ctx))) ((v_Vuna_dCompiler_dElab_dMeta_dfreshVarValue name) lvl))) (v_Vuna_dCompiler_dElab_dTypes_dctxDepth ctx)))))))))))))
+and v_Vuna_dCompiler_dElab_dTrait_dbindOnePatternFuel = (fun fuel -> (fun globals -> (fun ctx -> (fun ec -> (fun pname -> (fun pats -> (fun body -> (fun dom -> (fun clo -> (fun sp -> (if ((bi_le_int fuel) 0) then (C_Base_dResult_dResult_Base_dResult_dErr ("DT: internal: binder check fuel exhausted")) else ((fun lvl -> ((fun v -> ((fun ctx2 -> ((fun erasure -> ((v_Base_dResult_dandThen ((((((((v_Vuna_dCompiler_dElab_dTrait_dcheckBindersFuel ((bi_sub fuel) 1)) globals) ctx2) ec) pats) body) ((v_Vuna_dCompiler_dCore_dEval_dapplyClosure clo) v)) sp)) (fun p -> (match p with
   | C_Base_dPair_dPair_Base_dPair_dPair (dtb__198, dtb__199) -> (C_Base_dResult_dResult_Base_dResult_dOk ((C_Base_dPair_dPair_Base_dPair_dPair ((C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTLam (pname, erasure, dtb__198)), dtb__199))))
   | _ -> failwith "DT: impossible branch"
-)))) ((v_Vuna_dCompiler_dElab_dMeta_dtypeLayerRig false) dom))) (((v_Vuna_dCompiler_dElab_dTypes_dctxBindValue pname) dom) ctx))) ((v_Vuna_dCompiler_dElab_dMeta_dfreshVarValue pname) lvl))) (v_Vuna_dCompiler_dElab_dTypes_dctxDepth ctx)))))))))))
+)))) ((v_Vuna_dCompiler_dElab_dMeta_dtypeLayerRig false) dom))) (((v_Vuna_dCompiler_dElab_dTypes_dctxBindValue pname) dom) ctx))) ((v_Vuna_dCompiler_dElab_dMeta_dfreshVarValue pname) lvl))) (v_Vuna_dCompiler_dElab_dTypes_dctxDepth ctx)))))))))))))
+
+let v_Vuna_dCompiler_dElab_dTrait_dcheckBinders = (fun a1 -> (fun a2 -> (fun a3 -> (fun a4 -> (fun a5 -> (fun a6 -> (fun a7 -> ((((((((v_Vuna_dCompiler_dElab_dTrait_dcheckBindersFuel 512) a1) a2) a3) a4) a5) a6) a7))))))))
 
 let v_Vuna_dCompiler_dElab_dTrait_dcheckDef = (fun globals -> (fun ec -> (fun pats -> (fun body -> (fun expected -> (fun sp -> (((((((v_Vuna_dCompiler_dElab_dTrait_dcheckBinders globals) (v_Vuna_dCompiler_dElab_dTypes_demptyCtx ())) ec) pats) body) expected) sp)))))))
 
@@ -523,3 +534,7 @@ let rec v_Vuna_dCompiler_dElab_dTrait_delabInstancesGo = (fun mc0 -> (fun mc1 ->
 )))))))
 
 let v_Vuna_dCompiler_dElab_dTrait_delabInstances = (fun decls -> (fun classes -> (fun datas -> (fun globals -> (fun ec -> ((((((v_Vuna_dCompiler_dElab_dTrait_delabInstancesGo decls) classes) datas) globals) ec) C_Base_dList_dList_Nil))))))
+
+let v_Vuna_dCompiler_dElab_dTrait_dbindIndexBinder = (fun a1 -> (fun a2 -> (fun a3 -> (fun a4 -> (fun a5 -> (fun a6 -> (fun a7 -> (fun a8 -> (fun a9 -> ((((((((((v_Vuna_dCompiler_dElab_dTrait_dbindIndexBinderFuel 512) a1) a2) a3) a4) a5) a6) a7) a8) a9))))))))))
+
+let v_Vuna_dCompiler_dElab_dTrait_dbindOnePattern = (fun a1 -> (fun a2 -> (fun a3 -> (fun a4 -> (fun a5 -> (fun a6 -> (fun a7 -> (fun a8 -> (fun a9 -> ((((((((((v_Vuna_dCompiler_dElab_dTrait_dbindOnePatternFuel 512) a1) a2) a3) a4) a5) a6) a7) a8) a9))))))))))

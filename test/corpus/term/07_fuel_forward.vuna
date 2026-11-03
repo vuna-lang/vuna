@@ -1,0 +1,10 @@
+-- M25.2b 正例：SCC 入口假设传播（同 fuel 转发 + `fuel - 1` 递降）。
+-- go 有局部守卫，step 没有；step 的 fuel 正性由 go 的 else 区调用点传播而来。
+go : Int -> Int -> Int
+go fuel n = if fuel <= 0 then n else step fuel n
+
+step : Int -> Int -> Int
+step fuel n = go (fuel - 1) n
+
+main : Int
+main = 0

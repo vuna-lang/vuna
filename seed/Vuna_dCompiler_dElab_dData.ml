@@ -17,6 +17,7 @@ open Vuna_dCompiler_dFrontend_dManifest
 open Vuna_dCompiler_dPackages_dPkg
 open Vuna_dCompiler_dFrontend_dAst
 open Vuna_dCompiler_dFrontend_dLexer
+open Vuna_dCompiler_dFrontend_dParser_dSupport
 open Vuna_dCompiler_dFrontend_dParser
 open Vuna_dCompiler_dLoader_dModules
 open Vuna_dCompiler_dLoader_dResolve
@@ -33,6 +34,8 @@ open Vuna_dCompiler_dElab_dMeta
 open Vuna_dCompiler_dElab_dCase
 open Vuna_dCompiler_dElab_dDict
 open Vuna_dCompiler_dElab_dMatch
+open Vuna_dCompiler_dElab_dTerm_dSupport
+open Vuna_dCompiler_dElab_dTerm_dImpl
 open Vuna_dCompiler_dElab_dTerm
 let v_Vuna_dCompiler_dElab_dData_delabCtor = (fun globals -> (fun fam -> (fun arity -> (fun ec -> (fun c -> (match c with
   | C_Vuna_dCompiler_dFrontend_dAst_dCtor_Vuna_dCompiler_dFrontend_dAst_dCtor (dtb__0, dtb__1, dtb__2, dtb__3) -> ((fun famKind -> ((fun tyExpr2 -> ((v_Base_dResult_dandThen ((((v_Vuna_dCompiler_dElab_dTerm_dcheckType globals) (v_Vuna_dCompiler_dElab_dTypes_demptyCtx ())) ec) tyExpr2)) (fun pk -> (match pk with
@@ -104,14 +107,14 @@ let v_Vuna_dCompiler_dElab_dData_delabDataHeadsNoProgress = (fun globals -> (fun
   | _ -> failwith "DT: impossible branch"
 ))))
 
-let rec v_Vuna_dCompiler_dElab_dData_delabDataHeads = (fun pending -> (fun globals -> (fun ec -> (fun heads -> (match pending with
+let rec v_Vuna_dCompiler_dElab_dData_delabDataHeadsFuel = (fun fuel -> (fun pending -> (fun globals -> (fun ec -> (fun heads -> (if ((bi_le_int fuel) 0) then (C_Base_dResult_dResult_Base_dResult_dErr ("DT: internal: data head registration fuel exhausted")) else (match pending with
   | C_Base_dList_dList_Nil -> (C_Base_dResult_dResult_Base_dResult_dOk ((C_Base_dPair_dPair_Base_dPair_dPair ((v_Base_dList_dreverse heads), (C_Base_dPair_dPair_Base_dPair_dPair (globals, ec))))))
   | _ -> (match (((((v_Vuna_dCompiler_dElab_dData_delabDataHeadsRound pending) globals) ec) heads) C_Base_dList_dList_Nil) with
   | C_Base_dPair_dPair_Base_dPair_dPair (dtb__41, dtb__42) -> (match dtb__42 with
   | C_Base_dPair_dPair_Base_dPair_dPair (dtb__43, dtb__44) -> (match dtb__44 with
   | C_Base_dPair_dPair_Base_dPair_dPair (dtb__45, dtb__46) -> (match dtb__46 with
   | C_Base_dList_dList_Nil -> (C_Base_dResult_dResult_Base_dResult_dOk ((C_Base_dPair_dPair_Base_dPair_dPair ((v_Base_dList_dreverse dtb__41), (C_Base_dPair_dPair_Base_dPair_dPair (dtb__43, dtb__45))))))
-  | _ -> (if ((bi_eq_int (v_Base_dList_dlength dtb__46)) (v_Base_dList_dlength pending)) then (((v_Vuna_dCompiler_dElab_dData_delabDataHeadsNoProgress globals) ec) dtb__46) else ((((v_Vuna_dCompiler_dElab_dData_delabDataHeads dtb__46) dtb__43) dtb__45) dtb__41))
+  | _ -> (if ((bi_eq_int (v_Base_dList_dlength dtb__46)) (v_Base_dList_dlength pending)) then (((v_Vuna_dCompiler_dElab_dData_delabDataHeadsNoProgress globals) ec) dtb__46) else (((((v_Vuna_dCompiler_dElab_dData_delabDataHeadsFuel ((bi_sub fuel) 1)) dtb__46) dtb__43) dtb__45) dtb__41))
 )
   | _ -> failwith "DT: impossible branch"
 )
@@ -119,7 +122,9 @@ let rec v_Vuna_dCompiler_dElab_dData_delabDataHeads = (fun pending -> (fun globa
 )
   | _ -> failwith "DT: impossible branch"
 )
-)))))
+)))))))
+
+let v_Vuna_dCompiler_dElab_dData_delabDataHeads = (fun pending -> (fun globals -> (fun ec -> (fun heads -> (((((v_Vuna_dCompiler_dElab_dData_delabDataHeadsFuel 64) pending) globals) ec) heads)))))
 
 let rec v_Vuna_dCompiler_dElab_dData_delabDataBodies = (fun decls -> (fun heads -> (fun globals -> (fun ec -> (fun acc -> (match decls with
   | C_Base_dList_dList_Nil -> (C_Base_dResult_dResult_Base_dResult_dOk ((C_Base_dPair_dPair_Base_dPair_dPair ((v_Base_dList_dreverse acc), (C_Base_dPair_dPair_Base_dPair_dPair (globals, ec))))))

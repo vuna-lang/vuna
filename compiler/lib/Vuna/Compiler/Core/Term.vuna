@@ -190,6 +190,8 @@ data Value : Type where
   VLam : String -> Rig -> Closure -> Value
   VNeutral : Neutral -> Value
   VMeta : Int -> List Value -> Value
+  -- 卡住的应用（头部既不是 lambda 也不是中性 spines 时保留实参，禁止静默丢弃）。
+  VApp : Value -> Value -> Value
   -- M14：构造子值（已应用全部参数）。
   VCon : String -> List Value -> Value
   -- M14：卡住的 case（scrutinee 是中性值）。
@@ -422,28 +424,47 @@ anyAltFree d (alt :: rest) = case alt of
 
 -- M20：值里是否还有未解元变量（`VMeta m` 未解，或解里仍有未解）。
 hasUnsolvedMetaValue : List (Pair Int Value) -> Value -> Bool
-hasUnsolvedMetaValue sols v = case v of
+hasUnsolvedMetaValue sols v = hasUnsolvedMetaValueFuel 64 sols v
+
+hasUnsolvedMetaValueFuel : Int -> List (Pair Int Value) -> Value -> Bool
+hasUnsolvedMetaValueFuel fuel sols v = if fuel <= 0 then False
+else case v of
   VMeta m sp => case metaLookup m sols of
-    Just solved => hasUnsolvedMetaValue sols solved
+    Just solved => hasUnsolvedMetaValueFuel (fuel - 1) sols solved
     Nothing => True
   VNeutral n => case n of
-    NVar name lvl sp => hasUnsolvedMetaList sols sp
-    NGlobal g sp => hasUnsolvedMetaList sols sp
-  VPi name implicit rig dom clo => hasUnsolvedMetaValue sols dom || hasUnsolvedMetaClo sols clo
-  VLam name rig clo => hasUnsolvedMetaClo sols clo
-  VCon c args => hasUnsolvedMetaList sols args
-  VCase scrut alts => hasUnsolvedMetaValue sols scrut
+    NVar name lvl sp => hasUnsolvedMetaListFuel (fuel - 1) sols sp
+    NGlobal g sp => hasUnsolvedMetaListFuel (fuel - 1) sols sp
+  VPi name implicit rig dom clo =>
+    hasUnsolvedMetaValueFuel (fuel - 1) sols dom || hasUnsolvedMetaCloFuel (fuel - 1) sols clo
+  VLam name rig clo => hasUnsolvedMetaCloFuel (fuel - 1) sols clo
+  VCon c args => hasUnsolvedMetaListFuel (fuel - 1) sols args
+  VApp f a =>
+    hasUnsolvedMetaValueFuel (fuel - 1) sols f || hasUnsolvedMetaValueFuel (fuel - 1) sols a
+  VCase scrut alts => hasUnsolvedMetaValueFuel (fuel - 1) sols scrut
   VIf c th el =>
-    hasUnsolvedMetaValue sols c || hasUnsolvedMetaValue sols th || hasUnsolvedMetaValue sols el
+    hasUnsolvedMetaValueFuel (fuel - 1) sols c
+      || hasUnsolvedMetaValueFuel (fuel - 1) sols th
+      || hasUnsolvedMetaValueFuel (fuel - 1) sols el
   _ => False
 
 hasUnsolvedMetaList : List (Pair Int Value) -> List Value -> Bool
-hasUnsolvedMetaList sols [] = False
-hasUnsolvedMetaList sols (v :: rest) = hasUnsolvedMetaValue sols v || hasUnsolvedMetaList sols rest
+hasUnsolvedMetaList sols vs = hasUnsolvedMetaListFuel 64 sols vs
+
+hasUnsolvedMetaListFuel : Int -> List (Pair Int Value) -> List Value -> Bool
+hasUnsolvedMetaListFuel fuel sols vs = if fuel <= 0 then False
+else case vs of
+  [] => False
+  v :: rest =>
+    hasUnsolvedMetaValueFuel (fuel - 1) sols v || hasUnsolvedMetaListFuel (fuel - 1) sols rest
 
 hasUnsolvedMetaClo : List (Pair Int Value) -> Closure -> Bool
-hasUnsolvedMetaClo sols clo = case clo of
-  Clos env body => hasUnsolvedMetaList sols env
+hasUnsolvedMetaClo sols clo = hasUnsolvedMetaCloFuel 64 sols clo
+
+hasUnsolvedMetaCloFuel : Int -> List (Pair Int Value) -> Closure -> Bool
+hasUnsolvedMetaCloFuel fuel sols clo = if fuel <= 0 then False
+else case clo of
+  Clos env body => hasUnsolvedMetaListFuel (fuel - 1) sols env
 
 -- ---------------------------------------------------------------
 -- 宇宙 helper
@@ -471,6 +492,7 @@ levelEscapes limit depth v = case v of
   VLam name rig clo => levelEscapesClo limit clo
   VMeta m sp => levelEscapesList limit sp
   VCon c args => levelEscapesList limit args
+  VApp f a => levelEscapes limit depth f || levelEscapes limit depth a
   VCase scrut alts => levelEscapes limit depth scrut
   VIf c th el =>
     levelEscapes limit depth c || levelEscapes limit depth th || levelEscapes limit depth el

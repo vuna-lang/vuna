@@ -130,7 +130,9 @@ interpParse roots args = case args of
     let
       _ = print "error: --dt has been removed; interp always uses DT core evaluation\n"
     in 2
-  "--root" :: rest => rootArg roots rest (\roots2, rest2 => interpParse roots2 rest2)
+  "--root" :: rest => case rest of
+    dir :: rest2 => interpParse (append roots [rawRoot dir]) rest2
+    [] => usageError
   [path] => if startsWith "-" path then usageError else interpFile (effectiveRoots roots) path
   _ => usageError
 
@@ -146,11 +148,6 @@ interpDirErr path =
   let
     _ = print ("error: interp takes a single file, not a package directory: " ++ path ++ "\n")
   in 2
-
-rootArg : List Root -> List String -> (List Root -> List String -> Int) -> Int
-rootArg roots rest k = case rest of
-  dir :: rest2 => k (append roots [rawRoot dir]) rest2
-  [] => usageError
 
 interpEmit : List Root -> String -> Int
 interpEmit roots path =
@@ -247,7 +244,9 @@ replArgs args = replParse [] args
 
 replParse : List Root -> List String -> Int
 replParse roots args = case args of
-  "--root" :: rest => rootArg roots rest (\roots2, rest2 => replParse roots2 rest2)
+  "--root" :: rest => case rest of
+    dir :: rest2 => replParse (append roots [rawRoot dir]) rest2
+    [] => usageError
   [] => runRepl (effectiveRoots roots)
   _ => usageError
 
