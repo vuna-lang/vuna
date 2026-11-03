@@ -1,8 +1,10 @@
 module Vuna.Compiler.Common
-  ( Pos
+  ( HashTbl
+  , Pos
   , Span
   , baseName
   , containsDot
+  , hashStr
   , joinArrows
   , joinDots
   , joinSlashes
@@ -18,6 +20,13 @@ module Vuna.Compiler.Common
   , splitOnDot
   , splitPath
   , suggest
+  , tblEmpty
+  , tblFromList
+  , tblInsert
+  , tblInsertAll
+  , tblLookup
+  , tblMem
+  , tblOfNames
   , module Base.Bool
   , module Base.List
   , module Base.Maybe
@@ -150,3 +159,89 @@ prefixLen2 (x :: xs) (y :: ys) = if x == y then 1 + prefixLen2 xs ys else 0
 
 lengthDiffLE : Int -> Int -> Int -> Bool
 lengthDiffLE la lb n = if la >= lb then la - lb <= n else lb - la <= n
+
+-- ---------------------------------------------------------------
+-- 名字 → 值的持久哈希表：1024 桶（两层 32 叉）。
+-- 动机：defs / globals 一类表「每个类型检查节点都要查一次」，用关联列表线性扫让单次
+-- 查找成本随程序规模线性增长（总量二次方）。这里单次查找 ~64 步列表遍历 + 桶内 1–2
+-- 次字符串比较。桶内前插，语义与旧关联表「新值优先」一致。
+-- ---------------------------------------------------------------
+data HashTbl a : Type where
+  MkHashTbl : List (List (List (Pair String a))) -> HashTbl a
+
+replicate : Int -> a -> List a
+replicate n x = if n <= 0 then [] else x :: replicate (n - 1) x
+
+nthOr : Int -> a -> List a -> a
+nthOr i d xs = case xs of
+  [] => d
+  x :: rest => if i <= 0 then x else nthOr (i - 1) d rest
+
+putNth : Int -> a -> List a -> List a
+putNth i v xs = case xs of
+  [] => []
+  x :: rest => if i <= 0 then v :: rest else x :: putNth (i - 1) v rest
+
+mod1024 : Int -> Int
+mod1024 x = x - x / 1024 * 1024
+
+-- 字符串哈希 → 0..1023（逐字符取模，天然不溢出）。
+hashStr : String -> Int
+-- 索引键哈希：走运行时内建 `strHash`（OCaml 单遍、无 char-list 分配）。
+-- 旧实现 `hashChars (strUnpack s)` 每次查表都分配一条字符链表：force 每次 delta 展开
+-- 都要查 defs 表，实测这是 check 的主要分配来源之一。
+hashStr s = strHash s
+
+hashChars : List Int -> Int -> Int
+hashChars [] h = h
+hashChars (c :: rest) h = hashChars rest (mod1024 (h * 33 + c))
+
+tblEmpty : HashTbl a
+tblEmpty = MkHashTbl (replicate 32 (replicate 32 []))
+
+-- 名字集合（成员判定走哈希索引）：编译期大量「这个名字是否已定义/已见」的判定
+-- 原来是对 list 做 memName（逐个 O(n)）⇒ 整程序 O(n²)。统一用哈希集合。
+tblOfNames : List String -> HashTbl Bool
+tblOfNames xs = tblInsertAll (map (\n => Pair n True) xs) tblEmpty
+
+tblMem : String -> HashTbl Bool -> Bool
+tblMem n t = case tblLookup n t of
+  Just _ => True
+  Nothing => False
+
+tblInsert : String -> a -> HashTbl a -> HashTbl a
+tblInsert key v tbl = case tbl of
+  MkHashTbl outers =>
+    let
+      b = hashStr key
+      oi = b / 32
+      ii = b - oi * 32
+      outer = nthOr oi (replicate 32 []) outers
+      inner = nthOr ii [] outer
+    in MkHashTbl (putNth oi (putNth ii (Pair key v :: inner) outer) outers)
+
+lookupAssoc : String -> List (Pair String a) -> Maybe a
+lookupAssoc key pairs = case pairs of
+  [] => Nothing
+  (Pair k v) :: rest => if key == k then Just v else lookupAssoc key rest
+
+tblLookup : String -> HashTbl a -> Maybe a
+tblLookup key tbl = case tbl of
+  MkHashTbl outers =>
+    let
+      b = hashStr key
+      oi = b / 32
+      ii = b - oi * 32
+    in lookupAssoc key (nthOr ii [] (nthOr oi [] outers))
+
+tblFromList : List (Pair String a) -> HashTbl a
+tblFromList pairs = case pairs of
+  [] => tblEmpty
+  (Pair k v) :: rest => tblInsert k v (tblFromList rest)
+
+-- 批量插入（用于「按当前列表建表」或把一批新条目并入已有索引）。列表顺序 =
+-- 新值优先：先插入前面的条目，后面的同键条目覆盖前面的（与关联表查找语义一致）。
+tblInsertAll : List (Pair String a) -> HashTbl a -> HashTbl a
+tblInsertAll pairs tbl = case pairs of
+  [] => tbl
+  (Pair k v) :: rest => tblInsertAll rest (tblInsert k v tbl)

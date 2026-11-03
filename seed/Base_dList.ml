@@ -20,6 +20,27 @@ let dtp_listOf xs = List.fold_right (fun x acc -> C_Base_dList_dList_Cons (x, ac
 let dtp_ocamlOf xs =
   let rec go l = match l with C_Base_dList_dList_Nil -> [] | C_Base_dList_dList_Cons (x, rest) -> x :: go rest in
   go xs
+
+let dtp_concatMany xs = String.concat "" (dtp_ocamlOf xs)
+
+let dtp_substTemplate tmpl xs =
+  let args = Array.of_list (dtp_ocamlOf xs) in
+  let n = String.length tmpl and na = Array.length args in
+  let buf = Buffer.create (n + 32) in
+  let rec go i =
+    if i >= n then ()
+    else if tmpl.[i] = '<' then begin
+      let j = ref (i + 1) and k = ref 0 in
+      while !j < n && tmpl.[!j] >= '0' && tmpl.[!j] <= '9' do
+        k := !k * 10 + (Char.code tmpl.[!j] - 48); incr j
+      done;
+      if !j < n && tmpl.[!j] = '>' && !j > i + 1 then begin
+        (if !k < na then Buffer.add_string buf args.(!k)
+         else Buffer.add_string buf (String.sub tmpl i (!j - i + 1)));
+        go (!j + 1)
+      end else (Buffer.add_char buf '<'; go (i + 1))
+    end else (Buffer.add_char buf tmpl.[i]; go (i + 1))
+  in go 0; Buffer.contents buf
 let rec v_Base_dList_dappend = (fun mc0 -> (fun mc1 -> (match mc0 with
   | C_Base_dList_dList_Cons (dtb__0, dtb__1) -> (C_Base_dList_dList_Cons (dtb__0, ((v_Base_dList_dappend dtb__1) mc1)))
   | C_Base_dList_dList_Nil -> mc1

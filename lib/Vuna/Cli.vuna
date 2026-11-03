@@ -70,8 +70,14 @@ toolUsageLines prog =
 usageFor : String -> String
 usageFor prog = "usage:\n" ++ compilerUsageLines prog ++ toolUsageLines prog
 
+-- `--debug-perf` 是全局调试开关（见 Vuna.Compiler.Debug）：不参与子命令分发。
+stripDebugFlags : List String -> List String
+stripDebugFlags [] = []
+stripDebugFlags (a :: rest) =
+  if a == "--debug-perf" then stripDebugFlags rest else a :: stripDebugFlags rest
+
 runCli : List String -> Int
-runCli args = if anyHelp args then help else runCli1 args
+runCli args = if anyHelp args then help else runCli1 (stripDebugFlags args)
 
 runCli1 : List String -> Int
 runCli1 args = case args of

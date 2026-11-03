@@ -60,6 +60,7 @@ M25–M30 为可排期阶段，F1–F4 为不排期未来轨道）。
 | B16 | 效果 allowlist 按包名字符串（可伪造）；raw root 依赖模块可调 `prim_*`；**这是权限策略不是检查豁免**：M27 用 manifest 声明 capability 替换（或按决策删除） | `Loader/Resolve.packageAllowsEffects`；探针 | M27 |
 | B17 | case/终止性「只告警」的文档与实现不符（实际静默跳过、无 warning）；随 B01 删除豁免后不再需要「告警」语义 | `docs/reference/limits.md` vs `Elab/Case.ecTrusted` | 已修（M25：删除豁免；无 warning 通道） |
 | B18 | 解析层只有单一命名空间：同名 type/ctor/global 靠多处特判兜住，与导出层双命名空间不一致 | `Elab/Term.inferVarRef`、`Elab/Records` 注释 | M28 |
+| B19 | `Vuna.Compiler.Diagnostics` 单模块承载 74 个 TC 构造子的 code/模板，split codegen 把 74 臂 `match` 生成为单行 34912 字符（`nix/metrics.budget` maxline 因此从 8250 上调到 35500）；可拆成 Tc/Cg/元数据子模块降低单行与单模块规模 | `seed/Vuna_dCompiler_dDiagnostics.ml`；`nix/metrics.budget`；`vuna seed out compiler && sh nix/metrics.sh out` | M30 |
 
 ## C. 可复现缺陷（bug）
 
@@ -115,7 +116,7 @@ M25–M30 为可排期阶段，F1–F4 为不排期未来轨道）。
 | D15 | hermetic / 增量依赖哈希 / 并行构建（当前宿主 ocamlopt + mtime 增量） | M30 |
 | D16 | 数值塔（Int 固定宽度/溢出）与 Unicode String 语义（字节 vs 码点）决策 | M27 |
 | D17 | `main` 结果显示只支持 Int/String/Bool；interp 不执行效果 | M30（其余 F3） |
-| D18 | 性能工程：NbE 无共享、`termMetasAll` 扫描、自检 ~2min | M30 |
+| D18 | 性能工程：**部分修复（M25）**——defs/globals/sols 改为 `HashTbl` 索引、Loader 导出表 O(k⁴)→近线性、termination transpose 去重、check 不再拼产物文本、运行时 GC 调参；自检 76.8s→14.4s。**剩余**：NbE 无共享（`force` 每次重算 `eval [] body`）、conv 每节点重复 force、`dtCtorLookup` 线性扫族表、check/build 仍需 <10s 的进一步优化（见 `docs/reference/performance.md` §5） | M30（部分提前到 M25） |
 
 ## E. 验证/CI/文档基建缺口
 

@@ -55,6 +55,7 @@ module Vuna.Compiler.Elab.Case
 -- 拆自 M24 的单一 `Elab.vuna`（按真实调用图切；门面仍是 `Vuna.Compiler.Elab`）。
 import Vuna.Compiler.Common
 import Vuna.Compiler.Core
+import Vuna.Compiler.Diagnostics
 import Vuna.Compiler.Elab.Meta
 import Vuna.Compiler.Elab.Types
 import Vuna.Compiler.Frontend.Ast
@@ -68,10 +69,7 @@ import Vuna.Compiler.Frontend.Ast
 -- 方向约定：优先精化 **level 更大**（更内层）的变量，于是 ctor 一侧的新鲜变量精化成
 -- scrutinee 的真实变量（`m ↦ n`），不会把真实变量解到分支作用域外（level 形态，无需 de Bruijn）。
 unifyErr : Result a
--- @code TC_ImpossibleBranchIndex
-unifyErr =
-  Err
-    "[TC_ImpossibleBranchIndex] DT: this branch is impossible (index constraints are unsatisfiable)"
+unifyErr = Err (tcMsg ImpossibleBranchIndex VNil)
 
 unifyIdxList : Ec -> List (Pair Int Value) -> Int -> Int -> List Value -> List Value -> Result (List (Pair Int Value))
 unifyIdxList ec acc depth fuel xs ys =
@@ -85,12 +83,11 @@ unifyIdxListGo ec acc depth fuel (x :: xs) (y :: ys) =
 unifyIdxListGo ec acc depth fuel _ _ = unifyErr
 
 unifyIdx : Ec -> List (Pair Int Value) -> Int -> Int -> Value -> Value -> Result (List (Pair Int Value))
--- @code TC_IndexFuel
-unifyIdx ec acc depth fuel a b = if fuel <= 0 then Err "[TC_IndexFuel] DT: index unification ran out of reduction fuel"
+unifyIdx ec acc depth fuel a b = if fuel <= 0 then Err (tcMsg IndexFuel VNil)
 else
   let
-    a2 = force (ecDefs ec) (ecSols ec) defaultFuel (refineValue acc defaultFuel a)
-    b2 = force (ecDefs ec) (ecSols ec) defaultFuel (refineValue acc defaultFuel b)
+    a2 = force (ecDefTbl ec) (ecSolsP ec) defaultFuel (refineValue acc defaultFuel a)
+    b2 = force (ecDefTbl ec) (ecSolsP ec) defaultFuel (refineValue acc defaultFuel b)
   in case a2 of
     VNeutral (NVar an al []) => case b2 of
       VNeutral (NVar bn bl []) =>
@@ -155,7 +152,7 @@ else case a of
 
 -- conv 回落：只判定相等（索引里的 meta 求解读 M15）。
 unifyIdxConv : Ec -> List (Pair Int Value) -> Int -> Value -> Value -> Result (List (Pair Int Value))
-unifyIdxConv ec acc depth a b = case conv (ecDefs ec) (ecSols ec) depth a b of
+unifyIdxConv ec acc depth a b = case conv (ecDefTbl ec) (ecSolsP ec) depth a b of
   Ok sols2 => Ok acc
   Err e => unifyErr
 
@@ -203,7 +200,7 @@ teleValsFrom low k =
 -- 分支绑定子……）拿不到等式，保持旧行为；Bool/Int/String 的 case 走各自的专用路径，
 -- 不会到这里。
 reflectScrutinee : Ec -> Int -> List (Pair Int Value) -> Value -> Value -> Result (List (Pair Int Value))
-reflectScrutinee ec depth refs ctorVal scrutVal = case force (ecDefs ec) (ecSols ec) defaultFuel (refineValue refs defaultFuel scrutVal) of
+reflectScrutinee ec depth refs ctorVal scrutVal = case force (ecDefTbl ec) (ecSolsP ec) defaultFuel (refineValue refs defaultFuel scrutVal) of
   VNeutral n => case n of
     NVar name lvl [] => unifyIdx ec refs depth defaultFuel (VNeutral n) ctorVal
     _ => Ok refs
@@ -253,9 +250,7 @@ bindCtorGo ctx ty subpats acc = case ty of
         ctx2 = ctxBindValue famName domVal ctx
       in bindCtorGo ctx2 cod subpats (BindAcc (Pair famName Rig0 :: baBinders acc) (baPending acc))
     else case subpats of
-      -- @code TC_CaseBranchTooFewArgs
-      [] =>
-        Err "[TC_CaseBranchTooFewArgs] DT: case branch has too few arguments for its constructor"
+      [] => Err (tcMsg CaseBranchTooFewArgs VNil)
       p :: rest => case p of
         PVar pname psp => bindCtorBinder ctx domVal cod pname rest acc
         PWild psp => bindCtorBinder ctx domVal cod "_" rest acc
@@ -270,10 +265,7 @@ bindCtorGo ctx ty subpats acc = case ty of
         -- 内层 case——字面量 case 在 DT 里降级成 if 链，需要外层兜底体提供 else。
         PInt n psp => mkPendingBinder ctx domVal cod p rest acc
         PStr s psp => mkPendingBinder ctx domVal cod p rest acc
-        -- @code TC_NestedPatterns
-        _ =>
-          errAt (patSpan p)
-            "[TC_NestedPatterns] DT: nested patterns must be constructor patterns (M19)"
+        _ => tcErr0 (patSpan p) NestedPatterns
   _ => Ok (Pair ctx (Pair (reverse (baBinders acc)) (Pair (baPending acc) subpats)))
 
 -- 嵌套模式的通用处理：绑新鲜名字、记 Pending，继续绑 telescope。
@@ -414,10 +406,9 @@ checkCoverage ctx ec dd idxs alts sp =
 
 checkCovered : Ctx -> Ec -> DtData -> List Value -> List String -> List (Pair Pat Expr) -> Span -> List DtCtor -> Result Int
 checkCovered ctx ec dd idxs written alts sp [] = Ok 0
--- @code TC_NotExhaustive
 checkCovered ctx ec dd idxs written alts sp (ctor :: rest) =
   if memName (dtCtorName ctor) written then checkCovered ctx ec dd idxs written alts sp rest
-  else if branchReachable ctx ec idxs ctor then errAt sp ("[TC_NotExhaustive] DT: case is not exhaustive: missing " ++ dtCtorName ctor)
+  else if branchReachable ctx ec idxs ctor then tcErr1 sp (NotExhaustive (dtCtorName ctor)) (dtCtorName ctor)
   else checkCovered ctx ec dd idxs written alts sp rest
 
 -- case：先验 scrutinee 是归纳族，再逐分支精化，最后查覆盖率。

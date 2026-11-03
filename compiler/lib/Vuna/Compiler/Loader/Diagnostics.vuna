@@ -1,0 +1,93 @@
+module Vuna.Compiler.Loader.Diagnostics
+  ( LdDiag(..)
+  , LdEntry(..)
+  , ldAll
+  , ldCode
+  , ldEntryCode
+  , ldEntryDesc
+  , ldEntryTemplate
+  , ldErr
+  , ldErr0
+  , ldErr1
+  , ldErr2
+  , ldMsg
+  , ldTemplate
+  , module Base.Nat
+  , module Base.Vec
+  ) where
+
+-- Vuna.Compiler.Loader.Diagnostics：模块加载 / 包图诊断的域枚举（M30 重构）。
+--
+-- 域 `LD_`：模块解析（Flatten/Modules/Resolve 的加载期错误）。这些诊断**无 Span**
+-- （错误发生在文件/模块粒度而非 token 粒度），输出 `[CODE] 消息`（无位置前缀）。
+-- 与 TC_/CG_/LX_/PS_/LN_ 同构：arity 由 `Nat` 索引在编译期锁定。
+-- `DT: internal:` 的 fuel 耗尽等内部不变量不占符号。
+import Base.Nat
+import Base.Vec
+
+data LdDiag : Nat -> Type where
+  -- arity 1
+  EntryFileNotFound : String -> LdDiag (Succ Zero)
+  ImportCycle : String -> LdDiag (Succ Zero)
+  InvalidModuleName : String -> LdDiag (Succ Zero)
+  ModuleHeaderInEntryFile : String -> LdDiag (Succ Zero)
+  ModuleHeaderInEntrySource : String -> LdDiag (Succ Zero)
+  -- arity 2
+  ModuleNotFound : String -> String -> LdDiag (Succ (Succ Zero))
+  ModuleNotExported : String -> String -> LdDiag (Succ (Succ Zero))
+
+ldCode : {n : Nat} -> LdDiag n -> String
+ldCode (EntryFileNotFound _) = "LD_EntryFileNotFound"
+ldCode (ImportCycle _) = "LD_ImportCycle"
+ldCode (InvalidModuleName _) = "LD_InvalidModuleName"
+ldCode (ModuleHeaderInEntryFile _) = "LD_ModuleHeaderInEntryFile"
+ldCode (ModuleHeaderInEntrySource _) = "LD_ModuleHeaderInEntrySource"
+ldCode (ModuleNotFound _ _) = "LD_ModuleNotFound"
+ldCode (ModuleNotExported _ _) = "LD_ModuleNotExported"
+
+ldTemplate : {n : Nat} -> LdDiag n -> String
+ldTemplate (EntryFileNotFound _) = "entry file not found: <0>"
+ldTemplate (ImportCycle _) = "import cycle: <0>"
+ldTemplate (InvalidModuleName _) = "invalid module name: <0>"
+ldTemplate (ModuleHeaderInEntryFile _) = "module header is not allowed in entry file (<0>)"
+ldTemplate (ModuleHeaderInEntrySource _) = "module header is not allowed in entry source (<0>)"
+ldTemplate (ModuleNotFound _ _) = "module <0> not found (roots: <1>)"
+ldTemplate (ModuleNotExported _ _) = "module <0> is not exported by package <1>"
+
+data LdEntry : Type where
+  LdEntry : String -> String -> String -> LdEntry
+
+ldEntryCode : LdEntry -> String
+ldEntryCode (LdEntry c t d) = c
+
+ldEntryTemplate : LdEntry -> String
+ldEntryTemplate (LdEntry c t d) = t
+
+ldEntryDesc : LdEntry -> String
+ldEntryDesc (LdEntry c t d) = d
+
+ldAll : List LdEntry
+ldAll =
+  [ LdEntry (ldCode (EntryFileNotFound "")) (ldTemplate (EntryFileNotFound "")) "入口文件不存在",
+    LdEntry (ldCode (ImportCycle "")) (ldTemplate (ImportCycle "")) "import 成环",
+    LdEntry (ldCode (InvalidModuleName "")) (ldTemplate (InvalidModuleName "")) "非法模块名",
+    LdEntry (ldCode (ModuleHeaderInEntryFile "")) (ldTemplate (ModuleHeaderInEntryFile "")) "入口文件不允许模块头",
+    LdEntry (ldCode (ModuleHeaderInEntrySource "")) (ldTemplate (ModuleHeaderInEntrySource "")) "入口源码不允许模块头",
+    LdEntry (ldCode (ModuleNotFound "" "")) (ldTemplate (ModuleNotFound "" "")) "模块未找到",
+    LdEntry (ldCode (ModuleNotExported "" "")) (ldTemplate (ModuleNotExported "" "")) "模块未被包导出"
+  ]
+
+ldMsg : {n : Nat} -> LdDiag n -> Vec String n -> String
+ldMsg e args = "[" ++ ldCode e ++ "] " ++ substTemplate (ldTemplate e) args
+
+ldErr : {n : Nat} -> LdDiag n -> Vec String n -> Result a
+ldErr e args = Err (ldMsg e args)
+
+ldErr0 : LdDiag Zero -> Result a
+ldErr0 e = ldErr e VNil
+
+ldErr1 : LdDiag (Succ Zero) -> String -> Result a
+ldErr1 e a0 = ldErr e (VCons a0 VNil)
+
+ldErr2 : LdDiag (Succ (Succ Zero)) -> String -> String -> Result a
+ldErr2 e a0 a1 = ldErr e (VCons a0 (VCons a1 VNil))

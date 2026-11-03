@@ -4,6 +4,7 @@ module Vuna.Compiler.Core.Term
   , Level
   , Neutral(..)
   , Rig(..)
+  , Sols(..)
   , Term(..)
   , VCaseAlt(..)
   , Value(..)
@@ -58,6 +59,12 @@ module Vuna.Compiler.Core.Term
   , showCoreChars
   , showCoreString
   , showTerm
+  , solsCons
+  , solsEmpty
+  , solsFromList
+  , solsList
+  , solsLookup
+  , solsTbl
   , substAltAt
   , substMetaVar
   , substMetaVarAlt
@@ -224,9 +231,39 @@ metaLookup : Int -> List (Pair Int Value) -> Maybe Value
 metaLookup i [] = Nothing
 metaLookup i ((Pair j t) :: rest) = if i == j then Just t else metaLookup i rest
 
-defLookup : String -> List (Pair String Term) -> Maybe Term
-defLookup name [] = Nothing
-defLookup name ((Pair n t) :: rest) = if name == n then Just t else defLookup name rest
+-- ---------------------------------------------------------------
+-- Sols：解表 + 其哈希索引（M25 性能）。
+-- ---------------------------------------------------------------
+-- 解表是权威数据（前插新解），但**线性查找**在大程序上是 O(#元变量)/次：签名期的元变量
+-- （隐式参数）在 bodies 阶段每次 force/conv 都要查，逐定义成本随元变量数增长 ⇒ check 超线性。
+-- 这里把「list（权威）+ HashTbl（索引）」打包成一个值沿调用链传递；前插新解时同时
+-- 插入索引，因此查找恒为 O(1)；`solsLookup` 的线性兜底只防表与 list 不同步的意外。
+data Sols : Type where
+  Sols : HashTbl Value -> List (Pair Int Value) -> Sols
+
+solsEmpty : Sols
+solsEmpty = Sols tblEmpty []
+
+solsFromList : List (Pair Int Value) -> Sols
+solsFromList xs =
+  Sols (tblInsertAll (map (\p => Pair (strFromInt (firstOf p)) (secondOf p)) xs) tblEmpty) xs
+
+solsList : Sols -> List (Pair Int Value)
+solsList (Sols t xs) = xs
+
+solsTbl : Sols -> HashTbl Value
+solsTbl (Sols t xs) = t
+
+solsLookup : Int -> Sols -> Maybe Value
+-- 索引与 list 同步维护（`solsCons`/`ecPutSols` 每次前插都插表），所以 miss 就是「未解」，
+-- 不做线性兜底：未解元变量在推断期是**高频**查询，兜底会退化成 O(#解)/次。
+solsLookup i (Sols t xs) = tblLookup (strFromInt i) t
+
+solsCons : Int -> Value -> Sols -> Sols
+solsCons i v (Sols t xs) = Sols (tblInsert (strFromInt i) v t) (Pair i v :: xs)
+
+defLookup : String -> HashTbl Term -> Maybe Term
+defLookup name tbl = tblLookup name tbl
 
 notBool : Bool -> Bool
 notBool b = if b then False else True
@@ -423,13 +460,13 @@ anyAltFree d (alt :: rest) = case alt of
   CaseAlt n bs b => hasFreeTermVar (d + length bs) b || anyAltFree d rest
 
 -- M20：值里是否还有未解元变量（`VMeta m` 未解，或解里仍有未解）。
-hasUnsolvedMetaValue : List (Pair Int Value) -> Value -> Bool
+hasUnsolvedMetaValue : Sols -> Value -> Bool
 hasUnsolvedMetaValue sols v = hasUnsolvedMetaValueFuel 64 sols v
 
-hasUnsolvedMetaValueFuel : Int -> List (Pair Int Value) -> Value -> Bool
+hasUnsolvedMetaValueFuel : Int -> Sols -> Value -> Bool
 hasUnsolvedMetaValueFuel fuel sols v = if fuel <= 0 then False
 else case v of
-  VMeta m sp => case metaLookup m sols of
+  VMeta m sp => case solsLookup m sols of
     Just solved => hasUnsolvedMetaValueFuel (fuel - 1) sols solved
     Nothing => True
   VNeutral n => case n of
@@ -448,20 +485,20 @@ else case v of
       || hasUnsolvedMetaValueFuel (fuel - 1) sols el
   _ => False
 
-hasUnsolvedMetaList : List (Pair Int Value) -> List Value -> Bool
+hasUnsolvedMetaList : Sols -> List Value -> Bool
 hasUnsolvedMetaList sols vs = hasUnsolvedMetaListFuel 64 sols vs
 
-hasUnsolvedMetaListFuel : Int -> List (Pair Int Value) -> List Value -> Bool
+hasUnsolvedMetaListFuel : Int -> Sols -> List Value -> Bool
 hasUnsolvedMetaListFuel fuel sols vs = if fuel <= 0 then False
 else case vs of
   [] => False
   v :: rest =>
     hasUnsolvedMetaValueFuel (fuel - 1) sols v || hasUnsolvedMetaListFuel (fuel - 1) sols rest
 
-hasUnsolvedMetaClo : List (Pair Int Value) -> Closure -> Bool
+hasUnsolvedMetaClo : Sols -> Closure -> Bool
 hasUnsolvedMetaClo sols clo = hasUnsolvedMetaCloFuel 64 sols clo
 
-hasUnsolvedMetaCloFuel : Int -> List (Pair Int Value) -> Closure -> Bool
+hasUnsolvedMetaCloFuel : Int -> Sols -> Closure -> Bool
 hasUnsolvedMetaCloFuel fuel sols clo = if fuel <= 0 then False
 else case clo of
   Clos env body => hasUnsolvedMetaListFuel (fuel - 1) sols env

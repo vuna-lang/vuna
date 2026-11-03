@@ -6,6 +6,7 @@ module Vuna.Compiler.Codegen.Split (generateDtSplitProgram) where
 -- open 链，因此文件顺序即依赖顺序；内建字典类型/实例与 List 族桥接各有固定归属模块。
 -- 与单文件路径共用 Decl/Erase/Term 的生成器，只有「归属表 + 分文件装配」在这里。
 import Vuna.Compiler.Common
+import Vuna.Compiler.Diagnostics
 import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Driver.Split
 import Vuna.Compiler.Elab
@@ -266,7 +267,7 @@ openHeader (u :: rest) = "open " ++ u ++ "\n" ++ openHeader rest
 
 -- 单个文件的正文：open 链 + 类型 + 桥接（仅声明 List 的模块）+ 运行时定义。
 splitUnitText : List DtData -> List DtDef -> List DtData -> List DtDef -> String -> List String -> Result String
-splitUnitText allDatas allDefs unitDatas unitDefs bridgeText opens = andThen (genTypeDeclsOf allDatas unitDatas) (\typeText => andThen (groupRuntimeDefs unitDefs) (\groups => andThen (genGroups (depAdjacency unitDefs) (mkGenSt allDatas allDefs) groups) (\p => case p of
+splitUnitText allDatas allDefs unitDatas unitDefs bridgeText opens = andThen (genTypeDeclsOf allDatas unitDatas) (\typeText => andThen (groupRuntimeDefs unitDefs) (\groups => andThen (genGroups (adjTblOf (depAdjacency unitDefs)) (mkGenSt allDatas allDefs) groups) (\p => case p of
   Pair bodies _ => Ok (openHeader opens ++ typeText ++ bridgeText ++ joinWith "\n\n" bodies ++ "\n")
 )
 )
@@ -291,8 +292,7 @@ splitModuleFiles allDatas allDefs defPairs dataPairs earlier ((Pair mname decls)
 
 splitMainHook : List DtData -> List DtDef -> Bool -> Result String
 splitMainHook allDatas allDefs printResult = case findDtDef "main" allDefs of
-  -- @code CG_NoMain
-  Nothing => Err "[CG_NoMain] DT: no main definition"
+  Nothing => cgErr0 NoMain
   Just mainDef =>
     let
       table = defTable allDefs
@@ -307,7 +307,7 @@ splitMainFile allDatas allDefs defPairs dataPairs printResult opens =
   let
     entryDefs = defsInUnit defPairs entryOwner allDefs
     entryDatas = datasInUnit dataPairs entryOwner allDatas
-  in andThen (genTypeDeclsOf allDatas entryDatas) (\typeText => andThen (groupRuntimeDefs entryDefs) (\groups => andThen (genGroups (depAdjacency entryDefs) (mkGenSt allDatas allDefs) groups) (\p => case p of
+  in andThen (genTypeDeclsOf allDatas entryDatas) (\typeText => andThen (groupRuntimeDefs entryDefs) (\groups => andThen (genGroups (adjTblOf (depAdjacency entryDefs)) (mkGenSt allDatas allDefs) groups) (\p => case p of
     Pair bodies _ =>
       andThen (splitMainHook allDatas allDefs printResult)
         (\hook => Ok (SplitFile "Main.ml" (openHeader opens ++ typeText ++ joinWith "\n\n" bodies ++ "\n" ++ hook)))

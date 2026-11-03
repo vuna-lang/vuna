@@ -24,6 +24,7 @@ module Vuna.Compiler.Frontend.Lexer
 
 -- vuna 源码 lexer：字符游标、token 与 pos。
 import Vuna.Compiler.Common
+import Vuna.Compiler.Frontend.Diagnostics
 
 data Tok : Type where
   TIdent : String -> Tok
@@ -114,7 +115,7 @@ skipLineComment (Chars (c :: rest) p) =
 
 skipBlockComment : Int -> Chars -> Result Chars
 skipBlockComment depth cs = case cs of
-  Chars [] p => Err "unterminated block comment"
+  Chars [] p => lexErr0 UnterminatedBlockComment
   Chars (c :: rest) p => case rest of
     c2 :: rest2 =>
       if c == 123 && c2 == 45 then skipBlockComment (depth + 1) (Chars rest2 (advanceChar c2 (advanceChar c p)))
@@ -159,23 +160,22 @@ collectOp (Chars (c :: rest) p) acc =
   else Pair (strPack (reverse acc)) (Chars (c :: rest) p)
 
 scanString : Chars -> List Int -> Result (Pair String Chars)
-scanString (Chars [] p) acc = Err "unterminated string literal"
+scanString (Chars [] p) acc = lexErr0 UnterminatedString
 scanString (Chars (c :: rest) p) acc =
   if c == 34 then Ok (Pair (strPack (reverse acc)) (Chars rest (advanceChar c p)))
-  else if c == 10 then Err "unterminated string literal"
+  else if c == 10 then lexErr0 UnterminatedString
   else if c == 92 then scanEscape (Chars rest (advanceChar c p)) acc
   else scanString (Chars rest (advanceChar c p)) (c :: acc)
 
 scanEscape : Chars -> List Int -> Result (Pair String Chars)
-scanEscape (Chars [] p) acc = Err "unterminated string literal"
+scanEscape (Chars [] p) acc = lexErr0 UnterminatedString
 scanEscape (Chars (c :: rest) p) acc =
   if c == 110 then scanString (Chars rest (advanceChar c p)) (10 :: acc)
   else if c == 116 then scanString (Chars rest (advanceChar c p)) (9 :: acc)
   else if c == 114 then scanString (Chars rest (advanceChar c p)) (13 :: acc)
   else if c == 34 then scanString (Chars rest (advanceChar c p)) (34 :: acc)
   else if c == 92 then scanString (Chars rest (advanceChar c p)) (92 :: acc)
-  else if c == 39 then scanString (Chars rest (advanceChar c p)) (39 :: acc)
-  else Err "unknown escape sequence"
+  else if c == 39 then scanString (Chars rest (advanceChar c p)) (39 :: acc) else lexErr0 UnknownEscape
 
 lexChars : Int -> Chars -> Result (List PTok)
 lexChars fuel cs = if fuel <= 0 then Err "DT: lexer fuel exhausted (internal: lexer made no progress)"
@@ -207,7 +207,7 @@ else if isOpChar c then case collectOp (Chars rest (advanceChar c p)) [c] of
   Pair op cs2 => case lexChars (fuel - 1) cs2 of
     Err e => Err e
     Ok toks => Ok (PTok (TSym op) p :: toks)
-else Err "unexpected character"
+else lexErr0 UnexpectedCharacter
 
 lexSource : String -> Result (List PTok)
 lexSource source = lexChars (sourceFuel source) (Chars (strUnpack source) (Pos 1 1))
@@ -248,11 +248,11 @@ dropTrailingSpace (c :: rest) =
 
 -- 跳过字符串字面量（从开引号之后开始），返回引号之后的位置。
 skipStringBody : Chars -> Result Chars
-skipStringBody (Chars [] p) = Err "unterminated string literal"
+skipStringBody (Chars [] p) = lexErr0 UnterminatedString
 skipStringBody (Chars (c :: rest) p) = if c == 34 then Ok (Chars rest (advanceChar c p))
 else if c == 92 then case rest of
   c2 :: rest2 => skipStringBody (Chars rest2 (advanceChar c2 (advanceChar c p)))
-  [] => Err "unterminated string literal"
+  [] => lexErr0 UnterminatedString
 else skipStringBody (Chars rest (advanceChar c p))
 
 -- 行注释正文：从 `--` 之后扫到行尾（不消费换行）；endP 是最后一个正文字符位置。
@@ -264,7 +264,7 @@ collectLineBody (Chars (c :: rest) p) acc endP =
 
 -- 块注释正文：深度从 1 开始，返回 `{-` 与 `-}` 之间的原文；endP 是 `}` 的位置。
 collectBlockBody : Chars -> Int -> List Int -> Pos -> Result (Pair String (Pair Chars Pos))
-collectBlockBody (Chars [] p) depth acc endP = Err "unterminated block comment"
+collectBlockBody (Chars [] p) depth acc endP = lexErr0 UnterminatedBlockComment
 collectBlockBody (Chars (c :: rest) p) depth acc endP = case rest of
   c2 :: rest2 =>
     if c == 123 && c2 == 45 then collectBlockBody (Chars rest2 (advanceChar c2 (advanceChar c p))) (depth + 1) (c2 :: c :: acc)

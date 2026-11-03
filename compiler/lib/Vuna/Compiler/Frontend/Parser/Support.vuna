@@ -29,6 +29,7 @@ module Vuna.Compiler.Frontend.Parser.Support
   , stateFuel
   , terminatesExpression
   , tokOf
+  , toksLeft
   , toksOf
   , underscoreCtorName
   , upperFirst
@@ -40,10 +41,13 @@ module Vuna.Compiler.Frontend.Parser.Support
 import Vuna.Compiler.Common
 import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Frontend.Lexer
+import Vuna.Compiler.Frontend.Diagnostics
 
 data PState : Type where
-  PState : String -> List PTok -> Pos -> PState
+  PState : String -> List PTok -> Pos -> Int -> PState
 
+-- 余下 token 数（O(1) 维护）：stateFuel 旧实现 `128 * length toks + 1024` 每次调用都遍历
+-- 剩余 token 列表，而它在每个声明/表达式循环入口都被调用 ⇒ 大文件解析 O(n²)。
 -- vuna 源码 parser（offside layout）
 -- ---------------------------------------------------------------
 posOf : PTok -> Pos
@@ -53,7 +57,7 @@ tokOf : PTok -> Tok
 tokOf (PTok t p) = t
 
 fileOf : PState -> String
-fileOf (PState file toks last) = file
+fileOf (PState file toks last count) = file
 
 -- 从起始状态 st 到结束状态 st2 的 span：起点=当前 token，终点=最后消费的 token。
 spanOf : PState -> PState -> Span
@@ -62,7 +66,7 @@ spanOf st st2 =
     (posCol (lastPos st2))
 
 peekTok : PState -> PTok
-peekTok (PState file toks last) = case toks of
+peekTok (PState file toks last count) = case toks of
   t :: rest => t
   [] => PTok TEof (Pos 1 1)
 
@@ -70,14 +74,14 @@ peekPos : PState -> Pos
 peekPos st = posOf (peekTok st)
 
 lastPos : PState -> Pos
-lastPos (PState file toks last) = last
+lastPos (PState file toks last count) = last
 
 advance : PState -> PState
-advance (PState file toks last) = case toks of
+advance (PState file toks last count) = case toks of
   t :: rest => case t of
-    PTok TEof p => PState file toks last
-    _ => PState file rest (posOf t)
-  [] => PState file toks last
+    PTok TEof p => PState file toks last count
+    _ => PState file rest (posOf t) (if count > 0 then count - 1 else 0)
+  [] => PState file toks last count
 
 isEof : PState -> Bool
 isEof st = case peekTok st of
@@ -87,17 +91,20 @@ isEof st = case peekTok st of
 -- 让下一个 token 视作「与上一 token 同一行」：do 语句块里新起一行的裸表达式
 -- 需要这一点，否则首 token 会被 canContinue 判成缩进不足。
 toksOf : PState -> List PTok
-toksOf (PState file toks last) = toks
+toksOf (PState file toks last count) = toks
 
 -- 显式 fuel：parser 的递归都经「返回新状态再递归」，无法用结构递归证明；
 -- 每个解析循环带 fuel 并在入口 `if fuel <= 0` 守卫，递归传 `fuel - 1`。
 -- 初始预算按剩余 token 数线性放大（每次合法循环至少消耗一个 token）。
 stateFuel : PState -> Int
-stateFuel st = 128 * length (toksOf st) + 1024
+stateFuel st = 128 * toksLeft st + 1024
+
+toksLeft : PState -> Int
+toksLeft (PState file toks last count) = count
 
 sameLineState : PState -> PState
 sameLineState st = case peekPos st of
-  Pos line col => PState (fileOf st) (toksOf st) (Pos line 0)
+  Pos line col => PState (fileOf st) (toksOf st) (Pos line 0) (toksLeft st)
 
 atSym : PState -> String -> Bool
 atSym st s = case peekTok st of
@@ -132,18 +139,18 @@ canContinue st blockCol = case peekPos st of
 
 expectSym : PState -> String -> Result (Pair Int PState)
 expectSym st s = case peekTok st of
-  PTok (TSym x) p => if x == s then Ok (Pair 0 (advance st)) else Err ("expected " ++ s)
-  _ => Err ("expected " ++ s)
+  PTok (TSym x) p => if x == s then Ok (Pair 0 (advance st)) else psErr1 (ExpectedToken s) s
+  _ => psErr1 (ExpectedToken s) s
 
 expectKw : PState -> String -> Result (Pair Int PState)
 expectKw st k = case peekTok st of
-  PTok (TKw x) p => if x == k then Ok (Pair 0 (advance st)) else Err ("expected " ++ k)
-  _ => Err ("expected " ++ k)
+  PTok (TKw x) p => if x == k then Ok (Pair 0 (advance st)) else psErr1 (ExpectedToken k) k
+  _ => psErr1 (ExpectedToken k) k
 
 expectIdent : PState -> Result (Pair String PState)
 expectIdent st = case peekTok st of
   PTok (TIdent x) p => Ok (Pair x (advance st))
-  _ => Err "expected identifier"
+  _ => psErr0 ExpectedIdentifier
 
 upperFirst : String -> Bool
 upperFirst s = case strUnpack s of

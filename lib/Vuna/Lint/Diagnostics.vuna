@@ -1,0 +1,108 @@
+module Vuna.Lint.Diagnostics
+  ( LintEntry(..)
+  , LintRule(..)
+  , lintAll
+  , lintCode
+  , lintDesc
+  , lintEdit
+  , lintEntryCode
+  , lintEntryDesc
+  , lintEntryEdit
+  , lintEntryFixable
+  , lintEntryRule
+  , lintFixable
+  , lintMsg
+  , lintRule
+  , lintRuleCode
+  ) where
+
+-- Vuna.Lint.Diagnostics：lint 规则的单一真源（M30 重构）。
+--
+-- 旧形态是每个规则在 `Rules.vuna` 里就近写 5 行注释：
+--   -- @code LN_LiteralIfChain
+--   -- @rule literal-if-chain
+--   -- @fixable
+--   -- @msg  ...
+--   -- @edit ...
+--   -- @desc ...
+-- 其中 code（`LN_LiteralIfChain`）与 rule（`literal-if-chain`）是**同一规则的两个名字**，
+-- 手写两遍必然漂移。现在收拢为 `LintRule` 枚举：code 是符号（文档/索引的稳定键），
+-- rule 是 CLI/输出用的 kebab 短名，两者都在此一处声明。
+--
+-- 分层：本模块在**根包**（`vuna`），不属于 compiler 包 —— 工具链永不进 TCB
+-- （`nix/tcb-forbidden.txt`）。`Vuna.Compiler.Diagnostics` 承载编译期诊断（TC_/CG_），
+-- 本模块承载 lint 诊断（LN_）。两者单向依赖：根包 → compiler，反之不成立。
+import Base.Bool
+import Base.List
+import Base.String
+
+-- 规则枚举：新增规则在此加构造子，并登记到 `lintAll`
+data LintRule : Type where
+  LiteralIfChain : LintRule
+  RedundantCase : LintRule
+
+-- code：文档与索引的稳定符号（`LN_` 前缀 + 驼峰）。只增不删。
+lintCode : LintRule -> String
+lintCode LiteralIfChain = "LN_LiteralIfChain"
+lintCode RedundantCase = "LN_RedundantCase"
+
+-- rule：CLI 与 finding 输出用的 kebab 短名。与 code 一一对应（不再手写第二遍）。
+lintRule : LintRule -> String
+lintRule LiteralIfChain = "literal-if-chain"
+lintRule RedundantCase = "redundant-case"
+
+-- 反向：由 code 查 rule（gen-errors 与输出层按 code 反查时用）
+lintRuleCode : String -> String
+lintRuleCode code =
+  if code == lintCode LiteralIfChain then lintRule LiteralIfChain
+  else if code == lintCode RedundantCase then lintRule RedundantCase else ""
+
+-- 消息模板（`<0>` 为插值；每个规则恰好一个插值：被检查的主体描述）
+lintMsg : LintRule -> String -> String
+lintMsg LiteralIfChain scrutinee =
+  "if/else-if chain on `" ++ scrutinee ++ "` can be a case with literal patterns"
+lintMsg RedundantCase var =
+  "single-alternative case on `" ++ var ++ "` can be folded into the enclosing pattern"
+
+-- 修复动作描述（给 `vuna lint --explain` / 文档用）
+lintEdit : LintRule -> String
+lintEdit LiteralIfChain = "改写为 case 表达式：字面量分支 + 兜底 `_ =>`"
+lintEdit RedundantCase =
+  "把单分支 case 折叠进外层模式（需无冲突且体不提及被折叠变量）"
+
+-- 规则说明（文档用）
+lintDesc : LintRule -> String
+lintDesc LiteralIfChain = "if/else-if 字面量链可改写为 case 表达式。"
+lintDesc RedundantCase =
+  "单分支 case 可折叠进外层模式（需满足 enclosing 安全判据）。"
+
+-- 是否可自动修复（可修复的规则会派生 FX_ 修复码）
+lintFixable : LintRule -> Bool
+lintFixable LiteralIfChain = True
+lintFixable RedundantCase = True
+
+-- 文档遍历项（同构 List；gen-errors 遍历它渲染 LN_ 段）
+data LintEntry : Type where
+  LintEntry : String -> String -> String -> Bool -> String -> LintEntry
+
+lintEntryCode : LintEntry -> String
+lintEntryCode (LintEntry c r d f e) = c
+
+lintEntryRule : LintEntry -> String
+lintEntryRule (LintEntry c r d f e) = r
+
+lintEntryDesc : LintEntry -> String
+lintEntryDesc (LintEntry c r d f e) = d
+
+lintEntryFixable : LintEntry -> Bool
+lintEntryFixable (LintEntry c r d f e) = f
+
+lintEntryEdit : LintEntry -> String
+lintEntryEdit (LintEntry c r d f e) = e
+
+-- 全部规则（新增规则必须在此登记，否则文档缺失）
+lintAll : List LintEntry
+lintAll =
+  [ LintEntry (lintCode LiteralIfChain) (lintRule LiteralIfChain) (lintDesc LiteralIfChain) (lintFixable LiteralIfChain) (lintEdit LiteralIfChain),
+    LintEntry (lintCode RedundantCase) (lintRule RedundantCase) (lintDesc RedundantCase) (lintFixable RedundantCase) (lintEdit RedundantCase)
+  ]

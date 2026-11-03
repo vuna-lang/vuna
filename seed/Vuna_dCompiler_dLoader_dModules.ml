@@ -15,7 +15,11 @@ open Vuna_dCompiler_dCommon
 open Vuna_dCompiler_dFrontend_dToml
 open Vuna_dCompiler_dFrontend_dManifest
 open Vuna_dCompiler_dPackages_dPkg
+open Base_dNat
+open Base_dVec
+open Vuna_dCompiler_dLoader_dDiagnostics
 open Vuna_dCompiler_dFrontend_dAst
+open Vuna_dCompiler_dFrontend_dDiagnostics
 open Vuna_dCompiler_dFrontend_dLexer
 open Vuna_dCompiler_dFrontend_dParser_dSupport
 open Vuna_dCompiler_dFrontend_dParser
@@ -265,8 +269,8 @@ let v_Vuna_dCompiler_dLoader_dModules_dfindModuleFile = (fun roots -> (fun name 
   | _ -> (C_Base_dResult_dResult_Base_dResult_dErr (((bi_concat "ambiguous module ") ((bi_concat name) ((bi_concat " (found in: ") ((bi_concat (v_Vuna_dCompiler_dLoader_dModules_d_ujoinNames ((v_Base_dList_dmap v_Vuna_dCompiler_dLoader_dModules_dcandidateDir) dtb__137))) ")"))))))
 )
   | C_Base_dList_dList_Nil -> (match dtb__138 with
-  | C_Base_dList_dList_Nil -> (C_Base_dResult_dResult_Base_dResult_dErr (((bi_concat "module ") ((bi_concat name) ((bi_concat " not found (roots: ") ((bi_concat (v_Vuna_dCompiler_dLoader_dModules_d_ujoinRootDirs roots)) ")"))))))
-  | dtb__141 -> (C_Base_dResult_dResult_Base_dResult_dErr (((bi_concat "module ") ((bi_concat name) ((bi_concat " is not exported by package ") (v_Vuna_dCompiler_dLoader_dModules_d_ujoinNames dtb__138))))))
+  | C_Base_dList_dList_Nil -> (((v_Vuna_dCompiler_dLoader_dDiagnostics_dldErr2 (C_Vuna_dCompiler_dLoader_dDiagnostics_dLdDiag_Vuna_dCompiler_dLoader_dDiagnostics_dModuleNotFound (name, (v_Vuna_dCompiler_dLoader_dModules_d_ujoinRootDirs roots)))) name) (v_Vuna_dCompiler_dLoader_dModules_d_ujoinRootDirs roots))
+  | dtb__141 -> (((v_Vuna_dCompiler_dLoader_dDiagnostics_dldErr2 (C_Vuna_dCompiler_dLoader_dDiagnostics_dLdDiag_Vuna_dCompiler_dLoader_dDiagnostics_dModuleNotExported (name, (v_Vuna_dCompiler_dLoader_dModules_d_ujoinNames dtb__138)))) name) (v_Vuna_dCompiler_dLoader_dModules_d_ujoinNames dtb__138))
 )
   | _ -> failwith "DT: impossible branch"
 )) dtb__137)

@@ -80,7 +80,9 @@ module Vuna.Compiler.Elab.Trait
 -- `elabFunDef`（实例方法体复用同一套模式矩阵降级）。
 -- 拆自 M24 的单一 `Elab.vuna`（按真实调用图切；门面仍是 `Vuna.Compiler.Elab`）。
 import Vuna.Compiler.Common
+import Vuna.Compiler.Debug
 import Vuna.Compiler.Core
+import Vuna.Compiler.Diagnostics
 import Vuna.Compiler.Elab.Dict
 import Vuna.Compiler.Elab.Match
 import Vuna.Compiler.Elab.Meta
@@ -131,9 +133,7 @@ foldPiFieldTysGo (f :: rest) n ty =
 elabTrait : List (Pair String Term) -> Ec -> Pair Decl Span -> Result (Pair DtData (Pair (List (Pair String Term)) (Pair DtClass Ec)))
 elabTrait globals ec ds = case ds of
   Pair d dsp => case d of
-    -- @code TC_InterfaceOneParam
-    DTrait tname params methods sp => if length params /= 1 then errAt sp
-      "[TC_InterfaceOneParam] DT: interfaces must have exactly one parameter (M15 limitation)"
+    DTrait tname params methods sp => if length params /= 1 then tcErr0 sp InterfaceOneParam
     else andThen (classFieldTys globals ec params methods) (\p => case p of
       Pair fieldTys ec1 =>
         let
@@ -272,22 +272,13 @@ elabInstance : List (Pair String Term) -> List DtClass -> List DtData -> Ec -> P
 elabInstance globals classes datas ec ds = case ds of
   Pair d dsp => case d of
     DInstance mname isDefault headExpr methods msp => case instanceHeadName headExpr of
-      -- @code TC_InstanceHeadNotApp
-      Nothing =>
-        errAt msp
-          "[TC_InstanceHeadNotApp] DT: instance head must be an interface application (e.g. Show Int)"
+      Nothing => tcErr0 msp InstanceHeadNotApp
       Just cname => case findClass cname classes of
-        -- @code TC_UnknownInterface
-        Nothing =>
-          errAt msp ("[TC_UnknownInterface] DT: unknown interface " ++ cname ++ " in instance head")
+        Nothing => tcErr1 msp (UnknownInterface cname) cname
         Just cls => case firstUnknownInstanceMethod cls methods of
-          -- @code TC_InstanceUnknownMethod
-          Just n => errAt msp ("[TC_InstanceUnknownMethod] DT: instance has unknown method " ++ n)
+          Just n => tcErr1 msp (InstanceUnknownMethod n) n
           Nothing => case firstMissingInstanceMethod cls methods of
-            -- @code TC_InstanceMissingMethod
-            Just m =>
-              errAt msp
-                "[TC_InstanceMissingMethod] DT: instance is missing an implementation for an interface method"
+            Just m => tcErr0 msp InstanceMissingMethod
             Nothing => andThen (elabInstanceMethods globals cls (instanceHeadTerm headExpr) ec methods msp) (\p => case p of
               Pair fieldTerms (Pair fieldArgs ec1) =>
                 let
@@ -371,9 +362,7 @@ elabInstanceMethodsGo globals ec ((Pair mname fty) :: rest) pname headArg decls 
     clauses = methodClausesNamed mname decls
     instTy = substClassParam pname headArg fty
   in case clauses of
-    [] =>
-      errAt sp
-        "[TC_InstanceMissingMethod] DT: instance is missing an implementation for an interface method"
+    [] => tcErr0 sp InstanceMissingMethod
     _ => andThen (elabInstanceMethod globals ec instTy clauses) (\p => case p of
       Pair term ec1 =>
         elabInstanceMethodsGo globals ec1 rest pname headArg decls (term :: terms)
@@ -434,10 +423,10 @@ leadingImplicitCount t = case t of
 
 -- 解掉被替换出体的孤儿 `?m`（否则 `unsolvedMeta` 报未解元变量）。
 solveLiftedMeta : Ec -> String -> Int -> Ec
-solveLiftedMeta ec name m = case solveMeta (ecDefs ec) (ecSols ec) 0 m [] (VNeutral (NVar name 0 [])) of
-  Ok sols2 => case checkSolsDelta ec (ecSols ec) sols2 of
+solveLiftedMeta ec name m = case solveMeta (ecDefTbl ec) (ecSolsP ec) 0 m [] (VNeutral (NVar name 0 [])) of
+  Ok sols2 => case checkSolsDelta ec (ecSols ec) (solsList sols2) of
     Err e => ec
-    Ok _ => ecPutSols ec sols2
+    Ok _ => ecPutSols ec (solsList sols2)
   Err e => ec
 
 liftFreeDictGoals : String -> Ec -> Term -> Term -> Pair Term (Pair Term Ec)
@@ -454,7 +443,7 @@ liftFreeDictGoalsGo defName ec ty body inserted ((Pair m dom) :: rest) =
     -- 每插入一个字典 binder，它之后的位置都后移 1，所以插入点是 `隐式前缀长 + inserted`。
     argIdx = maxInt 0 (leadingImplicitCount ty - 1) + inserted
     quoteDepth = leadingImplicitCount ty + inserted
-    dictDom = substSolvedMetasAt quoteDepth (ecSols ec) (quote quoteDepth dom)
+    dictDom = substSolvedMetasAtTbl (ecSolTbl ec) quoteDepth (quote quoteDepth dom)
     ty2 = insertDictBinder dName argIdx dictDom ty
     -- 先插 binder（会把插入点之后的引用整体移位），**再**把孤儿元变量替换成字典变量：
     -- 顺序反过来时被替换出来的 TVar 也会被 shift 再挪一次，索引会偏。
@@ -550,20 +539,16 @@ checkInstanceHeadsGo [] classes globals ec acc insts seen =
 checkInstanceHeadsGo (d :: rest) classes globals ec acc insts seen = case d of
   Pair decl dsp => case decl of
     DInstance mname isDefault headExpr methods msp => case instanceHeadName headExpr of
-      Nothing =>
-        errAt msp
-          "[TC_InstanceHeadNotApp] DT: instance head must be an interface application (e.g. Show Int)"
+      Nothing => tcErr0 msp InstanceHeadNotApp
       Just cname => case findClass cname classes of
-        Nothing =>
-          errAt msp ("[TC_UnknownInterface] DT: unknown interface " ++ cname ++ " in instance head")
+        Nothing => tcErr1 msp (UnknownInterface cname) cname
         Just cls =>
           let
             iname = instanceName (dtClassName cls) mname headExpr
             ty = ctorResultType cls (instanceHeadTerm headExpr)
             named = instanceIsNamed mname
           in case findDuplicateInstance ec iname named ty seen of
-            -- @code TC_DuplicateInstance
-            Just other => errAt msp ("[TC_DuplicateInstance] DT: duplicate instance " ++ iname)
+            Just other => tcErr1 msp (DuplicateInstance iname) iname
             Nothing =>
               checkInstanceHeadsGo rest classes globals ec (Pair iname ty :: acc)
                 (DtInst iname ty named :: insts) (DtInst iname ty named :: seen)
@@ -591,7 +576,7 @@ findDefaultDup ec named ty (i :: rest) =
   else if headsEqual ec ty (dtInstHead i) then Just i else findDefaultDup ec named ty rest
 
 headsEqual : Ec -> Term -> Term -> Bool
-headsEqual ec a b = case conv (ecDefs ec) (ecSols ec) 0 (eval [] a) (eval [] b) of
+headsEqual ec a b = case conv (ecDefTbl ec) (ecSolsP ec) 0 (eval [] a) (eval [] b) of
   Ok _ => True
   Err e => False
 
@@ -606,17 +591,18 @@ elabInstanceBodiesGo (d :: rest) classes datas globals ec acc = andThen (elabIns
   Pair gs ec1 =>
     let
       newDefs = instanceDefsOf ec ec1 gs
-    in elabInstanceBodiesGo rest classes datas (append globals gs) ec1 (append newDefs acc)
+      ecTbl = ecPutGlobalsTbl ec1 (tblInsertAll gs (ecGlobalsTbl ec1))
+    in elabInstanceBodiesGo rest classes datas (append globals gs) ecTbl (append newDefs acc)
 )
 
 -- 从「精化前后 Ec 的 defs 差集」里取出这一条 instance 生成的定义。
 instanceDefsOf : Ec -> Ec -> List (Pair String Term) -> List DtDef
 instanceDefsOf ecBefore ecAfter gs =
   map
-    (\g => DtDef (firstOf g) (defTypeOrDefault gs (firstOf g)) (substDictTerm ecAfter (defBodyOf (ecDefs ecAfter) (firstOf g))))
+    (\g => DtDef (firstOf g) (defTypeOrDefault gs (firstOf g)) (substDictTerm ecAfter (defBodyOf (ecDefTbl ecAfter) (firstOf g))))
     gs
 
-defBodyOf : List (Pair String Term) -> String -> Term
+defBodyOf : HashTbl Term -> String -> Term
 defBodyOf defs name = case defLookup name defs of
   Just body => body
   Nothing => TInt 0
@@ -646,12 +632,13 @@ elabInstancesGo (d :: rest) classes datas globals ec acc = andThen (elabInstance
 -- M15：ecDefs 里那些不是源文件 DFun 的定义（接口投影、实例字典）。
 -- 它们的类型从 globals 里查（投影签名 / 实例头类型都在 elabTraits/elabInstances 时入表）。
 extraDefsOf : List (Pair String Term) -> Ec -> List DtDef -> List DtDef
-extraDefsOf globals ec sourceDefs = extraDefsGo globals (map dtDefName sourceDefs) (ecDefs ec) []
+extraDefsOf globals ec sourceDefs =
+  extraDefsGo globals (tblOfNames (map dtDefName sourceDefs)) (ecDefs ec) []
 
-extraDefsGo : List (Pair String Term) -> List String -> List (Pair String Term) -> List DtDef -> List DtDef
+extraDefsGo : List (Pair String Term) -> HashTbl Bool -> List (Pair String Term) -> List DtDef -> List DtDef
 extraDefsGo globals sourceNames [] acc = reverse acc
 extraDefsGo globals sourceNames (d :: rest) acc =
-  if memName (firstOf d) sourceNames then extraDefsGo globals sourceNames rest acc
+  if tblMem (firstOf d) sourceNames then extraDefsGo globals sourceNames rest acc
   else extraDefsGo globals sourceNames rest
     (DtDef (firstOf d) (defTypeOrDefault globals (firstOf d)) (secondOf d) :: acc)
 
@@ -674,10 +661,8 @@ else
   in case forced of
     VPi name implicit rig dom clo =>
       if implicit then if isIndexDomain ec dom then bindIndexBinderFuel (fuel - 1) globals ctx ec name dom clo [] body sp
-      else errAt sp
-        "[TC_ImplicitParamKind] DT: implicit parameters must be types or inductive families (M15)"
+      else tcErr0 sp ImplicitParamKind
       else checkBodyAtEnd globals ctx ec body expected sp
-    -- @code TC_ImplicitParamKind
     _ => checkE globals ctx ec body expected
 
 -- 隐式索引 binder（`{n : Nat}`）：绑成擦除的 lambda（Rig0），体在扩展上下文里继续。
@@ -697,8 +682,7 @@ else
 checkBodyAtEnd : List (Pair String Term) -> Ctx -> Ec -> Expr -> Value -> Span -> Result (Pair Term Ec)
 checkBodyAtEnd globals ctx ec body expected sp = case body of
   ELam names lambdaBody lambdaSp => checkE globals ctx ec body expected
-  -- @code TC_DefFewerParams
-  _ => errAt sp "[TC_DefFewerParams] DT: definition has fewer parameters than its signature"
+  _ => tcErr0 sp DefFewerParams
 
 checkBindersFuel fuel globals ctx ec (pat :: rest) body expected sp = if fuel <= 0 then Err "DT: internal: binder check fuel exhausted"
 else
@@ -706,17 +690,12 @@ else
     forced = forceVal ec expected
   in case forced of
     VPi name implicit rig dom clo => if implicit then if isIndexDomain ec dom then bindIndexBinderFuel (fuel - 1) globals ctx ec name dom clo (pat :: rest) body sp
-    else errAt sp
-      "[TC_ImplicitParamKind] DT: implicit parameters must be types or inductive families (M15)"
+    else tcErr0 sp ImplicitParamKind
     else case pat of
       PVar pname psp => bindOnePatternFuel (fuel - 1) globals ctx ec pname rest body dom clo sp
       PWild psp => bindOnePatternFuel (fuel - 1) globals ctx ec "_" rest body dom clo sp
-      -- @code TC_DefParamsMustBeVars
-      _ =>
-        errAt (patSpan pat)
-          "[TC_DefParamsMustBeVars] DT: definition parameters must be variables (M13)"
-    -- @code TC_DefMoreParams
-    _ => errAt sp "[TC_DefMoreParams] DT: definition has more parameters than its signature"
+      _ => tcErr0 (patSpan pat) DefParamsMustBeVars
+    _ => tcErr0 sp DefMoreParams
 
 bindOnePatternFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> String -> List Pat -> Expr -> Value -> Closure -> Span -> Result (Pair Term Ec)
 bindOnePatternFuel fuel globals ctx ec pname pats body dom clo sp = if fuel <= 0 then Err "DT: internal: binder check fuel exhausted"
@@ -738,16 +717,26 @@ else
 -- （标准模式矩阵：整列变量改名继续；有构造子则用该位置名作 scrutinee，同构造子的子模式递归，
 -- 变量/通配汇成兜底）。产物是纯 lambda + case，交给既有精化路径，覆盖/索引/擦除全自动。
 elabFunDef : List (Pair String Term) -> Ec -> List (Pair (List Pat) Expr) -> Value -> Span -> Result (Pair Term Ec)
-elabFunDef globals ec clauses expected sp = case clauses of
-  -- @code TC_FunctionNoClauses
-  [] => errAt sp "[TC_FunctionNoClauses] DT: function has no clauses"
-  [Pair pats body] =>
-    if allVarPats pats then checkDef globals ec pats body expected sp
-    else andThen (multiToExpr (ctorFamilyTable ec) clauses)
-      (\bodyExpr => checkDef globals ec [] bodyExpr expected sp)
-  _ =>
-    andThen (multiToExpr (ctorFamilyTable ec) clauses)
-      (\bodyExpr => checkDef globals ec [] bodyExpr expected sp)
+elabFunDef globals ec clauses expected sp =
+  let
+    key = strFromInt (spanStartLine sp)
+  in case clauses of
+    [] => tcErr0 sp FunctionNoClauses
+    [Pair pats body] => if allVarPats pats then checkDef globals ec pats body expected sp
+    else
+      let
+        _ = stampSample key "MULTI"
+      in andThen (multiToExpr (ctorFamilyTable ec) clauses) (\bodyExpr => let
+        _ = stampSample key "CHECKDEF"
+      in checkDef globals ec [] bodyExpr expected sp
+      )
+    _ =>
+      let
+        _ = stampSample key "MULTI"
+      in andThen (multiToExpr (ctorFamilyTable ec) clauses) (\bodyExpr => let
+        _ = stampSample key "CHECKDEF"
+      in checkDef globals ec [] bodyExpr expected sp
+      )
 
 checkBinders : List (Pair String Term) -> Ctx -> Ec -> List Pat -> Expr -> Value -> Span -> Result (Pair Term Ec)
 checkBinders a1 a2 a3 a4 a5 a6 a7 = checkBindersFuel 512 a1 a2 a3 a4 a5 a6 a7

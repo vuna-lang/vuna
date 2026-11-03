@@ -1,3 +1,6 @@
+let () =
+  let c = Gc.get () in
+  Gc.set { c with minor_heap_size = 16 * 1024 * 1024; space_overhead = 200 }
 let bi_add a b = a + b
 let bi_sub a b = a - b
 let bi_mul a b = a * b
@@ -72,6 +75,12 @@ let dtp_fileMtime path =
   try int_of_float (Unix.stat path).Unix.st_mtime with _ -> 0
 let dtp_fileSize path =
   try (Unix.stat path).Unix.st_size with _ -> 0
+let dtp_timeUs () = int_of_float (Unix.gettimeofday () *. 1000000.0)
+let dtp_strHash (s : string) =
+  let h = ref 0 in
+  String.iter (fun c -> h := ((!h * 33) + Char.code c) land 1023) s;
+  !h
+let dtp_strAt (s : string) (i : int) = if i < 0 || i >= String.length s then -1 else Char.code s.[i]
 let dtp_exit n = exit n
 let dtp_runIn dir args =
   let quote s = Filename.quote s in

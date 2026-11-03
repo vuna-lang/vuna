@@ -10,6 +10,7 @@ module Vuna.Compiler.Core
   , Rig0
   , Rig1
   , RigOmega
+  , Sols(..)
   , TApp
   , TBool
   , TCase
@@ -73,10 +74,18 @@ module Vuna.Compiler.Core
   , showTerm
   , showValue
   , showValueAt
+  , solsCons
+  , solsEmpty
+  , solsFromList
+  , solsList
+  , solsLookup
+  , solsTbl
   , solveMeta
   , substMetaVar
   , substSolvedMetas
   , substSolvedMetasAt
+  , substSolvedMetasAtTbl
+  , substSolvedMetasTbl
   , substVarAt
   , typeLevelOf
   , vCaseAltBinders

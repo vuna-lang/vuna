@@ -26,13 +26,55 @@ module Vuna.Compiler.Core.Conv
 import Vuna.Compiler.Common
 import Vuna.Compiler.Core.Term
 import Vuna.Compiler.Core.Eval
+import Vuna.Compiler.Diagnostics
+import Vuna.Compiler.Debug
 
 -- ---------------------------------------------------------------
 -- 定义性相等（beta + delta + eta）与一阶元变量求解
 -- 返回更新后的元变量解表。
 -- ---------------------------------------------------------------
-convFuel : Int -> List (Pair String Term) -> List (Pair Int Value) -> Int -> Value -> Value -> Result (List (Pair Int Value))
+-- 快速相等判定：只认「已经决定相等」的原子形态，**不做 delta 展开**。
+-- conv 每个节点都要 force 两侧（默认 fuel=512，深展开），而大量比较是同一类型常量
+-- （`String` vs `String`、`Type`、零参构造子、同层局部变量）。命中时直接成功，
+-- 省掉两次 force 与后续递归（实测 forceVal 单次 check 被调用 527 万次，占 check 大头）。
+fastSame : Value -> Value -> Bool
+fastSame a b = case a of
+  VType i => case b of
+    VType j => i == j
+    _ => False
+  VInt i => case b of
+    VInt j => i == j
+    _ => False
+  VStr i => case b of
+    VStr j => i == j
+    _ => False
+  VBool i => case b of
+    VBool j => if i then j else notBool j
+    _ => False
+  VNeutral n1 => case b of
+    VNeutral n2 => sameNeutralAtom n1 n2
+    _ => False
+  VCon c1 args1 => case b of
+    VCon c2 args2 => c1 == c2 && isNilList args1 && isNilList args2
+    _ => False
+  _ => False
+
+isNilList : List a -> Bool
+isNilList [] = True
+isNilList _ = False
+
+sameNeutralAtom : Neutral -> Neutral -> Bool
+sameNeutralAtom n1 n2 = case n1 of
+  NGlobal g1 sp1 => case n2 of
+    NGlobal g2 sp2 => g1 == g2 && isNilList sp1 && isNilList sp2
+    _ => False
+  NVar name1 lvl1 sp1 => case n2 of
+    NVar name2 lvl2 sp2 => name1 == name2 && lvl1 == lvl2 && isNilList sp1 && isNilList sp2
+    _ => False
+
+convFuel : Int -> HashTbl Term -> Sols -> Int -> Value -> Value -> Result Sols
 convFuel fuel defs sols depth a b = if fuel <= 0 then Err "DT: internal: conv fuel exhausted"
+else if fastSame a b then Ok sols
 else
   let
     a2 = force defs sols defaultFuel a
@@ -43,7 +85,7 @@ else
       VMeta m sp => solveMetaFuel (fuel - 1) defs sols depth m sp a2
       _ => convBothFuel (fuel - 1) defs sols depth a2 y2
 
-convBothFuel : Int -> List (Pair String Term) -> List (Pair Int Value) -> Int -> Value -> Value -> Result (List (Pair Int Value))
+convBothFuel : Int -> HashTbl Term -> Sols -> Int -> Value -> Value -> Result Sols
 convBothFuel fuel defs sols depth a b = if fuel <= 0 then Err "DT: internal: conv fuel exhausted"
 else case a of
   VType i => case b of
@@ -100,14 +142,14 @@ else case a of
     _ => mismatchAt depth a b
   _ => mismatchAt depth a b
 
-etaLeftFuel : Int -> List (Pair String Term) -> List (Pair Int Value) -> Int -> Value -> String -> Closure -> Result (List (Pair Int Value))
+etaLeftFuel : Int -> HashTbl Term -> Sols -> Int -> Value -> String -> Closure -> Result Sols
 etaLeftFuel fuel defs sols depth a name clo = if fuel <= 0 then Err "DT: internal: conv fuel exhausted"
 else
   let
     v = freshVar name depth
   in convFuel (fuel - 1) defs sols (depth + 1) (applyValue a v) (applyClosure clo v)
 
-etaRightFuel : Int -> List (Pair String Term) -> List (Pair Int Value) -> Int -> String -> Closure -> Value -> Result (List (Pair Int Value))
+etaRightFuel : Int -> HashTbl Term -> Sols -> Int -> String -> Closure -> Value -> Result Sols
 etaRightFuel fuel defs sols depth name clo b = if fuel <= 0 then Err "DT: internal: conv fuel exhausted"
 else
   let
@@ -123,7 +165,7 @@ isBoolNeutral n = case n of
   NVar name lvl sp => if sp == [] then isBoolTyName name else False
   _ => False
 
-convNeutralFuel : Int -> List (Pair String Term) -> List (Pair Int Value) -> Int -> Neutral -> Neutral -> Value -> Value -> Result (List (Pair Int Value))
+convNeutralFuel : Int -> HashTbl Term -> Sols -> Int -> Neutral -> Neutral -> Value -> Value -> Result Sols
 convNeutralFuel fuel defs sols depth n1 n2 v1 v2 = if fuel <= 0 then Err "DT: internal: conv fuel exhausted"
 else case n1 of
   NVar name level sp => case n2 of
@@ -137,7 +179,7 @@ else case n1 of
       else mismatchAt depth v1 v2
     _ => mismatchAt depth v1 v2
 
-convSpinesFuel : Int -> List (Pair String Term) -> List (Pair Int Value) -> Int -> List Value -> List Value -> Value -> Value -> Result (List (Pair Int Value))
+convSpinesFuel : Int -> HashTbl Term -> Sols -> Int -> List Value -> List Value -> Value -> Value -> Result Sols
 convSpinesFuel fuel defs sols depth [] [] v1 v2 =
   if fuel <= 0 then Err "DT: internal: conv fuel exhausted" else Ok sols
 convSpinesFuel fuel defs sols depth (a :: xs) (b :: ys) v1 v2 =
@@ -147,7 +189,7 @@ convSpinesFuel fuel defs sols depth (a :: xs) (b :: ys) v1 v2 =
 convSpinesFuel fuel defs sols depth _ _ v1 v2 =
   if fuel <= 0 then Err "DT: internal: conv fuel exhausted" else mismatchAt depth v1 v2
 
-convValueListsFuel : Int -> List (Pair String Term) -> List (Pair Int Value) -> Int -> List Value -> List Value -> Result (List (Pair Int Value))
+convValueListsFuel : Int -> HashTbl Term -> Sols -> Int -> List Value -> List Value -> Result Sols
 convValueListsFuel fuel defs sols depth [] [] =
   if fuel <= 0 then Err "DT: internal: conv fuel exhausted" else Ok sols
 convValueListsFuel fuel defs sols depth (a :: xs) (b :: ys) =
@@ -155,24 +197,23 @@ convValueListsFuel fuel defs sols depth (a :: xs) (b :: ys) =
   else andThen (convFuel (fuel - 1) defs sols depth a b)
     (\sols2 => convValueListsFuel (fuel - 1) defs sols2 depth xs ys)
 convValueListsFuel fuel defs sols depth _ _ =
-  if fuel <= 0 then Err "DT: internal: conv fuel exhausted"
-  else Err "type mismatch: constructor arguments differ in length"
+  if fuel <= 0 then Err "DT: internal: conv fuel exhausted" else tcErr0NoLoc TypeMismatchCtorArity
 
 -- 卡住的 case 相等：scrutinee 相等 + 每个构造子名的分支绑定数相同且分支体相等。
-convCaseAltsFuel : Int -> List (Pair String Term) -> List (Pair Int Value) -> Int -> List VCaseAlt -> List VCaseAlt -> Result (List (Pair Int Value))
+convCaseAltsFuel : Int -> HashTbl Term -> Sols -> Int -> List VCaseAlt -> List VCaseAlt -> Result Sols
 convCaseAltsFuel fuel defs sols depth [] [] =
   if fuel <= 0 then Err "DT: internal: conv fuel exhausted" else Ok sols
 convCaseAltsFuel fuel defs sols depth (a :: rest) (b :: rest2) = if fuel <= 0 then Err "DT: internal: conv fuel exhausted"
 else if vCaseAltName a == vCaseAltName b then if length (vCaseAltBinders a) == length (vCaseAltBinders b) then case convOneAltFuel (fuel - 1) defs sols depth a b of
   Err e => Err e
   Ok sols2 => convCaseAltsFuel (fuel - 1) defs sols2 depth rest rest2
-else Err ("type mismatch: case branch " ++ vCaseAltName a ++ " binds a different number of variables")
-else Err ("type mismatch: case branch " ++ vCaseAltName a ++ " vs " ++ vCaseAltName b)
+else tcErr1NoLoc (TypeMismatchCaseVars (vCaseAltName a)) (vCaseAltName a)
+else tcErr2NoLoc (TypeMismatchCaseBranch (vCaseAltName a) (vCaseAltName b)) (vCaseAltName a)
+  (vCaseAltName b)
 convCaseAltsFuel fuel defs sols depth _ _ =
-  if fuel <= 0 then Err "DT: internal: conv fuel exhausted"
-  else Err "type mismatch: case branches differ in number"
+  if fuel <= 0 then Err "DT: internal: conv fuel exhausted" else tcErr0NoLoc TypeMismatchCaseCount
 
-convOneAltFuel : Int -> List (Pair String Term) -> List (Pair Int Value) -> Int -> VCaseAlt -> VCaseAlt -> Result (List (Pair Int Value))
+convOneAltFuel : Int -> HashTbl Term -> Sols -> Int -> VCaseAlt -> VCaseAlt -> Result Sols
 convOneAltFuel fuel defs sols depth a b = if fuel <= 0 then Err "DT: internal: conv fuel exhausted"
 else
   let
@@ -184,7 +225,10 @@ else
 
 mismatchAt : Int -> Value -> Value -> Result a
 mismatchAt depth a b =
-  Err ("type mismatch: expected " ++ showValueAt depth a ++ ", got " ++ showValueAt depth b)
+  let
+    sa = showValueAt depth a
+    sb = showValueAt depth b
+  in tcErr2NoLoc (TypeMismatch sa sb) sa sb
 
 -- 一阶求解：spine 必须为空。解是 level 形态的 Value，可以提到当前上下文里的局部变量
 -- （M14 的索引精化需要 `n ↦ Zero` 这类提到分支绑定子的解）；是否越界由精化器按
@@ -196,10 +240,10 @@ splitAtVals n [] = Pair [] []
 splitAtVals n (x :: xs) = case splitAtVals (n - 1) xs of
   Pair a b => Pair (x :: a) b
 
-solveMetaFuel : Int -> List (Pair String Term) -> List (Pair Int Value) -> Int -> Int -> List Value -> Value -> Result (List (Pair Int Value))
+solveMetaFuel : Int -> HashTbl Term -> Sols -> Int -> Int -> List Value -> Value -> Result Sols
 solveMetaFuel fuel defs sols depth m sp rhs = if fuel <= 0 then Err "DT: internal: conv fuel exhausted"
 else case sp of
-  [] => case metaLookup m sols of
+  [] => case solsLookup m sols of
     Just t => convFuel (fuel - 1) defs sols depth (applySpine t []) rhs
     Nothing => case rhs of
       -- 同一个未解元变量统一自己（`?m` vs `?m`）是恒真约束，不能走 occurs 检查
@@ -209,18 +253,18 @@ else case sp of
       _ => solveMetaNew defs sols depth m rhs
   _ => solveMetaHoFuel (fuel - 1) defs sols depth m sp rhs
 
-solveMetaNew : List (Pair String Term) -> List (Pair Int Value) -> Int -> Int -> Value -> Result (List (Pair Int Value))
+solveMetaNew : HashTbl Term -> Sols -> Int -> Int -> Value -> Result Sols
 solveMetaNew defs sols depth m rhs =
   let
     t = quote depth rhs
-  in if hasMeta m 0 t then Err ("cannot solve metavariable ?" ++ strFromInt m ++ " (occurs check)")
-  else Ok (Pair m rhs :: sols)
+  in if hasMeta m 0 t then tcErr1NoLoc (CannotSolveOccurs (strFromInt m)) (strFromInt m)
+  else Ok (solsCons m rhs sols)
 
 -- 更高阶求解（M13 扩展）：只在「头一致」的安全形状上做提取/对齐，其余仍报 M13。
-solveMetaHoFuel : Int -> List (Pair String Term) -> List (Pair Int Value) -> Int -> Int -> List Value -> Value -> Result (List (Pair Int Value))
+solveMetaHoFuel : Int -> HashTbl Term -> Sols -> Int -> Int -> List Value -> Value -> Result Sols
 solveMetaHoFuel fuel defs sols depth m sp rhs = if fuel <= 0 then Err "DT: internal: conv fuel exhausted"
 else case rhs of
-  VMeta n sp2 => case metaLookup n sols of
+  VMeta n sp2 => case solsLookup n sols of
     Just t => convFuel (fuel - 1) defs sols depth (applySpine (VMeta m sp) []) (applySpine t sp2)
     Nothing =>
       if m == n then convSpinesFuel (fuel - 1) defs sols depth sp sp2 (VMeta m sp) rhs
@@ -234,11 +278,11 @@ else case rhs of
     NVar name level args =>
       solveMetaHeadFuel (fuel - 1) defs sols depth m sp (VNeutral n) (VNeutral (NVar name level []))
         args
-    _ => Err ("cannot solve higher-order metavariable ?" ++ strFromInt m ++ "")
-  _ => Err ("cannot solve higher-order metavariable ?" ++ strFromInt m ++ "")
+    _ => tcErr1NoLoc (CannotSolveHigherOrder (strFromInt m)) (strFromInt m)
+  _ => tcErr1NoLoc (CannotSolveHigherOrder (strFromInt m)) (strFromInt m)
 
 -- `?m sp = head args`（|args| >= |sp|）：`?m = head (take extra args)` 再统一剩余 spine。
-solveMetaHeadFuel : Int -> List (Pair String Term) -> List (Pair Int Value) -> Int -> Int -> List Value -> Value -> Value -> List Value -> Result (List (Pair Int Value))
+solveMetaHeadFuel : Int -> HashTbl Term -> Sols -> Int -> Int -> List Value -> Value -> Value -> List Value -> Result Sols
 solveMetaHeadFuel fuel defs sols depth m sp whole headVal args = if fuel <= 0 then Err "DT: internal: conv fuel exhausted"
 else if length args >= length sp then
   let
@@ -247,40 +291,40 @@ else if length args >= length sp then
     Pair headArgs tailArgs =>
       andThen (solveMetaFuel (fuel - 1) defs sols depth m [] (applySpine headVal headArgs))
         (\sols2 => convSpinesFuel (fuel - 1) defs sols2 depth sp tailArgs (VMeta m sp) whole)
-else Err ("cannot solve higher-order metavariable ?" ++ strFromInt m ++ "")
+else tcErr1NoLoc (CannotSolveHigherOrder (strFromInt m)) (strFromInt m)
 
-conv : List (Pair String Term) -> List (Pair Int Value) -> Int -> Value -> Value -> Result (List (Pair Int Value))
+conv : HashTbl Term -> Sols -> Int -> Value -> Value -> Result Sols
 conv a1 a2 a3 a4 a5 = convFuel 64 a1 a2 a3 a4 a5
 
-convBoth : List (Pair String Term) -> List (Pair Int Value) -> Int -> Value -> Value -> Result (List (Pair Int Value))
+convBoth : HashTbl Term -> Sols -> Int -> Value -> Value -> Result Sols
 convBoth a1 a2 a3 a4 a5 = convBothFuel 64 a1 a2 a3 a4 a5
 
-convCaseAlts : List (Pair String Term) -> List (Pair Int Value) -> Int -> List VCaseAlt -> List VCaseAlt -> Result (List (Pair Int Value))
+convCaseAlts : HashTbl Term -> Sols -> Int -> List VCaseAlt -> List VCaseAlt -> Result Sols
 convCaseAlts a1 a2 a3 a4 a5 = convCaseAltsFuel 64 a1 a2 a3 a4 a5
 
-convOneAlt : List (Pair String Term) -> List (Pair Int Value) -> Int -> VCaseAlt -> VCaseAlt -> Result (List (Pair Int Value))
+convOneAlt : HashTbl Term -> Sols -> Int -> VCaseAlt -> VCaseAlt -> Result Sols
 convOneAlt a1 a2 a3 a4 a5 = convOneAltFuel 64 a1 a2 a3 a4 a5
 
-convValueLists : List (Pair String Term) -> List (Pair Int Value) -> Int -> List Value -> List Value -> Result (List (Pair Int Value))
+convValueLists : HashTbl Term -> Sols -> Int -> List Value -> List Value -> Result Sols
 convValueLists a1 a2 a3 a4 a5 = convValueListsFuel 64 a1 a2 a3 a4 a5
 
-convNeutral : List (Pair String Term) -> List (Pair Int Value) -> Int -> Neutral -> Neutral -> Value -> Value -> Result (List (Pair Int Value))
+convNeutral : HashTbl Term -> Sols -> Int -> Neutral -> Neutral -> Value -> Value -> Result Sols
 convNeutral a1 a2 a3 a4 a5 a6 a7 = convNeutralFuel 64 a1 a2 a3 a4 a5 a6 a7
 
-convSpines : List (Pair String Term) -> List (Pair Int Value) -> Int -> List Value -> List Value -> Value -> Value -> Result (List (Pair Int Value))
+convSpines : HashTbl Term -> Sols -> Int -> List Value -> List Value -> Value -> Value -> Result Sols
 convSpines a1 a2 a3 a4 a5 a6 a7 = convSpinesFuel 64 a1 a2 a3 a4 a5 a6 a7
 
-etaLeft : List (Pair String Term) -> List (Pair Int Value) -> Int -> Value -> String -> Closure -> Result (List (Pair Int Value))
+etaLeft : HashTbl Term -> Sols -> Int -> Value -> String -> Closure -> Result Sols
 etaLeft a1 a2 a3 a4 a5 a6 = etaLeftFuel 64 a1 a2 a3 a4 a5 a6
 
-etaRight : List (Pair String Term) -> List (Pair Int Value) -> Int -> String -> Closure -> Value -> Result (List (Pair Int Value))
+etaRight : HashTbl Term -> Sols -> Int -> String -> Closure -> Value -> Result Sols
 etaRight a1 a2 a3 a4 a5 a6 = etaRightFuel 64 a1 a2 a3 a4 a5 a6
 
-solveMeta : List (Pair String Term) -> List (Pair Int Value) -> Int -> Int -> List Value -> Value -> Result (List (Pair Int Value))
+solveMeta : HashTbl Term -> Sols -> Int -> Int -> List Value -> Value -> Result Sols
 solveMeta a1 a2 a3 a4 a5 a6 = solveMetaFuel 64 a1 a2 a3 a4 a5 a6
 
-solveMetaHead : List (Pair String Term) -> List (Pair Int Value) -> Int -> Int -> List Value -> Value -> Value -> List Value -> Result (List (Pair Int Value))
+solveMetaHead : HashTbl Term -> Sols -> Int -> Int -> List Value -> Value -> Value -> List Value -> Result Sols
 solveMetaHead a1 a2 a3 a4 a5 a6 a7 a8 = solveMetaHeadFuel 64 a1 a2 a3 a4 a5 a6 a7 a8
 
-solveMetaHo : List (Pair String Term) -> List (Pair Int Value) -> Int -> Int -> List Value -> Value -> Result (List (Pair Int Value))
+solveMetaHo : HashTbl Term -> Sols -> Int -> Int -> List Value -> Value -> Result Sols
 solveMetaHo a1 a2 a3 a4 a5 a6 = solveMetaHoFuel 64 a1 a2 a3 a4 a5 a6

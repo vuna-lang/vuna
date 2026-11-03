@@ -15,7 +15,11 @@ open Vuna_dCompiler_dCommon
 open Vuna_dCompiler_dFrontend_dToml
 open Vuna_dCompiler_dFrontend_dManifest
 open Vuna_dCompiler_dPackages_dPkg
+open Base_dNat
+open Base_dVec
+open Vuna_dCompiler_dLoader_dDiagnostics
 open Vuna_dCompiler_dFrontend_dAst
+open Vuna_dCompiler_dFrontend_dDiagnostics
 open Vuna_dCompiler_dFrontend_dLexer
 open Vuna_dCompiler_dFrontend_dParser_dSupport
 open Vuna_dCompiler_dFrontend_dParser
@@ -23,6 +27,8 @@ open Vuna_dCompiler_dLoader_dModules
 open Vuna_dCompiler_dLoader_dResolve
 open Vuna_dCompiler_dLoader_dFlatten
 open Vuna_dCompiler_dLoader
+open Vuna_dCompiler_dDebug
+open Vuna_dCompiler_dDiagnostics
 open Vuna_dCompiler_dCore_dTerm
 open Vuna_dCompiler_dCore_dEval
 open Vuna_dCompiler_dCore_dConv
@@ -41,7 +47,7 @@ let v_Vuna_dCompiler_dElab_dData_delabCtor = (fun globals -> (fun fam -> (fun ar
   | C_Vuna_dCompiler_dFrontend_dAst_dCtor_Vuna_dCompiler_dFrontend_dAst_dCtor (dtb__0, dtb__1, dtb__2, dtb__3) -> ((fun famKind -> ((fun tyExpr2 -> ((v_Base_dResult_dandThen ((((v_Vuna_dCompiler_dElab_dTerm_dcheckType globals) (v_Vuna_dCompiler_dElab_dTypes_demptyCtx ())) ec) tyExpr2)) (fun pk -> (match pk with
   | C_Base_dPair_dPair_Base_dPair_dPair (dtb__4, dtb__5) -> (match dtb__5 with
   | C_Base_dPair_dPair_Base_dPair_dPair (dtb__6, dtb__7) -> ((fun tyTerm -> (match (v_Vuna_dCompiler_dElab_dMeta_dresultSpine (v_Vuna_dCompiler_dElab_dMeta_ddropParams tyTerm)) with
-  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__8, dtb__9) -> (if ((bi_neq_str dtb__8) fam) then ((v_Vuna_dCompiler_dElab_dTypes_derrAt dtb__3) ((bi_concat "[TC_CtorDoesNotReturn] DT: constructor ") ((bi_concat dtb__0) ((bi_concat " does not return ") fam)))) else (if ((bi_neq_int (v_Base_dList_dlength dtb__9)) arity) then ((v_Vuna_dCompiler_dElab_dTypes_derrAt dtb__3) ((bi_concat "[TC_CtorError] DT: constructor ") ((bi_concat dtb__0) ((bi_concat " has the wrong number of indices for ") fam)))) else (C_Base_dResult_dResult_Base_dResult_dOk ((C_Base_dPair_dPair_Base_dPair_dPair ((C_Vuna_dCompiler_dElab_dTypes_dDtCtor_Vuna_dCompiler_dElab_dTypes_dDtCtor (dtb__0, fam, (v_Vuna_dCompiler_dElab_dMeta_dteleOfType tyTerm), tyTerm)), dtb__7))))))
+  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__8, dtb__9) -> (if ((bi_neq_str dtb__8) fam) then ((((v_Vuna_dCompiler_dDiagnostics_dtcErr2 dtb__3) (C_Vuna_dCompiler_dDiagnostics_dTcErr_Vuna_dCompiler_dDiagnostics_dCtorDoesNotReturn (dtb__0, fam))) dtb__0) fam) else (if ((bi_neq_int (v_Base_dList_dlength dtb__9)) arity) then ((((v_Vuna_dCompiler_dDiagnostics_dtcErr2 dtb__3) (C_Vuna_dCompiler_dDiagnostics_dTcErr_Vuna_dCompiler_dDiagnostics_dCtorWrongIndices (dtb__0, fam))) dtb__0) fam) else (C_Base_dResult_dResult_Base_dResult_dOk ((C_Base_dPair_dPair_Base_dPair_dPair ((C_Vuna_dCompiler_dElab_dTypes_dDtCtor_Vuna_dCompiler_dElab_dTypes_dDtCtor (dtb__0, fam, (v_Vuna_dCompiler_dElab_dMeta_dteleOfType tyTerm), tyTerm)), dtb__7))))))
   | _ -> failwith "DT: impossible branch"
 )) (((v_Vuna_dCompiler_dElab_dMeta_dinlineSolvedMetas dtb__7) 0) dtb__4))
   | _ -> failwith "DT: impossible branch"
@@ -69,9 +75,9 @@ let rec v_Vuna_dCompiler_dElab_dData_delabCtors = (fun mc0 -> (fun mc1 -> (fun m
 
 let v_Vuna_dCompiler_dElab_dData_delabDataHead = (fun globals -> (fun ec -> (fun ds -> (match ds with
   | C_Base_dPair_dPair_Base_dPair_dPair (dtb__17, dtb__18) -> (match dtb__17 with
-  | C_Vuna_dCompiler_dFrontend_dAst_dDecl_Vuna_dCompiler_dFrontend_dAst_dDData (dtb__19, dtb__20, dtb__21, dtb__22, dtb__23, dtb__24) -> (if ((v_Base_dList_dmemName dtb__19) (v_Vuna_dCompiler_dElab_dPrelude_dpreludeNames ())) then ((v_Vuna_dCompiler_dElab_dTypes_derrAt dtb__24) ((bi_concat "[TC_CannotRedefineBuiltin] DT: cannot redefine builtin ") dtb__19)) else ((v_Base_dResult_dandThen ((((v_Vuna_dCompiler_dElab_dTerm_dcheckType globals) (v_Vuna_dCompiler_dElab_dTypes_demptyCtx ())) ec) dtb__21)) (fun pk -> (match pk with
+  | C_Vuna_dCompiler_dFrontend_dAst_dDecl_Vuna_dCompiler_dFrontend_dAst_dDData (dtb__19, dtb__20, dtb__21, dtb__22, dtb__23, dtb__24) -> (if ((v_Base_dList_dmemName dtb__19) (v_Vuna_dCompiler_dElab_dPrelude_dpreludeNames ())) then (((v_Vuna_dCompiler_dDiagnostics_dtcErr1 dtb__24) (C_Vuna_dCompiler_dDiagnostics_dTcErr_Vuna_dCompiler_dDiagnostics_dCannotRedefineBuiltin (dtb__19))) dtb__19) else ((v_Base_dResult_dandThen ((((v_Vuna_dCompiler_dElab_dTerm_dcheckType globals) (v_Vuna_dCompiler_dElab_dTypes_demptyCtx ())) ec) dtb__21)) (fun pk -> (match pk with
   | C_Base_dPair_dPair_Base_dPair_dPair (dtb__25, dtb__26) -> (match dtb__26 with
-  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__27, dtb__28) -> ((fun fullKind -> ((fun tele -> ((fun arity -> (if (v_Base_dBool_dnot (v_Vuna_dCompiler_dElab_dMeta_dkindWellFormed fullKind)) then ((v_Vuna_dCompiler_dElab_dTypes_derrAt dtb__24) "[TC_DataKindArrows] DT: the kind of a data declaration must be a chain of arrows ending in Type") else (C_Base_dResult_dResult_Base_dResult_dOk ((C_Base_dPair_dPair_Base_dPair_dPair ((C_Vuna_dCompiler_dElab_dMeta_dDataHead_Vuna_dCompiler_dElab_dMeta_dDataHead (dtb__19, fullKind, arity)), (C_Base_dPair_dPair_Base_dPair_dPair ((C_Base_dList_dList_Cons ((C_Base_dPair_dPair_Base_dPair_dPair (dtb__19, fullKind)), C_Base_dList_dList_Nil)), dtb__28)))))))) (v_Base_dList_dlength tele))) (v_Vuna_dCompiler_dElab_dMeta_dsplitKind fullKind))) ((v_Vuna_dCompiler_dElab_dPrelude_dprependParams dtb__20) (((v_Vuna_dCompiler_dElab_dMeta_dinlineSolvedMetas dtb__28) 0) dtb__25)))
+  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__27, dtb__28) -> ((fun fullKind -> ((fun tele -> ((fun arity -> (if (v_Base_dBool_dnot (v_Vuna_dCompiler_dElab_dMeta_dkindWellFormed fullKind)) then ((v_Vuna_dCompiler_dDiagnostics_dtcErr0 dtb__24) C_Vuna_dCompiler_dDiagnostics_dTcErr_Vuna_dCompiler_dDiagnostics_dDataKindArrows) else (C_Base_dResult_dResult_Base_dResult_dOk ((C_Base_dPair_dPair_Base_dPair_dPair ((C_Vuna_dCompiler_dElab_dMeta_dDataHead_Vuna_dCompiler_dElab_dMeta_dDataHead (dtb__19, fullKind, arity)), (C_Base_dPair_dPair_Base_dPair_dPair ((C_Base_dList_dList_Cons ((C_Base_dPair_dPair_Base_dPair_dPair (dtb__19, fullKind)), C_Base_dList_dList_Nil)), dtb__28)))))))) (v_Base_dList_dlength tele))) (v_Vuna_dCompiler_dElab_dMeta_dsplitKind fullKind))) ((v_Vuna_dCompiler_dElab_dPrelude_dprependParams dtb__20) (((v_Vuna_dCompiler_dElab_dMeta_dinlineSolvedMetas dtb__28) 0) dtb__25)))
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"

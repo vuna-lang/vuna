@@ -45,6 +45,7 @@ module Vuna.Compiler.Elab.Dict
 -- 拆自 M24 的单一 `Elab.vuna`（按真实调用图切；门面仍是 `Vuna.Compiler.Elab`）。
 import Vuna.Compiler.Common
 import Vuna.Compiler.Core
+import Vuna.Compiler.Diagnostics
 import Vuna.Compiler.Elab.Meta
 import Vuna.Compiler.Elab.Prelude
 import Vuna.Compiler.Elab.Sig
@@ -76,14 +77,16 @@ isDictFamily ec g = memName g (map (\c => dictTypeName (dtClassName c)) (ecClass
 -- 实例搜索：找头能统一到目标字典类型的**默认**实例。零个 ⇒ 报缺失，多个 ⇒ 报歧义。
 -- M23：命名实例（`as name`）不参与自动搜索，只能 `method @name` 显式选中（与 HM 一致）。
 searchInstance : Ec -> Value -> Span -> Result (Pair Term Ec)
--- @code TC_AmbiguousInstance
-searchInstance ec dom sp = case filterInstances ec dom (filter (\i => not (dtInstNamed i)) (ecInsts ec)) (ecSols ec) of
-  -- @code TC_NoInstanceFound
-  Pair [] sols => errAt sp ("[TC_NoInstanceFound] DT: no instance found for " ++ showValue dom)
-  Pair ([i]) sols => Ok (Pair (TGlobal (dtInstName i)) (ecPutSols ec sols))
+searchInstance ec dom sp = case filterInstances ec dom (filter (\i => not (dtInstNamed i)) (ecInsts ec)) (ecSolsP ec) of
+  Pair [] sols =>
+    let
+      sd = showValue dom
+    in tcErr1 sp (NoInstanceFound sd) sd
+  Pair ([i]) sols => Ok (Pair (TGlobal (dtInstName i)) (ecPutSols ec (solsList sols)))
   Pair cands sols =>
-    errAt sp
-      ("[TC_AmbiguousInstance] DT: ambiguous instance for " ++ showValue dom ++ " (candidates: " ++ joinInstNames cands ++ ")")
+    let
+      sd = showValue dom
+    in tcErr2 sp (AmbiguousInstance sd (joinInstNames cands)) sd (joinInstNames cands)
 
 -- M22：回填延迟的字典元变量。每个 `DtDictGoal m dom`：类参数已解（非元变量）且能搜到
 -- 唯一实例时解 `?m = <实例>`；仍未解或仍歧义则留到下一轮（幂等，可反复调用）。
@@ -100,12 +103,16 @@ else case ecDictGoals ec of
       forced = forceVal ec1 dom
       keep = ecAddDictGoal (resolveDictGoalsFuel (fuel - 1) globals ec1) (DtDictGoal m forced)
     in case dictClassArg ec1 forced of
-      Just argTy => if hasUnsolvedMetaValue (ecSols ec1) argTy then keep
+      Just argTy => if hasUnsolvedMetaValue (ecSolsP ec1) argTy then keep
+      else if isRigidClassArg ec1 argTy then keep
       else case searchInstance ec1 forced (Span "" 0 0 0 0) of
-        Ok (Pair instTerm ec2) => case solveMeta (ecDefs ec2) (ecSols ec2) 0 m [] (eval [] instTerm) of
-          Ok sols2 => case checkSolsDelta ec2 (ecSols ec2) sols2 of
+        -- 类参数是定义体的刚性变量时，任何实例头都匹配不上（实例都是具体/结构化头），
+        -- 搜一遍只会白跑 #实例 次 conv 再构造一条被丢弃的 NoInstanceFound。
+        -- resolveDictGoals 在 by-infer 路径上**每个节点**都会调用，这条提前返回很值钱。
+        Ok (Pair instTerm ec2) => case solveMeta (ecDefTbl ec2) (ecSolsP ec2) 0 m [] (eval [] instTerm) of
+          Ok sols2 => case checkSolsDelta ec2 (ecSols ec2) (solsList sols2) of
             Err e => keep
-            Ok _ => resolveDictGoalsFuel (fuel - 1) globals (ecPutSols ec2 sols2)
+            Ok _ => resolveDictGoalsFuel (fuel - 1) globals (ecPutSols ec2 (solsList sols2))
           Err e => keep
         Err e => keep
       Nothing => keep
@@ -115,18 +122,18 @@ else case ecDictGoals ec of
 -- 类型/索引元变量（Rig0）可留在项里。字典解（实例构造子）是闭的，`quote 0` 安全；
 -- 带自由变量（非闭）的解跳过——它们只可能是擦除元变量，codegen 跳过。
 substDictTerm : Ec -> Term -> Term
-substDictTerm ec t = substSolvedMetas (ecSols ec) t
+substDictTerm ec t = substSolvedMetasTbl (ecSolTbl ec) t
 
 -- 实例表筛选（M22）：接受**可新增解**的头匹配——`Dict_C ?a`（`?a` 未解）与实例头
 -- `Dict_C IO` 统一会解出 `?a = IO`，这正是「约束求解」：字典约束本身确定类参数。
 -- 每个候选都对照**同一份初始 sols** 试匹配（不把前一个候选的解带进下一个），
 -- 否则 `?a` 被第一个候选定死，第二个候选永远匹配不上、歧义漏检。
-filterInstances : Ec -> Value -> List DtInst -> List (Pair Int Value) -> Pair (List DtInst) (List (Pair Int Value))
+filterInstances : Ec -> Value -> List DtInst -> Sols -> Pair (List DtInst) Sols
 filterInstances ec dom [] sols = Pair [] sols
 filterInstances ec dom (i :: rest) sols =
   let
     hd = forceVal ec (eval [] (dtInstHead i))
-  in case conv (ecDefs ec) sols 0 dom hd of
+  in case conv (ecDefTbl ec) sols 0 dom hd of
     Err e => filterInstances ec dom rest sols
     Ok sols2 => case filterInstances ec dom rest sols of
       Pair more final => Pair (i :: more) sols2
@@ -149,24 +156,13 @@ joinRestInstNames (i :: rest) = ", " ++ dtInstName i ++ joinRestInstNames rest
 -- 定义已就位），签名用类的方法类型把类参数替换成实例头实参（与实例方法体一致）。
 inferInstSel : List (Pair String Term) -> Ctx -> Ec -> Expr -> String -> Span -> Result (Pair Term (Pair Value Ec))
 inferInstSel globals ctx ec meth iname sp = case methodNameOf meth of
-  Nothing =>
-    errAt sp
-      "[TC_InstanceAnnotationWrongUse] DT: @instance can only be used with a trait method (write `method @instance`)"
-  -- @code TC_InstanceAnnotationWrongUse
+  Nothing => tcErr0 sp InstanceAnnotationWrongUse
   Just mname => case instNamedLookup iname (ecInsts ec) of
-    -- @code TC_UnknownNamedInstance
-    Nothing => errAt sp ("[TC_UnknownNamedInstance] DT: unknown named instance " ++ iname)
+    Nothing => tcErr1 sp (UnknownNamedInstance iname) iname
     Just inst => case instClassOfDict (instDictName inst) (ecClasses ec) of
-      -- @code TC_InstanceNotTrait
-      Nothing =>
-        errAt sp
-          ("[TC_InstanceNotTrait] DT: instance " ++ iname ++ " is not an instance of a trait")
+      Nothing => tcErr1 sp (InstanceNotTrait iname) iname
       Just cls => case classMethodIndex mname (dtClassMethods cls) of
-        -- @code TC_OpOnlyIntString
-        Nothing =>
-          errAt sp
-            ("[TC_OpOnlyIntString] DT: `" ++ mname ++ "` is not a method of trait " ++ dtClassName cls)
-        -- @code TC_NeedsTwoArgs
+        Nothing => tcErr2 sp (NotTraitMethod mname (dtClassName cls)) mname (dtClassName cls)
         Just k =>
           let
             nFields = length (dtClassMethods cls)
@@ -254,7 +250,7 @@ dictFamilyNameOf ec dom = case forceVal ec dom of
 -- 头部是元变量（`?m' Int`）或 Pi 都不是具体构造子 ⇒ 不约束。
 argHeadMatchesKind : List (Pair String Term) -> Ec -> Ctx -> Value -> Value -> Bool
 argHeadMatchesKind globals ec ctx forced argKind = case neutralHeadOrSelf forced of
-  VNeutral (NGlobal g []) => case globalLookup g globals of
+  VNeutral (NGlobal g []) => case globalsLookup g globals ec of
     Just dictSig => case convEc ec (ctxDepth ctx) argKind (forceVal ec (eval [] dictSig)) of
       Ok ec2 => True
       Err e => False
@@ -276,12 +272,16 @@ dictClassArg ec dom = case forceVal ec dom of
 -- `mem` 的 `Dict_Eq a` 走这里；具体类型（`NGlobal`）与元变量不在此列。
 isRigidDictArg : Ec -> Value -> Bool
 isRigidDictArg ec dom = case dictClassArg ec dom of
-  Just arg => case forceVal ec arg of
-    VNeutral n => case n of
-      NVar name lvl sp => True
-      _ => False
-    _ => False
+  Just arg => isRigidClassArg ec arg
   Nothing => False
+
+-- 已取出的类参数是否为刚性局部变量（resolveDictGoals 里先算 docClassArg 再判，避免重复 force）。
+isRigidClassArg : Ec -> Value -> Bool
+isRigidClassArg ec arg = case forceVal ec arg of
+  VNeutral n => case n of
+    NVar name lvl sp => True
+    _ => False
+  _ => False
 
 -- M24：这里原来按「名字形如 t<数字> 的 HM 推断变量」决定 `==` / 比较运算直接走
 -- generic 运行时（跳过字典）。HM 删除后这种变量名不再产生，名字启发式整体移除。
@@ -386,11 +386,11 @@ allCtorsComparable ec fuel seen params (c :: rest) =
 
 -- 泛型相等兜底只对可安全结构比较的类型开放；否则要求在源码里有 Eq 实例。
 genericEqSafe : String -> Term -> Term -> Term -> Span -> Value -> Ec -> Result (Maybe (Pair Term (Pair Value Ec)))
--- @code TC_GenericEqNotComparable
-genericEqSafe name tyTerm aTerm bTerm sp aTy ec =
-  if typeComparable ec 64 [] aTy then Ok (Just (Pair (genericEqApp name tyTerm aTerm bTerm) (Pair (VNeutral (NGlobal "Bool" [])) ec)))
-  else errAt sp
-    ("[TC_GenericEqNotComparable] DT: cannot compare values of type " ++ showValue (forceVal ec aTy) ++ " with generic equality; add an Eq instance or deriving (Eq)")
+genericEqSafe name tyTerm aTerm bTerm sp aTy ec = if typeComparable ec 64 [] aTy then Ok (Just (Pair (genericEqApp name tyTerm aTerm bTerm) (Pair (VNeutral (NGlobal "Bool" [])) ec)))
+else
+  let
+    st = showValue (forceVal ec aTy)
+  in tcErr1 sp (GenericEqNotComparable st) st
 
 specializeEqTy : List (Pair String Term) -> Ctx -> String -> Term -> Term -> Span -> Value -> Ec -> Result (Maybe (Pair Term (Pair Value Ec)))
 -- M23：具体类型没有 Eq 实例时退回泛型结构比较（bi_eq_generic，语义与 HM 的 == 一致）；
@@ -447,8 +447,8 @@ cmpMethodName name = case name of
   ">" => "gt"
   _ => "ge"
 
-cmpRuntimeName : String -> String -> Result String
-cmpRuntimeName name tyName = case tyName of
+cmpRuntimeName : Span -> String -> String -> Result String
+cmpRuntimeName sp name tyName = case tyName of
   "Int" => case name of
     "<" => Ok "bi_lt_int"
     "<=" => Ok "bi_le_int"
@@ -456,10 +456,7 @@ cmpRuntimeName name tyName = case tyName of
     _ => Ok "bi_ge_int"
   "String" => Ok (cmpGenericName name)
   "Bool" => Ok (cmpGenericName name)
-  -- @code TC_OpOnlyIntString
-  _ =>
-    Err
-      ("[TC_OpOnlyIntString] DT: `" ++ name ++ "` is not defined for " ++ tyName ++ " (Ord instance required)")
+  _ => tcErr2 sp (OpNotDefinedFor name tyName) name tyName
 
 cmpGenericName : String -> String
 cmpGenericName name = case name of
@@ -485,7 +482,7 @@ specializeCmpTy : List (Pair String Term) -> Ctx -> String -> Term -> Term -> Sp
 -- 无 Ord 类时（单文件 / 未 import）退回泛型比较运行时。
 specializeCmpTy globals ctx name aTerm bTerm sp aTy ec = case cmpBuiltinTyName (forceVal ec aTy) of
   Just tyName =>
-    andThen (cmpRuntimeName name tyName)
+    andThen (cmpRuntimeName sp name tyName)
       (\rt => Ok (Just (Pair (TApp (TApp (TGlobal rt) aTerm Rig1) bTerm Rig1) (Pair (VNeutral (NGlobal "Bool" [])) ec))))
   Nothing => case findClassByShortName "Ord" (ecClasses ec) of
     Nothing =>

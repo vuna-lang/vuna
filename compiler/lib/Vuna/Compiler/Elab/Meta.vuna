@@ -39,6 +39,7 @@ module Vuna.Compiler.Elab.Meta
   , foldAppTerms
   , freshVarValue
   , globalLookup
+  , globalsLookup
   , hasFamParams
   , hasNoExplicitPi
   , hasOutOfScopeVar
@@ -95,7 +96,9 @@ module Vuna.Compiler.Elab.Meta
 -- 擦除判据（binderRig / isIndexDomain 等）、以及 trait/instance 的命名辅助。
 -- 拆自 M24 的单一 `Elab.vuna`（按真实调用图切；门面仍是 `Vuna.Compiler.Elab`）。
 import Vuna.Compiler.Common
+import Vuna.Compiler.Debug
 import Vuna.Compiler.Core
+import Vuna.Compiler.Diagnostics
 import Vuna.Compiler.Elab.Prelude
 import Vuna.Compiler.Elab.Sig
 import Vuna.Compiler.Elab.Types
@@ -197,14 +200,17 @@ convEc : Ec -> Int -> Value -> Value -> Result Ec
 -- 预置的 Bool 桩（preludeGlobals 里的 Bool）与 Base.Bool.Bool 是同一个类型：
 -- 签名里写的 Bool 走桩，构造子/内建实例给的是 Base.Bool.Bool，两者必须视为相等。
 convEc ec depth expected actual = if boolTypedVal ec expected && boolTypedVal ec actual then Ok ec
-else case conv (ecDefs ec) (ecSols ec) depth expected actual of
+else case conv (ecDefTbl ec) (ecSolsP ec) depth expected actual of
   Err e => Err e
   -- 作用域逃逸检查只复核**这次新增**的解：旧实现每次 conv 都扫全表
   -- （O(#元变量) × O(#conv)），大程序上就是主瓶颈（编译器包 180s 只走到第 800 个定义）。
   -- 解表按新解前插，用旧表头 id 作分隔前缀即可 O(新增) 定位。
-  Ok sols2 => case checkSolsDelta ec (ecSols ec) sols2 of
-    Err e => Err e
-    Ok _ => Ok (ecPutSols ec sols2)
+  Ok sols2 =>
+    let
+      sl = solsList sols2
+    in case checkSolsDelta ec (ecSols ec) sl of
+      Err e => Err e
+      Ok _ => Ok (ecPutSols ec sl)
 
 -- M15 元变量上下文：新解不得引用「创建该元变量之后才绑定」的局部变量（作用域逃逸）。
 -- conv 本身不知道元变量的创建深度，所以解表回来后在这里统一复核新增的解。
@@ -223,16 +229,16 @@ checkSolsDelta ec oldSols newSols = checkScopedValueList ec (newSolsSince oldSol
 
 checkScopedValueList : Ec -> List (Pair Int Value) -> Result Int
 checkScopedValueList ec [] = Ok 0
--- @code TC_CannotSolveMetavar
 checkScopedValueList ec ((Pair m v) :: rest) = case metaDepthOf ec m of
   Nothing => checkScopedValueList ec rest
   Just created =>
-    if levelEscapes created 0 v then Err
-      ("[TC_CannotSolveMetavar] DT: cannot solve metavariable ?" ++ strFromInt m ++ " (solution would escape its scope)")
+    if levelEscapes created 0 v then Err (tcMsg (CannotSolveMetavar (strFromInt m)) (VCons (strFromInt m) VNil))
     else checkScopedValueList ec rest
 
 metaDepthOf : Ec -> Int -> Maybe Int
-metaDepthOf ec m = metaDepthLookup m (ecDepthOfMeta ec)
+metaDepthOf ec m = case tblLookup (strFromInt m) (ecDepthTbl ec) of
+  Just d => Just d
+  Nothing => metaDepthLookup m (ecDepthOfMeta ec)
 
 metaDepthLookup : Int -> List (Pair Int Int) -> Maybe Int
 metaDepthLookup m lst = case lst of
@@ -244,12 +250,10 @@ checkSolsScoped ec sols = checkScopedFrom ec (ecDepthOfMeta ec) sols
 
 checkScopedFrom : Ec -> List (Pair Int Int) -> List (Pair Int Value) -> Result Int
 checkScopedFrom ec [] sols = Ok 0
--- @code TC_CannotSolveMetavar
 checkScopedFrom ec ((Pair m created) :: rest) sols = case metaLookup m sols of
   Nothing => checkScopedFrom ec rest sols
   Just v =>
-    if levelEscapes created 0 v then Err
-      ("[TC_CannotSolveMetavar] DT: cannot solve metavariable ?" ++ strFromInt m ++ " (solution would escape its scope)")
+    if levelEscapes created 0 v then Err (tcMsg (CannotSolveMetavar (strFromInt m)) (VCons (strFromInt m) VNil))
     else checkScopedFrom ec rest sols
 
 -- 未解元变量：返回第一个未解的编号。
@@ -320,6 +324,16 @@ globalLookup : String -> List (Pair String Term) -> Maybe Term
 globalLookup name [] = Nothing
 globalLookup name ((Pair n ty) :: rest) = if name == n then Just ty else globalLookup name rest
 
+-- 全局名查找的**热路径**入口：先查 Ec 里的哈希索引（O(1)），未命中再回落到线性扫。
+-- 回落是必要的：索引只在 `elabBodies` 之前从当时的 globals 建一次，之前的数据族/trait/
+-- 签名阶段索引为空（那些阶段总量小，线性扫可接受）；索引与 globals 不一致时以列表为准。
+globalsLookup : String -> List (Pair String Term) -> Ec -> Maybe Term
+globalsLookup name globals ec = case tblLookup name (ecGlobalsTbl ec) of
+  Just ty => Just ty
+  -- 表已完整（bodies 阶段）时，未命中就意味着「不是全局」：省掉线性扫全 globals
+  -- 的回落（未命中的绝大多数是数据族名，如 Base.List.List / String / Int）。
+  Nothing => if ecGlobalsComplete ec then Nothing else globalLookup name globals
+
 -- ---------------------------------------------------------------
 memSig : List (Pair a b) -> a -> Bool
 memSig [] name = False
@@ -330,24 +344,26 @@ memDefName name [] = False
 memDefName name ((Pair n ty) :: rest) = if n == name then True else memDefName name rest
 
 collectSigs : List Decl -> Result (List (Pair String Expr))
-collectSigs decls = collectSigsInto (definedNames decls) [] decls
+collectSigs decls =
+  let
+    banned = topQuantBanned (definedNames decls)
+  in collectSigsInto banned tblEmpty [] decls
 
 -- 声明收集（M20：签名里的自由小写名量化为隐式类型参数，见 `Elab.Sig.quantifyTopSig`）。
 -- `allDefs` 是**整个程序**的定义名（不能只看后面：`plus` 可能定义在引用它的签名之前）。
-collectSigsInto : List String -> List (Pair String Expr) -> List Decl -> Result (List (Pair String Expr))
-collectSigsInto allDefs acc [] = Ok (reverse acc)
-collectSigsInto allDefs acc (d :: rest) = case d of
+collectSigsInto : HashTbl Bool -> HashTbl Bool -> List (Pair String Expr) -> List Decl -> Result (List (Pair String Expr))
+collectSigsInto banned seen acc [] = Ok (reverse acc)
+collectSigsInto banned seen acc (d :: rest) = case d of
   DSig name ty sp =>
-    if memName name preludeNames then errAt sp ("[TC_CannotRedefineBuiltin] DT: cannot redefine builtin " ++ name)
-    else if memSig acc name then errAt sp ("[TC_DuplicateSignature] DT: duplicate signature for " ++ name)
-    else collectSigsInto allDefs (Pair name (quantifyTopSig allDefs ty sp) :: acc) rest
-  -- @code TC_CannotRedefineBuiltin
-  -- @code TC_DuplicateSignature
-  DFun name pats body sp => collectSigsInto allDefs acc rest
-  DData name params kind ctors derivings sp => collectSigsInto allDefs acc rest
+    if memName name preludeNames then tcErr1 sp (CannotRedefineBuiltin name) name
+    else if tblMem name seen then tcErr1 sp (DuplicateSignature name) name
+    else collectSigsInto banned (tblInsert name True seen)
+      (Pair name (quantifyTopSig banned ty sp) :: acc) rest
+  DFun name pats body sp => collectSigsInto banned seen acc rest
+  DData name params kind ctors derivings sp => collectSigsInto banned seen acc rest
   DRecord name params fields derivings sp => errAt sp "DT: internal: record was not desugared"
-  DTrait name params methods sp => collectSigsInto allDefs acc rest
-  DInstance mname isDefault head methods sp => collectSigsInto allDefs acc rest
+  DTrait name params methods sp => collectSigsInto banned seen acc rest
+  DInstance mname isDefault head methods sp => collectSigsInto banned seen acc rest
 
 --
 -- 已精化的族按源顺序积累在 Ec 的 datas 里（case 精化需要族的 ctor telescope）。

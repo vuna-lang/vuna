@@ -50,6 +50,8 @@ module Vuna.Compiler.Core.Eval
   , substSolvedMetas
   , substSolvedMetasAt
   , substSolvedMetasAtGo
+  , substSolvedMetasAtTbl
+  , substSolvedMetasTbl
   , valueEqDeep
   , valueListEqDeep
   , varIndex
@@ -175,10 +177,10 @@ applySpine v (a :: rest) = applySpine (applyValue v a) rest
 -- ---------------------------------------------------------------
 -- delta 展开：已解元变量 + 有定义的全局（带步数上限，避免递归定义挂死）
 -- ---------------------------------------------------------------
-force : List (Pair String Term) -> List (Pair Int Value) -> Int -> Value -> Value
+force : HashTbl Term -> Sols -> Int -> Value -> Value
 force defs sols fuel v = if fuel <= 0 then v
 else case v of
-  VMeta m sp => case metaLookup m sols of
+  VMeta m sp => case solsLookup m sols of
     Just t => force defs sols (fuel - 1) (applySpine t sp)
     Nothing => v
   VCase scrut alts =>
@@ -337,8 +339,22 @@ strPrim3 ([a, b, c]) f = case asStr a of
   Nothing => Nothing
 strPrim3 sp f = Nothing
 
-primReduce : List (Pair String Term) -> List (Pair Int Value) -> Int -> String -> List Value -> Maybe Value
+-- primReduce 的廉价前置判定：force 会对**每个**中性全局头调 primReduce，实测单次 check
+-- 有 1500 万次（绝大多数是数据族名，如 `Base.List.List`/`String`/`Int`）。primReduce
+-- 原先是 40 个字符串分支顺序比较，判空要几百纳秒；这里先用首字符筛掉「不可能是内建」
+-- 的名字（数据族名首字母大写且不是 T/F），命中不了就一次返回。
+couldBePrim : String -> Bool
+couldBePrim g =
+  let
+    c = strAt g 0
+  in if c < 0 then False
+  else if c >= 97 then c <= 122
+  else if c == 84 then True
+  else if c == 70 then True else if c >= 38 then c <= 47 else c == 60 || c == 62 || c == 124
+
+primReduce : HashTbl Term -> Sols -> Int -> String -> List Value -> Maybe Value
 primReduce defs sols fuel g sp = if fuel <= 0 then Nothing
+else if notBool (couldBePrim g) then Nothing
 else case g of
   "+" => intPrim2 sp (\a, b => VInt (a + b))
   "-" => intPrim2 sp (\a, b => VInt (a - b))
@@ -378,7 +394,7 @@ else case g of
   "bi_ge_generic" => genericPrim2 sp (\o => o >= 0)
   _ => Nothing
 
-genericEqPrim : List (Pair String Term) -> List (Pair Int Value) -> Int -> List Value -> Bool -> Maybe Value
+genericEqPrim : HashTbl Term -> Sols -> Int -> List Value -> Bool -> Maybe Value
 genericEqPrim defs sols fuel sp neg = if fuel <= 0 then Nothing
 else case sp of
   [ty, a, b] =>
@@ -386,7 +402,7 @@ else case sp of
       (VBool (if neg then notBool (valueEqDeep defs sols (fuel - 1) a b) else valueEqDeep defs sols (fuel - 1) a b))
   _ => Nothing
 
-valueEqDeep : List (Pair String Term) -> List (Pair Int Value) -> Int -> Value -> Value -> Bool
+valueEqDeep : HashTbl Term -> Sols -> Int -> Value -> Value -> Bool
 valueEqDeep defs sols fuel a b = if fuel <= 0 then False
 else case force defs sols fuel a of
   VInt x => case force defs sols fuel b of
@@ -418,7 +434,7 @@ else case force defs sols fuel a of
     _ => False
   _ => False
 
-valueListEqDeep : List (Pair String Term) -> List (Pair Int Value) -> Int -> List Value -> List Value -> Bool
+valueListEqDeep : HashTbl Term -> Sols -> Int -> List Value -> List Value -> Bool
 valueListEqDeep defs sols fuel xs ys = if fuel <= 0 then False
 else case xs of
   [] => case ys of
@@ -433,7 +449,7 @@ else case xs of
 -- 深度正规化（interp --dt 展示 main 用）：先 force，再递归 spine / if 分支。
 -- 与 force 不同，它会继续深入中立项的实参，因此 `inc (dbl 20)` 能算成 41。
 -- ---------------------------------------------------------------
-normalizeFuel : Int -> List (Pair String Term) -> List (Pair Int Value) -> Int -> Value -> Value
+normalizeFuel : Int -> HashTbl Term -> Sols -> Int -> Value -> Value
 normalizeFuel fuel defs sols fuel v = if fuel <= 0 then v
 else if fuel <= 0 then v
 else case force defs sols fuel v of
@@ -444,14 +460,14 @@ else case force defs sols fuel v of
 
 -- case 正规化：scrutinee 归约到构造子就走该分支并继续正规化（分支体里可能还有
 -- case——嵌套模式展开出来的内层匹配就是这种形态）；否则只正规化 scrutinee、保持卡住。
-normalizeCaseFuel : Int -> List (Pair String Term) -> List (Pair Int Value) -> Int -> Value -> List VCaseAlt -> Value
+normalizeCaseFuel : Int -> HashTbl Term -> Sols -> Int -> Value -> List VCaseAlt -> Value
 normalizeCaseFuel fuel defs sols fuel scrut alts = if fuel <= 0 then VCase scrut alts
 else if fuel <= 0 then VCase scrut alts
 else case normalizeFuel (fuel - 1) defs sols (fuel - 1) scrut of
   VCon c args => normalizeFuel (fuel - 1) defs sols (fuel - 1) (applyCaseAlt c args alts)
   s2 => VCase s2 alts
 
-normalizeNeutralFuel : Int -> List (Pair String Term) -> List (Pair Int Value) -> Int -> Neutral -> Value
+normalizeNeutralFuel : Int -> HashTbl Term -> Sols -> Int -> Neutral -> Value
 normalizeNeutralFuel fuel defs sols fuel n = if fuel <= 0 then VNeutral n
 else if fuel <= 0 then VNeutral n
 else case n of
@@ -466,7 +482,7 @@ else case n of
         Just v2 => normalizeFuel (fuel - 1) defs sols (fuel - 1) v2
         Nothing => VNeutral (NGlobal g sp2)
 
-normalizeIfFuel : Int -> List (Pair String Term) -> List (Pair Int Value) -> Int -> Value -> Value -> Value -> Value
+normalizeIfFuel : Int -> HashTbl Term -> Sols -> Int -> Value -> Value -> Value -> Value
 normalizeIfFuel fuel defs sols fuel c th el = if fuel <= 0 then VIf c th el
 else if fuel <= 0 then VIf c th el
 else case normalizeFuel (fuel - 1) defs sols (fuel - 1) c of
@@ -618,20 +634,72 @@ substSolvedMetasAtGo depth sols t = case t of
 substSolvedAltAt : Int -> List (Pair Int Value) -> CaseAlt -> CaseAlt
 substSolvedAltAt depth sols (CaseAlt n bs b) = CaseAlt n bs (substSolvedMetasAtGo depth sols b)
 
+isNilList : List a -> Bool
+isNilList [] = True
+isNilList _ = False
+
 showValueAt : Int -> Value -> String
-showValueAt depth v = showTerm (quote depth v)
+-- 快速路径：原子值直接给名字，免掉 quote+showTerm 的递归（mismatchAt 在试探路径上
+-- 每次 check 会构造 ~600 万条被丢弃的诊断消息，格式化是主要成本之一）。
+showValueAt depth v = case v of
+  VType _ => "Type"
+  VNeutral n1 => case n1 of
+    NGlobal g sp => if isNilList sp then g else showTerm (quote depth v)
+    NVar name lvl sp => if isNilList sp then name else showTerm (quote depth v)
+  VMeta m sp => if isNilList sp then "?" ++ strFromInt m else showTerm (quote depth v)
+  _ => showTerm (quote depth v)
 
 showValue : Value -> String
 showValue v = showValueAt 0 v
 
-normalize : List (Pair String Term) -> List (Pair Int Value) -> Int -> Value -> Value
+normalize : HashTbl Term -> Sols -> Int -> Value -> Value
 normalize a1 a2 a3 a4 = normalizeFuel 1024 a1 a2 a3 a4
 
-normalizeCase : List (Pair String Term) -> List (Pair Int Value) -> Int -> Value -> List VCaseAlt -> Value
+normalizeCase : HashTbl Term -> Sols -> Int -> Value -> List VCaseAlt -> Value
 normalizeCase a1 a2 a3 a4 a5 = normalizeCaseFuel 1024 a1 a2 a3 a4 a5
 
-normalizeNeutral : List (Pair String Term) -> List (Pair Int Value) -> Int -> Neutral -> Value
+normalizeNeutral : HashTbl Term -> Sols -> Int -> Neutral -> Value
 normalizeNeutral a1 a2 a3 a4 = normalizeNeutralFuel 1024 a1 a2 a3 a4
 
-normalizeIf : List (Pair String Term) -> List (Pair Int Value) -> Int -> Value -> Value -> Value -> Value
+normalizeIf : HashTbl Term -> Sols -> Int -> Value -> Value -> Value -> Value
 normalizeIf a1 a2 a3 a4 a5 a6 = normalizeIfFuel 1024 a1 a2 a3 a4 a5 a6
+
+-- 与 `substSolvedMetas` 相同，但解表用哈希索引：定义体的 zonk 会逐元变量查解，
+-- 关联表在千级解表上是 O(#解) 每次；索引把整次替换降成 O(#元变量)。
+-- 同 `substSolvedMetasTbl`，但按给定深度 quote（字典提升路径用；O(1) 查解）。
+substSolvedMetasAtTbl : HashTbl Value -> Int -> Term -> Term
+substSolvedMetasAtTbl sols depth t = case t of
+  TMeta m => case tblLookup (strFromInt m) sols of
+    Just v => quote depth v
+    Nothing => t
+  TPi n i r d c =>
+    TPi n i r (substSolvedMetasAtTbl sols depth d) (substSolvedMetasAtTbl sols (depth + 1) c)
+  TLam n r b => TLam n r (substSolvedMetasAtTbl sols (depth + 1) b)
+  TApp f a r => TApp (substSolvedMetasAtTbl sols depth f) (substSolvedMetasAtTbl sols depth a) r
+  TCon c args =>
+    TCon c (map (\p => Pair (substSolvedMetasAtTbl sols depth (firstOf p)) (secondOf p)) args)
+  TCase sc alts => TCase (substSolvedMetasAtTbl sols depth sc) alts
+  TIf c th el =>
+    TIf (substSolvedMetasAtTbl sols depth c) (substSolvedMetasAtTbl sols depth th)
+      (substSolvedMetasAtTbl sols depth el)
+  _ => t
+
+substSolvedMetasTbl : HashTbl Value -> Term -> Term
+substSolvedMetasTbl sols t = case t of
+  TMeta m => case tblLookup (strFromInt m) sols of
+    Just v =>
+      let
+        soln = quote 0 v
+      in if hasFreeTermVar 0 soln then t else soln
+    Nothing => t
+  TPi n i r d c => TPi n i r (substSolvedMetasTbl sols d) (substSolvedMetasTbl sols c)
+  TLam n r b => TLam n r (substSolvedMetasTbl sols b)
+  TApp f a r => TApp (substSolvedMetasTbl sols f) (substSolvedMetasTbl sols a) r
+  TCon c args => TCon c (map (\p => Pair (substSolvedMetasTbl sols (firstOf p)) (secondOf p)) args)
+  TCase s alts => TCase (substSolvedMetasTbl sols s) (map (substSolvedAltTbl sols) alts)
+  TIf c th el =>
+    TIf (substSolvedMetasTbl sols c) (substSolvedMetasTbl sols th) (substSolvedMetasTbl sols el)
+  _ => t
+
+substSolvedAltTbl : HashTbl Value -> CaseAlt -> CaseAlt
+substSolvedAltTbl sols (CaseAlt n bs b) = CaseAlt n bs (substSolvedMetasTbl sols b)

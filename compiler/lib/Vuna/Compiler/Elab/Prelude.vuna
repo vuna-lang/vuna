@@ -28,6 +28,7 @@ module Vuna.Compiler.Elab.Prelude
 -- 拆出来是为了让 `Elab` 专注精化规则（模块行数预算是硬门槛，见 nix/context.budget）。
 import Vuna.Compiler.Common
 import Vuna.Compiler.Core
+import Vuna.Compiler.Diagnostics
 
 -- ---------------------------------------------------------------
 -- 内置 prelude：Int / String 类型常量、运算符与 str* 内建（Bool 的权威定义是
@@ -53,6 +54,11 @@ preludeNames =
     "strUnpack",
     "strPack",
     "strLength",
+    "strConcatMany",
+    "strSubstTemplate",
+    "timeUs",
+    "strHash",
+    "strAt",
     "&&",
     "||"
   ]
@@ -99,14 +105,10 @@ builtinTyName v = case v of
 
 -- 按实参类型选运行时函数名。
 eqRuntimeName : String -> String -> Result String
--- @code TC_NeedsTwoArgs
 eqRuntimeName op tyName = case tyName of
   "Int" => if op == "==" then Ok "bi_eq_int" else Ok "bi_neq_int"
   "String" => if op == "==" then Ok "bi_eq_str" else Ok "bi_neq_str"
-  -- @code TC_OpOnlyIntString
-  _ =>
-    Err
-      ("[TC_OpOnlyIntString] DT: `" ++ op ++ "` is only defined for Int and String (found " ++ tyName ++ "; M19)")
+  _ => Err (tcMsg (OpOnlyIntString op tyName) (VCons op (VCons tyName VNil)))
 
 -- 泛化后的 `==` / `/=` 签名：`{a : Type} -> a -> a -> Bool`。
 polyEqTy : Term
@@ -131,6 +133,14 @@ strLengthTy = TPi "_" False Rig1 strTy intTy
 -- `preludeNames`（不阻止程序另定义同名；Base.IO 只用不定义）。
 listOfTy : Term -> Term
 listOfTy t = TApp (TGlobal "Base.List.List") t Rig1
+
+-- M25：一次性线性拼接（OCaml `String.concat`），用于 codegen 产物文本装配。
+strConcatManyTy : Term
+strConcatManyTy = TPi "_" False Rig1 (listOfTy strTy) strTy
+
+-- M25: template placeholder substitution in the runtime (single Buffer pass).
+strSubstTemplateTy : Term
+strSubstTemplateTy = TPi "_" False Rig1 strTy (TPi "_" False Rig1 (listOfTy strTy) strTy)
 
 primReadFileTy : Term
 primReadFileTy = TPi "_" False Rig1 strTy strTy
@@ -205,6 +215,11 @@ preludeGlobals =
     Pair "strUnpack" strUnpackTy,
     Pair "strPack" strPackTy,
     Pair "strLength" strLengthTy,
+    Pair "strConcatMany" strConcatManyTy,
+    Pair "strSubstTemplate" strSubstTemplateTy,
+    Pair "timeUs" intTy,
+    Pair "strHash" (TPi "_" False Rig1 strTy intTy),
+    Pair "strAt" (TPi "_" False Rig1 strTy (TPi "_" False Rig1 intTy intTy)),
     Pair "readFile" primReadFileTy,
     Pair "writeFile" primWriteFileTy,
     Pair "print" primPrintTy,

@@ -95,7 +95,7 @@ CLI 入口；`seed/` = 提交入库的多文件 OCaml 信任锚点（生成物�
   错误码体系与错误索引；`vuna gen-errors` 生成 `docs/.generated/errors.md`）：[dt-tooling.md](docs/reference/dt-tooling.md)
 - 仓库探索（按场景选工具、探索后落盘）：技能 `.agents/skills/repo-navigation/SKILL.md`
 - 自举与种子：[bootstrap.md](docs/reference/bootstrap.md)；测试与 CI：[testing.md](docs/reference/testing.md)；
-  已知边界：[limits.md](docs/reference/limits.md)
+  已知边界：[limits.md](docs/reference/limits.md)；性能：[performance.md](docs/reference/performance.md)
 - 技术债务与缺陷登记：[debt.md](docs/reference/debt.md)（M25–M30 关闭清单，A/B/C/D/E 五类）
 - 路线图 / 历史 / DT 状态：[docs/roadmap.md](docs/roadmap.md)（「阶段状态总览」）、
   [docs/history.md](docs/history.md)、[docs/dt-core.md](docs/dt-core.md)

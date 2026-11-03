@@ -47,7 +47,7 @@ _scratch/
 .agents/worktrees/
 
 
-/.local/
+.local/
 .vscode/
 
 # vuna 生成物（package / 工具链输出）

@@ -10,6 +10,7 @@ module Vuna.Compiler.Elab.Match (allVarPats, multiToCaseExpr, multiToExpr) where
 -- 关键不变量：每个 `ctorAltList` 递归层生成的新鲜子模式名必须带**本列位置名**
 -- （见 `subNamesFor`），否则层间同名会让外层 rename 抓到内层 binder。
 import Vuna.Compiler.Common
+import Vuna.Compiler.Diagnostics
 import Vuna.Compiler.Frontend.Ast
 
 -- 单 clause 的参数全是变量（或通配）时可直接 `checkDef` 绑定；否则需要 `multiToExpr`
@@ -23,8 +24,7 @@ allVarPats (p :: rest) = case p of
 
 multiToExpr : List (Pair String (List String)) -> List (Pair (List Pat) Expr) -> Result Expr
 multiToExpr table clauses = case arityOf clauses of
-  -- @code TC_FunctionNoClauses
-  Nothing => Err "[TC_FunctionNoClauses] DT: function has no clauses"
+  Nothing => Err (tcMsg FunctionNoClauses VNil)
   Just n =>
     let
       names = paramNames n
@@ -64,10 +64,7 @@ litAltExpr table clauses pos restParams fuel =
 litAltExprGo : List (Pair String (List String)) -> List (Pair (List Pat) Expr) -> String -> List String -> Int -> Result Expr
 litAltExprGo table clauses pos restParams fuel = if fuel <= 0 then Err "DT: internal: pattern matrix fuel exhausted"
 else case clauses of
-  -- @code TC_IntStringCaseNeedsFallback
-  [] =>
-    Err
-      "[TC_IntStringCaseNeedsFallback] DT: case on Int / String needs a variable or wildcard branch as fallback (M19)"
+  [] => Err (tcMsg IntStringCaseNeedsFallback VNil)
   (Pair (p :: ps) body) :: rest => case p of
     PVar pname psp =>
       andThen (buildColumnExpr table (stripFirstCol clauses) restParams (fuel - 1))
@@ -80,9 +77,7 @@ else case clauses of
   -- 变量/通配行也匹配这个字面量，必须一起进入子矩阵，否则内层列会缺分支
   -- （`TCon "a" [] => ...; TCon "b" _ => ...; TCon _ _ => ...` 报 missing Cons，
   -- 且 `f "a" [] = 1; f "a" _ = 2; f _ _ = 3` 会丢掉第二条同字面量分支）。
-  -- @code TC_ClauseTooManyPatterns
-  (Pair [] body) :: rest =>
-    Err "[TC_ClauseTooManyPatterns] DT: clause has more patterns than the function arity"
+  (Pair [] body) :: rest => Err (tcMsg ClauseTooManyPatterns VNil)
 
 -- 字面量分支的子矩阵：同字面量的行 + 变量/通配行（它们也匹配该字面量），保持原顺序；
 -- 其它字面量的行不匹配这个值。变量/通配行要把该列的头变量改名成 scrutinee 位置名
@@ -126,11 +121,10 @@ litPatExpr p = case p of
   _ => EInt 0 (Span "" 0 0 0 0)
 
 buildColumnExpr : List (Pair String (List String)) -> List (Pair (List Pat) Expr) -> List String -> Int -> Result Expr
--- @code TC_PatternFuel
-buildColumnExpr table clauses params fuel = if fuel <= 0 then Err "[TC_PatternFuel] DT: pattern matrix recursion ran out of fuel"
+buildColumnExpr table clauses params fuel = if fuel <= 0 then Err (tcMsg PatternFuel VNil)
 else if allEmptyPats clauses then Ok (bodyOfFirst clauses)
 else case params of
-  [] => Err "[TC_ClauseTooManyPatterns] DT: clause has more patterns than the function arity"
+  [] => Err (tcMsg ClauseTooManyPatterns VNil)
   pos :: restParams =>
     if allVarHeads clauses then andThen (buildColumnExpr table (stripFirstCol clauses) restParams (fuel - 1))
       (\inner => Ok (renameFirstVars clauses pos inner))

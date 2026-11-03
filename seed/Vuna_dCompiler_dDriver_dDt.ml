@@ -15,7 +15,11 @@ open Vuna_dCompiler_dCommon
 open Vuna_dCompiler_dFrontend_dToml
 open Vuna_dCompiler_dFrontend_dManifest
 open Vuna_dCompiler_dPackages_dPkg
+open Base_dNat
+open Base_dVec
+open Vuna_dCompiler_dLoader_dDiagnostics
 open Vuna_dCompiler_dFrontend_dAst
+open Vuna_dCompiler_dFrontend_dDiagnostics
 open Vuna_dCompiler_dFrontend_dLexer
 open Vuna_dCompiler_dFrontend_dParser_dSupport
 open Vuna_dCompiler_dFrontend_dParser
@@ -23,6 +27,8 @@ open Vuna_dCompiler_dLoader_dModules
 open Vuna_dCompiler_dLoader_dResolve
 open Vuna_dCompiler_dLoader_dFlatten
 open Vuna_dCompiler_dLoader
+open Vuna_dCompiler_dDebug
+open Vuna_dCompiler_dDiagnostics
 open Vuna_dCompiler_dCore_dTerm
 open Vuna_dCompiler_dCore_dEval
 open Vuna_dCompiler_dCore_dConv
@@ -57,13 +63,13 @@ let v_Vuna_dCompiler_dDriver_dDt_ddtLoad = (fun roots -> (fun entry -> ((v_Vuna_
 
 let v_Vuna_dCompiler_dDriver_dDt_ddtProjectDecls = (fun parts -> ((v_Base_dList_dappend ((v_Base_dList_dconcatMap v_Vuna_dCompiler_dLoader_dModules_dmoduleDeclsOf) (v_Base_dList_dreverse (v_Base_dPair_dsecondOf parts)))) (v_Base_dPair_dfirstOf parts)))
 
-let v_Vuna_dCompiler_dDriver_dDt_ddtLoadProject = (fun roots -> (fun entryPkg -> (fun entry -> ((v_Base_dResult_dandThen (((v_Vuna_dCompiler_dLoader_dFlatten_dloadProject roots) entryPkg) entry)) (fun project -> ((v_Base_dResult_dandThen (v_Vuna_dCompiler_dLoader_dFlatten_dresolveProject project)) (fun parts -> (C_Base_dResult_dResult_Base_dResult_dOk ((v_Vuna_dCompiler_dDriver_dDt_ddtProjectDecls parts))))))))))
+let v_Vuna_dCompiler_dDriver_dDt_ddtLoadProject = (fun roots -> (fun entryPkg -> (fun entry -> ((fun _u -> ((v_Base_dResult_dandThen (((v_Vuna_dCompiler_dLoader_dFlatten_dloadProject roots) entryPkg) entry)) (fun project -> ((fun _u -> ((v_Base_dResult_dandThen (v_Vuna_dCompiler_dLoader_dFlatten_dresolveProject project)) (fun parts -> ((fun _u -> (C_Base_dResult_dResult_Base_dResult_dOk ((v_Vuna_dCompiler_dDriver_dDt_ddtProjectDecls parts)))) (v_Vuna_dCompiler_dDebug_dstamp "resolve-done"))))) (v_Vuna_dCompiler_dDebug_dstamp "load-modules-done"))))) (v_Vuna_dCompiler_dDebug_dstamp "load-start")))))
 
-let v_Vuna_dCompiler_dDriver_dDt_ddtLoadModuleSet = (fun roots -> (fun entryPkg -> (fun names -> ((v_Base_dResult_dandThen (((v_Vuna_dCompiler_dLoader_dFlatten_dloadProjectModules roots) entryPkg) names)) (fun project -> ((v_Base_dResult_dandThen (v_Vuna_dCompiler_dLoader_dFlatten_dresolveProject project)) (fun parts -> (C_Base_dResult_dResult_Base_dResult_dOk ((v_Vuna_dCompiler_dDriver_dDt_ddtProjectDecls parts))))))))))
+let v_Vuna_dCompiler_dDriver_dDt_ddtLoadModuleSet = (fun roots -> (fun entryPkg -> (fun names -> ((fun _u -> ((v_Base_dResult_dandThen (((v_Vuna_dCompiler_dLoader_dFlatten_dloadProjectModules roots) entryPkg) names)) (fun project -> ((fun _u -> ((v_Base_dResult_dandThen (v_Vuna_dCompiler_dLoader_dFlatten_dresolveProject project)) (fun parts -> ((fun _u -> (C_Base_dResult_dResult_Base_dResult_dOk ((v_Vuna_dCompiler_dDriver_dDt_ddtProjectDecls parts)))) (v_Vuna_dCompiler_dDebug_dstamp "resolve-done"))))) (v_Vuna_dCompiler_dDebug_dstamp "load-modules-done"))))) (v_Vuna_dCompiler_dDebug_dstamp "load-start")))))
 
-let v_Vuna_dCompiler_dDriver_dDt_ddtCheckDecls = (fun loaded -> ((v_Base_dResult_dandThen loaded) (fun decls -> ((v_Base_dResult_dandThen (v_Vuna_dCompiler_dElab_dDriver_delabProgram decls)) (fun program -> ((v_Base_dResult_dandThen (v_Vuna_dCompiler_dCodegen_dProgram_dcheckDtProgram program)) (fun _u -> (C_Base_dResult_dResult_Base_dResult_dOk (C_Base_dList_dList_Nil)))))))))
+let v_Vuna_dCompiler_dDriver_dDt_ddtCheckDecls = (fun loaded -> ((v_Base_dResult_dandThen loaded) (fun decls -> ((fun _u -> ((v_Base_dResult_dandThen (v_Vuna_dCompiler_dElab_dDriver_delabProgram decls)) (fun program -> ((fun _u -> ((v_Base_dResult_dandThen (v_Vuna_dCompiler_dCodegen_dProgram_dcheckDtProgram program)) (fun _u -> ((fun _u -> (C_Base_dResult_dResult_Base_dResult_dOk (C_Base_dList_dList_Nil))) (v_Vuna_dCompiler_dDebug_dstamp "codegen-check-done"))))) (v_Vuna_dCompiler_dDebug_dstamp "elab-done"))))) (v_Vuna_dCompiler_dDebug_dstamp "decls-ready")))))
 
-let v_Vuna_dCompiler_dDriver_dDt_ddtCompileDecls = (fun loaded -> (fun printResult -> ((v_Base_dResult_dandThen loaded) (fun decls -> ((v_Base_dResult_dandThen (v_Vuna_dCompiler_dElab_dDriver_delabProgram decls)) (fun program -> ((v_Vuna_dCompiler_dCodegen_dProgram_dgenerateDtProgram program) printResult)))))))
+let v_Vuna_dCompiler_dDriver_dDt_ddtCompileDecls = (fun loaded -> (fun printResult -> ((v_Base_dResult_dandThen loaded) (fun decls -> ((fun _u -> ((v_Base_dResult_dandThen (v_Vuna_dCompiler_dElab_dDriver_delabProgram decls)) (fun program -> ((fun _u -> ((v_Base_dResult_dandThen ((v_Vuna_dCompiler_dCodegen_dProgram_dgenerateDtProgram program) printResult)) (fun code -> ((fun _u -> (C_Base_dResult_dResult_Base_dResult_dOk (code))) (v_Vuna_dCompiler_dDebug_dstamp "codegen-done"))))) (v_Vuna_dCompiler_dDebug_dstamp "elab-done"))))) (v_Vuna_dCompiler_dDebug_dstamp "decls-ready"))))))
 
 let v_Vuna_dCompiler_dDriver_dDt_ddtCheckFile = (fun roots -> (fun entry -> (v_Vuna_dCompiler_dDriver_dDt_ddtCheckDecls ((v_Vuna_dCompiler_dDriver_dDt_ddtLoad roots) entry))))
 
@@ -112,13 +118,13 @@ let rec v_Vuna_dCompiler_dDriver_dDt_ddefTableOf = (fun mc0 -> (match mc0 with
 
 let v_Vuna_dCompiler_dDriver_dDt_devalDtMain = (fun mc0 -> (match mc0 with
   | C_Base_dPair_dPair_Base_dPair_dPair (dtb__16, dtb__17) -> (match (v_Vuna_dCompiler_dDriver_dDt_dfindMainDef dtb__17) with
-  | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> (C_Base_dResult_dResult_Base_dResult_dErr ("[CG_NoMain] DT: no main definition"))
-  | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__18) -> ((fun table -> ((fun mainVal -> (if (v_Vuna_dCompiler_dDriver_dDt_disIOType (v_Vuna_dCompiler_dElab_dTypes_ddtDefType dtb__18)) then (C_Base_dResult_dResult_Base_dResult_dErr ("[CG_InterpCannotExecuteEffects] DT: interp cannot execute effects (main : IO a); compile and run the program instead")) else (match mainVal with
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> (v_Vuna_dCompiler_dDiagnostics_dcgErr0 C_Vuna_dCompiler_dDiagnostics_dCgErr_Vuna_dCompiler_dDiagnostics_dNoMain)
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__18) -> ((fun table -> ((fun mainVal -> (if (v_Vuna_dCompiler_dDriver_dDt_disIOType (v_Vuna_dCompiler_dElab_dTypes_ddtDefType dtb__18)) then (v_Vuna_dCompiler_dDiagnostics_dcgErr0 C_Vuna_dCompiler_dDiagnostics_dCgErr_Vuna_dCompiler_dDiagnostics_dInterpCannotExecuteEffects) else (match mainVal with
   | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVInt (dtb__19) -> (C_Base_dResult_dResult_Base_dResult_dOk ((bi_strFromInt dtb__19)))
   | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVStr (dtb__20) -> (C_Base_dResult_dResult_Base_dResult_dOk ((v_Vuna_dCompiler_dCore_dEval_dshowValue mainVal)))
   | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVBool (dtb__21) -> (C_Base_dResult_dResult_Base_dResult_dOk ((v_Vuna_dCompiler_dCore_dEval_dshowValue mainVal)))
-  | _ -> (C_Base_dResult_dResult_Base_dResult_dErr ("[CG_MainNotValue] DT: main does not reduce to a value"))
-))) ((((v_Vuna_dCompiler_dCore_dEval_dnormalize table) C_Base_dList_dList_Nil) (v_Vuna_dCompiler_dCore_dTerm_ddefaultFuel ())) (C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVNeutral ((C_Vuna_dCompiler_dCore_dTerm_dNeutral_Vuna_dCompiler_dCore_dTerm_dNGlobal ("main", C_Base_dList_dList_Nil))))))) (v_Vuna_dCompiler_dDriver_dDt_ddefTableOf dtb__17))
+  | _ -> (v_Vuna_dCompiler_dDiagnostics_dcgErr0 C_Vuna_dCompiler_dDiagnostics_dCgErr_Vuna_dCompiler_dDiagnostics_dMainNotValue)
+))) ((((v_Vuna_dCompiler_dCore_dEval_dnormalize (v_Vuna_dCompiler_dCommon_dtblFromList table)) (v_Vuna_dCompiler_dCore_dTerm_dsolsEmpty ())) (v_Vuna_dCompiler_dCore_dTerm_ddefaultFuel ())) (C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVNeutral ((C_Vuna_dCompiler_dCore_dTerm_dNeutral_Vuna_dCompiler_dCore_dTerm_dNGlobal ("main", C_Base_dList_dList_Nil))))))) (v_Vuna_dCompiler_dDriver_dDt_ddefTableOf dtb__17))
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"

@@ -6,6 +6,7 @@ module Vuna.Compiler.Loader.Resolve (checkEffectsBuiltins, resolveEntry, resolve
 -- 的名字；同时负责 DT prelude 名字放行、effectful 内建的包级限制（原
 -- `Vuna.Compiler.Loader.Builtins` 的 `builtinArity` 已按源码重组计划合并进来）。
 -- 导出表计算、加载流程与 flatten 在 `Loader.Flatten`。
+import Vuna.Compiler.Frontend.Diagnostics
 import Vuna.Compiler.Common
 import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Frontend.Lexer
@@ -50,6 +51,11 @@ builtinArity "bi_neq_str" = Just 2
 builtinArity "bi_eq_bool" = Just 2
 builtinArity "bi_neq_bool" = Just 2
 builtinArity "strLength" = Just 1
+builtinArity "strConcatMany" = Just 1
+builtinArity "strSubstTemplate" = Just 2
+builtinArity "timeUs" = Just 0
+builtinArity "strHash" = Just 1
+builtinArity "strAt" = Just 2
 builtinArity "strUnpack" = Just 1
 builtinArity "strPack" = Just 1
 builtinArity "strFromInt" = Just 1
@@ -123,7 +129,12 @@ dtPreludeNames =
     "strFromInt",
     "strUnpack",
     "strPack",
-    "strLength"
+    "strLength",
+    "strConcatMany",
+    "strSubstTemplate",
+    "timeUs",
+    "strHash",
+    "strAt"
   ]
 
 -- M24.7：trait 迁到库后，缺 import 是最常见的错误来源。除了常规的
@@ -382,7 +393,7 @@ else case expr of
 -- do（M11）在这里 desugar 成 bind/pure 的普通应用，后续类型检查与 codegen 无需认识 do。
 -- 最后一条裸表达式即块结果（`do e` = `e`）；裸语句用 `bind e (\_ -> rest)` 顺序化。
 desugarDo : List DoStmt -> Result Expr
-desugarDo [] = Err "do block needs at least one statement"
+desugarDo [] = psErr0 DoBlockNeedsStatement
 desugarDo ([DExpr e sp]) = Ok e
 desugarDo ((DExpr e sp) :: rest) =
   andThen (desugarDo rest)
@@ -392,7 +403,7 @@ desugarDo ((DBind (PVar name psp) e sp) :: rest) =
 desugarDo ((DBind (PWild psp) e sp) :: rest) =
   andThen (desugarDo rest)
     (\tail => Ok (EApp (EVar "bind" sp) [e, ELam ["vuna_do_ignore"] tail sp] sp))
-desugarDo ((DBind pat e sp) :: rest) = Err "do bind pattern must be a variable or _"
+desugarDo ((DBind pat e sp) :: rest) = psErr0 DoBindPattern
 
 resolveFieldValue : Int -> List Module -> String -> String -> List String -> List String -> List Import -> List String -> Pair String Expr -> Result (Pair String Expr)
 resolveFieldValue fuel modules label prefix own ownCtors imports scope (Pair fname value) =
@@ -435,7 +446,11 @@ else if containsDot name then case splitLastDot (splitOnDot name) of
         Nothing => Err (label ++ ": type " ++ base ++ " is not exported by " ++ m)
       )
 else andThen (modulesExportingType modules imports name) (\pairs => case pairs of
-  [] => Err (label ++ ": unknown type " ++ name ++ traitImportHint name)
+  -- M30：类型位置也可能出现**跨模块 import 的构造子**（依赖类型索引，如 `import Base.Nat`
+  -- 后 `Vec a Zero` 的 `Zero`）。`modulesExportingType` 只查 `"type"` entry，找不到构造子，
+  -- 故回退到 `resolveCtor`（值位置同款解析，认 `"ctor"` entry）。本地构造子走 `[]`
+  -- （本模块 `data` 定义的族，其构造子经 `ownTypes`/内建名处理；且本地构造子按惯例不作索引）。
+  [] => andThen (resolveCtor modules label prefix [] imports name) (\c => Ok c)
   _ => andThen (unifyEntryPairs label "type" name pairs) (\p => Ok (entryTarget (secondOf p)))
 )
 
@@ -469,7 +484,7 @@ resolveDecl : List Module -> String -> String -> List String -> List String -> L
 resolveDecl modules label prefix own ownCtors ownTypes imports d = case d of
   DData dname params kind ctors derivings sp =>
     andThen (resolveTypeTopName label prefix dname)
-      (\dn => andThen (traverse (resolveCtorSpec modules label prefix ownTypes imports) ctors) (\ctors2 => andThen (traverse (resolveTypeName modules label prefix ownTypes imports) derivings) (\ds2 => Ok (DData dn params kind ctors2 ds2 sp))))
+      (\dn => andThen (resolveTypeExpr resolveFuelBound modules label prefix ownTypes imports kind) (\kind2 => andThen (traverse (resolveCtorSpec modules label prefix ownTypes imports) ctors) (\ctors2 => andThen (traverse (resolveTypeName modules label prefix ownTypes imports) derivings) (\ds2 => Ok (DData dn params kind2 ctors2 ds2 sp)))))
   DRecord dname params fields derivings sp =>
     andThen (resolveTypeTopName label prefix dname)
       (\dn => andThen (traverse (resolveRecordField modules label prefix ownTypes imports) fields) (\fields2 => andThen (traverse (resolveTypeName modules label prefix ownTypes imports) derivings) (\ds2 => Ok (DRecord dn params fields2 ds2 sp))))

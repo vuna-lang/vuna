@@ -15,7 +15,11 @@ open Vuna_dCompiler_dCommon
 open Vuna_dCompiler_dFrontend_dToml
 open Vuna_dCompiler_dFrontend_dManifest
 open Vuna_dCompiler_dPackages_dPkg
+open Base_dNat
+open Base_dVec
+open Vuna_dCompiler_dLoader_dDiagnostics
 open Vuna_dCompiler_dFrontend_dAst
+open Vuna_dCompiler_dFrontend_dDiagnostics
 open Vuna_dCompiler_dFrontend_dLexer
 open Vuna_dCompiler_dFrontend_dParser_dSupport
 open Vuna_dCompiler_dFrontend_dParser
@@ -23,6 +27,8 @@ open Vuna_dCompiler_dLoader_dModules
 open Vuna_dCompiler_dLoader_dResolve
 open Vuna_dCompiler_dLoader_dFlatten
 open Vuna_dCompiler_dLoader
+open Vuna_dCompiler_dDebug
+open Vuna_dCompiler_dDiagnostics
 open Vuna_dCompiler_dCore_dTerm
 open Vuna_dCompiler_dCore_dEval
 open Vuna_dCompiler_dCore_dConv
@@ -44,10 +50,10 @@ let v_Vuna_dCompiler_dElab_dDict_disDictValue = (fun ec -> (fun v -> (match v wi
 
 let v_Vuna_dCompiler_dElab_dDict_disDictDomain = (fun ec -> (fun dom -> ((v_Vuna_dCompiler_dElab_dDict_disDictValue ec) ((v_Vuna_dCompiler_dElab_dTypes_dforceVal ec) dom))))
 
-let v_Vuna_dCompiler_dElab_dDict_dsubstDictTerm = (fun ec -> (fun t -> ((v_Vuna_dCompiler_dCore_dEval_dsubstSolvedMetas (v_Vuna_dCompiler_dElab_dTypes_decSols ec)) t)))
+let v_Vuna_dCompiler_dElab_dDict_dsubstDictTerm = (fun ec -> (fun t -> ((v_Vuna_dCompiler_dCore_dEval_dsubstSolvedMetasTbl (v_Vuna_dCompiler_dElab_dTypes_decSolTbl ec)) t)))
 
 let rec v_Vuna_dCompiler_dElab_dDict_dfilterInstances = (fun mc0 -> (fun mc1 -> (fun mc2 -> (fun mc3 -> (match mc2 with
-  | C_Base_dList_dList_Cons (dtb__3, dtb__4) -> ((fun hd -> (match (((((v_Vuna_dCompiler_dCore_dConv_dconv (v_Vuna_dCompiler_dElab_dTypes_decDefs mc0)) mc3) 0) mc1) hd) with
+  | C_Base_dList_dList_Cons (dtb__3, dtb__4) -> ((fun hd -> (match (((((v_Vuna_dCompiler_dCore_dConv_dconv (v_Vuna_dCompiler_dElab_dTypes_decDefTbl mc0)) mc3) 0) mc1) hd) with
   | C_Base_dResult_dResult_Base_dResult_dErr (dtb__5) -> ((((v_Vuna_dCompiler_dElab_dDict_dfilterInstances mc0) mc1) dtb__4) mc3)
   | C_Base_dResult_dResult_Base_dResult_dOk (dtb__6) -> (match ((((v_Vuna_dCompiler_dElab_dDict_dfilterInstances mc0) mc1) dtb__4) mc3) with
   | C_Base_dPair_dPair_Base_dPair_dPair (dtb__7, dtb__8) -> (C_Base_dPair_dPair_Base_dPair_dPair ((C_Base_dList_dList_Cons (dtb__3, dtb__7)), dtb__6))
@@ -74,14 +80,14 @@ let v_Vuna_dCompiler_dElab_dDict_djoinInstNames = (fun mc0 -> (match mc0 with
 let v_Vuna_dCompiler_dElab_dDict_dsearchInstance = (fun ec -> (fun dom -> (fun sp -> ((fun nd_uscrut -> (match nd_uscrut with
   | C_Base_dPair_dPair_Base_dPair_dPair (dtb__13, dtb__14) -> (match dtb__13 with
   | C_Base_dList_dList_Cons (dtb__15, dtb__16) -> (match dtb__16 with
-  | C_Base_dList_dList_Nil -> (C_Base_dResult_dResult_Base_dResult_dOk ((C_Base_dPair_dPair_Base_dPair_dPair ((C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTGlobal ((v_Vuna_dCompiler_dElab_dTypes_ddtInstName dtb__15))), ((v_Vuna_dCompiler_dElab_dTypes_decPutSols ec) dtb__14)))))
-  | _ -> ((v_Vuna_dCompiler_dElab_dTypes_derrAt sp) ((bi_concat "[TC_AmbiguousInstance] DT: ambiguous instance for ") ((bi_concat (v_Vuna_dCompiler_dCore_dEval_dshowValue dom)) ((bi_concat " (candidates: ") ((bi_concat (v_Vuna_dCompiler_dElab_dDict_djoinInstNames dtb__13)) ")")))))
+  | C_Base_dList_dList_Nil -> (C_Base_dResult_dResult_Base_dResult_dOk ((C_Base_dPair_dPair_Base_dPair_dPair ((C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTGlobal ((v_Vuna_dCompiler_dElab_dTypes_ddtInstName dtb__15))), ((v_Vuna_dCompiler_dElab_dTypes_decPutSols ec) (v_Vuna_dCompiler_dCore_dTerm_dsolsList dtb__14))))))
+  | _ -> ((fun sd -> ((((v_Vuna_dCompiler_dDiagnostics_dtcErr2 sp) (C_Vuna_dCompiler_dDiagnostics_dTcErr_Vuna_dCompiler_dDiagnostics_dAmbiguousInstance (sd, (v_Vuna_dCompiler_dElab_dDict_djoinInstNames dtb__13)))) sd) (v_Vuna_dCompiler_dElab_dDict_djoinInstNames dtb__13))) (v_Vuna_dCompiler_dCore_dEval_dshowValue dom))
 )
-  | C_Base_dList_dList_Nil -> ((v_Vuna_dCompiler_dElab_dTypes_derrAt sp) ((bi_concat "[TC_NoInstanceFound] DT: no instance found for ") (v_Vuna_dCompiler_dCore_dEval_dshowValue dom)))
+  | C_Base_dList_dList_Nil -> ((fun sd -> (((v_Vuna_dCompiler_dDiagnostics_dtcErr1 sp) (C_Vuna_dCompiler_dDiagnostics_dTcErr_Vuna_dCompiler_dDiagnostics_dNoInstanceFound (sd))) sd)) (v_Vuna_dCompiler_dCore_dEval_dshowValue dom))
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
-)) ((((v_Vuna_dCompiler_dElab_dDict_dfilterInstances ec) dom) ((v_Base_dList_dfilter (fun i -> (v_Base_dBool_dnot (v_Vuna_dCompiler_dElab_dTypes_ddtInstNamed i)))) (v_Vuna_dCompiler_dElab_dTypes_decInsts ec))) (v_Vuna_dCompiler_dElab_dTypes_decSols ec))))))
+)) ((((v_Vuna_dCompiler_dElab_dDict_dfilterInstances ec) dom) ((v_Base_dList_dfilter (fun i -> (v_Base_dBool_dnot (v_Vuna_dCompiler_dElab_dTypes_ddtInstNamed i)))) (v_Vuna_dCompiler_dElab_dTypes_decInsts ec))) (v_Vuna_dCompiler_dElab_dTypes_decSolsP ec))))))
 
 let v_Vuna_dCompiler_dElab_dDict_dmethodNameOf = (fun e -> (match e with
   | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEVar (dtb__17, dtb__18) -> (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__17))
@@ -145,13 +151,13 @@ let rec v_Vuna_dCompiler_dElab_dDict_dclassFieldTyAt = (fun mc0 -> (fun mc1 -> (
 )))
 
 let v_Vuna_dCompiler_dElab_dDict_dinferInstSel = (fun globals -> (fun ctx -> (fun ec -> (fun meth -> (fun iname -> (fun sp -> (match (v_Vuna_dCompiler_dElab_dDict_dmethodNameOf meth) with
-  | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> ((v_Vuna_dCompiler_dElab_dTypes_derrAt sp) "[TC_InstanceAnnotationWrongUse] DT: @instance can only be used with a trait method (write `method @instance`)")
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> ((v_Vuna_dCompiler_dDiagnostics_dtcErr0 sp) C_Vuna_dCompiler_dDiagnostics_dTcErr_Vuna_dCompiler_dDiagnostics_dInstanceAnnotationWrongUse)
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__36) -> (match ((v_Vuna_dCompiler_dElab_dDict_dinstNamedLookup iname) (v_Vuna_dCompiler_dElab_dTypes_decInsts ec)) with
-  | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> ((v_Vuna_dCompiler_dElab_dTypes_derrAt sp) ((bi_concat "[TC_UnknownNamedInstance] DT: unknown named instance ") iname))
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> (((v_Vuna_dCompiler_dDiagnostics_dtcErr1 sp) (C_Vuna_dCompiler_dDiagnostics_dTcErr_Vuna_dCompiler_dDiagnostics_dUnknownNamedInstance (iname))) iname)
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__37) -> (match ((v_Vuna_dCompiler_dElab_dDict_dinstClassOfDict (v_Vuna_dCompiler_dElab_dDict_dinstDictName dtb__37)) (v_Vuna_dCompiler_dElab_dTypes_decClasses ec)) with
-  | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> ((v_Vuna_dCompiler_dElab_dTypes_derrAt sp) ((bi_concat "[TC_InstanceNotTrait] DT: instance ") ((bi_concat iname) " is not an instance of a trait")))
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> (((v_Vuna_dCompiler_dDiagnostics_dtcErr1 sp) (C_Vuna_dCompiler_dDiagnostics_dTcErr_Vuna_dCompiler_dDiagnostics_dInstanceNotTrait (iname))) iname)
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__38) -> (match ((v_Vuna_dCompiler_dElab_dDict_dclassMethodIndex dtb__36) (v_Vuna_dCompiler_dElab_dTypes_ddtClassMethods dtb__38)) with
-  | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> ((v_Vuna_dCompiler_dElab_dTypes_derrAt sp) ((bi_concat "[TC_OpOnlyIntString] DT: `") ((bi_concat dtb__36) ((bi_concat "` is not a method of trait ") (v_Vuna_dCompiler_dElab_dTypes_ddtClassName dtb__38)))))
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> ((((v_Vuna_dCompiler_dDiagnostics_dtcErr2 sp) (C_Vuna_dCompiler_dDiagnostics_dTcErr_Vuna_dCompiler_dDiagnostics_dNotTraitMethod (dtb__36, (v_Vuna_dCompiler_dElab_dTypes_ddtClassName dtb__38)))) dtb__36) (v_Vuna_dCompiler_dElab_dTypes_ddtClassName dtb__38))
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__39) -> ((fun nFields -> ((fun fty -> ((fun instTy -> ((fun rigs -> ((fun fieldVar -> ((fun applied -> ((fun alt -> ((fun proj -> (C_Base_dResult_dResult_Base_dResult_dOk ((C_Base_dPair_dPair_Base_dPair_dPair (proj, (C_Base_dPair_dPair_Base_dPair_dPair (((v_Vuna_dCompiler_dCore_dEval_deval C_Base_dList_dList_Nil) instTy), ec))))))) (((v_Vuna_dCompiler_dElab_dMeta_dmethodArgLams rigs) 0) (C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTCase ((C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTGlobal (iname)), (C_Base_dList_dList_Cons (alt, C_Base_dList_dList_Nil))))))) (C_Vuna_dCompiler_dCore_dTerm_dCaseAlt_Vuna_dCompiler_dCore_dTerm_dCaseAlt ((v_Vuna_dCompiler_dElab_dMeta_ddictCtorName (v_Vuna_dCompiler_dElab_dTypes_ddtClassName dtb__38)), (v_Vuna_dCompiler_dElab_dMeta_dfieldBinderNames nFields), applied)))) ((v_Vuna_dCompiler_dElab_dMeta_dfoldAppTerms fieldVar) ((v_Vuna_dCompiler_dElab_dMeta_dmethodArgTerms rigs) nFields)))) (C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTVar ((v_Vuna_dCompiler_dElab_dMeta_dfieldVarName dtb__39), ((bi_sub ((bi_sub nFields) 1)) dtb__39))))) ((v_Vuna_dCompiler_dElab_dSig_dmethodArgRigsOf v_Vuna_dCompiler_dElab_dMeta_dbinderRig) fty))) (((v_Vuna_dCompiler_dElab_dMeta_dsubstClassParam (v_Vuna_dCompiler_dElab_dMeta_dparamNameOf (v_Vuna_dCompiler_dElab_dTypes_ddtClassParams dtb__38))) (v_Vuna_dCompiler_dElab_dDict_dinstHeadArg dtb__37)) fty))) ((v_Vuna_dCompiler_dElab_dDict_dclassFieldTyAt dtb__39) (v_Vuna_dCompiler_dElab_dTypes_ddtClassFieldTys dtb__38)))) (v_Base_dList_dlength (v_Vuna_dCompiler_dElab_dTypes_ddtClassMethods dtb__38)))
   | _ -> failwith "DT: impossible branch"
 )
@@ -201,7 +207,7 @@ let v_Vuna_dCompiler_dElab_dDict_dneutralHeadOrSelf = (fun v -> (match v with
 let v_Vuna_dCompiler_dElab_dDict_dargHeadMatchesKind = (fun globals -> (fun ec -> (fun ctx -> (fun forced -> (fun argKind -> (match (v_Vuna_dCompiler_dElab_dDict_dneutralHeadOrSelf forced) with
   | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVNeutral (dtb__57) -> (match dtb__57 with
   | C_Vuna_dCompiler_dCore_dTerm_dNeutral_Vuna_dCompiler_dCore_dTerm_dNGlobal (dtb__58, dtb__59) -> (match dtb__59 with
-  | C_Base_dList_dList_Nil -> (match ((v_Vuna_dCompiler_dElab_dMeta_dglobalLookup dtb__58) globals) with
+  | C_Base_dList_dList_Nil -> (match (((v_Vuna_dCompiler_dElab_dMeta_dglobalsLookup dtb__58) globals) ec) with
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__60) -> (match ((((v_Vuna_dCompiler_dElab_dMeta_dconvEc ec) (v_Vuna_dCompiler_dElab_dTypes_dctxDepth ctx)) argKind) ((v_Vuna_dCompiler_dElab_dTypes_dforceVal ec) ((v_Vuna_dCompiler_dCore_dEval_deval C_Base_dList_dList_Nil) dtb__60))) with
   | C_Base_dResult_dResult_Base_dResult_dOk (dtb__61) -> true
   | C_Base_dResult_dResult_Base_dResult_dErr (dtb__62) -> false
@@ -243,29 +249,37 @@ let v_Vuna_dCompiler_dElab_dDict_dclassArgIndex = (fun ec -> (fun dom -> (match 
   | _ -> failwith "DT: impossible branch"
 )))
 
+let v_Vuna_dCompiler_dElab_dDict_disRigidClassArg = (fun ec -> (fun arg -> (match ((v_Vuna_dCompiler_dElab_dTypes_dforceVal ec) arg) with
+  | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVNeutral (dtb__73) -> (match dtb__73 with
+  | C_Vuna_dCompiler_dCore_dTerm_dNeutral_Vuna_dCompiler_dCore_dTerm_dNVar (dtb__74, dtb__75, dtb__76) -> true
+  | _ -> false
+)
+  | _ -> false
+)))
+
 let rec v_Vuna_dCompiler_dElab_dDict_dresolveDictGoalsFuel = (fun fuel -> (fun globals -> (fun ec -> (if ((bi_le_int fuel) 0) then ec else (match (v_Vuna_dCompiler_dElab_dTypes_decDictGoals ec) with
   | C_Base_dList_dList_Nil -> ec
-  | C_Base_dList_dList_Cons (dtb__73, dtb__74) -> (match dtb__73 with
-  | C_Vuna_dCompiler_dElab_dTypes_dDtDictGoal_Vuna_dCompiler_dElab_dTypes_dDtDictGoal (dtb__75, dtb__76) -> ((fun ec1 -> ((fun forced -> ((fun keep -> (match ((v_Vuna_dCompiler_dElab_dDict_ddictClassArg ec1) forced) with
-  | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__77) -> (if ((v_Vuna_dCompiler_dCore_dTerm_dhasUnsolvedMetaValue (v_Vuna_dCompiler_dElab_dTypes_decSols ec1)) dtb__77) then keep else (match (((v_Vuna_dCompiler_dElab_dDict_dsearchInstance ec1) forced) (C_Vuna_dCompiler_dCommon_dSpan_Vuna_dCompiler_dCommon_dSpan ("", 0, 0, 0, 0))) with
-  | C_Base_dResult_dResult_Base_dResult_dOk (dtb__78) -> (match dtb__78 with
-  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__79, dtb__80) -> (match ((((((v_Vuna_dCompiler_dCore_dConv_dsolveMeta (v_Vuna_dCompiler_dElab_dTypes_decDefs dtb__80)) (v_Vuna_dCompiler_dElab_dTypes_decSols dtb__80)) 0) dtb__75) C_Base_dList_dList_Nil) ((v_Vuna_dCompiler_dCore_dEval_deval C_Base_dList_dList_Nil) dtb__79)) with
-  | C_Base_dResult_dResult_Base_dResult_dOk (dtb__81) -> (match (((v_Vuna_dCompiler_dElab_dMeta_dcheckSolsDelta dtb__80) (v_Vuna_dCompiler_dElab_dTypes_decSols dtb__80)) dtb__81) with
-  | C_Base_dResult_dResult_Base_dResult_dErr (dtb__82) -> keep
-  | C_Base_dResult_dResult_Base_dResult_dOk (dtb__83) -> (((v_Vuna_dCompiler_dElab_dDict_dresolveDictGoalsFuel ((bi_sub fuel) 1)) globals) ((v_Vuna_dCompiler_dElab_dTypes_decPutSols dtb__80) dtb__81))
+  | C_Base_dList_dList_Cons (dtb__77, dtb__78) -> (match dtb__77 with
+  | C_Vuna_dCompiler_dElab_dTypes_dDtDictGoal_Vuna_dCompiler_dElab_dTypes_dDtDictGoal (dtb__79, dtb__80) -> ((fun ec1 -> ((fun forced -> ((fun keep -> (match ((v_Vuna_dCompiler_dElab_dDict_ddictClassArg ec1) forced) with
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__81) -> (if ((v_Vuna_dCompiler_dCore_dTerm_dhasUnsolvedMetaValue (v_Vuna_dCompiler_dElab_dTypes_decSolsP ec1)) dtb__81) then keep else (if ((v_Vuna_dCompiler_dElab_dDict_disRigidClassArg ec1) dtb__81) then keep else (match (((v_Vuna_dCompiler_dElab_dDict_dsearchInstance ec1) forced) (C_Vuna_dCompiler_dCommon_dSpan_Vuna_dCompiler_dCommon_dSpan ("", 0, 0, 0, 0))) with
+  | C_Base_dResult_dResult_Base_dResult_dOk (dtb__82) -> (match dtb__82 with
+  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__83, dtb__84) -> (match ((((((v_Vuna_dCompiler_dCore_dConv_dsolveMeta (v_Vuna_dCompiler_dElab_dTypes_decDefTbl dtb__84)) (v_Vuna_dCompiler_dElab_dTypes_decSolsP dtb__84)) 0) dtb__79) C_Base_dList_dList_Nil) ((v_Vuna_dCompiler_dCore_dEval_deval C_Base_dList_dList_Nil) dtb__83)) with
+  | C_Base_dResult_dResult_Base_dResult_dOk (dtb__85) -> (match (((v_Vuna_dCompiler_dElab_dMeta_dcheckSolsDelta dtb__84) (v_Vuna_dCompiler_dElab_dTypes_decSols dtb__84)) (v_Vuna_dCompiler_dCore_dTerm_dsolsList dtb__85)) with
+  | C_Base_dResult_dResult_Base_dResult_dErr (dtb__86) -> keep
+  | C_Base_dResult_dResult_Base_dResult_dOk (dtb__87) -> (((v_Vuna_dCompiler_dElab_dDict_dresolveDictGoalsFuel ((bi_sub fuel) 1)) globals) ((v_Vuna_dCompiler_dElab_dTypes_decPutSols dtb__84) (v_Vuna_dCompiler_dCore_dTerm_dsolsList dtb__85)))
   | _ -> failwith "DT: impossible branch"
 )
-  | C_Base_dResult_dResult_Base_dResult_dErr (dtb__84) -> keep
+  | C_Base_dResult_dResult_Base_dResult_dErr (dtb__88) -> keep
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
 )
-  | C_Base_dResult_dResult_Base_dResult_dErr (dtb__85) -> keep
+  | C_Base_dResult_dResult_Base_dResult_dErr (dtb__89) -> keep
   | _ -> failwith "DT: impossible branch"
-))
+)))
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> keep
   | _ -> failwith "DT: impossible branch"
-)) ((v_Vuna_dCompiler_dElab_dTypes_decAddDictGoal (((v_Vuna_dCompiler_dElab_dDict_dresolveDictGoalsFuel ((bi_sub fuel) 1)) globals) ec1)) (C_Vuna_dCompiler_dElab_dTypes_dDtDictGoal_Vuna_dCompiler_dElab_dTypes_dDtDictGoal (dtb__75, forced))))) ((v_Vuna_dCompiler_dElab_dTypes_dforceVal ec1) dtb__76))) ((v_Vuna_dCompiler_dElab_dTypes_decPutDictGoals ec) dtb__74))
+)) ((v_Vuna_dCompiler_dElab_dTypes_decAddDictGoal (((v_Vuna_dCompiler_dElab_dDict_dresolveDictGoalsFuel ((bi_sub fuel) 1)) globals) ec1)) (C_Vuna_dCompiler_dElab_dTypes_dDtDictGoal_Vuna_dCompiler_dElab_dTypes_dDtDictGoal (dtb__79, forced))))) ((v_Vuna_dCompiler_dElab_dTypes_dforceVal ec1) dtb__80))) ((v_Vuna_dCompiler_dElab_dTypes_decPutDictGoals ec) dtb__78))
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
@@ -274,13 +288,7 @@ let rec v_Vuna_dCompiler_dElab_dDict_dresolveDictGoalsFuel = (fun fuel -> (fun g
 let v_Vuna_dCompiler_dElab_dDict_dresolveDictGoals = (fun globals -> (fun ec -> (((v_Vuna_dCompiler_dElab_dDict_dresolveDictGoalsFuel 64) globals) ec)))
 
 let v_Vuna_dCompiler_dElab_dDict_disRigidDictArg = (fun ec -> (fun dom -> (match ((v_Vuna_dCompiler_dElab_dDict_ddictClassArg ec) dom) with
-  | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__86) -> (match ((v_Vuna_dCompiler_dElab_dTypes_dforceVal ec) dtb__86) with
-  | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVNeutral (dtb__87) -> (match dtb__87 with
-  | C_Vuna_dCompiler_dCore_dTerm_dNeutral_Vuna_dCompiler_dCore_dTerm_dNVar (dtb__88, dtb__89, dtb__90) -> true
-  | _ -> false
-)
-  | _ -> false
-)
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__90) -> ((v_Vuna_dCompiler_dElab_dDict_disRigidClassArg ec) dtb__90)
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> false
   | _ -> failwith "DT: impossible branch"
 )))
@@ -363,7 +371,7 @@ and v_Vuna_dCompiler_dElab_dDict_danyValueUnsafe = (fun mc0 -> (fun mc1 -> (fun 
   | _ -> failwith "DT: impossible branch"
 )))))
 
-let v_Vuna_dCompiler_dElab_dDict_dgenericEqSafe = (fun name -> (fun tyTerm -> (fun aTerm -> (fun bTerm -> (fun sp -> (fun aTy -> (fun ec -> (if ((((v_Vuna_dCompiler_dElab_dDict_dtypeComparable ec) 64) C_Base_dList_dList_Nil) aTy) then (C_Base_dResult_dResult_Base_dResult_dOk ((C_Base_dMaybe_dMaybe_Base_dMaybe_dJust ((C_Base_dPair_dPair_Base_dPair_dPair (((((v_Vuna_dCompiler_dElab_dDict_dgenericEqApp name) tyTerm) aTerm) bTerm), (C_Base_dPair_dPair_Base_dPair_dPair ((C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVNeutral ((C_Vuna_dCompiler_dCore_dTerm_dNeutral_Vuna_dCompiler_dCore_dTerm_dNGlobal ("Bool", C_Base_dList_dList_Nil)))), ec)))))))) else ((v_Vuna_dCompiler_dElab_dTypes_derrAt sp) ((bi_concat "[TC_GenericEqNotComparable] DT: cannot compare values of type ") ((bi_concat (v_Vuna_dCompiler_dCore_dEval_dshowValue ((v_Vuna_dCompiler_dElab_dTypes_dforceVal ec) aTy))) " with generic equality; add an Eq instance or deriving (Eq)")))))))))))
+let v_Vuna_dCompiler_dElab_dDict_dgenericEqSafe = (fun name -> (fun tyTerm -> (fun aTerm -> (fun bTerm -> (fun sp -> (fun aTy -> (fun ec -> (if ((((v_Vuna_dCompiler_dElab_dDict_dtypeComparable ec) 64) C_Base_dList_dList_Nil) aTy) then (C_Base_dResult_dResult_Base_dResult_dOk ((C_Base_dMaybe_dMaybe_Base_dMaybe_dJust ((C_Base_dPair_dPair_Base_dPair_dPair (((((v_Vuna_dCompiler_dElab_dDict_dgenericEqApp name) tyTerm) aTerm) bTerm), (C_Base_dPair_dPair_Base_dPair_dPair ((C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVNeutral ((C_Vuna_dCompiler_dCore_dTerm_dNeutral_Vuna_dCompiler_dCore_dTerm_dNGlobal ("Bool", C_Base_dList_dList_Nil)))), ec)))))))) else ((fun st -> (((v_Vuna_dCompiler_dDiagnostics_dtcErr1 sp) (C_Vuna_dCompiler_dDiagnostics_dTcErr_Vuna_dCompiler_dDiagnostics_dGenericEqNotComparable (st))) st)) (v_Vuna_dCompiler_dCore_dEval_dshowValue ((v_Vuna_dCompiler_dElab_dTypes_dforceVal ec) aTy)))))))))))
 
 let v_Vuna_dCompiler_dElab_dDict_ddeferEqDict = (fun globals -> (fun ctx -> (fun mname -> (fun tyTerm -> (fun aTerm -> (fun bTerm -> (fun sp -> (fun dictTy -> (fun ec -> ((fun m -> (match ((v_Vuna_dCompiler_dElab_dTypes_dnewMeta ctx) ec) with
   | C_Base_dPair_dPair_Base_dPair_dPair (dtb__158, dtb__159) -> (C_Base_dResult_dResult_Base_dResult_dOk ((C_Base_dMaybe_dMaybe_Base_dMaybe_dJust ((C_Base_dPair_dPair_Base_dPair_dPair ((C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTApp ((C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTApp ((C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTApp ((C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTApp ((C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTGlobal (mname)), tyTerm, C_Vuna_dCompiler_dCore_dTerm_dRig_Vuna_dCompiler_dCore_dTerm_dRig0)), dtb__158, C_Vuna_dCompiler_dCore_dTerm_dRig_Vuna_dCompiler_dCore_dTerm_dRig1)), aTerm, C_Vuna_dCompiler_dCore_dTerm_dRig_Vuna_dCompiler_dCore_dTerm_dRig1)), bTerm, C_Vuna_dCompiler_dCore_dTerm_dRig_Vuna_dCompiler_dCore_dTerm_dRig1)), (C_Base_dPair_dPair_Base_dPair_dPair ((C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVNeutral ((C_Vuna_dCompiler_dCore_dTerm_dNeutral_Vuna_dCompiler_dCore_dTerm_dNGlobal ("Bool", C_Base_dList_dList_Nil)))), ((v_Vuna_dCompiler_dElab_dTypes_decAddDictGoal dtb__159) (C_Vuna_dCompiler_dElab_dTypes_dDtDictGoal_Vuna_dCompiler_dElab_dTypes_dDtDictGoal (m, dictTy)))))))))))
@@ -378,7 +386,7 @@ let v_Vuna_dCompiler_dElab_dDict_dcmpMethodName = (fun name -> (if ((bi_eq_str n
 
 let v_Vuna_dCompiler_dElab_dDict_dcmpGenericName = (fun name -> (if ((bi_eq_str name) "<") then "bi_lt_generic" else (if ((bi_eq_str name) "<=") then "bi_le_generic" else (if ((bi_eq_str name) ">") then "bi_gt_generic" else "bi_ge_generic"))))
 
-let v_Vuna_dCompiler_dElab_dDict_dcmpRuntimeName = (fun name -> (fun tyName -> (if ((bi_eq_str tyName) "Int") then (if ((bi_eq_str name) "<") then (C_Base_dResult_dResult_Base_dResult_dOk ("bi_lt_int")) else (if ((bi_eq_str name) "<=") then (C_Base_dResult_dResult_Base_dResult_dOk ("bi_le_int")) else (if ((bi_eq_str name) ">") then (C_Base_dResult_dResult_Base_dResult_dOk ("bi_gt_int")) else (C_Base_dResult_dResult_Base_dResult_dOk ("bi_ge_int"))))) else (if ((bi_eq_str tyName) "String") then (C_Base_dResult_dResult_Base_dResult_dOk ((v_Vuna_dCompiler_dElab_dDict_dcmpGenericName name))) else (if ((bi_eq_str tyName) "Bool") then (C_Base_dResult_dResult_Base_dResult_dOk ((v_Vuna_dCompiler_dElab_dDict_dcmpGenericName name))) else (C_Base_dResult_dResult_Base_dResult_dErr (((bi_concat "[TC_OpOnlyIntString] DT: `") ((bi_concat name) ((bi_concat "` is not defined for ") ((bi_concat tyName) " (Ord instance required)")))))))))))
+let v_Vuna_dCompiler_dElab_dDict_dcmpRuntimeName = (fun sp -> (fun name -> (fun tyName -> (if ((bi_eq_str tyName) "Int") then (if ((bi_eq_str name) "<") then (C_Base_dResult_dResult_Base_dResult_dOk ("bi_lt_int")) else (if ((bi_eq_str name) "<=") then (C_Base_dResult_dResult_Base_dResult_dOk ("bi_le_int")) else (if ((bi_eq_str name) ">") then (C_Base_dResult_dResult_Base_dResult_dOk ("bi_gt_int")) else (C_Base_dResult_dResult_Base_dResult_dOk ("bi_ge_int"))))) else (if ((bi_eq_str tyName) "String") then (C_Base_dResult_dResult_Base_dResult_dOk ((v_Vuna_dCompiler_dElab_dDict_dcmpGenericName name))) else (if ((bi_eq_str tyName) "Bool") then (C_Base_dResult_dResult_Base_dResult_dOk ((v_Vuna_dCompiler_dElab_dDict_dcmpGenericName name))) else ((((v_Vuna_dCompiler_dDiagnostics_dtcErr2 sp) (C_Vuna_dCompiler_dDiagnostics_dTcErr_Vuna_dCompiler_dDiagnostics_dOpNotDefinedFor (name, tyName))) name) tyName)))))))
 
 let v_Vuna_dCompiler_dElab_dDict_ddictArgUnsolvedMeta = (fun ec -> (fun dom -> (match ((v_Vuna_dCompiler_dElab_dDict_ddictClassArg ec) dom) with
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__160) -> (match ((v_Vuna_dCompiler_dElab_dTypes_dforceVal ec) dtb__160) with
@@ -411,7 +419,7 @@ let v_Vuna_dCompiler_dElab_dDict_dspecializeEqTy = (fun globals -> (fun ctx -> (
 )))))))))
 
 let v_Vuna_dCompiler_dElab_dDict_dspecializeCmpTy = (fun globals -> (fun ctx -> (fun name -> (fun aTerm -> (fun bTerm -> (fun sp -> (fun aTy -> (fun ec -> (match (v_Vuna_dCompiler_dElab_dPrelude_dcmpBuiltinTyName ((v_Vuna_dCompiler_dElab_dTypes_dforceVal ec) aTy)) with
-  | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__170) -> ((v_Base_dResult_dandThen ((v_Vuna_dCompiler_dElab_dDict_dcmpRuntimeName name) dtb__170)) (fun rt -> (C_Base_dResult_dResult_Base_dResult_dOk ((C_Base_dMaybe_dMaybe_Base_dMaybe_dJust ((C_Base_dPair_dPair_Base_dPair_dPair ((C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTApp ((C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTApp ((C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTGlobal (rt)), aTerm, C_Vuna_dCompiler_dCore_dTerm_dRig_Vuna_dCompiler_dCore_dTerm_dRig1)), bTerm, C_Vuna_dCompiler_dCore_dTerm_dRig_Vuna_dCompiler_dCore_dTerm_dRig1)), (C_Base_dPair_dPair_Base_dPair_dPair ((C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVNeutral ((C_Vuna_dCompiler_dCore_dTerm_dNeutral_Vuna_dCompiler_dCore_dTerm_dNGlobal ("Bool", C_Base_dList_dList_Nil)))), ec))))))))))
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__170) -> ((v_Base_dResult_dandThen (((v_Vuna_dCompiler_dElab_dDict_dcmpRuntimeName sp) name) dtb__170)) (fun rt -> (C_Base_dResult_dResult_Base_dResult_dOk ((C_Base_dMaybe_dMaybe_Base_dMaybe_dJust ((C_Base_dPair_dPair_Base_dPair_dPair ((C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTApp ((C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTApp ((C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTGlobal (rt)), aTerm, C_Vuna_dCompiler_dCore_dTerm_dRig_Vuna_dCompiler_dCore_dTerm_dRig1)), bTerm, C_Vuna_dCompiler_dCore_dTerm_dRig_Vuna_dCompiler_dCore_dTerm_dRig1)), (C_Base_dPair_dPair_Base_dPair_dPair ((C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVNeutral ((C_Vuna_dCompiler_dCore_dTerm_dNeutral_Vuna_dCompiler_dCore_dTerm_dNGlobal ("Bool", C_Base_dList_dList_Nil)))), ec))))))))))
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> (match ((v_Vuna_dCompiler_dElab_dMeta_dfindClassByShortName "Ord") (v_Vuna_dCompiler_dElab_dTypes_decClasses ec)) with
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> (C_Base_dResult_dResult_Base_dResult_dOk ((C_Base_dMaybe_dMaybe_Base_dMaybe_dJust ((C_Base_dPair_dPair_Base_dPair_dPair ((C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTApp ((C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTApp ((C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTGlobal ((v_Vuna_dCompiler_dElab_dDict_dcmpGenericName name))), aTerm, C_Vuna_dCompiler_dCore_dTerm_dRig_Vuna_dCompiler_dCore_dTerm_dRig1)), bTerm, C_Vuna_dCompiler_dCore_dTerm_dRig_Vuna_dCompiler_dCore_dTerm_dRig1)), (C_Base_dPair_dPair_Base_dPair_dPair ((C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVNeutral ((C_Vuna_dCompiler_dCore_dTerm_dNeutral_Vuna_dCompiler_dCore_dTerm_dNGlobal ("Bool", C_Base_dList_dList_Nil)))), ec))))))))
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__171) -> ((fun mname -> ((fun tyTerm -> ((fun dictTy -> (if ((v_Vuna_dCompiler_dElab_dDict_ddictArgUnsolvedMeta ec) dictTy) then (((((((((v_Vuna_dCompiler_dElab_dDict_ddeferEqDict globals) ctx) mname) tyTerm) aTerm) bTerm) sp) dictTy) ec) else (match (((v_Vuna_dCompiler_dElab_dDict_dsearchInstance ec) dictTy) sp) with

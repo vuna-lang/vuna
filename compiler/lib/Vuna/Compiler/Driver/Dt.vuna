@@ -21,6 +21,8 @@ module Vuna.Compiler.Driver.Dt
 --     再按**依赖顺序**拼接（见 `dtProjectDecls`）。
 -- DT 精化器按**整程序**精化，模块边界对精化不构成约束。
 import Vuna.Compiler.Common
+import Vuna.Compiler.Debug
+import Vuna.Compiler.Diagnostics
 import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Frontend.Parser
 import Vuna.Compiler.Packages.Pkg
@@ -43,25 +45,53 @@ dtProjectDecls parts = append (concatMap moduleDeclsOf (reverse (secondOf parts)
 -- 包模式：可执行包（app/Main.vuna 为入口，root/包名来自 Pkg.packageRoots / packageName）。
 dtLoadProject : List Root -> String -> String -> Result (List Decl)
 dtLoadProject roots entryPkg entry =
-  andThen (loadProject roots entryPkg entry)
-    (\project => andThen (resolveProject project) (\parts => Ok (dtProjectDecls parts)))
+  let
+    _ = stamp "load-start"
+  in andThen (loadProject roots entryPkg entry) (\project => let
+    _ = stamp "load-modules-done"
+  in andThen (resolveProject project) (\parts => let
+    _ = stamp "resolve-done"
+  in Ok (dtProjectDecls parts)
+  )
+  )
 
 -- 包模式：库包（以 [export].modules 为入口集合，没有 app/Main.vuna）。
 dtLoadModuleSet : List Root -> String -> List String -> Result (List Decl)
 dtLoadModuleSet roots entryPkg names =
-  andThen (loadProjectModules roots entryPkg names)
-    (\project => andThen (resolveProject project) (\parts => Ok (dtProjectDecls parts)))
+  let
+    _ = stamp "load-start"
+  in andThen (loadProjectModules roots entryPkg names) (\project => let
+    _ = stamp "load-modules-done"
+  in andThen (resolveProject project) (\parts => let
+    _ = stamp "resolve-done"
+  in Ok (dtProjectDecls parts)
+  )
+  )
 
 -- 声明序列的 check / compile 共用尾部（单文件与包模式同一条精化路径）。
 dtCheckDecls : Result (List Decl) -> Result (List String)
-dtCheckDecls loaded =
-  andThen loaded
-    (\decls => andThen (elabProgram decls) (\program => andThen (checkDtProgram program) (\_ => Ok [])))
+dtCheckDecls loaded = andThen loaded (\decls => let
+  _ = stamp "decls-ready"
+in andThen (elabProgram decls) (\program => let
+  _ = stamp "elab-done"
+in andThen (checkDtProgram program) (\_ => let
+  _ = stamp "codegen-check-done"
+in Ok []
+)
+)
+)
 
 dtCompileDecls : Result (List Decl) -> Bool -> Result String
-dtCompileDecls loaded printResult =
-  andThen loaded
-    (\decls => andThen (elabProgram decls) (\program => generateDtProgram program printResult))
+dtCompileDecls loaded printResult = andThen loaded (\decls => let
+  _ = stamp "decls-ready"
+in andThen (elabProgram decls) (\program => let
+  _ = stamp "elab-done"
+in andThen (generateDtProgram program printResult) (\code => let
+  _ = stamp "codegen-done"
+in Ok code
+)
+)
+)
 
 dtCheckFile : List String -> String -> Result (List String)
 dtCheckFile roots entry = dtCheckDecls (dtLoad roots entry)
@@ -120,21 +150,17 @@ splitReplExpr decls = case reverse decls of
 --     `Base.IO.IO` 这类模块前缀）。
 evalDtMain : Pair (List DtData) (List DtDef) -> Result String
 evalDtMain (Pair _ defs) = case findMainDef defs of
-  -- @code CG_NoMain
-  Nothing => Err "[CG_NoMain] DT: no main definition"
+  Nothing => cgErr0 NoMain
   Just mainDef =>
     let
       table = defTableOf defs
-      mainVal = normalize table [] defaultFuel (VNeutral (NGlobal "main" []))
-    in if isIOType (dtDefType mainDef) then Err
-      "[CG_InterpCannotExecuteEffects] DT: interp cannot execute effects (main : IO a); compile and run the program instead"
+      mainVal = normalize (tblFromList table) solsEmpty defaultFuel (VNeutral (NGlobal "main" []))
+    in if isIOType (dtDefType mainDef) then cgErr0 InterpCannotExecuteEffects
     else case mainVal of
-      -- @code CG_InterpCannotExecuteEffects
       VInt n => Ok (strFromInt n)
       VStr s => Ok (showValue mainVal)
       VBool b => Ok (showValue mainVal)
-      -- @code CG_MainNotValue
-      _ => Err "[CG_MainNotValue] DT: main does not reduce to a value"
+      _ => cgErr0 MainNotValue
 
 -- 族名（去掉模块前缀）：`Base.IO.IO` → `IO`。
 lastName : String -> String

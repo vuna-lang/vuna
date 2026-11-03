@@ -34,7 +34,9 @@ module Vuna.Compiler.Elab.Driver
 -- 以及目标（goal）收集与未解元变量的诊断（zonkGoal/goalsOfProgram/elabProgram*）。
 -- 拆自 M24 的单一 `Elab.vuna`（按真实调用图切；门面仍是 `Vuna.Compiler.Elab`）。
 import Vuna.Compiler.Common
+import Vuna.Compiler.Debug
 import Vuna.Compiler.Core
+import Vuna.Compiler.Diagnostics
 import Vuna.Compiler.Elab.Data
 import Vuna.Compiler.Elab.Derive
 import Vuna.Compiler.Elab.Dict
@@ -74,45 +76,83 @@ else
 -- ---------------------------------------------------------------
 -- 按源顺序精化签名：每个签名只对「prelude + 之前的签名」可见。
 elabSigs : List (Pair String Expr) -> List (Pair String Term) -> Ec -> Result (Pair (List (Pair String Term)) Ec)
-elabSigs [] globals ec = Ok (Pair globals ec)
-elabSigs ((Pair name tyExpr) :: rest) globals ec = andThen (checkType globals emptyCtx ec tyExpr) (\p => case p of
-  -- M24.5：签名会被存进 globals 在**别处**求值，检查期已解元变量必须内联（与构造子类型同因）：
-  -- `dup : (a : Type) -> (x : a) -> Eq x x` 的结果里 Eq 的隐式族参数解成签名自己的 `a`，
-  -- 留在签名里会在调用点变成悬空变量（`expected Nat, got a`）。
+elabSigs sigs globals ec =
+  elabSigsGo sigs globals (ecSetGlobalsComplete (ecPutGlobalsTbl ec (tblFromList globals)) True) []
+
+-- 新签名先前插到 acc（末尾一次 reverse 还原源顺序）；后续签名检查要看得到**已收集**的
+-- 签名，所以 live（globals 参数）也用前插累积（查找顺序无关语义）。
+-- 旧实现逐个 `append globals [sig]` 是 O(#globals)/次 ⇒ 整程序 O(n²)。
+elabSigsGo : List (Pair String Expr) -> List (Pair String Term) -> Ec -> List (Pair String Term) -> Result (Pair (List (Pair String Term)) Ec)
+elabSigsGo [] globals0 ec acc = Ok (Pair (append globals0 (reverse acc)) ec)
+elabSigsGo ((Pair name tyExpr) :: rest) globals ec acc = andThen (checkType globals emptyCtx ec tyExpr) (\p => case p of
   Pair tyTerm0 (Pair sortLvl ec1) =>
-    elabSigs rest (append globals [Pair name (inlineSolvedMetas ec1 0 tyTerm0)]) ec1
+    let
+      sigTy = inlineSolvedMetas ec1 0 tyTerm0
+    in elabSigsGo rest (Pair name sigTy :: globals)
+      (ecPutGlobalsTbl ec1 (tblInsert name sigTy (ecGlobalsTbl ec1))) (Pair name sigTy :: acc)
 )
+
+-- 子句表（名字 → 该函数的全部 clause，源顺序）。旧实现每个定义都扫一遍剩余声明
+-- （clausesFor）⇒ O(n²)；这里在 bodies 开始时建一次表，查表 O(1)。
+clausesTblOf : List Decl -> HashTbl (List (Pair (List Pat) Expr))
+clausesTblOf decls = clausesTblGo decls tblEmpty
+
+clausesTblGo : List Decl -> HashTbl (List (Pair (List Pat) Expr)) -> HashTbl (List (Pair (List Pat) Expr))
+clausesTblGo [] t = t
+clausesTblGo (d :: rest) t = case d of
+  DFun n pats body sp =>
+    let
+      cur = case tblLookup n t of
+        Just xs => xs
+        Nothing => []
+    in clausesTblGo rest (tblInsert n (append cur [Pair pats body]) t)
+  _ => clausesTblGo rest t
+
+clausesOfTbl : Ec -> List Decl -> String -> List (Pair (List Pat) Expr)
+clausesOfTbl ec decls name = case tblLookup name (ecClausesTbl ec) of
+  Just cs => cs
+  Nothing => clausesFor decls name
+
+defAlreadyDone : String -> Ec -> Bool
+defAlreadyDone name ec = case tblLookup name (ecDefTbl ec) of
+  Just _ => True
+  Nothing => False
 
 elabBodies : List Decl -> List (Pair String Term) -> List (Pair String Term) -> List DtDef -> Ec -> Result (Pair (List DtDef) Ec)
 elabBodies [] globals doneDefs acc ec = Ok (Pair (reverse acc) ec)
 elabBodies (d :: rest) globals doneDefs acc ec = case d of
-  DFun name pats body sp => case globalLookup name globals of
-    -- @code TC_ExpectedSignature
-    Nothing => errAt sp ("[TC_ExpectedSignature] DT: expected a type signature for " ++ name)
-    Just tyTerm => if memDefName name doneDefs then elabBodies rest globals doneDefs acc ec
-    else andThen (elabFunDef globals ec (clausesFor (d :: rest) name) (eval [] tyTerm) sp) (\p => case p of
-      Pair bodyTerm ec1 =>
-        let
-          lifted = liftFreeDictGoals name ec1 tyTerm bodyTerm
-          liftedTy = firstOf lifted
-          liftedBody = firstOf (secondOf lifted)
-          liftedEc = secondOf (secondOf lifted)
-          cleanTerm = substDictTerm liftedEc liftedBody
-          globals2 = replaceGlobalType name liftedTy globals
-        in elabBodies rest globals2 (Pair name liftedTy :: doneDefs)
-          (DtDef name liftedTy cleanTerm :: acc) (ecAddDef liftedEc (Pair name cleanTerm))
-    )
+  DFun name pats body sp => case globalsLookup name globals ec of
+    Nothing => tcErr1 sp (ExpectedSignature name) name
+    Just tyTerm => if defAlreadyDone name ec then elabBodies rest globals doneDefs acc ec
+    else
+      let
+        _ = stampSample (strFromInt (spanStartLine sp)) ("DEF " ++ name)
+      in andThen (elabFunDef globals ec (clausesOfTbl ec (d :: rest) name) (eval [] tyTerm) sp) (\p => let
+        _ = stampSample (strFromInt (spanStartLine sp)) ("FUN " ++ name)
+      in case p of
+        Pair bodyTerm ec1 =>
+          let
+            lifted = liftFreeDictGoals name ec1 tyTerm bodyTerm
+            liftedTy = firstOf lifted
+            liftedBody = firstOf (secondOf lifted)
+            liftedEc = secondOf (secondOf lifted)
+            cleanTerm = substDictTerm liftedEc liftedBody
+            -- 正文检查读的是哈希索引：只插表，不逐定义重建 globals list
+            -- （replaceGlobalType 是 O(#globals)/定义 ⇒ 整程序 O(n²)；该 list 只在
+            -- 签名阶段与最终 DtProgram 里用，正文阶段以表为准）。
+            ecGlobals = ecPutGlobalsTbl liftedEc (tblInsert name liftedTy (ecGlobalsTbl liftedEc))
+          in elabBodies rest globals (Pair name liftedTy :: doneDefs)
+            (DtDef name liftedTy cleanTerm :: acc) (ecAddDef ecGlobals (Pair name cleanTerm))
+      )
   _ => elabBodies rest globals doneDefs acc ec
 
 -- 每个签名都必须有定义（M13 不支持公理/未定义顶层）。
 checkAllDefined : List (Pair String Expr) -> List (Pair String Term) -> List Decl -> Result (List String)
 checkAllDefined [] globals decls = Ok []
--- @code TC_SignatureNoDef
 checkAllDefined ((Pair name tyExpr) :: rest) globals decls = if hasFunClause name decls then case globalLookup name globals of
-  -- @code TC_SignatureNoDef
-  Nothing => Err ("[TC_SignatureNoDef] DT: signature for " ++ name ++ " has no definition")
+  Nothing => Err (tcMsg (SignatureNoDef name) (VCons name VNil))
   Just ty => checkAllDefined rest globals decls
-else Err ("[TC_SignatureNoDef] DT: signature for " ++ name ++ " has no definition")
+else Err (tcMsg (SignatureNoDef name) (VCons name VNil))
 
 hasFunClause : String -> List Decl -> Bool
 hasFunClause name [] = False
@@ -132,19 +172,17 @@ dtEvalExprIn prog expr = case prog of
   DtProgram datas defs goals sols globals insts classes next =>
     let
       ec0 =
-        Ec next sols (map (\d => Pair (dtDefName d) (dtDefBody d)) defs) datas [] [] insts classes
-          []
+        Ec next sols (reverse (map (\d => Pair (dtDefName d) (dtDefBody d)) defs)) datas [] [] insts
+          classes [] (tblFromList (map (\d => Pair (dtDefName d) (dtDefBody d)) defs))
+          (tblFromList globals) (solsToTbl sols) tblEmpty True tblEmpty
     in andThen (inferE globals emptyCtx ec0 expr) (\p => case p of
       Pair term (Pair ty ec1) =>
         let
           ec2 = resolveDictGoalsFix globals ec1 8
           sols2 = ecSols ec2
         in case unsolvedFrom next (ecNext ec2) sols2 of
-          Just m =>
-            errAt (exprSpan expr)
-              ("[TC_UnsolvedMetavarInfer] DT: cannot infer a type for this expression (unsolved metavariable ?" ++ strFromInt m ++ "); add a type annotation")
-          -- @code TC_UnsolvedMetavarInfer
-          Nothing => case normalize (map (\d => Pair (dtDefName d) (dtDefBody d)) defs) sols2 defaultFuel (eval [] term) of
+          Just m => tcErr1 (exprSpan expr) (UnsolvedMetavarInfer (strFromInt m)) (strFromInt m)
+          Nothing => case normalize (tblFromList (map (\d => Pair (dtDefName d) (dtDefBody d)) defs)) (ecSolsP ec2) defaultFuel (eval [] term) of
             VInt n => Ok (strFromInt n)
             v => Ok (showValue v)
     )
@@ -156,45 +194,77 @@ elabProgramFull decls =
   andThen (prepareDecls decls) (\ds => andThen (expandDerivings ds) (\ds2 => elabProgramGo ds2))
 
 elabProgramGo : List Decl -> Result DtProgram
-elabProgramGo decls = andThen (collectSigs decls) (\sigs => andThen (elabDatas (collectDataDecls decls []) (preludeGlobalsFor (pickListFamily (dataNamesOf decls))) ecEmpty) (\pd => case pd of
-  Pair datas (Pair globals0 ec0) => andThen (elabTraits (collectTraitDecls decls []) globals0 ec0) (\pt => case pt of
-    Pair classDatas (Pair projGlobals (Pair classes ec1)) =>
-      let
-        globals1 = append globals0 projGlobals
-        datas1 = append datas classDatas
-      in andThen (checkInstanceHeads (collectInstDecls decls []) classes globals1 ec1) (\pih => case pih of
-        Pair instHeads ec1b =>
-          let
-            globals2 = append globals1 instHeads
-          in andThen (elabSigs sigs globals2 ec1b) (\p => case p of
-            Pair globals ec2 => andThen (checkAllDefined sigs globals decls) (\_ => andThen (elabBodies decls globals [] [] ec2) (\q => case q of
-              Pair defs0 ec3a =>
+elabProgramGo decls = andThen (collectSigs decls) (\sigs => let
+  _ = stamp "collectSigs-done"
+in andThen (elabDatas (collectDataDecls decls []) (preludeGlobalsFor (pickListFamily (dataNamesOf decls))) ecEmpty) (\pd => case pd of
+  Pair datas (Pair globals0 ec0) =>
+    let
+      _ = stamp "datas-done"
+    in andThen (elabTraits (collectTraitDecls decls []) globals0 ec0) (\pt => case pt of
+      Pair classDatas (Pair projGlobals (Pair classes ec1)) =>
+        let
+          globals1 = append globals0 projGlobals
+          datas1 = append datas classDatas
+          _ = stamp "traits-done"
+        in andThen (checkInstanceHeads (collectInstDecls decls []) classes globals1 ec1) (\pih => case pih of
+          Pair instHeads ec1b =>
+            let
+              globals2 = append globals1 instHeads
+              _ = stamp "instheads-done"
+            in andThen (elabSigs sigs globals2 ec1b) (\p => case p of
+              Pair globals ec2 =>
                 let
-                  -- M23：字典目标可能在「类参数刚被解出」之后才有唯一实例，而
-                  -- resolveDictGoals 只在 checkByInfer 路径调用；每轮定义体之后先收敛
-                  -- 一轮，定义体里的延迟字典实参要被替换成实例项（否则擦除检查会看到
-                  -- 运行时位置的 TMeta）。
-                  ec3 = resolveDictGoalsFix globals ec3a 8
-                  defs = rezonkDefs ec3 defs0
-                in andThen (elabInstanceBodies (collectInstDecls decls []) classes datas1 globals ec3) (\pi => case pi of
-                  Pair instDefs0 ec4a =>
+                  -- 正文检查前的唯一一次建表：globals 此时已固定（sigs + inst heads）。
+                  ec2b =
+                    ecPutClausesTbl
+                      (ecSetGlobalsComplete (ecPutGlobalsTbl ec2 (tblFromList globals)) True)
+                      (clausesTblOf decls)
+                  _ = stamp "sigs-elab-done"
+                in andThen (checkAllDefined sigs globals decls) (\_ => andThen (elabBodies decls globals [] [] ec2b) (\q => case q of
+                  Pair defs0 ec3a =>
                     let
-                      ec4 = resolveDictGoalsFix globals ec4a 8
-                      instDefs = rezonkDefs ec4 instDefs0
-                    in case unsolvedMeta ec4 of
-                      Just m => Err (unsolvedMessage ec4 m)
-                      Nothing =>
+                      -- M23：字典目标可能在「类参数刚被解出」之后才有唯一实例，而
+                      -- resolveDictGoals 只在 checkByInfer 路径调用；每轮定义体之后先收敛
+                      -- 一轮，定义体里的延迟字典实参要被替换成实例项（否则擦除检查会看到
+                      -- 运行时位置的 TMeta）。
+                      ec3 = resolveDictGoalsFix globals ec3a 8
+                      defs = rezonkDefs ec3 defs0
+                      _ =
+                        stamp
+                          ("bodies-done g=" ++ strFromInt (length globals) ++ " sols=" ++ strFromInt (length (ecSols ec3a)) ++ " defs=" ++ strFromInt (length (ecDefs ec3a)) ++ " metas=" ++ strFromInt (ecNext ec3a) ++ " dgoals=" ++ strFromInt (length (ecDictGoals ec3a)) ++ " datas=" ++ strFromInt (length (ecDatas ec3a)) ++ " insts=" ++ strFromInt (length (ecInsts ec3a)) ++ " classes=" ++ strFromInt (length (ecClasses ec3a)))
+                    in andThen (elabInstanceBodies (collectInstDecls decls []) classes datas1 globals ec3) (\pi => case pi of
+                      Pair instDefs0 ec4a =>
                         let
-                          extra = extraDefsOf globals ec4 (append instDefs defs)
-                          allDefs = rezonkDefs ec4 (append instDefs (append extra defs))
-                        in andThen (checkTerminationDecls decls)
-                          (\_ => Ok (DtProgram datas1 allDefs (ecGoals ec4) (ecSols ec4) globals (ecInsts ec4) (ecClasses ec4) (ecNext ec4)))
+                          ec4 = resolveDictGoalsFix globals ec4a 8
+                          instDefs = rezonkDefs ec4 instDefs0
+                          _ = stamp "instbodies-done"
+                        in case unsolvedMeta ec4 of
+                          Just m => Err (unsolvedMessage ec4 m)
+                          Nothing =>
+                            let
+                              extra = extraDefsOf globals ec4 (append instDefs defs)
+                              allDefs = rezonkDefs ec4 (append instDefs (append extra defs))
+                              -- bodies 阶段不再逐定义重建 globals（O(n²)）；这里用最终
+                              -- 定义集一次性把签名类型换成提升后的类型（O(n)）。
+                              defsTblOut =
+                                tblInsertAll (map (\x => Pair (dtDefName x) (dtDefType x)) allDefs)
+                                  tblEmpty
+                              globalsOut = map (\g => case tblLookup (firstOf g) defsTblOut of
+                                Just ty => Pair (firstOf g) ty
+                                Nothing => g
+                              ) globals
+                              _ = stamp "extradefs-done"
+                            in andThen (checkTerminationDecls decls) (\_ => let
+                              _ = stamp "termination-done"
+                            in Ok
+                              (DtProgram datas1 allDefs (ecGoals ec4) (ecSols ec4) globalsOut (ecInsts ec4) (ecClasses ec4) (ecNext ec4))
+                            )
+                    )
+                )
                 )
             )
-            )
-          )
-      )
-  )
+        )
+    )
 )
 )
 
@@ -216,14 +286,15 @@ resolveDictGoalsFix globals ec n =
 unsolvedMessage : Ec -> Int -> String
 unsolvedMessage ec m = case findGoal m (ecGoals ec) of
   Just g =>
-    "[TC_UnsolvedHole] DT: unsolved hole "
-      ++ showSpanLoc (dtGoalSpan g)
-      ++ " with goal "
-      ++ showValueAt (ctxDepthOf g) (dtGoalType g)
-  -- @code TC_UnsolvedHole
-  -- @code TC_UnsolvedMetavar
+    let
+      detail =
+        showSpanLoc (dtGoalSpan g) ++ " with goal " ++ showValueAt (ctxDepthOf g) (dtGoalType g)
+    in tcMsg (UnsolvedHole detail) (VCons detail VNil)
   Nothing =>
-    "[TC_UnsolvedMetavar] DT: unsolved metavariable ?" ++ strFromInt m ++ metaOwnerHint ec m
+    let
+      num = strFromInt m
+      hint = metaOwnerHint ec m
+    in tcMsg (UnsolvedMetavar num hint) (VCons num (VCons hint VNil))
 
 -- 未解元变量的归属提示：扫已精化的定义体与类型，指出它出现在哪个定义里（否则只有 ?m，
 -- 在一个上万行的程序里无从定位）。
@@ -292,7 +363,7 @@ goalInfoOf sols g =
 
 -- 洞目标里的类型可能仍含已解元变量：用当前解表 force 一遍再 show。
 zonkGoal : List (Pair Int Value) -> Value -> Value
-zonkGoal sols v = force [] sols defaultFuel v
+zonkGoal sols v = force tblEmpty (solsFromList sols) defaultFuel v
 
 -- 上下文条目（名字 + 类型）用于显示：类型项按快照深度用中性环境求值后 show。
 ctxEntriesOf : List (Pair String Term) -> List (Pair String String)

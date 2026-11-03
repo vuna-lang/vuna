@@ -29,6 +29,7 @@ module Vuna.Compiler.Elab.Data
 -- 拆自 M24 的单一 `Elab.vuna`（按真实调用图切；门面仍是 `Vuna.Compiler.Elab`）。
 import Vuna.Compiler.Common
 import Vuna.Compiler.Core
+import Vuna.Compiler.Diagnostics
 import Vuna.Compiler.Elab.Meta
 import Vuna.Compiler.Elab.Prelude
 import Vuna.Compiler.Elab.Term
@@ -37,8 +38,6 @@ import Vuna.Compiler.Frontend.Ast
 
 -- 精化一个构造子：类型是「Pi 链 → F r1..rk」。
 elabCtor : List (Pair String Term) -> String -> Int -> Ec -> Ctor -> Result (Pair DtCtor Ec)
--- @code TC_CtorDoesNotReturn
--- @code TC_CtorError
 elabCtor globals fam arity ec c = case c of
   Ctor cname tyExpr arityHint csp =>
     let
@@ -54,10 +53,8 @@ elabCtor globals fam arity ec c = case c of
           tyTerm = inlineSolvedMetas ec1 0 tyTerm0
         in case resultSpine (dropParams tyTerm) of
           Pair head args =>
-            if head /= fam then errAt csp
-              ("[TC_CtorDoesNotReturn] DT: constructor " ++ cname ++ " does not return " ++ fam)
-            else if length args /= arity then errAt csp
-              ("[TC_CtorError] DT: constructor " ++ cname ++ " has the wrong number of indices for " ++ fam)
+            if head /= fam then tcErr2 csp (CtorDoesNotReturn cname fam) cname fam
+            else if length args /= arity then tcErr2 csp (CtorWrongIndices cname fam) cname fam
             else Ok (Pair (DtCtor cname fam (teleOfType tyTerm) tyTerm) ec1)
     )
 
@@ -76,8 +73,7 @@ elabCtors globals fam arity ec (c :: rest) = andThen (elabCtor globals fam arity
 elabDataHead : List (Pair String Term) -> Ec -> Pair Decl Span -> Result (Pair DataHead (Pair (List (Pair String Term)) Ec))
 elabDataHead globals ec ds = case ds of
   Pair d dsp => case d of
-    -- @code TC_CannotRedefineBuiltin
-    DData dname writtenParams kindExpr ctors derivings dsp2 => if memName dname preludeNames then errAt dsp2 ("[TC_CannotRedefineBuiltin] DT: cannot redefine builtin " ++ dname)
+    DData dname writtenParams kindExpr ctors derivings dsp2 => if memName dname preludeNames then tcErr1 dsp2 (CannotRedefineBuiltin dname) dname
     else andThen (checkType globals emptyCtx ec kindExpr) (\pk => case pk of
       Pair kindTerm0 (Pair kindSort ec1) =>
         let
@@ -87,11 +83,9 @@ elabDataHead globals ec ds = case ds of
           fullKind = prependParams writtenParams (inlineSolvedMetas ec1 0 kindTerm0)
           tele = splitKind fullKind
           arity = length tele
-        in if not (kindWellFormed fullKind) then errAt dsp2
-          "[TC_DataKindArrows] DT: the kind of a data declaration must be a chain of arrows ending in Type"
+        in if not (kindWellFormed fullKind) then tcErr0 dsp2 DataKindArrows
         else Ok (Pair (DataHead dname fullKind arity) (Pair [Pair dname fullKind] ec1))
     )
-    -- @code TC_DataKindArrows
     _ => errAt dsp "DT: internal: expected a data declaration"
 
 elabDataHeadsRound : List (Pair Decl Span) -> List (Pair String Term) -> Ec -> List DataHead -> List (Pair Decl Span) -> Pair (List DataHead) (Pair (List (Pair String Term)) (Pair Ec (List (Pair Decl Span))))

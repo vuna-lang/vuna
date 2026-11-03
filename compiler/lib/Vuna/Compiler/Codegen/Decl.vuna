@@ -136,10 +136,15 @@ ocamlBinderName name =
     oc = sanitizeName name
   in if memName oc ocamlReservedWords then oc ++ "_" else oc
 
+-- 一次性线性拼接：先插分隔符成列表，再用运行时 `String.concat` 单遍拼出。
+-- 旧的 `x ++ sep ++ joinWith sep rest` 在千级片段上是 O(n²) 字节拷贝（build 路径曾占 ~20s）。
 joinWith : String -> List String -> String
-joinWith sep [] = ""
-joinWith sep ([x]) = x
-joinWith sep (x :: rest) = x ++ sep ++ joinWith sep rest
+joinWith sep xs = strConcatMany (interpose sep xs)
+
+interpose : String -> List String -> List String
+interpose sep [] = []
+interpose sep ([x]) = [x]
+interpose sep (x :: rest) = x :: sep :: interpose sep rest
 
 lastName : String -> String
 lastName name = case splitLastDot (splitOnDot name) of

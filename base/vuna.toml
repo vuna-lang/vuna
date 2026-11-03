@@ -13,6 +13,8 @@ modules = [
   "Base.Eq",
   "Base.Ord",
   "Base.List",
+  "Base.Nat",
+  "Base.Vec",
   "Base.Maybe",
   "Base.Result",
   "Base.String",

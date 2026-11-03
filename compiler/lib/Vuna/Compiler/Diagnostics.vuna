@@ -1,0 +1,523 @@
+module Vuna.Compiler.Diagnostics
+  ( CgEntry(..)
+  , CgErr(..)
+  , TcEntry(..)
+  , TcErr(..)
+  , cgAll
+  , cgCode
+  , cgEntryCode
+  , cgEntryDesc
+  , cgEntryTemplate
+  , cgErr
+  , cgErr0
+  , cgErr1
+  , cgMsg
+  , cgTemplate
+  , tcAll
+  , tcCode
+  , tcEntryCode
+  , tcEntryDesc
+  , tcEntryTemplate
+  , tcErr
+  , tcErr0
+  , tcErr0NoLoc
+  , tcErr1
+  , tcErr1NoLoc
+  , tcErr2
+  , tcErr2NoLoc
+  , tcMsg
+  , tcTemplate
+  , module Base.Nat
+  , module Base.Vec
+  , module Vuna.Compiler.Common
+  ) where
+
+-- Vuna.Compiler.Diagnostics：错误码体系（M30 重构）。
+--
+-- 把诊断的「标识 + 模板 + arity」从「字符串字面量 + 就近 `-- @code` 注释」收拢为
+-- **域枚举 + 构造子携带模板**。三个不变量：
+--
+-- 1. **arity 编译期锁定**（路 A）：`TcErr : Nat -> Type`，构造子的索引即模板插值个数
+--    （`UnknownName : String -> TcErr (Succ Zero)` = arity 1）。throw 点给 `Vec String n`，
+--    长度由类型 unify 锁定——arity 拼错**编译失败**。`n` 隐式（Rig0），运行时零开销。
+-- 2. **构造子 = 唯一真源**：每个构造子携带自己的模板（String payload，占位符 `<0>` `<1>`…）
+--    + arity（类型索引）+ code（`tcCode` 派生）。模板/arity/code 一处声明，永不漂移。
+--    渲染用 `Base.Vec.substTemplate`。
+-- 3. **`tcAll`/`cgAll` = 文档遍历源**：同构 `List TcEntry`/`CgEntry`（code + 模板 + 说明），
+--    `gen-errors` 遍历它渲染 `docs/.generated/errors.md`，不再扫 `-- @code` 注释。
+--
+-- 约定：
+-- - 符号语义稳定、**只增不删**；同语义多处共享一个构造子（不再「同规则不同码」）。
+-- - 一个码只承载**一种**语义。旧 `TC_OpOnlyIntString` / `TC_CtorError` 各自混了两种消息，
+--   已拆开（`OpOnlyIntString` / `NotTraitMethod` / `OpNotDefinedFor`；
+--   `CtorWrongIndices` / `CtorError`）。
+-- - 占位符 `<k>` 每个只出现一次（`substTemplate` 按序号单次替换）；需要同一实参出现两处时
+--   用两个序号并传两次（如 `WhereNeedsSig`）。
+-- - `DT: internal:`（编译器内部不变量）不占符号，仍走裸字符串，不经本模块。
+-- - 旧 `DT: ` 消息前缀已删除（`[CODE]` 已承载阶段信息）。
+--
+-- 分层：本模块是**编译器侧**真源，进 seed（被 `vuna check .` 自检）。根包 Lint/Diagnostics 与
+-- Frontend/Diagnostics 单向 import 本模块；compiler 永不 import 根包。
+import Vuna.Compiler.Common
+import Base.Nat
+import Base.Vec
+
+-- ---------------------------------------------------------------
+-- TC_：精化 / 终止性 / 覆盖性诊断（Elab）
+-- arity = 构造子索引；String payload = 消息模板（占位符 `<0>` `<1>`…）
+-- ---------------------------------------------------------------
+data TcErr : Nat -> Type where
+  -- arity 0
+  BoolCaseRestriction : TcErr Zero
+  CaseBranchTooFewArgs : TcErr Zero
+  CatchAllNotLast : TcErr Zero
+  ClauseTooManyPatterns : TcErr Zero
+  DataKindArrows : TcErr Zero
+  DefFewerParams : TcErr Zero
+  DefMoreParams : TcErr Zero
+  DefParamsMustBeVars : TcErr Zero
+  DoUnsupported : TcErr Zero
+  DuplicateCtorInCase : TcErr Zero
+  FunctionNoClauses : TcErr Zero
+  HoleNoExpectedType : TcErr Zero
+  ImplicitParamKind : TcErr Zero
+  ImpossibleBranchEmptyCtx : TcErr Zero
+  ImpossibleBranchIndex : TcErr Zero
+  IndexFuel : TcErr Zero
+  InstanceAnnotationWrongUse : TcErr Zero
+  InstanceHeadNotApp : TcErr Zero
+  InstanceMissingMethod : TcErr Zero
+  InterfaceOneParam : TcErr Zero
+  IntStringCaseNeedsFallback : TcErr Zero
+  IntStringCaseRestriction : TcErr Zero
+  InvalidArrowType : TcErr Zero
+  LambdaNoSignature : TcErr Zero
+  LambdaTooManyParams : TcErr Zero
+  LetBindingPattern : TcErr Zero
+  NestedPatterns : TcErr Zero
+  NotInductiveFamily : TcErr Zero
+  OnlyCtorPatterns : TcErr Zero
+  PatternFuel : TcErr Zero
+  RecordFieldAccessUnsupported : TcErr Zero
+  RecordsUnsupported : TcErr Zero
+  RecordUpdateUnsupported : TcErr Zero
+  TooManyArgs : TcErr Zero
+  TypeLevelArg : TcErr Zero
+  TypeMismatchCaseCount : TcErr Zero
+  TypeMismatchCtorArity : TcErr Zero
+  UniverseLevelNonNegative : TcErr Zero
+  -- arity 1
+  BranchTooManyArgs : String -> TcErr (Succ Zero)
+  CannotProveTermination : String -> TcErr (Succ Zero)
+  CannotRedefineBuiltin : String -> TcErr (Succ Zero)
+  CannotSolveMetavar : String -> TcErr (Succ Zero)
+  CannotSolveHigherOrder : String -> TcErr (Succ Zero)
+  CannotSolveOccurs : String -> TcErr (Succ Zero)
+  TypeMismatchCaseVars : String -> TcErr (Succ Zero)
+  DuplicateInstance : String -> TcErr (Succ Zero)
+  DuplicateSignature : String -> TcErr (Succ Zero)
+  ExpectedSignature : String -> TcErr (Succ Zero)
+  ExpectedType : String -> TcErr (Succ Zero)
+  GenericEqNotComparable : String -> TcErr (Succ Zero)
+  InstanceNotTrait : String -> TcErr (Succ Zero)
+  InstanceUnknownMethod : String -> TcErr (Succ Zero)
+  NeedsTwoArgs : String -> TcErr (Succ Zero)
+  NoInstanceFound : String -> TcErr (Succ Zero)
+  NotExhaustive : String -> TcErr (Succ Zero)
+  SignatureNoDef : String -> TcErr (Succ Zero)
+  UnknownInterface : String -> TcErr (Succ Zero)
+  UnknownName : String -> TcErr (Succ Zero)
+  UnknownNamedInstance : String -> TcErr (Succ Zero)
+  UnsolvedHole : String -> TcErr (Succ Zero)
+  UnsolvedMetavarInfer : String -> TcErr (Succ Zero)
+  -- arity 2
+  AmbiguousInstance : String -> String -> TcErr (Succ (Succ Zero))
+  AppliedNotType : String -> TcErr (Succ Zero)
+  CtorDoesNotReturn : String -> String -> TcErr (Succ (Succ Zero))
+  CtorError : String -> String -> TcErr (Succ (Succ Zero))
+  CtorWrongIndices : String -> String -> TcErr (Succ (Succ Zero))
+  NotTraitMethod : String -> String -> TcErr (Succ (Succ Zero))
+  OpNotDefinedFor : String -> String -> TcErr (Succ (Succ Zero))
+  OpOnlyIntString : String -> String -> TcErr (Succ (Succ Zero))
+  UnknownConstructorInCase : String -> String -> TcErr (Succ (Succ Zero))
+  UnsolvedMetavar : String -> String -> TcErr (Succ (Succ Zero))
+  TypeMismatch : String -> String -> TcErr (Succ (Succ Zero))
+  TypeMismatchCaseBranch : String -> String -> TcErr (Succ (Succ Zero))
+  WhereNeedsSig : String -> String -> TcErr (Succ (Succ Zero))
+
+-- ---------------------------------------------------------------
+-- CG_：codegen / 驱动诊断（Codegen / Driver；无位置）
+-- ---------------------------------------------------------------
+data CgErr : Nat -> Type where
+  -- arity 0
+  DependencyCycle : CgErr Zero
+  InterpCannotExecuteEffects : CgErr Zero
+  MainNotValue : CgErr Zero
+  MainReturnType : CgErr Zero
+  NoMain : CgErr Zero
+  TypeUsedAtRuntime : CgErr Zero
+  -- arity 1
+  TypeLevelBindingRuntime : String -> CgErr (Succ Zero)
+  TypeLevelNameRuntime : String -> CgErr (Succ Zero)
+  UnsolvedMetavarRuntime : String -> CgErr (Succ Zero)
+
+-- ---------------------------------------------------------------
+-- code 派生（唯一真源；`gen-errors` 与 throw 都用它）
+-- ---------------------------------------------------------------
+tcCode : {n : Nat} -> TcErr n -> String
+tcCode BoolCaseRestriction = "TC_BoolCaseRestriction"
+tcCode CaseBranchTooFewArgs = "TC_CaseBranchTooFewArgs"
+tcCode CatchAllNotLast = "TC_CatchAllNotLast"
+tcCode ClauseTooManyPatterns = "TC_ClauseTooManyPatterns"
+tcCode DataKindArrows = "TC_DataKindArrows"
+tcCode DefFewerParams = "TC_DefFewerParams"
+tcCode DefMoreParams = "TC_DefMoreParams"
+tcCode DefParamsMustBeVars = "TC_DefParamsMustBeVars"
+tcCode DoUnsupported = "TC_DoUnsupported"
+tcCode DuplicateCtorInCase = "TC_DuplicateCtorInCase"
+tcCode FunctionNoClauses = "TC_FunctionNoClauses"
+tcCode HoleNoExpectedType = "TC_HoleNoExpectedType"
+tcCode ImplicitParamKind = "TC_ImplicitParamKind"
+tcCode ImpossibleBranchEmptyCtx = "TC_ImpossibleBranchEmptyCtx"
+tcCode ImpossibleBranchIndex = "TC_ImpossibleBranchIndex"
+tcCode IndexFuel = "TC_IndexFuel"
+tcCode InstanceAnnotationWrongUse = "TC_InstanceAnnotationWrongUse"
+tcCode InstanceHeadNotApp = "TC_InstanceHeadNotApp"
+tcCode InstanceMissingMethod = "TC_InstanceMissingMethod"
+tcCode InterfaceOneParam = "TC_InterfaceOneParam"
+tcCode IntStringCaseNeedsFallback = "TC_IntStringCaseNeedsFallback"
+tcCode IntStringCaseRestriction = "TC_IntStringCaseRestriction"
+tcCode InvalidArrowType = "TC_InvalidArrowType"
+tcCode LambdaNoSignature = "TC_LambdaNoSignature"
+tcCode LambdaTooManyParams = "TC_LambdaTooManyParams"
+tcCode LetBindingPattern = "TC_LetBindingPattern"
+tcCode NestedPatterns = "TC_NestedPatterns"
+tcCode NotInductiveFamily = "TC_NotInductiveFamily"
+tcCode OnlyCtorPatterns = "TC_OnlyCtorPatterns"
+tcCode PatternFuel = "TC_PatternFuel"
+tcCode RecordFieldAccessUnsupported = "TC_RecordFieldAccessUnsupported"
+tcCode RecordsUnsupported = "TC_RecordsUnsupported"
+tcCode RecordUpdateUnsupported = "TC_RecordUpdateUnsupported"
+tcCode TooManyArgs = "TC_TooManyArgs"
+tcCode TypeLevelArg = "TC_TypeLevelArg"
+tcCode TypeMismatchCaseCount = "TC_TypeMismatchCaseCount"
+tcCode TypeMismatchCtorArity = "TC_TypeMismatchCtorArity"
+tcCode UniverseLevelNonNegative = "TC_UniverseLevelNonNegative"
+tcCode (BranchTooManyArgs _) = "TC_BranchTooManyArgs"
+tcCode (CannotProveTermination _) = "TC_CannotProveTermination"
+tcCode (CannotRedefineBuiltin _) = "TC_CannotRedefineBuiltin"
+tcCode (CannotSolveMetavar _) = "TC_CannotSolveMetavar"
+tcCode (CannotSolveHigherOrder _) = "TC_CannotSolveHigherOrder"
+tcCode (CannotSolveOccurs _) = "TC_CannotSolveOccurs"
+tcCode (TypeMismatchCaseVars _) = "TC_TypeMismatchCaseVars"
+tcCode (DuplicateInstance _) = "TC_DuplicateInstance"
+tcCode (DuplicateSignature _) = "TC_DuplicateSignature"
+tcCode (ExpectedSignature _) = "TC_ExpectedSignature"
+tcCode (ExpectedType _) = "TC_ExpectedType"
+tcCode (GenericEqNotComparable _) = "TC_GenericEqNotComparable"
+tcCode (InstanceNotTrait _) = "TC_InstanceNotTrait"
+tcCode (InstanceUnknownMethod _) = "TC_InstanceUnknownMethod"
+tcCode (NeedsTwoArgs _) = "TC_NeedsTwoArgs"
+tcCode (NoInstanceFound _) = "TC_NoInstanceFound"
+tcCode (NotExhaustive _) = "TC_NotExhaustive"
+tcCode (SignatureNoDef _) = "TC_SignatureNoDef"
+tcCode (UnknownInterface _) = "TC_UnknownInterface"
+tcCode (UnknownName _) = "TC_UnknownName"
+tcCode (UnknownNamedInstance _) = "TC_UnknownNamedInstance"
+tcCode (UnsolvedHole _) = "TC_UnsolvedHole"
+tcCode (UnsolvedMetavarInfer _) = "TC_UnsolvedMetavarInfer"
+tcCode (AmbiguousInstance _ _) = "TC_AmbiguousInstance"
+tcCode (AppliedNotType _) = "TC_AppliedNotType"
+tcCode (CtorDoesNotReturn _ _) = "TC_CtorDoesNotReturn"
+tcCode (CtorError _ _) = "TC_CtorError"
+tcCode (CtorWrongIndices _ _) = "TC_CtorWrongIndices"
+tcCode (NotTraitMethod _ _) = "TC_NotTraitMethod"
+tcCode (OpNotDefinedFor _ _) = "TC_OpNotDefinedFor"
+tcCode (OpOnlyIntString _ _) = "TC_OpOnlyIntString"
+tcCode (UnknownConstructorInCase _ _) = "TC_UnknownConstructorInCase"
+tcCode (UnsolvedMetavar _ _) = "TC_UnsolvedMetavar"
+tcCode (TypeMismatch _ _) = "TC_TypeMismatch"
+tcCode (TypeMismatchCaseBranch _ _) = "TC_TypeMismatchCaseBranch"
+tcCode (WhereNeedsSig _ _) = "TC_WhereNeedsSig"
+
+cgCode : {n : Nat} -> CgErr n -> String
+cgCode DependencyCycle = "CG_DependencyCycle"
+cgCode InterpCannotExecuteEffects = "CG_InterpCannotExecuteEffects"
+cgCode MainNotValue = "CG_MainNotValue"
+cgCode MainReturnType = "CG_MainReturnType"
+cgCode NoMain = "CG_NoMain"
+cgCode TypeUsedAtRuntime = "CG_TypeUsedAtRuntime"
+cgCode (TypeLevelBindingRuntime _) = "CG_TypeLevelBindingRuntime"
+cgCode (TypeLevelNameRuntime _) = "CG_TypeLevelNameRuntime"
+cgCode (UnsolvedMetavarRuntime _) = "CG_UnsolvedMetavarRuntime"
+
+-- ---------------------------------------------------------------
+-- 模板（构造子 payload，占位符 `<0>`/`<1>`；已去掉旧 `DT: ` 前缀）
+-- ---------------------------------------------------------------
+tcTemplate : {n : Nat} -> TcErr n -> String
+tcTemplate BoolCaseRestriction = "case on Bool only accepts True / False / variable patterns (M19)"
+tcTemplate CaseBranchTooFewArgs = "case branch has too few arguments for its constructor"
+tcTemplate CatchAllNotLast = "the catch-all branch must be the last one"
+tcTemplate ClauseTooManyPatterns = "clause has more patterns than the function arity"
+tcTemplate DataKindArrows =
+  "the kind of a data declaration must be a chain of arrows ending in Type"
+tcTemplate DefFewerParams = "definition has fewer parameters than its signature"
+tcTemplate DefMoreParams = "definition has more parameters than its signature"
+tcTemplate DefParamsMustBeVars = "definition parameters must be variables (M13)"
+tcTemplate DoUnsupported = "do blocks are not supported yet (M19)"
+tcTemplate DuplicateCtorInCase = "duplicate constructor in case"
+tcTemplate FunctionNoClauses = "function has no clauses"
+tcTemplate HoleNoExpectedType = "cannot infer the type of a hole; give it an expected type"
+tcTemplate ImplicitParamKind = "implicit parameters must be types or inductive families (M15)"
+tcTemplate ImpossibleBranchEmptyCtx =
+  "this branch is impossible (its context contains an empty inductive family)"
+tcTemplate ImpossibleBranchIndex = "this branch is impossible (index constraints are unsatisfiable)"
+tcTemplate IndexFuel = "index unification ran out of reduction fuel"
+tcTemplate InstanceAnnotationWrongUse =
+  "@instance can only be used with a trait method (write `method @instance`)"
+tcTemplate InstanceHeadNotApp = "instance head must be an interface application (e.g. Show Int)"
+tcTemplate InstanceMissingMethod = "instance is missing an implementation for an interface method"
+tcTemplate InterfaceOneParam = "interfaces must have exactly one parameter (M15 limitation)"
+tcTemplate IntStringCaseNeedsFallback =
+  "case on Int / String needs a variable or wildcard branch as fallback (M19)"
+tcTemplate IntStringCaseRestriction =
+  "case on Int / String only accepts literals / variable patterns (M19)"
+tcTemplate InvalidArrowType = "invalid arrow type"
+tcTemplate LambdaNoSignature = "cannot infer the type of a lambda; add a signature"
+tcTemplate LambdaTooManyParams = "lambda has more parameters than the expected function type"
+tcTemplate LetBindingPattern = "let bindings must be simple names or wildcards (M19)"
+tcTemplate NestedPatterns = "nested patterns must be constructor patterns (M19)"
+tcTemplate NotInductiveFamily = "case scrutinee is not an inductive family"
+tcTemplate OnlyCtorPatterns = "only constructor patterns are supported in case (M14)"
+tcTemplate PatternFuel = "pattern matrix recursion ran out of fuel"
+tcTemplate RecordFieldAccessUnsupported = "record field access is not supported yet (M15)"
+tcTemplate RecordsUnsupported = "records are not supported yet (M15)"
+tcTemplate RecordUpdateUnsupported = "record update is not supported yet (M15)"
+tcTemplate TooManyArgs = "too many arguments (not a function)"
+tcTemplate TypeLevelArg = "Type needs exactly one non-negative level (or none)"
+tcTemplate TypeMismatchCaseCount = "type mismatch: case branches differ in number"
+tcTemplate TypeMismatchCtorArity = "type mismatch: constructor arguments differ in length"
+tcTemplate UniverseLevelNonNegative = "universe level must be non-negative"
+tcTemplate (BranchTooManyArgs _) = "branch for constructor <0> has too many arguments"
+tcTemplate (CannotProveTermination _) = "cannot prove termination of <0>"
+tcTemplate (CannotRedefineBuiltin _) = "cannot redefine builtin <0>"
+tcTemplate (CannotSolveMetavar _) =
+  "cannot solve metavariable ?<0> (solution would escape its scope)"
+tcTemplate (CannotSolveHigherOrder _) =
+  "cannot solve higher-order metavariable ?<0> (M15 limitation)"
+tcTemplate (CannotSolveOccurs _) = "cannot solve metavariable ?<0> (occurs check)"
+tcTemplate (TypeMismatchCaseVars _) =
+  "type mismatch: case branch <0> binds a different number of variables"
+tcTemplate (DuplicateInstance _) = "duplicate instance <0>"
+tcTemplate (DuplicateSignature _) = "duplicate signature for <0>"
+tcTemplate (ExpectedSignature _) = "expected a type signature for <0>"
+tcTemplate (ExpectedType _) = "expected a type, but this expression has type <0>"
+tcTemplate (GenericEqNotComparable _) =
+  "cannot compare values of type <0> with generic equality; add an Eq instance or deriving (Eq)"
+tcTemplate (InstanceNotTrait _) = "instance <0> is not an instance of a trait"
+tcTemplate (InstanceUnknownMethod _) = "instance has unknown method <0>"
+tcTemplate (NeedsTwoArgs _) = "`<0>` needs exactly two arguments"
+tcTemplate (NoInstanceFound _) = "no instance found for <0>"
+tcTemplate (NotExhaustive _) = "case is not exhaustive: missing <0>"
+tcTemplate (SignatureNoDef _) = "signature for <0> has no definition"
+tcTemplate (UnknownInterface _) = "unknown interface <0> in instance head"
+tcTemplate (UnknownName _) = "unknown name <0>"
+tcTemplate (UnknownNamedInstance _) = "unknown named instance <0>"
+tcTemplate (UnsolvedHole _) = "unsolved hole <0>"
+tcTemplate (UnsolvedMetavarInfer _) =
+  "cannot infer a type for this expression (unsolved metavariable ?<0>); add a type annotation"
+tcTemplate (AmbiguousInstance _ _) = "ambiguous instance for <0> (candidates: <1>)"
+tcTemplate (AppliedNotType _) = "expected a type, but <0> applied to these arguments is not a type"
+tcTemplate (CtorDoesNotReturn _ _) = "constructor <0> does not return <1>"
+tcTemplate (CtorError _ _) = "constructor <0>: <1>"
+tcTemplate (CtorWrongIndices _ _) = "constructor <0> has the wrong number of indices for <1>"
+tcTemplate (NotTraitMethod _ _) = "`<0>` is not a method of trait <1>"
+tcTemplate (OpNotDefinedFor _ _) = "`<0>` is not defined for <1> (Ord instance required)"
+tcTemplate (OpOnlyIntString _ _) = "`<0>` is only defined for Int and String (found <1>; M19)"
+tcTemplate (UnknownConstructorInCase _ _) = "unknown constructor <0> in case <1>"
+tcTemplate (UnsolvedMetavar _ _) = "unsolved metavariable ?<0><1>"
+tcTemplate (TypeMismatch _ _) = "type mismatch: expected <0>, got <1>"
+tcTemplate (TypeMismatchCaseBranch _ _) = "type mismatch: case branch <0> vs <1>"
+tcTemplate (WhereNeedsSig _ _) =
+  "where binding `<0>` needs a type signature (write `<1> : <type>` before the clause)"
+
+cgTemplate : {n : Nat} -> CgErr n -> String
+cgTemplate DependencyCycle = "dependency cycle between runtime definitions"
+cgTemplate InterpCannotExecuteEffects =
+  "interp cannot execute effects (main : IO a); compile and run the program instead"
+cgTemplate MainNotValue = "main does not reduce to a value"
+cgTemplate MainReturnType = "main must return Int, String or Bool (M13 limitation)"
+cgTemplate NoMain = "no main definition"
+cgTemplate TypeUsedAtRuntime = "a type is used at runtime (M13 limitation)"
+cgTemplate (TypeLevelBindingRuntime _) = "type-level binding `<0>` is used at runtime"
+cgTemplate (TypeLevelNameRuntime _) = "type-level name `<0>` is used at runtime"
+cgTemplate (UnsolvedMetavarRuntime _) = "unsolved metavariable in runtime code<0>"
+
+-- ---------------------------------------------------------------
+-- 文档遍历源（同构 List；`gen-errors` 遍历渲染；不承载 arity——arity 在构造子类型里）
+-- ---------------------------------------------------------------
+data TcEntry : Type where
+  TcEntry : String -> String -> String -> TcEntry
+
+tcEntryCode : TcEntry -> String
+tcEntryCode (TcEntry code template desc) = code
+
+tcEntryTemplate : TcEntry -> String
+tcEntryTemplate (TcEntry code template desc) = template
+
+tcEntryDesc : TcEntry -> String
+tcEntryDesc (TcEntry code template desc) = desc
+
+data CgEntry : Type where
+  CgEntry : String -> String -> String -> CgEntry
+
+cgEntryCode : CgEntry -> String
+cgEntryCode (CgEntry code template desc) = code
+
+cgEntryTemplate : CgEntry -> String
+cgEntryTemplate (CgEntry code template desc) = template
+
+cgEntryDesc : CgEntry -> String
+cgEntryDesc (CgEntry code template desc) = desc
+
+-- 遍历所有 TC 构造子（新增构造子必须在此登记）
+tcAll : List TcEntry
+tcAll =
+  [ TcEntry (tcCode BoolCaseRestriction) (tcTemplate BoolCaseRestriction) "Bool 的 case 只接受 True/False/变量模式",
+    TcEntry (tcCode CaseBranchTooFewArgs) (tcTemplate CaseBranchTooFewArgs) "case 分支实参少于构造子字段",
+    TcEntry (tcCode CatchAllNotLast) (tcTemplate CatchAllNotLast) "兜底分支必须在最后",
+    TcEntry (tcCode ClauseTooManyPatterns) (tcTemplate ClauseTooManyPatterns) "子句模式多于函数元数",
+    TcEntry (tcCode DataKindArrows) (tcTemplate DataKindArrows) "data 的 kind 必须是箭头链",
+    TcEntry (tcCode DefFewerParams) (tcTemplate DefFewerParams) "定义实参少于签名",
+    TcEntry (tcCode DefMoreParams) (tcTemplate DefMoreParams) "定义实参多于签名",
+    TcEntry (tcCode DefParamsMustBeVars) (tcTemplate DefParamsMustBeVars) "定义参数必须是变量",
+    TcEntry (tcCode DoUnsupported) (tcTemplate DoUnsupported) "do 块尚不支持",
+    TcEntry (tcCode DuplicateCtorInCase) (tcTemplate DuplicateCtorInCase) "case 里重复的构造子",
+    TcEntry (tcCode FunctionNoClauses) (tcTemplate FunctionNoClauses) "函数没有子句",
+    TcEntry (tcCode HoleNoExpectedType) (tcTemplate HoleNoExpectedType) "洞缺少期望类型",
+    TcEntry (tcCode ImplicitParamKind) (tcTemplate ImplicitParamKind) "隐式参数必须是类型",
+    TcEntry (tcCode ImpossibleBranchEmptyCtx) (tcTemplate ImpossibleBranchEmptyCtx) "上下文含空归纳族，分支不可达",
+    TcEntry (tcCode ImpossibleBranchIndex) (tcTemplate ImpossibleBranchIndex) "索引约束不可满足，分支不可达",
+    TcEntry (tcCode IndexFuel) (tcTemplate IndexFuel) "索引归一化耗尽归约燃料",
+    TcEntry (tcCode InstanceAnnotationWrongUse) (tcTemplate InstanceAnnotationWrongUse) "@instance 只能用于 trait 方法",
+    TcEntry (tcCode InstanceHeadNotApp) (tcTemplate InstanceHeadNotApp) "instance 头必须是接口应用",
+    TcEntry (tcCode InstanceMissingMethod) (tcTemplate InstanceMissingMethod) "instance 缺方法实现",
+    TcEntry (tcCode InterfaceOneParam) (tcTemplate InterfaceOneParam) "接口必须恰好一个参数",
+    TcEntry (tcCode IntStringCaseNeedsFallback) (tcTemplate IntStringCaseNeedsFallback) "Int/String 的 case 需要兜底分支",
+    TcEntry (tcCode IntStringCaseRestriction) (tcTemplate IntStringCaseRestriction) "Int/String 的 case 模式受限",
+    TcEntry (tcCode InvalidArrowType) (tcTemplate InvalidArrowType) "非法箭头类型",
+    TcEntry (tcCode LambdaNoSignature) (tcTemplate LambdaNoSignature) "lambda 缺签名",
+    TcEntry (tcCode LambdaTooManyParams) (tcTemplate LambdaTooManyParams) "lambda 参数多于期望函数类型",
+    TcEntry (tcCode LetBindingPattern) (tcTemplate LetBindingPattern) "let 绑定必须是简单名或通配",
+    TcEntry (tcCode NestedPatterns) (tcTemplate NestedPatterns) "嵌套模式必须是构造子模式",
+    TcEntry (tcCode NotInductiveFamily) (tcTemplate NotInductiveFamily) "case 被检查项不是归纳族",
+    TcEntry (tcCode OnlyCtorPatterns) (tcTemplate OnlyCtorPatterns) "case 只支持构造子模式",
+    TcEntry (tcCode PatternFuel) (tcTemplate PatternFuel) "模式矩阵递归耗尽燃料",
+    TcEntry (tcCode RecordFieldAccessUnsupported) (tcTemplate RecordFieldAccessUnsupported) "record 字段访问尚不支持",
+    TcEntry (tcCode RecordsUnsupported) (tcTemplate RecordsUnsupported) "record 尚不支持",
+    TcEntry (tcCode RecordUpdateUnsupported) (tcTemplate RecordUpdateUnsupported) "record 更新尚不支持",
+    TcEntry (tcCode TooManyArgs) (tcTemplate TooManyArgs) "实参过多（不是函数）",
+    TcEntry (tcCode TypeLevelArg) (tcTemplate TypeLevelArg) "Type 的层级参数不合法",
+    TcEntry (tcCode TypeMismatchCaseCount) (tcTemplate TypeMismatchCaseCount) "case 分支数量不同",
+    TcEntry (tcCode TypeMismatchCtorArity) (tcTemplate TypeMismatchCtorArity) "构造子实参长度不同",
+    TcEntry (tcCode UniverseLevelNonNegative) (tcTemplate UniverseLevelNonNegative) "宇宙层级必须非负",
+    TcEntry (tcCode (BranchTooManyArgs "")) (tcTemplate (BranchTooManyArgs "")) "分支实参多于构造子字段",
+    TcEntry (tcCode (CannotProveTermination "")) (tcTemplate (CannotProveTermination "")) "无法证明终止性",
+    TcEntry (tcCode (CannotRedefineBuiltin "")) (tcTemplate (CannotRedefineBuiltin "")) "不能重定义内建名",
+    TcEntry (tcCode (CannotSolveMetavar "")) (tcTemplate (CannotSolveMetavar "")) "元变量解会逃逸作用域",
+    TcEntry (tcCode (CannotSolveHigherOrder "")) (tcTemplate (CannotSolveHigherOrder "")) "高阶元变量无法求解（M15 限制）",
+    TcEntry (tcCode (CannotSolveOccurs "")) (tcTemplate (CannotSolveOccurs "")) "解里出现自身（occurs check）",
+    TcEntry (tcCode (TypeMismatchCaseVars "")) (tcTemplate (TypeMismatchCaseVars "")) "case 分支绑定变量数不同",
+    TcEntry (tcCode (DuplicateInstance "")) (tcTemplate (DuplicateInstance "")) "重复的 instance",
+    TcEntry (tcCode (DuplicateSignature "")) (tcTemplate (DuplicateSignature "")) "重复的签名",
+    TcEntry (tcCode (ExpectedSignature "")) (tcTemplate (ExpectedSignature "")) "缺少类型签名",
+    TcEntry (tcCode (ExpectedType "")) (tcTemplate (ExpectedType "")) "期望类型",
+    TcEntry (tcCode (GenericEqNotComparable "")) (tcTemplate (GenericEqNotComparable "")) "泛型相等不支持该类型",
+    TcEntry (tcCode (InstanceNotTrait "")) (tcTemplate (InstanceNotTrait "")) "instance 不属于 trait",
+    TcEntry (tcCode (InstanceUnknownMethod "")) (tcTemplate (InstanceUnknownMethod "")) "instance 含未知方法",
+    TcEntry (tcCode (NeedsTwoArgs "")) (tcTemplate (NeedsTwoArgs "")) "需要恰好两个实参",
+    TcEntry (tcCode (NoInstanceFound "")) (tcTemplate (NoInstanceFound "")) "找不到 instance",
+    TcEntry (tcCode (NotExhaustive "")) (tcTemplate (NotExhaustive "")) "case 漏写可达分支",
+    TcEntry (tcCode (SignatureNoDef "")) (tcTemplate (SignatureNoDef "")) "签名没有对应定义",
+    TcEntry (tcCode (UnknownInterface "")) (tcTemplate (UnknownInterface "")) "未知接口",
+    TcEntry (tcCode (UnknownName "")) (tcTemplate (UnknownName "")) "引用了未绑定的名字",
+    TcEntry (tcCode (UnknownNamedInstance "")) (tcTemplate (UnknownNamedInstance "")) "未知命名 instance",
+    TcEntry (tcCode (UnsolvedHole "")) (tcTemplate (UnsolvedHole "")) "未填的洞",
+    TcEntry (tcCode (UnsolvedMetavarInfer "")) (tcTemplate (UnsolvedMetavarInfer "")) "无法推断类型（未解元变量）",
+    TcEntry (tcCode (AmbiguousInstance "" "")) (tcTemplate (AmbiguousInstance "" "")) "instance 歧义",
+    TcEntry (tcCode (AppliedNotType "")) (tcTemplate (AppliedNotType "")) "应用结果不是类型",
+    TcEntry (tcCode (CtorDoesNotReturn "" "")) (tcTemplate (CtorDoesNotReturn "" "")) "构造子结果族不符",
+    TcEntry (tcCode (CtorError "" "")) (tcTemplate (CtorError "" "")) "构造子应用形态不合法",
+    TcEntry (tcCode (CtorWrongIndices "" "")) (tcTemplate (CtorWrongIndices "" "")) "构造子索引个数不符",
+    TcEntry (tcCode (NotTraitMethod "" "")) (tcTemplate (NotTraitMethod "" "")) "名字不是该 trait 的方法",
+    TcEntry (tcCode (OpNotDefinedFor "" "")) (tcTemplate (OpNotDefinedFor "" "")) "运算符未对该类型定义",
+    TcEntry (tcCode (OpOnlyIntString "" "")) (tcTemplate (OpOnlyIntString "" "")) "运算符只对 Int/String 定义",
+    TcEntry (tcCode (UnknownConstructorInCase "" "")) (tcTemplate (UnknownConstructorInCase "" "")) "分支构造子不属于该族",
+    TcEntry (tcCode (UnsolvedMetavar "" "")) (tcTemplate (UnsolvedMetavar "" "")) "未解元变量",
+    TcEntry (tcCode (TypeMismatch "" "")) (tcTemplate (TypeMismatch "" "")) "类型不匹配",
+    TcEntry (tcCode (TypeMismatchCaseBranch "" "")) (tcTemplate (TypeMismatchCaseBranch "" "")) "case 分支不一致",
+    TcEntry (tcCode (WhereNeedsSig "" "")) (tcTemplate (WhereNeedsSig "" "")) "where 绑定缺类型签名"
+  ]
+
+cgAll : List CgEntry
+cgAll =
+  [ CgEntry (cgCode DependencyCycle) (cgTemplate DependencyCycle) "运行时定义间依赖成环",
+    CgEntry (cgCode InterpCannotExecuteEffects) (cgTemplate InterpCannotExecuteEffects) "interp 不能执行效果",
+    CgEntry (cgCode MainNotValue) (cgTemplate MainNotValue) "main 未归约到值",
+    CgEntry (cgCode MainReturnType) (cgTemplate MainReturnType) "main 返回类型受限",
+    CgEntry (cgCode NoMain) (cgTemplate NoMain) "入口缺少 main 定义",
+    CgEntry (cgCode TypeUsedAtRuntime) (cgTemplate TypeUsedAtRuntime) "类型被运行时使用（M13 限制）",
+    CgEntry (cgCode (TypeLevelBindingRuntime "")) (cgTemplate (TypeLevelBindingRuntime "")) "类型级绑定被运行时使用（M13 限制）",
+    CgEntry (cgCode (TypeLevelNameRuntime "")) (cgTemplate (TypeLevelNameRuntime "")) "类型级名字被运行时使用",
+    CgEntry (cgCode (UnsolvedMetavarRuntime "")) (cgTemplate (UnsolvedMetavarRuntime "")) "运行时代码里有未解元变量"
+  ]
+
+-- ---------------------------------------------------------------
+-- throw：拼 `[CODE] 消息`（去掉旧 `DT: ` 前缀）；TC 的 Span 经 showSpanLoc 拼在头部
+-- ---------------------------------------------------------------
+tcMsg : {n : Nat} -> TcErr n -> Vec String n -> String
+tcMsg e args = "[" ++ tcCode e ++ "] " ++ substTemplate (tcTemplate e) args
+
+cgMsg : {n : Nat} -> CgErr n -> Vec String n -> String
+cgMsg e args = "[" ++ cgCode e ++ "] " ++ substTemplate (cgTemplate e) args
+
+-- TC 诊断带位置（`文件:行:列: [CODE] 消息`）。
+-- 本模块**不**依赖 `Elab/Types`（避免 Elab ↔ Diagnostics 成环）：用 Common 的
+-- `showSpanLoc` 拼 span 前缀，与 `Elab/Types.errAt` 的输出格式一致。
+tcErr : {n : Nat} -> Span -> TcErr n -> Vec String n -> Result a
+tcErr sp e args = Err (showSpanLoc sp ++ ": " ++ tcMsg e args)
+
+-- CG 诊断无位置（`[CODE] 消息`）
+cgErr : {n : Nat} -> CgErr n -> Vec String n -> Result a
+cgErr e args = Err (cgMsg e args)
+
+-- ---------------------------------------------------------------
+-- 人体工学：按 arity 分档的 throw（调用点不必手搓 Vec）
+-- ---------------------------------------------------------------
+tcErr0 : Span -> TcErr Zero -> Result a
+tcErr0 sp e = tcErr sp e VNil
+
+tcErr1 : Span -> TcErr (Succ Zero) -> String -> Result a
+tcErr1 sp e a0 = tcErr sp e (VCons a0 VNil)
+
+tcErr2 : Span -> TcErr (Succ (Succ Zero)) -> String -> String -> Result a
+tcErr2 sp e a0 a1 = tcErr sp e (VCons a0 (VCons a1 VNil))
+
+cgErr0 : CgErr Zero -> Result a
+cgErr0 e = cgErr e VNil
+
+cgErr1 : CgErr (Succ Zero) -> String -> Result a
+cgErr1 e a0 = cgErr e (VCons a0 VNil)
+
+-- ---------------------------------------------------------------
+-- 无位置版本：Core（Conv/Eval）等底层诊断拿不到 Span，但仍要走同一套码与模板。
+-- 输出形态是无前缀的 `[CODE] 消息`（与带位置的 `文件:行:列: [CODE] 消息` 区分）。
+-- ---------------------------------------------------------------
+tcErr0NoLoc : TcErr Zero -> Result a
+tcErr0NoLoc e = Err (tcMsg e VNil)
+
+tcErr1NoLoc : TcErr (Succ Zero) -> String -> Result a
+tcErr1NoLoc e a0 = Err (tcMsg e (VCons a0 VNil))
+
+tcErr2NoLoc : TcErr (Succ (Succ Zero)) -> String -> String -> Result a
+tcErr2NoLoc e a0 a1 = Err (tcMsg e (VCons a0 (VCons a1 VNil)))

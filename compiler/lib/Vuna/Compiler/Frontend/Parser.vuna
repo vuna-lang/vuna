@@ -3,19 +3,20 @@ module Vuna.Compiler.Frontend.Parser (parseExpressionSource, parseSource) where
 -- vuna 源码 parser：offside layout，返回 AST 与 imports。
 import Vuna.Compiler.Common
 import Vuna.Compiler.Frontend.Ast
+import Vuna.Compiler.Frontend.Diagnostics
 import Vuna.Compiler.Frontend.Lexer
 import Vuna.Compiler.Frontend.Parser.Support
 
 parseSource : String -> String -> Result SourceFile
 parseSource file source =
   andThen (lexSource source)
-    (\toks => andThen (parseSourceFile (PState file toks (Pos 1 0))) (\p => Ok (firstOf p)))
+    (\toks => andThen (parseSourceFile (PState file toks (Pos 1 0) (length toks))) (\p => Ok (firstOf p)))
 
 -- 单表达式解析（REPL / 工具用）：整段输入必须恰好是一个表达式。
 parseExpressionSource : String -> Result Expr
 parseExpressionSource source =
   andThen (lexSource source)
-    (\toks => step (parseExpr (stateFuel (PState "<expr>" toks (Pos 1 0))) (PState "<expr>" toks (Pos 1 0)) 0 0) (\e, st => if isEof st then Ok e else Err "expected end of expression"))
+    (\toks => step (parseExpr (stateFuel (PState "<expr>" toks (Pos 1 0) (length toks))) (PState "<expr>" toks (Pos 1 0) (length toks)) 0 0) (\e, st => if isEof st then Ok e else psErr0 ExpectedEndOfExpr))
 
 -- 可选模块头（M10）：`module M (导出项, ...) where`；列表省略 = 导出全部。
 parseSourceFile : PState -> Result (Pair SourceFile PState)
@@ -23,7 +24,7 @@ parseSourceFile st = step (parseModDecl st) (\hdr, st1 => step (parseImports (st
 else case peekPos st2 of
   Pos line col =>
     step (parseDecls (stateFuel st2) st2 col)
-      (\decls, st3 => if isEof st3 then Ok (Pair (Source hdr imports decls) st3) else Err "expected end of input")
+      (\decls, st3 => if isEof st3 then Ok (Pair (Source hdr imports decls) st3) else psErr0 ExpectedEndOfInput)
 )
 )
 
@@ -55,7 +56,7 @@ parseExportItem st = case peekTok st of
     in if atSym st1 "(" then step (expectSym st1 "(")
       (\_, st2 => step (expectSym st2 "..") (\_, st3 => step (expectSym st3 ")") (\_, st4 => Ok (Pair (XTypeAll name (spanOf st st4)) st4))))
     else Ok (Pair (XBare name (spanOf st st1)) st1)
-  _ => Err "expected an export item"
+  _ => psErr0 ExpectedExportItem
 
 parseImportSpec : PState -> Result (Pair Import PState)
 parseImportSpec st =
@@ -81,7 +82,7 @@ else case peekPos st of
   Pos line col =>
     if col == blockCol then step (parseDecl st blockCol)
       (\decl, st1 => step (parseDecls (fuel - 1) st1 blockCol) (\rest, st2 => Ok (Pair (decl :: rest) st2)))
-    else Err ("expected a declaration at column " ++ strFromInt blockCol)
+    else psErr1 (ExpectedDeclAtColumn (strFromInt blockCol)) (strFromInt blockCol)
 
 parseDecl : PState -> Int -> Result (Pair Decl PState)
 parseDecl st blockCol = case peekTok st of
@@ -93,7 +94,7 @@ parseDecl st blockCol = case peekTok st of
     let
       st1 = advance st
     in if atSym st1 ":" then parseSignature st1 blockCol name p else parseClause st1 blockCol name p
-  _ => Err "expected a top-level declaration"
+  _ => psErr0 ExpectedTopLevelDecl
 
 parseSignature : PState -> Int -> String -> Pos -> Result (Pair Decl PState)
 parseSignature st blockCol name namePos =
@@ -145,7 +146,7 @@ else case peekPos st of
   Pos line col =>
     if col == bindCol then step (parseWhereItem st bindCol)
       (\item, st1 => step (parseWhereItemsAt (fuel - 1) st1 bindCol) (\rest, st2 => Ok (Pair (item :: rest) st2)))
-    else if col > bindCol then Err "unexpected indentation in where block" else Ok (Pair [] st)
+    else if col > bindCol then psErr0 UnexpectedIndentInWhere else Ok (Pair [] st)
 
 parseWhereItem : PState -> Int -> Result (Pair WhereItem PState)
 parseWhereItem st bindCol = step (parsePatternSingle (stateFuel st) st bindCol) (\pat, st1 => case pat of
@@ -179,16 +180,16 @@ whereBindsGo : List WhereItem -> List (Pair String (Pair Expr Span)) -> List Str
 whereBindsGo [] sigs bound acc = case firstDanglingSig (reverse sigs) bound of
   Nothing => Ok (reverse acc)
   Just (Pair name sp) =>
-    Err (showSpanLoc sp ++ ": where signature for `" ++ name ++ "` has no definition")
+    Err (showSpanLoc sp ++ ": " ++ psMsg (WhereSigNoDef name) (VCons name VNil))
 whereBindsGo (item :: rest) sigs bound acc = case item of
   WISig name ty sp =>
-    if memName name bound then Err (showSpanLoc sp ++ ": where signature for `" ++ name ++ "` must come before its clause")
-    else if hasWhereSig name sigs then Err (showSpanLoc sp ++ ": duplicate where signature for `" ++ name ++ "`")
+    if memName name bound then Err (showSpanLoc sp ++ ": " ++ psMsg (WhereSigBeforeClause name) (VCons name VNil))
+    else if hasWhereSig name sigs then Err (showSpanLoc sp ++ ": " ++ psMsg (WhereSigDuplicate name) (VCons name VNil))
     else whereBindsGo rest (Pair name (Pair ty sp) :: sigs) bound acc
   WIBind (Pair pat value) => case whereSigOf (patBoundName pat) sigs of
     Just (Pair ty sp) =>
       if memName (patBoundName pat) bound then Err
-        (showSpanLoc sp ++ ": where binding `" ++ patBoundName pat ++ "` has more than one clause; a signature can annotate only one")
+        (showSpanLoc sp ++ ": " ++ psMsg (WhereSigMultiClause (patBoundName pat)) (VCons (patBoundName pat) VNil))
       else whereBindsGo rest sigs (patBoundName pat :: bound) (Pair pat (EAnn value ty sp) :: acc)
     Nothing => whereBindsGo rest sigs (patBoundName pat :: bound) (Pair pat value :: acc)
 
@@ -219,7 +220,7 @@ lamNames [] = Ok []
 lamNames ((PVar n _) :: rest) = case lamNames rest of
   Ok ns => Ok (n :: ns)
   Err e => Err e
-lamNames (_ :: _) = Err "where function arguments must be simple names"
+lamNames (_ :: _) = psErr0 WhereArgsNotSimple
 
 parseClausePatterns : Int -> PState -> Int -> Result (Pair (List Pat) PState)
 parseClausePatterns fuel st blockCol =
@@ -251,7 +252,7 @@ else case peekPos st of
   Pos line col =>
     if col == fieldCol then step (expectIdent st)
       (\name, st1 => step (expectSym st1 ":") (\_, st2 => step (parseExpr (stateFuel st2) st2 fieldCol 0) (\ty, st3 => step (parseFieldList (fuel - 1) st3 fieldCol) (\rest, st4 => Ok (Pair (Field name ty (spanOf st st3) :: rest) st4)))))
-    else if col > fieldCol then Err "unexpected indentation in record block" else Ok (Pair [] st)
+    else if col > fieldCol then psErr0 UnexpectedIndentInRecord else Ok (Pair [] st)
 
 -- deriving (TraitA, TraitB)；可出现在 data/record 的构造器/字段块之后。
 parseDeriving : PState -> Result (Pair (List String) PState)
@@ -285,7 +286,7 @@ else case peekPos st of
   Pos line col =>
     if col == methodCol then step (expectIdent st)
       (\name, st1 => step (expectSym st1 ":") (\_, st2 => step (parseExpr (stateFuel st2) st2 methodCol 0) (\ty, st3 => step (parseMethodSigList (fuel - 1) st3 methodCol) (\rest, st4 => Ok (Pair (Pair name ty :: rest) st4)))))
-    else if col > methodCol then Err "unexpected indentation in trait block" else Ok (Pair [] st)
+    else if col > methodCol then psErr0 UnexpectedIndentInTrait else Ok (Pair [] st)
 
 -- instance 声明（M10.5）：`instance Head [as name] where` + 缩进方法定义。
 parseInstance : PState -> Int -> Pos -> Result (Pair Decl PState)
@@ -323,7 +324,7 @@ else case peekPos st of
   Pos line col =>
     if col == declCol then step (parseInstanceDecl st declCol)
       (\decl, st1 => step (parseInstanceDeclList (fuel - 1) st1 declCol) (\rest, st2 => Ok (Pair (decl :: rest) st2)))
-    else if col > declCol then Err "unexpected indentation in instance block" else Ok (Pair [] st)
+    else if col > declCol then psErr0 UnexpectedIndentInInstance else Ok (Pair [] st)
 
 parseInstanceDecl : PState -> Int -> Result (Pair Decl PState)
 parseInstanceDecl st blockCol = case peekTok st of
@@ -331,7 +332,7 @@ parseInstanceDecl st blockCol = case peekTok st of
     let
       st1 = advance st
     in if atSym st1 ":" then parseSignature st1 blockCol name p else parseClause st1 blockCol name p
-  _ => Err "expected an instance method"
+  _ => psErr0 ExpectedInstanceMethod
 
 parseParams : Int -> PState -> Result (Pair (List String) PState)
 parseParams fuel st = if fuel <= 0 then Err "DT: parser fuel exhausted (internal: parser made no progress)"
@@ -352,15 +353,15 @@ else case peekPos st of
   Pos line col =>
     if col == ctorCol then step (expectIdent st)
       (\name, st1 => step (expectSym st1 ":") (\_, st2 => step (parseExpr (stateFuel st2) st2 ctorCol 0) (\ty, st3 => step (parseCtorList (fuel - 1) st3 ctorCol) (\rest, st4 => Ok (Pair (Ctor name ty (countArrows ty) (spanOf st st3) :: rest) st4)))))
-    else if col > ctorCol then Err "unexpected indentation in data block" else Ok (Pair [] st)
+    else if col > ctorCol then psErr0 UnexpectedIndentInData else Ok (Pair [] st)
 
 parseExpr : Int -> PState -> Int -> Int -> Result (Pair Expr PState)
 parseExpr fuel st blockCol minPrec =
   if fuel <= 0 then Err "DT: parser fuel exhausted (internal: parser made no progress)"
-  else if isEof st then Err "unexpected end of input"
+  else if isEof st then psErr0 UnexpectedEndOfInput
   else if canContinue st blockCol then step (parseLhs (fuel - 1) st blockCol)
     (\lhs, st1 => parseInfix (fuel - 1) st1 blockCol minPrec lhs)
-  else Err "expression is not indented enough"
+  else psErr0 ExprNotIndented
 
 parseInfix : Int -> PState -> Int -> Int -> Expr -> Result (Pair Expr PState)
 parseInfix fuel st blockCol minPrec lhs = if fuel <= 0 then Err "DT: parser fuel exhausted (internal: parser made no progress)"
@@ -452,14 +453,14 @@ else case peekTok st of
     Nothing =>
       step (expectSym st "{")
         (\_, st1 => step (parseExpr (fuel - 1) st1 blockCol 0) (\base, st2 => step (expectSym st2 "|") (\_, st3 => step (parseRecordAssignments (fuel - 1) st3 blockCol) (\fields, st4 => Ok (Pair (ERecUpdate base fields (spanOf st st4)) st4)))))
-  _ => Err "expected expression"
+  _ => psErr0 ExpectedExpression
 
 -- DT（M13）Pi binder：`(x : A) -> B` 或 `{x : A} -> B`。
 -- 进入时已在开括号处；binder 名先由 lookahead 确认，再要求 `->`。
 parsePiBinder : Int -> PState -> Int -> String -> Bool -> String -> String -> Result (Pair Expr PState)
 parsePiBinder fuel st blockCol name implicit openSym closeSym =
   if fuel <= 0 then Err "DT: parser fuel exhausted (internal: parser made no progress)"
-  else if containsDot name then Err "pi binder name must be a simple identifier"
+  else if containsDot name then psErr0 PiBinderNameNotSimple
   else step (expectSym st openSym)
     (\_, st1 => step (expectIdent st1) (\name2, st2 => step (expectSym st2 ":") (\_, st3 => step (parseExpr (fuel - 1) st3 blockCol 0) (\dom, st4 => step (expectSym st4 closeSym) (\_, st5 => step (expectSym st5 "->") (\_, st6 => step (parseExpr (fuel - 1) st6 blockCol 1) (\cod, st7 => Ok (Pair (EPi name2 implicit dom cod (spanOf st st7)) st7))))))))
 
@@ -486,7 +487,7 @@ parseListExprElems : Int -> PState -> Int -> Result (Pair (List Expr) PState)
 parseListExprElems fuel st blockCol =
   if fuel <= 0 then Err "DT: parser fuel exhausted (internal: parser made no progress)"
   else step (parseExpr (fuel - 1) st blockCol 0)
-    (\e, st1 => if atSym st1 "," then step (parseListExprElems (fuel - 1) (advance st1) blockCol) (\rest, st2 => Ok (Pair (e :: rest) st2)) else if atSym st1 "]" then Ok (Pair [e] (advance st1)) else Err "expected , or ]")
+    (\e, st1 => if atSym st1 "," then step (parseListExprElems (fuel - 1) (advance st1) blockCol) (\rest, st2 => Ok (Pair (e :: rest) st2)) else if atSym st1 "]" then Ok (Pair [e] (advance st1)) else psErr0 ExpectedCommaOrBracket)
 
 foldCons : Span -> List Expr -> Expr
 foldCons sp [] = EVar "Nil" sp
@@ -513,12 +514,11 @@ parseLet fuel st blockCol =
 
 parseLetBindings : Int -> PState -> Int -> Result (Pair (List (Pair Pat Expr)) PState)
 parseLetBindings fuel st blockCol = if fuel <= 0 then Err "DT: parser fuel exhausted (internal: parser made no progress)"
-else if isEof st then Err "expected a let binding"
-else if atKw st "in" then Err "expected a let binding"
+else if isEof st then psErr0 ExpectedLetBinding
+else if atKw st "in" then psErr0 ExpectedLetBinding
 else case peekPos st of
   Pos line col =>
-    if col <= blockCol then Err "let binding is not indented enough"
-    else parseLetBindingsAt (fuel - 1) st col
+    if col <= blockCol then psErr0 LetBindingNotIndented else parseLetBindingsAt (fuel - 1) st col
 
 parseLetBindingsAt : Int -> PState -> Int -> Result (Pair (List (Pair Pat Expr)) PState)
 parseLetBindingsAt fuel st declCol = if fuel <= 0 then Err "DT: parser fuel exhausted (internal: parser made no progress)"
@@ -538,12 +538,12 @@ parseCase fuel st blockCol =
 
 parseCaseAlts : Int -> PState -> Int -> Result (Pair (List (Pair Pat Expr)) PState)
 parseCaseAlts fuel st blockCol = if fuel <= 0 then Err "DT: parser fuel exhausted (internal: parser made no progress)"
-else if isEof st then Err "case expression needs an alternative"
+else if isEof st then psErr0 CaseNeedsAlternative
 else case peekPos st of
-  Pos line col => if col <= blockCol then Err "case alternative is not indented enough"
-  else step (parseAltList (fuel - 1) st col) (\alts, st2 => if badCaseIndent st2 col then Err "unexpected indentation after case alternative"
+  Pos line col => if col <= blockCol then psErr0 CaseAltNotIndented
+  else step (parseAltList (fuel - 1) st col) (\alts, st2 => if badCaseIndent st2 col then psErr0 UnexpectedIndentAfterCaseAlt
   else case alts of
-    [] => Err "case expression needs an alternative"
+    [] => psErr0 CaseNeedsAlternative
     _ => Ok (Pair alts st2)
   )
 
@@ -566,12 +566,12 @@ parseIf fuel st blockCol =
 -- 最后一条必须是裸表达式（do 本身不引入 pure，最后表达式即块结果）。
 parseDo : Int -> PState -> Int -> Result (Pair Expr PState)
 parseDo fuel st blockCol = if fuel <= 0 then Err "DT: parser fuel exhausted (internal: parser made no progress)"
-else step (expectKw st "do") (\_, st1 => if isEof st1 then Err "do block needs at least one statement"
+else step (expectKw st "do") (\_, st1 => if isEof st1 then psErr0 DoBlockNeedsStatement
 else case peekPos st1 of
-  Pos line col => if col <= blockCol then Err "do block statement is not indented enough"
+  Pos line col => if col <= blockCol then psErr0 DoStatementNotIndented
   else step (parseDoStmts (fuel - 1) st1 col []) (\stmts, st2 => case reverse stmts of
     (DExpr lastExpr lastSp) :: rest => Ok (Pair (EDo stmts (spanOf st st2)) st2)
-    _ => Err "do block must end with an expression"
+    _ => psErr0 DoBlockMustEndWithExpr
   )
 )
 
@@ -580,12 +580,12 @@ parseDoStmts fuel st stmtCol acc = if fuel <= 0 then Err "DT: parser fuel exhaus
 else if isEof st then Ok (Pair (reverse acc) st)
 else case peekPos st of
   Pos line col => if col < stmtCol then Ok (Pair (reverse acc) st)
-  else if col > stmtCol then Err "unexpected indentation in do block"
+  else if col > stmtCol then psErr0 UnexpectedIndentInDo
   else step (parseDoStmt (fuel - 1) st stmtCol) (\stmt, st1 => case peekPos st1 of
     Pos line2 col2 =>
       if isEof st1 then Ok (Pair (reverse (stmt :: acc)) st1)
       else if col2 < stmtCol then Ok (Pair (reverse (stmt :: acc)) st1)
-      else if col2 > stmtCol then Err "unexpected indentation in do block"
+      else if col2 > stmtCol then psErr0 UnexpectedIndentInDo
       else parseDoStmts (fuel - 1) st1 stmtCol (stmt :: acc)
   )
 
@@ -650,7 +650,7 @@ else case peekTok st of
       (\_, st2 => step (parsePatternSingle (fuel - 1) st2 blockCol) (\pat, st3 => Ok (Pair (Pair fname pat) st3)))
     else Ok
       (Pair (Pair fname (PVar fname (Span (fileOf st) (posLine p) (posCol p) (posLine p) (posCol p)))) st1)
-  _ => Err "expected a record field pattern"
+  _ => psErr0 ExpectedRecordFieldPattern
 
 parsePatternAtoms : Int -> PState -> Int -> Result (Pair (List Pat) PState)
 parsePatternAtoms fuel st blockCol =
@@ -672,7 +672,7 @@ else case peekTok st of
     step (parsePatternSingle (fuel - 1) (advance st) blockCol)
       (\inner, st1 => step (expectSym st1 ")") (\_, st2 => Ok (Pair inner st2)))
   PTok (TSym "[") p => parseListPattern (fuel - 1) st blockCol
-  _ => Err "expected pattern"
+  _ => psErr0 ExpectedPattern
 
 parseListPattern : Int -> PState -> Int -> Result (Pair Pat PState)
 parseListPattern fuel st blockCol =
@@ -684,7 +684,7 @@ parseListPatternElems : Int -> PState -> Int -> Result (Pair (List Pat) PState)
 parseListPatternElems fuel st blockCol =
   if fuel <= 0 then Err "DT: parser fuel exhausted (internal: parser made no progress)"
   else step (parsePatternSingle (fuel - 1) st blockCol)
-    (\pat, st1 => if atSym st1 "," then step (parseListPatternElems (fuel - 1) (advance st1) blockCol) (\rest, st2 => Ok (Pair (pat :: rest) st2)) else if atSym st1 "]" then Ok (Pair [pat] (advance st1)) else Err "expected , or ]")
+    (\pat, st1 => if atSym st1 "," then step (parseListPatternElems (fuel - 1) (advance st1) blockCol) (\rest, st2 => Ok (Pair (pat :: rest) st2)) else if atSym st1 "]" then Ok (Pair [pat] (advance st1)) else psErr0 ExpectedCommaOrBracket)
 
 foldPCon : Span -> List Pat -> Pat
 foldPCon sp [] = PCon "Nil" [] sp

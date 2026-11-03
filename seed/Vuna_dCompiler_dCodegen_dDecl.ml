@@ -15,7 +15,11 @@ open Vuna_dCompiler_dCommon
 open Vuna_dCompiler_dFrontend_dToml
 open Vuna_dCompiler_dFrontend_dManifest
 open Vuna_dCompiler_dPackages_dPkg
+open Base_dNat
+open Base_dVec
+open Vuna_dCompiler_dLoader_dDiagnostics
 open Vuna_dCompiler_dFrontend_dAst
+open Vuna_dCompiler_dFrontend_dDiagnostics
 open Vuna_dCompiler_dFrontend_dLexer
 open Vuna_dCompiler_dFrontend_dParser_dSupport
 open Vuna_dCompiler_dFrontend_dParser
@@ -23,6 +27,8 @@ open Vuna_dCompiler_dLoader_dModules
 open Vuna_dCompiler_dLoader_dResolve
 open Vuna_dCompiler_dLoader_dFlatten
 open Vuna_dCompiler_dLoader
+open Vuna_dCompiler_dDebug
+open Vuna_dCompiler_dDiagnostics
 open Vuna_dCompiler_dCore_dTerm
 open Vuna_dCompiler_dCore_dEval
 open Vuna_dCompiler_dCore_dConv
@@ -68,14 +74,16 @@ let v_Vuna_dCompiler_dCodegen_dDecl_docamlReservedWords = fun () -> (C_Base_dLis
 
 let v_Vuna_dCompiler_dCodegen_dDecl_docamlBinderName = (fun name -> ((fun oc -> (if ((v_Base_dList_dmemName oc) (v_Vuna_dCompiler_dCodegen_dDecl_docamlReservedWords ())) then ((bi_concat oc) "_") else oc)) (v_Vuna_dCompiler_dCodegen_dDecl_dsanitizeName name)))
 
-let rec v_Vuna_dCompiler_dCodegen_dDecl_djoinWith = (fun mc0 -> (fun mc1 -> (match mc1 with
+let rec v_Vuna_dCompiler_dCodegen_dDecl_dinterpose = (fun mc0 -> (fun mc1 -> (match mc1 with
   | C_Base_dList_dList_Cons (dtb__0, dtb__1) -> (match dtb__1 with
-  | C_Base_dList_dList_Nil -> dtb__0
-  | _ -> ((bi_concat dtb__0) ((bi_concat mc0) ((v_Vuna_dCompiler_dCodegen_dDecl_djoinWith mc0) dtb__1)))
+  | C_Base_dList_dList_Nil -> (C_Base_dList_dList_Cons (dtb__0, C_Base_dList_dList_Nil))
+  | _ -> (C_Base_dList_dList_Cons (dtb__0, (C_Base_dList_dList_Cons (mc0, ((v_Vuna_dCompiler_dCodegen_dDecl_dinterpose mc0) dtb__1)))))
 )
-  | C_Base_dList_dList_Nil -> ""
+  | C_Base_dList_dList_Nil -> C_Base_dList_dList_Nil
   | _ -> failwith "DT: impossible branch"
 )))
+
+let v_Vuna_dCompiler_dCodegen_dDecl_djoinWith = (fun sep -> (fun xs -> (dtp_concatMany ((v_Vuna_dCompiler_dCodegen_dDecl_dinterpose sep) xs))))
 
 let v_Vuna_dCompiler_dCodegen_dDecl_dlastName = (fun name -> (match (v_Vuna_dCompiler_dCommon_dsplitLastDot (v_Vuna_dCompiler_dCommon_dsplitOnDot name)) with
   | C_Base_dPair_dPair_Base_dPair_dPair (dtb__2, dtb__3) -> dtb__3

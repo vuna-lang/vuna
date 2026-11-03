@@ -15,7 +15,11 @@ open Vuna_dCompiler_dCommon
 open Vuna_dCompiler_dFrontend_dToml
 open Vuna_dCompiler_dFrontend_dManifest
 open Vuna_dCompiler_dPackages_dPkg
+open Base_dNat
+open Base_dVec
+open Vuna_dCompiler_dLoader_dDiagnostics
 open Vuna_dCompiler_dFrontend_dAst
+open Vuna_dCompiler_dFrontend_dDiagnostics
 open Vuna_dCompiler_dFrontend_dLexer
 open Vuna_dCompiler_dFrontend_dParser_dSupport
 open Vuna_dCompiler_dFrontend_dParser
@@ -23,6 +27,8 @@ open Vuna_dCompiler_dLoader_dModules
 open Vuna_dCompiler_dLoader_dResolve
 open Vuna_dCompiler_dLoader_dFlatten
 open Vuna_dCompiler_dLoader
+open Vuna_dCompiler_dDebug
+open Vuna_dCompiler_dDiagnostics
 open Vuna_dCompiler_dCore_dTerm
 open Vuna_dCompiler_dCore_dEval
 open Vuna_dCompiler_dCore_dConv
@@ -277,7 +283,7 @@ let rec v_Vuna_dCompiler_dCodegen_dSplit_dopenHeader = (fun mc0 -> (match mc0 wi
   | _ -> failwith "DT: impossible branch"
 ))
 
-let v_Vuna_dCompiler_dCodegen_dSplit_dsplitUnitText = (fun allDatas -> (fun allDefs -> (fun unitDatas -> (fun unitDefs -> (fun bridgeText -> (fun opens -> ((v_Base_dResult_dandThen ((v_Vuna_dCompiler_dCodegen_dDecl_dgenTypeDeclsOf allDatas) unitDatas)) (fun typeText -> ((v_Base_dResult_dandThen (v_Vuna_dCompiler_dCodegen_dErase_dgroupRuntimeDefs unitDefs)) (fun groups -> ((v_Base_dResult_dandThen (((v_Vuna_dCompiler_dCodegen_dTerm_dgenGroups (v_Vuna_dCompiler_dCodegen_dErase_ddepAdjacency unitDefs)) ((v_Vuna_dCompiler_dCodegen_dTerm_dmkGenSt allDatas) allDefs)) groups)) (fun p -> (match p with
+let v_Vuna_dCompiler_dCodegen_dSplit_dsplitUnitText = (fun allDatas -> (fun allDefs -> (fun unitDatas -> (fun unitDefs -> (fun bridgeText -> (fun opens -> ((v_Base_dResult_dandThen ((v_Vuna_dCompiler_dCodegen_dDecl_dgenTypeDeclsOf allDatas) unitDatas)) (fun typeText -> ((v_Base_dResult_dandThen (v_Vuna_dCompiler_dCodegen_dErase_dgroupRuntimeDefs unitDefs)) (fun groups -> ((v_Base_dResult_dandThen (((v_Vuna_dCompiler_dCodegen_dTerm_dgenGroups (v_Vuna_dCompiler_dCodegen_dErase_dadjTblOf (v_Vuna_dCompiler_dCodegen_dErase_ddepAdjacency unitDefs))) ((v_Vuna_dCompiler_dCodegen_dTerm_dmkGenSt allDatas) allDefs)) groups)) (fun p -> (match p with
   | C_Base_dPair_dPair_Base_dPair_dPair (dtb__129, dtb__130) -> (C_Base_dResult_dResult_Base_dResult_dOk (((bi_concat (v_Vuna_dCompiler_dCodegen_dSplit_dopenHeader opens)) ((bi_concat typeText) ((bi_concat bridgeText) ((bi_concat ((v_Vuna_dCompiler_dCodegen_dDecl_djoinWith "\n\n") dtb__129)) "\n"))))))
   | _ -> failwith "DT: impossible branch"
 )))))))))))))
@@ -298,7 +304,7 @@ let rec v_Vuna_dCompiler_dCodegen_dSplit_dsplitModuleFiles = (fun mc0 -> (fun mc
 )))))))
 
 let v_Vuna_dCompiler_dCodegen_dSplit_dsplitMainHook = (fun allDatas -> (fun allDefs -> (fun printResult -> (match ((v_Vuna_dCompiler_dCodegen_dErase_dfindDtDef "main") allDefs) with
-  | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> (C_Base_dResult_dResult_Base_dResult_dErr ("[CG_NoMain] DT: no main definition"))
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> (v_Vuna_dCompiler_dDiagnostics_dcgErr0 C_Vuna_dCompiler_dDiagnostics_dCgErr_Vuna_dCompiler_dDiagnostics_dNoMain)
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__136) -> ((fun table -> ((fun mainRef -> (match (v_Vuna_dCompiler_dCodegen_dTerm_dioResultTy (v_Vuna_dCompiler_dElab_dTypes_ddtDefType dtb__136)) with
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__137) -> (((((v_Vuna_dCompiler_dCodegen_dTerm_dgenDtHook "") table) dtb__137) ((v_Vuna_dCompiler_dCodegen_dTerm_dioRunText (C_Base_dPair_dPair_Base_dPair_dPair (allDatas, allDefs))) mainRef)) printResult)
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> (((((v_Vuna_dCompiler_dCodegen_dTerm_dgenDtHook "") table) (v_Vuna_dCompiler_dElab_dTypes_ddtDefType dtb__136)) mainRef) printResult)
@@ -307,7 +313,7 @@ let v_Vuna_dCompiler_dCodegen_dSplit_dsplitMainHook = (fun allDatas -> (fun allD
   | _ -> failwith "DT: impossible branch"
 ))))
 
-let v_Vuna_dCompiler_dCodegen_dSplit_dsplitMainFile = (fun allDatas -> (fun allDefs -> (fun defPairs -> (fun dataPairs -> (fun printResult -> (fun opens -> ((fun entryDefs -> ((fun entryDatas -> ((v_Base_dResult_dandThen ((v_Vuna_dCompiler_dCodegen_dDecl_dgenTypeDeclsOf allDatas) entryDatas)) (fun typeText -> ((v_Base_dResult_dandThen (v_Vuna_dCompiler_dCodegen_dErase_dgroupRuntimeDefs entryDefs)) (fun groups -> ((v_Base_dResult_dandThen (((v_Vuna_dCompiler_dCodegen_dTerm_dgenGroups (v_Vuna_dCompiler_dCodegen_dErase_ddepAdjacency entryDefs)) ((v_Vuna_dCompiler_dCodegen_dTerm_dmkGenSt allDatas) allDefs)) groups)) (fun p -> (match p with
+let v_Vuna_dCompiler_dCodegen_dSplit_dsplitMainFile = (fun allDatas -> (fun allDefs -> (fun defPairs -> (fun dataPairs -> (fun printResult -> (fun opens -> ((fun entryDefs -> ((fun entryDatas -> ((v_Base_dResult_dandThen ((v_Vuna_dCompiler_dCodegen_dDecl_dgenTypeDeclsOf allDatas) entryDatas)) (fun typeText -> ((v_Base_dResult_dandThen (v_Vuna_dCompiler_dCodegen_dErase_dgroupRuntimeDefs entryDefs)) (fun groups -> ((v_Base_dResult_dandThen (((v_Vuna_dCompiler_dCodegen_dTerm_dgenGroups (v_Vuna_dCompiler_dCodegen_dErase_dadjTblOf (v_Vuna_dCompiler_dCodegen_dErase_ddepAdjacency entryDefs))) ((v_Vuna_dCompiler_dCodegen_dTerm_dmkGenSt allDatas) allDefs)) groups)) (fun p -> (match p with
   | C_Base_dPair_dPair_Base_dPair_dPair (dtb__138, dtb__139) -> ((v_Base_dResult_dandThen (((v_Vuna_dCompiler_dCodegen_dSplit_dsplitMainHook allDatas) allDefs) printResult)) (fun hook -> (C_Base_dResult_dResult_Base_dResult_dOk ((C_Vuna_dCompiler_dDriver_dSplit_dSplitFile_Vuna_dCompiler_dDriver_dSplit_dSplitFile ("Main.ml", ((bi_concat (v_Vuna_dCompiler_dCodegen_dSplit_dopenHeader opens)) ((bi_concat typeText) ((bi_concat ((v_Vuna_dCompiler_dCodegen_dDecl_djoinWith "\n\n") dtb__138)) ((bi_concat "\n") hook))))))))))
   | _ -> failwith "DT: impossible branch"
 )))))))) (((v_Vuna_dCompiler_dCodegen_dSplit_ddatasInUnit dataPairs) (v_Vuna_dCompiler_dCodegen_dSplit_dentryOwner ())) allDatas))) (((v_Vuna_dCompiler_dCodegen_dSplit_ddefsInUnit defPairs) (v_Vuna_dCompiler_dCodegen_dSplit_dentryOwner ())) allDefs))))))))

@@ -6,6 +6,7 @@ module Vuna.Compiler.Elab.Sig
   , methodArgRigsOf
   , quantifyTopSig
   , quantifyTraitSig
+  , topQuantBanned
   ) where
 
 -- Vuna.Compiler.Elab.Sig：签名工具：trait 类参数的 kind 推断（M19）与顶层签名的自由名量化（M20）。
@@ -142,15 +143,18 @@ dropName b (n :: rest) = if n == b then dropName b rest else n :: dropName b res
 
 -- 顶层签名里要量化的自由名字：额外排除本程序另有定义的名字（`vapp` 这类会被误
 -- 当类型变量）与内建 prelude 名。每个名字的 kind 按它在签名里的应用次数推断。
-quantifyTopSig : List String -> Expr -> Span -> Expr
-quantifyTopSig defined ty sp =
-  quantifyTopKinds (keepOutList (append defined topPreludeNames) (freeNames (\n => False) ty)) ty ty
-    sp
+quantifyTopSig : HashTbl Bool -> Expr -> Span -> Expr
+quantifyTopSig banned ty sp =
+  quantifyTopKinds (keepOutTbl banned (freeNames (\n => False) ty)) ty ty sp
 
-keepOutList : List String -> List String -> List String
-keepOutList banned [] = []
-keepOutList banned (n :: rest) =
-  if memName n banned then keepOutList banned rest else n :: keepOutList banned rest
+-- 顶层量化要排除的名字集合（本程序定义名 + 内建 prelude 名），哈希集合 O(1) 判定。
+topQuantBanned : List String -> HashTbl Bool
+topQuantBanned defined = tblOfNames (append defined topPreludeNames)
+
+keepOutTbl : HashTbl Bool -> List String -> List String
+keepOutTbl banned [] = []
+keepOutTbl banned (n :: rest) =
+  if tblMem n banned then keepOutTbl banned rest else n :: keepOutTbl banned rest
 
 topPreludeNames : List String
 topPreludeNames =

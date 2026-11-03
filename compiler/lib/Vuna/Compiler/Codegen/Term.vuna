@@ -17,6 +17,7 @@ module Vuna.Compiler.Codegen.Term
 -- List 族时生成 int list ↔ 变体族的桥接。
 import Vuna.Compiler.Common
 import Vuna.Compiler.Core
+import Vuna.Compiler.Diagnostics
 import Vuna.Compiler.Elab
 import Vuna.Compiler.Codegen.Decl
 import Vuna.Compiler.Codegen.Erase
@@ -24,7 +25,10 @@ import Vuna.Compiler.Codegen.Erase
 -- DT runtime：只包含 prelude 里出现的运算与 show（名字/语义与运行时 helper 一致）。
 dtRuntime : String
 dtRuntime =
-  "let bi_add a b = a + b\n"
+  "let () =\n"
+    ++ "  let c = Gc.get () in\n"
+    ++ "  Gc.set { c with minor_heap_size = 16 * 1024 * 1024; space_overhead = 200 }\n"
+    ++ "let bi_add a b = a + b\n"
     ++ "let bi_sub a b = a - b\n"
     ++ "let bi_mul a b = a * b\n"
     ++ "let bi_div a b = if b = 0 then failwith \"division by zero\" else a / b\n"
@@ -83,6 +87,9 @@ dtPrimRuntime =
     ++ "let dtp_fileExists path = Sys.file_exists path\n"
     ++ "let dtp_fileMtime path =\n  try int_of_float (Unix.stat path).Unix.st_mtime with _ -> 0\n"
     ++ "let dtp_fileSize path =\n  try (Unix.stat path).Unix.st_size with _ -> 0\n"
+    ++ "let dtp_timeUs () = int_of_float (Unix.gettimeofday () *. 1000000.0)\n"
+    ++ "let dtp_strHash (s : string) =\n  let h = ref 0 in\n  String.iter (fun c -> h := ((!h * 33) + Char.code c) land 1023) s;\n  !h\n"
+    ++ "let dtp_strAt (s : string) (i : int) = if i < 0 || i >= String.length s then -1 else Char.code s.[i]\n"
     ++ "let dtp_exit n = exit n\n"
     ++ "let dtp_runIn dir args =\n  let quote s = Filename.quote s in\n  let cmd = String.concat \" \" (List.map quote args) in\n  let old = Sys.getcwd () in\n  Fun.protect ~finally:(fun () -> Sys.chdir old) (fun () -> Sys.chdir dir; Sys.command cmd)\n"
 
@@ -132,6 +139,25 @@ dtListBridge datas = case findListFamilyData datas of
           ++ consMl
           ++ " (x, rest) -> x :: go rest in\n"
           ++ "  go xs\n"
+          ++ "\nlet dtp_concatMany xs = String.concat \"\" (dtp_ocamlOf xs)\n"
+          ++ "\nlet dtp_substTemplate tmpl xs =\n"
+          ++ "  let args = Array.of_list (dtp_ocamlOf xs) in\n"
+          ++ "  let n = String.length tmpl and na = Array.length args in\n"
+          ++ "  let buf = Buffer.create (n + 32) in\n"
+          ++ "  let rec go i =\n"
+          ++ "    if i >= n then ()\n"
+          ++ "    else if tmpl.[i] = '<' then begin\n"
+          ++ "      let j = ref (i + 1) and k = ref 0 in\n"
+          ++ "      while !j < n && tmpl.[!j] >= '0' && tmpl.[!j] <= '9' do\n"
+          ++ "        k := !k * 10 + (Char.code tmpl.[!j] - 48); incr j\n"
+          ++ "      done;\n"
+          ++ "      if !j < n && tmpl.[!j] = '>' && !j > i + 1 then begin\n"
+          ++ "        (if !k < na then Buffer.add_string buf args.(!k)\n"
+          ++ "         else Buffer.add_string buf (String.sub tmpl i (!j - i + 1)));\n"
+          ++ "        go (!j + 1)\n"
+          ++ "      end else (Buffer.add_char buf '<'; go (i + 1))\n"
+          ++ "    end else (Buffer.add_char buf tmpl.[i]; go (i + 1))\n"
+          ++ "  in go 0; Buffer.contents buf\n"
 
 findFamilyCtor : String -> List DtCtor -> Maybe DtCtor
 findFamilyCtor _ [] = Nothing
@@ -179,6 +205,11 @@ globalRef name = case name of
   "strUnpack" => Ok "dtp_unpack"
   "strPack" => Ok "dtp_pack"
   "strLength" => Ok "bi_strLength"
+  "strConcatMany" => Ok "dtp_concatMany"
+  "strSubstTemplate" => Ok "dtp_substTemplate"
+  "timeUs" => Ok "(dtp_timeUs ())"
+  "strHash" => Ok "dtp_strHash"
+  "strAt" => Ok "dtp_strAt"
   -- M23：效果内建的公开名与 `prim_*` 内部名都映射到同一组 `dtp_*` 运行时函数。
   "print" => Ok "dtp_print"
   "readFile" => Ok "dtp_readFile"
@@ -360,10 +391,7 @@ genTermFuel fuel st binders t = if fuel <= 0 then Err "DT: internal: codegen fue
 else case t of
   TVar name i => case binderAt i binders of
     Just (Pair oc rig) =>
-      if rigIsErased rig then Err
-        ("[CG_TypeLevelBindingRuntime] DT: type-level binding `" ++ name ++ "` is used at runtime")
-      else Ok (Pair oc st)
-    -- @code CG_TypeLevelBindingRuntime
+      if rigIsErased rig then cgErr1 (TypeLevelBindingRuntime name) name else Ok (Pair oc st)
     Nothing => Err "DT: internal: unbound runtime variable"
   TGlobal name => genGlobalRef st name
   TInt n => Ok (Pair (strFromInt n) st)
@@ -380,13 +408,9 @@ else case t of
   TApp f a rig => genAppFuel (fuel - 1) st binders f a rig
   TCon c args => genConAppFuel (fuel - 1) st binders c args
   TCase scrut alts => genCaseFuel (fuel - 1) st binders scrut alts
-  -- @code CG_TypeUsedAtRuntime
-  TPi name implicit rig dom cod =>
-    Err "[CG_TypeUsedAtRuntime] DT: a type is used at runtime (M13 limitation)"
-  TType l => Err "[CG_TypeUsedAtRuntime] DT: a type is used at runtime (M13 limitation)"
-  -- @code CG_UnsolvedMetavarRuntime
-  TMeta m =>
-    Err ("[CG_UnsolvedMetavarRuntime] DT: unsolved metavariable in runtime code" ++ showMetaHint m)
+  TPi name implicit rig dom cod => cgErr0 TypeUsedAtRuntime
+  TType l => cgErr0 TypeUsedAtRuntime
+  TMeta m => cgErr1 (UnsolvedMetavarRuntime (showMetaHint m)) (showMetaHint m)
 
 genTermLamFuel : Int -> GenSt -> List (Pair String Rig) -> String -> Rig -> Term -> Result (Pair String GenSt)
 genTermLamFuel fuel st binders name rig body = if fuel <= 0 then Err "DT: internal: codegen fuel exhausted"
@@ -532,19 +556,19 @@ genGroupBodies st (d :: rest) = andThen (genGroupDef st d) (\p => case p of
 )
 
 -- 单函数 SCC 且不引用自身时用 let；多函数 SCC（互递归）或自递归才用 let rec。
-groupNeedsRec : List (Pair String (List String)) -> List DtDef -> Bool
-groupNeedsRec adj [] = False
-groupNeedsRec adj ([d]) = memName (dtDefName d) (neighborsOf adj (dtDefName d))
-groupNeedsRec adj group = True
+groupNeedsRec : HashTbl (List String) -> List DtDef -> Bool
+groupNeedsRec adjT [] = False
+groupNeedsRec adjT ([d]) = memName (dtDefName d) (neighborsOf adjT (dtDefName d))
+groupNeedsRec adjT group = True
 
-genGroup : List (Pair String (List String)) -> GenSt -> List DtDef -> Result (Pair String GenSt)
+genGroup : HashTbl (List String) -> GenSt -> List DtDef -> Result (Pair String GenSt)
 genGroup adj st group = andThen (genGroupBodies st group) (\p => case p of
   Pair defs st2 =>
     Ok
       (Pair ((if groupNeedsRec adj group then "let rec " else "let ") ++ joinWith "\nand " defs) st2)
 )
 
-genGroups : List (Pair String (List String)) -> GenSt -> List (List DtDef) -> Result (Pair (List String) GenSt)
+genGroups : HashTbl (List String) -> GenSt -> List (List DtDef) -> Result (Pair (List String) GenSt)
 genGroups adj st [] = Ok (Pair [] st)
 genGroups adj st (g :: rest) = andThen (genGroup adj st g) (\p => case p of
   Pair text st2 => andThen (genGroups adj st2 rest) (\q => case q of
@@ -555,7 +579,7 @@ genGroups adj st (g :: rest) = andThen (genGroup adj st g) (\p => case p of
 -- main 的展示方式（类型 force 后必须是 Int/String/Bool）。
 -- 按族**短名**识别：Bool 的权威定义是 `Base.Bool.Bool`，也接受单文件 `data Bool`。
 mainShow : List (Pair String Term) -> Term -> Result (Pair String String)
-mainShow table tyTerm = case force table [] defaultFuel (eval [] tyTerm) of
+mainShow table tyTerm = case force (tblFromList table) solsEmpty defaultFuel (eval [] tyTerm) of
   VNeutral n => case n of
     NGlobal g [] => mainShowForName g
     _ => mainShowErr
@@ -587,8 +611,7 @@ mainShowForName g = case lastName g of
   _ => mainShowErr
 
 mainShowErr : Result (Pair String String)
--- @code CG_MainReturnType
-mainShowErr = Err "[CG_MainReturnType] DT: main must return Int, String or Bool (M13 limitation)"
+mainShowErr = cgErr0 MainReturnType
 
 -- main 钩子：`mainExpr` 是运行时求 main 值的表达式（普通 main 直接是 `v_main`；
 -- main : IO a 则是 `match v_main with C_IO_MkIO f -> f 0`），按类型 `tyTerm` 选展示函数。

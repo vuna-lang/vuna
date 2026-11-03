@@ -1,0 +1,13 @@
+module Base.Nat (Nat(..)) where
+
+-- Base.Nat：Peano 自然数，DT 的长度/arity 索引。
+--
+-- 此前源码里没有 Nat（只有 DT 夹具 `dt/10_vec` 等各自定义）。错误码体系重构（M30）需要
+-- 一个**编译期**长度索引来锁定诊断模板的插值个数（arity），Nat 作为索引真源，故入库到
+-- Base，供 `Base.Vec` / 诊断 `Args` 共用。
+--
+-- 索引用法见 `Base.Vec`：`Vec a n` 的 `n` 写隐式 `{n : Nat}` 时是 Rig0，运行时擦除——
+-- arity 拼错编译失败，运行时零开销。
+data Nat : Type where
+  Zero : Nat
+  Succ : Nat -> Nat

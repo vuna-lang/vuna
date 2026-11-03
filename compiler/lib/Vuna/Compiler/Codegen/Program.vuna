@@ -7,7 +7,9 @@ module Vuna.Compiler.Codegen.Program (checkDtProgram, generateDtProgram) where
 -- 再由入口按 main 的类型追加输出钩子。check 只跑到 genProgramBody，保证「能 check
 -- 就能 compile」。
 import Vuna.Compiler.Common
+import Vuna.Compiler.Debug
 import Vuna.Compiler.Core
+import Vuna.Compiler.Diagnostics
 import Vuna.Compiler.Elab
 import Vuna.Compiler.Codegen.Decl
 import Vuna.Compiler.Codegen.Erase
@@ -26,30 +28,50 @@ prepareDtProgram program =
     Pair runtime typeNames =>
       let
         allTypeNames = append typeNames familyNames
-      in andThen (checkAllDefScopes defs)
-        (\_ => andThen (ensureUniqueOcamlNames datas runtime) (\_ => andThen (checkAllErasure allTypeNames runtime) (\_ => andThen (groupRuntimeDefs runtime) (\groups => Ok (Pair runtime groups)))))
+      in let
+        _ = stamp "cg-partition-done"
+      in andThen (checkAllDefScopes defs) (\_ => andThen (ensureUniqueOcamlNames datas runtime) (\_ => let
+        _ = stamp "cg-names-done"
+      in andThen (checkAllErasure allTypeNames runtime) (\_ => let
+        _ = stamp "cg-erasure-done"
+      in andThen (groupRuntimeDefs runtime) (\groups => let
+        _ = stamp "cg-groups-done"
+      in Ok (Pair runtime groups)
+      )
+      )
+      )
+      )
 
 -- 生成主体（不含 main 钩子）：类型声明 + 按 SCC 顺序的函数定义。
 -- check / compile 共用这一份，保证两者的判定完全一致。
-genProgramBody : Pair (List DtData) (List DtDef) -> Result (Pair String (Pair (List DtDef) (List (Pair String Term))))
-genProgramBody program =
+genProgramBody : Bool -> Pair (List DtData) (List DtDef) -> Result (Pair String (Pair (List DtDef) (List (Pair String Term))))
+-- `buildText = False` 时跳过最后的整篇拼接：check 只要走完生成器的判定，不需要成品文本
+-- （千级定义拼接是 O(n²) 字节拷贝）。
+genProgramBody buildText program =
   let
     datas = firstOf program
     defs = secondOf program
-  in andThen (prepareDtProgram program) (\p => case p of
-    Pair runtime groups => andThen (genTypeDecls (runtimeDatas datas)) (\typeText => andThen (genGroups (depAdjacency runtime) (mkGenSt (runtimeDatas datas) runtime) groups) (\q => case q of
+  in andThen (prepareDtProgram program) (\p => let
+    _ = stamp "cg-prepare-done"
+  in case p of
+    Pair runtime groups => andThen (genTypeDecls (runtimeDatas datas)) (\typeText => let
+      _ = stamp "cg-typedecls-done"
+    in andThen (genGroups (adjTblOf (depAdjacency runtime)) (mkGenSt (runtimeDatas datas) runtime) groups) (\q => case q of
       Pair bodies st2 =>
-        Ok
-          (Pair (dtRuntime ++ "\n" ++ typeText ++ dtListBridge datas ++ joinWith "\n\n" bodies) (Pair runtime (defTable defs)))
+        let
+          _ = stamp "cg-genGroups-done"
+          text =
+            if buildText then dtRuntime ++ "\n" ++ typeText ++ dtListBridge datas ++ joinWith "\n\n" bodies
+            else ""
+        in Ok (Pair text (Pair runtime (defTable defs)))
     )
     )
   )
 
 generateDtProgram : Pair (List DtData) (List DtDef) -> Bool -> Result String
-generateDtProgram program printResult = andThen (genProgramBody program) (\p => case p of
+generateDtProgram program printResult = andThen (genProgramBody True program) (\p => case p of
   Pair bodyText (Pair runtime table) => case findDtDef "main" runtime of
-    -- @code CG_NoMain
-    Nothing => Err "[CG_NoMain] DT: no main definition"
+    Nothing => cgErr0 NoMain
     Just mainDef =>
       let
         mainTy = dtDefType mainDef
@@ -63,4 +85,4 @@ generateDtProgram program printResult = andThen (genProgramBody program) (\p => 
 -- 擦除检查、构造子引用、SCC 分组、类型声明与函数生成都在这一步走到。
 -- main 的存在与返回类型只在 generate 阶段要求，这样没有 main 的库文件也能 check。
 checkDtProgram : Pair (List DtData) (List DtDef) -> Result Int
-checkDtProgram program = andThen (genProgramBody program) (\_ => Ok 0)
+checkDtProgram program = andThen (genProgramBody False program) (\_ => Ok 0)

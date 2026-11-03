@@ -49,9 +49,12 @@ vuna 尚未发布任何版本：没有外部用户、下游生态与历史包袱
   seed 60 `.ml`、1112 checks、flake 全绿。
 - M24 后维护（本波）：全仓妥协/临时决定/缺陷审计 → [debt.md](reference/debt.md)；路线图
   从「功能扩张」重排为「正本清源」阶段（M25–M30）+ 未来轨道（F1–F4）。
-- M24 后维护（本波，错误码体系）：诊断带语义错误码（`[TC_/CG_/LN_/FX_]` 前缀，同语义
-  共享、符号只增不删）；`vuna gen-errors` 从源码 `-- @code` docstring 生成错误码文档
-  （`docs/.generated/errors.md`，gitignored、幂等）；lint 输出 `[LN_XXX] 规则: 消息`。
+- M24 后维护（本波，错误码体系）：诊断带语义错误码（`[TC_/CG_/LX_/PS_/LD_/LN_/FX_]`
+  前缀，一个码一种语义、只增不删）；真源是**域枚举**（`Vuna.Compiler.Diagnostics` 的
+  `TcErr`/`CgErr`、`Frontend.Diagnostics` 的 `LexDiag`/`PsDiag`、`Loader.Diagnostics` 的
+  `LdDiag`、`Vuna.Lint.Diagnostics` 的 `LintRule`），构造子携带模板、arity 由 `Nat` 索引
+  在编译期锁定；`vuna gen-errors` 遍历枚举表生成 `docs/.generated/errors.md`
+  （gitignored、幂等，131 码）；lint 输出 `[LN_XXX] 规则: 消息`。
 
 ## 终态（目标）
 
@@ -292,7 +295,7 @@ DT 验证库（Vec/Fin/Map/Set/排序/证明组合子）；包 registry、版本
 | 原 M25–M28（模块 v3/运行时/并发/生态）为顺序阶段 | 改为 **F1–F4 不排期**；M25 起先做正本清源（本文件） | M24 审计显示旧架构与迁移折中仍是主要风险，先修地基再扩张 |
 | 检查豁免（按包名跳过终止性/覆盖率）重设计为可审计信任 | **已删除**（M25）：检查器改进 + 源码修复达标；不维护名单 | 任何“可信名单”都会重新变成静默绕过；宁可让编译器源码接受与用户代码相同的检查 |
 | 「完成即删除细节」只记 history | 另立 [debt.md](reference/debt.md) 债务账本，roadmap 按债务排阶段 | 让「哪些妥协还在、由谁在哪个阶段关闭」可审计、不丢账 |
-| 诊断消息是纯文本（无稳定标识符） | 加语义错误码前缀 `[CODE]`（`TC_`/`CG_`/`LN_`/`FX_` 域），`vuna gen-errors` 从源码 `-- @code` docstring 生成 `docs/.generated/errors.md` | 诊断可被符号引用/去重/测试；符号语义稳定、只增不删，同语义共享一个符号（`(Mxx)` 不参与判定）；运行输出 `文件:行:列: [CODE] DT: ...`（lint 为 `[LN_XXX] 规则: 消息`） |
+| 诊断消息是纯文本（无稳定标识符） | 加语义错误码前缀 `[CODE]`（`TC_`/`CG_`/`LX_`/`PS_`/`LD_`/`LN_`/`FX_` 域）；**M30 起真源是域枚举**（构造子携带模板、`Nat` 索引锁定 arity），`vuna gen-errors` 遍历枚举表生成 `docs/.generated/errors.md`；删除了 `-- @code` docstring | 诊断可被符号引用/去重/测试；一个码一种语义、只增不删；arity 写错即编译失败；运行输出 `文件:行:列: [CODE] 消息`（lint 为 `[LN_XXX] 规则: 消息`） |
 
 ## 研究储备（不排期，不占编号）
 

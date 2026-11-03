@@ -153,7 +153,7 @@ vuna help, -h
 | [docs/reference/dt-parity.md](docs/reference/dt-parity.md) | DT 取代 HM 的历史证据表（含 lambda 擦除缺陷与用量统计；当前状态见 roadmap 总览） |
 | [docs/reference/compiler.md](docs/reference/compiler.md) | 编译器模块职责、codegen 表示与优化、机器无关指标 |
 | [docs/reference/bootstrap.md](docs/reference/bootstrap.md) | 种子策略、rotation 流程、fixed point、TCB 边界 |
-| [docs/reference/testing.md](docs/reference/testing.md) | 测试体系、corpus 分类、nix checks 清单、性能基准 |
+| [docs/reference/testing.md](docs/reference/testing.md) | 测试体系、corpus 分类、nix checks 清单、性能基准；性能工程见 [performance.md](docs/reference/performance.md) |
 | [docs/reference/limits.md](docs/reference/limits.md) | 当前限制与已知边界（编译模型 / IO / 工具链细节） |
 | [docs/reference/debt.md](docs/reference/debt.md) | 技术债务与缺陷登记（A 旧架构 / B 临时决定 / C bug / D 未实现 / E 基建，按 M25–M30 关闭） |
 | [docs/history.md](docs/history.md) | 里程碑历史（一览；实现细节在 git 历史） |

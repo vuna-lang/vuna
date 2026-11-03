@@ -44,6 +44,7 @@ module Vuna.Compiler.Loader.Modules
 -- 只放：Module / Project / ExportEntry / ExportRef 的类型与访问器、import 表的纯函数
 -- 校验、模块根查找（`findModuleFile`）、模块表与导出表的查询。名字解析在 Resolve，
 -- 导出表计算、加载流程与 flatten 在 Flatten；门面 `Vuna.Compiler.Loader` 保持原 API。
+import Vuna.Compiler.Loader.Diagnostics
 import Vuna.Compiler.Common
 import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Frontend.Lexer
@@ -325,8 +326,8 @@ findModuleFile : List Root -> String -> String -> Result (Pair String Root)
 findModuleFile roots name importerPkg = case collectModuleFiles roots name importerPkg [] [] of
   Pair allowed hidden => case allowed of
     [] => case hidden of
-      [] => Err ("module " ++ name ++ " not found (roots: " ++ _joinRootDirs roots ++ ")")
-      pkgs => Err ("module " ++ name ++ " is not exported by package " ++ _joinNames hidden)
+      [] => ldErr2 (ModuleNotFound name (_joinRootDirs roots)) name (_joinRootDirs roots)
+      pkgs => ldErr2 (ModuleNotExported name (_joinNames hidden)) name (_joinNames hidden)
     [only] => Ok only
     candidates =>
       Err

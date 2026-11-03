@@ -3,6 +3,7 @@ module Vuna.Compiler.Elab.Termination (checkTerminationDecls) where
 -- Vuna.Compiler.Elab.Termination：DT 终止性检查入口（M16 → M25.2a → M25.2b → M25.2c）。
 -- 判据细节见 `.Measure`（size/R2/投影/关系/弱环）与 `.Scc`（size-change）。
 import Vuna.Compiler.Common
+import Vuna.Compiler.Diagnostics
 import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Elab.Termination.Measure
 import Vuna.Compiler.Elab.Termination.Scc
@@ -55,18 +56,35 @@ exprRefsB bound e = case e of
 refsOfDef : List (Pair (List Pat) Expr) -> List String
 refsOfDef clauses = dedup (concatMap (\c => exprRefsB (patsNames (firstOf c)) (secondOf c)) clauses)
 
-mapEdges : List String -> List (Pair String (List (Pair (List Pat) Expr))) -> List (Pair String (List String))
+mapEdges : HashTbl Bool -> List (Pair String (List (Pair (List Pat) Expr))) -> List (Pair String (List String))
 mapEdges names [] = []
 mapEdges names (d :: rest) =
-  Pair (firstOf d) (filter (\r => memName r names) (refsOfDef (secondOf d))) :: mapEdges names rest
+  Pair (firstOf d) (filter (\r => tblMem r names) (refsOfDef (secondOf d))) :: mapEdges names rest
 
 callGraph : List (Pair String (List (Pair (List Pat) Expr))) -> List (Pair String (List String))
-callGraph defs = mapEdges (defNames defs) defs
+callGraph defs = mapEdges (tblOfNames (defNames defs)) defs
 
-adjOf : String -> List (Pair String (List String)) -> List String
-adjOf n g = case lookupPair n g of
+adjOf : String -> HashTbl (List String) -> List String
+adjOf n g = case tblLookup n g of
   Just xs => xs
   Nothing => []
+
+adjTblOf : List (Pair String (List String)) -> HashTbl (List String)
+adjTblOf g = tblInsertAll g tblEmpty
+
+-- 反向邻接表：一次遍历建哈希表（旧 transpose 逐边 lookup/replace 是 O(#边 × #节点)）。
+reverseAdjOf : List (Pair String (List String)) -> HashTbl (List String)
+reverseAdjOf [] = tblEmpty
+reverseAdjOf ((Pair src dsts) :: rest) = addSrcs src dsts (reverseAdjOf rest)
+
+addSrcs : String -> List String -> HashTbl (List String) -> HashTbl (List String)
+addSrcs src [] t = t
+addSrcs src (dst :: ds) t =
+  let
+    cur = case tblLookup dst t of
+      Just xs => xs
+      Nothing => []
+  in addSrcs src ds (tblInsert dst (src :: cur) t)
 
 replacePair : String -> List String -> List (Pair String (List String)) -> List (Pair String (List String))
 replacePair n v [] = []
@@ -74,8 +92,10 @@ replacePair n v ((Pair k xs) :: rest) =
   if k == n then Pair n v :: rest else Pair k xs :: replacePair n v rest
 
 addEdge : String -> String -> List (Pair String (List String)) -> List (Pair String (List String))
+-- 注意：这里**不做 dedup**。每个新边都对已累积的依赖表 dedup 是 O(k²)（高扇入
+-- 时合计 O(k³)）；去重挪到 transpose 结束后整表做一次（dedupTransposed）。
 addEdge n m acc = case lookupPair n acc of
-  Just xs => replacePair n (dedup (append xs [m])) acc
+  Just xs => replacePair n (m :: xs) acc
   Nothing => Pair n [m] :: acc
 
 addEdges : String -> List String -> List (Pair String (List String)) -> List (Pair String (List String))
@@ -87,7 +107,11 @@ transposeGo [] acc = acc
 transposeGo ((Pair src dsts) :: rest) acc = transposeGo rest (addEdges src dsts acc)
 
 transpose : List (Pair String (List String)) -> List (Pair String (List String))
-transpose g = transposeGo g []
+transpose g = dedupTransposed (transposeGo g [])
+
+dedupTransposed : List (Pair String (List String)) -> List (Pair String (List String))
+dedupTransposed [] = []
+dedupTransposed ((Pair n xs) :: rest) = Pair n (dedup xs) :: dedupTransposed rest
 
 edgeCount : List (Pair String (List String)) -> Int
 edgeCount [] = 0
@@ -97,40 +121,40 @@ graphFuel : List (Pair String (List String)) -> List String -> Int
 graphFuel g nodes = 4 * length nodes + 4 * edgeCount g + 16
 
 -- 迭代 DFS 后序：steps 里 (n, False) = 访问，(n, True) = 发射。
-dfsPost : List (Pair String Bool) -> Int -> List (Pair String (List String)) -> List String -> List String -> Pair (List String) (List String)
+dfsPost : List (Pair String Bool) -> Int -> HashTbl (List String) -> HashTbl Bool -> List String -> Pair (HashTbl Bool) (List String)
 dfsPost steps fuel g visited post = if fuel <= 0 then Pair visited post
 else case steps of
   [] => Pair visited post
   (Pair n emit) :: rest =>
     if emit then dfsPost rest (fuel - 1) g visited (n :: post)
-    else if memName n visited then dfsPost rest (fuel - 1) g visited post
+    else if tblMem n visited then dfsPost rest (fuel - 1) g visited post
     else dfsPost (append (map (\m => Pair m False) (adjOf n g)) (Pair n True :: rest)) (fuel - 1) g
-      (n :: visited) post
+      (tblInsert n True visited) post
 
-dfsAll : List String -> Int -> List (Pair String (List String)) -> List String -> List String -> List String
+dfsAll : List String -> Int -> HashTbl (List String) -> HashTbl Bool -> List String -> List String
 dfsAll [] fuel g visited post = post
 dfsAll (n :: rest) fuel g visited post = if fuel <= 0 then post
-else if memName n visited then dfsAll rest (fuel - 1) g visited post
+else if tblMem n visited then dfsAll rest (fuel - 1) g visited post
 else case dfsPost [Pair n False] fuel g visited post of
   Pair v2 p2 => dfsAll rest (fuel - 1) g v2 p2
 
-postOrder : List (Pair String (List String)) -> List String -> List String
-postOrder g nodes = dfsAll nodes (graphFuel g nodes) g [] []
+postOrder : HashTbl (List String) -> List (Pair String (List String)) -> List String -> List String
+postOrder gT g nodes = dfsAll nodes (graphFuel g nodes) gT tblEmpty []
 
-collectComp : List String -> Int -> List (Pair String (List String)) -> List String -> List String -> Pair (List String) (List String)
-collectComp stack fuel rg assigned comp = if fuel <= 0 then Pair comp assigned
+collectComp : List String -> Int -> HashTbl (List String) -> HashTbl Bool -> List String -> Pair (HashTbl Bool) (List String)
+collectComp stack fuel rg assigned comp = if fuel <= 0 then Pair assigned comp
 else case stack of
-  [] => Pair comp assigned
+  [] => Pair assigned comp
   m :: rest =>
-    if memName m assigned then collectComp rest (fuel - 1) rg assigned comp
-    else collectComp (append (adjOf m rg) rest) (fuel - 1) rg (m :: assigned) (m :: comp)
+    if tblMem m assigned then collectComp rest (fuel - 1) rg assigned comp
+    else collectComp (append (adjOf m rg) rest) (fuel - 1) rg (tblInsert m True assigned) (m :: comp)
 
-sccOf : List String -> Int -> List (Pair String (List String)) -> List String -> List (List String) -> List (List String)
+sccOf : List String -> Int -> HashTbl (List String) -> HashTbl Bool -> List (List String) -> List (List String)
 sccOf [] fuel rg assigned comps = comps
 sccOf (n :: rest) fuel rg assigned comps = if fuel <= 0 then comps
-else if memName n assigned then sccOf rest (fuel - 1) rg assigned comps
+else if tblMem n assigned then sccOf rest (fuel - 1) rg assigned comps
 else case collectComp [n] (fuel - 1) rg assigned [] of
-  Pair comp assigned2 => sccOf rest (fuel - 1) rg assigned2 (comp :: comps)
+  Pair assigned2 comp => sccOf rest (fuel - 1) rg assigned2 (comp :: comps)
 
 strWalk : Int -> List String -> List String -> List (Pair String (List Int)) -> Int -> List (Pair String (Pair Int (Pair Int (List Int)))) -> String -> List (Pair String Int) -> List String -> Expr -> Pair Bool (List (Pair (Pair String String) Int)) -> Pair Bool (List (Pair (Pair String String) Int))
 strWalk fuel comp ctors projs p sizes caller facts region e acc = if fuel <= 0 then acc
@@ -271,17 +295,21 @@ strClause comp ctors projs p caller facts clause =
   strWalk 100000 comp ctors projs p (strSizeEntries (firstOf clause)) caller facts []
     (secondOf clause) (Pair True [])
 
+-- 终止性失败的描述（<0>）：两种措辞（单函数 / 递归组）统一到 arity 1 的
+-- `CannotProveTermination`，描述里保留原来的区分信息。
 groupMessage : List String -> String
 groupMessage comp = case comp of
-  [f] =>
-    "[TC_CannotProveTermination] DT: cannot prove termination of "
-      ++ f
-      ++ " (recursive call does not structurally decrease)"
-  -- @code TC_CannotProveTermination
+  [f] => f ++ " (recursive call does not structurally decrease)"
   _ =>
-    "[TC_CannotProveTermination] DT: cannot prove termination of recursive group {"
+    "recursive group {"
       ++ joinComma comp
       ++ "} (mutual recursion: no parameter position decreases on every recursive call)"
+
+cannotProveMsg : List String -> String
+cannotProveMsg comp =
+  let
+    desc = groupMessage comp
+  in tcMsg (CannotProveTermination desc) (VCons desc VNil)
 
 collectClauses : List (Pair (List Pat) Expr) -> List String -> List String -> List (Pair String (List Int)) -> Int -> String -> List (Pair String Int) -> Pair Bool (List (Pair (Pair String String) Int)) -> Result (Pair Bool (List (Pair (Pair String String) Int)))
 collectClauses [] comp ctors projs p caller facts acc = Ok acc
@@ -304,7 +332,7 @@ tryMeasure comp defs ctors projs facts p maxP =
   tryMeasureGo comp defs ctors projs facts (maxP - p) maxP
 
 tryMeasureGo : List String -> List (Pair String (List (Pair (List Pat) Expr))) -> List String -> List (Pair String (List Int)) -> List (Pair String Int) -> Int -> Int -> Result Int
-tryMeasureGo comp defs ctors projs facts remaining maxP = if remaining <= 0 then Err (groupMessage comp)
+tryMeasureGo comp defs ctors projs facts remaining maxP = if remaining <= 0 then Err (cannotProveMsg comp)
 else
   let
     p = maxP - remaining
@@ -327,13 +355,13 @@ checkStrictGroup comp defs ctors projs facts = case tryMeasure comp defs ctors p
     Ok n => Ok n
     Err e2 => sctCheck comp defs ctors projs facts e2
 
-checkComp : List String -> List (Pair String (List (Pair (List Pat) Expr))) -> List String -> List (Pair String (List Int)) -> List (Pair String (List String)) -> List (Pair String Int) -> Result Int
+checkComp : List String -> List (Pair String (List (Pair (List Pat) Expr))) -> List String -> List (Pair String (List Int)) -> HashTbl (List String) -> List (Pair String Int) -> Result Int
 checkComp comp defs ctors projs g facts = case comp of
   [] => Ok 0
   [f] => if memName f (adjOf f g) then checkStrictGroup comp defs ctors projs facts else Ok 0
   _ => checkStrictGroup comp defs ctors projs facts
 
-checkSccs : List (List String) -> List (Pair String (List (Pair (List Pat) Expr))) -> List String -> List (Pair String (List Int)) -> List (Pair String (List String)) -> List (Pair String Int) -> Result Int
+checkSccs : List (List String) -> List (Pair String (List (Pair (List Pat) Expr))) -> List String -> List (Pair String (List Int)) -> HashTbl (List String) -> List (Pair String Int) -> Result Int
 checkSccs [] defs ctors projs g facts = Ok 0
 checkSccs (comp :: rest) defs ctors projs g facts =
   andThen (checkComp comp defs ctors projs g facts)
@@ -347,9 +375,10 @@ checkTerminationDecls decls =
     projs = projectionsOf defs
     facts = computePosFacts defs 16 []
     g = callGraph defs
+    gT = adjTblOf g
     nodes = defNames defs
-    rg = transpose g
+    rgT = reverseAdjOf g
     fuel = graphFuel g nodes
-    post = postOrder g nodes
-    comps = sccOf post fuel rg [] []
-  in checkSccs (reverse comps) defs ctors projs g facts
+    post = postOrder gT g nodes
+    comps = sccOf post fuel rgT tblEmpty []
+  in checkSccs (reverse comps) defs ctors projs gT facts

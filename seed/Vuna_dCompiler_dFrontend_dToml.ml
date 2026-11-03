@@ -270,9 +270,9 @@ let v_Vuna_dCompiler_dFrontend_dToml_dexpectEol = (fun path -> (fun cs -> (match
   | _ -> failwith "DT: impossible branch"
 )))
 
-let rec v_Vuna_dCompiler_dFrontend_dToml_dsamePath = (fun d260 -> (fun mc0 -> (fun mc1 -> (match mc0 with
+let rec v_Vuna_dCompiler_dFrontend_dToml_dsamePath = (fun d303 -> (fun mc0 -> (fun mc1 -> (match mc0 with
   | C_Base_dList_dList_Cons (dtb__112, dtb__113) -> (match mc1 with
-  | C_Base_dList_dList_Cons (dtb__114, dtb__115) -> (if (((v_Base_dEq_deq d260) dtb__112) dtb__114) then (((v_Vuna_dCompiler_dFrontend_dToml_dsamePath d260) dtb__113) dtb__115) else false)
+  | C_Base_dList_dList_Cons (dtb__114, dtb__115) -> (if (((v_Base_dEq_deq d303) dtb__112) dtb__114) then (((v_Vuna_dCompiler_dFrontend_dToml_dsamePath d303) dtb__113) dtb__115) else false)
   | _ -> false
 )
   | C_Base_dList_dList_Nil -> (match mc1 with
@@ -282,9 +282,9 @@ let rec v_Vuna_dCompiler_dFrontend_dToml_dsamePath = (fun d260 -> (fun mc0 -> (f
   | _ -> failwith "DT: impossible branch"
 ))))
 
-let rec v_Vuna_dCompiler_dFrontend_dToml_dmemSectionPath = (fun d263 -> (fun section -> (fun seen -> (match seen with
+let rec v_Vuna_dCompiler_dFrontend_dToml_dmemSectionPath = (fun d306 -> (fun section -> (fun seen -> (match seen with
   | C_Base_dList_dList_Nil -> false
-  | C_Base_dList_dList_Cons (dtb__116, dtb__117) -> (if (((v_Vuna_dCompiler_dFrontend_dToml_dsamePath d263) section) dtb__116) then true else (((v_Vuna_dCompiler_dFrontend_dToml_dmemSectionPath d263) section) dtb__117))
+  | C_Base_dList_dList_Cons (dtb__116, dtb__117) -> (if (((v_Vuna_dCompiler_dFrontend_dToml_dsamePath d306) section) dtb__116) then true else (((v_Vuna_dCompiler_dFrontend_dToml_dmemSectionPath d306) section) dtb__117))
   | _ -> failwith "DT: impossible branch"
 ))))
 
