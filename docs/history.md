@@ -220,3 +220,12 @@
   （`Base.List.mem` 的 `Eq a` 是同一处）。新增正例 `test/corpus/dt/34_io_do.vuna`
   （输出 `42`）、`35_io_main.vuna`（`main : IO String`，输出 `"hello"`）；全量
   `test/run-tests.sh` 849 项通过。
+
+- M24 后维护（错误码体系，本波）：诊断加语义错误码前缀 `[TC_/CG_/LN_/FX_]`
+  （`TC_` Elab 精化/终止/覆盖、`CG_` Codegen/Driver/Dt、`LN_` lint 规则、`FX_` 修复规则
+  从可修复 `LN_` 推导）；同语义消息共享一个符号、符号只增不删（`(Mxx)` 不参与判定）；
+  lint 输出 `路径:行:列: [LN_XXX] 规则: 消息`，Elab/Codegen 输出 `文件:行:列: [CODE] DT: ...`；
+  新增 `vuna gen-errors [ROOT]` 从源码 `-- @code` docstring 生成错误码文档
+  （`ROOT/docs/.generated/errors.md`，gitignored、幂等、勿手改）；`test/run-tests.sh` 新增
+  第 36 段（gen-errors 分区 + 幂等断言）。错误码体系与符号约定见
+  `docs/reference/dt-tooling.md` 第 4 节。

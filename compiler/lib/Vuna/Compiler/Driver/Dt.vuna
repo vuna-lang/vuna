@@ -140,17 +140,21 @@ splitReplExpr decls = case reverse decls of
 --     `Base.IO.IO` 这类模块前缀）。
 evalDtMain : Pair (List DtData) (List DtDef) -> Result String
 evalDtMain (Pair _ defs) = case findMainDef defs of
-  Nothing => Err "DT: no main definition"
+  -- @code CG_NoMain
+  Nothing => Err "[CG_NoMain] DT: no main definition"
   Just mainDef =>
     let
       table = defTableOf defs
       mainVal = normalize table [] defaultFuel (VNeutral (NGlobal "main" []))
-    in if isIOType (dtDefType mainDef) then Err "DT: interp cannot execute effects (main : IO a); compile and run the program instead"
+    in if isIOType (dtDefType mainDef) then Err
+      "[CG_InterpCannotExecuteEffects] DT: interp cannot execute effects (main : IO a); compile and run the program instead"
     else case mainVal of
+      -- @code CG_InterpCannotExecuteEffects
       VInt n => Ok (strFromInt n)
       VStr s => Ok (showValue mainVal)
       VBool b => Ok (showValue mainVal)
-      _ => Err "DT: main does not reduce to a value"
+      -- @code CG_MainNotValue
+      _ => Err "[CG_MainNotValue] DT: main does not reduce to a value"
 
 -- 族名（去掉模块前缀）：`Base.IO.IO` → `IO`。
 lastName : String -> String

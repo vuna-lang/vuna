@@ -118,7 +118,7 @@ let rec v_Vuna_dCompiler_dElab_dMeta_dcheckScopedValueList = (fun mc0 -> (fun mc
   | C_Base_dList_dList_Cons (dtb__38, dtb__39) -> (match dtb__38 with
   | C_Base_dPair_dPair_Base_dPair_dPair (dtb__40, dtb__41) -> (match ((v_Vuna_dCompiler_dElab_dMeta_dmetaDepthOf mc0) dtb__40) with
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> ((v_Vuna_dCompiler_dElab_dMeta_dcheckScopedValueList mc0) dtb__39)
-  | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__42) -> (if (((v_Vuna_dCompiler_dCore_dTerm_dlevelEscapes dtb__42) 0) dtb__41) then (C_Base_dResult_dResult_Base_dResult_dErr (((bi_concat "DT: cannot solve metavariable ?") ((bi_concat (bi_strFromInt dtb__40)) " (solution would escape its scope)")))) else ((v_Vuna_dCompiler_dElab_dMeta_dcheckScopedValueList mc0) dtb__39))
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__42) -> (if (((v_Vuna_dCompiler_dCore_dTerm_dlevelEscapes dtb__42) 0) dtb__41) then (C_Base_dResult_dResult_Base_dResult_dErr (((bi_concat "[TC_CannotSolveMetavar] DT: cannot solve metavariable ?") ((bi_concat (bi_strFromInt dtb__40)) " (solution would escape its scope)")))) else ((v_Vuna_dCompiler_dElab_dMeta_dcheckScopedValueList mc0) dtb__39))
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
@@ -143,7 +143,7 @@ let rec v_Vuna_dCompiler_dElab_dMeta_dcheckScopedFrom = (fun mc0 -> (fun mc1 -> 
   | C_Base_dList_dList_Cons (dtb__47, dtb__48) -> (match dtb__47 with
   | C_Base_dPair_dPair_Base_dPair_dPair (dtb__49, dtb__50) -> (match ((v_Vuna_dCompiler_dCore_dTerm_dmetaLookup dtb__49) mc2) with
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> (((v_Vuna_dCompiler_dElab_dMeta_dcheckScopedFrom mc0) dtb__48) mc2)
-  | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__51) -> (if (((v_Vuna_dCompiler_dCore_dTerm_dlevelEscapes dtb__50) 0) dtb__51) then (C_Base_dResult_dResult_Base_dResult_dErr (((bi_concat "DT: cannot solve metavariable ?") ((bi_concat (bi_strFromInt dtb__49)) " (solution would escape its scope)")))) else (((v_Vuna_dCompiler_dElab_dMeta_dcheckScopedFrom mc0) dtb__48) mc2))
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__51) -> (if (((v_Vuna_dCompiler_dCore_dTerm_dlevelEscapes dtb__50) 0) dtb__51) then (C_Base_dResult_dResult_Base_dResult_dErr (((bi_concat "[TC_CannotSolveMetavar] DT: cannot solve metavariable ?") ((bi_concat (bi_strFromInt dtb__49)) " (solution would escape its scope)")))) else (((v_Vuna_dCompiler_dElab_dMeta_dcheckScopedFrom mc0) dtb__48) mc2))
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
@@ -233,7 +233,7 @@ let rec v_Vuna_dCompiler_dElab_dMeta_dmemDefName = (fun mc0 -> (fun mc1 -> (matc
 
 let rec v_Vuna_dCompiler_dElab_dMeta_dcollectSigsInto = (fun mc0 -> (fun mc1 -> (fun mc2 -> (match mc2 with
   | C_Base_dList_dList_Cons (dtb__119, dtb__120) -> (match dtb__119 with
-  | C_Vuna_dCompiler_dFrontend_dAst_dDecl_Vuna_dCompiler_dFrontend_dAst_dDSig (dtb__121, dtb__122, dtb__123) -> (if ((v_Base_dList_dmemName dtb__121) (v_Vuna_dCompiler_dElab_dPrelude_dpreludeNames ())) then ((v_Vuna_dCompiler_dElab_dTypes_derrAt dtb__123) ((bi_concat "DT: cannot redefine builtin ") dtb__121)) else (if (((v_Vuna_dCompiler_dElab_dMeta_dmemSig (v_Base_dEq_dBase_dEq_dEq_uBase_dEq_dEq_uString ())) mc1) dtb__121) then ((v_Vuna_dCompiler_dElab_dTypes_derrAt dtb__123) ((bi_concat "DT: duplicate signature for ") dtb__121)) else (((v_Vuna_dCompiler_dElab_dMeta_dcollectSigsInto mc0) (C_Base_dList_dList_Cons ((C_Base_dPair_dPair_Base_dPair_dPair (dtb__121, (((v_Vuna_dCompiler_dElab_dSig_dquantifyTopSig mc0) dtb__122) dtb__123))), mc1))) dtb__120)))
+  | C_Vuna_dCompiler_dFrontend_dAst_dDecl_Vuna_dCompiler_dFrontend_dAst_dDSig (dtb__121, dtb__122, dtb__123) -> (if ((v_Base_dList_dmemName dtb__121) (v_Vuna_dCompiler_dElab_dPrelude_dpreludeNames ())) then ((v_Vuna_dCompiler_dElab_dTypes_derrAt dtb__123) ((bi_concat "[TC_CannotRedefineBuiltin] DT: cannot redefine builtin ") dtb__121)) else (if (((v_Vuna_dCompiler_dElab_dMeta_dmemSig (v_Base_dEq_dBase_dEq_dEq_uBase_dEq_dEq_uString ())) mc1) dtb__121) then ((v_Vuna_dCompiler_dElab_dTypes_derrAt dtb__123) ((bi_concat "[TC_DuplicateSignature] DT: duplicate signature for ") dtb__121)) else (((v_Vuna_dCompiler_dElab_dMeta_dcollectSigsInto mc0) (C_Base_dList_dList_Cons ((C_Base_dPair_dPair_Base_dPair_dPair (dtb__121, (((v_Vuna_dCompiler_dElab_dSig_dquantifyTopSig mc0) dtb__122) dtb__123))), mc1))) dtb__120)))
   | C_Vuna_dCompiler_dFrontend_dAst_dDecl_Vuna_dCompiler_dFrontend_dAst_dDFun (dtb__124, dtb__125, dtb__126, dtb__127) -> (((v_Vuna_dCompiler_dElab_dMeta_dcollectSigsInto mc0) mc1) dtb__120)
   | C_Vuna_dCompiler_dFrontend_dAst_dDecl_Vuna_dCompiler_dFrontend_dAst_dDData (dtb__128, dtb__129, dtb__130, dtb__131, dtb__132, dtb__133) -> (((v_Vuna_dCompiler_dElab_dMeta_dcollectSigsInto mc0) mc1) dtb__120)
   | C_Vuna_dCompiler_dFrontend_dAst_dDecl_Vuna_dCompiler_dFrontend_dAst_dDRecord (dtb__134, dtb__135, dtb__136, dtb__137, dtb__138) -> ((v_Vuna_dCompiler_dElab_dTypes_derrAt dtb__138) "DT: internal: record was not desugared")

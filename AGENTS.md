@@ -72,7 +72,7 @@ nix flake check                      # 12 项：3 packages + 9 checks
 nix run .#vuna-run-tests [-- --list | --only dt]   # 原生测试；nix run .#vuna-bench -- --quick
 vuna check .                         # 包级类型检查（自检）；vuna build . → .output/bin/<包名>
 vuna fmt --check <PATH>...           # 格式化检查（务必显式给路径）；vuna lint <file>...
-vuna doc [DIR [OUT]]                  # API 文档（默认 DIR/docs/api.md，gitignored）
+vuna doc [DIR [OUT]] | gen-errors [ROOT]  # API 文档 / 错误码文档（默认 docs/api.md / docs/.generated/errors.md，gitignored）
 vuna interp <file.vuna>              # DT 精化 + 核心求值（纯；只展示 Int/String/Bool）
 vuna seed <OUT> compiler             # 逐模块 DT split（必须显式 OUT；正式流程用 nix/seed-rotate.sh）
 ```
@@ -92,7 +92,7 @@ CLI 入口；`seed/` = 提交入库的多文件 OCaml 信任锚点（生成物�
   [stdlib.md](docs/reference/stdlib.md)、[packages.md](docs/reference/packages.md)、
   [dt.md](docs/reference/dt.md)、[dt-parity.md](docs/reference/dt-parity.md)（历史证据）
 - 编译器实现与 codegen：[compiler.md](docs/reference/compiler.md)；DT 工具链（洞目标、LSP、
-  错误索引）：[dt-tooling.md](docs/reference/dt-tooling.md)
+  错误码体系与错误索引；`vuna gen-errors` 生成 `docs/.generated/errors.md`）：[dt-tooling.md](docs/reference/dt-tooling.md)
 - 仓库探索（按场景选工具、探索后落盘）：技能 `.agents/skills/repo-navigation/SKILL.md`
 - 自举与种子：[bootstrap.md](docs/reference/bootstrap.md)；测试与 CI：[testing.md](docs/reference/testing.md)；
   已知边界：[limits.md](docs/reference/limits.md)

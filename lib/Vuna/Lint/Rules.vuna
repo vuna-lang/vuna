@@ -4,6 +4,7 @@ module Vuna.Lint.Rules
   , editEnd
   , editLines
   , editStart
+  , findingCode
   , findingCol
   , findingEdit
   , findingLine
@@ -28,7 +29,7 @@ data Edit : Type where
   Edit : Int -> Int -> List String -> Edit
 
 data Finding : Type where
-  Finding : Int -> Int -> String -> String -> Maybe Edit -> Finding
+  Finding : Int -> Int -> String -> String -> String -> Maybe Edit -> Finding
 
 data LitBranch : Type where
   LitBranch : String -> String -> LitBranch
@@ -52,19 +53,22 @@ editLines : Edit -> List String
 editLines (Edit start stop lines) = lines
 
 findingLine : Finding -> Int
-findingLine (Finding line col rule message edit) = line
+findingLine (Finding line col code rule message edit) = line
 
 findingCol : Finding -> Int
-findingCol (Finding line col rule message edit) = col
+findingCol (Finding line col code rule message edit) = col
+
+findingCode : Finding -> String
+findingCode (Finding line col code rule message edit) = code
 
 findingRule : Finding -> String
-findingRule (Finding line col rule message edit) = rule
+findingRule (Finding line col code rule message edit) = rule
 
 findingMessage : Finding -> String
-findingMessage (Finding line col rule message edit) = message
+findingMessage (Finding line col code rule message edit) = message
 
 findingEdit : Finding -> Maybe Edit
-findingEdit (Finding line col rule message edit) = edit
+findingEdit (Finding line col code rule message edit) = edit
 
 litText : LitBranch -> String
 litText (LitBranch text expr) = text
@@ -382,6 +386,12 @@ renderLitBranch : Int -> LitBranch -> String
 renderLitBranch indent branch = spaces (indent + 2) ++ litText branch ++ " => " ++ litExpr branch
 
 makeChainFinding : Int -> Int -> String -> List LitBranch -> String -> Int -> List Finding
+-- @code LN_LiteralIfChain
+-- @rule literal-if-chain
+-- @fixable
+-- @msg if/else-if chain on <scrutinee> can be a case with literal patterns
+-- @edit 改写为 case 表达式：字面量分支 + 兜底 `_ =>`
+-- @desc if/else-if 字面量链可改写为 case 表达式。
 makeChainFinding firstLine indent scrutinee acc defaultText lastLine =
   let
     branches = reverse acc
@@ -391,7 +401,7 @@ makeChainFinding firstLine indent scrutinee acc defaultText lastLine =
       newLines =
         append [spaces indent ++ "case " ++ scrutinee ++ " of"]
           (append (map (\b => renderLitBranch indent b) branches) [spaces (indent + 2) ++ "_ => " ++ defaultText])
-    in [ Finding firstLine (indent + 1) "literal-if-chain" ("if/else-if chain on `" ++ scrutinee ++ "` can be a case with literal patterns") (Just (Edit firstLine lastLine newLines))
+    in [ Finding firstLine (indent + 1) "LN_LiteralIfChain" "literal-if-chain" ("if/else-if chain on `" ++ scrutinee ++ "` can be a case with literal patterns") (Just (Edit firstLine lastLine newLines))
     ]
 
 finishChain : List String -> List PTok -> Int -> Int -> Int -> Int -> String -> List LitBranch -> List Finding
@@ -678,6 +688,12 @@ blockShape lines toks lastLine caseLine indent var enclosing patToks patText arr
         (bodyMentionsVar toks var (altLine + 1) stop) stop newBody
 
 redundantFinding : List String -> List PTok -> Int -> Int -> Int -> String -> Enclosing -> List PTok -> String -> Bool -> Int -> List String -> List Finding
+-- @code LN_RedundantCase
+-- @rule redundant-case
+-- @fixable
+-- @msg single-alternative case on <var> can be folded into the enclosing pattern
+-- @edit 把单分支 case 折叠进外层模式（需无冲突且体不提及被折叠变量）
+-- @desc 单分支 case 可折叠进外层模式（需满足 enclosing 安全判据）。
 redundantFinding lines toks lastLine caseLine indent var enclosing patToks patText mentions stop newBody =
   let
     headLine = enclosingLine enclosing
@@ -705,7 +721,7 @@ redundantFinding lines toks lastLine caseLine indent var enclosing patToks patTe
             newLines = newHead :: newBody
             fixable = lastOk && cleanOk && notBool mentions
             edit = if fixable then Just (Edit headLine (stop - 1) newLines) else Nothing
-          in [ Finding caseLine (indent + 1) "redundant-case" ("single-alternative case on `" ++ var ++ "` can be folded into the enclosing pattern") edit
+          in [ Finding caseLine (indent + 1) "LN_RedundantCase" "redundant-case" ("single-alternative case on `" ++ var ++ "` can be folded into the enclosing pattern") edit
           ]
 
 tokenOfVar : String -> List PTok -> Maybe PTok

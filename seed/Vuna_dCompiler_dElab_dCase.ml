@@ -33,7 +33,7 @@ open Vuna_dCompiler_dElab_dMeta
 type t_Vuna_dCompiler_dElab_dCase_dPending = C_Vuna_dCompiler_dElab_dCase_dPending_Vuna_dCompiler_dElab_dCase_dPending of (t_Vuna_dCompiler_dFrontend_dAst_dPat) * (string)
 and t_Vuna_dCompiler_dElab_dCase_dBindAcc = C_Vuna_dCompiler_dElab_dCase_dBindAcc_Vuna_dCompiler_dElab_dCase_dBindAcc of ((string, t_Vuna_dCompiler_dCore_dTerm_dRig) t_Base_dPair_dPair t_Base_dList_dList) * (t_Vuna_dCompiler_dElab_dCase_dPending t_Base_dList_dList)
 
-let v_Vuna_dCompiler_dElab_dCase_dunifyErr = fun () -> (C_Base_dResult_dResult_Base_dResult_dErr ("DT: this branch is impossible (index constraints are unsatisfiable)"))
+let v_Vuna_dCompiler_dElab_dCase_dunifyErr = fun () -> (C_Base_dResult_dResult_Base_dResult_dErr ("[TC_ImpossibleBranchIndex] DT: this branch is impossible (index constraints are unsatisfiable)"))
 
 let rec v_Vuna_dCompiler_dElab_dCase_doccursLevel = (fun lvl -> (fun v -> (match v with
   | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVNeutral (dtb__0) -> (match dtb__0 with
@@ -80,7 +80,7 @@ let rec v_Vuna_dCompiler_dElab_dCase_dunifyIdxList = (fun mc0 -> (fun mc1 -> (fu
 )
   | _ -> failwith "DT: impossible branch"
 )))))))
-and v_Vuna_dCompiler_dElab_dCase_dunifyIdx = (fun ec -> (fun acc -> (fun depth -> (fun fuel -> (fun a -> (fun b -> (if ((bi_le_int fuel) 0) then (C_Base_dResult_dResult_Base_dResult_dErr ("DT: index unification ran out of reduction fuel")) else ((fun a2 -> ((fun b2 -> (match a2 with
+and v_Vuna_dCompiler_dElab_dCase_dunifyIdx = (fun ec -> (fun acc -> (fun depth -> (fun fuel -> (fun a -> (fun b -> (if ((bi_le_int fuel) 0) then (C_Base_dResult_dResult_Base_dResult_dErr ("[TC_IndexFuel] DT: index unification ran out of reduction fuel")) else ((fun a2 -> ((fun b2 -> (match a2 with
   | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVNeutral (dtb__37) -> (match dtb__37 with
   | C_Vuna_dCompiler_dCore_dTerm_dNeutral_Vuna_dCompiler_dCore_dTerm_dNVar (dtb__38, dtb__39, dtb__40) -> (match dtb__40 with
   | C_Base_dList_dList_Nil -> (match b2 with
@@ -217,14 +217,14 @@ let v_Vuna_dCompiler_dElab_dCase_dfreshPatName = (fun i -> ((bi_concat "_np") (b
 
 let rec v_Vuna_dCompiler_dElab_dCase_dbindCtorGo = (fun ctx -> (fun ty -> (fun subpats -> (fun acc -> (match ty with
   | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTPi (dtb__93, dtb__94, dtb__95, dtb__96, dtb__97) -> ((fun domVal -> (if dtb__94 then ((fun famName -> ((fun ctx2 -> ((((v_Vuna_dCompiler_dElab_dCase_dbindCtorGo ctx2) dtb__97) subpats) (C_Vuna_dCompiler_dElab_dCase_dBindAcc_Vuna_dCompiler_dElab_dCase_dBindAcc ((C_Base_dList_dList_Cons ((C_Base_dPair_dPair_Base_dPair_dPair (famName, C_Vuna_dCompiler_dCore_dTerm_dRig_Vuna_dCompiler_dCore_dTerm_dRig0)), (v_Vuna_dCompiler_dElab_dCase_dbaBinders acc))), (v_Vuna_dCompiler_dElab_dCase_dbaPending acc))))) (((v_Vuna_dCompiler_dElab_dTypes_dctxBindValue famName) domVal) ctx))) ((bi_concat dtb__93) "#fam")) else (match subpats with
-  | C_Base_dList_dList_Nil -> (C_Base_dResult_dResult_Base_dResult_dErr ("DT: case branch has too few arguments for its constructor"))
+  | C_Base_dList_dList_Nil -> (C_Base_dResult_dResult_Base_dResult_dErr ("[TC_CaseBranchTooFewArgs] DT: case branch has too few arguments for its constructor"))
   | C_Base_dList_dList_Cons (dtb__98, dtb__99) -> (match dtb__98 with
   | C_Vuna_dCompiler_dFrontend_dAst_dPat_Vuna_dCompiler_dFrontend_dAst_dPVar (dtb__100, dtb__101) -> ((((((v_Vuna_dCompiler_dElab_dCase_dbindCtorBinder ctx) domVal) dtb__97) dtb__100) dtb__99) acc)
   | C_Vuna_dCompiler_dFrontend_dAst_dPat_Vuna_dCompiler_dFrontend_dAst_dPWild (dtb__102) -> ((((((v_Vuna_dCompiler_dElab_dCase_dbindCtorBinder ctx) domVal) dtb__97) "_") dtb__99) acc)
   | C_Vuna_dCompiler_dFrontend_dAst_dPat_Vuna_dCompiler_dFrontend_dAst_dPCon (dtb__103, dtb__104, dtb__105) -> ((fun fresh -> ((fun ctx2 -> ((((v_Vuna_dCompiler_dElab_dCase_dbindCtorGo ctx2) dtb__97) dtb__99) (C_Vuna_dCompiler_dElab_dCase_dBindAcc_Vuna_dCompiler_dElab_dCase_dBindAcc ((C_Base_dList_dList_Cons ((C_Base_dPair_dPair_Base_dPair_dPair (fresh, ((v_Vuna_dCompiler_dElab_dMeta_dbinderRig false) domVal))), (v_Vuna_dCompiler_dElab_dCase_dbaBinders acc))), ((v_Base_dList_dappend (v_Vuna_dCompiler_dElab_dCase_dbaPending acc)) (C_Base_dList_dList_Cons ((C_Vuna_dCompiler_dElab_dCase_dPending_Vuna_dCompiler_dElab_dCase_dPending (dtb__98, fresh)), C_Base_dList_dList_Nil))))))) (((v_Vuna_dCompiler_dElab_dTypes_dctxBindValue fresh) domVal) ctx))) (v_Vuna_dCompiler_dElab_dCase_dfreshPatName (v_Base_dList_dlength (v_Vuna_dCompiler_dElab_dCase_dbaPending acc))))
   | C_Vuna_dCompiler_dFrontend_dAst_dPat_Vuna_dCompiler_dFrontend_dAst_dPInt (dtb__106, dtb__107) -> ((((((v_Vuna_dCompiler_dElab_dCase_dmkPendingBinder ctx) domVal) dtb__97) dtb__98) dtb__99) acc)
   | C_Vuna_dCompiler_dFrontend_dAst_dPat_Vuna_dCompiler_dFrontend_dAst_dPStr (dtb__108, dtb__109) -> ((((((v_Vuna_dCompiler_dElab_dCase_dmkPendingBinder ctx) domVal) dtb__97) dtb__98) dtb__99) acc)
-  | _ -> ((v_Vuna_dCompiler_dElab_dTypes_derrAt (v_Vuna_dCompiler_dFrontend_dAst_dpatSpan dtb__98)) "DT: nested patterns must be constructor patterns (M19)")
+  | _ -> ((v_Vuna_dCompiler_dElab_dTypes_derrAt (v_Vuna_dCompiler_dFrontend_dAst_dpatSpan dtb__98)) "[TC_NestedPatterns] DT: nested patterns must be constructor patterns (M19)")
 )
   | _ -> failwith "DT: impossible branch"
 ))) ((v_Vuna_dCompiler_dCore_dEval_deval (v_Vuna_dCompiler_dElab_dTypes_dctxEnv ctx)) dtb__96))
@@ -351,7 +351,7 @@ let v_Vuna_dCompiler_dElab_dCase_dbranchReachable = (fun ctx -> (fun ec -> (fun 
 )))))
 
 let rec v_Vuna_dCompiler_dElab_dCase_dcheckCovered = (fun mc0 -> (fun mc1 -> (fun mc2 -> (fun mc3 -> (fun mc4 -> (fun mc5 -> (fun mc6 -> (fun mc7 -> (match mc7 with
-  | C_Base_dList_dList_Cons (dtb__164, dtb__165) -> (if ((v_Base_dList_dmemName (v_Vuna_dCompiler_dElab_dTypes_ddtCtorName dtb__164)) mc4) then ((((((((v_Vuna_dCompiler_dElab_dCase_dcheckCovered mc0) mc1) mc2) mc3) mc4) mc5) mc6) dtb__165) else (if (v_Vuna_dCompiler_dElab_dTypes_decTrusted mc1) then ((((((((v_Vuna_dCompiler_dElab_dCase_dcheckCovered mc0) mc1) mc2) mc3) mc4) mc5) mc6) dtb__165) else (if ((((v_Vuna_dCompiler_dElab_dCase_dbranchReachable mc0) mc1) mc3) dtb__164) then ((v_Vuna_dCompiler_dElab_dTypes_derrAt mc6) ((bi_concat "DT: case is not exhaustive: missing ") (v_Vuna_dCompiler_dElab_dTypes_ddtCtorName dtb__164))) else ((((((((v_Vuna_dCompiler_dElab_dCase_dcheckCovered mc0) mc1) mc2) mc3) mc4) mc5) mc6) dtb__165))))
+  | C_Base_dList_dList_Cons (dtb__164, dtb__165) -> (if ((v_Base_dList_dmemName (v_Vuna_dCompiler_dElab_dTypes_ddtCtorName dtb__164)) mc4) then ((((((((v_Vuna_dCompiler_dElab_dCase_dcheckCovered mc0) mc1) mc2) mc3) mc4) mc5) mc6) dtb__165) else (if (v_Vuna_dCompiler_dElab_dTypes_decTrusted mc1) then ((((((((v_Vuna_dCompiler_dElab_dCase_dcheckCovered mc0) mc1) mc2) mc3) mc4) mc5) mc6) dtb__165) else (if ((((v_Vuna_dCompiler_dElab_dCase_dbranchReachable mc0) mc1) mc3) dtb__164) then ((v_Vuna_dCompiler_dElab_dTypes_derrAt mc6) ((bi_concat "[TC_NotExhaustive] DT: case is not exhaustive: missing ") (v_Vuna_dCompiler_dElab_dTypes_ddtCtorName dtb__164))) else ((((((((v_Vuna_dCompiler_dElab_dCase_dcheckCovered mc0) mc1) mc2) mc3) mc4) mc5) mc6) dtb__165))))
   | C_Base_dList_dList_Nil -> (C_Base_dResult_dResult_Base_dResult_dOk (0))
   | _ -> failwith "DT: impossible branch"
 )))))))))

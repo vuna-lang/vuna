@@ -18,6 +18,9 @@ printFinding path fixMode f =
         ++ ":"
         ++ strFromInt (findingCol f)
         ++ ": "
+        ++ "["
+        ++ findingCode f
+        ++ "] "
         ++ findingRule f
         ++ ": "
         ++ findingMessage f

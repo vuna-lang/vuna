@@ -102,7 +102,10 @@ eqRuntimeName : String -> String -> Result String
 eqRuntimeName op tyName = case tyName of
   "Int" => if op == "==" then Ok "bi_eq_int" else Ok "bi_neq_int"
   "String" => if op == "==" then Ok "bi_eq_str" else Ok "bi_neq_str"
-  _ => Err ("DT: `" ++ op ++ "` is only defined for Int and String (found " ++ tyName ++ "; M19)")
+  -- @code TC_OpOnlyIntString
+  _ =>
+    Err
+      ("[TC_OpOnlyIntString] DT: `" ++ op ++ "` is only defined for Int and String (found " ++ tyName ++ "; M19)")
 
 -- 泛化后的 `==` / `/=` 签名：`{a : Type} -> a -> a -> Bool`。
 polyEqTy : Term

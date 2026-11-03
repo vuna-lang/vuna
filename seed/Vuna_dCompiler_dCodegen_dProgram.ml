@@ -60,7 +60,7 @@ let v_Vuna_dCompiler_dCodegen_dProgram_dgenProgramBody = (fun program -> ((fun d
 let v_Vuna_dCompiler_dCodegen_dProgram_dgenerateDtProgram = (fun program -> (fun printResult -> ((v_Base_dResult_dandThen (v_Vuna_dCompiler_dCodegen_dProgram_dgenProgramBody program)) (fun p -> (match p with
   | C_Base_dPair_dPair_Base_dPair_dPair (dtb__6, dtb__7) -> (match dtb__7 with
   | C_Base_dPair_dPair_Base_dPair_dPair (dtb__8, dtb__9) -> (match ((v_Vuna_dCompiler_dCodegen_dErase_dfindDtDef "main") dtb__8) with
-  | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> (C_Base_dResult_dResult_Base_dResult_dErr ("DT: no main definition"))
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> (C_Base_dResult_dResult_Base_dResult_dErr ("[CG_NoMain] DT: no main definition"))
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__10) -> ((fun mainTy -> ((fun mainRef -> (match (v_Vuna_dCompiler_dCodegen_dTerm_dioResultTy mainTy) with
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__11) -> (((((v_Vuna_dCompiler_dCodegen_dTerm_dgenDtHook dtb__6) dtb__9) dtb__11) ((v_Vuna_dCompiler_dCodegen_dTerm_dioRunText program) mainRef)) printResult)
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> (((((v_Vuna_dCompiler_dCodegen_dTerm_dgenDtHook dtb__6) dtb__9) mainTy) mainRef) printResult)

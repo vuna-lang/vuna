@@ -76,12 +76,14 @@ isDictFamily ec g = memName g (map (\c => dictTypeName (dtClassName c)) (ecClass
 -- 实例搜索：找头能统一到目标字典类型的**默认**实例。零个 ⇒ 报缺失，多个 ⇒ 报歧义。
 -- M23：命名实例（`as name`）不参与自动搜索，只能 `method @name` 显式选中（与 HM 一致）。
 searchInstance : Ec -> Value -> Span -> Result (Pair Term Ec)
+-- @code TC_AmbiguousInstance
 searchInstance ec dom sp = case filterInstances ec dom (filter (\i => not (dtInstNamed i)) (ecInsts ec)) (ecSols ec) of
-  Pair [] sols => errAt sp ("DT: no instance found for " ++ showValue dom)
+  -- @code TC_NoInstanceFound
+  Pair [] sols => errAt sp ("[TC_NoInstanceFound] DT: no instance found for " ++ showValue dom)
   Pair ([i]) sols => Ok (Pair (TGlobal (dtInstName i)) (ecPutSols ec sols))
   Pair cands sols =>
     errAt sp
-      ("DT: ambiguous instance for " ++ showValue dom ++ " (candidates: " ++ joinInstNames cands ++ ")")
+      ("[TC_AmbiguousInstance] DT: ambiguous instance for " ++ showValue dom ++ " (candidates: " ++ joinInstNames cands ++ ")")
 
 -- M22：回填延迟的字典元变量。每个 `DtDictGoal m dom`：类参数已解（非元变量）且能搜到
 -- 唯一实例时解 `?m = <实例>`；仍未解或仍歧义则留到下一轮（幂等，可反复调用）。
@@ -144,13 +146,22 @@ joinRestInstNames (i :: rest) = ", " ++ dtInstName i ++ joinRestInstNames rest
 inferInstSel : List (Pair String Term) -> Ctx -> Ec -> Expr -> String -> Span -> Result (Pair Term (Pair Value Ec))
 inferInstSel globals ctx ec meth iname sp = case methodNameOf meth of
   Nothing =>
-    errAt sp "DT: @instance can only be used with a trait method (write `method @instance`)"
+    errAt sp
+      "[TC_InstanceAnnotationWrongUse] DT: @instance can only be used with a trait method (write `method @instance`)"
+  -- @code TC_InstanceAnnotationWrongUse
   Just mname => case instNamedLookup iname (ecInsts ec) of
-    Nothing => errAt sp ("DT: unknown named instance " ++ iname)
+    -- @code TC_UnknownNamedInstance
+    Nothing => errAt sp ("[TC_UnknownNamedInstance] DT: unknown named instance " ++ iname)
     Just inst => case instClassOfDict (instDictName inst) (ecClasses ec) of
-      Nothing => errAt sp ("DT: instance " ++ iname ++ " is not an instance of a trait")
+      -- @code TC_InstanceNotTrait
+      Nothing =>
+        errAt sp
+          ("[TC_InstanceNotTrait] DT: instance " ++ iname ++ " is not an instance of a trait")
       Just cls => case classMethodIndex mname (dtClassMethods cls) of
-        Nothing => errAt sp ("DT: `" ++ mname ++ "` is not a method of trait " ++ dtClassName cls)
+        -- @code TC_OpOnlyIntString
+        Nothing =>
+          errAt sp
+            ("[TC_OpOnlyIntString] DT: `" ++ mname ++ "` is not a method of trait " ++ dtClassName cls)
         Just k =>
           let
             nFields = length (dtClassMethods cls)
@@ -349,7 +360,10 @@ cmpRuntimeName name tyName = case tyName of
     _ => Ok "bi_ge_int"
   "String" => Ok (cmpGenericName name)
   "Bool" => Ok (cmpGenericName name)
-  _ => Err ("DT: `" ++ name ++ "` is not defined for " ++ tyName ++ " (Ord instance required)")
+  -- @code TC_OpOnlyIntString
+  _ =>
+    Err
+      ("[TC_OpOnlyIntString] DT: `" ++ name ++ "` is not defined for " ++ tyName ++ " (Ord instance required)")
 
 cmpGenericName : String -> String
 cmpGenericName name = case name of

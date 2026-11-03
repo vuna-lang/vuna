@@ -68,7 +68,10 @@ import Vuna.Compiler.Frontend.Ast
 -- 方向约定：优先精化 **level 更大**（更内层）的变量，于是 ctor 一侧的新鲜变量精化成
 -- scrutinee 的真实变量（`m ↦ n`），不会把真实变量解到分支作用域外（level 形态，无需 de Bruijn）。
 unifyErr : Result a
-unifyErr = Err "DT: this branch is impossible (index constraints are unsatisfiable)"
+-- @code TC_ImpossibleBranchIndex
+unifyErr =
+  Err
+    "[TC_ImpossibleBranchIndex] DT: this branch is impossible (index constraints are unsatisfiable)"
 
 unifyIdxList : Ec -> List (Pair Int Value) -> Int -> Int -> List Value -> List Value -> Result (List (Pair Int Value))
 unifyIdxList ec acc depth fuel [] [] = Ok acc
@@ -78,7 +81,8 @@ unifyIdxList ec acc depth fuel (x :: xs) (y :: ys) =
 unifyIdxList ec acc depth fuel _ _ = unifyErr
 
 unifyIdx : Ec -> List (Pair Int Value) -> Int -> Int -> Value -> Value -> Result (List (Pair Int Value))
-unifyIdx ec acc depth fuel a b = if fuel <= 0 then Err "DT: index unification ran out of reduction fuel"
+-- @code TC_IndexFuel
+unifyIdx ec acc depth fuel a b = if fuel <= 0 then Err "[TC_IndexFuel] DT: index unification ran out of reduction fuel"
 else
   let
     a2 = force (ecDefs ec) (ecSols ec) defaultFuel (refineValue acc defaultFuel a)
@@ -244,7 +248,9 @@ bindCtorGo ctx ty subpats acc = case ty of
         ctx2 = ctxBindValue famName domVal ctx
       in bindCtorGo ctx2 cod subpats (BindAcc (Pair famName Rig0 :: baBinders acc) (baPending acc))
     else case subpats of
-      [] => Err "DT: case branch has too few arguments for its constructor"
+      -- @code TC_CaseBranchTooFewArgs
+      [] =>
+        Err "[TC_CaseBranchTooFewArgs] DT: case branch has too few arguments for its constructor"
       p :: rest => case p of
         PVar pname psp => bindCtorBinder ctx domVal cod pname rest acc
         PWild psp => bindCtorBinder ctx domVal cod "_" rest acc
@@ -259,7 +265,10 @@ bindCtorGo ctx ty subpats acc = case ty of
         -- 内层 case——字面量 case 在 DT 里降级成 if 链，需要外层兜底体提供 else。
         PInt n psp => mkPendingBinder ctx domVal cod p rest acc
         PStr s psp => mkPendingBinder ctx domVal cod p rest acc
-        _ => errAt (patSpan p) "DT: nested patterns must be constructor patterns (M19)"
+        -- @code TC_NestedPatterns
+        _ =>
+          errAt (patSpan p)
+            "[TC_NestedPatterns] DT: nested patterns must be constructor patterns (M19)"
   _ => Ok (Pair ctx (Pair (reverse (baBinders acc)) (Pair (baPending acc) subpats)))
 
 -- 嵌套模式的通用处理：绑新鲜名字、记 Pending，继续绑 telescope。
@@ -400,10 +409,11 @@ checkCoverage ctx ec dd idxs alts sp =
 
 checkCovered : Ctx -> Ec -> DtData -> List Value -> List String -> List (Pair Pat Expr) -> Span -> List DtCtor -> Result Int
 checkCovered ctx ec dd idxs written alts sp [] = Ok 0
+-- @code TC_NotExhaustive
 checkCovered ctx ec dd idxs written alts sp (ctor :: rest) =
   if memName (dtCtorName ctor) written then checkCovered ctx ec dd idxs written alts sp rest
   else if ecTrusted ec then checkCovered ctx ec dd idxs written alts sp rest
-  else if branchReachable ctx ec idxs ctor then errAt sp ("DT: case is not exhaustive: missing " ++ dtCtorName ctor)
+  else if branchReachable ctx ec idxs ctor then errAt sp ("[TC_NotExhaustive] DT: case is not exhaustive: missing " ++ dtCtorName ctor)
   else checkCovered ctx ec dd idxs written alts sp rest
 
 -- case：先验 scrutinee 是归纳族，再逐分支精化，最后查覆盖率。

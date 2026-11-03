@@ -100,34 +100,59 @@ $ vuna doc <dir> <out.md>
 
 注意输出文件的**父目录必须已存在**（`doc` 不创建目录）。
 
-## 4. DT 错误索引
+## 4. 错误码体系（M3 / M4）
 
-| 消息 | 阶段 | 触发条件 |
-| --- | --- | --- |
-| `DT: cannot infer the type of a hole; give it an expected type` | 精化 | `_` 出现在推断位置 |
-| `DT: unsolved hole <loc> with goal <ty>` | 精化 | 洞最终未被求解（带目标） |
-| `DT: unsolved metavariable ?k` | 精化 | 非洞的元变量未解 |
-| `DT: cannot solve metavariable ?k (occurs check)` | 精化 | 解里出现自身 |
-| `DT: cannot solve metavariable ?k (solution would escape its scope)` | 精化 | 解引用了创建之后才绑定的局部变量 |
-| `DT: cannot solve higher-order metavariable ?k (M15 limitation)` | 精化 | 带 spine 的元变量 |
-| `DT: no instance found for <dict type>` | 精化 | 接口字典找不到实例 |
-| `DT: ambiguous instance for <dict type> (candidates: ...)` | 精化 | 多个实例头部都能统一 |
-| `DT: unknown interface <C> in instance head` | 精化 | instance 头不是已声明接口 |
-| `DT: instance head must be an interface application (e.g. Show Int)` | 精化 | instance 头形态不合法 |
-| `DT: instance is missing an implementation of <m>` | 精化 | 实例漏实现方法 |
-| `DT: interfaces must have exactly one parameter (M15 limitation)` | 精化 | 多参数接口 |
-| `DT: cannot prove termination of <f> (recursive call does not structurally decrease)` | 终止性 | 自递归调用的实参没有变小 |
-| `DT: case is not exhaustive: missing <C>` | 覆盖性 | 漏写可达分支 |
-| `DT: this branch is impossible (index constraints are unsatisfiable)` | 覆盖性 | 写了不可达分支 |
-| `DT: case scrutinee is not an inductive family` | 精化 | 对非归纳族做 case |
-| `DT: unknown constructor <C> in case` | 精化 | 分支构造子不属于该族 |
-| `DT: constructor <C> does not return <F>` | 精化 | 构造子结果族不符 |
-| `DT: multiple clauses are not supported yet (use a single equation; M16)` | 精化 | 多 clause 函数（历史诊断） |
-| `DT: type-level binding <x> is used at runtime (M13 limitation)` | codegen | 运行时用到被擦除绑定 |
-| `DT: a type is used at runtime (M13 limitation)` | codegen | 运行时出现类型项 |
-| `DT: main must return Int, String or Bool (M13 limitation)` | codegen | `main` 返回类型不支持 |
+诊断输出带**错误码**：Elab/Codegen 为 `文件:行:列: [CODE] DT: 消息`（Codegen 无位置则无
+`行:列:`），lint 为 `路径:行:列: [CODE] 规则: 消息`。域前缀：
 
-## 5. 尚未实现（工具链自身缺口）
+| 域 | 含义 |
+| --- | --- |
+| `TC_` | Elab 精化 / 终止性 / 覆盖性诊断 |
+| `CG_` | Codegen / Driver / Dt 诊断 |
+| `LN_` | lint 规则 |
+| `FX_` | 错误修复规则（从可修复 `LN_` 推导，`FX_` + 规则名去 `-`） |
+
+约定：符号**语义稳定、只增不删**；同语义消息**共享**一个符号（`(Mxx)` 标记不参与符号
+判定）；`DT: internal:`（编译器内部不变量）不分配符号。
+
+**完整清单**由 `vuna gen-errors [ROOT]` 从源码 `-- @code` docstring 生成到
+`ROOT/docs/.generated/errors.md`（默认 ROOT=`.`）。生成物 gitignored、**勿手改**；重跑幂等。
+
+docstring 约定（诊断就近注释）：
+- DT：`-- @code TC_/CG_XXX`（每处诊断一条；同语义多处共享同一符号）。
+- lint：`-- @code LN_XXX`、`-- @rule <name>`、`-- @msg <消息>`、`-- @desc <说明>`、
+  `-- @fixable`、`-- @edit <修复描述>`（`-- @fixable` 推导出 `FX_` 条目）。
+
+下节错误索引只列**代表性**诊断；完整清单见生成物 `docs/.generated/errors.md`。
+
+## 5. DT 错误索引
+
+| code | 消息 | 阶段 | 触发条件 |
+| --- | --- | --- | --- |
+| `TC_HoleNoExpectedType` | `DT: cannot infer the type of a hole; give it an expected type` | 精化 | `_` 出现在推断位置 |
+| `TC_UnsolvedHole` | `DT: unsolved hole <loc> with goal <ty>` | 精化 | 洞最终未被求解（带目标） |
+| `TC_UnsolvedMetavar` | `DT: unsolved metavariable ?k` | 精化 | 非洞的元变量未解 |
+| `TC_CannotSolveMetavar` | `DT: cannot solve metavariable ?k (occurs check)` | 精化 | 解里出现自身 |
+| `TC_CannotSolveMetavar` | `DT: cannot solve metavariable ?k (solution would escape its scope)` | 精化 | 解引用了创建之后才绑定的局部变量 |
+| `—` | `DT: cannot solve higher-order metavariable ?k (M15 limitation)` | 精化 | 带 spine 的元变量（Core/Conv 未纳入错误码） |
+| `TC_NoInstanceFound` | `DT: no instance found for <dict type>` | 精化 | 接口字典找不到实例 |
+| `TC_AmbiguousInstance` | `DT: ambiguous instance for <dict type> (candidates: ...)` | 精化 | 多个实例头部都能统一 |
+| `TC_UnknownInterface` | `DT: unknown interface <C> in instance head` | 精化 | instance 头不是已声明接口 |
+| `TC_InstanceHeadNotApp` | `DT: instance head must be an interface application (e.g. Show Int)` | 精化 | instance 头形态不合法 |
+| `TC_InstanceMissingMethod` | `DT: instance is missing an implementation of <m>` | 精化 | 实例漏实现方法 |
+| `TC_InterfaceOneParam` | `DT: interfaces must have exactly one parameter (M15 limitation)` | 精化 | 多参数接口 |
+| `TC_CannotProveTermination` | `DT: cannot prove termination of <f> (recursive call does not structurally decrease)` | 终止性 | 自递归调用的实参没有变小 |
+| `TC_NotExhaustive` | `DT: case is not exhaustive: missing <C>` | 覆盖性 | 漏写可达分支 |
+| `TC_ImpossibleBranchIndex` | `DT: this branch is impossible (index constraints are unsatisfiable)` | 覆盖性 | 写了不可达分支 |
+| `TC_NotInductiveFamily` | `DT: case scrutinee is not an inductive family` | 精化 | 对非归纳族做 case |
+| `TC_UnknownConstructorInCase` | `DT: unknown constructor <C> in case` | 精化 | 分支构造子不属于该族 |
+| `TC_CtorDoesNotReturn` | `DT: constructor <C> does not return <F>` | 精化 | 构造子结果族不符 |
+| `—` | `DT: multiple clauses are not supported yet (use a single equation; M16)` | 精化 | 多 clause 函数（历史诊断，M16 已移除） |
+| `CG_TypeLevelBindingRuntime` | `DT: type-level binding <x> is used at runtime (M13 limitation)` | codegen | 运行时用到被擦除绑定 |
+| `CG_TypeUsedAtRuntime` | `DT: a type is used at runtime (M13 limitation)` | codegen | 运行时出现类型项 |
+| `CG_MainReturnType` | `DT: main must return Int, String or Bool (M13 limitation)` | codegen | `main` 返回类型不支持 |
+
+## 6. 尚未实现（工具链自身缺口）
 
 > 阶段状态与当前阻碍见 [docs/roadmap.md](../roadmap.md) 的「阶段状态总览」；这里只列
 > 工具链自身缺口。

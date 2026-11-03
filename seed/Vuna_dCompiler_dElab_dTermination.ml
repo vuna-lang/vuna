@@ -180,7 +180,7 @@ let v_Vuna_dCompiler_dElab_dTermination_dextendSizes = (fun sizes -> (fun scrut 
 let rec v_Vuna_dCompiler_dElab_dTermination_dcheckTermBody = (fun fname -> (fun sizes -> (fun e -> (match e with
   | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEApp (dtb__99, dtb__100, dtb__101) -> (match (((v_Vuna_dCompiler_dElab_dTermination_dcallIndexes fname) dtb__99) dtb__100) with
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> (((v_Vuna_dCompiler_dElab_dTermination_dcheckTermBody fname) sizes) dtb__99)
-  | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__102) -> (if (((v_Vuna_dCompiler_dElab_dTermination_danyDescends dtb__102) dtb__100) sizes) then (((v_Vuna_dCompiler_dElab_dTermination_dcheckTermArgs fname) sizes) dtb__100) else (C_Base_dResult_dResult_Base_dResult_dErr (((bi_concat "DT: cannot prove termination of ") ((bi_concat fname) " (recursive call does not structurally decrease)")))))
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__102) -> (if (((v_Vuna_dCompiler_dElab_dTermination_danyDescends dtb__102) dtb__100) sizes) then (((v_Vuna_dCompiler_dElab_dTermination_dcheckTermArgs fname) sizes) dtb__100) else (C_Base_dResult_dResult_Base_dResult_dErr (((bi_concat "[TC_CannotProveTermination] DT: cannot prove termination of ") ((bi_concat fname) " (recursive call does not structurally decrease)")))))
   | _ -> failwith "DT: impossible branch"
 )
   | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dECase (dtb__103, dtb__104, dtb__105) -> ((v_Base_dResult_dandThen (((v_Vuna_dCompiler_dElab_dTermination_dcheckTermBody fname) sizes) dtb__103)) (fun _u -> ((((v_Vuna_dCompiler_dElab_dTermination_dcheckTermAlts fname) sizes) dtb__103) dtb__104)))

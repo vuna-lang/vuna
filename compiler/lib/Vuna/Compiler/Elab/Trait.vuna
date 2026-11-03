@@ -131,7 +131,9 @@ foldPiFieldTysGo (f :: rest) n ty =
 elabTrait : List (Pair String Term) -> Ec -> Pair Decl Span -> Result (Pair DtData (Pair (List (Pair String Term)) (Pair DtClass Ec)))
 elabTrait globals ec ds = case ds of
   Pair d dsp => case d of
-    DTrait tname params methods sp => if length params /= 1 then errAt sp "DT: interfaces must have exactly one parameter (M15 limitation)"
+    -- @code TC_InterfaceOneParam
+    DTrait tname params methods sp => if length params /= 1 then errAt sp
+      "[TC_InterfaceOneParam] DT: interfaces must have exactly one parameter (M15 limitation)"
     else andThen (classFieldTys globals ec params methods) (\p => case p of
       Pair fieldTys ec1 =>
         let
@@ -270,13 +272,22 @@ elabInstance : List (Pair String Term) -> List DtClass -> List DtData -> Ec -> P
 elabInstance globals classes datas ec ds = case ds of
   Pair d dsp => case d of
     DInstance mname isDefault headExpr methods msp => case instanceHeadName headExpr of
-      Nothing => errAt msp "DT: instance head must be an interface application (e.g. Show Int)"
+      -- @code TC_InstanceHeadNotApp
+      Nothing =>
+        errAt msp
+          "[TC_InstanceHeadNotApp] DT: instance head must be an interface application (e.g. Show Int)"
       Just cname => case findClass cname classes of
-        Nothing => errAt msp ("DT: unknown interface " ++ cname ++ " in instance head")
+        -- @code TC_UnknownInterface
+        Nothing =>
+          errAt msp ("[TC_UnknownInterface] DT: unknown interface " ++ cname ++ " in instance head")
         Just cls => case firstUnknownInstanceMethod cls methods of
-          Just n => errAt msp ("DT: instance has unknown method " ++ n)
+          -- @code TC_InstanceUnknownMethod
+          Just n => errAt msp ("[TC_InstanceUnknownMethod] DT: instance has unknown method " ++ n)
           Nothing => case firstMissingInstanceMethod cls methods of
-            Just m => errAt msp "DT: instance is missing an implementation for an interface method"
+            -- @code TC_InstanceMissingMethod
+            Just m =>
+              errAt msp
+                "[TC_InstanceMissingMethod] DT: instance is missing an implementation for an interface method"
             Nothing => andThen (elabInstanceMethods globals cls (instanceHeadTerm headExpr) ec methods msp) (\p => case p of
               Pair fieldTerms (Pair fieldArgs ec1) =>
                 let
@@ -360,7 +371,10 @@ elabInstanceMethodsGo globals ec ((Pair mname fty) :: rest) pname headArg decls 
     clauses = methodClausesNamed mname decls
     instTy = substClassParam pname headArg fty
   in case clauses of
-    [] => errAt sp "DT: instance is missing an implementation for an interface method"
+    -- @code TC_InstanceMissingMethod
+    [] =>
+      errAt sp
+        "[TC_InstanceMissingMethod] DT: instance is missing an implementation for an interface method"
     _ => andThen (elabInstanceMethod globals ec instTy clauses) (\p => case p of
       Pair term ec1 =>
         elabInstanceMethodsGo globals ec1 rest pname headArg decls (term :: terms)
@@ -518,16 +532,22 @@ checkInstanceHeadsGo [] classes globals ec acc insts seen =
 checkInstanceHeadsGo (d :: rest) classes globals ec acc insts seen = case d of
   Pair decl dsp => case decl of
     DInstance mname isDefault headExpr methods msp => case instanceHeadName headExpr of
-      Nothing => errAt msp "DT: instance head must be an interface application (e.g. Show Int)"
+      -- @code TC_InstanceHeadNotApp
+      Nothing =>
+        errAt msp
+          "[TC_InstanceHeadNotApp] DT: instance head must be an interface application (e.g. Show Int)"
       Just cname => case findClass cname classes of
-        Nothing => errAt msp ("DT: unknown interface " ++ cname ++ " in instance head")
+        -- @code TC_UnknownInterface
+        Nothing =>
+          errAt msp ("[TC_UnknownInterface] DT: unknown interface " ++ cname ++ " in instance head")
         Just cls =>
           let
             iname = instanceName (dtClassName cls) mname headExpr
             ty = ctorResultType cls (instanceHeadTerm headExpr)
             named = instanceIsNamed mname
           in case findDuplicateInstance ec iname named ty seen of
-            Just other => errAt msp ("DT: duplicate instance " ++ iname)
+            -- @code TC_DuplicateInstance
+            Just other => errAt msp ("[TC_DuplicateInstance] DT: duplicate instance " ++ iname)
             Nothing =>
               checkInstanceHeadsGo rest classes globals ec (Pair iname ty :: acc)
                 (DtInst iname ty named :: insts) (DtInst iname ty named :: seen)
@@ -637,8 +657,10 @@ checkBinders globals ctx ec [] body expected sp =
   in case forced of
     VPi name implicit rig dom clo =>
       if implicit then if isIndexDomain ec dom then bindIndexBinder globals ctx ec name dom clo [] body sp
-      else errAt sp "DT: implicit parameters must be types or inductive families (M14)"
+      else errAt sp
+        "[TC_ImplicitParamKind] DT: implicit parameters must be types or inductive families (M14)"
       else checkBodyAtEnd globals ctx ec body expected sp
+    -- @code TC_ImplicitParamKind
     _ => checkE globals ctx ec body expected
 
 -- 隐式索引 binder（`{n : Nat}`）：绑成擦除的 lambda（Rig0），体在扩展上下文里继续。
@@ -657,19 +679,26 @@ bindIndexBinder globals ctx ec name dom clo pats body sp =
 checkBodyAtEnd : List (Pair String Term) -> Ctx -> Ec -> Expr -> Value -> Span -> Result (Pair Term Ec)
 checkBodyAtEnd globals ctx ec body expected sp = case body of
   ELam names lambdaBody lambdaSp => checkE globals ctx ec body expected
-  _ => errAt sp "DT: definition has fewer parameters than its signature"
+  -- @code TC_DefFewerParams
+  _ => errAt sp "[TC_DefFewerParams] DT: definition has fewer parameters than its signature"
 
 checkBinders globals ctx ec (pat :: rest) body expected sp =
   let
     forced = forceVal ec expected
   in case forced of
     VPi name implicit rig dom clo => if implicit then if isIndexDomain ec dom then bindIndexBinder globals ctx ec name dom clo (pat :: rest) body sp
-    else errAt sp "DT: implicit parameters must be types or inductive families (M14)"
+    else errAt sp
+      "[TC_ImplicitParamKind] DT: implicit parameters must be types or inductive families (M14)"
     else case pat of
+      -- @code TC_ImplicitParamKind
       PVar pname psp => bindOnePattern globals ctx ec pname rest body dom clo sp
       PWild psp => bindOnePattern globals ctx ec "_" rest body dom clo sp
-      _ => errAt (patSpan pat) "DT: definition parameters must be variables (M13)"
-    _ => errAt sp "DT: definition has more parameters than its signature"
+      -- @code TC_DefParamsMustBeVars
+      _ =>
+        errAt (patSpan pat)
+          "[TC_DefParamsMustBeVars] DT: definition parameters must be variables (M13)"
+    -- @code TC_DefMoreParams
+    _ => errAt sp "[TC_DefMoreParams] DT: definition has more parameters than its signature"
 
 bindOnePattern : List (Pair String Term) -> Ctx -> Ec -> String -> List Pat -> Expr -> Value -> Closure -> Span -> Result (Pair Term Ec)
 bindOnePattern globals ctx ec pname pats body dom clo sp =
@@ -691,7 +720,8 @@ bindOnePattern globals ctx ec pname pats body dom clo sp =
 -- 变量/通配汇成兜底）。产物是纯 lambda + case，交给既有精化路径，覆盖/索引/擦除全自动。
 elabFunDef : List (Pair String Term) -> Ec -> List (Pair (List Pat) Expr) -> Value -> Span -> Result (Pair Term Ec)
 elabFunDef globals ec clauses expected sp = case clauses of
-  [] => errAt sp "DT: function has no clauses"
+  -- @code TC_FunctionNoClauses
+  [] => errAt sp "[TC_FunctionNoClauses] DT: function has no clauses"
   [Pair pats body] =>
     if allVarPats pats then checkDef globals ec pats body expected sp
     else andThen (multiToExpr (ctorFamilyTable ec) clauses)

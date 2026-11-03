@@ -83,7 +83,8 @@ elabBodies : List Decl -> List (Pair String Term) -> List (Pair String Term) -> 
 elabBodies [] globals doneDefs acc ec = Ok (Pair (reverse acc) ec)
 elabBodies (d :: rest) globals doneDefs acc ec = case d of
   DFun name pats body sp => case globalLookup name globals of
-    Nothing => errAt sp ("DT: expected a type signature for " ++ name)
+    -- @code TC_ExpectedSignature
+    Nothing => errAt sp ("[TC_ExpectedSignature] DT: expected a type signature for " ++ name)
     Just tyTerm => if memDefName name doneDefs then elabBodies rest globals doneDefs acc ec
     else andThen (elabFunDef globals ec (clausesFor (d :: rest) name) (eval [] tyTerm) sp) (\p => case p of
       Pair bodyTerm ec1 =>
@@ -102,10 +103,12 @@ elabBodies (d :: rest) globals doneDefs acc ec = case d of
 -- 每个签名都必须有定义（M13 不支持公理/未定义顶层）。
 checkAllDefined : List (Pair String Expr) -> List (Pair String Term) -> List Decl -> Result (List String)
 checkAllDefined [] globals decls = Ok []
+-- @code TC_SignatureNoDef
 checkAllDefined ((Pair name tyExpr) :: rest) globals decls = if hasFunClause name decls then case globalLookup name globals of
-  Nothing => Err ("DT: signature for " ++ name ++ " has no definition")
+  -- @code TC_SignatureNoDef
+  Nothing => Err ("[TC_SignatureNoDef] DT: signature for " ++ name ++ " has no definition")
   Just ty => checkAllDefined rest globals decls
-else Err ("DT: signature for " ++ name ++ " has no definition")
+else Err ("[TC_SignatureNoDef] DT: signature for " ++ name ++ " has no definition")
 
 hasFunClause : String -> List Decl -> Bool
 hasFunClause name [] = False
@@ -135,7 +138,8 @@ dtEvalExprIn prog expr = case prog of
         in case unsolvedFrom next (ecNext ec2) sols2 of
           Just m =>
             errAt (exprSpan expr)
-              ("DT: cannot infer a type for this expression (unsolved metavariable ?" ++ strFromInt m ++ "); add a type annotation")
+              ("[TC_UnsolvedMetavarInfer] DT: cannot infer a type for this expression (unsolved metavariable ?" ++ strFromInt m ++ "); add a type annotation")
+          -- @code TC_UnsolvedMetavarInfer
           Nothing => case normalize (map (\d => Pair (dtDefName d) (dtDefBody d)) defs) sols2 defaultFuel (eval [] term) of
             VInt n => Ok (strFromInt n)
             v => Ok (showValue v)
@@ -218,11 +222,14 @@ checkTerminationIf trusted decls = if trusted then Ok 0 else checkTerminationDec
 unsolvedMessage : Ec -> Int -> String
 unsolvedMessage ec m = case findGoal m (ecGoals ec) of
   Just g =>
-    "DT: unsolved hole "
+    "[TC_UnsolvedHole] DT: unsolved hole "
       ++ showSpanLoc (dtGoalSpan g)
       ++ " with goal "
       ++ showValueAt (ctxDepthOf g) (dtGoalType g)
-  Nothing => "DT: unsolved metavariable ?" ++ strFromInt m ++ metaOwnerHint ec m
+  -- @code TC_UnsolvedHole
+  -- @code TC_UnsolvedMetavar
+  Nothing =>
+    "[TC_UnsolvedMetavar] DT: unsolved metavariable ?" ++ strFromInt m ++ metaOwnerHint ec m
 
 -- 未解元变量的归属提示：扫已精化的定义体与类型，指出它出现在哪个定义里（否则只有 ?m，
 -- 在一个上万行的程序里无从定位）。

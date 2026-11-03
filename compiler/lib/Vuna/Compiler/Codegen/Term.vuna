@@ -359,8 +359,10 @@ genTerm : GenSt -> List (Pair String Rig) -> Term -> Result (Pair String GenSt)
 genTerm st binders t = case t of
   TVar name i => case binderAt i binders of
     Just (Pair oc rig) =>
-      if rigIsErased rig then Err ("DT: type-level binding `" ++ name ++ "` is used at runtime (M13 limitation)")
+      if rigIsErased rig then Err
+        ("[CG_TypeLevelBindingRuntime] DT: type-level binding `" ++ name ++ "` is used at runtime (M13 limitation)")
       else Ok (Pair oc st)
+    -- @code CG_TypeLevelBindingRuntime
     Nothing => Err "DT: internal: unbound runtime variable"
   TGlobal name => genGlobalRef st name
   TInt n => Ok (Pair (strFromInt n) st)
@@ -377,9 +379,14 @@ genTerm st binders t = case t of
   TApp f a rig => genApp st binders f a rig
   TCon c args => genConApp st binders c args
   TCase scrut alts => genCase st binders scrut alts
-  TPi name implicit rig dom cod => Err "DT: a type is used at runtime (M13 limitation)"
-  TType l => Err "DT: a type is used at runtime (M13 limitation)"
-  TMeta m => Err ("DT: unsolved metavariable in runtime code" ++ showMetaHint m)
+  -- @code CG_TypeUsedAtRuntime
+  TPi name implicit rig dom cod =>
+    Err "[CG_TypeUsedAtRuntime] DT: a type is used at runtime (M13 limitation)"
+  -- @code CG_TypeUsedAtRuntime
+  TType l => Err "[CG_TypeUsedAtRuntime] DT: a type is used at runtime (M13 limitation)"
+  -- @code CG_UnsolvedMetavarRuntime
+  TMeta m =>
+    Err ("[CG_UnsolvedMetavarRuntime] DT: unsolved metavariable in runtime code" ++ showMetaHint m)
 
 genTermLam : GenSt -> List (Pair String Rig) -> String -> Rig -> Term -> Result (Pair String GenSt)
 genTermLam st binders name rig body = if rigIsErased rig then andThen (genTerm st (Pair "" Rig0 :: binders) body) (\p => case p of
@@ -571,7 +578,8 @@ mainShowForName g = case lastName g of
   _ => mainShowErr
 
 mainShowErr : Result (Pair String String)
-mainShowErr = Err "DT: main must return Int, String or Bool (M13 limitation)"
+-- @code CG_MainReturnType
+mainShowErr = Err "[CG_MainReturnType] DT: main must return Int, String or Bool (M13 limitation)"
 
 -- main 钩子：`mainExpr` 是运行时求 main 值的表达式（普通 main 直接是 `v_main`；
 -- main : IO a 则是 `match v_main with C_IO_MkIO f -> f 0`），按类型 `tyTerm` 选展示函数。

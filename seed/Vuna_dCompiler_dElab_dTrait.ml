@@ -111,7 +111,7 @@ let v_Vuna_dCompiler_dElab_dTrait_dprojectionDefs = (fun tname -> (fun pname -> 
 
 let v_Vuna_dCompiler_dElab_dTrait_delabTrait = (fun globals -> (fun ec -> (fun ds -> (match ds with
   | C_Base_dPair_dPair_Base_dPair_dPair (dtb__31, dtb__32) -> (match dtb__31 with
-  | C_Vuna_dCompiler_dFrontend_dAst_dDecl_Vuna_dCompiler_dFrontend_dAst_dDTrait (dtb__33, dtb__34, dtb__35, dtb__36) -> (if ((bi_neq_int (v_Base_dList_dlength dtb__34)) 1) then ((v_Vuna_dCompiler_dElab_dTypes_derrAt dtb__36) "DT: interfaces must have exactly one parameter (M15 limitation)") else ((v_Base_dResult_dandThen ((((v_Vuna_dCompiler_dElab_dTrait_dclassFieldTys globals) ec) dtb__34) dtb__35)) (fun p -> (match p with
+  | C_Vuna_dCompiler_dFrontend_dAst_dDecl_Vuna_dCompiler_dFrontend_dAst_dDTrait (dtb__33, dtb__34, dtb__35, dtb__36) -> (if ((bi_neq_int (v_Base_dList_dlength dtb__34)) 1) then ((v_Vuna_dCompiler_dElab_dTypes_derrAt dtb__36) "[TC_InterfaceOneParam] DT: interfaces must have exactly one parameter (M15 limitation)") else ((v_Base_dResult_dandThen ((((v_Vuna_dCompiler_dElab_dTrait_dclassFieldTys globals) ec) dtb__34) dtb__35)) (fun p -> (match p with
   | C_Base_dPair_dPair_Base_dPair_dPair (dtb__37, dtb__38) -> ((fun pname -> ((fun pKind -> ((fun dname -> ((fun cname -> ((fun dapp -> ((fun ctorTy -> ((fun tele -> ((fun dd -> ((fun projs -> ((fun projBodies -> ((fun cls -> ((fun ec2 -> ((fun ec3 -> (C_Base_dResult_dResult_Base_dResult_dOk ((C_Base_dPair_dPair_Base_dPair_dPair (dd, (C_Base_dPair_dPair_Base_dPair_dPair (projs, (C_Base_dPair_dPair_Base_dPair_dPair (cls, ec3))))))))) ((v_Vuna_dCompiler_dElab_dTrait_dfoldlAddDef ec2) projBodies))) ((v_Vuna_dCompiler_dElab_dTypes_decAddClass ((v_Vuna_dCompiler_dElab_dTypes_decAddData dtb__38) dd)) cls))) (C_Vuna_dCompiler_dElab_dTypes_dDtClass_Vuna_dCompiler_dElab_dTypes_dDtClass (dtb__33, dtb__34, projs, dtb__37)))) (((((v_Vuna_dCompiler_dElab_dTrait_dprojectionDefs dtb__33) pname) dtb__35) dtb__37) (v_Base_dList_dlength dtb__35)))) (((((v_Vuna_dCompiler_dElab_dTrait_dmethodProjections dtb__33) pname) pKind) dtb__35) dtb__37))) (C_Vuna_dCompiler_dElab_dTypes_dDtData_Vuna_dCompiler_dElab_dTypes_dDtData (dname, tele, (C_Base_dList_dList_Cons ((C_Vuna_dCompiler_dElab_dTypes_dDtCtor_Vuna_dCompiler_dElab_dTypes_dDtCtor (cname, dname, tele, ctorTy)), C_Base_dList_dList_Nil)))))) (v_Vuna_dCompiler_dElab_dMeta_dteleOfType ctorTy))) (C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTPi (pname, true, C_Vuna_dCompiler_dCore_dTerm_dRig_Vuna_dCompiler_dCore_dTerm_dRig0, pKind, ((v_Vuna_dCompiler_dElab_dTrait_dfoldPiFieldTys dtb__37) dapp))))) ((v_Vuna_dCompiler_dElab_dMeta_dfoldAppTerms (C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTGlobal (dname))) (C_Base_dList_dList_Cons ((C_Base_dPair_dPair_Base_dPair_dPair ((C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTVar (pname, 0)), C_Vuna_dCompiler_dCore_dTerm_dRig_Vuna_dCompiler_dCore_dTerm_dRig0)), C_Base_dList_dList_Nil))))) (v_Vuna_dCompiler_dElab_dMeta_ddictCtorName dtb__33))) (v_Vuna_dCompiler_dElab_dMeta_ddictTypeName dtb__33))) ((v_Vuna_dCompiler_dElab_dSig_dclassParamKind pname) dtb__35))) (v_Vuna_dCompiler_dElab_dMeta_dparamNameOf dtb__34))
   | _ -> failwith "DT: impossible branch"
 ))))
@@ -349,11 +349,11 @@ let rec v_Vuna_dCompiler_dElab_dTrait_dcheckInstanceHeadsGo = (fun mc0 -> (fun m
   | C_Base_dList_dList_Cons (dtb__154, dtb__155) -> (match dtb__154 with
   | C_Base_dPair_dPair_Base_dPair_dPair (dtb__156, dtb__157) -> (match dtb__156 with
   | C_Vuna_dCompiler_dFrontend_dAst_dDecl_Vuna_dCompiler_dFrontend_dAst_dDInstance (dtb__158, dtb__159, dtb__160, dtb__161, dtb__162) -> (match (v_Vuna_dCompiler_dElab_dTrait_dinstanceHeadName dtb__160) with
-  | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> ((v_Vuna_dCompiler_dElab_dTypes_derrAt dtb__162) "DT: instance head must be an interface application (e.g. Show Int)")
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> ((v_Vuna_dCompiler_dElab_dTypes_derrAt dtb__162) "[TC_InstanceHeadNotApp] DT: instance head must be an interface application (e.g. Show Int)")
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__163) -> (match ((v_Vuna_dCompiler_dElab_dTrait_dfindClass dtb__163) mc1) with
-  | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> ((v_Vuna_dCompiler_dElab_dTypes_derrAt dtb__162) ((bi_concat "DT: unknown interface ") ((bi_concat dtb__163) " in instance head")))
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> ((v_Vuna_dCompiler_dElab_dTypes_derrAt dtb__162) ((bi_concat "[TC_UnknownInterface] DT: unknown interface ") ((bi_concat dtb__163) " in instance head")))
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__164) -> ((fun iname -> ((fun ty -> ((fun named -> (match (((((v_Vuna_dCompiler_dElab_dTrait_dfindDuplicateInstance mc3) iname) named) ty) mc6) with
-  | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__165) -> ((v_Vuna_dCompiler_dElab_dTypes_derrAt dtb__162) ((bi_concat "DT: duplicate instance ") iname))
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__165) -> ((v_Vuna_dCompiler_dElab_dTypes_derrAt dtb__162) ((bi_concat "[TC_DuplicateInstance] DT: duplicate instance ") iname))
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> (((((((v_Vuna_dCompiler_dElab_dTrait_dcheckInstanceHeadsGo dtb__155) mc1) mc2) mc3) (C_Base_dList_dList_Cons ((C_Base_dPair_dPair_Base_dPair_dPair (iname, ty)), mc4))) (C_Base_dList_dList_Cons ((C_Vuna_dCompiler_dElab_dTypes_dDtInst_Vuna_dCompiler_dElab_dTypes_dDtInst (iname, ty, named)), mc5))) (C_Base_dList_dList_Cons ((C_Vuna_dCompiler_dElab_dTypes_dDtInst_Vuna_dCompiler_dElab_dTypes_dDtInst (iname, ty, named)), mc6)))
   | _ -> failwith "DT: impossible branch"
 )) (v_Vuna_dCompiler_dElab_dTrait_dinstanceIsNamed dtb__158))) ((v_Vuna_dCompiler_dElab_dTrait_dctorResultType dtb__164) (v_Vuna_dCompiler_dElab_dTrait_dinstanceHeadTerm dtb__160)))) (((v_Vuna_dCompiler_dElab_dTrait_dinstanceName (v_Vuna_dCompiler_dElab_dTypes_ddtClassName dtb__164)) dtb__158) dtb__160))
@@ -412,20 +412,20 @@ let v_Vuna_dCompiler_dElab_dTrait_dextraDefsOf = (fun globals -> (fun ec -> (fun
 
 let v_Vuna_dCompiler_dElab_dTrait_dcheckBodyAtEnd = (fun globals -> (fun ctx -> (fun ec -> (fun body -> (fun expected -> (fun sp -> (match body with
   | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dELam (dtb__178, dtb__179, dtb__180) -> (((((v_Vuna_dCompiler_dElab_dTerm_dcheckE globals) ctx) ec) body) expected)
-  | _ -> ((v_Vuna_dCompiler_dElab_dTypes_derrAt sp) "DT: definition has fewer parameters than its signature")
+  | _ -> ((v_Vuna_dCompiler_dElab_dTypes_derrAt sp) "[TC_DefFewerParams] DT: definition has fewer parameters than its signature")
 )))))))
 
 let rec v_Vuna_dCompiler_dElab_dTrait_dcheckBinders = (fun mc0 -> (fun mc1 -> (fun mc2 -> (fun mc3 -> (fun mc4 -> (fun mc5 -> (fun mc6 -> (match mc3 with
   | C_Base_dList_dList_Cons (dtb__181, dtb__182) -> ((fun forced -> (match forced with
-  | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVPi (dtb__183, dtb__184, dtb__185, dtb__186, dtb__187) -> (if dtb__184 then (if ((v_Vuna_dCompiler_dElab_dMeta_disIndexDomain mc2) dtb__186) then (((((((((v_Vuna_dCompiler_dElab_dTrait_dbindIndexBinder mc0) mc1) mc2) dtb__183) dtb__186) dtb__187) (C_Base_dList_dList_Cons (dtb__181, dtb__182))) mc4) mc6) else ((v_Vuna_dCompiler_dElab_dTypes_derrAt mc6) "DT: implicit parameters must be types or inductive families (M14)")) else (match dtb__181 with
+  | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVPi (dtb__183, dtb__184, dtb__185, dtb__186, dtb__187) -> (if dtb__184 then (if ((v_Vuna_dCompiler_dElab_dMeta_disIndexDomain mc2) dtb__186) then (((((((((v_Vuna_dCompiler_dElab_dTrait_dbindIndexBinder mc0) mc1) mc2) dtb__183) dtb__186) dtb__187) (C_Base_dList_dList_Cons (dtb__181, dtb__182))) mc4) mc6) else ((v_Vuna_dCompiler_dElab_dTypes_derrAt mc6) "[TC_ImplicitParamKind] DT: implicit parameters must be types or inductive families (M14)")) else (match dtb__181 with
   | C_Vuna_dCompiler_dFrontend_dAst_dPat_Vuna_dCompiler_dFrontend_dAst_dPVar (dtb__188, dtb__189) -> (((((((((v_Vuna_dCompiler_dElab_dTrait_dbindOnePattern mc0) mc1) mc2) dtb__188) dtb__182) mc4) dtb__186) dtb__187) mc6)
   | C_Vuna_dCompiler_dFrontend_dAst_dPat_Vuna_dCompiler_dFrontend_dAst_dPWild (dtb__190) -> (((((((((v_Vuna_dCompiler_dElab_dTrait_dbindOnePattern mc0) mc1) mc2) "_") dtb__182) mc4) dtb__186) dtb__187) mc6)
-  | _ -> ((v_Vuna_dCompiler_dElab_dTypes_derrAt (v_Vuna_dCompiler_dFrontend_dAst_dpatSpan dtb__181)) "DT: definition parameters must be variables (M13)")
+  | _ -> ((v_Vuna_dCompiler_dElab_dTypes_derrAt (v_Vuna_dCompiler_dFrontend_dAst_dpatSpan dtb__181)) "[TC_DefParamsMustBeVars] DT: definition parameters must be variables (M13)")
 ))
-  | _ -> ((v_Vuna_dCompiler_dElab_dTypes_derrAt mc6) "DT: definition has more parameters than its signature")
+  | _ -> ((v_Vuna_dCompiler_dElab_dTypes_derrAt mc6) "[TC_DefMoreParams] DT: definition has more parameters than its signature")
 )) ((v_Vuna_dCompiler_dElab_dTypes_dforceVal mc2) mc5))
   | C_Base_dList_dList_Nil -> ((fun forced -> (match forced with
-  | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVPi (dtb__191, dtb__192, dtb__193, dtb__194, dtb__195) -> (if dtb__192 then (if ((v_Vuna_dCompiler_dElab_dMeta_disIndexDomain mc2) dtb__194) then (((((((((v_Vuna_dCompiler_dElab_dTrait_dbindIndexBinder mc0) mc1) mc2) dtb__191) dtb__194) dtb__195) C_Base_dList_dList_Nil) mc4) mc6) else ((v_Vuna_dCompiler_dElab_dTypes_derrAt mc6) "DT: implicit parameters must be types or inductive families (M14)")) else ((((((v_Vuna_dCompiler_dElab_dTrait_dcheckBodyAtEnd mc0) mc1) mc2) mc4) mc5) mc6))
+  | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVPi (dtb__191, dtb__192, dtb__193, dtb__194, dtb__195) -> (if dtb__192 then (if ((v_Vuna_dCompiler_dElab_dMeta_disIndexDomain mc2) dtb__194) then (((((((((v_Vuna_dCompiler_dElab_dTrait_dbindIndexBinder mc0) mc1) mc2) dtb__191) dtb__194) dtb__195) C_Base_dList_dList_Nil) mc4) mc6) else ((v_Vuna_dCompiler_dElab_dTypes_derrAt mc6) "[TC_ImplicitParamKind] DT: implicit parameters must be types or inductive families (M14)")) else ((((((v_Vuna_dCompiler_dElab_dTrait_dcheckBodyAtEnd mc0) mc1) mc2) mc4) mc5) mc6))
   | _ -> (((((v_Vuna_dCompiler_dElab_dTerm_dcheckE mc0) mc1) mc2) mc4) mc5)
 )) ((v_Vuna_dCompiler_dElab_dTypes_dforceVal mc2) mc5))
   | _ -> failwith "DT: impossible branch"
@@ -442,7 +442,7 @@ and v_Vuna_dCompiler_dElab_dTrait_dbindOnePattern = (fun globals -> (fun ctx -> 
 let v_Vuna_dCompiler_dElab_dTrait_dcheckDef = (fun globals -> (fun ec -> (fun pats -> (fun body -> (fun expected -> (fun sp -> (((((((v_Vuna_dCompiler_dElab_dTrait_dcheckBinders globals) (v_Vuna_dCompiler_dElab_dTypes_demptyCtx ())) ec) pats) body) expected) sp)))))))
 
 let v_Vuna_dCompiler_dElab_dTrait_delabFunDef = (fun globals -> (fun ec -> (fun clauses -> (fun expected -> (fun sp -> (match clauses with
-  | C_Base_dList_dList_Nil -> ((v_Vuna_dCompiler_dElab_dTypes_derrAt sp) "DT: function has no clauses")
+  | C_Base_dList_dList_Nil -> ((v_Vuna_dCompiler_dElab_dTypes_derrAt sp) "[TC_FunctionNoClauses] DT: function has no clauses")
   | C_Base_dList_dList_Cons (dtb__200, dtb__201) -> (match dtb__200 with
   | C_Base_dPair_dPair_Base_dPair_dPair (dtb__202, dtb__203) -> (match dtb__201 with
   | C_Base_dList_dList_Nil -> (if (v_Vuna_dCompiler_dElab_dMatch_dallVarPats dtb__202) then ((((((v_Vuna_dCompiler_dElab_dTrait_dcheckDef globals) ec) dtb__202) dtb__203) expected) sp) else ((v_Base_dResult_dandThen ((v_Vuna_dCompiler_dElab_dMatch_dmultiToExpr (v_Vuna_dCompiler_dElab_dMeta_dctorFamilyTable ec)) clauses)) (fun bodyExpr -> ((((((v_Vuna_dCompiler_dElab_dTrait_dcheckDef globals) ec) C_Base_dList_dList_Nil) bodyExpr) expected) sp))))
@@ -458,7 +458,7 @@ let v_Vuna_dCompiler_dElab_dTrait_delabInstanceMethod = (fun globals -> (fun ec 
 let rec v_Vuna_dCompiler_dElab_dTrait_delabInstanceMethodsGo = (fun mc0 -> (fun mc1 -> (fun mc2 -> (fun mc3 -> (fun mc4 -> (fun mc5 -> (fun mc6 -> (fun mc7 -> (fun mc8 -> (match mc2 with
   | C_Base_dList_dList_Cons (dtb__204, dtb__205) -> (match dtb__204 with
   | C_Base_dPair_dPair_Base_dPair_dPair (dtb__206, dtb__207) -> ((fun clauses -> ((fun instTy -> (match clauses with
-  | C_Base_dList_dList_Nil -> ((v_Vuna_dCompiler_dElab_dTypes_derrAt mc8) "DT: instance is missing an implementation for an interface method")
+  | C_Base_dList_dList_Nil -> ((v_Vuna_dCompiler_dElab_dTypes_derrAt mc8) "[TC_InstanceMissingMethod] DT: instance is missing an implementation for an interface method")
   | _ -> ((v_Base_dResult_dandThen ((((v_Vuna_dCompiler_dElab_dTrait_delabInstanceMethod mc0) mc1) instTy) clauses)) (fun p -> (match p with
   | C_Base_dPair_dPair_Base_dPair_dPair (dtb__208, dtb__209) -> (((((((((v_Vuna_dCompiler_dElab_dTrait_delabInstanceMethodsGo mc0) dtb__209) dtb__205) mc3) mc4) mc5) (C_Base_dList_dList_Cons (dtb__208, mc6))) (C_Base_dList_dList_Cons ((C_Base_dPair_dPair_Base_dPair_dPair (dtb__208, C_Vuna_dCompiler_dCore_dTerm_dRig_Vuna_dCompiler_dCore_dTerm_dRig1)), mc7))) mc8)
   | _ -> failwith "DT: impossible branch"
@@ -475,13 +475,13 @@ let v_Vuna_dCompiler_dElab_dTrait_delabInstanceMethods = (fun globals -> (fun cl
 let v_Vuna_dCompiler_dElab_dTrait_delabInstance = (fun globals -> (fun classes -> (fun datas -> (fun ec -> (fun ds -> (match ds with
   | C_Base_dPair_dPair_Base_dPair_dPair (dtb__210, dtb__211) -> (match dtb__210 with
   | C_Vuna_dCompiler_dFrontend_dAst_dDecl_Vuna_dCompiler_dFrontend_dAst_dDInstance (dtb__212, dtb__213, dtb__214, dtb__215, dtb__216) -> (match (v_Vuna_dCompiler_dElab_dTrait_dinstanceHeadName dtb__214) with
-  | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> ((v_Vuna_dCompiler_dElab_dTypes_derrAt dtb__216) "DT: instance head must be an interface application (e.g. Show Int)")
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> ((v_Vuna_dCompiler_dElab_dTypes_derrAt dtb__216) "[TC_InstanceHeadNotApp] DT: instance head must be an interface application (e.g. Show Int)")
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__217) -> (match ((v_Vuna_dCompiler_dElab_dTrait_dfindClass dtb__217) classes) with
-  | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> ((v_Vuna_dCompiler_dElab_dTypes_derrAt dtb__216) ((bi_concat "DT: unknown interface ") ((bi_concat dtb__217) " in instance head")))
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> ((v_Vuna_dCompiler_dElab_dTypes_derrAt dtb__216) ((bi_concat "[TC_UnknownInterface] DT: unknown interface ") ((bi_concat dtb__217) " in instance head")))
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__218) -> (match ((v_Vuna_dCompiler_dElab_dTrait_dfirstUnknownInstanceMethod dtb__218) dtb__215) with
-  | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__219) -> ((v_Vuna_dCompiler_dElab_dTypes_derrAt dtb__216) ((bi_concat "DT: instance has unknown method ") dtb__219))
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__219) -> ((v_Vuna_dCompiler_dElab_dTypes_derrAt dtb__216) ((bi_concat "[TC_InstanceUnknownMethod] DT: instance has unknown method ") dtb__219))
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> (match ((v_Vuna_dCompiler_dElab_dTrait_dfirstMissingInstanceMethod dtb__218) dtb__215) with
-  | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__220) -> ((v_Vuna_dCompiler_dElab_dTypes_derrAt dtb__216) "DT: instance is missing an implementation for an interface method")
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__220) -> ((v_Vuna_dCompiler_dElab_dTypes_derrAt dtb__216) "[TC_InstanceMissingMethod] DT: instance is missing an implementation for an interface method")
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> ((v_Base_dResult_dandThen ((((((v_Vuna_dCompiler_dElab_dTrait_delabInstanceMethods globals) dtb__218) (v_Vuna_dCompiler_dElab_dTrait_dinstanceHeadTerm dtb__214)) ec) dtb__215) dtb__216)) (fun p -> (match p with
   | C_Base_dPair_dPair_Base_dPair_dPair (dtb__221, dtb__222) -> (match dtb__222 with
   | C_Base_dPair_dPair_Base_dPair_dPair (dtb__223, dtb__224) -> ((fun iname -> ((fun headTerm -> ((fun dctor -> ((fun dictTerm -> ((fun dictTyTerm -> (C_Base_dResult_dResult_Base_dResult_dOk ((C_Base_dPair_dPair_Base_dPair_dPair ((C_Base_dList_dList_Cons ((C_Base_dPair_dPair_Base_dPair_dPair (iname, dictTyTerm)), C_Base_dList_dList_Nil)), ((v_Vuna_dCompiler_dElab_dTypes_decAddDef ((v_Vuna_dCompiler_dElab_dTypes_decAddInst dtb__224) (C_Vuna_dCompiler_dElab_dTypes_dDtInst_Vuna_dCompiler_dElab_dTypes_dDtInst (iname, dictTyTerm, (v_Vuna_dCompiler_dElab_dTrait_dinstanceIsNamed dtb__212))))) (C_Base_dPair_dPair_Base_dPair_dPair (iname, dictTerm)))))))) ((v_Vuna_dCompiler_dElab_dTrait_dctorResultType dtb__218) headTerm))) (C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTCon (dctor, dtb__223)))) (v_Vuna_dCompiler_dElab_dMeta_ddictCtorName (v_Vuna_dCompiler_dElab_dTypes_ddtClassName dtb__218)))) (v_Vuna_dCompiler_dElab_dTrait_dinstanceHeadTerm dtb__214))) (((v_Vuna_dCompiler_dElab_dTrait_dinstanceName (v_Vuna_dCompiler_dElab_dTypes_ddtClassName dtb__218)) dtb__212) dtb__214))

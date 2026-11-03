@@ -37,6 +37,8 @@ import Vuna.Compiler.Frontend.Ast
 
 -- 精化一个构造子：类型是「Pi 链 → F r1..rk」。
 elabCtor : List (Pair String Term) -> String -> Int -> Ec -> Ctor -> Result (Pair DtCtor Ec)
+-- @code TC_CtorDoesNotReturn
+-- @code TC_CtorError
 elabCtor globals fam arity ec c = case c of
   Ctor cname tyExpr arityHint csp =>
     let
@@ -52,9 +54,10 @@ elabCtor globals fam arity ec c = case c of
           tyTerm = inlineSolvedMetas ec1 0 tyTerm0
         in case resultSpine (dropParams tyTerm) of
           Pair head args =>
-            if head /= fam then errAt csp ("DT: constructor " ++ cname ++ " does not return " ++ fam)
+            if head /= fam then errAt csp
+              ("[TC_CtorDoesNotReturn] DT: constructor " ++ cname ++ " does not return " ++ fam)
             else if length args /= arity then errAt csp
-              ("DT: constructor " ++ cname ++ " has the wrong number of indices for " ++ fam)
+              ("[TC_CtorError] DT: constructor " ++ cname ++ " has the wrong number of indices for " ++ fam)
             else Ok (Pair (DtCtor cname fam (teleOfType tyTerm) tyTerm) ec1)
     )
 
@@ -73,7 +76,8 @@ elabCtors globals fam arity ec (c :: rest) = andThen (elabCtor globals fam arity
 elabDataHead : List (Pair String Term) -> Ec -> Pair Decl Span -> Result (Pair DataHead (Pair (List (Pair String Term)) Ec))
 elabDataHead globals ec ds = case ds of
   Pair d dsp => case d of
-    DData dname writtenParams kindExpr ctors derivings dsp2 => if memName dname preludeNames then errAt dsp2 ("DT: cannot redefine builtin " ++ dname)
+    -- @code TC_CannotRedefineBuiltin
+    DData dname writtenParams kindExpr ctors derivings dsp2 => if memName dname preludeNames then errAt dsp2 ("[TC_CannotRedefineBuiltin] DT: cannot redefine builtin " ++ dname)
     else andThen (checkType globals emptyCtx ec kindExpr) (\pk => case pk of
       Pair kindTerm0 (Pair kindSort ec1) =>
         let
@@ -83,9 +87,11 @@ elabDataHead globals ec ds = case ds of
           fullKind = prependParams writtenParams (inlineSolvedMetas ec1 0 kindTerm0)
           tele = splitKind fullKind
           arity = length tele
-        in if not (kindWellFormed fullKind) then errAt dsp2 "DT: the kind of a data declaration must be a chain of arrows ending in Type"
+        in if not (kindWellFormed fullKind) then errAt dsp2
+          "[TC_DataKindArrows] DT: the kind of a data declaration must be a chain of arrows ending in Type"
         else Ok (Pair (DataHead dname fullKind arity) (Pair [Pair dname fullKind] ec1))
     )
+    -- @code TC_DataKindArrows
     _ => errAt dsp "DT: internal: expected a data declaration"
 
 elabDataHeadsRound : List (Pair Decl Span) -> List (Pair String Term) -> Ec -> List DataHead -> List (Pair Decl Span) -> Pair (List DataHead) (Pair (List (Pair String Term)) (Pair Ec (List (Pair Decl Span))))

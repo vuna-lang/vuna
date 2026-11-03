@@ -215,10 +215,12 @@ checkSolsDelta ec oldSols newSols = checkScopedValueList ec (newSolsSince oldSol
 
 checkScopedValueList : Ec -> List (Pair Int Value) -> Result Int
 checkScopedValueList ec [] = Ok 0
+-- @code TC_CannotSolveMetavar
 checkScopedValueList ec ((Pair m v) :: rest) = case metaDepthOf ec m of
   Nothing => checkScopedValueList ec rest
   Just created =>
-    if levelEscapes created 0 v then Err ("DT: cannot solve metavariable ?" ++ strFromInt m ++ " (solution would escape its scope)")
+    if levelEscapes created 0 v then Err
+      ("[TC_CannotSolveMetavar] DT: cannot solve metavariable ?" ++ strFromInt m ++ " (solution would escape its scope)")
     else checkScopedValueList ec rest
 
 metaDepthOf : Ec -> Int -> Maybe Int
@@ -234,10 +236,12 @@ checkSolsScoped ec sols = checkScopedFrom ec (ecDepthOfMeta ec) sols
 
 checkScopedFrom : Ec -> List (Pair Int Int) -> List (Pair Int Value) -> Result Int
 checkScopedFrom ec [] sols = Ok 0
+-- @code TC_CannotSolveMetavar
 checkScopedFrom ec ((Pair m created) :: rest) sols = case metaLookup m sols of
   Nothing => checkScopedFrom ec rest sols
   Just v =>
-    if levelEscapes created 0 v then Err ("DT: cannot solve metavariable ?" ++ strFromInt m ++ " (solution would escape its scope)")
+    if levelEscapes created 0 v then Err
+      ("[TC_CannotSolveMetavar] DT: cannot solve metavariable ?" ++ strFromInt m ++ " (solution would escape its scope)")
     else checkScopedFrom ec rest sols
 
 -- 未解元变量：返回第一个未解的编号。
@@ -320,9 +324,11 @@ collectSigsInto : List String -> List (Pair String Expr) -> List Decl -> Result 
 collectSigsInto allDefs acc [] = Ok (reverse acc)
 collectSigsInto allDefs acc (d :: rest) = case d of
   DSig name ty sp =>
-    if memName name preludeNames then errAt sp ("DT: cannot redefine builtin " ++ name)
-    else if memSig acc name then errAt sp ("DT: duplicate signature for " ++ name)
+    if memName name preludeNames then errAt sp ("[TC_CannotRedefineBuiltin] DT: cannot redefine builtin " ++ name)
+    else if memSig acc name then errAt sp ("[TC_DuplicateSignature] DT: duplicate signature for " ++ name)
     else collectSigsInto allDefs (Pair name (quantifyTopSig allDefs ty sp) :: acc) rest
+  -- @code TC_CannotRedefineBuiltin
+  -- @code TC_DuplicateSignature
   DFun name pats body sp => collectSigsInto allDefs acc rest
   DData name params kind ctors derivings sp => collectSigsInto allDefs acc rest
   DRecord name params fields derivings sp => errAt sp "DT: internal: record was not desugared"

@@ -291,7 +291,8 @@ splitModuleFiles allDatas allDefs defPairs dataPairs earlier ((Pair mname decls)
 
 splitMainHook : List DtData -> List DtDef -> Bool -> Result String
 splitMainHook allDatas allDefs printResult = case findDtDef "main" allDefs of
-  Nothing => Err "DT: no main definition"
+  -- @code CG_NoMain
+  Nothing => Err "[CG_NoMain] DT: no main definition"
   Just mainDef =>
     let
       table = defTable allDefs

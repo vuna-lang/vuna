@@ -239,7 +239,7 @@ let v_Vuna_dCompiler_dCodegen_dTerm_darmPatternText = (fun mc0 -> (fun mc1 -> (m
 let rec v_Vuna_dCompiler_dCodegen_dTerm_dgenTerm = (fun st -> (fun binders -> (fun t -> (match t with
   | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTVar (dtb__84, dtb__85) -> (match ((v_Vuna_dCompiler_dCodegen_dErase_dbinderAt dtb__85) binders) with
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__86) -> (match dtb__86 with
-  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__87, dtb__88) -> (if (v_Vuna_dCompiler_dCore_dTerm_drigIsErased dtb__88) then (C_Base_dResult_dResult_Base_dResult_dErr (((bi_concat "DT: type-level binding `") ((bi_concat dtb__84) "` is used at runtime (M13 limitation)")))) else (C_Base_dResult_dResult_Base_dResult_dOk ((C_Base_dPair_dPair_Base_dPair_dPair (dtb__87, st)))))
+  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__87, dtb__88) -> (if (v_Vuna_dCompiler_dCore_dTerm_drigIsErased dtb__88) then (C_Base_dResult_dResult_Base_dResult_dErr (((bi_concat "[CG_TypeLevelBindingRuntime] DT: type-level binding `") ((bi_concat dtb__84) "` is used at runtime (M13 limitation)")))) else (C_Base_dResult_dResult_Base_dResult_dOk ((C_Base_dPair_dPair_Base_dPair_dPair (dtb__87, st)))))
   | _ -> failwith "DT: impossible branch"
 )
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> (C_Base_dResult_dResult_Base_dResult_dErr ("DT: internal: unbound runtime variable"))
@@ -263,9 +263,9 @@ let rec v_Vuna_dCompiler_dCodegen_dTerm_dgenTerm = (fun st -> (fun binders -> (f
   | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTApp (dtb__105, dtb__106, dtb__107) -> (((((v_Vuna_dCompiler_dCodegen_dTerm_dgenApp st) binders) dtb__105) dtb__106) dtb__107)
   | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTCon (dtb__108, dtb__109) -> ((((v_Vuna_dCompiler_dCodegen_dTerm_dgenConApp st) binders) dtb__108) dtb__109)
   | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTCase (dtb__110, dtb__111) -> ((((v_Vuna_dCompiler_dCodegen_dTerm_dgenCase st) binders) dtb__110) dtb__111)
-  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTPi (dtb__112, dtb__113, dtb__114, dtb__115, dtb__116) -> (C_Base_dResult_dResult_Base_dResult_dErr ("DT: a type is used at runtime (M13 limitation)"))
-  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTType (dtb__117) -> (C_Base_dResult_dResult_Base_dResult_dErr ("DT: a type is used at runtime (M13 limitation)"))
-  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTMeta (dtb__118) -> (C_Base_dResult_dResult_Base_dResult_dErr (((bi_concat "DT: unsolved metavariable in runtime code") (v_Vuna_dCompiler_dCodegen_dErase_dshowMetaHint dtb__118))))
+  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTPi (dtb__112, dtb__113, dtb__114, dtb__115, dtb__116) -> (C_Base_dResult_dResult_Base_dResult_dErr ("[CG_TypeUsedAtRuntime] DT: a type is used at runtime (M13 limitation)"))
+  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTType (dtb__117) -> (C_Base_dResult_dResult_Base_dResult_dErr ("[CG_TypeUsedAtRuntime] DT: a type is used at runtime (M13 limitation)"))
+  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTMeta (dtb__118) -> (C_Base_dResult_dResult_Base_dResult_dErr (((bi_concat "[CG_UnsolvedMetavarRuntime] DT: unsolved metavariable in runtime code") (v_Vuna_dCompiler_dCodegen_dErase_dshowMetaHint dtb__118))))
   | _ -> failwith "DT: impossible branch"
 ))))
 and v_Vuna_dCompiler_dCodegen_dTerm_dgenTermLam = (fun st -> (fun binders -> (fun name -> (fun rig -> (fun body -> (if (v_Vuna_dCompiler_dCore_dTerm_drigIsErased rig) then ((v_Base_dResult_dandThen (((v_Vuna_dCompiler_dCodegen_dTerm_dgenTerm st) (C_Base_dList_dList_Cons ((C_Base_dPair_dPair_Base_dPair_dPair ("", C_Vuna_dCompiler_dCore_dTerm_dRig_Vuna_dCompiler_dCore_dTerm_dRig0)), binders))) body)) (fun p -> (match p with
@@ -416,7 +416,7 @@ let rec v_Vuna_dCompiler_dCodegen_dTerm_dioCtorOf = (fun mc0 -> (match mc0 with
   | _ -> failwith "DT: impossible branch"
 ))
 
-let v_Vuna_dCompiler_dCodegen_dTerm_dmainShowErr = fun () -> (C_Base_dResult_dResult_Base_dResult_dErr ("DT: main must return Int, String or Bool (M13 limitation)"))
+let v_Vuna_dCompiler_dCodegen_dTerm_dmainShowErr = fun () -> (C_Base_dResult_dResult_Base_dResult_dErr ("[CG_MainReturnType] DT: main must return Int, String or Bool (M13 limitation)"))
 
 let v_Vuna_dCompiler_dCodegen_dTerm_dmainShowForName = (fun g -> (if ((bi_eq_str (v_Vuna_dCompiler_dCodegen_dDecl_dlastName g)) "Int") then (C_Base_dResult_dResult_Base_dResult_dOk ((C_Base_dPair_dPair_Base_dPair_dPair ("string_of_int", "int")))) else (if ((bi_eq_str (v_Vuna_dCompiler_dCodegen_dDecl_dlastName g)) "String") then (C_Base_dResult_dResult_Base_dResult_dOk ((C_Base_dPair_dPair_Base_dPair_dPair ("dt_show_string", "string")))) else (if ((bi_eq_str (v_Vuna_dCompiler_dCodegen_dDecl_dlastName g)) "Bool") then (C_Base_dResult_dResult_Base_dResult_dOk ((C_Base_dPair_dPair_Base_dPair_dPair ("dt_show_bool", "bool")))) else (v_Vuna_dCompiler_dCodegen_dTerm_dmainShowErr ())))))
 

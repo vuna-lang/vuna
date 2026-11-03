@@ -5,10 +5,10 @@
 
 ## 原生测试：`test/run-tests.sh`
 
-vuna 原生测试按编号章节组织（**34 个章节**：编号到 35，第 12 段已删除；34a–34d 归在
-第 34 段内，`--list` 列 34 行），用 `vuna` / `vuna-seed` 驱动，不依赖外部 vuna 实现，
-但需要 `ocamlopt` 作为 codegen 后端。当前 **1076 checks**（结尾 `vuna tests passed
-(1076 checks)`；seed rotation 后重跑可能微调，以脚本输出为准）。
+vuna 原生测试按编号章节组织（**35 个章节**：编号到 36，第 12 段已删除；34a–34d 归在
+第 34 段内，`--list` 列 35 行），用 `vuna` / `vuna-seed` 驱动，不依赖外部 vuna 实现，
+但需要 `ocamlopt` 作为 codegen 后端。当前 **1086 checks**（结尾 `vuna tests passed
+(1086 checks)`；seed rotation 后重跑可能微调，以脚本输出为准）。
 
 ```console
 sh test/run-tests.sh        # 需要 PATH 中有 vuna 与 vuna-seed
@@ -85,7 +85,10 @@ DT 精化 + 擦除 codegen，`build` / `build --split` / `seed` = DT codegen）�
   fmt 黄金例见 `corpus/fmt/05_where`、`15_where_inst`、`fmt/typed/01_where`；
   where 缺签名负例是 `corpus/dt_err/35_where_no_sig`；
 - `corpus/lint/`、`corpus/fix/`：`vuna lint` / `lint --fix` golden、退出码与幂等（工具链，
-  与检查器无关）；
+  与检查器无关）。输出带错误码：`路径:行:列: [LN_XXX] <rule>: <message>`，例如
+  `01_literal_if_chain.vuna:3:8: [LN_LiteralIfChain] literal-if-chain: if/else-if chain on
+  <scrutinee> can be a case with literal patterns`；错误码体系与符号约定见
+  [dt-tooling.md](dt-tooling.md) 第 4 节，完整清单由 `vuna gen-errors` 生成；
 - `corpus/lsp/smoke.sh`：`vuna lsp` 的 JSON-RPC 冒烟（诊断来自 DT 精化 + `goalsOfProgram`
   洞目标）；
 - `corpus/dt/*`（53 个正例）、`corpus/dt_err/*`（35 个负例，其中

@@ -93,7 +93,8 @@ checkTermBody fname sizes e = case e of
     Just idxs =>
       if anyDescends idxs args sizes then checkTermArgs fname sizes args
       else Err
-        ("DT: cannot prove termination of " ++ fname ++ " (recursive call does not structurally decrease)")
+        ("[TC_CannotProveTermination] DT: cannot prove termination of " ++ fname ++ " (recursive call does not structurally decrease)")
+  -- @code TC_CannotProveTermination
   ECase scrut alts sp =>
     andThen (checkTermBody fname sizes scrut) (\_ => checkTermAlts fname sizes scrut alts)
   EIf c t el sp =>

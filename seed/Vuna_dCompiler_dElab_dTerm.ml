@@ -57,7 +57,7 @@ let v_Vuna_dCompiler_dElab_dTerm_dinferVarRef = (fun globals -> (fun ctx -> (fun
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__16) -> (C_Base_dResult_dResult_Base_dResult_dOk ((C_Base_dPair_dPair_Base_dPair_dPair ((C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTGlobal (dtb__16)), (C_Base_dPair_dPair_Base_dPair_dPair ((C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVType ((v_Vuna_dCompiler_dCore_dTerm_dlevelZero ()))), ec))))))
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> (match ((v_Vuna_dCompiler_dElab_dMeta_dglobalLookup name) globals) with
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__17) -> (if (v_Vuna_dCompiler_dElab_dTerm_dallImplicitPrefix dtb__17) then ((fun inst -> (C_Base_dResult_dResult_Base_dResult_dOk (inst))) (((((v_Vuna_dCompiler_dElab_dTerm_dinstantiateAllImplicit ctx) ec) ((v_Vuna_dCompiler_dElab_dMeta_dctorRefTerm (v_Vuna_dCompiler_dElab_dTypes_decDatas ec)) name)) ((v_Vuna_dCompiler_dCore_dEval_deval C_Base_dList_dList_Nil) dtb__17)) C_Base_dList_dList_Nil)) else (C_Base_dResult_dResult_Base_dResult_dOk ((C_Base_dPair_dPair_Base_dPair_dPair (((v_Vuna_dCompiler_dElab_dMeta_dctorRefTerm (v_Vuna_dCompiler_dElab_dTypes_decDatas ec)) name), (C_Base_dPair_dPair_Base_dPair_dPair (((v_Vuna_dCompiler_dCore_dEval_deval C_Base_dList_dList_Nil) dtb__17), ec)))))))
-  | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> ((v_Vuna_dCompiler_dElab_dTypes_derrAt sp) ((bi_concat "DT: unknown name ") name))
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> ((v_Vuna_dCompiler_dElab_dTypes_derrAt sp) ((bi_concat "[TC_UnknownName] DT: unknown name ") name))
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
@@ -75,19 +75,19 @@ let v_Vuna_dCompiler_dElab_dTerm_dwhereBindingName = (fun pat -> (match pat with
 let rec v_Vuna_dCompiler_dElab_dTerm_dcheckWhereSigs = (fun mc0 -> (match mc0 with
   | C_Base_dList_dList_Cons (dtb__20, dtb__21) -> (match (v_Base_dPair_dsecondOf dtb__20) with
   | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEAnn (dtb__22, dtb__23, dtb__24) -> (v_Vuna_dCompiler_dElab_dTerm_dcheckWhereSigs dtb__21)
-  | _ -> ((fun name -> ((v_Vuna_dCompiler_dElab_dTypes_derrAt (v_Vuna_dCompiler_dFrontend_dAst_dpatSpan (v_Base_dPair_dfirstOf dtb__20))) ((bi_concat "DT: where binding `") ((bi_concat name) ((bi_concat "` needs a type signature (write `") ((bi_concat name) " : <type>` before the clause)")))))) (v_Vuna_dCompiler_dElab_dTerm_dwhereBindingName (v_Base_dPair_dfirstOf dtb__20)))
+  | _ -> ((fun name -> ((v_Vuna_dCompiler_dElab_dTypes_derrAt (v_Vuna_dCompiler_dFrontend_dAst_dpatSpan (v_Base_dPair_dfirstOf dtb__20))) ((bi_concat "[TC_WhereNeedsSig] DT: where binding `") ((bi_concat name) ((bi_concat "` needs a type signature (write `") ((bi_concat name) " : <type>` before the clause)")))))) (v_Vuna_dCompiler_dElab_dTerm_dwhereBindingName (v_Base_dPair_dfirstOf dtb__20)))
 )
   | C_Base_dList_dList_Nil -> (C_Base_dResult_dResult_Base_dResult_dOk (0))
   | _ -> failwith "DT: impossible branch"
 ))
 
 let rec v_Vuna_dCompiler_dElab_dTerm_delabConAlt = (fun fb -> (fun globals -> (fun ctx -> (fun ec -> (fun dd -> (fun idxs -> (fun scrutVal -> (fun expected -> (fun cname -> (fun args -> (fun psp -> (fun body -> (match ((v_Vuna_dCompiler_dElab_dMeta_dfindCtorIn cname) (v_Vuna_dCompiler_dElab_dTypes_ddtDataCtors dd)) with
-  | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> ((v_Vuna_dCompiler_dElab_dTypes_derrAt psp) ((bi_concat "DT: unknown constructor ") ((bi_concat cname) ((bi_concat " in case ") (v_Vuna_dCompiler_dElab_dTypes_ddtDataName dd)))))
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> ((v_Vuna_dCompiler_dElab_dTypes_derrAt psp) ((bi_concat "[TC_UnknownConstructorInCase] DT: unknown constructor ") ((bi_concat cname) ((bi_concat " in case ") (v_Vuna_dCompiler_dElab_dTypes_ddtDataName dd)))))
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__25) -> ((v_Base_dResult_dandThen (((v_Vuna_dCompiler_dElab_dCase_dbindCtorTele ctx) (v_Vuna_dCompiler_dElab_dTypes_ddtCtorType dtb__25)) args)) (fun p -> (match p with
   | C_Base_dPair_dPair_Base_dPair_dPair (dtb__26, dtb__27) -> (match dtb__27 with
   | C_Base_dPair_dPair_Base_dPair_dPair (dtb__28, dtb__29) -> (match dtb__29 with
-  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__30, dtb__31) -> (if (v_Vuna_dCompiler_dElab_dMeta_dnonEmpty dtb__31) then ((v_Vuna_dCompiler_dElab_dTypes_derrAt psp) ((bi_concat "DT: branch for constructor ") ((bi_concat cname) " has too many arguments"))) else ((v_Base_dResult_dandThen ((((((v_Vuna_dCompiler_dElab_dCase_dunifyIdxList ec) C_Base_dList_dList_Nil) (v_Vuna_dCompiler_dElab_dTypes_dctxDepth dtb__26)) (v_Vuna_dCompiler_dCore_dTerm_ddefaultFuel ())) ((v_Vuna_dCompiler_dElab_dCase_dctorResultValsIn dtb__26) dtb__25)) ((v_Base_dList_dmap ((v_Vuna_dCompiler_dElab_dTypes_drefineValue C_Base_dList_dList_Nil) (v_Vuna_dCompiler_dCore_dTerm_ddefaultFuel ()))) idxs))) (fun refsIdx -> ((v_Base_dResult_dandThen (((((v_Vuna_dCompiler_dElab_dCase_dreflectScrutinee ec) (v_Vuna_dCompiler_dElab_dTypes_dctxDepth dtb__26)) refsIdx) ((v_Vuna_dCompiler_dElab_dCase_dctorValueIn dtb__26) dtb__25)) scrutVal)) (fun refs2 -> ((fun refinedExpected -> ((fun branchCtx2 -> ((fun body2 -> (match (((((v_Vuna_dCompiler_dElab_dTerm_dcheckE globals) branchCtx2) ec) body2) refinedExpected) with
-  | C_Base_dResult_dResult_Base_dResult_dErr (dtb__32) -> (if ((v_Vuna_dCompiler_dElab_dCase_dctxHasEmptyBinder ec) branchCtx2) then ((v_Vuna_dCompiler_dElab_dTypes_derrAt psp) "DT: this branch is impossible (its context contains an empty inductive family)") else (C_Base_dResult_dResult_Base_dResult_dErr (dtb__32)))
+  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__30, dtb__31) -> (if (v_Vuna_dCompiler_dElab_dMeta_dnonEmpty dtb__31) then ((v_Vuna_dCompiler_dElab_dTypes_derrAt psp) ((bi_concat "[TC_BranchTooManyArgs] DT: branch for constructor ") ((bi_concat cname) " has too many arguments"))) else ((v_Base_dResult_dandThen ((((((v_Vuna_dCompiler_dElab_dCase_dunifyIdxList ec) C_Base_dList_dList_Nil) (v_Vuna_dCompiler_dElab_dTypes_dctxDepth dtb__26)) (v_Vuna_dCompiler_dCore_dTerm_ddefaultFuel ())) ((v_Vuna_dCompiler_dElab_dCase_dctorResultValsIn dtb__26) dtb__25)) ((v_Base_dList_dmap ((v_Vuna_dCompiler_dElab_dTypes_drefineValue C_Base_dList_dList_Nil) (v_Vuna_dCompiler_dCore_dTerm_ddefaultFuel ()))) idxs))) (fun refsIdx -> ((v_Base_dResult_dandThen (((((v_Vuna_dCompiler_dElab_dCase_dreflectScrutinee ec) (v_Vuna_dCompiler_dElab_dTypes_dctxDepth dtb__26)) refsIdx) ((v_Vuna_dCompiler_dElab_dCase_dctorValueIn dtb__26) dtb__25)) scrutVal)) (fun refs2 -> ((fun refinedExpected -> ((fun branchCtx2 -> ((fun body2 -> (match (((((v_Vuna_dCompiler_dElab_dTerm_dcheckE globals) branchCtx2) ec) body2) refinedExpected) with
+  | C_Base_dResult_dResult_Base_dResult_dErr (dtb__32) -> (if ((v_Vuna_dCompiler_dElab_dCase_dctxHasEmptyBinder ec) branchCtx2) then ((v_Vuna_dCompiler_dElab_dTypes_derrAt psp) "[TC_ImpossibleBranchEmptyCtx] DT: this branch is impossible (its context contains an empty inductive family)") else (C_Base_dResult_dResult_Base_dResult_dErr (dtb__32)))
   | C_Base_dResult_dResult_Base_dResult_dOk (dtb__33) -> (match dtb__33 with
   | C_Base_dPair_dPair_Base_dPair_dPair (dtb__34, dtb__35) -> (C_Base_dResult_dResult_Base_dResult_dOk ((C_Base_dPair_dPair_Base_dPair_dPair ((C_Vuna_dCompiler_dCore_dTerm_dCaseAlt_Vuna_dCompiler_dCore_dTerm_dCaseAlt (cname, dtb__28, dtb__34)), dtb__35))))
   | _ -> failwith "DT: impossible branch"
@@ -111,14 +111,14 @@ and v_Vuna_dCompiler_dElab_dTerm_delabCaseAlts = (fun mc0 -> (fun mc1 -> (fun mc
 )))
   | C_Vuna_dCompiler_dFrontend_dAst_dPat_Vuna_dCompiler_dFrontend_dAst_dPVar (dtb__45, dtb__46) -> ((((((((((((v_Vuna_dCompiler_dElab_dTerm_delabCatchAll mc0) mc1) mc2) mc3) mc4) mc5) mc7) dtb__37) mc9) dtb__39) dtb__45) dtb__46)
   | C_Vuna_dCompiler_dFrontend_dAst_dPat_Vuna_dCompiler_dFrontend_dAst_dPWild (dtb__47) -> ((((((((((((v_Vuna_dCompiler_dElab_dTerm_delabCatchAll mc0) mc1) mc2) mc3) mc4) mc5) mc7) dtb__37) mc9) dtb__39) "_") dtb__47)
-  | _ -> ((v_Vuna_dCompiler_dElab_dTypes_derrAt (v_Vuna_dCompiler_dFrontend_dAst_dpatSpan dtb__38)) "DT: only constructor patterns are supported in case (M14)")
+  | _ -> ((v_Vuna_dCompiler_dElab_dTypes_derrAt (v_Vuna_dCompiler_dFrontend_dAst_dpatSpan dtb__38)) "[TC_OnlyCtorPatterns] DT: only constructor patterns are supported in case (M14)")
 )
   | _ -> failwith "DT: impossible branch"
 )
   | C_Base_dList_dList_Nil -> (C_Base_dResult_dResult_Base_dResult_dOk ((C_Base_dPair_dPair_Base_dPair_dPair ((v_Base_dList_dreverse mc9), mc2))))
   | _ -> failwith "DT: impossible branch"
 )))))))))))
-and v_Vuna_dCompiler_dElab_dTerm_delabCatchAll = (fun globals -> (fun ctx -> (fun ec -> (fun scrutTy -> (fun dd -> (fun idxs -> (fun expected -> (fun rest -> (fun acc -> (fun body -> (fun pname -> (fun psp -> ((fun ctx2 -> (if (v_Vuna_dCompiler_dElab_dMeta_dnonEmpty rest) then ((v_Vuna_dCompiler_dElab_dTypes_derrAt psp) "DT: the catch-all branch must be the last one") else ((v_Base_dResult_dandThen (((((v_Vuna_dCompiler_dElab_dTerm_dcheckE globals) ctx2) ec) body) expected)) (fun pb -> (match pb with
+and v_Vuna_dCompiler_dElab_dTerm_delabCatchAll = (fun globals -> (fun ctx -> (fun ec -> (fun scrutTy -> (fun dd -> (fun idxs -> (fun expected -> (fun rest -> (fun acc -> (fun body -> (fun pname -> (fun psp -> ((fun ctx2 -> (if (v_Vuna_dCompiler_dElab_dMeta_dnonEmpty rest) then ((v_Vuna_dCompiler_dElab_dTypes_derrAt psp) "[TC_CatchAllNotLast] DT: the catch-all branch must be the last one") else ((v_Base_dResult_dandThen (((((v_Vuna_dCompiler_dElab_dTerm_dcheckE globals) ctx2) ec) body) expected)) (fun pb -> (match pb with
   | C_Base_dPair_dPair_Base_dPair_dPair (dtb__48, dtb__49) -> ((fun binds -> (C_Base_dResult_dResult_Base_dResult_dOk ((C_Base_dPair_dPair_Base_dPair_dPair ((v_Base_dList_dreverse (C_Base_dList_dList_Cons ((C_Vuna_dCompiler_dCore_dTerm_dCaseAlt_Vuna_dCompiler_dCore_dTerm_dCaseAlt ("", binds, dtb__48)), acc))), dtb__49))))) (if ((bi_eq_str pname) "_") then C_Base_dList_dList_Nil else (C_Base_dList_dList_Cons ((C_Base_dPair_dPair_Base_dPair_dPair (pname, ((v_Vuna_dCompiler_dElab_dMeta_dbinderRig false) scrutTy))), C_Base_dList_dList_Nil))))
   | _ -> failwith "DT: impossible branch"
 ))))) (if ((bi_eq_str pname) "_") then ctx else (((v_Vuna_dCompiler_dElab_dTypes_dctxBindValue pname) scrutTy) ctx)))))))))))))))
@@ -129,13 +129,13 @@ and v_Vuna_dCompiler_dElab_dTerm_dcheckCase = (fun globals -> (fun ctx -> (fun e
 )
   | _ -> failwith "DT: impossible branch"
 ))))))))))))
-and v_Vuna_dCompiler_dElab_dTerm_dcheckCaseDedup = (fun globals -> (fun ctx -> (fun ec -> (fun scrut -> (fun alts -> (fun expected -> (fun sp -> (if (v_Vuna_dCompiler_dElab_dCase_dcatchAllNotLast alts) then ((v_Vuna_dCompiler_dElab_dTypes_derrAt sp) "DT: the catch-all branch must be the last one") else ((fun name -> ((fun clauses -> ((v_Base_dResult_dandThen (((v_Vuna_dCompiler_dElab_dMatch_dmultiToCaseExpr (v_Vuna_dCompiler_dElab_dMeta_dctorFamilyTable ec)) clauses) name)) (fun bodyExpr -> (((((v_Vuna_dCompiler_dElab_dTerm_dcheckE globals) ctx) ec) (C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dELet ((C_Base_dList_dList_Cons ((C_Base_dPair_dPair_Base_dPair_dPair ((C_Vuna_dCompiler_dFrontend_dAst_dPat_Vuna_dCompiler_dFrontend_dAst_dPVar (name, sp)), scrut)), C_Base_dList_dList_Nil)), bodyExpr, false, sp))) expected)))) ((v_Base_dList_dmap (fun alt -> (C_Base_dPair_dPair_Base_dPair_dPair ((C_Base_dList_dList_Cons ((v_Base_dPair_dfirstOf alt), C_Base_dList_dList_Nil)), (v_Base_dPair_dsecondOf alt))))) alts))) "nd_scrut")))))))))
+and v_Vuna_dCompiler_dElab_dTerm_dcheckCaseDedup = (fun globals -> (fun ctx -> (fun ec -> (fun scrut -> (fun alts -> (fun expected -> (fun sp -> (if (v_Vuna_dCompiler_dElab_dCase_dcatchAllNotLast alts) then ((v_Vuna_dCompiler_dElab_dTypes_derrAt sp) "[TC_CatchAllNotLast] DT: the catch-all branch must be the last one") else ((fun name -> ((fun clauses -> ((v_Base_dResult_dandThen (((v_Vuna_dCompiler_dElab_dMatch_dmultiToCaseExpr (v_Vuna_dCompiler_dElab_dMeta_dctorFamilyTable ec)) clauses) name)) (fun bodyExpr -> (((((v_Vuna_dCompiler_dElab_dTerm_dcheckE globals) ctx) ec) (C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dELet ((C_Base_dList_dList_Cons ((C_Base_dPair_dPair_Base_dPair_dPair ((C_Vuna_dCompiler_dFrontend_dAst_dPat_Vuna_dCompiler_dFrontend_dAst_dPVar (name, sp)), scrut)), C_Base_dList_dList_Nil)), bodyExpr, false, sp))) expected)))) ((v_Base_dList_dmap (fun alt -> (C_Base_dPair_dPair_Base_dPair_dPair ((C_Base_dList_dList_Cons ((v_Base_dPair_dfirstOf alt), C_Base_dList_dList_Nil)), (v_Base_dPair_dsecondOf alt))))) alts))) "nd_scrut")))))))))
 and v_Vuna_dCompiler_dElab_dTerm_dcheckCaseFam = (fun globals -> (fun ctx -> (fun ec -> (fun scrutTerm -> (fun scrutTy -> (fun alts -> (fun expected -> (fun sp -> (match ((v_Vuna_dCompiler_dElab_dTypes_dforceVal ec) scrutTy) with
   | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVNeutral (dtb__54) -> (match dtb__54 with
   | C_Vuna_dCompiler_dCore_dTerm_dNeutral_Vuna_dCompiler_dCore_dTerm_dNGlobal (dtb__55, dtb__56) -> (if (if (v_Vuna_dCompiler_dElab_dMeta_disBoolBaseName dtb__55) then ((bi_eq_generic dtb__56) C_Base_dList_dList_Nil) else false) then (((((((v_Vuna_dCompiler_dElab_dTerm_dcheckBoolCase globals) ctx) ec) scrutTerm) alts) expected) sp) else (if ((bi_eq_str dtb__55) "Int") then ((((((((v_Vuna_dCompiler_dElab_dTerm_dcheckLitCase globals) ctx) ec) scrutTerm) "Int") alts) expected) sp) else (if ((bi_eq_str dtb__55) "String") then ((((((((v_Vuna_dCompiler_dElab_dTerm_dcheckLitCase globals) ctx) ec) scrutTerm) "String") alts) expected) sp) else ((((((((((v_Vuna_dCompiler_dElab_dTerm_dcheckCaseOf globals) ctx) ec) scrutTerm) scrutTy) dtb__55) dtb__56) alts) expected) sp))))
-  | _ -> ((v_Vuna_dCompiler_dElab_dTypes_derrAt sp) "DT: case scrutinee is not an inductive family")
+  | _ -> ((v_Vuna_dCompiler_dElab_dTypes_derrAt sp) "[TC_NotInductiveFamily] DT: case scrutinee is not an inductive family")
 )
-  | _ -> ((v_Vuna_dCompiler_dElab_dTypes_derrAt sp) "DT: case scrutinee is not an inductive family")
+  | _ -> ((v_Vuna_dCompiler_dElab_dTypes_derrAt sp) "[TC_NotInductiveFamily] DT: case scrutinee is not an inductive family")
 )))))))))
 and v_Vuna_dCompiler_dElab_dTerm_dcheckBoolCase = (fun globals -> (fun ctx -> (fun ec -> (fun scrutTerm -> (fun alts -> (fun expected -> (fun sp -> ((v_Base_dResult_dandThen (((((((v_Vuna_dCompiler_dElab_dTerm_dboolAlt globals) ctx) ec) alts) "True") expected) sp)) (fun p -> (match p with
   | C_Base_dPair_dPair_Base_dPair_dPair (dtb__57, dtb__58) -> (match dtb__58 with
@@ -170,20 +170,20 @@ and v_Vuna_dCompiler_dElab_dTerm_dboolAltGo = (fun mc0 -> (fun mc1 -> (fun mc2 -
   | C_Base_dPair_dPair_Base_dPair_dPair (dtb__80, dtb__81) -> ((((((((v_Vuna_dCompiler_dElab_dTerm_dboolAltGo mc0) mc1) mc2) dtb__67) mc4) mc5) mc6) (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__80)))
   | _ -> failwith "DT: impossible branch"
 )))
-  | _ -> ((v_Vuna_dCompiler_dElab_dTypes_derrAt (v_Vuna_dCompiler_dFrontend_dAst_dpatSpan dtb__68)) "DT: case on Bool only accepts True / False / variable patterns (M19)")
+  | _ -> ((v_Vuna_dCompiler_dElab_dTypes_derrAt (v_Vuna_dCompiler_dFrontend_dAst_dpatSpan dtb__68)) "[TC_BoolCaseRestriction] DT: case on Bool only accepts True / False / variable patterns (M19)")
 )
   | _ -> failwith "DT: impossible branch"
 )
   | C_Base_dList_dList_Nil -> (match mc7 with
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__82) -> (C_Base_dResult_dResult_Base_dResult_dOk ((C_Base_dPair_dPair_Base_dPair_dPair (dtb__82, (C_Base_dPair_dPair_Base_dPair_dPair (C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing, mc2))))))
-  | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> (if (v_Vuna_dCompiler_dElab_dTypes_decTrusted mc2) then (C_Base_dResult_dResult_Base_dResult_dOk ((C_Base_dPair_dPair_Base_dPair_dPair ((C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTInt (0)), (C_Base_dPair_dPair_Base_dPair_dPair (C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing, mc2)))))) else ((v_Vuna_dCompiler_dElab_dTypes_derrAt mc6) ((bi_concat "DT: case is not exhaustive: missing ") mc4)))
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> (if (v_Vuna_dCompiler_dElab_dTypes_decTrusted mc2) then (C_Base_dResult_dResult_Base_dResult_dOk ((C_Base_dPair_dPair_Base_dPair_dPair ((C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTInt (0)), (C_Base_dPair_dPair_Base_dPair_dPair (C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing, mc2)))))) else ((v_Vuna_dCompiler_dElab_dTypes_derrAt mc6) ((bi_concat "[TC_NotExhaustive] DT: case is not exhaustive: missing ") mc4)))
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
 )))))))))
 and v_Vuna_dCompiler_dElab_dTerm_dcheckLitCase = (fun globals -> (fun ctx -> (fun ec -> (fun scrutTerm -> (fun tyName -> (fun alts -> (fun expected -> (fun sp -> ((v_Base_dResult_dandThen ((((((((v_Vuna_dCompiler_dElab_dTerm_dcheckLitAlts globals) ctx) ec) scrutTerm) tyName) alts) expected) sp)) (fun p -> (match p with
   | C_Base_dPair_dPair_Base_dPair_dPair (dtb__83, dtb__84) -> (match dtb__84 with
-  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__85, dtb__86) -> (if dtb__85 then (C_Base_dResult_dResult_Base_dResult_dOk ((C_Base_dPair_dPair_Base_dPair_dPair (dtb__83, dtb__86)))) else ((v_Vuna_dCompiler_dElab_dTypes_derrAt sp) "DT: case on Int / String needs a variable or wildcard branch as fallback (M19)"))
+  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__85, dtb__86) -> (if dtb__85 then (C_Base_dResult_dResult_Base_dResult_dOk ((C_Base_dPair_dPair_Base_dPair_dPair (dtb__83, dtb__86)))) else ((v_Vuna_dCompiler_dElab_dTypes_derrAt sp) "[TC_IntStringCaseNeedsFallback] DT: case on Int / String needs a variable or wildcard branch as fallback (M19)"))
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
@@ -201,7 +201,7 @@ and v_Vuna_dCompiler_dElab_dTerm_dcheckLitAlts = (fun mc0 -> (fun mc1 -> (fun mc
   | C_Base_dPair_dPair_Base_dPair_dPair (dtb__100, dtb__101) -> (C_Base_dResult_dResult_Base_dResult_dOk ((C_Base_dPair_dPair_Base_dPair_dPair (dtb__100, (C_Base_dPair_dPair_Base_dPair_dPair (true, dtb__101))))))
   | _ -> failwith "DT: impossible branch"
 )))
-  | _ -> ((v_Vuna_dCompiler_dElab_dTypes_derrAt (v_Vuna_dCompiler_dFrontend_dAst_dpatSpan dtb__89)) "DT: case on Int / String only accepts literals / variable patterns (M19)")
+  | _ -> ((v_Vuna_dCompiler_dElab_dTypes_derrAt (v_Vuna_dCompiler_dFrontend_dAst_dpatSpan dtb__89)) "[TC_IntStringCaseRestriction] DT: case on Int / String only accepts literals / variable patterns (M19)")
 )
   | _ -> failwith "DT: impossible branch"
 )
@@ -223,8 +223,8 @@ and v_Vuna_dCompiler_dElab_dTerm_dcheckLitBoundVar = (fun globals -> (fun ctx ->
   | _ -> failwith "DT: impossible branch"
 )))) ((v_Vuna_dCompiler_dElab_dMeta_dbinderRig false) (C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVNeutral ((C_Vuna_dCompiler_dCore_dTerm_dNeutral_Vuna_dCompiler_dCore_dTerm_dNGlobal (tyName, C_Base_dList_dList_Nil))))))) (((v_Vuna_dCompiler_dElab_dTypes_dctxBindValue name) (C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVNeutral ((C_Vuna_dCompiler_dCore_dTerm_dNeutral_Vuna_dCompiler_dCore_dTerm_dNGlobal (tyName, C_Base_dList_dList_Nil))))) ctx)))))))))))
 and v_Vuna_dCompiler_dElab_dTerm_dcheckCaseOf = (fun globals -> (fun ctx -> (fun ec -> (fun scrutTerm -> (fun scrutTy -> (fun fam -> (fun idxs -> (fun alts -> (fun expected -> (fun sp -> (match ((v_Vuna_dCompiler_dElab_dMeta_ddtDataLookup fam) (v_Vuna_dCompiler_dElab_dTypes_decDatas ec)) with
-  | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> ((v_Vuna_dCompiler_dElab_dTypes_derrAt sp) "DT: case scrutinee is not an inductive family")
-  | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__110) -> (if (v_Vuna_dCompiler_dElab_dCase_dhasDupNames (v_Vuna_dCompiler_dElab_dCase_daltNames alts)) then ((v_Vuna_dCompiler_dElab_dTypes_derrAt sp) "DT: duplicate constructor in case") else ((v_Base_dResult_dandThen ((((((((((v_Vuna_dCompiler_dElab_dTerm_delabCaseAlts globals) ctx) ec) scrutTy) dtb__110) idxs) ((v_Vuna_dCompiler_dElab_dTypes_devalCtx ctx) scrutTerm)) expected) alts) C_Base_dList_dList_Nil)) (fun p -> (match p with
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> ((v_Vuna_dCompiler_dElab_dTypes_derrAt sp) "[TC_NotInductiveFamily] DT: case scrutinee is not an inductive family")
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__110) -> (if (v_Vuna_dCompiler_dElab_dCase_dhasDupNames (v_Vuna_dCompiler_dElab_dCase_daltNames alts)) then ((v_Vuna_dCompiler_dElab_dTypes_derrAt sp) "[TC_DuplicateCtorInCase] DT: duplicate constructor in case") else ((v_Base_dResult_dandThen ((((((((((v_Vuna_dCompiler_dElab_dTerm_delabCaseAlts globals) ctx) ec) scrutTy) dtb__110) idxs) ((v_Vuna_dCompiler_dElab_dTypes_devalCtx ctx) scrutTerm)) expected) alts) C_Base_dList_dList_Nil)) (fun p -> (match p with
   | C_Base_dPair_dPair_Base_dPair_dPair (dtb__111, dtb__112) -> (((((((((v_Vuna_dCompiler_dElab_dCase_dcheckCaseDone dtb__112) ctx) dtb__110) idxs) alts) expected) sp) scrutTerm) dtb__111)
   | _ -> failwith "DT: impossible branch"
 ))))
@@ -249,12 +249,12 @@ and v_Vuna_dCompiler_dElab_dTerm_dcheckCondBool = (fun globals -> (fun ctx -> (f
   | _ -> failwith "DT: impossible branch"
 ))))))
 and v_Vuna_dCompiler_dElab_dTerm_dinferE = (fun globals -> (fun ctx -> (fun ec -> (fun expr -> (match expr with
-  | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEVar (dtb__123, dtb__124) -> (if ((bi_eq_str dtb__123) "Type") then (C_Base_dResult_dResult_Base_dResult_dOk ((C_Base_dPair_dPair_Base_dPair_dPair ((C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTType ((v_Vuna_dCompiler_dCore_dTerm_dlevelZero ()))), (C_Base_dPair_dPair_Base_dPair_dPair ((C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVType ((v_Vuna_dCompiler_dCore_dTerm_dlevelSucc (v_Vuna_dCompiler_dCore_dTerm_dlevelZero ())))), ec)))))) else (if ((bi_eq_str dtb__123) "_") then ((v_Vuna_dCompiler_dElab_dTypes_derrAt dtb__124) "DT: cannot infer the type of a hole; give it an expected type") else (((((v_Vuna_dCompiler_dElab_dTerm_dinferVarRef globals) ctx) ec) dtb__123) dtb__124)))
+  | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEVar (dtb__123, dtb__124) -> (if ((bi_eq_str dtb__123) "Type") then (C_Base_dResult_dResult_Base_dResult_dOk ((C_Base_dPair_dPair_Base_dPair_dPair ((C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTType ((v_Vuna_dCompiler_dCore_dTerm_dlevelZero ()))), (C_Base_dPair_dPair_Base_dPair_dPair ((C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVType ((v_Vuna_dCompiler_dCore_dTerm_dlevelSucc (v_Vuna_dCompiler_dCore_dTerm_dlevelZero ())))), ec)))))) else (if ((bi_eq_str dtb__123) "_") then ((v_Vuna_dCompiler_dElab_dTypes_derrAt dtb__124) "[TC_HoleNoExpectedType] DT: cannot infer the type of a hole; give it an expected type") else (((((v_Vuna_dCompiler_dElab_dTerm_dinferVarRef globals) ctx) ec) dtb__123) dtb__124)))
   | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEInt (dtb__125, dtb__126) -> (C_Base_dResult_dResult_Base_dResult_dOk ((C_Base_dPair_dPair_Base_dPair_dPair ((C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTInt (dtb__125)), (C_Base_dPair_dPair_Base_dPair_dPair ((C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVNeutral ((C_Vuna_dCompiler_dCore_dTerm_dNeutral_Vuna_dCompiler_dCore_dTerm_dNGlobal ("Int", C_Base_dList_dList_Nil)))), ec))))))
   | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEStr (dtb__127, dtb__128) -> (C_Base_dResult_dResult_Base_dResult_dOk ((C_Base_dPair_dPair_Base_dPair_dPair ((C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTStr (dtb__127)), (C_Base_dPair_dPair_Base_dPair_dPair ((C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVNeutral ((C_Vuna_dCompiler_dCore_dTerm_dNeutral_Vuna_dCompiler_dCore_dTerm_dNGlobal ("String", C_Base_dList_dList_Nil)))), ec))))))
   | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEPi (dtb__129, dtb__130, dtb__131, dtb__132, dtb__133) -> ((((((((v_Vuna_dCompiler_dElab_dTerm_dinferPi globals) ctx) ec) dtb__129) dtb__130) dtb__131) dtb__132) dtb__133)
   | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEApp (dtb__134, dtb__135, dtb__136) -> ((((((v_Vuna_dCompiler_dElab_dTerm_dinferApp globals) ctx) ec) dtb__134) dtb__135) dtb__136)
-  | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dELam (dtb__137, dtb__138, dtb__139) -> ((v_Vuna_dCompiler_dElab_dTypes_derrAt dtb__139) "DT: cannot infer the type of a lambda; add a signature")
+  | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dELam (dtb__137, dtb__138, dtb__139) -> ((v_Vuna_dCompiler_dElab_dTypes_derrAt dtb__139) "[TC_LambdaNoSignature] DT: cannot infer the type of a lambda; add a signature")
   | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEIf (dtb__140, dtb__141, dtb__142, dtb__143) -> ((v_Base_dResult_dandThen (((((v_Vuna_dCompiler_dElab_dTerm_dcheckCondBool globals) ctx) ec) dtb__140) dtb__143)) (fun pc -> (match pc with
   | C_Base_dPair_dPair_Base_dPair_dPair (dtb__144, dtb__145) -> ((v_Base_dResult_dandThen ((((v_Vuna_dCompiler_dElab_dTerm_dinferE globals) ctx) dtb__145) dtb__141)) (fun pt -> (match pt with
   | C_Base_dPair_dPair_Base_dPair_dPair (dtb__146, dtb__147) -> (match dtb__147 with
@@ -273,11 +273,11 @@ and v_Vuna_dCompiler_dElab_dTerm_dinferE = (fun globals -> (fun ctx -> (fun ec -
 )))
   | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dELet (dtb__154, dtb__155, dtb__156, dtb__157) -> (((((((v_Vuna_dCompiler_dElab_dTerm_dinferLet globals) ctx) ec) dtb__154) dtb__155) dtb__156) dtb__157)
   | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dECase (dtb__158, dtb__159, dtb__160) -> ((((((v_Vuna_dCompiler_dElab_dTerm_dinferCaseE globals) ctx) ec) dtb__158) dtb__159) dtb__160)
-  | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEField (dtb__161, dtb__162, dtb__163) -> ((v_Vuna_dCompiler_dElab_dTypes_derrAt dtb__163) "DT: record field access is not supported yet (M15)")
-  | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dERecord (dtb__164, dtb__165, dtb__166) -> ((v_Vuna_dCompiler_dElab_dTypes_derrAt dtb__166) "DT: records are not supported yet (M15)")
-  | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dERecUpdate (dtb__167, dtb__168, dtb__169) -> ((v_Vuna_dCompiler_dElab_dTypes_derrAt dtb__169) "DT: record update is not supported yet (M15)")
+  | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEField (dtb__161, dtb__162, dtb__163) -> ((v_Vuna_dCompiler_dElab_dTypes_derrAt dtb__163) "[TC_RecordFieldAccessUnsupported] DT: record field access is not supported yet (M15)")
+  | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dERecord (dtb__164, dtb__165, dtb__166) -> ((v_Vuna_dCompiler_dElab_dTypes_derrAt dtb__166) "[TC_RecordsUnsupported] DT: records are not supported yet (M15)")
+  | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dERecUpdate (dtb__167, dtb__168, dtb__169) -> ((v_Vuna_dCompiler_dElab_dTypes_derrAt dtb__169) "[TC_RecordUpdateUnsupported] DT: record update is not supported yet (M15)")
   | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEInstSel (dtb__170, dtb__171, dtb__172) -> ((((((v_Vuna_dCompiler_dElab_dDict_dinferInstSel globals) ctx) ec) dtb__170) dtb__171) dtb__172)
-  | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEDo (dtb__173, dtb__174) -> ((v_Vuna_dCompiler_dElab_dTypes_derrAt dtb__174) "DT: do blocks are not supported yet (M19)")
+  | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEDo (dtb__173, dtb__174) -> ((v_Vuna_dCompiler_dElab_dTypes_derrAt dtb__174) "[TC_DoUnsupported] DT: do blocks are not supported yet (M19)")
   | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEAnn (dtb__175, dtb__176, dtb__177) -> ((((((v_Vuna_dCompiler_dElab_dTerm_dinferAnn globals) ctx) ec) dtb__175) dtb__176) dtb__177)
   | _ -> failwith "DT: impossible branch"
 )))))
@@ -309,20 +309,20 @@ and v_Vuna_dCompiler_dElab_dTerm_dinferApp = (fun globals -> (fun ctx -> (fun ec
   | C_Base_dList_dList_Cons (dtb__194, dtb__195) -> (match dtb__195 with
   | C_Base_dList_dList_Cons (dtb__196, dtb__197) -> (match dtb__197 with
   | C_Base_dList_dList_Nil -> ((((((((v_Vuna_dCompiler_dElab_dTerm_dinferPi globals) ctx) ec) "_") false) dtb__194) dtb__196) sp)
-  | _ -> ((v_Vuna_dCompiler_dElab_dTypes_derrAt sp) "DT: invalid arrow type")
+  | _ -> ((v_Vuna_dCompiler_dElab_dTypes_derrAt sp) "[TC_InvalidArrowType] DT: invalid arrow type")
 )
-  | _ -> ((v_Vuna_dCompiler_dElab_dTypes_derrAt sp) "DT: invalid arrow type")
+  | _ -> ((v_Vuna_dCompiler_dElab_dTypes_derrAt sp) "[TC_InvalidArrowType] DT: invalid arrow type")
 )
-  | _ -> ((v_Vuna_dCompiler_dElab_dTypes_derrAt sp) "DT: invalid arrow type")
+  | _ -> ((v_Vuna_dCompiler_dElab_dTypes_derrAt sp) "[TC_InvalidArrowType] DT: invalid arrow type")
 ) else (if ((bi_eq_str dtb__192) "Type") then (match args with
   | C_Base_dList_dList_Cons (dtb__198, dtb__199) -> (match dtb__198 with
   | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEInt (dtb__200, dtb__201) -> (match dtb__199 with
-  | C_Base_dList_dList_Nil -> (if ((bi_lt_int dtb__200) 0) then ((v_Vuna_dCompiler_dElab_dTypes_derrAt dtb__201) "DT: universe level must be non-negative") else (C_Base_dResult_dResult_Base_dResult_dOk ((C_Base_dPair_dPair_Base_dPair_dPair ((C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTType ((v_Vuna_dCompiler_dCore_dTerm_dlevelOfInt dtb__200))), (C_Base_dPair_dPair_Base_dPair_dPair ((C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVType ((v_Vuna_dCompiler_dCore_dTerm_dlevelSucc (v_Vuna_dCompiler_dCore_dTerm_dlevelOfInt dtb__200)))), ec)))))))
-  | _ -> ((v_Vuna_dCompiler_dElab_dTypes_derrAt dtb__193) "DT: Type needs exactly one non-negative level (or none)")
+  | C_Base_dList_dList_Nil -> (if ((bi_lt_int dtb__200) 0) then ((v_Vuna_dCompiler_dElab_dTypes_derrAt dtb__201) "[TC_UniverseLevelNonNegative] DT: universe level must be non-negative") else (C_Base_dResult_dResult_Base_dResult_dOk ((C_Base_dPair_dPair_Base_dPair_dPair ((C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTType ((v_Vuna_dCompiler_dCore_dTerm_dlevelOfInt dtb__200))), (C_Base_dPair_dPair_Base_dPair_dPair ((C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVType ((v_Vuna_dCompiler_dCore_dTerm_dlevelSucc (v_Vuna_dCompiler_dCore_dTerm_dlevelOfInt dtb__200)))), ec)))))))
+  | _ -> ((v_Vuna_dCompiler_dElab_dTypes_derrAt dtb__193) "[TC_TypeLevelArg] DT: Type needs exactly one non-negative level (or none)")
 )
-  | _ -> ((v_Vuna_dCompiler_dElab_dTypes_derrAt dtb__193) "DT: Type needs exactly one non-negative level (or none)")
+  | _ -> ((v_Vuna_dCompiler_dElab_dTypes_derrAt dtb__193) "[TC_TypeLevelArg] DT: Type needs exactly one non-negative level (or none)")
 )
-  | _ -> ((v_Vuna_dCompiler_dElab_dTypes_derrAt dtb__193) "DT: Type needs exactly one non-negative level (or none)")
+  | _ -> ((v_Vuna_dCompiler_dElab_dTypes_derrAt dtb__193) "[TC_TypeLevelArg] DT: Type needs exactly one non-negative level (or none)")
 ) else (match fn with
   | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEVar (dtb__202, dtb__203) -> (match ((v_Vuna_dCompiler_dElab_dTypes_dctxLookup dtb__202) ctx) with
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__204) -> ((((((v_Vuna_dCompiler_dElab_dTerm_dinferAppGeneral globals) ctx) ec) fn) args) sp)
@@ -346,7 +346,7 @@ and v_Vuna_dCompiler_dElab_dTerm_dinferApp = (fun globals -> (fun ctx -> (fun ec
 )))
   | _ -> failwith "DT: impossible branch"
 )))
-  | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> ((v_Vuna_dCompiler_dElab_dTypes_derrAt dtb__203) ((bi_concat "DT: unknown name ") dtb__202))
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> ((v_Vuna_dCompiler_dElab_dTypes_derrAt dtb__203) ((bi_concat "[TC_UnknownName] DT: unknown name ") dtb__202))
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
@@ -378,7 +378,7 @@ and v_Vuna_dCompiler_dElab_dTerm_dinferApp = (fun globals -> (fun ctx -> (fun ec
 )))
   | _ -> failwith "DT: impossible branch"
 )))
-  | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> ((v_Vuna_dCompiler_dElab_dTypes_derrAt dtb__217) ((bi_concat "DT: unknown name ") dtb__216))
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> ((v_Vuna_dCompiler_dElab_dTypes_derrAt dtb__217) ((bi_concat "[TC_UnknownName] DT: unknown name ") dtb__216))
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
@@ -433,7 +433,7 @@ and v_Vuna_dCompiler_dElab_dTerm_dinferArgsGo = (fun globals -> (fun ctx -> (fun
   | _ -> failwith "DT: impossible branch"
 )))
   | _ -> failwith "DT: impossible branch"
-) else ((v_Vuna_dCompiler_dElab_dTypes_derrAt sp) "DT: implicit parameters must be types or inductive families (M15)"))) else (match args with
+) else ((v_Vuna_dCompiler_dElab_dTypes_derrAt sp) "[TC_ImplicitParamKind] DT: implicit parameters must be types or inductive families (M15)"))) else (match args with
   | C_Base_dList_dList_Nil -> (C_Base_dResult_dResult_Base_dResult_dOk ((C_Base_dPair_dPair_Base_dPair_dPair (C_Base_dList_dList_Nil, (C_Base_dPair_dPair_Base_dPair_dPair (forced, ec))))))
   | C_Base_dList_dList_Cons (dtb__260, dtb__261) -> ((v_Base_dResult_dandThen (((((v_Vuna_dCompiler_dElab_dTerm_dcheckE globals) ctx) ec) dtb__260) dtb__244)) (fun p -> (match p with
   | C_Base_dPair_dPair_Base_dPair_dPair (dtb__262, dtb__263) -> ((v_Base_dResult_dandThen ((((((v_Vuna_dCompiler_dElab_dTerm_dinferArgsGo globals) ctx) dtb__263) ((v_Vuna_dCompiler_dCore_dEval_dapplyClosure dtb__245) ((v_Vuna_dCompiler_dElab_dTypes_devalCtx ctx) dtb__262))) dtb__261) sp)) (fun q -> (match q with
@@ -449,7 +449,7 @@ and v_Vuna_dCompiler_dElab_dTerm_dinferArgsGo = (fun globals -> (fun ctx -> (fun
 ))
   | _ -> (match args with
   | C_Base_dList_dList_Nil -> (C_Base_dResult_dResult_Base_dResult_dOk ((C_Base_dPair_dPair_Base_dPair_dPair (C_Base_dList_dList_Nil, (C_Base_dPair_dPair_Base_dPair_dPair (forced, ec))))))
-  | C_Base_dList_dList_Cons (dtb__268, dtb__269) -> ((v_Vuna_dCompiler_dElab_dTypes_derrAt (v_Vuna_dCompiler_dFrontend_dAst_dexprSpan dtb__268)) "DT: too many arguments (not a function)")
+  | C_Base_dList_dList_Cons (dtb__268, dtb__269) -> ((v_Vuna_dCompiler_dElab_dTypes_derrAt (v_Vuna_dCompiler_dFrontend_dAst_dexprSpan dtb__268)) "[TC_TooManyArgs] DT: too many arguments (not a function)")
   | _ -> failwith "DT: impossible branch"
 )
 )) ((v_Vuna_dCompiler_dElab_dTypes_dforceVal ec) ty))))))))
@@ -557,7 +557,7 @@ and v_Vuna_dCompiler_dElab_dTerm_dcheckLetOne = (fun globals -> (fun ctx -> (fun
 )
   | _ -> failwith "DT: impossible branch"
 )))) (v_Base_dPair_dsecondOf bind))
-  | _ -> ((v_Vuna_dCompiler_dElab_dTypes_derrAt (v_Vuna_dCompiler_dFrontend_dAst_dpatSpan (v_Base_dPair_dfirstOf bind))) "DT: let bindings must be simple names or wildcards (M19)")
+  | _ -> ((v_Vuna_dCompiler_dElab_dTypes_derrAt (v_Vuna_dCompiler_dFrontend_dAst_dpatSpan (v_Base_dPair_dfirstOf bind))) "[TC_LetBindingPattern] DT: let bindings must be simple names or wildcards (M19)")
 ))))))))))
 and v_Vuna_dCompiler_dElab_dTerm_dinferLet = (fun globals -> (fun ctx -> (fun ec -> (fun binds -> (fun body -> (fun rec_u -> (fun sp -> (if rec_u then ((v_Base_dResult_dandThen (v_Vuna_dCompiler_dElab_dTerm_dcheckWhereSigs binds)) (fun _u -> (((((((v_Vuna_dCompiler_dElab_dTerm_dinferLetGo globals) ctx) ec) binds) body) rec_u) sp))) else (((((((v_Vuna_dCompiler_dElab_dTerm_dinferLetGo globals) ctx) ec) binds) body) rec_u) sp)))))))))
 and v_Vuna_dCompiler_dElab_dTerm_dinferLetGo = (fun globals -> (fun ctx -> (fun ec -> (fun binds -> (fun body -> (fun rec_u -> (fun sp -> (match binds with
@@ -566,7 +566,7 @@ and v_Vuna_dCompiler_dElab_dTerm_dinferLetGo = (fun globals -> (fun ctx -> (fun 
   | C_Base_dPair_dPair_Base_dPair_dPair (dtb__351, dtb__352) -> (match dtb__351 with
   | C_Vuna_dCompiler_dFrontend_dAst_dPat_Vuna_dCompiler_dFrontend_dAst_dPVar (dtb__353, dtb__354) -> (((((((((v_Vuna_dCompiler_dElab_dTerm_dinferLetBound globals) ctx) ec) dtb__353) dtb__352) dtb__350) body) rec_u) sp)
   | C_Vuna_dCompiler_dFrontend_dAst_dPat_Vuna_dCompiler_dFrontend_dAst_dPWild (dtb__355) -> ((((((((v_Vuna_dCompiler_dElab_dTerm_dinferLetIgnored globals) ctx) ec) dtb__352) dtb__350) body) rec_u) sp)
-  | _ -> ((v_Vuna_dCompiler_dElab_dTypes_derrAt (v_Vuna_dCompiler_dFrontend_dAst_dpatSpan dtb__351)) "DT: let bindings must be simple names or wildcards (M19)")
+  | _ -> ((v_Vuna_dCompiler_dElab_dTypes_derrAt (v_Vuna_dCompiler_dFrontend_dAst_dpatSpan dtb__351)) "[TC_LetBindingPattern] DT: let bindings must be simple names or wildcards (M19)")
 )
   | _ -> failwith "DT: impossible branch"
 )
@@ -619,7 +619,7 @@ and v_Vuna_dCompiler_dElab_dTerm_dcheckLam = (fun mc0 -> (fun mc1 -> (fun mc2 ->
   | C_Base_dPair_dPair_Base_dPair_dPair (dtb__387, dtb__388) -> (C_Base_dResult_dResult_Base_dResult_dOk ((C_Base_dPair_dPair_Base_dPair_dPair ((C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTLam (dtb__380, lamRig, dtb__387)), dtb__388))))
   | _ -> failwith "DT: impossible branch"
 )))) ((v_Vuna_dCompiler_dElab_dMeta_dbinderRig dtb__383) dtb__385))) ((v_Vuna_dCompiler_dCore_dEval_dapplyClosure dtb__386) v))) (((v_Vuna_dCompiler_dElab_dTypes_dctxBindValue dtb__380) dtb__385) mc1))) ((v_Vuna_dCompiler_dElab_dMeta_dfreshVarValue dtb__382) lvl))) (v_Vuna_dCompiler_dElab_dTypes_dctxDepth mc1))
-  | _ -> ((v_Vuna_dCompiler_dElab_dTypes_derrAt mc6) "DT: lambda has more parameters than the expected function type")
+  | _ -> ((v_Vuna_dCompiler_dElab_dTypes_derrAt mc6) "[TC_LambdaTooManyParams] DT: lambda has more parameters than the expected function type")
 )) ((v_Vuna_dCompiler_dElab_dTypes_dforceVal mc2) mc5))
   | C_Base_dList_dList_Nil -> (((((v_Vuna_dCompiler_dElab_dTerm_dcheckE mc0) mc1) mc2) mc4) mc5)
   | _ -> failwith "DT: impossible branch"
@@ -656,7 +656,7 @@ and v_Vuna_dCompiler_dElab_dTerm_dcheckTypeInfer = (fun globals -> (fun ctx -> (
   | C_Base_dPair_dPair_Base_dPair_dPair (dtb__402, dtb__403) -> (match dtb__403 with
   | C_Base_dPair_dPair_Base_dPair_dPair (dtb__404, dtb__405) -> ((fun forced -> (match (v_Vuna_dCompiler_dCore_dTerm_dtypeLevelOf forced) with
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__406) -> (C_Base_dResult_dResult_Base_dResult_dOk ((C_Base_dPair_dPair_Base_dPair_dPair (dtb__402, (C_Base_dPair_dPair_Base_dPair_dPair (dtb__406, dtb__405))))))
-  | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> ((v_Vuna_dCompiler_dElab_dTypes_derrAt (v_Vuna_dCompiler_dFrontend_dAst_dexprSpan expr)) ((bi_concat "DT: expected a type, but this expression has type ") ((v_Vuna_dCompiler_dCore_dEval_dshowValueAt (v_Vuna_dCompiler_dElab_dTypes_dctxDepth ctx)) dtb__404)))
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> ((v_Vuna_dCompiler_dElab_dTypes_derrAt (v_Vuna_dCompiler_dFrontend_dAst_dexprSpan expr)) ((bi_concat "[TC_ExpectedType] DT: expected a type, but this expression has type ") ((v_Vuna_dCompiler_dCore_dEval_dshowValueAt (v_Vuna_dCompiler_dElab_dTypes_dctxDepth ctx)) dtb__404)))
   | _ -> failwith "DT: impossible branch"
 )) ((v_Vuna_dCompiler_dElab_dTypes_dforceVal dtb__405) dtb__404))
   | _ -> failwith "DT: impossible branch"
@@ -687,12 +687,12 @@ and v_Vuna_dCompiler_dElab_dTerm_dcheckAppUnderType = (fun globals -> (fun ctx -
   | _ -> failwith "DT: impossible branch"
 ))))))))
 and v_Vuna_dCompiler_dElab_dTerm_dinferAppUnderType = (fun globals -> (fun ctx -> (fun ec -> (fun name -> (fun args -> (fun sp -> (match ((v_Vuna_dCompiler_dElab_dMeta_dglobalLookup name) globals) with
-  | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> ((v_Vuna_dCompiler_dElab_dTypes_derrAt sp) ((bi_concat "DT: unknown name ") name))
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> ((v_Vuna_dCompiler_dElab_dTypes_derrAt sp) ((bi_concat "[TC_UnknownName] DT: unknown name ") name))
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__417) -> ((v_Base_dResult_dandThen ((((((v_Vuna_dCompiler_dElab_dTerm_dinferArgs globals) ctx) ec) ((v_Vuna_dCompiler_dCore_dEval_deval C_Base_dList_dList_Nil) dtb__417)) args) sp)) (fun pa -> (match pa with
   | C_Base_dPair_dPair_Base_dPair_dPair (dtb__418, dtb__419) -> (match dtb__419 with
   | C_Base_dPair_dPair_Base_dPair_dPair (dtb__420, dtb__421) -> (match (v_Vuna_dCompiler_dCore_dTerm_dtypeLevelOf ((v_Vuna_dCompiler_dElab_dTypes_dforceVal dtb__421) dtb__420)) with
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__422) -> (C_Base_dResult_dResult_Base_dResult_dOk ((C_Base_dPair_dPair_Base_dPair_dPair (((v_Vuna_dCompiler_dElab_dMeta_dfoldAppTerms (C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTGlobal (name))) dtb__418), (C_Base_dPair_dPair_Base_dPair_dPair (dtb__422, dtb__421))))))
-  | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> ((v_Vuna_dCompiler_dElab_dTypes_derrAt sp) ((bi_concat "DT: expected a type, but ") ((bi_concat name) " applied to these arguments is not a type")))
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> ((v_Vuna_dCompiler_dElab_dTypes_derrAt sp) ((bi_concat "[TC_AppliedNotType] DT: expected a type, but ") ((bi_concat name) " applied to these arguments is not a type")))
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
@@ -764,11 +764,11 @@ and v_Vuna_dCompiler_dElab_dTerm_dspecializeBoolApp = (fun globals -> (fun ctx -
 )))
   | _ -> failwith "DT: impossible branch"
 )))
-  | _ -> ((v_Vuna_dCompiler_dElab_dTypes_derrAt sp) ((bi_concat "DT: `") ((bi_concat name) "` needs exactly two arguments")))
+  | _ -> ((v_Vuna_dCompiler_dElab_dTypes_derrAt sp) ((bi_concat "[TC_NeedsTwoArgs] DT: `") ((bi_concat name) "` needs exactly two arguments")))
 )
-  | _ -> ((v_Vuna_dCompiler_dElab_dTypes_derrAt sp) ((bi_concat "DT: `") ((bi_concat name) "` needs exactly two arguments")))
+  | _ -> ((v_Vuna_dCompiler_dElab_dTypes_derrAt sp) ((bi_concat "[TC_NeedsTwoArgs] DT: `") ((bi_concat name) "` needs exactly two arguments")))
 )
-  | _ -> ((v_Vuna_dCompiler_dElab_dTypes_derrAt sp) ((bi_concat "DT: `") ((bi_concat name) "` needs exactly two arguments")))
+  | _ -> ((v_Vuna_dCompiler_dElab_dTypes_derrAt sp) ((bi_concat "[TC_NeedsTwoArgs] DT: `") ((bi_concat name) "` needs exactly two arguments")))
 ) else (C_Base_dResult_dResult_Base_dResult_dOk (C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing)))))))))
 and v_Vuna_dCompiler_dElab_dTerm_dcheckAppGeneral = (fun globals -> (fun ctx -> (fun ec -> (fun fn -> (fun args -> (fun expected -> (fun sp -> (match fn with
   | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEVar (dtb__457, dtb__458) -> ((v_Base_dResult_dandThen ((((((v_Vuna_dCompiler_dElab_dTerm_dspecializeOpApp globals) ctx) ec) dtb__457) args) sp)) (fun mspec -> (match mspec with
@@ -785,12 +785,12 @@ and v_Vuna_dCompiler_dElab_dTerm_dcheckAppGeneral = (fun globals -> (fun ctx -> 
   | _ -> (((((v_Vuna_dCompiler_dElab_dTerm_dcheckByInfer globals) ctx) ec) (C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEApp (fn, args, sp))) expected)
 ))))))))
 and v_Vuna_dCompiler_dElab_dTerm_dcheckAppCtor = (fun globals -> (fun ctx -> (fun ec -> (fun name -> (fun args -> (fun expected -> (fun sp -> (match ((v_Vuna_dCompiler_dElab_dMeta_ddtCtorLookup name) (v_Vuna_dCompiler_dElab_dTypes_decDatas ec)) with
-  | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> ((v_Vuna_dCompiler_dElab_dTypes_derrAt sp) ((bi_concat "DT: unknown name ") name))
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> ((v_Vuna_dCompiler_dElab_dTypes_derrAt sp) ((bi_concat "[TC_UnknownName] DT: unknown name ") name))
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__464) -> ((v_Base_dResult_dandThen ((((((v_Vuna_dCompiler_dElab_dTerm_dinferArgs globals) ctx) ec) ((v_Vuna_dCompiler_dCore_dEval_deval C_Base_dList_dList_Nil) (v_Vuna_dCompiler_dElab_dTypes_ddtCtorType dtb__464))) args) sp)) (fun pa -> (match pa with
   | C_Base_dPair_dPair_Base_dPair_dPair (dtb__465, dtb__466) -> (match dtb__466 with
   | C_Base_dPair_dPair_Base_dPair_dPair (dtb__467, dtb__468) -> (match ((((v_Vuna_dCompiler_dElab_dMeta_dconvEc dtb__468) (v_Vuna_dCompiler_dElab_dTypes_dctxDepth ctx)) expected) dtb__467) with
   | C_Base_dResult_dResult_Base_dResult_dOk (dtb__469) -> (C_Base_dResult_dResult_Base_dResult_dOk ((C_Base_dPair_dPair_Base_dPair_dPair ((((v_Vuna_dCompiler_dElab_dMeta_dctorAppTerm (v_Vuna_dCompiler_dElab_dTypes_decDatas dtb__469)) (C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTGlobal (name))) dtb__465), dtb__469))))
-  | C_Base_dResult_dResult_Base_dResult_dErr (dtb__470) -> ((v_Vuna_dCompiler_dElab_dTypes_derrAt sp) ((bi_concat "DT: constructor ") ((bi_concat name) ((bi_concat ": ") dtb__470))))
+  | C_Base_dResult_dResult_Base_dResult_dErr (dtb__470) -> ((v_Vuna_dCompiler_dElab_dTypes_derrAt sp) ((bi_concat "[TC_CtorError] DT: constructor ") ((bi_concat name) ((bi_concat ": ") dtb__470))))
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"

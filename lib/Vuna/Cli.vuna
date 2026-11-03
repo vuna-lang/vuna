@@ -20,6 +20,7 @@ import Vuna.Files
 import Vuna.Index
 import Vuna.Repl
 import Vuna.Doc
+import Vuna.GenErrors
 import Vuna.TestRunner
 import Vuna.Lsp
 import qualified Vuna.Lint
@@ -44,6 +45,9 @@ toolUsageLines prog =
     ++ "  "
     ++ prog
     ++ " doc [DIR [OUT]]    生成 API 文档（默认 OUT=DIR/docs/api.md）\n"
+    ++ "  "
+    ++ prog
+    ++ " gen-errors [ROOT]  从源码 docstring 生成错误码文档（默认 ROOT=.，输出 ROOT/docs/.generated/errors.md）\n"
     ++ "  "
     ++ prog
     ++ " map [--modules]                      模块总览（索引缓存在 .local/index/，自动新鲜度判定）\n"
@@ -83,6 +87,7 @@ runCli1 args = case args of
     "fmt" => fmtArgs rest
     "repl" => replArgs rest
     "doc" => docArgs rest
+    "gen-errors" => genErrorsArgs rest
     "map" => mapArgs rest
     "api" => apiArgs rest
     "lsp" => Vuna.Lsp.runLspTool rest
@@ -261,6 +266,17 @@ docDefaultOut dir = if dir == "." then "docs/api.md" else dir ++ "/docs/api.md"
 
 docRun : String -> String -> Int
 docRun dir out = runDoc dir out
+
+-- ---------------------------------------------------------------
+-- gen-errors（错误码文档生成）
+-- 用法：vuna gen-errors [ROOT]；ROOT 默认 "."，输出 ROOT/docs/.generated/errors.md。
+-- 生成物不纳入 git（docs/.generated/ 在 .gitignore）。
+-- ---------------------------------------------------------------
+genErrorsArgs : List String -> Int
+genErrorsArgs args = case args of
+  [] => runGenErrors "."
+  [root] => if startsWith "-" root then usageError else runGenErrors root
+  _ => usageError
 
 -- ---------------------------------------------------------------
 -- map / api（源码索引）

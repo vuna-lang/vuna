@@ -149,6 +149,7 @@ vuna help, -h
 | [docs/reference/stdlib.md](docs/reference/stdlib.md) | 标准库 `vuna-base` 模块清单与 `Prelude` 自动导入 |
 | [docs/reference/packages.md](docs/reference/packages.md) | `vuna.toml` 包格式、workspace / 依赖 DAG、工具链命令一览 |
 | [docs/reference/dt.md](docs/reference/dt.md) | DT 子集：索引归纳族、依赖模式匹配、硬边界与夹具（当前状态见 roadmap 总览） |
+| [docs/reference/dt-tooling.md](docs/reference/dt-tooling.md) | DT 工具链：`vuna goal` 洞目标、LSP、`vuna doc`、错误码体系（`vuna gen-errors` 生成 `docs/.generated/errors.md`）与错误索引 |
 | [docs/reference/dt-parity.md](docs/reference/dt-parity.md) | DT 取代 HM 的历史证据表（含 lambda 擦除缺陷与用量统计；当前状态见 roadmap 总览） |
 | [docs/reference/compiler.md](docs/reference/compiler.md) | 编译器模块职责、codegen 表示与优化、机器无关指标 |
 | [docs/reference/bootstrap.md](docs/reference/bootstrap.md) | 种子策略、rotation 流程、fixed point、TCB 边界 |

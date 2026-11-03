@@ -59,7 +59,7 @@ let rec v_Vuna_dCompiler_dElab_dDriver_delabSigs = (fun mc0 -> (fun mc1 -> (fun 
 let rec v_Vuna_dCompiler_dElab_dDriver_delabBodies = (fun mc0 -> (fun mc1 -> (fun mc2 -> (fun mc3 -> (fun mc4 -> (match mc0 with
   | C_Base_dList_dList_Cons (dtb__8, dtb__9) -> (match dtb__8 with
   | C_Vuna_dCompiler_dFrontend_dAst_dDecl_Vuna_dCompiler_dFrontend_dAst_dDFun (dtb__10, dtb__11, dtb__12, dtb__13) -> (match ((v_Vuna_dCompiler_dElab_dMeta_dglobalLookup dtb__10) mc1) with
-  | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> ((v_Vuna_dCompiler_dElab_dTypes_derrAt dtb__13) ((bi_concat "DT: expected a type signature for ") dtb__10))
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> ((v_Vuna_dCompiler_dElab_dTypes_derrAt dtb__13) ((bi_concat "[TC_ExpectedSignature] DT: expected a type signature for ") dtb__10))
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__14) -> (if ((v_Vuna_dCompiler_dElab_dMeta_dmemDefName dtb__10) mc2) then (((((v_Vuna_dCompiler_dElab_dDriver_delabBodies dtb__9) mc1) mc2) mc3) mc4) else ((v_Base_dResult_dandThen (((((v_Vuna_dCompiler_dElab_dTrait_delabFunDef mc1) mc4) ((v_Vuna_dCompiler_dFrontend_dAst_dclausesFor (C_Base_dList_dList_Cons (dtb__8, dtb__9))) dtb__10)) ((v_Vuna_dCompiler_dCore_dEval_deval C_Base_dList_dList_Nil) dtb__14)) dtb__13)) (fun p -> (match p with
   | C_Base_dPair_dPair_Base_dPair_dPair (dtb__15, dtb__16) -> ((fun lifted -> ((fun liftedTy -> ((fun liftedBody -> ((fun liftedEc -> ((fun cleanTerm -> ((fun globals2 -> (((((v_Vuna_dCompiler_dElab_dDriver_delabBodies dtb__9) globals2) (C_Base_dList_dList_Cons ((C_Base_dPair_dPair_Base_dPair_dPair (dtb__10, liftedTy)), mc2))) (C_Base_dList_dList_Cons ((C_Vuna_dCompiler_dElab_dTypes_dDtDef_Vuna_dCompiler_dElab_dTypes_dDtDef (dtb__10, liftedTy, cleanTerm)), mc3))) ((v_Vuna_dCompiler_dElab_dTypes_decAddDef liftedEc) (C_Base_dPair_dPair_Base_dPair_dPair (dtb__10, cleanTerm))))) (((v_Vuna_dCompiler_dElab_dTrait_dreplaceGlobalType dtb__10) liftedTy) mc1))) ((v_Vuna_dCompiler_dElab_dDict_dsubstDictTerm liftedEc) liftedBody))) (v_Base_dPair_dsecondOf (v_Base_dPair_dsecondOf lifted)))) (v_Base_dPair_dfirstOf (v_Base_dPair_dsecondOf lifted)))) (v_Base_dPair_dfirstOf lifted))) ((((v_Vuna_dCompiler_dElab_dTrait_dliftFreeDictGoals dtb__10) dtb__16) dtb__14) dtb__15))
   | _ -> failwith "DT: impossible branch"
@@ -84,10 +84,10 @@ let rec v_Vuna_dCompiler_dElab_dDriver_dhasFunClause = (fun mc0 -> (fun mc1 -> (
 let rec v_Vuna_dCompiler_dElab_dDriver_dcheckAllDefined = (fun mc0 -> (fun mc1 -> (fun mc2 -> (match mc0 with
   | C_Base_dList_dList_Cons (dtb__23, dtb__24) -> (match dtb__23 with
   | C_Base_dPair_dPair_Base_dPair_dPair (dtb__25, dtb__26) -> (if ((v_Vuna_dCompiler_dElab_dDriver_dhasFunClause dtb__25) mc2) then (match ((v_Vuna_dCompiler_dElab_dMeta_dglobalLookup dtb__25) mc1) with
-  | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> (C_Base_dResult_dResult_Base_dResult_dErr (((bi_concat "DT: signature for ") ((bi_concat dtb__25) " has no definition"))))
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> (C_Base_dResult_dResult_Base_dResult_dErr (((bi_concat "[TC_SignatureNoDef] DT: signature for ") ((bi_concat dtb__25) " has no definition"))))
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__27) -> (((v_Vuna_dCompiler_dElab_dDriver_dcheckAllDefined dtb__24) mc1) mc2)
   | _ -> failwith "DT: impossible branch"
-) else (C_Base_dResult_dResult_Base_dResult_dErr (((bi_concat "DT: signature for ") ((bi_concat dtb__25) " has no definition")))))
+) else (C_Base_dResult_dResult_Base_dResult_dErr (((bi_concat "[TC_SignatureNoDef] DT: signature for ") ((bi_concat dtb__25) " has no definition")))))
   | _ -> failwith "DT: impossible branch"
 )
   | C_Base_dList_dList_Nil -> (C_Base_dResult_dResult_Base_dResult_dOk (C_Base_dList_dList_Nil))
@@ -102,7 +102,7 @@ let v_Vuna_dCompiler_dElab_dDriver_ddtEvalExprIn = (fun prog -> (fun expr -> (ma
   | C_Vuna_dCompiler_dElab_dTypes_dDtProgram_Vuna_dCompiler_dElab_dTypes_dDtProgram (dtb__28, dtb__29, dtb__30, dtb__31, dtb__32, dtb__33, dtb__34, dtb__35) -> ((fun ec0 -> ((v_Base_dResult_dandThen ((((v_Vuna_dCompiler_dElab_dTerm_dinferE dtb__32) (v_Vuna_dCompiler_dElab_dTypes_demptyCtx ())) ec0) expr)) (fun p -> (match p with
   | C_Base_dPair_dPair_Base_dPair_dPair (dtb__36, dtb__37) -> (match dtb__37 with
   | C_Base_dPair_dPair_Base_dPair_dPair (dtb__38, dtb__39) -> ((fun ec2 -> ((fun sols2 -> (match (((v_Vuna_dCompiler_dElab_dMeta_dunsolvedFrom dtb__35) (v_Vuna_dCompiler_dElab_dTypes_decNext ec2)) sols2) with
-  | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__40) -> ((v_Vuna_dCompiler_dElab_dTypes_derrAt (v_Vuna_dCompiler_dFrontend_dAst_dexprSpan expr)) ((bi_concat "DT: cannot infer a type for this expression (unsolved metavariable ?") ((bi_concat (bi_strFromInt dtb__40)) "); add a type annotation")))
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__40) -> ((v_Vuna_dCompiler_dElab_dTypes_derrAt (v_Vuna_dCompiler_dFrontend_dAst_dexprSpan expr)) ((bi_concat "[TC_UnsolvedMetavarInfer] DT: cannot infer a type for this expression (unsolved metavariable ?") ((bi_concat (bi_strFromInt dtb__40)) "); add a type annotation")))
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> (match ((((v_Vuna_dCompiler_dCore_dEval_dnormalize ((v_Base_dList_dmap (fun d -> (C_Base_dPair_dPair_Base_dPair_dPair ((v_Vuna_dCompiler_dElab_dTypes_ddtDefName d), (v_Vuna_dCompiler_dElab_dTypes_ddtDefBody d))))) dtb__29)) sols2) (v_Vuna_dCompiler_dCore_dTerm_ddefaultFuel ())) ((v_Vuna_dCompiler_dCore_dEval_deval C_Base_dList_dList_Nil) dtb__36)) with
   | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVInt (dtb__41) -> (C_Base_dResult_dResult_Base_dResult_dOk ((bi_strFromInt dtb__41)))
   | dtb__42 -> (C_Base_dResult_dResult_Base_dResult_dOk ((v_Vuna_dCompiler_dCore_dEval_dshowValue dtb__42)))
@@ -180,8 +180,8 @@ let rec v_Vuna_dCompiler_dElab_dDriver_dunsolvedFromRelevant = (fun i -> (fun st
 let v_Vuna_dCompiler_dElab_dDriver_dunsolvedMeta = (fun ec -> (((((v_Vuna_dCompiler_dElab_dDriver_dunsolvedFromRelevant 0) (v_Vuna_dCompiler_dElab_dTypes_decNext ec)) (v_Vuna_dCompiler_dElab_dTypes_decSols ec)) (v_Vuna_dCompiler_dElab_dMeta_drelevantMetas ec)) (v_Vuna_dCompiler_dElab_dTypes_decGoals ec)))
 
 let v_Vuna_dCompiler_dElab_dDriver_dunsolvedMessage = (fun ec -> (fun m -> (match ((v_Vuna_dCompiler_dElab_dDriver_dfindGoal m) (v_Vuna_dCompiler_dElab_dTypes_decGoals ec)) with
-  | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__83) -> ((bi_concat "DT: unsolved hole ") ((bi_concat (v_Vuna_dCompiler_dCommon_dshowSpanLoc (v_Vuna_dCompiler_dElab_dTypes_ddtGoalSpan dtb__83))) ((bi_concat " with goal ") ((v_Vuna_dCompiler_dCore_dEval_dshowValueAt (v_Vuna_dCompiler_dElab_dDriver_dctxDepthOf dtb__83)) (v_Vuna_dCompiler_dElab_dTypes_ddtGoalType dtb__83)))))
-  | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> ((bi_concat "DT: unsolved metavariable ?") ((bi_concat (bi_strFromInt m)) ((v_Vuna_dCompiler_dElab_dDriver_dmetaOwnerHint ec) m)))
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__83) -> ((bi_concat "[TC_UnsolvedHole] DT: unsolved hole ") ((bi_concat (v_Vuna_dCompiler_dCommon_dshowSpanLoc (v_Vuna_dCompiler_dElab_dTypes_ddtGoalSpan dtb__83))) ((bi_concat " with goal ") ((v_Vuna_dCompiler_dCore_dEval_dshowValueAt (v_Vuna_dCompiler_dElab_dDriver_dctxDepthOf dtb__83)) (v_Vuna_dCompiler_dElab_dTypes_ddtGoalType dtb__83)))))
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> ((bi_concat "[TC_UnsolvedMetavar] DT: unsolved metavariable ?") ((bi_concat (bi_strFromInt m)) ((v_Vuna_dCompiler_dElab_dDriver_dmetaOwnerHint ec) m)))
   | _ -> failwith "DT: impossible branch"
 )))
 

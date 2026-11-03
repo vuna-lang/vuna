@@ -370,7 +370,7 @@ let rec v_Vuna_dCompiler_dElab_dMatch_dlitAltExpr = (fun table -> (fun clauses -
 and v_Vuna_dCompiler_dElab_dMatch_dlitAltExprGo = (fun table -> (fun clauses -> (fun pos -> (fun restParams -> (fun fuel -> ((fun nd_uscrut -> (match nd_uscrut with
   | C_Base_dList_dList_Cons (dtb__206, dtb__207) -> (match dtb__206 with
   | C_Base_dPair_dPair_Base_dPair_dPair (dtb__208, dtb__209) -> (match dtb__208 with
-  | C_Base_dList_dList_Nil -> (C_Base_dResult_dResult_Base_dResult_dErr ("DT: clause has more patterns than the function arity"))
+  | C_Base_dList_dList_Nil -> (C_Base_dResult_dResult_Base_dResult_dErr ("[TC_ClauseTooManyPatterns] DT: clause has more patterns than the function arity"))
   | C_Base_dList_dList_Cons (dtb__210, dtb__211) -> (match dtb__210 with
   | C_Vuna_dCompiler_dFrontend_dAst_dPat_Vuna_dCompiler_dFrontend_dAst_dPVar (dtb__212, dtb__213) -> ((v_Base_dResult_dandThen ((((v_Vuna_dCompiler_dElab_dMatch_dbuildColumnExpr table) (v_Vuna_dCompiler_dElab_dMatch_dstripFirstCol clauses)) restParams) ((bi_sub fuel) 1))) (fun inner -> (C_Base_dResult_dResult_Base_dResult_dOk ((((v_Vuna_dCompiler_dElab_dMatch_drenameExpr dtb__212) pos) inner)))))
   | C_Vuna_dCompiler_dFrontend_dAst_dPat_Vuna_dCompiler_dFrontend_dAst_dPWild (dtb__214) -> ((((v_Vuna_dCompiler_dElab_dMatch_dbuildColumnExpr table) (v_Vuna_dCompiler_dElab_dMatch_dstripFirstCol clauses)) restParams) ((bi_sub fuel) 1))
@@ -380,11 +380,11 @@ and v_Vuna_dCompiler_dElab_dMatch_dlitAltExprGo = (fun table -> (fun clauses -> 
 )
   | _ -> failwith "DT: impossible branch"
 )
-  | C_Base_dList_dList_Nil -> (C_Base_dResult_dResult_Base_dResult_dErr ("DT: case on Int / String needs a variable or wildcard branch as fallback (M19)"))
+  | C_Base_dList_dList_Nil -> (C_Base_dResult_dResult_Base_dResult_dErr ("[TC_IntStringCaseNeedsFallback] DT: case on Int / String needs a variable or wildcard branch as fallback (M19)"))
   | _ -> failwith "DT: impossible branch"
 )) clauses))))))
-and v_Vuna_dCompiler_dElab_dMatch_dbuildColumnExpr = (fun table -> (fun clauses -> (fun params -> (fun fuel -> (if ((bi_le_int fuel) 0) then (C_Base_dResult_dResult_Base_dResult_dErr ("DT: pattern matrix recursion ran out of fuel")) else (if (v_Vuna_dCompiler_dElab_dMatch_dallEmptyPats clauses) then (C_Base_dResult_dResult_Base_dResult_dOk ((v_Vuna_dCompiler_dElab_dMatch_dbodyOfFirst clauses))) else (match params with
-  | C_Base_dList_dList_Nil -> (C_Base_dResult_dResult_Base_dResult_dErr ("DT: clause has more patterns than the function arity"))
+and v_Vuna_dCompiler_dElab_dMatch_dbuildColumnExpr = (fun table -> (fun clauses -> (fun params -> (fun fuel -> (if ((bi_le_int fuel) 0) then (C_Base_dResult_dResult_Base_dResult_dErr ("[TC_PatternFuel] DT: pattern matrix recursion ran out of fuel")) else (if (v_Vuna_dCompiler_dElab_dMatch_dallEmptyPats clauses) then (C_Base_dResult_dResult_Base_dResult_dOk ((v_Vuna_dCompiler_dElab_dMatch_dbodyOfFirst clauses))) else (match params with
+  | C_Base_dList_dList_Nil -> (C_Base_dResult_dResult_Base_dResult_dErr ("[TC_ClauseTooManyPatterns] DT: clause has more patterns than the function arity"))
   | C_Base_dList_dList_Cons (dtb__215, dtb__216) -> (if (v_Vuna_dCompiler_dElab_dMatch_dallVarHeads clauses) then ((v_Base_dResult_dandThen ((((v_Vuna_dCompiler_dElab_dMatch_dbuildColumnExpr table) (v_Vuna_dCompiler_dElab_dMatch_dstripFirstCol clauses)) dtb__216) ((bi_sub fuel) 1))) (fun inner -> (C_Base_dResult_dResult_Base_dResult_dOk ((((v_Vuna_dCompiler_dElab_dMatch_drenameFirstVars clauses) dtb__215) inner))))) else (if (v_Vuna_dCompiler_dElab_dMatch_dallCtorHeads clauses) then (((((v_Vuna_dCompiler_dElab_dMatch_dctorColumn table) clauses) dtb__215) dtb__216) fuel) else (if (v_Vuna_dCompiler_dElab_dMatch_dhasCtorHead clauses) then (((((v_Vuna_dCompiler_dElab_dMatch_dctorColumn table) clauses) dtb__215) dtb__216) fuel) else (((((v_Vuna_dCompiler_dElab_dMatch_dlitAltExpr table) clauses) dtb__215) dtb__216) ((bi_sub fuel) 1)))))
   | _ -> failwith "DT: impossible branch"
 )))))))
@@ -401,7 +401,7 @@ and v_Vuna_dCompiler_dElab_dMatch_dfallbackAltList = (fun table -> (fun pos -> (
 ))))))
 
 let v_Vuna_dCompiler_dElab_dMatch_dmultiToExpr = (fun table -> (fun clauses -> (match (v_Vuna_dCompiler_dElab_dMatch_darityOf clauses) with
-  | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> (C_Base_dResult_dResult_Base_dResult_dErr ("DT: function has no clauses"))
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> (C_Base_dResult_dResult_Base_dResult_dErr ("[TC_FunctionNoClauses] DT: function has no clauses"))
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__220) -> ((fun names -> ((v_Base_dResult_dandThen ((((v_Vuna_dCompiler_dElab_dMatch_dbuildColumnExpr table) clauses) names) 200)) (fun body -> (C_Base_dResult_dResult_Base_dResult_dOk (((v_Vuna_dCompiler_dElab_dMatch_dwrapLambdas names) body)))))) (v_Vuna_dCompiler_dElab_dMatch_dparamNames dtb__220))
   | _ -> failwith "DT: impossible branch"
 )))

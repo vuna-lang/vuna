@@ -94,16 +94,16 @@ let rec v_Vuna_dCompiler_dCodegen_dErase_dbinderAt = (fun mc0 -> (fun mc1 -> (ma
 let rec v_Vuna_dCompiler_dCodegen_dErase_dcheckErasure = (fun typeNames -> (fun binders -> (fun t -> (match t with
   | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTVar (dtb__22, dtb__23) -> (match ((v_Vuna_dCompiler_dCodegen_dErase_dbinderAt dtb__23) binders) with
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__24) -> (match dtb__24 with
-  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__25, dtb__26) -> (if (v_Vuna_dCompiler_dCore_dTerm_drigIsErased dtb__26) then (C_Base_dResult_dResult_Base_dResult_dErr (((bi_concat "DT: type-level binding `") ((bi_concat dtb__22) "` is used at runtime (M13 limitation)")))) else (C_Base_dResult_dResult_Base_dResult_dOk (0)))
+  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__25, dtb__26) -> (if (v_Vuna_dCompiler_dCore_dTerm_drigIsErased dtb__26) then (C_Base_dResult_dResult_Base_dResult_dErr (((bi_concat "[CG_TypeLevelBindingRuntime] DT: type-level binding `") ((bi_concat dtb__22) "` is used at runtime (M13 limitation)")))) else (C_Base_dResult_dResult_Base_dResult_dOk (0)))
   | _ -> failwith "DT: impossible branch"
 )
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> (C_Base_dResult_dResult_Base_dResult_dErr (((bi_concat "DT: internal: unbound runtime variable ") ((bi_concat dtb__22) ((bi_concat " (index ") ((bi_concat (bi_strFromInt dtb__23)) ((bi_concat ", binders ") ((bi_concat (bi_strFromInt (v_Base_dList_dlength binders))) ")"))))))))
   | _ -> failwith "DT: impossible branch"
 )
-  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTGlobal (dtb__27) -> (if ((v_Base_dList_dmemName dtb__27) typeNames) then (C_Base_dResult_dResult_Base_dResult_dErr (((bi_concat "DT: type-level name `") ((bi_concat dtb__27) "` is used at runtime (M13 limitation)")))) else (C_Base_dResult_dResult_Base_dResult_dOk (0)))
-  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTType (dtb__28) -> (C_Base_dResult_dResult_Base_dResult_dErr ("DT: a type is used at runtime (M13 limitation)"))
-  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTPi (dtb__29, dtb__30, dtb__31, dtb__32, dtb__33) -> (C_Base_dResult_dResult_Base_dResult_dErr ("DT: a type is used at runtime (M13 limitation)"))
-  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTMeta (dtb__34) -> (C_Base_dResult_dResult_Base_dResult_dErr (((bi_concat "DT: unsolved metavariable in runtime code") (v_Vuna_dCompiler_dCodegen_dErase_dshowMetaHint dtb__34))))
+  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTGlobal (dtb__27) -> (if ((v_Base_dList_dmemName dtb__27) typeNames) then (C_Base_dResult_dResult_Base_dResult_dErr (((bi_concat "[CG_TypeLevelNameRuntime] DT: type-level name `") ((bi_concat dtb__27) "` is used at runtime (M13 limitation)")))) else (C_Base_dResult_dResult_Base_dResult_dOk (0)))
+  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTType (dtb__28) -> (C_Base_dResult_dResult_Base_dResult_dErr ("[CG_TypeUsedAtRuntime] DT: a type is used at runtime (M13 limitation)"))
+  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTPi (dtb__29, dtb__30, dtb__31, dtb__32, dtb__33) -> (C_Base_dResult_dResult_Base_dResult_dErr ("[CG_TypeUsedAtRuntime] DT: a type is used at runtime (M13 limitation)"))
+  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTMeta (dtb__34) -> (C_Base_dResult_dResult_Base_dResult_dErr (((bi_concat "[CG_UnsolvedMetavarRuntime] DT: unsolved metavariable in runtime code") (v_Vuna_dCompiler_dCodegen_dErase_dshowMetaHint dtb__34))))
   | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTLam (dtb__35, dtb__36, dtb__37) -> (((v_Vuna_dCompiler_dCodegen_dErase_dcheckErasure typeNames) (C_Base_dList_dList_Cons ((C_Base_dPair_dPair_Base_dPair_dPair (dtb__35, dtb__36)), binders))) dtb__37)
   | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTApp (dtb__38, dtb__39, dtb__40) -> (match (v_Vuna_dCompiler_dCodegen_dErase_dflattenConApp t) with
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__41) -> (match dtb__41 with
@@ -315,7 +315,7 @@ let v_Vuna_dCompiler_dCodegen_dErase_dpickReady = (fun adj -> (fun groups -> (fu
 let rec v_Vuna_dCompiler_dCodegen_dErase_dorderGroupsAcc = (fun mc0 -> (fun mc1 -> (fun mc2 -> (match mc1 with
   | C_Base_dList_dList_Nil -> (C_Base_dResult_dResult_Base_dResult_dOk (C_Base_dList_dList_Nil))
   | _ -> (match (((v_Vuna_dCompiler_dCodegen_dErase_dpickReady mc0) mc1) mc2) with
-  | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> (C_Base_dResult_dResult_Base_dResult_dErr ("DT: dependency cycle between runtime definitions"))
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> (C_Base_dResult_dResult_Base_dResult_dErr ("[CG_DependencyCycle] DT: dependency cycle between runtime definitions"))
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__144) -> (match dtb__144 with
   | C_Base_dPair_dPair_Base_dPair_dPair (dtb__145, dtb__146) -> ((v_Base_dResult_dandThen (((v_Vuna_dCompiler_dCodegen_dErase_dorderGroupsAcc mc0) dtb__146) ((v_Base_dList_dappend dtb__145) mc2))) (fun tail -> (C_Base_dResult_dResult_Base_dResult_dOk ((C_Base_dList_dList_Cons (dtb__145, tail))))))
   | _ -> failwith "DT: impossible branch"

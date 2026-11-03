@@ -92,17 +92,26 @@ checkErasure : List String -> List (Pair String Rig) -> Term -> Result Int
 checkErasure typeNames binders t = case t of
   TVar name i => case binderAt i binders of
     Just (Pair n rig) =>
-      if rigIsErased rig then Err ("DT: type-level binding `" ++ name ++ "` is used at runtime (M13 limitation)")
+      if rigIsErased rig then Err
+        ("[CG_TypeLevelBindingRuntime] DT: type-level binding `" ++ name ++ "` is used at runtime (M13 limitation)")
       else Ok 0
+    -- @code CG_TypeLevelBindingRuntime
     Nothing =>
       Err
         ("DT: internal: unbound runtime variable " ++ name ++ " (index " ++ strFromInt i ++ ", binders " ++ strFromInt (length binders) ++ ")")
   TGlobal name =>
-    if memName name typeNames then Err ("DT: type-level name `" ++ name ++ "` is used at runtime (M13 limitation)")
+    if memName name typeNames then Err
+      ("[CG_TypeLevelNameRuntime] DT: type-level name `" ++ name ++ "` is used at runtime (M13 limitation)")
     else Ok 0
-  TType l => Err "DT: a type is used at runtime (M13 limitation)"
-  TPi name implicit rig dom cod => Err "DT: a type is used at runtime (M13 limitation)"
-  TMeta m => Err ("DT: unsolved metavariable in runtime code" ++ showMetaHint m)
+  -- @code CG_TypeLevelNameRuntime
+  -- @code CG_TypeUsedAtRuntime
+  TType l => Err "[CG_TypeUsedAtRuntime] DT: a type is used at runtime (M13 limitation)"
+  -- @code CG_TypeUsedAtRuntime
+  TPi name implicit rig dom cod =>
+    Err "[CG_TypeUsedAtRuntime] DT: a type is used at runtime (M13 limitation)"
+  -- @code CG_UnsolvedMetavarRuntime
+  TMeta m =>
+    Err ("[CG_UnsolvedMetavarRuntime] DT: unsolved metavariable in runtime code" ++ showMetaHint m)
   TLam name rig body => checkErasure typeNames (Pair name rig :: binders) body
   TApp f a rig => case flattenConApp t of
     -- 嵌套在构造子上的应用按构造子实参检查（实参自带擦除标志，比 TApp 的更准）。
@@ -299,7 +308,8 @@ orderGroups adj groups = orderGroupsAcc adj groups []
 orderGroupsAcc : List (Pair String (List String)) -> List (List String) -> List String -> Result (List (List String))
 orderGroupsAcc adj [] emitted = Ok []
 orderGroupsAcc adj remaining emitted = case pickReady adj remaining emitted of
-  Nothing => Err "DT: dependency cycle between runtime definitions"
+  -- @code CG_DependencyCycle
+  Nothing => Err "[CG_DependencyCycle] DT: dependency cycle between runtime definitions"
   Just (Pair g rest) =>
     andThen (orderGroupsAcc adj rest (append g emitted)) (\tail => Ok (g :: tail))
 

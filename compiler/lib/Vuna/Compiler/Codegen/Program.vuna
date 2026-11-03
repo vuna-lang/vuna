@@ -48,7 +48,8 @@ genProgramBody program =
 generateDtProgram : Pair (List DtData) (List DtDef) -> Bool -> Result String
 generateDtProgram program printResult = andThen (genProgramBody program) (\p => case p of
   Pair bodyText (Pair runtime table) => case findDtDef "main" runtime of
-    Nothing => Err "DT: no main definition"
+    -- @code CG_NoMain
+    Nothing => Err "[CG_NoMain] DT: no main definition"
     Just mainDef =>
       let
         mainTy = dtDefType mainDef

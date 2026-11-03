@@ -293,7 +293,7 @@ let rec v_Vuna_dCompiler_dCodegen_dSplit_dsplitModuleFiles = (fun mc0 -> (fun mc
 )))))))
 
 let v_Vuna_dCompiler_dCodegen_dSplit_dsplitMainHook = (fun allDatas -> (fun allDefs -> (fun printResult -> (match ((v_Vuna_dCompiler_dCodegen_dErase_dfindDtDef "main") allDefs) with
-  | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> (C_Base_dResult_dResult_Base_dResult_dErr ("DT: no main definition"))
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> (C_Base_dResult_dResult_Base_dResult_dErr ("[CG_NoMain] DT: no main definition"))
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__136) -> ((fun table -> ((fun mainRef -> (match (v_Vuna_dCompiler_dCodegen_dTerm_dioResultTy (v_Vuna_dCompiler_dElab_dTypes_ddtDefType dtb__136)) with
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__137) -> (((((v_Vuna_dCompiler_dCodegen_dTerm_dgenDtHook "") table) dtb__137) ((v_Vuna_dCompiler_dCodegen_dTerm_dioRunText (C_Base_dPair_dPair_Base_dPair_dPair (allDatas, allDefs))) mainRef)) printResult)
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> (((((v_Vuna_dCompiler_dCodegen_dTerm_dgenDtHook "") table) (v_Vuna_dCompiler_dElab_dTypes_ddtDefType dtb__136)) mainRef) printResult)

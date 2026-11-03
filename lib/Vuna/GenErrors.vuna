@@ -1,0 +1,223 @@
+module Vuna.GenErrors (runGenErrors) where
+
+-- Vuna.GenErrors：从源码 docstring 生成错误码文档。
+-- 扫 compiler 包源码 + lint 规则源码，提取 `-- @code` 注释块（@code/@msg/@desc/@rule/@fixable/@edit），
+-- 从源码消息字符串关联静态消息前缀，按域分组渲染 Markdown 到 docs/.generated/errors.md。
+-- 纯语法级（逐行扫，不跑类型检查）；生成物不纳入 git（docs/.generated/ 在 .gitignore）。
+-- 域前缀：TC_（类型检查/精化）、CG_（codegen/驱动）、LN_（lint 规则）、FX_（修复规则，由 @fixable 推导）。
+import Vuna.Compiler.Common
+import Vuna.Files
+
+data Entry : Type where
+  Entry : String -> String -> String -> String -> String -> Bool -> String -> Entry
+
+entryCode : Entry -> String
+entryCode (Entry c m d r e f s) = c
+
+entryMsg : Entry -> String
+entryMsg (Entry c m d r e f s) = m
+
+entryDesc : Entry -> String
+entryDesc (Entry c m d r e f s) = d
+
+entryRule : Entry -> String
+entryRule (Entry c m d r e f s) = r
+
+entryEdit : Entry -> String
+entryEdit (Entry c m d r e f s) = e
+
+entryFixable : Entry -> Bool
+entryFixable (Entry c m d r e f s) = f
+
+runGenErrors : String -> Int
+runGenErrors root =
+  let
+    outPath = root ++ "/docs/.generated/errors.md"
+    entries = scanFiles (errorSources root)
+    parent = parentOf outPath
+  in let
+    _ = if parent == "" then 0 else makeDir parent
+  in let
+    _ = writeFile outPath (renderDoc entries)
+  in let
+    _ = print ("wrote " ++ outPath ++ " (" ++ strFromInt (length entries) ++ " codes)\n")
+  in 0
+
+-- 取路径的父目录（按 `/` 分割，去最后一段）。注意 splitPath 只按第一个 `/` 分割，
+-- 对嵌套路径（如 docs/.generated/errors.md）会返回错误目录，这里显式按所有 `/`。
+parentOf : String -> String
+parentOf p = join "/" (initOf (split "/" p))
+
+initOf : List String -> List String
+initOf [] = []
+initOf ([x]) = []
+initOf (x :: rest) = x :: initOf rest
+
+errorSources : String -> List String
+errorSources root =
+  append (collectVunaFiles (root ++ "/compiler/lib")) [root ++ "/lib/Vuna/Lint/Rules.vuna"]
+
+scanFiles : List String -> List Entry
+scanFiles [] = []
+scanFiles (f :: rest) = append (scanFile f) (scanFiles rest)
+
+scanFile : String -> List Entry
+scanFile file = scanLines file (lines (readFile file))
+
+scanLines : String -> List String -> List Entry
+scanLines file [] = []
+scanLines file (l :: rest) = if startsWith "-- @" (trimLeft l) then
+  let
+    pair = collectBlock (l :: rest)
+  in append (parseBlocks file (firstOf pair)) (scanLines file (secondOf pair))
+else scanLines file rest
+
+-- 收集以 `-- @` 开头的连续注释行：返回（块行, 剩余行）。
+collectBlock : List String -> Pair (List String) (List String)
+collectBlock [] = Pair [] []
+collectBlock (l :: rest) = if startsWith "-- @" (trimLeft l) then case collectBlock rest of
+  Pair more rem => Pair (l :: more) rem
+else Pair [] (l :: rest)
+
+-- 一个注释块可能含多个相邻 `-- @code`（无空行分隔的连续诊断注释）：
+-- 每个 `-- @code` 行各生成一个 Entry（其余 tag 归属整个块，lint 块只有一个 @code）。
+parseBlocks : String -> List String -> List Entry
+parseBlocks file block = map (mkEntry file block) (codesOf block)
+
+codesOf : List String -> List String
+codesOf [] = []
+codesOf (l :: rest) =
+  if startsWith "-- @code " (trimLeft l) then tagValue "@code" [l] :: codesOf rest else codesOf rest
+
+mkEntry : String -> List String -> String -> Entry
+mkEntry file block code =
+  let
+    msgT = tagValue "@msg" block
+    msg = if msgT == "" then findMsg file code else msgT
+  in Entry code msg (tagValue "@desc" block) (tagValue "@rule" block) (tagValue "@edit" block)
+    (hasTag "@fixable" block) file
+
+tagValue : String -> List String -> String
+tagValue tag [] = ""
+tagValue tag (l :: rest) =
+  let
+    lt = trimLeft l
+  in if startsWith ("-- " ++ tag ++ " ") lt then substring (strLength ("-- " ++ tag ++ " ")) (strLength lt) lt
+  else tagValue tag rest
+
+hasTag : String -> List String -> Bool
+hasTag tag [] = False
+hasTag tag (l :: rest) = if trimLeft l == "-- " ++ tag then True else hasTag tag rest
+
+-- 从文件源码找 `[CODE]` 消息字符串，提取静态前缀（到 `++` / 行尾）。
+findMsg : String -> String -> String
+findMsg file code = findMsgLines (lines (readFile file)) code
+
+findMsgLines : List String -> String -> String
+findMsgLines [] code = ""
+findMsgLines (l :: rest) code =
+  if contains ("[" ++ code ++ "]") l then msgOf l code else findMsgLines rest code
+
+msgOf : String -> String -> String
+msgOf l code = msgOfParts (split "\"" l) code
+
+msgOfParts : List String -> String -> String
+msgOfParts [] code = ""
+msgOfParts (x :: rest) code =
+  if contains ("[" ++ code ++ "]") x then stripCode x code else msgOfParts rest code
+
+stripCode : String -> String -> String
+stripCode x code =
+  let
+    after = trimLeft (dropPrefix ("[" ++ code ++ "] ") x)
+  in trimRight (headOf (split "++" after))
+
+headOf : List String -> String
+headOf [] = ""
+headOf (x :: rest) = x
+
+dropPrefix : String -> String -> String
+dropPrefix p s = if startsWith p s then strPack (drop (strLength p) (strUnpack s)) else s
+
+-- ---------------------------------------------------------------
+-- 渲染
+-- ---------------------------------------------------------------
+renderDoc : List Entry -> String
+renderDoc entries =
+  let
+    es = dedup entries
+    tcs = filter (isDomain "TC_") es
+    cgs = filter (isDomain "CG_") es
+    lns = filter (isDomain "LN_") es
+    fxs = fixEntries es
+  in "# vuna 错误码\n\n"
+    ++ "由 `vuna gen-errors` 从源码 docstring 生成；**勿手改**（生成物，不纳入 git）。\n\n"
+    ++ "约定：运行诊断输出 `[CODE] 消息`；符号语义稳定、只增不删；域前缀 TC_/CG_/LN_/FX_。\n\n"
+    ++ "## 类型检查 / 精化（TC_）\n\n"
+    ++ renderTable tcs
+    ++ "\n"
+    ++ "## 代码生成（CG_）\n\n"
+    ++ renderTable cgs
+    ++ "\n"
+    ++ "## Lint 规则（LN_）\n\n"
+    ++ renderLintTable lns
+    ++ "\n"
+    ++ "## 修复规则（FX_）\n\n"
+    ++ renderLintTable fxs
+    ++ "\n"
+
+isDomain : String -> Entry -> Bool
+isDomain dom e = startsWith dom (entryCode e)
+
+renderTable : List Entry -> String
+renderTable [] = "（无）\n"
+renderTable entries =
+  "| code | 消息 | 说明 |\n| --- | --- | --- |\n" ++ join "\n" (map renderRow entries) ++ "\n"
+
+renderRow : Entry -> String
+renderRow e =
+  "| " ++ entryCode e ++ " | `" ++ escapeMsg (entryMsg e) ++ "` | " ++ entryDesc e ++ " |"
+
+renderLintTable : List Entry -> String
+renderLintTable [] = "（无）\n"
+renderLintTable entries =
+  "| code | 规则 | 消息 | 自动修复 |\n| --- | --- | --- | --- |\n"
+    ++ join "\n" (map renderLintRow entries)
+    ++ "\n"
+
+renderLintRow : Entry -> String
+renderLintRow e =
+  "| "
+    ++ entryCode e
+    ++ " | `"
+    ++ entryRule e
+    ++ "` | `"
+    ++ escapeMsg (entryMsg e)
+    ++ "` | "
+    ++ fixCell e
+    ++ " |"
+
+fixCell : Entry -> String
+fixCell e = if entryFixable e then "是" else "否"
+
+-- 去重（按 code 保留第一条；共享 code 在不同文件出现时只列一条）。
+dedup : List Entry -> List Entry
+dedup [] = []
+dedup (e :: rest) = if hasCode (entryCode e) rest then dedup rest else e :: dedup rest
+
+hasCode : String -> List Entry -> Bool
+hasCode code [] = False
+hasCode code (e :: rest) = if code == entryCode e then True else hasCode code rest
+
+-- 消息里反引号转成单引号（避免 Markdown 代码标记冲突）。
+escapeMsg : String -> String
+escapeMsg m = join "'" (split "`" m)
+
+-- FX_：从可修复的 LN_ 推导（code = FX_ + 规则名去 `-`）。
+fixEntries : List Entry -> List Entry
+fixEntries entries = map fxOf (filter entryFixable (filter (isDomain "LN_") entries))
+
+fxOf : Entry -> Entry
+fxOf e =
+  Entry ("FX_" ++ join "" (split "-" (entryRule e))) (entryMsg e) (entryEdit e) (entryRule e)
+    (entryEdit e) True ""
