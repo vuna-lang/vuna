@@ -26,7 +26,7 @@ M25–M30 为可排期阶段，F1–F4 为不排期未来轨道）。
 | A03 | `Loader` 门面保留 HM 时代死 API（`loadProgram*` 等零调用导出） | `grep loadProgram` 仅定义/注释 | M26 |
 | A04 | `Driver.Split` 留整套 HM `lib/+app/` 布局生成器与死 writer（~90 行零调用） | `buildScriptPackage`/`writeSplitFilesChanged` 等 | M26 |
 | A05 | 零参定义统一包 thunk（call-by-name），没有「顶层值求值一次」语义 | `Codegen/Term.vuna` thunk 约定；B 组 | M26 |
-| A06 | raw `--root` 是第二套加载语义：不注入 Prelude、不校验 export、可绕 effect allowlist | `Loader/Flatten.implicitPrelude` 对 `importerPkg==""` 返回空；探针 | M26 |
+| A06 | `--root`/`rawRoot` 是第二套加载语义：不注入 Prelude、不校验 export、可绕 effect allowlist；**计划删除 roots 概念**（M26：最近 `vuna.toml` 包上下文；无 manifest 只可见 base；单文件=包内 ad-hoc 入口） | `Loader/Flatten.implicitPrelude` 对 `importerPkg==""` 返回空；探针 | M26 |
 | A07 | `Bool` 双重身份：prelude 类型桩（无构造子）+ `Base.Bool` 真值，`if`/case/conv 多处特判 | `Elab/Prelude.boolTy`、`Core/Conv.isBoolTyName`、`Elab/Meta.boolCtor*` | M27 |
 | A08 | 内置实体靠 `lastName` 短名特判：用户 `data Bool`/`data IO`/`data List` 被误当内建 | `Codegen/Decl.vuna`、`Elab/Dict.vuna` 短名判据；探针 | M27 |
 | A09 | `True`/`False`/`Cons`/`Nil` 等构造子名是**全局**的，用户同名构造子解析错 | `Loader/Modules.vuna` 导出裸构造子；探针 | M27 |
@@ -36,7 +36,7 @@ M25–M30 为可排期阶段，F1–F4 为不排期未来轨道）。
 | A13 | `Split` 仍匹配 M24.7 前的 `Show_Show_` 实例名前缀（死兜底），与 Elab 命名规则脱节 | `Codegen/Split.vuna` `isBuiltinInstanceName` | M26 |
 | A14 | 记录/trait 投影全部降级成 `case`，诊断 span 指向生成代码（来源信息丢失） | `Elab/Records.prepareDecls`、`Elab/Dict` 投影 eta 展开 | M28 |
 | A15 | `seed` 与 `build --split` 是同一命令的两个名字；CLI 参数解析各自手写；包模式下 `--root` 被静默忽略 | `Driver/CompilerCli.vuna` seedRun/buildSplitRun；Design | M26 |
-| A16 | 跨包 import 方向不校验：Loader 的 roots 是扁平列表、selfRoot 不过滤 import；依赖包模块可以 import 消费包模块（实测 a→b、compiler→`Vuna.Json` 在 root 上下文通过） | `Pkg.packageRoots` 的 selfRoot `Nothing` + `Loader.rootAllows`；`_scratch/crossdep`、crossprobe | M26 |
+| A16 | 跨包 import 方向不校验：Loader 的 roots 是扁平列表、selfRoot 不过滤 import；依赖包模块可以 import 消费包模块（实测 a→b、compiler→`Vuna.Json` 在 root 上下文通过）；**根修=删除 roots、按导入方包依赖闭包解析**（M26） | `Pkg.packageRoots` 的 selfRoot `Nothing` + `Loader.rootAllows`；`_scratch/crossdep`、crossprobe | M26 |
 
 ## B. 升级期临时决定 / 精化器折中
 
