@@ -87,7 +87,7 @@ elabSigsGo [] globals0 ec acc = Ok (Pair (append globals0 (reverse acc)) ec)
 elabSigsGo ((Pair name tyExpr) :: rest) globals ec acc = andThen (checkType globals emptyCtx ec tyExpr) (\p => case p of
   Pair tyTerm0 (Pair sortLvl ec1) =>
     let
-      sigTy = inlineSolvedMetas ec1 0 tyTerm0
+      sigTy = zonkTerm ec1 0 tyTerm0
     in elabSigsGo rest (Pair name sigTy :: globals)
       (ecPutGlobalsTbl ec1 (tblInsert name sigTy (ecGlobalsTbl ec1))) (Pair name sigTy :: acc)
 )
@@ -118,6 +118,15 @@ defAlreadyDone name ec = case tblLookup name (ecDefTbl ec) of
   Just _ => True
   Nothing => False
 
+-- 有体的定义（名字 → 体）：axiom 是无体顶层，不能进 delta 展开 / 求值环境。
+defBodyPairs : List DtDef -> List (Pair String Term)
+defBodyPairs defs = mapMaybe defBodyPair defs
+
+defBodyPair : DtDef -> Maybe (Pair String Term)
+defBodyPair d = case dtDefBody d of
+  Just body => Just (Pair (dtDefName d) body)
+  Nothing => Nothing
+
 elabBodies : List Decl -> List (Pair String Term) -> List (Pair String Term) -> List DtDef -> Ec -> Result (Pair (List DtDef) Ec)
 elabBodies [] globals doneDefs acc ec = Ok (Pair (reverse acc) ec)
 elabBodies (d :: rest) globals doneDefs acc ec = case d of
@@ -144,21 +153,40 @@ elabBodies (d :: rest) globals doneDefs acc ec = case d of
           in elabBodies rest globals (Pair name liftedTy :: doneDefs)
             (DtDef name liftedTy cleanTerm :: acc) (ecAddDef ecGlobals (Pair name cleanTerm))
       )
+  -- M28：axiom 只产出无体/不透明的 `DtAxiom`（类型已在签名阶段精化进 globals）；
+  -- 不进 Ec 的 defs 表（没有体可 delta 展开），也不进 doneDefs。
+  DAxiom name tyExpr sp => case globalsLookup name globals ec of
+    Nothing => tcErr1 sp (ExpectedSignature name) name
+    Just tyTerm => elabBodies rest globals doneDefs (DtAxiom name tyTerm :: acc) ec
   _ => elabBodies rest globals doneDefs acc ec
 
--- 每个签名都必须有定义（M13 不支持公理/未定义顶层）。
+-- 每个签名都必须有定义；`axiom`（DAxiom）是无体的可擦除顶层，不要求 DFun。
 checkAllDefined : List (Pair String Expr) -> List (Pair String Term) -> List Decl -> Result (List String)
-checkAllDefined [] globals decls = Ok []
-checkAllDefined ((Pair name tyExpr) :: rest) globals decls = if hasFunClause name decls then case globalLookup name globals of
-  Nothing => Err (tcMsg (SignatureNoDef name) (VCons name VNil))
-  Just ty => checkAllDefined rest globals decls
-else Err (tcMsg (SignatureNoDef name) (VCons name VNil))
+checkAllDefined sigs globals decls = checkAllDefinedGo sigs globals decls
+
+checkAllDefinedGo : List (Pair String Expr) -> List (Pair String Term) -> List Decl -> Result (List String)
+checkAllDefinedGo [] globals decls = Ok []
+checkAllDefinedGo ((Pair name tyExpr) :: rest) globals decls = case axiomSpanOf name decls of
+  Just sp =>
+    if hasFunClause name decls then tcErr1 sp (AxiomWithDefinition name) name
+    else checkAllDefinedGo rest globals decls
+  Nothing => if hasFunClause name decls then case globalLookup name globals of
+    Nothing => Err (tcMsg (SignatureNoDef name) (VCons name VNil))
+    Just ty => checkAllDefinedGo rest globals decls
+  else Err (tcMsg (SignatureNoDef name) (VCons name VNil))
 
 hasFunClause : String -> List Decl -> Bool
 hasFunClause name [] = False
 hasFunClause name (d :: rest) = case d of
   DFun n pats body sp => if n == name then True else hasFunClause name rest
   _ => hasFunClause name rest
+
+-- 该名字是否由 `axiom` 声明（有则返回其 span，用于「axiom 不能有定义」诊断）。
+axiomSpanOf : String -> List Decl -> Maybe Span
+axiomSpanOf name [] = Nothing
+axiomSpanOf name (d :: rest) = case d of
+  DAxiom n ty sp => if n == name then Just sp else axiomSpanOf name rest
+  _ => axiomSpanOf name rest
 
 -- ---------------------------------------------------------------
 -- M23：REPL 表达式求值（`Vuna.Compiler.Driver.Dt.dtEvalExpr` 的下半段）
@@ -171,9 +199,10 @@ dtEvalExprIn : DtProgram -> Expr -> Result String
 dtEvalExprIn prog expr = case prog of
   DtProgram datas defs goals sols globals insts classes next =>
     let
+      -- M28：axiom 无体，不进 delta 展开 / 求值环境（只剩 globals 里的类型）。
+      bodies = defBodyPairs defs
       ec0 =
-        Ec next sols (reverse (map (\d => Pair (dtDefName d) (dtDefBody d)) defs)) datas [] [] insts
-          classes [] (tblFromList (map (\d => Pair (dtDefName d) (dtDefBody d)) defs))
+        Ec next sols (reverse bodies) datas [] [] insts classes [] (tblFromList bodies)
           (tblFromList globals) (solsToTbl sols) tblEmpty True tblEmpty
     in andThen (inferE globals emptyCtx ec0 expr) (\p => case p of
       Pair term (Pair ty ec1) =>
@@ -182,7 +211,7 @@ dtEvalExprIn prog expr = case prog of
           sols2 = ecSols ec2
         in case unsolvedFrom next (ecNext ec2) sols2 of
           Just m => tcErr1 (exprSpan expr) (UnsolvedMetavarInfer (strFromInt m)) (strFromInt m)
-          Nothing => case normalize (tblFromList (map (\d => Pair (dtDefName d) (dtDefBody d)) defs)) (ecSolsP ec2) defaultFuel (eval [] term) of
+          Nothing => case normalize (tblFromList bodies) (ecSolsP ec2) defaultFuel (eval [] term) of
             VInt n => Ok (strFromInt n)
             v => Ok (showValue v)
     )
@@ -268,10 +297,12 @@ in andThen (elabDatas (collectDataDecls decls []) preludeGlobals ecEmpty) (\pd =
 )
 )
 
--- 用当前解重新 zonk 定义体（延迟字典元变量 → 实例项）。
+-- 用当前解重新 zonk 定义体（延迟字典元变量 → 实例项）；axiom 无体，原样保留。
 rezonkDefs : Ec -> List DtDef -> List DtDef
-rezonkDefs ec defs =
-  map (\d => DtDef (dtDefName d) (dtDefType d) (substDictTerm ec (dtDefBody d))) defs
+rezonkDefs ec defs = map (\d => case dtDefBody d of
+  Just body => DtDef (dtDefName d) (dtDefType d) (substDictTerm ec body)
+  Nothing => d
+) defs
 
 -- 程序级字典目标收敛：反复回填直到字典目标不再减少（最多 n 轮，防振荡）。
 resolveDictGoalsFix : List (Pair String Term) -> Ec -> Int -> Ec

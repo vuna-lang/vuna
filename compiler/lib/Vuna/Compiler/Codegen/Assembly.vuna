@@ -36,19 +36,21 @@ prepareDtProgram program =
     defs = secondOf program
     table = defTable defs
     familyNames = map dtDataName datas
+    axiomNames = axiomNamesOf defs
   in case partitionDefs table defs of
     Pair runtime typeNames =>
       let
         allTypeNames = append typeNames familyNames
       in let
         _ = stamp "cg-partition-done"
-      in andThen (checkAllDefScopes defs) (\_ => andThen (ensureUniqueOcamlNames datas runtime) (\_ => let
+      in andThen (checkNoAxiomRuntime axiomNames runtime) (\_ => andThen (checkAllDefScopes defs) (\_ => andThen (ensureUniqueOcamlNames datas runtime) (\_ => let
         _ = stamp "cg-names-done"
       in andThen (checkAllErasure allTypeNames runtime) (\_ => let
         _ = stamp "cg-erasure-done"
       in andThen (groupRuntimeDefs runtime) (\groups => let
         _ = stamp "cg-groups-done"
       in Ok (Pair runtime groups)
+      )
       )
       )
       )

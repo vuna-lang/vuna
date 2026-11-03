@@ -8,7 +8,6 @@ module Vuna.Compiler.Elab.Term
   , checkBoolCase
   , checkByInfer
   , checkCase
-  , checkCaseDedup
   , checkCaseFam
   , checkCaseOf
   , checkCondBool
@@ -141,9 +140,6 @@ boolAlt a1 a2 a3 a4 a5 a6 a7 = boolAltFuel 256 a1 a2 a3 a4 a5 a6 a7
 boolAltGo : List (Pair String Term) -> Ctx -> Ec -> List (Pair Pat Expr) -> String -> Value -> Span -> Maybe Term -> Result (Pair Term (Pair (Maybe Term) Ec))
 boolAltGo a1 a2 a3 a4 a5 a6 a7 a8 = boolAltGoFuel 256 a1 a2 a3 a4 a5 a6 a7 a8
 
-checkCaseDedup : List (Pair String Term) -> Ctx -> Ec -> Expr -> List (Pair Pat Expr) -> Value -> Span -> Result (Pair Term Ec)
-checkCaseDedup a1 a2 a3 a4 a5 a6 a7 = checkCaseDedupFuel 256 a1 a2 a3 a4 a5 a6 a7
-
 elabCatchAll : List (Pair String Term) -> Ctx -> Ec -> Value -> DtData -> List Value -> Value -> List (Pair Pat Expr) -> List CaseAlt -> Expr -> String -> Span -> Result (Pair (List CaseAlt) Ec)
 elabCatchAll a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 =
   elabCatchAllFuel 256 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12
@@ -202,6 +198,6 @@ checkCaseOf a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 = checkCaseOfFuel 256 a1 a2 a3 a4 a5 
 elabCaseAlts : List (Pair String Term) -> Ctx -> Ec -> Value -> DtData -> List Value -> Value -> Value -> List (Pair Pat Expr) -> List CaseAlt -> Result (Pair (List CaseAlt) Ec)
 elabCaseAlts a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 = elabCaseAltsFuel 256 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10
 
-elabConAlt : Maybe Expr -> List (Pair String Term) -> Ctx -> Ec -> DtData -> List Value -> Value -> Value -> String -> List Pat -> Span -> Expr -> Result (Pair CaseAlt Ec)
-elabConAlt a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 =
-  elabConAltFuel 256 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12
+elabConAlt : List (Pair String Term) -> Ctx -> Ec -> DtData -> List Value -> Value -> Value -> String -> List Pat -> Span -> Expr -> Result (Pair CaseAlt Ec)
+elabConAlt a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 =
+  elabConAltFuel 256 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11

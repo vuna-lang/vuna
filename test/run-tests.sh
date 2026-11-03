@@ -197,10 +197,10 @@ for file in corpus/run/*.vuna; do
   compile_dir_and_run "$file (compiler)" "$VUNA" "$file" "$expected"
 done
 
-# 2) 模块夹具：DT 精化后核心求值 + compile 都要读取模块并得到 expected.out（正例 01–29）
+# 2) 模块夹具：DT 精化后核心求值 + compile 都要读取模块并得到 expected.out（正例 01–39）
 #    M26：每个夹具目录有独立 vuna.toml（只依赖 base），入口 app/Main.vuna 的 import
 #    从同包 lib/ 模块根解析（09_package_modules 覆盖「同包模块根」语义）。
-for dir in corpus/modules/[012][0-9]_*; do
+for dir in corpus/modules/[0-3][0-9]_*; do
   expected=$(cat "$dir/expected.out")
   actual=$("$VUNA" interp "$dir/app/Main.vuna" 2>&1)
   check_eq "$dir (interp)" "$expected" "$actual"

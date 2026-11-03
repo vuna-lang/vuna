@@ -80,24 +80,48 @@ sym a b e = case e of
   （原 `DtRecords`）降成单构造器 `data` 再精化；`deriving (Show, Eq)` 由 `Elab.Derive`
   （原 `DtDerive`）生成（`Show` 用记录源名且仅非参数化、`Eq` 支持参数化），`Ord` 派生
   支持非参数化类型。
-- **`where` 子句（M24）**。where 绑定是**带签名的局部顺序 let**：每个绑定必须在子句前
-  写显式签名（缺签名报 `DT: ... needs a type signature`），只能引用它之前的绑定；不支持
-  前向引用 / 自递归 / 互递归（递归放顶层定义组）。语法见 [language.md](language.md)。
+- **`let` / `where` 绑定块（M24，M28 统一）**。`let` 与 `where` 共用同一套绑定块模型
+  （顺序作用域 + 可选签名）：签名行 `name : Ty` 必须写在同名子句前，绑定可写
+  `pat = expr` 或函数子句 `name pats = expr`（降级成 λ）。`where` 仍要求每个绑定有签名
+  （缺签名报 `[TC_WhereNeedsSig]`），`let` 的签名行可选（M28 起）。两者都只能引用之前
+  的绑定，不支持前向引用 / 自递归 / 互递归（递归放顶层定义组）。语法见
+  [language.md](language.md)。
+- **`axiom` 与 η 展开（M28，D10）**。`axiom name : Ty` 是**无体/不透明**的顶层：只在
+  擦除/类型层可用，codegen 不生成运行时定义；运行时位置使用报
+  `[CG_AxiomAtRuntime] axiom ... cannot be used at runtime`（`dt/59_axiom` 正例、
+  `dt_err/42_axiom_runtime` 反例）。定义子句参数少于签名时按剩余 Pi 链 **η 展开**
+  （补 `\_arityN` 并把 body 应用到新参数，`dt/59_eta`）；参数多于签名仍报
+  `TC_DefMoreParams`，旧的 `TC_DefFewerParams` 保留在错误表里但不再触发。
+- **跨模块签名量化（M28 / C29）**。顶层签名里自由小写名的 banned 集按**模块作用域**
+  计算（只排除同一模块里另有定义的名字），跨模块同名小写名不再把类型变量误当全局名
+  （正例 `corpus/packages/08_module_scope`）。
 - **终止性检查（M16）**。自递归函数必须结构递归（每个递归调用至少有一个实参是同一形参
   的真子项），否则报 `cannot prove termination ...`；互递归不查，见 [limits.md](limits.md)。
 - **擦除规则（M16/M22.3）**。运行时表示只由 `Core.rigIsErased` 判定：隐式 binder 与 `Type`
   域擦除（`Rig0`），显式值 / 显式索引 `(n : Nat)` 保留（`Rig1`）——`Vec a n` 的隐式索引
   版本无长度字段，显式索引版本保留（`vlen` 可读）；不做整程序使用分析。
-- **`case` 分支与模式（M19）**。分支绑定构造子的全部显式 telescope binder；嵌套构造子
-  模式改写成内层 case（内层同样过覆盖检查）；兜底 `_ => ...` 只能放**最后一个**分支。
+- **`case` 分支与模式（M19/M28）**。分支绑定构造子的全部显式 telescope binder；兜底
+  `_ => ...` / 变量兜底只能放**最后一个**分支。**M28 起所有 `case` 只有一条精化规范形**：
+  先做家族无关的源级校验（兜底位置、重复构造子、重复字面量），需要嵌套模式或同构造子
+  多分支消解时先降级成**模式矩阵**（`Elab.Match.multiToCaseExpr`）——矩阵产物就是规范形
+  （每构造子一个分支 + 变量子模式），规范形再按 scrutinee 家族降低（`Bool` → `if`、
+  `Int`/`String` 字面量 → `if` 链、归纳族 → `TCase`）。精化器里不再有「去重降级」「嵌套
+  模式折叠」两条旁路（旧 `checkCaseDedup` 与 `foldPending` 已删）。
+- **冗余/不可达分支（M28/B15）**。`case` 的不可达分支从「静默忽略」改为**稳定诊断**：
+  重复构造子分支（前面的同构造子分支子模式全为变量/通配）报 `TC_RedundantCtorBranch`；
+  重复字面量报 `TC_RedundantLiteralBranch`；兜底分支之后还有字面量分支报
+  `TC_BranchAfterCatchAll`（兜底之后写构造子分支沿用 `TC_CatchAllNotLast`）。需要矩阵
+  消解的同构造子多分支（`Just (TStr s)` 之后的 `Just v`）不是冗余——矩阵会让两条都可达。
 - **多 clause 与方程左端模式（M19/M22.2）**。`f p1 = e1` / `f p2 = e2` 精化成单 lambda +
   case 树（`Elab.Match`，原 `DtMatch`）；变量兜底、嵌套模式共存，参数个数必须一致；M22.2
   起矩阵按族的构造子集合判覆盖（全覆盖不再补通配兜底），源级 `case` 的嵌套模式把后续 `_`
-  下沉。
+  下沉。M28 起这套矩阵也是源级 `case` 的**唯一**降级入口（多 clause 与 `case` 共用）。
 - **`let` / 推断位 `case`（M19）**。`let ... in` 脱糖为 `(\x => body) e`；`case` 可出现在
   推断位（实参、`if` 分支、let value），做法是建元变量当期望类型。
-- **内建字面量模式（M19）**。`Bool` 的 `case` 降级成 `if`；`Int` / `String` 字面量分支
-  降级成嵌套 `if` 链，因此**必须有一个变量/通配兜底分支**。
+- **内建字面量模式（M19/M28）**。`Bool` 的 `case` 降级成 `if`；`Int` / `String` 字面量分支
+  降级成嵌套 `if` 链，因此**必须有一个变量/通配兜底分支**（`TC_IntStringCaseNeedsFallback`）；
+  重复字面量与兜底之后的分支分别报 `TC_RedundantLiteralBranch` / `TC_BranchAfterCatchAll`
+  （M28）。
 - **Bool（M21/M22.2/M27）**。`Bool` 是 base 的普通 `data` 声明，canonical 身份是完整
   符号 `Base.Bool.Bool`（`True` / `False` = `Base.Bool.True` / `Base.Bool.False`）；
   `True`/`False` 精化成核心 `TBool`，canonical Bool 族不生成 OCaml 变体（运行时表示就是
@@ -110,15 +134,22 @@ sym a b e = case e of
   字典——具体类型无实例或没有对应类可见（只可能出现在显式绕开 `Prelude` 的上下文）时
   退回泛型运行时兜底。刚性类型参数延迟提升成 `{d : Dict_C a}`；库里的
   `Int`/`String`/`Bool` 实例与 `deriving` 实例参与搜索。
-- **等式搬运与不可达分支（M24.5）**。`case` 打在裸形参或包装族上时，把 scrutinee 的
-  值与构造子结果值再合一（`dt/46_rep`）；分支上下文含空归纳族（如 `Fin Zero`）时该
-  分支可省略（`dt/47_lookup_env`）；`plus` 一类类型级函数的定义性相等可用于 `Refl`
+- **等式搬运与不可达分支（M24.5/M28）**。`case` 打在裸形参或包装族上时，把 scrutinee 的
+  值与构造子结果值再合一（`dt/46_rep`）；`plus` 一类类型级函数的定义性相等可用于 `Refl`
   收尾，归纳步靠反射 + `cong`（`dt/48`–`50`）。剩余边界见 [dt-parity.md](dt-parity.md) §6.3。
 - **类型族（M24.6）**。结果类型以 `Type` 收尾的函数（`sel : Nat -> Type`、
   `Id : (a : Type) -> Type`）整体擦除、不生成运行时定义；正例 `dt/51`/`52`，在运行时
   定义里把擦除族参数当值用报错（`dt_err/39`）。
-- **可达性**：签名把索引**细化**（`Vec a (Succ m)`）时不可统一的分支可省略（否则报
-  `this branch is impossible`）；泛化索引（`Vec a n`）漏写报 `case is not exhaustive`。
+- **可达性（M14/M24.5/M28）**。省略一个分支与写出一个分支走**同一套判据**
+  `Elab.Case.BranchVerdict`：构造子结果索引与 scrutinee 索引一阶合一失败
+  （`TC_ImpossibleBranchIndex`），或分支上下文含空归纳族（`TC_ImpossibleBranchEmptyCtx`，
+  空族判定的唯一实现是 `isEmptyFamilyValue` → `allCtorsUnsatisfiable`）⇒ 分支不可达：
+  **省略合法、写出报错**（即使分支体自身类型正确，`dt_err/41d`）。签名把索引细化
+  （`Vec a (Succ m)`）时不可统一的分支可省略（`dt/47_lookup_env`）；泛化索引（`Vec a n`）
+  漏写报 `case is not exhaustive`。索引/上下文索引**含中性项**时无法证明空族，判据保守判
+  「可能非空」：分支必须写出且会被接受（`dt/58b` 的 `Mk : W f (f Zero)`），不会误判成空族。
+  M28 之前的「体检查失败就改报 impossible branch」特判已删——写出分支的诊断在精化分支体
+  之前给出，与覆盖率完全对称。
 - **`data` kind** 必须是 `... -> Type` 箭头链，构造子结果类型回到本族；族名与完整 Pi
   构造子类型进 `globals`，类型级 `Vec a n` 是中性应用（只在 unification 时比较）。
 - **`main`**：`check` 不要求 `main`，`compile` 要求；`main` 可为
@@ -157,7 +188,7 @@ DT 复用 Loader：多文件 / `import` / 包上下文都可用；codegen 只有
 `test/run-tests.sh` 第 34 段（`interp` / `check` / `compile` + `ocamlopt` 三路）。
 `.nointerp` 夹具跳过 interp，只做 `compile` + 运行（效果/不可归约）。
 
-- 正例 `test/corpus/dt/`（53 个）：按阶段 M13 `01_id`–`08_if`、M14 `09_nat`–`12_eq`、
+- 正例 `test/corpus/dt/`（64 个）：按阶段 M13 `01_id`–`08_if`、M14 `09_nat`–`12_eq`、
   M15 `13_iface`–`15_goal`、M16 `16_total`/`17_erase`、M18–M18.6 `18_ctx`–`21_level`、
   M19 `22_let`–`31_deriving_ord`、M20 `32_parametric_data`、M20.5 `36_multi_clause`、
   M21 `33_poly_fn_field`/`34_io_do`/`35_io_main`/`37_instance_ctor_pat`（`34_io_do` /
@@ -171,7 +202,12 @@ DT 复用 Loader：多文件 / `import` / 包上下文都可用；codegen 只有
   `48_eq_defeq`（`plus` 定义性相等）/`49_eq_induction`（归纳 + `cong`）/
   `50_eq_transport`（`sym`/`trans`/`subst`/`cast`）；M24.6 `45_ctor_shape`（构造子
   字段形状）、`51_type_family`/`52_type_family`（类型族整体擦除）；M24.7
-  `53_derived_ord_operator`（deriving(Ord) 后 `<`/`<=` 走 Ord 字典）。
+  `53_derived_ord_operator`（deriving(Ord) 后 `<`/`<=` 走 Ord 字典）；M28
+  `58_case_matrix`（源级 `case` 的规范形：嵌套模式/同构造子多分支经模式矩阵、字面量
+  if 链、Bool if 降级）、`58b_case_absurd`（空族/中性索引按同一判据：可省略的分支与
+  保守判非空的中性索引分支）、`59_axiom`（axiom 的类型层使用）、`59_eta`（η 展开）、
+  `59_let_where`（let/where 统一绑定块 + let 可选签名）、`60_erasure_unify`
+  （擦除单判据 + 合一）、`61_namespace_dual`（type/value 双命名空间）。
 - 正例 `test/corpus/dt_base/`（8 个，所在 corpus 包上下文 `test/corpus/vuna.toml`，
   只依赖 `base`）：M21 的 `Base.IO`/`do`/
   trait 投影与 `Base.IO` API 类型面；`06_base_string`（`str*` 的 `List` 族桥接）、
@@ -184,11 +220,17 @@ DT 复用 Loader：多文件 / `import` / 包上下文都可用；codegen 只有
   与最近 manifest 上下文）。
 - 正例 `test/corpus/dt_io/`（1 个）：`main : IO a` 的编译产物真正执行 `Base.IO` 效果
   （核心求值器不执行效果，所以只比产物输出）。
-- 负例 `test/corpus/dt_err/`（35 个）：M13–M23 的诊断夹具（`duplicate instance`、
+- 负例 `test/corpus/dt_err/`（45 个）：M13–M23 的诊断夹具（`duplicate instance`、
   `instance has unknown method`、`deriving_parametric_show`、`record_update_ambiguous`
   等），M24 新增 `35_where_no_sig`（期望片段 `needs a type signature`）；M24.5 新增
   `36_diff_index_case`/`37_impossible_branch`/`38_empty_ctx_branch`，M24.6 新增
-  `39_type_family_runtime_use`（类型族擦除后的运行时误用）。
+  `39_type_family_runtime_use`（类型族擦除后的运行时误用）；M28 新增
+  `40_universe_*`（严格分层/kind 反例）、`41_redundant_ctor_branch` /
+  `41b_redundant_literal` / `41c_branch_after_catchall`（冗余/不可达分支诊断）与
+  `41d_written_unreachable_branch`（可达性判据对「写出」与「省略」对称：上下文空族的
+  分支写出来也报错）、`42_axiom_runtime`（axiom 运行时使用）、`44_namespace_value_as_type`
+  （类型位置的值名）；`08_arity` 改为参数多于签名（`TC_DefMoreParams`；原 `fewer
+  parameters` 场景由 η 展开接管）。
 - `where` 签名正例在 `test/corpus/typed_ok/06_where_fwd`、`07_where_mutual`、
   `08_where_self`（局部辅助函数 / 顶层递归的对照）与 `corpus/fmt` 的 where 黄金例。
 

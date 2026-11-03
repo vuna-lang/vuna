@@ -94,8 +94,6 @@ let v_Vuna_dCompiler_dElab_dTerm_dboolAlt = (fun a1 -> (fun a2 -> (fun a3 -> (fu
 
 let v_Vuna_dCompiler_dElab_dTerm_dboolAltGo = (fun a1 -> (fun a2 -> (fun a3 -> (fun a4 -> (fun a5 -> (fun a6 -> (fun a7 -> (fun a8 -> (((((((((v_Vuna_dCompiler_dElab_dTerm_dImpl_dboolAltGoFuel 256) a1) a2) a3) a4) a5) a6) a7) a8)))))))))
 
-let v_Vuna_dCompiler_dElab_dTerm_dcheckCaseDedup = (fun a1 -> (fun a2 -> (fun a3 -> (fun a4 -> (fun a5 -> (fun a6 -> (fun a7 -> ((((((((v_Vuna_dCompiler_dElab_dTerm_dImpl_dcheckCaseDedupFuel 256) a1) a2) a3) a4) a5) a6) a7))))))))
-
 let v_Vuna_dCompiler_dElab_dTerm_delabCatchAll = (fun a1 -> (fun a2 -> (fun a3 -> (fun a4 -> (fun a5 -> (fun a6 -> (fun a7 -> (fun a8 -> (fun a9 -> (fun a10 -> (fun a11 -> (fun a12 -> (((((((((((((v_Vuna_dCompiler_dElab_dTerm_dImpl_delabCatchAllFuel 256) a1) a2) a3) a4) a5) a6) a7) a8) a9) a10) a11) a12)))))))))))))
 
 let v_Vuna_dCompiler_dElab_dTerm_dcheckE = (fun a1 -> (fun a2 -> (fun a3 -> (fun a4 -> (fun a5 -> ((((((v_Vuna_dCompiler_dElab_dTerm_dImpl_dcheckEFuel 256) a1) a2) a3) a4) a5))))))
@@ -134,4 +132,4 @@ let v_Vuna_dCompiler_dElab_dTerm_dcheckCaseOf = (fun a1 -> (fun a2 -> (fun a3 ->
 
 let v_Vuna_dCompiler_dElab_dTerm_delabCaseAlts = (fun a1 -> (fun a2 -> (fun a3 -> (fun a4 -> (fun a5 -> (fun a6 -> (fun a7 -> (fun a8 -> (fun a9 -> (fun a10 -> (((((((((((v_Vuna_dCompiler_dElab_dTerm_dImpl_delabCaseAltsFuel 256) a1) a2) a3) a4) a5) a6) a7) a8) a9) a10)))))))))))
 
-let v_Vuna_dCompiler_dElab_dTerm_delabConAlt = (fun a1 -> (fun a2 -> (fun a3 -> (fun a4 -> (fun a5 -> (fun a6 -> (fun a7 -> (fun a8 -> (fun a9 -> (fun a10 -> (fun a11 -> (fun a12 -> (((((((((((((v_Vuna_dCompiler_dElab_dTerm_dImpl_delabConAltFuel 256) a1) a2) a3) a4) a5) a6) a7) a8) a9) a10) a11) a12)))))))))))))
+let v_Vuna_dCompiler_dElab_dTerm_delabConAlt = (fun a1 -> (fun a2 -> (fun a3 -> (fun a4 -> (fun a5 -> (fun a6 -> (fun a7 -> (fun a8 -> (fun a9 -> (fun a10 -> (fun a11 -> ((((((((((((v_Vuna_dCompiler_dElab_dTerm_dImpl_delabConAltFuel 256) a1) a2) a3) a4) a5) a6) a7) a8) a9) a10) a11))))))))))))

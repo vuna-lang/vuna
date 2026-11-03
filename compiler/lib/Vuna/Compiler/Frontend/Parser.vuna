@@ -87,6 +87,7 @@ else case peekPos st of
 parseDecl : PState -> Int -> Result (Pair Decl PState)
 parseDecl st blockCol = case peekTok st of
   PTok (TKw "data") p => parseData st blockCol p
+  PTok (TKw "axiom") p => parseAxiom st blockCol p
   PTok (TKw "record") p => parseRecord st blockCol p
   PTok (TKw "trait") p => parseTrait st blockCol p
   PTok (TKw "instance") p => parseInstance st blockCol p
@@ -95,6 +96,13 @@ parseDecl st blockCol = case peekTok st of
       st1 = advance st
     in if atSym st1 ":" then parseSignature st1 blockCol name p else parseClause st1 blockCol name p
   _ => psErr0 ExpectedTopLevelDecl
+
+-- M28 axiom 声明（决策 5 / D10）：`axiom name : Ty`，无 `=` 体。
+-- 它是无体的可擦除顶层，只在类型层可用（运行时使用由擦除检查拒绝）。
+parseAxiom : PState -> Int -> Pos -> Result (Pair Decl PState)
+parseAxiom st blockCol kwPos =
+  step (expectKw st "axiom")
+    (\_, st1 => step (expectIdent st1) (\name, st2 => step (expectSym st2 ":") (\_, st3 => step (parseExpr (stateFuel st3) st3 blockCol 0) (\ty, st4 => Ok (Pair (DAxiom name ty (Span (fileOf st) (posLine kwPos) (posCol kwPos) (posLine (lastPos st4)) (posCol (lastPos st4)))) st4)))))
 
 parseSignature : PState -> Int -> String -> Pos -> Result (Pair Decl PState)
 parseSignature st blockCol name namePos =
@@ -115,9 +123,14 @@ in Ok
 
 -- where 块：`body where\n  <bindings>`，解析后 desugar 成 ELet（绑定对 body 可见）。
 --
--- M24：where 绑定可以带签名行 `name : Ty`（签名必须写在同名定义**之前**）。签名绑定到
--- 紧随其后的同名子句，子句的值降级成 `EAnn value ty`（ty 的 span 指向签名行），Elab
--- 据此把「全签名」的 where 组当递归组处理。无签名的旧写法照旧解析。
+-- ---------------------------------------------------------------
+-- 绑定块（M28 统一作用域模型，决策 5）：`where` 与 `let` 共用同一套绑定块解析：
+--   * 每个绑定可先写一行签名 `name : Ty`（必须写在同名子句**之前**）；
+--   * 子句可以是 `pat = expr` 或函数子句 `name pats = expr`（降级成 λ）。
+-- 有签名的绑定把签名贴到紧随其后的同名子句值上（`EAnn value ty`，span 指向签名行），
+-- Elab 据此在 checking 模式精化该值。两条记法只差一条：`where` 块**要求**每个绑定都有
+-- 签名行（由 Elab 的 `checkBindingSigs` 用一个诊断收口），`let` 的签名是可选的。
+-- ---------------------------------------------------------------
 parseWhere : PState -> Int -> Result (Pair (List (Pair Pat Expr)) PState)
 parseWhere st blockCol = case peekTok st of
   PTok (TKw "where") p =>
@@ -130,68 +143,72 @@ parseWhereBindings : PState -> Int -> Result (Pair (List (Pair Pat Expr)) PState
 parseWhereBindings st whereCol = if isEof st then Ok (Pair [] st)
 else case peekPos st of
   Pos line col =>
-    if col > whereCol then step (parseWhereItemsAt (stateFuel st) st col)
-      (\items, st1 => andThen (whereItemsToBinds items) (\binds => Ok (Pair binds st1)))
+    if col > whereCol then step (parseBindingItemsAt (stateFuel st) st col)
+      (\items, st1 => andThen (bindingItemsToBinds items) (\binds => Ok (Pair binds st1)))
     else Ok (Pair [] st)
 
--- where 块的条目：签名行或一条绑定（`pat = expr` / `name pats = expr`）。
-data WhereItem : Type where
-  WISig : String -> Expr -> Span -> WhereItem
-  WIBind : Pair Pat Expr -> WhereItem
+-- 绑定块的条目：签名行或一条绑定（`pat = expr` / `name pats = expr`）。
+data BindingItem : Type where
+  BISig : String -> Expr -> Span -> BindingItem
+  BIBind : Pair Pat Expr -> BindingItem
 
-parseWhereItemsAt : Int -> PState -> Int -> Result (Pair (List WhereItem) PState)
-parseWhereItemsAt fuel st bindCol = if fuel <= 0 then Err "DT: parser fuel exhausted (internal: parser made no progress)"
+parseBindingItemsAt : Int -> PState -> Int -> Result (Pair (List BindingItem) PState)
+parseBindingItemsAt fuel st bindCol = if fuel <= 0 then Err "DT: parser fuel exhausted (internal: parser made no progress)"
 else if isEof st then Ok (Pair [] st)
+else if atKw st "in" then Ok (Pair [] st)
 else case peekPos st of
   Pos line col =>
-    if col == bindCol then step (parseWhereItem st bindCol)
-      (\item, st1 => step (parseWhereItemsAt (fuel - 1) st1 bindCol) (\rest, st2 => Ok (Pair (item :: rest) st2)))
-    else if col > bindCol then psErr0 UnexpectedIndentInWhere else Ok (Pair [] st)
+    if col == bindCol then step (parseBindingItem (fuel - 1) st bindCol)
+      (\item, st1 => step (parseBindingItemsAt (fuel - 1) st1 bindCol) (\rest, st2 => Ok (Pair (item :: rest) st2)))
+    else if col > bindCol then psErr0 UnexpectedIndentInBinding else Ok (Pair [] st)
 
-parseWhereItem : PState -> Int -> Result (Pair WhereItem PState)
-parseWhereItem st bindCol = step (parsePatternSingle (stateFuel st) st bindCol) (\pat, st1 => case pat of
+parseBindingItem : Int -> PState -> Int -> Result (Pair BindingItem PState)
+parseBindingItem fuel st bindCol = if fuel <= 0 then Err "DT: parser fuel exhausted (internal: parser made no progress)"
+else step (parsePatternSingle (stateFuel st) st bindCol) (\pat, st1 => case pat of
   PVar name psp =>
     if atSym st1 ":" then step (expectSym st1 ":")
-      (\_, st2 => step (parseExpr (stateFuel st2) st2 bindCol 0) (\ty, st3 => Ok (Pair (WISig name ty (spanOf st st3)) st3)))
-    else parseWhereDef st st1 bindCol pat
-  _ => parseWhereDef st st1 bindCol pat
+      (\_, st2 => step (parseExpr (fuel - 1) st2 bindCol 0) (\ty, st3 => Ok (Pair (BISig name ty (spanOf st st3)) st3)))
+    else parseBindingDef (fuel - 1) st st1 bindCol pat
+  _ => parseBindingDef (fuel - 1) st st1 bindCol pat
 )
 
--- 单条 where 绑定：`pat = expr` 或函数子句 `name pats = expr`（desugar 成 λ）。
-parseWhereDef : PState -> PState -> Int -> Pat -> Result (Pair WhereItem PState)
-parseWhereDef stStart st bindCol pat = case pat of
+-- 单条绑定：`pat = expr` 或函数子句 `name pats = expr`（desugar 成 λ）。
+parseBindingDef : Int -> PState -> PState -> Int -> Pat -> Result (Pair BindingItem PState)
+parseBindingDef fuel stStart st bindCol pat = if fuel <= 0 then Err "DT: parser fuel exhausted (internal: parser made no progress)"
+else case pat of
   PVar name _ =>
     if startsPatternAtom st && canContinue st bindCol then step (parseClausePatterns (stateFuel st) st bindCol)
-      (\pats, st2 => step (expectSym st2 "=") (\_, st3 => step (parseExpr (stateFuel st3) st3 bindCol 0) (\value, st4 => andThen (lamNames pats) (\names => Ok (Pair (WIBind (Pair (PVar name (patSpan pat)) (ELam names value (spanOf stStart st4)))) st4)))))
-    else step (parseWhereValue st pat bindCol) (\b, st2 => Ok (Pair (WIBind b) st2))
-  _ => step (parseWhereValue st pat bindCol) (\b, st2 => Ok (Pair (WIBind b) st2))
+      (\pats, st2 => step (expectSym st2 "=") (\_, st3 => step (parseExpr (fuel - 1) st3 bindCol 0) (\value, st4 => andThen (lamNames pats) (\names => Ok (Pair (BIBind (Pair (PVar name (patSpan pat)) (ELam names value (spanOf stStart st4)))) st4)))))
+    else step (parseBindingValue (fuel - 1) st pat bindCol) (\b, st2 => Ok (Pair (BIBind b) st2))
+  _ => step (parseBindingValue (fuel - 1) st pat bindCol) (\b, st2 => Ok (Pair (BIBind b) st2))
 
-parseWhereValue : PState -> Pat -> Int -> Result (Pair (Pair Pat Expr) PState)
-parseWhereValue st pat blockCol =
-  step (expectSym st "=")
-    (\_, st1 => step (parseExpr (stateFuel st1) st1 blockCol 0) (\value, st2 => Ok (Pair (Pair pat value) st2)))
+parseBindingValue : Int -> PState -> Pat -> Int -> Result (Pair (Pair Pat Expr) PState)
+parseBindingValue fuel st pat blockCol =
+  if fuel <= 0 then Err "DT: parser fuel exhausted (internal: parser made no progress)"
+  else step (expectSym st "=")
+    (\_, st1 => step (parseExpr (fuel - 1) st1 blockCol 0) (\value, st2 => Ok (Pair (Pair pat value) st2)))
 
 -- 条目 → ELet 绑定：把签名贴到同名定义的值上（`EAnn value ty`），并校验布局约束：
 -- 签名必须先于同名定义、不能重复、不能悬空。
-whereItemsToBinds : List WhereItem -> Result (List (Pair Pat Expr))
-whereItemsToBinds items = whereBindsGo items [] [] []
+bindingItemsToBinds : List BindingItem -> Result (List (Pair Pat Expr))
+bindingItemsToBinds items = bindingBindsGo items [] [] []
 
-whereBindsGo : List WhereItem -> List (Pair String (Pair Expr Span)) -> List String -> List (Pair Pat Expr) -> Result (List (Pair Pat Expr))
-whereBindsGo [] sigs bound acc = case firstDanglingSig (reverse sigs) bound of
+bindingBindsGo : List BindingItem -> List (Pair String (Pair Expr Span)) -> List String -> List (Pair Pat Expr) -> Result (List (Pair Pat Expr))
+bindingBindsGo [] sigs bound acc = case firstDanglingSig (reverse sigs) bound of
   Nothing => Ok (reverse acc)
   Just (Pair name sp) =>
     Err (showSpanLoc sp ++ ": " ++ psMsg (WhereSigNoDef name) (VCons name VNil))
-whereBindsGo (item :: rest) sigs bound acc = case item of
-  WISig name ty sp =>
+bindingBindsGo (item :: rest) sigs bound acc = case item of
+  BISig name ty sp =>
     if memName name bound then Err (showSpanLoc sp ++ ": " ++ psMsg (WhereSigBeforeClause name) (VCons name VNil))
-    else if hasWhereSig name sigs then Err (showSpanLoc sp ++ ": " ++ psMsg (WhereSigDuplicate name) (VCons name VNil))
-    else whereBindsGo rest (Pair name (Pair ty sp) :: sigs) bound acc
-  WIBind (Pair pat value) => case whereSigOf (patBoundName pat) sigs of
+    else if hasBindingSig name sigs then Err (showSpanLoc sp ++ ": " ++ psMsg (WhereSigDuplicate name) (VCons name VNil))
+    else bindingBindsGo rest (Pair name (Pair ty sp) :: sigs) bound acc
+  BIBind (Pair pat value) => case bindingSigOf (patBoundName pat) sigs of
     Just (Pair ty sp) =>
       if memName (patBoundName pat) bound then Err
         (showSpanLoc sp ++ ": " ++ psMsg (WhereSigMultiClause (patBoundName pat)) (VCons (patBoundName pat) VNil))
-      else whereBindsGo rest sigs (patBoundName pat :: bound) (Pair pat (EAnn value ty sp) :: acc)
-    Nothing => whereBindsGo rest sigs (patBoundName pat :: bound) (Pair pat value :: acc)
+      else bindingBindsGo rest sigs (patBoundName pat :: bound) (Pair pat (EAnn value ty sp) :: acc)
+    Nothing => bindingBindsGo rest sigs (patBoundName pat :: bound) (Pair pat value :: acc)
 
 -- 绑定名（非简单变量绑定返回空串，永远匹配不到签名）。
 patBoundName : Pat -> String
@@ -199,13 +216,13 @@ patBoundName pat = case pat of
   PVar name sp => name
   _ => ""
 
-whereSigOf : String -> List (Pair String (Pair Expr Span)) -> Maybe (Pair Expr Span)
-whereSigOf name sigs = case sigs of
+bindingSigOf : String -> List (Pair String (Pair Expr Span)) -> Maybe (Pair Expr Span)
+bindingSigOf name sigs = case sigs of
   [] => Nothing
-  (Pair n v) :: rest => if n == name then Just v else whereSigOf name rest
+  (Pair n v) :: rest => if n == name then Just v else bindingSigOf name rest
 
-hasWhereSig : String -> List (Pair String (Pair Expr Span)) -> Bool
-hasWhereSig name sigs = case whereSigOf name sigs of
+hasBindingSig : String -> List (Pair String (Pair Expr Span)) -> Bool
+hasBindingSig name sigs = case bindingSigOf name sigs of
   Just _ => True
   Nothing => False
 
@@ -214,7 +231,7 @@ firstDanglingSig [] bound = Nothing
 firstDanglingSig ((Pair name (Pair ty sp)) :: rest) bound =
   if memName name bound then firstDanglingSig rest bound else Just (Pair name sp)
 
--- λ 参数名：where 函数子句的参数必须是简单变量名。
+-- λ 参数名：绑定块里的函数子句参数必须是简单变量名。
 lamNames : List Pat -> Result (List String)
 lamNames [] = Ok []
 lamNames ((PVar n _) :: rest) = case lamNames rest of
@@ -512,23 +529,17 @@ parseLet fuel st blockCol =
   else step (expectKw st "let")
     (\_, st1 => step (parseLetBindings (fuel - 1) st1 blockCol) (\binds, st2 => step (expectKw st2 "in") (\_, st3 => step (parseExpr (fuel - 1) st3 blockCol 0) (\body, st4 => Ok (Pair (ELet binds body False (spanOf st st4)) st4)))))
 
+-- `let` 绑定块：与 `where` 共用 `parseBindingItemsAt` / `bindingItemsToBinds`
+-- （签名行可选；函数子句降级成 λ）。块结束于缩进回退或 `in`。
 parseLetBindings : Int -> PState -> Int -> Result (Pair (List (Pair Pat Expr)) PState)
 parseLetBindings fuel st blockCol = if fuel <= 0 then Err "DT: parser fuel exhausted (internal: parser made no progress)"
 else if isEof st then psErr0 ExpectedLetBinding
 else if atKw st "in" then psErr0 ExpectedLetBinding
 else case peekPos st of
   Pos line col =>
-    if col <= blockCol then psErr0 LetBindingNotIndented else parseLetBindingsAt (fuel - 1) st col
-
-parseLetBindingsAt : Int -> PState -> Int -> Result (Pair (List (Pair Pat Expr)) PState)
-parseLetBindingsAt fuel st declCol = if fuel <= 0 then Err "DT: parser fuel exhausted (internal: parser made no progress)"
-else if isEof st then Ok (Pair [] st)
-else if atKw st "in" then Ok (Pair [] st)
-else case peekPos st of
-  Pos line col =>
-    if col == declCol then step (parsePatternSingle (stateFuel st) st declCol)
-      (\pat, st1 => step (expectSym st1 "=") (\_, st2 => step (parseExpr (fuel - 1) st2 declCol 0) (\value, st3 => step (parseLetBindingsAt (fuel - 1) st3 declCol) (\rest, st4 => Ok (Pair (Pair pat value :: rest) st4)))))
-    else Ok (Pair [] st)
+    if col <= blockCol then psErr0 LetBindingNotIndented
+    else step (parseBindingItemsAt (fuel - 1) st col)
+      (\items, st1 => andThen (bindingItemsToBinds items) (\binds => Ok (Pair binds st1)))
 
 parseCase : Int -> PState -> Int -> Result (Pair Expr PState)
 parseCase fuel st blockCol =

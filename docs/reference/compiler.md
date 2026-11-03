@@ -33,25 +33,25 @@
 | `Core`（门面） | core 类型论表示、NbE 求值与定义性相等等公开面 | `Core.Eval.eval`、`quote`、`normalize`、`Core.Conv.conv`、`Core.Term.defaultFuel` |
 | `Core.Term` | `Term`/`Value`/`Neutral`/`Closure`/`Rig`/`Level` 等数据（唯一真源）与 `shift`/`substVarAt`/显示等纯项变换 | `shift`、`substVarAt`、`rigIsErased` |
 | `Core.Eval` | beta 求值、delta 展开、prelude 原语归约、深度正规化与 quote | `eval`、`force`、`applyClosure`、`normalize`、`quote` |
-| `Core.Conv` | 定义性相等（beta + delta + eta）与一阶元变量求解 | `conv`、`convBoth`、`solveMeta` |
+| `Core.Conv` | 定义性相等（beta + delta + eta）与元变量求解（M28：Miller pattern + 创建深度就地检查；非 pattern 形状保守 head 提取） | `conv`、`convBoth`、`solveMeta` |
 | `Elab`（门面） | DT 精化器稳定入口；按 `Elab.*` 前缀选择重导出 `Types`/`Meta`/`Data`/`Trait`/`Driver` 的公开名 | `Elab.Driver.elabProgramFull`、`goalsOfProgram` |
-| `Elab.Sig` | 签名工具：trait 类参数 kind 推断 + 顶层签名自由名量化（**合并原 `DtKind` + `DtQuant`**） | `quantifyTopSig`、`classParamKind`、`methodArgRigsOf` |
-| `Elab.Types` | Elab 的数据定义与共享状态：`DtDef`/`DtCtor`/`DtData`/`DtGoal`/`DtClass`/`DtInst`/`DtProgram` 与 `Ctx` | `dtDataName`、`dtDefType`、`dtProgDefs` |
-| `Elab.Meta` | 共享工具层：值/构造子引用、`convEc`、元变量解的作用域复核、零参构造子与 canonical Bool（`Base.Bool.Bool`）的 `TBool` 表示 | `convEc`、`checkScopedFrom`、`dictTypeName` |
-| `Elab.Case` | case 精化基础设施：索引合一（`unifyIdx`）、scrutinee 反射、可达性/空族判定、分支辅助 | `unifyIdx`、`reflectScrutinee`、`branchReachable` |
+| `Elab.Sig` | 签名工具：trait 类参数 kind 推断 + 顶层签名自由名量化（**合并原 `DtKind` + `DtQuant`**）；M28 起量化 banned 集按模块作用域计算（C29，`bannedForModule`） | `quantifyTopSig`、`classParamKind`、`methodArgRigsOf`、`bannedForModule` |
+| `Elab.Types` | Elab 的数据定义与共享状态：`DtDef`/`DtAxiom`（无体/不透明顶层）/`DtCtor`/`DtData`/`DtGoal`/`DtClass`/`DtInst`/`DtProgram` 与 `Ctx`；`dtDefBody` 返回 `Maybe Term` | `dtDataName`、`dtDefType`、`dtDefBody`、`dtProgDefs` |
+| `Elab.Meta` | 共享工具层：值/构造子引用、`convEc`、元变量创建深度与统一 `zonkTerm`、擦除判据（`isTypeDomain`/`binderRig`）、命名空间查询（`typeLookup`/`valueLookup`）、canonical Bool 的 `TBool` 表示 | `convEc`、`zonkTerm`、`binderRig`、`typeLookup`、`dictTypeName` |
+| `Elab.Case` | case 规范形（M28）：索引合一（`unifyIdx`）、scrutinee 反射、单一可达性判据（`BranchVerdict`/`allCtorsUnsatisfiable`）、空族与冗余/不可达诊断 | `unifyIdx`、`reflectScrutinee`、`checkCoverage`、`isEmptyFamilyValue` |
 | `Elab.Dict` | 字典编码的表示与实例搜索：字典类型/实例头识别、`conv` 头匹配、实例选择、比较运算符泛化 | `searchInstance`、`dictFamilyNameOf`、`cmpRuntimeName`、`deferEqDict` |
 | `Elab.Term` | 项的双向检查（与 case 规则互递归的核心）：`inferE`/`checkE`/应用/隐式插入/类型检查 | `inferE`、`checkE`、`checkApp`、`checkType` |
-| `Elab.Data` | `data` 声明与构造子/索引擦除：`elabCtor`、`elabDataHead(s)`、`elabDataBodies`、擦除候选 | `elabDatas`、`ctorFieldTerms` |
+| `Elab.Data` | `data` 声明与构造子/索引擦除：`elabCtor`、`elabDataHead(s)`、`elabDataBodies`、擦除候选；M28 起校验 kind 结果层级与构造子字段 sort | `elabDatas`、`ctorFieldTerms`、`checkCtorFieldSorts` |
 | `Elab.Trait` | trait/instance 声明与实例体：类参数 kind、方法投影、实例头检查（重复/命名）、方法体精化 | `checkInstanceHeads`、`elabInstanceBodies`、`instanceName` |
 | `Elab.Driver` | 精化入口与程序组装：签名 → data/trait/instance → 定义体 → zonk/终止性检查 → `DtProgram`；洞目标 | `Elab.Driver.elabProgramFull`、`goalsOfProgram`、`dtEvalExprIn` |
-| `Elab.Termination` | DT 终止性检查（M16）：只分析自递归函数，结构递归/真子项判据 | `checkTerminationDecls` |
+| `Elab.Termination` | DT 终止性检查（M16/M25）：调用图 + SCC，结构下降/守卫 Int 判据（无包级豁免） | `checkTerminationDecls` |
 | `Elab.Prelude` | 把 `Intrinsics` 表翻译成 DT prelude globals（签名）；不再有第二份名字/签名表（原 `DtPrelude`） | `preludeGlobals`、`builtinTyName`、`cmpBuiltinTyName` |
 | `Elab.Match` | 多 clause 模式矩阵降级：构造子列 → `case`、字面量列 → `if` 链（纯 Ast→Ast） | `multiToExpr`、`buildColumnExpr` |
 | `Elab.Records` | `record` 的语法降级：记录 → 单构造器 `data`、字段访问/更新/recode（纯 Ast→Ast） | `desugarRecords`、`RecordInfo` |
 | `Elab.Derive` | `deriving` 的实例生成（展开成等价 `instance`，交给既有实例精化） | `expandDerivings` |
 | `Codegen`（门面） | DT 擦除 codegen 的稳定入口；重导出 `Codegen.Assembly` 与 `Codegen.Split` | `checkDtProgram`、`generateDtSplitProgram` |
 | `Codegen.Decl` | OCaml 名字编码（sanitize/前缀/保留字）+ 变体类型声明；构造子字段形状 keep flags 的实际消费点；内置身份按完整符号（canonical Bool 族不进运行时变体） | `ctorOcamlName`、`genTypeDecls`、`ctorKeepFlags` |
-| `Codegen.Erase` | 擦除检查、de Bruijn 作用域/名字护栏、依赖分析与 SCC 分组 | `checkAllErasure`、`checkAllDefScopes`、`ensureUniqueOcamlNames` |
+| `Codegen.Erase` | 擦除检查、de Bruijn 作用域/名字护栏、依赖分析与 SCC 分组；M28 起 axiom 强制进类型级分区，运行时使用报 `CG_AxiomAtRuntime` | `checkAllErasure`、`checkAllDefScopes`、`ensureUniqueOcamlNames`、`checkNoAxiomRuntime` |
 | `Codegen.Term` | 项 → OCaml（擦除驱动）+ DT 运行时前缀（`bi_*`、`dtp_*`、IO 桥接）；全局名 → runtime 映射消费 `Intrinsics` | `dtRuntime`、`genDtHook`、`genGroups` |
 | `Codegen.Assembly` | 同一份 `DtProgram` 的装配与检查入口（M26 由 `Codegen.Program` 改名；单文件产物生成器删除） | `prepareDtProgram`、`genUnitText`、`mainHook`、`checkDtProgram` |
 | `Codegen.Split` | **唯一** codegen 生成器：逐模块 split 的声明归属表与分文件装配 | `generateDtSplitProgram` |

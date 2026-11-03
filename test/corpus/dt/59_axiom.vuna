@@ -1,0 +1,16 @@
+-- M28（决策 5 / D10）：`axiom name : Ty` 是无体的可擦除/不透明顶层。
+-- 类型层引用合法（`t` 作类型常量、`step` 作类型层函数值）；运行时使用会被 codegen
+-- 擦除检查拒绝（反例见 dt_err/42_axiom_runtime）。
+axiom t : Type
+
+axiom step : t -> t
+
+-- 签名里的 `t` 解析到本模块的 axiom（同模块定义名不被当成隐式量化的类型变量）。
+idT : t -> t
+idT x = x
+
+-- axiom 的自由小写名与签名一样被量化为隐式类型参数（等价 `{a : Type} -> a -> a`）。
+axiom anyEq : a -> a
+
+main : Int
+main = 7

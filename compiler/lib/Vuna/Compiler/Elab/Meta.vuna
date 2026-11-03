@@ -1,11 +1,8 @@
 module Vuna.Compiler.Elab.Meta
   ( DataHead(..)
+  , ValueEntry(..)
   , baseNameOf
   , binderRig
-  , checkScopedFrom
-  , checkScopedValueList
-  , checkSolsDelta
-  , checkSolsScoped
   , collectDataDecls
   , collectInstDecls
   , collectSigs
@@ -42,15 +39,15 @@ module Vuna.Compiler.Elab.Meta
   , hasOutOfScopeVarAlts
   , hasOutOfScopeVarArgs
   , inferCtorRef
-  , inlineSolvedMetaAlt
-  , inlineSolvedMetas
   , instantiateNullaryCtor
   , isBoolGlobal
   , isBoolType
   , isDataHead
   , isIndexDomain
   , isSortVal
+  , isTypeDomain
   , isTypeLayerValue
+  , isTypeName
   , kindWellFormed
   , litEqName
   , lookupDataHead
@@ -58,17 +55,13 @@ module Vuna.Compiler.Elab.Meta
   , memDefName
   , memMetaId
   , memSig
-  , metaDepthLookup
-  , metaDepthOf
   , methodArgLams
   , methodArgTerms
   , methodArgTermsGo
   , neutralHeadName
-  , newSolsSince
   , nonEmpty
   , nullaryCtorTerm
   , paramNameOf
-  , prefixUntilMetaId
   , prependFamParams
   , relevantMetas
   , resultSpine
@@ -79,9 +72,11 @@ module Vuna.Compiler.Elab.Meta
   , teleOfType
   , termMetasAll
   , termMetasRuntime
-  , typeLayerRig
+  , typeLookup
   , unsolvedFrom
+  , valueLookup
   , zipTeleRigs
+  , zonkTerm
   ) where
 
 -- Vuna.Compiler.Elab.Meta：Elab 的共享工具层：值/构造子引用（零参构造子、Bool 专用表示）、convEc 与元变量解的作用域复核、
@@ -171,62 +166,12 @@ inferCtorRef ec ctx name tyTerm = case dtCtorLookup name (ecDatas ec) of
   Nothing => Ok (Pair (ctorRefTerm (ecDatas ec) name) (Pair (eval [] tyTerm) ec))
 
 -- 定义性相等（唯一入口；Bool 与其它 primitive 类型一样按同名全局比较）。
+-- M28：解的作用域在求解点就地检查（Core.Conv.solveMeta*），这里只把解表写回 Ec；
+-- 不再事后扫新增解（旧 checkSolsDelta 两段式已删除）。
 convEc : Ec -> Int -> Value -> Value -> Result Ec
 convEc ec depth expected actual = case conv (ecDefTbl ec) (ecSolsP ec) depth expected actual of
   Err e => Err e
-  -- 作用域逃逸检查只复核**这次新增**的解：旧实现每次 conv 都扫全表
-  -- （O(#元变量) × O(#conv)），大程序上就是主瓶颈（编译器包 180s 只走到第 800 个定义）。
-  -- 解表按新解前插，用旧表头 id 作分隔前缀即可 O(新增) 定位。
-  Ok sols2 =>
-    let
-      sl = solsList sols2
-    in case checkSolsDelta ec (ecSols ec) sl of
-      Err e => Err e
-      Ok _ => Ok (ecPutSols ec sl)
-
--- M15 元变量上下文：新解不得引用「创建该元变量之后才绑定」的局部变量（作用域逃逸）。
--- conv 本身不知道元变量的创建深度，所以解表回来后在这里统一复核新增的解。
--- 只在解表前缀里取出本次新增的解（旧表头 id 是分界；解表按新解前插）。
-newSolsSince : List (Pair Int Value) -> List (Pair Int Value) -> List (Pair Int Value)
-newSolsSince [] cur = cur
-newSolsSince ((Pair pid pv) :: prest) cur = prefixUntilMetaId pid cur
-
-prefixUntilMetaId : Int -> List (Pair Int Value) -> List (Pair Int Value)
-prefixUntilMetaId pid cur = case cur of
-  [] => []
-  (Pair cid cv) :: rest => if cid == pid then [] else Pair cid cv :: prefixUntilMetaId pid rest
-
-checkSolsDelta : Ec -> List (Pair Int Value) -> List (Pair Int Value) -> Result Int
-checkSolsDelta ec oldSols newSols = checkScopedValueList ec (newSolsSince oldSols newSols)
-
-checkScopedValueList : Ec -> List (Pair Int Value) -> Result Int
-checkScopedValueList ec [] = Ok 0
-checkScopedValueList ec ((Pair m v) :: rest) = case metaDepthOf ec m of
-  Nothing => checkScopedValueList ec rest
-  Just created =>
-    if levelEscapes created 0 v then Err (tcMsg (CannotSolveMetavar (strFromInt m)) (VCons (strFromInt m) VNil))
-    else checkScopedValueList ec rest
-
-metaDepthOf : Ec -> Int -> Maybe Int
-metaDepthOf ec m = case tblLookup (strFromInt m) (ecDepthTbl ec) of
-  Just d => Just d
-  Nothing => metaDepthLookup m (ecDepthOfMeta ec)
-
-metaDepthLookup : Int -> List (Pair Int Int) -> Maybe Int
-metaDepthLookup m lst = case lst of
-  [] => Nothing
-  (Pair id d) :: rest => if id == m then Just d else metaDepthLookup m rest
-
-checkSolsScoped : Ec -> List (Pair Int Value) -> Result Int
-checkSolsScoped ec sols = checkScopedFrom ec (ecDepthOfMeta ec) sols
-
-checkScopedFrom : Ec -> List (Pair Int Int) -> List (Pair Int Value) -> Result Int
-checkScopedFrom ec [] sols = Ok 0
-checkScopedFrom ec ((Pair m created) :: rest) sols = case metaLookup m sols of
-  Nothing => checkScopedFrom ec rest sols
-  Just v =>
-    if levelEscapes created 0 v then Err (tcMsg (CannotSolveMetavar (strFromInt m)) (VCons (strFromInt m) VNil))
-    else checkScopedFrom ec rest sols
+  Ok sols2 => Ok (ecPutSols ec (solsList sols2))
 
 -- 未解元变量：返回第一个未解的编号。
 unsolvedFrom : Int -> Int -> List (Pair Int Value) -> Maybe Int
@@ -318,24 +263,30 @@ memDefName name ((Pair n ty) :: rest) = if n == name then True else memDefName n
 collectSigs : List Decl -> Result (List (Pair String Expr))
 collectSigs decls =
   let
-    banned = topQuantBanned (definedNames decls)
-  in collectSigsInto banned tblEmpty [] decls
+    defined = definedNames decls
+  in collectSigsInto defined tblEmpty [] decls
 
 -- 声明收集（M20：签名里的自由小写名量化为隐式类型参数，见 `Elab.Sig.quantifyTopSig`）。
--- `allDefs` 是**整个程序**的定义名（不能只看后面：`plus` 可能定义在引用它的签名之前）。
-collectSigsInto : HashTbl Bool -> HashTbl Bool -> List (Pair String Expr) -> List Decl -> Result (List (Pair String Expr))
-collectSigsInto banned seen acc [] = Ok (reverse acc)
-collectSigsInto banned seen acc (d :: rest) = case d of
-  DSig name ty sp =>
-    if memName name preludeNames then tcErr1 sp (CannotRedefineBuiltin name) name
-    else if tblMem name seen then tcErr1 sp (DuplicateSignature name) name
-    else collectSigsInto banned (tblInsert name True seen)
-      (Pair name (quantifyTopSig banned ty sp) :: acc) rest
-  DFun name pats body sp => collectSigsInto banned seen acc rest
-  DData name params kind ctors derivings sp => collectSigsInto banned seen acc rest
+-- M28 / C29：banned 集按**签名所属模块**现场计算（`Elab.Sig.bannedForModule`），不再是
+-- program-wide 的定义名集合；`defined` 是整个程序的定义名（名字自带模块前缀，切分作用域）。
+collectSigsInto : List String -> HashTbl Bool -> List (Pair String Expr) -> List Decl -> Result (List (Pair String Expr))
+collectSigsInto defined seen acc [] = Ok (reverse acc)
+collectSigsInto defined seen acc (d :: rest) = case d of
+  DSig name ty sp => collectSigOne defined seen acc name ty sp rest
+  -- M28：axiom 与签名同一套类型检查/量化；区别只在 `checkAllDefined` 不要求它有体。
+  DAxiom name ty sp => collectSigOne defined seen acc name ty sp rest
+  DFun name pats body sp => collectSigsInto defined seen acc rest
+  DData name params kind ctors derivings sp => collectSigsInto defined seen acc rest
   DRecord name params fields derivings sp => errAt sp "DT: internal: record was not desugared"
-  DTrait name params methods sp => collectSigsInto banned seen acc rest
-  DInstance mname isDefault head methods sp => collectSigsInto banned seen acc rest
+  DTrait name params methods sp => collectSigsInto defined seen acc rest
+  DInstance mname isDefault head methods sp => collectSigsInto defined seen acc rest
+
+collectSigOne : List String -> HashTbl Bool -> List (Pair String Expr) -> String -> Expr -> Span -> List Decl -> Result (List (Pair String Expr))
+collectSigOne defined seen acc name ty sp rest =
+  if memName name preludeNames then tcErr1 sp (CannotRedefineBuiltin name) name
+  else if tblMem name seen then tcErr1 sp (DuplicateSignature name) name
+  else collectSigsInto defined (tblInsert name True seen)
+    (Pair name (quantifyTopSig (bannedForModule name defined) ty sp) :: acc) rest
 
 -- 已精化的族按源顺序积累在 Ec 的 datas 里（case 精化需要族的 ctor telescope）。
 -- 收集 data 声明（按源顺序）。
@@ -356,12 +307,26 @@ nonEmpty : List a -> Bool
 nonEmpty [] = False
 nonEmpty (_ :: _) = True
 
--- 族的 kind 必须是「箭头链 + 宇宙结尾」。
+-- 族的 kind 必须是「Pi 链 + 宇宙结尾」（M28 决策 1：严格分层、非累积）：
+-- - 结果必须是 `Type l` 且 `l` 非负（`Type i : Type (i+1)`；不允许 `Type : Type`、
+--   也没有 subtyping / cumulativity，所以 `Type i` 与 `Type j`（i≠j）不相等）；
+-- - 每个 binder 的域必须是能赋 sort 的类型（宇宙 / 递归 Pi 链）。索引域（归纳族、
+--   类型变量、族应用）的类型正确性由 `checkType` 的 Pi formation 保证，这里只复核
+--   结构里出现的宇宙层级非负——kind 会被存进 globals 并在别处按域求值，负层级是
+--   内部不变量被破坏的信号，必须就地拒绝。
 kindWellFormed : Term -> Bool
 kindWellFormed ty = case ty of
-  TPi name implicit rig dom cod => kindWellFormed cod
-  TType l => True
+  TPi name implicit rig dom cod => kindDomainWellFormed dom && kindWellFormed cod
+  TType l => levelToInt l >= 0
   _ => False
+
+-- kind binder 域的防御性复核：宇宙层级非负；Pi 链逐层递归；其余形态（类型变量 /
+-- 归纳族 / 族应用）是索引域，类型正确性已由 checkType 保证。
+kindDomainWellFormed : Term -> Bool
+kindDomainWellFormed dom = case dom of
+  TType l => levelToInt l >= 0
+  TPi _ _ _ d c => kindDomainWellFormed d && kindDomainWellFormed c
+  _ => True
 
 -- 族的参数/索引 telescope：binder 名 + 是否擦除（域是宇宙）。
 splitKind : Term -> List (Pair String Rig)
@@ -382,6 +347,52 @@ dtCtorLookup name [] = Nothing
 dtCtorLookup name (d :: rest) = case findCtorIn name (dtDataCtors d) of
   Just c => Just c
   Nothing => dtCtorLookup name rest
+
+-- ---------------------------------------------------------------
+-- M28（B18）：Elab 侧的**显式命名空间查询**
+-- ---------------------------------------------------------------
+-- 核心项里的名字是 Loader mangle 过的全局串；同名族与构造子**共享同一个串**
+-- （`data Pair a b where Pair : ...` 的族与构造子都叫 `<M>.Pair`），所以「这个名字属于
+-- 类型还是值命名空间」不能在调用点靠「kind 是不是宇宙」猜，而要按表查：
+--
+--   typeLookup  —— 类型命名空间：数据族（含 trait 字典族，字典族也是普通 DtData）与
+--                  **类型层全局**（签名是「Pi 链 → 宇宙」的 def，如 `sel : Nat -> Type`）；
+--   valueLookup —— 值命名空间：构造子优先（同名时值位置取构造子），再全局定义；
+--                  数据族名也在这里命中——它作为「类型作为项」有 kind 当类型。
+-- 名字是否在类型命名空间里声明（数据族 / 字典族）。
+isDataFamilyName : Ec -> String -> Bool
+isDataFamilyName ec name = case dtDataLookup name (ecDatas ec) of
+  Just _ => True
+  Nothing => False
+
+-- 全局签名是否是类型层：`Type`、`Type -> Type`、`Nat -> Type` 这类 Pi 链 → 宇宙。
+isTypeLevelGlobal : List (Pair String Term) -> Ec -> String -> Bool
+isTypeLevelGlobal globals ec name = case globalsLookup name globals ec of
+  Just ty => kindWellFormed ty
+  Nothing => False
+
+isTypeName : List (Pair String Term) -> Ec -> String -> Bool
+isTypeName globals ec name =
+  if isTypeLevelGlobal globals ec name then True else isDataFamilyName ec name
+
+-- 类型位置查类型命名空间：返回该名字的签名项（族的 kind / 类型层 def 的类型）。
+typeLookup : List (Pair String Term) -> Ec -> String -> Maybe Term
+typeLookup globals ec name =
+  if isTypeName globals ec name then globalsLookup name globals ec else Nothing
+
+-- 值命名空间的查询结果：构造子（值位置优先）或全局定义（含数据族名）。
+data ValueEntry : Type where
+  VECtor : DtCtor -> ValueEntry
+  VEDef : Term -> ValueEntry
+
+-- 值位置查值命名空间（构造子 + 全局定义）：同名时构造子优先——族 kind 与构造子同串，
+-- 直接查 globals 会先拿到族 kind（`Type -> ... -> Type`）而不是构造子类型。
+valueLookup : List (Pair String Term) -> Ec -> String -> Maybe ValueEntry
+valueLookup globals ec name = case dtCtorLookup name (ecDatas ec) of
+  Just ctor => Just (VECtor ctor)
+  Nothing => case globalsLookup name globals ec of
+    Just ty => Just (VEDef ty)
+    Nothing => Nothing
 
 -- 构造子类型的 telescope：逐个 binder 求值域。
 -- 隐式 binder（族参数/索引）一律擦除；显式 binder 只有在域是宇宙时才擦除。
@@ -412,7 +423,8 @@ resultSpine ty = case ty of
   _ => spineOfType ty
 
 -- ---------------------------------------------------------------
--- M24.5：把「检查期已解」的元变量内联进**会被存下来**的项（构造子类型 / 族 kind / 签名）
+-- M28：统一 zonk——把「检查期已解」的元变量替换进**会被存下来**的项
+-- （签名 / 构造子类型 / 族 kind）。
 -- ---------------------------------------------------------------
 -- 典型来源：`data Eq : {a : Type} -> a -> a -> Type` 的构造子写
 -- `Refl : {a : Type} -> (x : a) -> Eq x x`——结果类型 `Eq x x` 里隐式族参数由检查器插成
@@ -420,46 +432,44 @@ resultSpine ty = case ty of
 -- dtCtorType 里，使用点按另一份上下文求值时解出来的 `a` 就是悬空变量
 -- （曾报 `constructor Refl: type mismatch: expected Nat, got a`）。
 -- 解是 level 形态：按**当前 binder 深度** quote 成项即可；解里出现越界 index（负数）说明
--- 它引用了当前项作用域外的变量，此时不内联（保守，留原元变量）。
-inlineSolvedMetas : Ec -> Int -> Term -> Term
-inlineSolvedMetas ec depth t = inlineSolvedMetasFuel 64 ec depth t
+-- 它引用了当前项作用域外的变量，此时不替换（保守，留原元变量）。
+-- M28 起这是**唯一**的「已解元变量 → 项」入口（旧 inlineSolvedMetas/inlineSolvedMetaAlt
+-- 合并到这里；解在求解点已保证作用域，所以正常输入不会再出现越界）。
+zonkTerm : Ec -> Int -> Term -> Term
+zonkTerm ec depth t = zonkTermFuel 64 ec depth t
 
-inlineSolvedMetasFuel : Int -> Ec -> Int -> Term -> Term
-inlineSolvedMetasFuel fuel ec depth t = if fuel <= 0 then t
+zonkTermFuel : Int -> Ec -> Int -> Term -> Term
+zonkTermFuel fuel ec depth t = if fuel <= 0 then t
 else case t of
   TMeta m => case metaLookup m (ecSols ec) of
     Just v =>
       let
         q = quote depth v
-      in if hasOutOfScopeVar q then t else inlineSolvedMetasFuel (fuel - 1) ec depth q
+      in if hasOutOfScopeVar q then t else zonkTermFuel (fuel - 1) ec depth q
     Nothing => t
   TPi n i r d c =>
-    TPi n i r (inlineSolvedMetasFuel (fuel - 1) ec depth d)
-      (inlineSolvedMetasFuel (fuel - 1) ec (depth + 1) c)
-  TLam n r b => TLam n r (inlineSolvedMetasFuel (fuel - 1) ec (depth + 1) b)
-  TApp f a r =>
-    TApp (inlineSolvedMetasFuel (fuel - 1) ec depth f) (inlineSolvedMetasFuel (fuel - 1) ec depth a)
-      r
+    TPi n i r (zonkTermFuel (fuel - 1) ec depth d) (zonkTermFuel (fuel - 1) ec (depth + 1) c)
+  TLam n r b => TLam n r (zonkTermFuel (fuel - 1) ec (depth + 1) b)
+  TApp f a r => TApp (zonkTermFuel (fuel - 1) ec depth f) (zonkTermFuel (fuel - 1) ec depth a) r
   TCon c args =>
-    TCon c
-      (map (\p => Pair (inlineSolvedMetasFuel (fuel - 1) ec depth (firstOf p)) (secondOf p)) args)
+    TCon c (map (\p => Pair (zonkTermFuel (fuel - 1) ec depth (firstOf p)) (secondOf p)) args)
   TCase s alts =>
-    TCase (inlineSolvedMetasFuel (fuel - 1) ec depth s)
-      (map (\alt => inlineSolvedMetaAltFuel (fuel - 1) ec depth alt) alts)
+    TCase (zonkTermFuel (fuel - 1) ec depth s)
+      (map (\alt => zonkAltFuel (fuel - 1) ec depth alt) alts)
   TIf c th el =>
-    TIf (inlineSolvedMetasFuel (fuel - 1) ec depth c) (inlineSolvedMetasFuel (fuel - 1) ec depth th)
-      (inlineSolvedMetasFuel (fuel - 1) ec depth el)
+    TIf (zonkTermFuel (fuel - 1) ec depth c) (zonkTermFuel (fuel - 1) ec depth th)
+      (zonkTermFuel (fuel - 1) ec depth el)
   _ => t
 
-inlineSolvedMetaAlt : Ec -> Int -> CaseAlt -> CaseAlt
-inlineSolvedMetaAlt ec depth alt = inlineSolvedMetaAltFuel 64 ec depth alt
+zonkAlt : Ec -> Int -> CaseAlt -> CaseAlt
+zonkAlt ec depth alt = zonkAltFuel 64 ec depth alt
 
-inlineSolvedMetaAltFuel : Int -> Ec -> Int -> CaseAlt -> CaseAlt
-inlineSolvedMetaAltFuel fuel ec depth alt0 = if fuel <= 0 then CaseAlt "" [] (TMeta 0)
+zonkAltFuel : Int -> Ec -> Int -> CaseAlt -> CaseAlt
+zonkAltFuel fuel ec depth alt0 = if fuel <= 0 then CaseAlt "" [] (TMeta 0)
 else case alt0 of
-  CaseAlt n bs b => CaseAlt n bs (inlineSolvedMetasFuel (fuel - 1) ec (depth + length bs) b)
+  CaseAlt n bs b => CaseAlt n bs (zonkTermFuel (fuel - 1) ec (depth + length bs) b)
 
--- quote 出来的项里出现负 index：解引用了当前项作用域外的变量，不能内联。
+-- quote 出来的项里出现负 index：解引用了当前项作用域外的变量，不能替换。
 hasOutOfScopeVar : Term -> Bool
 hasOutOfScopeVar t = case t of
   TVar name i => i < 0
@@ -608,28 +618,27 @@ flattenTaggedApp t = case t of
 -- （`{f : Type -> Type}`，M19 起 `trait Mapper f` 需要）。其它类型（Int/String/…）仍
 -- 拒绝：隐式实参不参与运行时计算。
 isIndexDomain : Ec -> Value -> Bool
-isIndexDomain ec dom =
-  isTypeValue dom || isTypeLayerValue dom || isDataHead (ecDatas ec) (forceVal ec dom)
+isIndexDomain ec dom = isTypeDomain dom || isDataHead (ecDatas ec) (forceVal ec dom)
 
 -- ---------------------------------------------------------------
--- 擦除判据（M18.5：全仓唯一入口）
+-- 擦除判据（M18.5 起全仓唯一入口；M28 收成一个谓词）
 -- ---------------------------------------------------------------
--- 规则：**只有域是宇宙（`Type`）的 binder 才擦除**；隐式 binder 恒擦除（精化器插入隐式实参，
--- 运行时不传）。索引（`{n : Nat}` 这类归纳族域）**保留运行时表示**——它们可能被当成递归参数
--- 读回来（见 `vlen`），安全擦除需要整程序使用分析（M22）。
--- 这个词是全仓唯一判据：`teleOf` / `checkBinders` / `bindOnePattern` / `checkLam` / `inferArgs` /
--- `bindCtorBinder` 六处都必须走它，否则「字段数 / telescope 长度 / 绑定数」三处各自漂移。
-binderRig : Bool -> Value -> Rig
-binderRig implicit dom = rigOfBinder implicit (isTypeValue dom)
-
--- 域在「类型层」（M19）：宇宙，或**域全是宇宙的 Pi 链**（`Type -> Type` 这类高阶 kind）。
--- 用于**实参**与**定义参数**的 multiplicity——`applyTwice Box ...` 里的 `Box` 是类型
--- 构造器，必须擦除，否则 codegen 报「type-level name is used at runtime」。
+-- 规则：**隐式 binder 恒擦除；显式 binder 当且仅当域在类型层时擦除**。索引
+-- （`{n : Nat}` 这类隐式族索引、以及显式 `(n : Nat)`）按**显式标注**决定：写成隐式就擦除，
+-- 写成显式就保留运行时表示（`vlen` 能读回来）。不做整程序使用分析。
 --
--- 判据必须是递归的：值层函数类型 `a -> b` 也是 Pi，但它的域是**类型变量**（不是宇宙），
--- 因此不被误判为类型层（否则函数参数会被擦掉，`03_compose` / `04_apply` 直接崩）。
-typeLayerRig : Bool -> Value -> Rig
-typeLayerRig implicit dom = if implicit then Rig0 else if isTypeLayerValue dom then Rig0 else Rig1
+-- `isTypeDomain` 是**唯一的域判据**：宇宙 `Type n`，或「每个域都是类型层的 Pi 链」
+-- （`Type -> Type` 这类高阶 kind）。判据必须递归：值层函数类型 `a -> b` 也是 Pi，但它的
+-- 域是类型变量而不是宇宙，不能被误判（否则函数参数会被擦掉）。`isTypeValue` 是它的
+-- 特例（VType 是空 Pi 链）；M28 之前 `binderRig` 只查裸 `Type`、`typeLayerRig` 才查
+-- Pi 链，两个判据在显式高阶类型参数上漂移，现在统一走这里。
+-- `binderRig` 是**唯一的 Rig 构造入口**：`teleOf` / `checkBinders` / `bindOnePattern` /
+-- `checkLam` / `inferArgs` / `bindCtorBinder` 六处都必须走它。
+isTypeDomain : Value -> Bool
+isTypeDomain v = isTypeLayerValue v
+
+binderRig : Bool -> Value -> Rig
+binderRig implicit dom = rigOfBinder implicit (isTypeDomain dom)
 
 isTypeLayerValue : Value -> Bool
 isTypeLayerValue v = isTypeLayerValueFuel 128 v

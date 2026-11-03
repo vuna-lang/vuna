@@ -75,10 +75,12 @@ module Vuna.Compiler.Core
   , showValue
   , showValueAt
   , solsCons
+  , solsDepth
   , solsEmpty
   , solsFromList
   , solsList
   , solsLookup
+  , solsOf
   , solsTbl
   , solveMeta
   , substMetaVar

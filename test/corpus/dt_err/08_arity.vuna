@@ -1,2 +1,6 @@
-id : (a : Type) -> a -> a
-id a = a
+-- M28：η 展开只补**少**的参数；定义参数多于签名仍是错误。
+-- （旧夹具 `id : (a : Type) -> a -> a` / `id a = a` 在 M28 前报 TC_DefFewerParams；
+-- η 展开后那条定义走正常类型检查、不再命中 arity 诊断，这里改成 TC_DefMoreParams
+-- 继续锁住 arity 诊断。）
+f : Int -> Int
+f x y = x

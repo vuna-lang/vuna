@@ -92,8 +92,11 @@ data PsDiag : Nat -> Type where
   UnexpectedIndentInRecord : PsDiag Zero
   UnexpectedIndentInTrait : PsDiag Zero
   UnexpectedIndentInWhere : PsDiag Zero
+  -- M28：`let` / `where` 共用绑定块，缩进越界用统一诊断。
+  UnexpectedIndentInBinding : PsDiag Zero
   WhereArgsNotSimple : PsDiag Zero
-  -- arity 1（where 签名诊断；调用点自拼 span 前缀）
+  -- arity 1（绑定块签名诊断；调用点自拼 span 前缀。M28 起 let/where 共用，
+  -- 码名保持不变以稳定错误码文档，消息文案改为通用 "binding signature"）
   WhereSigBeforeClause : String -> PsDiag (Succ Zero)
   WhereSigDuplicate : String -> PsDiag (Succ Zero)
   WhereSigMultiClause : String -> PsDiag (Succ Zero)
@@ -131,6 +134,7 @@ psCode UnexpectedIndentInInstance = "PS_UnexpectedIndentInInstance"
 psCode UnexpectedIndentInRecord = "PS_UnexpectedIndentInRecord"
 psCode UnexpectedIndentInTrait = "PS_UnexpectedIndentInTrait"
 psCode UnexpectedIndentInWhere = "PS_UnexpectedIndentInWhere"
+psCode UnexpectedIndentInBinding = "PS_UnexpectedIndentInBinding"
 psCode WhereArgsNotSimple = "PS_WhereArgsNotSimple"
 psCode (ExpectedDeclAtColumn _) = "PS_ExpectedDeclAtColumn"
 psCode (ExpectedToken _) = "PS_ExpectedToken"
@@ -168,14 +172,15 @@ psTemplate UnexpectedIndentInInstance = "unexpected indentation in instance bloc
 psTemplate UnexpectedIndentInRecord = "unexpected indentation in record block"
 psTemplate UnexpectedIndentInTrait = "unexpected indentation in trait block"
 psTemplate UnexpectedIndentInWhere = "unexpected indentation in where block"
-psTemplate WhereArgsNotSimple = "where function arguments must be simple names"
+psTemplate UnexpectedIndentInBinding = "unexpected indentation in a let/where binding block"
+psTemplate WhereArgsNotSimple = "binding function arguments must be simple names"
 psTemplate (ExpectedDeclAtColumn _) = "expected a declaration at column <0>"
 psTemplate (ExpectedToken _) = "expected <0>"
-psTemplate (WhereSigBeforeClause _) = "where signature for `<0>` must come before its clause"
-psTemplate (WhereSigDuplicate _) = "duplicate where signature for `<0>`"
+psTemplate (WhereSigBeforeClause _) = "binding signature for `<0>` must come before its clause"
+psTemplate (WhereSigDuplicate _) = "duplicate binding signature for `<0>`"
 psTemplate (WhereSigMultiClause _) =
-  "where binding `<0>` has more than one clause; a signature can annotate only one"
-psTemplate (WhereSigNoDef _) = "where signature for `<0>` has no definition"
+  "binding `<0>` has more than one clause; a signature can annotate only one"
+psTemplate (WhereSigNoDef _) = "binding signature for `<0>` has no definition"
 
 -- ---------------------------------------------------------------
 -- 文档遍历源
@@ -242,13 +247,14 @@ psAll =
     PsEntry (psCode UnexpectedIndentInRecord) (psTemplate UnexpectedIndentInRecord) "record 块缩进意外",
     PsEntry (psCode UnexpectedIndentInTrait) (psTemplate UnexpectedIndentInTrait) "trait 块缩进意外",
     PsEntry (psCode UnexpectedIndentInWhere) (psTemplate UnexpectedIndentInWhere) "where 块缩进意外",
-    PsEntry (psCode WhereArgsNotSimple) (psTemplate WhereArgsNotSimple) "where 函数实参必须是简单名",
+    PsEntry (psCode UnexpectedIndentInBinding) (psTemplate UnexpectedIndentInBinding) "let/where 绑定块缩进意外",
+    PsEntry (psCode WhereArgsNotSimple) (psTemplate WhereArgsNotSimple) "绑定函数实参必须是简单名",
     PsEntry (psCode (ExpectedDeclAtColumn "")) (psTemplate (ExpectedDeclAtColumn "")) "该列期望一个声明",
     PsEntry (psCode (ExpectedToken "")) (psTemplate (ExpectedToken "")) "期望指定符号/关键字",
-    PsEntry (psCode (WhereSigBeforeClause "")) (psTemplate (WhereSigBeforeClause "")) "where 签名必须先于子句",
-    PsEntry (psCode (WhereSigDuplicate "")) (psTemplate (WhereSigDuplicate "")) "重复的 where 签名",
-    PsEntry (psCode (WhereSigMultiClause "")) (psTemplate (WhereSigMultiClause "")) "where 绑定多子句不可用签名",
-    PsEntry (psCode (WhereSigNoDef "")) (psTemplate (WhereSigNoDef "")) "where 签名无对应定义"
+    PsEntry (psCode (WhereSigBeforeClause "")) (psTemplate (WhereSigBeforeClause "")) "绑定签名必须先于子句",
+    PsEntry (psCode (WhereSigDuplicate "")) (psTemplate (WhereSigDuplicate "")) "重复的绑定签名",
+    PsEntry (psCode (WhereSigMultiClause "")) (psTemplate (WhereSigMultiClause "")) "绑定多子句不可用签名",
+    PsEntry (psCode (WhereSigNoDef "")) (psTemplate (WhereSigNoDef "")) "绑定签名无对应定义"
   ]
 
 -- ---------------------------------------------------------------

@@ -1,6 +1,9 @@
 -- M24.6 第一级：构造子字段形状的单一真源（telescope keep flags）。
 -- 覆盖：隐式族参数（擦除）+ 显式索引（保留）+ 运行时字段、record 构造子、
 -- 参数化 data、显式宇宙域字段（擦除）与 case 分支绑定。
+-- M28：显式宇宙域字段的族必须住得下该字段的 sort（`Type : Type 1`），所以 `Proxy`
+-- 声明在 `Type 1`；`data Proxy : Type where MkProxy : (t : Type) -> Proxy` 现在按
+-- 严格分层被拒（见 `dt_err/40_universe_field`）。
 data Nat : Type where
   Zero : Nat
   Succ : Nat -> Nat
@@ -16,7 +19,7 @@ record Point where
 data Pair2 : Type -> Type -> Type where
   MkPair2 : {a : Type} -> {b : Type} -> a -> b -> Pair2 a b
 
-data Proxy : Type where
+data Proxy : Type 1 where
   MkProxy : (t : Type) -> Proxy
 
 sumVec : {n : Nat} -> Vec Int n -> Int

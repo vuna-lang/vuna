@@ -55,6 +55,7 @@ findOwnFn name decls = case decls of
   d :: rest => case d of
     DFun n pats body sp => if n == name then Just name else findOwnFn name rest
     DSig n ty sp => if n == name then Just name else findOwnFn name rest
+    DAxiom n ty sp => if n == name then Just name else findOwnFn name rest
     _ => findOwnFn name rest
 
 findCtorNamed : String -> List Ctor -> Maybe String
@@ -129,6 +130,10 @@ declImplicitExports prefix d = case d of
       if isPrivateName name then []
       else [ExportEntry { kind = "val", public = name, target = mangle prefix name, parent = "" }]
   DSig name ty sp =>
+    if isPrivateName name then []
+    else [ExportEntry { kind = "val", public = name, target = mangle prefix name, parent = "" }]
+  -- M28：axiom 是无体的可擦除顶层，导出层按值条目处理（类型层引用跨模块可见）。
+  DAxiom name ty sp =>
     if isPrivateName name then []
     else [ExportEntry { kind = "val", public = name, target = mangle prefix name, parent = "" }]
   DFun name pats body sp =>
@@ -497,5 +502,5 @@ resolveModulesKeep : List Module -> Result (List Module)
 resolveModulesKeep [] = Ok []
 resolveModulesKeep ((Module name pkg imports implicit decls exports mcaps) :: rest) =
   andThen
-    (andThen (resolveProgram (Module name pkg imports implicit decls exports mcaps :: rest) name name (append (topNames decls) (typeNamesOf decls)) (ctorsOf decls) (append (ctorsOf decls) (append (topNames decls) (typeNamesOf decls))) (append imports implicit) decls) (\d => checkEffectsBuiltins name pkg mcaps d))
+    (andThen (resolveProgram (Module name pkg imports implicit decls exports mcaps :: rest) name name (namespacesOf decls) (append imports implicit) decls) (\d => checkEffectsBuiltins name pkg mcaps d))
     (\d1 => andThen (resolveModulesKeep rest) (\d2 => Ok (Module name pkg imports implicit d1 exports mcaps :: d2)))

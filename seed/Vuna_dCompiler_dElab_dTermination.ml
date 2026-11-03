@@ -183,14 +183,14 @@ let rec v_Vuna_dCompiler_dElab_dTermination_dedgeCount = (fun mc0 -> (match mc0 
 
 let v_Vuna_dCompiler_dElab_dTermination_dgraphFuel = (fun g -> (fun nodes -> ((bi_add ((bi_add ((bi_mul 4) (v_Base_dList_dlength nodes))) ((bi_mul 4) (v_Vuna_dCompiler_dElab_dTermination_dedgeCount g)))) 16)))
 
-let rec v_Vuna_dCompiler_dElab_dTermination_ddfsPost = (fun steps -> (fun fuel -> (fun g -> (fun visited -> (fun post -> (if ((bi_le_int fuel) 0) then (C_Base_dPair_dPair_Base_dPair_dPair (visited, post)) else (match steps with
-  | C_Base_dList_dList_Base_dList_dNil -> (C_Base_dPair_dPair_Base_dPair_dPair (visited, post))
+let rec v_Vuna_dCompiler_dElab_dTermination_ddfsPost = (fun steps -> (fun fuel -> (fun g -> (fun visited -> (fun post -> (if ((bi_le_int fuel) 0) then (C_Base_dPair_dPair_Base_dPair_dPair (visited, post)) else ((fun nd_uscrut5 -> (match nd_uscrut5 with
   | C_Base_dList_dList_Base_dList_dCons (dtb__94, dtb__95) -> (match dtb__94 with
   | C_Base_dPair_dPair_Base_dPair_dPair (dtb__96, dtb__97) -> (if dtb__97 then (((((v_Vuna_dCompiler_dElab_dTermination_ddfsPost dtb__95) ((bi_sub fuel) 1)) g) visited) (C_Base_dList_dList_Base_dList_dCons (dtb__96, post))) else (if ((v_Vuna_dCompiler_dCommon_dtblMem dtb__96) visited) then (((((v_Vuna_dCompiler_dElab_dTermination_ddfsPost dtb__95) ((bi_sub fuel) 1)) g) visited) post) else (((((v_Vuna_dCompiler_dElab_dTermination_ddfsPost ((v_Base_dList_dappend ((v_Base_dList_dmap (fun m -> (C_Base_dPair_dPair_Base_dPair_dPair (m, false)))) ((v_Vuna_dCompiler_dElab_dTermination_dadjOf dtb__96) g))) (C_Base_dList_dList_Base_dList_dCons ((C_Base_dPair_dPair_Base_dPair_dPair (dtb__96, true)), dtb__95)))) ((bi_sub fuel) 1)) g) (((v_Vuna_dCompiler_dCommon_dtblInsert dtb__96) true) visited)) post)))
   | _ -> failwith "DT: impossible branch"
 )
+  | C_Base_dList_dList_Base_dList_dNil -> (C_Base_dPair_dPair_Base_dPair_dPair (visited, post))
   | _ -> failwith "DT: impossible branch"
-)))))))
+)) steps)))))))
 
 let rec v_Vuna_dCompiler_dElab_dTermination_ddfsAll = (fun mc0 -> (fun mc1 -> (fun mc2 -> (fun mc3 -> (fun mc4 -> (match mc0 with
   | C_Base_dList_dList_Base_dList_dCons (dtb__98, dtb__99) -> (if ((bi_le_int mc1) 0) then mc4 else (if ((v_Vuna_dCompiler_dCommon_dtblMem dtb__98) mc3) then (((((v_Vuna_dCompiler_dElab_dTermination_ddfsAll dtb__99) ((bi_sub mc1) 1)) mc2) mc3) mc4) else (match (((((v_Vuna_dCompiler_dElab_dTermination_ddfsPost (C_Base_dList_dList_Base_dList_dCons ((C_Base_dPair_dPair_Base_dPair_dPair (dtb__98, false)), C_Base_dList_dList_Base_dList_dNil))) mc1) mc2) mc3) mc4) with
@@ -250,7 +250,7 @@ and v_Vuna_dCompiler_dElab_dTermination_dstrWalkEApp = (fun fuel -> (fun comp ->
 )
   | _ -> failwith "DT: impossible branch"
 ))))))))))))))
-and v_Vuna_dCompiler_dElab_dTermination_dstrWalkEAppMap = (fun fuel -> (fun comp -> (fun ctors -> (fun projs -> (fun p -> (fun sizes -> (fun caller -> (fun facts -> (fun region -> (fun fn -> (fun args -> (fun acc -> (if ((bi_le_int fuel) 0) then acc else ((fun nd_uscrut -> (match nd_uscrut with
+and v_Vuna_dCompiler_dElab_dTermination_dstrWalkEAppMap = (fun fuel -> (fun comp -> (fun ctors -> (fun projs -> (fun p -> (fun sizes -> (fun caller -> (fun facts -> (fun region -> (fun fn -> (fun args -> (fun acc -> (if ((bi_le_int fuel) 0) then acc else ((fun nd_uscrut12 -> (match nd_uscrut12 with
   | C_Base_dList_dList_Base_dList_dCons (dtb__154, dtb__155) -> (match dtb__154 with
   | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dELam (dtb__156, dtb__157, dtb__158) -> (match dtb__156 with
   | C_Base_dList_dList_Base_dList_dCons (dtb__159, dtb__160) -> (match dtb__160 with
@@ -263,14 +263,14 @@ and v_Vuna_dCompiler_dElab_dTermination_dstrWalkEAppMap = (fun fuel -> (fun comp
 )
   | _ -> (match dtb__155 with
   | C_Base_dList_dList_Base_dList_dCons (dtb__163, dtb__164) -> (match dtb__164 with
-  | C_Base_dList_dList_Base_dList_dNil -> (match dtb__154 with
-  | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEApp (dtb__165, dtb__166, dtb__167) -> (match dtb__165 with
-  | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEVar (dtb__168, dtb__169) -> (if ((v_Base_dList_dmemName dtb__168) comp) then ((((((((((((((v_Vuna_dCompiler_dElab_dTermination_dstrWalkMapPartialInline ((bi_sub fuel) 1)) comp) ctors) projs) p) sizes) caller) facts) region) dtb__168) dtb__166) dtb__163) dtb__167) acc) else (((((((((((v_Vuna_dCompiler_dElab_dTermination_dstrWalkArgs ((bi_sub fuel) 1)) comp) ctors) projs) p) sizes) caller) facts) region) args) acc))
+  | C_Base_dList_dList_Base_dList_dNil -> ((fun nd_uscrut26 -> (match nd_uscrut26 with
+  | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEVar (dtb__165, dtb__166) -> (if ((v_Base_dList_dmemName dtb__165) comp) then ((((((((((((((v_Vuna_dCompiler_dElab_dTermination_dstrWalkMapPartialInline ((bi_sub fuel) 1)) comp) ctors) projs) p) sizes) caller) facts) region) dtb__165) C_Base_dList_dList_Base_dList_dNil) dtb__163) dtb__166) acc) else (((((((((((v_Vuna_dCompiler_dElab_dTermination_dstrWalkArgs ((bi_sub fuel) 1)) comp) ctors) projs) p) sizes) caller) facts) region) args) acc))
+  | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEApp (dtb__167, dtb__168, dtb__169) -> (match dtb__167 with
+  | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEVar (dtb__170, dtb__171) -> (if ((v_Base_dList_dmemName dtb__170) comp) then ((((((((((((((v_Vuna_dCompiler_dElab_dTermination_dstrWalkMapPartialInline ((bi_sub fuel) 1)) comp) ctors) projs) p) sizes) caller) facts) region) dtb__170) dtb__168) dtb__163) dtb__169) acc) else (((((((((((v_Vuna_dCompiler_dElab_dTermination_dstrWalkArgs ((bi_sub fuel) 1)) comp) ctors) projs) p) sizes) caller) facts) region) args) acc))
   | _ -> (((((((((((v_Vuna_dCompiler_dElab_dTermination_dstrWalkArgs ((bi_sub fuel) 1)) comp) ctors) projs) p) sizes) caller) facts) region) args) acc)
 )
-  | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEVar (dtb__170, dtb__171) -> (if ((v_Base_dList_dmemName dtb__170) comp) then ((((((((((((((v_Vuna_dCompiler_dElab_dTermination_dstrWalkMapPartialInline ((bi_sub fuel) 1)) comp) ctors) projs) p) sizes) caller) facts) region) dtb__170) C_Base_dList_dList_Base_dList_dNil) dtb__163) dtb__171) acc) else (((((((((((v_Vuna_dCompiler_dElab_dTermination_dstrWalkArgs ((bi_sub fuel) 1)) comp) ctors) projs) p) sizes) caller) facts) region) args) acc))
   | _ -> (((((((((((v_Vuna_dCompiler_dElab_dTermination_dstrWalkArgs ((bi_sub fuel) 1)) comp) ctors) projs) p) sizes) caller) facts) region) args) acc)
-)
+)) dtb__154)
   | _ -> (((((((((((v_Vuna_dCompiler_dElab_dTermination_dstrWalkArgs ((bi_sub fuel) 1)) comp) ctors) projs) p) sizes) caller) facts) region) args) acc)
 )
   | _ -> (((((((((((v_Vuna_dCompiler_dElab_dTermination_dstrWalkArgs ((bi_sub fuel) 1)) comp) ctors) projs) p) sizes) caller) facts) region) args) acc)
@@ -278,14 +278,14 @@ and v_Vuna_dCompiler_dElab_dTermination_dstrWalkEAppMap = (fun fuel -> (fun comp
 )
   | _ -> (match dtb__155 with
   | C_Base_dList_dList_Base_dList_dCons (dtb__172, dtb__173) -> (match dtb__173 with
-  | C_Base_dList_dList_Base_dList_dNil -> (match dtb__154 with
-  | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEApp (dtb__174, dtb__175, dtb__176) -> (match dtb__174 with
-  | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEVar (dtb__177, dtb__178) -> (if ((v_Base_dList_dmemName dtb__177) comp) then ((((((((((((((v_Vuna_dCompiler_dElab_dTermination_dstrWalkMapPartialInline ((bi_sub fuel) 1)) comp) ctors) projs) p) sizes) caller) facts) region) dtb__177) dtb__175) dtb__172) dtb__176) acc) else (((((((((((v_Vuna_dCompiler_dElab_dTermination_dstrWalkArgs ((bi_sub fuel) 1)) comp) ctors) projs) p) sizes) caller) facts) region) args) acc))
+  | C_Base_dList_dList_Base_dList_dNil -> ((fun nd_uscrut23 -> (match nd_uscrut23 with
+  | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEVar (dtb__174, dtb__175) -> (if ((v_Base_dList_dmemName dtb__174) comp) then ((((((((((((((v_Vuna_dCompiler_dElab_dTermination_dstrWalkMapPartialInline ((bi_sub fuel) 1)) comp) ctors) projs) p) sizes) caller) facts) region) dtb__174) C_Base_dList_dList_Base_dList_dNil) dtb__172) dtb__175) acc) else (((((((((((v_Vuna_dCompiler_dElab_dTermination_dstrWalkArgs ((bi_sub fuel) 1)) comp) ctors) projs) p) sizes) caller) facts) region) args) acc))
+  | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEApp (dtb__176, dtb__177, dtb__178) -> (match dtb__176 with
+  | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEVar (dtb__179, dtb__180) -> (if ((v_Base_dList_dmemName dtb__179) comp) then ((((((((((((((v_Vuna_dCompiler_dElab_dTermination_dstrWalkMapPartialInline ((bi_sub fuel) 1)) comp) ctors) projs) p) sizes) caller) facts) region) dtb__179) dtb__177) dtb__172) dtb__178) acc) else (((((((((((v_Vuna_dCompiler_dElab_dTermination_dstrWalkArgs ((bi_sub fuel) 1)) comp) ctors) projs) p) sizes) caller) facts) region) args) acc))
   | _ -> (((((((((((v_Vuna_dCompiler_dElab_dTermination_dstrWalkArgs ((bi_sub fuel) 1)) comp) ctors) projs) p) sizes) caller) facts) region) args) acc)
 )
-  | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEVar (dtb__179, dtb__180) -> (if ((v_Base_dList_dmemName dtb__179) comp) then ((((((((((((((v_Vuna_dCompiler_dElab_dTermination_dstrWalkMapPartialInline ((bi_sub fuel) 1)) comp) ctors) projs) p) sizes) caller) facts) region) dtb__179) C_Base_dList_dList_Base_dList_dNil) dtb__172) dtb__180) acc) else (((((((((((v_Vuna_dCompiler_dElab_dTermination_dstrWalkArgs ((bi_sub fuel) 1)) comp) ctors) projs) p) sizes) caller) facts) region) args) acc))
   | _ -> (((((((((((v_Vuna_dCompiler_dElab_dTermination_dstrWalkArgs ((bi_sub fuel) 1)) comp) ctors) projs) p) sizes) caller) facts) region) args) acc)
-)
+)) dtb__154)
   | _ -> (((((((((((v_Vuna_dCompiler_dElab_dTermination_dstrWalkArgs ((bi_sub fuel) 1)) comp) ctors) projs) p) sizes) caller) facts) region) args) acc)
 )
   | _ -> (((((((((((v_Vuna_dCompiler_dElab_dTermination_dstrWalkArgs ((bi_sub fuel) 1)) comp) ctors) projs) p) sizes) caller) facts) region) args) acc)
@@ -293,14 +293,14 @@ and v_Vuna_dCompiler_dElab_dTermination_dstrWalkEAppMap = (fun fuel -> (fun comp
 )
   | _ -> (match dtb__155 with
   | C_Base_dList_dList_Base_dList_dCons (dtb__181, dtb__182) -> (match dtb__182 with
-  | C_Base_dList_dList_Base_dList_dNil -> (match dtb__154 with
-  | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEApp (dtb__183, dtb__184, dtb__185) -> (match dtb__183 with
-  | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEVar (dtb__186, dtb__187) -> (if ((v_Base_dList_dmemName dtb__186) comp) then ((((((((((((((v_Vuna_dCompiler_dElab_dTermination_dstrWalkMapPartialInline ((bi_sub fuel) 1)) comp) ctors) projs) p) sizes) caller) facts) region) dtb__186) dtb__184) dtb__181) dtb__185) acc) else (((((((((((v_Vuna_dCompiler_dElab_dTermination_dstrWalkArgs ((bi_sub fuel) 1)) comp) ctors) projs) p) sizes) caller) facts) region) args) acc))
+  | C_Base_dList_dList_Base_dList_dNil -> ((fun nd_uscrut20 -> (match nd_uscrut20 with
+  | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEVar (dtb__183, dtb__184) -> (if ((v_Base_dList_dmemName dtb__183) comp) then ((((((((((((((v_Vuna_dCompiler_dElab_dTermination_dstrWalkMapPartialInline ((bi_sub fuel) 1)) comp) ctors) projs) p) sizes) caller) facts) region) dtb__183) C_Base_dList_dList_Base_dList_dNil) dtb__181) dtb__184) acc) else (((((((((((v_Vuna_dCompiler_dElab_dTermination_dstrWalkArgs ((bi_sub fuel) 1)) comp) ctors) projs) p) sizes) caller) facts) region) args) acc))
+  | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEApp (dtb__185, dtb__186, dtb__187) -> (match dtb__185 with
+  | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEVar (dtb__188, dtb__189) -> (if ((v_Base_dList_dmemName dtb__188) comp) then ((((((((((((((v_Vuna_dCompiler_dElab_dTermination_dstrWalkMapPartialInline ((bi_sub fuel) 1)) comp) ctors) projs) p) sizes) caller) facts) region) dtb__188) dtb__186) dtb__181) dtb__187) acc) else (((((((((((v_Vuna_dCompiler_dElab_dTermination_dstrWalkArgs ((bi_sub fuel) 1)) comp) ctors) projs) p) sizes) caller) facts) region) args) acc))
   | _ -> (((((((((((v_Vuna_dCompiler_dElab_dTermination_dstrWalkArgs ((bi_sub fuel) 1)) comp) ctors) projs) p) sizes) caller) facts) region) args) acc)
 )
-  | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEVar (dtb__188, dtb__189) -> (if ((v_Base_dList_dmemName dtb__188) comp) then ((((((((((((((v_Vuna_dCompiler_dElab_dTermination_dstrWalkMapPartialInline ((bi_sub fuel) 1)) comp) ctors) projs) p) sizes) caller) facts) region) dtb__188) C_Base_dList_dList_Base_dList_dNil) dtb__181) dtb__189) acc) else (((((((((((v_Vuna_dCompiler_dElab_dTermination_dstrWalkArgs ((bi_sub fuel) 1)) comp) ctors) projs) p) sizes) caller) facts) region) args) acc))
   | _ -> (((((((((((v_Vuna_dCompiler_dElab_dTermination_dstrWalkArgs ((bi_sub fuel) 1)) comp) ctors) projs) p) sizes) caller) facts) region) args) acc)
-)
+)) dtb__154)
   | _ -> (((((((((((v_Vuna_dCompiler_dElab_dTermination_dstrWalkArgs ((bi_sub fuel) 1)) comp) ctors) projs) p) sizes) caller) facts) region) args) acc)
 )
   | _ -> (((((((((((v_Vuna_dCompiler_dElab_dTermination_dstrWalkArgs ((bi_sub fuel) 1)) comp) ctors) projs) p) sizes) caller) facts) region) args) acc)
@@ -355,13 +355,13 @@ and v_Vuna_dCompiler_dElab_dTermination_dstrWalkStmts = (fun mc0 -> (fun mc1 -> 
 
 let v_Vuna_dCompiler_dElab_dTermination_dstrClause = (fun comp -> (fun ctors -> (fun projs -> (fun p -> (fun caller -> (fun facts -> (fun clause -> (((((((((((v_Vuna_dCompiler_dElab_dTermination_dstrWalk 100000) comp) ctors) projs) p) (v_Vuna_dCompiler_dElab_dTermination_dMeasure_dstrSizeEntries (v_Base_dPair_dfirstOf clause))) caller) facts) C_Base_dList_dList_Base_dList_dNil) (v_Base_dPair_dsecondOf clause)) (C_Base_dPair_dPair_Base_dPair_dPair (true, C_Base_dList_dList_Base_dList_dNil))))))))))
 
-let v_Vuna_dCompiler_dElab_dTermination_dgroupMessage = (fun comp -> (match comp with
+let v_Vuna_dCompiler_dElab_dTermination_dgroupMessage = (fun comp -> ((fun nd_uscrut1 -> (match nd_uscrut1 with
   | C_Base_dList_dList_Base_dList_dCons (dtb__212, dtb__213) -> (match dtb__213 with
   | C_Base_dList_dList_Base_dList_dNil -> ((bi_concat dtb__212) " (recursive call does not structurally decrease)")
   | _ -> ((bi_concat "recursive group {") ((bi_concat (v_Vuna_dCompiler_dElab_dTermination_dMeasure_djoinComma comp)) "} (mutual recursion: no parameter position decreases on every recursive call)"))
 )
   | _ -> ((bi_concat "recursive group {") ((bi_concat (v_Vuna_dCompiler_dElab_dTermination_dMeasure_djoinComma comp)) "} (mutual recursion: no parameter position decreases on every recursive call)"))
-))
+)) comp))
 
 let v_Vuna_dCompiler_dElab_dTermination_dcannotProveMsg = (fun comp -> ((fun desc -> ((v_Vuna_dCompiler_dDiagnostics_dtcMsg (C_Vuna_dCompiler_dDiagnostics_dTcErr_Vuna_dCompiler_dDiagnostics_dCannotProveTermination (desc))) (C_Base_dVec_dVec_Base_dVec_dVCons (desc, C_Base_dVec_dVec_Base_dVec_dVNil)))) (v_Vuna_dCompiler_dElab_dTermination_dgroupMessage comp)))
 
@@ -401,14 +401,14 @@ let v_Vuna_dCompiler_dElab_dTermination_dcheckStrictGroup = (fun comp -> (fun de
   | _ -> failwith "DT: impossible branch"
 ))))))
 
-let v_Vuna_dCompiler_dElab_dTermination_dcheckComp = (fun comp -> (fun defs -> (fun ctors -> (fun projs -> (fun g -> (fun facts -> (match comp with
-  | C_Base_dList_dList_Base_dList_dNil -> (C_Base_dResult_dResult_Base_dResult_dOk (0))
+let v_Vuna_dCompiler_dElab_dTermination_dcheckComp = (fun comp -> (fun defs -> (fun ctors -> (fun projs -> (fun g -> (fun facts -> ((fun nd_uscrut6 -> (match nd_uscrut6 with
   | C_Base_dList_dList_Base_dList_dCons (dtb__228, dtb__229) -> (match dtb__229 with
   | C_Base_dList_dList_Base_dList_dNil -> (if ((v_Base_dList_dmemName dtb__228) ((v_Vuna_dCompiler_dElab_dTermination_dadjOf dtb__228) g)) then (((((v_Vuna_dCompiler_dElab_dTermination_dcheckStrictGroup comp) defs) ctors) projs) facts) else (C_Base_dResult_dResult_Base_dResult_dOk (0)))
   | _ -> (((((v_Vuna_dCompiler_dElab_dTermination_dcheckStrictGroup comp) defs) ctors) projs) facts)
 )
-  | _ -> (((((v_Vuna_dCompiler_dElab_dTermination_dcheckStrictGroup comp) defs) ctors) projs) facts)
-)))))))
+  | C_Base_dList_dList_Base_dList_dNil -> (C_Base_dResult_dResult_Base_dResult_dOk (0))
+  | _ -> failwith "DT: impossible branch"
+)) comp)))))))
 
 let rec v_Vuna_dCompiler_dElab_dTermination_dcheckSccs = (fun mc0 -> (fun mc1 -> (fun mc2 -> (fun mc3 -> (fun mc4 -> (fun mc5 -> (match mc0 with
   | C_Base_dList_dList_Base_dList_dCons (dtb__230, dtb__231) -> ((v_Base_dResult_dandThen ((((((v_Vuna_dCompiler_dElab_dTermination_dcheckComp dtb__230) mc1) mc2) mc3) mc4) mc5)) (fun n -> ((v_Base_dResult_dandThen ((((((v_Vuna_dCompiler_dElab_dTermination_dcheckSccs dtb__231) mc1) mc2) mc3) mc4) mc5)) (fun m -> (C_Base_dResult_dResult_Base_dResult_dOk (((bi_add n) m)))))))

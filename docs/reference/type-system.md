@@ -3,6 +3,61 @@
 本文覆盖 core-v0 之上的表达力：记录类型、trait 与实例、`do` 与 `Monad` / `Functor`。
 基础语法与模块系统见 [language.md](language.md)，标准库模块清单见 [stdlib.md](stdlib.md)。
 
+## 宇宙与 kind（M28 已定：严格分层、非累积）
+
+- **规则**（决策见 [roadmap](../roadmap.md) M28）：严格分层、非累积。
+  `Type i : Type (i+1)`；Pi formation 取 `max(i, j)`；`Type i` 与 `Type j`（`i ≠ j`）
+  **不相等**；**没有** subtyping / cumulativity（不做 `Type i ≤ Type j` 的自动提升），
+  `Type : Type` 仍被拒绝。唯一的层级流动是「显式写出更小的宇宙」：`Type 0` 可以赋给
+  `Type 1` 的签名（因为 `Type 0` 的**类型**就是 `Type 1`），反过来不行。
+- **data kind**：`data F : <kind>` 的 kind 必须是「Pi 链 → `Type l`」，`l ≥ 0`；
+  族层级就是 kind 末尾的 `l`（如 `data Vec : Type -> Nat -> Type` 的族层级是 0）。
+  kind 里每个 binder 的域必须是**类型**（宇宙、索引归纳族、类型变量、Pi 链等）。
+  不以宇宙收尾的 kind 报 `TC_DataKindArrows`。
+- **构造子字段**：构造子类型 `... -> F r1..rk` 的 binder 里，**前 arity 个**是族参数 /
+  索引（不受层级限制，**大参数合法**），其余是字段。每个字段 binder 的域 sort 必须
+  `≤ 族层级`（`Type i : Type (i+1)`，字段比族大就是宇宙不一致）；违反报
+  `TC_CtorError`：`field #k: its type sorts into Type i, above the family level Type l`。
+  检查在**表面类型表达式**上逐段做（`checkType` 取每个域的 sort，带 binder 进入
+  `Ctx`，依赖字段因此按正确上下文计算）。
+- 正/反例：
+
+  ```vuna
+  -- 合法：字段 `Type` 的 sort 是 1，族住在 Type 1
+  data D : Type 1 where
+    Mk : Type -> D
+
+  -- 合法：普通字段的 sort 都是 0，族住在 Type 0
+  data Holder : Type where
+    MkH : Int -> String -> Holder
+
+  -- 合法：`a : Type 1` 是族参数（arity 内），不受字段层级限制
+  data Big : Type 1 -> Type where
+    MkBig : (a : Type 1) -> Int -> Big a
+
+  -- 非法：字段 `Type` 的 sort 1 > 族层级 0
+  data Bad : Type where
+    MkBad : Type -> Bad        -- TC_CtorError（`Type 0` 同样被拒）
+
+  -- 非法：kind 不以宇宙收尾
+  data Bad2 : Type -> Int where
+    MkBad2 : Bad2              -- TC_DataKindArrows
+  ```
+
+  这三个反例分别锁定在 `test/corpus/dt_err/40_universe_{field,field0,kind}`，
+  正例在 `test/corpus/dt/57_universe`；非累积由
+  `test/corpus/dt_err/40_universe_cumulativity`（`bad : Type; bad = Type 0` 被拒）锁定。
+- **既有夹具的调整**：`test/corpus/dt/45_ctor_shape` 原来用
+  `data Proxy : Type where MkProxy : (t : Type) -> Proxy` 覆盖「显式宇宙域字段（擦除）」；
+  该声明按严格分层不成立（`Type` 的 sort 是 1），夹具改成 `data Proxy : Type 1`，
+  覆盖点与输出不变。显式宇宙域字段本身仍然合法，只要族的层级住得下。
+- **已知边界**：`Type i` 的显示不带 level（`Type 0` 与 `Type 1` 都打印成 `Type`），
+  所以非累积的 `TC_TypeMismatch` 文案目前是 `expected Type, got Type`——拒绝正确、
+  文案待 Core 的显示层补层级（不阻塞本阶段规则）。没有宇宙多态：族参数按
+  `Type 0` 落地（`data List a : Type` 的 `a`），索引可用更大层级的类型。
+- 实现位置：`Elab/Meta.kindWellFormed`（kind 形状 / 层级）、`Elab/Data.elabCtor` +
+  `checkCtorFieldSorts`（字段层级）。
+
 ## 记录类型（M10.5）
 
 - 声明：`record Point where` 后跟缩进的字段列表，字段写作 `x : Int`；记录可以参数化

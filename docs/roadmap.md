@@ -1,6 +1,6 @@
 # Vuna 路线图
 
-本文记录 vuna 的当前基线与**可排期阶段**（M27 起）以及**不排期的未来轨道**（F1–F4）。
+本文记录 vuna 的当前基线与**可排期阶段**（M29 起）以及**不排期的未来轨道**（F1–F4）。
 逐条技术债务、临时决定与可复现缺陷登记在 [reference/debt.md](reference/debt.md)；
 里程碑历史在 [history.md](history.md)（各阶段实现细节在 git 历史）。
 
@@ -70,6 +70,14 @@ vuna 尚未发布任何版本：没有外部用户、下游生态与历史包袱
   `[capabilities] effects` 显式声明能力（替代包名 allowlist）；原语语义规范落
   `docs/reference/primitives.md`（Int 63 位回绕、String UTF-8 字节串、除零与 `str*`
   的 interp 边界显式分类、`strShow` 统一 `Show String`）；seed 66 `.ml` / 67 文件。
+- M28：类型系统地基——宇宙定为**严格分层、非累积**（data kind 结果层级与构造子字段 sort
+  受检，`Type : Type` 仍拒绝）；擦除收成单判据 `isTypeDomain`/`binderRig`（显式 multiplicity
+  标注、不做使用分析，索引擦除策略=写成隐式 binder）；合一改为 Miller pattern unification、
+  元变量创建深度随 `Sols` 就地检查、统一 `zonkTerm` 替换 `inlineSolvedMetas`（非 pattern
+  形状保留保守 head 提取兜底）；解析层 type/value/ctor 三命名空间分离，Elab 用显式命名
+  空间查询替代「kind 是不是宇宙」猜测；新增 `axiom` 声明、定义 η 展开、let/where 统一
+  绑定块，签名量化 banned 集改按模块作用域（C29）；`case` 收敛到单一模式矩阵规范形并新增
+  冗余/不可达分支诊断；seed 66 `.ml` / 67 文件（模块面未变）。
 
 ## 终态（目标）
 
@@ -115,35 +123,12 @@ vuna 尚未发布任何版本：没有外部用户、下游生态与历史包袱
 | --- | --- | --- | --- | --- |
 | M26 | 包上下文统一（删除 roots）与单一路径 | — | 已完成 | A01–A06、A13、A15–A16、C08、C21、E14–E15 |
 | M27 | 内置、原语与效应边界 | M26 | 已完成 | A07–A11、B16、C16–C19、D16 |
-| M28 | 类型系统地基 | M27 | 待排期 | B05–B10、B15、D05–D10 |
+| M28 | 类型系统地基 | M27 | 已完成 | B05–B08、B10、B15、B18、C29、D05–D07、D10 |
 | M29 | 相等、实例与证明 ergonomics | M28 | 待排期 | A14、B11–B14、C05、D11–D12 |
 | M30 | 工具链与包 | —（可与 M27–M29 并行） | 待排期 | C11–C13、C25、D13–D15、D17–D18、E08 |
 | F1–F4 | 模块 v3 / 运行时 / 效应并发 / 生态 | 不排期 | 不排期 | D01–D04 |
 
-## 可排期阶段（M28 起）
-
-### M28：类型系统地基
-
-**目标**：把「宇宙 / 擦除 / 合一 / 命名空间 / 定义形式」从中间态收成一套明确规则，
-为 M29 的相等与证明能力打地基。
-
-**范围**（debt）：
-- 宇宙：决定「累积性 + lift」还是「单一 Type:Type」（B05/D05）；`kindWellFormed` 校验
-  data kind 的 level 与构造子结果（B05/D06）。
-- 擦除：4 个谓词收成一个判据；采用使用分析/QTT multiplicity 或显式标注（B06/D07）；
-  索引擦除策略明确。
-- 合一：pattern unification（Miller patterns）、元变量创建深度就地检查、统一 zonk
-  （B07）；删除 `inlineSolvedMetas` 补洞。
-- 命名空间：type/value 双命名空间进解析层，删除同名特判（B18）。
-- 定义形式：axiom/foreign 定义、η 展开（参数少于签名）、let/where 统一作用域模型
-  （B10/D10）。
-- case 规范形：统一走模式矩阵单一规范形；空族/absurd 与中性索引（B08/B15/D12 的
-  absurd 部分）。
-
-**验收**：宇宙/kind 反例被拒；合一有正/反例测试；编译器源码在**不伪造包名**的前提下
-通过终止性/覆盖检查；命名空间行为一致。
-
-**前置**：M27。**决策点**：宇宙方案；QTT vs 显式 multiplicity。
+## 可排期阶段（M29 起）
 
 ### M29：相等、实例与证明 ergonomics
 
@@ -223,8 +208,10 @@ DT 验证库（Vec/Fin/Map/Set/排序/证明组合子）；包 registry、版本
 
 ## 待决策（在所属阶段拍板，不在本文件预设）
 
-- **宇宙**：累积性 + lift（保持分层）vs 单一 `Type : Type`（简单但不一致）——M28。
-- **擦除/QTT**：整程序使用分析 + multiplicity 标注 vs 继续 rig 显式标注——M28。
+- **宇宙**：已定并落地（M28）**严格分层、非累积、无 `Type : Type`**；data kind 结果层级与
+  构造子字段 sort 受检，累积性/宇宙多态留研究（见「决策变更」）。
+- **擦除/QTT**：已定并落地（M28）**显式 multiplicity 标注（隐式 binder 即 Rig0）**，不做
+  整程序使用分析；QTT 完整变体留研究。
 - **相等**：强制 Eq 字典 vs 类型导向结构比较；若保留兜底，其可比较类型域如何定义——M25 已做安全域限制，M29 定稿。
 - **type-as-value**：引入 type codes（类型作为一等值）vs 只保留 `cast` 组合子——M29。
 - **无 manifest 时的 base 定位**：已定并落地（M26）**可执行文件相对布局 + `VUNA_BASE` 覆盖**；
@@ -263,11 +250,23 @@ DT 验证库（Vec/Fin/Map/Set/排序/证明组合子）；包 registry、版本
 | 检查豁免（按包名跳过终止性/覆盖率）重设计为可审计信任 | **已删除**（M25）：检查器改进 + 源码修复达标；不维护名单 | 任何“可信名单”都会重新变成静默绕过；宁可让编译器源码接受与用户代码相同的检查 |
 | 「完成即删除细节」只记 history | 另立 [debt.md](reference/debt.md) 债务账本，roadmap 按债务排阶段 | 让「哪些妥协还在、由谁在哪个阶段关闭」可审计、不丢账 |
 | 诊断消息是纯文本（无稳定标识符） | 加语义错误码前缀 `[CODE]`（`TC_`/`CG_`/`LX_`/`PS_`/`LD_`/`LN_`/`FX_` 域）；**M30 起真源是域枚举**（构造子携带模板、`Nat` 索引锁定 arity），`vuna gen-errors` 遍历枚举表生成 `docs/.generated/errors.md`；删除了 `-- @code` docstring | 诊断可被符号引用/去重/测试；一个码一种语义、只增不删；arity 写错即编译失败；运行输出 `文件:行:列: [CODE] 消息`（lint 为 `[LN_XXX] 规则: 消息`） |
+| Bool 双身份（prelude 类型桩 + `Base.Bool` data）与短名内置身份 | **M27：内置实体按完整声明符号判定**——Bool/List/IO 都是 base 普通 data（canonical `Base.Bool.Bool` / `Base.List.List` / `Base.IO.IO`），删 `lastName`/`isGlobalCtor`/Bool 桩；用户同名 data 是普通 data | 短名判定在用户同名 data 上必然误判；完整符号是 Loader 已 mangle 的唯一身份，无需第二套特判 |
+| 公开效果名与 `prim_*` 双份 | **M27：只保留 `prim_*` primitive 面**；用户经 `Base.IO`（IO 动作）或在自己 manifest 声明能力后直接调 `prim_*` | 双份名字无语义差异，只有维护成本；`prim_*` 才是 runtime 的 primitive 接口 |
+| 效果 allowlist 按包名字符串（`vuna`/`vuna-compiler`/`vuna-base`） | **M27：manifest `[capabilities] effects = [...]` 显式能力**，按包声明、未知能力名报错；无 manifest 无能力 | 包名是普通字符串、可伪造；能力是显式、可审计的声明（权限策略），不再随包名路由漂移 |
+| Int/String 语义未定 | **M27：Int = 固定宽度 63 位（补码回绕）；String = UTF-8 字节串**；除零与 `strUnpack`/`strPack` 等 interp 不归约项**显式分类**并写规范 | 宿主 OCaml 表示与大整数/码点不可兼得；先钉死可实现语义，Unicode 语义留 F2/F4 |
+| `Show String` 两套转义（runtime vs `Base.Show`） | **M27：`strShow` 是唯一实现**（runtime `dt_show_string`）；`Base.Show` String 实例与 `main : String` 展示共用 | 同一语义只能有一个实现；两套必然漂移 |
+| 生成 runtime 去掉 Unix 依赖（多后端目标） | **M27 决策：保留单个 OCaml runtime 的无条件 Unix 依赖**（`Unix.stat`/`gettimeofday`/`readlink`，`build.sh` 链接 `unix.cmxa`），作为 runtime 契约写入 `primitives.md`；无 Unix 后端归 F2 | 当前唯一后端就是 OCaml + Unix（base 定位还需要 `/proc/self/exe`）；抽象后端会引入 IR 与第二套语义，属 F2 的范围，不应在 M27 半途引入 |
+| 宇宙：累积性 + lift vs 单一 `Type : Type`（M28 决策点） | **M28：严格分层、非累积、无 `Type : Type`**；data kind 必须是 Pi 链 → `Type l`（l 非负），构造子字段 binder 的 sort 必须 ≤ 族层级（族参数/索引不受限）；不引入 subtyping | 半数累积性（无 subtyping 感知 conv）会破坏「检查器可信」；严格分层一致、简单、与擦除 codegen 无关；累积性/宇宙多态留研究 |
+| 擦除判据 4 个谓词、按语法 rig 判定 vs 使用分析/QTT | **M28：单一判据 `isTypeDomain`/`binderRig`**（隐式 binder 恒 `Rig0`；显式 binder 仅域在类型层时 `Rig0`）；**索引擦除=写成隐式 binder**；不做整程序使用分析 | 多判据在显式高阶类型参数上漂移（`binderRig` 只查裸 `Type`、`typeLayerRig` 才查 Pi 链）；显式 multiplicity 已足够表达，使用分析属 F3/QTT 研究 |
+| 元变量求解只覆盖少数「头一致」形状 + 事后作用域复核 + `inlineSolvedMetas` 补洞 | **M28：Miller pattern unification**（局部变量 spine → λ 抽象）+ 创建深度随 `Sols` **就地**检查 + 统一 `zonkTerm`；非 pattern 形状保留保守 head 提取兜底（有明确诊断） | pattern 是唯一可判定的高阶片段；就地检查取代 `O(#解)×conv` 的事后扫表；zonk 统一后「已解元变量进项」只有一个入口 |
+| 解析层单命名空间；Elab 靠「kind 是不是宇宙」猜类型位置 | **M28：`type`/`value`/`ctor` 三命名空间进 Loader（`Namespaces`）；Elab 显式 `typeLookup`/`valueLookup`** | 导出层早已按 kind 区分，解析层却拍平成一个表，同名 type/ctor/def 靠特判兜住；双命名空间让位置决定语义、不再猜 |
+| 顶层定义必须有体；签名参数个数必须与定义一致；where 是独立作用域模型 | **M28：`axiom` 声明**（无体、擦除层，运行时使用报 `CG_AxiomAtRuntime`）；**定义参数少于签名时 η 展开**；**`let`/`where` 共享同一绑定块解析与签名 gate**；签名量化 banned 集按模块作用域（C29） | 「无体定义」是证明/外来原语的正当形态；η-long 是类型论的规范形；两份作用域逻辑必然漂移 |
+| case 精化三条路径（直接/去重/嵌套折叠）与散落可达性判定 | **M28：单一入口**（源级校验 → 模式矩阵唯一降级 → 家族降级）+ **单一 `BranchVerdict` 可达性判据** + 冗余/不可达/兜底后分支诊断 | 三条路径的嵌套/去重语义互相掩盖（中性索引下「写也错、省也错」）；规范形只有一个 |
 
 ## 研究储备（不排期，不占编号）
 
-- QTT 的完整变体（依赖 multiplicity、资源安全）——M28 先落最小判据，完整理论在此。
-- 宇宙多态 / 累积性的更强形式（超出 M28 决策）——研究项。
+- QTT 的完整变体（依赖 multiplicity、资源安全）——M28 已定「显式 multiplicity 标注」的最小判据，完整理论在此。
+- 宇宙多态 / 累积性的更强形式（M28 已定「严格分层、非累积」；更强形式超出该决策）——研究项。
 - CoC 补完：非直谓 Prop、完整依赖消除的进阶形态（M28 只做 kind 形状的地基）。
 - 线性/量化类型（资源安全）、证明自动化/tactics/reflection、`rewrite`/`with` 等
   证明 ergonomics 的进阶形态。
@@ -279,10 +278,4 @@ DT 验证库（Vec/Fin/Map/Set/排序/证明组合子）；包 registry、版本
 - 已完成阶段细节：[history.md](history.md)
 - 子系统地图：[architecture.md](architecture.md)；DT 语义与设计边界：[dt.md](reference/dt.md)、
   [dt-core.md](dt-core.md)；自举链：[bootstrap.md](reference/bootstrap.md)；测试与 CI：
-| Bool 双身份（prelude 类型桩 + `Base.Bool` data）与短名内置身份 | **M27：内置实体按完整声明符号判定**——Bool/List/IO 都是 base 普通 data（canonical `Base.Bool.Bool` / `Base.List.List` / `Base.IO.IO`），删 `lastName`/`isGlobalCtor`/Bool 桩；用户同名 data 是普通 data | 短名判定在用户同名 data 上必然误判；完整符号是 Loader 已 mangle 的唯一身份，无需第二套特判 |
-| 公开效果名与 `prim_*` 双份 | **M27：只保留 `prim_*` primitive 面**；用户经 `Base.IO`（IO 动作）或在自己 manifest 声明能力后直接调 `prim_*` | 双份名字无语义差异，只有维护成本；`prim_*` 才是 runtime 的 primitive 接口 |
-| 效果 allowlist 按包名字符串（`vuna`/`vuna-compiler`/`vuna-base`） | **M27：manifest `[capabilities] effects = [...]` 显式能力**，按包声明、未知能力名报错；无 manifest 无能力 | 包名是普通字符串、可伪造；能力是显式、可审计的声明（权限策略），不再随包名路由漂移 |
-| Int/String 语义未定 | **M27：Int = 固定宽度 63 位（补码回绕）；String = UTF-8 字节串**；除零与 `strUnpack`/`strPack` 等 interp 不归约项**显式分类**并写规范 | 宿主 OCaml 表示与大整数/码点不可兼得；先钉死可实现语义，Unicode 语义留 F2/F4 |
-| `Show String` 两套转义（runtime vs `Base.Show`） | **M27：`strShow` 是唯一实现**（runtime `dt_show_string`）；`Base.Show` String 实例与 `main : String` 展示共用 | 同一语义只能有一个实现；两套必然漂移 |
-| 生成 runtime 去掉 Unix 依赖（多后端目标） | **M27 决策：保留单个 OCaml runtime 的无条件 Unix 依赖**（`Unix.stat`/`gettimeofday`/`readlink`，`build.sh` 链接 `unix.cmxa`），作为 runtime 契约写入 `primitives.md`；无 Unix 后端归 F2 | 当前唯一后端就是 OCaml + Unix（base 定位还需要 `/proc/self/exe`）；抽象后端会引入 IR 与第二套语义，属 F2 的范围，不应在 M27 半途引入 |
   [testing.md](reference/testing.md)；已知限制：[limits.md](reference/limits.md)

@@ -142,7 +142,7 @@ and v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteWalkEApp = (fun fuel -> (fun c
 )
   | _ -> failwith "DT: impossible branch"
 )))))))))))))
-and v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteWalkEAppMap = (fun fuel -> (fun comp -> (fun ctors -> (fun projs -> (fun caller -> (fun facts -> (fun sizes -> (fun region -> (fun fn -> (fun args -> (fun acc -> (if ((bi_le_int fuel) 0) then acc else ((fun nd_uscrut -> (match nd_uscrut with
+and v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteWalkEAppMap = (fun fuel -> (fun comp -> (fun ctors -> (fun projs -> (fun caller -> (fun facts -> (fun sizes -> (fun region -> (fun fn -> (fun args -> (fun acc -> (if ((bi_le_int fuel) 0) then acc else ((fun nd_uscrut11 -> (match nd_uscrut11 with
   | C_Base_dList_dList_Base_dList_dCons (dtb__91, dtb__92) -> (match dtb__91 with
   | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dELam (dtb__93, dtb__94, dtb__95) -> (match dtb__93 with
   | C_Base_dList_dList_Base_dList_dCons (dtb__96, dtb__97) -> (match dtb__97 with
@@ -155,14 +155,14 @@ and v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteWalkEAppMap = (fun fuel -> (fu
 )
   | _ -> (match dtb__92 with
   | C_Base_dList_dList_Base_dList_dCons (dtb__100, dtb__101) -> (match dtb__101 with
-  | C_Base_dList_dList_Base_dList_dNil -> (match dtb__91 with
-  | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEApp (dtb__102, dtb__103, dtb__104) -> (match dtb__102 with
-  | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEVar (dtb__105, dtb__106) -> (if ((v_Base_dList_dmemName dtb__105) comp) then (((((((((((((v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteWalkMapPartialInline ((bi_sub fuel) 1)) comp) ctors) projs) caller) facts) sizes) region) dtb__105) dtb__103) dtb__100) dtb__104) acc) else ((((((((((v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteCollectList ((bi_sub fuel) 1)) comp) ctors) projs) caller) facts) sizes) region) args) acc))
+  | C_Base_dList_dList_Base_dList_dNil -> ((fun nd_uscrut25 -> (match nd_uscrut25 with
+  | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEVar (dtb__102, dtb__103) -> (if ((v_Base_dList_dmemName dtb__102) comp) then (((((((((((((v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteWalkMapPartialInline ((bi_sub fuel) 1)) comp) ctors) projs) caller) facts) sizes) region) dtb__102) C_Base_dList_dList_Base_dList_dNil) dtb__100) dtb__103) acc) else ((((((((((v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteCollectList ((bi_sub fuel) 1)) comp) ctors) projs) caller) facts) sizes) region) args) acc))
+  | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEApp (dtb__104, dtb__105, dtb__106) -> (match dtb__104 with
+  | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEVar (dtb__107, dtb__108) -> (if ((v_Base_dList_dmemName dtb__107) comp) then (((((((((((((v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteWalkMapPartialInline ((bi_sub fuel) 1)) comp) ctors) projs) caller) facts) sizes) region) dtb__107) dtb__105) dtb__100) dtb__106) acc) else ((((((((((v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteCollectList ((bi_sub fuel) 1)) comp) ctors) projs) caller) facts) sizes) region) args) acc))
   | _ -> ((((((((((v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteCollectList ((bi_sub fuel) 1)) comp) ctors) projs) caller) facts) sizes) region) args) acc)
 )
-  | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEVar (dtb__107, dtb__108) -> (if ((v_Base_dList_dmemName dtb__107) comp) then (((((((((((((v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteWalkMapPartialInline ((bi_sub fuel) 1)) comp) ctors) projs) caller) facts) sizes) region) dtb__107) C_Base_dList_dList_Base_dList_dNil) dtb__100) dtb__108) acc) else ((((((((((v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteCollectList ((bi_sub fuel) 1)) comp) ctors) projs) caller) facts) sizes) region) args) acc))
   | _ -> ((((((((((v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteCollectList ((bi_sub fuel) 1)) comp) ctors) projs) caller) facts) sizes) region) args) acc)
-)
+)) dtb__91)
   | _ -> ((((((((((v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteCollectList ((bi_sub fuel) 1)) comp) ctors) projs) caller) facts) sizes) region) args) acc)
 )
   | _ -> ((((((((((v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteCollectList ((bi_sub fuel) 1)) comp) ctors) projs) caller) facts) sizes) region) args) acc)
@@ -170,14 +170,14 @@ and v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteWalkEAppMap = (fun fuel -> (fu
 )
   | _ -> (match dtb__92 with
   | C_Base_dList_dList_Base_dList_dCons (dtb__109, dtb__110) -> (match dtb__110 with
-  | C_Base_dList_dList_Base_dList_dNil -> (match dtb__91 with
-  | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEApp (dtb__111, dtb__112, dtb__113) -> (match dtb__111 with
-  | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEVar (dtb__114, dtb__115) -> (if ((v_Base_dList_dmemName dtb__114) comp) then (((((((((((((v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteWalkMapPartialInline ((bi_sub fuel) 1)) comp) ctors) projs) caller) facts) sizes) region) dtb__114) dtb__112) dtb__109) dtb__113) acc) else ((((((((((v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteCollectList ((bi_sub fuel) 1)) comp) ctors) projs) caller) facts) sizes) region) args) acc))
+  | C_Base_dList_dList_Base_dList_dNil -> ((fun nd_uscrut22 -> (match nd_uscrut22 with
+  | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEVar (dtb__111, dtb__112) -> (if ((v_Base_dList_dmemName dtb__111) comp) then (((((((((((((v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteWalkMapPartialInline ((bi_sub fuel) 1)) comp) ctors) projs) caller) facts) sizes) region) dtb__111) C_Base_dList_dList_Base_dList_dNil) dtb__109) dtb__112) acc) else ((((((((((v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteCollectList ((bi_sub fuel) 1)) comp) ctors) projs) caller) facts) sizes) region) args) acc))
+  | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEApp (dtb__113, dtb__114, dtb__115) -> (match dtb__113 with
+  | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEVar (dtb__116, dtb__117) -> (if ((v_Base_dList_dmemName dtb__116) comp) then (((((((((((((v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteWalkMapPartialInline ((bi_sub fuel) 1)) comp) ctors) projs) caller) facts) sizes) region) dtb__116) dtb__114) dtb__109) dtb__115) acc) else ((((((((((v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteCollectList ((bi_sub fuel) 1)) comp) ctors) projs) caller) facts) sizes) region) args) acc))
   | _ -> ((((((((((v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteCollectList ((bi_sub fuel) 1)) comp) ctors) projs) caller) facts) sizes) region) args) acc)
 )
-  | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEVar (dtb__116, dtb__117) -> (if ((v_Base_dList_dmemName dtb__116) comp) then (((((((((((((v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteWalkMapPartialInline ((bi_sub fuel) 1)) comp) ctors) projs) caller) facts) sizes) region) dtb__116) C_Base_dList_dList_Base_dList_dNil) dtb__109) dtb__117) acc) else ((((((((((v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteCollectList ((bi_sub fuel) 1)) comp) ctors) projs) caller) facts) sizes) region) args) acc))
   | _ -> ((((((((((v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteCollectList ((bi_sub fuel) 1)) comp) ctors) projs) caller) facts) sizes) region) args) acc)
-)
+)) dtb__91)
   | _ -> ((((((((((v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteCollectList ((bi_sub fuel) 1)) comp) ctors) projs) caller) facts) sizes) region) args) acc)
 )
   | _ -> ((((((((((v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteCollectList ((bi_sub fuel) 1)) comp) ctors) projs) caller) facts) sizes) region) args) acc)
@@ -185,14 +185,14 @@ and v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteWalkEAppMap = (fun fuel -> (fu
 )
   | _ -> (match dtb__92 with
   | C_Base_dList_dList_Base_dList_dCons (dtb__118, dtb__119) -> (match dtb__119 with
-  | C_Base_dList_dList_Base_dList_dNil -> (match dtb__91 with
-  | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEApp (dtb__120, dtb__121, dtb__122) -> (match dtb__120 with
-  | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEVar (dtb__123, dtb__124) -> (if ((v_Base_dList_dmemName dtb__123) comp) then (((((((((((((v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteWalkMapPartialInline ((bi_sub fuel) 1)) comp) ctors) projs) caller) facts) sizes) region) dtb__123) dtb__121) dtb__118) dtb__122) acc) else ((((((((((v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteCollectList ((bi_sub fuel) 1)) comp) ctors) projs) caller) facts) sizes) region) args) acc))
+  | C_Base_dList_dList_Base_dList_dNil -> ((fun nd_uscrut19 -> (match nd_uscrut19 with
+  | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEVar (dtb__120, dtb__121) -> (if ((v_Base_dList_dmemName dtb__120) comp) then (((((((((((((v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteWalkMapPartialInline ((bi_sub fuel) 1)) comp) ctors) projs) caller) facts) sizes) region) dtb__120) C_Base_dList_dList_Base_dList_dNil) dtb__118) dtb__121) acc) else ((((((((((v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteCollectList ((bi_sub fuel) 1)) comp) ctors) projs) caller) facts) sizes) region) args) acc))
+  | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEApp (dtb__122, dtb__123, dtb__124) -> (match dtb__122 with
+  | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEVar (dtb__125, dtb__126) -> (if ((v_Base_dList_dmemName dtb__125) comp) then (((((((((((((v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteWalkMapPartialInline ((bi_sub fuel) 1)) comp) ctors) projs) caller) facts) sizes) region) dtb__125) dtb__123) dtb__118) dtb__124) acc) else ((((((((((v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteCollectList ((bi_sub fuel) 1)) comp) ctors) projs) caller) facts) sizes) region) args) acc))
   | _ -> ((((((((((v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteCollectList ((bi_sub fuel) 1)) comp) ctors) projs) caller) facts) sizes) region) args) acc)
 )
-  | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEVar (dtb__125, dtb__126) -> (if ((v_Base_dList_dmemName dtb__125) comp) then (((((((((((((v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteWalkMapPartialInline ((bi_sub fuel) 1)) comp) ctors) projs) caller) facts) sizes) region) dtb__125) C_Base_dList_dList_Base_dList_dNil) dtb__118) dtb__126) acc) else ((((((((((v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteCollectList ((bi_sub fuel) 1)) comp) ctors) projs) caller) facts) sizes) region) args) acc))
   | _ -> ((((((((((v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteCollectList ((bi_sub fuel) 1)) comp) ctors) projs) caller) facts) sizes) region) args) acc)
-)
+)) dtb__91)
   | _ -> ((((((((((v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteCollectList ((bi_sub fuel) 1)) comp) ctors) projs) caller) facts) sizes) region) args) acc)
 )
   | _ -> ((((((((((v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteCollectList ((bi_sub fuel) 1)) comp) ctors) projs) caller) facts) sizes) region) args) acc)
@@ -557,15 +557,14 @@ let v_Vuna_dCompiler_dElab_dTermination_dScc_dhasFuelGuard = (fun p0 -> (fun e -
 
 let v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteFuelStrict = (fun callerFuel -> (fun site -> (match ((v_Vuna_dCompiler_dElab_dTermination_dMeasure_dnthExpr (v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteArgs site)) 0) with
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing
-  | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__258) -> (match dtb__258 with
-  | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEVar (dtb__259, dtb__260) -> (if ((bi_eq_str dtb__259) callerFuel) then (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (false)) else C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing)
-  | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEApp (dtb__261, dtb__262, dtb__263) -> (match dtb__261 with
-  | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEVar (dtb__264, dtb__265) -> (if ((bi_eq_str dtb__264) "-") then (match dtb__262 with
-  | C_Base_dList_dList_Base_dList_dCons (dtb__266, dtb__267) -> (match dtb__266 with
-  | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEVar (dtb__268, dtb__269) -> (match dtb__267 with
-  | C_Base_dList_dList_Base_dList_dCons (dtb__270, dtb__271) -> (match dtb__270 with
-  | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEInt (dtb__272, dtb__273) -> (match dtb__271 with
-  | C_Base_dList_dList_Base_dList_dNil -> (if ((bi_eq_str dtb__268) callerFuel) then (if ((bi_gt_int dtb__272) 0) then (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (true)) else C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing) else C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing)
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__258) -> ((fun nd_uscrut4 -> (match nd_uscrut4 with
+  | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEApp (dtb__259, dtb__260, dtb__261) -> (match dtb__259 with
+  | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEVar (dtb__262, dtb__263) -> (if ((bi_eq_str dtb__262) "-") then ((fun nd_uscrut10 -> (match nd_uscrut10 with
+  | C_Base_dList_dList_Base_dList_dCons (dtb__264, dtb__265) -> (match dtb__264 with
+  | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEVar (dtb__266, dtb__267) -> (match dtb__265 with
+  | C_Base_dList_dList_Base_dList_dCons (dtb__268, dtb__269) -> (match dtb__268 with
+  | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEInt (dtb__270, dtb__271) -> (match dtb__269 with
+  | C_Base_dList_dList_Base_dList_dNil -> (if ((bi_eq_str dtb__266) callerFuel) then (if ((bi_gt_int dtb__270) 0) then (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (true)) else C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing) else C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing)
   | _ -> C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing
 )
   | _ -> C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing
@@ -575,11 +574,12 @@ let v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteFuelStrict = (fun callerFuel -
   | _ -> C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing
 )
   | _ -> C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing
-) else C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing)
+)) dtb__260) else C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing)
   | _ -> C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing
 )
+  | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEVar (dtb__272, dtb__273) -> (if ((bi_eq_str dtb__272) callerFuel) then (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (false)) else C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing)
   | _ -> C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing
-)
+)) dtb__258)
   | _ -> failwith "DT: impossible branch"
 )))
 

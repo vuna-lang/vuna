@@ -327,9 +327,14 @@ else case inlinePrecGo formatFuelBound 0 e of
 
 -- 类型表达式不折行（保持签名/字段类型紧凑，避免 `->` 链被打断）。
 renderTypeExpr : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Expr -> List String
-renderTypeExpr at lineInd e = case inlinePrecGo formatFuelBound 0 e of
+renderTypeExpr at lineInd e = renderTypeExprFuel formatFuelBound at lineInd e
+
+-- 显式 fuel 的类型渲染：绑定块里的签名行需要把 fuel 串下去（SCT）。
+renderTypeExprFuel : Int -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Expr -> List String
+renderTypeExprFuel fuel at lineInd e = if fuel <= 0 then []
+else case inlinePrecGo (fuel - 1) 0 e of
   Just s => [s]
-  Nothing => renderBlockGo formatFuelBound at lineInd e
+  Nothing => renderBlockGo (fuel - 1) at lineInd e
 
 -- 行内放不下时的折行形式。
 renderWideGo : Int -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Expr -> List String
@@ -465,11 +470,22 @@ else case binds of
     in append ("let" :: bindingLines)
       (prefixFirst (spaces lineInd ++ "in ") (renderExprGo (fuel - 1) at lineInd body))
 
+-- M28：`let` 绑定也支持可选签名行（与 where 共用绑定块模型）；解析器把签名降级成
+-- `EAnn value ty`，这里按「签名行 + 绑定」还原，否则 fmt 产物会丢掉类型标注。
 renderLetBindingGo : Int -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Pair Pat Expr -> List String
-renderLetBindingGo fuel at bindInd (Pair pat value) =
-  if fuel <= 0 then []
-  else attachAt at (patSpan pat) bindInd
-    (renderBindingValueGo (fuel - 1) at bindInd (renderPatGo formatFuelBound pat ++ " =") value)
+renderLetBindingGo fuel at bindInd (Pair pat value) = if fuel <= 0 then []
+else case value of
+  EAnn inner ty annSp =>
+    let
+      sigPrefix = case pat of
+        PVar name psp => spaces bindInd ++ name ++ " : "
+        _ => spaces bindInd ++ renderPatGo formatFuelBound pat ++ " : "
+      sigLines = prefixFirst sigPrefix (renderTypeExprFuel (fuel - 1) at bindInd ty)
+    in append (attachAt at annSp bindInd sigLines)
+      (attachAt at (patSpan pat) bindInd (renderBindingValueGo (fuel - 1) at bindInd (renderPatGo formatFuelBound pat ++ " =") inner))
+  _ =>
+    attachAt at (patSpan pat) bindInd
+      (renderBindingValueGo (fuel - 1) at bindInd (renderPatGo formatFuelBound pat ++ " =") value)
 
 renderBindingValueGo : Int -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> String -> Expr -> List String
 renderBindingValueGo fuel at lineInd prefixText value = if fuel <= 0 then []

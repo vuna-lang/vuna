@@ -23,15 +23,17 @@ renderDeclAt at lineInd decl = attachAt at (declSpan decl) lineInd (renderDeclBo
 renderDeclBody : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Decl -> List String
 renderDeclBody at lineInd decl = case decl of
   DData name params kind ctors derivings sp => renderDataDecl at name params kind ctors derivings
-  DSig name ty sp => renderSigDecl at lineInd name ty
+  DAxiom name ty sp => renderSigLine at lineInd "axiom " name ty
+  DSig name ty sp => renderSigLine at lineInd "" name ty
   DFun name pats body sp => renderClause at lineInd name pats body
   DRecord name params fields derivings sp => renderRecordDecl at name params fields derivings
   DTrait name params methods sp => renderTraitDecl at name params methods
   DInstance mname isDefault head methods sp => renderInstanceDecl at mname head methods
 
-renderSigDecl : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> String -> Expr -> List String
-renderSigDecl at lineInd name ty =
-  prefixFirst (spaces lineInd ++ name ++ " : ") (renderTypeExpr at lineInd ty)
+-- 顶层签名与 axiom 声明共用：`<prefix>name : Ty`（prefix 为 "" 或 "axiom "）。
+renderSigLine : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> String -> String -> Expr -> List String
+renderSigLine at lineInd prefix name ty =
+  prefixFirst (spaces lineInd ++ prefix ++ name ++ " : ") (renderTypeExpr at lineInd ty)
 
 renderDataDecl : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> String -> List String -> Expr -> List Ctor -> List String -> List String
 renderDataDecl at name params kind ctors derivings =

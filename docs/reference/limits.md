@@ -30,17 +30,23 @@ DT 设计见 [docs/dt-core.md](../dt-core.md)。
 - `do` / Monad / IO 组合子已在 M11 实现；DT 自 M13 起步，M14 索引族、M15 隐式/
   接口/洞、M16 终止性、M17 工具链、M18.5–M18.6 擦除修复与表示层定型、M19–M22
   语言面/多文件/效应、M23 夹具迁移与 `interp` 核心求值、M24 单路径收尾、M24.5 等式
-  搬运、M24.6 编译器本体最小重构、M24.7 trait 库化、**M26 包上下文统一与单一
-  codegen 输出模型**。**当前阻碍按阶段登记在
+  搬运、M24.6 编译器本体最小重构、M24.7 trait 库化、M26 包上下文统一与单一 codegen
+  输出模型、M27 内置/原语/效应边界、**M28 类型系统地基**。**当前阻碍按阶段登记在
   [docs/roadmap.md](../roadmap.md)**。仍是边界的几条：
   - **身份按声明符号判定（M27）**：`Int` / `String` 是 language primitive 类型；`Bool` /
     `List` / `IO` 是 base 的普通 `data` 声明，canonical 身份分别是 `Base.Bool.Bool` /
     `Base.List.List` / `Base.IO.IO`。没有短名判定、没有 prelude 桩、没有全局构造子放行；
     用户同名 `data` 是普通声明。原语语义与身份常量表见 [primitives.md](primitives.md)。
-  - **擦除由 rig 判据驱动**：`Rig0`（隐式 binder / `Type` 域）不进运行时表示，`Rig1`
-    （显式值、显式索引 `(n : Nat)`）保留字段（`17_erase` / `dt/38_explicit_index` 锁定
-    两侧）；不做整程序使用分析，「想擦但被读」的显式索引不会自动擦除（可改成隐式
-`{n : Nat}`，代价是分支体读不到）。详见 [dt-core.md](../dt-core.md) §6。
+  - **擦除由单一判据驱动（M28）**：`Elab.Meta.isTypeDomain`/`binderRig` 是唯一入口——隐式
+    binder 恒 `Rig0`，显式 binder 仅当域在类型层（宇宙或域全为类型层的 Pi 链）才 `Rig0`，
+    其余 `Rig1`。**索引擦除策略=写成隐式 binder**：隐式索引 `{n : Nat}` 无运行时字段，
+    显式索引 `(n : Nat)` 保留字段（`dt/17_erase` / `dt/38_explicit_index` 锁定两侧）；
+    不做整程序使用分析，「想擦但被读」的显式索引不会自动擦除（改成隐式即读不到该值）。
+    详见 [dt-core.md](../dt-core.md) §6 与 [dt.md](dt.md)。
+  - **宇宙严格分层、非累积（M28）**：`Type i : Type (i+1)`，Pi formation `max(i,j)`，
+    `Type i ≠ Type j`，无 subtyping/cumulativity；data kind 必须是 Pi 链 → `Type l`，
+    构造子**字段 binder** 的域 sort 必须 ≤ 族层级（`data D : Type where Mk : Type -> D`
+    被拒，改住 `Type 1` 即可；族参数/索引不受限）。累积性/宇宙多态归研究。
   - **终止性：结构下降 + 守卫 Int（M25.2a/M25.2b）**：递归调用（含互递归组内
     调用）必须在某个固定测度位置上递减；测度可以是形参的真子项（含嵌套构造子模式、
     `case` 分支、`f v` 形式的单 clause 投影/accessor），或**带守卫的 Int**：
@@ -52,11 +58,11 @@ DT 设计见 [docs/dt-core.md](../dt-core.md)。
     静默通过）。每个 SCC 的每个环都必须有严格下降边（去掉严格边后无环）。
     **没有包级豁免**：依赖模块、入口模块与编译器包用同一套判据；基库为此改了两处
     实现（`Base.List.range` 改倒计数、`Base.String.split` 两段递归共享显式 fuel）。
-  - **`where` 绑定必须写签名且是顺序 let**：每个绑定都要在子句前写签名（缺签名报
-    `DT: where binding ... needs a type signature`），只能引用之前的绑定——不支持前向
-    引用 / 自递归 / 互递归（引用报 `DT: unknown name ...`），递归与互相引用放顶层定义组。
-    通配绑定 `_ = expr` 无法写签名，因此也会报缺签名诊断。语法见
-    [language.md](language.md)。
+  - **`where` 绑定必须写签名且是顺序 let**：M28 起 `let`/`where` 共用同一绑定块解析与
+    同一个签名 gate：`let` 的签名行可选（缺省推断）、支持子句糖；`where` 仍要求每个绑定
+    在子句前写签名（缺签名报 `DT: binding ... needs a type signature`）。只能引用之前的
+    绑定——不支持前向引用 / 自递归 / 互递归，递归与互相引用放顶层定义组。通配绑定
+    `_ = expr` 无法写签名，因此也会报缺签名诊断。语法见 [language.md](language.md)。
   - **`vuna interp` 不执行效果**：任何 `main : IO a` 一律报
     `DT: interp cannot execute effects (main : IO a); compile and run the program instead`
     （退出码 2），不做「纯动作求值、效果丢弃」的区分；需要效果时用 `compile` + 运行产物。
@@ -93,6 +99,10 @@ DT 设计见 [docs/dt-core.md](../dt-core.md)。
   - **类型族（结果以 `Type` 收尾的 Pi 链，如 `sel : Nat -> Type`）整体擦除（M24.6）**：
     不生成运行时定义；在运行时定义里把擦除的族参数当值用报错
     （`dt_err/39_type_family_runtime_use`）。
+  - **axiom 与命名空间（M28）**：`axiom name : Ty` 是无运行时定义的擦除/类型层声明，
+    运行时（非擦除位置）使用报 `CG_AxiomAtRuntime`；限定名 `M.typeConst` 可在类型位置
+    引用（裸小写名仍按隐式类型变量处理，跨模块类型位置引用请用限定名）。同模块
+    `data T` 与 `def T` 同名仍不支持（需 Elab globals 按命名空间拆表），归 F1 收尾。
   - **等式搬运边界（M24.5）**：隐式**值**参数 `{x : a}` 不支持（类型/值参数都要写显式）；
     构造子当函数值部分应用不参与 `conv`（`cong ... Succ ...` 与饱和 `VCon` 对不上，
     可用 lambda 或包装函数绕过）；`Ctx n -> Fin n -> Tm n` 这类**依赖索引取值**仍写
@@ -107,7 +117,9 @@ DT 设计见 [docs/dt-core.md](../dt-core.md)。
   - **延迟字典目标的最终诊断**：类参数始终未解时报 `unsolved metavariable`（而非「缺
     实例」）；`missingInstance` 级诊断细化留待后续。**DT 要求顶层定义有类型签名**：新增
     代码同样要写，否则报 `DT: expected a type signature for ...`。
-  - **高阶/开放元变量解**：`solveMetaHo` 覆盖常见形状（M20.5），其余仍受限。
+  - **高阶/开放元变量解（M28）**：Miller pattern unification 已落地（局部变量 spine → λ
+    抽象）；非 pattern 形状（如 meta-spine flex-flex `?m ?n = Maybe Json`）仍走保守
+    head 提取兜底，其余报 `TC_CannotSolveHigherOrder`。完整高阶合一属研究项。
   - **覆盖率与终止性对所有包一致执行**：M25 已删除按包名跳过检查的豁免；编译器、base
     与工具链源码通过 SCT + 显式 fuel/结构递归达标，不再有「可信包静默跳过」路径。
     工具链/前端/加载器的状态机用输入规模线性 fuel 或内存内不可达上界（debt C26/C27/C28），

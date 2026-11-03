@@ -1,0 +1,31 @@
+-- M28（决策 5）：`let` 与 `where` 共用同一套绑定块模型（顺序作用域 + 可选签名）。
+-- where 仍要求每个绑定有签名行；let 的签名行可选，且绑定支持函数子句糖。
+f : Int -> Int
+f x = g x where
+  h : Int -> Int
+  h y = y * 2
+
+  g : Int -> Int
+  g y = h y + 1
+
+-- let 块的签名行可选：带签名的绑定按签名 checking 精化（函数子句糖直接可用）。
+withSig : Int
+withSig =
+  let
+    k : Int
+    k = 3
+
+    addK : Int -> Int
+    addK x = k + x
+  in addK 4
+
+-- 不带签名的 let 绑定照旧走推断。
+noSig : Int
+noSig =
+  let
+    a = 2
+    b = a + 5
+  in b
+
+main : Int
+main = f 1 + withSig + noSig

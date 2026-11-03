@@ -1,0 +1,5 @@
+-- M28：axiom 没有运行时定义体——在运行时（非擦除位置）使用必须报错。
+axiom p : Int
+
+main : Int
+main = p + 1

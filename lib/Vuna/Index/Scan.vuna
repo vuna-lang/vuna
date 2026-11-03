@@ -211,6 +211,8 @@ symbolsOfDecl sMod decls comments d =
       Sym sMod name "trait" ("trait " ++ name ++ paramSuffix params) doc line col
         :: methodSymbols sMod methods line col
     DSig name ty sp => []
+    DAxiom name ty sp =>
+      [Sym sMod name "axiom" ("axiom " ++ name ++ " : " ++ renderTy ty) doc line col]
     DFun name pats body sp => [Sym sMod name "fun" (signatureOf name decls) doc line col]
     DInstance name isDefault head methods sp => case name of
       Just n => [Sym sMod n "instance" "instance" doc line col]

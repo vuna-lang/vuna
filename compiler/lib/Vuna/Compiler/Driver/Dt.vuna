@@ -143,9 +143,12 @@ findMainDef : List DtDef -> Maybe DtDef
 findMainDef [] = Nothing
 findMainDef (d :: rest) = if dtDefName d == "main" then Just d else findMainDef rest
 
+-- 有体定义（名字 → 体）：axiom 无体，不进核心求值器的 delta 表。
 defTableOf : List DtDef -> List (Pair String Term)
 defTableOf [] = []
-defTableOf (d :: rest) = Pair (dtDefName d) (dtDefBody d) :: defTableOf rest
+defTableOf (d :: rest) = case dtDefBody d of
+  Just body => Pair (dtDefName d) body :: defTableOf rest
+  Nothing => defTableOf rest
 
 -- M26：唯一 codegen 入口 = 逐模块 split（`compile` / `build` / seed rotation 共用）。
 -- 与单文件路径共用同一次精化，生成器把 datas/defs 按声明归属切到各模块文件；

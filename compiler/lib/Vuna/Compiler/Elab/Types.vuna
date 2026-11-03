@@ -30,6 +30,7 @@ module Vuna.Compiler.Elab.Types
   , dtDataName
   , dtDataParams
   , dtDefBody
+  , dtDefHasBody
   , dtDefName
   , dtDefType
   , dtGoalCtx
@@ -99,17 +100,29 @@ import Vuna.Compiler.Core
 import Vuna.Compiler.Frontend.Ast
 
 -- 一个 DT 定义：名字、类型项、体项（均为闭项；体带擦除标志）。
+-- M28：`DtAxiom` 是**无体/不透明**的顶层（`axiom name : Ty`）：它只有类型，没有
+-- 运行时定义体（决策 5 / D10）。类型层引用合法；运行时位置的使用由擦除检查报
+-- `CG_AxiomAtRuntime`。`dtDefBody` 因此返回 `Maybe Term`。
 data DtDef : Type where
   DtDef : String -> Term -> Term -> DtDef
+  DtAxiom : String -> Term -> DtDef
 
 dtDefName : DtDef -> String
 dtDefName (DtDef name ty body) = name
+dtDefName (DtAxiom name ty) = name
 
 dtDefType : DtDef -> Term
 dtDefType (DtDef name ty body) = ty
+dtDefType (DtAxiom name ty) = ty
 
-dtDefBody : DtDef -> Term
-dtDefBody (DtDef name ty body) = body
+dtDefBody : DtDef -> Maybe Term
+dtDefBody (DtDef name ty body) = Just body
+dtDefBody (DtAxiom name ty) = Nothing
+
+-- 有运行时定义体的定义（axiom 不算）：构造 def 表 / 求值环境时用它滤掉无体顶层。
+dtDefHasBody : DtDef -> Bool
+dtDefHasBody (DtDef name ty body) = True
+dtDefHasBody (DtAxiom name ty) = False
 
 -- M14：一个构造子。telescope 是「族参数 + 字段」的完整 binder 表（名字 / 擦除标志），
 -- 类型项是闭合的（`{a : Type} -> {n : Nat} -> a -> Vec a n -> Vec a (Succ n)` 形态）。
@@ -315,9 +328,10 @@ ecSolTbl (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl 
 
 ecPutSols : Ec -> List (Pair Int Value) -> Ec
 
--- force/conv 的解表包装：list（权威）+ 哈希索引（O(1) 查）。
+-- force/conv 的解表包装：list（权威）+ 哈希索引（O(1) 查）+ 元变量创建深度索引（M28：
+-- 求解点就地检查解的作用域）。
 ecSolsP : Ec -> Sols
-ecSolsP ec = Sols (ecSolTbl ec) (ecSols ec)
+ecSolsP ec = solsOf (ecSolTbl ec) (ecSols ec) (ecDepthTbl ec)
 
 ecPutSols ec sols2 =
   let

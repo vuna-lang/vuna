@@ -461,9 +461,11 @@ else andThen (genTermFuel (fuel - 1) st binders scrut) (\p => case p of
 -- 分组 → OCaml 定义
 -- ---------------------------------------------------------------
 genGroupDef : GenSt -> DtDef -> Result (Pair String GenSt)
-genGroupDef st d = andThen (genTerm st [] (dtDefBody d)) (\p => case p of
-  Pair body st2 => Ok (Pair (valueName (dtDefName d) ++ " = " ++ body) st2)
-)
+genGroupDef st d = case dtDefBody d of
+  Just body => andThen (genTerm st [] body) (\p => case p of
+    Pair bodyText st2 => Ok (Pair (valueName (dtDefName d) ++ " = " ++ bodyText) st2)
+  )
+  Nothing => Err "DT: internal: axiom reached runtime code generation (partition must erase it)"
 
 genGroupBodies : GenSt -> List DtDef -> Result (Pair (List String) GenSt)
 genGroupBodies st [] = Ok (Pair [] st)
@@ -491,9 +493,12 @@ recursiveValueAllowed t = case t of
 
 firstBadRecursiveValue : List DtDef -> Maybe String
 firstBadRecursiveValue [] = Nothing
-firstBadRecursiveValue (d :: rest) =
-  if runtimeArity (dtDefBody d) == 0 then if recursiveValueAllowed (dtDefBody d) then firstBadRecursiveValue rest else Just (dtDefName d)
-  else firstBadRecursiveValue rest
+firstBadRecursiveValue (d :: rest) = case dtDefBody d of
+  -- 只在运行时分组里调用：axiom 无体、不进运行时分组。
+  Nothing => Nothing
+  Just body =>
+    if runtimeArity body == 0 then if recursiveValueAllowed body then firstBadRecursiveValue rest else Just (dtDefName d)
+    else firstBadRecursiveValue rest
 
 genGroup : HashTbl (List String) -> GenSt -> List DtDef -> Result (Pair String GenSt)
 genGroup adj st group = if groupNeedsRec adj group then case firstBadRecursiveValue group of

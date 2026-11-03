@@ -1,0 +1,46 @@
+-- M28（B08）：空族 / 中性索引与「分支不可达」共用同一套 allCtorsUnsatisfiable 判据：
+--   * 索引已被签名细化排除的分支可省略（Vec a (Succ n) 上的 Nil）；
+--   * 分支上下文含空归纳族时可省略（进 ENil 时 n 精化成 Zero ⇒ i : Fin Zero；写出来的对照见 dt_err/41d）；
+--   * 索引含**中性项**时保守判「可能非空」：写出的分支照常接受，不会误判成空族。
+data Nat : Type where
+  Zero : Nat
+  Succ : Nat -> Nat
+
+data Vec : Type -> Nat -> Type where
+  Nil : {a : Type} -> Vec a Zero
+  Cons : {a : Type} -> {n : Nat} -> a -> Vec a n -> Vec a (Succ n)
+
+vhead : {a : Type} -> {n : Nat} -> Vec a (Succ n) -> a
+vhead xs = case xs of
+  Cons x rest => x
+
+data Fin : Nat -> Type where
+  FZero : {n : Nat} -> Fin (Succ n)
+  FSucc : {n : Nat} -> Fin n -> Fin (Succ n)
+
+data Env : Type -> Nat -> Type where
+  ENil : {a : Type} -> Env a Zero
+  ECons : {a : Type} -> {n : Nat} -> a -> Env a n -> Env a (Succ n)
+
+lookupEnv : {a : Type} -> {n : Nat} -> Env a n -> Fin n -> a
+lookupEnv env i = case env of
+  ECons x rest => case i of
+    FZero => x
+    FSucc j => lookupEnv rest j
+
+-- 中性索引：Mk 的结果索引是 `f Zero`（函数参数应用，归约卡住），不能判空族。
+data W : (Nat -> Nat) -> Nat -> Type where
+  Mk : (f : Nat -> Nat) -> W f (f Zero)
+
+neutral : (h : Nat -> Nat) -> (m : Nat) -> W h m -> Fin m -> Int
+neutral h m w i = case w of
+  Mk f => 0
+
+v1 : Vec Int (Succ Zero)
+v1 = Cons 5 Nil
+
+env2 : Env Int (Succ (Succ Zero))
+env2 = ECons 7 (ECons 8 ENil)
+
+main : Int
+main = vhead v1 + lookupEnv env2 (FSucc FZero)

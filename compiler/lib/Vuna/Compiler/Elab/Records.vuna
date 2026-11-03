@@ -159,6 +159,9 @@ desugarRecordDecl records d = case d of
     andThen (traverse (desugarRecordDecl records) methods)
       (\ms => Ok (DInstance iname isDefault head ms sp))
   DSig name ty sp => Ok d
+  -- M28：axiom 的类型表达式里可能有 record 语法吗？类型位置不走 record 降级
+  -- （record 是值层记法），原样返回。
+  DAxiom name ty sp => Ok d
 
 desugarPattern : List RecordInfo -> Pat -> Result Pat
 desugarPattern records pat = desugarPatternFuel 64 records pat

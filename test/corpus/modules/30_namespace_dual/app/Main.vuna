@@ -1,0 +1,10 @@
+import Types
+import Values
+import Shadow
+
+-- 类型位置 `Types.Pair` 是族，值位置同名的 `Types.Pair` 是构造子。
+cross : Types.Pair Int String
+cross = Types.Pair 7 "x"
+
+main : Int
+main = Types.pairFst cross + Shadow.shadowMain + Values.token

@@ -1,9 +1,11 @@
 module Vuna.Compiler.Elab.Sig
   ( arityFun
+  , bannedForModule
   , classParamKind
   , definedNames
   , exprMaxAppArity
   , methodArgRigsOf
+  , modulePrefixOf
   , quantifyTopSig
   , quantifyTraitSig
   , topQuantBanned
@@ -152,6 +154,23 @@ quantifyTopSig banned ty sp =
 topQuantBanned : List String -> HashTbl Bool
 topQuantBanned defined = tblOfNames (append defined topPreludeNames)
 
+-- C29（M28）：banned 集按**模块作用域**计算——只排除「与签名同一模块里另有定义」的
+-- 名字。程序级 flatten 后模块边界落在名字的模块前缀（最后一段之前）上；入口文件的
+-- 顶层名没有前缀（空串）。跨模块同名小写名不再让签名里的类型变量被误当全局名。
+bannedForModule : String -> List String -> HashTbl Bool
+bannedForModule sigName defined = topQuantBanned (filterNamesInModule sigName defined)
+
+filterNamesInModule : String -> List String -> List String
+filterNamesInModule sigName [] = []
+filterNamesInModule sigName (n :: rest) =
+  if modulePrefixOf n == modulePrefixOf sigName then n :: filterNamesInModule sigName rest
+  else filterNamesInModule sigName rest
+
+-- 名字的模块前缀（`Base.Nat.succ` → `Base.Nat`；入口顶层的 `main` → ""）。
+modulePrefixOf : String -> String
+modulePrefixOf name = case splitLastDot (splitOnDot name) of
+  Pair rev base => joinDots rev
+
 keepOutTbl : HashTbl Bool -> List String -> List String
 keepOutTbl banned [] = []
 keepOutTbl banned (n :: rest) =
@@ -160,9 +179,10 @@ keepOutTbl banned (n :: rest) =
 topPreludeNames : List String
 topPreludeNames = append ["Type", "->", "_"] (append typeIntrinsicNames preludeValueNames)
 
--- 本程序里另有定义（DFun）的顶层名字：签名里的这些名字不是类型变量。
+-- 本程序里另有定义（DFun / DAxiom）的顶层名字：签名里的这些名字不是类型变量。
 definedNames : List Decl -> List String
 definedNames [] = []
 definedNames (d :: rest) = case d of
   DFun n pats body sp => n :: definedNames rest
+  DAxiom n ty sp => n :: definedNames rest
   _ => definedNames rest

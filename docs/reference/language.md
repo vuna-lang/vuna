@@ -8,7 +8,8 @@
 
 - 类型：`Int` / `String`（语言 primitive 类型）、`data` 声明的代数数据类型、函数；
   类型签名参与 DT 精化，运行时是否保留由擦除判据（`Rig`）决定；
-- 语法：Idris2 风格 `data ... where`、多子句函数、`case ... of`、`let ... in`、
+- 语法：Idris2 风格 `data ... where`、多子句函数、顶层 `axiom` 声明（M28，无体/不透明
+  顶层）、`case ... of`、`let ... in`（绑定块可选签名行，M28）、
   lambda、`if then else`、`do` 块（M11）、整数/字符串字面量、`[..]` 与
   `x :: xs` 列表糖、中缀运算符
   （`-> || && == /= < <= > >= ++ + - * / :: >>= >>`）；
@@ -28,50 +29,108 @@
   [primitives.md](primitives.md) 的效果原语与能力一节；
 - `&&` / `||` 短路求值：先求左操作数，左侧能决定结果时不求值右侧（核心求值器与
   codegen 一致）；
-- `where` 子句：函数体后可跟缩进的 `where` 块，**每个 where 绑定必须在子句前写显式
-  类型签名**；where 绑定是带签名的**局部顺序 let**，只能引用它之前定义的绑定（见下节）；
+- `where` 子句：函数体后可跟缩进的 `where` 块；绑定块（`let` 与 `where` 同一套模型）
+  是**顺序作用域 + 可选签名**，其中 `where` 块要求每个绑定写显式签名；见下节；
 - 类型身份：`Int` / `String` 是语言 primitive 类型；`Bool` / `List` / `IO` 是 base 的
   普通 `data` 声明（canonical 身份 `Base.Bool.Bool` / `Base.List.List` / `Base.IO.IO`，
   经自动注入的 `Prelude` 可见）。用户写同名 `data` 是普通声明，不与 canonical 冲突。
   `True` / `False` / `Cons` / `Nil` 与其他构造子一样**按声明身份**解析，没有「内建全局
   构造子放行」；身份规则见 [primitives.md](primitives.md)。
 
-## `where` 绑定与显式签名
+## `let` / `where` 绑定块与显式签名
 
-`where` 块内每个绑定先写一行签名（`name : Ty`），紧跟它的子句（`name pats = expr`）：
+`let` 与 `where` 共用同一套**绑定块**模型（顺序作用域 + 可选签名），M28 起实现只有一份
+（parser 的 `parseBindingItemsAt` / `bindingItemsToBinds`，Elab 的 `checkBindingSigs`）：
 
 ```vuna
 f : Int -> Int
 f x = g x where
   h : Int -> Int
   h y = y * 2
+
   g : Int -> Int
   g y = h y + 1
+
+g : Int
+g =
+  let
+    k : Int
+    k = 3
+
+    addK : Int -> Int
+    addK x = k + x
+  in addK 4
 ```
 
-- **每个 where 绑定都必须有签名行，且签名必须写在对应子句之前**；没有签名的绑定不会
-  退回无签名 lambda 推断，而是直接报错。诊断（`errAt` / parser 都会带
-  `文件:行:列:` 前缀）：
+- 两条记法只差一条约束：**`where` 块每个绑定必须写签名行**（缺签名报
+  `[TC_WhereNeedsSig] where binding ... needs a type signature`）；`let` 块的签名行可选；
+- 两种子句形态都支持：`pat = expr` 与函数子句 `name pats = expr`（后者降级成 λ）；
+- 签名写在同名子句**之前**；悬空签名 / 重复签名 / 多子句共用签名 / 缩进越界都是
+  `PS_` 前缀的明确诊断：
 
   ```text
-  DT: where binding `f` needs a type signature (write `f : <type>` before the clause)
-  DT: unknown name h                          -- 引用了后面才定义的 where 绑定 h
-  DT: unknown name f                          -- where 绑定自递归
-  duplicate where signature for `g`
-  where signature for `g` must come before its clause
-  where signature for `g` has no definition
-  where binding `g` has more than one clause; a signature can annotate only one
+  [PS_WhereSigNoDef] binding signature for `g` has no definition
+  [PS_WhereSigDuplicate] duplicate binding signature for `g`
+  [PS_WhereSigBeforeClause] binding signature for `g` must come before its clause
+  [PS_WhereSigMultiClause] binding `g` has more than one clause; a signature can annotate only one
+  [PS_UnexpectedIndentInBinding] unexpected indentation in a let/where binding block
   ```
 
-- where 绑定是**局部顺序 let**：每个绑定只能引用**它之前**的绑定，不支持前向引用、
-  自递归或互递归；需要递归 / 互相引用时把函数放进顶层定义组（顶层定义组支持互递归、
-  自递归与前向引用）；
-- 绑定值按签名以 checking 模式精化（先检查签名是合法类型，再按该类型检查值），
-  因此不需要推断无签名 lambda 的类型；
-- 通配绑定 `_ = expr` 写不了签名，因此会报缺签名诊断；需要局部绑定时用命名绑定；
-- where 绑定的名字只在该函数体内可见（不导出、不参与模块导出列表），与顶层定义同名
-  时以局部绑定为准；
-- `vuna fmt` 会保留签名行并按「签名行 + 子句」输出（幂等），`where` 块缩进 2 空格。
+- 有签名的绑定按签名以 checking 模式精化（先检查签名是合法类型，再按该类型检查值），
+  因此不需要推断无签名 lambda 的类型；无签名绑定走推断；
+- 绑定块是**顺序作用域**：每个绑定只能引用它**之前**的绑定，不支持前向引用、自递归或
+  互递归（递归放进顶层定义组，顶层定义组支持互递归/自递归/前向引用）；
+- `where` 绑定的名字只在该函数体内可见（不导出、不参与模块导出列表），与顶层定义同名
+  时以局部绑定为准；`let` 绑定同理只在该表达式内可见；
+- `vuna fmt` 保留签名行并按「签名行 + 子句」输出（let 与 where 都幂等），缩进 2 空格。
+
+## `axiom` 声明（M28）
+
+`axiom name : Ty` 声明一个**无体/不透明**顶层（决策 5 / D10）。它不是函数定义：
+
+```vuna
+axiom t : Type
+axiom step : t -> t
+
+idT : t -> t
+idT x = x
+```
+
+- axiom 是**擦除/类型层**定义：只参与类型检查与类型层计算，codegen 不生成运行时定义
+  （`DtAxiom`，没有 `dtDefBody`）；
+- 类型层引用合法（上面的 `t` 作类型常量、`step` 作类型层值）；签名里的自由小写名与
+  普通签名一样量化为隐式类型参数（`axiom anyEq : a -> a` 等价 `{a : Type} -> a -> a`）；
+- 运行时位置使用 axiom 是硬错误（`check` 与 `compile` 同一条诊断）：
+  `[CG_AxiomAtRuntime] axiom ... cannot be used at runtime (it has no runtime definition)`；
+- axiom 是普通顶层声明：名字自动 mangle、`_` 前缀私有、可进模块导出表；同一名字不能
+  再有定义体（`[TC_AxiomWithDefinition]`），也不能重复声明；
+- `axiom` 是保留关键字；当前**编译器自身不用** axiom（旧 seed 必须能编译新源码）。
+
+## 函数定义与 η 展开（M28）
+
+定义子句的参数可以少于签名：剩余 Pi 链按 **η 展开**自动补参数（`\_arityN`，body 应用到
+这些新参数），所以 `f : Int -> Int` 配 `f = inc` 合法；参数**多于**签名仍报
+`[TC_DefMoreParams]`。旧的 `[TC_DefFewerParams]` 码保留在错误表里，M28 起不再触发。
+多 clause 与 where 绑定共用同一条精化路径，行为一致。
+
+## `case` 分支与模式
+
+`case e of` 的每个分支左端是模式：构造子模式（可嵌套，如 `Cons x (Cons y ys)`）、
+`Int` / `String` 字面量模式、变量或通配。分支按书写顺序匹配，因此：
+
+- 变量/通配兜底只能放**最后一个**分支，否则报 `TC_CatchAllNotLast`；
+- `Bool` 的 `case` 只认 `True` / `False` / 变量 / 通配（`TC_BoolCaseRestriction`）；
+- `Int` / `String` 的 `case` 必须有一个变量/通配兜底（`TC_IntStringCaseNeedsFallback`），
+  字面量分支降级成嵌套 `if` 链；
+- 不可达分支是**错误**：重复构造子分支、重复字面量、兜底之后的分支分别报
+  `TC_RedundantCtorBranch` / `TC_RedundantLiteralBranch` / `TC_BranchAfterCatchAll`；
+  被索引排除的分支与分支上下文含空归纳族的分支可以**省略**，写出来报
+  `TC_ImpossibleBranchIndex` / `TC_ImpossibleBranchEmptyCtx`（M28：省略与写出走同一套
+  `allCtorsUnsatisfiable` 判据——判为不可达的分支省略合法、写出报错；判为可达的分支必须
+  写出、写出即接受；索引含中性项时保守判可达）；
+- 嵌套模式与同一构造子的多个分支由模式矩阵降级（规范形：每构造子一个分支 + 变量子模式），
+  语义与手写嵌套 `case` 一致；依赖索引的细化细节见 [dt.md](dt.md) 的「case 分支与模式 /
+  可达性」两条。
 
 ## 模块系统
 
@@ -145,9 +204,10 @@ f x = g x where
   `Vuna.Compiler.Frontend.Parser`）能在同一个根下共存、没有歧义，包门面可以直接命名为
   `Base` 或 `Vuna`；
 - 模块导出只算聚合层；包级隐藏（哪些模块对外公开）留给 M11.5 的根 manifest；
-- 非限定名的查找顺序（值）：局部绑定 → 本模块构造子 → 本模块顶层定义 → 内建（intrinsic）
-  → 已自动 open 的 import 导出（先值项、再构造子）。两个 open import 导出同名但指向不同
-  定义时，裸名报歧义（指向同一定义的重复导出不算歧义，例如原模块与它的门面重导出）；
+- 非限定名的查找顺序（值位置）：局部绑定 → 本模块值定义（定义/签名/实例名）→ 本模块
+  构造子 → 内建（intrinsic）/DT prelude → 已自动 open 的 import 导出（先值项、再构造子）
+  → 本模块类型名（**类型作为项**的最后退路，见下节）。两个 open import 导出同名但指向
+  不同定义时，裸名报歧义（指向同一定义的重复导出不算歧义，例如原模块与它的门面重导出）；
   写全名或 alias 即可消歧；import 只提供目标模块**导出列表**中的名字（省略模块头 =
   全部导出，`_` 前缀除外）；
 - 限定名用**完整模块名**或 alias，永远不会歧义，但同样只解析目标模块的导出项；
@@ -157,3 +217,32 @@ f x = g x where
 - loader 解析 import 图、做名字解析后 **flatten** 成一个 program（内部名字带模块前缀，
   如 `Vuna.Compiler.Frontend.Parser.parseSource`），解释器与 codegen 复用同一份实现；`show` 只显示
   最后一段，所以输出与包内程序一致。
+
+## type / value 双命名空间（M28）
+
+解析层有三个命名空间，与导出表的 kind 一一对应，**不存在一张拍平的总表**：
+
+| 命名空间 | 内容 | 导出 kind |
+| --- | --- | --- |
+| 值 | 定义（DFun / 签名 / 实例名） | `val` |
+| 构造子 | data 构造子、record 名、trait 方法 | `ctor` |
+| 类型 | data / record / trait 的类型名 | `type` |
+
+- **类型位置只查类型命名空间**：先本模块声明的类型名（**优先于内建名**——`Base.Bool`
+  重新声明 `Bool` 就靠这条），再内建类型名；小写名保持为隐式类型变量（未被本模块值
+  定义占用时）。都没有再查 import 导出的类型。退化约定：非小写名找不到类型时按**索引
+  构造子**解析（`Vec a Zero` 的 `Zero`），最后才退到本模块值定义（类型层 def，
+  如 `sel : Nat -> Type`）。
+- **值位置查值命名空间**：局部绑定 → 本模块值定义 → 本模块构造子 → 内建 → import 导出
+  （值项、再构造子）→ **本模块类型名作为项**（最后退路）。因此
+  `data Pair a b where Pair : a -> b -> Pair a b` 的 `Pair` 在类型位置是族、在值位置是
+  构造子；显式 `(a : Type)` 参数处的族名（`firstTy Pair ...`）作为类型层实参可用。
+- **不同命名空间不互相遮蔽**：本模块声明的**类型**名不再抢走同名的导入**值**
+  （`import Values (token)` + 本地 `data token : Type`：值位置的 `token` 是导入的 Int 值，
+  类型位置的 `token` 是本地类型）；本模块的值定义也不进类型命名空间（除非走上面的
+  类型层 def 退化路径）。
+- 导出侧仍按名字各自的命名空间解析（裸 `T` 导出类型、`T(..)` 导出构造子，见「模块系统」）；
+  解析层的三张表与导出 kind 的 `val` / `ctor` / `type` 一一对应，解析器不再把三者拍平，
+  精化器（Elab）也不需要靠「kind 是不是宇宙」猜名字属于哪个命名空间。
+- 已知边界：类型层 def 退化路径只看**本模块**同名值定义；跨模块类型层定义（含 `axiom t :
+  Type`）在类型位置写**限定名** `M.t`（M28 起回退到导入值命名空间），裸小写名仍是类型变量。

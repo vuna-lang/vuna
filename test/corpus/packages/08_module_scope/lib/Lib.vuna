@@ -1,0 +1,14 @@
+module Lib (idAt, lower, TypeConst) where
+
+-- C29（M28）：`x` 是签名里的自由小写名，按模块作用域量化成隐式类型参数
+-- （`{x : Type} -> x -> x`）。入口文件另有同名顶层 `x`，但属于另一个模块作用域，
+-- 不得让这里的 `x` 被当成全局名（修复前：banned 集是 program-wide 的，
+-- 入口的 `x` 让这里的 `x` 不被量化 → unknown name x）。
+idAt : x -> x
+idAt y = y
+
+lower : Int -> Int
+lower n = n
+-- M28：无体顶层（axiom）是擦除/类型层定义；类型常量可以跨模块在**类型位置**按限定名
+-- 引用（`Lib.TypeConst`），运行时使用由 codegen 擦除检查拒绝。
+axiom TypeConst : Type 

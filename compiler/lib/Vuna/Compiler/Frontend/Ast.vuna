@@ -1,5 +1,6 @@
 module Vuna.Compiler.Frontend.Ast
   ( Ctor
+  , DAxiom
   , DBind
   , DData
   , DExpr
@@ -115,6 +116,9 @@ data Ctor : Type where
 data Decl : Type where
   -- M14：`data Name params : kind where`；kind 是索引族的类型表达式（HM 路径只接受 `Type`）。
   DData : String -> List String -> Expr -> List Ctor -> List String -> Span -> Decl
+  -- M28：`axiom name : Ty` —— 无体的可擦除/不透明顶层（决策 5 / D10）。
+  -- 它是**类型层**定义：类型层引用合法，运行时使用由擦除检查报错。
+  DAxiom : String -> Expr -> Span -> Decl
   DSig : String -> Expr -> Span -> Decl
   DFun : String -> List Pat -> Expr -> Span -> Decl
   DRecord : String -> List String -> List Field -> List String -> Span -> Decl
@@ -177,6 +181,7 @@ doStmtExpr stmt = case stmt of
 declSpan : Decl -> Span
 declSpan decl = case decl of
   DData name params kind ctors derivings sp => sp
+  DAxiom name ty sp => sp
   DSig name ty sp => sp
   DFun name pats body sp => sp
   DRecord name params fields derivings sp => sp
@@ -258,6 +263,7 @@ ctorArity name decls = case decls of
 declNames : Decl -> List String
 declNames d = case d of
   DFun name pats body _ => [name]
+  DAxiom name ty _ => [name]
   DSig name ty _ => [name]
   DData dname params kind ctors derivings _ => map ctorName ctors
   DRecord dname params fields derivings _ => [dname]

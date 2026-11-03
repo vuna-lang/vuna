@@ -37,9 +37,10 @@ import Vuna.Compiler.Elab.Types
 import Vuna.Compiler.Intrinsics
 import Vuna.Compiler.Frontend.Ast
 
--- 精化一个构造子：类型是「Pi 链 → F r1..rk」。
-elabCtor : List (Pair String Term) -> String -> Int -> Ec -> Ctor -> Result (Pair DtCtor Ec)
-elabCtor globals fam arity ec c = case c of
+-- 精化一个构造子：类型是「Pi 链 → F r1..rk」。`famLevel` 是族 kind 的结果层级
+-- （kind 末尾的 `Type l`，M28 决策 1）：字段 binder 的域 sort 必须 `≤ famLevel`。
+elabCtor : List (Pair String Term) -> String -> Int -> Level -> Ec -> Ctor -> Result (Pair DtCtor Ec)
+elabCtor globals fam arity famLevel ec c = case c of
   Ctor cname tyExpr arityHint csp =>
     let
       -- M20：`data Foo a : Type` 的构造子类型不写 `{a : Type} ->`，这里把族参数补成隐式
@@ -51,20 +52,89 @@ elabCtor globals fam arity ec c = case c of
     in andThen (checkType globals emptyCtx ec tyExpr2) (\pk => case pk of
       Pair tyTerm0 (Pair sort ec1) =>
         let
-          tyTerm = inlineSolvedMetas ec1 0 tyTerm0
+          tyTerm = zonkTerm ec1 0 tyTerm0
         in case resultSpine (dropParams tyTerm) of
           Pair head args =>
             if head /= fam then tcErr2 csp (CtorDoesNotReturn cname fam) cname fam
             else if length args /= arity then tcErr2 csp (CtorWrongIndices cname fam) cname fam
-            else Ok (Pair (DtCtor cname fam (teleOfType tyTerm) tyTerm) ec1)
+            else andThen
+              (checkCtorFieldSorts globals emptyCtx ec1 arity famLevel cname csp (countTelePis tyTerm) tyExpr2)
+              (\_ => Ok (Pair (DtCtor cname fam (teleOfType tyTerm) tyTerm) ec1))
     )
 
-elabCtors : List (Pair String Term) -> String -> Int -> Ec -> List Ctor -> Result (Pair (List DtCtor) Ec)
-elabCtors globals fam arity ec [] = Ok (Pair [] ec)
-elabCtors globals fam arity ec (c :: rest) = andThen (elabCtor globals fam arity ec c) (\p => case p of
-  Pair dc ec1 => andThen (elabCtors globals fam arity ec1 rest) (\q => case q of
+elabCtors : List (Pair String Term) -> String -> Int -> Level -> Ec -> List Ctor -> Result (Pair (List DtCtor) Ec)
+elabCtors globals fam arity famLevel ec [] = Ok (Pair [] ec)
+elabCtors globals fam arity famLevel ec (c :: rest) = andThen (elabCtor globals fam arity famLevel ec c) (\p => case p of
+  Pair dc ec1 => andThen (elabCtors globals fam arity famLevel ec1 rest) (\q => case q of
     Pair dcs ec2 => Ok (Pair (dc :: dcs) ec2)
   )
+)
+
+-- ---------------------------------------------------------------
+-- M28 决策 1：构造子字段的宇宙层级检查（严格分层、非累积）
+-- ---------------------------------------------------------------
+-- 族 kind 的结果层级（`... -> Type l` 的 l）。`kindWellFormed` 已保证该层存在。
+kindResultLevel : Term -> Maybe Level
+kindResultLevel ty = case ty of
+  TPi _ _ _ _ cod => kindResultLevel cod
+  TType l => Just l
+  _ => Nothing
+
+-- 对构造子的**表面**类型表达式做受控遍历：逐段 `checkType` 取域的 sort，并带 binder
+-- 进入 `Ctx`（后续依赖域的 sort 必须在正确上下文里算）。前 arity 个 binder 是族参数 /
+-- 索引，不受限（大参数合法）；其余 binder 是字段，其域 sort 必须 `≤ famLevel`
+-- （`Type i : Type (i+1)` 严格分层：字段比族大就是宇宙不一致）。
+-- 匿名箭头在 AST 里是 `EApp (EVar "->") [a, b]`，命名 Pi 是 `EPi`；两者都算一个 binder。
+-- 返回的 `Ec` 只是校验过程中的状态，调用方丢弃，不污染主精化。
+checkCtorFieldSorts : List (Pair String Term) -> Ctx -> Ec -> Int -> Level -> String -> Span -> Int -> Expr -> Result Ec
+checkCtorFieldSorts globals ctx ec arity famLevel cname csp tyPis tyExpr =
+  let
+    -- 表面形态与已精化形态必须同构（否则无法确定每个字段的层级，显式拒绝而不是静默放行）。
+    surfacePis = countSurfacePis tyExpr
+  in if surfacePis /= tyPis then tcErr2 csp
+    (CtorError cname "cannot verify the universe level of its field types; write the constructor type as a Pi chain")
+    cname
+    "cannot verify the universe level of its field types; write the constructor type as a Pi chain"
+  else ctorFieldSortsGo globals ctx ec 0 arity famLevel cname csp tyExpr
+
+countSurfacePis : Expr -> Int
+countSurfacePis e = case e of
+  EPi _ _ _ cod _ => 1 + countSurfacePis cod
+  EApp (EVar "->" _) ([_, b]) _ => 1 + countSurfacePis b
+  _ => 0
+
+-- 已精化构造子类型的 Pi 层数（与表面形态同构；见 checkCtorFieldSorts 的防御）。
+countTelePis : Term -> Int
+countTelePis t = case t of
+  TPi _ _ _ _ cod => 1 + countTelePis cod
+  _ => 0
+
+ctorFieldSortsGo : List (Pair String Term) -> Ctx -> Ec -> Int -> Int -> Level -> String -> Span -> Expr -> Result Ec
+ctorFieldSortsGo globals ctx ec pos arity famLevel cname csp tyExpr = case tyExpr of
+  EPi name _ dom cod _ =>
+    ctorFieldSortsBinder globals ctx ec pos arity famLevel cname csp name dom cod
+  EApp (EVar "->" _) ([a, b]) _ =>
+    ctorFieldSortsBinder globals ctx ec pos arity famLevel cname csp "_" a b
+  _ => Ok ec
+
+ctorFieldSortsBinder : List (Pair String Term) -> Ctx -> Ec -> Int -> Int -> Level -> String -> Span -> String -> Expr -> Expr -> Result Ec
+ctorFieldSortsBinder globals ctx ec pos arity famLevel cname csp name dom cod = andThen (checkType globals ctx ec dom) (\p => case p of
+  Pair domTerm (Pair sort ec1) =>
+    let
+      ctx2 = ctxBind name domTerm ctx
+    in if pos < arity then ctorFieldSortsGo globals ctx2 ec1 (pos + 1) arity famLevel cname csp cod
+    else if levelLt sort famLevel || levelEq sort famLevel then ctorFieldSortsGo globals ctx2 ec1 (pos + 1) arity famLevel cname csp cod
+    else
+      let
+        field = pos - arity
+        msg =
+          "field #"
+            ++ strFromInt field
+            ++ ": its type sorts into Type "
+            ++ strFromInt (levelToInt sort)
+            ++ ", above the family level Type "
+            ++ strFromInt (levelToInt famLevel)
+      in tcErr2 csp (CtorError cname msg) cname msg
 )
 
 -- Phase A：只精化 kind、登记族名。构造子字段可以引用**后面**声明的族（AST 里
@@ -81,7 +151,7 @@ elabDataHead globals ec ds = case ds of
           -- M20：族名后的参数并进 kind（`data List a : Type`），否则 `List a` 在构造子
           -- 类型里被当成「把非函数应用」。用显式 binder，与 `: Type -> Type` 写法一致。
           -- M24.5：kind 也会被存进 globals 在别处求值，检查期已解元变量同样要内联。
-          fullKind = prependParams writtenParams (inlineSolvedMetas ec1 0 kindTerm0)
+          fullKind = prependParams writtenParams (zonkTerm ec1 0 kindTerm0)
           tele = splitKind fullKind
           arity = length tele
         in if not (kindWellFormed fullKind) then tcErr0 dsp2 DataKindArrows
@@ -131,7 +201,12 @@ elabDataBodies decls heads globals ec acc = case decls of
         Just (Pair fullKind arity) =>
           let
             tele = splitKind fullKind
-          in andThen (elabCtors globals dname arity ec ctors) (\q => case q of
+            -- M28 决策 1：族层级（kind 末尾 `Type l`）传给构造子检查；kindWellFormed 已
+            -- 保证存在，兜底 levelZero 只防御内部不变量被破坏。
+            famLevel = case kindResultLevel fullKind of
+              Just l => l
+              Nothing => levelZero
+          in andThen (elabCtors globals dname arity famLevel ec ctors) (\q => case q of
             Pair dctors ec2 =>
               let
                 dd = DtData dname tele dctors

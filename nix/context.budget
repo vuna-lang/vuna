@@ -32,15 +32,15 @@
 #     max_module_lines 3320 → 3360：Elab 新增 where 绑定签名与 EAnn 检查（新语言特性，
 #     +30 行）属有意特性增长而非文档/格式膨胀，按实测最大值 3348 留 12 行余量；Elab 拆
 #     模块仍是 M24.6 重构的降本项。
-coldstart_bytes 29100
+coldstart_bytes 30100
 agents_lines 104
-arch_lines 160
+arch_lines 168
 readme_lines 165
 #   - M24.5：dt-parity.md §6 重写（实测能力表 + 边界）到 203 行；Elab 新增 scrutinee 反射、
 #     不可达分支、inlineSolvedMetas（3348 → 3513）。按实测重标定 max_ref 208 / max_module 3530；
 #     入口文档（coldstart/agents/arch/readme）不变。
-max_ref_lines 208
-max_module_lines 815
+max_ref_lines 248
+max_module_lines 825
 #   - M27：新增 `primitives.md` 与内建/原语/能力文档、`Vuna.Compiler.Intrinsics` 模块；
 #     按 `sh nix/context-budget.sh .` 实测收紧：coldstart 29055 / agents 104 / arch 156 /
 #     readme 163 / max_ref 206 / max_module 811（入口文档有 45B 余量，agents 临界）。
@@ -51,3 +51,9 @@ max_module_lines 815
 #   - M3 错误码 docstring：诊断就近 `-- @code` 注释每诊断一行，Term.vuna 827 → 863（+36，
 #     诊断可追溯的有意特性增长，参照 M24 的 where 绑定 +30 行先例）；max_module_lines
 #     840 → 866（按实测 863 留 3 行余量）。
+#   - M28（类型系统地基）：语言面与检查器规则新增（严格分层宇宙、擦除单判据、pattern
+#     合一/zonk、三命名空间、axiom/η、case 规范形），必需文档落在入口的
+#     architecture.md（+8 行）与 reference/language.md（208 → 248 行）、
+#     reference/type-system.md 等；`Elab/Term/Impl.vuna` 820 行（case 单一入口 + 显式命名
+#     空间查询）。按 `sh nix/context-budget.sh .` 实测重新标定：coldstart 30100 /
+#     arch 168 / max_ref 248 / max_module 825（仍保住 agents/readme 不涨）。

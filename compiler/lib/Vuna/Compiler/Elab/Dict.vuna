@@ -111,9 +111,7 @@ else case ecDictGoals ec of
         -- 搜一遍只会白跑 #实例 次 conv 再构造一条被丢弃的 NoInstanceFound。
         -- resolveDictGoals 在 by-infer 路径上**每个节点**都会调用，这条提前返回很值钱。
         Ok (Pair instTerm ec2) => case solveMeta (ecDefTbl ec2) (ecSolsP ec2) 0 m [] (eval [] instTerm) of
-          Ok sols2 => case checkSolsDelta ec2 (ecSols ec2) (solsList sols2) of
-            Err e => keep
-            Ok _ => resolveDictGoalsFuel (fuel - 1) globals (ecPutSols ec2 (solsList sols2))
+          Ok sols2 => resolveDictGoalsFuel (fuel - 1) globals (ecPutSols ec2 (solsList sols2))
           Err e => keep
         Err e => keep
       Nothing => keep
@@ -451,7 +449,6 @@ cmpRuntimeName sp name tyName = case tyName of
   _ =>
     if tyName == boolTypeName then Ok (cmpGenericName name)
     else tcErr2 sp (OpNotDefinedFor name tyName) name tyName
-  _ => tcErr2 sp (OpNotDefinedFor name tyName) name tyName
 
 cmpGenericName : String -> String
 cmpGenericName name = case name of

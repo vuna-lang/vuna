@@ -626,7 +626,9 @@ showValueAt : Int -> Value -> String
 -- 快速路径：原子值直接给名字，免掉 quote+showTerm 的递归（mismatchAt 在试探路径上
 -- 每次 check 会构造 ~600 万条被丢弃的诊断消息，格式化是主要成本之一）。
 showValueAt depth v = case v of
-  VType _ => "Type"
+  -- M28：宇宙层级参与诊断（严格分层下 `Type 0` 与 `Type 1` 不相等，只说 "Type"
+  -- 会让反例无法定位）；0 层仍显示 "Type" 以保持既有文案稳定。
+  VType l => if levelToInt l == 0 then "Type" else "Type " ++ strFromInt (levelToInt l)
   VNeutral n1 => case n1 of
     NGlobal g sp => if isNilList sp then g else showTerm (quote depth v)
     NVar name lvl sp => if isNilList sp then name else showTerm (quote depth v)

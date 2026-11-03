@@ -76,8 +76,8 @@ data Term where
   元变量求解满足：一阶（只接受空 spine）、闭合解（解中不含局部绑定变量）、
   occurs check。失败返回 `type mismatch: expected X, got Y`。
 - 明确限制：带局部变量的解与高阶元变量在 M13/M14 报错，M15 引入 metavariable
-  context 后补齐。
-- 宇宙规则：非累积。`Type i : Type (i+1)`；Pi formation 取 `max(i, j)`；
+  context 后补齐；M28 进一步换成 Miller pattern unification + 求解点作用域检查（§28）。
+- 宇宙规则（M28 已定，§28）：严格分层、非累积。`Type i : Type (i+1)`；Pi formation 取 `max(i, j)`；
   `Type i` 与 `Type j`（i≠j）不相等，因此 `Type 0 : Type 1` 合法而
   `bad : Type; bad = Type` 报类型不匹配。
 
@@ -363,7 +363,7 @@ data DtData : Type where
 | 相同构造子 | 相同构造子 | 逐实参递归；名字或 arity 不同 ⇒ 不可满足 |
 | 中性局部变量 | 任意 | 记录精化（该分支内变量 ↦ 项） |
 | 相同全局中性头 | 同头 | 逐 spine 元素递归；不同头 ⇒ 不可满足 |
-| 未解元变量 | 任意 | 走 M13 的 `solveMeta`（一阶、闭合解） |
+| 未解元变量 | 任意 | 走 `solveMeta`（M28：Miller pattern + 就地作用域检查） |
 | 其它 | 其它 | 不可满足 |
 
 - 「不可满足」不立即报错：源码**省略**的分支合法（覆盖率跳过它）；源码**写了**的
@@ -611,3 +611,29 @@ run w = case w of
 `g 0` 得 `1`）；负例 `test/corpus/dt_err/27_poly_fn_field_err.vuna`（`Wrap Bool` 里
 `g 0` 报 `expected Bool, got Int`，确保精化真的替换而非跳过）。全量
 `test/run-tests.sh` 841 项通过。
+
+## 28. M28：类型系统地基（已落地；现行语义见 reference）
+
+本节记录 M28 对本文早期设计（M13–M24）的**裁决**。现行规则以
+[reference/dt.md](reference/dt.md)、[reference/type-system.md](reference/type-system.md)
+与 [reference/debt.md](reference/debt.md) 为准；实现细节见 [history.md](history.md)。
+
+- **宇宙**：§4 的「非累积」保留为已定决策（M28）：`Type i : Type (i+1)`，Pi formation
+  `max(i,j)`，`Type i ≠ Type j`，不引入 subtyping/累积性。新增可检查规则：data kind
+  必须是 Pi 链 → `Type l`（l 非负）；构造子**字段 binder** 的域 sort 必须 ≤ 族层级
+  （族参数/索引不受限）；`Type : Type` 仍拒绝。累积性/宇宙多态留研究储备。
+- **擦除**：§6 与 §24 的 rig 判据收敛为单一入口 `isTypeDomain`/`binderRig`：隐式 binder
+  恒 `Rig0`；显式 binder 仅当域在类型层（宇宙或域全为类型层的 Pi 链）才 `Rig0`；显式
+  索引保留运行时表示。索引擦除策略 = **写成隐式 binder**；不做整程序使用分析。
+- **合一**：§4 的「一阶、闭合解」换成 **Miller pattern unification**：元变量创建深度随
+  `Sols` 携带并在求解点**就地**检查作用域（不再事后扫解表）；`inlineSolvedMetas`/
+  `inlineSolvedMetaAlt` 删除，统一为 `zonkTerm`。非 pattern 形状（meta-spine flex-flex
+  等）保留保守 head 提取兜底 + 明确诊断。
+- **命名空间**：§5 的名字解析不再靠「kind 是不是宇宙」猜测。Loader 按 type/value/ctor
+  三命名空间解析（`Namespaces`），Elab 用显式 `typeLookup`/`valueLookup`。
+- **定义形式**：§2/§19 的「顶层签名必须有定义」「定义参数个数必须与签名一致」等限制
+  过时：M28 起有 `axiom`（无体、擦除层定义，运行时使用报错）、定义 η 展开、let/where
+  统一绑定块（let 签名可选、where 仍必填）；签名量化 banned 集按模块作用域。
+- **case**：§17/§18 的「只支持顶层构造子模式」「case 不能在推断位」等 M14 限制已过时：
+  case 收敛到单一模式矩阵规范形，嵌套模式/推断位 case 均支持；覆盖率与「写出分支」共用
+  单一可达性判据，并新增冗余/不可达/兜底后分支诊断。

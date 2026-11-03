@@ -36,6 +36,7 @@ module Vuna.Compiler.Elab
   , Types.dtDataName
   , Types.dtDataParams
   , Types.dtDefBody
+  , Types.dtDefHasBody
   , Types.dtDefName
   , Types.dtDefType
   , Types.dtGoalCtx

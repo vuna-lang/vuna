@@ -1,0 +1,13 @@
+-- M28 / B18：类型位置只查类型命名空间。
+-- `count` 是值定义（`Nat -> Int`），不是类型；退化到值推断后结果不是宇宙，报 expected a type。
+data Nat : Type where
+  Zero : Nat
+
+count : Nat -> Int
+count n = 1
+
+bad : count
+bad = Zero
+
+main : Int
+main = 0

@@ -1,0 +1,11 @@
+import Lib
+
+-- 入口顶层名 `x` 与 `Lib` 签名里的类型变量同名（C29 的跨模块同名场景）。
+x : Int
+x = 1
+
+main : Int
+main = x + lower 1
+-- 跨模块把 axiom 类型常量当类型用（限定名走值/类型双命名空间的退化路径）。
+useT : Lib.TypeConst -> Lib.TypeConst
+useT v = v

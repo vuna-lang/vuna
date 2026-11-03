@@ -7,9 +7,9 @@ module Vuna.Compiler.Elab.Term.Impl
   , checkAppUnderTypeFuel
   , checkBoolCaseFuel
   , checkByInferFuel
-  , checkCaseDedupFuel
   , checkCaseFamFuel
   , checkCaseFuel
+  , checkCaseMatrixFuel
   , checkCaseOfFuel
   , checkCondBoolFuel
   , checkEFuel
@@ -63,21 +63,25 @@ import Vuna.Compiler.Elab.Types
 import Vuna.Compiler.Elab.Term.Support
 import Vuna.Compiler.Frontend.Ast
 
-elabConAltFuel : Int -> Maybe Expr -> List (Pair String Term) -> Ctx -> Ec -> DtData -> List Value -> Value -> Value -> String -> List Pat -> Span -> Expr -> Result (Pair CaseAlt Ec)
-elabConAltFuel fuel fb globals ctx ec dd idxs scrutVal expected cname args psp body = if fuel <= 0 then Err "DT: internal: inference fuel exhausted"
+-- M28：规范形分支的单一精化入口。分支可达性统一问 `branchAfterUnify`（与覆盖率的
+-- `branchVerdict` 用同一个判据）：不可达分支在精化分支体**之前**就报稳定诊断；可达分支
+-- 里的错误就是真错误（不再有「体检查失败就改报 impossible branch」的兜底特判）。
+elabConAltFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> DtData -> List Value -> Value -> Value -> String -> List Pat -> Span -> Expr -> Result (Pair CaseAlt Ec)
+elabConAltFuel fuel globals ctx ec dd idxs scrutVal expected cname args psp body = if fuel <= 0 then Err "DT: internal: inference fuel exhausted"
 else case findCtorIn cname (dtDataCtors dd) of
   Nothing => tcErr2 psp (UnknownConstructorInCase cname (dtDataName dd)) cname (dtDataName dd)
   Just ctor => andThen (bindCtorTele ctx (dtCtorType ctor) args) (\p => case p of
-    Pair branchCtx (Pair binders (Pair pending leftover)) => if nonEmpty leftover then tcErr1 psp (BranchTooManyArgs cname) cname
-    else andThen (unifyIdxList ec [] (ctxDepth branchCtx) defaultFuel (ctorResultValsIn branchCtx ctor) (map (refineValue [] defaultFuel) idxs)) (\refsIdx => andThen (reflectScrutinee ec (ctxDepth branchCtx) refsIdx (ctorValueIn branchCtx ctor) scrutVal) (\refs2 => let
-      refinedExpected = refineValue refs2 defaultFuel expected
-      branchCtx2 = ctxRefine branchCtx refs2
-      body2 = foldPending fb pending body
-    in case checkEFuel (fuel - 1) globals branchCtx2 ec body2 refinedExpected of
-      Err e =>
-        if ctxHasEmptyBinder ec branchCtx2 then tcErr0 psp ImpossibleBranchEmptyCtx else Err e
-      Ok (Pair bodyTerm ec2) => Ok (Pair (CaseAlt cname binders bodyTerm) ec2)
-    )
+    Pair branchCtx (Pair binders leftover) => if nonEmpty leftover then tcErr1 psp (BranchTooManyArgs cname) cname
+    else andThen (unifyIdxList ec [] (ctxDepth branchCtx) defaultFuel (ctorResultValsIn branchCtx ctor) (map (\v => refineValue [] defaultFuel v) idxs)) (\refsIdx => case branchAfterUnify ec branchCtx refsIdx of
+      BranchImpossibleIndex => tcErr0 psp ImpossibleBranchIndex
+      BranchImpossibleEmptyCtx => tcErr0 psp ImpossibleBranchEmptyCtx
+      BranchOk => andThen (reflectScrutinee ec (ctxDepth branchCtx) refsIdx (ctorValueIn branchCtx ctor) scrutVal) (\refs2 => let
+        refinedExpected = refineValue refs2 defaultFuel expected
+        branchCtx2 = ctxRefine branchCtx refs2
+      in andThen (checkEFuel (fuel - 1) globals branchCtx2 ec body refinedExpected) (\pb => case pb of
+        Pair bodyTerm ec2 => Ok (Pair (CaseAlt cname binders bodyTerm) ec2)
+      )
+      )
     )
   )
 
@@ -87,7 +91,7 @@ elabCaseAltsFuel fuel globals ctx ec scrutTy dd idxs scrutVal expected [] acc =
 elabCaseAltsFuel fuel globals ctx ec scrutTy dd idxs scrutVal expected (alt :: rest) acc = if fuel <= 0 then Err "DT: internal: inference fuel exhausted"
 else case alt of
   Pair pat body => case pat of
-    PCon cname args psp => andThen (elabConAltFuel (fuel - 1) (findCatchAllBody rest) globals ctx ec dd idxs scrutVal expected cname args psp body) (\p => case p of
+    PCon cname args psp => andThen (elabConAltFuel (fuel - 1) globals ctx ec dd idxs scrutVal expected cname args psp body) (\p => case p of
       Pair altTerm ec1 =>
         elabCaseAltsFuel (fuel - 1) globals ctx ec1 scrutTy dd idxs scrutVal expected rest
           (altTerm :: acc)
@@ -117,21 +121,36 @@ else
       in Ok (Pair (reverse (CaseAlt "" binds bodyTerm :: acc)) ec2)
   )
 
+-- M28：case 的**唯一入口**，流程固定为三步：
+--   ① 源级校验（`checkCaseAltsFlat`：兜底位置 / 重复构造子 / 重复字面量）——与家族无关；
+--   ② 需要模式矩阵才能表达的分支形态（嵌套模式、需矩阵消解的重复构造子）先降级成矩阵
+--      （`Elab.Match.multiToCaseExpr`）；矩阵生成的 case 天然是规范形，会再回到本入口走 ③；
+--   ③ 规范形直接按 scrutinee 家族降低（Bool → if；Int/String → if 链；归纳族 → TCase）。
+-- 没有第二条「去重降级」路径，也没有精化器内的嵌套模式折叠。
 checkCaseFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Expr -> List (Pair Pat Expr) -> Value -> Span -> Result (Pair Term Ec)
 checkCaseFuel fuel globals ctx ec scrut alts expected sp = if fuel <= 0 then Err "DT: internal: inference fuel exhausted"
-else if hasDupNames (altNames alts) then checkCaseDedupFuel (fuel - 1) globals ctx ec scrut alts expected sp
-else if anyNestedPat alts && hasVarCatchAll alts then checkCaseDedupFuel (fuel - 1) globals ctx ec scrut alts expected sp
+else andThen (checkCaseAltsFlat alts) (\_ => if needsMatrixCase alts then checkCaseMatrixFuel (fuel - 1) globals ctx ec scrut alts expected sp
 else andThen (inferEFuel (fuel - 1) globals ctx ec scrut) (\ps => case ps of
   Pair scrutTerm (Pair scrutTy ec1) =>
     checkCaseFamFuel (fuel - 1) globals ctx ec1 scrutTerm scrutTy alts expected sp
 )
+)
 
-checkCaseDedupFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Expr -> List (Pair Pat Expr) -> Value -> Span -> Result (Pair Term Ec)
-checkCaseDedupFuel fuel globals ctx ec scrut alts expected sp = if fuel <= 0 then Err "DT: internal: inference fuel exhausted"
-else if catchAllNotLast alts then tcErr0 sp CatchAllNotLast
+-- 哪些分支形态需要矩阵：嵌套模式（精化器不再自己折叠），以及校验后仍同名的构造子
+-- （`Just (TStr s)` 之后的 `Just v`：第二条不是不可达，矩阵会让两条都可达）。
+needsMatrixCase : List (Pair Pat Expr) -> Bool
+needsMatrixCase alts = anyNestedPat alts || hasDupNames (altNames alts)
+
+-- 去重/嵌套降级：let 绑定 scrutinee（只求值一次）→ 模式矩阵表达式 → 按规范形重新精化。
+-- M28：位置名带**上下文深度**（`nd_scrut<depth>`）。矩阵生成的新鲜绑定名以位置名为前缀，
+-- 而嵌套 case 会各自降级；若两层都用固定前缀，内层生成的 `_sc_...` 会与外层分支绑定
+-- 同名（编译器源码 `binderHeadName` 的 `PTok (TIdent name) p => case ... of Just (PTok ...)`
+-- 曾因此串位）。分支体在更深的作用域里检查，所以深度前缀保证不同层的名字不相交。
+checkCaseMatrixFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Expr -> List (Pair Pat Expr) -> Value -> Span -> Result (Pair Term Ec)
+checkCaseMatrixFuel fuel globals ctx ec scrut alts expected sp = if fuel <= 0 then Err "DT: internal: inference fuel exhausted"
 else
   let
-    name = "nd_scrut"
+    name = "nd_scrut" ++ strFromInt (ctxDepth ctx)
     clauses = map (\alt => Pair [firstOf alt] (secondOf alt)) alts
   in andThen (multiToCaseExpr (ctorFamilyTable ec) clauses name)
     (\bodyExpr => checkEFuel (fuel - 1) globals ctx ec (ELet [Pair (PVar name sp) scrut] bodyExpr False sp) expected)
@@ -244,8 +263,7 @@ checkCaseOfFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Term -> Value -
 checkCaseOfFuel fuel globals ctx ec scrutTerm scrutTy fam idxs alts expected sp = if fuel <= 0 then Err "DT: internal: inference fuel exhausted"
 else case dtDataLookup fam (ecDatas ec) of
   Nothing => tcErr0 sp NotInductiveFamily
-  Just dd => if hasDupNames (altNames alts) then tcErr0 sp DuplicateCtorInCase
-  else andThen (elabCaseAltsFuel (fuel - 1) globals ctx ec scrutTy dd idxs (evalCtx ctx scrutTerm) expected alts []) (\p => case p of
+  Just dd => andThen (elabCaseAltsFuel (fuel - 1) globals ctx ec scrutTy dd idxs (evalCtx ctx scrutTerm) expected alts []) (\p => case p of
     Pair altTerms ec2 => checkCaseDone ec2 ctx dd idxs alts expected sp scrutTerm altTerms
   )
 
@@ -427,7 +445,7 @@ else
       a :: rest => andThen (checkEFuel (fuel - 1) globals ctx ec a dom) (\p => case p of
         Pair aTerm ec1 => andThen (inferArgsGo (fuel - 1) globals ctx ec1 (applyClosure clo (evalCtx ctx aTerm)) rest sp) (\q => case q of
           Pair argTerms (Pair resTy ec2) =>
-            Ok (Pair (Pair aTerm (typeLayerRig False dom) :: argTerms) (Pair resTy ec2))
+            Ok (Pair (Pair aTerm (binderRig False dom) :: argTerms) (Pair resTy ec2))
         )
       )
     _ => case args of
@@ -515,17 +533,16 @@ else case expr of
 -- 逐条处理：推断绑定值 → 上下文绑名 → 处理后续与 body → `(\x => body) value`（beta 等价）。
 -- 不引入 `TLet`（`let` 是纯记法，不是类型论构造）；`rig` 由绑定值类型经 `binderRig` 决定，
 -- 与函数参数自动一致。后续绑定可见前面（顺序 let），不互递归；构造子模式 let 等价 case。
+-- 统一绑定块（M28）：`let` 与 `where` 走同一套顺序作用域；`where` 多一条记法约束
+-- （签名行必填，`checkBindingSigs`）。签名绑定在 parser 里已降级成 `EAnn value ty`，
+-- 值一律按签名以 checking 模式精化（`inferEFuel` 的 EAnn 分支），因此这里不再区分来源。
 checkLetFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> List (Pair Pat Expr) -> Expr -> Bool -> Value -> Span -> Result (Pair Term Ec)
 checkLetFuel fuel globals ctx ec binds body rec_ expected sp =
   if fuel <= 0 then Err "DT: internal: inference fuel exhausted"
-  else if rec_ then andThen (checkWhereSigs binds)
+  else andThen (checkBindingSigs rec_ binds)
     (\_ => checkLetGoFuel (fuel - 1) globals ctx ec binds body rec_ expected sp)
-  else checkLetGoFuel (fuel - 1) globals ctx ec binds body rec_ expected sp
 
--- M24：`where` 块（parser 生成的 `ELet binds body True`）是**带签名的局部顺序 let**：
--- 每个绑定必须由 `name : Ty` 行标注（parser 已降级成 `EAnn value ty`），这里校验齐全。
--- 语言决策：where 内部不支持自递归/互递归（递归放顶层定义组），所以这里不做预绑定，
--- 按顺序 let 精化即可；缺签名给明确诊断，而不是落到「lambda 的类型无法推断」。
+-- M24：where/let 绑定块是**顺序 let**：每个绑定只看得到它之前的绑定；递归放顶层定义组。
 checkLetGoFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> List (Pair Pat Expr) -> Expr -> Bool -> Value -> Span -> Result (Pair Term Ec)
 checkLetGoFuel fuel globals ctx ec [] body rec_ expected sp =
   if fuel <= 0 then Err "DT: internal: inference fuel exhausted"
@@ -569,8 +586,8 @@ else case firstOf bind of
 inferLetFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> List (Pair Pat Expr) -> Expr -> Bool -> Span -> Result (Pair Term (Pair Value Ec))
 inferLetFuel fuel globals ctx ec binds body rec_ sp =
   if fuel <= 0 then Err "DT: internal: inference fuel exhausted"
-  else if rec_ then andThen (checkWhereSigs binds) (\_ => inferLetGoFuel (fuel - 1) globals ctx ec binds body rec_ sp)
-  else inferLetGoFuel (fuel - 1) globals ctx ec binds body rec_ sp
+  else andThen (checkBindingSigs rec_ binds)
+    (\_ => inferLetGoFuel (fuel - 1) globals ctx ec binds body rec_ sp)
 
 inferLetGoFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> List (Pair Pat Expr) -> Expr -> Bool -> Span -> Result (Pair Term (Pair Value Ec))
 inferLetGoFuel fuel globals ctx ec binds body rec_ sp = if fuel <= 0 then Err "DT: internal: inference fuel exhausted"
@@ -640,27 +657,28 @@ else
     _ => tcErr0 sp LambdaTooManyParams
 
 -- 类型位置的裸名字：与类型同名的零参构造子（`data T : Type where T : ...`）不能抢走
--- 类型名——`inferEFuel (fuel - 1)` 的 `inferVarRef` 为了让值位置的构造子优先总先查构造子表，于是
--- `T` 在类型位置会被解释成构造子类型。类型位置只认「kind 是宇宙」的全局项：先查
--- 全局（族名/类型别名），kind 不是宇宙再退回推断。
+-- 类型名——`inferVarRef` 在值位置优先构造子，所以 `T` 在类型位置若走推断会拿到构造子
+-- 类型。M28（B18）起这里**显式查类型命名空间**（`typeLookup`：数据族 + 字典族 +
+-- 类型层 def），不再把「全局项的 kind 是不是宇宙」当命名空间判据。
 checkTypeFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Expr -> Result (Pair Term (Pair Level Ec))
 checkTypeFuel fuel globals ctx ec expr = if fuel <= 0 then Err "DT: internal: inference fuel exhausted"
 else case expr of
   EVar name sp => case ctxLookup name ctx of
     Just _ => checkTypeInferFuel (fuel - 1) globals ctx ec expr
-    Nothing => case globalsLookup name globals ec of
+    Nothing => case typeLookup globals ec name of
       Just tyTerm => case typeLevelOf (forceVal ec (eval [] tyTerm)) of
         Just lvl => Ok (Pair (TGlobal name) (Pair lvl ec))
         Nothing => checkTypeInferFuel (fuel - 1) globals ctx ec expr
       Nothing => checkTypeInferFuel (fuel - 1) globals ctx ec expr
-  -- M23：族应用在类型位置按 globals 的 kind 应用（`Pair` 这类与族同名的构造子
+  -- 族应用在类型位置按该名字在类型命名空间里的 kind 应用（`Pair` 这类与族同名的构造子
   -- 不能在类型位置被当成值构造子）。`->` / `Type` 是内建形式，仍走常规推断。
   EApp (EVar name sp) args asp => if name == "->" || name == "Type" then checkTypeInferFuel (fuel - 1) globals ctx ec expr
   else case ctxLookup name ctx of
     Just _ => checkTypeInferFuel (fuel - 1) globals ctx ec expr
-    Nothing => case inferAppUnderTypeFuel (fuel - 1) globals ctx ec name args sp of
+    Nothing => if isTypeName globals ec name then case inferAppUnderTypeFuel (fuel - 1) globals ctx ec name args sp of
       Err _ => checkTypeInferFuel (fuel - 1) globals ctx ec expr
       Ok p => Ok p
+    else checkTypeInferFuel (fuel - 1) globals ctx ec expr
   _ => checkTypeInferFuel (fuel - 1) globals ctx ec expr
 
 checkTypeInferFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Expr -> Result (Pair Term (Pair Level Ec))
@@ -683,23 +701,27 @@ checkAppFuel fuel globals ctx ec fn args expected sp = if fuel <= 0 then Err "DT
 else case fn of
   EVar name vsp => case ctxLookup name ctx of
     Just _ => checkAppGeneralFuel (fuel - 1) globals ctx ec fn args expected sp
-    -- M23：期望类型是宇宙 ⇒ 这一处在**类型位置**，按族 kind 做类型应用（与族同名的
-    -- 构造子不能抢）。类型位置可能嵌套在应用实参里（`List (Pair String Int)`），
-    -- 所以这一步必须在 checkAppFuel (fuel - 1) 里，而不只是 checkTypeFuel (fuel - 1)。
-    Nothing => if isSortVal ec expected then checkAppUnderTypeFuel (fuel - 1) globals ctx ec name args expected vsp
-    else case dtCtorLookup name (ecDatas ec) of
-      Just _ => checkAppCtorFuel (fuel - 1) globals ctx ec name args expected vsp
+    -- M28（B18）：**类型位置 = 期望是宇宙且名字在类型命名空间**。位置本身不能单独决定
+    -- 命名空间（`applyTwice Box ...` 里 `Box` 在值位置、期望是 `Type -> Type`），
+    -- 所以显式问 `isTypeName`，不再只看期望类型是不是宇宙。
+    -- 类型位置可能嵌套在应用实参里（`List (Pair String Int)`），所以这一步必须在
+    -- checkAppFuel (fuel - 1) 里，而不只是 checkTypeFuel (fuel - 1)。
+    Nothing => if isSortVal ec expected && isTypeName globals ec name then checkAppUnderTypeFuel (fuel - 1) globals ctx ec name args expected vsp
+    else case valueLookup globals ec name of
+      Just (VECtor _) => checkAppCtorFuel (fuel - 1) globals ctx ec name args expected vsp
+      Just (VEDef _) => checkAppGeneralFuel (fuel - 1) globals ctx ec fn args expected sp
       Nothing => checkAppGeneralFuel (fuel - 1) globals ctx ec fn args expected sp
   _ => checkAppGeneralFuel (fuel - 1) globals ctx ec fn args expected sp
 
--- 类型位置的应用：族名（`List`/`Vertex`）与「与族同名的构造子名」（`Pair`）都按
--- globals 里的 kind 应用；kind 应用结果不是宇宙时退回常规推断（例如高阶 kind 实参）。
+-- 类型位置的应用：名字已在类型命名空间（`checkAppFuel` 的 `isTypeName` 保证），按它的
+-- kind 应用；结果必须是宇宙。M28（B18）删掉了「infer 失败退回常规推断」的兜底——
+-- 进入这里就说明这是类型位置 + 类型命名空间，退化会把命名空间判断又搅混。
 checkAppUnderTypeFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> String -> List Expr -> Value -> Span -> Result (Pair Term Ec)
 checkAppUnderTypeFuel fuel globals ctx ec name args expected sp = if fuel <= 0 then Err "DT: internal: inference fuel exhausted"
-else case inferAppUnderTypeFuel (fuel - 1) globals ctx ec name args sp of
-  Err _ => checkAppGeneralFuel (fuel - 1) globals ctx ec (EVar name sp) args expected sp
-  Ok (Pair term (Pair lvl ec1)) =>
+else andThen (inferAppUnderTypeFuel (fuel - 1) globals ctx ec name args sp) (\p => case p of
+  Pair term (Pair lvl ec1) =>
     andThen (convEc ec1 (ctxDepth ctx) expected (VType lvl)) (\ec2 => Ok (Pair term ec2))
+)
 
 inferAppUnderTypeFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> String -> List Expr -> Span -> Result (Pair Term (Pair Level Ec))
 inferAppUnderTypeFuel fuel globals ctx ec name args sp = if fuel <= 0 then Err "DT: internal: inference fuel exhausted"

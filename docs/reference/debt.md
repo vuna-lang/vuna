@@ -34,7 +34,7 @@ M25–M30 为可排期阶段，F1–F4 为不排期未来轨道）。
 | A11 | 公开名与 `prim_*` 是同一内建的双份名字；生成 runtime 无条件下嵌 Unix | `Elab/Prelude` 双份表；`Codegen/Term.dtRuntime`；**M26 新增** `prim_getenv`/`prim_getcwd`/`prim_execPath`（只有 `prim_*` 名、无公开别名；`/proc/self/exe` 为 Linux 假设），语义规范归 M27 | 已修（M27：删公开效果名，只留 `prim_*`；runtime 映射来自 Intrinsics；Unix 依赖写入 runtime 契约） |
 | A12 | `IO a` 是 thunk 表示（`Int -> a`）、无 `runIO`，仅 `main` 处由生成 hook 执行 | `Base/IO.vuna`；`Codegen/Term` main hook | F3（M27 已清理接口：main hook 只认 canonical `Base.IO.IO`；IO 仍是 thunk，声明式接口留 F3） |
 | A13 | `Split` 仍匹配 M24.7 前的 `Show_Show_` 实例名前缀（死兜底），与 Elab 命名规则脱节 | `Codegen/Split.vuna` `isBuiltinInstanceName` | 已修（M26：改用 `Elab.instanceName`/`derivedInstName` + `Derive.instHead`，字符串归属表删除） |
-| A14 | 记录/trait 投影全部降级成 `case`，诊断 span 指向生成代码（来源信息丢失） | `Elab/Records.prepareDecls`、`Elab/Dict` 投影 eta 展开 | M28 |
+| A14 | 记录/trait 投影全部降级成 `case`，诊断 span 指向生成代码（来源信息丢失） | `Elab/Records.prepareDecls`、`Elab/Dict` 投影 eta 展开 | M29（随记录/投影 ergonomics 一起收；M28 未做） |
 | A15 | `seed` 与 `build --split` 是同一命令的两个名字；CLI 参数解析各自手写；包模式下根参数被静默忽略 | `Driver/CompilerCli.vuna` seedRun/buildSplitRun；Design | 已修（M26：`seed`/`--split` 删除，统一 `compile`/`build --out` 参数解析） |
 | A16 | 跨包 import 方向不校验：Loader 的 roots 是扁平列表、selfRoot 不过滤 import；依赖包模块可以 import 消费包模块（实测 a→b、compiler→`Vuna.Json` 在 root 上下文通过）；**根修=删除 roots、按导入方包依赖闭包解析**（M26） | `Pkg.packageRoots` 的 selfRoot `Nothing` + `Loader.rootAllows`；`_scratch/crossdep`、crossprobe | 已修（M26：`PackageContext` 依赖闭包解析，两包方向回归 `packages/95_cross_dep`） |
 
@@ -46,20 +46,20 @@ M25–M30 为可排期阶段，F1–F4 为不排期未来轨道）。
 | B02 | 覆盖率放行实现是插入 `TInt 0` 哨兵（而不是 bottom/absurd） | `Elab/Term.vuna`；trusted Bool 缺分支生成 `if ... else 0` | 已修（M25：删除覆盖率豁免与哨兵） |
 | B03 | 终止性只查自递归，互递归不查；归约 fuel=512 静默截断 | `Elab/Termination`、`Core/Eval.force` | M25 |
 | B04 | 无 Eq 实例时 `==` 退回 OCaml 多态结构相等；interp 用另一套 `valueEqDeep` | `Elab/Dict.genericEqApp`、`Core/Eval.valueEqDeep` | 部分修复（M25：泛型兜底限制在可安全结构比较类型；兜底删除 M29） |
-| B05 | 宇宙中间态：严格分层（`Type:Type` 不成立）但**无累积性**；data kind 的 level 不校验 | `Core/Conv.vuna` level 相等；`data Box5 : Type 5` 通过 | M28 |
-| B06 | 擦除判据 4 个谓词、按语法 rig 判定、不做整程序使用分析 | `Core/Term.rigOfBinder`、`Elab/Meta.{isIndexDomain,binderRig,typeLayerRig}` | M28 |
-| B07 | `solveMetaHo` 只覆盖少数形状；元变量深度是事后复核；存库项靠 `inlineSolvedMetas` 补洞 | `Core/Conv` 三条 M13 出口；`Elab/Meta.inlineSolvedMetas` | M28 |
-| B08 | case 精化三条路径并存（直接/去重降级/嵌套矩阵）；中性索引下空族「写也错、省也错」 | `Elab/Term.checkCase` 分流；`Elab/Case` 保守判定 | M28 |
-| B09 | 隐式仅精化器内部插入：`{x : a}`、隐式模式 `{p}`、用户 `auto` 均无 | `Elab/Meta.isIndexDomain`；parser pattern 语法 | M28（语法）/M29（搜索） |
-| B10 | `let` 与 `where` 两套作用域模型（签名必填/顺序可见）；无 axiom/未定义顶层；无 η 展开 | `Elab/Term.checkWhereSigs`；`DT: signature for ... has no definition` | M28 |
+| B05 | 宇宙中间态：严格分层（`Type:Type` 不成立）但**无累积性**；data kind 的 level 不校验 | `Core/Conv.vuna` level 相等；`data Box5 : Type 5` 通过 | 已修（M28：严格分层、非累积、无 `Type:Type`；data kind 结果层级 + 构造子字段 sort 受检；正反例 `dt/57_universe`、`dt_err/40_universe_*`） |
+| B06 | 擦除判据 4 个谓词、按语法 rig 判定、不做整程序使用分析 | `Core/Term.rigOfBinder`、`Elab/Meta.{isIndexDomain,binderRig,typeLayerRig}` | 已修（M28：判据收成 `isTypeDomain`/`binderRig` 单一入口；显式 multiplicity 标注、不做使用分析；索引擦除=隐式 binder；`dt/60_erasure_unify`） |
+| B07 | `solveMetaHo` 只覆盖少数形状；元变量深度是事后复核；存库项靠 `inlineSolvedMetas` 补洞 | `Core/Conv` 三条 M13 出口；`Elab/Meta.inlineSolvedMetas` | 部分修复（M28：Miller pattern unification + 创建深度随 `Sols` 就地检查 + 统一 `zonkTerm`，删 `inlineSolvedMetas`；剩余：非 pattern flex-flex 形状仍走保守 head 提取兜底，完整高阶合一归研究） |
+| B08 | case 精化三条路径并存（直接/去重降级/嵌套矩阵）；中性索引下空族「写也错、省也错」 | `Elab/Term.checkCase` 分流；`Elab/Case` 保守判定 | 已修（M28：单一 `checkCase` 入口 + 模式矩阵唯一降级 + 单一 `BranchVerdict` 可达性判据；`dt/58_case_matrix`/`58b_case_absurd`） |
+| B09 | 隐式仅精化器内部插入：`{x : a}`、隐式模式 `{p}`、用户 `auto` 均无 | `Elab/Meta.isIndexDomain`；parser pattern 语法 | M29（M28 未覆盖语法；隐式值参数/隐式模式/`auto` 与证明 ergonomics 一起） |
+| B10 | `let` 与 `where` 两套作用域模型（签名必填/顺序可见）；无 axiom/未定义顶层；无 η 展开 | `Elab/Term.checkWhereSigs`；`DT: signature for ... has no definition` | 已修（M28：`axiom` 声明（运行时使用报 `CG_AxiomAtRuntime`）、定义 η 展开、`let`/`where` 统一绑定块；`dt/59_*`） |
 | B11 | trait 只支持单参数、无默认方法/父类/关联类型；无约束实例；字典是单态编码 | `Elab/Trait`「exactly one parameter」；`Elab/Derive` 参数化只 Eq | M29 |
 | B12 | 命名实例不参与自动搜索；实例命名规则在 Elab/Derive/Split 三处重复实现 | `Elab/Dict.searchInstance` 过滤 named；命名 helper | M29 |
 | B13 | 依赖索引取值（`Ctx n -> Fin n -> Tm n`）无表达手段 | `dt-parity.md` §6.3；探针 `p3_dep_lookup` | M29 |
 | B14 | 类型当运行时值被擦除检查拦下（`Refl Nat` 失败），无 type codes | `Codegen/Erase` rig 检查；探针 | M29（决策） |
-| B15 | 字面量 case 必须有兜底；无冗余/不可达分支诊断 | `Elab/Term.checkLitCase` | M28 |
+| B15 | 字面量 case 必须有兜底；无冗余/不可达分支诊断 | `Elab/Term.checkLitCase` | 已修（M28：冗余构造子/冗余字面量/兜底后分支诊断；`dt_err/41*`） |
 | B16 | 效果 allowlist 按包名字符串（可伪造）；raw root 依赖模块可调 `prim_*`（**M26 已随删除环境根关闭**，剩下的是包名字符串判定）；**这是权限策略不是检查豁免**：M27 用 manifest 声明 capability 替换（或按决策删除） | `Loader/Resolve.packageAllowsEffects`；探针 | 已修（M27：manifest `[capabilities] effects` 显式能力；删 `packageAllowsEffects` 包名 allowlist） |
 | B17 | case/终止性「只告警」的文档与实现不符（实际静默跳过、无 warning）；随 B01 删除豁免后不再需要「告警」语义 | `docs/reference/limits.md` vs `Elab/Case.ecTrusted` | 已修（M25：删除豁免；无 warning 通道） |
-| B18 | 解析层只有单一命名空间：同名 type/ctor/global 靠多处特判兜住，与导出层双命名空间不一致 | `Elab/Term.inferVarRef`、`Elab/Records` 注释 | M28 |
+| B18 | 解析层只有单一命名空间：同名 type/ctor/global 靠多处特判兜住，与导出层双命名空间不一致 | `Elab/Term.inferVarRef`、`Elab/Records` 注释 | 部分修复（M28：Loader `type`/`value`/`ctor` 三命名空间 + Elab 显式 `typeLookup`/`valueLookup`；剩余：同模块 `data T` 与 `def T` 同名需 Elab globals 拆表，归 F1 模块/命名空间收尾；`dt/61_namespace_dual`） |
 | B19 | `Vuna.Compiler.Diagnostics` 单模块承载 74 个 TC 构造子的 code/模板，split codegen 把 74 臂 `match` 生成为单行 34912 字符（`nix/metrics.budget` maxline 因此从 8250 上调到 35500）；可拆成 Tc/Cg/元数据子模块降低单行与单模块规模 | `seed/Vuna_dCompiler_dDiagnostics.ml`；`nix/metrics.budget`；`vuna build --no-compile --out out compiler && sh nix/metrics.sh out` | M30 |
 
 ## C. 可复现缺陷（bug）
@@ -94,7 +94,7 @@ M25–M30 为可排期阶段，F1–F4 为不排期未来轨道）。
 | C26 | `Base.String.split` 为过检查改成显式 fuel 守卫，正确性依赖 `4*len+4` 外部论证（终止性本身由守卫保证） | `base/lib/Base/String.vuna`；M25.2b | M30（换结构递归或证明界） |
 | C27 | 前端/加载器状态机改用输入规模线性 fuel 初值（`8*len+64`/`128*tokens+1024`/1M/1G）；合法输入不触发依赖预算余量，无静态上界证明 | `Frontend/{Lexer,Parser,Toml}`、`Pkg`、`Loader`；M25.2c-front | M30（结构递归化或证明界） |
 | C28 | 工具链（Json/Fmt/Files/Index/Lint/Repl/Lsp）状态机/渲染互递归改用 fuel 或 `Base.List.range` 结构递归；fuel 上界靠输入规模/不可达值，无静态证明 | `lib/Vuna/{Json,Fmt,Fmt.Expr,Files,Index.Scan,Lint.Rules,Repl,Lsp}`；M25.2c-toolchain | M30（结构递归化或证明界） |
-| C29 | 顶层签名的隐式类型参数 banned 名集是 program-wide 的：entry 顶层小写名与 base 模块签名类型变量同名时，base 报 `unknown name a/v`（跨模块类型变量捕获） | `Elab/Sig.quantifyTopSig`；夹具 `test/corpus/dt/17_*`、`test/corpus/term_err/09_*`（M26 发现；夹具侧已改名规避） | M28（banned 集按模块作用域/按签名局部计算） |
+| C29 | 顶层签名的隐式类型参数 banned 名集是 program-wide 的：entry 顶层小写名与 base 模块签名类型变量同名时，base 报 `unknown name a/v`（跨模块类型变量捕获） | `Elab/Sig.quantifyTopSig`；夹具 `test/corpus/dt/17_*`、`test/corpus/term_err/09_*`（M26 发现；夹具侧已改名规避） | 已修（M28：`Elab.Sig.bannedForModule` 每签名现场算 banned；`packages/08_module_scope`） |
 
 ## D. 未实现能力 / 语言缺口
 
@@ -104,14 +104,14 @@ M25–M30 为可排期阶段，F1–F4 为不排期未来轨道）。
 | D02 | 运行时/后端未定型：GC、后端无关 IR、Wasm/JS（当前绑 OCaml runtime） | F2 |
 | D03 | 无通用效应系统 / 并发 / async；IO 只是 thunk + `prim_*` | F3 |
 | D04 | 包生态：registry、版本解析、lockfile、文档托管、DT 验证库（Vec/Fin/Map/Set） | F4 |
-| D05 | 宇宙：累积性 / 宇宙多态（当前严格分层但无 subtyping） | M28 |
-| D06 | 完整依赖 kind / CoC 依赖消除（`kindWellFormed` 只查箭头链形状） | M28 |
-| D07 | QTT / 整程序使用分析（擦除仍按语法 rig） | M28 |
-| D08 | 隐式语言化：用户 `implicit`/`auto`、隐式值参数 `{x:a}`、隐式模式 `{p}` | M28/M29 |
+| D05 | 宇宙：累积性 / 宇宙多态（当前严格分层但无 subtyping） | 已修（M28 决策：严格分层、非累积、无 `Type:Type`；累积性/宇宙多态归研究） |
+| D06 | 完整依赖 kind / CoC 依赖消除（`kindWellFormed` 只查箭头链形状） | 部分修复（M28：kind 形状 + 结果层级 + 构造子字段 sort 可检查；完整依赖 kind/参数-索引区分归研究（CoC 补完）） |
+| D07 | QTT / 整程序使用分析（擦除仍按语法 rig） | 已修（M28 决策：显式 multiplicity 标注（隐式 binder=Rig0），不做整程序使用分析；QTT 完整变体归研究） |
+| D08 | 隐式语言化：用户 `implicit`/`auto`、隐式值参数 `{x:a}`、隐式模式 `{p}` | M29（M28 未覆盖语法） |
 | D09 | type-as-value / type codes（Type 级等式的根本障碍） | M29 |
-| D10 | axiom/foreign 定义、η 展开（定义参数个数必须与签名一致）、typed let/统一 let-where | M28 |
+| D10 | axiom/foreign 定义、η 展开（定义参数个数必须与签名一致）、typed let/统一 let-where | 已修（M28：axiom/foreign 的无体形态（axiom）、η 展开、typed let 随 let/where 统一） |
 | D11 | trait 能力：多参数、默认方法、父类、关联类型、约束实例、coherence | M29 |
-| D12 | 证明 ergonomics：构造子部分应用 conv（`cong Succ`）、隐式等式搜索、absurd/空族、Σ | M29 |
+| D12 | 证明 ergonomics：构造子部分应用 conv（`cong Succ`）、隐式等式搜索、absurd/空族、Σ | M29（M28 只落了空族判据/冗余诊断，absurd 语法与隐式搜索仍在 M29） |
 | D13 | LSP 语义诊断（含 import 即跳过类型检查）；Index 仅 parse 级 | M30 |
 | D14 | REPL 多行/效果；`vuna test` 只能 `main : String` 且走 interp（不能测效果） | M30 |
 | D15 | hermetic / 增量依赖哈希 / 并行构建（当前宿主 ocamlopt + mtime 增量） | M30 |

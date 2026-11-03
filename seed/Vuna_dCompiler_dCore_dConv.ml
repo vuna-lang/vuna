@@ -78,72 +78,195 @@ let v_Vuna_dCompiler_dCore_dConv_dfastSame = (fun a -> (fun b -> (match a with
 
 let v_Vuna_dCompiler_dCore_dConv_dmismatchAt = (fun depth -> (fun a -> (fun b -> ((fun sa -> ((fun sb -> (((v_Vuna_dCompiler_dDiagnostics_dtcErr2NoLoc (C_Vuna_dCompiler_dDiagnostics_dTcErr_Vuna_dCompiler_dDiagnostics_dTypeMismatch (sa, sb))) sa) sb)) ((v_Vuna_dCompiler_dCore_dEval_dshowValueAt depth) b))) ((v_Vuna_dCompiler_dCore_dEval_dshowValueAt depth) a)))))
 
+let v_Vuna_dCompiler_dCore_dConv_dmetaCreatedDepth = (fun sols -> (fun depth -> (fun m -> (match ((v_Vuna_dCompiler_dCore_dTerm_dsolsDepth m) sols) with
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__24) -> dtb__24
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> depth
+  | _ -> failwith "DT: impossible branch"
+))))
+
+let v_Vuna_dCompiler_dCore_dConv_disNilSpine = (fun mc0 -> (match mc0 with
+  | C_Base_dList_dList_Base_dList_dNil -> true
+  | _ -> false
+))
+
+let rec v_Vuna_dCompiler_dCore_dConv_dmemLevel = (fun mc0 -> (fun mc1 -> (match mc1 with
+  | C_Base_dList_dList_Base_dList_dCons (dtb__25, dtb__26) -> (match dtb__25 with
+  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__27, dtb__28) -> (if ((bi_eq_int dtb__28) mc0) then true else ((v_Vuna_dCompiler_dCore_dConv_dmemLevel mc0) dtb__26))
+  | _ -> failwith "DT: impossible branch"
+)
+  | C_Base_dList_dList_Base_dList_dNil -> false
+  | _ -> failwith "DT: impossible branch"
+)))
+
+let rec v_Vuna_dCompiler_dCore_dConv_dtermScopedTo = (fun created -> (fun depth -> (fun extra -> (fun levels -> (fun t -> (match t with
+  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTVar (dtb__29, dtb__30) -> (if ((bi_lt_int dtb__30) extra) then true else ((fun level -> (if ((bi_ge_int level) 0) then (if ((bi_lt_int level) created) then true else ((v_Vuna_dCompiler_dCore_dConv_dmemLevel level) levels)) else false)) ((bi_sub ((bi_sub ((bi_add depth) extra)) 1)) dtb__30)))
+  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTMeta (dtb__31) -> true
+  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTGlobal (dtb__32) -> true
+  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTType (dtb__33) -> true
+  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTPi (dtb__34, dtb__35, dtb__36, dtb__37, dtb__38) -> (if (((((v_Vuna_dCompiler_dCore_dConv_dtermScopedTo created) depth) extra) levels) dtb__37) then (((((v_Vuna_dCompiler_dCore_dConv_dtermScopedTo created) depth) ((bi_add extra) 1)) levels) dtb__38) else false)
+  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTLam (dtb__39, dtb__40, dtb__41) -> (((((v_Vuna_dCompiler_dCore_dConv_dtermScopedTo created) depth) ((bi_add extra) 1)) levels) dtb__41)
+  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTApp (dtb__42, dtb__43, dtb__44) -> (if (((((v_Vuna_dCompiler_dCore_dConv_dtermScopedTo created) depth) extra) levels) dtb__42) then (((((v_Vuna_dCompiler_dCore_dConv_dtermScopedTo created) depth) extra) levels) dtb__43) else false)
+  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTCon (dtb__45, dtb__46) -> (((((v_Vuna_dCompiler_dCore_dConv_dargsScopedTo created) depth) extra) levels) dtb__46)
+  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTCase (dtb__47, dtb__48) -> (if (((((v_Vuna_dCompiler_dCore_dConv_dtermScopedTo created) depth) extra) levels) dtb__47) then (((((v_Vuna_dCompiler_dCore_dConv_daltsScopedTo created) depth) extra) levels) dtb__48) else false)
+  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTInt (dtb__49) -> true
+  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTStr (dtb__50) -> true
+  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTBool (dtb__51) -> true
+  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTIf (dtb__52, dtb__53, dtb__54) -> (if (if (((((v_Vuna_dCompiler_dCore_dConv_dtermScopedTo created) depth) extra) levels) dtb__52) then (((((v_Vuna_dCompiler_dCore_dConv_dtermScopedTo created) depth) extra) levels) dtb__53) else false) then (((((v_Vuna_dCompiler_dCore_dConv_dtermScopedTo created) depth) extra) levels) dtb__54) else false)
+  | _ -> failwith "DT: impossible branch"
+))))))
+and v_Vuna_dCompiler_dCore_dConv_dargsScopedTo = (fun mc0 -> (fun mc1 -> (fun mc2 -> (fun mc3 -> (fun mc4 -> (match mc4 with
+  | C_Base_dList_dList_Base_dList_dCons (dtb__55, dtb__56) -> (match dtb__55 with
+  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__57, dtb__58) -> (if (((((v_Vuna_dCompiler_dCore_dConv_dtermScopedTo mc0) mc1) mc2) mc3) dtb__57) then (((((v_Vuna_dCompiler_dCore_dConv_dargsScopedTo mc0) mc1) mc2) mc3) dtb__56) else false)
+  | _ -> failwith "DT: impossible branch"
+)
+  | C_Base_dList_dList_Base_dList_dNil -> true
+  | _ -> failwith "DT: impossible branch"
+))))))
+and v_Vuna_dCompiler_dCore_dConv_daltsScopedTo = (fun mc0 -> (fun mc1 -> (fun mc2 -> (fun mc3 -> (fun mc4 -> (match mc4 with
+  | C_Base_dList_dList_Base_dList_dCons (dtb__59, dtb__60) -> (if (((((v_Vuna_dCompiler_dCore_dConv_dtermScopedTo mc0) mc1) ((bi_add mc2) (v_Base_dList_dlength (v_Vuna_dCompiler_dCore_dTerm_dcaseAltBinders dtb__59)))) mc3) (v_Vuna_dCompiler_dCore_dTerm_dcaseAltBody dtb__59)) then (((((v_Vuna_dCompiler_dCore_dConv_daltsScopedTo mc0) mc1) mc2) mc3) dtb__60) else false)
+  | C_Base_dList_dList_Base_dList_dNil -> true
+  | _ -> failwith "DT: impossible branch"
+))))))
+
+let rec v_Vuna_dCompiler_dCore_dConv_dpatternSpineOf = (fun mc0 -> (match mc0 with
+  | C_Base_dList_dList_Base_dList_dCons (dtb__61, dtb__62) -> (match dtb__61 with
+  | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVNeutral (dtb__63) -> (match dtb__63 with
+  | C_Vuna_dCompiler_dCore_dTerm_dNeutral_Vuna_dCompiler_dCore_dTerm_dNVar (dtb__64, dtb__65, dtb__66) -> (if (v_Vuna_dCompiler_dCore_dConv_disNilSpine dtb__66) then (match (v_Vuna_dCompiler_dCore_dConv_dpatternSpineOf dtb__62) with
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__67) -> (if ((v_Vuna_dCompiler_dCore_dConv_dmemLevel dtb__65) dtb__67) then C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing else (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust ((C_Base_dList_dList_Base_dList_dCons ((C_Base_dPair_dPair_Base_dPair_dPair (dtb__64, dtb__65)), dtb__67)))))
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing
+  | _ -> failwith "DT: impossible branch"
+) else C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing)
+  | _ -> C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing
+)
+  | _ -> C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing
+)
+  | C_Base_dList_dList_Base_dList_dNil -> (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (C_Base_dList_dList_Base_dList_dNil))
+  | _ -> failwith "DT: impossible branch"
+))
+
+let rec v_Vuna_dCompiler_dCore_dConv_dlevelPosGo = (fun mc0 -> (fun mc1 -> (fun mc2 -> (match mc1 with
+  | C_Base_dList_dList_Base_dList_dCons (dtb__68, dtb__69) -> (if ((bi_eq_int dtb__68) mc0) then (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (mc2)) else (((v_Vuna_dCompiler_dCore_dConv_dlevelPosGo mc0) dtb__69) ((bi_add mc2) 1)))
+  | C_Base_dList_dList_Base_dList_dNil -> C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing
+  | _ -> failwith "DT: impossible branch"
+))))
+
+let v_Vuna_dCompiler_dCore_dConv_dlevelPos = (fun level -> (fun levels -> (((v_Vuna_dCompiler_dCore_dConv_dlevelPosGo level) levels) 0)))
+
+let rec v_Vuna_dCompiler_dCore_dConv_dspineLevels = (fun mc0 -> (match mc0 with
+  | C_Base_dList_dList_Base_dList_dCons (dtb__70, dtb__71) -> (C_Base_dList_dList_Base_dList_dCons ((v_Base_dPair_dsecondOf dtb__70), (v_Vuna_dCompiler_dCore_dConv_dspineLevels dtb__71)))
+  | C_Base_dList_dList_Base_dList_dNil -> C_Base_dList_dList_Base_dList_dNil
+  | _ -> failwith "DT: impossible branch"
+))
+
+let rec v_Vuna_dCompiler_dCore_dConv_dabsPatternBody = (fun n -> (fun created -> (fun depth -> (fun extra -> (fun levels -> (fun t -> (match t with
+  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTVar (dtb__72, dtb__73) -> (if ((bi_lt_int dtb__73) extra) then t else ((fun level -> (match ((v_Vuna_dCompiler_dCore_dConv_dlevelPos level) levels) with
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__74) -> (C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTVar (dtb__72, ((bi_sub ((bi_sub ((bi_add extra) n)) 1)) dtb__74)))
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> (C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTVar (dtb__72, ((bi_add dtb__73) n)))
+  | _ -> failwith "DT: impossible branch"
+)) ((bi_sub ((bi_sub ((bi_add depth) extra)) 1)) dtb__73)))
+  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTPi (dtb__75, dtb__76, dtb__77, dtb__78, dtb__79) -> (C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTPi (dtb__75, dtb__76, dtb__77, ((((((v_Vuna_dCompiler_dCore_dConv_dabsPatternBody n) created) depth) extra) levels) dtb__78), ((((((v_Vuna_dCompiler_dCore_dConv_dabsPatternBody n) created) depth) ((bi_add extra) 1)) levels) dtb__79)))
+  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTLam (dtb__80, dtb__81, dtb__82) -> (C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTLam (dtb__80, dtb__81, ((((((v_Vuna_dCompiler_dCore_dConv_dabsPatternBody n) created) depth) ((bi_add extra) 1)) levels) dtb__82)))
+  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTApp (dtb__83, dtb__84, dtb__85) -> (C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTApp (((((((v_Vuna_dCompiler_dCore_dConv_dabsPatternBody n) created) depth) extra) levels) dtb__83), ((((((v_Vuna_dCompiler_dCore_dConv_dabsPatternBody n) created) depth) extra) levels) dtb__84), dtb__85))
+  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTCon (dtb__86, dtb__87) -> (C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTCon (dtb__86, ((v_Base_dList_dmap (fun p -> (C_Base_dPair_dPair_Base_dPair_dPair (((((((v_Vuna_dCompiler_dCore_dConv_dabsPatternBody n) created) depth) extra) levels) (v_Base_dPair_dfirstOf p)), (v_Base_dPair_dsecondOf p))))) dtb__87)))
+  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTCase (dtb__88, dtb__89) -> (C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTCase (((((((v_Vuna_dCompiler_dCore_dConv_dabsPatternBody n) created) depth) extra) levels) dtb__88), ((v_Base_dList_dmap (fun alt -> (C_Vuna_dCompiler_dCore_dTerm_dCaseAlt_Vuna_dCompiler_dCore_dTerm_dCaseAlt ((v_Vuna_dCompiler_dCore_dTerm_dcaseAltName alt), (v_Vuna_dCompiler_dCore_dTerm_dcaseAltBinders alt), ((((((v_Vuna_dCompiler_dCore_dConv_dabsPatternBody n) created) depth) ((bi_add extra) (v_Base_dList_dlength (v_Vuna_dCompiler_dCore_dTerm_dcaseAltBinders alt)))) levels) (v_Vuna_dCompiler_dCore_dTerm_dcaseAltBody alt)))))) dtb__89)))
+  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTIf (dtb__90, dtb__91, dtb__92) -> (C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTIf (((((((v_Vuna_dCompiler_dCore_dConv_dabsPatternBody n) created) depth) extra) levels) dtb__90), ((((((v_Vuna_dCompiler_dCore_dConv_dabsPatternBody n) created) depth) extra) levels) dtb__91), ((((((v_Vuna_dCompiler_dCore_dConv_dabsPatternBody n) created) depth) extra) levels) dtb__92)))
+  | _ -> t
+)))))))
+
+let rec v_Vuna_dCompiler_dCore_dConv_dwrapPatternLams = (fun mc0 -> (fun mc1 -> (match mc0 with
+  | C_Base_dList_dList_Base_dList_dCons (dtb__93, dtb__94) -> (match dtb__93 with
+  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__95, dtb__96) -> (C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTLam (dtb__95, C_Vuna_dCompiler_dCore_dTerm_dRig_Vuna_dCompiler_dCore_dTerm_dRig1, ((v_Vuna_dCompiler_dCore_dConv_dwrapPatternLams dtb__94) mc1)))
+  | _ -> failwith "DT: impossible branch"
+)
+  | C_Base_dList_dList_Base_dList_dNil -> mc1
+  | _ -> failwith "DT: impossible branch"
+)))
+
+let rec v_Vuna_dCompiler_dCore_dConv_dpatternEnv = (fun created -> (fun depth -> (if ((bi_le_int depth) 0) then C_Base_dList_dList_Base_dList_dNil else ((fun level -> ((fun lvl -> (C_Base_dList_dList_Base_dList_dCons ((C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVNeutral ((C_Vuna_dCompiler_dCore_dTerm_dNeutral_Vuna_dCompiler_dCore_dTerm_dNVar ("_", lvl, C_Base_dList_dList_Base_dList_dNil)))), ((v_Vuna_dCompiler_dCore_dConv_dpatternEnv created) ((bi_sub depth) 1))))) (if ((bi_lt_int level) created) then level else 0))) ((bi_sub depth) 1)))))
+
+let v_Vuna_dCompiler_dCore_dConv_dpatternSolution = (fun mc0 -> (fun mc1 -> (fun mc2 -> (fun mc3 -> (match mc0 with
+  | C_Base_dList_dList_Base_dList_dCons (dtb__97, dtb__98) -> (match dtb__97 with
+  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__99, dtb__100) -> (C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVLam (dtb__99, C_Vuna_dCompiler_dCore_dTerm_dRig_Vuna_dCompiler_dCore_dTerm_dRig1, (C_Vuna_dCompiler_dCore_dTerm_dClosure_Vuna_dCompiler_dCore_dTerm_dClos (((v_Vuna_dCompiler_dCore_dConv_dpatternEnv mc1) mc2), ((v_Vuna_dCompiler_dCore_dConv_dwrapPatternLams dtb__98) mc3)))))
+  | _ -> failwith "DT: impossible branch"
+)
+  | C_Base_dList_dList_Base_dList_dNil -> (C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVType (v_Vuna_dCompiler_dCore_dTerm_dlevelZero))
+  | _ -> failwith "DT: impossible branch"
+)))))
+
+let v_Vuna_dCompiler_dCore_dConv_dsolveMetaEmptyStore = (fun sols -> (fun depth -> (fun m -> (fun rhs -> ((fun created -> ((fun t -> (if (((v_Vuna_dCompiler_dCore_dTerm_dhasMeta m) 0) t) then ((v_Vuna_dCompiler_dDiagnostics_dtcErr1NoLoc (C_Vuna_dCompiler_dDiagnostics_dTcErr_Vuna_dCompiler_dDiagnostics_dCannotSolveOccurs ((bi_strFromInt m)))) (bi_strFromInt m)) else (if (((((v_Vuna_dCompiler_dCore_dConv_dtermScopedTo created) depth) 0) C_Base_dList_dList_Base_dList_dNil) t) then (C_Base_dResult_dResult_Base_dResult_dOk ((((v_Vuna_dCompiler_dCore_dTerm_dsolsCons m) rhs) sols))) else ((v_Vuna_dCompiler_dDiagnostics_dtcErr1NoLoc (C_Vuna_dCompiler_dDiagnostics_dTcErr_Vuna_dCompiler_dDiagnostics_dCannotSolveMetavar ((bi_strFromInt m)))) (bi_strFromInt m))))) ((v_Vuna_dCompiler_dCore_dEval_dquote depth) rhs))) (((v_Vuna_dCompiler_dCore_dConv_dmetaCreatedDepth sols) depth) m))))))
+
+let v_Vuna_dCompiler_dCore_dConv_dsolveMetaEmpty = (fun sols -> (fun depth -> (fun m -> (fun rhs -> ((fun nd_uscrut4 -> (match nd_uscrut4 with
+  | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVMeta (dtb__101, dtb__102) -> (match dtb__102 with
+  | C_Base_dList_dList_Base_dList_dNil -> (if ((bi_eq_int dtb__101) m) then (C_Base_dResult_dResult_Base_dResult_dOk (sols)) else ((((v_Vuna_dCompiler_dCore_dConv_dsolveMetaEmptyStore sols) depth) m) rhs))
+  | _ -> ((((v_Vuna_dCompiler_dCore_dConv_dsolveMetaEmptyStore sols) depth) m) rhs)
+)
+  | _ -> ((((v_Vuna_dCompiler_dCore_dConv_dsolveMetaEmptyStore sols) depth) m) rhs)
+)) rhs)))))
+
 let rec v_Vuna_dCompiler_dCore_dConv_dsplitAtVals = (fun mc0 -> (fun mc1 -> (if ((bi_eq_int mc0) 0) then (match mc1 with
-  | C_Base_dList_dList_Base_dList_dCons (dtb__24, dtb__25) -> (C_Base_dPair_dPair_Base_dPair_dPair (C_Base_dList_dList_Base_dList_dNil, mc1))
+  | C_Base_dList_dList_Base_dList_dCons (dtb__103, dtb__104) -> (C_Base_dPair_dPair_Base_dPair_dPair (C_Base_dList_dList_Base_dList_dNil, mc1))
   | C_Base_dList_dList_Base_dList_dNil -> (C_Base_dPair_dPair_Base_dPair_dPair (C_Base_dList_dList_Base_dList_dNil, mc1))
   | _ -> failwith "DT: impossible branch"
 ) else (match mc1 with
-  | C_Base_dList_dList_Base_dList_dCons (dtb__26, dtb__27) -> (match ((v_Vuna_dCompiler_dCore_dConv_dsplitAtVals ((bi_sub mc0) 1)) dtb__27) with
-  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__28, dtb__29) -> (C_Base_dPair_dPair_Base_dPair_dPair ((C_Base_dList_dList_Base_dList_dCons (dtb__26, dtb__28)), dtb__29))
+  | C_Base_dList_dList_Base_dList_dCons (dtb__105, dtb__106) -> (match ((v_Vuna_dCompiler_dCore_dConv_dsplitAtVals ((bi_sub mc0) 1)) dtb__106) with
+  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__107, dtb__108) -> (C_Base_dPair_dPair_Base_dPair_dPair ((C_Base_dList_dList_Base_dList_dCons (dtb__105, dtb__107)), dtb__108))
   | _ -> failwith "DT: impossible branch"
 )
   | C_Base_dList_dList_Base_dList_dNil -> (C_Base_dPair_dPair_Base_dPair_dPair (C_Base_dList_dList_Base_dList_dNil, C_Base_dList_dList_Base_dList_dNil))
   | _ -> failwith "DT: impossible branch"
 ))))
 
-let v_Vuna_dCompiler_dCore_dConv_dsolveMetaNew = (fun defs -> (fun sols -> (fun depth -> (fun m -> (fun rhs -> ((fun t -> (if (((v_Vuna_dCompiler_dCore_dTerm_dhasMeta m) 0) t) then ((v_Vuna_dCompiler_dDiagnostics_dtcErr1NoLoc (C_Vuna_dCompiler_dDiagnostics_dTcErr_Vuna_dCompiler_dDiagnostics_dCannotSolveOccurs ((bi_strFromInt m)))) (bi_strFromInt m)) else (C_Base_dResult_dResult_Base_dResult_dOk ((((v_Vuna_dCompiler_dCore_dTerm_dsolsCons m) rhs) sols))))) ((v_Vuna_dCompiler_dCore_dEval_dquote depth) rhs)))))))
-
 let rec v_Vuna_dCompiler_dCore_dConv_dconvFuel = (fun fuel -> (fun defs -> (fun sols -> (fun depth -> (fun a -> (fun b -> (if ((bi_le_int fuel) 0) then (C_Base_dResult_dResult_Base_dResult_dErr ("DT: internal: conv fuel exhausted")) else (if ((v_Vuna_dCompiler_dCore_dConv_dfastSame a) b) then (C_Base_dResult_dResult_Base_dResult_dOk (sols)) else ((fun a2 -> ((fun y2 -> (match a2 with
-  | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVMeta (dtb__30, dtb__31) -> (((((((v_Vuna_dCompiler_dCore_dConv_dsolveMetaFuel ((bi_sub fuel) 1)) defs) sols) depth) dtb__30) dtb__31) y2)
+  | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVMeta (dtb__109, dtb__110) -> (((((((v_Vuna_dCompiler_dCore_dConv_dsolveMetaFuel ((bi_sub fuel) 1)) defs) sols) depth) dtb__109) dtb__110) y2)
   | _ -> (match y2 with
-  | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVMeta (dtb__32, dtb__33) -> (((((((v_Vuna_dCompiler_dCore_dConv_dsolveMetaFuel ((bi_sub fuel) 1)) defs) sols) depth) dtb__32) dtb__33) a2)
+  | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVMeta (dtb__111, dtb__112) -> (((((((v_Vuna_dCompiler_dCore_dConv_dsolveMetaFuel ((bi_sub fuel) 1)) defs) sols) depth) dtb__111) dtb__112) a2)
   | _ -> ((((((v_Vuna_dCompiler_dCore_dConv_dconvBothFuel ((bi_sub fuel) 1)) defs) sols) depth) a2) y2)
 )
 )) ((((v_Vuna_dCompiler_dCore_dEval_dforce defs) sols) v_Vuna_dCompiler_dCore_dTerm_ddefaultFuel) b))) ((((v_Vuna_dCompiler_dCore_dEval_dforce defs) sols) v_Vuna_dCompiler_dCore_dTerm_ddefaultFuel) a))))))))))
 and v_Vuna_dCompiler_dCore_dConv_dconvBothFuel = (fun fuel -> (fun defs -> (fun sols -> (fun depth -> (fun a -> (fun b -> (if ((bi_le_int fuel) 0) then (C_Base_dResult_dResult_Base_dResult_dErr ("DT: internal: conv fuel exhausted")) else (match a with
-  | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVType (dtb__34) -> (match b with
-  | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVType (dtb__35) -> (if ((bi_eq_generic dtb__34) dtb__35) then (C_Base_dResult_dResult_Base_dResult_dOk (sols)) else (((v_Vuna_dCompiler_dCore_dConv_dmismatchAt depth) a) b))
+  | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVType (dtb__113) -> (match b with
+  | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVType (dtb__114) -> (if ((bi_eq_generic dtb__113) dtb__114) then (C_Base_dResult_dResult_Base_dResult_dOk (sols)) else (((v_Vuna_dCompiler_dCore_dConv_dmismatchAt depth) a) b))
   | _ -> (((v_Vuna_dCompiler_dCore_dConv_dmismatchAt depth) a) b)
 )
-  | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVPi (dtb__36, dtb__37, dtb__38, dtb__39, dtb__40) -> (match b with
-  | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVPi (dtb__41, dtb__42, dtb__43, dtb__44, dtb__45) -> (if (((v_Base_dEq_deq v_Base_dEq_dBase_dEq_dEq_uBase_dEq_dEq_uBase_dBool_dBool) dtb__37) dtb__42) then ((v_Base_dResult_dandThen ((((((v_Vuna_dCompiler_dCore_dConv_dconvFuel ((bi_sub fuel) 1)) defs) sols) depth) dtb__39) dtb__44)) (fun sols2 -> ((fun v -> ((((((v_Vuna_dCompiler_dCore_dConv_dconvFuel ((bi_sub fuel) 1)) defs) sols2) ((bi_add depth) 1)) ((v_Vuna_dCompiler_dCore_dEval_dapplyClosure dtb__40) v)) ((v_Vuna_dCompiler_dCore_dEval_dapplyClosure dtb__45) v))) ((v_Vuna_dCompiler_dCore_dEval_dfreshVar dtb__36) depth)))) else (((v_Vuna_dCompiler_dCore_dConv_dmismatchAt depth) a) b))
+  | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVPi (dtb__115, dtb__116, dtb__117, dtb__118, dtb__119) -> (match b with
+  | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVPi (dtb__120, dtb__121, dtb__122, dtb__123, dtb__124) -> (if (((v_Base_dEq_deq v_Base_dEq_dBase_dEq_dEq_uBase_dEq_dEq_uBase_dBool_dBool) dtb__116) dtb__121) then ((v_Base_dResult_dandThen ((((((v_Vuna_dCompiler_dCore_dConv_dconvFuel ((bi_sub fuel) 1)) defs) sols) depth) dtb__118) dtb__123)) (fun sols2 -> ((fun v -> ((((((v_Vuna_dCompiler_dCore_dConv_dconvFuel ((bi_sub fuel) 1)) defs) sols2) ((bi_add depth) 1)) ((v_Vuna_dCompiler_dCore_dEval_dapplyClosure dtb__119) v)) ((v_Vuna_dCompiler_dCore_dEval_dapplyClosure dtb__124) v))) ((v_Vuna_dCompiler_dCore_dEval_dfreshVar dtb__115) depth)))) else (((v_Vuna_dCompiler_dCore_dConv_dmismatchAt depth) a) b))
   | _ -> (((v_Vuna_dCompiler_dCore_dConv_dmismatchAt depth) a) b)
 )
-  | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVLam (dtb__46, dtb__47, dtb__48) -> (match b with
-  | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVLam (dtb__49, dtb__50, dtb__51) -> ((fun v -> ((((((v_Vuna_dCompiler_dCore_dConv_dconvFuel ((bi_sub fuel) 1)) defs) sols) ((bi_add depth) 1)) ((v_Vuna_dCompiler_dCore_dEval_dapplyClosure dtb__48) v)) ((v_Vuna_dCompiler_dCore_dEval_dapplyClosure dtb__51) v))) ((v_Vuna_dCompiler_dCore_dEval_dfreshVar dtb__46) depth))
-  | _ -> (((((((v_Vuna_dCompiler_dCore_dConv_detaRightFuel ((bi_sub fuel) 1)) defs) sols) depth) dtb__46) dtb__48) b)
+  | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVLam (dtb__125, dtb__126, dtb__127) -> (match b with
+  | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVLam (dtb__128, dtb__129, dtb__130) -> ((fun v -> ((((((v_Vuna_dCompiler_dCore_dConv_dconvFuel ((bi_sub fuel) 1)) defs) sols) ((bi_add depth) 1)) ((v_Vuna_dCompiler_dCore_dEval_dapplyClosure dtb__127) v)) ((v_Vuna_dCompiler_dCore_dEval_dapplyClosure dtb__130) v))) ((v_Vuna_dCompiler_dCore_dEval_dfreshVar dtb__125) depth))
+  | _ -> (((((((v_Vuna_dCompiler_dCore_dConv_detaRightFuel ((bi_sub fuel) 1)) defs) sols) depth) dtb__125) dtb__127) b)
 )
-  | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVNeutral (dtb__52) -> (match b with
-  | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVNeutral (dtb__53) -> ((((((((v_Vuna_dCompiler_dCore_dConv_dconvNeutralFuel ((bi_sub fuel) 1)) defs) sols) depth) dtb__52) dtb__53) a) b)
-  | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVLam (dtb__54, dtb__55, dtb__56) -> (((((((v_Vuna_dCompiler_dCore_dConv_detaLeftFuel ((bi_sub fuel) 1)) defs) sols) depth) a) dtb__54) dtb__56)
+  | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVNeutral (dtb__131) -> (match b with
+  | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVNeutral (dtb__132) -> ((((((((v_Vuna_dCompiler_dCore_dConv_dconvNeutralFuel ((bi_sub fuel) 1)) defs) sols) depth) dtb__131) dtb__132) a) b)
+  | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVLam (dtb__133, dtb__134, dtb__135) -> (((((((v_Vuna_dCompiler_dCore_dConv_detaLeftFuel ((bi_sub fuel) 1)) defs) sols) depth) a) dtb__133) dtb__135)
   | _ -> (((v_Vuna_dCompiler_dCore_dConv_dmismatchAt depth) a) b)
 )
-  | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVInt (dtb__57) -> (match b with
-  | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVInt (dtb__58) -> (if ((bi_eq_int dtb__57) dtb__58) then (C_Base_dResult_dResult_Base_dResult_dOk (sols)) else (((v_Vuna_dCompiler_dCore_dConv_dmismatchAt depth) a) b))
+  | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVInt (dtb__136) -> (match b with
+  | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVInt (dtb__137) -> (if ((bi_eq_int dtb__136) dtb__137) then (C_Base_dResult_dResult_Base_dResult_dOk (sols)) else (((v_Vuna_dCompiler_dCore_dConv_dmismatchAt depth) a) b))
   | _ -> (((v_Vuna_dCompiler_dCore_dConv_dmismatchAt depth) a) b)
 )
-  | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVStr (dtb__59) -> (match b with
-  | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVStr (dtb__60) -> (if ((bi_eq_str dtb__59) dtb__60) then (C_Base_dResult_dResult_Base_dResult_dOk (sols)) else (((v_Vuna_dCompiler_dCore_dConv_dmismatchAt depth) a) b))
+  | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVStr (dtb__138) -> (match b with
+  | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVStr (dtb__139) -> (if ((bi_eq_str dtb__138) dtb__139) then (C_Base_dResult_dResult_Base_dResult_dOk (sols)) else (((v_Vuna_dCompiler_dCore_dConv_dmismatchAt depth) a) b))
   | _ -> (((v_Vuna_dCompiler_dCore_dConv_dmismatchAt depth) a) b)
 )
-  | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVBool (dtb__61) -> (match b with
-  | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVBool (dtb__62) -> (if (((v_Base_dEq_deq v_Base_dEq_dBase_dEq_dEq_uBase_dEq_dEq_uBase_dBool_dBool) dtb__61) dtb__62) then (C_Base_dResult_dResult_Base_dResult_dOk (sols)) else (((v_Vuna_dCompiler_dCore_dConv_dmismatchAt depth) a) b))
+  | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVBool (dtb__140) -> (match b with
+  | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVBool (dtb__141) -> (if (((v_Base_dEq_deq v_Base_dEq_dBase_dEq_dEq_uBase_dEq_dEq_uBase_dBool_dBool) dtb__140) dtb__141) then (C_Base_dResult_dResult_Base_dResult_dOk (sols)) else (((v_Vuna_dCompiler_dCore_dConv_dmismatchAt depth) a) b))
   | _ -> (((v_Vuna_dCompiler_dCore_dConv_dmismatchAt depth) a) b)
 )
-  | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVCon (dtb__63, dtb__64) -> (match b with
-  | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVCon (dtb__65, dtb__66) -> (if ((bi_eq_str dtb__63) dtb__65) then ((((((v_Vuna_dCompiler_dCore_dConv_dconvValueListsFuel ((bi_sub fuel) 1)) defs) sols) depth) dtb__64) dtb__66) else (((v_Vuna_dCompiler_dCore_dConv_dmismatchAt depth) a) b))
+  | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVCon (dtb__142, dtb__143) -> (match b with
+  | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVCon (dtb__144, dtb__145) -> (if ((bi_eq_str dtb__142) dtb__144) then ((((((v_Vuna_dCompiler_dCore_dConv_dconvValueListsFuel ((bi_sub fuel) 1)) defs) sols) depth) dtb__143) dtb__145) else (((v_Vuna_dCompiler_dCore_dConv_dmismatchAt depth) a) b))
   | _ -> (((v_Vuna_dCompiler_dCore_dConv_dmismatchAt depth) a) b)
 )
-  | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVApp (dtb__67, dtb__68) -> (match b with
-  | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVApp (dtb__69, dtb__70) -> ((v_Base_dResult_dandThen ((((((v_Vuna_dCompiler_dCore_dConv_dconvFuel ((bi_sub fuel) 1)) defs) sols) depth) dtb__67) dtb__69)) (fun sols2 -> ((((((v_Vuna_dCompiler_dCore_dConv_dconvFuel ((bi_sub fuel) 1)) defs) sols2) depth) dtb__68) dtb__70)))
+  | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVApp (dtb__146, dtb__147) -> (match b with
+  | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVApp (dtb__148, dtb__149) -> ((v_Base_dResult_dandThen ((((((v_Vuna_dCompiler_dCore_dConv_dconvFuel ((bi_sub fuel) 1)) defs) sols) depth) dtb__146) dtb__148)) (fun sols2 -> ((((((v_Vuna_dCompiler_dCore_dConv_dconvFuel ((bi_sub fuel) 1)) defs) sols2) depth) dtb__147) dtb__149)))
   | _ -> (((v_Vuna_dCompiler_dCore_dConv_dmismatchAt depth) a) b)
 )
-  | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVCase (dtb__71, dtb__72) -> (match b with
-  | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVCase (dtb__73, dtb__74) -> ((v_Base_dResult_dandThen ((((((v_Vuna_dCompiler_dCore_dConv_dconvFuel ((bi_sub fuel) 1)) defs) sols) depth) dtb__71) dtb__73)) (fun sols2 -> ((((((v_Vuna_dCompiler_dCore_dConv_dconvCaseAltsFuel ((bi_sub fuel) 1)) defs) sols2) depth) dtb__72) dtb__74)))
+  | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVCase (dtb__150, dtb__151) -> (match b with
+  | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVCase (dtb__152, dtb__153) -> ((v_Base_dResult_dandThen ((((((v_Vuna_dCompiler_dCore_dConv_dconvFuel ((bi_sub fuel) 1)) defs) sols) depth) dtb__150) dtb__152)) (fun sols2 -> ((((((v_Vuna_dCompiler_dCore_dConv_dconvCaseAltsFuel ((bi_sub fuel) 1)) defs) sols2) depth) dtb__151) dtb__153)))
   | _ -> (((v_Vuna_dCompiler_dCore_dConv_dmismatchAt depth) a) b)
 )
-  | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVIf (dtb__75, dtb__76, dtb__77) -> (match b with
-  | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVIf (dtb__78, dtb__79, dtb__80) -> ((v_Base_dResult_dandThen ((((((v_Vuna_dCompiler_dCore_dConv_dconvFuel ((bi_sub fuel) 1)) defs) sols) depth) dtb__75) dtb__78)) (fun sols2 -> ((v_Base_dResult_dandThen ((((((v_Vuna_dCompiler_dCore_dConv_dconvFuel ((bi_sub fuel) 1)) defs) sols2) depth) dtb__76) dtb__79)) (fun sols3 -> ((((((v_Vuna_dCompiler_dCore_dConv_dconvFuel ((bi_sub fuel) 1)) defs) sols3) depth) dtb__77) dtb__80)))))
+  | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVIf (dtb__154, dtb__155, dtb__156) -> (match b with
+  | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVIf (dtb__157, dtb__158, dtb__159) -> ((v_Base_dResult_dandThen ((((((v_Vuna_dCompiler_dCore_dConv_dconvFuel ((bi_sub fuel) 1)) defs) sols) depth) dtb__154) dtb__157)) (fun sols2 -> ((v_Base_dResult_dandThen ((((((v_Vuna_dCompiler_dCore_dConv_dconvFuel ((bi_sub fuel) 1)) defs) sols2) depth) dtb__155) dtb__158)) (fun sols3 -> ((((((v_Vuna_dCompiler_dCore_dConv_dconvFuel ((bi_sub fuel) 1)) defs) sols3) depth) dtb__156) dtb__159)))))
   | _ -> (((v_Vuna_dCompiler_dCore_dConv_dmismatchAt depth) a) b)
 )
   | _ -> (((v_Vuna_dCompiler_dCore_dConv_dmismatchAt depth) a) b)
@@ -151,19 +274,19 @@ and v_Vuna_dCompiler_dCore_dConv_dconvBothFuel = (fun fuel -> (fun defs -> (fun 
 and v_Vuna_dCompiler_dCore_dConv_detaLeftFuel = (fun fuel -> (fun defs -> (fun sols -> (fun depth -> (fun a -> (fun name -> (fun clo -> (if ((bi_le_int fuel) 0) then (C_Base_dResult_dResult_Base_dResult_dErr ("DT: internal: conv fuel exhausted")) else ((fun v -> ((((((v_Vuna_dCompiler_dCore_dConv_dconvFuel ((bi_sub fuel) 1)) defs) sols) ((bi_add depth) 1)) ((v_Vuna_dCompiler_dCore_dEval_dapplyValue a) v)) ((v_Vuna_dCompiler_dCore_dEval_dapplyClosure clo) v))) ((v_Vuna_dCompiler_dCore_dEval_dfreshVar name) depth))))))))))
 and v_Vuna_dCompiler_dCore_dConv_detaRightFuel = (fun fuel -> (fun defs -> (fun sols -> (fun depth -> (fun name -> (fun clo -> (fun b -> (if ((bi_le_int fuel) 0) then (C_Base_dResult_dResult_Base_dResult_dErr ("DT: internal: conv fuel exhausted")) else ((fun v -> ((((((v_Vuna_dCompiler_dCore_dConv_dconvFuel ((bi_sub fuel) 1)) defs) sols) ((bi_add depth) 1)) ((v_Vuna_dCompiler_dCore_dEval_dapplyClosure clo) v)) ((v_Vuna_dCompiler_dCore_dEval_dapplyValue b) v))) ((v_Vuna_dCompiler_dCore_dEval_dfreshVar name) depth))))))))))
 and v_Vuna_dCompiler_dCore_dConv_dconvNeutralFuel = (fun fuel -> (fun defs -> (fun sols -> (fun depth -> (fun n1 -> (fun n2 -> (fun v1 -> (fun v2 -> (if ((bi_le_int fuel) 0) then (C_Base_dResult_dResult_Base_dResult_dErr ("DT: internal: conv fuel exhausted")) else (match n1 with
-  | C_Vuna_dCompiler_dCore_dTerm_dNeutral_Vuna_dCompiler_dCore_dTerm_dNVar (dtb__81, dtb__82, dtb__83) -> (match n2 with
-  | C_Vuna_dCompiler_dCore_dTerm_dNeutral_Vuna_dCompiler_dCore_dTerm_dNVar (dtb__84, dtb__85, dtb__86) -> (if ((bi_eq_int dtb__82) dtb__85) then ((((((((v_Vuna_dCompiler_dCore_dConv_dconvSpinesFuel ((bi_sub fuel) 1)) defs) sols) depth) dtb__83) dtb__86) v1) v2) else (((v_Vuna_dCompiler_dCore_dConv_dmismatchAt depth) v1) v2))
+  | C_Vuna_dCompiler_dCore_dTerm_dNeutral_Vuna_dCompiler_dCore_dTerm_dNVar (dtb__160, dtb__161, dtb__162) -> (match n2 with
+  | C_Vuna_dCompiler_dCore_dTerm_dNeutral_Vuna_dCompiler_dCore_dTerm_dNVar (dtb__163, dtb__164, dtb__165) -> (if ((bi_eq_int dtb__161) dtb__164) then ((((((((v_Vuna_dCompiler_dCore_dConv_dconvSpinesFuel ((bi_sub fuel) 1)) defs) sols) depth) dtb__162) dtb__165) v1) v2) else (((v_Vuna_dCompiler_dCore_dConv_dmismatchAt depth) v1) v2))
   | _ -> (((v_Vuna_dCompiler_dCore_dConv_dmismatchAt depth) v1) v2)
 )
-  | C_Vuna_dCompiler_dCore_dTerm_dNeutral_Vuna_dCompiler_dCore_dTerm_dNGlobal (dtb__87, dtb__88) -> (match n2 with
-  | C_Vuna_dCompiler_dCore_dTerm_dNeutral_Vuna_dCompiler_dCore_dTerm_dNGlobal (dtb__89, dtb__90) -> (if ((bi_eq_str dtb__87) dtb__89) then ((((((((v_Vuna_dCompiler_dCore_dConv_dconvSpinesFuel ((bi_sub fuel) 1)) defs) sols) depth) dtb__88) dtb__90) v1) v2) else (((v_Vuna_dCompiler_dCore_dConv_dmismatchAt depth) v1) v2))
+  | C_Vuna_dCompiler_dCore_dTerm_dNeutral_Vuna_dCompiler_dCore_dTerm_dNGlobal (dtb__166, dtb__167) -> (match n2 with
+  | C_Vuna_dCompiler_dCore_dTerm_dNeutral_Vuna_dCompiler_dCore_dTerm_dNGlobal (dtb__168, dtb__169) -> (if ((bi_eq_str dtb__166) dtb__168) then ((((((((v_Vuna_dCompiler_dCore_dConv_dconvSpinesFuel ((bi_sub fuel) 1)) defs) sols) depth) dtb__167) dtb__169) v1) v2) else (((v_Vuna_dCompiler_dCore_dConv_dmismatchAt depth) v1) v2))
   | _ -> (((v_Vuna_dCompiler_dCore_dConv_dmismatchAt depth) v1) v2)
 )
   | _ -> failwith "DT: impossible branch"
 ))))))))))
 and v_Vuna_dCompiler_dCore_dConv_dconvSpinesFuel = (fun mc0 -> (fun mc1 -> (fun mc2 -> (fun mc3 -> (fun mc4 -> (fun mc5 -> (fun mc6 -> (fun mc7 -> (match mc4 with
-  | C_Base_dList_dList_Base_dList_dCons (dtb__91, dtb__92) -> (match mc5 with
-  | C_Base_dList_dList_Base_dList_dCons (dtb__93, dtb__94) -> (if ((bi_le_int mc0) 0) then (C_Base_dResult_dResult_Base_dResult_dErr ("DT: internal: conv fuel exhausted")) else ((v_Base_dResult_dandThen ((((((v_Vuna_dCompiler_dCore_dConv_dconvFuel ((bi_sub mc0) 1)) mc1) mc2) mc3) dtb__91) dtb__93)) (fun sols2 -> ((((((((v_Vuna_dCompiler_dCore_dConv_dconvSpinesFuel ((bi_sub mc0) 1)) mc1) sols2) mc3) dtb__92) dtb__94) mc6) mc7))))
+  | C_Base_dList_dList_Base_dList_dCons (dtb__170, dtb__171) -> (match mc5 with
+  | C_Base_dList_dList_Base_dList_dCons (dtb__172, dtb__173) -> (if ((bi_le_int mc0) 0) then (C_Base_dResult_dResult_Base_dResult_dErr ("DT: internal: conv fuel exhausted")) else ((v_Base_dResult_dandThen ((((((v_Vuna_dCompiler_dCore_dConv_dconvFuel ((bi_sub mc0) 1)) mc1) mc2) mc3) dtb__170) dtb__172)) (fun sols2 -> ((((((((v_Vuna_dCompiler_dCore_dConv_dconvSpinesFuel ((bi_sub mc0) 1)) mc1) sols2) mc3) dtb__171) dtb__173) mc6) mc7))))
   | _ -> (if ((bi_le_int mc0) 0) then (C_Base_dResult_dResult_Base_dResult_dErr ("DT: internal: conv fuel exhausted")) else (((v_Vuna_dCompiler_dCore_dConv_dmismatchAt mc3) mc6) mc7))
 )
   | C_Base_dList_dList_Base_dList_dNil -> (match mc5 with
@@ -173,8 +296,8 @@ and v_Vuna_dCompiler_dCore_dConv_dconvSpinesFuel = (fun mc0 -> (fun mc1 -> (fun 
   | _ -> failwith "DT: impossible branch"
 )))))))))
 and v_Vuna_dCompiler_dCore_dConv_dconvValueListsFuel = (fun mc0 -> (fun mc1 -> (fun mc2 -> (fun mc3 -> (fun mc4 -> (fun mc5 -> (match mc4 with
-  | C_Base_dList_dList_Base_dList_dCons (dtb__95, dtb__96) -> (match mc5 with
-  | C_Base_dList_dList_Base_dList_dCons (dtb__97, dtb__98) -> (if ((bi_le_int mc0) 0) then (C_Base_dResult_dResult_Base_dResult_dErr ("DT: internal: conv fuel exhausted")) else ((v_Base_dResult_dandThen ((((((v_Vuna_dCompiler_dCore_dConv_dconvFuel ((bi_sub mc0) 1)) mc1) mc2) mc3) dtb__95) dtb__97)) (fun sols2 -> ((((((v_Vuna_dCompiler_dCore_dConv_dconvValueListsFuel ((bi_sub mc0) 1)) mc1) sols2) mc3) dtb__96) dtb__98))))
+  | C_Base_dList_dList_Base_dList_dCons (dtb__174, dtb__175) -> (match mc5 with
+  | C_Base_dList_dList_Base_dList_dCons (dtb__176, dtb__177) -> (if ((bi_le_int mc0) 0) then (C_Base_dResult_dResult_Base_dResult_dErr ("DT: internal: conv fuel exhausted")) else ((v_Base_dResult_dandThen ((((((v_Vuna_dCompiler_dCore_dConv_dconvFuel ((bi_sub mc0) 1)) mc1) mc2) mc3) dtb__174) dtb__176)) (fun sols2 -> ((((((v_Vuna_dCompiler_dCore_dConv_dconvValueListsFuel ((bi_sub mc0) 1)) mc1) sols2) mc3) dtb__175) dtb__177))))
   | _ -> (if ((bi_le_int mc0) 0) then (C_Base_dResult_dResult_Base_dResult_dErr ("DT: internal: conv fuel exhausted")) else (v_Vuna_dCompiler_dDiagnostics_dtcErr0NoLoc C_Vuna_dCompiler_dDiagnostics_dTcErr_Vuna_dCompiler_dDiagnostics_dTypeMismatchCtorArity))
 )
   | C_Base_dList_dList_Base_dList_dNil -> (match mc5 with
@@ -184,12 +307,12 @@ and v_Vuna_dCompiler_dCore_dConv_dconvValueListsFuel = (fun mc0 -> (fun mc1 -> (
   | _ -> failwith "DT: impossible branch"
 )))))))
 and v_Vuna_dCompiler_dCore_dConv_dconvCaseAltsFuel = (fun mc0 -> (fun mc1 -> (fun mc2 -> (fun mc3 -> (fun mc4 -> (fun mc5 -> (match mc4 with
-  | C_Base_dList_dList_Base_dList_dCons (dtb__99, dtb__100) -> (match mc5 with
-  | C_Base_dList_dList_Base_dList_dCons (dtb__101, dtb__102) -> (if ((bi_le_int mc0) 0) then (C_Base_dResult_dResult_Base_dResult_dErr ("DT: internal: conv fuel exhausted")) else (if ((bi_eq_str (v_Vuna_dCompiler_dCore_dTerm_dvCaseAltName dtb__99)) (v_Vuna_dCompiler_dCore_dTerm_dvCaseAltName dtb__101)) then (if ((bi_eq_int (v_Base_dList_dlength (v_Vuna_dCompiler_dCore_dTerm_dvCaseAltBinders dtb__99))) (v_Base_dList_dlength (v_Vuna_dCompiler_dCore_dTerm_dvCaseAltBinders dtb__101))) then (match ((((((v_Vuna_dCompiler_dCore_dConv_dconvOneAltFuel ((bi_sub mc0) 1)) mc1) mc2) mc3) dtb__99) dtb__101) with
-  | C_Base_dResult_dResult_Base_dResult_dErr (dtb__103) -> (C_Base_dResult_dResult_Base_dResult_dErr (dtb__103))
-  | C_Base_dResult_dResult_Base_dResult_dOk (dtb__104) -> ((((((v_Vuna_dCompiler_dCore_dConv_dconvCaseAltsFuel ((bi_sub mc0) 1)) mc1) dtb__104) mc3) dtb__100) dtb__102)
+  | C_Base_dList_dList_Base_dList_dCons (dtb__178, dtb__179) -> (match mc5 with
+  | C_Base_dList_dList_Base_dList_dCons (dtb__180, dtb__181) -> (if ((bi_le_int mc0) 0) then (C_Base_dResult_dResult_Base_dResult_dErr ("DT: internal: conv fuel exhausted")) else (if ((bi_eq_str (v_Vuna_dCompiler_dCore_dTerm_dvCaseAltName dtb__178)) (v_Vuna_dCompiler_dCore_dTerm_dvCaseAltName dtb__180)) then (if ((bi_eq_int (v_Base_dList_dlength (v_Vuna_dCompiler_dCore_dTerm_dvCaseAltBinders dtb__178))) (v_Base_dList_dlength (v_Vuna_dCompiler_dCore_dTerm_dvCaseAltBinders dtb__180))) then (match ((((((v_Vuna_dCompiler_dCore_dConv_dconvOneAltFuel ((bi_sub mc0) 1)) mc1) mc2) mc3) dtb__178) dtb__180) with
+  | C_Base_dResult_dResult_Base_dResult_dErr (dtb__182) -> (C_Base_dResult_dResult_Base_dResult_dErr (dtb__182))
+  | C_Base_dResult_dResult_Base_dResult_dOk (dtb__183) -> ((((((v_Vuna_dCompiler_dCore_dConv_dconvCaseAltsFuel ((bi_sub mc0) 1)) mc1) dtb__183) mc3) dtb__179) dtb__181)
   | _ -> failwith "DT: impossible branch"
-) else ((v_Vuna_dCompiler_dDiagnostics_dtcErr1NoLoc (C_Vuna_dCompiler_dDiagnostics_dTcErr_Vuna_dCompiler_dDiagnostics_dTypeMismatchCaseVars ((v_Vuna_dCompiler_dCore_dTerm_dvCaseAltName dtb__99)))) (v_Vuna_dCompiler_dCore_dTerm_dvCaseAltName dtb__99))) else (((v_Vuna_dCompiler_dDiagnostics_dtcErr2NoLoc (C_Vuna_dCompiler_dDiagnostics_dTcErr_Vuna_dCompiler_dDiagnostics_dTypeMismatchCaseBranch ((v_Vuna_dCompiler_dCore_dTerm_dvCaseAltName dtb__99), (v_Vuna_dCompiler_dCore_dTerm_dvCaseAltName dtb__101)))) (v_Vuna_dCompiler_dCore_dTerm_dvCaseAltName dtb__99)) (v_Vuna_dCompiler_dCore_dTerm_dvCaseAltName dtb__101))))
+) else ((v_Vuna_dCompiler_dDiagnostics_dtcErr1NoLoc (C_Vuna_dCompiler_dDiagnostics_dTcErr_Vuna_dCompiler_dDiagnostics_dTypeMismatchCaseVars ((v_Vuna_dCompiler_dCore_dTerm_dvCaseAltName dtb__178)))) (v_Vuna_dCompiler_dCore_dTerm_dvCaseAltName dtb__178))) else (((v_Vuna_dCompiler_dDiagnostics_dtcErr2NoLoc (C_Vuna_dCompiler_dDiagnostics_dTcErr_Vuna_dCompiler_dDiagnostics_dTypeMismatchCaseBranch ((v_Vuna_dCompiler_dCore_dTerm_dvCaseAltName dtb__178), (v_Vuna_dCompiler_dCore_dTerm_dvCaseAltName dtb__180)))) (v_Vuna_dCompiler_dCore_dTerm_dvCaseAltName dtb__178)) (v_Vuna_dCompiler_dCore_dTerm_dvCaseAltName dtb__180))))
   | _ -> (if ((bi_le_int mc0) 0) then (C_Base_dResult_dResult_Base_dResult_dErr ("DT: internal: conv fuel exhausted")) else (v_Vuna_dCompiler_dDiagnostics_dtcErr0NoLoc C_Vuna_dCompiler_dDiagnostics_dTcErr_Vuna_dCompiler_dDiagnostics_dTypeMismatchCaseCount))
 )
   | C_Base_dList_dList_Base_dList_dNil -> (match mc5 with
@@ -199,37 +322,45 @@ and v_Vuna_dCompiler_dCore_dConv_dconvCaseAltsFuel = (fun mc0 -> (fun mc1 -> (fu
   | _ -> failwith "DT: impossible branch"
 )))))))
 and v_Vuna_dCompiler_dCore_dConv_dconvOneAltFuel = (fun fuel -> (fun defs -> (fun sols -> (fun depth -> (fun a -> (fun b -> (if ((bi_le_int fuel) 0) then (C_Base_dResult_dResult_Base_dResult_dErr ("DT: internal: conv fuel exhausted")) else ((fun bs -> ((fun n -> ((fun args -> ((((((v_Vuna_dCompiler_dCore_dConv_dconvFuel ((bi_sub fuel) 1)) defs) sols) ((bi_add depth) n)) ((v_Vuna_dCompiler_dCore_dEval_dapplyClosureBinder (v_Vuna_dCompiler_dCore_dTerm_dvCaseAltClosure a)) args)) ((v_Vuna_dCompiler_dCore_dEval_dapplyClosureBinder (v_Vuna_dCompiler_dCore_dTerm_dvCaseAltClosure b)) args))) (((v_Vuna_dCompiler_dCore_dEval_dargValsAt bs) depth) 0))) (v_Base_dList_dlength bs))) (v_Vuna_dCompiler_dCore_dTerm_dvCaseAltBinders a)))))))))
-and v_Vuna_dCompiler_dCore_dConv_dsolveMetaFuel = (fun fuel -> (fun defs -> (fun sols -> (fun depth -> (fun m -> (fun sp -> (fun rhs -> (if ((bi_le_int fuel) 0) then (C_Base_dResult_dResult_Base_dResult_dErr ("DT: internal: conv fuel exhausted")) else (match sp with
-  | C_Base_dList_dList_Base_dList_dNil -> (match ((v_Vuna_dCompiler_dCore_dTerm_dsolsLookup m) sols) with
-  | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__105) -> ((((((v_Vuna_dCompiler_dCore_dConv_dconvFuel ((bi_sub fuel) 1)) defs) sols) depth) ((v_Vuna_dCompiler_dCore_dEval_dapplySpine dtb__105) C_Base_dList_dList_Base_dList_dNil)) rhs)
-  | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> (match rhs with
-  | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVMeta (dtb__106, dtb__107) -> (match dtb__107 with
-  | C_Base_dList_dList_Base_dList_dNil -> (if ((bi_eq_int dtb__106) m) then (C_Base_dResult_dResult_Base_dResult_dOk (sols)) else (((((v_Vuna_dCompiler_dCore_dConv_dsolveMetaNew defs) sols) depth) m) rhs))
-  | _ -> (((((v_Vuna_dCompiler_dCore_dConv_dsolveMetaNew defs) sols) depth) m) rhs)
-)
-  | _ -> (((((v_Vuna_dCompiler_dCore_dConv_dsolveMetaNew defs) sols) depth) m) rhs)
-)
+and v_Vuna_dCompiler_dCore_dConv_dsolveMetaHoLegacyFuel = (fun fuel -> (fun defs -> (fun sols -> (fun depth -> (fun m -> (fun sp -> (fun rhs -> (if ((bi_le_int fuel) 0) then (C_Base_dResult_dResult_Base_dResult_dErr ("DT: internal: conv fuel exhausted")) else (match rhs with
+  | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVMeta (dtb__184, dtb__185) -> (match ((v_Vuna_dCompiler_dCore_dTerm_dsolsLookup dtb__184) sols) with
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__186) -> ((((((v_Vuna_dCompiler_dCore_dConv_dconvFuel ((bi_sub fuel) 1)) defs) sols) depth) ((v_Vuna_dCompiler_dCore_dEval_dapplySpine (C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVMeta (m, sp))) C_Base_dList_dList_Base_dList_dNil)) ((v_Vuna_dCompiler_dCore_dEval_dapplySpine dtb__186) dtb__185))
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> (if ((bi_eq_int m) dtb__184) then ((((((((v_Vuna_dCompiler_dCore_dConv_dconvSpinesFuel ((bi_sub fuel) 1)) defs) sols) depth) sp) dtb__185) (C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVMeta (m, sp))) rhs) else ((v_Base_dResult_dandThen (((((((v_Vuna_dCompiler_dCore_dConv_dsolveMetaFuel ((bi_sub fuel) 1)) defs) sols) depth) m) C_Base_dList_dList_Base_dList_dNil) (C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVMeta (dtb__184, C_Base_dList_dList_Base_dList_dNil)))) (fun sols2 -> ((((((((v_Vuna_dCompiler_dCore_dConv_dconvSpinesFuel ((bi_sub fuel) 1)) defs) sols2) depth) sp) dtb__185) (C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVMeta (m, sp))) rhs))))
   | _ -> failwith "DT: impossible branch"
 )
-  | _ -> (((((((v_Vuna_dCompiler_dCore_dConv_dsolveMetaHoFuel ((bi_sub fuel) 1)) defs) sols) depth) m) sp) rhs)
-)))))))))
-and v_Vuna_dCompiler_dCore_dConv_dsolveMetaHoFuel = (fun fuel -> (fun defs -> (fun sols -> (fun depth -> (fun m -> (fun sp -> (fun rhs -> (if ((bi_le_int fuel) 0) then (C_Base_dResult_dResult_Base_dResult_dErr ("DT: internal: conv fuel exhausted")) else (match rhs with
-  | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVMeta (dtb__108, dtb__109) -> (match ((v_Vuna_dCompiler_dCore_dTerm_dsolsLookup dtb__108) sols) with
-  | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__110) -> ((((((v_Vuna_dCompiler_dCore_dConv_dconvFuel ((bi_sub fuel) 1)) defs) sols) depth) ((v_Vuna_dCompiler_dCore_dEval_dapplySpine (C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVMeta (m, sp))) C_Base_dList_dList_Base_dList_dNil)) ((v_Vuna_dCompiler_dCore_dEval_dapplySpine dtb__110) dtb__109))
-  | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> (if ((bi_eq_int m) dtb__108) then ((((((((v_Vuna_dCompiler_dCore_dConv_dconvSpinesFuel ((bi_sub fuel) 1)) defs) sols) depth) sp) dtb__109) (C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVMeta (m, sp))) rhs) else ((v_Base_dResult_dandThen (((((((v_Vuna_dCompiler_dCore_dConv_dsolveMetaFuel ((bi_sub fuel) 1)) defs) sols) depth) m) C_Base_dList_dList_Base_dList_dNil) (C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVMeta (dtb__108, C_Base_dList_dList_Base_dList_dNil)))) (fun sols2 -> ((((((((v_Vuna_dCompiler_dCore_dConv_dconvSpinesFuel ((bi_sub fuel) 1)) defs) sols2) depth) sp) dtb__109) (C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVMeta (m, sp))) rhs))))
-  | _ -> failwith "DT: impossible branch"
-)
-  | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVNeutral (dtb__111) -> (match dtb__111 with
-  | C_Vuna_dCompiler_dCore_dTerm_dNeutral_Vuna_dCompiler_dCore_dTerm_dNGlobal (dtb__112, dtb__113) -> (((((((((v_Vuna_dCompiler_dCore_dConv_dsolveMetaHeadFuel ((bi_sub fuel) 1)) defs) sols) depth) m) sp) (C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVNeutral (dtb__111))) (C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVNeutral ((C_Vuna_dCompiler_dCore_dTerm_dNeutral_Vuna_dCompiler_dCore_dTerm_dNGlobal (dtb__112, C_Base_dList_dList_Base_dList_dNil))))) dtb__113)
-  | C_Vuna_dCompiler_dCore_dTerm_dNeutral_Vuna_dCompiler_dCore_dTerm_dNVar (dtb__114, dtb__115, dtb__116) -> (((((((((v_Vuna_dCompiler_dCore_dConv_dsolveMetaHeadFuel ((bi_sub fuel) 1)) defs) sols) depth) m) sp) (C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVNeutral (dtb__111))) (C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVNeutral ((C_Vuna_dCompiler_dCore_dTerm_dNeutral_Vuna_dCompiler_dCore_dTerm_dNVar (dtb__114, dtb__115, C_Base_dList_dList_Base_dList_dNil))))) dtb__116)
+  | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVNeutral (dtb__187) -> (match dtb__187 with
+  | C_Vuna_dCompiler_dCore_dTerm_dNeutral_Vuna_dCompiler_dCore_dTerm_dNGlobal (dtb__188, dtb__189) -> (((((((((v_Vuna_dCompiler_dCore_dConv_dsolveMetaHeadLegacyFuel ((bi_sub fuel) 1)) defs) sols) depth) m) sp) (C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVNeutral (dtb__187))) (C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVNeutral ((C_Vuna_dCompiler_dCore_dTerm_dNeutral_Vuna_dCompiler_dCore_dTerm_dNGlobal (dtb__188, C_Base_dList_dList_Base_dList_dNil))))) dtb__189)
+  | C_Vuna_dCompiler_dCore_dTerm_dNeutral_Vuna_dCompiler_dCore_dTerm_dNVar (dtb__190, dtb__191, dtb__192) -> (((((((((v_Vuna_dCompiler_dCore_dConv_dsolveMetaHeadLegacyFuel ((bi_sub fuel) 1)) defs) sols) depth) m) sp) (C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVNeutral (dtb__187))) (C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVNeutral ((C_Vuna_dCompiler_dCore_dTerm_dNeutral_Vuna_dCompiler_dCore_dTerm_dNVar (dtb__190, dtb__191, C_Base_dList_dList_Base_dList_dNil))))) dtb__192)
   | _ -> ((v_Vuna_dCompiler_dDiagnostics_dtcErr1NoLoc (C_Vuna_dCompiler_dDiagnostics_dTcErr_Vuna_dCompiler_dDiagnostics_dCannotSolveHigherOrder ((bi_strFromInt m)))) (bi_strFromInt m))
 )
   | _ -> ((v_Vuna_dCompiler_dDiagnostics_dtcErr1NoLoc (C_Vuna_dCompiler_dDiagnostics_dTcErr_Vuna_dCompiler_dDiagnostics_dCannotSolveHigherOrder ((bi_strFromInt m)))) (bi_strFromInt m))
 )))))))))
-and v_Vuna_dCompiler_dCore_dConv_dsolveMetaHeadFuel = (fun fuel -> (fun defs -> (fun sols -> (fun depth -> (fun m -> (fun sp -> (fun whole -> (fun headVal -> (fun args -> (if ((bi_le_int fuel) 0) then (C_Base_dResult_dResult_Base_dResult_dErr ("DT: internal: conv fuel exhausted")) else (if ((bi_ge_int (v_Base_dList_dlength args)) (v_Base_dList_dlength sp)) then ((fun extra -> (match ((v_Vuna_dCompiler_dCore_dConv_dsplitAtVals extra) args) with
-  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__117, dtb__118) -> ((v_Base_dResult_dandThen (((((((v_Vuna_dCompiler_dCore_dConv_dsolveMetaFuel ((bi_sub fuel) 1)) defs) sols) depth) m) C_Base_dList_dList_Base_dList_dNil) ((v_Vuna_dCompiler_dCore_dEval_dapplySpine headVal) dtb__117))) (fun sols2 -> ((((((((v_Vuna_dCompiler_dCore_dConv_dconvSpinesFuel ((bi_sub fuel) 1)) defs) sols2) depth) sp) dtb__118) (C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVMeta (m, sp))) whole)))
+and v_Vuna_dCompiler_dCore_dConv_dsolveMetaHeadLegacyFuel = (fun fuel -> (fun defs -> (fun sols -> (fun depth -> (fun m -> (fun sp -> (fun whole -> (fun headVal -> (fun args -> (if ((bi_le_int fuel) 0) then (C_Base_dResult_dResult_Base_dResult_dErr ("DT: internal: conv fuel exhausted")) else (if ((bi_ge_int (v_Base_dList_dlength args)) (v_Base_dList_dlength sp)) then ((fun extra -> (match ((v_Vuna_dCompiler_dCore_dConv_dsplitAtVals extra) args) with
+  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__193, dtb__194) -> ((v_Base_dResult_dandThen (((((((v_Vuna_dCompiler_dCore_dConv_dsolveMetaFuel ((bi_sub fuel) 1)) defs) sols) depth) m) C_Base_dList_dList_Base_dList_dNil) ((v_Vuna_dCompiler_dCore_dEval_dapplySpine headVal) dtb__193))) (fun sols2 -> ((((((((v_Vuna_dCompiler_dCore_dConv_dconvSpinesFuel ((bi_sub fuel) 1)) defs) sols2) depth) sp) dtb__194) (C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVMeta (m, sp))) whole)))
   | _ -> failwith "DT: impossible branch"
 )) ((bi_sub (v_Base_dList_dlength args)) (v_Base_dList_dlength sp))) else ((v_Vuna_dCompiler_dDiagnostics_dtcErr1NoLoc (C_Vuna_dCompiler_dDiagnostics_dTcErr_Vuna_dCompiler_dDiagnostics_dCannotSolveHigherOrder ((bi_strFromInt m)))) (bi_strFromInt m)))))))))))))
+and v_Vuna_dCompiler_dCore_dConv_dsolveMetaPattern = (fun fuel -> (fun defs -> (fun sols -> (fun depth -> (fun m -> (fun sp -> (fun rhs -> (if ((bi_le_int fuel) 0) then (C_Base_dResult_dResult_Base_dResult_dErr ("DT: internal: conv fuel exhausted")) else (match (v_Vuna_dCompiler_dCore_dConv_dpatternSpineOf sp) with
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> (((((((v_Vuna_dCompiler_dCore_dConv_dsolveMetaHoLegacyFuel ((bi_sub fuel) 1)) defs) sols) depth) m) sp) rhs)
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__195) -> ((fun created -> ((fun t -> ((fun n -> ((fun levels -> (if (((v_Vuna_dCompiler_dCore_dTerm_dhasMeta m) 0) t) then ((v_Vuna_dCompiler_dDiagnostics_dtcErr1NoLoc (C_Vuna_dCompiler_dDiagnostics_dTcErr_Vuna_dCompiler_dDiagnostics_dCannotSolveOccurs ((bi_strFromInt m)))) (bi_strFromInt m)) else (if (((((v_Vuna_dCompiler_dCore_dConv_dtermScopedTo created) depth) 0) dtb__195) t) then (C_Base_dResult_dResult_Base_dResult_dOk ((((v_Vuna_dCompiler_dCore_dTerm_dsolsCons m) ((((v_Vuna_dCompiler_dCore_dConv_dpatternSolution dtb__195) created) depth) ((((((v_Vuna_dCompiler_dCore_dConv_dabsPatternBody n) created) depth) 0) levels) t))) sols))) else ((v_Vuna_dCompiler_dDiagnostics_dtcErr1NoLoc (C_Vuna_dCompiler_dDiagnostics_dTcErr_Vuna_dCompiler_dDiagnostics_dCannotSolveMetavar ((bi_strFromInt m)))) (bi_strFromInt m))))) (v_Vuna_dCompiler_dCore_dConv_dspineLevels dtb__195))) (v_Base_dList_dlength dtb__195))) ((v_Vuna_dCompiler_dCore_dEval_dquote depth) rhs))) (((v_Vuna_dCompiler_dCore_dConv_dmetaCreatedDepth sols) depth) m))
+  | _ -> failwith "DT: impossible branch"
+)))))))))
+and v_Vuna_dCompiler_dCore_dConv_dsolveMetaFuel = (fun fuel -> (fun defs -> (fun sols -> (fun depth -> (fun m -> (fun sp -> (fun rhs -> (if ((bi_le_int fuel) 0) then (C_Base_dResult_dResult_Base_dResult_dErr ("DT: internal: conv fuel exhausted")) else (match ((v_Vuna_dCompiler_dCore_dTerm_dsolsLookup m) sols) with
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__196) -> ((((((v_Vuna_dCompiler_dCore_dConv_dconvFuel ((bi_sub fuel) 1)) defs) sols) depth) ((v_Vuna_dCompiler_dCore_dEval_dapplySpine dtb__196) sp)) rhs)
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> (match sp with
+  | C_Base_dList_dList_Base_dList_dNil -> ((((v_Vuna_dCompiler_dCore_dConv_dsolveMetaEmpty sols) depth) m) rhs)
+  | _ -> (match rhs with
+  | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVMeta (dtb__197, dtb__198) -> (if ((bi_eq_int dtb__197) m) then ((((((((v_Vuna_dCompiler_dCore_dConv_dconvSpinesFuel ((bi_sub fuel) 1)) defs) sols) depth) sp) dtb__198) (C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVMeta (m, sp))) rhs) else (match ((v_Vuna_dCompiler_dCore_dTerm_dsolsLookup dtb__197) sols) with
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__199) -> (((((((v_Vuna_dCompiler_dCore_dConv_dsolveMetaFuel ((bi_sub fuel) 1)) defs) sols) depth) m) sp) ((v_Vuna_dCompiler_dCore_dEval_dapplySpine dtb__199) dtb__198))
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> ((v_Base_dResult_dandThen (((((((v_Vuna_dCompiler_dCore_dConv_dsolveMetaFuel ((bi_sub fuel) 1)) defs) sols) depth) m) C_Base_dList_dList_Base_dList_dNil) (C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVMeta (dtb__197, C_Base_dList_dList_Base_dList_dNil)))) (fun sols2 -> ((((((((v_Vuna_dCompiler_dCore_dConv_dconvSpinesFuel ((bi_sub fuel) 1)) defs) sols2) depth) sp) dtb__198) (C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVMeta (m, sp))) rhs)))
+  | _ -> failwith "DT: impossible branch"
+))
+  | _ -> (((((((v_Vuna_dCompiler_dCore_dConv_dsolveMetaPattern ((bi_sub fuel) 1)) defs) sols) depth) m) sp) rhs)
+)
+)
+  | _ -> failwith "DT: impossible branch"
+)))))))))
+
+let v_Vuna_dCompiler_dCore_dConv_dsolveMetaNew = (fun defs -> (fun sols -> (fun depth -> (fun m -> (fun rhs -> ((((v_Vuna_dCompiler_dCore_dConv_dsolveMetaEmpty sols) depth) m) rhs))))))
 
 let v_Vuna_dCompiler_dCore_dConv_dconv = (fun a1 -> (fun a2 -> (fun a3 -> (fun a4 -> (fun a5 -> ((((((v_Vuna_dCompiler_dCore_dConv_dconvFuel 64) a1) a2) a3) a4) a5))))))
 
@@ -250,7 +381,3 @@ let v_Vuna_dCompiler_dCore_dConv_detaLeft = (fun a1 -> (fun a2 -> (fun a3 -> (fu
 let v_Vuna_dCompiler_dCore_dConv_detaRight = (fun a1 -> (fun a2 -> (fun a3 -> (fun a4 -> (fun a5 -> (fun a6 -> (((((((v_Vuna_dCompiler_dCore_dConv_detaRightFuel 64) a1) a2) a3) a4) a5) a6)))))))
 
 let v_Vuna_dCompiler_dCore_dConv_dsolveMeta = (fun a1 -> (fun a2 -> (fun a3 -> (fun a4 -> (fun a5 -> (fun a6 -> (((((((v_Vuna_dCompiler_dCore_dConv_dsolveMetaFuel 64) a1) a2) a3) a4) a5) a6)))))))
-
-let v_Vuna_dCompiler_dCore_dConv_dsolveMetaHead = (fun a1 -> (fun a2 -> (fun a3 -> (fun a4 -> (fun a5 -> (fun a6 -> (fun a7 -> (fun a8 -> (((((((((v_Vuna_dCompiler_dCore_dConv_dsolveMetaHeadFuel 64) a1) a2) a3) a4) a5) a6) a7) a8)))))))))
-
-let v_Vuna_dCompiler_dCore_dConv_dsolveMetaHo = (fun a1 -> (fun a2 -> (fun a3 -> (fun a4 -> (fun a5 -> (fun a6 -> (((((((v_Vuna_dCompiler_dCore_dConv_dsolveMetaHoFuel 64) a1) a2) a3) a4) a5) a6)))))))

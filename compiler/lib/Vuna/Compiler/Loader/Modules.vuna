@@ -2,6 +2,7 @@ module Vuna.Compiler.Loader.Modules
   ( ExportEntry(..)
   , ExportRef
   , Module
+  , Namespaces(..)
   , Project
   , collectModuleFiles
   , entryKind
@@ -29,6 +30,9 @@ module Vuna.Compiler.Loader.Modules
   , modulesExportingCtor
   , modulesExportingType
   , modulesExportingValue
+  , nsCtors
+  , nsTypes
+  , nsValues
   , projectEntryAllImports
   , projectEntryCapabilities
   , projectEntryDecls
@@ -103,6 +107,26 @@ projectEntryPkg (Project ds is imps ms pkg pcaps) = pkg
 
 projectEntryCapabilities : Project -> List String
 projectEntryCapabilities (Project ds is imps ms pkg pcaps) = pcaps
+
+-- M28（B18）：解析期的三个命名空间，与导出表 kind 一一对应，**不再拍平**。
+--   values = 值命名空间（DFun / 签名 / 实例名；导出 kind "val"）
+--   ctors  = 构造子命名空间（data 构造子 / record 名 / trait 方法；导出 kind "ctor"）
+--   types  = 类型命名空间（data / record / trait 的类型名；导出 kind "type"）
+-- 解析位置决定查哪个表：类型位置只查 types；值位置按 values → ctors → types（类型当项）。
+record Namespaces where
+  nsValues : List String
+  nsCtors : List String
+  nsTypes : List String
+
+-- 记录字段不是全局名（字段访问在 Elab 里降级成模式绑定），所以显式写访问器。
+nsValues : Namespaces -> List String
+nsValues (Namespaces values ctors types) = values
+
+nsCtors : Namespaces -> List String
+nsCtors (Namespaces values ctors types) = ctors
+
+nsTypes : Namespaces -> List String
+nsTypes (Namespaces values ctors types) = types
 
 -- 模块导出表（M10）。每条是「本模块公开名 → 定义处带模块前缀的名字」。
 -- kind 用字符串区分两套命名空间：val（函数/值）、ctor（构造器）、type（类型名）。

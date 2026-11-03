@@ -6,9 +6,15 @@ module Vuna.Compiler.Elab.Match (allVarPats, multiToCaseExpr, multiToExpr) where
 -- 模式匹配的 `Expr`：参数折成 lambda，逐列下降，构造子列编成 `case`，Int/String 列编成
 -- `if` 链。这样 `elabFunDef` 只需 `checkDef` 一个普通表达式，复用既有 case 精化。
 --
+-- M28（B08）：源级 `case` 的**唯一**降级入口（`multiToCaseExpr`，带 let 绑定 scrutinee）：
+-- 嵌套模式与同构造子多分支都在这里消解成规范形（每构造子一个分支 + 变量子模式），
+-- 精化器不再有「去重降级 / 嵌套模式折叠」两条旁路。
+--
 -- 位置无关的纯语法变换（只依赖 Ast 模式与表达式），因此从 Elab 拆出（M22 模块预算）。
 -- 关键不变量：每个 `ctorAltList` 递归层生成的新鲜子模式名必须带**本列位置名**
--- （见 `subNamesFor`），否则层间同名会让外层 rename 抓到内层 binder。
+-- （见 `subNamesFor`），否则层间同名会让外层 rename 抓到内层 binder。嵌套的矩阵降级
+-- （内层 source case 各自降级）之间靠调用方传入的位置名区分（`checkCaseMatrixFuel` 用
+-- 上下文深度做前缀）。
 import Vuna.Compiler.Common
 import Vuna.Compiler.Diagnostics
 import Vuna.Compiler.Frontend.Ast
@@ -285,9 +291,9 @@ renameAlt oldName newName alt =
 
 -- 该列出现构造子：每个构造子一组。
 --
--- **分支 pattern 的子模式一律用新鲜变量**（`_sc<i>`）：这样 `bindCtorTele` 不会折叠
--- 任何嵌套模式，位置名与 body 里的引用完全可控；子模式的真实形态交给内层
--- `buildColumnExpr` 用 case 表达。比依赖 `bindCtorTele` 的 `_np<N>` 编号稳健。
+-- **分支 pattern 的子模式一律用新鲜变量**（`_sc<i>`）：规范形的精化器只接受变量/通配
+-- 子模式（`bindCtorTele`），位置名与 body 里的引用完全可控；子模式的真实形态交给内层
+-- `buildColumnExpr` 用 case 表达。
 ctorAltList : List (Pair String (List String)) -> List (Pair (List Pat) Expr) -> String -> List String -> Int -> Result (List (Pair Pat Expr))
 ctorAltList table clauses pos restParams fuel =
   if fuel <= 0 then Err "DT: internal: pattern matrix fuel exhausted"

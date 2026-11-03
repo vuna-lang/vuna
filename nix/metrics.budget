@@ -56,15 +56,15 @@
 #   `vuna build --no-compile --out out compiler` 实测重新标定：
 #   bytes 1713842 / lines 15710 / maxline 34902 / longlines 4823 / letrec 587 /
 #   strcat 1 / eqint 142 / zeroarg 6 / ctorcount 4475。
-bytes 1773500
-lines 15960
-maxline 36000
-longlines 4950
-letrec 593
+bytes 1820834
+lines 16300
+maxline 38151
+longlines 5121
+letrec 607
 strcat 1
-eqint 142
-zeroarg 10
-ctorcount 4565
+eqint 143
+zeroarg 6
+ctorcount 4704
 # M23 夹具迁移与 interp 切换：编译器源码新增 DT 能力（零参构造子求值、record update 降级、
 #   参数化 record、@inst 选择、实例诊断、&&|| 短路、REPL 表达式求值、DtDerive/CoreCodegen
 #   修正）约 250 行；且本预算自 751ba49（Elab +467 行）起就已失效——HEAD 实测已是
@@ -124,3 +124,9 @@ ctorcount 4565
 #   bytes 1772923 / lines 15948 / maxline 35802 / longlines 4937 / letrec 592 /
 #   strcat 1 / eqint 141 / zeroarg 6 / ctorcount 4558。
 #   按 `vuna seed` 实测重新标定 ctorcount 4469 → 4487、bytes 1720000 → 1728000。
+# M28（类型系统地基：严格分层宇宙检查 / 擦除单判据 / pattern 合一 + zonk /
+#   三命名空间解析 / axiom + η 展开 / case 规范形）后按
+#   `vuna build --no-compile --out out compiler && sh nix/metrics.sh out` 实测重新标定：
+#   files 66 / bytes 1820834 / lines 16300 / maxline 38151 / longlines 5121 /
+#   letrec 607 / strcat 1 / eqint 143 / zeroarg 6 / ctorcount 4704。
+#   增长来自检查器新增规则与诊断（非 codegen 结构变化）；seed 模块数不变（66 `.ml`）。

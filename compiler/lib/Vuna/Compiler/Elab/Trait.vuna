@@ -6,7 +6,6 @@ module Vuna.Compiler.Elab.Trait
   , bindIndexBinder
   , bindOnePattern
   , checkBinders
-  , checkBodyAtEnd
   , checkDef
   , checkInstanceHeads
   , checkInstanceHeadsGo
@@ -422,11 +421,10 @@ leadingImplicitCount t = case t of
   _ => 0
 
 -- 解掉被替换出体的孤儿 `?m`（否则 `unsolvedMeta` 报未解元变量）。
+-- M28：解的作用域在 Core.Conv 求解点就地检查，这里不再事后复核。
 solveLiftedMeta : Ec -> String -> Int -> Ec
 solveLiftedMeta ec name m = case solveMeta (ecDefTbl ec) (ecSolsP ec) 0 m [] (VNeutral (NVar name 0 [])) of
-  Ok sols2 => case checkSolsDelta ec (ecSols ec) (solsList sols2) of
-    Err e => ec
-    Ok _ => ecPutSols ec (solsList sols2)
+  Ok sols2 => ecPutSols ec (solsList sols2)
   Err e => ec
 
 liftFreeDictGoals : String -> Ec -> Term -> Term -> Pair Term (Pair Term Ec)
@@ -662,7 +660,7 @@ else
     VPi name implicit rig dom clo =>
       if implicit then if isIndexDomain ec dom then bindIndexBinderFuel (fuel - 1) globals ctx ec name dom clo [] body sp
       else tcErr0 sp ImplicitParamKind
-      else checkBodyAtEnd globals ctx ec body expected sp
+      else checkBodyAtEndFuel (fuel - 1) globals ctx ec body expected sp
     _ => checkE globals ctx ec body expected
 
 -- 隐式索引 binder（`{n : Nat}`）：绑成擦除的 lambda（Rig0），体在扩展上下文里继续。
@@ -678,11 +676,29 @@ else
     Pair inner ec1 => Ok (Pair (TLam name Rig0 inner) ec1)
   )
 
--- 模式用完后仍剩显式 Pi：body 是 lambda 时按 check 处理，否则是参数个数不足。
-checkBodyAtEnd : List (Pair String Term) -> Ctx -> Ec -> Expr -> Value -> Span -> Result (Pair Term Ec)
-checkBodyAtEnd globals ctx ec body expected sp = case body of
+-- 模式用完后仍剩 Pi（M28 η 展开，决策 5 / D10）：body 是 lambda 时按 check 处理；
+-- 否则按签名剩余 Pi 补 `\_arityN`（N 取当前上下文深度保证唯一），并把 body **应用**
+-- 到这些新参数，整体按原签名继续 check——`f : A -> B` 配 `f = g` 因此成立。
+-- 隐式 binder 沿用既有规则：index 域绑成擦除 λ（隐式实参由精化器插入），其它域仍是
+-- ImplicitParamKind。`TC_DefFewerParams` 保留在错误表里但不再触发（见 Diagnostics）。
+checkBodyAtEndFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Expr -> Value -> Span -> Result (Pair Term Ec)
+checkBodyAtEndFuel fuel globals ctx ec body expected sp = if fuel <= 0 then Err "DT: internal: binder check fuel exhausted"
+else case body of
   ELam names lambdaBody lambdaSp => checkE globals ctx ec body expected
-  _ => tcErr0 sp DefFewerParams
+  _ => case forceVal ec expected of
+    VPi name implicit rig dom clo => if implicit then if isIndexDomain ec dom then bindIndexBinderFuel (fuel - 1) globals ctx ec name dom clo [] body sp
+    else tcErr0 sp ImplicitParamKind
+    else
+      let
+        lvl = ctxDepth ctx
+        etaName = "_arity" ++ strFromInt lvl
+        v = freshVarValue etaName lvl
+        ctx2 = ctxBindValue etaName dom ctx
+        body2 = EApp body [EVar etaName sp] sp
+      in andThen (checkBodyAtEndFuel (fuel - 1) globals ctx2 ec body2 (applyClosure clo v) sp) (\p => case p of
+        Pair inner ec1 => Ok (Pair (TLam etaName (binderRig False dom) inner) ec1)
+      )
+    _ => checkE globals ctx ec body expected
 
 checkBindersFuel fuel globals ctx ec (pat :: rest) body expected sp = if fuel <= 0 then Err "DT: internal: binder check fuel exhausted"
 else
@@ -704,7 +720,7 @@ else
     lvl = ctxDepth ctx
     v = freshVarValue pname lvl
     ctx2 = ctxBindValue pname dom ctx
-    erasure = typeLayerRig False dom
+    erasure = binderRig False dom
   in andThen (checkBindersFuel (fuel - 1) globals ctx2 ec pats body (applyClosure clo v) sp) (\p => case p of
     Pair inner ec1 => Ok (Pair (TLam pname erasure inner) ec1)
   )

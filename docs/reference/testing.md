@@ -7,8 +7,8 @@
 
 vuna 原生测试按编号章节组织（**38 个章节**：编号到 39，第 12 段已删除；34a–34d 归在
 第 34 段内，`--list` 列 38 行），用 `vuna` / `vuna-seed` 驱动，不依赖外部 vuna 实现，
-但需要 `ocamlopt` 作为 codegen 后端。M27 实测 **1188 checks 全绿**（含第 13 段 seed
-冒烟；`VUNA_SEED` 指向 rotation 后的 `vuna-seed`），全量运行约 **1m29s**（本机读数；
+但需要 `ocamlopt` 作为 codegen 后端。M28 实测 **1278 checks 全绿**（含第 13 段 seed
+冒烟；`VUNA_SEED` 指向 rotation 后的 `vuna-seed`），全量运行约 **1m40s**（本机读数；
 nix check 内含完整工具链，墙钟与机器相关）。
 
 ```console
@@ -69,7 +69,7 @@ DT 精化 + 擦除 codegen，`build` = DT 逐模块 codegen + `build.sh`）。�
 - `corpus/run/*.vuna`：`interp` 输出 vs `.out` golden；`compile`→ocamlopt→运行再比对；
   `.nointerp`（`10_string_pack`、`16_file_exists`、`17_file_meta`）只跑后者；M27 新增
   `18_int_overflow` / `19_string_utf8` / `20_str_hash`（纯值语义 golden）；
-- `corpus/modules/` 01–29 正例：跨模块函数/数据/嵌套 import 的 `interp` 与 `compile`
+- `corpus/modules/` 01–30 正例：跨模块函数/数据/嵌套 import 的 `interp` 与 `compile`
   结果（原“多根”夹具已迁移为**同包多模块**夹具，Helper 在 `lib/`；不再有“多根”
   概念）；覆盖显式导出列表、重导出、抽象类型、空导出集、包门面、无头模块
   重导出、same-target 去重、选择性重导出、两级门面、qualified import 重导出、多行模块
@@ -103,7 +103,9 @@ DT 精化 + 擦除 codegen，`build` = DT 逐模块 codegen + `build.sh`）。�
   `94_ambiguous_module` 覆盖包上下文下的歧义模块；`95_cross_dep` 覆盖依赖方向的
   负例（依赖包不能 import 消费包模块）；M27 新增 `07_effect_capability`（声明
   `[capabilities] effects` 后可直接调 `prim_*`）与负例 `96_effect_no_capability`
-  （未声明能力）、`97_unknown_capability`（未知能力名）；
+  （未声明能力）、`97_unknown_capability`（未知能力名）；M28 新增
+  `08_module_scope`（C29：entry 顶层小写名与同包模块签名里的类型变量同名，banned 集按
+  模块作用域计算后 base 模块不再报 `unknown name x`）；
 - `corpus/err/`、`corpus/run_err/`：解析/求值错误片段；`run_err` 的 `.err` 是 DT 诊断
   子串（非穷尽、if 条件类型、参数过多、clause 数不匹配、let 绑定模式等），
   `03_div_zero` 是产物运行期负例（运行断言 `division by zero`），`07_main_arity` 用
@@ -121,10 +123,14 @@ DT 精化 + 擦除 codegen，`build` = DT 逐模块 codegen + `build.sh`）。�
 - `corpus/lsp/smoke.sh`：`vuna lsp` 的 JSON-RPC 冒烟（诊断来自 DT 精化 +
   `goalsOfProgram` 洞目标）；**M26 未改 LSP 加载语义**（仍 parse 级、含 import 跳过类型
   检查），冒烟只锁当前行为；
-- `corpus/dt/*`（56 个正例：M27 新增 `54_user_bool_data`、`55_user_io_data`、
+- `corpus/dt/*`（64 个正例：M27 新增 `54_user_bool_data`、`55_user_io_data`、
   `56_user_list_data`（`.nointerp`），覆盖用户本地 `data Bool`/`IO`/`List` 与 canonical
-  `Base.*` 身份并存）、`corpus/dt_err/*`（35 个负例，其中
-  `35_where_no_sig` 是 M24 新增，`36`–`38` 与 `dt/45`–`52` 是 M24.5/M24.6 新增）、
+  `Base.*` 身份并存；M28 新增 `57_universe`、`58_case_matrix`/`58b_case_absurd`、
+  `59_axiom`/`59_eta`/`59_let_where`、`60_erasure_unify`、`61_namespace_dual`）、
+  `corpus/dt_err/*`（45 个负例，其中
+  `35_where_no_sig` 是 M24 新增，`36`–`38` 与 `dt/45`–`52` 是 M24.5/M24.6 新增，
+  M28 新增 `40_universe_*`、`41*`（冗余/不可达分支）、`42_axiom_runtime`、
+  `44_namespace_value_as_type`，且 `08_arity` 改为 `TC_DefMoreParams`）、
   `corpus/dt_base/`（8）、`corpus/dt_io/`（1）、`corpus/dt_pkg/`（3 个包目录）、
   `corpus/dt_ad_hoc/`（包内 ad-hoc 单文件，原 `dt_root`）：DT 专项夹具，见
   [dt.md](dt.md) 的夹具一节。

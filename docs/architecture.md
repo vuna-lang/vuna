@@ -50,6 +50,18 @@ import 子模块并选择性重导出（对外名字面与拆分前一致），�
  → sh build.sh                   （ocamlopt 逐模块编译并链接）
 ```
 
+**名字解析三命名空间（M28 / B18）**：`Loader.Resolve` 的解析期状态是三个**分开**的表
+（`Loader.Modules.Namespaces`：值 `nsValues` / 构造子 `nsCtors` / 类型 `nsTypes`，与导出
+`kind` 的 `val` / `ctor` / `type` 一一对应）。类型位置只查类型表（退化：索引构造子 →
+本模块类型层 def），值位置查值表（def → ctor → 导入值/ctor → **类型作为项**的最后退路）。
+语义与边界见 [language.md 的「type / value 双命名空间」](reference/language.md)。
+
+**擦除/合一/定义形式（M28）**：擦除只有单一判据链（`Elab.Meta.isTypeDomain` →
+`binderRig` → `Core.rigOfBinder`，读取侧统一 `Core.rigIsErased`）；元变量求解在
+`Core.Conv.solveMeta`（created-depth 随 `Sols` 就地检查，非空 spine 走 Miller pattern），
+已解元变量进项只经 `Elab.Meta.zonkTerm`；`axiom` 是无体擦除定义（`DtAxiom`，运行时使用由
+`Codegen.Erase.checkNoAxiomRuntime` 拒绝），定义参数少于签名时按剩余 Pi η 展开。
+
 **内建单一真源（M27）**：`Vuna.Compiler.Intrinsics` 是名字/签名/arity/归约/能力/runtime/
 可见性的唯一真源；`Loader.Resolve`（arity、放行、能力）、`Elab.Prelude`（签名）、
 `Core.Eval`（归约）、`Codegen.Term`（runtime）都消费它。内置身份按声明 symbol 判定：

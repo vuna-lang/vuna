@@ -83,14 +83,14 @@ let rec v_Vuna_dCompiler_dCore_dEval_devalFuel = (fun fuel -> (fun env -> (fun t
   | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTIf (dtb__37, dtb__38, dtb__39) -> (((v_Vuna_dCompiler_dCore_dEval_devalIf (((v_Vuna_dCompiler_dCore_dEval_devalFuel ((bi_sub fuel) 1)) env) dtb__37)) (((v_Vuna_dCompiler_dCore_dEval_devalFuel ((bi_sub fuel) 1)) env) dtb__38)) (((v_Vuna_dCompiler_dCore_dEval_devalFuel ((bi_sub fuel) 1)) env) dtb__39))
   | _ -> failwith "DT: impossible branch"
 )))))
-and v_Vuna_dCompiler_dCore_dEval_devalArgTermsFuel = (fun fuel -> (fun env -> (fun args -> (if ((bi_le_int fuel) 0) then C_Base_dList_dList_Base_dList_dNil else (match args with
-  | C_Base_dList_dList_Base_dList_dNil -> C_Base_dList_dList_Base_dList_dNil
+and v_Vuna_dCompiler_dCore_dEval_devalArgTermsFuel = (fun fuel -> (fun env -> (fun args -> (if ((bi_le_int fuel) 0) then C_Base_dList_dList_Base_dList_dNil else ((fun nd_uscrut3 -> (match nd_uscrut3 with
   | C_Base_dList_dList_Base_dList_dCons (dtb__40, dtb__41) -> (match dtb__40 with
   | C_Base_dPair_dPair_Base_dPair_dPair (dtb__42, dtb__43) -> (C_Base_dList_dList_Base_dList_dCons ((((v_Vuna_dCompiler_dCore_dEval_devalFuel ((bi_sub fuel) 1)) env) dtb__42), (((v_Vuna_dCompiler_dCore_dEval_devalArgTermsFuel ((bi_sub fuel) 1)) env) dtb__41)))
   | _ -> failwith "DT: impossible branch"
 )
+  | C_Base_dList_dList_Base_dList_dNil -> C_Base_dList_dList_Base_dList_dNil
   | _ -> failwith "DT: impossible branch"
-)))))
+)) args)))))
 and v_Vuna_dCompiler_dCore_dEval_devalCaseFuel = (fun fuel -> (fun scrut -> (fun alts -> (if ((bi_le_int fuel) 0) then (C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVType (v_Vuna_dCompiler_dCore_dTerm_dlevelZero)) else (match scrut with
   | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVCon (dtb__44, dtb__45) -> ((((v_Vuna_dCompiler_dCore_dEval_dapplyCaseAltFuel ((bi_sub fuel) 1)) dtb__44) dtb__45) alts)
   | _ -> (C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVCase (scrut, alts))
@@ -106,15 +106,15 @@ and v_Vuna_dCompiler_dCore_dEval_dapplyCaseAltFuel = (fun fuel -> (fun c -> (fun
 ) else ((((v_Vuna_dCompiler_dCore_dEval_dapplyCaseAltFuel ((bi_sub fuel) 1)) c) args) dtb__47)))
   | _ -> failwith "DT: impossible branch"
 ))))))
-and v_Vuna_dCompiler_dCore_dEval_dapplyValueFuel = (fun fuel -> (fun f -> (fun a -> (if ((bi_le_int fuel) 0) then (C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVType (v_Vuna_dCompiler_dCore_dTerm_dlevelZero)) else (match f with
-  | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVLam (dtb__52, dtb__53, dtb__54) -> (match dtb__54 with
-  | C_Vuna_dCompiler_dCore_dTerm_dClosure_Vuna_dCompiler_dCore_dTerm_dClos (dtb__55, dtb__56) -> (((v_Vuna_dCompiler_dCore_dEval_devalFuel ((bi_sub fuel) 1)) (C_Base_dList_dList_Base_dList_dCons (a, dtb__55))) dtb__56)
-  | _ -> (C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVApp (f, a))
+and v_Vuna_dCompiler_dCore_dEval_dapplyValueFuel = (fun fuel -> (fun f -> (fun a -> (if ((bi_le_int fuel) 0) then (C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVType (v_Vuna_dCompiler_dCore_dTerm_dlevelZero)) else ((fun nd_uscrut3 -> (match nd_uscrut3 with
+  | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVMeta (dtb__52, dtb__53) -> (C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVMeta (dtb__52, ((v_Base_dList_dappend dtb__53) (C_Base_dList_dList_Base_dList_dCons (a, C_Base_dList_dList_Base_dList_dNil)))))
+  | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVNeutral (dtb__54) -> (C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVNeutral (((v_Vuna_dCompiler_dCore_dEval_dspineAppend dtb__54) a)))
+  | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVLam (dtb__55, dtb__56, dtb__57) -> (match dtb__57 with
+  | C_Vuna_dCompiler_dCore_dTerm_dClosure_Vuna_dCompiler_dCore_dTerm_dClos (dtb__58, dtb__59) -> (((v_Vuna_dCompiler_dCore_dEval_devalFuel ((bi_sub fuel) 1)) (C_Base_dList_dList_Base_dList_dCons (a, dtb__58))) dtb__59)
+  | _ -> failwith "DT: impossible branch"
 )
-  | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVNeutral (dtb__57) -> (C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVNeutral (((v_Vuna_dCompiler_dCore_dEval_dspineAppend dtb__57) a)))
-  | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVMeta (dtb__58, dtb__59) -> (C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVMeta (dtb__58, ((v_Base_dList_dappend dtb__59) (C_Base_dList_dList_Base_dList_dCons (a, C_Base_dList_dList_Base_dList_dNil)))))
   | _ -> (C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVApp (f, a))
-)))))
+)) f)))))
 
 let v_Vuna_dCompiler_dCore_dEval_deval = (fun env -> (fun t -> (((v_Vuna_dCompiler_dCore_dEval_devalFuel 128) env) t)))
 
@@ -334,7 +334,7 @@ let rec v_Vuna_dCompiler_dCore_dEval_dnthByte = (fun mc0 -> (fun mc1 -> (match m
 
 let v_Vuna_dCompiler_dCore_dEval_dstrAtBytes = (fun s -> (fun i -> (if (if ((bi_lt_int i) 0) then true else ((bi_ge_int i) (bi_strLength s))) then ((bi_sub 0) 1) else ((v_Vuna_dCompiler_dCore_dEval_dnthByte (dtp_unpack s)) i))))
 
-let v_Vuna_dCompiler_dCore_dEval_datPrim = (fun sp -> (match sp with
+let v_Vuna_dCompiler_dCore_dEval_datPrim = (fun sp -> ((fun nd_uscrut1 -> (match nd_uscrut1 with
   | C_Base_dList_dList_Base_dList_dCons (dtb__121, dtb__122) -> (match dtb__122 with
   | C_Base_dList_dList_Base_dList_dCons (dtb__123, dtb__124) -> (match dtb__124 with
   | C_Base_dList_dList_Base_dList_dNil -> (match (v_Vuna_dCompiler_dCore_dEval_dasStr dtb__121) with
@@ -351,7 +351,7 @@ let v_Vuna_dCompiler_dCore_dEval_datPrim = (fun sp -> (match sp with
   | _ -> C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing
 )
   | _ -> C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing
-))
+)) sp))
 
 let rec v_Vuna_dCompiler_dCore_dEval_dapplyClosureBinder = (fun mc0 -> (fun mc1 -> (match mc1 with
   | C_Base_dList_dList_Base_dList_dCons (dtb__127, dtb__128) -> (match mc0 with
@@ -468,7 +468,7 @@ let v_Vuna_dCompiler_dCore_dEval_disNilList = (fun mc0 -> (match mc0 with
 ))
 
 let v_Vuna_dCompiler_dCore_dEval_dshowValueAt = (fun depth -> (fun v -> (match v with
-  | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVType (dtb__217) -> "Type"
+  | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVType (dtb__217) -> (if ((bi_eq_int (v_Vuna_dCompiler_dCore_dTerm_dlevelToInt dtb__217)) 0) then "Type" else ((bi_concat "Type ") (bi_strFromInt (v_Vuna_dCompiler_dCore_dTerm_dlevelToInt dtb__217))))
   | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVNeutral (dtb__218) -> (match dtb__218 with
   | C_Vuna_dCompiler_dCore_dTerm_dNeutral_Vuna_dCompiler_dCore_dTerm_dNGlobal (dtb__219, dtb__220) -> (if (v_Vuna_dCompiler_dCore_dEval_disNilList dtb__220) then dtb__219 else (v_Vuna_dCompiler_dCore_dTerm_dshowTerm ((v_Vuna_dCompiler_dCore_dEval_dquote depth) v)))
   | C_Vuna_dCompiler_dCore_dTerm_dNeutral_Vuna_dCompiler_dCore_dTerm_dNVar (dtb__221, dtb__222, dtb__223) -> (if (v_Vuna_dCompiler_dCore_dEval_disNilList dtb__223) then dtb__221 else (v_Vuna_dCompiler_dCore_dTerm_dshowTerm ((v_Vuna_dCompiler_dCore_dEval_dquote depth) v)))
@@ -551,7 +551,7 @@ and v_Vuna_dCompiler_dCore_dEval_dprimReduce = (fun defs -> (fun sols -> (fun fu
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing
   | _ -> failwith "DT: impossible branch"
 )))))))
-and v_Vuna_dCompiler_dCore_dEval_dgenericEqPrim = (fun defs -> (fun sols -> (fun fuel -> (fun sp -> (fun neg -> (if ((bi_le_int fuel) 0) then C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing else (match sp with
+and v_Vuna_dCompiler_dCore_dEval_dgenericEqPrim = (fun defs -> (fun sols -> (fun fuel -> (fun sp -> (fun neg -> (if ((bi_le_int fuel) 0) then C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing else ((fun nd_uscrut5 -> (match nd_uscrut5 with
   | C_Base_dList_dList_Base_dList_dCons (dtb__247, dtb__248) -> (match dtb__248 with
   | C_Base_dList_dList_Base_dList_dCons (dtb__249, dtb__250) -> (match dtb__250 with
   | C_Base_dList_dList_Base_dList_dCons (dtb__251, dtb__252) -> (match dtb__252 with
@@ -563,7 +563,7 @@ and v_Vuna_dCompiler_dCore_dEval_dgenericEqPrim = (fun defs -> (fun sols -> (fun
   | _ -> C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing
 )
   | _ -> C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing
-)))))))
+)) sp)))))))
 and v_Vuna_dCompiler_dCore_dEval_dvalueEqDeep = (fun defs -> (fun sols -> (fun fuel -> (fun a -> (fun b -> (if ((bi_le_int fuel) 0) then false else (match ((((v_Vuna_dCompiler_dCore_dEval_dforce defs) sols) fuel) a) with
   | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVInt (dtb__253) -> (match ((((v_Vuna_dCompiler_dCore_dEval_dforce defs) sols) fuel) b) with
   | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVInt (dtb__254) -> ((bi_eq_int dtb__253) dtb__254)

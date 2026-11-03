@@ -73,13 +73,13 @@ let v_Vuna_dCompiler_dDriver_dDt_ddtCheckLibrary = (fun ctx -> (fun names -> (v_
 
 let v_Vuna_dCompiler_dDriver_dDt_dreplExprName = "vuna_repl_expr"
 
-let v_Vuna_dCompiler_dDriver_dDt_dsplitReplExpr = (fun decls -> (match (v_Base_dList_dreverse decls) with
+let v_Vuna_dCompiler_dDriver_dDt_dsplitReplExpr = (fun decls -> ((fun nd_uscrut1 -> (match nd_uscrut1 with
   | C_Base_dList_dList_Base_dList_dCons (dtb__0, dtb__1) -> (match dtb__0 with
   | C_Vuna_dCompiler_dFrontend_dAst_dDecl_Vuna_dCompiler_dFrontend_dAst_dDFun (dtb__2, dtb__3, dtb__4, dtb__5) -> (if ((bi_eq_str dtb__2) v_Vuna_dCompiler_dDriver_dDt_dreplExprName) then (C_Base_dResult_dResult_Base_dResult_dOk ((C_Base_dPair_dPair_Base_dPair_dPair ((v_Base_dList_dreverse dtb__1), dtb__4)))) else (C_Base_dResult_dResult_Base_dResult_dErr ("DT: internal: REPL expression definition is not last")))
   | _ -> (C_Base_dResult_dResult_Base_dResult_dErr ("DT: internal: REPL expression was not parsed as a definition"))
 )
   | _ -> (C_Base_dResult_dResult_Base_dResult_dErr ("DT: internal: REPL expression was not parsed as a definition"))
-))
+)) (v_Base_dList_dreverse decls)))
 
 let v_Vuna_dCompiler_dDriver_dDt_ddtEvalExpr = (fun ctx -> (fun program -> (fun exprSource -> ((v_Base_dResult_dandThen (((v_Vuna_dCompiler_dLoader_dFlatten_dloadProjectSource ctx) "<repl>") ((bi_concat program) ((bi_concat "\n") ((bi_concat v_Vuna_dCompiler_dDriver_dDt_dreplExprName) ((bi_concat " = ") ((bi_concat exprSource) "\n"))))))) (fun project -> ((v_Base_dResult_dandThen (v_Vuna_dCompiler_dLoader_dFlatten_dresolveProject project)) (fun parts -> ((v_Base_dResult_dandThen (v_Vuna_dCompiler_dDriver_dDt_dsplitReplExpr (v_Vuna_dCompiler_dDriver_dDt_ddtProjectDecls parts))) (fun p -> ((v_Base_dResult_dandThen (v_Vuna_dCompiler_dElab_dDriver_delabProgramFull (v_Base_dPair_dfirstOf p))) (fun prog -> ((v_Vuna_dCompiler_dElab_dDriver_ddtEvalExprIn prog) (v_Base_dPair_dsecondOf p)))))))))))))
 
@@ -96,20 +96,24 @@ let rec v_Vuna_dCompiler_dDriver_dDt_dfindMainDef = (fun mc0 -> (match mc0 with
 ))
 
 let rec v_Vuna_dCompiler_dDriver_dDt_ddefTableOf = (fun mc0 -> (match mc0 with
-  | C_Base_dList_dList_Base_dList_dCons (dtb__12, dtb__13) -> (C_Base_dList_dList_Base_dList_dCons ((C_Base_dPair_dPair_Base_dPair_dPair ((v_Vuna_dCompiler_dElab_dTypes_ddtDefName dtb__12), (v_Vuna_dCompiler_dElab_dTypes_ddtDefBody dtb__12))), (v_Vuna_dCompiler_dDriver_dDt_ddefTableOf dtb__13)))
+  | C_Base_dList_dList_Base_dList_dCons (dtb__12, dtb__13) -> (match (v_Vuna_dCompiler_dElab_dTypes_ddtDefBody dtb__12) with
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__14) -> (C_Base_dList_dList_Base_dList_dCons ((C_Base_dPair_dPair_Base_dPair_dPair ((v_Vuna_dCompiler_dElab_dTypes_ddtDefName dtb__12), dtb__14)), (v_Vuna_dCompiler_dDriver_dDt_ddefTableOf dtb__13)))
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> (v_Vuna_dCompiler_dDriver_dDt_ddefTableOf dtb__13)
+  | _ -> failwith "DT: impossible branch"
+)
   | C_Base_dList_dList_Base_dList_dNil -> C_Base_dList_dList_Base_dList_dNil
   | _ -> failwith "DT: impossible branch"
 ))
 
 let v_Vuna_dCompiler_dDriver_dDt_devalDtMain = (fun mc0 -> (match mc0 with
-  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__14, dtb__15) -> (match (v_Vuna_dCompiler_dDriver_dDt_dfindMainDef dtb__15) with
+  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__15, dtb__16) -> (match (v_Vuna_dCompiler_dDriver_dDt_dfindMainDef dtb__16) with
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> (v_Vuna_dCompiler_dDiagnostics_dcgErr0 C_Vuna_dCompiler_dDiagnostics_dCgErr_Vuna_dCompiler_dDiagnostics_dNoMain)
-  | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__16) -> ((fun table -> ((fun mainVal -> (if (v_Vuna_dCompiler_dDriver_dDt_disIOType (v_Vuna_dCompiler_dElab_dTypes_ddtDefType dtb__16)) then (v_Vuna_dCompiler_dDiagnostics_dcgErr0 C_Vuna_dCompiler_dDiagnostics_dCgErr_Vuna_dCompiler_dDiagnostics_dInterpCannotExecuteEffects) else (match mainVal with
-  | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVInt (dtb__17) -> (C_Base_dResult_dResult_Base_dResult_dOk ((bi_strFromInt dtb__17)))
-  | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVStr (dtb__18) -> (C_Base_dResult_dResult_Base_dResult_dOk ((v_Vuna_dCompiler_dCore_dEval_dshowValue mainVal)))
-  | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVBool (dtb__19) -> (C_Base_dResult_dResult_Base_dResult_dOk ((v_Vuna_dCompiler_dCore_dEval_dshowValue mainVal)))
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__17) -> ((fun table -> ((fun mainVal -> (if (v_Vuna_dCompiler_dDriver_dDt_disIOType (v_Vuna_dCompiler_dElab_dTypes_ddtDefType dtb__17)) then (v_Vuna_dCompiler_dDiagnostics_dcgErr0 C_Vuna_dCompiler_dDiagnostics_dCgErr_Vuna_dCompiler_dDiagnostics_dInterpCannotExecuteEffects) else (match mainVal with
+  | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVInt (dtb__18) -> (C_Base_dResult_dResult_Base_dResult_dOk ((bi_strFromInt dtb__18)))
+  | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVStr (dtb__19) -> (C_Base_dResult_dResult_Base_dResult_dOk ((v_Vuna_dCompiler_dCore_dEval_dshowValue mainVal)))
+  | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVBool (dtb__20) -> (C_Base_dResult_dResult_Base_dResult_dOk ((v_Vuna_dCompiler_dCore_dEval_dshowValue mainVal)))
   | _ -> (v_Vuna_dCompiler_dDiagnostics_dcgErr0 C_Vuna_dCompiler_dDiagnostics_dCgErr_Vuna_dCompiler_dDiagnostics_dMainNotValue)
-))) ((((v_Vuna_dCompiler_dCore_dEval_dnormalize (v_Vuna_dCompiler_dCommon_dtblFromList table)) v_Vuna_dCompiler_dCore_dTerm_dsolsEmpty) v_Vuna_dCompiler_dCore_dTerm_ddefaultFuel) (C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVNeutral ((C_Vuna_dCompiler_dCore_dTerm_dNeutral_Vuna_dCompiler_dCore_dTerm_dNGlobal ("main", C_Base_dList_dList_Base_dList_dNil))))))) (v_Vuna_dCompiler_dDriver_dDt_ddefTableOf dtb__15))
+))) ((((v_Vuna_dCompiler_dCore_dEval_dnormalize (v_Vuna_dCompiler_dCommon_dtblFromList table)) v_Vuna_dCompiler_dCore_dTerm_dsolsEmpty) v_Vuna_dCompiler_dCore_dTerm_ddefaultFuel) (C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVNeutral ((C_Vuna_dCompiler_dCore_dTerm_dNeutral_Vuna_dCompiler_dCore_dTerm_dNGlobal ("main", C_Base_dList_dList_Base_dList_dNil))))))) (v_Vuna_dCompiler_dDriver_dDt_ddefTableOf dtb__16))
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"

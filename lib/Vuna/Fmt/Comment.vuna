@@ -254,6 +254,7 @@ modDeclItemAnchors m = case m of
 declAnchors : Decl -> List Span
 declAnchors d = case d of
   DData name params kind ctors derivings sp => sp :: map ctorSpan ctors
+  DAxiom name ty sp => [sp]
   DSig name ty sp => [sp]
   DFun name pats body sp => sp :: exprAnchors body
   DRecord name params fields derivings sp => sp :: map fieldSpan fields

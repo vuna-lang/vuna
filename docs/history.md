@@ -325,3 +325,52 @@
   67 文件），第二轮加入 `strShow` 使用后再 rotation；`seed-count.txt` 自动更新。
 - **基线**：seed 66 `.ml` / 67 文件、`nix flake check` 全绿（测试断言数与套件耗时见
   [reference/testing.md](reference/testing.md)）。
+
+## M28：类型系统地基（2026-11）
+
+- **宇宙（B05/D05/D06）**：定为**严格分层、非累积、无 `Type : Type`**（不引入 subtyping）。
+  `kindWellFormed` 从「只查箭头链形状」升级为「Pi 链 → `Type l`（l 非负）+ 域层级防御
+  复核」；族 kind 的结果层级传入构造子检查，构造子**字段 binder**（跳过前 arity 个族参数/
+  索引）的域 sort 必须 `≤` 族层级，否则报 `TC_CtorError`（`data D : Type where Mk : Type -> D`
+  被拒；`data D : Type 1 where Mk : Type -> D` 合法）。`showValueAt` 现在区分 `Type n`
+  的层级显示。正反例 `dt/57_universe`、`dt_err/40_universe_{field,field0,kind,cumulativity}`；
+  `dt/45_ctor_shape` 的 `Proxy` 按其字段 sort 改住 `Type 1`。
+- **擦除（B06/D07）**：4 个判据收成 **`isTypeDomain` / `binderRig` 单一入口**——隐式 binder
+  恒 `Rig0`；显式 binder 仅当域在类型层（宇宙或域全为类型层的 Pi 链）才 `Rig0`；显式索引
+  保留运行时表示。删除 `typeLayerRig` 与 `binderRig` 里「只查裸 `Type`」的旧判据。策略
+  定为**显式 multiplicity 标注**（不做整程序使用分析）；QTT 完整变体留研究。正例
+  `dt/60_erasure_unify`。
+- **合一（B07）**：`Sols` 携带元变量创建深度索引（`solsDepth`），求解点**就地**检查解的
+  作用域；非空 spine 走 **Miller pattern unification**（spine 为互不相同的局部中性变量 →
+  λ 抽象，闭包环境按 level 复原创建点上下文）；非 pattern 形状保留旧的保守 head 提取兜底
+  （`CannotSolveHigherOrder` 仍可能出现）。删除事后 `checkSolsDelta` 复核与
+  `inlineSolvedMetas`/`inlineSolvedMetaAlt`，统一为 `zonkTerm`（签名 / 构造子类型 / 族 kind
+  的唯一 zonk 入口）。shape 统计：编译器自检时实际命中的是 meta-spine 的 flex-flex
+  形状（`?m ?n = Maybe Json`），pattern 路径是理论上的首选分支。
+- **命名空间（B18）**：Loader 的 `own`/`ownCtors`/`ownTypes` 拍平表替换为
+  `Loader.Modules.Namespaces`（`nsValues`/`nsCtors`/`nsTypes`，对应导出表 kind
+  `val`/`ctor`/`type`）：值位置 def → ctor → 内建 → 导入值/ctor → 本模块类型名作项；类型
+  位置只查类型命名空间（保留本模块类型名优先于内建），退化到索引构造子/类型层 def。Elab
+  新增 `isTypeName`/`typeLookup`/`valueLookup`，`inferVarRef`/`checkTypeFuel`/`checkAppFuel`
+  改走显式命名空间查询，删除「kind 是不是宇宙」的猜测与 `checkAppUnderType` 的 infer→general
+  兜底。夹具 `dt/61_namespace_dual`、`dt_err/44_namespace_value_as_type`、
+  `modules/30_namespace_dual`（本地 `data token` 不再遮蔽导入值）。
+- **定义形式（B10/D10/C29）**：新增 `axiom name : Ty`（无体、擦除/类型层定义；
+  `DtDef` 增加 `DtAxiom`、`dtDefBody : DtDef -> Maybe Term`；运行时使用报
+  `CG_AxiomAtRuntime`，带体报 `TC_AxiomWithDefinition`）；定义参数少于签名时按剩余 Pi
+  **η 展开**（`TC_DefFewerParams` 保留码但不再触发；`dt_err/08_arity` 改为锁
+  `TC_DefMoreParams`）；`let`/`where` 共用绑定块解析与同一个签名 gate（let 签名可选、
+  where 仍必填）。C29：签名量化的 banned 集改由 `Elab.Sig.bannedForModule` 按模块前缀
+  现场计算（`packages/08_module_scope`）。
+- **case 规范形（B08/B15）**：`checkCase` 成唯一入口——源级校验（兜底位置/重复构造子/
+  重复字面量）→ 需要时经 `multiToCaseExpr` 唯一降级 → 模式矩阵规范形 → 按家族降低
+  （Bool→if、Int/String→if 链、归纳族→TCase）；删除 `checkCaseDedup` 旁路与精化器内
+  `Pending` 嵌套折叠。覆盖率与「写出分支」共用单一 `BranchVerdict`（索引合一 + 上下文
+  空族，空族唯一实现 `allCtorsUnsatisfiable`）；新增稳定码 `TC_RedundantCtorBranch`/
+  `TC_RedundantLiteralBranch`/`TC_BranchAfterCatchAll`，不可达分支在精化体之前报错。
+  附带修复模式矩阵嵌套降级的新鲜名互撞（位置名带 `ctxDepth`）。
+- **测试/基线**：新增 dt 正例 `57_universe`、`58_case_matrix`、`58b_case_absurd`、
+  `59_axiom`/`59_eta`/`59_let_where`、`60_erasure_unify`、`61_namespace_dual` 与模块级
+  `modules/30_namespace_dual`、`packages/08_module_scope`；负例 `dt_err/40_*`、`41*`、
+  `42_axiom_runtime`、`44_namespace_value_as_type`。seed 模块面不变（66 `.ml` / 67 文件），
+  `nix flake check` 全绿。
