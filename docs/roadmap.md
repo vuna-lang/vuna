@@ -89,8 +89,8 @@ vuna 尚未发布任何版本：没有外部用户、下游生态与历史包袱
 
 | 阶段 | 主题 | 依赖 | 关闭的债务（示例） |
 | --- | --- | --- | --- |
-| M25 | 健全性与验证基建 | — | B01–B04、C01–C07、C15、C20–C24、E01–E13 |
-| M26 | 单一路径与装配收敛 | M25 | A01–A06、A13、A15、C08、C21、E14–E15 |
+| M25 | 健全性与验证基建 | — | B01–B04、C01–C07、C15、C20–C24、E01–E13、E16 |
+| M26 | 单一路径与装配收敛 | M25 | A01–A06、A13、A15–A16、C08、C21、E14–E15 |
 | M27 | 内置、原语与效应边界 | M26 | A07–A11、C16–C19、D16 |
 | M28 | 类型系统地基 | M25、M27 | B05–B10、B15、D05–D10 |
 | M29 | 相等、实例与证明 ergonomics | M25、M28 | A14、B11–B14、C05、D11–D12 |
@@ -105,9 +105,12 @@ vuna 尚未发布任何版本：没有外部用户、下游生态与历史包袱
 和不可信的验证基建一次性收口；后续所有阶段都踩着这条基线。
 
 **范围**（debt）：
-- 信任边界：包名 allowlist（B01/B16/C02）→ manifest/workspace 显式信任声明，raw `--root`
-  不再绕过；效果内建按 capability/声明而不是 manifest 名字。
-- 诊断模型：Error/Warning 分级并真正输出（B17/D4）；覆盖率/终止性放行必须可见（C01/C02）。
+- **删除检查豁免，不维护名单**（B01/B17/C02/C03）：终止性/覆盖率不再按包名
+  allowlist 放行；编译器源码靠检查器改进（SCC 互递归 + size-change）与源码修复（显式兜底、
+  无哨兵）达标，目标零特例。效果内建是**权限策略**而非检查豁免（B16）：M27 用 manifest
+  声明的 capability 替换包名，raw `--root` 的绕过先在 M25 关闭。
+- 诊断模型：Error/Warning 分级真正输出（B17/D4）；豁免删除后 warning 只用于真正的非致命
+  诊断，不再用于掩盖「跳过检查」。
 - bottom/absurd 表示替代 `TInt 0` 哨兵（B02/C01）；缺失分支在 codegen 生成类型正确的
   `failwith` 或由类型检查拒绝。
 - 终止性：互递归按 SCC + size-change（或显式 well-founded 见证）；fuel 截断给专门诊断
@@ -117,15 +120,16 @@ vuna 尚未发布任何版本：没有外部用户、下游生态与历史包袱
   两套求值器同一语义（C04/B04；彻底删除兜底在 M29）。
 - 诊断文本：去掉用户可见的里程碑编号与 `DT: internal:`（C20）。
 - 验证基建：CI 入口（E01/C24）、check 清单/数量自动生成（E02）、seed 漂移检查（C15/E05）、
-  result 新鲜度（E03）、TCB allowlist + 闭包数量断言（E04/C09 已修一半）、
+  result 新鲜度（E03）、seed 闭包 allowlist + 数量断言（E04/C09 已修一半）、
   index-check/metrics/context 脚本修正（C10/C22/E06/E07）、runner 标记语义与负向断言
   （C23/E09–E11）、`.nocompile` 改为「已知产物不可编译」断言（C05 标记部分）。
 - 文档过期项：fmt 崩溃描述、`--with-comments`、checks 数量（E12，随本波文档同步）。
 
-**验收**：上述债务关闭；新增反例夹具覆盖「伪造 trust/包名」「Bool 缺分支」「互递归非结构」
+**验收**：上述债务关闭；新增反例夹具覆盖「伪造包名（豁免已删，不再受影响）」「Bool 缺分支」「互递归非结构」
 「函数相等」「静默丢实参」；CI 一条命令可复现；`seed/` 漂移会被 CI 拒绝。
 
-**决策点**：信任如何表达（manifest 字段 vs 构建期 flag）；`==` 安全域限制的边界。
+**决策点**：豁免删除后，确实不可判定的定义只有「改进检查器 vs 显式逐条标注」两条路（目标
+零特例）；`==` 安全域限制的边界；effect capability 形态留给 M27。
 
 ### M26：单一路径与装配收敛
 
@@ -136,6 +140,10 @@ vuna 尚未发布任何版本：没有外部用户、下游生态与历史包袱
 - 统一装配：单文件 = 单 unit 的 split；删除重复 prepare/hook/`build.sh` 生成器（A01）；
   删除空 `Vuna_builtins` unit（A02）；`seed` 与 `build --split` 关系收敛（A15）。
 - resolved identity：Elab 在 `DtProgram` 上给出 owner/实例身份；split 只消费结构（A13）；`checkResolvedModules` 覆盖 entryDecls（C08）；入口 trait/实例可 seed。
+- **跨包 import 方向**：Loader 按「导入方包的依赖闭包」过滤 roots（A16/E16）；当前
+  `rootAllows` + selfRoot `Nothing` 允许依赖包 import 消费包模块（实测 `vuna check b` 通过），
+  root 上下文还会掩盖 compiler→tools 的误 import；改完加「隔离入口」回归（`check compiler`、
+  `check base`）而不是只靠 seed 事后失败。
 - 死代码清理：Loader 门面死 API（A03）、Driver/Split 的 HM `lib+app` 生成器与死 writer（A04）。
 - 初始化语义：零参定义 thunk/求值一次明确化，去掉调用点补 `()` 的约定（A05）。
 - 加载语义：raw `--root` 与单文件模式的去留决策（A06）；夹具迁移路径明确。
@@ -278,7 +286,8 @@ DT 验证库（Vec/Fin/Map/Set/排序/证明组合子）；包 registry、版本
 - **单文件/raw 模式**：删除（夹具全部包化）vs 作为「匿名包」加载真实 base——M26。
 - **Int/String 语义**：固定宽度 + UTF-8 字节串 vs 大整数/Unicode 码点——M27。
 - **IO/effects 边界**：`Base.IO` thunk 留到 F3，还是 M27 就改为声明式 intrinsic 接口。
-- **trust 表达**：manifest 显式 `trusted` vs 仅 seed 构建期 flag / 允许清单不可伪造——M25。
+- **检查豁免**：M25 直接删除按包名豁免（终止性/覆盖率），不再设计信任声明；若个别定义确实
+  不可判定，只能显式逐条标注并跟踪，目标清零。
 
 ## 决策变更（仍影响当前/未来的；更早的决策细节见 history 与 m18-migration.md）
 
@@ -299,6 +308,7 @@ DT 验证库（Vec/Fin/Map/Set/排序/证明组合子）；包 registry、版本
 | 类型族按运行时定义 | 整体擦除（`... -> Type`），运行时用擦除参数报错 | check 过而 ocamlopt 才炸的存量 bug（M24.6） |
 | compiler 25 个扁平模块 | 目录即层 + 门面 + 叶子（40 模块），工具链同法拆分 | 单模块阅读成本 3530 → ≤~800 行；index/seed 模块面稳定 |
 | 原 M25–M28（模块 v3/运行时/并发/生态）为顺序阶段 | 改为 **F1–F4 不排期**；M25 起先做正本清源（本文件） | M24 审计显示旧架构与迁移折中仍是主要风险，先修地基再扩张 |
+| 检查豁免（按包名跳过终止性/覆盖率）重设计为可审计信任 | **排期删除，不维护名单**（M25）：检查器改进 + 源码修复达标；个别不可判定定义显式逐条标注，目标清零 | 任何“可信名单”都会重新变成静默绕过；宁可让编译器源码接受与用户代码相同的检查 |
 | 「完成即删除细节」只记 history | 另立 [debt.md](reference/debt.md) 债务账本，roadmap 按债务排阶段 | 让「哪些妥协还在、由谁在哪个阶段关闭」可审计、不丢账 |
 
 ## 研究储备（不排期，不占编号）

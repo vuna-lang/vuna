@@ -36,12 +36,13 @@ M25–M30 为可排期阶段，F1–F4 为不排期未来轨道）。
 | A13 | `Split` 仍匹配 M24.7 前的 `Show_Show_` 实例名前缀（死兜底），与 Elab 命名规则脱节 | `Codegen/Split.vuna` `isBuiltinInstanceName` | M26 |
 | A14 | 记录/trait 投影全部降级成 `case`，诊断 span 指向生成代码（来源信息丢失） | `Elab/Records.prepareDecls`、`Elab/Dict` 投影 eta 展开 | M28 |
 | A15 | `seed` 与 `build --split` 是同一命令的两个名字；CLI 参数解析各自手写；包模式下 `--root` 被静默忽略 | `Driver/CompilerCli.vuna` seedRun/buildSplitRun；Design | M26 |
+| A16 | 跨包 import 方向不校验：Loader 的 roots 是扁平列表、selfRoot 不过滤 import；依赖包模块可以 import 消费包模块（实测 a→b、compiler→`Vuna.Json` 在 root 上下文通过） | `Pkg.packageRoots` 的 selfRoot `Nothing` + `Loader.rootAllows`；`_scratch/crossdep`、crossprobe | M26 |
 
 ## B. 升级期临时决定 / 精化器折中
 
 | ID | 摘要 | 证据 | 阶段 |
 | --- | --- | --- | --- |
-| B01 | TCB 信任 = 包名字符串 allowlist：`vuna*` 包静默跳过终止性/覆盖率；无 warning 通道 | `Driver/Dt.dtTrustsTermination`；对照探针 | M25 |
+| B01 | 检查豁免按包名字符串 allowlist：`vuna*` 包静默跳过终止性/覆盖率；无 warning；**计划删除而非维护**（M25 用检查器改进 + 源码修复达标） | `Driver/Dt.dtTrustsTermination`；对照探针 | M25 |
 | B02 | 覆盖率放行实现是插入 `TInt 0` 哨兵（而不是 bottom/absurd） | `Elab/Term.vuna`；trusted Bool 缺分支生成 `if ... else 0` | M25 |
 | B03 | 终止性只查自递归，互递归不查；归约 fuel=512 静默截断 | `Elab/Termination`、`Core/Eval.force` | M25 |
 | B04 | 无 Eq 实例时 `==` 退回 OCaml 多态结构相等；interp 用另一套 `valueEqDeep` | `Elab/Dict.genericEqApp`、`Core/Eval.valueEqDeep` | M25（根修 M29） |
@@ -56,8 +57,8 @@ M25–M30 为可排期阶段，F1–F4 为不排期未来轨道）。
 | B13 | 依赖索引取值（`Ctx n -> Fin n -> Tm n`）无表达手段 | `dt-parity.md` §6.3；探针 `p3_dep_lookup` | M29 |
 | B14 | 类型当运行时值被擦除检查拦下（`Refl Nat` 失败），无 type codes | `Codegen/Erase` rig 检查；探针 | M29（决策） |
 | B15 | 字面量 case 必须有兜底；无冗余/不可达分支诊断 | `Elab/Term.checkLitCase` | M28 |
-| B16 | 效果 allowlist 同样按包名（可伪造）；raw root 依赖模块可调 `prim_*` | `Loader/Resolve.packageAllowsEffects`；探针 | M25/M27 |
-| B17 | case/终止性对 TCB 包「只告警」的文档与实现不符：实现无任何 warning 输出 | `docs/reference/limits.md` vs `Elab/Case.ecTrusted` | M25 |
+| B16 | 效果 allowlist 按包名字符串（可伪造）；raw root 依赖模块可调 `prim_*`；**这是权限策略不是检查豁免**：M27 用 manifest 声明 capability 替换（或按决策删除） | `Loader/Resolve.packageAllowsEffects`；探针 | M27 |
+| B17 | case/终止性「只告警」的文档与实现不符（实际静默跳过、无 warning）；随 B01 删除豁免后不再需要「告警」语义 | `docs/reference/limits.md` vs `Elab/Case.ecTrusted` | M25 |
 | B18 | 解析层只有单一命名空间：同名 type/ctor/global 靠多处特判兜住，与导出层双命名空间不一致 | `Elab/Term.inferVarRef`、`Elab/Records` 注释 | M28 |
 
 ## C. 可复现缺陷（bug）
@@ -132,6 +133,7 @@ M25–M30 为可排期阶段，F1–F4 为不排期未来轨道）。
 | E13 | `docs/.local`、`test/.local` 曾被索引缓存污染（审计探针产生，已清理；应加入 .gitignore/防护） | M25 |
 | E14 | `packages/05_entry_data` 只断言运行结果，未直接断言 `Main.ml` 含 `C_Color` | M26 |
 | E15 | 重组/拆分的行为不变性没有入库夹具（一次性 diff） | M26 |
+| E16 | CI 没有分入口上下文的依赖方向回归：root 上下文会掩盖 compiler→root 误 import（实测 `vuna check .` 通过、seed 才失败）；base→compiler 方向需 `vuna check base` 才能暴露 | M25 |
 
 ## 报告映射
 
