@@ -12,13 +12,9 @@ M14 在同一路径上加入索引归纳族与依赖模式匹配（见 §11）�
   NbE/转换；`Core/{Term,Eval,Conv}`）、`Elab.vuna`（双向精化器；`Elab/*`）、
   `Codegen.vuna`（擦除 + OCaml 生成；`Codegen/{Decl,Erase,Term,Program,Split}`）、
   `Driver/Dt.vuna`（单文件 facade）。
-- 入口：`vuna compile` / `vuna check` / `vuna interp`（当时是 opt-in 子集，现已无开关）。
+- 入口：`vuna compile` / `vuna check` / `vuna interp`（已无 opt-in 开关）。
 - 只支持单文件（M13 时）：不经过 Loader、不支持 `import`、不支持包模式、不接入
-  `build` / `split` / `seed`（后续阶段补齐，见 §9）。
-
-**非目标（M13 不做）**：cumulativity / universe polymorphism、索引归纳族与依赖模式
-匹配（M14 已落地，见 §11）、接口/实例搜索/洞目标显示（M15）、终止性与覆盖性（M16）、
-完整擦除分析（M16）、IO/effects（M19）、跨模块 import、`rewrite` / `with`。
+  `build` / `split` / `seed`（后续阶段补齐）。
 
 ## 2. Surface 子集
 
@@ -190,54 +186,6 @@ M24 之后单一文件 codegen 的入口只接受 `DtProgram`（Elab 输出）�
 `test/corpus/dt/51_type_family.vuna`、`52_type_family.vuna`；运行时定义里把擦除参数当值用
 仍然报错（`dt_err/39_type_family_runtime_use.vuna`）。旧的三个「类型级 Pi 体用类型参数」
 负例（`dt_err/09`、`18`、`19`）语义已纠正：它们现在是合法的类型族，已删除。
-
-## 7. 与旧路径的边界（历史）
-
-本节记录 M13/M14 时期 DT 与当时另一条路径的边界，**已不适用**（终态只有 DT）：
-
-- 只共享 `Vuna.Compiler.Ast` / `Vuna.Compiler.Parser`（现 `Frontend.*`）/ `Vuna.Fmt` 与 `Base.*`；
-  当时 `EPi` 在另一条链的 loader 里报 `dependent function type requires the DT path`。
-- `Driver.Dt`（原 `Vuna.Compiler.Dt`）是唯一对外 facade（`compiler/vuna.toml` 的 `[export]`）；
-  核心求值器通过 `vuna interp` 暴露，用于与 codegen 结果做一致性测试（M23 起为默认
-  且唯一的 DT 语义）。
-- M13/M14 的 DT 当时不进入 `build` / `seed` / `split`；seed 仍由旧 typed codegen 生成
-  （DT 模块是普通源码，随 compiler 闭包进入 TCB）。M24 起 seed 由 DT split codegen 生成。
-- M14 的 `data` / `case` 走同一套 `Ast` / `Parser`（`DData` 新增 kind 字段、`ECase`
-  复用已有 case 语法），因此解析行为不变。
-
-## 8. 诊断
-
-所有精化诊断带 `文件:行:列` 前缀；关键消息见实现与测试夹具
-（`test/corpus/dt_err/*.err`）。codegen 阶段错误（运行时使用类型级绑定等）
-不带 span，M16 擦除分析再补位置。M14 的 `data` / `case` / 索引错误仍是精化期
-诊断，带 span；消息清单见 §19。
-
-## 9. 后续阶段接口
-
-- M14（**已实现**）：`data F : <kind> where` 的索引归纳族、带显式 telescope 的构造器
-  （`(a : Type) -> (n : Nat) -> ...`）、依赖模式匹配。Core 增加了 `TCon` / `TCase`
-  （值域 `VCon` / `VCase`），精化器增加 `unifyIdx` 索引 unification 与覆盖率判定，
-  递归定义限制同时解除。实现细节见 §11–§23。
-- M15：metavariable context、隐式搜索/接口、洞目标显示；替换 M13/M14 的一阶求解
-  限制（包括隐式索引推断）。
-- M16：终止性/覆盖性 + 真正擦除分析（替代 M13 的 codegen 期擦除检查与 M14 的
-  fuel 兜底）。
-
-## 10. 基准（本机参考，非 CI 门槛）
-
-`nix run .#vuna-bench -- --quick` 的 `dt_elab` 项：对
-`test/corpus/dt/03_compose.vuna`（Pi + 3 个类型参数擦除 + compose）跑
-`compile --no-print`（精化 + 擦除检查 + codegen）的耗时。
-
-- 本机（M13 完成时）：`dt_elab` ≈ **2 ms**；对照同一报告的
-  `compiler_self_compile` ≈ **2.8 s**、`seed_build` ≈ **1.5 s**、
-  `corpus_compile`（16 个夹具批量编译）≈ **0.5 s**。
-- 时间依赖机器，只用于回归对比（`--baseline` / `--json`），不进入
-  `nix flake check`；机器无关指标仍由 `nix/metrics.budget` 约束 seed 闭包的
-  codegen 产物（M13 后 bytes 867732 / lines 9049）。
-- M14 后 DT 夹具从 8 个增加到 12 个（新增 `09_nat` / `10_vec` / `11_fin` /
-  `12_eq`），精化与 codegen 的路径也变了（构造子/变体/match）：`dt_elab` 的
-  M14 新数字**待重新基准**（由 Lead 在合并后补测）。
 
 ## 11. M14 范围
 
@@ -506,47 +454,6 @@ M13 的 `data` / `case` / 递归不再报“不支持”；`record` / `trait` / 
 6. **擦除检查**扩展到 `TCon` / `TCase`：运行时（非擦除位置）使用被擦除的 binder
    仍报错；类型级定义整体不生成代码。
 7. DT codegen 的错误仍**不带 span**（M16 统一补位置）。
-
-## 22. 当时的限制（M14 之后，历史快照）
-
-> 本节是 M14 的边界记录，**不反映当前状态**。M19 已补齐 `let`、推断位 `case`、嵌套模式、
-> 多 clause、`record`、`deriving` 与内建字面量模式；M20 已接入多文件 / `import` / `--root`；
-> M20.5 已补更高阶统一与字典延迟。当前阶段状态与阻碍见 [docs/roadmap.md](roadmap.md)。
-
-- M14 要求索引 binder 写成显式形式（隐式索引推断属 M15，已实现）；
-- 索引值保留运行时表示（显式索引；完整擦除属 M22.3）；
-- 一阶闭合元变量解；更高阶形态由 M20.5 的 `solveMetaHo` 覆盖常见情况；
-- 当时不支持 `let` / record / trait / `do` / 嵌套模式 / 多 clause（均已实现）；
-- 递归终止性靠 `force` 的 fuel 上限，而不是结构性检查（M16 起有检查）；
-- 无 cumulativity / universe polymorphism（M13 起未变）。
-
-## 23. M14 测试夹具（历史快照）
-
-> **本节的数字是 M14 当时的快照。** 当前实测为 **21 正例 / 19 反例**（M15 追加
-> `13_iface`/`14_solve`/`15_goal`，M16 追加 `16_total`/`17_erase` 与反例
-> `16_nonterm`/`17_nested_total`，M18 追加 `18_ctx`，M18.5 追加正例 `19_lam` 与反例
-> `18_lam_type_used`，M18.6 追加正例 `20_rig`/`21_level` 与反例 `19_rig_type_runtime`）；
-> 完整清单见 [reference/dt.md](reference/dt.md)。
-
-正例 `test/corpus/dt/` 共 12 个（M13 的 `01_id`–`08_if` + M14 的四个）；
-数值是 `vuna interp` / `compile` 的 golden：
-
-- `09_nat.vuna`：`Nat` + 递归 `plus` / `toInt`，输出 `5`；
-- `10_vec.vuna`：`Vec` 的 `vhead`（只写 `Cons`）/ `vtail` / `vlen`，输出 `4`；
-- `11_fin.vuna`：`Fin` 安全取下标 `at`（`Vec a (Succ m)` 与 `Fin (Succ m)` 一起排除
-  `Nil` / `FZero` 两个不可能分支），输出 `7`；
-- `12_eq.vuna`：`Eq` 的 `sym` / `trans`（都是 `case e of Refl ... => ...`；`Eq` 的
-  构造子没有字段，运行时是零字段变体，codegen 里是 `C_Eq_Refl`），输出 `7`。
-
-负例 `test/corpus/dt_err/` 共 15 个，断言错误片段：
-
-- M13：`01_universe`、`02_conv`、`03_hole`、`05_import`、`06_unknown`、`07_lambda`、
-  `08_arity`、`09_runtime_type`、`11_implicit_non_type`；
-- M14 新增/改名：`04_nonexhaustive`（漏写 `Succ` 分支，报
-  `case is not exhaustive: missing Succ`）、`10_impossible`（写了不可达分支，报
-  `this branch is impossible`）、`12_case_int`（case 打在 `Int` 上）、
-  `13_unknown_ctor`（未知构造子）、`14_bad_ctor_result`（构造子结果不是所属族）、
-  `15_nested_pat`（嵌套模式）。
 
 ## 24. 表示层定型与 QTT 预留（M18.6）
 

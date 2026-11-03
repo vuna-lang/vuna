@@ -155,12 +155,12 @@ vuna help, -h
 | [docs/reference/testing.md](docs/reference/testing.md) | 测试体系、corpus 分类、nix checks 清单、性能基准 |
 | [docs/reference/limits.md](docs/reference/limits.md) | 当前限制与已知边界（编译模型 / IO / 工具链细节） |
 | [docs/reference/debt.md](docs/reference/debt.md) | 技术债务与缺陷登记（A 旧架构 / B 临时决定 / C bug / D 未实现 / E 基建，按 M25–M30 关闭） |
-| [docs/history.md](docs/history.md) | 里程碑历史与已完成阶段细节 |
+| [docs/history.md](docs/history.md) | 里程碑历史（一览；实现细节在 git 历史） |
 | [docs/roadmap.md](docs/roadmap.md) | 路线图：终态 + 正本清源阶段（M25–M30）+ 不排期轨道（F1–F4）+ 决策变更表 |
 | [docs/dt-core.md](docs/dt-core.md) | DT 核心类型论与精化器设计稿（M13–M14） |
 
 文档分层规则：README 只保留定位/上手/目录/硬约束/导航；细节在 `docs/reference/`；
-roadmap 的「已完成」只保留一句话摘要，历史细节在 `docs/history.md`。
+roadmap 的「已完成」只保留一句话摘要，里程碑历史在 `docs/history.md`（实现细节在 git 历史）。
 
 ## 许可
 

@@ -2,14 +2,14 @@
 
 本文记录 vuna 的当前基线与**可排期阶段**（M25 起）以及**不排期的未来轨道**（F1–F4）。
 逐条技术债务、临时决定与可复现缺陷登记在 [reference/debt.md](reference/debt.md)；
-已完成阶段的历史细节在 [history.md](history.md)。
+里程碑历史在 [history.md](history.md)（各阶段实现细节在 git 历史）。
 
 ## 维护规则
 
 - **M 编号 = 可排期阶段**：按依赖顺序推进；完成即按本规则收敛。
 - **F 编号 = future，不排期、不占 M 编号**：只表示方向与前置条件，编号不构成排期承诺。
-- **已完成阶段只保留一句话摘要**（「已完成」列表）；目标/范围/验收/设计细节删除，写进
-  [history.md](history.md)。
+- **已完成阶段只保留一句话摘要**（「已完成」列表）；目标/范围/验收/设计细节删除，历史
+  写进 [history.md](history.md)（实现细节在 git 历史）。
 - **新阶段必须能映射到 [debt.md](reference/debt.md) 的条目**：每阶段在「范围」里列 debt ID；
   关闭债务时更新该文件，不静默删除。
 - **新增/变更阶段先写入 roadmap，完成后收敛摘要**；推翻旧决策必须在「决策变更」留一行，
@@ -298,7 +298,7 @@ DT 验证库（Vec/Fin/Map/Set/排序/证明组合子）；包 registry、版本
 - **检查豁免**：M25 直接删除按包名豁免（终止性/覆盖率），不再设计信任声明；若个别定义确实
   不可判定，只能显式逐条标注并跟踪，目标清零。
 
-## 决策变更（仍影响当前/未来的；更早的决策细节见 history 与 m18-migration.md）
+## 决策变更（仍影响当前/未来的；更早的决策细节见 history）
 
 | 原决策 | 新决策 | 理由 |
 | --- | --- | --- |
@@ -333,7 +333,7 @@ DT 验证库（Vec/Fin/Map/Set/排序/证明组合子）；包 registry、版本
 ## 相关阅读
 
 - 债务与缺陷逐条登记：[reference/debt.md](reference/debt.md)
-- 已完成阶段细节：[history.md](history.md)；旧决策原文：[m18-migration.md](reference/m18-migration.md)
+- 已完成阶段细节：[history.md](history.md)
 - 子系统地图：[architecture.md](architecture.md)；DT 语义与设计边界：[dt.md](reference/dt.md)、
   [dt-core.md](dt-core.md)；自举链：[bootstrap.md](reference/bootstrap.md)；测试与 CI：
   [testing.md](reference/testing.md)；已知限制：[limits.md](reference/limits.md)

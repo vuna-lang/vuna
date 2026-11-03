@@ -8,7 +8,7 @@
 因此**任何设计、接口、命令、实现、哲学都允许被推翻**（包括本文件与 roadmap 已写下的
 决策）；「保留兼容层」「以后可能有人依赖」不构成保留理由——评估一个遗留物只看一条：
 **它在终态里还成立吗**。推翻旧决策时不要静默改写历史，在 roadmap 的「决策变更」表记
-一行、细节进 `docs/history.md`。当前路线由此确定：**终态是单一 DT 路径，已在 M24 落地**
+一行、里程碑记录进 `docs/history.md`（实现细节在 git 历史）。当前路线由此确定：**终态是单一 DT 路径，已在 M24 落地**
 （唯一检查器与 codegen，roadmap「终态」与「阶段状态总览」）。
 
 ## 阅读顺序
@@ -101,4 +101,4 @@ CLI 入口；`seed/` = 提交入库的多文件 OCaml 信任锚点（生成物�
   [docs/history.md](docs/history.md)、[docs/dt-core.md](docs/dt-core.md)
 
 > 文档分层规则：`README.md` 只保留定位/上手/目录/硬约束/导航；细节在 `docs/reference/`；
-> roadmap 的「已完成」只保留一句话摘要，历史细节在 `docs/history.md`。
+> roadmap 的「已完成」只保留一句话摘要，里程碑历史在 `docs/history.md`（实现细节在 git 历史）。

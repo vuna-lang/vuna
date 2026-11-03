@@ -34,7 +34,7 @@ DT 设计见 [docs/dt-core.md](../dt-core.md)。
   - **擦除由 rig 判据驱动**：`Rig0`（隐式 binder / `Type` 域）不进运行时表示，`Rig1`
     （显式值、显式索引 `(n : Nat)`）保留字段（`17_erase` / `dt/38_explicit_index` 锁定
     两侧）；不做整程序使用分析，「想擦但被读」的显式索引不会自动擦除（可改成隐式
-    `{n : Nat}`，代价是分支体读不到）。详见 [m16-design.md](m16-design.md) §3。
+    `{n : Nat}`，代价是分支体读不到）。详见 [dt-core.md](../dt-core.md) §6。
   - **终止性只接受结构递归**：递归调用必须是形参的真子项；`sortBy le (take half xs)`
     这类要改写成结构递归（`Base.Sort` 已改插入排序），互递归与跨调用 size-change 不查。
   - **`where` 绑定必须写签名且是顺序 let**：每个绑定都要在子句前写签名（缺签名报
@@ -149,4 +149,5 @@ DT 设计见 [docs/dt-core.md](../dt-core.md)。
   空间收敛、`Prelude` 自动导入与 `.output` 构建；DT 地基与全部语言能力落地；单路径
   收尾（删除第二套检查器、seed 改由 DT split codegen 生成）；M24.5 等式搬运、M24.6
   编译器本体最小重构、M24.7 `Show`/`Eq`/`Ord` 库化。依赖类型主线（M13–M18）见
-  [docs/roadmap.md](../roadmap.md)；每个阶段的细节见 [docs/history.md](../history.md)。
+  [docs/roadmap.md](../roadmap.md)；里程碑历史见 [docs/history.md](../history.md)
+  （实现细节在 git 历史）。

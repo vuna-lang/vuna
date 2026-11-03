@@ -2,7 +2,7 @@
 
 本文是**历史证据表**，不是计划：记录「要让 DT 取代 HM，DT 还缺什么」，是
 [docs/roadmap.md](../roadmap.md) 的阶段证据；**当前阶段状态与阻碍以 roadmap 的「阶段状态总览」为准**。计划见 roadmap，DT 语义见
-[dt.md](dt.md)，设计边界见 [docs/dt-core.md](../dt-core.md) §7 / §22。
+[dt.md](dt.md)，设计边界见 [docs/dt-core.md](../dt-core.md)。
 
 **口径**：vuna 无发布、无外部用户，全部源码都在本仓库内，所以每项都是「**取代时必须在新
 路径里等价提供的能力**」，不是「为兼容旧用户而保留的负担」。「用量」既是「DT 要写自己时
@@ -52,72 +52,6 @@
   隐式索引擦除（17）→ 改显式 `(n : Nat)` binder（实测通过，但索引会变成运行时字段）。
   `record`（14）与 `deriving`（15）**不在此列**：它们是终态保留的语言特性，DT 侧必须补齐
   （`deriving` 在 DT 的自然形态是生成 instance，复用 M15 的实例搜索）。
-
-## 3. lambda 擦除缺陷（M18.5 已修复，留作样本）
-
-`Elab.Term.checkLam`（原 `Elab.checkLam`）曾把**每个** lambda 形参标成
-`erased = True`，`Codegen.Term.genTerm`（原 `CoreCodegen.genTerm`）的 `TLam` 分支配套
-「擦除即不生成形参」。于是任何 lambda 形参都被当成类型级变量，产生两条
-失败路径——两路都已被 `test/corpus/dt/19_lam.vuna` 固化为回归夹具。
-
-**路径 A：形参在运行时被使用 → 直接报错**（修复前）：
-
-```vuna
-twice : (Nat -> Nat) -> Nat -> Nat
-twice f x = f (f x)
-
-three : Nat
-three = twice (\n => Succ n) Zero
--- error: in `three`: DT: type-level binding `n` is used at runtime
-```
-
-**路径 B：形参未被使用 → 静默错编译**：`check` 与 `compile` 都退出 0、`interp` 结果正确，
-但生成的 OCaml **少一个形参**（`main = apply2 (\n => 7) 1`）：
-
-```ocaml
-let v_apply2 = (fun f -> (fun x -> (f x)))
-let v_main = ((v_apply2 7) 1)     (* 少一层 fun：7 被当成函数 *)
-(* $ vuna check/compile --dt ... 均 exit 0；ocamlopt 才报： *)
-(* Error: The constant 7 has type int but an expression was expected of type 'a -> 'b *)
-```
-
-路径 B 是审计中唯一**违反类型系统基本保证**的发现：`Codegen` 注释里（原 `CoreCodegen`）「能 check 就能
-compile」在此失效，DT 存在能产出错误程序的通道。修复方式是把判据收敛成全仓唯一入口
-`Elab.erasedBinder implicit dom = implicit || isTypeValue dom`（M22.3 后由 eraseMask 取代），六处判据点
-（`teleOf` / `checkBinders` / `bindOnePattern` / `checkLam` / `inferArgs` / `bindCtorBinder`）
-全部改走它；`test/run-tests.sh` 第 34 段同时加了「同夹具 `interp` 输出 == 编译产物输出」的
-逐夹具对拍断言，保证语义一致性不靠人工比对。
-
-## 4. 核对的数字与口径差异
-
-三处口径差异（其余与 `.local/audit-a/stats/stats.sh` 一致）：
-1. **字符串比较 155 / 52**：155 是 `compiler/lib` 中「`==` 右侧紧跟字符串字面量的行数」，
-   `lib` 同口径是 **52**（`/=` 也算上是 **55**）；表 1 写 52，roadmap 引用 155 时指 `compiler/lib`。
-2. **多 clause 399 名 / 978 行**是逐文件去重口径；跨文件拼接是 421 名 / 1050 行（同名碰撞）。
-3. **`let` 296 是 `compiler/lib` 的量**，`lib` 是 189——勿混列读取。
-
-测试面：DT 正例 36 / 负例 28，见 [testing.md](testing.md)。
-
-## 5. 对计划的三条推论
-
-**① 多文件不是第一前置，语言面才是。** 第 1–11 项全部能在单文件里遇到；即使立刻做出多
-文件 + 包集成，任何含闭包或 `let` 的模块仍过不了精化。顺序应是 M18.5 → M19 → M20。
-
-**② 签名必填是迁移工作，不是 DT 语言特性。** 1083 个无签名定义是**改写量**：终态要求顶层
-签名必填并**不引入 HM 式顶层推断**（精化需要签名做检查模式与错误定位）。写一次性签名导出
-工具、用 HM 推断结果回填源码即可，工具在 M24 后删除。
-
-**③ 擦除与 metrics 重标定必须排在切换 seed 之前。** `seed/` 由 HM split codegen 生成，DT
-产物形状完全不同（单文件、无 `.mli`、每产物带 28 行 runtime 前导）。所以「DT 能编译自己」
-（M23）与「DT codegen 产出 seed 需要的形状 + 新预算」（M22.3）必须都在 M24 的 seed 切换之前
-完成；顺序反了会拿 HM 的预算衡量 DT 产物，得到无意义的门槛。
-
-## 相关阅读
-
-当前阶段状态与阻碍：[roadmap.md](../roadmap.md)（「阶段状态总览」）；DT 语义与设计：[dt.md](dt.md)、
-[dt-core.md](../dt-core.md)；被推翻的 M18 决策原文：[m18-migration.md](m18-migration.md)；
-限制与测试面：[limits.md](limits.md)、[testing.md](testing.md)；审计原始数据：
-`.local/audit-a/REPORT.md`、`.local/audit-a/repro.sh`、`.local/audit-b/`。
 
 ## 6. 索引精化的能力边界（M24.5 实测更新）
 
@@ -195,10 +129,17 @@ compile」在此失效，DT 存在能产出错误程序的通道。修复方式�
 - **不要先动 Term 层**：实测收益集中在 `Env`/`lookup`/弱化/替换这一层，把 `Term` 的 Pi/Lam
   结构整体索引化成本极高且收益递减。
 - 三个「看起来诱人但不划算」的项（拓扑序见证、元变量上下文索引化、终止性 `Acc` 见证）
-  的记录见 [docs/history.md](../history.md) M24.6 与 [dt-core.md](../dt-core.md) §6.3。
+  的记录见 [dt-core.md](../dt-core.md) §6.3。
 
 > **口径提示**：§6.1 的结论来自 M24.5 的一轮实测：`test/corpus/dt/46..50`、`dt_err/36..38`
 > 与 `_scratch/` 实验（`d_append`、`b_fin_ctx`、`l_rep` 等，原始审计在 `.local/audit-c/`，77 个
 > 夹具）。早期报告里的 `append` ❌ 已在 M23/M24 修复但文档未更新——引用旧表前请先复核夹具。
 > 另外，早期有一份报告认为「`subst` 也写不出来」，复核后发现是那份夹具漏了穿过 binder 时的
 > `shift u`（`subst` 的目标项必须先弱化），修正后通过。
+## 相关阅读
+
+当前阶段状态与阻碍：[roadmap.md](../roadmap.md)（「阶段状态总览」）；DT 语义与设计：[dt.md](dt.md)、
+[dt-core.md](../dt-core.md)；
+限制与测试面：[limits.md](limits.md)、[testing.md](testing.md)；审计原始数据：
+`.local/audit-a/REPORT.md`、`.local/audit-a/repro.sh`、`.local/audit-b/`。
+
