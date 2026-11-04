@@ -87,6 +87,7 @@ let v_Base_dString_dcontains
 let v_Base_dString_dendsWith
 let v_Base_dString_djoin
 let v_Base_dString_dlines
+let v_Base_dString_drepeat
 let v_Base_dString_dsplit
 let v_Base_dString_dstartsWith
 let v_Base_dString_dsubstring

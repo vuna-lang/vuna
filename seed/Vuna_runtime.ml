@@ -99,6 +99,11 @@ let dtp_strHash (s : string) =
   String.iter (fun c -> h := ((!h * 33) + Char.code c) land 1023) s;
   !h
 let dtp_strAt (s : string) (i : int) = if i < 0 || i >= String.length s then -1 else Char.code s.[i]
+let dtp_substring start len s =
+  let n = String.length s in
+  let st = if start < 0 then 0 else if start > n then n else start in
+  let ln = if len < 0 then 0 else if st + len > n then n - st else len in
+  String.sub s st ln
 let dtp_exit n = exit n
 let dtp_runIn dir args =
   let quote s = Filename.quote s in

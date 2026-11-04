@@ -171,17 +171,26 @@ golden 一致，再 warmup + 多次取中位数；RSS 用 GNU time 的 max RSS�
 口径与基线维护见 `bench/README.md`；基线 `bench/baseline.json` 入库，`--check` 对超阈值项
 软告警。与 `nix/bench.sh` 的分工：后者测构建 / 编译墙钟与产物尺寸，本设施测运行期。
 
-M33 起点 / W2 后 / W3 后读数（`--runs 3 --warmup 1`，x86_64 / 16 核 / ocamlopt 5.5.1
+M33 起点 / W2 / W3 / W4 后读数（`--runs 3 --warmup 1`，x86_64 / 16 核 / ocamlopt 5.5.1
 非 flambda；绝对 ms 随机器变化，只比较 ratio）：
 
-| benchmark | 起点 | W2 后 | W3 后 | 首要成本 / 处理 |
-| --- | --- | --- | --- | --- |
-| arith | ~11.6x | ~1.2x | ~1.0x | 内建跨模块调用、curried 递归闭包 → 饱和内联 + 多参数 lambda 链 |
-| string_ops | ~28.9x | ~3.6x | ~3.4x | `++` 链 / `strPack` → `String.concat` 批拼；剩余是 `substring` 的 List 桥接 |
-| hashmap | ~9.5x | ~3.0x | ~2.0x | W2 codegen；W3 桶改 `Array`（`Array.get` O(1) + 32 元素 copy-on-write） |
-| list_recursion | ~2.1x | ~0.8x | ~0.7x | 已达标 |
-| gc_pressure | ~1.3x | ~1.0x | ~1.0x | 已达标 |
-| array | — | — | ~0.9x | W3 新增：不可变 `Array` 与手写 OCaml 持平 |
+| benchmark | 起点 | W2 后 | W3 后 | W4 后 | 首要成本 / 处理 |
+| --- | --- | --- | --- | --- | --- |
+| arith | ~11.6x | ~1.2x | ~1.0x | ~1.2x | 内建跨模块调用、curried 递归闭包 → 饱和内联 + 多参数 lambda 链 |
+| string_ops | ~28.9x | ~3.6x | ~3.4x | ~1.0x | `++` 链 / `strPack` → `String.concat` 批拼；W4 `strSubstring` + `repeat` 一次 `strConcatMany` |
+| hashmap | ~9.5x | ~3.0x | ~2.0x | ~2.0x | W2 codegen；W3 桶改 `Array`（`Array.get` O(1) + copy-on-write） |
+| list_recursion | ~2.1x | ~0.8x | ~0.7x | ~0.8x | 已达标 |
+| gc_pressure | ~1.3x | ~1.0x | ~1.0x | ~1.1x | 已达标 |
+| array | — | — | ~0.9x | ~0.9x | W3 新增：不可变 `Array` 与手写 OCaml 持平 |
+
+W4（可变数据边界 / 字符串补齐）：
+
+1. **`strSubstring` 原语**（runtime `String.sub` + clamp 语义；interp 也归约
+   `OpStrSubstring`），`Base.String.substring` 不再走 List 桥接；
+2. **`Base.String.repeat`** 改一次 `strConcatMany`，消除逐级 `++` 的 O(n²) 拷贝；
+3. **线性 / ST 裁剪**：可变数据（`IORef` / `MArray` / `Buffer`）保持 IO 隔离，不引入线性
+   类型与 ST/region（见 [limits.md](limits.md) 的「容器与可变数据」与 debt D22）。
+   string_ops 3.4x → 1.0x；全部基准进入 2× 手写 OCaml（M33 退出标准）。
 
 W2 落地的 codegen / 运行时改进（都在 `Codegen/Term.vuna` 与 `base/`）：
 

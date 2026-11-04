@@ -101,11 +101,14 @@ endsWith suffix text =
     lt = strLength text
   in if ls > lt then False else _startsWithChars (strUnpack suffix) (drop (lt - ls) (strUnpack text))
 
+-- M33 W4：`repeat` 改成一次 `strConcatMany`（原来 `s ++ repeat (n-1) s` 是 O(n²) 拷贝）。
 repeat : Int -> String -> String
-repeat n s = if n <= 0 then "" else s ++ repeat (n - 1) s
+repeat n s = strConcatMany (map (\_ => s) (range 0 n))
 
+-- M33 W4：`substring` 直接用 `strSubstring` 原语（runtime `String.sub` + clamp），
+-- 不再走 `strUnpack`/`take`/`drop`/`strPack` 的 List 桥接。
 substring : Int -> Int -> String -> String
-substring start len s = strPack (take len (drop start (strUnpack s)))
+substring start len s = strSubstring start len s
 
 _isSpace : Int -> Bool
 _isSpace c = c == 32 || c == 9 || c == 10 || c == 13

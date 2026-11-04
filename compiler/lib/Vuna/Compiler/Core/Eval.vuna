@@ -347,6 +347,7 @@ else case findIntrinsic g of
     OpStrLength => strPrim1 sp (\s => VInt (strLength s))
     OpStrHash => strPrim1 sp (\s => VInt (strHashOf s))
     OpStrAt => atPrim sp
+    OpStrSubstring => substringPrim sp
     OpStrShow => strPrim1 sp (\s => VStr (showCoreString s))
     -- interp 边界（显式分类，见 docs/reference/primitives.md）：List 桥接依赖 base 的
     -- `Base.List.List` 构造子表示，核心求值器无法安全构造；除零/运行期失败同理。
@@ -380,6 +381,38 @@ strAtBytes s i = if i < 0 || i >= strLength s then 0 - 1 else nthByte (strUnpack
 nthByte : List Int -> Int -> Int
 nthByte [] i = 0 - 1
 nthByte (c :: rest) i = if i <= 0 then c else nthByte rest (i - 1)
+
+-- `strSubstring start len s`：与 runtime `dtp_substring` / `Base.String.substring` 同语义
+-- （start/len 按字节 clamp：负 start 视为 0、负 len 视为 0、越界截断到末尾）。
+substringPrim : List Value -> Maybe Value
+substringPrim ([startV, lenV, strV]) = case asInt startV of
+  Just start => case asInt lenV of
+    Just len => case asStr strV of
+      Just s => Just (VStr (substringBytes start len s))
+      Nothing => Nothing
+    Nothing => Nothing
+  Nothing => Nothing
+substringPrim _ = Nothing
+
+substringBytes : Int -> Int -> String -> String
+substringBytes start len s =
+  let
+    n = strLength s
+    st = if start < 0 then 0 else if start > n then n else start
+    ln = if len < 0 then 0 else if st + len > n then n - st else len
+  in strPack (takeBytes ln (dropBytes st (strUnpack s)))
+
+takeBytes : Int -> List Int -> List Int
+takeBytes n xs = if n <= 0 then []
+else case xs of
+  [] => []
+  y :: rest => y :: takeBytes (n - 1) rest
+
+dropBytes : Int -> List Int -> List Int
+dropBytes n xs = if n <= 0 then xs
+else case xs of
+  [] => []
+  _ :: rest => dropBytes (n - 1) rest
 
 -- ---------------------------------------------------------------
 -- 深度正规化（interp --dt 展示 main 用）：先 force，再递归 spine / if 分支。

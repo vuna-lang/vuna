@@ -28,9 +28,9 @@ let v_Base_dString_dunlines = (fun mc0 -> (match mc0 with
   | _ -> (dtp_concatMany ((v_Base_dList_dmap (fun x -> (x ^ "\n"))) mc0))
 ))
 
-let rec v_Base_dString_drepeat = (fun n s -> (if (n <= 0) then "" else (s ^ ((v_Base_dString_drepeat (n - 1)) s))))
+let v_Base_dString_drepeat = (fun n s -> (dtp_concatMany ((v_Base_dList_dmap (fun _u -> s)) ((v_Base_dList_drange 0) n))))
 
-let v_Base_dString_dsubstring = (fun start len s -> (dtp_pack ((v_Base_dList_dtake len) ((v_Base_dList_ddrop start) (dtp_unpack s)))))
+let v_Base_dString_dsubstring = (fun start len s -> (((dtp_substring start) len) s))
 
 let v_Base_dString_d_uisSpace = (fun c -> (if (if (if (c = 32) then true else (c = 9)) then true else (c = 10)) then true else (c = 13)))
 

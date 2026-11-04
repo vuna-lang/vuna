@@ -98,6 +98,7 @@
 | `strFromInt` | `Int -> String` | 十进制，负数带 `-`（OCaml `string_of_int`） |
 | `strHash` | `String -> Int` | 固定 1024 桶：`h` 初值 0，逐字节 `h = (h*33 + byte) mod 1024`，结果 0..1023 |
 | `strAt` | `String -> Int -> Int` | 见 §4（越界 `-1`） |
+| `strSubstring` | `Int -> Int -> String -> String` | 字节切片（M33 W4）：start/len 按字节 clamp——负 start 视为 0、负 len 视为 0、越界截断到末尾；与 `Base.String.substring` 同语义 |
 | `strConcatMany` | `List String -> String` | 一次性拼接（OCaml `String.concat ""`） |
 | `strSubstTemplate` | `String -> List String -> String` | `<N>` 占位符按序号替换；非数字 `<`、越界序号原样保留（`Base.Vec.substTemplate`） |
 | `timeUs` | `IO Int` | 微秒时间戳（`Unix.gettimeofday`）；效果原语，能力 `clock` |
@@ -237,7 +238,7 @@
 | 类别 | 归约 | 说明 |
 | --- | --- | --- |
 | 上述运算符 | 是 | `/` 在除数为 0 时**不归约**（见下） |
-| `strFromInt` / `strLength` / `strHash` / `strAt` / `strShow` | 是 | 与 runtime **同语义同公式** |
+| `strFromInt` / `strLength` / `strHash` / `strAt` / `strSubstring` / `strShow` | 是 | 与 runtime **同语义同公式** |
 | `strUnpack` / `strPack` / `strConcatMany` / `strSubstTemplate` | **否** | 结果依赖 `Base.List.List` 的构造子表示（List 桥接），核心求值器不构造该表示 |
 | 全部效果原语（`prim_*` / `timeUs`） | **否** | 纯求值器不执行效果 |
 | `a / 0` | **否** | 核心求值器表达不了运行期异常；显式分类，不返回 0 |
