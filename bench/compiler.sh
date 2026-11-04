@@ -101,7 +101,7 @@ run_once() {
       clear_check_cache
       t0=$(date +%s%3N); (cd "$ROOT" && "$VUNA_BIN" check . >/dev/null 2>&1); rc=$?; t1=$(date +%s%3N) ;;
     check-compiler)
-      rm -rf "$ROOT/compiler/.local/check-cache"
+      clear_check_cache
       t0=$(date +%s%3N); (cd "$ROOT" && "$VUNA_BIN" check compiler >/dev/null 2>&1); rc=$?; t1=$(date +%s%3N) ;;
     check-warm)
       (cd "$ROOT" && "$VUNA_BIN" check . >/dev/null 2>&1)
