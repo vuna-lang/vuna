@@ -159,6 +159,7 @@ in
       ../../lib
       ../../base
       ../../app
+      ../../vuna.toml
     ];
     env = {
       VUNA = "${vuna}/bin/vuna";

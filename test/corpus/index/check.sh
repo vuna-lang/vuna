@@ -57,6 +57,9 @@ module Demo.B (two) where
 
 import Demo.A
 
+-- M31.3（B26）：临时 workspace 无 base 依赖，`+` 需本地 fixity 声明。
+infixl 6 +
+
 two : Int
 two = one + one
 EOF
@@ -75,7 +78,7 @@ case "$(grep 'Demo/A.vuna' "$manifest" 2>/dev/null | awk -F'\t' '{print $3}')" i
 esac
 if [ -e "$ws/.local/index/cache.lock" ]; then bad "index lock leaked after first map"; else ok; fi
 check_eq "index refs 4 fields" "4" "$(grep -m1 '^Demo.B	' "$refscache" 2>/dev/null | awk -F'\t' '{print NF}')"
-check_contains "index refs record position" "$(cat "$refscache" 2>/dev/null)" "Demo.B	one	6	"
+check_contains "index refs record position" "$(cat "$refscache" 2>/dev/null)" "Demo.B	one	9	"
 
 # 2) 第二次 map 命中缓存：manifest 内容/mtime 不变。
 before=$(cat "$manifest")

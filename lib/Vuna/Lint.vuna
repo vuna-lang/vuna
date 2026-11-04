@@ -6,7 +6,9 @@ module Vuna.Lint (runLint) where
 -- M30：参数走 `Vuna.Cli.Args` 的统一入口（--fix 开关 + 位置参数，未知/重复 flag 可读
 -- 错误），读盘先判存在/目录（`readText`），不再对不存在路径抛宿主异常。
 import Vuna.Compiler.Common
+import Vuna.Compiler.Frontend.Ast
 import Vuna.Cli.Args
+import Vuna.FixityEnv
 import Vuna.Lint.Fix
 import Vuna.Lint.Rules
 import Base.IO
@@ -57,8 +59,8 @@ reportFindings path fixMode findings =
     _ = printFindings path fixMode findings
   in if length findings == 0 then 0 else 1
 
-fixReport : String -> String -> List Finding -> Int
-fixReport path source findings = case fixLoop source findings 8 0 of
+fixReport : String -> String -> List Finding -> List FixityDecl -> Int
+fixReport path source findings programFixities = case fixLoop programFixities source findings 8 0 of
   Err e =>
     let
       _ = runIO (prim_print (path ++ ": error: " ++ e ++ "\n"))
@@ -67,7 +69,7 @@ fixReport path source findings = case fixLoop source findings 8 0 of
   else
     let
       _ = runIO (prim_writeFile path newSource)
-    in case lintSource newSource of
+    in case lintSourceWith programFixities newSource of
       Err e =>
         let
           _ = runIO (prim_print (path ++ ": error: " ++ e ++ "\n"))
@@ -77,30 +79,43 @@ fixReport path source findings = case fixLoop source findings 8 0 of
           _ = runIO (prim_print (path ++ ": fixed " ++ strFromInt count ++ " finding(s)\n"))
         in reportFindings path True remaining
 
-lintExisting : Bool -> String -> String -> Int
-lintExisting doFix path source = case lintSource source of
+lintExisting : Bool -> String -> String -> List FixityDecl -> Int
+lintExisting doFix path source programFixities = case lintSourceWith programFixities source of
   Err e =>
     let
       _ = runIO (prim_print (path ++ ": error: " ++ e ++ "\n"))
     in 2
   Ok findings =>
-    if doFix then fixReport path source findings else reportFindings path False findings
+    if doFix then fixReport path source findings programFixities
+    else reportFindings path False findings
 
-lintOne : Bool -> String -> Int
-lintOne doFix path = case readText path of
+-- 逐文件取程序级 fixity（`Vuna.FixityEnv` 按目录缓存模块图）；拿不到上下文是工具错误，
+-- 不静默按本地声明表继续（那会把 import 闭包里的运算符判成 unknown fixity）。
+lintOne : Bool -> FixityEnv -> String -> Pair FixityEnv Int
+lintOne doFix env path = case readText path of
   Err e =>
     let
       _ = runIO (prim_print ("error: " ++ e ++ "\n"))
-    in 2
-  Ok source => lintExisting doFix path source
+    in Pair env 2
+  Ok source =>
+    let
+      looked = fixitiesForFile env path source
+      env2 = firstOf looked
+    in case secondOf looked of
+      Err e =>
+        let
+          _ = runIO (prim_print (path ++ ": cannot load package fixity context: " ++ e ++ "\n"))
+        in Pair env2 2
+      Ok programFixities => Pair env2 (lintExisting doFix path source programFixities)
 
-lintFiles : Bool -> List String -> Int
-lintFiles doFix [] = 0
-lintFiles doFix (path :: rest) =
+lintFiles : Bool -> FixityEnv -> List String -> Int
+lintFiles doFix env [] = 0
+lintFiles doFix env (path :: rest) =
   let
-    code = lintOne doFix path
+    stepped = lintOne doFix env path
+    code = secondOf stepped
   in let
-    restCode = lintFiles doFix rest
+    restCode = lintFiles doFix (firstOf stepped) rest
   in if code > restCode then code else restCode
 
 runLint : List String -> Int
@@ -111,4 +126,4 @@ runLint args = case parseToolArgs "vuna lint" [BoolFlag "fix"] args of
     in 2
   Ok parsed => case positionals parsed of
     [] => lintUsageError 0
-    files => lintFiles (flagSet parsed "fix") files
+    files => lintFiles (flagSet parsed "fix") emptyFixityEnv files

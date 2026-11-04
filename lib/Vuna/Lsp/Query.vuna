@@ -18,7 +18,7 @@ module Vuna.Lsp.Query
 -- 方法：
 --   hover             先 DT 洞目标（包上下文；无独立 `_` 时跳过精化），未命中再
 --                     Index 标识符签名/注释；range 落在光标 token 上（不是定义位置）；
---   formatting        `Vuna.Fmt.formatSource` 成功且内容变化 ⇒ 全文 TextEdit；
+--   formatting        `Vuna.Fmt.formatSourceWith`（程序级 fixity）成功且内容变化 ⇒ 全文 TextEdit；
 --   documentSymbol    AST 声明树（data/record/trait 带子节点）；selectionRange 精确落名字；
 --   definition        位置 token（支持 `Mod.name`）→ Index 符号 → Location；Index 不可用时
 --                     同文件缓冲兜底；
@@ -30,6 +30,7 @@ import Vuna.Compiler.Driver.Dt
 import Vuna.Compiler.Elab
 import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Loader.Fixity
+import Vuna.FixityEnv
 import Vuna.Compiler.Frontend.Parser
 import Vuna.Compiler.Packages.Pkg
 import Vuna.Fmt
@@ -226,13 +227,25 @@ referencesResult uri line col text (Just idx) = case tokenAtCursor text line col
   Nothing => []
   Just (Pair startCol token) => referencesFor idx (currentModuleNameOf text) token
 
--- formatting：formatSource 成功且内容有变化 ⇒ 全文 TextEdit；否则 []。
-formattingEdits : String -> List Json
-formattingEdits text = case formatSource text of
+-- formatting：formatSourceWith 成功且内容有变化 ⇒ 全文 TextEdit；否则 []。
+-- M31.3（B27）：fixity 是程序级的——与 CLI 同源，用 `Vuna.FixityEnv`（按文件目录缓存模块图，
+-- 声明表逐文件重算 local + import 闭包）。上下文/加载失败或未知运算符 ⇒ 返回空 edits
+-- （不让 LSP 请求失败，也不静默改语义）。
+formattingEdits : String -> String -> List Json
+formattingEdits uri text = case formattingFixities uri text of
   Err e => []
-  Ok formatted =>
-    if formatted == text then []
-    else [JObj [Pair "range" (fullRange text), Pair "newText" (JStr formatted)]]
+  Ok fixities => case formatSourceWith fixities text of
+    Err e => []
+    Ok formatted =>
+      if formatted == text then []
+      else [JObj [Pair "range" (fullRange text), Pair "newText" (JStr formatted)]]
+
+formattingFixities : String -> String -> Result (List FixityDecl)
+formattingFixities uri text =
+  let
+    path = decodeUri uri
+  in if path == "" then Err "empty document uri"
+  else secondOf (fixitiesForFile emptyFixityEnv path text)
 
 -- Index：惰性加载（首次 definition/references/completion/workspaceSymbol 时）
 -- ---------------------------------------------------------------
@@ -369,9 +382,11 @@ declSymbolJson lines d =
 documentSymbols : String -> String -> List Json
 documentSymbols uri text = case parseSource uri text of
   Err e => []
-  Ok (Source hdr imports fx decls0) => case reorderProgram (tableOfKeepOps fx) decls0 of
-    Err e => []
-    Ok decls => map (declSymbolJson (split "\n" text)) decls
+  Ok (Source hdr imports fx decls0) => case formattingFixities uri text of
+    Err _ => []
+    Ok programFixities => case reorderProgram (tableOfKeepOps (append programFixities fx)) decls0 of
+      Err e => []
+      Ok decls => map (declSymbolJson (split "\n" text)) decls
 
 -- ---------------------------------------------------------------
 -- definition：位置 → token → Index → Location

@@ -1,16 +1,16 @@
 module Vuna.Zeta
   ( Alpha(..)
+  , Base.HashMap.empty
   , Gamma
-  , Vuna.Compiler.Frontend.Parser.parseSource
   , beta
   , zeta
   , module Base.Bool
   , module Base.List
   ) where
 
+import Base.HashMap
 import Base.Bool
 import Base.List
-import Vuna.Compiler.Frontend.Parser
 
 zeta : Int
 zeta = 1

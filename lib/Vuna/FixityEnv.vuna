@@ -1,0 +1,68 @@
+module Vuna.FixityEnv (FixityEnv, emptyFixityEnv, fixitiesForFile) where
+
+-- Vuna.FixityEnv：工具链（fmt / lint / LSP）的 per-file **程序级 fixity** 解析器（M31.3 / B27）。
+--
+-- parser 只产出中缀链，Loader 重排需要「本文件 `infix*` 声明 ++ 该文件 import 闭包可见声明」。
+-- 昂贵部分是**按包上下文加载模块图**（每个文件重复加载会退化成 O(#文件 × #模块)）；声明表
+-- 本身必须逐文件重算——不同文件 imports 不同，跨文件复用声明表会让 `::`/`+` 等被判
+-- unknown fixity 或打出错误括号。
+--
+-- 缓存（键都是**文件所在目录**，见 `dirKey`）：
+--   * 目录 -> 该目录最近 manifest 的 `PackageContext`（避免逐文件重读/解析 vuna.toml）；
+--   * 包目录（`contextDir`）-> 已加载模块图（同包多文件只加载一次，声明表仍逐文件算）。
+-- 上下文/加载失败是**硬错误**：fixity 无法确定时调用方必须拒绝格式化/lint，不能静默
+-- 用本地表继续（那会退化成 unknown fixity 或错优先级）。
+--
+-- 本模块只属于工具链（fmt/lint/LSP），不进 seed 闭包。
+import Vuna.Compiler.Common
+import Vuna.Compiler.Frontend.Ast
+import Vuna.Compiler.Loader.Flatten
+import Vuna.Compiler.Loader.Modules
+import Vuna.Compiler.Packages.Pkg
+
+-- 表示抽象：只有 emptyFixityEnv / fixitiesForFile 能构造与推进缓存。
+data FixityEnv : Type where
+  MkFixityEnv : List (Pair String PackageContext) -> List (Pair String (List Module)) -> FixityEnv
+
+emptyFixityEnv : FixityEnv
+emptyFixityEnv = MkFixityEnv [] []
+
+-- 缓存键：文件所在目录（无 `/` 时用 "."）。同一目录的文件共享上下文；
+-- 相对/绝对路径写法不同只会造成一次缓存 miss，不影响正确性。
+dirKey : String -> String
+dirKey path = case splitPath path of
+  Pair dir base => if dir == "" then "." else dir
+
+cacheLookup : String -> List (Pair String a) -> Maybe a
+cacheLookup key [] = Nothing
+cacheLookup key ((Pair k v) :: rest) = if k == key then Just v else cacheLookup key rest
+
+cacheForget : String -> List (Pair String a) -> List (Pair String a)
+cacheForget key [] = []
+cacheForget key ((Pair k v) :: rest) =
+  if k == key then cacheForget key rest else Pair k v :: cacheForget key rest
+
+cachePut : String -> a -> List (Pair String a) -> List (Pair String a)
+cachePut key value entries = Pair key value :: cacheForget key entries
+
+-- 取一个文件的程序级 fixity：`Pair env' (Result (List FixityDecl))`。
+-- env' 带回推进后的缓存（即使本次失败，已成功的上下文缓存仍可复用）。
+fixitiesForFile : FixityEnv -> String -> String -> Pair FixityEnv (Result (List FixityDecl))
+fixitiesForFile (MkFixityEnv ctxCache modCache) path source =
+  let
+    dir = dirKey path
+    ctxRes = case cacheLookup dir ctxCache of
+      Just ctx => Ok ctx
+      Nothing => contextForFile path
+  in case ctxRes of
+    Err e => Pair (MkFixityEnv ctxCache modCache) (Err e)
+    Ok ctx =>
+      let
+        ctxCache2 = cachePut dir ctx ctxCache
+        modKey = contextDir ctx
+        mods = case cacheLookup modKey modCache of
+          Just ms => ms
+          Nothing => []
+      in case fixitiesForSourceIn ctx mods path source of
+        Err e => Pair (MkFixityEnv ctxCache2 modCache) (Err e)
+        Ok (Pair mods2 fx) => Pair (MkFixityEnv ctxCache2 (cachePut modKey mods2 modCache)) (Ok fx)

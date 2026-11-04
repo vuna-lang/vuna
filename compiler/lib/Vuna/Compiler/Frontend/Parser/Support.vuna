@@ -6,13 +6,16 @@ module Vuna.Compiler.Frontend.Parser.Support
   , badCaseIndent
   , binderHeadName
   , canContinue
+  , closeParenNext
   , countArrows
   , ctorPatternStart
   , expectIdent
   , expectKw
   , expectSym
+  , expectValueName
   , fileOf
   , isEof
+  , isReservedValueName
   , isSyntaxSym
   , lastPos
   , nthTok
@@ -21,6 +24,7 @@ module Vuna.Compiler.Frontend.Parser.Support
   , peekTokAt
   , posOf
   , sameLineState
+  , sectionOpAt
   , spanOf
   , startsAtom
   , startsPatternAtom
@@ -166,6 +170,18 @@ expectIdent st = case peekTok st of
   PTok (TIdent x) p => Ok (Pair x (advance st))
   _ => psErr0 ExpectedIdentifier
 
+-- M31.3：值位置名字 = 标识符或非保留符号名。用于用户符号名 def/signature 与反引号
+-- 中缀里的名字（`` a `f` b ``）。
+expectValueName : PState -> Result (Pair String PState)
+expectValueName st = case peekTok st of
+  PTok (TIdent x) p =>
+    if isReservedValueName x then psErr1 (ExpectedToken "value name") "value name"
+    else Ok (Pair x (advance st))
+  PTok (TSym op) p =>
+    if isReservedValueName op then psErr1 (ExpectedToken "value name") "value name"
+    else Ok (Pair op (advance st))
+  _ => psErr0 ExpectedIdentifier
+
 upperFirst : String -> Bool
 upperFirst s = case strUnpack s of
   c :: rest => c >= 65 && c <= 90
@@ -227,6 +243,26 @@ isSyntaxSym op = case op of
   "{" => True
   "}" => True
   _ => False
+
+-- M31.3：保留符号名不能被当作可定义名 / 反引号名字 / 原子 section 的 op。
+-- 集合 = 表达式位置的语法符号（`isSyntaxSym`）∪ {`->`, `` ` ``}。
+-- `->` 是语法而非用户运算符（fixity 由 Loader.syntaxFixityDecls 恒提供）；反引号是定界符。
+isReservedValueName : String -> Bool
+isReservedValueName name = isSyntaxSym name || name == "->" || name == "`"
+
+-- M31.3：右 section 判定——当前 token 是运算符、下一个 token 是 `)`。
+-- 不消费 `)`：由外层 `(` 分支统一消费。
+closeParenNext : PState -> Bool
+closeParenNext st = case peekTokAt st 1 of
+  Just (PTok (TSym ")") p) => True
+  _ => False
+
+-- M31.3：`(` 之后的下一个 token 若是非保留符号名，则该括号是 section
+-- （`(+)` 或 `(+ e)`），返回该符号名；否则不是 section。
+sectionOpAt : PState -> Maybe String
+sectionOpAt st = case peekTokAt st 1 of
+  Just (PTok (TSym op) p) => if isReservedValueName op then Nothing else Just op
+  _ => Nothing
 
 countArrows : Expr -> Int
 countArrows (EInfix "->" _ rest _) = 1 + countArrows rest

@@ -1,28 +1,31 @@
 module Vuna.Compiler.Loader.Fixity
   ( FixityTable
-  , builtinFixityDecls
   , lookupFixity
+  , lookupFixityDecl
   , reorderExpr
   , reorderPattern
   , reorderProgram
-  , symbolOfTarget
+  , symbolOfTargetIn
+  , syntaxFixityDecls
   , tableOf
   , tableOfKeepOps
   ) where
 
--- Vuna.Compiler.Loader.Fixity：中缀重排（M31.2）。
+-- Vuna.Compiler.Loader.Fixity：中缀重排（M31.2/M31.3）。
 --
--- parser 不做优先级判断：中缀链统一收成右嵌套的 `EInfix`，括号收成 `EParen`（括号是
--- 重排的边界，必须显式保留）。本模块按模块可见的 `infix*` 声明（`FixityDecl`：优先级
--- 0–9、结合性 0/1/2、可选别名）把 `EInfix` 链重排成 `EApp`，并**在这一步**完成：
---   - 运算符别名替换（`==` → `eq`、`::` → `Cons`、`>>=` → `bind`）；
---   - `>>` 的 do 派生展开（`a >> b` = `bind a (\_ -> b)`，M31.3 再库化成函数）。
+-- parser 不做优先级判断：中缀链统一收成右嵌套的 `EInfix` / `EBacktick`，括号收成
+-- `EParen`（括号是重排的边界，必须显式保留）。本模块按模块可见的 `infix*` 声明
+-- （`FixityDecl`：优先级 0–9、结合性 0/1/2、可选别名）把链重排成 `EApp`，并**在这一步**
+-- 完成运算符别名替换（`==` → `eq`、`::` → `Cons`、`>>=` → `bind`）与 section 展开。
 --
--- 重排后 AST 不含 `EInfix` / `EParen`；Elab / codegen 不应看到它们（残留即 internal
--- error）。Fmt / Index / Lsp 在 parse 后阶段各自处理这两个节点。
+-- 表来源（M31.3 起）：**唯一来源是源码声明**（库或用户）。`->` 是语法而不是用户运算符，
+-- 由 `syntaxFixityDecls` 恒可见。表里没有声明的**符号**运算符在中缀位置一律报错（不静默
+-- 默认优先级，否则 `a + b * c` 会静默变成 `(a + b) * c`）；fmt 宁可拒绝格式化也不按错
+-- 优先级重排。反引号名字（`a `f` b`）是普通函数的中缀写法，没声明时按 9 左结合
+-- （Haskell 默认）。
 --
--- 内建兜底表：库声明优先；库没有声明时（旧包/未加载 base 的探针）用它保证语义不变。
--- M31.3 库声明齐全后删除兜底表（登记 debt）。
+-- 重排后 AST 不含 `EInfix` / `EBacktick` / `ESect*` / `EParen`；Elab / codegen 不应看到
+-- 它们（残留即 internal error）。Fmt / Index / Lsp 在 parse 后阶段各自处理这些节点。
 import Vuna.Compiler.Common
 import Vuna.Compiler.Frontend.Ast
 
@@ -32,30 +35,19 @@ data FixityTable : Type where
 tableOf : List FixityDecl -> FixityTable
 tableOf ds = MkFixityTable True ds
 
--- Fmt 用：不替换别名、不展开 `>>`（打印时保留源码里的运算符写法）。
+-- Fmt 用：不替换别名（打印时保留源码里的运算符写法）；section 与反引号保留原形。
 tableOfKeepOps : List FixityDecl -> FixityTable
 tableOfKeepOps ds = MkFixityTable False ds
 
-builtinFixityDecls : List FixityDecl
-builtinFixityDecls =
-  [ FixityDecl "->" 1 2 Nothing (Span "" 0 0 0 0),
-    FixityDecl ">>=" 1 2 (Just "bind") (Span "" 0 0 0 0),
-    FixityDecl ">>" 1 1 Nothing (Span "" 0 0 0 0),
-    FixityDecl "||" 2 1 Nothing (Span "" 0 0 0 0),
-    FixityDecl "&&" 3 1 Nothing (Span "" 0 0 0 0),
-    FixityDecl "==" 4 1 (Just "eq") (Span "" 0 0 0 0),
-    FixityDecl "/=" 4 1 (Just "neq") (Span "" 0 0 0 0),
-    FixityDecl "<" 4 1 (Just "lt") (Span "" 0 0 0 0),
-    FixityDecl "<=" 4 1 (Just "le") (Span "" 0 0 0 0),
-    FixityDecl ">" 4 1 (Just "gt") (Span "" 0 0 0 0),
-    FixityDecl ">=" 4 1 (Just "ge") (Span "" 0 0 0 0),
-    FixityDecl "++" 5 2 Nothing (Span "" 0 0 0 0),
-    FixityDecl "::" 5 2 (Just "Cons") (Span "" 0 0 0 0),
-    FixityDecl "+" 6 1 Nothing (Span "" 0 0 0 0),
-    FixityDecl "-" 6 1 Nothing (Span "" 0 0 0 0),
-    FixityDecl "*" 7 1 Nothing (Span "" 0 0 0 0),
-    FixityDecl "/" 7 1 Nothing (Span "" 0 0 0 0)
-  ]
+renameMode : FixityTable -> Bool
+renameMode (MkFixityTable r ds) = r
+
+fixityDecls : FixityTable -> List FixityDecl
+fixityDecls (MkFixityTable r ds) = ds
+
+-- 语法运算符：`->` 由 parser/Elab 消费，不属于任何库模块，因此恒可见（不是用户表兜底）。
+syntaxFixityDecls : List FixityDecl
+syntaxFixityDecls = [FixityDecl "->" 1 2 Nothing (Span "" 0 0 0 0)]
 
 -- 反向别名：方法名/构造子名（`eq`/`Cons`/`bind`）-> 运算符符号。Fmt 打印用。
 findTarget : List FixityDecl -> String -> Maybe String
@@ -64,46 +56,77 @@ findTarget (d :: rest) name = case fixityTarget d of
   Just t => if t == name then Just (fixityOp d) else findTarget rest name
   Nothing => findTarget rest name
 
-symbolOfTarget : String -> Maybe String
-symbolOfTarget name = findTarget builtinFixityDecls name
+-- Fmt 用：按调用方给的**程序级**声明表反查符号。
+symbolOfTargetIn : List FixityDecl -> String -> Maybe String
+symbolOfTargetIn ds name = findTarget ds name
 
--- 第一处匹配生效：调用方把「本模块 + imports 闭包」放在前面、兜底表放在后面。
+-- 第一处匹配生效：调用方把「本模块 + imports 闭包」放在前面、语法表放在后面。
 lookupDecl : String -> List FixityDecl -> Maybe FixityDecl
 lookupDecl op [] = Nothing
 lookupDecl op (d :: rest) = if fixityOp d == op then Just d else lookupDecl op rest
 
-lookupFixity : FixityTable -> String -> Pair Int Int
-lookupFixity (MkFixityTable _ ds) op = case lookupDecl op ds of
-  Just d => Pair (fixityLevel d) (fixityAssoc d)
-  Nothing => case lookupDecl op builtinFixityDecls of
-    Just d => Pair (fixityLevel d) (fixityAssoc d)
-    Nothing => Pair 9 1
+-- 查找顺序：调用方给的声明（本模块 + import 闭包）→ 语法表（`->`）。没有别处兜底。
+lookupFixityDecl : FixityTable -> String -> Maybe FixityDecl
+lookupFixityDecl t op = case lookupDecl op (fixityDecls t) of
+  Just d => Just d
+  Nothing => lookupDecl op syntaxFixityDecls
+
+lookupFixity : FixityTable -> String -> Maybe (Pair Int Int)
+lookupFixity t op = case lookupFixityDecl t op of
+  Just d => Just (Pair (fixityLevel d) (fixityAssoc d))
+  Nothing => Nothing
 
 aliasOf : FixityTable -> String -> String
-aliasOf (MkFixityTable _ ds) op = case lookupDecl op ds of
+aliasOf t op = case lookupFixityDecl t op of
   Just d => case fixityTarget d of
-    Just t => t
+    Just t2 => t2
     Nothing => op
-  Nothing => case lookupDecl op builtinFixityDecls of
-    Just d => case fixityTarget d of
-      Just t => t
-      Nothing => op
-    Nothing => op
+  Nothing => op
 
-renameMode : FixityTable -> Bool
-renameMode (MkFixityTable r ds) = r
+-- 链元素：运算符名、是否反引号写法（fmt keep 模式要按原样重建）、右操作数。
+data ChainOp : Type where
+  MkChainOp : String -> Bool -> Expr -> ChainOp
 
-infixTerm : FixityTable -> String -> Expr -> Expr -> Span -> Expr
-infixTerm t op lhs rhs sp = if renameMode t then case op of
-  ">>" => EApp (EVar "bind" sp) [lhs, ELam ["vuna_seq_ignore"] rhs sp] sp
-  _ => EApp (EVar (aliasOf t op) sp) [lhs, rhs] sp
-else EApp (EVar op sp) [lhs, rhs] sp
+chainOp : ChainOp -> String
+chainOp (MkChainOp op isBt rhs) = op
 
--- 把右嵌套的 `EInfix` 链展平成「首操作数 + (运算符, 操作数) 列表」；括号 / 应用 / 原子
+chainIsBacktick : ChainOp -> Bool
+chainIsBacktick (MkChainOp op isBt rhs) = isBt
+
+chainRhs : ChainOp -> Expr
+chainRhs (MkChainOp op isBt rhs) = rhs
+
+-- 未知运算符的诊断（严格表）：不静默默认优先级。
+unknownFixityMsg : String -> String
+unknownFixityMsg op =
+  "unknown fixity for operator " ++ op ++ " (declare it with infixl/infixr/infix)"
+
+-- 运算符优先级：查表；反引号名字没声明时按 9 左结合（Haskell 默认）；未知**符号**运算符
+-- 一律报错（严格表与宽松表同判据）——fmt 宁可拒绝格式化也不按错优先级重排改变语义
+-- （宽松表只保证「不因缺声明而崩溃」这件事已经不需要了）。
+fixityOf : FixityTable -> ChainOp -> Result (Pair Int Int)
+fixityOf t c = case lookupFixity t (chainOp c) of
+  Just p => Ok p
+  Nothing => if chainIsBacktick c then Ok (Pair 9 1) else Err (unknownFixityMsg (chainOp c))
+
+-- rename 模式产出普通应用（别名已替换，`>>` 也走别名到库函数）；keep 模式保留反引号原形
+-- 供 fmt 打印（普通运算符仍是 `EApp (EVar op)`，fmt 按 fixity 打回中缀）。
+infixTerm : FixityTable -> ChainOp -> Expr -> Expr -> Span -> Expr
+infixTerm t c lhs rhs sp =
+  if renameMode t then if chainOp c == ">>" then EApp (EVar "bind" sp) [lhs, ELam ["vuna_seq_ignore"] rhs sp] sp
+  else EApp (EVar (aliasOf t (chainOp c)) sp) [lhs, rhs] sp
+  else if chainIsBacktick c then EBacktick (chainOp c) lhs rhs sp
+  else EApp (EVar (chainOp c) sp) [lhs, rhs] sp
+
+-- 把右嵌套的 `EInfix` / `EBacktick` 链展平成「首操作数 + 链元素列表」；括号 / 应用 / 原子
 -- 作为边界操作数（先递归重排，EParen 在这里消失）。
-collectChain : FixityTable -> Expr -> Result (Pair Expr (List (Pair String Expr)))
+collectChain : FixityTable -> Expr -> Result (Pair Expr (List ChainOp))
 collectChain t (EInfix op l r sp) = andThen (reorderExpr t l) (\l2 => andThen (collectChain t r) (\p => case p of
-  Pair first rest => Ok (Pair l2 (Pair op first :: rest))
+  Pair first rest => Ok (Pair l2 (MkChainOp op False first :: rest))
+)
+)
+collectChain t (EBacktick name l r sp) = andThen (reorderExpr t l) (\l2 => andThen (collectChain t r) (\p => case p of
+  Pair first rest => Ok (Pair l2 (MkChainOp name True first :: rest))
 )
 )
 collectChain t e = andThen (reorderExpr t e) (\e2 => Ok (Pair e2 []))
@@ -111,33 +134,48 @@ collectChain t e = andThen (reorderExpr t e) (\e2 => Ok (Pair e2 []))
 -- precedence climbing：`rest` 里同级/更高级的运算符继续被消费。
 -- 显式 fuel 计步（M31.2：`more` 是列表模式变量，SCT 对「tuple 列表」的递减度量
 -- 不闭合；按 R2「守卫 Int」判据给上界，每次递归消费一个运算符）。
-climb : Int -> FixityTable -> Int -> Expr -> List (Pair String Expr) -> Span -> Result (Pair Expr (List (Pair String Expr)))
+climb : Int -> FixityTable -> Int -> Expr -> List ChainOp -> Span -> Result (Pair Expr (List ChainOp))
 climb fuel t minPrec lhs rest sp = if fuel <= 0 then Err "DT: internal: infix reorder fuel exhausted"
 else case rest of
   [] => Ok (Pair lhs [])
-  (Pair op rhs) :: more =>
-    let
-      fx = lookupFixity t op
-      level = firstOf fx
-      assoc = secondOf fx
-    in if level < minPrec then Ok (Pair lhs rest)
-    else
+  c :: more => case fixityOf t c of
+    Err e => Err e
+    Ok fx =>
       let
+        level = firstOf fx
+        assoc = secondOf fx
         nextMin = if assoc == 2 then level else level + 1
-      in andThen (climb (fuel - 1) t nextMin rhs more sp) (\p => case p of
-        Pair rhs2 more2 => climb (fuel - 1) t minPrec (infixTerm t op lhs rhs2 sp) more2 sp
+        rhs = chainRhs c
+      in if level < minPrec then Ok (Pair lhs rest)
+      else andThen (climb (fuel - 1) t nextMin rhs more sp) (\p => case p of
+        Pair rhs2 more2 => climb (fuel - 1) t minPrec (infixTerm t c lhs rhs2 sp) more2 sp
       )
+
+-- 一条中缀链：先展平，再按优先级重排；重排后不允许剩运算符。
+reorderChain : FixityTable -> Expr -> Result Expr
+reorderChain t e = andThen (collectChain t e) (\p => case p of
+  Pair first rest => andThen (climb (2 * length rest + 2) t 0 first rest (exprSpan e)) (\q => case q of
+    Pair out leftover =>
+      if length leftover == 0 then Ok out else Err "DT: internal: infix reorder left an operator"
+  )
+)
 
 reorderExpr : FixityTable -> Expr -> Result Expr
 reorderExpr t (EVar name sp) = Ok (EVar name sp)
 reorderExpr t (EInt n sp) = Ok (EInt n sp)
 reorderExpr t (EStr s sp) = Ok (EStr s sp)
-reorderExpr t (EInfix op l r sp) = andThen (collectChain t (EInfix op l r sp)) (\p => case p of
-  Pair first rest => andThen (climb (2 * length rest + 2) t 0 first rest sp) (\q => case q of
-    Pair out leftover =>
-      if length leftover == 0 then Ok out else Err "DT: internal: infix reorder left an operator"
-  )
-)
+reorderExpr t (EInfix op l r sp) = reorderChain t (EInfix op l r sp)
+reorderExpr t (EBacktick name l r sp) = reorderChain t (EBacktick name l r sp)
+-- section：rename 模式在名字解析前展开成 `EVar` / lambda（别名已替换）；keep 模式保留原形
+-- 供 fmt 打印。
+reorderExpr t (ESectOp op sp) =
+  if renameMode t then Ok (EVar (aliasOf t op) sp) else Ok (ESectOp op sp)
+reorderExpr t (ESectL op e sp) =
+  andThen (reorderExpr t e)
+    (\e2 => if renameMode t then Ok (ELam ["vuna_section"] (EApp (EVar (aliasOf t op) sp) [EVar "vuna_section" sp, e2] sp) sp) else Ok (ESectL op e2 sp))
+reorderExpr t (ESectR e op sp) =
+  andThen (reorderExpr t e)
+    (\e2 => if renameMode t then Ok (ELam ["vuna_section"] (EApp (EVar (aliasOf t op) sp) [e2, EVar "vuna_section" sp] sp) sp) else Ok (ESectR e2 op sp))
 reorderExpr t (EParen inner sp) = reorderExpr t inner
 reorderExpr t (ELam names body sp) = andThen (reorderExpr t body) (\b => Ok (ELam names b sp))
 reorderExpr t (EApp fn args sp) =
@@ -167,6 +205,7 @@ reorderExpr t (EDo stmts sp) =
   andThen (traverse (\v => reorderDoStmt t v) stmts) (\ss => Ok (EDo ss sp))
 reorderExpr t (EAnn inner ty sp) =
   andThen (reorderExpr t inner) (\i2 => andThen (reorderExpr t ty) (\t2 => Ok (EAnn i2 t2 sp)))
+reorderExpr t other = Err "DT: internal: Fixity.reorderExpr: unexpected expression form"
 
 reorderBinds : FixityTable -> List (Pair Pat Expr) -> Result (List (Pair Pat Expr))
 reorderBinds t binds = traverse (\v => reorderBind t v) binds

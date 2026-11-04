@@ -29,13 +29,20 @@ import Vuna.Compiler.Core
 import Vuna.Compiler.Elab
 import Vuna.Compiler.Intrinsics
 
+-- M31.3：除 `[A-Za-z0-9]` 外的任意字符都必须转义成 `_x<code>_`——用户符号名函数
+-- （`<+>`、`>>=` 之外的声明名）会直接进 OCaml 值名，原样输出是非法标识符。
+-- 与既有编码不冲突：字面标识符里的 `_` 已映射成 `_u`，输出里除转义序列外不会出现裸 `_`，
+-- 因此不会与字面名冲突（`ensureUniqueOcamlNames` 仍是最后一道防线）。
+isAsciiAlphaNum : Int -> Bool
+isAsciiAlphaNum c = c >= 65 && c <= 90 || c >= 97 && c <= 122 || c >= 48 && c <= 57
+
 sanitizeChar : Int -> List Int
 -- `#` 出现在 Loader 生成的匿名实例名里（`#default`、`#fancy`），OCaml 标识符不允许。
 sanitizeChar 46 = [95, 100]
 sanitizeChar 95 = [95, 117]
 sanitizeChar 39 = [95, 112]
 sanitizeChar 35 = [95, 104]
-sanitizeChar c = [c]
+sanitizeChar c = if isAsciiAlphaNum c then [c] else strUnpack ("_x" ++ strFromInt c ++ "_")
 
 sanitizeName : String -> String
 sanitizeName name = strPack (concatMap sanitizeChar (strUnpack name))

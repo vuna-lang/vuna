@@ -6,11 +6,15 @@ module Base.Ord (Ord(..)) where
 -- trait 留本模块（放 `Base.Bool` 会成环）；`Int` / `String` 的实例在
 -- `Base.Int` / `Base.String`。
 --
--- `<` / `<=` / `>` / `>=` 不再是编译器内建全局：Loader 把它们解析成 `lt` / `le` /
--- `gt` / `ge` 的别名（M31.1）；Int / String 上的特化是内建实例实现。
--- `<` / `<=` / `>` / `>=` 是 `lt` / `le` / `gt` / `ge` 的 fixity/别名声明（M31.2：
--- 优先级与别名由库声明，Loader 在中缀重排时消费）。
+-- `<` / `<=` / `>` / `>=` 是 `lt` / `le` / `gt` / `ge` 的别名：Int / String 上的
+-- 特化是内建实例实现。fixity 与别名的**唯一来源**是本模块的 `infixl` 声明（Loader
+-- 在中缀重排时消费，不再有编译器内建兜底表）。
 import Base.Bool
+
+infixl 4 < = lt
+infixl 4 <= = le
+infixl 4 > = gt
+infixl 4 >= = ge
 
 trait Ord a where
   lt : a -> a -> Bool

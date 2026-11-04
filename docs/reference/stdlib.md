@@ -101,9 +101,9 @@ module Base.IO (IO, print, println, readFile, writeFile, readLine, readDir, ...)
   （`Prelude` 显式 `import Base.Int` 加载 Int 实例）。编译器只保留**机制**：
   `deriving (Show, Eq, Ord)` 的展开、`eq` / `lt` 等的 `Int` / `String` 运行时特化、
   `if` / 字面量等语法。**M31.1 起运算符是方法别名**：`==` / `/=` / `<` / `<=` / `>` / `>=`
-  在 Loader 被解析成 `eq` / `neq` / `lt` / `le` / `gt` / `ge`（M31.1 起由 Loader 解析；
-  M31.2 起在 `Loader.Fixity` 的重排里做别名替换），因此 `a == b` 与 `eq a b` 是同一条
-  路径。**M29 起相等证据驱动**：`eq`（含运算符写法）只有 Int/String 内建特化或 `Eq` 证据
+  在 Loader 被解析成 `eq` / `neq` / `lt` / `le` / `gt` / `ge`（M31.1 起由 Loader 解析，
+  M31.3 起 fixity 与别名全部来自库模块里的 `infix*` 声明），因此 `a == b` 与 `eq a b`
+  是同一条路径。**M29 起相等证据驱动**：`eq`（含运算符写法）只有 Int/String 内建特化或 `Eq` 证据
   （实例 / `deriving` / 约束实例），无实例与函数相等在 check 期报错；参数化类型的
   `deriving` 展开成约束实例（`instance Eq a => Eq (F a)`），库里可写的容器实例也按这个
   形态声明。字符串展示只有一个实现 `strShow`——`Base.Show` 的 `String` 实例是

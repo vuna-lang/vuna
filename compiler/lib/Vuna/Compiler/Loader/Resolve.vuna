@@ -331,6 +331,15 @@ else case expr of
   -- M31.2：`EInfix` / `EParen` 是 parser 的中间产物，正常路径在 Loader 重排里已消除；
   -- 走到这里说明重排漏了（internal error，不静默透传）。
   EInfix op lhs rhs sp => Err (label ++ ": DT: internal: unreordered infix operator " ++ op)
+  -- M31.3：同上——反引号中缀与 section 也必须在 Loader.Fixity 重排里消除（严格执行
+  -- 契约「rename 后不存在」），走到这里说明重排漏了，显式 internal error 不静默透传。
+  EBacktick name lhs rhs sp =>
+    Err (label ++ ": DT: internal: unreordered backtick infix operator " ++ name)
+  ESectOp op sp => Err (label ++ ": DT: internal: unreordered operator section (" ++ op ++ ")")
+  ESectL op rhs sp =>
+    Err (label ++ ": DT: internal: unreordered left operator section (" ++ op ++ ")")
+  ESectR lhs op sp =>
+    Err (label ++ ": DT: internal: unreordered right operator section (" ++ op ++ ")")
   EParen inner sp => resolveExpr (fuel - 1) modules label prefix ns imports scope inner
   EInt n sp => Ok (EInt n sp)
   EStr s sp => Ok (EStr s sp)
@@ -641,6 +650,11 @@ effExpr e = case e of
   EDo stmts sp => effDos stmts
   -- M31.2：parser 中间产物（重排后不应出现；这里只做结构递归）。
   EInfix op l r sp => firstEffect [effExpr l, effExpr r]
+  -- M31.3：反引号中缀 / section 同理（重排后不出现，保持结构递归以不丢 effect）。
+  EBacktick name l r sp => firstEffect [effExpr l, effExpr r]
+  ESectOp op sp => Nothing
+  ESectL op rhs sp => effExpr rhs
+  ESectR lhs op sp => effExpr lhs
   EParen inner sp => effExpr inner
   -- M24：where 绑定签名 `EAnn value ty`；类型层不算 effect，只看值。
   EAnn value ty sp => effExpr value

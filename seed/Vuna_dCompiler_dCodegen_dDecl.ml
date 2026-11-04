@@ -5,11 +5,11 @@ open Base_dMonad
 open Base_dMaybe
 open Base_dEq
 open Base_dOrd
+open Base_dInt
 open Base_dList
 open Base_dResult
 open Base_dString
 open Base_dShow
-open Base_dInt
 open Prelude
 open Vuna_dCompiler_dCommon
 open Vuna_dCompiler_dFrontend_dToml
@@ -61,7 +61,9 @@ open Vuna_dCompiler_dElab_dTermination_dScc
 open Vuna_dCompiler_dElab_dTermination
 open Vuna_dCompiler_dElab_dDriver
 open Vuna_dCompiler_dElab
-let v_Vuna_dCompiler_dCodegen_dDecl_dsanitizeChar = (fun mc0 -> (if ((bi_eq_int mc0) 46) then (C_Base_dList_dList_Base_dList_dCons (95, (C_Base_dList_dList_Base_dList_dCons (100, C_Base_dList_dList_Base_dList_dNil)))) else (if ((bi_eq_int mc0) 95) then (C_Base_dList_dList_Base_dList_dCons (95, (C_Base_dList_dList_Base_dList_dCons (117, C_Base_dList_dList_Base_dList_dNil)))) else (if ((bi_eq_int mc0) 39) then (C_Base_dList_dList_Base_dList_dCons (95, (C_Base_dList_dList_Base_dList_dCons (112, C_Base_dList_dList_Base_dList_dNil)))) else (if ((bi_eq_int mc0) 35) then (C_Base_dList_dList_Base_dList_dCons (95, (C_Base_dList_dList_Base_dList_dCons (104, C_Base_dList_dList_Base_dList_dNil)))) else (C_Base_dList_dList_Base_dList_dCons (mc0, C_Base_dList_dList_Base_dList_dNil)))))))
+let v_Vuna_dCompiler_dCodegen_dDecl_disAsciiAlphaNum = (fun c -> (if (if (if ((bi_ge_int c) 65) then ((bi_le_int c) 90) else false) then true else (if ((bi_ge_int c) 97) then ((bi_le_int c) 122) else false)) then true else (if ((bi_ge_int c) 48) then ((bi_le_int c) 57) else false)))
+
+let v_Vuna_dCompiler_dCodegen_dDecl_dsanitizeChar = (fun mc0 -> (if ((bi_eq_int mc0) 46) then (C_Base_dList_dList_Base_dList_dCons (95, (C_Base_dList_dList_Base_dList_dCons (100, C_Base_dList_dList_Base_dList_dNil)))) else (if ((bi_eq_int mc0) 95) then (C_Base_dList_dList_Base_dList_dCons (95, (C_Base_dList_dList_Base_dList_dCons (117, C_Base_dList_dList_Base_dList_dNil)))) else (if ((bi_eq_int mc0) 39) then (C_Base_dList_dList_Base_dList_dCons (95, (C_Base_dList_dList_Base_dList_dCons (112, C_Base_dList_dList_Base_dList_dNil)))) else (if ((bi_eq_int mc0) 35) then (C_Base_dList_dList_Base_dList_dCons (95, (C_Base_dList_dList_Base_dList_dCons (104, C_Base_dList_dList_Base_dList_dNil)))) else (if (v_Vuna_dCompiler_dCodegen_dDecl_disAsciiAlphaNum mc0) then (C_Base_dList_dList_Base_dList_dCons (mc0, C_Base_dList_dList_Base_dList_dNil)) else (dtp_unpack ((bi_concat "_x") ((bi_concat (bi_strFromInt mc0)) "_")))))))))
 
 let v_Vuna_dCompiler_dCodegen_dDecl_dsanitizeName = (fun name -> (dtp_pack ((v_Base_dList_dconcatMap v_Vuna_dCompiler_dCodegen_dDecl_dsanitizeChar) (dtp_unpack name))))
 

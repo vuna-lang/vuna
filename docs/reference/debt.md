@@ -17,11 +17,9 @@
 | B13/D20 | 泛型 Σ 的值级构造仍不可表达（字段类型不能依赖运行时值） | `dt_err/45_generic_sigma_runtime`；Tarski 式存在式是当前替代（`dt/62`/`dt/63`） | F4 |
 | B18 | 同模块 `data T` 与 `def T` 同名仍不支持（Elab globals 需按命名空间拆表） | `Elab.Term` 的类型层 def 退化路径只查同名值定义 | F1 |
 | B23 | 孤儿实例规则曾写进 `limits.md` / `type-system.md` / `records-traits.md`（「trait 与类型都不在本模块定义时被拒」），但实现从未强制；M31.1 起 primitive 类型的实例（`Base.Int` / `Base.String`）按落点规则放在「没有类型声明」的模块里，不能靠孤儿规则 | `Elab/Trait.elabInstanceSig`；`docs/reference/limits.md`、`records-traits.md` | M31.1：文档改为**实例落点规则**（[operators.md](operators.md)），删除「孤儿实例被拒」表述；是否补实现检查待定 |
-| B24 | `Show` 的实例仍全部堆在 `Base.Show`（`Int` / `String` / `Bool`），与 M31.1 的「实例跟类型模块走」规则不一致（`show : a -> String` 的返回类型是 `String`，String 实例应留 trait 模块，Bool / Int 可迁类型模块） | `base/lib/Base/Show.vuna`；[operators.md](operators.md) | 后续（M31.3 或另立项） |
-| B25 | `Int` / `String` 是 primitive（无 `data` 声明、无类型声明文件）；是否引入 `primitive type` 声明把类型身份搬进库（canonical 名、字面量/覆盖性/codegen 全链路）待评估；M31.1 保持 primitive，只把实例放 `Base.Int` / `Base.String` | `Intrinsics.typeIntrinsicNames`；`Elab/Prelude`；`Codegen` | F/研究（M31.3 后再评估） |
-| B26 | M31.2 已实现 `infixl/infixr/infix` 声明语法与 `Loader.Fixity` 重排，但 base/compiler 源码**尚未写声明**（自举顺序：新语法要等已 rotate 的新种子才能进 seed 闭包），当前语义由 `Loader.Fixity.builtinFixityDecls` 兜底表提供。下一步：在已 rotate 的种子上给 `Base.Eq` / `Base.Ord` / `Base.Bool` / `Base.Int` / `Base.String` / `Base.List` / `Base.Monad` 加声明，删除 / 收缩兜底表并再次 rotation | `Loader/Fixity.vuna`；`base/lib/Base/*.vuna` | M31.3（需两次 rotation） |
-| B27 | Fmt 的打印 fixity 表用内建兜底表（跨模块 / 用户声明的自定义优先级不感知）：`formatSource` 的重排用本地 `Source.fixities`，但打印函数 `Fmt/Expr.infixPrec` 只有内建表；自定义运算符或覆盖内建优先级时可能加括号不足 / 过多（语义风险） | `lib/Vuna/Fmt.vuna`；`lib/Vuna/Fmt/Expr.vuna` | M31.3（fmt 从 Loader 取程序级 fixity，或把表贯穿渲染函数） |
-| B28 | `Elab` / `Lint` / `Index` 等对 `Expr` 的穷尽 case 在 M31.2 补了 `_ => Err/[]/False/...` 兜底分支（`EInfix` / `EParen` 正常在 Loader 重排后不存在）；若将来某个前端入口绕过重排，这些兜底会**静默丢表达式**（Elab / Resolve 是显式 internal error，工具链是空值） | `Elab/*`、`lib/Vuna/{Lint,Index,Lsp,Doc}` | 后续：统一改显式 internal error 或断言 |
+| B24 | `Show` 的实例仍全部堆在 `Base.Show`（`Int` / `String` / `Bool`），与 M31.1 的「实例跟类型模块走」规则不一致（`show : a -> String` 的返回类型是 `String`，String 实例应留 trait 模块，Bool / Int 可迁类型模块） | `base/lib/Base/Show.vuna`；[operators.md](operators.md) | 另立项（M31.3 未处理） |
+| B25 | `Int` / `String` 是 primitive（无 `data` 声明、无类型声明文件）；是否引入 `primitive type` 声明把类型身份搬进库（canonical 名、字面量/覆盖性/codegen 全链路）待评估；M31.1 保持 primitive，只把实例放 `Base.Int` / `Base.String` | `Intrinsics.typeIntrinsicNames`；`Elab/Prelude`；`Codegen` | F/研究（M31.3 已收尾，可评估） |
+| B28 | 工具链 `Lint` / `Index` 对 `Expr` 的穷尽 case 仍有兜底分支（`_ => []`；`EInfix` / `EParen` / M31.3 的 `EBacktick` / `ESect*` 正常在 Loader 重排后不存在，M31.3 已给新节点补显式递归）；若将来新增 AST 节点或前端入口绕过重排，兜底会**静默丢子树**（Elab / Resolve 是显式 internal error，Fmt / Doc 显式处理，工具链是空值） | `lib/Vuna/{Lint,Index}`；`Loader/Resolve`、`Elab/*` | 后续：统一改显式 internal error 或断言 |
 | B29 | M32 的显式 trait 约束只支持顶层签名；`where` / `let` 绑定、`axiom`、trait 方法、构造子 / 记录字段上的 `C a =>` 都不支持（trait 方法约束是父类语义，归 F4） | `Parser.rejectCtxSuffix` / `PS_ConstraintUnsupportedHere`；`test/corpus/traits/99_explicit_*_rejected` | F4（父类 / 局部约束） |
 | B30 | 标准库容器只覆盖 `String` / `Int` 键：无泛型 `Hashable`（trait 仅单参数、无 `deriving Hash`）、无有序持久容器（TreeMap/TreeSet）、无可变/数组容器（`Array` / `ST` / `IORef`）。编译器热点已由 `HashMap`/`IntMap` 覆盖；其余场景按实测需求再评估 | `base/lib/Base/{HashMap,HashSet,IntMap}.vuna`；[stdlib.md](stdlib.md) 的容器边界 | F4（容器）/ F3（效应系统） |
 | C07 | 擦除位的作用域护栏按约定跳过，未对擦除位置做完整 de Bruijn 校验 | `Codegen/Erase.checkAllDefScopes`：跳过擦除实参 | 待定 |
@@ -40,7 +38,6 @@
 | E04 | TCB 只有黑名单 + 闭包数量断言，没有完整 allowlist | `nix/tcb-check.sh` + `nix/seed-count.txt` | 待定 |
 | E06 | seed rotation 替换步骤非原子：校验通过后 `rm -rf seed && cp -r` | `nix/seed-rotate.sh` | 待定 |
 | C30 | `vuna build` 的 build meta 不含 manifest 摘要：改 `vuna.toml` 能力声明后 `build` 报 "up to date"、跳过重检查与重编（`vuna check` 仍全量） | `Driver/Compile.buildMetaText` / `metaUpToDate` | 待定 |
-| C31 | `test/corpus/fmt/check.sh` 的合成探针包没有依赖包 ⇒ 没有自动 Prelude 注入，而编译器/工具链源码里的 `==` / `<=` 在 M31.1 起是 Eq/Ord 方法别名，需要方法在作用域；脚本目前在模块头后手工注入 `import Prelude` | `test/corpus/fmt/check.sh`；探针错误 `<entry>: unbound variable eq` | M31.1 已缓解（脚本注入）；根治（探针包按真实依赖布局构造）待做 |
 | C32 | 无单文件 / 模块级 elab 缓存与序列化格式（只有 build 产物级增量） | `Driver/Compile.buildMetaText`；无 Core Term / DtProgram 序列化 | M34 |
 | C33 | 无性能 CI 门槛与分配 / GC 统计：bench 仅手动、`--check` 软对比 | `nix/bench.sh` 非 check；`performance.md` §2 只有时间戳打点 | M34 |
 

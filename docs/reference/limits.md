@@ -134,6 +134,11 @@
 - **覆盖率与终止性对所有包一致执行**：没有按包名跳过检查的豁免；编译器、base 与工具链源码
   通过 SCT + 显式 fuel / 结构递归达标。工具链 / 前端 / 加载器的状态机用输入规模线性 fuel
   或内存内不可达上界，正常输入不触发；触发时是明确的 internal 错误，不会静默改变语义。
+- **section 是 lambda 语法糖**：`(+ e)` / `(e +)` 在 Loader 展开成未标注 lambda（`(+)` 只是
+  运算符作值）。因此**直接应用** section（`(+ 3) 4`）会命中既有的 lambda 推断边界
+  `TC_LambdaNoSignature`（普通 `(\x => x) 5` 同样报错）；把 section 传给带签名的参数
+  （`inc : Int -> Int`，`inc = (+ 3)`）正常。用户符号名函数同理按普通定义处理，codegen 用
+  `_x<code>_` 转义非标识符字符。
 - **`List` 桥接**：返回或接收 `List` 的原语（`strUnpack` / `strPack` / `strConcatMany` /
   `strSubstTemplate` / `prim_getArgs` / `prim_readDir`）由 codegen 映射到桥接 helper，
   桥接只为 canonical `Base.List.List` 生成；`Prelude` 自动注入 `Base.List`，因此正常上下文
@@ -184,7 +189,10 @@
 
 - fmt：行宽 100，但模块头 / 导出列表、类型签名与超长字符串字面量不折行；表达式内部的注释
   会前移到最内层包含它的条目（或下一条目），不保证留在原位置；单行块注释可挂行尾，多行块
-  注释只作前置注释。`where` 块的绑定签名行按源码顺序保留、幂等。
+  注释只作前置注释。`where` 块的绑定签名行按源码顺序保留、幂等。`infix*` 声明被打印在
+  imports 之后、源码顺序、每条一行；fixity 是**程序级**属性，CLI / LSP 用
+  `Loader.Flatten.fixitiesForSource` 取可见闭包；取不到（上下文 / 依赖加载失败）时 fmt 报错、
+  不格式化该文件；未知符号运算符同样报错（不静默按默认优先级重排）。
 - REPL 支持多行续行（括号 / 字符串 / 注释 / 尾 token），但每个提交项仍是一个完整表达式或
   一条定义；顶层定义必须**先写签名**（DT 签名必填）；依赖只支持本地路径（registry / 锁文件
   未做）；`Map` 是关联表实现的抽象类型（无平衡树）；`HashMap` / `HashSet` / `IntMap` 是

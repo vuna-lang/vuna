@@ -36,6 +36,8 @@ module Base.IO
 import Base.List
 import Base.Bool
 import Base.Monad
+-- `++` 的 fixity 声明在 Base.String；base 模块不自动注入 Prelude，println 需要它。
+import Base.String
 
 data IO a : Type where
   MkIO : (Int -> a) -> IO a

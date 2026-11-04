@@ -28,6 +28,7 @@ import Vuna.Compiler.Loader.Fixity
 import Vuna.Compiler.Frontend.Lexer
 import Vuna.Compiler.Frontend.Parser
 import Vuna.Compiler.Packages.Pkg
+import Vuna.FixityEnv
 import Vuna.Index.Types
 import Base.IO
 
@@ -338,6 +339,17 @@ refsInExpr sMod e = case e of
   ERecUpdate r fields sp => append (refsInExpr sMod r) (concatMap (refsInField sMod) fields)
   EDo stmts sp => concatMap (refsInDoStmt sMod) stmts
   EAnn value ty sp => append (refsInExpr sMod value) (refsInExpr sMod ty)
+  -- M31.3：keep 模式（index/fmt）下反引号中缀与 section **保留原形**（不像 EParen/EInfix
+  -- 会被重排消掉），所以这里必须显式处理：反引号里的名字本身也是引用，操作数继续递归，
+  -- 不能像旧 wildcard 那样静默丢整棵子树。
+  EBacktick nm l r sp =>
+    append [Ref sMod nm (spanStartLine sp) (spanStartCol sp)]
+      (append (refsInExpr sMod l) (refsInExpr sMod r))
+  ESectOp op sp => [Ref sMod op (spanStartLine sp) (spanStartCol sp)]
+  ESectL op inner sp =>
+    append [Ref sMod op (spanStartLine sp) (spanStartCol sp)] (refsInExpr sMod inner)
+  ESectR inner op sp =>
+    append [Ref sMod op (spanStartLine sp) (spanStartCol sp)] (refsInExpr sMod inner)
   _ => []
 
 -- ---------------------------------------------------------------
@@ -355,31 +367,39 @@ builtSymbols (Built ms syms refs) = syms
 builtRefs : Built -> List Ref
 builtRefs (Built ms syms refs) = refs
 
--- 索引一个文件。parse 失败返回 Err（调用方转成 warning），不中断整体。
-indexOne : String -> String -> String -> Result Built
-indexOne dir pkgName path =
-  if runIO (prim_fileExists path) then indexOneExisting dir pkgName path
-  else Err (path ++ ": no such file")
+-- 索引一个文件。parse/fixity 失败返回 Err（调用方转成 warning），不中断整体。
+-- 返回推进后的 `FixityEnv`：按目录复用包上下文与已加载模块图（见 Vuna.FixityEnv）。
+indexOne : FixityEnv -> String -> String -> String -> Pair FixityEnv (Result Built)
+indexOne env dir pkgName path =
+  if runIO (prim_fileExists path) then indexOneExisting env dir pkgName path
+  else Pair env (Err (path ++ ": no such file"))
 
-indexOneExisting : String -> String -> String -> Result Built
-indexOneExisting dir pkgName path =
+indexOneExisting : FixityEnv -> String -> String -> String -> Pair FixityEnv (Result Built)
+indexOneExisting env dir pkgName path =
   let
     source = runIO (prim_readFile path)
     bytes = strLength source
-  in case parseSource path source of
-    Err e => Err (path ++ ": " ++ e)
-    Ok (Source srcHdr imports fx decls0) => case reorderProgram (tableOfKeepOps fx) decls0 of
-      Err e => Err (path ++ ": " ++ e)
-      Ok decls =>
-        let
-          sMod = moduleNameOf dir path srcHdr
-          comments = case lexComments source of
-            Err e => []
-            Ok cs => cs
-          info = ModuleInfo sMod pkgName path bytes (length decls)
-          syms = symbolsOfModule sMod decls comments
-          refs = refsInDecls sMod decls
-        in Ok (Built [info] syms refs)
+    looked = fixitiesForFile env path source
+    env2 = firstOf looked
+  in case secondOf looked of
+    Err e => Pair env2 (Err (path ++ ": cannot load package fixity context: " ++ e))
+    Ok programFixities => case parseSource path source of
+      Err e => Pair env2 (Err (path ++ ": " ++ e))
+      -- M31.3（B26/B27）：必须按**程序级** fixity 重排（本文件声明 ++ import 闭包，
+      -- 本地优先）。只用本地声明会让用到 `+`/`==`/`::` 的文件报 unknown fixity，
+      -- 然后被当错误跳过 → `vuna map` 静默漏模块。
+      Ok (Source srcHdr imports fx decls0) => case reorderProgram (tableOfKeepOps (append programFixities fx)) decls0 of
+        Err e => Pair env2 (Err (path ++ ": " ++ e))
+        Ok decls =>
+          let
+            sMod = moduleNameOf dir path srcHdr
+            comments = case lexComments source of
+              Err e => []
+              Ok cs => cs
+            info = ModuleInfo sMod pkgName path bytes (length decls)
+            syms = symbolsOfModule sMod decls comments
+            refs = refsInDecls sMod decls
+          in Pair env2 (Ok (Built [info] syms refs))
 
 data Acc : Type where
   Acc : List ModuleInfo -> List Sym -> List Ref -> List String -> Acc
@@ -396,35 +416,40 @@ accRefs (Acc ms syms refs warns) = refs
 accWarns : Acc -> List String
 accWarns (Acc ms syms refs warns) = warns
 
-indexPackage : String -> String -> List String -> Acc -> Acc
-indexPackage dir pkgName files acc = foldFiles dir pkgName files acc
+indexPackage : FixityEnv -> String -> String -> List String -> Acc -> Pair FixityEnv Acc
+indexPackage env dir pkgName files acc = foldFiles env dir pkgName files acc
 
-foldFiles : String -> String -> List String -> Acc -> Acc
-foldFiles dir pkgName [] acc = acc
-foldFiles dir pkgName (path :: rest) acc =
-  foldFiles dir pkgName rest (indexFileInto dir pkgName path acc)
+foldFiles : FixityEnv -> String -> String -> List String -> Acc -> Pair FixityEnv Acc
+foldFiles env dir pkgName [] acc = Pair env acc
+foldFiles env dir pkgName (path :: rest) acc =
+  let
+    stepped = indexFileInto env dir pkgName path acc
+  in foldFiles (firstOf stepped) dir pkgName rest (secondOf stepped)
 
-indexFileInto : String -> String -> String -> Acc -> Acc
-indexFileInto dir pkgName path acc = case indexOne dir pkgName path of
-  Err e => Acc (accModules acc) (accSymbols acc) (accRefs acc) (e :: accWarns acc)
-  Ok b =>
-    Acc (append (accModules acc) (builtModules b)) (append (accSymbols acc) (builtSymbols b))
-      (append (accRefs acc) (builtRefs b)) (accWarns acc)
+indexFileInto : FixityEnv -> String -> String -> String -> Acc -> Pair FixityEnv Acc
+indexFileInto env dir pkgName path acc = case indexOne env dir pkgName path of
+  Pair env2 result => case result of
+    Err e => Pair env2 (Acc (accModules acc) (accSymbols acc) (accRefs acc) (e :: accWarns acc))
+    Ok b =>
+      Pair env2
+        (Acc (append (accModules acc) (builtModules b)) (append (accSymbols acc) (builtSymbols b)) (append (accRefs acc) (builtRefs b)) (accWarns acc))
 
-collectAll : List (Pair String String) -> Acc -> Acc
-collectAll [] acc = acc
-collectAll (root :: rest) acc =
+collectAll : FixityEnv -> List (Pair String String) -> Acc -> Pair FixityEnv Acc
+collectAll env [] acc = Pair env acc
+collectAll env (root :: rest) acc =
   let
     dir = firstOf root
     pkgName = secondOf root
     files = packageSources dir
-  in collectAll rest (indexPackage dir pkgName files acc)
+    stepped = indexPackage env dir pkgName files acc
+  in collectAll (firstOf stepped) rest (secondOf stepped)
 
 -- 全量构建（parse 所有源码，不读写缓存）。
 buildIndex : String -> Result Index
 buildIndex repo =
   let
-    acc = collectAll (packageDirs repo) (Acc [] [] [] [])
+    stepped = collectAll emptyFixityEnv (packageDirs repo) (Acc [] [] [] [])
+    acc = secondOf stepped
   in Ok (Index (accModules acc) (dedupeSymbols (accSymbols acc)) (accRefs acc))
 
 -- ---------------------------------------------------------------

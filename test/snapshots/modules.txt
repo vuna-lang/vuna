@@ -5,6 +5,7 @@ Vuna.Cli.Args  ./lib/Vuna/Cli/Args.vuna
 Vuna.Cli  ./lib/Vuna/Cli.vuna
 Vuna.Doc  ./lib/Vuna/Doc.vuna
 Vuna.Files  ./lib/Vuna/Files.vuna
+Vuna.FixityEnv  ./lib/Vuna/FixityEnv.vuna
 Vuna.Fmt.Comment  ./lib/Vuna/Fmt/Comment.vuna
 Vuna.Fmt.Decl  ./lib/Vuna/Fmt/Decl.vuna
 Vuna.Fmt.Expr  ./lib/Vuna/Fmt/Expr.vuna

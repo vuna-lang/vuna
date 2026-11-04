@@ -35,8 +35,13 @@ import Base.Bool
 -- M31.1：`String` 是 primitive 类型，Eq / Ord 实例跟类型模块走（落点规则见 Base/Eq.vuna）。
 import Base.Eq
 import Base.Ord
+-- `+` / `-` / `*` / `/` 的 fixity 声明在 Base.Int；base 模块不自动注入 Prelude，
+-- 本模块的算术运算符需要它的声明进入 import 闭包。
+import Base.Int
 
--- M31.2：`++` 的 fixity 声明（字符串拼接是内建值）。
+-- `++` 的 fixity 声明（字符串拼接是内建值）。
+infixr 5 ++
+
 split : String -> String -> List String
 split sep text =
   if strLength sep == 0 then map (\c => strPack [c]) (strUnpack text)

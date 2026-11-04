@@ -25,6 +25,7 @@ import Vuna.Interp
 import Vuna.Compiler.Frontend.Parser
 import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Loader.Fixity
+import Vuna.FixityEnv
 import Vuna.Compiler.Elab
 import Vuna.Fmt
 import Vuna.Files
@@ -235,10 +236,10 @@ fmtArgs args = case parseToolArgs "vuna fmt" [BoolFlag "check"] args of
 fmtRun : Bool -> List String -> Int
 fmtRun check [] = case fmtDefaultTargets 0 of
   Err e => toolError e
-  Ok targets => fmtFiles check (concatMap expandPath targets) 0
+  Ok targets => fmtFiles check emptyFixityEnv (concatMap expandPath targets) 0
 fmtRun check paths = case firstMissingPath paths of
   Just missing => toolError ("no such file: " ++ missing)
-  Nothing => fmtFiles check (concatMap expandPath paths) 0
+  Nothing => fmtFiles check emptyFixityEnv (concatMap expandPath paths) 0
 
 -- 省略 PATH 时格式化 workspace 内所有包的 lib/app/test（拆包后 compiler/ 也在内）。
 -- 不是 workspace 或没有任何源码目录都是**输入错误**（exit 2），不再静默回退到相对
@@ -269,27 +270,37 @@ existingTargets (path :: rest) acc =
 expandPath : String -> List String
 expandPath path = if pathExistsDir path then collectVunaFiles path else [path]
 
-fmtFiles : Bool -> List String -> Int -> Int
-fmtFiles check [] changed = if check && changed > 0 then
+-- M31.3（B27）：fmt 的 fixity 是**程序级**的（本文件 `infix*` 声明 + 该文件 import 闭包）。
+-- `Vuna.FixityEnv` 按文件目录缓存「按包上下文加载的模块图」（昂贵部分），声明表逐文件
+-- 重算（不同文件 imports 不同，跨文件复用会判 unknown fixity / 打出错误括号）。
+-- 上下文/加载失败是硬错误：fixity 无法确定时**拒绝格式化该文件**，不静默改语义。
+fmtFiles : Bool -> FixityEnv -> List String -> Int -> Int
+fmtFiles check env [] changed = if check && changed > 0 then
   let
     _ = runIO (prim_print (strFromInt changed ++ " file(s) need formatting\n"))
   in 1
 else 0
-fmtFiles check (path :: rest) changed = case readText path of
+fmtFiles check env (path :: rest) changed = case readText path of
   Err e => toolError e
-  Ok original => case formatSource original of
-    Err e => toolError (path ++ ": " ++ e)
-    Ok formatted => if formatted == original then fmtFiles check rest changed
-    else if check then
-      let
-        _ = runIO (prim_print ("would reformat: " ++ path ++ "\n"))
-      in fmtFiles check rest (changed + 1)
-    else
-      let
-        _ = runIO (prim_writeFile path formatted)
-      in let
-        _ = runIO (prim_print ("formatted " ++ path ++ "\n"))
-      in fmtFiles check rest (changed + 1)
+  Ok original =>
+    let
+      looked = fixitiesForFile env path original
+      env2 = firstOf looked
+    in case secondOf looked of
+      Err e => toolError (path ++ ": cannot determine fixity context: " ++ e)
+      Ok fixities => case formatSourceWith fixities original of
+        Err e => toolError (path ++ ": " ++ e)
+        Ok formatted => if formatted == original then fmtFiles check env2 rest changed
+        else if check then
+          let
+            _ = runIO (prim_print ("would reformat: " ++ path ++ "\n"))
+          in fmtFiles check env2 rest (changed + 1)
+        else
+          let
+            _ = runIO (prim_writeFile path formatted)
+          in let
+            _ = runIO (prim_print ("formatted " ++ path ++ "\n"))
+          in fmtFiles check env2 rest (changed + 1)
 
 -- ---------------------------------------------------------------
 -- repl
@@ -456,14 +467,16 @@ goalRun file = case readText file of
   Err e => toolError e
   Ok source => case parseSource file source of
     Err e => toolFailure e
-    Ok (Source _ _ fx decls0) => case reorderProgram (tableOfKeepOps fx) decls0 of
+    Ok (Source _ _ fx decls0) => case secondOf (fixitiesForFile emptyFixityEnv file source) of
       Err e => toolFailure e
-      Ok decls => case goalsOfProgram decls of
+      Ok programFixities => case reorderProgram (tableOfKeepOps (append programFixities fx)) decls0 of
         Err e => toolFailure e
-        Ok infos =>
-          let
-            _ = runIO (prim_print (goalHeader file (length infos) ++ renderGoals file infos))
-          in 0
+        Ok decls => case goalsOfProgram decls of
+          Err e => toolFailure e
+          Ok infos =>
+            let
+              _ = runIO (prim_print (goalHeader file (length infos) ++ renderGoals file infos))
+            in 0
 
 renderGoals : String -> List DtGoalInfo -> String
 renderGoals file [] = ""

@@ -1,11 +1,15 @@
 module Vuna.Fmt.Decl (filterSections, joinSections, renderSourceSections) where
 
--- Vuna.Fmt.Decl：声明 / 模块头 / import 的打印与文件组装（M24 后维护·源码重组，从 Vuna.Fmt 拆出）。
+-- Vuna.Fmt.Decl：声明 / 模块头 / import / `infix*` 声明的打印与文件组装（M24 后维护·源码
+-- 重组，从 Vuna.Fmt 拆出；M31.3 加 fixity 声明打印与程序级 fixity 参数）。
 --
 -- 布局约定：2 空格缩进、顶层声明之间一个空行、文件末尾一个换行、无行尾空白；
--- 导出列表按字面文本 ASCII 字典序排序（`module B` 整模块重导出排最后），单行超
--- maxWidth 或含注释时逐项一行（逗号前置）。where 块按 parser 的 ELet..True 形态
--- 还原成 where 写法（带签名绑定先输出签名行）。
+-- `infix*` 声明放在 imports 之后、第一个声明之前（源码顺序，每行一条），单独成一个
+-- section（与 imports / 声明之间各空一行）；导出列表按字面文本 ASCII 字典序排序
+-- （`module B` 整模块重导出排最后），单行超 maxWidth 或含注释时逐项一行（逗号前置）。
+-- where 块按 parser 的 ELet..True 形态还原成 where 写法（带签名绑定先输出签名行）。
+--
+-- env = 程序可见的 fixity 闭包（本地声明在最前），只用于打印侧的优先级/别名判定。
 import Vuna.Compiler.Common
 import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Frontend.Lexer
@@ -17,166 +21,171 @@ import Base.Sort
 -- ---------------------------------------------------------------
 -- 声明渲染
 -- ---------------------------------------------------------------
-renderDeclAt : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Decl -> List String
-renderDeclAt at lineInd decl = attachAt at (declSpan decl) lineInd (renderDeclBody at lineInd decl)
+renderDeclAt : List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Decl -> List String
+renderDeclAt env at lineInd decl =
+  attachAt at (declSpan decl) lineInd (renderDeclBody env at lineInd decl)
 
-renderDeclBody : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Decl -> List String
-renderDeclBody at lineInd (DData name params kind ctors derivings sp) =
-  renderDataDecl at name params kind ctors derivings
-renderDeclBody at lineInd (DAxiom name ty sp) = renderSigLine at lineInd "axiom " name [] ty
-renderDeclBody at lineInd (DSig name ctx ty sp) = renderSigLine at lineInd "" name ctx ty
-renderDeclBody at lineInd (DFun name pats body sp) = renderClause at lineInd name pats body
-renderDeclBody at lineInd (DRecord name params fields derivings sp) =
-  renderRecordDecl at name params fields derivings
-renderDeclBody at lineInd (DTrait name params methods sp) = renderTraitDecl at name params methods
-renderDeclBody at lineInd (DInstance ctxE head methods sp) = renderInstanceDecl at ctxE head methods
+renderDeclBody : List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Decl -> List String
+renderDeclBody env at lineInd (DData name params kind ctors derivings sp) =
+  renderDataDecl env at name params kind ctors derivings
+renderDeclBody env at lineInd (DAxiom name ty sp) = renderSigLine env at lineInd "axiom " name [] ty
+renderDeclBody env at lineInd (DSig name ctx ty sp) = renderSigLine env at lineInd "" name ctx ty
+renderDeclBody env at lineInd (DFun name pats body sp) = renderClause env at lineInd name pats body
+renderDeclBody env at lineInd (DRecord name params fields derivings sp) =
+  renderRecordDecl env at name params fields derivings
+renderDeclBody env at lineInd (DTrait name params methods sp) =
+  renderTraitDecl env at name params methods
+renderDeclBody env at lineInd (DInstance ctxE head methods sp) =
+  renderInstanceDecl env at ctxE head methods
 
 -- 顶层签名与 axiom 声明共用：`<prefix>name : Ty`（prefix 为 "" 或 "axiom "）。
-renderSigLine : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> String -> String -> List Expr -> Expr -> List String
-renderSigLine at lineInd prefix name ctx ty =
-  prefixFirst (spaces lineInd ++ prefix ++ name ++ " : " ++ renderInstanceCtx ctx)
-    (renderTypeExpr at lineInd ty)
+renderSigLine : List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> String -> String -> List Expr -> Expr -> List String
+renderSigLine env at lineInd prefix name ctx ty =
+  prefixFirst (spaces lineInd ++ prefix ++ name ++ " : " ++ renderInstanceCtx env ctx)
+    (renderTypeExpr env at lineInd ty)
 
-renderDataDecl : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> String -> List String -> Expr -> List Ctor -> List String -> List String
-renderDataDecl at name params kind ctors derivings =
+renderDataDecl : List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> String -> List String -> Expr -> List Ctor -> List String -> List String
+renderDataDecl env at name params kind ctors derivings =
   let
     header =
       "data "
         ++ name
         ++ joinSpace params
         ++ " : "
-        ++ join " " (renderTypeExpr at 0 kind)
+        ++ join " " (renderTypeExpr env at 0 kind)
         ++ " where"
-    ctorLines = concatMap (\c => renderCtorDecl at c) ctors
+    ctorLines = concatMap (\c => renderCtorDecl env at c) ctors
   in append [header] (append ctorLines (renderDerivings derivings))
 
-renderCtorDecl : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Ctor -> List String
-renderCtorDecl at (Ctor cname ty arity sp) =
-  attachAt at sp 2 (prefixFirst ("  " ++ cname ++ " : ") (renderTypeExpr at 2 ty))
+renderCtorDecl : List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Ctor -> List String
+renderCtorDecl env at (Ctor cname ty arity sp) =
+  attachAt at sp 2 (prefixFirst ("  " ++ cname ++ " : ") (renderTypeExpr env at 2 ty))
 
 renderDerivings : List String -> List String
 renderDerivings [] = []
 renderDerivings names = ["deriving (" ++ joinComma names ++ ")"]
 
-renderRecordDecl : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> String -> List String -> List Field -> List String -> List String
-renderRecordDecl at name params fields derivings =
+renderRecordDecl : List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> String -> List String -> List Field -> List String -> List String
+renderRecordDecl env at name params fields derivings =
   let
     header = "record " ++ name ++ joinSpace params ++ " where"
-    fieldLines = concatMap (\f => renderRecordField at f) fields
+    fieldLines = concatMap (\f => renderRecordField env at f) fields
   in append [header] (append fieldLines (renderDerivings derivings))
 
-renderRecordField : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Field -> List String
-renderRecordField at f =
+renderRecordField : List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Field -> List String
+renderRecordField env at f =
   attachAt at (fieldSpan f) 2
-    (prefixFirst ("  " ++ fieldName f ++ " : ") (renderTypeExpr at 2 (fieldType f)))
+    (prefixFirst ("  " ++ fieldName f ++ " : ") (renderTypeExpr env at 2 (fieldType f)))
 
-renderTraitDecl : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> String -> List String -> List TraitMethod -> List String
-renderTraitDecl at name params methods =
+renderTraitDecl : List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> String -> List String -> List TraitMethod -> List String
+renderTraitDecl env at name params methods =
   let
     header = "trait " ++ name ++ joinSpace params ++ " where"
-    methodLines = concatMap (\m => renderMethodSig at m) methods
+    methodLines = concatMap (\m => renderMethodSig env at m) methods
   in append [header] methodLines
 
 -- M30（B20）：注释锚点用方法签名 span（方法名到类型结束），不再用类型表达式 span。
-renderMethodSig : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> TraitMethod -> List String
-renderMethodSig at m =
+renderMethodSig : List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> TraitMethod -> List String
+renderMethodSig env at m =
   attachAt at (traitMethodSpan m) 2
-    (prefixFirst ("  " ++ traitMethodName m ++ " : ") (renderTypeExpr at 2 (traitMethodType m)))
+    (prefixFirst ("  " ++ traitMethodName m ++ " : ") (renderTypeExpr env at 2 (traitMethodType m)))
 
-renderInstanceDecl : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> List Expr -> Expr -> List Decl -> List String
-renderInstanceDecl at ctxE head methods =
+renderInstanceDecl : List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> List Expr -> Expr -> List Decl -> List String
+renderInstanceDecl env at ctxE head methods =
   let
-    headLines = case inlineExpr head of
+    headLines = case inlineExpr env head of
       Just s => [s]
-      Nothing => parenWrapInd at 0 head
-    ctxText = renderInstanceCtx ctxE
+      Nothing => parenWrapInd env at 0 head
+    ctxText = renderInstanceCtx env ctxE
     headLine = appendLast " where" (prefixFirst ("instance " ++ ctxText) headLines)
-    methodLines = concatMap (\d => renderDeclAt at 2 d) methods
+    methodLines = concatMap (\d => renderDeclAt env at 2 d) methods
   in append headLine methodLines
 
 -- 实例上下文：`C a, C b => `（M29 起实例可带 ctx；空 ctx 与旧输出逐字一致）。
-renderInstanceCtx : List Expr -> String
-renderInstanceCtx [] = ""
-renderInstanceCtx ctxE = joinTexts ", " (map renderOneCtx ctxE) ++ " => "
+renderInstanceCtx : List FixityDecl -> List Expr -> String
+renderInstanceCtx env [] = ""
+renderInstanceCtx env ctxE = joinTexts ", " (map (renderOneCtx env) ctxE) ++ " => "
 
 joinTexts : String -> List String -> String
 joinTexts sep [] = ""
 joinTexts sep ([x]) = x
 joinTexts sep (x :: rest) = x ++ sep ++ joinTexts sep rest
 
-renderOneCtx : Expr -> String
-renderOneCtx e = case inlineExpr e of
+renderOneCtx : List FixityDecl -> Expr -> String
+renderOneCtx env e = case inlineExpr env e of
   Just s => s
   Nothing => "…"
 
 -- 函数子句 / instance 方法子句 / where 绑定子句共用。
 -- where 块（parser desugar 成 ELet .. True）优先按 where 形式还原。
-renderClause : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> String -> List Pat -> Expr -> List String
-renderClause at lineInd name pats body =
+renderClause : List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> String -> List Pat -> Expr -> List String
+renderClause env at lineInd name pats body =
   let
     headerBase = spaces lineInd ++ name ++ joinSpace (map renderPatAtom pats) ++ " ="
   in case body of
     ELet binds inner recFlag sp => if recFlag then
       let
         whereInd = lineInd + 2
-      in case inlinePrec 0 inner of
-        Just s => (headerBase ++ " " ++ s ++ " where") :: renderWhereBindings at whereInd binds
+      in case inlinePrec env 0 inner of
+        Just s => (headerBase ++ " " ++ s ++ " where") :: renderWhereBindings env at whereInd binds
         Nothing =>
           let
             bodyInd = lineInd + 2
-            bodyLines = prefixFirst (spaces bodyInd) (renderExpr at bodyInd inner)
+            bodyLines = prefixFirst (spaces bodyInd) (renderExpr env at bodyInd inner)
             whereLine = spaces whereInd ++ "where"
-            bindLines = renderWhereBindings at (lineInd + 4) binds
+            bindLines = renderWhereBindings env at (lineInd + 4) binds
           in headerBase :: append bodyLines (whereLine :: bindLines)
-    else headerBase :: prefixFirst (spaces (lineInd + 2)) (renderExpr at (lineInd + 2) body)
-    _ => case inlinePrec 0 body of
+    else headerBase :: prefixFirst (spaces (lineInd + 2)) (renderExpr env at (lineInd + 2) body)
+    _ => case inlinePrec env 0 body of
       Just s =>
         if strWidth (headerBase ++ " " ++ s) <= maxWidth then [headerBase ++ " " ++ s]
-        else headerBase :: prefixFirst (spaces (lineInd + 2)) (renderExpr at (lineInd + 2) body)
-      Nothing => prefixFirst (headerBase ++ " ") (renderExpr at lineInd body)
+        else headerBase :: prefixFirst (spaces (lineInd + 2)) (renderExpr env at (lineInd + 2) body)
+      Nothing => prefixFirst (headerBase ++ " ") (renderExpr env at lineInd body)
 
-renderWhereBindings : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> List (Pair Pat Expr) -> List String
-renderWhereBindings at lineInd binds = concatMap (\b => renderWhereBinding at lineInd b) binds
+renderWhereBindings : List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> List (Pair Pat Expr) -> List String
+renderWhereBindings env at lineInd binds =
+  concatMap (\b => renderWhereBinding env at lineInd b) binds
 
-renderWhereBinding : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Pair Pat Expr -> List String
-renderWhereBinding at lineInd (Pair pat value) = case value of
+renderWhereBinding : List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Pair Pat Expr -> List String
+renderWhereBinding env at lineInd (Pair pat value) = case value of
   -- M24：带签名的 where 绑定先输出 `name : Ty` 独立一行，再按原格式输出子句。
   EAnn inner ty annSp =>
-    append (attachAt at annSp lineInd (renderWhereSigLine at lineInd pat ty))
-      (attachAt at (patSpan pat) lineInd (renderWhereBindingBody at lineInd pat inner))
-  _ => attachAt at (patSpan pat) lineInd (renderWhereBindingBody at lineInd pat value)
+    append (attachAt at annSp lineInd (renderWhereSigLine env at lineInd pat ty))
+      (attachAt at (patSpan pat) lineInd (renderWhereBindingBody env at lineInd pat inner))
+  _ => attachAt at (patSpan pat) lineInd (renderWhereBindingBody env at lineInd pat value)
 
 -- where 绑定签名行：`g : Int -> Int`（缩进与 where 绑定一致，类型不折行）。
-renderWhereSigLine : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Pat -> Expr -> List String
-renderWhereSigLine at lineInd (PVar name psp) ty =
-  prefixFirst (spaces lineInd ++ name ++ " : ") (renderTypeExpr at lineInd ty)
-renderWhereSigLine at lineInd pat ty =
-  prefixFirst (spaces lineInd ++ renderPat pat ++ " : ") (renderTypeExpr at lineInd ty)
+renderWhereSigLine : List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Pat -> Expr -> List String
+renderWhereSigLine env at lineInd (PVar name psp) ty =
+  prefixFirst (spaces lineInd ++ name ++ " : ") (renderTypeExpr env at lineInd ty)
+renderWhereSigLine env at lineInd pat ty =
+  prefixFirst (spaces lineInd ++ renderPat pat ++ " : ") (renderTypeExpr env at lineInd ty)
 
-renderWhereBindingBody : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Pat -> Expr -> List String
-renderWhereBindingBody at lineInd (PVar name psp) value = case value of
-  ELocalFun clauses lsp => renderLocalFunClauses at lineInd name clauses
-  ELam ps inner lsp => renderClause at lineInd name (map (\n => PVar n dummySpan) ps) inner
-  _ => renderBindingValue at lineInd (name ++ " =") value
-renderWhereBindingBody at lineInd pat value =
-  renderBindingValue at lineInd (renderPat pat ++ " =") value
+renderWhereBindingBody : List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Pat -> Expr -> List String
+renderWhereBindingBody env at lineInd (PVar name psp) value = case value of
+  ELocalFun clauses lsp => renderLocalFunClauses env at lineInd name clauses
+  ELam ps inner lsp => renderClause env at lineInd name (map (\n => PVar n dummySpan) ps) inner
+  _ => renderBindingValue env at lineInd (name ++ " =") value
+renderWhereBindingBody env at lineInd pat value =
+  renderBindingValue env at lineInd (renderPat pat ++ " =") value
 
 -- A2：where 内部多 clause 局部函数：每个 clause 走 `renderClause`（与顶层子句同形）。
-renderLocalFunClauses : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> String -> List (Pair (List Pat) Expr) -> List String
-renderLocalFunClauses at lineInd name [] = []
-renderLocalFunClauses at lineInd name ((Pair pats body) :: rest) =
-  append (renderClause at lineInd name pats body) (renderLocalFunClauses at lineInd name rest)
+renderLocalFunClauses : List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> String -> List (Pair (List Pat) Expr) -> List String
+renderLocalFunClauses env at lineInd name [] = []
+renderLocalFunClauses env at lineInd name ((Pair pats body) :: rest) =
+  append (renderClause env at lineInd name pats body)
+    (renderLocalFunClauses env at lineInd name rest)
 
 -- 顶层声明：不同函数之间一个空行；类型签名紧贴同名函数子句。
-renderTopDecls : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> List Decl -> List String
-renderTopDecls at [] = []
-renderTopDecls at (d :: rest) = append (renderDeclAt at 0 d) (renderTopRest at d rest)
+renderTopDecls : List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> List Decl -> List String
+renderTopDecls env at [] = []
+renderTopDecls env at (d :: rest) = append (renderDeclAt env at 0 d) (renderTopRest env at d rest)
 
-renderTopRest : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Decl -> List Decl -> List String
-renderTopRest at prev [] = []
-renderTopRest at prev (d :: rest) =
-  if attachDecl prev d then append (renderDeclAt at 0 d) (renderTopRest at d rest)
-  else "" :: append (renderDeclAt at 0 d) (renderTopRest at d rest)
+renderTopRest : List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Decl -> List Decl -> List String
+renderTopRest env at prev [] = []
+renderTopRest env at prev (d :: rest) =
+  if attachDecl prev d then append (renderDeclAt env at 0 d) (renderTopRest env at d rest)
+  else "" :: append (renderDeclAt env at 0 d) (renderTopRest env at d rest)
 
 attachDecl : Decl -> Decl -> Bool
 attachDecl prev (DFun n pats body sp) = declNamed prev n
@@ -188,7 +197,7 @@ declNamed (DSig m ctx ty sp) n = m == n
 declNamed _ n = False
 
 -- ---------------------------------------------------------------
--- 模块头 / import / 文件组装
+-- 模块头 / import / `infix*` 声明 / 文件组装
 -- ---------------------------------------------------------------
 renderModDecl : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> ModDecl -> List String
 renderModDecl at (ModDecl name explicit items sp) =
@@ -259,6 +268,24 @@ aliasSuffix : Maybe String -> String
 aliasSuffix Nothing = ""
 aliasSuffix (Just a) = " as " ++ a
 
+-- `infix` / `infixl` / `infixr`（FixityDecl 的结合性编码：0 = 无，1 = 左，2 = 右）。
+assocKeyword : Int -> String
+assocKeyword 1 = "infixl"
+assocKeyword 2 = "infixr"
+assocKeyword n = "infix"
+
+-- 规范写法：`infixl 6 +` / `infixr 5 :: = Cons` / `infix 4 == = eq`。
+renderFixityDecl : FixityDecl -> String
+renderFixityDecl (FixityDecl op level assoc target sp) =
+  assocKeyword assoc ++ " " ++ strFromInt level ++ " " ++ op ++ targetSuffix target
+
+targetSuffix : Maybe String -> String
+targetSuffix Nothing = ""
+targetSuffix (Just t) = " = " ++ t
+
+renderFixityLine : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> FixityDecl -> List String
+renderFixityLine at d = attachAt at (fixitySpan d) 0 [renderFixityDecl d]
+
 renderHeader : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Maybe ModDecl -> List String
 renderHeader at Nothing = []
 renderHeader at (Just m) = attachAt at (modDeclSpan m) 0 (renderModDecl at m)
@@ -270,11 +297,14 @@ renderEofComments : List Comment -> List String
 renderEofComments [] = []
 renderEofComments comments = concatMap (commentLeadLines 0) comments
 
-renderSourceSections : Maybe ModDecl -> List Import -> List Decl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> List Comment -> List (List String)
-renderSourceSections hdr imports decls at eof =
+-- 文件组装：模块头 / imports / `infix*` 声明 / 声明 / 文件末尾注释各成一个 section，
+-- 非空 section 之间空一行（`filterSections` 去掉空 section 靠 `joinSections` 分隔）。
+renderSourceSections : List FixityDecl -> Maybe ModDecl -> List Import -> List FixityDecl -> List Decl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> List Comment -> List (List String)
+renderSourceSections env hdr imports fixities decls at eof =
   [ renderHeader at hdr,
     concatMap (renderImportLine at) imports,
-    renderTopDecls at decls,
+    concatMap (renderFixityLine at) fixities,
+    renderTopDecls env at decls,
     renderEofComments eof
   ]
 

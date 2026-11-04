@@ -1,7 +1,10 @@
 module Base.Bool (Bool(..), and, bool, not, or, xor) where
 
 -- Base.Bool：布尔类型与逻辑辅助函数。无依赖模块。
--- M31.2：`&&` / `||` 的 fixity 声明（它们是短路内建值，不是 trait 方法）。
+-- `&&` / `||` 的 fixity 声明在本模块（它们是短路内建值，不是 trait 方法）。
+infixl 3 &&
+infixl 2 ||
+
 data Bool : Type where
   False : Bool
   True : Bool

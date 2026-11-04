@@ -280,6 +280,12 @@ renameExpr oldName newName e = case e of
   EDo stmts sp => EDo stmts sp
   -- M31.2：parser 中间产物；Elab 阶段正常不存在（Loader 重排已消除），这里保持结构递归。
   EInfix op l r sp => EInfix op (renameExpr oldName newName l) (renameExpr oldName newName r) sp
+  -- M31.3：反引号中缀 / section 同理——重排后不存在，保持结构递归以免静默丢子表达式。
+  EBacktick name l r sp =>
+    EBacktick name (renameExpr oldName newName l) (renameExpr oldName newName r) sp
+  ESectOp op sp => ESectOp op sp
+  ESectL op rhs sp => ESectL op (renameExpr oldName newName rhs) sp
+  ESectR lhs op sp => ESectR (renameExpr oldName newName lhs) op sp
   EParen inner sp => EParen (renameExpr oldName newName inner) sp
   EAnn value ty sp => EAnn (renameExpr oldName newName value) (renameExpr oldName newName ty) sp
 

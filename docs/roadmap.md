@@ -13,10 +13,15 @@ vuna 尚未发布任何版本：没有外部用户、下游生态与历史包袱
 
 - **一条路径**：`Parser → Loader → DT 精化 → 擦除 codegen → OCaml`；DT 是唯一检查器，
   没有第二套 checker / codegen，也没有可切换开关。
-- **名字与运算符**：`==` / `/=` / `<` / `<=` / `>` / `>=` 是 `Eq` / `Ord` 方法
-  （`eq` / `neq` / `lt` / `le` / `gt` / `ge`）的 fixity / 别名声明；parser 只产出
-  `EInfix` / `EParen`，`Loader.Fixity` 在 resolve 前按模块可见 fixity 表重排并做别名
-  替换（M31.1–M31.2，见 [operators.md](reference/operators.md)）。
+- **名字与运算符**：**运算符 = 有 fixity 的普通名字**；`a op b`、`op a b`、`` a `f` b ``
+  与 `f a b` 同义。parser 只产出 `EInfix` / `EBacktick` / `ESect*` / `EParen` 中间节点，
+  `Loader.Fixity` 在 resolve 前按模块可见 fixity 表重排、替换别名、展开 section。fixity 与
+  别名**唯一来源**是源码里的 `infix*` 声明（库或用户；`->` 是语法由 Loader 的语法表恒可见），
+  没有编译器兜底表；未知符号运算符中缀使用是错误；可见闭包按模块去重（防 import diamond
+  路径爆炸）。`==` / `/=` / `<` / `<=` / `>` / `>=` 是 `Eq` / `Ord` 方法
+  （`eq` / `neq` / `lt` / `le` / `gt` / `ge`）的别名；`>>` 由 Loader 按 do 派生展开（`bind a (\_ -> b)`）。
+  fmt 感知程序级 fixity 并打印 `infix*` 声明（M31.1–M31.3，见
+  [operators.md](reference/operators.md)）。
 - **自举**：`seed/` 是 compiler 包入口闭包的多文件 OCaml 信任锚点；旧 seed 能编译当前
   源码，rotation 后 stage1 == stage2。工具链（fmt/lint/repl/doc/test/LSP/Index）不进 TCB。
 - **包与构建**：workspace 根即包；每文件唯一包上下文；声明式效应能力；逐模块 split 输出；
@@ -46,12 +51,10 @@ vuna 尚未发布任何版本：没有外部用户、下游生态与历史包袱
 
 ## 下一步
 
-**M31.3 待做**（B26 / B27：库内 `infix*` 声明替代内建兜底表、fmt 感知程序级 fixity；
-反引号中缀 / section / 用户符号名）与性能轨道无硬依赖，可按需插入；B 系列语言 / 精化器
-残留与 C / E 系列工具项也按需插入。
-
-**M33–M35 性能轨道已排期**（见下）：按「语言能写高性能系统程序 → 编译器快 → 并发 / 服务端」
-推进。新阶段必须映射到 debt 条目，并在「范围」里列明关闭哪些项。
+**M31 系列已收尾**（M31.1–M31.3：运算符=方法别名、parser 去优先级、库内 `infix*` 声明成为
+fixity 唯一来源、反引号中缀 / section / 用户符号名、fmt 程序级 fixity）。下一步是已排期的
+**M33–M35 性能轨道**（见下）：按「语言能写高性能系统程序 → 编译器快 → 并发 / 服务端」推进。
+新阶段必须映射到 debt 条目，并在「范围」里列明关闭哪些项；B / C / E 系列残留按需插入。
 
 ## 性能轨道（M33–M35）
 

@@ -261,14 +261,14 @@ handleHover msg state =
         midx = secondOf indexPair
       in Pair False (Pair state1 [responseOk (idOf msg) (symbolHoverResult uri line col text midx)])
 
--- formatting：formatSource 成功且内容变化 ⇒ 全文 TextEdit；否则 []。
+-- formatting：formatSourceWith 成功且内容变化 ⇒ 全文 TextEdit；否则 []（M31.3：程序级 fixity）。
 handleFormatting : Json -> LspState -> Pair Bool (Pair LspState (List Json))
 handleFormatting msg state =
   let
     params = paramsOf msg
     uri = uriOfParams params
     text = textForUri uri state
-  in Pair False (Pair state [responseOk (idOf msg) (JArr (formattingEdits text))])
+  in Pair False (Pair state [responseOk (idOf msg) (JArr (formattingEdits uri text))])
 
 -- documentSymbol：当前缓冲的 AST 声明树（不要求磁盘上存在）。
 handleDocumentSymbol : Json -> LspState -> Pair Bool (Pair LspState (List Json))

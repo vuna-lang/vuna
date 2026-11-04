@@ -5,11 +5,11 @@ open Base_dMonad
 open Base_dMaybe
 open Base_dEq
 open Base_dOrd
+open Base_dInt
 open Base_dList
 open Base_dResult
 open Base_dString
 open Base_dShow
-open Base_dInt
 open Prelude
 open Vuna_dCompiler_dCommon
 open Vuna_dCompiler_dFrontend_dToml
@@ -152,9 +152,9 @@ let v_Vuna_dCompiler_dElab_dMeta_dglobalsLookup = (fun name -> (fun globals -> (
   | _ -> failwith "DT: impossible branch"
 ))))
 
-let rec v_Vuna_dCompiler_dElab_dMeta_dmemSig = (fun d5995 -> (fun mc0 -> (fun mc1 -> (match mc0 with
+let rec v_Vuna_dCompiler_dElab_dMeta_dmemSig = (fun d6109 -> (fun mc0 -> (fun mc1 -> (match mc0 with
   | C_Base_dList_dList_Base_dList_dCons (dtb__72, dtb__73) -> (match dtb__72 with
-  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__74, dtb__75) -> (if (((v_Base_dEq_deq d5995) dtb__74) mc1) then true else (((v_Vuna_dCompiler_dElab_dMeta_dmemSig d5995) dtb__73) mc1))
+  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__74, dtb__75) -> (if (((v_Base_dEq_deq d6109) dtb__74) mc1) then true else (((v_Vuna_dCompiler_dElab_dMeta_dmemSig d6109) dtb__73) mc1))
   | _ -> failwith "DT: impossible branch"
 )
   | C_Base_dList_dList_Base_dList_dNil -> false

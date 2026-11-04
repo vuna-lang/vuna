@@ -9,7 +9,8 @@ module Vuna.Fmt.Comment
 -- Vuna.Fmt.Comment：注释保留（M11.6）。
 --
 -- 注释不在 AST 里，格式化器单独 lex 出注释，按源码位置挂到最近的「条目」
--- （顶部声明/import/构造器/记录字段/trait 方法/let 与 where 绑定/case 分支/do 语句）：
+-- （顶部声明/import/`infix*` 声明/构造器/记录字段/trait 方法/let 与 where 绑定/case 分支/
+-- do 语句）：
 -- 单独成行的注释成为下一条目的前置注释，写在同一行末尾的注释成为该条目的行尾注释；
 -- 表达式内部的注释前移到最内层包含它的条目（没有则前移到下一条目；文件末尾的注释
 -- 保留在文件末尾）。
@@ -301,13 +302,20 @@ exprAnchors e = case e of
   ELocalFun clauses sp => concatMap localClauseAnchors clauses
   EInfix op l r sp => append (exprAnchors l) (exprAnchors r)
   EParen inner sp => exprAnchors inner
+  -- M31.3：反引号中缀 / section 是 parse 后中间产物；子表达式里的注释仍要前移。
+  EBacktick name l r sp => append (exprAnchors l) (exprAnchors r)
+  ESectOp op sp => []
+  ESectL op inner sp => exprAnchors inner
+  ESectR inner op sp => exprAnchors inner
 
 localClauseAnchors : Pair (List Pat) Expr -> List Span
 localClauseAnchors (Pair pats body) = exprAnchors body
 
-anchorSpans : Maybe ModDecl -> List Import -> List Decl -> List Span
-anchorSpans hdr imports decls =
-  append (headerAnchors hdr) (append (map importAnchor imports) (concatMap declAnchors decls))
+-- M31.3：`infix*` 声明的 span 也是注释锚点（前置/行尾注释随声明保留）。
+anchorSpans : Maybe ModDecl -> List Import -> List FixityDecl -> List Decl -> List Span
+anchorSpans hdr imports fixities decls =
+  append (headerAnchors hdr)
+    (append (map importAnchor imports) (append (map fixitySpan fixities) (concatMap declAnchors decls)))
 
 -- 把附件表应用到条目渲染结果上：前置注释在上，行尾注释追加到最后一行。
 leadingLines : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Span -> Int -> List String

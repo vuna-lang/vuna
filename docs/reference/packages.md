@@ -44,8 +44,9 @@
     workspace 根时对每个包的 `test/` 聚合；
   - `vuna fmt [--check] [PATH]...`：`Vuna.Fmt` 格式化（2 空格缩进、幂等、可重新 parse；
     保留行注释 / 块注释，超过 100 列时在 RHS、列表字面量、函数应用参数与中缀链处折行；
-    模块头显式导出列表逐项一行并按名排序，项注释随项移动）；省略 PATH 时格式化 workspace
-    内所有包的 `lib/app/test`；
+    模块头显式导出列表逐项一行并按名排序，项注释随项移动；`infix*` 声明按源码顺序打印在
+    imports 之后；fixity 取**程序级**可见闭包，见 [operators.md](operators.md)）；省略 PATH
+    时格式化 workspace 内所有包的 `lib/app/test`；
   - `vuna interp <file.vuna>`：DT 精化 + 核心求值（纯；不执行效果；入口文件按最近 manifest
     获得包上下文，无则 base-only）；
   - `vuna repl`：REPL，定义累积、表达式经 DT 求值（支持 import/记录/trait/do；顶层定义必须

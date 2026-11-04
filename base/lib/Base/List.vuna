@@ -31,8 +31,13 @@ import Base.Eq
 -- M31.1：`==` / `<=` 是 Eq / Ord 方法名的别名，base 模块不自动注入 Prelude，
 -- 因此 take/drop/rangeFrom 的 `<=` 需要 Ord 方法名可见。
 import Base.Ord
+-- `+` / `-` 的 fixity 声明在 Base.Int；base 模块不自动注入 Prelude，
+-- range 的算术需要它的声明进入 import 闭包。
+import Base.Int
 
--- M31.2：`::` 是 canonical 构造子 `Cons` 的中缀别名（表达式与 pattern 都走这条声明）。
+-- `::` 是 canonical 构造子 `Cons` 的中缀别名（表达式与 pattern 都走这条声明）。
+infixr 5 :: = Cons
+
 data List a : Type where
   Nil : List a
   Cons : a -> List a -> List a

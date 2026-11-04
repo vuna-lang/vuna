@@ -1,7 +1,11 @@
 # M22.1 夹具：库包（无 app/Main.vuna）。
 # check 以 [export].modules 为入口集合；compile 给出清晰错误。
+# M31.3：模块里用 `+`，同 01_exec，包必须显式依赖 vuna-base 才能拿到运算符 fixity。
 [package]
 name = "dtpkg-lib"
 
 [export]
 modules = ["Lib"]
+
+[dependencies]
+vuna-base = "../../../../base"

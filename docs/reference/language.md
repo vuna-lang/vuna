@@ -10,12 +10,13 @@
   类型签名参与精化，运行时是否保留由擦除判据（`Rig`）决定；
 - 语法：Idris2 风格 `data ... where`、多子句函数、顶层 `axiom` 声明（无体 / 不透明）、
   `case ... of`、`let ... in`（绑定块可选签名行）、lambda、`if then else`、`do` 块、
-  整数 / 字符串字面量、`[..]` 与 `x :: xs` 列表糖、中缀运算符；
-- **运算符 = 有 fixity 的普通名字**：`a op b` 与 `op a b` 同义，运算符不拥有独立语义。
-  parser 不做优先级判断（中缀链先收成右嵌套的中间节点），`Loader.Fixity` 按模块可见的
-  fixity 表重排；fixity 与别名由 `infixl N op` / `infixr N op` / `infix N op`
-  （可选 `= 目标名`，例如 `infix 4 == = eq`）声明，优先级 0–9、结合性由关键字给出。
-  内建运算符的默认表与逐阶段落地见 [operators.md](operators.md)；
+  整数 / 字符串字面量、`[..]` 与 `x :: xs` 列表糖、中缀 / 反引号中缀 / section / 用户符号名运算符；
+- **运算符 = 有 fixity 的普通名字**：`a op b` 与 `op a b` 同义，`` a `f` b `` 与 `f a b` 同义，
+  运算符不拥有独立语义；parser 不做优先级（中缀链收成右嵌套中间节点），`Loader.Fixity` 按
+  模块可见 fixity 表重排。fixity / 别名的**唯一来源**是 `infixl N op` / `infixr N op` /
+  `infix N op` 声明（可选 `= 目标名`，如 `infixl 4 == = eq`），优先级 0–9。没有内建运算符表：
+  符号运算符用于中缀却无声明是**错误**；`->` 是语法，由 Loader 语法表恒可见。库声明表、
+  可见闭包去重与 fmt 程序级 fixity 见 [operators.md](operators.md)；
 - layout：offside 规则；顶层声明、`data` 构造器块、`case` 分支、`let` 绑定按块列对齐，
   表达式跨行必须缩进超过所在块列；
 - `main` 必须是零参数定义；展示由编译器钩子完成（`Int` → 十进制、`String` → `strShow`、
@@ -26,12 +27,11 @@
   `&& ||`、`++`、`strFromInt` / `strUnpack` / `strPack` /
   `strLength` / `strConcatMany` / `strSubstTemplate` / `strHash` / `strAt` / `strShow`、
   `timeUs`。宽度、编码、转义与 interp 边界见 [primitives.md](primitives.md)；
-- **运算符 = 方法别名（M31.1–M31.2）**：`==` / `/=` / `<` / `<=` / `>` / `>=` 不是内建值，
+- **运算符 = 方法别名（M31.1–M31.3）**：`==` / `/=` / `<` / `<=` / `>` / `>=` 不是内建值，
   而是 `Base.Eq` / `Base.Ord` 的方法（`eq` / `neq` / `lt` / `le` / `gt` / `ge`）的
-  **别名**（M31.2 起由 `Loader.Fixity` 的 fixity 表在重排时替换；库内
-  `infix ... = ...` 声明见 debt B26）。`a == b` 与 `eq a b` 同义，Int / String 上由
-  内建实例特化，其它类型走 `Eq` / `Ord` 字典。trait 声明与实例的落点规则见
-  [operators.md](operators.md)；
+  **别名**（fixity 与别名由库模块里的 `infixl ... = ...` 声明提供，`Loader.Fixity` 在重排时
+  替换）。`a == b` 与 `eq a b` 同义，Int / String 上由内建实例特化，其它类型走 `Eq` / `Ord`
+  字典。trait 声明与实例的落点规则见 [operators.md](operators.md)；
 - 效果原语**只有 `prim_*` 名**（`prim_print` / `prim_readFile` / `prim_getArgs` /
   `prim_getenv` / …）：用户经 `Base.IO` 的 IO 动作使用，或在 `vuna.toml` 用
   `[capabilities].effects` 声明能力后直接调用；见 [primitives.md](primitives.md) 的

@@ -13,6 +13,7 @@ module Vuna.Compiler.Frontend.Ast
   , DoStmt
   , EAnn
   , EApp
+  , EBacktick
   , ECase
   , EDo
   , EField
@@ -26,6 +27,9 @@ module Vuna.Compiler.Frontend.Ast
   , EPi
   , ERecUpdate
   , ERecord
+  , ESectL
+  , ESectOp
+  , ESectR
   , EStr
   , EVar
   , ExportItem
@@ -128,6 +132,14 @@ data Expr : Type where
   -- error）；Fmt / Index / Lsp 在 parse 后处理它们。
   EInfix : String -> Expr -> Expr -> Span -> Expr
   EParen : Expr -> Span -> Expr
+  -- M31.3：反引号中缀 `` a `f` b ``（f 是普通值名或符号名；Loader 按名字查 fixity）。
+  -- 与 EInfix/EParen 同属 parser 中间产物：rename 模式（Loader 正常路径）后不存在。
+  EBacktick : String -> Expr -> Expr -> Span -> Expr
+  -- M31.3：section：op 值 / 左 section / 右 section。同样是 parser 中间产物，
+  -- Loader 在名字解析前消除成 EVar / lambda。
+  ESectOp : String -> Span -> Expr
+  ESectL : String -> Expr -> Span -> Expr
+  ESectR : Expr -> String -> Span -> Expr
   -- M24：表达式类型标注。只由 parser 的 where 绑定签名生成（`g : Int -> Int` 行
   -- 绑定到随后的 `g ... = ...` 子句），Elab 精化时据此把 where 组按签名递归提升；
   -- 普通表达式位置不产生它，Fmt 在非 where 位置把它当透明括号渲染。
@@ -205,6 +217,10 @@ exprSpan : Expr -> Span
 exprSpan (EVar name sp) = sp
 exprSpan (EInfix op lhs rhs sp) = sp
 exprSpan (EParen inner sp) = exprSpan inner
+exprSpan (EBacktick name lhs rhs sp) = sp
+exprSpan (ESectOp op sp) = sp
+exprSpan (ESectL op rhs sp) = sp
+exprSpan (ESectR lhs op sp) = sp
 exprSpan (EInt n sp) = sp
 exprSpan (EStr s sp) = sp
 exprSpan (ELam ps body sp) = sp

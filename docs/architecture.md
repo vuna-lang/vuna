@@ -1,11 +1,9 @@
 # 架构：子系统地图与数据流
 
-本文是 vuna 仓库的**子系统地图**：回答“改一个功能要在哪些模块动手、该跑哪段测试”。
-逐模块职责与 codegen 要点见 [compiler.md](reference/compiler.md)，Core / 精化器实现见
-[core.md](reference/core.md)，语义见 [language.md](reference/language.md) /
-[type-system.md](reference/type-system.md)，自举见
-[bootstrap.md](reference/bootstrap.md)，内建 / 原语 / 能力见
-[primitives.md](reference/primitives.md)。
+本文是 vuna 仓库的**子系统地图**：回答“改一个功能要在哪些模块动手、该跑哪段测试”。逐模块
+职责见 [compiler.md](reference/compiler.md)，Core / 精化器见 [core.md](reference/core.md)，
+语义见 [language.md](reference/language.md) / [type-system.md](reference/type-system.md)，
+自举 / 内建原语能力见 [bootstrap.md](reference/bootstrap.md) / [primitives.md](reference/primitives.md)。
 
 ## 仓库分层
 
@@ -32,8 +30,7 @@ compiler/lib/Vuna/Compiler/   （55 个模块：54 个导出 + 内部 Debug；�
 import 子模块并选择性重导出（对外名字面不变），实现只在叶子；**数据定义只在叶子**
 （`Core.Term`、`Elab.Types` 等）。目标每模块 ≤~800 行（当前最大 `Elab/Trait.vuna`，约 1.2k）。
 `compiler/` 是 seed 唯一来源（`compiler/app/Main.vuna` 的 import 闭包，当前 71 `.ml` / 72
-文件，以 `seed/` 与 `nix/seed-count.txt` 为准）；`lib/` 工具链与 `app/` 在 TCB 之外；
-`base/` 模块名就是公开 API。
+文件，以 `seed/` 与 `nix/seed-count.txt` 为准）；`lib/` 工具链与 `app/` 在 TCB 之外；`base/` 模块名即 API。
 
 ## 1. 编译链：Frontend → Loader → Elab → Codegen
 
@@ -57,6 +54,12 @@ import 子模块并选择性重导出（对外名字面不变），实现只在�
 本模块类型层 def），值位置查值表（def → ctor → 导入值 / ctor → **类型作为项**的最后退路）。
 语义与边界见 [language.md 的「type / value 双命名空间」](reference/language.md)。
 
+**运算符与 fixity**：parser 只产出 `EInfix` / `EBacktick` / `ESect*` / `EParen` 中间节点；
+`Loader.Flatten` 按每模块可见表（`Module.fixities`，`dedupeFixities` 首现去重）在名字解析前调
+`Loader.Fixity.reorderProgram` 重排 / 换别名 / 展开 section。表来源 = 源码 `infix*` 声明
+（`->` 由 `syntaxFixityDecls` 恒可见；未知符号运算符报错）；fmt / LSP / lint 用
+`fixitiesForSource(In)` 取程序级闭包。详见 [operators.md](reference/operators.md)。
+
 **擦除 / 合一 / 定义形式**：擦除只有单一判据链（`Elab.Meta.isTypeDomain` →
 `binderRig` → `Core.rigOfBinder`，读取侧统一 `Core.rigIsErased`）；元变量求解在
 `Core.Conv.solveMeta`（created-depth 随 `Sols` 就地检查，非空 spine 走 Miller pattern）；
@@ -72,8 +75,7 @@ import 子模块并选择性重导出（对外名字面不变），实现只在�
 **内建单一真源**：`Vuna.Compiler.Intrinsics` 是名字 / 签名 / arity / 归约 / 能力 / runtime /
 可见性的唯一真源；`Loader.Resolve`（arity、放行、能力）、`Elab.Prelude`（签名）、
 `Core.Eval`（归约）、`Codegen.Term`（runtime）都消费它。内置身份按声明 symbol 判定：
-`Bool` / `List` / `IO` 是 base 普通 data（`Base.Bool.Bool` / `Base.List.List` /
-`Base.IO.IO`），不按短名 / `lastName`。
+`Bool` / `List` / `IO` 是 base 普通 data（`Base.Bool.Bool` / `Base.List.List` / `Base.IO.IO`），不按短名。
 
 擦除检查由 `Codegen.Assembly.checkDtProgram` 负责（判据 `Core.rigIsErased`）。`vuna interp`
 走同一精化链后由 `Driver.Dt.dtEvalFile` 求 `main`（纯求值：只展示 `Int`/`String`/`Bool`，
@@ -89,9 +91,8 @@ import 子模块并选择性重导出（对外名字面不变），实现只在�
 **通常连带改动**：语法 = `Frontend.{Lexer,Parser,Ast}` + `Fmt` + `Elab.Term` / `Elab.Match` +
 `Codegen`；名字解析 = `Loader.{Modules,Resolve,Flatten}`；类型规则 = `Elab.*` +
 `Elab.{Records,Derive}` + `Codegen`；split = `Codegen.Split` + `Driver.Split`；诊断 =
-`Frontend.Ast` / `Common` + 各阶段 `Result` 错误 + golden。建议测试标签：第 1–11、13–27、
-30、34 段（见 [testing.md](reference/testing.md)）；包构建 / split 见第 28/29/33/34 段；
-快照与上下文回归见第 38/39 段。
+`Frontend.Ast` / `Common` + 各阶段 `Result` 错误 + golden。测试标签：第 1–11、13–27、30、34 段
+（见 [testing.md](reference/testing.md)）；包构建 / split 见第 28/29/33/34 段；快照与上下文回归见第 38/39 段。
 
 ## 2. 包与 workspace
 
@@ -113,8 +114,8 @@ vuna.toml → Frontend.{Toml.parseToml, Manifest.parseManifest/validateManifest}
 
 **约束**：Toml/Manifest 不碰 I/O，Pkg 只做 lexical 规范化；**每个源文件唯一包上下文**，
 目录入口 `check/build <dir>` 直接 `loadPackage` 只认该目录 manifest（不向上找）；跨包只认
-依赖包 `[export]`，隐藏模块报错；依赖图 DAG、包名唯一（diamond 合法）；`[capabilities]`
-能力名合法性由 Loader 校验。测试：第 28–29、33、39 段 + `checks.vuna-package`。
+依赖包 `[export]`，隐藏模块报错；依赖图 DAG、包名唯一；`[capabilities]` 名由 Loader 校验。
+测试：第 28–29、33、39 段 + `checks.vuna-package`。
 
 ## 3. 根包工具链与 TCB 边界
 
@@ -122,8 +123,8 @@ vuna.toml → Frontend.{Toml.parseToml, Manifest.parseManifest/validateManifest}
 
 - `Vuna.Cli.runCli` 分发；`Vuna.Interp.interpretFile/interpretExpr`（`PackageContext` 入参，
   实际 `Driver.Dt.dtEvalFile`）、`Vuna.Repl.runRepl`、`Vuna.TestRunner.runTests`、
-  `Vuna.Doc.runDoc`、`Vuna.Files.collectVunaFiles`；fmt/lint 见 `Fmt.formatSource` /
-  `Lint.runLint`（+ 子模块）。
+  `Vuna.Doc.runDoc`、`Vuna.Files.collectVunaFiles`；fmt/lint 见 `Fmt.formatSourceWith` /
+  `Lint.runLint`。
 - 进程执行只在 `Driver.CompilerCli.runIn`（`prim_runIn`，需要 `process`；工具链经 `runIO`）。
 - **TCB**：工具链永不进 seed（`compiler/app/Main.vuna` 闭包不含 `Vuna.*` 工具模块；
   `nix/tcb-forbidden.txt` 黑名单）；效应边界是 manifest 显式能力
@@ -134,9 +135,8 @@ vuna.toml → Frontend.{Toml.parseToml, Manifest.parseManifest/validateManifest}
 ## 4. LSP 与索引（工具链侧，不进 seed）
 
 - `Vuna.Lsp.runLsp`：JSON-RPC over stdio；帧按字节读（body 后无换行，见
-  [tooling.md](reference/tooling.md) §2）；诊断走 `Pkg.contextForFile` + DT 精化（含 import
-  的文件同样类型检查）；hover = 洞目标 + Index 符号；另有 formatting / documentSymbol /
-  definition / references / completion / workspace symbol / lint 诊断。
+  [tooling.md](reference/tooling.md) §2）；诊断走 `Pkg.contextForFile` + DT 精化；hover = 洞目标 +
+  Index 符号；另有 formatting / documentSymbol / definition / references / completion / lint 诊断。
 - `Vuna.Index`：parse 级索引（`vuna map` / `vuna api`，缓存 `.local/index/`，内容哈希判定
   新鲜度）。
 
@@ -155,13 +155,10 @@ sh s1/build.sh）→ stage1 →（build --no-compile --out s2 compiler）→ dif
 旧 seed 能编译新源码；rotation 后 stage1 == stage2；seed 只含 compiler 包入口闭包。
 测试：第 13/38 段 + `checks.seed-selfhost`，详见 [bootstrap.md](reference/bootstrap.md)。
 
-## 改一处 → 跑什么（速查）
-
+## 改一处 → 跑什么
 | 你改了什么 | 最小验证 |
 | --- | --- |
-| 只改 `lib/` 工具链 | `vuna fmt --check <文件>` + `vuna lint lib/Vuna/Cli.vuna` + 第 14–16、30–32 段 |
-| 改 `base/` 标准库 | 第 26–27 段（monad / stdlib）+ `vuna check .` |
-| 改 `compiler/` 任一模块 | 全量 `test/run-tests.sh` + `nix flake check`（至少 seed-selfhost） |
-| 改语法 / 类型规则 / DT 精化 / 擦除 codegen | 第 1–11、13–27、30、34 段 + 全量测试 + 编译器自检 |
-| 改 split 输出 / `vuna.toml`（含 `[capabilities]`） | 第 28–29、33、34、38、39 段 + `vuna check` + `checks.vuna-package` / `seed-selfhost` |
-| 改 Nix | `nix flake check`（`checks.*` 全绿）+ `nix build .#vuna` |
+| `lib/` / `base/` | 第 14–16、26–27、30–32 段 + `vuna check .` |
+| `compiler/`（语法 / 类型 / 精化 / 擦除） | 全量测试 + `flake check`（至少 seed-selfhost） |
+| split 输出 / `vuna.toml` | 第 28–29、33–34、38–39 段 + `checks.vuna-package` |
+| Nix | `nix flake check` + `nix build .#vuna` |

@@ -5,6 +5,7 @@ open Base_dMonad
 open Base_dMaybe
 open Base_dEq
 open Base_dOrd
+open Base_dInt
 open Base_dList
 open Base_dResult
 let v_Eq_uString = (C_Dict_uBase_dEq_dEq_MkDict_uBase_dEq_dEq ((fun x -> (fun y -> ((bi_eq_str x) y))), (fun x -> (fun y -> ((bi_neq_str x) y)))))

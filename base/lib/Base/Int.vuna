@@ -13,7 +13,12 @@ module Base.Int where
 import Base.Eq
 import Base.Ord
 
--- M31.2：数值运算符的 fixity 声明（`+` 等仍是 Int 内建值，不是 trait 方法）。
+-- 数值运算符的 fixity 声明在本模块（`+` 等是 Int 内建值，不是 trait 方法）。
+infixl 6 +
+infixl 6 -
+infixl 7 *
+infixl 7 /
+
 instance Eq Int where
   eq x y = x == y
   neq x y = x /= y

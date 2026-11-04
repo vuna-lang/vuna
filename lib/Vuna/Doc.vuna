@@ -18,6 +18,7 @@ import Vuna.Compiler.Frontend.Manifest
 import Vuna.Compiler.Frontend.Parser
 import Vuna.Compiler.Packages.Pkg
 import Vuna.Files
+import Vuna.FixityEnv
 import Base.IO
 
 runDoc : String -> String -> Int
@@ -65,25 +66,36 @@ docManifestExports dir =
   else Ok Nothing
 
 -- 解析出的模块：模块全名 + 渲染段落（用于按 [export] 顺序过滤）。
+-- M31.3（B26/B27）：逐文件用 `Vuna.FixityEnv` 取**程序级** fixity（本文件声明 ++
+-- import 闭包，本地优先）；只用本地表会让用到 `+`/`==`/`::` 的模块报 unknown fixity。
 docModules : List String -> Result (List (Pair String String))
-docModules files = docModulesGo files []
+docModules files = secondOf (docModulesGo emptyFixityEnv files [])
 
-docModulesGo : List String -> List (Pair String String) -> Result (List (Pair String String))
-docModulesGo [] acc = Ok (reverse acc)
-docModulesGo (path :: rest) acc = case docModule path of
-  Err e => Err e
-  Ok (Pair name section) => docModulesGo rest (Pair name section :: acc)
+docModulesGo : FixityEnv -> List String -> List (Pair String String) -> Pair FixityEnv (Result (List (Pair String String)))
+docModulesGo env [] acc = Pair env (Ok (reverse acc))
+docModulesGo env (path :: rest) acc =
+  let
+    stepped = docModule env path
+  in case secondOf stepped of
+    Err e => Pair (firstOf stepped) (Err e)
+    Ok section => docModulesGo (firstOf stepped) rest (section :: acc)
 
-docModule : String -> Result (Pair String String)
-docModule path = case readText path of
-  Err e => Err e
-  Ok source => case parseSource path source of
-    Err e => Err (path ++ ": " ++ e)
-    Ok (Source hdr imports fx decls0) => case reorderProgram (tableOfKeepOps fx) decls0 of
-      Err e => Err (path ++ ": " ++ e)
-      Ok decls =>
-        Ok
-          (Pair (moduleNameOfPath path hdr) (moduleHeaderLine path hdr ++ "\n\n```vuna\n" ++ join "\n" (declLines decls) ++ "\n```\n"))
+docModule : FixityEnv -> String -> Pair FixityEnv (Result (Pair String String))
+docModule env path = case readText path of
+  Err e => Pair env (Err e)
+  Ok source =>
+    let
+      looked = fixitiesForFile env path source
+      env2 = firstOf looked
+    in case secondOf looked of
+      Err e => Pair env2 (Err (path ++ ": cannot load package fixity context: " ++ e))
+      Ok programFixities => case parseSource path source of
+        Err e => Pair env2 (Err (path ++ ": " ++ e))
+        Ok (Source hdr imports fx decls0) => case reorderProgram (tableOfKeepOps (append programFixities fx)) decls0 of
+          Err e => Pair env2 (Err (path ++ ": " ++ e))
+          Ok decls =>
+            Pair env2
+              (Ok (Pair (moduleNameOfPath path hdr) (moduleHeaderLine path hdr ++ "\n\n```vuna\n" ++ join "\n" (declLines decls) ++ "\n```\n")))
 
 moduleNameOfPath : String -> Maybe ModDecl -> String
 moduleNameOfPath path (Just (ModDecl name hasList items sp)) = name
@@ -175,6 +187,12 @@ renderTyPlain : Expr -> String
 renderTyPlain (EApp f args sp) = renderTyAtom f ++ " " ++ join " " (map renderTyArg args)
 renderTyPlain (EInt n sp) = strFromInt n
 renderTyPlain (EStr s sp) = "\"" ++ s ++ "\""
+-- M31.3：类型位置也可能出现反引号中缀 / section（keep 模式下保留原形）；显式渲染，
+-- 不落到 `_` 静默丢表达式。
+renderTyPlain (EBacktick nm l r sp) = renderTyArg l ++ " `" ++ nm ++ "` " ++ renderTyArg r
+renderTyPlain (ESectOp op sp) = "(" ++ op ++ ")"
+renderTyPlain (ESectL op e sp) = "(" ++ op ++ " " ++ renderTy e ++ ")"
+renderTyPlain (ESectR e op sp) = "(" ++ renderTy e ++ " " ++ op ++ ")"
 renderTyPlain _ = "_"
 
 renderTyArg : Expr -> String

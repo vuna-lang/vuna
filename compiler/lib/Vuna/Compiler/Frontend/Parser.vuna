@@ -58,6 +58,10 @@ parseExportItem st = case peekTok st of
     in if atSym st1 "(" then step (expectSym st1 "(")
       (\_, st2 => step (expectSym st2 "..") (\_, st3 => step (expectSym st3 ")") (\_, st4 => Ok (Pair (XTypeAll name (spanOf st st4)) st4))))
     else Ok (Pair (XBare name (spanOf st st1)) st1)
+  -- M31.3：导出用户符号名函数（`(<+>)`）。保留符号不可导出。
+  PTok (TSym op) p =>
+    if isReservedValueName op then psErr0 ExpectedExportItem
+    else Ok (Pair (XBare op (spanOf st (advance st))) (advance st))
   _ => psErr0 ExpectedExportItem
 
 parseImportSpec : PState -> Result (Pair Import PState)
@@ -115,10 +119,15 @@ expectFixityLevel st = case peekTok st of
   _ => psErr0 ExpectedFixityLevel
 
 -- fixity/别名声明里的运算符名：符号（`+`、`::`）或标识符（`eq`）。
+-- 保留符号（`isSyntaxSym` ∪ {`->`, `` ` ``}）不是用户运算符，不能声明 fixity。
 expectOpName : PState -> Result (Pair String PState)
 expectOpName st = case peekTok st of
-  PTok (TSym op) p => Ok (Pair op (advance st))
-  PTok (TIdent name) p => Ok (Pair name (advance st))
+  PTok (TSym op) p =>
+    if isReservedValueName op then psErr1 (ExpectedToken "operator") "operator"
+    else Ok (Pair op (advance st))
+  PTok (TIdent name) p =>
+    if isReservedValueName name then psErr1 (ExpectedToken "operator") "operator"
+    else Ok (Pair name (advance st))
   _ => psErr1 (ExpectedToken "operator") "operator"
 
 parseDecl : PState -> Int -> Result (Pair Decl PState)
@@ -133,6 +142,13 @@ parseDecl st blockCol = case peekTok st of
       st1 = advance st
     in if atSym st1 ":" then parseSignature st1 blockCol True name p
     else parseClause st1 blockCol name p
+  -- M31.3：用户符号名函数（`<+> a b = a + b`）与签名（`<+> : ...`）。
+  -- 保留符号（`->` / 反引号 / 语法符号）不是可定义名。
+  PTok (TSym op) p => if isReservedValueName op then psErr0 ExpectedTopLevelDecl
+  else
+    let
+      st1 = advance st
+    in if atSym st1 ":" then parseSignature st1 blockCol True op p else parseClause st1 blockCol op p
   _ => psErr0 ExpectedTopLevelDecl
 
 -- M28 axiom 声明（决策 5 / D10）：`axiom name : Ty`，无 `=` 体。
@@ -455,10 +471,18 @@ parseExpr fuel st blockCol minPrec =
 parseInfix : Int -> PState -> Int -> Int -> Expr -> Result (Pair Expr PState)
 parseInfix fuel st blockCol minPrec lhs = if fuel <= 0 then Err "DT: parser fuel exhausted (internal: parser made no progress)"
 else case peekTok st of
+  -- M31.3：反引号中缀 `` a `f` b ``。名字是普通值名或符号名（expectValueName）；
+  -- rhs 用 parseExpr（与普通中缀一致，会继续吞后续中缀），形成右嵌套链交给 Loader 重排。
+  PTok (TSym "`") p =>
+    if canContinue st blockCol then step (expectValueName (advance st))
+      (\name, st1 => step (expectSym st1 "`") (\_, st2 => step (parseExpr (fuel - 1) st2 blockCol 0) (\rhs, st3 => parseInfix (fuel - 1) st3 blockCol minPrec (EBacktick name lhs rhs (spanOf st st3)))))
+    else Ok (Pair lhs st)
   PTok (TSym op) p =>
-    if canContinue st blockCol && not (isSyntaxSym op) then step (parseExpr (fuel - 1) (advance st) blockCol 0)
+    if canContinue st blockCol && not (isSyntaxSym op) then if closeParenNext st then Ok (Pair (ESectR lhs op (spanOf st (advance st))) (advance st))
+    else step (parseExpr (fuel - 1) (advance st) blockCol 0)
       (\rhs, st2 => parseInfix (fuel - 1) st2 blockCol minPrec (EInfix op lhs rhs (spanOf st st2)))
     else Ok (Pair lhs st)
+  -- M31.3：右 section `(e op)`。只消费 op；`)` 由外层 `(` 分支消费。
   _ => Ok (Pair lhs st)
 
 parseLhs : Int -> PState -> Int -> Result (Pair Expr PState)
@@ -521,9 +545,12 @@ else case peekTok st of
   PTok (TKw "Type") p => Ok (Pair (EVar "Type" (spanOf st (advance st))) (advance st))
   PTok (TSym "(") p => case binderHeadName (advance st) of
     Just name => parsePiBinder (fuel - 1) st blockCol name False "(" ")"
-    Nothing =>
-      step (parseExpr (fuel - 1) (advance st) blockCol 0)
-        (\inner, st1 => step (expectSym st1 ")") (\_, st2 => Ok (Pair (EParen inner (spanOf st st2)) st2)))
+    -- M31.3：`(+)` / `(+ e)` section。`(e op)` 由 parseInfix 的右 section 分支处理。
+    Nothing => case sectionOpAt st of
+      Just op => parseSectionAtom (fuel - 1) st blockCol op
+      Nothing =>
+        step (parseExpr (fuel - 1) (advance st) blockCol 0)
+          (\inner, st1 => step (expectSym st1 ")") (\_, st2 => Ok (Pair (EParen inner (spanOf st st2)) st2)))
   PTok (TSym "[") p => parseListExpr (fuel - 1) st blockCol
   PTok (TSym "{") p => case binderHeadName (advance st) of
     Just name => parsePiBinder (fuel - 1) st blockCol name True "{" "}"
@@ -531,6 +558,14 @@ else case peekTok st of
       step (expectSym st "{")
         (\_, st1 => step (parseExpr (fuel - 1) st1 blockCol 0) (\base, st2 => step (expectSym st2 "|") (\_, st3 => step (parseRecordAssignments (fuel - 1) st3 blockCol) (\fields, st4 => Ok (Pair (ERecUpdate base fields (spanOf st st4)) st4)))))
   _ => psErr0 ExpectedExpression
+
+-- M31.3：section 的 op 值 / 左 section 形态：`(op)` 与 `(op e)`。
+-- 进入时已在 `(`，op 已由 sectionOpAt 确认（TSym 且非保留名）。
+parseSectionAtom : Int -> PState -> Int -> String -> Result (Pair Expr PState)
+parseSectionAtom fuel st blockCol op =
+  if fuel <= 0 then Err "DT: parser fuel exhausted (internal: parser made no progress)"
+  else step (expectSym st "(")
+    (\_, st1 => step (expectSym st1 op) (\_, st2 => if atSym st2 ")" then Ok (Pair (ESectOp op (spanOf st (advance st2))) (advance st2)) else step (parseExpr (fuel - 1) st2 blockCol 0) (\rhs, st3 => step (expectSym st3 ")") (\_, st4 => Ok (Pair (ESectL op rhs (spanOf st st4)) st4)))))
 
 -- DT（M13）Pi binder：`(x : A) -> B` 或 `{x : A} -> B`。
 -- 进入时已在开括号处；binder 名先由 lookahead 确认，再要求 `->`。
