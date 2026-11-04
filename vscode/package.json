@@ -1,0 +1,194 @@
+{
+  "name": "vuna",
+  "displayName": "Vuna",
+  "description": "Vuna language support: syntax highlighting, LSP (diagnostics, hover, formatting, symbols, go-to-definition, references, completion), lint/check/build commands.",
+  "version": "0.1.0",
+  "publisher": "vuna-lang",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/vuna-lang/vuna.git",
+    "directory": "vscode"
+  },
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Linters",
+    "Formatters"
+  ],
+  "keywords": [
+    "vuna",
+    "dependently-typed",
+    "language-server",
+    "lsp"
+  ],
+  "main": "./dist/extension.js",
+  "activationEvents": [
+    "onLanguage:vuna"
+  ],
+  "contributes": {
+    "languages": [
+      {
+        "id": "vuna",
+        "aliases": [
+          "Vuna",
+          "vuna"
+        ],
+        "extensions": [
+          ".vuna"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "vuna",
+        "scopeName": "source.vuna",
+        "path": "./syntaxes/vuna.tmLanguage.json"
+      }
+    ],
+    "snippets": [
+      {
+        "language": "vuna",
+        "path": "./snippets/vuna.json"
+      }
+    ],
+    "commands": [
+      {
+        "command": "vuna.restartServer",
+        "title": "Restart Language Server",
+        "category": "Vuna"
+      },
+      {
+        "command": "vuna.formatDocument",
+        "title": "Format Document",
+        "category": "Vuna"
+      },
+      {
+        "command": "vuna.lintFile",
+        "title": "Lint File",
+        "category": "Vuna"
+      },
+      {
+        "command": "vuna.checkFile",
+        "title": "Check File",
+        "category": "Vuna"
+      },
+      {
+        "command": "vuna.buildPackage",
+        "title": "Build Package",
+        "category": "Vuna"
+      },
+      {
+        "command": "vuna.showVersion",
+        "title": "Show Version",
+        "category": "Vuna"
+      }
+    ],
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "vuna.restartServer"
+        },
+        {
+          "command": "vuna.formatDocument",
+          "when": "editorLangId == vuna"
+        },
+        {
+          "command": "vuna.lintFile",
+          "when": "editorLangId == vuna"
+        },
+        {
+          "command": "vuna.checkFile",
+          "when": "editorLangId == vuna"
+        },
+        {
+          "command": "vuna.buildPackage",
+          "when": "editorLangId == vuna || resourceLangId == vuna"
+        },
+        {
+          "command": "vuna.showVersion"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "vuna.formatDocument",
+          "when": "editorLangId == vuna",
+          "group": "1_vuna@1"
+        },
+        {
+          "command": "vuna.lintFile",
+          "when": "editorLangId == vuna",
+          "group": "1_vuna@2"
+        },
+        {
+          "command": "vuna.checkFile",
+          "when": "editorLangId == vuna",
+          "group": "1_vuna@3"
+        },
+        {
+          "command": "vuna.buildPackage",
+          "when": "editorLangId == vuna",
+          "group": "1_vuna@4"
+        }
+      ],
+      "explorer/context": [
+        {
+          "command": "vuna.buildPackage",
+          "when": "resourceLangId == vuna",
+          "group": "1_vuna@1"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Vuna",
+      "properties": {
+        "vuna.server.path": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Path to the `vuna` executable used to start the language server (`vuna lsp`). Leave empty to auto-detect: `vuna` on `PATH`, then `<workspace>/result/bin/vuna`, then `<workspace>/../result/bin/vuna`."
+        },
+        "vuna.basePath": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Optional value for the `VUNA_BASE` environment variable. Leave empty to use `<workspace>/base` when it exists; otherwise the server falls back to its own base detection."
+        },
+        "vuna.trace.server": {
+          "type": "string",
+          "enum": [
+            "off",
+            "messages",
+            "verbose"
+          ],
+          "default": "off",
+          "markdownDescription": "Trace the communication between VS Code and the Vuna language server (`off`, `messages`, `verbose`). Output goes to the **Vuna Language Server Trace** channel."
+        },
+        "vuna.diagnostics.onSave": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "Run `vuna lint <file>` when a `.vuna` file is saved and publish the findings in the Problems panel. This is independent of the language server's parse/type diagnostics; disable it if linting on save is too slow for your workspace."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "package": "vsce package --no-dependencies",
+    "vscode:prepublish": "npm run build"
+  },
+  "dependencies": {
+    "vscode-languageclient": "^9.0.1",
+    "vscode-oniguruma": "^2.0.1",
+    "vscode-textmate": "^9.3.2"
+  },
+  "devDependencies": {
+    "@types/node": "^20.17.0",
+    "@types/vscode": "^1.90.0",
+    "@vscode/vsce": "^3.2.0",
+    "esbuild": "^0.24.0",
+    "typescript": "^5.6.0"
+  }
+}

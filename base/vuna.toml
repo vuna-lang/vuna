@@ -1,8 +1,6 @@
 # vuna-base：标准库包（编译器与用户程序的第一个依赖）。
 [package]
 name = "vuna-base"
-version = "0.1.0"
-edition = "2026"
 
 
 [export]

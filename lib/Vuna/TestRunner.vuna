@@ -1,50 +1,152 @@
 module Vuna.TestRunner (runTests) where
 
--- Vuna.TestRunner：包内测试运行器（M11.5）。
+-- Vuna.TestRunner：包内测试运行器（M11.5；M30 起支持效果测试与 workspace 聚合）。
 --
--- 约定：包 `test/` 下每个 `*.vuna` 是一个测试模块，`main : String`；
--- 返回空串表示通过，返回非空串表示失败（打印失败信息）。
--- M23 起用 DT 精化后的核心求值执行（`Vuna.Interp`），因此测试模块的顶层定义同样
--- 必须写签名；代码生成路径的验证留给 CI 脚本。
+-- 约定：包 `test/` 下每个 `*.vuna` 是一个测试模块，入口固定叫 `main`；
+--   - `main : String`：核心求值，返回空串通过（历史约定，`interpretFile` 展示成 `""`）；
+--   - `main : Int`：核心求值，值 0 通过；
+--   - `main : Bool`：核心求值，值 True 通过；
+--   - `main : IO a`：临时包编译 + 运行，以**进程退出码**判定（0 通过；失败测试显式
+--     `exit 1`）。效果的输出直接写终端；
+--   - 其它返回类型：明确失败（不再静默当失败），错误信息里写清支持的类型。
+-- main 的类别用 `Vuna.Compiler.Driver.Dt.dtMainKind` 判定（同一份 DT 精化，不猜语法）。
+-- 编译/精化失败也按 FAIL 记录诊断（单测失败不中断其余测试）。
+--
 -- M26：入口是 `Package`，内部用 `Pkg.packageContext` 构造包上下文（不再有环境根 flag）；
 -- 测试模块与包内模块走同一套模块可见性规则。
+-- M30：`vuna test <workspace-root>` 对 workspace 里每个包各跑自己的 `test/`（根包 +
+-- `[workspace].members`），按包名分组汇总，任一失败总退出码 1；单包（只含自己的
+-- 目录，或它是 workspace 成员被直接指定）行为不变。
 import Vuna.Compiler.Common
 import Vuna.Compiler.Packages.Pkg
+import Vuna.Compiler.Driver.Dt
 import Vuna.Files
 import Vuna.Interp
 
 runTests : Package -> Int
-runTests pkg =
+runTests pkg = case workspacePackages (packageDir pkg) of
+  Err e =>
+    let
+      _ = prim_print ("error: " ++ e ++ "\n")
+    in 2
+  Ok pkgs => if length pkgs <= 1 then runPackageTests pkg else runWorkspaceTests pkgs
+
+-- ---------------------------------------------------------------
+-- 单包（行为与 M11.5 一致：没有 test/ 是输入错误，退出码 2）
+-- ---------------------------------------------------------------
+runPackageTests : Package -> Int
+runPackageTests pkg =
   let
     testDir = packageDir pkg ++ "/test"
-  in if pathExistsDir testDir then
-    let
-      files = testFiles (prim_readDir testDir)
-    in runTestFiles (packageContext pkg) testDir files 0 0
+  in if pathExistsDir testDir then case runTestFiles (packageContext pkg) testDir (testFiles (prim_readDir testDir)) 0 0 of
+    Pair _ fail => if fail == 0 then 0 else 1
   else
     let
       _ = prim_print ("error: test directory not found: " ++ testDir ++ "\n")
     in 2
 
+-- ---------------------------------------------------------------
+-- workspace 聚合：每个包一组，缺 test/ 的包跳过（不是错误：库成员常常没有测试）。
+-- ---------------------------------------------------------------
+runWorkspaceTests : List Package -> Int
+runWorkspaceTests pkgs =
+  let
+    _ = prim_print ("workspace: " ++ strFromInt (length pkgs) ++ " package(s)\n")
+  in runWorkspaceGo pkgs 0 0
+
+runWorkspaceGo : List Package -> Int -> Int -> Int
+runWorkspaceGo pkgs pass fail = case pkgs of
+  [] =>
+    let
+      _ =
+        prim_print
+          ("\nworkspace: " ++ strFromInt pass ++ " passed, " ++ strFromInt fail ++ " failed\n")
+    in if fail == 0 then 0 else 1
+  pkg :: rest =>
+    let
+      name = workspacePackageLabel pkg
+      testDir = packageDir pkg ++ "/test"
+    in if pathExistsDir testDir then
+      let
+        _ = prim_print ("-- " ++ name ++ " --\n")
+      in case runTestFiles (packageContext pkg) testDir (testFiles (prim_readDir testDir)) 0 0 of
+        Pair p f => runWorkspaceGo rest (pass + p) (fail + f)
+    else
+      let
+        _ = prim_print ("-- " ++ name ++ " -- (no test directory)\n")
+      in runWorkspaceGo rest pass fail
+
+-- 包名可能为空（只用于展示，不参与语义）。
+workspacePackageLabel : Package -> String
+workspacePackageLabel pkg =
+  let
+    name = packageName pkg
+  in if name == "" then packageDir pkg else name
+
+-- ---------------------------------------------------------------
+-- 逐文件执行；返回 (passed, failed)
+-- ---------------------------------------------------------------
 testFiles : List String -> List String
 testFiles [] = []
 testFiles (name :: rest) = if endsWith ".vuna" name then name :: testFiles rest else testFiles rest
 
-runTestFiles : PackageContext -> String -> List String -> Int -> Int -> Int
-runTestFiles ctx dir [] pass fail =
-  let
-    _ = prim_print ("\n" ++ strFromInt pass ++ " passed, " ++ strFromInt fail ++ " failed\n")
-  in if fail == 0 then 0 else 1
-runTestFiles ctx dir (name :: rest) pass fail =
-  let
-    path = dir ++ "/" ++ name
-  in let
-    output = interpretFile ctx path
-  in if output == "\"\"" then
+runTestFiles : PackageContext -> String -> List String -> Int -> Int -> Pair Int Int
+runTestFiles ctx dir files pass fail = case files of
+  [] =>
     let
-      _ = prim_print ("ok   " ++ name ++ "\n")
-    in runTestFiles ctx dir rest (pass + 1) fail
-  else
+      _ = prim_print ("\n" ++ strFromInt pass ++ " passed, " ++ strFromInt fail ++ " failed\n")
+    in Pair pass fail
+  name :: rest =>
     let
-      _ = prim_print ("FAIL " ++ name ++ ": " ++ output ++ "\n")
-    in runTestFiles ctx dir rest pass (fail + 1)
+      path = dir ++ "/" ++ name
+      ok = runOneTest ctx path name
+    in if ok then runTestFiles ctx dir rest (pass + 1) fail
+    else runTestFiles ctx dir rest pass (fail + 1)
+
+-- 单个测试：按 main 的返回类别选执行路径。
+runOneTest : PackageContext -> String -> String -> Bool
+runOneTest ctx path name = case dtMainKind ctx path of
+  Err e => testFail name e
+  Ok kind => case kind of
+    "IO" => runIOTest ctx path name
+    "String" => pureTest name (interpretFile ctx path) "\"\""
+    "Int" => pureTest name (interpretFile ctx path) "0"
+    "Bool" => pureTest name (interpretFile ctx path) "True"
+    _ =>
+      testFail name
+        ("unsupported test main type: " ++ kind ++ " (expected `main : String` (empty = pass), `main : Int` (0 = pass), `main : Bool` (True = pass) or `main : IO a` (exit code 0 = pass))")
+
+-- 纯测试：`interpretFile` 的核心求值结果与期望值逐字比较。
+pureTest : String -> String -> String -> Bool
+pureTest name output expected = if output == expected then testOk name
+else
+  let
+    _ = prim_print ("FAIL " ++ name ++ ": expected " ++ expected ++ ", got " ++ output ++ "\n")
+  in False
+
+-- 效果测试：临时包编译 + 运行，退出码 0 通过；编译/链接失败按 FAIL 记录诊断。
+runIOTest : PackageContext -> String -> String -> Bool
+runIOTest ctx path name =
+  let
+    source = prim_readFile path
+  in case runEffectProgram ctx source False of
+    Err e => testFail name e
+    Ok 0 => testOk name
+    Ok code =>
+      let
+        _ =
+          prim_print
+            ("FAIL " ++ name ++ ": effect program exited with code " ++ strFromInt code ++ "\n")
+      in False
+
+testOk : String -> Bool
+testOk name =
+  let
+    _ = prim_print ("ok   " ++ name ++ "\n")
+  in True
+
+testFail : String -> String -> Bool
+testFail name message =
+  let
+    _ = prim_print ("FAIL " ++ name ++ ": " ++ message ++ "\n")
+  in False

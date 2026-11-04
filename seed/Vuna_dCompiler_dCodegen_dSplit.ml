@@ -17,6 +17,9 @@ open Vuna_dCompiler_dPackages_dPkg
 open Vuna_dCompiler_dDebug
 open Base_dNat
 open Base_dVec
+open Vuna_dCompiler_dDiagnostics_dCommon
+open Vuna_dCompiler_dDiagnostics_dCg
+open Vuna_dCompiler_dDiagnostics_dTc
 open Vuna_dCompiler_dDiagnostics
 open Vuna_dCompiler_dFrontend_dAst
 open Vuna_dCompiler_dFrontend_dDiagnostics
@@ -44,6 +47,7 @@ open Vuna_dCompiler_dElab_dTerm_dSupport
 open Vuna_dCompiler_dElab_dTerm_dImpl
 open Vuna_dCompiler_dElab_dTerm
 open Vuna_dCompiler_dElab_dData
+open Vuna_dCompiler_dElab_dInstName
 open Vuna_dCompiler_dElab_dTrait
 open Vuna_dCompiler_dElab_dDerive
 open Vuna_dCompiler_dElab_dRecords
@@ -105,14 +109,14 @@ let v_Vuna_dCompiler_dCodegen_dSplit_dheadClassName = (fun e -> (match e with
 ))
 
 let rec v_Vuna_dCompiler_dCodegen_dSplit_dsplitDerivedOwners = (fun mc0 -> (fun mc1 -> (fun mc2 -> (fun mc3 -> (match mc3 with
-  | C_Base_dList_dList_Base_dList_dCons (dtb__46, dtb__47) -> (C_Base_dList_dList_Base_dList_dCons ((C_Base_dPair_dPair_Base_dPair_dPair (((v_Vuna_dCompiler_dElab_dTrait_dinstanceName dtb__46) ((((v_Vuna_dCompiler_dElab_dDerive_dinstHead dtb__46) mc1) mc2) v_Vuna_dCompiler_dCodegen_dSplit_dsplitNoSpan)), mc0)), ((((v_Vuna_dCompiler_dCodegen_dSplit_dsplitDerivedOwners mc0) mc1) mc2) dtb__47)))
+  | C_Base_dList_dList_Base_dList_dCons (dtb__46, dtb__47) -> (C_Base_dList_dList_Base_dList_dCons ((C_Base_dPair_dPair_Base_dPair_dPair (((v_Vuna_dCompiler_dElab_dInstName_dinstanceName dtb__46) ((((v_Vuna_dCompiler_dElab_dDerive_dinstHead dtb__46) mc1) mc2) v_Vuna_dCompiler_dCodegen_dSplit_dsplitNoSpan)), mc0)), ((((v_Vuna_dCompiler_dCodegen_dSplit_dsplitDerivedOwners mc0) mc1) mc2) dtb__47)))
   | C_Base_dList_dList_Base_dList_dNil -> C_Base_dList_dList_Base_dList_dNil
   | _ -> failwith "DT: impossible branch"
 )))))
 
 let v_Vuna_dCompiler_dCodegen_dSplit_dsplitInstanceOwnerOf = (fun owner -> (fun d -> (match d with
   | C_Vuna_dCompiler_dFrontend_dAst_dDecl_Vuna_dCompiler_dFrontend_dAst_dDInstance (dtb__48, dtb__49, dtb__50, dtb__51) -> (match (v_Vuna_dCompiler_dCodegen_dSplit_dheadClassName dtb__49) with
-  | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__52) -> (C_Base_dList_dList_Base_dList_dCons ((C_Base_dPair_dPair_Base_dPair_dPair (((v_Vuna_dCompiler_dElab_dTrait_dinstanceName dtb__52) dtb__49), owner)), C_Base_dList_dList_Base_dList_dNil))
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__52) -> (C_Base_dList_dList_Base_dList_dCons ((C_Base_dPair_dPair_Base_dPair_dPair (((v_Vuna_dCompiler_dElab_dInstName_dinstanceName dtb__52) dtb__49), owner)), C_Base_dList_dList_Base_dList_dNil))
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> C_Base_dList_dList_Base_dList_dNil
   | _ -> failwith "DT: impossible branch"
 )
@@ -122,7 +126,7 @@ let v_Vuna_dCompiler_dCodegen_dSplit_dsplitInstanceOwnerOf = (fun owner -> (fun 
 )))
 
 let v_Vuna_dCompiler_dCodegen_dSplit_dsplitTraitDefOwnerOf = (fun owner -> (fun d -> (match d with
-  | C_Vuna_dCompiler_dFrontend_dAst_dDecl_Vuna_dCompiler_dFrontend_dAst_dDTrait (dtb__64, dtb__65, dtb__66, dtb__67) -> ((v_Base_dList_dmap (fun m -> (C_Base_dPair_dPair_Base_dPair_dPair ((v_Base_dPair_dfirstOf m), owner)))) dtb__66)
+  | C_Vuna_dCompiler_dFrontend_dAst_dDecl_Vuna_dCompiler_dFrontend_dAst_dDTrait (dtb__64, dtb__65, dtb__66, dtb__67) -> ((v_Base_dList_dmap (fun m -> (C_Base_dPair_dPair_Base_dPair_dPair ((v_Vuna_dCompiler_dFrontend_dAst_dtraitMethodName m), owner)))) dtb__66)
   | _ -> C_Base_dList_dList_Base_dList_dNil
 )))
 

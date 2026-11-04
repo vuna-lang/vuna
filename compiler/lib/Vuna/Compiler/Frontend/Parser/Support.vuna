@@ -93,9 +93,27 @@ isEof st = case peekTok st of
 toksOf : PState -> List PTok
 toksOf (PState file toks last count) = toks
 
--- 显式 fuel：parser 的递归都经「返回新状态再递归」，无法用结构递归证明；
--- 每个解析循环带 fuel 并在入口 `if fuel <= 0` 守卫，递归传 `fuel - 1`。
--- 初始预算按剩余 token 数线性放大（每次合法循环至少消耗一个 token）。
+-- 显式 fuel（M30/C27 保留，给出证明界）：parser 的递归都经「返回新状态再递归」，
+-- 递归实参是**游标状态**而不是某个形参的真子项（PState 不可分解成更小的 token 列表），
+-- 所以现有 SCT 判据看不到结构下降；每个解析循环带 fuel 并在入口 `if fuel <= 0` 守卫、
+-- 递归传 `fuel - 1`，R2「守卫 Int」判据直接接受。
+--
+-- **不耗尽证明**（`stateFuel = 128 * 剩余 token 数 + 1024`）：
+--   1. 不变量：任一带 fuel 的调用点上，`fuel >= 16 * 剩余 token 数 + 1`；
+--   2. 相邻两次 token 消费之间的 fuel 递减数 ≤ 16。逐产生式审计最长的「零 token 递减链」：
+--        - 表达式原子：parseExpr→parseLhs→parseApplication→parseAtom→parseAtomBase
+--          = 5 步后消费 1 token（括号/列表/记录更新再嵌套，每 token 仍 ≤ 6 步）；
+--        - 中缀：parseInfix 每消费 1 个运算符 token 至多 2 步；
+--        - case 分支：parseCaseAlts→parseAltList→parsePatternSingle→parsePatternCons
+--          →parsePatternHead→parsePatternAtom = 6 步消费 1 token；
+--        - 绑定/where/do：parseWhere→parseBindingItemsAt→parseBindingItem →
+--          parseBindingDef/parseBindingValue ≈ 5 步；
+--      取 16 作统一上界（真实最长链 6）；
+--   3. 归纳：种子 `128*N + 1024 >= 16*N + 1`；每消费 1 token 允许 16 步递减，
+--      故沿路径 `fuel` 与「16 * 剩余」的差只增不减；路径末尾（EOF）至多再走
+--      一个 ≤16 步的收尾链，被 1024 的常数项覆盖。`stateFuel` 在嵌套入口重新取值时
+--      也按**当前**剩余 token 数线性放大，不变量保持。
+--   于是任何可由内存构造的合法输入都不会触发 `parser fuel exhausted`。
 stateFuel : PState -> Int
 stateFuel st = 128 * toksLeft st + 1024
 

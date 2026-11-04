@@ -1,0 +1,7 @@
+# M30：workspace 是检查单元——根包正常、成员包有错，`vuna check .` 必须失败，
+# 错误带 `[bad]` 前缀（旧实现只检查根包，成员错误被静默忽略）。
+[package]
+name = "ws-member-error"
+
+[workspace]
+members = ["bad"]

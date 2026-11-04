@@ -1,65 +1,113 @@
 module Vuna.Doc (runDoc) where
 
--- Vuna.Doc：从源码生成 API 文档（M11.5）。
+-- Vuna.Doc：从源码生成 API 文档（M11.5；M30 补 [export] 过滤与路径校验）。
 -- 扫描包 lib/（或给定目录）下的所有 .vuna 模块，把模块头 + 类型声明 + 顶层签名
 -- 渲染成 Markdown；不依赖类型检查（纯语法级），`_` 前缀私有名字跳过。
+--
+-- M30：
+--   - 输入目录必须是已存在目录；源文件先判存在再读（`readText`），坏路径给可读错误；
+--   - 目录自己的 `vuna.toml` 若有 `[export].modules`，只渲染这些模块（按 manifest
+--     顺序）；缺模块是错误，不再输出「所有 41 个模块」；
+--   - 输出文件的父目录逐级创建（`prim_makeDir` 只建一层）；
+--   - 默认 OUT 仍由 CLI 决定：`.` → docs/api.md，其他 DIR → DIR/docs/api.md。
+import Vuna.Cli.Args
 import Vuna.Compiler.Common
 import Vuna.Compiler.Frontend.Ast
+import Vuna.Compiler.Frontend.Manifest
 import Vuna.Compiler.Frontend.Parser
+import Vuna.Compiler.Packages.Pkg
 import Vuna.Files
 
 runDoc : String -> String -> Int
-runDoc dir outPath =
-  let
-    libDir = dir ++ "/lib"
-  in let
-    root = if pathExistsDir libDir then libDir else dir
-  in if pathExistsDir root then
+runDoc dir outPath = case requireDirectory dir of
+  Err e => docError e
+  Ok _ =>
     let
+      libDir = dir ++ "/lib"
+      root = if pathExistsDir libDir then libDir else dir
       files = collectVunaFiles root
-    in case docModules files of
-      Err e =>
-        let
-          _ = prim_print ("error: " ++ e ++ "\n")
-        in 2
-      Ok sections =>
-        let
-          content =
-            "# vuna API\n\n由 `vuna doc` 从源码生成。\n\n" ++ join "\n" sections ++ "\n"
-        in let
-          parent = firstOf (splitPath outPath)
-        in let
-          _ = if parent == "" then 0 else prim_makeDir parent
-        in let
-          _ = prim_writeFile outPath content
-        in let
-          _ = prim_print ("wrote " ++ outPath ++ " (" ++ strFromInt (length files) ++ " modules)\n")
-        in 0
-  else
-    let
-      _ = prim_print ("error: no such directory: " ++ dir ++ "\n")
-    in 2
+    in if length files == 0 then docError ("no vuna sources found under " ++ dir ++ "; pass a package or source directory")
+    else case docManifestExports dir of
+      Err e => docError e
+      Ok exports => case docModules files of
+        Err e => docError e
+        Ok sections => case selectSections exports sections of
+          Err e => docError e
+          Ok rendered => writeDoc outPath rendered
 
-docModules : List String -> Result (List String)
-docModules [] = Ok []
-docModules (path :: rest) =
-  andThen (docModule path)
-    (\section => andThen (docModules rest) (\sections => Ok (section :: sections)))
+docError : String -> Int
+docError e =
+  let
+    _ = prim_print ("error: " ++ e ++ "\n")
+  in 2
 
-docModule : String -> Result String
-docModule path = case parseSource path (prim_readFile path) of
-  Err e => Err (path ++ ": " ++ e)
-  Ok (Source hdr imports decls) =>
-    Ok (moduleHeaderLine path hdr ++ "\n\n```vuna\n" ++ join "\n" (declLines decls) ++ "\n```\n")
+writeDoc : String -> List String -> Int
+writeDoc outPath rendered =
+  let
+    content = "# vuna API\n\n由 `vuna doc` 从源码生成。\n\n" ++ join "\n" rendered ++ "\n"
+    _ = ensureDirPath (parentOf outPath)
+    _ = prim_writeFile outPath content
+    _ = prim_print ("wrote " ++ outPath ++ " (" ++ strFromInt (length rendered) ++ " modules)\n")
+  in 0
+
+-- 目录自己的 vuna.toml（不向上搜索：DIR 就是文档根）决定 [export] 过滤。
+docManifestExports : String -> Result (Maybe (List String))
+docManifestExports dir =
+  let
+    manifestFile = dir ++ "/vuna.toml"
+  in if prim_fileExists manifestFile then case loadManifestAt manifestFile of
+    Err e => Err e
+    Ok manifest => Ok (manifestExports manifest)
+  else Ok Nothing
+
+-- 解析出的模块：模块全名 + 渲染段落（用于按 [export] 顺序过滤）。
+docModules : List String -> Result (List (Pair String String))
+docModules files = docModulesGo files []
+
+docModulesGo : List String -> List (Pair String String) -> Result (List (Pair String String))
+docModulesGo [] acc = Ok (reverse acc)
+docModulesGo (path :: rest) acc = case docModule path of
+  Err e => Err e
+  Ok (Pair name section) => docModulesGo rest (Pair name section :: acc)
+
+docModule : String -> Result (Pair String String)
+docModule path = case readText path of
+  Err e => Err e
+  Ok source => case parseSource path source of
+    Err e => Err (path ++ ": " ++ e)
+    Ok (Source hdr imports decls) =>
+      Ok
+        (Pair (moduleNameOfPath path hdr) (moduleHeaderLine path hdr ++ "\n\n```vuna\n" ++ join "\n" (declLines decls) ++ "\n```\n"))
+
+moduleNameOfPath : String -> Maybe ModDecl -> String
+moduleNameOfPath path hdr = case hdr of
+  Just (ModDecl name hasList items sp) => name
+  Nothing => stripVunaSuffix (baseName path)
 
 moduleHeaderLine : String -> Maybe ModDecl -> String
 moduleHeaderLine path hdr = case hdr of
   Just (ModDecl name hasList items sp) => "## " ++ name
-  Nothing => case splitPath path of
-    Pair dir base => "## " ++ stripVunaSuffix base
+  Nothing => "## " ++ stripVunaSuffix (baseName path)
 
 stripVunaSuffix : String -> String
 stripVunaSuffix name = if endsWith ".vuna" name then substring 0 (strLength name - 5) name else name
+
+-- [export].modules 过滤：按 manifest 顺序输出；缺失模块是配置错误（exit 2）。
+selectSections : Maybe (List String) -> List (Pair String String) -> Result (List String)
+selectSections exports sections = case exports of
+  Nothing => Ok (map secondOf sections)
+  Just mods => selectMods mods sections []
+
+selectMods : List String -> List (Pair String String) -> List String -> Result (List String)
+selectMods [] sections acc = Ok (reverse acc)
+selectMods (name :: rest) sections acc = case findSection name sections of
+  Nothing => Err ("exported module not found in sources: " ++ name ++ " (from [export].modules)")
+  Just section => selectMods rest sections (section :: acc)
+
+findSection : String -> List (Pair String String) -> Maybe String
+findSection name sections = case sections of
+  [] => Nothing
+  (Pair modName section) :: rest => if modName == name then Just section else findSection name rest
 
 -- 顶层声明渲染：类型/记录/trait 展开成员，签名单行；无签名函数不列出。
 declLines : List Decl -> List String
@@ -96,8 +144,8 @@ ctorLine (Ctor name ty arity sp) = "  " ++ name ++ " : " ++ renderTy ty
 fieldLine : Field -> String
 fieldLine (Field name ty sp) = "  " ++ name ++ " : " ++ renderTy ty
 
-methodLine : Pair String Expr -> String
-methodLine (Pair name ty) = "  " ++ name ++ " : " ++ renderTy ty
+methodLine : TraitMethod -> String
+methodLine m = "  " ++ traitMethodName m ++ " : " ++ renderTy (traitMethodType m)
 
 isPrivate : String -> Bool
 isPrivate name = case strUnpack name of

@@ -428,3 +428,56 @@
 - **性能**：M29 未改 check 主路径（bodies/conv/force）；相等收口删掉的是非主路径的
   interp/runtime 比较实现；开发期自检墙钟受并行构建影响，正式基准见
   [reference/performance.md](reference/performance.md)。
+## M30（工具链与包 + VSCode 扩展）
+
+> 目标是让工具链的「查询/诊断/文档/构建」与编译器语义同级可信，并补齐包与构建的工程
+> 缺口；生态能力仍归 F4。实现细节在 git 历史，这里只留可审计的结论。
+
+- **CLI 错误层（C12）**：新增 `Vuna.Cli.Args`（统一布尔/值 flag、位置参数、路径守卫、
+  递归建目录、removed hint）；`Vuna.Cli` 统一 0/1/2 退出码与错误出口。`fmt` 无
+  workspace/无源码、`map` 非 workspace、`doc` 坏目录、`gen-errors` 坏 ROOT、不存在文件
+  全部可读错误 exit 2，无宿主异常；`corpus/cli/check.sh` 61 项锁定。
+- **Index v2（C11/D13）**：缓存首行 `vuna-index 2`，条目 `path\tbytes\thash`（内容哈希，
+  不再用 mtime）；数据先写、manifest 最后、tmp+mv 原子替换；`cache.lock` 目录锁（mkdir
+  原子、新鲜锁跳过、过期清理、始终释放）；refs 带 line/col，新增 `referencesAt` /
+  `findReferences` / `symbolAt`；`corpus/index/check.sh` 35 项 + 同 size/同 mtime 内容
+  变更失效回归。语义索引决策：顶层签名必填 ⇒ parse 级签名即公开语义面，不另建索引。
+- **LSP（D13）**：改为走 `Pkg.contextForFile` + `Loader.loadModuleSource`，含 `import` 的
+  文件真正类型检查；补 formatting/documentSymbol/definition/references/completion/
+  workspace symbol/workspace symbol/lint 诊断；URI `%XX` 解码、错误过滤、capabilities
+  全套；smoke 72 项。已知边界：didChange 全量精化、依赖未保存改动读盘、Index 每进程一次。
+- **REPL / TestRunner（D14）**：REPL 多行续行（括号/字符串/注释/尾 token）+ IO 表达式经
+  临时包 compile+run；`vuna test` 纯 String/Int/Bool 走 interp、`main : IO ...` 走
+  compile+运行（退出码 0 通过）、workspace 聚合；`corpus/test-m30` 正/负例。
+- **doc（C13）**：尊重 `[export].modules`（manifest 顺序、缺模块报错）；删除
+  `--with-comments` 与 `Index.renderDocWithComments` 死代码；输出父目录递归创建。
+- **manifest / workspace / 构建（C25/D15）**：`[package]` 只接受 `name`（version/edition
+  删除，全仓 manifest 同步）；workspace 是所有成员的 check 单元、所有可执行成员的 build
+  单元，`build --package NAME` 供 Nix 构根包；`build-meta.json` 记录源/依赖闭包内容哈希，
+  同哈希 + 二进制存在时跳过；生成的 `build.sh` 按模块内容哈希（`.ml`/`.mli` + 依赖
+  `.cmi` stamp）增量；确定性/增量/build-library 错误均有回归。完全 hermetic 仍由 Nix 承担。
+- **B19**：`Diagnostics` 拆为门面 + `Diagnostics.{Common,Tc,Cg}`，`tcAll`/`cgAll` 按 arity
+  分块；`maxline` 39687→30618（新最大值来自既有 `Intrinsics`）。
+- **B20**：`DTrait` 方法列表改 `List TraitMethod`（name/type/span）；投影/实例方法错误
+  定位到方法签名行。
+- **B21**：删除 `Elab.Dict` 死代码与死导出。
+- **B22**：实例名=单类前缀 + **完整 head 名**（`Eq_Base.Bool.Bool` / `Show_Color`），双前缀
+  消失且不同模块同名 data 不撞；快照重生成。
+- **C26–C28**：逐点采用结构递归或证明界（`Base.String.split`、Lexer/Parser/Toml/Pkg/
+  Resolve、Json/Fmt/Files/Index/Repl/Lsp），measure 表见 `reference/limits.md`；压力探针
+  （20k 空白/注释、2000 层括号、84KB TOML）before/after 一致。
+- **D18 性能**：ctor 索引 + `Sols/Ec/DtProgram.defVals` 值共享骨架（实测收益≈0，零成本
+  保留）；真正收益来自 C29 签名 banned 表一次性建 + per-sig O(1) 查：`check compiler`
+  16.0s→3.1s、`check .` 44.4s→8.1s；`corpus` 全量测试作为门禁。
+- **E08 benchmark**：`nix/bench-baseline.json` 入库；`nix/bench.sh` 用 jq 解析，新增
+  `--check`（软告警）/`--strict`/`--threshold`；`nix/ci.sh --bench` 可选。
+- **E10**：`.nocompile` 死标记删除；第 43 段对每个 `.nointerp` 断言 interp 明确拒绝。
+- **VSCode 扩展**：新增 `vscode/`（TypeScript + `vscode-languageclient`，esbuild 打包）；
+  TextMate 语法高亮、language-configuration、snippets、LSP 客户端（诊断/hover/format/
+  symbols/definition/references/completion）、lint/check/build/format 命令与状态栏；
+  提交 `dist/extension.js` 以便离线使用；`checks.vscode-ext` 只校验已提交产物，不跑 npm install。
+- **seed**：rotation 后 70 `.ml` / 71 文件；stage1 == stage2；TCB 不含工具链/扩展。
+- **测试/基线**：`test/run-tests.sh` 新增第 40–43 段（CLI/Index/doc、workspace/build 确定性、
+  REPL/test、`.nointerp` 负向）；LSP smoke 72 项；快照 `exports/modules/split-*` 重生成；
+  `nix/metrics.budget` 按 B19 拆分与 B20 span 复标定（maxline 降）；`context.budget` 按
+  M30 文档结构复标定。

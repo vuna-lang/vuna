@@ -60,10 +60,10 @@ M25–M30 为可排期阶段，F1–F4 为不排期未来轨道）。
 | B16 | 效果 allowlist 按包名字符串（可伪造）；raw root 依赖模块可调 `prim_*`（**M26 已随删除环境根关闭**，剩下的是包名字符串判定）；**这是权限策略不是检查豁免**：M27 用 manifest 声明 capability 替换（或按决策删除） | `Loader/Resolve.packageAllowsEffects`；探针 | 已修（M27：manifest `[capabilities] effects` 显式能力；删 `packageAllowsEffects` 包名 allowlist） |
 | B17 | case/终止性「只告警」的文档与实现不符（实际静默跳过、无 warning）；随 B01 删除豁免后不再需要「告警」语义 | `docs/reference/limits.md` vs `Elab/Case.ecTrusted` | 已修（M25：删除豁免；无 warning 通道） |
 | B18 | 解析层只有单一命名空间：同名 type/ctor/global 靠多处特判兜住，与导出层双命名空间不一致 | `Elab/Term.inferVarRef`、`Elab/Records` 注释 | 部分修复（M28：Loader `type`/`value`/`ctor` 三命名空间 + Elab 显式 `typeLookup`/`valueLookup`；剩余：同模块 `data T` 与 `def T` 同名需 Elab globals 拆表，归 F1 模块/命名空间收尾；`dt/61_namespace_dual`） |
-| B19 | `Vuna.Compiler.Diagnostics` 单模块承载 74 个 TC 构造子的 code/模板，split codegen 把 74 臂 `match` 生成为单行 34912 字符（`nix/metrics.budget` maxline 因此从 8250 上调到 35500）；可拆成 Tc/Cg/元数据子模块降低单行与单模块规模 | `seed/Vuna_dCompiler_dDiagnostics.ml`；`nix/metrics.budget`；`vuna build --no-compile --out out compiler && sh nix/metrics.sh out` | M30 |
-| B20 | trait 方法级诊断 span 粗粒度：`DTrait` 的方法签名 AST 无 span，投影/实例方法的生成定义错误只能归到 trait/instance 声明行（A14 的方法级收尾） | `Frontend/Ast.vuna` `DTrait`；`Elab/Trait.elabTrait` | M30 |
-| B21 | 实例搜索重构后 `Elab.Dict` 遗留无人调用的导出（`filterInstances`/`joinInstNames`/`joinRestInstNames`/`instDictName`/`instHeadArg`/`classArgIndex`/`dictFamilyNameOf` 等，部分仅内部） | `Elab/Dict.vuna` export 表；`vuna map --impact` | M30 |
-| B22 | 匿名实例名保留「类模块前缀 + 类短名 + head」双前缀（如 `Base.Eq.Eq_Base.Eq.Eq_Box_a`）：行为正确但 split 归属/名字可读性差，且 `split-*.txt` 快照难读 | `Elab/Trait.instanceName`；`test/snapshots/split-*.txt` | M30 |
+| B19 | 已修（M30：`Diagnostics` 拆成门面 + `Diagnostics.{Common,Tc,Cg}`；`tcAll`/`cgAll` 按 arity 分块 ≤8 项；`maxline` 39687→30618，新最大值来自既有 `Intrinsics`） | `seed/Vuna_dCompiler_dDiagnostics.ml`；`nix/metrics.budget`；`vuna build --no-compile --out out compiler && sh nix/metrics.sh out` | 已修（M30） |
+| B20 | 已修（M30：`DTrait` 方法列表改 `List TraitMethod`（name/type/span）；投影/实例方法错误定位到方法签名行；`traits/` 新增方法级负例） | `Frontend/Ast.vuna` `DTrait`；`Elab/Trait.elabTrait` | 已修（M30） |
+| B21 | 已修（M30：删除 `filterInstances`/`instDictName`/`instHeadArg`/`classArgIndex`/`dictFamilyNameOf` 等死代码与导出，内部 helper 收敛） | `Elab/Dict.vuna` export 表；`vuna map --impact` | 已修（M30） |
+| B22 | 已修（M30：实例名=单类前缀+**完整 head 名**（`Eq_Base.Bool.Bool`/`Show_Color`），双前缀消失且不同模块同名 data 不撞；`split-*.txt` 快照重生成） | `Elab/Trait.instanceName`；`test/snapshots/split-*.txt` | 已修（M30） |
 
 ## C. 可复现缺陷（bug）
 
@@ -79,9 +79,9 @@ M25–M30 为可排期阶段，F1–F4 为不排期未来轨道）。
 | C08 | `checkResolvedModules` 只校验模块声明，不校验 entryDecls | `Codegen/Split.vuna` | 已修（M26：entryDecls 不带点/非空/不重复 + 每个 DtDef/DtData 必须有归属） |
 | C09 | `tcb-check.sh` 只匹配 `Vuna_d<短名>.ml`，重组后嵌套模块（`Vuna_dFmt_dExpr.ml`）漏检 | 已修：改为前缀匹配（2026-11 本轮） | 已修 |
 | C10 | `index-check.sh` 用硬编码符号 + touch 空模块，重组后漂移 | 已修：探针改为真实源文件 `Loader/Resolve.vuna`（本轮） | 已修 |
-| C11 | Index 缓存只按 `(size, mtime 秒)` 判新，同秒等长内容变更不失效；缓存写非原子无锁 | `Index/Scan.vuna`；探针 `idx2` | M30 |
-| C12 | `fmt --check` 在非包目录/子目录崩溃（`Failure("readFile: lib")`）；不存在路径抛异常；`map` 同场景静默空输出 | `lib/Vuna/Cli.vuna` fmtDefaultTargets；探针 | M30 |
-| C13 | `doc --with-comments` 在 usage/文档中宣传但 CLI 未解析（exit 2）；`doc` 忽略 `[export]`（出 41 模块） | `lib/Vuna/Cli.docArgs`；usage 已删该 flag（本轮） | M30 |
+| C11 | 已修（M30：缓存 v2 首行 `vuna-index 2` + 内容哈希；数据先写/manifest 最后、tmp+mv 原子替换、cache.lock 目录锁（并发/过期/命中清理）；同 size+同 mtime 内容变更失效有回归） | `Index/Scan.vuna`；探针 `idx2` | 已修（M30） |
+| C12 | 已修（M30：统一 Args/错误出口；不存在路径/非 workspace/非包目录可读错误 exit 2；无宿主异常；`corpus/cli/check.sh` 61 项） | `lib/Vuna/Cli.vuna` fmtDefaultTargets；探针 | 已修（M30） |
+| C13 | 已修（M30：`doc` 尊重 `[export].modules`；`--with-comments` 删除并给 removed hint；`corpus/doc/01_export`） | `lib/Vuna/Cli.docArgs`；usage 已删该 flag（本轮） | 已修（M30） |
 | C14 | tracked 0 字节 `compiler/lib/Vuna/Compiler/Builtins.vuna` 被索引成幻影模块 | 已删（本轮）；index 扫描应跳过 0 字节/坏文件 | 已修 |
 | C15 | seed rotation 无漂移判据：fixed point PASS 时 `seed/` 仍可与源码生成差 5 行；`result*` 无新鲜度保障 | `nix/checks/seed-selfhost.sh`；探针 `rot` | 部分修复（seed drift diff 已加；result 新鲜度 M25） |
 | C16 | `Show String` 两套实现：runtime 转义 vs `Base.Show` 只加引号（转义不一致） | `Codegen/Term` vs `Base/Show.vuna`；探针 | 已修（M27：`strShow` 单一转义实现；Base.Show 与 main 展示共用） |
@@ -93,10 +93,10 @@ M25–M30 为可排期阶段，F1–F4 为不排期未来轨道）。
 | C22 | `metrics.sh` 用 `cat` 无分隔拼接：无尾换行文件导致 lines/maxline 失真 | `nix/metrics.sh`；探针 `met` | M25 |
 | C23 | `test/run-tests.sh` 965 行 shell、无 timeout、夹具/段数无守卫；`.nocompile` 语义过期 | `test/run-tests.sh`；附录清单 | M25 |
 | C24 | 无 CI 配置；flake check 实际 12 项文档/提交信息写 9；无 eval-cache/keep-going 封装 | `nix eval .#checks`；文档 | M25 |
-| C25 | `[workspace]` 成员不是检查/构建单元（成员错误可被根 check 忽略）；manifest `version`/`edition` 死字段；构建非 hermetic | `Manifest`/`Pkg`/`Cli`；探针 | M30 |
-| C26 | `Base.String.split` 为过检查改成显式 fuel 守卫，正确性依赖 `4*len+4` 外部论证（终止性本身由守卫保证） | `base/lib/Base/String.vuna`；M25.2b | M30（换结构递归或证明界） |
-| C27 | 前端/加载器状态机改用输入规模线性 fuel 初值（`8*len+64`/`128*tokens+1024`/1M/1G）；合法输入不触发依赖预算余量，无静态上界证明 | `Frontend/{Lexer,Parser,Toml}`、`Pkg`、`Loader`；M25.2c-front | M30（结构递归化或证明界） |
-| C28 | 工具链（Json/Fmt/Files/Index/Lint/Repl/Lsp）状态机/渲染互递归改用 fuel 或 `Base.List.range` 结构递归；fuel 上界靠输入规模/不可达值，无静态证明 | `lib/Vuna/{Json,Fmt,Fmt.Expr,Files,Index.Scan,Lint.Rules,Repl,Lsp}`；M25.2c-toolchain | M30（结构递归化或证明界） |
+| C25 | 已修（M30：manifest 只接受 `[package].name`（version/edition 删除，rotation 后全仓同步）；workspace 是 check/build 单元；`build-meta.json` 依赖闭包哈希 + 同哈希跳过 + `build.sh` 按模块内容哈希增量；确定性有回归） | `Manifest`/`Pkg`/`Cli`；探针 | 已修（M30） |
+| C26 | 已修（M30：fuel 收紧为 `2*len(text)+len(sep)+2`，源码注释给出上界证明；长输入 1001/101/15000 回归） | `base/lib/Base/String.vuna`；M25.2b | 已修（M30） |
+| C27 | 已修（M30：逐点采用结构递归或证明界——Lexer `2*len+64`、Parser `128*tokens+1024`、Toml 双 fuel、Pkg 依赖图/`findManifestDirMaybe`、Resolve 保留 1G 并论证；measure 表见 `docs/reference/limits.md`） | `Frontend/{Lexer,Parser,Toml}`、`Pkg`、`Loader`；M25.2c-front | 已修（M30） |
+| C28 | 已修（M30：Json/Fmt/Files/Index/Repl/Lsp 逐点 measure；`formatFuelBound=64*astSize+1024`；目录遍历/交互循环保留有界 fuel 并论证；measure 表见 `limits.md`） | `lib/Vuna/{Json,Fmt,Fmt.Expr,Files,Index.Scan,Lint.Rules,Repl,Lsp}`；M25.2c-toolchain | 已修（M30） |
 | C29 | 顶层签名的隐式类型参数 banned 名集是 program-wide 的：entry 顶层小写名与 base 模块签名类型变量同名时，base 报 `unknown name a/v`（跨模块类型变量捕获） | `Elab/Sig.quantifyTopSig`；夹具 `test/corpus/dt/17_*`、`test/corpus/term_err/09_*`（M26 发现；夹具侧已改名规避） | 已修（M28：`Elab.Sig.bannedForModule` 每签名现场算 banned；`packages/08_module_scope`） |
 
 ## D. 未实现能力 / 语言缺口
@@ -115,12 +115,12 @@ M25–M30 为可排期阶段，F1–F4 为不排期未来轨道）。
 | D10 | axiom/foreign 定义、η 展开（定义参数个数必须与签名一致）、typed let/统一 let-where | 已修（M28：axiom/foreign 的无体形态（axiom）、η 展开、typed let 随 let/where 统一） |
 | D11 | trait 能力：多参数、默认方法、父类、关联类型、约束实例、coherence | 部分修复（M29：约束实例 `instance Eq a => Eq (F a)` + 参数化 deriving + coherence（重复/重叠 head 报错）落地；多参数/默认方法/父类/关联类型迁 F4） |
 | D12 | 证明 ergonomics：构造子部分应用 conv（`cong Succ`）、隐式等式搜索、absurd/空族、Σ | 部分修复（M29：构造子未饱和引用/应用按 η 展开（`cong Succ`）、隐式值参数、Σ 用 Tarski 式存在式表达依赖索引 lookup；隐式模式/`auto`/隐式等式搜索/absurd 语法迁 F4） |
-| D13 | LSP 语义诊断（含 import 即跳过类型检查）；Index 仅 parse 级 | M30 |
-| D14 | REPL 多行/效果；`vuna test` 只能 `main : String` 且走 interp（不能测效果） | M30 |
-| D15 | hermetic / 增量依赖哈希 / 并行构建（当前宿主 ocamlopt + mtime 增量） | M30 |
+| D13 | 已修（M30：LSP 走 `Pkg.contextForFile` + `Loader.loadModuleSource`，含 import 的文件真正类型检查；诊断/formatting/symbols/definition/references/completion/workspace symbol/lint 全套；semantic index 决策见 `dt-tooling.md`） | M30 | 已修（M30） |
+| D14 | 已修（M30：REPL 多行续行 + IO 表达式 compile+run；`vuna test` 纯 String/Int/Bool 走 interp、`main : IO ...` 走 compile+运行、workspace 聚合；`corpus/test-m30`） | M30 | 已修（M30） |
+| D15 | 已修（M30：确定性产物 + 依赖闭包哈希 meta + 同哈希跳过 + 按模块内容哈希 `build.sh`；完全 hermetic 仍由 Nix 承担，边界见 `packages.md`） | M30 | 已修（M30） |
 | D16 | 数值塔（Int 固定宽度/溢出）与 Unicode String 语义（字节 vs 码点）决策 | 已修（M27：Int 63 位补码回绕 + String UTF-8 字节串） |
-| D17 | `main` 结果显示只支持 Int/String/Bool；interp 不执行效果 | M30（其余 F3） |
-| D18 | 性能工程：**部分修复（M25）**——defs/globals/sols 改为 `HashTbl` 索引、Loader 导出表 O(k⁴)→近线性、termination transpose 去重、check 不再拼产物文本、运行时 GC 调参；自检 76.8s→14.4s。**剩余**：NbE 无共享（`force` 每次重算 `eval [] body`）、conv 每节点重复 force、`dtCtorLookup` 线性扫族表、check/build 仍需 <10s 的进一步优化（见 `docs/reference/performance.md` §5） | M30（部分提前到 M25） |
+| D17 | 部分修复（M30：test/REPL 效果走 compile+run，interp 保持纯；`main` 展示仍限 Int/String/Bool，任意类型展示归 F3） | M30（其余 F3） | 已修（M30，部分） |
+| D18 | 已修（M30：ctor 索引 + `Sols/Ec/DtProgram.defVals` 值共享骨架（实测收益≈0，零成本保留）；真正收益来自 C29 签名 banned 表 O(n²)→近线性：`check compiler` 16.0s→3.1s、`check .` 44.4s→8.1s） | `Core/Eval`、`Core/Term`、`Elab/Types`、`Elab/Sig`；读数见 `docs/reference/performance.md` | 已修（M30） |
 | D19 | 类型级部分应用不可用（`Sigma Nat (Vec Int)` 这类把类型族部分应用当类型参数） | F4/研究（M29 实测：走 `checkAppUnderTypeFuel` 报 `expected Nat, got Int`；值层构造子 η 不覆盖类型位置） |
 | D20 | 泛型 Σ 值级构造受「类型依赖运行时值」限制（字段类型依赖运行时值无 codegen 表示；`CG_TypeLevelNameRuntime`） | F4（M29：用 Tarski 式存在式作为可编译替代；泛型 Σ 需 type codes/依赖字段表示） |
 
@@ -135,9 +135,9 @@ M25–M30 为可排期阶段，F1–F4 为不排期未来轨道）。
 | E05 | seed rotation 无漂移判据（见 C15） | 已修（seed-selfhost `diff -r seed s1`） |
 | E06 | 验证脚本改真实工作树（index-check touch、seed-rotate 非原子 `rm -rf seed`） | M25 |
 | E07 | metrics/context 预算手工、单边上限、历史注释长；缺 `--recalibrate` 生成器 | M25 |
-| E08 | benchmark 完全脱离 CI、无基线文件、JSON 用 sed 解析 | M30 |
+| E08 | 已修（M30：`nix/bench-baseline.json` 入库 + jq 解析 + `--check` 软告警/`--strict` + `nix/ci.sh --bench` 可选；跨机器只软告警） | M30 | 已修（M30） |
 | E09 | `nix run .#vuna-run-tests` 与 flake `vuna-tests` 两入口；章节过滤各自实现 | M25 |
-| E10 | `.nointerp` 只有跳过、无「interp 仍拒绝」负向断言；`.nocompile` 语义已过期（C05 已修，M29 起无夹具使用，runner 跳过分支仍在待清理） | M25（清理 M30） |
+| E10 | 已修（M30：`.nocompile` 死标记从 runner 删除；第 43 段对每个 `.nointerp` 断言 interp 明确拒绝（非 0）） | M25（清理 M30） | 已修（M30） |
 | E11 | 特殊标记清单与跳过原因未在 testing.md 成表 | M25 |
 | E12 | 文档过期：`fmt --check` 崩溃已修但 limits 仍写；`--with-comments`；checks 数量 | M25→已随本波修 |
 | E13 | `docs/.local`、`test/.local` 曾被索引缓存污染（审计探针产生，已清理；应加入 .gitignore/防护） | M25 |

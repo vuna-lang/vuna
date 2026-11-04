@@ -51,6 +51,7 @@ module Vuna.Compiler.Core
   , eval
   , evalCase
   , force
+  , hasFreeTermVar
   , hasUnsolvedMetaValue
   , insertDictBinder
   , insertLamBinder
@@ -75,12 +76,14 @@ module Vuna.Compiler.Core
   , showValue
   , showValueAt
   , solsCons
+  , solsDefVals
   , solsDepth
   , solsEmpty
   , solsFromList
   , solsList
   , solsLookup
   , solsOf
+  , solsPutDefVals
   , solsTbl
   , solveMeta
   , substMetaVar
@@ -89,6 +92,7 @@ module Vuna.Compiler.Core
   , substSolvedMetasAtTbl
   , substSolvedMetasTbl
   , substVarAt
+  , termHasUnsolvedMeta
   , typeLevelOf
   , vCaseAltBinders
   , vCaseAltClosure

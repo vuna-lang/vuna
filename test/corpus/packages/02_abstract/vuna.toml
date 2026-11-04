@@ -1,6 +1,5 @@
 [package]
 name = "absapp"
-version = "0.1.0"
 
 [dependencies]
 vuna-base = "../../../../base"

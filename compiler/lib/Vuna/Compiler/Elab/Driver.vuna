@@ -7,6 +7,7 @@ module Vuna.Compiler.Elab.Driver
   , ctxEntriesAt
   , ctxEntriesOf
   , dtEvalExprIn
+  , dtEvalExprInInfo
   , dtGoalInfoCtx
   , dtGoalInfoGoal
   , dtGoalInfoSpan
@@ -127,12 +128,93 @@ defBodyPair d = case dtDefBody d of
   Just body => Just (Pair (dtDefName d) body)
   Nothing => Nothing
 
-elabBodies : List Decl -> List (Pair String Term) -> List (Pair String Term) -> List DtDef -> Ec -> Result (Pair (List DtDef) Ec)
-elabBodies [] globals doneDefs acc ec = Ok (Pair (reverse acc) ec)
-elabBodies (d :: rest) globals doneDefs acc ec = case d of
+-- ---------------------------------------------------------------
+-- M30（D18）：定义体求值结果的共享（安全前缀记忆化）
+-- ---------------------------------------------------------------
+-- 目标：`force` 每命中一个全局定义就 `eval [] body` 重算一次（conv 每个节点两侧各
+-- force 一次），值是纯的、闭的，可以缓存成 `Value` 放进 `Sols.defVals`。
+--
+-- **正确性条件**（缓存值 = 以后任何时刻 `force` 会算出的值）：缓存时把值写进
+-- `Ec.ecDefVals`，之后 `force` 命中就直接返回它、不再看 defs 表，所以必须保证展开
+-- 结果不再随 defs / sols 的增长而改变：
+--   1. 体是闭项（`hasFreeTermVar 0`）——顶层定义体本来就该闭，这里复核；
+--   2. 体里没有**未解**元变量（`termHasUnsolvedMeta`）：已解 meta 的解表只增不改，
+--      值里嵌的是已定解，后续求解不会改写它；
+--   3. 体的全局引用（沿 defs 表的定义体做传递闭包）不触达：
+--      a) 正在缓存的这个名字（自递归 / 互递归——force 靠 fuel 截断，得到的是伪值）；
+--      b) 任何「还没有定义体、但整个程序里之后会出现」的名字（DFun 子句名与实例
+--         生成的字典名；前向引用会让缓存值永远停在 `NGlobal` 中性形态，随后的新
+--         定义不会再展开它）。
+--   传递闭包遇到**已缓存**（defVals，值已固定）或**永不定义**（内建/axiom/构造子/
+--   data 族名，`defs` 表里永远没有、也不在 future 集合里）的名字即停——这两类名字
+--   的求值结果不会再变。判定保守：fuel 用完、含环路未在本表登记的都算不安全，只会
+--   少缓存、不会错缓存；未缓存的定义完全走原来的 defs 表路径，语义与 M29 一致。
+--
+-- fuel = 4096 只是**证明界**：每次访问消耗 1，且 `seen` 保证每个名字的体最多展开
+-- 一次 ⇒ 实际访问数 ≤ 当前 defs 表项数（编译器全包 ~1.6k）；超出按「不安全」处理。
+futureBodyTbl : List Decl -> List (Pair String Term) -> HashTbl Bool
+futureBodyTbl decls instHeads =
+  tblInsertAll (map (\n => Pair n True) (append (declFunNames decls) (map firstOf instHeads)))
+    tblEmpty
+
+-- 之后会有定义体的 DFun 名（实例字典名由 `instHeads` 单独提供）。
+declFunNames : List Decl -> List String
+declFunNames [] = []
+declFunNames (d :: rest) = case d of
+  DFun name pats body sp => name :: declFunNames rest
+  _ => declFunNames rest
+
+-- 项里出现的全局名（结构递归；TCon 的名字是构造子、不是全局定义，不计）。
+termGlobalRefs : Term -> List String
+termGlobalRefs t = case t of
+  TVar name i => []
+  TMeta m => []
+  TGlobal g => [g]
+  TType l => []
+  TPi name implicit rig dom cod => append (termGlobalRefs dom) (termGlobalRefs cod)
+  TLam name rig body => termGlobalRefs body
+  TApp f a rig => append (termGlobalRefs f) (termGlobalRefs a)
+  TCon c args => concatMap (\p => termGlobalRefs (firstOf p)) args
+  TCase scrut alts =>
+    append (termGlobalRefs scrut) (concatMap (\alt => termGlobalRefs (caseAltBody alt)) alts)
+  TInt n => []
+  TStr s => []
+  TBool b => []
+  TIf c th el => append (termGlobalRefs c) (append (termGlobalRefs th) (termGlobalRefs el))
+
+memoUnsafe : Int -> HashTbl Bool -> HashTbl Term -> HashTbl Value -> String -> HashTbl Bool -> List String -> Bool
+memoUnsafe fuel future defs defvals self seen refs = if fuel <= 0 then True
+else case refs of
+  [] => False
+  g :: rest => if g == self then True
+  else if isJust (tblLookup g defvals) then memoUnsafe (fuel - 1) future defs defvals self seen rest
+  else if tblMem g seen then memoUnsafe (fuel - 1) future defs defvals self seen rest
+  else case tblLookup g defs of
+    Just body =>
+      memoUnsafe (fuel - 1) future defs defvals self (tblInsert g True seen)
+        (append (termGlobalRefs body) rest)
+    Nothing =>
+      if tblMem g future then True else memoUnsafe (fuel - 1) future defs defvals self seen rest
+
+memoDefValue : HashTbl Bool -> Ec -> String -> Term -> Maybe Value
+memoDefValue future ec name body =
+  if hasFreeTermVar 0 body then Nothing
+  else if termHasUnsolvedMeta (ecSolsP ec) body then Nothing
+  else if memoUnsafe 4096 future (ecDefTbl ec) (ecDefVals ec) name tblEmpty (termGlobalRefs body) then Nothing
+  else Just (force (ecDefTbl ec) (ecSolsP ec) defaultFuel (VNeutral (NGlobal name [])))
+
+-- 尝试把当前定义体求出的值写进 `ecDefVals`（不满足安全条件时原样返回）。
+memoizeDef : HashTbl Bool -> Ec -> String -> Term -> Ec
+memoizeDef future ec name body = case memoDefValue future ec name body of
+  Just v => ecPutDefVals ec (tblInsert name v (ecDefVals ec))
+  Nothing => ec
+
+elabBodies : HashTbl Bool -> List Decl -> List (Pair String Term) -> List (Pair String Term) -> List DtDef -> Ec -> Result (Pair (List DtDef) Ec)
+elabBodies future [] globals doneDefs acc ec = Ok (Pair (reverse acc) ec)
+elabBodies future (d :: rest) globals doneDefs acc ec = case d of
   DFun name pats body sp => case globalsLookup name globals ec of
     Nothing => tcErr1 sp (ExpectedSignature name) name
-    Just tyTerm => if defAlreadyDone name ec then elabBodies rest globals doneDefs acc ec
+    Just tyTerm => if defAlreadyDone name ec then elabBodies future rest globals doneDefs acc ec
     else
       let
         _ = stampSample (strFromInt (spanStartLine sp)) ("DEF " ++ name)
@@ -150,16 +232,17 @@ elabBodies (d :: rest) globals doneDefs acc ec = case d of
             -- （replaceGlobalType 是 O(#globals)/定义 ⇒ 整程序 O(n²)；该 list 只在
             -- 签名阶段与最终 DtProgram 里用，正文阶段以表为准）。
             ecGlobals = ecPutGlobalsTbl liftedEc (tblInsert name liftedTy (ecGlobalsTbl liftedEc))
-          in elabBodies rest globals (Pair name liftedTy :: doneDefs)
-            (DtDef name liftedTy cleanTerm (Just sp) :: acc)
-            (ecAddDef ecGlobals (Pair name cleanTerm))
+            ecWithDef = ecAddDef ecGlobals (Pair name cleanTerm)
+            ecNext2 = memoizeDef future ecWithDef name cleanTerm
+          in elabBodies future rest globals (Pair name liftedTy :: doneDefs)
+            (DtDef name liftedTy cleanTerm (Just sp) :: acc) ecNext2
       )
   -- M28：axiom 只产出无体/不透明的 `DtAxiom`（类型已在签名阶段精化进 globals）；
   -- 不进 Ec 的 defs 表（没有体可 delta 展开），也不进 doneDefs。
   DAxiom name tyExpr sp => case globalsLookup name globals ec of
     Nothing => tcErr1 sp (ExpectedSignature name) name
-    Just tyTerm => elabBodies rest globals doneDefs (DtAxiom name tyTerm (Just sp) :: acc) ec
-  _ => elabBodies rest globals doneDefs acc ec
+    Just tyTerm => elabBodies future rest globals doneDefs (DtAxiom name tyTerm (Just sp) :: acc) ec
+  _ => elabBodies future rest globals doneDefs acc ec
 
 -- 每个签名都必须有定义；`axiom`（DAxiom）是无体的可擦除顶层，不要求 DFun。
 checkAllDefined : List (Pair String Expr) -> List (Pair String Term) -> List Decl -> Result (List String)
@@ -197,24 +280,31 @@ axiomSpanOf name (d :: rest) = case d of
 -- （`elabProgramGo` 已校验过）；表达式自己留下的未解 meta 单独报清晰错误。
 -- 字典约束（`==` 等）用与定义体相同的收敛回填，最后在 defs + 解表上归一化并 show。
 dtEvalExprIn : DtProgram -> Expr -> Result String
-dtEvalExprIn prog expr = case prog of
-  DtProgram datas defs goals sols globals insts classes next =>
+dtEvalExprIn prog expr = andThen (dtEvalExprInInfo prog expr) (\p => Ok (firstOf p))
+
+-- M30 · REPL：同时返回值文本与 zonk 后的类型文本（类型决定是否走效果执行）。
+dtEvalExprInInfo : DtProgram -> Expr -> Result (Pair String String)
+dtEvalExprInInfo prog expr = case prog of
+  DtProgram datas defs goals sols globals insts classes next defvals =>
     let
       -- M28：axiom 无体，不进 delta 展开 / 求值环境（只剩 globals 里的类型）。
       bodies = defBodyPairs defs
+      -- M30（D18）：表达式求值与程序同一套环（构造子索引 + 定义值共享缓存）。
       ec0 =
         Ec next sols (reverse bodies) datas [] [] insts classes [] (tblFromList bodies)
-          (tblFromList globals) (solsToTbl sols) tblEmpty True tblEmpty
+          (tblFromList globals) (solsToTbl sols) tblEmpty True tblEmpty (ctorTblOfDatas datas)
+          defvals
     in andThen (inferE globals emptyCtx ec0 expr) (\p => case p of
       Pair term (Pair ty ec1) =>
         let
           ec2 = resolveDictGoalsFix globals ec1 8
           sols2 = ecSols ec2
+          tyText = showTerm (quote 0 (force (tblFromList bodies) (ecSolsP ec2) defaultFuel ty))
         in case unsolvedFrom next (ecNext ec2) sols2 of
           Just m => tcErr1 (exprSpan expr) (UnsolvedMetavarInfer (strFromInt m)) (strFromInt m)
           Nothing => case normalize (tblFromList bodies) (ecSolsP ec2) defaultFuel (eval [] term) of
-            VInt n => Ok (strFromInt n)
-            v => Ok (showValue v)
+            VInt n => Ok (Pair (strFromInt n) tyText)
+            v => Ok (Pair (showValue v) tyText)
     )
 
 -- 精化入口。M19：先做 record 降级（`Elab.Records.prepareDecls`）——record 是纯记法。
@@ -229,8 +319,11 @@ elabProgramGo decls = andThen (collectSigs decls) (\sigs => let
 in andThen (elabDatas (collectDataDecls decls []) preludeGlobals ecEmpty) (\pd => case pd of
   Pair datas (Pair globals0 ec0) =>
     let
+      -- M30（D18）：data 精化完成后一次性建构造子索引（之后 ecAddData 增量维护）；
+      -- 索引 miss 会回落线性扫 `ecDatas`，所以这里只影响速度。
+      ec0b = ecPutCtorTbl ec0 (ctorTblOfDatas (ecDatas ec0))
       _ = stamp "datas-done"
-    in andThen (elabTraits (collectTraitDecls decls []) globals0 ec0) (\pt => case pt of
+    in andThen (elabTraits (collectTraitDecls decls []) globals0 ec0b) (\pt => case pt of
       Pair classDatas (Pair projGlobals (Pair classes (Pair projSpans ec1))) =>
         let
           globals1 = append globals0 projGlobals
@@ -240,6 +333,9 @@ in andThen (elabDatas (collectDataDecls decls []) preludeGlobals ecEmpty) (\pd =
           Pair instHeads ec1b =>
             let
               globals2 = append globals1 instHeads
+              -- M30（D18）：哪些名字之后才拿到定义体（DFun 子句 + 实例生成的字典）。
+              -- 值共享的传递闭包碰到「还没有体但之后会有」的名字必须放弃缓存（前向引用）。
+              future = futureBodyTbl decls instHeads
               _ = stamp "instheads-done"
             in andThen (elabSigs sigs globals2 ec1b) (\p => case p of
               Pair globals ec2 =>
@@ -250,7 +346,7 @@ in andThen (elabDatas (collectDataDecls decls []) preludeGlobals ecEmpty) (\pd =
                       (ecSetGlobalsComplete (ecPutGlobalsTbl ec2 (tblFromList globals)) True)
                       (clausesTblOf decls)
                   _ = stamp "sigs-elab-done"
-                in andThen (checkAllDefined sigs globals decls) (\_ => andThen (elabBodies decls globals [] [] ec2b) (\q => case q of
+                in andThen (checkAllDefined sigs globals decls) (\_ => andThen (elabBodies future decls globals [] [] ec2b) (\q => case q of
                   Pair defs0 ec3a =>
                     let
                       -- M23：字典目标可能在「类参数刚被解出」之后才有唯一实例，而
@@ -262,7 +358,7 @@ in andThen (elabDatas (collectDataDecls decls []) preludeGlobals ecEmpty) (\pd =
                       _ =
                         stamp
                           ("bodies-done g=" ++ strFromInt (length globals) ++ " sols=" ++ strFromInt (length (ecSols ec3a)) ++ " defs=" ++ strFromInt (length (ecDefs ec3a)) ++ " metas=" ++ strFromInt (ecNext ec3a) ++ " dgoals=" ++ strFromInt (length (ecDictGoals ec3a)) ++ " datas=" ++ strFromInt (length (ecDatas ec3a)) ++ " insts=" ++ strFromInt (length (ecInsts ec3a)) ++ " classes=" ++ strFromInt (length (ecClasses ec3a)))
-                    in andThen (elabInstanceBodies (collectInstDecls decls []) classes datas1 globals ec3) (\pi => case pi of
+                    in andThen (elabInstanceBodies decls classes datas1 globals ec3) (\pi => case pi of
                       Pair instDefs0 ec4a =>
                         let
                           ec4 = resolveDictGoalsFix globals ec4a 8
@@ -287,7 +383,7 @@ in andThen (elabDatas (collectDataDecls decls []) preludeGlobals ecEmpty) (\pd =
                             in andThen (checkTerminationDecls decls) (\_ => let
                               _ = stamp "termination-done"
                             in Ok
-                              (DtProgram datas1 allDefs (ecGoals ec4) (ecSols ec4) globalsOut (ecInsts ec4) (ecClasses ec4) (ecNext ec4))
+                              (DtProgram datas1 allDefs (ecGoals ec4) (ecSols ec4) globalsOut (ecInsts ec4) (ecClasses ec4) (ecNext ec4) (ecDefVals ec4))
                             )
                     )
                 )

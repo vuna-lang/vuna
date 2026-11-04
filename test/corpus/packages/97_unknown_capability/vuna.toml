@@ -1,7 +1,5 @@
 [package]
 name = "effect-unknown-capability"
-version = "0.1.0"
-edition = "2026"
 
 [dependencies]
 vuna-base = "../../../../base"

@@ -47,49 +47,50 @@ Content-Length: <字节数>\r\n
 接收端同时容忍以 `\n` 结尾的 header 行（部分客户端/编辑器会发裸 `\n`）。
 `Content-Length` 按**字节**计，不是字符数。
 
-### 已实现的方法
+### 已实现的方法（M30）
 
 | 方法 | 行为 |
 | --- | --- |
-| `initialize` | 返回 capabilities（`textDocumentSync` 用 Full=1、`hoverProvider=true`）与 `serverInfo` |
+| `initialize` | capabilities：Full 同步、hover、completion（`.` 触发）、definition、references、documentSymbol、documentFormatting、workspaceSymbol；`serverInfo` |
 | `initialized` | 通知，无响应 |
 | `textDocument/didOpen` / `didChange` / `didClose` | 内存维护打开文档表（Full 同步） |
-| `textDocument/publishDiagnostics` | 服务端 → 客户端：解析 / DT 精化 / 覆盖性诊断 |
-| `textDocument/hover` | 落在 DT 洞 `_` 上时返回目标类型（markdown 代码块）与上下文 |
-| `shutdown` | 返回 `result: null` |
-| `exit` | 进程以 0 退出 |
+| `textDocument/publishDiagnostics` | 包上下文解析 / DT 精化 / 覆盖性诊断 + lint 诊断 |
+| `textDocument/hover` | DT 洞 `_` 的目标类型与上下文；否则标识符签名/文档注释 |
+| `textDocument/formatting` | `Vuna.Fmt.formatSource` 全文替换 TextEdit（解析失败返回空） |
+| `textDocument/documentSymbol` | AST 声明树（data/record/trait 带子节点） |
+| `textDocument/definition` / `references` | Index：token → 符号 → 定义位置；references 用 `Ref` 的精确行/列 |
+| `textDocument/completion` | 关键字 + 当前缓冲顶层符号 + Index 符号；`.` 后按模块过滤 |
+| `workspace/symbol` | Index 符号过滤（有上限） |
+| `shutdown` / `exit` | 正常退出语义：收到 shutdown 后 exit 退 0，否则退 1 |
 
-`workspace/symbol`、`textDocument/completion` / `definition` / `references` /
-`documentSymbol` / `formatting` / `codeAction` 等**显式返回空结果**，避免客户端报错。
+### 诊断的来源与边界
 
-### 诊断的来源与已知边界
-
-LSP **不做包解析**：
-
-1. `parseSource` 失败 ⇒ 只发一条 parse 诊断；
-2. 解析成功 ⇒ 走 **DT 精化**（`Elab.Driver.elabProgramWith`，与 `goalsOfProgram` 同源；含覆盖性
-   检查），把 `<file>:<line>:<col>: message` 转成 LSP range（**0-based**，所以行列各减 1）；
-3. **含 `import` 的文件跳过类型检查**（缺 import 解析），只保留 parse 诊断；
-4. hover 用同一精化链的 `Elab.Driver.goalsOfProgram` 取洞目标与上下文（可插拔点是 `dtGoalsOf`）。
-
-**M26 边界（如实记录）**：本次只统一了编译器/CLI 的包上下文，**LSP 加载语义未改**——
-仍是 parse 级、含 `import` 的文件不做类型检查；D13/M30 会把 LSP 接到与 CLI 相同的
-`Pkg.contextForFile` 上（届时含 import 的文件也能进 DT 精化）。
+- **走与 CLI 相同的包上下文**（`Pkg.contextForFile`）：有 `module` 头的文件用
+  `Loader.loadModuleSource`（模块按库模块加载），无头的入口文件用
+  `loadProjectSource`；随后 `Dt.dtCheckSource` 做 `elabProgramFull`。**含 `import` 的
+  文件不再跳过类型检查**（D13 已修）。
+- 错误串 `<file>:<line>:<col>: message` 转成 LSP 的 0-based range；依赖模块的错误
+  按 `spanFile` 过滤（只发当前文件），无位置的错误归当前文件。
+- lint findings 合并进同一 `publishDiagnostics`：severity 2、`code` 为 `LN_*` 规则码、
+  `source: "vuna"`。
+- 已知边界（模块头注释同步记录）：`didChange` 全量重新精化（大文件可能滞后，编辑器
+  端应去抖）；依赖的未保存改动读盘；Index 每进程一次、不随编辑刷新；多根 workspace
+  取首个文档；一次只发首个编译错误。
+- URI：`file://` + `%XX` 解码；非 file / 不存在的路径用 cwd 包上下文，不崩溃。
 
 ### 编辑器冒烟
 
-`test/corpus/lsp/smoke.sh` 是自包含脚本（只依赖 POSIX sh + 传入的 vuna），
-真的把帧从 stdin 喂给 `vuna lsp` 并断言 stdout 上的 JSON：
+`test/corpus/lsp/smoke.sh` 是自包含脚本（只依赖 POSIX sh + 传入的 vuna），真的把帧从
+stdin 喂给 `vuna lsp` 并断言 stdout 上的 JSON；M30 起覆盖两模块临时包、含 import 的
+类型错误、formatting、documentSymbol、definition、references、completion、lint 诊断、
+URI 解码与退出码：
 
 ```console
 sh test/corpus/lsp/smoke.sh ./result/bin/vuna
 ```
 
-它覆盖：initialize capabilities、`didOpen` 后收到类型错误诊断、`didChange` 修正后诊断
-清空、hover 命中洞返回 `Type`、`shutdown` 返回 null、`exit` 退出码 0，并校验
-stdout 只含协议帧、每帧 `Content-Length` 与正文长度一致。
-
-`test/run-tests.sh` 的 LSP 段调用它。
+它校验：stdout 只含协议帧、每帧 `Content-Length` 与正文长度一致、诊断范围 0-based、
+shutdown/exit 退出码。`test/run-tests.sh` 的 LSP 段调用它。
 
 ## 3. `vuna doc` 与接口 / 隐式签名
 

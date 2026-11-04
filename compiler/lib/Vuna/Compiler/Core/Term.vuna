@@ -60,18 +60,21 @@ module Vuna.Compiler.Core.Term
   , showCoreString
   , showTerm
   , solsCons
+  , solsDefVals
   , solsDepth
   , solsEmpty
   , solsFromList
   , solsList
   , solsLookup
   , solsOf
+  , solsPutDefVals
   , solsTbl
   , substAltAt
   , substMetaVar
   , substMetaVarAlt
   , substMetaVarGo
   , substVarAt
+  , termHasUnsolvedMeta
   , typeLevelOf
   , vCaseAltBinders
   , vCaseAltClosure
@@ -243,38 +246,81 @@ metaLookup i ((Pair j t) :: rest) = if i == j then Just t else metaLookup i rest
 --
 -- M28：元变量创建深度进入 Sols（`solsDepth`），求解点**就地**检查作用域；不再有
 -- 「先存解、事后扫解表」的两段式复核（旧 `checkSolsDelta`）。
+--
+-- M30（D18）：第 4 个字段 `defVals` 是**定义体求值结果的值共享缓存**（键 = 全局名）。
+-- 它是可重建缓存：未命中一律回落 `force` 原来的 defs 表 delta 展开，所以缓存内容
+-- 少一点只影响速度、不影响语义。缓存写入只发生在 `Elab.Driver.elabBodies` 的安全
+-- 前缀检查之后（闭项、无未解元变量、可达全局名全部已缓存或永不定义），见那里的证明。
 data Sols : Type where
-  Sols : HashTbl Value -> List (Pair Int Value) -> HashTbl Int -> Sols
+  Sols : HashTbl Value -> List (Pair Int Value) -> HashTbl Int -> HashTbl Value -> Sols
 
 solsEmpty : Sols
-solsEmpty = Sols tblEmpty [] tblEmpty
+solsEmpty = Sols tblEmpty [] tblEmpty tblEmpty
 
 solsFromList : List (Pair Int Value) -> Sols
 solsFromList xs =
   Sols (tblInsertAll (map (\p => Pair (strFromInt (firstOf p)) (secondOf p)) xs) tblEmpty) xs
-    tblEmpty
+    tblEmpty tblEmpty
 
--- Elab 侧构造：解表（list 权威）+ 解索引 + 元变量创建深度索引。
-solsOf : HashTbl Value -> List (Pair Int Value) -> HashTbl Int -> Sols
-solsOf t xs d = Sols t xs d
+-- Elab 侧构造：解表（list 权威）+ 解索引 + 元变量创建深度索引 + 定义值缓存。
+solsOf : HashTbl Value -> List (Pair Int Value) -> HashTbl Int -> HashTbl Value -> Sols
+solsOf t xs d dv = Sols t xs d dv
 
 solsList : Sols -> List (Pair Int Value)
-solsList (Sols t xs d) = xs
+solsList (Sols t xs d dv) = xs
 
 solsTbl : Sols -> HashTbl Value
-solsTbl (Sols t xs d) = t
+solsTbl (Sols t xs d dv) = t
+
+-- 定义值缓存（`force` 的 delta 展开先查它；未命中才回落 defs 表）。
+solsDefVals : Sols -> HashTbl Value
+solsDefVals (Sols t xs d dv) = dv
+
+solsPutDefVals : Sols -> HashTbl Value -> Sols
+solsPutDefVals (Sols t xs d dv) dv2 = Sols t xs d dv2
 
 -- 元变量创建深度（绑定当时的上下文长度）；未登记的元变量返回 Nothing。
 solsDepth : Int -> Sols -> Maybe Int
-solsDepth i (Sols t xs d) = tblLookup (strFromInt i) d
+solsDepth i (Sols t xs d dv) = tblLookup (strFromInt i) d
 
 solsLookup : Int -> Sols -> Maybe Value
 -- 索引与 list 同步维护（`solsCons`/`ecPutSols` 每次前插都插表），所以 miss 就是「未解」，
 -- 不做线性兜底：未解元变量在推断期是**高频**查询，兜底会退化成 O(#解)/次。
-solsLookup i (Sols t xs d) = tblLookup (strFromInt i) t
+solsLookup i (Sols t xs d dv) = tblLookup (strFromInt i) t
 
 solsCons : Int -> Value -> Sols -> Sols
-solsCons i v (Sols t xs d) = Sols (tblInsert (strFromInt i) v t) (Pair i v :: xs) d
+solsCons i v (Sols t xs d dv) = Sols (tblInsert (strFromInt i) v t) (Pair i v :: xs) d dv
+
+-- 项里是否有**未解**元变量（D18 的值共享安全条件之一：含未解 meta 的体不缓存）。
+-- 已解的 TMeta 不算：缓存里留下的是已解值，后续求解不会改写既有解。
+termHasUnsolvedMeta : Sols -> Term -> Bool
+termHasUnsolvedMeta sols t = case t of
+  TMeta m => case solsLookup m sols of
+    Just _ => False
+    Nothing => True
+  TVar name i => False
+  TGlobal g => False
+  TType l => False
+  TPi name implicit rig dom cod => termHasUnsolvedMeta sols dom || termHasUnsolvedMeta sols cod
+  TLam name rig body => termHasUnsolvedMeta sols body
+  TApp f a rig => termHasUnsolvedMeta sols f || termHasUnsolvedMeta sols a
+  TCon c args => termHasUnsolvedMetaArgs sols args
+  TCase scrut alts => termHasUnsolvedMeta sols scrut || termHasUnsolvedMetaAlts sols alts
+  TInt n => False
+  TStr s => False
+  TBool b => False
+  TIf c th el =>
+    termHasUnsolvedMeta sols c || termHasUnsolvedMeta sols th || termHasUnsolvedMeta sols el
+
+termHasUnsolvedMetaArgs : Sols -> List (Pair Term Rig) -> Bool
+termHasUnsolvedMetaArgs sols [] = False
+termHasUnsolvedMetaArgs sols ((Pair a rig) :: rest) =
+  termHasUnsolvedMeta sols a || termHasUnsolvedMetaArgs sols rest
+
+termHasUnsolvedMetaAlts : Sols -> List CaseAlt -> Bool
+termHasUnsolvedMetaAlts sols [] = False
+termHasUnsolvedMetaAlts sols (alt :: rest) =
+  termHasUnsolvedMeta sols (caseAltBody alt) || termHasUnsolvedMetaAlts sols rest
 
 defLookup : String -> HashTbl Term -> Maybe Term
 defLookup name tbl = tblLookup name tbl

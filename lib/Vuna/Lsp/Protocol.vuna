@@ -1,0 +1,348 @@
+module Vuna.Lsp.Protocol
+  ( allDigits
+  , clampInt
+  , decodeUri
+  , digitsToInt
+  , dirOfPath
+  , fileNameOf
+  , flushLogLines
+  , isEmptyList
+  , lastElem
+  , lastSegment
+  , lineText
+  , logLine
+  , lspRange
+  , nextFrame
+  , notify
+  , nthCode
+  , parentDir
+  , pathToUri
+  , qualPrefixLen
+  , readMore
+  , responseErr
+  , responseOk
+  , sendFrame
+  , spanRange
+  , stripTrailingDots
+  , tokenAtCursor
+  , wordPrefixLen
+  ) where
+
+-- Vuna.Lsp.Protocol：LSP 的传输与通用工具层（工具链模块，**永不进 seed 闭包**）。
+--
+-- 只放与「LSP 请求语义」无关的机械层：
+--   - JSON-RPC 2.0 帧读写：`Content-Length` 解析/切帧（`nextFrame`/`readMore`）、
+--     `sendFrame` 与响应/通知构造（stdout 只写协议帧）；
+--   - URI 编解码：`file://` + %XX（`decodeUri`/`pathToUri`），路径工具按最后一个 `/`
+--     切分（**不要用 Common.splitPath**：它按第一个 `/` 切，取不了目录/basename）；
+--   - LSP 0-based 位置/范围与 vuna 1-based Span 的换算（`lspRange`/`spanRange`）；
+--   - 日志行前缀与退出时一次写出（`logLine`/`flushLogLines`——避免 /dev/stderr 被反复截断）；
+--   - 字符串/字符/光标小工具（`lineText`/`tokenAtCursor` 等），供 Query/Diagnostics 复用。
+--
+-- stdin 只有行级内建（`prim_readLine`，等价 OCaml `input_line`），没有字节级读。
+-- 读取层因此维护字节缓冲：每 `prim_readLine` 一次就把「该行 + "\n"」并入缓冲，
+-- 按 `Content-Length` 截取正文是字节精确的（`strLength` 即 UTF-8 字节数）。
+import Vuna.Compiler.Common
+import Vuna.Json
+
+-- 小工具
+-- ---------------------------------------------------------------
+maxInt : Int -> Int -> Int
+maxInt a b = if a >= b then a else b
+
+clampInt : Int -> Int -> Int -> Int
+clampInt lo hi v = if v < lo then lo else if v > hi then hi else v
+
+isDigitCode : Int -> Bool
+isDigitCode c = c >= 48 && c <= 57
+
+allDigitCodes : List Int -> Bool
+allDigitCodes [] = True
+allDigitCodes (c :: rest) = if isDigitCode c then allDigitCodes rest else False
+
+allDigits : String -> Bool
+allDigits s = s /= "" && allDigitCodes (strUnpack s)
+
+parseIntFull : String -> Maybe Int
+parseIntFull s = if allDigits s then Just (digitsToInt (strUnpack s) 0) else Nothing
+
+digitsToInt : List Int -> Int -> Int
+digitsToInt [] acc = acc
+digitsToInt (c :: rest) acc = digitsToInt rest (acc * 10 + (c - 48))
+
+asciiLower : String -> String
+asciiLower s = strPack (map lowerCode (strUnpack s))
+
+lowerCode : Int -> Int
+lowerCode c = if c >= 65 && c <= 90 then c + 32 else c
+
+isEmptyList : List a -> Bool
+isEmptyList xs = case xs of
+  [] => True
+  _ => False
+
+-- 标识符字符（ASCII 字母 / 数字 / 下划线）。`.` 单独处理（限定名）。
+isWordCode : Int -> Bool
+isWordCode c = c >= 48 && c <= 57 || c >= 65 && c <= 90 || c >= 97 && c <= 122 || c == 95
+
+wordPrefixLen : List Int -> Int
+wordPrefixLen [] = 0
+wordPrefixLen (c :: rest) = if isWordCode c then 1 + wordPrefixLen rest else 0
+
+qualPrefixLen : List Int -> Int
+qualPrefixLen [] = 0
+qualPrefixLen (c :: rest) = if isWordCode c || c == 46 then 1 + qualPrefixLen rest else 0
+
+-- 第 i 个字符的字节码（0-based）；越界返回 -1。
+nthCode : List Int -> Int -> Int
+nthCode [] i = 0 - 1
+nthCode (c :: rest) i = if i <= 0 then c else nthCode rest (i - 1)
+
+dropDotCodes : List Int -> List Int
+dropDotCodes [] = []
+dropDotCodes (c :: rest) = if c == 46 then dropDotCodes rest else c :: rest
+
+stripTrailingDots : String -> String
+stripTrailingDots s = strPack (reverse (dropDotCodes (reverse (strUnpack s))))
+
+lastElem : List a -> Maybe a
+lastElem [] = Nothing
+lastElem (x :: rest) = case rest of
+  [] => Just x
+  _ => lastElem rest
+
+lastSegment : String -> String
+lastSegment token = case lastElem (splitOnDot token) of
+  Nothing => token
+  Just x => x
+
+-- ---------------------------------------------------------------
+-- URI：file:// + %XX 解码/编码
+-- ---------------------------------------------------------------
+fileScheme : String
+fileScheme = "file://"
+
+hexValue : Int -> Int
+hexValue c =
+  if c >= 48 && c <= 57 then c - 48
+  else if c >= 97 && c <= 102 then c - 87 else if c >= 65 && c <= 70 then c - 55 else 0 - 1
+
+hexDigitCode : Int -> Int
+hexDigitCode v = if v < 10 then 48 + v else 87 + v
+
+percentDecode : String -> String
+percentDecode s = percentDecodeChars (strUnpack s) []
+
+percentDecodeChars : List Int -> List Int -> String
+percentDecodeChars [] acc = strPack (reverse acc)
+percentDecodeChars (c :: rest) acc = if c == 37 then case rest of
+  h :: l :: more =>
+    let
+      hv = hexValue h
+      lv = hexValue l
+    in if hv >= 0 && lv >= 0 then percentDecodeChars more ((hv * 16 + lv) :: acc)
+    else percentDecodeChars rest (37 :: acc)
+  _ => percentDecodeChars rest (37 :: acc)
+else percentDecodeChars rest (c :: acc)
+
+-- URI 路径里只保留绝对安全字符，其余 %XX 编码。
+uriSafe : Int -> Bool
+uriSafe c = isWordCode c || c == 47 || c == 46 || c == 45 || c == 126
+
+percentEncode : String -> String
+percentEncode s = strPack (reverse (percentEncodeChars (strUnpack s) []))
+
+percentEncodeChars : List Int -> List Int -> List Int
+percentEncodeChars [] acc = acc
+percentEncodeChars (c :: rest) acc =
+  if uriSafe c then percentEncodeChars rest (c :: acc)
+  else percentEncodeChars rest (hexDigitCode (c - c / 16 * 16) :: hexDigitCode (c / 16) :: 37 :: acc)
+
+pathToUri : String -> String
+pathToUri path = fileScheme ++ percentEncode path
+
+decodeUri : String -> String
+decodeUri uri =
+  if startsWith fileScheme uri then percentDecode (substring 7 (strLength uri - 7) uri) else ""
+
+-- 路径工具：注意 `Vuna.Compiler.Common.splitPath` 按**第一个** `/` 切
+-- （Driver/Compile 也注明它不适合取 basename），不能用来取目录/文件名；
+-- 这里按最后一个 `/` 自己算。
+lastSlashGo : List Int -> Int -> Int -> Int
+lastSlashGo [] idx last = last
+lastSlashGo (c :: rest) idx last = lastSlashGo rest (idx + 1) (if c == 47 then idx else last)
+
+lastSlashIndex : String -> Int
+lastSlashIndex s = lastSlashGo (strUnpack s) 0 (0 - 1)
+
+-- 目录部分（无 "/" 时返回 "."；根 "/" 返回 "/"）。
+dirOfPath : String -> String
+dirOfPath path = case lastSlashIndex path of
+  i => if i < 0 then "." else if i == 0 then "/" else substring 0 i path
+
+-- 最后一段（文件名/目录名）。
+fileNameOf : String -> String
+fileNameOf path = case lastSlashIndex path of
+  i => if i < 0 then path else substring (i + 1) (strLength path - i - 1) path
+
+parentDir : String -> String
+parentDir path =
+  let
+    d = dirOfPath path
+  in if d == path then path else d
+
+-- ---------------------------------------------------------------
+-- JSON-RPC 帧／响应构造
+-- ---------------------------------------------------------------
+-- 发送一帧。Content-Length 是**字节**数：vuna 的 String 底层是 OCaml string，
+-- `strLength` 即字节数（UTF-8 多字节字符也按字节计），与协议一致。
+sendFrame : Json -> Int
+sendFrame payload =
+  let
+    body = renderJson payload
+  in prim_print ("Content-Length: " ++ strFromInt (strLength body) ++ "\r\n\r\n" ++ body)
+
+responseOk : Json -> Json -> Json
+responseOk id body = JObj [Pair "jsonrpc" (JStr "2.0"), Pair "id" id, Pair "result" body]
+
+responseErr : Json -> Int -> String -> Json
+responseErr id code message =
+  JObj
+    [Pair "jsonrpc" (JStr "2.0"), Pair "id" id, Pair "error" (JObj [Pair "code" (JNum code), Pair "message" (JStr message)])]
+
+notify : String -> Json -> Json
+notify methodName params =
+  JObj [Pair "jsonrpc" (JStr "2.0"), Pair "method" (JStr methodName), Pair "params" params]
+
+-- ---------------------------------------------------------------
+-- 位置换算：vuna 的 Span 从 1 开始，LSP 从 0 开始
+-- ---------------------------------------------------------------
+lspPosition : Int -> Int -> Json
+lspPosition line col =
+  JObj [Pair "line" (JNum (maxInt 0 (line - 1))), Pair "character" (JNum (maxInt 0 (col - 1)))]
+
+lspRange : Int -> Int -> Int -> Int -> Json
+lspRange sl sc el ec = JObj [Pair "start" (lspPosition sl sc), Pair "end" (lspPosition el ec)]
+
+spanRange : Span -> Json
+spanRange sp = lspRange (spanStartLine sp) (spanStartCol sp) (spanEndLine sp) (spanEndCol sp)
+
+-- 文档位置上的 token / 名字
+-- ---------------------------------------------------------------
+-- 第 line 行（1-based）的文本；越界返回 ""。
+lineText : String -> Int -> String
+lineText text line = lineAt1 (split "\n" text) line
+
+lineAt1 : List String -> Int -> String
+lineAt1 [] n = ""
+lineAt1 (x :: rest) n = if n <= 1 then x else lineAt1 rest (n - 1)
+
+-- 光标（1-based line/col）处的名字：允许限定名（`Base.List.map`），去掉尾部 `.`。
+tokenAtCursor : String -> Int -> Int -> Maybe (Pair Int String)
+tokenAtCursor text line col =
+  let
+    ln = lineText text line
+    chars = strUnpack ln
+    p0 = clampInt 0 (col - 1) (length chars)
+    left = reverse (take p0 chars)
+    right = drop p0 chars
+    startP = p0 - qualPrefixLen left
+    endP = p0 + qualPrefixLen right
+  in if endP - startP <= 0 then Nothing
+  else
+    let
+      token = stripTrailingDots (substring startP (endP - startP) ln)
+    in if token == "" then Nothing else Just (Pair (startP + 1) token)
+
+-- 日志行前缀；退出时一次写出（`prim_writeFile "/dev/stderr"` 每次打开都会截断，
+-- 逐行写会把前面的行冲掉，所以内存累积、退出时 join 一次）。
+logLine : String -> String
+logLine s = "[vuna-lsp] " ++ s ++ "\n"
+
+flushLogLines : List String -> Int
+flushLogLines [] = 0
+flushLogLines logs = prim_writeFile "/dev/stderr" (join "" (map logLine (reverse logs)))
+
+-- 帧读取：字节缓冲 + 按 Content-Length 切帧
+-- ---------------------------------------------------------------
+-- 从 stdin 再读一行并入缓冲；Nothing = EOF。
+--
+-- 难点：`prim_readLine` 在 EOF 返回 ""，与「真正的空行」无法区分。而 **LF-only 帧**
+-- （client 用 `\n` 分隔 header）的 header 结束符正好是一个空行，必须保留它的
+-- `\n` 才能被 splitHeaders 识别成 `\n\n`。所以这里做一次 lookahead：
+--   - 读到非空行 ⇒ 直接并入「行 + "\n"」；
+--   - 读到空行  ⇒ 再读一行：又空 ⇒ 判定 EOF；非空 ⇒ 前一个空行是真的空行，
+--                 并入 "\n" 与这一行。
+-- CRLF 帧不受影响：`input_line` 只剥 `\n`，空行读到的是 "\r" 而不是 ""，
+-- 走非空分支，于是缓冲里自然得到 `\r\n\r\n`。
+readMore : String -> Maybe String
+readMore pending =
+  let
+    line = prim_readLine
+  in if line /= "" then Just (pending ++ line ++ "\n")
+  else
+    let
+      next = prim_readLine
+    in if next == "" then Nothing else Just (pending ++ "\n" ++ next ++ "\n")
+
+-- 找子串 needle 从 start 起的字节偏移；找不到返回 -1。
+findFrom : String -> Int -> String -> Int
+findFrom needle start hay = findFromGo needle hay (range start (strLength hay))
+
+-- 计数器循环改为对候选起点列表的结构递归（range 用倒计数实现）。
+findFromGo : String -> String -> List Int -> Int
+findFromGo needle hay [] = 0 - 1
+findFromGo needle hay (k :: rest) =
+  if k + strLength needle > strLength hay then 0 - 1
+  else if substring k (strLength needle) hay == needle then k else findFromGo needle hay rest
+
+crlfCrlf : String
+crlfCrlf = strPack [13, 10, 13, 10]
+
+lfLf : String
+lfLf = strPack [10, 10]
+
+cutHeaders : Int -> String -> Int -> Pair String String
+cutHeaders at buf gap =
+  Pair (substring 0 at buf) (substring (at + gap) (strLength buf - at - gap) buf)
+
+-- 切出 header 块（到第一个 `\r\n\r\n` 或 `\n\n`），返回 (header 块, 之后的缓冲)。
+splitHeaders : String -> Maybe (Pair String String)
+splitHeaders buf = case findFrom crlfCrlf 0 buf of
+  hit => if hit >= 0 then Just (cutHeaders hit buf 4) else splitHeadersLf buf
+
+splitHeadersLf : String -> Maybe (Pair String String)
+splitHeadersLf buf = case findFrom lfLf 0 buf of
+  hit => if hit >= 0 then Just (cutHeaders hit buf 2) else Nothing
+
+-- `Content-Length: 123`（大小写不敏感，容忍前后空白与行尾 \r）。
+parseContentLength : String -> Maybe Int
+parseContentLength line =
+  let
+    trimmed = trim line
+  in if startsWith "content-length:" (asciiLower trimmed) then parseIntFull (trim (substring 15 (strLength trimmed - 15) trimmed))
+  else Nothing
+
+findLengthLine : List String -> Maybe Int
+findLengthLine [] = Nothing
+findLengthLine (line :: rest) = case parseContentLength line of
+  Just n => Just n
+  Nothing => findLengthLine rest
+
+contentLengthOf : String -> Maybe Int
+contentLengthOf block = case findLengthLine (split "\n" block) of
+  Nothing => Nothing
+  Just n => if n > 0 then Just n else Nothing
+
+-- 尝试切一帧：Just (body, rest)；Nothing = 缓冲里还没有完整帧。
+nextFrame : String -> Maybe (Pair String String)
+nextFrame pending = case splitHeaders pending of
+  Nothing => Nothing
+  Just (Pair headerBlock afterHeaders) => case contentLengthOf headerBlock of
+    Nothing => Nothing
+    Just len =>
+      if strLength afterHeaders < len then Nothing
+      else Just
+        (Pair (substring 0 len afterHeaders) (substring len (strLength afterHeaders - len) afterHeaders))
+
+-- ---------------------------------------------------------------

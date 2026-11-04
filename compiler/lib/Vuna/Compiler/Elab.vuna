@@ -4,18 +4,19 @@ module Vuna.Compiler.Elab
   , Derive.instHead
   , Driver.DtGoalInfo
   , Driver.dtEvalExprIn
+  , Driver.dtEvalExprInInfo
   , Driver.dtGoalInfoCtx
   , Driver.dtGoalInfoGoal
   , Driver.dtGoalInfoSpan
   , Driver.elabProgram
   , Driver.elabProgramFull
   , Driver.goalsOfProgram
+  , InstName.derivedInstName
+  , InstName.instanceName
   , Meta.dictCtorName
   , Meta.dictTypeName
   , Trait.checkInstanceHeads
-  , Trait.derivedInstName
   , Trait.elabInstanceBodies
-  , Trait.instanceName
   , Types.DtClass
   , Types.DtCtor
   , Types.DtData
@@ -43,6 +44,7 @@ module Vuna.Compiler.Elab
   , Types.dtGoalSpan
   , Types.dtGoalType
   , Types.dtProgDatas
+  , Types.dtProgDefVals
   , Types.dtProgDefs
   , Types.dtProgGoals
   , Types.dtProgSols
@@ -60,5 +62,6 @@ import Vuna.Compiler.Elab.Types as Types
 import Vuna.Compiler.Elab.Meta as Meta
 import Vuna.Compiler.Elab.Data as Data
 import Vuna.Compiler.Elab.Trait as Trait
+import Vuna.Compiler.Elab.InstName as InstName
 import Vuna.Compiler.Elab.Driver as Driver
 import Vuna.Compiler.Elab.Derive as Derive

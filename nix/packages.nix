@@ -76,7 +76,7 @@ let
       cp -r ${../base} base
       cp ${../vuna.toml} vuna.toml
       chmod -R u+w .
-      ${vuna-compiler}/bin/vuna-compiler build .
+      ${vuna-compiler}/bin/vuna-compiler build --package vuna .
       cp .output/bin/vuna "$out/bin/vuna"
       cp -r base "$out/base"
     '';

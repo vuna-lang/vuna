@@ -3,8 +3,6 @@
 # build/check/compile 三种入口都必须被拒。
 [package]
 name = "consumer-a"
-version = "0.1.0"
-edition = "2026"
 
 [dependencies]
 dependency-b = "../b"

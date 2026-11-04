@@ -19,30 +19,32 @@
 | 模块 | 职责 | 关键入口 |
 | --- | --- | --- |
 | `Common` | 编译器门面：整模块重导出 `Base.Pair`/`Bool`/`List`/`Maybe`/`Result`/`String`，并保留 `Pos`/`Span`、模块路径与诊断工具 | `showSpanLoc`、`suggest`、`splitPath` |
+| `Diagnostics`（门面） | 错误码体系入口（M30 拆分）：整模块重导出 `Diagnostics.Tc`/`Cg`/`Common` 与 `Base.Nat`/`Vec`，调用点名字集合不变 | `tcErr0`、`cgErr0`、`tcAll`、`cgAll` |
+| `Diagnostics.Tc` / `Cg` | `TcErr : Nat -> Type` / `CgErr : Nat -> Type` 域枚举（构造子携带模板、arity 由索引锁定）；`tcAll`/`cgAll` 按 arity 分块（避免单行巨表） | `tcCode`、`tcTemplate`、`cgCode`、`cgTemplate` |
 | `Intrinsics` | **内建声明唯一真源（M27）**：名字/签名形状（`IType`）/arity/归约标签（`IntrinsicOp`）/能力（`Capability`）/runtime 名/用户可见性；内置身份按声明 symbol（`Base.Bool.Bool` / `Base.List.List` / `Base.IO.IO`） | `findIntrinsic`、`intrinsicRuntime`、`intrinsicCapability`、`parseCapability` |
-| `Frontend.Ast` | 语法类型与 AST helper（`Expr`/`Decl`/`Pat`/`Ctor`/`Import`/`ModDecl`） | `clausesFor`、`funArity`、`declNames` |
+| `Frontend.Ast` | 语法类型与 AST helper（`Expr`/`Decl`/`Pat`/`Ctor`/`Import`/`ModDecl`/`TraitMethod`） | `clausesFor`、`funArity`、`declNames` |
 | `Frontend.Lexer` | 字符游标、token 与位置；注释单独 lex 出来供 formatter 使用 | `lexSource`、`lexComments` |
-| `Frontend.Parser` | offside layout parser → AST + imports；`where` 块与绑定签名行 | `parseSource`、`parseExpressionSource` |
+| `Frontend.Parser` | offside layout parser → AST + imports；`where` 块与绑定签名行；方法签名带 span（M30/B20） | `parseSource`、`parseExpressionSource` |
 | `Frontend.Toml` | TOML 子集解析器 | `parseToml`、`lookupEntry` |
-| `Frontend.Manifest` | `vuna.toml` 的语义模型与结构校验（不做 I/O） | `parseManifest`、`validateManifest` |
+| `Frontend.Manifest` | `vuna.toml` 的语义模型与结构校验（M30 起 `[package]` 只有 `name`；不做 I/O） | `parseManifest`、`validateManifest` |
 | `Packages.Pkg` | 包 / workspace 解析层：manifest 图、依赖 DAG、**每个文件的包上下文**（最近 manifest + 依赖闭包）、base 定位（不碰 Loader / CLI） | `loadPackage`、`workspacePackages`、`contextForFile`、`contextForDir`、`locateBase` |
 | `Loader`（门面） | 模块加载、名字解析与 flatten 的稳定入口；对外导出 `Project` / `Module` / `ExportEntry` 与 `loadProject*` / `resolveProject` | `loadProject`、`loadProjectModules`、`resolveProject` |
 | `Loader.Modules` | 加载器的数据与模块图（叶子，无跨 Loader 子模块依赖）：模块根、import 边、导出表结构 | `collectModuleFiles`、`moduleAllImportsOf` |
 | `Loader.Resolve` | 名字解析 + 效应能力检查：把 parse 后声明/表达式解析成带模块前缀的名字；内建 arity/prelude 放行/能力检查都消费 `Intrinsics`（不再有手写内建表） | `resolveProgram`、`checkEffectsBuiltins` |
-| `Loader.Flatten` | 模块导出表计算、加载流程与 flatten（`Prelude` 自动导入——含 ad-hoc 单文件、`[export]` 可见性） | `loadProject`、`loadProjectModules`、`loadProjectSource` |
+| `Loader.Flatten` | 模块导出表计算、加载流程与 flatten（`Prelude` 自动导入——含 ad-hoc 单文件、`[export]` 可见性）；M30 新增内存源码的**库模块**入口（LSP） | `loadProject`、`loadProjectModules`、`loadProjectSource`、`loadModuleSource` |
 | `Core`（门面） | core 类型论表示、NbE 求值与定义性相等等公开面 | `Core.Eval.eval`、`quote`、`normalize`、`Core.Conv.conv`、`Core.Term.defaultFuel` |
 | `Core.Term` | `Term`/`Value`/`Neutral`/`Closure`/`Rig`/`Level` 等数据（唯一真源）与 `shift`/`substVarAt`/显示等纯项变换 | `shift`、`substVarAt`、`rigIsErased` |
 | `Core.Eval` | beta 求值、delta 展开、prelude 原语归约、深度正规化与 quote | `eval`、`force`、`applyClosure`、`normalize`、`quote` |
 | `Core.Conv` | 定义性相等（beta + delta + eta）与元变量求解（M28：Miller pattern + 创建深度就地检查；非 pattern 形状保守 head 提取） | `conv`、`convBoth`、`solveMeta` |
 | `Elab`（门面） | DT 精化器稳定入口；按 `Elab.*` 前缀选择重导出 `Types`/`Meta`/`Data`/`Trait`/`Driver` 的公开名 | `Elab.Driver.elabProgramFull`、`goalsOfProgram` |
-| `Elab.Sig` | 签名工具：trait 类参数 kind 推断 + 顶层签名自由名量化（**合并原 `DtKind` + `DtQuant`**）；M28 起量化 banned 集按模块作用域计算（C29，`bannedForModule`） | `quantifyTopSig`、`classParamKind`、`methodArgRigsOf`、`bannedForModule` |
-| `Elab.Types` | Elab 的数据定义与共享状态：`DtDef`/`DtAxiom`（无体/不透明顶层）/`DtCtor`/`DtData`/`DtGoal`/`DtClass`/`DtInst`/`DtProgram` 与 `Ctx`；`dtDefBody` 返回 `Maybe Term` | `dtDataName`、`dtDefType`、`dtDefBody`、`dtProgDefs` |
+| `Elab.Sig` | 签名工具：trait 类参数 kind 推断 + 顶层签名自由名量化（**合并原 `DtKind` + `DtQuant`**）；M28 起量化 banned 集按模块作用域计算（C29），M30 改一次性 qualified 表 + per-sig O(1) 查（修 O(n²)） | `quantifyTopSig`、`quantifyTopSigCached`、`qualifiedBannedTbl`、`classParamKind` |
+| `Elab.Types` | Elab 的数据定义与共享状态：`DtDef`/`DtAxiom`（无体/不透明顶层）/`DtCtor`/`DtData`/`DtGoal`/`DtClass`/`DtInst`/`DtProgram` 与 `Ctx`；M30 `Ec` 带 ctor/defVal 索引缓存，`DtProgram` 带 `defVals` | `dtDataName`、`dtDefType`、`dtDefBody`、`dtProgDefs`、`dtProgDefVals` |
 | `Elab.Meta` | 共享工具层：值/构造子引用、`convEc`、元变量创建深度与统一 `zonkTerm`、擦除判据（`isTypeDomain`/`binderRig`）、命名空间查询（`typeLookup`/`valueLookup`）、canonical Bool 的 `TBool` 表示 | `convEc`、`zonkTerm`、`binderRig`、`typeLookup`、`dictTypeName` |
 | `Elab.Case` | case 规范形（M28）：索引合一（`unifyIdx`）、scrutinee 反射、单一可达性判据（`BranchVerdict`/`allCtorsUnsatisfiable`）、空族与冗余/不可达诊断 | `unifyIdx`、`reflectScrutinee`、`checkCoverage`、`isEmptyFamilyValue` |
 | `Elab.Dict` | 字典编码的表示与实例搜索：字典类型/实例头识别、`conv` 头匹配、实例搜索（M29 起递归解 ctx / 约束实例）、`==`/比较运算符特化（Int/String 内建或 Eq/Ord 字典；**无泛型结构比较兜底**） | `searchInstance`、`dictFamilyNameOf`、`cmpRuntimeName`、`deferEqDict` |
 | `Elab.Term` | 项的双向检查（与 case 规则互递归的核心）：`inferE`/`checkE`/应用/隐式插入/类型检查 | `inferE`、`checkE`、`checkApp`、`checkType` |
 | `Elab.Data` | `data` 声明与构造子/索引擦除：`elabCtor`、`elabDataHead(s)`、`elabDataBodies`、擦除候选；M28 起校验 kind 结果层级与构造子字段 sort | `elabDatas`、`ctorFieldTerms`、`checkCtorFieldSorts` |
-| `Elab.Trait` | trait/instance 声明与实例体：类参数 kind、方法投影、实例头检查（重复 / 相干性；M29 删除命名实例、支持约束实例 ctx）、方法体精化 | `checkInstanceHeads`、`elabInstanceBodies`、`instanceName` |
+| `Elab.Trait` | trait/instance 声明与实例体：类参数 kind、方法投影、实例头检查（重复 / 相干性；M29 删除命名实例、支持约束实例 ctx）、方法体精化；M30 起方法签名带 span（B20），实例名=单类前缀+完整 head 名（B22） | `checkInstanceHeads`、`elabInstanceBodies`、`instanceName` |
 | `Elab.Driver` | 精化入口与程序组装：签名 → data/trait/instance → 定义体 → zonk/终止性检查 → `DtProgram`；洞目标 | `Elab.Driver.elabProgramFull`、`goalsOfProgram`、`dtEvalExprIn` |
 | `Elab.Termination` | DT 终止性检查（M16/M25）：调用图 + SCC，结构下降/守卫 Int 判据（无包级豁免） | `checkTerminationDecls` |
 | `Elab.Prelude` | 把 `Intrinsics` 表翻译成 DT prelude globals（签名）；不再有第二份名字/签名表（原 `DtPrelude`） | `preludeGlobals`、`builtinTyName`、`cmpBuiltinTyName` |
@@ -55,10 +57,11 @@
 | `Codegen.Term` | 项 → OCaml（擦除驱动）+ DT 运行时前缀（`bi_*`、`dtp_*`、IO 桥接）；全局名 → runtime 映射消费 `Intrinsics` | `dtRuntime`、`genDtHook`、`genGroups` |
 | `Codegen.Assembly` | 同一份 `DtProgram` 的装配与检查入口（M26 由 `Codegen.Program` 改名；单文件产物生成器删除） | `prepareDtProgram`、`genUnitText`、`mainHook`、`checkDtProgram` |
 | `Codegen.Split` | **唯一** codegen 生成器：逐模块 split 的声明归属表与分文件装配 | `generateDtSplitProgram` |
-| `Driver.Split` | 输出文件模型与构建脚本生成：`SplitFile`、依赖序、增量 `build.sh` | `SplitFile`、`buildScript`、`writeSplitFiles` |
-| `Driver.Dt` | DT 路径 facade（供 `Compile` / `CompilerCli` / `Interp` 使用）：单一 `PackageContext` 加载形状 | `dtCheck`、`dtCheckLibrary`、`dtSplitProject`、`dtEvalFile` |
-| `Driver.Compile` | 编译入口：`PackageContext` 检查/编译、目录式 codegen 与构建脚本执行 | `checkPackage`、`compileToDir`、`buildSplit`、`runBuildScript` |
-| `Driver.CompilerCli` | 编译器自己的 CLI（`vuna-compiler`）；**合并原 `Process`** 的 `runIn`（`prim_runIn`，需要 `process` 能力） | `runCompilerCli`、`compilerUsageLines`、`runIn` |
+| `Driver.Split` | 输出文件模型与构建脚本生成：`SplitFile`、依赖序、M30 起按内容哈希增量的 `build.sh` | `SplitFile`、`buildScript`、`writeSplitFiles`、`writeSplitFilesIfChanged` |
+| `Driver.Dt` | DT 路径 facade（供 `Compile` / `CompilerCli` / `Interp` / LSP 使用）：单一 `PackageContext` 加载形状；M30 新增内存源码检查/洞目标、`dtMainKind`、`dtEvalExprInfo` | `dtCheck`、`dtCheckLibrary`、`dtCheckSource`、`dtGoalsSource`、`dtSplitProject`、`dtEvalFile`、`dtMainKind` |
+| `Driver.Compile` | 编译入口：`PackageContext` 检查/编译、目录式 codegen、构建脚本执行；M30 新增 build meta（确定性/依赖闭包哈希/同哈希跳过）与递归建目录 | `checkPackage`、`compileToDir`、`buildMetaText`、`metaUpToDate`、`writeBuildMeta` |
+| `Driver.CompilerCli` | 编译器自己的 CLI（`vuna-compiler`）；**合并原 `Process`** 的 `runIn`；M30 workspace check/build 单元、`build --package`、`version` | `runCompilerCli`、`compilerUsageLines`、`runIn` |
+| `Version` | 版本号唯一真源（M30）；产品 CLI / `vuna-compiler` / build meta / VSCode 探测共用 | `vunaVersion` |
 
 `compiler/vuna.toml` 的 `[export]` 列出全部 49 个导出模块（内部 `Debug` 不在内）；
 `[capabilities] effects` 声明五个能力（编译器直接使用 `prim_*`）。工具链模块不在此包。

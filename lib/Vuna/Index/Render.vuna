@@ -1,7 +1,8 @@
-module Vuna.Index.Render (renderApi, renderDocWithComments, renderModules, renderOverview) where
+module Vuna.Index.Render (renderApi, renderModules, renderOverview) where
 
--- Vuna.Index.Render：`vuna map` / `vuna api` / `vuna doc --with-comments` 的文本渲染
--- （M24 后维护·源码重组）。纯字符串拼装，不读源码。
+-- Vuna.Index.Render：`vuna map` / `vuna api` 的文本渲染（M24 后维护·源码重组）。
+-- 纯字符串拼装，不读源码。M30 删除 `renderDocWithComments`：`vuna doc --with-comments`
+-- 从未实现（flag 已删），doc 现在由 Vuna.Doc 直接按源码 + `[export]` 渲染。
 import Vuna.Compiler.Common
 import Vuna.Index.Types
 
@@ -47,27 +48,3 @@ apiRow s =
     ++ "  -- line "
     ++ strFromInt (symLine s)
     ++ (if symDoc s == "" then "" else "\n      " ++ symDoc s)
-
--- `vuna doc --with-comments`：模块 + 签名 + 紧邻注释。
-renderDocWithComments : Index -> String
-renderDocWithComments index =
-  let
-    mods = distinct (map symModule (indexSymbols index))
-  in join "\n" (map (docSection index) mods)
-
-docSection : Index -> String -> String
-docSection index modQuery =
-  let
-    syms =
-      filter
-        (\s => symModule s == modQuery && (symKind s == "fun" || symKind s == "data" || symKind s == "record" || symKind s == "trait"))
-        (indexSymbols index)
-  in "## " ++ modQuery ++ "\n\n```vuna\n" ++ join "\n" (map docRow syms) ++ "```\n"
-
-docRow : Sym -> String
-docRow s =
-  (if symDoc s == "" then "" else "-- " ++ symDoc s ++ "\n")
-    ++ symName s
-    ++ " : "
-    ++ symSig s
-    ++ "\n\n"

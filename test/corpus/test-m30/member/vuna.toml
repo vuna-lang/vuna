@@ -1,0 +1,6 @@
+# workspace 成员包：`vuna test <workspace-root>` 要把它并入聚合（按包名分组）。
+[package]
+name = "test-m30-member"
+
+[dependencies]
+vuna-base = "../../../../base"

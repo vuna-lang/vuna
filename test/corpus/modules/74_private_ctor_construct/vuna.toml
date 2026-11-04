@@ -3,8 +3,6 @@
 # 入口 app/Main.vuna + lib/ 模块根，base 经 [dependencies] 进入可见性闭包。
 [package]
 name = "fix-74-private-ctor-construct"
-version = "0.1.0"
-edition = "2026"
 
 [dependencies]
 vuna-base = "../../../../base"

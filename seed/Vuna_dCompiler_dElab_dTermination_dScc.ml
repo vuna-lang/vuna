@@ -17,6 +17,9 @@ open Vuna_dCompiler_dPackages_dPkg
 open Vuna_dCompiler_dDebug
 open Base_dNat
 open Base_dVec
+open Vuna_dCompiler_dDiagnostics_dCommon
+open Vuna_dCompiler_dDiagnostics_dCg
+open Vuna_dCompiler_dDiagnostics_dTc
 open Vuna_dCompiler_dDiagnostics
 open Vuna_dCompiler_dFrontend_dAst
 open Vuna_dCompiler_dFrontend_dDiagnostics
@@ -44,6 +47,7 @@ open Vuna_dCompiler_dElab_dTerm_dSupport
 open Vuna_dCompiler_dElab_dTerm_dImpl
 open Vuna_dCompiler_dElab_dTerm
 open Vuna_dCompiler_dElab_dData
+open Vuna_dCompiler_dElab_dInstName
 open Vuna_dCompiler_dElab_dTrait
 open Vuna_dCompiler_dElab_dDerive
 open Vuna_dCompiler_dElab_dRecords
@@ -281,7 +285,7 @@ let rec v_Vuna_dCompiler_dElab_dTermination_dScc_dedgesEqCanon = (fun mc0 -> (fu
 )
   | C_Base_dList_dList_Base_dList_dCons (dtb__155, dtb__156) -> (match mc1 with
   | C_Base_dList_dList_Base_dList_dNil -> false
-  | C_Base_dList_dList_Base_dList_dCons (dtb__157, dtb__158) -> (if ((bi_eq_int (v_Vuna_dCompiler_dElab_dTermination_dScc_dedgeFrom dtb__155)) (v_Vuna_dCompiler_dElab_dTermination_dScc_dedgeFrom dtb__157)) then (if ((bi_eq_int (v_Vuna_dCompiler_dElab_dTermination_dScc_dedgeTo dtb__155)) (v_Vuna_dCompiler_dElab_dTermination_dScc_dedgeTo dtb__157)) then (if (((v_Base_dEq_deq v_Base_dEq_dEq_uBase_dEq_dEq_uBase_dBool_dBool) (v_Vuna_dCompiler_dElab_dTermination_dScc_dscStrictEdge dtb__155)) (v_Vuna_dCompiler_dElab_dTermination_dScc_dscStrictEdge dtb__157)) then ((v_Vuna_dCompiler_dElab_dTermination_dScc_dedgesEqCanon dtb__156) dtb__158) else false) else false) else false)
+  | C_Base_dList_dList_Base_dList_dCons (dtb__157, dtb__158) -> (if ((bi_eq_int (v_Vuna_dCompiler_dElab_dTermination_dScc_dedgeFrom dtb__155)) (v_Vuna_dCompiler_dElab_dTermination_dScc_dedgeFrom dtb__157)) then (if ((bi_eq_int (v_Vuna_dCompiler_dElab_dTermination_dScc_dedgeTo dtb__155)) (v_Vuna_dCompiler_dElab_dTermination_dScc_dedgeTo dtb__157)) then (if (((v_Base_dEq_deq v_Eq_uBase_dBool_dBool) (v_Vuna_dCompiler_dElab_dTermination_dScc_dscStrictEdge dtb__155)) (v_Vuna_dCompiler_dElab_dTermination_dScc_dscStrictEdge dtb__157)) then ((v_Vuna_dCompiler_dElab_dTermination_dScc_dedgesEqCanon dtb__156) dtb__158) else false) else false) else false)
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"

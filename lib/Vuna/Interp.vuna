@@ -1,4 +1,4 @@
-module Vuna.Interp (interpretExpr, interpretFile) where
+module Vuna.Interp (evalExprInfo, interpretExpr, interpretFile, runEffectProgram) where
 
 -- Vuna.Interp：解释器 facade（工具链侧；编译入口见 Vuna.Compiler.Driver.Compile）。
 --
@@ -13,9 +13,16 @@ module Vuna.Interp (interpretExpr, interpretFile) where
 -- 求值是**纯**的：不执行效果。`main : IO a` 只对纯动作（例如 `pure n`）能求出值；
 -- 真正带 `prim_print` / 文件效果的 `main` 请用 `compile` + 运行产物（见 dt.md）。
 -- 该模块只被 CLI / REPL / test runner 使用，不属于编译器 seed 闭包。
+--
+-- M30：新增两条工具链能力（仍然不属于编译器 seed 闭包）：
+--   - `evalExprInfo`：表达式值 + zonk 后类型文本（REPL 用类型判断是否 IO）；
+--   - `runEffectProgram`：把「带 main 的完整入口源码」放进临时包，走
+--     `compileToDir` + `runBuildScript` + 运行（REPL 的 IO 表达式与 `vuna test`
+--     的 IO 测试共用这一条执行路径）。效果的输出直接写终端，判定只看进程退出码。
 import Vuna.Compiler.Common
 import Vuna.Compiler.Packages.Pkg
 import Vuna.Compiler.Driver.Dt
+import Vuna.Compiler.Driver.Compile
 
 interpretFile : PackageContext -> String -> String
 interpretFile ctx entry = case dtEvalFile ctx entry of
@@ -28,3 +35,145 @@ interpretExpr : PackageContext -> String -> String -> String
 interpretExpr ctx program expr = case dtEvalExpr ctx program expr of
   Err e => "error: " ++ e
   Ok output => output
+
+-- M30 · REPL：值文本 + zonk 后的类型文本（`showTerm` 渲染，可直接写回合成签名）。
+-- 类型文本形如 `(Base.IO.IO Int)`（canonical 全名）；REPL 据此决定是否走效果执行。
+evalExprInfo : PackageContext -> String -> String -> Result (Pair String String)
+evalExprInfo ctx program expr = dtEvalExprInfo ctx program expr
+
+-- ---------------------------------------------------------------
+-- 效果程序执行（REPL 的 IO 表达式 + `vuna test` 的 IO 测试）
+--
+-- 临时包布局（每次执行一个，结束后 `rm -rf` 清理）：
+--   <TMPDIR>/vuna-effect-<timeUs>/
+--     vuna.toml          -- 包名固定 vuna-effect；[dependencies] 复用调用方上下文的
+--                           依赖根（绝对路径）；[capabilities].effects 复制调用方本包
+--                           的能力声明（否则入口里的 prim_* 会被能力检查拒绝）
+--     app/Main.vuna      -- 调用方给的「带 main 的完整入口源码」
+--     .output/           -- compileToDir 产物 + build.sh + bin/vuna-effect
+--
+-- 失败都是可读的 `Err`（临时目录已清理）：manifest/精化/代码生成错误来自 compiler；
+-- 链接失败带包名/目录/退出码；缺 `ocamlopt` 时给「进 nix develop」的可操作提示。
+-- ---------------------------------------------------------------
+effectPackageName : String
+effectPackageName = "vuna-effect"
+
+effectBinaryName : String
+effectBinaryName = "vuna-effect"
+
+-- 临时目录根：`$TMPDIR`（去尾部 `/`），没有就用 `/tmp`。
+-- 读环境是启动期动作，函数化（A05：零参顶层值会在模块初始化时求值）。
+tempBase : Int -> String
+tempBase _ =
+  let
+    env = prim_getenv "TMPDIR"
+  in if env == "" then "/tmp"
+  else if endsWith "/" env then substring 0 (strLength env - 1) env else env
+
+-- 微秒时间戳命名 + 冲突探测：同一进程内连续执行不会撞名。探测走 `range` 生成的
+-- 有界列表（结构下降），异常情况最多换 1000 个后缀，都不行就用基名（失败由编译报）。
+freshTempDir : String -> String
+freshTempDir base = pickTempDir base (range 0 1001)
+
+pickTempDir : String -> List Int -> String
+pickTempDir base [] = base
+pickTempDir base (n :: rest) =
+  let
+    candidate = if n == 0 then base else base ++ "-" ++ strFromInt n
+  in if prim_fileExists candidate then pickTempDir base rest else candidate
+
+-- 上下文依赖根 → 临时包的 [dependencies] 条目（包名 → 包目录）。
+-- base-only 上下文（包名为空）只有 base 一个根，必须全部带上；普通上下文跳过第一个
+-- 根（它是当前包自己的 lib：临时包不能依赖「自己」，否则触发依赖环）。
+effectDeps : PackageContext -> List (Pair String String)
+effectDeps ctx = case contextRoots ctx of
+  [] => []
+  roots =>
+    if contextPackageName ctx == "" then map effectDep roots else map effectDep (drop 1 roots)
+
+effectDep : Root -> Pair String String
+effectDep root = Pair (rootName root) (absoluteDir (rootPackageDir (rootDir root)))
+
+-- 模块根固定是 <包目录>/lib；去掉后缀得到包目录（manifest 的 [dependencies] 吃包目录）。
+rootPackageDir : String -> String
+rootPackageDir dir = if endsWith "/lib" dir then substring 0 (strLength dir - 4) dir else dir
+
+-- 依赖路径必须是绝对路径（临时包不在调用方的工作目录下，相对路径会解析错）。
+absoluteDir : String -> String
+absoluteDir dir = if startsWith "/" dir then dir else prim_getcwd ++ "/" ++ dir
+
+tomlQuote : String -> String
+tomlQuote s = "\"" ++ tomlEscaped (strUnpack s) ++ "\""
+
+tomlEscaped : List Int -> String
+tomlEscaped [] = ""
+tomlEscaped (c :: rest) = tomlChar c ++ tomlEscaped rest
+
+tomlChar : Int -> String
+tomlChar c = if c == 34 then "\\\"" else if c == 92 then "\\\\" else strPack [c]
+
+-- 依赖 key 用裸名（TOML 的 quoted key 在 vuna 的 TOML 解析器里不支持；包名已被
+-- manifest 校验限制为 a-z/0-9/'-'，是合法 bare key）；路径值用双引号字符串。
+depLine : Pair String String -> String
+depLine dep = firstOf dep ++ " = " ++ tomlQuote (secondOf dep) ++ "\n"
+
+depsSection : List (Pair String String) -> String
+depsSection [] = ""
+depsSection deps = "\n[dependencies]\n" ++ join "" (map depLine deps)
+
+capsSection : List String -> String
+capsSection [] = ""
+capsSection caps = "\n[capabilities]\neffects = [" ++ join ", " (map tomlQuote caps) ++ "]\n"
+
+effectManifest : PackageContext -> String
+effectManifest ctx =
+  "[package]\nname = "
+    ++ tomlQuote effectPackageName
+    ++ "\n"
+    ++ depsSection (effectDeps ctx)
+    ++ capsSection (contextCapabilities ctx)
+
+-- `ocamlopt` 是否在 PATH 里（链接阶段需要）。探针的 stdout/stderr 全部丢弃。
+hasOcamlopt : Int -> Bool
+hasOcamlopt _ = prim_runIn "." ["sh", "-c", "command -v ocamlopt >/dev/null 2>&1"] == 0
+
+noOcamloptMessage : String
+noOcamloptMessage =
+  "`ocamlopt` not found in PATH; run the toolchain inside `nix develop` (or install OCaml) to compile effect programs"
+
+cleanupTemp : String -> Int -> Int
+cleanupTemp dir code =
+  let
+    _ = prim_runIn "/" ["rm", "-rf", dir]
+  in code
+
+cleanupErr : String -> String -> Result Int
+cleanupErr dir e =
+  let
+    _ = prim_runIn "/" ["rm", "-rf", dir]
+  in Err e
+
+-- 把带 main 的入口源码编译成临时包里的可执行文件并运行，返回进程退出码。
+-- `printResult` 透传给 codegen 的 main 钩子（IO a 时先跑动作、再按 a 的类型打印）；
+-- effect 测试用 False（只看退出码，不比较输出）。
+runEffectProgram : PackageContext -> String -> Bool -> Result Int
+runEffectProgram ctx source printResult =
+  let
+    dir = freshTempDir (tempBase 0 ++ "/vuna-effect-" ++ strFromInt timeUs)
+    entry = dir ++ "/app/Main.vuna"
+    outDir = dir ++ "/.output"
+    _ = prim_makeDir dir
+    _ = prim_makeDir (dir ++ "/app")
+    _ = prim_writeFile (dir ++ "/vuna.toml") (effectManifest ctx)
+    _ = prim_writeFile entry source
+  in case contextForDir dir of
+    Err e => cleanupErr dir e
+    Ok ctxTmp => case compileToDir ctxTmp entry printResult outDir of
+      Err e => cleanupErr dir e
+      Ok _ =>
+        let
+          _ = prim_makeDir (outDir ++ "/bin")
+        in if hasOcamlopt 0 then case runBuildScript outDir ("bin/" ++ effectBinaryName) effectBinaryName of
+          Err e => cleanupErr dir e
+          Ok _ => Ok (cleanupTemp dir (prim_runIn outDir ["bin/" ++ effectBinaryName]))
+        else cleanupErr dir noOcamloptMessage

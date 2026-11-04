@@ -21,6 +21,7 @@ module Vuna.Compiler.Elab.Meta
   , dictTypeName
   , dropParams
   , dtCtorLookup
+  , dtCtorLookupEc
   , dtDataLookup
   , fieldBinderGo
   , fieldBinderNames
@@ -155,7 +156,7 @@ isBoolFamilyName name = name == boolTypeName
 -- `inferE (EVar ctor)`：零参构造子（`Nil`/`Nothing` 等）的隐式类型参数实例化成元变量，
 -- 使其类型为 `List ?m`/`Maybe ?m`（值），而非 `{a}->List a`（函数）。
 inferCtorRef : Ec -> Ctx -> String -> Term -> Result (Pair Term (Pair Value Ec))
-inferCtorRef ec ctx name tyTerm = case dtCtorLookup name (ecDatas ec) of
+inferCtorRef ec ctx name tyTerm = case dtCtorLookupEc ec name of
   Just ctor => if isBoolFamilyName (dtCtorFamily ctor) then Ok (Pair (boolCtorTerm (dtCtorName ctor)) (Pair (VNeutral (NGlobal boolTypeName [])) ec))
   else
     let
@@ -265,29 +266,34 @@ collectSigs : List Decl -> Result (List (Pair String Expr))
 collectSigs decls =
   let
     defined = definedNames decls
-  in collectSigsInto defined tblEmpty [] decls
+    -- M30（D18）：banned 表一次性建（一次 O(#defined)），之后每个签名 O(1) 查。
+    -- 旧实现每签名扫全 defined 并重建表（O(#sigs × #defined)），实测 collectSigs 12.9 s。
+    banned = qualifiedBannedTbl defined
+    preludeBanned = topQuantBanned []
+  in collectSigsInto banned preludeBanned tblEmpty [] decls
 
 -- 声明收集（M20：签名里的自由小写名量化为隐式类型参数，见 `Elab.Sig.quantifyTopSig`）。
--- M28 / C29：banned 集按**签名所属模块**现场计算（`Elab.Sig.bannedForModule`），不再是
--- program-wide 的定义名集合；`defined` 是整个程序的定义名（名字自带模块前缀，切分作用域）。
-collectSigsInto : List String -> HashTbl Bool -> List (Pair String Expr) -> List Decl -> Result (List (Pair String Expr))
-collectSigsInto defined seen acc [] = Ok (reverse acc)
-collectSigsInto defined seen acc (d :: rest) = case d of
-  DSig name ty sp => collectSigOne defined seen acc name ty sp rest
+-- M28 / C29：banned 集按**签名所属模块**作用域；M30（D18）把这张集合改成共享缓存：
+-- `banned` 的键是「模块前缀 \t 名字」（`Sig.qualifiedBannedTbl`），`preludeBanned` 是
+-- 全局 prelude 名单，两者都只建一次。
+collectSigsInto : HashTbl Bool -> HashTbl Bool -> HashTbl Bool -> List (Pair String Expr) -> List Decl -> Result (List (Pair String Expr))
+collectSigsInto banned preludeBanned seen acc [] = Ok (reverse acc)
+collectSigsInto banned preludeBanned seen acc (d :: rest) = case d of
+  DSig name ty sp => collectSigOne banned preludeBanned seen acc name ty sp rest
   -- M28：axiom 与签名同一套类型检查/量化；区别只在 `checkAllDefined` 不要求它有体。
-  DAxiom name ty sp => collectSigOne defined seen acc name ty sp rest
-  DFun name pats body sp => collectSigsInto defined seen acc rest
-  DData name params kind ctors derivings sp => collectSigsInto defined seen acc rest
+  DAxiom name ty sp => collectSigOne banned preludeBanned seen acc name ty sp rest
+  DFun name pats body sp => collectSigsInto banned preludeBanned seen acc rest
+  DData name params kind ctors derivings sp => collectSigsInto banned preludeBanned seen acc rest
   DRecord name params fields derivings sp => errAt sp "DT: internal: record was not desugared"
-  DTrait name params methods sp => collectSigsInto defined seen acc rest
-  DInstance ctxE head methods sp => collectSigsInto defined seen acc rest
+  DTrait name params methods sp => collectSigsInto banned preludeBanned seen acc rest
+  DInstance ctxE head methods sp => collectSigsInto banned preludeBanned seen acc rest
 
-collectSigOne : List String -> HashTbl Bool -> List (Pair String Expr) -> String -> Expr -> Span -> List Decl -> Result (List (Pair String Expr))
-collectSigOne defined seen acc name ty sp rest =
+collectSigOne : HashTbl Bool -> HashTbl Bool -> HashTbl Bool -> List (Pair String Expr) -> String -> Expr -> Span -> List Decl -> Result (List (Pair String Expr))
+collectSigOne banned preludeBanned seen acc name ty sp rest =
   if memName name preludeNames then tcErr1 sp (CannotRedefineBuiltin name) name
   else if tblMem name seen then tcErr1 sp (DuplicateSignature name) name
-  else collectSigsInto defined (tblInsert name True seen)
-    (Pair name (quantifyTopSig (bannedForModule name defined) ty sp) :: acc) rest
+  else collectSigsInto banned preludeBanned (tblInsert name True seen)
+    (Pair name (quantifyTopSigCached (modulePrefixOf name) banned preludeBanned ty sp) :: acc) rest
 
 -- 已精化的族按源顺序积累在 Ec 的 datas 里（case 精化需要族的 ctor telescope）。
 -- 收集 data 声明（按源顺序）。
@@ -349,6 +355,14 @@ dtCtorLookup name (d :: rest) = case findCtorIn name (dtDataCtors d) of
   Just c => Just c
   Nothing => dtCtorLookup name rest
 
+-- M30（D18）构造子索引的**唯一热路径入口**：先查 `Ec.ecCtorTbl`（O(1)），未命中回落
+-- 线性扫族表。索引是可重建缓存（真相仍是 `ecDatas`）：建表前的阶段（data 精化中途）
+-- 或者 `ecAddData` 之外的旁路构造都会 miss，回落保证语义不变。
+dtCtorLookupEc : Ec -> String -> Maybe DtCtor
+dtCtorLookupEc ec name = case tblLookup name (ecCtorTbl ec) of
+  Just c => Just c
+  Nothing => dtCtorLookup name (ecDatas ec)
+
 -- ---------------------------------------------------------------
 -- M28（B18）：Elab 侧的**显式命名空间查询**
 -- ---------------------------------------------------------------
@@ -389,7 +403,7 @@ data ValueEntry : Type where
 -- 值位置查值命名空间（构造子 + 全局定义）：同名时构造子优先——族 kind 与构造子同串，
 -- 直接查 globals 会先拿到族 kind（`Type -> ... -> Type`）而不是构造子类型。
 valueLookup : List (Pair String Term) -> Ec -> String -> Maybe ValueEntry
-valueLookup globals ec name = case dtCtorLookup name (ecDatas ec) of
+valueLookup globals ec name = case dtCtorLookupEc ec name of
   Just ctor => Just (VECtor ctor)
   Nothing => case globalsLookup name globals ec of
     Just ty => Just (VEDef ty)

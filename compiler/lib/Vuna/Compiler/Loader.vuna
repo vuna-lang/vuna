@@ -6,6 +6,7 @@ module Vuna.Compiler.Loader
   , entryParent
   , entryPublic
   , entryTarget
+  , loadModuleSource
   , loadProject
   , loadProjectModules
   , loadProjectSource

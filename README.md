@@ -37,7 +37,7 @@ sh hello-out/build.sh hello && ./hello-out/hello # -> 7
 ./result/bin/vuna build examples/multi         # 现成的多包示例（根包 + greet + base 依赖）
 examples/multi/.output/bin/multi               # -> hi hi hi|n2 n1（--out 可覆盖输出目录）
 ./result/bin/vuna check examples/multi         # 包级类型检查
-./result/bin/vuna test examples/multi          # 跑包内 test/*.vuna（main : String，空串通过）
+./result/bin/vuna test examples/multi          # 纯 String/Int/Bool 走 interp；main : IO ... 走 compile+运行
 
 # 测试 / 格式化 / 文档
 nix run .#vuna-run-tests                            # 原生测试（= sh test/run-tests.sh）
@@ -105,6 +105,7 @@ manifest，不向上找。环境根开关、raw 模式、`--split` 与 `seed` �
 ├── seed/      # compiler 闭包的多文件自举信任锚点（生成物，禁止手改）
 ├── test/      # run-tests.sh + corpus/ 夹具
 ├── examples/  # 多包示例
+├── vscode/    # VSCode 扩展（语法高亮 + LSP 客户端 + lint/fmt/check/build；提交 dist/）
 ├── nix/       # 构建图（packages/checks）+ rotate/metrics/bench
 ├── docs/      # 分层文档（见 AGENTS.md 导航）
 ├── vuna.toml  # workspace 根（同时是产品 CLI 包）；members: compiler/base

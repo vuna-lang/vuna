@@ -17,6 +17,9 @@ open Vuna_dCompiler_dPackages_dPkg
 open Vuna_dCompiler_dDebug
 open Base_dNat
 open Base_dVec
+open Vuna_dCompiler_dDiagnostics_dCommon
+open Vuna_dCompiler_dDiagnostics_dCg
+open Vuna_dCompiler_dDiagnostics_dTc
 open Vuna_dCompiler_dDiagnostics
 open Vuna_dCompiler_dFrontend_dAst
 open Vuna_dCompiler_dFrontend_dDiagnostics
@@ -54,7 +57,7 @@ let v_Vuna_dCompiler_dElab_dPrelude_dbuiltinTyName = (fun v -> (match v with
   | _ -> C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing
 ))
 
-let v_Vuna_dCompiler_dElab_dPrelude_deqRuntimeName = (fun op -> (fun tyName -> (if ((bi_eq_str tyName) "Int") then (if ((bi_eq_str op) "==") then (C_Base_dResult_dResult_Base_dResult_dOk ("bi_eq_int")) else (C_Base_dResult_dResult_Base_dResult_dOk ("bi_neq_int"))) else (if ((bi_eq_str tyName) "String") then (if ((bi_eq_str op) "==") then (C_Base_dResult_dResult_Base_dResult_dOk ("bi_eq_str")) else (C_Base_dResult_dResult_Base_dResult_dOk ("bi_neq_str"))) else (C_Base_dResult_dResult_Base_dResult_dErr (((v_Vuna_dCompiler_dDiagnostics_dtcMsg (C_Vuna_dCompiler_dDiagnostics_dTcErr_Vuna_dCompiler_dDiagnostics_dOpOnlyIntString (op, tyName))) (C_Base_dVec_dVec_Base_dVec_dVCons (op, (C_Base_dVec_dVec_Base_dVec_dVCons (tyName, C_Base_dVec_dVec_Base_dVec_dVNil)))))))))))
+let v_Vuna_dCompiler_dElab_dPrelude_deqRuntimeName = (fun op -> (fun tyName -> (if ((bi_eq_str tyName) "Int") then (if ((bi_eq_str op) "==") then (C_Base_dResult_dResult_Base_dResult_dOk ("bi_eq_int")) else (C_Base_dResult_dResult_Base_dResult_dOk ("bi_neq_int"))) else (if ((bi_eq_str tyName) "String") then (if ((bi_eq_str op) "==") then (C_Base_dResult_dResult_Base_dResult_dOk ("bi_eq_str")) else (C_Base_dResult_dResult_Base_dResult_dOk ("bi_neq_str"))) else (C_Base_dResult_dResult_Base_dResult_dErr (((v_Vuna_dCompiler_dDiagnostics_dTc_dtcMsg (C_Vuna_dCompiler_dDiagnostics_dTc_dTcErr_Vuna_dCompiler_dDiagnostics_dTc_dOpOnlyIntString (op, tyName))) (C_Base_dVec_dVec_Base_dVec_dVCons (op, (C_Base_dVec_dVec_Base_dVec_dVCons (tyName, C_Base_dVec_dVec_Base_dVec_dVNil)))))))))))
 
 let v_Vuna_dCompiler_dElab_dPrelude_dpolyEqTy = (C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTPi ("a", true, C_Vuna_dCompiler_dCore_dTerm_dRig_Vuna_dCompiler_dCore_dTerm_dRig0, (C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTType (v_Vuna_dCompiler_dCore_dTerm_dlevelZero)), (((v_Vuna_dCompiler_dElab_dPrelude_dfun2 (C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTVar ("a", 0))) (C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTVar ("a", 0))) v_Vuna_dCompiler_dElab_dPrelude_dboolTy)))
 

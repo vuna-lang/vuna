@@ -39,10 +39,31 @@ cursorLine (TomlCursor chars line col) = line
 cursorCol : TomlCursor -> Int
 cursorCol (TomlCursor chars line col) = col
 
--- 显式 fuel：TOML 主循环经「返回新游标再递归」，用 fuel 守卫 + 递减；
--- 每次合法迭代至少消费一个字符，故初值取剩余字符数 + 1。
+-- 显式 fuel（M30/C27：收紧到证明界）。两类状态机用不同的测度：
+--
+-- ① 逐**字符**扫描器（basic string / 整数 / 数组元素 / section 段）：`cursorFuel`
+--    按剩余字符数线性放大。证明：这些循环的每个 fuel 递减步都消费 ≥1 个字符
+--    （parseStringChars/parseStringEscape/parseIntegerDigits 逐字符；parseArrayItems /
+--    parseArrayString 一步消费引号与分隔符后进下一元素；parseSectionSegments 一步消费
+--    `.` 后 parseBareKey 结构递归吃掉裸键段），故步数 ≤ 剩余字符数；`2*len+16` 覆盖
+--    收尾（最后一字符之后的 expectEol/skipGap 不耗 fuel）。
+--
+-- ② 逐**行**主循环（parseTomlLoop 读 key/section 条目）：`lineFuel` 按剩余行数放大。
+--    证明：每次迭代恰好处理一条 key/section，结束时 expectEol 消费该行的换行符
+--    （或 EOF），故迭代数 ≤ 剩余换行数+1 = `lineCount`；每次迭代的递减链固定为
+--    parseTomlLoop→parseTomlLoopAt→parseKeyLine→parseEntryValue→parseTomlLoop = 4 步
+--    （section 为 3 步），故 `4*lineCount+16` 严格覆盖。空白/注释行由结构递归的
+--    skipGap 跳过、不耗主循环 fuel。
 cursorFuel : TomlCursor -> Int
-cursorFuel (TomlCursor chars line col) = 8 * length chars + 64
+cursorFuel (TomlCursor chars line col) = 2 * length chars + 16
+
+-- 剩余行数（换行数 + 1）：逐行主循环的迭代上界。
+lineFuel : TomlCursor -> Int
+lineFuel (TomlCursor chars line col) = 4 * countLines chars + 16
+
+countLines : List Int -> Int
+countLines [] = 1
+countLines (c :: rest) = if c == 10 then 1 + countLines rest else countLines rest
 
 advanceCursor : TomlCursor -> TomlCursor
 advanceCursor (TomlCursor [] line col) = TomlCursor [] line col
@@ -357,7 +378,7 @@ parseTomlAt : String -> String -> Result (List TomlEntry)
 parseTomlAt path source =
   let
     cs = TomlCursor (stripCR (strUnpack source)) 1 1
-  in parseTomlLoop (cursorFuel cs) path cs [] [] []
+  in parseTomlLoop (lineFuel cs) path cs [] [] []
 
 lookupEntry : List String -> String -> List TomlEntry -> Maybe TomlValue
 lookupEntry section key entries = case entries of

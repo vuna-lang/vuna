@@ -25,18 +25,18 @@ let v_Base_dBool_dor
 let v_Base_dBool_dxor
 
 == Base_dEq.ml
-let v_Base_dEq_dEq_uBase_dEq_dEq_uBase_dBool_dBool
-let v_Base_dEq_dEq_uBase_dEq_dEq_uInt
-let v_Base_dEq_dEq_uBase_dEq_dEq_uString
 let v_Base_dEq_deq
 let v_Base_dEq_dneq
+let v_Eq_uBase_dBool_dBool
+let v_Eq_uInt
+let v_Eq_uString
 
 == Base_dList.ml
 let v_Base_dList_dflatMap
 let v_Base_dList_drange
 let v_Base_dList_dreverse
-let v_Base_dMonad_dFunctor_uBase_dMonad_dFunctor_uBase_dList_dList
-let v_Base_dMonad_dMonad_uBase_dMonad_dMonad_uBase_dList_dList
+let v_Functor_uBase_dList_dList
+let v_Monad_uBase_dList_dList
 
 == Base_dMaybe.ml
 let v_Base_dMaybe_dfromMaybe
@@ -44,8 +44,8 @@ let v_Base_dMaybe_disJust
 let v_Base_dMaybe_disNothing
 let v_Base_dMaybe_dmapJust
 let v_Base_dMaybe_dmaybe
-let v_Base_dMonad_dFunctor_uBase_dMonad_dFunctor_uBase_dMaybe_dMaybe
-let v_Base_dMonad_dMonad_uBase_dMonad_dMonad_uBase_dMaybe_dMaybe
+let v_Functor_uBase_dMaybe_dMaybe
+let v_Monad_uBase_dMaybe_dMaybe
 
 == Base_dMonad.ml
 let v_Base_dMonad_dbind
@@ -53,13 +53,13 @@ let v_Base_dMonad_dfmap
 let v_Base_dMonad_dpure
 
 == Base_dOrd.ml
-let v_Base_dOrd_dOrd_uBase_dOrd_dOrd_uBase_dBool_dBool
-let v_Base_dOrd_dOrd_uBase_dOrd_dOrd_uInt
-let v_Base_dOrd_dOrd_uBase_dOrd_dOrd_uString
 let v_Base_dOrd_dge
 let v_Base_dOrd_dgt
 let v_Base_dOrd_dle
 let v_Base_dOrd_dlt
+let v_Ord_uBase_dBool_dBool
+let v_Ord_uInt
+let v_Ord_uString
 
 == Base_dPair.ml
 let v_Base_dPair_dfirstOf
@@ -73,10 +73,10 @@ let v_Base_dResult_dstep
 let v_Base_dResult_dwithDefault
 
 == Base_dShow.ml
-let v_Base_dShow_dShow_uBase_dShow_dShow_uBase_dBool_dBool
-let v_Base_dShow_dShow_uBase_dShow_dShow_uInt
-let v_Base_dShow_dShow_uBase_dShow_dShow_uString
 let v_Base_dShow_dshow
+let v_Show_uBase_dBool_dBool
+let v_Show_uInt
+let v_Show_uString
 
 == Base_dString.ml
 let v_Base_dString_d_uisSpace
@@ -91,8 +91,8 @@ let v_Base_dString_dtrimLeft
 let v_Base_dString_dtrimRight
 
 == Main.ml
-let v_Base_dShow_dShow_uBase_dShow_dShow_uColor
-let v_Pretty_uPretty_uColor
+let v_Pretty_uColor
+let v_Show_uColor
 let v_main
 let v_pretty
 type t_Color

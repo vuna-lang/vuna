@@ -174,6 +174,17 @@ applySpine v (a :: rest) = applySpine (applyValue v a) rest
 -- ---------------------------------------------------------------
 -- delta 展开：已解元变量 + 有定义的全局（带步数上限，避免递归定义挂死）
 -- ---------------------------------------------------------------
+-- M30（D18）值共享：定义体求值结果缓存在 `Sols.defVals`。命中时**仍然**走
+-- `applySpine` 后继续 `force`（缓存的是定义体的求值结果，可能仍需要 beta/元变量
+-- 归约），并照常递减 fuel——fuel 语义与未命中路径完全一致。缓存只在
+-- `elabBodies` 的安全前缀检查后写入，因此命中值与原路径求出的值定义性相等；
+-- 未缓存的定义行为逐字节不变。
+--
+-- 查找顺序是**先 defs 表、命中后再查值缓存**（而不是先查值缓存）：值缓存只对
+-- 「有定义体的全局」可能有值，而 force 的绝大多数 NGlobal 头是数据族/内建（没有
+-- 定义体），先查缓存会让它们每次多付一次哈希查。实测（M30）：单次 `check compiler`
+-- 的定义展开只有 ~700 次，而 NGlobal force ~5M 次，所以先 defs 后缓存的顺序把
+-- 「未定义全局」的成本保持为原来的一次 defLookup，缓存 hit 的收益仍保留。
 force : HashTbl Term -> Sols -> Int -> Value -> Value
 force defs sols fuel v = if fuel <= 0 then v
 else case v of
@@ -198,7 +209,9 @@ else case v of
       _ => VApp f2 a
   VNeutral n => case n of
     NGlobal g sp => case defLookup g defs of
-      Just body => force defs sols (fuel - 1) (applySpine (eval [] body) sp)
+      Just body => case tblLookup g (solsDefVals sols) of
+        Just cached => force defs sols (fuel - 1) (applySpine cached sp)
+        Nothing => force defs sols (fuel - 1) (applySpine (eval [] body) sp)
       Nothing => case primReduce defs sols (fuel - 1) g sp of
         Just v2 => force defs sols (fuel - 1) v2
         Nothing => v

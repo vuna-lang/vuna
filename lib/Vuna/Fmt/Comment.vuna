@@ -235,8 +235,9 @@ nextAnchorWithFallback anchors csp = case bestNextAnchor anchors csp of
       else Just enc
 
 -- 条目定位：收集所有可挂注释的语法条目 span（源码顺序）。
-traitMethodAnchor : Pair String Expr -> Span
-traitMethodAnchor (Pair name ty) = exprSpan ty
+-- M30（B20）：trait 方法用方法签名 span（方法名到类型结束）。
+traitMethodAnchor : TraitMethod -> Span
+traitMethodAnchor m = traitMethodSpan m
 
 importAnchor : Import -> Span
 importAnchor imp = importSpan imp

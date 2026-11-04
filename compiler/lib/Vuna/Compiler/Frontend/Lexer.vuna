@@ -214,10 +214,19 @@ else lexErr0 UnexpectedCharacter
 lexSource : String -> Result (List PTok)
 lexSource source = lexChars (sourceFuel source) (Chars (strUnpack source) (Pos 1 1))
 
--- 显式 fuel 的初值：lexChars→lexToken 每次 token 至少两次递归，另有逐字符 skipTrivia，
--- 故按源串长度线性放大；64 兜住短输入。
+-- 显式 fuel 的初值（M30/C27：从 8*len+64 收紧到证明界 2*len+64）。
+-- **上界证明**（lexChars 主循环）：一次 token 读取沿调用路径恰好消耗 2 步 fuel——
+-- `lexChars` 入口 1 步、`lexToken` 1 步（没有别的逐 token 递减）；token 之间的
+-- trivia（空白/注释）由 `skipTrivia` 消费，它对每个空白字符递减 1 步、对整段注释只
+-- 递减 1 步（注释正文由结构递归的 skipLineComment/skipBlockComment 扫，不耗 fuel）。
+-- 记 T = token 数、S = 被 skipTrivia 逐字符消费的空白字符数，则
+--   T + S ≤ len(source)（token 字符与空白字符互不重叠，注释里的字符也已计入 S 或 T），
+-- 一条求值路径的 fuel 消耗 ≤ 2*T + S + 1(收尾 EOF 的 lexChars) ≤ 2*len(source)+1；
+-- 取 2*len+64 留出 63 步余量（注释段的单步递减也被 S 覆盖）。
+-- 同一初值也用于 `scanComments`：它的每次递归都消费 ≥1 个源字符（字符串/行注释/
+-- 块注释/普通字符），所以调用次数 ≤ len+1，远小于 2*len+64。
 sourceFuel : String -> Int
-sourceFuel source = 8 * strLength source + 64
+sourceFuel source = 2 * strLength source + 64
 
 -- ---------------------------------------------------------------
 -- 注释扫描（fmt 用）：注释不进入 token 流，但格式化器需要保留它们。

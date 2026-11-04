@@ -1,5 +1,6 @@
 module Vuna.Compiler.Loader.Flatten
-  ( loadProject
+  ( loadModuleSource
+  , loadProject
   , loadProjectModules
   , loadProjectSource
   , resolveProject
@@ -46,7 +47,8 @@ findOwnData name decls = case decls of
     DRecord dname params fields derivings sp =>
       if dname == name then Just (Pair dname [dname]) else findOwnData name rest
     DTrait tname params methods sp =>
-      if tname == name then Just (Pair tname (map firstOf methods)) else findOwnData name rest
+      if tname == name then Just (Pair tname (map traitMethodName methods))
+      else findOwnData name rest
     _ => findOwnData name rest
 
 findOwnFn : String -> List Decl -> Maybe String
@@ -63,10 +65,12 @@ findCtorNamed name ctors = case ctors of
   [] => Nothing
   c :: rest => if ctorName c == name then Just (ctorName c) else findCtorNamed name rest
 
-findMethodNamed : a -> List (Pair a b) -> Maybe a
+-- M30（B20）：trait 方法现在带 span，按 `TraitMethod` 取名字即可（不再是 Pair）。
+findMethodNamed : String -> List TraitMethod -> Maybe String
 findMethodNamed name methods = case methods of
   [] => Nothing
-  (Pair mname ty) :: rest => if mname == name then Just mname else findMethodNamed name rest
+  (TraitMethod mname ty msp) :: rest =>
+    if mname == name then Just mname else findMethodNamed name rest
 
 findOwnCtorName : String -> List Decl -> Maybe (Pair String String)
 findOwnCtorName name decls = case decls of
@@ -112,7 +116,7 @@ declImplicitExports prefix d = case d of
   DTrait tname params methods sp =>
     if isPrivateName tname then []
     else ExportEntry { kind = "type", public = tname, target = mangle prefix tname, parent = "" }
-      :: ownCtorEntries prefix tname (map firstOf methods)
+      :: ownCtorEntries prefix tname (map traitMethodName methods)
   -- M29-T2b：命名实例已删除，实例不出现在导出表（字典按实例表注册）。
   DInstance ctxE head methods sp => []
   DSig name ty sp =>
@@ -474,6 +478,20 @@ loadProjectSource ctx label source = andThen (parseSource label source) (\src =>
     Nothing =>
       andThen (validateImports "<entry>" imports)
         (\_ => andThen (implicitPrelude (contextRoots ctx) (contextPackageName ctx) "" imports) (\implicit => andThen (loadAll 1048576 (contextRoots ctx) (contextPackageName ctx) [] [] (append imports implicit)) (\modules => Ok (Project decls imports implicit modules (contextPackageName ctx) (contextCapabilities ctx)))))
+)
+
+-- 以**源码字符串**给出一个**库模块**（M30 · LSP）：源码允许带 `module ... where`
+-- 头（LSP 打开 lib/ 下的文件时就是这种形态）。模块头存在时，按 import 闭包加载后
+-- 把该模块本身作为合成的 `Module` 放进 Project，再交给 `resolveProject` 做名字解析；
+-- 无模块头时退化为入口语义（与 `loadProjectSource` 相同）。
+-- 入口声明保持为空：调用方（LSP）只需要逐模块已解析的声明。
+loadModuleSource : PackageContext -> String -> String -> Result Project
+loadModuleSource ctx label source = andThen (parseSource label source) (\src => case src of
+  Source hdr imports decls => case hdr of
+    Nothing => loadProjectSource ctx label source
+    Just (ModDecl name hasList items sp) =>
+      andThen (validateImports name imports)
+        (\_ => andThen (implicitPrelude (contextRoots ctx) (contextPackageName ctx) name imports) (\implicit => andThen (loadAll 1048576 (contextRoots ctx) (contextPackageName ctx) [] [] (append imports implicit)) (\modules => andThen (computeExports modules name hdr imports decls) (\exports => Ok (Project [] imports implicit (Module name (contextPackageName ctx) imports implicit decls exports (contextCapabilities ctx) :: modules) (contextPackageName ctx) (contextCapabilities ctx))))))
 )
 
 -- 返回逐模块已解析（未 flatten）的声明，供 M12 分离编译使用。

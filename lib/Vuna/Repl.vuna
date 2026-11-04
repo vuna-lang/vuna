@@ -2,14 +2,33 @@ module Vuna.Repl (runRepl) where
 
 -- Vuna.Repl：交互式 REPL（M11.5；M23 起底层是 DT 精化 + 核心求值）。
 --
--- 设计：REPL 维护 imports / 定义 两段源码缓冲。每输入一行：
+-- 设计：REPL 维护 imports / 定义 / 待续输入（pending）三段状态。每输入一行：
 --   - `import ...` 行追加到 imports 缓冲（解析通过才接受）；
 --   - 能整行解析为顶层定义时追加到定义缓冲（累积，供后续表达式使用）；
---   - 否则按表达式求值：`imports + 定义` 作为 program、当前行作为表达式交给
---     `Vuna.Interp.interpretExpr`（DT 精化后核心求值）。
+--   - 否则按表达式求值：`imports + 定义` 作为 program、当前输入作为表达式交给
+--     `Vuna.Interp.evalExprInfo`（DT 精化后核心求值）。
 --   - `:q`/`:quit` 退出，`:help` 帮助，`:reset` 清空缓冲。
--- 限制：一次只能输入一行（多行定义/表达式暂不支持）。DT 顶层签名必填，所以定义
--- 要先输入 `x : Int` 再输入 `x = 1 + 1`，之后表达式才能引用 `x`。
+-- DT 顶层签名必填，所以定义要先输入 `x : Int` 再输入 `x = 1 + 1`，之后表达式才能
+-- 引用 `x`。
+--
+-- M30（D14）：多行输入 + 效果表达式。
+--   - 输入不完整时进入 `... ` 续行：判据是未闭合的 `(`/`[`/`{`、未闭合字符串 / 块注释，
+--     或行尾是一个「显然还要继续」的 token（`=` `->` `|` `,` `where` `do` `then`
+--     `else` `of` `in` `case` `let`）。连续 64 行仍未闭合就报错丢弃。缩进续行
+--     （offside 块：do / case / where 分支）按「去缩进的行或空行收尾」处理：空行提交
+--     完整输入、不完整时报错丢弃；在续行状态里 `:q`/`:quit` 仍然可用。续行保留原始
+--     缩进（offside 布局），只对第一行做 trim。
+--   - IO 表达式：`evalExprInfo` 同时返回类型文本，顶层类型是 `(Base.IO.IO a)` 时不走
+--     核心求值，而是把「imports + 定义 + `main : <类型>` + `main = <表达式>`」写进
+--     临时包，`compileToDir` → `runBuildScript` → 运行（见 `Vuna.Interp.runEffectProgram`）。
+--     效果输出直接到终端；`a` 是 Int/String/Bool 时运行完再打印结果值。编译失败打印
+--     可读诊断并保持已有缓冲；缺 `ocamlopt` 时给「进 nix develop」的提示。
+--   - 限制：程序里已经有 `main` 时拒绝效果执行（避免与合成入口重复定义）；临时包只能
+--     依赖上下文的依赖包，当前包自己的 lib 模块在 IO 表达式里不可 import。
+--
+-- 实现结构：**只有 `replLoop` 递归**（显式 fuel：C28 记录的交互主循环不是全函数，
+-- 用 1G 行守卫防不可达死循环），其余步骤函数都返回新状态（`ReplState` / `ReplOutcome`），
+-- 不自我递归——这样「空行提交 pending 后再处理下一行」不会把后续输入吞进嵌套循环。
 import Vuna.Compiler.Common
 import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Packages.Pkg
@@ -22,6 +41,14 @@ replTempFile = "/tmp/vuna-repl.vuna"
 replPrompt : String
 replPrompt = "vuna> "
 
+-- 续行提示（GHCi 风格）：提醒当前输入还没结束。
+replContinuePrompt : String
+replContinuePrompt = "... "
+
+-- 待续输入的行数上限：既防粘贴事故，也保证 needsMore 的误判不会无限续行。
+replMaxPendingLines : Int
+replMaxPendingLines = 64
+
 replHelp : String
 replHelp =
   "命令：\n"
@@ -29,12 +56,36 @@ replHelp =
     ++ "  :reset   清空已输入的定义与 import\n"
     ++ "  :quit    退出（同 Ctrl-D）\n"
     ++ "其他输入按 vuna 源码处理：`import ...` 与定义会被累积，表达式会立即求值。\n"
-    ++ "注意：DT 顶层签名必填，定义请先输入签名行（如 `x : Int`）再输入定义行。\n"
+    ++ "DT 顶层签名必填，定义请先输入签名行（如 `x : Int`）再输入定义行。\n"
+    ++ "多行输入：未闭合的括号/字符串/块注释或行尾是 `=` `->` `|` `,` `where` `do` 等\n"
+    ++ "时显示 `... ` 继续读；缩进块（do/case/where）用空行提交，空行时输入不完整则丢弃。\n"
+    ++ "效果表达式（顶层类型是 IO a）会临时编译并运行；效果的输出直接到终端。\n"
 
 -- REPL 是「读一行→处理→再读一行」的无限状态机，递归不沿输入结构下降；
 -- 用显式 fuel 守卫（1G 行，实际不可达）。
 replFuelBound : Int
 replFuelBound = 1073741824
+
+-- REPL 的累积状态：imports 缓冲、定义缓冲、待续输入（空串 = 没有待续输入）。
+data ReplState : Type where
+  MkReplState : String -> String -> String -> ReplState
+
+stateImports : ReplState -> String
+stateImports (MkReplState imports defs pending) = imports
+
+stateDefs : ReplState -> String
+stateDefs (MkReplState imports defs pending) = defs
+
+statePending : ReplState -> String
+statePending (MkReplState imports defs pending) = pending
+
+replState : String -> String -> String -> ReplState
+replState imports defs pending = MkReplState imports defs pending
+
+-- 一步的结果：继续（带新状态）或退出（退出码）。
+data ReplOutcome : Type where
+  ReplContinue : ReplState -> ReplOutcome
+  ReplExit : Int -> ReplOutcome
 
 -- M26：REPL 的模块解析来自**包上下文**（CLI 用 `contextForDir "."`：cwd 在包内
 -- 就用最近 vuna.toml 的依赖闭包，cwd 不是包时退化成 base-only；不再有环境根 flag）。
@@ -42,67 +93,318 @@ runRepl : PackageContext -> Int
 runRepl ctx =
   let
     _ = prim_print ("vuna repl\n" ++ replHelp)
-  in replLoop replFuelBound ctx "" ""
+  in replLoop replFuelBound ctx (replState "" "" "")
 
-replLoop : Int -> PackageContext -> String -> String -> Int
-replLoop fuel ctx imports defs = if fuel <= 0 then 0
+replLoop : Int -> PackageContext -> ReplState -> Int
+replLoop fuel ctx st = if fuel <= 0 then 0
 else
   let
-    _ = prim_print replPrompt
+    _ = prim_print (if statePending st == "" then replPrompt else replContinuePrompt)
   in let
-    line = prim_readLine
-  in if line == "" then 0 else replHandle (fuel - 1) ctx imports defs (trim line)
+    raw = prim_readLine
+  in if trim raw == "" then case blankStep ctx st of
+    ReplExit code => code
+    ReplContinue st2 => replLoop (fuel - 1) ctx st2
+  else case inputStep ctx st raw of
+    ReplExit code => code
+    ReplContinue st2 => replLoop (fuel - 1) ctx st2
 
-replHandle : Int -> PackageContext -> String -> String -> String -> Int
-replHandle fuel ctx imports defs line = if fuel <= 0 then 0
-else case line of
-  "" => replLoop (fuel - 1) ctx imports defs
-  ":q" => 0
-  ":quit" => 0
+-- 新读到的一行：没有待续输入时按完整输入处理；否则先追加到 pending。
+inputStep : PackageContext -> ReplState -> String -> ReplOutcome
+inputStep ctx st raw =
+  if statePending st == "" then lineStep ctx st (trim raw) else pendingStep ctx st raw
+
+-- 空行 / Ctrl-D：`prim_readLine` 在 EOF 与空行上都返回 ""，再读一行区分：
+-- 两行都空 = EOF（pending 完整则执行后退出，不完整则报错丢弃）；
+-- 否则是「用户用空行收尾当前输入」：先提交 pending，再把读到的这行当新输入处理。
+blankStep : PackageContext -> ReplState -> ReplOutcome
+blankStep ctx st =
+  let
+    next = trim prim_readLine
+  in if next == "" then ReplExit (finishAtEof ctx st)
+  else if statePending st == "" then lineStep ctx st next
+  else case submitPending ctx st of
+    ReplExit code => ReplExit code
+    ReplContinue st2 => lineStep ctx st2 next
+
+-- EOF：pending 是完整输入就执行（结果不影响退出码），不完整则报错；都返回 0。
+finishAtEof : PackageContext -> ReplState -> Int
+finishAtEof ctx st = if statePending st == "" then 0
+else case submitPending ctx st of
+  ReplExit code => code
+  ReplContinue _ => 0
+
+-- 提交 pending：结构上仍是未闭合状态（括号/字符串/块注释/行尾继续符）就报错丢弃，
+-- 否则按完整输入处理（缩进块只有靠空行才能收尾）。
+submitPending : PackageContext -> ReplState -> ReplOutcome
+submitPending ctx st = if needsMore (statePending st) then
+  let
+    _ = prim_print "错误: 输入不完整，已丢弃当前输入\n"
+  in ReplContinue (replState (stateImports st) (stateDefs st) "")
+else submitText ctx st (trim (statePending st))
+
+-- 完整的一行输入：命令优先；否则按「还需要续行 / import / 定义或表达式」处理。
+lineStep : PackageContext -> ReplState -> String -> ReplOutcome
+lineStep ctx st line = case line of
+  ":q" => ReplExit 0
+  ":quit" => ReplExit 0
   ":reset" =>
     let
       _ = prim_print "已清空\n"
-    in replLoop (fuel - 1) ctx "" ""
+    in ReplContinue (replState "" "" "")
   ":help" =>
     let
       _ = prim_print replHelp
-    in replLoop (fuel - 1) ctx imports defs
+    in ReplContinue st
   _ =>
-    if startsWith "import " line then replAddImport (fuel - 1) ctx imports defs line
-    else replDefineOrEval (fuel - 1) ctx imports defs line
+    if needsMore line then ReplContinue (replState (stateImports st) (stateDefs st) (line ++ "\n"))
+    else if startsWith "import " line then addImport ctx st line else submitText ctx st line
 
-replAddImport : Int -> PackageContext -> String -> String -> String -> Int
-replAddImport fuel ctx imports defs line = if fuel <= 0 then 0
+-- 续行状态：把新行（保留缩进）追加到 pending；`:q`/`:quit` 仍可直接退出。
+-- 缩进行（offside 块的成员）即使结构上「完整」也继续等，直到出现去缩进行或空行，
+-- 否则 `do` / `case` / `where` 的第一条分支就会被误当成完整输入提前求值。
+pendingStep : PackageContext -> ReplState -> String -> ReplOutcome
+pendingStep ctx st raw = if raw == ":q" || raw == ":quit" then ReplExit 0
 else
   let
-    imports2 = imports ++ line ++ "\n"
-  in case parseSource replTempFile (imports2 ++ defs) of
+    pending2 = statePending st ++ raw ++ "\n"
+  in if countChar 10 pending2 > replMaxPendingLines then
+    let
+      _ =
+        prim_print
+          ("错误: 续行超过 " ++ strFromInt replMaxPendingLines ++ " 行，已丢弃当前输入\n")
+    in ReplContinue (replState (stateImports st) (stateDefs st) "")
+  else if needsMore pending2 then ReplContinue (replState (stateImports st) (stateDefs st) pending2)
+  else if startsIndented raw then ReplContinue (replState (stateImports st) (stateDefs st) pending2)
+  else submitText ctx st (trim pending2)
+
+startsIndented : String -> Bool
+startsIndented line = startsWith " " line || startsWith "\t" line
+
+-- import：先和已有定义一起 parse，通过才接受（否则保持原状态并打印解析错误）。
+addImport : PackageContext -> ReplState -> String -> ReplOutcome
+addImport ctx st line =
+  let
+    imports2 = stateImports st ++ line ++ "\n"
+  in case parseSource replTempFile (imports2 ++ stateDefs st) of
     Err e =>
       let
         _ = prim_print ("parse error: " ++ e ++ "\n")
-      in replLoop (fuel - 1) ctx imports defs
-    Ok _ => replLoop (fuel - 1) ctx imports2 defs
+      in ReplContinue st
+    Ok _ => ReplContinue (replState imports2 (stateDefs st) "")
 
-replDefineOrEval : Int -> PackageContext -> String -> String -> String -> Int
-replDefineOrEval fuel ctx imports defs line = if fuel <= 0 then 0
-else case parseSource replTempFile (imports ++ defs ++ line ++ "\n") of
+-- 定义还是表达式：整段能解析成顶层声明就追加到定义缓冲，否则按表达式求值。
+submitText : PackageContext -> ReplState -> String -> ReplOutcome
+submitText ctx st text = case parseSource replTempFile (stateImports st ++ stateDefs st ++ text ++ "\n") of
   Ok (Source hdr imp decls) => case hdr of
-    Just md => replEvalExpr (fuel - 1) ctx imports defs line
-    Nothing => replLoop (fuel - 1) ctx imports (defs ++ line ++ "\n")
-  Err e => replEvalExpr (fuel - 1) ctx imports defs line
+    Just md => evalText ctx st text
+    Nothing => ReplContinue (replState (stateImports st) (stateDefs st ++ text ++ "\n") "")
+  Err e => evalText ctx st text
 
-replEvalExpr : Int -> PackageContext -> String -> String -> String -> Int
-replEvalExpr fuel ctx imports defs line = if fuel <= 0 then 0
-else case parseExpressionSource line of
+-- 表达式求值：类型是 IO a 时走临时包编译+运行，否则核心求值后打印值。
+evalText : PackageContext -> ReplState -> String -> ReplOutcome
+evalText ctx st text = case parseExpressionSource text of
   Err e =>
     let
       _ = prim_print ("错误: " ++ e ++ "\n")
-    in replLoop (fuel - 1) ctx imports defs
+    in ReplContinue (replState (stateImports st) (stateDefs st) "")
   Ok _ =>
     let
-      program = imports ++ "\n" ++ defs
-    in let
-      output = interpretExpr ctx program line
-    in let
-      _ = prim_print (output ++ "\n")
-    in replLoop (fuel - 1) ctx imports defs
+      program = stateImports st ++ "\n" ++ stateDefs st
+    in case evalExprInfo ctx program text of
+      Err e =>
+        let
+          _ = prim_print ("错误: " ++ e ++ "\n")
+        in ReplContinue (replState (stateImports st) (stateDefs st) "")
+      Ok info =>
+        let
+          tyText = secondOf info
+        in if isIOTypeText tyText then
+          let
+            _ = evalIO ctx st text tyText
+          in ReplContinue (replState (stateImports st) (stateDefs st) "")
+        else
+          let
+            _ = prim_print (firstOf info ++ "\n")
+          in ReplContinue (replState (stateImports st) (stateDefs st) "")
+
+-- IO 表达式：合成 `main : <类型>` + `main = <表达式>`，临时编译并运行。
+-- 返回进程退出码（0 成功；非 0 只打印退出码，不改变 REPL 状态）；错误已打印。
+-- 类型里若有未解元变量（`?N`，常见于没有上下文可推断的裸 `pure ...`），不能写回
+-- 签名，给出「加类型标注」的可操作提示。
+evalIO : PackageContext -> ReplState -> String -> String -> Int
+evalIO ctx st text tyText = if hasMainDef (stateImports st) (stateDefs st) then
+  let
+    _ =
+      prim_print
+        "错误: 程序已经定义了 main，无法把表达式当作效果入口（先 :reset 或改名）\n"
+  in 0
+else if hasUnsolvedMeta tyText then
+  let
+    _ =
+      prim_print
+        ("错误: 无法确定 IO 表达式的完整类型（" ++ tyText ++ "）；先定义成带签名的值再求值（如 `prog : Base.IO.IO Int` + `prog = ...`）\n")
+  in 0
+else
+  let
+    source = stateImports st ++ stateDefs st ++ "\nmain : " ++ tyText ++ "\nmain = " ++ text ++ "\n"
+  in case runEffectProgram ctx source (ioPrintResult tyText) of
+    Err e =>
+      let
+        _ = prim_print ("错误: " ++ e ++ "\n")
+      in 0
+    Ok code => if code == 0 then 0
+    else
+      let
+        _ = prim_print ("[进程退出码 " ++ strFromInt code ++ "]\n")
+      in code
+
+-- 类型文本里是否有未解元变量（`showTerm` 渲染成 `?N`）。
+hasUnsolvedMeta : String -> Bool
+hasUnsolvedMeta tyText = contains "?" tyText
+
+-- 程序源码里是否已经有 `main`（顶层签名或定义）；有则拒绝合成效果入口。
+hasMainDef : String -> String -> Bool
+hasMainDef imports defs = case parseSource replTempFile (imports ++ "\n" ++ defs) of
+  Err e => False
+  Ok (Source hdr imp decls) => memName "main" (topNames decls)
+
+-- 顶层类型文本是 canonical `IO a` 吗？`dtEvalExprInfo` 的 showTerm 把 TApp 渲染成
+-- `(Base.IO.IO Int)`（canonical 全名），函数类型则是 `(...) -> ...`，前缀不会命中。
+isIOTypeText : String -> Bool
+isIOTypeText tyText =
+  let
+    t = trim tyText
+  in startsWith "(Base.IO.IO " t
+    || startsWith "Base.IO.IO " t
+    || startsWith "(IO " t
+    || t == "Base.IO.IO"
+    || t == "IO"
+
+-- 效果运行结束后是否让 codegen 的 main 钩子打印结果值：只有 a 是 Int/String/Bool
+-- 时才能打印（其它返回类型 codegen 会报 MainReturnType，所以保持 ignore）。
+ioPrintResult : String -> Bool
+ioPrintResult tyText = case ioInnerType (trim tyText) of
+  Nothing => False
+  Just inner => inner == "Int" || inner == "String" || inner == "Bool"
+
+-- `(Base.IO.IO Int)` → "Int"；`(Base.IO.IO (Base.Pair Int Int))` → "(Base.Pair Int Int)"。
+ioInnerType : String -> Maybe String
+ioInnerType t =
+  if startsWith "(Base.IO.IO " t then Just
+    (stripTrailingParen (trim (substring (strLength "(Base.IO.IO ") (strLength t - strLength "(Base.IO.IO ") t)))
+  else if startsWith "Base.IO.IO " t then Just
+    (stripTrailingParen (trim (substring (strLength "Base.IO.IO ") (strLength t - strLength "Base.IO.IO ") t)))
+  else if startsWith "(IO " t then Just (stripTrailingParen (trim (substring 4 (strLength t - 4) t)))
+  else Nothing
+
+-- 只保留实参本身：外层 TApp 的渲染是 `(IO a)`，去掉结尾的 `)` 即可
+-- （实参本身是 TApp 时会剩下 `(Base.Pair Int Int)`，保留原样）。
+stripTrailingParen : String -> String
+stripTrailingParen s = if endsWith ")" s then trim (substring 0 (strLength s - 1) s) else s
+
+-- ---------------------------------------------------------------
+-- 续行判定
+--
+-- needsMore 只看「结构」不看语义：本行结束时若还在字符串/块注释里、括号没配平，
+-- 或最后一个 token 是继续符，就等下一行。空的 `(` 等结构在 64 行后强制报错。
+-- ---------------------------------------------------------------
+-- 扫描状态：grammar 状态（0 普通 / 1 字符串 / 2 块注释 / 3 行注释）+ 块注释嵌套深度
+-- + 括号配平数（只统计普通状态下的括号）。
+data ScanState : Type where
+  MkScanState : Int -> Int -> Int -> ScanState
+
+scanStateOf : ScanState -> Int
+scanStateOf (MkScanState state depth brackets) = state
+
+scanBracketsOf : ScanState -> Int
+scanBracketsOf (MkScanState state depth brackets) = brackets
+
+needsMore : String -> Bool
+needsMore text =
+  let
+    st = scanText (strUnpack text) 0 0 0
+  in if unclosedScan st then True
+  else if scanBracketsOf st > 0 then True else if scanStateOf st == 3 then False else tailTokenOpen text
+
+-- 字符串/块注释里的括号不算结构；行注释一直吃到行尾。
+scanText : List Int -> Int -> Int -> Int -> ScanState
+scanText chars state depth brackets = case chars of
+  [] => MkScanState state depth brackets
+  c :: rest => case state of
+    0 => scanNormal c rest depth brackets
+    1 => scanInString c rest depth brackets
+    2 => scanInBlock c rest depth brackets
+    _ => scanInLine c rest depth brackets
+
+-- 普通状态：`"` 进字符串、`{-` 进块注释、`--` 进行注释、其余是括号配平。
+scanNormal : Int -> List Int -> Int -> Int -> ScanState
+scanNormal c rest depth brackets = if c == 34 then scanText rest 1 depth brackets
+else if c == 123 then case rest of
+  c2 :: rest2 =>
+    if c2 == 45 then scanText rest2 2 (depth + 1) brackets else scanText rest 0 depth (brackets + 1)
+  [] => MkScanState 0 depth (brackets + 1)
+else if c == 45 then case rest of
+  c2 :: rest2 =>
+    if c2 == 45 then scanText rest2 3 depth brackets else scanText rest 0 depth brackets
+  [] => MkScanState 0 depth brackets
+else if c == 40 || c == 91 then scanText rest 0 depth (brackets + 1)
+else if c == 41 || c == 93 || c == 125 then scanText rest 0 depth (if brackets > 0 then brackets - 1 else 0)
+else scanText rest 0 depth brackets
+
+-- 字符串：`\` 转义下一个字符（lexer 的规则），`"` 收尾。
+scanInString : Int -> List Int -> Int -> Int -> ScanState
+scanInString c rest depth brackets = if c == 92 then case rest of
+  _ :: rest2 => scanText rest2 1 depth brackets
+  [] => MkScanState 1 depth brackets
+else if c == 34 then scanText rest 0 depth brackets else scanText rest 1 depth brackets
+
+-- 块注释可嵌套（与 lexer 一致）：`{-` 深度 +1，`-}` 深度 -1，深度 0 回普通状态。
+scanInBlock : Int -> List Int -> Int -> Int -> ScanState
+scanInBlock c rest depth brackets = if c == 123 then case rest of
+  c2 :: rest2 =>
+    if c2 == 45 then scanText rest2 2 (depth + 1) brackets else scanText rest 2 depth brackets
+  [] => MkScanState 2 depth brackets
+else if c == 45 then case rest of
+  c2 :: rest2 =>
+    if c2 == 125 then if depth <= 1 then scanText rest2 0 0 brackets else scanText rest2 2 (depth - 1) brackets
+    else scanText rest 2 depth brackets
+  [] => MkScanState 2 depth brackets
+else scanText rest 2 depth brackets
+
+-- 行注释：吃到换行（pending 的每行都以 `\n` 结尾，所以不会跨行）。
+scanInLine : Int -> List Int -> Int -> Int -> ScanState
+scanInLine c rest depth brackets =
+  if c == 10 then scanText rest 0 depth brackets else scanText rest 3 depth brackets
+
+-- 描到结尾：字符串/块注释里，或括号没配平 → 还需要更多行。
+-- 行注释（state 3）到行尾就结束（pending 的扫描文本以 `\n` 收尾时不会走到这里）。
+unclosedScan : ScanState -> Bool
+unclosedScan st =
+  let
+    state = scanStateOf st
+  in state == 1 || state == 2
+
+-- 行尾 token 是继续符吗？只在扫描状态是普通状态时用（行注释/字符串里不算）。
+tailTokenOpen : String -> Bool
+tailTokenOpen text = memName (lastToken text) tailTokens
+
+tailTokens : List String
+tailTokens = ["=", "->", "|", ",", "where", "do", "then", "else", "of", "in", "case", "let"]
+
+-- 最后一个空白分隔 token（text 已 trimRight）。
+lastToken : String -> String
+lastToken text = lastTokenGo (strUnpack (trimRight text)) []
+
+lastTokenGo : List Int -> List Int -> String
+lastTokenGo [] acc = strPack (reverse acc)
+lastTokenGo (c :: rest) acc =
+  if c == 32 || c == 9 then lastTokenGo rest [] else lastTokenGo rest (c :: acc)
+
+countChar : Int -> String -> Int
+countChar c text = countCharGo c (strUnpack text)
+
+countCharGo : Int -> List Int -> Int
+countCharGo c chars = case chars of
+  [] => 0
+  x :: rest => if x == c then 1 + countCharGo c rest else countCharGo c rest

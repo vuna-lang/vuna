@@ -1,0 +1,4 @@
+module Bad (bad) where
+
+bad : Int
+bad = "not an int"

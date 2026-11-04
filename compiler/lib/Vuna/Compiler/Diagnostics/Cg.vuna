@@ -1,0 +1,141 @@
+module Vuna.Compiler.Diagnostics.Cg
+  ( CgEntry(..)
+  , CgErr(..)
+  , cgAll
+  , cgCode
+  , cgDefLoc
+  , cgEntryCode
+  , cgEntryDesc
+  , cgEntryTemplate
+  , cgErr
+  , cgErr0
+  , cgErr1
+  , cgErrDefAt
+  , cgMsg
+  , cgTemplate
+  ) where
+
+-- Vuna.Compiler.Diagnostics.Cg：CG_ 域（codegen / 驱动诊断；无位置）。
+--
+-- 从 `Vuna.Compiler.Diagnostics` 拆出（M30 B19）；对外名字集合不变，门面仍是
+-- `Vuna.Compiler.Diagnostics`。arity 同样由 `CgErr : Nat -> Type` 的构造子索引锁定；
+-- `cgAll` 是 `gen-errors` 的文档遍历源。
+import Vuna.Compiler.Common
+import Vuna.Compiler.Diagnostics.Common
+import Base.Nat
+import Base.Vec
+
+-- ---------------------------------------------------------------
+-- CG_：codegen / 驱动诊断（Codegen / Driver；无位置）
+-- ---------------------------------------------------------------
+data CgErr : Nat -> Type where
+  -- arity 0
+  DependencyCycle : CgErr Zero
+  InterpCannotExecuteEffects : CgErr Zero
+  MainNotValue : CgErr Zero
+  MainReturnType : CgErr Zero
+  NoMain : CgErr Zero
+  TypeUsedAtRuntime : CgErr Zero
+  -- arity 1
+  AxiomAtRuntime : String -> CgErr (Succ Zero)
+  ListBridgeRequired : String -> CgErr (Succ Zero)
+  RecursiveValueDefinition : String -> CgErr (Succ Zero)
+  TypeLevelBindingRuntime : String -> CgErr (Succ Zero)
+  TypeLevelNameRuntime : String -> CgErr (Succ Zero)
+  UnsolvedMetavarRuntime : String -> CgErr (Succ Zero)
+
+cgCode : {n : Nat} -> CgErr n -> String
+cgCode DependencyCycle = "CG_DependencyCycle"
+cgCode InterpCannotExecuteEffects = "CG_InterpCannotExecuteEffects"
+cgCode MainNotValue = "CG_MainNotValue"
+cgCode MainReturnType = "CG_MainReturnType"
+cgCode NoMain = "CG_NoMain"
+cgCode TypeUsedAtRuntime = "CG_TypeUsedAtRuntime"
+cgCode (AxiomAtRuntime _) = "CG_AxiomAtRuntime"
+cgCode (ListBridgeRequired _) = "CG_ListBridgeRequired"
+cgCode (RecursiveValueDefinition _) = "CG_RecursiveValueDefinition"
+cgCode (TypeLevelBindingRuntime _) = "CG_TypeLevelBindingRuntime"
+cgCode (TypeLevelNameRuntime _) = "CG_TypeLevelNameRuntime"
+cgCode (UnsolvedMetavarRuntime _) = "CG_UnsolvedMetavarRuntime"
+
+cgTemplate : {n : Nat} -> CgErr n -> String
+cgTemplate DependencyCycle = "dependency cycle between runtime definitions"
+cgTemplate InterpCannotExecuteEffects =
+  "interp cannot execute effects (main : IO a); compile and run the program instead"
+cgTemplate MainNotValue = "main does not reduce to a value"
+cgTemplate MainReturnType = "main must return Int, String or Bool (M13 limitation)"
+cgTemplate NoMain = "no main definition"
+cgTemplate TypeUsedAtRuntime = "a type is used at runtime (M13 limitation)"
+cgTemplate (AxiomAtRuntime _) =
+  "axiom `<0>` cannot be used at runtime (it has no runtime definition)"
+cgTemplate (ListBridgeRequired _) =
+  "builtin `<0>` requires the canonical `Base.List.List` declaration from vuna-base (no base dependency in this package)"
+cgTemplate (RecursiveValueDefinition _) =
+  "top-level value definition `<0>` cannot be recursive; make it a function or remove the cycle"
+cgTemplate (TypeLevelBindingRuntime _) = "type-level binding `<0>` is used at runtime"
+cgTemplate (TypeLevelNameRuntime _) = "type-level name `<0>` is used at runtime"
+cgTemplate (UnsolvedMetavarRuntime _) = "unsolved metavariable in runtime code<0>"
+
+data CgEntry : Type where
+  CgEntry : String -> String -> String -> CgEntry
+
+cgEntryCode : CgEntry -> String
+cgEntryCode (CgEntry code template desc) = code
+
+cgEntryTemplate : CgEntry -> String
+cgEntryTemplate (CgEntry code template desc) = template
+
+cgEntryDesc : CgEntry -> String
+cgEntryDesc (CgEntry code template desc) = desc
+
+cgAll : List CgEntry
+cgAll = concatLists [cgChunk0, cgChunk1]
+
+cgChunk0 : List CgEntry
+cgChunk0 =
+  [ CgEntry (cgCode DependencyCycle) (cgTemplate DependencyCycle) "运行时定义间依赖成环",
+    CgEntry (cgCode InterpCannotExecuteEffects) (cgTemplate InterpCannotExecuteEffects) "interp 不能执行效果",
+    CgEntry (cgCode MainNotValue) (cgTemplate MainNotValue) "main 未归约到值",
+    CgEntry (cgCode MainReturnType) (cgTemplate MainReturnType) "main 返回类型受限",
+    CgEntry (cgCode NoMain) (cgTemplate NoMain) "入口缺少 main 定义",
+    CgEntry (cgCode TypeUsedAtRuntime) (cgTemplate TypeUsedAtRuntime) "类型被运行时使用（M13 限制）",
+    CgEntry (cgCode (AxiomAtRuntime "")) (cgTemplate (AxiomAtRuntime "")) "axiom 被运行时使用（它没有运行时定义体）",
+    CgEntry (cgCode (ListBridgeRequired "")) (cgTemplate (ListBridgeRequired "")) "内建需要 canonical Base.List.List 桥接但包没有 base 依赖"
+  ]
+
+cgChunk1 : List CgEntry
+cgChunk1 =
+  [ CgEntry (cgCode (RecursiveValueDefinition "")) (cgTemplate (RecursiveValueDefinition "")) "递归组里的零参值定义无法安全落地",
+    CgEntry (cgCode (TypeLevelBindingRuntime "")) (cgTemplate (TypeLevelBindingRuntime "")) "类型级绑定被运行时使用（M13 限制）",
+    CgEntry (cgCode (TypeLevelNameRuntime "")) (cgTemplate (TypeLevelNameRuntime "")) "类型级名字被运行时使用",
+    CgEntry (cgCode (UnsolvedMetavarRuntime "")) (cgTemplate (UnsolvedMetavarRuntime "")) "运行时代码里有未解元变量"
+  ]
+
+-- ---------------------------------------------------------------
+-- throw：拼 `[CODE] 消息`（CG 无位置）
+-- ---------------------------------------------------------------
+cgMsg : {n : Nat} -> CgErr n -> Vec String n -> String
+cgMsg e args = diagMsg (cgCode e) (cgTemplate e) args
+
+cgErr : {n : Nat} -> CgErr n -> Vec String n -> Result a
+cgErr e args = diagErr (cgMsg e args)
+
+cgErr0 : CgErr Zero -> Result a
+cgErr0 e = cgErr e VNil
+
+cgErr1 : CgErr (Succ Zero) -> String -> Result a
+cgErr1 e a0 = cgErr e (VCons a0 VNil)
+
+-- ---------------------------------------------------------------
+-- M29（A14）：定义级 CG 诊断（带来源位置）
+-- ---------------------------------------------------------------
+-- `DtDef` 现在携带来源 `Maybe Span`（顶层定义 = 子句 span；instance 生成定义 =
+-- instance 声明 span；trait 投影 = trait 声明 span）。CG 诊断在 **def 粒度**补位置，
+-- 格式与 Elab 诊断一致：`文件:行:列: in `name`: [CODE] 消息`；没有 span 时退回旧的
+-- `in `name`: `（不改变既有夹具断言的子串）。位置前缀的实现在 Diagnostics.Common
+-- （`diagDefLoc`），本模块不依赖 `Elab/Types`（避免环）。
+cgDefLoc : Maybe Span -> String -> String
+cgDefLoc span name = diagDefLoc span name
+
+cgErrDefAt : Maybe Span -> String -> {n : Nat} -> CgErr n -> Vec String n -> Result a
+cgErrDefAt span name e args = Err (cgDefLoc span name ++ cgMsg e args)

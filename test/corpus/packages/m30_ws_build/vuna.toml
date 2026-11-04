@@ -1,0 +1,10 @@
+# M30：workspace 是构建单元——根包可执行、成员包是库；`build .` 构建根包并
+# 检查/跳过库成员；`--package <name>` 只构建指定包。
+[package]
+name = "ws-build"
+
+[workspace]
+members = ["member"]
+
+[dependencies]
+member = "member"

@@ -6,7 +6,9 @@ module Vuna.Compiler.Elab.Sig
   , exprMaxAppArity
   , methodArgRigsOf
   , modulePrefixOf
+  , qualifiedBannedTbl
   , quantifyTopSig
+  , quantifyTopSigCached
   , quantifyTraitSig
   , topQuantBanned
   ) where
@@ -168,6 +170,37 @@ filterNamesInModule sigName (n :: rest) =
 modulePrefixOf : String -> String
 modulePrefixOf name = case splitLastDot (splitOnDot name) of
   Pair rev base => joinDots rev
+
+-- ---------------------------------------------------------------
+-- M30（D18）：签名量化的**共享 banned 表**（修 M28/C29 的 O(n²)）
+-- ---------------------------------------------------------------
+-- 旧实现 `bannedForModule sigName defined` 对每个签名都扫一遍全程序 defined 名
+-- （filterNamesInModule 里逐名算 modulePrefixOf）并重建一张哈希表：5085 个签名 ×
+-- 2306 个定义名 ⇒ 1.2e7 次 splitOnDot/splitLastDot（每次分配），实测
+-- `check compiler` 的 collectSigs 相位 12.9 s。这里把「模块前缀 + 名字」做成**一次性**
+-- 的全局键，签名阶段只做 O(1) 查表；语义与原 per-module 过滤逐项等价：
+--   旧：banned = prelude ∪ { n ∈ defined | modulePrefixOf n == modulePrefixOf sigName }
+--   新：keepOutQualified σ 用 prelude 表 + 键 `modulePrefixOf sigName ++ "\t" ++ n`
+-- 分隔符取 `\t`（标识符只允许字母/数字/下划线/撇号，mangle 前缀只含点，绝不会撞）。
+qualifiedBannedTbl : List String -> HashTbl Bool
+qualifiedBannedTbl defined =
+  tblInsertAll (map (\n => Pair (qualifiedKey (modulePrefixOf n) n) True) defined) tblEmpty
+
+qualifiedKey : String -> String -> String
+qualifiedKey prefix name = prefix ++ "\t" ++ name
+
+-- 与 `quantifyTopSig` 同义，但 banned 用共享的 qualified 表 + 全局 prelude 表。
+quantifyTopSigCached : String -> HashTbl Bool -> HashTbl Bool -> Expr -> Span -> Expr
+quantifyTopSigCached prefix banned preludeBanned ty sp =
+  quantifyTopKinds (keepOutQualified prefix banned preludeBanned (freeNames (\n => False) ty)) ty ty
+    sp
+
+keepOutQualified : String -> HashTbl Bool -> HashTbl Bool -> List String -> List String
+keepOutQualified prefix banned preludeBanned [] = []
+keepOutQualified prefix banned preludeBanned (n :: rest) =
+  if tblMem n preludeBanned then keepOutQualified prefix banned preludeBanned rest
+  else if tblMem (qualifiedKey prefix n) banned then keepOutQualified prefix banned preludeBanned rest
+  else n :: keepOutQualified prefix banned preludeBanned rest
 
 keepOutTbl : HashTbl Bool -> List String -> List String
 keepOutTbl banned [] = []

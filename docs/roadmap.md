@@ -84,6 +84,16 @@ vuna 尚未发布任何版本：没有外部用户、下游生态与历史包袱
   实例特性，隐式值参数 `{x : a}` 与构造子未饱和 η 展开（`cong Succ`），type-as-value
   定为不引入 type codes，依赖索引 lookup 用 Tarski 式存在式表达，记录/投影生成定义带
   来源 span（A14）；`monad/04` 去标记；seed 66 `.ml` / 67 文件（模块面未变）。
+- M30：工具链与包——CLI 统一参数/错误出口（无宿主异常）、Index v2 内容哈希 + 原子写/锁 +
+  refs 位置、LSP 走包上下文（含 import 真正类型检查）+ formatting/symbols/definition/
+  references/completion/workspace symbol/lint 诊断、REPL 多行 + IO compile+run、
+  `vuna test` 纯/效果双路径 + workspace 聚合、doc 尊重 `[export]`、manifest 删除
+  version/edition、workspace 成为 check/build 单元、`build-meta.json` 依赖闭包哈希 +
+  同哈希跳过 + `build.sh` 按模块内容哈希增量、benchmark 基线/软告警、Diagnostics 拆分
+  （B19）、trait 方法级 span（B20）、Dict 死导出清理（B21）、实例名单前缀 + 完整 head 名
+  （B22）、C26–C28 measure 收口、D18 性能（C29 签名 banned 表 O(n²)→近线性，`check .`
+  44.4s→8.1s）；新增 `vscode/` 扩展（语法高亮/LSP/lint/fmt/check/build/package）；seed 70
+  `.ml` / 71 文件。
 
 ## 终态（目标）
 
@@ -131,31 +141,12 @@ vuna 尚未发布任何版本：没有外部用户、下游生态与历史包袱
 | M27 | 内置、原语与效应边界 | M26 | 已完成 | A07–A11、B16、C16–C19、D16 |
 | M28 | 类型系统地基 | M27 | 已完成 | B05–B08、B10、B15、B18、C29、D05–D07、D10 |
 | M29 | 相等、实例与证明 ergonomics | M28 | 已完成 | A14、B04、B11–B14、C04、C05、D11–D12（部分项经决策迁 F4） |
-| M30 | 工具链与包 | —（不依赖 M29 语义） | 待排期 | C11–C13、C25、D13–D15、D17–D18、E08 |
+| M30 | 工具链与包 | —（不依赖 M29 语义） | 已完成 | C11–C13、C25–C28、B19–B22、D13–D15、D17、D18、E08、E10 |
 | F1–F4 | 模块 v3 / 运行时 / 效应并发 / 生态 | 不排期 | 不排期 | D01–D04 |
 
-## 可排期阶段（M30）
+## 可排期阶段（M30 起）
 
-### M30：工具链与包
-
-**目标**：让工具链的「查询/诊断/文档/构建」与编译器语义同级可信；补齐包与构建的工程
-缺口（生态能力仍归 F4）。
-
-**范围**（debt）：
-- CLI 错误层：`fmt`/`map`/`doc` 对不存在路径/非工作区给可读错误，不再抛宿主异常
-  （C12）；参数模型统一。
-- 工具链语义：LSP 对 import 的文件真正做类型检查（需要包解析）、Index 内容哈希 +
-  可选语义索引（C11/D13）；REPL 多行/效果（D14）；TestRunner 支持效果与 main 类型（D14）；
-  `doc --with-comments` 实现或删除、doc 尊重 `[export]`（C13/D17）。
-- 包与构建：manifest 字段语义（version/edition 或删除）、workspace 作为检查/构建单元、
-  hermetic 构建与依赖哈希（C25/D15）；registry/lockfile 仍归 F4。
-- 工程化：benchmark 基线/软告警（E08）、性能（NbE 共享/自检耗时）（D18）。
-- 文档与验证：把「工具链能力/边界」写入 reference，并给关键行为加集成测试。
-
-**验收**：CLI 无宿主异常泄漏；LSP/Index 在两模块以上工程可用；doc 与 usage 一致；构建可
-复现（同输入同产物）；benchmark 有基线。
-
-**前置**：—（工具链与包，不依赖 M29 的相等/实例语义；可独立排期）。
+_M30 已完成（见「已完成」摘要与 history）；下一阶段从 M31 开始排期。_
 
 ## 未来轨道（F = future，不排期、不占 M 编号）
 
@@ -190,6 +181,14 @@ trait 能力补完（多参数/默认方法/父类/关联类型）；包 registr
 
 **前置**：M29（相等/实例/证明 ergonomics）、M30（包基建）。**状态**：不排期；验证库优先
 于 registry（没有外部用户时 registry 没有意义）。
+
+| 相等/实例/证明收口（M29 终态） | **M30 起不再改语言语义**：只做工具链/包/构建；`main` 展示仍限 Int/String/Bool，任意类型展示归 F3 | M29 已把相等证据化、实例 schema v2 钉死；M30 的目标是让工具链与编译器语义同级可信，不再引入新类型论特性 |
+| 构建靠 mtime 增量、非 hermetic、workspace 成员不参与 check/build（C25/D15） | **M30：确定性产物 + `build-meta.json` 依赖闭包哈希 + 同哈希跳过 + `build.sh` 按模块内容哈希增量；workspace 是所有成员的 check 单元、所有可执行成员的 build 单元；manifest 删除 version/edition（registry/lockfile 归 F4）** | mtime 增量在 checkout/复制后失效；依赖闭包哈希让「同输入同产物」可审计；workspace 成员错误不能被根 check 静默忽略；死字段删除优于定义一套没有消费者的语义 |
+| LSP 只做 parse 级、含 import 跳过类型检查（D13） | **M30：LSP 走与 CLI 相同的 `Pkg.contextForFile` + `Loader.loadModuleSource`**；补 formatting/documentSymbol/definition/references/completion/workspace symbol/lint 诊断；Index 仅 parse 级（签名必填 ⇒ 语法索引即语义面，不另建语义索引） | 包上下文是唯一正确加载模型；工具链必须看到与 `check` 相同的诊断；签名必填已在 M24 钉死，解析级签名就是公开语义面 |
+| `vuna test` 只能 `main : String` + interp；REPL 单行（D14） | **M30：纯 String/Int/Bool 测试走 interp（快），`main : IO ...` 走 compile+运行（退出码判定）；REPL 多行续行 + IO 表达式临时包 compile+run**；interp 保持纯 | 效果不能靠纯求值器猜测；compile+运行复用唯一 codegen 语义；REPL/interp 的分工用类型显式判定 |
+| C26–C28 的 fuel 只有「输入规模线性」备注、无静态论证 | **M30：逐点采用结构递归或证明界**（measure 表见 `limits.md`）；交互/服务主循环保留不可达上界并明确标注「非全函数」 | 无上界的“经验值”不可审计；能结构递归的列表/状态机改结构递归，不能的写清 measure 与证明 |
+| D18 性能只靠零散哈希表/GC 调参 | **M30：ctor 索引 + NbE 值共享骨架（零成本，实测收益≈0），真正收益来自 C29 签名 banned 表一次性建 + per-sig O(1) 查**（`check compiler` 16.0s→3.1s、`check .` 44.4s→8.1s） | 先定位热点再改；O(n²) 的根因是 per-signature 全表扫描，不是 NbE 缺少缓存；不夸大值共享的收益 |
+| 工具链无编辑器集成（issue/扩展） | **M30：新增 `vscode/` 扩展**（TextMate 语法高亮、LSP 客户端、lint/fmt/check/build 命令；TypeScript + `vscode-languageclient`，提交构建后的 `dist/extension.js` 以便离线使用） | 编辑器是工具链的主要消费者；离线可用与 Nix 可校验优先于 npm 运行时依赖 |
 
 ## 待决策（在所属阶段拍板，不在本文件预设）
 

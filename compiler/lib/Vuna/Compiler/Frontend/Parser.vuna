@@ -290,19 +290,19 @@ parseTrait st blockCol kwPos =
   step (expectKw st "trait")
     (\_, st1 => step (expectIdent st1) (\name, st2 => step (parseParams (stateFuel st2) st2) (\params, st3 => step (expectKw st3 "where") (\_, st4 => step (parseMethodSigs st4 blockCol) (\methods, st5 => Ok (Pair (DTrait name params methods (Span (fileOf st) (posLine kwPos) (posCol kwPos) (posLine (lastPos st5)) (posCol (lastPos st5)))) st5))))))
 
-parseMethodSigs : PState -> Int -> Result (Pair (List (Pair String Expr)) PState)
+parseMethodSigs : PState -> Int -> Result (Pair (List TraitMethod) PState)
 parseMethodSigs st blockCol = if isEof st then Ok (Pair [] st)
 else case peekPos st of
   Pos line col =>
     if col > blockCol then parseMethodSigList (stateFuel st) st col else Ok (Pair [] st)
 
-parseMethodSigList : Int -> PState -> Int -> Result (Pair (List (Pair String Expr)) PState)
+parseMethodSigList : Int -> PState -> Int -> Result (Pair (List TraitMethod) PState)
 parseMethodSigList fuel st methodCol = if fuel <= 0 then Err "DT: parser fuel exhausted (internal: parser made no progress)"
 else if isEof st then Ok (Pair [] st)
 else case peekPos st of
   Pos line col =>
     if col == methodCol then step (expectIdent st)
-      (\name, st1 => step (expectSym st1 ":") (\_, st2 => step (parseExpr (stateFuel st2) st2 methodCol 0) (\ty, st3 => step (parseMethodSigList (fuel - 1) st3 methodCol) (\rest, st4 => Ok (Pair (Pair name ty :: rest) st4)))))
+      (\name, st1 => step (expectSym st1 ":") (\_, st2 => step (parseExpr (stateFuel st2) st2 methodCol 0) (\ty, st3 => step (parseMethodSigList (fuel - 1) st3 methodCol) (\rest, st4 => Ok (Pair (TraitMethod name ty (spanOf st st3) :: rest) st4)))))
     else if col > methodCol then psErr0 UnexpectedIndentInTrait else Ok (Pair [] st)
 
 -- instance 声明（M10.5 / M29）：`instance [<ctx> ,... =>] Head where` + 缩进方法定义。

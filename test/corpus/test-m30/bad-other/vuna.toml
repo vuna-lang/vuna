@@ -1,0 +1,6 @@
+# 失败夹具（不支持的 main 返回类型）：`vuna test` 必须明确失败，而不是静默当通过/失败。
+[package]
+name = "test-m30-bad-other"
+
+[dependencies]
+vuna-base = "../../../../base"

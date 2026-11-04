@@ -65,17 +65,23 @@ DT 设计见 [docs/dt-core.md](../dt-core.md)。
   - **`vuna interp` 不执行效果**：任何 `main : IO a` 一律报
     `DT: interp cannot execute effects (main : IO a); compile and run the program instead`
     （退出码 2），不做「纯动作求值、效果丢弃」的区分；需要效果时用 `compile` + 运行产物。
-    `vuna test` / `vuna repl` 走同一求值器。
+    M30 起 **`vuna test` 的 `main : IO ...` 与 REPL 的 `IO` 表达式都走 compile + 运行**
+    （退出码 0 通过 / 输出直接到终端），不再只有 `interp` 一条路；纯 `String`/`Int`/`Bool`
+    测试仍走核心求值（快）。
   - **REPL 定义必须先写签名**：交互式定义也要先输入 `x : Int` 再输入 `x = 1 + 1`；
-    表达式走 DT 表达式接口（推断表达式类型后求值）。
+    表达式走 DT 表达式接口（推断表达式类型后求值）。M30 起支持多行续行（未闭合
+    括号/尾随 `=`/`where`/`do` 等），空行强制结束；`IO` 表达式编译到临时包运行，
+    每次约 1–2s，需要 `ocamlopt`。
   - **除零语义**：核心求值器对 `a / 0` **不归约**（`interp` 报 `main does not reduce to a
     value`），`compile` 产物运行时 `failwith "division by zero"`（未捕获异常，退出码
     2）；测试用 `compile` + 运行断言（`run_err/03_div_zero`）。这是显式分类而非静默 0，
     完整边界见 [primitives.md](primitives.md) 的 interp 归约边界。
   - **`main` 的数据值展示限制**：`interp` 只展示 `Int`/`String`/`Bool`，与产物同一展示
     语义（`String` 走 `strShow` 转义，见 [primitives.md](primitives.md)）；返回
-    data/record 的 `main` 报 `main does not reduce to a value`。夹具的 `main` 用
-    `Int`/`String`（数据覆盖点留在被调函数里）。
+    data/record 的 `main` 报 `main does not reduce to a value`，编译产物报
+    `CG_MainReturnType`。夹具的 `main` 用 `Int`/`String`（数据覆盖点留在被调函数里）。
+    任意类型 `main` 的展示归 F3（需要运行时 `Show` 证据），M30 只补齐效果执行路径
+    （test/REPL），不扩大展示类型。
   - **interp 不归约的原语按类分类**：返回/接收 `List` 的 `strUnpack` / `strPack` /
     `strConcatMany` / `strSubstTemplate`（List 桥接依赖 `Base.List.List` 构造子表示）、
     `/0`、以及全部效果原语；其余 `str*`（`strFromInt` / `strLength` / `strHash` /
@@ -134,6 +140,24 @@ DT 设计见 [docs/dt-core.md](../dt-core.md)。
     与工具链源码通过 SCT + 显式 fuel/结构递归达标，不再有「可信包静默跳过」路径。
     工具链/前端/加载器的状态机用输入规模线性 fuel 或内存内不可达上界（debt C26/C27/C28），
     正常输入不触发；触发时是明确的 internal 错误，不会静默改变语义。
+  - **C26–C28 的 measure 收口（M30）**：逐点采用「结构递归」或「证明界」，不再有
+    「无静态上界的线性 fuel」：
+
+    | 站点 | measure / 论证 |
+    | --- | --- |
+    | `Base.String.split`（C26） | `2*len(text)+len(sep)+2`；每步消费 1 字符或跳过 ≤len(sep) 字符 |
+    | `Frontend.Lexer`（C27） | `2*len(source)+64`；每个递归调用消费 ≥1 字符，trivia/token 不重叠 |
+    | `Frontend.Parser`（C27） | `128*toksLeft+1024`；每个循环至少消费 1 token（offside 状态机保留守卫；列表循环尽量结构递归） |
+    | `Frontend.Toml`（C27） | 逐行结构递归；状态机按 `4*lines+16` 证明 |
+    | `Packages.Pkg`（C27） | 依赖图无环 + 已访问目录集；守卫上界为可达 manifest 目录数 |
+    | `Loader.Resolve`（C27） | 对 `List Decl`/`Expr` 的结构递归去 fuel；状态机保留并证明 |
+    | `Vuna.Json`（C28） | 每个解析函数消费 ≥1 字符；`8*len+64` 守卫（互递归返回剩余输入，SCT 不可见） |
+    | `Vuna.Fmt.Expr`（C28） | `formatFuelBound = 64*astSize+1024`；AST 结构递归 + 互递归组证明 |
+    | `Vuna.Files` / `Index.Scan`（C28） | 目录树每层递减；上界 = 目录深度（符号链接环被截断） |
+    | `Vuna.Repl` / `Vuna.Lsp`（C28） | 交互/服务主循环保留 1G 程序不变量：非全函数，fuel 只防不可达死循环 |
+
+    所有站点在正常输入下不会触发；触发时是明确的 internal 错误。深层/长输入夹具锁定
+    不会因合法规模耗尽守卫。
   - **`List` 桥接**：返回或接收 `List` 的原语（`strUnpack` / `strPack` /
     `strConcatMany` / `strSubstTemplate` / `prim_getArgs` / `prim_readDir`）由 codegen
     映射到桥接 helper，桥接只为 canonical `Base.List.List` 生成；`Prelude` 自动注入
@@ -168,19 +192,20 @@ DT 设计见 [docs/dt-core.md](../dt-core.md)。
 - M11.6 fmt 限制：行宽 100，但模块头/导出列表、类型签名与超长字符串字面量不折行；表达式
   内部的注释会前移到最内层包含它的条目（或下一条目），不保证留在原位置；单行块注释可挂
   行尾，多行块注释只作前置注释。`where` 块的绑定签名行按源码顺序保留、幂等。
-- M11.5 工具链限制：REPL 一次只接受一行（多行定义/表达式需后续扩展）；`vuna test` 经
-  `Vuna.Interp` 用 DT 核心求值器（不执行效果；代码生成路径由 `test/run-tests.sh` 覆盖）；
-  REPL 的顶层定义必须**先写签名**（DT 签名必填）；依赖只支持本地路径（registry/锁文件
-  未做）；`Map` 是关联表实现的抽象类型（无平衡树）；`Result` 暂无 Functor/Monad 实例。
+- M11.5 工具链限制（M30 更新）：REPL 支持多行续行（括号/字符串/注释/尾 token），但每个
+  提交项仍是一个完整表达式或一条定义；`vuna test` 的纯 `String`/`Int`/`Bool` 测试走
+  `Vuna.Interp` 核心求值，`main : IO ...` 走 compile+运行（退出码判定；代码生成路径由
+  `test/run-tests.sh` 覆盖）；REPL 的顶层定义必须**先写签名**（DT 签名必填）；依赖只支持
+  本地路径（registry/锁文件未做）；`Map` 是关联表实现的抽象类型（无平衡树）；`Result`
+  暂无 Functor/Monad 实例。
 - `vuna lint` 首批规则是保守子集：lambda 体内的冗余 `case` 不报告（lambda 参数只有变量
   名）；只处理从行首 `if` 起始的规范布局；多行分支 if 链、非最后子句/alt 上的冗余 `case`
   只报告不自动修复；`--fix` 遇到注释、tab、CRLF 也跳过。`vuna lint` **必须显式给路径**，
   无参数是用法错误（退出码 2）。
-- `vuna fmt --check` 省略 PATH 时按 workspace 包约定扫描各包 `lib/app/test`（缺目录的
-  崩溃已修）；但**非包目录 / 不存在路径仍会抛宿主异常**（如
-  `Failure("readFile: lib")`），`vuna map` 在同类场景会静默输出空结果。登记 debt **C12**，
-  M30 在 CLI 错误层统一改成可操作诊断。`vuna doc` 也忽略包的 `[export]`（输出全部模块），usage 已删除未实现的注释开关——
-  debt **C13**，M30 修。
+- `vuna fmt --check` 省略 PATH 时按 workspace 包约定扫描各包 `lib/app/test`（缺目录不再
+  崩溃）；M30 起非包目录 / 不存在路径都是可读错误 exit 2，`map` 同类场景也给出明确错误
+  而非静默空输出（C12 已修）。`vuna doc` 尊重 `[export].modules`，`--with-comments`
+  已删除并给 removed hint（C13 已修）。
 
 ## 命名与构建（M12.8）
 

@@ -373,7 +373,7 @@ else case fn of
       -- 推断位置按**构造子**解释（推断位置是值位置；类型位置由 checkTypeFuel (fuel - 1) / checkAppFuel (fuel - 1)
       -- 的「期望是宇宙」分支先走类型应用，不会到这里）。构造子表优先于 globals：
       -- globals 里同名项先登记的是族的 kind，直接查会拿到 `Type -> ... -> Type`。
-      Nothing => case dtCtorLookup name (ecDatas ec) of
+      Nothing => case dtCtorLookupEc ec name of
         Just ctor => andThen (inferArgsFuel (fuel - 1) globals ctx ec (eval [] (dtCtorType ctor)) args sp) (\pa => case pa of
           Pair argTerms (Pair resTy ec2) =>
             Ok (Pair (ctorAppTerm (ecDatas ec2) (TGlobal name) argTerms) (Pair resTy ec2))
@@ -811,7 +811,7 @@ else case fn of
 -- （`Type -> Type -> Type`）而不是构造子类型，导致隐式族参数丢失。
 checkAppCtorFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> String -> List Expr -> Value -> Span -> Result (Pair Term Ec)
 checkAppCtorFuel fuel globals ctx ec name args expected sp = if fuel <= 0 then Err "DT: internal: inference fuel exhausted"
-else case dtCtorLookup name (ecDatas ec) of
+else case dtCtorLookupEc ec name of
   Nothing => tcErr1 sp (UnknownName name) name
   Just ctor => andThen (inferArgsFuel (fuel - 1) globals ctx ec (eval [] (dtCtorType ctor)) args sp) (\pa => case pa of
     Pair argTerms (Pair resTy ec1) => case convEc ec1 (ctxDepth ctx) expected resTy of

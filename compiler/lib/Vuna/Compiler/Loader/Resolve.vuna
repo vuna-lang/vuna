@@ -18,9 +18,23 @@ import Vuna.Compiler.Frontend.Lexer
 import Vuna.Compiler.Loader.Modules
 import Vuna.Compiler.Intrinsics
 
--- 解析器递归显式 fuel：下降证明只认同一参数位置的严格递减，而这里
--- 递归既沿表达式子项也沿绑定列表/作用域前进，单测度表达不了；用 fuel + 递减。
--- 上界远大于任何可由内存构造的 AST 的递归调用数（1G）。
+-- 解析器递归的显式 fuel（M30/C27：保留 1G，逐点写清楚 measure 与上界）。
+--
+-- **为什么不是结构递归**：这里的递归原则上沿 AST 的真子项下降（表达式子项、模式
+-- 子项、绑定列表的 tail），但实现经 `andThen` 闭包转发，SCT 判据看不到「同一形参
+-- 位置严格递减」；且入口函数在 Decl / Expr / Pat 三种类型间互递归，不存在单一形参
+-- 测度。因此保留显式 fuel + 递减（R2「守卫 Int」判据）。
+--
+-- **measure**：每个带 fuel 的入口在 `if fuel <= 0` 守卫下、每次递归传 `fuel - 1`；
+-- 沿任一条调用路径（同一次种子内）步数 ≤ 该路径消费的 AST 节点数 × 小常数
+-- （每个 andThen 链接 1 步，无状态机回读）。`resolveFuelBound` 作为**每个子项**
+-- 的新种子（`resolvePattern resolveFuelBound` / `resolveTypeExpr resolveFuelBound`
+-- 等）：重播种点都位于当前项的真子项上（模式的字段、声明的方法体、ctor 的 kind），
+-- 所以不会形成同一项上的自环；子项个数有限 ⇒ 总调用数有限。
+--
+-- **上界**：1G 远大于任何可由内存构造的 AST 的节点数（单个 AST 节点至少 ~32 字节，
+-- 1G 节点 ≥ 32 GiB 不可构造），故合法输入不会耗尽；耗尽时是明确的 internal 错误
+-- （`resolve fuel exhausted`），不会静默返回半解析结果。
 resolveFuelBound : Int
 resolveFuelBound = 1073741824
 
@@ -463,10 +477,10 @@ resolveRecordField modules label prefix ns imports (Field fname ty sp) =
   andThen (checkBinder label fname)
     (\_ => andThen (resolveTypeExpr resolveFuelBound modules label prefix ns imports ty) (\ty2 => Ok (Field fname ty2 sp)))
 
-resolveTraitMethod : List Module -> String -> String -> Namespaces -> List Import -> Pair String Expr -> Result (Pair String Expr)
-resolveTraitMethod modules label prefix ns imports (Pair mname ty) =
+resolveTraitMethod : List Module -> String -> String -> Namespaces -> List Import -> TraitMethod -> Result TraitMethod
+resolveTraitMethod modules label prefix ns imports (TraitMethod mname ty sp) =
   andThen (resolveTopName label prefix mname)
-    (\n => andThen (resolveTypeExpr resolveFuelBound modules label prefix ns imports ty) (\ty2 => Ok (Pair n ty2)))
+    (\n => andThen (resolveTypeExpr resolveFuelBound modules label prefix ns imports ty) (\ty2 => Ok (TraitMethod n ty2 sp)))
 
 resolveInstanceMethod : List Module -> String -> String -> Namespaces -> List Import -> Decl -> Result Decl
 resolveInstanceMethod modules label prefix ns imports d = case d of

@@ -1,0 +1,3 @@
+-- 成员包的入口（本身能 check/build）；失败来自 test/MemberFail.vuna。
+main : Int
+main = 0

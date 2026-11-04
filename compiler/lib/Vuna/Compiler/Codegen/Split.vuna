@@ -85,7 +85,7 @@ splitDerivedOwners owner dname params (t :: rest) =
 -- 因此按 `DTrait` 结构显式补上（入口 trait 没有模块前缀，这一步是唯一归属来源）。
 splitTraitDefOwnerOf : String -> Decl -> List (Pair String String)
 splitTraitDefOwnerOf owner d = case d of
-  DTrait tname params methods sp => map (\m => Pair (firstOf m) owner) methods
+  DTrait tname params methods sp => map (\m => Pair (traitMethodName m) owner) methods
   _ => []
 
 splitTraitDataOwnerOf : String -> Decl -> List (Pair String String)

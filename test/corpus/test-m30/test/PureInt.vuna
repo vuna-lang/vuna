@@ -1,0 +1,3 @@
+-- 纯测试（通过）：main : Int，0 通过。
+main : Int
+main = 0

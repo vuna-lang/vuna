@@ -17,6 +17,9 @@ open Vuna_dCompiler_dPackages_dPkg
 open Vuna_dCompiler_dDebug
 open Base_dNat
 open Base_dVec
+open Vuna_dCompiler_dDiagnostics_dCommon
+open Vuna_dCompiler_dDiagnostics_dCg
+open Vuna_dCompiler_dDiagnostics_dTc
 open Vuna_dCompiler_dDiagnostics
 open Vuna_dCompiler_dFrontend_dAst
 open Vuna_dCompiler_dFrontend_dDiagnostics
@@ -44,6 +47,7 @@ open Vuna_dCompiler_dElab_dTerm_dSupport
 open Vuna_dCompiler_dElab_dTerm_dImpl
 open Vuna_dCompiler_dElab_dTerm
 open Vuna_dCompiler_dElab_dData
+open Vuna_dCompiler_dElab_dInstName
 open Vuna_dCompiler_dElab_dTrait
 open Vuna_dCompiler_dElab_dDerive
 open Vuna_dCompiler_dElab_dRecords
@@ -60,8 +64,9 @@ open Vuna_dCompiler_dDriver_dSplit
 open Vuna_dCompiler_dCodegen_dSplit
 open Vuna_dCompiler_dCodegen
 open Vuna_dCompiler_dDriver_dDt
+open Vuna_dCompiler_dVersion
 open Vuna_dCompiler_dDriver_dCompile
 open Vuna_dCompiler_dDriver_dCompilerCli
 open Base_dIO
-let v_main = (((v_Base_dMonad_dbind v_Base_dMonad_dMonad_uBase_dMonad_dMonad_uBase_dIO_dIO) v_Base_dIO_dgetArgs) (fun args -> (((v_Base_dMonad_dbind v_Base_dMonad_dMonad_uBase_dMonad_dMonad_uBase_dIO_dIO) ((v_Base_dMonad_dpure v_Base_dMonad_dMonad_uBase_dMonad_dMonad_uBase_dIO_dIO) (v_Vuna_dCompiler_dDriver_dCompilerCli_drunCompilerCli args))) (fun code -> (v_Base_dIO_dexit code)))))
+let v_main = (((v_Base_dMonad_dbind v_Monad_uBase_dIO_dIO) v_Base_dIO_dgetArgs) (fun args -> (((v_Base_dMonad_dbind v_Monad_uBase_dIO_dIO) ((v_Base_dMonad_dpure v_Monad_uBase_dIO_dIO) (v_Vuna_dCompiler_dDriver_dCompilerCli_drunCompilerCli args))) (fun code -> (v_Base_dIO_dexit code)))))
 let () = print_endline (string_of_int (match v_main with C_Base_dIO_dIO_Base_dIO_dMkIO f -> f 0))

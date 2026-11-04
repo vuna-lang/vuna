@@ -2,38 +2,18 @@ module Vuna.Compiler.Elab.Dict
   ( allocTeleMetas
   , argHeadMatchesKind
   , boolShortCircuit
-  , classArgIndex
-  , classFieldTyAt
-  , classMethodIndex
-  , classMethodIndexGo
-  , cmpGenericName
-  , cmpMethodName
-  , cmpOps
-  , cmpRuntimeName
-  , deferEqDict
   , dictArgKind
   , dictArgUnsolvedMeta
   , dictClassArg
-  , dictFamilyNameOf
-  , filterInstances
-  , instDictName
-  , instHeadArg
   , isCmpOp
   , isDictDomain
-  , isDictFamily
-  , isDictValue
   , isRigidDictArg
-  , joinInstNames
-  , joinRestInstNames
-  , methodNameMatches
   , neutralHeadOrSelf
   , resolveDictGoals
-  , searchInstance
   , searchInstanceIn
   , specializeCmpTy
   , specializeEqTy
   , substDictTerm
-  , termMetaId
   ) where
 
 -- Vuna.Compiler.Elab.Dict：字典编码的**表示与实例搜索**：字典类型/实例头的识别、实例搜索（conv 头匹配）、
@@ -50,15 +30,6 @@ import Vuna.Compiler.Elab.Sig
 import Vuna.Compiler.Elab.Types
 import Vuna.Compiler.Intrinsics
 import Vuna.Compiler.Frontend.Ast
-
-classArgIndex : Ec -> Value -> Int
-classArgIndex ec dom = case dictClassArg ec dom of
-  Just arg => case forceVal ec arg of
-    VNeutral n => case n of
-      NVar name lvl sp => lvl
-      _ => 0
-    _ => 0
-  Nothing => 0
 
 isDictDomain : Ec -> Value -> Bool
 isDictDomain ec dom = isDictValue ec (forceVal ec dom)
@@ -284,20 +255,6 @@ piRigs t = case t of
   TPi n i r dom cod => r :: piRigs cod
   _ => []
 
--- 实例表筛选（M22）：接受**可新增解**的头匹配——`Dict_C ?a`（`?a` 未解）与实例头
--- `Dict_C IO` 统一会解出 `?a = IO`，这正是「约束求解」：字典约束本身确定类参数。
--- 每个候选都对照**同一份初始 sols** 试匹配（不把前一个候选的解带进下一个），
--- 否则 `?a` 被第一个候选定死，第二个候选永远匹配不上、歧义漏检。
-filterInstances : Ec -> Value -> List DtInst -> Sols -> Pair (List DtInst) Sols
-filterInstances ec dom [] sols = Pair [] sols
-filterInstances ec dom (i :: rest) sols =
-  let
-    hd = forceVal ec (eval [] (dtInstHead i))
-  in case conv (ecDefTbl ec) sols 0 dom hd of
-    Err e => filterInstances ec dom rest sols
-    Ok sols2 => case filterInstances ec dom rest sols of
-      Pair more final => Pair (i :: more) sols2
-
 joinInstNames : List DtInst -> String
 joinInstNames [] = ""
 joinInstNames (i :: rest) = dtInstName i ++ joinRestInstNames rest
@@ -305,45 +262,6 @@ joinInstNames (i :: rest) = dtInstName i ++ joinRestInstNames rest
 joinRestInstNames : List DtInst -> String
 joinRestInstNames [] = ""
 joinRestInstNames (i :: rest) = ", " ++ dtInstName i ++ joinRestInstNames rest
-
--- 实例头 `Dict_C <arg>` 的字典族名。
-instDictName : DtInst -> Maybe String
-instDictName inst = case flattenTaggedApp (dtInstHead inst) of
-  Just (Pair g args) => Just g
-  Nothing => Nothing
-
--- 实例头实参（单参数接口；`Dict_C arg`）。
-instHeadArg : DtInst -> Term
-instHeadArg inst = case flattenTaggedApp (dtInstHead inst) of
-  Just (Pair g args) => case args of
-    a :: rest => firstOf a
-    [] => TGlobal "Int"
-  Nothing => TGlobal "Int"
-
-instClassOfDict : Maybe String -> List DtClass -> Maybe DtClass
-instClassOfDict Nothing classes = Nothing
-instClassOfDict (Just g) classes = findClassByDict g classes
-
-findClassByDict : String -> List DtClass -> Maybe DtClass
-findClassByDict g [] = Nothing
-findClassByDict g (c :: rest) =
-  if dictTypeName (dtClassName c) == g then Just c else findClassByDict g rest
-
--- 方法在类里的字段下标（方法名允许带模块前缀，按最后一段匹配）。
-classMethodIndex : String -> List (Pair String Term) -> Maybe Int
-classMethodIndex mname methods = classMethodIndexGo mname methods 0
-
-classMethodIndexGo : String -> List (Pair String Term) -> Int -> Maybe Int
-classMethodIndexGo mname [] i = Nothing
-classMethodIndexGo mname (m :: rest) i =
-  if methodNameMatches mname (firstOf m) then Just i else classMethodIndexGo mname rest (i + 1)
-
-methodNameMatches : String -> String -> Bool
-methodNameMatches a b = if a == b then True else baseNameOf a == baseNameOf b
-
-classFieldTyAt : Int -> List Term -> Term
-classFieldTyAt i [] = TGlobal "Int"
-classFieldTyAt i (t :: rest) = if i <= 0 then t else classFieldTyAt (i - 1) rest
 
 -- 字典族的类参数 kind：字典 data `Dict_C` 的构造子类型第一个 binder 的域
 -- （`MkDict_C : {p : K} -> <字段>` 里的 `K`）。

@@ -1,0 +1,3 @@
+-- 成员包的纯测试（通过）：验证 workspace 聚合会跑到成员的 test/。
+main : Int
+main = 0

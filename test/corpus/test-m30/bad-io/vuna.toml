@@ -1,0 +1,7 @@
+# 失败夹具（效果测试）：`vuna test test/corpus/test-m30/bad-io` 退出码 1。
+# 效果测试只看进程退出码，所以失败测试显式 exit 1。
+[package]
+name = "test-m30-bad-io"
+
+[dependencies]
+vuna-base = "../../../../base"

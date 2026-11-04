@@ -5,5 +5,3 @@
 # 注入），保持夹具原始语义。
 [package]
 name = "fix-02-data"
-version = "0.1.0"
-edition = "2026"

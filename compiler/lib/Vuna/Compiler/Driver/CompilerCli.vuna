@@ -16,6 +16,7 @@ import Vuna.Compiler.Common
 import Vuna.Compiler.Packages.Pkg
 import Vuna.Compiler.Driver.Compile
 import Vuna.Compiler.Driver.Dt
+import Vuna.Compiler.Version
 
 compilerUsageLines : String -> String
 compilerUsageLines prog =
@@ -27,8 +28,11 @@ compilerUsageLines prog =
     ++ " check (<entry.vuna> | <package-dir>)\n"
     ++ "  "
     ++ prog
-    ++ " build [--no-compile] [--out DIR] [DIR]\n"
+    ++ " build [--no-compile] [--out DIR] [--package NAME] [DIR]\n"
     ++ "  --no-print                    compile 生成的程序不打印 main 结果（默认打印）\n"
+    ++ "  "
+    ++ prog
+    ++ " version, --version          显示版本\n"
     ++ "  "
     ++ prog
     ++ " help, -h\n"
@@ -49,9 +53,17 @@ runCompilerCliFor1 prog args = case args of
     "compile" => compileArgs prog rest
     "check" => checkArgs prog rest
     "build" => buildArgs prog rest
+    "version" => printVersion 0
+    "--version" => printVersion 0
     "seed" => removedCommand prog "seed" "use `build --out OUT [DIR]` or `compile DIR OUT`"
     "help" => helpFor prog
     _ => if startsWith "-" arg then removedFlag prog arg else unknownCommand prog arg
+
+printVersion : Int -> Int
+printVersion _ =
+  let
+    _ = prim_print ("vuna-compiler " ++ vunaVersion ++ "\n")
+  in 0
 
 anyHelp : List String -> Bool
 anyHelp [] = False
@@ -128,13 +140,6 @@ defaultDir : Maybe String -> String
 defaultDir dir = case dir of
   Just dir2 => dir2
   Nothing => "."
-
--- build 的输出目录：`--out DIR` 显式给出时用给定值；否则默认 `<PKG-DIR>/.output`
--- （PKG-DIR 缺省为 "."，即 `.output`；与 M26 前 `vuna build <pkg>` 的布局一致）。
-defaultOutDir : Maybe String -> String -> String
-defaultOutDir out dir = case out of
-  Just outDir => outDir
-  Nothing => dir ++ "/.output"
 
 -- 路径既不是文件也不是目录时的统一错误（先 prim_fileExists 再 prim_isDirectory：
 -- 内建 prim_isDirectory 对不存在的路径会抛异常）。
@@ -215,11 +220,24 @@ checkEmit path =
   else dtPathErr path
 
 checkPkgDir : String -> Int
-checkPkgDir dir = case loadPackage dir of
+checkPkgDir dir = case workspacePackages dir of
   Err e => printErr e
-  Ok pkg => case checkPackage pkg of
-    Err e => printErr e
-    Ok warnings => printWarnings warnings
+  Ok pkgs => checkPackages pkgs 0
+
+-- M30：workspace 是检查单元——根包 + [workspace].members 逐个检查，成员错误不再被
+-- 根 check 忽略。错误带 `[包名]` 前缀；全部跑完再汇总退出码。
+checkPackages : List Package -> Int -> Int
+checkPackages [] code = code
+checkPackages (pkg :: rest) code =
+  let
+    c = case checkPackage pkg of
+      Err e =>
+        let
+          _ = prim_print ("error: [" ++ packageName pkg ++ "] " ++ e ++ "\n")
+        in 1
+      Ok warnings => printWarnings warnings
+    next = if c > code then c else code
+  in checkPackages rest next
 
 checkFileEntry : String -> Int
 checkFileEntry path = case contextForFile path of
@@ -229,45 +247,123 @@ checkFileEntry path = case contextForFile path of
     Ok warnings => printWarnings warnings
 
 -- ---------------------------------------------------------------
--- build：包级逐模块 codegen 到 DIR（默认 .output），再跑 DIR/build.sh 链接到
+-- build：包级逐模块 codegen 到 DIR（默认 <PKG-DIR>/.output），再跑 build.sh 链接到
 -- DIR/bin/<包名>；--no-compile 只做 codegen 不链接。
+-- M30：workspace 根 = 构建单元（所有可执行成员各建到自己的 .output 或 DIR/<包名>；
+-- 库成员只检查）；--package NAME 只建指定包（Nix 构建根包用，避免重复构建成员）。
+-- build meta（同哈希跳过）见 Vuna.Compiler.Driver.Compile。
 -- ---------------------------------------------------------------
 buildArgs : String -> List String -> Int
-buildArgs prog args = buildParse prog False Nothing Nothing args
+buildArgs prog args = buildParse prog False Nothing Nothing Nothing args
 
-buildParse : String -> Bool -> Maybe String -> Maybe String -> List String -> Int
-buildParse prog noCompile out dir args = case args of
-  [] => buildRun noCompile (defaultDir dir) (defaultOutDir out (defaultDir dir))
-  "--no-compile" :: rest => buildParse prog True out dir rest
+buildParse : String -> Bool -> Maybe String -> Maybe String -> Maybe String -> List String -> Int
+buildParse prog noCompile out dir pkg args = case args of
+  [] => buildRun noCompile (defaultDir dir) out pkg
+  "--no-compile" :: rest => buildParse prog True out dir pkg rest
   "--out" :: rest => case rest of
     outDir :: more => if startsWith "-" outDir then removedFlag prog outDir
     else case out of
-      Nothing => buildParse prog noCompile (Just outDir) dir more
+      Nothing => buildParse prog noCompile (Just outDir) dir pkg more
+      Just _ => usageErr prog
+    [] => usageErr prog
+  "--package" :: rest => case rest of
+    name :: more => if startsWith "-" name then removedFlag prog name
+    else case pkg of
+      Nothing => buildParse prog noCompile out dir (Just name) more
       Just _ => usageErr prog
     [] => usageErr prog
   arg :: rest => if startsWith "-" arg then removedFlag prog arg
   else case dir of
-    Nothing => buildParse prog noCompile out (Just arg) rest
+    Nothing => buildParse prog noCompile out (Just arg) pkg rest
     Just _ => usageErr prog
 
-buildRun : Bool -> String -> String -> Int
-buildRun noCompile dir outDir = case executablePackage "build" dir of
+buildRun : Bool -> String -> Maybe String -> Maybe String -> Int
+buildRun noCompile dir outM pkgM = case workspacePackages dir of
   Err e => printErr e
-  Ok pkg =>
-    let
-      name = packageName pkg
-    in case compileToDir (packageContext pkg) (packageEntry pkg) True outDir of
-      Err e => printErr e
-      Ok _ => if noCompile then 0 else buildLinked outDir name
+  Ok pkgs => if isSingleLibraryPackage pkgs then printErr (libraryOnlyMessage pkgs)
+  else case selectBuildTargets pkgM pkgs of
+    Err e => printErr e
+    Ok targets => buildTargets noCompile (length pkgs > 1) outM targets 0
 
--- 链接：先建 bin/（build.sh 的 -o bin/<pkg> 需要父目录存在），再跑 build.sh。
-buildLinked : String -> String -> Int
-buildLinked outDir name =
+-- 单包目录且是库包（没有 app/Main.vuna）→ build 必须报错（不是静默 skip）。
+-- workspace 根里的库成员仍走 skip（构建单元覆盖全部可执行成员）。
+isSingleLibraryPackage : List Package -> Bool
+isSingleLibraryPackage pkgs = case pkgs of
+  [pkg] => not (prim_fileExists (packageEntry pkg))
+  _ => False
+
+libraryOnlyMessage : List Package -> String
+libraryOnlyMessage pkgs = case pkgs of
+  pkg :: _ =>
+    "library package "
+      ++ packageName pkg
+      ++ " has no app/Main.vuna (executable package required; use `check` for libraries)"
+  [] => "no package to build"
+
+selectBuildTargets : Maybe String -> List Package -> Result (List Package)
+selectBuildTargets pkgM pkgs = case pkgM of
+  Nothing => Ok pkgs
+  Just name => case findPackageByName name pkgs of
+    Nothing => Err ("no such package in workspace: " ++ name)
+    Just pkg => Ok [pkg]
+
+findPackageByName : String -> List Package -> Maybe Package
+findPackageByName name [] = Nothing
+findPackageByName name (pkg :: rest) =
+  if packageName pkg == name then Just pkg else findPackageByName name rest
+
+buildTargets : Bool -> Bool -> Maybe String -> List Package -> Int -> Int
+buildTargets noCompile multiOut outM [] code = code
+buildTargets noCompile multiOut outM (pkg :: rest) code =
   let
-    _ = prim_makeDir (outDir ++ "/bin")
+    c = buildOne noCompile multiOut outM pkg
+    next = if c > code then c else code
+  in buildTargets noCompile multiOut outM rest next
+
+-- 单包：可执行包 build；库包只 check（workspace 构建单元覆盖所有成员）。
+buildOne : Bool -> Bool -> Maybe String -> Package -> Int
+buildOne noCompile multiOut outM pkg =
+  let
+    name = packageName pkg
+    outDir = case outM of
+      Just out => if multiOut then out ++ "/" ++ name else out
+      Nothing => packageDir pkg ++ "/.output"
+    entry = packageEntry pkg
+  in if prim_fileExists entry then
+    let
+      ctx = packageContext pkg
+      binPath = outDir ++ "/bin/" ++ name
+    in if noCompile then compileCodegen ctx entry outDir
+    else if metaUpToDate outDir ctx entry binPath then
+      let
+        _ = prim_print ("up to date: " ++ binPath ++ "\n")
+      in 0
+    else case compileToDir ctx entry True outDir of
+      Err e => printErr e
+      Ok _ => buildLinked ctx entry outDir name
+  else case checkPackage pkg of
+    Err e => printErr e
+    Ok warnings =>
+      let
+        _ = printWarnings warnings
+        _ = prim_print ("skipped (library): " ++ name ++ " -> " ++ outDir ++ "\n")
+      in 0
+
+compileCodegen : PackageContext -> String -> String -> Int
+compileCodegen ctx entry outDir = case compileToDir ctx entry True outDir of
+  Err e => printErr e
+  Ok _ => 0
+
+-- 链接：先建 bin/（build.sh 的 -o bin/<pkg> 需要父目录存在），再跑 build.sh；
+-- 链接成功后写 build-meta.json（同哈希跳过在 buildOne 入口判定）。
+buildLinked : PackageContext -> String -> String -> String -> Int
+buildLinked ctx entry outDir name =
+  let
+    _ = ensureDirPath (outDir ++ "/bin")
   in case runBuildScript outDir ("bin/" ++ name) name of
     Err e => printErr e
     Ok _ =>
       let
+        _ = writeBuildMeta outDir ctx entry True
         _ = prim_print ("built " ++ outDir ++ "/bin/" ++ name ++ "\n")
       in 0

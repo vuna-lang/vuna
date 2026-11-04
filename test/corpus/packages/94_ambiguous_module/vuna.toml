@@ -3,8 +3,6 @@
 # 用两个环境根模拟；M26 起由包依赖闭包决定可见性）。
 [package]
 name = "a"
-version = "0.1.0"
-edition = "2026"
 
 [workspace]
 members = ["b", "c"]

@@ -1,11 +1,14 @@
 module Vuna.Index
   ( Index(..)
   , ModuleInfo(..)
+  , Ref(..)
   , Sym(..)
   , buildIndex
+  , findReferences
   , findSymbol
   , impactOf
   , indexModules
+  , indexRefs
   , indexSymbols
   , listAllSymbols
   , loadOrBuild
@@ -14,8 +17,12 @@ module Vuna.Index
   , modName
   , modPackage
   , modPath
+  , refCol
+  , refLine
+  , refModule
+  , refName
+  , referencesAt
   , renderApi
-  , renderDocWithComments
   , renderModules
   , renderOverview
   , symCol
@@ -26,6 +33,7 @@ module Vuna.Index
   , symModule
   , symName
   , symSig
+  , symbolAt
   ) where
 
 -- Vuna.Index：源码符号索引（工具链模块，**永不进 seed 闭包**）。
@@ -33,23 +41,27 @@ module Vuna.Index
 -- 目的：让 agent/人类用一条命令定位「符号在哪、谁引用它、该跑哪些测试」，而不是通读
 -- 全仓。索引只依赖 parse 级信息（AST + Span + lexComments），不跑类型检查。
 --
--- 缓存设计（`.local/index/`，已 gitignore）：
---   - `manifest.txt` 每行 `path <TAB> bytes <TAB> mtime`——新鲜度判定的唯一依据；
---   - `modules.txt`  每行 `module <TAB> pkg <TAB> path <TAB> bytes <TAB> declCount`；
---   - `symbols.txt`  每行 `module <TAB> name <TAB> kind <TAB> line <TAB> col <TAB> sig <TAB> doc`；
---   - `refs.txt`     每行 `module <TAB> name`（模块引用了哪些名字，预先算好的反向边）。
+-- 缓存设计（`.local/index/`，已 gitignore；M30 起 v2 内容哈希 + 原子写 + 目录锁）：
+--   - `manifest.txt` 首行 `vuna-index 2`，随后每行 `path TAB bytes TAB hash`——
+--     新鲜度判定的唯一依据（内容哈希；不再用 mtime+size，C11）；旧格式全量重建；
+--   - `modules.txt`  每行 `module TAB pkg TAB path TAB bytes TAB declCount`；
+--   - `symbols.txt`  每行 `module TAB name TAB kind TAB line TAB col TAB sig TAB doc`；
+--   - `refs.txt`     每行 `module TAB name TAB line TAB col`（引用出现位置）。
 --
--- 新鲜度：每次调用先遍历目录 + 逐个 `prim_fileSize`/`prim_fileMtime`（不读文件内容），
--- 与 manifest 完全一致就直接从 `*.txt` 回读索引；否则全量重建并写回。
--- 因此**没有「刷新索引」命令**：`vuna map` / `vuna api` 自己判定。
--- 缓存不可写时降级为纯内存构建（不报错）。
+-- 新鲜度：每次调用先遍历目录 + 读文件算内容哈希（不读 AST），与 manifest 逐条一致就
+-- 从 `*.txt` 回读索引；否则全量重建并写回。因此**没有「刷新索引」命令**：
+-- `vuna map` / `vuna api` 自己判定。缓存不可写 / 写失败时降级为纯内存构建（不报错）。
+--
+-- 文档决策（M30）：顶层签名必填；parse 级签名就是工具链需要的语义面，不引入独立的
+-- 语义索引（D13 的语义部分由 LSP 的 DT 检查消费，不在 Index 里重复）。
 --
 -- 符号全名：`<vuna 模块全名>.<顶层名>`，如
 -- `Vuna.Compiler.Elab.elabProgramFull`。
 --
 -- M24 后维护·源码重组：数据模型在 Vuna.Index.Types，parse 扫描/构建/缓存在 Vuna.Index.Scan，
 -- 查找与影响面在 Vuna.Index.Query，map/api 的文本渲染在 Vuna.Index.Render；
--- 本模块只做门面重导出（对外导出集合不变）。
+-- 本模块只做门面重导出（对外导出集合见模块头；M30 增加 Ref/referencesAt/symbolAt，
+-- 删除 renderDocWithComments）。
 import Vuna.Index.Query
 import Vuna.Index.Render
 import Vuna.Index.Scan

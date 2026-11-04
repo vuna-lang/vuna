@@ -1,0 +1,7 @@
+# 失败夹具（纯测试）：`vuna test test/corpus/test-m30/bad-pure` 退出码 1。
+# 不是根 workspace 的成员，避免污染通过路径的聚合。
+[package]
+name = "test-m30-bad-pure"
+
+[dependencies]
+vuna-base = "../../../../base"

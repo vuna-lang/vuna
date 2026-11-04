@@ -1,0 +1,4 @@
+import Member
+
+main : String
+main = greet

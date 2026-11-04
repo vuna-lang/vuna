@@ -1,0 +1,3 @@
+-- 失败夹具的入口（本身能 check/build）；失败来自 test/PureFail.vuna。
+main : Int
+main = 0

@@ -5,14 +5,14 @@
 
 ## 原生测试：`test/run-tests.sh`
 
-vuna 原生测试按编号章节组织（**38 个章节**：编号到 39，第 12 段已删除；34a–34d 归在
-第 34 段内，`--list` 列 38 行），用 `vuna` / `vuna-seed` 驱动，不依赖外部 vuna 实现，
-但需要 `ocamlopt` 作为 codegen 后端。M29 实测 **1359 checks 全绿**（`sh test/run-tests.sh`；
-本机墙钟含包构建与 seed 冒烟、受机器负载影响，精确数随夹具增删变化）。M29 新增
-`dt/60_ctor_eta`、`dt/61_implicit_values`、`dt/62_sigma_basic`、`dt/63_dep_lookup`、
-`dt_err/42`–`52`、`traits/14_constrained_instance`、`traits/15_parametric_deriving`、
-`records/97_field_access_span` 与命名实例/`@` 语法负例（`traits/96`–`98`）；nix check 内
-含完整工具链，墙钟与机器相关。
+vuna 原生测试按编号章节组织（**42 个章节**：编号到 43，第 12 段已删除；34a–34d 归在
+第 34 段内；M30 新增第 40–43 段）。用 `vuna` / `vuna-seed` 驱动，不依赖外部 vuna 实现，
+但需要 `ocamlopt` 作为 codegen 后端。M30 实测 **1402 checks 全绿**（`sh test/run-tests.sh`；
+本机墙钟含包构建与 seed 冒烟、受机器负载影响，精确数随夹具增删变化）。M30 新增：
+`corpus/cli/check.sh`（61 项 CLI 错误矩阵）、`corpus/index/check.sh`（35 项 Index v2）、
+`corpus/doc/01_export`（doc `[export]`）、`corpus/packages/{09_workspace_member_error,
+10_workspace_build}`（workspace check/build）、`corpus/test-m30/`（REPL/effect test）；
+LSP smoke 扩到 72 项。nix check 内含完整工具链，墙钟与机器相关。
 
 ```console
 sh test/run-tests.sh        # 需要 PATH 中有 vuna 与 vuna-seed
@@ -67,9 +67,9 @@ DT 精化 + 擦除 codegen，`build` = DT 逐模块 codegen + `build.sh`）。�
 `strSubstTemplate`；M27 起这些内建的 interp 不归约是显式分类）。M29 修掉 C05 的字典
 binder 位置后，`monad/04_kind_generic` 不再需要标记——**当前 14 个 `.nointerp`**（`dt/34`、
 `dt/35`、`dt/56`、`dt_base/01`–`03`/`06`、`run/10`/`16`/`17`、`stdlib/03`/`07`/`09`/`10`）。
-`.nocompile` 标记 runner 仍识别（`test/run-tests.sh` 的跳过分支），但**已无夹具使用**：
-它原本只服务 C05「多隐式参数字典的擦除 codegen 尚不支持」，M29 修复后语义过期，属于
-待清理的死标记。负例 `.err` 是稳定诊断子串，interp/compile 文案不同时用 `.cerr`。
+M30/E10 起 `.nointerp` 不再只是「跳过」：第 43 段对每个标记夹具跑一次 `interp`，断言
+**非 0（明确拒绝：效果不可执行或不归约为值）**；`.nocompile` 死标记已从 runner 删除。
+负例 `.err` 是稳定诊断子串，interp/compile 文案不同时用 `.cerr`。
 
 - `corpus/run/*.vuna`：`interp` 输出 vs `.out` golden；`compile`→ocamlopt→运行再比对；
   `.nointerp`（`10_string_pack`、`16_file_exists`、`17_file_meta`）只跑后者；M27 新增
@@ -128,9 +128,10 @@ binder 位置后，`monad/04_kind_generic` 不再需要标记——**当前 14 �
   `01_literal_if_chain.vuna:3:8: [LN_LiteralIfChain] literal-if-chain: if/else-if chain on
   <scrutinee> can be a case with literal patterns`；错误码体系与符号约定见
   [dt-tooling.md](dt-tooling.md) 第 4 节，完整清单由 `vuna gen-errors` 生成；
-- `corpus/lsp/smoke.sh`：`vuna lsp` 的 JSON-RPC 冒烟（诊断来自 DT 精化 +
-  `goalsOfProgram` 洞目标）；**M26 未改 LSP 加载语义**（仍 parse 级、含 import 跳过类型
-  检查），冒烟只锁当前行为；
+- `corpus/lsp/smoke.sh`：`vuna lsp` 的 JSON-RPC 冒烟（72 项）。M30 起走包上下文
+  （含 import 的文件真正类型检查），覆盖两模块临时包、formatting、documentSymbol、
+  definition、references、completion、workspace symbol、lint 诊断、URI `%XX` 与退出码；
+  边界见 [dt-tooling.md](dt-tooling.md) §2；
 - `corpus/dt/*`（M13–M29 正例，清单见 [dt.md](dt.md) 夹具一节）：M27 新增
   `54_user_bool_data`、`55_user_io_data`、`56_user_list_data`（`.nointerp`），覆盖用户
   本地 `data Bool`/`IO`/`List` 与 canonical `Base.*` 身份并存；M28 新增 `57_universe`、
@@ -166,21 +167,21 @@ binder 位置后，`monad/04_kind_generic` 不再需要标记——**当前 14 �
 
 ## Nix checks 清单
 
-`nix flake check` 实测 **12 项**：3 个 package 构建（`vuna` / `vuna-compiler` /
-`vuna-seed`）+ 9 个 check 语义项（`context-budget`、`seed-selfhost`、`vuna-fmt`、
+`nix flake check` 实测 **13 项**：3 个 package 构建（`vuna` / `vuna-compiler` /
+`vuna-seed`）+ 10 个 check 语义项（`context-budget`、`seed-selfhost`、`vuna-fmt`、
 `vuna-index`、`vuna-lint`、`vuna-metrics`、`vuna-package`、`vuna-tests`、
-`vuna-typecheck`；主体是 `nix/checks/<name>.sh`）。语义项：
+`vuna-typecheck`、`vscode-ext`；主体是 `nix/checks/<name>.sh`）。语义项：
 `seed-selfhost`（seed→stage0→stage1→stage2 逐字节一致、TCB 黑名单、闭包数量、增量构建
 与行为抽查）、`vuna-tests`（沙箱跑上述原生测试）、`vuna-typecheck` / `vuna-lint`
 （`vuna check .` 自检、lint 零 finding）、`vuna-fmt`（workspace 全包与 `examples/`）、
 `vuna-package`（`examples/multi` 的 build/test/fmt/doc + 根包构建）、`vuna-metrics`
 （seed 闭包的 codegen 指标对 `nix/metrics.budget`）、`vuna-index`（`map` / `--find` /
-`--impact` / `api` 与缓存失效）、`context-budget`（入口文档字节数与单模块行数对
-`nix/context.budget`）。
+`--impact` / `api` 与内容哈希缓存失效）、`context-budget`（入口文档字节数与单模块行数对
+`nix/context.budget`）、`vscode-ext`（提交的 `vscode/dist/extension.js` 与清单/语法文件的
+离线自检，不跑 npm install）。
 M24 后这些 check 的脚本已按单路径 CLI（无 `compile --package`）更新；M26 起 metrics /
 seed-selfhost 的生成命令改为 `build --no-compile --out`（不再有 `seed` 子命令）。
-M27 已完成两轮 seed rotation（`seed/` 66 个 `.ml`），`checks.seed-selfhost` 与原生测试
-第 13 段使用 rotation 后的种子，均为绿。
+M30 完成后 seed rotation 会更新 `seed/` 的模块数（B19 拆分 +3）与 `nix/seed-count.txt`。
 
 ## Nix 命令与本地开发
 
@@ -208,13 +209,18 @@ VUNA=$PWD/result-vuna/bin/vuna VUNA_SEED=$PWD/result-seed/bin/vuna-seed \
 
 `nix run .#vuna-bench` 是**手动**基准（不是 CI check，结果依赖机器）：默认测 `vuna`，
 `--compiler seed` 改测 `vuna-seed`；`--quick` 快速冒烟，`--runs N --save F` 存档，
-`--baseline F` 与历史对比，`--with-tests` 额外跑全部 checks，`--json` 输出机器可读报告。
+`--baseline F` 与历史对比（JSON 用 `jq` 解析），`--with-tests` 额外跑全部 checks，
+`--json` 输出机器可读报告。M30/E08 新增：入库基线 `nix/bench-baseline.json`、
+`--check`（默认读基线，超 `--threshold N`（默认 20%）只打印 `WARN`、退出 0）、
+`--strict`（同机 + 同 compiler 的 WARN 变失败）；`nix/ci.sh --bench` 在 flake check
+之后跑软告警（默认不跑，避免 CI 抖动）。跨机器/不同口径只做软告警。
 
 报告包含三级构建（seed → vuna-compiler → vuna 的 ocamlopt 时间）、编译性能（自编译
 compiler 闭包、corpus 批量、tiny 程序、DT 精化 + 擦除 codegen）、吞吐、产物
 bytes/lines/最长行/行尾空白、codegen 健康度计数（`let rec`、`String.concat ""`、
 `bi_eq_int/_str/_bool`、零参定义）以及 fixed point / seed 一致性与可选 tests 状态。
-中间产物写入临时目录（`TMPDIR` 可覆盖），不写入仓库。
+中间产物写入临时目录（`TMPDIR` 可覆盖），不写入仓库。基线在空闲机器上重跑：
+`nix run .#vuna-bench -- --quick --json nix/bench-baseline.json`（或默认 runs=3 更稳）。
 
 M26 起所有构建口径都是逐模块 split（`compile`/`build`/seed 同一种产物），不再有
 「单文件 `main.ml` vs 多模块」两种读数需要区分；历史读数中的单文件口径见

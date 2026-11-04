@@ -8,19 +8,29 @@
 
 `./result/bin/vuna`（`nix build .#vuna` 产物，16 核开发机，单进程、无并行）：
 
-| 命令 | 原始 | 第 1 轮（去超线性） | 最终 |
-| --- | --- | --- | --- |
-| `check base` | 47 ms | 49 ms | **69 ms**（构成见 §7） |
-| `check compiler` | 76.8 s | 14.4 s | **2.5 s** |
-| `check .` | ~117 s | 22.3 s | **3.7 s** |
-| `build . --no-compile` | 135.1 s | 24.5 s | **3.7 s** |
-| `build .` | ~152 s | 27.1 s | **6.3 s** |
-| `fmt --check`（全仓） | 0.6 s | 0.6 s | **0.3 s** |
-| `lint` / `doc` / `map` / `gen-errors` | 10–900 ms | — | **均 <1 s** |
+| 命令 | 原始 | 第 1 轮（去超线性） | 最终（M29） | M30 后（user CPU） |
+| --- | --- | --- | --- | --- |
+| `check base` | 47 ms | 49 ms | **69 ms**（构成见 §7） | **26 ms** |
+| `check compiler` | 76.8 s | 14.4 s | **2.5 s** | **3.1 s**（M29 后回归到 16.0 s 已修，见 §5） |
+| `check .` | ~117 s | 22.3 s | **3.7 s** | **8.1 s**（M30 起 workspace 检查所有成员，口径变化） |
+| `build . --no-compile` | 135.1 s | 24.5 s | **3.7 s** | **—**（未重测；codegen 路径未改） |
+| `build .` | ~152 s | 27.1 s | **6.3 s** | **—** |
+| `fmt --check`（全仓） | 0.6 s | 0.6 s | **0.3 s** | **0.3 s** |
+| `lint` / `doc` / `map` / `gen-errors` | 10–900 ms | — | **均 <1 s** | **均 <1 s**（Index v2 多读内容算哈希，仍 <1 s） |
 
 中间轮次（合入 diag-enums 后的回退与逐项修复：HashTbl 索引、诊断消息构造搬运行时、
 primReduce 预筛、字典收敛短路、名字/邻接表哈希化）的逐轮读数保留在 git 历史里。
 **所有命令已在 10 s 以内**；增长率见 §8。
+
+> **M30 观测**：M28/C29 的 `Sig.bannedForModule` 把 banned 集改成 per-signature 现场扫全程序
+> defined 名，使 `collectSigs` 退化成 O(n²)：`check compiler` 从 2.5 s 级回到 16.0 s 级。
+> M30 改为一次性 qualified 表 + per-sig O(1) 查后，`check compiler` 16.0 s → **3.1 s**
+> （collectSigs 相位 14.33 s → 35.6 ms），synthetic collectSigs 曲线从
+> 238/752/3088/12887/54622 ms（n=500→8000）降到 8/13.6/26.9/30.6/31.1 ms。
+> `check .` 8.1 s 包含 M30 新语义「workspace 检查所有成员」（compiler + base + root），
+> 不是同口径回退。D18 的 NbE 值共享（`Sols.defVals` + 安全前缀记忆化）按设计落地，但采样
+> 显示收益≈0（DFun 的 WHNF 是 `VLam`，`eval [] body` 已是 O(1)；force 的 NGlobal 绝大多数
+> 是数据族/内建），因此保留零成本骨架、不夸大收益。ctor 索引已加（可重建缓存 + 线性回落）。
 
 > **M29 观测（非基准口径）**：相等收口删掉的是 interp 侧的 `valueEqDeep` /
 > `genericEqPrim` 与编译产物里的 `bi_eq_generic` / `bi_neq_generic` 两个 helper——都不在
@@ -112,21 +122,24 @@ tblEmpty / tblInsert k v / tblLookup k / tblFromList pairs / tblInsertAll pairs
 
 ## 5. 仍然存在的热点（下一步）
 
-`check compiler` 的 14.4 s 里 `elabBodies`（逐定义精化）仍占约 13 s，其余阶段合计 <1.5 s。
-逐定义成本约 5–7 ms/定义，来自精化器本身而非整表扫描：
+`check compiler` 的 3.1 s 里 `elabBodies`（逐定义精化）仍是主要部分，但 M30 已确认
+**逐定义成本不是整表扫描**，此前的 16.0 s 是 C29 签名阶段 O(n²) 造成的：
 
-1. **NbE 无共享**（D18 的根）：`force` 命中全局定义时每次都 `eval [] body` 重算；
-   `applyClosure`/`quote` 到处重建闭包与项。需要 thunk/惰性共享或值的 memo。
-2. **conv/force 的调用量**：`convFuel` 在**每个**节点先对两侧各 force 一次。可加
-   「同 head 同 spine 直接成功」的快速路径减少无谓 force。
-3. `dtCtorLookup` 仍是线性扫 `ecDatas`（70 族 / 数百构造子），可加 `Ec` 里的 ctor 索引。
-4. **GC 仍占可观测比例**：32MB minor heap 之后仍有约 15–20% 时间在 GC；减少分配（共享/复用）
-   比继续调参更有效。
-5. **仍然占大头的是逐定义精化（`elabBodies`）**：本轮消息构造搬入运行时后，`check compiler`
-   16.0s 里 bodies 仍约 13s（2075 个定义 ≈ 6ms/定义），来自 NbE 无共享、conv 每节点重复
-   force、以及项/字符串分配的 GC 压力；`dtCtorLookup` 仍是线性扫族表（82 族）。
-6. check/build 的 10s 目标需要上面 1–2 项（NbE 共享 / conv 快速路径）落地，而不是继续找
-   整表扫描或消息格式化的边角成本。
+1. **已修：签名 banned 集 O(n²)**（M30）：`Sig.qualifiedBannedTbl` 一次建表 +
+   `quantifyTopSigCached` per-sig O(1)；collectSigs 14.33 s → 35.6 ms。这是本轮唯一
+   量级收益。
+2. **NbE 值共享收益≈0**（M30 实测）：`Sols.defVals` + 安全前缀记忆化已落地（骨架），但
+   DFun 的 WHNF 是 `VLam`（`eval [] body` O(1)），force 的 NGlobal 绝大多数是数据族/内建；
+   采样显示单次 check 定义展开仅 ~700 次 vs force NGlobal ~5M 次。真正要降需要参数相关
+   共享或减少 conv 的 force 调用量（不可行于纯 NbE 的部分已如实记录）。
+3. **ctor 索引已加**（M30）：`Ec` 里 `dtCtorLookupEc` 先查表、未命中回落线性扫。
+4. **仍可做的下一步**：conv 的「同 head 同 spine 直接成功」快速路径（`fastSame` 已覆盖
+   原子形态）、减少 `applySpine`/`quote` 的分配、termination 的 list→表化（§8 的合成曲线
+   在 n=4000 仍有小常数超线性）、以及 `check .` 在 workspace 单元下的并行/增量检查。
+5. **GC 仍占可观测比例**：32MB minor heap 之后仍有约 15–20% 时间在 GC；减少分配比继续
+   调参更有效。
+6. check/build 的 10s 目标已满足（M30 后 check compiler 3.1 s；check . 8.1 s 含 workspace
+   全成员检查）；继续优化应针对 alloc/conv 调用量，而不是找整表扫描。
 
 **构建口径必须一致（踩到的坑）**：同一份源码，`vuna build .`（M26 前的单文件
 `main.ml` 产物）产出的编译器比 `nix build .#vuna`（seed 多文件 split 编译）慢约 35%

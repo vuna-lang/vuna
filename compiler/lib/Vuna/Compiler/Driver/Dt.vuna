@@ -1,8 +1,12 @@
 module Vuna.Compiler.Driver.Dt
   ( dtCheck
   , dtCheckLibrary
+  , dtCheckSource
   , dtEvalExpr
+  , dtEvalExprInfo
   , dtEvalFile
+  , dtGoalsSource
+  , dtMainKind
   , dtSplitProject
   ) where
 
@@ -82,8 +86,7 @@ dtCheckLibrary ctx names = dtCheckDecls (dtLoadModules ctx names)
 -- 核心求值器：精化后用 NbE + delta 求 main 的值并 show（与 codegen 结果对照）。
 dtEvalFile : PackageContext -> String -> Result String
 dtEvalFile ctx entry =
-  andThen (dtLoad ctx entry)
-    (\decls => andThen (elabProgram decls) (\program => evalDtMain program))
+  andThen (dtLoad ctx entry) (\decls => andThen (elabProgramFull decls) evalDtMain)
 
 -- REPL 的表达式求值（M23）：上下文 + program 源码 + 表达式源码。
 -- program 里的定义必须有签名（REPL 用户逐行输入签名）；表达式在程序的环境
@@ -98,6 +101,53 @@ dtEvalExpr ctx program exprSource =
   andThen
     (loadProjectSource ctx "<repl>" (program ++ "\n" ++ replExprName ++ " = " ++ exprSource ++ "\n"))
     (\project => andThen (resolveProject project) (\parts => andThen (splitReplExpr (dtProjectDecls parts)) (\p => andThen (elabProgramFull (firstOf p)) (\prog => dtEvalExprIn prog (secondOf p)))))
+
+-- M30 · REPL：表达式求值 + 类型文本。REPL 用类型判断是否为 `IO a`（决定是否走
+-- compile+run）；类型文本经 `showTerm` 渲染 zonk 后的类型，可直接写回合成签名的
+-- `main : <type>`。
+dtEvalExprInfo : PackageContext -> String -> String -> Result (Pair String String)
+dtEvalExprInfo ctx program exprSource =
+  andThen
+    (loadProjectSource ctx "<repl>" (program ++ "\n" ++ replExprName ++ " = " ++ exprSource ++ "\n"))
+    (\project => andThen (resolveProject project) (\parts => andThen (splitReplExpr (dtProjectDecls parts)) (\p => andThen (elabProgramFull (firstOf p)) (\prog => dtEvalExprInInfo prog (secondOf p)))))
+
+-- M30 · LSP：把内存里的源码当入口（无模块头）或库模块（有模块头）加载并精化。
+-- 返回空 warning 列表；错误串仍是带 `<label>:line:col` 的稳定诊断，LSP 自行解析。
+dtCheckSource : PackageContext -> String -> String -> Result (List String)
+dtCheckSource ctx label source =
+  andThen (loadModuleSource ctx label source)
+    (\project => andThen (resolveProject project) (\parts => andThen (elabProgramFull (dtProjectDecls parts)) (\_ => Ok [])))
+
+-- M30 · LSP hover：内存源码的洞目标（与 `vuna goal` 同源）。
+dtGoalsSource : PackageContext -> String -> String -> Result (List DtGoalInfo)
+dtGoalsSource ctx label source =
+  andThen (loadModuleSource ctx label source)
+    (\project => andThen (resolveProject project) (\parts => goalsOfProgram (dtProjectDecls parts)))
+
+-- M30 · `vuna test`：main 的返回类别，决定执行路径。
+--   "IO"     —— 效果程序，走 compile + 运行（退出码判定）；
+--   "String" —— 纯测试，空串通过；
+--   "Int"    —— 0 通过；
+--   "Bool"   —— True 通过；
+--   "Other"  —— 明确拒绝（不是静默当失败）。
+dtMainKind : PackageContext -> String -> Result String
+dtMainKind ctx entry = andThen (dtLoad ctx entry) (\decls => andThen (elabProgram decls) (\p => case findMainDef (secondOf p) of
+  Nothing => cgErr0 NoMain
+  Just mainDef => if isIOType (dtDefType mainDef) then Ok "IO"
+  else case force (tblFromList (defTableOf (secondOf p))) solsEmpty defaultFuel (eval [] (dtDefType mainDef)) of
+    VNeutral n => case n of
+      NGlobal g sp => case sp of
+        [] => mainKindForName g
+        _ => Ok "Other"
+      _ => Ok "Other"
+    _ => Ok "Other"
+)
+)
+
+mainKindForName : String -> Result String
+mainKindForName g =
+  if g == intTypeName then Ok "Int"
+  else if g == strTypeName then Ok "String" else if g == boolTypeName then Ok "Bool" else Ok "Other"
 
 -- 合成定义的唯一名字：只在 `dtEvalExpr` 内部出现，摘除时按名字识别。
 replExprName : String
@@ -118,13 +168,14 @@ splitReplExpr decls = case reverse decls of
 --     「尝试归约、卡住才报错」这种不可靠的判定。效果程序只走 compile + 运行
 --     （夹具用 `.nointerp` 标记）。IO 的识别按 main 的**类型**（族名 `IO`，含
 --     `Base.IO.IO` 这类模块前缀）。
-evalDtMain : Pair (List DtData) (List DtDef) -> Result String
-evalDtMain (Pair _ defs) = case findMainDef defs of
+evalDtMain : DtProgram -> Result String
+evalDtMain program = case findMainDef (dtProgDefs program) of
   Nothing => cgErr0 NoMain
   Just mainDef =>
     let
-      table = defTableOf defs
-      mainVal = normalize (tblFromList table) solsEmpty defaultFuel (VNeutral (NGlobal "main" []))
+      table = defTableOf (dtProgDefs program)
+      sols = solsPutDefVals solsEmpty (dtProgDefVals program)
+      mainVal = normalize (tblFromList table) sols defaultFuel (VNeutral (NGlobal "main" []))
     in if isIOType (dtDefType mainDef) then cgErr0 InterpCannotExecuteEffects
     else case mainVal of
       VInt n => Ok (strFromInt n)

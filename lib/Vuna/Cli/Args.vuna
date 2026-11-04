@@ -1,0 +1,231 @@
+module Vuna.Cli.Args
+  ( ArgErr(..)
+  , ArgSpec(..)
+  , Parsed
+  , argErrText
+  , ensureDirPath
+  , flagSet
+  , flagValue
+  , parentOf
+  , parseToolArgs
+  , positionals
+  , readText
+  , requireDirectory
+  , requireExists
+  ) where
+
+-- Vuna.Cli.Args：工具命令的统一参数解析与输入/输出路径守卫（M30 · CLI 错误层）。
+--
+-- 为什么在这里（而不是 Vuna.Cli）：`Vuna.Cli` 要 import `Vuna.Lint` / `Vuna.Doc`
+-- 等工具模块（分发），这些模块无法反向 import `Vuna.Cli`（循环）。统一入口必须
+-- 落在依赖图的叶子上，因此本模块只依赖编译器包（removed flag 真源）与 Base。
+--
+-- 参数模型：
+--   - 每个工具命令显式声明允许的 flag 表（`BoolFlag` 开关 / `ValueFlag` 取值）；
+--   - 位置参数保持用户给的顺序；`--` 之后一律当位置参数；
+--   - 未知 flag / 重复 flag / 缺值都是可读错误，由调用方统一打印并 exit 2；
+--   - `--with-comments` 这类只属于工具命令的已删 flag 在工具侧 hint 表里；
+--     其余已删 flag 回落编译器包 `removedFlagHint`（唯一真源，不复制文案）。
+--
+-- 读盘守卫：内建 `prim_isDirectory` 对不存在的路径会抛宿主异常，所以所有来自
+-- 用户的路径都必须先 `prim_fileExists` 再 `prim_isDirectory`；`readText` /
+-- `requireExists` / `requireDirectory` 是唯一入口。
+import Vuna.Compiler.Common
+import Vuna.Compiler.Driver.CompilerCli
+
+-- ---------------------------------------------------------------
+-- 参数说明表
+-- ---------------------------------------------------------------
+-- BoolFlag：开关（如 `--check`）；ValueFlag：需要紧跟一个值（如 `--find <Module.name>`）。
+data ArgSpec : Type where
+  BoolFlag : String -> ArgSpec
+  ValueFlag : String -> ArgSpec
+
+specName : ArgSpec -> String
+specName spec = case spec of
+  BoolFlag name => name
+  ValueFlag name => name
+
+specOf : String -> List ArgSpec -> Maybe ArgSpec
+specOf name specs = case specs of
+  [] => Nothing
+  spec :: rest => if specName spec == name then Just spec else specOf name rest
+
+-- 参数错误：统一由 `argErrText` 渲染成单行可读文案。
+data ArgErr : Type where
+  UnknownFlag : String -> ArgErr
+  DuplicateFlag : String -> ArgErr
+  MissingValue : String -> ArgErr
+
+-- 解析结果：开关名集合、取值 flag 的 (name, value)、按用户顺序的位置参数。
+data Parsed : Type where
+  Parsed : List String -> List (Pair String String) -> List String -> Parsed
+
+-- 内部解析结果（Base.Result 的错误固定是 String，不能携带结构化 ArgErr）。
+data ParseOut : Type where
+  POk : Parsed -> ParseOut
+  PErr : ArgErr -> ParseOut
+
+flagNames : Parsed -> List String
+flagNames (Parsed flags values items) = flags
+
+valuesOf : Parsed -> List (Pair String String)
+valuesOf (Parsed flags values items) = values
+
+positionals : Parsed -> List String
+positionals (Parsed flags values items) = items
+
+-- 某开关是否出现（名字不带 `--`）。
+flagSet : Parsed -> String -> Bool
+flagSet parsed name = memName name (flagNames parsed)
+
+-- 某取值 flag 的值（名字不带 `--`）。
+flagValue : Parsed -> String -> Maybe String
+flagValue parsed name = lookupValue name (valuesOf parsed)
+
+lookupValue : String -> List (Pair String String) -> Maybe String
+lookupValue name values = case values of
+  [] => Nothing
+  (Pair key value) :: rest => if key == name then Just value else lookupValue name rest
+
+hasValue : String -> List (Pair String String) -> Bool
+hasValue name values = case lookupValue name values of
+  Just _ => True
+  Nothing => False
+
+-- ---------------------------------------------------------------
+-- 解析
+-- ---------------------------------------------------------------
+-- 工具命令共用入口：`cmd` 只用于错误文案，`specs` 是允许的 flag 表，
+-- `args` 是去掉子命令后的参数。
+parseToolArgs : String -> List ArgSpec -> List String -> Result Parsed
+parseToolArgs cmd specs args = case parseGo False specs args [] [] [] of
+  POk parsed => Ok parsed
+  PErr e => Err (argErrText cmd e)
+
+parseGo : Bool -> List ArgSpec -> List String -> List String -> List (Pair String String) -> List String -> ParseOut
+parseGo literal specs args flags values items = case args of
+  [] => POk (Parsed (reverse flags) (reverse values) (reverse items))
+  arg :: rest =>
+    if literal then parseGo True specs rest flags values (arg :: items)
+    else if arg == "--" then parseGo True specs rest flags values items
+    else if isFlagLike arg then parseFlag specs arg rest flags values items
+    else parseGo False specs rest flags values (arg :: items)
+
+-- `-` 单独出现按位置参数（stdin 约定）；其余以 `-` 开头的都当 flag。
+isFlagLike : String -> Bool
+isFlagLike arg = startsWith "-" arg && arg /= "-"
+
+flagNameOf : String -> String
+flagNameOf arg =
+  if startsWith "--" arg then substring 2 (strLength arg - 2) arg
+  else substring 1 (strLength arg - 1) arg
+
+parseFlag : List ArgSpec -> String -> List String -> List String -> List (Pair String String) -> List String -> ParseOut
+parseFlag specs raw rest flags values items =
+  let
+    name = flagNameOf raw
+  in case specOf name specs of
+    Nothing => PErr (UnknownFlag raw)
+    Just spec => case spec of
+      BoolFlag _ =>
+        if memName name flags then PErr (DuplicateFlag raw)
+        else parseGo False specs rest (name :: flags) values items
+      ValueFlag _ => if hasValue name values then PErr (DuplicateFlag raw)
+      else case rest of
+        [] => PErr (MissingValue raw)
+        value :: more =>
+          if isFlagLike value then PErr (MissingValue raw)
+          else parseGo False specs more flags (Pair name value :: values) items
+
+-- ---------------------------------------------------------------
+-- 错误文案
+-- ---------------------------------------------------------------
+-- 工具命令侧已删的 flag（编译器 flag 的真源仍是 CompilerCli.removedFlagHint；
+-- 只放「只属于工具命令」的已删 flag）。
+dashFlag : String -> String
+dashFlag name = "-" ++ "-" ++ name
+
+toolRemovedFlagHint : String -> Maybe String
+toolRemovedFlagHint flag =
+  if flag == dashFlag "with-comments" then Just "doc renders doc comments by default; drop the flag"
+  else Nothing
+
+removedHintFor : String -> Maybe String
+removedHintFor flag = case toolRemovedFlagHint flag of
+  Just hint => Just hint
+  Nothing => removedFlagHint flag
+
+-- 渲染参数错误；`cmd` 是完整命令名（如 "vuna fmt"），只用在不涉及已删 flag 的文案里。
+argErrText : String -> ArgErr -> String
+argErrText cmd e = case e of
+  UnknownFlag flag => case removedHintFor flag of
+    Just hint => flag ++ " has been removed; " ++ hint
+    Nothing => "unknown flag for `" ++ cmd ++ "`: " ++ flag
+  DuplicateFlag flag => "duplicate flag: " ++ flag
+  MissingValue flag => "flag requires a value: " ++ flag
+
+-- ---------------------------------------------------------------
+-- 读盘守卫（禁止在不存在路径上调 prim_isDirectory）
+-- ---------------------------------------------------------------
+-- 读一个文本文件：先判存在、再判目录，最后才读。
+readText : String -> Result String
+readText path =
+  if prim_fileExists path then if prim_isDirectory path then Err ("is a directory: " ++ path) else Ok (prim_readFile path)
+  else Err ("no such file: " ++ path)
+
+-- 要求路径存在（文件或目录均可）。
+requireExists : String -> Result Int
+requireExists path = if prim_fileExists path then Ok 0 else Err ("no such file: " ++ path)
+
+-- 要求路径存在且是目录。
+requireDirectory : String -> Result Int
+requireDirectory path =
+  if prim_fileExists path then if prim_isDirectory path then Ok 0 else Err ("not a directory: " ++ path)
+  else Err ("no such directory: " ++ path)
+
+-- ---------------------------------------------------------------
+-- 目录创建（prim_makeDir 只建一层）
+-- ---------------------------------------------------------------
+parentOf : String -> String
+parentOf path =
+  let
+    parent = parentText path
+  in if parent == "" then if startsWith "/" path then "/" else "." else parent
+
+parentText : String -> String
+parentText path = case splitLastSlash (strUnpack path) [] [] of
+  Pair parent _ => parent
+
+splitLastSlash : List Int -> List Int -> List String -> Pair String String
+splitLastSlash chars current parts = case chars of
+  [] => Pair (joinSlashParts parts) (strPack (reverse current))
+  c :: rest =>
+    if c == 47 then splitLastSlash rest [] (strPack (reverse current) :: parts)
+    else splitLastSlash rest (c :: current) parts
+
+-- parts 是倒序累积的，拼接前先 reverse（否则绝对路径会丢首斜杠）。
+joinSlashParts : List String -> String
+joinSlashParts parts = joinSlashPartsGo (reverse parts)
+
+joinSlashPartsGo : List String -> String
+joinSlashPartsGo [] = ""
+joinSlashPartsGo ([part]) = part
+joinSlashPartsGo (part :: rest) = part ++ "/" ++ joinSlashPartsGo rest
+
+-- 递归创建所有缺失的父目录；已存在返回 0。`prim_makeDir` 对已存在路径返回 0。
+-- 递归不沿输入结构下降（parentOf 返回 String），用显式 fuel（字节长度上界）守卫。
+ensureDirPath : String -> Int
+ensureDirPath path = ensureDirPathGo (strLength path + 2) path
+
+ensureDirPathGo : Int -> String -> Int
+ensureDirPathGo fuel path = if fuel <= 0 then 1
+else if path == "" || path == "." || path == "/" then 0
+else if pathExistsDirSafe path then 0
+else
+  let
+    _ = ensureDirPathGo (fuel - 1) (parentOf path)
+  in if pathExistsDirSafe path then 0 else prim_makeDir path
+
+pathExistsDirSafe : String -> Bool
+pathExistsDirSafe path = prim_fileExists path && prim_isDirectory path

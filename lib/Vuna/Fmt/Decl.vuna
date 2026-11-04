@@ -68,16 +68,18 @@ renderRecordField at f =
   attachAt at (fieldSpan f) 2
     (prefixFirst ("  " ++ fieldName f ++ " : ") (renderTypeExpr at 2 (fieldType f)))
 
-renderTraitDecl : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> String -> List String -> List (Pair String Expr) -> List String
+renderTraitDecl : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> String -> List String -> List TraitMethod -> List String
 renderTraitDecl at name params methods =
   let
     header = "trait " ++ name ++ joinSpace params ++ " where"
     methodLines = concatMap (\m => renderMethodSig at m) methods
   in append [header] methodLines
 
-renderMethodSig : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Pair String Expr -> List String
-renderMethodSig at (Pair mname ty) =
-  attachAt at (exprSpan ty) 2 (prefixFirst ("  " ++ mname ++ " : ") (renderTypeExpr at 2 ty))
+-- M30（B20）：注释锚点用方法签名 span（方法名到类型结束），不再用类型表达式 span。
+renderMethodSig : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> TraitMethod -> List String
+renderMethodSig at m =
+  attachAt at (traitMethodSpan m) 2
+    (prefixFirst ("  " ++ traitMethodName m ++ " : ") (renderTypeExpr at 2 (traitMethodType m)))
 
 renderInstanceDecl : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> List Expr -> Expr -> List Decl -> List String
 renderInstanceDecl at ctxE head methods =

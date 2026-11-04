@@ -1,0 +1,12 @@
+trait Pretty a where
+  pretty : a -> String
+
+data Color : Type where
+  Red : Color
+
+-- 实例漏实现 pretty：诊断必须指向 trait 里的方法签名行（第 2 行第 3 列），
+-- 而不是 instance 声明行——B20 方法级定位回归夹具。
+instance Pretty Color where
+
+main : String
+main = "x"

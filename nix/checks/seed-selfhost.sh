@@ -62,7 +62,8 @@ test "$("$OUT/dt_id/dt_id")" = "42"
 # 增量构建：无改动时 build.sh 不重编任何模块（只链接）；touch 一个模块只重编它。
 ( cd b1 && sh build.sh ../vuna-stage1 ) >build2.log
 ! grep -q '^compile ' build2.log
-touch b1/Base_dList.ml
+# M30：build.sh 按内容哈希（不是 mtime）判增量——touch 不再触发重编，改内容才触发。
+printf "\n(* seed-selfhost incremental probe *)\n" >> b1/Base_dList.ml
 ( cd b1 && sh build.sh ../vuna-stage1 ) >build3.log
 grep -q '^compile Base_dList' build3.log
 ! grep -q '^compile Vuna_runtime' build3.log

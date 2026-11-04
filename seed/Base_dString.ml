@@ -60,7 +60,7 @@ and v_Base_dString_dskipSep = (fun sep -> (fun chars -> (fun fuel -> (fun n -> (
   | _ -> failwith "DT: impossible branch"
 )))))))
 
-let v_Base_dString_dsplit = (fun sep -> (fun text -> (if ((bi_eq_int (bi_strLength sep)) 0) then ((v_Base_dList_dmap (fun c -> (dtp_pack (C_Base_dList_dList_Base_dList_dCons (c, C_Base_dList_dList_Base_dList_dNil))))) (dtp_unpack text)) else (((((v_Base_dString_dsplitAcc (dtp_unpack sep)) (dtp_unpack text)) ((bi_add ((bi_mul 4) (bi_strLength text))) 4)) C_Base_dList_dList_Base_dList_dNil) C_Base_dList_dList_Base_dList_dNil))))
+let v_Base_dString_dsplit = (fun sep -> (fun text -> (if ((bi_eq_int (bi_strLength sep)) 0) then ((v_Base_dList_dmap (fun c -> (dtp_pack (C_Base_dList_dList_Base_dList_dCons (c, C_Base_dList_dList_Base_dList_dNil))))) (dtp_unpack text)) else (((((v_Base_dString_dsplitAcc (dtp_unpack sep)) (dtp_unpack text)) ((bi_add ((bi_add ((bi_mul 2) (bi_strLength text))) (bi_strLength sep))) 2)) C_Base_dList_dList_Base_dList_dNil) C_Base_dList_dList_Base_dList_dNil))))
 
 let v_Base_dString_dlines = (fun s -> ((v_Base_dString_dsplit "\n") s))
 

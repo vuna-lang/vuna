@@ -1,0 +1,98 @@
+{
+  "Data declaration": {
+    "prefix": "data",
+    "body": [
+      "data ${1:Name}${2: a} : Type where",
+      "  ${3:Constructor} : ${4:a} -> ${1:Name}${2: a}"
+    ],
+    "description": "Algebraic data type (Idris2-style `data ... where`)"
+  },
+  "Record declaration": {
+    "prefix": "record",
+    "body": [
+      "record ${1:Point} where",
+      "  ${2:x} : ${3:Int}",
+      "  ${4:y} : ${5:Int}"
+    ],
+    "description": "Record type with field signatures"
+  },
+  "Trait declaration": {
+    "prefix": "trait",
+    "body": [
+      "trait ${1:Show} ${2:a} where",
+      "  ${3:show} : ${2:a} -> ${4:String}"
+    ],
+    "description": "Trait declaration with a method signature"
+  },
+  "Instance declaration": {
+    "prefix": "instance",
+    "body": [
+      "instance ${1:Show} ${2:Int} where",
+      "  ${3:show} ${4:x} = ${5:strFromInt ${4:x}}"
+    ],
+    "description": "Trait instance implementation"
+  },
+  "Function (signature + definition)": {
+    "prefix": "fn",
+    "body": [
+      "${1:name} : ${2:Int} -> ${3:Int}",
+      "${1:name} ${4:x} = ${5:x}"
+    ],
+    "description": "Top-level function with type signature and clause"
+  },
+  "Case expression": {
+    "prefix": "case",
+    "body": [
+      "case ${1:value} of",
+      "  ${2:pattern} => ${3:result}"
+    ],
+    "description": "`case ... of` expression"
+  },
+  "Do block": {
+    "prefix": "do",
+    "body": [
+      "do",
+      "  ${1:result} <- ${2:action}",
+      "  pure ${3:${1:result}}"
+    ],
+    "description": "Do block with a bind and a final pure"
+  },
+  "Where block": {
+    "prefix": "where",
+    "body": [
+      "where",
+      "  ${1:helper} : ${2:Int} -> ${3:Int}",
+      "  ${1:helper} ${4:x} = ${5:x}"
+    ],
+    "description": "`where` block (every binding needs an explicit signature)"
+  },
+  "Let binding block": {
+    "prefix": "let",
+    "body": [
+      "let",
+      "  ${1:name} : ${2:Int}",
+      "  ${1:name} = ${3:value}",
+      "in ${1:name}"
+    ],
+    "description": "`let ... in` binding block"
+  },
+  "Module header": {
+    "prefix": "module",
+    "body": [
+      "module ${1:Vuna.Example}",
+      "  ( ${2:main}",
+      "  ) where"
+    ],
+    "description": "Module header with an explicit export list"
+  },
+  "Import": {
+    "prefix": "import",
+    "body": ["import ${1:Vuna.Module}"],
+    "description": "Import a module (depend + open)"
+  },
+  "Axiom": {
+    "prefix": "axiom",
+    "body": ["axiom ${1:name} : ${2:Type}"],
+    "description": "Opaque/erased top-level axiom"
+  }
+}

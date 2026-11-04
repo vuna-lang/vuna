@@ -1,6 +1,7 @@
 module Vuna.Index.Types
   ( Index(..)
   , ModuleInfo(..)
+  , Ref(..)
   , Sym(..)
   , distinct
   , indexModules
@@ -11,6 +12,10 @@ module Vuna.Index.Types
   , modName
   , modPackage
   , modPath
+  , refCol
+  , refLine
+  , refModule
+  , refName
   , symCol
   , symDoc
   , symFullName
@@ -75,9 +80,26 @@ symCol (Sym sMod sName sKind sSig sDoc sLine sCol) = sCol
 symFullName : Sym -> String
 symFullName (Sym sMod sName sKind sSig sDoc sLine sCol) = sMod ++ "." ++ sName
 
--- 索引：模块 + 符号 + 反向边（reader 模块 → 被引用的名字）。
+-- 引用：引用方模块、被引用的名字、引用出现处（行、列）。M30：refs 不只记录
+-- 「模块引用了哪些名字」，还记录出现位置，供 `referencesAt` 与影响面分析使用。
+data Ref : Type where
+  Ref : String -> String -> Int -> Int -> Ref
+
+refModule : Ref -> String
+refModule (Ref refMod refNm refLn refCl) = refMod
+
+refName : Ref -> String
+refName (Ref refMod refNm refLn refCl) = refNm
+
+refLine : Ref -> Int
+refLine (Ref refMod refNm refLn refCl) = refLn
+
+refCol : Ref -> Int
+refCol (Ref refMod refNm refLn refCl) = refCl
+
+-- 索引：模块 + 符号 + 反向边（引用方模块 → 引用位置）。
 data Index : Type where
-  Index : List ModuleInfo -> List Sym -> List (Pair String String) -> Index
+  Index : List ModuleInfo -> List Sym -> List Ref -> Index
 
 indexModules : Index -> List ModuleInfo
 indexModules (Index ms syms refs) = ms
@@ -85,7 +107,7 @@ indexModules (Index ms syms refs) = ms
 indexSymbols : Index -> List Sym
 indexSymbols (Index ms syms refs) = syms
 
-indexRefs : Index -> List (Pair String String)
+indexRefs : Index -> List Ref
 indexRefs (Index ms syms refs) = refs
 
 -- 去重（保持首次出现顺序）：Scan 的引用抽取与 Render 的分组共用。

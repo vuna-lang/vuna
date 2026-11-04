@@ -9,6 +9,7 @@ module Vuna.GenErrors (runGenErrors) where
 -- 由此消除了旧实现「扫注释 + 从消息字面量反推前缀」的双重真源（findMsg 已删除）。
 -- FX_（自动修复码）由可修复的 LN_ 规则派生：`FX_` + 规则名去 `-`。
 -- 纯数据渲染，不读文件、不跑类型检查；生成物不纳入 git（docs/.generated/ 在 .gitignore）。
+import Vuna.Cli.Args
 import Vuna.Compiler.Common
 import Vuna.Compiler.Diagnostics
 import Vuna.Compiler.Frontend.Diagnostics
@@ -68,26 +69,21 @@ allEntries =
     (append (map cgEntryToEntry cgAll) (append (map lintEntryToEntry lintAll) (append (map lexEntryToEntry lexAll) (append (map psEntryToEntry psAll) (map ldEntryToEntry ldAll)))))
 
 runGenErrors : String -> Int
-runGenErrors root =
+runGenErrors root = case requireDirectory root of
+  Err e => genErrorsError e
+  Ok _ =>
+    let
+      outPath = root ++ "/docs/.generated/errors.md"
+      _ = ensureDirPath (parentOf outPath)
+      _ = prim_writeFile outPath (renderDoc allEntries)
+      _ = prim_print ("wrote " ++ outPath ++ " (" ++ strFromInt (length allEntries) ++ " codes)\n")
+    in 0
+
+genErrorsError : String -> Int
+genErrorsError e =
   let
-    outPath = root ++ "/docs/.generated/errors.md"
-    parent = parentOf outPath
-  in let
-    _ = if parent == "" then 0 else prim_makeDir parent
-  in let
-    _ = prim_writeFile outPath (renderDoc allEntries)
-  in let
-    _ = prim_print ("wrote " ++ outPath ++ " (" ++ strFromInt (length allEntries) ++ " codes)\n")
-  in 0
-
--- 取路径的父目录（按 `/` 分割，去最后一段）。
-parentOf : String -> String
-parentOf p = join "/" (initOf (split "/" p))
-
-initOf : List String -> List String
-initOf [] = []
-initOf ([x]) = []
-initOf (x :: rest) = x :: initOf rest
+    _ = prim_print ("error: " ++ e ++ "\n")
+  in 2
 
 -- ---------------------------------------------------------------
 -- 渲染

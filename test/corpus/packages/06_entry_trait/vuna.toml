@@ -3,8 +3,6 @@
 # 入口的 data/trait/实例也要正确发进 Main.ml 并参与归属表）。
 [package]
 name = "entry-trait"
-version = "0.1.0"
-edition = "2026"
 
 [dependencies]
 vuna-base = "../../../../base"

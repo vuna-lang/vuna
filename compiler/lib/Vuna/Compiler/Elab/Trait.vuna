@@ -1,7 +1,5 @@
 module Vuna.Compiler.Elab.Trait
-  ( argNameOf
-  , argSuffix
-  , bindClassParams
+  ( bindClassParams
   , bindIndexBinder
   , bindOnePattern
   , checkBinders
@@ -14,7 +12,6 @@ module Vuna.Compiler.Elab.Trait
   , ctorResultType
   , defBodyOf
   , defTypeOrDefault
-  , derivedInstName
   , elabFunDef
   , elabInstance
   , elabInstanceBodies
@@ -28,7 +25,6 @@ module Vuna.Compiler.Elab.Trait
   , elabTraits
   , elabTraitsGo
   , explicitPiArity
-  , exprNameFor
   , extraDefsGo
   , extraDefsOf
   , findClass
@@ -48,9 +44,7 @@ module Vuna.Compiler.Elab.Trait
   , insertArgAt
   , insertDictCalls
   , instanceDefsOf
-  , instanceHeadName
   , instanceHeadTerm
-  , instanceName
   , leadingImplicitCount
   , liftFreeDictGoals
   , liftFreeDictGoalsGo
@@ -77,6 +71,7 @@ import Vuna.Compiler.Debug
 import Vuna.Compiler.Core
 import Vuna.Compiler.Diagnostics
 import Vuna.Compiler.Elab.Dict
+import Vuna.Compiler.Elab.InstName
 import Vuna.Compiler.Elab.Match
 import Vuna.Compiler.Elab.Meta
 import Vuna.Compiler.Elab.Sig
@@ -123,33 +118,42 @@ foldPiFieldTysGo (f :: rest) n ty =
   TPi "_" False Rig1 (shift 0 n f) (foldPiFieldTysGo rest (n + 1) ty)
 
 -- 精化一个 trait：字典 DtData + 方法投影（签名 + 定义体）+ 类表项。
--- M29（A14）：额外返回「投影名 → trait 声明 span」表，供 `extraDefsOf` 给生成定义
--- 标来源（方法签名 AST 目前不带 span，用 trait 声明 span 粗粒度；方法级待 AST 扩展）。
+-- M29（A14）：额外返回「投影名 → 来源 span」表，供 `extraDefsOf` 给生成定义标来源；
+-- M30（B20）方法签名带 span 后，这张表用**方法签名 span**（不再粗粒度到 trait 声明行）。
 elabTrait : List (Pair String Term) -> Ec -> Pair Decl Span -> Result (Pair DtData (Pair (List (Pair String Term)) (Pair DtClass (Pair (List (Pair String Span)) Ec))))
 elabTrait globals ec ds = case ds of
   Pair d dsp => case d of
     DTrait tname params methods sp => if length params /= 1 then tcErr0 sp InterfaceOneParam
-    else andThen (classFieldTys globals ec params methods) (\p => case p of
-      Pair fieldTys ec1 =>
-        let
-          pname = paramNameOf params
-          -- M19：类参数的 kind 从方法签名推断（`Functor f` 的 `f` 是 `Type -> Type`）。
-          pKind = classParamKind pname methods
-          dname = dictTypeName tname
-          cname = dictCtorName tname
-          dapp = foldAppTerms (TGlobal dname) [Pair (TVar pname 0) Rig0]
-          ctorTy = TPi pname True Rig0 pKind (foldPiFieldTys fieldTys dapp)
-          tele = teleOfType ctorTy
-          dd = DtData dname tele [DtCtor cname dname tele ctorTy]
-          projs = methodProjections tname pname pKind methods fieldTys
-          projSpans = map (\m => Pair (firstOf m) sp) methods
-          projBodies = projectionDefs tname pname methods fieldTys (length methods)
-          cls = DtClass tname params projs fieldTys
-          ec2 = ecAddClass (ecAddData ec1 dd) cls
-          ec3 = foldlAddDef ec2 projBodies
-        in Ok (Pair dd (Pair projs (Pair cls (Pair projSpans ec3))))
-    )
+    else
+      let
+        -- 方法投影/kind 推断仍吃 (名字, 类型) 对；span 只在 projSpans 里用。
+        methodsP = traitMethodPairs methods
+      in andThen (classFieldTys globals ec params methodsP) (\p => case p of
+        Pair fieldTys ec1 =>
+          let
+            pname = paramNameOf params
+            -- M19：类参数的 kind 从方法签名推断（`Functor f` 的 `f` 是 `Type -> Type`）。
+            pKind = classParamKind pname methodsP
+            dname = dictTypeName tname
+            cname = dictCtorName tname
+            dapp = foldAppTerms (TGlobal dname) [Pair (TVar pname 0) Rig0]
+            ctorTy = TPi pname True Rig0 pKind (foldPiFieldTys fieldTys dapp)
+            tele = teleOfType ctorTy
+            dd = DtData dname tele [DtCtor cname dname tele ctorTy]
+            projs = methodProjections tname pname pKind methodsP fieldTys
+            projSpans = map (\m => Pair (traitMethodName m) (traitMethodSpan m)) methods
+            projBodies = projectionDefs tname pname methodsP fieldTys (length methods)
+            cls = DtClass tname params projs fieldTys
+            ec2 = ecAddClass (ecAddData ec1 dd) cls
+            ec3 = foldlAddDef ec2 projBodies
+          in Ok (Pair dd (Pair projs (Pair cls (Pair projSpans ec3))))
+      )
     _ => errAt dsp "DT: internal: expected a trait declaration"
+
+-- trait 方法列表 → 旧内部形态（名字, 类型）对。span 走 `traitMethodSpan`。
+traitMethodPairs : List TraitMethod -> List (Pair String Expr)
+traitMethodPairs [] = []
+traitMethodPairs (m :: rest) = Pair (traitMethodName m) (traitMethodType m) :: traitMethodPairs rest
 
 -- 方法投影的签名与定义体：
 --   sig:  `{p : <kind>} -> {d : Dict_C p} -> <方法类型>`
@@ -209,64 +213,25 @@ projectionDefsGo ctor (m :: rest) (t :: rest2) idx nFields = case m of
     Pair mname (projectionBody ctor idx (methodArgRigsOf binderRig t) nFields)
       :: projectionDefsGo ctor rest rest2 (idx + 1) nFields
 
--- 实例头 `Show Int` 的类名与实参。
-instanceHeadName : Expr -> Maybe String
-instanceHeadName e = case e of
-  EVar n sp => Just n
-  EApp fn args sp => case fn of
-    EVar n fsp => Just n
-    _ => Nothing
-  _ => Nothing
-
--- 实例定义名：由类名与头实参派生（`Show_Int`、`Show_Box_a`）。
--- M29-T2b：命名实例（`as name`）已删除，不再有覆盖名；M21 的按「类名 + 头实参」派生
--- 仍然是唯一规则（同一模块的 `instance Functor IO` / `instance Monad IO` 名字不同）。
-instanceName : String -> Expr -> String
-instanceName cname headExpr = cname ++ "_" ++ derivedInstName headExpr
-
-derivedInstName : Expr -> String
-derivedInstName e = case e of
-  EApp fn args sp => case fn of
-    EVar n fsp => n ++ argSuffix args
-    _ => "Inst"
-  EVar n sp => n
-  _ => "Inst"
-
-argSuffix : List Expr -> String
-argSuffix [] = ""
-argSuffix (a :: rest) = "_" ++ exprNameFor a ++ argSuffix rest
-
-exprNameFor : Expr -> String
-exprNameFor e = case e of
-  EVar n sp => n
-  EInt n sp => strFromInt n
-  EStr s sp => s
-  -- M29-T2b：参数化实例名要能区分 `Box a` / `Pair a b`（旧实现一律 "X" → `Eq_X` 撞名）。
-  EApp fn args sp => exprNameFor fn ++ argSuffix args
-  _ => "X"
-
--- 实例头实参的名字（`Pretty Color` 里的 `Color`）。
-argNameOf : Expr -> String
-argNameOf e = case e of
-  EVar n sp => n
-  _ => "Int"
-
 -- 实例体：每个方法子句按方法签名 check，再按声明顺序组成字典构造子应用。
 -- M29-T2b：实例带 telescope（类型参数）与 context（字典约束）：
 --   字典类型 = `Π tele(Rig0). Π ctx(Rig1). Dict_C <arg>`；
 --   字典值   = `λ tele(Rig0). λ ctx(Rig1). TCon MkDict <fields>`；
 --   方法体里对 tele 变量的字典需求先在**声明的 ctx** 里消解，消不掉且仍是刚性 ⇒
 --   `TC_InstanceContextMissing`（ctx 不足）；具体类型的临时需求留给程序级字典搜索。
-elabInstance : List (Pair Decl Span) -> List (Pair String Term) -> List DtClass -> List DtData -> Ec -> Pair Decl Span -> Result (Pair (List (Pair String Term)) Ec)
-elabInstance decls globals classes datas ec ds = case ds of
+elabInstance : List (Pair Decl Span) -> List (Pair Decl Span) -> List (Pair String Term) -> List DtClass -> List DtData -> Ec -> Pair Decl Span -> Result (Pair (List (Pair String Term)) Ec)
+elabInstance instDecls allDecls globals classes datas ec ds = case ds of
   Pair d dsp => case d of
-    DInstance ctxE headExpr methods msp => andThen (elabInstanceSig classes globals (definedNames (map firstOf decls)) ec msp headExpr ctxE) (\p => case p of
+    DInstance ctxE headExpr methods msp => andThen (elabInstanceSig classes globals (definedNames (map firstOf instDecls)) ec msp headExpr ctxE) (\p => case p of
       Pair info ec0 => case findClass (instSigClass info) classes of
         Nothing => tcErr0 msp InstanceHeadNotApp
         Just cls => case firstUnknownInstanceMethod cls methods of
           Just n => tcErr1 msp (InstanceUnknownMethod n) n
           Nothing => case firstMissingInstanceMethod cls methods of
-            Just m => tcErr0 msp InstanceMissingMethod
+            Just m => case traitMethodSpanOf (dtClassName cls) m allDecls of
+              -- M30（B20）：缺方法指向 trait 里的**方法签名行**，而不是实例声明行。
+              Just mspan => tcErr0 mspan InstanceMissingMethod
+              Nothing => tcErr0 msp InstanceMissingMethod
             Nothing =>
               let
                 bodyCtx = instBodyCtx info
@@ -530,6 +495,27 @@ hasMethodClauses name [] = False
 hasMethodClauses name (d :: rest) = case d of
   DFun n pats body sp => if baseNameOf n == name then True else hasMethodClauses name rest
   _ => hasMethodClauses name rest
+
+-- M30（B20）：实例缺方法时把诊断落到 trait 里的**方法签名行**——先按类全名找到
+-- trait 声明，再按方法全名找到方法签名 span；找不到（如外部生成的类）返回 Nothing，
+-- 调用方回退到实例声明 span。`decls` 是已 resolve 的全程序声明，trait 名与方法名
+-- 都是 mangle 后的全名（与 `dtClassMethods` / `firstMissingInstanceMethod` 一致）。
+findTraitDecl : String -> List (Pair Decl Span) -> Maybe Decl
+findTraitDecl cname [] = Nothing
+findTraitDecl cname (pd :: rest) = case pd of
+  Pair d dsp => case d of
+    DTrait tname params methods _ => if tname == cname then Just d else findTraitDecl cname rest
+    _ => findTraitDecl cname rest
+
+findTraitMethodSpan : String -> List TraitMethod -> Maybe Span
+findTraitMethodSpan mname [] = Nothing
+findTraitMethodSpan mname (m :: rest) =
+  if traitMethodName m == mname then Just (traitMethodSpan m) else findTraitMethodSpan mname rest
+
+traitMethodSpanOf : String -> String -> List (Pair Decl Span) -> Maybe Span
+traitMethodSpanOf cname mname decls = case findTraitDecl cname decls of
+  Just (DTrait tname params methods tspan) => findTraitMethodSpan mname methods
+  _ => Nothing
 
 -- 实例注册用的头类型：`Dict_C <arg>`，供实例搜索按头统一。
 ctorResultType : DtClass -> Term -> Term
@@ -921,7 +907,11 @@ checkInstanceHeadsGo (d :: rest) classes globals ec acc insts seen = case d of
     )
     _ => checkInstanceHeadsGo rest classes globals ec acc insts seen
 
--- 实例冲突：精确重复（同名 / 同 head，modulo tele 改名）优先，其次「可合一但不同」= 重叠。
+-- 实例冲突：精确重复（同 head，modulo tele 改名）优先，其次「可合一但不同」= 重叠。
+-- M30（B22）：名字 = 单类前缀 + **完整 head 名**，所以不同 head（含不同模块的同名 data）
+-- 必然得到不同名字；名字判重只可能命中「同类同 head」或「不同类恰好同短名 + 同 head」
+-- （后者本就无法生成两个不同的 dict 符号，显式报 duplicate 比静默丢一个更好）。
+-- coherence 的语义真源仍是下面的 head 判定（`anyInstanceExact`/`anyInstanceOverlap`）。
 data InstClash : Type where
   ClashDuplicate : InstClash
   ClashOverlap : InstClash
@@ -993,19 +983,22 @@ teleGlobalEnvGo remaining i =
   else VNeutral (NGlobal ("#ov" ++ strFromInt i) []) :: teleGlobalEnvGo (remaining - 1) (i + 1)
 
 -- 实例方法体（在顶层定义之后精化）。
-elabInstanceBodies : List (Pair Decl Span) -> List DtClass -> List DtData -> List (Pair String Term) -> Ec -> Result (Pair (List DtDef) Ec)
-elabInstanceBodies decls classes datas globals ec =
-  elabInstanceBodiesGo decls classes datas globals ec []
+-- M30（B20）：入口收**全量已 resolve 声明**（Driver 传入，`List Decl`），内部自己筛出
+-- 实例列表；全量声明同时用于「实例缺方法」诊断反查 trait 方法签名 span（`traitMethodSpanOf`）。
+elabInstanceBodies : List Decl -> List DtClass -> List DtData -> List (Pair String Term) -> Ec -> Result (Pair (List DtDef) Ec)
+elabInstanceBodies allDecls classes datas globals ec =
+  elabInstanceBodiesGo (collectInstDecls allDecls []) (map (\d => Pair d (declSpan d)) allDecls)
+    classes datas globals ec []
 
-elabInstanceBodiesGo : List (Pair Decl Span) -> List DtClass -> List DtData -> List (Pair String Term) -> Ec -> List DtDef -> Result (Pair (List DtDef) Ec)
-elabInstanceBodiesGo [] classes datas globals ec acc = Ok (Pair (reverse acc) ec)
-elabInstanceBodiesGo (d :: rest) classes datas globals ec acc = andThen (elabInstance (d :: rest) globals classes datas ec d) (\p => case p of
+elabInstanceBodiesGo : List (Pair Decl Span) -> List (Pair Decl Span) -> List DtClass -> List DtData -> List (Pair String Term) -> Ec -> List DtDef -> Result (Pair (List DtDef) Ec)
+elabInstanceBodiesGo [] allDecls classes datas globals ec acc = Ok (Pair (reverse acc) ec)
+elabInstanceBodiesGo (d :: rest) allDecls classes datas globals ec acc = andThen (elabInstance (d :: rest) allDecls globals classes datas ec d) (\p => case p of
   Pair gs ec1 =>
     let
       -- M29（A14）：实例生成的字典/方法定义统一挂**实例声明 span**（`d` 的 span）。
       newDefs = instanceDefsOf ec ec1 (Just (secondOf d)) gs
       ecTbl = ecPutGlobalsTbl ec1 (tblInsertAll gs (ecGlobalsTbl ec1))
-    in elabInstanceBodiesGo rest classes datas (append globals gs) ecTbl (append newDefs acc)
+    in elabInstanceBodiesGo rest allDecls classes datas (append globals gs) ecTbl (append newDefs acc)
 )
 
 -- 从「精化前后 Ec 的 defs 差集」里取出这一条 instance 生成的定义。
@@ -1040,7 +1033,8 @@ elabInstances decls classes datas globals ec = elabInstancesGo decls classes dat
 
 elabInstancesGo : List (Pair Decl Span) -> List DtClass -> List DtData -> List (Pair String Term) -> Ec -> List (Pair String Term) -> Result (Pair (List (Pair String Term)) Ec)
 elabInstancesGo [] classes datas globals ec acc = Ok (Pair (reverse acc) ec)
-elabInstancesGo (d :: rest) classes datas globals ec acc = andThen (elabInstance (d :: rest) globals classes datas ec d) (\p => case p of
+-- 旧批量入口（无全量声明，方法级 span 不可用；保留签名以兼容既有导出）。
+elabInstancesGo (d :: rest) classes datas globals ec acc = andThen (elabInstance (d :: rest) [] globals classes datas ec d) (\p => case p of
   Pair gs ec1 => elabInstancesGo rest classes datas (append globals gs) ec1 (append gs acc)
 )
 

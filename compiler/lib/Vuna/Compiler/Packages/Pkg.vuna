@@ -290,10 +290,21 @@ checkUniqueNamesGo seen ids = case ids of
 checkUniquePackageNames : List Package -> Result Int
 checkUniquePackageNames packages = checkUniqueNamesGo [] (collectDependencyIds packages)
 
+-- 依赖 DFS 的初值（M30/C27：保留 1M，但补上「为什么不可能耗尽」的论证）。
+-- 测度：每处理一条依赖边 / 展开一个包目录都要消费 ≥1 步 fuel；`memStackDir` 的
+-- 循环检测保证一条依赖链上不重复进入同一目录，所以单条链上的展开深度 ≤ 链上的
+-- **不同目录数**（有限，≤ 路径字符串长度量级），整张图的展开次数 ≤ 可达依赖边数
+-- （有限）。1M 远高于任何可由内存构造的依赖图（每次展开都要读一个 vuna.toml，
+-- 真实耗时在同一数量级就会先超时），且耗尽时是明确的 internal 错误、不会静默
+-- 返回不完整图。若将来要做「按已访问目录数」的精确界，需要先收集 manifest 的
+-- 依赖表（那本身就要走同一趟 DFS），故这里选择证明界而不是额外的两趟扫描。
+pkgFuelBound : Int
+pkgFuelBound = 1048576
+
 -- 加载 dir/vuna.toml 及其 [dependencies] 路径依赖（递归、含循环检测）。
 loadPackage : String -> Result Package
 loadPackage dir =
-  andThen (loadPackageWalk 1048576 [] Nothing dir)
+  andThen (loadPackageWalk pkgFuelBound [] Nothing dir)
     (\package => andThen (checkUniquePackageNames [package]) (\_ => Ok package))
 
 -- ---------------------------------------------------------------- workspace
@@ -374,11 +385,15 @@ findManifestUpMaybeStep fuel dir parent =
   else if parent == dir then Nothing else findManifestUpMaybe (fuel - 1) parent
 
 -- 从 startDir 向上找第一个含 vuna.toml 的目录（找不到 → Nothing）。
+-- 上界证明（M30/C27）：每上溯一层消耗 2 步（findManifestUpMaybe + Step），
+-- 层数 k 满足 2*(k-1) ≤ strLength start——absolute 路径每层至少占「/x」两字符，
+-- 且 normalizeDir 已去掉空段/`.`/`..`，所以 2*k ≤ strLength start + 2；
+-- 取 2*strLength start + 4 严格覆盖（含末层 parent==dir 的收尾）。
 findManifestDirMaybe : String -> Maybe String
 findManifestDirMaybe startDir =
   let
     start = normalizeDir startDir
-  in findManifestUpMaybe (strLength start + 1) start
+  in findManifestUpMaybe (2 * strLength start + 4) start
 
 -- `findManifestDir` 保留给 fmt / index 这类「向上找 workspace 根」的工具；
 -- 包上下文一律走 `contextForFile` / `contextForDir`。

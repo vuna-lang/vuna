@@ -1,7 +1,5 @@
 [package]
 name = "greet"
-version = "0.1.0"
-edition = "2026"
 
 [export]
 modules = ["Greet", "Greet.Internal"]

@@ -1,6 +1,7 @@
 # M26 模块面快照（vuna map --modules）
 
 ## root（工具链 + 产品 CLI）
+Vuna.Cli.Args  ./lib/Vuna/Cli/Args.vuna
 Vuna.Cli  ./lib/Vuna/Cli.vuna
 Vuna.Doc  ./lib/Vuna/Doc.vuna
 Vuna.Files  ./lib/Vuna/Files.vuna
@@ -21,6 +22,9 @@ Vuna.Lint.Diagnostics  ./lib/Vuna/Lint/Diagnostics.vuna
 Vuna.Lint.Fix  ./lib/Vuna/Lint/Fix.vuna
 Vuna.Lint.Rules  ./lib/Vuna/Lint/Rules.vuna
 Vuna.Lint  ./lib/Vuna/Lint.vuna
+Vuna.Lsp.Diagnostics  ./lib/Vuna/Lsp/Diagnostics.vuna
+Vuna.Lsp.Protocol  ./lib/Vuna/Lsp/Protocol.vuna
+Vuna.Lsp.Query  ./lib/Vuna/Lsp/Query.vuna
 Vuna.Lsp  ./lib/Vuna/Lsp.vuna
 Vuna.Repl  ./lib/Vuna/Repl.vuna
 Vuna.TestRunner  ./lib/Vuna/TestRunner.vuna
@@ -37,6 +41,9 @@ Vuna.Compiler.Core.Eval  compiler/lib/Vuna/Compiler/Core/Eval.vuna
 Vuna.Compiler.Core.Term  compiler/lib/Vuna/Compiler/Core/Term.vuna
 Vuna.Compiler.Core  compiler/lib/Vuna/Compiler/Core.vuna
 Vuna.Compiler.Debug  compiler/lib/Vuna/Compiler/Debug.vuna
+Vuna.Compiler.Diagnostics.Cg  compiler/lib/Vuna/Compiler/Diagnostics/Cg.vuna
+Vuna.Compiler.Diagnostics.Common  compiler/lib/Vuna/Compiler/Diagnostics/Common.vuna
+Vuna.Compiler.Diagnostics.Tc  compiler/lib/Vuna/Compiler/Diagnostics/Tc.vuna
 Vuna.Compiler.Diagnostics  compiler/lib/Vuna/Compiler/Diagnostics.vuna
 Vuna.Compiler.Driver.Compile  compiler/lib/Vuna/Compiler/Driver/Compile.vuna
 Vuna.Compiler.Driver.CompilerCli  compiler/lib/Vuna/Compiler/Driver/CompilerCli.vuna
@@ -47,6 +54,7 @@ Vuna.Compiler.Elab.Data  compiler/lib/Vuna/Compiler/Elab/Data.vuna
 Vuna.Compiler.Elab.Derive  compiler/lib/Vuna/Compiler/Elab/Derive.vuna
 Vuna.Compiler.Elab.Dict  compiler/lib/Vuna/Compiler/Elab/Dict.vuna
 Vuna.Compiler.Elab.Driver  compiler/lib/Vuna/Compiler/Elab/Driver.vuna
+Vuna.Compiler.Elab.InstName  compiler/lib/Vuna/Compiler/Elab/InstName.vuna
 Vuna.Compiler.Elab.Match  compiler/lib/Vuna/Compiler/Elab/Match.vuna
 Vuna.Compiler.Elab.Meta  compiler/lib/Vuna/Compiler/Elab/Meta.vuna
 Vuna.Compiler.Elab.Prelude  compiler/lib/Vuna/Compiler/Elab/Prelude.vuna
@@ -75,6 +83,7 @@ Vuna.Compiler.Loader.Modules  compiler/lib/Vuna/Compiler/Loader/Modules.vuna
 Vuna.Compiler.Loader.Resolve  compiler/lib/Vuna/Compiler/Loader/Resolve.vuna
 Vuna.Compiler.Loader  compiler/lib/Vuna/Compiler/Loader.vuna
 Vuna.Compiler.Packages.Pkg  compiler/lib/Vuna/Compiler/Packages/Pkg.vuna
+Vuna.Compiler.Version  compiler/lib/Vuna/Compiler/Version.vuna
 app.Main  compiler/app/Main.vuna
 Base.Bool  base/lib/Base/Bool.vuna
 Base.Eq  base/lib/Base/Eq.vuna
@@ -108,6 +117,9 @@ Vuna.Compiler.Core.Eval  ./lib/Vuna/Compiler/Core/Eval.vuna
 Vuna.Compiler.Core.Term  ./lib/Vuna/Compiler/Core/Term.vuna
 Vuna.Compiler.Core  ./lib/Vuna/Compiler/Core.vuna
 Vuna.Compiler.Debug  ./lib/Vuna/Compiler/Debug.vuna
+Vuna.Compiler.Diagnostics.Cg  ./lib/Vuna/Compiler/Diagnostics/Cg.vuna
+Vuna.Compiler.Diagnostics.Common  ./lib/Vuna/Compiler/Diagnostics/Common.vuna
+Vuna.Compiler.Diagnostics.Tc  ./lib/Vuna/Compiler/Diagnostics/Tc.vuna
 Vuna.Compiler.Diagnostics  ./lib/Vuna/Compiler/Diagnostics.vuna
 Vuna.Compiler.Driver.Compile  ./lib/Vuna/Compiler/Driver/Compile.vuna
 Vuna.Compiler.Driver.CompilerCli  ./lib/Vuna/Compiler/Driver/CompilerCli.vuna
@@ -118,6 +130,7 @@ Vuna.Compiler.Elab.Data  ./lib/Vuna/Compiler/Elab/Data.vuna
 Vuna.Compiler.Elab.Derive  ./lib/Vuna/Compiler/Elab/Derive.vuna
 Vuna.Compiler.Elab.Dict  ./lib/Vuna/Compiler/Elab/Dict.vuna
 Vuna.Compiler.Elab.Driver  ./lib/Vuna/Compiler/Elab/Driver.vuna
+Vuna.Compiler.Elab.InstName  ./lib/Vuna/Compiler/Elab/InstName.vuna
 Vuna.Compiler.Elab.Match  ./lib/Vuna/Compiler/Elab/Match.vuna
 Vuna.Compiler.Elab.Meta  ./lib/Vuna/Compiler/Elab/Meta.vuna
 Vuna.Compiler.Elab.Prelude  ./lib/Vuna/Compiler/Elab/Prelude.vuna
@@ -146,6 +159,7 @@ Vuna.Compiler.Loader.Modules  ./lib/Vuna/Compiler/Loader/Modules.vuna
 Vuna.Compiler.Loader.Resolve  ./lib/Vuna/Compiler/Loader/Resolve.vuna
 Vuna.Compiler.Loader  ./lib/Vuna/Compiler/Loader.vuna
 Vuna.Compiler.Packages.Pkg  ./lib/Vuna/Compiler/Packages/Pkg.vuna
+Vuna.Compiler.Version  ./lib/Vuna/Compiler/Version.vuna
 app.Main  ./app/Main.vuna
 
 

@@ -17,6 +17,9 @@ open Vuna_dCompiler_dPackages_dPkg
 open Vuna_dCompiler_dDebug
 open Base_dNat
 open Base_dVec
+open Vuna_dCompiler_dDiagnostics_dCommon
+open Vuna_dCompiler_dDiagnostics_dCg
+open Vuna_dCompiler_dDiagnostics_dTc
 open Vuna_dCompiler_dDiagnostics
 open Vuna_dCompiler_dFrontend_dAst
 open Vuna_dCompiler_dFrontend_dDiagnostics
@@ -44,6 +47,7 @@ open Vuna_dCompiler_dElab_dTerm_dSupport
 open Vuna_dCompiler_dElab_dTerm_dImpl
 open Vuna_dCompiler_dElab_dTerm
 open Vuna_dCompiler_dElab_dData
+open Vuna_dCompiler_dElab_dInstName
 open Vuna_dCompiler_dElab_dTrait
 open Vuna_dCompiler_dElab_dDerive
 open Vuna_dCompiler_dElab_dRecords
@@ -108,7 +112,7 @@ let rec v_Vuna_dCompiler_dCodegen_dErase_dpartitionDefsGo = (fun mc0 -> (fun mc1
 
 let v_Vuna_dCompiler_dCodegen_dErase_dpartitionDefs = (fun table -> (fun defs -> ((((v_Vuna_dCompiler_dCodegen_dErase_dpartitionDefsGo (v_Vuna_dCompiler_dCommon_dtblFromList table)) defs) C_Base_dList_dList_Base_dList_dNil) C_Base_dList_dList_Base_dList_dNil)))
 
-let v_Vuna_dCompiler_dCodegen_dErase_ddefLocPrefix = (fun d -> ((v_Vuna_dCompiler_dDiagnostics_dcgDefLoc (v_Vuna_dCompiler_dElab_dTypes_ddtDefSpan d)) (v_Vuna_dCompiler_dElab_dTypes_ddtDefName d)))
+let v_Vuna_dCompiler_dCodegen_dErase_ddefLocPrefix = (fun d -> ((v_Vuna_dCompiler_dDiagnostics_dCg_dcgDefLoc (v_Vuna_dCompiler_dElab_dTypes_ddtDefSpan d)) (v_Vuna_dCompiler_dElab_dTypes_ddtDefName d)))
 
 let v_Vuna_dCompiler_dCodegen_dErase_dshowMetaHint = (fun m -> ((bi_concat " ?") (bi_strFromInt m)))
 
@@ -122,15 +126,15 @@ let rec v_Vuna_dCompiler_dCodegen_dErase_dcheckErasureFuel = (fun fuel -> (fun t
   | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTVar (dtb__25, dtb__26) -> ((fun nd_uscrut6 -> (match nd_uscrut6 with
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> (C_Base_dResult_dResult_Base_dResult_dErr (((bi_concat "DT: internal: unbound runtime variable ") ((bi_concat dtb__25) ((bi_concat " (index ") ((bi_concat (bi_strFromInt dtb__26)) ((bi_concat ", binders ") ((bi_concat (bi_strFromInt (v_Base_dList_dlength binders))) ")"))))))))
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__27) -> (match dtb__27 with
-  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__28, dtb__29) -> (if (v_Vuna_dCompiler_dCore_dTerm_drigIsErased dtb__29) then ((v_Vuna_dCompiler_dDiagnostics_dcgErr1 (C_Vuna_dCompiler_dDiagnostics_dCgErr_Vuna_dCompiler_dDiagnostics_dTypeLevelBindingRuntime (dtb__25))) dtb__25) else (C_Base_dResult_dResult_Base_dResult_dOk (0)))
+  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__28, dtb__29) -> (if (v_Vuna_dCompiler_dCore_dTerm_drigIsErased dtb__29) then ((v_Vuna_dCompiler_dDiagnostics_dCg_dcgErr1 (C_Vuna_dCompiler_dDiagnostics_dCg_dCgErr_Vuna_dCompiler_dDiagnostics_dCg_dTypeLevelBindingRuntime (dtb__25))) dtb__25) else (C_Base_dResult_dResult_Base_dResult_dOk (0)))
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
 )) ((v_Vuna_dCompiler_dCodegen_dErase_dbinderAt dtb__26) binders))
-  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTGlobal (dtb__30) -> (if ((v_Base_dList_dmemName dtb__30) typeNames) then ((v_Vuna_dCompiler_dDiagnostics_dcgErr1 (C_Vuna_dCompiler_dDiagnostics_dCgErr_Vuna_dCompiler_dDiagnostics_dTypeLevelNameRuntime (dtb__30))) dtb__30) else (C_Base_dResult_dResult_Base_dResult_dOk (0)))
-  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTType (dtb__31) -> (v_Vuna_dCompiler_dDiagnostics_dcgErr0 C_Vuna_dCompiler_dDiagnostics_dCgErr_Vuna_dCompiler_dDiagnostics_dTypeUsedAtRuntime)
-  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTPi (dtb__32, dtb__33, dtb__34, dtb__35, dtb__36) -> (v_Vuna_dCompiler_dDiagnostics_dcgErr0 C_Vuna_dCompiler_dDiagnostics_dCgErr_Vuna_dCompiler_dDiagnostics_dTypeUsedAtRuntime)
-  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTMeta (dtb__37) -> ((v_Vuna_dCompiler_dDiagnostics_dcgErr1 (C_Vuna_dCompiler_dDiagnostics_dCgErr_Vuna_dCompiler_dDiagnostics_dUnsolvedMetavarRuntime ((v_Vuna_dCompiler_dCodegen_dErase_dshowMetaHint dtb__37)))) (v_Vuna_dCompiler_dCodegen_dErase_dshowMetaHint dtb__37))
+  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTGlobal (dtb__30) -> (if ((v_Base_dList_dmemName dtb__30) typeNames) then ((v_Vuna_dCompiler_dDiagnostics_dCg_dcgErr1 (C_Vuna_dCompiler_dDiagnostics_dCg_dCgErr_Vuna_dCompiler_dDiagnostics_dCg_dTypeLevelNameRuntime (dtb__30))) dtb__30) else (C_Base_dResult_dResult_Base_dResult_dOk (0)))
+  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTType (dtb__31) -> (v_Vuna_dCompiler_dDiagnostics_dCg_dcgErr0 C_Vuna_dCompiler_dDiagnostics_dCg_dCgErr_Vuna_dCompiler_dDiagnostics_dCg_dTypeUsedAtRuntime)
+  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTPi (dtb__32, dtb__33, dtb__34, dtb__35, dtb__36) -> (v_Vuna_dCompiler_dDiagnostics_dCg_dcgErr0 C_Vuna_dCompiler_dDiagnostics_dCg_dCgErr_Vuna_dCompiler_dDiagnostics_dCg_dTypeUsedAtRuntime)
+  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTMeta (dtb__37) -> ((v_Vuna_dCompiler_dDiagnostics_dCg_dcgErr1 (C_Vuna_dCompiler_dDiagnostics_dCg_dCgErr_Vuna_dCompiler_dDiagnostics_dCg_dUnsolvedMetavarRuntime ((v_Vuna_dCompiler_dCodegen_dErase_dshowMetaHint dtb__37)))) (v_Vuna_dCompiler_dCodegen_dErase_dshowMetaHint dtb__37))
   | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTLam (dtb__38, dtb__39, dtb__40) -> ((((v_Vuna_dCompiler_dCodegen_dErase_dcheckErasureFuel ((bi_sub fuel) 1)) typeNames) (C_Base_dList_dList_Base_dList_dCons ((C_Base_dPair_dPair_Base_dPair_dPair (dtb__38, dtb__39)), binders))) dtb__40)
   | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTApp (dtb__41, dtb__42, dtb__43) -> ((fun nd_uscrut7 -> (match nd_uscrut7 with
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> (if (v_Vuna_dCompiler_dCore_dTerm_drigIsErased dtb__43) then ((((v_Vuna_dCompiler_dCodegen_dErase_dcheckErasureFuel ((bi_sub fuel) 1)) typeNames) binders) dtb__41) else ((v_Base_dResult_dandThen ((((v_Vuna_dCompiler_dCodegen_dErase_dcheckErasureFuel ((bi_sub fuel) 1)) typeNames) binders) dtb__41)) (fun _u -> ((((v_Vuna_dCompiler_dCodegen_dErase_dcheckErasureFuel ((bi_sub fuel) 1)) typeNames) binders) dtb__42))))
@@ -352,14 +356,14 @@ let rec v_Vuna_dCompiler_dCodegen_dErase_dpickReadyAcc = (fun mc0 -> (fun mc1 ->
 
 let v_Vuna_dCompiler_dCodegen_dErase_dpickReady = (fun adjT -> (fun groups -> (fun emitted -> ((((v_Vuna_dCompiler_dCodegen_dErase_dpickReadyAcc adjT) groups) C_Base_dList_dList_Base_dList_dNil) emitted))))
 
-let rec v_Vuna_dCompiler_dCodegen_dErase_dorderGroupsAccFuel = (fun fuel -> (fun adjT -> (fun remaining -> (fun emitted -> (if ((bi_le_int fuel) 0) then (v_Vuna_dCompiler_dDiagnostics_dcgErr0 C_Vuna_dCompiler_dDiagnostics_dCgErr_Vuna_dCompiler_dDiagnostics_dDependencyCycle) else (match remaining with
+let rec v_Vuna_dCompiler_dCodegen_dErase_dorderGroupsAccFuel = (fun fuel -> (fun adjT -> (fun remaining -> (fun emitted -> (if ((bi_le_int fuel) 0) then (v_Vuna_dCompiler_dDiagnostics_dCg_dcgErr0 C_Vuna_dCompiler_dDiagnostics_dCg_dCgErr_Vuna_dCompiler_dDiagnostics_dCg_dDependencyCycle) else (match remaining with
   | C_Base_dList_dList_Base_dList_dNil -> (C_Base_dResult_dResult_Base_dResult_dOk (C_Base_dList_dList_Base_dList_dNil))
   | _ -> ((fun nd_uscrut4 -> (match nd_uscrut4 with
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__145) -> (match dtb__145 with
   | C_Base_dPair_dPair_Base_dPair_dPair (dtb__146, dtb__147) -> ((v_Base_dResult_dandThen ((((v_Vuna_dCompiler_dCodegen_dErase_dorderGroupsAccFuel ((bi_sub fuel) 1)) adjT) dtb__147) ((v_Vuna_dCompiler_dCodegen_dErase_daddAllNames dtb__146) emitted))) (fun tail -> (C_Base_dResult_dResult_Base_dResult_dOk ((C_Base_dList_dList_Base_dList_dCons (dtb__146, tail))))))
   | _ -> failwith "DT: impossible branch"
 )
-  | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> (v_Vuna_dCompiler_dDiagnostics_dcgErr0 C_Vuna_dCompiler_dDiagnostics_dCgErr_Vuna_dCompiler_dDiagnostics_dDependencyCycle)
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> (v_Vuna_dCompiler_dDiagnostics_dCg_dcgErr0 C_Vuna_dCompiler_dDiagnostics_dCg_dCgErr_Vuna_dCompiler_dDiagnostics_dCg_dDependencyCycle)
   | _ -> failwith "DT: impossible branch"
 )) (((v_Vuna_dCompiler_dCodegen_dErase_dpickReady adjT) remaining) emitted))
 ))))))
@@ -441,7 +445,7 @@ let rec v_Vuna_dCompiler_dCodegen_dErase_dcheckNoAxiomRuntimeGo = (fun mc0 -> (f
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> ((v_Vuna_dCompiler_dCodegen_dErase_dcheckNoAxiomRuntimeGo mc0) dtb__191)
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__192) -> (match (((v_Vuna_dCompiler_dCodegen_dErase_dtermDepsInto mc0) C_Base_dList_dList_Base_dList_dNil) dtb__192) with
   | C_Base_dList_dList_Base_dList_dNil -> ((v_Vuna_dCompiler_dCodegen_dErase_dcheckNoAxiomRuntimeGo mc0) dtb__191)
-  | C_Base_dList_dList_Base_dList_dCons (dtb__193, dtb__194) -> ((((v_Vuna_dCompiler_dDiagnostics_dcgErrDefAt (v_Vuna_dCompiler_dElab_dTypes_ddtDefSpan dtb__190)) (v_Vuna_dCompiler_dElab_dTypes_ddtDefName dtb__190)) (C_Vuna_dCompiler_dDiagnostics_dCgErr_Vuna_dCompiler_dDiagnostics_dAxiomAtRuntime (dtb__193))) (C_Base_dVec_dVec_Base_dVec_dVCons (dtb__193, C_Base_dVec_dVec_Base_dVec_dVNil)))
+  | C_Base_dList_dList_Base_dList_dCons (dtb__193, dtb__194) -> ((((v_Vuna_dCompiler_dDiagnostics_dCg_dcgErrDefAt (v_Vuna_dCompiler_dElab_dTypes_ddtDefSpan dtb__190)) (v_Vuna_dCompiler_dElab_dTypes_ddtDefName dtb__190)) (C_Vuna_dCompiler_dDiagnostics_dCg_dCgErr_Vuna_dCompiler_dDiagnostics_dCg_dAxiomAtRuntime (dtb__193))) (C_Base_dVec_dVec_Base_dVec_dVCons (dtb__193, C_Base_dVec_dVec_Base_dVec_dVNil)))
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"

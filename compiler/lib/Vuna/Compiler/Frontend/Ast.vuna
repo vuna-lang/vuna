@@ -39,6 +39,7 @@ module Vuna.Compiler.Frontend.Ast
   , Pat
   , Source
   , SourceFile
+  , TraitMethod
   , XBare
   , XModule
   , XTypeAll
@@ -64,6 +65,9 @@ module Vuna.Compiler.Frontend.Ast
   , modDeclSpan
   , patSpan
   , topNames
+  , traitMethodName
+  , traitMethodSpan
+  , traitMethodType
   , typeNamesOf
   ) where
 
@@ -73,6 +77,11 @@ import Vuna.Compiler.Common
 -- 记录字段：字段名 + 类型表达式 + span（M10.5）。
 data Field : Type where
   Field : String -> Expr -> Span -> Field
+
+-- trait 方法签名：方法名 + 类型表达式 + span（M30 B20：span 覆盖「方法名到类型结束」，
+-- 让方法级诊断/符号/注释锚点能落到方法行，而不是整条 trait 声明行）。
+data TraitMethod : Type where
+  TraitMethod : String -> Expr -> Span -> TraitMethod
 
 data Pat : Type where
   PVar : String -> Span -> Pat
@@ -120,7 +129,7 @@ data Decl : Type where
   DSig : String -> Expr -> Span -> Decl
   DFun : String -> List Pat -> Expr -> Span -> Decl
   DRecord : String -> List String -> List Field -> List String -> Span -> Decl
-  DTrait : String -> List String -> List (Pair String Expr) -> Span -> Decl
+  DTrait : String -> List String -> List TraitMethod -> Span -> Decl
   DInstance : List Expr -> Expr -> List Decl -> Span -> Decl
 
 -- M10 模块头与导出项。
@@ -197,6 +206,15 @@ fieldName (Field name ty sp) = name
 fieldType : Field -> Expr
 fieldType (Field name ty sp) = ty
 
+traitMethodName : TraitMethod -> String
+traitMethodName (TraitMethod name ty sp) = name
+
+traitMethodType : TraitMethod -> Expr
+traitMethodType (TraitMethod name ty sp) = ty
+
+traitMethodSpan : TraitMethod -> Span
+traitMethodSpan (TraitMethod name ty sp) = sp
+
 data Import : Type where
   Import : String -> Bool -> Maybe String -> Span -> Import
 
@@ -264,7 +282,7 @@ declNames d = case d of
   DSig name ty _ => [name]
   DData dname params kind ctors derivings _ => map ctorName ctors
   DRecord dname params fields derivings _ => [dname]
-  DTrait tname params methods _ => map firstOf methods
+  DTrait tname params methods _ => map traitMethodName methods
   DInstance ctxE head methods _ => []
 
 -- 顶层可见名字（M20：把 data / record / trait 的**类型名**也算进来）。
@@ -277,14 +295,14 @@ declAllNames : Decl -> List String
 declAllNames d = case d of
   DData dname params kind ctors derivings _ => dname :: map ctorName ctors
   DRecord dname params fields derivings _ => [dname]
-  DTrait tname params methods _ => tname :: map firstOf methods
+  DTrait tname params methods _ => tname :: map traitMethodName methods
   _ => declNames d
 
 _declCtors : Decl -> List String
 _declCtors d = case d of
   DData dname params kind ctors derivings _ => map ctorName ctors
   DRecord dname params fields derivings _ => [dname]
-  DTrait tname params methods _ => map firstOf methods
+  DTrait tname params methods _ => map traitMethodName methods
   _ => []
 
 ctorsOf : List Decl -> List String

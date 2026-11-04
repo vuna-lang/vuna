@@ -1,0 +1,3 @@
+-- 成员包入口：让成员也能被 `vuna check` / `vuna build`（`vuna test` 只跑 test/）。
+main : Int
+main = 0

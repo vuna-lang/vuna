@@ -223,4 +223,31 @@ in
     ];
     script = ./context-budget.sh;
   };
+
+  # M30：VSCode 扩展的离线自检。srcs 显式列出扩展的提交文件，避免把 dev 用
+  # node_modules 带进 Nix store；只校验已构建的 dist/（重新构建见 vscode/README）。
+  vscode-ext = mkCheck {
+    name = "vuna-vscode-ext";
+    srcs = [
+      ../../vscode/package.json
+      ../../vscode/package-lock.json
+      ../../vscode/tsconfig.json
+      ../../vscode/src
+      ../../vscode/scripts
+      ../../vscode/dist
+      ../../vscode/syntaxes
+      ../../vscode/language-configuration.json
+      ../../vscode/snippets
+      ../../vscode/README.md
+      ../../vscode/LICENSE
+      ../../vscode/.vscodeignore
+      ../../vscode/check.sh
+      ../../vscode/dev
+    ];
+    nativeBuildInputs = [
+      pkgs.nodejs
+      pkgs.bash
+    ];
+    script = ./vscode-ext.sh;
+  };
 }

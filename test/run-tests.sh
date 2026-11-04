@@ -577,16 +577,12 @@ done
 
 # 26) do / Monad / 高阶 kind（M11）：正例 check + interp + compile；
 #     错误例都失败、含片段、不写输出目录。
-#     `.nointerp`：核心求值不执行效果/不归约 → 跳过 interp；
-#     `.nocompile`：擦除 codegen 尚不支持（多隐式参数字典 binder）→ 只断言 check。
+#     `.nointerp`：核心求值不执行效果/不归约 → 跳过 interp（M30 第 43 段补负向断言）。
 for file in corpus/monad/[01][0-9]_*.vuna; do
   base=${file%.vuna}
   expected=$(cat "$base.out")
   "$VUNA" check "$file" >/dev/null 2>&1
   check_eq "$file (monad check exit)" "0" "$?"
-  if [ -f "$file.nocompile" ]; then
-    continue
-  fi
   if [ ! -f "$file.nointerp" ]; then
     actual=$("$VUNA" interp "$file" 2>&1)
     check_eq "$file (monad interp)" "$expected" "$actual"
@@ -679,8 +675,6 @@ mkdir -p "$tmp/fmt-pkg"
 cat > "$tmp/fmt-pkg/vuna.toml" <<EOF
 [package]
 name = "fmt-roundtrip"
-version = "0.1.0"
-edition = "2026"
 
 [dependencies]
 vuna-base = "$VUNA_BASE"
@@ -747,7 +741,8 @@ if grep -q '^compile ' "$tmp/split_noop.log"; then
 else
   ok
 fi
-touch "$split_dir/Vuna_dHello.ml"
+# M30：增量判定改内容哈希——touch 不再触发重编；改内容才触发。
+printf '\n(* M30 incremental probe *)\n' >>"$split_dir/Vuna_dHello.ml"
 ( cd "$split_dir" && OCAMLOPT="$OCAMLOPT" sh build.sh bin/prog ) >"$tmp/split_inc.log" 2>&1
 check_contains "package split incremental module" "$(cat "$tmp/split_inc.log")" "compile Vuna_dHello"
 if grep -q '^compile Vuna_runtime' "$tmp/split_inc.log"; then
@@ -1103,6 +1098,117 @@ case "$help26" in
   *seed*) bad "context help no seed" "absent" "help still mentions seed" ;;
   *) ok ;;
 esac
+
+# 40) M30 工具链回归：CLI 错误矩阵 + Index v2 自检 + doc [export]
+#     两个 check.sh 是独立 POSIX 脚本（内部 mktemp 隔离，不碰仓库缓存）。
+sh corpus/cli/check.sh "$VUNA" >"$tmp/cli_m30.log" 2>&1
+if [ "$?" -eq 0 ]; then ok; else bad "cli m30" "exit 0" "$(tail -8 "$tmp/cli_m30.log")"; fi
+sh corpus/index/check.sh "$VUNA" >"$tmp/index_m30.log" 2>&1
+if [ "$?" -eq 0 ]; then ok; else bad "index m30" "exit 0" "$(tail -8 "$tmp/index_m30.log")"; fi
+
+doc_m30_out="$tmp/doc-m30/api.md"
+doc_m30=$("$VUNA" doc corpus/doc/01_export "$doc_m30_out" 2>&1)
+doc_m30_code=$?
+if [ "$doc_m30_code" -ne 0 ]; then
+  bad "doc m30 exit" "0" "$doc_m30"
+elif [ ! -f "$doc_m30_out" ]; then
+  bad "doc m30 output" "writes $doc_m30_out" "missing"
+else
+  doc_m30_text=$(cat "$doc_m30_out")
+  check_contains "doc [export] includes Visible" "$doc_m30_text" "## Visible"
+  case "$doc_m30_text" in
+    *"## Hidden"*) bad "doc [export] excludes Hidden" "absent" "Hidden still documented" ;;
+    *) ok ;;
+  esac
+fi
+
+# 41) M30 workspace 检查/构建单元 + 确定性/增量构建
+# 41a) 成员错误不能再被根 check 忽略。
+member_err=$("$VUNA" check corpus/packages/m30_ws_member_error 2>&1)
+member_code=$?
+if [ "$member_code" -ne 0 ]; then ok; else bad "workspace member check exit" "non-zero" "$member_code"; fi
+check_contains "workspace member check names package" "$member_err" "[bad]"
+
+# 41b) workspace build：根包构建、库成员跳过；产物可运行。
+ws_pkg=corpus/packages/m30_ws_build
+ws_out1="$tmp/ws-build-1"
+ws_out2="$tmp/ws-build-2"
+if ! ws_build=$("$VUNA" build --out "$ws_out1" "$ws_pkg" 2>&1); then
+  bad "workspace build" "exit 0" "$ws_build"
+else
+  check_contains "workspace build skips library member" "$ws_build" "skipped (library): member"
+  if [ -x "$ws_out1/ws-build/bin/ws-build" ]; then
+    check_eq "workspace build binary runs" "\"hello from member\"" "$("$ws_out1/ws-build/bin/ws-build" 2>&1)"
+  else
+    bad "workspace build binary" "executable" "missing"
+  fi
+  # 41c) 同哈希跳过。
+  ws_build2=$("$VUNA" build --out "$ws_out1" "$ws_pkg" 2>&1)
+  check_contains "workspace build up to date" "$ws_build2" "up to date:"
+  # 41d) --package 只建指定包（库成员只 check/skip）。
+  ws_pkg_build=$("$VUNA" build --package member --out "$tmp/ws-build-pkg" "$ws_pkg" 2>&1)
+  ws_pkg_code=$?
+  if [ "$ws_pkg_code" -eq 0 ]; then ok; else bad "workspace build --package" "exit 0" "$ws_pkg_build"; fi
+  check_contains "workspace build --package library skip" "$ws_pkg_build" "skipped (library): member"
+  # 41e) 确定性：同源两次 build 的 .ml/build.sh/meta 逐字节一致。
+  if ! "$VUNA" build --out "$ws_out2" "$ws_pkg" >/dev/null 2>&1; then
+    bad "workspace build second" "exit 0" "failed"
+  else
+    det_ok=1
+    for f in "$ws_out1/ws-build"/*.ml "$ws_out1/ws-build/build.sh" "$ws_out1/ws-build/build-meta.json"; do
+      base=$(basename "$f")
+      if ! cmp -s "$f" "$ws_out2/ws-build/$base"; then
+        det_ok=0
+        bad "workspace build deterministic: $base" "identical" "differs"
+      fi
+    done
+    [ "$det_ok" -eq 1 ] && ok
+  fi
+fi
+
+# 42) M30 P3：REPL 多行/效果 + TestRunner 效果/workspace 聚合
+# REPL：多行定义（`=` 续行 + 缩进 + 空行提交）与纯表达式
+repl_multi=$(printf 'f : Int -> Int\nf x =\n  x + 1\n\nf 41\n:q\n' | "$VUNA" repl 2>&1)
+check_contains "vuna repl multiline def" "$repl_multi" "42"
+# REPL：IO 表达式走临时包编译+运行（效果输出直接到终端）
+repl_io=$(printf 'import Base.IO\nprint "hi"\n:q\n' | "$VUNA" repl 2>&1)
+check_contains "vuna repl io effect" "$repl_io" "hi"
+# REPL：不完整输入 + 空行 → 报错丢弃但继续
+repl_bad=$(printf 'x =\n\n:q\n' | "$VUNA" repl 2>&1)
+check_contains "vuna repl incomplete input" "$repl_bad" "输入不完整"
+
+# TestRunner：workspace 聚合（根包 3 纯 + 1 IO，成员 1 纯）
+test_ws=$("$VUNA" test corpus/test-m30 2>&1)
+test_ws_code=$?
+check_eq "vuna test workspace exit" "0" "$test_ws_code"
+check_contains "vuna test workspace summary" "$test_ws" "workspace: 5 passed, 0 failed"
+check_contains "vuna test workspace io test" "$test_ws" "ok   IoPass.vuna"
+check_contains "vuna test member group" "$test_ws" "-- test-m30-member --"
+# 失败路径：纯失败 / 效果失败（退出码非 0）/ 不支持的 main 类型 / 聚合失败
+"$VUNA" test corpus/test-m30/bad-pure >/dev/null 2>&1
+check_eq "vuna test pure fail exit" "1" "$?"
+"$VUNA" test corpus/test-m30/bad-io >/dev/null 2>&1
+check_eq "vuna test io fail exit" "1" "$?"
+"$VUNA" test corpus/test-m30/bad-other >/dev/null 2>&1
+check_eq "vuna test other main exit" "1" "$?"
+"$VUNA" test corpus/test-m30/ws-fail >/dev/null 2>&1
+check_eq "vuna test workspace fail exit" "1" "$?"
+# 单包行为不变：没有 test/ 仍是输入错误（exit 2）
+"$VUNA" test ../base >/dev/null 2>&1
+check_eq "vuna test missing dir exit" "2" "$?"
+
+# 43) E10：`.nointerp` 不再是「静默跳过」——每个标记夹具必须能被 interp 明确拒绝
+#     （效果不可执行 / 不归约为值），不得返回 0 或 golden。
+for mark in $(find corpus -name '*.vuna.nointerp' | LC_ALL=C sort); do
+  nointerp_file=${mark%.nointerp}
+  nointerp_out=$("$VUNA" interp "$nointerp_file" 2>&1)
+  nointerp_code=$?
+  if [ "$nointerp_code" -ne 0 ]; then
+    ok
+  else
+    bad "$nointerp_file (.nointerp must be rejected by interp)" "non-zero" "$nointerp_out"
+  fi
+done
 
 if [ "$fail" -ne 0 ]; then
   printf '%s passed, %s failed\n' "$pass" "$fail"

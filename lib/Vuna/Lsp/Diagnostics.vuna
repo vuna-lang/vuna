@@ -1,0 +1,149 @@
+module Vuna.Lsp.Diagnostics (contextForDoc, publishDiagnosticsFor) where
+
+-- Vuna.Lsp.Diagnostics：LSP 诊断链（工具链模块，**永不进 seed 闭包**）。
+--
+-- 策略（M30 起走包上下文，不再「含 import 就跳过」）：
+--   1. 解析失败 ⇒ 一条带位置的 parse 诊断；
+--   2. 有 `module` 头 ⇒ `Loader.loadModuleSource`（经 `Dt.dtCheckSource`），无头 ⇒
+--      `loadProjectSource` 入口语义；DT 精化错误按 `<file>:<line>:<col>` 转 LSP 0-based；
+--   3. 依赖文件（spanFile 不是当前文件）的错误**过滤掉**——每个打开的文件只发布自己的
+--      诊断；没有位置的错误归到当前文件 0:0；
+--   4. 合并 `Vuna.Lint.Rules.lintSource` 的语法级 finding（severity 2，code = LN_ 规则码）。
+--
+-- 包上下文：file:// URI → 路径 → `contextForFile`；非 file URI（或磁盘上不存在的
+-- 路径）退化到 cwd 的 `contextForDir "."`。失败由调用方转成 0:0 的 `pkg: ...` 诊断。
+import Vuna.Compiler.Common
+import Vuna.Compiler.Driver.Dt
+import Vuna.Compiler.Frontend.Parser
+import Vuna.Compiler.Packages.Pkg
+import Vuna.Files
+import Vuna.Json
+import Vuna.Lint.Rules
+import Vuna.Lsp.Protocol
+
+-- DiagnosticSeverity：1 = Error、2 = Warning、3 = Information、4 = Hint
+severityError : Int
+severityError = 1
+
+severityWarning : Int
+severityWarning = 2
+
+-- 诊断
+-- ---------------------------------------------------------------
+-- 行/列 1-based；code 为空串表示无规则码（编译错误）。
+data Diag : Type where
+  Diag : Int -> Int -> Int -> Int -> Int -> String -> String -> Diag
+
+diagStartLine : Diag -> Int
+diagStartLine (Diag sl sc el ec sev code msg) = sl
+
+diagStartCol : Diag -> Int
+diagStartCol (Diag sl sc el ec sev code msg) = sc
+
+diagEndLine : Diag -> Int
+diagEndLine (Diag sl sc el ec sev code msg) = el
+
+diagEndCol : Diag -> Int
+diagEndCol (Diag sl sc el ec sev code msg) = ec
+
+diagSeverity : Diag -> Int
+diagSeverity (Diag sl sc el ec sev code msg) = sev
+
+diagCode : Diag -> String
+diagCode (Diag sl sc el ec sev code msg) = code
+
+diagMessage : Diag -> String
+diagMessage (Diag sl sc el ec sev code msg) = msg
+
+diagJson : Diag -> Json
+diagJson d =
+  JObj
+    (append [Pair "range" (lspRange (diagStartLine d) (diagStartCol d) (diagEndLine d) (diagEndCol d)), Pair "severity" (JNum (diagSeverity d)), Pair "source" (JStr "vuna")] (append (if diagCode d == "" then [] else [Pair "code" (JStr (diagCode d))]) [Pair "message" (JStr (diagMessage d))]))
+
+-- 编译器的错误/警告串形如 `<file>:<line>:<col>: <msg>`；file 本身可能含冒号
+-- （例如 URI `file:///x.vuna:2:7: ...`）。所以扫描第一个「连续两段都是数字」的位置，
+-- 而不是取头两段。识别不出来就当无位置（0,0）。
+-- 返回 (file, (line, (col, msg)))。
+splitLocFull : String -> Pair String (Pair Int (Pair Int String))
+splitLocFull message = case scanLocFull (split ":" message) [] of
+  Nothing => Pair "" (Pair 0 (Pair 0 message))
+  Just loc => loc
+
+scanLocFull : List String -> List String -> Maybe (Pair String (Pair Int (Pair Int String)))
+scanLocFull [] acc = Nothing
+scanLocFull (a :: rest) acc = case rest of
+  b :: more =>
+    if allDigits a && allDigits b then Just
+      (Pair (join ":" (reverse acc)) (Pair (digitsToInt (strUnpack a) 0) (Pair (digitsToInt (strUnpack b) 0) (trim (join ":" more)))))
+    else scanLocFull rest (a :: acc)
+  [] => Nothing
+
+diagOfMessage : Int -> String -> String -> Diag
+diagOfMessage severity code message =
+  let
+    loc = splitLocFull message
+    line = firstOf (secondOf loc)
+  in if line <= 0 then Diag 0 0 0 0 severity code message
+  else
+    let
+      col = firstOf (secondOf (secondOf loc))
+      msg = secondOf (secondOf (secondOf loc))
+    in Diag line col line col severity code msg
+
+-- 错误属于当前文件才发；无位置的错误归到当前文件；依赖文件的错误过滤掉。
+diagIfOwn : String -> Int -> String -> Maybe Diag
+diagIfOwn label severity message =
+  let
+    loc = splitLocFull message
+    file = firstOf loc
+    line = firstOf (secondOf loc)
+  in if line <= 0 then Just (diagOfMessage severity "" message)
+  else if file == "" || file == label || fileNameOf label /= "" && endsWith ("/" ++ fileNameOf label) file then Just (diagOfMessage severity "" message)
+  else Nothing
+
+-- 包上下文：file:// URI → 路径 → `contextForFile`；非 file URI（或磁盘上不存在的
+-- 路径）退化到 cwd 的 `contextForDir "."`。失败由调用方转成 0:0 的 `pkg: ...` 诊断。
+contextForDoc : String -> Result (Pair String PackageContext)
+contextForDoc uri =
+  let
+    path = decodeUri uri
+  in if path == "" then mapResult (\ctx => Pair "" ctx) (contextForDir ".")
+  else if pathExistsFile path then mapResult (\ctx => Pair path ctx) (contextForFile path)
+  else mapResult (\ctx => Pair path ctx) (contextForDir ".")
+
+-- DT 精化（经包上下文；模块头走 loadModuleSource，无头走入口语义）。
+checkDiagnostics : String -> PackageContext -> String -> List Diag
+checkDiagnostics label ctx text = case dtCheckSource ctx label text of
+  Ok _ => []
+  Err e => case diagIfOwn label severityError e of
+    Nothing => []
+    Just d => [d]
+
+-- lint finding 合并为 warning（code = LN_ 规则码）。
+lintDiagnostics : String -> List Diag
+lintDiagnostics text = case lintSource text of
+  Err _ => []
+  Ok findings => map lintDiag findings
+
+lintDiag : Finding -> Diag
+lintDiag f =
+  Diag (findingLine f) (findingCol f) (findingLine f) (findingCol f + 1) severityWarning
+    (findingCode f) (findingMessage f)
+
+diagnosticsFor : String -> String -> List Diag
+diagnosticsFor uri text = case contextForDoc uri of
+  Err e => [Diag 0 0 0 0 severityError "" e]
+  Ok (Pair label ctx) => case parseSource label text of
+    Err e => [diagOfMessage severityError "" e]
+    Ok _ => append (checkDiagnostics label ctx text) (lintDiagnostics text)
+
+publishDiagnostics : String -> Int -> List Diag -> Json
+publishDiagnostics uri version diags =
+  notify "textDocument/publishDiagnostics"
+    (JObj [Pair "uri" (JStr uri), Pair "version" (JNum version), Pair "diagnostics" (JArr (map diagJson diags))])
+
+-- ---------------------------------------------------------------
+-- 一次请求的完整发布帧：诊断链 + publishDiagnostics 通知（门面只需要这一个入口，
+-- 不必把 Diag 类型暴露出去）。
+publishDiagnosticsFor : String -> Int -> String -> Json
+publishDiagnosticsFor uri version text = publishDiagnostics uri version (diagnosticsFor uri text)

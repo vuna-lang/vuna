@@ -58,8 +58,6 @@ cp "$HERE/_probe.vuna" "$pkg/app/Main.vuna"
 cat >"$pkg/vuna.toml" <<'EOF'
 [package]
 name = "vuna"
-version = "0.1.0"
-edition = "2026"
 
 [capabilities]
 effects = ["console", "fs", "process", "env", "clock"]

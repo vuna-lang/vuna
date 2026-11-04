@@ -1,0 +1,36 @@
+open Vuna_runtime
+open Base_dPair
+open Base_dBool
+open Base_dMonad
+open Base_dMaybe
+open Base_dEq
+open Base_dList
+open Base_dResult
+open Base_dString
+open Base_dShow
+open Base_dOrd
+open Prelude
+open Vuna_dCompiler_dCommon
+open Vuna_dCompiler_dFrontend_dToml
+open Vuna_dCompiler_dFrontend_dManifest
+open Vuna_dCompiler_dPackages_dPkg
+open Vuna_dCompiler_dDebug
+open Base_dNat
+open Base_dVec
+let v_Vuna_dCompiler_dDiagnostics_dCommon_ddiagMsg = (fun code -> (fun template -> (fun args -> ((bi_concat "[") ((bi_concat code) ((bi_concat "] ") ((v_Base_dVec_dsubstTemplate template) args)))))))
+
+let v_Vuna_dCompiler_dDiagnostics_dCommon_ddiagErr = (fun msg -> (C_Base_dResult_dResult_Base_dResult_dErr (msg)))
+
+let v_Vuna_dCompiler_dDiagnostics_dCommon_ddiagErrAt = (fun sp -> (fun msg -> (C_Base_dResult_dResult_Base_dResult_dErr (((bi_concat (v_Vuna_dCompiler_dCommon_dshowSpanLoc sp)) ((bi_concat ": ") msg))))))
+
+let v_Vuna_dCompiler_dDiagnostics_dCommon_ddiagDefLoc = (fun span -> (fun name -> (match span with
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__0) -> ((bi_concat (v_Vuna_dCompiler_dCommon_dshowSpanLoc dtb__0)) ((bi_concat ": in `") ((bi_concat name) "`: ")))
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> ((bi_concat "in `") ((bi_concat name) "`: "))
+  | _ -> failwith "DT: impossible branch"
+)))
+
+let rec v_Vuna_dCompiler_dDiagnostics_dCommon_dconcatLists = (fun mc0 -> (match mc0 with
+  | C_Base_dList_dList_Base_dList_dCons (dtb__1, dtb__2) -> ((v_Base_dList_dappend dtb__1) (v_Vuna_dCompiler_dDiagnostics_dCommon_dconcatLists dtb__2))
+  | C_Base_dList_dList_Base_dList_dNil -> C_Base_dList_dList_Base_dList_dNil
+  | _ -> failwith "DT: impossible branch"
+))

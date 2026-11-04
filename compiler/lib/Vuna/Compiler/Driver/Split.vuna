@@ -4,6 +4,7 @@ module Vuna.Compiler.Driver.Split
   , splitCompileOrder
   , splitInitFiles
   , writeSplitFiles
+  , writeSplitFilesIfChanged
   ) where
 
 -- Vuna.Compiler.Driver.Split：分离编译（M12）的输出文件模型与构建脚本生成。
@@ -38,6 +39,17 @@ writeSplitFiles dir (f :: rest) = andThen (writeSplitFiles dir rest) (\n => let
 in Ok (n + 1)
 )
 
+-- M30：只写内容变化的文件（build 的逐模块增量写盘；内容相同不 touch）。
+writeSplitFilesIfChanged : String -> List SplitFile -> Result Int
+writeSplitFilesIfChanged dir [] = Ok 0
+writeSplitFilesIfChanged dir (f :: rest) = andThen (writeSplitFilesIfChanged dir rest) (\n => let
+  path = dir ++ "/" ++ splitName f
+  text = splitText f
+  same = prim_fileExists path && prim_readFile path == text
+  _ = if same then 0 else prim_writeFile path text
+in Ok (n + 1)
+)
+
 -- 编译单元顺序：按输出顺序取 .ml（跳过 .mli 与 Vuna_runtime.ml 之后不重复）。
 splitCompileOrder : List String -> List String
 splitCompileOrder [] = []
@@ -49,13 +61,14 @@ stripMl name = substring 0 (strLength name - 3) name
 
 -- 构建脚本；names 是编译单元（无扩展名）顺序，最后 Link 到 "$OUT"。
 -- 干净构建（没有 .cmx，例如 Nix 构建 seed / stage1）走一次 ocamlopt 调用，
--- 避免几十次进程启动；已有 .cmx 时才走按模块时间戳的增量路径。
+-- 避免几十次进程启动；已有 .cmx 时按**内容哈希**（.ml/.mli + 依赖 .cmi/.cmx）增量编译，
+-- 不再用 mtime（M30/D15：同输入同产物，不受复制/checkout 时间影响）。
 buildScript : List String -> String
 buildScript names =
   "#!/bin/sh\n"
-    ++ "# 由 vuna 生成：分离编译构建脚本。用法: ./build.sh [OUT]\n"
+    ++ "# 由 vuna 生成：分离编译构建脚本（M30：按内容哈希增量）。用法: ./build.sh [OUT]\n"
     ++ "# 干净构建：一次 ocamlopt 编译全部 .mli/.ml 并链接；\n"
-    ++ "# 增量构建：按 .ml/.mli/.cmi 时间戳逐模块重编（编译单元顺序即依赖顺序）。\n"
+    ++ "# 增量构建：每个模块的 .ml/.mli 与依赖 .cmi/.cmx 内容哈希写 $base.stamp，命中即跳过。\n"
     ++ "set -eu\n"
     ++ "cd \"$(dirname \"$0\")\"\n"
     ++ "OUT=${1:-program}\n"
@@ -63,6 +76,20 @@ buildScript names =
     ++ "MODULES=\""
     ++ spaceJoin names
     ++ "\"\n"
+    ++ "hash_of() {\n"
+    ++ "  acc=\"\"\n"
+    ++ "  for f in \"$@\"; do\n"
+    ++ "    if [ -f \"$f\" ]; then acc=\"$acc$(sha256sum < \"$f\")\"; else acc=\"${acc}-\"; fi\n"
+    ++ "  done\n"
+    ++ "  printf '%s' \"$acc\" | sha256sum | awk '{print $1}'\n"
+    ++ "}\n"
+    ++ "stamp_want() {\n"
+    ++ "  base=$1\n"
+    ++ "  shift\n"
+    ++ "  deps=\"\"\n"
+    ++ "  for d in \"$@\"; do deps=\"$deps $d.cmi $d.cmx\"; done\n"
+    ++ "  hash_of \"$base.ml\" \"$base.mli\" $deps\n"
+    ++ "}\n"
     ++ "clean=1\n"
     ++ "for m in $MODULES; do\n"
     ++ "  if [ -f \"$m.cmx\" ]; then clean=0; fi\n"
@@ -74,34 +101,37 @@ buildScript names =
     ++ "    SOURCES=\"$SOURCES $m.ml\"\n"
     ++ "  done\n"
     ++ "  ocamlopt $FLAGS -I +unix -o \"$OUT\" unix.cmxa $SOURCES\n"
+    ++ stampWrites names []
     ++ "  echo \"built $OUT\"\n"
     ++ "  exit 0\n"
     ++ "fi\n"
     ++ "compile_mod() {\n"
     ++ "  base=$1\n"
     ++ "  shift\n"
-    ++ "  stale=0\n"
-    ++ "  [ -f \"$base.cmx\" ] || stale=1\n"
-    ++ "  if [ \"$stale\" -eq 0 ] && [ \"$base.ml\" -nt \"$base.cmx\" ]; then stale=1; fi\n"
-    ++ "  if [ -f \"$base.mli\" ]; then\n"
-    ++ "    [ -f \"$base.cmi\" ] || stale=1\n"
-    ++ "    if [ \"$stale\" -eq 0 ] && [ \"$base.mli\" -nt \"$base.cmi\" ]; then stale=1; fi\n"
-    ++ "  fi\n"
-    ++ "  for dep in \"$@\"; do\n"
-    ++ "    if [ \"$stale\" -eq 0 ] && [ -f \"$dep.cmi\" ] && [ \"$dep.cmi\" -nt \"$base.cmx\" ]; then stale=1; fi\n"
-    ++ "    if [ \"$stale\" -eq 1 ]; then break; fi\n"
-    ++ "  done\n"
-    ++ "  if [ \"$stale\" -eq 1 ]; then\n"
-    ++ "    echo \"compile $base\"\n"
-    ++ "    if [ -f \"$base.mli\" ]; then ocamlopt $FLAGS -I +unix -c \"$base.mli\"; fi\n"
-    ++ "    ocamlopt $FLAGS -I +unix -c \"$base.ml\"\n"
-    ++ "  fi\n"
+    ++ "  want=$(stamp_want \"$base\" \"$@\")\n"
+    ++ "  if [ -f \"$base.cmx\" ] && [ -f \"$base.stamp\" ] && [ \"$(cat \"$base.stamp\")\" = \"$want\" ]; then return 0; fi\n"
+    ++ "  echo \"compile $base\"\n"
+    ++ "  if [ -f \"$base.mli\" ]; then ocamlopt $FLAGS -I +unix -c \"$base.mli\"; fi\n"
+    ++ "  ocamlopt $FLAGS -I +unix -c \"$base.ml\"\n"
+    ++ "  printf '%s' \"$want\" > \"$base.stamp\"\n"
     ++ "}\n"
     ++ compileCalls names []
     ++ "ocamlopt $FLAGS -I +unix -o \"$OUT\" unix.cmxa "
     ++ joinCmxs names
     ++ "\n"
     ++ "echo \"built $OUT\"\n"
+
+-- 干净构建成功后写每个模块的 stamp（与增量路径的 stamp 公式一致）。
+stampWrites : List String -> List String -> String
+stampWrites [] prev = ""
+stampWrites (name :: rest) prev =
+  "  stamp_want "
+    ++ name
+    ++ depsSuffix prev
+    ++ " > \""
+    ++ name
+    ++ ".stamp\"\n"
+    ++ stampWrites rest (name :: prev)
 
 spaceJoin : List String -> String
 spaceJoin [] = ""

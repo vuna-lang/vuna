@@ -3,8 +3,6 @@
 # 依赖模块走同包 lib/ 模块根——不再需要 `--root dt_root`。
 [package]
 name = "fix-dt-ad-hoc"
-version = "0.1.0"
-edition = "2026"
 
 [dependencies]
 vuna-base = "../../../base"
