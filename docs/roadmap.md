@@ -95,11 +95,12 @@ M33（语言能写高性能系统程序）已收尾，历史在 git；剩下两�
 增量进入秒级以下；LSP 编辑反馈明显下降；性能 CI 门槛可用（[debt.md](reference/debt.md) C33）。
 **映射 debt**：C30、C31、C32、C33、E01、E04、E06。
 
-**进度（M34 第一波）**：`bench/compiler.sh` 编译器基准 + 软门槛已落地（C33 部分、C34 关闭）；
-`check .` 10.8s→7.2s（termination worklist 不动点、`groupDefs`/`extraDefsOf` 表化、
-`vuna map` 索引 O(n²)→O(n)；C30（build meta 含 manifest 摘要）已修；M34.5 的 check/build 级 elab 缓存
-（`/vuna-cache`，冷 / 热：check . 6.8s→25ms、build --no-compile 2.9s→18ms））。剩余：
-LSP / 单文件级缓存（接口摘要）、workspace 并行 check、`Sort`/`append` 剩余热点。
+**进度（M34）**：M34.1 基准/软门槛（C34 关闭、C33 部分）；M34.2 热点（termination worklist、
+`groupDefs`/`extraDefsOf`/`Namespaces` 表化、`vuna map` 索引 O(n²)→O(n)、C30）；M34.3 部分
+（`termHasAnyMeta` 快速路径；`Ec`/`Sols` 已是 O(1) cons 与增量 delta）；M34.5 的 check/build 级
+elab 缓存（`$TMPDIR/vuna-cache`，冷/热：check . 6.5s→25ms、build --no-compile 2.8s→21ms）；M34.6 读数
+随基准。剩余：M34.3 的 hash-consing；M34.4 workspace 并行 check / 模块级并行 codegen /
+LSP 增量；M34.5 的接口摘要 + 规范序列化（C32）。
 
 ### M35：并发 / 服务端
 
