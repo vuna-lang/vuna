@@ -1,0 +1,16 @@
+data Capability : Type where
+  CapConsole : Capability
+  CapFs : Capability
+  CapProcess : Capability
+  CapEnv : Capability
+  CapClock : Capability
+
+capabilityName : Capability -> String
+capabilityName CapConsole = "console"
+capabilityName CapFs = "fs"
+capabilityName CapProcess = "process"
+capabilityName CapEnv = "env"
+capabilityName CapClock = "clock"
+
+main : Int
+main = 0

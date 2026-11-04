@@ -548,12 +548,11 @@ resolveEntry modules entryPkg entryCaps imports decls =
     (\_ => andThen (resolveProgram modules "<entry>" "" (namespacesOf decls) imports decls) (\d => checkEffectsBuiltins "<entry>" entryPkg entryCaps d))
 
 resolveModules : List Module -> Result (List Decl)
-resolveModules modules = case modules of
-  [] => Ok []
-  (Module name mpkg imports imps decls exports mcaps) :: rest =>
-    andThen
-      (andThen (resolveProgram modules name name (namespacesOf decls) (append imports imps) decls) (\d => checkEffectsBuiltins name mpkg mcaps d))
-      (\d1 => andThen (resolveModules rest) (\d2 => Ok (append d1 d2)))
+resolveModules [] = Ok []
+resolveModules (modules@((Module name mpkg imports imps decls exports mcaps) :: rest)) =
+  andThen
+    (andThen (resolveProgram modules name name (namespacesOf decls) (append imports imps) decls) (\d => checkEffectsBuiltins name mpkg mcaps d))
+    (\d1 => andThen (resolveModules rest) (\d2 => Ok (append d1 d2)))
 
 -- ---------------------------------------------------------------
 -- 效应能力（M27）：包在 vuna.toml 的 [capabilities].effects 里显式声明能力；

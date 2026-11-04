@@ -1,18 +1,11 @@
 #!/bin/sh
 # checks.vuna-lint：当前源码（compiler + CLI + base + app）必须零 lint finding。
-#
-# 已知豁免（case-to-clauses 拆分与 STR 的冲突，见 docs/reference/lint.md §5）：
-#   Doc.renderTy / Index.Scan.renderTy / Fmt.Expr 的若干互递归或自递归函数：
-#   拆成多 clause 后 STR 失去下降环（递归/互递归函数保持 case 形态）；
-#   Loader.Resolve.resolveModules 同理。
+# AST 驱动规则（literal-if-chain / lift-destructure / case-to-clauses）只报可安全自动修复的形态；
+# 签名含隐式 Pi 的函数跳过 clause 级改写；case-to-clauses 对 body 引用 scrutinee 的分支用
+# as-pattern（`x@pat`）保持绑定。
 set -eu
 
 OUT=${1:?usage: vuna-lint.sh OUT}
 : "${VUNA:?VUNA 未设置}"
 
-"$VUNA" lint $(find compiler/lib base/lib lib app -name '*.vuna' -print) 2>&1 | \
-  grep -v -e 'lib/Vuna/Doc.vuna:.*LN_CaseToClauses' \
-          -e 'lib/Vuna/Index/Scan.vuna:.*LN_CaseToClauses' \
-          -e 'lib/Vuna/Fmt/Expr.vuna:.*LN_CaseToClauses' \
-          -e 'compiler/lib/Vuna/Compiler/Loader/Resolve.vuna:.*LN_CaseToClauses' \
-          >/dev/null || true
+"$VUNA" lint $(find compiler/lib base/lib lib app -name '*.vuna' -print)

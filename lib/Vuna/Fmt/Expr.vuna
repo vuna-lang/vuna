@@ -158,12 +158,11 @@ opText : String -> String
 opText op = if op == "Cons" then "::" else op
 
 listExprElems : Expr -> Maybe (List Expr)
-listExprElems e = case e of
-  EVar "Nil" sp => Just []
-  EApp (EVar "Cons" csp) ([a, rest]) sp => case listExprElems rest of
-    Just elems => Just (a :: elems)
-    Nothing => Nothing
-  _ => Nothing
+listExprElems (EVar "Nil" sp) = Just []
+listExprElems (EApp (EVar "Cons" csp) ([a, rest]) sp) = case listExprElems rest of
+  Just elems => Just (a :: elems)
+  Nothing => Nothing
+listExprElems _ = Nothing
 
 inlineExprGo : Int -> Expr -> Maybe String
 inlineExprGo fuel e = if fuel <= 0 then Nothing else inlinePrecGo (fuel - 1) 0 e
@@ -299,17 +298,16 @@ else case inlinePrecGo (fuel - 1) 0 e of
   Just s => if atomForm e then Just s else Just ("(" ++ s ++ ")")
 
 atomForm : Expr -> Bool
-atomForm e = case e of
-  EVar name sp => True
-  EInt n sp => True
-  EStr s sp => True
-  EField base f sp => True
-  ERecord name fields sp => True
-  ERecUpdate base fields sp => True
-  EApp fn args sp => case listExprElems (EApp fn args sp) of
-    Just elems => True
-    Nothing => False
-  _ => False
+atomForm (EVar name sp) = True
+atomForm (EInt n sp) = True
+atomForm (EStr s sp) = True
+atomForm (EField base f sp) = True
+atomForm (ERecord name fields sp) = True
+atomForm (ERecUpdate base fields sp) = True
+atomForm (EApp fn args sp) = case listExprElems (EApp fn args sp) of
+  Just elems => True
+  Nothing => False
+atomForm _ = False
 
 -- ---------------------------------------------------------------
 -- 块级表达式（含 case/let/do 或含块结构的子表达式）；
@@ -583,25 +581,23 @@ infixChainOperands p assoc op a b =
   if assoc == 1 then a :: flattenInfixRight p op b else append (flattenInfixLeft p op a) [b]
 
 flattenInfixLeft : Int -> String -> Expr -> List Expr
-flattenInfixLeft p op e = case e of
-  EApp (EVar name sp) ([l, r]) sp2 =>
-    let
-      op2 = if name == "bind" then ">>=" else name
-    in case infixPrec op2 of
-      Just (Pair p2 assoc2) =>
-        if p2 == p && op2 == op then append (flattenInfixLeft p op l) [r] else [e]
-      Nothing => [e]
-  _ => [e]
+flattenInfixLeft p op (e@(EApp (EVar name sp) ([l, r]) sp2)) =
+  let
+    op2 = if name == "bind" then ">>=" else name
+  in case infixPrec op2 of
+    Just (Pair p2 assoc2) =>
+      if p2 == p && op2 == op then append (flattenInfixLeft p op l) [r] else [e]
+    Nothing => [e]
+flattenInfixLeft p op e = [e]
 
 flattenInfixRight : Int -> String -> Expr -> List Expr
-flattenInfixRight p op e = case e of
-  EApp (EVar name sp) ([l, r]) sp2 =>
-    let
-      op2 = if name == "bind" then ">>=" else name
-    in case infixPrec op2 of
-      Just (Pair p2 assoc2) => if p2 == p && op2 == op then l :: flattenInfixRight p op r else [e]
-      Nothing => [e]
-  _ => [e]
+flattenInfixRight p op (e@(EApp (EVar name sp) ([l, r]) sp2)) =
+  let
+    op2 = if name == "bind" then ">>=" else name
+  in case infixPrec op2 of
+    Just (Pair p2 assoc2) => if p2 == p && op2 == op then l :: flattenInfixRight p op r else [e]
+    Nothing => [e]
+flattenInfixRight p op e = [e]
 
 renderInfixChainGo : Int -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Int -> Int -> String -> List Expr -> List String
 renderInfixChainGo fuel at lineInd p assoc op operands = if fuel <= 0 then []

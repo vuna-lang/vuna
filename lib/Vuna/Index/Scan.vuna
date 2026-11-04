@@ -146,17 +146,16 @@ packageDirs repo = case findManifestDir repo of
 -- 签名渲染（语法级）
 -- ---------------------------------------------------------------
 renderTy : Expr -> String
-renderTy ty = case ty of
-  EVar name sp => name
-  EApp (EVar arrow _) ([a, b]) _ =>
-    if arrow == "->" then renderTyArg a ++ " -> " ++ renderTy b else renderTyPlain ty
-  EPi name implicit dom cod sp =>
-    let
-      binder =
-        if implicit then "{" ++ name ++ " : " ++ renderTy dom ++ "}"
-        else "(" ++ name ++ " : " ++ renderTy dom ++ ")"
-    in binder ++ " -> " ++ renderTy cod
-  _ => renderTyPlain ty
+renderTy (EVar name sp) = name
+renderTy (ty@(EApp (EVar arrow _) ([a, b]) _)) =
+  if arrow == "->" then renderTyArg a ++ " -> " ++ renderTy b else renderTyPlain ty
+renderTy (EPi name implicit dom cod sp) =
+  let
+    binder =
+      if implicit then "{" ++ name ++ " : " ++ renderTy dom ++ "}"
+      else "(" ++ name ++ " : " ++ renderTy dom ++ ")"
+  in binder ++ " -> " ++ renderTy cod
+renderTy ty = renderTyPlain ty
 
 renderTyPlain : Expr -> String
 renderTyPlain (EApp f args sp) = renderTyAtom f ++ " " ++ join " " (map renderTyArg args)

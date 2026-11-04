@@ -155,11 +155,19 @@ genTypeDeclsOf allDatas subset = <多行 body 重排>
 - 规则不做类型 / 语义推理，只做语法可证的改写；`case-to-clauses` 要求 `case` 直接是函数
   体，多 clause 函数与 `where` / `let` 内的 case 不拆。
 
-## 6. 相关文件
+## 6. as-pattern 生成
 
-- `lib/Vuna/Lint/Rules.vuna`：规则、AST 遍历、源码切片、Edit / Finding 数据类型；
-- `lib/Vuna/Lint/Fix.vuna`：Edit 排序与多轮 `--fix`；
-- `lib/Vuna/Lint/Diagnostics.vuna`：`LintRule` 枚举（code / rule / 消息 / 可修复性 / 文档项）；
-- `lib/Vuna/Lint.vuna`：CLI 参数、打印、退出码；
-- `lib/Vuna/Lsp/Diagnostics.vuna`：LSP 诊断合并；
-- `nix/checks/vuna-lint.sh`：全仓零 finding 门禁与 STR 冲突豁免。
+`case-to-clauses` 拆分「分支体引用 scrutinee」的函数时，用 as-pattern（`x@pat`）保持绑定：
+
+```console
+advance (PState file toks last count) = case toks of
+  t :: rest => ...
+  [] => ...
+# =>
+advance (PState file toks@(t :: rest) last count) = ...
+advance (PState file toks@[]) last count = ...
+```
+
+STR 把 as 绑定视作整个值（`patNames` / `pathInPat` / `patSizeStrict` 已支持），
+递归/互递归函数拆分后仍能通过终止性检查。`case` 分支左端的 as-pattern 暂未接入
+（只支持函数子句参数与嵌套模式位置）。

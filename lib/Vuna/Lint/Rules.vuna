@@ -200,8 +200,8 @@ prefixChars (p :: prest) text = case text of
 
 containsSubChars : List Int -> List Int -> Bool
 containsSubChars pat [] = False
-containsSubChars pat (c :: rest) =
-  if prefixChars pat (c :: rest) then True else containsSubChars pat rest
+containsSubChars pat (text@(c :: rest)) =
+  if prefixChars pat text then True else containsSubChars pat rest
 
 containsChar : Int -> List Int -> Bool
 containsChar c [] = False
@@ -247,8 +247,19 @@ blockBodyLines lines body target =
   let
     start = exprStartLine body
     stop = spanEndLine (exprSpan body)
-    k = indentOf (lineAt lines start) - target
-  in dedentRange lines start stop (if k < 0 then 0 else k)
+    startCol = spanStartCol (exprSpan body)
+    firstIndent = indentOf (lineAt lines start)
+    inline = if startCol > firstIndent + 1 then True else False
+    raw =
+      if inline then append [tailFromCol (lineAt lines start) startCol] (rangeLines lines (start + 1) stop)
+      else rangeLines lines start stop
+  in case raw of
+    [] => []
+    first :: rest =>
+      let
+        firstText = if inline then first else dropIndent firstIndent first
+      in append [spaces target ++ firstText]
+        (map (\line => spaces target ++ dropIndent firstIndent line) rest)
 
 -- ---------------------------------------------------------------
 -- token 工具
@@ -758,7 +769,8 @@ laneReplace lines toks lane name replacement startLine startCol =
 liftBodyPlacementOk : List String -> List PTok -> Pat -> Expr -> Bool
 liftBodyPlacementOk lines toks altPat body =
   if exprSingleLine body then segmentOk lines toks body
-  else exprStartLine body > spanStartLine (patSpan altPat)
+  else if exprStartLine body > spanStartLine (patSpan altPat) then True
+  else spanStartCol (exprSpan body) > indentOf (lineAt lines (exprStartLine body)) + 1
 
 liftFixable : List String -> List PTok -> Lane -> Pat -> Expr -> Span -> Bool
 liftFixable lines toks lane pat body sp =
@@ -773,7 +785,9 @@ liftEdit lines toks lane pat body name sp =
   let
     headLine = laneHeadLine lane
     ownLine = startsOwnLine lines (spanStartLine sp) (spanStartCol sp)
-    patTextValue = "(" ++ patText lines toks pat ++ ")"
+    patTextValue =
+      if exprMentions name body then asPatText lines toks name pat
+      else "(" ++ patText lines toks pat ++ ")"
     newHead = laneReplace lines toks lane name patTextValue (spanStartLine sp) (spanStartCol sp)
     target = if ownLine then spanStartCol sp - 1 else indentOf (lineAt lines headLine) + 2
     newLines =
@@ -785,9 +799,18 @@ liftEdit lines toks lane pat body name sp =
 
 liftCaseOk : List String -> List PTok -> Lane -> Pat -> Expr -> String -> Span -> List Finding
 liftCaseOk lines toks lane pat body name sp =
-  if countLaneVar name lane == 1 && notBool (exprMentions name body) && notBool (intersectsNames (patVarFuel lintFuel pat) (removeName name (laneVars lane))) && liftablePat pat && liftFixable lines toks lane pat body sp then [ Finding (spanStartLine sp) (spanStartCol sp) (lintCode LiftDestructure) (lintRule LiftDestructure) (lintMsg LiftDestructure name) (Just (liftEdit lines toks lane pat body name sp))
+  if countLaneVar name lane == 1 && (if exprMentions name body then laneIsClause lane else True) && notBool (intersectsNames (patVarFuel lintFuel pat) (removeName name (laneVars lane))) && liftablePat pat && liftFixable lines toks lane pat body sp then [ Finding (spanStartLine sp) (spanStartCol sp) (lintCode LiftDestructure) (lintRule LiftDestructure) (lintMsg LiftDestructure name) (Just (liftEdit lines toks lane pat body name sp))
   ]
   else []
+
+laneIsClause : Lane -> Bool
+laneIsClause (LClause line pats last) = True
+laneIsClause (LAlt line pat last) = False
+
+asPatText : List String -> List PTok -> String -> Pat -> String
+asPatText lines toks name pat =
+  if patNeedsParen pat then name ++ "@" ++ "(" ++ patText lines toks pat ++ ")"
+  else name ++ "@" ++ patText lines toks pat
 
 liftCase : List String -> List PTok -> Lane -> Expr -> Expr -> List (Pair Pat Expr) -> Span -> List Finding
 liftCase lines toks lane caseExpr scrut ([Pair pat body]) sp = case scrut of
@@ -797,7 +820,7 @@ liftCase lines toks lane caseExpr scrut _ sp = []
 
 liftLet : List String -> List PTok -> Lane -> Span -> Pat -> Expr -> Expr -> List Finding
 liftLet lines toks lane sp pat (EVar name nsp) body =
-  if liftablePat pat && countLaneVar name lane == 1 && notBool (exprMentions name body) && notBool (intersectsNames (patVarFuel lintFuel pat) (removeName name (laneVars lane))) && liftLetFixable lines toks lane pat body sp then [ Finding (spanStartLine sp) (spanStartCol sp) (lintCode LiftDestructure) (lintRule LiftDestructure) (lintMsg LiftDestructure name) (Just (liftLetEdit lines toks lane pat body name sp))
+  if liftablePat pat && countLaneVar name lane == 1 && (if exprMentions name body then laneIsClause lane else True) && notBool (intersectsNames (patVarFuel lintFuel pat) (removeName name (laneVars lane))) && liftLetFixable lines toks lane pat body sp then [ Finding (spanStartLine sp) (spanStartCol sp) (lintCode LiftDestructure) (lintRule LiftDestructure) (lintMsg LiftDestructure name) (Just (liftLetEdit lines toks lane pat body name sp))
   ]
   else []
 liftLet lines toks lane sp pat _ body = []
@@ -818,7 +841,9 @@ liftLetEdit : List String -> List PTok -> Lane -> Pat -> Expr -> String -> Span 
 liftLetEdit lines toks lane pat body name sp =
   let
     headLine = laneHeadLine lane
-    patTextValue = "(" ++ patText lines toks pat ++ ")"
+    patTextValue =
+      if exprMentions name body then asPatText lines toks name pat
+      else "(" ++ patText lines toks pat ++ ")"
     newHead = laneReplace lines toks lane name patTextValue (spanStartLine sp) (spanStartCol sp)
     target = indentOf (lineAt lines headLine) + 2
     -- let 解构没有既有语料约束，单行 body 直接按 fmt 规范形态与 clause/alt 头同行。
@@ -839,32 +864,9 @@ liftFindings lines toks lane _ = []
 -- ---------------------------------------------------------------
 -- 规则 3：case-to-clauses
 -- ---------------------------------------------------------------
-lastPatOf : List (Pair Pat Expr) -> Maybe Pat
-lastPatOf [] = Nothing
-lastPatOf ((Pair pat body) :: rest) = case rest of
-  [] => Just pat
-  _ => lastPatOf rest
-
-wildcardLast : List (Pair Pat Expr) -> Bool
-wildcardLast alts = case lastPatOf alts of
-  Nothing => False
-  Just pat => case pat of
-    PWild sp => True
-    PVar n sp => True
-    _ => False
-
-lengthTwo : List a -> Bool
-lengthTwo ([a, b]) = True
-lengthTwo _ = False
-
-nilConsShape : List (Pair Pat Expr) -> Bool
-nilConsShape ([Pair (PCon "Nil" nilArgs nilSp) firstBody, Pair (PCon "Cons" consArgs consSp) secondBody]) =
-  isNilList nilArgs && lengthTwo consArgs
-nilConsShape _ = False
-
-provablyExhaustive : List (Pair Pat Expr) -> Bool
-provablyExhaustive alts = wildcardLast alts || nilConsShape alts
-
+-- 判据不再语法层证明穷尽性：lint 的输入应视为能通过 `vuna check` 的程序，
+-- 而 DT 已强制 `case` 穷尽；`case` 与多 clause 的匹配语义等价（分支/clause 顺序一致）。
+-- 纯映射表（分支体不引用 scrutinee）同样拆成多 clause。
 isWildPat : Pat -> Bool
 isWildPat (PWild sp) = True
 isWildPat _ = False
@@ -872,7 +874,7 @@ isWildPat _ = False
 caseAltLiftableOk : String -> List String -> Pair Pat Expr -> Bool
 caseAltLiftableOk x others (Pair pat body) =
   notBool (intersectsNames (patVarFuel lintFuel pat) others)
-    && (if exprMentions x body then isWildPat pat else True)
+    && (if exprMentions x body then isWildPat pat || liftablePat pat else True)
 
 altsLiftableGo : String -> List String -> List (Pair Pat Expr) -> Bool
 altsLiftableGo x others [] = True
@@ -882,17 +884,11 @@ altsLiftableGo x others (alt :: rest) =
 altsLiftable : String -> List Pat -> List (Pair Pat Expr) -> Bool
 altsLiftable x pats alts = altsLiftableGo x (removeName x (patVars pats)) alts
 
--- 至少一个分支体真的用到 scrutinee 变量：全不引用时 lift 后参数只剩模式匹配，
--- 不是本规则的目标形态（也避免把 literal-if-chain 生成的 case 再拆成 clause）。
-altsUseVar : String -> List (Pair Pat Expr) -> Bool
-altsUseVar x [] = False
-altsUseVar x ((Pair pat body) :: rest) = exprMentions x body || altsUseVar x rest
-
 caseAltClauseLines : List String -> List PTok -> String -> PTok -> String -> Int -> Pat -> Expr -> List String
 caseAltClauseLines lines toks headPrefix varTok x headIndent pat body =
   let
     replacement =
-      if exprMentions x body then x
+      if exprMentions x body then if isWildPat pat then x else asPatText lines toks x pat
       else if patNeedsParen pat then "(" ++ patText lines toks pat ++ ")" else patText lines toks pat
     newHead = replaceIdentInLine headPrefix varTok replacement
   in if exprSingleLine body then [newHead ++ " " ++ exprText lines toks body]
@@ -934,7 +930,7 @@ caseToClausesEdit lines toks x pats headLine sp alts =
 caseToClauses : List String -> List PTok -> Int -> String -> List Pat -> Expr -> Bool -> List Finding
 caseToClauses lines toks headLine name pats (ECase scrut alts sp) singleClause = case scrut of
   EVar x xsp =>
-    if singleClause && countVar x pats == 1 && atLeastTwo alts && provablyExhaustive alts && altsUseVar x alts && altsLiftable x pats alts && caseToClausesFixable lines toks pats headLine sp alts then [ Finding (spanStartLine sp) (spanStartCol sp) (lintCode CaseToClauses) (lintRule CaseToClauses) (lintMsg CaseToClauses x) (Just (caseToClausesEdit lines toks x pats headLine sp alts))
+    if singleClause && countVar x pats == 1 && atLeastTwo alts && altsLiftable x pats alts && caseToClausesFixable lines toks pats headLine sp alts then [ Finding (spanStartLine sp) (spanStartCol sp) (lintCode CaseToClauses) (lintRule CaseToClauses) (lintMsg CaseToClauses x) (Just (caseToClausesEdit lines toks x pats headLine sp alts))
     ]
     else []
   _ => []

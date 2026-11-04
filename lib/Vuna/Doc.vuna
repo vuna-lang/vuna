@@ -169,10 +169,9 @@ renderTyPlain (EStr s sp) = "\"" ++ s ++ "\""
 renderTyPlain _ = "_"
 
 renderTyArg : Expr -> String
-renderTyArg ty = case ty of
-  EVar name sp => name
-  EApp (EVar "->" _) ([a, b]) _ => "(" ++ renderTy ty ++ ")"
-  _ => "(" ++ renderTy ty ++ ")"
+renderTyArg (EVar name sp) = name
+renderTyArg (ty@(EApp (EVar "->" _) ([a, b]) _)) = "(" ++ renderTy ty ++ ")"
+renderTyArg ty = "(" ++ renderTy ty ++ ")"
 
 renderTyAtom : Expr -> String
 renderTyAtom (EVar name sp) = name

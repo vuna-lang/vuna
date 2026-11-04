@@ -188,10 +188,9 @@
 - `vuna fmt --check` 省略 PATH 时按 workspace 包约定扫描各包 `lib/app/test`；非包目录 /
   不存在路径都是可读错误 exit 2，`map` 同类场景也给出明确错误而非静默空输出。`vuna doc`
   尊重 `[export].modules`。
-- **as-pattern 与 lint 的冲突**：`case-to-clauses` 把递归 / 互递归函数拆成多 clause 后，
-  SCT 可能失去下降环；这些函数保持 `case` 形态，`nix/checks/vuna-lint.sh` 按 finding
-  过滤（见 [lint.md](lint.md) §5 与脚本注释）。
-
+- **as-pattern 与 lint**：`case-to-clauses` 拆分「分支体引用 scrutinee」的函数时自动生成
+  `x@pat` 保持绑定；STR 把 as 绑定视作整个值，递归/互递归函数也能通过终止性检查。
+  `case` 分支左端的 as-pattern 暂未接入（只支持函数子句参数与嵌套模式）。
 ## 命名与构建
 
 - 标准库包名 `vuna-base`、模块根 `Base.*`，编译器模块 `Vuna.Compiler.*`（门面
