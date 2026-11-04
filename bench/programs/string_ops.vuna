@@ -1,0 +1,10 @@
+-- M33 W4：字符串基准：一次 `strConcatMany` 批拼 + 库 repeat / substring（后者走新原语）。
+-- 手写 OCaml 对照见 string_ops.ml（同算法：String.concat / String.sub）。
+import Base.String
+import Base.List
+
+main : Int
+main =
+  let
+    s = strConcatMany (map (\_ => "0123456789") (range 0 3000))
+  in strLength s + strLength (repeat 2000 "xy") + strLength (substring 100 20000 s)

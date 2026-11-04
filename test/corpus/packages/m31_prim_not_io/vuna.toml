@@ -1,0 +1,8 @@
+[package]
+name = "m31-prim-not-io"
+
+[dependencies]
+vuna-base = "../../../../base"
+
+[capabilities]
+effects = ["env"]

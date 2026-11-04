@@ -1,0 +1,8 @@
+[package]
+name = "m31-runio-no-cap"
+
+[dependencies]
+vuna-base = "../../../../base"
+
+[capabilities]
+effects = ["console"]

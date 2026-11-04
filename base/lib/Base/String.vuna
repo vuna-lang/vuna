@@ -32,6 +32,15 @@ module Base.String
 --   空 sep 走单独分支（不消耗 fuel），不受影响；分离器长度不进入逐字符循环的计数。
 import Base.List
 import Base.Bool
+-- M31.1：`String` 是 primitive 类型，Eq / Ord 实例跟类型模块走（落点规则见 Base/Eq.vuna）。
+import Base.Eq
+import Base.Ord
+-- `+` / `-` / `*` / `/` 的 fixity 声明在 Base.Int；base 模块不自动注入 Prelude，
+-- 本模块的算术运算符需要它的声明进入 import 闭包。
+import Base.Int
+
+-- `++` 的 fixity 声明（字符串拼接是内建值）。
+infixr 5 ++
 
 split : String -> String -> List String
 split sep text =
@@ -53,16 +62,21 @@ skipSep sep (chars@(c :: rest)) fuel n acc parts =
   else skipSep sep rest (fuel - 1) (n - 1) acc parts
 
 join : String -> List String -> String
-join sep [] = ""
-join sep ([x]) = x
-join sep (x :: rest) = x ++ sep ++ join sep rest
+join sep xs = strConcatMany (_interleave sep xs)
+
+-- M33 W2：`join` 原来用 `x ++ sep ++ join sep rest` 逐段拼接，总拷贝 O(n²)；
+-- 改成一次 `strConcatMany`（runtime `String.concat ""`，单遍分配）。
+_interleave : String -> List String -> List String
+_interleave sep [] = []
+_interleave sep ([x]) = [x]
+_interleave sep (x :: rest) = x :: sep :: _interleave sep rest
 
 lines : String -> List String
 lines s = split "\n" s
 
 unlines : List String -> String
 unlines [] = ""
-unlines (x :: rest) = x ++ "\n" ++ unlines rest
+unlines xs = strConcatMany (map (\x => x ++ "\n") xs)
 
 trimLeft : String -> String
 trimLeft s = strPack (_dropSpace (strUnpack s))
@@ -87,11 +101,14 @@ endsWith suffix text =
     lt = strLength text
   in if ls > lt then False else _startsWithChars (strUnpack suffix) (drop (lt - ls) (strUnpack text))
 
+-- M33 W4：`repeat` 改成一次 `strConcatMany`（原来 `s ++ repeat (n-1) s` 是 O(n²) 拷贝）。
 repeat : Int -> String -> String
-repeat n s = if n <= 0 then "" else s ++ repeat (n - 1) s
+repeat n s = strConcatMany (map (\_ => s) (range 0 n))
 
+-- M33 W4：`substring` 直接用 `strSubstring` 原语（runtime `String.sub` + clamp），
+-- 不再走 `strUnpack`/`take`/`drop`/`strPack` 的 List 桥接。
 substring : Int -> Int -> String -> String
-substring start len s = strPack (take len (drop start (strUnpack s)))
+substring start len s = strSubstring start len s
 
 _isSpace : Int -> Bool
 _isSpace c = c == 32 || c == 9 || c == 10 || c == 13
@@ -111,3 +128,15 @@ _containsChars needle text = if _startsWithChars needle text then True
 else case text of
   [] => False
   c :: rest => _containsChars needle rest
+
+-- M31.1：primitive 没有构造子，实例实现走编译器内建特化（`bi_eq_str` / 泛型比较运行时），
+-- 不会自递归。
+instance Eq String where
+  eq x y = x == y
+  neq x y = x /= y
+
+instance Ord String where
+  lt x y = x < y
+  le x y = x <= y
+  gt x y = x > y
+  ge x y = x >= y

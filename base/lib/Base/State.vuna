@@ -1,0 +1,54 @@
+module Base.State
+  ( State
+  , bindState
+  , evalState
+  , execState
+  , get
+  , mapState
+  , modify
+  , pureState
+  , put
+  , runState
+  ) where
+
+-- Base.State：库级 State 效应（M33 W6）。表示是 `s -> Pair a s` 的纯函数，
+-- 不引入语言级效应：`bindState` / `mapState` / `pureState` 手写组合子（trait 只支持
+-- 单参数、类型级部分应用还不支持，所以暂不声明 Functor/Monad 实例；`do` 留到 F4）。
+--
+-- `get` / `put` / `modify` 是常见操作；`evalState` 取结果、`execState` 取状态。
+import Base.Pair
+import Base.Int
+
+data State s a : Type where
+  MkState : (s -> Pair a s) -> State s a
+
+runState : State s a -> s -> Pair a s
+runState (MkState f) s = f s
+
+evalState : State s a -> s -> a
+evalState st s = firstOf (runState st s)
+
+execState : State s a -> s -> s
+execState st s = secondOf (runState st s)
+
+pureState : a -> State s a
+pureState a = MkState (\s => Pair a s)
+
+mapState : (a -> b) -> State s a -> State s b
+mapState f st = MkState (\s => case runState st s of
+  Pair a s2 => Pair (f a) s2
+)
+
+bindState : State s a -> (a -> State s b) -> State s b
+bindState st k = MkState (\s => case runState st s of
+  Pair a s2 => runState (k a) s2
+)
+
+get : State s s
+get = MkState (\s => Pair s s)
+
+put : s -> State s Int
+put s = MkState (\_ => Pair 0 s)
+
+modify : (s -> s) -> State s Int
+modify f = MkState (\s => Pair 0 (f s))

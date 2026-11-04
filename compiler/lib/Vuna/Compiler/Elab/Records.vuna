@@ -157,10 +157,11 @@ desugarRecordDecl records d = case d of
   DTrait name params methods sp => Ok d
   DInstance ctxE head methods sp =>
     andThen (traverse (desugarRecordDecl records) methods) (\ms => Ok (DInstance ctxE head ms sp))
-  DSig name ty sp => Ok d
+  DSig name ctx ty sp => Ok d
   -- M28：axiom 的类型表达式里可能有 record 语法吗？类型位置不走 record 降级
   -- （record 是值层记法），原样返回。
   DAxiom name ty sp => Ok d
+  DExtern name cName ty sp => Ok d
 
 desugarPattern : List RecordInfo -> Pat -> Result Pat
 desugarPattern records pat = desugarPatternFuel 64 records pat
@@ -219,7 +220,7 @@ else case e of
       (\c2 => Ok (ELocalFun c2 sp))
   ECase scrut alts sp =>
     andThen (desugarExprFuel (fuel - 1) records scrut)
-      (\s2 => andThen (traverse (desugarAltFuel (fuel - 1) records) alts) (\a2 => Ok (ECase s2 a2 sp)))
+      (\s2 => andThen (traverse (desugarAltFuel (fuel - 1) records) alts) (\a2 => Ok (ECase s2 (map (expandCaseAs s2) a2) sp)))
   EIf c t el sp =>
     andThen (desugarExprFuel (fuel - 1) records c)
       (\c2 => andThen (desugarExprFuel (fuel - 1) records t) (\t2 => andThen (desugarExprFuel (fuel - 1) records el) (\e2 => Ok (EIf c2 t2 e2 sp))))
@@ -248,6 +249,7 @@ else case e of
   EAnn value ty sp =>
     andThen (desugarExprFuel (fuel - 1) records value)
       (\v2 => andThen (desugarExprFuel (fuel - 1) records ty) (\t2 => Ok (EAnn v2 t2 sp)))
+  _ => Err "DT: internal: unreordered infix/paren in elaboration"
 
 desugarDoStmtFuel : Int -> List RecordInfo -> DoStmt -> Result DoStmt
 desugarDoStmtFuel fuel records stmt = if fuel <= 0 then Err "DT: internal: record desugar fuel exhausted"
@@ -396,3 +398,13 @@ desugarDoStmt a1 a2 = desugarDoStmtFuel 512 a1 a2
 
 desugarExpr : List RecordInfo -> Expr -> Result Expr
 desugarExpr a1 a2 = desugarExprFuel 512 a1 a2
+
+-- case 分支左端的 as-pattern（`y@pat => body`）：等价于 `pat => let y = <scrutinee> in body`。
+-- 纯语言里 scrutinee 可重复求值；常见形态（scrutinee 是变量）无额外开销。
+expandCaseAs : Expr -> Pair Pat Expr -> Pair Pat Expr
+expandCaseAs scrut (Pair pat body) = expandCaseAsGo scrut pat body
+
+expandCaseAsGo : Expr -> Pat -> Expr -> Pair Pat Expr
+expandCaseAsGo scrut (PAs n inner psp) body =
+  expandCaseAsGo scrut inner (ELet [Pair (PVar n psp) scrut] body False psp)
+expandCaseAsGo scrut pat body = Pair pat body

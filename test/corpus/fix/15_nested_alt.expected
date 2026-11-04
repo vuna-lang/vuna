@@ -1,0 +1,9 @@
+data Wrap : Type where
+  Wrap : Pair Int Int -> Int -> Wrap
+
+h : Wrap -> Pair Int Int
+h (Wrap p@(Pair a b) n) =
+  p
+
+main : Pair Int Int
+main = h (Wrap (Pair 1 2) 0)

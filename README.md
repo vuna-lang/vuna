@@ -121,10 +121,10 @@ manifest，不向上找。命令语义与包格式
 
 1. **当前 seed 必须能编译当前源码**，rotation 后 stage1 == stage2（fixed point）；
 2. **`seed/` 只含 compiler 包入口闭包**：工具链不进 TCB（`nix/tcb-forbidden.txt`）；
-3. **效应内建按 manifest 显式能力**：包在 `[capabilities] effects` 声明
-   `console`/`fs`/`process`/`env`/`clock` 后才能直接调用 effectful `prim_*`，否则只能经
-   `Base.IO`（`Vuna.Compiler.Intrinsics` + `Loader.Resolve.checkEffectsBuiltins`，
-   没有包名 allowlist）；
+3. **效果原语返回 `IO` 动作**：包在 `[capabilities] effects` 声明
+   `console`/`fs`/`process`/`env`/`clock`/`unsafe` 后才能直接调用 effectful `prim_*`，
+   否则经 `Base.IO`；动作只在 `main` 执行（`Intrinsics` + `checkEffectsBuiltins`，没有包名
+   allowlist）；
 4. **唯一路径**：语言夹具、`vuna interp`、包构建与 seed 全部走 DT；没有第二套
    checker/codegen；
 5. 编译器自检通过（`vuna check .`）；`seed/` 是生成物，禁止手改。
@@ -142,11 +142,12 @@ manifest，不向上找。命令语义与包格式
 | [docs/reference/type-system.md](docs/reference/type-system.md) | 类型系统：宇宙/kind、索引归纳族、依赖匹配、相等证据、擦除、终止性 |
 | [docs/reference/records-traits.md](docs/reference/records-traits.md) | 记录、trait / 实例 / `deriving`、`do` / Monad / IO |
 | [docs/reference/stdlib.md](docs/reference/stdlib.md) | 标准库 `vuna-base` 模块清单与 `Prelude` 自动导入 |
+| [docs/reference/operators.md](docs/reference/operators.md) | 运算符=方法别名、`Eq`/`Ord` 真源、实例落点规则 |
 | [docs/reference/primitives.md](docs/reference/primitives.md) | 内建/原语唯一声明面、Int/String/IO 语义、效应能力（`[capabilities]`） |
 | [docs/reference/packages.md](docs/reference/packages.md) | `vuna.toml` 包格式、workspace / 依赖 DAG、工具链命令一览 |
 | [docs/reference/core.md](docs/reference/core.md) | Core TT / NbE / 合一 / 精化器 / 擦除 / codegen 护栏的实现参考 |
 | [docs/reference/tooling.md](docs/reference/tooling.md) | 工具链：`vuna goal`、LSP、`vuna doc`、错误码体系与代表性错误索引 |
-| [docs/reference/compiler.md](docs/reference/compiler.md) | 编译器模块职责、codegen 表示与输出模型、机器无关指标 |
+| [docs/reference/compiler.md](docs/reference/compiler.md) | 编译器模块职责、codegen 表示与输出模型、夹具指标 |
 | [docs/reference/bootstrap.md](docs/reference/bootstrap.md) | 种子策略、rotation 流程、fixed point、TCB 边界 |
 | [docs/reference/testing.md](docs/reference/testing.md) | 测试体系、corpus 分类、nix checks 清单、性能基准 |
 | [docs/reference/lint.md](docs/reference/lint.md) | lint 规则（AST 驱动、`--fix` 与门禁） |

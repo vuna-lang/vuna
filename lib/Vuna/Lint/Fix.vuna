@@ -5,6 +5,7 @@ module Vuna.Lint.Fix (fixLoop) where
 -- 编辑按起点排序、从后往前应用（避免行号漂移），每次修复后用 parseSource 复验，
 -- 不合法就当作不可修复。门面的 --fix 循环调用本模块的 fixLoop。
 import Vuna.Compiler.Common
+import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Frontend.Parser
 import Vuna.Lint.Rules
 
@@ -57,11 +58,13 @@ applyFixes source findings =
         Err e => Err ("parse failed after fix: " ++ e)
         Ok ignored => Ok (Pair count newSource)
 
-fixLoop : String -> List Finding -> Int -> Int -> Result (Pair Int String)
-fixLoop source findings passes total = if passes <= 0 then Ok (Pair total source)
+-- `programFixities` 与首轮 lint 用的是同一份程序级 fixity（--fix 只做格式/结构改写，
+-- 不改 imports），每轮复验必须继续按它重排，否则会退化成 unknown fixity。
+fixLoop : List FixityDecl -> String -> List Finding -> Int -> Int -> Result (Pair Int String)
+fixLoop programFixities source findings passes total = if passes <= 0 then Ok (Pair total source)
 else case applyFixes source findings of
   Err e => Err e
   Ok (Pair count newSource) => if count == 0 then Ok (Pair total source)
-  else case lintSource newSource of
+  else case lintSourceWith programFixities newSource of
     Err e => Err e
-    Ok remaining => fixLoop newSource remaining (passes - 1) (total + count)
+    Ok remaining => fixLoop programFixities newSource remaining (passes - 1) (total + count)

@@ -9,9 +9,11 @@ module Vuna.Compiler.Elab.Trait
   , classFieldTys
   , classFieldTysGo
   , clauseSpanOf
+  , constraintPartsOf
   , ctorResultType
   , defBodyOf
   , defTypeOrDefault
+  , elabConstraintDomains
   , elabFunDef
   , elabInstance
   , elabInstanceBodies
@@ -67,6 +69,7 @@ module Vuna.Compiler.Elab.Trait
 -- `elabFunDef`（实例方法体复用同一套模式矩阵降级）。
 -- 拆自 M24 的单一 `Elab.vuna`（按真实调用图切；门面仍是 `Vuna.Compiler.Elab`）。
 import Vuna.Compiler.Common
+import Base.HashMap
 import Vuna.Compiler.Debug
 import Vuna.Compiler.Core
 import Vuna.Compiler.Diagnostics
@@ -267,11 +270,11 @@ instanceHeadParts _ = Nothing
 constraintPartsOf : Span -> List Expr -> Result (List (Pair String Expr))
 constraintPartsOf sp [] = Ok []
 constraintPartsOf sp (e :: rest) = case instanceConstraintParts e of
-  Nothing => tcErr0 sp InstanceContextNotDict
+  Nothing => tcErr0 sp ConstraintNotDict
   Just p => andThen (constraintPartsOf sp rest) (\ps => Ok (p :: ps))
 
 instanceConstraintParts : Expr -> Maybe (Pair String Expr)
-instanceConstraintParts (EApp fn (a :: rest) sp) = case fn of
+instanceConstraintParts (EApp fn ([a]) sp) = case fn of
   EVar n fsp => Just (Pair n a)
   _ => Nothing
 instanceConstraintParts _ = Nothing
@@ -326,7 +329,7 @@ elabInstanceConstrained classes globals defined ec0 sp cls argExpr ctxParts =
     tele = instanceTeleOf banned combined (argExpr :: ctxArgs)
     teleCtx0 = instanceTeleCtx tele
   in andThen (checkType globals teleCtx0 ec0 argExpr) (\q => case q of
-    Pair argTerm (Pair sortLvl ec1) => andThen (elabInstanceCtxTys classes globals teleCtx0 ctxParts sp ec1) (\r => case r of
+    Pair argTerm (Pair sortLvl ec1) => andThen (elabConstraintDomains classes globals teleCtx0 ctxParts sp ec1) (\r => case r of
       Pair ctxTys ec2 =>
         Ok
           (Pair (InstSigInfo (dtClassName cls) tele ctxTys argTerm (ctorResultType cls argTerm)) ec2)
@@ -364,7 +367,7 @@ isLowerStart n = case strUnpack n of
   [] => False
   c :: rest => c >= 97 && c <= 122
 
-instanceTeleOf : HashTbl Bool -> Expr -> List Expr -> List (Pair String Term)
+instanceTeleOf : HashMap Bool -> Expr -> List Expr -> List (Pair String Term)
 instanceTeleOf banned combined exprs =
   let
     vars = uniqNames (keepOutBanned banned (concatMap exprFreeLower exprs))
@@ -381,10 +384,10 @@ uniqNames : List String -> List String
 uniqNames [] = []
 uniqNames (n :: rest) = if memName n rest then uniqNames rest else n :: uniqNames rest
 
-keepOutBanned : HashTbl Bool -> List String -> List String
+keepOutBanned : HashMap Bool -> List String -> List String
 keepOutBanned tbl [] = []
 keepOutBanned tbl (n :: rest) =
-  if tblMem n tbl then keepOutBanned tbl rest else n :: keepOutBanned tbl rest
+  if Base.HashMap.member n tbl then keepOutBanned tbl rest else n :: keepOutBanned tbl rest
 
 -- tele 的局部上下文（声明顺序绑定；`TVar 0` = 最内层 tele）。
 instanceTeleCtx : List (Pair String Term) -> Ctx
@@ -394,16 +397,18 @@ instanceTeleCtxGo : List (Pair String Term) -> Ctx -> Ctx
 instanceTeleCtxGo [] ctx = ctx
 instanceTeleCtxGo ((Pair n k) :: rest) ctx = instanceTeleCtxGo rest (ctxBindValue n (eval [] k) ctx)
 
--- ctx 字典域的类型化（在 teleCtx 下 checkType 每个约束实参）。
-elabInstanceCtxTys : List DtClass -> List (Pair String Term) -> Ctx -> List (Pair String Expr) -> Span -> Ec -> Result (Pair (List Term) Ec)
-elabInstanceCtxTys classes globals ctx [] sp ec = Ok (Pair [] ec)
-elabInstanceCtxTys classes globals ctx ((Pair cname argExpr) :: rest) sp ec = case findClass cname classes of
+-- 约束实参的字典域精化（实例/签名 ctx 共用）：arg 按类参数 kind 检查后拼成 `Dict_C arg`。
+elabConstraintDomains : List DtClass -> List (Pair String Term) -> Ctx -> List (Pair String Expr) -> Span -> Ec -> Result (Pair (List Term) Ec)
+elabConstraintDomains classes globals ctx [] sp ec = Ok (Pair [] ec)
+elabConstraintDomains classes globals ctx ((Pair cname argExpr) :: rest) sp ec = case findClass cname classes of
   Nothing => tcErr1 sp (UnknownInterface cname) cname
-  Just cls => andThen (checkType globals ctx ec argExpr) (\q => case q of
-    Pair argTerm (Pair sortLvl ec1) => andThen (elabInstanceCtxTys classes globals ctx rest sp ec1) (\r => case r of
-      Pair tvs ec2 => Ok (Pair (ctorResultType cls argTerm :: tvs) ec2)
+  Just cls => case dictArgKind ec (VNeutral (NGlobal (dictTypeName (dtClassName cls)) [])) of
+    Nothing => tcErr0 sp ConstraintNotDict
+    Just kindVal => andThen (checkE globals ctx ec argExpr kindVal) (\q => case q of
+      Pair argTerm ec1 => andThen (elabConstraintDomains classes globals ctx rest sp ec1) (\r => case r of
+        Pair tvs ec2 => Ok (Pair (ctorResultType cls argTerm :: tvs) ec2)
+      )
     )
-  )
 
 -- 实例方法体上下文：tele 之外再绑定 ctx 字典（第 k 个 ctx binder 的名字 `_ctx<k>`）。
 instBodyCtx : InstSigInfo -> Ctx
@@ -609,7 +614,7 @@ solveCtxGoals ctx nCtx nTele ec acc = solveCtxGoalsGo ctx nCtx ec (ecDictGoals e
 
 solveCtxGoalsGo : Ctx -> Int -> Ec -> List DtDictGoal -> List DtDictGoal -> List (Pair Int Int) -> Pair (List (Pair Int Int)) Ec
 solveCtxGoalsGo ctx nCtx ec [] kept acc = Pair (reverse acc) (ecPutDictGoals ec (reverse kept))
-solveCtxGoalsGo ctx nCtx ec ((g@(DtDictGoal m dom)) :: rest) kept acc = case metaLookup m (ecSols ec) of
+solveCtxGoalsGo ctx nCtx ec ((g@(DtDictGoal m dom)) :: rest) kept acc = case metaLookup m (ecSolTbl ec) of
   Just _ => solveCtxGoalsGo ctx nCtx ec rest kept acc
   Nothing => case matchCtxDictIdx ctx nCtx dom ec of
     Nothing => solveCtxGoalsGo ctx nCtx ec rest (g :: kept) acc
@@ -712,10 +717,9 @@ freeDictGoals ec = freeDictGoalsGo ec (ecDictGoals ec) []
 freeDictGoalsGo : Ec -> List DtDictGoal -> List DictGoalGroup -> List DictGoalGroup
 freeDictGoalsGo ec [] acc = acc
 freeDictGoalsGo ec (g :: rest) acc = case g of
-  DtDictGoal m dom => if isRigidDictArg ec dom then case metaLookup m (ecSols ec) of
-    -- 已提升过的目标不再重复提升（`solveLiftedMeta` 已把 ?m 解成 `d`）；
-    -- 否则后续每个定义都会被塞进一个多余的字典 binder（曾把 `xor` 的
-    -- `not b` 破坏成一次字典搜索）。
+  DtDictGoal m dom => if isRigidDictArg ec dom then case metaLookup m (ecSolTbl ec) of
+    -- 已提升过的目标不再重复提升（`solveLiftedMeta` 已把 ?m 解成 `d`）；否则后续每个
+    -- 定义都会被塞进一个多余的字典 binder（曾把 `xor` 的 `not b` 破坏成一次字典搜索）。
     Just _ => freeDictGoalsGo ec rest acc
     Nothing => freeDictGoalsGo ec rest (addDictGoalGroup ec m dom acc)
   else freeDictGoalsGo ec rest acc
@@ -983,7 +987,7 @@ elabInstanceBodiesGo (d :: rest) allDecls classes datas globals ec acc = andThen
     let
       -- M29（A14）：实例生成的字典/方法定义统一挂**实例声明 span**（`d` 的 span）。
       newDefs = instanceDefsOf ec ec1 (Just (secondOf d)) gs
-      ecTbl = ecPutGlobalsTbl ec1 (tblInsertAll gs (ecGlobalsTbl ec1))
+      ecTbl = ecPutGlobalsTbl ec1 (Base.HashMap.insertAll gs (ecGlobalsTbl ec1))
     in elabInstanceBodiesGo rest allDecls classes datas (append globals gs) ecTbl (append newDefs acc)
 )
 
@@ -995,7 +999,7 @@ instanceDefsOf ecBefore ecAfter srcSpan gs =
     (\g => DtDef (firstOf g) (defTypeOrDefault gs (firstOf g)) (substDictTerm ecAfter (defBodyOf (ecDefTbl ecAfter) (firstOf g))) srcSpan)
     gs
 
-defBodyOf : HashTbl Term -> String -> Term
+defBodyOf : HashMap Term -> String -> Term
 defBodyOf defs name = case defLookup name defs of
   Just body => body
   Nothing => TInt 0
@@ -1030,12 +1034,12 @@ elabInstancesGo (d :: rest) classes datas globals ec acc = andThen (elabInstance
 -- 找不到的生成项给 `Nothing`，诊断保持无位置）。
 extraDefsOf : List (Pair String Term) -> Ec -> List (Pair String Span) -> List DtDef -> List DtDef
 extraDefsOf globals ec srcSpans sourceDefs =
-  extraDefsGo globals (tblOfNames (map dtDefName sourceDefs)) srcSpans (ecDefs ec) []
+  extraDefsGo globals (Base.HashMap.ofNames (map dtDefName sourceDefs)) srcSpans (ecDefs ec) []
 
-extraDefsGo : List (Pair String Term) -> HashTbl Bool -> List (Pair String Span) -> List (Pair String Term) -> List DtDef -> List DtDef
+extraDefsGo : List (Pair String Term) -> HashMap Bool -> List (Pair String Span) -> List (Pair String Term) -> List DtDef -> List DtDef
 extraDefsGo globals sourceNames srcSpans [] acc = reverse acc
 extraDefsGo globals sourceNames srcSpans (d :: rest) acc =
-  if tblMem (firstOf d) sourceNames then extraDefsGo globals sourceNames srcSpans rest acc
+  if Base.HashMap.member (firstOf d) sourceNames then extraDefsGo globals sourceNames srcSpans rest acc
   else extraDefsGo globals sourceNames srcSpans rest
     (DtDef (firstOf d) (defTypeOrDefault globals (firstOf d)) (secondOf d) (spanOfName (firstOf d) srcSpans) :: acc)
 
@@ -1066,10 +1070,24 @@ else
     forced = forceVal ec expected
   in case forced of
     VPi name implicit rig dom clo =>
-      if implicit then if isImplicitDomain ctx ec dom then bindIndexBinderFuel (fuel - 1) globals ctx ec name dom clo [] body sp
+      if implicit then if isDictDomain ec dom then bindDictBinderFuel (fuel - 1) globals ctx ec name dom clo [] body sp
+      else if isImplicitDomain ctx ec dom then bindIndexBinderFuel (fuel - 1) globals ctx ec name dom clo [] body sp
       else tcErr0 sp ImplicitParamKind
       else checkBodyAtEndFuel (fuel - 1) globals ctx ec body expected sp
     _ => checkE globals ctx ec body expected
+
+-- M32：显式约束的隐式字典 binder：自动绑定（不消耗 pattern）、绑成 `TLam Rig1`，body 经 `localDictLookup` 命中声明假设。
+bindDictBinderFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> String -> Value -> Closure -> List Pat -> Expr -> Span -> Result (Pair Term Ec)
+bindDictBinderFuel fuel globals ctx ec name dom clo pats body sp = if fuel <= 0 then Err "DT: internal: binder check fuel exhausted"
+else
+  let
+    lvl = ctxDepth ctx
+    v = freshVarValue name lvl
+    ctx2 = ctxBindValue name dom ctx
+    expected2 = applyClosure clo v
+  in andThen (checkBindersFuel (fuel - 1) globals ctx2 ec pats body expected2 sp) (\p => case p of
+    Pair inner ec1 => Ok (Pair (TLam name Rig1 inner) ec1)
+  )
 
 -- 隐式索引 binder（`{n : Nat}`）：绑成擦除的 lambda（Rig0），体在扩展上下文里继续。
 bindIndexBinderFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> String -> Value -> Closure -> List Pat -> Expr -> Span -> Result (Pair Term Ec)
@@ -1094,7 +1112,8 @@ checkBodyAtEndFuel fuel globals ctx ec body expected sp = if fuel <= 0 then Err 
 else case body of
   ELam names lambdaBody lambdaSp => checkE globals ctx ec body expected
   _ => case forceVal ec expected of
-    VPi name implicit rig dom clo => if implicit then if isImplicitDomain ctx ec dom then bindIndexBinderFuel (fuel - 1) globals ctx ec name dom clo [] body sp
+    VPi name implicit rig dom clo => if implicit then if isDictDomain ec dom then bindDictBinderFuel (fuel - 1) globals ctx ec name dom clo [] body sp
+    else if isImplicitDomain ctx ec dom then bindIndexBinderFuel (fuel - 1) globals ctx ec name dom clo [] body sp
     else tcErr0 sp ImplicitParamKind
     else
       let
@@ -1113,7 +1132,8 @@ else
   let
     forced = forceVal ec expected
   in case forced of
-    VPi name implicit rig dom clo => if implicit then if isImplicitDomain ctx ec dom then bindIndexBinderFuel (fuel - 1) globals ctx ec name dom clo (pat :: rest) body sp
+    VPi name implicit rig dom clo => if implicit then if isDictDomain ec dom then bindDictBinderFuel (fuel - 1) globals ctx ec name dom clo (pat :: rest) body sp
+    else if isImplicitDomain ctx ec dom then bindIndexBinderFuel (fuel - 1) globals ctx ec name dom clo (pat :: rest) body sp
     else tcErr0 sp ImplicitParamKind
     else case pat of
       PVar pname psp => bindOnePatternFuel (fuel - 1) globals ctx ec pname rest body dom clo sp

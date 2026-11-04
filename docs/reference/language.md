@@ -10,8 +10,13 @@
   类型签名参与精化，运行时是否保留由擦除判据（`Rig`）决定；
 - 语法：Idris2 风格 `data ... where`、多子句函数、顶层 `axiom` 声明（无体 / 不透明）、
   `case ... of`、`let ... in`（绑定块可选签名行）、lambda、`if then else`、`do` 块、
-  整数 / 字符串字面量、`[..]` 与 `x :: xs` 列表糖、中缀运算符
-  （`-> || && == /= < <= > >= ++ + - * / :: >>= >>`）；
+  整数 / 字符串字面量、`[..]` 与 `x :: xs` 列表糖、中缀 / 反引号中缀 / section / 用户符号名运算符；
+- **运算符 = 有 fixity 的普通名字**：`a op b` 与 `op a b` 同义，`` a `f` b `` 与 `f a b` 同义，
+  运算符不拥有独立语义；parser 不做优先级（中缀链收成右嵌套中间节点），`Loader.Fixity` 按
+  模块可见 fixity 表重排。fixity / 别名的**唯一来源**是 `infixl N op` / `infixr N op` /
+  `infix N op` 声明（可选 `= 目标名`，如 `infixl 4 == = eq`），优先级 0–9。没有内建运算符表：
+  符号运算符用于中缀却无声明是**错误**；`->` 是语法，由 Loader 语法表恒可见。库声明表、
+  可见闭包去重与 fmt 程序级 fixity 见 [operators.md](operators.md)；
 - layout：offside 规则；顶层声明、`data` 构造器块、`case` 分支、`let` 绑定按块列对齐，
   表达式跨行必须缩进超过所在块列；
 - `main` 必须是零参数定义；展示由编译器钩子完成（`Int` → 十进制、`String` → `strShow`、
@@ -19,9 +24,14 @@
   钩子。`vuna interp` 只展示 `Int` / `String` / `Bool` 的 `main` 值（interp 是精化后的
   纯核心求值，见 [limits.md](limits.md)）；
 - 内建值（`Vuna.Compiler.Intrinsics.allIntrinsics` 里用户可见的项）：`+ - * /`、
-  `== /= < <= > >=`、`&& ||`、`++`、`strFromInt` / `strUnpack` / `strPack` /
+  `&& ||`、`++`、`strFromInt` / `strUnpack` / `strPack` /
   `strLength` / `strConcatMany` / `strSubstTemplate` / `strHash` / `strAt` / `strShow`、
   `timeUs`。宽度、编码、转义与 interp 边界见 [primitives.md](primitives.md)；
+- **运算符 = 方法别名（M31.1–M31.3）**：`==` / `/=` / `<` / `<=` / `>` / `>=` 不是内建值，
+  而是 `Base.Eq` / `Base.Ord` 的方法（`eq` / `neq` / `lt` / `le` / `gt` / `ge`）的
+  **别名**（fixity 与别名由库模块里的 `infixl ... = ...` 声明提供，`Loader.Fixity` 在重排时
+  替换）。`a == b` 与 `eq a b` 同义，Int / String 上由内建实例特化，其它类型走 `Eq` / `Ord`
+  字典。trait 声明与实例的落点规则见 [operators.md](operators.md)；
 - 效果原语**只有 `prim_*` 名**（`prim_print` / `prim_readFile` / `prim_getArgs` /
   `prim_getenv` / …）：用户经 `Base.IO` 的 IO 动作使用，或在 `vuna.toml` 用
   `[capabilities].effects` 声明能力后直接调用；见 [primitives.md](primitives.md) 的
@@ -135,6 +145,12 @@ idT x = x
   有定义体（`[TC_AxiomWithDefinition]`），也不能重复声明；
 - `axiom` 是保留关键字；当前编译器自身不用 axiom（旧 seed 必须能编译新源码）。
 
+## 签名的 trait 约束（M32）
+
+顶层签名可写约束前缀（`f : Eq a, Show a => a -> String`）；语义、绑定顺序、诊断与边界见
+[records-traits.md](records-traits.md)。约束只允许在顶层签名上，其它位置写 `=>` 报
+`[PS_ConstraintUnsupportedHere]`。
+
 ## 函数定义与 η 展开
 
 定义子句的参数可以少于签名：剩余 Pi 链按 **η 展开**自动补参数（`\_arityN`，body 应用到
@@ -151,8 +167,8 @@ idT x = x
   `advance (PState file toks@(t :: rest) last count) = ...`；带参数的内层模式需括号
   （`x@(t :: rest)`），变量 / 字面量 / 0 元构造子不需要（`x@True`、`x@42`）。
   编译期由模式矩阵注入绑定（`Elab.Match`）；STR 把 as 绑定视为整个值（不改变结构下降）。
-  `case` 分支左端的 as-pattern 尚未接入（当前只支持函数子句参数 / 嵌套模式）。
-
+  `case` 分支左端也支持 as-pattern（`case xs of y@(t :: rest) => ...`，desugar 为
+  `case` 分支左端也支持 as-pattern（desugar 为 `let` 绑定；scrutinee 纯表达式重复求值语义等价）。
 - 变量 / 通配兜底只能放**最后一个**分支，否则报 `TC_CatchAllNotLast`；
 - `Bool` 的 `case` 只认 `True` / `False` / 变量 / 通配（`TC_BoolCaseRestriction`）；
 - `Int` / `String` 的 `case` 必须有一个变量 / 通配兜底（`TC_IntStringCaseNeedsFallback`），

@@ -1,0 +1,12 @@
+import Base.List
+
+data PState : Type where
+  PState : List Int -> Int -> PState
+
+advance : PState -> Int
+advance (PState toks n) = case toks of
+  t :: rest => t + n + length toks
+  [] => n + length toks
+
+main : Int
+main = 0

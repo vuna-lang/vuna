@@ -13,6 +13,15 @@ vuna 尚未发布任何版本：没有外部用户、下游生态与历史包袱
 
 - **一条路径**：`Parser → Loader → DT 精化 → 擦除 codegen → OCaml`；DT 是唯一检查器，
   没有第二套 checker / codegen，也没有可切换开关。
+- **名字与运算符**：**运算符 = 有 fixity 的普通名字**；`a op b`、`op a b`、`` a `f` b ``
+  与 `f a b` 同义。parser 只产出 `EInfix` / `EBacktick` / `ESect*` / `EParen` 中间节点，
+  `Loader.Fixity` 在 resolve 前按模块可见 fixity 表重排、替换别名、展开 section。fixity 与
+  别名**唯一来源**是源码里的 `infix*` 声明（库或用户；`->` 是语法由 Loader 的语法表恒可见），
+  没有编译器兜底表；未知符号运算符中缀使用是错误；可见闭包按模块去重（防 import diamond
+  路径爆炸）。`==` / `/=` / `<` / `<=` / `>` / `>=` 是 `Eq` / `Ord` 方法
+  （`eq` / `neq` / `lt` / `le` / `gt` / `ge`）的别名；`>>` 由 Loader 按 do 派生展开（`bind a (\_ -> b)`）。
+  fmt 感知程序级 fixity 并打印 `infix*` 声明（M31.1–M31.3，见
+  [operators.md](reference/operators.md)）。
 - **自举**：`seed/` 是 compiler 包入口闭包的多文件 OCaml 信任锚点；旧 seed 能编译当前
   源码，rotation 后 stage1 == stage2。工具链（fmt/lint/repl/doc/test/LSP/Index）不进 TCB。
 - **包与构建**：workspace 根即包；每文件唯一包上下文；声明式效应能力；逐模块 split 输出；
@@ -20,6 +29,16 @@ vuna 尚未发布任何版本：没有外部用户、下游生态与历史包袱
 - **工具链**：CLI 统一参数 / 错误出口；LSP 走包上下文（诊断 / hover / 补全 / 定位 /
   references / 格式化 / 符号）；REPL 多行 + IO compile+run；`vuna test` 纯 / 效果双路径；
   VSCode 扩展。
+- **容器与查找表**：标准库有 `Base.HashMap` / `Base.HashSet` / `Base.IntMap`（1024 桶持久
+  哈希表；M33 W3 起桶是 `Array (Array (List ...))`）、不可变 `Base.Array`（copy-on-write）
+  与 IO 内 `Base.IORef` / `Base.MArray` / `Base.Buffer`；内建类型构造子 `Array` / `IORef` /
+  `MArray` / `Buffer`（M33 W3）。编译器查找表（defs / globals / ctor / clause / defVals）用
+  `HashMap`，元变量解表与创建深度表用 `IntMap`（`metaLookup` 走索引，不再线性扫 /
+  不再 `strFromInt`）。
+- **系统编程能力（M33）**：生成程序基准 `nix run .#vuna-perf`（vuna vs 手写 OCaml，典型
+  负载 ≤2×）；codegen 内建内联 / 多参数 lambda 链 / 字符串批拼；`Array` / `IORef` / `MArray` /
+  `Buffer` 与 IO 隔离的可变数据；受限 FFI（`extern` + 包根 `ffi/*.c`）；库级 `State` /
+  `Reader` / `Error`。测量设施与基线在 `bench/`。
 - **质量门禁**：`nix flake check`（packages + seed-selfhost + tests + typecheck + lint + fmt +
   index + metrics + package + context-budget + vscode-ext）、原生测试、lint / fmt / metrics /
   文档预算。
@@ -39,9 +58,59 @@ vuna 尚未发布任何版本：没有外部用户、下游生态与历史包袱
 
 ## 下一步
 
-**下一阶段从 M31 起按需排期；当前没有已承诺的阶段。** 候选来自
-[debt.md](reference/debt.md) 的开放项（语言 / 精化器残留、工具与构建、F1–F4 能力缺口）。
-新阶段必须映射到 debt 条目，并在「范围」里列明关闭哪些项。
+**M31 系列已收尾**（M31.1–M31.3：运算符=方法别名、parser 去优先级、库内 `infix*` 声明成为
+fixity 唯一来源、反引号中缀 / section / 用户符号名、fmt 程序级 fixity）。**M33 已收尾**（六波：
+测量地基 `nix run .#vuna-perf`、codegen / 运行时优化、容器与表示（`Array`/`IORef`/`MArray`/
+`Buffer` + `HashMap`/`IntMap` 的 `Array` 桶）、可变数据边界与字符串补齐、受限 FFI
+（`extern` + `ffi/*.c`）、库级最小效应接口（`State`/`Reader`/`Error`）；生成程序基准全部进入
+2× 手写 OCaml；线性类型 / ST 按计划裁剪，见 debt D22）。下一步是已排期的 **M34（编译器快）**，
+再往后 **M35（并发 / 服务端）**。新阶段必须映射到 debt 条目，并在「范围」里列明关闭哪些项；
+B / C / E 系列残留按需插入。
+
+## 性能轨道（M34–M35）
+
+M33（语言能写高性能系统程序）已收尾，历史在 git；剩下两个小阶段。顺序依据：**编译器本身
+是 vuna 程序（编译为 OCaml 运行）**，M33 的 codegen / 运行时 / 容器改进已直接反哺编译器。
+
+### M34：编译器快
+
+1. **基准与门槛**：复用 M33 的测量，设 `check` / `build` / LSP 的软 / 硬门槛；
+2. **数据与算法（剩余）**：`append` O(n²)、SCC / 终止性 / loader 的 list→表、
+   `Sort` 的 O(n²)、字符串 Buffer（容器 / 索引、`metaLookup` 索引化、去 `strFromInt`
+   已落地）；**`vuna map` 冷启动全量重建 ~31 s**：索引缓存内容哈希失效后整仓重扫，且
+   `Vuna.Index.Scan.refsInExpr` 用左结合 `append` 拼接子树引用列表，嵌套表达式 / 应用
+   spine 上呈 O(n²)（热缓存读数 ~0.46 s；见 [debt.md](reference/debt.md) C34）；
+3. **分配削减**：`Ec` / `Sols` 复制、Term / Value 表示、`normalize` / `force` 复用、
+   hash-consing / interning；
+4. **并行 / 增量**：workspace 并行 `check`（纯核心 + 确定性合并）、模块级并行 codegen、
+   LSP 增量；
+5. **单文件 / 模块级编译缓存**：依赖图 + 接口摘要 → 进程内缓存（LSP / REPL / workspace）→
+   AST 磁盘缓存 → **elab 级磁盘缓存**。缓存 key 含源内容哈希、依赖接口摘要、base / prelude
+   版本、编译器版本、manifest 能力；接口不变时复用 elab 结果，实现变化只失效 codegen。
+   前置是序列化格式（Core Term / DtProgram，见 [debt.md](reference/debt.md) C32）；
+6. **吃 M33 红利**：编译器重编译后验证 codegen / 运行时的收益并设门槛。
+
+**依赖**：M33 已落地（测量 / 容器 / codegen 基础）；5 依赖序列化与接口摘要。
+**退出标准**：`check .` 从当前 ~8 s 降至目标；`vuna map` 冷启动从 ~31 s 降至秒级；单文件
+增量进入秒级以下；LSP 编辑反馈明显下降；性能 CI 门槛可用（[debt.md](reference/debt.md) C33）。
+**映射 debt**：C30、C31、C32、C33、C34、E01、E04、E06。
+
+### M35：并发 / 服务端
+
+1. **效应系统 / 代数效应**：effect rows 或等价设计、handler、与 ST / 可变数据整合；
+2. **结构化并发 / async**：调度器、取消 / 超时、结构化作用域、内存模型；先库级
+   （线程池 / 事件循环 + IO），再语言级；
+3. **网络 / 系统库与完整 FFI**：socket / 文件 / 进程、异步 IO、回调 / GC 交互；
+4. **服务端框架 / 包生态**（可选，依赖外部用户）。
+
+**依赖**：M33 的运行时 / 受限 FFI / 库级效应已落地；M34 的确定性与缓存。
+**退出标准**：并发 echo / HTTP 基准；取消 / 超时语义正确；无数据竞争（类型层或运行时检测）。
+**映射 debt**：D03（关闭）、D02（运行时决策）、D04（生态，可选）。
+
+**明确排除**：不自研后端 / GC / LLVM / native；OCaml 后端长期保留（D02 的该分支关闭）。
+Wasm / JS 暂缓，不排期；若未来需要单独立项。性能轨道不改变「单一 DT 路径」、seed 不变量
+与 TCB 边界；codegen / 运行时改动进入 seed 闭包时，按既有「旧种子能编译新源码 → rotation
+→ stage1 == stage2」流程执行。
 
 ## 未来轨道（F = future，不排期）
 
@@ -57,6 +126,8 @@ vuna 尚未发布任何版本：没有外部用户、下游生态与历史包袱
 擦除感知的运行时；OCaml runtime 长期保留 vs 自研 GC / 后端无关 IR；Wasm/JS 后端原型；
 GC / 运行时正确性与性能；后端语义一致与 seed 边界不变。
 
+**M33–M35 决策**：不自研 GC / 后端；OCaml 后端长期保留；Wasm / JS 暂缓（见「性能轨道」
+的排除项）。
 **前置**：原语 / 效应边界、擦除判据稳定。**状态**：不排期；擦除后 OCaml 后端可能长期够用。
 
 ### F3：效应、并发与异步
@@ -64,7 +135,8 @@ GC / 运行时正确性与性能；后端语义一致与 seed 边界不变。
 通用效应系统（effect rows 或等价设计）、async/await 或结构化并发、调度器、取消 / 超时；
 把 `IO` 从 thunk 升级为正式效应接口。
 
-**前置**：F2 方向决策。**状态**：不排期；可先库级后语言级。
+**前置**：F2 方向决策。**状态**：不排期；可先库级后语言级。**M33–M35 决策**：最小效应
+接口在 M33 尾段，通用效应 / 并发在 M35；F3 的完整形态以 M35 的范围为准。
 
 ### F4：标准库与包生态
 
@@ -81,8 +153,9 @@ registry（没有外部用户时 registry 没有意义）。
 - QTT 的完整变体（依赖 multiplicity、资源安全）。
 - 宇宙多态 / 累积性的更强形式。
 - CoC 补完：非直谓 Prop、完整依赖消除的进阶形态。
-- 线性 / 量化类型、证明自动化 / tactics / reflection、`rewrite` / `with` 的进阶形态。
-- 效应行多态（若 F3 未采用）、自研 GC / 多后端（若 F2 决定不做）。
+- 线性 / 唯一性类型的进阶形态（M33 只取可变数据 / ST 所需子集；完整 QTT 见上）。
+- 证明自动化 / tactics / reflection、`rewrite` / `with` 的进阶形态。
+- 效应行多态（若 F3 未采用）。
 
 ## 维护规则
 
@@ -94,6 +167,8 @@ registry（没有外部用户时 registry 没有意义）。
 - **禁止无登记的临时层**：任何「先这样、以后再说」的兼容层 / 哨兵 / 特判必须登记 debt 并
   给关闭阶段，否则视为未完成。
 - 插入阶段用 `x.5`；研究储备进入排期时再分配编号。
+- 性能轨道（M33–M35）是同一大阶段的三个小阶段，可按依赖合并 / 拆分；完成后按 M 编号规则
+  删除阶段记录。
 
 ## 相关阅读
 

@@ -1,0 +1,9 @@
+-- M32：顶层签名可写 trait 约束 `C a =>`；约束成为定义体的字典假设，调用点由实例
+-- 搜索自动补字典（`f 1 1` 用 Eq Int、`f "a" "a"` 用 Eq String）。
+import Prelude
+
+f : Eq a => a -> a -> Bool
+f x y = x == y
+
+main : Bool
+main = f 1 1 && f "a" "a" && not (f 1 2)

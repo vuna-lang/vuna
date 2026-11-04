@@ -1,0 +1,10 @@
+module Fmt16 where
+
+f : Eq a,Show a=>a->String
+f x = "x"
+
+g : Eq ( Box a ) => a -> Bool
+g x = True
+
+h : Int -> Int
+h n = n

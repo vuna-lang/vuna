@@ -8,7 +8,8 @@ module Vuna.Lsp.Diagnostics (contextForDoc, publishDiagnosticsFor) where
 --      `loadProjectSource` 入口语义；DT 精化错误按 `<file>:<line>:<col>` 转 LSP 0-based；
 --   3. 依赖文件（spanFile 不是当前文件）的错误**过滤掉**——每个打开的文件只发布自己的
 --      诊断；没有位置的错误归到当前文件 0:0；
---   4. 合并 `Vuna.Lint.Rules.lintSource` 的语法级 finding（severity 2，code = LN_ 规则码）。
+--   4. 合并 `Vuna.Lint.Rules.lintSourceWith` 的语法级 finding（severity 2，code = LN_ 规则码）；
+--      lint 重排用**程序级** fixity（`Vuna.FixityEnv`，与 fmt/CLI 同源）。
 --
 -- 包上下文：file:// URI → 路径 → `contextForFile`；非 file URI（或磁盘上不存在的
 -- 路径）退化到 cwd 的 `contextForDir "."`。失败由调用方转成 0:0 的 `pkg: ...` 诊断。
@@ -17,6 +18,7 @@ import Vuna.Compiler.Driver.Dt
 import Vuna.Compiler.Frontend.Parser
 import Vuna.Compiler.Packages.Pkg
 import Vuna.Files
+import Vuna.FixityEnv
 import Vuna.Json
 import Vuna.Lint.Rules
 import Vuna.Lsp.Protocol
@@ -119,11 +121,14 @@ checkDiagnostics label ctx text = case dtCheckSource ctx label text of
     Nothing => []
     Just d => [d]
 
--- lint finding 合并为 warning（code = LN_ 规则码）。
-lintDiagnostics : String -> List Diag
-lintDiagnostics text = case lintSource text of
-  Err _ => []
-  Ok findings => map lintDiag findings
+-- lint finding 合并为 warning（code = LN_ 规则码）。lint 重排的 fixity 取程序级闭包
+-- （`Vuna.FixityEnv`，与 fmt/CLI 同源）；取不到时只丢 lint finding，不影响 DT 诊断。
+lintDiagnostics : String -> String -> List Diag
+lintDiagnostics label text = case fixitiesForFile emptyFixityEnv label text of
+  Pair _ (Err _) => []
+  Pair _ (Ok env) => case lintSourceWith env text of
+    Err _ => []
+    Ok findings => map lintDiag findings
 
 lintDiag : Finding -> Diag
 lintDiag f =
@@ -135,7 +140,7 @@ diagnosticsFor uri text = case contextForDoc uri of
   Err e => [Diag 0 0 0 0 severityError "" e]
   Ok (Pair label ctx) => case parseSource label text of
     Err e => [diagOfMessage severityError "" e]
-    Ok _ => append (checkDiagnostics label ctx text) (lintDiagnostics text)
+    Ok _ => append (checkDiagnostics label ctx text) (lintDiagnostics label text)
 
 publishDiagnostics : String -> Int -> List Diag -> Json
 publishDiagnostics uri version diags =

@@ -1,6 +1,12 @@
 let () =
   let c = Gc.get () in
   Gc.set { c with minor_heap_size = 16 * 1024 * 1024; space_overhead = 200 }
+let () =
+  if (try Sys.getenv "VN_PERF_STATS" with Not_found -> "") <> "" then
+    at_exit (fun () ->
+      let s = Gc.quick_stat () in
+      Printf.eprintf "VN_PERF minor_words=%.0f major_words=%.0f minor_collections=%d major_collections=%d top_heap_words=%d\n"
+        s.Gc.minor_words s.Gc.major_words s.Gc.minor_collections s.Gc.major_collections s.Gc.top_heap_words)
 let bi_add a b = a + b
 let bi_sub a b = a - b
 let bi_mul a b = a * b
@@ -12,7 +18,9 @@ let bi_neq_str (a : string) (b : string) = a <> b
 let bi_strFromInt (n : int) = string_of_int n
 let bi_strLength (s : string) = String.length s
 let bi_strUnpack (s : string) = List.init (String.length s) (fun i -> Char.code s.[i])
-let bi_strPack (cs : int list) = String.init (List.length cs) (fun i -> Char.chr (List.nth cs i))
+let bi_strPack (cs : int list) =
+  let a = Array.of_list cs in
+  String.init (Array.length a) (fun i -> Char.chr a.(i))
 let bi_lt_int (a : int) (b : int) = a < b
 let bi_le_int (a : int) (b : int) = a <= b
 let bi_gt_int (a : int) (b : int) = a > b
@@ -83,11 +91,19 @@ let dtp_timeUs () = int_of_float (Unix.gettimeofday () *. 1000000.0)
 let dtp_getenv k = try Sys.getenv k with Not_found -> ""
 let dtp_getcwd () = try Sys.getcwd () with _ -> "."
 let dtp_execPath () = try Unix.readlink "/proc/self/exe" with _ -> Sys.executable_name
+let dtp_arraySet (a : 'a array) (i : int) (v : 'a) =
+  let b = Array.copy a in
+  Array.set b i v; b
 let dtp_strHash (s : string) =
   let h = ref 0 in
   String.iter (fun c -> h := ((!h * 33) + Char.code c) land 1023) s;
   !h
 let dtp_strAt (s : string) (i : int) = if i < 0 || i >= String.length s then -1 else Char.code s.[i]
+let dtp_substring start len s =
+  let n = String.length s in
+  let st = if start < 0 then 0 else if start > n then n else start in
+  let ln = if len < 0 then 0 else if st + len > n then n - st else len in
+  String.sub s st ln
 let dtp_exit n = exit n
 let dtp_runIn dir args =
   let quote s = Filename.quote s in

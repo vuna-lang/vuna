@@ -1,0 +1,30 @@
+module Base.Error (Error, bindError, catchError, mapError, pureError, runError, throwError) where
+
+-- Base.Error：库级 Error 效应（M33 W6）。`Error e a` 是 `Ok a` / `Err e` 的和类型
+-- （错误类型泛型；`Base.Result` 的 `Result a` 固定 `String` 错误，不在这里复用）。
+-- 组合子手写（trait 单参数 / 类型级部分应用限制，暂不声明 Monad 实例）。
+data Error e a : Type where
+  MkOk : a -> Error e a
+  MkErr : e -> Error e a
+
+runError : Error e a -> (e -> b) -> (a -> b) -> b
+runError (MkOk a) onErr onOk = onOk a
+runError (MkErr e) onErr onOk = onErr e
+
+throwError : e -> Error e a
+throwError e = MkErr e
+
+pureError : a -> Error e a
+pureError a = MkOk a
+
+mapError : (a -> b) -> Error e a -> Error e b
+mapError f (MkOk a) = MkOk (f a)
+mapError f (MkErr e) = MkErr e
+
+bindError : Error e a -> (a -> Error e b) -> Error e b
+bindError (MkOk a) k = k a
+bindError (MkErr e) k = MkErr e
+
+catchError : Error e a -> (e -> Error e a) -> Error e a
+catchError (MkOk a) h = MkOk a
+catchError (MkErr e) h = h e

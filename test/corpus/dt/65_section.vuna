@@ -1,0 +1,36 @@
+-- M31.3：section 三种形态 + 与别名/普通括号表达式混用：
+--   `(+)`    ≡ 运算符作为值（`+` 无别名，`(::)` → `Cons`、`(==)` → `eq` 走别名表）；
+--   `(+ e)`  ≡ \vuna_section => vuna_section + e；
+--   `(e +)`  ≡ \vuna_section => e + vuna_section。
+-- section 不要求 fixity 声明（前缀使用无歧义）；普通括号表达式（`(3 + 4)`、`(+) 1 2`
+-- 作为应用实参）仍按原语义解析。
+--
+-- 左/右 section 展开成 lambda：DT 精化在**推断位置**不接受无签名的 lambda
+-- （TC_LambdaNoSignature），所以这里按真实用法把它们传给带函数签名的参数（检查模式）。
+import Prelude
+
+applyTo : (Int -> Int) -> Int
+applyTo f = f 5
+
+addTwo : Int
+addTwo = (+) 1 2
+
+leftAdd : Int
+leftAdd = applyTo (+ 10)
+
+rightAdd : Int
+rightAdd = applyTo (10 +)
+
+eqTrue : Bool
+eqTrue = (==) 3 3
+
+xs : List Int
+xs = (::) 7 [8, 9]
+
+consHead : Int
+consHead = case xs of
+  Cons x rest => x
+  Nil => 0
+
+main : Int
+main = addTwo + leftAdd + rightAdd + consHead + (if eqTrue then 0 else 100) + (2 * (3 + 4))

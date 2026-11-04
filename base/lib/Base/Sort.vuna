@@ -14,7 +14,7 @@ import Base.Ord
 
 insertBy : (a -> a -> Bool) -> a -> List a -> List a
 insertBy le y [] = [y]
-insertBy le y (x :: xs) = if le y x then y :: x :: xs else x :: insertBy le y xs
+insertBy le y (x :: xs) = if y <= x then y :: x :: xs else x :: insertBy le y xs
 
 sortBy : (a -> a -> Bool) -> List a -> List a
 sortBy le [] = []

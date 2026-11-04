@@ -1,0 +1,12 @@
+-- 列表基准：非尾递归求和、foldl、append、reverse、length。
+-- 手写 OCaml 对照见 list_recursion.ml（同算法）。
+sum : List Int -> Int
+sum xs = case xs of
+  [] => 0
+  x :: rest => x + sum rest
+
+main : Int
+main =
+  let
+    xs = range 0 100000
+  in sum xs + foldl (\acc, x => acc + x) 0 (append xs (reverse xs)) + length xs

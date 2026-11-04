@@ -83,11 +83,12 @@ isOpChar c =
     || c == 126
     || c == 58
 
--- 关键字表（M28 增 `axiom`）。
+-- 关键字表（M28 增 `axiom`；M31.2 增 `infixl` / `infixr` / `infix`）。
 isKeyword : String -> Bool
 isKeyword s =
   s == "data"
     || s == "axiom"
+    || s == "extern"
     || s == "case"
     || s == "of"
     || s == "let"
@@ -106,6 +107,9 @@ isKeyword s =
     || s == "instance"
     || s == "deriving"
     || s == "do"
+    || s == "infixl"
+    || s == "infixr"
+    || s == "infix"
 
 classifyIdent : String -> Tok
 classifyIdent s = if isKeyword s then TKw s else TIdent s
@@ -205,6 +209,11 @@ else if c == 34 then case scanString (Chars rest (advanceChar c p)) [] of
 else if c == 40 || c == 41 || c == 91 || c == 93 || c == 44 || c == 123 || c == 125 then case lexChars (fuel - 1) (Chars rest (advanceChar c p)) of
   Err e => Err e
   Ok toks => Ok (PTok (TSym (strPack [c])) p :: toks)
+else if c == 96 then case lexChars (fuel - 1) (Chars rest (advanceChar c p)) of
+  -- M31.3：反引号中缀的定界符。`96` 不在 isOpChar 里（否则会与相邻符号粘成一个 token），
+  -- 单独识别成 `TSym "`"`，由 parser 配对消费。
+  Err e => Err e
+  Ok toks => Ok (PTok (TSym "`") p :: toks)
 else if isOpChar c then case collectOp (Chars rest (advanceChar c p)) [c] of
   Pair op cs2 => case lexChars (fuel - 1) cs2 of
     Err e => Err e

@@ -1,10 +1,23 @@
 #!/bin/sh
-# 机器无关的 codegen 指标（M12 回归门槛）。
+# codegen 产物指标（固定夹具精确基线 / 手动上限）。
 # 用法: sh nix/metrics.sh <SRC> [BUDGET]
 #   SRC     单个 .ml 文件，或按分离编译布局的目录（聚合其中所有 .ml）
-#   BUDGET  可选的 budget 文件（每行 "<metric> <max>"）；省略则只打印指标。
-# 输出稳定、与机器无关（不含时间）；超出 budget 时以非 0 退出。
+#   BUDGET  可选的基线文件（每行 "<metric> <max>" 或 "<metric> =<expected>"）；
+#           省略则只打印指标。`<max>` 是上限（超了失败）；`=<expected>` 是精确基线
+#           （不等即失败，用于固定输入）。
+# 输出稳定、与机器无关（不含时间；强制 C locale）。
+#
+# 指标语义（都是生成代码的文本计数，不是语义计数）：
+#   files      聚合的 .ml 文件数（夹具里锁模块面；seed 数由 seed-selfhost 断言）
+#   bytes/lines/maxline/longlines  产物体积与行长（longlines = >100 列的行）
+#   letrec     含 `let rec ` 的行数
+#   strcat     `String.concat ""` 出现次数（运行时 dtp_concatMany 的标记）
+#   eqint      `bi_eq_int` 出现次数（Int 相等快速路径的标记）
+#   zeroarg    `fun () ->` 出现次数；内嵌 runtime 文本里的同串也计入
+#   ctorcount  `^  | C_` 行数 = 生成代码里以构造子模式开头的 match 臂；
+#              单行 `type t_ = C_ ...` 声明不计（名字是历史遗留）
 set -eu
+export LC_ALL=C
 
 SRC=${1:?usage: metrics.sh <src> [budget]}
 BUDGET=${2:-}
@@ -69,13 +82,24 @@ while read -r name max; do
     ctorcount) v=$ctorcount ;;
     *) echo "metrics: unknown budget metric $name" >&2; exit 1 ;;
   esac
-  if [ "$v" -gt "$max" ]; then
-    printf 'REGRESSION %s: %s > budget %s\n' "$name" "$v" "$max" >&2
-    fail=1
-  fi
+  case "$max" in
+    =*)
+      want=${max#=}
+      if [ "$v" -ne "$want" ]; then
+        printf 'DRIFT %s: %s != baseline %s\n' "$name" "$v" "$want" >&2
+        fail=1
+      fi
+      ;;
+    *)
+      if [ "$v" -gt "$max" ]; then
+        printf 'REGRESSION %s: %s > budget %s\n' "$name" "$v" "$max" >&2
+        fail=1
+      fi
+      ;;
+  esac
 done <"$BUDGET"
 if [ "$fail" -ne 0 ]; then
-  echo "metrics: budget exceeded (nix/metrics.budget)" >&2
+  echo "metrics: check failed ($BUDGET)" >&2
   exit 1
 fi
-echo "metrics: within budget"
+echo "metrics: ok"

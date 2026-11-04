@@ -4,16 +4,20 @@ open Base_dBool
 open Base_dMonad
 open Base_dMaybe
 open Base_dEq
+open Base_dOrd
+open Base_dInt
 open Base_dList
 open Base_dResult
 open Base_dString
 open Base_dShow
-open Base_dOrd
 open Prelude
 open Vuna_dCompiler_dCommon
 open Vuna_dCompiler_dFrontend_dToml
 open Vuna_dCompiler_dFrontend_dManifest
+open Base_dIO
 open Vuna_dCompiler_dPackages_dPkg
+open Base_dArray
+open Base_dHashMap
 open Vuna_dCompiler_dDebug
 open Base_dNat
 open Base_dVec
@@ -27,11 +31,13 @@ open Vuna_dCompiler_dFrontend_dLexer
 open Vuna_dCompiler_dFrontend_dParser_dSupport
 open Vuna_dCompiler_dFrontend_dParser
 open Vuna_dCompiler_dLoader_dDiagnostics
+open Vuna_dCompiler_dLoader_dFixity
 open Vuna_dCompiler_dLoader_dModules
 open Vuna_dCompiler_dIntrinsics
 open Vuna_dCompiler_dLoader_dResolve
 open Vuna_dCompiler_dLoader_dFlatten
 open Vuna_dCompiler_dLoader
+open Base_dIntMap
 open Vuna_dCompiler_dCore_dTerm
 open Vuna_dCompiler_dCore_dEval
 open Vuna_dCompiler_dCore_dConv
@@ -48,17 +54,17 @@ let rec v_Vuna_dCompiler_dElab_dTerm_dSupport_dallImplicitPrefix = (fun mc0 -> (
   | _ -> true
 ))
 
-let rec v_Vuna_dCompiler_dElab_dTerm_dSupport_dinstantiateAllImplicitFuel = (fun fuel -> (fun ctx -> (fun ec -> (fun head -> (fun ty -> (fun acc -> (if ((bi_le_int fuel) 0) then (C_Base_dPair_dPair_Base_dPair_dPair (((v_Vuna_dCompiler_dElab_dMeta_dfoldAppTerms head) (v_Base_dList_dreverse acc)), (C_Base_dPair_dPair_Base_dPair_dPair (ty, ec)))) else (match ((v_Vuna_dCompiler_dElab_dTypes_dforceVal ec) ty) with
+let rec v_Vuna_dCompiler_dElab_dTerm_dSupport_dinstantiateAllImplicitFuel = (fun fuel ctx ec head ty acc -> (if (fuel <= 0) then (C_Base_dPair_dPair_Base_dPair_dPair (((v_Vuna_dCompiler_dElab_dMeta_dfoldAppTerms head) (v_Base_dList_dreverse acc)), (C_Base_dPair_dPair_Base_dPair_dPair (ty, ec)))) else (match ((v_Vuna_dCompiler_dElab_dTypes_dforceVal ec) ty) with
   | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVPi (dtb__5, dtb__6, dtb__7, dtb__8, dtb__9) -> (if dtb__6 then ((fun m -> (match ((v_Vuna_dCompiler_dElab_dTypes_dnewMeta ctx) ec) with
-  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__10, dtb__11) -> ((((((v_Vuna_dCompiler_dElab_dTerm_dSupport_dinstantiateAllImplicitFuel ((bi_sub fuel) 1)) ctx) dtb__11) head) ((v_Vuna_dCompiler_dCore_dEval_dapplyClosure dtb__9) (C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVMeta (m, C_Base_dList_dList_Base_dList_dNil)))) (C_Base_dList_dList_Base_dList_dCons ((C_Base_dPair_dPair_Base_dPair_dPair (dtb__10, ((v_Vuna_dCompiler_dElab_dMeta_dbinderRig true) dtb__8))), acc)))
+  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__10, dtb__11) -> ((((((v_Vuna_dCompiler_dElab_dTerm_dSupport_dinstantiateAllImplicitFuel (fuel - 1)) ctx) dtb__11) head) ((v_Vuna_dCompiler_dCore_dEval_dapplyClosure dtb__9) (C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVMeta (m, C_Base_dList_dList_Base_dList_dNil)))) (C_Base_dList_dList_Base_dList_dCons ((C_Base_dPair_dPair_Base_dPair_dPair (dtb__10, ((v_Vuna_dCompiler_dElab_dMeta_dbinderRig true) dtb__8))), acc)))
   | _ -> failwith "DT: impossible branch"
 )) (v_Vuna_dCompiler_dElab_dTypes_decNext ec)) else (C_Base_dPair_dPair_Base_dPair_dPair (((v_Vuna_dCompiler_dElab_dMeta_dfoldAppTerms head) (v_Base_dList_dreverse acc)), (C_Base_dPair_dPair_Base_dPair_dPair (ty, ec)))))
   | _ -> (C_Base_dPair_dPair_Base_dPair_dPair (((v_Vuna_dCompiler_dElab_dMeta_dfoldAppTerms head) (v_Base_dList_dreverse acc)), (C_Base_dPair_dPair_Base_dPair_dPair (ty, ec))))
-))))))))
+)))
 
-let v_Vuna_dCompiler_dElab_dTerm_dSupport_dinstantiateAllImplicit = (fun ctx -> (fun ec -> (fun head -> (fun ty -> (fun acc -> ((((((v_Vuna_dCompiler_dElab_dTerm_dSupport_dinstantiateAllImplicitFuel 64) ctx) ec) head) ty) acc))))))
+let v_Vuna_dCompiler_dElab_dTerm_dSupport_dinstantiateAllImplicit = (fun ctx ec head ty acc -> ((((((v_Vuna_dCompiler_dElab_dTerm_dSupport_dinstantiateAllImplicitFuel 64) ctx) ec) head) ty) acc))
 
-let v_Vuna_dCompiler_dElab_dTerm_dSupport_dinferVarRef = (fun globals -> (fun ctx -> (fun ec -> (fun name -> (fun sp -> ((fun nd_uscrut5 -> (match nd_uscrut5 with
+let v_Vuna_dCompiler_dElab_dTerm_dSupport_dinferVarRef = (fun globals ctx ec name sp -> ((fun nd_uscrut5 -> (match nd_uscrut5 with
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> ((fun nd_uscrut7 -> (match nd_uscrut7 with
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> (((v_Vuna_dCompiler_dDiagnostics_dTc_dtcErr1 sp) (C_Vuna_dCompiler_dDiagnostics_dTc_dTcErr_Vuna_dCompiler_dDiagnostics_dTc_dUnknownName (name))) name)
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__12) -> (match dtb__12 with
@@ -73,7 +79,7 @@ let v_Vuna_dCompiler_dElab_dTerm_dSupport_dinferVarRef = (fun globals -> (fun ct
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
-)) ((v_Vuna_dCompiler_dElab_dTypes_dctxLookup name) ctx)))))))
+)) ((v_Vuna_dCompiler_dElab_dTypes_dctxLookup name) ctx)))
 
 let v_Vuna_dCompiler_dElab_dTerm_dSupport_dwhereBindingName = (fun mc0 -> (match mc0 with
   | C_Vuna_dCompiler_dFrontend_dAst_dPat_Vuna_dCompiler_dFrontend_dAst_dPVar (dtb__18, dtb__19) -> dtb__18
@@ -89,4 +95,4 @@ let rec v_Vuna_dCompiler_dElab_dTerm_dSupport_dcheckWhereSigs = (fun mc0 -> (mat
   | _ -> failwith "DT: impossible branch"
 ))
 
-let v_Vuna_dCompiler_dElab_dTerm_dSupport_dcheckBindingSigs = (fun requiresSigs -> (fun binds -> (if requiresSigs then (v_Vuna_dCompiler_dElab_dTerm_dSupport_dcheckWhereSigs binds) else (C_Base_dResult_dResult_Base_dResult_dOk (0)))))
+let v_Vuna_dCompiler_dElab_dTerm_dSupport_dcheckBindingSigs = (fun requiresSigs binds -> (if requiresSigs then (v_Vuna_dCompiler_dElab_dTerm_dSupport_dcheckWhereSigs binds) else (C_Base_dResult_dResult_Base_dResult_dOk (0))))

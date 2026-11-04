@@ -1,0 +1,19 @@
+-- M32：约束实参可以是结构化类型（`Eq (Box a)`）。body 的 `==` 在刚性 `Box a` 上
+-- 延迟成字典目标，定义体结束后按声明 ctx 消解（不再重复提升成新的隐式参数）。
+import Prelude
+import Base.List
+
+data Box a : Type where
+  MkBox : a -> Box a
+
+instance Eq a => Eq (Box a) where
+  eq x y = case x of
+    MkBox p => case y of
+      MkBox q => p == q
+  neq x y = if x == y then False else True
+
+same : Eq (Box a) => Box a -> Box a -> Bool
+same x y = x == y
+
+main : String
+main = if same (MkBox 1) (MkBox 1) then "same" else "diff"

@@ -1,0 +1,22 @@
+module Base.IORef (modifyRef, newRef, readRef, writeRef) where
+
+-- Base.IORef：IO 内的可变引用（M33 W3）。内建类型构造子 `IORef`，OCaml 表示 `'a ref`。
+--
+-- 所有操作都是 IO 动作：效果只在 `main`（或 `Base.IO.runIO`，需 `unsafe`）执行。
+-- `modifyRef` 读-改-写一次完成，避免调用方手写 do 时的中间绑定。
+import Base.Monad
+import Base.IO
+
+newRef : a -> IO (IORef a)
+newRef x = prim_newRef x
+
+readRef : IORef a -> IO a
+readRef r = prim_readRef r
+
+writeRef : IORef a -> a -> IO Int
+writeRef r v = prim_writeRef r v
+
+modifyRef : IORef a -> (a -> a) -> IO Int
+modifyRef r f = do
+  x <- readRef r
+  writeRef r (f x)

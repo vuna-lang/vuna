@@ -1,0 +1,13 @@
+import Base.IO
+-- M33 W3：IO 内的可变数组 MArray（new / write / read / length）。
+import Base.MArray
+
+main : IO Int
+main = do
+  a <- new 3 0
+  _ <- write a 0 7
+  _ <- write a 1 11
+  x <- read a 0
+  y <- read a 1
+  n <- Base.MArray.length a
+  pure (x + y + n)

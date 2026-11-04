@@ -1,0 +1,8 @@
+-- M33 W5：受限 FFI。`extern name "c_symbol" : ty` 只允许基本类型；
+-- C 实现放在包根 ffi/*.c，由生成的 build.sh 编译链接。
+extern c_add "vuna_add" : Int -> Int -> Int
+
+extern c_twice "vuna_twice" : Int -> Int
+
+main : Int
+main = c_twice (c_add 20 22)

@@ -4,6 +4,8 @@ open Base_dBool
 open Base_dMonad
 open Base_dMaybe
 open Base_dEq
+open Base_dOrd
+open Base_dInt
 open Base_dList
 open Base_dResult
 open Base_dString
@@ -15,7 +17,7 @@ let v_Show_uString = (C_Dict_uBase_dShow_dShow_MkDict_uBase_dShow_dShow ((fun s 
 
 let v_Show_uBase_dBool_dBool = (C_Dict_uBase_dShow_dShow_MkDict_uBase_dShow_dShow ((fun b -> (if b then "True" else "False"))))
 
-let v_Base_dShow_dshow = (fun _ud -> (fun x0 -> (match _ud with
+let v_Base_dShow_dshow = (fun _ud x0 -> (match _ud with
   | C_Dict_uBase_dShow_dShow_MkDict_uBase_dShow_dShow (dtb__0) -> (dtb__0 x0)
   | _ -> failwith "DT: impossible branch"
-)))
+))

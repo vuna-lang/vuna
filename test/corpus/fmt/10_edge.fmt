@@ -8,7 +8,7 @@ h : Int -> Int
 h x = (f x + 2) * 3
 
 listBuild : Int -> List Int
-listBuild n = [n, 1, 2]
+listBuild n = n :: 1 :: 2 :: []
 
 listLit : List Int
 listLit = [1, 2, 3]

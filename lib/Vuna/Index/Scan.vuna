@@ -22,11 +22,15 @@ module Vuna.Index.Scan (buildIndex, loadOrBuild) where
 --     只建内存索引、跳过写缓存；过期锁 `rm -rf` 后重试一次；结束时 rmdir；
 --   - 缓存不可写 / 写失败一律降级为纯内存索引（不报错）。
 import Vuna.Compiler.Common
+import Base.HashMap
 import Vuna.Compiler.Frontend.Ast
+import Vuna.Compiler.Loader.Fixity
 import Vuna.Compiler.Frontend.Lexer
 import Vuna.Compiler.Frontend.Parser
 import Vuna.Compiler.Packages.Pkg
+import Vuna.FixityEnv
 import Vuna.Index.Types
+import Base.IO
 
 -- ---------------------------------------------------------------
 -- 小型 helper（本模块自用，避免污染 Base）
@@ -112,7 +116,7 @@ collectVuna dir = collectVunaGo 1048576 dir
 -- 目录树递归（符号链接可成环）用显式 fuel 守卫；每次下钻一层消耗 1。
 collectVunaGo : Int -> String -> List String
 collectVunaGo fuel dir =
-  if fuel <= 0 then [] else concatMap (walkVunaGo (fuel - 1) dir) (prim_readDir dir)
+  if fuel <= 0 then [] else concatMap (walkVunaGo (fuel - 1) dir) (runIO (prim_readDir dir))
 
 walkVunaGo : Int -> String -> String -> List String
 walkVunaGo fuel dir name = if fuel <= 0 then []
@@ -125,7 +129,7 @@ else
 
 -- prim_isDirectory 对不存在的路径会抛异常，必须先判存在。
 dirExists : String -> Bool
-dirExists path = prim_fileExists path && prim_isDirectory path
+dirExists path = runIO (prim_fileExists path) && runIO (prim_isDirectory path)
 
 -- 包的索引范围：<pkg>/lib 与 <pkg>/app（模块源码）。刻意不扫 test/ 与 examples/
 -- （夹具含故意不合法的语法，不是模块源码）。
@@ -145,17 +149,21 @@ packageDirs repo = case findManifestDir repo of
 -- 签名渲染（语法级）
 -- ---------------------------------------------------------------
 renderTy : Expr -> String
-renderTy ty = case ty of
-  EVar name sp => name
-  EApp (EVar arrow _) ([a, b]) _ =>
-    if arrow == "->" then renderTyArg a ++ " -> " ++ renderTy b else renderTyPlain ty
-  EPi name implicit dom cod sp =>
-    let
-      binder =
-        if implicit then "{" ++ name ++ " : " ++ renderTy dom ++ "}"
-        else "(" ++ name ++ " : " ++ renderTy dom ++ ")"
-    in binder ++ " -> " ++ renderTy cod
-  _ => renderTyPlain ty
+renderTy (EVar name sp) = name
+renderTy (ty@(EApp (EVar arrow _) ([a, b]) _)) =
+  if arrow == "->" then renderTyArg a ++ " -> " ++ renderTy b else renderTyPlain ty
+renderTy (EPi name implicit dom cod sp) =
+  let
+    binder =
+      if implicit then "{" ++ name ++ " : " ++ renderTy dom ++ "}"
+      else "(" ++ name ++ " : " ++ renderTy dom ++ ")"
+  in binder ++ " -> " ++ renderTy cod
+renderTy ty = renderTyPlain ty
+
+-- M32：签名可带 trait 约束（`C a, D b => τ`）；空 ctx 与旧输出逐字一致。
+renderSigTy : List Expr -> Expr -> String
+renderSigTy [] ty = renderTy ty
+renderSigTy ctx ty = join ", " (map renderTy ctx) ++ " => " ++ renderTy ty
 
 renderTyPlain : Expr -> String
 renderTyPlain (EApp f args sp) = renderTyAtom f ++ " " ++ join " " (map renderTyArg args)
@@ -202,7 +210,7 @@ declCol d = spanStartCol (declSpan d)
 signatureOf : String -> List Decl -> String
 signatureOf name [] = ""
 signatureOf name (d :: rest) = case d of
-  DSig n ty sp => if n == name then renderTy ty else signatureOf name rest
+  DSig n ctx ty sp => if n == name then renderSigTy ctx ty else signatureOf name rest
   _ => signatureOf name rest
 
 symbolsOfModule : String -> List Decl -> List Comment -> List Sym
@@ -224,9 +232,11 @@ symbolsOfDecl sMod decls comments d =
     DTrait name params methods sp =>
       Sym sMod name "trait" ("trait " ++ name ++ paramSuffix params) doc line col
         :: methodSymbols sMod methods
-    DSig name ty sp => []
+    DSig name ctx ty sp => []
     DAxiom name ty sp =>
       [Sym sMod name "axiom" ("axiom " ++ name ++ " : " ++ renderTy ty) doc line col]
+    DExtern name cName ty sp =>
+      [Sym sMod name "extern" ("extern " ++ name ++ " : " ++ renderTy ty) doc line col]
     DFun name pats body sp => [Sym sMod name "fun" (signatureOf name decls) doc line col]
     -- M29-T2b：命名实例已删除，实例不再产生符号（字典按实例表注册）。
     DInstance ctxE head methods sp => []
@@ -331,6 +341,18 @@ refsInExpr sMod e = case e of
   ERecUpdate r fields sp => append (refsInExpr sMod r) (concatMap (refsInField sMod) fields)
   EDo stmts sp => concatMap (refsInDoStmt sMod) stmts
   EAnn value ty sp => append (refsInExpr sMod value) (refsInExpr sMod ty)
+  -- M31.3：keep 模式（index/fmt）下反引号中缀与 section **保留原形**（不像 EParen/EInfix
+  -- 会被重排消掉），所以这里必须显式处理：反引号里的名字本身也是引用，操作数继续递归，
+  -- 不能像旧 wildcard 那样静默丢整棵子树。
+  EBacktick nm l r sp =>
+    append [Ref sMod nm (spanStartLine sp) (spanStartCol sp)]
+      (append (refsInExpr sMod l) (refsInExpr sMod r))
+  ESectOp op sp => [Ref sMod op (spanStartLine sp) (spanStartCol sp)]
+  ESectL op inner sp =>
+    append [Ref sMod op (spanStartLine sp) (spanStartCol sp)] (refsInExpr sMod inner)
+  ESectR inner op sp =>
+    append [Ref sMod op (spanStartLine sp) (spanStartCol sp)] (refsInExpr sMod inner)
+  _ => []
 
 -- ---------------------------------------------------------------
 -- 全量构建
@@ -347,28 +369,39 @@ builtSymbols (Built ms syms refs) = syms
 builtRefs : Built -> List Ref
 builtRefs (Built ms syms refs) = refs
 
--- 索引一个文件。parse 失败返回 Err（调用方转成 warning），不中断整体。
-indexOne : String -> String -> String -> Result Built
-indexOne dir pkgName path =
-  if prim_fileExists path then indexOneExisting dir pkgName path else Err (path ++ ": no such file")
+-- 索引一个文件。parse/fixity 失败返回 Err（调用方转成 warning），不中断整体。
+-- 返回推进后的 `FixityEnv`：按目录复用包上下文与已加载模块图（见 Vuna.FixityEnv）。
+indexOne : FixityEnv -> String -> String -> String -> Pair FixityEnv (Result Built)
+indexOne env dir pkgName path =
+  if runIO (prim_fileExists path) then indexOneExisting env dir pkgName path
+  else Pair env (Err (path ++ ": no such file"))
 
-indexOneExisting : String -> String -> String -> Result Built
-indexOneExisting dir pkgName path =
+indexOneExisting : FixityEnv -> String -> String -> String -> Pair FixityEnv (Result Built)
+indexOneExisting env dir pkgName path =
   let
-    source = prim_readFile path
+    source = runIO (prim_readFile path)
     bytes = strLength source
-  in case parseSource path source of
-    Err e => Err (path ++ ": " ++ e)
-    Ok (Source srcHdr imports decls) =>
-      let
-        sMod = moduleNameOf dir path srcHdr
-        comments = case lexComments source of
-          Err e => []
-          Ok cs => cs
-        info = ModuleInfo sMod pkgName path bytes (length decls)
-        syms = symbolsOfModule sMod decls comments
-        refs = refsInDecls sMod decls
-      in Ok (Built [info] syms refs)
+    looked = fixitiesForFile env path source
+    env2 = firstOf looked
+  in case secondOf looked of
+    Err e => Pair env2 (Err (path ++ ": cannot load package fixity context: " ++ e))
+    Ok programFixities => case parseSource path source of
+      Err e => Pair env2 (Err (path ++ ": " ++ e))
+      -- M31.3（B26/B27）：必须按**程序级** fixity 重排（本文件声明 ++ import 闭包，
+      -- 本地优先）。只用本地声明会让用到 `+`/`==`/`::` 的文件报 unknown fixity，
+      -- 然后被当错误跳过 → `vuna map` 静默漏模块。
+      Ok (Source srcHdr imports fx decls0) => case reorderProgram (tableOfKeepOps (append programFixities fx)) decls0 of
+        Err e => Pair env2 (Err (path ++ ": " ++ e))
+        Ok decls =>
+          let
+            sMod = moduleNameOf dir path srcHdr
+            comments = case lexComments source of
+              Err e => []
+              Ok cs => cs
+            info = ModuleInfo sMod pkgName path bytes (length decls)
+            syms = symbolsOfModule sMod decls comments
+            refs = refsInDecls sMod decls
+          in Pair env2 (Ok (Built [info] syms refs))
 
 data Acc : Type where
   Acc : List ModuleInfo -> List Sym -> List Ref -> List String -> Acc
@@ -385,35 +418,40 @@ accRefs (Acc ms syms refs warns) = refs
 accWarns : Acc -> List String
 accWarns (Acc ms syms refs warns) = warns
 
-indexPackage : String -> String -> List String -> Acc -> Acc
-indexPackage dir pkgName files acc = foldFiles dir pkgName files acc
+indexPackage : FixityEnv -> String -> String -> List String -> Acc -> Pair FixityEnv Acc
+indexPackage env dir pkgName files acc = foldFiles env dir pkgName files acc
 
-foldFiles : String -> String -> List String -> Acc -> Acc
-foldFiles dir pkgName [] acc = acc
-foldFiles dir pkgName (path :: rest) acc =
-  foldFiles dir pkgName rest (indexFileInto dir pkgName path acc)
+foldFiles : FixityEnv -> String -> String -> List String -> Acc -> Pair FixityEnv Acc
+foldFiles env dir pkgName [] acc = Pair env acc
+foldFiles env dir pkgName (path :: rest) acc =
+  let
+    stepped = indexFileInto env dir pkgName path acc
+  in foldFiles (firstOf stepped) dir pkgName rest (secondOf stepped)
 
-indexFileInto : String -> String -> String -> Acc -> Acc
-indexFileInto dir pkgName path acc = case indexOne dir pkgName path of
-  Err e => Acc (accModules acc) (accSymbols acc) (accRefs acc) (e :: accWarns acc)
-  Ok b =>
-    Acc (append (accModules acc) (builtModules b)) (append (accSymbols acc) (builtSymbols b))
-      (append (accRefs acc) (builtRefs b)) (accWarns acc)
+indexFileInto : FixityEnv -> String -> String -> String -> Acc -> Pair FixityEnv Acc
+indexFileInto env dir pkgName path acc = case indexOne env dir pkgName path of
+  Pair env2 result => case result of
+    Err e => Pair env2 (Acc (accModules acc) (accSymbols acc) (accRefs acc) (e :: accWarns acc))
+    Ok b =>
+      Pair env2
+        (Acc (append (accModules acc) (builtModules b)) (append (accSymbols acc) (builtSymbols b)) (append (accRefs acc) (builtRefs b)) (accWarns acc))
 
-collectAll : List (Pair String String) -> Acc -> Acc
-collectAll [] acc = acc
-collectAll (root :: rest) acc =
+collectAll : FixityEnv -> List (Pair String String) -> Acc -> Pair FixityEnv Acc
+collectAll env [] acc = Pair env acc
+collectAll env (root :: rest) acc =
   let
     dir = firstOf root
     pkgName = secondOf root
     files = packageSources dir
-  in collectAll rest (indexPackage dir pkgName files acc)
+    stepped = indexPackage env dir pkgName files acc
+  in collectAll (firstOf stepped) rest (secondOf stepped)
 
 -- 全量构建（parse 所有源码，不读写缓存）。
 buildIndex : String -> Result Index
 buildIndex repo =
   let
-    acc = collectAll (packageDirs repo) (Acc [] [] [] [])
+    stepped = collectAll emptyFixityEnv (packageDirs repo) (Acc [] [] [] [])
+    acc = secondOf stepped
   in Ok (Index (accModules acc) (dedupeSymbols (accSymbols acc)) (accRefs acc))
 
 -- ---------------------------------------------------------------
@@ -444,7 +482,10 @@ lockPath repo = cacheDir repo ++ "/cache.lock"
 -- 哈希 = strHash(content) 与 strHash("v2:" ++ content) 的组合（同一内容必须得到同一
 -- 字符串；两个 10 位哈希组合降低「同 size 同 mtime 内容变更」漏判的概率）。
 contentHash : String -> String
-contentHash content = strFromInt (hashStr content) ++ "-" ++ strFromInt (hashStr ("v2:" ++ content))
+contentHash content =
+  strFromInt (Base.HashMap.hashStr content)
+    ++ "-"
+    ++ strFromInt (Base.HashMap.hashStr ("v2:" ++ content))
 
 entryPath : Pair String (Pair Int String) -> String
 entryPath entry = firstOf entry
@@ -457,12 +498,13 @@ entryHash entry = secondOf (secondOf entry)
 
 -- 磁盘上的当前文件元数据（path, bytes, hash）。读内容算哈希，不 parse。
 scanFile : String -> Pair String (Pair Int String)
-scanFile path = if prim_fileExists path then scanFileExisting path else Pair path (Pair 0 "")
+scanFile path =
+  if runIO (prim_fileExists path) then scanFileExisting path else Pair path (Pair 0 "")
 
 scanFileExisting : String -> Pair String (Pair Int String)
 scanFileExisting path =
   let
-    source = prim_readFile path
+    source = runIO (prim_readFile path)
   in Pair path (Pair (strLength source) (contentHash source))
 
 scanRoot : Pair String String -> List (Pair String (Pair Int String))
@@ -508,7 +550,7 @@ readManifestEntries : String -> Maybe (List (Pair String (Pair Int String)))
 readManifestEntries repo =
   let
     path = manifestPath repo
-  in if prim_fileExists path then parseManifestV2 (prim_readFile path) else Nothing
+  in if runIO (prim_fileExists path) then parseManifestV2 (runIO (prim_readFile path)) else Nothing
 
 manifestMatches : String -> List (Pair String (Pair Int String)) -> Bool
 manifestMatches repo entries = case readManifestEntries repo of
@@ -532,27 +574,27 @@ ensureCacheDir repo =
   in if dirExists (cacheDir repo) then 0 else primRunMkdir repo ".local/index"
 
 primRunMkdir : String -> String -> Int
-primRunMkdir repo name = prim_runIn repo ["mkdir", name]
+primRunMkdir repo name = runIO (prim_runIn repo ["mkdir", name])
 
 -- 目录可写性探测（test -w 不写文件）：不可写时不做任何写缓存动作。
 writableDir : String -> Bool
-writableDir dir = prim_runIn dir ["test", "-w", "."] == 0
+writableDir dir = runIO (prim_runIn dir ["test", "-w", "."]) == 0
 
 -- 锁年龄判定：`timeUs` 是时钟能力（vuna 根包 manifest 已声明 clock）。
 nowSeconds : Int -> Int
-nowSeconds _ = timeUs / 1000000
+nowSeconds _ = runIO timeUs / 1000000
 
 lockIsFresh : Int -> String -> Bool
 lockIsFresh _ path =
   let
-    age = nowSeconds 0 - prim_fileMtime path
+    age = nowSeconds 0 - runIO (prim_fileMtime path)
   in age >= 0 && age < 60
 
 -- `mkdir` 是原子创建：返回 0 表示本进程拿到锁；非 0（已存在/不可写）表示放弃写缓存。
 -- 用 prim_runIn 而不是 prim_makeDir：后者在并发竞争（路径刚被另一进程创建）时
 -- 会抛宿主 failwith，而锁失败按约定必须静默降级。
 tryMkdirLock : String -> Bool
-tryMkdirLock repo = prim_runIn (cacheDir repo) ["mkdir", "cache.lock"] == 0
+tryMkdirLock repo = runIO (prim_runIn (cacheDir repo) ["mkdir", "cache.lock"]) == 0
 
 acquireLock : String -> Bool
 acquireLock repo =
@@ -561,12 +603,12 @@ acquireLock repo =
   in if dirExists path then if lockIsFresh 0 path then False
   else
     let
-      _ = prim_runIn (cacheDir repo) ["rm", "-rf", "cache.lock"]
+      _ = runIO (prim_runIn (cacheDir repo) ["rm", "-rf", "cache.lock"])
     in tryMkdirLock repo
   else tryMkdirLock repo
 
 releaseLock : String -> Int
-releaseLock repo = prim_runIn (cacheDir repo) ["rm", "-rf", "cache.lock"]
+releaseLock repo = runIO (prim_runIn (cacheDir repo) ["rm", "-rf", "cache.lock"])
 
 -- 过期残留锁清理：缓存命中时不会走 saveIndex，但上一次崩溃/并发留下的**过期**锁
 -- 必须清掉，否则它会在下一次缓存失效时让写缓存白等（<60s 新鲜锁仍尊重持有者）。
@@ -574,7 +616,7 @@ cleanupStaleLock : String -> Int
 cleanupStaleLock repo =
   let
     path = lockPath repo
-  in if dirExists path then if lockIsFresh 0 path then 0 else prim_runIn (cacheDir repo) ["rm", "-rf", "cache.lock"]
+  in if dirExists path then if lockIsFresh 0 path then 0 else runIO (prim_runIn (cacheDir repo) ["rm", "-rf", "cache.lock"])
   else 0
 
 -- 每个缓存文件先写 `<name>.tmp`，再 `mv` 同目录原子替换（rename(2)）。
@@ -583,8 +625,8 @@ writeAtomic repo name content =
   let
     dir = cacheDir repo
     tmpName = name ++ ".tmp"
-    _ = prim_writeFile (dir ++ "/" ++ tmpName) content
-  in prim_runIn dir ["mv", tmpName, name]
+    _ = runIO (prim_writeFile (dir ++ "/" ++ tmpName) content)
+  in runIO (prim_runIn dir ["mv", tmpName, name])
 
 -- 数据文件先写、manifest 最后：manifest 存在即表示其余文件都已提交。
 -- 任一数据文件写失败都不写 manifest（降级为内存索引，下次重建）。
@@ -623,7 +665,7 @@ loadIndexFromCache repo =
     (parseRefs (parseLines (readOrEmpty (refsPath repo))))
 
 readOrEmpty : String -> String
-readOrEmpty path = if prim_fileExists path then prim_readFile path else ""
+readOrEmpty path = if runIO (prim_fileExists path) then runIO (prim_readFile path) else ""
 
 parseLines : String -> List String
 parseLines text = filterNonEmpty (splitOnNewline text)
@@ -667,7 +709,7 @@ parseRefs (line :: rest) = case splitOnTab line of
 -- 非 workspace（向上找不到 vuna.toml）是**输入错误**，不再静默建空索引。
 loadOrBuild : String -> Result Index
 loadOrBuild repo = case findManifestDirMaybe repo of
-  Nothing => Err ("index: no vuna.toml found from " ++ prim_getcwd ++ " (searched upward)")
+  Nothing => Err ("index: no vuna.toml found from " ++ runIO prim_getcwd ++ " (searched upward)")
   Just manifestDir =>
     let
       entries = scanSources repo

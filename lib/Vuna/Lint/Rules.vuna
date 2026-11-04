@@ -12,14 +12,14 @@ module Vuna.Lint.Rules
   , findingRule
   , isNilList
   , joinLines
-  , lintSource
+  , lintSourceWith
   , splitLines
   ) where
 
 -- Vuna.Lint.Rules：lint 的三条规则（AST 驱动）+ 源码切片工具。
 --
 -- M31 重写：旧实现是纯 token 行扫描（按缩进猜结构），规范格式下几乎不触发。
--- 现在 `lintSource` 先 parseSource 得到 AST，规则判定全部走 AST；需要源码原文
+-- 现在 `lintSourceWith` 先 parseSource 得到 AST，规则判定全部走 AST；需要源码原文
 -- （字面量、模式、分支体）时再用 span + token 边界从源码切片，绝不重新渲染
 -- 字符串字面量。Edit 用行范围表示（`Edit start stop lines`），由 Vuna.Lint.Fix 应用。
 --
@@ -35,6 +35,7 @@ module Vuna.Lint.Rules
 -- 折叠产生互相冲突的 Edit。
 import Vuna.Compiler.Common
 import Vuna.Compiler.Frontend.Ast
+import Vuna.Compiler.Loader.Fixity
 import Vuna.Compiler.Frontend.Lexer
 import Vuna.Compiler.Frontend.Parser
 import Vuna.Lint.Diagnostics
@@ -200,8 +201,8 @@ prefixChars (p :: prest) text = case text of
 
 containsSubChars : List Int -> List Int -> Bool
 containsSubChars pat [] = False
-containsSubChars pat (c :: rest) =
-  if prefixChars pat (c :: rest) then True else containsSubChars pat rest
+containsSubChars pat (text@(c :: rest)) =
+  if prefixChars pat text then True else containsSubChars pat rest
 
 containsChar : Int -> List Int -> Bool
 containsChar c [] = False
@@ -247,8 +248,19 @@ blockBodyLines lines body target =
   let
     start = exprStartLine body
     stop = spanEndLine (exprSpan body)
-    k = indentOf (lineAt lines start) - target
-  in dedentRange lines start stop (if k < 0 then 0 else k)
+    startCol = spanStartCol (exprSpan body)
+    firstIndent = indentOf (lineAt lines start)
+    inline = if startCol > firstIndent + 1 then True else False
+    raw =
+      if inline then append [tailFromCol (lineAt lines start) startCol] (rangeLines lines (start + 1) stop)
+      else rangeLines lines start stop
+  in case raw of
+    [] => []
+    first :: rest =>
+      let
+        firstText = if inline then first else dropIndent firstIndent first
+      in append [spaces target ++ firstText]
+        (map (\line => spaces target ++ dropIndent firstIndent line) rest)
 
 -- ---------------------------------------------------------------
 -- token 工具
@@ -347,6 +359,14 @@ else case e of
   EDo stmts sp => minPair (startFromSpan sp) (startStmts (fuel - 1) stmts)
   EAnn value ty sp =>
     minPair (startFromSpan sp) (minPair (startExpr (fuel - 1) value) (startExpr (fuel - 1) ty))
+  -- M31.3：keep 模式（lint 的 parse 后阶段）下反引号中缀 / section 保留原形；
+  -- 起始位置要递归到操作数（中缀 span 从运算符开始，lhs 可能更靠前）。
+  EBacktick nm l r sp =>
+    minPair (startFromSpan sp) (minPair (startExpr (fuel - 1) l) (startExpr (fuel - 1) r))
+  ESectOp op sp => startFromSpan sp
+  ESectL op rhs sp => minPair (startFromSpan sp) (startExpr (fuel - 1) rhs)
+  ESectR lhs op sp => minPair (startFromSpan sp) (startExpr (fuel - 1) lhs)
+  _ => Pair 0 0
 
 startExprs : Int -> List Expr -> Pair Int Int
 startExprs fuel exprs = if fuel <= 0 then Pair 1000000000 1000000000
@@ -581,6 +601,13 @@ else case e of
     mentionsExpr (fuel - 1) name base || mentionsFields (fuel - 1) name fields
   EDo stmts sp => mentionsStmts (fuel - 1) name stmts
   EAnn value ty sp => mentionsExpr (fuel - 1) name value || mentionsExpr (fuel - 1) name ty
+  -- M31.3：反引号里的名字与 section 的 op 都是值引用，操作数继续递归。
+  EBacktick nm l r sp =>
+    nm == name || mentionsExpr (fuel - 1) name l || mentionsExpr (fuel - 1) name r
+  ESectOp op sp => op == name
+  ESectL op rhs sp => op == name || mentionsExpr (fuel - 1) name rhs
+  ESectR lhs op sp => op == name || mentionsExpr (fuel - 1) name lhs
+  _ => False
 
 mentionsExprs : Int -> String -> List Expr -> Bool
 mentionsExprs fuel name exprs = if fuel <= 0 then False
@@ -758,7 +785,8 @@ laneReplace lines toks lane name replacement startLine startCol =
 liftBodyPlacementOk : List String -> List PTok -> Pat -> Expr -> Bool
 liftBodyPlacementOk lines toks altPat body =
   if exprSingleLine body then segmentOk lines toks body
-  else exprStartLine body > spanStartLine (patSpan altPat)
+  else if exprStartLine body > spanStartLine (patSpan altPat) then True
+  else spanStartCol (exprSpan body) > indentOf (lineAt lines (exprStartLine body)) + 1
 
 liftFixable : List String -> List PTok -> Lane -> Pat -> Expr -> Span -> Bool
 liftFixable lines toks lane pat body sp =
@@ -773,7 +801,9 @@ liftEdit lines toks lane pat body name sp =
   let
     headLine = laneHeadLine lane
     ownLine = startsOwnLine lines (spanStartLine sp) (spanStartCol sp)
-    patTextValue = "(" ++ patText lines toks pat ++ ")"
+    patTextValue =
+      if exprMentions name body then asPatText lines toks name pat
+      else "(" ++ patText lines toks pat ++ ")"
     newHead = laneReplace lines toks lane name patTextValue (spanStartLine sp) (spanStartCol sp)
     target = if ownLine then spanStartCol sp - 1 else indentOf (lineAt lines headLine) + 2
     newLines =
@@ -785,9 +815,18 @@ liftEdit lines toks lane pat body name sp =
 
 liftCaseOk : List String -> List PTok -> Lane -> Pat -> Expr -> String -> Span -> List Finding
 liftCaseOk lines toks lane pat body name sp =
-  if countLaneVar name lane == 1 && notBool (exprMentions name body) && notBool (intersectsNames (patVarFuel lintFuel pat) (removeName name (laneVars lane))) && liftablePat pat && liftFixable lines toks lane pat body sp then [ Finding (spanStartLine sp) (spanStartCol sp) (lintCode LiftDestructure) (lintRule LiftDestructure) (lintMsg LiftDestructure name) (Just (liftEdit lines toks lane pat body name sp))
+  if countLaneVar name lane == 1 && True && notBool (intersectsNames (patVarFuel lintFuel pat) (removeName name (laneVars lane))) && liftablePat pat && liftFixable lines toks lane pat body sp then [ Finding (spanStartLine sp) (spanStartCol sp) (lintCode LiftDestructure) (lintRule LiftDestructure) (lintMsg LiftDestructure name) (Just (liftEdit lines toks lane pat body name sp))
   ]
   else []
+
+laneIsClause : Lane -> Bool
+laneIsClause (LClause line pats last) = True
+laneIsClause (LAlt line pat last) = False
+
+asPatText : List String -> List PTok -> String -> Pat -> String
+asPatText lines toks name pat =
+  if patNeedsParen pat then name ++ "@" ++ "(" ++ patText lines toks pat ++ ")"
+  else name ++ "@" ++ patText lines toks pat
 
 liftCase : List String -> List PTok -> Lane -> Expr -> Expr -> List (Pair Pat Expr) -> Span -> List Finding
 liftCase lines toks lane caseExpr scrut ([Pair pat body]) sp = case scrut of
@@ -797,7 +836,7 @@ liftCase lines toks lane caseExpr scrut _ sp = []
 
 liftLet : List String -> List PTok -> Lane -> Span -> Pat -> Expr -> Expr -> List Finding
 liftLet lines toks lane sp pat (EVar name nsp) body =
-  if liftablePat pat && countLaneVar name lane == 1 && notBool (exprMentions name body) && notBool (intersectsNames (patVarFuel lintFuel pat) (removeName name (laneVars lane))) && liftLetFixable lines toks lane pat body sp then [ Finding (spanStartLine sp) (spanStartCol sp) (lintCode LiftDestructure) (lintRule LiftDestructure) (lintMsg LiftDestructure name) (Just (liftLetEdit lines toks lane pat body name sp))
+  if liftablePat pat && countLaneVar name lane == 1 && True && notBool (intersectsNames (patVarFuel lintFuel pat) (removeName name (laneVars lane))) && liftLetFixable lines toks lane pat body sp then [ Finding (spanStartLine sp) (spanStartCol sp) (lintCode LiftDestructure) (lintRule LiftDestructure) (lintMsg LiftDestructure name) (Just (liftLetEdit lines toks lane pat body name sp))
   ]
   else []
 liftLet lines toks lane sp pat _ body = []
@@ -818,7 +857,9 @@ liftLetEdit : List String -> List PTok -> Lane -> Pat -> Expr -> String -> Span 
 liftLetEdit lines toks lane pat body name sp =
   let
     headLine = laneHeadLine lane
-    patTextValue = "(" ++ patText lines toks pat ++ ")"
+    patTextValue =
+      if exprMentions name body then asPatText lines toks name pat
+      else "(" ++ patText lines toks pat ++ ")"
     newHead = laneReplace lines toks lane name patTextValue (spanStartLine sp) (spanStartCol sp)
     target = indentOf (lineAt lines headLine) + 2
     -- let 解构没有既有语料约束，单行 body 直接按 fmt 规范形态与 clause/alt 头同行。
@@ -839,32 +880,9 @@ liftFindings lines toks lane _ = []
 -- ---------------------------------------------------------------
 -- 规则 3：case-to-clauses
 -- ---------------------------------------------------------------
-lastPatOf : List (Pair Pat Expr) -> Maybe Pat
-lastPatOf [] = Nothing
-lastPatOf ((Pair pat body) :: rest) = case rest of
-  [] => Just pat
-  _ => lastPatOf rest
-
-wildcardLast : List (Pair Pat Expr) -> Bool
-wildcardLast alts = case lastPatOf alts of
-  Nothing => False
-  Just pat => case pat of
-    PWild sp => True
-    PVar n sp => True
-    _ => False
-
-lengthTwo : List a -> Bool
-lengthTwo ([a, b]) = True
-lengthTwo _ = False
-
-nilConsShape : List (Pair Pat Expr) -> Bool
-nilConsShape ([Pair (PCon "Nil" nilArgs nilSp) firstBody, Pair (PCon "Cons" consArgs consSp) secondBody]) =
-  isNilList nilArgs && lengthTwo consArgs
-nilConsShape _ = False
-
-provablyExhaustive : List (Pair Pat Expr) -> Bool
-provablyExhaustive alts = wildcardLast alts || nilConsShape alts
-
+-- 判据不再语法层证明穷尽性：lint 的输入应视为能通过 `vuna check` 的程序，
+-- 而 DT 已强制 `case` 穷尽；`case` 与多 clause 的匹配语义等价（分支/clause 顺序一致）。
+-- 纯映射表（分支体不引用 scrutinee）同样拆成多 clause。
 isWildPat : Pat -> Bool
 isWildPat (PWild sp) = True
 isWildPat _ = False
@@ -872,7 +890,7 @@ isWildPat _ = False
 caseAltLiftableOk : String -> List String -> Pair Pat Expr -> Bool
 caseAltLiftableOk x others (Pair pat body) =
   notBool (intersectsNames (patVarFuel lintFuel pat) others)
-    && (if exprMentions x body then isWildPat pat else True)
+    && (if exprMentions x body then isWildPat pat || liftablePat pat else True)
 
 altsLiftableGo : String -> List String -> List (Pair Pat Expr) -> Bool
 altsLiftableGo x others [] = True
@@ -882,17 +900,11 @@ altsLiftableGo x others (alt :: rest) =
 altsLiftable : String -> List Pat -> List (Pair Pat Expr) -> Bool
 altsLiftable x pats alts = altsLiftableGo x (removeName x (patVars pats)) alts
 
--- 至少一个分支体真的用到 scrutinee 变量：全不引用时 lift 后参数只剩模式匹配，
--- 不是本规则的目标形态（也避免把 literal-if-chain 生成的 case 再拆成 clause）。
-altsUseVar : String -> List (Pair Pat Expr) -> Bool
-altsUseVar x [] = False
-altsUseVar x ((Pair pat body) :: rest) = exprMentions x body || altsUseVar x rest
-
 caseAltClauseLines : List String -> List PTok -> String -> PTok -> String -> Int -> Pat -> Expr -> List String
 caseAltClauseLines lines toks headPrefix varTok x headIndent pat body =
   let
     replacement =
-      if exprMentions x body then x
+      if exprMentions x body then if isWildPat pat then x else asPatText lines toks x pat
       else if patNeedsParen pat then "(" ++ patText lines toks pat ++ ")" else patText lines toks pat
     newHead = replaceIdentInLine headPrefix varTok replacement
   in if exprSingleLine body then [newHead ++ " " ++ exprText lines toks body]
@@ -934,7 +946,7 @@ caseToClausesEdit lines toks x pats headLine sp alts =
 caseToClauses : List String -> List PTok -> Int -> String -> List Pat -> Expr -> Bool -> List Finding
 caseToClauses lines toks headLine name pats (ECase scrut alts sp) singleClause = case scrut of
   EVar x xsp =>
-    if singleClause && countVar x pats == 1 && atLeastTwo alts && provablyExhaustive alts && altsUseVar x alts && altsLiftable x pats alts && caseToClausesFixable lines toks pats headLine sp alts then [ Finding (spanStartLine sp) (spanStartCol sp) (lintCode CaseToClauses) (lintRule CaseToClauses) (lintMsg CaseToClauses x) (Just (caseToClausesEdit lines toks x pats headLine sp alts))
+    if singleClause && countVar x pats == 1 && atLeastTwo alts && altsLiftable x pats alts && caseToClausesFixable lines toks pats headLine sp alts then [ Finding (spanStartLine sp) (spanStartCol sp) (lintCode CaseToClauses) (lintRule CaseToClauses) (lintMsg CaseToClauses x) (Just (caseToClausesEdit lines toks x pats headLine sp alts))
     ]
     else []
   _ => []
@@ -976,6 +988,13 @@ else case e of
   EDo stmts sp => walkStmts (fuel - 1) lines toks stmts
   EAnn value ty sp =>
     append (walkExpr (fuel - 1) lines toks value) (walkExpr (fuel - 1) lines toks ty)
+  -- M31.3：keep 模式下保留的反引号中缀 / section：结构递归，不静默丢子树。
+  EBacktick nm l r sp =>
+    append (walkExpr (fuel - 1) lines toks l) (walkExpr (fuel - 1) lines toks r)
+  ESectOp op sp => []
+  ESectL op rhs sp => walkExpr (fuel - 1) lines toks rhs
+  ESectR lhs op sp => walkExpr (fuel - 1) lines toks lhs
+  _ => []
 
 walkIf : Int -> List String -> List PTok -> Expr -> Expr -> Expr -> Expr -> List Finding
 walkIf fuel lines toks e cond yes no = if fuel <= 0 then []
@@ -1060,7 +1079,7 @@ hasImplicitPi _ = False
 sigTyOf : String -> List Decl -> Maybe Expr
 sigTyOf name [] = Nothing
 sigTyOf name (d :: rest) = case d of
-  DSig n ty sp => if n == name then Just ty else sigTyOf name rest
+  DSig n ctx ty sp => if n == name then Just ty else sigTyOf name rest
   _ => sigTyOf name rest
 
 hasImplicitSig : String -> List Decl -> Bool
@@ -1134,16 +1153,21 @@ dedupGo : List Finding -> List Finding -> List Finding
 dedupGo kept [] = reverse kept
 dedupGo kept (f :: rest) = if coveredBy kept f then dedupGo kept rest else dedupGo (f :: kept) rest
 
-lintSource : String -> Result (List Finding)
-lintSource source = case parseSource "<lint>" source of
+-- M31.3（B26/B27）：lint 的规则看 AST 中缀结构，所以重排必须与程序级 fixity 一致。
+-- `programFixities` = 本文件 `infix*` 声明 ++ 该文件 import 闭包可见声明（调用方算）；
+-- 这里再把它放在本文件声明（parse 得到的 env）之前——本地优先，与 Loader 一致。
+-- 缺声明时严格报 unknown fixity（不静默按默认优先级重排）。
+lintSourceWith : List FixityDecl -> String -> Result (List Finding)
+lintSourceWith programFixities source = case parseSource "<lint>" source of
   Err e => Err e
-  Ok ignored => case lexSource source of
+  Ok (Source _ _ fx decls0) => case reorderProgram (tableOfKeepOps (append programFixities fx)) decls0 of
     Err e => Err e
-    Ok toks =>
-      let
-        lines = splitLines source
-        decls = sourceDecls ignored
-      in Ok (dedupFindings (sortFindings (scanDecls lines toks decls decls)))
+    Ok decls => case lexSource source of
+      Err e => Err e
+      Ok toks =>
+        let
+          lines = splitLines source
+        in Ok (dedupFindings (sortFindings (scanDecls lines toks decls decls)))
 
 sourceDecls : SourceFile -> List Decl
-sourceDecls (Source hdr imports decls) = decls
+sourceDecls (Source hdr imports fx decls) = decls

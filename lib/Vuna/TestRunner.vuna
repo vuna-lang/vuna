@@ -22,12 +22,13 @@ import Vuna.Compiler.Packages.Pkg
 import Vuna.Compiler.Driver.Dt
 import Vuna.Files
 import Vuna.Interp
+import Base.IO
 
 runTests : Package -> Int
 runTests pkg = case workspacePackages (packageDir pkg) of
   Err e =>
     let
-      _ = prim_print ("error: " ++ e ++ "\n")
+      _ = runIO (prim_print ("error: " ++ e ++ "\n"))
     in 2
   Ok pkgs => if length pkgs <= 1 then runPackageTests pkg else runWorkspaceTests pkgs
 
@@ -38,11 +39,11 @@ runPackageTests : Package -> Int
 runPackageTests pkg =
   let
     testDir = packageDir pkg ++ "/test"
-  in if pathExistsDir testDir then case runTestFiles (packageContext pkg) testDir (testFiles (prim_readDir testDir)) 0 0 of
+  in if pathExistsDir testDir then case runTestFiles (packageContext pkg) testDir (testFiles (runIO (prim_readDir testDir))) 0 0 of
     Pair _ fail => if fail == 0 then 0 else 1
   else
     let
-      _ = prim_print ("error: test directory not found: " ++ testDir ++ "\n")
+      _ = runIO (prim_print ("error: test directory not found: " ++ testDir ++ "\n"))
     in 2
 
 -- ---------------------------------------------------------------
@@ -51,7 +52,7 @@ runPackageTests pkg =
 runWorkspaceTests : List Package -> Int
 runWorkspaceTests pkgs =
   let
-    _ = prim_print ("workspace: " ++ strFromInt (length pkgs) ++ " package(s)\n")
+    _ = runIO (prim_print ("workspace: " ++ strFromInt (length pkgs) ++ " package(s)\n"))
   in runWorkspaceGo pkgs 0 0
 
 runWorkspaceGo : List Package -> Int -> Int -> Int
@@ -59,8 +60,8 @@ runWorkspaceGo pkgs pass fail = case pkgs of
   [] =>
     let
       _ =
-        prim_print
-          ("\nworkspace: " ++ strFromInt pass ++ " passed, " ++ strFromInt fail ++ " failed\n")
+        runIO
+          (prim_print ("\nworkspace: " ++ strFromInt pass ++ " passed, " ++ strFromInt fail ++ " failed\n"))
     in if fail == 0 then 0 else 1
   pkg :: rest =>
     let
@@ -68,12 +69,12 @@ runWorkspaceGo pkgs pass fail = case pkgs of
       testDir = packageDir pkg ++ "/test"
     in if pathExistsDir testDir then
       let
-        _ = prim_print ("-- " ++ name ++ " --\n")
-      in case runTestFiles (packageContext pkg) testDir (testFiles (prim_readDir testDir)) 0 0 of
+        _ = runIO (prim_print ("-- " ++ name ++ " --\n"))
+      in case runTestFiles (packageContext pkg) testDir (testFiles (runIO (prim_readDir testDir))) 0 0 of
         Pair p f => runWorkspaceGo rest (pass + p) (fail + f)
     else
       let
-        _ = prim_print ("-- " ++ name ++ " -- (no test directory)\n")
+        _ = runIO (prim_print ("-- " ++ name ++ " -- (no test directory)\n"))
       in runWorkspaceGo rest pass fail
 
 -- 包名可能为空（只用于展示，不参与语义）。
@@ -93,7 +94,8 @@ testFiles (name :: rest) = if endsWith ".vuna" name then name :: testFiles rest 
 runTestFiles : PackageContext -> String -> List String -> Int -> Int -> Pair Int Int
 runTestFiles ctx dir [] pass fail =
   let
-    _ = prim_print ("\n" ++ strFromInt pass ++ " passed, " ++ strFromInt fail ++ " failed\n")
+    _ =
+      runIO (prim_print ("\n" ++ strFromInt pass ++ " passed, " ++ strFromInt fail ++ " failed\n"))
   in Pair pass fail
 runTestFiles ctx dir (name :: rest) pass fail =
   let
@@ -120,32 +122,34 @@ pureTest : String -> String -> String -> Bool
 pureTest name output expected = if output == expected then testOk name
 else
   let
-    _ = prim_print ("FAIL " ++ name ++ ": expected " ++ expected ++ ", got " ++ output ++ "\n")
+    _ =
+      runIO
+        (prim_print ("FAIL " ++ name ++ ": expected " ++ expected ++ ", got " ++ output ++ "\n"))
   in False
 
 -- 效果测试：临时包编译 + 运行，退出码 0 通过；编译/链接失败按 FAIL 记录诊断。
 runIOTest : PackageContext -> String -> String -> Bool
 runIOTest ctx path name =
   let
-    source = prim_readFile path
+    source = runIO (prim_readFile path)
   in case runEffectProgram ctx source False of
     Err e => testFail name e
     Ok 0 => testOk name
     Ok code =>
       let
         _ =
-          prim_print
-            ("FAIL " ++ name ++ ": effect program exited with code " ++ strFromInt code ++ "\n")
+          runIO
+            (prim_print ("FAIL " ++ name ++ ": effect program exited with code " ++ strFromInt code ++ "\n"))
       in False
 
 testOk : String -> Bool
 testOk name =
   let
-    _ = prim_print ("ok   " ++ name ++ "\n")
+    _ = runIO (prim_print ("ok   " ++ name ++ "\n"))
   in True
 
 testFail : String -> String -> Bool
 testFail name message =
   let
-    _ = prim_print ("FAIL " ++ name ++ ": " ++ message ++ "\n")
+    _ = runIO (prim_print ("FAIL " ++ name ++ ": " ++ message ++ "\n"))
   in False

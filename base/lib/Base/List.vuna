@@ -28,6 +28,15 @@ import Base.Monad
 -- M24.7：`mem` 的 `==` 在刚性类型上提升成 Dict_Eq；显式 import Base.Eq 既保证类存在，
 -- 也让 split 产物有正确的单元依赖顺序（生成代码引用 Base.Eq.eq 投影）。
 import Base.Eq
+-- M31.1：`==` / `<=` 是 Eq / Ord 方法名的别名，base 模块不自动注入 Prelude，
+-- 因此 take/drop/rangeFrom 的 `<=` 需要 Ord 方法名可见。
+import Base.Ord
+-- `+` / `-` 的 fixity 声明在 Base.Int；base 模块不自动注入 Prelude，
+-- range 的算术需要它的声明进入 import 闭包。
+import Base.Int
+
+-- `::` 是 canonical 构造子 `Cons` 的中缀别名（表达式与 pattern 都走这条声明）。
+infixr 5 :: = Cons
 
 data List a : Type where
   Nil : List a
@@ -64,9 +73,15 @@ foldr : (a -> b -> b) -> b -> List a -> b
 foldr f acc [] = acc
 foldr f acc (x :: xs) = f x (foldr f acc xs)
 
+-- M33 W2：原来的 `append (f x) (concatMap f rest)` 在「每段都较长」时是 O(n²)
+-- （每层 append 复制 f x）。改成尾递归 accumulator：把每段逆序前插，最后整体 reverse，
+-- 总代价 O(所有段长之和)。终止性仍是结构递归（rest）。
 concatMap : (a -> List b) -> List a -> List b
-concatMap f [] = []
-concatMap f (x :: rest) = append (f x) (concatMap f rest)
+concatMap f xs = concatMapGo f xs []
+
+concatMapGo : (a -> List b) -> List a -> List b -> List b
+concatMapGo f [] acc = reverse acc
+concatMapGo f (x :: rest) acc = concatMapGo f rest (append (reverse (f x)) acc)
 
 flatMap : (a -> List b) -> List a -> List b
 flatMap f xs = concatMap f xs

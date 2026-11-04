@@ -1,0 +1,11 @@
+-- M32 负例：约束语法只允许在顶层签名上；where 绑定签名写 `=>` 直接报语法诊断。
+import Prelude
+
+helper : Int -> Bool
+helper n = go n
+  where
+    go : Eq a => a -> Bool
+    go x = True
+
+main : Bool
+main = helper 1

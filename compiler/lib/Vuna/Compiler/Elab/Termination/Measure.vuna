@@ -190,9 +190,9 @@ ctorNameOf : Ctor -> String
 ctorNameOf (Ctor name ty arity sp) = name
 
 patSizeStrict : Pat -> Int -> List Int -> List (Pair String (Pair Int (Pair Int (List Int)))) -> List (Pair String (Pair Int (Pair Int (List Int))))
-patSizeStrict (PVar n sp) base path acc = Pair n (Pair base (Pair (length path) path)) :: acc
 patSizeStrict (PAs n inner sp) base path acc =
   patSizeStrict inner base path (Pair n (Pair base (Pair (length path) path)) :: acc)
+patSizeStrict (PVar n sp) base path acc = Pair n (Pair base (Pair (length path) path)) :: acc
 patSizeStrict (PWild sp) base path acc = acc
 patSizeStrict (PCon c ps sp) base path acc = patsSizeStrict ps base path 0 acc
 patSizeStrict (PRecord rn fields sp) base path acc = fieldsSizeStrict fields base path 0 acc
@@ -234,12 +234,22 @@ sizeOfVarStrict name ((Pair n sz) :: rest) =
 -- 让 map 回调里的递归/投影参与下降判定。
 -- ==== 以下为 2c 恢复的检查器实现（R2 正事实 / 投影 / 调用点关系 / 遍历辅助）====
 guardPosVar : Expr -> Maybe String
-guardPosVar (EApp (EVar op osp) args sp) = case op of
-  "<=" => guardLE args
-  ">=" => guardGE args
-  "<" => guardLT args
+guardPosVar e = case e of
+  EApp (EVar op osp) args sp => case opBaseName op of
+    -- M31.1：`<=` / `>=` / `<` 在 Loader 被解析成 `le` / `ge` / `lt` 方法调用，
+    -- 终止性守卫按方法短名识别；裸运算符名保留（Loader 之前的内部生成物）。
+    "le" => guardLE args
+    "ge" => guardGE args
+    "lt" => guardLT args
+    "<=" => guardLE args
+    ">=" => guardGE args
+    "<" => guardLT args
+    _ => Nothing
   _ => Nothing
-guardPosVar _ = Nothing
+
+-- 名字按点取最后一段（`Base.Ord.le` → `le`）；裸名原样返回。
+opBaseName : String -> String
+opBaseName name = secondOf (splitLastDot (splitOnDot name))
 
 guardLE : List Expr -> Maybe String
 guardLE ([lhs, rhs]) = case rhs of
@@ -407,7 +417,6 @@ pathInFields v ((Pair fn fp) :: rest) path k = case pathInPat v fp (append path 
 
 pathInPat : String -> Pat -> List Int -> Maybe (List Int)
 pathInPat v (PVar n sp) path = if n == v then Just path else Nothing
-pathInPat v (PAs n inner sp) path = if n == v then Just path else pathInPat v inner path
 pathInPat v (PWild sp) path = Nothing
 pathInPat v (PCon c ps sp) path = pathInPats v ps path 0
 pathInPat v (PRecord rn fields sp) path = pathInFields v fields path 0

@@ -1,0 +1,10 @@
+import Base.IO
+-- M33 W3：IO 内的 IORef（newRef / writeRef / readRef）。
+import Base.IORef
+
+main : IO Int
+main = do
+  r <- newRef 10
+  _ <- writeRef r 32
+  x <- readRef r
+  pure (x + 1)

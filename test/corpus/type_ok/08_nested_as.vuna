@@ -1,0 +1,13 @@
+-- case 分支字段位置的嵌套模式 + as-pattern：匹配内层模式并绑定整个值。
+import Base.List
+
+data Wrap : Type where
+  Wrap : List Int -> Int -> Wrap
+
+f : Wrap -> Int
+f w = case w of
+  Wrap (ys@(x :: rest)) n => x + n + length ys
+  Wrap (ys@[]) n => n + length ys
+
+main : Int
+main = f (Wrap [1, 2] 10) + f (Wrap [] 5)

@@ -1,0 +1,7 @@
+-- 算术基准：尾递归 + 整数算术。
+-- 手写 OCaml 对照见 arith.ml（同算法）。
+loop : Int -> Int -> Int
+loop acc n = if n <= 0 then acc else loop (acc + n * 3 - n / 2) (n - 1)
+
+main : Int
+main = loop 0 3000000

@@ -3,6 +3,7 @@ module Vuna.Compiler.Intrinsics
   , IType(..)
   , Intrinsic
   , IntrinsicOp(..)
+  , TypeIntrinsic(..)
   , allIntrinsics
   , arityOfType
   , boolFalseCtor
@@ -17,6 +18,7 @@ module Vuna.Compiler.Intrinsics
   , intrinsicCapability
   , intrinsicName
   , intrinsicOp
+  , intrinsicReturnsIO
   , intrinsicRuntime
   , intrinsicSignature
   , intrinsicVisible
@@ -29,8 +31,14 @@ module Vuna.Compiler.Intrinsics
   , listNilCtor
   , needsListBridge
   , parseCapability
+  , preludeTypeNames
   , preludeValueNames
   , strTypeName
+  , typeIntrinsicArities
+  , typeIntrinsicArityOf
+  , typeIntrinsicCtorArity
+  , typeIntrinsicCtorName
+  , typeIntrinsicCtorNames
   , typeIntrinsicNames
   , userIntrinsics
   ) where
@@ -52,6 +60,7 @@ module Vuna.Compiler.Intrinsics
 --     `Base.List.List` / `Base.IO.IO`（见 `Loader`/`Codegen` 的常量）；
 --   - 隐藏的内部 runtime 名（`bi_*`）只供 codegen 映射，不对用户源码可见。
 import Vuna.Compiler.Common
+import Base.HashMap
 
 -- ---------------------------------------------------------------
 -- 能力（capability）：显式、不可按包名伪造的效应声明面
@@ -62,6 +71,8 @@ data Capability : Type where
   CapProcess : Capability
   CapEnv : Capability
   CapClock : Capability
+  -- 允许在 main 之外执行 IO 动作（`Base.IO.runIO`；工具链特权，M31）。
+  CapUnsafe : Capability
 
 capabilityName : Capability -> String
 capabilityName CapConsole = "console"
@@ -69,12 +80,13 @@ capabilityName CapFs = "fs"
 capabilityName CapProcess = "process"
 capabilityName CapEnv = "env"
 capabilityName CapClock = "clock"
+capabilityName CapUnsafe = "unsafe"
 
 capabilityNames : List String
 capabilityNames = map capabilityName allCapabilities
 
 allCapabilities : List Capability
-allCapabilities = [CapConsole, CapFs, CapProcess, CapEnv, CapClock]
+allCapabilities = [CapConsole, CapFs, CapProcess, CapEnv, CapClock, CapUnsafe]
 
 parseCapability : String -> Maybe Capability
 parseCapability "console" = Just CapConsole
@@ -82,26 +94,76 @@ parseCapability "fs" = Just CapFs
 parseCapability "process" = Just CapProcess
 parseCapability "env" = Just CapEnv
 parseCapability "clock" = Just CapClock
+parseCapability "unsafe" = Just CapUnsafe
 parseCapability _ = Nothing
 
 -- ---------------------------------------------------------------
 -- 签名形状：只表达内建签名需要的形状（不含依赖 pi / 多态细节）
 -- ---------------------------------------------------------------
 data IType : Type where
-  -- 宇宙 `Type`（只给 `Int` / `String` 两个 primitive 类型名用）
+  -- 宇宙 `Type`（类型构造子 / 类型变量参数的域）
   ITy : IType
   IInt : IType
   IStr : IType
   IBool : IType
   -- `Base.List.List <arg>`：族身份固定为 base 的普通 data 声明
   IList : IType -> IType
+  -- `Base.IO.IO <arg>`：效果原语返回的 IO 动作（M31 起效果原语类型化）
+  IIO : IType -> IType
   IFun : IType -> IType -> IType
-  -- `{a : Type} -> a -> a -> Bool`（`==` / `/=` 的泛化签名）
-  IPolyEq : IType
+  -- M33 W3：内建类型构造子与签名里的类型变量。
+  IVar : String -> IType
+  IArray : IType -> IType
+  IRef : IType -> IType
+  IMArray : IType -> IType
+  IBuf : IType
+  -- 隐式类型参数绑定（`{a : Type} -> ...`）；不进函数 arity。
+  IPi : String -> IType -> IType
 
 arityOfType : IType -> Int
 arityOfType (IFun _ cod) = 1 + arityOfType cod
+arityOfType (IPi _ cod) = arityOfType cod
 arityOfType _ = 0
+
+-- ---------------------------------------------------------------
+-- 内建类型构造子（M33 W3）
+-- ---------------------------------------------------------------
+-- 与 `Int` / `String` 两个 primitive 类型名不同，这些是**带参数的**类型构造子：
+-- 名字恒可见（prelude 类型层），codegen 按固定 OCaml 类型渲染（见 Codegen.Decl）。
+-- 参数个数的唯一真源在此；Elab.Prelude 据此生成 kind，Codegen.Decl 据此渲染。
+data TypeIntrinsic : Type where
+  MkTypeIntrinsic : String -> Int -> TypeIntrinsic
+
+typeIntrinsicCtorName : TypeIntrinsic -> String
+typeIntrinsicCtorName (MkTypeIntrinsic name arity) = name
+
+typeIntrinsicCtorArity : TypeIntrinsic -> Int
+typeIntrinsicCtorArity (MkTypeIntrinsic name arity) = arity
+
+typeIntrinsicArities : List TypeIntrinsic
+typeIntrinsicArities =
+  [ MkTypeIntrinsic "Array" 1,
+    MkTypeIntrinsic "IORef" 1,
+    MkTypeIntrinsic "MArray" 1,
+    MkTypeIntrinsic "Buffer" 0
+  ]
+
+-- `-1` = 不是内建类型构造子。
+typeIntrinsicArityOf : String -> Int
+typeIntrinsicArityOf name = typeIntrinsicArityOfRest name typeIntrinsicArities
+
+typeIntrinsicArityOfRest : String -> List TypeIntrinsic -> Int
+typeIntrinsicArityOfRest name [] = 0 - 1
+typeIntrinsicArityOfRest name (t :: rest) =
+  if typeIntrinsicCtorName t == name then typeIntrinsicCtorArity t
+  else typeIntrinsicArityOfRest name rest
+
+typeIntrinsicCtorNames : List String
+typeIntrinsicCtorNames = map typeIntrinsicCtorName typeIntrinsicArities
+
+-- prelude 类型层名字：primitive 类型 + 内建类型构造子（禁止重定义 + Loader 放行）。
+preludeTypeNames : List String
+preludeTypeNames = append typeIntrinsicNames typeIntrinsicCtorNames
 
 -- ---------------------------------------------------------------
 -- interp 归约标签（Core.Eval 按它归约；OpNone = 不在 interp 归约）
@@ -135,6 +197,7 @@ data IntrinsicOp : Type where
   OpStrSubstTemplate : IntrinsicOp
   OpStrHash : IntrinsicOp
   OpStrAt : IntrinsicOp
+  OpStrSubstring : IntrinsicOp
   OpStrShow : IntrinsicOp
 
 -- ---------------------------------------------------------------
@@ -175,6 +238,8 @@ needsListBridge i = case intrinsicRuntime i of
   "(fun p -> dtp_listOf (dtp_readDir p))" => True
   "(dtp_listOf (dtp_getArgs ()))" => True
   "(fun dir args -> dtp_runIn dir (dtp_ocamlOf args))" => True
+  "(fun xs -> Array.of_list (dtp_ocamlOf xs))" => True
+  "(fun a -> dtp_listOf (Array.to_list a))" => True
   _ => False
 
 -- canonical 族必须由 vuna-base 以固定的构造子集合声明；其它同名声明是非法伪造。
@@ -186,6 +251,17 @@ canonicalCtorsFor name =
 
 intrinsicArity : Intrinsic -> Int
 intrinsicArity i = arityOfType (intrinsicSignature i)
+
+-- 签名尾部是 `IIO _`：该内建返回 IO 动作，codegen 必须把 runtime 表达式包成
+-- `MkIO (fun _ -> …)` 值（M31；零参原语因此成为真正的值而不是每次求值的表达式）。
+intrinsicReturnsIO : Intrinsic -> Bool
+intrinsicReturnsIO i = typeReturnsIO (intrinsicSignature i)
+
+typeReturnsIO : IType -> Bool
+typeReturnsIO (IIO _) = True
+typeReturnsIO (IFun _ cod) = typeReturnsIO cod
+typeReturnsIO (IPi _ cod) = typeReturnsIO cod
+typeReturnsIO _ = False
 
 isEffectfulIntrinsic : Intrinsic -> Bool
 isEffectfulIntrinsic i = case intrinsicCapability i of
@@ -212,8 +288,9 @@ boolTrueCtor = "Base.Bool.True"
 boolFalseCtor : String
 boolFalseCtor = "Base.Bool.False"
 
+-- 类型位置的放行面：primitive 类型名 + 内建类型构造子（M33 W3）。
 isIntrinsicTypeName : String -> Bool
-isIntrinsicTypeName name = memName name typeIntrinsicNames
+isIntrinsicTypeName name = memName name preludeTypeNames
 
 -- base 里普通 data 声明的**完整符号身份**（不是短名）：List / IO 的判定只认它们。
 listFamilyName : String
@@ -235,17 +312,15 @@ ioMkIoCtor = "Base.IO.MkIO"
 allIntrinsics : List Intrinsic
 -- 效果原语（M27：只保留 `prim_*` 名；公开名删除，用户经 Base.IO 或显式能力）。
 -- 精化器合成的比较/相等特化名（内部：不对用户源码可见）。
+-- M33 W3：内建类型构造子 Array / IORef / MArray / Buffer 的原语。
+-- 纯 Array 原语无能力；IORef / MArray / Buffer 都是 IO 动作（无能力：不触碰外部世界）。
+-- 空数组字面量：non-expansive 的 OCaml `[||]`，让 `HashMap` 的空表这类零参多态值可泛化。
+-- M33 W4：字节切片（clamp 语义与 Base.String.substring 一致），避免 List 桥接。
 allIntrinsics =
   [ MkIntrinsic "+" (IFun IInt (IFun IInt IInt)) OpAdd Nothing "bi_add" True,
     MkIntrinsic "-" (IFun IInt (IFun IInt IInt)) OpSub Nothing "bi_sub" True,
     MkIntrinsic "*" (IFun IInt (IFun IInt IInt)) OpMul Nothing "bi_mul" True,
     MkIntrinsic "/" (IFun IInt (IFun IInt IInt)) OpDiv Nothing "bi_div" True,
-    MkIntrinsic "==" IPolyEq OpEqInt Nothing "bi_eq_int" True,
-    MkIntrinsic "/=" IPolyEq OpNeqInt Nothing "bi_neq_int" True,
-    MkIntrinsic "<" (IFun IInt (IFun IInt IBool)) OpLtInt Nothing "bi_lt_int" True,
-    MkIntrinsic "<=" (IFun IInt (IFun IInt IBool)) OpLeInt Nothing "bi_le_int" True,
-    MkIntrinsic ">" (IFun IInt (IFun IInt IBool)) OpGtInt Nothing "bi_gt_int" True,
-    MkIntrinsic ">=" (IFun IInt (IFun IInt IBool)) OpGeInt Nothing "bi_ge_int" True,
     MkIntrinsic "++" (IFun IStr (IFun IStr IStr)) OpConcat Nothing "bi_concat" True,
     MkIntrinsic "&&" (IFun IBool (IFun IBool IBool)) OpAnd Nothing "bi_and" True,
     MkIntrinsic "||" (IFun IBool (IFun IBool IBool)) OpOr Nothing "bi_or" True,
@@ -255,28 +330,47 @@ allIntrinsics =
     MkIntrinsic "strLength" (IFun IStr IInt) OpStrLength Nothing "bi_strLength" True,
     MkIntrinsic "strConcatMany" (IFun (IList IStr) IStr) OpStrConcatMany Nothing "dtp_concatMany" True,
     MkIntrinsic "strSubstTemplate" (IFun IStr (IFun (IList IStr) IStr)) OpStrSubstTemplate Nothing "dtp_substTemplate" True,
-    MkIntrinsic "timeUs" IInt OpNone (Just CapClock) "(dtp_timeUs ())" True,
+    MkIntrinsic "timeUs" (IIO IInt) OpNone (Just CapClock) "(dtp_timeUs ())" True,
     MkIntrinsic "strHash" (IFun IStr IInt) OpStrHash Nothing "dtp_strHash" True,
     MkIntrinsic "strAt" (IFun IStr (IFun IInt IInt)) OpStrAt Nothing "dtp_strAt" True,
+    MkIntrinsic "strSubstring" (IFun IInt (IFun IInt (IFun IStr IStr))) OpStrSubstring Nothing "dtp_substring" True,
     MkIntrinsic "strShow" (IFun IStr IStr) OpStrShow Nothing "dt_show_string" True,
-    MkIntrinsic "prim_print" (IFun IStr IInt) OpNone (Just CapConsole) "dtp_print" True,
-    MkIntrinsic "prim_readFile" (IFun IStr IStr) OpNone (Just CapFs) "dtp_readFile" True,
-    MkIntrinsic "prim_writeFile" (IFun IStr (IFun IStr IInt)) OpNone (Just CapFs) "dtp_writeFile" True,
-    MkIntrinsic "prim_readLine" IStr OpNone (Just CapConsole) "(dtp_readLine ())" True,
-    MkIntrinsic "prim_readBytes" (IFun IInt IStr) OpNone (Just CapConsole) "dtp_readBytes" True,
-    MkIntrinsic "prim_getArgs" (IList IStr) OpNone (Just CapProcess) "(dtp_listOf (dtp_getArgs ()))" True,
-    MkIntrinsic "prim_readDir" (IFun IStr (IList IStr)) OpNone (Just CapFs) "(fun p -> dtp_listOf (dtp_readDir p))" True,
-    MkIntrinsic "prim_isDirectory" (IFun IStr IBool) OpNone (Just CapFs) "dtp_isDirectory" True,
-    MkIntrinsic "prim_makeDir" (IFun IStr IInt) OpNone (Just CapFs) "dtp_makeDir" True,
-    MkIntrinsic "prim_removeFile" (IFun IStr IInt) OpNone (Just CapFs) "dtp_removeFile" True,
-    MkIntrinsic "prim_fileExists" (IFun IStr IBool) OpNone (Just CapFs) "dtp_fileExists" True,
-    MkIntrinsic "prim_fileMtime" (IFun IStr IInt) OpNone (Just CapFs) "dtp_fileMtime" True,
-    MkIntrinsic "prim_fileSize" (IFun IStr IInt) OpNone (Just CapFs) "dtp_fileSize" True,
-    MkIntrinsic "prim_exit" (IFun IInt IInt) OpNone (Just CapProcess) "dtp_exit" True,
-    MkIntrinsic "prim_runIn" (IFun IStr (IFun (IList IStr) IInt)) OpNone (Just CapProcess) "(fun dir args -> dtp_runIn dir (dtp_ocamlOf args))" True,
-    MkIntrinsic "prim_getenv" (IFun IStr IStr) OpNone (Just CapEnv) "dtp_getenv" True,
-    MkIntrinsic "prim_getcwd" IStr OpNone (Just CapEnv) "(dtp_getcwd ())" True,
-    MkIntrinsic "prim_execPath" IStr OpNone (Just CapEnv) "(dtp_execPath ())" True,
+    MkIntrinsic "arrayLength" (IPi "a" (IFun (IArray (IVar "a")) IInt)) OpNone Nothing "Array.length" True,
+    MkIntrinsic "arrayEmpty" (IPi "a" (IArray (IVar "a"))) OpNone Nothing "[||]" True,
+    MkIntrinsic "arrayGet" (IPi "a" (IFun (IArray (IVar "a")) (IFun IInt (IVar "a")))) OpNone Nothing "Array.get" True,
+    MkIntrinsic "arraySet" (IPi "a" (IFun (IArray (IVar "a")) (IFun IInt (IFun (IVar "a") (IArray (IVar "a")))))) OpNone Nothing "dtp_arraySet" True,
+    MkIntrinsic "arrayMake" (IPi "a" (IFun IInt (IFun (IVar "a") (IArray (IVar "a"))))) OpNone Nothing "Array.make" True,
+    MkIntrinsic "arrayFromList" (IPi "a" (IFun (IList (IVar "a")) (IArray (IVar "a")))) OpNone Nothing "(fun xs -> Array.of_list (dtp_ocamlOf xs))" True,
+    MkIntrinsic "arrayToList" (IPi "a" (IFun (IArray (IVar "a")) (IList (IVar "a")))) OpNone Nothing "(fun a -> dtp_listOf (Array.to_list a))" True,
+    MkIntrinsic "prim_newRef" (IPi "a" (IFun (IVar "a") (IIO (IRef (IVar "a"))))) OpNone Nothing "(fun x -> ref x)" True,
+    MkIntrinsic "prim_readRef" (IPi "a" (IFun (IRef (IVar "a")) (IIO (IVar "a")))) OpNone Nothing "(fun r -> !r)" True,
+    MkIntrinsic "prim_writeRef" (IPi "a" (IFun (IRef (IVar "a")) (IFun (IVar "a") (IIO IInt)))) OpNone Nothing "(fun r v -> r := v; 0)" True,
+    MkIntrinsic "prim_newMArray" (IPi "a" (IFun IInt (IFun (IVar "a") (IIO (IMArray (IVar "a")))))) OpNone Nothing "(fun n v -> Array.make n v)" True,
+    MkIntrinsic "prim_readMArray" (IPi "a" (IFun (IMArray (IVar "a")) (IFun IInt (IIO (IVar "a"))))) OpNone Nothing "(fun a i -> Array.get a i)" True,
+    MkIntrinsic "prim_writeMArray" (IPi "a" (IFun (IMArray (IVar "a")) (IFun IInt (IFun (IVar "a") (IIO IInt))))) OpNone Nothing "(fun a i v -> Array.set a i v; 0)" True,
+    MkIntrinsic "prim_mArrayLength" (IPi "a" (IFun (IMArray (IVar "a")) (IIO IInt))) OpNone Nothing "(fun a -> Array.length a)" True,
+    MkIntrinsic "prim_newBuffer" (IIO IBuf) OpNone Nothing "(Buffer.create 16)" True,
+    MkIntrinsic "prim_bufferAdd" (IFun IBuf (IFun IStr (IIO IInt))) OpNone Nothing "(fun b s -> Buffer.add_string b s; String.length s)" True,
+    MkIntrinsic "prim_bufferContents" (IFun IBuf (IIO IStr)) OpNone Nothing "(fun b -> Buffer.contents b)" True,
+    MkIntrinsic "prim_bufferLength" (IFun IBuf (IIO IInt)) OpNone Nothing "(fun b -> Buffer.length b)" True,
+    MkIntrinsic "prim_print" (IFun IStr (IIO IInt)) OpNone (Just CapConsole) "dtp_print" True,
+    MkIntrinsic "prim_readFile" (IFun IStr (IIO IStr)) OpNone (Just CapFs) "dtp_readFile" True,
+    MkIntrinsic "prim_writeFile" (IFun IStr (IFun IStr (IIO IInt))) OpNone (Just CapFs) "dtp_writeFile" True,
+    MkIntrinsic "prim_readLine" (IIO IStr) OpNone (Just CapConsole) "(dtp_readLine ())" True,
+    MkIntrinsic "prim_readBytes" (IFun IInt (IIO IStr)) OpNone (Just CapConsole) "dtp_readBytes" True,
+    MkIntrinsic "prim_getArgs" (IIO (IList IStr)) OpNone (Just CapProcess) "(dtp_listOf (dtp_getArgs ()))" True,
+    MkIntrinsic "prim_readDir" (IFun IStr (IIO (IList IStr))) OpNone (Just CapFs) "(fun p -> dtp_listOf (dtp_readDir p))" True,
+    MkIntrinsic "prim_isDirectory" (IFun IStr (IIO IBool)) OpNone (Just CapFs) "dtp_isDirectory" True,
+    MkIntrinsic "prim_makeDir" (IFun IStr (IIO IInt)) OpNone (Just CapFs) "dtp_makeDir" True,
+    MkIntrinsic "prim_removeFile" (IFun IStr (IIO IInt)) OpNone (Just CapFs) "dtp_removeFile" True,
+    MkIntrinsic "prim_fileExists" (IFun IStr (IIO IBool)) OpNone (Just CapFs) "dtp_fileExists" True,
+    MkIntrinsic "prim_fileMtime" (IFun IStr (IIO IInt)) OpNone (Just CapFs) "dtp_fileMtime" True,
+    MkIntrinsic "prim_fileSize" (IFun IStr (IIO IInt)) OpNone (Just CapFs) "dtp_fileSize" True,
+    MkIntrinsic "prim_exit" (IFun IInt (IIO IInt)) OpNone (Just CapProcess) "dtp_exit" True,
+    MkIntrinsic "prim_runIn" (IFun IStr (IFun (IList IStr) (IIO IInt))) OpNone (Just CapProcess) "(fun dir args -> dtp_runIn dir (dtp_ocamlOf args))" True,
+    MkIntrinsic "prim_getenv" (IFun IStr (IIO IStr)) OpNone (Just CapEnv) "dtp_getenv" True,
+    MkIntrinsic "prim_getcwd" (IIO IStr) OpNone (Just CapEnv) "(dtp_getcwd ())" True,
+    MkIntrinsic "prim_execPath" (IIO IStr) OpNone (Just CapEnv) "(dtp_execPath ())" True,
     MkIntrinsic "bi_eq_int" (IFun IInt (IFun IInt IBool)) OpEqInt Nothing "bi_eq_int" False,
     MkIntrinsic "bi_neq_int" (IFun IInt (IFun IInt IBool)) OpNeqInt Nothing "bi_neq_int" False,
     MkIntrinsic "bi_eq_str" (IFun IStr (IFun IStr IBool)) OpEqStr Nothing "bi_eq_str" False,
@@ -291,11 +385,13 @@ allIntrinsics =
     MkIntrinsic "bi_ge_generic" (IFun IInt (IFun IInt IBool)) OpGeGeneric Nothing "bi_ge_generic" False
   ]
 
-intrinsicTbl : HashTbl Intrinsic
-intrinsicTbl = tblInsertAll (map (\i => Pair (intrinsicName i) i) allIntrinsics) tblEmpty
+intrinsicTbl : HashMap Intrinsic
+intrinsicTbl =
+  Base.HashMap.insertAll (map (\i => Pair (intrinsicName i) i) allIntrinsics)
+    (Base.HashMap.fromList [])
 
 findIntrinsic : String -> Maybe Intrinsic
-findIntrinsic name = tblLookup name intrinsicTbl
+findIntrinsic name = Base.HashMap.lookup name intrinsicTbl
 
 isIntrinsicName : String -> Bool
 isIntrinsicName name = case findIntrinsic name of

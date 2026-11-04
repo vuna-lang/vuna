@@ -1,0 +1,6 @@
+-- M33 W6：库级 Reader 效应（纯函数表示，interp 可归约）。
+import Base.Reader
+import Base.Int
+
+main : Int
+main = Base.Reader.runReader (Base.Reader.mapReader (\n => n * 2) Base.Reader.ask) 21

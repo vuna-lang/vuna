@@ -1,0 +1,42 @@
+import Core
+import Fancy
+import Effects
+
+-- codegen 夹具入口：入口 data + case、deriving (Show)、trait Pretty + instance、
+-- 字符串拼接与跨模块调用；main : String 保持包可 build（--no-compile 不执行）。
+data Color : Type where
+  Red : Color
+  Blue : Color
+  Green : Color
+deriving (Show)
+
+trait Pretty a where
+  pretty : a -> String
+
+instance Pretty Color where
+  pretty c = case c of
+    Red => "red"
+    Blue => "blue"
+    Green => "green"
+
+pick : Color
+pick = Green
+
+pin : Int
+pin = marker
+
+main : String
+main =
+  pretty pick
+    ++ "/"
+    ++ show Blue
+    ++ "/"
+    ++ show (area (Circle 3))
+    ++ "/"
+    ++ show (pointSum (moveX origin 4))
+    ++ "/"
+    ++ label 0
+    ++ "/"
+    ++ show (firstTwo [1, 2, 3])
+    ++ "/"
+    ++ show (swapAdd 1)

@@ -6,23 +6,25 @@ module Vuna.Compiler.Frontend.Parser.Support
   , badCaseIndent
   , binderHeadName
   , canContinue
+  , closeParenNext
   , countArrows
   , ctorPatternStart
   , expectIdent
   , expectKw
   , expectSym
+  , expectValueName
   , fileOf
-  , infixInfo
   , isEof
+  , isReservedValueName
+  , isSyntaxSym
   , lastPos
-  , mkInfixExpr
   , nthTok
-  , opExpr
   , peekPos
   , peekTok
   , peekTokAt
   , posOf
   , sameLineState
+  , sectionOpAt
   , spanOf
   , startsAtom
   , startsPatternAtom
@@ -168,6 +170,18 @@ expectIdent st = case peekTok st of
   PTok (TIdent x) p => Ok (Pair x (advance st))
   _ => psErr0 ExpectedIdentifier
 
+-- M31.3：值位置名字 = 标识符或非保留符号名。用于用户符号名 def/signature 与反引号
+-- 中缀里的名字（`` a `f` b ``）。
+expectValueName : PState -> Result (Pair String PState)
+expectValueName st = case peekTok st of
+  PTok (TIdent x) p =>
+    if isReservedValueName x then psErr1 (ExpectedToken "value name") "value name"
+    else Ok (Pair x (advance st))
+  PTok (TSym op) p =>
+    if isReservedValueName op then psErr1 (ExpectedToken "value name") "value name"
+    else Ok (Pair op (advance st))
+  _ => psErr0 ExpectedIdentifier
+
 upperFirst : String -> Bool
 upperFirst s = case strUnpack s of
   c :: rest => c >= 65 && c <= 90
@@ -205,37 +219,53 @@ startsPatternAtom st = case peekTok st of
   PTok (TSym "[") p => True
   _ => False
 
-infixInfo : String -> Maybe (Pair Int Int)
-infixInfo "->" = Just (Pair 1 1)
-infixInfo "||" = Just (Pair 2 0)
-infixInfo "&&" = Just (Pair 3 0)
-infixInfo "==" = Just (Pair 4 0)
-infixInfo "/=" = Just (Pair 4 0)
-infixInfo "<" = Just (Pair 4 0)
-infixInfo "<=" = Just (Pair 4 0)
-infixInfo ">" = Just (Pair 4 0)
-infixInfo ">=" = Just (Pair 4 0)
-infixInfo "++" = Just (Pair 5 1)
-infixInfo "+" = Just (Pair 6 0)
-infixInfo "-" = Just (Pair 6 0)
-infixInfo "*" = Just (Pair 7 0)
-infixInfo "/" = Just (Pair 7 0)
-infixInfo "::" = Just (Pair 8 1)
-infixInfo ">>=" = Just (Pair 1 1)
-infixInfo ">>" = Just (Pair 1 0)
-infixInfo _ = Nothing
+-- M31.2：中缀解析不再有固定优先级表——`infix*` 声明随模块进入 Loader，重排时才消费。
+-- 这里只判定「哪些符号在表达式位置属于语法、遇到就停止」，其余 TSym 都当运算符。
+isSyntaxSym : String -> Bool
+isSyntaxSym op = case op of
+  "=" => True
+  ":" => True
+  "," => True
+  ";" => True
+  "|" => True
+  "=>" => True
+  "<-" => True
+  "\\" => True
+  "." => True
+  ".." => True
+  "@" => True
+  -- 括号/分隔符：表达式位置出现时是语法边界，不是运算符（否则 `(a + b)` 的 `)` 会被
+  -- 当成中缀符号吞掉）。
+  "(" => True
+  ")" => True
+  "[" => True
+  "]" => True
+  "{" => True
+  "}" => True
+  _ => False
 
-opExpr : String -> Span -> Expr
-opExpr "::" sp = EVar "Cons" sp
-opExpr ">>=" sp = EVar "bind" sp
-opExpr op sp = EVar op sp
+-- M31.3：保留符号名不能被当作可定义名 / 反引号名字 / 原子 section 的 op。
+-- 集合 = 表达式位置的语法符号（`isSyntaxSym`）∪ {`->`, `` ` ``}。
+-- `->` 是语法而非用户运算符（fixity 由 Loader.syntaxFixityDecls 恒提供）；反引号是定界符。
+isReservedValueName : String -> Bool
+isReservedValueName name = isSyntaxSym name || name == "->" || name == "`"
 
--- `>>` 是 do 的派生：`a >> b` = `bind a (\_ -> b)`。
-mkInfixExpr : String -> Expr -> Expr -> Span -> Expr
-mkInfixExpr ">>" lhs rhs sp = EApp (EVar "bind" sp) [lhs, ELam ["vuna_seq_ignore"] rhs sp] sp
-mkInfixExpr op lhs rhs sp = EApp (opExpr op sp) [lhs, rhs] sp
+-- M31.3：右 section 判定——当前 token 是运算符、下一个 token 是 `)`。
+-- 不消费 `)`：由外层 `(` 分支统一消费。
+closeParenNext : PState -> Bool
+closeParenNext st = case peekTokAt st 1 of
+  Just (PTok (TSym ")") p) => True
+  _ => False
+
+-- M31.3：`(` 之后的下一个 token 若是非保留符号名，则该括号是 section
+-- （`(+)` 或 `(+ e)`），返回该符号名；否则不是 section。
+sectionOpAt : PState -> Maybe String
+sectionOpAt st = case peekTokAt st 1 of
+  Just (PTok (TSym op) p) => if isReservedValueName op then Nothing else Just op
+  _ => Nothing
 
 countArrows : Expr -> Int
+countArrows (EInfix "->" _ rest _) = 1 + countArrows rest
 countArrows (EApp (EVar "->" _) ([x, rest]) _) = 1 + countArrows rest
 countArrows _ = 0
 

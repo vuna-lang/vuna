@@ -11,19 +11,32 @@
 | `Base.Pair` / `Base.Bool` / `Base.List` / `Base.Maybe` / `Base.Result` | 核心代数数据类型与常用 helper（append/reverse/map/filter/foldl/foldr/traverse/andThen/step/...） |
 | `Base.String` | split/join/lines/unlines/trim/contains/startsWith/endsWith/repeat/substring |
 | `Base.Sort` | 稳定归并排序 `mergeSort` / `sortBy` |
-| `Base.Map` | 关联表实现的抽象 Map（empty/insert/lookup/remove/keys/values/size/...） |
+| `Base.Map` | 关联表实现的抽象 Map（empty/insert/lookup/remove/keys/values/size/...）；小表用 |
+| `Base.HashMap` | `String` 键、值泛型的持久哈希映射（1024 桶；empty/insert/insertAll/lookup/member/fromList/toList/size/ofNames、公开 `hashStr`）；大表、构造后频繁查找 |
+| `Base.HashSet` | `String` 集合（内部 `HashMap Bool`；empty/insert/member/fromList/toList/size） |
+| `Base.IntMap` | `Int` 键、值泛型的持久哈希映射（同 1024 桶结构；整数键免字符串编码） |
+| `Base.Array` | 不可变数组（内建类型构造子 `Array`；`fromList` / `toList` / `length` / `get` / `set` / `make`，`set` 返回新数组） |
+| `Base.IORef` | IO 内的可变引用（`newRef` / `readRef` / `writeRef` / `modifyRef`，全部 `IO`） |
+| `Base.MArray` | IO 内的可变数组（`new` / `read` / `write` / `length`，全部 `IO`） |
+| `Base.Buffer` | 可变字符串缓冲（`new` / `add` / `contents` / `length`，全部 `IO`） |
+| `Base.State` / `Base.Reader` / `Base.Error` | 库级效应（M33 W6）：纯函数表示，手写 `bind` / `map` / `pure` 组合子；`State` 是 `s -> Pair a s`、`Reader` 是 `e -> a`、`Error` 是泛型 `Ok`/`Err` 和；暂不声明 trait 实例（等 F4 的 trait 能力） |
 | `Base.Nat` | `Nat(..)`（`Zero` / `Succ`）；DT 夹具与错误码表使用 |
 | `Base.Vec` | `Vec(..)` 与 `substTemplate` / `vhead` / `vlen` / `vtail` |
 | `Base.Monad` | `Functor` / `Monad` trait |
 | `Base.Show` | `Show` trait（`show : a -> String`）+ `Int` / `String` / `Bool` 实例 |
-| `Base.Eq` | `Eq` trait（`eq` / `neq : a -> a -> Bool`）+ `Int` / `String` / `Bool` 实例 |
-| `Base.Ord` | `Ord` trait（`lt` / `le` / `gt` / `ge : a -> a -> Bool`）+ `Int` / `String` / `Bool` 实例 |
-| `Base.IO` | 抽象 `IO a` 与 IO 组合子（实例 + print/readFile/writeFile/getArgs/exit，内部包装 `prim_*` 效果原语） |
+| `Base.Eq` | `Eq` trait（`eq` / `neq : a -> a -> Bool`）+ `Bool` 实例（Bool 是 `Eq` 返回类型，实例随 trait） |
+| `Base.Ord` | `Ord` trait（`lt` / `le` / `gt` / `ge : a -> a -> Bool`）+ `Bool` 实例 |
+| `Base.Int` | `Int` 的 `Eq` / `Ord` 实例宿主（`Int` 是 primitive 类型；实例跟类型模块走） |
+| `Base.IO` | 抽象 `IO a` 与 IO 组合子（实例 + print/readFile/writeFile/getArgs/exit，直接别名到 IO 化的 `prim_*` 动作）+ 特权执行入口 `runIO : IO a -> a`（要求 `unsafe` 能力） |
 | `Base` | 包门面：整模块重导出核心模块（不含 `Nat` / `Vec`；`import Base` 即可用） |
 | `Prelude` | 顶层模块（`base/lib/Prelude.vuna`）：重导出 `Base.Pair` / `Bool` / `Eq` / `Ord` / `Show` / `List` / `Maybe` / `Result` / `String` / `Monad`，**包上下文内所有源文件（含无 manifest 的 ad-hoc 单文件）自动导入**；显式 `import` 时不再重复注入；刻意不含 `Base.IO`（效果 API 需显式 import，效果面不进入自动注入） |
 
-跨包使用时只可见 `base/vuna.toml` `[export]` 列出的模块；抽象类型（`Map`、`IO`）的构造器
-保持私有。`Map` / `Sort` 不在 `Prelude` 里，需要显式 import。
+跨包使用时只可见 `base/vuna.toml` `[export]` 列出的模块；抽象类型（`Map`、`HashMap`、
+`HashSet`、`IntMap`、`IO`）的构造器保持私有。`Map` / `Sort` / `HashMap` / `HashSet` /
+`IntMap` 都不在 `Prelude` 里，需要显式 import；也**不进 `Base` 门面**——`Base` 门面整模块
+重导出 `Base.Map`，而 `HashMap` / `IntMap` 与它同名导出 `empty`/`insert`/`lookup`/
+`fromList`/`toList`/`size`，同时重导出会触发 `duplicate export` 硬错误。同文件使用多个
+容器时写完整限定名（`HashMap.insert` / `IntMap.lookup` / `HashSet.member`）。
 
 模块导出清单（`base/lib/*.vuna`、`base/lib/Base/*.vuna` 的模块头）：
 
@@ -36,6 +49,7 @@ module Base.Bool (Bool(..), not, and, or, xor, bool) where
 module Base.Show (Show(..)) where
 module Base.Eq (Eq(..)) where
 module Base.Ord (Ord(..)) where
+module Base.Int where
 module Base.List (List(..), append, reverse, length, map, filter, foldl, foldr, concatMap,
                   flatMap, mem, memName, lookupPair, zip, take, drop, range, mapMaybe) where
 module Base.Maybe (Maybe(..), fromMaybe, isJust, isNothing, maybe, mapJust) where
@@ -45,6 +59,10 @@ module Base.String (split, join, lines, unlines, trim, trimLeft, trimRight, cont
                     startsWith, endsWith, repeat, substring) where
 module Base.Sort (mergeSort, sortBy) where
 module Base.Map (Map, empty, insert, lookup, remove, keys, values, size, fromList, toList) where
+module Base.HashMap (HashMap, empty, fromList, hashStr, insert, insertAll, lookup, member,
+                     ofNames, size, toList) where
+module Base.HashSet (HashSet, empty, fromList, insert, member, size, toList) where
+module Base.IntMap (IntMap, empty, fromList, insert, insertAll, lookup, member, size, toList) where
 module Base.Nat (Nat(..)) where
 module Base.Vec (Vec(..), substTemplate, vhead, vlen, vtail) where
 module Base.Monad (Functor(..), Monad(..)) where
@@ -81,18 +99,26 @@ module Base.IO (IO, print, println, readFile, writeFile, readLine, readDir, ...)
   `prim_getArgs`）经 List 桥接 helper（`dtp_unpack` / `dtp_pack` / `dtp_listOf`）落地，
   桥接只为 canonical `Base.List.List` 生成；`Prelude` 自动注入 `Base.List`，所以正常上下文
   里总可用。
-- **`Show` / `Eq` / `Ord` 在库**：trait 声明、方法投影与 `Int` / `String` / `Bool` 实例全在
-  `Base.Show` / `Base.Eq` / `Base.Ord`，随 `Prelude` 自动导入。编译器只保留**机制**：
-  `deriving (Show, Eq, Ord)` 的展开、`==` / `/=` 与比较的 `Int` / `String` 运行时特化、
-  `if` / 字面量等语法。相等是证据驱动的：`==` / `/=` 只有 Int/String 内建特化或 `Eq`
-  证据（实例 / `deriving` / 约束实例），无实例与函数相等在 check 期报错；参数化类型的
-  `deriving` 展开成约束实例。字符串展示只有一个实现 `strShow`——`Base.Show` 的 `String`
-  实例是 `show s = strShow s`，库不再另写一套转义；`Show Bool` 用 `if` 输出
-  `True` / `False`，`Eq Bool` 方法体用析取（不能自递归）。
-- **效果原语只有 `prim_*` 名**：`Base.IO` 是默认用户面（把 `prim_*` 包成 `IO` 动作），并在
-  `base/vuna.toml` 声明 `[capabilities].effects = ["console", "fs", "process"]`；普通包不
-  声明能力就只能经 `Base.IO`，声明能力后可直接调用 `prim_*`。能力是**权限声明**，不是
-  检查豁免（`Loader.Resolve.checkEffectsBuiltins`）。
+- **`Show` / `Eq` / `Ord` 在库（M31.1 起声明与实例分离）**：`Base.Show` / `Base.Eq` /
+  `Base.Ord` 承载 trait 声明；实例按**落点规则**分布（见 [operators.md](operators.md)）：
+  `Int` → `Base.Int`、`String` → `Base.String`、`Bool` → `Base.Eq` / `Base.Ord`
+  （Bool 是方法返回类型，放 `Base.Bool` 会成 import 环）。实例随 `Prelude` 自动导入
+  （`Prelude` 显式 `import Base.Int` 加载 Int 实例）。编译器只保留**机制**：
+  `deriving (Show, Eq, Ord)` 的展开、`eq` / `lt` 等的 `Int` / `String` 运行时特化、
+  `if` / 字面量等语法。**M31.1 起运算符是方法别名**：`==` / `/=` / `<` / `<=` / `>` / `>=`
+  在 Loader 被解析成 `eq` / `neq` / `lt` / `le` / `gt` / `ge`（M31.1 起由 Loader 解析，
+  M31.3 起 fixity 与别名全部来自库模块里的 `infix*` 声明），因此 `a == b` 与 `eq a b`
+  是同一条路径。**M29 起相等证据驱动**：`eq`（含运算符写法）只有 Int/String 内建特化或 `Eq` 证据
+  （实例 / `deriving` / 约束实例），无实例与函数相等在 check 期报错；参数化类型的
+  `deriving` 展开成约束实例（`instance Eq a => Eq (F a)`），库里可写的容器实例也按这个
+  形态声明。字符串展示只有一个实现 `strShow`——`Base.Show` 的 `String` 实例是
+  `show s = strShow s`，库不再另写一套转义；`Show Bool` 用 `if` 输出 `True` / `False`；
+  `Eq Bool` / `Ord Bool` 用模式匹配穷尽（不依赖 `==` / `<`，避免实例体自引用）。
+- **效果原语只有 `prim_*` 名，且返回 `IO` 动作（M31）**：`Base.IO` 是默认用户面
+  （`print` / `readFile` / … 直接别名到 `prim_*`，类型形如 `… -> IO a`），并在
+  `base/vuna.toml` 声明 `[capabilities].effects = ["console", "fs", "process"]`；动作只在
+  `main` 执行，`runIO` 是唯一的 main 外入口、需 `unsafe`。能力是**权限声明**，不是检查豁免
+  （`Loader.Resolve.checkEffectsBuiltins`）。
 - **ad-hoc 单文件与包内模块一致**：`Prelude` 自动注入，`Show` / `Eq` / `Ord` 及其实例开箱
   可用；诊断在缺少显式 import 时仍会提示加对应 import。ad-hoc 文件没有能力，效果只能经
   `Base.IO`。
@@ -101,7 +127,25 @@ module Base.IO (IO, print, println, readFile, writeFile, readLine, readDir, ...)
 
 ## 已知边界
 
-- `Map` 是关联表（assoc list）实现的抽象类型，无平衡树；
+- `Map` 是关联表（assoc list）实现的抽象类型，无平衡树；适合小表；
+- `HashMap` / `IntMap` 是 1024 桶的持久哈希表：无 `remove`、无 resize；`toList` 按桶序
+  展开（不保证插入序）；`size` 是 O(n)（没有计数字段）；M33 W3 起桶结构是
+  `Array (Array (List ...))`（`Array.get` O(1)，`insert` 两次 32 元素 copy-on-write）；
+- **`empty` 已移除**：`HashMap` / `IntMap` 的空表统一写 `fromList []`。原因是空表在
+  OCaml 侧用 `Array.make` 构造会引入弱类型变量（`'_weak`），跨模块使用时被固定成某个
+  `a`；`fromList []` 走 `MkHashMap arrayEmpty`（`[||]` 字面量，non-expansive）可正常泛化；
+- **`fromList` 与 `insertAll` 的冲突语义不同**：`fromList` 列表**前面**的条目优先（与
+  `Base.Map.fromList` 的查找语义一致），`insertAll` **后面**的条目覆盖前面的。两者都是
+  编译器历史 API 的语义，不要合并或用错；
+- 键只覆盖 `String`（`HashMap`/`HashSet`）与 `Int`（`IntMap`）：没有泛型 `Hashable`
+  trait（trait 仅单参数、无 `deriving Hash`），也没有有序持久容器（TreeMap/TreeSet）；
+  需要有序时用 `Base.Sort`，大表查找用哈希容器；
+- **容器与可变数据（M33 W3）**：不可变 `Base.Array`、IO 内 `IORef` / `MArray` / `Buffer`
+  已落地；`Array.get` / `MArray.read` 越界是宿主 `Invalid_argument`；`Array.set` 返回新数组；
+  可变句柄只经 `IO` 动作使用（`runIO` 逃逸需要 `unsafe`）；没有线性 / 唯一性类型与 ST；
+- **库级效应（M33 W6）**：`State` / `Reader` / `Error` 是纯函数库，**不进入 `Prelude` /
+  `Base` 门面**（显式 import）；没有 trait 实例（trait 单参数 / 类型级部分应用限制），
+  `bind` / `map` / `pure` 组合子手写；没有语言级效应系统 / 并发（M35）；
 - `Result` 暂无 `Functor` / `Monad` 实例；
 - 抽象类型（`Map`、`IO`）跨包不可构造、不可模式匹配，只能经 API 使用。
 

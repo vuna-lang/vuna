@@ -34,6 +34,7 @@ import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Packages.Pkg
 import Vuna.Compiler.Frontend.Parser
 import Vuna.Interp
+import Base.IO
 
 replTempFile : String
 replTempFile = "/tmp/vuna-repl.vuna"
@@ -92,16 +93,16 @@ data ReplOutcome : Type where
 runRepl : PackageContext -> Int
 runRepl ctx =
   let
-    _ = prim_print ("vuna repl\n" ++ replHelp)
+    _ = runIO (prim_print ("vuna repl\n" ++ replHelp))
   in replLoop replFuelBound ctx (replState "" "" "")
 
 replLoop : Int -> PackageContext -> ReplState -> Int
 replLoop fuel ctx st = if fuel <= 0 then 0
 else
   let
-    _ = prim_print (if statePending st == "" then replPrompt else replContinuePrompt)
+    _ = runIO (prim_print (if statePending st == "" then replPrompt else replContinuePrompt))
   in let
-    raw = prim_readLine
+    raw = runIO prim_readLine
   in if trim raw == "" then case blankStep ctx st of
     ReplExit code => code
     ReplContinue st2 => replLoop (fuel - 1) ctx st2
@@ -120,7 +121,7 @@ inputStep ctx st raw =
 blankStep : PackageContext -> ReplState -> ReplOutcome
 blankStep ctx st =
   let
-    next = trim prim_readLine
+    next = trim (runIO prim_readLine)
   in if next == "" then ReplExit (finishAtEof ctx st)
   else if statePending st == "" then lineStep ctx st next
   else case submitPending ctx st of
@@ -139,7 +140,7 @@ else case submitPending ctx st of
 submitPending : PackageContext -> ReplState -> ReplOutcome
 submitPending ctx st = if needsMore (statePending st) then
   let
-    _ = prim_print "错误: 输入不完整，已丢弃当前输入\n"
+    _ = runIO (prim_print "错误: 输入不完整，已丢弃当前输入\n")
   in ReplContinue (replState (stateImports st) (stateDefs st) "")
 else submitText ctx st (trim (statePending st))
 
@@ -149,11 +150,11 @@ lineStep ctx st ":q" = ReplExit 0
 lineStep ctx st ":quit" = ReplExit 0
 lineStep ctx st ":reset" =
   let
-    _ = prim_print "已清空\n"
+    _ = runIO (prim_print "已清空\n")
   in ReplContinue (replState "" "" "")
 lineStep ctx st ":help" =
   let
-    _ = prim_print replHelp
+    _ = runIO (prim_print replHelp)
   in ReplContinue st
 lineStep ctx st line =
   if needsMore line then ReplContinue (replState (stateImports st) (stateDefs st) (line ++ "\n"))
@@ -170,8 +171,8 @@ else
   in if countChar 10 pending2 > replMaxPendingLines then
     let
       _ =
-        prim_print
-          ("错误: 续行超过 " ++ strFromInt replMaxPendingLines ++ " 行，已丢弃当前输入\n")
+        runIO
+          (prim_print ("错误: 续行超过 " ++ strFromInt replMaxPendingLines ++ " 行，已丢弃当前输入\n"))
     in ReplContinue (replState (stateImports st) (stateDefs st) "")
   else if needsMore pending2 then ReplContinue (replState (stateImports st) (stateDefs st) pending2)
   else if startsIndented raw then ReplContinue (replState (stateImports st) (stateDefs st) pending2)
@@ -188,14 +189,14 @@ addImport ctx st line =
   in case parseSource replTempFile (imports2 ++ stateDefs st) of
     Err e =>
       let
-        _ = prim_print ("parse error: " ++ e ++ "\n")
+        _ = runIO (prim_print ("parse error: " ++ e ++ "\n"))
       in ReplContinue st
     Ok _ => ReplContinue (replState imports2 (stateDefs st) "")
 
 -- 定义还是表达式：整段能解析成顶层声明就追加到定义缓冲，否则按表达式求值。
 submitText : PackageContext -> ReplState -> String -> ReplOutcome
 submitText ctx st text = case parseSource replTempFile (stateImports st ++ stateDefs st ++ text ++ "\n") of
-  Ok (Source hdr imp decls) => case hdr of
+  Ok (Source hdr imp fx decls) => case hdr of
     Just md => evalText ctx st text
     Nothing => ReplContinue (replState (stateImports st) (stateDefs st ++ text ++ "\n") "")
   Err e => evalText ctx st text
@@ -205,7 +206,7 @@ evalText : PackageContext -> ReplState -> String -> ReplOutcome
 evalText ctx st text = case parseExpressionSource text of
   Err e =>
     let
-      _ = prim_print ("错误: " ++ e ++ "\n")
+      _ = runIO (prim_print ("错误: " ++ e ++ "\n"))
     in ReplContinue (replState (stateImports st) (stateDefs st) "")
   Ok _ =>
     let
@@ -213,7 +214,7 @@ evalText ctx st text = case parseExpressionSource text of
     in case evalExprInfo ctx program text of
       Err e =>
         let
-          _ = prim_print ("错误: " ++ e ++ "\n")
+          _ = runIO (prim_print ("错误: " ++ e ++ "\n"))
         in ReplContinue (replState (stateImports st) (stateDefs st) "")
       Ok info =>
         let
@@ -224,7 +225,7 @@ evalText ctx st text = case parseExpressionSource text of
           in ReplContinue (replState (stateImports st) (stateDefs st) "")
         else
           let
-            _ = prim_print (firstOf info ++ "\n")
+            _ = runIO (prim_print (firstOf info ++ "\n"))
           in ReplContinue (replState (stateImports st) (stateDefs st) "")
 
 -- IO 表达式：合成 `main : <类型>` + `main = <表达式>`，临时编译并运行。
@@ -235,14 +236,14 @@ evalIO : PackageContext -> ReplState -> String -> String -> Int
 evalIO ctx st text tyText = if hasMainDef (stateImports st) (stateDefs st) then
   let
     _ =
-      prim_print
-        "错误: 程序已经定义了 main，无法把表达式当作效果入口（先 :reset 或改名）\n"
+      runIO
+        (prim_print "错误: 程序已经定义了 main，无法把表达式当作效果入口（先 :reset 或改名）\n")
   in 0
 else if hasUnsolvedMeta tyText then
   let
     _ =
-      prim_print
-        ("错误: 无法确定 IO 表达式的完整类型（" ++ tyText ++ "）；先定义成带签名的值再求值（如 `prog : Base.IO.IO Int` + `prog = ...`）\n")
+      runIO
+        (prim_print ("错误: 无法确定 IO 表达式的完整类型（" ++ tyText ++ "）；先定义成带签名的值再求值（如 `prog : Base.IO.IO Int` + `prog = ...`）\n"))
   in 0
 else
   let
@@ -250,12 +251,12 @@ else
   in case runEffectProgram ctx source (ioPrintResult tyText) of
     Err e =>
       let
-        _ = prim_print ("错误: " ++ e ++ "\n")
+        _ = runIO (prim_print ("错误: " ++ e ++ "\n"))
       in 0
     Ok code => if code == 0 then 0
     else
       let
-        _ = prim_print ("[进程退出码 " ++ strFromInt code ++ "]\n")
+        _ = runIO (prim_print ("[进程退出码 " ++ strFromInt code ++ "]\n"))
       in code
 
 -- 类型文本里是否有未解元变量（`showTerm` 渲染成 `?N`）。
@@ -266,7 +267,7 @@ hasUnsolvedMeta tyText = contains "?" tyText
 hasMainDef : String -> String -> Bool
 hasMainDef imports defs = case parseSource replTempFile (imports ++ "\n" ++ defs) of
   Err e => False
-  Ok (Source hdr imp decls) => memName "main" (topNames decls)
+  Ok (Source hdr imp fx decls) => memName "main" (topNames decls)
 
 -- 顶层类型文本是 canonical `IO a` 吗？`dtEvalExprInfo` 的 showTerm 把 TApp 渲染成
 -- `(Base.IO.IO Int)`（canonical 全名），函数类型则是 `(...) -> ...`，前缀不会命中。

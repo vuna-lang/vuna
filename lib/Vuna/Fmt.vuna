@@ -1,4 +1,4 @@
-module Vuna.Fmt (formatSource) where
+module Vuna.Fmt (formatSourceWith) where
 
 -- Vuna.Fmt：vuna 源码格式化器门面（parse → 规范打印）。
 -- 输出约定：2 空格缩进、顶层声明之间一个空行、文件末尾一个换行、无行尾空白；
@@ -7,25 +7,35 @@ module Vuna.Fmt (formatSource) where
 -- 重导出统一排最后；单行超过 maxWidth 或列表内含注释时逐项一行（逗号前置），
 -- 否则保持单行。项级注释随项移动。
 -- 注释保留（M11.6）：注释不在 AST 里，格式化器单独 lex 出注释，按源码位置
--- 挂到最近的「条目」（顶部声明/import/构造器/记录字段/trait 方法/let 与 where
--- 绑定/case 分支/do 语句）；实现见 Vuna.Fmt.Comment。
+-- 挂到最近的「条目」（顶部声明/import/`infix*` 声明/构造器/记录字段/trait 方法/
+-- let 与 where 绑定/case 分支/do 语句）；实现见 Vuna.Fmt.Comment。
 --
 -- M24 后维护·源码重组后本模块只是门面：表达式/模式打印在 Vuna.Fmt.Expr，声明/模块头在
 -- Vuna.Fmt.Decl，注释挂载在 Vuna.Fmt.Comment，共用小工具在 Vuna.Fmt.Util。
+--
+-- M31.3（B27）：fixity 是**程序级**属性——同一个运算符在 A 模块的优先级可能来自它 import
+-- 的库模块，因此调用方必须给出「程序可见的 fixity 闭包」（`formatSourceWith` 的第一个
+-- 参数，见 `Vuna.Compiler.Loader.Flatten.fixitiesForSource`）。fmt 内部把本文件的本地
+-- `infix*` 声明放在最前（本地优先），并用 keep 表（`tableOfKeepOps`）重排/打印：
+-- 未知**符号**运算符由 Loader 报错（不静默改语义，调用方据此拒绝格式化）；未知反引号
+-- 名字按 9 左结合（Haskell 默认）。本模块不引用固定兜底表。
 import Vuna.Compiler.Common
 import Vuna.Compiler.Frontend.Ast
+import Vuna.Compiler.Loader.Fixity
 import Vuna.Compiler.Frontend.Lexer
 import Vuna.Compiler.Frontend.Parser
 import Vuna.Fmt.Comment
 import Vuna.Fmt.Decl
 import Vuna.Fmt.Util
 
-formatSource : String -> Result String
-formatSource source = case parseSource "<fmt>" source of
+formatSourceWith : List FixityDecl -> String -> Result String
+formatSourceWith programFixities source = case parseSource "<fmt>" source of
   Err e => Err e
-  Ok (Source hdr imports decls) => case lexComments source of
+  Ok (Source hdr imports fx decls0) => case reorderProgram (tableOfKeepOps (append fx programFixities)) decls0 of
     Err e => Err e
-    Ok comments => case assignComments (anchorSpans hdr imports decls) comments [] [] of
-      Pair at eof => case joinSections (filterSections (renderSourceSections hdr imports decls at eof)) of
-        [] => Ok ""
-        lines => Ok (unlines lines)
+    Ok decls => case lexComments source of
+      Err e => Err e
+      Ok comments => case assignComments (anchorSpans hdr imports fx decls) comments [] [] of
+        Pair at eof => case joinSections (filterSections (renderSourceSections (append fx programFixities) hdr imports fx decls at eof)) of
+          [] => Ok ""
+          lines => Ok (unlines lines)

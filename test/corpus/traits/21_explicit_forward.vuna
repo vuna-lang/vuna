@@ -1,0 +1,12 @@
+-- M32：约束函数互调（约束跨函数传播）。`helper` 的调用点字典实参在 `checkAll` 的
+-- 刚性类型变量上延迟，定义体结束后命中 `checkAll` 声明的 `Eq a` 假设。
+import Prelude
+
+helper : Eq a => a -> a -> Bool
+helper x y = x == y
+
+checkAll : Eq a => a -> a -> a -> Bool
+checkAll x y z = helper x y && helper y z
+
+main : Bool
+main = checkAll 1 1 1 && not (checkAll 1 2 2)

@@ -97,11 +97,16 @@ nix run .#vuna-run-tests [-- --list | --only 34 | --only dt | --vuna stable]
   构造器不可见）同样覆盖；`95_ambiguous_field` 覆盖歧义字段；
 - `corpus/traits/`：正例 `interp` 与 `compile` 比对 golden（含泛型字典穿参、多类型
   default；`14_constrained_instance`（`instance Eq a => Eq (Box a)` +
-  `mem (Box 1) [...]`）、`15_parametric_deriving`（参数化 `deriving (Show, Eq, Ord)`））；
+  `mem (Box 1) [...]`）、`15_parametric_deriving`（参数化 `deriving (Show, Eq, Ord)`）、
+  `16_eq_ord_alias`（`==` / `eq`、`<` / `lt` 走同一路径，Int/String 特化 + Bool 实例）、
+  `17`–`22`（M32 显式签名约束：单 / 多约束、结构化 `Eq (Box a)`、高阶 kind `Monad m`、
+  约束函数互调、未使用约束））；
   命名实例特性不存在。错误例 90–95、98 要求错误片段、非 0 退出、不写
-  输出（孤儿实例、重复实例 / 相干性、head 不符、缺 / 未知方法、显式只写 `Trait` 不写
-  `(..)`）；`96_named_instance_removed` / `97_instance_sel_removed` 是 `as` / `@` 语法的
-  解析负例；
+  输出（重复实例 / 相干性、head 不符、缺 / 未知方法、显式只写 `Trait` 不写 `(..)`；
+  `90_orphan_default` 实际覆盖重复实例，孤儿规则表述已随 M31.1 删除，见 B23）；
+  `99_explicit_*`（M32 约束负例：未知接口、非单参数应用、kind 不符、where / trait 方法
+  位置不支持）。
+  `96_named_instance_removed` / `97_instance_sel_removed` 是 `as` / `@` 语法的解析负例；
 - `corpus/monad/`：`do` / `>>=` / `>>` 在 Maybe/List 上的正例，含高阶 kind 泛型
   `bindPair : m a -> m b -> m (Pair a b)`；`04_kind_generic`（多隐式参数字典）check /
   interp / compile+运行三路全过；错误例覆盖 kind 不符、无 Monad、do 结尾 / 绑定模式非法；
@@ -176,7 +181,9 @@ nix run .#vuna-run-tests [-- --list | --only 34 | --only dt | --vuna stable]
 - `vuna-typecheck` / `vuna-lint`：`vuna check .` 自检、lint 零 finding；
 - `vuna-fmt`：workspace 全包与 `examples/`；
 - `vuna-package`：`examples/multi` 的 build/test/fmt/doc + 根包构建；
-- `vuna-metrics`：seed 闭包的 codegen 指标对 `nix/metrics.budget`；
+- `vuna-metrics`：冻结夹具（`test/corpus/codegen`）的 codegen 产物对
+  `nix/codegen.baseline` 的精确基线；种子尺寸不设门槛（见 [compiler.md](compiler.md)
+  §codegen 夹具基线）；
 - `vuna-index`：`map` / `--find` / `--impact` / `api` 与内容哈希缓存失效；
 - `context-budget`：入口文档字节数与单模块行数对 `nix/context.budget`；
 - `vscode-ext`：提交的 `vscode/dist/extension.js` 与清单 / 语法文件的离线自检，不跑

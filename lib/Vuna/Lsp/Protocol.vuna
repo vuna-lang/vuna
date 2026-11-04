@@ -47,6 +47,7 @@ module Vuna.Lsp.Protocol
 -- body 按 `Content-Length` 精确读够 `N` 字节（`strLength` 即 UTF-8 字节数）。
 import Vuna.Compiler.Common
 import Vuna.Json
+import Base.IO
 
 -- 小工具
 -- ---------------------------------------------------------------
@@ -142,7 +143,7 @@ percentDecodeChars (c :: rest) acc = if c == 37 then case rest of
     let
       hv = hexValue h
       lv = hexValue l
-    in if hv >= 0 && lv >= 0 then percentDecodeChars more ((hv * 16 + lv) :: acc)
+    in if hv >= 0 && lv >= 0 then percentDecodeChars more (hv * 16 + lv :: acc)
     else percentDecodeChars rest (37 :: acc)
   _ => percentDecodeChars rest (37 :: acc)
 else percentDecodeChars rest (c :: acc)
@@ -202,7 +203,7 @@ sendFrame : Json -> Int
 sendFrame payload =
   let
     body = renderJson payload
-  in prim_print ("Content-Length: " ++ strFromInt (strLength body) ++ "\r\n\r\n" ++ body)
+  in runIO (prim_print ("Content-Length: " ++ strFromInt (strLength body) ++ "\r\n\r\n" ++ body))
 
 responseOk : Json -> Json -> Json
 responseOk id body = JObj [Pair "jsonrpc" (JStr "2.0"), Pair "id" id, Pair "result" body]
@@ -263,7 +264,7 @@ logLine s = "[vuna-lsp] " ++ s ++ "\n"
 
 flushLogLines : List String -> Int
 flushLogLines [] = 0
-flushLogLines logs = prim_writeFile "/dev/stderr" (join "" (map logLine (reverse logs)))
+flushLogLines logs = runIO (prim_writeFile "/dev/stderr" (join "" (map logLine (reverse logs))))
 
 -- 帧读取：字节缓冲 + 按 Content-Length 切帧
 -- ---------------------------------------------------------------
@@ -276,7 +277,7 @@ flushLogLines logs = prim_writeFile "/dev/stderr" (join "" (map logLine (reverse
 -- 语义：有数据就立即返回已到达的字节（**可能少于 n**），EOF 返回 ""。
 -- 调用方（`Vuna.Lsp.lspLoop`）负责拼接缓冲并重试切帧。
 readChunk : Int -> String
-readChunk n = prim_readBytes n
+readChunk n = runIO (prim_readBytes n)
 
 -- 找子串 needle 从 start 起的字节偏移；找不到返回 -1。
 findFrom : String -> Int -> String -> Int

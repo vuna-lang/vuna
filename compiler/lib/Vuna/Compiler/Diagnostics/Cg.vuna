@@ -38,6 +38,7 @@ data CgErr : Nat -> Type where
   TypeUsedAtRuntime : CgErr Zero
   -- arity 1
   AxiomAtRuntime : String -> CgErr (Succ Zero)
+  EffectPrimRequiresIO : String -> CgErr (Succ Zero)
   ListBridgeRequired : String -> CgErr (Succ Zero)
   RecursiveValueDefinition : String -> CgErr (Succ Zero)
   TypeLevelBindingRuntime : String -> CgErr (Succ Zero)
@@ -52,6 +53,7 @@ cgCode MainReturnType = "CG_MainReturnType"
 cgCode NoMain = "CG_NoMain"
 cgCode TypeUsedAtRuntime = "CG_TypeUsedAtRuntime"
 cgCode (AxiomAtRuntime _) = "CG_AxiomAtRuntime"
+cgCode (EffectPrimRequiresIO _) = "CG_EffectPrimRequiresIO"
 cgCode (ListBridgeRequired _) = "CG_ListBridgeRequired"
 cgCode (RecursiveValueDefinition _) = "CG_RecursiveValueDefinition"
 cgCode (TypeLevelBindingRuntime _) = "CG_TypeLevelBindingRuntime"
@@ -68,6 +70,8 @@ cgTemplate NoMain = "no main definition"
 cgTemplate TypeUsedAtRuntime = "a type is used at runtime (M13 limitation)"
 cgTemplate (AxiomAtRuntime _) =
   "axiom `<0>` cannot be used at runtime (it has no runtime definition)"
+cgTemplate (EffectPrimRequiresIO _) =
+  "effectful builtin `<0>` returns `IO`; requires the canonical `Base.IO.IO` declaration from vuna-base (add `import Base.IO`, or use Base.IO actions / runIO)"
 cgTemplate (ListBridgeRequired _) =
   "builtin `<0>` requires the canonical `Base.List.List` declaration from vuna-base (no base dependency in this package)"
 cgTemplate (RecursiveValueDefinition _) =
@@ -100,6 +104,7 @@ cgChunk0 =
     CgEntry (cgCode NoMain) (cgTemplate NoMain) "入口缺少 main 定义",
     CgEntry (cgCode TypeUsedAtRuntime) (cgTemplate TypeUsedAtRuntime) "类型被运行时使用（M13 限制）",
     CgEntry (cgCode (AxiomAtRuntime "")) (cgTemplate (AxiomAtRuntime "")) "axiom 被运行时使用（它没有运行时定义体）",
+    CgEntry (cgCode (EffectPrimRequiresIO "")) (cgTemplate (EffectPrimRequiresIO "")) "效果原语返回 IO 但包没有 canonical Base.IO.IO 声明（缺 import Base.IO）",
     CgEntry (cgCode (ListBridgeRequired "")) (cgTemplate (ListBridgeRequired "")) "内建需要 canonical Base.List.List 桥接但包没有 base 依赖"
   ]
 

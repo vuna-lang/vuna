@@ -37,9 +37,8 @@
 3. **`seed/` 只含 compiler 包入口闭包**（`compiler/app/Main.vuna` 的 import 闭包）；
 4. **工具链不进 TCB**：`fmt`/`lint`/`repl`/`doc`/`test`/`Index`/`LSP`（以及未来的
    package manager）永不进入 seed 闭包；黑名单见 `nix/tcb-forbidden.txt`；
-5. **效应内建按 manifest 显式能力**：包声明 `[capabilities] effects`
-   （`console`/`fs`/`process`/`env`/`clock`）才能直接调 effectful `prim_*`，否则经
-   `Base.IO`（唯一真源 `Vuna.Compiler.Intrinsics` + `Loader.Resolve.checkEffectsBuiltins`）；
+5. **效应原语返回 `IO` 动作**：声明 `[capabilities] effects` 才可直调 effectful `prim_*`，
+   否则经 `Base.IO`；动作只在 `main` 执行，`Base.IO.runIO` 是唯一 main 外入口、需 `unsafe`；
 6. **唯一路径**：语言夹具、`vuna interp`、包构建与 seed 全部走 DT（精化 + 擦除
    codegen，`vuna check .` 也是 DT 自检）；没有可切换的检查器，也没有第二套 codegen；
 7. 编译器自检通过：`vuna check .` 必须能检查自身源码（`checks.vuna-typecheck`）。
@@ -66,22 +65,22 @@
 ```console
 nix build .#vuna --out-link result   # 产品 CLI；.#vuna-compiler / .#vuna-seed 同理
 nix flake check                      # 13 项：3 packages + 10 checks（含 vscode-ext）
-nix run .#vuna-run-tests [-- --list | --only dt]   # 原生测试；nix run .#vuna-bench -- --quick
+nix run .#vuna-run-tests [-- --list | --only dt]   # 原生测试；bench：.#vuna-bench --quick / .#vuna-perf --check
 vuna check .                         # 包级类型检查（自检）；vuna build . → .output/bin/<包名>
 vuna fmt --check <PATH>...           # 格式化检查（省略 PATH = workspace 各包 lib/app/test）；vuna lint <file>...
-vuna doc [DIR [OUT]] | gen-errors [ROOT]  # API 文档 / 错误码文档（默认 docs/api.md / docs/.generated/errors.md，gitignored）
+vuna doc [DIR [OUT]] | gen-errors [ROOT]  # API 文档 / 错误码文档（默认 docs/api.md / docs/.generated/errors.md）
 vuna interp <file.vuna>              # DT 精化 + 核心求值（纯；只展示 Int/String/Bool）
 vuna build --no-compile --out <OUT> compiler   # 逐模块 DT codegen 到目录（= vuna compile compiler <OUT>；rotation 用 nix/seed-rotate.sh）
 vuna map [...] | vuna api <Module.name>  # 模块总览 / 定位符号 / 改动影响面 / 签名面
 ```
-
 ## 目录速览
 
-`compiler/` = 编译器包（模块 `Vuna.Compiler.*`，入口 `app/Main.vuna`，**进 seed**）；
-`base/` = 标准库 `vuna-base`（`Base.*` + `Prelude`，**进 seed**）；`lib/` = 根包工具链
-（Cli/Interp/Files/Fmt/Lint/Repl/Doc/Index/Lsp/TestRunner，**不进 seed**）；`app/` = 产品
-CLI 入口；`seed/` = 提交入库的多文件 OCaml 信任锚点（生成物，禁止手改、别读）；`test/` =
-`run-tests.sh` + `corpus/` 夹具；`vscode/` = VSCode 扩展（高亮 + LSP + lint/fmt/check/build，`dist/` 提交）；`nix/` = 构建图（packages/checks）+ rotate/metrics/bench；`docs/` = 分层文档。
+`compiler/` = 编译器包（`Vuna.Compiler.*`，入口 `app/Main.vuna`，**进 seed**）；`base/` =
+标准库 `vuna-base`（`Base.*` + `Prelude`，**进 seed**）；`lib/` = 根包工具链（Cli/Interp/
+Files/Fmt/Lint/Repl/Doc/Index/Lsp/TestRunner，**不进 seed**）；`app/` = 产品 CLI 入口；
+`seed/` = 提交入库的 OCaml 信任锚点（生成物，禁止手改、别读）；`test/` = `run-tests.sh` +
+`corpus/` 夹具 + `bench/` 生成程序基准；`vscode/` = VSCode 扩展（高亮 + LSP + lint/fmt/check/
+build，`dist/` 提交）；`nix/` = 构建图 + rotate/metrics/bench；`docs/` = 分层文档。
 
 ## 文档导航
 
@@ -90,7 +89,8 @@ CLI 入口；`seed/` = 提交入库的多文件 OCaml 信任锚点（生成物�
   [type-system.md](docs/reference/type-system.md)（宇宙/索引族/依赖匹配/相等/擦除）、
   [records-traits.md](docs/reference/records-traits.md)（记录/trait/do）、
   [stdlib.md](docs/reference/stdlib.md)、[packages.md](docs/reference/packages.md)、
-  [primitives.md](docs/reference/primitives.md)（内建/原语/能力）
+  [primitives.md](docs/reference/primitives.md)（内建/原语/能力）、
+  [operators.md](docs/reference/operators.md)（运算符=方法别名、实例落点规则）
 - 编译器实现：[compiler.md](docs/reference/compiler.md)（模块与输出模型）、
   [core.md](docs/reference/core.md)（Core TT / NbE / 精化器）
 - 工具链（`goal` / LSP / `doc` / 错误码；`vuna gen-errors` 生成

@@ -8,6 +8,7 @@ module Vuna.Files (collectSourceFiles, collectVunaFiles, pathExistsDir, pathExis
 -- 所以任何来自用户输入的路径都必须先用 `pathExistsDir` 判存在，
 -- 不要直接调用 `prim_isDirectory`。
 import Vuna.Compiler.Common
+import Base.IO
 
 -- 递归收集目录下所有 .vuna 文件（跳过 . / .. 与隐藏项）。
 -- 同时跳过生成物与本地缓存目录：它们可能包含符号链接 / 超大文件，
@@ -35,7 +36,7 @@ collectVunaFiles dir = collectVunaFilesGo 1048576 dir
 collectVunaFilesGo : Int -> String -> List String
 collectVunaFilesGo fuel dir =
   if fuel <= 0 then []
-  else if pathExistsDir dir then concatMap (walkVunaGo (fuel - 1) dir) (prim_readDir dir) else []
+  else if pathExistsDir dir then concatMap (walkVunaGo (fuel - 1) dir) (runIO (prim_readDir dir)) else []
 
 walkVunaGo : Int -> String -> String -> List String
 walkVunaGo fuel dir name = if fuel <= 0 then []
@@ -56,7 +57,7 @@ collectSourceFiles dir = collectSourceFilesGo 1048576 dir
 collectSourceFilesGo : Int -> String -> List String
 collectSourceFilesGo fuel dir =
   if fuel <= 0 then []
-  else if pathExistsDir dir then concatMap (walkAnyGo (fuel - 1) dir) (prim_readDir dir) else []
+  else if pathExistsDir dir then concatMap (walkAnyGo (fuel - 1) dir) (runIO (prim_readDir dir)) else []
 
 walkAnyGo : Int -> String -> String -> List String
 walkAnyGo fuel dir name = if fuel <= 0 then []
@@ -71,7 +72,7 @@ else case name of
 
 -- 安全的目录判定：不存在返回 False，而不是抛异常。
 pathExistsDir : String -> Bool
-pathExistsDir path = pathExistsFile path && prim_isDirectory path
+pathExistsDir path = pathExistsFile path && runIO (prim_isDirectory path)
 
 pathExistsFile : String -> Bool
-pathExistsFile path = prim_fileExists path
+pathExistsFile path = runIO (prim_fileExists path)

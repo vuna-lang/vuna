@@ -1,0 +1,9 @@
+-- M32：未使用的约束也合法（binder 保留，调用点仍需实例）。`tag` 不调用任何 trait
+-- 方法，但签名声明 `Show a =>`，所以 `tag 42` 仍要求 Show Int。
+import Prelude
+
+tag : Show a => a -> String
+tag x = "value"
+
+main : String
+main = tag 42

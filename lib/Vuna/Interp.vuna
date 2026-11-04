@@ -23,6 +23,7 @@ import Vuna.Compiler.Common
 import Vuna.Compiler.Packages.Pkg
 import Vuna.Compiler.Driver.Dt
 import Vuna.Compiler.Driver.Compile
+import Base.IO
 
 interpretFile : PackageContext -> String -> String
 interpretFile ctx entry = case dtEvalFile ctx entry of
@@ -66,7 +67,7 @@ effectBinaryName = "vuna-effect"
 tempBase : Int -> String
 tempBase _ =
   let
-    env = prim_getenv "TMPDIR"
+    env = runIO (prim_getenv "TMPDIR")
   in if env == "" then "/tmp"
   else if endsWith "/" env then substring 0 (strLength env - 1) env else env
 
@@ -80,7 +81,7 @@ pickTempDir base [] = base
 pickTempDir base (n :: rest) =
   let
     candidate = if n == 0 then base else base ++ "-" ++ strFromInt n
-  in if prim_fileExists candidate then pickTempDir base rest else candidate
+  in if runIO (prim_fileExists candidate) then pickTempDir base rest else candidate
 
 -- 上下文依赖根 → 临时包的 [dependencies] 条目（包名 → 包目录）。
 -- base-only 上下文（包名为空）只有 base 一个根，必须全部带上；普通上下文跳过第一个
@@ -100,7 +101,7 @@ rootPackageDir dir = if endsWith "/lib" dir then substring 0 (strLength dir - 4)
 
 -- 依赖路径必须是绝对路径（临时包不在调用方的工作目录下，相对路径会解析错）。
 absoluteDir : String -> String
-absoluteDir dir = if startsWith "/" dir then dir else prim_getcwd ++ "/" ++ dir
+absoluteDir dir = if startsWith "/" dir then dir else runIO prim_getcwd ++ "/" ++ dir
 
 tomlQuote : String -> String
 tomlQuote s = "\"" ++ tomlEscaped (strUnpack s) ++ "\""
@@ -137,7 +138,7 @@ effectManifest ctx =
 
 -- `ocamlopt` 是否在 PATH 里（链接阶段需要）。探针的 stdout/stderr 全部丢弃。
 hasOcamlopt : Int -> Bool
-hasOcamlopt _ = prim_runIn "." ["sh", "-c", "command -v ocamlopt >/dev/null 2>&1"] == 0
+hasOcamlopt _ = runIO (prim_runIn "." ["sh", "-c", "command -v ocamlopt >/dev/null 2>&1"]) == 0
 
 noOcamloptMessage : String
 noOcamloptMessage =
@@ -146,13 +147,13 @@ noOcamloptMessage =
 cleanupTemp : String -> Int -> Int
 cleanupTemp dir code =
   let
-    _ = prim_runIn "/" ["rm", "-rf", dir]
+    _ = runIO (prim_runIn "/" ["rm", "-rf", dir])
   in code
 
 cleanupErr : String -> String -> Result Int
 cleanupErr dir e =
   let
-    _ = prim_runIn "/" ["rm", "-rf", dir]
+    _ = runIO (prim_runIn "/" ["rm", "-rf", dir])
   in Err e
 
 -- 把带 main 的入口源码编译成临时包里的可执行文件并运行，返回进程退出码。
@@ -161,21 +162,21 @@ cleanupErr dir e =
 runEffectProgram : PackageContext -> String -> Bool -> Result Int
 runEffectProgram ctx source printResult =
   let
-    dir = freshTempDir (tempBase 0 ++ "/vuna-effect-" ++ strFromInt timeUs)
+    dir = freshTempDir (tempBase 0 ++ "/vuna-effect-" ++ strFromInt (runIO timeUs))
     entry = dir ++ "/app/Main.vuna"
     outDir = dir ++ "/.output"
-    _ = prim_makeDir dir
-    _ = prim_makeDir (dir ++ "/app")
-    _ = prim_writeFile (dir ++ "/vuna.toml") (effectManifest ctx)
-    _ = prim_writeFile entry source
+    _ = runIO (prim_makeDir dir)
+    _ = runIO (prim_makeDir (dir ++ "/app"))
+    _ = runIO (prim_writeFile (dir ++ "/vuna.toml") (effectManifest ctx))
+    _ = runIO (prim_writeFile entry source)
   in case contextForDir dir of
     Err e => cleanupErr dir e
     Ok ctxTmp => case compileToDir ctxTmp entry printResult outDir of
       Err e => cleanupErr dir e
       Ok _ =>
         let
-          _ = prim_makeDir (outDir ++ "/bin")
+          _ = runIO (prim_makeDir (outDir ++ "/bin"))
         in if hasOcamlopt 0 then case runBuildScript outDir ("bin/" ++ effectBinaryName) effectBinaryName of
           Err e => cleanupErr dir e
-          Ok _ => Ok (cleanupTemp dir (prim_runIn outDir ["bin/" ++ effectBinaryName]))
+          Ok _ => Ok (cleanupTemp dir (runIO (prim_runIn outDir ["bin/" ++ effectBinaryName])))
         else cleanupErr dir noOcamloptMessage

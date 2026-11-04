@@ -95,6 +95,11 @@ data PsDiag : Nat -> Type where
   -- M28：`let` / `where` 共用绑定块，缩进越界用统一诊断。
   UnexpectedIndentInBinding : PsDiag Zero
   WhereArgsNotSimple : PsDiag Zero
+  -- M31.2：`infix*` 声明的优先级必须是 0–9 的十进制字面量。
+  ExpectedFixityLevel : PsDiag Zero
+  FixityLevelRange : PsDiag Zero
+  -- M32：`C a => τ` 的约束语法只允许在顶层签名上；其它签名位置给明确诊断。
+  ConstraintUnsupportedHere : PsDiag Zero
   -- arity 1（绑定块签名诊断；调用点自拼 span 前缀。M28 起 let/where 共用，
   -- 码名保持不变以稳定错误码文档，消息文案改为通用 "binding signature"）
   WhereSigBeforeClause : String -> PsDiag (Succ Zero)
@@ -136,6 +141,9 @@ psCode UnexpectedIndentInTrait = "PS_UnexpectedIndentInTrait"
 psCode UnexpectedIndentInWhere = "PS_UnexpectedIndentInWhere"
 psCode UnexpectedIndentInBinding = "PS_UnexpectedIndentInBinding"
 psCode WhereArgsNotSimple = "PS_WhereArgsNotSimple"
+psCode ExpectedFixityLevel = "PS_ExpectedFixityLevel"
+psCode FixityLevelRange = "PS_FixityLevelRange"
+psCode ConstraintUnsupportedHere = "PS_ConstraintUnsupportedHere"
 psCode (ExpectedDeclAtColumn _) = "PS_ExpectedDeclAtColumn"
 psCode (ExpectedToken _) = "PS_ExpectedToken"
 psCode (WhereSigBeforeClause _) = "PS_WhereSigBeforeClause"
@@ -174,6 +182,10 @@ psTemplate UnexpectedIndentInTrait = "unexpected indentation in trait block"
 psTemplate UnexpectedIndentInWhere = "unexpected indentation in where block"
 psTemplate UnexpectedIndentInBinding = "unexpected indentation in a let/where binding block"
 psTemplate WhereArgsNotSimple = "binding function arguments must be simple names"
+psTemplate ExpectedFixityLevel = "expected a fixity level (0-9)"
+psTemplate FixityLevelRange = "fixity level must be between 0 and 9"
+psTemplate ConstraintUnsupportedHere =
+  "trait constraints (`C a =>`) are only supported on top-level signatures"
 psTemplate (ExpectedDeclAtColumn _) = "expected a declaration at column <0>"
 psTemplate (ExpectedToken _) = "expected <0>"
 psTemplate (WhereSigBeforeClause _) = "binding signature for `<0>` must come before its clause"
@@ -254,7 +266,10 @@ psAll =
     PsEntry (psCode (WhereSigBeforeClause "")) (psTemplate (WhereSigBeforeClause "")) "绑定签名必须先于子句",
     PsEntry (psCode (WhereSigDuplicate "")) (psTemplate (WhereSigDuplicate "")) "重复的绑定签名",
     PsEntry (psCode (WhereSigMultiClause "")) (psTemplate (WhereSigMultiClause "")) "绑定多子句不可用签名",
-    PsEntry (psCode (WhereSigNoDef "")) (psTemplate (WhereSigNoDef "")) "绑定签名无对应定义"
+    PsEntry (psCode (WhereSigNoDef "")) (psTemplate (WhereSigNoDef "")) "绑定签名无对应定义",
+    PsEntry (psCode ExpectedFixityLevel) (psTemplate ExpectedFixityLevel) "fixity 声明缺少优先级",
+    PsEntry (psCode FixityLevelRange) (psTemplate FixityLevelRange) "fixity 优先级必须在 0–9",
+    PsEntry (psCode ConstraintUnsupportedHere) (psTemplate ConstraintUnsupportedHere) "trait 约束只能在顶层签名上写"
   ]
 
 -- ---------------------------------------------------------------

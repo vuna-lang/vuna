@@ -55,7 +55,7 @@ Content-Length: <字节数>\r\n
 | `textDocument/didOpen` / `didChange` / `didClose` | 内存维护打开文档表（Full 同步） |
 | `textDocument/publishDiagnostics` | 包上下文解析 / DT 精化 / 覆盖性诊断 + lint 诊断 |
 | `textDocument/hover` | DT 洞 `_` 的目标类型与上下文（文本里没有独立 `_` 时跳过精化）；否则标识符签名 / 文档注释。`range` 落在**光标 token** 上（不是符号定义位置）——客户端用它判断 hover 何时失效 |
-| `textDocument/formatting` | `Vuna.Fmt.formatSource` 全文替换 TextEdit（解析失败返回空） |
+| `textDocument/formatting` | `Vuna.Fmt.formatSourceWith` 全文替换 TextEdit（fixity 取程序级可见闭包）（解析失败返回空） |
 | `textDocument/documentSymbol` | AST 声明树（data/record/trait 带子节点） |
 | `textDocument/definition` / `references` | Index：token → 符号 → 定义位置；references 用 `Ref` 的精确行 / 列 |
 | `textDocument/completion` | 关键字 + 当前缓冲顶层符号 + Index 符号；`.` 后按模块过滤 |
@@ -150,8 +150,9 @@ $ vuna doc <dir> <out.md>
 | `TC_CannotSolveHigherOrder` | 精化 | 非 Miller pattern 的元变量应用 |
 | `TC_NoInstanceFound` | 精化 | 接口字典找不到实例 |
 | `TC_AmbiguousInstance` | 精化 | 多个实例头部都能统一 |
-| `TC_UnknownInterface` | 精化 | instance 头不是已声明接口 |
+| `TC_UnknownInterface` | 精化 | instance 头 / 签名约束头能解析成名字但不是已声明接口 |
 | `TC_InstanceHeadNotApp` | 精化 | instance 头形态不合法 |
+| `TC_ConstraintNotDict` | 精化 | 约束项不是单参数 trait 应用 |
 | `TC_InstanceMissingMethod` | 精化 | 实例漏实现方法 |
 | `TC_CannotProveTermination` | 终止性 | 递归调用没有结构下降 |
 | `TC_NotExhaustive` | 覆盖性 | 漏写可达分支 |

@@ -329,6 +329,7 @@ else case expr of
   ERecUpdate base fields sp => tcErr0 sp RecordUpdateUnsupported
   EDo stmts sp => tcErr0 sp DoUnsupported
   EAnn value ty sp => inferAnnFuel (fuel - 1) globals ctx ec value ty sp
+  _ => Err "DT: internal: unreordered infix/paren in elaboration"
 
 -- M24：where 绑定签名 `EAnn value ty`（parser 从 `name : Ty` 行生成）。
 -- 先检查 ty 是合法类型，再把 value 按该类型 check；推导位返回 eval ty 作为类型。
@@ -391,7 +392,14 @@ else case fn of
                 Ok (Pair (ctorAppTerm (ecDatas ec2) (TGlobal name) argTerms) (Pair resTy ec2))
             )
           )
-          Nothing => tcErr1 vsp (UnknownName name) name
+          -- M31.1：`==` / `<` 等已不是 prelude globals（用户源码的运算符在 Loader 被
+          -- 别名成方法名），但 `Elab.Derive`（deriving 展开）与 `Elab.Match`（字面量
+          -- 模式）仍直接构造 `EVar "=="` 这类内部生成名，且实例方法体没有签名、走推断。
+          -- 因此推断位置在没有 globals 项时也要先试运算符特化，再报 UnknownName。
+          Nothing => andThen (specializeOpAppFuel (fuel - 1) globals ctx ec name args sp) (\mspec => case mspec of
+            Just pair => Ok pair
+            Nothing => tcErr1 vsp (UnknownName name) name
+          )
     _ => inferAppGeneralFuel (fuel - 1) globals ctx ec fn args sp
 
 inferAppGeneralFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Expr -> List Expr -> Span -> Result (Pair Term (Pair Value Ec))
@@ -481,7 +489,7 @@ else case dictClassArg ec dom of
       -- 类参数是裸元变量：在**副本**上推断显式实参以确定它（`MkB` → `?a = B`），
       -- 但只把 `?a` 的解带回真实 ec，`inferEFuel (fuel - 1)` 新建的孤儿元变量随副本丢弃——
       -- 否则 `bind (pure 41)` 的 `pure` 类参数（`?3`）会变成未解孤儿报 M13。
-      VMeta a [] => andThen (constrainDictDomGoKFuel (fuel - 1) globals ec ctx argTy argKind args sp) (\ecProbe => case metaLookup a (ecSols ecProbe) of
+      VMeta a [] => andThen (constrainDictDomGoKFuel (fuel - 1) globals ec ctx argTy argKind args sp) (\ecProbe => case metaLookup a (ecSolTbl ecProbe) of
         Just v => case solveMeta (ecDefTbl ec) (ecSolsP ec) 0 a [] v of
           Ok sols2 => Ok (ecPutSols ec (solsList sols2))
           Err e => Ok ec
@@ -588,6 +596,7 @@ expandLocalFuns ec (EDo stmts sp) =
   andThen (traverse (expandDoStmt ec) stmts) (\stmts2 => Ok (EDo stmts2 sp))
 expandLocalFuns ec (EAnn value ty sp) =
   andThen (expandLocalFuns ec value) (\value2 => Ok (EAnn value2 ty sp))
+expandLocalFuns ec _ = Err "DT: internal: unreordered infix/paren in elaboration"
 
 expandBind : Ec -> Pair Pat Expr -> Result (Pair Pat Expr)
 expandBind ec (Pair pat value) = andThen (expandLocalFuns ec value) (\v2 => Ok (Pair pat v2))
@@ -804,7 +813,7 @@ else case globalsLookup name globals ec of
 -- 因此 codegen 只需要名字映射（不感知类型），M18.6 的封装不被破坏。
 specializeEqAppFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> String -> List Expr -> Span -> Result (Maybe (Pair Term (Pair Value Ec)))
 specializeEqAppFuel fuel globals ctx ec name args sp = if fuel <= 0 then Err "DT: internal: inference fuel exhausted"
-else if isEqOp name then case args of
+else if isEqMethod ec name then case args of
   [a, b] => andThen (inferEFuel (fuel - 1) globals ctx ec a) (\pa => case pa of
     Pair aTerm (Pair aTy ec1) => andThen (inferEFuel (fuel - 1) globals ctx ec1 b) (\pb => case pb of
       Pair bTerm (Pair bTy ec2) =>
@@ -817,7 +826,7 @@ else Ok Nothing
 
 specializeCmpAppFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> String -> List Expr -> Span -> Result (Maybe (Pair Term (Pair Value Ec)))
 specializeCmpAppFuel fuel globals ctx ec name args sp = if fuel <= 0 then Err "DT: internal: inference fuel exhausted"
-else if isCmpOp name then case args of
+else if isCmpMethod ec name then case args of
   [a, b] => andThen (inferEFuel (fuel - 1) globals ctx ec a) (\pa => case pa of
     Pair aTerm (Pair aTy ec1) => andThen (inferEFuel (fuel - 1) globals ctx ec1 b) (\pb => case pb of
       Pair bTerm (Pair bTy ec2) =>

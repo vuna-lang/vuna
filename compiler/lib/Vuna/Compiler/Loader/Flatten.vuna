@@ -1,5 +1,7 @@
 module Vuna.Compiler.Loader.Flatten
-  ( loadModuleSource
+  ( fixitiesForSource
+  , fixitiesForSourceIn
+  , loadModuleSource
   , loadProject
   , loadProjectModules
   , loadProjectSource
@@ -13,13 +15,47 @@ module Vuna.Compiler.Loader.Flatten
 -- M26：入口统一吃 `PackageContext`（最近 manifest 的包 + 依赖闭包 roots）；旧的
 -- 旧的历史顺序拼接/flatten 死路径已删除，DT 精化由 `Driver.Dt` 按
 -- 「依赖序列 + 入口声明」拼接。
+import Base.IO
 import Vuna.Compiler.Loader.Diagnostics
 import Vuna.Compiler.Common
+import Base.HashMap
 import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Frontend.Parser
+import Vuna.Compiler.Loader.Fixity
 import Vuna.Compiler.Loader.Modules
 import Vuna.Compiler.Loader.Resolve
 import Vuna.Compiler.Packages.Pkg
+
+-- M31.2：imports 模块的**可见 fixity 表**（Module 里已含各自的 import 闭包）。
+-- 本模块声明由调用方放在返回列表最前，查找时第一处匹配生效。
+-- M31.2：parse 错误带文件名（前端诊断无位置，加载器知道路径）。
+parseFileWithPath : String -> String -> Result SourceFile
+parseFileWithPath path src = case parseSource path src of
+  Err e => Err (path ++ ": " ++ e)
+  Ok src2 => Ok src2
+
+visibleFixitiesOf : List Module -> List Import -> List FixityDecl
+visibleFixitiesOf modules imports = concatMap (\imp => case findModule modules (importName imp) of
+  Just m => moduleFixitiesOf m
+  Nothing => []
+) imports
+
+-- 按运算符去重（保留第一处 = 本地声明优先，其次 import 顺序）。
+-- M31.3（B26 暴露）：每个 Module 的 visible 列表原本是「本模块 ++ import 闭包」的**重复
+-- 拼接**——import 图里有大量 diamond，路径数随层数指数增长；base 一旦有 `infix*` 声明，
+-- 拼接出来的列表长度就爆炸（`append` 递归直接爆栈）。去重后每个模块的可见表只含
+-- 不同运算符（O(运算符数)），闭包计算回到线性。
+dedupeFixities : List FixityDecl -> List FixityDecl
+dedupeFixities ds = dedupeFixitiesGo ds (Base.HashMap.fromList []) []
+
+dedupeFixitiesGo : List FixityDecl -> HashMap Int -> List FixityDecl -> List FixityDecl
+dedupeFixitiesGo [] seen acc = reverse acc
+dedupeFixitiesGo (d :: rest) seen acc =
+  let
+    key = fixityOp d
+  in case Base.HashMap.lookup key seen of
+    Just _ => dedupeFixitiesGo rest seen acc
+    Nothing => dedupeFixitiesGo rest (Base.HashMap.insert key 1 seen) (d :: acc)
 
 -- ---------------------------------------------------------------
 -- 模块导出表计算（M10）
@@ -53,8 +89,9 @@ findOwnFn : String -> List Decl -> Maybe String
 findOwnFn name [] = Nothing
 findOwnFn name (d :: rest) = case d of
   DFun n pats body sp => if n == name then Just name else findOwnFn name rest
-  DSig n ty sp => if n == name then Just name else findOwnFn name rest
+  DSig n ctx ty sp => if n == name then Just name else findOwnFn name rest
   DAxiom n ty sp => if n == name then Just name else findOwnFn name rest
+  DExtern n c ty sp => if n == name then Just name else findOwnFn name rest
   _ => findOwnFn name rest
 
 findCtorNamed : String -> List Ctor -> Maybe String
@@ -112,11 +149,14 @@ declImplicitExports prefix d = case d of
       :: ownCtorEntries prefix tname (map traitMethodName methods)
   -- M29-T2b：命名实例已删除，实例不出现在导出表（字典按实例表注册）。
   DInstance ctxE head methods sp => []
-  DSig name ty sp =>
+  DSig name ctx ty sp =>
     if isPrivateName name then []
     else [ExportEntry { kind = "val", public = name, target = mangle prefix name, parent = "" }]
   -- M28：axiom 是无体的可擦除顶层，导出层按值条目处理（类型层引用跨模块可见）。
   DAxiom name ty sp =>
+    if isPrivateName name then []
+    else [ExportEntry { kind = "val", public = name, target = mangle prefix name, parent = "" }]
+  DExtern name cName ty sp =>
     if isPrivateName name then []
     else [ExportEntry { kind = "val", public = name, target = mangle prefix name, parent = "" }]
   DFun name pats body sp =>
@@ -129,17 +169,17 @@ implicitExports prefix decls = dedupeImplicitExports (concatMap (declImplicitExp
 -- 没有模块头 = 导出全部：类型签名 DSig 与子句 DFun 会为同一个函数各产生一条
 -- val 条目，必须去重，否则重导出该模块时会在 duplicate export 检查里误报。
 dedupeImplicitExports : List ExportEntry -> List ExportEntry
-dedupeImplicitExports entries = dedupeByPublic entries tblEmpty []
+dedupeImplicitExports entries = dedupeByPublic entries (Base.HashMap.fromList []) []
 
 -- 按 (kind, public) 去重：类型签名与子句会为同一个函数各产生一条 val 条目。
-dedupeByPublic : List ExportEntry -> HashTbl Int -> List ExportEntry -> List ExportEntry
+dedupeByPublic : List ExportEntry -> HashMap Int -> List ExportEntry -> List ExportEntry
 dedupeByPublic [] seen acc = reverse acc
 dedupeByPublic (e :: rest) seen acc =
   let
     key = entryKind e ++ "|" ++ entryPublic e
-  in case tblLookup key seen of
+  in case Base.HashMap.lookup key seen of
     Just _ => dedupeByPublic rest seen acc
-    Nothing => dedupeByPublic rest (tblInsert key 1 seen) (e :: acc)
+    Nothing => dedupeByPublic rest (Base.HashMap.insert key 1 seen) (e :: acc)
 
 -- 裸名导出时，若名字是 **record 类型** 且与其同名构造器 target 相同，只导出类型、
 -- 不导出构造器：抽象记录必须写 T(..) 才公开构造器。（普通 data 里 ctor 与类型同名
@@ -159,7 +199,7 @@ isRecordTarget modules decls prefix target = case splitLastDot (splitOnDot targe
       m = joinDots revPrefix
     in if m == prefix then isRecordDecl base decls
     else case findModule modules m of
-      Just (Module mname mpkg mimports mimps dcs exports mcaps) => isRecordDecl base dcs
+      Just (Module mname mpkg mimports mimps dcs exports mcaps mfx) => isRecordDecl base dcs
       Nothing => False
 
 isRecordDecl : String -> List Decl -> Bool
@@ -302,20 +342,20 @@ sameExportEntry e e2 =
     && entryParent e == entryParent e2
 
 dedupeExportEntries : List ExportEntry -> List ExportEntry
-dedupeExportEntries entries = dedupeByFullKey entries tblEmpty []
+dedupeExportEntries entries = dedupeByFullKey entries (Base.HashMap.fromList []) []
 
 exportEntryKey : ExportEntry -> String
 exportEntryKey e =
   entryKind e ++ "|" ++ entryPublic e ++ "|" ++ entryTarget e ++ "|" ++ entryParent e
 
-dedupeByFullKey : List ExportEntry -> HashTbl Int -> List ExportEntry -> List ExportEntry
+dedupeByFullKey : List ExportEntry -> HashMap Int -> List ExportEntry -> List ExportEntry
 dedupeByFullKey [] seen acc = reverse acc
 dedupeByFullKey (e :: rest) seen acc =
   let
     key = exportEntryKey e
-  in case tblLookup key seen of
+  in case Base.HashMap.lookup key seen of
     Just _ => dedupeByFullKey rest seen acc
-    Nothing => dedupeByFullKey rest (tblInsert key 1 seen) (e :: acc)
+    Nothing => dedupeByFullKey rest (Base.HashMap.insert key 1 seen) (e :: acc)
 
 checkExportDuplicates : String -> List ExportEntry -> Result (List a)
 checkExportDuplicates prefix [] = Ok []
@@ -424,10 +464,17 @@ else case findModule modules name of
     path = firstOf found
   in let
     root = secondOf found
-  in andThen (parseSource path (prim_readFile path)) (\src => case src of
-    Source hdr imports decls =>
-      andThen (validateModuleHeader name hdr)
-        (\_ => andThen (validateImports name imports) (\_ => andThen (implicitPrelude roots (rootName root) name imports) (\implicit => andThen (loadAll (fuel - 1) roots (rootName root) modules (name :: stack) (append imports implicit)) (\modules2 => andThen (computeExports modules2 name hdr imports decls) (\exports => Ok (Module name (rootName root) imports implicit decls exports (rootCapabilities root) :: modules2))))))
+  in andThen (parseFileWithPath path (runIO (prim_readFile path))) (\src => case src of
+    Source hdr imports fixities decls => andThen (validateModuleHeader name hdr) (\_ => andThen (validateImports name imports) (\_ => andThen (implicitPrelude roots (rootName root) name imports) (\implicit => andThen (loadAll (fuel - 1) roots (rootName root) modules (name :: stack) (append imports implicit)) (\modules2 => andThen (computeExports modules2 name hdr imports decls) (\exports => let
+      visible =
+        dedupeFixities (append fixities (visibleFixitiesOf modules2 (append imports implicit)))
+    in Ok
+      (Module name (rootName root) imports implicit decls exports (rootCapabilities root) visible :: modules2)
+    )
+    )
+    )
+    )
+    )
   )
   )
   else ldErr1 (InvalidModuleName name) name
@@ -436,12 +483,12 @@ else case findModule modules name of
 -- （决定同包/跨包导出可见性与 manifest 能力声明）。
 -- loadProject 返回 flatten 前的形态（入口声明 + 依赖模块列表），供分离编译使用。
 loadProject : PackageContext -> String -> Result Project
-loadProject ctx entry = if prim_fileExists entry then andThen (parseSource entry (prim_readFile entry)) (\src => case src of
-  Source hdr imports decls => case hdr of
+loadProject ctx entry = if runIO (prim_fileExists entry) then andThen (parseFileWithPath entry (runIO (prim_readFile entry))) (\src => case src of
+  Source hdr imports fixities decls => case hdr of
     Just (ModDecl dname hasList items sp) => ldErr1 (ModuleHeaderInEntryFile entry) entry
     Nothing =>
       andThen (validateImports "<entry>" imports)
-        (\_ => andThen (implicitPrelude (contextRoots ctx) (contextPackageName ctx) "" imports) (\implicit => andThen (loadAll 1048576 (contextRoots ctx) (contextPackageName ctx) [] [] (append imports implicit)) (\modules => Ok (Project decls imports implicit modules (contextPackageName ctx) (contextCapabilities ctx)))))
+        (\_ => andThen (implicitPrelude (contextRoots ctx) (contextPackageName ctx) "" imports) (\implicit => andThen (loadAll 1048576 (contextRoots ctx) (contextPackageName ctx) [] [] (append imports implicit)) (\modules => Ok (Project decls imports implicit modules (contextPackageName ctx) (contextCapabilities ctx) fixities))))
 )
 else ldErr1 (EntryFileNotFound entry) entry
 
@@ -451,17 +498,17 @@ loadProjectModules ctx names =
   let
     entryImports = map (\n => Import n False Nothing (Span "" 0 0 0 0)) names
   in andThen (loadAll 1048576 (contextRoots ctx) (contextPackageName ctx) [] [] entryImports)
-    (\modules => Ok (Project [] [] [] modules (contextPackageName ctx) (contextCapabilities ctx)))
+    (\modules => Ok (Project [] [] [] modules (contextPackageName ctx) (contextCapabilities ctx) []))
 
 -- 入口以**源码字符串**给出（REPL 的表达式求值）：入口不落盘（import 仍按上下文的
 -- roots 从磁盘解析）；隐式 Prelude 与文件入口同规则（ad-hoc 单文件也自动注入）。
 loadProjectSource : PackageContext -> String -> String -> Result Project
-loadProjectSource ctx label source = andThen (parseSource label source) (\src => case src of
-  Source hdr imports decls => case hdr of
+loadProjectSource ctx label source = andThen (parseFileWithPath label source) (\src => case src of
+  Source hdr imports fixities decls => case hdr of
     Just (ModDecl dname hasList items sp) => ldErr1 (ModuleHeaderInEntrySource label) label
     Nothing =>
       andThen (validateImports "<entry>" imports)
-        (\_ => andThen (implicitPrelude (contextRoots ctx) (contextPackageName ctx) "" imports) (\implicit => andThen (loadAll 1048576 (contextRoots ctx) (contextPackageName ctx) [] [] (append imports implicit)) (\modules => Ok (Project decls imports implicit modules (contextPackageName ctx) (contextCapabilities ctx)))))
+        (\_ => andThen (implicitPrelude (contextRoots ctx) (contextPackageName ctx) "" imports) (\implicit => andThen (loadAll 1048576 (contextRoots ctx) (contextPackageName ctx) [] [] (append imports implicit)) (\modules => Ok (Project decls imports implicit modules (contextPackageName ctx) (contextCapabilities ctx) fixities))))
 )
 
 -- 以**源码字符串**给出一个**库模块**（M30 · LSP）：源码允许带 `module ... where`
@@ -470,23 +517,57 @@ loadProjectSource ctx label source = andThen (parseSource label source) (\src =>
 -- 无模块头时退化为入口语义（与 `loadProjectSource` 相同）。
 -- 入口声明保持为空：调用方（LSP）只需要逐模块已解析的声明。
 loadModuleSource : PackageContext -> String -> String -> Result Project
-loadModuleSource ctx label source = andThen (parseSource label source) (\src => case src of
-  Source hdr imports decls => case hdr of
+loadModuleSource ctx label source = andThen (parseFileWithPath label source) (\src => case src of
+  Source hdr imports fixities decls => case hdr of
     Nothing => loadProjectSource ctx label source
+    Just (ModDecl name hasList items sp) => andThen (validateImports name imports) (\_ => andThen (implicitPrelude (contextRoots ctx) (contextPackageName ctx) name imports) (\implicit => andThen (loadAll 1048576 (contextRoots ctx) (contextPackageName ctx) [] [] (append imports implicit)) (\modules => andThen (computeExports modules name hdr imports decls) (\exports => let
+      visible =
+        dedupeFixities (append fixities (visibleFixitiesOf modules (append imports implicit)))
+    in Ok
+      (Project [] imports implicit (Module name (contextPackageName ctx) imports implicit decls exports (contextCapabilities ctx) visible :: modules) (contextPackageName ctx) (contextCapabilities ctx) [])
+    )
+    )
+    )
+    )
+)
+
+-- M31.3（B27）：fmt 用的「程序级 fixity」——本文件的 `infix*` 声明（在前，本地优先）
+-- ++ import 闭包可见的声明（Module 里已含各自的 import 闭包）。只 parse + 加载模块图，
+-- **不做精化/名字解析**，因此很便宜；有/无模块头都支持。
+--
+-- `modules` 是调用方可复用的已加载模块表（按包上下文缓存）：同包多文件只加载一次模块图。
+-- 但 fixity **声明表必须按文件重算**（local + 该文件自己的 import 闭包）——不同文件的
+-- imports 不同，跨文件复用声明表会让 fmt 给 `::`/`+` 等打出错误的括号。
+-- 返回值同时带回更新后的模块表，供调用方继续复用。
+-- 注意：本函数及其包装进 seed 闭包（compiler 包），保持小而纯。
+fixitiesForSourceIn : PackageContext -> List Module -> String -> String -> Result (Pair (List Module) (List FixityDecl))
+fixitiesForSourceIn ctx modules0 label source = andThen (parseFileWithPath label source) (\src => case src of
+  Source hdr imports fixities decls => case hdr of
+    Nothing =>
+      andThen (validateImports label imports)
+        (\_ => andThen (implicitPrelude (contextRoots ctx) (contextPackageName ctx) "" imports) (\implicit => andThen (loadAll 1048576 (contextRoots ctx) (contextPackageName ctx) modules0 [] (append imports implicit)) (\modules => Ok (Pair modules (dedupeFixities (append fixities (visibleFixitiesOf modules (append imports implicit))))))))
     Just (ModDecl name hasList items sp) =>
       andThen (validateImports name imports)
-        (\_ => andThen (implicitPrelude (contextRoots ctx) (contextPackageName ctx) name imports) (\implicit => andThen (loadAll 1048576 (contextRoots ctx) (contextPackageName ctx) [] [] (append imports implicit)) (\modules => andThen (computeExports modules name hdr imports decls) (\exports => Ok (Project [] imports implicit (Module name (contextPackageName ctx) imports implicit decls exports (contextCapabilities ctx) :: modules) (contextPackageName ctx) (contextCapabilities ctx))))))
+        (\_ => andThen (implicitPrelude (contextRoots ctx) (contextPackageName ctx) name imports) (\implicit => andThen (loadAll 1048576 (contextRoots ctx) (contextPackageName ctx) modules0 [] (append imports implicit)) (\modules => Ok (Pair modules (dedupeFixities (append fixities (visibleFixitiesOf modules (append imports implicit))))))))
 )
+
+-- 单文件便捷入口（LSP formatting / fmt 探针）：不跨调用复用模块表。
+fixitiesForSource : PackageContext -> String -> String -> Result (List FixityDecl)
+fixitiesForSource ctx label source =
+  andThen (fixitiesForSourceIn ctx [] label source) (\p => Ok (secondOf p))
 
 -- 返回逐模块已解析（未 flatten）的声明，供 M12 分离编译使用。
 resolveProject : Project -> Result (Pair (List Decl) (List Module))
-resolveProject (Project decls imports implicit modules entryPkg entryCaps) =
-  andThen (resolveEntry modules entryPkg entryCaps (append imports implicit) decls)
-    (\entryDecls => andThen (resolveModulesKeep modules) (\modules2 => Ok (Pair entryDecls modules2)))
+resolveProject (Project decls imports implicit modules entryPkg entryCaps entryFixes) =
+  let
+    entryTable =
+      tableOf
+        (dedupeFixities (append entryFixes (visibleFixitiesOf modules (append imports implicit))))
+  in andThen (reorderProgram entryTable decls)
+    (\decls2 => andThen (resolveEntry modules entryPkg entryCaps (append imports implicit) decls2) (\entryDecls => andThen (resolveModulesKeep modules) (\modules2 => Ok (Pair entryDecls modules2))))
 
 resolveModulesKeep : List Module -> Result (List Module)
 resolveModulesKeep [] = Ok []
-resolveModulesKeep ((Module name pkg imports implicit decls exports mcaps) :: rest) =
-  andThen
-    (andThen (resolveProgram (Module name pkg imports implicit decls exports mcaps :: rest) name name (namespacesOf decls) (append imports implicit) decls) (\d => checkEffectsBuiltins name pkg mcaps d))
-    (\d1 => andThen (resolveModulesKeep rest) (\d2 => Ok (Module name pkg imports implicit d1 exports mcaps :: d2)))
+resolveModulesKeep ((Module name pkg imports implicit decls exports mcaps fixities) :: rest) =
+  andThen (reorderProgram (tableOf fixities) decls)
+    (\decls2 => andThen (andThen (resolveProgram (Module name pkg imports implicit decls2 exports mcaps fixities :: rest) name name (namespacesOf decls2) (append imports implicit) decls2) (\d => checkEffectsBuiltins name pkg mcaps d)) (\d1 => andThen (resolveModulesKeep rest) (\d2 => Ok (Module name pkg imports implicit d1 exports mcaps fixities :: d2))))

@@ -1,0 +1,6 @@
+-- M32 负例：trait 方法签名上的约束还没实现（父类语义，F4），报明确语法诊断。
+trait C a where
+  m : Eq a => a -> Bool
+
+main : Int
+main = 0

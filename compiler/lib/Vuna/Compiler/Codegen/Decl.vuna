@@ -29,13 +29,20 @@ import Vuna.Compiler.Core
 import Vuna.Compiler.Elab
 import Vuna.Compiler.Intrinsics
 
+-- M31.3：除 `[A-Za-z0-9]` 外的任意字符都必须转义成 `_x<code>_`——用户符号名函数
+-- （`<+>`、`>>=` 之外的声明名）会直接进 OCaml 值名，原样输出是非法标识符。
+-- 与既有编码不冲突：字面标识符里的 `_` 已映射成 `_u`，输出里除转义序列外不会出现裸 `_`，
+-- 因此不会与字面名冲突（`ensureUniqueOcamlNames` 仍是最后一道防线）。
+isAsciiAlphaNum : Int -> Bool
+isAsciiAlphaNum c = c >= 65 && c <= 90 || c >= 97 && c <= 122 || c >= 48 && c <= 57
+
 sanitizeChar : Int -> List Int
 -- `#` 出现在 Loader 生成的匿名实例名里（`#default`、`#fancy`），OCaml 标识符不允许。
 sanitizeChar 46 = [95, 100]
 sanitizeChar 95 = [95, 117]
 sanitizeChar 39 = [95, 112]
 sanitizeChar 35 = [95, 104]
-sanitizeChar c = [c]
+sanitizeChar c = if isAsciiAlphaNum c then [c] else strUnpack ("_x" ++ strFromInt c ++ "_")
 
 sanitizeName : String -> String
 sanitizeName name = strPack (concatMap sanitizeChar (strUnpack name))
@@ -331,14 +338,29 @@ else case v of
     NVar name lvl sp => case levelSlot levels lvl of
       Just s => typeParamName s
       Nothing => "unit"
-    NGlobal g sp => if g == intTypeName then "int"
-    else if g == strTypeName then "string"
-    else if g == boolTypeName then "bool"
-    else case findDtData g datas of
-      Just gd =>
-        familyTyText g (renderFamilyArgsFuel (fuel - 1) levels table datas (lookupUsed table g) sp)
-      Nothing => "unit"
+    NGlobal g sp => renderTypeArgGlobal fuel levels table datas g sp
   _ => "unit"
+
+-- 全局类型头：内建类型构造子优先，其次 primitive 类型，最后程序里的 data 族。
+renderTypeArgGlobal : Int -> List Int -> List (Pair String (List Int)) -> List DtData -> String -> List Value -> String
+renderTypeArgGlobal fuel levels table datas g sp = case renderTypeIntrinsic g (map (\x => renderTypeArgFuel (fuel - 1) levels table datas x) sp) of
+  Just t => t
+  Nothing => if g == intTypeName then "int"
+  else if g == strTypeName then "string"
+  else if g == boolTypeName then "bool"
+  else case findDtData g datas of
+    Just gd =>
+      familyTyText g (renderFamilyArgsFuel (fuel - 1) levels table datas (lookupUsed table g) sp)
+    Nothing => "unit"
+
+-- M33 W3：内建类型构造子的 OCaml 类型渲染。参数文本已由调用方递归渲染。
+-- 名字表与 arity 的唯一真源在 Intrinsics；这里只放「名字 → OCaml 类型模板」。
+renderTypeIntrinsic : String -> List String -> Maybe String
+renderTypeIntrinsic "Array" ([a]) = Just ("(" ++ a ++ " array)")
+renderTypeIntrinsic "IORef" ([a]) = Just ("(" ++ a ++ " ref)")
+renderTypeIntrinsic "MArray" ([a]) = Just ("(" ++ a ++ " array)")
+renderTypeIntrinsic "Buffer" [] = Just "Buffer.t"
+renderTypeIntrinsic _ _ = Nothing
 
 -- 单个字段的 OCaml 类型 + 下一个不透明参数槽。
 -- 显式 Pi 字段（`(Int -> a)` 这类）**结构化渲染**：它把族参数（IO 的结果类型）带进
@@ -369,13 +391,15 @@ renderFieldTy levels table datas lvl (VNeutral n) slot = case n of
   NVar name lvl2 sp => case levelSlot levels lvl2 of
     Just s => Pair (typeParamName s) slot
     Nothing => Pair (typeParamName slot) (slot + 1)
-  NGlobal g sp => if g == intTypeName then Pair "int" slot
-  else if g == strTypeName then Pair "string" slot
-  else if g == boolTypeName then Pair "bool" slot
-  else case findDtData g datas of
-    Just gd =>
-      Pair (familyTyText g (renderFamilyArgs levels table datas (lookupUsed table g) sp)) slot
-    Nothing => Pair (typeParamName slot) (slot + 1)
+  NGlobal g sp => case renderTypeIntrinsic g (map (\x => renderTypeArg levels table datas x) sp) of
+    Just t => Pair t slot
+    Nothing => if g == intTypeName then Pair "int" slot
+    else if g == strTypeName then Pair "string" slot
+    else if g == boolTypeName then Pair "bool" slot
+    else case findDtData g datas of
+      Just gd =>
+        Pair (familyTyText g (renderFamilyArgs levels table datas (lookupUsed table g) sp)) slot
+      Nothing => Pair (typeParamName slot) (slot + 1)
 renderFieldTy levels table datas lvl _ slot = Pair (typeParamName slot) (slot + 1)
 
 -- 构造子字段形状的**唯一真源**（M24.6 第一级）：从 telescope 的 rig 算出 keep flags

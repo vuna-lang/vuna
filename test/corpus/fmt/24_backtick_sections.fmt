@@ -1,0 +1,14 @@
+module Vuna.BacktickSample where
+
+import Base.Int
+
+plus : Int -> Int -> Int
+plus a b = a + b
+
+-- 反引号中缀：`plus` 没有 fixity 声明，按 9 左结合决定括号。
+backtickUse : Int
+backtickUse = 3 `plus` 4
+
+-- section 三种形态：op 值 / 左 section / 右 section。
+sections : List (Int -> Int)
+sections = [(+), (+ 1), (1 +)]

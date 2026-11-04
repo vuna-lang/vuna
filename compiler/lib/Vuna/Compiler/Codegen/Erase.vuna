@@ -25,6 +25,7 @@ module Vuna.Compiler.Codegen.Erase
 --   - 运行时依赖图与 SCC 分组（决定 `let` / `let rec ... and ...` 的生成顺序）。
 -- 纯分析，不产生 OCaml 文本。
 import Vuna.Compiler.Common
+import Base.HashMap
 import Vuna.Compiler.Core
 import Vuna.Compiler.Diagnostics
 import Vuna.Compiler.Elab
@@ -81,16 +82,16 @@ else case v of
     isTypeFormingFuel (fuel - 1) (applyClosure clo (VNeutral (NVar name 0 [])))
   _ => False
 
-isTypeLevelDef : HashTbl Term -> DtDef -> Bool
+isTypeLevelDef : HashMap Term -> DtDef -> Bool
 isTypeLevelDef tbl d = isTypeForming (force tbl solsEmpty defaultFuel (eval [] (dtDefType d)))
 
 -- 类型级 / 运行时分区。M28：`axiom` 是擦除/不透明顶层——**无论它的类型是什么**
 -- 都进类型级分区（没有运行时定义体，不能被 codegen 生成）；它的运行时使用由
 -- `checkNoAxiomRuntime` 报专门诊断。
 partitionDefs : List (Pair String Term) -> List DtDef -> Pair (List DtDef) (List String)
-partitionDefs table defs = partitionDefsGo (tblFromList table) defs [] []
+partitionDefs table defs = partitionDefsGo (Base.HashMap.fromList table) defs [] []
 
-partitionDefsGo : HashTbl Term -> List DtDef -> List DtDef -> List String -> Pair (List DtDef) (List String)
+partitionDefsGo : HashMap Term -> List DtDef -> List DtDef -> List String -> Pair (List DtDef) (List String)
 partitionDefsGo table [] runtime typeNames = Pair (reverse runtime) (reverse typeNames)
 partitionDefsGo table (d :: rest) runtime typeNames =
   if isAxiomDef d then partitionDefsGo table rest runtime (dtDefName d :: typeNames)
@@ -106,9 +107,9 @@ defLocPrefix d = cgDefLoc (dtDefSpan d) (dtDefName d)
 -- M28：axiom 只在擦除/类型层可用；运行时位置（非擦除实参/非类型层）的使用报
 -- `CG_AxiomAtRuntime`。用运行时依赖遍历（跳过擦除实参）找名字，类型层引用不报。
 checkNoAxiomRuntime : List String -> List DtDef -> Result Int
-checkNoAxiomRuntime axiomNames defs = checkNoAxiomRuntimeGo (tblOfNames axiomNames) defs
+checkNoAxiomRuntime axiomNames defs = checkNoAxiomRuntimeGo (Base.HashMap.ofNames axiomNames) defs
 
-checkNoAxiomRuntimeGo : HashTbl Bool -> List DtDef -> Result Int
+checkNoAxiomRuntimeGo : HashMap Bool -> List DtDef -> Result Int
 checkNoAxiomRuntimeGo axiomTbl [] = Ok 0
 checkNoAxiomRuntimeGo axiomTbl (d :: rest) = case dtDefBody d of
   Nothing => checkNoAxiomRuntimeGo axiomTbl rest
@@ -125,11 +126,14 @@ checkAllErasure typeNames (d :: rest) =
 -- 报错带上定义名：同一份程序里哪个函数有问题要能一眼看出来。
 -- M29（A14）：有 span 时前缀 `file:line:col:`（保留原有的 `in `name`: ` 形状）。
 checkOneErasure : List String -> DtDef -> Result Int
-checkOneErasure typeNames d = case dtDefBody d of
-  Nothing => Err "DT: internal: axiom reached the runtime erasure check (partition must erase it)"
-  Just body => case checkErasure typeNames [] body of
-    Err e => Err (defLocPrefix d ++ e)
-    Ok n => Ok n
+checkOneErasure typeNames d = case dtDefExtern d of
+  -- M33 W5：extern 没有 vuna 体，运行时实现由 OCaml `external` 提供；不参与擦除检查。
+  Just _ => Ok 0
+  Nothing => case dtDefBody d of
+    Nothing => Err "DT: internal: axiom reached the runtime erasure check (partition must erase it)"
+    Just body => case checkErasure typeNames [] body of
+      Err e => Err (defLocPrefix d ++ e)
+      Ok n => Ok n
 
 -- binders：最近绑定在前（名字 + 是否擦除）。
 showMetaHint : Int -> String
@@ -194,10 +198,10 @@ binderAt i [] = Nothing
 binderAt i (b :: rest) = if i <= 0 then Just b else binderAt (i - 1) rest
 
 -- 依赖：运行时会用到的 TGlobal（擦除实参里的不算）。
-termDepsIntoFuel : Int -> HashTbl Bool -> List String -> Term -> List String
+termDepsIntoFuel : Int -> HashMap Bool -> List String -> Term -> List String
 termDepsIntoFuel fuel runtimeNames acc t = if fuel <= 0 then acc
 else case t of
-  TGlobal name => if tblMem name runtimeNames then addName name acc else acc
+  TGlobal name => if Base.HashMap.member name runtimeNames then addName name acc else acc
   TVar name i => acc
   TMeta m => acc
   TType l => acc
@@ -220,14 +224,14 @@ else case t of
       (termDepsIntoFuel (fuel - 1) runtimeNames (termDepsIntoFuel (fuel - 1) runtimeNames acc c) th)
       el
 
-termDepsArgsFuel : Int -> HashTbl Bool -> List String -> List (Pair Term Rig) -> List String
+termDepsArgsFuel : Int -> HashMap Bool -> List String -> List (Pair Term Rig) -> List String
 termDepsArgsFuel fuel runtimeNames acc [] = if fuel <= 0 then acc else acc
 termDepsArgsFuel fuel runtimeNames acc ((Pair arg rig) :: rest) =
   if fuel <= 0 then acc
   else if rigIsErased rig then termDepsArgsFuel (fuel - 1) runtimeNames acc rest
   else termDepsArgsFuel (fuel - 1) runtimeNames (termDepsIntoFuel (fuel - 1) runtimeNames acc arg) rest
 
-termDepsAltsFuel : Int -> HashTbl Bool -> List String -> List CaseAlt -> List String
+termDepsAltsFuel : Int -> HashMap Bool -> List String -> List CaseAlt -> List String
 termDepsAltsFuel fuel runtimeNames acc [] = if fuel <= 0 then acc else acc
 termDepsAltsFuel fuel runtimeNames acc (alt :: rest) =
   if fuel <= 0 then acc
@@ -252,94 +256,96 @@ lookupDtDef defs name = findDtDef name defs
 -- 按 Kosaraju 分组（与 Codegen 的既有实现同构）：先在正向依赖图上求完成顺序，再在反向图
 -- 上按该顺序收集分量，最后按依赖就绪顺序排列分量。分量内成员按源码顺序排列，
 -- 保证同一输入产出逐字节稳定的 OCaml。
-neighborsOf : HashTbl (List String) -> String -> List String
-neighborsOf adjT name = case tblLookup name adjT of
+neighborsOf : HashMap (List String) -> String -> List String
+neighborsOf adjT name = case Base.HashMap.lookup name adjT of
   Just ns => ns
   Nothing => []
 
 -- 反向邻接表：一次遍历 adj 构建（旧实现 dependentsOf 对每个名字扫全表 ⇒ O(n²)）。
-addDependents : String -> List String -> HashTbl (List String) -> HashTbl (List String)
+addDependents : String -> List String -> HashMap (List String) -> HashMap (List String)
 addDependents src [] t = t
 addDependents src (m :: rest) t =
   let
-    cur = case tblLookup m t of
+    cur = case Base.HashMap.lookup m t of
       Just xs => xs
       Nothing => []
-  in addDependents src rest (tblInsert m (src :: cur) t)
+  in addDependents src rest (Base.HashMap.insert m (src :: cur) t)
 
-reverseAdjTbl : List (Pair String (List String)) -> HashTbl (List String)
-reverseAdjTbl [] = tblEmpty
+reverseAdjTbl : List (Pair String (List String)) -> HashMap (List String)
+reverseAdjTbl [] = Base.HashMap.fromList []
 reverseAdjTbl ((Pair n ns) :: rest) = addDependents n ns (reverseAdjTbl rest)
 
-adjTblOf : List (Pair String (List String)) -> HashTbl (List String)
-adjTblOf adj = tblInsertAll adj tblEmpty
+adjTblOf : List (Pair String (List String)) -> HashMap (List String)
+adjTblOf adj = Base.HashMap.insertAll adj (Base.HashMap.fromList [])
 
-foldNeighborsPost : HashTbl (List String) -> List String -> HashTbl Bool -> List String -> Pair (HashTbl Bool) (List String)
+foldNeighborsPost : HashMap (List String) -> List String -> HashMap Bool -> List String -> Pair (HashMap Bool) (List String)
 foldNeighborsPost adjT ms visited order = foldNeighborsPostFuel 100000 adjT ms visited order
 
-foldNeighborsPostFuel : Int -> HashTbl (List String) -> List String -> HashTbl Bool -> List String -> Pair (HashTbl Bool) (List String)
+foldNeighborsPostFuel : Int -> HashMap (List String) -> List String -> HashMap Bool -> List String -> Pair (HashMap Bool) (List String)
 foldNeighborsPostFuel fuel adjT ms visited order = if fuel <= 0 then Pair visited order
 else case ms of
   [] => Pair visited order
-  m :: rest => if tblMem m visited then foldNeighborsPostFuel (fuel - 1) adjT rest visited order
-  else case dfsPostFuel (fuel - 1) adjT m (tblInsert m True visited) order of
+  m :: rest => if Base.HashMap.member m visited then foldNeighborsPostFuel (fuel - 1) adjT rest visited order
+  else case dfsPostFuel (fuel - 1) adjT m (Base.HashMap.insert m True visited) order of
     Pair visited2 order2 => foldNeighborsPostFuel (fuel - 1) adjT rest visited2 order2
 
-dfsPost : HashTbl (List String) -> String -> HashTbl Bool -> List String -> Pair (HashTbl Bool) (List String)
+dfsPost : HashMap (List String) -> String -> HashMap Bool -> List String -> Pair (HashMap Bool) (List String)
 dfsPost adjT n visited order = dfsPostFuel 100000 adjT n visited order
 
-dfsPostFuel : Int -> HashTbl (List String) -> String -> HashTbl Bool -> List String -> Pair (HashTbl Bool) (List String)
+dfsPostFuel : Int -> HashMap (List String) -> String -> HashMap Bool -> List String -> Pair (HashMap Bool) (List String)
 dfsPostFuel fuel adjT n visited order = if fuel <= 0 then Pair visited order
 else case foldNeighborsPostFuel (fuel - 1) adjT (neighborsOf adjT n) visited order of
   Pair visited2 order2 => Pair visited2 (n :: order2)
 
-postOrder : HashTbl (List String) -> List String -> HashTbl Bool -> List String -> Pair (HashTbl Bool) (List String)
+postOrder : HashMap (List String) -> List String -> HashMap Bool -> List String -> Pair (HashMap Bool) (List String)
 postOrder adjT [] visited order = Pair visited order
-postOrder adjT (n :: rest) visited order = if tblMem n visited then postOrder adjT rest visited order
-else case dfsPost adjT n (tblInsert n True visited) order of
+postOrder adjT (n :: rest) visited order = if Base.HashMap.member n visited then postOrder adjT rest visited order
+else case dfsPost adjT n (Base.HashMap.insert n True visited) order of
   Pair visited2 order2 => postOrder adjT rest visited2 order2
 
-foldNeighborsCollect : HashTbl (List String) -> List String -> HashTbl Bool -> List String -> Pair (HashTbl Bool) (List String)
+foldNeighborsCollect : HashMap (List String) -> List String -> HashMap Bool -> List String -> Pair (HashMap Bool) (List String)
 foldNeighborsCollect adjT ms visited comp = foldNeighborsCollectFuel 100000 adjT ms visited comp
 
-foldNeighborsCollectFuel : Int -> HashTbl (List String) -> List String -> HashTbl Bool -> List String -> Pair (HashTbl Bool) (List String)
+foldNeighborsCollectFuel : Int -> HashMap (List String) -> List String -> HashMap Bool -> List String -> Pair (HashMap Bool) (List String)
 foldNeighborsCollectFuel fuel adjT ms visited comp = if fuel <= 0 then Pair visited comp
 else case ms of
   [] => Pair visited comp
-  m :: rest => if tblMem m visited then foldNeighborsCollectFuel (fuel - 1) adjT rest visited comp
-  else case dfsCollectFuel (fuel - 1) adjT m (tblInsert m True visited) comp of
+  m :: rest => if Base.HashMap.member m visited then foldNeighborsCollectFuel (fuel - 1) adjT rest visited comp
+  else case dfsCollectFuel (fuel - 1) adjT m (Base.HashMap.insert m True visited) comp of
     Pair visited2 comp2 => foldNeighborsCollectFuel (fuel - 1) adjT rest visited2 comp2
 
-dfsCollect : HashTbl (List String) -> String -> HashTbl Bool -> List String -> Pair (HashTbl Bool) (List String)
+dfsCollect : HashMap (List String) -> String -> HashMap Bool -> List String -> Pair (HashMap Bool) (List String)
 dfsCollect adjT n visited comp = dfsCollectFuel 100000 adjT n visited comp
 
-dfsCollectFuel : Int -> HashTbl (List String) -> String -> HashTbl Bool -> List String -> Pair (HashTbl Bool) (List String)
+dfsCollectFuel : Int -> HashMap (List String) -> String -> HashMap Bool -> List String -> Pair (HashMap Bool) (List String)
 dfsCollectFuel fuel adjT n visited comp = if fuel <= 0 then Pair visited comp
 else case foldNeighborsCollectFuel (fuel - 1) adjT (neighborsOf adjT n) visited comp of
   Pair visited2 comp2 => Pair visited2 (n :: comp2)
 
-collectComps : HashTbl (List String) -> List String -> HashTbl Bool -> List (List String) -> List (List String)
+collectComps : HashMap (List String) -> List String -> HashMap Bool -> List (List String) -> List (List String)
 collectComps adjT [] visited comps = comps
-collectComps adjT (n :: rest) visited comps = if tblMem n visited then collectComps adjT rest visited comps
-else case dfsCollect adjT n (tblInsert n True visited) [] of
+collectComps adjT (n :: rest) visited comps = if Base.HashMap.member n visited then collectComps adjT rest visited comps
+else case dfsCollect adjT n (Base.HashMap.insert n True visited) [] of
   Pair visited2 comp => collectComps adjT rest visited2 (comp :: comps)
 
 -- 名字 → 所属分量（一次构建，O(1) 查）。
-componentTblOf : List (List String) -> HashTbl (List String)
-componentTblOf comps = tblInsertAll (concatMap (\g => map (\n => Pair n g) g) comps) tblEmpty
+componentTblOf : List (List String) -> HashMap (List String)
+componentTblOf comps =
+  Base.HashMap.insertAll (concatMap (\g => map (\n => Pair n g) g) comps) (Base.HashMap.fromList [])
 
-addAllNames : List String -> HashTbl Bool -> HashTbl Bool
+addAllNames : List String -> HashMap Bool -> HashMap Bool
 addAllNames [] t = t
-addAllNames (n :: rest) t = addAllNames rest (tblInsert n True t)
+addAllNames (n :: rest) t = addAllNames rest (Base.HashMap.insert n True t)
 
 -- 按 names 首次出现顺序产出 SCC，组内成员按 names 顺序排列。
 groupsFromComps : List (List String) -> List String -> List (List String)
-groupsFromComps comps names = groupsFromCompsGo (componentTblOf comps) names names tblEmpty
+groupsFromComps comps names =
+  groupsFromCompsGo (componentTblOf comps) names names (Base.HashMap.fromList [])
 
-groupsFromCompsGo : HashTbl (List String) -> List String -> List String -> HashTbl Bool -> List (List String)
+groupsFromCompsGo : HashMap (List String) -> List String -> List String -> HashMap Bool -> List (List String)
 groupsFromCompsGo compTbl allNames [] emitted = []
-groupsFromCompsGo compTbl allNames (n :: rest) emitted = if tblMem n emitted then groupsFromCompsGo compTbl allNames rest emitted
-else case tblLookup n compTbl of
+groupsFromCompsGo compTbl allNames (n :: rest) emitted = if Base.HashMap.member n emitted then groupsFromCompsGo compTbl allNames rest emitted
+else case Base.HashMap.lookup n compTbl of
   Just g => groupOf allNames g :: groupsFromCompsGo compTbl allNames rest (addAllNames g emitted)
   Nothing => groupsFromCompsGo compTbl allNames rest emitted
 
@@ -347,7 +353,7 @@ else case tblLookup n compTbl of
 -- 旧实现对每个分量都 filter 一遍 allNames ⇒ O(#分量 × #定义)。
 groupOf : List String -> List String -> List String
 groupOf allNames ([x]) = [x]
-groupOf allNames g = filterNames (\m => tblMem m (tblOfNames g)) allNames
+groupOf allNames g = filterNames (\m => Base.HashMap.member m (Base.HashMap.ofNames g)) allNames
 
 filterNames : (String -> Bool) -> List String -> List String
 filterNames pred [] = []
@@ -362,34 +368,34 @@ uniqueNames (name :: rest) =
   if name == "" then uniqueNames rest
   else if memName name rest then uniqueNames rest else name :: uniqueNames rest
 
-groupDeps : HashTbl (List String) -> List String -> List String
+groupDeps : HashMap (List String) -> List String -> List String
 groupDeps adjT group =
   filterNames (\n => notIn n group) (uniqueNames (concatMap (neighborsOf adjT) group))
 
-allIn : List String -> HashTbl Bool -> Bool
+allIn : List String -> HashMap Bool -> Bool
 allIn [] allowed = True
-allIn (n :: rest) allowed = if tblMem n allowed then allIn rest allowed else False
+allIn (n :: rest) allowed = if Base.HashMap.member n allowed then allIn rest allowed else False
 
-groupReady : HashTbl (List String) -> List String -> HashTbl Bool -> Bool
+groupReady : HashMap (List String) -> List String -> HashMap Bool -> Bool
 groupReady adjT group emitted = allIn (groupDeps adjT group) emitted
 
-pickReady : HashTbl (List String) -> List (List String) -> HashTbl Bool -> Maybe (Pair (List String) (List (List String)))
+pickReady : HashMap (List String) -> List (List String) -> HashMap Bool -> Maybe (Pair (List String) (List (List String)))
 pickReady adjT groups emitted = pickReadyAcc adjT groups [] emitted
 
-pickReadyAcc : HashTbl (List String) -> List (List String) -> List (List String) -> HashTbl Bool -> Maybe (Pair (List String) (List (List String)))
+pickReadyAcc : HashMap (List String) -> List (List String) -> List (List String) -> HashMap Bool -> Maybe (Pair (List String) (List (List String)))
 pickReadyAcc adjT [] before emitted = Nothing
 pickReadyAcc adjT (g :: rest) before emitted =
   if groupReady adjT g emitted then Just (Pair g (append (reverse before) rest))
   else pickReadyAcc adjT rest (g :: before) emitted
 
-orderGroups : HashTbl (List String) -> List (List String) -> Result (List (List String))
-orderGroups adjT groups = orderGroupsAcc adjT groups tblEmpty
+orderGroups : HashMap (List String) -> List (List String) -> Result (List (List String))
+orderGroups adjT groups = orderGroupsAcc adjT groups (Base.HashMap.fromList [])
 
-orderGroupsAcc : HashTbl (List String) -> List (List String) -> HashTbl Bool -> Result (List (List String))
+orderGroupsAcc : HashMap (List String) -> List (List String) -> HashMap Bool -> Result (List (List String))
 orderGroupsAcc adjT remaining emitted =
   orderGroupsAccFuel (length remaining + 1) adjT remaining emitted
 
-orderGroupsAccFuel : Int -> HashTbl (List String) -> List (List String) -> HashTbl Bool -> Result (List (List String))
+orderGroupsAccFuel : Int -> HashMap (List String) -> List (List String) -> HashMap Bool -> Result (List (List String))
 orderGroupsAccFuel fuel adjT remaining emitted = if fuel <= 0 then cgErr0 DependencyCycle
 else case remaining of
   [] => Ok []
@@ -404,7 +410,7 @@ else case remaining of
 depAdjacency : List DtDef -> List (Pair String (List String))
 depAdjacency defs =
   let
-    names = tblOfNames (runtimeNamesOf defs)
+    names = Base.HashMap.ofNames (runtimeNamesOf defs)
   in map (\d => case dtDefBody d of
     Just body => Pair (dtDefName d) (termDepsInto names [] body)
     Nothing => Pair (dtDefName d) []
@@ -418,19 +424,20 @@ groupRuntimeDefs defs =
     adj = depAdjacency defs
     adjT = adjTblOf adj
     revT = reverseAdjTbl adj
-  in case postOrder adjT names tblEmpty [] of
+  in case postOrder adjT names (Base.HashMap.fromList []) [] of
     Pair _ order =>
       let
-        comps = collectComps revT order tblEmpty []
+        comps = collectComps revT order (Base.HashMap.fromList []) []
         groups = groupsFromComps comps names
       in andThen (orderGroups adjT groups) (\ordered => Ok (map (groupDefsOf defsTbl) ordered))
 
-dtDefTblOf : List DtDef -> HashTbl DtDef
-dtDefTblOf defs = tblInsertAll (map (\d => Pair (dtDefName d) d) defs) tblEmpty
+dtDefTblOf : List DtDef -> HashMap DtDef
+dtDefTblOf defs =
+  Base.HashMap.insertAll (map (\d => Pair (dtDefName d) d) defs) (Base.HashMap.fromList [])
 
-groupDefsOf : HashTbl DtDef -> List String -> List DtDef
+groupDefsOf : HashMap DtDef -> List String -> List DtDef
 groupDefsOf defsTbl [] = []
-groupDefsOf defsTbl (n :: rest) = case tblLookup n defsTbl of
+groupDefsOf defsTbl (n :: rest) = case Base.HashMap.lookup n defsTbl of
   Nothing => groupDefsOf defsTbl rest
   Just d => d :: groupDefsOf defsTbl rest
 
@@ -439,13 +446,13 @@ groupDefsOf defsTbl (n :: rest) = case tblLookup n defsTbl of
 -- value/type/ctor 名字做去重校验，任何未来改动引入碰撞都在 check 期报错，而不是
 -- 静默覆盖（三族前缀 v_/t_/C_ 互不相同，只需族内校验）。
 checkNoDupOcamlNames : String -> List String -> Result Int
-checkNoDupOcamlNames kind names = checkNoDupOcamlNamesGo kind names tblEmpty
+checkNoDupOcamlNames kind names = checkNoDupOcamlNamesGo kind names (Base.HashMap.fromList [])
 
-checkNoDupOcamlNamesGo : String -> List String -> HashTbl Bool -> Result Int
+checkNoDupOcamlNamesGo : String -> List String -> HashMap Bool -> Result Int
 checkNoDupOcamlNamesGo kind [] seen = Ok 0
 checkNoDupOcamlNamesGo kind (n :: rest) seen =
-  if tblMem n seen then Err ("DT: internal: OCaml name collision among " ++ kind ++ "s: `" ++ n ++ "`")
-  else checkNoDupOcamlNamesGo kind rest (tblInsert n True seen)
+  if Base.HashMap.member n seen then Err ("DT: internal: OCaml name collision among " ++ kind ++ "s: `" ++ n ++ "`")
+  else checkNoDupOcamlNamesGo kind rest (Base.HashMap.insert n True seen)
 
 ensureUniqueOcamlNames : List DtData -> List DtDef -> Result Int
 ensureUniqueOcamlNames datas defs =
@@ -510,13 +517,13 @@ checkAllDefScopes (d :: rest) = case dtDefBody d of
     Err e => Err (defLocPrefix d ++ e)
     Ok n => checkAllDefScopes rest
 
-termDepsInto : HashTbl Bool -> List String -> Term -> List String
+termDepsInto : HashMap Bool -> List String -> Term -> List String
 termDepsInto a1 a2 a3 = termDepsIntoFuel 100000 a1 a2 a3
 
-termDepsArgs : HashTbl Bool -> List String -> List (Pair Term Rig) -> List String
+termDepsArgs : HashMap Bool -> List String -> List (Pair Term Rig) -> List String
 termDepsArgs a1 a2 a3 = termDepsArgsFuel 100000 a1 a2 a3
 
-termDepsAlts : HashTbl Bool -> List String -> List CaseAlt -> List String
+termDepsAlts : HashMap Bool -> List String -> List CaseAlt -> List String
 termDepsAlts a1 a2 a3 = termDepsAltsFuel 100000 a1 a2 a3
 
 checkErasure : List String -> List (Pair String Rig) -> Term -> Result Int

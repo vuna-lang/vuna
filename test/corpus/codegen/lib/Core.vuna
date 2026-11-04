@@ -1,0 +1,33 @@
+module Core where
+
+-- codegen 夹具：record（声明/构造/更新/字段访问/模式）、List 结构递归（letrec）、
+-- where 多 clause、Int 相等（eqint）。这些形状都直接体现在生成的 .ml 里。
+import Base.List
+
+record Point where
+  x : Int
+  y : Int
+
+origin : Point
+origin = Point { x = 0, y = 0 }
+
+moveX : Point -> Int -> Point
+moveX p dx = { p | x = p.x + dx }
+
+pointSum : Point -> Int
+pointSum p = case p of
+  Point { x = a, y = b } => a + b
+
+sum : List Int -> Int
+sum xs = case xs of
+  [] => 0
+  x :: rest => x + sum rest
+
+label : Int -> String
+label n = tag n where
+  tag : Int -> String
+  tag 0 = "zero"
+  tag _ = "nonzero"
+
+isZero : Int -> Bool
+isZero n = n == 0

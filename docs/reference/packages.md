@@ -44,8 +44,9 @@
     workspace 根时对每个包的 `test/` 聚合；
   - `vuna fmt [--check] [PATH]...`：`Vuna.Fmt` 格式化（2 空格缩进、幂等、可重新 parse；
     保留行注释 / 块注释，超过 100 列时在 RHS、列表字面量、函数应用参数与中缀链处折行；
-    模块头显式导出列表逐项一行并按名排序，项注释随项移动）；省略 PATH 时格式化 workspace
-    内所有包的 `lib/app/test`；
+    模块头显式导出列表逐项一行并按名排序，项注释随项移动；`infix*` 声明按源码顺序打印在
+    imports 之后；fixity 取**程序级**可见闭包，见 [operators.md](operators.md)）；省略 PATH
+    时格式化 workspace 内所有包的 `lib/app/test`；
   - `vuna interp <file.vuna>`：DT 精化 + 核心求值（纯；不执行效果；入口文件按最近 manifest
     获得包上下文，无则 base-only）；
   - `vuna repl`：REPL，定义累积、表达式经 DT 求值（支持 import/记录/trait/do；顶层定义必须
@@ -69,7 +70,7 @@
 ## 效应能力
 
 - 包在 `[capabilities] effects` 里**显式声明**可直接使用的 effectful 内建能力：合法值
-  `console` / `fs` / `process` / `env` / `clock`（可任意子集）。`Frontend.Manifest` 只做
+  `console` / `fs` / `process` / `env` / `clock` / `unsafe`（可任意子集）。`Frontend.Manifest` 只做
   结构校验（空名字 / 重复名字分别报错），合法能力名与放行判定在 Loader：未知名字报
   `unknown capability ...`（typo 不静默降级）；`manifestCapabilities` 是读取入口。
 - 能力按**包**生效：同包所有模块共享本包 manifest 的能力；`PackageContext` / `Root` /
@@ -77,9 +78,9 @@
   `Vuna.Compiler.Intrinsics` 里每个内建声明的能力位检查。**没有按包名 / 路由的 allowlist**，
   能力声明不可由调用参数伪造；检查覆盖整个源文件（包括未求值的定义），不只看 `main`。
 - 未声明能力的包（普通用户包、`test/corpus` 夹具）只能经 `Base.IO` 使用效果。`Base.IO`
-  是 base 包对 `prim_*` 的普通封装，也是推荐路径；它自身在 `vuna-base` 的能力声明内。
-- 本仓库声明：根包 `vuna` 与 `vuna-compiler` 声明全部五个能力（CLI/工具链与编译器直接
-  使用 `prim_*`）；`vuna-base` 只声明 `console` / `fs` / `process`（`Base.IO` 的封装面）。
+  是 `prim_*` 的直接别名层（M31），也是推荐路径；`runIO` 在 main 之外执行动作、需 `unsafe`。
+- 本仓库声明：根包 `vuna` 与 `vuna-compiler` 声明全部六个能力（含 `unsafe`；工具链在
+  main 之外用 `runIO`）；`vuna-base` 只声明 `console` / `fs` / `process`（别名面）。
   无 manifest 的 ad-hoc 文件没有能力，直接调用 effectful 内建即被拒。
 
 ## 包格式速查

@@ -44,6 +44,7 @@ module Vuna.Compiler.Core.Term
   , levelToInt
   , levelZero
   , metaLookup
+  , metaLookupList
   , notBool
   , rigIsErased
   , rigIsLinear
@@ -92,6 +93,8 @@ module Vuna.Compiler.Core.Term
 --
 -- M24 后维护（源码重组）：从原 1227 行 Core.vuna 拆出；本模块是 Core 的叶子，只依赖 Common。
 import Vuna.Compiler.Common
+import Base.HashMap
+import Base.IntMap
 
 -- ---------------------------------------------------------------
 -- M18.6：表示层定型（QTT 预留）
@@ -229,16 +232,21 @@ defaultFuel = 512
 -- ---------------------------------------------------------------
 -- 元变量 / 定义表（M14：解是 level 形态的 Value，可以提到当前上下文里的局部变量）
 -- ---------------------------------------------------------------
-metaLookup : Int -> List (Pair Int Value) -> Maybe Value
-metaLookup i [] = Nothing
-metaLookup i ((Pair j t) :: rest) = if i == j then Just t else metaLookup i rest
+-- 热路径入口：查解表的 IntMap 索引（O(1)、无 strFromInt 分配）。
+metaLookup : Int -> IntMap Value -> Maybe Value
+metaLookup i t = Base.IntMap.lookup i t
+
+-- 纯 list 场景（只有解表 list、没有索引）的线性兜底；热路径不要用。
+metaLookupList : Int -> List (Pair Int Value) -> Maybe Value
+metaLookupList i [] = Nothing
+metaLookupList i ((Pair j t) :: rest) = if i == j then Just t else metaLookupList i rest
 
 -- ---------------------------------------------------------------
 -- Sols：解表 + 其哈希索引（M25 性能）。
 -- ---------------------------------------------------------------
 -- 解表是权威数据（前插新解），但**线性查找**在大程序上是 O(#元变量)/次：签名期的元变量
 -- （隐式参数）在 bodies 阶段每次 force/conv 都要查，逐定义成本随元变量数增长 ⇒ check 超线性。
--- 这里把「list（权威）+ HashTbl（索引）+ 元变量创建深度索引」打包成一个值沿调用链传递；
+-- 这里把「list（权威）+ HashMap（索引）+ 元变量创建深度索引」打包成一个值沿调用链传递；
 -- 前插新解时同时插入索引，因此查找恒为 O(1)。
 --
 -- M28：元变量创建深度进入 Sols（`solsDepth`），求解点**就地**检查作用域；不再有
@@ -249,44 +257,44 @@ metaLookup i ((Pair j t) :: rest) = if i == j then Just t else metaLookup i rest
 -- 少一点只影响速度、不影响语义。缓存写入只发生在 `Elab.Driver.elabBodies` 的安全
 -- 前缀检查之后（闭项、无未解元变量、可达全局名全部已缓存或永不定义），见那里的证明。
 data Sols : Type where
-  Sols : HashTbl Value -> List (Pair Int Value) -> HashTbl Int -> HashTbl Value -> Sols
+  Sols : IntMap Value -> List (Pair Int Value) -> IntMap Int -> HashMap Value -> Sols
 
 solsEmpty : Sols
-solsEmpty = Sols tblEmpty [] tblEmpty tblEmpty
+solsEmpty = Sols (Base.IntMap.fromList []) [] (Base.IntMap.fromList []) (Base.HashMap.fromList [])
 
 solsFromList : List (Pair Int Value) -> Sols
 solsFromList xs =
-  Sols (tblInsertAll (map (\p => Pair (strFromInt (firstOf p)) (secondOf p)) xs) tblEmpty) xs
-    tblEmpty tblEmpty
+  Sols (Base.IntMap.insertAll xs (Base.IntMap.fromList [])) xs (Base.IntMap.fromList [])
+    (Base.HashMap.fromList [])
 
 -- Elab 侧构造：解表（list 权威）+ 解索引 + 元变量创建深度索引 + 定义值缓存。
-solsOf : HashTbl Value -> List (Pair Int Value) -> HashTbl Int -> HashTbl Value -> Sols
+solsOf : IntMap Value -> List (Pair Int Value) -> IntMap Int -> HashMap Value -> Sols
 solsOf t xs d dv = Sols t xs d dv
 
 solsList : Sols -> List (Pair Int Value)
 solsList (Sols t xs d dv) = xs
 
-solsTbl : Sols -> HashTbl Value
+solsTbl : Sols -> IntMap Value
 solsTbl (Sols t xs d dv) = t
 
 -- 定义值缓存（`force` 的 delta 展开先查它；未命中才回落 defs 表）。
-solsDefVals : Sols -> HashTbl Value
+solsDefVals : Sols -> HashMap Value
 solsDefVals (Sols t xs d dv) = dv
 
-solsPutDefVals : Sols -> HashTbl Value -> Sols
+solsPutDefVals : Sols -> HashMap Value -> Sols
 solsPutDefVals (Sols t xs d dv) dv2 = Sols t xs d dv2
 
 -- 元变量创建深度（绑定当时的上下文长度）；未登记的元变量返回 Nothing。
 solsDepth : Int -> Sols -> Maybe Int
-solsDepth i (Sols t xs d dv) = tblLookup (strFromInt i) d
+solsDepth i (Sols t xs d dv) = Base.IntMap.lookup i d
 
 solsLookup : Int -> Sols -> Maybe Value
 -- 索引与 list 同步维护（`solsCons`/`ecPutSols` 每次前插都插表），所以 miss 就是「未解」，
 -- 不做线性兜底：未解元变量在推断期是**高频**查询，兜底会退化成 O(#解)/次。
-solsLookup i (Sols t xs d dv) = tblLookup (strFromInt i) t
+solsLookup i (Sols t xs d dv) = Base.IntMap.lookup i t
 
 solsCons : Int -> Value -> Sols -> Sols
-solsCons i v (Sols t xs d dv) = Sols (tblInsert (strFromInt i) v t) (Pair i v :: xs) d dv
+solsCons i v (Sols t xs d dv) = Sols (Base.IntMap.insert i v t) (Pair i v :: xs) d dv
 
 -- 项里是否有**未解**元变量（D18 的值共享安全条件之一：含未解 meta 的体不缓存）。
 -- 已解的 TMeta 不算：缓存里留下的是已解值，后续求解不会改写既有解。
@@ -320,8 +328,8 @@ termHasUnsolvedMetaAlts sols [] = False
 termHasUnsolvedMetaAlts sols (alt :: rest) =
   termHasUnsolvedMeta sols (caseAltBody alt) || termHasUnsolvedMetaAlts sols rest
 
-defLookup : String -> HashTbl Term -> Maybe Term
-defLookup name tbl = tblLookup name tbl
+defLookup : String -> HashMap Term -> Maybe Term
+defLookup name tbl = Base.HashMap.lookup name tbl
 
 notBool : Bool -> Bool
 notBool b = if b then False else True

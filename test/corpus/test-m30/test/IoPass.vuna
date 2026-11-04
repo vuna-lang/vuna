@@ -1,8 +1,8 @@
 import Base.IO
 
 -- 效果测试（通过）：main : IO a 走临时包编译+运行，进程退出码 0 通过。
--- 效果输出直接到终端；`pure (prim_print ...)` 验证包级能力（[capabilities].effects）。
+-- 效果输出直接到终端；`prim_print` 现在本身就是 IO 动作（M31），在 do 里直接作最后一条语句。
 main : IO Int
 main = do
   _ <- print "test-m30: io-pass\n"
-  pure (prim_print "test-m30: io-pass (prim)\n")
+  prim_print "test-m30: io-pass (prim)\n"

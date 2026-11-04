@@ -4,16 +4,20 @@ open Base_dBool
 open Base_dMonad
 open Base_dMaybe
 open Base_dEq
+open Base_dOrd
+open Base_dInt
 open Base_dList
 open Base_dResult
 open Base_dString
 open Base_dShow
-open Base_dOrd
 open Prelude
 open Vuna_dCompiler_dCommon
 open Vuna_dCompiler_dFrontend_dToml
 open Vuna_dCompiler_dFrontend_dManifest
+open Base_dIO
 open Vuna_dCompiler_dPackages_dPkg
+open Base_dArray
+open Base_dHashMap
 open Vuna_dCompiler_dDebug
 open Base_dNat
 open Base_dVec
@@ -68,12 +72,12 @@ let v_Vuna_dCompiler_dLoader_dDiagnostics_dldEntryDesc = (fun mc0 -> (match mc0 
 
 let v_Vuna_dCompiler_dLoader_dDiagnostics_dldAll = (C_Base_dList_dList_Base_dList_dCons ((C_Vuna_dCompiler_dLoader_dDiagnostics_dLdEntry_Vuna_dCompiler_dLoader_dDiagnostics_dLdEntry ((v_Vuna_dCompiler_dLoader_dDiagnostics_dldCode (C_Vuna_dCompiler_dLoader_dDiagnostics_dLdDiag_Vuna_dCompiler_dLoader_dDiagnostics_dEntryFileNotFound (""))), (v_Vuna_dCompiler_dLoader_dDiagnostics_dldTemplate (C_Vuna_dCompiler_dLoader_dDiagnostics_dLdDiag_Vuna_dCompiler_dLoader_dDiagnostics_dEntryFileNotFound (""))), "\229\133\165\229\143\163\230\150\135\228\187\182\228\184\141\229\173\152\229\156\168")), (C_Base_dList_dList_Base_dList_dCons ((C_Vuna_dCompiler_dLoader_dDiagnostics_dLdEntry_Vuna_dCompiler_dLoader_dDiagnostics_dLdEntry ((v_Vuna_dCompiler_dLoader_dDiagnostics_dldCode (C_Vuna_dCompiler_dLoader_dDiagnostics_dLdDiag_Vuna_dCompiler_dLoader_dDiagnostics_dImportCycle (""))), (v_Vuna_dCompiler_dLoader_dDiagnostics_dldTemplate (C_Vuna_dCompiler_dLoader_dDiagnostics_dLdDiag_Vuna_dCompiler_dLoader_dDiagnostics_dImportCycle (""))), "import \230\136\144\231\142\175")), (C_Base_dList_dList_Base_dList_dCons ((C_Vuna_dCompiler_dLoader_dDiagnostics_dLdEntry_Vuna_dCompiler_dLoader_dDiagnostics_dLdEntry ((v_Vuna_dCompiler_dLoader_dDiagnostics_dldCode (C_Vuna_dCompiler_dLoader_dDiagnostics_dLdDiag_Vuna_dCompiler_dLoader_dDiagnostics_dInvalidModuleName (""))), (v_Vuna_dCompiler_dLoader_dDiagnostics_dldTemplate (C_Vuna_dCompiler_dLoader_dDiagnostics_dLdDiag_Vuna_dCompiler_dLoader_dDiagnostics_dInvalidModuleName (""))), "\233\157\158\230\179\149\230\168\161\229\157\151\229\144\141")), (C_Base_dList_dList_Base_dList_dCons ((C_Vuna_dCompiler_dLoader_dDiagnostics_dLdEntry_Vuna_dCompiler_dLoader_dDiagnostics_dLdEntry ((v_Vuna_dCompiler_dLoader_dDiagnostics_dldCode (C_Vuna_dCompiler_dLoader_dDiagnostics_dLdDiag_Vuna_dCompiler_dLoader_dDiagnostics_dModuleHeaderInEntryFile (""))), (v_Vuna_dCompiler_dLoader_dDiagnostics_dldTemplate (C_Vuna_dCompiler_dLoader_dDiagnostics_dLdDiag_Vuna_dCompiler_dLoader_dDiagnostics_dModuleHeaderInEntryFile (""))), "\229\133\165\229\143\163\230\150\135\228\187\182\228\184\141\229\133\129\232\174\184\230\168\161\229\157\151\229\164\180")), (C_Base_dList_dList_Base_dList_dCons ((C_Vuna_dCompiler_dLoader_dDiagnostics_dLdEntry_Vuna_dCompiler_dLoader_dDiagnostics_dLdEntry ((v_Vuna_dCompiler_dLoader_dDiagnostics_dldCode (C_Vuna_dCompiler_dLoader_dDiagnostics_dLdDiag_Vuna_dCompiler_dLoader_dDiagnostics_dModuleHeaderInEntrySource (""))), (v_Vuna_dCompiler_dLoader_dDiagnostics_dldTemplate (C_Vuna_dCompiler_dLoader_dDiagnostics_dLdDiag_Vuna_dCompiler_dLoader_dDiagnostics_dModuleHeaderInEntrySource (""))), "\229\133\165\229\143\163\230\186\144\231\160\129\228\184\141\229\133\129\232\174\184\230\168\161\229\157\151\229\164\180")), (C_Base_dList_dList_Base_dList_dCons ((C_Vuna_dCompiler_dLoader_dDiagnostics_dLdEntry_Vuna_dCompiler_dLoader_dDiagnostics_dLdEntry ((v_Vuna_dCompiler_dLoader_dDiagnostics_dldCode (C_Vuna_dCompiler_dLoader_dDiagnostics_dLdDiag_Vuna_dCompiler_dLoader_dDiagnostics_dModuleNotFound ("", ""))), (v_Vuna_dCompiler_dLoader_dDiagnostics_dldTemplate (C_Vuna_dCompiler_dLoader_dDiagnostics_dLdDiag_Vuna_dCompiler_dLoader_dDiagnostics_dModuleNotFound ("", ""))), "\230\168\161\229\157\151\230\156\170\230\137\190\229\136\176")), (C_Base_dList_dList_Base_dList_dCons ((C_Vuna_dCompiler_dLoader_dDiagnostics_dLdEntry_Vuna_dCompiler_dLoader_dDiagnostics_dLdEntry ((v_Vuna_dCompiler_dLoader_dDiagnostics_dldCode (C_Vuna_dCompiler_dLoader_dDiagnostics_dLdDiag_Vuna_dCompiler_dLoader_dDiagnostics_dModuleNotExported ("", ""))), (v_Vuna_dCompiler_dLoader_dDiagnostics_dldTemplate (C_Vuna_dCompiler_dLoader_dDiagnostics_dLdDiag_Vuna_dCompiler_dLoader_dDiagnostics_dModuleNotExported ("", ""))), "\230\168\161\229\157\151\230\156\170\232\162\171\229\140\133\229\175\188\229\135\186")), C_Base_dList_dList_Base_dList_dNil))))))))))))))
 
-let v_Vuna_dCompiler_dLoader_dDiagnostics_dldMsg = (fun e -> (fun args -> ((bi_concat "[") ((bi_concat (v_Vuna_dCompiler_dLoader_dDiagnostics_dldCode e)) ((bi_concat "] ") ((v_Base_dVec_dsubstTemplate (v_Vuna_dCompiler_dLoader_dDiagnostics_dldTemplate e)) args))))))
+let v_Vuna_dCompiler_dLoader_dDiagnostics_dldMsg = (fun e args -> (String.concat "" ["["; (v_Vuna_dCompiler_dLoader_dDiagnostics_dldCode e); "] "; ((v_Base_dVec_dsubstTemplate (v_Vuna_dCompiler_dLoader_dDiagnostics_dldTemplate e)) args)]))
 
-let v_Vuna_dCompiler_dLoader_dDiagnostics_dldErr = (fun e -> (fun args -> (C_Base_dResult_dResult_Base_dResult_dErr (((v_Vuna_dCompiler_dLoader_dDiagnostics_dldMsg e) args)))))
+let v_Vuna_dCompiler_dLoader_dDiagnostics_dldErr = (fun e args -> (C_Base_dResult_dResult_Base_dResult_dErr (((v_Vuna_dCompiler_dLoader_dDiagnostics_dldMsg e) args))))
 
 let v_Vuna_dCompiler_dLoader_dDiagnostics_dldErr0 = (fun e -> ((v_Vuna_dCompiler_dLoader_dDiagnostics_dldErr e) C_Base_dVec_dVec_Base_dVec_dVNil))
 
-let v_Vuna_dCompiler_dLoader_dDiagnostics_dldErr1 = (fun e -> (fun a0 -> ((v_Vuna_dCompiler_dLoader_dDiagnostics_dldErr e) (C_Base_dVec_dVec_Base_dVec_dVCons (a0, C_Base_dVec_dVec_Base_dVec_dVNil)))))
+let v_Vuna_dCompiler_dLoader_dDiagnostics_dldErr1 = (fun e a0 -> ((v_Vuna_dCompiler_dLoader_dDiagnostics_dldErr e) (C_Base_dVec_dVec_Base_dVec_dVCons (a0, C_Base_dVec_dVec_Base_dVec_dVNil))))
 
-let v_Vuna_dCompiler_dLoader_dDiagnostics_dldErr2 = (fun e -> (fun a0 -> (fun a1 -> ((v_Vuna_dCompiler_dLoader_dDiagnostics_dldErr e) (C_Base_dVec_dVec_Base_dVec_dVCons (a0, (C_Base_dVec_dVec_Base_dVec_dVCons (a1, C_Base_dVec_dVec_Base_dVec_dVNil))))))))
+let v_Vuna_dCompiler_dLoader_dDiagnostics_dldErr2 = (fun e a0 a1 -> ((v_Vuna_dCompiler_dLoader_dDiagnostics_dldErr e) (C_Base_dVec_dVec_Base_dVec_dVCons (a0, (C_Base_dVec_dVec_Base_dVec_dVCons (a1, C_Base_dVec_dVec_Base_dVec_dVNil))))))

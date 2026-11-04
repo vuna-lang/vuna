@@ -46,7 +46,7 @@ bodyCase n =
 
 bindChain = (\a => a) >>= (\b => b)
 
-seqChain = (\a => a) >>= (\vuna_seq_ignore => \b => b)
+seqChain = (\a => a) >> (\b => b)
 
 main : Int
 main = treeSum (Node Leaf 3 Leaf) + (shrink (mkSeg 1 5)).start + bodyCase 2

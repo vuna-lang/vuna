@@ -1,9 +1,10 @@
-module Vuna.Sample (Point(..), Shape, area, module Vuna.Compiler.Common, Vuna.Compiler.Frontend.Parser.parseSource) where
+module Vuna.Sample (module Base.List, Base.String.strLength, area, Shape, Point(..), Base.HashMap.fromList) where
 
-import Vuna.Compiler.Common
-import qualified Vuna.Compiler.Frontend.Parser as P
-import Vuna.Compiler.Frontend.Ast as A
-import qualified Vuna.Compiler.Frontend.Lexer as L
+import Base.String
+import Base.HashMap
+import Base.List
+import qualified Base.Maybe as M
+import Base.Bool as B
 
 data Shape : Type where
   Circle : Int -> Shape
@@ -13,3 +14,6 @@ area : Shape -> Int
 area s = case s of
   Circle r => 3 * r * r
   Rect w h => w * h
+
+point : Point
+point = Point { x = 1, y = 2 }

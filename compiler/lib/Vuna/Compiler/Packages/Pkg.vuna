@@ -46,6 +46,7 @@ module Vuna.Compiler.Packages.Pkg
 -- （只是数据通路；合法能力名与放行判定由 Loader 消费）。
 import Vuna.Compiler.Common
 import Vuna.Compiler.Frontend.Manifest
+import Base.IO
 
 -- 模块根：目录、包名、可选导出模块列表、能力列表（M27：该包 manifest 的
 -- `[capabilities].effects`）。
@@ -160,7 +161,7 @@ else case normalizeAcc False (splitOnSlash path) [] of
 -- 否则 "." 这类相对路径的父目录仍是 "."，搜索在起点就停住）。
 absolutePath : String -> String
 absolutePath path =
-  if startsWith "/" path then normalizeDir path else normalizeDir (prim_getcwd ++ "/" ++ path)
+  if startsWith "/" path then normalizeDir path else normalizeDir (runIO prim_getcwd ++ "/" ++ path)
 
 -- 依赖路径拼接：绝对路径直接用，相对路径相对 base 目录规范化。
 joinPath : String -> String -> String
@@ -175,7 +176,7 @@ joinPathsText (path :: rest) = path ++ ", " ++ joinPathsText rest
 -- ---------------------------------------------------------------- manifest
 -- path 是 vuna.toml 的路径；缺失时报 `pkg: missing vuna.toml in <目录>`。
 loadManifestAt : String -> Result Manifest
-loadManifestAt path = if prim_fileExists path then case parseManifest path (prim_readFile path) of
+loadManifestAt path = if runIO (prim_fileExists path) then case parseManifest path (runIO (prim_readFile path)) of
   Err e => Err ("pkg: " ++ e)
   Ok manifest => case validateManifest manifest of
     Err e => Err ("pkg: " ++ e)
@@ -361,7 +362,7 @@ packageContext package =
 findManifestUpMaybe : Int -> String -> Maybe String
 findManifestUpMaybe fuel dir =
   if fuel <= 0 then Nothing
-  else if prim_fileExists (dir ++ "/vuna.toml") then Just dir
+  else if runIO (prim_fileExists (dir ++ "/vuna.toml")) then Just dir
   else findManifestUpMaybeStep (fuel - 1) dir (manifestDir dir)
 
 findManifestUpMaybeStep : Int -> String -> String -> Maybe String
@@ -392,7 +393,7 @@ findManifestDir startDir = case findManifestDirMaybe startDir of
 -- 相对布局（<exeDir>/base、../base、../../base、../../../base）。候选目录必须含
 -- vuna.toml；都不成立时报错并列出尝试路径 + `VUNA_BASE` 提示。
 hasManifest : String -> Bool
-hasManifest dir = prim_fileExists (dir ++ "/vuna.toml")
+hasManifest dir = runIO (prim_fileExists (dir ++ "/vuna.toml"))
 
 baseCandidates : String -> List String
 baseCandidates exeDir =
@@ -417,10 +418,10 @@ firstExistingBase original (dir :: rest) =
 locateBase : Int -> Result String
 locateBase _ =
   let
-    env = prim_getenv "VUNA_BASE"
+    env = runIO (prim_getenv "VUNA_BASE")
   in if env == "" then
     let
-      candidates = baseCandidates (manifestDir (absolutePath prim_execPath))
+      candidates = baseCandidates (manifestDir (absolutePath (runIO prim_execPath)))
     in firstExistingBase candidates candidates
   else
     let

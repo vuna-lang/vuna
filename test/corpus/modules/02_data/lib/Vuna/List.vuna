@@ -1,3 +1,9 @@
+-- M31.3（B26）：本包**故意**不依赖 vuna-base（避免隐式 Prelude 把 Base.List 的
+-- Nil/Cons 带进来，见 vuna.toml 注释）。因此 `+` 的 fixity 必须由本文件声明——
+-- `+` 本身是内建值（Intrinsics 可见），不需要 base 也能解析；缺 fixity 声明会报
+-- unknown fixity。
+infixl 6 +
+
 data List a : Type where
   Nil : List a
   Cons : a -> List a -> List a

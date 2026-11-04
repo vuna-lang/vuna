@@ -41,26 +41,26 @@ check_eq() { # name expected actual
   if [ "$2" = "$3" ]; then ok; else bad "$1"; printf '  expected: %s\n  actual:   %s\n' "$2" "$3"; fi
 }
 
-# ---- 探针包：把 root Vuna 工具链 + compiler 的 Vuna/Compiler + base 的 Base 合成一个
-#      临时包（包名 `vuna`，与真实工具链一致，属于终止性检查的 TCB 信任名单），
-#      用当前编译器的包模式 DT 路径编译探针。
-#      注：探针编译的是编译器/工具链本体，必须按 TCB 信任处理；无 manifest 的
-#      ad-hoc 单文件模式没有包上下文，会触发对 Vuna.Compiler.Lexer 等 fuel/NbE
-#      辅助函数的终止性检查。 ----
+# ---- 探针包：把 root Vuna 工具链 + compiler 的 Vuna/Compiler 合成一个临时包（包名
+#      `vuna`，与真实工具链一致，属于终止性检查的 TCB 信任名单），用当前编译器的包模式
+#      DT 路径编译探针。
+#      M31.3（C31 根因）：探针包按**真实依赖布局**构造——base 作为依赖包（vuna-base），
+#      而不是把 base 源码拷进本包再手工注 `import Prelude`。这样 Loader 走真实规则自动
+#      注入 Prelude，与仓库内任何真实包一致；base 的 `infix*` 声明也随依赖闭包可见。 ----
 pkg="$tmp/probe-pkg"
-mkdir -p "$pkg/lib/Vuna/Compiler" "$pkg/lib/Base" "$pkg/app"
+mkdir -p "$pkg/lib/Vuna/Compiler" "$pkg/app"
 cp -R "$REPO/lib/Vuna/." "$pkg/lib/Vuna/"
 cp -R "$REPO/compiler/lib/Vuna/Compiler/." "$pkg/lib/Vuna/Compiler/"
-cp -R "$REPO/base/lib/Base/." "$pkg/lib/Base/"
-cp "$REPO/base/lib/Base.vuna" "$pkg/lib/Base.vuna"
-cp "$REPO/base/lib/Prelude.vuna" "$pkg/lib/Prelude.vuna"
 cp "$HERE/_probe.vuna" "$pkg/app/Main.vuna"
-cat >"$pkg/vuna.toml" <<'EOF'
+cat >"$pkg/vuna.toml" <<EOF
 [package]
 name = "vuna"
 
+[dependencies]
+vuna-base = "$REPO/base"
+
 [capabilities]
-effects = ["console", "fs", "process", "env", "clock"]
+effects = ["console", "fs", "process", "env", "clock", "unsafe"]
 EOF
 chmod -R u+w "$pkg" 2>/dev/null || true
 # M26：compile 产目录（Vuna_runtime.ml + 模块 + Main.ml + build.sh），不是单文件 .ml。

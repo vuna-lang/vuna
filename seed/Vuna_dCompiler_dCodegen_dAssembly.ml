@@ -4,16 +4,20 @@ open Base_dBool
 open Base_dMonad
 open Base_dMaybe
 open Base_dEq
+open Base_dOrd
+open Base_dInt
 open Base_dList
 open Base_dResult
 open Base_dString
 open Base_dShow
-open Base_dOrd
 open Prelude
 open Vuna_dCompiler_dCommon
 open Vuna_dCompiler_dFrontend_dToml
 open Vuna_dCompiler_dFrontend_dManifest
+open Base_dIO
 open Vuna_dCompiler_dPackages_dPkg
+open Base_dArray
+open Base_dHashMap
 open Vuna_dCompiler_dDebug
 open Base_dNat
 open Base_dVec
@@ -27,11 +31,13 @@ open Vuna_dCompiler_dFrontend_dLexer
 open Vuna_dCompiler_dFrontend_dParser_dSupport
 open Vuna_dCompiler_dFrontend_dParser
 open Vuna_dCompiler_dLoader_dDiagnostics
+open Vuna_dCompiler_dLoader_dFixity
 open Vuna_dCompiler_dLoader_dModules
 open Vuna_dCompiler_dIntrinsics
 open Vuna_dCompiler_dLoader_dResolve
 open Vuna_dCompiler_dLoader_dFlatten
 open Vuna_dCompiler_dLoader
+open Base_dIntMap
 open Vuna_dCompiler_dCore_dTerm
 open Vuna_dCompiler_dCore_dEval
 open Vuna_dCompiler_dCore_dConv
@@ -71,7 +77,7 @@ let v_Vuna_dCompiler_dCodegen_dAssembly_dgenUnitText = (fun mc0 -> (match mc0 wi
   | _ -> failwith "DT: impossible branch"
 ))
 
-let v_Vuna_dCompiler_dCodegen_dAssembly_dmainHook = (fun program -> (fun runtimeDefs -> (fun printResult -> (match ((v_Vuna_dCompiler_dCodegen_dErase_dfindDtDef "main") runtimeDefs) with
+let v_Vuna_dCompiler_dCodegen_dAssembly_dmainHook = (fun program runtimeDefs printResult -> (match ((v_Vuna_dCompiler_dCodegen_dErase_dfindDtDef "main") runtimeDefs) with
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> (v_Vuna_dCompiler_dDiagnostics_dCg_dcgErr0 C_Vuna_dCompiler_dDiagnostics_dCg_dCgErr_Vuna_dCompiler_dDiagnostics_dCg_dNoMain)
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__5) -> ((fun table -> ((fun mainRef -> (match (v_Vuna_dCompiler_dCodegen_dTerm_dioResultTy (v_Vuna_dCompiler_dElab_dTypes_ddtDefType dtb__5)) with
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__6) -> (((((v_Vuna_dCompiler_dCodegen_dTerm_dgenDtHook "") table) dtb__6) ((v_Vuna_dCompiler_dCodegen_dTerm_dioRunText program) mainRef)) printResult)
@@ -79,10 +85,10 @@ let v_Vuna_dCompiler_dCodegen_dAssembly_dmainHook = (fun program -> (fun runtime
   | _ -> failwith "DT: impossible branch"
 )) (v_Vuna_dCompiler_dCodegen_dDecl_dvalueName "main"))) (v_Vuna_dCompiler_dCodegen_dErase_ddefTable (v_Base_dPair_dsecondOf program)))
   | _ -> failwith "DT: impossible branch"
-))))
+))
 
 let rec v_Vuna_dCompiler_dCodegen_dAssembly_dopenHeader = (fun mc0 -> (match mc0 with
-  | C_Base_dList_dList_Base_dList_dCons (dtb__7, dtb__8) -> ((bi_concat "open ") ((bi_concat dtb__7) ((bi_concat "\n") (v_Vuna_dCompiler_dCodegen_dAssembly_dopenHeader dtb__8))))
+  | C_Base_dList_dList_Base_dList_dCons (dtb__7, dtb__8) -> (String.concat "" ["open "; dtb__7; "\n"; (v_Vuna_dCompiler_dCodegen_dAssembly_dopenHeader dtb__8)])
   | C_Base_dList_dList_Base_dList_dNil -> ""
   | _ -> failwith "DT: impossible branch"
 ))
@@ -93,22 +99,22 @@ let rec v_Vuna_dCompiler_dCodegen_dAssembly_dconcatGroups = (fun mc0 -> (match m
   | _ -> failwith "DT: impossible branch"
 ))
 
-let rec v_Vuna_dCompiler_dCodegen_dAssembly_dmemDataName = (fun mc0 -> (fun mc1 -> (match mc1 with
-  | C_Base_dList_dList_Base_dList_dCons (dtb__11, dtb__12) -> (if ((bi_eq_str (v_Vuna_dCompiler_dElab_dTypes_ddtDataName dtb__11)) mc0) then true else ((v_Vuna_dCompiler_dCodegen_dAssembly_dmemDataName mc0) dtb__12))
+let rec v_Vuna_dCompiler_dCodegen_dAssembly_dmemDataName = (fun mc0 mc1 -> (match mc1 with
+  | C_Base_dList_dList_Base_dList_dCons (dtb__11, dtb__12) -> (if ((v_Vuna_dCompiler_dElab_dTypes_ddtDataName dtb__11) = mc0) then true else ((v_Vuna_dCompiler_dCodegen_dAssembly_dmemDataName mc0) dtb__12))
   | C_Base_dList_dList_Base_dList_dNil -> false
   | _ -> failwith "DT: impossible branch"
-)))
+))
 
-let v_Vuna_dCompiler_dCodegen_dAssembly_dlistBridgeFor = (fun allDatas -> (fun unitDatas -> (match (v_Vuna_dCompiler_dCodegen_dTerm_dfindListFamilyData allDatas) with
+let v_Vuna_dCompiler_dCodegen_dAssembly_dlistBridgeFor = (fun allDatas unitDatas -> (match (v_Vuna_dCompiler_dCodegen_dTerm_dfindListFamilyData allDatas) with
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> ""
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__13) -> (if ((v_Vuna_dCompiler_dCodegen_dAssembly_dmemDataName (v_Vuna_dCompiler_dElab_dTypes_ddtDataName dtb__13)) unitDatas) then (v_Vuna_dCompiler_dCodegen_dTerm_ddtListBridge allDatas) else "")
   | _ -> failwith "DT: impossible branch"
-)))
+))
 
-let v_Vuna_dCompiler_dCodegen_dAssembly_dgenUnitParts = (fun usedTbl -> (fun opens -> (fun allDatas -> (fun unitDatas -> (fun groups -> ((v_Base_dResult_dandThen (((v_Vuna_dCompiler_dCodegen_dDecl_dgenTypeDeclsWith usedTbl) allDatas) unitDatas)) (fun typeText -> ((fun _u -> ((v_Base_dResult_dandThen (((v_Vuna_dCompiler_dCodegen_dTerm_dgenGroups (v_Vuna_dCompiler_dCodegen_dErase_dadjTblOf (v_Vuna_dCompiler_dCodegen_dErase_ddepAdjacency (v_Vuna_dCompiler_dCodegen_dAssembly_dconcatGroups groups)))) (v_Vuna_dCompiler_dCodegen_dTerm_dmkGenSt allDatas)) groups)) (fun p -> (match p with
+let v_Vuna_dCompiler_dCodegen_dAssembly_dgenUnitParts = (fun usedTbl opens allDatas unitDatas groups -> ((v_Base_dResult_dandThen (((v_Vuna_dCompiler_dCodegen_dDecl_dgenTypeDeclsWith usedTbl) allDatas) unitDatas)) (fun typeText -> ((fun _u -> ((v_Base_dResult_dandThen (((v_Vuna_dCompiler_dCodegen_dTerm_dgenGroups (v_Vuna_dCompiler_dCodegen_dErase_dadjTblOf (v_Vuna_dCompiler_dCodegen_dErase_ddepAdjacency (v_Vuna_dCompiler_dCodegen_dAssembly_dconcatGroups groups)))) (v_Vuna_dCompiler_dCodegen_dTerm_dmkGenSt allDatas)) groups)) (fun p -> (match p with
   | C_Base_dPair_dPair_Base_dPair_dPair (dtb__14, dtb__15) -> ((fun _u -> (C_Base_dResult_dResult_Base_dResult_dOk ((C_Vuna_dCompiler_dCodegen_dAssembly_dUnitParts_Vuna_dCompiler_dCodegen_dAssembly_dUnitParts ((C_Base_dList_dList_Base_dList_dCons ((v_Vuna_dCompiler_dCodegen_dAssembly_dopenHeader opens), (C_Base_dList_dList_Base_dList_dCons (typeText, (C_Base_dList_dList_Base_dList_dCons (((v_Vuna_dCompiler_dCodegen_dAssembly_dlistBridgeFor allDatas) unitDatas), C_Base_dList_dList_Base_dList_dNil)))))), dtb__14, dtb__15))))) (v_Vuna_dCompiler_dDebug_dstamp "cg-genGroups-done"))
   | _ -> failwith "DT: impossible branch"
-)))) (v_Vuna_dCompiler_dDebug_dstamp "cg-typedecls-done")))))))))
+)))) (v_Vuna_dCompiler_dDebug_dstamp "cg-typedecls-done")))))
 
 let v_Vuna_dCompiler_dCodegen_dAssembly_dcheckDtProgram = (fun program -> ((v_Base_dResult_dandThen (v_Vuna_dCompiler_dCodegen_dAssembly_dprepareDtProgram program)) (fun p -> ((fun _u -> (match p with
   | C_Base_dPair_dPair_Base_dPair_dPair (dtb__16, dtb__17) -> ((v_Base_dResult_dandThen (((((v_Vuna_dCompiler_dCodegen_dAssembly_dgenUnitParts (v_Vuna_dCompiler_dCodegen_dDecl_dusedTableOf (v_Vuna_dCompiler_dCodegen_dDecl_druntimeDatas (v_Base_dPair_dfirstOf program)))) C_Base_dList_dList_Base_dList_dNil) (v_Vuna_dCompiler_dCodegen_dDecl_druntimeDatas (v_Base_dPair_dfirstOf program))) (v_Vuna_dCompiler_dCodegen_dDecl_druntimeDatas (v_Base_dPair_dfirstOf program))) dtb__17)) (fun _u -> (C_Base_dResult_dResult_Base_dResult_dOk (0))))

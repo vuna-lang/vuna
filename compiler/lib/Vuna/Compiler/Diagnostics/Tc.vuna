@@ -56,7 +56,7 @@ data TcErr : Nat -> Type where
   IndexFuel : TcErr Zero
   InstanceAnnotationWrongUse : TcErr Zero
   InstanceHeadNotApp : TcErr Zero
-  InstanceContextNotDict : TcErr Zero
+  ConstraintNotDict : TcErr Zero
   InstanceMissingMethod : TcErr Zero
   InterfaceOneParam : TcErr Zero
   IntStringCaseNeedsFallback : TcErr Zero
@@ -92,6 +92,8 @@ data TcErr : Nat -> Type where
   DuplicateSignature : String -> TcErr (Succ Zero)
   ExpectedSignature : String -> TcErr (Succ Zero)
   ExpectedType : String -> TcErr (Succ Zero)
+  -- M33 W5：extern 签名超出受限 FFI 子集（基本类型 + 简单 Array）。
+  FfiTypeUnsupported : String -> TcErr (Succ Zero)
   EqRequiresEvidence : String -> TcErr (Succ Zero)
   InstanceNotTrait : String -> TcErr (Succ Zero)
   InstanceUnknownMethod : String -> TcErr (Succ Zero)
@@ -144,7 +146,7 @@ tcCode ImpossibleBranchIndex = "TC_ImpossibleBranchIndex"
 tcCode IndexFuel = "TC_IndexFuel"
 tcCode InstanceAnnotationWrongUse = "TC_InstanceAnnotationWrongUse"
 tcCode InstanceHeadNotApp = "TC_InstanceHeadNotApp"
-tcCode InstanceContextNotDict = "TC_InstanceContextNotDict"
+tcCode ConstraintNotDict = "TC_ConstraintNotDict"
 tcCode InstanceMissingMethod = "TC_InstanceMissingMethod"
 tcCode InterfaceOneParam = "TC_InterfaceOneParam"
 tcCode IntStringCaseNeedsFallback = "TC_IntStringCaseNeedsFallback"
@@ -179,6 +181,7 @@ tcCode (OverlappingInstances _) = "TC_OverlappingInstances"
 tcCode (DuplicateSignature _) = "TC_DuplicateSignature"
 tcCode (ExpectedSignature _) = "TC_ExpectedSignature"
 tcCode (ExpectedType _) = "TC_ExpectedType"
+tcCode (FfiTypeUnsupported _) = "TC_FfiTypeUnsupported"
 tcCode (EqRequiresEvidence _) = "TC_EqRequiresEvidence"
 tcCode (InstanceNotTrait _) = "TC_InstanceNotTrait"
 tcCode (InstanceUnknownMethod _) = "TC_InstanceUnknownMethod"
@@ -233,8 +236,8 @@ tcTemplate IndexFuel = "index unification ran out of reduction fuel"
 tcTemplate InstanceAnnotationWrongUse =
   "@instance can only be used with a trait method (write `method @instance`)"
 tcTemplate InstanceHeadNotApp = "instance head must be an interface application (e.g. Show Int)"
-tcTemplate InstanceContextNotDict =
-  "instance context item must be a single-parameter interface application (e.g. Eq a)"
+tcTemplate ConstraintNotDict =
+  "constraint must be a single-parameter interface application (e.g. Eq a)"
 tcTemplate InstanceMissingMethod = "instance is missing an implementation for an interface method"
 tcTemplate InterfaceOneParam = "interfaces must have exactly one parameter (M15 limitation)"
 tcTemplate IntStringCaseNeedsFallback =
@@ -274,6 +277,7 @@ tcTemplate (OverlappingInstances _) = "overlapping instance <0>"
 tcTemplate (DuplicateSignature _) = "duplicate signature for <0>"
 tcTemplate (ExpectedSignature _) = "expected a type signature for <0>"
 tcTemplate (ExpectedType _) = "expected a type, but this expression has type <0>"
+tcTemplate (FfiTypeUnsupported _) = "extern type is outside the supported FFI subset: <0>"
 tcTemplate (EqRequiresEvidence _) =
   "cannot use == or /= on values of type <0>: provide an Eq instance (or derive Eq); the Eq trait must be in scope"
 tcTemplate (InstanceNotTrait _) = "instance <0> is not an instance of a trait"
@@ -286,7 +290,7 @@ tcTemplate (RedundantCtorBranch cname) =
 tcTemplate (RedundantLiteralBranch lit) =
   "redundant literal branch: " ++ lit ++ " is already covered by an earlier branch"
 tcTemplate (SignatureNoDef _) = "signature for <0> has no definition"
-tcTemplate (UnknownInterface _) = "unknown interface <0> in instance head"
+tcTemplate (UnknownInterface _) = "unknown interface <0> in instance head or constraint"
 tcTemplate (UnknownName _) = "unknown name <0>"
 tcTemplate (UnknownNamedInstance _) = "unknown named instance <0>"
 tcTemplate (UnsolvedHole _) = "unsolved hole <0>"
@@ -357,7 +361,7 @@ tcChunk2 =
     TcEntry (tcCode IndexFuel) (tcTemplate IndexFuel) "索引归一化耗尽归约燃料",
     TcEntry (tcCode InstanceAnnotationWrongUse) (tcTemplate InstanceAnnotationWrongUse) "@instance 只能用于 trait 方法",
     TcEntry (tcCode InstanceHeadNotApp) (tcTemplate InstanceHeadNotApp) "instance 头必须是接口应用",
-    TcEntry (tcCode InstanceContextNotDict) (tcTemplate InstanceContextNotDict) "实例上下文必须是单参数 trait 应用",
+    TcEntry (tcCode ConstraintNotDict) (tcTemplate ConstraintNotDict) "约束必须是单参数 trait 应用",
     TcEntry (tcCode InstanceMissingMethod) (tcTemplate InstanceMissingMethod) "instance 缺方法实现",
     TcEntry (tcCode InterfaceOneParam) (tcTemplate InterfaceOneParam) "接口必须恰好一个参数",
     TcEntry (tcCode IntStringCaseNeedsFallback) (tcTemplate IntStringCaseNeedsFallback) "Int/String 的 case 需要兜底分支"
@@ -407,6 +411,7 @@ tcChunk6 =
     TcEntry (tcCode (DuplicateSignature "")) (tcTemplate (DuplicateSignature "")) "重复的签名",
     TcEntry (tcCode (ExpectedSignature "")) (tcTemplate (ExpectedSignature "")) "缺少类型签名",
     TcEntry (tcCode (ExpectedType "")) (tcTemplate (ExpectedType "")) "期望类型",
+    TcEntry (tcCode (FfiTypeUnsupported "")) (tcTemplate (FfiTypeUnsupported "")) "extern 类型超出受限 FFI 子集",
     TcEntry (tcCode (EqRequiresEvidence "")) (tcTemplate (EqRequiresEvidence "")) "相等需要 Eq 证据（无泛型兜底）",
     TcEntry (tcCode (InstanceNotTrait "")) (tcTemplate (InstanceNotTrait "")) "instance 不属于 trait"
   ]

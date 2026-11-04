@@ -61,7 +61,7 @@
   局部多 clause 函数（复用模式矩阵，穷尽性同 `case`；签名只能写一条、覆盖全部子句，非相邻
   同名子句报 `PS_WhereSigMultiClause`）。局部函数仍不支持递归。
 - **as-pattern**：`x@pat` 可用于函数子句参数与嵌套模式（模式矩阵注入绑定，STR 视作整个
-  值），`case` 分支左端尚未接入；`vuna lint` 的 `case-to-clauses` 对递归 / 互递归函数保持
+  值），`case` 分支左端也支持 as-pattern（desugar 为 `let` 绑定）。`vuna lint` 的 `case-to-clauses` 对递归 / 互递归函数
   `case`（与 STR 的已知冲突，见 [lint.md](lint.md) §5）。
 - **`vuna interp` 不执行效果**：任何 `main : IO a` 一律报
   `DT: interp cannot execute effects (main : IO a); compile and run the program instead`
@@ -97,6 +97,13 @@
   参数 + ctx 字典参数，搜索递归解 ctx）；`deriving (Show, Eq, Ord)` 对参数化 data 同样可用。
   `List a` / `Maybe a` 等容器的实例仍需显式声明（Base 只带 `Int` / `String` / `Bool` 的
   实例）。
+- **顶层签名约束（M32）**：`f : Eq a, Show a => τ` 可用。约束生成隐式 Rig1 字典 binder
+  （插在前导隐式类型参数之后、显式参数之前），body 的方法调用优先命中声明的假设；签名
+  未覆盖的刚性字典需求仍按旧规则提升成额外隐式参数。**只支持顶层签名**：`where` / `let`
+  绑定、`axiom`、trait 方法、构造子 / 记录字段的类型里写 `=>` 报
+  `[PS_ConstraintUnsupportedHere]`；trait 方法签名上的约束是父类语义，归 F4。约束头未
+  声明报 `unknown interface <name>`；约束项不是单参数 trait 应用报
+  `[TC_ConstraintNotDict]`；实参与类参数 kind 不符报 `[TC_TypeMismatch]`。
 - **类型族**（结果以 `Type` 收尾的 Pi 链，如 `sel : Nat -> Type`）整体擦除，不生成运行时
   定义；在运行时定义里把擦除的族参数当值用报错。
 - **axiom 与命名空间**：`axiom name : Ty` 是无运行时定义的擦除 / 类型层声明，运行时使用报
@@ -109,13 +116,15 @@
   指标族 `Tm : Ty -> Type` + `Some`）表达。**泛型 Σ 的值级构造仍是边界**（类型不能依赖
   运行时值），归 F4。空族判定在索引含中性项时仍保守。
 - **命名实例不存在**：没有 `as name` / `@name`；实例按 head 全局唯一（相干性），重复报
-  `duplicate instance`；孤儿实例（trait 与类型都不在本模块定义）仍被拒。
+  `duplicate instance`。**M31.1**：实例按**落点规则**分布（跟类型模块走，trait 签名
+  直接依赖的类型例外，见 [operators.md](operators.md)），不再声称「孤儿实例被拒」
+  （实现从未强制，B23）。
 - **type-as-value**：**不引入 type codes**；Type 级等式走擦除的 `Eq` 证据 + `cast`
   组合子；把类型放到**运行时位置**仍被擦除检查拒（`CG_TypeUsedAtRuntime` /
   `CG_TypeLevelBindingRuntime` / `CG_TypeLevelNameRuntime`）。
 - **高阶 kind 与多隐式参数字典**：高阶 kind 的 check 已支持（`m a` 推断
   `m : Type -> Type`）；含多隐式参数字典的 `do` 程序不再是边界。trait 多参数 / 默认方法 /
-  父类 / 关联类型归 F4（单参数 trait + 约束实例是当前终态）。
+  父类 / 关联类型归 F4（单参数 trait + 约束实例 + 顶层签名约束是当前终态）。
 - **延迟字典目标的最终诊断**：类参数始终未解时报 `unsolved metavariable`（而非「缺实例」）；
   `missingInstance` 级诊断细化留待后续。**顶层定义必须有类型签名**，否则报
   `DT: expected a type signature for ...`。
@@ -125,10 +134,39 @@
 - **覆盖率与终止性对所有包一致执行**：没有按包名跳过检查的豁免；编译器、base 与工具链源码
   通过 SCT + 显式 fuel / 结构递归达标。工具链 / 前端 / 加载器的状态机用输入规模线性 fuel
   或内存内不可达上界，正常输入不触发；触发时是明确的 internal 错误，不会静默改变语义。
+- **section 是 lambda 语法糖**：`(+ e)` / `(e +)` 在 Loader 展开成未标注 lambda（`(+)` 只是
+  运算符作值）。因此**直接应用** section（`(+ 3) 4`）会命中既有的 lambda 推断边界
+  `TC_LambdaNoSignature`（普通 `(\x => x) 5` 同样报错）；把 section 传给带签名的参数
+  （`inc : Int -> Int`，`inc = (+ 3)`）正常。用户符号名函数同理按普通定义处理，codegen 用
+  `_x<code>_` 转义非标识符字符。
 - **`List` 桥接**：返回或接收 `List` 的原语（`strUnpack` / `strPack` / `strConcatMany` /
   `strSubstTemplate` / `prim_getArgs` / `prim_readDir`）由 codegen 映射到桥接 helper，
   桥接只为 canonical `Base.List.List` 生成；`Prelude` 自动注入 `Base.List`，因此正常上下文
   总可用，闭包里没有该族时这些原语不可用。
+
+## 容器与可变数据（M33 W3）
+
+- **内建类型构造子**：`Array a` / `IORef a` / `MArray a` / `Buffer` 是类型层构造子（不是
+  `data` 声明），名字恒可见、不能重定义；没有构造子可模式匹配，只能经原语 / `Base.*` API。
+- **不可变 `Array`**：`fromList` / `toList` / `length` / `get` / `set` / `make`；`set` 是
+  copy-on-write（`Array.copy` + `Array.set`），原数组不变；越界是宿主 `Invalid_argument`。
+- **IO 内可变数据**：`IORef` / `MArray` / `Buffer` 的操作全部是 `IO` 动作，只能经
+  `Base.IORef` / `Base.MArray` / `Base.Buffer` 使用；`runIO` 是 main 外唯一执行入口、需要
+  `unsafe`。**没有线性 / 唯一性类型与 ST / region**：类型上无法表达「句柄不逃逸」，
+  可变句柄的安全边界目前是 IO 隔离 + `unsafe` 的显式放行（D22 部分关闭）。
+- **哈希容器**：桶是 `Array (Array (List ...))`（`Array.get` O(1)，`insert` copy-on-write）；
+  `empty` 已移除、统一写 `fromList []`（见 stdlib.md 的弱类型变量说明）。
+- **没有泛型 `Hashable`**：`HashMap` / `HashSet` 只覆盖 `String`，`IntMap` 只覆盖 `Int`；
+  无 `deriving Hash`（trait 单参数限制）；无有序持久容器。
+- `Base.Sort` 仍是插入排序（O(n²)，编译器热点之外的库算法项）。
+
+## 受限 FFI（M33 W5）
+
+- 只支持 `Int` / `String` / `Bool` / `Array Int|String|Bool` 的**显式参数**；无回调 /
+  GC root / pin、无 C 头文件解析、无字符串双向可变共享（String 只读传递）、无泛型。
+- C 源在包根 `ffi/*.c`，随生成的 `build.sh` 编译并链接；没有 `ffi/` 的包行为不变。
+- `extern` 的名字与签名都手写（不 import C 头）；超出子集报 `TC_FfiTypeUnsupported`。
+- interp 不执行 extern（只走 compile + 运行）；`extern` 声明本身不参与 `interp` 求值。
 
 ## fuel / measure 站点
 
@@ -154,10 +192,11 @@
 ## main 与 IO
 
 - 可执行入口（`vuna build`）要求 `main : IO a`（`IO` 判定只认 canonical `Base.IO.IO`），
-  由运行时执行动作（没有公开的 `runIO` / `unsafeRunIO`）。
+  由运行时执行动作；「main 之外执行」只有 `Base.IO.runIO`（要求能力 `unsafe`，工具链特权）。
+- **效果原语返回 `IO` 动作（M31）**：纯 `main` 直呼 `prim_*` 是类型错误（`TC_TypeMismatch`）。
 - **效果靠显式能力**：效果原语只有 `prim_*` 名。普通包不能直接调用它们，只能经
   `Base.IO`；要在源码里直接调用，必须在 `vuna.toml` 的 `[capabilities].effects` 声明对应
-  能力（`console` / `fs` / `process` / `env` / `clock`）。无 manifest 的 ad-hoc 文件没有
+  能力（`console` / `fs` / `process` / `env` / `clock` / `unsafe`）。无 manifest 的 ad-hoc 文件没有
   能力。未声明时报 `` requires capability `<cap>` ... ``
   （`Loader.Resolve.checkEffectsBuiltins`）。这是**权限声明**，不是检查豁免；不存在按包名
   字符串判定的 allowlist。完整表见 [primitives.md](primitives.md)。`vuna interp` /
@@ -165,8 +204,8 @@
 - `vuna interp` 只做**纯**核心求值：任何 `main : IO a` 一律报错并提示 `compile` + 运行
   产物；纯 `main : Int/String/Bool` 的结果展示仍保留为调试约定（`String` 走 `strShow`
   转义）。IO 组合统一用 `Functor` / `Monad` trait（`fmap` / `bind` / `pure`、`>>=`、
-  `do`），不导出 `bindIO` / `pureIO` / `fmapIO`；`Base.IO` API 直接返回 IO，内部包装
-  `prim_*` 效果原语。`IO` 仍是库层 thunk 表示，不是完整的 effect 类型系统（归 F3）。
+  `do`），不导出 `bindIO` / `pureIO` / `fmapIO`；`Base.IO` API 直接别名到 IO 化的
+  `prim_*` 原语（M31）。`IO` 仍是库层 thunk 表示，不是完整的 effect 类型系统（归 F3）。
 - IO 失败（如读缺失文件）在产物里抛宿主异常，但入口文件缺失返回普通错误；CLI 用
   `prim_exit` 返回非 0 退出码（compile 错误 1、lint 有 finding 1、用法 / 解析 / IO 错误 2）。
 
@@ -174,10 +213,15 @@
 
 - fmt：行宽 100，但模块头 / 导出列表、类型签名与超长字符串字面量不折行；表达式内部的注释
   会前移到最内层包含它的条目（或下一条目），不保证留在原位置；单行块注释可挂行尾，多行块
-  注释只作前置注释。`where` 块的绑定签名行按源码顺序保留、幂等。
+  注释只作前置注释。`where` 块的绑定签名行按源码顺序保留、幂等。`infix*` 声明被打印在
+  imports 之后、源码顺序、每条一行；fixity 是**程序级**属性，CLI / LSP 用
+  `Loader.Flatten.fixitiesForSource` 取可见闭包；取不到（上下文 / 依赖加载失败）时 fmt 报错、
+  不格式化该文件；未知符号运算符同样报错（不静默按默认优先级重排）。
 - REPL 支持多行续行（括号 / 字符串 / 注释 / 尾 token），但每个提交项仍是一个完整表达式或
   一条定义；顶层定义必须**先写签名**（DT 签名必填）；依赖只支持本地路径（registry / 锁文件
-  未做）；`Map` 是关联表实现的抽象类型（无平衡树）；`Result` 暂无 Functor / Monad 实例。
+  未做）；`Map` 是关联表实现的抽象类型（无平衡树）；`HashMap` / `HashSet` / `IntMap` 是
+  1024 桶的持久哈希容器（无 `remove` / resize，键限 `String` / `Int`，`toList` 桶序、
+  `size` O(n)）；`Result` 暂无 Functor / Monad 实例。
 - `vuna lint` 只报告**可安全自动修复**的形态，三条规则：`literal-if-chain`、
   `lift-destructure`、`case-to-clauses`。不可安全折叠的情形（非最后 clause、clause head
   跨行、含注释 / tab / CR、分支体无法安全收束）**不报告**；签名含隐式 Pi 的函数跳过
@@ -187,10 +231,9 @@
 - `vuna fmt --check` 省略 PATH 时按 workspace 包约定扫描各包 `lib/app/test`；非包目录 /
   不存在路径都是可读错误 exit 2，`map` 同类场景也给出明确错误而非静默空输出。`vuna doc`
   尊重 `[export].modules`。
-- **as-pattern 与 lint 的冲突**：`case-to-clauses` 把递归 / 互递归函数拆成多 clause 后，
-  SCT 可能失去下降环；这些函数保持 `case` 形态，`nix/checks/vuna-lint.sh` 按 finding
-  过滤（见 [lint.md](lint.md) §5 与脚本注释）。
-
+- **as-pattern 与 lint**：`case-to-clauses` 拆分「分支体引用 scrutinee」的函数时自动生成
+  `x@pat` 保持绑定；STR 把 as 绑定视作整个值，递归/互递归函数也能通过终止性检查。
+  `case` 分支左端也支持 as-pattern（desugar 为 `let` 绑定，scrutinee 纯表达式重复求值语义等价）。
 ## 命名与构建
 
 - 标准库包名 `vuna-base`、模块根 `Base.*`，编译器模块 `Vuna.Compiler.*`（门面

@@ -1,0 +1,12 @@
+-- M32：约束实参是**闭合类型**（签名里没有自由类型变量，`Show Int => ...`）时也要正确
+-- 绑定——此时没有前导隐式 binder，字典 binder 直接插在最外层。
+import Prelude
+
+showOne : Show Int => Int -> String
+showOne x = show x
+
+compareZero : Eq Int, Ord Int => Int -> String
+compareZero n = if n == 0 then "zero" else if n < 0 then "neg" else "pos"
+
+main : String
+main = showOne 42 ++ "/" ++ compareZero 0 ++ "/" ++ compareZero 5

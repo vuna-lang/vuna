@@ -4,6 +4,7 @@ module Vuna.Compiler.Frontend.Ast
   , DBind
   , DData
   , DExpr
+  , DExtern
   , DFun
   , DInstance
   , DRecord
@@ -13,22 +14,29 @@ module Vuna.Compiler.Frontend.Ast
   , DoStmt
   , EAnn
   , EApp
+  , EBacktick
   , ECase
   , EDo
   , EField
   , EIf
+  , EInfix
   , EInt
   , ELam
   , ELet
   , ELocalFun
+  , EParen
   , EPi
   , ERecUpdate
   , ERecord
+  , ESectL
+  , ESectOp
+  , ESectR
   , EStr
   , EVar
   , ExportItem
   , Expr
   , Field
+  , FixityDecl
   , Import
   , ModDecl
   , PAs
@@ -62,6 +70,11 @@ module Vuna.Compiler.Frontend.Ast
   , fieldName
   , fieldSpan
   , fieldType
+  , fixityAssoc
+  , fixityLevel
+  , fixityOp
+  , fixitySpan
+  , fixityTarget
   , funArity
   , importSpan
   , modDeclSpan
@@ -115,10 +128,44 @@ data Expr : Type where
   ERecord : String -> List (Pair String Expr) -> Span -> Expr
   ERecUpdate : Expr -> List (Pair String Expr) -> Span -> Expr
   EDo : List DoStmt -> Span -> Expr
+  -- M31.2：中缀链与括号。parser 的**中间产物**：Loader 按 fixity 表重排并消除它们
+  -- （`Loader.Resolve.reorderProgram`），Elab / codegen 永远不应看到（残留即 internal
+  -- error）；Fmt / Index / Lsp 在 parse 后处理它们。
+  EInfix : String -> Expr -> Expr -> Span -> Expr
+  EParen : Expr -> Span -> Expr
+  -- M31.3：反引号中缀 `` a `f` b ``（f 是普通值名或符号名；Loader 按名字查 fixity）。
+  -- 与 EInfix/EParen 同属 parser 中间产物：rename 模式（Loader 正常路径）后不存在。
+  EBacktick : String -> Expr -> Expr -> Span -> Expr
+  -- M31.3：section：op 值 / 左 section / 右 section。同样是 parser 中间产物，
+  -- Loader 在名字解析前消除成 EVar / lambda。
+  ESectOp : String -> Span -> Expr
+  ESectL : String -> Expr -> Span -> Expr
+  ESectR : Expr -> String -> Span -> Expr
   -- M24：表达式类型标注。只由 parser 的 where 绑定签名生成（`g : Int -> Int` 行
   -- 绑定到随后的 `g ... = ...` 子句），Elab 精化时据此把 where 组按签名递归提升；
   -- 普通表达式位置不产生它，Fmt 在非 where 位置把它当透明括号渲染。
   EAnn : Expr -> Expr -> Span -> Expr
+
+-- M31.2：fixity / 别名声明（`infixl 6 +`、`infixr 5 :: = Cons`、`infix 4 == = eq`）。
+-- 只进入 `Source.fixities`，由 Loader 在中缀重排时消费；**不进入 `Decl`**，避免所有
+-- Decl 匹配点扩散。
+data FixityDecl : Type where
+  FixityDecl : String -> Int -> Int -> Maybe String -> Span -> FixityDecl
+
+fixityOp : FixityDecl -> String
+fixityOp (FixityDecl op level assoc target sp) = op
+
+fixityLevel : FixityDecl -> Int
+fixityLevel (FixityDecl op level assoc target sp) = level
+
+fixityAssoc : FixityDecl -> Int
+fixityAssoc (FixityDecl op level assoc target sp) = assoc
+
+fixityTarget : FixityDecl -> Maybe String
+fixityTarget (FixityDecl op level assoc target sp) = target
+
+fixitySpan : FixityDecl -> Span
+fixitySpan (FixityDecl op level assoc target sp) = sp
 
 -- do 语句（M11）：`pat <- expr` 或裸表达式；最后一条必须是裸表达式。
 data DoStmt : Type where
@@ -134,7 +181,11 @@ data Decl : Type where
   -- M28：`axiom name : Ty` —— 无体的可擦除/不透明顶层（决策 5 / D10）。
   -- 它是**类型层**定义：类型层引用合法，运行时使用由擦除检查报错。
   DAxiom : String -> Expr -> Span -> Decl
-  DSig : String -> Expr -> Span -> Decl
+  -- M33 W5：受限 FFI：`extern "c_name" : Ty`（无体；运行时由 C 链接提供）。
+  DExtern : String -> String -> Expr -> Span -> Decl
+  -- M32：顶层签名可带 trait 约束上下文（`f : Eq a, Show b => τ`）；ctx 是约束表达式
+  -- （洞形 `C arg`，每个都是单参数 trait 应用）。空 ctx = 无显式约束（旧形态）。
+  DSig : String -> List Expr -> Expr -> Span -> Decl
   DFun : String -> List Pat -> Expr -> Span -> Decl
   DRecord : String -> List String -> List Field -> List String -> Span -> Decl
   DTrait : String -> List String -> List TraitMethod -> Span -> Decl
@@ -151,9 +202,9 @@ data ExportItem : Type where
 data ModDecl : Type where
   ModDecl : String -> Bool -> List ExportItem -> Span -> ModDecl
 
--- parser 的产物：可选模块头 + imports + 顶层声明。
+-- parser 的产物：可选模块头 + imports + fixity/别名声明 + 顶层声明。
 data SourceFile : Type where
-  Source : Maybe ModDecl -> List Import -> List Decl -> SourceFile
+  Source : Maybe ModDecl -> List Import -> List FixityDecl -> List Decl -> SourceFile
 
 -- 各节点的源码 span 访问器。
 patSpan : Pat -> Span
@@ -167,6 +218,12 @@ patSpan (PRecord name fields sp) = sp
 
 exprSpan : Expr -> Span
 exprSpan (EVar name sp) = sp
+exprSpan (EInfix op lhs rhs sp) = sp
+exprSpan (EParen inner sp) = exprSpan inner
+exprSpan (EBacktick name lhs rhs sp) = sp
+exprSpan (ESectOp op sp) = sp
+exprSpan (ESectL op rhs sp) = sp
+exprSpan (ESectR lhs op sp) = sp
 exprSpan (EInt n sp) = sp
 exprSpan (EStr s sp) = sp
 exprSpan (ELam ps body sp) = sp
@@ -193,7 +250,8 @@ doStmtExpr (DExpr expr sp) = expr
 declSpan : Decl -> Span
 declSpan (DData name params kind ctors derivings sp) = sp
 declSpan (DAxiom name ty sp) = sp
-declSpan (DSig name ty sp) = sp
+declSpan (DExtern name cName ty sp) = sp
+declSpan (DSig name ctx ty sp) = sp
 declSpan (DFun name pats body sp) = sp
 declSpan (DRecord name params fields derivings sp) = sp
 declSpan (DTrait name params methods sp) = sp
@@ -280,7 +338,8 @@ ctorArity name (d :: rest) = case d of
 declNames : Decl -> List String
 declNames (DFun name pats body _) = [name]
 declNames (DAxiom name ty _) = [name]
-declNames (DSig name ty _) = [name]
+declNames (DExtern name cName ty _) = [name]
+declNames (DSig name ctx ty _) = [name]
 declNames (DData dname params kind ctors derivings _) = map ctorName ctors
 declNames (DRecord dname params fields derivings _) = [dname]
 declNames (DTrait tname params methods _) = map traitMethodName methods
