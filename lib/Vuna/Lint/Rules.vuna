@@ -802,7 +802,7 @@ liftEdit lines toks lane pat body name sp =
 
 liftCaseOk : List String -> List PTok -> Lane -> Pat -> Expr -> String -> Span -> List Finding
 liftCaseOk lines toks lane pat body name sp =
-  if countLaneVar name lane == 1 && (if exprMentions name body then laneIsClause lane else True) && notBool (intersectsNames (patVarFuel lintFuel pat) (removeName name (laneVars lane))) && liftablePat pat && liftFixable lines toks lane pat body sp then [ Finding (spanStartLine sp) (spanStartCol sp) (lintCode LiftDestructure) (lintRule LiftDestructure) (lintMsg LiftDestructure name) (Just (liftEdit lines toks lane pat body name sp))
+  if countLaneVar name lane == 1 && True && notBool (intersectsNames (patVarFuel lintFuel pat) (removeName name (laneVars lane))) && liftablePat pat && liftFixable lines toks lane pat body sp then [ Finding (spanStartLine sp) (spanStartCol sp) (lintCode LiftDestructure) (lintRule LiftDestructure) (lintMsg LiftDestructure name) (Just (liftEdit lines toks lane pat body name sp))
   ]
   else []
 
@@ -823,7 +823,7 @@ liftCase lines toks lane caseExpr scrut _ sp = []
 
 liftLet : List String -> List PTok -> Lane -> Span -> Pat -> Expr -> Expr -> List Finding
 liftLet lines toks lane sp pat (EVar name nsp) body =
-  if liftablePat pat && countLaneVar name lane == 1 && (if exprMentions name body then laneIsClause lane else True) && notBool (intersectsNames (patVarFuel lintFuel pat) (removeName name (laneVars lane))) && liftLetFixable lines toks lane pat body sp then [ Finding (spanStartLine sp) (spanStartCol sp) (lintCode LiftDestructure) (lintRule LiftDestructure) (lintMsg LiftDestructure name) (Just (liftLetEdit lines toks lane pat body name sp))
+  if liftablePat pat && countLaneVar name lane == 1 && True && notBool (intersectsNames (patVarFuel lintFuel pat) (removeName name (laneVars lane))) && liftLetFixable lines toks lane pat body sp then [ Finding (spanStartLine sp) (spanStartCol sp) (lintCode LiftDestructure) (lintRule LiftDestructure) (lintMsg LiftDestructure name) (Just (liftLetEdit lines toks lane pat body name sp))
   ]
   else []
 liftLet lines toks lane sp pat _ body = []
