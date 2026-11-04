@@ -1,3 +1,6 @@
+let () =
+  let c = Gc.get () in
+  Gc.set { c with minor_heap_size = 16 * 1024 * 1024; space_overhead = 200 }
 let bi_add a b = a + b
 let bi_sub a b = a - b
 let bi_mul a b = a * b
@@ -6,8 +9,6 @@ let bi_eq_int (a : int) (b : int) = a = b
 let bi_neq_int (a : int) (b : int) = a <> b
 let bi_eq_str (a : string) (b : string) = a = b
 let bi_neq_str (a : string) (b : string) = a <> b
-let bi_eq_generic (a : 'a) (b : 'a) = a = b
-let bi_neq_generic (a : 'a) (b : 'a) = a <> b
 let bi_strFromInt (n : int) = string_of_int n
 let bi_strLength (s : string) = String.length s
 let bi_strUnpack (s : string) = List.init (String.length s) (fun i -> Char.code s.[i])
@@ -56,6 +57,12 @@ let dtp_getArgs () =
   let n = Array.length argv in
   if n <= 1 then [] else Array.to_list (Array.sub argv 1 (n - 1))
 let dtp_readLine () = try input_line stdin with End_of_file -> ""
+let dtp_readBytes n =
+  if n <= 0 then ""
+  else
+    let b = Bytes.create n in
+    let k = try input stdin b 0 n with _ -> 0 in
+    if k <= 0 then "" else Bytes.sub_string b 0 k
 let dtp_readDir path =
   try List.sort compare (Array.to_list (Sys.readdir path))
   with Sys_error msg -> failwith ("readDir: " ^ msg)
@@ -72,6 +79,15 @@ let dtp_fileMtime path =
   try int_of_float (Unix.stat path).Unix.st_mtime with _ -> 0
 let dtp_fileSize path =
   try (Unix.stat path).Unix.st_size with _ -> 0
+let dtp_timeUs () = int_of_float (Unix.gettimeofday () *. 1000000.0)
+let dtp_getenv k = try Sys.getenv k with Not_found -> ""
+let dtp_getcwd () = try Sys.getcwd () with _ -> "."
+let dtp_execPath () = try Unix.readlink "/proc/self/exe" with _ -> Sys.executable_name
+let dtp_strHash (s : string) =
+  let h = ref 0 in
+  String.iter (fun c -> h := ((!h * 33) + Char.code c) land 1023) s;
+  !h
+let dtp_strAt (s : string) (i : int) = if i < 0 || i >= String.length s then -1 else Char.code s.[i]
 let dtp_exit n = exit n
 let dtp_runIn dir args =
   let quote s = Filename.quote s in

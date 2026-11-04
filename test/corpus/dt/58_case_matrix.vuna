@@ -1,0 +1,40 @@
+-- M28（B08/B15）：case 规范形。所有分支先收敛到模式矩阵的规范形
+-- （每构造子一个分支 + 变量子模式）；嵌套模式与同构造子多分支由矩阵消解，
+-- 字面量列降级成 if 链、Bool 降级成 if。
+data Nat : Type where
+  Zero : Nat
+  Succ : Nat -> Nat
+
+data MyMaybe : Type -> Type where
+  MyNothing : (a : Type) -> MyMaybe a
+  MyJust : (a : Type) -> a -> MyMaybe a
+
+-- 嵌套模式 + 同构造子多分支（第二条 MyJust 不是不可达：矩阵按子模式列区分）。
+unwrap : MyMaybe (MyMaybe Int) -> Int
+unwrap m = case m of
+  MyNothing a => 0
+  MyJust a (MyNothing b) => 1
+  MyJust a (MyJust b x) => x + 10
+
+-- 嵌套字面量模式：矩阵把它编成内层 if 链（兜底变量提供 else）。
+justInt : MyMaybe Int -> Int
+justInt m = case m of
+  MyNothing a => 0
+  MyJust a 0 => 1
+  MyJust a n => n + 2
+
+-- 字面量列：仍要求变量/通配兜底。
+classify : Int -> Int
+classify n = case n of
+  0 => 100
+  1 => 200
+  k => k + 1
+
+-- Bool：True/False 是零参构造子模式，走 if 降级。
+boolToInt : Bool -> Int
+boolToInt b = case b of
+  True => 7
+  False => 9
+
+main : Int
+main = unwrap (MyJust (MyMaybe Int) (MyJust Int 5)) + justInt (MyJust Int 0) + justInt (MyJust Int 7) + classify 0 + boolToInt False

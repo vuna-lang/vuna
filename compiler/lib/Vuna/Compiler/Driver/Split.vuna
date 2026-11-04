@@ -1,0 +1,150 @@
+module Vuna.Compiler.Driver.Split
+  ( SplitFile(..)
+  , buildScript
+  , splitCompileOrder
+  , splitInitFiles
+  , writeSplitFiles
+  , writeSplitFilesIfChanged
+  ) where
+
+-- Vuna.Compiler.Driver.Split：分离编译（M12）的输出文件模型与构建脚本生成。
+--
+-- Codegen.Split.generateDtSplitProgram 产出 `List SplitFile`（相对文件名 + 内容）；
+-- 本模块负责落盘并生成增量构建脚本：
+--   - 编译顺序由 generateSplitProgram 给定（Vuna_runtime → 依赖拓扑序模块 → Main）；
+--   - 每模块 .ml/.mli 变化、或任一更早模块的 .cmi 比本模块 .cmx 新 → 只重编本模块
+--     （模块 open 链让所有更早模块都是依赖，保守但正确）；
+--   - 最后链接成可执行文件。
+-- 构建脚本只用 POSIX sh + ocamlopt，可在 Nix 沙箱内复现。
+import Vuna.Compiler.Common
+
+data SplitFile : Type where
+  SplitFile : String -> String -> SplitFile
+
+splitName : SplitFile -> String
+splitName (SplitFile name text) = name
+
+splitText : SplitFile -> String
+splitText (SplitFile name text) = text
+
+-- 先结束条目（.mli/.ml 文件名列表），供 CLI/脚本使用。
+splitInitFiles : List SplitFile -> List String
+splitInitFiles [] = []
+splitInitFiles (f :: rest) = splitName f :: splitInitFiles rest
+
+writeSplitFiles : String -> List SplitFile -> Result Int
+writeSplitFiles dir [] = Ok 0
+writeSplitFiles dir (f :: rest) = andThen (writeSplitFiles dir rest) (\n => let
+  _ = prim_writeFile (dir ++ "/" ++ splitName f) (splitText f)
+in Ok (n + 1)
+)
+
+-- M30：只写内容变化的文件（build 的逐模块增量写盘；内容相同不 touch）。
+writeSplitFilesIfChanged : String -> List SplitFile -> Result Int
+writeSplitFilesIfChanged dir [] = Ok 0
+writeSplitFilesIfChanged dir (f :: rest) = andThen (writeSplitFilesIfChanged dir rest) (\n => let
+  path = dir ++ "/" ++ splitName f
+  text = splitText f
+  same = prim_fileExists path && prim_readFile path == text
+  _ = if same then 0 else prim_writeFile path text
+in Ok (n + 1)
+)
+
+-- 编译单元顺序：按输出顺序取 .ml（跳过 .mli 与 Vuna_runtime.ml 之后不重复）。
+splitCompileOrder : List String -> List String
+splitCompileOrder [] = []
+splitCompileOrder (name :: rest) =
+  if endsWith ".ml" name then stripMl name :: splitCompileOrder rest else splitCompileOrder rest
+
+stripMl : String -> String
+stripMl name = substring 0 (strLength name - 3) name
+
+-- 构建脚本；names 是编译单元（无扩展名）顺序，最后 Link 到 "$OUT"。
+-- 干净构建（没有 .cmx，例如 Nix 构建 seed / stage1）走一次 ocamlopt 调用，
+-- 避免几十次进程启动；已有 .cmx 时按**内容哈希**（.ml/.mli + 依赖 .cmi/.cmx）增量编译，
+-- 不再用 mtime（M30/D15：同输入同产物，不受复制/checkout 时间影响）。
+buildScript : List String -> String
+buildScript names =
+  "#!/bin/sh\n"
+    ++ "# 由 vuna 生成：分离编译构建脚本（M30：按内容哈希增量）。用法: ./build.sh [OUT]\n"
+    ++ "# 干净构建：一次 ocamlopt 编译全部 .mli/.ml 并链接；\n"
+    ++ "# 增量构建：每个模块的 .ml/.mli 与依赖 .cmi/.cmx 内容哈希写 $base.stamp，命中即跳过。\n"
+    ++ "set -eu\n"
+    ++ "cd \"$(dirname \"$0\")\"\n"
+    ++ "OUT=${1:-program}\n"
+    ++ "FLAGS=\"-g -w -a+39 -warn-error +39\"\n"
+    ++ "MODULES=\""
+    ++ spaceJoin names
+    ++ "\"\n"
+    ++ "hash_of() {\n"
+    ++ "  for f in \"$@\"; do\n"
+    ++ "    if [ -f \"$f\" ]; then cat \"$f\"; else printf '%s' '-'; fi\n"
+    ++ "  done | sha256sum | awk '{print $1}'\n"
+    ++ "}\n"
+    ++ "stamp_want() {\n"
+    ++ "  base=$1\n"
+    ++ "  shift\n"
+    ++ "  deps=\"\"\n"
+    ++ "  for d in \"$@\"; do deps=\"$deps $d.stamp\"; done\n"
+    ++ "  hash_of \"$base.ml\" \"$base.mli\" $deps\n"
+    ++ "}\n"
+    ++ "clean=1\n"
+    ++ "for m in $MODULES; do\n"
+    ++ "  if [ -f \"$m.cmx\" ]; then clean=0; fi\n"
+    ++ "done\n"
+    ++ "if [ \"$clean\" -eq 1 ]; then\n"
+    ++ "  SOURCES=\"\"\n"
+    ++ "  for m in $MODULES; do\n"
+    ++ "    if [ -f \"$m.mli\" ]; then SOURCES=\"$SOURCES $m.mli\"; fi\n"
+    ++ "    SOURCES=\"$SOURCES $m.ml\"\n"
+    ++ "  done\n"
+    ++ "  ocamlopt $FLAGS -I +unix -o \"$OUT\" unix.cmxa $SOURCES\n"
+    ++ stampWrites names []
+    ++ "  echo \"built $OUT\"\n"
+    ++ "  exit 0\n"
+    ++ "fi\n"
+    ++ "compile_mod() {\n"
+    ++ "  base=$1\n"
+    ++ "  shift\n"
+    ++ "  want=$(stamp_want \"$base\" \"$@\")\n"
+    ++ "  if [ -f \"$base.cmx\" ] && [ -f \"$base.stamp\" ] && [ \"$(cat \"$base.stamp\")\" = \"$want\" ]; then return 0; fi\n"
+    ++ "  echo \"compile $base\"\n"
+    ++ "  if [ -f \"$base.mli\" ]; then ocamlopt $FLAGS -I +unix -c \"$base.mli\"; fi\n"
+    ++ "  ocamlopt $FLAGS -I +unix -c \"$base.ml\"\n"
+    ++ "  printf '%s' \"$want\" > \"$base.stamp\"\n"
+    ++ "}\n"
+    ++ compileCalls names []
+    ++ "ocamlopt $FLAGS -I +unix -o \"$OUT\" unix.cmxa "
+    ++ joinCmxs names
+    ++ "\n"
+    ++ "echo \"built $OUT\"\n"
+
+-- 干净构建成功后写每个模块的 stamp（与增量路径的 stamp 公式一致）。
+stampWrites : List String -> List String -> String
+stampWrites [] prev = ""
+stampWrites (name :: rest) prev =
+  "  stamp_want "
+    ++ name
+    ++ depsSuffix prev
+    ++ " > \""
+    ++ name
+    ++ ".stamp\"\n"
+    ++ stampWrites rest (name :: prev)
+
+spaceJoin : List String -> String
+spaceJoin [] = ""
+spaceJoin (name :: rest) = name ++ " " ++ spaceJoin rest
+
+depsSuffix : List String -> String
+depsSuffix [] = ""
+depsSuffix (dep :: rest) = " " ++ dep ++ depsSuffix rest
+
+compileCalls : List String -> List String -> String
+compileCalls [] prev = ""
+compileCalls (name :: rest) prev =
+  "compile_mod " ++ name ++ depsSuffix prev ++ "\n" ++ compileCalls rest (name :: prev)
+
+joinCmxs : List String -> String
+joinCmxs [] = ""
+joinCmxs ([name]) = name ++ ".cmx"
+joinCmxs (name :: rest) = name ++ ".cmx " ++ joinCmxs rest

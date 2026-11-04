@@ -1,0 +1,563 @@
+module Vuna.Lsp.Query
+  ( completionItems
+  , definitionResult
+  , documentSymbols
+  , formattingEdits
+  , holeHoverAt
+  , referencesResult
+  , symbolHoverResult
+  , workspaceRoot
+  , workspaceSymbols
+  ) where
+
+-- Vuna.Lsp.Query：LSP 各查询方法的实现（工具链模块，**永不进 seed 闭包**）。
+--
+-- 全是「输入文本/位置/索引 → JSON 结果」的纯查询，不持有服务器状态（状态机在
+-- Vuna.Lsp 门面）。依赖方向：Query → Diagnostics → Protocol，单向无环。
+--
+-- 方法：
+--   hover             先 DT 洞目标（包上下文；无独立 `_` 时跳过精化），未命中再
+--                     Index 标识符签名/注释；range 落在光标 token 上（不是定义位置）；
+--   formatting        `Vuna.Fmt.formatSource` 成功且内容变化 ⇒ 全文 TextEdit；
+--   documentSymbol    AST 声明树（data/record/trait 带子节点）；selectionRange 精确落名字；
+--   definition        位置 token（支持 `Mod.name`）→ Index 符号 → Location；Index 不可用时
+--                     同文件缓冲兜底；
+--   references        定义位置 + Index `findReferences` 的出现位置；
+--   completion        关键字 + 当前缓冲顶层名 + Index 符号（`.` 后按模块过滤，cap 500）；
+--   workspace/symbol  Index 过滤（cap 200），没有 textDocument 时用首个打开文档推断根。
+import Vuna.Compiler.Common
+import Vuna.Compiler.Driver.Dt
+import Vuna.Compiler.Elab
+import Vuna.Compiler.Frontend.Ast
+import Vuna.Compiler.Frontend.Parser
+import Vuna.Compiler.Packages.Pkg
+import Vuna.Fmt
+import Vuna.Index
+import Vuna.Json
+import Vuna.Lsp.Diagnostics
+import Vuna.Lsp.Protocol
+
+-- 结果上限：避免病态索引/大文件把单帧撑爆。
+maxCompletions : Int
+maxCompletions = 500
+
+maxWorkspaceSymbols : Int
+maxWorkspaceSymbols = 200
+
+maxReferences : Int
+maxReferences = 500
+
+-- 全文范围（格式化用）：0:0 到最后一行的行尾。
+fullRange : String -> Json
+fullRange text =
+  let
+    ls = split "\n" text
+    endLine = length ls - 1
+    endText = case lastElem ls of
+      Nothing => ""
+      Just x => x
+  in lspRange 1 1 (endLine + 1) (strLength endText + 1)
+
+-- ---------------------------------------------------------------
+-- 子串定位；找不到返回 -1（字节偏移）。
+findSubstring : String -> String -> Int
+findSubstring needle hay = findSubGo (strUnpack needle) (strUnpack hay) 0
+
+findSubGo : List Int -> List Int -> Int -> Int
+findSubGo needle [] idx = 0 - 1
+findSubGo needle (c :: rest) idx =
+  if isPrefixChars needle (c :: rest) then idx else findSubGo needle rest (idx + 1)
+
+isPrefixChars : List Int -> List Int -> Bool
+isPrefixChars [] _ = True
+isPrefixChars _ [] = False
+isPrefixChars (x :: xs) (y :: ys) = if x == y then isPrefixChars xs ys else False
+
+-- 在 span 覆盖的行范围里找名字的起始位置（1-based line/col）。
+findNamePos : List String -> Span -> String -> Maybe (Pair Int Int)
+findNamePos lines sp name =
+  scanNameLines (spanStartLine sp) True (spanStartCol sp) (spanEndLine sp)
+    (drop (spanStartLine sp - 1) lines) name
+
+scanNameLines : Int -> Bool -> Int -> Int -> List String -> String -> Maybe (Pair Int Int)
+scanNameLines lineNo isFirst firstCol lastLine remaining name = if lineNo > lastLine then Nothing
+else case remaining of
+  [] => Nothing
+  ln :: rest =>
+    let
+      from0 = clampInt 0 (if isFirst then firstCol - 1 else 0) (strLength ln)
+      tailPart = substring from0 (strLength ln - from0) ln
+    in case findSubstring name tailPart of
+      hit =>
+        if hit >= 0 then Just (Pair lineNo (hit + from0 + 1))
+        else scanNameLines (lineNo + 1) False firstCol lastLine rest name
+
+-- 选择范围：尽量指向名字本身，找不到就退回声明起点。
+nameSelRange : List String -> Span -> String -> Json
+nameSelRange lines sp name = case findNamePos lines sp name of
+  Nothing =>
+    lspRange (spanStartLine sp) (spanStartCol sp) (spanStartLine sp)
+      (spanStartCol sp + strLength name)
+  Just (Pair l c) => lspRange l c l (c + strLength name)
+
+-- ---------------------------------------------------------------
+-- hover：DT 洞目标 + 标识符签名
+-- ---------------------------------------------------------------
+ctxLine : Pair String String -> String
+ctxLine kv = "- `" ++ firstOf kv ++ "` : " ++ secondOf kv ++ "\n"
+
+contextBlock : List (Pair String String) -> String
+contextBlock [] = ""
+contextBlock ctx = "\nContext:\n" ++ join "" (map ctxLine ctx)
+
+goalContents : DtGoalInfo -> Json
+goalContents g =
+  JObj
+    [Pair "kind" (JStr "markdown"), Pair "value" (JStr ("```vuna\n" ++ dtGoalInfoGoal g ++ "\n```\n" ++ contextBlock (dtGoalInfoCtx g)))]
+
+holeContains : Int -> Int -> DtGoalInfo -> Bool
+holeContains line col g =
+  let
+    sp = dtGoalInfoSpan g
+    sl = spanStartLine sp
+    sc = spanStartCol sp
+    el = spanEndLine sp
+    ec = spanEndCol sp
+  in if line < sl || line > el then False
+  else if line == sl && col < sc then False else if line == el && col > ec then False else True
+
+holeAt : Int -> Int -> List DtGoalInfo -> Maybe DtGoalInfo
+holeAt line col [] = Nothing
+holeAt line col (g :: rest) = if holeContains line col g then Just g else holeAt line col rest
+
+holeHoverJson : DtGoalInfo -> Json
+holeHoverJson g =
+  let
+    sp = dtGoalInfoSpan g
+  in JObj
+    [Pair "contents" (goalContents g), Pair "range" (lspRange (spanStartLine sp) (spanStartCol sp) (spanEndLine sp) (spanEndCol sp))]
+
+symbolHoverBody : Sym -> String
+symbolHoverBody s =
+  let
+    body =
+      if symKind s == "fun" then symFullName s ++ " : " ++ symSig s
+      else if symSig s == "" then symFullName s else symSig s
+    doc = if symDoc s == "" then "" else "\n\n" ++ symDoc s
+  in "```vuna\n" ++ body ++ "\n```" ++ doc
+
+-- hover 的 range 必须是**光标下的 token**，不是符号定义位置：客户端（VS Code）用
+-- hover.range 判断 hover 何时失效，鼠标一动到 range 外就收起。返回定义位置会让使用点
+-- 的 hover 立刻消失。
+symbolHoverJson : Sym -> Int -> Int -> String -> Json
+symbolHoverJson s line startCol token =
+  JObj
+    [Pair "contents" (JObj [Pair "kind" (JStr "markdown"), Pair "value" (JStr (symbolHoverBody s))]), Pair "range" (lspRange line startCol line (startCol + strLength token))]
+
+-- ---------------------------------------------------------------
+currentModuleNameOf : String -> String
+currentModuleNameOf text = case parseSource "<lsp>" text of
+  Err e => ""
+  Ok (Source hdr imports decls) => currentModuleName decls hdr
+
+-- hover 的第一段：DT 洞目标（包上下文；与 `vuna goal` 同源）。
+-- 快速判据：文本里没有独立的 `_` token 时直接跳过——否则每次 hover 都要跑一遍
+-- 整模块（含 import 闭包）的 DT 精化，大文件上是秒级开销。
+holeHoverAt : String -> Int -> Int -> String -> Maybe Json
+holeHoverAt uri line col text = if hasHole text then holeHoverChecked uri line col text else Nothing
+
+holeHoverChecked : String -> Int -> Int -> String -> Maybe Json
+holeHoverChecked uri line col text = case contextForDoc uri of
+  Err e => Nothing
+  Ok (Pair label ctx) => case dtGoalsSource ctx label text of
+    Err e => Nothing
+    Ok gs => case holeAt line col gs of
+      Nothing => Nothing
+      Just g => Just (holeHoverJson g)
+
+-- 洞判定：`_` 是独立 token（左右都不是标识符/限定名的连接字符）。
+-- 行首/行尾用哨兵 -1；字符串或注释里的 `_` 会误判成「有洞」，只多跑一次精化，不影响正确性。
+holeJoinCode : Int -> Bool
+holeJoinCode c =
+  c >= 48 && c <= 57 || c >= 65 && c <= 90 || c >= 97 && c <= 122 || c == 95 || c == 46
+
+holeScan : List Int -> Int -> Bool
+holeScan [] prev = False
+holeScan (c :: rest) prev = if c == 95 then holeAtUnderscore rest prev else holeScan rest c
+
+holeAtUnderscore : List Int -> Int -> Bool
+holeAtUnderscore rest prev =
+  if holeJoinCode prev then holeScan rest 95
+  else if holeJoinNext rest then holeScan rest 95 else True
+
+holeJoinNext : List Int -> Bool
+holeJoinNext [] = False
+holeJoinNext (c :: rest) = holeJoinCode c
+
+hasHole : String -> Bool
+hasHole text = holeScan (strUnpack text) (0 - 1)
+
+-- hover 的第二段：光标标识符的签名/注释（Index；不可用/未命中 → null）。
+symbolHoverResult : String -> Int -> Int -> String -> Maybe Index -> Json
+symbolHoverResult uri line col text Nothing = JNull
+symbolHoverResult uri line col text (Just idx) = case tokenAtCursor text line col of
+  Nothing => JNull
+  Just (Pair startCol token) => case bestSymbol idx (currentModuleNameOf text) token of
+    Nothing => JNull
+    Just sym => symbolHoverJson sym line startCol token
+
+-- definition：光标 token → Index 符号 → Location；Index 不可用/未命中时同文件兜底。
+definitionResult : String -> Int -> Int -> String -> Maybe Index -> Json
+definitionResult uri line col text Nothing =
+  bufferDefinition uri text (fromMaybe "" (mapJust secondOf (tokenAtCursor text line col)))
+definitionResult uri line col text (Just idx) = case tokenAtCursor text line col of
+  Nothing => JNull
+  Just (Pair startCol token) => case bestSymbol idx (currentModuleNameOf text) token of
+    Nothing => bufferDefinition uri text token
+    Just sym => case symLocation idx sym of
+      Nothing => bufferDefinition uri text token
+      Just loc => JArr [loc]
+
+-- references：定义位置 + Index refs 的出现位置。
+referencesResult : String -> Int -> Int -> String -> Maybe Index -> List Json
+referencesResult uri line col text Nothing = []
+referencesResult uri line col text (Just idx) = case tokenAtCursor text line col of
+  Nothing => []
+  Just (Pair startCol token) => referencesFor idx (currentModuleNameOf text) token
+
+-- formatting：formatSource 成功且内容有变化 ⇒ 全文 TextEdit；否则 []。
+formattingEdits : String -> List Json
+formattingEdits text = case formatSource text of
+  Err e => []
+  Ok formatted =>
+    if formatted == text then []
+    else [JObj [Pair "range" (fullRange text), Pair "newText" (JStr formatted)]]
+
+-- Index：惰性加载（首次 definition/references/completion/workspaceSymbol 时）
+-- ---------------------------------------------------------------
+-- 工作区根：从文件所在目录向上取**最外层** manifest（workspace 根）。
+outermostManifest : Int -> String -> String
+outermostManifest fuel dir = if fuel <= 0 then dir
+else
+  let
+    parent = parentDir dir
+  in if parent == dir then dir
+  else case findManifestDirMaybe parent of
+    Nothing => dir
+    Just p => outermostManifest (fuel - 1) p
+
+workspaceRoot : String -> String
+workspaceRoot uri =
+  let
+    path = decodeUri uri
+    startDir = if path == "" then "." else dirOfPath path
+  in case findManifestDirMaybe startDir of
+    Nothing => case findManifestDirMaybe "." of
+      Nothing => "."
+      Just d => d
+    Just nearest => outermostManifest 64 nearest
+
+modulePathOf : Index -> String -> Maybe String
+modulePathOf idx modNameQuery = case filter (\mi => modName mi == modNameQuery) (indexModules idx) of
+  mi :: rest => Just (modPath mi)
+  [] => Nothing
+
+-- 符号定义位置 → LSP Location。
+symLocation : Index -> Sym -> Maybe Json
+symLocation idx s = case modulePathOf idx (symModule s) of
+  Nothing => Nothing
+  Just path =>
+    Just
+      (JObj [Pair "uri" (JStr (pathToUri path)), Pair "range" (lspRange (symLine s) (symCol s) (symLine s) (symCol s + strLength (symName s)))])
+
+-- 光标名字的最佳符号：优先当前模块，否则取第一个候选。
+pickBestSymbol : String -> List Sym -> Maybe Sym
+pickBestSymbol curMod syms = case filter (\s => symModule s == curMod) syms of
+  s :: rest => Just s
+  [] => case syms of
+    s :: rest => Just s
+    [] => Nothing
+
+bestSymbol : Index -> String -> String -> Maybe Sym
+bestSymbol idx curMod token = case findSymbol idx token of
+  Ok syms => pickBestSymbol curMod syms
+  Err e => Nothing
+
+-- 当前文档的模块名（无 module 头 → ""）。
+currentModuleName : List Decl -> Maybe ModDecl -> String
+currentModuleName decls Nothing = ""
+currentModuleName decls (Just (ModDecl name explicit items sp)) = name
+
+-- 当前缓冲里的顶层名字（类型名 + 声明名），供补全使用。
+declBufferNames : Decl -> List String
+declBufferNames d = append (typeNamesOf [d]) (declNames d)
+
+bufferNames : String -> List String
+bufferNames text = case parseSource "<completion>" text of
+  Err e => []
+  Ok (Source hdr imports decls) => dedupeNames (concatMap declBufferNames decls)
+
+dedupeNames : List String -> List String
+dedupeNames xs = dedupeNamesGo xs [] []
+
+dedupeNamesGo : List String -> List String -> List String -> List String
+dedupeNamesGo [] seen acc = reverse acc
+dedupeNamesGo (x :: rest) seen acc =
+  if memName x seen then dedupeNamesGo rest seen acc else dedupeNamesGo rest (x :: seen) (x :: acc)
+
+-- ---------------------------------------------------------------
+-- documentSymbol：AST 声明树
+-- ---------------------------------------------------------------
+declNameOf : Decl -> String
+declNameOf (DData name params kind ctors derivings sp) = name
+declNameOf (DAxiom name ty sp) = name
+declNameOf (DSig name ty sp) = name
+declNameOf (DFun name pats body sp) = name
+declNameOf (DRecord name params fields derivings sp) = name
+declNameOf (DTrait name params methods sp) = name
+declNameOf (DInstance ctxE head methods sp) = "instance"
+
+-- LSP SymbolKind：Function=12、Field=8、Interface=11、Constant=14、
+-- EnumMember=22、Struct=23、Method=6。
+declSymbolKind : Decl -> Int
+declSymbolKind (DData name params kind ctors derivings sp) = 23
+declSymbolKind (DRecord name params fields derivings sp) = 23
+declSymbolKind (DTrait name params methods sp) = 11
+declSymbolKind (DAxiom name ty sp) = 14
+declSymbolKind (DSig name ty sp) = 12
+declSymbolKind (DFun name pats body sp) = 12
+declSymbolKind (DInstance ctxE head methods sp) = 12
+
+symbolJson : String -> Int -> Json -> Json -> List Json -> Json
+symbolJson name kind range sel children =
+  JObj
+    (append [Pair "name" (JStr name), Pair "kind" (JNum kind), Pair "range" range, Pair "selectionRange" sel] (if isEmptyList children then [] else [Pair "children" (JArr children)]))
+
+ctorSymbolJson : List String -> Ctor -> Json
+ctorSymbolJson lines c =
+  symbolJson (ctorName c) 22 (spanRange (ctorSpan c)) (nameSelRange lines (ctorSpan c) (ctorName c))
+    []
+
+fieldSymbolJson : List String -> Field -> Json
+fieldSymbolJson lines f =
+  symbolJson (fieldName f) 8 (spanRange (fieldSpan f))
+    (nameSelRange lines (fieldSpan f) (fieldName f)) []
+
+-- M30（B20）：方法子节点用方法签名 span（方法名到类型结束），不再复用 trait 声明 span。
+methodSymbolJson : List String -> TraitMethod -> Json
+methodSymbolJson lines m =
+  symbolJson (traitMethodName m) 6 (spanRange (traitMethodSpan m))
+    (nameSelRange lines (traitMethodSpan m) (traitMethodName m)) []
+
+declChildrenJson : List String -> Decl -> List Json
+declChildrenJson lines (DData name params kind ctors derivings sp) =
+  map (ctorSymbolJson lines) ctors
+declChildrenJson lines (DRecord name params fields derivings sp) =
+  map (fieldSymbolJson lines) fields
+declChildrenJson lines (DTrait name params methods sp) = map (methodSymbolJson lines) methods
+declChildrenJson lines _ = []
+
+declSymbolJson : List String -> Decl -> Json
+declSymbolJson lines d =
+  let
+    sp = declSpan d
+    name = declNameOf d
+  in symbolJson name (declSymbolKind d) (spanRange sp) (nameSelRange lines sp name)
+    (declChildrenJson lines d)
+
+documentSymbols : String -> String -> List Json
+documentSymbols uri text = case parseSource uri text of
+  Err e => []
+  Ok (Source hdr imports decls) => map (declSymbolJson (split "\n" text)) decls
+
+-- ---------------------------------------------------------------
+-- definition：位置 → token → Index → Location
+-- ---------------------------------------------------------------
+findDeclByName : String -> List Decl -> Maybe Decl
+findDeclByName name [] = Nothing
+findDeclByName name (d :: rest) =
+  if memName name (declBufferNames d) then Just d else findDeclByName name rest
+
+-- Index 不可用/未命中时的同文件兜底：在当前缓冲的顶层声明里找同名定义。
+bufferDefinition : String -> String -> String -> Json
+bufferDefinition uri text token = case parseSource uri text of
+  Err e => JNull
+  Ok (Source hdr imports decls) => case findDeclByName (lastSegment token) decls of
+    Nothing => JNull
+    Just d =>
+      JArr
+        [JObj [Pair "uri" (JStr uri), Pair "range" (nameSelRange (split "\n" text) (declSpan d) (lastSegment token))]]
+
+-- ---------------------------------------------------------------
+-- references：Index refs（带出现位置）+ 定义位置
+-- ---------------------------------------------------------------
+refLocation : Index -> Ref -> Maybe Json
+refLocation idx r = case modulePathOf idx (refModule r) of
+  Nothing => Nothing
+  Just path =>
+    Just
+      (JObj [Pair "uri" (JStr (pathToUri path)), Pair "range" (lspRange (refLine r) (refCol r) (refLine r) (refCol r + strLength (refName r)))])
+
+referencesFor : Index -> String -> String -> List Json
+referencesFor idx curMod token = case bestSymbol idx curMod token of
+  Nothing => []
+  Just sym =>
+    let
+      refs = case findReferences idx (symName sym) of
+        Ok rs => take maxReferences rs
+        Err e => []
+      refLocs = mapMaybe (refLocation idx) refs
+      defLocs = case symLocation idx sym of
+        Nothing => []
+        Just loc => [loc]
+    in append defLocs refLocs
+
+-- ---------------------------------------------------------------
+-- completion
+-- ---------------------------------------------------------------
+data Compl : Type where
+  Compl : String -> Int -> String -> Compl
+
+complLabel : Compl -> String
+complLabel (Compl label kind detail) = label
+
+complKind : Compl -> Int
+complKind (Compl label kind detail) = kind
+
+complDetail : Compl -> String
+complDetail (Compl label kind detail) = detail
+
+-- CompletionItemKind：Method=2、Function=3、Constructor=4、Field=5、Variable=6、
+-- Class=7、Interface=8、Module=9、Keyword=14、Constant=21、Struct=22。
+symCompletionKind : Sym -> Int
+symCompletionKind s = case symKind s of
+  "fun" => 3
+  "data" => 22
+  "record" => 22
+  "trait" => 8
+  "axiom" => 21
+  "ctor" => 4
+  "field" => 5
+  "method" => 2
+  _ => 6
+
+symSymbolKind : Sym -> Int
+symSymbolKind s = case symKind s of
+  "data" => 23
+  "record" => 23
+  "trait" => 11
+  "axiom" => 14
+  "ctor" => 22
+  "field" => 8
+  "method" => 6
+  _ => 12
+
+complJson : Compl -> Json
+complJson c =
+  JObj
+    (append [Pair "label" (JStr (complLabel c)), Pair "kind" (JNum (complKind c))] (if complDetail c == "" then [] else [Pair "detail" (JStr (complDetail c))]))
+
+dedupeCompls : List Compl -> List Compl
+dedupeCompls xs = dedupeComplsGo xs [] []
+
+dedupeComplsGo : List Compl -> List String -> List Compl -> List Compl
+dedupeComplsGo [] seen acc = reverse acc
+dedupeComplsGo (x :: rest) seen acc =
+  if memName (complLabel x) seen then dedupeComplsGo rest seen acc
+  else dedupeComplsGo rest (complLabel x :: seen) (x :: acc)
+
+lspKeywords : List String
+lspKeywords =
+  [ "module",
+    "import",
+    "data",
+    "record",
+    "trait",
+    "instance",
+    "where",
+    "deriving",
+    "axiom",
+    "let",
+    "in",
+    "case",
+    "of",
+    "do",
+    "if",
+    "then",
+    "else",
+    "Type",
+    "True",
+    "False"
+  ]
+
+bufferCompls : String -> List Compl
+bufferCompls text = map (\n => Compl n 3 "") (bufferNames text)
+
+keywordCompls : List Compl
+keywordCompls = map (\n => Compl n 14 "") lspKeywords
+
+indexCompls : Maybe Index -> List Compl
+indexCompls Nothing = []
+indexCompls (Just idx) =
+  map (\s => Compl (symName s) (symCompletionKind s) (symSig s)) (indexSymbols idx)
+
+hasPrefix : String -> List Compl -> List Compl
+hasPrefix prefix items = filter (\c => startsWith prefix (complLabel c)) items
+
+finishCompls : List Compl -> List Json
+finishCompls items = map complJson (take maxCompletions (dedupeCompls items))
+
+-- `.` 之后的限定补全：前缀是模块名，按 `<module>.` 过滤符号全名。
+qualifiedCompletions : String -> List Int -> Int -> String -> Maybe Index -> List Json
+qualifiedCompletions ln chars prefixStart prefix Nothing = []
+qualifiedCompletions ln chars prefixStart prefix (Just idx) =
+  let
+    beforeDotChars = take (prefixStart - 1) chars
+    modLen = qualPrefixLen (reverse beforeDotChars)
+    modStart = length beforeDotChars - modLen
+    modPrefix = substring modStart modLen ln
+    fullPrefix = modPrefix ++ "."
+    hits =
+      filter (\s => startsWith fullPrefix (symFullName s) && startsWith prefix (symName s))
+        (indexSymbols idx)
+  in finishCompls (map (\s => Compl (symName s) (symCompletionKind s) (symSig s)) hits)
+
+completionItems : String -> Int -> Int -> Maybe Index -> List Json
+completionItems text line0 col0 midx =
+  let
+    ln = lineText text (line0 + 1)
+    chars = strUnpack ln
+    p0 = clampInt 0 col0 (length chars)
+    left = reverse (take p0 chars)
+    prefixLen = wordPrefixLen left
+    prefixStart = p0 - prefixLen
+    afterDot = prefixStart > 0 && nthCode chars (prefixStart - 1) == 46
+    prefix = substring prefixStart prefixLen ln
+  in if afterDot then qualifiedCompletions ln chars prefixStart prefix midx
+  else finishCompls
+    (append (hasPrefix prefix keywordCompls) (append (hasPrefix prefix (bufferCompls text)) (hasPrefix prefix (indexCompls midx))))
+
+-- ---------------------------------------------------------------
+-- workspace/symbol
+-- ---------------------------------------------------------------
+matchingSymbols : Index -> String -> List Sym
+matchingSymbols idx query = case findSymbol idx query of
+  Ok syms => syms
+  Err e =>
+    filter (\s => contains query (symName s) || contains query (symFullName s)) (indexSymbols idx)
+
+symbolInfoJson : Index -> Sym -> Maybe Json
+symbolInfoJson idx s = case symLocation idx s of
+  Nothing => Nothing
+  Just loc =>
+    Just
+      (JObj (append [Pair "name" (JStr (symName s)), Pair "kind" (JNum (symSymbolKind s)), Pair "location" loc] (if symModule s == "" then [] else [Pair "containerName" (JStr (symModule s))])))
+
+workspaceSymbols : Maybe Index -> String -> List Json
+workspaceSymbols Nothing query = []
+workspaceSymbols (Just idx) query =
+  let
+    syms = if query == "" then indexSymbols idx else matchingSymbols idx query
+  in mapMaybe (symbolInfoJson idx) (take maxWorkspaceSymbols syms)
+
+-- ---------------------------------------------------------------

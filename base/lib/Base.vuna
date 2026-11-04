@@ -1,12 +1,15 @@
 module Base
   ( module Base.Bool
+  , module Base.Eq
   , module Base.IO
   , module Base.List
   , module Base.Map
   , module Base.Maybe
   , module Base.Monad
+  , module Base.Ord
   , module Base.Pair
   , module Base.Result
+  , module Base.Show
   , module Base.Sort
   , module Base.String
   ) where
@@ -15,6 +18,9 @@ module Base
 -- （例如 Map/IO 的构造器不因门面而公开）。编译器/用户程序可以只 `import Vuna`。
 import Base.Pair
 import Base.Bool
+import Base.Show
+import Base.Eq
+import Base.Ord
 import Base.List
 import Base.Maybe
 import Base.Result

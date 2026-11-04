@@ -1,0 +1,14 @@
+-- M29-T2b 负例：实例方法体需要 `Eq a` 但实例没声明 ctx ⇒ TC_InstanceContextMissing。
+import Prelude
+
+data Box a : Type where
+  MkBox : a -> Box a
+
+instance Eq (Box a) where
+  eq x y = case x of
+    MkBox p => case y of
+      MkBox q => p == q
+  neq x y = False
+
+main : String
+main = "x"

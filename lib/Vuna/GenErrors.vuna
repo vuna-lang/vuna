@@ -1,0 +1,175 @@
+module Vuna.GenErrors (runGenErrors) where
+
+-- Vuna.GenErrors：从**枚举真源**生成错误码文档。
+--
+-- M30 重构后不再扫源码 `-- @code` 注释：code、模板、说明、规则名、修复动作
+-- 全部来自三个枚举表——
+--   Vuna.Compiler.Diagnostics 的 `tcAll` / `cgAll`（TC_/CG_），
+--   Vuna.Lint.Diagnostics 的 `lintAll`（LN_），
+-- 由此消除了旧实现「扫注释 + 从消息字面量反推前缀」的双重真源（findMsg 已删除）。
+-- FX_（自动修复码）由可修复的 LN_ 规则派生：`FX_` + 规则名去 `-`。
+-- 纯数据渲染，不读文件、不跑类型检查；生成物不纳入 git（docs/.generated/ 在 .gitignore）。
+import Vuna.Cli.Args
+import Vuna.Compiler.Common
+import Vuna.Compiler.Diagnostics
+import Vuna.Compiler.Frontend.Diagnostics
+import Vuna.Compiler.Loader.Diagnostics
+import Vuna.Files
+import Vuna.Lint.Diagnostics
+import Base.List
+import Base.String
+
+data Entry : Type where
+  Entry : String -> String -> String -> String -> String -> Bool -> Entry
+
+entryCode : Entry -> String
+entryCode (Entry c m d r e f) = c
+
+entryMsg : Entry -> String
+entryMsg (Entry c m d r e f) = m
+
+entryDesc : Entry -> String
+entryDesc (Entry c m d r e f) = d
+
+entryRule : Entry -> String
+entryRule (Entry c m d r e f) = r
+
+entryEdit : Entry -> String
+entryEdit (Entry c m d r e f) = e
+
+entryFixable : Entry -> Bool
+entryFixable (Entry c m d r e f) = f
+
+-- ---------------------------------------------------------------
+-- 枚举表 → Entry（唯一数据来源）
+-- ---------------------------------------------------------------
+tcEntryToEntry : TcEntry -> Entry
+tcEntryToEntry e = Entry (tcEntryCode e) (tcEntryTemplate e) (tcEntryDesc e) "" "" False
+
+cgEntryToEntry : CgEntry -> Entry
+cgEntryToEntry e = Entry (cgEntryCode e) (cgEntryTemplate e) (cgEntryDesc e) "" "" False
+
+lintEntryToEntry : LintEntry -> Entry
+lintEntryToEntry e =
+  Entry (lintEntryCode e) "" (lintEntryDesc e) (lintEntryRule e) (lintEntryEdit e)
+    (lintEntryFixable e)
+
+lexEntryToEntry : LexEntry -> Entry
+lexEntryToEntry e = Entry (lexEntryCode e) (lexEntryTemplate e) (lexEntryDesc e) "" "" False
+
+psEntryToEntry : PsEntry -> Entry
+psEntryToEntry e = Entry (psEntryCode e) (psEntryTemplate e) (psEntryDesc e) "" "" False
+
+ldEntryToEntry : LdEntry -> Entry
+ldEntryToEntry e = Entry (ldEntryCode e) (ldEntryTemplate e) (ldEntryDesc e) "" "" False
+
+allEntries : List Entry
+allEntries =
+  append (map tcEntryToEntry tcAll)
+    (append (map cgEntryToEntry cgAll) (append (map lintEntryToEntry lintAll) (append (map lexEntryToEntry lexAll) (append (map psEntryToEntry psAll) (map ldEntryToEntry ldAll)))))
+
+runGenErrors : String -> Int
+runGenErrors root = case requireDirectory root of
+  Err e => genErrorsError e
+  Ok _ =>
+    let
+      outPath = root ++ "/docs/.generated/errors.md"
+      _ = ensureDirPath (parentOf outPath)
+      _ = prim_writeFile outPath (renderDoc allEntries)
+      _ = prim_print ("wrote " ++ outPath ++ " (" ++ strFromInt (length allEntries) ++ " codes)\n")
+    in 0
+
+genErrorsError : String -> Int
+genErrorsError e =
+  let
+    _ = prim_print ("error: " ++ e ++ "\n")
+  in 2
+
+-- ---------------------------------------------------------------
+-- 渲染
+-- ---------------------------------------------------------------
+renderDoc : List Entry -> String
+renderDoc entries =
+  let
+    tcs = filter (isDomain "TC_") entries
+    cgs = filter (isDomain "CG_") entries
+    lxs = filter (isDomain "LX_") entries
+    pss = filter (isDomain "PS_") entries
+    lds = filter (isDomain "LD_") entries
+    lns = filter (isDomain "LN_") entries
+    fxs = fixEntries entries
+  in "# vuna 错误码\n\n"
+    ++ "由 `vuna gen-errors` 从枚举真源（`Vuna.Compiler.Diagnostics` 的 `tcAll`/`cgAll`、\n"
+    ++ "`Vuna.Compiler.Frontend.Diagnostics` 的 `lexAll`/`psAll`、`Vuna.Compiler.Loader.Diagnostics` 的 `ldAll`、\n"
+    ++ "`Vuna.Lint.Diagnostics` 的 `lintAll`）生成；**勿手改**（生成物，不纳入 git）。\n\n"
+    ++ "约定：运行诊断输出 `[CODE] 消息`；符号语义稳定、只增不删；\n"
+    ++ "域前缀 TC_/CG_/LX_/PS_/LD_/LN_/FX_。\n"
+    ++ "模板中 `<0>`/`<1>` 是插值占位符，arity 由枚举构造子的类型索引在编译期锁定。\n\n"
+    ++ "## 类型检查 / 精化（TC_）\n\n"
+    ++ renderTable tcs
+    ++ "\n"
+    ++ "## 代码生成（CG_）\n\n"
+    ++ renderTable cgs
+    ++ "\n"
+    ++ "## 词法（LX_）\n\n"
+    ++ renderTable lxs
+    ++ "\n"
+    ++ "## 语法（PS_）\n\n"
+    ++ renderTable pss
+    ++ "\n"
+    ++ "## 模块加载（LD_）\n\n"
+    ++ renderTable lds
+    ++ "\n"
+    ++ "## Lint 规则（LN_）\n\n"
+    ++ renderLintTable lns
+    ++ "\n"
+    ++ "## 修复规则（FX_）\n\n"
+    ++ renderLintTable fxs
+    ++ "\n"
+
+isDomain : String -> Entry -> Bool
+isDomain dom e = startsWith dom (entryCode e)
+
+renderTable : List Entry -> String
+renderTable [] = "（无）\n"
+renderTable entries =
+  "| code | 消息 | 说明 |\n| --- | --- | --- |\n" ++ join "\n" (map renderRow entries) ++ "\n"
+
+renderRow : Entry -> String
+renderRow e =
+  "| " ++ entryCode e ++ " | `" ++ escapeMsg (entryMsg e) ++ "` | " ++ entryDesc e ++ " |"
+
+renderLintTable : List Entry -> String
+renderLintTable [] = "（无）\n"
+renderLintTable entries =
+  "| code | 规则 | 说明 | 自动修复 |\n| --- | --- | --- | --- |\n"
+    ++ join "\n" (map renderLintRow entries)
+    ++ "\n"
+
+renderLintRow : Entry -> String
+renderLintRow e =
+  "| "
+    ++ entryCode e
+    ++ " | `"
+    ++ entryRule e
+    ++ "` | "
+    ++ entryDesc e
+    ++ " | "
+    ++ fixCell e
+    ++ " |"
+
+fixCell : Entry -> String
+fixCell e = if entryFixable e then "是" else "否"
+
+-- 消息里反引号转成单引号（避免 Markdown 代码标记冲突）。
+escapeMsg : String -> String
+escapeMsg m = join "'" (split "`" m)
+
+-- FX_：从可修复的 LN_ 推导（code = FX_ + 规则名去 `-`）。
+fixEntries : List Entry -> List Entry
+fixEntries entries = map fxOf (filter entryFixable (filter (isDomain "LN_") entries))
+
+fxOf : Entry -> Entry
+fxOf e =
+  Entry ("FX_" ++ join "" (split "-" (entryRule e))) (entryMsg e) (entryEdit e) (entryRule e)
+    (entryEdit e) True

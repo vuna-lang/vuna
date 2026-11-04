@@ -1,0 +1,279 @@
+module Vuna.Compiler.Elab.Derive (expandDerivings, instHead) where
+
+-- Vuna.Compiler.Elab.Derive：`deriving` 的**实例生成**（M19；M24.7 改为库里的 trait）。
+--
+-- `deriving (Show, Eq)` 不需要新的精化规则：它等价于一条手写 `instance`，方法体按 data
+-- 的构造子骨架机械生成。因此这里把它展开成 `DInstance`，交给既有的实例精化（M15 的
+-- 字典编码 + 实例搜索）处理。
+--
+-- M24.7：trait 声明、方法投影与内建类型实例的权威定义都在 `Base.Show` / `Base.Eq` /
+-- `Base.Ord`（编译器不再注入内建 trait/实例）。本模块拿到的 derivings 名字已经由
+-- Loader 解析过：包模式经 `Prelude` 重导出得到完整类名（`Base.Show.Show`），单文件里
+-- 自己声明的 trait 则保持无前缀（`Show`）。因此：
+--   - 实例头用**解析后的完整类名**；
+--   - 构造子的分派按类名**最后一段**（`Show` / `Eq` / `Ord`）；
+--   - 方法体里对同类方法的递归调用（`show` / `eq` / `lt` / `le`）必须用解析后的
+--     **投影全局名**（`Base.Show.show` …）：Loader 的短名放行已删除，裸名再也解析不到。
+--
+-- 生成规则（与 M19 一致，`test/corpus/traits/0{3,4,5}_*` 覆盖）：
+--   Show：`show (C x1 ..) = "(" ++ "C" ++ " " ++ show x1 ++ .. ++ ")"`；零参 ⇒ `"C"`。
+--   Eq  ：`eq (C x1 ..) (C y1 ..) = x1 == y1 && ..`；不同构造子 ⇒ `False`。
+--   Ord ：先按**声明顺序**比构造子索引，同构造子再逐字段比。
+import Vuna.Compiler.Common
+import Vuna.Compiler.Frontend.Ast
+
+-- 类名最后一段：`Base.Show.Show` → `Show`；派生规则按它分派（找不到的类报不支持）。
+traitShortName : String -> String
+traitShortName tname = secondOf (splitLastDot (splitOnDot tname))
+
+-- 类方法的投影全局名：Loader 把 trait 方法 mangle 成 `<模块前缀>.<方法短名>`
+-- （`resolveTraitMethod`）；单文件内联 trait 没有模块前缀时就是短名。
+traitMethodGlobal : String -> String -> String
+traitMethodGlobal tname methodName = case splitLastDot (splitOnDot tname) of
+  Pair rev base => case rev of
+    [] => methodName
+    _ => joinDots rev ++ "." ++ methodName
+
+-- ---------------------------------------------------------------
+-- 展开 `deriving (T1, T2)` ⇒ 等价 instance 声明
+-- ---------------------------------------------------------------
+--
+-- 两段式：先收集所有派生实例，再整体**追加到声明列表末尾**。不能就地插到 data 之后
+-- ——那条 data 的族信息要等 `elabDatas` 阶段才进 `globals`，插在中间会让实例方法体里
+-- 的 `case` 拿不到 scrutinee 的类型。
+expandDerivings : List Decl -> Result (List Decl)
+expandDerivings decls = andThen (collectDerivings decls) (\insts => Ok (append decls insts))
+
+collectDerivings : List Decl -> Result (List Decl)
+collectDerivings [] = Ok []
+collectDerivings (d :: rest) = case d of
+  DData name params kind ctors derivings sp =>
+    if length derivings == 0 then collectDerivings rest
+    else andThen (derivingsFor name params ctors derivings sp)
+      (\insts => andThen (collectDerivings rest) (\more => Ok (append insts more)))
+  _ => collectDerivings rest
+
+derivingsFor : String -> List String -> List Ctor -> List String -> Span -> Result (List Decl)
+derivingsFor dname params ctors derivings sp = derivingsForGo dname params ctors derivings sp []
+
+derivingsForGo : String -> List String -> List Ctor -> List String -> Span -> List Decl -> Result (List Decl)
+derivingsForGo dname params ctors [] sp acc = Ok (reverse acc)
+-- M29-T2b：参数化 data 的派生生成**带 context 的实例**（`Eq a => Eq (Box a)`）。
+-- ctx 只包含「在某个构造子字段类型里出现过」的类型参数（顺序 = 声明顺序），
+-- 与实例 tele 一一对应；`deriving (Ord)` 的字段比较只用 lt/le，因此只要求 Ord ctx。
+derivingsForGo dname params ctors (t :: rest) sp acc =
+  andThen (deriveInstance dname params ctors t sp)
+    (\decl => derivingsForGo dname params ctors rest sp (decl :: acc))
+
+-- ctx 参数：data 参数里在构造子字段类型中出现过的（保持声明顺序）。
+deriveCtxParams : List String -> List Ctor -> List String
+deriveCtxParams [] ctors = []
+deriveCtxParams (p :: rest) ctors =
+  if anyCtorMentions p ctors then p :: deriveCtxParams rest ctors else deriveCtxParams rest ctors
+
+anyCtorMentions : String -> List Ctor -> Bool
+anyCtorMentions p [] = False
+anyCtorMentions p ((Ctor cn ty ar cnsp) :: rest) =
+  if exprMentionsName p ty then True else anyCtorMentions p rest
+
+exprMentionsName : String -> Expr -> Bool
+exprMentionsName p (EVar n sp) = n == p
+exprMentionsName p (EApp fn args sp) = exprMentionsName p fn || anyExprMentions p args
+exprMentionsName p (EPi n i dom cod sp) = exprMentionsName p dom || exprMentionsName p cod
+exprMentionsName p (EAnn v ty sp) = exprMentionsName p v || exprMentionsName p ty
+exprMentionsName p _ = False
+
+anyExprMentions : String -> List Expr -> Bool
+anyExprMentions p [] = False
+anyExprMentions p (e :: rest) = exprMentionsName p e || anyExprMentions p rest
+
+-- 单个类的实例声明。`tn` 是 Loader 解析后的完整类名；方法名（`show` / `eq` / ...）由
+-- `elabInstance` 按类方法的最后一段匹配，因此实例里仍写短名。
+-- M29-T2b：参数化 data 生成带 ctx 的 DInstance（ctx 顺序 = 声明顺序，见 deriveCtxParams）。
+deriveInstance : String -> List String -> List Ctor -> String -> Span -> Result Decl
+deriveInstance dname params ctors tn sp =
+  let
+    hd = instHead tn dname params sp
+    used = deriveCtxParams params ctors
+    ctxExprs = map (\p => EApp (EVar tn sp) [EVar p sp] sp) used
+  in case traitShortName tn of
+    "Show" =>
+      let
+        proj = traitMethodGlobal tn "show"
+        ms = [DFun "show" [PVar "sx" sp] (showBody proj ctors "sx" sp) sp]
+      in Ok (DInstance ctxExprs hd ms sp)
+    "Eq" =>
+      let
+        eqProj = traitMethodGlobal tn "eq"
+        ms =
+          [ DFun "eq" [PVar "sx" sp, PVar "sy" sp] (eqBody ctors sp) sp,
+            DFun "neq" [PVar "sx" sp, PVar "sy" sp] (neqBody eqProj sp) sp
+          ]
+      in Ok (DInstance ctxExprs hd ms sp)
+    "Ord" =>
+      let
+        ltProj = traitMethodGlobal tn "lt"
+        leProj = traitMethodGlobal tn "le"
+        ms =
+          [ DFun "lt" [PVar "sx" sp, PVar "sy" sp] (ordBody leProj ctors sp) sp,
+            DFun "le" [PVar "sx" sp, PVar "sy" sp] (leBody ltProj sp) sp,
+            DFun "gt" [PVar "sx" sp, PVar "sy" sp] (gtBody ltProj sp) sp,
+            DFun "ge" [PVar "sx" sp, PVar "sy" sp] (geBody leProj sp) sp
+          ]
+      in Ok (DInstance ctxExprs hd ms sp)
+    kind => Err (showSpanLoc sp ++ ": cannot derive `" ++ kind ++ "` (supported: Show, Eq, Ord)")
+
+-- `T <Data> a1 .. an` 形态的实例头（`T` 是解析后的完整类名）。
+instHead : String -> String -> List String -> Span -> Expr
+instHead tn dname params sp = EApp (EVar tn sp) [applyTypeParams (EVar dname sp) params sp] sp
+
+-- `Box` 应用到 data 参数上：`Box a b`（单参数 trait 的实例头实参是一个**类型**）。
+applyTypeParams : Expr -> List String -> Span -> Expr
+applyTypeParams head [] sp = head
+applyTypeParams head ps sp = EApp head (map (\p => EVar p sp) ps) sp
+
+-- ---------------------------------------------------------------
+-- Show
+-- ---------------------------------------------------------------
+showBody : String -> List Ctor -> String -> Span -> Expr
+showBody proj ctors scrut sp = ECase (EVar scrut sp) (showAlts proj ctors sp) sp
+
+showAlts : String -> List Ctor -> Span -> List (Pair Pat Expr)
+showAlts proj [] sp = []
+showAlts proj ((Ctor cn ty ar cnsp) :: rest) sp =
+  let
+    vs = varNames "fa" ar
+    pat = PCon cn (map (\v => PVar v sp) vs) sp
+  in Pair pat (showCtor proj cn vs sp) :: showAlts proj rest sp
+
+-- 零参 ⇒ `"C"`；否则 `"(C " ++ show f0 ++ " " ++ .. ++ ")"`。
+showCtor : String -> String -> List String -> Span -> Expr
+showCtor proj cn [] sp = EStr cn sp
+showCtor proj cn vs sp = EApp (EVar "++" sp) [EStr ("(" ++ cn ++ " ") sp, showFields proj vs sp] sp
+
+showFields : String -> List String -> Span -> Expr
+showFields proj [] sp = EStr ")" sp
+showFields proj (v :: rest) sp = case rest of
+  [] => EApp (EVar "++" sp) [showOne proj v sp, EStr ")" sp] sp
+  _ =>
+    EApp (EVar "++" sp)
+      [showOne proj v sp, EApp (EVar "++" sp) [EStr " " sp, showFields proj rest sp] sp] sp
+
+showOne : String -> String -> Span -> Expr
+showOne proj v sp = EApp (EVar proj sp) [EVar v sp] sp
+
+-- ---------------------------------------------------------------
+-- Eq
+-- ---------------------------------------------------------------
+-- `case sx of C f.. => case sy of C g.. => f0 == g0 && .. | _ => False`
+eqBody : List Ctor -> Span -> Expr
+eqBody ctors sp = ECase (EVar "sx" sp) (map (\c => eqAlt c sp) ctors) sp
+
+eqAlt : Ctor -> Span -> Pair Pat Expr
+eqAlt (Ctor cn ty ar cnsp) sp =
+  let
+    vs = varNames "fa" ar
+    pat = PCon cn (map (\v => PVar v sp) vs) sp
+    body = ECase (EVar "sy" sp) (eqInner cn ar sp) sp
+  in Pair pat body
+
+eqInner : String -> Int -> Span -> List (Pair Pat Expr)
+eqInner cn ar sp =
+  [ Pair (PCon cn (map (\v => PVar v sp) (varNames "fb" ar)) sp) (conjFields (varNames "fa" ar) (varNames "fb" ar) sp),
+    Pair (PWild sp) (boolFalse sp)
+  ]
+
+-- `f0 == g0 && f1 == g1 && ..`；无字段 ⇒ `True`。
+conjFields : List String -> List String -> Span -> Expr
+conjFields [] gs sp = boolTrue sp
+conjFields (f :: fs) (g :: gs) sp = case fs of
+  [] => EApp (EVar "==" sp) [EVar f sp, EVar g sp] sp
+  _ => EApp (EVar "&&" sp) [EApp (EVar "==" sp) [EVar f sp, EVar g sp] sp, conjFields fs gs sp] sp
+conjFields fs gs sp = boolFalse sp
+
+-- `neq sx sy = if eq sx sy then False else True`（`eq` 用解析后的投影名）。
+neqBody : String -> Span -> Expr
+neqBody eqProj sp =
+  EIf (EApp (EVar eqProj sp) [EVar "sx" sp, EVar "sy" sp] sp) (boolFalse sp) (boolTrue sp) sp
+
+-- ---------------------------------------------------------------
+-- Ord（构造子按声明顺序为序，同构造子逐字段比）
+-- ---------------------------------------------------------------
+ordBody : String -> List Ctor -> Span -> Expr
+ordBody leProj ctors sp = ECase (EVar "sx" sp) (ordAlts leProj ctors ctors 0 sp) sp
+
+ordAlts : String -> List Ctor -> List Ctor -> Int -> Span -> List (Pair Pat Expr)
+ordAlts leProj all [] i sp = []
+ordAlts leProj all ((Ctor cn ty ar cnsp) :: rest) i sp =
+  let
+    vs = varNames "fa" ar
+    pat = PCon cn (map (\v => PVar v sp) vs) sp
+    body = ECase (EVar "sy" sp) (ordInner leProj i ar all sp) sp
+  in Pair pat body :: ordAlts leProj all rest (i + 1) sp
+
+-- 对 `sy` 再分派：索引更小的构造子 ⇒ False，同构造子 ⇒ 逐字段 lt，更大 ⇒ True。
+ordInner : String -> Int -> Int -> List Ctor -> Span -> List (Pair Pat Expr)
+ordInner leProj i ar all sp = ordInnerGo leProj i ar all 0 sp
+
+ordInnerGo : String -> Int -> Int -> List Ctor -> Int -> Span -> List (Pair Pat Expr)
+ordInnerGo leProj i ar [] j sp = []
+ordInnerGo leProj i ar ((Ctor cn ty car cnsp) :: rest) j sp =
+  let
+    gs = varNames "fb" car
+    pat = PCon cn (map (\v => PVar v sp) gs) sp
+    body =
+      if j == i then ltFields leProj (varNames "fa" ar) gs sp
+      else if j < i then boolFalse sp else boolTrue sp
+  in Pair pat body :: ordInnerGo leProj i ar rest (j + 1) sp
+
+-- 逐字段 `<`：`f0 < g0 || (le f0 g0 && le g0 f0 && (f1 < g1 || ..))`；无字段 ⇒ False。
+-- M29-T2b：只用 Ord 的 lt/le（不再用 `==`），因此 `deriving (Ord)` 只需 Ord ctx。
+ltFields : String -> List String -> List String -> Span -> Expr
+ltFields leProj [] gs sp = boolFalse sp
+ltFields leProj (f :: fs) (g :: gs) sp = case fs of
+  [] => EApp (EVar "<" sp) [EVar f sp, EVar g sp] sp
+  _ =>
+    EApp (EVar "||" sp)
+      [EApp (EVar "<" sp) [EVar f sp, EVar g sp] sp, EApp (EVar "&&" sp) [EApp (EVar leProj sp) [EVar f sp, EVar g sp] sp, EApp (EVar "&&" sp) [EApp (EVar leProj sp) [EVar g sp, EVar f sp] sp, ltFields leProj fs gs sp] sp] sp]
+      sp
+-- M23：字段数不匹配的组合走不到（derive 生成的字段表按构造子对齐），但 DT 要求模式矩阵穷尽。
+ltFields leProj _ _ sp = boolFalse sp
+
+-- `le sx sy = lt sx sy || !(lt sy sx)`——只用 `lt` 派生，不依赖 `Eq` 实例
+-- （`deriving (Ord)` 不要求同时 derive `Eq`）。`lt` 用解析后的投影名。
+leBody : String -> Span -> Expr
+leBody ltProj sp =
+  EApp (EVar "||" sp)
+    [EApp (EVar ltProj sp) [EVar "sx" sp, EVar "sy" sp] sp, EIf (EApp (EVar ltProj sp) [EVar "sy" sp, EVar "sx" sp] sp) (boolFalse sp) (boolTrue sp) sp]
+    sp
+
+varNames : String -> Int -> List String
+varNames prefix n = varNamesAt prefix 0 n
+
+varNamesAt : String -> Int -> Int -> List String
+varNamesAt prefix i n = varNamesAtGo (n - i) prefix n
+
+varNamesAtGo : Int -> String -> Int -> List String
+varNamesAtGo remaining prefix n =
+  if remaining <= 0 then []
+  else (prefix ++ strFromInt (n - remaining)) :: varNamesAtGo (remaining - 1) prefix n
+
+-- `gt sx sy = lt sy sx`；`ge sx sy = le sy sx`（都用已生成的 `lt` / `le`）。
+gtBody : String -> Span -> Expr
+gtBody ltProj sp = EApp (EVar ltProj sp) [EVar "sy" sp, EVar "sx" sp] sp
+
+geBody : String -> Span -> Expr
+geBody leProj sp = EApp (EVar leProj sp) [EVar "sy" sp, EVar "sx" sp] sp
+
+-- ---------------------------------------------------------------
+-- 派生体里产生 Bool 的辅助
+-- ---------------------------------------------------------------
+-- 派生方法体不再引用源码里的 `True` / `False`（M22.2 已去掉 prelude 的值桩，
+-- 权威定义在 `Base.Bool`，而派生实例可能出现在不 import Base.Bool 的程序里）。
+-- 用 Int 上的 `==`（精化期特化成 `bi_eq_int`）产生 Bool：`1 == 1` / `0 == 1`。
+-- 这样派生 Eq/Ord 与源码是否声明 Bool 构造子无关。
+boolTrue : Span -> Expr
+boolTrue sp = EApp (EVar "==" sp) [EInt 1 sp, EInt 1 sp] sp
+
+boolFalse : Span -> Expr
+boolFalse sp = EApp (EVar "==" sp) [EInt 0 sp, EInt 1 sp] sp

@@ -1,0 +1,8 @@
+shift : Pair Int Int -> Int
+shift p =
+  let
+    Pair x y = p
+  in x + y
+
+main : Int
+main = shift (Pair 1 2)

@@ -1,0 +1,5 @@
+module Values (token) where
+
+-- 值命名空间的小写名，供 Shadow 模块与值层同名类型对照。
+token : Int
+token = 42

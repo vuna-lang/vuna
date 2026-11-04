@@ -1,36 +1,75 @@
 # vuna-compiler：编译器包（seed 的来源）。
 # 只包含“把源码变成 OCaml / 生成 seed”所需的模块 + 编译器自己的 CLI 入口；
 # 工具链（fmt/lint/repl/doc/test）在根包 vuna，不进入 seed 闭包。
+#
+# 目录即层（M25 源码重组）：Frontend（词法/语法/TOML/manifest）→ Packages（包图）
+# → Loader（模块图/名字解析/flatten）→ Core（TT/NbE）→ Elab（双向精化）→ Codegen
+# （擦除 + OCaml 生成）→ Driver（facade/CLI）。同包内模块经 import 闭包可见即可；
+# 这里列出全部模块，作为包对外的完整模块面（依赖包可见性由 [export] 控制）。
 [package]
 name = "vuna-compiler"
-version = "0.1.0"
-edition = "2026"
 
 [export]
 modules = [
   "Vuna.Compiler.Common",
-  "Vuna.Compiler.Ast",
-  "Vuna.Compiler.Lexer",
-  "Vuna.Compiler.Parser",
-  "Vuna.Compiler.Builtins",
-  "Vuna.Compiler.Toml",
-  "Vuna.Compiler.Manifest",
-  "Vuna.Compiler.Pkg",
+  "Vuna.Compiler.Diagnostics",
+  "Vuna.Compiler.Diagnostics.Common",
+  "Vuna.Compiler.Diagnostics.Cg",
+  "Vuna.Compiler.Diagnostics.Tc",
+  "Vuna.Compiler.Intrinsics",
+  "Vuna.Compiler.Version",
+  "Vuna.Compiler.Frontend.Diagnostics",
+  "Vuna.Compiler.Loader.Diagnostics",
+  "Vuna.Compiler.Frontend.Ast",
+  "Vuna.Compiler.Frontend.Lexer",
+  "Vuna.Compiler.Frontend.Parser",
+  "Vuna.Compiler.Frontend.Parser.Support",
+  "Vuna.Compiler.Frontend.Toml",
+  "Vuna.Compiler.Frontend.Manifest",
+  "Vuna.Compiler.Packages.Pkg",
   "Vuna.Compiler.Loader",
+  "Vuna.Compiler.Loader.Modules",
+  "Vuna.Compiler.Loader.Resolve",
+  "Vuna.Compiler.Loader.Flatten",
   "Vuna.Compiler.Core",
-  "Vuna.Compiler.DtPrelude",
-  "Vuna.Compiler.DtQuant",
-  "Vuna.Compiler.DtKind",
-  "Vuna.Compiler.DtTerm",
-  "Vuna.Compiler.DtMatch",
+  "Vuna.Compiler.Core.Term",
+  "Vuna.Compiler.Core.Eval",
+  "Vuna.Compiler.Core.Conv",
   "Vuna.Compiler.Elab",
-  "Vuna.Compiler.CoreCodegen",
-  "Vuna.Compiler.Dt",
-  "Vuna.Compiler.Split",
-  "Vuna.Compiler.SplitCli",
-  "Vuna.Compiler.Compile",
-  "Vuna.Compiler.CompilerCli"
+  "Vuna.Compiler.Elab.Sig",
+  "Vuna.Compiler.Elab.Types",
+  "Vuna.Compiler.Elab.Meta",
+  "Vuna.Compiler.Elab.Case",
+  "Vuna.Compiler.Elab.Dict",
+  "Vuna.Compiler.Elab.Term",
+  "Vuna.Compiler.Elab.Term.Impl",
+  "Vuna.Compiler.Elab.Term.Support",
+  "Vuna.Compiler.Elab.Data",
+  "Vuna.Compiler.Elab.Trait",
+  "Vuna.Compiler.Elab.InstName",
+  "Vuna.Compiler.Elab.Driver",
+  "Vuna.Compiler.Elab.Termination",
+  "Vuna.Compiler.Elab.Termination.Measure",
+  "Vuna.Compiler.Elab.Termination.Scc",
+  "Vuna.Compiler.Elab.Prelude",
+  "Vuna.Compiler.Elab.Match",
+  "Vuna.Compiler.Elab.Records",
+  "Vuna.Compiler.Elab.Derive",
+  "Vuna.Compiler.Codegen",
+  "Vuna.Compiler.Codegen.Decl",
+  "Vuna.Compiler.Codegen.Erase",
+  "Vuna.Compiler.Codegen.Term",
+  "Vuna.Compiler.Codegen.Assembly",
+  "Vuna.Compiler.Codegen.Split",
+  "Vuna.Compiler.Driver.Split",
+  "Vuna.Compiler.Driver.Dt",
+  "Vuna.Compiler.Driver.Compile",
+  "Vuna.Compiler.Driver.CompilerCli"
 ]
 
 [dependencies]
 vuna-base = "../base"
+
+# M27：效应能力声明（编译器自身直接使用 effectful 内建）。
+[capabilities]
+effects = ["console", "fs", "process", "env", "clock"]

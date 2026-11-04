@@ -1,0 +1,7 @@
+# M28：目录型夹具的独立包上下文（只依赖 vuna-base）。
+# 覆盖 type / value / ctor 三个命名空间的跨模块解析。
+[package]
+name = "fix-30-namespace-dual"
+
+[dependencies]
+vuna-base = "../../../../base"

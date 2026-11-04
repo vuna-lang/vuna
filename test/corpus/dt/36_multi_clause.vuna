@@ -1,18 +1,16 @@
 -- M22：多 clause 函数的模式矩阵降级（构造子 + 通配混合列、零参构造子、构造子形参）。
 --
--- `multiToExpr`/`buildColumnExpr`（现 `Vuna.Compiler.DtMatch`）把 clause 矩阵降成
+-- `multiToExpr`/`buildColumnExpr`（现 `Vuna.Compiler.Elab.Match`）把 clause 矩阵降成
 -- lambda + 嵌套 case：构造子列编成 `case`，变量/通配列改写成位置名，通配子句同时
 -- 供构造子分支与兜底使用。覆盖三件事：
 -- ① 两个构造子参数的函数（`add`）：两列都按构造子分发；
 -- ② 构造子 + 通配混合列（`zipD`）：具体子句在前、`_ _` 兜底在后；
 -- ③ 单 clause 的构造子形参（`firstOf`/`secondOf`）与零参构造子值（`Zero`/`Nil`）。
+-- M26：删除本地 `data List`（Nil/Cons），改用 Prelude 的 base `List`（`::`/`[]` 语法糖
+-- 只对 base List 生效）；本地同名 data 的解析优先级见 A07/A08/A09/C17（M27）。
 data Nat : Type where
   Zero : Nat
   Succ : Nat -> Nat
-
-data List a : Type where
-  Nil : List a
-  Cons : a -> List a -> List a
 
 data Pair a b : Type where
   MkPair : a -> b -> Pair a b

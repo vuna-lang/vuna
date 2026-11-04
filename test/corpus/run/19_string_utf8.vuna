@@ -1,0 +1,4 @@
+-- M27 / D16：String 是 UTF-8 字节串（不是码点）：strLength 按字节，
+-- strAt 按字节返回 0..255（越界 -1）。"é" 的 UTF-8 是 0xC3 0xA9。
+main : Int
+main = strLength "é" * 100 + strAt "é" 1

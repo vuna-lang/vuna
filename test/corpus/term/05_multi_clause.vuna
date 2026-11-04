@@ -1,0 +1,18 @@
+-- M25.2a 正例：多 clause 函数，每个 clause 的自递归都要有下降证据。
+import Prelude
+
+data Nat : Type where
+  Zero : Nat
+  Succ : Nat -> Nat
+
+append2 : List Int -> List Int -> List Int
+append2 Nil ys = ys
+append2 (Cons x rest) ys = Cons x (append2 rest ys)
+
+dropAll : Nat -> List Int -> List Int
+dropAll Zero xs = xs
+dropAll (Succ k) Nil = Nil
+dropAll (Succ k) (Cons x rest) = dropAll k rest
+
+main : Int
+main = 0

@@ -1,0 +1,36 @@
+-- M29：隐式值参数（`{x : a}`）与隐式证明参数——sym / trans / subst 不再手写全部显式参数。
+-- 隐式 binder 恒擦除（Rig0）：值只参与类型/索引，运行时不可见；调用点由合一求解。
+data Nat : Type where
+  Zero : Nat
+  Succ : Nat -> Nat
+
+data Eq : {a : Type} -> a -> a -> Type where
+  Refl : {a : Type} -> (x : a) -> Eq x x
+
+sym : {a : Type} -> {x : a} -> {y : a} -> Eq x y -> Eq y x
+sym e = case e of
+  Refl z => Refl z
+
+trans : {a : Type} -> {x : a} -> {y : a} -> {z : a} -> Eq x y -> Eq y z -> Eq x z
+trans e1 e2 = case e1 of
+  Refl w => e2
+
+-- 隐式 `p : a -> Type`（类型族参数由结果类型 `p y` 与实参类型 `p x` 合一解出）。
+subst : {a : Type} -> {p : a -> Type} -> {x : a} -> {y : a} -> Eq x y -> p x -> p y
+subst e px = case e of
+  Refl z => px
+
+three : Eq 3 3
+three = sym (Refl 3)
+
+three2 : Eq 3 3
+three2 = trans (Refl 3) (Refl 3)
+
+zeroEq : Eq Zero Zero
+zeroEq = Refl Zero
+
+transported : Eq Zero Zero
+transported = subst zeroEq zeroEq
+
+main : Int
+main = 61

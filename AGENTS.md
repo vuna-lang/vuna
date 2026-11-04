@@ -7,26 +7,23 @@
 **vuna 尚未发布任何版本**：没有外部用户、下游生态与历史包袱，全部源码都在本仓库内。
 因此**任何设计、接口、命令、实现、哲学都允许被推翻**（包括本文件与 roadmap 已写下的
 决策）；「保留兼容层」「以后可能有人依赖」不构成保留理由——评估一个遗留物只看一条：
-**它在终态里还成立吗**。推翻旧决策时不要静默改写历史，在 roadmap 的「决策变更」表记
-一行、细节进 `docs/history.md`。当前路线由此确定：**终态是单一 DT 路径，已在 M24 落地**
-（唯一检查器与 codegen，roadmap「终态」与「阶段状态总览」）。
+**它在终态里还成立吗**。推翻旧决策时在提交信息与对应主题页说明，不静默改写；已完成阶段
+与历史细节在 git 历史。当前路线：**单一 DT 路径**（唯一检查器与 codegen）。
 
 ## 阅读顺序
 
 1. `AGENTS.md`（本文件）——不变量、纪律、常用命令；
 2. [`docs/architecture.md`](docs/architecture.md)——子系统地图：哪条链路、入口符号、连带改动、测试标签；
-3. 需要时再下钻：[`docs/reference/`](docs/reference/)（language / type-system / stdlib / packages /
-   compiler / bootstrap / testing / limits / dt）、[roadmap](docs/roadmap.md)、[dt-core](docs/dt-core.md)、[history](docs/history.md)。
+3. 需要时再下钻：[`docs/reference/`](docs/reference/)（类型系统 / Core / 编译器 / 包 / 工具 / 测试参考页）、
+   [roadmap](docs/roadmap.md)、[debt](docs/reference/debt.md)。
 
-**定位符号**用 `vuna map --find` / `--impact` / `vuna api`（用法见技能
-`.agents/skills/repo-navigation/SKILL.md`）。**不要做的事**：通读全仓；读 `seed/` 或
-`docs/api.md`（生成物）。
+**定位符号**用 `vuna map --find` / `--impact` / `vuna api`（规程见 repo-navigation 技能）；**不要做的事**：通读全仓、读 `seed/` 或 `docs/api.md`（生成物）。
 
 ## 编译器选取规则
 
 1. **优先**本地 `./result/bin/vuna`（`nix build .#vuna --out-link result` 的产物）；
-2. 本地不存在或编译不过：**一律** `nix run vuna -- <subcommand>`（`nix registry list` 里的
-   别名 `flake:vuna github:vuna-lang/vuna`，即远端稳定版）；
+2. 本地不存在或编译不过：**一律** `nix run vuna -- <subcommand>`（`nix registry list`
+   里的别名，即远端稳定版）；
 3. 测试：`nix run .#vuna-run-tests`（`nix/run-tests.nix`；`--list` / `--only <章节>` 过滤，
    无参数等价 `sh test/run-tests.sh`）。
 
@@ -35,14 +32,14 @@
 
 ## 硬不变量（改坏了必须自己发现）
 
-1. **当前 seed 必须能编译当前源码**——`seed/` 是提交入库的信任锚点；
+1. **当前 seed 必须能编译当前源码，且与源码同步**（compiler/base 改动必须 rotation）——`seed/` 是提交入库的信任锚点；
 2. **seed rotation 后 stage1 == stage2**（文件集逐字节一致，fixed point）；
 3. **`seed/` 只含 compiler 包入口闭包**（`compiler/app/Main.vuna` 的 import 闭包）；
 4. **工具链不进 TCB**：`fmt`/`lint`/`repl`/`doc`/`test`/`Index`/`LSP`（以及未来的
    package manager）永不进入 seed 闭包；黑名单见 `nix/tcb-forbidden.txt`；
-5. **效果内建按包 allowlist**：只有 `vuna` / `vuna-compiler` / `vuna-base` 可直接调用
-   effectful 内建（`print`/`readFile`/`exit`/`prim_*` 等），其余包必须经 `Base.IO`
-   （`Vuna.Compiler.Loader.packageAllowsEffects`）；
+5. **效应内建按 manifest 显式能力**：包声明 `[capabilities] effects`
+   （`console`/`fs`/`process`/`env`/`clock`）才能直接调 effectful `prim_*`，否则经
+   `Base.IO`（唯一真源 `Vuna.Compiler.Intrinsics` + `Loader.Resolve.checkEffectsBuiltins`）；
 6. **唯一路径**：语言夹具、`vuna interp`、包构建与 seed 全部走 DT（精化 + 擦除
    codegen，`vuna check .` 也是 DT 自检）；没有可切换的检查器，也没有第二套 codegen；
 7. 编译器自检通过：`vuna check .` 必须能检查自身源码（`checks.vuna-typecheck`）。
@@ -62,19 +59,20 @@
   本地 `./result/bin/vuna` 做小范围验证。
 - **探索按场景选工具**（规程见技能 `.agents/skills/repo-navigation/SKILL.md`）：要改的
   模块整篇 `read`；不改只引用的用 `vuna map` / `vuna api`，**不要 grep**（拿多拿少又没签名）。
-- **探索完必须落盘**：数据流 / 不变量 / 边界写进 `docs/` 并接进导航，别只留在会话里。
+- **探索完必须落盘**：数据流 / 不变量 / 边界写进 `docs/` 并接进导航，别只留在会话里；**git 线性历史**：优先 ff-only merge / rebase / cherry-pick / 挤压提交
 
 ## 常用命令速查
 
 ```console
 nix build .#vuna --out-link result   # 产品 CLI；.#vuna-compiler / .#vuna-seed 同理
-nix flake check                      # tests/package/metrics/typecheck/lint/seed-selfhost
+nix flake check                      # 13 项：3 packages + 10 checks（含 vscode-ext）
 nix run .#vuna-run-tests [-- --list | --only dt]   # 原生测试；nix run .#vuna-bench -- --quick
 vuna check .                         # 包级类型检查（自检）；vuna build . → .output/bin/<包名>
-vuna fmt --check <PATH>...           # 格式化检查（务必显式给路径）；vuna lint <file>...
-vuna doc [--with-comments] [DIR [OUT]]  # API 文档（默认 DIR/docs/api.md，gitignored）
+vuna fmt --check <PATH>...           # 格式化检查（省略 PATH = workspace 各包 lib/app/test）；vuna lint <file>...
+vuna doc [DIR [OUT]] | gen-errors [ROOT]  # API 文档 / 错误码文档（默认 docs/api.md / docs/.generated/errors.md，gitignored）
 vuna interp <file.vuna>              # DT 精化 + 核心求值（纯；只展示 Int/String/Bool）
-vuna seed <OUT> compiler             # 逐模块 DT split（必须显式 OUT；正式流程用 nix/seed-rotate.sh）
+vuna build --no-compile --out <OUT> compiler   # 逐模块 DT codegen 到目录（= vuna compile compiler <OUT>；rotation 用 nix/seed-rotate.sh）
+vuna map [...] | vuna api <Module.name>  # 模块总览 / 定位符号 / 改动影响面 / 签名面
 ```
 
 ## 目录速览
@@ -83,21 +81,24 @@ vuna seed <OUT> compiler             # 逐模块 DT split（必须显式 OUT；�
 `base/` = 标准库 `vuna-base`（`Base.*` + `Prelude`，**进 seed**）；`lib/` = 根包工具链
 （Cli/Interp/Files/Fmt/Lint/Repl/Doc/Index/Lsp/TestRunner，**不进 seed**）；`app/` = 产品
 CLI 入口；`seed/` = 提交入库的多文件 OCaml 信任锚点（生成物，禁止手改、别读）；`test/` =
-`run-tests.sh` + `corpus/` 夹具；`nix/` = 构建图（packages/checks）+ rotate/metrics/bench；`docs/` = 分层文档。
+`run-tests.sh` + `corpus/` 夹具；`vscode/` = VSCode 扩展（高亮 + LSP + lint/fmt/check/build，`dist/` 提交）；`nix/` = 构建图（packages/checks）+ rotate/metrics/bench；`docs/` = 分层文档。
 
 ## 文档导航
 
 - 子系统地图、改动定位：[`docs/architecture.md`](docs/architecture.md)
-- 语言语义：[language.md](docs/reference/language.md)、[type-system.md](docs/reference/type-system.md)、
+- 语言与类型：[language.md](docs/reference/language.md)（语法/模块）、
+  [type-system.md](docs/reference/type-system.md)（宇宙/索引族/依赖匹配/相等/擦除）、
+  [records-traits.md](docs/reference/records-traits.md)（记录/trait/do）、
   [stdlib.md](docs/reference/stdlib.md)、[packages.md](docs/reference/packages.md)、
-  [dt.md](docs/reference/dt.md)、[dt-parity.md](docs/reference/dt-parity.md)（历史证据）
-- 编译器实现与 codegen：[compiler.md](docs/reference/compiler.md)；DT 工具链（洞目标、LSP、
-  错误索引）：[dt-tooling.md](docs/reference/dt-tooling.md)
+  [primitives.md](docs/reference/primitives.md)（内建/原语/能力）
+- 编译器实现：[compiler.md](docs/reference/compiler.md)（模块与输出模型）、
+  [core.md](docs/reference/core.md)（Core TT / NbE / 精化器）
+- 工具链（`goal` / LSP / `doc` / 错误码；`vuna gen-errors` 生成
+  `docs/.generated/errors.md`）：[tooling.md](docs/reference/tooling.md)；lint：[lint.md](docs/reference/lint.md)
 - 仓库探索（按场景选工具、探索后落盘）：技能 `.agents/skills/repo-navigation/SKILL.md`
 - 自举与种子：[bootstrap.md](docs/reference/bootstrap.md)；测试与 CI：[testing.md](docs/reference/testing.md)；
-  已知边界：[limits.md](docs/reference/limits.md)
-- 路线图 / 历史 / DT 状态：[docs/roadmap.md](docs/roadmap.md)（「阶段状态总览」）、
-  [docs/history.md](docs/history.md)、[docs/dt-core.md](docs/dt-core.md)
+  已知边界：[limits.md](docs/reference/limits.md)；性能：[performance.md](docs/reference/performance.md)
+- 债务 / 能力缺口与路线图：[debt.md](docs/reference/debt.md)（只含开放项）、[docs/roadmap.md](docs/roadmap.md)（基线、终态、下一阶段、F1–F4）
 
 > 文档分层规则：`README.md` 只保留定位/上手/目录/硬约束/导航；细节在 `docs/reference/`；
-> roadmap 的「已完成」只保留一句话摘要，历史细节在 `docs/history.md`。
+> roadmap 只保留当前基线与未来方向；已完成阶段 / 已落地决策 / 历史在 git 历史。

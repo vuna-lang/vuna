@@ -1,12 +1,12 @@
 module Vuna.Files (collectSourceFiles, collectVunaFiles, pathExistsDir, pathExistsFile) where
 
 -- Vuna.Files：目录遍历工具（fmt / doc / test / Index 共用）。
--- 只依赖 readDir / isDirectory / fileExists 内建；readDir 返回字典序，遍历顺序确定。
+-- 只依赖 prim_readDir / prim_isDirectory / prim_fileExists 内建；prim_readDir 返回字典序，遍历顺序确定。
 -- 路径拆分（splitPath / baseName）在 Vuna.Compiler.Common，供编译器驱动与工具共用。
 --
--- 注意：内建 `isDirectory` 对**不存在的路径**会抛异常（会直接终止进程），
+-- 注意：内建 `prim_isDirectory` 对**不存在的路径**会抛异常（会直接终止进程），
 -- 所以任何来自用户输入的路径都必须先用 `pathExistsDir` 判存在，
--- 不要直接调用 `isDirectory`。
+-- 不要直接调用 `prim_isDirectory`。
 import Vuna.Compiler.Common
 
 -- 递归收集目录下所有 .vuna 文件（跳过 . / .. 与隐藏项）。
@@ -28,36 +28,50 @@ skipGenerated name =
     || name == "corpus"
 
 collectVunaFiles : String -> List String
-collectVunaFiles dir = if pathExistsDir dir then concatMap (walkVuna dir) (readDir dir) else []
+collectVunaFiles dir = collectVunaFilesGo 1048576 dir
 
-walkVuna : String -> String -> List String
-walkVuna dir name = case name of
+-- 目录树是文件系统图（符号链接可成环），递归无法用结构下降证明；用显式 fuel 守卫。
+-- 每次进入下一层目录消耗 1，触底返回空列表（合法目录树远小于该上限）。
+collectVunaFilesGo : Int -> String -> List String
+collectVunaFilesGo fuel dir =
+  if fuel <= 0 then []
+  else if pathExistsDir dir then concatMap (walkVunaGo (fuel - 1) dir) (prim_readDir dir) else []
+
+walkVunaGo : Int -> String -> String -> List String
+walkVunaGo fuel dir name = if fuel <= 0 then []
+else case name of
   "." => []
   ".." => []
   _ => if skipGenerated name then []
   else
     let
       path = dir ++ "/" ++ name
-    in if pathExistsDir path then collectVunaFiles path
+    in if pathExistsDir path then collectVunaFilesGo (fuel - 1) path
     else if endsWith ".vuna" name then [path] else []
 
 -- 递归收集目录下所有非隐藏项（文件与目录），用于通用遍历。
 collectSourceFiles : String -> List String
-collectSourceFiles dir = if pathExistsDir dir then concatMap (walkAny dir) (readDir dir) else []
+collectSourceFiles dir = collectSourceFilesGo 1048576 dir
 
-walkAny : String -> String -> List String
-walkAny dir name = case name of
+collectSourceFilesGo : Int -> String -> List String
+collectSourceFilesGo fuel dir =
+  if fuel <= 0 then []
+  else if pathExistsDir dir then concatMap (walkAnyGo (fuel - 1) dir) (prim_readDir dir) else []
+
+walkAnyGo : Int -> String -> String -> List String
+walkAnyGo fuel dir name = if fuel <= 0 then []
+else case name of
   "." => []
   ".." => []
   _ => if skipGenerated name then []
   else
     let
       path = dir ++ "/" ++ name
-    in if pathExistsDir path then collectSourceFiles path else [path]
+    in if pathExistsDir path then collectSourceFilesGo (fuel - 1) path else [path]
 
 -- 安全的目录判定：不存在返回 False，而不是抛异常。
 pathExistsDir : String -> Bool
-pathExistsDir path = pathExistsFile path && isDirectory path
+pathExistsDir path = pathExistsFile path && prim_isDirectory path
 
 pathExistsFile : String -> Bool
-pathExistsFile path = fileExists path
+pathExistsFile path = prim_fileExists path

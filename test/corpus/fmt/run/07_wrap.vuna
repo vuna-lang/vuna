@@ -1,8 +1,5 @@
 -- 折行后的程序语义不变（M11.6）：超长列表 / 应用 / 中缀链会被 fmt 折行。
-
-data List a : Type where
-  Nil : List a
-  Cons : a -> List a -> List a
+-- M26：Prelude 自动注入 → 用 base 的 `List`（本地同名 data List 见 M27 A07/A08/A09/C17）。
 
 sumAll : List Int -> Int
 sumAll xs = case xs of

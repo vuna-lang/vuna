@@ -1,0 +1,7 @@
+classify : Int -> String
+classify 0 = "zero"
+classify 1 = "one"
+classify _ = "many"
+
+main : String
+main = classify 0

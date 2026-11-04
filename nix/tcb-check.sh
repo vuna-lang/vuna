@@ -27,10 +27,12 @@ while IFS= read -r module || [ -n "$module" ]; do
     '' | '#'*) continue ;;
   esac
   for dir in "$@"; do
-    if [ -e "$dir/Vuna_d$module.ml" ]; then
-      printf 'tcb-check: %s 包含禁止进入 seed 闭包的模块 Vuna.%s\n' "$dir" "$module" >&2
-      fail=1
-    fi
+    for f in "$dir/Vuna_d$module.ml" "$dir"/Vuna_d"$module"_*.ml; do
+      if [ -e "$f" ]; then
+        printf 'tcb-check: %s 包含禁止进入 seed 闭包的模块 Vuna.%s（%s）\n' "$dir" "$module" "$(basename "$f")" >&2
+        fail=1
+      fi
+    done
   done
 done <"$list"
 

@@ -1,0 +1,289 @@
+module Vuna.Fmt.Decl (filterSections, joinSections, renderSourceSections) where
+
+-- Vuna.Fmt.Decl：声明 / 模块头 / import 的打印与文件组装（M24 后维护·源码重组，从 Vuna.Fmt 拆出）。
+--
+-- 布局约定：2 空格缩进、顶层声明之间一个空行、文件末尾一个换行、无行尾空白；
+-- 导出列表按字面文本 ASCII 字典序排序（`module B` 整模块重导出排最后），单行超
+-- maxWidth 或含注释时逐项一行（逗号前置）。where 块按 parser 的 ELet..True 形态
+-- 还原成 where 写法（带签名绑定先输出签名行）。
+import Vuna.Compiler.Common
+import Vuna.Compiler.Frontend.Ast
+import Vuna.Compiler.Frontend.Lexer
+import Vuna.Fmt.Comment
+import Vuna.Fmt.Expr
+import Vuna.Fmt.Util
+import Base.Sort
+
+-- ---------------------------------------------------------------
+-- 声明渲染
+-- ---------------------------------------------------------------
+renderDeclAt : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Decl -> List String
+renderDeclAt at lineInd decl = attachAt at (declSpan decl) lineInd (renderDeclBody at lineInd decl)
+
+renderDeclBody : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Decl -> List String
+renderDeclBody at lineInd (DData name params kind ctors derivings sp) =
+  renderDataDecl at name params kind ctors derivings
+renderDeclBody at lineInd (DAxiom name ty sp) = renderSigLine at lineInd "axiom " name ty
+renderDeclBody at lineInd (DSig name ty sp) = renderSigLine at lineInd "" name ty
+renderDeclBody at lineInd (DFun name pats body sp) = renderClause at lineInd name pats body
+renderDeclBody at lineInd (DRecord name params fields derivings sp) =
+  renderRecordDecl at name params fields derivings
+renderDeclBody at lineInd (DTrait name params methods sp) = renderTraitDecl at name params methods
+renderDeclBody at lineInd (DInstance ctxE head methods sp) = renderInstanceDecl at ctxE head methods
+
+-- 顶层签名与 axiom 声明共用：`<prefix>name : Ty`（prefix 为 "" 或 "axiom "）。
+renderSigLine : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> String -> String -> Expr -> List String
+renderSigLine at lineInd prefix name ty =
+  prefixFirst (spaces lineInd ++ prefix ++ name ++ " : ") (renderTypeExpr at lineInd ty)
+
+renderDataDecl : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> String -> List String -> Expr -> List Ctor -> List String -> List String
+renderDataDecl at name params kind ctors derivings =
+  let
+    header =
+      "data "
+        ++ name
+        ++ joinSpace params
+        ++ " : "
+        ++ join " " (renderTypeExpr at 0 kind)
+        ++ " where"
+    ctorLines = concatMap (\c => renderCtorDecl at c) ctors
+  in append [header] (append ctorLines (renderDerivings derivings))
+
+renderCtorDecl : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Ctor -> List String
+renderCtorDecl at (Ctor cname ty arity sp) =
+  attachAt at sp 2 (prefixFirst ("  " ++ cname ++ " : ") (renderTypeExpr at 2 ty))
+
+renderDerivings : List String -> List String
+renderDerivings [] = []
+renderDerivings names = ["deriving (" ++ joinComma names ++ ")"]
+
+renderRecordDecl : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> String -> List String -> List Field -> List String -> List String
+renderRecordDecl at name params fields derivings =
+  let
+    header = "record " ++ name ++ joinSpace params ++ " where"
+    fieldLines = concatMap (\f => renderRecordField at f) fields
+  in append [header] (append fieldLines (renderDerivings derivings))
+
+renderRecordField : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Field -> List String
+renderRecordField at f =
+  attachAt at (fieldSpan f) 2
+    (prefixFirst ("  " ++ fieldName f ++ " : ") (renderTypeExpr at 2 (fieldType f)))
+
+renderTraitDecl : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> String -> List String -> List TraitMethod -> List String
+renderTraitDecl at name params methods =
+  let
+    header = "trait " ++ name ++ joinSpace params ++ " where"
+    methodLines = concatMap (\m => renderMethodSig at m) methods
+  in append [header] methodLines
+
+-- M30（B20）：注释锚点用方法签名 span（方法名到类型结束），不再用类型表达式 span。
+renderMethodSig : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> TraitMethod -> List String
+renderMethodSig at m =
+  attachAt at (traitMethodSpan m) 2
+    (prefixFirst ("  " ++ traitMethodName m ++ " : ") (renderTypeExpr at 2 (traitMethodType m)))
+
+renderInstanceDecl : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> List Expr -> Expr -> List Decl -> List String
+renderInstanceDecl at ctxE head methods =
+  let
+    headLines = case inlineExpr head of
+      Just s => [s]
+      Nothing => parenWrapInd at 0 head
+    ctxText = renderInstanceCtx ctxE
+    headLine = appendLast " where" (prefixFirst ("instance " ++ ctxText) headLines)
+    methodLines = concatMap (\d => renderDeclAt at 2 d) methods
+  in append headLine methodLines
+
+-- 实例上下文：`C a, C b => `（M29 起实例可带 ctx；空 ctx 与旧输出逐字一致）。
+renderInstanceCtx : List Expr -> String
+renderInstanceCtx [] = ""
+renderInstanceCtx ctxE = joinTexts ", " (map renderOneCtx ctxE) ++ " => "
+
+joinTexts : String -> List String -> String
+joinTexts sep [] = ""
+joinTexts sep ([x]) = x
+joinTexts sep (x :: rest) = x ++ sep ++ joinTexts sep rest
+
+renderOneCtx : Expr -> String
+renderOneCtx e = case inlineExpr e of
+  Just s => s
+  Nothing => "…"
+
+-- 函数子句 / instance 方法子句 / where 绑定子句共用。
+-- where 块（parser desugar 成 ELet .. True）优先按 where 形式还原。
+renderClause : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> String -> List Pat -> Expr -> List String
+renderClause at lineInd name pats body =
+  let
+    headerBase = spaces lineInd ++ name ++ joinSpace (map renderPatAtom pats) ++ " ="
+  in case body of
+    ELet binds inner recFlag sp => if recFlag then
+      let
+        whereInd = lineInd + 2
+      in case inlinePrec 0 inner of
+        Just s => (headerBase ++ " " ++ s ++ " where") :: renderWhereBindings at whereInd binds
+        Nothing =>
+          let
+            bodyInd = lineInd + 2
+            bodyLines = prefixFirst (spaces bodyInd) (renderExpr at bodyInd inner)
+            whereLine = spaces whereInd ++ "where"
+            bindLines = renderWhereBindings at (lineInd + 4) binds
+          in headerBase :: append bodyLines (whereLine :: bindLines)
+    else headerBase :: prefixFirst (spaces (lineInd + 2)) (renderExpr at (lineInd + 2) body)
+    _ => case inlinePrec 0 body of
+      Just s =>
+        if strWidth (headerBase ++ " " ++ s) <= maxWidth then [headerBase ++ " " ++ s]
+        else headerBase :: prefixFirst (spaces (lineInd + 2)) (renderExpr at (lineInd + 2) body)
+      Nothing => prefixFirst (headerBase ++ " ") (renderExpr at lineInd body)
+
+renderWhereBindings : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> List (Pair Pat Expr) -> List String
+renderWhereBindings at lineInd binds = concatMap (\b => renderWhereBinding at lineInd b) binds
+
+renderWhereBinding : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Pair Pat Expr -> List String
+renderWhereBinding at lineInd (Pair pat value) = case value of
+  -- M24：带签名的 where 绑定先输出 `name : Ty` 独立一行，再按原格式输出子句。
+  EAnn inner ty annSp =>
+    append (attachAt at annSp lineInd (renderWhereSigLine at lineInd pat ty))
+      (attachAt at (patSpan pat) lineInd (renderWhereBindingBody at lineInd pat inner))
+  _ => attachAt at (patSpan pat) lineInd (renderWhereBindingBody at lineInd pat value)
+
+-- where 绑定签名行：`g : Int -> Int`（缩进与 where 绑定一致，类型不折行）。
+renderWhereSigLine : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Pat -> Expr -> List String
+renderWhereSigLine at lineInd (PVar name psp) ty =
+  prefixFirst (spaces lineInd ++ name ++ " : ") (renderTypeExpr at lineInd ty)
+renderWhereSigLine at lineInd pat ty =
+  prefixFirst (spaces lineInd ++ renderPat pat ++ " : ") (renderTypeExpr at lineInd ty)
+
+renderWhereBindingBody : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Pat -> Expr -> List String
+renderWhereBindingBody at lineInd (PVar name psp) value = case value of
+  ELocalFun clauses lsp => renderLocalFunClauses at lineInd name clauses
+  ELam ps inner lsp => renderClause at lineInd name (map (\n => PVar n dummySpan) ps) inner
+  _ => renderBindingValue at lineInd (name ++ " =") value
+renderWhereBindingBody at lineInd pat value =
+  renderBindingValue at lineInd (renderPat pat ++ " =") value
+
+-- A2：where 内部多 clause 局部函数：每个 clause 走 `renderClause`（与顶层子句同形）。
+renderLocalFunClauses : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> String -> List (Pair (List Pat) Expr) -> List String
+renderLocalFunClauses at lineInd name [] = []
+renderLocalFunClauses at lineInd name ((Pair pats body) :: rest) =
+  append (renderClause at lineInd name pats body) (renderLocalFunClauses at lineInd name rest)
+
+-- 顶层声明：不同函数之间一个空行；类型签名紧贴同名函数子句。
+renderTopDecls : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> List Decl -> List String
+renderTopDecls at [] = []
+renderTopDecls at (d :: rest) = append (renderDeclAt at 0 d) (renderTopRest at d rest)
+
+renderTopRest : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Decl -> List Decl -> List String
+renderTopRest at prev [] = []
+renderTopRest at prev (d :: rest) =
+  if attachDecl prev d then append (renderDeclAt at 0 d) (renderTopRest at d rest)
+  else "" :: append (renderDeclAt at 0 d) (renderTopRest at d rest)
+
+attachDecl : Decl -> Decl -> Bool
+attachDecl prev (DFun n pats body sp) = declNamed prev n
+attachDecl prev _ = False
+
+declNamed : Decl -> String -> Bool
+declNamed (DFun m pats body sp) n = m == n
+declNamed (DSig m ty sp) n = m == n
+declNamed _ n = False
+
+-- ---------------------------------------------------------------
+-- 模块头 / import / 文件组装
+-- ---------------------------------------------------------------
+renderModDecl : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> ModDecl -> List String
+renderModDecl at (ModDecl name explicit items sp) =
+  if explicit then renderExplicitModDecl at name (sortExports items)
+  else ["module " ++ name ++ " where"]
+
+-- 空导出列表（`module M () where`）与短列表保持单行；超宽或含项注释时逐项一行。
+renderExplicitModDecl : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> String -> List ExportItem -> List String
+renderExplicitModDecl at name [] = ["module " ++ name ++ " () where"]
+renderExplicitModDecl at name sorted =
+  let
+    oneLine = "module " ++ name ++ " (" ++ joinComma (map renderExportItem sorted) ++ ") where"
+  in if fitsLine 0 oneLine && not (anyItemHasComments at sorted) then [oneLine]
+  else renderExportListBlock at name sorted
+
+-- 多行导出列表（逗号前置）：首项 `( a`，其余 `, b`，收尾 `) where`。
+renderExportListBlock : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> String -> List ExportItem -> List String
+renderExportListBlock at name items =
+  append ["module " ++ name] (append (renderExportLines at items) ["  ) where"])
+
+renderExportLines : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> List ExportItem -> List String
+renderExportLines at [] = []
+renderExportLines at (first :: rest) =
+  append (renderExportLine at "  ( " first) (renderExportRest at rest)
+
+renderExportRest : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> List ExportItem -> List String
+renderExportRest at [] = []
+renderExportRest at (item :: rest) =
+  append (renderExportLine at "  , " item) (renderExportRest at rest)
+
+renderExportLine : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> String -> ExportItem -> List String
+renderExportLine at prefixText item =
+  attachAt at (exportItemSpan item) 2 [prefixText ++ renderExportItem item]
+
+renderExportItem : ExportItem -> String
+renderExportItem (XBare name sp) = name
+renderExportItem (XTypeAll name sp) = name ++ "(..)"
+renderExportItem (XModule name sp) = "module " ++ name
+
+-- 排序键：分组前缀（`module B` = 1，其余 = 0）++ 字面文本；稳定排序保证幂等。
+exportRank : ExportItem -> Int
+exportRank (XModule _ _) = 1
+exportRank _ = 0
+
+exportKey : ExportItem -> String
+exportKey item = strFromInt (exportRank item) ++ renderExportItem item
+
+strLeChars : List Int -> List Int -> Bool
+strLeChars [] [] = True
+strLeChars [] (y :: ys) = True
+strLeChars (x :: xs) [] = False
+strLeChars (x :: xs) (y :: ys) = if x < y then True else if x > y then False else strLeChars xs ys
+
+strLe : String -> String -> Bool
+strLe a b = strLeChars (strUnpack a) (strUnpack b)
+
+exportKeyLe : ExportItem -> ExportItem -> Bool
+exportKeyLe a b = strLe (exportKey a) (exportKey b)
+
+sortExports : List ExportItem -> List ExportItem
+sortExports items = sortBy exportKeyLe items
+
+renderImport : Import -> String
+renderImport (Import name isQualified alias sp) =
+  "import " ++ (if isQualified then "qualified " else "") ++ name ++ aliasSuffix alias
+
+aliasSuffix : Maybe String -> String
+aliasSuffix Nothing = ""
+aliasSuffix (Just a) = " as " ++ a
+
+renderHeader : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Maybe ModDecl -> List String
+renderHeader at Nothing = []
+renderHeader at (Just m) = attachAt at (modDeclSpan m) 0 (renderModDecl at m)
+
+renderImportLine : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Import -> List String
+renderImportLine at imp = attachAt at (importSpan imp) 0 [renderImport imp]
+
+renderEofComments : List Comment -> List String
+renderEofComments [] = []
+renderEofComments comments = concatMap (commentLeadLines 0) comments
+
+renderSourceSections : Maybe ModDecl -> List Import -> List Decl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> List Comment -> List (List String)
+renderSourceSections hdr imports decls at eof =
+  [ renderHeader at hdr,
+    concatMap (renderImportLine at) imports,
+    renderTopDecls at decls,
+    renderEofComments eof
+  ]
+
+filterSections : List (List String) -> List (List String)
+filterSections [] = []
+filterSections (section :: rest) = case section of
+  [] => filterSections rest
+  _ => section :: filterSections rest
+
+joinSections : List (List String) -> List String
+joinSections [] = []
+joinSections ([section]) = section
+joinSections (section :: rest) = append section ("" :: joinSections rest)

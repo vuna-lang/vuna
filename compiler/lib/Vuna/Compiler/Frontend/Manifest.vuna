@@ -1,0 +1,238 @@
+module Vuna.Compiler.Frontend.Manifest
+  ( Manifest(..)
+  , manifestCapabilities
+  , manifestDependencies
+  , manifestDir
+  , manifestExports
+  , manifestMembers
+  , manifestName
+  , manifestPath
+  , parseManifest
+  , resolveManifestPath
+  , validateManifest
+  ) where
+
+-- Vuna.Compiler.Frontend.Manifest：vuna.toml 的语义模型（M11.5 包管理基础件）。
+-- 表约定（M30：删除死字段 version / edition——registry/lockfile 归 F4，当前没有消费者）：
+--   [package]     name（必填）
+--   [workspace]   members = ["stdlib", "app"]（可选）
+--   [export]      modules = ["Base.List"]（可选；值必须是字符串数组）
+--   [capabilities] effects = ["console", "fs"]（可选；M27 效应能力声明，值必须是
+--                 字符串数组；合法能力名的语义校验由 Loader 负责）
+--   [dependencies] <dep-name> = "<相对路径>"
+-- parseManifest 只解析，不检查文件是否存在；validateManifest 做结构校验。
+-- 本模块不做文件 I/O：调用方用自己的 prim_readFile 读入内容后传入。
+import Vuna.Compiler.Common
+import Vuna.Compiler.Frontend.Toml
+
+data Manifest : Type where
+  Manifest : Maybe String -> List String -> Maybe (List String) -> List (Pair String String) -> List String -> String -> Manifest
+
+manifestName : Manifest -> Maybe String
+manifestName (Manifest name members exports deps caps path) = name
+
+manifestMembers : Manifest -> List String
+manifestMembers (Manifest name members exports deps caps path) = members
+
+manifestExports : Manifest -> Maybe (List String)
+manifestExports (Manifest name members exports deps caps path) = exports
+
+manifestDependencies : Manifest -> List (Pair String String)
+manifestDependencies (Manifest name members exports deps caps path) = deps
+
+-- M27：manifest 的 `[capabilities].effects` 声明；空列表表示该包没有直接使用
+-- effectful 内建的能力（只能经 Base.IO）。
+manifestCapabilities : Manifest -> List String
+manifestCapabilities (Manifest name members exports deps caps path) = caps
+
+manifestPath : Manifest -> String
+manifestPath (Manifest name members exports deps caps path) = path
+
+-- 字符分类（与 Toml 内部约定一致；vuna 无字符字面量，统一用 char code）。
+isDigitChar : Int -> Bool
+isDigitChar c = c >= 48 && c <= 57
+
+isUpperAlphaChar : Int -> Bool
+isUpperAlphaChar c = c >= 65 && c <= 90
+
+isLowerAlphaChar : Int -> Bool
+isLowerAlphaChar c = c >= 97 && c <= 122
+
+-- 错误定位：解析期的错误带 `path:line: `，纯结构校验错误带 `path: `。
+atLine : String -> Int -> String -> String
+atLine path line msg =
+  if path == "" then "line " ++ strFromInt line ++ ": " ++ msg
+  else path ++ ":" ++ strFromInt line ++ ": " ++ msg
+
+manifestErr : String -> String -> String
+manifestErr path msg = if path == "" then msg else path ++ ": " ++ msg
+
+sameSection : List a -> List a -> Bool
+sameSection [] [] = True
+sameSection (x :: xs) (y :: ys) = if x == y then sameSection xs ys else False
+sameSection _ _ = False
+
+fieldLoc : String -> List String -> String -> List TomlEntry -> String
+fieldLoc path section key entries = case lookupEntryLine section key entries of
+  Just line =>
+    if path == "" then "line " ++ strFromInt line ++ ": "
+    else path ++ ":" ++ strFromInt line ++ ": "
+  Nothing => if path == "" then "" else path ++ ": "
+
+stringField : String -> List String -> String -> List TomlEntry -> Result (Maybe String)
+stringField path section key entries = case lookupEntry section key entries of
+  Nothing => Ok Nothing
+  Just (TStr s) => Ok (Just s)
+  Just value => Err (fieldLoc path section key entries ++ "expected a string for \"" ++ key ++ "\"")
+
+stringListField : String -> List String -> String -> List TomlEntry -> Result (Maybe (List String))
+stringListField path section key entries = case lookupEntry section key entries of
+  Nothing => Ok Nothing
+  Just (TList xs) => Ok (Just xs)
+  Just value =>
+    Err (fieldLoc path section key entries ++ "expected an array of strings for \"" ++ key ++ "\"")
+
+orEmptyList : Maybe (List a) -> List a
+orEmptyList Nothing = []
+orEmptyList (Just xs) = xs
+
+-- 只接受约定表；未知表 / 未知 key 报带行号的错误（防止字段拼写错误被静默忽略）。
+checkOneEntry : String -> TomlEntry -> Result Int
+checkOneEntry path (TomlEntry section key value line) =
+  if sameSection section [] then Err (atLine path line ("unexpected top-level key \"" ++ key ++ "\""))
+  else if sameSection section ["package"] then if key == "name" then Ok 0
+  else Err (atLine path line ("unknown key \"" ++ key ++ "\" in [package]"))
+  else if sameSection section ["workspace"] then if key == "members" then Ok 0
+  else Err (atLine path line ("unknown key \"" ++ key ++ "\" in [workspace]"))
+  else if sameSection section ["export"] then if key == "modules" then Ok 0
+  else Err (atLine path line ("unknown key \"" ++ key ++ "\" in [export]"))
+  else if sameSection section ["capabilities"] then if key == "effects" then Ok 0
+  else Err (atLine path line ("unknown key \"" ++ key ++ "\" in [capabilities]"))
+  else if sameSection section ["dependencies"] then Ok 0
+  else Err (atLine path line ("unknown section [" ++ joinDots section ++ "]"))
+
+checkEntries : String -> List TomlEntry -> Result Int
+checkEntries path [] = Ok 0
+checkEntries path (entry :: rest) = case checkOneEntry path entry of
+  Err e => Err e
+  Ok ok => checkEntries path rest
+
+collectDependencies : String -> List TomlEntry -> Result (List (Pair String String))
+collectDependencies path entries = collectDependenciesAcc path entries []
+
+collectDependenciesAcc : String -> List TomlEntry -> List (Pair String String) -> Result (List (Pair String String))
+collectDependenciesAcc path [] acc = Ok (reverse acc)
+collectDependenciesAcc path ((TomlEntry section key value line) :: rest) acc = if sameSection section ["dependencies"] then case value of
+  TStr rel => collectDependenciesAcc path rest (Pair key rel :: acc)
+  _ => Err (atLine path line ("dependency \"" ++ key ++ "\" must have a string relative path"))
+else collectDependenciesAcc path rest acc
+
+buildManifest : String -> List TomlEntry -> Result Manifest
+buildManifest path entries =
+  andThen (checkEntries path entries)
+    (\checked => andThen (stringField path ["package"] "name" entries) (\name => andThen (stringListField path ["workspace"] "members" entries) (\members => andThen (stringListField path ["export"] "modules" entries) (\exports => andThen (collectDependencies path entries) (\deps => andThen (stringListField path ["capabilities"] "effects" entries) (\caps => Ok (Manifest name (orEmptyList members) exports deps (orEmptyList caps) path)))))))
+
+parseManifest : String -> String -> Result Manifest
+parseManifest path contents =
+  andThen (parseTomlAt path contents) (\entries => buildManifest path entries)
+
+-- 结构校验（不检查文件存在性）。
+validPackageName : String -> Bool
+validPackageName name = validPackageChars (strUnpack name)
+
+validPackageChars : List Int -> Bool
+validPackageChars [] = True
+validPackageChars (c :: rest) =
+  if isLowerAlphaChar c || isDigitChar c || c == 45 then validPackageChars rest else False
+
+validModuleName : String -> Bool
+validModuleName name = validModuleSegments (splitOnDot name)
+
+validModuleSegments : List String -> Bool
+validModuleSegments [] = True
+validModuleSegments (seg :: rest) =
+  if validModuleSegment seg then validModuleSegments rest else False
+
+validModuleSegment : String -> Bool
+validModuleSegment seg = validModuleSegmentChars (strUnpack seg)
+
+validModuleSegmentChars : List Int -> Bool
+validModuleSegmentChars [] = False
+validModuleSegmentChars (c :: rest) = if isUpperAlphaChar c then validModuleTail rest else False
+
+validModuleTail : List Int -> Bool
+validModuleTail [] = True
+validModuleTail (c :: rest) =
+  if isUpperAlphaChar c || isLowerAlphaChar c || isDigitChar c || c == 95 then validModuleTail rest
+  else False
+
+validateName : String -> Maybe String -> Result Int
+validateName path Nothing = Err (manifestErr path "missing [package] name")
+validateName path (Just n) =
+  if n == "" then Err (manifestErr path "package name must not be empty")
+  else if validPackageName n then Ok 0
+  else Err
+    (manifestErr path ("invalid package name \"" ++ n ++ "\" (allowed characters: a-z, 0-9, '-')"))
+
+validateMembers : String -> List String -> Result Int
+validateMembers path [] = Ok 0
+validateMembers path (m :: rest) =
+  if m == "" then Err (manifestErr path "workspace member must not be empty")
+  else validateMembers path rest
+
+validateModules : String -> List String -> Result Int
+validateModules path [] = Ok 0
+validateModules path (m :: rest) =
+  if validModuleName m then validateModules path rest
+  else Err
+    (manifestErr path ("invalid export module \"" ++ m ++ "\" (segments must match [A-Z][A-Za-z0-9_]*)"))
+
+validateExports : String -> Maybe (List String) -> Result Int
+validateExports path Nothing = Ok 0
+validateExports path (Just modules) = validateModules path modules
+
+validateDependencies : String -> List (Pair String String) -> Result Int
+validateDependencies path deps = validateDepsSeen path [] deps
+
+validateDepsSeen : String -> List String -> List (Pair String String) -> Result Int
+validateDepsSeen path seen [] = Ok 0
+validateDepsSeen path seen ((Pair name rel) :: rest) =
+  if name == "" then Err (manifestErr path "dependency name must not be empty")
+  else if rel == "" then Err (manifestErr path ("dependency \"" ++ name ++ "\" path must not be empty"))
+  else if memName name seen then Err (manifestErr path ("duplicate dependency \"" ++ name ++ "\""))
+  else validateDepsSeen path (name :: seen) rest
+
+-- M27：能力声明只做结构校验（非空、无重复）；合法能力名的语义表在 Loader 侧，
+-- 这里不重复一份名字表（避免两处真源漂移）。
+validateCapabilities : String -> List String -> Result Int
+validateCapabilities path caps = validateCapsSeen path [] caps
+
+validateCapsSeen : String -> List String -> List String -> Result Int
+validateCapsSeen path seen [] = Ok 0
+validateCapsSeen path seen (c :: rest) =
+  if c == "" then Err (manifestErr path "capability name must not be empty")
+  else if memName c seen then Err (manifestErr path ("duplicate capability \"" ++ c ++ "\""))
+  else validateCapsSeen path (c :: seen) rest
+
+validateManifest : Manifest -> Result Manifest
+validateManifest (Manifest name members exports deps caps path) =
+  andThen (validateName path name)
+    (\okName => andThen (validateMembers path members) (\okMembers => andThen (validateExports path exports) (\okExports => andThen (validateDependencies path deps) (\okDeps => andThen (validateCapabilities path caps) (\okCaps => Ok (Manifest name members exports deps caps path))))))
+
+-- manifest 所在目录：`a/b/vuna.toml` -> `a/b`；没有目录成分 -> "."。
+manifestDir : String -> String
+manifestDir path = dirFromRev (reverse (strUnpack path))
+
+dirFromRev : List Int -> String
+dirFromRev [] = "."
+dirFromRev (c :: rest) = if c == 47 then dirResult (strPack (reverse rest)) else dirFromRev rest
+
+dirResult : String -> String
+dirResult dir = if dir == "" then "/" else dir
+
+-- 依赖路径的相对解析基础：manifest 目录 + 相对路径。
+resolveManifestPath : Manifest -> String -> String
+resolveManifestPath manifest rel =
+  let
+    dir = manifestDir (manifestPath manifest)
+  in if startsWith "/" rel then rel else if dir == "." then rel else dir ++ "/" ++ rel

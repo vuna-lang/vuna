@@ -1,0 +1,9 @@
+-- 不报的形态：多 clause 函数（规则只处理单 clause 顶层函数）。
+split allDatas subset = case subset of
+  [] => ""
+  _ => allDatas
+split other subset = case subset of
+  [] => ""
+  _ => other
+
+main = 0

@@ -1,0 +1,4 @@
+-- 不支持的 main 类型：`Pair Int Int` 既不是 String/Int/Bool 也不是 IO，
+-- dtMainKind 返回 "Other"，TestRunner 必须明确 FAIL（`vuna test` 退出码 1）。
+main : Pair Int Int
+main = Pair 1 2

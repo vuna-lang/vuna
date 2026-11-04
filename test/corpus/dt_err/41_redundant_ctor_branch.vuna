@@ -1,0 +1,13 @@
+-- 反例（M28/B15）：同一零参构造子的第二个分支不可达 → 稳定诊断 TC_RedundantCtorBranch。
+data Nat : Type where
+  Zero : Nat
+  Succ : Nat -> Nat
+
+bad : Nat -> Int
+bad n = case n of
+  Zero => 1
+  Zero => 2
+  Succ k => 3
+
+main : Int
+main = 0

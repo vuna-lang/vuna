@@ -1,5 +1,16 @@
-fact : Int -> Int
-fact n = if n == 0 then 1 else n * fact (n - 1)
+-- M25.2a：改成结构递归（旧写法 `fact (n - 1)` 依赖 EApp 遍历漏洞静默通过；
+-- 算术下降要等 M25.2b，这里用 Nat 上的结构递归保持 golden 不变）。
+data Nat : Type where
+  Z : Nat
+  S : Nat -> Nat
+
+toInt : Nat -> Int
+toInt Z = 0
+toInt (S k) = 1 + toInt k
+
+fact : Nat -> Int
+fact Z = 1
+fact (S k) = toInt (S k) * fact k
 
 main : Int
-main = fact 5
+main = fact (S (S (S (S (S Z)))))

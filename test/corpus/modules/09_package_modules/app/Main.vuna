@@ -1,0 +1,5 @@
+-- M26：入口 import 同包 lib/ 模块（不再需要多根 --root）。
+import Helper
+
+main : Int
+main = triple 14

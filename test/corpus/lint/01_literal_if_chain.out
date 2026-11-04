@@ -1,1 +1,1 @@
-corpus/lint/01_literal_if_chain.vuna:2:3: literal-if-chain: if/else-if chain on `name` can be a case with literal patterns
+corpus/lint/01_literal_if_chain.vuna:2:3: [LN_LiteralIfChain] literal-if-chain: if/else-if chain on `name` can be a case with literal patterns

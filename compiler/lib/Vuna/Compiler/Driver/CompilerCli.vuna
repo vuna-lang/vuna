@@ -1,0 +1,363 @@
+module Vuna.Compiler.Driver.CompilerCli
+  ( compilerUsageLines
+  , removedFlagHint
+  , runCompilerCli
+  , runCompilerCliFor
+  ) where
+
+-- Vuna.Compiler.Driver.CompilerCli：编译器自己的 CLI（vuna-compiler）。
+--
+-- M24 起唯一路径是 DT（精化 + 逐模块擦除 codegen）：compile / check / build。
+-- M26：包上下文统一——`compile` 与 `build` 都产**目录**（split + build.sh），
+-- 不再有 seed 子命令、split 开关与环境根 flag（移除时给出可操作提示）。
+-- 工具命令（lint / interp / test / fmt / repl / doc）在 Vuna.Cli。
+-- compiler/app/Main.vuna 的入口闭包就是 seed 闭包。
+import Vuna.Compiler.Common
+import Vuna.Compiler.Packages.Pkg
+import Vuna.Compiler.Driver.Compile
+import Vuna.Compiler.Driver.Dt
+import Vuna.Compiler.Version
+
+compilerUsageLines : String -> String
+compilerUsageLines prog =
+  "  "
+    ++ prog
+    ++ " compile [--no-print] (<entry.vuna> | <package-dir>) <out-dir>\n"
+    ++ "  "
+    ++ prog
+    ++ " check (<entry.vuna> | <package-dir>)\n"
+    ++ "  "
+    ++ prog
+    ++ " build [--no-compile] [--out DIR] [--package NAME] [DIR]\n"
+    ++ "  --no-print                    compile 生成的程序不打印 main 结果（默认打印）\n"
+    ++ "  "
+    ++ prog
+    ++ " version, --version          显示版本\n"
+    ++ "  "
+    ++ prog
+    ++ " help, -h\n"
+
+compilerUsage : String -> String
+compilerUsage prog = "usage:\n" ++ compilerUsageLines prog
+
+runCompilerCli : List String -> Int
+runCompilerCli args = runCompilerCliFor "vuna-compiler" args
+
+runCompilerCliFor : String -> List String -> Int
+runCompilerCliFor prog args = if anyHelp args then helpFor prog else runCompilerCliFor1 prog args
+
+runCompilerCliFor1 : String -> List String -> Int
+runCompilerCliFor1 prog args = case args of
+  [] => usageErr prog
+  arg :: rest => case arg of
+    "compile" => compileArgs prog rest
+    "check" => checkArgs prog rest
+    "build" => buildArgs prog rest
+    "version" => printVersion 0
+    "--version" => printVersion 0
+    "seed" => removedCommand prog "seed" "use `build --out OUT [DIR]` or `compile DIR OUT`"
+    "help" => helpFor prog
+    _ => if startsWith "-" arg then removedFlag prog arg else unknownCommand prog arg
+
+printVersion : Int -> Int
+printVersion _ =
+  let
+    _ = prim_print ("vuna-compiler " ++ vunaVersion ++ "\n")
+  in 0
+
+anyHelp : List String -> Bool
+anyHelp [] = False
+anyHelp (arg :: rest) = if arg == "-h" || arg == "--help" then True else anyHelp rest
+
+helpFor : String -> Int
+helpFor prog =
+  let
+    _ = prim_print (compilerUsage prog)
+  in 0
+
+usageErr : String -> Int
+usageErr prog =
+  let
+    _ = prim_print (compilerUsage prog)
+  in 2
+
+unknownCommand : String -> String -> Int
+unknownCommand prog arg =
+  let
+    _ =
+      prim_print
+        ("error: unknown command `" ++ arg ++ "`\n" ++ "run `" ++ prog ++ " help` for the command list\n")
+  in 2
+
+removedCommand : String -> String -> String -> Int
+removedCommand prog cmd hint =
+  let
+    _ = prim_print ("error: `" ++ cmd ++ "` has been removed; " ++ hint ++ "\n")
+  in 2
+
+-- 被删除 flag 的可操作提示（Vuna.Cli 的工具命令复用同一张表）。
+-- flag 名用「两条横线 + 名字」拼接：M26 验收要求源码中不再出现已删除 flag 的字面量
+-- （尤其环境根 flag），同时保留可操作提示。
+dashFlag : String -> String
+dashFlag name = "-" ++ "-" ++ name
+
+removedFlagHint : String -> Maybe String
+removedFlagHint flag =
+  if flag == dashFlag "dt" then Just "DT is the only path; drop the flag"
+  else if flag == dashFlag "package" then Just "use `build` or `compile`"
+  else if flag == dashFlag "split" then Just "split is the only output model; use `build --out OUT [DIR]` or `compile <pkg-dir> OUT`"
+  else if flag == dashFlag "root" then Just "module resolution is decided by the nearest vuna.toml; set VUNA_BASE for standalone files"
+  else if flag == dashFlag "out" then Just "pass OUTDIR positionally to `compile`; `build` accepts --out DIR"
+  else if flag == dashFlag "no-typecheck" then Just "checking is always enabled"
+  else if flag == dashFlag "typecheck" then Just "checking is always enabled"
+  else if flag == dashFlag "typed" then Just "DT is the only path" else Nothing
+
+removedFlag : String -> String -> Int
+removedFlag prog flag = case removedFlagHint flag of
+  Nothing => usageErr prog
+  Just hint =>
+    let
+      _ = prim_print ("error: " ++ flag ++ " has been removed; " ++ hint ++ "\n")
+    in 2
+
+printErrText : String -> Int
+printErrText e =
+  let
+    _ = prim_print e
+  in 1
+
+printErr : String -> Int
+printErr e = printErrText ("error: " ++ e ++ "\n")
+
+printWarnings : List String -> Int
+printWarnings [] = 0
+printWarnings (w :: rest) =
+  let
+    _ = prim_print (w ++ "\n")
+  in printWarnings rest
+
+defaultDir : Maybe String -> String
+defaultDir (Just dir2) = dir2
+defaultDir Nothing = "."
+
+-- 路径既不是文件也不是目录时的统一错误（先 prim_fileExists 再 prim_isDirectory：
+-- 内建 prim_isDirectory 对不存在的路径会抛异常）。
+dtPathErr : String -> Int
+dtPathErr path = printErr ("no such file or package directory: " ++ path)
+
+-- 可执行包解析：必须是目录、能读 vuna.toml、且有 app/Main.vuna。
+executablePackage : String -> String -> Result Package
+executablePackage label dir =
+  if prim_fileExists dir then if prim_isDirectory dir then executablePackageAt label dir
+  else Err (label ++ ": expects a package directory, not a file: " ++ dir)
+  else Err ("no such file or package directory: " ++ dir)
+
+executablePackageAt : String -> String -> Result Package
+executablePackageAt label dir =
+  andThen (loadPackage dir)
+    (\pkg => if prim_fileExists (packageEntry pkg) then Ok pkg else Err (label ++ ": library package " ++ packageName pkg ++ " has no app/Main.vuna (executable package required)"))
+
+-- ---------------------------------------------------------------
+-- compile：文件入口（最近的 vuna.toml 包上下文 / 无 manifest 的 base-only）
+-- 或包目录入口（可执行包），逐模块写出到 OUTDIR；成功静默。
+-- ---------------------------------------------------------------
+compileArgs : String -> List String -> Int
+compileArgs prog args = compileParse prog True Nothing Nothing args
+
+compileParse : String -> Bool -> Maybe String -> Maybe String -> List String -> Int
+compileParse prog printResult entry outDir args = case args of
+  [] => compileFinish prog printResult entry outDir
+  "--no-print" :: rest => compileParse prog False entry outDir rest
+  arg :: rest => if startsWith "-" arg then removedFlag prog arg
+  else case entry of
+    Nothing => compileParse prog printResult (Just arg) outDir rest
+    Just _ => case outDir of
+      Nothing => compileParse prog printResult entry (Just arg) rest
+      Just _ => usageErr prog
+
+compileFinish : String -> Bool -> Maybe String -> Maybe String -> Int
+compileFinish prog printResult Nothing outDir = usageErr prog
+compileFinish prog printResult (Just e) outDir = case outDir of
+  Nothing => usageErr prog
+  Just out => compileRun printResult e out
+
+compileRun : Bool -> String -> String -> Int
+compileRun printResult entry outDir =
+  if prim_fileExists entry then if prim_isDirectory entry then compilePkgDir printResult entry outDir
+  else compileFileEntry printResult entry outDir
+  else dtPathErr entry
+
+compileFileEntry : Bool -> String -> String -> Int
+compileFileEntry printResult entry outDir = case contextForFile entry of
+  Err e => printErr e
+  Ok ctx => case compileToDir ctx entry printResult outDir of
+    Err e => printErr e
+    Ok _ => 0
+
+compilePkgDir : Bool -> String -> String -> Int
+compilePkgDir printResult dir outDir = case executablePackage "compile" dir of
+  Err e => printErr e
+  Ok pkg => case compileToDir (packageContext pkg) (packageEntry pkg) printResult outDir of
+    Err e => printErr e
+    Ok _ => 0
+
+-- ---------------------------------------------------------------
+-- check：文件入口（包上下文）或包目录（可执行包 check 入口；库包 check [export].modules）
+-- ---------------------------------------------------------------
+checkArgs : String -> List String -> Int
+checkArgs prog [] = usageErr prog
+checkArgs prog (arg :: rest) = if startsWith "-" arg then removedFlag prog arg
+else case rest of
+  [] => checkEmit arg
+  _ => usageErr prog
+
+checkEmit : String -> Int
+checkEmit path =
+  if prim_fileExists path then if prim_isDirectory path then checkPkgDir path else checkFileEntry path
+  else dtPathErr path
+
+checkPkgDir : String -> Int
+checkPkgDir dir = case workspacePackages dir of
+  Err e => printErr e
+  Ok pkgs => checkPackages pkgs 0
+
+-- M30：workspace 是检查单元——根包 + [workspace].members 逐个检查，成员错误不再被
+-- 根 check 忽略。错误带 `[包名]` 前缀；全部跑完再汇总退出码。
+checkPackages : List Package -> Int -> Int
+checkPackages [] code = code
+checkPackages (pkg :: rest) code =
+  let
+    c = case checkPackage pkg of
+      Err e =>
+        let
+          _ = prim_print ("error: [" ++ packageName pkg ++ "] " ++ e ++ "\n")
+        in 1
+      Ok warnings => printWarnings warnings
+    next = if c > code then c else code
+  in checkPackages rest next
+
+checkFileEntry : String -> Int
+checkFileEntry path = case contextForFile path of
+  Err e => printErr e
+  Ok ctx => case dtCheck ctx path of
+    Err e => printErr e
+    Ok warnings => printWarnings warnings
+
+-- ---------------------------------------------------------------
+-- build：包级逐模块 codegen 到 DIR（默认 <PKG-DIR>/.output），再跑 build.sh 链接到
+-- DIR/bin/<包名>；--no-compile 只做 codegen 不链接。
+-- M30：workspace 根 = 构建单元（所有可执行成员各建到自己的 .output 或 DIR/<包名>；
+-- 库成员只检查）；--package NAME 只建指定包（Nix 构建根包用，避免重复构建成员）。
+-- build meta（同哈希跳过）见 Vuna.Compiler.Driver.Compile。
+-- ---------------------------------------------------------------
+buildArgs : String -> List String -> Int
+buildArgs prog args = buildParse prog False Nothing Nothing Nothing args
+
+buildParse : String -> Bool -> Maybe String -> Maybe String -> Maybe String -> List String -> Int
+buildParse prog noCompile out dir pkg args = case args of
+  [] => buildRun noCompile (defaultDir dir) out pkg
+  "--no-compile" :: rest => buildParse prog True out dir pkg rest
+  "--out" :: rest => case rest of
+    outDir :: more => if startsWith "-" outDir then removedFlag prog outDir
+    else case out of
+      Nothing => buildParse prog noCompile (Just outDir) dir pkg more
+      Just _ => usageErr prog
+    [] => usageErr prog
+  "--package" :: rest => case rest of
+    name :: more => if startsWith "-" name then removedFlag prog name
+    else case pkg of
+      Nothing => buildParse prog noCompile out dir (Just name) more
+      Just _ => usageErr prog
+    [] => usageErr prog
+  arg :: rest => if startsWith "-" arg then removedFlag prog arg
+  else case dir of
+    Nothing => buildParse prog noCompile out (Just arg) pkg rest
+    Just _ => usageErr prog
+
+buildRun : Bool -> String -> Maybe String -> Maybe String -> Int
+buildRun noCompile dir outM pkgM = case workspacePackages dir of
+  Err e => printErr e
+  Ok pkgs => if isSingleLibraryPackage pkgs then printErr (libraryOnlyMessage pkgs)
+  else case selectBuildTargets pkgM pkgs of
+    Err e => printErr e
+    Ok targets => buildTargets noCompile (length pkgs > 1) outM targets 0
+
+-- 单包目录且是库包（没有 app/Main.vuna）→ build 必须报错（不是静默 skip）。
+-- workspace 根里的库成员仍走 skip（构建单元覆盖全部可执行成员）。
+isSingleLibraryPackage : List Package -> Bool
+isSingleLibraryPackage ([pkg]) = not (prim_fileExists (packageEntry pkg))
+isSingleLibraryPackage _ = False
+
+libraryOnlyMessage : List Package -> String
+libraryOnlyMessage (pkg :: _) =
+  "library package "
+    ++ packageName pkg
+    ++ " has no app/Main.vuna (executable package required; use `check` for libraries)"
+libraryOnlyMessage [] = "no package to build"
+
+selectBuildTargets : Maybe String -> List Package -> Result (List Package)
+selectBuildTargets Nothing pkgs = Ok pkgs
+selectBuildTargets (Just name) pkgs = case findPackageByName name pkgs of
+  Nothing => Err ("no such package in workspace: " ++ name)
+  Just pkg => Ok [pkg]
+
+findPackageByName : String -> List Package -> Maybe Package
+findPackageByName name [] = Nothing
+findPackageByName name (pkg :: rest) =
+  if packageName pkg == name then Just pkg else findPackageByName name rest
+
+buildTargets : Bool -> Bool -> Maybe String -> List Package -> Int -> Int
+buildTargets noCompile multiOut outM [] code = code
+buildTargets noCompile multiOut outM (pkg :: rest) code =
+  let
+    c = buildOne noCompile multiOut outM pkg
+    next = if c > code then c else code
+  in buildTargets noCompile multiOut outM rest next
+
+-- 单包：可执行包 build；库包只 check（workspace 构建单元覆盖所有成员）。
+buildOne : Bool -> Bool -> Maybe String -> Package -> Int
+buildOne noCompile multiOut outM pkg =
+  let
+    name = packageName pkg
+    outDir = case outM of
+      Just out => if multiOut then out ++ "/" ++ name else out
+      Nothing => packageDir pkg ++ "/.output"
+    entry = packageEntry pkg
+  in if prim_fileExists entry then
+    let
+      ctx = packageContext pkg
+      binPath = outDir ++ "/bin/" ++ name
+    in if noCompile then compileCodegen ctx entry outDir
+    else if metaUpToDate outDir ctx entry binPath then
+      let
+        _ = prim_print ("up to date: " ++ binPath ++ "\n")
+      in 0
+    else case compileToDir ctx entry True outDir of
+      Err e => printErr e
+      Ok _ => buildLinked ctx entry outDir name
+  else case checkPackage pkg of
+    Err e => printErr e
+    Ok warnings =>
+      let
+        _ = printWarnings warnings
+        _ = prim_print ("skipped (library): " ++ name ++ " -> " ++ outDir ++ "\n")
+      in 0
+
+compileCodegen : PackageContext -> String -> String -> Int
+compileCodegen ctx entry outDir = case compileToDir ctx entry True outDir of
+  Err e => printErr e
+  Ok _ => 0
+
+-- 链接：先建 bin/（build.sh 的 -o bin/<pkg> 需要父目录存在），再跑 build.sh；
+-- 链接成功后写 build-meta.json（同哈希跳过在 buildOne 入口判定）。
+buildLinked : PackageContext -> String -> String -> String -> Int
+buildLinked ctx entry outDir name =
+  let
+    _ = ensureDirPath (outDir ++ "/bin")
+  in case runBuildScript outDir ("bin/" ++ name) name of
+    Err e => printErr e
+    Ok _ =>
+      let
+        _ = writeBuildMeta outDir ctx entry True
+        _ = prim_print ("built " ++ outDir ++ "/bin/" ++ name ++ "\n")
+      in 0

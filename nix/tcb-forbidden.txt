@@ -12,8 +12,6 @@ Repl
 TestRunner
 Files
 Interp
-Process
-Codegen
 Index
 Lsp
 Json

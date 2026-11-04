@@ -18,26 +18,21 @@ traverse f (x :: xs) = case f x of
     Ok ys => Ok (y :: ys)
 
 andThen : Result a -> (a -> Result b) -> Result b
-andThen r f = case r of
-  Ok x => f x
-  Err e => Err e
+andThen (Ok x) f = f x
+andThen (Err e) f = Err e
 
 step : Result (Pair a b) -> (a -> b -> Result c) -> Result c
-step r k = case r of
-  Ok (Pair x st) => k x st
-  Err e => Err e
+step (Ok (Pair x st)) k = k x st
+step (Err e) k = Err e
 
 mapResult : (a -> b) -> Result a -> Result b
-mapResult f r = case r of
-  Ok x => Ok (f x)
-  Err e => Err e
+mapResult f (Ok x) = Ok (f x)
+mapResult f (Err e) = Err e
 
 mapError : (String -> String) -> Result a -> Result a
-mapError f r = case r of
-  Ok x => Ok x
-  Err e => Err (f e)
+mapError f (Ok x) = Ok x
+mapError f (Err e) = Err (f e)
 
 withDefault : a -> Result a -> a
-withDefault d r = case r of
-  Ok x => x
-  Err e => d
+withDefault d (Ok x) = x
+withDefault d (Err e) = d

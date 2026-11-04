@@ -1,0 +1,244 @@
+module Vuna.Compiler.Driver.Compile
+  ( buildMetaText
+  , buildSplit
+  , checkPackage
+  , compileToDir
+  , ensureDirPath
+  , metaUpToDate
+  , runBuildScript
+  , writeBuildMeta
+  ) where
+
+-- Vuna.Compiler.Driver.Compile：编译入口（供 CompilerCli / 测试使用）。唯一路径是 DT：
+-- 精化（Elab）→ 擦除检查 + 逐模块 OCaml 生成（Codegen.Split）；`check*` 只检查不产码。
+-- M26：包上下文（`PackageContext`）是唯一入口形状；旧的 `effectiveRoots` /
+-- 单文件 codegen（main.ml + build.sh）/ `seedSplit` 已删除——`compile` 与 `seed`
+-- rotation 共用 `compileToDir`（目录 + build.sh）。
+-- M30：`build` 在链接成功后写 `build-meta.json`（源/依赖闭包内容哈希 + compiler 版本），
+-- 同哈希直接跳过；`compile` / `build --no-compile` 不写 meta（seed rotation 与快照
+-- 只认 .ml/build.sh 的确定性产物）。
+import Vuna.Compiler.Common
+import Vuna.Compiler.Packages.Pkg
+import Vuna.Compiler.Driver.Dt
+import Vuna.Compiler.Driver.Split
+import Vuna.Compiler.Version
+
+-- 包级 check：可执行包检查 app/Main.vuna；库包检查 [export].modules。
+checkPackage : Package -> Result (List String)
+checkPackage pkg = if prim_fileExists (packageEntry pkg) then dtCheck (packageContext pkg) (packageEntry pkg)
+else case packageExports pkg of
+  Nothing =>
+    Err
+      ("check: library package " ++ packageName pkg ++ " has no app/Main.vuna (executable) and no [export].modules (library)")
+  Just names => dtCheckLibrary (packageContext pkg) names
+
+-- 逐级创建目录（prim_makeDir 只建一层；`--out a/b` 的父目录可能不存在）。
+-- 递归沿 `parentOfPath` 上升，不是结构下降，用显式 fuel 守卫（路径深度上限）。
+ensureDirPath : String -> Int
+ensureDirPath path = ensureDirPathFuel 256 path
+
+ensureDirPathFuel : Int -> String -> Int
+ensureDirPathFuel fuel path = if fuel <= 0 then 0
+else if path == "" || path == "." || path == "/" then 0
+else if prim_fileExists path then 0
+else
+  let
+    _ = ensureDirPathFuel (fuel - 1) (parentOfPath path)
+  in prim_makeDir path
+
+-- 去掉最后一段（`a/b/c` -> `a/b`；无 `/` -> "."；绝对路径的父仍绝对）。
+-- 先 reverse，跳过第一个 `/` 后剩下的字符再 reverse 回来。
+dropPastSlash : List Int -> List Int
+dropPastSlash [] = []
+dropPastSlash (c :: rest) = if c == 47 then rest else dropPastSlash rest
+
+parentOfPath : String -> String
+parentOfPath path =
+  let
+    chars = strUnpack path
+    rev = reverse chars
+    after = dropPastSlash rev
+  in if length after == length rev then "."
+  else
+    let
+      parent = strPack (reverse after)
+    in if parent == "" then if startsWith "/" path then "/" else "."
+    else if startsWith "/" path && not (startsWith "/" parent) then "/" ++ parent else parent
+
+-- 逐模块 split 输出到 outDir：各模块 .ml + Main.ml + build.sh；Ok 写出的文件数。
+-- outDir 在 codegen 成功后才创建（精化失败不留产物）。
+compileToDir : PackageContext -> String -> Bool -> String -> Result Int
+compileToDir ctx entry printResult outDir = andThen (dtSplitProject ctx entry printResult) (\files => let
+  _ = ensureDirPath outDir
+in andThen (writeSplitFilesIfChanged outDir files) (\n => let
+  order = splitCompileOrder (splitInitFiles files)
+in let
+  _ = prim_writeFile (outDir ++ "/build.sh") (buildScript order)
+in Ok n
+)
+)
+
+-- loadPackage + compileToDir：给定包目录的代码生成（seed rotation / 测试用）。
+buildSplit : String -> String -> Result Int
+buildSplit dir outDir =
+  andThen (loadPackage dir)
+    (\pkg => compileToDir (packageContext pkg) (packageEntry pkg) True outDir)
+
+-- ---------------------------------------------------------------
+-- M30：build meta（确定性、无绝对路径/时间戳）
+--
+-- 目的：同输入同产物 + 依赖闭包哈希 + 同哈希跳过。meta 只记录**模块名**与内容
+-- 哈希（模块名由模块根相对路径推导，跨机器稳定）；不记录绝对路径/时间戳。
+-- `build` 链接成功后写；`compile` / `build --no-compile` 不写（seed rotation 与
+-- 快照只认 .ml/build.sh）。
+-- ---------------------------------------------------------------
+metaSchema : Int
+metaSchema = 1
+
+metaFileName : String
+metaFileName = "build-meta.json"
+
+-- 内容哈希：两个 30-bit 值 + 长度组合（与 Index 缓存同一思路；避免单哈希冲突）。
+textHash : String -> Int
+textHash s = strHash s * 1000003 + strHash ("m30:" ++ s) + strLength s
+
+-- 目录遍历（模块根内的 .vuna；与 Vuna.Files 的跳过规则一致，但 compiler 包不能
+-- import 根包工具链）。fuel 守卫目录图（符号链接环）。
+skipMetaDir : String -> Bool
+skipMetaDir name =
+  name == ".git"
+    || name == ".local"
+    || name == ".output"
+    || name == ".direnv"
+    || name == "node_modules"
+    || name == "seed"
+    || name == "_scratch"
+    || name == "result"
+    || name == "corpus"
+
+collectVunaMeta : Int -> String -> List String
+collectVunaMeta fuel dir =
+  if fuel <= 0 then []
+  else if prim_fileExists dir && prim_isDirectory dir then concatMap (walkVunaMeta (fuel - 1) dir) (prim_readDir dir)
+  else []
+
+walkVunaMeta : Int -> String -> String -> List String
+walkVunaMeta fuel dir name = if fuel <= 0 then []
+else case name of
+  "." => []
+  ".." => []
+  _ => if skipMetaDir name then []
+  else
+    let
+      path = dir ++ "/" ++ name
+    in if prim_fileExists path && prim_isDirectory path then collectVunaMeta (fuel - 1) path
+    else if endsWith ".vuna" name then [path] else []
+
+dropPrefixMeta : String -> String -> String
+dropPrefixMeta prefix s =
+  if startsWith prefix s then substring (strLength prefix) (strLength s - strLength prefix) s else s
+
+slashesToDots : String -> String
+slashesToDots s = strPack (map slashToDot (strUnpack s))
+
+slashToDot : Int -> Int
+slashToDot c = if c == 47 then 46 else c
+
+moduleNameOfPath : String -> String -> String
+moduleNameOfPath rootPath path =
+  let
+    rel0 = dropPrefixMeta (rootPath ++ "/") path
+    rel = if endsWith ".vuna" rel0 then substring 0 (strLength rel0 - 5) rel0 else rel0
+  in slashesToDots rel
+
+rootSources : Root -> List (Pair String Int)
+rootSources root =
+  map (\p => Pair (moduleNameOfPath (rootDir root) p) (textHash (prim_readFile p)))
+    (collectVunaMeta 1048576 (rootDir root))
+
+rootHash : Root -> Int
+rootHash root = closureHashOf (rootSources root) 0
+
+closureHashOf : List (Pair String Int) -> Int -> Int
+closureHashOf [] acc = acc
+closureHashOf ((Pair name h) :: rest) acc = closureHashOf rest (acc * 1000003 + h)
+
+-- 入口文件 + 所有模块根的源码（模块名 → 哈希）。
+entrySource : String -> Pair String Int
+entrySource entry = Pair "<entry>" (textHash (prim_readFile entry))
+
+contextSources : PackageContext -> String -> List (Pair String Int)
+contextSources ctx entry = append (concatMap rootSources (contextRoots ctx)) [entrySource entry]
+
+-- 依赖闭包（跳过第一个根：它是本包自己的 lib；base-only 由 build 不会走到）。
+dependencyHashes : PackageContext -> List (Pair String Int)
+dependencyHashes ctx = case contextRoots ctx of
+  [] => []
+  _ :: deps => map (\r => Pair (rootName r) (rootHash r)) deps
+
+metaPairText : Pair String Int -> String
+metaPairText (Pair name hash) = "{\"name\":\"" ++ name ++ "\",\"hash\":" ++ strFromInt hash ++ "}"
+
+joinJsonList : List String -> String
+joinJsonList [] = ""
+joinJsonList ([x]) = x
+joinJsonList (x :: rest) = x ++ "," ++ joinJsonList rest
+
+-- 路径最后一段（`splitPath` 按第一个 `/` 切，不适合取 basename）。
+-- 输入是反向字符流；acc 里已是原顺序的最后一段字符，直接 strPack。
+lastSegmentRev : List Int -> List Int -> String
+lastSegmentRev [] acc = strPack acc
+lastSegmentRev (c :: rest) acc = if c == 47 then strPack acc else lastSegmentRev rest (c :: acc)
+
+lastSegment : String -> String
+lastSegment path = lastSegmentRev (reverse (strUnpack path)) []
+
+buildMetaText : PackageContext -> String -> Bool -> String
+buildMetaText ctx entry linked =
+  let
+    sources = contextSources ctx entry
+    deps = dependencyHashes ctx
+    entryName = lastSegment entry
+    linkedText = if linked then "true" else "false"
+  in "{\"schema\":"
+    ++ strFromInt metaSchema
+    ++ ",\"compiler\":\""
+    ++ vunaVersion
+    ++ "\",\"package\":\""
+    ++ contextPackageName ctx
+    ++ "\",\"entry\":\""
+    ++ entryName
+    ++ "\",\"linked\":"
+    ++ linkedText
+    ++ ",\"closure\":"
+    ++ strFromInt (closureHashOf sources 0)
+    ++ ",\"sources\":["
+    ++ joinJsonList (map metaPairText sources)
+    ++ "],\"dependencies\":["
+    ++ joinJsonList (map metaPairText deps)
+    ++ "]}\n"
+
+metaPathOf : String -> String
+metaPathOf outDir = outDir ++ "/" ++ metaFileName
+
+writeBuildMeta : String -> PackageContext -> String -> Bool -> Int
+writeBuildMeta outDir ctx entry linked =
+  prim_writeFile (metaPathOf outDir) (buildMetaText ctx entry linked)
+
+-- 同哈希跳过：meta 内容与期望（linked=true）完全一致，且产物二进制存在。
+metaUpToDate : String -> PackageContext -> String -> String -> Bool
+metaUpToDate outDir ctx entry binPath =
+  let
+    path = metaPathOf outDir
+  in if prim_fileExists path && prim_fileExists binPath then prim_readFile path == buildMetaText ctx entry True
+  else False
+
+-- 在 dir 里跑生成的 build.sh：`sh build.sh <out>`（out 相对 dir，例如 "bin/<pkg>"）。
+-- 链接失败给出带包名/目录/退出码的清晰错误（ocamlopt 的 stderr 已在终端）。
+runBuildScript : String -> String -> String -> Result Int
+runBuildScript dir out name =
+  let
+    code = prim_runIn dir ["sh", "build.sh", out]
+  in if code == 0 then Ok 0
+  else Err
+    ("build: " ++ name ++ ": `sh build.sh " ++ out ++ "` failed in " ++ dir ++ " (exit " ++ strFromInt code ++ ")")

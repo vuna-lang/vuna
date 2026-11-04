@@ -1,0 +1,8 @@
+-- M29：`Type` 没有 Eq 证据（泛型相等兜底已删除），`a == a`（a : Type）在 check 期报
+-- 「缺实例」；旧实现会在这里退回泛型结构比较，把类型/擦除值拖进运行时。
+-- 「类型族在运行时位置使用」的擦除护栏现由 dt_err/45_generic_sigma_runtime 覆盖。
+f : (a : Type) -> Int
+f a = if a == a then 1 else 0
+
+main : Int
+main = f Int

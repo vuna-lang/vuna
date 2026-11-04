@@ -1,0 +1,20 @@
+-- M27 / C17：用户 `data List` 与 base 的 canonical `Base.List.List` 并存；
+-- `str*` 的桥接只认 canonical 族，用户族的构造子名不再影响 runtime helper 生成。
+import Base.List
+
+data List a : Type where
+  Empty : List a
+  Link : a -> List a -> List a
+
+sumOwn : List Int -> Int
+sumOwn xs = case xs of
+  Empty => 0
+  Link x rest => x + sumOwn rest
+
+sumBase : Base.List.List Int -> Int
+sumBase xs = case xs of
+  Base.List.Nil => 0
+  Base.List.Cons x rest => x + sumBase rest
+
+main : Int
+main = sumOwn (Link 1 (Link 2 Empty)) + sumBase (strUnpack "AB")

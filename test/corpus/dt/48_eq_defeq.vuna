@@ -1,0 +1,22 @@
+-- M24.5：隐式族参数版 Eq（`data Eq : {a : Type} -> a -> a -> Type`）可用；定义性相等
+-- `plus Zero n ≡ n` 直接 conv 通过，所以 `plusZero` 一个 Refl 就够。
+data Nat : Type where
+  Zero : Nat
+  Succ : Nat -> Nat
+
+data Eq : {a : Type} -> a -> a -> Type where
+  Refl : {a : Type} -> (x : a) -> Eq x x
+
+plus : Nat -> Nat -> Nat
+plus a b = case a of
+  Zero => b
+  Succ k => Succ (plus k b)
+
+plusZero : (n : Nat) -> Eq (plus Zero n) n
+plusZero n = Refl n
+
+plusSucc : (n : Nat) -> (m : Nat) -> Eq (plus (Succ n) m) (Succ (plus n m))
+plusSucc n m = Refl (Succ (plus n m))
+
+main : Int
+main = 42

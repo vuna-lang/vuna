@@ -1,0 +1,218 @@
+module Vuna.Compiler.Elab.Sig
+  ( arityFun
+  , bannedForModule
+  , classParamKind
+  , definedNames
+  , exprMaxAppArity
+  , methodArgRigsOf
+  , modulePrefixOf
+  , qualifiedBannedTbl
+  , quantifyTopSig
+  , quantifyTopSigCached
+  , quantifyTraitSig
+  , topQuantBanned
+  ) where
+
+-- Vuna.Compiler.Elab.Sig：签名工具：trait 类参数的 kind 推断（M19）与顶层签名的自由名量化（M20）。
+-- 由原 `Elab.Kind` + `Elab.Quant` 合并而成（两者都只做 AST 变换、且 Quant 依赖 Kind）。
+import Vuna.Compiler.Common
+import Vuna.Compiler.Frontend.Ast
+import Vuna.Compiler.Core
+import Vuna.Compiler.Intrinsics
+
+-- ---------------------------------------------------------------------------
+-- 类参数 kind 推断（原 Elab/Kind.vuna）
+-- ---------------------------------------------------------------------------
+classParamKind : String -> List (Pair String Expr) -> Term
+classParamKind pname methods = arityFun (methodMaxAppArity pname methods) (TType levelZero)
+
+arityFun : Int -> Term -> Term
+arityFun n res = if n <= 0 then res else TPi "_" False Rig1 (TType levelZero) (arityFun (n - 1) res)
+
+methodMaxAppArity : String -> List (Pair String Expr) -> Int
+methodMaxAppArity pname methods =
+  maxIntList (map (\m => exprMaxAppArity pname (secondOf m)) methods)
+
+maxIntList : List Int -> Int
+maxIntList [] = 0
+maxIntList (x :: rest) = if x >= maxIntList rest then x else maxIntList rest
+
+exprMaxAppArity : String -> Expr -> Int
+exprMaxAppArity pname (EApp (EVar f fsp) args sp) =
+  if f == pname then maxIntList (length args :: map (exprMaxAppArity pname) args)
+  else maxIntList (map (exprMaxAppArity pname) args)
+exprMaxAppArity pname (EApp fn args sp) =
+  maxIntList (exprMaxAppArity pname fn :: map (exprMaxAppArity pname) args)
+exprMaxAppArity pname (ELam names body sp) = exprMaxAppArity pname body
+exprMaxAppArity pname (EPi n implicit dom cod sp) =
+  maxIntList [exprMaxAppArity pname dom, exprMaxAppArity pname cod]
+exprMaxAppArity pname (ELet binds body rec_ sp) =
+  maxIntList (exprMaxAppArity pname body :: map (\b => exprMaxAppArity pname (secondOf b)) binds)
+exprMaxAppArity pname (ECase scrut alts sp) =
+  maxIntList (exprMaxAppArity pname scrut :: map (\a => exprMaxAppArity pname (secondOf a)) alts)
+exprMaxAppArity pname (EIf c t f sp) =
+  maxIntList [exprMaxAppArity pname c, exprMaxAppArity pname t, exprMaxAppArity pname f]
+exprMaxAppArity pname (EField b fname sp) = exprMaxAppArity pname b
+exprMaxAppArity pname (ERecord rn fields sp) =
+  maxIntList (map (\p => exprMaxAppArity pname (secondOf p)) fields)
+exprMaxAppArity pname (ERecUpdate b fields sp) = exprMaxAppArity pname b
+exprMaxAppArity pname _ = 0
+
+-- 方法的显式参数各自的 multiplicity（M19）：逐 binder 按域判断，判据由调用方传入
+-- （`Elab` 的 `binderRig`——`Elab.Sig` 不重复定义擦除规则，保持单一入口）。
+methodArgRigsOf : (Bool -> Value -> Rig) -> Term -> List Rig
+methodArgRigsOf rigOf ty = methodArgRigsOfGo rigOf ty []
+
+methodArgRigsOfGo : (Bool -> Value -> Rig) -> Term -> List Value -> List Rig
+methodArgRigsOfGo rigOf (TPi name implicit rigB dom cod) env =
+  let
+    domVal = eval env dom
+    v = VNeutral (NVar name (length env) [])
+  in rigOf implicit domVal :: methodArgRigsOfGo rigOf cod (v :: env)
+methodArgRigsOfGo rigOf _ env = []
+
+-- ---------------------------------------------------------------------------
+-- 顶层签名量化（原 Elab/Quant.vuna）
+-- ---------------------------------------------------------------------------
+-- 把 trait 方法签名里的自由小写名量化为隐式类型参数。
+-- `boundInScope` 给出「这个名字已在上下文里」的判定（trait 的类参数不算自由变量，
+-- 且它们的 kind 是 `Type -> Type` 这类高阶形态，不能被 `Type` 覆盖）。
+quantifyTraitSig : (String -> Bool) -> Expr -> Span -> Expr
+quantifyTraitSig inScope ty sp = quantify (freeNames inScope ty) ty sp
+
+freeNames : (String -> Bool) -> Expr -> List String
+freeNames inScope ty = keepOut inScope (dropPiBound (lowerVarNames ty) (piBoundNames ty))
+
+keepOut : (String -> Bool) -> List String -> List String
+keepOut inScope [] = []
+keepOut inScope (n :: rest) = if inScope n then keepOut inScope rest else n :: keepOut inScope rest
+
+quantify : List String -> Expr -> Span -> Expr
+quantify [] e sp = e
+quantify (n :: rest) e sp = EPi n True (EVar "Type" sp) (quantify rest e sp) sp
+
+-- 顶层签名的自由名按**用法**给 kind：名字在签名里被应用了 k 个实参 ⇒ `Type -> ... -> Type`
+-- （`bindPair : m a -> m b -> m (Pair a b)` 的 `m`）。旧实现一律绑 `Type`，于是 `m a`
+-- 报 "too many arguments (not a function)"。规则与 trait 类参数（`Elab.Sig.classParamKind`）
+-- 同一套，只是作用在任意自由名上。
+quantifyTopKinds : List String -> Expr -> Expr -> Span -> Expr
+quantifyTopKinds [] sigExpr e sp = e
+quantifyTopKinds (n :: rest) sigExpr e sp =
+  EPi n True (kindArrowExpr (exprMaxAppArity n sigExpr) sp) (quantifyTopKinds rest sigExpr e sp) sp
+
+kindArrowExpr : Int -> Span -> Expr
+kindArrowExpr k sp =
+  if k <= 0 then EVar "Type" sp else EPi "_" False (EVar "Type" sp) (kindArrowExpr (k - 1) sp) sp
+
+piBoundNames : Expr -> List String
+piBoundNames (EPi n implicit dom cod sp) = n :: piBoundNames cod
+piBoundNames _ = []
+
+lowerVarNames : Expr -> List String
+lowerVarNames e = dedupNames (exprLowerVars e)
+
+exprLowerVars : Expr -> List String
+exprLowerVars (EVar n sp) = if isLowerIdent n then [n] else []
+exprLowerVars (EApp fn args sp) = append (exprLowerVars fn) (concatMap exprLowerVars args)
+exprLowerVars (ELam names body sp) = exprLowerVars body
+exprLowerVars (EPi n implicit dom cod sp) = append (exprLowerVars dom) (exprLowerVars cod)
+exprLowerVars (EIf c t f sp) = append (exprLowerVars c) (append (exprLowerVars t) (exprLowerVars f))
+exprLowerVars (ELet binds body rec_ sp) =
+  append (concatMap (\b => exprLowerVars (secondOf b)) binds) (exprLowerVars body)
+exprLowerVars (ECase scrut alts sp) =
+  append (exprLowerVars scrut) (concatMap (\a => exprLowerVars (secondOf a)) alts)
+exprLowerVars (EField b f sp) = exprLowerVars b
+exprLowerVars (ERecord rn fields sp) = concatMap (\p => exprLowerVars (secondOf p)) fields
+exprLowerVars (ERecUpdate b fields sp) = exprLowerVars b
+exprLowerVars _ = []
+
+isLowerIdent : String -> Bool
+isLowerIdent n = case strUnpack n of
+  [] => False
+  c :: rest => c >= 97 && c <= 122
+
+dedupNames : List String -> List String
+dedupNames [] = []
+dedupNames (x :: rest) = if memName x rest then dedupNames rest else x :: dedupNames rest
+
+dropPiBound : List String -> List String -> List String
+dropPiBound names [] = names
+dropPiBound names (b :: rest) = dropPiBound (dropName b names) rest
+
+dropName : String -> List String -> List String
+dropName b [] = []
+dropName b (n :: rest) = if n == b then dropName b rest else n :: dropName b rest
+
+-- 顶层签名里要量化的自由名字：额外排除本程序另有定义的名字（`vapp` 这类会被误
+-- 当类型变量）与内建 prelude 名。每个名字的 kind 按它在签名里的应用次数推断。
+quantifyTopSig : HashTbl Bool -> Expr -> Span -> Expr
+quantifyTopSig banned ty sp =
+  quantifyTopKinds (keepOutTbl banned (freeNames (\n => False) ty)) ty ty sp
+
+-- 顶层量化要排除的名字集合（本程序定义名 + 内建 prelude 名），哈希集合 O(1) 判定。
+topQuantBanned : List String -> HashTbl Bool
+topQuantBanned defined = tblOfNames (append defined topPreludeNames)
+
+-- C29（M28）：banned 集按**模块作用域**计算——只排除「与签名同一模块里另有定义」的
+-- 名字。程序级 flatten 后模块边界落在名字的模块前缀（最后一段之前）上；入口文件的
+-- 顶层名没有前缀（空串）。跨模块同名小写名不再让签名里的类型变量被误当全局名。
+bannedForModule : String -> List String -> HashTbl Bool
+bannedForModule sigName defined = topQuantBanned (filterNamesInModule sigName defined)
+
+filterNamesInModule : String -> List String -> List String
+filterNamesInModule sigName [] = []
+filterNamesInModule sigName (n :: rest) =
+  if modulePrefixOf n == modulePrefixOf sigName then n :: filterNamesInModule sigName rest
+  else filterNamesInModule sigName rest
+
+-- 名字的模块前缀（`Base.Nat.succ` → `Base.Nat`；入口顶层的 `main` → ""）。
+modulePrefixOf : String -> String
+modulePrefixOf name = case splitLastDot (splitOnDot name) of
+  Pair rev base => joinDots rev
+
+-- ---------------------------------------------------------------
+-- M30（D18）：签名量化的**共享 banned 表**（修 M28/C29 的 O(n²)）
+-- ---------------------------------------------------------------
+-- 旧实现 `bannedForModule sigName defined` 对每个签名都扫一遍全程序 defined 名
+-- （filterNamesInModule 里逐名算 modulePrefixOf）并重建一张哈希表：5085 个签名 ×
+-- 2306 个定义名 ⇒ 1.2e7 次 splitOnDot/splitLastDot（每次分配），实测
+-- `check compiler` 的 collectSigs 相位 12.9 s。这里把「模块前缀 + 名字」做成**一次性**
+-- 的全局键，签名阶段只做 O(1) 查表；语义与原 per-module 过滤逐项等价：
+--   旧：banned = prelude ∪ { n ∈ defined | modulePrefixOf n == modulePrefixOf sigName }
+--   新：keepOutQualified σ 用 prelude 表 + 键 `modulePrefixOf sigName ++ "\t" ++ n`
+-- 分隔符取 `\t`（标识符只允许字母/数字/下划线/撇号，mangle 前缀只含点，绝不会撞）。
+qualifiedBannedTbl : List String -> HashTbl Bool
+qualifiedBannedTbl defined =
+  tblInsertAll (map (\n => Pair (qualifiedKey (modulePrefixOf n) n) True) defined) tblEmpty
+
+qualifiedKey : String -> String -> String
+qualifiedKey prefix name = prefix ++ "\t" ++ name
+
+-- 与 `quantifyTopSig` 同义，但 banned 用共享的 qualified 表 + 全局 prelude 表。
+quantifyTopSigCached : String -> HashTbl Bool -> HashTbl Bool -> Expr -> Span -> Expr
+quantifyTopSigCached prefix banned preludeBanned ty sp =
+  quantifyTopKinds (keepOutQualified prefix banned preludeBanned (freeNames (\n => False) ty)) ty ty
+    sp
+
+keepOutQualified : String -> HashTbl Bool -> HashTbl Bool -> List String -> List String
+keepOutQualified prefix banned preludeBanned [] = []
+keepOutQualified prefix banned preludeBanned (n :: rest) =
+  if tblMem n preludeBanned then keepOutQualified prefix banned preludeBanned rest
+  else if tblMem (qualifiedKey prefix n) banned then keepOutQualified prefix banned preludeBanned rest
+  else n :: keepOutQualified prefix banned preludeBanned rest
+
+keepOutTbl : HashTbl Bool -> List String -> List String
+keepOutTbl banned [] = []
+keepOutTbl banned (n :: rest) =
+  if tblMem n banned then keepOutTbl banned rest else n :: keepOutTbl banned rest
+
+topPreludeNames : List String
+topPreludeNames = append ["Type", "->", "_"] (append typeIntrinsicNames preludeValueNames)
+
+-- 本程序里另有定义（DFun / DAxiom）的顶层名字：签名里的这些名字不是类型变量。
+definedNames : List Decl -> List String
+definedNames [] = []
+definedNames (d :: rest) = case d of
+  DFun n pats body sp => n :: definedNames rest
+  DAxiom n ty sp => n :: definedNames rest
+  _ => definedNames rest

@@ -1,63 +1,86 @@
-# 语言参考：包管理与工具链命令
+# 包管理与工具链命令
 
 本文覆盖 `vuna.toml` 包格式、workspace / 依赖 DAG，以及产品 CLI 的工具链子命令。
-语言语法见 [language.md](language.md)，编译器侧 CLI（`vuna-compiler`）与 seed 的关系
-见 [bootstrap.md](bootstrap.md)。
+语言语法见 [language.md](language.md)，编译器侧 CLI（`vuna-compiler`）与 seed 的关系见
+[bootstrap.md](bootstrap.md)。
 
-## 包管理与工具链（M11.5 / M12.5）
+## 包管理与工具链
 
-- 包元信息用 `vuna.toml`（TOML 子集）：`[package]`（name/version/edition）、
-  `[workspace]`（members）、`[export]`（modules）、`[dependencies]`
-  （依赖名 = 相对路径，暂不做 registry）。
+- 包元信息用 `vuna.toml`（TOML 子集）：`[package]`（只有 name）、`[workspace]`（members）、
+  `[export]`（modules）、`[capabilities]`（effects）、`[dependencies]`（依赖名 = 相对路径，
+  暂不做 registry）。`[package]` 里出现其他 key 是错误，不静默忽略。
 - **workspace 根即一个包**（Cargo 风格）：根 `vuna.toml` 同时含 `[workspace]` 与
-  `[package]`；成员是子目录，各自有自己的 `vuna.toml`。本仓库 = 根包 `vuna`（产品
-  CLI）+ 成员包 `vuna-compiler`（编译器）+ 成员包 `vuna-base`（标准库）；依赖图
+  `[package]`；成员是子目录，各自有自己的 `vuna.toml`。本仓库 = 根包 `vuna`（产品 CLI）+
+  成员包 `vuna-compiler`（编译器）+ 成员包 `vuna-base`（标准库）；依赖图
   `vuna → vuna-compiler → vuna-base`，根包也直接依赖 `vuna-base`。
-- 每包固定三目录：`lib/`（模块根）、`app/`（入口，恒为 `app/Main.vuna`）、
-  `test/`（测试模块）。依赖只向下流：`app`/`test` 可用本包 `lib` + 依赖包 `lib`；
-  依赖包之间是 DAG（循环依赖报错）。
-- **包名 ≠ 模块命名空间**：模块名仍由路径决定（`base/lib/Base/List.vuna` ⇔
-  `Base.List`）；loader 按「本包 lib + 依赖包 lib（DFS 后序、按包名去重）」解析
-  import，跨包只认依赖包 `[export]` 列表，隐藏模块报
-  `is not exported by package ...`。包模式自动注入 `Prelude` import（见 [stdlib.md](stdlib.md)）。
-- 编译器 CLI（`compiler/lib/Vuna/Compiler/CompilerCli.vuna`）：`vuna-compiler` 提供
-  `compile/check/build/seed`，入口 `compiler/app/Main.vuna`；**seed 只由这个入口的闭包
-  生成**。产品 CLI（`lib/Vuna/Cli.vuna`）通过 in-process 调库实现同样的命令，并追加
-  工具命令：
+- 每包固定三目录：`lib/`（模块根）、`app/`（入口，恒为 `app/Main.vuna`）、`test/`
+  （测试模块）。依赖只向下流：`app`/`test` 可用本包 `lib` + 依赖包 `lib`；依赖包之间是
+  DAG（循环依赖报错）。
+- **包名 ≠ 模块命名空间**：模块名仍由路径决定（`base/lib/Base/List.vuna` ⇔ `Base.List`）；
+  每个源文件按**包上下文**解析 import——向上找最近的 `vuna.toml`，可用模块根 = 本包 `lib/`
+  + 依赖闭包的 `lib/`（DFS 后序、按包名去重），跨包只认依赖包 `[export]` 列表，隐藏模块报
+  `is not exported by package ...`。无 manifest 的文件只有 base 上下文（`VUNA_BASE` 覆盖，
+  否则按可执行文件相对布局探测），且这类 ad-hoc 单文件与包内模块一样**自动注入
+  `Prelude`**（见 [stdlib.md](stdlib.md)）。**目录入口**（`check/build <dir>`）只认该目录
+  自己的 manifest，不向上找。
+- **依赖图内包名唯一**：包名参与「同包永远可见」判定，因此同名不同目录是配置错误。同名同
+  目录的 diamond 依赖合法；同名不同目录在加载期报 `duplicate package name ...`。
+- 编译器 CLI（`compiler/lib/Vuna/Compiler/Driver/CompilerCli.vuna`）：`vuna-compiler` 提供
+  `compile/check/build`，入口 `compiler/app/Main.vuna`；**seed 只由这个入口的闭包生成**。
+  产品 CLI（`lib/Vuna/Cli.vuna`）通过 in-process 调库实现同样的命令，并追加工具命令：
 
-  - `vuna compile [--no-print] [--root DIR]... (<entry.vuna> | <package-dir>) [out.ml]`：
-    单文件 / 整程序 codegen（DT 精化 → 擦除型 OCaml）；包目录入口等价于把包入口当
-    单文件入口，不再产出包级 `.output/lib/` + `app/Main.ml` 布局；
-  - `vuna build [--no-compile] [DIR]`：DT codegen 到 `DIR/.output/main.ml`（+`build.sh`
-    供手动重建），再用受限进程执行内建调 ocamlopt 编出 `DIR/.output/bin/<包名>`
-    （`--no-compile` 只生成 `.output` 源码、不调 ocamlopt）；
-  - `vuna build --split OUT [DIR]`：DT 逐模块 codegen（依赖序逐模块 `.ml` + `build.sh`
-    写到 OUT）；无法归属的声明报清晰错误，不静默丢弃、不回退单文件；
-  - `vuna seed OUT [DIR]`：与 `build --split` 同形，供 seed 轮换；**必须显式 OUT**
-    （正式流程用 `nix/seed-rotate.sh` 生成到临时目录、校验后替换 `seed/`）；
-  - `vuna test [DIR]`：经 `Vuna.Interp` 用 DT 核心求值执行 `test/*.vuna`，
-    `main : String` 空串通过，非空为失败信息（不走效果）；
-  - `vuna fmt [--check] [PATH]...`：`Vuna.Fmt` 格式化（2 空格缩进、幂等、可重新
-    parse；M11.6 起**保留行注释/块注释**，超过 100 列时在 RHS、列表字面量、
-    函数应用参数与中缀链处折行；模块头显式导出列表逐项一行并按名排序，项注释随项
-    移动）；省略 PATH 时格式化 workspace 内所有包的
-    `lib/app/test`（拆包后自动覆盖 `compiler/lib`）；
-  - `vuna repl [--root DIR]...`：行式 REPL，定义累积、表达式经 DT 求值
-    （支持 import/记录/trait/do；顶层定义必须先写签名）；
-  - `vuna doc [DIR] [OUT]`：扫描 `lib/` 生成 Markdown API 文档（默认
-    `DIR/docs/api.md`，仓库的 `docs/api.md` 是生成物、gitignored）；
+  - `vuna compile [--no-print] (<entry.vuna> | <package-dir>) OUTDIR`：DT 精化 → 擦除型
+    OCaml，**逐模块**写到 OUTDIR（`Vuna_runtime.ml` + 各模块 + `Main.ml` + `build.sh`），
+    成功静默；OUTDIR 必填；
+  - `vuna check (<entry.vuna> | <package-dir>)`：类型检查（不生成代码）；目录是 workspace
+    根时**逐个检查所有成员**（成员错误不再被根 check 忽略）；
+  - `vuna build [--no-compile] [--out DIR] [--package NAME] [PKG-DIR]`：默认输出到
+    `<PKG-DIR>/.output`（PKG-DIR 缺省 `.`，`--out` 覆盖）；目录是 workspace 根时构建所有
+    **可执行**成员（库成员只检查并打印 `skipped (library)`），`--out DIR` 时按
+    `DIR/<包名>` 分目录；`--package NAME` 只构建指定包（Nix 构建根包用）；`--no-compile`
+    只生成源码目录、不调 `ocamlopt`；
+  - `vuna test [DIR]`：纯测试（`main : String` 空串 / `Int` 0 / `Bool` True 通过）走
+    DT 核心求值；`main : IO ...` 走 compile + 运行，退出码 0 通过（可测效果）。DIR 是
+    workspace 根时对每个包的 `test/` 聚合；
+  - `vuna fmt [--check] [PATH]...`：`Vuna.Fmt` 格式化（2 空格缩进、幂等、可重新 parse；
+    保留行注释 / 块注释，超过 100 列时在 RHS、列表字面量、函数应用参数与中缀链处折行；
+    模块头显式导出列表逐项一行并按名排序，项注释随项移动）；省略 PATH 时格式化 workspace
+    内所有包的 `lib/app/test`；
+  - `vuna interp <file.vuna>`：DT 精化 + 核心求值（纯；不执行效果；入口文件按最近 manifest
+    获得包上下文，无则 base-only）；
+  - `vuna repl`：REPL，定义累积、表达式经 DT 求值（支持 import/记录/trait/do；顶层定义必须
+    先写签名；与 CLI 同一包上下文）；未闭合括号 / 尾随 `=` / `where` / `do` 等自动续行；
+    `IO` 表达式经临时包 compile + 运行执行（每次约 1–2s，需要 `ocamlopt`）；
+  - `vuna doc [DIR] [OUT]`：扫描 `lib/` 生成 Markdown API 文档（默认 `DIR/docs/api.md`，
+    仓库的 `docs/api.md` 是生成物、gitignored）；目录是含 `[export]` 的包时只输出导出模块；
   - `vuna map [--modules]` / `vuna map --find <Module.name>` / `vuna map --impact
-    <Module.name>` / `vuna api <Module.name>`：`Vuna.Index` 的源码符号索引，用于定位
-    定义、引用者与建议测试标签；索引缓存在 `.local/index/`（gitignored），按
-    mtime+size 自动判定新鲜度，没有刷新命令。
+    <Module.name>` / `vuna api <Module.name>`：`Vuna.Index` 的源码符号索引，用于定位定义、
+    引用者与建议测试标签；索引缓存在 `.local/index/`（gitignored），按**内容哈希**判定
+    新鲜度（同 size/同 mtime 的内容变更也会失效），refs 带行 / 列位置，没有刷新命令；
+  - `vuna version` / `vuna --version`：打印 `vuna <版本>`；版本唯一真源是
+    `compiler/lib/Vuna/Compiler/Version.vuna`。
 - 示例：`examples/multi/` 是多包 workspace（根包 + 成员包 `greet` + `base` 路径依赖），
   `checks.vuna-package` 在 Nix 沙箱里构建并运行它，验证包管理路径可复现。
-- 可执行入口：`vuna build` / `vuna seed` 要求入口 `main : IO a`（运行时执行动作，
-  退出码用 `exit`）；`vuna build --split` 同样按可执行入口处理。普通用户包不能
-  直接调用 effectful 内建（`print` / `readFile` / ...），只能经 `Base.IO`；编译器、
-  产品 CLI、`vuna-base` 自身在包级 allowlist 内，`--root` 原始文件模式与 `vuna interp`
-  保留给调试/测试；`vuna interp` 是纯核心求值（不执行效果），效果程序用
-  `compile` + 运行产物。
+- 可执行入口：`vuna build` 要求入口 `main : IO a`（运行时执行动作，退出码用 `exit`）。
+  效果内建只有 `prim_*` 名：包必须在 manifest 显式声明能力才能直接调用，未声明的包只能经
+  `Base.IO`（推荐路径）；`vuna interp` 是纯核心求值（不执行效果），效果程序用 `compile` +
+  运行产物。
+
+## 效应能力
+
+- 包在 `[capabilities] effects` 里**显式声明**可直接使用的 effectful 内建能力：合法值
+  `console` / `fs` / `process` / `env` / `clock`（可任意子集）。`Frontend.Manifest` 只做
+  结构校验（空名字 / 重复名字分别报错），合法能力名与放行判定在 Loader：未知名字报
+  `unknown capability ...`（typo 不静默降级）；`manifestCapabilities` 是读取入口。
+- 能力按**包**生效：同包所有模块共享本包 manifest 的能力；`PackageContext` / `Root` /
+  `Module` / `Project` 都携带能力，`Loader.Resolve.checkEffectsBuiltins` 按
+  `Vuna.Compiler.Intrinsics` 里每个内建声明的能力位检查。**没有按包名 / 路由的 allowlist**，
+  能力声明不可由调用参数伪造；检查覆盖整个源文件（包括未求值的定义），不只看 `main`。
+- 未声明能力的包（普通用户包、`test/corpus` 夹具）只能经 `Base.IO` 使用效果。`Base.IO`
+  是 base 包对 `prim_*` 的普通封装，也是推荐路径；它自身在 `vuna-base` 的能力声明内。
+- 本仓库声明：根包 `vuna` 与 `vuna-compiler` 声明全部五个能力（CLI/工具链与编译器直接
+  使用 `prim_*`）；`vuna-base` 只声明 `console` / `fs` / `process`（`Base.IO` 的封装面）。
+  无 manifest 的 ad-hoc 文件没有能力，直接调用 effectful 内建即被拒。
 
 ## 包格式速查
 
@@ -65,8 +88,6 @@
 # 根 vuna.toml：workspace 根同时是包（可执行目标）
 [package]
 name = "vuna"
-version = "0.1.0"
-edition = "2026"
 
 [workspace]
 members = ["compiler", "base"]
@@ -74,21 +95,28 @@ members = ["compiler", "base"]
 [dependencies]
 vuna-compiler = "compiler"
 vuna-base = "base"
+
+# 直接使用 effectful 内建（本包 = 产品 CLI/工具链）的能力声明
+[capabilities]
+effects = ["console", "fs", "process", "env", "clock"]
 ```
 
 ```toml
 # 成员包（库包）：用 [export] 限定跨包可见的模块
 [package]
 name = "vuna-base"
-version = "0.1.0"
-edition = "2026"
 
 [export]
 modules = [
   "Base",
   "Base.Pair",
   "Base.Bool",
+  "Base.Show",
+  "Base.Eq",
+  "Base.Ord",
   "Base.List",
+  "Base.Nat",
+  "Base.Vec",
   "Base.Maybe",
   "Base.Result",
   "Base.String",
@@ -100,39 +128,60 @@ modules = [
 ]
 ```
 
-（`vuna-base` 不在 `[dependencies]` 里依赖别的包；上例的 `[dependencies]` 段从略。）
+（`vuna-base` 不在 `[dependencies]` 里依赖别的包；上例的 `[dependencies]` 段从略。
+`vuna-base` 的 `[capabilities] effects` 只列 `["console", "fs", "process"]`：`Base.IO`
+封装了这些能力对应的 `prim_*`。）
 
-`[export]` 的每个名字都是模块全名；`[dependencies]` 的值是相对该包目录的路径
-（lexical 规范化，不做 realpath）。manifest 只被解析与校验（`Vuna.Compiler.Manifest`），
+`[export]` 的每个名字都是模块全名；`[dependencies]` 的值是相对该包目录的路径（lexical
+规范化，不做 realpath）。manifest 只被解析与校验（`Vuna.Compiler.Frontend.Manifest`），
 文件 I/O 由调用方负责。
+
+## 构建确定性与增量
+
+- **确定性**：同一源码 + 同一编译器产出的 `.ml` / `build.sh` / `build-meta.json` 逐字节
+  一致，产物不含绝对路径或时间戳（测试对两次 `build --out` 做逐字节 diff）。
+- **build meta**：`build` 链接成功后写 `<out>/build-meta.json`（`compile` 与
+  `build --no-compile` 不写，避免污染 seed rotation 与快照）。字段：`schema`、`compiler`、
+  `package`、`entry`、`linked`、`closure`、`sources`（模块名 → 内容哈希）、`dependencies`
+  （依赖包名 → 闭包哈希）。同哈希 + 二进制存在时 `build` 直接打印 `up to date:` 跳过。
+- **按模块内容哈希增量**：生成的 `build.sh` 为每个模块计算 `.ml`/`.mli` + 依赖 `.cmi` 的
+  内容哈希并写 `<module>.stamp`，命中则跳过重编；不再用 mtime，所以 checkout / 复制不会
+  造成全量重编。需要 POSIX sh + `sha256sum`（Nix stdenv 与常规 coreutils 环境都有）。
+- **hermetic 边界**：确定性 / 哈希 / 增量由 vuna 保证；**完全 hermetic 的固定工具链由 Nix
+  构建承担**。本地 `vuna build` 仍调用宿主 `ocamlopt`；`--no-compile` 只产源码。
+- **workspace 单元**：`check` 是所有成员的检查单元；`build` 是全部可执行成员的构建单元
+  （库成员 check + skip），`--package` 可只建一个包。
 
 ## 工具链命令一览
 
 | 命令 | 说明 |
 | --- | --- |
-| `vuna compile [--no-print] [--root DIR]... (<entry.vuna> \| <package-dir>) [out.ml]` | 单文件 / 原始模式 codegen（DT 单文件输出模型） |
-| `vuna check [--root DIR]... (<entry.vuna> \| <package-dir>)` | 类型检查（不生成代码） |
-| `vuna build [--no-compile] [DIR]` | 单文件 DT codegen + ocamlopt → `.output/bin/<包名>` |
-| `vuna build --split OUT [DIR]` | 逐模块 DT codegen 到 OUT（`.ml` + `build.sh`） |
-| `vuna seed OUT [DIR]` | 逐模块 seed 文件集（必须显式 OUT；rotation 用脚本） |
+| `vuna compile [--no-print] (<entry.vuna> \| <package-dir>) OUTDIR` | 逐模块 codegen 写到目录（唯一输出模型；成功静默） |
+| `vuna check (<entry.vuna> \| <package-dir>)` | 类型检查（workspace 根检查所有成员；不生成代码） |
+| `vuna build [--no-compile] [--out DIR] [--package NAME] [PKG-DIR]` | 逐模块 codegen（默认 `<PKG-DIR>/.output`）+ 执行 `build.sh` → `DIR/bin/<包名>`；workspace 根建所有可执行成员 |
 | `vuna lint [--fix] <file.vuna>...` | 风格检查与自动修复 |
-| `vuna interp [--root DIR]... <file.vuna>` | DT 精化 + 核心求值（纯；只展示 `Int`/`String`/`Bool`） |
-| `vuna test [DIR]` | 用 DT 核心求值执行包内 `test/*.vuna`（`main : String`，空串通过） |
+| `vuna interp <file.vuna>` | DT 精化 + 核心求值（纯；只展示 `Int`/`String`/`Bool`） |
+| `vuna test [DIR]` | 纯测试走核心求值；`main : IO ...` 走 compile+运行（退出码 0 通过） |
 | `vuna fmt [--check] [PATH]...` | 格式化 |
-| `vuna repl [--root DIR]...` | 交互式 REPL |
-| `vuna doc [--with-comments] [DIR [OUT]]` | 生成 Markdown API 文档 |
-| `vuna map [--modules]` / `--find` / `--impact` | 源码符号索引（定义、引用者、建议测试） |
+| `vuna repl` | 交互式 REPL（多行；IO 表达式经 compile+运行） |
+| `vuna doc [DIR [OUT]]` | 生成 Markdown API 文档（尊重 `[export]`） |
+| `vuna map [--modules]` / `--find` / `--impact` | 源码符号索引（内容哈希缓存；定义、引用位置、建议测试） |
 | `vuna api <Module.name>` | 某模块的签名面（含注释与行号） |
+| `vuna gen-errors [ROOT]` | 生成错误码文档（默认 `docs/.generated/errors.md`） |
+| `vuna version`, `vuna --version` | 版本 |
 | `vuna help`, `vuna -h` | 用法 |
 
-每个命令都必须显式书写，不再支持“无子命令 = compile”的旧式回退。没有可选的检查器
-开关：所有编译命令都走 DT 精化 + 擦除 codegen，`vuna interp` 总是 DT 精化 +
-核心求值。`vuna compile --package` 已删除；包目录入口直接作为单文件入口交给
-`compile` / `check`。省略 `--root` 时使用当前目录包的模块根；
-`--root` 仍用于原始文件模式（例如编译器自举、测试夹具）显式指定模块根。
+每个命令都必须显式书写，不再支持“无子命令 = compile”的旧式回退。没有可选的检查器开关：
+所有编译命令都走 DT 精化 + 擦除 codegen，`vuna interp` 总是 DT 精化 + 核心求值。包目录
+入口直接作为入口文件交给 `compile` / `check`；`compile`/`build` 的产物统一是逐模块目录
+（`--out` 指定 build 的输出目录），seed rotation 用 `build --no-compile --out` +
+`nix/seed-rotate.sh`。工具命令的退出码约定：0 成功、1 运行期错误、2 用法 / 参数错误；
+不存在路径 / 非 workspace / 非包目录给可读错误，不泄漏宿主异常。详见
+[bootstrap.md](bootstrap.md)。
 
 ## 相关阅读
 
 - 模块系统与 import 解析：[language.md](language.md)
 - `Prelude` 与标准库包：[stdlib.md](stdlib.md)
+- 内建 / 原语的声明面与效应语义：[primitives.md](primitives.md)
 - 测试命令的环境变量与 nix 入口：[testing.md](testing.md)

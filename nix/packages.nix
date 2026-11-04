@@ -31,6 +31,8 @@ let
     } build;
 
   # stage 0：提交入库的多文件信任锚点种子，用 seed/build.sh 构建。
+  # base 与可执行文件按「可执行文件相对布局」安装（$out/base），无 manifest 的
+  # 单文件由 vuna-seed 直接编译时能找到 base（M26）。
   vuna-seed = mkStage {
     name = "vuna-seed-${version}";
     description = "vuna seed compiler (stage 0, multi-file seed)";
@@ -38,13 +40,14 @@ let
     build = ''
       mkdir -p "$out/bin"
       cp -r ${../seed} seed
+      cp -r ${../base} "$out/base"
       chmod -R u+w seed
       cd seed
       sh build.sh "$out/bin/vuna-seed"
     '';
   };
 
-  # stage 1 编译器：种子对 compiler 包做分离编译，用生成的 build.sh 构建。
+  # stage 1 编译器：种子对 compiler 包做逐模块 codegen，用生成的 build.sh 构建。
   vuna-compiler = mkStage {
     name = "vuna-compiler-${version}";
     description = "vuna compiler (stage 1, split-compiled from compiler/)";
@@ -54,8 +57,9 @@ let
       cp -r ${../compiler} compiler
       cp -r ${../base} base
       chmod -R u+w .
-      ${vuna-seed}/bin/vuna-seed seed stage1 compiler
+      ${vuna-seed}/bin/vuna-seed build --no-compile --out stage1 compiler
       sh stage1/build.sh "$out/bin/vuna-compiler"
+      cp -r base "$out/base"
     '';
   };
 
@@ -72,8 +76,9 @@ let
       cp -r ${../base} base
       cp ${../vuna.toml} vuna.toml
       chmod -R u+w .
-      ${vuna-compiler}/bin/vuna-compiler build .
+      ${vuna-compiler}/bin/vuna-compiler build --package vuna .
       cp .output/bin/vuna "$out/bin/vuna"
+      cp -r base "$out/base"
     '';
   };
 

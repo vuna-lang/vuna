@@ -1,0 +1,3 @@
+-- 纯测试（失败）：main : Int = 1，非 0 → FAIL（`vuna test` 退出码 1）。
+main : Int
+main = 1

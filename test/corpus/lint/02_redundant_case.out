@@ -1,1 +1,1 @@
-corpus/lint/02_redundant_case.vuna:2:3: redundant-case: single-alternative case on `p` can be folded into the enclosing pattern
+corpus/lint/02_redundant_case.vuna:2:3: [LN_LiftDestructure] lift-destructure: single-alternative case on `p` can be folded into the enclosing pattern

@@ -25,6 +25,9 @@ import Base.Pair
 import Base.Maybe
 import Base.Bool
 import Base.Monad
+-- M24.7：`mem` 的 `==` 在刚性类型上提升成 Dict_Eq；显式 import Base.Eq 既保证类存在，
+-- 也让 split 产物有正确的单元依赖顺序（生成代码引用 Base.Eq.eq 投影）。
+import Base.Eq
 
 data List a : Type where
   Nil : List a
@@ -92,8 +95,14 @@ drop : Int -> List a -> List a
 drop n [] = []
 drop n (x :: xs) = if n <= 0 then x :: xs else drop (n - 1) xs
 
+-- M25.2b：原来的升序写法 `i :: range (i + 1) n` 需要「有界计数器」规则才能证明；
+-- 改成对「剩余个数」倒计数（`k = n - i`，每次 `k - 1`，由 `k <= 0` 守卫），
+-- 终止性由 R2 直接可证；语义与原来一致（`i >= n` 时 `k <= 0` 返回空表）。
 range : Int -> Int -> List Int
-range i n = if i >= n then [] else i :: range (i + 1) n
+range i n = rangeFrom i (n - i)
+
+rangeFrom : Int -> Int -> List Int
+rangeFrom i k = if k <= 0 then [] else i :: rangeFrom (i + 1) (k - 1)
 
 mapMaybe : (a -> Maybe b) -> List a -> List b
 mapMaybe f [] = []

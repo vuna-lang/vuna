@@ -1,5 +1,4 @@
 open Vuna_runtime
-open Vuna_builtins
 open Base_dPair
 open Base_dBool
 type ('a0, 'a1) t_Dict_uBase_dMonad_dFunctor = C_Dict_uBase_dMonad_dFunctor_MkDict_uBase_dMonad_dFunctor of ('a1)

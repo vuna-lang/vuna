@@ -1,0 +1,11 @@
+-- M25.2a 正例：嵌套构造子模式里的深层字段仍是形参的真子项（旧 size 表只看一层）。
+data Box : Type where
+  MkBox : Box -> Box
+  Base : Box
+
+count : Box -> Int
+count (MkBox (MkBox b)) = 1 + count b
+count _ = 0
+
+main : Int
+main = count (MkBox (MkBox Base))

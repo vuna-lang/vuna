@@ -1,0 +1,7 @@
+-- M25.2b 负例：升序计数器 `i + 1`（本轮没有「有界计数器」规则；base 的 range
+-- 已改写成倒计数，这里仍应拒绝）。
+up : Int -> Int -> Int
+up i n = if i >= n then 0 else up (i + 1) n
+
+main : Int
+main = 0

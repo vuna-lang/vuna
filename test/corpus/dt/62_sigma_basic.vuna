@@ -1,0 +1,51 @@
+-- M29（B13/D12）：依赖对（Σ）的基本构造 / 投影 / 嵌套。
+--
+-- 用可编译的 **Tarski 风格存在式**演示：`Ty` 是运行时类型码（普通 data），
+-- `Tm : Ty -> Type` 是指标族，`Some = Σ (t : Ty). Tm t`。
+--
+-- 泛型 `Sigma : (a : Type) -> (a -> Type) -> Type` 的值级构造受「类型不能依赖运行时值」
+-- 限制：`MkSigma` 的类型族参数是运行时字段，传类型族名会被擦除检查拒
+-- （`CG_TypeLevelNameRuntime`，负例 test/corpus/dt_err/45_generic_sigma_runtime.vuna）。
+-- M29 决定不引入 type codes（B14/D09），因此**泛型 Σ 的值级使用归 F4**，可编译的 Σ 落地
+-- 证据就是本夹具的类型码 + 指标族存在式（`base/` 不新增泛型 Σ 模块）。
+data Ty : Type where
+  TNat : Ty
+
+data Tm : Ty -> Type where
+  TZero : Tm TNat
+
+-- 存在式：Σ (t : Ty). Tm t
+data Some : Type where
+  MkSome : (t : Ty) -> Tm t -> Some
+
+-- 第一投影：取见证（类型码）。
+someFst : Some -> Ty
+someFst s = case s of
+  MkSome t x => t
+
+-- 第二投影：取依赖值，类型是 `Tm (someFst s)`。
+someSnd : (s : Some) -> Tm (someFst s)
+someSnd s = case s of
+  MkSome t x => x
+
+evalTm : (t : Ty) -> Tm t -> Int
+evalTm t x = case t of
+  TNat => 1
+
+someEval : Some -> Int
+someEval s = case s of
+  MkSome t x => evalTm t x
+
+-- 嵌套：一个存在式里放两个存在式（Σ 的分量本身又是 Σ）。
+data Nested : Type where
+  MkNested : Some -> Some -> Nested
+
+nestedEval : Nested -> Int
+nestedEval n = case n of
+  MkNested a b => someEval a + someEval b
+
+one : Some
+one = MkSome TNat TZero
+
+main : Int
+main = someEval one + nestedEval (MkNested one one)

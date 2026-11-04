@@ -1,0 +1,7 @@
+-- M29（C04）：含函数字段的 data 没有可用的 Eq 证据（字段类型 `Int -> Int` 无实例），
+-- `==` 在 check 期被拒；derive Eq 同样会因字段相等缺实例而失败。
+data FnBox : Type where
+  MkFn : (Int -> Int) -> FnBox
+
+main : Bool
+main = MkFn (\x => x) == MkFn (\x => x)

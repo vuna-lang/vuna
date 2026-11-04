@@ -1,0 +1,8 @@
+-- M29（B04/C04）：没有 Eq 实例的普通 data，`==` 在 check 期报「缺实例」，
+-- 不再退回泛型结构比较兜底（拒绝运行期 compare/Invalid_argument 的旧路径）。
+data Color : Type where
+  Red : Color
+  Green : Color
+
+main : Bool
+main = Red == Red

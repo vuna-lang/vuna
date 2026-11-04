@@ -1,0 +1,6 @@
+-- M25.2b 负例：无守卫的 `n - 1`（没有下界证据，必须拒绝）。
+bad : Int -> Int
+bad n = bad (n - 1)
+
+main : Int
+main = 0

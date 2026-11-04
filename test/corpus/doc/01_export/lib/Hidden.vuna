@@ -1,0 +1,4 @@
+module Hidden (secret) where
+
+secret : Int
+secret = 7

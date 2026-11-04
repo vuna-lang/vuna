@@ -1,8 +1,6 @@
 # 多包示例 workspace 根：根目录本身是包（可执行目标），成员包 greet 提供库。
 [package]
 name = "multi"
-version = "0.1.0"
-edition = "2026"
 
 [workspace]
 members = ["greet"]

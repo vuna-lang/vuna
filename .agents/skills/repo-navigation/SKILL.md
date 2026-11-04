@@ -133,8 +133,8 @@ tests: run, stdlib
 
 - 子系统地图级 → `docs/architecture.md`（已有五条链路）
 - 单一参考主题 → `docs/reference/<topic>.md`
-- 阶段决策/设计闸门 → `docs/reference/mXX-design.md`
-- 里程碑历史 → `docs/history.md`（roadmap 只留一句话摘要）
+- 阶段方向 / 开放项 → `docs/roadmap.md` + `docs/reference/debt.md`（只记仍未完成项）
+- 历史 / 已完成阶段 / 已落地决策 → git log（不要写进 `docs/`）
 
 **写完必须接进导航**：`AGENTS.md` 的「文档导航」与 `README.md` 的文档表各加一行，
 否则文档等于不存在。

@@ -1,0 +1,5 @@
+[package]
+name = "effect-no-capability"
+
+[dependencies]
+vuna-base = "../../../../base"

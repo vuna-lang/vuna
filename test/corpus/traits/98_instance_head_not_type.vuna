@@ -1,0 +1,9 @@
+-- M29-T2b 负例：实例头实参必须是类型（`Pretty 1` 的 `1` 不是类型）。
+trait Pretty a where
+  pretty : a -> String
+
+instance Pretty 1 where
+  pretty c = "one"
+
+main : String
+main = "x"

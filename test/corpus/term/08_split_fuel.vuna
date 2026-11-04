@@ -1,0 +1,6 @@
+-- M25.2b 正例：基库 `Base.String.split` 同形态（跨函数 fuel 传递 + 守卫）。
+import Base.List
+import Base.String
+
+main : Int
+main = length (split "," "a,b,,c")

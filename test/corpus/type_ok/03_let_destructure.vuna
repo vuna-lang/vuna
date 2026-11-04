@@ -1,0 +1,9 @@
+-- A1：let 模式解构（构造子模式）应通过检查并正确求值。
+data Point : Type where
+  MkPoint : Int -> Int -> Point
+
+main : Int
+main =
+  let
+    MkPoint x y = MkPoint 40 2
+  in x + y

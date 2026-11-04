@@ -1,13 +1,11 @@
 -- M19：`deriving (Show, Eq)` 在 DT 下可用（展开成等价的 instance）。
 --
 -- `deriving` 不需要新的精化规则：它等价于手写 `instance`，方法体按构造子骨架机械生成。
--- 展开发生在精化之前（`DtDerive.vuna`），交给既有的字典编码与实例搜索处理。
+-- 展开发生在精化之前（`Elab.Derive`），交给既有的字典编码与实例搜索处理。
 --
 -- 前置两项都在 M19 完成：同 trait 多实例能正确解析（`Show Int` 与 `Show Color` 共存）、
 -- `==` 对非内建类型走 `Eq` 实例。
-data Bool : Type where
-  False : Bool
-  True : Bool
+import Prelude
 
 data Color : Type where
   Red : Color

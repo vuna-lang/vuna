@@ -1,0 +1,5 @@
+[package]
+name = "p1"
+
+[dependencies]
+n = "../n1"

@@ -1,0 +1,1149 @@
+module Vuna.Lint.Rules
+  ( Edit
+  , Finding
+  , editEnd
+  , editLines
+  , editStart
+  , findingCode
+  , findingCol
+  , findingEdit
+  , findingLine
+  , findingMessage
+  , findingRule
+  , isNilList
+  , joinLines
+  , lintSource
+  , splitLines
+  ) where
+
+-- Vuna.Lint.Rules：lint 的三条规则（AST 驱动）+ 源码切片工具。
+--
+-- M31 重写：旧实现是纯 token 行扫描（按缩进猜结构），规范格式下几乎不触发。
+-- 现在 `lintSource` 先 parseSource 得到 AST，规则判定全部走 AST；需要源码原文
+-- （字面量、模式、分支体）时再用 span + token 边界从源码切片，绝不重新渲染
+-- 字符串字面量。Edit 用行范围表示（`Edit start stop lines`），由 Vuna.Lint.Fix 应用。
+--
+-- 规则：
+--   * literal-if-chain：`if x == lit then a else if x == lit then b else c` 链，
+--     lit 为 String/Int 字面量且 else 链同一 scrutinee → `case x of lit => a ... _ => c`；
+--   * lift-destructure：单候选解构（单 alt case / 单绑定 let）提升到外层 clause/alt 模式
+--     （原 redundant-case 的扩展；旧 RedundantCase 保留为历史别名，不再产生）；
+--   * case-to-clauses：顶层单 clause 函数的 `case` 分支提升为多条同名 clause。
+--
+-- 三条规则都只做语法可证的改写：判据不满足时只报告、不给 Edit（`findingEdit = Nothing`）。
+-- 候选按（行, 列）排序，被更大 Edit 行范围包含的内层 finding 会被丢弃，避免同一链/同一次
+-- 折叠产生互相冲突的 Edit。
+import Vuna.Compiler.Common
+import Vuna.Compiler.Frontend.Ast
+import Vuna.Compiler.Frontend.Lexer
+import Vuna.Compiler.Frontend.Parser
+import Vuna.Lint.Diagnostics
+
+data Edit : Type where
+  Edit : Int -> Int -> List String -> Edit
+
+data Finding : Type where
+  Finding : Int -> Int -> String -> String -> String -> Maybe Edit -> Finding
+
+-- 外层模式上下文：候选提升的目标位置。
+-- LClause headLine pats isLast：外层是顶层子句；LAlt headLine pat isLast：外层是 alt。
+data Lane : Type where
+  LClause : Int -> List Pat -> Bool -> Lane
+  LAlt : Int -> Pat -> Bool -> Lane
+
+-- 字面量 if 分支：literal 原文、then 原文、then 表达式。
+data ChainItem : Type where
+  ChainItem : String -> String -> Expr -> ChainItem
+
+-- 链提取结果：scrutinee 名、分支、default 原文、default 表达式。
+data ChainRes : Type where
+  ChainRes : String -> List ChainItem -> String -> Expr -> ChainRes
+
+lintFuel : Int
+lintFuel = 1000000
+
+editStart : Edit -> Int
+editStart (Edit start stop lines) = start
+
+editEnd : Edit -> Int
+editEnd (Edit start stop lines) = stop
+
+editLines : Edit -> List String
+editLines (Edit start stop lines) = lines
+
+findingLine : Finding -> Int
+findingLine (Finding line col code rule message edit) = line
+
+findingCol : Finding -> Int
+findingCol (Finding line col code rule message edit) = col
+
+findingCode : Finding -> String
+findingCode (Finding line col code rule message edit) = code
+
+findingRule : Finding -> String
+findingRule (Finding line col code rule message edit) = rule
+
+findingMessage : Finding -> String
+findingMessage (Finding line col code rule message edit) = message
+
+findingEdit : Finding -> Maybe Edit
+findingEdit (Finding line col code rule message edit) = edit
+
+isNilList : List a -> Bool
+isNilList [] = True
+isNilList (x :: rest) = False
+
+notBool : Bool -> Bool
+notBool b = if b then False else True
+
+atLeastTwo : List a -> Bool
+atLeastTwo (x :: y :: rest) = True
+atLeastTwo _ = False
+
+-- ---------------------------------------------------------------
+-- 行 / 字符工具
+-- ---------------------------------------------------------------
+isSpaceChar : Int -> Bool
+isSpaceChar c = c == 32 || c == 9
+
+spaceChars : Int -> List Int
+spaceChars n = if n <= 0 then [] else 32 :: spaceChars (n - 1)
+
+spaces : Int -> String
+spaces n = strPack (spaceChars n)
+
+indentOf : String -> Int
+indentOf line = indentChars (strUnpack line)
+
+indentChars : List Int -> Int
+indentChars [] = 0
+indentChars (c :: rest) = case c of
+  32 => 1 + indentChars rest
+  9 => 1 + indentChars rest
+  _ => 0
+
+blankChars : List Int -> Bool
+blankChars [] = True
+blankChars (c :: rest) = isSpaceChar c && blankChars rest
+
+splitLines : String -> List String
+splitLines source = splitLinesFrom (strUnpack source) [] []
+
+splitLinesFrom : List Int -> List String -> List Int -> List String
+splitLinesFrom [] acc cur = reverse (strPack (reverse cur) :: acc)
+splitLinesFrom (c :: rest) acc cur =
+  if c == 10 then splitLinesFrom rest (strPack (reverse cur) :: acc) []
+  else splitLinesFrom rest acc (c :: cur)
+
+joinLines : List String -> String
+joinLines [] = ""
+-- 单元素列表不加换行：splitLines 对以换行结尾的源码会补一个空行，旧实现
+-- （`line ++ "\n" ++ joinLines rest`）会让 --fix 每次多写一个行尾换行。
+joinLines ([line]) = line
+joinLines (line :: rest) = line ++ "\n" ++ joinLines rest
+
+nthLine : List String -> Int -> String
+nthLine [] n = ""
+nthLine (line :: rest) n = if n <= 1 then line else nthLine rest (n - 1)
+
+lineAt : List String -> Int -> String
+lineAt lines n = nthLine lines n
+
+takeChars : Int -> List a -> List a
+takeChars n [] = []
+takeChars n (c :: rest) = if n <= 0 then [] else c :: takeChars (n - 1) rest
+
+dropChars : Int -> List a -> List a
+dropChars n chars = if n <= 0 then chars
+else case chars of
+  [] => []
+  c :: rest => dropChars (n - 1) rest
+
+sliceChars : Int -> Int -> List a -> List a
+sliceChars start count chars = takeChars count (dropChars start chars)
+
+sliceLine : Int -> Int -> String -> String
+sliceLine start count line = strPack (sliceChars start count (strUnpack line))
+
+dropIndent : Int -> String -> String
+dropIndent n line = strPack (dropChars n (strUnpack line))
+
+-- 源码列 col 之前的部分（col 从 1 开始）。
+prefixBeforeCol : String -> Int -> String
+prefixBeforeCol line col = sliceLine 0 (col - 1) line
+
+-- col 起的行尾原文（含 col 处字符）。
+tailFromCol : String -> Int -> String
+tailFromCol line col = strPack (dropChars (col - 1) (strUnpack line))
+
+-- 列区间 [c1, c2) 的原文（1 基、左闭右开）。
+sliceBetween : String -> Int -> Int -> String
+sliceBetween line c1 c2 = sliceLine (c1 - 1) (c2 - c1) line
+
+nthChar : Int -> List Int -> Int
+nthChar i [] = 0
+nthChar i (c :: rest) = if i <= 0 then c else nthChar (i - 1) rest
+
+trimLen : List Int -> Int -> Int
+trimLen chars n =
+  if n <= 0 then 0 else if isSpaceChar (nthChar (n - 1) chars) then trimLen chars (n - 1) else n
+
+trimEnd : String -> String
+trimEnd line =
+  strPack (takeChars (trimLen (strUnpack line) (length (strUnpack line))) (strUnpack line))
+
+prefixChars : List Int -> List Int -> Bool
+prefixChars [] text = True
+prefixChars (p :: prest) text = case text of
+  [] => False
+  t :: trest => if p == t then prefixChars prest trest else False
+
+containsSubChars : List Int -> List Int -> Bool
+containsSubChars pat [] = False
+containsSubChars pat (c :: rest) =
+  if prefixChars pat (c :: rest) then True else containsSubChars pat rest
+
+containsChar : Int -> List Int -> Bool
+containsChar c [] = False
+containsChar c (x :: rest) = if x == c then True else containsChar c rest
+
+hasComment : String -> Bool
+hasComment line =
+  containsSubChars (strUnpack "--") (strUnpack line)
+    || containsSubChars (strUnpack "{-") (strUnpack line)
+
+hasTabOrCR : String -> Bool
+hasTabOrCR line = containsChar 9 (strUnpack line) || containsChar 13 (strUnpack line)
+
+dropIndex : Int -> List a -> List a
+dropIndex n lines = if n <= 0 then lines
+else case lines of
+  [] => []
+  x :: rest => dropIndex (n - 1) rest
+
+takeIndex : Int -> List a -> List a
+takeIndex n lines = if n <= 0 then []
+else case lines of
+  [] => []
+  x :: rest => x :: takeIndex (n - 1) rest
+
+rangeLines : List String -> Int -> Int -> List String
+rangeLines lines start stop = takeIndex (stop - start + 1) (dropIndex (start - 1) lines)
+
+dedentRange : List String -> Int -> Int -> Int -> List String
+dedentRange lines start stop n = map (\line => dropIndent n line) (rangeLines lines start stop)
+
+linesCleanRange : List String -> Int -> Int -> Bool
+linesCleanRange lines start stop = linesCleanGo (rangeLines lines start stop)
+
+linesCleanGo : List String -> Bool
+linesCleanGo [] = True
+linesCleanGo (line :: rest) =
+  if hasComment line || hasTabOrCR line then False else linesCleanGo rest
+
+-- 多行 body 按目标缩进重排：以 body 真实首行缩进减去 target 作为统一 dedent。
+blockBodyLines : List String -> Expr -> Int -> List String
+blockBodyLines lines body target =
+  let
+    start = exprStartLine body
+    stop = spanEndLine (exprSpan body)
+    k = indentOf (lineAt lines start) - target
+  in dedentRange lines start stop (if k < 0 then 0 else k)
+
+-- ---------------------------------------------------------------
+-- token 工具
+-- ---------------------------------------------------------------
+tokPos : PTok -> Pos
+tokPos (PTok t p) = p
+
+tokLine : PTok -> Int
+tokLine tok = posLine (tokPos tok)
+
+tokCol : PTok -> Int
+tokCol tok = posCol (tokPos tok)
+
+tokIsKw : PTok -> String -> Bool
+tokIsKw (PTok (TKw x) p) key = x == key
+tokIsKw _ key = False
+
+tokIdentOf : PTok -> Maybe String
+tokIdentOf (PTok (TIdent x) p) = Just x
+tokIdentOf _ = Nothing
+
+tokIsEof : PTok -> Bool
+tokIsEof (PTok TEof p) = True
+tokIsEof _ = False
+
+headToken : List a -> Maybe a
+headToken [] = Nothing
+headToken (t :: rest) = Just t
+
+tokenAt : List PTok -> Int -> Int -> Maybe PTok
+tokenAt [] line col = Nothing
+tokenAt (t :: rest) line col =
+  if tokLine t == line && tokCol t == col then Just t else tokenAt rest line col
+
+-- span 最后一个 token 之后的第一个 token（EOF 也返回）；用于定位切片右边界。
+nextTokAfter : List PTok -> Int -> Int -> Maybe PTok
+nextTokAfter [] line col = Nothing
+nextTokAfter (t :: rest) line col =
+  if tokLine t == line && tokCol t == col then headToken rest else nextTokAfter rest line col
+
+-- span 的原文（单行）。右边界 = span 末 token 之后的下一个 token（或行尾）。
+spanText : List String -> List PTok -> Span -> String
+spanText lines toks sp = if spanStartLine sp /= spanEndLine sp then ""
+else
+  let
+    line = lineAt lines (spanStartLine sp)
+    col = spanStartCol sp
+  in case nextTokAfter toks (spanEndLine sp) (spanEndCol sp) of
+    Nothing => trimEnd (tailFromCol line col)
+    Just t =>
+      if tokIsEof t then trimEnd (tailFromCol line col)
+      else if tokLine t == spanEndLine sp then trimEnd (sliceBetween line col (tokCol t))
+      else trimEnd (tailFromCol line col)
+
+patText : List String -> List PTok -> Pat -> String
+patText lines toks pat = spanText lines toks (patSpan pat)
+
+spanSingleLine : Span -> Bool
+spanSingleLine sp = spanStartLine sp == spanEndLine sp
+
+-- 表达式的真实起始位置：parser 给中缀表达式（`a + b`）的 span 从运算符开始，
+-- 起点会比 `a` 晚，所以取整棵子树里最靠前的 span 起点。
+exprStartPos : Expr -> Pair Int Int
+exprStartPos e = startExpr lintFuel e
+
+minPair : Pair Int Int -> Pair Int Int -> Pair Int Int
+minPair (a@(Pair la ca)) (b@(Pair lb cb)) =
+  if la < lb then a else if la == lb && ca <= cb then a else b
+
+startFromSpan : Span -> Pair Int Int
+startFromSpan sp = Pair (spanStartLine sp) (spanStartCol sp)
+
+startExpr : Int -> Expr -> Pair Int Int
+startExpr fuel e = if fuel <= 0 then Pair 0 0
+else case e of
+  EVar n sp => startFromSpan sp
+  EInt n sp => startFromSpan sp
+  EStr s sp => startFromSpan sp
+  ELam ps body sp => minPair (startFromSpan sp) (startExpr (fuel - 1) body)
+  EApp fn args sp =>
+    minPair (startFromSpan sp) (minPair (startExpr (fuel - 1) fn) (startExprs (fuel - 1) args))
+  EPi n implicit dom cod sp =>
+    minPair (startFromSpan sp) (minPair (startExpr (fuel - 1) dom) (startExpr (fuel - 1) cod))
+  ELet binds body recFlag sp =>
+    minPair (startFromSpan sp) (minPair (startBinds (fuel - 1) binds) (startExpr (fuel - 1) body))
+  ELocalFun clauses sp => minPair (startFromSpan sp) (startLocalClauses (fuel - 1) clauses)
+  ECase scrut alts sp =>
+    minPair (startFromSpan sp) (minPair (startExpr (fuel - 1) scrut) (startAlts (fuel - 1) alts))
+  EIf c t el sp =>
+    minPair (startFromSpan sp)
+      (minPair (startExpr (fuel - 1) c) (minPair (startExpr (fuel - 1) t) (startExpr (fuel - 1) el)))
+  EField base f sp => minPair (startFromSpan sp) (startExpr (fuel - 1) base)
+  ERecord rn fields sp => minPair (startFromSpan sp) (startFields (fuel - 1) fields)
+  ERecUpdate base fields sp =>
+    minPair (startFromSpan sp) (minPair (startExpr (fuel - 1) base) (startFields (fuel - 1) fields))
+  EDo stmts sp => minPair (startFromSpan sp) (startStmts (fuel - 1) stmts)
+  EAnn value ty sp =>
+    minPair (startFromSpan sp) (minPair (startExpr (fuel - 1) value) (startExpr (fuel - 1) ty))
+
+startExprs : Int -> List Expr -> Pair Int Int
+startExprs fuel exprs = if fuel <= 0 then Pair 1000000000 1000000000
+else case exprs of
+  [] => Pair 1000000000 1000000000
+  e :: rest => minPair (startExpr (fuel - 1) e) (startExprs (fuel - 1) rest)
+
+startFields : Int -> List (Pair String Expr) -> Pair Int Int
+startFields fuel fields = if fuel <= 0 then Pair 1000000000 1000000000
+else case fields of
+  [] => Pair 1000000000 1000000000
+  (Pair f e) :: rest => minPair (startExpr (fuel - 1) e) (startFields (fuel - 1) rest)
+
+startBinds : Int -> List (Pair Pat Expr) -> Pair Int Int
+startBinds fuel binds = if fuel <= 0 then Pair 1000000000 1000000000
+else case binds of
+  [] => Pair 1000000000 1000000000
+  (Pair pat e) :: rest => minPair (startExpr (fuel - 1) e) (startBinds (fuel - 1) rest)
+
+startAlts : Int -> List (Pair Pat Expr) -> Pair Int Int
+startAlts fuel alts = if fuel <= 0 then Pair 1000000000 1000000000
+else case alts of
+  [] => Pair 1000000000 1000000000
+  (Pair pat e) :: rest => minPair (startExpr (fuel - 1) e) (startAlts (fuel - 1) rest)
+
+startLocalClauses : Int -> List (Pair (List Pat) Expr) -> Pair Int Int
+startLocalClauses fuel clauses = if fuel <= 0 then Pair 1000000000 1000000000
+else case clauses of
+  [] => Pair 1000000000 1000000000
+  (Pair pats e) :: rest => minPair (startExpr (fuel - 1) e) (startLocalClauses (fuel - 1) rest)
+
+startStmts : Int -> List DoStmt -> Pair Int Int
+startStmts fuel stmts = if fuel <= 0 then Pair 1000000000 1000000000
+else case stmts of
+  [] => Pair 1000000000 1000000000
+  stmt :: rest => minPair (startStmt (fuel - 1) stmt) (startStmts (fuel - 1) rest)
+
+startStmt : Int -> DoStmt -> Pair Int Int
+startStmt fuel stmt = if fuel <= 0 then Pair 1000000000 1000000000
+else case stmt of
+  DBind pat e sp => startExpr (fuel - 1) e
+  DExpr e sp => startExpr (fuel - 1) e
+
+exprStartLine : Expr -> Int
+exprStartLine e = case exprStartPos e of
+  Pair line col => line
+
+exprStartCol : Expr -> Int
+exprStartCol e = case exprStartPos e of
+  Pair line col => col
+
+-- 表达式的真实单行性：起点用子树最小位置（覆盖中缀 span 起点偏后的情况）。
+exprSingleLine : Expr -> Bool
+exprSingleLine e = exprStartLine e == spanEndLine (exprSpan e)
+
+-- 表达式原文（单行）。左边界用真实起点，右边界 = span 末 token 之后的下一个 token。
+exprText : List String -> List PTok -> Expr -> String
+exprText lines toks e = if notBool (exprSingleLine e) then ""
+else
+  let
+    line = lineAt lines (exprStartLine e)
+    col = exprStartCol e
+    endLine = spanEndLine (exprSpan e)
+  in case nextTokAfter toks endLine (spanEndCol (exprSpan e)) of
+    Nothing => trimEnd (tailFromCol line col)
+    Just t =>
+      if tokIsEof t then trimEnd (tailFromCol line col)
+      else if tokLine t == endLine then trimEnd (sliceBetween line col (tokCol t))
+      else trimEnd (tailFromCol line col)
+
+-- 表达式是否收束在自己的行片段末尾：同行后随 token 只能是 `else`（inline 链尾）或没有。
+segmentOk : List String -> List PTok -> Expr -> Bool
+segmentOk lines toks e = if notBool (exprSingleLine e) then False
+else case nextTokAfter toks (spanEndLine (exprSpan e)) (spanEndCol (exprSpan e)) of
+  Nothing => True
+  Just t =>
+    if tokIsEof t then True
+    else if tokLine t == spanEndLine (exprSpan e) then tokIsKw t "else" else True
+
+replaceIdentInLine : String -> PTok -> String -> String
+replaceIdentInLine line tok replacement =
+  let
+    col = tokCol tok
+    name = identText tok
+    prefix = sliceLine 0 (col - 1) line
+    suffix = tailFromCol line (col + strLength name)
+  in prefix ++ replacement ++ suffix
+
+identText : PTok -> String
+identText tok = case tokIdentOf tok of
+  Just x => x
+  Nothing => ""
+
+-- 名字是否出现在行首缩进之外的正文前（即该位置之前只有空白）。
+startsOwnLine : List String -> Int -> Int -> Bool
+startsOwnLine lines line col = blankChars (strUnpack (prefixBeforeCol (lineAt lines line) col))
+
+-- ---------------------------------------------------------------
+-- 模式工具（带 fuel，便于相互递归的 SCT 证明）
+-- ---------------------------------------------------------------
+patVars : List Pat -> List String
+patVars pats = patVarsFuel lintFuel pats
+
+patVarsFuel : Int -> List Pat -> List String
+patVarsFuel fuel pats = if fuel <= 0 then []
+else case pats of
+  [] => []
+  p :: rest => append (patVarFuel (fuel - 1) p) (patVarsFuel (fuel - 1) rest)
+
+patVarFuel : Int -> Pat -> List String
+patVarFuel fuel pat = if fuel <= 0 then []
+else case pat of
+  PVar name sp => [name]
+  PAs name inner sp => name :: patVarFuel (fuel - 1) inner
+  PWild sp => []
+  PCon name args sp => patVarsFuel (fuel - 1) args
+  PInt n sp => []
+  PStr s sp => []
+  PRecord name fields sp => patFieldVarsFuel (fuel - 1) fields
+
+patFieldVarsFuel : Int -> List (Pair String Pat) -> List String
+patFieldVarsFuel fuel fields = if fuel <= 0 then []
+else case fields of
+  [] => []
+  (Pair f pat) :: rest => append (patVarFuel (fuel - 1) pat) (patFieldVarsFuel (fuel - 1) rest)
+
+countVar : String -> List Pat -> Int
+countVar name pats = countPatsFuel lintFuel name pats
+
+countPatsFuel : Int -> String -> List Pat -> Int
+countPatsFuel fuel name pats = if fuel <= 0 then 0
+else case pats of
+  [] => 0
+  p :: rest => countPatFuel (fuel - 1) name p + countPatsFuel (fuel - 1) name rest
+
+countPatFuel : Int -> String -> Pat -> Int
+countPatFuel fuel name pat = if fuel <= 0 then 0
+else case pat of
+  PVar n sp => if n == name then 1 else 0
+  PCon n args sp => countPatsFuel (fuel - 1) name args
+  PRecord n fields sp => countFieldsFuel (fuel - 1) name fields
+  _ => 0
+
+countFieldsFuel : Int -> String -> List (Pair String Pat) -> Int
+countFieldsFuel fuel name fields = if fuel <= 0 then 0
+else case fields of
+  [] => 0
+  (Pair f pat) :: rest => countPatFuel (fuel - 1) name pat + countFieldsFuel (fuel - 1) name rest
+
+patVarSpan : String -> Pat -> Maybe Span
+patVarSpan name pat = patVarSpanFuel lintFuel name pat
+
+patVarSpanFuel : Int -> String -> Pat -> Maybe Span
+patVarSpanFuel fuel name pat = if fuel <= 0 then Nothing
+else case pat of
+  PVar n sp => if n == name then Just sp else Nothing
+  PCon n args sp => patVarSpanInPatsFuel (fuel - 1) name args
+  PRecord n fields sp => patVarSpanInFieldsFuel (fuel - 1) name fields
+  _ => Nothing
+
+patVarSpanInPats : String -> List Pat -> Maybe Span
+patVarSpanInPats name pats = patVarSpanInPatsFuel lintFuel name pats
+
+patVarSpanInPatsFuel : Int -> String -> List Pat -> Maybe Span
+patVarSpanInPatsFuel fuel name pats = if fuel <= 0 then Nothing
+else case pats of
+  [] => Nothing
+  p :: rest => case patVarSpanFuel (fuel - 1) name p of
+    Just sp => Just sp
+    Nothing => patVarSpanInPatsFuel (fuel - 1) name rest
+
+patVarSpanInFieldsFuel : Int -> String -> List (Pair String Pat) -> Maybe Span
+patVarSpanInFieldsFuel fuel name fields = if fuel <= 0 then Nothing
+else case fields of
+  [] => Nothing
+  (Pair f pat) :: rest => case patVarSpanFuel (fuel - 1) name pat of
+    Just sp => Just sp
+    Nothing => patVarSpanInFieldsFuel (fuel - 1) name rest
+
+intersectsNames : List String -> List String -> Bool
+intersectsNames [] ys = False
+intersectsNames (x :: rest) ys = if memName x ys then True else intersectsNames rest ys
+
+removeName : String -> List String -> List String
+removeName name [] = []
+removeName name (x :: rest) = if x == name then removeName name rest else x :: removeName name rest
+
+liftablePat : Pat -> Bool
+liftablePat (PCon name args sp) = True
+liftablePat (PInt n sp) = True
+liftablePat (PStr s sp) = True
+liftablePat (PRecord name fields sp) = True
+liftablePat _ = False
+
+-- 带参数的模式放进 clause 参数位置时必须加括号（`(VBool b)`），否则会被解析成
+-- 多个参数模式（0 元构造子与后续模式分开）。无参数构造子/字面量/变量不需要。
+patNeedsParen : Pat -> Bool
+patNeedsParen (PCon _ args _) = notEmptyPatList args
+patNeedsParen (PRecord _ _ _) = True
+patNeedsParen _ = False
+
+notEmptyPatList : List Pat -> Bool
+notEmptyPatList [] = False
+notEmptyPatList _ = True
+
+-- ---------------------------------------------------------------
+-- 表达式 / 模式的自由名引用
+-- ---------------------------------------------------------------
+exprMentions : String -> Expr -> Bool
+exprMentions name e = mentionsExpr lintFuel name e
+
+mentionsExpr : Int -> String -> Expr -> Bool
+mentionsExpr fuel name e = if fuel <= 0 then False
+else case e of
+  EVar n sp => n == name
+  EInt n sp => False
+  EStr s sp => False
+  ELam ps body sp => mentionsExpr (fuel - 1) name body
+  EApp fn args sp => mentionsExpr (fuel - 1) name fn || mentionsExprs (fuel - 1) name args
+  EPi n implicit dom cod sp => mentionsExpr (fuel - 1) name dom || mentionsExpr (fuel - 1) name cod
+  ELet binds body recFlag sp =>
+    mentionsBinds (fuel - 1) name binds || mentionsExpr (fuel - 1) name body
+  ELocalFun clauses sp => mentionsClauses (fuel - 1) name clauses
+  ECase scrut alts sp => mentionsExpr (fuel - 1) name scrut || mentionsAlts (fuel - 1) name alts
+  EIf cond yes no sp =>
+    mentionsExpr (fuel - 1) name cond
+      || mentionsExpr (fuel - 1) name yes
+      || mentionsExpr (fuel - 1) name no
+  EField base f sp => mentionsExpr (fuel - 1) name base
+  ERecord rname fields sp => mentionsFields (fuel - 1) name fields
+  ERecUpdate base fields sp =>
+    mentionsExpr (fuel - 1) name base || mentionsFields (fuel - 1) name fields
+  EDo stmts sp => mentionsStmts (fuel - 1) name stmts
+  EAnn value ty sp => mentionsExpr (fuel - 1) name value || mentionsExpr (fuel - 1) name ty
+
+mentionsExprs : Int -> String -> List Expr -> Bool
+mentionsExprs fuel name exprs = if fuel <= 0 then False
+else case exprs of
+  [] => False
+  e :: rest => mentionsExpr (fuel - 1) name e || mentionsExprs (fuel - 1) name rest
+
+mentionsFields : Int -> String -> List (Pair String Expr) -> Bool
+mentionsFields fuel name fields = if fuel <= 0 then False
+else case fields of
+  [] => False
+  (Pair f e) :: rest => mentionsExpr (fuel - 1) name e || mentionsFields (fuel - 1) name rest
+
+mentionsBinds : Int -> String -> List (Pair Pat Expr) -> Bool
+mentionsBinds fuel name binds = if fuel <= 0 then False
+else case binds of
+  [] => False
+  (Pair pat e) :: rest => mentionsExpr (fuel - 1) name e || mentionsBinds (fuel - 1) name rest
+
+mentionsAlts : Int -> String -> List (Pair Pat Expr) -> Bool
+mentionsAlts fuel name alts = if fuel <= 0 then False
+else case alts of
+  [] => False
+  (Pair pat e) :: rest => mentionsExpr (fuel - 1) name e || mentionsAlts (fuel - 1) name rest
+
+mentionsClauses : Int -> String -> List (Pair (List Pat) Expr) -> Bool
+mentionsClauses fuel name clauses = if fuel <= 0 then False
+else case clauses of
+  [] => False
+  (Pair pats e) :: rest => mentionsExpr (fuel - 1) name e || mentionsClauses (fuel - 1) name rest
+
+mentionsStmts : Int -> String -> List DoStmt -> Bool
+mentionsStmts fuel name stmts = if fuel <= 0 then False
+else case stmts of
+  [] => False
+  stmt :: rest => mentionsStmt (fuel - 1) name stmt || mentionsStmts (fuel - 1) name rest
+
+mentionsStmt : Int -> String -> DoStmt -> Bool
+mentionsStmt fuel name stmt = if fuel <= 0 then False
+else case stmt of
+  DBind pat e sp => mentionsExpr (fuel - 1) name e
+  DExpr e sp => mentionsExpr (fuel - 1) name e
+
+-- ---------------------------------------------------------------
+-- 规则 1：literal-if-chain
+-- ---------------------------------------------------------------
+condShape : List String -> List PTok -> Expr -> Maybe (Pair String String)
+condShape lines toks (EApp (EVar op opSp) args appSp) = if op == "==" then case args of
+  [lhs, rhs] => case lhs of
+    EVar name nsp => case rhs of
+      EStr s rsp => Just (Pair name (spanText lines toks (exprSpan rhs)))
+      EInt n rsp => Just (Pair name (spanText lines toks (exprSpan rhs)))
+      _ => Nothing
+    _ => Nothing
+  _ => Nothing
+else Nothing
+condShape lines toks _ = Nothing
+
+chainOf : List String -> List PTok -> Expr -> Maybe ChainRes
+chainOf lines toks (EIf cond yes no sp) = case condShape lines toks cond of
+  Nothing => Nothing
+  Just (Pair name lit) =>
+    Just (chainCollect lines toks name [ChainItem lit (exprText lines toks yes) yes] no)
+chainOf lines toks _ = Nothing
+
+chainCollect : List String -> List PTok -> String -> List ChainItem -> Expr -> ChainRes
+chainCollect lines toks name acc expr = chainCollectFuel lintFuel lines toks name acc expr
+
+chainCollectFuel : Int -> List String -> List PTok -> String -> List ChainItem -> Expr -> ChainRes
+chainCollectFuel fuel lines toks name acc expr = if fuel <= 0 then ChainRes name (reverse acc) "" expr
+else case expr of
+  EIf cond yes no sp => case condShape lines toks cond of
+    Just (Pair other lit) =>
+      if other == name then chainCollectFuel (fuel - 1) lines toks name
+        (ChainItem lit (exprText lines toks yes) yes :: acc) no
+      else ChainRes name (reverse acc) (exprText lines toks expr) expr
+    Nothing => ChainRes name (reverse acc) (exprText lines toks expr) expr
+  _ => ChainRes name (reverse acc) (exprText lines toks expr) expr
+
+renderChainItem : Int -> ChainItem -> String
+renderChainItem indent (ChainItem lit thenText expr) =
+  spaces (indent + 2) ++ lit ++ " => " ++ thenText
+
+itemsSegmentsOk : List String -> List PTok -> List ChainItem -> Bool
+itemsSegmentsOk lines toks [] = True
+itemsSegmentsOk lines toks ((ChainItem lit thenText expr) :: rest) =
+  segmentOk lines toks expr && itemsSegmentsOk lines toks rest
+
+chainFixable : List String -> List PTok -> Span -> List ChainItem -> Expr -> Bool
+chainFixable lines toks sp items defaultExpr =
+  linesCleanRange lines (spanStartLine sp) (spanEndLine sp)
+    && itemsSegmentsOk lines toks items
+    && segmentOk lines toks defaultExpr
+
+chainFindings : List String -> List PTok -> Span -> String -> List ChainItem -> String -> Expr -> List Finding
+chainFindings lines toks sp name items defaultText defaultExpr = if notBool (atLeastTwo items) then []
+else if notBool (chainFixable lines toks sp items defaultExpr) then []
+else
+  let
+    startLine = spanStartLine sp
+    endLine = spanEndLine sp
+    line = lineAt lines startLine
+    indent = indentOf line
+    prefix = prefixBeforeCol line (spanStartCol sp)
+    newLines =
+      append [prefix ++ "case " ++ name ++ " of"]
+        (append (map (\item => renderChainItem indent item) items) [spaces (indent + 2) ++ "_ => " ++ defaultText])
+    edit = Just (Edit startLine endLine newLines)
+  in [ Finding startLine (spanStartCol sp) (lintCode LiteralIfChain) (lintRule LiteralIfChain) (lintMsg LiteralIfChain name) edit
+  ]
+
+chainItemThen : ChainItem -> Expr
+chainItemThen (ChainItem lit thenText expr) = expr
+
+walkChainItems : Int -> List String -> List PTok -> List ChainItem -> List Finding
+walkChainItems fuel lines toks items = if fuel <= 0 then []
+else case items of
+  [] => []
+  item :: rest =>
+    append (walkExpr (fuel - 1) lines toks (chainItemThen item))
+      (walkChainItems (fuel - 1) lines toks rest)
+
+-- ---------------------------------------------------------------
+-- 规则 2：lift-destructure
+-- ---------------------------------------------------------------
+laneHeadLine : Lane -> Int
+laneHeadLine (LClause line pats last) = line
+laneHeadLine (LAlt line pat last) = line
+
+laneLast : Lane -> Bool
+laneLast (LClause line pats last) = last
+laneLast (LAlt line pat last) = last
+
+laneVars : Lane -> List String
+laneVars (LClause line pats last) = patVars pats
+laneVars (LAlt line pat last) = patVarFuel lintFuel pat
+
+countLaneVar : String -> Lane -> Int
+countLaneVar name (LClause line pats last) = countVar name pats
+countLaneVar name (LAlt line pat last) = countPatFuel lintFuel name pat
+
+laneVarSpan : String -> Lane -> Maybe Span
+laneVarSpan name (LClause line pats last) = patVarSpanInPats name pats
+laneVarSpan name (LAlt line pat last) = patVarSpan name pat
+
+laneHeadText : List String -> Lane -> Int -> Int -> String
+laneHeadText lines lane startLine startCol =
+  let
+    line = laneHeadLine lane
+  in if startLine == line then trimEnd (prefixBeforeCol (lineAt lines line) startCol)
+  else lineAt lines line
+
+patsOnLine : List Pat -> Int -> Bool
+patsOnLine [] line = True
+patsOnLine (p :: rest) line =
+  spanStartLine (patSpan p) == line && spanEndLine (patSpan p) == line && patsOnLine rest line
+
+laneHeadSingleLine : Lane -> Bool
+laneHeadSingleLine (LClause line pats last) = patsOnLine pats line
+laneHeadSingleLine (LAlt line pat last) = spanSingleLine (patSpan pat)
+
+-- 把外层 head 里的被提升变量替换成新模式。startLine/startCol 是被提升表达式
+-- 的起点：嵌在 head 行内时只保留表达式之前的前缀（避免把 `case p of` 留在 clause 头）。
+laneReplace : List String -> List PTok -> Lane -> String -> String -> Int -> Int -> String
+laneReplace lines toks lane name replacement startLine startCol =
+  let
+    headText = laneHeadText lines lane startLine startCol
+  in case laneVarSpan name lane of
+    Nothing => headText
+    Just sp => case tokenAt toks (spanStartLine sp) (spanStartCol sp) of
+      Nothing => headText
+      Just tok => replaceIdentInLine headText tok replacement
+
+-- 体在原位置的放置是否可安全改写：单行体要收束行片段；多行体要求从独立行开始。
+liftBodyPlacementOk : List String -> List PTok -> Pat -> Expr -> Bool
+liftBodyPlacementOk lines toks altPat body =
+  if exprSingleLine body then segmentOk lines toks body
+  else exprStartLine body > spanStartLine (patSpan altPat)
+
+liftFixable : List String -> List PTok -> Lane -> Pat -> Expr -> Span -> Bool
+liftFixable lines toks lane pat body sp =
+  laneLast lane
+    && laneHeadSingleLine lane
+    && spanSingleLine (patSpan pat)
+    && linesCleanRange lines (laneHeadLine lane) (spanEndLine sp)
+    && liftBodyPlacementOk lines toks pat body
+
+liftEdit : List String -> List PTok -> Lane -> Pat -> Expr -> String -> Span -> Edit
+liftEdit lines toks lane pat body name sp =
+  let
+    headLine = laneHeadLine lane
+    ownLine = startsOwnLine lines (spanStartLine sp) (spanStartCol sp)
+    patTextValue = "(" ++ patText lines toks pat ++ ")"
+    newHead = laneReplace lines toks lane name patTextValue (spanStartLine sp) (spanStartCol sp)
+    target = if ownLine then spanStartCol sp - 1 else indentOf (lineAt lines headLine) + 2
+    newLines =
+      if ownLine then if exprSingleLine body then [newHead, spaces target ++ exprText lines toks body]
+      else newHead :: blockBodyLines lines body target
+      else if exprSingleLine body then [newHead ++ " " ++ exprText lines toks body]
+      else newHead :: blockBodyLines lines body target
+  in Edit headLine (spanEndLine sp) newLines
+
+liftCaseOk : List String -> List PTok -> Lane -> Pat -> Expr -> String -> Span -> List Finding
+liftCaseOk lines toks lane pat body name sp =
+  if countLaneVar name lane == 1 && notBool (exprMentions name body) && notBool (intersectsNames (patVarFuel lintFuel pat) (removeName name (laneVars lane))) && liftablePat pat && liftFixable lines toks lane pat body sp then [ Finding (spanStartLine sp) (spanStartCol sp) (lintCode LiftDestructure) (lintRule LiftDestructure) (lintMsg LiftDestructure name) (Just (liftEdit lines toks lane pat body name sp))
+  ]
+  else []
+
+liftCase : List String -> List PTok -> Lane -> Expr -> Expr -> List (Pair Pat Expr) -> Span -> List Finding
+liftCase lines toks lane caseExpr scrut ([Pair pat body]) sp = case scrut of
+  EVar name nsp => liftCaseOk lines toks lane pat body name sp
+  _ => []
+liftCase lines toks lane caseExpr scrut _ sp = []
+
+liftLet : List String -> List PTok -> Lane -> Span -> Pat -> Expr -> Expr -> List Finding
+liftLet lines toks lane sp pat (EVar name nsp) body =
+  if liftablePat pat && countLaneVar name lane == 1 && notBool (exprMentions name body) && notBool (intersectsNames (patVarFuel lintFuel pat) (removeName name (laneVars lane))) && liftLetFixable lines toks lane pat body sp then [ Finding (spanStartLine sp) (spanStartCol sp) (lintCode LiftDestructure) (lintRule LiftDestructure) (lintMsg LiftDestructure name) (Just (liftLetEdit lines toks lane pat body name sp))
+  ]
+  else []
+liftLet lines toks lane sp pat _ body = []
+
+liftLetFixable : List String -> List PTok -> Lane -> Pat -> Expr -> Span -> Bool
+liftLetFixable lines toks lane pat body sp =
+  laneLast lane
+    && laneHeadSingleLine lane
+    && spanSingleLine (patSpan pat)
+    && linesCleanRange lines (laneHeadLine lane) (spanEndLine sp)
+    && liftLetPlacementOk lines toks sp body
+
+liftLetPlacementOk : List String -> List PTok -> Span -> Expr -> Bool
+liftLetPlacementOk lines toks sp body =
+  if exprSingleLine body then segmentOk lines toks body else exprStartLine body > spanStartLine sp
+
+liftLetEdit : List String -> List PTok -> Lane -> Pat -> Expr -> String -> Span -> Edit
+liftLetEdit lines toks lane pat body name sp =
+  let
+    headLine = laneHeadLine lane
+    patTextValue = "(" ++ patText lines toks pat ++ ")"
+    newHead = laneReplace lines toks lane name patTextValue (spanStartLine sp) (spanStartCol sp)
+    target = indentOf (lineAt lines headLine) + 2
+    -- let 解构没有既有语料约束，单行 body 直接按 fmt 规范形态与 clause/alt 头同行。
+    newLines =
+      if exprSingleLine body then [newHead ++ " " ++ exprText lines toks body]
+      else newHead :: blockBodyLines lines body target
+  in Edit headLine (spanEndLine sp) newLines
+
+liftFindings : List String -> List PTok -> Lane -> Expr -> List Finding
+liftFindings lines toks lane (expr@(ECase scrut alts sp)) =
+  liftCase lines toks lane expr scrut alts sp
+liftFindings lines toks lane (ELet binds body recFlag sp) = if notBool recFlag then case binds of
+  [Pair pat value] => liftLet lines toks lane sp pat value body
+  _ => []
+else []
+liftFindings lines toks lane _ = []
+
+-- ---------------------------------------------------------------
+-- 规则 3：case-to-clauses
+-- ---------------------------------------------------------------
+lastPatOf : List (Pair Pat Expr) -> Maybe Pat
+lastPatOf [] = Nothing
+lastPatOf ((Pair pat body) :: rest) = case rest of
+  [] => Just pat
+  _ => lastPatOf rest
+
+wildcardLast : List (Pair Pat Expr) -> Bool
+wildcardLast alts = case lastPatOf alts of
+  Nothing => False
+  Just pat => case pat of
+    PWild sp => True
+    PVar n sp => True
+    _ => False
+
+lengthTwo : List a -> Bool
+lengthTwo ([a, b]) = True
+lengthTwo _ = False
+
+nilConsShape : List (Pair Pat Expr) -> Bool
+nilConsShape ([Pair (PCon "Nil" nilArgs nilSp) firstBody, Pair (PCon "Cons" consArgs consSp) secondBody]) =
+  isNilList nilArgs && lengthTwo consArgs
+nilConsShape _ = False
+
+provablyExhaustive : List (Pair Pat Expr) -> Bool
+provablyExhaustive alts = wildcardLast alts || nilConsShape alts
+
+isWildPat : Pat -> Bool
+isWildPat (PWild sp) = True
+isWildPat _ = False
+
+caseAltLiftableOk : String -> List String -> Pair Pat Expr -> Bool
+caseAltLiftableOk x others (Pair pat body) =
+  notBool (intersectsNames (patVarFuel lintFuel pat) others)
+    && (if exprMentions x body then isWildPat pat else True)
+
+altsLiftableGo : String -> List String -> List (Pair Pat Expr) -> Bool
+altsLiftableGo x others [] = True
+altsLiftableGo x others (alt :: rest) =
+  caseAltLiftableOk x others alt && altsLiftableGo x others rest
+
+altsLiftable : String -> List Pat -> List (Pair Pat Expr) -> Bool
+altsLiftable x pats alts = altsLiftableGo x (removeName x (patVars pats)) alts
+
+-- 至少一个分支体真的用到 scrutinee 变量：全不引用时 lift 后参数只剩模式匹配，
+-- 不是本规则的目标形态（也避免把 literal-if-chain 生成的 case 再拆成 clause）。
+altsUseVar : String -> List (Pair Pat Expr) -> Bool
+altsUseVar x [] = False
+altsUseVar x ((Pair pat body) :: rest) = exprMentions x body || altsUseVar x rest
+
+caseAltClauseLines : List String -> List PTok -> String -> PTok -> String -> Int -> Pat -> Expr -> List String
+caseAltClauseLines lines toks headPrefix varTok x headIndent pat body =
+  let
+    replacement =
+      if exprMentions x body then x
+      else if patNeedsParen pat then "(" ++ patText lines toks pat ++ ")" else patText lines toks pat
+    newHead = replaceIdentInLine headPrefix varTok replacement
+  in if exprSingleLine body then [newHead ++ " " ++ exprText lines toks body]
+  else newHead :: blockBodyLines lines body (headIndent + 2)
+
+clausesForAlts : List String -> List PTok -> String -> PTok -> String -> Int -> List (Pair Pat Expr) -> List String
+clausesForAlts lines toks headPrefix varTok x headIndent [] = []
+clausesForAlts lines toks headPrefix varTok x headIndent ((Pair pat body) :: rest) =
+  append (caseAltClauseLines lines toks headPrefix varTok x headIndent pat body)
+    (clausesForAlts lines toks headPrefix varTok x headIndent rest)
+
+altsPlacementOk : List String -> List PTok -> List (Pair Pat Expr) -> Bool
+altsPlacementOk lines toks [] = True
+altsPlacementOk lines toks ((Pair pat body) :: rest) =
+  liftBodyPlacementOk lines toks pat body && altsPlacementOk lines toks rest
+
+caseToClausesFixable : List String -> List PTok -> List Pat -> Int -> Span -> List (Pair Pat Expr) -> Bool
+caseToClausesFixable lines toks pats headLine sp alts =
+  patsOnLine pats headLine
+    && linesCleanRange lines headLine (spanEndLine sp)
+    && altsPlacementOk lines toks alts
+
+caseToClausesEdit : List String -> List PTok -> String -> List Pat -> Int -> Span -> List (Pair Pat Expr) -> Edit
+caseToClausesEdit lines toks x pats headLine sp alts =
+  let
+    headText = lineAt lines headLine
+    caseStartLine = spanStartLine sp
+    headPrefix =
+      if caseStartLine == headLine then trimEnd (prefixBeforeCol headText (spanStartCol sp))
+      else trimEnd headText
+    varTok = case laneVarSpan x (LClause headLine pats False) of
+      Nothing => PTok TEof (Pos 1 1)
+      Just vsp => case tokenAt toks (spanStartLine vsp) (spanStartCol vsp) of
+        Nothing => PTok TEof (Pos 1 1)
+        Just tok => tok
+    headIndent = indentOf headText
+  in Edit headLine (spanEndLine sp) (clausesForAlts lines toks headPrefix varTok x headIndent alts)
+
+caseToClauses : List String -> List PTok -> Int -> String -> List Pat -> Expr -> Bool -> List Finding
+caseToClauses lines toks headLine name pats (ECase scrut alts sp) singleClause = case scrut of
+  EVar x xsp =>
+    if singleClause && countVar x pats == 1 && atLeastTwo alts && provablyExhaustive alts && altsUseVar x alts && altsLiftable x pats alts && caseToClausesFixable lines toks pats headLine sp alts then [ Finding (spanStartLine sp) (spanStartCol sp) (lintCode CaseToClauses) (lintRule CaseToClauses) (lintMsg CaseToClauses x) (Just (caseToClausesEdit lines toks x pats headLine sp alts))
+    ]
+    else []
+  _ => []
+caseToClauses lines toks headLine name pats _ singleClause = []
+
+-- ---------------------------------------------------------------
+-- AST 遍历（覆盖全部 Expr 构造子，含 ELocalFun / EAnn）
+--
+-- 相互递归组统一把 fuel 放在第 0 形参并 `if fuel <= 0` 守卫：这是编译器
+-- `tryFuelThread` 判据能接受的形态（每个环至少一条 `fuel - k` 严格下降边）。
+-- ---------------------------------------------------------------
+scanBodyPos : Int -> List String -> List PTok -> Maybe Lane -> Expr -> List Finding
+scanBodyPos fuel lines toks maybeLane expr = if fuel <= 0 then []
+else case maybeLane of
+  Nothing => walkExpr fuel lines toks expr
+  Just lane => append (liftFindings lines toks lane expr) (walkExpr fuel lines toks expr)
+
+walkExpr : Int -> List String -> List PTok -> Expr -> List Finding
+walkExpr fuel lines toks e = if fuel <= 0 then []
+else case e of
+  EVar name sp => []
+  EInt n sp => []
+  EStr s sp => []
+  ELam ps body sp => walkExpr (fuel - 1) lines toks body
+  EApp fn args sp =>
+    append (walkExpr (fuel - 1) lines toks fn) (walkExprs (fuel - 1) lines toks args)
+  EPi name implicit dom cod sp =>
+    append (walkExpr (fuel - 1) lines toks dom) (walkExpr (fuel - 1) lines toks cod)
+  ELet binds body recFlag sp =>
+    append (walkBinds (fuel - 1) lines toks binds) (walkExpr (fuel - 1) lines toks body)
+  ELocalFun clauses sp => walkLocalClauses (fuel - 1) lines toks clauses
+  ECase scrut alts sp =>
+    append (walkExpr (fuel - 1) lines toks scrut) (walkAlts (fuel - 1) lines toks alts)
+  EIf cond yes no sp => walkIf (fuel - 1) lines toks e cond yes no
+  EField base f sp => walkExpr (fuel - 1) lines toks base
+  ERecord rname fields sp => walkFields (fuel - 1) lines toks fields
+  ERecUpdate base fields sp =>
+    append (walkExpr (fuel - 1) lines toks base) (walkFields (fuel - 1) lines toks fields)
+  EDo stmts sp => walkStmts (fuel - 1) lines toks stmts
+  EAnn value ty sp =>
+    append (walkExpr (fuel - 1) lines toks value) (walkExpr (fuel - 1) lines toks ty)
+
+walkIf : Int -> List String -> List PTok -> Expr -> Expr -> Expr -> Expr -> List Finding
+walkIf fuel lines toks e cond yes no = if fuel <= 0 then []
+else case chainOf lines toks e of
+  Nothing =>
+    append (walkExpr (fuel - 1) lines toks cond)
+      (append (walkExpr (fuel - 1) lines toks yes) (walkExpr (fuel - 1) lines toks no))
+  Just (ChainRes name items defText defExpr) =>
+    if notBool (atLeastTwo items) then append (walkExpr (fuel - 1) lines toks cond)
+      (append (walkExpr (fuel - 1) lines toks yes) (walkExpr (fuel - 1) lines toks no))
+    else append (chainFindings lines toks (exprSpan e) name items defText defExpr)
+      (append (walkChainItems (fuel - 1) lines toks items) (walkExpr (fuel - 1) lines toks defExpr))
+
+walkExprs : Int -> List String -> List PTok -> List Expr -> List Finding
+walkExprs fuel lines toks exprs = if fuel <= 0 then []
+else case exprs of
+  [] => []
+  e :: rest => append (walkExpr (fuel - 1) lines toks e) (walkExprs (fuel - 1) lines toks rest)
+
+walkFields : Int -> List String -> List PTok -> List (Pair String Expr) -> List Finding
+walkFields fuel lines toks fields = if fuel <= 0 then []
+else case fields of
+  [] => []
+  (Pair f e) :: rest =>
+    append (walkExpr (fuel - 1) lines toks e) (walkFields (fuel - 1) lines toks rest)
+
+walkBinds : Int -> List String -> List PTok -> List (Pair Pat Expr) -> List Finding
+walkBinds fuel lines toks binds = if fuel <= 0 then []
+else case binds of
+  [] => []
+  (Pair pat e) :: rest =>
+    append (walkExpr (fuel - 1) lines toks e) (walkBinds (fuel - 1) lines toks rest)
+
+walkAlts : Int -> List String -> List PTok -> List (Pair Pat Expr) -> List Finding
+walkAlts fuel lines toks alts = if fuel <= 0 then []
+else case alts of
+  [] => []
+  (Pair pat body) :: rest =>
+    let
+      lane = LAlt (spanStartLine (patSpan pat)) pat (isNilList rest)
+    in append (scanBodyPos (fuel - 1) lines toks (Just lane) body)
+      (walkAlts (fuel - 1) lines toks rest)
+
+walkLocalClauses : Int -> List String -> List PTok -> List (Pair (List Pat) Expr) -> List Finding
+walkLocalClauses fuel lines toks clauses = if fuel <= 0 then []
+else case clauses of
+  [] => []
+  (Pair pats body) :: rest =>
+    append (walkExpr (fuel - 1) lines toks body) (walkLocalClauses (fuel - 1) lines toks rest)
+
+walkStmts : Int -> List String -> List PTok -> List DoStmt -> List Finding
+walkStmts fuel lines toks stmts = if fuel <= 0 then []
+else case stmts of
+  [] => []
+  stmt :: rest =>
+    append (walkStmt (fuel - 1) lines toks stmt) (walkStmts (fuel - 1) lines toks rest)
+
+walkStmt : Int -> List String -> List PTok -> DoStmt -> List Finding
+walkStmt fuel lines toks stmt = if fuel <= 0 then []
+else case stmt of
+  DBind pat e sp => walkExpr (fuel - 1) lines toks e
+  DExpr e sp => walkExpr (fuel - 1) lines toks e
+
+-- ---------------------------------------------------------------
+-- 声明遍历与结果整理
+-- ---------------------------------------------------------------
+laterHasFun : String -> List Decl -> Bool
+laterHasFun name [] = False
+laterHasFun name (d :: rest) = case d of
+  DFun n pats body sp => if n == name then True else laterHasFun name rest
+  _ => laterHasFun name rest
+
+-- 签名里出现隐式 Pi（`{n : Nat} -> ...`）的函数跳过 clause 级改写：
+-- parser 的 clause 模式是所有显式参数，隐式参数由精化器插入；把 case 折叠进 clause
+-- 模式会改变模式矩阵与隐式 Pi 的对齐（实测 `vhead : (a : Type) -> {n : Nat} -> ...`
+-- 会把 `VCons` 模式错配到 `n : Nat`）。literal-if-chain 与函数参数无关，不受影响。
+hasImplicitPi : Expr -> Bool
+hasImplicitPi (EPi name implicit dom cod sp) = if implicit then True else hasImplicitPi cod
+hasImplicitPi (EApp (EVar "->" _) ([dom, cod]) sp) = hasImplicitPi dom || hasImplicitPi cod
+hasImplicitPi _ = False
+
+sigTyOf : String -> List Decl -> Maybe Expr
+sigTyOf name [] = Nothing
+sigTyOf name (d :: rest) = case d of
+  DSig n ty sp => if n == name then Just ty else sigTyOf name rest
+  _ => sigTyOf name rest
+
+hasImplicitSig : String -> List Decl -> Bool
+hasImplicitSig name decls = case sigTyOf name decls of
+  Nothing => False
+  Just ty => hasImplicitPi ty
+
+countFunClauses : String -> List Decl -> Int
+countFunClauses name [] = 0
+countFunClauses name (d :: rest) = case d of
+  DFun n pats body sp => (if n == name then 1 else 0) + countFunClauses name rest
+  _ => countFunClauses name rest
+
+scanMethodDecls : List String -> List PTok -> List Decl -> List Finding
+scanMethodDecls lines toks [] = []
+scanMethodDecls lines toks (d :: rest) = case d of
+  DFun name pats body sp =>
+    append (walkExpr lintFuel lines toks body) (scanMethodDecls lines toks rest)
+  _ => scanMethodDecls lines toks rest
+
+declFindings : List String -> List PTok -> List Decl -> Decl -> List Decl -> List Finding
+declFindings lines toks allDecls (DFun name pats body sp) rest = if hasImplicitSig name allDecls then []
+else
+  let
+    lastForName = notBool (laterHasFun name rest)
+    singleClause = countFunClauses name allDecls == 1
+    lane = LClause (spanStartLine sp) pats lastForName
+  in append (caseToClauses lines toks (spanStartLine sp) name pats body singleClause)
+    (scanBodyPos lintFuel lines toks (Just lane) body)
+declFindings lines toks allDecls (DInstance ctxE head methods sp) rest =
+  scanMethodDecls lines toks methods
+declFindings lines toks allDecls _ rest = []
+
+scanDecls : List String -> List PTok -> List Decl -> List Decl -> List Finding
+scanDecls lines toks allDecls [] = []
+scanDecls lines toks allDecls (d :: rest) =
+  append (declFindings lines toks allDecls d rest) (scanDecls lines toks allDecls rest)
+
+sortFindings : List Finding -> List Finding
+sortFindings [] = []
+sortFindings (f :: rest) = insertFinding f (sortFindings rest)
+
+insertFinding : Finding -> List Finding -> List Finding
+insertFinding f [] = [f]
+insertFinding f (g :: rest) =
+  if findingLine f < findingLine g then f :: g :: rest
+  else if findingLine f == findingLine g && findingCol f <= findingCol g then f :: g :: rest
+  else g :: insertFinding f rest
+
+editContains : Edit -> Edit -> Bool
+editContains big small =
+  editStart big <= editStart small
+    && editEnd big >= editEnd small
+    && (editStart big < editStart small || editEnd big > editEnd small)
+
+findingHiddenBy : Finding -> Finding -> Bool
+findingHiddenBy big small = case findingEdit big of
+  Nothing => False
+  Just bigEdit => case findingEdit small of
+    Nothing => False
+    Just smallEdit => editContains bigEdit smallEdit
+
+coveredBy : List Finding -> Finding -> Bool
+coveredBy [] f = False
+coveredBy (g :: rest) f = findingHiddenBy g f || coveredBy rest f
+
+dedupFindings : List Finding -> List Finding
+dedupFindings findings = dedupGo [] findings
+
+dedupGo : List Finding -> List Finding -> List Finding
+dedupGo kept [] = reverse kept
+dedupGo kept (f :: rest) = if coveredBy kept f then dedupGo kept rest else dedupGo (f :: kept) rest
+
+lintSource : String -> Result (List Finding)
+lintSource source = case parseSource "<lint>" source of
+  Err e => Err e
+  Ok ignored => case lexSource source of
+    Err e => Err e
+    Ok toks =>
+      let
+        lines = splitLines source
+        decls = sourceDecls ignored
+      in Ok (dedupFindings (sortFindings (scanDecls lines toks decls decls)))
+
+sourceDecls : SourceFile -> List Decl
+sourceDecls (Source hdr imports decls) = decls

@@ -1,0 +1,3 @@
+-- M28 决策 1 反例：data kind 必须以宇宙收尾（`Type -> Int` 不是合法的族 kind）。
+data Bad : Type -> Int where
+  Mk : Bad

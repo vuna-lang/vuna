@@ -1,0 +1,16 @@
+-- M29-T2b 负例：`Eq (Box a)` 与 `Eq (Box Int)` 头可合一 ⇒ TC_OverlappingInstances。
+import Prelude
+
+data Box a : Type where
+  MkBox : a -> Box a
+
+instance Eq a => Eq (Box a) where
+  eq x y = True
+  neq x y = False
+
+instance Eq (Box Int) where
+  eq x y = True
+  neq x y = False
+
+main : String
+main = "x"

@@ -1,0 +1,304 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "Vuna",
+  "scopeName": "source.vuna",
+  "comment": "TextMate grammar for the Vuna language (core-v0: Idris2-style data/record/trait/instance, offside layout).",
+  "patterns": [
+    { "include": "#comments" },
+    { "include": "#strings" },
+    { "include": "#module-header" },
+    { "include": "#imports" },
+    { "include": "#data-declaration" },
+    { "include": "#record-declaration" },
+    { "include": "#trait-declaration" },
+    { "include": "#instance-declaration" },
+    { "include": "#axiom-declaration" },
+    { "include": "#bindings" },
+    { "include": "#numbers" },
+    { "include": "#builtins" },
+    { "include": "#keywords" },
+    { "include": "#operators" },
+    { "include": "#punctuation" },
+    { "include": "#qualified-names" },
+    { "include": "#wildcard" },
+    { "include": "#type-names" },
+    { "include": "#identifiers" }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "match": "--.*$",
+          "name": "comment.line.double-dash.vuna"
+        },
+        {
+          "include": "#block-comment"
+        }
+      ]
+    },
+    "block-comment": {
+      "begin": "\\{-",
+      "end": "-\\}",
+      "name": "comment.block.vuna",
+      "patterns": [
+        {
+          "include": "#block-comment"
+        }
+      ]
+    },
+    "strings": {
+      "patterns": [
+        {
+          "begin": "\"",
+          "end": "\"|$",
+          "name": "string.quoted.double.vuna",
+          "patterns": [
+            {
+              "match": "\\\\(?:n|t|r|\"|'|\\\\)",
+              "name": "constant.character.escape.vuna"
+            }
+          ]
+        }
+      ]
+    },
+    "module-header": {
+      "begin": "^(\\s*)(module)\\s+([A-Z][A-Za-z0-9_']*(?:\\.[A-Za-z_][A-Za-z0-9_']*)*)",
+      "beginCaptures": {
+        "2": { "name": "keyword.control.module.vuna" },
+        "3": { "name": "entity.name.namespace.vuna" }
+      },
+      "end": "(?=\\bwhere\\b)",
+      "name": "meta.module.vuna",
+      "patterns": [
+        {
+          "include": "#export-list"
+        }
+      ]
+    },
+    "export-list": {
+      "patterns": [
+        { "include": "#comments" },
+        { "include": "#keywords" },
+        { "include": "#punctuation" },
+        { "include": "#type-names" }
+      ]
+    },
+    "imports": {
+      "begin": "^(\\s*)(import)\\b",
+      "beginCaptures": {
+        "2": { "name": "keyword.control.import.vuna" }
+      },
+      "end": "$",
+      "name": "meta.import.vuna",
+      "patterns": [
+        {
+          "match": "\\b(qualified|as)\\b",
+          "name": "keyword.control.import.vuna"
+        },
+        {
+          "match": "\\b[A-Z][A-Za-z0-9_']*(?:\\.[A-Za-z_][A-Za-z0-9_']*)*\\b",
+          "name": "entity.name.namespace.vuna"
+        }
+      ]
+    },
+    "data-declaration": {
+      "begin": "^(\\s*)(data)\\s+([A-Z][A-Za-z0-9_']*)",
+      "beginCaptures": {
+        "2": { "name": "keyword.declaration.data.vuna" },
+        "3": { "name": "entity.name.type.vuna" }
+      },
+      "end": "(?=^\\S)",
+      "name": "meta.data-declaration.vuna",
+      "patterns": [
+        {
+          "match": "^(\\s*)([A-Z][A-Za-z0-9_']*)(?=\\s*:)",
+          "captures": {
+            "2": { "name": "entity.name.type.constructor.vuna" }
+          }
+        },
+        { "include": "#bindings" },
+        { "include": "#type-names" }
+      ]
+    },
+    "record-declaration": {
+      "begin": "^(\\s*)(record)\\s+([A-Z][A-Za-z0-9_']*)",
+      "beginCaptures": {
+        "2": { "name": "keyword.declaration.record.vuna" },
+        "3": { "name": "entity.name.type.vuna" }
+      },
+      "end": "(?=^\\S)",
+      "name": "meta.record-declaration.vuna",
+      "patterns": [
+        {
+          "match": "^(\\s*)([a-z_][A-Za-z0-9_']*)(?=\\s*:)",
+          "captures": {
+            "2": { "name": "variable.other.property.vuna" }
+          }
+        },
+        { "include": "#bindings" },
+        { "include": "#type-names" }
+      ]
+    },
+    "trait-declaration": {
+      "begin": "^(\\s*)(trait)\\s+([A-Z][A-Za-z0-9_']*)",
+      "beginCaptures": {
+        "2": { "name": "keyword.declaration.trait.vuna" },
+        "3": { "name": "entity.name.type.vuna" }
+      },
+      "end": "(?=^\\S)",
+      "name": "meta.trait-declaration.vuna",
+      "patterns": [
+        { "include": "#bindings" },
+        { "include": "#type-names" }
+      ]
+    },
+    "instance-declaration": {
+      "begin": "^(\\s*)(instance)\\b",
+      "beginCaptures": {
+        "2": { "name": "keyword.declaration.instance.vuna" }
+      },
+      "end": "(?=^\\S)",
+      "name": "meta.instance-declaration.vuna",
+      "patterns": [
+        { "include": "#bindings" },
+        { "include": "#type-names" }
+      ]
+    },
+    "axiom-declaration": {
+      "match": "^(\\s*)(axiom)\\s+([a-z_][A-Za-z0-9_']*)",
+      "captures": {
+        "2": { "name": "keyword.declaration.axiom.vuna" },
+        "3": { "name": "entity.name.function.vuna" }
+      }
+    },
+    "bindings": {
+      "patterns": [
+        {
+          "match": "^(\\s*)([a-z_][A-Za-z0-9_']*)(?=\\s*:)",
+          "captures": {
+            "2": { "name": "entity.name.function.vuna" }
+          }
+        },
+        {
+          "match": "^(\\s*)([a-z_][A-Za-z0-9_']*)(?=\\s+[^\\n=]*=(?!>))",
+          "captures": {
+            "2": { "name": "entity.name.function.vuna" }
+          }
+        }
+      ]
+    },
+    "numbers": {
+      "patterns": [
+        {
+          "match": "\\b[0-9]+\\b",
+          "name": "constant.numeric.integer.vuna"
+        }
+      ]
+    },
+    "builtins": {
+      "patterns": [
+        {
+          "match": "\\bprim_[A-Za-z0-9_]+\\b",
+          "name": "support.function.builtin.vuna"
+        },
+        {
+          "match": "\\b(strFromInt|strUnpack|strPack|strLength|strConcatMany|strSubstTemplate|strHash|strAt|strShow|timeUs)\\b",
+          "name": "support.function.builtin.vuna"
+        }
+      ]
+    },
+    "keywords": {
+      "patterns": [
+        {
+          "match": "\\bType\\b",
+          "name": "storage.type.vuna"
+        },
+        {
+          "match": "\\b(data|record|trait|instance|deriving|axiom)\\b",
+          "name": "keyword.declaration.vuna"
+        },
+        {
+          "match": "\\b(module|import|qualified|as)\\b",
+          "name": "keyword.control.import.vuna"
+        },
+        {
+          "match": "\\b(case|of|let|in|if|then|else|where|do)\\b",
+          "name": "keyword.control.vuna"
+        }
+      ]
+    },
+    "operators": {
+      "patterns": [
+        {
+          "match": "(>>=|>>|->|=>|::|==|/=|<=|>=|&&|\\|\\||\\+\\+|<-|\\\\)",
+          "name": "keyword.operator.vuna"
+        },
+        {
+          "match": "[+\\-*/<>=]",
+          "name": "keyword.operator.vuna"
+        }
+      ]
+    },
+    "punctuation": {
+      "patterns": [
+        {
+          "match": "[()\\[\\]{},;]",
+          "name": "punctuation.separator.vuna"
+        },
+        {
+          "match": ":|\\|",
+          "name": "punctuation.separator.vuna"
+        },
+        {
+          "match": "\\.\\.\\.",
+          "name": "punctuation.definition.vuna"
+        }
+      ]
+    },
+    "qualified-names": {
+      "patterns": [
+        {
+          "match": "\\b[A-Z][A-Za-z0-9_']*(?:\\.[A-Za-z_][A-Za-z0-9_']*)+\\b",
+          "name": "entity.name.namespace.vuna"
+        }
+      ]
+    },
+    "type-names": {
+      "patterns": [
+        { "include": "#keywords" },
+        { "include": "#numbers" },
+        { "include": "#builtins" },
+        { "include": "#operators" },
+        { "include": "#punctuation" },
+        {
+          "match": "\\b[A-Z][A-Za-z0-9_']*\\b",
+          "name": "entity.name.type.vuna"
+        },
+        {
+          "match": "\\b_\\b",
+          "name": "variable.language.wildcard.vuna"
+        },
+        {
+          "match": "\\b[a-z_][A-Za-z0-9_']*\\b",
+          "name": "variable.other.vuna"
+        }
+      ]
+    },
+    "wildcard": {
+      "patterns": [
+        {
+          "match": "\\b_\\b",
+          "name": "variable.language.wildcard.vuna"
+        }
+      ]
+    },
+    "identifiers": {
+      "patterns": [
+        {
+          "match": "\\b[a-z_][A-Za-z0-9_']*\\b",
+          "name": "variable.other.vuna"
+        }
+      ]
+    }
+  }
+}

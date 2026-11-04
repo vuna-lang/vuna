@@ -1,0 +1,203 @@
+module Vuna.Compiler.Elab.Term
+  ( boolAlt
+  , boolAltGo
+  , checkApp
+  , checkAppCtor
+  , checkAppGeneral
+  , checkAppUnderType
+  , checkBoolCase
+  , checkByInfer
+  , checkCase
+  , checkCaseFam
+  , checkCaseOf
+  , checkCondBool
+  , checkE
+  , checkLam
+  , checkLet
+  , checkLetGo
+  , checkLetOne
+  , checkLitAlts
+  , checkLitBoundVar
+  , checkLitCase
+  , checkType
+  , checkTypeInfer
+  , constrainDictDom
+  , constrainDictDomGoK
+  , deferDictBinder
+  , elabCaseAlts
+  , elabCatchAll
+  , elabConAlt
+  , inferAnn
+  , inferApp
+  , inferAppGeneral
+  , inferAppGeneralGo
+  , inferAppUnderType
+  , inferArgs
+  , inferCaseE
+  , inferE
+  , inferLet
+  , inferLetBound
+  , inferLetGo
+  , inferLetIgnored
+  , inferPi
+  , litAltStep
+  , specializeBoolApp
+  , specializeCmpApp
+  , specializeEqApp
+  , specializeOpApp
+  ) where
+
+-- Vuna.Compiler.Elab.Term：项检查门面（M25.2c 拆分）：对外保留原名字的 wrapper（常量 fuel 入口），
+-- 实现见 `.Impl`，非递归 helper 见 `.Support`。
+import Vuna.Compiler.Common
+import Vuna.Compiler.Core
+import Vuna.Compiler.Elab.Case
+import Vuna.Compiler.Elab.Dict
+import Vuna.Compiler.Elab.Match
+import Vuna.Compiler.Elab.Meta
+import Vuna.Compiler.Elab.Prelude
+import Vuna.Compiler.Elab.Types
+import Vuna.Compiler.Elab.Term.Impl
+import Vuna.Compiler.Elab.Term.Support
+import Vuna.Compiler.Frontend.Ast
+
+deferDictBinder : List (Pair String Term) -> Ctx -> Ec -> Value -> Closure -> List Expr -> Span -> Result (Pair (List (Pair Term Rig)) (Pair Value Ec))
+deferDictBinder globals ctx ec dom clo args sp =
+  deferDictBinderFuel 64 globals ctx ec dom clo args sp
+
+specializeCmpApp : List (Pair String Term) -> Ctx -> Ec -> String -> List Expr -> Span -> Result (Maybe (Pair Term (Pair Value Ec)))
+specializeCmpApp a1 a2 a3 a4 a5 a6 = specializeCmpAppFuel 256 a1 a2 a3 a4 a5 a6
+
+specializeEqApp : List (Pair String Term) -> Ctx -> Ec -> String -> List Expr -> Span -> Result (Maybe (Pair Term (Pair Value Ec)))
+specializeEqApp a1 a2 a3 a4 a5 a6 = specializeEqAppFuel 256 a1 a2 a3 a4 a5 a6
+
+checkTypeInfer : List (Pair String Term) -> Ctx -> Ec -> Expr -> Result (Pair Term (Pair Level Ec))
+checkTypeInfer a1 a2 a3 a4 = checkTypeInferFuel 256 a1 a2 a3 a4
+
+checkByInfer : List (Pair String Term) -> Ctx -> Ec -> Expr -> Value -> Result (Pair Term Ec)
+checkByInfer a1 a2 a3 a4 a5 = checkByInferFuel 256 a1 a2 a3 a4 a5
+
+inferLetIgnored : List (Pair String Term) -> Ctx -> Ec -> Expr -> List (Pair Pat Expr) -> Expr -> Bool -> Span -> Result (Pair Term (Pair Value Ec))
+inferLetIgnored a1 a2 a3 a4 a5 a6 a7 a8 = inferLetIgnoredFuel 256 a1 a2 a3 a4 a5 a6 a7 a8
+
+inferLetBound : List (Pair String Term) -> Ctx -> Ec -> String -> Expr -> List (Pair Pat Expr) -> Expr -> Bool -> Span -> Result (Pair Term (Pair Value Ec))
+inferLetBound a1 a2 a3 a4 a5 a6 a7 a8 a9 = inferLetBoundFuel 256 a1 a2 a3 a4 a5 a6 a7 a8 a9
+
+inferLet : List (Pair String Term) -> Ctx -> Ec -> List (Pair Pat Expr) -> Expr -> Bool -> Span -> Result (Pair Term (Pair Value Ec))
+inferLet a1 a2 a3 a4 a5 a6 a7 = inferLetFuel 256 a1 a2 a3 a4 a5 a6 a7
+
+inferLetGo : List (Pair String Term) -> Ctx -> Ec -> List (Pair Pat Expr) -> Expr -> Bool -> Span -> Result (Pair Term (Pair Value Ec))
+inferLetGo a1 a2 a3 a4 a5 a6 a7 = inferLetGoFuel 256 a1 a2 a3 a4 a5 a6 a7
+
+checkAppCtor : List (Pair String Term) -> Ctx -> Ec -> String -> List Expr -> Value -> Span -> Result (Pair Term Ec)
+checkAppCtor a1 a2 a3 a4 a5 a6 a7 = checkAppCtorFuel 256 a1 a2 a3 a4 a5 a6 a7
+
+checkAppUnderType : List (Pair String Term) -> Ctx -> Ec -> String -> List Expr -> Value -> Span -> Result (Pair Term Ec)
+checkAppUnderType a1 a2 a3 a4 a5 a6 a7 = checkAppUnderTypeFuel 256 a1 a2 a3 a4 a5 a6 a7
+
+checkApp : List (Pair String Term) -> Ctx -> Ec -> Expr -> List Expr -> Value -> Span -> Result (Pair Term Ec)
+checkApp a1 a2 a3 a4 a5 a6 a7 = checkAppFuel 256 a1 a2 a3 a4 a5 a6 a7
+
+checkAppGeneral : List (Pair String Term) -> Ctx -> Ec -> Expr -> List Expr -> Value -> Span -> Result (Pair Term Ec)
+checkAppGeneral a1 a2 a3 a4 a5 a6 a7 = checkAppGeneralFuel 256 a1 a2 a3 a4 a5 a6 a7
+
+specializeOpApp : List (Pair String Term) -> Ctx -> Ec -> String -> List Expr -> Span -> Result (Maybe (Pair Term (Pair Value Ec)))
+specializeOpApp a1 a2 a3 a4 a5 a6 = specializeOpAppFuel 256 a1 a2 a3 a4 a5 a6
+
+specializeBoolApp : List (Pair String Term) -> Ctx -> Ec -> String -> List Expr -> Span -> Result (Maybe (Pair Term (Pair Value Ec)))
+specializeBoolApp a1 a2 a3 a4 a5 a6 = specializeBoolAppFuel 256 a1 a2 a3 a4 a5 a6
+
+checkLam : List (Pair String Term) -> Ctx -> Ec -> List String -> Expr -> Value -> Span -> Result (Pair Term Ec)
+checkLam a1 a2 a3 a4 a5 a6 a7 = checkLamFuel 256 a1 a2 a3 a4 a5 a6 a7
+
+checkLetOne : List (Pair String Term) -> Ctx -> Ec -> Pair Pat Expr -> List (Pair Pat Expr) -> Expr -> Bool -> Value -> Span -> Result (Pair Term Ec)
+checkLetOne a1 a2 a3 a4 a5 a6 a7 a8 a9 = checkLetOneFuel 256 a1 a2 a3 a4 a5 a6 a7 a8 a9
+
+checkLet : List (Pair String Term) -> Ctx -> Ec -> List (Pair Pat Expr) -> Expr -> Bool -> Value -> Span -> Result (Pair Term Ec)
+checkLet a1 a2 a3 a4 a5 a6 a7 a8 = checkLetFuel 256 a1 a2 a3 a4 a5 a6 a7 a8
+
+checkLetGo : List (Pair String Term) -> Ctx -> Ec -> List (Pair Pat Expr) -> Expr -> Bool -> Value -> Span -> Result (Pair Term Ec)
+checkLetGo a1 a2 a3 a4 a5 a6 a7 a8 = checkLetGoFuel 256 a1 a2 a3 a4 a5 a6 a7 a8
+
+checkLitBoundVar : List (Pair String Term) -> Ctx -> Ec -> Term -> String -> String -> Expr -> Value -> Span -> Result (Pair Term Ec)
+checkLitBoundVar a1 a2 a3 a4 a5 a6 a7 a8 a9 = checkLitBoundVarFuel 256 a1 a2 a3 a4 a5 a6 a7 a8 a9
+
+litAltStep : List (Pair String Term) -> Ctx -> Ec -> Term -> String -> Term -> Expr -> List (Pair Pat Expr) -> Value -> Span -> Result (Pair Term (Pair Bool Ec))
+litAltStep a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 = litAltStepFuel 256 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10
+
+checkLitCase : List (Pair String Term) -> Ctx -> Ec -> Term -> String -> List (Pair Pat Expr) -> Value -> Span -> Result (Pair Term Ec)
+checkLitCase a1 a2 a3 a4 a5 a6 a7 a8 = checkLitCaseFuel 256 a1 a2 a3 a4 a5 a6 a7 a8
+
+checkLitAlts : List (Pair String Term) -> Ctx -> Ec -> Term -> String -> List (Pair Pat Expr) -> Value -> Span -> Result (Pair Term (Pair Bool Ec))
+checkLitAlts a1 a2 a3 a4 a5 a6 a7 a8 = checkLitAltsFuel 256 a1 a2 a3 a4 a5 a6 a7 a8
+
+checkBoolCase : List (Pair String Term) -> Ctx -> Ec -> Term -> List (Pair Pat Expr) -> Value -> Span -> Result (Pair Term Ec)
+checkBoolCase a1 a2 a3 a4 a5 a6 a7 = checkBoolCaseFuel 256 a1 a2 a3 a4 a5 a6 a7
+
+boolAlt : List (Pair String Term) -> Ctx -> Ec -> List (Pair Pat Expr) -> String -> Value -> Span -> Result (Pair Term (Pair (Maybe Term) Ec))
+boolAlt a1 a2 a3 a4 a5 a6 a7 = boolAltFuel 256 a1 a2 a3 a4 a5 a6 a7
+
+boolAltGo : List (Pair String Term) -> Ctx -> Ec -> List (Pair Pat Expr) -> String -> Value -> Span -> Maybe Term -> Result (Pair Term (Pair (Maybe Term) Ec))
+boolAltGo a1 a2 a3 a4 a5 a6 a7 a8 = boolAltGoFuel 256 a1 a2 a3 a4 a5 a6 a7 a8
+
+elabCatchAll : List (Pair String Term) -> Ctx -> Ec -> Value -> DtData -> List Value -> Value -> List (Pair Pat Expr) -> List CaseAlt -> Expr -> String -> Span -> Result (Pair (List CaseAlt) Ec)
+elabCatchAll a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 =
+  elabCatchAllFuel 256 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12
+
+checkE : List (Pair String Term) -> Ctx -> Ec -> Expr -> Value -> Result (Pair Term Ec)
+checkE a1 a2 a3 a4 a5 = checkEFuel 256 a1 a2 a3 a4 a5
+
+inferPi : List (Pair String Term) -> Ctx -> Ec -> String -> Bool -> Expr -> Expr -> Span -> Result (Pair Term (Pair Value Ec))
+inferPi a1 a2 a3 a4 a5 a6 a7 a8 = inferPiFuel 256 a1 a2 a3 a4 a5 a6 a7 a8
+
+inferAnn : List (Pair String Term) -> Ctx -> Ec -> Expr -> Expr -> Span -> Result (Pair Term (Pair Value Ec))
+inferAnn a1 a2 a3 a4 a5 a6 = inferAnnFuel 256 a1 a2 a3 a4 a5 a6
+
+checkType : List (Pair String Term) -> Ctx -> Ec -> Expr -> Result (Pair Term (Pair Level Ec))
+checkType a1 a2 a3 a4 = checkTypeFuel 256 a1 a2 a3 a4
+
+inferAppUnderType : List (Pair String Term) -> Ctx -> Ec -> String -> List Expr -> Span -> Result (Pair Term (Pair Level Ec))
+inferAppUnderType a1 a2 a3 a4 a5 a6 = inferAppUnderTypeFuel 256 a1 a2 a3 a4 a5 a6
+
+inferArgs : List (Pair String Term) -> Ctx -> Ec -> Value -> List Expr -> Span -> Result (Pair (List (Pair Term Rig)) (Pair Value Ec))
+inferArgs a1 a2 a3 a4 a5 a6 = inferArgsFuel 256 a1 a2 a3 a4 a5 a6
+
+constrainDictDom : List (Pair String Term) -> Ec -> Ctx -> Value -> List Expr -> Span -> Result Ec
+constrainDictDom a1 a2 a3 a4 a5 a6 = constrainDictDomFuel 256 a1 a2 a3 a4 a5 a6
+
+constrainDictDomGoK : List (Pair String Term) -> Ec -> Ctx -> Value -> Value -> List Expr -> Span -> Result Ec
+constrainDictDomGoK a1 a2 a3 a4 a5 a6 a7 = constrainDictDomGoKFuel 256 a1 a2 a3 a4 a5 a6 a7
+
+inferApp : List (Pair String Term) -> Ctx -> Ec -> Expr -> List Expr -> Span -> Result (Pair Term (Pair Value Ec))
+inferApp a1 a2 a3 a4 a5 a6 = inferAppFuel 256 a1 a2 a3 a4 a5 a6
+
+inferAppGeneral : List (Pair String Term) -> Ctx -> Ec -> Expr -> List Expr -> Span -> Result (Pair Term (Pair Value Ec))
+inferAppGeneral a1 a2 a3 a4 a5 a6 = inferAppGeneralFuel 256 a1 a2 a3 a4 a5 a6
+
+inferAppGeneralGo : List (Pair String Term) -> Ctx -> Ec -> Expr -> List Expr -> Span -> Result (Pair Term (Pair Value Ec))
+inferAppGeneralGo a1 a2 a3 a4 a5 a6 = inferAppGeneralGoFuel 256 a1 a2 a3 a4 a5 a6
+
+checkCondBool : List (Pair String Term) -> Ctx -> Ec -> Expr -> Span -> Result (Pair Term Ec)
+checkCondBool a1 a2 a3 a4 a5 = checkCondBoolFuel 256 a1 a2 a3 a4 a5
+
+inferE : List (Pair String Term) -> Ctx -> Ec -> Expr -> Result (Pair Term (Pair Value Ec))
+inferE a1 a2 a3 a4 = inferEFuel 256 a1 a2 a3 a4
+
+inferCaseE : List (Pair String Term) -> Ctx -> Ec -> Expr -> List (Pair Pat Expr) -> Span -> Result (Pair Term (Pair Value Ec))
+inferCaseE a1 a2 a3 a4 a5 a6 = inferCaseEFuel 256 a1 a2 a3 a4 a5 a6
+
+checkCase : List (Pair String Term) -> Ctx -> Ec -> Expr -> List (Pair Pat Expr) -> Value -> Span -> Result (Pair Term Ec)
+checkCase a1 a2 a3 a4 a5 a6 a7 = checkCaseFuel 256 a1 a2 a3 a4 a5 a6 a7
+
+checkCaseFam : List (Pair String Term) -> Ctx -> Ec -> Term -> Value -> List (Pair Pat Expr) -> Value -> Span -> Result (Pair Term Ec)
+checkCaseFam a1 a2 a3 a4 a5 a6 a7 a8 = checkCaseFamFuel 256 a1 a2 a3 a4 a5 a6 a7 a8
+
+checkCaseOf : List (Pair String Term) -> Ctx -> Ec -> Term -> Value -> String -> List Value -> List (Pair Pat Expr) -> Value -> Span -> Result (Pair Term Ec)
+checkCaseOf a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 = checkCaseOfFuel 256 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10
+
+elabCaseAlts : List (Pair String Term) -> Ctx -> Ec -> Value -> DtData -> List Value -> Value -> Value -> List (Pair Pat Expr) -> List CaseAlt -> Result (Pair (List CaseAlt) Ec)
+elabCaseAlts a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 = elabCaseAltsFuel 256 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10
+
+elabConAlt : List (Pair String Term) -> Ctx -> Ec -> DtData -> List Value -> Value -> Value -> String -> List Pat -> Span -> Expr -> Result (Pair CaseAlt Ec)
+elabConAlt a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 =
+  elabConAltFuel 256 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11

@@ -1,0 +1,529 @@
+module Vuna.Compiler.Codegen.Erase
+  ( adjTblOf
+  , axiomNamesOf
+  , binderAt
+  , checkAllDefScopes
+  , checkAllErasure
+  , checkNoAxiomRuntime
+  , defTable
+  , depAdjacency
+  , ensureUniqueOcamlNames
+  , findDtDef
+  , flattenConApp
+  , groupRuntimeDefs
+  , neighborsOf
+  , partitionDefs
+  , showMetaHint
+  ) where
+
+-- Vuna.Compiler.Codegen.Erase：擦除检查、依赖分析与 SCC 分组。
+--
+-- 输入是 Elab 产出的 `DtProgram` 定义表（项上自带擦除标志），本模块负责：
+--   - 类型级 / 运行时定义分区（isTypeForming / partitionDefs）；
+--   - 运行时项的擦除检查（运行时位置不得出现被擦除绑定 / 类型 / 类型级定义）；
+--   - de Bruijn 作用域护栏与 OCaml 名字单射性护栏；
+--   - 运行时依赖图与 SCC 分组（决定 `let` / `let rec ... and ...` 的生成顺序）。
+-- 纯分析，不产生 OCaml 文本。
+import Vuna.Compiler.Common
+import Vuna.Compiler.Core
+import Vuna.Compiler.Diagnostics
+import Vuna.Compiler.Elab
+import Vuna.Compiler.Codegen.Decl
+
+-- ---------------------------------------------------------------
+-- 构造子应用的标准形态
+-- ---------------------------------------------------------------
+--
+-- 精化器可能把饱和的构造子应用表示成嵌套 `TApp (TApp (TCon c []) a) b`，
+-- 也可能直接给 `TCon c [a, b]`。这里统一折叠成 (构造子名, 实参列表)：
+-- 擦除/依赖分析按实参自带的擦除标志判断，生成侧好一次性 tupled 出来。
+flattenConApp : Term -> Maybe (Pair String (List (Pair Term Rig)))
+flattenConApp (TApp f a rig) = case flattenConApp f of
+  Just (Pair c args) => Just (Pair c (append args [Pair a rig]))
+  Nothing => Nothing
+flattenConApp (TCon c args) = Just (Pair c args)
+flattenConApp _ = Nothing
+
+-- ---------------------------------------------------------------
+-- 预处理：分区（类型级 / 运行时）、擦除检查、依赖拓扑排序
+-- ---------------------------------------------------------------
+defTable : List DtDef -> List (Pair String Term)
+defTable [] = []
+defTable (d :: rest) = case dtDefBody d of
+  -- M28：axiom 无体，不进 delta 展开表。
+  Just body => Pair (dtDefName d) body :: defTable rest
+  Nothing => defTable rest
+
+findDtDef : String -> List DtDef -> Maybe DtDef
+findDtDef name [] = Nothing
+findDtDef name (d :: rest) = if dtDefName d == name then Just d else findDtDef name rest
+
+-- M28：无体/不透明顶层（`axiom`）判据（`Elab.Types.dtDefHasBody` 是唯一真源）。
+isAxiomDef : DtDef -> Bool
+isAxiomDef d = if dtDefHasBody d then False else True
+
+axiomNamesOf : List DtDef -> List String
+axiomNamesOf [] = []
+axiomNamesOf (d :: rest) =
+  if isAxiomDef d then dtDefName d :: axiomNamesOf rest else axiomNamesOf rest
+
+-- 类型级定义的判据：定义**类型** force 后以宇宙收尾（`Type` 或 `... -> Type` 的 Pi 链）。
+-- 旧实现只看 `isTypeValue`（仅裸 `Type`），于是 `sel : Nat -> Type` 一类类型族被判成
+-- 运行时定义，生成的 OCaml 里出现未定义的 `v_Int`/`v_String`（M24.5 发现的预存在 bug）。
+isTypeForming : Value -> Bool
+isTypeForming v = isTypeFormingFuel 128 v
+
+isTypeFormingFuel : Int -> Value -> Bool
+isTypeFormingFuel fuel v = if fuel <= 0 then False
+else case v of
+  VType l => True
+  VPi name implicit rig dom clo =>
+    isTypeFormingFuel (fuel - 1) (applyClosure clo (VNeutral (NVar name 0 [])))
+  _ => False
+
+isTypeLevelDef : HashTbl Term -> DtDef -> Bool
+isTypeLevelDef tbl d = isTypeForming (force tbl solsEmpty defaultFuel (eval [] (dtDefType d)))
+
+-- 类型级 / 运行时分区。M28：`axiom` 是擦除/不透明顶层——**无论它的类型是什么**
+-- 都进类型级分区（没有运行时定义体，不能被 codegen 生成）；它的运行时使用由
+-- `checkNoAxiomRuntime` 报专门诊断。
+partitionDefs : List (Pair String Term) -> List DtDef -> Pair (List DtDef) (List String)
+partitionDefs table defs = partitionDefsGo (tblFromList table) defs [] []
+
+partitionDefsGo : HashTbl Term -> List DtDef -> List DtDef -> List String -> Pair (List DtDef) (List String)
+partitionDefsGo table [] runtime typeNames = Pair (reverse runtime) (reverse typeNames)
+partitionDefsGo table (d :: rest) runtime typeNames =
+  if isAxiomDef d then partitionDefsGo table rest runtime (dtDefName d :: typeNames)
+  else if isTypeLevelDef table d then partitionDefsGo table rest runtime (dtDefName d :: typeNames)
+  else partitionDefsGo table rest (d :: runtime) typeNames
+
+-- M29（A14）：定义级诊断前缀（唯一实现在 `Diagnostics.cgDefLoc`，此处只做访问器适配）。
+-- 有来源 span（`DtDef` 的 `Maybe Span`）时输出 `file:line:col: in `name`: `，
+-- 没有时保持旧的 `in `name`: `。CG 诊断是 `Err String`（不走位置层），在拼串处补前缀。
+defLocPrefix : DtDef -> String
+defLocPrefix d = cgDefLoc (dtDefSpan d) (dtDefName d)
+
+-- M28：axiom 只在擦除/类型层可用；运行时位置（非擦除实参/非类型层）的使用报
+-- `CG_AxiomAtRuntime`。用运行时依赖遍历（跳过擦除实参）找名字，类型层引用不报。
+checkNoAxiomRuntime : List String -> List DtDef -> Result Int
+checkNoAxiomRuntime axiomNames defs = checkNoAxiomRuntimeGo (tblOfNames axiomNames) defs
+
+checkNoAxiomRuntimeGo : HashTbl Bool -> List DtDef -> Result Int
+checkNoAxiomRuntimeGo axiomTbl [] = Ok 0
+checkNoAxiomRuntimeGo axiomTbl (d :: rest) = case dtDefBody d of
+  Nothing => checkNoAxiomRuntimeGo axiomTbl rest
+  Just body => case termDepsInto axiomTbl [] body of
+    [] => checkNoAxiomRuntimeGo axiomTbl rest
+    -- M29（A14）：带使用点定义的位置（旧实现这里既无位置也无定义名）。
+    name :: more => cgErrDefAt (dtDefSpan d) (dtDefName d) (AxiomAtRuntime name) (VCons name VNil)
+
+checkAllErasure : List String -> List DtDef -> Result Int
+checkAllErasure typeNames [] = Ok 0
+checkAllErasure typeNames (d :: rest) =
+  andThen (checkOneErasure typeNames d) (\_ => checkAllErasure typeNames rest)
+
+-- 报错带上定义名：同一份程序里哪个函数有问题要能一眼看出来。
+-- M29（A14）：有 span 时前缀 `file:line:col:`（保留原有的 `in `name`: ` 形状）。
+checkOneErasure : List String -> DtDef -> Result Int
+checkOneErasure typeNames d = case dtDefBody d of
+  Nothing => Err "DT: internal: axiom reached the runtime erasure check (partition must erase it)"
+  Just body => case checkErasure typeNames [] body of
+    Err e => Err (defLocPrefix d ++ e)
+    Ok n => Ok n
+
+-- binders：最近绑定在前（名字 + 是否擦除）。
+showMetaHint : Int -> String
+showMetaHint m = " ?" ++ strFromInt m
+
+checkErasureFuel : Int -> List String -> List (Pair String Rig) -> Term -> Result Int
+checkErasureFuel fuel typeNames binders t = if fuel <= 0 then Err "DT: internal: erasure fuel exhausted"
+else case t of
+  TVar name i => case binderAt i binders of
+    Just (Pair n rig) =>
+      if rigIsErased rig then cgErr1 (TypeLevelBindingRuntime name) name else Ok 0
+    Nothing =>
+      Err
+        ("DT: internal: unbound runtime variable " ++ name ++ " (index " ++ strFromInt i ++ ", binders " ++ strFromInt (length binders) ++ ")")
+  TGlobal name => if memName name typeNames then cgErr1 (TypeLevelNameRuntime name) name else Ok 0
+  TType l => cgErr0 TypeUsedAtRuntime
+  TPi name implicit rig dom cod => cgErr0 TypeUsedAtRuntime
+  TMeta m => cgErr1 (UnsolvedMetavarRuntime (showMetaHint m)) (showMetaHint m)
+  TLam name rig body => checkErasureFuel (fuel - 1) typeNames (Pair name rig :: binders) body
+  TApp f a rig => case flattenConApp t of
+    -- 嵌套在构造子上的应用按构造子实参检查（实参自带擦除标志，比 TApp 的更准）。
+    Just (Pair c args) => checkConArgsErasureFuel (fuel - 1) typeNames binders args
+    Nothing =>
+      if rigIsErased rig then checkErasureFuel (fuel - 1) typeNames binders f
+      else andThen (checkErasureFuel (fuel - 1) typeNames binders f)
+        (\_ => checkErasureFuel (fuel - 1) typeNames binders a)
+  -- M14：构造子应用只看非擦除实参（擦除实参是族参数/索引，允许是类型项）。
+  TCon c args => checkConArgsErasureFuel (fuel - 1) typeNames binders args
+  -- M14：case 的分支把「完整 telescope（表面顺序）」压栈后再检查分支体。
+  TCase scrut alts =>
+    andThen (checkErasureFuel (fuel - 1) typeNames binders scrut)
+      (\_ => checkAltErasureFuel (fuel - 1) typeNames binders alts)
+  TInt n => Ok 0
+  TStr s => Ok 0
+  TBool b => Ok 0
+  TIf c th el =>
+    andThen (checkErasureFuel (fuel - 1) typeNames binders c)
+      (\_ => andThen (checkErasureFuel (fuel - 1) typeNames binders th) (\_ => checkErasureFuel (fuel - 1) typeNames binders el))
+
+checkConArgsErasureFuel : Int -> List String -> List (Pair String Rig) -> List (Pair Term Rig) -> Result Int
+checkConArgsErasureFuel fuel typeNames binders [] =
+  if fuel <= 0 then Err "DT: internal: erasure fuel exhausted" else Ok 0
+checkConArgsErasureFuel fuel typeNames binders ((Pair arg rig) :: rest) =
+  if fuel <= 0 then Err "DT: internal: erasure fuel exhausted"
+  else if rigIsErased rig then checkConArgsErasureFuel (fuel - 1) typeNames binders rest
+  else andThen (checkErasureFuel (fuel - 1) typeNames binders arg)
+    (\_ => checkConArgsErasureFuel (fuel - 1) typeNames binders rest)
+
+checkAltErasureFuel : Int -> List String -> List (Pair String Rig) -> List CaseAlt -> Result Int
+checkAltErasureFuel fuel typeNames binders [] =
+  if fuel <= 0 then Err "DT: internal: erasure fuel exhausted" else Ok 0
+checkAltErasureFuel fuel typeNames binders (alt :: rest) = if fuel <= 0 then Err "DT: internal: erasure fuel exhausted"
+else
+  let
+    altBinders = caseAltBinders alt
+    env = append (reverse altBinders) binders
+  in andThen (checkErasureFuel (fuel - 1) typeNames env (caseAltBody alt))
+    (\_ => checkAltErasureFuel (fuel - 1) typeNames binders rest)
+
+binderAt : Int -> List (Pair String Rig) -> Maybe (Pair String Rig)
+binderAt i [] = Nothing
+binderAt i (b :: rest) = if i <= 0 then Just b else binderAt (i - 1) rest
+
+-- 依赖：运行时会用到的 TGlobal（擦除实参里的不算）。
+termDepsIntoFuel : Int -> HashTbl Bool -> List String -> Term -> List String
+termDepsIntoFuel fuel runtimeNames acc t = if fuel <= 0 then acc
+else case t of
+  TGlobal name => if tblMem name runtimeNames then addName name acc else acc
+  TVar name i => acc
+  TMeta m => acc
+  TType l => acc
+  TPi name implicit rig dom cod => acc
+  TLam name rig body => termDepsIntoFuel (fuel - 1) runtimeNames acc body
+  TApp f a rig => case flattenConApp t of
+    Just (Pair c args) => termDepsArgsFuel (fuel - 1) runtimeNames acc args
+    Nothing =>
+      if rigIsErased rig then termDepsIntoFuel (fuel - 1) runtimeNames acc f
+      else termDepsIntoFuel (fuel - 1) runtimeNames (termDepsIntoFuel (fuel - 1) runtimeNames acc f) a
+  TCon c args => termDepsArgsFuel (fuel - 1) runtimeNames acc args
+  TCase scrut alts =>
+    termDepsAltsFuel (fuel - 1) runtimeNames (termDepsIntoFuel (fuel - 1) runtimeNames acc scrut)
+      alts
+  TInt n => acc
+  TStr s => acc
+  TBool b => acc
+  TIf c th el =>
+    termDepsIntoFuel (fuel - 1) runtimeNames
+      (termDepsIntoFuel (fuel - 1) runtimeNames (termDepsIntoFuel (fuel - 1) runtimeNames acc c) th)
+      el
+
+termDepsArgsFuel : Int -> HashTbl Bool -> List String -> List (Pair Term Rig) -> List String
+termDepsArgsFuel fuel runtimeNames acc [] = if fuel <= 0 then acc else acc
+termDepsArgsFuel fuel runtimeNames acc ((Pair arg rig) :: rest) =
+  if fuel <= 0 then acc
+  else if rigIsErased rig then termDepsArgsFuel (fuel - 1) runtimeNames acc rest
+  else termDepsArgsFuel (fuel - 1) runtimeNames (termDepsIntoFuel (fuel - 1) runtimeNames acc arg) rest
+
+termDepsAltsFuel : Int -> HashTbl Bool -> List String -> List CaseAlt -> List String
+termDepsAltsFuel fuel runtimeNames acc [] = if fuel <= 0 then acc else acc
+termDepsAltsFuel fuel runtimeNames acc (alt :: rest) =
+  if fuel <= 0 then acc
+  else termDepsAltsFuel (fuel - 1) runtimeNames
+    (termDepsIntoFuel (fuel - 1) runtimeNames acc (caseAltBody alt)) rest
+
+addName : String -> List String -> List String
+addName name [] = [name]
+addName name (x :: rest) = if x == name then x :: rest else x :: addName name rest
+
+runtimeNamesOf : List DtDef -> List String
+runtimeNamesOf [] = []
+runtimeNamesOf (d :: rest) = dtDefName d :: runtimeNamesOf rest
+
+lookupDtDef : List DtDef -> String -> Maybe DtDef
+lookupDtDef defs name = findDtDef name defs
+
+-- ---------------------------------------------------------------
+-- SCC 分组（M14：替代 M13 的「递归 = 报错」）
+-- ---------------------------------------------------------------
+--
+-- 按 Kosaraju 分组（与 Codegen 的既有实现同构）：先在正向依赖图上求完成顺序，再在反向图
+-- 上按该顺序收集分量，最后按依赖就绪顺序排列分量。分量内成员按源码顺序排列，
+-- 保证同一输入产出逐字节稳定的 OCaml。
+neighborsOf : HashTbl (List String) -> String -> List String
+neighborsOf adjT name = case tblLookup name adjT of
+  Just ns => ns
+  Nothing => []
+
+-- 反向邻接表：一次遍历 adj 构建（旧实现 dependentsOf 对每个名字扫全表 ⇒ O(n²)）。
+addDependents : String -> List String -> HashTbl (List String) -> HashTbl (List String)
+addDependents src [] t = t
+addDependents src (m :: rest) t =
+  let
+    cur = case tblLookup m t of
+      Just xs => xs
+      Nothing => []
+  in addDependents src rest (tblInsert m (src :: cur) t)
+
+reverseAdjTbl : List (Pair String (List String)) -> HashTbl (List String)
+reverseAdjTbl [] = tblEmpty
+reverseAdjTbl ((Pair n ns) :: rest) = addDependents n ns (reverseAdjTbl rest)
+
+adjTblOf : List (Pair String (List String)) -> HashTbl (List String)
+adjTblOf adj = tblInsertAll adj tblEmpty
+
+foldNeighborsPost : HashTbl (List String) -> List String -> HashTbl Bool -> List String -> Pair (HashTbl Bool) (List String)
+foldNeighborsPost adjT ms visited order = foldNeighborsPostFuel 100000 adjT ms visited order
+
+foldNeighborsPostFuel : Int -> HashTbl (List String) -> List String -> HashTbl Bool -> List String -> Pair (HashTbl Bool) (List String)
+foldNeighborsPostFuel fuel adjT ms visited order = if fuel <= 0 then Pair visited order
+else case ms of
+  [] => Pair visited order
+  m :: rest => if tblMem m visited then foldNeighborsPostFuel (fuel - 1) adjT rest visited order
+  else case dfsPostFuel (fuel - 1) adjT m (tblInsert m True visited) order of
+    Pair visited2 order2 => foldNeighborsPostFuel (fuel - 1) adjT rest visited2 order2
+
+dfsPost : HashTbl (List String) -> String -> HashTbl Bool -> List String -> Pair (HashTbl Bool) (List String)
+dfsPost adjT n visited order = dfsPostFuel 100000 adjT n visited order
+
+dfsPostFuel : Int -> HashTbl (List String) -> String -> HashTbl Bool -> List String -> Pair (HashTbl Bool) (List String)
+dfsPostFuel fuel adjT n visited order = if fuel <= 0 then Pair visited order
+else case foldNeighborsPostFuel (fuel - 1) adjT (neighborsOf adjT n) visited order of
+  Pair visited2 order2 => Pair visited2 (n :: order2)
+
+postOrder : HashTbl (List String) -> List String -> HashTbl Bool -> List String -> Pair (HashTbl Bool) (List String)
+postOrder adjT [] visited order = Pair visited order
+postOrder adjT (n :: rest) visited order = if tblMem n visited then postOrder adjT rest visited order
+else case dfsPost adjT n (tblInsert n True visited) order of
+  Pair visited2 order2 => postOrder adjT rest visited2 order2
+
+foldNeighborsCollect : HashTbl (List String) -> List String -> HashTbl Bool -> List String -> Pair (HashTbl Bool) (List String)
+foldNeighborsCollect adjT ms visited comp = foldNeighborsCollectFuel 100000 adjT ms visited comp
+
+foldNeighborsCollectFuel : Int -> HashTbl (List String) -> List String -> HashTbl Bool -> List String -> Pair (HashTbl Bool) (List String)
+foldNeighborsCollectFuel fuel adjT ms visited comp = if fuel <= 0 then Pair visited comp
+else case ms of
+  [] => Pair visited comp
+  m :: rest => if tblMem m visited then foldNeighborsCollectFuel (fuel - 1) adjT rest visited comp
+  else case dfsCollectFuel (fuel - 1) adjT m (tblInsert m True visited) comp of
+    Pair visited2 comp2 => foldNeighborsCollectFuel (fuel - 1) adjT rest visited2 comp2
+
+dfsCollect : HashTbl (List String) -> String -> HashTbl Bool -> List String -> Pair (HashTbl Bool) (List String)
+dfsCollect adjT n visited comp = dfsCollectFuel 100000 adjT n visited comp
+
+dfsCollectFuel : Int -> HashTbl (List String) -> String -> HashTbl Bool -> List String -> Pair (HashTbl Bool) (List String)
+dfsCollectFuel fuel adjT n visited comp = if fuel <= 0 then Pair visited comp
+else case foldNeighborsCollectFuel (fuel - 1) adjT (neighborsOf adjT n) visited comp of
+  Pair visited2 comp2 => Pair visited2 (n :: comp2)
+
+collectComps : HashTbl (List String) -> List String -> HashTbl Bool -> List (List String) -> List (List String)
+collectComps adjT [] visited comps = comps
+collectComps adjT (n :: rest) visited comps = if tblMem n visited then collectComps adjT rest visited comps
+else case dfsCollect adjT n (tblInsert n True visited) [] of
+  Pair visited2 comp => collectComps adjT rest visited2 (comp :: comps)
+
+-- 名字 → 所属分量（一次构建，O(1) 查）。
+componentTblOf : List (List String) -> HashTbl (List String)
+componentTblOf comps = tblInsertAll (concatMap (\g => map (\n => Pair n g) g) comps) tblEmpty
+
+addAllNames : List String -> HashTbl Bool -> HashTbl Bool
+addAllNames [] t = t
+addAllNames (n :: rest) t = addAllNames rest (tblInsert n True t)
+
+-- 按 names 首次出现顺序产出 SCC，组内成员按 names 顺序排列。
+groupsFromComps : List (List String) -> List String -> List (List String)
+groupsFromComps comps names = groupsFromCompsGo (componentTblOf comps) names names tblEmpty
+
+groupsFromCompsGo : HashTbl (List String) -> List String -> List String -> HashTbl Bool -> List (List String)
+groupsFromCompsGo compTbl allNames [] emitted = []
+groupsFromCompsGo compTbl allNames (n :: rest) emitted = if tblMem n emitted then groupsFromCompsGo compTbl allNames rest emitted
+else case tblLookup n compTbl of
+  Just g => groupOf allNames g :: groupsFromCompsGo compTbl allNames rest (addAllNames g emitted)
+  Nothing => groupsFromCompsGo compTbl allNames rest emitted
+
+-- 单成员分量（大程序里占绝对多数）直接返回，免掉对全程序名字的一次 filter；
+-- 旧实现对每个分量都 filter 一遍 allNames ⇒ O(#分量 × #定义)。
+groupOf : List String -> List String -> List String
+groupOf allNames ([x]) = [x]
+groupOf allNames g = filterNames (\m => tblMem m (tblOfNames g)) allNames
+
+filterNames : (String -> Bool) -> List String -> List String
+filterNames pred [] = []
+filterNames pred (n :: rest) = if pred n then n :: filterNames pred rest else filterNames pred rest
+
+notIn : String -> List String -> Bool
+notIn name names = if memName name names then False else True
+
+uniqueNames : List String -> List String
+uniqueNames [] = []
+uniqueNames (name :: rest) =
+  if name == "" then uniqueNames rest
+  else if memName name rest then uniqueNames rest else name :: uniqueNames rest
+
+groupDeps : HashTbl (List String) -> List String -> List String
+groupDeps adjT group =
+  filterNames (\n => notIn n group) (uniqueNames (concatMap (neighborsOf adjT) group))
+
+allIn : List String -> HashTbl Bool -> Bool
+allIn [] allowed = True
+allIn (n :: rest) allowed = if tblMem n allowed then allIn rest allowed else False
+
+groupReady : HashTbl (List String) -> List String -> HashTbl Bool -> Bool
+groupReady adjT group emitted = allIn (groupDeps adjT group) emitted
+
+pickReady : HashTbl (List String) -> List (List String) -> HashTbl Bool -> Maybe (Pair (List String) (List (List String)))
+pickReady adjT groups emitted = pickReadyAcc adjT groups [] emitted
+
+pickReadyAcc : HashTbl (List String) -> List (List String) -> List (List String) -> HashTbl Bool -> Maybe (Pair (List String) (List (List String)))
+pickReadyAcc adjT [] before emitted = Nothing
+pickReadyAcc adjT (g :: rest) before emitted =
+  if groupReady adjT g emitted then Just (Pair g (append (reverse before) rest))
+  else pickReadyAcc adjT rest (g :: before) emitted
+
+orderGroups : HashTbl (List String) -> List (List String) -> Result (List (List String))
+orderGroups adjT groups = orderGroupsAcc adjT groups tblEmpty
+
+orderGroupsAcc : HashTbl (List String) -> List (List String) -> HashTbl Bool -> Result (List (List String))
+orderGroupsAcc adjT remaining emitted =
+  orderGroupsAccFuel (length remaining + 1) adjT remaining emitted
+
+orderGroupsAccFuel : Int -> HashTbl (List String) -> List (List String) -> HashTbl Bool -> Result (List (List String))
+orderGroupsAccFuel fuel adjT remaining emitted = if fuel <= 0 then cgErr0 DependencyCycle
+else case remaining of
+  [] => Ok []
+  _ => case pickReady adjT remaining emitted of
+    Nothing => cgErr0 DependencyCycle
+    Just (Pair g rest) =>
+      andThen (orderGroupsAccFuel (fuel - 1) adjT rest (addAllNames g emitted))
+        (\tail => Ok (g :: tail))
+
+-- 运行时定义的依赖邻接表（只保留运行时会用到的 TGlobal 边）。
+-- 入参只会有体定义（axiom 已被分区到类型级）；无体项按空依赖处理。
+depAdjacency : List DtDef -> List (Pair String (List String))
+depAdjacency defs =
+  let
+    names = tblOfNames (runtimeNamesOf defs)
+  in map (\d => case dtDefBody d of
+    Just body => Pair (dtDefName d) (termDepsInto names [] body)
+    Nothing => Pair (dtDefName d) []
+  ) defs
+
+groupRuntimeDefs : List DtDef -> Result (List (List DtDef))
+groupRuntimeDefs defs =
+  let
+    names = runtimeNamesOf defs
+    defsTbl = dtDefTblOf defs
+    adj = depAdjacency defs
+    adjT = adjTblOf adj
+    revT = reverseAdjTbl adj
+  in case postOrder adjT names tblEmpty [] of
+    Pair _ order =>
+      let
+        comps = collectComps revT order tblEmpty []
+        groups = groupsFromComps comps names
+      in andThen (orderGroups adjT groups) (\ordered => Ok (map (groupDefsOf defsTbl) ordered))
+
+dtDefTblOf : List DtDef -> HashTbl DtDef
+dtDefTblOf defs = tblInsertAll (map (\d => Pair (dtDefName d) d) defs) tblEmpty
+
+groupDefsOf : HashTbl DtDef -> List String -> List DtDef
+groupDefsOf defsTbl [] = []
+groupDefsOf defsTbl (n :: rest) = case tblLookup n defsTbl of
+  Nothing => groupDefsOf defsTbl rest
+  Just d => d :: groupDefsOf defsTbl rest
+
+-- M24.6 第一级：OCaml 名字编码的单射性护栏。`sanitizeName` 的转义是前缀码
+-- （'_' 只会以 `_d/_u/_p/_h` 形式出现），理论上已单射；这里仍对**实际生成的**
+-- value/type/ctor 名字做去重校验，任何未来改动引入碰撞都在 check 期报错，而不是
+-- 静默覆盖（三族前缀 v_/t_/C_ 互不相同，只需族内校验）。
+checkNoDupOcamlNames : String -> List String -> Result Int
+checkNoDupOcamlNames kind names = checkNoDupOcamlNamesGo kind names tblEmpty
+
+checkNoDupOcamlNamesGo : String -> List String -> HashTbl Bool -> Result Int
+checkNoDupOcamlNamesGo kind [] seen = Ok 0
+checkNoDupOcamlNamesGo kind (n :: rest) seen =
+  if tblMem n seen then Err ("DT: internal: OCaml name collision among " ++ kind ++ "s: `" ++ n ++ "`")
+  else checkNoDupOcamlNamesGo kind rest (tblInsert n True seen)
+
+ensureUniqueOcamlNames : List DtData -> List DtDef -> Result Int
+ensureUniqueOcamlNames datas defs =
+  let
+    runtime = runtimeDatas datas
+    valueNames = map (\d => valueName (dtDefName d)) defs
+    typeNames = map (\d => typeName (dtDataName d)) runtime
+    ctorNames =
+      concatMap (\d => map (\c => ctorOcamlName (dtCtorFamily c) (dtCtorName c)) (dtDataCtors d))
+        runtime
+  in andThen (checkNoDupOcamlNames "value" valueNames)
+    (\_ => andThen (checkNoDupOcamlNames "type" typeNames) (\_ => checkNoDupOcamlNames "constructor" ctorNames))
+
+-- M24.6 第三级（重新裁定后的最小落地）：de Bruijn index 的作用域护栏。
+-- `Core.varIndex` 越界已改为返回 -1（不再静默指向 0）；这里对**全部**定义体
+-- （含类型级定义，它们现在整体擦除、不再过擦除检查）做一次作用域验证，任何
+-- 越界/负 index 都在 check 期报内部错误，而不是在 codegen/OCaml 阶段才炸。
+checkTermScopes : Int -> Term -> Result Int
+checkTermScopes depth (TVar name i) =
+  if i >= 0 then if i < depth then Ok 0
+  else Err
+    ("DT: internal: out-of-scope de Bruijn index " ++ strFromInt i ++ " (depth " ++ strFromInt depth ++ ")")
+  else Err ("DT: internal: negative de Bruijn index " ++ strFromInt i)
+checkTermScopes depth (TGlobal name) = Ok 0
+checkTermScopes depth (TInt n) = Ok 0
+checkTermScopes depth (TStr s) = Ok 0
+checkTermScopes depth (TBool b) = Ok 0
+checkTermScopes depth (TType l) = Ok 0
+checkTermScopes depth (TMeta m) = Ok 0
+checkTermScopes depth (TApp f a rig) =
+  if rigIsErased rig then checkTermScopes depth f
+  else andThen (checkTermScopes depth f) (\_ => checkTermScopes depth a)
+checkTermScopes depth (TCon c args) = checkTermScopesArgs depth args
+checkTermScopes depth (TLam name rig body) = checkTermScopes (depth + 1) body
+checkTermScopes depth (TPi name implicit rig dom cod) =
+  andThen (checkTermScopes depth dom) (\_ => checkTermScopes (depth + 1) cod)
+checkTermScopes depth (TIf c th el) =
+  andThen (checkTermScopes depth c)
+    (\_ => andThen (checkTermScopes depth th) (\_ => checkTermScopes depth el))
+checkTermScopes depth (TCase scrut alts) =
+  andThen (checkTermScopes depth scrut) (\_ => checkAltScopes depth alts)
+
+checkTermScopesArgs : Int -> List (Pair Term Rig) -> Result Int
+checkTermScopesArgs depth [] = Ok 0
+checkTermScopesArgs depth ((Pair arg rig) :: rest) =
+  if rigIsErased rig then checkTermScopesArgs depth rest
+  else andThen (checkTermScopes depth arg) (\_ => checkTermScopesArgs depth rest)
+
+checkAltScopes : Int -> List CaseAlt -> Result Int
+checkAltScopes depth [] = Ok 0
+checkAltScopes depth (alt :: rest) =
+  andThen (checkTermScopes (depth + length (caseAltBinders alt)) (caseAltBody alt))
+    (\_ => checkAltScopes depth rest)
+
+checkAllDefScopes : List DtDef -> Result Int
+checkAllDefScopes [] = Ok 0
+checkAllDefScopes (d :: rest) = case dtDefBody d of
+  -- axiom 没有体；作用域护栏只检查会落项的体。
+  Nothing => checkAllDefScopes rest
+  -- M29（A14）：内部护栏错误也带定义来源位置，便于定位生成定义。
+  Just body => case checkTermScopes 0 body of
+    Err e => Err (defLocPrefix d ++ e)
+    Ok n => checkAllDefScopes rest
+
+termDepsInto : HashTbl Bool -> List String -> Term -> List String
+termDepsInto a1 a2 a3 = termDepsIntoFuel 100000 a1 a2 a3
+
+termDepsArgs : HashTbl Bool -> List String -> List (Pair Term Rig) -> List String
+termDepsArgs a1 a2 a3 = termDepsArgsFuel 100000 a1 a2 a3
+
+termDepsAlts : HashTbl Bool -> List String -> List CaseAlt -> List String
+termDepsAlts a1 a2 a3 = termDepsAltsFuel 100000 a1 a2 a3
+
+checkErasure : List String -> List (Pair String Rig) -> Term -> Result Int
+checkErasure a1 a2 a3 = checkErasureFuel 512 a1 a2 a3
+
+checkConArgsErasure : List String -> List (Pair String Rig) -> List (Pair Term Rig) -> Result Int
+checkConArgsErasure a1 a2 a3 = checkConArgsErasureFuel 512 a1 a2 a3
+
+checkAltErasure : List String -> List (Pair String Rig) -> List CaseAlt -> Result Int
+checkAltErasure a1 a2 a3 = checkAltErasureFuel 512 a1 a2 a3

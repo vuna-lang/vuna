@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 # vuna-bench: 手动性能基准（构建 / 编译 / 产物尺寸）。
-# 由 `nix run .#vuna-bench` 提供；不是 CI check，不写入仓库。
+# 由 `nix run .#vuna-bench` 提供；默认不是 CI check，运行结果只在 --json/--save
+# 指定时写文件；入库的产物只有基线 nix/bench-baseline.json（--check 的软对比对象）。
+#
+# 基线：`nix run .#vuna-bench -- --quick --json nix/bench-baseline.json` 生成
+# 提交入库的基线；之后用 `--check`（读基线、超阈值 WARN、退出 0）做软对比。
+# 基线按机器记录 meta（arch/nproc/compiler/runs/warmup），跨机器或口径不同时
+# 只软告警、不阻断；--strict 也只把「同机器 + 同 compiler」的超阈值当失败。
 set -euo pipefail
 
 RUNS=3
@@ -8,6 +14,9 @@ WARMUP=1
 COMPILER=vuna
 JSON_OUT=""
 BASELINE=""
+CHECK=0
+STRICT=0
+THRESHOLD=20
 WITH_TESTS=0
 KEEP=0
 STATUS=ok
@@ -25,10 +34,18 @@ options:
   --quick                等价于 --runs 1、无 warmup
   --json FILE|-          写出 JSON 报告；`-` 表示只输出 JSON
   --save FILE            与 --json 相同
-  --baseline FILE        与之前的 JSON 报告对比，输出 delta
+  --baseline FILE        与之前的 JSON 报告对比，输出 delta（jq 解析）
+  --check                读取基线（--baseline FILE，默认 nix/bench-baseline.json），
+                         对超出 --threshold 的指标打印 WARN；软告警，退出 0
+  --strict               与 --check 连用：同机器、同 compiler 的 WARN 变为退出 1；
+                         跨机器/口径不同以及 bench 状态失败仍只告警、不阻断
+  --threshold N          性能回退阈值，百分比（默认 20）
   --with-tests           额外运行 test/run-tests.sh（较慢）
   --keep                 保留临时构建目录
   -h, --help             显示本帮助
+
+基线：`--quick --json nix/bench-baseline.json` 生成入库基线；基线 meta 记录
+arch/nproc/compiler/ocamlopt/git_head/git_dirty/runs/warmup，跨机器只做软告警。
 
 环境：
   TMPDIR                 临时目录根（默认 /tmp；不可写时请指向可写目录）
@@ -87,6 +104,23 @@ while [ $# -gt 0 ]; do
       BASELINE=${1#*=}
       shift
       ;;
+    --check)
+      CHECK=1
+      shift
+      ;;
+    --strict)
+      STRICT=1
+      shift
+      ;;
+    --threshold)
+      [ $# -ge 2 ] || die "--threshold needs a value"
+      THRESHOLD=$2
+      shift 2
+      ;;
+    --threshold=*)
+      THRESHOLD=${1#*=}
+      shift
+      ;;
     --with-tests)
       WITH_TESTS=1
       shift
@@ -108,11 +142,16 @@ done
 case $RUNS in
   ''|*[!0-9]*|0) die "--runs must be a positive integer" ;;
 esac
+case $THRESHOLD in
+  ''|*[!0-9]*|0) die "--threshold must be a positive integer (percent)" ;;
+esac
 case $COMPILER in
   vuna|stage1) COMPILER=vuna ;;
   seed|vuna-seed|stage0) COMPILER=seed ;;
   *) die "--compiler must be vuna or seed" ;;
 esac
+# --strict 是 --check 的失败模式；单独出现时隐含 --check。
+[ "$STRICT" = 1 ] && CHECK=1
 
 REPO=$PWD
 [ -f "$REPO/seed/build.sh" ] || die "run from the repo root (seed/build.sh not found)"
@@ -129,8 +168,25 @@ abspath() {
   esac
 }
 
+# --check 默认读取入库基线 nix/bench-baseline.json。
+if [ "$CHECK" = 1 ] && [ -z "$BASELINE" ]; then
+  BASELINE=$REPO/nix/bench-baseline.json
+fi
+if [ "$CHECK" = 1 ] && [ "$JSON_OUT" = "-" ]; then
+  die "--check 不能与 --json - 组合（机器 JSON 与 WARN 行会混在一起）"
+fi
+if [ -n "$BASELINE" ]; then
+  # 基线解析只用 jq（不再 sed 正则抠 JSON 字段）。
+  command -v jq >/dev/null 2>&1 || die "jq not found (use: nix run .#vuna-bench)"
+fi
+
 if [ -n "$JSON_OUT" ]; then JSON_OUT=$(abspath "$JSON_OUT"); fi
 if [ -n "$BASELINE" ]; then BASELINE=$(abspath "$BASELINE"); fi
+# 基线缺失/非法在开始测量前就报错，避免白跑一遍基准。
+if [ -n "$BASELINE" ]; then
+  [ -f "$BASELINE" ] || die "baseline not found: $BASELINE"
+  jq -e . "$BASELINE" >/dev/null 2>&1 || die "baseline is not valid JSON: $BASELINE"
+fi
 
 TMPROOT=${TMPDIR:-/tmp}
 mkdir -p "$TMPROOT" 2>/dev/null || true
@@ -187,8 +243,11 @@ else
   mkdir -p "$WORK/src/test/corpus"
   cp -r test/corpus/run "$WORK/src/test/corpus/"
   cp -r test/corpus/dt "$WORK/src/test/corpus/"
+  cp test/corpus/vuna.toml "$WORK/src/test/corpus/"
 fi
 cd "$WORK/src"
+# M26：包上下文取代 `--root`；工作副本的 base 位置（无 manifest 的临时夹具用）。
+export VUNA_BASE="$WORK/src/base"
 
 log() {
   printf '%s\n' "$*" >>"$WORK/cmd.log"
@@ -258,10 +317,10 @@ SELF_OUT_SRC=$WORK/selfsrc
 SELF_COMPILER_SRC=$WORK/selfcompilersrc
 
 measure seed_build sh seed/build.sh "$SEED_BIN"
-measure seed_compile "$SEED_BIN" build --split "$STAGE1_SRC" compiler
+measure seed_compile "$SEED_BIN" compile compiler "$STAGE1_SRC"
 cp -r "$STAGE1_SRC" "$STAGE1_BUILD"
 measure stage1_build sh "$STAGE1_BUILD/build.sh" "$VUNA_COMPILER_BIN"
-measure product_compile "$VUNA_COMPILER_BIN" build --split "$PRODUCT_SRC" .
+measure product_compile "$VUNA_COMPILER_BIN" compile . "$PRODUCT_SRC"
 cp -r "$PRODUCT_SRC" "$PRODUCT_BUILD"
 measure product_build sh "$PRODUCT_BUILD/build.sh" "$VUNA_BIN"
 
@@ -271,16 +330,16 @@ else
   SELF_BIN=$SEED_BIN
 fi
 
-measure compiler_self_compile "$SELF_BIN" build --split "$SELF_OUT_SRC" .
-measure compiler_closure_compile "$SELF_BIN" build --split "$SELF_COMPILER_SRC" compiler
+measure compiler_self_compile "$SELF_BIN" compile . "$SELF_OUT_SRC"
+measure compiler_closure_compile "$SELF_BIN" compile compiler "$SELF_COMPILER_SRC"
 cat "$SELF_OUT_SRC"/*.ml >"$WORK/self_concat.ml"
 cat "$STAGE1_SRC"/*.ml >"$WORK/stage1_concat.ml"
 cat seed/*.ml >"$WORK/seed_concat.ml"
 
 printf 'main : Int\nmain = 40 + 2\n' >tiny.vuna
-measure tiny_compile "$SELF_BIN" compile --root compiler/lib --root lib --root base/lib --root app --no-print tiny.vuna "$WORK/tiny.ml"
+measure tiny_compile "$SELF_BIN" compile --no-print tiny.vuna "$WORK/tinyout"
 # DT 精化 + 擦除 codegen 基准（单文件，Pi + 类型擦除；M24 起是唯一 codegen 路径）
-measure dt_elab "$SELF_BIN" compile --no-print test/corpus/dt/03_compose.vuna "$WORK/dt.ml"
+measure dt_elab "$SELF_BIN" compile --no-print test/corpus/dt/03_compose.vuna "$WORK/dtelab"
 
 # ---- corpus 批量编译（单次计时，内部循环） --------------------------------
 cat >"$WORK/corpus.sh" <<'EOS'
@@ -290,8 +349,8 @@ rm -rf "$CORPUS_OUT"
 mkdir -p "$CORPUS_OUT"
 : >"$CORPUS_FAIL"
 for f in test/corpus/run/*.vuna; do
-  out="$CORPUS_OUT/$(basename "$f" .vuna).ml"
-  if ! "$CORPUS_BIN" compile --root compiler/lib --root lib --root base/lib --root app --no-print "$f" "$out" >>"$CORPUS_LOG" 2>&1; then
+  out="$CORPUS_OUT/$(basename "$f" .vuna)"
+  if ! "$CORPUS_BIN" compile --no-print "$f" "$out" >>"$CORPUS_LOG" 2>&1; then
     printf '%s\n' "$f" >>"$CORPUS_FAIL"
   fi
 done
@@ -336,10 +395,11 @@ collect_stats() {
   COUNT["${key}_rec_zero_arg"]=$(grep -cE '^let rec [A-Za-z0-9_]+ = fun \(\) ->' "$f" || true)
 }
 
+cat "$WORK/tinyout"/*.ml >"$WORK/tiny_concat.ml"
 collect_stats seed "$WORK/seed_concat.ml"
 collect_stats stage1 "$WORK/stage1_concat.ml"
 collect_stats self "$WORK/self_concat.ml"
-collect_stats tiny "$WORK/tiny.ml"
+collect_stats tiny "$WORK/tiny_concat.ml"
 
 # ---- 状态 ----------------------------------------------------------------
 FIXED_POINT=skipped
@@ -352,7 +412,7 @@ if [ "$COMPILER" = vuna ]; then
   fi
 fi
 SEED_MATCHES=false
-if diff -r -x "*.cmi" -x "*.cmx" -x "*.o" -x "vuna-seed" -x "build.log" seed "$STAGE1_SRC" >/dev/null 2>&1; then SEED_MATCHES=true; fi
+if diff -r -x "*.cmi" -x "*.cmx" -x "*.o" -x "vuna-seed" -x "build.log" -x "build.sh" "$REPO/seed" "$STAGE1_SRC" >/dev/null 2>&1; then SEED_MATCHES=true; fi
 
 TESTS=skipped
 TESTS_SUMMARY=""
@@ -554,39 +614,123 @@ emit_json() {
 EOF
 }
 
+# 当前口径的扁平指标：timings_ms.<key>.median / sizes.<key>（与基线 flat 对齐）。
+declare -A CUR_FLAT
+
+collect_current_flat() {
+  local key
+  for key in "${!MEDIAN[@]}"; do
+    CUR_FLAT["timings_ms.${key}.median"]=${MEDIAN[$key]}
+  done
+  for key in "${!SIZE[@]}"; do
+    CUR_FLAT["sizes.${key}"]=${SIZE[$key]}
+  done
+}
+
+# 基线扁平指标：只由 jq 解析（flat 缺失时从 timings_ms/sizes 回退合成）。
+baseline_flat() {
+  jq -r '
+    (.flat // (
+      ((.timings_ms // {})
+        | to_entries
+        | map({ key: ("timings_ms." + .key + ".median"), value: .value.median })
+        | from_entries)
+      + ((.sizes // {})
+        | to_entries
+        | map({ key: ("sizes." + .key), value: .value })
+        | from_entries)
+    ))
+    | to_entries[]
+    | select(.value | type == "number")
+    | "\(.key)\t\(.value)"
+  ' "$BASELINE"
+}
+
 compare_baseline() {
   [ -f "$BASELINE" ] || die "baseline not found: $BASELINE"
+  command -v jq >/dev/null 2>&1 || die "jq not found (use: nix run .#vuna-bench)"
+  jq -e . "$BASELINE" >/dev/null 2>&1 || die "baseline is not valid JSON: $BASELINE"
+
+  local base_compiler base_arch base_nproc base_runs base_warmup
+  base_compiler=$(jq -r '.meta.compiler // "unknown"' "$BASELINE")
+  base_arch=$(jq -r '.meta.arch // "unknown"' "$BASELINE")
+  base_nproc=$(jq -r '.meta.nproc // "unknown"' "$BASELINE")
+  base_runs=$(jq -r '.meta.runs // "unknown"' "$BASELINE")
+  base_warmup=$(jq -r '.meta.warmup // "unknown"' "$BASELINE")
+
   note ""
   note "== 对比基线 =="
   note "baseline: $BASELINE"
-  local base_compiler
-  base_compiler=$(sed -n 's/^[[:space:]]*"compiler":[[:space:]]*"\([^"]*\)".*/\1/p' "$BASELINE" | head -n 1)
-  if [ -n "$base_compiler" ] && [ "$base_compiler" != "$COMPILER" ]; then
-    note "注意: 基线 compiler=$base_compiler，当前 compiler=$COMPILER"
+  note "baseline meta: compiler=$base_compiler arch=$base_arch nproc=$base_nproc runs=$base_runs warmup=$base_warmup"
+
+  SAME_COMPILER=1
+  SAME_MACHINE=1
+  if [ "$base_compiler" != unknown ] && [ "$base_compiler" != "$COMPILER" ]; then
+    SAME_COMPILER=0
+    note "跳过比较: 基线 compiler=$base_compiler，当前 compiler=$COMPILER（只对同 compiler 比较）"
   fi
-  local flatfile=$WORK/flat.current
-  : >"$flatfile"
-  local key
-  for key in $(printf '%s\n' "${!MEDIAN[@]}" | sort); do
-    printf 'timings_ms.%s.median %s\n' "$key" "${MEDIAN[$key]}" >>"$flatfile"
-  done
-  for key in $(printf '%s\n' "${!SIZE[@]}" | sort); do
-    printf 'sizes.%s %s\n' "$key" "${SIZE[$key]}" >>"$flatfile"
-  done
-  printf '  %-42s %12s %12s %12s\n' metric current baseline delta
-  local cur current
-  while IFS=' ' read -r key cur; do
+  if [ "$base_arch" != unknown ] && [ "$base_arch" != "$ARCH" ]; then SAME_MACHINE=0; fi
+  if [ "$base_nproc" != unknown ] && [ "$base_nproc" != "$NPROC" ]; then SAME_MACHINE=0; fi
+  if [ "$SAME_MACHINE" = 0 ]; then
+    note "跨机器基线（arch/nproc 不同）：差异只作软告警，--strict 也不因此失败"
+  fi
+  if { [ "$base_runs" != unknown ] && [ "$base_runs" != "$RUNS" ]; } ||
+    { [ "$base_warmup" != unknown ] && [ "$base_warmup" != "$WARMUP" ]; }; then
+    note "口径不同: 基线 runs=$base_runs warmup=$base_warmup，当前 runs=$RUNS warmup=$WARMUP（只作软告警）"
+  fi
+
+  WARN_COUNT=0
+  HARD_WARN=0
+  SOFT_WARN=0
+  CMP_COUNT=0
+  if [ "$SAME_COMPILER" = 0 ]; then return 0; fi
+
+  collect_current_flat
+  printf '  %-42s %12s %12s %10s  %s\n' metric current baseline delta result
+  local key basev cur delta flag verdict
+  while IFS=$'\t' read -r key basev; do
     [ -n "$key" ] || continue
-    current=$(awk -v k="$key" '$1 == k { print $2; exit }' "$flatfile")
-    [ -n "$current" ] || continue
-    awk -v k="$key" -v c="$current" -v b="$cur" 'BEGIN {
-      if (c == 0 && b == 0) exit
-      if (b == 0) { printf "  %-42s %12s %12s %12s\n", k, c, b, "n/a"; exit }
+    cur=${CUR_FLAT[$key]:-}
+    if [ -z "$cur" ]; then
+      note "  (当前未测量: $key)"
+      continue
+    fi
+    CMP_COUNT=$((CMP_COUNT + 1))
+    read -r delta flag <<<"$(awk -v c="$cur" -v b="$basev" -v th="$THRESHOLD" 'BEGIN {
+      if (b + 0 == 0) {
+        if (c + 0 == 0) { print "0.0 flat" } else { print "n/a new" }
+        exit
+      }
       d = (c - b) / b * 100
-      mark = (d < -0.5) ? "down" : ((d > 0.5) ? "up" : "flat")
-      printf "  %-42s %12s %12s %9.1f%% %s\n", k, c, b, d, mark
-    }'
-  done < <(sed -n 's/^[[:space:]]*"\([^"]*\)":[[:space:]]*\([-0-9.][0-9.]*\)[[:space:]]*,\{0,1\}$/\1 \2/p' "$BASELINE")
+      if (d > th) { printf "%.1f WARN\n", d }
+      else if (d < -0.5) { printf "%.1f down\n", d }
+      else if (d > 0.5) { printf "%.1f up\n", d }
+      else { printf "%.1f flat\n", d }
+    }')"
+    verdict=$flag
+    shown_delta="${delta}%"
+    case $flag in
+      new) shown_delta="n/a" ;;
+      WARN)
+        WARN_COUNT=$((WARN_COUNT + 1))
+        if [ "$SAME_MACHINE" = 1 ]; then
+          HARD_WARN=$((HARD_WARN + 1))
+        else
+          SOFT_WARN=$((SOFT_WARN + 1))
+          verdict="WARN(cross-machine)"
+        fi
+        ;;
+    esac
+    printf '  %-42s %12s %12s %10s  %s\n' "$key" "$cur" "$basev" "$shown_delta" "$verdict"
+  done < <(baseline_flat)
+
+  note ""
+  note "threshold: ${THRESHOLD}%  compared: $CMP_COUNT  warn: $WARN_COUNT (hard: $HARD_WARN, cross-machine: $SOFT_WARN)"
+  if [ "$WARN_COUNT" -gt 0 ]; then
+    note "BENCH-CHECK-WARN"
+  else
+    note "BENCH-CHECK-OK"
+  fi
 }
 
 if [ "$JSON_OUT" = "-" ]; then
@@ -598,5 +742,21 @@ else
     note "json: $JSON_OUT"
   fi
   if [ -n "$BASELINE" ]; then compare_baseline; fi
+  if [ "$CHECK" = 1 ]; then
+    if [ "$STATUS" != ok ]; then
+      note "note: bench status=$STATUS（--check 下不因此失败；--strict 才失败）"
+    fi
+    if [ "$STRICT" = 1 ]; then
+      if [ "${HARD_WARN:-0}" -gt 0 ]; then
+        note "BENCH-CHECK-FAIL（--strict：同机器 ${HARD_WARN} 项超出 ${THRESHOLD}% 阈值）"
+        exit 1
+      fi
+      if [ "$STATUS" != ok ]; then
+        note "BENCH-CHECK-FAIL（--strict：bench status=$STATUS）"
+        exit 1
+      fi
+    fi
+    exit 0
+  fi
   [ "$STATUS" = ok ] || exit 1
 fi

@@ -1,0 +1,3 @@
+-- 纯测试（通过）：main : Bool，True 通过。
+main : Bool
+main = True

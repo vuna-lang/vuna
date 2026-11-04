@@ -11,7 +11,21 @@ set -eu
 VUNA=${1:?usage: index-check.sh <vuna> [repo]}
 REPO=${2:-.}
 
+# 先转绝对路径：下面的「非 workspace」用例会 cd 到临时目录再调用 $VUNA。
+case "$VUNA" in
+  */*)
+    case "$VUNA" in
+      /*) ;;
+      *) VUNA=$(CDPATH= cd -- "$(dirname -- "$VUNA")" && pwd)/$(basename -- "$VUNA") ;;
+    esac
+    ;;
+  *) VUNA=$(command -v "$VUNA" 2>/dev/null || printf '%s' "$VUNA") ;;
+esac
+
 cd "$REPO"
+
+tmpd=$(mktemp -d "${TMPDIR:-/tmp}/vuna-index-check.XXXXXX") || exit 1
+trap 'if [ -f "$tmpd/Resolve.vuna.bak" ]; then mv "$tmpd/Resolve.vuna.bak" compiler/lib/Vuna/Compiler/Loader/Resolve.vuna; fi; rm -rf "$tmpd"' EXIT INT TERM
 
 fail=0
 note() { printf '%s\n' "$1"; }
@@ -36,18 +50,37 @@ else
 fi
 
 # 2) 缓存：第二次调用应命中（不重建）。用 manifest 的 mtime 不变来验证。
+#    M30：缓存格式 v2 首行必须是 `vuna-index 2`。
 if [ -f .local/index/manifest.txt ]; then
-  : # manifest 存在即视为写缓存成功
+  first=$(sed -n '1p' .local/index/manifest.txt)
+  if [ "$first" = "vuna-index 2" ]; then
+    note "ok: index cache v2 header"
+  else
+    bad "index cache header is not vuna-index 2: $first"
+  fi
 else
   bad "index cache manifest.txt not written"
 fi
 
+# 2b) 非 workspace 目录：map 必须有可读错误并非 0（C12；不是静默空输出）。
+empty="$tmpd/empty"
+mkdir -p "$empty"
+if ( cd "$empty" && "$VUNA" map >"$tmpd/map.out" 2>&1 ); then
+  bad "map outside a workspace should exit non-zero"
+else
+  if grep -q "vuna.toml\|workspace" "$tmpd/map.out"; then
+    note "ok: map outside workspace gives readable error"
+  else
+    bad "map outside workspace error is not readable: $(cat "$tmpd/map.out")"
+  fi
+fi
+
 # 3) --find 全名：命中且有行号。M24：HM 删除后改用仍然存在的 DT 精化入口。
-if ! found=$("$VUNA" map --find Vuna.Compiler.Elab.elabProgramFull 2>&1); then
+if ! found=$("$VUNA" map --find Vuna.Compiler.Elab.Driver.elabProgramFull 2>&1); then
   bad "map --find <full name> failed: $found"
 else
   case "$found" in
-    *"Vuna.Compiler.Elab.elabProgramFull"*) : ;;
+    *"Vuna.Compiler.Elab.Driver.elabProgramFull"*) : ;;
     *) bad "map --find output missing symbol name: $found" ;;
   esac
   # 形如 (...(2623:1)...)，必须带 行:列
@@ -66,7 +99,7 @@ else
 fi
 
 # 5) --impact：给出引用者与测试标签。
-if ! imp=$("$VUNA" map --impact Vuna.Compiler.Elab.elabProgramFull 2>&1); then
+if ! imp=$("$VUNA" map --impact Vuna.Compiler.Elab.Driver.elabProgramFull 2>&1); then
   bad "map --impact failed: $imp"
 else
   case "$imp" in
@@ -81,7 +114,7 @@ else
 fi
 
 # 6) api：某模块签名面含行号。
-if ! api=$("$VUNA" api Vuna.Compiler.Builtins 2>&1); then
+if ! api=$("$VUNA" api Vuna.Compiler.Loader.Resolve 2>&1); then
   bad "api failed: $api"
 else
   case "$api" in
@@ -108,15 +141,36 @@ else
   bad "index cache files missing (symbols.txt / modules.txt)"
 fi
 
-# 8) 缓存自动失效：touch 一个源文件后，manifest 必须被重写（内容变化）。
-before=$(cat .local/index/manifest.txt)
-touch compiler/lib/Vuna/Compiler/Builtins.vuna
-"$VUNA" map >/dev/null 2>&1 || bad "vuna map after touch failed"
-after=$(cat .local/index/manifest.txt)
-if [ "$before" = "$after" ]; then
-  bad "manifest unchanged after touching a source file (cache did not invalidate)"
+# 8) 缓存自动失效（M30/C11）：同 size + 同 mtime 的内容变更也必须失效——
+#    旧实现只按 (size, mtime 秒) 判新，这里把 mtime 还原到原值后改内容。
+target=compiler/lib/Vuna/Compiler/Loader/Resolve.vuna
+cp -p "$target" "$tmpd/Resolve.vuna.bak"
+before_manifest=$(cat .local/index/manifest.txt)
+before_size=$(wc -c <"$target" | tr -d ' ')
+before_mtime=$(stat -c '%Y' "$target")
+# 第 8 行是行注释（第 7 行是空行）；替换注释文本首字符，字节数与语法都保持不变。
+sed -i '8s/^-- ./-- X/' "$target"
+touch -r "$tmpd/Resolve.vuna.bak" "$target" || cp -p "$tmpd/Resolve.vuna.bak" "$target"
+after_size=$(wc -c <"$target" | tr -d ' ')
+after_mtime=$(stat -c '%Y' "$target")
+if [ "$before_size" != "$after_size" ] || [ "$before_mtime" != "$after_mtime" ]; then
+  bad "index invalidation probe failed to keep size/mtime (size $before_size->$after_size, mtime $before_mtime->$after_mtime)"
+fi
+"$VUNA" map >/dev/null 2>&1 || bad "vuna map after content change failed"
+after_manifest=$(cat .local/index/manifest.txt)
+mv "$tmpd/Resolve.vuna.bak" "$target"
+if [ "$before_manifest" = "$after_manifest" ]; then
+  bad "manifest unchanged after same-size/same-mtime content change (cache did not invalidate)"
 else
-  note "ok: cache invalidates on mtime change"
+  note "ok: cache invalidates on content change with same size+mtime"
+fi
+# 恢复内容后缓存必须再次失效（避免用坏内容命中缓存）。
+"$VUNA" map >/dev/null 2>&1 || bad "vuna map after restore failed"
+restored_manifest=$(cat .local/index/manifest.txt)
+if [ "$after_manifest" = "$restored_manifest" ]; then
+  bad "manifest unchanged after restoring content (cache did not invalidate back)"
+else
+  note "ok: cache invalidates after restoring content"
 fi
 
 # 9) 索引不含生成物 / 夹具：seed/ 与 test/ 不应出现在模块清单里。

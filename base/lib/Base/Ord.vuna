@@ -1,0 +1,35 @@
+module Base.Ord (Ord(..)) where
+
+-- Base.Ord：`Ord` trait 与内建类型实例（M24.7：从编译器合成迁到库）。
+--
+-- 方法与编译器内建 `Ord` 的方法面**逐位对齐**：`lt` / `le` / `gt` / `ge`，都是
+-- `a -> a -> Bool`。下一波删除 `DtDerive` 的内建 trait/实例、并把 `<` / `<=` /
+-- `>` / `>=` 的实例搜索从硬编码短名切到类表后，这四个方法就是比较运算符的字典字段。
+--
+-- 方法体直接写比较运算符：`Int` 在精化期特化成 `bi_*_int`；`String` / `Bool` 走
+-- 泛型运行时 `bi_*_generic`（与既有内建实例一致），因此不会自递归。
+import Base.Bool
+
+trait Ord a where
+  lt : a -> a -> Bool
+  le : a -> a -> Bool
+  gt : a -> a -> Bool
+  ge : a -> a -> Bool
+
+instance Ord Int where
+  lt x y = x < y
+  le x y = x <= y
+  gt x y = x > y
+  ge x y = x >= y
+
+instance Ord String where
+  lt x y = x < y
+  le x y = x <= y
+  gt x y = x > y
+  ge x y = x >= y
+
+instance Ord Bool where
+  lt x y = x < y
+  le x y = x <= y
+  gt x y = x > y
+  ge x y = x >= y

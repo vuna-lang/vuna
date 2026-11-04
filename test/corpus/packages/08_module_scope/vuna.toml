@@ -1,0 +1,5 @@
+[package]
+name = "module-scope"
+
+[dependencies]
+vuna-base = "../../../../base"

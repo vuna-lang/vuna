@@ -1,0 +1,282 @@
+module Vuna.Compiler.Frontend.Diagnostics
+  ( LexDiag(..)
+  , LexEntry(..)
+  , PsDiag(..)
+  , PsEntry(..)
+  , lexAll
+  , lexCode
+  , lexEntryCode
+  , lexEntryDesc
+  , lexEntryTemplate
+  , lexErr
+  , lexErr0
+  , lexMsg
+  , lexTemplate
+  , psAll
+  , psCode
+  , psEntryCode
+  , psEntryDesc
+  , psEntryTemplate
+  , psErr
+  , psErr0
+  , psErr1
+  , psMsg
+  , psTemplate
+  , module Base.Nat
+  , module Base.Vec
+  , module Vuna.Compiler.Common
+  ) where
+
+-- Vuna.Compiler.Frontend.Diagnostics：词法/语法诊断的域枚举（M30 重构）。
+--
+-- 与 `Vuna.Compiler.Diagnostics`（TC_/CG_，带 Span）同构，但前端诊断**无位置**：
+-- Lexer/Parser 的 `Err` 只携带字符串，位置信息留在 token/状态里由上层拼。
+--
+-- 域：`LX_`（词法）、`PS_`（语法）。arity 由 `Nat` 索引在编译期锁定（同 TC 机制）。
+-- 说明：`DT: internal:` 的 fuel 耗尽等内部不变量**不占符号**，仍走裸字符串。
+import Vuna.Compiler.Common
+import Base.Nat
+import Base.Vec
+
+-- ---------------------------------------------------------------
+-- LX_：词法诊断
+-- ---------------------------------------------------------------
+data LexDiag : Nat -> Type where
+  UnterminatedBlockComment : LexDiag Zero
+  UnterminatedString : LexDiag Zero
+  UnknownEscape : LexDiag Zero
+  UnexpectedCharacter : LexDiag Zero
+
+lexCode : {n : Nat} -> LexDiag n -> String
+lexCode UnterminatedBlockComment = "LX_UnterminatedBlockComment"
+lexCode UnterminatedString = "LX_UnterminatedString"
+lexCode UnknownEscape = "LX_UnknownEscape"
+lexCode UnexpectedCharacter = "LX_UnexpectedCharacter"
+
+lexTemplate : {n : Nat} -> LexDiag n -> String
+lexTemplate UnterminatedBlockComment = "unterminated block comment"
+lexTemplate UnterminatedString = "unterminated string literal"
+lexTemplate UnknownEscape = "unknown escape sequence"
+lexTemplate UnexpectedCharacter = "unexpected character"
+
+-- ---------------------------------------------------------------
+-- PS_：语法诊断
+-- ---------------------------------------------------------------
+data PsDiag : Nat -> Type where
+  -- arity 0
+  CaseAltNotIndented : PsDiag Zero
+  CaseNeedsAlternative : PsDiag Zero
+  DoBlockMustEndWithExpr : PsDiag Zero
+  DoBindPattern : PsDiag Zero
+  DoBlockNeedsStatement : PsDiag Zero
+  DoStatementNotIndented : PsDiag Zero
+  ExpectedCommaOrBracket : PsDiag Zero
+  ExpectedEndOfExpr : PsDiag Zero
+  ExpectedEndOfInput : PsDiag Zero
+  ExpectedExportItem : PsDiag Zero
+  ExpectedExpression : PsDiag Zero
+  ExpectedIdentifier : PsDiag Zero
+  ExpectedInstanceMethod : PsDiag Zero
+  ExpectedLetBinding : PsDiag Zero
+  ExpectedPattern : PsDiag Zero
+  ExpectedRecordFieldPattern : PsDiag Zero
+  ExpectedTopLevelDecl : PsDiag Zero
+  ExprNotIndented : PsDiag Zero
+  LetBindingNotIndented : PsDiag Zero
+  PiBinderNameNotSimple : PsDiag Zero
+  UnexpectedEndOfInput : PsDiag Zero
+  UnexpectedIndentAfterCaseAlt : PsDiag Zero
+  UnexpectedIndentInData : PsDiag Zero
+  UnexpectedIndentInDo : PsDiag Zero
+  UnexpectedIndentInInstance : PsDiag Zero
+  UnexpectedIndentInRecord : PsDiag Zero
+  UnexpectedIndentInTrait : PsDiag Zero
+  UnexpectedIndentInWhere : PsDiag Zero
+  -- M28：`let` / `where` 共用绑定块，缩进越界用统一诊断。
+  UnexpectedIndentInBinding : PsDiag Zero
+  WhereArgsNotSimple : PsDiag Zero
+  -- arity 1（绑定块签名诊断；调用点自拼 span 前缀。M28 起 let/where 共用，
+  -- 码名保持不变以稳定错误码文档，消息文案改为通用 "binding signature"）
+  WhereSigBeforeClause : String -> PsDiag (Succ Zero)
+  WhereSigDuplicate : String -> PsDiag (Succ Zero)
+  WhereSigMultiClause : String -> PsDiag (Succ Zero)
+  WhereSigNoDef : String -> PsDiag (Succ Zero)
+  -- arity 1
+  ExpectedDeclAtColumn : String -> PsDiag (Succ Zero)
+  ExpectedToken : String -> PsDiag (Succ Zero)
+
+psCode : {n : Nat} -> PsDiag n -> String
+psCode CaseAltNotIndented = "PS_CaseAltNotIndented"
+psCode CaseNeedsAlternative = "PS_CaseNeedsAlternative"
+psCode DoBlockMustEndWithExpr = "PS_DoBlockMustEndWithExpr"
+psCode DoBindPattern = "PS_DoBindPattern"
+psCode DoBlockNeedsStatement = "PS_DoBlockNeedsStatement"
+psCode DoStatementNotIndented = "PS_DoStatementNotIndented"
+psCode ExpectedCommaOrBracket = "PS_ExpectedCommaOrBracket"
+psCode ExpectedEndOfExpr = "PS_ExpectedEndOfExpr"
+psCode ExpectedEndOfInput = "PS_ExpectedEndOfInput"
+psCode ExpectedExportItem = "PS_ExpectedExportItem"
+psCode ExpectedExpression = "PS_ExpectedExpression"
+psCode ExpectedIdentifier = "PS_ExpectedIdentifier"
+psCode ExpectedInstanceMethod = "PS_ExpectedInstanceMethod"
+psCode ExpectedLetBinding = "PS_ExpectedLetBinding"
+psCode ExpectedPattern = "PS_ExpectedPattern"
+psCode ExpectedRecordFieldPattern = "PS_ExpectedRecordFieldPattern"
+psCode ExpectedTopLevelDecl = "PS_ExpectedTopLevelDecl"
+psCode ExprNotIndented = "PS_ExprNotIndented"
+psCode LetBindingNotIndented = "PS_LetBindingNotIndented"
+psCode PiBinderNameNotSimple = "PS_PiBinderNameNotSimple"
+psCode UnexpectedEndOfInput = "PS_UnexpectedEndOfInput"
+psCode UnexpectedIndentAfterCaseAlt = "PS_UnexpectedIndentAfterCaseAlt"
+psCode UnexpectedIndentInData = "PS_UnexpectedIndentInData"
+psCode UnexpectedIndentInDo = "PS_UnexpectedIndentInDo"
+psCode UnexpectedIndentInInstance = "PS_UnexpectedIndentInInstance"
+psCode UnexpectedIndentInRecord = "PS_UnexpectedIndentInRecord"
+psCode UnexpectedIndentInTrait = "PS_UnexpectedIndentInTrait"
+psCode UnexpectedIndentInWhere = "PS_UnexpectedIndentInWhere"
+psCode UnexpectedIndentInBinding = "PS_UnexpectedIndentInBinding"
+psCode WhereArgsNotSimple = "PS_WhereArgsNotSimple"
+psCode (ExpectedDeclAtColumn _) = "PS_ExpectedDeclAtColumn"
+psCode (ExpectedToken _) = "PS_ExpectedToken"
+psCode (WhereSigBeforeClause _) = "PS_WhereSigBeforeClause"
+psCode (WhereSigDuplicate _) = "PS_WhereSigDuplicate"
+psCode (WhereSigMultiClause _) = "PS_WhereSigMultiClause"
+psCode (WhereSigNoDef _) = "PS_WhereSigNoDef"
+
+psTemplate : {n : Nat} -> PsDiag n -> String
+psTemplate CaseAltNotIndented = "case alternative is not indented enough"
+psTemplate CaseNeedsAlternative = "case expression needs an alternative"
+psTemplate DoBlockMustEndWithExpr = "do block must end with an expression"
+psTemplate DoBindPattern = "do bind pattern must be a variable or _"
+psTemplate DoBlockNeedsStatement = "do block needs at least one statement"
+psTemplate DoStatementNotIndented = "do block statement is not indented enough"
+psTemplate ExpectedCommaOrBracket = "expected , or ]"
+psTemplate ExpectedEndOfExpr = "expected end of expression"
+psTemplate ExpectedEndOfInput = "expected end of input"
+psTemplate ExpectedExportItem = "expected an export item"
+psTemplate ExpectedExpression = "expected expression"
+psTemplate ExpectedIdentifier = "expected identifier"
+psTemplate ExpectedInstanceMethod = "expected an instance method"
+psTemplate ExpectedLetBinding = "expected a let binding"
+psTemplate ExpectedPattern = "expected pattern"
+psTemplate ExpectedRecordFieldPattern = "expected a record field pattern"
+psTemplate ExpectedTopLevelDecl = "expected a top-level declaration"
+psTemplate ExprNotIndented = "expression is not indented enough"
+psTemplate LetBindingNotIndented = "let binding is not indented enough"
+psTemplate PiBinderNameNotSimple = "pi binder name must be a simple identifier"
+psTemplate UnexpectedEndOfInput = "unexpected end of input"
+psTemplate UnexpectedIndentAfterCaseAlt = "unexpected indentation after case alternative"
+psTemplate UnexpectedIndentInData = "unexpected indentation in data block"
+psTemplate UnexpectedIndentInDo = "unexpected indentation in do block"
+psTemplate UnexpectedIndentInInstance = "unexpected indentation in instance block"
+psTemplate UnexpectedIndentInRecord = "unexpected indentation in record block"
+psTemplate UnexpectedIndentInTrait = "unexpected indentation in trait block"
+psTemplate UnexpectedIndentInWhere = "unexpected indentation in where block"
+psTemplate UnexpectedIndentInBinding = "unexpected indentation in a let/where binding block"
+psTemplate WhereArgsNotSimple = "binding function arguments must be simple names"
+psTemplate (ExpectedDeclAtColumn _) = "expected a declaration at column <0>"
+psTemplate (ExpectedToken _) = "expected <0>"
+psTemplate (WhereSigBeforeClause _) = "binding signature for `<0>` must come before its clause"
+psTemplate (WhereSigDuplicate _) = "duplicate binding signature for `<0>`"
+psTemplate (WhereSigMultiClause _) =
+  "binding `<0>` has more than one clause; a signature can annotate only one"
+psTemplate (WhereSigNoDef _) = "binding signature for `<0>` has no definition"
+
+-- ---------------------------------------------------------------
+-- 文档遍历源
+-- ---------------------------------------------------------------
+data LexEntry : Type where
+  LexEntry : String -> String -> String -> LexEntry
+
+lexEntryCode : LexEntry -> String
+lexEntryCode (LexEntry c t d) = c
+
+lexEntryTemplate : LexEntry -> String
+lexEntryTemplate (LexEntry c t d) = t
+
+lexEntryDesc : LexEntry -> String
+lexEntryDesc (LexEntry c t d) = d
+
+data PsEntry : Type where
+  PsEntry : String -> String -> String -> PsEntry
+
+psEntryCode : PsEntry -> String
+psEntryCode (PsEntry c t d) = c
+
+psEntryTemplate : PsEntry -> String
+psEntryTemplate (PsEntry c t d) = t
+
+psEntryDesc : PsEntry -> String
+psEntryDesc (PsEntry c t d) = d
+
+lexAll : List LexEntry
+lexAll =
+  [ LexEntry (lexCode UnterminatedBlockComment) (lexTemplate UnterminatedBlockComment) "块注释未闭合",
+    LexEntry (lexCode UnterminatedString) (lexTemplate UnterminatedString) "字符串字面量未闭合",
+    LexEntry (lexCode UnknownEscape) (lexTemplate UnknownEscape) "未知转义序列",
+    LexEntry (lexCode UnexpectedCharacter) (lexTemplate UnexpectedCharacter) "无法识别的字符"
+  ]
+
+psAll : List PsEntry
+psAll =
+  [ PsEntry (psCode CaseAltNotIndented) (psTemplate CaseAltNotIndented) "case 分支缩进不足",
+    PsEntry (psCode CaseNeedsAlternative) (psTemplate CaseNeedsAlternative) "case 缺少分支",
+    PsEntry (psCode DoBlockMustEndWithExpr) (psTemplate DoBlockMustEndWithExpr) "do 块必须以表达式结尾",
+    PsEntry (psCode DoBindPattern) (psTemplate DoBindPattern) "do 绑定模式受限",
+    PsEntry (psCode DoBlockNeedsStatement) (psTemplate DoBlockNeedsStatement) "do 块至少一条语句",
+    PsEntry (psCode DoStatementNotIndented) (psTemplate DoStatementNotIndented) "do 语句缩进不足",
+    PsEntry (psCode ExpectedCommaOrBracket) (psTemplate ExpectedCommaOrBracket) "期望 , 或 ]",
+    PsEntry (psCode ExpectedEndOfExpr) (psTemplate ExpectedEndOfExpr) "表达式后有多余内容",
+    PsEntry (psCode ExpectedEndOfInput) (psTemplate ExpectedEndOfInput) "输入后有多余内容",
+    PsEntry (psCode ExpectedExportItem) (psTemplate ExpectedExportItem) "期望导出项",
+    PsEntry (psCode ExpectedExpression) (psTemplate ExpectedExpression) "期望表达式",
+    PsEntry (psCode ExpectedIdentifier) (psTemplate ExpectedIdentifier) "期望标识符",
+    PsEntry (psCode ExpectedInstanceMethod) (psTemplate ExpectedInstanceMethod) "期望 instance 方法",
+    PsEntry (psCode ExpectedLetBinding) (psTemplate ExpectedLetBinding) "期望 let 绑定",
+    PsEntry (psCode ExpectedPattern) (psTemplate ExpectedPattern) "期望模式",
+    PsEntry (psCode ExpectedRecordFieldPattern) (psTemplate ExpectedRecordFieldPattern) "期望 record 字段模式",
+    PsEntry (psCode ExpectedTopLevelDecl) (psTemplate ExpectedTopLevelDecl) "期望顶层声明",
+    PsEntry (psCode ExprNotIndented) (psTemplate ExprNotIndented) "表达式缩进不足",
+    PsEntry (psCode LetBindingNotIndented) (psTemplate LetBindingNotIndented) "let 绑定缩进不足",
+    PsEntry (psCode PiBinderNameNotSimple) (psTemplate PiBinderNameNotSimple) "pi binder 名必须是简单标识符",
+    PsEntry (psCode UnexpectedEndOfInput) (psTemplate UnexpectedEndOfInput) "意外的输入结束",
+    PsEntry (psCode UnexpectedIndentAfterCaseAlt) (psTemplate UnexpectedIndentAfterCaseAlt) "case 分支后缩进意外",
+    PsEntry (psCode UnexpectedIndentInData) (psTemplate UnexpectedIndentInData) "data 块缩进意外",
+    PsEntry (psCode UnexpectedIndentInDo) (psTemplate UnexpectedIndentInDo) "do 块缩进意外",
+    PsEntry (psCode UnexpectedIndentInInstance) (psTemplate UnexpectedIndentInInstance) "instance 块缩进意外",
+    PsEntry (psCode UnexpectedIndentInRecord) (psTemplate UnexpectedIndentInRecord) "record 块缩进意外",
+    PsEntry (psCode UnexpectedIndentInTrait) (psTemplate UnexpectedIndentInTrait) "trait 块缩进意外",
+    PsEntry (psCode UnexpectedIndentInWhere) (psTemplate UnexpectedIndentInWhere) "where 块缩进意外",
+    PsEntry (psCode UnexpectedIndentInBinding) (psTemplate UnexpectedIndentInBinding) "let/where 绑定块缩进意外",
+    PsEntry (psCode WhereArgsNotSimple) (psTemplate WhereArgsNotSimple) "绑定函数实参必须是简单名",
+    PsEntry (psCode (ExpectedDeclAtColumn "")) (psTemplate (ExpectedDeclAtColumn "")) "该列期望一个声明",
+    PsEntry (psCode (ExpectedToken "")) (psTemplate (ExpectedToken "")) "期望指定符号/关键字",
+    PsEntry (psCode (WhereSigBeforeClause "")) (psTemplate (WhereSigBeforeClause "")) "绑定签名必须先于子句",
+    PsEntry (psCode (WhereSigDuplicate "")) (psTemplate (WhereSigDuplicate "")) "重复的绑定签名",
+    PsEntry (psCode (WhereSigMultiClause "")) (psTemplate (WhereSigMultiClause "")) "绑定多子句不可用签名",
+    PsEntry (psCode (WhereSigNoDef "")) (psTemplate (WhereSigNoDef "")) "绑定签名无对应定义"
+  ]
+
+-- ---------------------------------------------------------------
+-- throw：拼 `[CODE] 消息`（前端诊断无位置）
+-- ---------------------------------------------------------------
+lexMsg : {n : Nat} -> LexDiag n -> Vec String n -> String
+lexMsg e args = "[" ++ lexCode e ++ "] " ++ substTemplate (lexTemplate e) args
+
+psMsg : {n : Nat} -> PsDiag n -> Vec String n -> String
+psMsg e args = "[" ++ psCode e ++ "] " ++ substTemplate (psTemplate e) args
+
+lexErr : {n : Nat} -> LexDiag n -> Vec String n -> Result a
+lexErr e args = Err (lexMsg e args)
+
+psErr : {n : Nat} -> PsDiag n -> Vec String n -> Result a
+psErr e args = Err (psMsg e args)
+
+lexErr0 : LexDiag Zero -> Result a
+lexErr0 e = lexErr e VNil
+
+psErr0 : PsDiag Zero -> Result a
+psErr0 e = psErr e VNil
+
+psErr1 : PsDiag (Succ Zero) -> String -> Result a
+psErr1 e a0 = psErr e (VCons a0 VNil)

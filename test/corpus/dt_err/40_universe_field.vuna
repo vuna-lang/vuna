@@ -1,0 +1,4 @@
+-- M28 决策 1 反例：字段 `Type` 的 sort 是 1（`Type : Type 1`），大于族层级 0。
+-- 严格分层（无累积性）下不能把大宇宙的字段塞进小宇宙的族。
+data D : Type where
+  Mk : Type -> D

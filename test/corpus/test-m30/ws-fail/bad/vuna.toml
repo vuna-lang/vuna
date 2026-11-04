@@ -1,0 +1,6 @@
+# workspace 成员（失败）：`vuna test <workspace-root>` 要把它的失败计入总退出码。
+[package]
+name = "test-m30-ws-fail-bad"
+
+[dependencies]
+vuna-base = "../../../../../base"

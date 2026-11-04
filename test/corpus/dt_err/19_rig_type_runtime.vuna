@@ -1,7 +1,0 @@
--- M18.6：Rig0（类型级）绑定被当运行时值使用必须报错——判据读 rigIsErased，不再读 Bool。
-data Nat : Type where
-  Zero : Nat
-  Succ : Nat -> Nat
-
-bad : (a : Type) -> Type
-bad a = a

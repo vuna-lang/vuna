@@ -1,0 +1,6 @@
+-- M26：包内 ad-hoc 入口（包根 Main.vuna，不是 app/Main.vuna）。
+-- import 解析走最近的 vuna.toml（本目录）→ 同包 lib/ 模块根。
+import Lib
+
+main : Int
+main = double 21

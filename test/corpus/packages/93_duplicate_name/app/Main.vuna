@@ -1,0 +1,4 @@
+import N
+
+main : Int
+main = n

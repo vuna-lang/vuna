@@ -1,0 +1,14 @@
+# M26 split 产物快照：test/corpus/packages/05_entry_data
+# files（排序，相对 OUTDIR）
+Main.ml
+Vuna_runtime.ml
+build.sh
+
+# names（每个 .ml 的 ^type t_ / ^let v_，排序）
+
+== Main.ml
+let v_main
+let v_pick
+type t_Color
+
+== Vuna_runtime.ml

@@ -1,0 +1,6 @@
+-- M25.2a 负例：自递归无下降（既有 M16 行为，保证与 dt_err/16 的诊断兼容）。
+loop : Int -> Int
+loop n = loop n
+
+main : Int
+main = 0

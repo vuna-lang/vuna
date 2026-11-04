@@ -1,0 +1,11 @@
+# 聚合失败夹具：workspace 根 + 一个失败的成员包。
+# `vuna test test/corpus/test-m30/ws-fail` 必须跑到成员并聚合出非 0 退出码（任一失败 → 1）。
+# 注意：它嵌套在 test-m30/ 下但**不是** test-m30 workspace 的成员，所以不影响通过路径。
+[package]
+name = "test-m30-ws-fail"
+
+[workspace]
+members = ["bad"]
+
+[dependencies]
+vuna-base = "../../../../base"

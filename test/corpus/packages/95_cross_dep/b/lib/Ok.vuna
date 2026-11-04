@@ -1,0 +1,4 @@
+module Ok (okValue) where
+
+okValue : Int
+okValue = 7

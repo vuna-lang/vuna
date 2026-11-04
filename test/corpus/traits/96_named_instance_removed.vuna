@@ -1,0 +1,12 @@
+-- M29-T2b 负例：命名实例语法已删除（`as name` 不再是合法语法）。
+trait Pretty a where
+  pretty : a -> String
+
+data Color : Type where
+  Red : Color
+
+instance Pretty Color as fancy where
+  pretty c = "fancy"
+
+main : String
+main = pretty Red

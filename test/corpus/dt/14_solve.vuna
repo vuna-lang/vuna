@@ -9,23 +9,23 @@ plus a b = case a of
   Succ k => Succ (plus k b)
 
 data Vec : Type -> Nat -> Type where
-  Nil : {a : Type} -> Vec a Zero
-  Cons : {a : Type} -> {n : Nat} -> a -> Vec a n -> Vec a (Succ n)
+  VNil : {a : Type} -> Vec a Zero
+  VCons : {a : Type} -> {n : Nat} -> a -> Vec a n -> Vec a (Succ n)
 
--- 隐式长度：调用点不需要写 `Nil Int` / `Cons Int Zero 1 ...`
+-- 隐式长度：调用点不需要写 `VNil Int` / `VCons Int Zero 1 ...`
 vapp : {a : Type} -> {m : Nat} -> {n : Nat} -> Vec a m -> Vec a n -> Vec a (plus m n)
 vapp xs ys = case xs of
-  Nil => ys
-  Cons z zs => Cons z (vapp zs ys)
+  VNil => ys
+  VCons z zs => VCons z (vapp zs ys)
 
 vlen : {a : Type} -> {n : Nat} -> Vec a n -> Int
 vlen xs = case xs of
-  Nil => 0
-  Cons y ys => 1 + vlen ys
+  VNil => 0
+  VCons y ys => 1 + vlen ys
 
 -- 隐式索引也能在已知期望类型时被约束住（这里是 Vec Int 3）
 three : Vec Int (Succ (Succ (Succ Zero)))
-three = vapp (Cons 1 (Cons 2 Nil)) (Cons 3 Nil)
+three = vapp (VCons 1 (VCons 2 VNil)) (VCons 3 VNil)
 
 main : Int
 main = vlen three

@@ -1,0 +1,3 @@
+-- M28 决策 1 反例：`Type 0` 的 sort 仍是 1（`Type 0 : Type 1`），族层级 0 住不下。
+data D : Type where
+  Mk : Type 0 -> D

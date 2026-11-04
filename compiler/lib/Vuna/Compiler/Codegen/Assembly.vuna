@@ -1,0 +1,124 @@
+module Vuna.Compiler.Codegen.Assembly
+  ( UnitParts
+  , checkDtProgram
+  , genUnitParts
+  , genUnitText
+  , mainHook
+  , prepareDtProgram
+  ) where
+
+-- Vuna.Compiler.Codegen.Assembly：split 产物的**唯一装配实现**（M26；原 Program）。
+--
+-- `prepareDtProgram` 是 check 与 split 共用的准备阶段（名字护栏 + 分区 + 擦除检查 +
+-- SCC 分组）；`genUnitParts` 生成「open 头 + 类型声明 + List 桥接 + 分组正文」的片段与
+-- 生成状态（check 只走到这里、丢弃文本，保留原 `buildText=False` 的性能语义）；
+-- `genUnitText` 把片段拼成单元正文；`mainHook` 是 main 输出钩子的唯一实现；
+-- `checkDtProgram` = prepare + genUnitParts 后丢弃文本，保证「能 check 就能 build」。
+import Vuna.Compiler.Common
+import Vuna.Compiler.Debug
+import Vuna.Compiler.Diagnostics
+import Vuna.Compiler.Elab
+import Vuna.Compiler.Codegen.Decl
+import Vuna.Compiler.Codegen.Erase
+import Vuna.Compiler.Codegen.Term
+
+-- 装配片段：文件头（open 链）、类型声明、List 桥接、按 SCC 顺序的正文，外加生成状态。
+-- 构造子不导出：调用方只能经 `genUnitText` 拼接，避免各处重复实现拼接顺序。
+data UnitParts : Type where
+  UnitParts : List String -> List String -> GenSt -> UnitParts
+
+-- check / split 共用的准备阶段：名字护栏 + 分区 + 擦除检查 + SCC 分组。
+-- 返回 (运行时定义（源码顺序）, 已按依赖排序的分组)。
+prepareDtProgram : Pair (List DtData) (List DtDef) -> Result (Pair (List DtDef) (List (List DtDef)))
+prepareDtProgram program =
+  let
+    datas = firstOf program
+    defs = secondOf program
+    table = defTable defs
+    familyNames = map dtDataName datas
+    axiomNames = axiomNamesOf defs
+  in case partitionDefs table defs of
+    Pair runtime typeNames =>
+      let
+        allTypeNames = append typeNames familyNames
+      in let
+        _ = stamp "cg-partition-done"
+      in andThen (checkNoAxiomRuntime axiomNames runtime) (\_ => andThen (checkAllDefScopes defs) (\_ => andThen (ensureUniqueOcamlNames datas runtime) (\_ => let
+        _ = stamp "cg-names-done"
+      in andThen (checkAllErasure allTypeNames runtime) (\_ => let
+        _ = stamp "cg-erasure-done"
+      in andThen (groupRuntimeDefs runtime) (\groups => let
+        _ = stamp "cg-groups-done"
+      in Ok (Pair runtime groups)
+      )
+      )
+      )
+      )
+      )
+
+-- 单个单元的装配片段。
+--   opens     ：本单元要 open 的更早单元（编译顺序 = open 链顺序）
+--   allDatas  ：整个程序的运行时族（类型渲染与构造子表的完整视图）
+--   unitDatas ：写进本单元的类型声明
+--   groups    ：本单元运行时分组的 SCC 序（由调用方按归属过滤后分组）
+genUnitParts : List (Pair String (List Int)) -> List String -> List DtData -> List DtData -> List (List DtDef) -> Result UnitParts
+genUnitParts usedTbl opens allDatas unitDatas groups = andThen (genTypeDeclsWith usedTbl allDatas unitDatas) (\typeText => let
+  _ = stamp "cg-typedecls-done"
+in andThen (genGroups (adjTblOf (depAdjacency (concatGroups groups))) (mkGenSt allDatas) groups) (\p => case p of
+  Pair bodies st =>
+    let
+      _ = stamp "cg-genGroups-done"
+    in Ok (UnitParts [openHeader opens, typeText, listBridgeFor allDatas unitDatas] bodies st)
+)
+)
+
+-- 片段拼接：open 链 + 类型 + 桥接 + 正文（正文之间空行分隔，末尾不带换行；
+-- 调用方按需要补换行/钩子）。
+genUnitText : UnitParts -> String
+genUnitText (UnitParts fragments bodies st) =
+  strConcatMany (append fragments [joinWith "\n\n" bodies])
+
+-- main 输出钩子的唯一实现（原 Program.generateDtProgram 与 Split.splitMainHook 合并）。
+-- 返回的文本以换行开头，调用方直接接在正文之后；`main : IO a` 时先跑 IO 动作。
+mainHook : Pair (List DtData) (List DtDef) -> List DtDef -> Bool -> Result String
+mainHook program runtimeDefs printResult = case findDtDef "main" runtimeDefs of
+  Nothing => cgErr0 NoMain
+  Just mainDef =>
+    let
+      table = defTable (secondOf program)
+      mainRef = valueName "main"
+    in case ioResultTy (dtDefType mainDef) of
+      Just innerTy => genDtHook "" table innerTy (ioRunText program mainRef) printResult
+      Nothing => genDtHook "" table (dtDefType mainDef) mainRef printResult
+
+-- `vuna check` 跑一遍完整装配（丢弃文本），保证「能 check 就能 build」：
+-- 擦除检查、构造子引用、SCC 分组、类型声明与函数生成都在这一步走到。
+-- main 的存在与返回类型只在生成阶段要求，这样没有 main 的库模块也能 check。
+checkDtProgram : Pair (List DtData) (List DtDef) -> Result Int
+checkDtProgram program = andThen (prepareDtProgram program) (\p => let
+  _ = stamp "cg-prepare-done"
+in case p of
+  Pair runtime groups =>
+    andThen
+      (genUnitParts (usedTableOf (runtimeDatas (firstOf program))) [] (runtimeDatas (firstOf program)) (runtimeDatas (firstOf program)) groups)
+      (\_ => Ok 0)
+)
+
+-- `open` 链（每行一个），更早单元在前。
+openHeader : List String -> String
+openHeader [] = ""
+openHeader (u :: rest) = "open " ++ u ++ "\n" ++ openHeader rest
+
+concatGroups : List (List DtDef) -> List DtDef
+concatGroups [] = []
+concatGroups (g :: rest) = append g (concatGroups rest)
+
+-- List 族桥接只写进声明该族的单元（后续模块 open 后即可用）。
+listBridgeFor : List DtData -> List DtData -> String
+listBridgeFor allDatas unitDatas = case findListFamilyData allDatas of
+  Nothing => ""
+  Just dd => if memDataName (dtDataName dd) unitDatas then dtListBridge allDatas else ""
+
+memDataName : String -> List DtData -> Bool
+memDataName name [] = False
+memDataName name (d :: rest) = if dtDataName d == name then True else memDataName name rest

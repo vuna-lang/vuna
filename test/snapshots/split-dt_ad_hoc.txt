@@ -1,0 +1,102 @@
+# M26 split 产物快照：test/corpus/dt_ad_hoc/Main.vuna
+# files（排序，相对 OUTDIR）
+Base_dBool.ml
+Base_dEq.ml
+Base_dList.ml
+Base_dMaybe.ml
+Base_dMonad.ml
+Base_dOrd.ml
+Base_dPair.ml
+Base_dResult.ml
+Base_dShow.ml
+Base_dString.ml
+Lib.ml
+Main.ml
+Prelude.ml
+Vuna_runtime.ml
+build.sh
+
+# names（每个 .ml 的 ^type t_ / ^let v_，排序）
+
+== Base_dBool.ml
+let v_Base_dBool_dand
+let v_Base_dBool_dbool
+let v_Base_dBool_dnot
+let v_Base_dBool_dor
+let v_Base_dBool_dxor
+
+== Base_dEq.ml
+let v_Base_dEq_deq
+let v_Base_dEq_dneq
+let v_Eq_uBase_dBool_dBool
+let v_Eq_uInt
+let v_Eq_uString
+
+== Base_dList.ml
+let v_Base_dList_dflatMap
+let v_Base_dList_drange
+let v_Base_dList_dreverse
+let v_Functor_uBase_dList_dList
+let v_Monad_uBase_dList_dList
+
+== Base_dMaybe.ml
+let v_Base_dMaybe_dfromMaybe
+let v_Base_dMaybe_disJust
+let v_Base_dMaybe_disNothing
+let v_Base_dMaybe_dmapJust
+let v_Base_dMaybe_dmaybe
+let v_Functor_uBase_dMaybe_dMaybe
+let v_Monad_uBase_dMaybe_dMaybe
+
+== Base_dMonad.ml
+let v_Base_dMonad_dbind
+let v_Base_dMonad_dfmap
+let v_Base_dMonad_dpure
+
+== Base_dOrd.ml
+let v_Base_dOrd_dge
+let v_Base_dOrd_dgt
+let v_Base_dOrd_dle
+let v_Base_dOrd_dlt
+let v_Ord_uBase_dBool_dBool
+let v_Ord_uInt
+let v_Ord_uString
+
+== Base_dPair.ml
+let v_Base_dPair_dfirstOf
+let v_Base_dPair_dsecondOf
+
+== Base_dResult.ml
+let v_Base_dResult_dandThen
+let v_Base_dResult_dmapError
+let v_Base_dResult_dmapResult
+let v_Base_dResult_dstep
+let v_Base_dResult_dwithDefault
+
+== Base_dShow.ml
+let v_Base_dShow_dshow
+let v_Show_uBase_dBool_dBool
+let v_Show_uInt
+let v_Show_uString
+
+== Base_dString.ml
+let v_Base_dString_d_uisSpace
+let v_Base_dString_dcontains
+let v_Base_dString_dendsWith
+let v_Base_dString_dlines
+let v_Base_dString_dsplit
+let v_Base_dString_dstartsWith
+let v_Base_dString_dsubstring
+let v_Base_dString_dtrim
+let v_Base_dString_dtrimLeft
+let v_Base_dString_dtrimRight
+
+== Lib.ml
+let v_Lib_ddouble
+
+== Main.ml
+let v_main
+
+== Prelude.ml
+
+== Vuna_runtime.ml

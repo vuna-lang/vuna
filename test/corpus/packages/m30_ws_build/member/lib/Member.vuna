@@ -1,0 +1,4 @@
+module Member (greet) where
+
+greet : String
+greet = "hello from member"

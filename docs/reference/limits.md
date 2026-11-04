@@ -1,126 +1,201 @@
 # 限制与已知边界
 
-本文汇总当前实现的限制与边界条件（原 README「限制与路线」节迁入）。后续规划见
-[docs/roadmap.md](../roadmap.md)，DT 设计见 [docs/dt-core.md](../dt-core.md)。
+本文汇总当前实现仍成立的限制与边界条件。后续规划与开放债务见
+[roadmap.md](../roadmap.md) / [debt.md](debt.md)；类型规则见
+[type-system.md](type-system.md)，原语语义见 [primitives.md](primitives.md)，
+编译器实现见 [compiler.md](compiler.md) / [core.md](core.md)。
 
-## 编译模型
+## 编译模型与产物
 
-- 只有一条编译链：`Loader → DT 精化（Elab） → 擦除 codegen（CoreCodegen）`。
-  `check` / `compile` / `build` / `seed` 与语言夹具全部走它，没有可切换的检查器。
-- codegen 只用 OCaml 标准库、不依赖解释循环；已做 Kosaraju SCC 分组、比较运算符
-  特化（`bi_eq_int` 等）、`&&`/`||` 短路降级、零参顶层定义 thunk 化。
-- 输出模型有两种：**单文件**（`vuna compile` 产一个 `.ml`；`vuna build` 产
-  `.output/main.ml` + `build.sh` + `bin/<包名>`）与**逐模块 split**（`vuna build --split
-  OUT`、`vuna seed OUT` → 依赖序 `<Module>.ml` + `build.sh`，**不生成 `.mli`**）。
-  单文件路径是 split 的回归基线（两者产物行为按夹具对拍）。
-- 构建：`build.sh` 的增量粒度是模块（`.ml`/`.cmx` 及依赖 `.cmi` 时间戳），无跨包并行
-  与依赖哈希；split 不回退：无法归属到模块的声明报清晰错误，不会静默丢弃或改用单文件
-  输出。基准测量仍手动（`nix run .#vuna-bench`），CI 只守机器无关指标。
-- 编译器是独立成员包 `vuna-compiler`，`seed/` 只由 compiler 包入口闭包生成，工具链
-  不在 TCB；产品 CLI `vuna` 是单一二进制（in-process 调 compiler 库，不 fork
-  `vuna-compiler`）；`vuna build` 通过受限进程执行内建（`prim_runIn`）调 ocamlopt 编
-  `.output/main.ml`（同时产出 `.output/build.sh` 供手动重建），不是 vuna 进程转发；
-  LSP / package manager / Index 在根包侧，**永不进入 seed 闭包**。
-- `do` / Monad / IO 组合子已在 M11 实现；DT 自 M13 起步，M14 索引族、M15 隐式/
-  接口/洞、M16 终止性、M17 工具链、M18.5–M18.6 擦除修复与表示层定型、M19–M22
-  语言面/多文件/效应、M23 夹具迁移与 `interp` 核心求值、M24 单路径收尾。**当前阻碍
-  按阶段登记在 [docs/roadmap.md](../roadmap.md)**。仍是边界的几条：
-  - **单文件 / 无库模式没有隐式 `Bool`**：单文件程序用 `True`/`False` 需自己
-    `data Bool`（与 `List` 约定一致）；`Bool` 类型名仍是 prelude 类型别名（内建 trait
-    签名需要），数据定义在包模式下以 `Base.Bool` 为权威。
-  - **擦除由 rig 判据驱动**：`Rig0`（隐式 binder / `Type` 域）不进运行时表示，`Rig1`
-    （显式值、显式索引 `(n : Nat)`）保留字段（`17_erase` / `dt/38_explicit_index` 锁定
-    两侧）；不做整程序使用分析，「想擦但被读」的显式索引不会自动擦除（可改成隐式
-    `{n : Nat}`，代价是分支体读不到）。详见 [m16-design.md](m16-design.md) §3。
-  - **终止性只接受结构递归**：递归调用必须是形参的真子项；`sortBy le (take half xs)`
-    这类要改写成结构递归（`Base.Sort` 已改插入排序），互递归与跨调用 size-change 不查。
-  - **`where` 绑定必须写签名且是顺序 let**：每个绑定都要在子句前写签名（缺签名报
-    `DT: where binding ... needs a type signature`），只能引用之前的绑定——不支持前向
-    引用 / 自递归 / 互递归（引用报 `DT: unknown name ...`），递归与互相引用放顶层定义组。
-    通配绑定 `_ = expr` 无法写签名，因此也会报缺签名诊断。语法见
-    [language.md](language.md)。
-  - **`vuna interp` 不执行效果**：任何 `main : IO a` 一律报
-    `DT: interp cannot execute effects (main : IO a); compile and run the program instead`
-    （退出码 2），不做「纯动作求值、效果丢弃」的区分；需要效果时用 `compile` + 运行产物。
-    `vuna test` / `vuna repl` 走同一求值器。
-  - **REPL 定义必须先写签名**：交互式定义也要先输入 `x : Int` 再输入 `x = 1 + 1`；
-    表达式走 DT 表达式接口（推断表达式类型后求值）。
-  - **除零语义**：核心求值器对 `a / 0` **不归约**（`interp` 报 `main does not reduce to a
-    value`），`compile` 产物运行时 `failwith "division by zero"`（未捕获异常，退出码
-    2）；测试用 `compile` + 运行断言（`run_err/03_div_zero`）。
-  - **`main` 的数据值展示限制**：`interp` 只展示 `Int`/`String`/`Bool`（`show` 语义，
-    字符串带引号）；返回 data/record 的 `main` 报 `main does not reduce to a value`。
-    夹具的 `main` 用 `Int`/`String`（数据覆盖点留在被调函数里）。
-  - **`strUnpack`/`strPack` 在核心求值器不归约**：codegen 侧已补齐（无 `List` 族时
-    映射 `bi_strUnpack`/`bi_strPack`），但 interp 不归约；相关夹具用 `.nointerp` 标记。
-  - **参数化 data 的派生实例**：`deriving (Eq)` 可用但走通用结构比较兜底（需要 `Eq` 字典
-    的场景如 `mem (List (Maybe2 Int))` 仍可能缺实例）；`deriving (Show)` / `(Ord)` 只支持
-    非参数化类型（参数化时显式报错）。
-  - **命名实例 `@inst` 不参与自动实例搜索**：default 实例按 (trait, 类型) 唯一；命名实例
-    只能用 `@name` 显式选择（`@M.name` 需已导入）。
-  - **高阶 kind 与多隐式参数的推断**：高阶 kind 的 **check** 已支持（`m a` 推断
-    `m : Type -> Type`）；含多隐式参数字典的 `do` 程序核心求值不归约、擦除 codegen 也
-    尚未支持（`monad/04_kind_generic` 用 `.nointerp` + `.nocompile`，只断言 `check`；
-    interp/codegen 待修 `liftFreeDictGoals`）。
-  - **延迟字典目标的最终诊断**：类参数始终未解时报 `unsolved metavariable`（而非「缺
-    实例」）；`missingInstance` 级诊断细化留待后续。**DT 要求顶层定义有类型签名**：新增
-    代码同样要写，否则报 `DT: expected a type signature for ...`。
-  - **高阶/开放元变量解**：`solveMetaHo` 覆盖常见形状（M20.5），其余仍受限。
-  - **覆盖率（穷尽性/冗余）检查对 TCB 三包**（`vuna` / `vuna-compiler` / `vuna-base`）
-    **只告警不报错**（编译器源码是执行代码）；用户包与夹具仍严格。终止性检查同机制
-    （`dtTrustsTermination`）。
-  - **`==` / `/=` 在具体类型无可用 `Eq` 实例时退回泛型结构比较**（见
-    [type-system.md](type-system.md)）；刚性类型变量保持 M22 语义（提升成隐式字典参数，
-    实例优先）。「比较函数/不可结构比较的值」在无实例时是运行时未定义行为，而不是编译
-    错误。单文件程序的 `List` 若由程序自己声明，`getArgs` / `readDir` 等效果内建返回的
-    列表由 codegen 桥接回该族；没有声明 `List` 的单文件程序不能使用这些内建。
-  完整 DT 主线见 [docs/roadmap.md](../roadmap.md)、设计边界见 [docs/dt-core.md](../dt-core.md)、
-  工具链见 [dt-tooling.md](dt-tooling.md)；种子轮换是手动流程（发版/不兼容变更时），日常
-  工具链改动不需要 rotation；`test/run-tests.sh` 以 golden 比对为主。
+- 只有一条编译链：`Loader → DT 精化（Elab） → 擦除 codegen（Codegen）`。
+  `check` / `compile` / `build` 与语言夹具全部走它，没有可切换的检查器。
+- 输出模型只有一种：**逐模块 split**（`vuna compile ENTRY OUTDIR` 与 `vuna build` 都产
+  依赖序的 `<Module>.ml` + `Vuna_runtime.ml` + `Main.ml` + `build.sh`，**不生成 `.mli`**）。
+  `compile` 只 codegen 到目录、成功静默；`build` 默认输出到 `<PKG-DIR>/.output`
+  （PKG-DIR 缺省当前目录，`--out DIR` 可改），随后执行 `build.sh` 链接出
+  `DIR/bin/<包名>`。
+- **确定性**：同一源码 + 同一编译器产出的 `.ml` / `build.sh` / `build-meta.json` 逐字节
+  一致，产物不含绝对路径或时间戳；`build` 链接成功后写 `<out>/build-meta.json`，同哈希 +
+  二进制存在时跳过（`up to date:`）。`compile` 与 `build --no-compile` 不写 meta。
+- **增量**：生成的 `build.sh` 按模块内容哈希（Merkle stamp）判断是否重编，不用 mtime；
+  需要 POSIX sh + `sha256sum`。`--no-compile` 只产源码，不调 `ocamlopt`。
+- **hermetic 边界**：确定性 / 哈希 / 增量由 vuna 保证；完全 hermetic 的固定工具链由 Nix
+  构建承担，本地 `vuna build` 仍调用宿主 `ocamlopt`。
+- 编译器是独立成员包 `vuna-compiler`，`seed/` 只由 compiler 包入口闭包生成，工具链不在
+  TCB；产品 CLI `vuna` 是单一二进制（in-process 调 compiler 库，不 fork
+  `vuna-compiler`）；`vuna build` 在 codegen 后执行生成的 `build.sh`（`prim_runIn` 调
+  `ocamlopt`）。LSP / package manager / Index 在根包侧，**永不进入 seed 闭包**。
+- `do` / Monad / IO 组合子、DT 索引族、隐式、终止性、擦除与单路径均已落地；单文件只是
+  包内 ad-hoc 入口，与包内模块走同一装配 / codegen，不再有第二套加载语义。
+- `result*` out-link 是手工指向某次构建的符号链接，源码 / seed 变了不会自动更新；跑测试或
+  基准前先重建对应的 `nix build ... --out-link`（开放债务 E03）。
 
-## main 与 IO（M12.6）
+## 类型系统边界
 
-- 可执行入口（`vuna build` / `--split` / `seed`）要求 `main : IO a`，由运行时执行动作
-  （没有公开的 `runIO` / `unsafeRunIO`）；普通用户包不能直接调用 effectful 内建
-  （`print` / `readFile` / `exit` / ...），只能经 `Base.IO`（编译器 / 产品 CLI /
-  `vuna-base` 自身在包级 allowlist 内）；`vuna interp` / `vuna test` / `--root` 的**入口
-  文件**同样禁止直接调用 effectful 内建（只有被加载的 base/compiler 模块内部可用）。
-  `vuna interp` 只做**纯**核心求值：任何 `main : IO a` 一律报错并提示 `compile` +
-  运行产物；纯 `main : Int/String/Bool` 结果 show 仍保留为调试约定。IO 组合统一用
-  `Functor`/`Monad` trait（`fmap`/`bind`/`pure`、`>>=`、`do`），不导出
-  `bindIO`/`pureIO`/`fmapIO`；效果 API 直接返回 IO，内部由不导出的 `prim_*` 原语实现。
-  当前 `IO` 仍是库层 thunk 表示，不是完整的 effect 类型系统（见 [docs/roadmap.md](../roadmap.md)）。
-- IO 失败（如 `readFile` 缺失文件）抛宿主异常，但入口文件缺失返回普通错误；CLI 用 `exit`
-  内建返回非 0 退出码（compile 错误 1、lint 有 finding 1、用法/解析/IO 错误 2）。
+- **身份按声明符号判定**：`Int` / `String` 是 language primitive 类型；`Bool` / `List` /
+  `IO` 是 base 的普通 `data` 声明，canonical 身份分别是 `Base.Bool.Bool` /
+  `Base.List.List` / `Base.IO.IO`。没有短名判定、没有 prelude 桩、没有全局构造子放行；
+  用户同名 `data` 是普通声明。原语语义与身份常量表见 [primitives.md](primitives.md)。
+- **擦除由单一判据驱动**：`Elab.Meta.isTypeDomain` / `binderRig` 是唯一入口——隐式 binder
+  恒 `Rig0`，显式 binder 仅当域在类型层（宇宙或域全为类型层的 Pi 链）才 `Rig0`，其余
+  `Rig1`。**索引擦除策略 = 写成隐式 binder**：隐式索引 `{n : Nat}` 无运行时字段，显式索引
+  `(n : Nat)` 保留字段（`dt/17_erase` / `dt/38_explicit_index` 锁定两侧）；不做整程序使用
+  分析，「想擦但被读」的显式索引不会自动擦除（改成隐式即读不到该值）。
+- **宇宙严格分层、非累积**：`Type i : Type (i+1)`，Pi formation `max(i,j)`，
+  `Type i ≠ Type j`，无 subtyping / cumulativity；data kind 必须是 Pi 链 → `Type l`，
+  构造子**字段 binder** 的域 sort 必须 ≤ 族层级（`data D : Type where Mk : Type -> D`
+  被拒，改住 `Type 1` 即可；族参数 / 索引不受限）。`Type i` 的显示不带 level，所以非累积
+  的类型不匹配文案可能是 `expected Type, got Type`（拒绝正确，显示待补）。没有宇宙多态。
+- **终止性：结构下降 + 守卫 Int**：递归调用（含互递归组内调用）必须在某个固定测度位置上
+  递减；测度可以是形参的真子项（含嵌套构造子模式、`case` 分支、`f v` 形式的单 clause
+  投影 / accessor），或**带守卫的 Int**：`n - k`（k>0）且能证明 `n > 0`——证据来自
+  `if n <= 0 then … else …` 的 else 区，或 SCC 入口假设。无守卫的 `n - 1`、升序
+  `i + 1`（有界计数器规则尚未实现）与无下降的互递归仍会被拒；HOF 递归、`where` 绑定体里
+  调外层函数、`Cons x (f x)` 这类藏在实参里的递归都会被检查。每个 SCC 的每个环都必须有
+  严格下降边。**没有包级豁免**：依赖模块、入口模块与编译器包用同一套判据。
+- **`where` 绑定必须写签名且是顺序 let**：`let` 的签名行可选、支持子句糖；`where` 仍要求
+  每个绑定在子句前写签名。只能引用之前的绑定——不支持前向引用 / 自递归 / 互递归，递归与
+  互相引用放顶层定义组。
+- **局部函数能力边界**：`let` 绑定左端支持构造子 / 记录 / 字面量模式解构（等价单分支
+  `case`，必须穷尽，否则报 `TC_NotExhaustive`）；`where` / `let` 的**相邻**同名子句合并成
+  局部多 clause 函数（复用模式矩阵，穷尽性同 `case`；签名只能写一条、覆盖全部子句，非相邻
+  同名子句报 `PS_WhereSigMultiClause`）。局部函数仍不支持递归。
+- **as-pattern**：`x@pat` 可用于函数子句参数与嵌套模式（模式矩阵注入绑定，STR 视作整个
+  值），`case` 分支左端尚未接入；`vuna lint` 的 `case-to-clauses` 对递归 / 互递归函数保持
+  `case`（与 STR 的已知冲突，见 [lint.md](lint.md) §5）。
+- **`vuna interp` 不执行效果**：任何 `main : IO a` 一律报
+  `DT: interp cannot execute effects (main : IO a); compile and run the program instead`
+  （退出码 2），不做「纯动作求值、效果丢弃」的区分；需要效果时用 `compile` + 运行产物。
+  `vuna test` 的 `main : IO ...` 与 REPL 的 `IO` 表达式都走 compile + 运行（退出码 0 通过 /
+  输出直接到终端），纯 `String` / `Int` / `Bool` 测试仍走核心求值（快）。
+- **REPL 定义必须先写签名**：交互式定义也要先输入 `x : Int` 再输入 `x = 1 + 1`；表达式走
+  DT 表达式接口（推断表达式类型后求值）。支持多行续行（未闭合括号 / 尾随 `=` / `where` /
+  `do` 等），空行强制结束；`IO` 表达式编译到临时包运行，每次约 1–2s，需要 `ocamlopt`。
+- **除零语义**：核心求值器对 `a / 0` **不归约**（`interp` 报 `main does not reduce to a
+  value`），`compile` 产物运行时 `failwith "division by zero"`（未捕获异常，退出码 2）；
+  测试用 `compile` + 运行断言（`run_err/03_div_zero`）。这是显式分类而非静默 0，完整边界见
+  [primitives.md](primitives.md) 的 interp 归约边界。
+- **`main` 的数据值展示限制**：`interp` 只展示 `Int` / `String` / `Bool`，与产物同一展示
+  语义（`String` 走 `strShow` 转义）；返回 data / record 的 `main` 报
+  `main does not reduce to a value`，编译产物报 `CG_MainReturnType`。夹具的 `main` 用
+  `Int` / `String`（数据覆盖点留在被调函数里）。任意类型 `main` 的展示归 F3（需要运行时
+  `Show` 证据）。
+- **interp 不归约的原语按类分类**：返回 / 接收 `List` 的 `strUnpack` / `strPack` /
+  `strConcatMany` / `strSubstTemplate`（List 桥接依赖 `Base.List.List` 构造子表示）、`/0`、
+  以及全部效果原语；其余 `str*`（`strFromInt` / `strLength` / `strHash` / `strAt` /
+  `strShow`）已实现且与 runtime 同公式。相关夹具用 `.nointerp` 标记。
+- **`Prelude` 自动注入**：包上下文内所有源文件（含 ad-hoc 单文件）自动导入 `Prelude`，
+  `Show` / `Eq` / `Ord` 及其实例开箱可用；显式 `import` 仍可补充。缺 import 的诊断只在
+  显式绕开 `Prelude` 的上下文出现。
+- **`==` / `/=` 是证据驱动的（无泛型兜底）**：只有两条路径——`Int` / `String` 内建特化，
+  或 `Eq` 证据（字典：手写实例、`deriving`、约束实例）。具体类型没有实例、函数类型相等、
+  `Eq` 类不在作用域，都在 `check` 期报错；不存在「运行时结构比较兜底」，interp 与编译产物
+  也没有第二套相等算法。刚性类型变量搜不到实例时提升成隐式字典参数，实例优先。
+  `<` / `<=` / `>` / `>=`：`Int` 内建特化、`String` / `Bool` 保留泛型运行时，其它类型必须
+  有 `Ord` 证据。
+- **约束实例与参数化 `deriving`**：`instance Eq a => Eq (Box a)` 可用（实例 def 带隐式类型
+  参数 + ctx 字典参数，搜索递归解 ctx）；`deriving (Show, Eq, Ord)` 对参数化 data 同样可用。
+  `List a` / `Maybe a` 等容器的实例仍需显式声明（Base 只带 `Int` / `String` / `Bool` 的
+  实例）。
+- **类型族**（结果以 `Type` 收尾的 Pi 链，如 `sel : Nat -> Type`）整体擦除，不生成运行时
+  定义；在运行时定义里把擦除的族参数当值用报错。
+- **axiom 与命名空间**：`axiom name : Ty` 是无运行时定义的擦除 / 类型层声明，运行时使用报
+  `CG_AxiomAtRuntime`；限定名 `M.typeConst` 可在类型位置引用（裸小写名仍按隐式类型变量
+  处理，跨模块类型位置引用请用限定名）。同模块 `data T` 与 `def T` 同名仍不支持，归 F1
+  收尾。
+- **证明 ergonomics**：隐式值参数 `{x : a}` 已支持（隐式 binder 恒擦除，值只进类型 / 索引 /
+  证明位置，子句体不能按名字引用）；构造子当函数值部分应用可参与 `conv`（η 展开）；
+  `Ctx n -> Fin n -> Tm n` 这类依赖索引取值用 **Tarski 式存在式**（运行时类型码 `Ty` +
+  指标族 `Tm : Ty -> Type` + `Some`）表达。**泛型 Σ 的值级构造仍是边界**（类型不能依赖
+  运行时值），归 F4。空族判定在索引含中性项时仍保守。
+- **命名实例不存在**：没有 `as name` / `@name`；实例按 head 全局唯一（相干性），重复报
+  `duplicate instance`；孤儿实例（trait 与类型都不在本模块定义）仍被拒。
+- **type-as-value**：**不引入 type codes**；Type 级等式走擦除的 `Eq` 证据 + `cast`
+  组合子；把类型放到**运行时位置**仍被擦除检查拒（`CG_TypeUsedAtRuntime` /
+  `CG_TypeLevelBindingRuntime` / `CG_TypeLevelNameRuntime`）。
+- **高阶 kind 与多隐式参数字典**：高阶 kind 的 check 已支持（`m a` 推断
+  `m : Type -> Type`）；含多隐式参数字典的 `do` 程序不再是边界。trait 多参数 / 默认方法 /
+  父类 / 关联类型归 F4（单参数 trait + 约束实例是当前终态）。
+- **延迟字典目标的最终诊断**：类参数始终未解时报 `unsolved metavariable`（而非「缺实例」）；
+  `missingInstance` 级诊断细化留待后续。**顶层定义必须有类型签名**，否则报
+  `DT: expected a type signature for ...`。
+- **高阶 / 开放元变量解**：Miller pattern unification 已落地（局部变量 spine → λ 抽象）；
+  非 pattern 形状（如 meta-spine flex-flex）报 `TC_CannotSolveHigherOrder`。完整高阶合一属
+  研究项。
+- **覆盖率与终止性对所有包一致执行**：没有按包名跳过检查的豁免；编译器、base 与工具链源码
+  通过 SCT + 显式 fuel / 结构递归达标。工具链 / 前端 / 加载器的状态机用输入规模线性 fuel
+  或内存内不可达上界，正常输入不触发；触发时是明确的 internal 错误，不会静默改变语义。
+- **`List` 桥接**：返回或接收 `List` 的原语（`strUnpack` / `strPack` / `strConcatMany` /
+  `strSubstTemplate` / `prim_getArgs` / `prim_readDir`）由 codegen 映射到桥接 helper，
+  桥接只为 canonical `Base.List.List` 生成；`Prelude` 自动注入 `Base.List`，因此正常上下文
+  总可用，闭包里没有该族时这些原语不可用。
+
+## fuel / measure 站点
+
+工具链 / 前端 / 加载器 / 库的状态机逐点采用结构递归或可证明的界，不再有「无静态上界的
+线性 fuel」：
+
+| 站点 | measure / 论证 |
+| --- | --- |
+| `Base.String.split` | `2*len(text)+len(sep)+2`；每步消费 1 字符或跳过 ≤len(sep) 字符 |
+| `Frontend.Lexer` | `2*len(source)+64`；每个递归调用消费 ≥1 字符，trivia/token 不重叠 |
+| `Frontend.Parser` | `128*toksLeft+1024`；每个循环至少消费 1 token（offside 状态机保留守卫；列表循环尽量结构递归） |
+| `Frontend.Toml` | 逐行结构递归；状态机按 `4*lines+16` 证明 |
+| `Packages.Pkg` | 依赖图无环 + 已访问目录集；守卫上界为可达 manifest 目录数 |
+| `Loader.Resolve` | 对 `List Decl` / `Expr` 的结构递归去 fuel；状态机保留并证明 |
+| `Vuna.Json` | 每个解析函数消费 ≥1 字符；`8*len+64` 守卫（互递归返回剩余输入，SCT 不可见） |
+| `Vuna.Fmt.Expr` | `formatFuelBound = 64*astSize+1024`；AST 结构递归 + 互递归组证明 |
+| `Vuna.Files` / `Index.Scan` | 目录树每层递减；上界 = 目录深度（符号链接环被截断） |
+| `Vuna.Repl` / `Vuna.Lsp` | 交互 / 服务主循环保留 1G 程序不变量：非全函数，fuel 只防不可达死循环 |
+
+所有站点在正常输入下不会触发；触发时是明确的 internal 错误。深层 / 长输入夹具锁定不会因
+合法规模耗尽守卫。
+
+## main 与 IO
+
+- 可执行入口（`vuna build`）要求 `main : IO a`（`IO` 判定只认 canonical `Base.IO.IO`），
+  由运行时执行动作（没有公开的 `runIO` / `unsafeRunIO`）。
+- **效果靠显式能力**：效果原语只有 `prim_*` 名。普通包不能直接调用它们，只能经
+  `Base.IO`；要在源码里直接调用，必须在 `vuna.toml` 的 `[capabilities].effects` 声明对应
+  能力（`console` / `fs` / `process` / `env` / `clock`）。无 manifest 的 ad-hoc 文件没有
+  能力。未声明时报 `` requires capability `<cap>` ... ``
+  （`Loader.Resolve.checkEffectsBuiltins`）。这是**权限声明**，不是检查豁免；不存在按包名
+  字符串判定的 allowlist。完整表见 [primitives.md](primitives.md)。`vuna interp` /
+  `vuna test` 的入口文件同样受限。
+- `vuna interp` 只做**纯**核心求值：任何 `main : IO a` 一律报错并提示 `compile` + 运行
+  产物；纯 `main : Int/String/Bool` 的结果展示仍保留为调试约定（`String` 走 `strShow`
+  转义）。IO 组合统一用 `Functor` / `Monad` trait（`fmap` / `bind` / `pure`、`>>=`、
+  `do`），不导出 `bindIO` / `pureIO` / `fmapIO`；`Base.IO` API 直接返回 IO，内部包装
+  `prim_*` 效果原语。`IO` 仍是库层 thunk 表示，不是完整的 effect 类型系统（归 F3）。
+- IO 失败（如读缺失文件）在产物里抛宿主异常，但入口文件缺失返回普通错误；CLI 用
+  `prim_exit` 返回非 0 退出码（compile 错误 1、lint 有 finding 1、用法 / 解析 / IO 错误 2）。
 
 ## 工具链细节
 
-- M11.6 fmt 限制：行宽 100，但模块头/导出列表、类型签名与超长字符串字面量不折行；表达式
-  内部的注释会前移到最内层包含它的条目（或下一条目），不保证留在原位置；单行块注释可挂
-  行尾，多行块注释只作前置注释。`where` 块的绑定签名行按源码顺序保留、幂等。
-- M11.5 工具链限制：REPL 一次只接受一行（多行定义/表达式需后续扩展）；`vuna test` 经
-  `Vuna.Interp` 用 DT 核心求值器（不执行效果；代码生成路径由 `test/run-tests.sh` 覆盖）；
-  REPL 的顶层定义必须**先写签名**（DT 签名必填）；依赖只支持本地路径（registry/锁文件
-  未做）；`Map` 是关联表实现的抽象类型（无平衡树）；`Result` 暂无 Functor/Monad 实例。
-- `vuna lint` 首批规则是保守子集：lambda 体内的冗余 `case` 不报告（lambda 参数只有变量
-  名）；只处理从行首 `if` 起始的规范布局；多行分支 if 链、非最后子句/alt 上的冗余 `case`
-  只报告不自动修复；`--fix` 遇到注释、tab、CRLF 也跳过。`vuna lint` **必须显式给路径**，
-  无参数是用法错误（退出码 2）。
-- `vuna fmt --check` 省略 PATH 时按 workspace 包约定扫描各包 `lib/app/test`；若某包缺其中
-  某个目录（本仓库 `compiler/` 没有 `test/`、`base/` 没有 `app/`），当前会抛
-  `Failure("isDirectory: ...")`。**workaround：显式给 PATH**（`checks.vuna-package` 的
-  fmt 检查都是显式传目录）。
+- fmt：行宽 100，但模块头 / 导出列表、类型签名与超长字符串字面量不折行；表达式内部的注释
+  会前移到最内层包含它的条目（或下一条目），不保证留在原位置；单行块注释可挂行尾，多行块
+  注释只作前置注释。`where` 块的绑定签名行按源码顺序保留、幂等。
+- REPL 支持多行续行（括号 / 字符串 / 注释 / 尾 token），但每个提交项仍是一个完整表达式或
+  一条定义；顶层定义必须**先写签名**（DT 签名必填）；依赖只支持本地路径（registry / 锁文件
+  未做）；`Map` 是关联表实现的抽象类型（无平衡树）；`Result` 暂无 Functor / Monad 实例。
+- `vuna lint` 只报告**可安全自动修复**的形态，三条规则：`literal-if-chain`、
+  `lift-destructure`、`case-to-clauses`。不可安全折叠的情形（非最后 clause、clause head
+  跨行、含注释 / tab / CR、分支体无法安全收束）**不报告**；签名含隐式 Pi 的函数跳过
+  clause 级改写。`case-to-clauses` 不做语法穷尽性证明（交给 `vuna check`），对编译不过的
+  文件可能拆出不完整 clause。`--fix` 遇到注释、tab、CRLF 也跳过。`vuna lint` **必须显式给
+  路径**，无参数是用法错误（退出码 2）。规则语义与边界见 [lint.md](lint.md)。
+- `vuna fmt --check` 省略 PATH 时按 workspace 包约定扫描各包 `lib/app/test`；非包目录 /
+  不存在路径都是可读错误 exit 2，`map` 同类场景也给出明确错误而非静默空输出。`vuna doc`
+  尊重 `[export].modules`。
+- **as-pattern 与 lint 的冲突**：`case-to-clauses` 把递归 / 互递归函数拆成多 clause 后，
+  SCT 可能失去下降环；这些函数保持 `case` 形态，`nix/checks/vuna-lint.sh` 按 finding
+  过滤（见 [lint.md](lint.md) §5 与脚本注释）。
 
-## 命名与构建（M12.8）
+## 命名与构建
 
 - 标准库包名 `vuna-base`、模块根 `Base.*`，编译器模块 `Vuna.Compiler.*`（门面
-  `Vuna.Compiler.Common`）；包模式自动导入 `Prelude`，原始 `--root` 模式不导入（保持
-  自举/夹具的显式 import 语义）；`vuna build` 需要 PATH 中有 `ocamlopt`；`Prelude`
-  刻意不含 `Base.IO` 效果函数。
-
-## 已完成阶段（细节见 history）
-
-- M12.7 / M12.8 / M13–M24 已完成：删除 dynamic codegen 与旧开关；标准库/编译器命名空间
-  收敛、`Prelude` 自动导入与 `.output` 构建；DT 地基与全部语言能力落地；单路径收尾
-  （删除第二套检查器、seed 改由 DT split codegen 生成）。依赖类型主线（M13–M18）见
-  [docs/roadmap.md](../roadmap.md)；每个阶段的细节见 [docs/history.md](../history.md)。
+  `Vuna.Compiler.Common`）；包上下文内所有源文件（含 ad-hoc 单文件）自动导入 `Prelude`；
+  `vuna build` 需要 PATH 中有 `ocamlopt`；`Prelude` 刻意不含 `Base.IO`（效果 API 需显式
+  import）。
+- `seed/` 是生成物，只能通过 rotation 更新；当前文件集以 `seed/` 与
+  `nix/seed-count.txt` 为准。流程与不变量见 [bootstrap.md](bootstrap.md)。

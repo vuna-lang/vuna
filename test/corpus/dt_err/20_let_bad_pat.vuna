@@ -1,4 +1,4 @@
--- M19：let 绑定左端只接受简单变量/通配；构造子模式必须报错。
+-- A1：let 模式解构必须不可失败（穷尽）；Succ 模式缺 Zero，应报覆盖性错误。
 data Nat : Type where
   Zero : Nat
   Succ : Nat -> Nat

@@ -1,0 +1,5 @@
+shift : Pair Int Int -> Int
+shift (Pair x y) = x + y
+
+main : Int
+main = shift (Pair 1 2)

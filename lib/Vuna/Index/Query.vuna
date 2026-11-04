@@ -1,0 +1,105 @@
+module Vuna.Index.Query
+  ( findReferences
+  , findSymbol
+  , impactOf
+  , listAllSymbols
+  , referencesAt
+  , symbolAt
+  ) where
+
+-- Vuna.Index.Query：符号查找（全名/裸名/后缀）、位置查询（`referencesAt`）与改动
+-- 影响面（M24 后维护·源码重组；M30 refs 带位置）。
+-- 影响面来自 Scan 预先算好的 refs 反向边，不重新解析源码。
+import Vuna.Compiler.Common
+import Vuna.Index.Types
+
+-- ---------------------------------------------------------------
+-- 查找
+-- ---------------------------------------------------------------
+findSymbol : Index -> String -> Result (List Sym)
+findSymbol index query =
+  let
+    syms = indexSymbols index
+    exact = filter (\s => symFullName s == query) syms
+  in case exact of
+    _ :: _ => Ok exact
+    [] => findByBare syms query
+
+findByBare : List Sym -> String -> Result (List Sym)
+findByBare syms query =
+  let
+    bare = filter (\s => symName s == query) syms
+  in case bare of
+    _ :: _ => Ok bare
+    [] => findBySuffix syms query
+
+findBySuffix : List Sym -> String -> Result (List Sym)
+findBySuffix syms query =
+  let
+    suffix = "." ++ query
+    hits = filter (\s => endsWith suffix (symFullName s)) syms
+  in case hits of
+    [] => Err ("no such symbol: " ++ query)
+    _ => Ok hits
+
+-- 某模块里给定行/列上的符号：先按行收窄；多候选时优先列完全一致的，否则取该行
+-- 第一个符号。用于 LSP/referencesAt 这类「光标位置 → 定义」的查询。
+symbolAt : Index -> String -> Int -> Int -> Result Sym
+symbolAt index modQuery queryLine queryCol =
+  let
+    onLine = filter (\s => symModule s == modQuery && symLine s == queryLine) (indexSymbols index)
+  in case onLine of
+    [] =>
+      Err ("no symbol at " ++ modQuery ++ ":" ++ strFromInt queryLine ++ ":" ++ strFromInt queryCol)
+    [s] => Ok s
+    _ => case filter (\s => symCol s == queryCol) onLine of
+      s :: _ => Ok s
+      [] => case onLine of
+        s :: _ => Ok s
+        [] =>
+          Err
+            ("no symbol at " ++ modQuery ++ ":" ++ strFromInt queryLine ++ ":" ++ strFromInt queryCol)
+
+-- 位置上的符号被哪些地方引用（refs 的 line/col 是引用出现处）。
+referencesAt : Index -> String -> Int -> Int -> Result (List Ref)
+referencesAt index modQuery queryLine queryCol = case symbolAt index modQuery queryLine queryCol of
+  Err e => Err e
+  Ok sym => Ok (refsNamed (symName sym) (indexRefs index))
+
+refsNamed : String -> List Ref -> List Ref
+refsNamed name refs = filter (\r => refName r == name) refs
+
+-- 按名/全名查引用点（LSP references 的按名视图；referencesAt 是先由位置找符号）。
+findReferences : Index -> String -> Result (List Ref)
+findReferences index query = case findSymbol index query of
+  Err e => Err e
+  Ok syms => Ok (refsForNames (map symName syms) (indexRefs index))
+
+refsForNames : List String -> List Ref -> List Ref
+refsForNames names refs = filter (\r => memName (refName r) names) refs
+
+-- ---------------------------------------------------------------
+-- 影响面
+-- ---------------------------------------------------------------
+-- 影响面：引用该符号的模块（来自 refs 反向边）+ 建议测试标签。
+impactOf : Index -> String -> Result String
+impactOf index query = case findSymbol index query of
+  Err e => Err e
+  Ok syms =>
+    let
+      names = map symName syms
+      refs = filter (\r => memName (refName r) names) (indexRefs index)
+      readers = distinct (map refModule refs)
+    in Ok
+      ("symbol: " ++ join ", " (map symFullName syms) ++ "\n" ++ "readers: " ++ join ", " readers ++ "\n" ++ "tests: " ++ testTagsFor syms ++ "\n")
+
+testTagsFor : List Sym -> String
+testTagsFor syms = tagsOfKinds (map symKind syms)
+
+tagsOfKinds : List String -> String
+tagsOfKinds kinds =
+  if memName "trait" kinds then "traits, run"
+  else if memName "data" kinds || memName "record" kinds then "records, run" else "run, stdlib"
+
+listAllSymbols : Index -> List Sym
+listAllSymbols index = indexSymbols index

@@ -1,0 +1,7 @@
+-- M26：同包 lib/ 模块（入口 app/Main.vuna 直接 import 它），并可引用同包 Vuna.Math。
+-- 旧夹具（09_multi_root）把它放在 app/ 靠 `--root app` 命中；M26 起 app/ 不再是模块根，
+-- 同包模块统一从 lib/ 解析。
+import Vuna.Math
+
+triple : Int -> Int
+triple x = x + double x

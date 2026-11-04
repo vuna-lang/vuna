@@ -1,0 +1,303 @@
+module Vuna.Compiler.Codegen.Split (generateDtSplitProgram) where
+
+-- Vuna.Compiler.Codegen.Split：逐模块 split 生成（`compile` / `build` / `seed` 的唯一输出模型）。
+--
+-- 把同一份精化结果按「声明归属」切到各模块文件：跨模块引用靠全局唯一 OCaml 名字 +
+-- open 链，因此文件顺序即依赖顺序。装配（prepare / 类型 / 桥接 / 正文 / main 钩子）
+-- 全部由 `Codegen.Assembly` 提供，本模块只做「归属表 + 按归属过滤 + 分文件」。
+--
+-- 归属表**只从 Loader-resolved 的声明结构派生**（声明名、实例名、派生实例名、trait
+-- 方法投影名与 `Dict_<trait>`）；不再有字符串前缀表（`Show_Show_*` / 内建方法名表）。
+-- 推导不到的带点名字回落到「模块前缀必须是已知模块」，否则报错。
+import Vuna.Compiler.Common
+import Vuna.Compiler.Frontend.Ast
+import Vuna.Compiler.Driver.Split
+import Vuna.Compiler.Elab
+import Vuna.Compiler.Codegen.Assembly
+import Vuna.Compiler.Codegen.Decl
+import Vuna.Compiler.Codegen.Erase
+import Vuna.Compiler.Codegen.Term
+
+splitNoSpan : Span
+splitNoSpan = Span "" 0 0 0 0
+
+-- 入口单元的固定名（入口声明不带模块前缀，统一归到 `Main`）。
+entryOwner : String
+entryOwner = "Main"
+
+-- 运行时前缀单元：`Vuna_runtime.ml` 只有 `dtRuntime`，其余单元都 open 它。
+runtimeUnit : String
+runtimeUnit = "Vuna_runtime"
+
+splitUnitOfModule : String -> String
+splitUnitOfModule modName = sanitizeName modName
+
+modulePrefixOfName : String -> String
+modulePrefixOfName name = case splitLastDot (splitOnDot name) of
+  Pair rev base => joinDots rev
+
+-- ---------------------------------------------------------------
+-- 归属表：声明名 / 实例名 / 方法投影名 → 模块；data / 字典 data → 模块
+-- ---------------------------------------------------------------
+splitDeclNames : List Decl -> List String
+splitDeclNames [] = []
+splitDeclNames (d :: rest) = case d of
+  DSig name ty sp => name :: splitDeclNames rest
+  DFun name pats body sp => name :: splitDeclNames rest
+  DData name params kind ctors derivings sp => name :: splitDeclNames rest
+  DRecord name params fields derivings sp => name :: splitDeclNames rest
+  DTrait name params methods sp => name :: splitDeclNames rest
+  _ => splitDeclNames rest
+
+splitDataNames : List Decl -> List String
+splitDataNames [] = []
+splitDataNames (d :: rest) = case d of
+  DData name params kind ctors derivings sp => name :: splitDataNames rest
+  DRecord name params fields derivings sp => name :: splitDataNames rest
+  _ => splitDataNames rest
+
+headClassName : Expr -> Maybe String
+headClassName (EApp fn args sp) = case fn of
+  EVar n fsp => Just n
+  _ => Nothing
+headClassName (EVar n sp) = Just n
+headClassName _ = Nothing
+
+-- 实例名与派生实例名用 Elab 的同一实现（`Elab.instanceName` / `Elab.instHead`），
+-- 不再复制命名逻辑：Elab 生成的 `DtDef` 名字与本表逐字一致。
+splitInstanceOwnerOf : String -> Decl -> List (Pair String String)
+splitInstanceOwnerOf owner (DInstance ctxE headExpr methods sp) = case headClassName headExpr of
+  Just c => [Pair (instanceName c headExpr) owner]
+  Nothing => []
+splitInstanceOwnerOf owner (DData dname params kind ctors derivings sp) =
+  splitDerivedOwners owner dname params derivings
+splitInstanceOwnerOf owner (DRecord dname params fields derivings sp) =
+  splitDerivedOwners owner dname params derivings
+splitInstanceOwnerOf owner _ = []
+
+splitDerivedOwners : String -> String -> List String -> List String -> List (Pair String String)
+splitDerivedOwners owner dname params [] = []
+splitDerivedOwners owner dname params (t :: rest) =
+  Pair (instanceName t (instHead t dname params splitNoSpan)) owner
+    :: splitDerivedOwners owner dname params rest
+
+-- trait 的运行时产物不在顶层声明名里：方法投影定义与字典类型都由 Elab 生成，
+-- 因此按 `DTrait` 结构显式补上（入口 trait 没有模块前缀，这一步是唯一归属来源）。
+splitTraitDefOwnerOf : String -> Decl -> List (Pair String String)
+splitTraitDefOwnerOf owner (DTrait tname params methods sp) =
+  map (\m => Pair (traitMethodName m) owner) methods
+splitTraitDefOwnerOf owner _ = []
+
+splitTraitDataOwnerOf : String -> Decl -> List (Pair String String)
+splitTraitDataOwnerOf owner (DTrait tname params methods sp) = [Pair ("Dict_" ++ tname) owner]
+splitTraitDataOwnerOf owner _ = []
+
+splitInstanceOwnersGo : String -> List Decl -> List (Pair String String)
+splitInstanceOwnersGo owner [] = []
+splitInstanceOwnersGo owner (d :: rest) =
+  append (splitInstanceOwnerOf owner d) (splitInstanceOwnersGo owner rest)
+
+splitOwnerEntriesOf : String -> List Decl -> List (Pair String String)
+splitOwnerEntriesOf owner decls =
+  append (map (\n => Pair n owner) (splitDeclNames decls))
+    (append (splitInstanceOwnersGo owner decls) (concatMap (splitTraitDefOwnerOf owner) decls))
+
+splitDataOwnerEntriesOf : String -> List Decl -> List (Pair String String)
+splitDataOwnerEntriesOf owner decls =
+  append (map (\n => Pair n owner) (splitDataNames decls))
+    (concatMap (splitTraitDataOwnerOf owner) decls)
+
+splitOwnerEntriesOfModules : List (Pair String (List Decl)) -> List (Pair String String)
+splitOwnerEntriesOfModules [] = []
+splitOwnerEntriesOfModules ((Pair mname decls) :: rest) =
+  append (splitOwnerEntriesOf mname decls) (splitOwnerEntriesOfModules rest)
+
+splitDataOwnerEntriesOfModules : List (Pair String (List Decl)) -> List (Pair String String)
+splitDataOwnerEntriesOfModules [] = []
+splitDataOwnerEntriesOfModules ((Pair mname decls) :: rest) =
+  append (splitDataOwnerEntriesOf mname decls) (splitDataOwnerEntriesOfModules rest)
+
+data SplitMeta : Type where
+  SplitMeta : List (Pair String String) -> List (Pair String String) -> List String -> SplitMeta
+
+smDefOwners : SplitMeta -> List (Pair String String)
+smDefOwners (SplitMeta defOwners dataOwners knownModules) = defOwners
+
+smDataOwners : SplitMeta -> List (Pair String String)
+smDataOwners (SplitMeta defOwners dataOwners knownModules) = dataOwners
+
+smKnownModules : SplitMeta -> List String
+smKnownModules (SplitMeta defOwners dataOwners knownModules) = knownModules
+
+splitMetaOf : List (Pair String (List Decl)) -> List Decl -> SplitMeta
+splitMetaOf modules entryDecls =
+  let
+    knownModules = map (\p => firstOf p) modules
+    defOwners =
+      append (splitOwnerEntriesOfModules modules) (splitOwnerEntriesOf entryOwner entryDecls)
+    dataOwners =
+      append (splitDataOwnerEntriesOfModules modules)
+        (splitDataOwnerEntriesOf entryOwner entryDecls)
+  in SplitMeta defOwners dataOwners knownModules
+
+lookupModuleOf : List (Pair String String) -> String -> Maybe String
+lookupModuleOf pairs name = lookupPair name pairs
+
+knownModuleOrErr : List String -> String -> String -> Result String
+knownModuleOrErr knownModules what name =
+  let
+    prefix = modulePrefixOfName name
+  in if memName prefix knownModules then Ok prefix
+  else Err
+    ("DT split: `" ++ what ++ "` " ++ name ++ " has module prefix `" ++ prefix ++ "` but no such module")
+
+splitDataOwnerOf : SplitMeta -> DtData -> Result String
+splitDataOwnerOf meta d = case lookupModuleOf (smDataOwners meta) (dtDataName d) of
+  Just o => Ok o
+  Nothing =>
+    if containsDot (dtDataName d) then knownModuleOrErr (smKnownModules meta) "data" (dtDataName d)
+    else Err ("DT split: cannot determine module for data `" ++ dtDataName d ++ "`")
+
+splitDefOwnerOf : SplitMeta -> String -> Result String
+splitDefOwnerOf meta name = case lookupModuleOf (smDefOwners meta) name of
+  Just o => Ok o
+  Nothing =>
+    if containsDot name then knownModuleOrErr (smKnownModules meta) "definition" name
+    else Err ("DT split: cannot determine module for definition `" ++ name ++ "`")
+
+nameOwnerPairsOfDefs : SplitMeta -> List DtDef -> Result (List (Pair String String))
+nameOwnerPairsOfDefs meta [] = Ok []
+nameOwnerPairsOfDefs meta (d :: rest) =
+  andThen (splitDefOwnerOf meta (dtDefName d))
+    (\o => andThen (nameOwnerPairsOfDefs meta rest) (\ps => Ok (Pair (dtDefName d) o :: ps)))
+
+nameOwnerPairsOfDatas : SplitMeta -> List DtData -> Result (List (Pair String String))
+nameOwnerPairsOfDatas meta [] = Ok []
+nameOwnerPairsOfDatas meta (d :: rest) =
+  andThen (splitDataOwnerOf meta d)
+    (\o => andThen (nameOwnerPairsOfDatas meta rest) (\ps => Ok (Pair (dtDataName d) o :: ps)))
+
+-- ---------------------------------------------------------------
+-- 按归属过滤 + 生成
+-- ---------------------------------------------------------------
+-- 名字 → 归属单元的哈希索引。旧实现对**每个**模块把全部 def/data 逐个做
+-- `mapOwnerOf`（线性扫 pairs）⇒ O(#模块 × #def × #pairs)，大包上就是几秒。
+ownerTblOf : List (Pair String String) -> HashTbl String
+ownerTblOf pairs = tblInsertAll pairs tblEmpty
+
+ownerOfTbl : HashTbl String -> String -> String
+ownerOfTbl t name = case tblLookup name t of
+  Just o => o
+  Nothing => ""
+
+datasInUnit : HashTbl String -> String -> List DtData -> List DtData
+datasInUnit ownerT u datas = filter (\d => ownerOfTbl ownerT (dtDataName d) == u) datas
+
+defsInUnit : HashTbl String -> String -> List DtDef -> List DtDef
+defsInUnit ownerT u defs = filter (\d => ownerOfTbl ownerT (dtDefName d) == u) defs
+
+splitModuleFiles : List (Pair String (List Int)) -> List DtData -> List DtDef -> HashTbl String -> HashTbl String -> List String -> List (Pair String (List Decl)) -> Result (List SplitFile)
+splitModuleFiles usedTbl allDatas allDefs defOwnerT dataOwnerT earlier [] = Ok []
+splitModuleFiles usedTbl allDatas allDefs defOwnerT dataOwnerT earlier ((Pair mname decls) :: rest) =
+  let
+    unit = splitUnitOfModule mname
+    unitDatas = datasInUnit dataOwnerT mname allDatas
+    unitDefs = defsInUnit defOwnerT mname allDefs
+  in andThen (groupRuntimeDefs unitDefs)
+    (\groups => andThen (genUnitParts usedTbl (append [runtimeUnit] earlier) allDatas unitDatas groups) (\parts => andThen (splitModuleFiles usedTbl allDatas allDefs defOwnerT dataOwnerT (append earlier [unit]) rest) (\tail => Ok (SplitFile (unit ++ ".ml") (genUnitText parts ++ "\n") :: tail))))
+
+splitMainFile : List (Pair String (List Int)) -> List DtData -> List DtDef -> HashTbl String -> HashTbl String -> Bool -> List String -> Result SplitFile
+splitMainFile usedTbl allDatas allDefs defOwnerT dataOwnerT printResult opens =
+  let
+    entryDefs = defsInUnit defOwnerT entryOwner allDefs
+    entryDatas = datasInUnit dataOwnerT entryOwner allDatas
+  in andThen (groupRuntimeDefs entryDefs)
+    (\groups => andThen (genUnitParts usedTbl opens allDatas entryDatas groups) (\parts => andThen (mainHook (Pair allDatas allDefs) allDefs printResult) (\hook => Ok (SplitFile "Main.ml" (genUnitText parts ++ hook)))))
+
+-- ---------------------------------------------------------------
+-- 生成前护栏（C08）：模块声明必须已 resolved、入口声明必须是裸名、归属必须全覆盖
+-- ---------------------------------------------------------------
+checkModuleDeclName : List String -> String -> String -> Result Int
+checkModuleDeclName knownModules mname name =
+  if containsDot name then if memName (modulePrefixOfName name) knownModules then Ok 0
+  else Err
+    ("DT: internal: module " ++ mname ++ " declares `" ++ name ++ "` whose module prefix `" ++ modulePrefixOfName name ++ "` is not a known module (codegen requires Loader-resolved decls)")
+  else Err
+    ("DT: internal: module " ++ mname ++ " has an unresolved declaration name `" ++ name ++ "` (codegen requires Loader-resolved decls)")
+
+checkModuleDeclNames : List String -> String -> List String -> Result Int
+checkModuleDeclNames knownModules mname [] = Ok 0
+checkModuleDeclNames knownModules mname (n :: rest) =
+  andThen (checkModuleDeclName knownModules mname n)
+    (\_ => checkModuleDeclNames knownModules mname rest)
+
+checkModuleDecls : List String -> List (Pair String (List Decl)) -> Result Int
+checkModuleDecls knownModules [] = Ok 0
+checkModuleDecls knownModules ((Pair mname decls) :: rest) =
+  andThen (checkModuleDeclNames knownModules mname (splitDeclNames decls))
+    (\_ => checkModuleDecls knownModules rest)
+
+-- 入口的**声明身份**：签名/定义同名是正常形态（DSig + 多 clause DFun），所以只看
+-- data/record/trait/sig 这些唯一标识；它们必须是裸名（入口没有模块前缀）。
+entryDeclIdentities : List Decl -> List String
+entryDeclIdentities [] = []
+entryDeclIdentities (d :: rest) = case d of
+  DSig name ty sp => name :: entryDeclIdentities rest
+  DData name params kind ctors derivings sp => name :: entryDeclIdentities rest
+  DRecord name params fields derivings sp => name :: entryDeclIdentities rest
+  DTrait name params methods sp => name :: entryDeclIdentities rest
+  _ => entryDeclIdentities rest
+
+checkEntryDeclName : List String -> String -> Result Int
+checkEntryDeclName seen name =
+  if name == "" then Err "DT: internal: entry declaration has an empty name"
+  else if containsDot name then Err
+    ("DT: internal: entry declaration `" ++ name ++ "` must not contain a module prefix (codegen requires Loader-resolved decls)")
+  else if memName name seen then Err ("DT: internal: duplicate entry declaration `" ++ name ++ "`")
+  else Ok 0
+
+checkEntryDeclsGo : List String -> List String -> Result Int
+checkEntryDeclsGo seen [] = Ok 0
+checkEntryDeclsGo seen (n :: rest) =
+  andThen (checkEntryDeclName seen n) (\_ => checkEntryDeclsGo (n :: seen) rest)
+
+checkEntryDecls : List Decl -> Result Int
+checkEntryDecls decls = checkEntryDeclsGo [] (entryDeclIdentities decls)
+
+-- 每个 runtime `DtDef` / `DtData` 都必须有归属（查表命中或带点名字命中已知模块），
+-- 在生成前失败并带名字，而不是静默丢定义。
+checkDefOwners : SplitMeta -> List DtDef -> Result Int
+checkDefOwners meta [] = Ok 0
+checkDefOwners meta (d :: rest) =
+  andThen (splitDefOwnerOf meta (dtDefName d)) (\_ => checkDefOwners meta rest)
+
+checkDataOwners : SplitMeta -> List DtData -> Result Int
+checkDataOwners meta [] = Ok 0
+checkDataOwners meta (d :: rest) =
+  andThen (splitDataOwnerOf meta d) (\_ => checkDataOwners meta rest)
+
+checkResolvedModules : SplitMeta -> List (Pair String (List Decl)) -> List Decl -> List DtDef -> List DtData -> Result Int
+checkResolvedModules meta modules entryDecls runtime datas =
+  andThen (checkModuleDecls (smKnownModules meta) modules)
+    (\_ => andThen (checkEntryDecls entryDecls) (\_ => andThen (checkDefOwners meta runtime) (\_ => checkDataOwners meta datas)))
+
+generateDtSplitProgram : List (Pair String (List Decl)) -> List Decl -> DtProgram -> Bool -> Result (List SplitFile)
+generateDtSplitProgram modules entryDecls prog printResult =
+  let
+    allDatas = runtimeDatas (dtProgDatas prog)
+    allDefs = dtProgDefs prog
+    meta = splitMetaOf modules entryDecls
+  in andThen (prepareDtProgram (Pair (dtProgDatas prog) allDefs)) (\p => case p of
+    Pair runtime groups => andThen (checkResolvedModules meta modules entryDecls runtime allDatas) (\_ => andThen (nameOwnerPairsOfDefs meta runtime) (\defPairs => andThen (nameOwnerPairsOfDatas meta allDatas) (\dataPairs => let
+      defOwnerT = ownerTblOf defPairs
+      dataOwnerT = ownerTblOf dataPairs
+    in andThen (splitModuleFiles (usedTableOf allDatas) allDatas runtime defOwnerT dataOwnerT [] modules) (\moduleFiles => let
+      unitNames = map (\q => splitUnitOfModule (firstOf q)) modules
+    in andThen
+      (splitMainFile (usedTableOf allDatas) allDatas runtime defOwnerT dataOwnerT printResult (append [runtimeUnit] unitNames))
+      (\mainFile => Ok (SplitFile "Vuna_runtime.ml" dtRuntime :: append moduleFiles [mainFile]))
+    )
+    )
+    )
+    )
+  )

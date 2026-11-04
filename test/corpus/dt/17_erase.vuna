@@ -7,8 +7,8 @@ data Eq : Type -> Type -> Type where
   Refl : {a : Type} -> Eq a a
 
 data Vec : Type -> Nat -> Type where
-  Nil : {a : Type} -> Vec a Zero
-  Cons : {a : Type} -> {n : Nat} -> a -> Vec a n -> Vec a (Succ n)
+  VNil : {a : Type} -> Vec a Zero
+  VCons : {a : Type} -> {n : Nat} -> a -> Vec a n -> Vec a (Succ n)
 
 -- sym/trans 只用构造子标签，不需要携带证明
 sym : {a : Type} -> {b : Type} -> Eq a b -> Eq b a
@@ -18,12 +18,12 @@ sym e = case e of
 two : Nat
 two = Succ (Succ Zero)
 
-v : Vec Int (Succ (Succ Zero))
-v = Cons 5 (Cons 6 Nil)
+vecTwo : Vec Int (Succ (Succ Zero))
+vecTwo = VCons 5 (VCons 6 VNil)
 
 vhead : {a : Type} -> {n : Nat} -> Vec a (Succ n) -> a
 vhead xs = case xs of
-  Cons y ys => y
+  VCons y ys => y
 
 main : Int
-main = vhead v
+main = vhead vecTwo

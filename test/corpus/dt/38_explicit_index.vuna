@@ -1,18 +1,18 @@
 -- M22.3：擦除判据由 rig 驱动——**显式**索引 binder（`(n : Nat)`）是 Rig1，保留运行时
--- 字段（`Cons` 带 `t_Nat`）；**隐式**索引（`{n : Nat}`，见 17_erase）是 Rig0，擦除。
+-- 字段（`VCons` 带 `t_Nat`）；**隐式**索引（`{n : Nat}`，见 17_erase）是 Rig0，擦除。
 -- `vlen` 把索引当递归参数读回来，不能被误擦。
 data Nat : Type where
   Zero : Nat
   Succ : Nat -> Nat
 
 data Vec : Type -> Nat -> Type where
-  Nil : {a : Type} -> Vec a Zero
-  Cons : {a : Type} -> (n : Nat) -> a -> Vec a n -> Vec a (Succ n)
+  VNil : {a : Type} -> Vec a Zero
+  VCons : {a : Type} -> (n : Nat) -> a -> Vec a n -> Vec a (Succ n)
 
 vlen : {a : Type} -> {n : Nat} -> Vec a n -> Int
 vlen xs = case xs of
-  [] => 0
-  Cons m y ys => 1 + vlen ys
+  VNil => 0
+  VCons m y ys => 1 + vlen ys
 
 main : Int
-main = vlen (Cons Zero 5 [])
+main = vlen (VCons Zero 5 VNil)

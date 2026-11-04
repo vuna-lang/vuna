@@ -1,0 +1,6 @@
+-- M25.2b 正例：守卫 Int 递减（`fuel - 1` 在 `fuel <= 0` 的 else 区）。
+fuelLoop : Int -> Int -> Int
+fuelLoop fuel n = if fuel <= 0 then n else fuelLoop (fuel - 1) (n + 1)
+
+main : Int
+main = fuelLoop 10 0

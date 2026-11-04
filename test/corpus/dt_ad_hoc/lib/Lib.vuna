@@ -1,0 +1,5 @@
+module Lib where
+
+-- M26：包内 lib/ 模块根下的模块（入口 Main.vuna 直接 import Lib）。
+double : Int -> Int
+double x = x + x

@@ -1,0 +1,8 @@
+-- M25.2a 负例：HOF 递归（旧实现 EApp 只递归函数头 → 静默通过）。
+import Prelude
+
+walk : List Int -> Int
+walk xs = length (map (\x => walk xs) xs)
+
+main : Int
+main = 0

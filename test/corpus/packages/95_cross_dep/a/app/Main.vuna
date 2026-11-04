@@ -1,0 +1,4 @@
+import A
+
+main : Int
+main = aval

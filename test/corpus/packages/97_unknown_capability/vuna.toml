@@ -1,0 +1,8 @@
+[package]
+name = "effect-unknown-capability"
+
+[dependencies]
+vuna-base = "../../../../base"
+
+[capabilities]
+effects = ["bogus"]

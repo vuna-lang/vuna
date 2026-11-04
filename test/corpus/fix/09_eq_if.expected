@@ -1,0 +1,7 @@
+pick : String -> Int
+pick "x" = 1
+pick "y" = 2
+pick _ = 0
+
+main : Int
+main = pick "x"

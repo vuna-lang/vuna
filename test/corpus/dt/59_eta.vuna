@@ -1,0 +1,18 @@
+-- M28（决策 5 / D10）：定义参数少于签名时按剩余 Pi 链做 η 展开（补 `\_arityN` 并把
+-- body 应用到新参数），不再报 TC_DefFewerParams。
+inc : Int -> Int
+inc x = x + 1
+
+-- 零子句定义：body 是函数值，η 展开成 `\_arity0 => inc _arity0`。
+inc2 : Int -> Int
+inc2 = inc
+
+add : Int -> Int -> Int
+add x y = x + y
+
+-- 两个剩余参数一起展开。
+add2 : Int -> Int -> Int
+add2 = add
+
+main : Int
+main = inc2 1 + add2 2 3

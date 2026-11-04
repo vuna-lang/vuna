@@ -1,0 +1,5 @@
+weight : Int -> Int
+weight n = if n == 10 then 100 else if n == 20 then 200 else 300
+
+main : Int
+main = weight 10

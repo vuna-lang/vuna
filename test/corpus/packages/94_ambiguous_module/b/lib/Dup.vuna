@@ -1,0 +1,4 @@
+module Dup (dupValue) where
+
+dupValue : Int
+dupValue = 1

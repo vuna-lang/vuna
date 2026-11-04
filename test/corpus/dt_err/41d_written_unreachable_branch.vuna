@@ -1,0 +1,22 @@
+-- 反例（M28/B08）：分支不可达的判定与覆盖率共用同一判据 —— ENil 分支里 n 精化成 Zero，
+-- 于是 i : Fin Zero 是空归纳族；该分支**可以省略**，但写出来（即使分支体类型正确）
+-- 也必须报 TC_ImpossibleBranchEmptyCtx。
+data Nat : Type where
+  Zero : Nat
+  Succ : Nat -> Nat
+
+data Fin : Nat -> Type where
+  FZero : {n : Nat} -> Fin (Succ n)
+  FSucc : {n : Nat} -> Fin n -> Fin (Succ n)
+
+data Env : Type -> Nat -> Type where
+  ENil : {a : Type} -> Env a Zero
+  ECons : {a : Type} -> {n : Nat} -> a -> Env a n -> Env a (Succ n)
+
+bad : {a : Type} -> {n : Nat} -> Env a n -> Fin n -> Int
+bad env i = case env of
+  ENil => 0
+  ECons x rest => 1
+
+main : Int
+main = 0

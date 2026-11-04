@@ -1,3 +1,5 @@
+import Prelude
+
 data Color : Type where
   Red : Color
   Blue : Color
@@ -11,8 +13,5 @@ instance Pretty Color where
     Red => "red"
     Blue => "blue"
 
-instance Pretty Color as fancy where
-  pretty c = "FANCY"
-
 main : String
-main = pretty Red ++ "/" ++ pretty @fancy Blue ++ "/" ++ show Red
+main = pretty Red ++ "/" ++ pretty Blue ++ "/" ++ show Red

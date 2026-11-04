@@ -1,0 +1,8 @@
+# M26 夹具：两包方向性实验（consumer a 依赖 dependency b）。
+# a 正常 build；b 的模块 import a 的模块 A → b 在自己的包上下文里看不到 A，
+# build/check/compile 三种入口都必须被拒。
+[package]
+name = "consumer-a"
+
+[dependencies]
+dependency-b = "../b"

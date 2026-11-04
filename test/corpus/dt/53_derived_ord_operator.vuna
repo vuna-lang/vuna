@@ -1,0 +1,15 @@
+-- M24.7 回归：deriving (Ord) 之后**运算符** `<`/`<=`/`>`/`>=` 必须走 Ord 字典
+-- （旧行为把任何零参 data 族名当内建类型，直接报 is not defined，派生 Ord 只有方法可用）。
+import Prelude
+
+data C3 : Type where
+  Low : C3
+  Mid : C3
+  High : C3
+deriving (Ord)
+
+check : Bool -> Int
+check b = if b then 1 else 0
+
+main : Int
+main = check (Low < Mid) + check (Mid <= High) + check (High > Low) + check (High >= High)

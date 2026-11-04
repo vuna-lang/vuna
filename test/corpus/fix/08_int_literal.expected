@@ -1,0 +1,7 @@
+weight : Int -> Int
+weight 10 = 100
+weight 20 = 200
+weight _ = 300
+
+main : Int
+main = weight 10

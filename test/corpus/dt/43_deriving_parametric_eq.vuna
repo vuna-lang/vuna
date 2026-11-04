@@ -1,5 +1,8 @@
--- M23：参数化 data 的 `deriving (Eq)`。DT 的字典是单态编码，无法表达
--- 「对所有 a：Eq (Maybe2 a)」，因此不生成实例；具体类型上的 `==` / `/=` 走通用结构比较兜底。
+-- M29：参数化 data 的 `deriving (Eq)` 生成**约束实例**
+-- （`instance Eq a => Eq (Maybe2 a)`，字典 def 带隐式类型参数 + ctx 字典参数）；
+-- `==` / `/=` 走字典。没有 Eq 证据的相等现在是 check 期错误（见 dt_err/47）。
+import Prelude
+
 data Maybe2 a : Type where
   Nothing2 : Maybe2 a
   Just2 : a -> Maybe2 a

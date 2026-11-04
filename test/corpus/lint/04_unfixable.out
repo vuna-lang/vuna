@@ -1,1 +1,0 @@
-corpus/lint/04_unfixable.vuna:2:3: redundant-case: single-alternative case on `p` can be folded into the enclosing pattern

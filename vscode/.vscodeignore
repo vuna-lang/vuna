@@ -1,0 +1,14 @@
+.vscode/**
+.tmp/**
+dev/**
+src/**
+scripts/**
+node_modules/**
+tsconfig.json
+check.sh
+.gitignore
+package-lock.json
+pnpm-lock.yaml
+**/*.ts
+**/*.map
+*.vsix

@@ -1,0 +1,603 @@
+module Vuna.Compiler.Codegen.Term
+  ( GenSt
+  , dtListBridge
+  , dtRuntime
+  , findListFamilyData
+  , genDtHook
+  , genGroups
+  , ioResultTy
+  , ioRunText
+  , mkGenSt
+  ) where
+
+-- Vuna.Compiler.Codegen.Term：项 → OCaml（擦除驱动）+ DT 运行时前缀。
+--
+-- 生成状态 GenSt（族/构造子表、构造子形状、fresh 变量计数）是生成期唯一可变状态；
+-- case 分支绑定按构造子形状（keep flags）校验后进入 binder 环境。`dtRuntime`
+-- 是产物开头的 OCaml 帮助函数（bi_* / show / dtp_*），`dtListBridge` 只在程序声明了
+-- List 族时生成 int list ↔ 变体族的桥接。
+import Vuna.Compiler.Common
+import Vuna.Compiler.Core
+import Vuna.Compiler.Diagnostics
+import Vuna.Compiler.Elab
+import Vuna.Compiler.Intrinsics
+import Vuna.Compiler.Codegen.Decl
+import Vuna.Compiler.Codegen.Erase
+
+-- DT runtime：只包含 prelude 里出现的运算与 show（名字/语义与运行时 helper 一致）。
+dtRuntime : String
+dtRuntime =
+  "let () =\n"
+    ++ "  let c = Gc.get () in\n"
+    ++ "  Gc.set { c with minor_heap_size = 16 * 1024 * 1024; space_overhead = 200 }\n"
+    ++ "let bi_add a b = a + b\n"
+    ++ "let bi_sub a b = a - b\n"
+    ++ "let bi_mul a b = a * b\n"
+    ++ "let bi_div a b = if b = 0 then failwith \"division by zero\" else a / b\n"
+    ++ "let bi_eq_int (a : int) (b : int) = a = b\n"
+    ++ "let bi_neq_int (a : int) (b : int) = a <> b\n"
+    ++ "let bi_eq_str (a : string) (b : string) = a = b\n"
+    ++ "let bi_neq_str (a : string) (b : string) = a <> b\n"
+    ++ "let bi_strFromInt (n : int) = string_of_int n\n"
+    ++ "let bi_strLength (s : string) = String.length s\n"
+    ++ "let bi_strUnpack (s : string) = List.init (String.length s) (fun i -> Char.code s.[i])\n"
+    ++ "let bi_strPack (cs : int list) = String.init (List.length cs) (fun i -> Char.chr (List.nth cs i))\n"
+    ++ "let bi_lt_int (a : int) (b : int) = a < b\n"
+    ++ "let bi_le_int (a : int) (b : int) = a <= b\n"
+    ++ "let bi_gt_int (a : int) (b : int) = a > b\n"
+    ++ "let bi_ge_int (a : int) (b : int) = a >= b\n"
+    ++ "let bi_lt_generic (a : 'a) (b : 'a) = compare a b < 0\n"
+    ++ "let bi_le_generic (a : 'a) (b : 'a) = compare a b <= 0\n"
+    ++ "let bi_gt_generic (a : 'a) (b : 'a) = compare a b > 0\n"
+    ++ "let bi_ge_generic (a : 'a) (b : 'a) = compare a b >= 0\n"
+    ++ "let bi_concat a b = a ^ b\n"
+    ++ "let bi_and a b = a && b\n"
+    ++ "let bi_or a b = a || b\n"
+    ++ "let dt_show_bool b = if b then \"True\" else \"False\"\n"
+    ++ "let dt_show_string s =\n"
+    ++ "  let buf = Buffer.create 16 in\n"
+    ++ "  Buffer.add_char buf (Char.chr 34);\n"
+    ++ "  String.iter (fun c ->\n"
+    ++ "    let n = Char.code c in\n"
+    ++ "    if n = 34 then Buffer.add_string buf (String.make 1 (Char.chr 92) ^ String.make 1 (Char.chr 34))\n"
+    ++ "    else if n = 92 then Buffer.add_string buf (String.make 1 (Char.chr 92) ^ String.make 1 (Char.chr 92))\n"
+    ++ "    else if n = 10 then Buffer.add_string buf (String.make 1 (Char.chr 92) ^ \"n\")\n"
+    ++ "    else if n = 9 then Buffer.add_string buf (String.make 1 (Char.chr 92) ^ \"t\")\n"
+    ++ "    else if n = 13 then Buffer.add_string buf (String.make 1 (Char.chr 92) ^ \"r\")\n"
+    ++ "    else Buffer.add_char buf c) s;\n"
+    ++ "  Buffer.add_char buf (Char.chr 34);\n"
+    ++ "  Buffer.contents buf\n"
+    ++ dtPrimRuntime
+
+-- M21：effectful 内建（`prim_*`）的 DT 运行时实现。
+-- 签名在 `Vuna.Compiler.Intrinsics`（唯一真源），这里补 OCaml 侧实现（对应
+-- `intrinsicRuntime` 字段）；`prim_getArgs` / `prim_readLine` 在 Base.IO 里是**值**，
+-- 所以在引用点展开成 `dtp_*(()`，与 Codegen 的既有处理一致（每次求值都重新读）。
+-- `prim_readBytes` 是**函数**（`Int -> String`）：最多读 n 字节、有数据就立即返回
+-- （可能少于 n），EOF 返回 `""`——LSP 的帧循环靠它精确读 Content-Length 字节。
+dtPrimRuntime : String
+dtPrimRuntime =
+  "let dtp_print s = print_string s; flush stdout; String.length s\n"
+    ++ "let dtp_readFile path =\n  try\n    let ch = open_in_bin path in\n    Fun.protect ~finally:(fun () -> close_in_noerr ch)\n      (fun () -> really_input_string ch (in_channel_length ch))\n  with Sys_error msg -> failwith (\"readFile: \" ^ msg)\n"
+    ++ "let dtp_writeFile path contents =\n  try\n    let ch = open_out_bin path in\n    Fun.protect ~finally:(fun () -> close_out_noerr ch)\n      (fun () -> output_string ch contents);\n    String.length contents\n  with Sys_error msg -> failwith (\"writeFile: \" ^ msg)\n"
+    ++ "let dtp_getArgs () =\n  let argv = Sys.argv in\n  let n = Array.length argv in\n  if n <= 1 then [] else Array.to_list (Array.sub argv 1 (n - 1))\n"
+    ++ "let dtp_readLine () = try input_line stdin with End_of_file -> \"\"\n"
+    ++ "let dtp_readBytes n =\n  if n <= 0 then \"\"\n  else\n    let b = Bytes.create n in\n    let k = try input stdin b 0 n with _ -> 0 in\n    if k <= 0 then \"\" else Bytes.sub_string b 0 k\n"
+    ++ "let dtp_readDir path =\n  try List.sort compare (Array.to_list (Sys.readdir path))\n  with Sys_error msg -> failwith (\"readDir: \" ^ msg)\n"
+    ++ "let dtp_isDirectory path =\n  try Sys.is_directory path with Sys_error msg -> failwith (\"isDirectory: \" ^ msg)\n"
+    ++ "let dtp_makeDir path =\n  try (if Sys.file_exists path then 0 else (Sys.mkdir path 0o755; 0))\n  with Sys_error msg -> failwith (\"makeDir: \" ^ msg)\n"
+    ++ "let dtp_removeFile path =\n  try (if Sys.file_exists path then (Sys.remove path; 0) else 0)\n  with Sys_error msg -> failwith (\"removeFile: \" ^ msg)\n"
+    ++ "let dtp_fileExists path = Sys.file_exists path\n"
+    ++ "let dtp_fileMtime path =\n  try int_of_float (Unix.stat path).Unix.st_mtime with _ -> 0\n"
+    ++ "let dtp_fileSize path =\n  try (Unix.stat path).Unix.st_size with _ -> 0\n"
+    ++ "let dtp_timeUs () = int_of_float (Unix.gettimeofday () *. 1000000.0)\n"
+    ++ "let dtp_getenv k = try Sys.getenv k with Not_found -> \"\"\n"
+    ++ "let dtp_getcwd () = try Sys.getcwd () with _ -> \".\"\n"
+    ++ "let dtp_execPath () = try Unix.readlink \"/proc/self/exe\" with _ -> Sys.executable_name\n"
+    ++ "let dtp_strHash (s : string) =\n  let h = ref 0 in\n  String.iter (fun c -> h := ((!h * 33) + Char.code c) land 1023) s;\n  !h\n"
+    ++ "let dtp_strAt (s : string) (i : int) = if i < 0 || i >= String.length s then -1 else Char.code s.[i]\n"
+    ++ "let dtp_exit n = exit n\n"
+    ++ "let dtp_runIn dir args =\n  let quote s = Filename.quote s in\n  let cmd = String.concat \" \" (List.map quote args) in\n  let old = Sys.getcwd () in\n  Fun.protect ~finally:(fun () -> Sys.chdir old) (fun () -> Sys.chdir dir; Sys.command cmd)\n"
+
+-- M19：`==` / `/=` 的跨类型特化（精化期已按实参类型重写成 `bi_eq_int` / `bi_eq_str`
+-- 这类名字），以及 str* 内建。codegen 只做名字映射、不感知类型——M18.6 的
+-- M22.2：`strUnpack` / `strPack` 的运行时桥接。
+-- Core 的 `strUnpack` 语义是「OCaml int list」，而 DT 路径里 `List` 是程序自己声明的
+-- 归纳族（`Base.List.List` 在 OCaml 里是变体类型 `t_Base_dList_dList`）。这两个 helper
+-- 按实际族名生成，把 int list ↔ 族构造子互转；`globalRef` 把 `strUnpack`/`strPack`
+-- 映射到它们（桥接只服务 Int 元素，与 prelude 签名 `List Int` 一致）。
+dtListBridge : List DtData -> String
+dtListBridge datas = case findListFamilyData datas of
+  Nothing => ""
+  Just dd => case findFamilyCtor (dtDataCtors dd) listNilCtor of
+    Nothing => ""
+    Just nilC => case findFamilyCtor (dtDataCtors dd) listConsCtor of
+      Nothing => ""
+      Just consC =>
+        let
+          famName = dtDataName dd
+          nilMl = ctorOcamlName famName (dtCtorName nilC)
+          consMl = ctorOcamlName famName (dtCtorName consC)
+        in "\nlet dtp_unpack (s : string) =\n"
+          ++ "  let cs = List.init (String.length s) (fun i -> Char.code s.[i]) in\n"
+          ++ "  List.fold_right (fun x acc -> "
+          ++ consMl
+          ++ " (x, acc)) cs "
+          ++ nilMl
+          ++ "\n"
+          ++ "let dtp_pack xs =\n"
+          ++ "  let rec to_list xs = match xs with "
+          ++ nilMl
+          ++ " -> [] | "
+          ++ consMl
+          ++ " (x, rest) -> x :: to_list rest in\n"
+          ++ "  let cs = to_list xs in\n"
+          ++ "  String.init (List.length cs) (fun i -> Char.chr (List.nth cs i))\n"
+          ++ "\nlet dtp_listOf xs = List.fold_right (fun x acc -> "
+          ++ consMl
+          ++ " (x, acc)) xs "
+          ++ nilMl
+          ++ "\n"
+          ++ "let dtp_ocamlOf xs =\n"
+          ++ "  let rec go l = match l with "
+          ++ nilMl
+          ++ " -> [] | "
+          ++ consMl
+          ++ " (x, rest) -> x :: go rest in\n"
+          ++ "  go xs\n"
+          ++ "\nlet dtp_concatMany xs = String.concat \"\" (dtp_ocamlOf xs)\n"
+          ++ "\nlet dtp_substTemplate tmpl xs =\n"
+          ++ "  let args = Array.of_list (dtp_ocamlOf xs) in\n"
+          ++ "  let n = String.length tmpl and na = Array.length args in\n"
+          ++ "  let buf = Buffer.create (n + 32) in\n"
+          ++ "  let rec go i =\n"
+          ++ "    if i >= n then ()\n"
+          ++ "    else if tmpl.[i] = '<' then begin\n"
+          ++ "      let j = ref (i + 1) and k = ref 0 in\n"
+          ++ "      while !j < n && tmpl.[!j] >= '0' && tmpl.[!j] <= '9' do\n"
+          ++ "        k := !k * 10 + (Char.code tmpl.[!j] - 48); incr j\n"
+          ++ "      done;\n"
+          ++ "      if !j < n && tmpl.[!j] = '>' && !j > i + 1 then begin\n"
+          ++ "        (if !k < na then Buffer.add_string buf args.(!k)\n"
+          ++ "         else Buffer.add_string buf (String.sub tmpl i (!j - i + 1)));\n"
+          ++ "        go (!j + 1)\n"
+          ++ "      end else (Buffer.add_char buf '<'; go (i + 1))\n"
+          ++ "    end else (Buffer.add_char buf tmpl.[i]; go (i + 1))\n"
+          ++ "  in go 0; Buffer.contents buf\n"
+
+findFamilyCtor : List DtCtor -> String -> Maybe DtCtor
+findFamilyCtor [] name = Nothing
+findFamilyCtor (c :: rest) name = if dtCtorName c == name then Just c else findFamilyCtor rest name
+
+findListFamilyData : List DtData -> Maybe DtData
+findListFamilyData [] = Nothing
+findListFamilyData (d :: rest) =
+  if dtDataName d == listFamilyName then Just d else findListFamilyData rest
+
+-- 全局名 → runtime 表达式：唯一真源是 `Vuna.Compiler.Intrinsics`（M27）。
+-- 内部 `bi_*` 也在这张表里（visible=False）；codegen 只做名字映射、不感知类型。
+globalRef : String -> Result String
+globalRef name = case findIntrinsic name of
+  Just i => Ok (intrinsicRuntime i)
+  Nothing => Ok (valueName name)
+
+-- 零参 user 构造子作为普通值引用时，OCaml 里就是裸构造子；只有 datas 表知道它是
+-- 构造子，所以生成入口先查构造子表，再回落到 Intrinsics/值名。
+genGlobalRef : GenSt -> String -> Result (Pair String GenSt)
+genGlobalRef st name = case lookupPair name (gsCtors st) of
+  Just family => Ok (Pair (ctorOcamlName family name) st)
+  Nothing => case findIntrinsic name of
+    Just i =>
+      if needsListBridge i then if memName listFamilyName (gsFamilies st) then Ok (Pair (intrinsicRuntime i) st)
+      else cgErr1 (ListBridgeRequired name) name
+      else Ok (Pair (intrinsicRuntime i) st)
+    Nothing => Ok (Pair (valueName name) st)
+
+-- 项 → OCaml
+-- ---------------------------------------------------------------
+--
+-- 生成状态：族名表、构造子 → 族表、构造子形状表、fresh 变量计数。
+-- binder 环境是「最近绑定在前」的 (OCaml 变量名, 是否擦除)，TVar 靠 index 解析。
+-- M24.6：`gsCtorShapes` 是构造子字段形状的唯一真源，构造子应用与 case 分支都按它
+-- 校验/生成（见 `ctorKeepFlags`）。
+data GenSt : Type where
+  GenSt : List String -> List (Pair String String) -> List (Pair String (List Bool)) -> Int -> GenSt
+
+gsCtors : GenSt -> List (Pair String String)
+gsCtors (GenSt families ctors shapes next) = ctors
+
+gsCtorShapes : GenSt -> List (Pair String (List Bool))
+gsCtorShapes (GenSt families ctors shapes next) = shapes
+
+-- 程序声明的族名表（`strUnpack` / `strPack` 的映射要看有没有 List 族）。
+gsFamilies : GenSt -> List String
+gsFamilies (GenSt families ctors shapes next) = families
+
+gsNext : GenSt -> Int
+gsNext (GenSt families ctors shapes next) = next
+
+gsPutNext : GenSt -> Int -> GenSt
+gsPutNext (GenSt families ctors shapes next) n = GenSt families ctors shapes n
+
+ctorTableOfData : DtData -> List (Pair String String)
+ctorTableOfData d = map (\c => Pair (dtCtorName c) (dtCtorFamily c)) (dtDataCtors d)
+
+ctorTableOf : List DtData -> List (Pair String String)
+ctorTableOf [] = []
+ctorTableOf (d :: rest) = append (ctorTableOfData d) (ctorTableOf rest)
+
+mkGenSt : List DtData -> GenSt
+mkGenSt datas = GenSt (map dtDataName datas) (ctorTableOf datas) (ctorShapeOf datas) 0
+
+-- 运行时参数个数为 0 的定义（无 TLam 或只有擦除 TLam）。A05 后零参定义就是普通值
+-- 绑定（`let v_x = body`，模块初始化时求值），这里只用于递归值守卫的判据。
+runtimeArity : Term -> Int
+runtimeArity (TLam n r b) = if rigIsErased r then runtimeArity b else 1 + runtimeArity b
+runtimeArity _ = 0
+
+-- case 分支的绑定环境：全部 telescope binder 都进环境（擦除的用占位名 + True），
+-- 顺序为 telescope 表面顺序的逆序；pattern 只保留未擦除的 fresh 名。
+data AltEnv : Type where
+  AltEnv : List (Pair String Rig) -> List String -> GenSt -> AltEnv
+
+aeEnv : AltEnv -> List (Pair String Rig)
+aeEnv (AltEnv env pats st) = env
+
+aePats : AltEnv -> List String
+aePats (AltEnv env pats st) = pats
+
+aeSt : AltEnv -> GenSt
+aeSt (AltEnv env pats st) = st
+
+altEnvGo : GenSt -> List (Pair String Rig) -> List (Pair String Rig) -> List String -> AltEnv
+altEnvGo st env [] pats = AltEnv env (reverse pats) st
+altEnvGo st env ((Pair name rig) :: rest) pats = if rigIsErased rig then altEnvGo st (Pair "" Rig0 :: env) rest pats
+else
+  let
+    fresh = gsNext st
+    nm = "dtb__" ++ strFromInt fresh
+  in altEnvGo (gsPutNext st (fresh + 1)) (Pair nm Rig1 :: env) rest (nm :: pats)
+
+altEnv : GenSt -> List (Pair String Rig) -> List (Pair String Rig) -> AltEnv
+altEnv st outer tele = altEnvGo st outer tele []
+
+-- 构造子分支的绑定环境：按**构造子形状**（keep flags）决定哪些 telescope 位置进 pattern。
+-- 与实参一样有两种合法约定：
+--   1. **全 telescope**（普通 case：`caseAltBinders` 含擦除占位，body 的 de Bruijn index
+--      按完整 telescope 数）；
+--   2. **仅保留字段**（Elab 生成的字典投影分支：只绑方法字段，body index 按字段数）。
+-- 按 binders 长度落在哪个口径选择，并逐位校验 rig 与形状一致。
+altEnvChecked : GenSt -> String -> List (Pair String Rig) -> List (Pair String Rig) -> List Bool -> Result AltEnv
+altEnvChecked st label outer binders flags =
+  if length binders == length flags then altEnvFull st label outer binders flags []
+  else if length binders == countKept flags then altEnvKept st label outer binders []
+  else Err
+    ("DT: internal: constructor " ++ label ++ ": case branch binder count matches neither full telescope nor kept fields")
+
+countKept : List Bool -> Int
+countKept [] = 0
+countKept (k :: rest) = if k then 1 + countKept rest else countKept rest
+
+altEnvFull : GenSt -> String -> List (Pair String Rig) -> List (Pair String Rig) -> List Bool -> List String -> Result AltEnv
+altEnvFull st label outer [] flags pats = case flags of
+  [] => Ok (AltEnv outer (reverse pats) st)
+  _ :: _ =>
+    Err ("DT: internal: constructor " ++ label ++ ": case branch has fewer binders than its shape")
+altEnvFull st label outer ((Pair name rig) :: rest) flags pats = case flags of
+  [] =>
+    Err ("DT: internal: constructor " ++ label ++ ": case branch has more binders than its shape")
+  keep :: flags2 => if flagMatchesRig keep rig then if keep then
+    let
+      fresh = gsNext st
+      nm = "dtb__" ++ strFromInt fresh
+    in altEnvFull (gsPutNext st (fresh + 1)) label (Pair nm Rig1 :: outer) rest flags2 (nm :: pats)
+  else altEnvFull st label (Pair "" Rig0 :: outer) rest flags2 pats
+  else Err ("DT: internal: constructor " ++ label ++ ": case branch binder rig disagrees with its shape")
+
+altEnvKept : GenSt -> String -> List (Pair String Rig) -> List (Pair String Rig) -> List String -> Result AltEnv
+altEnvKept st label outer [] pats = Ok (AltEnv outer (reverse pats) st)
+altEnvKept st label outer ((Pair name rig) :: rest) pats = if rigIsErased rig then Err ("DT: internal: constructor " ++ label ++ ": kept-field branch has an erased binder")
+else
+  let
+    fresh = gsNext st
+    nm = "dtb__" ++ strFromInt fresh
+  in altEnvKept (gsPutNext st (fresh + 1)) label (Pair nm Rig1 :: outer) rest (nm :: pats)
+
+genTermFuel : Int -> GenSt -> List (Pair String Rig) -> Term -> Result (Pair String GenSt)
+genTermFuel fuel st binders t = if fuel <= 0 then Err "DT: internal: codegen fuel exhausted"
+else case t of
+  TVar name i => case binderAt i binders of
+    Just (Pair oc rig) =>
+      if rigIsErased rig then cgErr1 (TypeLevelBindingRuntime name) name else Ok (Pair oc st)
+    Nothing => Err "DT: internal: unbound runtime variable"
+  TGlobal name => genGlobalRef st name
+  TInt n => Ok (Pair (strFromInt n) st)
+  TStr s => Ok (Pair (ocamlString s) st)
+  TBool b => Ok (Pair (boolText b) st)
+  TIf c th el => andThen (genTermFuel (fuel - 1) st binders c) (\pc => case pc of
+    Pair gc st1 => andThen (genTermFuel (fuel - 1) st1 binders th) (\pt => case pt of
+      Pair gt st2 => andThen (genTermFuel (fuel - 1) st2 binders el) (\pe => case pe of
+        Pair ge st3 => Ok (Pair ("(if " ++ gc ++ " then " ++ gt ++ " else " ++ ge ++ ")") st3)
+      )
+    )
+  )
+  TLam name rig body => genTermLamFuel (fuel - 1) st binders name rig body
+  TApp f a rig => genAppFuel (fuel - 1) st binders f a rig
+  TCon c args => genConAppFuel (fuel - 1) st binders c args
+  TCase scrut alts => genCaseFuel (fuel - 1) st binders scrut alts
+  TPi name implicit rig dom cod => cgErr0 TypeUsedAtRuntime
+  TType l => cgErr0 TypeUsedAtRuntime
+  TMeta m => cgErr1 (UnsolvedMetavarRuntime (showMetaHint m)) (showMetaHint m)
+
+genTermLamFuel : Int -> GenSt -> List (Pair String Rig) -> String -> Rig -> Term -> Result (Pair String GenSt)
+genTermLamFuel fuel st binders name rig body = if fuel <= 0 then Err "DT: internal: codegen fuel exhausted"
+else if rigIsErased rig then andThen (genTermFuel (fuel - 1) st (Pair "" Rig0 :: binders) body) (\p => case p of
+  Pair b st2 => Ok (Pair b st2)
+)
+else
+  let
+    ocName = ocamlBinderName name
+  in andThen (genTermFuel (fuel - 1) st (Pair ocName Rig1 :: binders) body) (\p => case p of
+    Pair b st2 => Ok (Pair ("(fun " ++ ocName ++ " -> " ++ b ++ ")") st2)
+  )
+
+-- 应用：精化器可能把饱和的构造子应用表示成嵌套 `TApp (TApp (TCon c []) a) b`。
+-- 这种形态必须先折叠成 `TCon c [a, b]`，否则 OCaml 侧会把它当成 curried 调用
+-- （多变体构造子是 tupled 的，`C 1 2` 类型不对）。
+genAppFuel : Int -> GenSt -> List (Pair String Rig) -> Term -> Term -> Rig -> Result (Pair String GenSt)
+genAppFuel fuel st binders f a rig = if fuel <= 0 then Err "DT: internal: codegen fuel exhausted"
+else if rigIsErased rig then genTermFuel (fuel - 1) st binders f
+else case flattenConApp (TApp f a rig) of
+  Just (Pair c args) => genConAppFuel (fuel - 1) st binders c args
+  Nothing => andThen (genTermFuel (fuel - 1) st binders f) (\pf => case pf of
+    Pair fs st1 => andThen (genTermFuel (fuel - 1) st1 binders a) (\pa => case pa of
+      Pair at st2 => Ok (Pair ("(" ++ fs ++ " " ++ at ++ ")") st2)
+    )
+  )
+
+-- OCaml 的多参变体构造子是 **tupled**（`C of t1 * t2` 写作 `C (a, b)`），
+-- 不是 curried，所以多实参必须用逗号包成一个元组。
+conAppText : String -> List String -> String
+conAppText name [] = name
+conAppText name ([a]) = "(" ++ name ++ " (" ++ a ++ "))"
+conAppText name args = "(" ++ name ++ " (" ++ joinWith ", " args ++ "))"
+
+-- 构造子实参对齐（M24.6 第一级）：TCon 的实参有两种合法约定：
+--   1. **全 telescope**（含擦除位，普通构造子经 `inferArgs` 插入隐式后如此）；
+--   2. **仅保留字段**（字典构造子 `MkDict_C` 只带方法实现，省略擦除的类参数）。
+-- 两种都按 shape 归一成「运行时实参列表」（全部非擦除），供 `genConArgs` 生成。
+alignCtorArgs : String -> List Bool -> List (Pair Term Rig) -> Result (List (Pair Term Rig))
+alignCtorArgs label [] [] = Ok []
+alignCtorArgs label [] (_ :: _) =
+  Err ("DT: internal: constructor " ++ label ++ ": application has more arguments than its shape")
+alignCtorArgs label (keep :: flags) [] =
+  if keep then Err ("DT: internal: constructor " ++ label ++ ": application has fewer arguments than its shape")
+  else alignCtorArgs label flags []
+alignCtorArgs label (keep :: flags) ((Pair arg rig) :: rest) =
+  if keep then if rigIsErased rig then Err ("DT: internal: constructor " ++ label ++ ": runtime field marked erased")
+  else andThen (alignCtorArgs label flags rest) (\ts => Ok (Pair arg rig :: ts))
+  else if rigIsErased rig then alignCtorArgs label flags rest
+  else alignCtorArgs label flags (Pair arg rig :: rest)
+
+genConArgsFuel : Int -> GenSt -> List (Pair String Rig) -> List (Pair Term Rig) -> Result (Pair (List String) GenSt)
+genConArgsFuel fuel st binders [] =
+  if fuel <= 0 then Err "DT: internal: codegen fuel exhausted" else Ok (Pair [] st)
+genConArgsFuel fuel st binders ((Pair arg rig) :: rest) = if fuel <= 0 then Err "DT: internal: codegen fuel exhausted"
+else andThen (genTermFuel (fuel - 1) st binders arg) (\p => case p of
+  Pair text st2 => andThen (genConArgsFuel (fuel - 1) st2 binders rest) (\q => case q of
+    Pair texts st3 => Ok (Pair (text :: texts) st3)
+  )
+)
+
+genConAppFuel : Int -> GenSt -> List (Pair String Rig) -> String -> List (Pair Term Rig) -> Result (Pair String GenSt)
+genConAppFuel fuel st binders c args = if fuel <= 0 then Err "DT: internal: codegen fuel exhausted"
+else case lookupPair c (gsCtors st) of
+  Nothing => Err ("DT: internal: unknown constructor " ++ c)
+  Just family => case lookupPair c (gsCtorShapes st) of
+    Nothing => Err ("DT: internal: no shape for constructor " ++ c)
+    Just flags => andThen (alignCtorArgs c flags args) (\runtimeArgs => andThen (genConArgsFuel (fuel - 1) st binders runtimeArgs) (\p => case p of
+      Pair argTexts st2 => Ok (Pair (conAppText (ctorOcamlName family c) argTexts) st2)
+    )
+    )
+
+hasFallbackAlt : List CaseAlt -> Bool
+hasFallbackAlt [] = False
+hasFallbackAlt (alt :: rest) = if caseAltName alt == "" then True else hasFallbackAlt rest
+
+armPatternText : String -> List String -> String
+armPatternText cname [] = cname
+armPatternText cname pats = cname ++ " (" ++ joinWith ", " pats ++ ")"
+
+genArmFuel : Int -> GenSt -> List (Pair String Rig) -> CaseAlt -> Result (Pair String GenSt)
+genArmFuel fuel st outer alt = if fuel <= 0 then Err "DT: internal: codegen fuel exhausted"
+else if caseAltName alt == "" then
+  let
+    bound = altEnv st outer (caseAltBinders alt)
+    patText = case aePats bound of
+      [] => "_"
+      p :: rest => p
+  in andThen (genTermFuel (fuel - 1) (aeSt bound) (aeEnv bound) (caseAltBody alt)) (\p => case p of
+    Pair b st2 => Ok (Pair ("  | " ++ patText ++ " -> " ++ b ++ "\n") st2)
+  )
+else case lookupPair (caseAltName alt) (gsCtors st) of
+  Nothing => Err ("DT: internal: unknown constructor " ++ caseAltName alt)
+  Just family => case lookupPair (caseAltName alt) (gsCtorShapes st) of
+    Nothing => Err ("DT: internal: no shape for constructor " ++ caseAltName alt)
+    Just flags => andThen (altEnvChecked st (caseAltName alt) outer (caseAltBinders alt) flags) (\bound => andThen (genTermFuel (fuel - 1) (aeSt bound) (aeEnv bound) (caseAltBody alt)) (\p => case p of
+      Pair b st2 =>
+        let
+          cname = ctorOcamlName family (caseAltName alt)
+          patText = armPatternText cname (aePats bound)
+        in Ok (Pair ("  | " ++ patText ++ " -> " ++ b ++ "\n") st2)
+    )
+    )
+
+genArmsFuel : Int -> GenSt -> List (Pair String Rig) -> List CaseAlt -> Result (Pair String GenSt)
+genArmsFuel fuel st binders [] =
+  if fuel <= 0 then Err "DT: internal: codegen fuel exhausted" else Ok (Pair "" st)
+genArmsFuel fuel st binders (alt :: rest) = if fuel <= 0 then Err "DT: internal: codegen fuel exhausted"
+else andThen (genArmFuel (fuel - 1) st binders alt) (\p => case p of
+  Pair arm st2 => andThen (genArmsFuel (fuel - 1) st2 binders rest) (\q => case q of
+    Pair arms st3 => Ok (Pair (arm ++ arms) st3)
+  )
+)
+
+genCaseFuel : Int -> GenSt -> List (Pair String Rig) -> Term -> List CaseAlt -> Result (Pair String GenSt)
+genCaseFuel fuel st binders scrut alts = if fuel <= 0 then Err "DT: internal: codegen fuel exhausted"
+else andThen (genTermFuel (fuel - 1) st binders scrut) (\p => case p of
+  Pair scrutText st1 => andThen (genArmsFuel (fuel - 1) st1 binders alts) (\q => case q of
+    Pair arms st2 =>
+      let
+        fallback =
+          if hasFallbackAlt alts then "" else "  | _ -> failwith \"DT: impossible branch\"\n"
+      in Ok (Pair ("(match " ++ scrutText ++ " with\n" ++ arms ++ fallback ++ ")") st2)
+  )
+)
+
+-- ---------------------------------------------------------------
+-- 分组 → OCaml 定义
+-- ---------------------------------------------------------------
+-- M29（A14）：定义级 CG 错误带来源位置（`DtDef` 的 `Maybe Span` + 定义名）。
+-- `genTerm` 内部的错误（TypeUsedAtRuntime / TypeLevelBindingRuntime / TypeLevelNameRuntime /
+-- UnsolvedMetavarRuntime / ListBridgeRequired / 构造子 arity 内部错等）都在这里统一收口，
+-- 生成定义（trait 投影 / instance 字典 / deriving）因此能指回 trait/instance/data 声明行。
+genGroupDef : GenSt -> DtDef -> Result (Pair String GenSt)
+genGroupDef st d = case dtDefBody d of
+  Just body => case genTerm st [] body of
+    Err e => Err (cgDefLoc (dtDefSpan d) (dtDefName d) ++ e)
+    Ok (Pair bodyText st2) => Ok (Pair (valueName (dtDefName d) ++ " = " ++ bodyText) st2)
+  Nothing =>
+    Err
+      (cgDefLoc (dtDefSpan d) (dtDefName d) ++ "DT: internal: axiom reached runtime code generation (partition must erase it)")
+
+genGroupBodies : GenSt -> List DtDef -> Result (Pair (List String) GenSt)
+genGroupBodies st [] = Ok (Pair [] st)
+genGroupBodies st (d :: rest) = andThen (genGroupDef st d) (\p => case p of
+  Pair def st2 => andThen (genGroupBodies st2 rest) (\q => case q of
+    Pair defs st3 => Ok (Pair (def :: defs) st3)
+  )
+)
+
+-- 单函数 SCC 且不引用自身时用 let；多函数 SCC（互递归）或自递归才用 let rec。
+groupNeedsRec : HashTbl (List String) -> List DtDef -> Bool
+groupNeedsRec adjT [] = False
+groupNeedsRec adjT ([d]) = memName (dtDefName d) (neighborsOf adjT (dtDefName d))
+groupNeedsRec adjT group = True
+
+-- A05：零运行时参数的定义现在是普通值绑定（`let v_x = body`，模块初始化时求值），
+-- 而 OCaml 的 `let rec` 只接受函数或构造子应用作右值。递归组里出现其它形态的零参
+-- 定义时，环无法安全落地，必须在生成前报 `CG_RecursiveValueDefinition`（带定义名）。
+-- 擦除 lambda 会在生成时消失，所以先剥掉再判定「真正落盘的右值形状」。
+recursiveValueAllowed : Term -> Bool
+recursiveValueAllowed (TLam n rig b) = if rigIsErased rig then recursiveValueAllowed b else True
+recursiveValueAllowed (TCon c args) = True
+recursiveValueAllowed _ = False
+
+firstBadRecursiveValue : List DtDef -> Maybe String
+firstBadRecursiveValue [] = Nothing
+firstBadRecursiveValue (d :: rest) = case dtDefBody d of
+  -- 只在运行时分组里调用：axiom 无体、不进运行时分组。
+  Nothing => Nothing
+  Just body =>
+    if runtimeArity body == 0 then if recursiveValueAllowed body then firstBadRecursiveValue rest else Just (dtDefName d)
+    else firstBadRecursiveValue rest
+
+genGroup : HashTbl (List String) -> GenSt -> List DtDef -> Result (Pair String GenSt)
+genGroup adj st group = if groupNeedsRec adj group then case firstBadRecursiveValue group of
+  -- M29（A14）：带来源位置（组里按名字找回定义）。
+  Just name => case findDtDef name group of
+    Just d => cgErrDefAt (dtDefSpan d) name (RecursiveValueDefinition name) (VCons name VNil)
+    Nothing => cgErr1 (RecursiveValueDefinition name) name
+  Nothing => genGroupLet st group True
+else genGroupLet st group False
+
+genGroupLet : GenSt -> List DtDef -> Bool -> Result (Pair String GenSt)
+genGroupLet st group isRec = andThen (genGroupBodies st group) (\p => case p of
+  Pair defs st2 => Ok (Pair ((if isRec then "let rec " else "let ") ++ joinWith "\nand " defs) st2)
+)
+
+genGroups : HashTbl (List String) -> GenSt -> List (List DtDef) -> Result (Pair (List String) GenSt)
+genGroups adj st [] = Ok (Pair [] st)
+genGroups adj st (g :: rest) = andThen (genGroup adj st g) (\p => case p of
+  Pair text st2 => andThen (genGroups adj st2 rest) (\q => case q of
+    Pair texts st3 => Ok (Pair (text :: texts) st3)
+  )
+)
+
+-- main 的展示方式（类型 force 后必须是 Int/String/Bool）。
+-- 按 canonical 符号识别：Int / String 是 primitive 类型，Bool 是 `Base.Bool.Bool`。
+mainShow : List (Pair String Term) -> Term -> Result (Pair String String)
+mainShow table tyTerm = case force (tblFromList table) solsEmpty defaultFuel (eval [] tyTerm) of
+  VNeutral n => case n of
+    NGlobal g [] => mainShowForName g
+    _ => mainShowErr
+  _ => mainShowErr
+
+-- 把 `IO a` 拆成内层类型 `a`；不是 **base 的 canonical IO** 则 Nothing（M27：完整符号身份）。
+ioResultTy : Term -> Maybe Term
+ioResultTy (TApp fn arg _) = case fn of
+  TGlobal g => if g == ioFamilyName then Just arg else Nothing
+  _ => Nothing
+ioResultTy _ = Nothing
+
+-- 找 canonical IO 族的（族名, 构造子名），用于生成 `match main with C_IO_MkIO f -> f 0`。
+ioCtorOf : List DtData -> Maybe (Pair String String)
+ioCtorOf [] = Nothing
+ioCtorOf (d :: rest) = if dtDataName d == ioFamilyName then firstCtorOf d else ioCtorOf rest
+
+firstCtorOf : DtData -> Maybe (Pair String String)
+firstCtorOf d = case dtDataCtors d of
+  c :: _ => Just (Pair (dtDataName d) (dtCtorName c))
+  [] => Nothing
+
+mainShowForName : String -> Result (Pair String String)
+mainShowForName g =
+  if g == intTypeName then Ok (Pair "string_of_int" "int")
+  else if g == strTypeName then Ok (Pair "dt_show_string" "string")
+  else if g == boolTypeName then Ok (Pair "dt_show_bool" "bool") else mainShowErr
+
+mainShowErr : Result (Pair String String)
+mainShowErr = cgErr0 MainReturnType
+
+-- main 钩子：`mainExpr` 是运行时求 main 值的表达式（普通 main 直接是 `v_main`；
+-- main : IO a 则是 `match v_main with C_IO_MkIO f -> f 0`），按类型 `tyTerm` 选展示函数。
+genDtHook : String -> List (Pair String Term) -> Term -> String -> Bool -> Result String
+genDtHook bodyText table tyTerm mainExpr printResult = andThen (mainShow table tyTerm) (\showPair => case showPair of
+  Pair showFn kind =>
+    let
+      hook =
+        if printResult then "let () = print_endline (" ++ showFn ++ " (" ++ mainExpr ++ "))\n"
+        else "let () = ignore (" ++ mainExpr ++ ")\n"
+    in Ok (bodyText ++ "\n" ++ hook)
+)
+
+-- `match v_main with C_IO_MkIO f -> f 0`（找不到 IO 构造子时回退为原样引用）。
+ioRunText : Pair (List DtData) (List DtDef) -> String -> String
+ioRunText program mainRef = case ioCtorOf (firstOf program) of
+  Just (Pair family ctor) =>
+    "match " ++ mainRef ++ " with " ++ ctorOcamlName family ctor ++ " f -> f 0"
+  Nothing => mainRef
+
+genTerm : GenSt -> List (Pair String Rig) -> Term -> Result (Pair String GenSt)
+genTerm a1 a2 a3 = genTermFuel 512 a1 a2 a3
+
+genTermLam : GenSt -> List (Pair String Rig) -> String -> Rig -> Term -> Result (Pair String GenSt)
+genTermLam a1 a2 a3 a4 a5 = genTermLamFuel 512 a1 a2 a3 a4 a5
+
+genApp : GenSt -> List (Pair String Rig) -> Term -> Term -> Rig -> Result (Pair String GenSt)
+genApp a1 a2 a3 a4 a5 = genAppFuel 512 a1 a2 a3 a4 a5
+
+genConApp : GenSt -> List (Pair String Rig) -> String -> List (Pair Term Rig) -> Result (Pair String GenSt)
+genConApp a1 a2 a3 a4 = genConAppFuel 512 a1 a2 a3 a4
+
+genConArgs : GenSt -> List (Pair String Rig) -> List (Pair Term Rig) -> Result (Pair (List String) GenSt)
+genConArgs a1 a2 a3 = genConArgsFuel 512 a1 a2 a3
+
+genArm : GenSt -> List (Pair String Rig) -> CaseAlt -> Result (Pair String GenSt)
+genArm a1 a2 a3 = genArmFuel 512 a1 a2 a3
+
+genArms : GenSt -> List (Pair String Rig) -> List CaseAlt -> Result (Pair String GenSt)
+genArms a1 a2 a3 = genArmsFuel 512 a1 a2 a3
+
+genCase : GenSt -> List (Pair String Rig) -> Term -> List CaseAlt -> Result (Pair String GenSt)
+genCase a1 a2 a3 a4 = genCaseFuel 512 a1 a2 a3 a4

@@ -1,0 +1,454 @@
+module Vuna.Compiler.Packages.Pkg
+  ( Package(..)
+  , PackageContext
+  , Root
+  , contextCapabilities
+  , contextDir
+  , contextForDir
+  , contextForFile
+  , contextPackage
+  , contextPackageName
+  , contextRoots
+  , findManifestDir
+  , findManifestDirMaybe
+  , loadManifestAt
+  , loadPackage
+  , locateBase
+  , packageContext
+  , packageDependencies
+  , packageDir
+  , packageEntry
+  , packageExports
+  , packageManifest
+  , packageName
+  , packageRoots
+  , rootCapabilities
+  , rootDir
+  , rootExports
+  , rootName
+  , rootPackage
+  , workspacePackages
+  ) where
+
+-- Vuna.Compiler.Packages.Pkg：M11.5 包 / workspace 解析层（不碰 Loader / CLI）。
+-- 每个包 = 带 vuna.toml 的目录；workspace 根同时是子包（Cargo 风格：
+-- 根 vuna.toml 同时含 [workspace] 与 [package]）。
+-- 本模块用内建 prim_readFile / prim_fileExists 读盘，不做 realpath：路径只做 lexical
+-- 规范化（合并 "//"、消去 "."、".."），循环检测与去重用规范化后的目录字符串。
+-- 包内目录约定：lib/、app/、test/；入口固定 app/Main.vuna。
+--
+-- M26：每个源文件只有唯一**包上下文**（`PackageContext`）= 最近的 vuna.toml 包
+-- + 它的依赖闭包 + 模块根列表。没有 manifest 的文件只有 base 上下文（base 定位 =
+-- `VUNA_BASE` 覆盖 + 可执行文件相对布局），此时包名为空（ad-hoc 入口）。
+-- 旧的环境根（命令行 flag 与 raw 模式 / List Root）已删除；`Root` 只作为包上下文的
+-- 内部模块根（类型 + 访问器导出，构造子不导出）。
+-- M27：`Root` / `PackageContext` 携带 manifest 的 `[capabilities].effects` 能力声明
+-- （只是数据通路；合法能力名与放行判定由 Loader 消费）。
+import Vuna.Compiler.Common
+import Vuna.Compiler.Frontend.Manifest
+
+-- 模块根：目录、包名、可选导出模块列表、能力列表（M27：该包 manifest 的
+-- `[capabilities].effects`）。
+-- exports = Nothing 表示该根不限制导出（自己包）；exports = Just mods 表示只有
+-- mods 里的模块可被跨包 import。
+-- 抽象性：导出表只写 `Root`（不含 `(..)`）。v0 的 data 会把**与类型同名**的构造子
+-- 随裸类型名一起导出，所以构造子命名为 `MkRoot`，外部只能经本模块的访问器使用。
+data Root : Type where
+  MkRoot : String -> String -> Maybe (List String) -> List String -> Root
+
+-- 已解析的包：manifest、直接依赖（顺序同 [dependencies]）、包目录（已规范化）。
+data Package : Type where
+  Package : Manifest -> List Package -> String -> Package
+
+-- 文件/目录的包上下文（抽象：构造子不导出，只能经 `contextForFile` /
+-- `contextForDir` / `packageContext` 获得；构造子命名为 `MkPackageContext` 的原因同上）。
+--   - String         = 上下文目录（包目录；base-only 时为 ""）
+--   - Maybe Package  = 包本体（base-only 时为 Nothing：文件不属于任何包）
+--   - List Root      = 模块根列表（自己 lib 在最前，随后是依赖闭包）
+--   - String         = 包名（base-only 时为 ""，无显式能力、effectful prim_* 被拒）
+--   - List String    = 本包 manifest 声明的能力（M27；base-only 时为 []）
+data PackageContext : Type where
+  MkPackageContext : String -> Maybe Package -> List Root -> String -> List String -> PackageContext
+
+rootDir : Root -> String
+rootDir (MkRoot dir name exports caps) = dir
+
+rootName : Root -> String
+rootName (MkRoot dir name exports caps) = name
+
+-- rootName 的别名（Loader/CLI 侧更常用的叫法）。
+rootPackage : Root -> String
+rootPackage root = rootName root
+
+rootExports : Root -> Maybe (List String)
+rootExports (MkRoot dir name exports caps) = exports
+
+-- M27：该模块根所属包声明的效应能力（空列表 = 只能经 Base.IO）。
+rootCapabilities : Root -> List String
+rootCapabilities (MkRoot dir name exports caps) = caps
+
+contextDir : PackageContext -> String
+contextDir (MkPackageContext dir pkg roots name caps) = dir
+
+contextPackage : PackageContext -> Maybe Package
+contextPackage (MkPackageContext dir pkg roots name caps) = pkg
+
+contextRoots : PackageContext -> List Root
+contextRoots (MkPackageContext dir pkg roots name caps) = roots
+
+-- 上下文包名：base-only（ad-hoc）为空串；Loader 用它判同包可见性与效果内建。
+contextPackageName : PackageContext -> String
+contextPackageName (MkPackageContext dir pkg roots name caps) = name
+
+-- M27：本包声明的效应能力（入口文件用；base-only / ad-hoc 为 []）。
+contextCapabilities : PackageContext -> List String
+contextCapabilities (MkPackageContext dir pkg roots name caps) = caps
+
+packageManifest : Package -> Manifest
+packageManifest (Package manifest dependencies dir) = manifest
+
+packageDependencies : Package -> List Package
+packageDependencies (Package manifest dependencies dir) = dependencies
+
+packageDir : Package -> String
+packageDir (Package manifest dependencies dir) = dir
+
+packageName : Package -> String
+packageName package = case manifestName (packageManifest package) of
+  Nothing => ""
+  Just name => name
+
+packageExports : Package -> Maybe (List String)
+packageExports package = manifestExports (packageManifest package)
+
+-- ---------------------------------------------------------------- 路径工具
+splitSlashChars : List Int -> List String -> List Int -> List String
+splitSlashChars [] acc seg = reverse (strPack (reverse seg) :: acc)
+splitSlashChars (c :: rest) acc seg =
+  if c == 47 then splitSlashChars rest (strPack (reverse seg) :: acc) []
+  else splitSlashChars rest acc (c :: seg)
+
+splitOnSlash : String -> List String
+splitOnSlash path = splitSlashChars (strUnpack path) [] []
+
+-- 把段列表按 lexical 规则折叠；acc 为反向累积的已处理段。
+-- `..` 分支原本拆到 normalizeParent，形成互递归且下降位置不一致；这里内联成
+-- 同一个对 `segments` 的结构递归（每个分支都只递归到 rest），终止性可直接证明。
+normalizeAcc : Bool -> List String -> List String -> List String
+normalizeAcc absolute [] acc = acc
+normalizeAcc absolute (seg :: rest) acc = case seg of
+  "" => normalizeAcc absolute rest acc
+  "." => normalizeAcc absolute rest acc
+  ".." => case acc of
+    [] => if absolute then normalizeAcc absolute rest [] else normalizeAcc absolute rest [".."]
+    prev :: prevRest =>
+      if prev == ".." then normalizeAcc absolute rest (".." :: acc)
+      else normalizeAcc absolute rest prevRest
+  _ => normalizeAcc absolute rest (seg :: acc)
+
+-- 目录字符串规范化（lexical，不解析符号链接）："a/./b/../c/" -> "a/c"。
+-- 相对路径空结果归一为 "."，绝对路径空结果归一为 "/"。
+normalizeDir : String -> String
+normalizeDir path = if startsWith "/" path then case normalizeAcc True (splitOnSlash path) [] of
+  [] => "/"
+  segments => "/" ++ joinSlashes (reverse segments)
+else case normalizeAcc False (splitOnSlash path) [] of
+  [] => "."
+  segments => joinSlashes (reverse segments)
+
+-- 相对路径按当前工作目录归一为绝对路径（M26：向上找 manifest 前必须先绝对化，
+-- 否则 "." 这类相对路径的父目录仍是 "."，搜索在起点就停住）。
+absolutePath : String -> String
+absolutePath path =
+  if startsWith "/" path then normalizeDir path else normalizeDir (prim_getcwd ++ "/" ++ path)
+
+-- 依赖路径拼接：绝对路径直接用，相对路径相对 base 目录规范化。
+joinPath : String -> String -> String
+joinPath base rel =
+  if startsWith "/" rel then normalizeDir rel else normalizeDir (base ++ "/" ++ rel)
+
+joinPathsText : List String -> String
+joinPathsText [] = ""
+joinPathsText ([path]) = path
+joinPathsText (path :: rest) = path ++ ", " ++ joinPathsText rest
+
+-- ---------------------------------------------------------------- manifest
+-- path 是 vuna.toml 的路径；缺失时报 `pkg: missing vuna.toml in <目录>`。
+loadManifestAt : String -> Result Manifest
+loadManifestAt path = if prim_fileExists path then case parseManifest path (prim_readFile path) of
+  Err e => Err ("pkg: " ++ e)
+  Ok manifest => case validateManifest manifest of
+    Err e => Err ("pkg: " ++ e)
+    Ok validated => Ok validated
+else Err ("pkg: missing vuna.toml in " ++ normalizeDir (manifestDir path))
+
+manifestNameString : Manifest -> String
+manifestNameString manifest = case manifestName manifest of
+  Nothing => ""
+  Just name => name
+
+-- ---------------------------------------------------------------- 加载包
+-- 依赖链栈：每个元素是 (规范化目录, 包名)；只用于循环检测。
+memStackDir : a -> List (Pair a b) -> Bool
+memStackDir dir [] = False
+memStackDir dir (pair :: rest) = if firstOf pair == dir then True else memStackDir dir rest
+
+cyclePrefix : a -> List (Pair a b) -> Maybe (List (Pair a b))
+cyclePrefix dir [] = Nothing
+cyclePrefix dir (pair :: rest) = if firstOf pair == dir then Just [pair]
+else case cyclePrefix dir rest of
+  Nothing => Nothing
+  Just prefix => Just (pair :: prefix)
+
+cycleMessage : String -> Maybe String -> List (Pair String String) -> String
+cycleMessage dir Nothing stack = "pkg: dependency cycle at " ++ dir
+cycleMessage dir (Just dep) stack = case cyclePrefix dir stack of
+  Nothing => "pkg: dependency cycle at " ++ dir
+  Just prefix =>
+    "pkg: dependency cycle: " ++ joinArrows (append (map secondOf (reverse prefix)) [dep])
+
+dependencyNameOk : Maybe a -> a -> Bool
+dependencyNameOk Nothing actual = True
+dependencyNameOk (Just expected) actual = expected == actual
+
+mismatchMessage : Maybe String -> String -> String
+mismatchMessage Nothing actual = "pkg: package name mismatch"
+mismatchMessage (Just expected) actual =
+  "pkg: dependency " ++ expected ++ " expects package name " ++ expected ++ " but found " ++ actual
+
+loadDependencyList : Int -> List (Pair String String) -> String -> List (Pair String String) -> Result (List Package)
+loadDependencyList fuel stack baseDir deps = if fuel <= 0 then Err "DT: pkg fuel exhausted (internal: dependency graph too deep)"
+else case deps of
+  [] => Ok []
+  (Pair depName rel) :: rest => case loadPackageWalk (fuel - 1) stack (Just depName) (joinPath baseDir rel) of
+    Err e => Err e
+    Ok dependency => case loadDependencyList (fuel - 1) stack baseDir rest of
+      Err e => Err e
+      Ok dependencies => Ok (dependency :: dependencies)
+
+loadPackageWalk : Int -> List (Pair String String) -> Maybe String -> String -> Result Package
+loadPackageWalk fuel stack depName dir = if fuel <= 0 then Err "DT: pkg fuel exhausted (internal: dependency graph too deep)"
+else
+  let
+    normalized = normalizeDir dir
+  in if memStackDir normalized stack then Err (cycleMessage normalized depName stack)
+  else case loadManifestAt (normalized ++ "/vuna.toml") of
+    Err e => Err e
+    Ok manifest =>
+      let
+        name = manifestNameString manifest
+      in if dependencyNameOk depName name then case loadDependencyList (fuel - 1) (Pair normalized name :: stack) normalized (manifestDependencies manifest) of
+        Err e => Err e
+        Ok dependencies => Ok (Package manifest dependencies normalized)
+      else Err (mismatchMessage depName name)
+
+-- ---------------------------------------------------------------- 包名唯一性（M24.7）
+-- 包名不是纯标签，它参与两项语义判定：
+--   - `Loader.rootAllows` 的「同包永远可见」（`rootName root == importerPkg`）；
+--   - manifest `[capabilities] effects` 的显式能力表。
+-- 因此同一依赖图里两个**不同目录**共用包名是配置错误。旧实现 `dependencyRoots`
+-- 只按包名去重：后出现的那支依赖（连同它自己的整支依赖）被静默丢弃，模块解析
+-- 悄悄退化到前一个同名包（实测 `check` 输出 exit 0）。现在加载后显式校验：
+-- 同名同目录（diamond 依赖）合法，同名不同目录直接报错。
+collectPackageIds : Package -> List (Pair String String)
+collectPackageIds package =
+  Pair (packageName package) (packageDir package)
+    :: collectDependencyIds (packageDependencies package)
+
+collectDependencyIds : List Package -> List (Pair String String)
+collectDependencyIds [] = []
+collectDependencyIds (package :: rest) =
+  append (collectPackageIds package) (collectDependencyIds rest)
+
+lookupPackageDir : String -> List (Pair String String) -> Maybe String
+lookupPackageDir name [] = Nothing
+lookupPackageDir name ((Pair n dir) :: rest) =
+  if n == name then Just dir else lookupPackageDir name rest
+
+checkUniqueNamesGo : List (Pair String String) -> List (Pair String String) -> Result Int
+checkUniqueNamesGo seen [] = Ok 0
+checkUniqueNamesGo seen ((Pair name dir) :: rest) = case lookupPackageDir name seen of
+  Nothing => checkUniqueNamesGo (Pair name dir :: seen) rest
+  Just prevDir =>
+    if prevDir == dir then checkUniqueNamesGo seen rest
+    else Err
+      ("pkg: duplicate package name \"" ++ name ++ "\" in " ++ prevDir ++ " and " ++ dir ++ " (package names must be unique within a dependency graph)")
+
+checkUniquePackageNames : List Package -> Result Int
+checkUniquePackageNames packages = checkUniqueNamesGo [] (collectDependencyIds packages)
+
+-- 依赖 DFS 的初值（M30/C27：保留 1M，但补上「为什么不可能耗尽」的论证）。
+-- 测度：每处理一条依赖边 / 展开一个包目录都要消费 ≥1 步 fuel；`memStackDir` 的
+-- 循环检测保证一条依赖链上不重复进入同一目录，所以单条链上的展开深度 ≤ 链上的
+-- **不同目录数**（有限，≤ 路径字符串长度量级），整张图的展开次数 ≤ 可达依赖边数
+-- （有限）。1M 远高于任何可由内存构造的依赖图（每次展开都要读一个 vuna.toml，
+-- 真实耗时在同一数量级就会先超时），且耗尽时是明确的 internal 错误、不会静默
+-- 返回不完整图。若将来要做「按已访问目录数」的精确界，需要先收集 manifest 的
+-- 依赖表（那本身就要走同一趟 DFS），故这里选择证明界而不是额外的两趟扫描。
+pkgFuelBound : Int
+pkgFuelBound = 1048576
+
+-- 加载 dir/vuna.toml 及其 [dependencies] 路径依赖（递归、含循环检测）。
+loadPackage : String -> Result Package
+loadPackage dir =
+  andThen (loadPackageWalk pkgFuelBound [] Nothing dir)
+    (\package => andThen (checkUniquePackageNames [package]) (\_ => Ok package))
+
+-- ---------------------------------------------------------------- workspace
+loadMembers : String -> List String -> Result (List Package)
+loadMembers baseDir [] = Ok []
+loadMembers baseDir (rel :: rest) = case loadPackage (joinPath baseDir rel) of
+  Err e => Err e
+  Ok memberPackage => case loadMembers baseDir rest of
+    Err e => Err e
+    Ok memberPackages => Ok (memberPackage :: memberPackages)
+
+-- 根包 + [workspace].members（顺序同 manifest）；没有 members 时只含根包。
+-- 每个成员自己的依赖图已由 loadPackage 校验；这里再校验并集，捕获跨成员的
+-- 同名不同目录冲突。
+workspacePackages : String -> Result (List Package)
+workspacePackages rootBaseDir =
+  let
+    base = normalizeDir rootBaseDir
+  in case loadPackage base of
+    Err e => Err e
+    Ok rootPackage => case loadMembers base (manifestMembers (packageManifest rootPackage)) of
+      Err e => Err e
+      Ok members =>
+        andThen (checkUniquePackageNames (rootPackage :: members))
+          (\_ => Ok (rootPackage :: members))
+
+-- ---------------------------------------------------------------- 模块根
+dependencyRootOf : Package -> Root
+dependencyRootOf package =
+  MkRoot (packageDir package ++ "/lib") (packageName package) (packageExports package)
+    (manifestCapabilities (packageManifest package))
+
+-- DFS 后序：先深依赖、再直接依赖本体；按包名去重（首次出现保留）。
+-- 包名唯一性由 `checkUniquePackageNames` 在加载期保证（同名 ⇒ 同目录），所以
+-- 按名字去重不会再丢掉不同目录的依赖。
+-- 返回 (更新后的 seen, 根列表)。
+dependencyRoots : List String -> List Package -> Pair (List String) (List Root)
+dependencyRoots seen [] = Pair seen []
+dependencyRoots seen (package :: rest) = if memName (packageName package) seen then dependencyRoots seen rest
+else case dependencyRoots (packageName package :: seen) (packageDependencies package) of
+  Pair seen1 transitive => case dependencyRoots seen1 rest of
+    Pair seen2 siblings => Pair seen2 (append transitive (dependencyRootOf package :: siblings))
+
+-- 自身 lib 根在最前（exports = Nothing：本包内全部可见）；
+-- 随后是传递依赖的 lib 根（依赖优先的 DFS 后序），各自用 [export].modules 限制。
+packageRoots : Package -> List Root
+packageRoots package =
+  let
+    selfName = packageName package
+    selfRoot =
+      MkRoot (packageDir package ++ "/lib") selfName Nothing
+        (manifestCapabilities (packageManifest package))
+  in case dependencyRoots [selfName] (packageDependencies package) of
+    Pair seen roots => selfRoot :: roots
+
+-- 包入口固定为 <dir>/app/Main.vuna。
+packageEntry : Package -> String
+packageEntry package = packageDir package ++ "/app/Main.vuna"
+
+-- 已知 Package 的上下文（调用方已有包对象时不必重新读盘）。
+packageContext : Package -> PackageContext
+packageContext package =
+  MkPackageContext (packageDir package) (Just package) (packageRoots package) (packageName package)
+    (manifestCapabilities (packageManifest package))
+
+-- ---------------------------------------------------------------- 查找
+findManifestUpMaybe : Int -> String -> Maybe String
+findManifestUpMaybe fuel dir =
+  if fuel <= 0 then Nothing
+  else if prim_fileExists (dir ++ "/vuna.toml") then Just dir
+  else findManifestUpMaybeStep (fuel - 1) dir (manifestDir dir)
+
+findManifestUpMaybeStep : Int -> String -> String -> Maybe String
+findManifestUpMaybeStep fuel dir parent =
+  if fuel <= 0 then Nothing
+  else if parent == dir then Nothing else findManifestUpMaybe (fuel - 1) parent
+
+-- 从 startDir 向上找第一个含 vuna.toml 的目录（找不到 → Nothing）。
+-- 上界证明（M30/C27）：每上溯一层消耗 2 步（findManifestUpMaybe + Step），
+-- 层数 k 满足 2*(k-1) ≤ strLength start——absolute 路径每层至少占「/x」两字符，
+-- 且 normalizeDir 已去掉空段/`.`/`..`，所以 2*k ≤ strLength start + 2；
+-- 取 2*strLength start + 4 严格覆盖（含末层 parent==dir 的收尾）。
+findManifestDirMaybe : String -> Maybe String
+findManifestDirMaybe startDir =
+  let
+    start = normalizeDir startDir
+  in findManifestUpMaybe (2 * strLength start + 4) start
+
+-- `findManifestDir` 保留给 fmt / index 这类「向上找 workspace 根」的工具；
+-- 包上下文一律走 `contextForFile` / `contextForDir`。
+findManifestDir : String -> Result String
+findManifestDir startDir = case findManifestDirMaybe startDir of
+  Just dir => Ok dir
+  Nothing => Err ("pkg: no vuna.toml found from " ++ normalizeDir startDir ++ " (searched upward)")
+
+-- ---------------------------------------------------------------- base 定位（M26）
+-- base 只由两处决定：`VUNA_BASE`（显式覆盖，相对路径按 cwd 归一），或可执行文件
+-- 相对布局（<exeDir>/base、../base、../../base、../../../base）。候选目录必须含
+-- vuna.toml；都不成立时报错并列出尝试路径 + `VUNA_BASE` 提示。
+hasManifest : String -> Bool
+hasManifest dir = prim_fileExists (dir ++ "/vuna.toml")
+
+baseCandidates : String -> List String
+baseCandidates exeDir =
+  [ joinPath exeDir "base",
+    joinPath exeDir "../base",
+    joinPath exeDir "../../base",
+    joinPath exeDir "../../../base"
+  ]
+
+baseNotFound : List String -> Result a
+baseNotFound tried =
+  Err
+    ("pkg: cannot locate vuna-base (tried: " ++ joinPathsText tried ++ "); set VUNA_BASE to a directory containing vuna.toml")
+
+firstExistingBase : List String -> List String -> Result String
+firstExistingBase original [] = baseNotFound original
+firstExistingBase original (dir :: rest) =
+  if hasManifest dir then Ok dir else firstExistingBase original rest
+
+-- base 定位是启动期读环境/探路径的**动作**（A05 后零参顶层值会在模块初始化时求值），
+-- 因此函数化：调用方传 dummy 0，真正用到 base-only 上下文时才解析。
+locateBase : Int -> Result String
+locateBase _ =
+  let
+    env = prim_getenv "VUNA_BASE"
+  in if env == "" then
+    let
+      candidates = baseCandidates (manifestDir (absolutePath prim_execPath))
+    in firstExistingBase candidates candidates
+  else
+    let
+      dir = absolutePath env
+    in if hasManifest dir then Ok dir else baseNotFound [dir]
+
+-- ---------------------------------------------------------------- 包上下文
+-- base-only 上下文：不属于任何包的文件（ad-hoc 入口）。包名为空串（效果内建
+-- 仍被拒绝），模块根只有 base/lib，导出限制沿用 base 的 [export].modules。
+-- 入口能力为空（base 模块根各自携带 base manifest 的能力，不受影响）。
+baseOnlyContext : String -> Result PackageContext
+baseOnlyContext base =
+  andThen (loadPackage base)
+    (\package => Ok (MkPackageContext "" Nothing [dependencyRootOf package] "" []))
+
+-- 从 start（已绝对化的目录）向上找最近 manifest；找不到 → base-only。
+-- manifest 非法（解析/校验失败）必须报错，不回退到 base-only。
+contextAt : String -> Result PackageContext
+contextAt start = case findManifestDirMaybe start of
+  Just dir => andThen (loadPackage dir) (\package => Ok (packageContext package))
+  Nothing => andThen (locateBase 0) baseOnlyContext
+
+-- 文件入口：相对路径先按 cwd 绝对化，再从文件所在目录向上找最近 vuna.toml。
+contextForFile : String -> Result PackageContext
+contextForFile path = contextAt (manifestDir (absolutePath path))
+
+-- 目录入口（REPL / 工具从 cwd 取上下文）：同样先绝对化再向上找 manifest。
+-- 「显式包目录」语义（check/compile/build 的目录参数）不用本函数，而是直接
+-- `loadPackage`：只认该目录自己的 vuna.toml，不向上搜索。
+contextForDir : String -> Result PackageContext
+contextForDir dir = contextAt (absolutePath dir)

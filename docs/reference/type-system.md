@@ -1,151 +1,137 @@
-# 语言参考：记录、trait 与 do/Monad
+# 类型系统（依赖类型）
 
-本文覆盖 core-v0 之上的表达力：记录类型、trait 与实例、`do` 与 `Monad` / `Functor`。
-基础语法与模块系统见 [language.md](language.md)，标准库模块清单见 [stdlib.md](stdlib.md)。
+vuna 只有一套类型检查器：依赖类型（DT）的双向精化 + NbE 定义性相等。没有可切换的
+检查器，也没有「DT 子集」开关；所有命令（`check` / `compile` / `build` / `interp` /
+LSP / 测试夹具）都走它。本文是类型规则的语义页；语法与模块系统见
+[language.md](language.md)，记录 / trait / `do` 见 [records-traits.md](records-traits.md)，
+Core 表示与合一实现见 [core.md](core.md)，当前边界清单见 [limits.md](limits.md)。
 
-## 记录类型（M10.5）
+## 宇宙与 kind
 
-- 声明：`record Point where` 后跟缩进的字段列表，字段写作 `x : Int`；记录可以参数化
-  （`record Pair a b where`），记录类型名同时是它的构造器名；
-- 构造、访问、更新与模式：
+- **严格分层、非累积**：`Type i : Type (i+1)`；Pi formation 取 `max(i, j)`；
+  `Type i` 与 `Type j`（`i ≠ j`）**不相等**；没有 subtyping / cumulativity，
+  `Type : Type` 被拒绝。唯一的层级流动是显式写更小的宇宙：`Type 0` 可以赋给
+  `Type 1` 的签名（因为 `Type 0` 的类型就是 `Type 1`），反过来不行。
+- **data kind**：`data F : <kind>` 的 kind 必须是「Pi 链 → `Type l`」，`l ≥ 0`；
+  族层级就是末尾的 `l`（`data Vec : Type -> Nat -> Type` 的族层级是 0）；kind 里每个
+  binder 的域必须是类型。不以宇宙收尾的 kind 报 `TC_DataKindArrows`。
+- **构造子字段层级**：构造子类型 `... -> F r1..rk` 的前 `arity` 个 binder 是族参数 /
+  索引（不受层级限制），其余是字段；每个字段 binder 的域 sort 必须 `≤` 族层级，
+  违反报 `TC_CtorError`。检查在表面类型表达式上逐段做（带 binder 进入 `Ctx`），
+  依赖字段按正确上下文计算。
+- **没有宇宙多态**：族参数按 `Type 0` 落地，索引可以用更大层级的类型。层级显示不带
+  level（`Type 0` 与 `Type 1` 都打印成 `Type`），所以非累积的类型不匹配文案可能是
+  `expected Type, got Type`——拒绝正确，显示待补（见 [limits.md](limits.md)）。
+- 实现：`Elab/Meta.kindWellFormed`（kind 形状 / 层级）、`Elab/Data.elabCtor` +
+  `checkCtorFieldSorts`（字段层级）。
 
-  ```vuna
-  record Point where
-    x : Int
-    y : Int
+## data 与索引归纳族
 
-  p : Point
-  p = Point { y = 2, x = 1 }         -- 字段顺序任意，但必须给全
+- 声明形式是 `data F : <kind> where` 加缩进的构造子表。kind 的**箭头个数 = 族的
+  参数 / 索引个数（arity）**，域依次对应族应用的位置；`data Vec : Type -> Nat -> Type`
+  就是 `Vec a n`。族参数不写圆括号，构造子用**完整 telescope** 重新绑定：前 `arity`
+  个 binder 对应族参数 / 索引，其余是字段，结果索引写在类型里。
+- 构造子应用要写全**显式**族参数 / 索引（`Cons Int Zero 1 (Nil Int)`）；隐式索引
+  （`{n : Nat}`）由调用点或期望类型反推。推断仍是一阶的：没有期望类型、又需要解出
+  带局部变量的解时可能报 `TC_UnsolvedMetavar`。
+- 族的类型级应用（`Vec a n`）保持中性（`TGlobal` / `NGlobal` spine），只在 unification
+  时按定义性相等比较，不做类型级求值。
+- 没有内置的归纳相等族 `Eq`（DT 用来做证明的 `data Eq`）；`Base.Eq` 是 trait。`Nat` / `Vec` /
+  `Fin` 也是用户（或 `Base.Nat`、`Base.Vec`）声明的普通族。`Bool` / `List` / `IO` 的
+  canonical 身份见 [primitives.md](primitives.md)。
+- 索引 binder 的擦除：隐式索引无运行时字段，显式索引保留运行时字段（`Vec a n` 的
+  `(n : Nat)` 可被读回）；想擦除索引就把它写成隐式 binder，代价是分支体读不到它。
+- 实现：`Elab/Data`、`Elab/Types`；unification 见 [core.md](core.md)。
 
-  q : Point
-  q = { p | x = 3 }                  -- 字段更新，可一次更新多个字段
+## 依赖模式匹配与 case
 
-  sum : Point -> Int
-  sum p = case p of
-    Point { x = a, y = b } => a + b  -- 可省略字段（省略 = 通配）
+- `case e of` 的 scrutinee 必须是归纳族应用；分支绑定构造子的**全部显式 telescope
+  binder**（族参数、索引与字段各占一个位置），隐式 binder 不消费子模式。
+- **索引精化**：每个分支把构造子结果索引与 scrutinee 索引做 unification，得到该分支的
+  索引等式（`level ↦ value` 精化），分支体的期望类型随之精化。打在裸形参或包装族上时
+  还会把 scrutinee 的值与构造子结果值再合一（scrutinee 反射）。
+- **省略与写出共用同一判据**（`Elab.Case.BranchVerdict`）：
+  - 构造子结果索引与 scrutinee 索引一阶合一失败 ⇒ 分支不可达（`TC_ImpossibleBranchIndex`）；
+  - 分支上下文含空归纳族（如 `Fin Zero`）⇒ 不可达（`TC_ImpossibleBranchEmptyCtx`）；
+  - 不可达分支**省略合法、写出报错**；可达分支必须写出，写出即接受。
+  - 索引含中性项时无法证明空族，判据保守判「可能非空」：分支必须写出且会被接受。
+- `case` 的**唯一规范形**：先做家族无关的源级校验（兜底位置、重复构造子、重复字面量），
+  需要嵌套模式 / 同构造子多分支时经模式矩阵降级（每构造子一个分支 + 变量子模式），
+  再按 scrutinee 家族降低（`Bool` → `if`，`Int` / `String` 字面量 → `if` 链，归纳族 →
+  `TCase`）。多 clause 函数与源级 `case` 共用这套模式矩阵。
+- **字面量 case 必须有变量 / 通配兜底**（`TC_IntStringCaseNeedsFallback`）；
+  `Bool` 的 `case` 只认 `True` / `False` / 变量 / 通配（`TC_BoolCaseRestriction`）。
+- **诊断**：重复构造子分支、重复字面量、兜底之后的分支分别是
+  `TC_RedundantCtorBranch` / `TC_RedundantLiteralBranch` / `TC_BranchAfterCatchAll`；
+  兜底不在最后报 `TC_CatchAllNotLast`；漏写可达分支报 `TC_NotExhaustive`。
+  「需要矩阵消解的同构造子多分支」不是冗余——矩阵会让两条都可达。
+- 语法与 as-pattern 的当前适用范围见 [language.md](language.md)；实现见
+  `Elab/Case`、`Elab/Match`、[core.md](core.md)。
 
-  onlyX : Point -> Int
-  onlyX p = case p of
-    Point { x } => x                 -- pun：等价于 Point { x = x }
-  ```
+## 相等与比较
 
-  字段访问写作 `p.x`，支持链式（如 `s.start.x`）；
-- 实现上记录在类型检查阶段降级为单构造器 `data`（DT 路径由 `DtRecords` 做同样的
-  降级，M23 起含 record update 与参数化 record）：构造 = 构造器应用，字段访问/更新 =
-  内联 `case`，所以核心求值器与 codegen 行为一致；
-- 字段访问/更新的 base 类型必须可推断；推断不出时报
-  `cannot resolve record type ... add a type signature`，给函数参数补类型签名即可；
-- 导出遵循模块规则：`T` 只导出记录类型（构造器隐藏，跨模块不能构造/模式匹配，即抽象），
-  `T(..)` 才公开记录构造器；
-- 错误：缺字段（`missing field`）、重复字段（`duplicate field`）、未知字段
-  （`unknown field`）、对非记录做字段访问/更新（`not a record type`）；
-- 记录支持 `deriving (Show, Eq)`（`Show` 要求非参数化记录且字段可 show，`Eq` 支持
-  参数化记录）；记录字段访问/更新在 base 类型未定时报错。
+- **`==` / `/=` 是证据驱动的**，只有两条路径：
+  1. `Int` / `String` 的内建特化（`bi_eq_int` / `bi_eq_str`）；
+  2. `Eq` 证据：手写实例、`deriving (Eq)` 生成的实例、约束实例。
+  具体类型没有实例、函数类型相等、`Eq` 类不在作用域，都在 `check` 期报错
+  （`TC_NoInstanceFound` / `TC_EqRequiresEvidence`）。**没有泛型结构比较兜底**，
+  interp 与编译产物也没有第二套相等算法。
+- **`<` / `<=` / `>` / `>=`**：`Int` 内建特化；`String` / `Bool` 保留泛型运行时；
+  其它类型必须有 `Ord` 证据，无实例 / 无类在 `check` 期报错。
+- 相等发生在**刚性类型变量**上时，搜不到实例会提升成隐式字典参数（延迟到调用点），
+  实例（含 `deriving` 生成的）仍优先。`Eq` / `Ord` / `Show` 的声明与实例在
+  `Base.Eq` / `Base.Ord` / `Base.Show`，随 `Prelude` 自动导入；trait 与实例语义见
+  [records-traits.md](records-traits.md)。
+- **type-as-value**：不引入 type codes。Type 级等式走**擦除的 `Eq` 证据 + `cast`
+  组合子**；把类型放到**运行时位置**仍被擦除检查拒（`CG_TypeUsedAtRuntime` /
+  `CG_TypeLevelBindingRuntime` / `CG_TypeLevelNameRuntime`）。显式 `Type` binder 按
+  擦除规则处理，因此「类型当显式实参」（`Refl2 Int`）可行，但它不是 type-as-value。
+- **依赖索引取值**用 **Tarski 式存在式**表达：运行时类型码 `Ty` + 指标族
+  `Tm : Ty -> Type` + 存在式 `Some`，让 `Ctx n -> Fin n -> Some` 这类 lookup 可写成
+  普通函数。泛型 Σ 的值级构造（字段类型依赖运行时值）仍是边界，归 F4
+  （[limits.md](limits.md) / [debt.md](debt.md)）。
+- **隐式值参数 `{x : a}`**：域是类型 / 索引 / 证明域时可用；隐式 binder 恒擦除，值只
+  参与类型 / 索引 / 证明，子句体不能按名字引用。构造子的未饱和引用 / 应用按 η 展开
+  （`cong ... Succ ...`、裸构造子当值传递后再应用都可用）。隐式模式 `{p}` 与
+  `auto` / 隐式等式搜索未实现（F4）。
 
-## trait 与实例（M10.5）
+## 擦除与运行时表示
 
-- 语法：
+- **唯一判据**：`Elab.Meta.binderRig` 构造 `Rig`，`Core.rigIsErased` 读取；
+  隐式 binder 恒 `Rig0`；显式 binder 仅当域在类型层（宇宙，或域全为类型层的 Pi 链）才
+  `Rig0`；其余 `Rig1`。
+- `Rig0` binder 不进运行时表示（不生成参数、不算字段）；`Rig1` 保留。**不做整程序
+  使用分析**：想擦除的索引写成隐式 binder。
+- **类型族**（结果以 `Type` 收尾的 Pi 链，如 `sel : Nat -> Type`）整体擦除，不生成运行时
+  定义；在运行时定义里把擦除参数当值用报错。
+- `axiom name : Ty` 是无运行时定义的擦除 / 类型层声明；运行时（非擦除位置）使用报
+  `CG_AxiomAtRuntime`。
+- 擦除相关实现与 codegen 不变量（构造子字段形状 keep flags、作用域护栏、唯一名字）见
+  [core.md](core.md)；codegen 输出见 [compiler.md](compiler.md)。
 
-  ```vuna
-  trait Pretty a where
-    pretty : a -> String
+## 定义与终止性
 
-  data Color : Type where
-    Red : Color
-    Blue : Color
-  deriving (Show, Eq)
+- 顶层定义必须有类型签名；签名里的自由小写名量化为隐式类型参数（量化 banned 集按
+  模块作用域计算）。定义子句参数少于签名时按剩余 Pi 链 **η 展开**；多于签名报
+  `TC_DefMoreParams`。
+- **终止性**：递归（含互递归）必须能证明下降——每个循环至少一条结构下降边（实参是同一
+  形参的真子项，含嵌套模式、`case` 分支、`f v` 形式的单 clause 投影），或带守卫的 Int
+  （`n - k` 且能证明 `n > 0`）。检查按调用图 + SCC 进行，每个环都要有严格下降边；
+  没有按包名的检查豁免。无守卫的 `n - 1`、升序 `i + 1`、无下降的互递归报
+  `TC_CannotProveTermination`。measure 站点表与边界见 [limits.md](limits.md)。
+- **零参顶层定义求值一次**：生成 `let v_x = body`；递归组里的零参非构造子 RHS 报
+  `CG_RecursiveValueDefinition`。
+- **`main`**：`check` 不要求 `main`，`compile` / `build` 要求；`main` 可为
+  `Int` / `String` / `Bool` 或 `IO a`（`IO` 只认 canonical `Base.IO.IO`）。
+  `vuna interp` 是纯核心求值，只展示 `Int` / `String` / `Bool`，任何 `main : IO a`
+  一律明确报错。
+- 洞 `_` 未解时报 `TC_UnsolvedHole`（带位置与目标类型）；`vuna goal` 列出全部洞
+  （[tooling.md](tooling.md)）。
 
-  instance Pretty Color where          -- 未命名实例 = default（相干默认）
-    pretty c = case c of
-      Red => "red"
-      Blue => "blue"
+## 与其它页的分工
 
-  instance Pretty Color as fancy where -- 命名实例
-    pretty c = "fancy"
-
-  main : String
-  main = pretty Red ++ "/" ++ pretty @fancy Blue ++ "/" ++ show Red
-  ```
-
-- 上面的 `main : String` 是 `vuna test` / 纯 `vuna interp` 的调试约定；可执行包
-  （`vuna build` / `--split`）要求 `main : IO a`（M12.6）。`vuna interp` 走 DT 核心
-  求值，任何 `main : IO a` 一律报错（见 [limits.md](limits.md)）。
-- trait 只支持单参数；default 实例按 (trait, 类型) 全局唯一（重复报
-  `duplicate instance`，含 `deriving` 生成的实例）；
-  命名实例不自动参与解析，只能用 `@name` 选择（可 `@M.name`，M 需已导入）；
-  trait 与类型都不在本模块定义时禁止写 default，必须命名（孤儿规则）；
-- `deriving (Show, Eq, Ord)` 生成 default 实例：`Show` 只支持非参数化类型且字段可
-  show，`Eq` 支持参数化类型，`Ord` 支持可比较类型；derive 与手写同名 default 冲突报
-  `duplicate instance`；实例里出现 trait 未声明的方法报
-  （`instance has unknown method`）；
-- 内置 trait：`Show`（`show`）、`Eq`（`eq` / `neq` 对应 `==` / `/=`）、`Ord`
-  （`lt` / `le` / `gt` / `ge` 对应 `<` / `<=` / `>` / `>=`）；运算符在类型确定时
-  静态派发到实例方法。内建/结构回退：`Eq` 覆盖 data/record/`List`；`Show` 覆盖
-  `Int` / `String` / `Bool` 与非参数化 data/record；`Ord` 的运行时内建回退只覆盖
-  `Int` / `String` / `Bool`（`Int` 用原生比较，`String` / `Bool` 走运行时结构比较），
-  其它类型报 `no instance Ord ...`；
-- **结构回退**：`==` / `/=` 在**具体类型**且没有可用 `Eq` 实例时退回运行时结构比较
-  （`bi_eq_generic`，核心求值器/擦除 codegen 同一语义），编译器源码因此可以在不写
-  `deriving` 的前提下比较列表/记录；比较发生在**刚性类型变量**上时保持 M22 语义——
-  搜不到实例时提升成隐式字典参数（`deferEqDict`），实例（含 `deriving (Eq)` 生成的）
-  仍优先。有实例时仍优先字典，`deriving (Eq)` 的行为不变。
-- 实现（M10.5c）与限制：具体类型的调用点仍走**静态派发**；当方法调用点类型是
-  **裸类型变量**时（如 `showIt x = show x`）做**方法级字典穿参**——类型检查给该函数
-  增加方法函数参数（字典按 trait 方法扁平化），调用点静态传入具体实例方法或调用者的
-  字典参数，支持跨函数传播、前向引用与递归；例如 `data Dummy deriving (Eq)` 加
-  `showIt x = show x` 是合法程序（调用 `showIt 42` / `showIt "s"` 时分别传入对应
-  `show` 实现）。`Eq` / `Ord` 在类型无法确定时（含 `List a` 等结构化泛型）仍回退到
-  运行时结构比较；
-  `Show` / 用户 trait 的结构化泛型（如 `show (List a)`）仍不支持（只有裸类型变量
-  支持字典穿参）并报错；**高阶 kind**（`Ty.TApp` + kind 元数）与**一般约束泛化**
-  （trait 参数本身是类型构造器变量，如 `Monad m` 的字典穿参）已在 M11 实现；
-  default 实例的可见性按整个程序（flatten）计算，未做 import 图级细化；
-- **求值与降级**：`vuna interp` 一律先经 DT 精化（`DtRecords` / `DtDerive`
-  做记录、trait、deriving 降级），再用核心求值器求 `main` 的值；类型/覆盖性错误在
-  求值前报出。`vuna test` / `vuna repl` 与 `interp` 共用同一核心求值器；
-- 命名空间与导出：trait 名在类型命名空间、方法名在值命名空间；无模块头 = 全部导出
-  （含方法），显式导出列表需 `Trait(..)` 才导出方法；命名实例名按普通值名导出/限定
-  （显式列表里可写 `fancy`，app 侧用 `@M.fancy` 选择）；
-- 实现：`==` / `/=` / `<` / `<=` / `>` / `>=` 由 `Eq` / `Ord` trait 承担（删除旧的
-  `specializeCmp` 特化）；Show 由 `DtDerive` 生成（record 用源名、String 带引号）。
-
-## do、Monad 与 Functor（M11）
-
-- 语法：`do` 块，语句是 `pat <- expr`（pat 只支持变量或 `_`）或裸表达式，
-  最后一条必须是裸表达式；`a >>= f` 等价 `bind a f`，`a >> b` 等价
-  `bind a (\_ -> b)`（顺序执行）。
-- `do` 在 **loader** 里 desugar 成 `bind` / lambda（parser 保留 `EDo`，formatter
-  因此能还原 do 语法）：
-
-  ```vuna
-  import Base.Monad
-  import Base.Maybe
-
-  safeDiv : Int -> Int -> Maybe Int
-  safeDiv a b = if b == 0 then Nothing else Just (a / b)
-
-  main : Maybe Int
-  main = do
-    x <- safeDiv 10 2
-    y <- safeDiv x 0
-    pure (x + y)
-  ```
-
-- `Functor`（`fmap`）与 `Monad`（`bind` / `pure`）在 `base/lib/Base/Monad.vuna`；
-  `Maybe` / `List` / `IO` 各有 default 实例。`Monad m` 的 m 是 kind `* -> *`：
-  trait 声明的类型参数可以当类型构造器应用（`m a`），实例 head 是类型构造器本身
-  （`instance Monad Maybe`），kind 不符（如 `instance Monad Int`）在声明期报错。
-- 一般约束泛化：签名里出现高阶类型变量（如 `bindPair : m a -> m b -> m (Pair a b)`）
-  时，类型检查自动给函数加方法级字典参数；调用点按实际类型静态派发或继续穿参。
-- `do` 对 `Maybe` / `List` / `IO` 都生效。`IO` 是 `base/lib/Base/IO.vuna` 的抽象类型
-  （构造器私有）；组合统一用 `Functor` / `Monad` trait 的 `fmap` / `bind` / `pure`、
-  `>>=` 与 `do`，不再导出 `bindIO` / `pureIO` / `fmapIO`。效果 API 直接返回 IO：
-  `print` / `println` / `readFile` / `writeFile` / `readLine` / `readDir` /
-  `isDirectory` / `makeDir` / `removeFile` / `fileExists` / `getArgs` / `exit`
-  （例如 `getArgs : IO (List String)`、`print : String -> IO Int`）；
-  内部实现用不导出的 `prim_*` 原语。
-  **没有公开的 `runIO`/`unsafeRunIO`**：IO 动作只能由运行时在 `main` 处执行。
-  可执行包/`vuna build` 要求 `main : IO a`；`vuna interp`/`vuna test` 保留
-  “显示纯 main 结果”的调试约定，但 interp 是纯核心求值——效果不会真正执行，
-  **任何 `main : IO a` 一律报错**（只展示 `Int`/`String`/`Bool`），需要效果时用
-  `compile` + 运行产物；入口代码里同样不能直接调用 effectful 内建。
+- 语法、`let` / `where`、模块与命名空间：[language.md](language.md)
+- 记录、trait / 实例 / `deriving`、`do` / Monad：[records-traits.md](records-traits.md)
+- Core 表示、NbE、合一、精化器、擦除 codegen 不变量：[core.md](core.md)
+- 原语身份、Int / String 语义、效果能力：[primitives.md](primitives.md)
+- 当前限制与未来能力归属：[limits.md](limits.md)、[debt.md](debt.md)

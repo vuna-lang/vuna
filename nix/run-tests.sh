@@ -14,6 +14,10 @@
 #                    纯数字 / 通配时只按序号匹配（34 → 34；3* → 3、30–34）。
 #                    可重复，也可用逗号分隔：--only 'fmt,DT'。
 #   --list           打印全部章节（序号 + 标题）后退出 0。
+  --jobs N         并行跑 N 个章节（默认 1）。各章节在独立临时目录里跑；
+                   章节之间不共享状态，可安全并行（写仓库 .output 的章节会竞争，
+                   用 --only 排除即可）。
+#   --jobs N         并行跑 N 个章节（默认 1；N=8 时全量约 4–6× 加速）。
 #   --vuna MODE      local（默认，用本仓库 nix build .#vuna / .#vuna-seed）
 #                    或 stable（用注册表别名 vuna#vuna / vuna#vuna-seed）。
 #   -h, --help       显示本帮助。
@@ -103,12 +107,29 @@ add_patterns() { # raw：逗号分隔的模式串
 
 only_patterns=()
 want_list=0
+want_jobs=1
 vuna_mode=local
 
 while [ "$#" -gt 0 ]; do
   case $1 in
     --list)
       want_list=1
+      ;;
+    --jobs)
+      [ "$#" -ge 2 ] || die "--jobs 需要一个正整数（例如 --jobs 8）"
+      want_jobs=$2
+      shift
+      ;;
+    --jobs=*)
+      want_jobs=${1#--jobs=}
+      ;;
+    -j)
+      [ "$#" -ge 2 ] || die "-j 需要一个正整数（例如 -j 8）"
+      want_jobs=$2
+      shift
+      ;;
+    -j*)
+      want_jobs=${1#-j}
       ;;
     --only)
       [ "$#" -ge 2 ] || die "--only 需要一个模式参数（例如 --only dt；用 --list 查看章节）"
@@ -146,6 +167,12 @@ case $vuna_mode in
   local | stable) ;;
   *) die "--vuna 只支持 local 或 stable：$vuna_mode" ;;
 esac
+
+case $want_jobs in
+  "" | *[!0-9]*) die "--jobs 必须是正整数：$want_jobs" ;;
+  0) die "--jobs 必须 >= 1：$want_jobs" ;;
+esac
+jobs=$want_jobs
 
 if [ -n "${VUNA_REPO:-}" ] && [ ! -d "$VUNA_REPO" ]; then
   die "VUNA_REPO 不是目录：$VUNA_REPO"
@@ -340,8 +367,8 @@ resolve_tools() {
 
 resolve_tools || exit 1
 
-if [ "${#only_patterns[@]}" -eq 0 ]; then
-  # 无 --only：直接 exec 原脚本，行为与 sh test/run-tests.sh 等价。
+if [ "${#only_patterns[@]}" -eq 0 ] && [ "$jobs" -eq 1 ]; then
+  # 无 --only 且串行：直接 exec 原脚本，行为与 sh test/run-tests.sh 等价。
   exec "${BASH:-bash}" "$run_script"
 fi
 
@@ -463,22 +490,95 @@ if ! WORK_TMP=$(mktemp -d "${TMPDIR:-/tmp}/vuna-run-tests.XXXXXX"); then
 fi
 
 split_script "$run_script" "$WORK_TMP"
+if [ "${#only_patterns[@]}" -eq 0 ]; then
+  # --jobs 且未给 --only：默认跑全部章节（并行模式需要按章节切分）。
+  only_patterns=("*")
+fi
 select_parts "$WORK_TMP"
 
 if [ "${#selected[@]}" -eq 0 ]; then
   die "没有章节匹配：${only_patterns[*]}（用 --list 查看全部章节）"
 fi
 
-compose_selected "$WORK_TMP"
+test_dir=$(dirname "$run_script")
+cd "$test_dir" || die "无法进入测试目录：$test_dir"
 
-warn "只运行 ${#selected[@]}/$SPLIT_COUNT 个章节："
+if [ "$jobs" -le 1 ]; then
+  compose_selected "$WORK_TMP"
+  warn "只运行 ${#selected[@]}/$SPLIT_COUNT 个章节："
+  for label in "${selected_labels[@]}"; do
+    printf '  %s\n' "$label" >&2
+  done
+  # 不用 exec：保留 trap，退出时清理临时脚本目录。
+  "${BASH:-bash}" "$WORK_TMP/selected.sh"
+  status=$?
+  exit "$status"
+fi
+
+# ---- 并行模式（--jobs N）：每个章节 = preamble + 该章节 + 结尾 summary，
+# 各自在独立临时目录（$tmp）里跑；日志按章节顺序回放，便于定位失败。
+compose_one() { # tmpdir idx
+  local tmpdir=$1 idx=$2 out=$1/job-$idx.sh
+  cat "$tmpdir/preamble.sh" >"$out"
+  printf '\n' >>"$out"
+  cat "$tmpdir/parts/$idx.sh" >>"$out"
+  printf '\n' >>"$out"
+  cat "$tmpdir/tail.sh" >>"$out"
+}
+
+warn "并行运行 ${#selected[@]}/$SPLIT_COUNT 个章节（--jobs $jobs）："
 for label in "${selected_labels[@]}"; do
   printf '  %s\n' "$label" >&2
 done
 
-test_dir=$(dirname "$run_script")
-cd "$test_dir" || die "无法进入测试目录：$test_dir"
-# 不用 exec：保留 trap，退出时清理临时脚本目录。
-"${BASH:-bash}" "$WORK_TMP/selected.sh"
-status=$?
-exit "$status"
+running=0
+for idx in "${selected[@]}"; do
+  compose_one "$WORK_TMP" "$idx"
+  (
+    "${BASH:-bash}" "$WORK_TMP/job-$idx.sh" >"$WORK_TMP/out-$idx.log" 2>&1
+    printf '%s\n' "$?" >"$WORK_TMP/rc-$idx"
+  ) &
+  running=$((running + 1))
+  if [ "$running" -ge "$jobs" ]; then
+    wait -n || true
+    running=$((running - 1))
+  fi
+done
+wait
+
+total_pass=0
+total_fail=0
+bad_sections=0
+for idx in "${selected[@]}"; do
+  cat "$WORK_TMP/out-$idx.log"
+  rc=$(cat "$WORK_TMP/rc-$idx" 2>/dev/null || printf '1')
+  case "$rc" in
+    0) ;;
+    *) bad_sections=$((bad_sections + 1)) ;;
+  esac
+  line=$(tail -n 1 "$WORK_TMP/out-$idx.log")
+  case "$line" in
+    'vuna tests passed ('*)
+      n=${line#vuna tests passed (}
+      n=${n%% checks)*}
+      case "$n" in "" | *[!0-9]*) n=0 ;; esac
+      total_pass=$((total_pass + n))
+      ;;
+    *' passed, '*' failed')
+      p2=${line%% passed,*}
+      f2=${line#*passed, }
+      f2=${f2%% failed*}
+      case "$p2" in "" | *[!0-9]*) p2=0 ;; esac
+      case "$f2" in "" | *[!0-9]*) f2=0 ;; esac
+      total_pass=$((total_pass + p2))
+      total_fail=$((total_fail + f2))
+      ;;
+    *) ;;
+  esac
+done
+
+if [ "$total_fail" -ne 0 ] || [ "$bad_sections" -ne 0 ]; then
+  printf '%s passed, %s failed (§%s 章节失败)\n' "$total_pass" "$total_fail" "$bad_sections"
+  exit 1
+fi
+printf 'vuna tests passed (%s checks)\n' "$total_pass"

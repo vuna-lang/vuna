@@ -1,3 +1,0 @@
--- M18.5：域是宇宙的 lambda 形参仍然擦除，被当运行时值使用必须报错。
-f : (a : Type) -> Type -> Type
-f a b = a

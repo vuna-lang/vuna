@@ -1,0 +1,4 @@
+-- M28 决策 1 反例：严格分层、非累积——`Type 0` 住 `Type 1`，不能当成 `Type` 用
+-- （没有 subtyping / cumulativity；`Type 0` 与 `Type 1` 不相等）。
+bad : Type
+bad = Type 0

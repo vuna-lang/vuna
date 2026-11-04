@@ -1,0 +1,4 @@
+import Base.Bool
+
+main : Int
+main = if Yes then 1 else 2

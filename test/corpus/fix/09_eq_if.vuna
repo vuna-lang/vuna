@@ -1,0 +1,5 @@
+pick : String -> Int
+pick a = if a == "x" then 1 else if a == "y" then 2 else 0
+
+main : Int
+main = pick "x"

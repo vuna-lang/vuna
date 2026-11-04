@@ -1,0 +1,4 @@
+module Visible (answer) where
+
+answer : Int
+answer = 42

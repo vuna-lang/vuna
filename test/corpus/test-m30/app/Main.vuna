@@ -1,0 +1,3 @@
+-- 夹具入口：`vuna test` 只跑 test/；这里让根包本身也能 `vuna check` / `vuna build`。
+main : Int
+main = 0

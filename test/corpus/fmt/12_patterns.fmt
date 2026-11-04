@@ -1,7 +1,3 @@
-data Bool : Type where
-  False : Bool
-  True : Bool
-
 data List a : Type where
   Nil : List a
   Cons : a -> List a -> List a

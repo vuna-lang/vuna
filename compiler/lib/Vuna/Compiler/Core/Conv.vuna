@@ -1,0 +1,477 @@
+module Vuna.Compiler.Core.Conv
+  ( conv
+  , convBoth
+  , convCaseAlts
+  , convNeutral
+  , convOneAlt
+  , convSpines
+  , convValueLists
+  , etaLeft
+  , etaRight
+  , mismatchAt
+  , solveMeta
+  , solveMetaNew
+  ) where
+
+-- Vuna.Compiler.Core.Conv：定义性相等（beta + delta + eta）与元变量求解。
+--
+-- 返回更新后的元变量解表。M28：空 spine 就地检查作用域；非空 spine 走 Miller pattern
+-- unification（局部中性变量 spine → λ 抽象）；非 pattern 形状明确报错。
+-- M24 后维护（源码重组）：从原 Core.vuna 拆出；依赖 Core.Term（表示层）与 Core.Eval（force/quote/show）。
+import Vuna.Compiler.Common
+import Vuna.Compiler.Core.Term
+import Vuna.Compiler.Core.Eval
+import Vuna.Compiler.Diagnostics
+import Vuna.Compiler.Debug
+
+-- ---------------------------------------------------------------
+-- 定义性相等（beta + delta + eta）与一阶元变量求解
+-- 返回更新后的元变量解表。
+-- ---------------------------------------------------------------
+-- 快速相等判定：只认「已经决定相等」的原子形态，**不做 delta 展开**。
+-- conv 每个节点都要 force 两侧（默认 fuel=512，深展开），而大量比较是同一类型常量
+-- （`String` vs `String`、`Type`、零参构造子、同层局部变量）。命中时直接成功，
+-- 省掉两次 force 与后续递归（实测 forceVal 单次 check 被调用 527 万次，占 check 大头）。
+fastSame : Value -> Value -> Bool
+fastSame a b = case a of
+  VType i => case b of
+    -- M29：Level 是 `MkLevel` 数据；用 `levelEq`（内部只比 Int 字段）避免在相等
+    -- 路径上依赖泛型结构比较兜底（`==` 的兜底将在 M29 删除）。
+    VType j => levelEq i j
+    _ => False
+  VInt i => case b of
+    VInt j => i == j
+    _ => False
+  VStr i => case b of
+    VStr j => i == j
+    _ => False
+  VBool i => case b of
+    VBool j => if i then j else notBool j
+    _ => False
+  VNeutral n1 => case b of
+    VNeutral n2 => sameNeutralAtom n1 n2
+    _ => False
+  VCon c1 args1 => case b of
+    VCon c2 args2 => c1 == c2 && isNilList args1 && isNilList args2
+    _ => False
+  _ => False
+
+isNilList : List a -> Bool
+isNilList [] = True
+isNilList _ = False
+
+sameNeutralAtom : Neutral -> Neutral -> Bool
+sameNeutralAtom (NGlobal g1 sp1) n2 = case n2 of
+  NGlobal g2 sp2 => g1 == g2 && isNilList sp1 && isNilList sp2
+  _ => False
+sameNeutralAtom (NVar name1 lvl1 sp1) n2 = case n2 of
+  NVar name2 lvl2 sp2 => name1 == name2 && lvl1 == lvl2 && isNilList sp1 && isNilList sp2
+  _ => False
+
+convFuel : Int -> HashTbl Term -> Sols -> Int -> Value -> Value -> Result Sols
+convFuel fuel defs sols depth a b = if fuel <= 0 then Err "DT: internal: conv fuel exhausted"
+else if fastSame a b then Ok sols
+else
+  let
+    a2 = force defs sols defaultFuel a
+    y2 = force defs sols defaultFuel b
+  in case a2 of
+    VMeta m sp => solveMetaFuel (fuel - 1) defs sols depth m sp y2
+    _ => case y2 of
+      VMeta m sp => solveMetaFuel (fuel - 1) defs sols depth m sp a2
+      _ => convBothFuel (fuel - 1) defs sols depth a2 y2
+
+convBothFuel : Int -> HashTbl Term -> Sols -> Int -> Value -> Value -> Result Sols
+convBothFuel fuel defs sols depth a b = if fuel <= 0 then Err "DT: internal: conv fuel exhausted"
+else case a of
+  VType i => case b of
+    VType j => if levelEq i j then Ok sols else mismatchAt depth a b
+    _ => mismatchAt depth a b
+  VPi name implicit rig dom cod => case b of
+    VPi name2 implicit2 rig2 dom2 cod2 => if implicit == implicit2 then andThen (convFuel (fuel - 1) defs sols depth dom dom2) (\sols2 => let
+      v = freshVar name depth
+    in convFuel (fuel - 1) defs sols2 (depth + 1) (applyClosure cod v) (applyClosure cod2 v)
+    )
+    else mismatchAt depth a b
+    _ => mismatchAt depth a b
+  VLam name rig clo => case b of
+    VLam name2 rig2 clo2 =>
+      let
+        v = freshVar name depth
+      in convFuel (fuel - 1) defs sols (depth + 1) (applyClosure clo v) (applyClosure clo2 v)
+    _ => etaRightFuel (fuel - 1) defs sols depth name clo b
+  VNeutral n => case b of
+    VNeutral n2 => convNeutralFuel (fuel - 1) defs sols depth n n2 a b
+    VLam name2 rig2 clo2 => etaLeftFuel (fuel - 1) defs sols depth a name2 clo2
+    _ => mismatchAt depth a b
+  VInt n => case b of
+    VInt m => if n == m then Ok sols else mismatchAt depth a b
+    _ => mismatchAt depth a b
+  VStr s => case b of
+    VStr s2 => if s == s2 then Ok sols else mismatchAt depth a b
+    _ => mismatchAt depth a b
+  VBool x => case b of
+    VBool y => if x == y then Ok sols else mismatchAt depth a b
+    _ => mismatchAt depth a b
+  VCon c args => case b of
+    VCon c2 args2 =>
+      if c == c2 then convValueListsFuel (fuel - 1) defs sols depth args args2
+      else mismatchAt depth a b
+    _ => mismatchAt depth a b
+  VApp f x => case b of
+    VApp f2 x2 =>
+      andThen (convFuel (fuel - 1) defs sols depth f f2)
+        (\sols2 => convFuel (fuel - 1) defs sols2 depth x x2)
+    _ => mismatchAt depth a b
+  VCase scrut alts => case b of
+    VCase scrut2 alts2 =>
+      andThen (convFuel (fuel - 1) defs sols depth scrut scrut2)
+        (\sols2 => convCaseAltsFuel (fuel - 1) defs sols2 depth alts alts2)
+    _ => mismatchAt depth a b
+  VIf c th el => case b of
+    VIf c2 th2 el2 =>
+      andThen (convFuel (fuel - 1) defs sols depth c c2)
+        (\sols2 => andThen (convFuel (fuel - 1) defs sols2 depth th th2) (\sols3 => convFuel (fuel - 1) defs sols3 depth el el2))
+    _ => mismatchAt depth a b
+  _ => mismatchAt depth a b
+
+etaLeftFuel : Int -> HashTbl Term -> Sols -> Int -> Value -> String -> Closure -> Result Sols
+etaLeftFuel fuel defs sols depth a name clo = if fuel <= 0 then Err "DT: internal: conv fuel exhausted"
+else
+  let
+    v = freshVar name depth
+  in convFuel (fuel - 1) defs sols (depth + 1) (applyValue a v) (applyClosure clo v)
+
+etaRightFuel : Int -> HashTbl Term -> Sols -> Int -> String -> Closure -> Value -> Result Sols
+etaRightFuel fuel defs sols depth name clo b = if fuel <= 0 then Err "DT: internal: conv fuel exhausted"
+else
+  let
+    v = freshVar name depth
+  in convFuel (fuel - 1) defs sols (depth + 1) (applyClosure clo v) (applyValue b v)
+
+convNeutralFuel : Int -> HashTbl Term -> Sols -> Int -> Neutral -> Neutral -> Value -> Value -> Result Sols
+convNeutralFuel fuel defs sols depth n1 n2 v1 v2 = if fuel <= 0 then Err "DT: internal: conv fuel exhausted"
+else case n1 of
+  NVar name level sp => case n2 of
+    NVar name2 level2 sp2 =>
+      if level == level2 then convSpinesFuel (fuel - 1) defs sols depth sp sp2 v1 v2
+      else mismatchAt depth v1 v2
+    _ => mismatchAt depth v1 v2
+  NGlobal g sp => case n2 of
+    NGlobal g2 sp2 =>
+      if g == g2 then convSpinesFuel (fuel - 1) defs sols depth sp sp2 v1 v2
+      else mismatchAt depth v1 v2
+    _ => mismatchAt depth v1 v2
+
+convSpinesFuel : Int -> HashTbl Term -> Sols -> Int -> List Value -> List Value -> Value -> Value -> Result Sols
+convSpinesFuel fuel defs sols depth [] [] v1 v2 =
+  if fuel <= 0 then Err "DT: internal: conv fuel exhausted" else Ok sols
+convSpinesFuel fuel defs sols depth (a :: xs) (b :: ys) v1 v2 =
+  if fuel <= 0 then Err "DT: internal: conv fuel exhausted"
+  else andThen (convFuel (fuel - 1) defs sols depth a b)
+    (\sols2 => convSpinesFuel (fuel - 1) defs sols2 depth xs ys v1 v2)
+convSpinesFuel fuel defs sols depth _ _ v1 v2 =
+  if fuel <= 0 then Err "DT: internal: conv fuel exhausted" else mismatchAt depth v1 v2
+
+convValueListsFuel : Int -> HashTbl Term -> Sols -> Int -> List Value -> List Value -> Result Sols
+convValueListsFuel fuel defs sols depth [] [] =
+  if fuel <= 0 then Err "DT: internal: conv fuel exhausted" else Ok sols
+convValueListsFuel fuel defs sols depth (a :: xs) (b :: ys) =
+  if fuel <= 0 then Err "DT: internal: conv fuel exhausted"
+  else andThen (convFuel (fuel - 1) defs sols depth a b)
+    (\sols2 => convValueListsFuel (fuel - 1) defs sols2 depth xs ys)
+convValueListsFuel fuel defs sols depth _ _ =
+  if fuel <= 0 then Err "DT: internal: conv fuel exhausted" else tcErr0NoLoc TypeMismatchCtorArity
+
+-- 卡住的 case 相等：scrutinee 相等 + 每个构造子名的分支绑定数相同且分支体相等。
+convCaseAltsFuel : Int -> HashTbl Term -> Sols -> Int -> List VCaseAlt -> List VCaseAlt -> Result Sols
+convCaseAltsFuel fuel defs sols depth [] [] =
+  if fuel <= 0 then Err "DT: internal: conv fuel exhausted" else Ok sols
+convCaseAltsFuel fuel defs sols depth (a :: rest) (b :: rest2) = if fuel <= 0 then Err "DT: internal: conv fuel exhausted"
+else if vCaseAltName a == vCaseAltName b then if length (vCaseAltBinders a) == length (vCaseAltBinders b) then case convOneAltFuel (fuel - 1) defs sols depth a b of
+  Err e => Err e
+  Ok sols2 => convCaseAltsFuel (fuel - 1) defs sols2 depth rest rest2
+else tcErr1NoLoc (TypeMismatchCaseVars (vCaseAltName a)) (vCaseAltName a)
+else tcErr2NoLoc (TypeMismatchCaseBranch (vCaseAltName a) (vCaseAltName b)) (vCaseAltName a)
+  (vCaseAltName b)
+convCaseAltsFuel fuel defs sols depth _ _ =
+  if fuel <= 0 then Err "DT: internal: conv fuel exhausted" else tcErr0NoLoc TypeMismatchCaseCount
+
+convOneAltFuel : Int -> HashTbl Term -> Sols -> Int -> VCaseAlt -> VCaseAlt -> Result Sols
+convOneAltFuel fuel defs sols depth a b = if fuel <= 0 then Err "DT: internal: conv fuel exhausted"
+else
+  let
+    bs = vCaseAltBinders a
+    n = length bs
+    args = argValsAt bs depth 0
+  in convFuel (fuel - 1) defs sols (depth + n) (applyClosureBinder (vCaseAltClosure a) args)
+    (applyClosureBinder (vCaseAltClosure b) args)
+
+mismatchAt : Int -> Value -> Value -> Result a
+mismatchAt depth a b =
+  let
+    sa = showValueAt depth a
+    sb = showValueAt depth b
+  in tcErr2NoLoc (TypeMismatch sa sb) sa sb
+
+-- ---------------------------------------------------------------
+-- 元变量求解（M28：Miller pattern unification）
+-- ---------------------------------------------------------------
+-- 规则：
+--   * spine 为空：解 = rhs；就地检查 rhs 的自由变量都早于元变量创建深度（作用域）。
+--   * spine 全是互不相同的局部中性变量 `x1..xn`（Miller pattern）：解 = `λx1..xn. body`，
+--     rhs 里的 spine 变量被抽象成对应 λ 绑定，其它自由变量必须早于创建深度。
+--   * 其余形状（真正的高阶、非 pattern）不再用「头一致」的临时提取特判，直接报
+--     CannotSolveHigherOrder，诊断明确。
+-- 解的表示：λ 链直接构造成 `VLam`（闭包环境按 level 复原创建点的上下文变量），于是
+-- `force` 里既有的 `applySpine` 就能用；quote/conv/codegen 都不需要认识新形态。
+--
+-- 元变量创建深度随 `Sols` 携带（`solsDepth`），作用域在求解点就地检查；不再事后扫解表。
+-- 元变量创建深度；未登记时退回当前深度（只可能出现在没有求解路径的 zonk 上下文）。
+metaCreatedDepth : Sols -> Int -> Int -> Int
+metaCreatedDepth sols depth m = case solsDepth m sols of
+  Just d => d
+  Nothing => depth
+
+-- 项在「创建深度 created、quote 深度 depth、已进入 extra 个内部 binder」下是否只引用
+-- 本地 binder / 创建深度之前的自由变量 / pattern spine 里的变量。
+termScopedTo : Int -> Int -> Int -> List (Pair String Int) -> Term -> Bool
+termScopedTo created depth extra levels (TVar name i) = if i < extra then True
+else
+  let
+    level = depth + extra - 1 - i
+  in level >= 0 && (level < created || memLevel level levels)
+termScopedTo created depth extra levels (TMeta m) = True
+termScopedTo created depth extra levels (TGlobal g) = True
+termScopedTo created depth extra levels (TType l) = True
+termScopedTo created depth extra levels (TPi name implicit rig dom cod) =
+  termScopedTo created depth extra levels dom && termScopedTo created depth (extra + 1) levels cod
+termScopedTo created depth extra levels (TLam name rig body) =
+  termScopedTo created depth (extra + 1) levels body
+termScopedTo created depth extra levels (TApp f a rig) =
+  termScopedTo created depth extra levels f && termScopedTo created depth extra levels a
+termScopedTo created depth extra levels (TCon c args) = argsScopedTo created depth extra levels args
+termScopedTo created depth extra levels (TCase scrut alts) =
+  termScopedTo created depth extra levels scrut && altsScopedTo created depth extra levels alts
+termScopedTo created depth extra levels (TInt n) = True
+termScopedTo created depth extra levels (TStr s) = True
+termScopedTo created depth extra levels (TBool b) = True
+termScopedTo created depth extra levels (TIf c th el) =
+  termScopedTo created depth extra levels c
+    && termScopedTo created depth extra levels th
+    && termScopedTo created depth extra levels el
+
+argsScopedTo : Int -> Int -> Int -> List (Pair String Int) -> List (Pair Term Rig) -> Bool
+argsScopedTo created depth extra levels [] = True
+argsScopedTo created depth extra levels ((Pair a rig) :: rest) =
+  termScopedTo created depth extra levels a && argsScopedTo created depth extra levels rest
+
+altsScopedTo : Int -> Int -> Int -> List (Pair String Int) -> List CaseAlt -> Bool
+altsScopedTo created depth extra levels [] = True
+altsScopedTo created depth extra levels (alt :: rest) =
+  termScopedTo created depth (extra + length (caseAltBinders alt)) levels (caseAltBody alt)
+    && altsScopedTo created depth extra levels rest
+
+-- Miller pattern 判据：spine 全是不重复、无实参的局部中性变量。
+patternSpineOf : List Value -> Maybe (List (Pair String Int))
+patternSpineOf [] = Just []
+patternSpineOf (v :: rest) = case v of
+  VNeutral n => case n of
+    NVar name level sp => if isNilSpine sp then case patternSpineOf rest of
+      Just more => if memLevel level more then Nothing else Just (Pair name level :: more)
+      Nothing => Nothing
+    else Nothing
+    _ => Nothing
+  _ => Nothing
+
+isNilSpine : List Value -> Bool
+isNilSpine [] = True
+isNilSpine _ = False
+
+memLevel : Int -> List (Pair String Int) -> Bool
+memLevel level [] = False
+memLevel level ((Pair n l) :: rest) = if l == level then True else memLevel level rest
+
+levelPos : Int -> List Int -> Maybe Int
+levelPos level levels = levelPosGo level levels 0
+
+levelPosGo : Int -> List Int -> Int -> Maybe Int
+levelPosGo level [] i = Nothing
+levelPosGo level (l :: rest) i = if l == level then Just i else levelPosGo level rest (i + 1)
+
+spineLevels : List (Pair String Int) -> List Int
+spineLevels [] = []
+spineLevels (p :: rest) = secondOf p :: spineLevels rest
+
+-- pattern 抽象：把 quote 出来的 rhs 变成「n 个 λ 之下」的项。索引规则：
+--   * spine 第 i 个变量 → `extra + (n - 1 - i)`（λ 链外层是 spine 头部）；
+--   * 创建深度之前的自由变量 → `i + n`（n 个新 binder 在外侧）；
+--   * 内部 binder 变量（i < extra）保持原索引。
+absPatternBody : Int -> Int -> Int -> Int -> List Int -> Term -> Term
+absPatternBody n created depth extra levels (t@(TVar name i)) = if i < extra then t
+else
+  let
+    level = depth + extra - 1 - i
+  in case levelPos level levels of
+    Just pos => TVar name (extra + n - 1 - pos)
+    Nothing => TVar name (i + n)
+absPatternBody n created depth extra levels (TPi name implicit rig dom cod) =
+  TPi name implicit rig (absPatternBody n created depth extra levels dom)
+    (absPatternBody n created depth (extra + 1) levels cod)
+absPatternBody n created depth extra levels (TLam name rig body) =
+  TLam name rig (absPatternBody n created depth (extra + 1) levels body)
+absPatternBody n created depth extra levels (TApp f a rig) =
+  TApp (absPatternBody n created depth extra levels f)
+    (absPatternBody n created depth extra levels a) rig
+absPatternBody n created depth extra levels (TCon c args) =
+  TCon c
+    (map (\p => Pair (absPatternBody n created depth extra levels (firstOf p)) (secondOf p)) args)
+absPatternBody n created depth extra levels (TCase scrut alts) =
+  TCase (absPatternBody n created depth extra levels scrut)
+    (map (\alt => CaseAlt (caseAltName alt) (caseAltBinders alt) (absPatternBody n created depth (extra + length (caseAltBinders alt)) levels (caseAltBody alt))) alts)
+absPatternBody n created depth extra levels (TIf c th el) =
+  TIf (absPatternBody n created depth extra levels c)
+    (absPatternBody n created depth extra levels th)
+    (absPatternBody n created depth extra levels el)
+absPatternBody n created depth extra levels t = t
+
+-- 解里的 λ 链：spine 头部为最外层绑定。
+wrapPatternLams : List (Pair String Int) -> Term -> Term
+wrapPatternLams [] body = body
+wrapPatternLams ((Pair name lvl) :: rest) body = TLam name Rig1 (wrapPatternLams rest body)
+
+-- 闭包环境：按 level 复原创建点的上下文变量。第一个条目对应 level `depth-1`；创建深度
+-- 之后的 level 在作用域检查后不可能被引用（占位 0，避免 levelEscapes 误判）。
+-- 结构递归在 `depth` 上递减（守卫可从 `depth <= 0` 的 else 推出 depth > 0）。
+patternEnv : Int -> Int -> List Value
+patternEnv created depth = if depth <= 0 then []
+else
+  let
+    level = depth - 1
+    lvl = if level < created then level else 0
+  in VNeutral (NVar "_" lvl []) :: patternEnv created (depth - 1)
+
+patternSolution : List (Pair String Int) -> Int -> Int -> Term -> Value
+patternSolution [] created depth body = VType levelZero
+patternSolution ((Pair name lvl) :: rest) created depth body =
+  VLam name Rig1 (Clos (patternEnv created depth) (wrapPatternLams rest body))
+
+-- 空 spine：直接存解，但先就地检查作用域（自由变量必须早于创建深度）。
+-- `?m = ?m`（同一个未解元变量）是恒真约束，不能走 occurs 检查。
+solveMetaEmpty : Sols -> Int -> Int -> Value -> Result Sols
+solveMetaEmpty sols depth m (rhs@(VMeta n [])) =
+  if n == m then Ok sols else solveMetaEmptyStore sols depth m rhs
+solveMetaEmpty sols depth m rhs = solveMetaEmptyStore sols depth m rhs
+
+solveMetaEmptyStore : Sols -> Int -> Int -> Value -> Result Sols
+solveMetaEmptyStore sols depth m rhs =
+  let
+    created = metaCreatedDepth sols depth m
+    t = quote depth rhs
+  in if hasMeta m 0 t then tcErr1NoLoc (CannotSolveOccurs (strFromInt m)) (strFromInt m)
+  else if termScopedTo created depth 0 [] t then Ok (solsCons m rhs sols)
+  else tcErr1NoLoc (CannotSolveMetavar (strFromInt m)) (strFromInt m)
+
+-- 非空 spine：Miller pattern 才求解，其它形状明确拒绝。
+-- 非 pattern 形状的兜底（M28）：旧 M13 扩展的「头一致」提取，仅用于 spine 不是 Miller
+-- pattern 的存量场景（如 `?m (e1 e2) = head args`）。这不是合一理论的一部分，只是保守
+-- 近似：能提取就提取，其余仍报 CannotSolveHigherOrder；pattern 路径优先，命中时不会走到这里。
+splitAtVals : Int -> List Value -> Pair (List Value) (List Value)
+splitAtVals 0 xs = Pair [] xs
+splitAtVals n [] = Pair [] []
+splitAtVals n (x :: xs) = case splitAtVals (n - 1) xs of
+  Pair a b => Pair (x :: a) b
+
+solveMetaHoLegacyFuel : Int -> HashTbl Term -> Sols -> Int -> Int -> List Value -> Value -> Result Sols
+solveMetaHoLegacyFuel fuel defs sols depth m sp rhs = if fuel <= 0 then Err "DT: internal: conv fuel exhausted"
+else case rhs of
+  VMeta n sp2 => case solsLookup n sols of
+    Just t => convFuel (fuel - 1) defs sols depth (applySpine (VMeta m sp) []) (applySpine t sp2)
+    Nothing =>
+      if m == n then convSpinesFuel (fuel - 1) defs sols depth sp sp2 (VMeta m sp) rhs
+      else andThen (solveMetaFuel (fuel - 1) defs sols depth m [] (VMeta n []))
+        (\sols2 => convSpinesFuel (fuel - 1) defs sols2 depth sp sp2 (VMeta m sp) rhs)
+  VNeutral n => case n of
+    NGlobal g args =>
+      solveMetaHeadLegacyFuel (fuel - 1) defs sols depth m sp (VNeutral n) (VNeutral (NGlobal g []))
+        args
+    NVar name level args =>
+      solveMetaHeadLegacyFuel (fuel - 1) defs sols depth m sp (VNeutral n)
+        (VNeutral (NVar name level [])) args
+    _ => tcErr1NoLoc (CannotSolveHigherOrder (strFromInt m)) (strFromInt m)
+  _ => tcErr1NoLoc (CannotSolveHigherOrder (strFromInt m)) (strFromInt m)
+
+solveMetaHeadLegacyFuel : Int -> HashTbl Term -> Sols -> Int -> Int -> List Value -> Value -> Value -> List Value -> Result Sols
+solveMetaHeadLegacyFuel fuel defs sols depth m sp whole headVal args = if fuel <= 0 then Err "DT: internal: conv fuel exhausted"
+else if length args >= length sp then
+  let
+    extra = length args - length sp
+  in case splitAtVals extra args of
+    Pair headArgs tailArgs =>
+      andThen (solveMetaFuel (fuel - 1) defs sols depth m [] (applySpine headVal headArgs))
+        (\sols2 => convSpinesFuel (fuel - 1) defs sols2 depth sp tailArgs (VMeta m sp) whole)
+else tcErr1NoLoc (CannotSolveHigherOrder (strFromInt m)) (strFromInt m)
+
+solveMetaPattern : Int -> HashTbl Term -> Sols -> Int -> Int -> List Value -> Value -> Result Sols
+solveMetaPattern fuel defs sols depth m sp rhs = if fuel <= 0 then Err "DT: internal: conv fuel exhausted"
+else case patternSpineOf sp of
+  Nothing => solveMetaHoLegacyFuel (fuel - 1) defs sols depth m sp rhs
+  Just pats =>
+    let
+      created = metaCreatedDepth sols depth m
+      t = quote depth rhs
+      n = length pats
+      levels = spineLevels pats
+    in if hasMeta m 0 t then tcErr1NoLoc (CannotSolveOccurs (strFromInt m)) (strFromInt m)
+    else if termScopedTo created depth 0 pats t then Ok
+      (solsCons m (patternSolution pats created depth (absPatternBody n created depth 0 levels t)) sols)
+    else tcErr1NoLoc (CannotSolveMetavar (strFromInt m)) (strFromInt m)
+
+solveMetaFuel : Int -> HashTbl Term -> Sols -> Int -> Int -> List Value -> Value -> Result Sols
+solveMetaFuel fuel defs sols depth m sp rhs = if fuel <= 0 then Err "DT: internal: conv fuel exhausted"
+else case solsLookup m sols of
+  Just t => convFuel (fuel - 1) defs sols depth (applySpine t sp) rhs
+  Nothing => case sp of
+    [] => solveMetaEmpty sols depth m rhs
+    _ => case rhs of
+      -- 同一个元变量：只统一 spine（恒真约束，不能走 occurs 检查）。
+      VMeta n sp2 => if n == m then convSpinesFuel (fuel - 1) defs sols depth sp sp2 (VMeta m sp) rhs
+      else case solsLookup n sols of
+        Just t => solveMetaFuel (fuel - 1) defs sols depth m sp (applySpine t sp2)
+        Nothing =>
+          andThen (solveMetaFuel (fuel - 1) defs sols depth m [] (VMeta n []))
+            (\sols2 => convSpinesFuel (fuel - 1) defs sols2 depth sp sp2 (VMeta m sp) rhs)
+      _ => solveMetaPattern (fuel - 1) defs sols depth m sp rhs
+
+solveMetaNew : HashTbl Term -> Sols -> Int -> Int -> Value -> Result Sols
+solveMetaNew defs sols depth m rhs = solveMetaEmpty sols depth m rhs
+
+conv : HashTbl Term -> Sols -> Int -> Value -> Value -> Result Sols
+conv a1 a2 a3 a4 a5 = convFuel 64 a1 a2 a3 a4 a5
+
+convBoth : HashTbl Term -> Sols -> Int -> Value -> Value -> Result Sols
+convBoth a1 a2 a3 a4 a5 = convBothFuel 64 a1 a2 a3 a4 a5
+
+convCaseAlts : HashTbl Term -> Sols -> Int -> List VCaseAlt -> List VCaseAlt -> Result Sols
+convCaseAlts a1 a2 a3 a4 a5 = convCaseAltsFuel 64 a1 a2 a3 a4 a5
+
+convOneAlt : HashTbl Term -> Sols -> Int -> VCaseAlt -> VCaseAlt -> Result Sols
+convOneAlt a1 a2 a3 a4 a5 = convOneAltFuel 64 a1 a2 a3 a4 a5
+
+convValueLists : HashTbl Term -> Sols -> Int -> List Value -> List Value -> Result Sols
+convValueLists a1 a2 a3 a4 a5 = convValueListsFuel 64 a1 a2 a3 a4 a5
+
+convNeutral : HashTbl Term -> Sols -> Int -> Neutral -> Neutral -> Value -> Value -> Result Sols
+convNeutral a1 a2 a3 a4 a5 a6 a7 = convNeutralFuel 64 a1 a2 a3 a4 a5 a6 a7
+
+convSpines : HashTbl Term -> Sols -> Int -> List Value -> List Value -> Value -> Value -> Result Sols
+convSpines a1 a2 a3 a4 a5 a6 a7 = convSpinesFuel 64 a1 a2 a3 a4 a5 a6 a7
+
+etaLeft : HashTbl Term -> Sols -> Int -> Value -> String -> Closure -> Result Sols
+etaLeft a1 a2 a3 a4 a5 a6 = etaLeftFuel 64 a1 a2 a3 a4 a5 a6
+
+etaRight : HashTbl Term -> Sols -> Int -> String -> Closure -> Value -> Result Sols
+etaRight a1 a2 a3 a4 a5 a6 = etaRightFuel 64 a1 a2 a3 a4 a5 a6
+
+solveMeta : HashTbl Term -> Sols -> Int -> Int -> List Value -> Value -> Result Sols
+solveMeta a1 a2 a3 a4 a5 a6 = solveMetaFuel 64 a1 a2 a3 a4 a5 a6

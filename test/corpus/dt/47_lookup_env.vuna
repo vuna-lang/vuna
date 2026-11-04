@@ -1,0 +1,26 @@
+-- M24.5：不可达分支按**上下文**省略 —— `case env of ECons ...` 只写 ECons：
+-- 进 ENil 分支时 n 被精化成 Zero，于是 `i : Fin Zero` 是空归纳族，这条分支永远进不去。
+-- （旧实现按「索引能否合一」判可达性，ENil 看起来可达，会报 missing ENil。）
+data Nat : Type where
+  Zero : Nat
+  Succ : Nat -> Nat
+
+data Fin : Nat -> Type where
+  FZero : {n : Nat} -> Fin (Succ n)
+  FSucc : {n : Nat} -> Fin n -> Fin (Succ n)
+
+data Env : Type -> Nat -> Type where
+  ENil : {a : Type} -> Env a Zero
+  ECons : {a : Type} -> {n : Nat} -> a -> Env a n -> Env a (Succ n)
+
+lookupEnv : {a : Type} -> {n : Nat} -> Env a n -> Fin n -> a
+lookupEnv env i = case env of
+  ECons x rest => case i of
+    FZero => x
+    FSucc j => lookupEnv rest j
+
+env2 : Env Int (Succ (Succ Zero))
+env2 = ECons 7 (ECons 8 ENil)
+
+main : Int
+main = lookupEnv env2 (FSucc FZero)

@@ -1,0 +1,67 @@
+module Vuna.Lint.Fix (fixLoop) where
+
+-- Vuna.Lint.Fix：把 lint 规则给出的编辑描述应用到源码（M24 后维护·源码重组，从 Vuna.Lint 拆出）。
+--
+-- 编辑按起点排序、从后往前应用（避免行号漂移），每次修复后用 parseSource 复验，
+-- 不合法就当作不可修复。门面的 --fix 循环调用本模块的 fixLoop。
+import Vuna.Compiler.Common
+import Vuna.Compiler.Frontend.Parser
+import Vuna.Lint.Rules
+
+sortEdits : List Edit -> List Edit
+sortEdits [] = []
+sortEdits (e :: rest) = insertEdit e (sortEdits rest)
+
+insertEdit : Edit -> List Edit -> List Edit
+insertEdit e [] = [e]
+insertEdit e (f :: rest) =
+  if editStart e > editStart f then e :: f :: rest else f :: insertEdit e rest
+
+collectEdits : List Finding -> List Edit -> List Edit
+collectEdits [] acc = acc
+collectEdits (f :: rest) acc = case findingEdit f of
+  Nothing => collectEdits rest acc
+  Just e => collectEdits rest (e :: acc)
+
+takeList : Int -> List a -> List a
+takeList n [] = []
+takeList n (x :: rest) = if n <= 0 then [] else x :: takeList (n - 1) rest
+
+dropList : Int -> List a -> List a
+dropList n lines = if n <= 0 then lines
+else case lines of
+  [] => []
+  x :: rest => dropList (n - 1) rest
+
+replaceRange : Int -> Int -> List a -> List a -> List a
+replaceRange start stop newLines lines =
+  append (takeList (start - 1) lines) (append newLines (dropList stop lines))
+
+applyEditList : List Edit -> List String -> Int -> Int -> Pair Int (List String)
+applyEditList [] lines limit count = Pair count lines
+applyEditList (e :: rest) lines limit count =
+  if editEnd e < limit then applyEditList rest (replaceRange (editStart e) (editEnd e) (editLines e) lines) (editStart e)
+    (count + 1)
+  else applyEditList rest lines limit count
+
+applyFixes : String -> List Finding -> Result (Pair Int String)
+applyFixes source findings =
+  let
+    edits = sortEdits (collectEdits findings [])
+  in case applyEditList edits (splitLines source) (length (splitLines source) + 1) 0 of
+    Pair count newLines => if count == 0 then Ok (Pair 0 source)
+    else
+      let
+        newSource = joinLines newLines
+      in case parseSource "<lint>" newSource of
+        Err e => Err ("parse failed after fix: " ++ e)
+        Ok ignored => Ok (Pair count newSource)
+
+fixLoop : String -> List Finding -> Int -> Int -> Result (Pair Int String)
+fixLoop source findings passes total = if passes <= 0 then Ok (Pair total source)
+else case applyFixes source findings of
+  Err e => Err e
+  Ok (Pair count newSource) => if count == 0 then Ok (Pair total source)
+  else case lintSource newSource of
+    Err e => Err e
+    Ok remaining => fixLoop newSource remaining (passes - 1) (total + count)

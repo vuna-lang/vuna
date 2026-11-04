@@ -1,0 +1,10 @@
+-- A2 负例：where 多 clause 的模式矩阵仍必须穷尽。
+data Maybe2 : Type where
+  Nothing2 : Maybe2
+  Just2 : Int -> Maybe2
+
+main : Int
+main = f (Just2 1)
+  where
+    f : Maybe2 -> Int
+    f (Just2 x) = x

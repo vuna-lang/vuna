@@ -1,0 +1,22 @@
+-- M24.6 第一级附带修复：类型族（结果类型以 `Type` 收尾的 Pi，如 `Id : (a:Type) -> Type`）
+-- 整体擦除，不生成运行时定义；它们出现在值定义的类型注解里由 delta 归约消掉。
+data Nat : Type where
+  Zero : Nat
+  Succ : Nat -> Nat
+
+Id : (a : Type) -> Type
+Id a = a
+
+Pick : Nat -> Type
+Pick n = case n of
+  Zero => Int
+  Succ k => Int
+
+x : Id Int
+x = 5
+
+y : Pick Zero
+y = 7
+
+main : Int
+main = x + y

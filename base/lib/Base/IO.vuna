@@ -37,14 +37,12 @@ ioPure : a -> IO a
 ioPure x = MkIO (\w => x)
 
 ioBind : IO a -> (a -> IO b) -> IO b
-ioBind io k = case io of
-  MkIO f => MkIO (\w => case k (f w) of
-    MkIO g => g w
-  )
+ioBind (MkIO f) k = MkIO (\w => case k (f w) of
+  MkIO g => g w
+)
 
 ioFmap : (a -> b) -> IO a -> IO b
-ioFmap f io = case io of
-  MkIO g => MkIO (\w => f (g w))
+ioFmap f (MkIO g) = MkIO (\w => f (g w))
 
 print : String -> IO Int
 print s = MkIO (\w => prim_print s)

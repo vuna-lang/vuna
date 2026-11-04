@@ -1,0 +1,6 @@
+# 被依赖包 b：故意 `import A`（consumer 的模块）——依赖方向不允许。
+[package]
+name = "dependency-b"
+
+[export]
+modules = ["Ok", "Dup"]

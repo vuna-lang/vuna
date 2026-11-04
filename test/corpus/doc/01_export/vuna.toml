@@ -1,0 +1,6 @@
+# M30 doc [export] 夹具：只渲染 [export].modules 列出的模块。
+[package]
+name = "doc-export"
+
+[export]
+modules = ["Visible"]

@@ -1,0 +1,8 @@
+-- M29：比较运算符同样证据驱动——没有 Ord 实例的 data，`<` 在 check 期报缺实例，
+-- 不再生成对用户 data 的 `compare`（M19–M28 的「无 Ord 类 → 泛型比较」兜底已删除）。
+data Color : Type where
+  Red : Color
+  Green : Color
+
+main : Bool
+main = Red < Green

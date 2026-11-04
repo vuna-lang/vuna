@@ -1,0 +1,31 @@
+-- M28 / B18：type / value 双命名空间。
+--
+-- 同一模块里类型名与构造子同名（`data Pair ... where Pair : ...`）时：类型位置解析成
+-- 族（kind），值位置解析成构造子，互不干扰。类型名还可以当**类型层实参**出现在值位置
+-- （依赖类型里的「类型作为项」）。
+data Pair a b : Type where
+  Pair : a -> b -> Pair a b
+
+mk : Pair Int String
+mk = Pair 7 "x"
+
+pairFst : Pair Int String -> Int
+pairFst p = case p of
+  Pair n s => n
+
+-- 类型作为项：`Pair Int String` 出现在值位置，是 `(a : Type)` 的显式类型实参。
+firstTy : (a : Type) -> a -> Type
+firstTy a x = a
+
+keep : Type
+keep = firstTy (Pair Int String) mk
+
+-- 小写类型名（类型命名空间的非内建名）与值层内建名并存，不互相污染。
+data nat : Type where
+  MkNat : nat
+
+natTag : nat -> Int
+natTag n = 3
+
+main : Int
+main = pairFst mk + natTag MkNat

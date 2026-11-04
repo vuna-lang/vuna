@@ -1,0 +1,101 @@
+module Vuna.Fmt.Util
+  ( appendBefore
+  , appendLast
+  , concatStrings
+  , dummySpan
+  , firstLine
+  , fitsLine
+  , isNilList
+  , joinComma
+  , joinLines
+  , joinSpace
+  , lastLineOf
+  , mapMaybeStrings
+  , maxWidth
+  , prefixFirst
+  , restLines
+  , spaces
+  , strWidth
+  ) where
+
+-- Vuna.Fmt.Util：格式化器共用的行/字符串小工具与行宽常量（无 AST 逻辑）。
+-- M24 后维护·源码重组：从 Vuna.Fmt 拆出，供 Expr / Comment / Decl 与门面共用。
+import Vuna.Compiler.Common
+import Vuna.Compiler.Frontend.Ast
+
+-- ---------------------------------------------------------------
+-- 行 / 字符串小工具
+-- ---------------------------------------------------------------
+spaces : Int -> String
+spaces n = if n <= 0 then "" else " " ++ spaces (n - 1)
+
+concatStrings : List String -> String
+concatStrings [] = ""
+concatStrings (s :: rest) = s ++ concatStrings rest
+
+joinComma : List String -> String
+joinComma [] = ""
+joinComma ([x]) = x
+joinComma (x :: rest) = x ++ ", " ++ joinComma rest
+
+joinSpace : List String -> String
+joinSpace [] = ""
+joinSpace (x :: rest) = " " ++ x ++ joinSpace rest
+
+joinLines : List String -> String
+joinLines [] = ""
+joinLines ([l]) = l
+joinLines (l :: rest) = l ++ "\n" ++ joinLines rest
+
+firstLine : List String -> String
+firstLine [] = ""
+firstLine (l :: rest) = l
+
+restLines : List a -> List a
+restLines [] = []
+restLines (l :: rest) = rest
+
+prefixFirst : String -> List String -> List String
+prefixFirst pre [] = [pre]
+prefixFirst pre (l :: rest) = (pre ++ l) :: rest
+
+appendLast : String -> List String -> List String
+appendLast suffix [] = [suffix]
+appendLast suffix ([l]) = [l ++ suffix]
+appendLast suffix (l :: rest) = l :: appendLast suffix rest
+
+-- 把 argLines 追加到 lines 的最后一个物理行后面（前置分隔串 sep）。
+appendBefore : String -> List String -> List String -> List String
+appendBefore sep lines [] = lines
+appendBefore sep lines (a :: rest) = append (appendLast (sep ++ a) lines) rest
+
+isNilList : List a -> Bool
+isNilList [] = True
+isNilList (x :: rest) = False
+
+mapMaybeStrings : (Expr -> Maybe String) -> List Expr -> Maybe (List String)
+mapMaybeStrings f [] = Just []
+mapMaybeStrings f (x :: rest) = case f x of
+  Nothing => Nothing
+  Just s => case mapMaybeStrings f rest of
+    Nothing => Nothing
+    Just ss => Just (s :: ss)
+
+-- ---------------------------------------------------------------
+-- 字符串字面量：按 lexer 支持的转义重新编码
+dummySpan : Span
+dummySpan = Span "" 1 1 1 1
+
+maxWidth : Int
+maxWidth = 100
+
+strWidth : String -> Int
+strWidth s = length (strUnpack s)
+
+fitsLine : Int -> String -> Bool
+fitsLine indent text = indent + strWidth text <= maxWidth
+
+lastLineOf : List String -> String
+lastLineOf [] = ""
+lastLineOf ([x]) = x
+lastLineOf (x :: rest) = lastLineOf rest

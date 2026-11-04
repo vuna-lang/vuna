@@ -1,0 +1,148 @@
+module Vuna.Compiler.Elab.Prelude
+  ( builtinEqTyName
+  , builtinTyName
+  , classMethodProjection
+  , cmpBuiltinTyName
+  , eqRuntimeName
+  , fun2
+  , intTy
+  , isEqOp
+  , polyEqTy
+  , preludeGlobals
+  , preludeNames
+  , prependParams
+  , strTy
+  ) where
+
+-- Vuna.Compiler.Elab.Prelude：把 `Vuna.Compiler.Intrinsics` 的**唯一内建声明表**翻译成
+-- DT 的 prelude globals（签名项）。M27 起这里不再有第二份名字/签名表：
+--
+--   - `Int` / `String` 是语言 primitive 类型；`Bool` 是 base 的普通 data 声明
+--     （canonical `Base.Bool.Bool`，`True`/`False` 精化成 `TBool`）；
+--   - `List` 的签名参数固定绑定 base 的普通 data 声明 `Base.List.List`（完整符号，
+--     固定为 canonical，不按短名挑选）；
+--   - 效果原语只有 `prim_*` 名，签名与能力位都在 Intrinsics 表里。
+--
+-- 名字解析（arity/放行/能力）在 `Loader.Resolve`，runtime 映射在 `Codegen.Term`，
+-- interp 归约在 `Core.Eval`——三处都消费同一张表。
+import Vuna.Compiler.Common
+import Vuna.Compiler.Core
+import Vuna.Compiler.Diagnostics
+import Vuna.Compiler.Intrinsics
+
+intTy : Term
+intTy = TGlobal intTypeName
+
+strTy : Term
+strTy = TGlobal strTypeName
+
+boolTy : Term
+boolTy = TGlobal boolTypeName
+
+-- `a -> b -> c` 的签名拼接（b/c 按外层 binder 深度移位）。
+fun2 : Term -> Term -> Term -> Term
+fun2 a b c = TPi "_" False Rig1 a (TPi "_" False Rig1 (shift 0 1 b) (shift 0 2 c))
+
+-- ---------------------------------------------------------------
+-- `==` / `/=` 的跨类型特化
+-- ---------------------------------------------------------------
+-- 泛化签名 `{a : Type} -> a -> a -> Bool`；精化到饱和应用时按第一个实参类型选
+-- runtime 函数名（`bi_eq_int` / `bi_eq_str` / `bi_neq_int` / `bi_neq_str`）。
+-- 特化在精化期完成，codegen 只按名字映射。
+eqOps : List String
+eqOps = ["==", "/="]
+
+isEqOp : String -> Bool
+isEqOp name = memName name eqOps
+
+-- 内建类型名（`VNeutral (NGlobal g [])` 形态）。
+builtinTyName : Value -> Maybe String
+builtinTyName v = case v of
+  VNeutral n => case n of
+    -- M29：用 `length`（Int 的 `==` 是特化路径），不依赖 List 的泛型结构比较兜底。
+    NGlobal g sp => if length sp == 0 then Just g else Nothing
+    _ => Nothing
+  _ => Nothing
+
+-- 按实参类型选 runtime 函数名（只有 Int / String 可特化；其它类型走 Eq 字典）。
+eqRuntimeName : String -> String -> Result String
+eqRuntimeName op "Int" = if op == "==" then Ok "bi_eq_int" else Ok "bi_neq_int"
+eqRuntimeName op "String" = if op == "==" then Ok "bi_eq_str" else Ok "bi_neq_str"
+eqRuntimeName op tyName = Err (tcMsg (OpOnlyIntString op tyName) (VCons op (VCons tyName VNil)))
+
+-- 泛化后的 `==` / `/=` 签名：`{a : Type} -> a -> a -> Bool`。
+polyEqTy : Term
+polyEqTy = TPi "a" True Rig0 (TType levelZero) (fun2 (TVar "a" 0) (TVar "a" 0) boolTy)
+
+-- ---------------------------------------------------------------
+-- IType → Core Term
+-- ---------------------------------------------------------------
+-- 所有 IType 都是闭项（没有自由变量），因此 codomain 不需要 shift。
+ityToTerm : IType -> Term
+ityToTerm ITy = TType levelZero
+ityToTerm IInt = intTy
+ityToTerm IStr = strTy
+ityToTerm IBool = boolTy
+ityToTerm (IList elem) = TApp (TGlobal listFamilyName) (ityToTerm elem) Rig1
+ityToTerm (IFun a b) = TPi "_" False Rig1 (ityToTerm a) (ityToTerm b)
+ityToTerm IPolyEq = polyEqTy
+
+-- ---------------------------------------------------------------
+-- prelude globals / 名字名单
+-- ---------------------------------------------------------------
+-- 类型 primitive 先于值（`Int : Type` 等），值按 Intrinsics 表顺序。
+preludeTypeGlobals : List (Pair String Term)
+preludeTypeGlobals = map (\n => Pair n (TType levelZero)) typeIntrinsicNames
+
+preludeValueGlobals : List (Pair String Term)
+preludeValueGlobals =
+  map (\i => Pair (intrinsicName i) (ityToTerm (intrinsicSignature i))) userIntrinsics
+
+preludeGlobals : List (Pair String Term)
+preludeGlobals = append preludeTypeGlobals preludeValueGlobals
+
+-- 「禁止重定义」名单：primitive 类型名 + 全部用户可见内建值名。
+-- 只在入口（ad-hoc）文件里可能命中——模块内声明会被 mangle 成 `<Module>.name`。
+preludeNames : List String
+preludeNames = append typeIntrinsicNames preludeValueNames
+
+-- 只认内建可特化类型（`Int` / `String`）；其它类型在 DT 里走 `Eq` 实例。
+builtinEqTyName : Value -> Maybe String
+builtinEqTyName v = case builtinTyName v of
+  Just g =>
+    if g == intTypeName then Just intTypeName
+    else if g == strTypeName then Just strTypeName else Nothing
+  Nothing => Nothing
+
+-- 比较运算符的运行时特化只认 Int / String / canonical Bool；其它类型（用户 data /
+-- 刚性变量）必须走 Ord 字典。
+cmpBuiltinTyName : Value -> Maybe String
+cmpBuiltinTyName v = case builtinTyName v of
+  Just g =>
+    if g == intTypeName then Just intTypeName
+    else if g == strTypeName then Just strTypeName
+    else if g == boolTypeName then Just boolTypeName else Nothing
+  Nothing => Nothing
+
+-- 族名后的参数作为**隐式** binder 前置到 kind（`data List a : Type` 的 `a` + `Type`
+-- ⇒ `{a : Type} -> Type`）。
+prependParams : List String -> Term -> Term
+prependParams [] kindTerm = kindTerm
+prependParams (p :: rest) kindTerm =
+  TPi p False Rig1 (TType levelZero) (prependParams rest kindTerm)
+
+-- ---------------------------------------------------------------
+-- trait 库化后的类/方法查找辅助（放在本模块是为了压 Elab 的行数预算）
+-- ---------------------------------------------------------------
+baseNameOf : String -> String
+baseNameOf name = case splitLastDot (splitOnDot name) of
+  Pair rev base => base
+
+-- 类方法（按短名）的投影全局名：Loader 把 trait 方法 mangle 成 `<模块前缀>.<方法短名>`。
+classMethodProjection : List (Pair String Term) -> String -> String
+classMethodProjection methods short = classMethodProjectionGo short methods short
+
+classMethodProjectionGo : String -> List (Pair String Term) -> String -> String
+classMethodProjectionGo short [] fallback = fallback
+classMethodProjectionGo short (m :: rest) fallback =
+  if baseNameOf (firstOf m) == short then firstOf m else classMethodProjectionGo short rest fallback

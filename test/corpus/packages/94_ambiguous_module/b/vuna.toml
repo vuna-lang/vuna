@@ -1,0 +1,5 @@
+[package]
+name = "b"
+
+[export]
+modules = ["Dup"]

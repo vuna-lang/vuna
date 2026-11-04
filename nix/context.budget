@@ -32,9 +32,45 @@
 #     max_module_lines 3320 → 3360：Elab 新增 where 绑定签名与 EAnn 检查（新语言特性，
 #     +30 行）属有意特性增长而非文档/格式膨胀，按实测最大值 3348 留 12 行余量；Elab 拆
 #     模块仍是 M24.6 重构的降本项。
-coldstart_bytes 29200
+#   - 文档按主题重整：删除 history/dt-core/dt-parity/dt.md，新增 core/tooling/records-traits
+#     并把 DT 语义并入 type-system；合并 main 的 LSP/readBytes 文档后按实测复标定：
+#     coldstart 29731 / agents 104 / arch 167 / readme 163 / max_ref 279。
+coldstart_bytes 29731
 agents_lines 104
-arch_lines 178
-readme_lines 168
-max_ref_lines 168
-max_module_lines 3360
+arch_lines 167
+readme_lines 163
+#   - M24.5：dt-parity.md §6 重写（实测能力表 + 边界）到 203 行；Elab 新增 scrutinee 反射、
+#     不可达分支、inlineSolvedMetas（3348 → 3513）。按实测重标定 max_ref 208 / max_module 3530；
+#     入口文档（coldstart/agents/arch/readme）不变。
+max_ref_lines 279
+max_module_lines 1195
+#   - M27：新增 `primitives.md` 与内建/原语/能力文档、`Vuna.Compiler.Intrinsics` 模块；
+#     按 `sh nix/context-budget.sh .` 实测收紧：coldstart 29055 / agents 104 / arch 156 /
+#     readme 163 / max_ref 206 / max_module 811（入口文档有 45B 余量，agents 临界）。
+#   - M25 源码重组：compiler/lib 按层分目录并把 Elab(3529)/Codegen(1781)/Loader(1363)/
+#     Core(1227) 拆成门面 + 叶子模块；单模块最大值从 Elab 3529 降到 Frontend/Parser 823。
+#     入口文档未改（coldstart/agents/arch/readme/max_ref 不变），只把 max_module_lines
+#     3530 → 840（按实测 823 留 17 行余量，属结构优化的降本项）。
+#   - M3 错误码 docstring：诊断就近 `-- @code` 注释每诊断一行，Term.vuna 827 → 863（+36，
+#     诊断可追溯的有意特性增长，参照 M24 的 where 绑定 +30 行先例）；max_module_lines
+#     840 → 866（按实测 863 留 3 行余量）。
+#   - M28（类型系统地基）：语言面与检查器规则新增（严格分层宇宙、擦除单判据、pattern
+#     合一/zonk、三命名空间、axiom/η、case 规范形），必需文档落在入口的
+#     architecture.md（+8 行）与 reference/language.md（208 → 248 行）、
+#     reference/type-system.md 等；`Elab/Term/Impl.vuna` 820 行（case 单一入口 + 显式命名
+#     空间查询）。按 `sh nix/context-budget.sh .` 实测重新标定：coldstart 30100 /
+#     arch 168 / max_ref 248 / max_module 825（仍保住 agents/readme 不涨）。
+#   - M29（相等/实例/证明 ergonomics）：实例字典 schema v2 把「实例头/ctx 类型化 +
+#     elabInstance 方法体 + 实例搜索/去重」集中在 `Elab/Trait.vuna`（1195 行，超 ~800
+#     行目标；拆分留 M30，debt B21 记录了 Dict 死 API 清理），max_module_lines 825 → 1195
+#     （按实测单点增长，非格式化）；`docs/reference/dt.md` 记录 M29 终态语义（相等证据
+#     驱动/约束实例/参数化 deriving/命名实例删除/隐式值参数/Tarski 存在式/type codes 决策）
+#     后 248 → 286。入口文档（coldstart/arch/readme/agents）**未涨**：M29 段压进
+#     architecture 一行摘要并删去重复链接，coldstart 29685 / arch 167（均在旧预算内）。
+#   - M30（as-pattern 与 git 线性历史纪律）：`18821ee` 在 AGENTS 加 1 行（as-pattern
+#     摘要）、`a2438e3` 再加 1 行（线性历史纪律；提交标题写“压缩 AGENTS 导航行”，实际是
+#     +1 行），两处都没有随附复标定 ⇒ 合入本分支前 HEAD 的 context-budget 已经红
+#     （agents 106 / coldstart 30253），属漏标定（与 M23 同类），不是本分支引入的。
+#     本分支 architecture 的 LSP 段改写 +15B。按 `sh nix/context-budget.sh .` 实测复标定：
+#     coldstart 30268 / agents 106；arch 165 / readme 165 / max_ref 286 / max_module 1175
+#     仍低于原预算，不变。

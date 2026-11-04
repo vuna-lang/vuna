@@ -1,0 +1,322 @@
+module Vuna.Compiler.Frontend.Ast
+  ( Ctor
+  , DAxiom
+  , DBind
+  , DData
+  , DExpr
+  , DFun
+  , DInstance
+  , DRecord
+  , DSig
+  , DTrait
+  , Decl
+  , DoStmt
+  , EAnn
+  , EApp
+  , ECase
+  , EDo
+  , EField
+  , EIf
+  , EInt
+  , ELam
+  , ELet
+  , ELocalFun
+  , EPi
+  , ERecUpdate
+  , ERecord
+  , EStr
+  , EVar
+  , ExportItem
+  , Expr
+  , Field
+  , Import
+  , ModDecl
+  , PAs
+  , PCon
+  , PInt
+  , PRecord
+  , PStr
+  , PVar
+  , PWild
+  , Pat
+  , Source
+  , SourceFile
+  , TraitMethod
+  , XBare
+  , XModule
+  , XTypeAll
+  , clausesFor
+  , ctorArity
+  , ctorArityOf
+  , ctorName
+  , ctorSpan
+  , ctorType
+  , ctorsOf
+  , declDerivings
+  , declNames
+  , declSpan
+  , doStmtExpr
+  , doStmtSpan
+  , exportItemSpan
+  , exprSpan
+  , fieldName
+  , fieldSpan
+  , fieldType
+  , funArity
+  , importSpan
+  , modDeclSpan
+  , patSpan
+  , topNames
+  , traitMethodName
+  , traitMethodSpan
+  , traitMethodType
+  , typeNamesOf
+  ) where
+
+-- Vuna.Compiler.Frontend.Ast：core-v0/M10.5 的语法类型与 AST 辅助函数。
+import Vuna.Compiler.Common
+
+-- 记录字段：字段名 + 类型表达式 + span（M10.5）。
+data Field : Type where
+  Field : String -> Expr -> Span -> Field
+
+-- trait 方法签名：方法名 + 类型表达式 + span（M30 B20：span 覆盖「方法名到类型结束」，
+-- 让方法级诊断/符号/注释锚点能落到方法行，而不是整条 trait 声明行）。
+data TraitMethod : Type where
+  TraitMethod : String -> Expr -> Span -> TraitMethod
+
+data Pat : Type where
+  PVar : String -> Span -> Pat
+  -- as-pattern（`x@pat` / `(pat)@x`）：匹配内层模式，并把整个匹配值绑定到 x。
+  PAs : String -> Pat -> Span -> Pat
+  PWild : Span -> Pat
+  PCon : String -> List Pat -> Span -> Pat
+  PInt : Int -> Span -> Pat
+  PStr : String -> Span -> Pat
+  PRecord : String -> List (Pair String Pat) -> Span -> Pat
+
+data Expr : Type where
+  EVar : String -> Span -> Expr
+  EInt : Int -> Span -> Expr
+  EStr : String -> Span -> Expr
+  ELam : List String -> Expr -> Span -> Expr
+  EApp : Expr -> List Expr -> Span -> Expr
+  -- DT（M13）命名 Pi：`(x : A) -> B` 与隐式 `{x : A} -> B`。
+  -- 匿名 `A -> B` 仍沿用 `EApp (EVar "->") [A, B]` 编码（既有路径零改动）。
+  EPi : String -> Bool -> Expr -> Expr -> Span -> Expr
+  ELet : List (Pair Pat Expr) -> Expr -> Bool -> Span -> Expr
+  -- A2：局部函数组（where/let 内的多 clause 函数）。
+  -- 只作为 `ELet` 绑定值出现：每个 clause 是「参数模式列表 + body」。
+  -- 由 Elab 用 `Elab.Match.multiToExpr` 降级成 lambda + 模式矩阵（与顶层 DFun 同一路径）。
+  ELocalFun : List (Pair (List Pat) Expr) -> Span -> Expr
+  ECase : Expr -> List (Pair Pat Expr) -> Span -> Expr
+  EIf : Expr -> Expr -> Expr -> Span -> Expr
+  EField : Expr -> String -> Span -> Expr
+  ERecord : String -> List (Pair String Expr) -> Span -> Expr
+  ERecUpdate : Expr -> List (Pair String Expr) -> Span -> Expr
+  EDo : List DoStmt -> Span -> Expr
+  -- M24：表达式类型标注。只由 parser 的 where 绑定签名生成（`g : Int -> Int` 行
+  -- 绑定到随后的 `g ... = ...` 子句），Elab 精化时据此把 where 组按签名递归提升；
+  -- 普通表达式位置不产生它，Fmt 在非 where 位置把它当透明括号渲染。
+  EAnn : Expr -> Expr -> Span -> Expr
+
+-- do 语句（M11）：`pat <- expr` 或裸表达式；最后一条必须是裸表达式。
+data DoStmt : Type where
+  DBind : Pat -> Expr -> Span -> DoStmt
+  DExpr : Expr -> Span -> DoStmt
+
+data Ctor : Type where
+  Ctor : String -> Expr -> Int -> Span -> Ctor
+
+data Decl : Type where
+  -- M14：`data Name params : kind where`；kind 是索引族的类型表达式（HM 路径只接受 `Type`）。
+  DData : String -> List String -> Expr -> List Ctor -> List String -> Span -> Decl
+  -- M28：`axiom name : Ty` —— 无体的可擦除/不透明顶层（决策 5 / D10）。
+  -- 它是**类型层**定义：类型层引用合法，运行时使用由擦除检查报错。
+  DAxiom : String -> Expr -> Span -> Decl
+  DSig : String -> Expr -> Span -> Decl
+  DFun : String -> List Pat -> Expr -> Span -> Decl
+  DRecord : String -> List String -> List Field -> List String -> Span -> Decl
+  DTrait : String -> List String -> List TraitMethod -> Span -> Decl
+  DInstance : List Expr -> Expr -> List Decl -> Span -> Decl
+
+-- M10 模块头与导出项。
+-- XBare 是裸名导出，XTypeAll 是 `T(..)`，XModule 是 `module B` 整模块重导出。
+data ExportItem : Type where
+  XBare : String -> Span -> ExportItem
+  XTypeAll : String -> Span -> ExportItem
+  XModule : String -> Span -> ExportItem
+
+-- 模块头：模块名、是否写了显式导出列表、导出项、span。
+data ModDecl : Type where
+  ModDecl : String -> Bool -> List ExportItem -> Span -> ModDecl
+
+-- parser 的产物：可选模块头 + imports + 顶层声明。
+data SourceFile : Type where
+  Source : Maybe ModDecl -> List Import -> List Decl -> SourceFile
+
+-- 各节点的源码 span 访问器。
+patSpan : Pat -> Span
+patSpan (PVar name sp) = sp
+patSpan (PAs name inner sp) = sp
+patSpan (PWild sp) = sp
+patSpan (PCon name pats sp) = sp
+patSpan (PInt n sp) = sp
+patSpan (PStr s sp) = sp
+patSpan (PRecord name fields sp) = sp
+
+exprSpan : Expr -> Span
+exprSpan (EVar name sp) = sp
+exprSpan (EInt n sp) = sp
+exprSpan (EStr s sp) = sp
+exprSpan (ELam ps body sp) = sp
+exprSpan (EApp fn args sp) = sp
+exprSpan (EPi name implicit dom cod sp) = sp
+exprSpan (ELet binds body _ sp) = sp
+exprSpan (ELocalFun clauses sp) = sp
+exprSpan (ECase scrut alts sp) = sp
+exprSpan (EIf c t e sp) = sp
+exprSpan (EField base f sp) = sp
+exprSpan (ERecord name fields sp) = sp
+exprSpan (ERecUpdate base fields sp) = sp
+exprSpan (EDo stmts sp) = sp
+exprSpan (EAnn inner ty sp) = sp
+
+doStmtSpan : DoStmt -> Span
+doStmtSpan (DBind pat expr sp) = sp
+doStmtSpan (DExpr expr sp) = sp
+
+doStmtExpr : DoStmt -> Expr
+doStmtExpr (DBind pat expr sp) = expr
+doStmtExpr (DExpr expr sp) = expr
+
+declSpan : Decl -> Span
+declSpan (DData name params kind ctors derivings sp) = sp
+declSpan (DAxiom name ty sp) = sp
+declSpan (DSig name ty sp) = sp
+declSpan (DFun name pats body sp) = sp
+declSpan (DRecord name params fields derivings sp) = sp
+declSpan (DTrait name params methods sp) = sp
+declSpan (DInstance ctxE head methods sp) = sp
+
+ctorSpan : Ctor -> Span
+ctorSpan (Ctor name ty arity sp) = sp
+
+fieldSpan : Field -> Span
+fieldSpan (Field name ty sp) = sp
+
+fieldName : Field -> String
+fieldName (Field name ty sp) = name
+
+fieldType : Field -> Expr
+fieldType (Field name ty sp) = ty
+
+traitMethodName : TraitMethod -> String
+traitMethodName (TraitMethod name ty sp) = name
+
+traitMethodType : TraitMethod -> Expr
+traitMethodType (TraitMethod name ty sp) = ty
+
+traitMethodSpan : TraitMethod -> Span
+traitMethodSpan (TraitMethod name ty sp) = sp
+
+data Import : Type where
+  Import : String -> Bool -> Maybe String -> Span -> Import
+
+importSpan : Import -> Span
+importSpan (Import name isQualified alias sp) = sp
+
+modDeclSpan : ModDecl -> Span
+modDeclSpan (ModDecl name explicit items sp) = sp
+
+exportItemSpan : ExportItem -> Span
+exportItemSpan (XBare name sp) = sp
+exportItemSpan (XTypeAll name sp) = sp
+exportItemSpan (XModule name sp) = sp
+
+collectClauses : List Decl -> String -> List (Pair (List Pat) Expr)
+collectClauses [] name = []
+collectClauses (d :: rest) name = case d of
+  DFun n pats body _ =>
+    if n == name then Pair pats body :: collectClauses rest name else collectClauses rest name
+  _ => collectClauses rest name
+
+clausesFor : List Decl -> String -> List (Pair (List Pat) Expr)
+clausesFor decls name = collectClauses decls name
+
+funArity : String -> List Decl -> Maybe Int
+funArity name decls = case clausesFor decls name of
+  [] => Nothing
+  (Pair pats body) :: _ => Just (length pats)
+
+ctorName : Ctor -> String
+ctorName (Ctor name ty arity _) = name
+
+ctorType : Ctor -> Expr
+ctorType (Ctor name ty arity _) = ty
+
+typeArity : Expr -> Int
+typeArity (EApp (EVar "->" _) ([x, rest]) _) = 1 + typeArity rest
+typeArity _ = 0
+
+ctorArityOf : Ctor -> Int
+ctorArityOf (Ctor name ty arity _) = arity
+
+lookupCtorArity : String -> List Ctor -> Maybe Int
+lookupCtorArity name [] = Nothing
+lookupCtorArity name (c :: rest) =
+  if ctorName c == name then Just (ctorArityOf c) else lookupCtorArity name rest
+
+ctorArity : String -> List Decl -> Maybe Int
+ctorArity name [] = Nothing
+ctorArity name (d :: rest) = case d of
+  DData dname params kind ctors derivings sp => case lookupCtorArity name ctors of
+    Just arity => Just arity
+    Nothing => ctorArity name rest
+  DRecord dname params fields derivings sp =>
+    if name == dname then Just (length fields) else ctorArity name rest
+  _ => ctorArity name rest
+
+declNames : Decl -> List String
+declNames (DFun name pats body _) = [name]
+declNames (DAxiom name ty _) = [name]
+declNames (DSig name ty _) = [name]
+declNames (DData dname params kind ctors derivings _) = map ctorName ctors
+declNames (DRecord dname params fields derivings _) = [dname]
+declNames (DTrait tname params methods _) = map traitMethodName methods
+declNames (DInstance ctxE head methods _) = []
+
+-- 顶层可见名字（M20：把 data / record / trait 的**类型名**也算进来）。
+-- Loader 用它判断「是不是本模块声明的名字」；DT 的类型名可以在值层位置出现
+-- （`Vec Nat n` 的 `Nat`），所以必须一并认出来。语义仍由下游检查器决定。
+topNames : List Decl -> List String
+topNames decls = concatMap declNames decls
+
+declAllNames : Decl -> List String
+declAllNames (DData dname params kind ctors derivings _) = dname :: map ctorName ctors
+declAllNames (DRecord dname params fields derivings _) = [dname]
+declAllNames (DTrait tname params methods _) = tname :: map traitMethodName methods
+declAllNames d = declNames d
+
+_declCtors : Decl -> List String
+_declCtors (DData dname params kind ctors derivings _) = map ctorName ctors
+_declCtors (DRecord dname params fields derivings _) = [dname]
+_declCtors (DTrait tname params methods _) = map traitMethodName methods
+_declCtors _ = []
+
+ctorsOf : List Decl -> List String
+ctorsOf decls = concatMap _declCtors decls
+
+declTypeNames : Decl -> List String
+declTypeNames (DData name params kind ctors derivings _) = [name]
+declTypeNames (DRecord name params fields derivings _) = [name]
+declTypeNames (DTrait name params methods _) = [name]
+declTypeNames _ = []
+
+typeNamesOf : List Decl -> List String
+typeNamesOf decls = concatMap declTypeNames decls
+
+declDerivings : Decl -> List String
+declDerivings (DData name params kind ctors derivings _) = derivings
+declDerivings (DRecord name params fields derivings _) = derivings
+declDerivings _ = []

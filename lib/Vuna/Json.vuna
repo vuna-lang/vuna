@@ -50,9 +50,8 @@ jsonObjSingle k v = JObj [Pair k v]
 -- 访问器
 -- ---------------------------------------------------------------
 jsonGet : String -> Json -> Maybe Json
-jsonGet key v = case v of
-  JObj kvs => lookupKV key kvs
-  _ => Nothing
+jsonGet key (JObj kvs) = lookupKV key kvs
+jsonGet key _ = Nothing
 
 lookupKV : String -> List (Pair String Json) -> Maybe Json
 lookupKV key [] = Nothing
@@ -66,56 +65,47 @@ jsonGetIn (k :: rest) v = case jsonGet k v of
   Just inner => jsonGetIn rest inner
 
 jsonAsStr : Json -> Maybe String
-jsonAsStr v = case v of
-  JStr s => Just s
-  _ => Nothing
+jsonAsStr (JStr s) = Just s
+jsonAsStr _ = Nothing
 
 jsonAsInt : Json -> Maybe Int
-jsonAsInt v = case v of
-  JNum n => Just n
-  _ => Nothing
+jsonAsInt (JNum n) = Just n
+jsonAsInt _ = Nothing
 
 jsonAsBool : Json -> Maybe Bool
-jsonAsBool v = case v of
-  JBool b => Just b
-  _ => Nothing
+jsonAsBool (JBool b) = Just b
+jsonAsBool _ = Nothing
 
 jsonAsArr : Json -> Maybe (List Json)
-jsonAsArr v = case v of
-  JArr xs => Just xs
-  _ => Nothing
+jsonAsArr (JArr xs) = Just xs
+jsonAsArr _ = Nothing
 
 jsonAsObj : Json -> Maybe (List (Pair String Json))
-jsonAsObj v = case v of
-  JObj kvs => Just kvs
-  _ => Nothing
+jsonAsObj (JObj kvs) = Just kvs
+jsonAsObj _ = Nothing
 
 jsonStrOr : String -> Json -> String
-jsonStrOr d v = case v of
-  JStr s => s
-  _ => d
+jsonStrOr d (JStr s) = s
+jsonStrOr d _ = d
 
 jsonIntOr : Int -> Json -> Int
-jsonIntOr d v = case v of
-  JNum n => n
-  _ => d
+jsonIntOr d (JNum n) = n
+jsonIntOr d _ = d
 
 jsonBoolOr : Bool -> Json -> Bool
-jsonBoolOr d v = case v of
-  JBool b => b
-  _ => d
+jsonBoolOr d (JBool b) = b
+jsonBoolOr d _ = d
 
 -- ---------------------------------------------------------------
 -- 渲染
 -- ---------------------------------------------------------------
 renderJson : Json -> String
-renderJson v = case v of
-  JNull => "null"
-  JBool b => if b then "true" else "false"
-  JNum n => strFromInt n
-  JStr s => renderJsonString s
-  JArr xs => "[" ++ join "," (map renderJson xs) ++ "]"
-  JObj kvs => "{" ++ join "," (map renderMember kvs) ++ "}"
+renderJson JNull = "null"
+renderJson (JBool b) = if b then "true" else "false"
+renderJson (JNum n) = strFromInt n
+renderJson (JStr s) = renderJsonString s
+renderJson (JArr xs) = "[" ++ join "," (map renderJson xs) ++ "]"
+renderJson (JObj kvs) = "{" ++ join "," (map renderMember kvs) ++ "}"
 
 renderMember : Pair String Json -> String
 renderMember kv = renderJsonString (firstOf kv) ++ ":" ++ renderJson (secondOf kv)
@@ -128,14 +118,14 @@ renderJsonString s =
 
 -- 每字符一块（无需转义时退化为单字符），拼起来等价于逐字符转义。
 escapeChunk : Int -> String
-escapeChunk c =
-  if c == 34 then "\\\""
-  else if c == 92 then "\\\\"
-  else if c == 10 then "\\n"
-  else if c == 9 then "\\t"
-  else if c == 13 then "\\r"
-  else if c == 8 then "\\b"
-  else if c == 12 then "\\f" else if c < 32 then "\\u" ++ pad4 (hexLower c) else strPack [c]
+escapeChunk 34 = "\\\""
+escapeChunk 92 = "\\\\"
+escapeChunk 10 = "\\n"
+escapeChunk 9 = "\\t"
+escapeChunk 13 = "\\r"
+escapeChunk 8 = "\\b"
+escapeChunk 12 = "\\f"
+escapeChunk c = if c < 32 then "\\u" ++ pad4 (hexLower c) else strPack [c]
 
 pad4 : String -> String
 pad4 s = repeat (4 - strLength s) "0" ++ s
@@ -149,26 +139,33 @@ hexDigit d = if d < 10 then 48 + d else 87 + d
 -- ---------------------------------------------------------------
 -- 解析
 -- ---------------------------------------------------------------
+-- 显式 fuel：递归下降的互递归组经「返回剩余输入再递归」，SCT 看不到跨函数的结构下降；
+-- 用 fuel 守卫 + 同参数位 `fuel - 1`。初值按输入字符数线性放大（每步至少消费一字符）。
+jsonFuel : List Int -> Int
+jsonFuel chars = 8 * length chars + 64
+
 parseJson : String -> Result Json
 parseJson source =
   let
     chars = skipJsonWs (strUnpack source)
-  in case parseValue chars of
+  in case parseValue (jsonFuel chars) chars of
     Err e => Err ("json: " ++ e)
-    Ok (Pair v rest) => if skipJsonWs rest == [] then Ok v else Err "json: trailing characters"
+    Ok (Pair v rest) =>
+      if length (skipJsonWs rest) == 0 then Ok v else Err "json: trailing characters"
 
 skipJsonWs : List Int -> List Int
 skipJsonWs [] = []
 skipJsonWs (c :: rest) =
   if c == 32 || c == 9 || c == 10 || c == 13 then skipJsonWs rest else c :: rest
 
-parseValue : List Int -> Result (Pair Json (List Int))
-parseValue chars = case chars of
+parseValue : Int -> List Int -> Result (Pair Json (List Int))
+parseValue fuel chars = if fuel <= 0 then Err "json: parser fuel exhausted (internal)"
+else case chars of
   [] => Err "unexpected end of input"
   c :: rest =>
-    if c == 123 then parseObject rest
-    else if c == 91 then parseArray rest
-    else if c == 34 then parseStringBody rest []
+    if c == 123 then parseObject (fuel - 1) rest
+    else if c == 91 then parseArray (fuel - 1) rest
+    else if c == 34 then parseStringBody (fuel - 1) rest []
     else if c == 116 then parseLiteral "true" (JBool True) chars
     else if c == 102 then parseLiteral "false" (JBool False) chars
     else if c == 110 then parseLiteral "null" JNull chars
@@ -184,84 +181,99 @@ parseLiteral want value chars = case splitAtCharCount (strLength want) chars of
   Just (Pair got rest) =>
     if strPack got == want then Ok (Pair value rest) else Err ("expected " ++ want)
 
-parseObject : List Int -> Result (Pair Json (List Int))
-parseObject chars = case parseObjectMembers chars [] of
+parseObject : Int -> List Int -> Result (Pair Json (List Int))
+parseObject fuel chars = if fuel <= 0 then Err "json: parser fuel exhausted (internal)"
+else case parseObjectMembers (fuel - 1) chars [] of
   Err e => Err e
   Ok (Pair kvs rest) => Ok (Pair (JObj kvs) rest)
 
-parseObjectMembers : List Int -> List (Pair String Json) -> Result (Pair (List (Pair String Json)) (List Int))
-parseObjectMembers chars acc = case skipJsonWs chars of
+parseObjectMembers : Int -> List Int -> List (Pair String Json) -> Result (Pair (List (Pair String Json)) (List Int))
+parseObjectMembers fuel chars acc = if fuel <= 0 then Err "json: parser fuel exhausted (internal)"
+else case skipJsonWs chars of
   [] => Err "unterminated object"
-  c :: rest =>
-    if c == 125 then Ok (Pair (reverse acc) rest)
-    else if c == 34 then parseObjectPair rest acc else Err "expected a string key in object"
+  c :: rest => case c of
+    125 => Ok (Pair (reverse acc) rest)
+    34 => parseObjectPair (fuel - 1) rest acc
+    _ => Err "expected a string key in object"
 
-parseObjectPair : List Int -> List (Pair String Json) -> Result (Pair (List (Pair String Json)) (List Int))
-parseObjectPair chars acc = case parseStringBody chars [] of
+parseObjectPair : Int -> List Int -> List (Pair String Json) -> Result (Pair (List (Pair String Json)) (List Int))
+parseObjectPair fuel chars acc = if fuel <= 0 then Err "json: parser fuel exhausted (internal)"
+else case parseStringBody (fuel - 1) chars [] of
   Err e => Err e
   Ok (Pair keyJson rest) => case skipJsonWs rest of
     [] => Err "unterminated object"
     c :: rest2 =>
-      if c == 58 then parseObjectValue (jsonStrOr "" keyJson) (skipJsonWs rest2) acc
+      if c == 58 then parseObjectValue (fuel - 1) (jsonStrOr "" keyJson) (skipJsonWs rest2) acc
       else Err "expected : in object"
 
-parseObjectValue : String -> List Int -> List (Pair String Json) -> Result (Pair (List (Pair String Json)) (List Int))
-parseObjectValue key chars acc = case parseValue chars of
+parseObjectValue : Int -> String -> List Int -> List (Pair String Json) -> Result (Pair (List (Pair String Json)) (List Int))
+parseObjectValue fuel key chars acc = if fuel <= 0 then Err "json: parser fuel exhausted (internal)"
+else case parseValue (fuel - 1) chars of
   Err e => Err e
   Ok (Pair v rest) => case skipJsonWs rest of
     [] => Err "unterminated object"
-    c :: rest2 =>
-      if c == 44 then parseObjectMembers rest2 (Pair key v :: acc)
-      else if c == 125 then Ok (Pair (reverse (Pair key v :: acc)) rest2)
-      else Err "expected , or } in object"
+    c :: rest2 => case c of
+      44 => parseObjectMembers (fuel - 1) rest2 (Pair key v :: acc)
+      125 => Ok (Pair (reverse (Pair key v :: acc)) rest2)
+      _ => Err "expected , or } in object"
 
-parseArray : List Int -> Result (Pair Json (List Int))
-parseArray chars = case parseArrayItems chars [] of
+parseArray : Int -> List Int -> Result (Pair Json (List Int))
+parseArray fuel chars = if fuel <= 0 then Err "json: parser fuel exhausted (internal)"
+else case parseArrayItems (fuel - 1) chars [] of
   Err e => Err e
   Ok (Pair items rest) => Ok (Pair (JArr items) rest)
 
-parseArrayItems : List Int -> List Json -> Result (Pair (List Json) (List Int))
-parseArrayItems chars acc = case skipJsonWs chars of
+parseArrayItems : Int -> List Int -> List Json -> Result (Pair (List Json) (List Int))
+parseArrayItems fuel chars acc = if fuel <= 0 then Err "json: parser fuel exhausted (internal)"
+else case skipJsonWs chars of
   [] => Err "unterminated array"
-  c :: rest => if c == 93 then Ok (Pair (reverse acc) rest) else parseArrayValue (c :: rest) acc
+  c :: rest =>
+    if c == 93 then Ok (Pair (reverse acc) rest) else parseArrayValue (fuel - 1) (c :: rest) acc
 
-parseArrayValue : List Int -> List Json -> Result (Pair (List Json) (List Int))
-parseArrayValue chars acc = case parseValue chars of
+parseArrayValue : Int -> List Int -> List Json -> Result (Pair (List Json) (List Int))
+parseArrayValue fuel chars acc = if fuel <= 0 then Err "json: parser fuel exhausted (internal)"
+else case parseValue (fuel - 1) chars of
   Err e => Err e
   Ok (Pair v rest) => case skipJsonWs rest of
     [] => Err "unterminated array"
-    c :: rest2 =>
-      if c == 44 then parseArrayItems rest2 (v :: acc)
-      else if c == 93 then Ok (Pair (reverse (v :: acc)) rest2) else Err "expected , or ] in array"
+    c :: rest2 => case c of
+      44 => parseArrayItems (fuel - 1) rest2 (v :: acc)
+      93 => Ok (Pair (reverse (v :: acc)) rest2)
+      _ => Err "expected , or ] in array"
 
 -- 字符串体：起始引号已被消费；acc 是逆序字符。
-parseStringBody : List Int -> List Int -> Result (Pair Json (List Int))
-parseStringBody chars acc = case chars of
+parseStringBody : Int -> List Int -> List Int -> Result (Pair Json (List Int))
+parseStringBody fuel chars acc = if fuel <= 0 then Err "json: parser fuel exhausted (internal)"
+else case chars of
   [] => Err "unterminated string"
-  c :: rest =>
-    if c == 34 then Ok (Pair (JStr (strPack (reverse acc))) rest)
-    else if c == 92 then parseEscape rest acc else parseStringBody rest (c :: acc)
+  c :: rest => case c of
+    34 => Ok (Pair (JStr (strPack (reverse acc))) rest)
+    92 => parseEscape (fuel - 1) rest acc
+    _ => parseStringBody (fuel - 1) rest (c :: acc)
 
-parseEscape : List Int -> List Int -> Result (Pair Json (List Int))
-parseEscape chars acc = case chars of
+parseEscape : Int -> List Int -> List Int -> Result (Pair Json (List Int))
+parseEscape fuel chars acc = if fuel <= 0 then Err "json: parser fuel exhausted (internal)"
+else case chars of
   [] => Err "unterminated string"
-  c :: rest =>
-    if c == 34 then parseStringBody rest (34 :: acc)
-    else if c == 92 then parseStringBody rest (92 :: acc)
-    else if c == 47 then parseStringBody rest (47 :: acc)
-    else if c == 98 then parseStringBody rest (8 :: acc)
-    else if c == 102 then parseStringBody rest (12 :: acc)
-    else if c == 110 then parseStringBody rest (10 :: acc)
-    else if c == 114 then parseStringBody rest (13 :: acc)
-    else if c == 116 then parseStringBody rest (9 :: acc)
-    else if c == 117 then parseUnicodeEscape rest acc else Err ("invalid escape \\" ++ strPack [c])
+  c :: rest => case c of
+    34 => parseStringBody (fuel - 1) rest (34 :: acc)
+    92 => parseStringBody (fuel - 1) rest (92 :: acc)
+    47 => parseStringBody (fuel - 1) rest (47 :: acc)
+    98 => parseStringBody (fuel - 1) rest (8 :: acc)
+    102 => parseStringBody (fuel - 1) rest (12 :: acc)
+    110 => parseStringBody (fuel - 1) rest (10 :: acc)
+    114 => parseStringBody (fuel - 1) rest (13 :: acc)
+    116 => parseStringBody (fuel - 1) rest (9 :: acc)
+    117 => parseUnicodeEscape (fuel - 1) rest acc
+    _ => Err ("invalid escape \\" ++ strPack [c])
 
-parseUnicodeEscape : List Int -> List Int -> Result (Pair Json (List Int))
-parseUnicodeEscape chars acc = case splitAtCharCount 4 chars of
+parseUnicodeEscape : Int -> List Int -> List Int -> Result (Pair Json (List Int))
+parseUnicodeEscape fuel chars acc = if fuel <= 0 then Err "json: parser fuel exhausted (internal)"
+else case splitAtCharCount 4 chars of
   Nothing => Err "invalid \\u escape"
   Just (Pair digits rest) => case parseHex4 digits of
     Nothing => Err "invalid \\u escape"
-    Just code => parseStringBody rest (append (reverse (encodeUtf8 code)) acc)
+    Just code => parseStringBody (fuel - 1) rest (append (reverse (encodeUtf8 code)) acc)
 
 parseHex4 : List Int -> Maybe Int
 parseHex4 digits = parseHex4Go digits 0 0
@@ -297,37 +309,33 @@ parseNumber chars = case signOf chars of
         Pair rest3 ok => if ok then Ok (Pair (JNum signed) rest3) else Err "invalid number"
 
 signOf : List Int -> Pair Bool (List Int)
-signOf chars = case chars of
-  c :: rest => if c == 45 then Pair True rest else Pair False chars
-  [] => Pair False []
+signOf (chars@(c :: rest)) = if c == 45 then Pair True rest else Pair False chars
+signOf [] = Pair False []
 
 -- 返回 (数值, (位数, 余下字符))。
 parseIntDigits : List Int -> Int -> Int -> Pair Int (Pair Int (List Int))
-parseIntDigits chars acc count = case chars of
-  c :: rest =>
-    if isDigitChar c then parseIntDigits rest (acc * 10 + (c - 48)) (count + 1)
-    else Pair acc (Pair count (c :: rest))
-  [] => Pair acc (Pair count [])
+parseIntDigits (c :: rest) acc count =
+  if isDigitChar c then parseIntDigits rest (acc * 10 + (c - 48)) (count + 1)
+  else Pair acc (Pair count (c :: rest))
+parseIntDigits [] acc count = Pair acc (Pair count [])
 
 -- 小数与指数：语法校验后丢弃（值保持整数）。
 skipNumberTail : List Int -> Pair (List Int) Bool
-skipNumberTail chars = case chars of
-  c :: rest => if c == 46 then case parseIntDigits rest 0 0 of
-    Pair value (Pair count rest2) => if count == 0 then Pair chars False else skipExponent rest2
-  else skipExponent chars
-  [] => Pair [] True
+skipNumberTail (chars@(c :: rest)) = if c == 46 then case parseIntDigits rest 0 0 of
+  Pair value (Pair count rest2) => if count == 0 then Pair chars False else skipExponent rest2
+else skipExponent chars
+skipNumberTail [] = Pair [] True
 
 skipExponent : List Int -> Pair (List Int) Bool
-skipExponent chars = case chars of
-  c :: rest => if c == 101 || c == 69 then
-    let
-      afterSign = case rest of
-        s :: rest2 => if s == 43 || s == 45 then rest2 else rest
-        [] => []
-    in case parseIntDigits afterSign 0 0 of
-      Pair value (Pair count rest3) => if count == 0 then Pair chars False else Pair rest3 True
-  else Pair chars True
-  [] => Pair [] True
+skipExponent (chars@(c :: rest)) = if c == 101 || c == 69 then
+  let
+    afterSign = case rest of
+      s :: rest2 => if s == 43 || s == 45 then rest2 else rest
+      [] => []
+  in case parseIntDigits afterSign 0 0 of
+    Pair value (Pair count rest3) => if count == 0 then Pair chars False else Pair rest3 True
+else Pair chars True
+skipExponent [] = Pair [] True
 
 -- 取前 n 个字符；不足 n 个返回 Nothing。
 splitAtCharCount : Int -> List Int -> Maybe (Pair (List Int) (List Int))

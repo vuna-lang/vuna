@@ -1,0 +1,36 @@
+-- M28：擦除单判据 + 合一。
+-- 1) 显式高阶类型参数（域 `Type -> Type`）按「域在类型层」擦除：单判据 binderRig。
+-- 2) 显式索引 `(n : Nat)` 保留运行时表示（可被读回）。
+-- 3) `>>=` / `fromMaybe` 的隐式类型参数走元变量求解（含非空 spine 的 head 提取兜底）。
+import Base.Maybe
+
+data Nat : Type where
+  Zero : Nat
+  Succ : Nat -> Nat
+
+data Box : Type -> Type where
+  MkBox : (a : Type) -> a -> Box a
+
+data Vec : Type -> Nat -> Type where
+  Nil : (a : Type) -> Vec a Zero
+  Cons : (a : Type) -> (n : Nat) -> a -> Vec a n -> Vec a (Succ n)
+
+-- 显式高阶类型参数：`f` 只出现在类型层，M28 的单判据把它当 Rig0（不进运行时表示）。
+applyType : (f : Type -> Type) -> (a : Type) -> f a -> f a
+applyType f a x = x
+
+-- 显式索引：保留运行时字段，`m` 在递归调用里被读回。
+vlen : (a : Type) -> (n : Nat) -> Vec a n -> Nat
+vlen a n xs = case xs of
+  Nil b => Zero
+  Cons b m y ys => Succ (vlen b m ys)
+
+unbox : Box Int -> Int
+unbox b = case b of
+  MkBox a x => x
+
+onlyJust : Maybe Int -> Int
+onlyJust m = fromMaybe 0 (m >>= \x => Just (x + 1))
+
+main : Int
+main = unbox (applyType Box Int (MkBox Int (onlyJust (Just 40))))
