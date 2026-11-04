@@ -219,6 +219,7 @@ buildMetaText ctx entry linked =
   let
     sources = contextSources ctx entry
     deps = dependencyHashes ctx
+    manifestHash = textHash (runIO (prim_readFile (contextDir ctx ++ "/vuna.toml")))
     entryName = lastSegment entry
     linkedText = if linked then "true" else "false"
   in "{\"schema\":"
@@ -233,6 +234,8 @@ buildMetaText ctx entry linked =
     ++ linkedText
     ++ ",\"closure\":"
     ++ strFromInt (closureHashOf sources 0)
+    ++ ",\"manifest\":"
+    ++ strFromInt manifestHash
     ++ ",\"sources\":["
     ++ joinJsonList (map metaPairText sources)
     ++ "],\"dependencies\":["

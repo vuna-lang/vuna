@@ -97,7 +97,7 @@ M33（语言能写高性能系统程序）已收尾，历史在 git；剩下两�
 
 **进度（M34 第一波）**：`bench/compiler.sh` 编译器基准 + 软门槛已落地（C33 部分、C34 关闭）；
 `check .` 10.8s→7.2s（termination worklist 不动点、`groupDefs`/`extraDefsOf` 表化、
-`vuna map` 索引 O(n²)→O(n)）。剩余：单文件 / 模块级 elab 缓存（M34.5，前置 C32 序列化）、
+`vuna map` 索引 O(n²)→O(n)；C30（build meta 含 manifest 摘要）已修）。剩余：单文件 / 模块级 elab 缓存（M34.5，前置 C32 序列化）、
 workspace 并行 check、`Sort`/`append` 剩余热点。
 
 ### M35：并发 / 服务端
