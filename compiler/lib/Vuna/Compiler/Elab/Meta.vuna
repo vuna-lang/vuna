@@ -433,9 +433,8 @@ spineOfType t = case t of
   _ => Pair "" []
 
 resultSpine : Term -> Pair String (List Term)
-resultSpine ty = case ty of
-  TPi name implicit rig dom cod => resultSpine cod
-  _ => spineOfType ty
+resultSpine (TPi name implicit rig dom cod) = resultSpine cod
+resultSpine ty = spineOfType ty
 
 -- ---------------------------------------------------------------
 -- M28：统一 zonk——把「检查期已解」的元变量替换进**会被存下来**的项
@@ -512,9 +511,8 @@ prependFamParams kindTerm tyExpr sp = case kindTerm of
 
 -- 剥掉外层 Pi（`resultSpine` 需要看返回类型）。
 dropParams : Term -> Term
-dropParams t = case t of
-  TPi n implicit rigB dom cod => dropParams cod
-  _ => t
+dropParams (TPi n implicit rigB dom cod) = dropParams cod
+dropParams t = t
 
 ctorGlobals : List DtCtor -> List (Pair String Term)
 ctorGlobals [] = []

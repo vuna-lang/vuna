@@ -13,24 +13,19 @@ data ScEdge : Type where
   MkScEdge : Int -> Int -> Bool -> ScEdge
 
 siteCaller : Site -> String
-siteCaller s = case s of
-  MkSite c g args sizes region => c
+siteCaller (MkSite c g args sizes region) = c
 
 siteCallee : Site -> String
-siteCallee s = case s of
-  MkSite c g args sizes region => g
+siteCallee (MkSite c g args sizes region) = g
 
 siteArgs : Site -> List Expr
-siteArgs s = case s of
-  MkSite c g args sizes region => args
+siteArgs (MkSite c g args sizes region) = args
 
 siteSizes : Site -> List (Pair String (Pair Int (Pair Int (List Int))))
-siteSizes s = case s of
-  MkSite c g args sizes region => sizes
+siteSizes (MkSite c g args sizes region) = sizes
 
 siteRegion : Site -> List String
-siteRegion s = case s of
-  MkSite c g args sizes region => region
+siteRegion (MkSite c g args sizes region) = region
 
 siteCollectList : Int -> List String -> List String -> List (Pair String (List Int)) -> String -> List (Pair String Int) -> List (Pair String (Pair Int (Pair Int (List Int)))) -> List String -> List Expr -> List Site -> List Site
 siteCollectList fuel comp ctors projs caller facts sizes region [] acc =
@@ -109,8 +104,19 @@ else case e of
   EAnn value ty sp =>
     siteWalkC (fuel - 1) comp ctors projs caller facts sizes region ty
       (siteWalkC (fuel - 1) comp ctors projs caller facts sizes region value acc)
+  -- A2：where/let 多 clause 局部函数：各 clause body 的调用点同样要收集
+  -- （否则 `where` 绑定体里调外层递归函数会漏检）。
+  ELocalFun clauses sp =>
+    siteCollectBinds (fuel - 1) comp ctors projs caller facts sizes region
+      (localClauseBinds clauses) acc
   EVar n sp => if memName n comp then MkSite caller n [] sizes region :: acc else acc
   _ => acc
+
+-- A2：把局部函数的 clause 列表转成 `siteCollectBinds` 能吃的 binds（模式仅占位）。
+localClauseBinds : List (Pair (List Pat) Expr) -> List (Pair Pat Expr)
+localClauseBinds [] = []
+localClauseBinds ((Pair pats body) :: rest) =
+  Pair (PWild (exprSpan body)) body :: localClauseBinds rest
 
 siteWalkEApp : Int -> List String -> List String -> List (Pair String (List Int)) -> String -> List (Pair String Int) -> List (Pair String (Pair Int (Pair Int (List Int)))) -> List String -> Expr -> List Expr -> List Site -> List Site
 siteWalkEApp fuel comp ctors projs caller facts sizes region fn args acc = if fuel <= 0 then acc
@@ -173,16 +179,13 @@ siteCollectGo comp ctors projs defs facts (f :: rest) acc =
     (siteCollectClauses comp ctors projs facts f (clausesOfDef f defs) acc)
 
 edgeFrom : ScEdge -> Int
-edgeFrom e = case e of
-  MkScEdge i j strict => i
+edgeFrom (MkScEdge i j strict) = i
 
 edgeTo : ScEdge -> Int
-edgeTo e = case e of
-  MkScEdge i j strict => j
+edgeTo (MkScEdge i j strict) = j
 
 scStrictEdge : ScEdge -> Bool
-scStrictEdge e = case e of
-  MkScEdge i j strict => strict
+scStrictEdge (MkScEdge i j strict) = strict
 
 scIsStrict : Int -> Bool
 scIsStrict m = if m == 0 then False else True

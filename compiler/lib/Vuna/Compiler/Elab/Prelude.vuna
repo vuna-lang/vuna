@@ -66,10 +66,9 @@ builtinTyName v = case v of
 
 -- 按实参类型选 runtime 函数名（只有 Int / String 可特化；其它类型走 Eq 字典）。
 eqRuntimeName : String -> String -> Result String
-eqRuntimeName op tyName = case tyName of
-  "Int" => if op == "==" then Ok "bi_eq_int" else Ok "bi_neq_int"
-  "String" => if op == "==" then Ok "bi_eq_str" else Ok "bi_neq_str"
-  _ => Err (tcMsg (OpOnlyIntString op tyName) (VCons op (VCons tyName VNil)))
+eqRuntimeName op "Int" = if op == "==" then Ok "bi_eq_int" else Ok "bi_neq_int"
+eqRuntimeName op "String" = if op == "==" then Ok "bi_eq_str" else Ok "bi_neq_str"
+eqRuntimeName op tyName = Err (tcMsg (OpOnlyIntString op tyName) (VCons op (VCons tyName VNil)))
 
 -- 泛化后的 `==` / `/=` 签名：`{a : Type} -> a -> a -> Bool`。
 polyEqTy : Term

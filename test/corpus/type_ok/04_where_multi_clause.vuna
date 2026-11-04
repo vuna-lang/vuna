@@ -1,0 +1,11 @@
+-- A2：where 内部函数支持多 clause（共享一条签名，构造子模式参数）。
+data Nat : Type where
+  Zero : Nat
+  Succ : Nat -> Nat
+
+main : Int
+main = pick (Succ Zero) Zero where
+  pick : Nat -> Nat -> Int
+  pick Zero _ = 1
+  pick (Succ _) Zero = 2
+  pick (Succ _) (Succ _) = 3

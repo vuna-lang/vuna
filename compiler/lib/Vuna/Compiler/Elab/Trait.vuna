@@ -169,10 +169,9 @@ methodProjections tname pname pKind methods fieldTys =
 methodProjZip : String -> String -> Term -> Int -> List (Pair String Expr) -> List Term -> List (Pair String Term)
 methodProjZip tname pname pKind idx [] fieldTys = []
 methodProjZip tname pname pKind idx (m :: rest) [] = []
-methodProjZip tname pname pKind idx (m :: rest) (t :: rest2) = case m of
-  Pair mname mexpr =>
-    Pair mname (TPi pname True Rig0 pKind (TPi "_" True Rig0 (foldAppTerms (TGlobal (dictTypeName tname)) [Pair (TVar pname 0) Rig0]) (shift 0 1 t)))
-      :: methodProjZip tname pname pKind (idx + 1) rest rest2
+methodProjZip tname pname pKind idx ((Pair mname mexpr) :: rest) (t :: rest2) =
+  Pair mname (TPi pname True Rig0 pKind (TPi "_" True Rig0 (foldAppTerms (TGlobal (dictTypeName tname)) [Pair (TVar pname 0) Rig0]) (shift 0 1 t)))
+    :: methodProjZip tname pname pKind (idx + 1) rest rest2
 
 -- 投影的定义体：`\p => \d => \x0 .. \x(ar-1) => case d of MkDict_C f0..fn => f_k x0..`
 -- 签名 `{p} -> {d : Dict_C p} -> <方法类型>`；de Bruijn 索引：`_d = n+ar`、`_p = n+ar+1`、
@@ -208,10 +207,9 @@ projectionDefs tname pname methods fieldTys nFields =
 projectionDefsGo : String -> List (Pair String Expr) -> List Term -> Int -> Int -> List (Pair String Term)
 projectionDefsGo ctor [] fieldTys idx nFields = []
 projectionDefsGo ctor (m :: rest) [] idx nFields = []
-projectionDefsGo ctor (m :: rest) (t :: rest2) idx nFields = case m of
-  Pair mname mexpr =>
-    Pair mname (projectionBody ctor idx (methodArgRigsOf binderRig t) nFields)
-      :: projectionDefsGo ctor rest rest2 (idx + 1) nFields
+projectionDefsGo ctor ((Pair mname mexpr) :: rest) (t :: rest2) idx nFields =
+  Pair mname (projectionBody ctor idx (methodArgRigsOf binderRig t) nFields)
+    :: projectionDefsGo ctor rest rest2 (idx + 1) nFields
 
 -- 实例体：每个方法子句按方法签名 check，再按声明顺序组成字典构造子应用。
 -- M29-T2b：实例带 telescope（类型参数）与 context（字典约束）：
@@ -565,8 +563,8 @@ substInstParamGo arg depth t = case t of
   _ => t
 
 substInstParamAlt : Term -> Int -> CaseAlt -> CaseAlt
-substInstParamAlt arg depth alt = case alt of
-  CaseAlt n bs b => CaseAlt n bs (substInstParamGo arg (depth + length bs) b)
+substInstParamAlt arg depth (CaseAlt n bs b) =
+  CaseAlt n bs (substInstParamGo arg (depth + length bs) b)
 
 elabInstanceMethodsGo : List (Pair String Term) -> Ctx -> Int -> Ec -> List (Pair String Term) -> String -> Term -> List Decl -> List Term -> List (Pair Term Rig) -> Span -> Result (Pair (List Term) (Pair (List (Pair Term Rig)) Ec))
 elabInstanceMethodsGo globals ctx nCtx ec [] pname headArg decls terms args sp =
@@ -698,8 +696,8 @@ substMetaTermGo m rep depth t = case t of
   _ => t
 
 substMetaTermAlt : Int -> Term -> Int -> CaseAlt -> CaseAlt
-substMetaTermAlt m rep depth alt = case alt of
-  CaseAlt n bs b => CaseAlt n bs (substMetaTermGo m rep (depth + length bs) b)
+substMetaTermAlt m rep depth (CaseAlt n bs b) =
+  CaseAlt n bs (substMetaTermGo m rep (depth + length bs) b)
 
 clauseSpanOf : List (Pair (List Pat) Expr) -> Span
 clauseSpanOf clauses = case clauses of

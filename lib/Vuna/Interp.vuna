@@ -110,7 +110,9 @@ tomlEscaped [] = ""
 tomlEscaped (c :: rest) = tomlChar c ++ tomlEscaped rest
 
 tomlChar : Int -> String
-tomlChar c = if c == 34 then "\\\"" else if c == 92 then "\\\\" else strPack [c]
+tomlChar 34 = "\\\""
+tomlChar 92 = "\\\\"
+tomlChar c = strPack [c]
 
 -- 依赖 key 用裸名（TOML 的 quoted key 在 vuna 的 TOML 解析器里不支持；包名已被
 -- manifest 校验限制为 a-z/0-9/'-'，是合法 bare key）；路径值用双引号字符串。

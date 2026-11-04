@@ -212,6 +212,10 @@ else case e of
   ELet binds body rec_ sp =>
     andThen (traverse (desugarBindFuel (fuel - 1) records) binds)
       (\b2 => andThen (desugarExprFuel (fuel - 1) records body) (\body2 => Ok (ELet b2 body2 rec_ sp)))
+  -- A2：where/let 多 clause 局部函数：逐 clause 消解记录模式与 body。
+  ELocalFun clauses sp =>
+    andThen (traverse (desugarLocalClauseFuel (fuel - 1) records) clauses)
+      (\c2 => Ok (ELocalFun c2 sp))
   ECase scrut alts sp =>
     andThen (desugarExprFuel (fuel - 1) records scrut)
       (\s2 => andThen (traverse (desugarAltFuel (fuel - 1) records) alts) (\a2 => Ok (ECase s2 a2 sp)))
@@ -322,6 +326,13 @@ desugarBindFuel fuel records (Pair pat value) =
   else andThen (desugarPatternFuel (fuel - 1) records pat)
     (\p2 => andThen (desugarExprFuel (fuel - 1) records value) (\v2 => Ok (Pair p2 v2)))
 
+-- A2：局部函数 clause（参数模式列表 + body）。
+desugarLocalClauseFuel : Int -> List RecordInfo -> Pair (List Pat) Expr -> Result (Pair (List Pat) Expr)
+desugarLocalClauseFuel fuel records clause =
+  if fuel <= 0 then Err "DT: internal: record desugar fuel exhausted"
+  else andThen (traverse (desugarPatternFuel (fuel - 1) records) (firstOf clause))
+    (\p2 => andThen (desugarExprFuel (fuel - 1) records (secondOf clause)) (\b2 => Ok (Pair p2 b2)))
+
 desugarAltFuel : Int -> List RecordInfo -> Pair Pat Expr -> Result (Pair Pat Expr)
 desugarAltFuel fuel records (Pair pat body) =
   if fuel <= 0 then Err "DT: internal: record desugar fuel exhausted"
@@ -338,13 +349,12 @@ recordsWithField fname (r :: rest) = case r of
 
 -- 字段访问降级：`case base of Mk<R> f0 .. fn => f_k`（缺省位置补通配）。
 fieldAccessExpr : RecordInfo -> String -> Expr -> Span -> Expr
-fieldAccessExpr info fname b sp = case info of
-  RecordInfo rname params fdefs derivings ctor =>
-    let
-      pats = fieldAccessPats fname fdefs
-      body = EVar fname sp
-      alt = Pair (PCon ctor pats sp) body
-    in ECase b [alt] sp
+fieldAccessExpr (RecordInfo rname params fdefs derivings ctor) fname b sp =
+  let
+    pats = fieldAccessPats fname fdefs
+    body = EVar fname sp
+    alt = Pair (PCon ctor pats sp) body
+  in ECase b [alt] sp
 
 -- 分支模式：命中的字段位置绑定成与字段同名的变量，其余补通配。
 fieldAccessPats : String -> List (Pair String Expr) -> List Pat

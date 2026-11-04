@@ -348,9 +348,9 @@ and v_Vuna_dCompiler_dCore_dTerm_dsubstMetaVarAlt = (fun mc0 -> (fun mc1 -> (fun
 
 let v_Vuna_dCompiler_dCore_dTerm_dsubstMetaVar = (fun m -> (fun name -> (fun q -> (fun t -> (((((v_Vuna_dCompiler_dCore_dTerm_dsubstMetaVarGo m) name) q) 0) t)))))
 
-let rec v_Vuna_dCompiler_dCore_dTerm_dinsertDictBinderGo = (fun name -> (fun idx -> (fun dictDom -> (fun depth -> (fun t -> (match t with
-  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTPi (dtb__238, dtb__239, dtb__240, dtb__241, dtb__242) -> (if ((bi_eq_int depth) idx) then (C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTPi (dtb__238, dtb__239, dtb__240, dtb__241, (C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTPi (name, true, C_Vuna_dCompiler_dCore_dTerm_dRig_Vuna_dCompiler_dCore_dTerm_dRig1, dictDom, (((v_Vuna_dCompiler_dCore_dTerm_dshift 0) 1) dtb__242))))) else (C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTPi (dtb__238, dtb__239, dtb__240, dtb__241, (((((v_Vuna_dCompiler_dCore_dTerm_dinsertDictBinderGo name) idx) dictDom) ((bi_add depth) 1)) dtb__242))))
-  | _ -> t
+let rec v_Vuna_dCompiler_dCore_dTerm_dinsertDictBinderGo = (fun mc0 -> (fun mc1 -> (fun mc2 -> (fun mc3 -> (fun mc4 -> (match mc4 with
+  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTPi (dtb__238, dtb__239, dtb__240, dtb__241, dtb__242) -> (if ((bi_eq_int mc3) mc1) then (C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTPi (dtb__238, dtb__239, dtb__240, dtb__241, (C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTPi (mc0, true, C_Vuna_dCompiler_dCore_dTerm_dRig_Vuna_dCompiler_dCore_dTerm_dRig1, mc2, (((v_Vuna_dCompiler_dCore_dTerm_dshift 0) 1) dtb__242))))) else (C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTPi (dtb__238, dtb__239, dtb__240, dtb__241, (((((v_Vuna_dCompiler_dCore_dTerm_dinsertDictBinderGo mc0) mc1) mc2) ((bi_add mc3) 1)) dtb__242))))
+  | _ -> mc4
 ))))))
 
 let v_Vuna_dCompiler_dCore_dTerm_dinsertDictBinder = (fun name -> (fun idx -> (fun dictDom -> (fun t -> (((((v_Vuna_dCompiler_dCore_dTerm_dinsertDictBinderGo name) idx) dictDom) 0) t)))))
@@ -362,9 +362,9 @@ let rec v_Vuna_dCompiler_dCore_dTerm_dcountPis = (fun t -> (match t with
   | _ -> 0
 ))
 
-let rec v_Vuna_dCompiler_dCore_dTerm_dinsertLamBinderGo = (fun name -> (fun idx -> (fun depth -> (fun t -> (match t with
-  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTLam (dtb__248, dtb__249, dtb__250) -> (if ((bi_eq_int depth) idx) then (C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTLam (dtb__248, dtb__249, (C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTLam (name, C_Vuna_dCompiler_dCore_dTerm_dRig_Vuna_dCompiler_dCore_dTerm_dRig1, (((v_Vuna_dCompiler_dCore_dTerm_dshift 0) 1) dtb__250))))) else (C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTLam (dtb__248, dtb__249, ((((v_Vuna_dCompiler_dCore_dTerm_dinsertLamBinderGo name) idx) ((bi_add depth) 1)) dtb__250))))
-  | _ -> t
+let rec v_Vuna_dCompiler_dCore_dTerm_dinsertLamBinderGo = (fun mc0 -> (fun mc1 -> (fun mc2 -> (fun mc3 -> (match mc3 with
+  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTLam (dtb__248, dtb__249, dtb__250) -> (if ((bi_eq_int mc2) mc1) then (C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTLam (dtb__248, dtb__249, (C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTLam (mc0, C_Vuna_dCompiler_dCore_dTerm_dRig_Vuna_dCompiler_dCore_dTerm_dRig1, (((v_Vuna_dCompiler_dCore_dTerm_dshift 0) 1) dtb__250))))) else (C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTLam (dtb__248, dtb__249, ((((v_Vuna_dCompiler_dCore_dTerm_dinsertLamBinderGo mc0) mc1) ((bi_add mc2) 1)) dtb__250))))
+  | _ -> mc3
 )))))
 
 let v_Vuna_dCompiler_dCore_dTerm_dinsertLamBinder = (fun name -> (fun idx -> (fun t -> ((((v_Vuna_dCompiler_dCore_dTerm_dinsertLamBinderGo name) idx) 0) t))))
@@ -470,8 +470,8 @@ and v_Vuna_dCompiler_dCore_dTerm_dlevelEscapesList = (fun mc0 -> (fun mc1 -> (ma
   | C_Base_dList_dList_Base_dList_dNil -> false
   | _ -> failwith "DT: impossible branch"
 )))
-and v_Vuna_dCompiler_dCore_dTerm_dlevelEscapesClo = (fun limit -> (fun clo -> (match clo with
-  | C_Vuna_dCompiler_dCore_dTerm_dClosure_Vuna_dCompiler_dCore_dTerm_dClos (dtb__346, dtb__347) -> ((v_Vuna_dCompiler_dCore_dTerm_dlevelEscapesList limit) dtb__346)
+and v_Vuna_dCompiler_dCore_dTerm_dlevelEscapesClo = (fun mc0 -> (fun mc1 -> (match mc1 with
+  | C_Vuna_dCompiler_dCore_dTerm_dClosure_Vuna_dCompiler_dCore_dTerm_dClos (dtb__346, dtb__347) -> ((v_Vuna_dCompiler_dCore_dTerm_dlevelEscapesList mc0) dtb__346)
   | _ -> failwith "DT: impossible branch"
 )))
 

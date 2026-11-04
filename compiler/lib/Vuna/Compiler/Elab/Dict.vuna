@@ -228,8 +228,7 @@ substDictTermGo ec depth t = case t of
   _ => t
 
 substDictTermAlt : Ec -> Int -> CaseAlt -> CaseAlt
-substDictTermAlt ec depth alt = case alt of
-  CaseAlt n bs b => CaseAlt n bs (substDictTermGo ec (depth + length bs) b)
+substDictTermAlt ec depth (CaseAlt n bs b) = CaseAlt n bs (substDictTermGo ec (depth + length bs) b)
 
 -- 把 Value 里的全局应用脊还原成 Term，并按全局签名恢复每个实参的 rig。
 dictTermOfValue : Ec -> Value -> Maybe Term
@@ -294,9 +293,8 @@ argHeadMatchesKind globals ec ctx forced argKind = case neutralHeadOrSelf forced
 
 -- 中性应用的头部（`Box Int` ⇒ `Box`）；非应用原样返回。
 neutralHeadOrSelf : Value -> Value
-neutralHeadOrSelf v = case v of
-  VNeutral (NGlobal g (_ :: _)) => VNeutral (NGlobal g [])
-  _ => v
+neutralHeadOrSelf (VNeutral (NGlobal g (_ :: _))) = VNeutral (NGlobal g [])
+neutralHeadOrSelf v = v
 
 dictClassArg : Ec -> Value -> Maybe Value
 dictClassArg ec dom = case forceVal ec dom of

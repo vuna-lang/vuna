@@ -121,8 +121,7 @@ occursLevelList lvl [] = False
 occursLevelList lvl (v :: rest) = occursLevel lvl v || occursLevelList lvl rest
 
 occursLevelClo : Int -> Closure -> Bool
-occursLevelClo lvl clo = case clo of
-  Clos env body => occursLevelList lvl env
+occursLevelClo lvl (Clos env body) = occursLevelList lvl env
 
 -- 刚性位置：构造子/中性头按结构递归，其余回落到 conv 的相等性判定。
 unifyIdxRigid : Ec -> List (Pair Int Value) -> Int -> Int -> Value -> Value -> Result (List (Pair Int Value))
@@ -409,9 +408,9 @@ checkLitHead prevs alt rest sp =
 -- 兜底分支只能最后；后面的字面量分支报 `BranchAfterCatchAll`（B15 新诊断），
 -- 其它分支沿用既有 `CatchAllNotLast`。
 checkCatchAll : List (Pair Pat Expr) -> Pair Pat Expr -> List (Pair Pat Expr) -> Span -> Result Int
-checkCatchAll prevs alt rest sp = case rest of
-  [] => Ok 0
-  _ => if hasLitHead rest then tcErr0 sp BranchAfterCatchAll else tcErr0 sp CatchAllNotLast
+checkCatchAll prevs alt [] sp = Ok 0
+checkCatchAll prevs alt rest sp =
+  if hasLitHead rest then tcErr0 sp BranchAfterCatchAll else tcErr0 sp CatchAllNotLast
 
 hasLitHead : List (Pair Pat Expr) -> Bool
 hasLitHead alts = case alts of
@@ -448,8 +447,7 @@ hasDupNames (x :: rest) = memName x rest || hasDupNames rest
 -- 按作用域解析，不会错位。
 anyNestedPat : List (Pair Pat Expr) -> Bool
 anyNestedPat [] = False
-anyNestedPat (alt :: rest) = case alt of
-  Pair pat body => if nestedInPat pat then True else anyNestedPat rest
+anyNestedPat ((Pair pat body) :: rest) = if nestedInPat pat then True else anyNestedPat rest
 
 nestedInPat : Pat -> Bool
 nestedInPat p = case p of

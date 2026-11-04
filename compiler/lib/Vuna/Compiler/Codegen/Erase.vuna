@@ -349,9 +349,8 @@ else case tblLookup n compTbl of
 -- 单成员分量（大程序里占绝对多数）直接返回，免掉对全程序名字的一次 filter；
 -- 旧实现对每个分量都 filter 一遍 allNames ⇒ O(#分量 × #定义)。
 groupOf : List String -> List String -> List String
-groupOf allNames g = case g of
-  [x] => [x]
-  _ => filterNames (\m => tblMem m (tblOfNames g)) allNames
+groupOf allNames ([x]) = [x]
+groupOf allNames g = filterNames (\m => tblMem m (tblOfNames g)) allNames
 
 filterNames : (String -> Bool) -> List String -> List String
 filterNames pred names = case names of

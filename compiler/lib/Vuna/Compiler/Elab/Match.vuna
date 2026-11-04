@@ -44,8 +44,7 @@ multiToCaseExpr table clauses name = buildColumnExpr table clauses [name] 200
 
 arityOf : List (Pair (List Pat) Expr) -> Maybe Int
 arityOf [] = Nothing
-arityOf (c :: rest) = case c of
-  Pair pats body => Just (length pats)
+arityOf ((Pair pats body) :: rest) = Just (length pats)
 
 paramNames : Int -> List String
 paramNames n = paramNamesGo (n - 0) n []
@@ -248,6 +247,8 @@ renameExpr oldName newName e = case e of
       (renameExprUnless oldName newName (bindNames binds) body) rec_ sp
   ECase scrut alts sp =>
     ECase (renameExpr oldName newName scrut) (map (renameAlt oldName newName) alts) sp
+  -- A2：局部函数组的每个 clause 独立改名（参数模式绑定名遮蔽该 clause 的 body）。
+  ELocalFun clauses sp => ELocalFun (map (renameLocalClause oldName newName) clauses) sp
   EIf c t e2 sp =>
     EIf (renameExpr oldName newName c) (renameExpr oldName newName t)
       (renameExpr oldName newName e2) sp
@@ -268,6 +269,12 @@ renameBind oldName newName bind = Pair (firstOf bind) (renameExpr oldName newNam
 renameFieldValue : String -> String -> Pair String Expr -> Pair String Expr
 renameFieldValue oldName newName field =
   Pair (firstOf field) (renameExpr oldName newName (secondOf field))
+
+-- A2：局部函数 clause —— 参数模式里的绑定名遮蔽 oldName。
+renameLocalClause : String -> String -> Pair (List Pat) Expr -> Pair (List Pat) Expr
+renameLocalClause oldName newName clause =
+  Pair (firstOf clause)
+    (renameExprUnless oldName newName (concatMap patNamesOf (firstOf clause)) (secondOf clause))
 
 bindNames : List (Pair Pat Expr) -> List String
 bindNames [] = []

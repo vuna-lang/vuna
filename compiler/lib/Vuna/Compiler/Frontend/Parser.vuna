@@ -178,7 +178,7 @@ parseBindingDef fuel stStart st bindCol pat = if fuel <= 0 then Err "DT: parser 
 else case pat of
   PVar name _ =>
     if startsPatternAtom st && canContinue st bindCol then step (parseClausePatterns (stateFuel st) st bindCol)
-      (\pats, st2 => step (expectSym st2 "=") (\_, st3 => step (parseExpr (fuel - 1) st3 bindCol 0) (\value, st4 => andThen (lamNames pats) (\names => Ok (Pair (BIBind (Pair (PVar name (patSpan pat)) (ELam names value (spanOf stStart st4)))) st4)))))
+      (\pats, st2 => step (expectSym st2 "=") (\_, st3 => step (parseExpr (fuel - 1) st3 bindCol 0) (\value, st4 => Ok (Pair (BIBind (Pair (PVar name (patSpan pat)) (ELocalFun [Pair pats value] (spanOf stStart st4)))) st4))))
     else step (parseBindingValue (fuel - 1) st pat bindCol) (\b, st2 => Ok (Pair (BIBind b) st2))
   _ => step (parseBindingValue (fuel - 1) st pat bindCol) (\b, st2 => Ok (Pair (BIBind b) st2))
 
@@ -203,12 +203,30 @@ bindingBindsGo (item :: rest) sigs bound acc = case item of
     if memName name bound then Err (showSpanLoc sp ++ ": " ++ psMsg (WhereSigBeforeClause name) (VCons name VNil))
     else if hasBindingSig name sigs then Err (showSpanLoc sp ++ ": " ++ psMsg (WhereSigDuplicate name) (VCons name VNil))
     else bindingBindsGo rest (Pair name (Pair ty sp) :: sigs) bound acc
-  BIBind (Pair pat value) => case bindingSigOf (patBoundName pat) sigs of
-    Just (Pair ty sp) =>
-      if memName (patBoundName pat) bound then Err
-        (showSpanLoc sp ++ ": " ++ psMsg (WhereSigMultiClause (patBoundName pat)) (VCons (patBoundName pat) VNil))
-      else bindingBindsGo rest sigs (patBoundName pat :: bound) (Pair pat (EAnn value ty sp) :: acc)
-    Nothing => bindingBindsGo rest sigs (patBoundName pat :: bound) (Pair pat value :: acc)
+  BIBind (Pair pat value) => case localFunMerge (patBoundName pat) value acc of
+    Just merged => bindingBindsGo rest sigs bound merged
+    Nothing => case bindingSigOf (patBoundName pat) sigs of
+      Just (Pair ty sp) =>
+        if memName (patBoundName pat) bound then Err
+          (showSpanLoc sp ++ ": " ++ psMsg (WhereSigMultiClause (patBoundName pat)) (VCons (patBoundName pat) VNil))
+        else bindingBindsGo rest sigs (patBoundName pat :: bound) (Pair pat (EAnn value ty sp) :: acc)
+      Nothing => bindingBindsGo rest sigs (patBoundName pat :: bound) (Pair pat value :: acc)
+
+-- A2：把相邻同名函数子句合并成一个 `ELocalFun` 绑定（where/let 多 clause）。
+-- 签名保留在合并后的条目上（`EAnn` 只包裹第一条的 `ELocalFun`）；不连续的同名子句
+-- 不合并，仍按旧的 `WhereSigMultiClause` 报错。
+localFunMerge : String -> Expr -> List (Pair Pat Expr) -> Maybe (List (Pair Pat Expr))
+localFunMerge name value acc = case acc of
+  (Pair (PVar n nsp) (ELocalFun cs0 sp0)) :: rest => if n == name then case value of
+    ELocalFun cs1 sp1 => Just (Pair (PVar n nsp) (ELocalFun (append cs0 cs1) sp0) :: rest)
+    _ => Nothing
+  else Nothing
+  (Pair (PVar n nsp) (EAnn (ELocalFun cs0 sp0) ty annSp)) :: rest => if n == name then case value of
+    ELocalFun cs1 sp1 =>
+      Just (Pair (PVar n nsp) (EAnn (ELocalFun (append cs0 cs1) sp0) ty annSp) :: rest)
+    _ => Nothing
+  else Nothing
+  _ => Nothing
 
 -- 绑定名（非简单变量绑定返回空串，永远匹配不到签名）。
 patBoundName : Pat -> String
@@ -231,14 +249,7 @@ firstDanglingSig [] bound = Nothing
 firstDanglingSig ((Pair name (Pair ty sp)) :: rest) bound =
   if memName name bound then firstDanglingSig rest bound else Just (Pair name sp)
 
--- λ 参数名：绑定块里的函数子句参数必须是简单变量名。
-lamNames : List Pat -> Result (List String)
-lamNames [] = Ok []
-lamNames ((PVar n _) :: rest) = case lamNames rest of
-  Ok ns => Ok (n :: ns)
-  Err e => Err e
-lamNames (_ :: _) = psErr0 WhereArgsNotSimple
-
+-- λ 参数名：绑定块里的函数子句参数必须是简单变量名（A2 起保留模式，见 parseBindingDef）。
 parseClausePatterns : Int -> PState -> Int -> Result (Pair (List Pat) PState)
 parseClausePatterns fuel st blockCol =
   if fuel <= 0 then Err "DT: parser fuel exhausted (internal: parser made no progress)"

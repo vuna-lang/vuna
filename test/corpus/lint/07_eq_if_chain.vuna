@@ -1,0 +1,5 @@
+sign : String -> Int
+sign name = if name == "a" then 1 else if name == "b" then 2 else 3
+
+main : Int
+main = sign "a"

@@ -1,0 +1,8 @@
+weight : Int -> Int
+weight n = case n of
+  10 => 100
+  20 => 200
+  _ => 300
+
+main : Int
+main = weight 10

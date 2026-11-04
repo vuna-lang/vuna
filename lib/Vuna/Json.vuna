@@ -128,14 +128,14 @@ renderJsonString s =
 
 -- 每字符一块（无需转义时退化为单字符），拼起来等价于逐字符转义。
 escapeChunk : Int -> String
-escapeChunk c =
-  if c == 34 then "\\\""
-  else if c == 92 then "\\\\"
-  else if c == 10 then "\\n"
-  else if c == 9 then "\\t"
-  else if c == 13 then "\\r"
-  else if c == 8 then "\\b"
-  else if c == 12 then "\\f" else if c < 32 then "\\u" ++ pad4 (hexLower c) else strPack [c]
+escapeChunk 34 = "\\\""
+escapeChunk 92 = "\\\\"
+escapeChunk 10 = "\\n"
+escapeChunk 9 = "\\t"
+escapeChunk 13 = "\\r"
+escapeChunk 8 = "\\b"
+escapeChunk 12 = "\\f"
+escapeChunk c = if c < 32 then "\\u" ++ pad4 (hexLower c) else strPack [c]
 
 pad4 : String -> String
 pad4 s = repeat (4 - strLength s) "0" ++ s
@@ -201,9 +201,10 @@ parseObjectMembers : Int -> List Int -> List (Pair String Json) -> Result (Pair 
 parseObjectMembers fuel chars acc = if fuel <= 0 then Err "json: parser fuel exhausted (internal)"
 else case skipJsonWs chars of
   [] => Err "unterminated object"
-  c :: rest =>
-    if c == 125 then Ok (Pair (reverse acc) rest)
-    else if c == 34 then parseObjectPair (fuel - 1) rest acc else Err "expected a string key in object"
+  c :: rest => case c of
+    125 => Ok (Pair (reverse acc) rest)
+    34 => parseObjectPair (fuel - 1) rest acc
+    _ => Err "expected a string key in object"
 
 parseObjectPair : Int -> List Int -> List (Pair String Json) -> Result (Pair (List (Pair String Json)) (List Int))
 parseObjectPair fuel chars acc = if fuel <= 0 then Err "json: parser fuel exhausted (internal)"
@@ -221,10 +222,10 @@ else case parseValue (fuel - 1) chars of
   Err e => Err e
   Ok (Pair v rest) => case skipJsonWs rest of
     [] => Err "unterminated object"
-    c :: rest2 =>
-      if c == 44 then parseObjectMembers (fuel - 1) rest2 (Pair key v :: acc)
-      else if c == 125 then Ok (Pair (reverse (Pair key v :: acc)) rest2)
-      else Err "expected , or } in object"
+    c :: rest2 => case c of
+      44 => parseObjectMembers (fuel - 1) rest2 (Pair key v :: acc)
+      125 => Ok (Pair (reverse (Pair key v :: acc)) rest2)
+      _ => Err "expected , or } in object"
 
 parseArray : Int -> List Int -> Result (Pair Json (List Int))
 parseArray fuel chars = if fuel <= 0 then Err "json: parser fuel exhausted (internal)"
@@ -245,34 +246,36 @@ else case parseValue (fuel - 1) chars of
   Err e => Err e
   Ok (Pair v rest) => case skipJsonWs rest of
     [] => Err "unterminated array"
-    c :: rest2 =>
-      if c == 44 then parseArrayItems (fuel - 1) rest2 (v :: acc)
-      else if c == 93 then Ok (Pair (reverse (v :: acc)) rest2) else Err "expected , or ] in array"
+    c :: rest2 => case c of
+      44 => parseArrayItems (fuel - 1) rest2 (v :: acc)
+      93 => Ok (Pair (reverse (v :: acc)) rest2)
+      _ => Err "expected , or ] in array"
 
 -- 字符串体：起始引号已被消费；acc 是逆序字符。
 parseStringBody : Int -> List Int -> List Int -> Result (Pair Json (List Int))
 parseStringBody fuel chars acc = if fuel <= 0 then Err "json: parser fuel exhausted (internal)"
 else case chars of
   [] => Err "unterminated string"
-  c :: rest =>
-    if c == 34 then Ok (Pair (JStr (strPack (reverse acc))) rest)
-    else if c == 92 then parseEscape (fuel - 1) rest acc else parseStringBody (fuel - 1) rest (c :: acc)
+  c :: rest => case c of
+    34 => Ok (Pair (JStr (strPack (reverse acc))) rest)
+    92 => parseEscape (fuel - 1) rest acc
+    _ => parseStringBody (fuel - 1) rest (c :: acc)
 
 parseEscape : Int -> List Int -> List Int -> Result (Pair Json (List Int))
 parseEscape fuel chars acc = if fuel <= 0 then Err "json: parser fuel exhausted (internal)"
 else case chars of
   [] => Err "unterminated string"
-  c :: rest =>
-    if c == 34 then parseStringBody (fuel - 1) rest (34 :: acc)
-    else if c == 92 then parseStringBody (fuel - 1) rest (92 :: acc)
-    else if c == 47 then parseStringBody (fuel - 1) rest (47 :: acc)
-    else if c == 98 then parseStringBody (fuel - 1) rest (8 :: acc)
-    else if c == 102 then parseStringBody (fuel - 1) rest (12 :: acc)
-    else if c == 110 then parseStringBody (fuel - 1) rest (10 :: acc)
-    else if c == 114 then parseStringBody (fuel - 1) rest (13 :: acc)
-    else if c == 116 then parseStringBody (fuel - 1) rest (9 :: acc)
-    else if c == 117 then parseUnicodeEscape (fuel - 1) rest acc
-    else Err ("invalid escape \\" ++ strPack [c])
+  c :: rest => case c of
+    34 => parseStringBody (fuel - 1) rest (34 :: acc)
+    92 => parseStringBody (fuel - 1) rest (92 :: acc)
+    47 => parseStringBody (fuel - 1) rest (47 :: acc)
+    98 => parseStringBody (fuel - 1) rest (8 :: acc)
+    102 => parseStringBody (fuel - 1) rest (12 :: acc)
+    110 => parseStringBody (fuel - 1) rest (10 :: acc)
+    114 => parseStringBody (fuel - 1) rest (13 :: acc)
+    116 => parseStringBody (fuel - 1) rest (9 :: acc)
+    117 => parseUnicodeEscape (fuel - 1) rest acc
+    _ => Err ("invalid escape \\" ++ strPack [c])
 
 parseUnicodeEscape : Int -> List Int -> List Int -> Result (Pair Json (List Int))
 parseUnicodeEscape fuel chars acc = if fuel <= 0 then Err "json: parser fuel exhausted (internal)"

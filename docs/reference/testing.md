@@ -124,10 +124,13 @@ M30/E10 起 `.nointerp` 不再只是「跳过」：第 43 段对每个标记夹�
   fmt 黄金例见 `corpus/fmt/05_where`、`15_where_inst`、`fmt/typed/01_where`；
   where 缺签名负例是 `corpus/dt_err/35_where_no_sig`；
 - `corpus/lint/`、`corpus/fix/`：`vuna lint` / `lint --fix` golden、退出码与幂等（工具链，
-  与检查器无关）。输出带错误码：`路径:行:列: [LN_XXX] <rule>: <message>`，例如
+  与检查器无关）。M30 起规则为 AST 驱动：`literal-if-chain`、`lift-destructure`（单分支
+  case / let 模式解构）、`case-to-clauses`（顶层 case → 多 clause）；语料 05–11、fix 07–12
+  覆盖三条规则与「不报」形态。输出带错误码：`路径:行:列: [LN_XXX] <rule>: <message>`，例如
   `01_literal_if_chain.vuna:3:8: [LN_LiteralIfChain] literal-if-chain: if/else-if chain on
   <scrutinee> can be a case with literal patterns`；错误码体系与符号约定见
-  [dt-tooling.md](dt-tooling.md) 第 4 节，完整清单由 `vuna gen-errors` 生成；
+  [dt-tooling.md](dt-tooling.md) 第 4 节，完整清单由 `vuna gen-errors` 生成。规则与边界见
+  [lint.md](lint.md)；`checks.vuna-lint` 对全部包源码要求零 finding；
 - `corpus/lsp/smoke.sh`：`vuna lsp` 的 JSON-RPC 冒烟（72 项）。M30 起走包上下文
   （含 import 的文件真正类型检查），覆盖两模块临时包、formatting、documentSymbol、
   definition、references、completion、workspace symbol、lint 诊断、URI `%XX` 与退出码；

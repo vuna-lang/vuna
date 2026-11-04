@@ -144,9 +144,8 @@ catchAllEnv alt scrut env = case vCaseAltBinders alt of
   _ => scrut :: env
 
 evalIf : Value -> Value -> Value -> Value
-evalIf c th el = case c of
-  VBool b => if b then th else el
-  _ => VIf c th el
+evalIf (VBool b) th el = if b then th else el
+evalIf c th el = VIf c th el
 
 spineAppend : Neutral -> Value -> Neutral
 spineAppend n a = case n of
@@ -495,8 +494,7 @@ argValsAt ((Pair name rig) :: rest) depth i =
 -- 逐个把实参喂给闭包：闭包 env 是分支外环境，实参按 arg0 先喂的顺序。
 applyClosureBinder : Closure -> List Value -> Value
 applyClosureBinder clo [] = VCon "_alt" []
-applyClosureBinder clo (a :: rest) = case clo of
-  Clos env body => applyClosureBinder (Clos (a :: env) body) rest
+applyClosureBinder (Clos env body) (a :: rest) = applyClosureBinder (Clos (a :: env) body) rest
 
 freshVar : String -> Int -> Value
 freshVar name level = VNeutral (NVar name level [])
@@ -552,9 +550,8 @@ substSolvedAlt sols (CaseAlt n bs b) = CaseAlt n bs (substSolvedMetas sols b)
 -- de Bruijn index；深度 0 的版本会把解里的 `NVar` 拍成越界变量（`mergeSort` 的
 -- 字典签名曾变成 `{d : Dict_Ord ?67}`）。
 substSolvedMetasAt : Int -> List (Pair Int Value) -> Term -> Term
-substSolvedMetasAt d sols t = case sols of
-  [] => t
-  _ => substSolvedMetasAtGo d sols t
+substSolvedMetasAt d [] t = t
+substSolvedMetasAt d sols t = substSolvedMetasAtGo d sols t
 
 substSolvedMetasAtGo : Int -> List (Pair Int Value) -> Term -> Term
 substSolvedMetasAtGo depth sols t = case t of

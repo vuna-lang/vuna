@@ -1,0 +1,1 @@
+corpus/lint/11_let_destructure.vuna:3:3: [LN_LiftDestructure] lift-destructure: single-alternative case on `p` can be folded into the enclosing pattern

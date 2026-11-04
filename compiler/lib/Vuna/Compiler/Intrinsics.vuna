@@ -78,11 +78,13 @@ allCapabilities : List Capability
 allCapabilities = [CapConsole, CapFs, CapProcess, CapEnv, CapClock]
 
 parseCapability : String -> Maybe Capability
-parseCapability name =
-  if name == "console" then Just CapConsole
-  else if name == "fs" then Just CapFs
-  else if name == "process" then Just CapProcess
-  else if name == "env" then Just CapEnv else if name == "clock" then Just CapClock else Nothing
+parseCapability name = case name of
+  "console" => Just CapConsole
+  "fs" => Just CapFs
+  "process" => Just CapProcess
+  "env" => Just CapEnv
+  "clock" => Just CapClock
+  _ => Nothing
 
 -- ---------------------------------------------------------------
 -- 签名形状：只表达内建签名需要的形状（不含依赖 pi / 多态细节）

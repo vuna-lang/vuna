@@ -142,15 +142,15 @@ let v_Vuna_dCompiler_dPackages_dPkg_dmanifestNameString = (fun manifest -> (matc
   | _ -> failwith "DT: impossible branch"
 ))
 
-let rec v_Vuna_dCompiler_dPackages_dPkg_dmemStackDir = (fun d493 -> (fun dir -> (fun stack -> (match stack with
+let rec v_Vuna_dCompiler_dPackages_dPkg_dmemStackDir = (fun d494 -> (fun dir -> (fun stack -> (match stack with
   | C_Base_dList_dList_Base_dList_dNil -> false
-  | C_Base_dList_dList_Base_dList_dCons (dtb__66, dtb__67) -> (if (((v_Base_dEq_deq d493) (v_Base_dPair_dfirstOf dtb__66)) dir) then true else (((v_Vuna_dCompiler_dPackages_dPkg_dmemStackDir d493) dir) dtb__67))
+  | C_Base_dList_dList_Base_dList_dCons (dtb__66, dtb__67) -> (if (((v_Base_dEq_deq d494) (v_Base_dPair_dfirstOf dtb__66)) dir) then true else (((v_Vuna_dCompiler_dPackages_dPkg_dmemStackDir d494) dir) dtb__67))
   | _ -> failwith "DT: impossible branch"
 ))))
 
-let rec v_Vuna_dCompiler_dPackages_dPkg_dcyclePrefix = (fun d499 -> (fun dir -> (fun stack -> (match stack with
+let rec v_Vuna_dCompiler_dPackages_dPkg_dcyclePrefix = (fun d500 -> (fun dir -> (fun stack -> (match stack with
   | C_Base_dList_dList_Base_dList_dNil -> C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing
-  | C_Base_dList_dList_Base_dList_dCons (dtb__68, dtb__69) -> (if (((v_Base_dEq_deq d499) (v_Base_dPair_dfirstOf dtb__68)) dir) then (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust ((C_Base_dList_dList_Base_dList_dCons (dtb__68, C_Base_dList_dList_Base_dList_dNil)))) else (match (((v_Vuna_dCompiler_dPackages_dPkg_dcyclePrefix d499) dir) dtb__69) with
+  | C_Base_dList_dList_Base_dList_dCons (dtb__68, dtb__69) -> (if (((v_Base_dEq_deq d500) (v_Base_dPair_dfirstOf dtb__68)) dir) then (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust ((C_Base_dList_dList_Base_dList_dCons (dtb__68, C_Base_dList_dList_Base_dList_dNil)))) else (match (((v_Vuna_dCompiler_dPackages_dPkg_dcyclePrefix d500) dir) dtb__69) with
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__70) -> (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust ((C_Base_dList_dList_Base_dList_dCons (dtb__68, dtb__70))))
   | _ -> failwith "DT: impossible branch"
@@ -168,9 +168,9 @@ let v_Vuna_dCompiler_dPackages_dPkg_dcycleMessage = (fun dir -> (fun depName -> 
   | _ -> failwith "DT: impossible branch"
 ))))
 
-let v_Vuna_dCompiler_dPackages_dPkg_ddependencyNameOk = (fun d520 -> (fun depName -> (fun actual -> (match depName with
+let v_Vuna_dCompiler_dPackages_dPkg_ddependencyNameOk = (fun d521 -> (fun depName -> (fun actual -> (match depName with
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> true
-  | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__73) -> (((v_Base_dEq_deq d520) dtb__73) actual)
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__73) -> (((v_Base_dEq_deq d521) dtb__73) actual)
   | _ -> failwith "DT: impossible branch"
 ))))
 

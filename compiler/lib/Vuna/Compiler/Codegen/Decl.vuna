@@ -29,9 +29,11 @@ import Vuna.Compiler.Intrinsics
 
 sanitizeChar : Int -> List Int
 -- `#` 出现在 Loader 生成的匿名实例名里（`#default`、`#fancy`），OCaml 标识符不允许。
-sanitizeChar c =
-  if c == 46 then [95, 100]
-  else if c == 95 then [95, 117] else if c == 39 then [95, 112] else if c == 35 then [95, 104] else [c]
+sanitizeChar 46 = [95, 100]
+sanitizeChar 95 = [95, 117]
+sanitizeChar 39 = [95, 112]
+sanitizeChar 35 = [95, 104]
+sanitizeChar c = [c]
 
 sanitizeName : String -> String
 sanitizeName name = strPack (concatMap sanitizeChar (strUnpack name))
@@ -40,13 +42,13 @@ ocamlPad3 : String -> String
 ocamlPad3 s = if strLength s == 1 then "00" ++ s else if strLength s == 2 then "0" ++ s else s
 
 ocamlEscapeChar : Int -> List Int
+ocamlEscapeChar 34 = [92, 34]
+ocamlEscapeChar 92 = [92, 92]
+ocamlEscapeChar 10 = [92, 110]
+ocamlEscapeChar 9 = [92, 116]
+ocamlEscapeChar 13 = [92, 114]
 ocamlEscapeChar c =
-  if c == 34 then [92, 34]
-  else if c == 92 then [92, 92]
-  else if c == 10 then [92, 110]
-  else if c == 9 then [92, 116]
-  else if c == 13 then [92, 114]
-  else if c >= 32 && c <= 126 then [c] else strUnpack ("\\" ++ ocamlPad3 (strFromInt c))
+  if c >= 32 && c <= 126 then [c] else strUnpack ("\\" ++ ocamlPad3 (strFromInt c))
 
 ocamlString : String -> String
 ocamlString s = "\"" ++ strPack (concatMap ocamlEscapeChar (strUnpack s)) ++ "\""
@@ -461,13 +463,12 @@ runtimeDatas datas = filter (\d => if isBoolFamilyName (dtDataName d) then False
 -- 类型声明：`allDatas` 用于族间参数推断（跨模块字段类型照旧渲染成全局类型名），
 -- `subset` 是实际写进本文件的族。
 genTypeDeclsOf : List DtData -> List DtData -> Result String
-genTypeDeclsOf allDatas subset = case subset of
-  [] => Ok ""
-  _ =>
-    let
-      table = usedTableFix allDatas (map (\d => Pair (dtDataName d) []) allDatas)
-    in andThen (traverse (genDataDecl table allDatas) subset)
-      (\parts => Ok ("type " ++ joinWith "\nand " parts ++ "\n\n"))
+genTypeDeclsOf allDatas [] = Ok ""
+genTypeDeclsOf allDatas subset =
+  let
+    table = usedTableFix allDatas (map (\d => Pair (dtDataName d) []) allDatas)
+  in andThen (traverse (genDataDecl table allDatas) subset)
+    (\parts => Ok ("type " ++ joinWith "\nand " parts ++ "\n\n"))
 
 collectUsedSpine : List Int -> List (Pair String (List Int)) -> List DtData -> Int -> List Value -> List Int
 collectUsedSpine a1 a2 a3 a4 a5 = collectUsedSpineFuel 512 a1 a2 a3 a4 a5

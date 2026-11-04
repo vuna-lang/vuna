@@ -416,12 +416,11 @@ implicitPreludeFrom roots importerPkg = case collectModuleFiles roots "Prelude" 
     implicitPreludeDeps importerPkg (filter (\c => rootName (secondOf c) /= importerPkg) allowed)
 
 implicitPreludeDeps : String -> List (Pair String Root) -> Result (List Import)
-implicitPreludeDeps importerPkg deps = case deps of
-  [] => Ok []
-  [_] => Ok [Import "Prelude" False Nothing (Span "" 0 0 0 0)]
-  _ =>
-    Err
-      ("ambiguous implicit Prelude (found in: " ++ joinArrows (map (\c => rootName (secondOf c)) deps) ++ ")")
+implicitPreludeDeps importerPkg [] = Ok []
+implicitPreludeDeps importerPkg ([_]) = Ok [Import "Prelude" False Nothing (Span "" 0 0 0 0)]
+implicitPreludeDeps importerPkg deps =
+  Err
+    ("ambiguous implicit Prelude (found in: " ++ joinArrows (map (\c => rootName (secondOf c)) deps) ++ ")")
 
 loadAll : Int -> List Root -> String -> List Module -> List String -> List Import -> Result (List Module)
 loadAll fuel roots importerPkg modules stack imports = if fuel <= 0 then Err "DT: loader fuel exhausted (internal: module graph too deep)"

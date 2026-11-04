@@ -1,0 +1,8 @@
+sign : String -> Int
+sign name =
+  if name == "console" then 1
+  else if name == "fs" then 2
+  else if name == "process" then 3 else if name == "env" then 4 else if name == "clock" then 5 else 0
+
+main : Int
+main = sign "fs"

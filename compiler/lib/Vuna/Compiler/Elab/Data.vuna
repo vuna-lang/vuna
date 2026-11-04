@@ -317,5 +317,5 @@ candidateOf d = Pair (dtDataName d) (candidateNames (dtDataParams d) (eraseIndex
 candidateNames : List (Pair String Rig) -> List Bool -> List String
 candidateNames [] ms = []
 candidateNames (p :: rest) [] = []
-candidateNames (p :: rest) (m :: ms) = case p of
-  Pair n e => if m then n :: candidateNames rest ms else candidateNames rest ms
+candidateNames ((Pair n e) :: rest) (m :: ms) =
+  if m then n :: candidateNames rest ms else candidateNames rest ms

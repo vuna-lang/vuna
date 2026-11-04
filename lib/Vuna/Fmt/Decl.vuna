@@ -146,16 +146,25 @@ renderWhereBinding at lineInd (Pair pat value) = case value of
 
 -- where 绑定签名行：`g : Int -> Int`（缩进与 where 绑定一致，类型不折行）。
 renderWhereSigLine : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Pat -> Expr -> List String
-renderWhereSigLine at lineInd pat ty = case pat of
-  PVar name psp => prefixFirst (spaces lineInd ++ name ++ " : ") (renderTypeExpr at lineInd ty)
-  _ => prefixFirst (spaces lineInd ++ renderPat pat ++ " : ") (renderTypeExpr at lineInd ty)
+renderWhereSigLine at lineInd (PVar name psp) ty =
+  prefixFirst (spaces lineInd ++ name ++ " : ") (renderTypeExpr at lineInd ty)
+renderWhereSigLine at lineInd pat ty =
+  prefixFirst (spaces lineInd ++ renderPat pat ++ " : ") (renderTypeExpr at lineInd ty)
 
 renderWhereBindingBody : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Pat -> Expr -> List String
 renderWhereBindingBody at lineInd pat value = case pat of
   PVar name psp => case value of
+    ELocalFun clauses lsp => renderLocalFunClauses at lineInd name clauses
     ELam ps inner lsp => renderClause at lineInd name (map (\n => PVar n dummySpan) ps) inner
     _ => renderBindingValue at lineInd (name ++ " =") value
   _ => renderBindingValue at lineInd (renderPat pat ++ " =") value
+
+-- A2：where 内部多 clause 局部函数：每个 clause 走 `renderClause`（与顶层子句同形）。
+renderLocalFunClauses : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> String -> List (Pair (List Pat) Expr) -> List String
+renderLocalFunClauses at lineInd name clauses = case clauses of
+  [] => []
+  (Pair pats body) :: rest =>
+    append (renderClause at lineInd name pats body) (renderLocalFunClauses at lineInd name rest)
 
 -- 顶层声明：不同函数之间一个空行；类型签名紧贴同名函数子句。
 renderTopDecls : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> List Decl -> List String

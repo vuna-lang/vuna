@@ -55,9 +55,9 @@ let v_Vuna_dCompiler_dCore_dEval_dcatchAllEnv = (fun alt -> (fun scrut -> (fun e
   | _ -> (C_Base_dList_dList_Base_dList_dCons (scrut, env))
 ))))
 
-let v_Vuna_dCompiler_dCore_dEval_devalIf = (fun c -> (fun th -> (fun el -> (match c with
-  | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVBool (dtb__7) -> (if dtb__7 then th else el)
-  | _ -> (C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVIf (c, th, el))
+let v_Vuna_dCompiler_dCore_dEval_devalIf = (fun mc0 -> (fun mc1 -> (fun mc2 -> (match mc0 with
+  | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVBool (dtb__7) -> (if dtb__7 then mc1 else mc2)
+  | _ -> (C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVIf (mc0, mc1, mc2))
 ))))
 
 let v_Vuna_dCompiler_dCore_dEval_dspineAppend = (fun n -> (fun a -> (match n with
@@ -460,12 +460,12 @@ and v_Vuna_dCompiler_dCore_dEval_dnormalizeIfFuel = (fun fuel -> (fun defs -> (f
   | dtb__168 -> (C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVIf (dtb__168, (((((v_Vuna_dCompiler_dCore_dEval_dnormalizeFuel ((bi_sub fuel) 1)) defs) sols) ((bi_sub fuel) 1)) th), (((((v_Vuna_dCompiler_dCore_dEval_dnormalizeFuel ((bi_sub fuel) 1)) defs) sols) ((bi_sub fuel) 1)) el)))
 ))))))))))
 
-let rec v_Vuna_dCompiler_dCore_dEval_dapplyClosureBinder = (fun mc0 -> (fun mc1 -> (match mc1 with
-  | C_Base_dList_dList_Base_dList_dCons (dtb__169, dtb__170) -> (match mc0 with
-  | C_Vuna_dCompiler_dCore_dTerm_dClosure_Vuna_dCompiler_dCore_dTerm_dClos (dtb__171, dtb__172) -> ((v_Vuna_dCompiler_dCore_dEval_dapplyClosureBinder (C_Vuna_dCompiler_dCore_dTerm_dClosure_Vuna_dCompiler_dCore_dTerm_dClos ((C_Base_dList_dList_Base_dList_dCons (dtb__169, dtb__171)), dtb__172))) dtb__170)
+let rec v_Vuna_dCompiler_dCore_dEval_dapplyClosureBinder = (fun mc0 -> (fun mc1 -> (match mc0 with
+  | C_Vuna_dCompiler_dCore_dTerm_dClosure_Vuna_dCompiler_dCore_dTerm_dClos (dtb__169, dtb__170) -> (match mc1 with
+  | C_Base_dList_dList_Base_dList_dCons (dtb__171, dtb__172) -> ((v_Vuna_dCompiler_dCore_dEval_dapplyClosureBinder (C_Vuna_dCompiler_dCore_dTerm_dClosure_Vuna_dCompiler_dCore_dTerm_dClos ((C_Base_dList_dList_Base_dList_dCons (dtb__171, dtb__169)), dtb__170))) dtb__172)
+  | C_Base_dList_dList_Base_dList_dNil -> (C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVCon ("_alt", C_Base_dList_dList_Base_dList_dNil))
   | _ -> failwith "DT: impossible branch"
 )
-  | C_Base_dList_dList_Base_dList_dNil -> (C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVCon ("_alt", C_Base_dList_dList_Base_dList_dNil))
   | _ -> failwith "DT: impossible branch"
 )))
 
@@ -564,9 +564,9 @@ and v_Vuna_dCompiler_dCore_dEval_dsubstSolvedAltAt = (fun mc0 -> (fun mc1 -> (fu
   | _ -> failwith "DT: impossible branch"
 ))))
 
-let v_Vuna_dCompiler_dCore_dEval_dsubstSolvedMetasAt = (fun d -> (fun sols -> (fun t -> (match sols with
-  | C_Base_dList_dList_Base_dList_dNil -> t
-  | _ -> (((v_Vuna_dCompiler_dCore_dEval_dsubstSolvedMetasAtGo d) sols) t)
+let v_Vuna_dCompiler_dCore_dEval_dsubstSolvedMetasAt = (fun mc0 -> (fun mc1 -> (fun mc2 -> (match mc1 with
+  | C_Base_dList_dList_Base_dList_dNil -> mc2
+  | _ -> (((v_Vuna_dCompiler_dCore_dEval_dsubstSolvedMetasAtGo mc0) mc1) mc2)
 ))))
 
 let v_Vuna_dCompiler_dCore_dEval_disNilList = (fun mc0 -> (match mc0 with

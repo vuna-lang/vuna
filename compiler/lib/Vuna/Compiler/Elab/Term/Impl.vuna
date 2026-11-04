@@ -158,11 +158,11 @@ else
 checkCaseFamFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Term -> Value -> List (Pair Pat Expr) -> Value -> Span -> Result (Pair Term Ec)
 checkCaseFamFuel fuel globals ctx ec scrutTerm scrutTy alts expected sp = if fuel <= 0 then Err "DT: internal: inference fuel exhausted"
 else case forceVal ec scrutTy of
-  VNeutral (NGlobal fam idxs) =>
-    if fam == boolTypeName && length idxs == 0 then checkBoolCaseFuel (fuel - 1) globals ctx ec scrutTerm alts expected sp
-    else if fam == "Int" then checkLitCaseFuel (fuel - 1) globals ctx ec scrutTerm "Int" alts expected sp
-    else if fam == "String" then checkLitCaseFuel (fuel - 1) globals ctx ec scrutTerm "String" alts expected sp
-    else checkCaseOfFuel (fuel - 1) globals ctx ec scrutTerm scrutTy fam idxs alts expected sp
+  VNeutral (NGlobal fam idxs) => if fam == boolTypeName && length idxs == 0 then checkBoolCaseFuel (fuel - 1) globals ctx ec scrutTerm alts expected sp
+  else case fam of
+    "Int" => checkLitCaseFuel (fuel - 1) globals ctx ec scrutTerm "Int" alts expected sp
+    "String" => checkLitCaseFuel (fuel - 1) globals ctx ec scrutTerm "String" alts expected sp
+    _ => checkCaseOfFuel (fuel - 1) globals ctx ec scrutTerm scrutTy fam idxs alts expected sp
   _ => tcErr0 sp NotInductiveFamily
 
 -- M19：Bool 上的 case 降级成 if（`True` / `False` 是零参构造子形态的模式）。
@@ -320,6 +320,9 @@ else case expr of
     )
   )
   ELet binds body rec_ sp => inferLetFuel (fuel - 1) globals ctx ec binds body rec_ sp
+  ELocalFun clauses sp =>
+    andThen (expandLocalFuns ec (ELocalFun clauses sp))
+      (\e2 => inferEFuel (fuel - 1) globals ctx ec e2)
   ECase scrut alts sp => inferCaseEFuel (fuel - 1) globals ctx ec scrut alts sp
   EField base fname sp => tcErr0 sp RecordFieldAccessUnsupported
   ERecord rname fields sp => tcErr0 sp RecordsUnsupported
@@ -520,6 +523,10 @@ else case expr of
   EIf c t e sp => checkByInferFuel (fuel - 1) globals ctx ec expr expected
   ECase scrut alts csp => checkCaseFuel (fuel - 1) globals ctx ec scrut alts expected csp
   ELet binds body rec_ sp => checkLetFuel (fuel - 1) globals ctx ec binds body rec_ expected sp
+  -- A2：防御分支——正常路径已在绑定块入口展开；普通表达式位置直接降级后重查。
+  ELocalFun clauses sp =>
+    andThen (expandLocalFuns ec (ELocalFun clauses sp))
+      (\e2 => checkEFuel (fuel - 1) globals ctx ec e2 expected)
   -- M24：`EAnn` 在 check 位等价于「按标注类型检查内部表达式」。
   EAnn value ty sp => andThen (checkTypeFuel (fuel - 1) globals ctx ec ty) (\pt => case pt of
     Pair tyTerm (Pair _ ec1) =>
@@ -539,8 +546,60 @@ else case expr of
 checkLetFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> List (Pair Pat Expr) -> Expr -> Bool -> Value -> Span -> Result (Pair Term Ec)
 checkLetFuel fuel globals ctx ec binds body rec_ expected sp =
   if fuel <= 0 then Err "DT: internal: inference fuel exhausted"
-  else andThen (checkBindingSigs rec_ binds)
-    (\_ => checkLetGoFuel (fuel - 1) globals ctx ec binds body rec_ expected sp)
+  else andThen (traverse (expandBind ec) binds)
+    (\binds2 => andThen (checkBindingSigs rec_ binds2) (\_ => checkLetGoFuel (fuel - 1) globals ctx ec binds2 body rec_ expected sp))
+
+-- A2：把 `ELocalFun`（where/let 多 clause 函数）用 `Elab.Match.multiToExpr` 的模式矩阵
+-- 降级成普通表达式（lambda + case/if），与顶层 DFun 的 `elabFunDef` 走同一条路径。
+-- 只展开**顶层** `ELocalFun`；结果里嵌套的 `ELocalFun` 由 `checkEFuel`/`inferEFuel` 的
+-- `ELocalFun` 分支在继续精化时再展开（结构递归只沿输入表达式的子项，SCT 可证）。
+expandLocalFuns : Ec -> Expr -> Result Expr
+expandLocalFuns ec e = case e of
+  ELocalFun clauses sp => multiToExpr (ctorFamilyTable ec) clauses
+  EVar name sp => Ok (EVar name sp)
+  EInt n sp => Ok (EInt n sp)
+  EStr s sp => Ok (EStr s sp)
+  ELam names body sp => andThen (expandLocalFuns ec body) (\b2 => Ok (ELam names b2 sp))
+  EApp fn args sp =>
+    andThen (expandLocalFuns ec fn)
+      (\fn2 => andThen (traverse (expandLocalFuns ec) args) (\args2 => Ok (EApp fn2 args2 sp)))
+  EPi name implicit dom cod sp =>
+    andThen (expandLocalFuns ec dom)
+      (\dom2 => andThen (expandLocalFuns ec cod) (\cod2 => Ok (EPi name implicit dom2 cod2 sp)))
+  ELet binds body rec_ sp =>
+    andThen (traverse (expandBind ec) binds)
+      (\binds2 => andThen (expandLocalFuns ec body) (\body2 => Ok (ELet binds2 body2 rec_ sp)))
+  ECase scrut alts sp =>
+    andThen (expandLocalFuns ec scrut)
+      (\scrut2 => andThen (traverse (expandBind ec) alts) (\alts2 => Ok (ECase scrut2 alts2 sp)))
+  EIf c t el sp =>
+    andThen (expandLocalFuns ec c)
+      (\c2 => andThen (expandLocalFuns ec t) (\t2 => andThen (expandLocalFuns ec el) (\el2 => Ok (EIf c2 t2 el2 sp))))
+  EField base fname sp => andThen (expandLocalFuns ec base) (\base2 => Ok (EField base2 fname sp))
+  ERecord rname fields sp =>
+    andThen
+      (traverse (\fv => andThen (expandLocalFuns ec (secondOf fv)) (\v2 => Ok (Pair (firstOf fv) v2))) fields)
+      (\fields2 => Ok (ERecord rname fields2 sp))
+  ERecUpdate base fields sp =>
+    andThen (expandLocalFuns ec base)
+      (\base2 => andThen (traverse (\fv => andThen (expandLocalFuns ec (secondOf fv)) (\v2 => Ok (Pair (firstOf fv) v2))) fields) (\fields2 => Ok (ERecUpdate base2 fields2 sp)))
+  EDo stmts sp => andThen (traverse (expandDoStmt ec) stmts) (\stmts2 => Ok (EDo stmts2 sp))
+  EAnn value ty sp => andThen (expandLocalFuns ec value) (\value2 => Ok (EAnn value2 ty sp))
+
+expandBind : Ec -> Pair Pat Expr -> Result (Pair Pat Expr)
+expandBind ec (Pair pat value) = andThen (expandLocalFuns ec value) (\v2 => Ok (Pair pat v2))
+
+expandDoStmt : Ec -> DoStmt -> Result DoStmt
+expandDoStmt ec stmt = case stmt of
+  DBind pat value sp => andThen (expandLocalFuns ec value) (\v2 => Ok (DBind pat v2 sp))
+  DExpr value sp => andThen (expandLocalFuns ec value) (\v2 => Ok (DExpr v2 sp))
+
+-- M19：推断位的 `let`（嵌套 let 的 value 位置就是推断位）。
+inferLetFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> List (Pair Pat Expr) -> Expr -> Bool -> Span -> Result (Pair Term (Pair Value Ec))
+inferLetFuel fuel globals ctx ec binds body rec_ sp =
+  if fuel <= 0 then Err "DT: internal: inference fuel exhausted"
+  else andThen (traverse (expandBind ec) binds)
+    (\binds2 => andThen (checkBindingSigs rec_ binds2) (\_ => inferLetGoFuel (fuel - 1) globals ctx ec binds2 body rec_ sp))
 
 -- M24：where/let 绑定块是**顺序 let**：每个绑定只看得到它之前的绑定；递归放顶层定义组。
 checkLetGoFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> List (Pair Pat Expr) -> Expr -> Bool -> Value -> Span -> Result (Pair Term Ec)
@@ -580,15 +639,15 @@ else case firstOf bind of
             Ok (Pair (TApp (TLam "_" rig (shift 0 1 bodyTerm)) valueTerm rig) ec2)
         )
     )
-  _ => tcErr0 (patSpan (firstOf bind)) LetBindingPattern
+  -- A1：let 模式解构（`let (MkPoint x y) = p in ...`）等价单分支 case：
+  -- 模式只能绑定变量/通配以外的形态时，把绑定降级成 `case value of pat => rest`，
+  -- 穷尽性交给既有的 case 精化（不可失败模式通过，`Just` 这类非穷尽模式报覆盖性错误）。
+  _ =>
+    checkEFuel (fuel - 1) globals ctx ec
+      (ECase (secondOf bind) [Pair (firstOf bind) (ELet rest body rec_ sp)] (patSpan (firstOf bind)))
+      expected
 
--- M19：推断位的 `let`（嵌套 let 的 value 位置就是推断位）。
-inferLetFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> List (Pair Pat Expr) -> Expr -> Bool -> Span -> Result (Pair Term (Pair Value Ec))
-inferLetFuel fuel globals ctx ec binds body rec_ sp =
-  if fuel <= 0 then Err "DT: internal: inference fuel exhausted"
-  else andThen (checkBindingSigs rec_ binds)
-    (\_ => inferLetGoFuel (fuel - 1) globals ctx ec binds body rec_ sp)
-
+-- M19：推断位的 `let`（嵌套 let 的 value 位置就是推断位）；入口见上方 `inferLetFuel`。
 inferLetGoFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> List (Pair Pat Expr) -> Expr -> Bool -> Span -> Result (Pair Term (Pair Value Ec))
 inferLetGoFuel fuel globals ctx ec binds body rec_ sp = if fuel <= 0 then Err "DT: internal: inference fuel exhausted"
 else case binds of
@@ -596,7 +655,10 @@ else case binds of
   (Pair pat value) :: rest => case pat of
     PVar name psp => inferLetBoundFuel (fuel - 1) globals ctx ec name value rest body rec_ sp
     PWild psp => inferLetIgnoredFuel (fuel - 1) globals ctx ec value rest body rec_ sp
-    _ => tcErr0 (patSpan pat) LetBindingPattern
+    -- A1：let 模式解构在推断位同样降级为单分支 case（见 checkLetOneFuel 的说明）。
+    _ =>
+      inferEFuel (fuel - 1) globals ctx ec
+        (ECase value [Pair pat (ELet rest body rec_ sp)] (patSpan pat))
 
 inferLetBoundFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> String -> Expr -> List (Pair Pat Expr) -> Expr -> Bool -> Span -> Result (Pair Term (Pair Value Ec))
 inferLetBoundFuel fuel globals ctx ec name value rest body rec_ sp = if fuel <= 0 then Err "DT: internal: inference fuel exhausted"

@@ -165,14 +165,12 @@ renderTyPlain ty = case ty of
   _ => "_"
 
 renderTyArg : Expr -> String
-renderTyArg ty = case ty of
-  EVar name sp => name
-  _ => "(" ++ renderTy ty ++ ")"
+renderTyArg (EVar name sp) = name
+renderTyArg ty = "(" ++ renderTy ty ++ ")"
 
 renderTyAtom : Expr -> String
-renderTyAtom ty = case ty of
-  EVar name sp => name
-  _ => "(" ++ renderTy ty ++ ")"
+renderTyAtom (EVar name sp) = name
+renderTyAtom ty = "(" ++ renderTy ty ++ ")"
 
 paramSuffix : List String -> String
 paramSuffix [] = ""
@@ -309,6 +307,9 @@ refsInField sMod (Pair fname value) = refsInExpr sMod value
 refsInBind : String -> Pair Pat Expr -> List Ref
 refsInBind sMod (Pair p x) = refsInExpr sMod x
 
+refsInLocalClause : String -> Pair (List Pat) Expr -> List Ref
+refsInLocalClause sMod (Pair pats body) = refsInExpr sMod body
+
 refsInDoStmt : String -> DoStmt -> List Ref
 refsInDoStmt sMod s = case s of
   DBind p x tsp => refsInExpr sMod x
@@ -324,6 +325,8 @@ refsInExpr sMod e = case e of
   EPi n i dom cod sp => append (refsInExpr sMod dom) (refsInExpr sMod cod)
   ELet binds body isRec sp => append (concatMap (refsInBind sMod) binds) (refsInExpr sMod body)
   ECase scrut alts sp => append (refsInExpr sMod scrut) (concatMap (refsInBind sMod) alts)
+  -- A2：where/let 多 clause 局部函数：只看各 clause 的 body（与 refsInBind 一致，不看模式）。
+  ELocalFun clauses sp => concatMap (refsInLocalClause sMod) clauses
   EIf c t e2 sp => append (refsInExpr sMod c) (append (refsInExpr sMod t) (refsInExpr sMod e2))
   EField r fname sp => refsInExpr sMod r
   ERecord tn fields sp => concatMap (refsInField sMod) fields

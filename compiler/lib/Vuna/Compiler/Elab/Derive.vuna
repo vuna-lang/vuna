@@ -73,8 +73,8 @@ deriveCtxParams (p :: rest) ctors =
 
 anyCtorMentions : String -> List Ctor -> Bool
 anyCtorMentions p [] = False
-anyCtorMentions p (c :: rest) = case c of
-  Ctor cn ty ar cnsp => if exprMentionsName p ty then True else anyCtorMentions p rest
+anyCtorMentions p ((Ctor cn ty ar cnsp) :: rest) =
+  if exprMentionsName p ty then True else anyCtorMentions p rest
 
 exprMentionsName : String -> Expr -> Bool
 exprMentionsName p e = case e of
@@ -141,12 +141,11 @@ showBody proj ctors scrut sp = ECase (EVar scrut sp) (showAlts proj ctors sp) sp
 
 showAlts : String -> List Ctor -> Span -> List (Pair Pat Expr)
 showAlts proj [] sp = []
-showAlts proj (c :: rest) sp = case c of
-  Ctor cn ty ar cnsp =>
-    let
-      vs = varNames "fa" ar
-      pat = PCon cn (map (\v => PVar v sp) vs) sp
-    in Pair pat (showCtor proj cn vs sp) :: showAlts proj rest sp
+showAlts proj ((Ctor cn ty ar cnsp) :: rest) sp =
+  let
+    vs = varNames "fa" ar
+    pat = PCon cn (map (\v => PVar v sp) vs) sp
+  in Pair pat (showCtor proj cn vs sp) :: showAlts proj rest sp
 
 -- 零参 ⇒ `"C"`；否则 `"(C " ++ show f0 ++ " " ++ .. ++ ")"`。
 showCtor : String -> String -> List String -> Span -> Expr
@@ -172,13 +171,12 @@ eqBody : List Ctor -> Span -> Expr
 eqBody ctors sp = ECase (EVar "sx" sp) (map (\c => eqAlt c sp) ctors) sp
 
 eqAlt : Ctor -> Span -> Pair Pat Expr
-eqAlt c sp = case c of
-  Ctor cn ty ar cnsp =>
-    let
-      vs = varNames "fa" ar
-      pat = PCon cn (map (\v => PVar v sp) vs) sp
-      body = ECase (EVar "sy" sp) (eqInner cn ar sp) sp
-    in Pair pat body
+eqAlt (Ctor cn ty ar cnsp) sp =
+  let
+    vs = varNames "fa" ar
+    pat = PCon cn (map (\v => PVar v sp) vs) sp
+    body = ECase (EVar "sy" sp) (eqInner cn ar sp) sp
+  in Pair pat body
 
 eqInner : String -> Int -> Span -> List (Pair Pat Expr)
 eqInner cn ar sp =
@@ -207,13 +205,12 @@ ordBody leProj ctors sp = ECase (EVar "sx" sp) (ordAlts leProj ctors ctors 0 sp)
 
 ordAlts : String -> List Ctor -> List Ctor -> Int -> Span -> List (Pair Pat Expr)
 ordAlts leProj all [] i sp = []
-ordAlts leProj all (c :: rest) i sp = case c of
-  Ctor cn ty ar cnsp =>
-    let
-      vs = varNames "fa" ar
-      pat = PCon cn (map (\v => PVar v sp) vs) sp
-      body = ECase (EVar "sy" sp) (ordInner leProj i ar all sp) sp
-    in Pair pat body :: ordAlts leProj all rest (i + 1) sp
+ordAlts leProj all ((Ctor cn ty ar cnsp) :: rest) i sp =
+  let
+    vs = varNames "fa" ar
+    pat = PCon cn (map (\v => PVar v sp) vs) sp
+    body = ECase (EVar "sy" sp) (ordInner leProj i ar all sp) sp
+  in Pair pat body :: ordAlts leProj all rest (i + 1) sp
 
 -- 对 `sy` 再分派：索引更小的构造子 ⇒ False，同构造子 ⇒ 逐字段 lt，更大 ⇒ True。
 ordInner : String -> Int -> Int -> List Ctor -> Span -> List (Pair Pat Expr)
@@ -221,15 +218,14 @@ ordInner leProj i ar all sp = ordInnerGo leProj i ar all 0 sp
 
 ordInnerGo : String -> Int -> Int -> List Ctor -> Int -> Span -> List (Pair Pat Expr)
 ordInnerGo leProj i ar [] j sp = []
-ordInnerGo leProj i ar (c :: rest) j sp = case c of
-  Ctor cn ty car cnsp =>
-    let
-      gs = varNames "fb" car
-      pat = PCon cn (map (\v => PVar v sp) gs) sp
-      body =
-        if j == i then ltFields leProj (varNames "fa" ar) gs sp
-        else if j < i then boolFalse sp else boolTrue sp
-    in Pair pat body :: ordInnerGo leProj i ar rest (j + 1) sp
+ordInnerGo leProj i ar ((Ctor cn ty car cnsp) :: rest) j sp =
+  let
+    gs = varNames "fb" car
+    pat = PCon cn (map (\v => PVar v sp) gs) sp
+    body =
+      if j == i then ltFields leProj (varNames "fa" ar) gs sp
+      else if j < i then boolFalse sp else boolTrue sp
+  in Pair pat body :: ordInnerGo leProj i ar rest (j + 1) sp
 
 -- 逐字段 `<`：`f0 < g0 || (le f0 g0 && le g0 f0 && (f1 < g1 || ..))`；无字段 ⇒ False。
 -- M29-T2b：只用 Ord 的 lt/le（不再用 `==`），因此 `deriving (Ord)` 只需 Ord ctx。

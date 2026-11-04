@@ -463,6 +463,18 @@
 - **B21**：删除 `Elab.Dict` 死代码与死导出。
 - **B22**：实例名=单类前缀 + **完整 head 名**（`Eq_Base.Bool.Bool` / `Show_Color`），双前缀
   消失且不同模块同名 data 不撞；快照重生成。
+- **A1/A2 局部绑定能力**：`let` 左端支持构造子/记录/字面量模式解构（等价单分支 `case`，
+  穷尽性同 `case`）；`where`/`let` 的**相邻**同名子句合并为局部多 clause 函数（新 AST
+  节点 `ELocalFun`，复用 `Elab.Match` 模式矩阵，一条签名覆盖全部子句）。
+  `TC_LetBindingPattern` 与 `PS_WhereSigMultiClause` 退出历史（码保留）；新增语料
+  `type_ok/04,05`、`type_err/04`，`term_err/04` 继续锁 STR 对局部函数体的遍历。
+- **lint AST 驱动（M30）**：`Vuna.Lint.Rules` 从 token 行扫描改为 AST 遍历（覆盖全部
+  `Expr` 构造子含 `ELocalFun`/`EAnn`，Edit 仍为行范围）；规则改名为
+  `lift-destructure`（`LN_LiftDestructure`，覆盖单分支 case 与 let 模式解构）与
+  `case-to-clauses`（`LN_CaseToClauses`，顶层 case → 多 clause）；`literal-if-chain` 支持
+  Int 字面量/`= if` 链首/链尾 inline else。规则只报告**可安全自动修复**的形态，
+  签名含隐式 Pi 的函数跳过 clause 级改写；`checks.vuna-lint` 扩到全部包源码。
+  新参考页 [reference/lint.md](reference/lint.md)。
 - **C26–C28**：逐点采用结构递归或证明界（`Base.String.split`、Lexer/Parser/Toml/Pkg/
   Resolve、Json/Fmt/Files/Index/Repl/Lsp），measure 表见 `reference/limits.md`；压力探针
   （20k 空白/注释、2000 层括号、84KB TOML）before/after 一致。

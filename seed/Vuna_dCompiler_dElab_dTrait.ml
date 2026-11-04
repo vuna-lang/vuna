@@ -96,12 +96,12 @@ let rec v_Vuna_dCompiler_dElab_dTrait_dtraitMethodPairs = (fun mc0 -> (match mc0
 ))
 
 let rec v_Vuna_dCompiler_dElab_dTrait_dmethodProjZip = (fun mc0 -> (fun mc1 -> (fun mc2 -> (fun mc3 -> (fun mc4 -> (fun mc5 -> (match mc4 with
-  | C_Base_dList_dList_Base_dList_dCons (dtb__16, dtb__17) -> (match mc5 with
-  | C_Base_dList_dList_Base_dList_dCons (dtb__18, dtb__19) -> (match dtb__16 with
-  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__20, dtb__21) -> (C_Base_dList_dList_Base_dList_dCons ((C_Base_dPair_dPair_Base_dPair_dPair (dtb__20, (C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTPi (mc1, true, C_Vuna_dCompiler_dCore_dTerm_dRig_Vuna_dCompiler_dCore_dTerm_dRig0, mc2, (C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTPi ("_", true, C_Vuna_dCompiler_dCore_dTerm_dRig_Vuna_dCompiler_dCore_dTerm_dRig0, ((v_Vuna_dCompiler_dElab_dMeta_dfoldAppTerms (C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTGlobal ((v_Vuna_dCompiler_dElab_dMeta_ddictTypeName mc0)))) (C_Base_dList_dList_Base_dList_dCons ((C_Base_dPair_dPair_Base_dPair_dPair ((C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTVar (mc1, 0)), C_Vuna_dCompiler_dCore_dTerm_dRig_Vuna_dCompiler_dCore_dTerm_dRig0)), C_Base_dList_dList_Base_dList_dNil))), (((v_Vuna_dCompiler_dCore_dTerm_dshift 0) 1) dtb__18))))))), ((((((v_Vuna_dCompiler_dElab_dTrait_dmethodProjZip mc0) mc1) mc2) ((bi_add mc3) 1)) dtb__17) dtb__19)))
+  | C_Base_dList_dList_Base_dList_dCons (dtb__16, dtb__17) -> (match dtb__16 with
+  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__18, dtb__19) -> (match mc5 with
+  | C_Base_dList_dList_Base_dList_dCons (dtb__20, dtb__21) -> (C_Base_dList_dList_Base_dList_dCons ((C_Base_dPair_dPair_Base_dPair_dPair (dtb__18, (C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTPi (mc1, true, C_Vuna_dCompiler_dCore_dTerm_dRig_Vuna_dCompiler_dCore_dTerm_dRig0, mc2, (C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTPi ("_", true, C_Vuna_dCompiler_dCore_dTerm_dRig_Vuna_dCompiler_dCore_dTerm_dRig0, ((v_Vuna_dCompiler_dElab_dMeta_dfoldAppTerms (C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTGlobal ((v_Vuna_dCompiler_dElab_dMeta_ddictTypeName mc0)))) (C_Base_dList_dList_Base_dList_dCons ((C_Base_dPair_dPair_Base_dPair_dPair ((C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTVar (mc1, 0)), C_Vuna_dCompiler_dCore_dTerm_dRig_Vuna_dCompiler_dCore_dTerm_dRig0)), C_Base_dList_dList_Base_dList_dNil))), (((v_Vuna_dCompiler_dCore_dTerm_dshift 0) 1) dtb__20))))))), ((((((v_Vuna_dCompiler_dElab_dTrait_dmethodProjZip mc0) mc1) mc2) ((bi_add mc3) 1)) dtb__17) dtb__21)))
+  | C_Base_dList_dList_Base_dList_dNil -> C_Base_dList_dList_Base_dList_dNil
   | _ -> failwith "DT: impossible branch"
 )
-  | C_Base_dList_dList_Base_dList_dNil -> C_Base_dList_dList_Base_dList_dNil
   | _ -> failwith "DT: impossible branch"
 )
   | C_Base_dList_dList_Base_dList_dNil -> C_Base_dList_dList_Base_dList_dNil
@@ -118,12 +118,12 @@ let rec v_Vuna_dCompiler_dElab_dTrait_dexplicitPiArity = (fun t -> (match t with
 ))
 
 let rec v_Vuna_dCompiler_dElab_dTrait_dprojectionDefsGo = (fun mc0 -> (fun mc1 -> (fun mc2 -> (fun mc3 -> (fun mc4 -> (match mc1 with
-  | C_Base_dList_dList_Base_dList_dCons (dtb__27, dtb__28) -> (match mc2 with
-  | C_Base_dList_dList_Base_dList_dCons (dtb__29, dtb__30) -> (match dtb__27 with
-  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__31, dtb__32) -> (C_Base_dList_dList_Base_dList_dCons ((C_Base_dPair_dPair_Base_dPair_dPair (dtb__31, ((((v_Vuna_dCompiler_dElab_dTrait_dprojectionBody mc0) mc3) ((v_Vuna_dCompiler_dElab_dSig_dmethodArgRigsOf v_Vuna_dCompiler_dElab_dMeta_dbinderRig) dtb__29)) mc4))), (((((v_Vuna_dCompiler_dElab_dTrait_dprojectionDefsGo mc0) dtb__28) dtb__30) ((bi_add mc3) 1)) mc4)))
+  | C_Base_dList_dList_Base_dList_dCons (dtb__27, dtb__28) -> (match dtb__27 with
+  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__29, dtb__30) -> (match mc2 with
+  | C_Base_dList_dList_Base_dList_dCons (dtb__31, dtb__32) -> (C_Base_dList_dList_Base_dList_dCons ((C_Base_dPair_dPair_Base_dPair_dPair (dtb__29, ((((v_Vuna_dCompiler_dElab_dTrait_dprojectionBody mc0) mc3) ((v_Vuna_dCompiler_dElab_dSig_dmethodArgRigsOf v_Vuna_dCompiler_dElab_dMeta_dbinderRig) dtb__31)) mc4))), (((((v_Vuna_dCompiler_dElab_dTrait_dprojectionDefsGo mc0) dtb__28) dtb__32) ((bi_add mc3) 1)) mc4)))
+  | C_Base_dList_dList_Base_dList_dNil -> C_Base_dList_dList_Base_dList_dNil
   | _ -> failwith "DT: impossible branch"
 )
-  | C_Base_dList_dList_Base_dList_dNil -> C_Base_dList_dList_Base_dList_dNil
   | _ -> failwith "DT: impossible branch"
 )
   | C_Base_dList_dList_Base_dList_dNil -> C_Base_dList_dList_Base_dList_dNil
@@ -460,8 +460,8 @@ let rec v_Vuna_dCompiler_dElab_dTrait_dsubstInstParamGo = (fun arg -> (fun depth
   | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTIf (dtb__210, dtb__211, dtb__212) -> (C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTIf ((((v_Vuna_dCompiler_dElab_dTrait_dsubstInstParamGo arg) depth) dtb__210), (((v_Vuna_dCompiler_dElab_dTrait_dsubstInstParamGo arg) depth) dtb__211), (((v_Vuna_dCompiler_dElab_dTrait_dsubstInstParamGo arg) depth) dtb__212)))
   | _ -> t
 ))))
-and v_Vuna_dCompiler_dElab_dTrait_dsubstInstParamAlt = (fun arg -> (fun depth -> (fun alt -> (match alt with
-  | C_Vuna_dCompiler_dCore_dTerm_dCaseAlt_Vuna_dCompiler_dCore_dTerm_dCaseAlt (dtb__213, dtb__214, dtb__215) -> (C_Vuna_dCompiler_dCore_dTerm_dCaseAlt_Vuna_dCompiler_dCore_dTerm_dCaseAlt (dtb__213, dtb__214, (((v_Vuna_dCompiler_dElab_dTrait_dsubstInstParamGo arg) ((bi_add depth) (v_Base_dList_dlength dtb__214))) dtb__215)))
+and v_Vuna_dCompiler_dElab_dTrait_dsubstInstParamAlt = (fun mc0 -> (fun mc1 -> (fun mc2 -> (match mc2 with
+  | C_Vuna_dCompiler_dCore_dTerm_dCaseAlt_Vuna_dCompiler_dCore_dTerm_dCaseAlt (dtb__213, dtb__214, dtb__215) -> (C_Vuna_dCompiler_dCore_dTerm_dCaseAlt_Vuna_dCompiler_dCore_dTerm_dCaseAlt (dtb__213, dtb__214, (((v_Vuna_dCompiler_dElab_dTrait_dsubstInstParamGo mc0) ((bi_add mc1) (v_Base_dList_dlength dtb__214))) dtb__215)))
   | _ -> failwith "DT: impossible branch"
 ))))
 
@@ -559,8 +559,8 @@ let rec v_Vuna_dCompiler_dElab_dTrait_dsubstMetaTermGo = (fun m -> (fun rep -> (
   | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTIf (dtb__266, dtb__267, dtb__268) -> (C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTIf (((((v_Vuna_dCompiler_dElab_dTrait_dsubstMetaTermGo m) rep) depth) dtb__266), ((((v_Vuna_dCompiler_dElab_dTrait_dsubstMetaTermGo m) rep) depth) dtb__267), ((((v_Vuna_dCompiler_dElab_dTrait_dsubstMetaTermGo m) rep) depth) dtb__268)))
   | _ -> t
 )))))
-and v_Vuna_dCompiler_dElab_dTrait_dsubstMetaTermAlt = (fun m -> (fun rep -> (fun depth -> (fun alt -> (match alt with
-  | C_Vuna_dCompiler_dCore_dTerm_dCaseAlt_Vuna_dCompiler_dCore_dTerm_dCaseAlt (dtb__269, dtb__270, dtb__271) -> (C_Vuna_dCompiler_dCore_dTerm_dCaseAlt_Vuna_dCompiler_dCore_dTerm_dCaseAlt (dtb__269, dtb__270, ((((v_Vuna_dCompiler_dElab_dTrait_dsubstMetaTermGo m) rep) ((bi_add depth) (v_Base_dList_dlength dtb__270))) dtb__271)))
+and v_Vuna_dCompiler_dElab_dTrait_dsubstMetaTermAlt = (fun mc0 -> (fun mc1 -> (fun mc2 -> (fun mc3 -> (match mc3 with
+  | C_Vuna_dCompiler_dCore_dTerm_dCaseAlt_Vuna_dCompiler_dCore_dTerm_dCaseAlt (dtb__269, dtb__270, dtb__271) -> (C_Vuna_dCompiler_dCore_dTerm_dCaseAlt_Vuna_dCompiler_dCore_dTerm_dCaseAlt (dtb__269, dtb__270, ((((v_Vuna_dCompiler_dElab_dTrait_dsubstMetaTermGo mc0) mc1) ((bi_add mc2) (v_Base_dList_dlength dtb__270))) dtb__271)))
   | _ -> failwith "DT: impossible branch"
 )))))
 

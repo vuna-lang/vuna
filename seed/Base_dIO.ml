@@ -71,8 +71,8 @@ type 'a0 t_Base_dIO_dIO = C_Base_dIO_dIO_Base_dIO_dMkIO of ((int) -> 'a0)
 
 let v_Base_dIO_dioPure = (fun x -> (C_Base_dIO_dIO_Base_dIO_dMkIO ((fun w -> x))))
 
-let v_Base_dIO_dioBind = (fun io -> (fun k -> (match io with
-  | C_Base_dIO_dIO_Base_dIO_dMkIO (dtb__0) -> (C_Base_dIO_dIO_Base_dIO_dMkIO ((fun w -> (match (k (dtb__0 w)) with
+let v_Base_dIO_dioBind = (fun mc0 -> (fun mc1 -> (match mc0 with
+  | C_Base_dIO_dIO_Base_dIO_dMkIO (dtb__0) -> (C_Base_dIO_dIO_Base_dIO_dMkIO ((fun w -> (match (mc1 (dtb__0 w)) with
   | C_Base_dIO_dIO_Base_dIO_dMkIO (dtb__1) -> (dtb__1 w)
   | _ -> failwith "DT: impossible branch"
 ))))
@@ -81,8 +81,8 @@ let v_Base_dIO_dioBind = (fun io -> (fun k -> (match io with
 
 let v_Monad_uBase_dIO_dIO = (C_Dict_uBase_dMonad_dMonad_MkDict_uBase_dMonad_dMonad ((fun io -> (fun k -> ((v_Base_dIO_dioBind io) k))), (fun x -> (v_Base_dIO_dioPure x))))
 
-let v_Base_dIO_dioFmap = (fun f -> (fun io -> (match io with
-  | C_Base_dIO_dIO_Base_dIO_dMkIO (dtb__2) -> (C_Base_dIO_dIO_Base_dIO_dMkIO ((fun w -> (f (dtb__2 w)))))
+let v_Base_dIO_dioFmap = (fun mc0 -> (fun mc1 -> (match mc1 with
+  | C_Base_dIO_dIO_Base_dIO_dMkIO (dtb__2) -> (C_Base_dIO_dIO_Base_dIO_dMkIO ((fun w -> (mc0 (dtb__2 w)))))
   | _ -> failwith "DT: impossible branch"
 )))
 

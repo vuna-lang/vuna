@@ -54,9 +54,9 @@ let v_Vuna_dCompiler_dFrontend_dManifest_datLine = (fun path -> (fun line -> (fu
 
 let v_Vuna_dCompiler_dFrontend_dManifest_dmanifestErr = (fun path -> (fun msg -> (if ((bi_eq_str path) "") then msg else ((bi_concat path) ((bi_concat ": ") msg)))))
 
-let rec v_Vuna_dCompiler_dFrontend_dManifest_dsameSection = (fun d347 -> (fun mc0 -> (fun mc1 -> (match mc0 with
+let rec v_Vuna_dCompiler_dFrontend_dManifest_dsameSection = (fun d348 -> (fun mc0 -> (fun mc1 -> (match mc0 with
   | C_Base_dList_dList_Base_dList_dCons (dtb__36, dtb__37) -> (match mc1 with
-  | C_Base_dList_dList_Base_dList_dCons (dtb__38, dtb__39) -> (if (((v_Base_dEq_deq d347) dtb__36) dtb__38) then (((v_Vuna_dCompiler_dFrontend_dManifest_dsameSection d347) dtb__37) dtb__39) else false)
+  | C_Base_dList_dList_Base_dList_dCons (dtb__38, dtb__39) -> (if (((v_Base_dEq_deq d348) dtb__36) dtb__38) then (((v_Vuna_dCompiler_dFrontend_dManifest_dsameSection d348) dtb__37) dtb__39) else false)
   | _ -> false
 )
   | C_Base_dList_dList_Base_dList_dNil -> (match mc1 with

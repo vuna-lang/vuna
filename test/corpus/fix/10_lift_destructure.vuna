@@ -1,0 +1,6 @@
+first : Pair Int Int -> Int
+first p = case p of
+  Pair a b => a
+
+main : Int
+main = first (Pair 1 2)

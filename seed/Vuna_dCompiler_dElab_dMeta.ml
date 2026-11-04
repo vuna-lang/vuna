@@ -147,9 +147,9 @@ let v_Vuna_dCompiler_dElab_dMeta_dglobalsLookup = (fun name -> (fun globals -> (
   | _ -> failwith "DT: impossible branch"
 ))))
 
-let rec v_Vuna_dCompiler_dElab_dMeta_dmemSig = (fun d5103 -> (fun mc0 -> (fun mc1 -> (match mc0 with
+let rec v_Vuna_dCompiler_dElab_dMeta_dmemSig = (fun d5154 -> (fun mc0 -> (fun mc1 -> (match mc0 with
   | C_Base_dList_dList_Base_dList_dCons (dtb__72, dtb__73) -> (match dtb__72 with
-  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__74, dtb__75) -> (if (((v_Base_dEq_deq d5103) dtb__74) mc1) then true else (((v_Vuna_dCompiler_dElab_dMeta_dmemSig d5103) dtb__73) mc1))
+  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__74, dtb__75) -> (if (((v_Base_dEq_deq d5154) dtb__74) mc1) then true else (((v_Vuna_dCompiler_dElab_dMeta_dmemSig d5154) dtb__73) mc1))
   | _ -> failwith "DT: impossible branch"
 )
   | C_Base_dList_dList_Base_dList_dNil -> false
@@ -282,9 +282,9 @@ let rec v_Vuna_dCompiler_dElab_dMeta_dspineOfType = (fun t -> (match t with
   | _ -> (C_Base_dPair_dPair_Base_dPair_dPair ("", C_Base_dList_dList_Base_dList_dNil))
 ))
 
-let rec v_Vuna_dCompiler_dElab_dMeta_dresultSpine = (fun ty -> (match ty with
+let rec v_Vuna_dCompiler_dElab_dMeta_dresultSpine = (fun mc0 -> (match mc0 with
   | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTPi (dtb__159, dtb__160, dtb__161, dtb__162, dtb__163) -> (v_Vuna_dCompiler_dElab_dMeta_dresultSpine dtb__163)
-  | _ -> (v_Vuna_dCompiler_dElab_dMeta_dspineOfType ty)
+  | _ -> (v_Vuna_dCompiler_dElab_dMeta_dspineOfType mc0)
 ))
 
 let rec v_Vuna_dCompiler_dElab_dMeta_dhasOutOfScopeVar = (fun t -> (match t with
@@ -342,9 +342,9 @@ let rec v_Vuna_dCompiler_dElab_dMeta_dprependFamParams = (fun kindTerm -> (fun t
   | _ -> tyExpr
 ))))
 
-let rec v_Vuna_dCompiler_dElab_dMeta_ddropParams = (fun t -> (match t with
+let rec v_Vuna_dCompiler_dElab_dMeta_ddropParams = (fun mc0 -> (match mc0 with
   | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTPi (dtb__221, dtb__222, dtb__223, dtb__224, dtb__225) -> (v_Vuna_dCompiler_dElab_dMeta_ddropParams dtb__225)
-  | _ -> t
+  | _ -> mc0
 ))
 
 let rec v_Vuna_dCompiler_dElab_dMeta_dctorGlobals = (fun mc0 -> (match mc0 with

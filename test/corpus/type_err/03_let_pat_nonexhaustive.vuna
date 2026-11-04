@@ -1,0 +1,10 @@
+-- A1 负例：let 模式解构必须不可失败（非穷尽模式应报覆盖性错误）。
+data Maybe2 : Type where
+  Nothing2 : Maybe2
+  Just2 : Int -> Maybe2
+
+main : Int
+main =
+  let
+    Just2 x = Just2 1
+  in x

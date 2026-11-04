@@ -145,20 +145,19 @@ else submitText ctx st (trim (statePending st))
 
 -- 完整的一行输入：命令优先；否则按「还需要续行 / import / 定义或表达式」处理。
 lineStep : PackageContext -> ReplState -> String -> ReplOutcome
-lineStep ctx st line = case line of
-  ":q" => ReplExit 0
-  ":quit" => ReplExit 0
-  ":reset" =>
-    let
-      _ = prim_print "已清空\n"
-    in ReplContinue (replState "" "" "")
-  ":help" =>
-    let
-      _ = prim_print replHelp
-    in ReplContinue st
-  _ =>
-    if needsMore line then ReplContinue (replState (stateImports st) (stateDefs st) (line ++ "\n"))
-    else if startsWith "import " line then addImport ctx st line else submitText ctx st line
+lineStep ctx st ":q" = ReplExit 0
+lineStep ctx st ":quit" = ReplExit 0
+lineStep ctx st ":reset" =
+  let
+    _ = prim_print "已清空\n"
+  in ReplContinue (replState "" "" "")
+lineStep ctx st ":help" =
+  let
+    _ = prim_print replHelp
+  in ReplContinue st
+lineStep ctx st line =
+  if needsMore line then ReplContinue (replState (stateImports st) (stateDefs st) (line ++ "\n"))
+  else if startsWith "import " line then addImport ctx st line else submitText ctx st line
 
 -- 续行状态：把新行（保留缩进）追加到 pending；`:q`/`:quit` 仍可直接退出。
 -- 缩进行（offside 块的成员）即使结构上「完整」也继续等，直到出现去缩进行或空行，

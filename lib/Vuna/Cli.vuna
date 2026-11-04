@@ -470,8 +470,7 @@ renderGoals file (i :: rest) =
 
 renderGoalCtx : List (Pair String String) -> String
 renderGoalCtx [] = ""
-renderGoalCtx (e :: rest) = case e of
-  Pair n ty => "  " ++ n ++ " : " ++ ty ++ "\n" ++ renderGoalCtx rest
+renderGoalCtx ((Pair n ty) :: rest) = "  " ++ n ++ " : " ++ ty ++ "\n" ++ renderGoalCtx rest
 
 goalHeader : String -> Int -> String
 goalHeader file n = if n == 0 then file ++ ": no holes\n" else ""

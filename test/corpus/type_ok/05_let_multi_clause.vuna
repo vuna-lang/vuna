@@ -1,0 +1,12 @@
+-- A2：let 绑定里的多 clause 函数（签名可选，共享一条签名）。
+data Nat : Type where
+  Zero : Nat
+  Succ : Nat -> Nat
+
+main : Int
+main =
+  let
+    f : Nat -> Int
+    f Zero = 0
+    f (Succ _) = 7
+  in f (Succ Zero)

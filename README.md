@@ -150,6 +150,7 @@ manifest，不向上找。环境根开关、raw 模式、`--split` 与 `seed` �
 | [docs/reference/compiler.md](docs/reference/compiler.md) | 编译器模块职责、codegen 表示与优化、机器无关指标 |
 | [docs/reference/bootstrap.md](docs/reference/bootstrap.md) | 种子策略、rotation 流程、fixed point、TCB 边界 |
 | [docs/reference/testing.md](docs/reference/testing.md) | 测试体系、corpus 分类、nix checks 清单、性能基准 |
+| [docs/reference/lint.md](docs/reference/lint.md) | lint 规则（AST 驱动、`--fix` 与门禁） |
 | [docs/reference/limits.md](docs/reference/limits.md) | 当前限制与已知边界（编译模型 / IO / 工具链细节） |
 | [docs/reference/debt.md](docs/reference/debt.md) | 技术债务与缺陷登记（A/B/C/D/E 五类，按 M25–M30 关闭） |
 | [docs/history.md](docs/history.md) | 里程碑历史（一览；实现细节在 git 历史） |

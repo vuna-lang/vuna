@@ -20,6 +20,7 @@ module Vuna.Compiler.Frontend.Ast
   , EInt
   , ELam
   , ELet
+  , ELocalFun
   , EPi
   , ERecUpdate
   , ERecord
@@ -101,6 +102,10 @@ data Expr : Type where
   -- 匿名 `A -> B` 仍沿用 `EApp (EVar "->") [A, B]` 编码（既有路径零改动）。
   EPi : String -> Bool -> Expr -> Expr -> Span -> Expr
   ELet : List (Pair Pat Expr) -> Expr -> Bool -> Span -> Expr
+  -- A2：局部函数组（where/let 内的多 clause 函数）。
+  -- 只作为 `ELet` 绑定值出现：每个 clause 是「参数模式列表 + body」。
+  -- 由 Elab 用 `Elab.Match.multiToExpr` 降级成 lambda + 模式矩阵（与顶层 DFun 同一路径）。
+  ELocalFun : List (Pair (List Pat) Expr) -> Span -> Expr
   ECase : Expr -> List (Pair Pat Expr) -> Span -> Expr
   EIf : Expr -> Expr -> Expr -> Span -> Expr
   EField : Expr -> String -> Span -> Expr
@@ -166,6 +171,7 @@ exprSpan expr = case expr of
   EApp fn args sp => sp
   EPi name implicit dom cod sp => sp
   ELet binds body _ sp => sp
+  ELocalFun clauses sp => sp
   ECase scrut alts sp => sp
   EIf c t e sp => sp
   EField base f sp => sp
@@ -292,11 +298,10 @@ topNames : List Decl -> List String
 topNames decls = concatMap declNames decls
 
 declAllNames : Decl -> List String
-declAllNames d = case d of
-  DData dname params kind ctors derivings _ => dname :: map ctorName ctors
-  DRecord dname params fields derivings _ => [dname]
-  DTrait tname params methods _ => tname :: map traitMethodName methods
-  _ => declNames d
+declAllNames (DData dname params kind ctors derivings _) = dname :: map ctorName ctors
+declAllNames (DRecord dname params fields derivings _) = [dname]
+declAllNames (DTrait tname params methods _) = tname :: map traitMethodName methods
+declAllNames d = declNames d
 
 _declCtors : Decl -> List String
 _declCtors d = case d of

@@ -62,6 +62,12 @@ DT 设计见 [docs/dt-core.md](../dt-core.md)。
     在子句前写签名（缺签名报 `DT: binding ... needs a type signature`）。只能引用之前的
     绑定——不支持前向引用 / 自递归 / 互递归，递归与互相引用放顶层定义组。通配绑定
     `_ = expr` 无法写签名，因此也会报缺签名诊断。语法见 [language.md](language.md)。
+  - **M30 的局部函数能力边界**：`let` 绑定左端支持构造子/记录/字面量模式解构（等价单
+    分支 `case`，必须穷尽，否则报 `TC_NotExhaustive`；`TC_LetBindingPattern` 不再产生）；
+    `where`/`let` 的**相邻**同名子句合并成局部多 clause 函数（复用 `Elab.Match` 模式
+    矩阵，穷尽性同 `case`；签名只能写一条、覆盖全部子句，非相邻同名子句仍报
+    `PS_WhereSigMultiClause`）。局部函数仍不支持递归。终止性检查（STR）会遍历局部函数
+    各子句的 body，`where` 绑定体里调外层函数的负例仍被拒（`corpus/term_err/04`）。
   - **`vuna interp` 不执行效果**：任何 `main : IO a` 一律报
     `DT: interp cannot execute effects (main : IO a); compile and run the program instead`
     （退出码 2），不做「纯动作求值、效果丢弃」的区分；需要效果时用 `compile` + 运行产物。
@@ -198,10 +204,14 @@ DT 设计见 [docs/dt-core.md](../dt-core.md)。
   `test/run-tests.sh` 覆盖）；REPL 的顶层定义必须**先写签名**（DT 签名必填）；依赖只支持
   本地路径（registry/锁文件未做）；`Map` 是关联表实现的抽象类型（无平衡树）；`Result`
   暂无 Functor/Monad 实例。
-- `vuna lint` 首批规则是保守子集：lambda 体内的冗余 `case` 不报告（lambda 参数只有变量
-  名）；只处理从行首 `if` 起始的规范布局；多行分支 if 链、非最后子句/alt 上的冗余 `case`
-  只报告不自动修复；`--fix` 遇到注释、tab、CRLF 也跳过。`vuna lint` **必须显式给路径**，
-  无参数是用法错误（退出码 2）。
+- `vuna lint`（M30 AST 驱动）只报告**可安全自动修复**的形态，三条规则：`literal-if-chain`
+  （String/Int 字面量 if/else-if 链，含 `= if` 链首与链尾 inline `else`）、
+  `lift-destructure`（单分支 case / let 模式解构 → 外层模式）、`case-to-clauses`（顶层
+  case → 多 clause）。不可安全折叠的情形（非最后 clause、clause head 跨行、含注释/tab/CR、
+  分支体无法安全收束）**不报告**；签名含隐式 Pi 的函数跳过 clause 级改写（模式矩阵与隐式
+  参数对齐，见 `Base.Vec.vhead` 的坑）。`--fix` 遇到注释、tab、CRLF 也跳过。`vuna lint`
+  **必须显式给路径**，无参数是用法错误（退出码 2）。`checks.vuna-lint` 对全部包源码要求
+  零 finding；规则语义与边界见 [lint.md](lint.md)。
 - `vuna fmt --check` 省略 PATH 时按 workspace 包约定扫描各包 `lib/app/test`（缺目录不再
   崩溃）；M30 起非包目录 / 不存在路径都是可读错误 exit 2，`map` 同类场景也给出明确错误
   而非静默空输出（C12 已修）。`vuna doc` 尊重 `[export].modules`，`--with-comments`

@@ -210,15 +210,14 @@ tblMem n t = case tblLookup n t of
   Nothing => False
 
 tblInsert : String -> a -> HashTbl a -> HashTbl a
-tblInsert key v tbl = case tbl of
-  MkHashTbl outers =>
-    let
-      b = hashStr key
-      oi = b / 32
-      ii = b - oi * 32
-      outer = nthOr oi (replicate 32 []) outers
-      inner = nthOr ii [] outer
-    in MkHashTbl (putNth oi (putNth ii (Pair key v :: inner) outer) outers)
+tblInsert key v (MkHashTbl outers) =
+  let
+    b = hashStr key
+    oi = b / 32
+    ii = b - oi * 32
+    outer = nthOr oi (replicate 32 []) outers
+    inner = nthOr ii [] outer
+  in MkHashTbl (putNth oi (putNth ii (Pair key v :: inner) outer) outers)
 
 lookupAssoc : String -> List (Pair String a) -> Maybe a
 lookupAssoc key pairs = case pairs of
@@ -226,13 +225,12 @@ lookupAssoc key pairs = case pairs of
   (Pair k v) :: rest => if key == k then Just v else lookupAssoc key rest
 
 tblLookup : String -> HashTbl a -> Maybe a
-tblLookup key tbl = case tbl of
-  MkHashTbl outers =>
-    let
-      b = hashStr key
-      oi = b / 32
-      ii = b - oi * 32
-    in lookupAssoc key (nthOr ii [] (nthOr oi [] outers))
+tblLookup key (MkHashTbl outers) =
+  let
+    b = hashStr key
+    oi = b / 32
+    ii = b - oi * 32
+  in lookupAssoc key (nthOr ii [] (nthOr oi [] outers))
 
 tblFromList : List (Pair String a) -> HashTbl a
 tblFromList pairs = case pairs of

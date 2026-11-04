@@ -51,6 +51,9 @@ exprRefsB bound e = case e of
     append (exprRefsB bound base) (concatMap (\q => exprRefsB bound (secondOf q)) fields)
   EDo stmts sp => secondOf (refsOfStmts bound stmts)
   EAnn value ty sp => append (exprRefsB bound value) (exprRefsB bound ty)
+  -- A2：局部函数组：每个 clause 的参数模式绑定在其体内可见。
+  ELocalFun clauses sp =>
+    concatMap (\c => exprRefsB (append (patsNames (firstOf c)) bound) (secondOf c)) clauses
 
 refsOfDef : List (Pair (List Pat) Expr) -> List String
 refsOfDef clauses = dedup (concatMap (\c => exprRefsB (patsNames (firstOf c)) (secondOf c)) clauses)
@@ -188,8 +191,19 @@ else case e of
   EAnn value ty sp =>
     strWalk (fuel - 1) comp ctors projs p sizes caller facts region ty
       (strWalk (fuel - 1) comp ctors projs p sizes caller facts region value acc)
+  -- A2：where/let 多 clause 局部函数的每个 clause body 都要进 STR 遍历（body 里可能
+  -- 调用外层递归函数，旧 `_ => acc` 会漏检）。借用 `strWalkBinds`（参数表与 `strWalk`
+  -- 完全一致，SCT 可证下降）；模式列表只用来定位，不参与 STR。
+  ELocalFun clauses sp =>
+    strWalkBinds (fuel - 1) comp ctors projs p sizes caller facts region (localClauseBinds clauses)
+      acc
   EVar n sp => if memName n comp then markInvalid acc else acc
   _ => acc
+
+localClauseBinds : List (Pair (List Pat) Expr) -> List (Pair Pat Expr)
+localClauseBinds [] = []
+localClauseBinds ((Pair pats body) :: rest) =
+  Pair (PWild (exprSpan body)) body :: localClauseBinds rest
 
 strWalkEApp : Int -> List String -> List String -> List (Pair String (List Int)) -> Int -> List (Pair String (Pair Int (Pair Int (List Int)))) -> String -> List (Pair String Int) -> List String -> Expr -> List Expr -> Pair Bool (List (Pair (Pair String String) Int)) -> Pair Bool (List (Pair (Pair String String) Int))
 strWalkEApp fuel comp ctors projs p sizes caller facts region fn args acc = if fuel <= 0 then acc
@@ -296,12 +310,11 @@ strClause comp ctors projs p caller facts clause =
 -- 终止性失败的描述（<0>）：两种措辞（单函数 / 递归组）统一到 arity 1 的
 -- `CannotProveTermination`，描述里保留原来的区分信息。
 groupMessage : List String -> String
-groupMessage comp = case comp of
-  [f] => f ++ " (recursive call does not structurally decrease)"
-  _ =>
-    "recursive group {"
-      ++ joinComma comp
-      ++ "} (mutual recursion: no parameter position decreases on every recursive call)"
+groupMessage ([f]) = f ++ " (recursive call does not structurally decrease)"
+groupMessage comp =
+  "recursive group {"
+    ++ joinComma comp
+    ++ "} (mutual recursion: no parameter position decreases on every recursive call)"
 
 cannotProveMsg : List String -> String
 cannotProveMsg comp =

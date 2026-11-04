@@ -68,8 +68,8 @@ and v_Vuna_dCompiler_dElab_dCase_doccursLevelList = (fun mc0 -> (fun mc1 -> (mat
   | C_Base_dList_dList_Base_dList_dNil -> false
   | _ -> failwith "DT: impossible branch"
 )))
-and v_Vuna_dCompiler_dElab_dCase_doccursLevelClo = (fun lvl -> (fun clo -> (match clo with
-  | C_Vuna_dCompiler_dCore_dTerm_dClosure_Vuna_dCompiler_dCore_dTerm_dClos (dtb__31, dtb__32) -> ((v_Vuna_dCompiler_dElab_dCase_doccursLevelList lvl) dtb__31)
+and v_Vuna_dCompiler_dElab_dCase_doccursLevelClo = (fun mc0 -> (fun mc1 -> (match mc1 with
+  | C_Vuna_dCompiler_dCore_dTerm_dClosure_Vuna_dCompiler_dCore_dTerm_dClos (dtb__31, dtb__32) -> ((v_Vuna_dCompiler_dElab_dCase_doccursLevelList mc0) dtb__31)
   | _ -> failwith "DT: impossible branch"
 )))
 
@@ -365,9 +365,9 @@ let rec v_Vuna_dCompiler_dElab_dCase_dhasLitHead = (fun alts -> ((fun nd_uscrut1
   | _ -> failwith "DT: impossible branch"
 )) alts))
 
-let v_Vuna_dCompiler_dElab_dCase_dcheckCatchAll = (fun prevs -> (fun alt -> (fun rest -> (fun sp -> (match rest with
+let v_Vuna_dCompiler_dElab_dCase_dcheckCatchAll = (fun mc0 -> (fun mc1 -> (fun mc2 -> (fun mc3 -> (match mc2 with
   | C_Base_dList_dList_Base_dList_dNil -> (C_Base_dResult_dResult_Base_dResult_dOk (0))
-  | _ -> (if (v_Vuna_dCompiler_dElab_dCase_dhasLitHead rest) then ((v_Vuna_dCompiler_dDiagnostics_dTc_dtcErr0 sp) C_Vuna_dCompiler_dDiagnostics_dTc_dTcErr_Vuna_dCompiler_dDiagnostics_dTc_dBranchAfterCatchAll) else ((v_Vuna_dCompiler_dDiagnostics_dTc_dtcErr0 sp) C_Vuna_dCompiler_dDiagnostics_dTc_dTcErr_Vuna_dCompiler_dDiagnostics_dTc_dCatchAllNotLast))
+  | _ -> (if (v_Vuna_dCompiler_dElab_dCase_dhasLitHead mc2) then ((v_Vuna_dCompiler_dDiagnostics_dTc_dtcErr0 mc3) C_Vuna_dCompiler_dDiagnostics_dTc_dTcErr_Vuna_dCompiler_dDiagnostics_dTc_dBranchAfterCatchAll) else ((v_Vuna_dCompiler_dDiagnostics_dTc_dtcErr0 mc3) C_Vuna_dCompiler_dDiagnostics_dTc_dTcErr_Vuna_dCompiler_dDiagnostics_dTc_dCatchAllNotLast))
 )))))
 
 let rec v_Vuna_dCompiler_dElab_dCase_dcheckCaseAltsGo = (fun prevs -> (fun alts -> ((fun nd_uscrut2 -> (match nd_uscrut2 with

@@ -64,9 +64,38 @@ g =
 
 - 两条记法只差一条约束：**`where` 块每个绑定必须写签名行**（缺签名报
   `[TC_WhereNeedsSig] where binding ... needs a type signature`）；`let` 块的签名行可选；
-- 两种子句形态都支持：`pat = expr` 与函数子句 `name pats = expr`（后者降级成 λ）；
-- 签名写在同名子句**之前**；悬空签名 / 重复签名 / 多子句共用签名 / 缩进越界都是
-  `PS_` 前缀的明确诊断：
+- 两种子句形态都支持：`pat = expr` 与函数子句 `name pats = expr`；
+- **局部多 clause 函数**（M30）：同一名字的**相邻**多条子句合并成一个局部函数（`where`
+  与 `let` 都支持），参数是任意模式（构造子/字面量/记录/变量），匹配语义与顶层函数
+  子句一致（编译期走 `Elab.Match.multiToExpr` 的模式矩阵，穷尽性同 `case`）；
+  - 一条签名行覆盖该名字的**全部**子句（签名写在第一条子句之前）；非相邻的同名子句
+    仍报 `[PS_WhereSigMultiClause]`（保留为历史诊断）；
+  - 局部函数仍是**顺序作用域**：不能自递归/互递归；需要递归时放到顶层定义组。
+
+  ```vuna
+  main : Int
+  main = pick (Succ Zero) Zero where
+    pick : Nat -> Nat -> Int
+    pick Zero _ = 1
+    pick (Succ _) Zero = 2
+    pick (Succ _) (Succ _) = 3
+  ```
+
+- **`let` 模式解构**（M30）：`let` 绑定左端可以是构造子/记录/字面量模式（不再只允许
+  简单名/通配）。语义等价单分支 `case`：模式必须不可失败（穷尽），否则报
+  `[TC_NotExhaustive] case is not exhaustive: missing ...`；模式绑定出的变量在后续绑定
+  与 `in` body 中可见。`TC_LetBindingPattern`（“let bindings must be simple names or
+  wildcards”）不再产生，保留为历史诊断码。
+
+  ```vuna
+  main : Int
+  main =
+    let
+      MkPoint x y = MkPoint 40 2
+    in x + y
+  ```
+
+- 签名写在同名子句**之前**；悬空签名 / 重复签名 / 缩进越界都是 `PS_` 前缀的明确诊断：
 
   ```text
   [PS_WhereSigNoDef] binding signature for `g` has no definition
@@ -75,6 +104,8 @@ g =
   [PS_WhereSigMultiClause] binding `g` has more than one clause; a signature can annotate only one
   [PS_UnexpectedIndentInBinding] unexpected indentation in a let/where binding block
   ```
+
+  （`PS_WhereSigMultiClause` 只对**非相邻**同名子句报；相邻子句合并成局部多 clause 函数。）
 
 - 有签名的绑定按签名以 checking 模式精化（先检查签名是合法类型，再按该类型检查值），
   因此不需要推断无签名 lambda 的类型；无签名绑定走推断；

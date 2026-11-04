@@ -1,0 +1,15 @@
+keep p = case p of
+  Pair a b => p
+
+choose x = case x of
+  Just a => a
+  Nothing => 0
+
+split allDatas subset = case subset of
+  [] => ""
+  _ => allDatas
+split other subset = case subset of
+  [] => ""
+  _ => other
+
+main = 0

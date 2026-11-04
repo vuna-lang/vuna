@@ -175,8 +175,8 @@ let rec v_Vuna_dCompiler_dElab_dDict_dsubstDictTermGo = (fun ec -> (fun depth ->
   | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTIf (dtb__57, dtb__58, dtb__59) -> (C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTIf ((((v_Vuna_dCompiler_dElab_dDict_dsubstDictTermGo ec) depth) dtb__57), (((v_Vuna_dCompiler_dElab_dDict_dsubstDictTermGo ec) depth) dtb__58), (((v_Vuna_dCompiler_dElab_dDict_dsubstDictTermGo ec) depth) dtb__59)))
   | _ -> t
 ))))
-and v_Vuna_dCompiler_dElab_dDict_dsubstDictTermAlt = (fun ec -> (fun depth -> (fun alt -> (match alt with
-  | C_Vuna_dCompiler_dCore_dTerm_dCaseAlt_Vuna_dCompiler_dCore_dTerm_dCaseAlt (dtb__60, dtb__61, dtb__62) -> (C_Vuna_dCompiler_dCore_dTerm_dCaseAlt_Vuna_dCompiler_dCore_dTerm_dCaseAlt (dtb__60, dtb__61, (((v_Vuna_dCompiler_dElab_dDict_dsubstDictTermGo ec) ((bi_add depth) (v_Base_dList_dlength dtb__61))) dtb__62)))
+and v_Vuna_dCompiler_dElab_dDict_dsubstDictTermAlt = (fun mc0 -> (fun mc1 -> (fun mc2 -> (match mc2 with
+  | C_Vuna_dCompiler_dCore_dTerm_dCaseAlt_Vuna_dCompiler_dCore_dTerm_dCaseAlt (dtb__60, dtb__61, dtb__62) -> (C_Vuna_dCompiler_dCore_dTerm_dCaseAlt_Vuna_dCompiler_dCore_dTerm_dCaseAlt (dtb__60, dtb__61, (((v_Vuna_dCompiler_dElab_dDict_dsubstDictTermGo mc0) ((bi_add mc1) (v_Base_dList_dlength dtb__61))) dtb__62)))
   | _ -> failwith "DT: impossible branch"
 ))))
 
@@ -219,16 +219,16 @@ let v_Vuna_dCompiler_dElab_dDict_ddictArgKind = (fun ec -> (fun dom -> (match ((
   | _ -> failwith "DT: impossible branch"
 )))
 
-let v_Vuna_dCompiler_dElab_dDict_dneutralHeadOrSelf = (fun v -> ((fun nd_uscrut1 -> (match nd_uscrut1 with
+let v_Vuna_dCompiler_dElab_dDict_dneutralHeadOrSelf = (fun mc0 -> (match mc0 with
   | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVNeutral (dtb__79) -> (match dtb__79 with
   | C_Vuna_dCompiler_dCore_dTerm_dNeutral_Vuna_dCompiler_dCore_dTerm_dNGlobal (dtb__80, dtb__81) -> (match dtb__81 with
   | C_Base_dList_dList_Base_dList_dCons (dtb__82, dtb__83) -> (C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVNeutral ((C_Vuna_dCompiler_dCore_dTerm_dNeutral_Vuna_dCompiler_dCore_dTerm_dNGlobal (dtb__80, C_Base_dList_dList_Base_dList_dNil))))
-  | _ -> v
+  | _ -> mc0
 )
-  | _ -> v
+  | _ -> mc0
 )
-  | _ -> v
-)) v))
+  | _ -> mc0
+))
 
 let v_Vuna_dCompiler_dElab_dDict_dargHeadMatchesKind = (fun globals -> (fun ec -> (fun ctx -> (fun forced -> (fun argKind -> ((fun nd_uscrut5 -> (match nd_uscrut5 with
   | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVNeutral (dtb__84) -> (match dtb__84 with

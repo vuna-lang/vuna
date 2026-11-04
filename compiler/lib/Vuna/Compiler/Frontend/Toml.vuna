@@ -123,13 +123,13 @@ skipGap cs = skipGapGo False cs
 
 skipGapGo : Bool -> TomlCursor -> TomlCursor
 skipGapGo inComment (TomlCursor [] line col) = TomlCursor [] line col
-skipGapGo inComment (TomlCursor (c :: rest) line col) =
-  if inComment then if c == 10 then skipGapGo False (TomlCursor rest (line + 1) 1)
-  else skipGapGo True (TomlCursor rest line (col + 1))
-  else if isBlankChar c then skipGapGo False (TomlCursor rest line (col + 1))
-  else if c == 10 then skipGapGo False (TomlCursor rest (line + 1) 1)
-  else if c == 35 then skipGapGo True (TomlCursor rest line (col + 1))
-  else TomlCursor (c :: rest) line col
+skipGapGo inComment (TomlCursor (c :: rest) line col) = if inComment then if c == 10 then skipGapGo False (TomlCursor rest (line + 1) 1)
+else skipGapGo True (TomlCursor rest line (col + 1))
+else if isBlankChar c then skipGapGo False (TomlCursor rest line (col + 1))
+else case c of
+  10 => skipGapGo False (TomlCursor rest (line + 1) 1)
+  35 => skipGapGo True (TomlCursor rest line (col + 1))
+  _ => TomlCursor (c :: rest) line col
 
 collectBareKey : TomlCursor -> List Int -> Pair String TomlCursor
 collectBareKey (TomlCursor [] line col) acc = Pair (strPack (reverse acc)) (TomlCursor [] line col)
@@ -157,25 +157,25 @@ parseStringChars : Int -> String -> TomlCursor -> TomlCursor -> List Int -> Resu
 parseStringChars fuel path startCs cs acc = if fuel <= 0 then Err "DT: toml fuel exhausted (internal: toml parser made no progress)"
 else case cursorChars cs of
   [] => failAt path (cursorLine startCs) "unterminated basic string"
-  c :: rest =>
-    if c == 34 then Ok (Pair (strPack (reverse acc)) (advanceCursor cs))
-    else if c == 10 then failAt path (cursorLine startCs) "unterminated basic string (newline in string)"
-    else if c == 92 then parseStringEscape (fuel - 1) path startCs (advanceCursor cs) acc
-    else parseStringChars (fuel - 1) path startCs (advanceCursor cs) (c :: acc)
+  c :: rest => case c of
+    34 => Ok (Pair (strPack (reverse acc)) (advanceCursor cs))
+    10 => failAt path (cursorLine startCs) "unterminated basic string (newline in string)"
+    92 => parseStringEscape (fuel - 1) path startCs (advanceCursor cs) acc
+    _ => parseStringChars (fuel - 1) path startCs (advanceCursor cs) (c :: acc)
 
 parseStringEscape : Int -> String -> TomlCursor -> TomlCursor -> List Int -> Result (Pair String TomlCursor)
 parseStringEscape fuel path startCs cs acc = if fuel <= 0 then Err "DT: toml fuel exhausted (internal: toml parser made no progress)"
 else case cursorChars cs of
   [] => failAt path (cursorLine startCs) "unterminated escape sequence"
-  c :: rest =>
-    if c == 110 then parseStringChars (fuel - 1) path startCs (advanceCursor cs) (10 :: acc)
-    else if c == 116 then parseStringChars (fuel - 1) path startCs (advanceCursor cs) (9 :: acc)
-    else if c == 114 then parseStringChars (fuel - 1) path startCs (advanceCursor cs) (13 :: acc)
-    else if c == 98 then parseStringChars (fuel - 1) path startCs (advanceCursor cs) (8 :: acc)
-    else if c == 102 then parseStringChars (fuel - 1) path startCs (advanceCursor cs) (12 :: acc)
-    else if c == 34 then parseStringChars (fuel - 1) path startCs (advanceCursor cs) (34 :: acc)
-    else if c == 92 then parseStringChars (fuel - 1) path startCs (advanceCursor cs) (92 :: acc)
-    else failAt path (cursorLine cs) ("unknown escape sequence \\" ++ strPack [c])
+  c :: rest => case c of
+    110 => parseStringChars (fuel - 1) path startCs (advanceCursor cs) (10 :: acc)
+    116 => parseStringChars (fuel - 1) path startCs (advanceCursor cs) (9 :: acc)
+    114 => parseStringChars (fuel - 1) path startCs (advanceCursor cs) (13 :: acc)
+    98 => parseStringChars (fuel - 1) path startCs (advanceCursor cs) (8 :: acc)
+    102 => parseStringChars (fuel - 1) path startCs (advanceCursor cs) (12 :: acc)
+    34 => parseStringChars (fuel - 1) path startCs (advanceCursor cs) (34 :: acc)
+    92 => parseStringChars (fuel - 1) path startCs (advanceCursor cs) (92 :: acc)
+    _ => failAt path (cursorLine cs) ("unknown escape sequence \\" ++ strPack [c])
 
 -- 整数：可选前导 '-'，至少一位十进制数字；小数点/尾随字母报错。
 parseInteger : String -> TomlCursor -> Result (Pair Int TomlCursor)
@@ -240,10 +240,10 @@ parseArrayItems fuel path cs acc = if fuel <= 0 then Err "DT: toml fuel exhauste
 else case skipGap cs of
   TomlCursor chars line col => case chars of
     [] => failAt path line "unterminated array"
-    c :: rest =>
-      if c == 93 then Ok (Pair (TList (reverse acc)) (advanceCursor (TomlCursor chars line col)))
-      else if c == 34 then parseArrayString (fuel - 1) path (TomlCursor chars line col) acc
-      else failAt path line "expected a string in array"
+    c :: rest => case c of
+      93 => Ok (Pair (TList (reverse acc)) (advanceCursor (TomlCursor chars line col)))
+      34 => parseArrayString (fuel - 1) path (TomlCursor chars line col) acc
+      _ => failAt path line "expected a string in array"
 
 parseArrayString : Int -> String -> TomlCursor -> List String -> Result (Pair TomlValue TomlCursor)
 parseArrayString fuel path cs acc = if fuel <= 0 then Err "DT: toml fuel exhausted (internal: toml parser made no progress)"
@@ -252,10 +252,10 @@ else case parseStringValue path cs of
   Ok (Pair s afterString) => case skipGap afterString of
     TomlCursor chars line col => case chars of
       [] => failAt path line "unterminated array"
-      c :: rest =>
-        if c == 44 then parseArrayItems (fuel - 1) path (advanceCursor (TomlCursor chars line col)) (s :: acc)
-        else if c == 93 then Ok (Pair (TList (reverse (s :: acc))) (advanceCursor (TomlCursor chars line col)))
-        else failAt path line "expected ',' or ']' in array"
+      c :: rest => case c of
+        44 => parseArrayItems (fuel - 1) path (advanceCursor (TomlCursor chars line col)) (s :: acc)
+        93 => Ok (Pair (TList (reverse (s :: acc))) (advanceCursor (TomlCursor chars line col)))
+        _ => failAt path line "expected ',' or ']' in array"
 
 parseValue : String -> TomlCursor -> Result (Pair TomlValue TomlCursor)
 parseValue path cs = case cursorChars cs of
@@ -283,19 +283,19 @@ else case parseBareKey path (skipBlank cs) of
   Ok (Pair seg afterSeg) => case skipBlank afterSeg of
     TomlCursor chars line col => case chars of
       [] => failAt path line "unterminated section header"
-      c :: rest =>
-        if c == 46 then parseSectionSegments (fuel - 1) path (TomlCursor rest line (col + 1)) (seg :: acc)
-        else if c == 93 then Ok (Pair (reverse (seg :: acc)) (TomlCursor rest line (col + 1)))
-        else failAt path line "expected '.' or ']' in section header"
+      c :: rest => case c of
+        46 => parseSectionSegments (fuel - 1) path (TomlCursor rest line (col + 1)) (seg :: acc)
+        93 => Ok (Pair (reverse (seg :: acc)) (TomlCursor rest line (col + 1)))
+        _ => failAt path line "expected '.' or ']' in section header"
 
 expectEol : String -> TomlCursor -> Result TomlCursor
 expectEol path cs = case skipBlank cs of
   TomlCursor chars line col => case chars of
     [] => Ok (TomlCursor chars line col)
-    c :: rest =>
-      if c == 10 then Ok (TomlCursor rest (line + 1) 1)
-      else if c == 35 then expectEolAfterComment path (TomlCursor chars line col)
-      else failAt path (cursorLine cs) "unexpected character at end of line"
+    c :: rest => case c of
+      10 => Ok (TomlCursor rest (line + 1) 1)
+      35 => expectEolAfterComment path (TomlCursor chars line col)
+      _ => failAt path (cursorLine cs) "unexpected character at end of line"
 
 expectEolAfterComment : String -> TomlCursor -> Result TomlCursor
 expectEolAfterComment path cs = case skipComment cs of

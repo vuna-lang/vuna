@@ -163,21 +163,22 @@ collectOp (Chars (c :: rest) p) acc =
 
 scanString : Chars -> List Int -> Result (Pair String Chars)
 scanString (Chars [] p) acc = lexErr0 UnterminatedString
-scanString (Chars (c :: rest) p) acc =
-  if c == 34 then Ok (Pair (strPack (reverse acc)) (Chars rest (advanceChar c p)))
-  else if c == 10 then lexErr0 UnterminatedString
-  else if c == 92 then scanEscape (Chars rest (advanceChar c p)) acc
-  else scanString (Chars rest (advanceChar c p)) (c :: acc)
+scanString (Chars (c :: rest) p) acc = case c of
+  34 => Ok (Pair (strPack (reverse acc)) (Chars rest (advanceChar c p)))
+  10 => lexErr0 UnterminatedString
+  92 => scanEscape (Chars rest (advanceChar c p)) acc
+  _ => scanString (Chars rest (advanceChar c p)) (c :: acc)
 
 scanEscape : Chars -> List Int -> Result (Pair String Chars)
 scanEscape (Chars [] p) acc = lexErr0 UnterminatedString
-scanEscape (Chars (c :: rest) p) acc =
-  if c == 110 then scanString (Chars rest (advanceChar c p)) (10 :: acc)
-  else if c == 116 then scanString (Chars rest (advanceChar c p)) (9 :: acc)
-  else if c == 114 then scanString (Chars rest (advanceChar c p)) (13 :: acc)
-  else if c == 34 then scanString (Chars rest (advanceChar c p)) (34 :: acc)
-  else if c == 92 then scanString (Chars rest (advanceChar c p)) (92 :: acc)
-  else if c == 39 then scanString (Chars rest (advanceChar c p)) (39 :: acc) else lexErr0 UnknownEscape
+scanEscape (Chars (c :: rest) p) acc = case c of
+  110 => scanString (Chars rest (advanceChar c p)) (10 :: acc)
+  116 => scanString (Chars rest (advanceChar c p)) (9 :: acc)
+  114 => scanString (Chars rest (advanceChar c p)) (13 :: acc)
+  34 => scanString (Chars rest (advanceChar c p)) (34 :: acc)
+  92 => scanString (Chars rest (advanceChar c p)) (92 :: acc)
+  39 => scanString (Chars rest (advanceChar c p)) (39 :: acc)
+  _ => lexErr0 UnknownEscape
 
 lexChars : Int -> Chars -> Result (List PTok)
 lexChars fuel cs = if fuel <= 0 then Err "DT: lexer fuel exhausted (internal: lexer made no progress)"

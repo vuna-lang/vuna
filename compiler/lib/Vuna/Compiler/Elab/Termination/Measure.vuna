@@ -228,17 +228,19 @@ extendSizesStrict sizes scrut pat = case scrut of
 
 sizeOfVarStrict : String -> List (Pair String (Pair Int (Pair Int (List Int)))) -> Maybe (Pair Int (Pair Int (List Int)))
 sizeOfVarStrict name [] = Nothing
-sizeOfVarStrict name (s :: rest) = case s of
-  Pair n sz => if n == name then Just sz else sizeOfVarStrict name rest
+sizeOfVarStrict name ((Pair n sz) :: rest) =
+  if n == name then Just sz else sizeOfVarStrict name rest
 
 -- `map (\v => body) lst`：lambda 绑定 v 视为 lst 的元素（更深的子项），
 -- 让 map 回调里的递归/投影参与下降判定。
 -- ==== 以下为 2c 恢复的检查器实现（R2 正事实 / 投影 / 调用点关系 / 遍历辅助）====
 guardPosVar : Expr -> Maybe String
 guardPosVar e = case e of
-  EApp (EVar op osp) args sp =>
-    if op == "<=" then guardLE args
-    else if op == ">=" then guardGE args else if op == "<" then guardLT args else Nothing
+  EApp (EVar op osp) args sp => case op of
+    "<=" => guardLE args
+    ">=" => guardGE args
+    "<" => guardLT args
+    _ => Nothing
   _ => Nothing
 
 guardLE : List Expr -> Maybe String

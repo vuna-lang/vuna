@@ -330,27 +330,28 @@ handleFrame msg state = case jsonGet "method" msg of
     Just methodName => dispatch methodName msg state
 
 dispatch : String -> Json -> LspState -> Pair Bool (Pair LspState (List Json))
-dispatch methodName msg state = case methodName of
-  "initialize" => Pair False (Pair state [initializeResult msg])
-  "initialized" => Pair False (Pair state [])
-  "shutdown" => Pair False (Pair (setShutdown True state) [responseOk (idOf msg) JNull])
-  "exit" => Pair True (Pair state [])
-  "textDocument/didOpen" => handleDidOpen msg state
-  "textDocument/didChange" => handleDidChange msg state
-  "textDocument/didClose" => handleDidClose msg state
-  "textDocument/hover" => handleHover msg state
-  "textDocument/completion" => handleCompletion msg state
-  "textDocument/definition" => handleDefinition msg state
-  "textDocument/references" => handleReferences msg state
-  "textDocument/documentSymbol" => handleDocumentSymbol msg state
-  "textDocument/formatting" => handleFormatting msg state
-  "textDocument/codeAction" => Pair False (Pair state [responseOk (idOf msg) (JArr [])])
-  "workspace/symbol" => handleWorkspaceSymbol msg state
-  "$/cancelRequest" => Pair False (Pair state [])
-  _ =>
-    if startsWith "$/" methodName then Pair False (Pair state [])
-    else Pair False
-      (Pair state [responseErr (idOf msg) errMethodNotFound ("method not found: " ++ methodName)])
+dispatch "initialize" msg state = Pair False (Pair state [initializeResult msg])
+dispatch "initialized" msg state = Pair False (Pair state [])
+dispatch "shutdown" msg state =
+  Pair False (Pair (setShutdown True state) [responseOk (idOf msg) JNull])
+dispatch "exit" msg state = Pair True (Pair state [])
+dispatch "textDocument/didOpen" msg state = handleDidOpen msg state
+dispatch "textDocument/didChange" msg state = handleDidChange msg state
+dispatch "textDocument/didClose" msg state = handleDidClose msg state
+dispatch "textDocument/hover" msg state = handleHover msg state
+dispatch "textDocument/completion" msg state = handleCompletion msg state
+dispatch "textDocument/definition" msg state = handleDefinition msg state
+dispatch "textDocument/references" msg state = handleReferences msg state
+dispatch "textDocument/documentSymbol" msg state = handleDocumentSymbol msg state
+dispatch "textDocument/formatting" msg state = handleFormatting msg state
+dispatch "textDocument/codeAction" msg state =
+  Pair False (Pair state [responseOk (idOf msg) (JArr [])])
+dispatch "workspace/symbol" msg state = handleWorkspaceSymbol msg state
+dispatch "$/cancelRequest" msg state = Pair False (Pair state [])
+dispatch methodName msg state =
+  if startsWith "$/" methodName then Pair False (Pair state [])
+  else Pair False
+    (Pair state [responseErr (idOf msg) errMethodNotFound ("method not found: " ++ methodName)])
 
 -- ---------------------------------------------------------------
 -- 主循环

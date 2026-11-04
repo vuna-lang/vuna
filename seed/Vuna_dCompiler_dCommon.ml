@@ -162,8 +162,8 @@ let rec v_Vuna_dCompiler_dCommon_dhashChars = (fun mc0 -> (fun mc1 -> (match mc0
 
 let v_Vuna_dCompiler_dCommon_dtblEmpty = (C_Vuna_dCompiler_dCommon_dHashTbl_Vuna_dCompiler_dCommon_dMkHashTbl (((v_Vuna_dCompiler_dCommon_dreplicate 32) ((v_Vuna_dCompiler_dCommon_dreplicate 32) C_Base_dList_dList_Base_dList_dNil))))
 
-let v_Vuna_dCompiler_dCommon_dtblInsert = (fun key -> (fun v -> (fun tbl -> (match tbl with
-  | C_Vuna_dCompiler_dCommon_dHashTbl_Vuna_dCompiler_dCommon_dMkHashTbl (dtb__60) -> ((fun b -> ((fun oi -> ((fun ii -> ((fun outer -> ((fun inner -> (C_Vuna_dCompiler_dCommon_dHashTbl_Vuna_dCompiler_dCommon_dMkHashTbl ((((v_Vuna_dCompiler_dCommon_dputNth oi) (((v_Vuna_dCompiler_dCommon_dputNth ii) (C_Base_dList_dList_Base_dList_dCons ((C_Base_dPair_dPair_Base_dPair_dPair (key, v)), inner))) outer)) dtb__60)))) (((v_Vuna_dCompiler_dCommon_dnthOr ii) C_Base_dList_dList_Base_dList_dNil) outer))) (((v_Vuna_dCompiler_dCommon_dnthOr oi) ((v_Vuna_dCompiler_dCommon_dreplicate 32) C_Base_dList_dList_Base_dList_dNil)) dtb__60))) ((bi_sub b) ((bi_mul oi) 32)))) ((bi_div b) 32))) (v_Vuna_dCompiler_dCommon_dhashStr key))
+let v_Vuna_dCompiler_dCommon_dtblInsert = (fun mc0 -> (fun mc1 -> (fun mc2 -> (match mc2 with
+  | C_Vuna_dCompiler_dCommon_dHashTbl_Vuna_dCompiler_dCommon_dMkHashTbl (dtb__60) -> ((fun b -> ((fun oi -> ((fun ii -> ((fun outer -> ((fun inner -> (C_Vuna_dCompiler_dCommon_dHashTbl_Vuna_dCompiler_dCommon_dMkHashTbl ((((v_Vuna_dCompiler_dCommon_dputNth oi) (((v_Vuna_dCompiler_dCommon_dputNth ii) (C_Base_dList_dList_Base_dList_dCons ((C_Base_dPair_dPair_Base_dPair_dPair (mc0, mc1)), inner))) outer)) dtb__60)))) (((v_Vuna_dCompiler_dCommon_dnthOr ii) C_Base_dList_dList_Base_dList_dNil) outer))) (((v_Vuna_dCompiler_dCommon_dnthOr oi) ((v_Vuna_dCompiler_dCommon_dreplicate 32) C_Base_dList_dList_Base_dList_dNil)) dtb__60))) ((bi_sub b) ((bi_mul oi) 32)))) ((bi_div b) 32))) (v_Vuna_dCompiler_dCommon_dhashStr mc0))
   | _ -> failwith "DT: impossible branch"
 ))))
 
@@ -176,8 +176,8 @@ let rec v_Vuna_dCompiler_dCommon_dlookupAssoc = (fun key -> (fun pairs -> ((fun 
   | _ -> failwith "DT: impossible branch"
 )) pairs)))
 
-let v_Vuna_dCompiler_dCommon_dtblLookup = (fun key -> (fun tbl -> (match tbl with
-  | C_Vuna_dCompiler_dCommon_dHashTbl_Vuna_dCompiler_dCommon_dMkHashTbl (dtb__65) -> ((fun b -> ((fun oi -> ((fun ii -> ((v_Vuna_dCompiler_dCommon_dlookupAssoc key) (((v_Vuna_dCompiler_dCommon_dnthOr ii) C_Base_dList_dList_Base_dList_dNil) (((v_Vuna_dCompiler_dCommon_dnthOr oi) C_Base_dList_dList_Base_dList_dNil) dtb__65)))) ((bi_sub b) ((bi_mul oi) 32)))) ((bi_div b) 32))) (v_Vuna_dCompiler_dCommon_dhashStr key))
+let v_Vuna_dCompiler_dCommon_dtblLookup = (fun mc0 -> (fun mc1 -> (match mc1 with
+  | C_Vuna_dCompiler_dCommon_dHashTbl_Vuna_dCompiler_dCommon_dMkHashTbl (dtb__65) -> ((fun b -> ((fun oi -> ((fun ii -> ((v_Vuna_dCompiler_dCommon_dlookupAssoc mc0) (((v_Vuna_dCompiler_dCommon_dnthOr ii) C_Base_dList_dList_Base_dList_dNil) (((v_Vuna_dCompiler_dCommon_dnthOr oi) C_Base_dList_dList_Base_dList_dNil) dtb__65)))) ((bi_sub b) ((bi_mul oi) 32)))) ((bi_div b) 32))) (v_Vuna_dCompiler_dCommon_dhashStr mc0))
   | _ -> failwith "DT: impossible branch"
 )))
 

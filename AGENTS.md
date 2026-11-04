@@ -92,7 +92,7 @@ CLI 入口；`seed/` = 提交入库的多文件 OCaml 信任锚点（生成物�
   [dt.md](docs/reference/dt.md)、[primitives.md](docs/reference/primitives.md)（内建/原语/能力）、
   [dt-parity.md](docs/reference/dt-parity.md)（历史证据）
 - 编译器实现与 codegen：[compiler.md](docs/reference/compiler.md)；DT 工具链（洞目标、LSP、
-  错误码体系与错误索引；`vuna gen-errors` 生成 `docs/.generated/errors.md`）：[dt-tooling.md](docs/reference/dt-tooling.md)
+  错误码体系与错误索引；`vuna gen-errors` 生成 `docs/.generated/errors.md`）：[dt-tooling.md](docs/reference/dt-tooling.md)；lint：[lint.md](docs/reference/lint.md)
 - 仓库探索（按场景选工具、探索后落盘）：技能 `.agents/skills/repo-navigation/SKILL.md`
 - 自举与种子：[bootstrap.md](docs/reference/bootstrap.md)；测试与 CI：[testing.md](docs/reference/testing.md)；
   已知边界：[limits.md](docs/reference/limits.md)；性能：[performance.md](docs/reference/performance.md)

@@ -1,0 +1,13 @@
+describe : List Int -> List String -> String
+describe allDatas subset = "items"
+
+pickAll : List Int -> List String -> String
+pickAll allDatas subset = case subset of
+  [] => "none"
+  _ =>
+    let
+      picked = describe allDatas subset
+    in picked
+
+main : Int
+main = 0

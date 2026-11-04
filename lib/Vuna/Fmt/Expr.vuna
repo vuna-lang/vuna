@@ -24,11 +24,12 @@ import Vuna.Fmt.Util
 -- 字符串字面量：按 lexer 支持的转义重新编码
 -- ---------------------------------------------------------------
 escapeChar : Int -> String
-escapeChar c =
-  if c == 34 then strPack [92, 34]
-  else if c == 92 then strPack [92, 92]
-  else if c == 10 then strPack [92, 110]
-  else if c == 9 then strPack [92, 116] else if c == 13 then strPack [92, 114] else strPack [c]
+escapeChar 34 = strPack [92, 34]
+escapeChar 92 = strPack [92, 92]
+escapeChar 10 = strPack [92, 110]
+escapeChar 9 = strPack [92, 116]
+escapeChar 13 = strPack [92, 114]
+escapeChar c = strPack [c]
 
 renderStr : String -> String
 renderStr s = strPack [34] ++ concatStrings (map escapeChar (strUnpack s)) ++ strPack [34]
@@ -207,6 +208,8 @@ else case e of
         [] => Just ("{ " ++ b ++ " }")
         _ => Just ("{ " ++ b ++ " | " ++ joinComma ss ++ " }")
   EDo stmts sp => Nothing
+  -- A2：局部函数组只作为 let/where 绑定值出现，由 `renderLetBindingGo` 展开成多子句。
+  ELocalFun clauses sp => Nothing
   -- M24：非 where 位置（例如 `let` 绑定值）的 `EAnn` 透明渲染内部表达式：
   -- 表达式位置没有 `: Ty` 语法，输出标注会让 fmt 产物无法重新 parse。
   EAnn value ty sp => inlinePrecGo (fuel - 1) minPrec value
@@ -385,6 +388,8 @@ else case e of
   ERecord name fields sp => renderRecordBlockGo (fuel - 1) at lineInd name fields
   ERecUpdate base fields sp => renderRecUpdateBlockGo (fuel - 1) at lineInd base fields
   EDo stmts sp => renderDoGo (fuel - 1) at lineInd stmts
+  -- A2：局部函数组只作为 let/where 绑定值出现，由 `renderLetBindingGo` 展开成多子句。
+  ELocalFun clauses sp => []
   EAnn value ty sp => renderExprGo (fuel - 1) at lineInd value
   EVar name sp => [name]
   EInt n sp => [strFromInt n]
@@ -468,17 +473,42 @@ else case binds of
 renderLetBindingGo : Int -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Pair Pat Expr -> List String
 renderLetBindingGo fuel at bindInd (Pair pat value) = if fuel <= 0 then []
 else case value of
-  EAnn inner ty annSp =>
-    let
-      sigPrefix = case pat of
-        PVar name psp => spaces bindInd ++ name ++ " : "
-        _ => spaces bindInd ++ renderPatGo formatFuelBound pat ++ " : "
-      sigLines = prefixFirst sigPrefix (renderTypeExprFuel (fuel - 1) at bindInd ty)
-    in append (attachAt at annSp bindInd sigLines)
-      (attachAt at (patSpan pat) bindInd (renderBindingValueGo (fuel - 1) at bindInd (renderPatGo formatFuelBound pat ++ " =") inner))
+  EAnn inner ty annSp => case inner of
+    ELocalFun clauses lsp =>
+      append
+        (attachAt at annSp bindInd (prefixFirst (spaces bindInd ++ renderPatGo formatFuelBound pat ++ " : ") (renderTypeExprFuel (fuel - 1) at bindInd ty)))
+        (renderLocalFunGo (fuel - 1) at bindInd pat clauses)
+    _ => case pat of
+      PVar name psp =>
+        let
+          sigLines =
+            prefixFirst (spaces bindInd ++ name ++ " : ")
+              (renderTypeExprFuel (fuel - 1) at bindInd ty)
+        in append (attachAt at annSp bindInd sigLines)
+          (attachAt at (patSpan pat) bindInd (renderBindingValueGo (fuel - 1) at bindInd (renderPatGo formatFuelBound pat ++ " =") inner))
+      _ =>
+        let
+          sigLines =
+            prefixFirst (spaces bindInd ++ renderPatGo formatFuelBound pat ++ " : ")
+              (renderTypeExprFuel (fuel - 1) at bindInd ty)
+        in append (attachAt at annSp bindInd sigLines)
+          (attachAt at (patSpan pat) bindInd (renderBindingValueGo (fuel - 1) at bindInd (renderPatGo formatFuelBound pat ++ " =") inner))
+  ELocalFun clauses lsp => renderLocalFunGo (fuel - 1) at bindInd pat clauses
   _ =>
     attachAt at (patSpan pat) bindInd
       (renderBindingValueGo (fuel - 1) at bindInd (renderPatGo formatFuelBound pat ++ " =") value)
+
+-- A2：where/let 多 clause 局部函数：`name p1 p2 = body` 逐 clause 渲染。
+renderLocalFunGo : Int -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Pat -> List (Pair (List Pat) Expr) -> List String
+renderLocalFunGo fuel at bindInd pat clauses = if fuel <= 0 then []
+else case clauses of
+  [] => []
+  (Pair pats body) :: rest =>
+    let
+      headText = renderPatGo formatFuelBound pat ++ joinSpace (map renderPatAtom pats) ++ " ="
+      lines = renderBindingValueGo (fuel - 1) at bindInd headText body
+    in append (attachAt at (patSpan pat) bindInd lines)
+      (renderLocalFunGo (fuel - 1) at bindInd pat rest)
 
 renderBindingValueGo : Int -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> String -> Expr -> List String
 renderBindingValueGo fuel at lineInd prefixText value = if fuel <= 0 then []

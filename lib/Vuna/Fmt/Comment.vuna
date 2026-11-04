@@ -249,8 +249,7 @@ headerAnchors hdr = case hdr of
 
 -- 导出项也作为注释锚点：排序时项注释随项移动。
 modDeclItemAnchors : ModDecl -> List Span
-modDeclItemAnchors m = case m of
-  ModDecl _ _ items _ => map exportItemSpan items
+modDeclItemAnchors (ModDecl _ _ items _) = map exportItemSpan items
 
 declAnchors : Decl -> List Span
 declAnchors d = case d of
@@ -302,6 +301,11 @@ exprAnchors e = case e of
   EDo stmts sp => concatMap doStmtAnchors stmts
   -- M24：where 绑定签名行（`g : Int -> Int`）本身是注释锚点（前置/行尾注释挂签名行）。
   EAnn value ty sp => sp :: exprAnchors value
+  -- A2：where/let 多 clause 局部函数：每个 clause body 的表达式锚点。
+  ELocalFun clauses sp => concatMap localClauseAnchors clauses
+
+localClauseAnchors : Pair (List Pat) Expr -> List Span
+localClauseAnchors (Pair pats body) = exprAnchors body
 
 anchorSpans : Maybe ModDecl -> List Import -> List Decl -> List Span
 anchorSpans hdr imports decls =

@@ -468,11 +468,10 @@ insertDictBinder name idx dictDom t = insertDictBinderGo name idx dictDom 0 t
 -- 其中 0..idx 号索引都指向插入点之前的 binder，索引全部 +1；`shift 0 1` 在嵌套 binder
 -- 内会把 cutoff 自动抬高 1，正好让「插入点之后才绑定的变量」保持不变。
 insertDictBinderGo : String -> Int -> Term -> Int -> Term -> Term
-insertDictBinderGo name idx dictDom depth t = case t of
-  TPi n i r d c =>
-    if depth == idx then TPi n i r d (TPi name True Rig1 dictDom (shift 0 1 c))
-    else TPi n i r d (insertDictBinderGo name idx dictDom (depth + 1) c)
-  _ => t
+insertDictBinderGo name idx dictDom depth (TPi n i r d c) =
+  if depth == idx then TPi n i r d (TPi name True Rig1 dictDom (shift 0 1 c))
+  else TPi n i r d (insertDictBinderGo name idx dictDom (depth + 1) c)
+insertDictBinderGo name idx dictDom depth t = t
 
 -- M29：保留给旧调用面的纯 helper（本模块不再用；导出名保持稳定以免动导出面快照）。
 cutoffOf : Int -> Int -> Int
@@ -492,11 +491,10 @@ insertLamBinder : String -> Int -> Term -> Term
 insertLamBinder name idx t = insertLamBinderGo name idx 0 t
 
 insertLamBinderGo : String -> Int -> Int -> Term -> Term
-insertLamBinderGo name idx depth t = case t of
-  TLam n r b =>
-    if depth == idx then TLam n r (TLam name Rig1 (shift 0 1 b))
-    else TLam n r (insertLamBinderGo name idx (depth + 1) b)
-  _ => t
+insertLamBinderGo name idx depth (TLam n r b) =
+  if depth == idx then TLam n r (TLam name Rig1 (shift 0 1 b))
+  else TLam n r (insertLamBinderGo name idx (depth + 1) b)
+insertLamBinderGo name idx depth t = t
 
 countLams : Term -> Int
 countLams t = case t of
@@ -521,8 +519,7 @@ anyPairFree d ((Pair a r) :: rest) = hasFreeTermVar d a || anyPairFree d rest
 
 anyAltFree : Int -> List CaseAlt -> Bool
 anyAltFree d [] = False
-anyAltFree d (alt :: rest) = case alt of
-  CaseAlt n bs b => hasFreeTermVar (d + length bs) b || anyAltFree d rest
+anyAltFree d ((CaseAlt n bs b) :: rest) = hasFreeTermVar (d + length bs) b || anyAltFree d rest
 
 -- M20：值里是否还有未解元变量（`VMeta m` 未解，或解里仍有未解）。
 hasUnsolvedMetaValue : Sols -> Value -> Bool
@@ -608,8 +605,7 @@ levelEscapesList limit [] = False
 levelEscapesList limit (v :: rest) = levelEscapes limit 0 v || levelEscapesList limit rest
 
 levelEscapesClo : Int -> Closure -> Bool
-levelEscapesClo limit clo = case clo of
-  Clos env body => levelEscapesList limit env
+levelEscapesClo limit (Clos env body) = levelEscapesList limit env
 
 showTerm : Term -> String
 showTerm t = case t of
@@ -653,9 +649,10 @@ showCoreString s = "\"" ++ showCoreChars (strUnpack s) ++ "\""
 
 showCoreChars : List Int -> String
 showCoreChars [] = ""
-showCoreChars (c :: rest) =
-  if c == 34 then "\\\"" ++ showCoreChars rest
-  else if c == 92 then "\\\\" ++ showCoreChars rest
-  else if c == 10 then "\\n" ++ showCoreChars rest
-  else if c == 9 then "\\t" ++ showCoreChars rest
-  else if c == 13 then "\\r" ++ showCoreChars rest else strPack [c] ++ showCoreChars rest
+showCoreChars (c :: rest) = case c of
+  34 => "\\\"" ++ showCoreChars rest
+  92 => "\\\\" ++ showCoreChars rest
+  10 => "\\n" ++ showCoreChars rest
+  9 => "\\t" ++ showCoreChars rest
+  13 => "\\r" ++ showCoreChars rest
+  _ => strPack [c] ++ showCoreChars rest

@@ -1,0 +1,5 @@
+classify : Int -> String
+classify n = if n == 0 then "zero" else if n == 1 then "one" else "many"
+
+main : String
+main = classify 0

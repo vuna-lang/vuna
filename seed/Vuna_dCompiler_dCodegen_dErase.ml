@@ -310,13 +310,13 @@ let rec v_Vuna_dCompiler_dCodegen_dErase_dfilterNames = (fun pred -> (fun names 
   | _ -> failwith "DT: impossible branch"
 )))
 
-let v_Vuna_dCompiler_dCodegen_dErase_dgroupOf = (fun allNames -> (fun g -> ((fun nd_uscrut2 -> (match nd_uscrut2 with
+let v_Vuna_dCompiler_dCodegen_dErase_dgroupOf = (fun mc0 -> (fun mc1 -> (match mc1 with
   | C_Base_dList_dList_Base_dList_dCons (dtb__134, dtb__135) -> (match dtb__135 with
   | C_Base_dList_dList_Base_dList_dNil -> (C_Base_dList_dList_Base_dList_dCons (dtb__134, C_Base_dList_dList_Base_dList_dNil))
-  | _ -> ((v_Vuna_dCompiler_dCodegen_dErase_dfilterNames (fun m -> ((v_Vuna_dCompiler_dCommon_dtblMem m) (v_Vuna_dCompiler_dCommon_dtblOfNames g)))) allNames)
+  | _ -> ((v_Vuna_dCompiler_dCodegen_dErase_dfilterNames (fun m -> ((v_Vuna_dCompiler_dCommon_dtblMem m) (v_Vuna_dCompiler_dCommon_dtblOfNames mc1)))) mc0)
 )
-  | _ -> ((v_Vuna_dCompiler_dCodegen_dErase_dfilterNames (fun m -> ((v_Vuna_dCompiler_dCommon_dtblMem m) (v_Vuna_dCompiler_dCommon_dtblOfNames g)))) allNames)
-)) g)))
+  | _ -> ((v_Vuna_dCompiler_dCodegen_dErase_dfilterNames (fun m -> ((v_Vuna_dCompiler_dCommon_dtblMem m) (v_Vuna_dCompiler_dCommon_dtblOfNames mc1)))) mc0)
+)))
 
 let rec v_Vuna_dCompiler_dCodegen_dErase_dgroupsFromCompsGo = (fun mc0 -> (fun mc1 -> (fun mc2 -> (fun mc3 -> (match mc2 with
   | C_Base_dList_dList_Base_dList_dCons (dtb__136, dtb__137) -> (if ((v_Vuna_dCompiler_dCommon_dtblMem dtb__136) mc3) then ((((v_Vuna_dCompiler_dCodegen_dErase_dgroupsFromCompsGo mc0) mc1) dtb__137) mc3) else (match ((v_Vuna_dCompiler_dCommon_dtblLookup dtb__136) mc0) with

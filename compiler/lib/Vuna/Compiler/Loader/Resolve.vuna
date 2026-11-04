@@ -251,6 +251,26 @@ else andThen (resolvePattern resolveFuelBound modules label prefix ns imports pa
       (\body2 => Ok (Pair pat2 body2))
 )
 
+-- A2：局部函数的一个 clause（参数模式列表 + body）；参数绑定累加到 body 的作用域。
+resolveLocalClause : Int -> List Module -> String -> String -> Namespaces -> List Import -> List String -> Pair (List Pat) Expr -> Result (Pair (List Pat) Expr)
+resolveLocalClause fuel modules label prefix ns imports scope (Pair pats body) = if fuel <= 0 then Err "DT: resolve fuel exhausted (internal: resolver made no progress)"
+else andThen (resolveLocalPats (fuel - 1) modules label prefix ns imports pats) (\p => case p of
+  Pair pats2 bound =>
+    andThen (resolveExpr (fuel - 1) modules label prefix ns imports (append bound scope) body)
+      (\body2 => Ok (Pair pats2 body2))
+)
+
+resolveLocalPats : Int -> List Module -> String -> String -> Namespaces -> List Import -> List Pat -> Result (Pair (List Pat) (List String))
+resolveLocalPats fuel modules label prefix ns imports [] =
+  if fuel <= 0 then Err "DT: resolve fuel exhausted (internal: resolver made no progress)"
+  else Ok (Pair [] [])
+resolveLocalPats fuel modules label prefix ns imports (pat :: rest) = if fuel <= 0 then Err "DT: resolve fuel exhausted (internal: resolver made no progress)"
+else andThen (resolvePattern (fuel - 1) modules label prefix ns imports pat) (\p => case p of
+  Pair pat2 bound => andThen (resolveLocalPats (fuel - 1) modules label prefix ns imports rest) (\r => case r of
+    Pair rest2 restBound => Ok (Pair (pat2 :: rest2) (append bound restBound))
+  )
+)
+
 resolveLet : Int -> List Module -> String -> String -> Namespaces -> List Import -> List String -> Bool -> List (Pair Pat Expr) -> Expr -> Result (Pair (List (Pair Pat Expr)) Expr)
 resolveLet fuel modules label prefix ns imports scope rec_ binds body =
   if fuel <= 0 then Err "DT: resolve fuel exhausted (internal: resolver made no progress)"
@@ -322,6 +342,11 @@ else case expr of
   ELet binds body rec_ sp => andThen (resolveLet (fuel - 1) modules label prefix ns imports scope rec_ binds body) (\r => case r of
     Pair binds2 body2 => Ok (ELet binds2 body2 rec_ sp)
   )
+  -- A2：where/let 多 clause 局部函数：逐 clause 解析参数模式并累加作用域。
+  ELocalFun clauses sp =>
+    andThen
+      (traverse (\dtv => resolveLocalClause (fuel - 1) modules label prefix ns imports scope dtv) clauses)
+      (\clauses2 => Ok (ELocalFun clauses2 sp))
   ECase scrut alts sp =>
     andThen (resolveExpr (fuel - 1) modules label prefix ns imports scope scrut)
       (\scrut2 => andThen (traverse (\dtv => resolveAlt (fuel - 1) modules label prefix ns imports scope dtv) alts) (\alts2 => Ok (ECase scrut2 alts2 sp)))
@@ -575,6 +600,7 @@ effExpr e = case e of
   ELam ps body sp => effExpr body
   EApp fn args sp => firstEffect [effExpr fn, effExprs args]
   ELet binds body rec_ sp => firstEffect [effBinds binds, effExpr body]
+  ELocalFun clauses sp => effLocalClauses clauses
   ECase scrut alts sp => firstEffect [effExpr scrut, effAlts alts]
   EIf c t el sp => firstEffect [effExpr c, effExpr t, effExpr el]
   EField base fname sp => effExpr base
@@ -598,6 +624,11 @@ effBinds ((Pair pat value) :: rest) = firstEffect [effExpr value, effBinds rest]
 effAlts : List (Pair Pat Expr) -> Maybe String
 effAlts [] = Nothing
 effAlts ((Pair pat body) :: rest) = firstEffect [effExpr body, effAlts rest]
+
+-- A2：局部函数各 clause 的 body（模式本身不算 effect）。
+effLocalClauses : List (Pair (List Pat) Expr) -> Maybe String
+effLocalClauses [] = Nothing
+effLocalClauses ((Pair pats body) :: rest) = firstEffect [effExpr body, effLocalClauses rest]
 
 effFields : List (Pair String Expr) -> Maybe String
 effFields [] = Nothing

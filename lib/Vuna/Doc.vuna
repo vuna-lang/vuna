@@ -153,16 +153,15 @@ isPrivate name = case strUnpack name of
   [] => False
 
 renderTy : Expr -> String
-renderTy ty = case ty of
-  EVar name sp => name
-  EApp (EVar "->" _) ([a, b]) _ => renderTyArg a ++ " -> " ++ renderTy b
-  EPi name implicit dom cod sp =>
-    let
-      binder =
-        if implicit then "{" ++ name ++ " : " ++ renderTy dom ++ "}"
-        else "(" ++ name ++ " : " ++ renderTy dom ++ ")"
-    in binder ++ " -> " ++ renderTy cod
-  _ => renderTyPlain ty
+renderTy (EVar name sp) = name
+renderTy (EApp (EVar "->" _) ([a, b]) _) = renderTyArg a ++ " -> " ++ renderTy b
+renderTy (EPi name implicit dom cod sp) =
+  let
+    binder =
+      if implicit then "{" ++ name ++ " : " ++ renderTy dom ++ "}"
+      else "(" ++ name ++ " : " ++ renderTy dom ++ ")"
+  in binder ++ " -> " ++ renderTy cod
+renderTy ty = renderTyPlain ty
 
 renderTyPlain : Expr -> String
 renderTyPlain ty = case ty of
@@ -178,6 +177,5 @@ renderTyArg ty = case ty of
   _ => "(" ++ renderTy ty ++ ")"
 
 renderTyAtom : Expr -> String
-renderTyAtom ty = case ty of
-  EVar name sp => name
-  _ => "(" ++ renderTy ty ++ ")"
+renderTyAtom (EVar name sp) = name
+renderTyAtom ty = "(" ++ renderTy ty ++ ")"
