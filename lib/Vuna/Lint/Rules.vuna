@@ -27,10 +27,10 @@ module Vuna.Lint.Rules
 --   * literal-if-chain：`if x == lit then a else if x == lit then b else c` 链，
 --     lit 为 String/Int 字面量且 else 链同一 scrutinee → `case x of lit => a ... _ => c`；
 --   * lift-destructure：单候选解构（单 alt case / 单绑定 let）提升到外层 clause/alt 模式
---     （原 redundant-case 的扩展；旧 RedundantCase 保留为历史别名，不再产生）；
+--     （原 redundant-case 的扩展；旧 RedundantCase 别名已删除）；
 --   * case-to-clauses：顶层单 clause 函数的 `case` 分支提升为多条同名 clause。
 --
--- 三条规则都只做语法可证的改写：判据不满足时只报告、不给 Edit（`findingEdit = Nothing`）。
+-- 三条规则都只做语法可证的改写：判据不满足时不报告（只报可安全自动修复的形态）。
 -- 候选按（行, 列）排序，被更大 Edit 行范围包含的内层 finding 会被丢弃，避免同一链/同一次
 -- 折叠产生互相冲突的 Edit。
 import Vuna.Compiler.Common

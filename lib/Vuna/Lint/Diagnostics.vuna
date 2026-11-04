@@ -39,25 +39,21 @@ import Base.String
 -- 规则枚举：新增规则在此加构造子，并登记到 `lintAll`。
 --
 -- M31：`redundant-case` 扩展并改名为 `lift-destructure`（覆盖单 alt case 与单绑定
--- let 解构两种形态）。旧 `RedundantCase`/`LN_RedundantCase` 作为历史别名保留
--- （code 只增不删），但规则已不再产生它。
+-- let 解构两种形态）。旧 `RedundantCase`/`LN_RedundantCase` 别名已删除（不再产生）。
 data LintRule : Type where
   LiteralIfChain : LintRule
-  RedundantCase : LintRule
   LiftDestructure : LintRule
   CaseToClauses : LintRule
 
--- code：文档与索引的稳定符号（`LN_` 前缀 + 驼峰）。只增不删。
+-- code：文档与索引的稳定符号（`LN_` 前缀 + 驼峰）。
 lintCode : LintRule -> String
 lintCode LiteralIfChain = "LN_LiteralIfChain"
-lintCode RedundantCase = "LN_RedundantCase"
 lintCode LiftDestructure = "LN_LiftDestructure"
 lintCode CaseToClauses = "LN_CaseToClauses"
 
 -- rule：CLI 与 finding 输出用的 kebab 短名。与 code 一一对应（不再手写第二遍）。
 lintRule : LintRule -> String
 lintRule LiteralIfChain = "literal-if-chain"
-lintRule RedundantCase = "redundant-case"
 lintRule LiftDestructure = "lift-destructure"
 lintRule CaseToClauses = "case-to-clauses"
 
@@ -65,7 +61,6 @@ lintRule CaseToClauses = "case-to-clauses"
 lintRuleCode : String -> String
 lintRuleCode code =
   if code == lintCode LiteralIfChain then lintRule LiteralIfChain
-  else if code == lintCode RedundantCase then lintRule RedundantCase
   else if code == lintCode LiftDestructure then lintRule LiftDestructure
   else if code == lintCode CaseToClauses then lintRule CaseToClauses else ""
 
@@ -73,9 +68,6 @@ lintRuleCode code =
 lintMsg : LintRule -> String -> String
 lintMsg LiteralIfChain scrutinee =
   "if/else-if chain on `" ++ scrutinee ++ "` can be a case with literal patterns"
-lintMsg RedundantCase var =
-  "single-alternative case on `" ++ var ++ "` can be folded into the enclosing pattern"
--- lift-destructure 沿用旧 redundant-case 的消息文本（既有 golden 的 .out 只需换 code/rule 名）。
 lintMsg LiftDestructure var =
   "single-alternative case on `" ++ var ++ "` can be folded into the enclosing pattern"
 lintMsg CaseToClauses var = "top-level case on `" ++ var ++ "` can be converted to multiple clauses"
@@ -83,8 +75,6 @@ lintMsg CaseToClauses var = "top-level case on `" ++ var ++ "` can be converted 
 -- 修复动作描述（给 `vuna lint --explain` / 文档用）
 lintEdit : LintRule -> String
 lintEdit LiteralIfChain = "改写为 case 表达式：字面量分支 + 兜底 `_ =>`"
-lintEdit RedundantCase =
-  "把单分支 case 折叠进外层模式（需无冲突且体不提及被折叠变量）"
 lintEdit LiftDestructure =
   "把单候选 case/let 解构提升进外层模式（需无冲突且体不提及被提升变量）"
 lintEdit CaseToClauses = "把顶层 case 的每个分支提升为一条同名 clause"
@@ -92,8 +82,6 @@ lintEdit CaseToClauses = "把顶层 case 的每个分支提升为一条同名 cl
 -- 规则说明（文档用）
 lintDesc : LintRule -> String
 lintDesc LiteralIfChain = "if/else-if 字面量链可改写为 case 表达式。"
-lintDesc RedundantCase =
-  "单分支 case 可折叠进外层模式（需满足 enclosing 安全判据）。"
 lintDesc LiftDestructure =
   "单候选 case 或单绑定 let 解构可提升到外层 clause/alt 模式（需满足安全判据）。"
 lintDesc CaseToClauses =
@@ -102,7 +90,6 @@ lintDesc CaseToClauses =
 -- 是否可自动修复（可修复的规则会派生 FX_ 修复码）
 lintFixable : LintRule -> Bool
 lintFixable LiteralIfChain = True
-lintFixable RedundantCase = True
 lintFixable LiftDestructure = True
 lintFixable CaseToClauses = True
 
@@ -129,7 +116,6 @@ lintEntryEdit (LintEntry c r d f e) = e
 lintAll : List LintEntry
 lintAll =
   [ LintEntry (lintCode LiteralIfChain) (lintRule LiteralIfChain) (lintDesc LiteralIfChain) (lintFixable LiteralIfChain) (lintEdit LiteralIfChain),
-    LintEntry (lintCode RedundantCase) (lintRule RedundantCase) (lintDesc RedundantCase) (lintFixable RedundantCase) (lintEdit RedundantCase),
     LintEntry (lintCode LiftDestructure) (lintRule LiftDestructure) (lintDesc LiftDestructure) (lintFixable LiftDestructure) (lintEdit LiftDestructure),
     LintEntry (lintCode CaseToClauses) (lintRule CaseToClauses) (lintDesc CaseToClauses) (lintFixable CaseToClauses) (lintEdit CaseToClauses)
   ]
