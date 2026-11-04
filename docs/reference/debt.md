@@ -26,6 +26,8 @@
 | C07 | 擦除位的作用域护栏按约定跳过，未对擦除位置做完整 de Bruijn 校验 | `Codegen/Erase.checkAllDefScopes`：跳过擦除实参 | 待定 |
 | D12 | 证明 ergonomics 进阶未实现：absurd / 空族消去语法、`rewrite` / `with`；隐式模式与 `auto` 见 B09/D08 | `limits.md` 的证明 ergonomics 边界；`tooling.md` §5 | F4 |
 | D19 | 类型级部分应用不可用（如把 `Vec Int` 当类型参数传给 `Sigma Nat`） | `checkAppUnderTypeFuel` 报 `expected Nat, got Int` | F4 |
+| D21 | 无 FFI：不能调用外部 C 函数 / 导出函数；无 ABI、GC root / pin、回调约定 | `Intrinsics.allIntrinsics` 无外来调用原语；[limits.md](limits.md) 无该边界 | M33 |
+| D22 | 无可变数据（`IORef` / 可变数组）与 ST / region；无线性 / 唯一性类型，`runST` 无法类型安全表达 | `limits.md`；无 `Ref` / `Array` 原语 | M33 |
 
 ## 工具、构建与验证
 
@@ -38,15 +40,17 @@
 | E06 | seed rotation 替换步骤非原子：校验通过后 `rm -rf seed && cp -r` | `nix/seed-rotate.sh` | 待定 |
 | C30 | `vuna build` 的 build meta 不含 manifest 摘要：改 `vuna.toml` 能力声明后 `build` 报 "up to date"、跳过重检查与重编（`vuna check` 仍全量） | `Driver/Compile.buildMetaText` / `metaUpToDate` | 待定 |
 | C31 | `test/corpus/fmt/check.sh` 的合成探针包没有依赖包 ⇒ 没有自动 Prelude 注入，而编译器/工具链源码里的 `==` / `<=` 在 M31.1 起是 Eq/Ord 方法别名，需要方法在作用域；脚本目前在模块头后手工注入 `import Prelude` | `test/corpus/fmt/check.sh`；探针错误 `<entry>: unbound variable eq` | M31.1 已缓解（脚本注入）；根治（探针包按真实依赖布局构造）待做 |
+| C32 | 无单文件 / 模块级 elab 缓存与序列化格式（只有 build 产物级增量） | `Driver/Compile.buildMetaText`；无 Core Term / DtProgram 序列化 | M34 |
+| C33 | 无性能 CI 门槛与分配 / GC 统计：bench 仅手动、`--check` 软对比 | `nix/bench.sh` 非 check；`performance.md` §2 只有时间戳打点 | M34 |
 
 ## 未来能力（F1–F4）
 
 | ID | 摘要 | 归属 |
 | --- | --- | --- |
 | D01 | 模块系统无签名 / 接口、无 functor / 嵌套 / 局部模块、import 仅文件顶部、无选择性 import | F1 |
-| D02 | 运行时 / 后端未定型：GC、后端无关 IR、Wasm/JS（当前绑 OCaml runtime） | F2 |
-| D03 | 无通用效应系统 / 并发 / async；`IO` 仍是 thunk + IO 化的 `prim_*`（M31：动作只在 `main`，`runIO` 是能力门控逃逸） | F3 |
-| D04 | 包生态：registry、版本解析、lockfile、文档托管、DT 验证库（Vec/Fin/Map/Set） | F4 |
+| D02 | 运行时 / 后端未定型：GC、后端无关 IR、Wasm/JS（当前绑 OCaml runtime） | F2（M33 表示 / 运行时；自研 GC / 后端不做，Wasm / JS 暂缓） |
+| D03 | 无通用效应系统 / 并发 / async；`IO` 仍是 thunk + IO 化的 `prim_*`（M31：动作只在 `main`，`runIO` 是能力门控逃逸） | F3（M33 最小效应接口、M35 并发 / async） |
+| D04 | 包生态：registry、版本解析、lockfile、文档托管、DT 验证库（Vec/Fin/Map/Set） | F4（M33 容器 / 库部分） |
 | D06 | 完整依赖 kind / CoC 依赖消除（当前只检查 kind 形状与层级） | 研究储备 |
 | D17 | `main` 的展示仍限 `Int` / `String` / `Bool`；任意类型展示需要运行时 `Show` 证据 | F3 |
 
