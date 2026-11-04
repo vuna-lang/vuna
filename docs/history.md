@@ -374,3 +374,57 @@
   `modules/30_namespace_dual`、`packages/08_module_scope`；负例 `dt_err/40_*`、`41*`、
   `42_axiom_runtime`、`44_namespace_value_as_type`。seed 模块面不变（66 `.ml` / 67 文件），
   `nix flake check` 全绿。
+## M29：相等、实例与证明 ergonomics（2026-11）
+
+- **实例字典 schema v2（B11/B12/A13 收尾）**：`instance [<ctx> ,...] => <head> where` 语法
+  （AST `DInstance` 带 ctx；Parser/Loader 一次到位）；`DtInst` 改为
+  `{name, tele, ctx, head}`——实例是「隐式类型参数 tele + ctx 字典参数 → 结果头
+  `Dict_C <arg>`」的全 Pi 值；`checkInstanceHeads` 在 datas/traits 就绪后把 head/ctx
+  类型化（tele kind 由应用次数/族 kind 推断；`instance Eq (Box Int)` 不再被塌成
+  `Dict_Eq Int`）；`elabInstance` 在 `tele + _ctx<k>` 上下文里精化方法体，方法体产生的
+  字典 goal 与声明 ctx conv 命中即解成 ctx 字典变量，剩余刚性 goal 走 `searchInstanceIn`
+  局部 ctx + 自实例递归，失败报 `TC_InstanceContextMissing`。实例搜索改为
+  `searchInstanceIn globals ctx ec dom sp`：局部 ctx 字典 → 刚性结构化快路径 → 候选
+  alloc tele meta → 结果头 conv → 递归解 ctx → 组装
+  `TGlobal inst <teleArgs(Rig0)> <dictArgs(Rig1)>`；coherence 用 head 同名/α-等价 +
+  可合一重叠（`TC_OverlappingInstances`），单态实例 head/字典类型与旧实现一致。
+- **参数化 deriving**：`deriving (Show, Eq, Ord)` 对参数化 data（单参/双参/递归）按
+  **字段类型里出现的参数**生成 ctx 实例（`instance Eq a => Eq (F a)`），`Ord` 的逐字段
+  比较改走 `le`/`lt` 不再额外要求 `Eq`；`instHead` 修成 `Eq (Box a)`（旧实现对参数化
+  data 生成多实参头）；`exprNameFor` 修 `Eq_X` 撞名。
+- **相等收口（B04/C04，决策 A）**：删除泛型结构比较兜底与两套实现——
+  `bi_eq_generic`/`bi_neq_generic`、`OpEqGeneric`/`OpNeqGeneric`、`genericEqPrim`/
+  `valueEqDeep`/`valueListEqDeep`、`genericEqApp`/`typeComparable` 全家；`==`/`/=` 只剩
+  「Int/String 内建特化」与「`Eq` 证据（字典/`deriving`/约束实例）」两条路径，
+  `specializeEqTy` 在无类/无实例时 check 期报错；`<` 等比较同波删除「无 `Ord` 类 →
+  generic cmp」兜底（String/Bool 的泛型运行时保留）。11 处编译器/工具链裸 `==` 改为
+  显式 helper（`levelEq`、`length x == 0`、`levelListEq`、`manifestEntriesSame` 等），
+  interp 与 codegen 不再有第二套相等算法；函数字段相等/无实例 data 相等在 check 期被拒。
+- **证明 ergonomics（B09/D08/D12 部分）**：隐式值参数 `{x : a}` 可用
+  （`Elab.Meta.isImplicitDomain`：类型/索引域、未解 meta、中性类型变量域放行；隐式
+  binder 恒 Rig0 擦除，值只进类型/索引/证明位置，子句体不能按名引用）；构造子未饱和
+  引用/应用按 **η 展开**（`Elab.Meta.etaCtorTerm`，唯一 binder 名 `#eta<i>`），
+  `cong ... Succ ...` 与「构造子当值传递后再应用」check/compile/run 全过。隐式模式
+  `{p}`、`auto`/隐式等式搜索、absurd 语法迁 F4。
+- **Σ 与依赖索引 lookup（B13/D12）**：泛型 Σ 的值级构造受「类型依赖运行时值」限制
+  （codegen 无表示，`CG_TypeLevelNameRuntime`）→ F4；M29 用 **Tarski 式存在式**
+  （运行时类型码族 `Ty` + 指标族 `Tm : Ty -> Type` + `Some`）表达
+  `Ctx n -> Fin n -> Sigma Ty Tm` 形态的依赖索引 lookup，夹具可编译可运行。
+- **type-as-value（B14/D09 决策）**：不引入 type codes；Type 级等式走擦除的 `Eq` 证据 +
+  `cast` 组合子；类型进运行时位置仍由 `CG_TypeUsedAtRuntime`/`CG_TypeLevel*` 拒绝。
+- **命名实例删除（B12）**：删除 `instance ... as name` 与 `@name`/`EInstSel` 全链
+  （AST/Parser/Loader/Elab/Split/Fmt/Index）；实例按 head 全局唯一，相干性靠重复/重叠
+  诊断；孤儿实例仍被拒。错误码按「只增不删」保留枚举但不再触发。
+- **A14 记录/投影 span**：`DtDef`/`DtAxiom` 携带来源 `Maybe Span`，顶层定义 / 实例字典 /
+  trait 投影定义在 codegen 阶段报错时带 `file:line:col`（`CG_*` 诊断不再只有定义名或
+  完全无位置）；记录字段访问/投影错误指向源码使用/声明位置。
+- **测试/基线**：新增 `traits/14`（约束实例 + `mem (MkBox 1)`）、`traits/15`（参数化
+  deriving 单/双/递归 + `<`/`==`/show）、`dt/60_ctor_eta`、`dt/61_implicit_values`、
+  `dt/62_sigma_basic`、`dt/63_dep_lookup`、dt_err/42–49、records/93 等；`monad/04` 去
+  `.nointerp`/`.nocompile`（C05：字典目标按域 conv 去重、binder 位置循环外定基准、
+  `insertLamBinder` 移位 cutoff 修 0）；命名实例夹具删除/改写。seed rotation 后
+  seed 66 `.ml` / 67 文件（模块面不变）；`nix flake check` 全绿；测试断言数以
+  [reference/testing.md](reference/testing.md) 为准。
+- **性能**：M29 未改 check 主路径（bodies/conv/force）；相等收口删掉的是非主路径的
+  interp/runtime 比较实现；开发期自检墙钟受并行构建影响，正式基准见
+  [reference/performance.md](reference/performance.md)。

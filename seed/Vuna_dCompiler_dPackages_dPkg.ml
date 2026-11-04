@@ -160,7 +160,7 @@ let rec v_Vuna_dCompiler_dPackages_dPkg_dcyclePrefix = (fun d517 -> (fun dir -> 
 
 let v_Vuna_dCompiler_dPackages_dPkg_dcycleMessage = (fun dir -> (fun depName -> (fun stack -> (match depName with
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> ((bi_concat "pkg: dependency cycle at ") dir)
-  | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__71) -> (match (((v_Vuna_dCompiler_dPackages_dPkg_dcyclePrefix v_Base_dEq_dBase_dEq_dEq_uBase_dEq_dEq_uString) dir) stack) with
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__71) -> (match (((v_Vuna_dCompiler_dPackages_dPkg_dcyclePrefix v_Base_dEq_dEq_uBase_dEq_dEq_uString) dir) stack) with
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> ((bi_concat "pkg: dependency cycle at ") dir)
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__72) -> ((bi_concat "pkg: dependency cycle: ") (v_Vuna_dCompiler_dCommon_djoinArrows ((v_Base_dList_dappend ((v_Base_dList_dmap v_Base_dPair_dsecondOf) (v_Base_dList_dreverse dtb__72))) (C_Base_dList_dList_Base_dList_dCons (dtb__71, C_Base_dList_dList_Base_dList_dNil)))))
   | _ -> failwith "DT: impossible branch"
@@ -196,9 +196,9 @@ let rec v_Vuna_dCompiler_dPackages_dPkg_dloadDependencyList = (fun fuel -> (fun 
   | C_Base_dList_dList_Base_dList_dNil -> (C_Base_dResult_dResult_Base_dResult_dOk (C_Base_dList_dList_Base_dList_dNil))
   | _ -> failwith "DT: impossible branch"
 )) deps))))))
-and v_Vuna_dCompiler_dPackages_dPkg_dloadPackageWalk = (fun fuel -> (fun stack -> (fun depName -> (fun dir -> (if ((bi_le_int fuel) 0) then (C_Base_dResult_dResult_Base_dResult_dErr ("DT: pkg fuel exhausted (internal: dependency graph too deep)")) else ((fun normalized -> (if (((v_Vuna_dCompiler_dPackages_dPkg_dmemStackDir v_Base_dEq_dBase_dEq_dEq_uBase_dEq_dEq_uString) normalized) stack) then (C_Base_dResult_dResult_Base_dResult_dErr ((((v_Vuna_dCompiler_dPackages_dPkg_dcycleMessage normalized) depName) stack))) else (match (v_Vuna_dCompiler_dPackages_dPkg_dloadManifestAt ((bi_concat normalized) "/vuna.toml")) with
+and v_Vuna_dCompiler_dPackages_dPkg_dloadPackageWalk = (fun fuel -> (fun stack -> (fun depName -> (fun dir -> (if ((bi_le_int fuel) 0) then (C_Base_dResult_dResult_Base_dResult_dErr ("DT: pkg fuel exhausted (internal: dependency graph too deep)")) else ((fun normalized -> (if (((v_Vuna_dCompiler_dPackages_dPkg_dmemStackDir v_Base_dEq_dEq_uBase_dEq_dEq_uString) normalized) stack) then (C_Base_dResult_dResult_Base_dResult_dErr ((((v_Vuna_dCompiler_dPackages_dPkg_dcycleMessage normalized) depName) stack))) else (match (v_Vuna_dCompiler_dPackages_dPkg_dloadManifestAt ((bi_concat normalized) "/vuna.toml")) with
   | C_Base_dResult_dResult_Base_dResult_dErr (dtb__83) -> (C_Base_dResult_dResult_Base_dResult_dErr (dtb__83))
-  | C_Base_dResult_dResult_Base_dResult_dOk (dtb__84) -> ((fun name -> (if (((v_Vuna_dCompiler_dPackages_dPkg_ddependencyNameOk v_Base_dEq_dBase_dEq_dEq_uBase_dEq_dEq_uString) depName) name) then (match ((((v_Vuna_dCompiler_dPackages_dPkg_dloadDependencyList ((bi_sub fuel) 1)) (C_Base_dList_dList_Base_dList_dCons ((C_Base_dPair_dPair_Base_dPair_dPair (normalized, name)), stack))) normalized) (v_Vuna_dCompiler_dFrontend_dManifest_dmanifestDependencies dtb__84)) with
+  | C_Base_dResult_dResult_Base_dResult_dOk (dtb__84) -> ((fun name -> (if (((v_Vuna_dCompiler_dPackages_dPkg_ddependencyNameOk v_Base_dEq_dEq_uBase_dEq_dEq_uString) depName) name) then (match ((((v_Vuna_dCompiler_dPackages_dPkg_dloadDependencyList ((bi_sub fuel) 1)) (C_Base_dList_dList_Base_dList_dCons ((C_Base_dPair_dPair_Base_dPair_dPair (normalized, name)), stack))) normalized) (v_Vuna_dCompiler_dFrontend_dManifest_dmanifestDependencies dtb__84)) with
   | C_Base_dResult_dResult_Base_dResult_dErr (dtb__85) -> (C_Base_dResult_dResult_Base_dResult_dErr (dtb__85))
   | C_Base_dResult_dResult_Base_dResult_dOk (dtb__86) -> (C_Base_dResult_dResult_Base_dResult_dOk ((C_Vuna_dCompiler_dPackages_dPkg_dPackage_Vuna_dCompiler_dPackages_dPkg_dPackage (dtb__84, dtb__86, normalized))))
   | _ -> failwith "DT: impossible branch"

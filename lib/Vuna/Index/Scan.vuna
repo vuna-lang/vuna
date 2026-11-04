@@ -214,9 +214,8 @@ symbolsOfDecl sMod decls comments d =
     DAxiom name ty sp =>
       [Sym sMod name "axiom" ("axiom " ++ name ++ " : " ++ renderTy ty) doc line col]
     DFun name pats body sp => [Sym sMod name "fun" (signatureOf name decls) doc line col]
-    DInstance name isDefault head methods sp => case name of
-      Just n => [Sym sMod n "instance" "instance" doc line col]
-      Nothing => []
+    -- M29-T2b：命名实例已删除，实例不再产生符号（字典按实例表注册）。
+    DInstance ctxE head methods sp => []
 
 ctorSymbols : String -> List Ctor -> List Comment -> List Sym
 ctorSymbols sMod ctors comments =
@@ -278,8 +277,7 @@ namesInDecl d = case d of
   DData name params kind ctors derivings sp => concatMap (\c => namesInExpr (ctorType c)) ctors
   DRecord name params fields derivings sp => concatMap (\f => namesInExpr (fieldType f)) fields
   DTrait name params methods sp => concatMap namesInMethod methods
-  DInstance name isDefault head methods sp =>
-    append (namesInExpr head) (concatMap namesInDecl methods)
+  DInstance ctxE head methods sp => append (namesInExpr head) (concatMap namesInDecl methods)
   _ => []
 
 namesInMethod : Pair String Expr -> List String
@@ -307,7 +305,6 @@ namesInExpr e = case e of
   EField r fname sp => namesInExpr r
   ERecord tn fields sp => concatMap namesInMethod fields
   ERecUpdate r fields sp => append (namesInExpr r) (concatMap namesInMethod fields)
-  EInstSel r mname sp => namesInExpr r
   EDo stmts sp => concatMap namesInDoStmt stmts
   EAnn value ty sp => append (namesInExpr value) (namesInExpr ty)
 
@@ -431,9 +428,24 @@ manifestLine entry =
 manifestText : List (Pair String (Pair Int Int)) -> String
 manifestText entries = join "\n" (map manifestLine entries) ++ "\n"
 
+-- M29：manifest 条目表的相等不再走泛型结构比较兜底（`==` 的兜底将在 M29 删除）；
+-- 逐字段显式比较（String / Int 的 `==` 都走特化路径）。
+manifestEntrySame : Pair String (Pair Int Int) -> Pair String (Pair Int Int) -> Bool
+manifestEntrySame a b =
+  firstOf a == firstOf b
+    && firstOf (secondOf a) == firstOf (secondOf b)
+    && secondOf (secondOf a) == secondOf (secondOf b)
+
+manifestEntriesSame : List (Pair String (Pair Int Int)) -> List (Pair String (Pair Int Int)) -> Bool
+manifestEntriesSame [] [] = True
+manifestEntriesSame (a :: rest) (b :: rest2) =
+  if manifestEntrySame a b then manifestEntriesSame rest rest2 else False
+manifestEntriesSame _ _ = False
+
 manifestMatches : String -> List (Pair String (Pair Int Int)) -> Bool
 manifestMatches repo entries =
-  if prim_fileExists (manifestPath repo) then parseManifestLines (splitOnNewline (prim_readFile (manifestPath repo))) == entries
+  if prim_fileExists (manifestPath repo) then manifestEntriesSame (parseManifestLines (splitOnNewline (prim_readFile (manifestPath repo))))
+    entries
   else False
 
 parseManifestLines : List String -> List (Pair String (Pair Int Int))

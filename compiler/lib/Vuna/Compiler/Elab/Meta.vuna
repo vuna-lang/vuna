@@ -43,6 +43,7 @@ module Vuna.Compiler.Elab.Meta
   , isBoolGlobal
   , isBoolType
   , isDataHead
+  , isImplicitDomain
   , isIndexDomain
   , isSortVal
   , isTypeDomain
@@ -117,7 +118,7 @@ instantiateNullaryCtor ec ctx v = instantiateNullaryCtorFuel 64 ec ctx v
 instantiateNullaryCtorFuel : Int -> Ec -> Ctx -> Value -> Result (Pair Value (Pair (List Term) Ec))
 instantiateNullaryCtorFuel fuel ec ctx v = if fuel <= 0 then Ok (Pair v (Pair [] ec))
 else case forceVal ec v of
-  VPi _ True _ dom clo => if isIndexDomain ec dom then case newMeta ctx ec of
+  VPi _ True _ dom clo => if isImplicitDomain ctx ec dom then case newMeta ctx ec of
     Pair metaTerm ec1 => andThen (instantiateNullaryCtorFuel (fuel - 1) ec1 ctx (applyClosure clo (eval (ctxEnv ctx) metaTerm))) (\p => case p of
       Pair ty (Pair metas ec2) => Ok (Pair ty (Pair (metaTerm :: metas) ec2))
     )
@@ -279,7 +280,7 @@ collectSigsInto defined seen acc (d :: rest) = case d of
   DData name params kind ctors derivings sp => collectSigsInto defined seen acc rest
   DRecord name params fields derivings sp => errAt sp "DT: internal: record was not desugared"
   DTrait name params methods sp => collectSigsInto defined seen acc rest
-  DInstance mname isDefault head methods sp => collectSigsInto defined seen acc rest
+  DInstance ctxE head methods sp => collectSigsInto defined seen acc rest
 
 collectSigOne : List String -> HashTbl Bool -> List (Pair String Expr) -> String -> Expr -> Span -> List Decl -> Result (List (Pair String Expr))
 collectSigOne defined seen acc name ty sp rest =
@@ -549,7 +550,7 @@ collectTraitDecls (d :: rest) acc = case d of
 collectInstDecls : List Decl -> List (Pair Decl Span) -> List (Pair Decl Span)
 collectInstDecls [] acc = reverse acc
 collectInstDecls (d :: rest) acc = case d of
-  DInstance mname isDefault head methods sp => collectInstDecls rest (Pair d sp :: acc)
+  DInstance ctxE head methods sp => collectInstDecls rest (Pair d sp :: acc)
   _ => collectInstDecls rest acc
 
 -- 单参数接口的参数名（elabTrait 已校验 length params == 1）。
@@ -619,6 +620,85 @@ flattenTaggedApp t = case t of
 -- 拒绝：隐式实参不参与运行时计算。
 isIndexDomain : Ec -> Value -> Bool
 isIndexDomain ec dom = isTypeDomain dom || isDataHead (ecDatas ec) (forceVal ec dom)
+
+-- M29（B09/D08）：隐式 binder 域的**放行判据**（比 isIndexDomain 宽一档）。
+-- 隐式值参数 `{x : a}`（域是类型/索引变量）过去被 isIndexDomain 拒：
+--   `a` 求值是 `VNeutral (NVar ...)`，既不是宇宙/Pi 链也不是 data 头。
+-- 现在多放行两类域：
+--   1) 未解元变量：**使用侧** `{x : a}` 的 `a` 在调用点已被实例化成 meta
+--      （`inferArgsGo` 先给 `a` 建 meta，再处理 `x`），必须允许插入隐式实参；
+--      meta 的最终域由后续合一决定；若解成运行时类型，运行时使用会被擦除检查拒绝。
+--   2) 中性局部变量：**定义侧** `{x : a}` 的 `a` 是上下文里的类型/索引变量；
+--      查它的 binder 类型，若 binder 类型本身是 index domain（`Type` / 高阶 kind /
+--      `Nat` 之类索引族）则放行。`Int` / `String` 这类非类型域仍拒绝。
+-- 放行**不改变擦除判据**：隐式 binder 恒 Rig0（`binderRig`），值只在类型/证明位置可用；
+-- 运行时使用由 `Codegen.Erase` 的擦除检查报错（`dt_err/42_implicit_value_runtime`）。
+isImplicitDomain : Ctx -> Ec -> Value -> Bool
+isImplicitDomain ctx ec dom = if isIndexDomain ec dom then True
+else case forceVal ec dom of
+  VMeta m sp => True
+  VNeutral n => case n of
+    NVar name lvl sp => neutralBinderIndexDomain ctx ec lvl
+    _ => False
+  -- 高阶 kind 形态（`{p : a -> Type}`）：域本身是「类型构造子的 kind」也放行；
+  -- 值层函数类型（`a -> b`，cod 不是宇宙）仍拒绝。
+  VPi _ _ _ d clo => isKindWithCtx ctx ec (forceVal ec dom)
+  _ => False
+
+-- 上下文里 level 为 lvl 的 binder 的类型是不是 index domain。
+-- Ctx 项按「最近绑定在前」存；level 0 是最外层 binder，所以位置 = depth - lvl - 1。
+neutralBinderIndexDomain : Ctx -> Ec -> Int -> Bool
+neutralBinderIndexDomain ctx ec lvl = case neutralBinderType ctx ec lvl of
+  Just tyVal => isIndexDomain ec tyVal
+  Nothing => False
+
+-- level 为 lvl 的 binder 的类型（在完整上下文里求值）。
+neutralBinderType : Ctx -> Ec -> Int -> Maybe Value
+neutralBinderType ctx ec lvl =
+  let
+    d = ctxDepth ctx
+    idx = d - lvl - 1
+  in if lvl < 0 then Nothing
+  else if idx < 0 then Nothing
+  else case ctxItemAt idx (ctxItems ctx) of
+    Nothing => Nothing
+    Just item => Just (varTypeValue ctx idx (secondOf item))
+
+-- 「kind 形态」：Pi 链每个域都是类型（type-like），终点是宇宙。
+-- 例：`Type`、`Type -> Type`、`a -> Type`（a 是类型变量）、`Nat -> Type`。
+isKindWithCtx : Ctx -> Ec -> Value -> Bool
+isKindWithCtx ctx ec v = isKindWithCtxFuel 64 ctx ec v
+
+isKindWithCtxFuel : Int -> Ctx -> Ec -> Value -> Bool
+isKindWithCtxFuel fuel ctx ec v = if fuel <= 0 then False
+else case forceVal ec v of
+  VType l => True
+  VPi _ _ _ d clo =>
+    isTypeLikeWithCtx fuel ctx ec d
+      && isKindWithCtxFuel (fuel - 1) ctx ec (applyClosure clo (VNeutral (NVar "kind" 0 [])))
+  _ => False
+
+-- 值是不是「类型/类型构造子」（可以当 kind 的域）。
+-- 中性类型变量（`a : Type`）与类型构造子变量（`f : Type -> Type`）算；`n : Nat` 这类
+-- 值变量不算；未解元变量放行（由后续合一与擦除检查兜底）。
+isTypeLikeWithCtx : Int -> Ctx -> Ec -> Value -> Bool
+isTypeLikeWithCtx fuel ctx ec v = if fuel <= 0 then False
+else case forceVal ec v of
+  VType l => True
+  VPi _ _ _ d clo =>
+    isTypeLikeWithCtx (fuel - 1) ctx ec (applyClosure clo (VNeutral (NVar "ty" 0 [])))
+  VNeutral n => case n of
+    NVar name lvl sp => case neutralBinderType ctx ec lvl of
+      Just tyVal => isTypeDomain tyVal
+      Nothing => False
+    NGlobal g sp => isDataHead (ecDatas ec) v
+    _ => False
+  VMeta m sp => True
+  _ => False
+
+ctxItemAt : Int -> List (Pair String Term) -> Maybe (Pair String Term)
+ctxItemAt i [] = Nothing
+ctxItemAt i (x :: rest) = if i <= 0 then Just x else ctxItemAt (i - 1) rest
 
 -- ---------------------------------------------------------------
 -- 擦除判据（M18.5 起全仓唯一入口；M28 收成一个谓词）
@@ -692,23 +772,66 @@ isSortVal ec v = case forceVal ec v of
 -- M23：**运行时零参**的构造子（telescope 只剩擦除 binder，如 `Nil : {a : Type} -> List a`）
 -- 走 `inferCtorRef` 的 `nullaryCtorTerm`——那里能拿到实例化隐式参数用的元变量项，
 -- 保证 `TCon` 实参与 telescope 逐位对齐（求值器的 VCon 依赖这个对齐）。
+-- M29（B13/D12）：**非零参**构造子的**未饱和引用**做 η 展开（`etaCtorTerm`），不再留
+-- `TGlobal`——见 `etaCtorTerm` 注释。
 ctorRefTerm : List DtData -> String -> Term
 ctorRefTerm datas name = case dtCtorLookup name datas of
   Just ctor =>
     if isBoolFamilyName (dtCtorFamily ctor) then boolCtorTerm (dtCtorName ctor)
-    else if dtCtorTelescope ctor == [] then TCon name [] else TGlobal name
+    else if length (dtCtorTelescope ctor) == 0 then TCon name [] else etaCtorTerm ctor []
   Nothing => TGlobal name
 
 -- 构造子应用必须饱和成 TCon，求值器才能给 case 造出 VCon（中性 NGlobal 命不中分支）。
--- 未饱和的部分应用（柯里化）保持 TApp：此时 case 会卡住，与 HM 语义一致。
+-- M29（B13/D12）：未饱和应用做 η 展开（与 `ctorRefTerm` 共用 `etaCtorTerm`），
+-- 否则「构造子当函数值传递」会留 TGlobal 脊：精化期 conv 与 VCon 对不上、
+-- codegen 也会把裸构造子名当运行期值输出（OCaml 报 should not be a constructor）。
 ctorAppTerm : List DtData -> Term -> List (Pair Term Rig) -> Term
 ctorAppTerm datas (TGlobal g) args = case dtCtorLookup g datas of
   Just ctor =>
     if isBoolFamilyName (dtCtorFamily ctor) then boolCtorTerm g
-    else if length args >= length (dtCtorTelescope ctor) then TCon g args
-    else foldAppTerms (TGlobal g) args
+    else if length args >= length (dtCtorTelescope ctor) then TCon g args else etaCtorTerm ctor args
   Nothing => foldAppTerms (TGlobal g) args
 ctorAppTerm datas fn args = foldAppTerms fn args
+
+-- M29（B13/D12）：构造子**未饱和**引用/应用的 η 展开。
+--
+-- `cong ... Succ ...` 这类「把构造子当函数值传」原先留 `TGlobal`：求值成 `NGlobal` 脊，
+-- 与饱和应用产生的 `VCon` 在 conv 里对不上（报 `expected (Succ n), got (Succ n)`，
+-- `Elab/Case.vuna` 的 `ctorValueIn` 用 `_tele` 名字可见）；且 codegen 把裸构造子名
+-- 当运行期值输出，OCaml 报 `This expression should not be a constructor`。
+-- 这里按 telescope 补 λ：`Succ` ⇒ `\x -> Succ x`、`VCons a` ⇒ `\n -> \x -> \xs -> VCons a n x xs`，
+-- 于是精化期 β 归约直接得到 `VCon`，运行期得到合法闭包。
+-- 已收到的实参先 `shift` 到 λ 之下（外层 de Bruijn 索引整体 +k）；零参与饱和应用不变。
+etaCtorTerm : DtCtor -> List (Pair Term Rig) -> Term
+etaCtorTerm ctor args =
+  let
+    rest = dropCount (length args) (dtCtorTelescope ctor)
+    k = length rest
+  in etaCtorLa (dtCtorName ctor) 0 rest (shiftCtorArgs k args)
+
+-- 把构造子已收到的实参搬到 k 个 λ 之下（外层 de Bruijn 索引整体 +k）。
+shiftCtorArgs : Int -> List (Pair Term Rig) -> List (Pair Term Rig)
+shiftCtorArgs n [] = []
+shiftCtorArgs n ((Pair a rig) :: rest) = Pair (shift 0 n a) rig :: shiftCtorArgs n rest
+
+-- 逐层搭 λ：第 i 个剩余形参在最终体里的 de Bruijn 索引 = 剩余 binder 数 - 1。
+-- binder 名必须**唯一**（用 `#eta<i>`）：telescope 里的匿名字段名都是 `_`，codegen 按
+-- binder 名渲染 OCaml 变量、不做 shadow 规避——两个 `_` 都被渲染成 `_u`，体里同时引用
+-- 两个形参就会互相捕获（实测 OCaml 类型错误 `'a t_List` vs `'a t_List t_List`）。
+-- `#` 不是源码标识符字符（sanitize 成 `_h`），因此不会和用户变量撞名。
+etaCtorLa : String -> Int -> List (Pair String Rig) -> List (Pair Term Rig) -> Term
+etaCtorLa name i [] args = TCon name args
+etaCtorLa name i ((Pair _ rig) :: rest) args =
+  let
+    binder = "#eta" ++ strFromInt i
+  in TLam binder rig (etaCtorLa name (i + 1) rest (append args [Pair (TVar binder (length rest)) rig]))
+
+-- 丢掉列表前 n 个元素（构造子已收到的实参前缀）。
+dropCount : Int -> List a -> List a
+dropCount n xs = if n <= 0 then xs
+else case xs of
+  [] => []
+  _ :: rest => dropCount (n - 1) rest
 
 foldAppTerms : Term -> List (Pair Term Rig) -> Term
 foldAppTerms fn [] = fn

@@ -35,7 +35,9 @@ import Vuna.Compiler.Debug
 fastSame : Value -> Value -> Bool
 fastSame a b = case a of
   VType i => case b of
-    VType j => i == j
+    -- M29：Level 是 `MkLevel` 数据；用 `levelEq`（内部只比 Int 字段）避免在相等
+    -- 路径上依赖泛型结构比较兜底（`==` 的兜底将在 M29 删除）。
+    VType j => levelEq i j
     _ => False
   VInt i => case b of
     VInt j => i == j
@@ -84,7 +86,7 @@ convBothFuel : Int -> HashTbl Term -> Sols -> Int -> Value -> Value -> Result So
 convBothFuel fuel defs sols depth a b = if fuel <= 0 then Err "DT: internal: conv fuel exhausted"
 else case a of
   VType i => case b of
-    VType j => if i == j then Ok sols else mismatchAt depth a b
+    VType j => if levelEq i j then Ok sols else mismatchAt depth a b
     _ => mismatchAt depth a b
   VPi name implicit rig dom cod => case b of
     VPi name2 implicit2 rig2 dom2 cod2 => if implicit == implicit2 then andThen (convFuel (fuel - 1) defs sols depth dom dom2) (\sols2 => let

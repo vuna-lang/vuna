@@ -1,0 +1,18 @@
+-- M29（B13/D12）负例：泛型 Σ 的值级**构造**被擦除检查拒（B14/D09 边界）——
+-- `MkSigma` 的第二个分量 `p` 是运行时字段，把类型族名 `Tm` 当运行时值传会报
+-- `CG_TypeLevelNameRuntime`。M29 不引入 type codes，因此泛型 Σ 的值级使用归 F4；
+-- 可编译的存在式写法见 test/corpus/dt/62_sigma_basic.vuna（Tarski 风格类型码）。
+data Ty : Type where
+  TNat : Ty
+
+data Tm : Ty -> Type where
+  TZero : Tm TNat
+
+data Sigma : (a : Type) -> (a -> Type) -> Type where
+  MkSigma : (a : Type) -> (p : a -> Type) -> (x : a) -> p x -> Sigma a p
+
+bad : Sigma Ty Tm
+bad = MkSigma Ty Tm TNat TZero
+
+main : Int
+main = 0

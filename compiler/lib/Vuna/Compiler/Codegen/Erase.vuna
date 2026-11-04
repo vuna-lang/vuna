@@ -98,6 +98,12 @@ partitionDefsGo table (d :: rest) runtime typeNames =
   else if isTypeLevelDef table d then partitionDefsGo table rest runtime (dtDefName d :: typeNames)
   else partitionDefsGo table rest (d :: runtime) typeNames
 
+-- M29（A14）：定义级诊断前缀（唯一实现在 `Diagnostics.cgDefLoc`，此处只做访问器适配）。
+-- 有来源 span（`DtDef` 的 `Maybe Span`）时输出 `file:line:col: in `name`: `，
+-- 没有时保持旧的 `in `name`: `。CG 诊断是 `Err String`（不走位置层），在拼串处补前缀。
+defLocPrefix : DtDef -> String
+defLocPrefix d = cgDefLoc (dtDefSpan d) (dtDefName d)
+
 -- M28：axiom 只在擦除/类型层可用；运行时位置（非擦除实参/非类型层）的使用报
 -- `CG_AxiomAtRuntime`。用运行时依赖遍历（跳过擦除实参）找名字，类型层引用不报。
 checkNoAxiomRuntime : List String -> List DtDef -> Result Int
@@ -109,7 +115,8 @@ checkNoAxiomRuntimeGo axiomTbl (d :: rest) = case dtDefBody d of
   Nothing => checkNoAxiomRuntimeGo axiomTbl rest
   Just body => case termDepsInto axiomTbl [] body of
     [] => checkNoAxiomRuntimeGo axiomTbl rest
-    name :: more => cgErr1 (AxiomAtRuntime name) name
+    -- M29（A14）：带使用点定义的位置（旧实现这里既无位置也无定义名）。
+    name :: more => cgErrDefAt (dtDefSpan d) (dtDefName d) (AxiomAtRuntime name) (VCons name VNil)
 
 checkAllErasure : List String -> List DtDef -> Result Int
 checkAllErasure typeNames [] = Ok 0
@@ -117,11 +124,12 @@ checkAllErasure typeNames (d :: rest) =
   andThen (checkOneErasure typeNames d) (\_ => checkAllErasure typeNames rest)
 
 -- 报错带上定义名：同一份程序里哪个函数有问题要能一眼看出来。
+-- M29（A14）：有 span 时前缀 `file:line:col:`（保留原有的 `in `name`: ` 形状）。
 checkOneErasure : List String -> DtDef -> Result Int
 checkOneErasure typeNames d = case dtDefBody d of
   Nothing => Err "DT: internal: axiom reached the runtime erasure check (partition must erase it)"
   Just body => case checkErasure typeNames [] body of
-    Err e => Err ("in `" ++ dtDefName d ++ "`: " ++ e)
+    Err e => Err (defLocPrefix d ++ e)
     Ok n => Ok n
 
 -- binders：最近绑定在前（名字 + 是否擦除）。
@@ -503,7 +511,10 @@ checkAllDefScopes [] = Ok 0
 checkAllDefScopes (d :: rest) = case dtDefBody d of
   -- axiom 没有体；作用域护栏只检查会落项的体。
   Nothing => checkAllDefScopes rest
-  Just body => andThen (checkTermScopes 0 body) (\_ => checkAllDefScopes rest)
+  -- M29（A14）：内部护栏错误也带定义来源位置，便于定位生成定义。
+  Just body => case checkTermScopes 0 body of
+    Err e => Err (defLocPrefix d ++ e)
+    Ok n => checkAllDefScopes rest
 
 termDepsInto : HashTbl Bool -> List String -> Term -> List String
 termDepsInto a1 a2 a3 = termDepsIntoFuel 100000 a1 a2 a3

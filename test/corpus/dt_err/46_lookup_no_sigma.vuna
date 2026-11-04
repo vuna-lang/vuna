@@ -1,0 +1,27 @@
+-- M29（B13/D12）负例：没有 Σ 时「元素类型依赖位置」的 Ctx/lookup 写不出来 ——
+-- 递归步只能拿到 `Tm n`，而 goal 要 `Tm (Succ n)`（索引无法按位置精化）。
+-- 正例（存在式隐藏索引）见 test/corpus/dt/63_dep_lookup.vuna。
+data Nat : Type where
+  Zero : Nat
+  Succ : Nat -> Nat
+
+data Fin : Nat -> Type where
+  FZero : {n : Nat} -> Fin (Succ n)
+  FSucc : {n : Nat} -> Fin n -> Fin (Succ n)
+
+data Tm : Nat -> Type where
+  TZero : Tm Zero
+  TSucc : {n : Nat} -> Tm n -> Tm (Succ n)
+
+data Ctx : Nat -> Type where
+  CtxNil : Ctx Zero
+  CtxCons : {n : Nat} -> Tm (Succ n) -> Ctx n -> Ctx (Succ n)
+
+lookupTm : {n : Nat} -> Ctx n -> Fin n -> Tm n
+lookupTm c i = case c of
+  CtxCons x xs => case i of
+    FZero => x
+    FSucc j => lookupTm xs j
+
+main : Int
+main = 0

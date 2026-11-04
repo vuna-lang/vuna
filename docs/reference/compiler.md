@@ -39,10 +39,10 @@
 | `Elab.Types` | Elab 的数据定义与共享状态：`DtDef`/`DtAxiom`（无体/不透明顶层）/`DtCtor`/`DtData`/`DtGoal`/`DtClass`/`DtInst`/`DtProgram` 与 `Ctx`；`dtDefBody` 返回 `Maybe Term` | `dtDataName`、`dtDefType`、`dtDefBody`、`dtProgDefs` |
 | `Elab.Meta` | 共享工具层：值/构造子引用、`convEc`、元变量创建深度与统一 `zonkTerm`、擦除判据（`isTypeDomain`/`binderRig`）、命名空间查询（`typeLookup`/`valueLookup`）、canonical Bool 的 `TBool` 表示 | `convEc`、`zonkTerm`、`binderRig`、`typeLookup`、`dictTypeName` |
 | `Elab.Case` | case 规范形（M28）：索引合一（`unifyIdx`）、scrutinee 反射、单一可达性判据（`BranchVerdict`/`allCtorsUnsatisfiable`）、空族与冗余/不可达诊断 | `unifyIdx`、`reflectScrutinee`、`checkCoverage`、`isEmptyFamilyValue` |
-| `Elab.Dict` | 字典编码的表示与实例搜索：字典类型/实例头识别、`conv` 头匹配、实例选择、比较运算符泛化 | `searchInstance`、`dictFamilyNameOf`、`cmpRuntimeName`、`deferEqDict` |
+| `Elab.Dict` | 字典编码的表示与实例搜索：字典类型/实例头识别、`conv` 头匹配、实例搜索（M29 起递归解 ctx / 约束实例）、`==`/比较运算符特化（Int/String 内建或 Eq/Ord 字典；**无泛型结构比较兜底**） | `searchInstance`、`dictFamilyNameOf`、`cmpRuntimeName`、`deferEqDict` |
 | `Elab.Term` | 项的双向检查（与 case 规则互递归的核心）：`inferE`/`checkE`/应用/隐式插入/类型检查 | `inferE`、`checkE`、`checkApp`、`checkType` |
 | `Elab.Data` | `data` 声明与构造子/索引擦除：`elabCtor`、`elabDataHead(s)`、`elabDataBodies`、擦除候选；M28 起校验 kind 结果层级与构造子字段 sort | `elabDatas`、`ctorFieldTerms`、`checkCtorFieldSorts` |
-| `Elab.Trait` | trait/instance 声明与实例体：类参数 kind、方法投影、实例头检查（重复/命名）、方法体精化 | `checkInstanceHeads`、`elabInstanceBodies`、`instanceName` |
+| `Elab.Trait` | trait/instance 声明与实例体：类参数 kind、方法投影、实例头检查（重复 / 相干性；M29 删除命名实例、支持约束实例 ctx）、方法体精化 | `checkInstanceHeads`、`elabInstanceBodies`、`instanceName` |
 | `Elab.Driver` | 精化入口与程序组装：签名 → data/trait/instance → 定义体 → zonk/终止性检查 → `DtProgram`；洞目标 | `Elab.Driver.elabProgramFull`、`goalsOfProgram`、`dtEvalExprIn` |
 | `Elab.Termination` | DT 终止性检查（M16/M25）：调用图 + SCC，结构下降/守卫 Int 判据（无包级豁免） | `checkTerminationDecls` |
 | `Elab.Prelude` | 把 `Intrinsics` 表翻译成 DT prelude globals（签名）；不再有第二份名字/签名表（原 `DtPrelude`） | `preludeGlobals`、`builtinTyName`、`cmpBuiltinTyName` |
@@ -126,8 +126,8 @@ M27 新增 `Intrinsics` 并把内建名字/签名/arity/能力/runtime 映射/�
 - **依赖分组**：用 Kosaraju SCC 求函数依赖分量（`Codegen.Erase.groupRuntimeDefs`），
   自/互递归分量才用 `let rec ... and ...`，非自递归单函数用 `let`；
 - **比较运算符特化**：精化期按实参类型把 `==` `/=` `<` `<=` `>` `>=` 重写为
-  `bi_eq_int` / `bi_eq_str` 等单态 helper，避免多态 `caml_equal` / `caml_less_than`
-  （多态函数里的比较仍保留通用 `bi_eq` / 字典）；
+  `bi_eq_int` / `bi_eq_str` 等单态 helper（M29 删除泛型结构比较兜底，`bi_eq_generic`
+  与 interp 的 `valueEqDeep` 双实现已不存在）；其它类型走 `Eq`/`Ord` 字典参数；
 - **短路**：`a && b` / `a || b` 在精化期降成 `TIf`（`a && b` ⇒ `if a then b else False`），
   左侧能决定结果时不求值右侧；核心求值器读同一 `TIf`，语义一致；
 - **字符串拼接**：`++` 走 `bi_concat`（OCaml `^`）；

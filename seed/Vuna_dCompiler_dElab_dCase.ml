@@ -136,7 +136,7 @@ and v_Vuna_dCompiler_dElab_dCase_dunifyIdx = (fun ec -> (fun acc -> (fun depth -
 )) a2)) ((((v_Vuna_dCompiler_dCore_dEval_dforce (v_Vuna_dCompiler_dElab_dTypes_decDefTbl ec)) (v_Vuna_dCompiler_dElab_dTypes_decSolsP ec)) v_Vuna_dCompiler_dCore_dTerm_ddefaultFuel) (((v_Vuna_dCompiler_dElab_dTypes_drefineValue acc) v_Vuna_dCompiler_dCore_dTerm_ddefaultFuel) b)))) ((((v_Vuna_dCompiler_dCore_dEval_dforce (v_Vuna_dCompiler_dElab_dTypes_decDefTbl ec)) (v_Vuna_dCompiler_dElab_dTypes_decSolsP ec)) v_Vuna_dCompiler_dCore_dTerm_ddefaultFuel) (((v_Vuna_dCompiler_dElab_dTypes_drefineValue acc) v_Vuna_dCompiler_dCore_dTerm_ddefaultFuel) a))))))))))
 and v_Vuna_dCompiler_dElab_dCase_dunifyIdxRigid = (fun ec -> (fun acc -> (fun depth -> (fun fuel -> (fun a -> (fun b -> (if ((bi_le_int fuel) 0) then v_Vuna_dCompiler_dElab_dCase_dunifyErr else ((fun nd_uscrut6 -> (match nd_uscrut6 with
   | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVBool (dtb__59) -> (match b with
-  | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVBool (dtb__60) -> (if (((v_Base_dEq_deq v_Base_dEq_dBase_dEq_dEq_uBase_dEq_dEq_uBase_dBool_dBool) dtb__59) dtb__60) then (C_Base_dResult_dResult_Base_dResult_dOk (acc)) else v_Vuna_dCompiler_dElab_dCase_dunifyErr)
+  | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVBool (dtb__60) -> (if (((v_Base_dEq_deq v_Base_dEq_dEq_uBase_dEq_dEq_uBase_dBool_dBool) dtb__59) dtb__60) then (C_Base_dResult_dResult_Base_dResult_dOk (acc)) else v_Vuna_dCompiler_dElab_dCase_dunifyErr)
   | _ -> v_Vuna_dCompiler_dElab_dCase_dunifyErr
 )
   | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVStr (dtb__61) -> (match b with

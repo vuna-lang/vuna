@@ -38,8 +38,6 @@ dtRuntime =
     ++ "let bi_neq_int (a : int) (b : int) = a <> b\n"
     ++ "let bi_eq_str (a : string) (b : string) = a = b\n"
     ++ "let bi_neq_str (a : string) (b : string) = a <> b\n"
-    ++ "let bi_eq_generic (a : 'a) (b : 'a) = a = b\n"
-    ++ "let bi_neq_generic (a : 'a) (b : 'a) = a <> b\n"
     ++ "let bi_strFromInt (n : int) = string_of_int n\n"
     ++ "let bi_strLength (s : string) = String.length s\n"
     ++ "let bi_strUnpack (s : string) = List.init (String.length s) (fun i -> Char.code s.[i])\n"
@@ -460,12 +458,18 @@ else andThen (genTermFuel (fuel - 1) st binders scrut) (\p => case p of
 -- ---------------------------------------------------------------
 -- 分组 → OCaml 定义
 -- ---------------------------------------------------------------
+-- M29（A14）：定义级 CG 错误带来源位置（`DtDef` 的 `Maybe Span` + 定义名）。
+-- `genTerm` 内部的错误（TypeUsedAtRuntime / TypeLevelBindingRuntime / TypeLevelNameRuntime /
+-- UnsolvedMetavarRuntime / ListBridgeRequired / 构造子 arity 内部错等）都在这里统一收口，
+-- 生成定义（trait 投影 / instance 字典 / deriving）因此能指回 trait/instance/data 声明行。
 genGroupDef : GenSt -> DtDef -> Result (Pair String GenSt)
 genGroupDef st d = case dtDefBody d of
-  Just body => andThen (genTerm st [] body) (\p => case p of
-    Pair bodyText st2 => Ok (Pair (valueName (dtDefName d) ++ " = " ++ bodyText) st2)
-  )
-  Nothing => Err "DT: internal: axiom reached runtime code generation (partition must erase it)"
+  Just body => case genTerm st [] body of
+    Err e => Err (cgDefLoc (dtDefSpan d) (dtDefName d) ++ e)
+    Ok (Pair bodyText st2) => Ok (Pair (valueName (dtDefName d) ++ " = " ++ bodyText) st2)
+  Nothing =>
+    Err
+      (cgDefLoc (dtDefSpan d) (dtDefName d) ++ "DT: internal: axiom reached runtime code generation (partition must erase it)")
 
 genGroupBodies : GenSt -> List DtDef -> Result (Pair (List String) GenSt)
 genGroupBodies st [] = Ok (Pair [] st)
@@ -502,7 +506,10 @@ firstBadRecursiveValue (d :: rest) = case dtDefBody d of
 
 genGroup : HashTbl (List String) -> GenSt -> List DtDef -> Result (Pair String GenSt)
 genGroup adj st group = if groupNeedsRec adj group then case firstBadRecursiveValue group of
-  Just name => cgErr1 (RecursiveValueDefinition name) name
+  -- M29（A14）：带来源位置（组里按名字找回定义）。
+  Just name => case findDtDef name group of
+    Just d => cgErrDefAt (dtDefSpan d) name (RecursiveValueDefinition name) (VCons name VNil)
+    Nothing => cgErr1 (RecursiveValueDefinition name) name
   Nothing => genGroupLet st group True
 else genGroupLet st group False
 

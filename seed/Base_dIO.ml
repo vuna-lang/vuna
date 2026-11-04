@@ -74,14 +74,14 @@ let v_Base_dIO_dioBind = (fun io -> (fun k -> (match io with
   | _ -> failwith "DT: impossible branch"
 )))
 
-let v_Base_dIO_dBase_dMonad_dMonad_uBase_dMonad_dMonad_uBase_dIO_dIO = (C_Dict_uBase_dMonad_dMonad_MkDict_uBase_dMonad_dMonad ((fun io -> (fun k -> ((v_Base_dIO_dioBind io) k))), (fun x -> (v_Base_dIO_dioPure x))))
+let v_Base_dMonad_dMonad_uBase_dMonad_dMonad_uBase_dIO_dIO = (C_Dict_uBase_dMonad_dMonad_MkDict_uBase_dMonad_dMonad ((fun io -> (fun k -> ((v_Base_dIO_dioBind io) k))), (fun x -> (v_Base_dIO_dioPure x))))
 
 let v_Base_dIO_dioFmap = (fun f -> (fun io -> (match io with
   | C_Base_dIO_dIO_Base_dIO_dMkIO (dtb__2) -> (C_Base_dIO_dIO_Base_dIO_dMkIO ((fun w -> (f (dtb__2 w)))))
   | _ -> failwith "DT: impossible branch"
 )))
 
-let v_Base_dIO_dBase_dMonad_dFunctor_uBase_dMonad_dFunctor_uBase_dIO_dIO = (C_Dict_uBase_dMonad_dFunctor_MkDict_uBase_dMonad_dFunctor ((fun f -> (fun io -> ((v_Base_dIO_dioFmap f) io)))))
+let v_Base_dMonad_dFunctor_uBase_dMonad_dFunctor_uBase_dIO_dIO = (C_Dict_uBase_dMonad_dFunctor_MkDict_uBase_dMonad_dFunctor ((fun f -> (fun io -> ((v_Base_dIO_dioFmap f) io)))))
 
 let v_Base_dIO_dprint = (fun s -> (C_Base_dIO_dIO_Base_dIO_dMkIO ((fun w -> (dtp_print s)))))
 

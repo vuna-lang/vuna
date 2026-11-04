@@ -81,9 +81,7 @@ declValueNames d = case d of
   DSig name ty sp => [name]
   -- M28：axiom 是无体的值命名空间条目（类型层使用；运行时使用由 Elab/Codegen 拒绝）。
   DAxiom name ty sp => [name]
-  DInstance iname isDefault head methods sp => case iname of
-    Nothing => []
-    Just n => [n]
+  DInstance ctxE head methods sp => []
   _ => []
 
 -- 值命名空间：DFun / 签名 / 实例名。
@@ -325,10 +323,6 @@ else case expr of
   ERecUpdate base fields sp =>
     andThen (resolveExpr (fuel - 1) modules label prefix ns imports scope base)
       (\b => andThen (traverse (\dtv => resolveFieldValue (fuel - 1) modules label prefix ns imports scope dtv) fields) (\fs => Ok (ERecUpdate b fs sp)))
-  EInstSel meth name sp => andThen (resolveExpr (fuel - 1) modules label prefix ns imports scope meth) (\m2 => case resolveGlobal modules label prefix ns imports scope name of
-    Err e => Err (label ++ ": unknown instance name " ++ name ++ " (@" ++ name ++ ")")
-    Ok n2 => Ok (EInstSel m2 n2 sp)
-  )
   EDo stmts sp =>
     andThen (desugarDo stmts) (\e => resolveExpr (fuel - 1) modules label prefix ns imports scope e)
   -- M24：where 绑定签名（`g : Int -> Int`）降级成 `EAnn value ty`；值与类型都做名字解析。
@@ -449,9 +443,10 @@ resolveDecl modules label prefix ns imports d = case d of
   DTrait tname params methods sp =>
     andThen (resolveTypeTopName label prefix tname)
       (\tn => andThen (traverse (resolveTraitMethod modules label prefix ns imports) methods) (\ms => Ok (DTrait tn params ms sp)))
-  DInstance iname isDefault head methods sp =>
-    andThen (resolveInstanceName label prefix iname)
-      (\in2 => andThen (resolveTypeExpr resolveFuelBound modules label prefix ns imports head) (\head2 => andThen (traverse (resolveInstanceMethod modules label prefix ns imports) methods) (\ms => Ok (DInstance in2 isDefault head2 ms sp))))
+  DInstance ctxE head methods sp =>
+    andThen
+      (traverse (\cx => resolveTypeExpr resolveFuelBound modules label prefix ns imports cx) ctxE)
+      (\ctx2 => andThen (resolveTypeExpr resolveFuelBound modules label prefix ns imports head) (\head2 => andThen (traverse (resolveInstanceMethod modules label prefix ns imports) methods) (\ms => Ok (DInstance ctx2 head2 ms sp))))
   DSig name ty sp =>
     andThen (resolveTopName label prefix name)
       (\n => andThen (resolveTypeExpr resolveFuelBound modules label prefix ns imports ty) (\ty2 => Ok (DSig n ty2 sp)))
@@ -472,12 +467,6 @@ resolveTraitMethod : List Module -> String -> String -> Namespaces -> List Impor
 resolveTraitMethod modules label prefix ns imports (Pair mname ty) =
   andThen (resolveTopName label prefix mname)
     (\n => andThen (resolveTypeExpr resolveFuelBound modules label prefix ns imports ty) (\ty2 => Ok (Pair n ty2)))
-
--- 未命名实例（default）没有公开名字；给一个模块内私有的内部名字，便于校验孤儿规则。
-resolveInstanceName : String -> String -> Maybe String -> Result (Maybe String)
-resolveInstanceName label prefix Nothing = Ok (Just (mangle prefix "#default"))
-resolveInstanceName label prefix (Just name) =
-  andThen (resolveTopName label prefix name) (\n => Ok (Just n))
 
 resolveInstanceMethod : List Module -> String -> String -> Namespaces -> List Import -> Decl -> Result Decl
 resolveInstanceMethod modules label prefix ns imports d = case d of
@@ -577,7 +566,6 @@ effExpr e = case e of
   EField base fname sp => effExpr base
   ERecord name fields sp => effFields fields
   ERecUpdate base fields sp => firstEffect [effExpr base, effFields fields]
-  EInstSel meth iname sp => effExpr meth
   -- M20：`EPi` 是 DT 的核心语法，这里只做结构递归（类型层不算 effect）。
   EPi name implicit dom cod sp => firstEffect [effExpr dom, effExpr cod]
   EDo stmts sp => effDos stmts
@@ -614,7 +602,7 @@ effDecl : Decl -> Maybe String
 effDecl d = case d of
   DFun n pats body sp => effExpr body
   DTrait n ps methods sp => Nothing
-  DInstance iname isDefault headTy methods sp => effDecls methods
+  DInstance ctxE headTy methods sp => effDecls methods
   _ => Nothing
 
 effDecls : List Decl -> Maybe String

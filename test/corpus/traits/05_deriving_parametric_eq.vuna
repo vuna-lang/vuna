@@ -1,3 +1,5 @@
+-- M29：参数化 data 的 `deriving (Eq)` 生成约束实例（`instance Eq a => Eq (Maybe2 a)`）；
+-- `==` / `/=` 走字典，不再有泛型结构比较兜底。
 import Prelude
 
 data Maybe2 a : Type where

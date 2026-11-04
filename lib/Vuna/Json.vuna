@@ -160,7 +160,8 @@ parseJson source =
     chars = skipJsonWs (strUnpack source)
   in case parseValue (jsonFuel chars) chars of
     Err e => Err ("json: " ++ e)
-    Ok (Pair v rest) => if skipJsonWs rest == [] then Ok v else Err "json: trailing characters"
+    Ok (Pair v rest) =>
+      if length (skipJsonWs rest) == 0 then Ok v else Err "json: trailing characters"
 
 skipJsonWs : List Int -> List Int
 skipJsonWs [] = []

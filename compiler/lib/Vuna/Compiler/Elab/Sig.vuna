@@ -52,7 +52,6 @@ exprMaxAppArity pname e = case e of
   EField b fname sp => exprMaxAppArity pname b
   ERecord rn fields sp => maxIntList (map (\p => exprMaxAppArity pname (secondOf p)) fields)
   ERecUpdate b fields sp => exprMaxAppArity pname b
-  EInstSel b m sp => exprMaxAppArity pname b
   _ => 0
 
 -- 方法的显式参数各自的 multiplicity（M19）：逐 binder 按域判断，判据由调用方传入
@@ -124,7 +123,6 @@ exprLowerVars e = case e of
   EField b f sp => exprLowerVars b
   ERecord rn fields sp => concatMap (\p => exprLowerVars (secondOf p)) fields
   ERecUpdate b fields sp => exprLowerVars b
-  EInstSel b m sp => exprLowerVars b
   _ => []
 
 isLowerIdent : String -> Bool

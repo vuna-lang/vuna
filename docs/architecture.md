@@ -20,19 +20,18 @@ compiler/lib/Vuna/Compiler/   （50 个模块：49 个导出 + 内部 `Debug`；
 │                             Prelude Match Records Derive     双向精化
 ├─ Codegen.vuna + Codegen/    Decl Erase Term Assembly Split  擦除检查 + OCaml 生成
 └─ Driver/                    Split Dt Compile CompilerCli     输出模型 / facade / 编译入口 / CLI
-根包 vuna（模块根 lib/，入口 app/Main.vuna）：Cli/Interp/Fmt/Lint/Index（各门面+子模块）、
+根包 vuna（模块根 lib/，入口 app/Main.vuna）：Cli/Interp/Fmt/Lint/Index（门面+子模块）、
   Repl/Doc/Lsp/Json/TestRunner/Files
-成员包 vuna-base（模块根 base/lib/）：Base.*（15 个公开模块）+ Prelude
-依赖图：vuna → vuna-compiler → vuna-base，根包也直接依赖 vuna-base
+成员包 vuna-base（base/lib/，15 个公开模块 + Prelude）；依赖图 vuna → vuna-compiler → vuna-base（根包也直接依赖 base）
+依赖图：vuna → vuna-compiler → vuna-base（根包也直接依赖 base）
 ```
 
 **目录即层**：目录 = 依赖层次，上层可 import 下层、反向禁止。**门面模式**：`X.vuna` 只
-import 子模块并选择性重导出（对外名字面与拆分前一致），实现只在叶子；**数据定义只在叶子**
-（`Core.Term`、`Elab.Types` 等），门面不定义数据。目标每模块 ≤~800 行（当前最大
-`Lint.Rules` 811）。`compiler/` 是 seed 唯一来源（入口 `compiler/app/Main.vuna` 的 import
-闭包，当前 66 个 `.ml` / 67 个文件（M27 含 `Intrinsics`，
-以 `seed/` 与 `nix/seed-count.txt` 为准）；`lib/` 工具链与 `app/` 在 TCB 之外；
-`base/` 的模块名就是公开 API，保持 15 个不变。
+import 子模块并选择性重导出（对外名字面不变），实现只在叶子；**数据定义只在叶子**
+（`Core.Term`、`Elab.Types` 等）。目标每模块 ≤~800 行（当前最大 `Elab/Trait.vuna` 1195）。
+`compiler/` 是 seed 唯一来源（`compiler/app/Main.vuna` 的 import 闭包，当前 66 `.ml` / 67 文件，
+以 `seed/` 与 `nix/seed-count.txt` 为准）；`lib/` 工具链与 `app/` 在 TCB 之外；`base/`
+模块名就是公开 API，保持 15 个不变。
 
 ## 1. 编译链：Frontend → Loader → Elab → Codegen
 
@@ -62,6 +61,11 @@ import 子模块并选择性重导出（对外名字面与拆分前一致），�
 已解元变量进项只经 `Elab.Meta.zonkTerm`；`axiom` 是无体擦除定义（`DtAxiom`，运行时使用由
 `Codegen.Erase.checkNoAxiomRuntime` 拒绝），定义参数少于签名时按剩余 Pi η 展开。
 
+
+**相等/实例/证明（M29）**：`==`/比较是证据驱动的（Int/String 内建或 `Eq`/`Ord` 字典，无泛型
+再递归解 ctx，约束实例与参数化 `deriving` 可用，命名实例删除）；隐式值参数 `{x : a}` 与
+构造子 η 展开在 `Elab.Meta`；`DtDef` 带来源 span（A14）。细节见
+[compiler.md](reference/compiler.md)。
 **内建单一真源（M27）**：`Vuna.Compiler.Intrinsics` 是名字/签名/arity/归约/能力/runtime/
 可见性的唯一真源；`Loader.Resolve`（arity、放行、能力）、`Elab.Prelude`（签名）、
 `Core.Eval`（归约）、`Codegen.Term`（runtime）都消费它。内置身份按声明 symbol 判定：
@@ -155,15 +159,8 @@ M27 新增 `Intrinsics` 进闭包并完成 rotation：当前 seed 为 66 个 `.m
 | 只改 `lib/` 工具链 | `vuna fmt --check <文件>` + `vuna lint lib/Vuna/Cli.vuna` + 第 14–16、30–32 段 |
 | 改 `base/` 标准库 | 第 26–27 段（monad / stdlib）+ `vuna check .` |
 | 改 `compiler/` 任一模块 | 全量 `test/run-tests.sh` + `nix flake check`（至少 seed-selfhost） |
-| 改语法/类型规则 | 第 1–11、13–27、30、34 段 + 全量测试 + 编译器自检 |
-| 改 DT 精化 / 擦除 codegen | 第 1–11、13–27、30、34 段 + 全量测试 + 编译器自检 |
-| 改内建/原语/能力（`Intrinsics`、`[capabilities]`） | 第 34、39 段 + 全量测试 + `nix flake check`（rotation 后含 `seed-selfhost`） |
-| 改 split 输出 | 第 33/34/38 段 + `diff -r` 对拍 + `checks.seed-selfhost` |
-| 改 `vuna.toml` 机制（含 `[capabilities]`） | 第 28–29、33、39 段 + `checks.vuna-package` |
+| 改语法/类型规则 / DT 精化 / 擦除 codegen | 第 1–11、13–27、30、34 段 + 全量测试 + 编译器自检 |
+| 改 split 输出 / `vuna.toml`（含 `[capabilities]`） | 第 28–29、33、34、38、39 段 + `vuna check` + `checks.vuna-package`/`seed-selfhost` |
 | 改 Nix | `nix flake check`（`checks.*` 全绿）+ `nix build .#vuna` |
 
 ## 相关阅读
-
-[compiler.md](reference/compiler.md)（模块/codegen）、[bootstrap.md](reference/bootstrap.md)（种子/rotation）、
-[testing.md](reference/testing.md)（测试/CI）、[language.md](reference/language.md)、
-[type-system.md](reference/type-system.md)、[dt.md](reference/dt.md)（语义）、[primitives.md](reference/primitives.md)（内建/原语/能力）、[dt-tooling.md](reference/dt-tooling.md)（LSP/错误索引）、[roadmap.md](roadmap.md)（路线）。

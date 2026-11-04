@@ -159,7 +159,7 @@ checkCaseFamFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Term -> Value 
 checkCaseFamFuel fuel globals ctx ec scrutTerm scrutTy alts expected sp = if fuel <= 0 then Err "DT: internal: inference fuel exhausted"
 else case forceVal ec scrutTy of
   VNeutral (NGlobal fam idxs) =>
-    if fam == boolTypeName && idxs == [] then checkBoolCaseFuel (fuel - 1) globals ctx ec scrutTerm alts expected sp
+    if fam == boolTypeName && length idxs == 0 then checkBoolCaseFuel (fuel - 1) globals ctx ec scrutTerm alts expected sp
     else if fam == "Int" then checkLitCaseFuel (fuel - 1) globals ctx ec scrutTerm "Int" alts expected sp
     else if fam == "String" then checkLitCaseFuel (fuel - 1) globals ctx ec scrutTerm "String" alts expected sp
     else checkCaseOfFuel (fuel - 1) globals ctx ec scrutTerm scrutTy fam idxs alts expected sp
@@ -324,7 +324,6 @@ else case expr of
   EField base fname sp => tcErr0 sp RecordFieldAccessUnsupported
   ERecord rname fields sp => tcErr0 sp RecordsUnsupported
   ERecUpdate base fields sp => tcErr0 sp RecordUpdateUnsupported
-  EInstSel meth iname sp => inferInstSel globals ctx ec meth iname sp
   EDo stmts sp => tcErr0 sp DoUnsupported
   EAnn value ty sp => inferAnnFuel (fuel - 1) globals ctx ec value ty sp
 
@@ -422,7 +421,7 @@ else
     forced = forceVal ec ty
   in case forced of
     VPi name implicit rig dom clo => if implicit then if isDictDomain ec dom then if dictArgUnsolvedMeta ec dom then deferDictBinderFuel (fuel - 1) globals ctx ec dom clo args sp
-    else andThen (constrainDictDomFuel (fuel - 1) globals ec ctx dom args sp) (\ec0 => case searchInstance ec0 (forceVal ec0 dom) sp of
+    else andThen (constrainDictDomFuel (fuel - 1) globals ec ctx dom args sp) (\ec0 => case searchInstanceIn globals ctx ec0 (forceVal ec0 dom) sp of
       Ok (Pair instTerm ec1) =>
         let
           ty2 = applyClosure clo (evalCtx ctx instTerm)
@@ -432,9 +431,10 @@ else
         )
       Err e =>
         if hasUnsolvedMetaValue (ecSolsP ec0) (forceVal ec0 dom) then deferDictBinderFuel (fuel - 1) globals ctx ec0 dom clo args sp
+        else if isRigidDictArg ec0 (forceVal ec0 dom) then deferDictBinderFuel (fuel - 1) globals ctx ec0 dom clo args sp
         else Err e
     )
-    else if isIndexDomain ec dom then case newMeta ctx ec of
+    else if isImplicitDomain ctx ec dom then case newMeta ctx ec of
       Pair metaTerm ec1 => andThen (inferArgsGo (fuel - 1) globals ctx ec1 (applyClosure clo (eval (ctxEnv ctx) metaTerm)) args sp) (\p => case p of
         Pair argTerms (Pair resTy ec2) =>
           Ok (Pair (Pair metaTerm Rig0 :: argTerms) (Pair resTy ec2))

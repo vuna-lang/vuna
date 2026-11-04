@@ -34,7 +34,7 @@ M25–M30 为可排期阶段，F1–F4 为不排期未来轨道）。
 | A11 | 公开名与 `prim_*` 是同一内建的双份名字；生成 runtime 无条件下嵌 Unix | `Elab/Prelude` 双份表；`Codegen/Term.dtRuntime`；**M26 新增** `prim_getenv`/`prim_getcwd`/`prim_execPath`（只有 `prim_*` 名、无公开别名；`/proc/self/exe` 为 Linux 假设），语义规范归 M27 | 已修（M27：删公开效果名，只留 `prim_*`；runtime 映射来自 Intrinsics；Unix 依赖写入 runtime 契约） |
 | A12 | `IO a` 是 thunk 表示（`Int -> a`）、无 `runIO`，仅 `main` 处由生成 hook 执行 | `Base/IO.vuna`；`Codegen/Term` main hook | F3（M27 已清理接口：main hook 只认 canonical `Base.IO.IO`；IO 仍是 thunk，声明式接口留 F3） |
 | A13 | `Split` 仍匹配 M24.7 前的 `Show_Show_` 实例名前缀（死兜底），与 Elab 命名规则脱节 | `Codegen/Split.vuna` `isBuiltinInstanceName` | 已修（M26：改用 `Elab.instanceName`/`derivedInstName` + `Derive.instHead`，字符串归属表删除） |
-| A14 | 记录/trait 投影全部降级成 `case`，诊断 span 指向生成代码（来源信息丢失） | `Elab/Records.prepareDecls`、`Elab/Dict` 投影 eta 展开 | M29（随记录/投影 ergonomics 一起收；M28 未做） |
+| A14 | 记录/trait 投影全部降级成 `case`，诊断 span 指向生成代码（来源信息丢失） | `Elab/Records.prepareDecls`、`Elab/Dict` 投影 eta 展开 | 已修（M29：`DtDef`/`DtAxiom` 带来源 `Maybe Span`，Codegen 的 `CG_*` 诊断带 `file:line:col` 与 `in <定义名>`（axiom 运行时/类型级名字/作用域护栏等）；记录字段访问仍保留源码位置（records/97 回归）） |
 | A15 | `seed` 与 `build --split` 是同一命令的两个名字；CLI 参数解析各自手写；包模式下根参数被静默忽略 | `Driver/CompilerCli.vuna` seedRun/buildSplitRun；Design | 已修（M26：`seed`/`--split` 删除，统一 `compile`/`build --out` 参数解析） |
 | A16 | 跨包 import 方向不校验：Loader 的 roots 是扁平列表、selfRoot 不过滤 import；依赖包模块可以 import 消费包模块（实测 a→b、compiler→`Vuna.Json` 在 root 上下文通过）；**根修=删除 roots、按导入方包依赖闭包解析**（M26） | `Pkg.packageRoots` 的 selfRoot `Nothing` + `Loader.rootAllows`；`_scratch/crossdep`、crossprobe | 已修（M26：`PackageContext` 依赖闭包解析，两包方向回归 `packages/95_cross_dep`） |
 
@@ -45,22 +45,25 @@ M25–M30 为可排期阶段，F1–F4 为不排期未来轨道）。
 | B01 | 检查豁免按包名字符串 allowlist：`vuna*` 包静默跳过终止性/覆盖率；无 warning；**计划删除而非维护**（M25 用检查器改进 + 源码修复达标） | `Driver/Dt.dtTrustsTermination`；对照探针 | 已修（M25：删除豁免，compiler/base/toolchain 全量源码达标） |
 | B02 | 覆盖率放行实现是插入 `TInt 0` 哨兵（而不是 bottom/absurd） | `Elab/Term.vuna`；trusted Bool 缺分支生成 `if ... else 0` | 已修（M25：删除覆盖率豁免与哨兵） |
 | B03 | 终止性只查自递归，互递归不查；归约 fuel=512 静默截断 | `Elab/Termination`、`Core/Eval.force` | M25 |
-| B04 | 无 Eq 实例时 `==` 退回 OCaml 多态结构相等；interp 用另一套 `valueEqDeep` | `Elab/Dict.genericEqApp`、`Core/Eval.valueEqDeep` | 部分修复（M25：泛型兜底限制在可安全结构比较类型；兜底删除 M29） |
+| B04 | 无 Eq 实例时 `==` 退回 OCaml 多态结构相等；interp 用另一套 `valueEqDeep` | `Elab/Dict.genericEqApp`、`Core/Eval.valueEqDeep` | 已修（M29：删除 `bi_eq_generic`/`valueEqDeep` 双实现；`==`/`/=` 只走 Int/String 内建特化或 `Eq` 证据，无实例/函数字段相等在 check 期报 `TC_NoInstanceFound`；`dt_err/47–50`） |
 | B05 | 宇宙中间态：严格分层（`Type:Type` 不成立）但**无累积性**；data kind 的 level 不校验 | `Core/Conv.vuna` level 相等；`data Box5 : Type 5` 通过 | 已修（M28：严格分层、非累积、无 `Type:Type`；data kind 结果层级 + 构造子字段 sort 受检；正反例 `dt/57_universe`、`dt_err/40_universe_*`） |
 | B06 | 擦除判据 4 个谓词、按语法 rig 判定、不做整程序使用分析 | `Core/Term.rigOfBinder`、`Elab/Meta.{isIndexDomain,binderRig,typeLayerRig}` | 已修（M28：判据收成 `isTypeDomain`/`binderRig` 单一入口；显式 multiplicity 标注、不做使用分析；索引擦除=隐式 binder；`dt/60_erasure_unify`） |
 | B07 | `solveMetaHo` 只覆盖少数形状；元变量深度是事后复核；存库项靠 `inlineSolvedMetas` 补洞 | `Core/Conv` 三条 M13 出口；`Elab/Meta.inlineSolvedMetas` | 部分修复（M28：Miller pattern unification + 创建深度随 `Sols` 就地检查 + 统一 `zonkTerm`，删 `inlineSolvedMetas`；剩余：非 pattern flex-flex 形状仍走保守 head 提取兜底，完整高阶合一归研究） |
 | B08 | case 精化三条路径并存（直接/去重降级/嵌套矩阵）；中性索引下空族「写也错、省也错」 | `Elab/Term.checkCase` 分流；`Elab/Case` 保守判定 | 已修（M28：单一 `checkCase` 入口 + 模式矩阵唯一降级 + 单一 `BranchVerdict` 可达性判据；`dt/58_case_matrix`/`58b_case_absurd`） |
-| B09 | 隐式仅精化器内部插入：`{x : a}`、隐式模式 `{p}`、用户 `auto` 均无 | `Elab/Meta.isIndexDomain`；parser pattern 语法 | M29（M28 未覆盖语法；隐式值参数/隐式模式/`auto` 与证明 ergonomics 一起） |
+| B09 | 隐式仅精化器内部插入：`{x : a}`、隐式模式 `{p}`、用户 `auto` 均无 | `Elab/Meta.isIndexDomain`；parser pattern 语法 | 部分修复（M29：`isImplicitDomain` 放行隐式值参数 `{x : a}`（中性类型变量域/未解 meta），隐式 binder 仍恒擦除 Rig0；隐式模式 `{p}` 与 `auto`/隐式等式搜索迁 F4） |
 | B10 | `let` 与 `where` 两套作用域模型（签名必填/顺序可见）；无 axiom/未定义顶层；无 η 展开 | `Elab/Term.checkWhereSigs`；`DT: signature for ... has no definition` | 已修（M28：`axiom` 声明（运行时使用报 `CG_AxiomAtRuntime`）、定义 η 展开、`let`/`where` 统一绑定块；`dt/59_*`） |
-| B11 | trait 只支持单参数、无默认方法/父类/关联类型；无约束实例；字典是单态编码 | `Elab/Trait`「exactly one parameter」；`Elab/Derive` 参数化只 Eq | M29 |
-| B12 | 命名实例不参与自动搜索；实例命名规则在 Elab/Derive/Split 三处重复实现 | `Elab/Dict.searchInstance` 过滤 named；命名 helper | M29 |
-| B13 | 依赖索引取值（`Ctx n -> Fin n -> Tm n`）无表达手段 | `dt-parity.md` §6.3；探针 `p3_dep_lookup` | M29 |
-| B14 | 类型当运行时值被擦除检查拦下（`Refl Nat` 失败），无 type codes | `Codegen/Erase` rig 检查；探针 | M29（决策） |
+| B11 | trait 只支持单参数、无默认方法/父类/关联类型；无约束实例；字典是单态编码 | `Elab/Trait`「exactly one parameter」；`Elab/Derive` 参数化只 Eq | 部分修复（M29：约束实例 `instance Eq a => Eq (F a)` + 参数化 deriving + 实例搜索递归解 ctx + coherence；trait 仍是单参数；多参数/默认方法/父类/关联类型迁 F4） |
+| B12 | 命名实例不参与自动搜索；实例命名规则在 Elab/Derive/Split 三处重复实现 | `Elab/Dict.searchInstance` 过滤 named；命名 helper | 已修（M29：删除命名实例特性（`as name`/`@name`/`EInstSel` 全链），实例按 head 全局唯一、命名规则单一来源；`Dict.searchInstance` 不再过滤 named） |
+| B13 | 依赖索引取值（`Ctx n -> Fin n -> Tm n`）无表达手段 | `dt-parity.md` §6.3；探针 `p3_dep_lookup` | 部分修复（M29：用 Tarski 式存在式（运行时类型码 `Ty` + 指标族 `Tm : Ty -> Type` + `Some`）表达依赖索引 lookup（`dt/62`/`dt/63`）；泛型 Σ 值级构造迁 F4，见 D20） |
+| B14 | 类型当运行时值被擦除检查拦下（`Refl Nat` 失败），无 type codes | `Codegen/Erase` rig 检查；探针 | 已定（M29 决策：不引入 type codes；保留 `cast` 组合子；显式 Type 实参按擦除处理，运行时位置使用报 `CG_TypeUsedAtRuntime`/`CG_TypeLevel*`） |
 | B15 | 字面量 case 必须有兜底；无冗余/不可达分支诊断 | `Elab/Term.checkLitCase` | 已修（M28：冗余构造子/冗余字面量/兜底后分支诊断；`dt_err/41*`） |
 | B16 | 效果 allowlist 按包名字符串（可伪造）；raw root 依赖模块可调 `prim_*`（**M26 已随删除环境根关闭**，剩下的是包名字符串判定）；**这是权限策略不是检查豁免**：M27 用 manifest 声明 capability 替换（或按决策删除） | `Loader/Resolve.packageAllowsEffects`；探针 | 已修（M27：manifest `[capabilities] effects` 显式能力；删 `packageAllowsEffects` 包名 allowlist） |
 | B17 | case/终止性「只告警」的文档与实现不符（实际静默跳过、无 warning）；随 B01 删除豁免后不再需要「告警」语义 | `docs/reference/limits.md` vs `Elab/Case.ecTrusted` | 已修（M25：删除豁免；无 warning 通道） |
 | B18 | 解析层只有单一命名空间：同名 type/ctor/global 靠多处特判兜住，与导出层双命名空间不一致 | `Elab/Term.inferVarRef`、`Elab/Records` 注释 | 部分修复（M28：Loader `type`/`value`/`ctor` 三命名空间 + Elab 显式 `typeLookup`/`valueLookup`；剩余：同模块 `data T` 与 `def T` 同名需 Elab globals 拆表，归 F1 模块/命名空间收尾；`dt/61_namespace_dual`） |
 | B19 | `Vuna.Compiler.Diagnostics` 单模块承载 74 个 TC 构造子的 code/模板，split codegen 把 74 臂 `match` 生成为单行 34912 字符（`nix/metrics.budget` maxline 因此从 8250 上调到 35500）；可拆成 Tc/Cg/元数据子模块降低单行与单模块规模 | `seed/Vuna_dCompiler_dDiagnostics.ml`；`nix/metrics.budget`；`vuna build --no-compile --out out compiler && sh nix/metrics.sh out` | M30 |
+| B20 | trait 方法级诊断 span 粗粒度：`DTrait` 的方法签名 AST 无 span，投影/实例方法的生成定义错误只能归到 trait/instance 声明行（A14 的方法级收尾） | `Frontend/Ast.vuna` `DTrait`；`Elab/Trait.elabTrait` | M30 |
+| B21 | 实例搜索重构后 `Elab.Dict` 遗留无人调用的导出（`filterInstances`/`joinInstNames`/`joinRestInstNames`/`instDictName`/`instHeadArg`/`classArgIndex`/`dictFamilyNameOf` 等，部分仅内部） | `Elab/Dict.vuna` export 表；`vuna map --impact` | M30 |
+| B22 | 匿名实例名保留「类模块前缀 + 类短名 + head」双前缀（如 `Base.Eq.Eq_Base.Eq.Eq_Box_a`）：行为正确但 split 归属/名字可读性差，且 `split-*.txt` 快照难读 | `Elab/Trait.instanceName`；`test/snapshots/split-*.txt` | M30 |
 
 ## C. 可复现缺陷（bug）
 
@@ -69,8 +72,8 @@ M25–M30 为可排期阶段，F1–F4 为不排期未来轨道）。
 | C01 | trusted 包 Bool case 缺分支生成 `if b then "t" else 0`（ocamlopt 类型错误） | 探针 `_scratch/audit-lead/booltrust`；`Elab/Term.vuna` | 已修（M25：覆盖率豁免删除后必报错） |
 | C02 | 包名 `vuna-base` 的普通包跳过终止性/覆盖率（静默）、可直接调用效果内建 | 对照探针 trusted vs `user-lib` | 已修（M25：豁免删除，包名不再影响检查） |
 | C03 | 非结构互递归 `ping n = pong n; pong n = ping n` 通过检查 | `Elab/Termination` 只分析自调用 | 已修（M25：调用图/SCT + 每环严格） |
-| C04 | 含函数字段的值 `==`：`interp` 返回 0，编译产物抛 `Invalid_argument("compare: functional value")` | 探针 `p9`/`funeq` | M25（根修 M29） |
-| C05 | `monad/04_kind_generic`：compile 产出的字典 binder 多态错误（`'b occurs inside t_Dict_uMonad`），`.nocompile` 整段跳过掩盖 | `Elab/Trait.liftFreeDictGoals` 记账；探针产物 | M29（标记清理 M25） |
+| C04 | 含函数字段的值 `==`：`interp` 返回 0，编译产物抛 `Invalid_argument("compare: functional value")` | 探针 `p9`/`funeq` | 已修（M29：泛型兜底删除后函数/无实例相等在 check 期失败，interp 与 codegen 不再有第二套比较算法；`dt_err/47–50`） |
+| C05 | `monad/04_kind_generic`：compile 产出的字典 binder 多态错误（`'b occurs inside t_Dict_uMonad`），`.nocompile` 整段跳过掩盖 | `Elab/Trait.liftFreeDictGoals` 记账；探针产物 | 已修（M29：字典目标按域 conv 去重、binder 位置在循环外定基准、`insertLamBinder` 移位 cutoff 修 0；monad/04 去 `.nointerp`/`.nocompile` 后 check+interp+compile+运行全过） |
 | C06 | `Core.applyValue` 没有 `VCase` 分支，落到 `_ => f` **静默丢实参** | `Core/Eval.vuna`；Elab 靠 eta 展开规避 | 已修（M25：VApp 卡住应用） |
 | C07 | 作用域护栏只验运行时 defs 且跳过擦除位；类型级定义/擦除位可带越界 index | `Codegen/Erase.checkAllDefScopes` | 部分修复（M25：全部定义；擦除位仍按约定跳过） |
 | C08 | `checkResolvedModules` 只校验模块声明，不校验 entryDecls | `Codegen/Split.vuna` | 已修（M26：entryDecls 不带点/非空/不重复 + 每个 DtDef/DtData 必须有归属） |
@@ -107,17 +110,19 @@ M25–M30 为可排期阶段，F1–F4 为不排期未来轨道）。
 | D05 | 宇宙：累积性 / 宇宙多态（当前严格分层但无 subtyping） | 已修（M28 决策：严格分层、非累积、无 `Type:Type`；累积性/宇宙多态归研究） |
 | D06 | 完整依赖 kind / CoC 依赖消除（`kindWellFormed` 只查箭头链形状） | 部分修复（M28：kind 形状 + 结果层级 + 构造子字段 sort 可检查；完整依赖 kind/参数-索引区分归研究（CoC 补完）） |
 | D07 | QTT / 整程序使用分析（擦除仍按语法 rig） | 已修（M28 决策：显式 multiplicity 标注（隐式 binder=Rig0），不做整程序使用分析；QTT 完整变体归研究） |
-| D08 | 隐式语言化：用户 `implicit`/`auto`、隐式值参数 `{x:a}`、隐式模式 `{p}` | M29（M28 未覆盖语法） |
-| D09 | type-as-value / type codes（Type 级等式的根本障碍） | M29 |
+| D08 | 隐式语言化：用户 `implicit`/`auto`、隐式值参数 `{x:a}`、隐式模式 `{p}` | 部分修复（M29：隐式值参数 `{x:a}` 可用（`Elab.Meta.isImplicitDomain`，恒 Rig0 擦除）；隐式模式 `{p}` 与 `auto`/隐式等式搜索迁 F4） |
+| D09 | type-as-value / type codes（Type 级等式的根本障碍） | 已定（M29 决策：不做 type codes；Type 级等式走擦除的 `Eq` 证据 + `cast`） |
 | D10 | axiom/foreign 定义、η 展开（定义参数个数必须与签名一致）、typed let/统一 let-where | 已修（M28：axiom/foreign 的无体形态（axiom）、η 展开、typed let 随 let/where 统一） |
-| D11 | trait 能力：多参数、默认方法、父类、关联类型、约束实例、coherence | M29 |
-| D12 | 证明 ergonomics：构造子部分应用 conv（`cong Succ`）、隐式等式搜索、absurd/空族、Σ | M29（M28 只落了空族判据/冗余诊断，absurd 语法与隐式搜索仍在 M29） |
+| D11 | trait 能力：多参数、默认方法、父类、关联类型、约束实例、coherence | 部分修复（M29：约束实例 `instance Eq a => Eq (F a)` + 参数化 deriving + coherence（重复/重叠 head 报错）落地；多参数/默认方法/父类/关联类型迁 F4） |
+| D12 | 证明 ergonomics：构造子部分应用 conv（`cong Succ`）、隐式等式搜索、absurd/空族、Σ | 部分修复（M29：构造子未饱和引用/应用按 η 展开（`cong Succ`）、隐式值参数、Σ 用 Tarski 式存在式表达依赖索引 lookup；隐式模式/`auto`/隐式等式搜索/absurd 语法迁 F4） |
 | D13 | LSP 语义诊断（含 import 即跳过类型检查）；Index 仅 parse 级 | M30 |
 | D14 | REPL 多行/效果；`vuna test` 只能 `main : String` 且走 interp（不能测效果） | M30 |
 | D15 | hermetic / 增量依赖哈希 / 并行构建（当前宿主 ocamlopt + mtime 增量） | M30 |
 | D16 | 数值塔（Int 固定宽度/溢出）与 Unicode String 语义（字节 vs 码点）决策 | 已修（M27：Int 63 位补码回绕 + String UTF-8 字节串） |
 | D17 | `main` 结果显示只支持 Int/String/Bool；interp 不执行效果 | M30（其余 F3） |
 | D18 | 性能工程：**部分修复（M25）**——defs/globals/sols 改为 `HashTbl` 索引、Loader 导出表 O(k⁴)→近线性、termination transpose 去重、check 不再拼产物文本、运行时 GC 调参；自检 76.8s→14.4s。**剩余**：NbE 无共享（`force` 每次重算 `eval [] body`）、conv 每节点重复 force、`dtCtorLookup` 线性扫族表、check/build 仍需 <10s 的进一步优化（见 `docs/reference/performance.md` §5） | M30（部分提前到 M25） |
+| D19 | 类型级部分应用不可用（`Sigma Nat (Vec Int)` 这类把类型族部分应用当类型参数） | F4/研究（M29 实测：走 `checkAppUnderTypeFuel` 报 `expected Nat, got Int`；值层构造子 η 不覆盖类型位置） |
+| D20 | 泛型 Σ 值级构造受「类型依赖运行时值」限制（字段类型依赖运行时值无 codegen 表示；`CG_TypeLevelNameRuntime`） | F4（M29：用 Tarski 式存在式作为可编译替代；泛型 Σ 需 type codes/依赖字段表示） |
 
 ## E. 验证/CI/文档基建缺口
 
@@ -132,7 +137,7 @@ M25–M30 为可排期阶段，F1–F4 为不排期未来轨道）。
 | E07 | metrics/context 预算手工、单边上限、历史注释长；缺 `--recalibrate` 生成器 | M25 |
 | E08 | benchmark 完全脱离 CI、无基线文件、JSON 用 sed 解析 | M30 |
 | E09 | `nix run .#vuna-run-tests` 与 flake `vuna-tests` 两入口；章节过滤各自实现 | M25 |
-| E10 | `.nointerp` 只有跳过、无「interp 仍拒绝」负向断言；`.nocompile` 语义已过期（C05） | M25 |
+| E10 | `.nointerp` 只有跳过、无「interp 仍拒绝」负向断言；`.nocompile` 语义已过期（C05 已修，M29 起无夹具使用，runner 跳过分支仍在待清理） | M25（清理 M30） |
 | E11 | 特殊标记清单与跳过原因未在 testing.md 成表 | M25 |
 | E12 | 文档过期：`fmt --check` 崩溃已修但 limits 仍写；`--with-comments`；checks 数量 | M25→已随本波修 |
 | E13 | `docs/.local`、`test/.local` 曾被索引缓存污染（审计探针产生，已清理；应加入 .gitignore/防护） | M25 |

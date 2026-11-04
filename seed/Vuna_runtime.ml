@@ -9,8 +9,6 @@ let bi_eq_int (a : int) (b : int) = a = b
 let bi_neq_int (a : int) (b : int) = a <> b
 let bi_eq_str (a : string) (b : string) = a = b
 let bi_neq_str (a : string) (b : string) = a <> b
-let bi_eq_generic (a : 'a) (b : 'a) = a = b
-let bi_neq_generic (a : 'a) (b : 'a) = a <> b
 let bi_strFromInt (n : int) = string_of_int n
 let bi_strLength (s : string) = String.length s
 let bi_strUnpack (s : string) = List.init (String.length s) (fun i -> Char.code s.[i])

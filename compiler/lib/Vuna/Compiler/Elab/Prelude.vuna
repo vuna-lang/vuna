@@ -59,7 +59,8 @@ isEqOp name = memName name eqOps
 builtinTyName : Value -> Maybe String
 builtinTyName v = case v of
   VNeutral n => case n of
-    NGlobal g sp => if sp == [] then Just g else Nothing
+    -- M29：用 `length`（Int 的 `==` 是特化路径），不依赖 List 的泛型结构比较兜底。
+    NGlobal g sp => if length sp == 0 then Just g else Nothing
     _ => Nothing
   _ => Nothing
 

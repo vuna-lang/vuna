@@ -351,7 +351,6 @@ posWalk names caller sizes facts region e st = case e of
   ERecUpdate base fields sp =>
     posWalkFields names caller sizes facts region fields
       (posWalk names caller sizes facts region base st)
-  EInstSel base meth sp => posWalk names caller sizes facts region base st
   EDo stmts sp => posWalkStmts names caller sizes facts region stmts st
   EAnn value ty sp =>
     posWalk names caller sizes facts region ty (posWalk names caller sizes facts region value st)

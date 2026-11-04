@@ -206,9 +206,6 @@ else case e of
       Just ss => case fields of
         [] => Just ("{ " ++ b ++ " }")
         _ => Just ("{ " ++ b ++ " | " ++ joinComma ss ++ " }")
-  EInstSel base inst sp => case inlineAtomGo (fuel - 1) base of
-    Nothing => Nothing
-    Just b => Just (b ++ " @" ++ inst)
   EDo stmts sp => Nothing
   -- M24：非 where 位置（例如 `let` 绑定值）的 `EAnn` 透明渲染内部表达式：
   -- 表达式位置没有 `: Ty` 语法，输出标注会让 fmt 产物无法重新 parse。
@@ -290,9 +287,6 @@ else case inlineApplyHeadGo (fuel - 1) fn of
 inlineApplyHeadGo : Int -> Expr -> Maybe String
 inlineApplyHeadGo fuel fn = if fuel <= 0 then Nothing
 else case fn of
-  EInstSel base inst sp => case inlineAtomGo (fuel - 1) base of
-    Nothing => Nothing
-    Just b => Just (b ++ " @" ++ inst)
   _ => inlineAtomGo (fuel - 1) fn
 
 inlineAtomGo : Int -> Expr -> Maybe String
@@ -390,7 +384,6 @@ else case e of
   EField base f sp => appendLast ("." ++ f) (renderAtomExprGo (fuel - 1) at lineInd base)
   ERecord name fields sp => renderRecordBlockGo (fuel - 1) at lineInd name fields
   ERecUpdate base fields sp => renderRecUpdateBlockGo (fuel - 1) at lineInd base fields
-  EInstSel base inst sp => appendLast (" @" ++ inst) (renderAtomExprGo (fuel - 1) at lineInd base)
   EDo stmts sp => renderDoGo (fuel - 1) at lineInd stmts
   EAnn value ty sp => renderExprGo (fuel - 1) at lineInd value
   EVar name sp => [name]
@@ -649,7 +642,6 @@ fitsLineWidth currentWidth t = currentWidth + 1 + strWidth t <= maxWidth
 renderApplyHeadGo : Int -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Expr -> List String
 renderApplyHeadGo fuel at lineInd fn = if fuel <= 0 then []
 else case fn of
-  EInstSel base inst sp => appendLast (" @" ++ inst) (renderAtomExprGo (fuel - 1) at lineInd base)
   _ => renderAtomExprGo (fuel - 1) at lineInd fn
 
 appendApplyArgsGo : Int -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> List String -> List Expr -> List String

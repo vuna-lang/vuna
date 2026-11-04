@@ -22,7 +22,7 @@
 | 6 | ~~`case` 在推断位~~ | **M19 已实现**：元变量作期望类型 | 132 | 2 | 29 | M19（已完成） |
 | 7 | ~~`case` 嵌套构造子模式~~ | **M19 已实现**：改写成内层 case | 410 alts | 1 | 91 | M19（已完成） |
 | 8 | DT prelude 的容器与 IO 原语 | `DT: unknown name <name>` | List 1064、Pair 1845、Maybe 65、Result 175；print 42、readFile 13、exit 9 | 79/30/17/18；5/5/5/5 | 132/286/27/21；48/11/8 | **M22.2**（`str*`/`prim_*` 已进 prelude；容器来自 base，`String`/`Map`/`Sort` 探针仍失败） |
-| 9 | ~~`==` / `/=` 只对 Int~~ | **M19 已实现**：隐式类型参数 + 精化期按实参类型特化（`bi_eq_str` 等） | 155 处字符串比较 | 0 | 52 | M19（已完成） |
+| 9 | ~~`==` / `/=` 只对 Int~~ | **M19 已实现**：隐式类型参数 + 精化期按实参类型特化（`bi_eq_str` 等）；**M29 收口为证据驱动**——只有 Int/String 内建特化或 `Eq` 证据（字典/`deriving`/约束实例），删除泛型结构比较兜底，无实例/函数相等在 check 期报错 | 155 处字符串比较 | 0 | 52 | M19 + M29（已完成） |
 | 10 | ~~`case` 只接受归纳族~~ | **M19 已实现**：Bool 降级 if，Int/String 降级 if 链（需兜底） | 4（Bool 分支） | 0 | 0 | M19（已完成） |
 | 11 | 非结构递归（算术递减 / fuel 式） | `Elab.Termination.checkTermBody`：`DT: cannot prove termination of <f> ...` | 41（`Elab` 14、`Core` 13、`Loader` 5、余 9） | 3 | 20 | M19 风险项 |
 | 12 | ~~单文件~~：无 `import` / `--root` / `data Foo a` | **M20 已实现**：复用 Loader（`loadProgramRaw`）、参数化 `data`、签名类型变量隐式量化。剩余包目录归 M22.1 | 20 模块头 / 64 import | 12 / 33 | 13 / 64 | M20（已完成） |
@@ -56,9 +56,10 @@
 ## 6. 索引精化的能力边界（M24.5 实测更新）
 
 要判断「编译器本体能否用 DT 重写」，关键不是 DT 有多少语法，而是**精化器能在多大范围内
-给出索引等式**。本节是 2026-11（M24.5）的实测结论，每行都有可复现夹具。
+给出索引等式**。本节是 2026-11（M24.5）的实测结论，每行都有可复现夹具；**M29 更新了
+依赖索引取值 / 隐式值参数 / 构造子部分应用三项**（见 §6.1 末行与 §6.3）。
 
-### 6.1 能力表（M24.5 后）
+### 6.1 能力表（M24.5 后；依赖索引行按 M29 更新）
 
 | 形态 | M24.5 前 | M24.5 后 | 说明 / 夹具 |
 | --- | --- | --- | --- |
@@ -74,7 +75,7 @@
 | 值级 `Eq` 的 `sym` / `trans` / `subst` | 部分 | ✅ | 全部靠 `case Refl` 的索引合一（`dt/50_eq_transport`） |
 | Type 级 `cast : Eq a b -> a -> b` / 索引级 `castLen` | ✅ | ✅ | `Eq` 的隐式族参数解成 `Type` 时即类型之间的等式（`dt/50_eq_transport`） |
 | `append : Vec a n -> Vec a m -> Vec a (plus n m)` | ❌ `expected (Zero), got m` | ✅ | **旧文档的 ❌ 是错的**：分支精化 + `plus` 的定义性相等已经足够（`case xs of Nil => ys; Cons x rest => Cons x (app rest ys)`） |
-| 取出**依赖索引**的值（`Ctx n -> Fin n -> Tm n` 形态） | ❌ | ❌ | 递归步拿到的是 `Ctx n'`（不是 `Ctx (Succ _)`），要「按位置变化的类型族」；这是索引设计的形态问题，不是精化器缺陷 |
+| 取出**依赖索引**的值（`Ctx n -> Fin n -> Tm n` 形态） | ❌ | ❌ | M29 前：递归步拿到的是 `Ctx n'`（不是 `Ctx (Succ _)`），要「按位置变化的类型族」。**M29：✅ 用 Tarski 式存在式**（`data Ty` 运行时类型码 + `Tm : Ty -> Type` + `data Some where MkSome : (t : Ty) -> Tm t -> Some`，lookup 返回 `Some`）——`dt/63_dep_lookup`；无存在式的负例 `dt_err/46_lookup_no_sigma`。泛型 Σ 的值级构造仍 ❌（F4，`dt_err/45_generic_sigma_runtime`） |
 
 ### 6.2 M24.5 修掉的实现缺陷
 
@@ -100,32 +101,44 @@
 > 性能约束：可达性只在**没写出来的构造子**上计算（写出的分支直接跳过）。否则每个 case 的每个
 > 构造子都要模拟一次分支，`vuna check .` 会从 ~90s 掉到 400s+。
 
-### 6.3 剩余边界（写 M24.6 时要记住）
+### 6.3 剩余边界（M29 终态；未关闭项注明归属）
 
-1. **隐式值参数仍不允许**：`{x : a}`（域是类型变量）报 `implicit parameters must be types or
-   inductive families`。证明辅助函数要把类型与值参数写成**显式**（`cong`/`sym`/`trans` 夹具即如此）。
-2. **构造子当函数值传递不一致**：`cong ... Succ ...` 里 `Succ` 部分应用留在 `TGlobal`
-   （求值成 `NGlobal`），与饱和应用产生的 `VCon` 走不到一起（`expected (Succ n), got (Succ n)`）。
-   用 lambda（`\m => Succ m`）或包装函数 `succF : Nat -> Nat` 绕过。
-3. **空族判定的保守性**：见 §6.2 第 2 条，索引含中性项时不判空。
-4. **类型当运行时值会被擦除检查拦下**：`Refl Nat`（`Nat` 落在值位置）在 `check` 就报
-   `type-level name Nat is used at runtime`；Type 级 `cast` 只能定义/检查，不能拿类型本身构造等式。
-5. **没有隐式等式搜索**：等式要显式传参（`Eq x y -> ...`），没有 `auto`/`unify` 搜索。
-6. **依赖索引值取回仍是设计问题**：`Ctx n -> Fin n -> Tm n` 这类要「按位置变化的类型族」，
-   当前 DT 没有表达手段；M24.6 第三级因此只保留护栏（`Env`/`Vec` 只存**不依赖索引**
-   的值，见 [dt-core.md](../dt-core.md) §6.3）。
+1. **隐式值参数（M29 已支持，B09 关闭）**：`{x : a}`（域是类型 / 索引 / 证明域）可用，
+   隐式 binder 恒擦除（`Rig0`），值只进类型 / 索引 / 证明位置；**子句体不能按名字引用**
+   隐式 binder，隐式模式 `{p}` 与 `auto` / 隐式等式搜索归 **F4**。证明辅助函数因此不再
+   手写全部显式参数（`dt/61_implicit_values`）；负例 `dt_err/42_implicit_value_domain`、
+   `dt_err/43_implicit_unnameable`。
+2. **构造子部分应用（M29 已支持，D12 关闭）**：未饱和构造子引用/应用做 **η 展开**
+   （`Elab.Meta.etaCtorTerm`），`cong ... Succ ...` 与「裸构造子当值传递后再应用」都
+   可用（`dt/60_ctor_eta`）；不再需要 lambda / 包装函数绕过。
+3. **空族判定的保守性**：见 §6.2 第 2 条，索引含中性项时不判空（M28 起判据收成
+   `BranchVerdict`，行为不变）。
+4. **type-as-value（M29 已定：不引入 type codes）**：Type 级等式走**擦除的 `Eq` 证据 +
+   `cast` 组合子**（`dt/50_eq_transport` 的 `cast` / `subst`）；把类型放到**运行时位置**
+   仍被擦除检查拒（`CG_TypeUsedAtRuntime` / `CG_TypeLevelBindingRuntime` /
+   `CG_TypeLevelNameRuntime`），负例沿用 `dt_err/45`。显式 `Type` binder 按
+   `rigOfBinder` 擦除，所以「类型当显式实参」（如 `Refl2 Int`）可行，但它不是
+   type-as-value。type codes 归 F4 研究项（决策记录见 roadmap「决策变更」）。
+5. **没有隐式等式搜索（M29 未做）**：等式仍要显式传参（`Eq x y -> ...`），没有
+   `auto` / `unify` 搜索——与隐式模式一起归 **F4**（M29 只做隐式值参数）。
+6. **依赖索引值取回（M29 用 Tarski 式存在式关闭，B13）**：`Ctx n -> Fin n -> Tm n` 不再
+   需要「按位置变化的类型族」——把「类型码 + 依赖值」藏进普通存在式 `Some`，lookup
+   返回 `Some`（`dt/62_sigma_basic` / `dt/63_dep_lookup`）。**泛型 Σ 的值级构造仍是
+   边界**（`Sigma : (a : Type) -> (a -> Type) -> Type` 的字段是类型族，类型不能依赖
+   运行时值），归 **F4**；负例 `dt_err/45_generic_sigma_runtime`。
 7. **类型级函数的 codegen 缺陷（M24.6 已修）**：`sel : Nat -> Type` 这类返回 `Type` 的
    函数曾因 `isTypeLevelDef` 只看裸 `Type` 被判成运行时定义，生成的 OCaml 出现未定义
    标识符（`v_Int` / `v_String`）。M24.6 改用 `isTypeForming`（`... -> Type` Pi 链整体
-   擦除），正例 `dt/51`/`52`、负例 `dt_err/39`；细节见 [dt-core.md](../dt-core.md) §6.4。
+   擦除），正例 `dt/51`/`52`、负例 `dt_err/45`；细节见 [dt-core.md](../dt-core.md) §6.4。
 
 ### 6.4 对计划的含义（更新）
 
 - **「用 DT 重写编译器」不是幻想，但也不是照抄**。弱化、替换、按族 case、`rep`/`lookupEnv`/
   `append`、归纳证明（`plusZeroR`）都已可写；不再是「卡在跨索引等式」。
-- M24.6 第三级（`Env : Nat -> Type` + `Fin` total lookup）**按 §6.3 第 6 条收窄**：`Fin` 索引的
-  边界检查可写、`lookup` 的 `ENil` 分支可省；但「取回依赖索引的值」需要重新设计 Env 的载体，
-  不在本波内完成。
+- M24.6 第三级（`Env : Nat -> Type` + `Fin` total lookup）**M29 用 Tarski 式存在式关闭**
+  （`data Ty` 运行时类型码 + `Tm : Ty -> Type` + `Some`）：lookup 返回存在式，不再需要
+  「按位置变化的类型族」（`dt/63_dep_lookup`）。**泛型 Σ 的值级构造**仍归 F4——M29 决策
+  不引入 type codes（§6.3 第 4/6 条），所以「类型依赖运行时值」不在此里程碑解决。
 - **不要先动 Term 层**：实测收益集中在 `Env`/`lookup`/弱化/替换这一层，把 `Term` 的 Pi/Lam
   结构整体索引化成本极高且收益递减。
 - 三个「看起来诱人但不划算」的项（拓扑序见证、元变量上下文索引化、终止性 `Acc` 见证）

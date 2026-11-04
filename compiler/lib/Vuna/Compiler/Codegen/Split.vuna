@@ -68,8 +68,8 @@ headClassName e = case e of
 -- 不再复制命名逻辑：Elab 生成的 `DtDef` 名字与本表逐字一致。
 splitInstanceOwnerOf : String -> Decl -> List (Pair String String)
 splitInstanceOwnerOf owner d = case d of
-  DInstance mname isDefault headExpr methods sp => case headClassName headExpr of
-    Just c => [Pair (instanceName c mname headExpr) owner]
+  DInstance ctxE headExpr methods sp => case headClassName headExpr of
+    Just c => [Pair (instanceName c headExpr) owner]
     Nothing => []
   DData dname params kind ctors derivings sp => splitDerivedOwners owner dname params derivings
   DRecord dname params fields derivings sp => splitDerivedOwners owner dname params derivings
@@ -78,7 +78,7 @@ splitInstanceOwnerOf owner d = case d of
 splitDerivedOwners : String -> String -> List String -> List String -> List (Pair String String)
 splitDerivedOwners owner dname params [] = []
 splitDerivedOwners owner dname params (t :: rest) =
-  Pair (instanceName t Nothing (instHead t dname params splitNoSpan)) owner
+  Pair (instanceName t (instHead t dname params splitNoSpan)) owner
     :: splitDerivedOwners owner dname params rest
 
 -- trait 的运行时产物不在顶层声明名里：方法投影定义与字典类型都由 Elab 生成，

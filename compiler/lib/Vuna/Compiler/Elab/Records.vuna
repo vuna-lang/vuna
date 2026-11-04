@@ -155,9 +155,8 @@ desugarRecordDecl records d = case d of
   DData name params kind ctors derivings sp => Ok d
   DRecord name params fields derivings sp => Ok d
   DTrait name params methods sp => Ok d
-  DInstance iname isDefault head methods sp =>
-    andThen (traverse (desugarRecordDecl records) methods)
-      (\ms => Ok (DInstance iname isDefault head ms sp))
+  DInstance ctxE head methods sp =>
+    andThen (traverse (desugarRecordDecl records) methods) (\ms => Ok (DInstance ctxE head ms sp))
   DSig name ty sp => Ok d
   -- M28：axiom 的类型表达式里可能有 record 语法吗？类型位置不走 record 降级
   -- （record 是值层记法），原样返回。
@@ -234,7 +233,6 @@ else case e of
   ERecUpdate base fields sp =>
     andThen (desugarExprFuel (fuel - 1) records base)
       (\b => andThen (traverse (desugarFieldValueFuel (fuel - 1) records) fields) (\fs => andThen (desugarRecUpdate records b fs sp) (\e2 => Ok e2)))
-  EInstSel m n sp => andThen (desugarExprFuel (fuel - 1) records m) (\m2 => Ok (EInstSel m2 n sp))
   EDo stmts sp =>
     andThen (traverse (desugarDoStmtFuel (fuel - 1) records) stmts) (\s2 => Ok (EDo s2 sp))
   -- EPi 的可用性由各自的检查器判定（HM 报错、DT 支持），降级这里只做结构递归。

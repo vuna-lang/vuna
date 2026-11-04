@@ -12,11 +12,9 @@ module Vuna.Compiler.Elab
   , Driver.goalsOfProgram
   , Meta.dictCtorName
   , Meta.dictTypeName
-  , Trait.anonInstName
   , Trait.checkInstanceHeads
   , Trait.derivedInstName
   , Trait.elabInstanceBodies
-  , Trait.instPrefixOf
   , Trait.instanceName
   , Types.DtClass
   , Types.DtCtor
@@ -38,6 +36,7 @@ module Vuna.Compiler.Elab
   , Types.dtDefBody
   , Types.dtDefHasBody
   , Types.dtDefName
+  , Types.dtDefSpan
   , Types.dtDefType
   , Types.dtGoalCtx
   , Types.dtGoalMeta

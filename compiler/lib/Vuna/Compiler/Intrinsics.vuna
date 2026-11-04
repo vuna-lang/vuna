@@ -125,8 +125,6 @@ data IntrinsicOp : Type where
   OpLeGeneric : IntrinsicOp
   OpGtGeneric : IntrinsicOp
   OpGeGeneric : IntrinsicOp
-  OpEqGeneric : IntrinsicOp
-  OpNeqGeneric : IntrinsicOp
   OpConcat : IntrinsicOp
   OpAnd : IntrinsicOp
   OpOr : IntrinsicOp
@@ -287,8 +285,6 @@ allIntrinsics =
     MkIntrinsic "bi_le_int" (IFun IInt (IFun IInt IBool)) OpLeInt Nothing "bi_le_int" False,
     MkIntrinsic "bi_gt_int" (IFun IInt (IFun IInt IBool)) OpGtInt Nothing "bi_gt_int" False,
     MkIntrinsic "bi_ge_int" (IFun IInt (IFun IInt IBool)) OpGeInt Nothing "bi_ge_int" False,
-    MkIntrinsic "bi_eq_generic" IPolyEq OpEqGeneric Nothing "bi_eq_generic" False,
-    MkIntrinsic "bi_neq_generic" IPolyEq OpNeqGeneric Nothing "bi_neq_generic" False,
     MkIntrinsic "bi_lt_generic" (IFun IInt (IFun IInt IBool)) OpLtGeneric Nothing "bi_lt_generic" False,
     MkIntrinsic "bi_le_generic" (IFun IInt (IFun IInt IBool)) OpLeGeneric Nothing "bi_le_generic" False,
     MkIntrinsic "bi_gt_generic" (IFun IInt (IFun IInt IBool)) OpGtGeneric Nothing "bi_gt_generic" False,

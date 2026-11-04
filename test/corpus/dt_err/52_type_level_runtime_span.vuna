@@ -1,0 +1,13 @@
+-- M29（A14）：类型级名字在运行时使用（`CG_TypeLevelNameRuntime`）现在带**定义位置**
+-- （`bad` 的子句 span）；旧实现只有 `in `bad`: ` 而无 file:line:col。
+Pick : Int -> Type
+Pick n = Int
+
+pick2 : (Int -> Type) -> Int
+pick2 p = 0
+
+bad : Int
+bad = pick2 Pick
+
+main : Int
+main = 0

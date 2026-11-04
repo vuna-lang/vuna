@@ -560,7 +560,7 @@ for file in corpus/traits/9[0-9]_*.vuna; do
   expect_dt_error "$file" "$file"
 done
 
-# 24) 跨模块 trait 正例：无头模块全导出（含命名实例）/ header 显式 Trait(..)（interp + compile）
+# 24) 跨模块 trait 正例：无头模块全导出 / header 显式 Trait(..)（interp + compile）
 for dir in corpus/traits/[01][0-9]_*/; do
   dir=${dir%/}
   expected=$(cat "$dir/expected.out")

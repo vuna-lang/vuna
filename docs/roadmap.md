@@ -1,6 +1,6 @@
 # Vuna 路线图
 
-本文记录 vuna 的当前基线与**可排期阶段**（M29 起）以及**不排期的未来轨道**（F1–F4）。
+本文记录 vuna 的当前基线与**可排期阶段**（M30 起）以及**不排期的未来轨道**（F1–F4）。
 逐条技术债务、临时决定与可复现缺陷登记在 [reference/debt.md](reference/debt.md)；
 里程碑历史在 [history.md](history.md)（各阶段实现细节在 git 历史）。
 
@@ -78,6 +78,12 @@ vuna 尚未发布任何版本：没有外部用户、下游生态与历史包袱
   空间查询替代「kind 是不是宇宙」猜测；新增 `axiom` 声明、定义 η 展开、let/where 统一
   绑定块，签名量化 banned 集改按模块作用域（C29）；`case` 收敛到单一模式矩阵规范形并新增
   冗余/不可达分支诊断；seed 66 `.ml` / 67 文件（模块面未变）。
+- M29：相等、实例与证明 ergonomics——实例字典 schema v2（`instance Eq a => Eq (F a)`
+  约束实例 + 参数化 `deriving (Eq/Show/Ord)` + 实例搜索递归解 ctx + coherence），删除
+  泛型 `==` 兜底与 `bi_eq_generic`/`valueEqDeep` 双实现（相等改为证据驱动），删除命名
+  实例特性，隐式值参数 `{x : a}` 与构造子未饱和 η 展开（`cong Succ`），type-as-value
+  定为不引入 type codes，依赖索引 lookup 用 Tarski 式存在式表达，记录/投影生成定义带
+  来源 span（A14）；`monad/04` 去标记；seed 66 `.ml` / 67 文件（模块面未变）。
 
 ## 终态（目标）
 
@@ -124,34 +130,11 @@ vuna 尚未发布任何版本：没有外部用户、下游生态与历史包袱
 | M26 | 包上下文统一（删除 roots）与单一路径 | — | 已完成 | A01–A06、A13、A15–A16、C08、C21、E14–E15 |
 | M27 | 内置、原语与效应边界 | M26 | 已完成 | A07–A11、B16、C16–C19、D16 |
 | M28 | 类型系统地基 | M27 | 已完成 | B05–B08、B10、B15、B18、C29、D05–D07、D10 |
-| M29 | 相等、实例与证明 ergonomics | M28 | 待排期 | A14、B11–B14、C05、D11–D12 |
-| M30 | 工具链与包 | —（可与 M27–M29 并行） | 待排期 | C11–C13、C25、D13–D15、D17–D18、E08 |
+| M29 | 相等、实例与证明 ergonomics | M28 | 已完成 | A14、B04、B11–B14、C04、C05、D11–D12（部分项经决策迁 F4） |
+| M30 | 工具链与包 | —（不依赖 M29 语义） | 待排期 | C11–C13、C25、D13–D15、D17–D18、E08 |
 | F1–F4 | 模块 v3 / 运行时 / 效应并发 / 生态 | 不排期 | 不排期 | D01–D04 |
 
-## 可排期阶段（M29 起）
-
-### M29：相等、实例与证明 ergonomics
-
-**目标**：让 `Eq`/字典/派生/证明写法成为类型系统的自然结果，而不是「泛型兜底 + 手写
-显式参数」的拼凑。
-
-**范围**（debt）：
-- 字典 schema：参数化/约束实例（`instance Eq a => Eq (F a)`）、参数化 `deriving (Eq/Show/
-  Ord)`、字典身份与 owner（B11/A13 收尾）；`monad/04` 的字典 binder bug（C05）。
-- 删除泛型 `==` 兜底与 `bi_eq_generic`/`valueEqDeep` 双实现（B04/C04）；若保留结构比较，
-  必须类型导向且与 interp 同语义（M25 已做安全域限制，在此收口）。
-- type-as-value / type codes 决策（B14/D09）；Type 级等式与 `cast` 的最终形态。
-- 证明 ergonomics：构造子部分应用 conv（`cong Succ`）、隐式等式搜索/auto、隐式值参数
-  `{x:a}` 与隐式模式、absurd/空族、Σ 与依赖索引取值（Ctx/Env）（B13/D08/D12）。
-- trait 能力与 coherence：多参数/默认方法/父类/关联类型、命名实例进搜索或删除该特性
-  （B11/B12/D11）。
-- 记录/投影 span 与诊断（A14）。
-
-**验收**：`mem (Box Int)` 等参数化实例可用；`deriving` 覆盖参数化 Show/Ord；函数相等在
-check 期被拒；`sym/cong/subst` 无需手写全显式参数；依赖索引 lookup 可表达；`monad/04`
-去掉 `.nointerp/.nocompile`。
-
-**前置**：M28。**决策点**：type codes vs 保留 `cast` 组合子；命名实例去留。
+## 可排期阶段（M30）
 
 ### M30：工具链与包
 
@@ -172,7 +155,7 @@ check 期被拒；`sym/cong/subst` 无需手写全显式参数；依赖索引 lo
 **验收**：CLI 无宿主异常泄漏；LSP/Index 在两模块以上工程可用；doc 与 usage 一致；构建可
 复现（同输入同产物）；benchmark 有基线。
 
-**前置**：—（可与 M26–M29 并行）。
+**前置**：—（工具链与包，不依赖 M29 的相等/实例语义；可独立排期）。
 
 ## 未来轨道（F = future，不排期、不占 M 编号）
 
@@ -200,7 +183,9 @@ GC/运行时正确性与性能；后端语义一致与 seed 边界不变。
 
 ### F4：标准库与包生态
 
-DT 验证库（Vec/Fin/Map/Set/排序/证明组合子）；包 registry、版本解析、lockfile、文档托管；
+DT 验证库（Vec/Fin/Map/Set/排序/证明组合子）；证明 ergonomics 进阶（隐式模式 `{p}`、
+`auto`/隐式等式搜索、absurd/空族消去、类型级部分应用、泛型 Σ / type codes 若采用）；
+trait 能力补完（多参数/默认方法/父类/关联类型）；包 registry、版本解析、lockfile、文档托管；
 生态与发布流程。
 
 **前置**：M29（相等/实例/证明 ergonomics）、M30（包基建）。**状态**：不排期；验证库优先
@@ -212,8 +197,13 @@ DT 验证库（Vec/Fin/Map/Set/排序/证明组合子）；包 registry、版本
   构造子字段 sort 受检，累积性/宇宙多态留研究（见「决策变更」）。
 - **擦除/QTT**：已定并落地（M28）**显式 multiplicity 标注（隐式 binder 即 Rig0）**，不做
   整程序使用分析；QTT 完整变体留研究。
-- **相等**：强制 Eq 字典 vs 类型导向结构比较；若保留兜底，其可比较类型域如何定义——M25 已做安全域限制，M29 定稿。
-- **type-as-value**：引入 type codes（类型作为一等值）vs 只保留 `cast` 组合子——M29。
+- **相等**：已定并落地（M29）**证据驱动**——`==` / `/=` 只有两条路径：`Int`/`String` 内建
+  特化、或 `Eq` 证据（字典 / `deriving` / 约束实例）；删除泛型结构比较兜底与 `valueEqDeep`
+  双实现，无实例/函数字段相等在 check 期报错。`<` 等比较同理删除「无 `Ord` 类 → 任意类型
+  泛型比较」兜底（`String`/`Bool` 的泛型运行时保留）。
+- **type-as-value**：已定并落地（M29）**不引入 type codes**；Type 级等式走擦除的 `Eq` 证据 +
+  `cast` 组合子（`dt/48–50`）；「类型在运行时位置使用」仍由 `CG_TypeUsedAtRuntime` /
+  `CG_TypeLevel*` 拒绝。运行时类型反射/类型级通用性留研究。
 - **无 manifest 时的 base 定位**：已定并落地（M26）**可执行文件相对布局 + `VUNA_BASE` 覆盖**；
   找不到 base 时明确报错，不退回纯内建。定位由 `Pkg.locateBase` 用
   `prim_getenv` / `prim_getcwd` / `prim_execPath` 三个内部原语实现（语义规范见 [primitives.md](reference/primitives.md)）。
@@ -235,6 +225,12 @@ DT 验证库（Vec/Fin/Map/Set/排序/证明组合子）；包 registry、版本
 | `Show`/`Eq`/`Ord` 内建 | 库为唯一来源 `Base.{Show,Eq,Ord}`（M24.7） | 删双份定义与短名桥接；与 List/Monad 对齐 |
 | Bool 去桩 = prelude 不再有 Bool | 只去值桩、保留类型别名；M27 再收双身份 | 旧 `==`/比较签名需要 Bool 名；现成为 debt A07 |
 | 非 Int/String 的 `==` 必须有实例 | 无实例时退回泛型结构比较 | 迁移期编译器源码大量裸比较；现成为 debt B04（M25/M29 收口） |
+| 相等：无实例时退回泛型结构比较（`bi_eq_generic` + interp 另一套 `valueEqDeep`，M23–M25 安全域限制） | **M29：`==`/`/=` 只允许内建特化（Int/String）或 `Eq` 证据**；删除兜底与双实现；参数化相等由约束实例 + 参数化 `deriving` 承接；无实例/函数字段相等在 check 期报错 | 双实现语义不可收敛（函数值/擦除实参/中立值三处分歧，C04 根因）；相等由证据决定，而不是 import 可见性或类型形状启发式 |
+| type-as-value：引入 type codes（类型作为一等运行时值） | **M29：不引入 type codes**；Type 级等式走擦除的 `Eq` 证据 + `cast` 组合子；类型级定义/隐式 Type 实参仍按擦除处理，运行时使用报错 | 收益仅 Type 级等式，成本是 Core 表示 + 后端契约提前锁死；M29 的真实缺口是证明 ergonomics（`{x:a}`/部分应用 `cong`），与 type codes 正交 |
+| 命名实例 `instance C T as name` + `@name` 选择 | **M29 删除该特性**：default 实例按实例头唯一（`deriving` 生成的也算），重叠实例报重复/重叠诊断 | 命名实例不参与搜索、与 default 抢同一 head 时靠人工优先级；无外部用户，删除比定义一层优先级语义便宜 |
+| trait 能力：M29 内做多参数/默认方法/父类/关联类型 | **M29 只做单参数 trait + 约束实例（`instance Eq a => Eq (F a)`）+ 参数化 `deriving`**；多参数/默认方法/父类/关联类型迁 F4 | 多参数要重写 `DtClass`/`Dict_C` 编码与 codegen，与实例上下文 schema 叠加风险高；先让单参数 schema 稳定 |
+| 证明 ergonomics：M29 全做（隐式模式 `{p}`、`auto`/隐式等式搜索、absurd/空族消去） | **M29 只做隐式值参数 `{x : a}` + 构造子未饱和 η 展开（`cong Succ`）**；隐式模式、`auto`/隐式等式搜索、absurd 语法迁 F4 | 隐式模式要改 pattern 语法 + 模式矩阵；`auto` 需要独立证明搜索器，与 trait 字典搜索是两套机制；M29 验收用不上 |
+| Σ 与依赖索引取值：M29 直接给泛型 Σ | **M29 用 Tarski 式存在式（运行时类型码 `Ty` + `Tm : Ty -> Type` + `Some`）表达依赖索引 lookup**；泛型 Σ 值级构造（字段类型依赖运行时值）迁 F4（需 type codes / 依赖字段表示） | 泛型 Σ 的 codegen 现在无法表示「类型依赖运行时值」（`CG_TypeLevelNameRuntime`），强行落地会留坏 API；Tarski 编码今天可编译可运行且语义等价 |
 | TCB 三包覆盖率/终止性豁免（静默/告警） | **M25 已删除**：compiler/base/toolchain 源码全部接受 SCT + 显式 fuel 检查，不再有 per-package 信任声明 | 任何信任名单都会变成静默绕过；检查必须对编译器自身与用户代码一致 |
 | seed 由 HM codegen 生成 | M24 起由 DT split codegen 生成，无 `.mli` | 终态只有一套 codegen，seed 必须自证 |
 | `--dt` 开关、`compile --package`、SigExport | M24 全部删除 | 单路径不需要开关；一次性工具用完即弃 |

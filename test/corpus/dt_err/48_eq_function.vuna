@@ -1,0 +1,10 @@
+-- M29（C04）：函数类型没有 Eq 实例，`==` 在 check 期被拒——不把函数值拖到运行时
+-- 多态相等（那会抛 Invalid_argument("compare: functional value")）。
+f : Int -> Int
+f x = x
+
+g : Int -> Int
+g x = x
+
+main : Bool
+main = f == g

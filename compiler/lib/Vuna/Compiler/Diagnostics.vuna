@@ -5,12 +5,14 @@ module Vuna.Compiler.Diagnostics
   , TcErr(..)
   , cgAll
   , cgCode
+  , cgDefLoc
   , cgEntryCode
   , cgEntryDesc
   , cgEntryTemplate
   , cgErr
   , cgErr0
   , cgErr1
+  , cgErrDefAt
   , cgMsg
   , cgTemplate
   , tcAll
@@ -87,6 +89,7 @@ data TcErr : Nat -> Type where
   IndexFuel : TcErr Zero
   InstanceAnnotationWrongUse : TcErr Zero
   InstanceHeadNotApp : TcErr Zero
+  InstanceContextNotDict : TcErr Zero
   InstanceMissingMethod : TcErr Zero
   InterfaceOneParam : TcErr Zero
   IntStringCaseNeedsFallback : TcErr Zero
@@ -117,10 +120,12 @@ data TcErr : Nat -> Type where
   CannotSolveOccurs : String -> TcErr (Succ Zero)
   TypeMismatchCaseVars : String -> TcErr (Succ Zero)
   DuplicateInstance : String -> TcErr (Succ Zero)
+  InstanceContextMissing : String -> TcErr (Succ Zero)
+  OverlappingInstances : String -> TcErr (Succ Zero)
   DuplicateSignature : String -> TcErr (Succ Zero)
   ExpectedSignature : String -> TcErr (Succ Zero)
   ExpectedType : String -> TcErr (Succ Zero)
-  GenericEqNotComparable : String -> TcErr (Succ Zero)
+  EqRequiresEvidence : String -> TcErr (Succ Zero)
   InstanceNotTrait : String -> TcErr (Succ Zero)
   InstanceUnknownMethod : String -> TcErr (Succ Zero)
   NeedsTwoArgs : String -> TcErr (Succ Zero)
@@ -191,6 +196,7 @@ tcCode ImpossibleBranchIndex = "TC_ImpossibleBranchIndex"
 tcCode IndexFuel = "TC_IndexFuel"
 tcCode InstanceAnnotationWrongUse = "TC_InstanceAnnotationWrongUse"
 tcCode InstanceHeadNotApp = "TC_InstanceHeadNotApp"
+tcCode InstanceContextNotDict = "TC_InstanceContextNotDict"
 tcCode InstanceMissingMethod = "TC_InstanceMissingMethod"
 tcCode InterfaceOneParam = "TC_InterfaceOneParam"
 tcCode IntStringCaseNeedsFallback = "TC_IntStringCaseNeedsFallback"
@@ -220,10 +226,12 @@ tcCode (CannotSolveHigherOrder _) = "TC_CannotSolveHigherOrder"
 tcCode (CannotSolveOccurs _) = "TC_CannotSolveOccurs"
 tcCode (TypeMismatchCaseVars _) = "TC_TypeMismatchCaseVars"
 tcCode (DuplicateInstance _) = "TC_DuplicateInstance"
+tcCode (InstanceContextMissing _) = "TC_InstanceContextMissing"
+tcCode (OverlappingInstances _) = "TC_OverlappingInstances"
 tcCode (DuplicateSignature _) = "TC_DuplicateSignature"
 tcCode (ExpectedSignature _) = "TC_ExpectedSignature"
 tcCode (ExpectedType _) = "TC_ExpectedType"
-tcCode (GenericEqNotComparable _) = "TC_GenericEqNotComparable"
+tcCode (EqRequiresEvidence _) = "TC_EqRequiresEvidence"
 tcCode (InstanceNotTrait _) = "TC_InstanceNotTrait"
 tcCode (InstanceUnknownMethod _) = "TC_InstanceUnknownMethod"
 tcCode (NeedsTwoArgs _) = "TC_NeedsTwoArgs"
@@ -291,6 +299,8 @@ tcTemplate IndexFuel = "index unification ran out of reduction fuel"
 tcTemplate InstanceAnnotationWrongUse =
   "@instance can only be used with a trait method (write `method @instance`)"
 tcTemplate InstanceHeadNotApp = "instance head must be an interface application (e.g. Show Int)"
+tcTemplate InstanceContextNotDict =
+  "instance context item must be a single-parameter interface application (e.g. Eq a)"
 tcTemplate InstanceMissingMethod = "instance is missing an implementation for an interface method"
 tcTemplate InterfaceOneParam = "interfaces must have exactly one parameter (M15 limitation)"
 tcTemplate IntStringCaseNeedsFallback =
@@ -325,11 +335,13 @@ tcTemplate (CannotSolveOccurs _) = "cannot solve metavariable ?<0> (occurs check
 tcTemplate (TypeMismatchCaseVars _) =
   "type mismatch: case branch <0> binds a different number of variables"
 tcTemplate (DuplicateInstance _) = "duplicate instance <0>"
+tcTemplate (InstanceContextMissing _) = "instance context cannot be satisfied: <0>"
+tcTemplate (OverlappingInstances _) = "overlapping instance <0>"
 tcTemplate (DuplicateSignature _) = "duplicate signature for <0>"
 tcTemplate (ExpectedSignature _) = "expected a type signature for <0>"
 tcTemplate (ExpectedType _) = "expected a type, but this expression has type <0>"
-tcTemplate (GenericEqNotComparable _) =
-  "cannot compare values of type <0> with generic equality; add an Eq instance or deriving (Eq)"
+tcTemplate (EqRequiresEvidence _) =
+  "cannot use == or /= on values of type <0>: provide an Eq instance (or derive Eq); the Eq trait must be in scope"
 tcTemplate (InstanceNotTrait _) = "instance <0> is not an instance of a trait"
 tcTemplate (InstanceUnknownMethod _) = "instance has unknown method <0>"
 tcTemplate (NeedsTwoArgs _) = "`<0>` needs exactly two arguments"
@@ -429,6 +441,7 @@ tcAll =
     TcEntry (tcCode IndexFuel) (tcTemplate IndexFuel) "索引归一化耗尽归约燃料",
     TcEntry (tcCode InstanceAnnotationWrongUse) (tcTemplate InstanceAnnotationWrongUse) "@instance 只能用于 trait 方法",
     TcEntry (tcCode InstanceHeadNotApp) (tcTemplate InstanceHeadNotApp) "instance 头必须是接口应用",
+    TcEntry (tcCode InstanceContextNotDict) (tcTemplate InstanceContextNotDict) "实例上下文必须是单参数 trait 应用",
     TcEntry (tcCode InstanceMissingMethod) (tcTemplate InstanceMissingMethod) "instance 缺方法实现",
     TcEntry (tcCode InterfaceOneParam) (tcTemplate InterfaceOneParam) "接口必须恰好一个参数",
     TcEntry (tcCode IntStringCaseNeedsFallback) (tcTemplate IntStringCaseNeedsFallback) "Int/String 的 case 需要兜底分支",
@@ -457,10 +470,12 @@ tcAll =
     TcEntry (tcCode (CannotSolveOccurs "")) (tcTemplate (CannotSolveOccurs "")) "解里出现自身（occurs check）",
     TcEntry (tcCode (TypeMismatchCaseVars "")) (tcTemplate (TypeMismatchCaseVars "")) "case 分支绑定变量数不同",
     TcEntry (tcCode (DuplicateInstance "")) (tcTemplate (DuplicateInstance "")) "重复的 instance",
+    TcEntry (tcCode (InstanceContextMissing "")) (tcTemplate (InstanceContextMissing "")) "实例上下文无法满足",
+    TcEntry (tcCode (OverlappingInstances "")) (tcTemplate (OverlappingInstances "")) "重叠的 instance",
     TcEntry (tcCode (DuplicateSignature "")) (tcTemplate (DuplicateSignature "")) "重复的签名",
     TcEntry (tcCode (ExpectedSignature "")) (tcTemplate (ExpectedSignature "")) "缺少类型签名",
     TcEntry (tcCode (ExpectedType "")) (tcTemplate (ExpectedType "")) "期望类型",
-    TcEntry (tcCode (GenericEqNotComparable "")) (tcTemplate (GenericEqNotComparable "")) "泛型相等不支持该类型",
+    TcEntry (tcCode (EqRequiresEvidence "")) (tcTemplate (EqRequiresEvidence "")) "相等需要 Eq 证据（无泛型兜底）",
     TcEntry (tcCode (InstanceNotTrait "")) (tcTemplate (InstanceNotTrait "")) "instance 不属于 trait",
     TcEntry (tcCode (InstanceUnknownMethod "")) (tcTemplate (InstanceUnknownMethod "")) "instance 含未知方法",
     TcEntry (tcCode (NeedsTwoArgs "")) (tcTemplate (NeedsTwoArgs "")) "需要恰好两个实参",
@@ -541,6 +556,22 @@ cgErr0 e = cgErr e VNil
 
 cgErr1 : CgErr (Succ Zero) -> String -> Result a
 cgErr1 e a0 = cgErr e (VCons a0 VNil)
+
+-- ---------------------------------------------------------------
+-- M29（A14）：定义级 CG 诊断（带来源位置）
+-- ---------------------------------------------------------------
+-- `DtDef` 现在携带来源 `Maybe Span`（顶层定义 = 子句 span；instance 生成定义 =
+-- instance 声明 span；trait 投影 = trait 声明 span）。CG 诊断在 **def 粒度**补位置，
+-- 格式与 Elab 诊断一致：`文件:行:列: in `name`: [CODE] 消息`；没有 span 时退回旧的
+-- `in `name`: `（不改变既有夹具断言的子串）。
+-- 本模块不依赖 `Elab/Types`（避免环），因此以 `Maybe Span` + 名字为参数。
+cgDefLoc : Maybe Span -> String -> String
+cgDefLoc span name = case span of
+  Just sp => showSpanLoc sp ++ ": in `" ++ name ++ "`: "
+  Nothing => "in `" ++ name ++ "`: "
+
+cgErrDefAt : Maybe Span -> String -> {n : Nat} -> CgErr n -> Vec String n -> Result a
+cgErrDefAt span name e args = Err (cgDefLoc span name ++ cgMsg e args)
 
 -- ---------------------------------------------------------------
 -- 无位置版本：Core（Conv/Eval）等底层诊断拿不到 Span，但仍要走同一套码与模板。

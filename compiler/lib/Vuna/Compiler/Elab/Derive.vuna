@@ -48,7 +48,7 @@ collectDerivings : List Decl -> Result (List Decl)
 collectDerivings [] = Ok []
 collectDerivings (d :: rest) = case d of
   DData name params kind ctors derivings sp =>
-    if derivings == [] then collectDerivings rest
+    if length derivings == 0 then collectDerivings rest
     else andThen (derivingsFor name params ctors derivings sp)
       (\insts => andThen (collectDerivings rest) (\more => Ok (append insts more)))
   _ => collectDerivings rest
@@ -58,35 +58,51 @@ derivingsFor dname params ctors derivings sp = derivingsForGo dname params ctors
 
 derivingsForGo : String -> List String -> List Ctor -> List String -> Span -> List Decl -> Result (List Decl)
 derivingsForGo dname params ctors [] sp acc = Ok (reverse acc)
--- M23：参数化 data 的派生。
---   - Eq：DT 的字典是**单态**编码（`Dict_Eq p` 只服务一个具体 p），无法表达
---     「对所有 a：Eq (Maybe2 a)」。因此不生成实例：`==` / `/=` 在具体类型上会走
---     精化期的**通用结构比较**兜底（`bi_eq_generic`，语义对齐 HM 的 OCaml 结构相等），
---     traits/05 的 `Just2 1 == Just2 1` 因此可用。代价：需要 Eq 字典的场景（例如
---     `mem` 作用在 `List (Maybe2 Int)` 上）仍找不到实例——记入 limits.md。
---   - Show / Ord：派生体里的字段比较/展示需要 `Dict_Show a` / `Dict_Ord a`，
---     单态字典同样表达不了；直接报清晰错误（HM 对参数化 Show 也是拒绝的）。
-derivingsForGo dname params ctors (t :: rest) sp acc = case params of
-  [] =>
-    andThen (deriveInstance dname params ctors t sp)
-      (\decl => derivingsForGo dname params ctors rest sp (decl :: acc))
-  _ =>
-    if traitShortName t == "Eq" then derivingsForGo dname params ctors rest sp acc
-    else Err
-      (showSpanLoc sp ++ ": DT: deriving " ++ traitShortName t ++ " is only supported for non-parameterized data types")
+-- M29-T2b：参数化 data 的派生生成**带 context 的实例**（`Eq a => Eq (Box a)`）。
+-- ctx 只包含「在某个构造子字段类型里出现过」的类型参数（顺序 = 声明顺序），
+-- 与实例 tele 一一对应；`deriving (Ord)` 的字段比较只用 lt/le，因此只要求 Ord ctx。
+derivingsForGo dname params ctors (t :: rest) sp acc =
+  andThen (deriveInstance dname params ctors t sp)
+    (\decl => derivingsForGo dname params ctors rest sp (decl :: acc))
+
+-- ctx 参数：data 参数里在构造子字段类型中出现过的（保持声明顺序）。
+deriveCtxParams : List String -> List Ctor -> List String
+deriveCtxParams [] ctors = []
+deriveCtxParams (p :: rest) ctors =
+  if anyCtorMentions p ctors then p :: deriveCtxParams rest ctors else deriveCtxParams rest ctors
+
+anyCtorMentions : String -> List Ctor -> Bool
+anyCtorMentions p [] = False
+anyCtorMentions p (c :: rest) = case c of
+  Ctor cn ty ar cnsp => if exprMentionsName p ty then True else anyCtorMentions p rest
+
+exprMentionsName : String -> Expr -> Bool
+exprMentionsName p e = case e of
+  EVar n sp => n == p
+  EApp fn args sp => exprMentionsName p fn || anyExprMentions p args
+  EPi n i dom cod sp => exprMentionsName p dom || exprMentionsName p cod
+  EAnn v ty sp => exprMentionsName p v || exprMentionsName p ty
+  _ => False
+
+anyExprMentions : String -> List Expr -> Bool
+anyExprMentions p [] = False
+anyExprMentions p (e :: rest) = exprMentionsName p e || anyExprMentions p rest
 
 -- 单个类的实例声明。`tn` 是 Loader 解析后的完整类名；方法名（`show` / `eq` / ...）由
 -- `elabInstance` 按类方法的最后一段匹配，因此实例里仍写短名。
+-- M29-T2b：参数化 data 生成带 ctx 的 DInstance（ctx 顺序 = 声明顺序，见 deriveCtxParams）。
 deriveInstance : String -> List String -> List Ctor -> String -> Span -> Result Decl
 deriveInstance dname params ctors tn sp =
   let
     hd = instHead tn dname params sp
+    used = deriveCtxParams params ctors
+    ctxExprs = map (\p => EApp (EVar tn sp) [EVar p sp] sp) used
   in case traitShortName tn of
     "Show" =>
       let
         proj = traitMethodGlobal tn "show"
         ms = [DFun "show" [PVar "sx" sp] (showBody proj ctors "sx" sp) sp]
-      in Ok (DInstance Nothing False hd ms sp)
+      in Ok (DInstance ctxExprs hd ms sp)
     "Eq" =>
       let
         eqProj = traitMethodGlobal tn "eq"
@@ -94,23 +110,28 @@ deriveInstance dname params ctors tn sp =
           [ DFun "eq" [PVar "sx" sp, PVar "sy" sp] (eqBody ctors sp) sp,
             DFun "neq" [PVar "sx" sp, PVar "sy" sp] (neqBody eqProj sp) sp
           ]
-      in Ok (DInstance Nothing False hd ms sp)
+      in Ok (DInstance ctxExprs hd ms sp)
     "Ord" =>
       let
         ltProj = traitMethodGlobal tn "lt"
         leProj = traitMethodGlobal tn "le"
         ms =
-          [ DFun "lt" [PVar "sx" sp, PVar "sy" sp] (ordBody ctors sp) sp,
+          [ DFun "lt" [PVar "sx" sp, PVar "sy" sp] (ordBody leProj ctors sp) sp,
             DFun "le" [PVar "sx" sp, PVar "sy" sp] (leBody ltProj sp) sp,
             DFun "gt" [PVar "sx" sp, PVar "sy" sp] (gtBody ltProj sp) sp,
             DFun "ge" [PVar "sx" sp, PVar "sy" sp] (geBody leProj sp) sp
           ]
-      in Ok (DInstance Nothing False hd ms sp)
+      in Ok (DInstance ctxExprs hd ms sp)
     kind => Err (showSpanLoc sp ++ ": cannot derive `" ++ kind ++ "` (supported: Show, Eq, Ord)")
 
 -- `T <Data> a1 .. an` 形态的实例头（`T` 是解析后的完整类名）。
 instHead : String -> String -> List String -> Span -> Expr
-instHead tn dname params sp = EApp (EVar tn sp) (EVar dname sp :: map (\p => EVar p sp) params) sp
+instHead tn dname params sp = EApp (EVar tn sp) [applyTypeParams (EVar dname sp) params sp] sp
+
+-- `Box` 应用到 data 参数上：`Box a b`（单参数 trait 的实例头实参是一个**类型**）。
+applyTypeParams : Expr -> List String -> Span -> Expr
+applyTypeParams head [] sp = head
+applyTypeParams head ps sp = EApp head (map (\p => EVar p sp) ps) sp
 
 -- ---------------------------------------------------------------
 -- Show
@@ -181,46 +202,47 @@ neqBody eqProj sp =
 -- ---------------------------------------------------------------
 -- Ord（构造子按声明顺序为序，同构造子逐字段比）
 -- ---------------------------------------------------------------
-ordBody : List Ctor -> Span -> Expr
-ordBody ctors sp = ECase (EVar "sx" sp) (ordAlts ctors ctors 0 sp) sp
+ordBody : String -> List Ctor -> Span -> Expr
+ordBody leProj ctors sp = ECase (EVar "sx" sp) (ordAlts leProj ctors ctors 0 sp) sp
 
-ordAlts : List Ctor -> List Ctor -> Int -> Span -> List (Pair Pat Expr)
-ordAlts all [] i sp = []
-ordAlts all (c :: rest) i sp = case c of
+ordAlts : String -> List Ctor -> List Ctor -> Int -> Span -> List (Pair Pat Expr)
+ordAlts leProj all [] i sp = []
+ordAlts leProj all (c :: rest) i sp = case c of
   Ctor cn ty ar cnsp =>
     let
       vs = varNames "fa" ar
       pat = PCon cn (map (\v => PVar v sp) vs) sp
-      body = ECase (EVar "sy" sp) (ordInner i ar all sp) sp
-    in Pair pat body :: ordAlts all rest (i + 1) sp
+      body = ECase (EVar "sy" sp) (ordInner leProj i ar all sp) sp
+    in Pair pat body :: ordAlts leProj all rest (i + 1) sp
 
 -- 对 `sy` 再分派：索引更小的构造子 ⇒ False，同构造子 ⇒ 逐字段 lt，更大 ⇒ True。
-ordInner : Int -> Int -> List Ctor -> Span -> List (Pair Pat Expr)
-ordInner i ar all sp = ordInnerGo i ar all 0 sp
+ordInner : String -> Int -> Int -> List Ctor -> Span -> List (Pair Pat Expr)
+ordInner leProj i ar all sp = ordInnerGo leProj i ar all 0 sp
 
-ordInnerGo : Int -> Int -> List Ctor -> Int -> Span -> List (Pair Pat Expr)
-ordInnerGo i ar [] j sp = []
-ordInnerGo i ar (c :: rest) j sp = case c of
+ordInnerGo : String -> Int -> Int -> List Ctor -> Int -> Span -> List (Pair Pat Expr)
+ordInnerGo leProj i ar [] j sp = []
+ordInnerGo leProj i ar (c :: rest) j sp = case c of
   Ctor cn ty car cnsp =>
     let
       gs = varNames "fb" car
       pat = PCon cn (map (\v => PVar v sp) gs) sp
       body =
-        if j == i then ltFields (varNames "fa" ar) gs sp
+        if j == i then ltFields leProj (varNames "fa" ar) gs sp
         else if j < i then boolFalse sp else boolTrue sp
-    in Pair pat body :: ordInnerGo i ar rest (j + 1) sp
+    in Pair pat body :: ordInnerGo leProj i ar rest (j + 1) sp
 
--- 逐字段 `<`：`f0 < g0 || (f0 == g0 && (f1 < g1 || ..))`；无字段 ⇒ False。
-ltFields : List String -> List String -> Span -> Expr
-ltFields [] gs sp = boolFalse sp
-ltFields (f :: fs) (g :: gs) sp = case fs of
+-- 逐字段 `<`：`f0 < g0 || (le f0 g0 && le g0 f0 && (f1 < g1 || ..))`；无字段 ⇒ False。
+-- M29-T2b：只用 Ord 的 lt/le（不再用 `==`），因此 `deriving (Ord)` 只需 Ord ctx。
+ltFields : String -> List String -> List String -> Span -> Expr
+ltFields leProj [] gs sp = boolFalse sp
+ltFields leProj (f :: fs) (g :: gs) sp = case fs of
   [] => EApp (EVar "<" sp) [EVar f sp, EVar g sp] sp
   _ =>
     EApp (EVar "||" sp)
-      [EApp (EVar "<" sp) [EVar f sp, EVar g sp] sp, EApp (EVar "&&" sp) [EApp (EVar "==" sp) [EVar f sp, EVar g sp] sp, ltFields fs gs sp] sp]
+      [EApp (EVar "<" sp) [EVar f sp, EVar g sp] sp, EApp (EVar "&&" sp) [EApp (EVar leProj sp) [EVar f sp, EVar g sp] sp, EApp (EVar "&&" sp) [EApp (EVar leProj sp) [EVar g sp, EVar f sp] sp, ltFields leProj fs gs sp] sp] sp]
       sp
 -- M23：字段数不匹配的组合走不到（derive 生成的字段表按构造子对齐），但 DT 要求模式矩阵穷尽。
-ltFields _ _ sp = boolFalse sp
+ltFields leProj _ _ sp = boolFalse sp
 
 -- `le sx sy = lt sx sy || !(lt sy sx)`——只用 `lt` 派生，不依赖 `Eq` 实例
 -- （`deriving (Ord)` 不要求同时 derive `Eq`）。`lt` 用解析后的投影名。

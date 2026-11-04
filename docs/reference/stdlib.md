@@ -78,7 +78,10 @@ module Base.IO (IO, print, println, readFile, writeFile, readLine, readDir, ...)
 - **`Show` / `Eq` / `Ord` 在库**：trait 声明、方法投影与 `Int` / `String` / `Bool` 实例
   全在 `Base.Show` / `Base.Eq` / `Base.Ord`，随 `Prelude` 自动导入。编译器只保留**机制**：
   `deriving (Show, Eq, Ord)` 的展开、`==` / `/=` 与比较的 `Int` / `String` 运行时特化、
-  `if` / 字面量等语法。字符串展示只有一个实现 `strShow`——`Base.Show` 的 `String` 实例
+  `if` / 字面量等语法。**M29 起相等证据驱动**：`==` / `/=` 只有 Int/String 内建特化或
+  `Eq` 证据（实例 / `deriving` / 约束实例），无实例与函数相等在 check 期报错；参数化
+  类型的 `deriving` 展开成约束实例（`instance Eq a => Eq (F a)`），库里可写的容器实例
+  也按这个形态声明。字符串展示只有一个实现 `strShow`——`Base.Show` 的 `String` 实例
   是 `show s = strShow s`，库不再另写一套转义；`Show Bool` 用 `if` 输出 `True` / `False`，
   `Eq Bool` 方法体用析取（不能自递归）。
 - **效果原语只有 `prim_*` 名**：旧的公开名（`print` / `readFile` / `exit` / …）已删除，

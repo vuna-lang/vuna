@@ -32,14 +32,16 @@ module Vuna.Compiler.Elab.Types
   , dtDefBody
   , dtDefHasBody
   , dtDefName
+  , dtDefSpan
   , dtDefType
   , dtGoalCtx
   , dtGoalMeta
   , dtGoalSpan
   , dtGoalType
+  , dtInstCtx
   , dtInstHead
   , dtInstName
-  , dtInstNamed
+  , dtInstTele
   , dtProgClasses
   , dtProgDatas
   , dtProgDefs
@@ -103,26 +105,34 @@ import Vuna.Compiler.Frontend.Ast
 -- M28：`DtAxiom` 是**无体/不透明**的顶层（`axiom name : Ty`）：它只有类型，没有
 -- 运行时定义体（决策 5 / D10）。类型层引用合法；运行时位置的使用由擦除检查报
 -- `CG_AxiomAtRuntime`。`dtDefBody` 因此返回 `Maybe Term`。
+-- M29（A14）：末位带**来源 span**——顶层 DFun/DAxiom 用子句 span；instance 生成的
+-- 字典定义用 instance 声明 span；trait 方法投影用 trait 声明 span；其它生成项（无来源）
+-- 给 `Nothing`。codegen/擦除诊断据此把 `file:line:col:` 前缀补上。
 data DtDef : Type where
-  DtDef : String -> Term -> Term -> DtDef
-  DtAxiom : String -> Term -> DtDef
+  DtDef : String -> Term -> Term -> Maybe Span -> DtDef
+  DtAxiom : String -> Term -> Maybe Span -> DtDef
 
 dtDefName : DtDef -> String
-dtDefName (DtDef name ty body) = name
-dtDefName (DtAxiom name ty) = name
+dtDefName (DtDef name ty body span) = name
+dtDefName (DtAxiom name ty span) = name
 
 dtDefType : DtDef -> Term
-dtDefType (DtDef name ty body) = ty
-dtDefType (DtAxiom name ty) = ty
+dtDefType (DtDef name ty body span) = ty
+dtDefType (DtAxiom name ty span) = ty
 
 dtDefBody : DtDef -> Maybe Term
-dtDefBody (DtDef name ty body) = Just body
-dtDefBody (DtAxiom name ty) = Nothing
+dtDefBody (DtDef name ty body span) = Just body
+dtDefBody (DtAxiom name ty span) = Nothing
 
 -- 有运行时定义体的定义（axiom 不算）：构造 def 表 / 求值环境时用它滤掉无体顶层。
 dtDefHasBody : DtDef -> Bool
-dtDefHasBody (DtDef name ty body) = True
-dtDefHasBody (DtAxiom name ty) = False
+dtDefHasBody (DtDef name ty body span) = True
+dtDefHasBody (DtAxiom name ty span) = False
+
+-- 来源 span（A14 唯一读入口）：诊断在 def 粒度补 `file:line:col:` 前缀；`Nothing` 时保持无位置。
+dtDefSpan : DtDef -> Maybe Span
+dtDefSpan (DtDef name ty body span) = span
+dtDefSpan (DtAxiom name ty span) = span
 
 -- M14：一个构造子。telescope 是「族参数 + 字段」的完整 binder 表（名字 / 擦除标志），
 -- 类型项是闭合的（`{a : Type} -> {n : Nat} -> a -> Vec a n -> Vec a (Succ n)` 形态）。
@@ -190,16 +200,19 @@ dtClassFieldTys (DtClass name params projs fieldTys) = fieldTys
 -- M23：`as name` 的命名实例**不参与**自动实例搜索（只能 `@name` 选中，与 HM 一致），
 -- 否则 `instance Pretty Color` 与 `instance Pretty Color as fancy` 会撞成歧义。
 data DtInst : Type where
-  DtInst : String -> Term -> Bool -> DtInst
+  DtInst : String -> List (Pair String Term) -> List Term -> Term -> DtInst
 
 dtInstName : DtInst -> String
-dtInstName (DtInst name head named) = name
+dtInstName (DtInst name tele ctxE head) = name
+
+dtInstTele : DtInst -> List (Pair String Term)
+dtInstTele (DtInst name tele ctxE head) = tele
+
+dtInstCtx : DtInst -> List Term
+dtInstCtx (DtInst name tele ctxE head) = ctxE
 
 dtInstHead : DtInst -> Term
-dtInstHead (DtInst name head named) = head
-
-dtInstNamed : DtInst -> Bool
-dtInstNamed (DtInst name head named) = named
+dtInstHead (DtInst name tele ctxE head) = head
 
 -- 精化状态：下一个元变量编号、已解元变量（level 形态的 Value）、已精化的定义体、
 -- 已声明的归纳族（M14：case 精化需要知道族的构造子 telescope）。

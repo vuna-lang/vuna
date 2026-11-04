@@ -49,7 +49,6 @@ exprRefsB bound e = case e of
   ERecord rn fields sp => concatMap (\q => exprRefsB bound (secondOf q)) fields
   ERecUpdate base fields sp =>
     append (exprRefsB bound base) (concatMap (\q => exprRefsB bound (secondOf q)) fields)
-  EInstSel base meth sp => exprRefsB bound base
   EDo stmts sp => secondOf (refsOfStmts bound stmts)
   EAnn value ty sp => append (exprRefsB bound value) (exprRefsB bound ty)
 
@@ -185,7 +184,6 @@ else case e of
   ERecUpdate base fields sp =>
     strWalkFields (fuel - 1) comp ctors projs p sizes caller facts region fields
       (strWalk (fuel - 1) comp ctors projs p sizes caller facts region base acc)
-  EInstSel base meth sp => strWalk (fuel - 1) comp ctors projs p sizes caller facts region base acc
   EDo stmts sp => strWalkStmts (fuel - 1) comp ctors projs p sizes caller facts region stmts acc
   EAnn value ty sp =>
     strWalk (fuel - 1) comp ctors projs p sizes caller facts region ty

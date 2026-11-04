@@ -39,8 +39,8 @@ readme_lines 165
 #   - M24.5：dt-parity.md §6 重写（实测能力表 + 边界）到 203 行；Elab 新增 scrutinee 反射、
 #     不可达分支、inlineSolvedMetas（3348 → 3513）。按实测重标定 max_ref 208 / max_module 3530；
 #     入口文档（coldstart/agents/arch/readme）不变。
-max_ref_lines 248
-max_module_lines 825
+max_ref_lines 286
+max_module_lines 1195
 #   - M27：新增 `primitives.md` 与内建/原语/能力文档、`Vuna.Compiler.Intrinsics` 模块；
 #     按 `sh nix/context-budget.sh .` 实测收紧：coldstart 29055 / agents 104 / arch 156 /
 #     readme 163 / max_ref 206 / max_module 811（入口文档有 45B 余量，agents 临界）。
@@ -57,3 +57,10 @@ max_module_lines 825
 #     reference/type-system.md 等；`Elab/Term/Impl.vuna` 820 行（case 单一入口 + 显式命名
 #     空间查询）。按 `sh nix/context-budget.sh .` 实测重新标定：coldstart 30100 /
 #     arch 168 / max_ref 248 / max_module 825（仍保住 agents/readme 不涨）。
+#   - M29（相等/实例/证明 ergonomics）：实例字典 schema v2 把「实例头/ctx 类型化 +
+#     elabInstance 方法体 + 实例搜索/去重」集中在 `Elab/Trait.vuna`（1195 行，超 ~800
+#     行目标；拆分留 M30，debt B21 记录了 Dict 死 API 清理），max_module_lines 825 → 1195
+#     （按实测单点增长，非格式化）；`docs/reference/dt.md` 记录 M29 终态语义（相等证据
+#     驱动/约束实例/参数化 deriving/命名实例删除/隐式值参数/Tarski 存在式/type codes 决策）
+#     后 248 → 286。入口文档（coldstart/arch/readme/agents）**未涨**：M29 段压进
+#     architecture 一行摘要并删去重复链接，coldstart 29685 / arch 167（均在旧预算内）。

@@ -7,9 +7,12 @@
 
 vuna 原生测试按编号章节组织（**38 个章节**：编号到 39，第 12 段已删除；34a–34d 归在
 第 34 段内，`--list` 列 38 行），用 `vuna` / `vuna-seed` 驱动，不依赖外部 vuna 实现，
-但需要 `ocamlopt` 作为 codegen 后端。M28 实测 **1278 checks 全绿**（含第 13 段 seed
-冒烟；`VUNA_SEED` 指向 rotation 后的 `vuna-seed`），全量运行约 **1m40s**（本机读数；
-nix check 内含完整工具链，墙钟与机器相关）。
+但需要 `ocamlopt` 作为 codegen 后端。M29 实测 **1359 checks 全绿**（`sh test/run-tests.sh`；
+本机墙钟含包构建与 seed 冒烟、受机器负载影响，精确数随夹具增删变化）。M29 新增
+`dt/60_ctor_eta`、`dt/61_implicit_values`、`dt/62_sigma_basic`、`dt/63_dep_lookup`、
+`dt_err/42`–`52`、`traits/14_constrained_instance`、`traits/15_parametric_deriving`、
+`records/97_field_access_span` 与命名实例/`@` 语法负例（`traits/96`–`98`）；nix check 内
+含完整工具链，墙钟与机器相关。
 
 ```console
 sh test/run-tests.sh        # 需要 PATH 中有 vuna 与 vuna-seed
@@ -61,10 +64,12 @@ DT 精化 + 擦除 codegen，`build` = DT 逐模块 codegen + `build.sh`）。�
 语言夹具只走 DT：`interp`（DT 精化 + 核心求值）、`check`、`compile` + ocamlopt。
 `<base>.vuna.nointerp` 标记跳过 interp 对拍，只做 `compile` + 运行，用于效果程序
 （`main : IO a`）与核心求值器不可归约的夹具（`strUnpack`/`strPack`/`strConcatMany`/
-`strSubstTemplate`、多隐式参数字典；M27 起这些内建的 interp 不归约是显式分类）；
-`.nocompile` 跳过 codegen（仅 `monad/04_kind_generic`，只断言 `check`）。当前 15 个
-`.nointerp`（`dt/34`、`dt/35`、`dt/56`、`dt_base/01`–`03`/`06`、`monad/04_kind_generic`、
-`run/10`/`16`/`17`、`stdlib/03`/`07`/`09`/`10`）。负例 `.err` 是稳定诊断子串，interp/compile 文案不同时用 `.cerr`。
+`strSubstTemplate`；M27 起这些内建的 interp 不归约是显式分类）。M29 修掉 C05 的字典
+binder 位置后，`monad/04_kind_generic` 不再需要标记——**当前 14 个 `.nointerp`**（`dt/34`、
+`dt/35`、`dt/56`、`dt_base/01`–`03`/`06`、`run/10`/`16`/`17`、`stdlib/03`/`07`/`09`/`10`）。
+`.nocompile` 标记 runner 仍识别（`test/run-tests.sh` 的跳过分支），但**已无夹具使用**：
+它原本只服务 C05「多隐式参数字典的擦除 codegen 尚不支持」，M29 修复后语义过期，属于
+待清理的死标记。负例 `.err` 是稳定诊断子串，interp/compile 文案不同时用 `.cerr`。
 
 - `corpus/run/*.vuna`：`interp` 输出 vs `.out` golden；`compile`→ocamlopt→运行再比对；
   `.nointerp`（`10_string_pack`、`16_file_exists`、`17_file_meta`）只跑后者；M27 新增
@@ -83,14 +88,17 @@ DT 精化 + 擦除 codegen，`build` = DT 逐模块 codegen + `build.sh`）。�
   （record update 与参数化 record 由 `Elab.Records`（原 `DtRecords`）支持）；90–95
   反例要求错误片段、非 0 退出、compile 不写输出；跨模块 `0*_*/`（`Point(..)` 可构造/匹配，`Point` 保持抽象）与
   `9*_*/`（抽象构造器不可见）同样覆盖；`95_ambiguous_field` 覆盖歧义字段；
-- `corpus/traits/` trait：正例 01–13 `interp` 与 `compile` 比对 golden（含泛型字典穿参、
-  多类型 default、02 命名实例 `@fancy`、08 跨模块 `@M.fancy`）；错误例 90–95、98 要求
-  错误片段、非 0 退出、不写输出（孤儿默认、重复实例、未知 `@`、head 不符、缺/未知方法、
-  显式只写 `Trait` 不写 `(..)`）；
+- `corpus/traits/` trait：正例 `interp` 与 `compile` 比对 golden（含泛型字典穿参、
+  多类型 default；**M29 新增** `14_constrained_instance`（`instance Eq a => Eq (Box a)`
+  + `mem (Box 1) [...]`）与 `15_parametric_deriving`（参数化
+  `deriving (Show, Eq, Ord)`））；命名实例（`as name` / `@fancy` / `@M.fancy`）特性已删，
+  其正例夹具一并删除。错误例 90–95、98 要求错误片段、非 0 退出、不写输出（孤儿实例、
+  重复实例/相干性、head 不符、缺/未知方法、显式只写 `Trait` 不写 `(..)`）；M29 新增
+  `96_named_instance_removed` / `97_instance_sel_removed`（`as` / `@` 语法已删除的解析负例）；
 - `corpus/monad/`：`do` / `>>=` / `>>` 在 Maybe/List 上的正例，含高阶 kind 泛型
-  `bindPair : m a -> m b -> m (Pair a b)`；`04_kind_generic` 带 `.nointerp` +
-  `.nocompile`（多隐式参数字典，只断言 `check`）；错误例覆盖 kind 不符、无 Monad、
-  do 结尾/绑定模式非法；
+  `bindPair : m a -> m b -> m (Pair a b)`；`04_kind_generic`（多隐式参数字典）M29 起
+  已去掉 `.nointerp` / `.nocompile`，check / interp / compile+运行三路全过（C05）；
+  错误例覆盖 kind 不符、无 Monad、do 结尾/绑定模式非法；
 - `corpus/stdlib/`：`Base.*` 与 do/IO 正例、错误例；效果
   夹具 `03_do_io`、`09_io`、`10_package` 与 `strUnpack`/`strPack` 的 `07_string` 带
   `.nointerp`；另有 `test/corpus/fmt/check.sh` 覆盖格式化 golden、注释保留、行宽折行、
@@ -123,17 +131,22 @@ DT 精化 + 擦除 codegen，`build` = DT 逐模块 codegen + `build.sh`）。�
 - `corpus/lsp/smoke.sh`：`vuna lsp` 的 JSON-RPC 冒烟（诊断来自 DT 精化 +
   `goalsOfProgram` 洞目标）；**M26 未改 LSP 加载语义**（仍 parse 级、含 import 跳过类型
   检查），冒烟只锁当前行为；
-- `corpus/dt/*`（64 个正例：M27 新增 `54_user_bool_data`、`55_user_io_data`、
-  `56_user_list_data`（`.nointerp`），覆盖用户本地 `data Bool`/`IO`/`List` 与 canonical
-  `Base.*` 身份并存；M28 新增 `57_universe`、`58_case_matrix`/`58b_case_absurd`、
-  `59_axiom`/`59_eta`/`59_let_where`、`60_erasure_unify`、`61_namespace_dual`）、
-  `corpus/dt_err/*`（45 个负例，其中
-  `35_where_no_sig` 是 M24 新增，`36`–`38` 与 `dt/45`–`52` 是 M24.5/M24.6 新增，
-  M28 新增 `40_universe_*`、`41*`（冗余/不可达分支）、`42_axiom_runtime`、
-  `44_namespace_value_as_type`，且 `08_arity` 改为 `TC_DefMoreParams`）、
-  `corpus/dt_base/`（8）、`corpus/dt_io/`（1）、`corpus/dt_pkg/`（3 个包目录）、
-  `corpus/dt_ad_hoc/`（包内 ad-hoc 单文件，原 `dt_root`）：DT 专项夹具，见
-  [dt.md](dt.md) 的夹具一节。
+- `corpus/dt/*`（M13–M29 正例，清单见 [dt.md](dt.md) 夹具一节）：M27 新增
+  `54_user_bool_data`、`55_user_io_data`、`56_user_list_data`（`.nointerp`），覆盖用户
+  本地 `data Bool`/`IO`/`List` 与 canonical `Base.*` 身份并存；M28 新增 `57_universe`、
+  `58_case_matrix`/`58b_case_absurd`、`59_axiom`/`59_eta`/`59_let_where`、
+  `60_erasure_unify`、`61_namespace_dual`；M29 新增 `60_ctor_eta`（构造子 η 展开）、
+  `61_implicit_values`（隐式值参数）、`62_sigma_basic`（Tarski 式存在式）、
+  `63_dep_lookup`（依赖索引 lookup）。
+  `corpus/dt_err/*` 负例：`35_where_no_sig` 是 M24，`36`–`38` 与 `dt/45`–`52` 是
+  M24.5/M24.6，M28 新增 `40_universe_*`、`41*`（冗余/不可达分支）、`42_axiom_runtime`、
+  `44_namespace_value_as_type`，M29 新增 `42_implicit_value_domain`、
+  `43_implicit_unnameable`、`45_generic_sigma_runtime`、`46_lookup_no_sigma`，以及
+  **相等收口负例** `47_eq_no_instance`、`48_eq_function`、`49_eq_funfield_data`、
+  `50_ord_no_instance`（`TC_NoInstanceFound` / `TC_EqRequiresEvidence`）；
+  `08_arity` 改为 `TC_DefMoreParams`；`corpus/dt_base/`（8）、`corpus/dt_io/`（1）、
+  `corpus/dt_pkg/`（3 个包目录）、`corpus/dt_ad_hoc/`（包内 ad-hoc 单文件，原 `dt_root`）
+  是 DT 专项夹具。
 - `corpus/term/` / `corpus/term_err/`：M25 终止性正反例（HOF/where/互递归/SCT/fuel），
   第 37 段；错误码段（第 36 段）用 `vuna gen-errors`（真源是诊断域枚举）检查
   TC/CG/LN/FX 分区与幂等。

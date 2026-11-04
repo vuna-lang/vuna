@@ -1,0 +1,72 @@
+-- M29（B13/D12）：构造子**未饱和**引用/应用的 η 展开（`Elab/Meta.etaCtorTerm`）。
+-- 1) 裸构造子当函数值传给 `cong`（旧实现：`expected (Succ _tele), got (Succ k)`）。
+-- 2) 裸构造子当值传递后再应用（旧行为：check 通过但 OCaml 报 should not be a constructor）。
+-- 3) 带隐式前缀构造子的未饱和应用（`Cons` 传给高阶函数，隐式 `a` 由期望类型解出）。
+data Nat : Type where
+  Zero : Nat
+  Succ : Nat -> Nat
+
+data Eq : {a : Type} -> a -> a -> Type where
+  Refl : {a : Type} -> (x : a) -> Eq x x
+
+plus : Nat -> Nat -> Nat
+plus a b = case a of
+  Zero => b
+  Succ k => Succ (plus k b)
+
+cong : (a : Type) -> (b : Type) -> (x : a) -> (y : a) -> (f : a -> b) -> Eq x y -> Eq (f x) (f y)
+cong a b x y f e = case e of
+  Refl z => Refl (f z)
+
+-- 1) 裸构造子 `Succ` 当函数值：η 展开后在精化期 β 归约成 VCon，不再有 NGlobal 脊。
+plusZeroR : (n : Nat) -> Eq n (plus n Zero)
+plusZeroR n = case n of
+  Zero => Refl Zero
+  Succ k => cong Nat Nat k (plus k Zero) Succ (plusZeroR k)
+
+-- 2) 裸构造子当值传递后再应用：运行期必须是合法闭包（旧行为 OCaml 编译失败）。
+apply : (f : Nat -> Nat) -> Nat -> Nat
+apply f x = f x
+
+applySucc : Nat
+applySucc = apply Succ (Succ Zero)
+
+letSucc : Nat
+letSucc =
+  let
+    f = Succ
+  in f (Succ Zero)
+
+proofUse : Nat
+proofUse = case plusZeroR (Succ Zero) of
+  Refl z => z
+
+-- 3) 隐式前缀构造子的未饱和应用：`Cons` 的 `{a}` 由期望类型解成 Nat。
+data List : Type -> Type where
+  Nil : {a : Type} -> List a
+  Cons : {a : Type} -> a -> List a -> List a
+
+foldList : (Nat -> List Nat -> List Nat) -> List Nat -> List Nat
+foldList f xs = case xs of
+  [] => []
+  y :: ys => f y ys
+
+built : List Nat
+built = foldList Cons [Succ Zero, Zero]
+
+listHead : List Nat -> Nat
+listHead xs = case xs of
+  [] => Zero
+  y :: ys => y
+
+natToInt : Nat -> Int
+natToInt n = case n of
+  Zero => 0
+  Succ k => 1 + natToInt k
+
+main : Int
+main =
+  natToInt (apply Succ (Succ Zero))
+    + natToInt letSucc
+    + natToInt proofUse
+    + natToInt (listHead built)

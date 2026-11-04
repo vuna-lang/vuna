@@ -1,3 +1,4 @@
+-- M29-T2b 负例：`@name` 实例选择语法已删除。
 trait Pretty a where
   pretty : a -> String
 
@@ -8,4 +9,4 @@ instance Pretty Color where
   pretty c = "red"
 
 main : String
-main = pretty @nope Red
+main = pretty @fancy Red

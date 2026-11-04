@@ -1,0 +1,14 @@
+-- M29：刚性类型变量上的 `==` 没有可搜实例，提升成**隐式字典参数**（`{d : Dict_Eq a}`），
+-- 调用点由具体类型的实例填充（`f 1 1` 用 Eq Int、`f "a" "a"` 用 Eq String）。
+-- 这是「实例延迟」路径，不是泛型结构比较兜底（兜底已在 M29 删除）。
+import Prelude
+
+data Dummy : Type where
+  D : Dummy
+deriving (Eq)
+
+f : a -> a -> Bool
+f x y = x == y
+
+main : Bool
+main = f 1 1 && f "a" "a"

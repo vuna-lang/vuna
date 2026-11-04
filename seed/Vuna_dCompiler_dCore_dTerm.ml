@@ -315,17 +315,17 @@ let rec v_Vuna_dCompiler_dCore_dTerm_dcountPis = (fun t -> (match t with
   | _ -> 0
 ))
 
-let rec v_Vuna_dCompiler_dCore_dTerm_dinsertLamBinderGo = (fun name -> (fun idx -> (fun total -> (fun depth -> (fun t -> (match t with
-  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTLam (dtb__202, dtb__203, dtb__204) -> (if ((bi_eq_int depth) idx) then (C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTLam (dtb__202, dtb__203, (C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTLam (name, C_Vuna_dCompiler_dCore_dTerm_dRig_Vuna_dCompiler_dCore_dTerm_dRig1, (((v_Vuna_dCompiler_dCore_dTerm_dshift ((v_Vuna_dCompiler_dCore_dTerm_dcutoffOf total) idx)) 1) dtb__204))))) else (C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTLam (dtb__202, dtb__203, (((((v_Vuna_dCompiler_dCore_dTerm_dinsertLamBinderGo name) idx) total) ((bi_add depth) 1)) dtb__204))))
+let rec v_Vuna_dCompiler_dCore_dTerm_dinsertLamBinderGo = (fun name -> (fun idx -> (fun depth -> (fun t -> (match t with
+  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTLam (dtb__202, dtb__203, dtb__204) -> (if ((bi_eq_int depth) idx) then (C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTLam (dtb__202, dtb__203, (C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTLam (name, C_Vuna_dCompiler_dCore_dTerm_dRig_Vuna_dCompiler_dCore_dTerm_dRig1, (((v_Vuna_dCompiler_dCore_dTerm_dshift 0) 1) dtb__204))))) else (C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTLam (dtb__202, dtb__203, ((((v_Vuna_dCompiler_dCore_dTerm_dinsertLamBinderGo name) idx) ((bi_add depth) 1)) dtb__204))))
   | _ -> t
-))))))
+)))))
+
+let v_Vuna_dCompiler_dCore_dTerm_dinsertLamBinder = (fun name -> (fun idx -> (fun t -> ((((v_Vuna_dCompiler_dCore_dTerm_dinsertLamBinderGo name) idx) 0) t))))
 
 let rec v_Vuna_dCompiler_dCore_dTerm_dcountLams = (fun t -> (match t with
   | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTLam (dtb__205, dtb__206, dtb__207) -> ((bi_add 1) (v_Vuna_dCompiler_dCore_dTerm_dcountLams dtb__207))
   | _ -> 0
 ))
-
-let v_Vuna_dCompiler_dCore_dTerm_dinsertLamBinder = (fun name -> (fun idx -> (fun t -> (((((v_Vuna_dCompiler_dCore_dTerm_dinsertLamBinderGo name) idx) (v_Vuna_dCompiler_dCore_dTerm_dcountLams t)) 0) t))))
 
 let rec v_Vuna_dCompiler_dCore_dTerm_dhasFreeTermVar = (fun d -> (fun t -> (match t with
   | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTVar (dtb__208, dtb__209) -> ((bi_ge_int dtb__209) d)

@@ -105,7 +105,6 @@ else case e of
   ERecUpdate base fields sp =>
     siteCollectFields (fuel - 1) comp ctors projs caller facts sizes region fields
       (siteWalkC (fuel - 1) comp ctors projs caller facts sizes region base acc)
-  EInstSel base meth sp => siteWalkC (fuel - 1) comp ctors projs caller facts sizes region base acc
   EDo stmts sp => siteCollectStmts (fuel - 1) comp ctors projs caller facts sizes region stmts acc
   EAnn value ty sp =>
     siteWalkC (fuel - 1) comp ctors projs caller facts sizes region ty

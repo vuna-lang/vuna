@@ -28,7 +28,7 @@ renderDeclBody at lineInd decl = case decl of
   DFun name pats body sp => renderClause at lineInd name pats body
   DRecord name params fields derivings sp => renderRecordDecl at name params fields derivings
   DTrait name params methods sp => renderTraitDecl at name params methods
-  DInstance mname isDefault head methods sp => renderInstanceDecl at mname head methods
+  DInstance ctxE head methods sp => renderInstanceDecl at ctxE head methods
 
 -- 顶层签名与 axiom 声明共用：`<prefix>name : Ty`（prefix 为 "" 或 "axiom "）。
 renderSigLine : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> String -> String -> Expr -> List String
@@ -79,18 +79,31 @@ renderMethodSig : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))
 renderMethodSig at (Pair mname ty) =
   attachAt at (exprSpan ty) 2 (prefixFirst ("  " ++ mname ++ " : ") (renderTypeExpr at 2 ty))
 
-renderInstanceDecl : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Maybe String -> Expr -> List Decl -> List String
-renderInstanceDecl at mname head methods =
+renderInstanceDecl : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> List Expr -> Expr -> List Decl -> List String
+renderInstanceDecl at ctxE head methods =
   let
     headLines = case inlineExpr head of
       Just s => [s]
       Nothing => parenWrapInd at 0 head
-    asText = case mname of
-      Nothing => ""
-      Just n => " as " ++ n
-    headLine = appendLast (asText ++ " where") (prefixFirst "instance " headLines)
+    ctxText = renderInstanceCtx ctxE
+    headLine = appendLast " where" (prefixFirst ("instance " ++ ctxText) headLines)
     methodLines = concatMap (\d => renderDeclAt at 2 d) methods
   in append headLine methodLines
+
+-- 实例上下文：`C a, C b => `（M29 起实例可带 ctx；空 ctx 与旧输出逐字一致）。
+renderInstanceCtx : List Expr -> String
+renderInstanceCtx [] = ""
+renderInstanceCtx ctxE = joinTexts ", " (map renderOneCtx ctxE) ++ " => "
+
+joinTexts : String -> List String -> String
+joinTexts sep [] = ""
+joinTexts sep ([x]) = x
+joinTexts sep (x :: rest) = x ++ sep ++ joinTexts sep rest
+
+renderOneCtx : Expr -> String
+renderOneCtx e = case inlineExpr e of
+  Just s => s
+  Nothing => "…"
 
 -- 函数子句 / instance 方法子句 / where 绑定子句共用。
 -- where 块（parser desugar 成 ELet .. True）优先按 where 形式还原。

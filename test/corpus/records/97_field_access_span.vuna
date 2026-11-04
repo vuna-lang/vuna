@@ -1,0 +1,8 @@
+-- M29（A14）：记录字段访问在精化期已有正确 span（`Elab/Records.fieldAccessExpr` 把访问
+-- span 写进生成的 case），本夹具锁定 `文件:行:列: [CODE]` 格式不回退。
+record Point where
+  x : Int
+  y : Int
+
+main : String
+main = (Point 1 2).x ++ "s"

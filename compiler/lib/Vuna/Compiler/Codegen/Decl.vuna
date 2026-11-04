@@ -273,10 +273,18 @@ dataUsedLevels d table datas =
         (dtDataCtors d)
   in filter (\l => memInt l raw) (typeParamLevels d)
 
+-- M29：`List Int` 的相等不再走泛型结构比较兜底（`==` 的兜底将在 M29 删除），
+-- 这里显式按元素比较（元素是 Int，`==` 走特化路径）。
+levelListEq : List Int -> List Int -> Bool
+levelListEq [] [] = True
+levelListEq (x :: xs) (y :: ys) = if x == y then levelListEq xs ys else False
+levelListEq _ _ = False
+
 sameLevelTable : List (Pair String (List Int)) -> List (Pair String (List Int)) -> Bool
 sameLevelTable [] [] = True
 sameLevelTable (a :: rest) (b :: rest2) =
-  if firstOf a == firstOf b && secondOf a == secondOf b then sameLevelTable rest rest2 else False
+  if firstOf a == firstOf b && levelListEq (secondOf a) (secondOf b) then sameLevelTable rest rest2
+  else False
 sameLevelTable _ _ = False
 
 usedTableFix : List DtData -> List (Pair String (List Int)) -> List (Pair String (List Int))

@@ -1,0 +1,9 @@
+-- M29（A14）：axiom 被运行时使用时，codegen 擦除检查现在报**使用点定义**的位置
+-- （`DtDef` 带来源 span：这里是 `useMagic` 的子句位置），不再是无位置的消息。
+axiom magic : Int
+
+useMagic : Int
+useMagic = magic + 1
+
+main : Int
+main = useMagic

@@ -17,7 +17,6 @@ module Vuna.Compiler.Frontend.Ast
   , EDo
   , EField
   , EIf
-  , EInstSel
   , EInt
   , ELam
   , ELet
@@ -98,7 +97,6 @@ data Expr : Type where
   EField : Expr -> String -> Span -> Expr
   ERecord : String -> List (Pair String Expr) -> Span -> Expr
   ERecUpdate : Expr -> List (Pair String Expr) -> Span -> Expr
-  EInstSel : Expr -> String -> Span -> Expr
   EDo : List DoStmt -> Span -> Expr
   -- M24：表达式类型标注。只由 parser 的 where 绑定签名生成（`g : Int -> Int` 行
   -- 绑定到随后的 `g ... = ...` 子句），Elab 精化时据此把 where 组按签名递归提升；
@@ -123,7 +121,7 @@ data Decl : Type where
   DFun : String -> List Pat -> Expr -> Span -> Decl
   DRecord : String -> List String -> List Field -> List String -> Span -> Decl
   DTrait : String -> List String -> List (Pair String Expr) -> Span -> Decl
-  DInstance : Maybe String -> Bool -> Expr -> List Decl -> Span -> Decl
+  DInstance : List Expr -> Expr -> List Decl -> Span -> Decl
 
 -- M10 模块头与导出项。
 -- XBare 是裸名导出，XTypeAll 是 `T(..)`，XModule 是 `module B` 整模块重导出。
@@ -164,7 +162,6 @@ exprSpan expr = case expr of
   EField base f sp => sp
   ERecord name fields sp => sp
   ERecUpdate base fields sp => sp
-  EInstSel meth name sp => sp
   EDo stmts sp => sp
   EAnn inner ty sp => sp
 
@@ -186,7 +183,7 @@ declSpan decl = case decl of
   DFun name pats body sp => sp
   DRecord name params fields derivings sp => sp
   DTrait name params methods sp => sp
-  DInstance name isDefault head methods sp => sp
+  DInstance ctxE head methods sp => sp
 
 ctorSpan : Ctor -> Span
 ctorSpan (Ctor name ty arity sp) = sp
@@ -268,9 +265,7 @@ declNames d = case d of
   DData dname params kind ctors derivings _ => map ctorName ctors
   DRecord dname params fields derivings _ => [dname]
   DTrait tname params methods _ => map firstOf methods
-  DInstance name isDefault head methods _ => case name of
-    Nothing => []
-    Just n => [n]
+  DInstance ctxE head methods _ => []
 
 -- 顶层可见名字（M20：把 data / record / trait 的**类型名**也算进来）。
 -- Loader 用它判断「是不是本模块声明的名字」；DT 的类型名可以在值层位置出现

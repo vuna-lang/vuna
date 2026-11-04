@@ -151,13 +151,14 @@ elabBodies (d :: rest) globals doneDefs acc ec = case d of
             -- 签名阶段与最终 DtProgram 里用，正文阶段以表为准）。
             ecGlobals = ecPutGlobalsTbl liftedEc (tblInsert name liftedTy (ecGlobalsTbl liftedEc))
           in elabBodies rest globals (Pair name liftedTy :: doneDefs)
-            (DtDef name liftedTy cleanTerm :: acc) (ecAddDef ecGlobals (Pair name cleanTerm))
+            (DtDef name liftedTy cleanTerm (Just sp) :: acc)
+            (ecAddDef ecGlobals (Pair name cleanTerm))
       )
   -- M28：axiom 只产出无体/不透明的 `DtAxiom`（类型已在签名阶段精化进 globals）；
   -- 不进 Ec 的 defs 表（没有体可 delta 展开），也不进 doneDefs。
   DAxiom name tyExpr sp => case globalsLookup name globals ec of
     Nothing => tcErr1 sp (ExpectedSignature name) name
-    Just tyTerm => elabBodies rest globals doneDefs (DtAxiom name tyTerm :: acc) ec
+    Just tyTerm => elabBodies rest globals doneDefs (DtAxiom name tyTerm (Just sp) :: acc) ec
   _ => elabBodies rest globals doneDefs acc ec
 
 -- 每个签名都必须有定义；`axiom`（DAxiom）是无体的可擦除顶层，不要求 DFun。
@@ -230,7 +231,7 @@ in andThen (elabDatas (collectDataDecls decls []) preludeGlobals ecEmpty) (\pd =
     let
       _ = stamp "datas-done"
     in andThen (elabTraits (collectTraitDecls decls []) globals0 ec0) (\pt => case pt of
-      Pair classDatas (Pair projGlobals (Pair classes ec1)) =>
+      Pair classDatas (Pair projGlobals (Pair classes (Pair projSpans ec1))) =>
         let
           globals1 = append globals0 projGlobals
           datas1 = append datas classDatas
@@ -271,7 +272,7 @@ in andThen (elabDatas (collectDataDecls decls []) preludeGlobals ecEmpty) (\pd =
                           Just m => Err (unsolvedMessage ec4 m)
                           Nothing =>
                             let
-                              extra = extraDefsOf globals ec4 (append instDefs defs)
+                              extra = extraDefsOf globals ec4 projSpans (append instDefs defs)
                               allDefs = rezonkDefs ec4 (append instDefs (append extra defs))
                               -- bodies 阶段不再逐定义重建 globals（O(n²)）；这里用最终
                               -- 定义集一次性把签名类型换成提升后的类型（O(n)）。
@@ -300,7 +301,7 @@ in andThen (elabDatas (collectDataDecls decls []) preludeGlobals ecEmpty) (\pd =
 -- 用当前解重新 zonk 定义体（延迟字典元变量 → 实例项）；axiom 无体，原样保留。
 rezonkDefs : Ec -> List DtDef -> List DtDef
 rezonkDefs ec defs = map (\d => case dtDefBody d of
-  Just body => DtDef (dtDefName d) (dtDefType d) (substDictTerm ec body)
+  Just body => DtDef (dtDefName d) (dtDefType d) (substDictTerm ec body) (dtDefSpan d)
   Nothing => d
 ) defs
 

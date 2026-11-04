@@ -4,8 +4,8 @@ trait Pretty a where
 data Color : Type where
   Red : Color
 
-instance Pretty Color as p where
+instance Pretty Color where
   pretty c = "red"
 
 main : String
-main = pretty @p 1
+main = pretty 1

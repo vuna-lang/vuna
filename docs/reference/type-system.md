@@ -94,8 +94,9 @@
   `T(..)` 才公开记录构造器；
 - 错误：缺字段（`missing field`）、重复字段（`duplicate field`）、未知字段
   （`unknown field`）、对非记录做字段访问/更新（`not a record type`）；
-- 记录支持 `deriving (Show, Eq)`（`Show` 要求非参数化记录且字段可 show，`Eq` 支持
-  参数化记录）；记录字段访问/更新在 base 类型未定时报错。
+- 记录支持 `deriving (Show, Eq, Ord)`；参数化记录（及参数化 data）的派生在 M29 起按
+  类型参数生成**约束实例**（`instance Show a => Show (Pair a b)` 形态），不再有
+  「参数化只能 Eq、Show/Ord 拒绝」的限制；记录字段访问/更新在 base 类型未定时报错。
 
 ## trait 与实例（M10.5）
 
@@ -110,63 +111,81 @@
     Blue : Color
   deriving (Show, Eq)
 
-  instance Pretty Color where          -- 未命名实例 = default（相干默认）
+  instance Pretty Color where          -- 实例按 head 唯一（无命名实例）
     pretty c = case c of
       Red => "red"
       Blue => "blue"
 
-  instance Pretty Color as fancy where -- 命名实例
-    pretty c = "fancy"
-
   main : String
-  main = pretty Red ++ "/" ++ pretty @fancy Blue ++ "/" ++ show Red
+  main = pretty Red ++ "/" ++ show Red
+  ```
+
+- **约束实例（M29）**：ctx 写在 head 前，搜索时递归求解：
+
+  ```vuna
+  data Box a : Type where
+    MkBox : a -> Box a
+
+  instance Eq a => Eq (Box a) where  -- 字典 def 带隐式类型参数 + ctx 字典参数
+    eq x y = case x of
+      MkBox a => case y of
+        MkBox b => a == b
   ```
 
 - 上面的 `main : String` 是 `vuna test` / 纯 `vuna interp` 的调试约定；可执行包
   （`vuna build`）要求 `main : IO a`（M12.6）。`vuna interp` 走 DT 核心
   求值，任何 `main : IO a` 一律报错（见 [limits.md](limits.md)）。
-- trait 只支持单参数；default 实例按 (trait, 类型) 全局唯一（重复报
-  `duplicate instance`，含 `deriving` 生成的实例）；
-  命名实例不自动参与解析，只能用 `@name` 选择（可 `@M.name`，M 需已导入）；
-  trait 与类型都不在本模块定义时禁止写 default，必须命名（孤儿规则）；
-- `deriving (Show, Eq, Ord)` 生成 default 实例：`Show` 只支持非参数化类型且字段可
-  show，`Eq` 支持参数化类型，`Ord` 支持可比较类型；derive 与手写同名 default 冲突报
-  `duplicate instance`；实例里出现 trait 未声明的方法报
-  （`instance has unknown method`）；
+- trait 只支持**单参数**（多参数 / 默认方法 / 父类 / 关联类型归 F4）；实例按 head 全局
+  唯一，重复报 `duplicate instance`（含 `deriving` 生成的实例）；**M29 删除命名实例**：
+  没有 `as name` / `@name`，相干性只靠「同一 head 唯一」；trait 与类型都不在本模块
+  定义时禁止写实例（孤儿规则，没有命名实例可绕行）；
+- **约束实例（M29）**：`instance Eq a => Eq (Box a) where ...`——ctx 是 `C 变量` 列表，
+  实例字典是全 Pi（隐式类型参数 + ctx 字典参数），实例搜索递归解 ctx；
+  `mem (Box 1) [...]` 这类参数化用法因此可用；
+- `deriving (Show, Eq, Ord)`（M29 起参数化也可用）：按 data 的每个类型参数生成 ctx
+  （`instance Eq a => Eq (F a)`），`Show` 要求字段可 show；derive 与手写实例同 head
+  冲突报 `duplicate instance`；实例里出现 trait 未声明的方法报
+  `instance has unknown method`；
 - **`Show` / `Eq` / `Ord` 是库里的普通 trait（M24.7）**：声明、方法投影与
   `Int` / `String` / `Bool` 实例都在 `Base.Show` / `Base.Eq` / `Base.Ord`，包上下文内所有
   源文件（含 ad-hoc 单文件）随自动注入的 `Prelude` 可用；显式 `import` 仍可覆盖/补充。
   `show` / `eq` / `lt` 等短名不再由编译器放行，必须经
   import 解析。`deriving` 的展开用 Loader 解析后的完整类名（如 `Base.Show.Show`）。
-- **结构回退**：`==` / `/=` 在**具体类型**且没有可用 `Eq` 实例时退回运行时结构比较
-  （`bi_eq_generic`，核心求值器/擦除 codegen 同一语义）；程序里没有 `Eq` 类可见
-  （只可能发生在显式绕开 `Prelude` 的上下文）时同样退回。比较发生在**刚性类型变量**上时保持 M22 语义——
-  搜不到实例时提升成隐式字典参数（`deferEqDict`），实例（含 `deriving (Eq)` 生成的）
-  仍优先。`<` / `<=` / `>` / `>=` 对 `Int` 做运行时特化、`String`/`Bool` 走泛型
-  运行时，其它具体类型（含用户 `data`）走 `Ord` 字典、无 `Ord` 类时退回泛型比较。
-  `deriving (Eq)` 的行为不变。
+- **`==` / `/=` 是证据驱动的（M29 定稿）**：只有两条路径——`Int` / `String` 的内建
+  特化（`bi_eq_int` / `bi_eq_str`），或 `Eq` 证据（字典投影；手写实例、`deriving (Eq)`
+  生成的实例、约束实例都算证据）。**没有泛型结构比较兜底**：具体类型没有实例、函数
+  类型相等、`Eq` 类不在作用域，一律在 `check` 期报错（缺实例 / 缺类诊断）。
+  比较发生在**刚性类型变量**上时保持 M22 语义——搜不到实例时提升成隐式字典参数
+  （`deferEqDict`），实例（含 `deriving (Eq)` 生成的）仍优先。`<` / `<=` / `>` / `>=`
+  同理：`Int` 内建特化、`String` / `Bool` 保留泛型运行时，其它类型必须有 `Ord` 证据，
+  无实例 / 无类在 check 期报错。
 - 实现（M10.5c）与限制：具体类型的调用点仍走**静态派发**；当方法调用点类型是
   **裸类型变量**时（如 `showIt x = show x`）做**方法级字典穿参**——类型检查给该函数
   增加方法函数参数（字典按 trait 方法扁平化），调用点静态传入具体实例方法或调用者的
   字典参数，支持跨函数传播、前向引用与递归；例如 `data Dummy deriving (Eq)` 加
   `showIt x = show x` 是合法程序（调用 `showIt 42` / `showIt "s"` 时分别传入对应
-  `show` 实现）。`Eq` / `Ord` 在类型无法确定时（含 `List a` 等结构化泛型）仍回退到
-  运行时结构比较；
-  `Show` / 用户 trait 的结构化泛型（如 `show (List a)`）仍不支持（只有裸类型变量
-  支持字典穿参）并报错；**高阶 kind**（`Ty.TApp` + kind 元数）与**一般约束泛化**
-  （trait 参数本身是类型构造器变量，如 `Monad m` 的字典穿参）已在 M11 实现；
-  default 实例的可见性按整个程序（flatten）计算，未做 import 图级细化；
+  `show` 实现）。**没有结构性自动回退（M29）**：`List a` / `Box a` 这类要能比较 /
+  展示，必须有约束实例（`instance Eq a => Eq (List a)` 等）或具体实例；Base 当前只
+  带 `Int` / `String` / `Bool` 的 `Eq` / `Ord` / `Show` 实例，其它容器实例按需在
+  库/用户侧声明（M29 起语法可用）。**高阶 kind**（`Ty.TApp` + kind 元数）与
+  **一般约束泛化**（trait 参数本身是类型构造器变量，如 `Monad m` 的字典穿参）
+  已在 M11 实现；实例的可见性按整个程序（flatten）计算，未做 import 图级细化；
+- **隐式值参数（M29/B09）**：`{x : a}`（域是类型 / 索引 / 证明域）可写，隐式 binder
+  恒擦除（`Rig0`），值只参与类型 / 索引 / 证明，子句体不能按名字引用它；隐式模式
+  `{p}` 与 `auto` / 隐式等式搜索归 F4。`sym` / `trans` / `subst` 一类证明辅助因此
+  不再手写全部显式参数（`dt/61_implicit_values`）；
+- 命名空间与导出：trait 名在类型命名空间、方法名在值命名空间；无模块头 = 全部导出
+  （含方法），显式导出列表需 `Trait(..)` 才导出方法；实例（含约束实例）按整个程序
+  （flatten）参与搜索，不按 import 图细化；
+- 实现：`==` / `/=` 在饱和应用处先做内建特化（`Int` / `String`），否则解析成 `Eq`
+  字典的方法投影；`<` 等比较运算符同理（`Int` 内建、`String` / `Bool` 泛型运行时、
+  其它走 `Ord` 字典）。trait 字典名与方法投影名从类表按短名取（M24.7 起不硬编码
+  `Dict_Eq` / `eq`）。`deriving (Show)` 的展示体按构造子骨架生成（record 用源名、
+  String 带引号），方法调用走库里的 `show` 投影；参数化派生体的字段调用走 ctx 字典。
 - **求值与降级**：`vuna interp` 一律先经 DT 精化（`Elab.Records` / `Elab.Derive` 做
   记录、trait、deriving 降级；原 `DtRecords` / `DtDerive`），再用核心求值器求 `main`
   的值；类型/覆盖性错误在求值前报出。`vuna test` / `vuna repl` 与 `interp` 共用同一
   核心求值器；
-- 命名空间与导出：trait 名在类型命名空间、方法名在值命名空间；无模块头 = 全部导出
-  （含方法），显式导出列表需 `Trait(..)` 才导出方法；命名实例名按普通值名导出/限定
-  （显式列表里可写 `fancy`，app 侧用 `@M.fancy` 选择）；
-- 实现：`==` / `/=` / `<` / `<=` / `>` / `>=` 由 `Eq` / `Ord` trait 承担（删除旧的
-  `specializeCmp` 特化）；trait 字典名与方法投影名从类表按短名取（M24.7 起不硬编码
-  `Dict_Eq` / `eq`）。`deriving (Show)` 的展示体按构造子骨架生成（record 用源名、
-  String 带引号），方法调用走库里的 `show` 投影。
 
 ## do、Monad 与 Functor（M11）
 
@@ -191,7 +210,7 @@
   ```
 
 - `Functor`（`fmap`）与 `Monad`（`bind` / `pure`）在 `base/lib/Base/Monad.vuna`；
-  `Maybe` / `List` / `IO` 各有 default 实例。`Monad m` 的 m 是 kind `* -> *`：
+  `Maybe` / `List` / `IO` 各有 `Functor` / `Monad` 实例。`Monad m` 的 m 是 kind `* -> *`：
   trait 声明的类型参数可以当类型构造器应用（`m a`），实例 head 是类型构造器本身
   （`instance Monad Maybe`），kind 不符（如 `instance Monad Int`）在声明期报错。
 - 一般约束泛化：签名里出现高阶类型变量（如 `bindPair : m a -> m b -> m (Pair a b)`）

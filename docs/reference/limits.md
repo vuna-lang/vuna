@@ -27,12 +27,11 @@ DT 设计见 [docs/dt-core.md](../dt-core.md)。
   `vuna-compiler`）；`vuna build` 在 codegen 后执行生成的 `build.sh`（受限进程执行内建
   `prim_runIn` 调 `ocamlopt`），不是 vuna 进程转发；
   LSP / package manager / Index 在根包侧，**永不进入 seed 闭包**。
-- `do` / Monad / IO 组合子已在 M11 实现；DT 自 M13 起步，M14 索引族、M15 隐式/
-  接口/洞、M16 终止性、M17 工具链、M18.5–M18.6 擦除修复与表示层定型、M19–M22
-  语言面/多文件/效应、M23 夹具迁移与 `interp` 核心求值、M24 单路径收尾、M24.5 等式
-  搬运、M24.6 编译器本体最小重构、M24.7 trait 库化、M26 包上下文统一与单一 codegen
-  输出模型、M27 内置/原语/效应边界、**M28 类型系统地基**。**当前阻碍按阶段登记在
-  [docs/roadmap.md](../roadmap.md)**。仍是边界的几条：
+- `do` / Monad / IO 组合子已在 M11 实现；DT 自 M13 起步，M14–M24.7 补齐索引族/隐式/
+  终止性/工具链/擦除/语言面/单路径收尾与 trait 库化，M25–M29 依次完成健全性基建、单一
+  装配、内置与效应边界、类型系统地基、相等/实例/证明 ergonomics（各里程碑一句话状态见
+  [docs/roadmap.md](../roadmap.md)，历史见 [docs/history.md](../history.md)）。
+  **当前阻碍按阶段登记在 [docs/roadmap.md](../roadmap.md)**。仍是边界的几条：
   - **身份按声明符号判定（M27）**：`Int` / `String` 是 language primitive 类型；`Bool` /
     `List` / `IO` 是 base 的普通 `data` 声明，canonical 身份分别是 `Base.Bool.Bool` /
     `Base.List.List` / `Base.IO.IO`。没有短名判定、没有 prelude 桩、没有全局构造子放行；
@@ -84,36 +83,47 @@ DT 设计见 [docs/dt-core.md](../dt-core.md)。
   - **`Prelude` 自动注入（M24.7/M26）**：包上下文内所有源文件（含 ad-hoc 单文件）自动
     导入 `Prelude`，`Show` / `Eq` / `Ord` 及其实例开箱可用；显式 `import` 仍可补充。
     缺 import 的诊断只在显式绕开 `Prelude` 的上下文出现。
-  - **`==` / 比较在无实例时的兜底**：具体类型没有可用 `Eq` 实例时 `==` / `/=` 退回
-    运行时结构比较（`bi_eq_generic`）；没有 `Eq` 类可见（只可能出现在显式绕开
-    `Prelude` 的上下文）同样退回。刚性类型变量保持 M22 语义（搜不到实例时提升成
-    隐式字典参数，实例优先）。
-    `<` / `<=` / `>` / `>=` 只对 `Int` 做运行时特化、`String`/`Bool` 走泛型运行时；
-    **其它具体类型**（含用户 `data`）必须走 `Ord` 字典，无 `Ord` 类时同样退回泛型比较。
-  - **`deriving` 对参数化 data 仍只支持 `Eq`**：`deriving (Eq)` 可用（走通用结构比较
-    兜底，需要 `Eq` 字典的场景如 `mem (List (Maybe2 Int))` 仍可能缺实例）；
-    `deriving (Show)` / `(Ord)` 只支持非参数化类型（参数化时显式报错）。
+  - **`==` / `/=` 是证据驱动的（M29 定稿，无泛型兜底）**：只有两条路径——`Int` /
+    `String` 内建特化，或 `Eq` 证据（字典：手写实例、`deriving`、约束实例）。具体类型
+    没有实例、函数类型相等、`Eq` 类不在作用域，都在 `check` 期报错；不存在「运行时
+    结构比较兜底」，interp 与编译产物也没有第二套相等算法。刚性类型变量保持 M22 语义
+    （搜不到实例时提升成隐式字典参数，实例优先）。
+    `<` / `<=` / `>` / `>=`：`Int` 内建特化、`String` / `Bool` 保留泛型运行时，其它
+    类型必须有 `Ord` 证据，无实例 / 无类在 check 期报错。
+  - **约束实例与参数化 `deriving`（M29）**：`instance Eq a => Eq (Box a)` 可用（实例
+    def 带隐式类型参数 + ctx 字典参数，搜索递归解 ctx）；`deriving (Show, Eq, Ord)`
+    对参数化 data 同样可用（按 data 参数生成 ctx）。`mem (Box 1) [...]` 这类需要
+    `Dict_Eq (Box Int)` 的用法因此不再是边界；`List a` / `Maybe a` 等容器的实例仍需
+    显式声明（Base 只带 `Int` / `String` / `Bool` 的实例）。
   - **OCaml 保留字**：codegen 只对 lambda binder 的裸标识符加 `_` 后缀转义
     （`method` / `type` 等可以作 vuna 标识符）；用户值 / 类型 / 构造子名分别有
     `v_` / `t_` / `C_` 前缀，不会撞 OCaml 保留字。
   - **类型族（结果以 `Type` 收尾的 Pi 链，如 `sel : Nat -> Type`）整体擦除（M24.6）**：
     不生成运行时定义；在运行时定义里把擦除的族参数当值用报错
-    （`dt_err/39_type_family_runtime_use`）。
+    （`dt_err/45_generic_sigma_runtime`）。
   - **axiom 与命名空间（M28）**：`axiom name : Ty` 是无运行时定义的擦除/类型层声明，
     运行时（非擦除位置）使用报 `CG_AxiomAtRuntime`；限定名 `M.typeConst` 可在类型位置
     引用（裸小写名仍按隐式类型变量处理，跨模块类型位置引用请用限定名）。同模块
     `data T` 与 `def T` 同名仍不支持（需 Elab globals 按命名空间拆表），归 F1 收尾。
-  - **等式搬运边界（M24.5）**：隐式**值**参数 `{x : a}` 不支持（类型/值参数都要写显式）；
-    构造子当函数值部分应用不参与 `conv`（`cong ... Succ ...` 与饱和 `VCon` 对不上，
-    可用 lambda 或包装函数绕过）；`Ctx n -> Fin n -> Tm n` 这类**依赖索引取值**仍写
-    不出（按位置变化的类型族没有表达手段）；空族判定在索引含中性项时保守。详见
-    [dt-parity.md](dt-parity.md) §6.3。
-  - **命名实例 `@inst` 不参与自动实例搜索**：default 实例按 (trait, 类型) 唯一；命名实例
-    只能用 `@name` 显式选择（`@M.name` 需已导入）。
-  - **高阶 kind 与多隐式参数的推断**：高阶 kind 的 **check** 已支持（`m a` 推断
-    `m : Type -> Type`）；含多隐式参数字典的 `do` 程序核心求值不归约、擦除 codegen 也
-    尚未支持（`monad/04_kind_generic` 用 `.nointerp` + `.nocompile`，只断言 `check`；
-    interp/codegen 待修 `liftFreeDictGoals`）。
+  - **等式搬运与证明 ergonomics（M24.5 / M29）**：隐式**值**参数 `{x : a}` 已支持
+    （M29/B09；隐式 binder 恒擦除，值只进类型/索引/证明位置，子句体不能按名字引用；
+    隐式模式 `{p}` 与 `auto`/隐式等式搜索归 F4）；构造子当函数值部分应用可参与 `conv`
+    （M29 η 展开，`cong ... Succ ...` 直接可用）；`Ctx n -> Fin n -> Tm n` 这类**依赖
+    索引取值**用 **Tarski 式存在式**（运行时类型码 `Ty` + 指标族 `Tm : Ty -> Type` +
+    `Some`）表达（`dt/62_sigma_basic` / `dt/63_dep_lookup`，B13 以此关闭）；**泛型 Σ 的
+    值级构造仍是边界**（类型不能依赖运行时值），归 F4。空族判定在索引含中性项时仍保守。
+    详见 [dt-parity.md](dt-parity.md) §6.3。
+  - **命名实例已删除（M29）**：`as name` / `@name` 不再存在；实例按 head 全局唯一
+    （相干性），重复报 `duplicate instance`；孤儿实例（trait 与类型都不在本模块定义）
+    仍被拒。
+  - **type-as-value（M29 决策）**：**不引入 type codes**；Type 级等式走擦除的 `Eq` 证据
+    + `cast` 组合子；把类型放到**运行时位置**仍被擦除检查拒（`CG_TypeUsedAtRuntime` /
+    `CG_TypeLevelBindingRuntime` / `CG_TypeLevelNameRuntime`）。
+  - **高阶 kind 与多隐式参数字典**：高阶 kind 的 **check** 已支持（`m a` 推断
+    `m : Type -> Type`）；M29 修掉 `liftFreeDictGoals` 的字典 binder 位置 bug（C05），
+    `monad/04_kind_generic` 已去掉 `.nointerp` / `.nocompile`，check/interp/compile+运行
+    全过。含多隐式参数字典的 `do` 程序不再是边界。trait 多参数 / 默认方法 / 父类 /
+    关联类型归 F4（M29 终态是单参数 trait + 约束实例）。
   - **延迟字典目标的最终诊断**：类参数始终未解时报 `unsolved metavariable`（而非「缺
     实例」）；`missingInstance` 级诊断细化留待后续。**DT 要求顶层定义有类型签名**：新增
     代码同样要写，否则报 `DT: expected a type signature for ...`。
@@ -179,11 +189,8 @@ DT 设计见 [docs/dt-core.md](../dt-core.md)。
   `Prelude`；`vuna build` 需要 PATH 中有 `ocamlopt`；`Prelude` 刻意不含 `Base.IO`
   （效果 API 需显式 import）。
 
-## 已完成阶段（细节见 history）
+## 阶段与历史
 
-- M12.7 / M12.8 / M13–M24.7 已完成：删除 dynamic codegen 与旧开关；标准库/编译器命名
-  空间收敛、`Prelude` 自动导入与 `.output` 构建；DT 地基与全部语言能力落地；单路径
-  收尾（删除第二套检查器、seed 改由 DT split codegen 生成）；M24.5 等式搬运、M24.6
-  编译器本体最小重构、M24.7 `Show`/`Eq`/`Ord` 库化。依赖类型主线（M13–M18）见
-  [docs/roadmap.md](../roadmap.md)；里程碑历史见 [docs/history.md](../history.md)
-  （实现细节在 git 历史）。
+- 阶段状态、当前阻碍与「决策变更」以 [roadmap.md](../roadmap.md) 为唯一口径；里程碑的
+  实现细节见 [history.md](../history.md)（更细的在 git 历史）。**本文件只保留当前仍
+  成立的边界，不复制里程碑清单**，避免 roadmap / history / limits 三处漂移。

@@ -13,9 +13,5 @@ instance Pretty Color where
     Blue => "blue"
   shout c = pretty c ++ "!"
 
-instance Pretty Color as fancy where
-  pretty c = "fancy"
-  shout c = "fancy!"
-
 main : String
-main = pretty @fancy Blue ++ "/" ++ show Red
+main = pretty Blue ++ "/" ++ show Red

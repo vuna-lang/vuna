@@ -21,7 +21,6 @@ module Vuna.Compiler.Core.Eval
   , force
   , freshVar
   , genericCmp
-  , genericEqPrim
   , genericPrim2
   , intPrim1
   , intPrim2
@@ -51,8 +50,6 @@ module Vuna.Compiler.Core.Eval
   , substSolvedMetasAtGo
   , substSolvedMetasAtTbl
   , substSolvedMetasTbl
-  , valueEqDeep
-  , valueListEqDeep
   , varIndex
   ) where
 
@@ -334,8 +331,6 @@ else case findIntrinsic g of
     OpLeGeneric => genericPrim2 sp (\o => o <= 0)
     OpGtGeneric => genericPrim2 sp (\o => o > 0)
     OpGeGeneric => genericPrim2 sp (\o => o >= 0)
-    OpEqGeneric => genericEqPrim defs sols (fuel - 1) sp False
-    OpNeqGeneric => genericEqPrim defs sols (fuel - 1) sp True
     OpConcat => strPrim2 sp (\a, b => VStr (a ++ b))
     OpAnd => boolPrim2 sp (\a, b => VBool (a && b))
     OpOr => boolPrim2 sp (\a, b => VBool (a || b))
@@ -377,57 +372,6 @@ strAtBytes s i = if i < 0 || i >= strLength s then 0 - 1 else nthByte (strUnpack
 nthByte : List Int -> Int -> Int
 nthByte [] i = 0 - 1
 nthByte (c :: rest) i = if i <= 0 then c else nthByte rest (i - 1)
-
-genericEqPrim : HashTbl Term -> Sols -> Int -> List Value -> Bool -> Maybe Value
-genericEqPrim defs sols fuel sp neg = if fuel <= 0 then Nothing
-else case sp of
-  [ty, a, b] =>
-    Just
-      (VBool (if neg then notBool (valueEqDeep defs sols (fuel - 1) a b) else valueEqDeep defs sols (fuel - 1) a b))
-  _ => Nothing
-
-valueEqDeep : HashTbl Term -> Sols -> Int -> Value -> Value -> Bool
-valueEqDeep defs sols fuel a b = if fuel <= 0 then False
-else case force defs sols fuel a of
-  VInt x => case force defs sols fuel b of
-    VInt y => x == y
-    _ => False
-  VStr x => case force defs sols fuel b of
-    VStr y => strEq x y
-    _ => False
-  VBool x => case force defs sols fuel b of
-    VBool y => if x then y else notBool y
-    _ => False
-  VType x => case force defs sols fuel b of
-    VType y => levelToInt x == levelToInt y
-    _ => False
-  VCon c args => case force defs sols fuel b of
-    VCon c2 args2 => if c == c2 then valueListEqDeep defs sols (fuel - 1) args args2 else False
-    _ => False
-  VApp f a => case force defs sols fuel b of
-    VApp f2 a2 => valueEqDeep defs sols (fuel - 1) f f2 && valueEqDeep defs sols (fuel - 1) a a2
-    _ => False
-  -- 构造子实参表包含**擦除**的类型/索引实参（VCon 不带 rig，比较时无法区分）。它们对
-  -- 运行时结构相等没有意义，却常是未解/已解的元变量或类型中立值：按「同一个元变量」
-  -- 或「同一个中立值的显示形态」判等即可（`Just2 1 == Just2 1` 的首个实参就是 `?m`）。
-  VMeta m sp => case force defs sols fuel b of
-    VMeta m2 sp2 => m == m2
-    _ => False
-  VNeutral n => case force defs sols fuel b of
-    VNeutral n2 => showValue (VNeutral n) == showValue (VNeutral n2)
-    _ => False
-  _ => False
-
-valueListEqDeep : HashTbl Term -> Sols -> Int -> List Value -> List Value -> Bool
-valueListEqDeep defs sols fuel xs ys = if fuel <= 0 then False
-else case xs of
-  [] => case ys of
-    [] => True
-    _ => False
-  a :: rest => case ys of
-    [] => False
-    b :: rest2 =>
-      if valueEqDeep defs sols fuel a b then valueListEqDeep defs sols fuel rest rest2 else False
 
 -- ---------------------------------------------------------------
 -- 深度正规化（interp --dt 展示 main 用）：先 force，再递归 spine / if 分支。

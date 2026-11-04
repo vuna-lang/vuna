@@ -22,6 +22,15 @@
 primReduce 预筛、字典收敛短路、名字/邻接表哈希化）的逐轮读数保留在 git 历史里。
 **所有命令已在 10 s 以内**；增长率见 §8。
 
+> **M29 观测（非基准口径）**：相等收口删掉的是 interp 侧的 `valueEqDeep` /
+> `genericEqPrim` 与编译产物里的 `bi_eq_generic` / `bi_neq_generic` 两个 helper——都不在
+> check/build 的主成本路径（§5 的 `elabBodies` / conv / force）上，未观察到退化。
+> M29 开发期间本机 `vuna check .` 单次约 21 s，但那是**多任务并行构建/测试时的墙钟**
+> （同机有其他 `nix build` 与全量测试在跑），不能与 §1 的 3.7 s 基线直接比；正式基线由
+> Lead 在空闲机器上用 `nix run .#vuna-bench` 重测。C05（字典 binder 位置）修复只改
+> 字典构造顺序、不改变实例搜索复杂度；`monad/04_kind_generic` 去标记后
+> check/interp/compile+运行全过，无性能回退迹象。
+
 ## 2. 探针设施：`Vuna.Compiler.Debug`
 
 开关是 CLI 参数（`Vuna.Cli.runCli` 会剥掉它再分发，任何子命令后都能加）：
@@ -94,7 +103,7 @@ tblEmpty / tblInsert k v / tblLookup k / tblFromList pairs / tblInsertAll pairs
 | 解表查找的线性兜底 | `solsLookup` 未命中时回落到线性扫全解表；**未解**元变量在推断期是高频查询，miss 每次扫 ~9k | 索引与 list 同步维护（每次前插都插表）⇒ miss 即未解，去掉兜底：13.4 s → 12.1 s |
 | 索引键哈希的字符链表分配 | `hashStr = hashChars (strUnpack s)`：每次查表都 `strUnpack` 一条字符链表（force 每次 delta 展开都查 defs 表） | 新增运行时内建 `strHash`（OCaml 单遍、无分配）：12.1 s → 10.8 s |
 | 元变量创建深度的线性查找 | `metaDepthOf` 线性扫 `ecDepthOfMeta`（~9k） | Ec 新增 `dptbl`（`HashTbl Int`），查找 O(1) |
-| 解表线性查找（`metaLookup`） | 每次 force/conv/hasUnsolved 线性扫解表；签名期元变量在 bodies 阶段反复查，逐定义成本随解表增长（0.9 → 17.5 ms/def） | `Sols`（HashTbl 索引 + list 权威）沿 force/conv/normalize/valueEqDeep/primReduce/hasUnsolvedMeta* 传递，查找 O(1)：21.6s → 13.3s（同口径单文件产物） |
+| 解表线性查找（`metaLookup`） | 每次 force/conv/hasUnsolved 线性扫解表；签名期元变量在 bodies 阶段反复查，逐定义成本随解表增长（0.9 → 17.5 ms/def） | `Sols`（HashTbl 索引 + list 权威）沿 force/conv/normalize/primReduce/hasUnsolvedMeta* 传递，查找 O(1)：21.6s → 13.3s（同口径单文件产物） |
 | 探针时钟（`Debug.stamp`） | 每次 fork `sh -c date` ≈ 5 ms，只能 1/64 采样，无法做逐定义增长分析 | 新内建 `timeUs`（`Unix.gettimeofday` µs，~1µs/次）：可逐定义打点 |
 | 产物文本拼接（`Codegen.Decl.joinWith`） | `x ++ sep ++ joinWith sep rest`：千级片段 O(n²) 字节拷贝 | `interpose` + 新内建 `strConcatMany`（`String.concat`）：build 52.6s → 24.7s |
 

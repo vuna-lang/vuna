@@ -1,12 +1,15 @@
--- M23：没有 Eq 实例的类型上 `==` 退回泛型结构比较（与 HM 的运行时 `=` 对齐），
--- 不再报 "no instance" 错误。有实例时仍优先走字典。
+-- M29：相等收口为证据驱动——没有 Eq 证据的 `==` / `/=` 在 check 期报错，
+-- 不再退回泛型结构比较。普通 data 用 `deriving (Eq)`；参数化 data 的 `deriving (Eq)`
+-- 生成约束实例（`instance Eq a => Eq (List a)`），`List Int` 上的相等因此可用。
 data Nat : Type where
   Zero : Nat
   Succ : Nat -> Nat
+deriving (Eq)
 
 data List a : Type where
   Nil : List a
   Cons : a -> List a -> List a
+deriving (Eq)
 
 eqNat : Nat -> Nat -> Bool
 eqNat a b = a == b

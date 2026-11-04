@@ -1,5 +1,6 @@
 module Vuna.Compiler.Elab.Dict
-  ( argHeadMatchesKind
+  ( allocTeleMetas
+  , argHeadMatchesKind
   , boolShortCircuit
   , classArgIndex
   , classFieldTyAt
@@ -15,13 +16,8 @@ module Vuna.Compiler.Elab.Dict
   , dictClassArg
   , dictFamilyNameOf
   , filterInstances
-  , findClassByDict
-  , genericEqApp
-  , inferInstSel
-  , instClassOfDict
   , instDictName
   , instHeadArg
-  , instNamedLookup
   , isCmpOp
   , isDictDomain
   , isDictFamily
@@ -30,13 +26,14 @@ module Vuna.Compiler.Elab.Dict
   , joinInstNames
   , joinRestInstNames
   , methodNameMatches
-  , methodNameOf
   , neutralHeadOrSelf
   , resolveDictGoals
   , searchInstance
+  , searchInstanceIn
   , specializeCmpTy
   , specializeEqTy
   , substDictTerm
+  , termMetaId
   ) where
 
 -- Vuna.Compiler.Elab.Dict：字典编码的**表示与实例搜索**：字典类型/实例头的识别、实例搜索（conv 头匹配）、
@@ -45,6 +42,7 @@ module Vuna.Compiler.Elab.Dict
 -- 拆自 M24 的单一 `Elab.vuna`（按真实调用图切；门面仍是 `Vuna.Compiler.Elab`）。
 import Vuna.Compiler.Common
 import Vuna.Compiler.Core
+import Vuna.Compiler.Core.Term
 import Vuna.Compiler.Diagnostics
 import Vuna.Compiler.Elab.Meta
 import Vuna.Compiler.Elab.Prelude
@@ -75,19 +73,134 @@ isDictValue ec v = case v of
 isDictFamily : Ec -> String -> Bool
 isDictFamily ec g = memName g (map (\c => dictTypeName (dtClassName c)) (ecClasses ec))
 
--- 实例搜索：找头能统一到目标字典类型的**默认**实例。零个 ⇒ 报缺失，多个 ⇒ 报歧义。
--- M23：命名实例（`as name`）不参与自动搜索，只能 `method @name` 显式选中（与 HM 一致）。
+-- 实例搜索（M29-T2a）：
+--   1. 先查**局部上下文**里的字典 binder（实例方法体的 tele ctx 字典）；
+--   2. 刚性类参数（含结构化：`Box a`）在「全部实例都无 tele/ctx」时可直接判缺失，省掉
+--      每个隐式插入点的全实例 conv 扫描（自检热路径）；
+--   3. 全局候选按「分配 tele meta → conv 结果头 → 递归解 ctx」匹配；named 实例不参与
+--      自动搜索（M23 语义，T2b 删除该特性）。
+searchInstanceIn : List (Pair String Term) -> Ctx -> Ec -> Value -> Span -> Result (Pair Term Ec)
+searchInstanceIn globals ctx ec dom sp = searchInstFuel globals ctx 16 ec dom sp
+
+-- 兼容入口：无局部上下文（顶层回填路径）。
 searchInstance : Ec -> Value -> Span -> Result (Pair Term Ec)
-searchInstance ec dom sp = case filterInstances ec dom (filter (\i => not (dtInstNamed i)) (ecInsts ec)) (ecSolsP ec) of
-  Pair [] sols =>
+searchInstance ec dom sp = searchInstanceIn [] emptyCtx ec dom sp
+
+data InstMatch : Type where
+  InstMatch : DtInst -> Term -> InstMatch
+
+instMatchInst : InstMatch -> DtInst
+instMatchInst (InstMatch i t) = i
+
+instMatchTerm : InstMatch -> Term
+instMatchTerm (InstMatch i t) = t
+
+-- 递归深度上限（实例 ctx 链）；`fuel` 在每个递归层减 1。
+searchInstFuel : List (Pair String Term) -> Ctx -> Int -> Ec -> Value -> Span -> Result (Pair Term Ec)
+searchInstFuel globals ctx fuel ec dom sp = if fuel <= 0 then missingInstance ec dom sp
+else case localDictLookup ctx 0 dom ec of
+  Just pair => Ok pair
+  Nothing => if rigidSearchFast ec dom then missingInstance ec dom sp
+  else case matchInstances globals ctx fuel ec dom sp (ecInsts ec) [] of
+    Pair [] ec1 => missingInstance ec1 dom sp
+    Pair ([m]) ec1 => Ok (Pair (instMatchTerm m) ec1)
+    Pair ms ec1 =>
+      let
+        sd = showValue dom
+        names = joinInstNames (map instMatchInst ms)
+      in tcErr2 sp (AmbiguousInstance sd names) sd names
+
+missingInstance : Ec -> Value -> Span -> Result a
+missingInstance ec dom sp =
+  let
+    sd = showValue dom
+  in tcErr1 sp (NoInstanceFound sd) sd
+
+-- 局部上下文查找：ctxItems 最近的 binder 在前，其 de Bruijn index 就是下标 i。
+localDictLookup : Ctx -> Int -> Value -> Ec -> Maybe (Pair Term Ec)
+localDictLookup ctx i dom ec = case ctxItems ctx of
+  [] => Nothing
+  _ => localDictLookupGo ctx i dom ec (ctxItems ctx)
+
+localDictLookupGo : Ctx -> Int -> Value -> Ec -> List (Pair String Term) -> Maybe (Pair Term Ec)
+localDictLookupGo ctx i dom ec [] = Nothing
+localDictLookupGo ctx i dom ec ((Pair name ty) :: rest) =
+  let
+    v = forceVal ec (varTypeValue ctx i ty)
+  in if isDictValue ec v then case conv (ecDefTbl ec) (ecSolsP ec) 0 v dom of
+    Ok sols2 => Just (Pair (TVar name i) (ecPutSols ec (solsList sols2)))
+    Err e => localDictLookupGo ctx (i + 1) dom ec rest
+  else localDictLookupGo ctx (i + 1) dom ec rest
+
+-- 刚性类参数快路径：只有当所有实例都是单态（tele/ctx 均空）时才可确定匹配不上。
+rigidSearchFast : Ec -> Value -> Bool
+rigidSearchFast ec dom = if isRigidDictArg ec dom then allInstancesMono (ecInsts ec) else False
+
+allInstancesMono : List DtInst -> Bool
+allInstancesMono [] = True
+allInstancesMono (i :: rest) = case dtInstTele i of
+  [] => case dtInstCtx i of
+    [] => allInstancesMono rest
+    _ => False
+  _ => False
+
+matchInstances : List (Pair String Term) -> Ctx -> Int -> Ec -> Value -> Span -> List DtInst -> List InstMatch -> Pair (List InstMatch) Ec
+matchInstances globals ctx fuel ec dom sp [] acc = Pair (reverse acc) ec
+matchInstances globals ctx fuel ec dom sp (i :: rest) acc = case tryMatchInst globals ctx fuel ec i dom sp of
+  Just (Pair term ec1) => matchInstances globals ctx fuel ec1 dom sp rest (InstMatch i term :: acc)
+  Nothing => matchInstances globals ctx fuel ec dom sp rest acc
+
+-- 单个候选：alloc tele metas → conv 结果头 → 读 tele 解 → 递归解 ctx → 组装
+-- `TGlobal inst <typeArgs(Rig0)> <dictArgs(Rig1)>`。
+tryMatchInst : List (Pair String Term) -> Ctx -> Int -> Ec -> DtInst -> Value -> Span -> Maybe (Pair Term Ec)
+tryMatchInst globals ctx fuel ec inst dom sp = if fuel <= 0 then Nothing
+else case allocTeleMetas ctx ec (dtInstTele inst) of
+  Pair metas ec1 =>
     let
-      sd = showValue dom
-    in tcErr1 sp (NoInstanceFound sd) sd
-  Pair ([i]) sols => Ok (Pair (TGlobal (dtInstName i)) (ecPutSols ec (solsList sols)))
-  Pair cands sols =>
-    let
-      sd = showValue dom
-    in tcErr2 sp (AmbiguousInstance sd (joinInstNames cands)) sd (joinInstNames cands)
+      hd = eval (map (\m => VMeta m []) metas) (dtInstHead inst)
+    in case conv (ecDefTbl ec1) (ecSolsP ec1) 0 dom hd of
+      Err e => Nothing
+      Ok sols2 =>
+        let
+          ec2 = ecPutSols ec1 (solsList sols2)
+        in case solveTeleMetas ec2 metas of
+          Nothing => Nothing
+          Just solved =>
+            let
+              teleArgs =
+                map (\v => Pair (quote (ctxDepth ctx) (forceVal ec2 v)) Rig0) (reverse solved)
+              env2 = map (\v => forceVal ec2 v) solved
+              ctxVals = map (\t => forceVal ec2 (eval env2 t)) (dtInstCtx inst)
+            in case solveDictCtxs globals ctx (fuel - 1) ec2 sp ctxVals [] of
+              Nothing => Nothing
+              Just (Pair dictArgs ec3) =>
+                Just
+                  (Pair (foldAppTerms (TGlobal (dtInstName inst)) (append teleArgs dictArgs)) ec3)
+
+allocTeleMetas : Ctx -> Ec -> List (Pair String Term) -> Pair (List Int) Ec
+allocTeleMetas ctx ec [] = Pair [] ec
+allocTeleMetas ctx ec (t :: rest) = case newMeta ctx ec of
+  Pair tm ec1 => case allocTeleMetas ctx ec1 rest of
+    Pair ids ec2 => Pair (termMetaId tm :: ids) ec2
+
+termMetaId : Term -> Int
+termMetaId t = case t of
+  TMeta m => m
+  _ => 0
+
+solveTeleMetas : Ec -> List Int -> Maybe (List Value)
+solveTeleMetas ec [] = Just []
+solveTeleMetas ec (m :: rest) = case metaLookup m (ecSols ec) of
+  Nothing => Nothing
+  Just v => case solveTeleMetas ec rest of
+    Nothing => Nothing
+    Just vs => Just (v :: vs)
+
+solveDictCtxs : List (Pair String Term) -> Ctx -> Int -> Ec -> Span -> List Value -> List (Pair Term Rig) -> Maybe (Pair (List (Pair Term Rig)) Ec)
+solveDictCtxs globals ctx fuel ec sp [] acc = Just (Pair (reverse acc) ec)
+solveDictCtxs globals ctx fuel ec sp (cv :: rest) acc = case searchInstFuel globals ctx fuel ec cv sp of
+  Err e => Nothing
+  Ok (Pair t ec1) => solveDictCtxs globals ctx fuel ec1 sp rest (Pair t Rig1 :: acc)
 
 -- M22：回填延迟的字典元变量。每个 `DtDictGoal m dom`：类参数已解（非元变量）且能搜到
 -- 唯一实例时解 `?m = <实例>`；仍未解或仍歧义则留到下一轮（幂等，可反复调用）。
@@ -116,12 +229,60 @@ else case ecDictGoals ec of
         Err e => keep
       Nothing => keep
 
--- M22：把「已解且闭」的元变量在项里替换成其实例项（`TMeta m` → `quote 0` 的解）。
--- 字典元变量是运行时实参（Rig1），codegen 会对残留的 `TMeta` 报错；只有擦除的
--- 类型/索引元变量（Rig0）可留在项里。字典解（实例构造子）是闭的，`quote 0` 安全；
--- 带自由变量（非闭）的解跳过——它们只可能是擦除元变量，codegen 跳过。
+-- M29-T2b：字典解的 term 化要**保留 multiplicity**：参数化实例的字典项形如
+-- `TApp (TApp (TGlobal inst) <typeArg>) <dictArg>`，而 Value spine 不含 rig；
+-- 直接 `quote 0` 会把 erased 类型实参渲染成运行期实参（OCaml 里出现 `v_Int`）。
+-- 这里按实例签名的 Pi 前缀（`Π tele(Rig0). Π ctx(Rig1). head`）恢复每个实参的 rig。
 substDictTerm : Ec -> Term -> Term
-substDictTerm ec t = substSolvedMetasTbl (ecSolTbl ec) t
+substDictTerm ec t = substDictTermGo ec 0 t
+
+substDictTermGo : Ec -> Int -> Term -> Term
+substDictTermGo ec depth t = case t of
+  TMeta m => case metaLookup m (ecSols ec) of
+    Nothing => t
+    Just v => case dictTermOfValue ec v of
+      Just soln => if hasFreeTermVar 0 soln then t else shift 0 depth soln
+      Nothing =>
+        let
+          soln0 = quote 0 v
+        in if hasFreeTermVar 0 soln0 then t else soln0
+  TPi n i r dom cod => TPi n i r (substDictTermGo ec depth dom) (substDictTermGo ec (depth + 1) cod)
+  TLam n r b => TLam n r (substDictTermGo ec (depth + 1) b)
+  TApp f a r => TApp (substDictTermGo ec depth f) (substDictTermGo ec depth a) r
+  TCon c args => TCon c (map (\p => Pair (substDictTermGo ec depth (firstOf p)) (secondOf p)) args)
+  TCase s alts =>
+    TCase (substDictTermGo ec depth s) (map (\alt => substDictTermAlt ec depth alt) alts)
+  TIf c th el =>
+    TIf (substDictTermGo ec depth c) (substDictTermGo ec depth th) (substDictTermGo ec depth el)
+  _ => t
+
+substDictTermAlt : Ec -> Int -> CaseAlt -> CaseAlt
+substDictTermAlt ec depth alt = case alt of
+  CaseAlt n bs b => CaseAlt n bs (substDictTermGo ec (depth + length bs) b)
+
+-- 把 Value 里的全局应用脊还原成 Term，并按全局签名恢复每个实参的 rig。
+dictTermOfValue : Ec -> Value -> Maybe Term
+dictTermOfValue ec v = case forceVal ec v of
+  VNeutral n => case n of
+    NGlobal g sp => Just (foldSpineWithTyRigs (TGlobal g) sp (piRigsOfGlobal ec g))
+    _ => Nothing
+  _ => Nothing
+
+foldSpineWithTyRigs : Term -> List Value -> List Rig -> Term
+foldSpineWithTyRigs fn [] rigs = fn
+foldSpineWithTyRigs fn (v :: rest) rigs = case rigs of
+  r :: rs => foldSpineWithTyRigs (TApp fn (quote 0 v) r) rest rs
+  [] => foldSpineWithTyRigs (TApp fn (quote 0 v) Rig1) rest []
+
+piRigsOfGlobal : Ec -> String -> List Rig
+piRigsOfGlobal ec g = case tblLookup g (ecGlobalsTbl ec) of
+  Just ty => piRigs ty
+  Nothing => []
+
+piRigs : Term -> List Rig
+piRigs t = case t of
+  TPi n i r dom cod => r :: piRigs cod
+  _ => []
 
 -- 实例表筛选（M22）：接受**可新增解**的头匹配——`Dict_C ?a`（`?a` 未解）与实例头
 -- `Dict_C IO` 统一会解出 `?a = IO`，这正是「约束求解」：字典约束本身确定类参数。
@@ -144,49 +305,6 @@ joinInstNames (i :: rest) = dtInstName i ++ joinRestInstNames rest
 joinRestInstNames : List DtInst -> String
 joinRestInstNames [] = ""
 joinRestInstNames (i :: rest) = ", " ++ dtInstName i ++ joinRestInstNames rest
-
--- ---------------------------------------------------------------
--- M23：`@inst` 命名实例选择
--- ---------------------------------------------------------------
--- `method @Instance args..`：不走实例搜索，直接取**指定实例**的方法实现。
--- DT 的实例是字典值（`MkDict_C <方法字段...>`），方法字段顺序 = 类的方法声明顺序；
--- 但顶层定义体精化时实例体还没生成（顺序是「定义体 → 实例体」），所以这里构造
--- 「对实例字典做 case 取第 k 个字段」的投影项（字典名是全局引用，求值/codegen 时
--- 定义已就位），签名用类的方法类型把类参数替换成实例头实参（与实例方法体一致）。
-inferInstSel : List (Pair String Term) -> Ctx -> Ec -> Expr -> String -> Span -> Result (Pair Term (Pair Value Ec))
-inferInstSel globals ctx ec meth iname sp = case methodNameOf meth of
-  Nothing => tcErr0 sp InstanceAnnotationWrongUse
-  Just mname => case instNamedLookup iname (ecInsts ec) of
-    Nothing => tcErr1 sp (UnknownNamedInstance iname) iname
-    Just inst => case instClassOfDict (instDictName inst) (ecClasses ec) of
-      Nothing => tcErr1 sp (InstanceNotTrait iname) iname
-      Just cls => case classMethodIndex mname (dtClassMethods cls) of
-        Nothing => tcErr2 sp (NotTraitMethod mname (dtClassName cls)) mname (dtClassName cls)
-        Just k =>
-          let
-            nFields = length (dtClassMethods cls)
-            fty = classFieldTyAt k (dtClassFieldTys cls)
-            instTy = substClassParam (paramNameOf (dtClassParams cls)) (instHeadArg inst) fty
-            -- **eta 展开**成 `\x0 .. \x(ar-1) => case <dict> of MkDict_C f0..fn => f_k x0..x(ar-1)`。
-            -- 不能只给裸 `case`：`case` 是值，核心求值器对「把卡住的 case 当函数应用」不会 β
-            -- 归约（call-by-name 下 VCase 没有应用规则），`pretty @fancy Blue` 会卡住。
-            -- 展开后应用先 β 归约，case 在体内被 force，字典的 delta 展开再命中断言分支。
-            rigs = methodArgRigsOf binderRig fty
-            fieldVar = TVar (fieldVarName k) (nFields - 1 - k)
-            applied = foldAppTerms fieldVar (methodArgTerms rigs nFields)
-            alt = CaseAlt (dictCtorName (dtClassName cls)) (fieldBinderNames nFields) applied
-            proj = methodArgLams rigs 0 (TCase (TGlobal iname) [alt])
-          in Ok (Pair proj (Pair (eval [] instTy) ec))
-
-methodNameOf : Expr -> Maybe String
-methodNameOf e = case e of
-  EVar n sp => Just n
-  _ => Nothing
-
-instNamedLookup : String -> List DtInst -> Maybe DtInst
-instNamedLookup name [] = Nothing
-instNamedLookup name (i :: rest) =
-  if dtInstNamed i && dtInstName i == name then Just i else instNamedLookup name rest
 
 -- 实例头 `Dict_C <arg>` 的字典族名。
 instDictName : DtInst -> Maybe String
@@ -267,131 +385,55 @@ dictClassArg ec dom = case forceVal ec dom of
   VNeutral (NGlobal g ([arg])) => Just arg
   _ => Nothing
 
--- 字典域类参数是不是定义体的刚性变量（绑定于当前定义类型，无实例可搜）。
--- `mem` 的 `Dict_Eq a` 走这里；具体类型（`NGlobal`）与元变量不在此列。
+-- 字典域类参数是否依赖**刚性局部变量**（绑定于当前定义/实例 tele 的类型变量）。
+-- M29-T2a：判定改为**结构化**——`a`、`Box a`、`List (Box a)` 都算刚性（旧实现只看裸 NVar，
+-- 导致 `mem (Box a)` 这类泛型调用点既搜不到实例、也不提升成隐式字典参数）。
 isRigidDictArg : Ec -> Value -> Bool
 isRigidDictArg ec dom = case dictClassArg ec dom of
   Just arg => isRigidClassArg ec arg
   Nothing => False
 
--- 已取出的类参数是否为刚性局部变量（resolveDictGoals 里先算 docClassArg 再判，避免重复 force）。
+-- 已取出的类参数是否含刚性局部变量（resolveDictGoals 里先算 dictClassArg 再判，避免重复 force）。
 isRigidClassArg : Ec -> Value -> Bool
-isRigidClassArg ec arg = case forceVal ec arg of
+isRigidClassArg ec arg = valueHasRigidNVar ec 64 arg
+
+valueHasRigidNVar : Ec -> Int -> Value -> Bool
+valueHasRigidNVar ec fuel v = if fuel <= 0 then False
+else case forceVal ec v of
   VNeutral n => case n of
     NVar name lvl sp => True
-    _ => False
+    NGlobal g sp => anyValueHasRigidNVar ec (fuel - 1) sp
+  VCon c args => anyValueHasRigidNVar ec (fuel - 1) args
+  VApp f a => valueHasRigidNVar ec (fuel - 1) f || valueHasRigidNVar ec (fuel - 1) a
+  VCase s alts => valueHasRigidNVar ec (fuel - 1) s
+  VIf c t e =>
+    valueHasRigidNVar ec (fuel - 1) c
+      || valueHasRigidNVar ec (fuel - 1) t
+      || valueHasRigidNVar ec (fuel - 1) e
   _ => False
 
--- M24：这里原来按「名字形如 t<数字> 的 HM 推断变量」决定 `==` / 比较运算直接走
--- generic 运行时（跳过字典）。HM 删除后这种变量名不再产生，名字启发式整体移除。
--- 刚性类型变量保持 M22 语义：搜不到实例时由 `deferEqDict` 提升成隐式字典参数
--- （`deriving (Eq)` / 手写实例仍然生效）；`bi_*_generic` 兜底只留给「具体类型且
--- 没有对应实例」。签名清理后类型变量有稳定语义名，不再需要按名字判定来源。
--- M23：没有 Eq 实例时的泛型结构比较兜底（擦除的类型实参 + 两个运行时值）。
-genericEqApp : String -> Term -> Term -> Term -> Term
-genericEqApp name tyTerm aTerm bTerm =
-  let
-    rt = if name == "==" then "bi_eq_generic" else "bi_neq_generic"
-  in TApp (TApp (TApp (TGlobal rt) tyTerm Rig0) aTerm Rig1) bTerm Rig1
+anyValueHasRigidNVar : Ec -> Int -> List Value -> Bool
+anyValueHasRigidNVar ec fuel [] = False
+anyValueHasRigidNVar ec fuel (v :: rest) =
+  valueHasRigidNVar ec fuel v || anyValueHasRigidNVar ec fuel rest
 
--- `==` / `/=` 的饱和应用（M19）：`Int` / `String` 特化成具体运行时函数；其它类型解析成
--- `Eq` 字典的方法投影（`deriving (Eq)` 的用处）。M24.7：方法投影名与字典名从库里
--- 短名 `Eq` 的类表项取（`Base.Eq.Eq`），不用硬编码 `Dict_Eq`。
+-- `==` / `/=` 的饱和应用（M19/M29）：`Int` / `String` 特化成具体运行时函数；其它类型解析成
+-- `Eq` 字典的方法投影（手写实例、`deriving (Eq)`、约束实例都算证据）。
+-- M24.7：方法投影名与字典名从库里短名 `Eq` 的类表项取（`Base.Eq.Eq`），不用硬编码 `Dict_Eq`。
 --
--- M25：泛型兜底（`bi_*_generic`，OCaml 多态相等）只允许「运行时表示可安全结构比较」的
--- 类型：不能含函数/Pi、类型宇宙、元变量或未知抽象类型；含函数字段的 data 明确拒绝，
--- 用户必须 `deriving (Eq)`/手写实例。这样不会再把「函数值相等」拖到运行时崩
--- `Invalid_argument("compare: functional value")`。
-termHasPi : Term -> Bool
-termHasPi t = case t of
-  TPi name implicit rig dom cod => True
-  TApp f a rig => termHasPi f || termHasPi a
-  TCon c args => termHasPiArgs args
-  TIf c th el => termHasPi c || termHasPi th || termHasPi el
-  TCase scrut alts => termHasPi scrut
-  _ => False
-
-termHasPiArgs : List (Pair Term Rig) -> Bool
-termHasPiArgs [] = False
-termHasPiArgs ((Pair t rig) :: rest) = termHasPi t || termHasPiArgs rest
-
--- 跳过 data 的族参数（kind 的 Pi binder），返回字段 telescope。
-dropDataParams : Int -> Term -> Term
-dropDataParams n t = if n <= 0 then t
-else case t of
-  TPi name implicit rig dom cod => dropDataParams (n - 1) cod
-  _ => t
-
--- 字段 telescope 里只要出现函数类型的域就不可安全结构比较。
-ctorFieldsComparable : Term -> Bool
-ctorFieldsComparable t = case t of
-  TPi name implicit rig dom cod => if termHasPi dom then False else ctorFieldsComparable cod
-  _ => True
-
-dataByName : List DtData -> String -> Maybe DtData
-dataByName [] name = Nothing
-dataByName (d :: rest) name = if dtDataName d == name then Just d else dataByName rest name
-
-typeComparable : Ec -> Int -> List String -> Value -> Bool
-typeComparable ec fuel seen v = if fuel <= 0 then False
-else case forceVal ec v of
-  VInt n => True
-  VStr s => True
-  VBool b => True
-  VCon name args =>
-    if primitiveComparable name then True else dataComparable ec (fuel - 1) seen name args
-  VNeutral n => case n of
-    NGlobal g args =>
-      if primitiveComparable g then True else dataComparable ec (fuel - 1) seen g args
-    NVar name lvl sp => False
-  VType l => False
-  VPi name implicit rig dom cod => False
-  VLam name rig clo => False
-  VMeta m sp => False
-  VCase scrut alts => False
-  VIf c th el => False
-  VApp f a => False
-
-primitiveComparable : String -> Bool
-primitiveComparable g = g == intTypeName || g == strTypeName || g == boolTypeName
-
-dataComparable : Ec -> Int -> List String -> String -> List Value -> Bool
-dataComparable ec fuel seen name args = if memName name seen then True
-else case dataByName (ecDatas ec) name of
-  Nothing => True
-  Just d =>
-    if anyValueUnsafe ec fuel (name :: seen) args then False
-    else allCtorsComparable ec fuel (name :: seen) (dtDataParams d) (dtDataCtors d)
-
-anyValueUnsafe : Ec -> Int -> List String -> List Value -> Bool
-anyValueUnsafe ec fuel seen [] = False
-anyValueUnsafe ec fuel seen (x :: rest) =
-  if typeComparable ec fuel seen x then anyValueUnsafe ec fuel seen rest else True
-
-allCtorsComparable : Ec -> Int -> List String -> List (Pair String Rig) -> List DtCtor -> Bool
-allCtorsComparable ec fuel seen params [] = True
-allCtorsComparable ec fuel seen params (c :: rest) =
-  if ctorFieldsComparable (dropDataParams (length params) (dtCtorType c)) then allCtorsComparable ec fuel seen params rest
-  else False
-
--- 泛型相等兜底只对可安全结构比较的类型开放；否则要求在源码里有 Eq 实例。
-genericEqSafe : String -> Term -> Term -> Term -> Span -> Value -> Ec -> Result (Maybe (Pair Term (Pair Value Ec)))
-genericEqSafe name tyTerm aTerm bTerm sp aTy ec = if typeComparable ec 64 [] aTy then Ok
-  (Just (Pair (genericEqApp name tyTerm aTerm bTerm) (Pair (VNeutral (NGlobal boolTypeName [])) ec)))
-else
-  let
-    st = showValue (forceVal ec aTy)
-  in tcErr1 sp (GenericEqNotComparable st) st
-
+-- M29（决策 A）：**删除泛型结构比较兜底**——程序里没有 `Eq` 类、或具体类型搜不到实例时
+-- 在 check 期报错（`TC_EqRequiresEvidence` / `TC_NoInstanceFound`），不再退回
+-- `bi_eq_generic`（OCaml 多态相等）或 interp 的另一套 `valueEqDeep`。
 specializeEqTy : List (Pair String Term) -> Ctx -> String -> Term -> Term -> Span -> Value -> Ec -> Result (Maybe (Pair Term (Pair Value Ec)))
--- M23：具体类型没有 Eq 实例时退回泛型结构比较（bi_eq_generic，语义与 HM 的 == 一致）；
--- 程序里没有 Eq 类时（单文件 / 未 import）同样退回泛型。
 specializeEqTy globals ctx name aTerm bTerm sp aTy ec = case builtinEqTyName (forceVal ec aTy) of
   Just tyName =>
     andThen (eqRuntimeName name tyName)
       (\rt => Ok (Just (Pair (TApp (TApp (TGlobal rt) aTerm Rig1) bTerm Rig1) (Pair (VNeutral (NGlobal boolTypeName [])) ec))))
   Nothing => case findClassByShortName "Eq" (ecClasses ec) of
-    Nothing => genericEqSafe name (quote (ctxDepth ctx) aTy) aTerm bTerm sp aTy ec
+    Nothing =>
+      let
+        st = showValue (forceVal ec aTy)
+      in tcErr1 sp (EqRequiresEvidence st) st
     Just cls =>
       let
         mname = classMethodProjection (dtClassMethods cls) (if name == "==" then "eq" else "neq")
@@ -400,13 +442,13 @@ specializeEqTy globals ctx name aTerm bTerm sp aTy ec = case builtinEqTyName (fo
         tyTerm = quote (ctxDepth ctx) aTy
         dictTy = VNeutral (NGlobal (dictTypeName (dtClassName cls)) [aTy])
       in if dictArgUnsolvedMeta ec dictTy then deferEqDict globals ctx mname tyTerm aTerm bTerm sp dictTy ec
-      else case searchInstance ec dictTy sp of
+      else case searchInstanceIn globals ctx ec dictTy sp of
         Ok (Pair dictTerm ec1) =>
           Ok
             (Just (Pair (TApp (TApp (TApp (TApp (TGlobal mname) tyTerm Rig0) dictTerm Rig1) aTerm Rig1) bTerm Rig1) (Pair (VNeutral (NGlobal boolTypeName [])) ec1)))
         Err e =>
           if isRigidDictArg ec dictTy then deferEqDict globals ctx mname tyTerm aTerm bTerm sp dictTy ec
-          else genericEqSafe name tyTerm aTerm bTerm sp aTy ec
+          else Err e
 
 -- 刚性类参数（如 `mem` 的 `a`）没有可搜实例：延迟成裸元变量 + 记录自由字典目标，
 -- 等定义体精化完由 `liftFreeDictGoals` 提升成 `{d : Dict_Eq a}` 隐式参数。
@@ -470,23 +512,25 @@ dictArgUnsolvedMeta ec dom = case dictClassArg ec dom of
   Nothing => False
 
 specializeCmpTy : List (Pair String Term) -> Ctx -> String -> Term -> Term -> Span -> Value -> Ec -> Result (Maybe (Pair Term (Pair Value Ec)))
--- M24.7：`Ord` 类/实例在库（`Base.Ord`），按短名查类并用真实字典名/方法投影名；
--- 无 Ord 类时（单文件 / 未 import）退回泛型比较运行时。
+-- M24.7：`Ord` 类/实例在库（`Base.Ord`），按短名查类并用真实字典名/方法投影名。
+-- M29：**删除「无 Ord 类 → 任意类型泛型比较」兜底**——没有 `Ord` 证据时在 check 期报错
+-- （`Ord instance required`），不再生成 `bi_lt_generic` 等对用户 data 的 `compare`。
 specializeCmpTy globals ctx name aTerm bTerm sp aTy ec = case cmpBuiltinTyName (forceVal ec aTy) of
   Just tyName =>
     andThen (cmpRuntimeName sp name tyName)
       (\rt => Ok (Just (Pair (TApp (TApp (TGlobal rt) aTerm Rig1) bTerm Rig1) (Pair (VNeutral (NGlobal boolTypeName [])) ec))))
   Nothing => case findClassByShortName "Ord" (ecClasses ec) of
     Nothing =>
-      Ok
-        (Just (Pair (TApp (TApp (TGlobal (cmpGenericName name)) aTerm Rig1) bTerm Rig1) (Pair (VNeutral (NGlobal boolTypeName [])) ec)))
+      let
+        st = showValue (forceVal ec aTy)
+      in tcErr2 sp (OpNotDefinedFor name st) name st
     Just cls =>
       let
         mname = classMethodProjection (dtClassMethods cls) (cmpMethodName name)
         tyTerm = quote (ctxDepth ctx) aTy
         dictTy = VNeutral (NGlobal (dictTypeName (dtClassName cls)) [aTy])
       in if dictArgUnsolvedMeta ec dictTy then deferEqDict globals ctx mname tyTerm aTerm bTerm sp dictTy ec
-      else case searchInstance ec dictTy sp of
+      else case searchInstanceIn globals ctx ec dictTy sp of
         Ok (Pair dictTerm ec1) =>
           Ok
             (Just (Pair (TApp (TApp (TApp (TApp (TGlobal mname) tyTerm Rig0) dictTerm Rig1) aTerm Rig1) bTerm Rig1) (Pair (VNeutral (NGlobal boolTypeName [])) ec1)))

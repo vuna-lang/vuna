@@ -305,28 +305,34 @@ else case peekPos st of
       (\name, st1 => step (expectSym st1 ":") (\_, st2 => step (parseExpr (stateFuel st2) st2 methodCol 0) (\ty, st3 => step (parseMethodSigList (fuel - 1) st3 methodCol) (\rest, st4 => Ok (Pair (Pair name ty :: rest) st4)))))
     else if col > methodCol then psErr0 UnexpectedIndentInTrait else Ok (Pair [] st)
 
--- instance 声明（M10.5）：`instance Head [as name] where` + 缩进方法定义。
+-- instance 声明（M10.5 / M29）：`instance [<ctx> ,... =>] Head where` + 缩进方法定义。
+-- ctx 是逗号分隔的字典约束（每个形如 `C arg`；M29 只支持单参数 trait）。
+-- M29-T2b：命名实例（`as name`）已删除。
 parseInstance : PState -> Int -> Pos -> Result (Pair Decl PState)
-parseInstance st blockCol kwPos = step (expectKw st "instance") (\_, st1 => step (parseExpr (stateFuel st1) st1 blockCol 0) (\head, st2 => step (parseInstanceName st2) (\name, st3 => step (expectKw st3 "where") (\_, st4 => step (parseInstanceBody st4 blockCol) (\methods, st5 => let
-  isDefault = instanceIsDefault name
-in Ok
-  (Pair (DInstance name isDefault head methods (Span (fileOf st) (posLine kwPos) (posCol kwPos) (posLine (lastPos st5)) (posCol (lastPos st5)))) st5)
-)
-)
-)
+parseInstance st blockCol kwPos = step (expectKw st "instance") (\_, st1 => step (parseInstanceHeadCtx (stateFuel st1) st1 blockCol) (\hc, st2 => case hc of
+  Pair ctxE head => parseInstanceTail ctxE head st blockCol kwPos st2
 )
 )
 
-instanceIsDefault : Maybe String -> Bool
-instanceIsDefault name = case name of
-  Nothing => True
-  Just _ => False
+parseInstanceTail : List Expr -> Expr -> PState -> Int -> Pos -> PState -> Result (Pair Decl PState)
+parseInstanceTail ctxE head st blockCol kwPos st2 =
+  step (expectKw st2 "where")
+    (\_, st3 => step (parseInstanceBody st3 blockCol) (\methods, st4 => Ok (Pair (DInstance ctxE head methods (Span (fileOf st) (posLine kwPos) (posCol kwPos) (posLine (lastPos st4)) (posCol (lastPos st4)))) st4)))
 
-parseInstanceName : PState -> Result (Pair (Maybe String) PState)
-parseInstanceName st =
-  if atKw st "as" then step (expectKw st "as")
-    (\_, st1 => step (expectIdent st1) (\name, st2 => Ok (Pair (Just name) st2)))
-  else Ok (Pair Nothing st)
+parseInstanceHeadCtx : Int -> PState -> Int -> Result (Pair (Pair (List Expr) Expr) PState)
+parseInstanceHeadCtx fuel st blockCol =
+  if fuel <= 0 then Err "DT: parser fuel exhausted (internal: parser made no progress)"
+  else step (parseExpr fuel st blockCol 0)
+    (\e1, st1 => if atSym st1 "=>" then step (parseExpr (fuel - 1) (advance st1) blockCol 0) (\hd, st2 => Ok (Pair (Pair [e1] hd) st2)) else if atSym st1 "," then parseInstanceCtxRest (fuel - 1) (advance st1) [e1] blockCol else Ok (Pair (Pair [] e1) st1))
+
+-- ctx 列表的剩余部分：`e , e ... => head`。
+parseInstanceCtxRest : Int -> PState -> List Expr -> Int -> Result (Pair (Pair (List Expr) Expr) PState)
+parseInstanceCtxRest fuel st acc blockCol =
+  if fuel <= 0 then Err "DT: parser fuel exhausted (internal: parser made no progress)"
+  else if atSym st "=>" then step (parseExpr (fuel - 1) (advance st) blockCol 0)
+    (\hd, st1 => Ok (Pair (Pair (reverse acc) hd) st1))
+  else step (parseExpr fuel st blockCol 0)
+    (\e, st1 => if atSym st1 "," then parseInstanceCtxRest (fuel - 1) (advance st1) (e :: acc) blockCol else step (expectSym st1 "=>") (\_, st2 => step (parseExpr (fuel - 1) st2 blockCol 0) (\hd, st3 => Ok (Pair (Pair (reverse (e :: acc)) hd) st3))))
 
 parseInstanceBody : PState -> Int -> Result (Pair (List Decl) PState)
 parseInstanceBody st blockCol = if isEof st then Ok (Pair [] st)
@@ -405,19 +411,11 @@ else case peekTok st of
 
 parseApplication : Int -> PState -> Int -> Result (Pair Expr PState)
 parseApplication fuel st blockCol = if fuel <= 0 then Err "DT: parser fuel exhausted (internal: parser made no progress)"
-else step (parseAtom (fuel - 1) st blockCol) (\first, st1 => step (parseInstanceSelector st1 blockCol first) (\first2, st2 => step (parseArgs (fuel - 1) st2 blockCol) (\args, st3 => case args of
-  [] => Ok (Pair first2 st3)
-  _ => Ok (Pair (EApp first2 args (spanOf st st3)) st3)
+else step (parseAtom (fuel - 1) st blockCol) (\first, st1 => step (parseArgs (fuel - 1) st1 blockCol) (\args, st2 => case args of
+  [] => Ok (Pair first st2)
+  _ => Ok (Pair (EApp first args (spanOf st st2)) st2)
 )
 )
-)
-
--- `method @instance`：显式命名实例选择（M10.5）。
-parseInstanceSelector : PState -> Int -> Expr -> Result (Pair Expr PState)
-parseInstanceSelector st blockCol first =
-  if atSym st "@" then step (expectSym st "@")
-    (\_, st1 => step (expectIdent st1) (\name, st2 => Ok (Pair (EInstSel first name (spanFromExpr first st2)) st2)))
-  else Ok (Pair first st)
 
 spanFromExpr : Expr -> PState -> Span
 spanFromExpr e st2 =

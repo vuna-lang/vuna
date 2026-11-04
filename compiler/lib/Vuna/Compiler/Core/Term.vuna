@@ -428,6 +428,7 @@ insertDictBinderGo name idx dictDom depth t = case t of
     else TPi n i r d (insertDictBinderGo name idx dictDom (depth + 1) c)
   _ => t
 
+-- M29：保留给旧调用面的纯 helper（本模块不再用；导出名保持稳定以免动导出面快照）。
 cutoffOf : Int -> Int -> Int
 cutoffOf total idx = if total - (idx + 1) <= 0 then 0 else total - (idx + 1)
 
@@ -437,14 +438,18 @@ countPis t = case t of
   _ => 0
 
 -- M20 字典提升：在 `TLam` 链索引 `idx` 的绑定子后插入 `TLam d`。
+-- M29（C05）：插入点之后的体 `b` 的自由变量全部位于插入点**外侧**，因此 shift 的 cutoff
+-- 必须是 0（`shift` 下钻 binder 时会自动抬高 cutoff，正好保持体内层变量不变）。旧实现
+-- 传 `total - (idx + 1)`，导致第 `idx` 个 binder 及一部分外侧变量少移一位——被提升的
+-- 字典变量因此可能退化成显式参数（`ma` → `d114` 自应用）。
 insertLamBinder : String -> Int -> Term -> Term
-insertLamBinder name idx t = insertLamBinderGo name idx (countLams t) 0 t
+insertLamBinder name idx t = insertLamBinderGo name idx 0 t
 
-insertLamBinderGo : String -> Int -> Int -> Int -> Term -> Term
-insertLamBinderGo name idx total depth t = case t of
+insertLamBinderGo : String -> Int -> Int -> Term -> Term
+insertLamBinderGo name idx depth t = case t of
   TLam n r b =>
-    if depth == idx then TLam n r (TLam name Rig1 (shift (cutoffOf total idx) 1 b))
-    else TLam n r (insertLamBinderGo name idx total (depth + 1) b)
+    if depth == idx then TLam n r (TLam name Rig1 (shift 0 1 b))
+    else TLam n r (insertLamBinderGo name idx (depth + 1) b)
   _ => t
 
 countLams : Term -> Int

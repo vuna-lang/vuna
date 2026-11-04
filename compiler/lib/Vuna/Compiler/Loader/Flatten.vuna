@@ -68,16 +68,6 @@ findMethodNamed name methods = case methods of
   [] => Nothing
   (Pair mname ty) :: rest => if mname == name then Just mname else findMethodNamed name rest
 
-findOwnInstanceName : String -> List Decl -> Maybe String
-findOwnInstanceName name decls = case decls of
-  [] => Nothing
-  d :: rest => case d of
-    DInstance iname isDefault head methods sp => if isDefault then findOwnInstanceName name rest
-    else case iname of
-      Just n => if n == name then Just n else findOwnInstanceName name rest
-      Nothing => findOwnInstanceName name rest
-    _ => findOwnInstanceName name rest
-
 findOwnCtorName : String -> List Decl -> Maybe (Pair String String)
 findOwnCtorName name decls = case decls of
   [] => Nothing
@@ -123,12 +113,8 @@ declImplicitExports prefix d = case d of
     if isPrivateName tname then []
     else ExportEntry { kind = "type", public = tname, target = mangle prefix tname, parent = "" }
       :: ownCtorEntries prefix tname (map firstOf methods)
-  DInstance iname isDefault head methods sp => if isDefault then []
-  else case iname of
-    Nothing => []
-    Just name =>
-      if isPrivateName name then []
-      else [ExportEntry { kind = "val", public = name, target = mangle prefix name, parent = "" }]
+  -- M29-T2b：命名实例已删除，实例不出现在导出表（字典按实例表注册）。
+  DInstance ctxE head methods sp => []
   DSig name ty sp =>
     if isPrivateName name then []
     else [ExportEntry { kind = "val", public = name, target = mangle prefix name, parent = "" }]
@@ -205,9 +191,7 @@ ownOrImportedTypeRef modules prefix decls imports name = case findOwnData name d
 ownOrImportedValueRef : List Module -> String -> List Decl -> List Import -> String -> Result (Maybe ExportRef)
 ownOrImportedValueRef modules prefix decls imports name = case findOwnFn name decls of
   Just fn => Ok (Just (ExportRef "val" (mangle prefix fn) ""))
-  Nothing => case findOwnInstanceName name decls of
-    Just iname => Ok (Just (ExportRef "val" (mangle prefix iname) ""))
-    Nothing => ownOrImportedValueRef2 modules prefix decls imports name
+  Nothing => ownOrImportedValueRef2 modules prefix decls imports name
 
 ownOrImportedValueRef2 : List Module -> String -> List Decl -> List Import -> String -> Result (Maybe ExportRef)
 ownOrImportedValueRef2 modules prefix decls imports name = case findOwnCtorName name decls of
