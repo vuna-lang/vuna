@@ -94,7 +94,7 @@ lib/Vuna/Lint/Fix.vuna: fixLoop
 lib/Vuna/Lint/Rules.vuna: Edit, Finding, editEnd, editLines, editStart, findingCode, findingCol, findingEdit, findingLine, findingMessage, findingRule, isNilList, joinLines, lintSource, splitLines
 lib/Vuna/Lsp.vuna: runLsp, runLspTool
 lib/Vuna/Lsp/Diagnostics.vuna: contextForDoc, publishDiagnosticsFor
-lib/Vuna/Lsp/Protocol.vuna: allDigits, clampInt, decodeUri, digitsToInt, dirOfPath, fileNameOf, flushLogLines, isEmptyList, lastElem, lastSegment, lineText, logLine, lspRange, nextFrame, notify, nthCode, parentDir, pathToUri, qualPrefixLen, readMore, responseErr, responseOk, sendFrame, spanRange, stripTrailingDots, tokenAtCursor, wordPrefixLen
+lib/Vuna/Lsp/Protocol.vuna: allDigits, clampInt, contentLengthOf, decodeUri, digitsToInt, dirOfPath, fileNameOf, flushLogLines, isEmptyList, lastElem, lastSegment, lineText, logLine, lspRange, notify, nthCode, parentDir, pathToUri, qualPrefixLen, readChunk, responseErr, responseOk, sendFrame, spanRange, splitHeaderBlock, stripTrailingDots, tokenAtCursor, wordPrefixLen
 lib/Vuna/Lsp/Query.vuna: completionItems, definitionResult, documentSymbols, formattingEdits, holeHoverAt, referencesResult, symbolHoverResult, workspaceRoot, workspaceSymbols
 lib/Vuna/Repl.vuna: runRepl
 lib/Vuna/TestRunner.vuna: runTests

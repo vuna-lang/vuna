@@ -5,10 +5,12 @@ module Vuna.Lsp (runLsp, runLspTool) where
 -- 传输/URI/帧在 `Vuna.Lsp.Protocol`，诊断链在 `Vuna.Lsp.Diagnostics`，各查询方法在
 -- `Vuna.Lsp.Query`；本模块只保留**服务器状态机**：
 --   initialize / initialized / shutdown / exit、textDocument/didOpen|didChange|didClose
---   （Full 同步，kind = 1）、capabilities、请求分发与 stdin 帧循环。
+--   （Full 同步，kind = 1）、capabilities、请求分发与 stdin 字节帧循环。
 -- `runLsp` / `runLspTool` 是 CLI 入口（由 Vuna.Cli 插入分发）。
 --
 -- 协议约束：**stdout 只写协议帧**；日志走 stderr（内存累积、退出时一次写出）。
+-- 读取按 `Content-Length` 精确切字节（`readChunk`），**不能按行读**：标准 LSP 帧的
+-- body 后面没有换行，客户端在拿到响应前也不发下一帧，行级读会在 `initialize` 就互等死锁。
 -- 退出码：收到 shutdown 后的 exit 退 0，否则（EOF / 未 shutdown）退 1。
 --
 -- 服务器状态：打开的文档表、惰性 Index（一次构建并缓存）、日志缓冲。
@@ -16,6 +18,7 @@ module Vuna.Lsp (runLsp, runLspTool) where
 --   - didChange 跑一次完整 DT 精化，大文件逐个按键变更可能较慢（客户端可降级为保存时检查）；
 --   - 编辑**未保存的依赖模块**时，精化仍从磁盘读依赖（LSP 只覆盖当前文档）；
 --   - Index 只反映磁盘内容、不随 didChange 刷新；构建失败则相关方法退化返回空结果；
+--   - 首次索引查找可能触发 `.local/index/` 全量重建（仓库级秒级），期间请求排队；
 --   - 多根 workspace 未支持：workspace/symbol 用首个打开文档推断工作区根。
 import Vuna.Compiler.Common
 import Vuna.Index
@@ -31,11 +34,19 @@ lspServerName : String
 lspServerName = "vuna-lsp"
 
 lspServerVersion : String
-lspServerVersion = "0.2.0"
+lspServerVersion = "0.2.1"
 
 -- LSP 的 TextDocumentSyncKind.Full = 1
 syncKindFull : Int
 syncKindFull = 1
+
+-- 每次 readChunk 的字节数（帧 body 可能跨多块；缓冲里拼够 Content-Length 再切帧）。
+readChunkSize : Int
+readChunkSize = 65536
+
+-- 单帧 / 缓冲上界：坏客户端不能把内存撑爆（正常源文件帧远小于此）。
+maxFrameBytes : Int
+maxFrameBytes = 16777216
 
 -- JSON-RPC 2.0 错误码
 errMethodNotFound : Int
@@ -348,6 +359,12 @@ dispatch "textDocument/formatting" msg state = handleFormatting msg state
 dispatch "textDocument/codeAction" msg state =
   Pair False (Pair state [responseOk (idOf msg) (JArr [])])
 dispatch "workspace/symbol" msg state = handleWorkspaceSymbol msg state
+-- 客户端能力注册（vscode-languageclient 的 fileEvents 等）：服务器不消费这些注册，
+-- 但必须回成功，否则客户端会把「注册失败」当成错误刷日志。
+dispatch "client/registerCapability" msg state =
+  Pair False (Pair state [responseOk (idOf msg) JNull])
+dispatch "client/unregisterCapability" msg state =
+  Pair False (Pair state [responseOk (idOf msg) JNull])
 dispatch "$/cancelRequest" msg state = Pair False (Pair state [])
 dispatch methodName msg state =
   if startsWith "$/" methodName then Pair False (Pair state [])
@@ -357,16 +374,34 @@ dispatch methodName msg state =
 -- ---------------------------------------------------------------
 -- 主循环
 -- ---------------------------------------------------------------
--- 返回值即进程退出码：收到 shutdown 后的 exit 退 0，否则退 1（LSP 约定）。
+-- 逐帧循环：缓冲里先切 header（`splitHeaderBlock`），拿到 `Content-Length` 后按字节数
+-- 判断 body 是否读够；不够就 `feedMore` 再读一块。返回值即进程退出码。
 lspLoop : Int -> String -> LspState -> Int
 lspLoop fuel pending state = if fuel <= 0 then abnormalExit (logTo "frame fuel exhausted (internal)" state)
-else case nextFrame pending of
-  Nothing => case readMore pending of
-    -- EOF 且从未收到 shutdown ⇒ 非正常断开，退 1。
-    -- 注意 flushLogs 返回的是写入字节数，不能直接当退出码。
-    Nothing => abnormalExit (logTo "input closed" state)
-    Just pending2 => lspLoop (fuel - 1) pending2 state
-  Just (Pair body rest) => case parseJson body of
+else if strLength pending > maxFrameBytes then abnormalExit (logTo "frame buffer exceeded limit" state)
+else case splitHeaderBlock pending of
+  -- 还没有完整 header：继续读。
+  Nothing => feedMore fuel pending state
+  Just (Pair headerBlock afterHeaders) => case contentLengthOf headerBlock of
+    -- header 里没有可用的 Content-Length：丢掉这段 header，避免无限等待。
+    Nothing =>
+      lspLoop (fuel - 1) afterHeaders (logTo "frame header without Content-Length dropped" state)
+    Just len => frameBody fuel pending afterHeaders len state
+
+-- header 有效：body 不够就再读；够了就解码一帧。
+frameBody : Int -> String -> String -> Int -> LspState -> Int
+frameBody fuel pending afterHeaders len state =
+  if len > maxFrameBytes then abnormalExit (logTo "frame too large" state)
+  else if strLength afterHeaders < len then feedMore fuel pending state
+  else decodeFrame fuel len afterHeaders state
+
+-- 切出 body（`Content-Length` 字节，body 后没有换行）、解析并分发，然后继续下一帧。
+decodeFrame : Int -> Int -> String -> LspState -> Int
+decodeFrame fuel len afterHeaders state =
+  let
+    body = substring 0 len afterHeaders
+    rest = substring len (strLength afterHeaders - len) afterHeaders
+  in case parseJson body of
     Err e => lspLoop (fuel - 1) rest (logTo ("malformed frame: " ++ e) state)
     Ok msg =>
       let
@@ -377,6 +412,16 @@ else case nextFrame pending of
         frames = secondOf after
         _ = map sendFrame frames
       in if shouldExit then exitCodeOf state2 else lspLoop (fuel - 1) rest state2
+
+-- 缓冲里还没有完整的一帧：再读一块（可能只到几个字节）。
+-- EOF（readChunk 返回 ""）且从未 shutdown ⇒ 非正常断开，退 1。
+-- 注意 flushLogs 返回的是写入字节数，不能直接当退出码。
+feedMore : Int -> String -> LspState -> Int
+feedMore fuel pending state =
+  let
+    chunk = readChunk readChunkSize
+  in if chunk == "" then abnormalExit (logTo "input closed" state)
+  else lspLoop (fuel - 1) (pending ++ chunk) state
 
 -- exit 之前是否收到过 shutdown。
 exitCodeOf : LspState -> Int
@@ -393,7 +438,7 @@ abnormalExit state =
     _ = flushLogs state
   in 1
 
--- stdin 帧循环是「读帧→处理→再读」的无限状态机；用显式 fuel 守卫（1G 帧）。
+-- stdin 帧循环是「读帧→处理→再读」的无限状态机；用显式 fuel 守卫（1G 次读/帧操作）。
 lspFuelBound : Int
 lspFuelBound = 1073741824
 

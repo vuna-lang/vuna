@@ -57,6 +57,12 @@ let dtp_getArgs () =
   let n = Array.length argv in
   if n <= 1 then [] else Array.to_list (Array.sub argv 1 (n - 1))
 let dtp_readLine () = try input_line stdin with End_of_file -> ""
+let dtp_readBytes n =
+  if n <= 0 then ""
+  else
+    let b = Bytes.create n in
+    let k = try input stdin b 0 n with _ -> 0 in
+    if k <= 0 then "" else Bytes.sub_string b 0 k
 let dtp_readDir path =
   try List.sort compare (Array.to_list (Sys.readdir path))
   with Sys_error msg -> failwith ("readDir: " ^ msg)

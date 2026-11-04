@@ -263,6 +263,7 @@ allIntrinsics =
     MkIntrinsic "prim_readFile" (IFun IStr IStr) OpNone (Just CapFs) "dtp_readFile" True,
     MkIntrinsic "prim_writeFile" (IFun IStr (IFun IStr IInt)) OpNone (Just CapFs) "dtp_writeFile" True,
     MkIntrinsic "prim_readLine" IStr OpNone (Just CapConsole) "(dtp_readLine ())" True,
+    MkIntrinsic "prim_readBytes" (IFun IInt IStr) OpNone (Just CapConsole) "dtp_readBytes" True,
     MkIntrinsic "prim_getArgs" (IList IStr) OpNone (Just CapProcess) "(dtp_listOf (dtp_getArgs ()))" True,
     MkIntrinsic "prim_readDir" (IFun IStr (IList IStr)) OpNone (Just CapFs) "(fun p -> dtp_listOf (dtp_readDir p))" True,
     MkIntrinsic "prim_isDirectory" (IFun IStr IBool) OpNone (Just CapFs) "dtp_isDirectory" True,

@@ -106,7 +106,7 @@
 
 | 能力 | 原语 |
 | --- | --- |
-| `console` | `prim_print`、`prim_readLine` |
+| `console` | `prim_print`、`prim_readLine`、`prim_readBytes` |
 | `fs` | `prim_readFile`、`prim_writeFile`、`prim_readDir`、`prim_isDirectory`、`prim_makeDir`、`prim_removeFile`、`prim_fileExists`、`prim_fileMtime`、`prim_fileSize` |
 | `process` | `prim_getArgs`、`prim_exit`、`prim_runIn` |
 | `env` | `prim_getenv`、`prim_getcwd`、`prim_execPath` |
@@ -138,6 +138,7 @@
 | `prim_writeFile` | 二进制写整串，返回**字节数**；IO 失败抛宿主异常 |
 | `prim_readFile` | 读整个文件为字节串；IO 失败抛宿主异常 |
 | `prim_readLine` | 读一行；EOF 返回 `""`（与空行不可区分） |
+| `prim_readBytes` | `Int -> String`：最多读 n 字节，**有数据就立即返回**（可能少于 n），EOF 返回 `""`；调用方负责循环/拼接（LSP 帧读取用） |
 | `prim_readDir` | 目录项按字符串排序；目录不存在/不可读时抛宿主异常 |
 | `prim_makeDir` / `prim_removeFile` | **幂等**：已存在/不存在时直接返回 `0` |
 | `prim_fileExists` | 路径不存在时为 `False` |

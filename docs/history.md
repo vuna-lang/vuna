@@ -501,3 +501,24 @@
   `Elab.Match` 的模式矩阵把 as 列解包为「变量列 + 内层列」注入绑定。STR 的
   `patNames`/`pathInPat`/`patSizeStrict` 视 as 绑定为整个值。`case` 分支 as 暂未接入；
   case-to-clauses 对递归/互递归函数保持 case（STR 冲突，门禁过滤）。
+
+## M30 后续：LSP 传输修复（bugfix）
+
+> 症状：VS Code 里扩展能装、语法高亮正常、`vuna lsp` 进程也能起来，但 hover / 定义跳转 /
+> 诊断全都没有。实现细节在 git 历史，这里只留可审计的结论。
+
+- **根因**：读取层用 `prim_readLine` 按行切 body，而标准 LSP 帧是
+  `Content-Length: N\r\n\r\n{body}`（body 后没有换行）。交互式客户端在拿到 `initialize`
+  响应前不再写字节 → 客户端等响应、服务器等换行，互等死锁；`LanguageClient.start()` 永不
+  完成，一个特性都不会注册。批式喂帧的 smoke 测试抓不到（后一帧的 header 行给前一帧的
+  body 补了换行）。
+- **修复**：新增内建 `prim_readBytes : Int -> String`（`console` 能力；最多读 n 字节、有
+  数据立即返回、EOF 返回 `""`），`Lsp.Protocol.readChunk` + `Lsp.lspLoop` 改为「字节缓冲 →
+  切 header → 按 `Content-Length` 精确取 body」；header 结束符取 CRLF/LF 中**最靠前**者
+  （混合流不再错位）；`client/(un)registerCapability` 回 `null`。
+- **同期查询修正**：hover `range` 从「符号定义位置」改为「光标 token」（客户端据此判断
+  hover 何时失效）；文本里没有独立 `_` 时不跑 DT 精化（否则每次 hover 都重跑整模块）。
+- **回归**：`test/corpus/lsp/smoke.sh` 新增第 18 项（交互式 initialize，body 无换行）与
+  第 19 项（使用点 hover 的 range），旧二进制上两项均失败、新二进制全过；快照
+  `exports.txt` 随 `Lsp.Protocol` 导出面更新；`seed/` 已 rotation（fixed point 通过）；
+  `nix/metrics.budget` 按新增内建的单行增长复标定。

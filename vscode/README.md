@@ -105,12 +105,14 @@ Nix store 拷出的脚本 + `vscode/` 工作树运行都适用；接 Nix 时把 
 
 ## 已知边界（与服务器实现同步）
 
-- 当前 `vuna lsp`（M26/M30 阶段）只声明 `textDocumentSync` 与 `hoverProvider`；
-  formatting / documentSymbol / definition / references / completion 会显式返回空结果，
-  等服务器实现后扩展自动生效（无需改扩展）。
-- 扩展不自己实现任何语言特性，也不猜测服务器未声明的能力；因此「命令存在但暂时无输出」
-  是服务器能力尚未落地的表现，不是扩展错误。
-- vscode-languageclient v9 把文件监听移到了 `synchronize.fileEvents`；服务器尚未注册
-  `workspace/didChangeWatchedFiles`，所以文件事件目前不会触发服务器动作（打开/编辑/保存
-  的文档同步走 `textDocument/didOpen|didChange`，不受影响）。
+- `vuna lsp` 声明全套能力（diagnostics / hover / formatting / documentSymbol / definition /
+  references / completion / workspace symbol），扩展只转发服务器在 `initialize` 里声明的能力。
+  某个能力没落地时表现为「命令存在但没有输出」，不是扩展错误。
+- hover 的 `range` 落在光标下的 token；definition / references / completion 依赖
+  `.local/index/`（首次查询可能触发全量重建，仓库级秒级）。
+- vscode-languageclient v9 把文件监听移到了 `synchronize.fileEvents`；服务器会接受客户端的
+  能力注册（回 `null`）但不消费 `workspace/didChangeWatchedFiles`，打开/编辑/保存的文档
+  同步走 `textDocument/didOpen|didChange`，不受影响。
+- 服务器读取按 `Content-Length` 精确切字节：标准 LSP 帧的 body 后没有换行，**不能**按行读
+  （旧实现会在 `initialize` 就与客户端互等死锁：进程起来了但所有语言功能都不可用）。
 - `Vuna: Check File` 原样运行 `vuna check <file>`；包级检查请用 `vuna check .`（终端）。

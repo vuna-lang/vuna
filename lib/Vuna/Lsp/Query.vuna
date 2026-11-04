@@ -16,7 +16,8 @@ module Vuna.Lsp.Query
 -- Vuna.Lsp 门面）。依赖方向：Query → Diagnostics → Protocol，单向无环。
 --
 -- 方法：
---   hover             先 DT 洞目标（包上下文），未命中再 Index 标识符签名/注释；
+--   hover             先 DT 洞目标（包上下文；无独立 `_` 时跳过精化），未命中再
+--                     Index 标识符签名/注释；range 落在光标 token 上（不是定义位置）；
 --   formatting        `Vuna.Fmt.formatSource` 成功且内容变化 ⇒ 全文 TextEdit；
 --   documentSymbol    AST 声明树（data/record/trait 带子节点）；selectionRange 精确落名字；
 --   definition        位置 token（支持 `Mod.name`）→ Index 符号 → Location；Index 不可用时
@@ -145,10 +146,13 @@ symbolHoverBody s =
     doc = if symDoc s == "" then "" else "\n\n" ++ symDoc s
   in "```vuna\n" ++ body ++ "\n```" ++ doc
 
-symbolHoverJson : Sym -> Json
-symbolHoverJson s =
+-- hover 的 range 必须是**光标下的 token**，不是符号定义位置：客户端（VS Code）用
+-- hover.range 判断 hover 何时失效，鼠标一动到 range 外就收起。返回定义位置会让使用点
+-- 的 hover 立刻消失。
+symbolHoverJson : Sym -> Int -> Int -> String -> Json
+symbolHoverJson s line startCol token =
   JObj
-    [Pair "contents" (JObj [Pair "kind" (JStr "markdown"), Pair "value" (JStr (symbolHoverBody s))]), Pair "range" (lspRange (symLine s) (symCol s) (symLine s) (symCol s + strLength (symName s)))]
+    [Pair "contents" (JObj [Pair "kind" (JStr "markdown"), Pair "value" (JStr (symbolHoverBody s))]), Pair "range" (lspRange line startCol line (startCol + strLength token))]
 
 -- ---------------------------------------------------------------
 currentModuleNameOf : String -> String
@@ -157,14 +161,41 @@ currentModuleNameOf text = case parseSource "<lsp>" text of
   Ok (Source hdr imports decls) => currentModuleName decls hdr
 
 -- hover 的第一段：DT 洞目标（包上下文；与 `vuna goal` 同源）。
+-- 快速判据：文本里没有独立的 `_` token 时直接跳过——否则每次 hover 都要跑一遍
+-- 整模块（含 import 闭包）的 DT 精化，大文件上是秒级开销。
 holeHoverAt : String -> Int -> Int -> String -> Maybe Json
-holeHoverAt uri line col text = case contextForDoc uri of
+holeHoverAt uri line col text = if hasHole text then holeHoverChecked uri line col text else Nothing
+
+holeHoverChecked : String -> Int -> Int -> String -> Maybe Json
+holeHoverChecked uri line col text = case contextForDoc uri of
   Err e => Nothing
   Ok (Pair label ctx) => case dtGoalsSource ctx label text of
     Err e => Nothing
     Ok gs => case holeAt line col gs of
       Nothing => Nothing
       Just g => Just (holeHoverJson g)
+
+-- 洞判定：`_` 是独立 token（左右都不是标识符/限定名的连接字符）。
+-- 行首/行尾用哨兵 -1；字符串或注释里的 `_` 会误判成「有洞」，只多跑一次精化，不影响正确性。
+holeJoinCode : Int -> Bool
+holeJoinCode c =
+  c >= 48 && c <= 57 || c >= 65 && c <= 90 || c >= 97 && c <= 122 || c == 95 || c == 46
+
+holeScan : List Int -> Int -> Bool
+holeScan [] prev = False
+holeScan (c :: rest) prev = if c == 95 then holeAtUnderscore rest prev else holeScan rest c
+
+holeAtUnderscore : List Int -> Int -> Bool
+holeAtUnderscore rest prev =
+  if holeJoinCode prev then holeScan rest 95
+  else if holeJoinNext rest then holeScan rest 95 else True
+
+holeJoinNext : List Int -> Bool
+holeJoinNext [] = False
+holeJoinNext (c :: rest) = holeJoinCode c
+
+hasHole : String -> Bool
+hasHole text = holeScan (strUnpack text) (0 - 1)
 
 -- hover 的第二段：光标标识符的签名/注释（Index；不可用/未命中 → null）。
 symbolHoverResult : String -> Int -> Int -> String -> Maybe Index -> Json
@@ -173,7 +204,7 @@ symbolHoverResult uri line col text (Just idx) = case tokenAtCursor text line co
   Nothing => JNull
   Just (Pair startCol token) => case bestSymbol idx (currentModuleNameOf text) token of
     Nothing => JNull
-    Just sym => symbolHoverJson sym
+    Just sym => symbolHoverJson sym line startCol token
 
 -- definition：光标 token → Index 符号 → Location；Index 不可用/未命中时同文件兜底。
 definitionResult : String -> Int -> Int -> String -> Maybe Index -> Json

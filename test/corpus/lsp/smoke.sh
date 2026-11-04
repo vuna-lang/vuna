@@ -29,6 +29,11 @@
 #  16. 非 file URI（untitled:）不崩溃
 #  17. 未知方法返回 JSON-RPC method not found（-32601）
 #
+# C. 传输/查询回归（交互式客户端；帧一次性批式喂入是抓不到的）
+#  18. 交互式帧读取：body 后没有换行时 initialize 也必须立刻有响应
+#      （回归点：读取层曾按行读 body → initialize 互等死锁）
+#  19. 符号 hover：返回签名，且 range 落在**光标 token**（不是符号定义位置）
+#
 # 只依赖 POSIX sh / awk / sed 与传入的 vuna 可执行文件。
 set -u
 
@@ -424,6 +429,53 @@ check_eq "空 stdin 退出码 1" "1" "$?"
 printf 'Content-Length: 44\r\n\r\n{"jsonrpc":"2.0","id":1,"method":"shutdown"}' >"$tmp/eof.bin"
 "$VUNA" lsp <"$tmp/eof.bin" >/dev/null 2>&1
 check_eq "收到 shutdown 但无 exit（EOF）退出码 1" "1" "$?"
+
+# ---- 18) 交互式帧读取：body 后没有换行、客户端等响应时也必须立刻处理 ----
+# 回归点：读取层曾用 `prim_readLine` 按行读 body；标准 LSP 帧的 body **不带换行**，
+# 于是 initialize 的响应要等下一帧写入才出现（客户端在等响应，不会再写 → 永久挂起）。
+# 这里只写 initialize，延迟 6s 才写 shutdown/exit，要求在 4s 内看到 initialize 响应。
+#
+# 注意：这条流水线不能用 `awk` 生成帧——awk 的 stdout 是块缓冲，帧会等到 awk 退出
+# （6s 后）才到达服务器，测试就失去意义。用 shell 的 printf 直接写，立即可见。
+frame_line() { LC_ALL=C printf 'Content-Length: %d\r\n\r\n%s' "${#1}" "$1"; }
+{
+  frame_line '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"capabilities":{}}}'
+  sleep 6
+  frame_line '{"jsonrpc":"2.0","id":2,"method":"shutdown","params":null}'
+  frame_line '{"jsonrpc":"2.0","method":"exit","params":null}'
+} | "$VUNA" lsp >"$tmp/interactive.out" 2>/dev/null &
+interactive_pid=$!
+interactive_ok=0
+i=0
+while [ "$i" -lt 4 ]; do
+  if grep -q '"id":1,"result"' "$tmp/interactive.out" 2>/dev/null; then
+    interactive_ok=1
+    break
+  fi
+  sleep 1
+  i=$((i + 1))
+done
+check_eq "交互式 initialize 在下一帧之前已响应（body 无换行）" "1" "$interactive_ok"
+wait "$interactive_pid"
+check_eq "交互式会话退出码 0" "0" "$?"
+
+# ---- 19) 符号 hover：返回签名，且 range 落在**光标 token**（不是定义位置）----
+# 回归点：range 曾指向符号定义处，客户端会把使用点的 hover 当成失效而收起。
+# 这里故意 hover 在**使用点**（第 6 行 useIt = depHelper 1），定义在第 3 行；
+# range 必须是光标 token（line 6, char 8..17），不能是定义位置。
+{
+  printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"capabilities":{}}}'
+  printf '%s\n' '{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"'"$dep_uri"'","languageId":"vuna","version":1,"text":"module Dep where\n\ndepHelper : Int -> Int\ndepHelper n = n + 1\n\nuseIt : Int\nuseIt = depHelper 1\n"}}}'
+  printf '%s\n' '{"jsonrpc":"2.0","id":2,"method":"textDocument/hover","params":{"textDocument":{"uri":"'"$dep_uri"'"},"position":{"line":6,"character":10}}}'
+  printf '%s\n' '{"jsonrpc":"2.0","id":3,"method":"shutdown","params":null}'
+  printf '%s\n' '{"jsonrpc":"2.0","method":"exit","params":null}'
+} | LC_ALL=C awk '{ printf "Content-Length: %d\r\n\r\n%s", length($0), $0 }' >"$tmp/symhover.bin"
+"$VUNA" lsp <"$tmp/symhover.bin" >"$tmp/symhover.out" 2>/dev/null
+symhover_out=$(tr -d '\r' <"$tmp/symhover.out")
+check_contains "符号 hover 回 id 2" "$symhover_out" '"id":2'
+check_contains "符号 hover 带签名" "$symhover_out" 'Int -> Int'
+check_contains "hover range 落在光标 token（line 6, char 8..17）" "$symhover_out" \
+  '"range":{"start":{"line":6,"character":8},"end":{"line":6,"character":17}}'
 
 printf 'lsp: %d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ] && echo "lsp smoke passed"

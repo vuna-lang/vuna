@@ -131,9 +131,8 @@ vuna.toml → Frontend.{Toml.parseToml, Manifest.parseManifest/validateManifest}
 
 ## 4. LSP 与索引（工具链侧，不进 seed）
 
-- `Vuna.Lsp.runLsp`：JSON-RPC，诊断 = parse + DT 精化错误，hover = `goalsOfProgram`；
-  含 `import` 跳过类型检查。**M26 未改加载语义**（仍 parse 级），D13/M30 接
-  `Pkg.contextForFile`。
+- `Vuna.Lsp.runLsp`：JSON-RPC，帧按字节读（body 后无换行，见 [dt-tooling.md](reference/dt-tooling.md)）；
+  诊断 = parse + DT 精化错误（D13/M30 走 `Pkg.contextForFile`）；hover = 洞目标 + Index 符号。
 - `Vuna.Index`：parse 级索引（`vuna map` / `vuna api`，缓存 `.local/index/`）。
 
 ## 5. 自举链：seed → vuna-seed → vuna-compiler → vuna

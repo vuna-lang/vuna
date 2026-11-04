@@ -47,6 +47,12 @@ Content-Length: <字节数>\r\n
 接收端同时容忍以 `\n` 结尾的 header 行（部分客户端/编辑器会发裸 `\n`）。
 `Content-Length` 按**字节**计，不是字符数。
 
+**读取必须是字节级的**（`prim_readBytes` → `Vuna.Lsp.Protocol.readChunk` + 缓冲）：body
+后面**没有尾随换行**，而交互式客户端（`initialize` / hover / definition 等请求）在拿到
+响应之前不会再写任何字节。若用 `prim_readLine` 按行切 body，服务器会阻塞在「等 body 的
+换行」，客户端阻塞在「等响应」——`initialize` 就永久挂起，编辑器表现为「LSP 进程起来了但
+什么功能都没有」。回归测试见 smoke 第 18 项。
+
 ### 已实现的方法（M30）
 
 | 方法 | 行为 |
@@ -55,7 +61,7 @@ Content-Length: <字节数>\r\n
 | `initialized` | 通知，无响应 |
 | `textDocument/didOpen` / `didChange` / `didClose` | 内存维护打开文档表（Full 同步） |
 | `textDocument/publishDiagnostics` | 包上下文解析 / DT 精化 / 覆盖性诊断 + lint 诊断 |
-| `textDocument/hover` | DT 洞 `_` 的目标类型与上下文；否则标识符签名/文档注释 |
+| `textDocument/hover` | DT 洞 `_` 的目标类型与上下文（文本里没有独立 `_` 时跳过精化）；否则标识符签名/文档注释。`range` 落在**光标 token** 上（不是符号定义位置）——客户端用它判断 hover 何时失效 |
 | `textDocument/formatting` | `Vuna.Fmt.formatSource` 全文替换 TextEdit（解析失败返回空） |
 | `textDocument/documentSymbol` | AST 声明树（data/record/trait 带子节点） |
 | `textDocument/definition` / `references` | Index：token → 符号 → 定义位置；references 用 `Ref` 的精确行/列 |
@@ -74,8 +80,10 @@ Content-Length: <字节数>\r\n
 - lint findings 合并进同一 `publishDiagnostics`：severity 2、`code` 为 `LN_*` 规则码、
   `source: "vuna"`。
 - 已知边界（模块头注释同步记录）：`didChange` 全量重新精化（大文件可能滞后，编辑器
-  端应去抖）；依赖的未保存改动读盘；Index 每进程一次、不随编辑刷新；多根 workspace
-  取首个文档；一次只发首个编译错误。
+  端应去抖）；依赖的未保存改动读盘；Index 每进程一次、不随编辑刷新；首次索引查找可能
+  触发 `.local/index/` 全量重建（仓库级秒级，期间请求排队）；没有洞的文件 hover 不跑
+  精化，含洞的文件每次 hover 会重跑一次整模块精化；多根 workspace 取首个文档；一次只发
+  首个编译错误。
 - URI：`file://` + `%XX` 解码；非 file / 不存在的路径用 cwd 包上下文，不崩溃。
 
 ### 编辑器冒烟
@@ -90,7 +98,8 @@ sh test/corpus/lsp/smoke.sh ./result/bin/vuna
 ```
 
 它校验：stdout 只含协议帧、每帧 `Content-Length` 与正文长度一致、诊断范围 0-based、
-shutdown/exit 退出码。`test/run-tests.sh` 的 LSP 段调用它。
+shutdown/exit 退出码，以及**交互式帧读取**（第 18 项：body 后无换行时 `initialize` 也必须
+立刻响应）和**符号 hover 的 range 落点**（第 19 项）。`test/run-tests.sh` 的 LSP 段调用它。
 
 ## 3. `vuna doc` 与接口 / 隐式签名
 

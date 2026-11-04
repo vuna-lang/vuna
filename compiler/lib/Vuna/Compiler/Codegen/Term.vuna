@@ -70,9 +70,11 @@ dtRuntime =
     ++ dtPrimRuntime
 
 -- M21：effectful 内建（`prim_*`）的 DT 运行时实现。
--- 签名在 `Elab.Prelude.preludeGlobals`，这里补 OCaml 侧实现（对应 Intrinsics 的
+-- 签名在 `Vuna.Compiler.Intrinsics`（唯一真源），这里补 OCaml 侧实现（对应
 -- `intrinsicRuntime` 字段）；`prim_getArgs` / `prim_readLine` 在 Base.IO 里是**值**，
 -- 所以在引用点展开成 `dtp_*(()`，与 Codegen 的既有处理一致（每次求值都重新读）。
+-- `prim_readBytes` 是**函数**（`Int -> String`）：最多读 n 字节、有数据就立即返回
+-- （可能少于 n），EOF 返回 `""`——LSP 的帧循环靠它精确读 Content-Length 字节。
 dtPrimRuntime : String
 dtPrimRuntime =
   "let dtp_print s = print_string s; flush stdout; String.length s\n"
@@ -80,6 +82,7 @@ dtPrimRuntime =
     ++ "let dtp_writeFile path contents =\n  try\n    let ch = open_out_bin path in\n    Fun.protect ~finally:(fun () -> close_out_noerr ch)\n      (fun () -> output_string ch contents);\n    String.length contents\n  with Sys_error msg -> failwith (\"writeFile: \" ^ msg)\n"
     ++ "let dtp_getArgs () =\n  let argv = Sys.argv in\n  let n = Array.length argv in\n  if n <= 1 then [] else Array.to_list (Array.sub argv 1 (n - 1))\n"
     ++ "let dtp_readLine () = try input_line stdin with End_of_file -> \"\"\n"
+    ++ "let dtp_readBytes n =\n  if n <= 0 then \"\"\n  else\n    let b = Bytes.create n in\n    let k = try input stdin b 0 n with _ -> 0 in\n    if k <= 0 then \"\" else Bytes.sub_string b 0 k\n"
     ++ "let dtp_readDir path =\n  try List.sort compare (Array.to_list (Sys.readdir path))\n  with Sys_error msg -> failwith (\"readDir: \" ^ msg)\n"
     ++ "let dtp_isDirectory path =\n  try Sys.is_directory path with Sys_error msg -> failwith (\"isDirectory: \" ^ msg)\n"
     ++ "let dtp_makeDir path =\n  try (if Sys.file_exists path then 0 else (Sys.mkdir path 0o755; 0))\n  with Sys_error msg -> failwith (\"makeDir: \" ^ msg)\n"

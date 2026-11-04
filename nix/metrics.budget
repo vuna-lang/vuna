@@ -56,9 +56,9 @@
 #   `vuna build --no-compile --out out compiler` 实测重新标定：
 #   bytes 1713842 / lines 15710 / maxline 34902 / longlines 4823 / letrec 587 /
 #   strcat 1 / eqint 142 / zeroarg 6 / ctorcount 4475。
-bytes 1966253
-lines 17701
-maxline 30618
+bytes 1967216
+lines 17707
+maxline 31198
 longlines 5466
 letrec 665
 strcat 1
@@ -167,3 +167,11 @@ ctorcount 5035
 #   files 71 / bytes 1966253 / lines 17701 / maxline 30618 / longlines 5466 / letrec 665 /
 #   strcat 1 / eqint 154 / zeroarg 6 / ctorcount 5035。
 #   增量来自 as-pattern 相关分支与多 clause 函数的 codegen 产物。
+# M30 后续（LSP 传输修复）：新增内建 `prim_readBytes`（Intrinsics 单一声明表的一项）
+#   与 runtime 实现 `dtp_readBytes`，seed 闭包的 `Vuna_dCompiler_dIntrinsics.ml` 里
+#   `allIntrinsics` 字面量是**单行**，因此单行最大值 30618 → 31198（已知形态：内建表
+#   扩大即单点增长，见 debt.md「Diagnostics 单模块过大」同类问题）；bytes/lines 的增量
+#   来自该条目与 runtime 串。`lib/` 侧 LSP 传输改写不属于 compiler 包闭包，不进本指标。
+#   按 `vuna build --no-compile --out out compiler && sh nix/metrics.sh out` 实测重新标定：
+#   files 71 / bytes 1967216 / lines 17707 / maxline 31198 / longlines 5466 / letrec 665 /
+#   strcat 1 / eqint 154 / zeroarg 6 / ctorcount 5035（其余指标不变）。

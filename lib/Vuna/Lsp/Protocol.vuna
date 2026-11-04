@@ -1,6 +1,7 @@
 module Vuna.Lsp.Protocol
   ( allDigits
   , clampInt
+  , contentLengthOf
   , decodeUri
   , digitsToInt
   , dirOfPath
@@ -12,17 +13,17 @@ module Vuna.Lsp.Protocol
   , lineText
   , logLine
   , lspRange
-  , nextFrame
   , notify
   , nthCode
   , parentDir
   , pathToUri
   , qualPrefixLen
-  , readMore
+  , readChunk
   , responseErr
   , responseOk
   , sendFrame
   , spanRange
+  , splitHeaderBlock
   , stripTrailingDots
   , tokenAtCursor
   , wordPrefixLen
@@ -31,17 +32,19 @@ module Vuna.Lsp.Protocol
 -- Vuna.Lsp.Protocol：LSP 的传输与通用工具层（工具链模块，**永不进 seed 闭包**）。
 --
 -- 只放与「LSP 请求语义」无关的机械层：
---   - JSON-RPC 2.0 帧读写：`Content-Length` 解析/切帧（`nextFrame`/`readMore`）、
---     `sendFrame` 与响应/通知构造（stdout 只写协议帧）；
+--   - JSON-RPC 2.0 帧读写：`Content-Length` 解析/切帧（`splitHeaderBlock` /
+--     `contentLengthOf` / `readChunk`）、`sendFrame` 与响应/通知构造（stdout 只写协议帧）；
 --   - URI 编解码：`file://` + %XX（`decodeUri`/`pathToUri`），路径工具按最后一个 `/`
 --     切分（**不要用 Common.splitPath**：它按第一个 `/` 切，取不了目录/basename）；
 --   - LSP 0-based 位置/范围与 vuna 1-based Span 的换算（`lspRange`/`spanRange`）；
 --   - 日志行前缀与退出时一次写出（`logLine`/`flushLogLines`——避免 /dev/stderr 被反复截断）；
 --   - 字符串/字符/光标小工具（`lineText`/`tokenAtCursor` 等），供 Query/Diagnostics 复用。
 --
--- stdin 只有行级内建（`prim_readLine`，等价 OCaml `input_line`），没有字节级读。
--- 读取层因此维护字节缓冲：每 `prim_readLine` 一次就把「该行 + "\n"」并入缓冲，
--- 按 `Content-Length` 截取正文是字节精确的（`strLength` 即 UTF-8 字节数）。
+-- 读取层是**字节级**的（`prim_readBytes`，见 Intrinsics）：标准 LSP 帧的 body
+-- **没有尾随换行**（`Content-Length: N\r\n\r\n{body}` 之后直接是下一帧），所以绝不能
+-- 用行级读（`prim_readLine`）切 body——客户端等响应的交互式场景会直接死锁。
+-- 帧循环（`Vuna.Lsp.lspLoop`）维护字节缓冲：header 到 `\r\n\r\n`/`\n\n` 为止，
+-- body 按 `Content-Length` 精确读够 `N` 字节（`strLength` 即 UTF-8 字节数）。
 import Vuna.Compiler.Common
 import Vuna.Json
 
@@ -264,25 +267,16 @@ flushLogLines logs = prim_writeFile "/dev/stderr" (join "" (map logLine (reverse
 
 -- 帧读取：字节缓冲 + 按 Content-Length 切帧
 -- ---------------------------------------------------------------
--- 从 stdin 再读一行并入缓冲；Nothing = EOF。
+-- 从 stdin 读最多 n 字节并入缓冲（`prim_readBytes`）。
 --
--- 难点：`prim_readLine` 在 EOF 返回 ""，与「真正的空行」无法区分。而 **LF-only 帧**
--- （client 用 `\n` 分隔 header）的 header 结束符正好是一个空行，必须保留它的
--- `\n` 才能被 splitHeaders 识别成 `\n\n`。所以这里做一次 lookahead：
---   - 读到非空行 ⇒ 直接并入「行 + "\n"」；
---   - 读到空行  ⇒ 再读一行：又空 ⇒ 判定 EOF；非空 ⇒ 前一个空行是真的空行，
---                 并入 "\n" 与这一行。
--- CRLF 帧不受影响：`input_line` 只剥 `\n`，空行读到的是 "\r" 而不是 ""，
--- 走非空分支，于是缓冲里自然得到 `\r\n\r\n`。
-readMore : String -> Maybe String
-readMore pending =
-  let
-    line = prim_readLine
-  in if line /= "" then Just (pending ++ line ++ "\n")
-  else
-    let
-      next = prim_readLine
-    in if next == "" then Nothing else Just (pending ++ "\n" ++ next ++ "\n")
+-- **不能按行读**：标准 LSP 帧是 `Content-Length: N\r\n\r\n{body}`，body 后面没有
+-- 换行；客户端在拿到响应前也不会写下一帧。用 `prim_readLine` 切 body 会让「客户端等
+-- 响应、服务器等换行」互相死锁（`initialize` 就卡住），所以读取层必须是字节级的。
+--
+-- 语义：有数据就立即返回已到达的字节（**可能少于 n**），EOF 返回 ""。
+-- 调用方（`Vuna.Lsp.lspLoop`）负责拼接缓冲并重试切帧。
+readChunk : Int -> String
+readChunk n = prim_readBytes n
 
 -- 找子串 needle 从 start 起的字节偏移；找不到返回 -1。
 findFrom : String -> Int -> String -> Int
@@ -306,13 +300,17 @@ cutHeaders at buf gap =
   Pair (substring 0 at buf) (substring (at + gap) (strLength buf - at - gap) buf)
 
 -- 切出 header 块（到第一个 `\r\n\r\n` 或 `\n\n`），返回 (header 块, 之后的缓冲)。
-splitHeaders : String -> Maybe (Pair String String)
-splitHeaders buf = case findFrom crlfCrlf 0 buf of
-  hit => if hit >= 0 then Just (cutHeaders hit buf 4) else splitHeadersLf buf
+-- 同时容忍规范要求的 CRLF 与部分客户端用的裸 LF（`\n\n`），取**最靠前**的结束符。
+-- 不能「先找 CRLF，找不到再退回 LF」：混合流里前一个 LF 帧的 body 会把后一个 CRLF
+-- 结束符圈进同一个 header 块，于是按错误的 Content-Length 切 body。
+-- Nothing = 缓冲里还没有完整 header（需要再 readChunk）。
+splitHeaderBlock : String -> Maybe (Pair String String)
+splitHeaderBlock buf = chooseHeaderHit (findFrom crlfCrlf 0 buf) (findFrom lfLf 0 buf) buf
 
-splitHeadersLf : String -> Maybe (Pair String String)
-splitHeadersLf buf = case findFrom lfLf 0 buf of
-  hit => if hit >= 0 then Just (cutHeaders hit buf 2) else Nothing
+chooseHeaderHit : Int -> Int -> String -> Maybe (Pair String String)
+chooseHeaderHit crlfHit lfHit buf =
+  if lfHit >= 0 && (crlfHit < 0 || lfHit < crlfHit) then Just (cutHeaders lfHit buf 2)
+  else if crlfHit >= 0 then Just (cutHeaders crlfHit buf 4) else Nothing
 
 -- `Content-Length: 123`（大小写不敏感，容忍前后空白与行尾 \r）。
 parseContentLength : String -> Maybe Int
@@ -328,20 +326,10 @@ findLengthLine (line :: rest) = case parseContentLength line of
   Just n => Just n
   Nothing => findLengthLine rest
 
+-- header 块里的 Content-Length（必须 > 0；0 长度或缺失都算 header 无效）。
 contentLengthOf : String -> Maybe Int
 contentLengthOf block = case findLengthLine (split "\n" block) of
   Nothing => Nothing
   Just n => if n > 0 then Just n else Nothing
-
--- 尝试切一帧：Just (body, rest)；Nothing = 缓冲里还没有完整帧。
-nextFrame : String -> Maybe (Pair String String)
-nextFrame pending = case splitHeaders pending of
-  Nothing => Nothing
-  Just (Pair headerBlock afterHeaders) => case contentLengthOf headerBlock of
-    Nothing => Nothing
-    Just len =>
-      if strLength afterHeaders < len then Nothing
-      else Just
-        (Pair (substring 0 len afterHeaders) (substring len (strLength afterHeaders - len) afterHeaders))
 
 -- ---------------------------------------------------------------
