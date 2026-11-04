@@ -678,7 +678,7 @@ and v_Vuna_dCompiler_dCodegen_dTerm_dgenCaseFuel = (fun fuel st binders scrut al
   | _ -> failwith "DT: impossible branch"
 )))))
 
-let v_Vuna_dCompiler_dCodegen_dTerm_dexternBasicText = (fun v -> (match v with
+let v_Vuna_dCompiler_dCodegen_dTerm_dexternBasicText = (fun mc0 -> (match mc0 with
   | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVNeutral (dtb__288) -> (match dtb__288 with
   | C_Vuna_dCompiler_dCore_dTerm_dNeutral_Vuna_dCompiler_dCore_dTerm_dNGlobal (dtb__289, dtb__290) -> (if (dtb__289 = v_Vuna_dCompiler_dIntrinsics_dintTypeName) then (C_Base_dResult_dResult_Base_dResult_dOk ("int")) else (if (dtb__289 = v_Vuna_dCompiler_dIntrinsics_dstrTypeName) then (C_Base_dResult_dResult_Base_dResult_dOk ("string")) else (if (dtb__289 = v_Vuna_dCompiler_dIntrinsics_dboolTypeName) then (C_Base_dResult_dResult_Base_dResult_dOk ("bool")) else (C_Base_dResult_dResult_Base_dResult_dErr (("DT: internal: extern type is not basic: " ^ dtb__289))))))
   | _ -> (C_Base_dResult_dResult_Base_dResult_dErr ("DT: internal: extern type is not a global type"))
@@ -686,24 +686,24 @@ let v_Vuna_dCompiler_dCodegen_dTerm_dexternBasicText = (fun v -> (match v with
   | _ -> (C_Base_dResult_dResult_Base_dResult_dErr ("DT: internal: extern type is not basic"))
 ))
 
-let v_Vuna_dCompiler_dCodegen_dTerm_dexternDomText = (fun v -> (match v with
+let v_Vuna_dCompiler_dCodegen_dTerm_dexternDomText = (fun mc0 -> (match mc0 with
   | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVNeutral (dtb__291) -> (match dtb__291 with
-  | C_Vuna_dCompiler_dCore_dTerm_dNeutral_Vuna_dCompiler_dCore_dTerm_dNGlobal (dtb__292, dtb__293) -> (if (dtb__292 = "Array") then ((fun nd_uscrut4 -> (match nd_uscrut4 with
+  | C_Vuna_dCompiler_dCore_dTerm_dNeutral_Vuna_dCompiler_dCore_dTerm_dNGlobal (dtb__292, dtb__293) -> (if (dtb__292 = "Array") then (match dtb__293 with
   | C_Base_dList_dList_Base_dList_dCons (dtb__294, dtb__295) -> (match dtb__295 with
   | C_Base_dList_dList_Base_dList_dNil -> ((v_Base_dResult_dandThen (v_Vuna_dCompiler_dCodegen_dTerm_dexternBasicText dtb__294)) (fun e -> (C_Base_dResult_dResult_Base_dResult_dOk ((String.concat "" ["("; e; " array)"])))))
   | _ -> (C_Base_dResult_dResult_Base_dResult_dErr ("DT: internal: extern Array needs one type argument"))
 )
   | _ -> (C_Base_dResult_dResult_Base_dResult_dErr ("DT: internal: extern Array needs one type argument"))
-)) dtb__293) else (v_Vuna_dCompiler_dCodegen_dTerm_dexternBasicText v))
-  | _ -> (v_Vuna_dCompiler_dCodegen_dTerm_dexternBasicText v)
+) else (if (dtb__292 = "Array") then (C_Base_dResult_dResult_Base_dResult_dErr ("DT: internal: extern Array needs one type argument")) else (v_Vuna_dCompiler_dCodegen_dTerm_dexternBasicText mc0)))
+  | _ -> (v_Vuna_dCompiler_dCodegen_dTerm_dexternBasicText mc0)
 )
-  | _ -> (v_Vuna_dCompiler_dCodegen_dTerm_dexternBasicText v)
+  | _ -> (v_Vuna_dCompiler_dCodegen_dTerm_dexternBasicText mc0)
 ))
 
-let rec v_Vuna_dCompiler_dCodegen_dTerm_dexternTyText = (fun fuel lvl v -> (if (fuel <= 0) then (C_Base_dResult_dResult_Base_dResult_dErr ("DT: internal: extern type is too deep")) else (match v with
-  | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVPi (dtb__296, dtb__297, dtb__298, dtb__299, dtb__300) -> (if dtb__297 then (C_Base_dResult_dResult_Base_dResult_dErr ("DT: internal: extern has an implicit parameter")) else ((v_Base_dResult_dandThen (v_Vuna_dCompiler_dCodegen_dTerm_dexternDomText dtb__299)) (fun domText -> ((v_Base_dResult_dandThen (((v_Vuna_dCompiler_dCodegen_dTerm_dexternTyText (fuel - 1)) (lvl + 1)) ((v_Vuna_dCompiler_dCore_dEval_dapplyClosure dtb__300) (C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVNeutral ((C_Vuna_dCompiler_dCore_dTerm_dNeutral_Vuna_dCompiler_dCore_dTerm_dNVar (dtb__296, lvl, C_Base_dList_dList_Base_dList_dNil))))))) (fun resText -> (C_Base_dResult_dResult_Base_dResult_dOk ((String.concat "" ["("; domText; ") -> "; resText]))))))))
-  | _ -> (v_Vuna_dCompiler_dCodegen_dTerm_dexternDomText v)
-)))
+let rec v_Vuna_dCompiler_dCodegen_dTerm_dexternTyText = (fun mc0 mc1 mc2 -> (match mc2 with
+  | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVPi (dtb__296, dtb__297, dtb__298, dtb__299, dtb__300) -> (if (mc0 <= 0) then (C_Base_dResult_dResult_Base_dResult_dErr ("DT: internal: extern type is too deep")) else (if dtb__297 then (C_Base_dResult_dResult_Base_dResult_dErr ("DT: internal: extern has an implicit parameter")) else ((v_Base_dResult_dandThen (v_Vuna_dCompiler_dCodegen_dTerm_dexternDomText dtb__299)) (fun domText -> ((v_Base_dResult_dandThen (((v_Vuna_dCompiler_dCodegen_dTerm_dexternTyText (mc0 - 1)) (mc1 + 1)) ((v_Vuna_dCompiler_dCore_dEval_dapplyClosure dtb__300) (C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVNeutral ((C_Vuna_dCompiler_dCore_dTerm_dNeutral_Vuna_dCompiler_dCore_dTerm_dNVar (dtb__296, mc1, C_Base_dList_dList_Base_dList_dNil))))))) (fun resText -> (C_Base_dResult_dResult_Base_dResult_dOk ((String.concat "" ["("; domText; ") -> "; resText])))))))))
+  | _ -> (if (mc0 <= 0) then (C_Base_dResult_dResult_Base_dResult_dErr ("DT: internal: extern type is too deep")) else (v_Vuna_dCompiler_dCodegen_dTerm_dexternDomText mc2))
+))
 
 let v_Vuna_dCompiler_dCodegen_dTerm_dgenExternTy = (fun ty -> (((v_Vuna_dCompiler_dCodegen_dTerm_dexternTyText 64) 0) ((v_Vuna_dCompiler_dCore_dEval_deval C_Base_dList_dList_Base_dList_dNil) ty)))
 

@@ -35,6 +35,10 @@ vuna 尚未发布任何版本：没有外部用户、下游生态与历史包袱
   `MArray` / `Buffer`（M33 W3）。编译器查找表（defs / globals / ctor / clause / defVals）用
   `HashMap`，元变量解表与创建深度表用 `IntMap`（`metaLookup` 走索引，不再线性扫 /
   不再 `strFromInt`）。
+- **系统编程能力（M33）**：生成程序基准 `nix run .#vuna-perf`（vuna vs 手写 OCaml，典型
+  负载 ≤2×）；codegen 内建内联 / 多参数 lambda 链 / 字符串批拼；`Array` / `IORef` / `MArray` /
+  `Buffer` 与 IO 隔离的可变数据；受限 FFI（`extern` + 包根 `ffi/*.c`）；库级 `State` /
+  `Reader` / `Error`。测量设施与基线在 `bench/`。
 - **质量门禁**：`nix flake check`（packages + seed-selfhost + tests + typecheck + lint + fmt +
   index + metrics + package + context-budget + vscode-ext）、原生测试、lint / fmt / metrics /
   文档预算。
@@ -55,44 +59,18 @@ vuna 尚未发布任何版本：没有外部用户、下游生态与历史包袱
 ## 下一步
 
 **M31 系列已收尾**（M31.1–M31.3：运算符=方法别名、parser 去优先级、库内 `infix*` 声明成为
-fixity 唯一来源、反引号中缀 / section / 用户符号名、fmt 程序级 fixity）。**M33 性能轨道进行中**：
-W1 测量地基（`nix run .#vuna-perf` + 基线）、W2 codegen/运行时（内建饱和内联、多参数 lambda
-链、字符串批量拼接、`VN_PERF_STATS` GC 统计）、W3 容器与表示（内建类型构造子 +
-`Array`/`IORef`/`MArray`/`Buffer`、`HashMap`/`IntMap` 的 `Array` 桶、`empty` → `fromList []`）、
-W4 可变数据边界与字符串补齐（`strSubstring`、`repeat` 批拼；线性类型 / ST 明确裁剪）、
-W5 受限 FFI（`extern name "c_symbol" : ty` + 包根 `ffi/*.c`，基本类型 / 无回调）已落地，
-生成程序基准全部进入 2× 手写 OCaml；剩 W6 最小效应接口（State/Reader/Error 库级）。M33
-完成后按维护规则删除阶段记录。下一步是 **M34/M35**：按「语言能写高性能系统程序 → 编译器快 →
-并发 / 服务端」推进。新阶段必须映射到 debt 条目，并在「范围」里列明关闭哪些项；B / C / E
-系列残留按需插入。
+fixity 唯一来源、反引号中缀 / section / 用户符号名、fmt 程序级 fixity）。**M33 已收尾**（六波：
+测量地基 `nix run .#vuna-perf`、codegen / 运行时优化、容器与表示（`Array`/`IORef`/`MArray`/
+`Buffer` + `HashMap`/`IntMap` 的 `Array` 桶）、可变数据边界与字符串补齐、受限 FFI
+（`extern` + `ffi/*.c`）、库级最小效应接口（`State`/`Reader`/`Error`）；生成程序基准全部进入
+2× 手写 OCaml；线性类型 / ST 按计划裁剪，见 debt D22）。下一步是已排期的 **M34（编译器快）**，
+再往后 **M35（并发 / 服务端）**。新阶段必须映射到 debt 条目，并在「范围」里列明关闭哪些项；
+B / C / E 系列残留按需插入。
 
-## 性能轨道（M33–M35）
+## 性能轨道（M34–M35）
 
-性能是下一个大阶段，分三个小阶段。顺序依据：**编译器本身是 vuna 程序（编译为 OCaml
-运行）**，因此先做生成程序的性能，B 线的 codegen / 运行时 / 表示改进会直接反哺 A 线；
-语言特性（async / 代数效应 / FFI）不会自动让编译器变快，所以 M33 内部先做「编译器也
-吃得到」的项。
-
-### M33：语言能写高性能系统程序
-
-1. **测量**：生成程序基准（字符串 / 数组 / 哈希 / 递归 / FFI / GC 压力）+ 分配、GC、
-   峰值内存统计；复用同一套设施做编译器基准；
-2. **codegen / 运行时质量**（最高优先，编译器也受益）：单态化 / 字典消除、去装箱、内联、
-   尾调用、闭包转换、常量折叠、`String` / `Bytes` / Buffer、记录与变体布局、GC 统计与调优；
-3. **容器与表示（剩余）**：不可变 `Array`；可变数组 / `IORef`（IO 内）；M34 复用同一
-   实现（`HashMap` / `HashSet` / `IntMap` 已落地，见「当前基线」）；
-4. **可变数据 / ST / 类型系统**：先 `IORef` / 可变数组 → 线性 / 唯一性类型（或 rank-2 /
-   存在类型）→ ST / region；顺序不可颠倒（见 [debt.md](reference/debt.md) D22）；
-5. **FFI**：先受限 FFI（纯 C 函数、基本类型、无回调 / GC 交互），再字符串 / 数组 / 回调 /
-   GC root / pin（D21）；
-6. **最小效应接口**：`IO` 从 thunk 升级为正式效应接口；State / Reader / Error 先库级
-   （为 M35 打底）。
-
-**依赖**：1 先于其余；2 / 3 可并行；4 依赖 2 / 3；5 依赖 2 与 4 的能力边界；6 可在尾段启动。
-**退出标准**：生成程序基准达到设定门槛（例如典型负载在 2× 手写 OCaml 内）；编译器重编译
-后自身有可测下降；FFI / 可变数据可用；ST 是否完成取决于线性类型进度。
-**映射 debt**：D02（部分：表示与运行时性能）、D03（部分：IO 正式化）、D04（容器基础已
-落地，剩 DT 验证库 / 库）、D21、D22。
+M33（语言能写高性能系统程序）已收尾，历史在 git；剩下两个小阶段。顺序依据：**编译器本身
+是 vuna 程序（编译为 OCaml 运行）**，M33 的 codegen / 运行时 / 容器改进已直接反哺编译器。
 
 ### M34：编译器快
 
@@ -112,7 +90,7 @@ W5 受限 FFI（`extern name "c_symbol" : ty` + 包根 `ffi/*.c`，基本类型 
    前置是序列化格式（Core Term / DtProgram，见 [debt.md](reference/debt.md) C32）；
 6. **吃 M33 红利**：编译器重编译后验证 codegen / 运行时的收益并设门槛。
 
-**依赖**：M33 的 1 / 2 / 3；2 可与 M33 并行；5 依赖序列化与接口摘要。
+**依赖**：M33 已落地（测量 / 容器 / codegen 基础）；5 依赖序列化与接口摘要。
 **退出标准**：`check .` 从当前 ~8 s 降至目标；`vuna map` 冷启动从 ~31 s 降至秒级；单文件
 增量进入秒级以下；LSP 编辑反馈明显下降；性能 CI 门槛可用（[debt.md](reference/debt.md) C33）。
 **映射 debt**：C30、C31、C32、C33、C34、E01、E04、E06。
@@ -125,7 +103,7 @@ W5 受限 FFI（`extern name "c_symbol" : ty` + 包根 `ffi/*.c`，基本类型 
 3. **网络 / 系统库与完整 FFI**：socket / 文件 / 进程、异步 IO、回调 / GC 交互；
 4. **服务端框架 / 包生态**（可选，依赖外部用户）。
 
-**依赖**：M33 的运行时 / FFI / 最小效应接口；M34 的确定性与缓存。
+**依赖**：M33 的运行时 / 受限 FFI / 库级效应已落地；M34 的确定性与缓存。
 **退出标准**：并发 echo / HTTP 基准；取消 / 超时语义正确；无数据竞争（类型层或运行时检测）。
 **映射 debt**：D03（关闭）、D02（运行时决策）、D04（生态，可选）。
 

@@ -434,33 +434,30 @@ checkExternTy : Span -> Term -> Result Int
 checkExternTy sp tyTerm = checkExternValue sp 64 0 (eval [] tyTerm)
 
 checkExternValue : Span -> Int -> Int -> Value -> Result Int
-checkExternValue sp fuel lvl v = if fuel <= 0 then tcErr1 sp (FfiTypeUnsupported "too many parameters") "too many parameters"
-else case v of
-  VPi name implicit rig dom clo =>
-    if implicit then tcErr1 sp (FfiTypeUnsupported "implicit parameter") "implicit parameter"
-    else andThen (checkExternDomain sp dom)
-      (\_ => checkExternValue sp (fuel - 1) (lvl + 1) (applyClosure clo (VNeutral (NVar name lvl []))))
-  _ => checkExternDomain sp v
+checkExternValue sp fuel lvl (VPi name implicit _ dom clo) =
+  if fuel <= 0 then tcErr1 sp (FfiTypeUnsupported "too many parameters") "too many parameters"
+  else if implicit then tcErr1 sp (FfiTypeUnsupported "implicit parameter") "implicit parameter"
+  else andThen (checkExternDomain sp dom)
+    (\_ => checkExternValue sp (fuel - 1) (lvl + 1) (applyClosure clo (VNeutral (NVar name lvl []))))
+checkExternValue sp fuel lvl v =
+  if fuel <= 0 then tcErr1 sp (FfiTypeUnsupported "too many parameters") "too many parameters"
+  else checkExternDomain sp v
 
 checkExternDomain : Span -> Value -> Result Int
-checkExternDomain sp v = case v of
-  VNeutral n => case n of
-    NGlobal g args => if g == intTypeName || g == strTypeName || g == boolTypeName then Ok 0
-    else if g == "Array" then case args of
-      [elem] => checkExternArrayElem sp elem
-      _ => tcErr1 sp (FfiTypeUnsupported "Array needs one type argument") "Array"
-    else tcErr1 sp (FfiTypeUnsupported g) g
-    _ => tcErr1 sp (FfiTypeUnsupported "non-global type") "non-global"
-  _ => tcErr1 sp (FfiTypeUnsupported "non-basic type") "non-basic"
+checkExternDomain sp (VNeutral (NGlobal g args)) = if g == intTypeName || g == strTypeName || g == boolTypeName then Ok 0
+else if g == "Array" then case args of
+  [elem] => checkExternArrayElem sp elem
+  _ => tcErr1 sp (FfiTypeUnsupported "Array needs one type argument") "Array"
+else tcErr1 sp (FfiTypeUnsupported g) g
+checkExternDomain sp (VNeutral _) = tcErr1 sp (FfiTypeUnsupported "non-global type") "non-global"
+checkExternDomain sp _ = tcErr1 sp (FfiTypeUnsupported "non-basic type") "non-basic"
 
 checkExternArrayElem : Span -> Value -> Result Int
-checkExternArrayElem sp v = case v of
-  VNeutral n => case n of
-    NGlobal g args =>
-      if g == intTypeName || g == strTypeName || g == boolTypeName then Ok 0
-      else tcErr1 sp (FfiTypeUnsupported ("Array " ++ g)) g
-    _ => tcErr1 sp (FfiTypeUnsupported "Array element is not a basic type") "array-element"
-  _ => tcErr1 sp (FfiTypeUnsupported "Array element is not a basic type") "array-element"
+checkExternArrayElem sp (VNeutral (NGlobal g args)) =
+  if g == intTypeName || g == strTypeName || g == boolTypeName then Ok 0
+  else tcErr1 sp (FfiTypeUnsupported ("Array " ++ g)) g
+checkExternArrayElem sp _ =
+  tcErr1 sp (FfiTypeUnsupported "Array element is not a basic type") "array-element"
 
 -- M23：REPL 表达式求值（`Vuna.Compiler.Driver.Dt.dtEvalExpr` 的下半段）
 -- ---------------------------------------------------------------

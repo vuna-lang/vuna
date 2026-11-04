@@ -7,13 +7,16 @@
 #       引入「移动靶」。指标定义见 nix/metrics.sh 头注释。
 # 规则：本文件是精确基线（`=<expected>`），不是上限；不等即失败（双向捕获膨胀与
 #       优化丢失）。种子尺寸不在这里设阈值（见 docs/reference/compiler.md）。
+# M33 codegen 优化后重标定：内建内联消除了 `bi_eq_int`（eqint 3 → 0）、`++` 链展开为
+#       `String.concat ""`（strcat 0 → 1）、多参数 lambda 链与内联让产物变小（bytes
+#       5087 → 4820、maxline 758 → 623、longlines 7 → 6）。
 files =4
-bytes =5087
+bytes =4820
 lines =138
-maxline =758
-longlines =7
+maxline =623
+longlines =6
 letrec =1
-strcat =0
-eqint =3
+strcat =1
+eqint =0
 zeroarg =0
 ctorcount =20

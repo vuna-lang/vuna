@@ -683,33 +683,28 @@ genExternTy : Term -> Result String
 genExternTy ty = externTyText 64 0 (eval [] ty)
 
 externTyText : Int -> Int -> Value -> Result String
-externTyText fuel lvl v = if fuel <= 0 then Err "DT: internal: extern type is too deep"
-else case v of
-  VPi name implicit rig dom clo =>
-    if implicit then Err "DT: internal: extern has an implicit parameter"
-    else andThen (externDomText dom)
-      (\domText => andThen (externTyText (fuel - 1) (lvl + 1) (applyClosure clo (VNeutral (NVar name lvl [])))) (\resText => Ok ("(" ++ domText ++ ") -> " ++ resText)))
-  _ => externDomText v
+externTyText fuel lvl (VPi name implicit _ dom clo) =
+  if fuel <= 0 then Err "DT: internal: extern type is too deep"
+  else if implicit then Err "DT: internal: extern has an implicit parameter"
+  else andThen (externDomText dom)
+    (\domText => andThen (externTyText (fuel - 1) (lvl + 1) (applyClosure clo (VNeutral (NVar name lvl [])))) (\resText => Ok ("(" ++ domText ++ ") -> " ++ resText)))
+externTyText fuel lvl v =
+  if fuel <= 0 then Err "DT: internal: extern type is too deep" else externDomText v
 
 externDomText : Value -> Result String
-externDomText v = case v of
-  VNeutral n => case n of
-    NGlobal g args => if g == "Array" then case args of
-      [elem] => andThen (externBasicText elem) (\e => Ok ("(" ++ e ++ " array)"))
-      _ => Err "DT: internal: extern Array needs one type argument"
-    else externBasicText v
-    _ => externBasicText v
-  _ => externBasicText v
+externDomText (VNeutral (NGlobal "Array" ([elem]))) =
+  andThen (externBasicText elem) (\e => Ok ("(" ++ e ++ " array)"))
+externDomText (VNeutral (NGlobal "Array" _)) =
+  Err "DT: internal: extern Array needs one type argument"
+externDomText v = externBasicText v
 
 externBasicText : Value -> Result String
-externBasicText v = case v of
-  VNeutral n => case n of
-    NGlobal g args =>
-      if g == intTypeName then Ok "int"
-      else if g == strTypeName then Ok "string"
-      else if g == boolTypeName then Ok "bool" else Err ("DT: internal: extern type is not basic: " ++ g)
-    _ => Err "DT: internal: extern type is not a global type"
-  _ => Err "DT: internal: extern type is not basic"
+externBasicText (VNeutral (NGlobal g args)) =
+  if g == intTypeName then Ok "int"
+  else if g == strTypeName then Ok "string"
+  else if g == boolTypeName then Ok "bool" else Err ("DT: internal: extern type is not basic: " ++ g)
+externBasicText (VNeutral _) = Err "DT: internal: extern type is not a global type"
+externBasicText _ = Err "DT: internal: extern type is not basic"
 
 genGroupBodies : GenSt -> List DtDef -> Result (Pair (List String) GenSt)
 genGroupBodies st [] = Ok (Pair [] st)

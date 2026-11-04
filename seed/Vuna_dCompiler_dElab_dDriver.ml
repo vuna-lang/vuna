@@ -327,32 +327,32 @@ let rec v_Vuna_dCompiler_dElab_dDriver_dcheckAllDefinedGo = (fun mc0 mc1 mc2 -> 
 
 let v_Vuna_dCompiler_dElab_dDriver_dcheckAllDefined = (fun sigs globals decls -> (((v_Vuna_dCompiler_dElab_dDriver_dcheckAllDefinedGo sigs) globals) decls))
 
-let v_Vuna_dCompiler_dElab_dDriver_dcheckExternArrayElem = (fun sp v -> (match v with
+let v_Vuna_dCompiler_dElab_dDriver_dcheckExternArrayElem = (fun mc0 mc1 -> (match mc1 with
   | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVNeutral (dtb__132) -> (match dtb__132 with
-  | C_Vuna_dCompiler_dCore_dTerm_dNeutral_Vuna_dCompiler_dCore_dTerm_dNGlobal (dtb__133, dtb__134) -> (if (if (if (dtb__133 = v_Vuna_dCompiler_dIntrinsics_dintTypeName) then true else (dtb__133 = v_Vuna_dCompiler_dIntrinsics_dstrTypeName)) then true else (dtb__133 = v_Vuna_dCompiler_dIntrinsics_dboolTypeName)) then (C_Base_dResult_dResult_Base_dResult_dOk (0)) else (((v_Vuna_dCompiler_dDiagnostics_dTc_dtcErr1 sp) (C_Vuna_dCompiler_dDiagnostics_dTc_dTcErr_Vuna_dCompiler_dDiagnostics_dTc_dFfiTypeUnsupported (("Array " ^ dtb__133)))) dtb__133))
-  | _ -> (((v_Vuna_dCompiler_dDiagnostics_dTc_dtcErr1 sp) (C_Vuna_dCompiler_dDiagnostics_dTc_dTcErr_Vuna_dCompiler_dDiagnostics_dTc_dFfiTypeUnsupported ("Array element is not a basic type"))) "array-element")
+  | C_Vuna_dCompiler_dCore_dTerm_dNeutral_Vuna_dCompiler_dCore_dTerm_dNGlobal (dtb__133, dtb__134) -> (if (if (if (dtb__133 = v_Vuna_dCompiler_dIntrinsics_dintTypeName) then true else (dtb__133 = v_Vuna_dCompiler_dIntrinsics_dstrTypeName)) then true else (dtb__133 = v_Vuna_dCompiler_dIntrinsics_dboolTypeName)) then (C_Base_dResult_dResult_Base_dResult_dOk (0)) else (((v_Vuna_dCompiler_dDiagnostics_dTc_dtcErr1 mc0) (C_Vuna_dCompiler_dDiagnostics_dTc_dTcErr_Vuna_dCompiler_dDiagnostics_dTc_dFfiTypeUnsupported (("Array " ^ dtb__133)))) dtb__133))
+  | _ -> (((v_Vuna_dCompiler_dDiagnostics_dTc_dtcErr1 mc0) (C_Vuna_dCompiler_dDiagnostics_dTc_dTcErr_Vuna_dCompiler_dDiagnostics_dTc_dFfiTypeUnsupported ("Array element is not a basic type"))) "array-element")
 )
-  | _ -> (((v_Vuna_dCompiler_dDiagnostics_dTc_dtcErr1 sp) (C_Vuna_dCompiler_dDiagnostics_dTc_dTcErr_Vuna_dCompiler_dDiagnostics_dTc_dFfiTypeUnsupported ("Array element is not a basic type"))) "array-element")
+  | _ -> (((v_Vuna_dCompiler_dDiagnostics_dTc_dtcErr1 mc0) (C_Vuna_dCompiler_dDiagnostics_dTc_dTcErr_Vuna_dCompiler_dDiagnostics_dTc_dFfiTypeUnsupported ("Array element is not a basic type"))) "array-element")
 ))
 
-let v_Vuna_dCompiler_dElab_dDriver_dcheckExternDomain = (fun sp v -> (match v with
+let v_Vuna_dCompiler_dElab_dDriver_dcheckExternDomain = (fun mc0 mc1 -> (match mc1 with
   | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVNeutral (dtb__135) -> (match dtb__135 with
   | C_Vuna_dCompiler_dCore_dTerm_dNeutral_Vuna_dCompiler_dCore_dTerm_dNGlobal (dtb__136, dtb__137) -> (if (if (if (dtb__136 = v_Vuna_dCompiler_dIntrinsics_dintTypeName) then true else (dtb__136 = v_Vuna_dCompiler_dIntrinsics_dstrTypeName)) then true else (dtb__136 = v_Vuna_dCompiler_dIntrinsics_dboolTypeName)) then (C_Base_dResult_dResult_Base_dResult_dOk (0)) else (if (dtb__136 = "Array") then ((fun nd_uscrut5 -> (match nd_uscrut5 with
   | C_Base_dList_dList_Base_dList_dCons (dtb__138, dtb__139) -> (match dtb__139 with
-  | C_Base_dList_dList_Base_dList_dNil -> ((v_Vuna_dCompiler_dElab_dDriver_dcheckExternArrayElem sp) dtb__138)
-  | _ -> (((v_Vuna_dCompiler_dDiagnostics_dTc_dtcErr1 sp) (C_Vuna_dCompiler_dDiagnostics_dTc_dTcErr_Vuna_dCompiler_dDiagnostics_dTc_dFfiTypeUnsupported ("Array needs one type argument"))) "Array")
+  | C_Base_dList_dList_Base_dList_dNil -> ((v_Vuna_dCompiler_dElab_dDriver_dcheckExternArrayElem mc0) dtb__138)
+  | _ -> (((v_Vuna_dCompiler_dDiagnostics_dTc_dtcErr1 mc0) (C_Vuna_dCompiler_dDiagnostics_dTc_dTcErr_Vuna_dCompiler_dDiagnostics_dTc_dFfiTypeUnsupported ("Array needs one type argument"))) "Array")
 )
-  | _ -> (((v_Vuna_dCompiler_dDiagnostics_dTc_dtcErr1 sp) (C_Vuna_dCompiler_dDiagnostics_dTc_dTcErr_Vuna_dCompiler_dDiagnostics_dTc_dFfiTypeUnsupported ("Array needs one type argument"))) "Array")
-)) dtb__137) else (((v_Vuna_dCompiler_dDiagnostics_dTc_dtcErr1 sp) (C_Vuna_dCompiler_dDiagnostics_dTc_dTcErr_Vuna_dCompiler_dDiagnostics_dTc_dFfiTypeUnsupported (dtb__136))) dtb__136)))
-  | _ -> (((v_Vuna_dCompiler_dDiagnostics_dTc_dtcErr1 sp) (C_Vuna_dCompiler_dDiagnostics_dTc_dTcErr_Vuna_dCompiler_dDiagnostics_dTc_dFfiTypeUnsupported ("non-global type"))) "non-global")
+  | _ -> (((v_Vuna_dCompiler_dDiagnostics_dTc_dtcErr1 mc0) (C_Vuna_dCompiler_dDiagnostics_dTc_dTcErr_Vuna_dCompiler_dDiagnostics_dTc_dFfiTypeUnsupported ("Array needs one type argument"))) "Array")
+)) dtb__137) else (((v_Vuna_dCompiler_dDiagnostics_dTc_dtcErr1 mc0) (C_Vuna_dCompiler_dDiagnostics_dTc_dTcErr_Vuna_dCompiler_dDiagnostics_dTc_dFfiTypeUnsupported (dtb__136))) dtb__136)))
+  | _ -> (((v_Vuna_dCompiler_dDiagnostics_dTc_dtcErr1 mc0) (C_Vuna_dCompiler_dDiagnostics_dTc_dTcErr_Vuna_dCompiler_dDiagnostics_dTc_dFfiTypeUnsupported ("non-global type"))) "non-global")
 )
-  | _ -> (((v_Vuna_dCompiler_dDiagnostics_dTc_dtcErr1 sp) (C_Vuna_dCompiler_dDiagnostics_dTc_dTcErr_Vuna_dCompiler_dDiagnostics_dTc_dFfiTypeUnsupported ("non-basic type"))) "non-basic")
+  | _ -> (((v_Vuna_dCompiler_dDiagnostics_dTc_dtcErr1 mc0) (C_Vuna_dCompiler_dDiagnostics_dTc_dTcErr_Vuna_dCompiler_dDiagnostics_dTc_dFfiTypeUnsupported ("non-basic type"))) "non-basic")
 ))
 
-let rec v_Vuna_dCompiler_dElab_dDriver_dcheckExternValue = (fun sp fuel lvl v -> (if (fuel <= 0) then (((v_Vuna_dCompiler_dDiagnostics_dTc_dtcErr1 sp) (C_Vuna_dCompiler_dDiagnostics_dTc_dTcErr_Vuna_dCompiler_dDiagnostics_dTc_dFfiTypeUnsupported ("too many parameters"))) "too many parameters") else (match v with
-  | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVPi (dtb__140, dtb__141, dtb__142, dtb__143, dtb__144) -> (if dtb__141 then (((v_Vuna_dCompiler_dDiagnostics_dTc_dtcErr1 sp) (C_Vuna_dCompiler_dDiagnostics_dTc_dTcErr_Vuna_dCompiler_dDiagnostics_dTc_dFfiTypeUnsupported ("implicit parameter"))) "implicit parameter") else ((v_Base_dResult_dandThen ((v_Vuna_dCompiler_dElab_dDriver_dcheckExternDomain sp) dtb__143)) (fun _u -> ((((v_Vuna_dCompiler_dElab_dDriver_dcheckExternValue sp) (fuel - 1)) (lvl + 1)) ((v_Vuna_dCompiler_dCore_dEval_dapplyClosure dtb__144) (C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVNeutral ((C_Vuna_dCompiler_dCore_dTerm_dNeutral_Vuna_dCompiler_dCore_dTerm_dNVar (dtb__140, lvl, C_Base_dList_dList_Base_dList_dNil)))))))))
-  | _ -> ((v_Vuna_dCompiler_dElab_dDriver_dcheckExternDomain sp) v)
-)))
+let rec v_Vuna_dCompiler_dElab_dDriver_dcheckExternValue = (fun mc0 mc1 mc2 mc3 -> (match mc3 with
+  | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVPi (dtb__140, dtb__141, dtb__142, dtb__143, dtb__144) -> (if (mc1 <= 0) then (((v_Vuna_dCompiler_dDiagnostics_dTc_dtcErr1 mc0) (C_Vuna_dCompiler_dDiagnostics_dTc_dTcErr_Vuna_dCompiler_dDiagnostics_dTc_dFfiTypeUnsupported ("too many parameters"))) "too many parameters") else (if dtb__141 then (((v_Vuna_dCompiler_dDiagnostics_dTc_dtcErr1 mc0) (C_Vuna_dCompiler_dDiagnostics_dTc_dTcErr_Vuna_dCompiler_dDiagnostics_dTc_dFfiTypeUnsupported ("implicit parameter"))) "implicit parameter") else ((v_Base_dResult_dandThen ((v_Vuna_dCompiler_dElab_dDriver_dcheckExternDomain mc0) dtb__143)) (fun _u -> ((((v_Vuna_dCompiler_dElab_dDriver_dcheckExternValue mc0) (mc1 - 1)) (mc2 + 1)) ((v_Vuna_dCompiler_dCore_dEval_dapplyClosure dtb__144) (C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVNeutral ((C_Vuna_dCompiler_dCore_dTerm_dNeutral_Vuna_dCompiler_dCore_dTerm_dNVar (dtb__140, mc2, C_Base_dList_dList_Base_dList_dNil))))))))))
+  | _ -> (if (mc1 <= 0) then (((v_Vuna_dCompiler_dDiagnostics_dTc_dtcErr1 mc0) (C_Vuna_dCompiler_dDiagnostics_dTc_dTcErr_Vuna_dCompiler_dDiagnostics_dTc_dFfiTypeUnsupported ("too many parameters"))) "too many parameters") else ((v_Vuna_dCompiler_dElab_dDriver_dcheckExternDomain mc0) mc3))
+))
 
 let v_Vuna_dCompiler_dElab_dDriver_dcheckExternTy = (fun sp tyTerm -> ((((v_Vuna_dCompiler_dElab_dDriver_dcheckExternValue sp) 64) 0) ((v_Vuna_dCompiler_dCore_dEval_deval C_Base_dList_dList_Base_dList_dNil) tyTerm)))
 
