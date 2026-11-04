@@ -76,22 +76,157 @@ else
 -- 精化入口
 -- ---------------------------------------------------------------
 -- 按源顺序精化签名：每个签名只对「prelude + 之前的签名」可见。
-elabSigs : List (Pair String Expr) -> List (Pair String Term) -> Ec -> Result (Pair (List (Pair String Term)) Ec)
+elabSigs : List (Pair String (Pair (List Expr) (Pair Expr Span))) -> List (Pair String Term) -> Ec -> Result (Pair (List (Pair String Term)) Ec)
 elabSigs sigs globals ec =
   elabSigsGo sigs globals (ecSetGlobalsComplete (ecPutGlobalsTbl ec (tblFromList globals)) True) []
 
 -- 新签名先前插到 acc（末尾一次 reverse 还原源顺序）；后续签名检查要看得到**已收集**的
 -- 签名，所以 live（globals 参数）也用前插累积（查找顺序无关语义）。
 -- 旧实现逐个 `append globals [sig]` 是 O(#globals)/次 ⇒ 整程序 O(n²)。
-elabSigsGo : List (Pair String Expr) -> List (Pair String Term) -> Ec -> List (Pair String Term) -> Result (Pair (List (Pair String Term)) Ec)
+elabSigsGo : List (Pair String (Pair (List Expr) (Pair Expr Span))) -> List (Pair String Term) -> Ec -> List (Pair String Term) -> Result (Pair (List (Pair String Term)) Ec)
 elabSigsGo [] globals0 ec acc = Ok (Pair (append globals0 (reverse acc)) ec)
-elabSigsGo ((Pair name tyExpr) :: rest) globals ec acc = andThen (checkType globals emptyCtx ec tyExpr) (\p => case p of
-  Pair tyTerm0 (Pair sortLvl ec1) =>
-    let
-      sigTy = zonkTerm ec1 0 tyTerm0
-    in elabSigsGo rest (Pair name sigTy :: globals)
-      (ecPutGlobalsTbl ec1 (tblInsert name sigTy (ecGlobalsTbl ec1))) (Pair name sigTy :: acc)
+elabSigsGo ((Pair name (Pair ctxExprs (Pair tyExpr sigSpan))) :: rest) globals ec acc = andThen (checkType globals emptyCtx ec tyExpr) (\p => case p of
+  Pair tyTerm0 (Pair sortLvl ec1) => andThen (elabSigDictBinders globals ec1 tyTerm0 ctxExprs sigSpan) (\q => case q of
+    Pair tyTerm1 ec2 =>
+      let
+        sigTy = zonkTerm ec2 0 tyTerm1
+      in elabSigsGo rest (Pair name sigTy :: globals)
+        (ecPutGlobalsTbl ec2 (tblInsert name sigTy (ecGlobalsTbl ec2))) (Pair name sigTy :: acc)
+  )
 )
+
+-- 顶层签名里的前导隐式 Pi 前缀 → Ctx（`{a : Type} -> {n : Nat} -> ...`）。
+leadingImplicitCtx : Term -> Ctx
+leadingImplicitCtx ty0 = leadingImplicitCtxGo emptyCtx ty0
+
+leadingImplicitCtxGo : Ctx -> Term -> Ctx
+leadingImplicitCtxGo ctx (TPi n True rig dom cod) =
+  let
+    domVal = eval (ctxEnv ctx) dom
+  in leadingImplicitCtxGo (ctxBindValue n domVal ctx) cod
+leadingImplicitCtxGo ctx _ = ctx
+
+-- M32：把签名的 trait 约束 `C1 a, C2 b =>` 精化成隐式 Rig1 字典 binder，插在前导隐式
+-- binder 之后（与 `liftFreeDictGoals` 的插入点同一规则）。约束域名里的类型变量在此处
+-- 正好落在 prefix 的 de Bruijn 环境里，可以直接作为新 Pi 的 domain。
+elabSigDictBinders : List (Pair String Term) -> Ec -> Term -> List Expr -> Span -> Result (Pair Term Ec)
+elabSigDictBinders globals ec tyTerm [] sp = Ok (Pair tyTerm ec)
+elabSigDictBinders globals ec tyTerm ctxExprs sp = andThen (constraintPartsOf sp ctxExprs) (\parts => andThen (elabConstraintDomains (ecClasses ec) globals (leadingImplicitCtx tyTerm) parts sp ec) (\q => let
+  doms = firstOf q
+  ec1 = secondOf q
+in Ok (Pair (insertSigDicts tyTerm doms (leadingImplicitCount tyTerm)) ec1)
+)
+)
+
+-- 字典 binder 插在前导隐式 binder 之后（与 `liftFreeDictGoals` 同一位置）：
+--   * 有类型变量 / 用户隐式 binder（nImp > 0）：逆序插在第 nImp-1 个 binder 之后，
+--     后插的在外，最终顺序 = `_ctx0, _ctx1, ...`；`insertDictBinder` 的 shift 负责
+--     已插入 binder 的域移位。
+--   * 没有前导隐式 binder（nImp == 0，如 `Show Int => ...`）：直接在最外层 prepend。
+--     此时域名里没有前缀变量可引用（自由变量都已被量化成隐式 binder），无需 shift。
+insertSigDicts : Term -> List Term -> Int -> Term
+insertSigDicts ty [] nImp = ty
+insertSigDicts ty doms nImp =
+  if nImp <= 0 then prependSigDicts ty doms 0
+  else insertSigDictsRev ty doms (length doms - 1) (nImp - 1)
+
+prependSigDicts : Term -> List Term -> Int -> Term
+prependSigDicts ty [] k = ty
+prependSigDicts ty (dom :: rest) k =
+  TPi (sigDictName k) True Rig1 dom (prependSigDicts ty rest (k + 1))
+
+insertSigDictsRev : Term -> List Term -> Int -> Int -> Term
+insertSigDictsRev ty [] k baseIdx = ty
+insertSigDictsRev ty (dom :: rest) k baseIdx =
+  insertSigDictsRev (insertDictBinder (sigDictName k) baseIdx dom ty) rest (k - 1) baseIdx
+
+sigDictName : Int -> String
+sigDictName k = "_ctx" ++ strFromInt k
+
+-- ---------------------------------------------------------------
+-- M32：显式签名约束下的字典目标消解
+-- ---------------------------------------------------------------
+-- body 精化时，调用点的字典实参在类参数还没解出时被延迟成 `DtDictGoal`（裸 meta）；
+-- 若签名声明了 `C a`，这些目标应解到声明的 `_ctx<k>` binder，而不是再被
+-- `liftFreeDictGoals` 提升成新的隐式参数。目标域与 binder 类型 conv 相等即命中。
+data DeclDictBinder : Type where
+  DeclDictBinder : String -> Int -> Value -> DeclDictBinder
+
+declDictName : DeclDictBinder -> String
+declDictName (DeclDictBinder n l d) = n
+
+declDictLevel : DeclDictBinder -> Int
+declDictLevel (DeclDictBinder n l d) = l
+
+declDictDom : DeclDictBinder -> Value
+declDictDom (DeclDictBinder n l d) = d
+
+-- 签名前导隐式前缀里的字典 binder（源码顺序 = level 升序）。
+declaredDictBinders : Ec -> Term -> List DeclDictBinder
+declaredDictBinders ec ty = declaredDictBindersGo ec emptyCtx ty []
+
+declaredDictBindersGo : Ec -> Ctx -> Term -> List DeclDictBinder -> List DeclDictBinder
+declaredDictBindersGo ec ctx (TPi n True rig dom cod) acc =
+  let
+    domVal = eval (ctxEnv ctx) dom
+    acc2 = if isDictDomain ec domVal then DeclDictBinder n (ctxDepth ctx) domVal :: acc else acc
+  in declaredDictBindersGo ec (ctxBindValue n domVal ctx) cod acc2
+declaredDictBindersGo ec ctx _ acc = reverse acc
+
+-- 消解目标并把 body 里的 `?m` 换成 ctx 字典变量；剩下的目标留给 `liftFreeDictGoals`。
+solveDeclaredDictGoals : Ec -> Term -> Term -> Pair Term Ec
+solveDeclaredDictGoals ec ty body = case declaredDictBinders ec ty of
+  [] => Pair body ec
+  binders =>
+    let
+      solved = solveDeclaredDictGoalsGo ec binders (ecDictGoals ec) [] []
+    in Pair (applyDeclaredDictSubsts (firstOf solved) body) (secondOf solved)
+
+data DictSubst : Type where
+  DictSubst : Int -> String -> Int -> DictSubst
+
+dictSubstMeta : DictSubst -> Int
+dictSubstMeta (DictSubst m name q) = m
+
+dictSubstName : DictSubst -> String
+dictSubstName (DictSubst m name q) = name
+
+dictSubstQ : DictSubst -> Int
+dictSubstQ (DictSubst m name q) = q
+
+solveDeclaredDictGoalsGo : Ec -> List DeclDictBinder -> List DtDictGoal -> List DtDictGoal -> List DictSubst -> Pair (List DictSubst) Ec
+solveDeclaredDictGoalsGo ec binders goals kept acc = case goals of
+  [] => Pair (reverse acc) (ecPutDictGoals ec (reverse kept))
+  (g@(DtDictGoal m dom)) :: rest => case metaLookup m (ecSols ec) of
+    Just _ => solveDeclaredDictGoalsGo ec binders rest (g :: kept) acc
+    Nothing => case firstMatchDictBinder ec binders dom of
+      Nothing => solveDeclaredDictGoalsGo ec binders rest (g :: kept) acc
+      Just b =>
+        let
+          -- q = level + 1：出现点（term 根下的 lambda 深度 depth）的 index = depth - q，正好等于
+          -- 该 binder 在「全部隐式 binder 之外再加 depth 层 λ」处的 de Bruijn index。
+          q = declDictLevel b + 1
+        in case solveMeta (ecDefTbl ec) (ecSolsP ec) 0 m [] (VNeutral (NVar (declDictName b) (declDictLevel b) [])) of
+          Ok sols2 =>
+            solveDeclaredDictGoalsGo (ecPutSols ec (solsList sols2)) binders rest kept
+              (DictSubst m (declDictName b) q :: acc)
+          Err e => solveDeclaredDictGoalsGo ec binders rest (g :: kept) acc
+
+firstMatchDictBinder : Ec -> List DeclDictBinder -> Value -> Maybe DeclDictBinder
+firstMatchDictBinder ec [] dom = Nothing
+firstMatchDictBinder ec (b :: rest) dom =
+  if dictDomMatches ec (declDictDom b) dom then Just b else firstMatchDictBinder ec rest dom
+
+dictDomMatches : Ec -> Value -> Value -> Bool
+dictDomMatches ec a b = case conv (ecDefTbl ec) (ecSolsP ec) 0 (forceVal ec a) (forceVal ec b) of
+  Ok _ => True
+  Err _ => False
+
+applyDeclaredDictSubsts : List DictSubst -> Term -> Term
+applyDeclaredDictSubsts [] body = body
+applyDeclaredDictSubsts (s :: rest) body =
+  applyDeclaredDictSubsts rest
+    (substMetaVar (dictSubstMeta s) (dictSubstName s) (dictSubstQ s) body)
 
 -- 子句表（名字 → 该函数的全部 clause，源顺序）。旧实现每个定义都扫一遍剩余声明
 -- （clausesFor）⇒ O(n²)；这里在 bodies 开始时建一次表，查表 O(1)。
@@ -223,7 +358,12 @@ elabBodies future (d :: rest) globals doneDefs acc ec = case d of
       in case p of
         Pair bodyTerm ec1 =>
           let
-            lifted = liftFreeDictGoals name ec1 tyTerm bodyTerm
+            -- M32：先把命中的延迟字典目标解到签名声明的 ctx binder（若有），剩余目标
+            -- 才由 liftFreeDictGoals 提升成新的隐式参数。
+            solvedDecl = solveDeclaredDictGoals ec1 tyTerm bodyTerm
+            bodyTerm1 = firstOf solvedDecl
+            ec1b = secondOf solvedDecl
+            lifted = liftFreeDictGoals name ec1b tyTerm bodyTerm1
             liftedTy = firstOf lifted
             liftedBody = firstOf (secondOf lifted)
             liftedEc = secondOf (secondOf lifted)
@@ -245,12 +385,12 @@ elabBodies future (d :: rest) globals doneDefs acc ec = case d of
   _ => elabBodies future rest globals doneDefs acc ec
 
 -- 每个签名都必须有定义；`axiom`（DAxiom）是无体的可擦除顶层，不要求 DFun。
-checkAllDefined : List (Pair String Expr) -> List (Pair String Term) -> List Decl -> Result (List String)
+checkAllDefined : List (Pair String (Pair (List Expr) (Pair Expr Span))) -> List (Pair String Term) -> List Decl -> Result (List String)
 checkAllDefined sigs globals decls = checkAllDefinedGo sigs globals decls
 
-checkAllDefinedGo : List (Pair String Expr) -> List (Pair String Term) -> List Decl -> Result (List String)
+checkAllDefinedGo : List (Pair String (Pair (List Expr) (Pair Expr Span))) -> List (Pair String Term) -> List Decl -> Result (List String)
 checkAllDefinedGo [] globals decls = Ok []
-checkAllDefinedGo ((Pair name tyExpr) :: rest) globals decls = case axiomSpanOf name decls of
+checkAllDefinedGo ((Pair name (Pair ctx (Pair tyExpr sigSpan))) :: rest) globals decls = case axiomSpanOf name decls of
   Just sp =>
     if hasFunClause name decls then tcErr1 sp (AxiomWithDefinition name) name
     else checkAllDefinedGo rest globals decls

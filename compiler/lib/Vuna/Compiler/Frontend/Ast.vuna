@@ -168,7 +168,9 @@ data Decl : Type where
   -- M28：`axiom name : Ty` —— 无体的可擦除/不透明顶层（决策 5 / D10）。
   -- 它是**类型层**定义：类型层引用合法，运行时使用由擦除检查报错。
   DAxiom : String -> Expr -> Span -> Decl
-  DSig : String -> Expr -> Span -> Decl
+  -- M32：顶层签名可带 trait 约束上下文（`f : Eq a, Show b => τ`）；ctx 是约束表达式
+  -- （洞形 `C arg`，每个都是单参数 trait 应用）。空 ctx = 无显式约束（旧形态）。
+  DSig : String -> List Expr -> Expr -> Span -> Decl
   DFun : String -> List Pat -> Expr -> Span -> Decl
   DRecord : String -> List String -> List Field -> List String -> Span -> Decl
   DTrait : String -> List String -> List TraitMethod -> Span -> Decl
@@ -229,7 +231,7 @@ doStmtExpr (DExpr expr sp) = expr
 declSpan : Decl -> Span
 declSpan (DData name params kind ctors derivings sp) = sp
 declSpan (DAxiom name ty sp) = sp
-declSpan (DSig name ty sp) = sp
+declSpan (DSig name ctx ty sp) = sp
 declSpan (DFun name pats body sp) = sp
 declSpan (DRecord name params fields derivings sp) = sp
 declSpan (DTrait name params methods sp) = sp
@@ -316,7 +318,7 @@ ctorArity name (d :: rest) = case d of
 declNames : Decl -> List String
 declNames (DFun name pats body _) = [name]
 declNames (DAxiom name ty _) = [name]
-declNames (DSig name ty _) = [name]
+declNames (DSig name ctx ty _) = [name]
 declNames (DData dname params kind ctors derivings _) = map ctorName ctors
 declNames (DRecord dname params fields derivings _) = [dname]
 declNames (DTrait tname params methods _) = map traitMethodName methods

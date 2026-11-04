@@ -1,0 +1,11 @@
+-- M32 负例：约束实参的 kind 必须与类参数 kind 一致（`Monad` 要 `Type -> Type`，
+-- `Int` 是 `Type`）。
+trait Monad m where
+  bind : m a -> (a -> m b) -> m b
+  pure : a -> m a
+
+f : Monad Int => Int -> Int
+f x = x
+
+main : Int
+main = f 1

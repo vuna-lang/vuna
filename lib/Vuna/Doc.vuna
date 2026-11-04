@@ -129,7 +129,8 @@ declLinesOf (DRecord name params fields derivings sp) =
 declLinesOf (DTrait name params methods sp) =
   if isPrivate name then []
   else ("trait " ++ name ++ paramSuffix params ++ " where") :: map methodLine methods
-declLinesOf (DSig name ty sp) = if isPrivate name then [] else ["", name ++ " : " ++ renderTy ty]
+declLinesOf (DSig name ctx ty sp) =
+  if isPrivate name then [] else ["", name ++ " : " ++ renderSigCtx ctx ++ renderTy ty]
 declLinesOf _ = []
 
 paramSuffix : List String -> String
@@ -164,6 +165,11 @@ renderTy (EPi name implicit dom cod sp) =
       else "(" ++ name ++ " : " ++ renderTy dom ++ ")"
   in binder ++ " -> " ++ renderTy cod
 renderTy ty = renderTyPlain ty
+
+-- M32：签名约束前缀（`C a, D b => `）；空 ctx 与旧输出逐字一致。
+renderSigCtx : List Expr -> String
+renderSigCtx [] = ""
+renderSigCtx ctx = join ", " (map renderTy ctx) ++ " => "
 
 renderTyPlain : Expr -> String
 renderTyPlain (EApp f args sp) = renderTyAtom f ++ " " ++ join " " (map renderTyArg args)

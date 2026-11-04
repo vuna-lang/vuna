@@ -158,6 +158,11 @@ renderTy (EPi name implicit dom cod sp) =
   in binder ++ " -> " ++ renderTy cod
 renderTy ty = renderTyPlain ty
 
+-- M32：签名可带 trait 约束（`C a, D b => τ`）；空 ctx 与旧输出逐字一致。
+renderSigTy : List Expr -> Expr -> String
+renderSigTy [] ty = renderTy ty
+renderSigTy ctx ty = join ", " (map renderTy ctx) ++ " => " ++ renderTy ty
+
 renderTyPlain : Expr -> String
 renderTyPlain (EApp f args sp) = renderTyAtom f ++ " " ++ join " " (map renderTyArg args)
 renderTyPlain (EInt n sp) = strFromInt n
@@ -203,7 +208,7 @@ declCol d = spanStartCol (declSpan d)
 signatureOf : String -> List Decl -> String
 signatureOf name [] = ""
 signatureOf name (d :: rest) = case d of
-  DSig n ty sp => if n == name then renderTy ty else signatureOf name rest
+  DSig n ctx ty sp => if n == name then renderSigTy ctx ty else signatureOf name rest
   _ => signatureOf name rest
 
 symbolsOfModule : String -> List Decl -> List Comment -> List Sym
@@ -225,7 +230,7 @@ symbolsOfDecl sMod decls comments d =
     DTrait name params methods sp =>
       Sym sMod name "trait" ("trait " ++ name ++ paramSuffix params) doc line col
         :: methodSymbols sMod methods
-    DSig name ty sp => []
+    DSig name ctx ty sp => []
     DAxiom name ty sp =>
       [Sym sMod name "axiom" ("axiom " ++ name ++ " : " ++ renderTy ty) doc line col]
     DFun name pats body sp => [Sym sMod name "fun" (signatureOf name decls) doc line col]

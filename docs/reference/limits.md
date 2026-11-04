@@ -97,6 +97,13 @@
   参数 + ctx 字典参数，搜索递归解 ctx）；`deriving (Show, Eq, Ord)` 对参数化 data 同样可用。
   `List a` / `Maybe a` 等容器的实例仍需显式声明（Base 只带 `Int` / `String` / `Bool` 的
   实例）。
+- **顶层签名约束（M32）**：`f : Eq a, Show a => τ` 可用。约束生成隐式 Rig1 字典 binder
+  （插在前导隐式类型参数之后、显式参数之前），body 的方法调用优先命中声明的假设；签名
+  未覆盖的刚性字典需求仍按旧规则提升成额外隐式参数。**只支持顶层签名**：`where` / `let`
+  绑定、`axiom`、trait 方法、构造子 / 记录字段的类型里写 `=>` 报
+  `[PS_ConstraintUnsupportedHere]`；trait 方法签名上的约束是父类语义，归 F4。约束头未
+  声明报 `unknown interface <name>`；约束项不是单参数 trait 应用报
+  `[TC_ConstraintNotDict]`；实参与类参数 kind 不符报 `[TC_TypeMismatch]`。
 - **类型族**（结果以 `Type` 收尾的 Pi 链，如 `sel : Nat -> Type`）整体擦除，不生成运行时
   定义；在运行时定义里把擦除的族参数当值用报错。
 - **axiom 与命名空间**：`axiom name : Ty` 是无运行时定义的擦除 / 类型层声明，运行时使用报
@@ -117,7 +124,7 @@
   `CG_TypeLevelBindingRuntime` / `CG_TypeLevelNameRuntime`）。
 - **高阶 kind 与多隐式参数字典**：高阶 kind 的 check 已支持（`m a` 推断
   `m : Type -> Type`）；含多隐式参数字典的 `do` 程序不再是边界。trait 多参数 / 默认方法 /
-  父类 / 关联类型归 F4（单参数 trait + 约束实例是当前终态）。
+  父类 / 关联类型归 F4（单参数 trait + 约束实例 + 顶层签名约束是当前终态）。
 - **延迟字典目标的最终诊断**：类参数始终未解时报 `unsolved metavariable`（而非「缺实例」）；
   `missingInstance` 级诊断细化留待后续。**顶层定义必须有类型签名**，否则报
   `DT: expected a type signature for ...`。

@@ -9,9 +9,11 @@ module Vuna.Compiler.Elab.Trait
   , classFieldTys
   , classFieldTysGo
   , clauseSpanOf
+  , constraintPartsOf
   , ctorResultType
   , defBodyOf
   , defTypeOrDefault
+  , elabConstraintDomains
   , elabFunDef
   , elabInstance
   , elabInstanceBodies
@@ -267,11 +269,11 @@ instanceHeadParts _ = Nothing
 constraintPartsOf : Span -> List Expr -> Result (List (Pair String Expr))
 constraintPartsOf sp [] = Ok []
 constraintPartsOf sp (e :: rest) = case instanceConstraintParts e of
-  Nothing => tcErr0 sp InstanceContextNotDict
+  Nothing => tcErr0 sp ConstraintNotDict
   Just p => andThen (constraintPartsOf sp rest) (\ps => Ok (p :: ps))
 
 instanceConstraintParts : Expr -> Maybe (Pair String Expr)
-instanceConstraintParts (EApp fn (a :: rest) sp) = case fn of
+instanceConstraintParts (EApp fn ([a]) sp) = case fn of
   EVar n fsp => Just (Pair n a)
   _ => Nothing
 instanceConstraintParts _ = Nothing
@@ -326,7 +328,7 @@ elabInstanceConstrained classes globals defined ec0 sp cls argExpr ctxParts =
     tele = instanceTeleOf banned combined (argExpr :: ctxArgs)
     teleCtx0 = instanceTeleCtx tele
   in andThen (checkType globals teleCtx0 ec0 argExpr) (\q => case q of
-    Pair argTerm (Pair sortLvl ec1) => andThen (elabInstanceCtxTys classes globals teleCtx0 ctxParts sp ec1) (\r => case r of
+    Pair argTerm (Pair sortLvl ec1) => andThen (elabConstraintDomains classes globals teleCtx0 ctxParts sp ec1) (\r => case r of
       Pair ctxTys ec2 =>
         Ok
           (Pair (InstSigInfo (dtClassName cls) tele ctxTys argTerm (ctorResultType cls argTerm)) ec2)
@@ -394,16 +396,18 @@ instanceTeleCtxGo : List (Pair String Term) -> Ctx -> Ctx
 instanceTeleCtxGo [] ctx = ctx
 instanceTeleCtxGo ((Pair n k) :: rest) ctx = instanceTeleCtxGo rest (ctxBindValue n (eval [] k) ctx)
 
--- ctx 字典域的类型化（在 teleCtx 下 checkType 每个约束实参）。
-elabInstanceCtxTys : List DtClass -> List (Pair String Term) -> Ctx -> List (Pair String Expr) -> Span -> Ec -> Result (Pair (List Term) Ec)
-elabInstanceCtxTys classes globals ctx [] sp ec = Ok (Pair [] ec)
-elabInstanceCtxTys classes globals ctx ((Pair cname argExpr) :: rest) sp ec = case findClass cname classes of
+-- 约束实参的字典域精化（实例/签名 ctx 共用）：arg 按类参数 kind 检查后拼成 `Dict_C arg`。
+elabConstraintDomains : List DtClass -> List (Pair String Term) -> Ctx -> List (Pair String Expr) -> Span -> Ec -> Result (Pair (List Term) Ec)
+elabConstraintDomains classes globals ctx [] sp ec = Ok (Pair [] ec)
+elabConstraintDomains classes globals ctx ((Pair cname argExpr) :: rest) sp ec = case findClass cname classes of
   Nothing => tcErr1 sp (UnknownInterface cname) cname
-  Just cls => andThen (checkType globals ctx ec argExpr) (\q => case q of
-    Pair argTerm (Pair sortLvl ec1) => andThen (elabInstanceCtxTys classes globals ctx rest sp ec1) (\r => case r of
-      Pair tvs ec2 => Ok (Pair (ctorResultType cls argTerm :: tvs) ec2)
+  Just cls => case dictArgKind ec (VNeutral (NGlobal (dictTypeName (dtClassName cls)) [])) of
+    Nothing => tcErr0 sp ConstraintNotDict
+    Just kindVal => andThen (checkE globals ctx ec argExpr kindVal) (\q => case q of
+      Pair argTerm ec1 => andThen (elabConstraintDomains classes globals ctx rest sp ec1) (\r => case r of
+        Pair tvs ec2 => Ok (Pair (ctorResultType cls argTerm :: tvs) ec2)
+      )
     )
-  )
 
 -- 实例方法体上下文：tele 之外再绑定 ctx 字典（第 k 个 ctx binder 的名字 `_ctx<k>`）。
 instBodyCtx : InstSigInfo -> Ctx
@@ -1066,10 +1070,24 @@ else
     forced = forceVal ec expected
   in case forced of
     VPi name implicit rig dom clo =>
-      if implicit then if isImplicitDomain ctx ec dom then bindIndexBinderFuel (fuel - 1) globals ctx ec name dom clo [] body sp
+      if implicit then if isDictDomain ec dom then bindDictBinderFuel (fuel - 1) globals ctx ec name dom clo [] body sp
+      else if isImplicitDomain ctx ec dom then bindIndexBinderFuel (fuel - 1) globals ctx ec name dom clo [] body sp
       else tcErr0 sp ImplicitParamKind
       else checkBodyAtEndFuel (fuel - 1) globals ctx ec body expected sp
     _ => checkE globals ctx ec body expected
+
+-- M32：显式约束的隐式字典 binder：自动绑定（不消耗 pattern）、绑成 `TLam Rig1`，body 经 `localDictLookup` 命中声明假设。
+bindDictBinderFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> String -> Value -> Closure -> List Pat -> Expr -> Span -> Result (Pair Term Ec)
+bindDictBinderFuel fuel globals ctx ec name dom clo pats body sp = if fuel <= 0 then Err "DT: internal: binder check fuel exhausted"
+else
+  let
+    lvl = ctxDepth ctx
+    v = freshVarValue name lvl
+    ctx2 = ctxBindValue name dom ctx
+    expected2 = applyClosure clo v
+  in andThen (checkBindersFuel (fuel - 1) globals ctx2 ec pats body expected2 sp) (\p => case p of
+    Pair inner ec1 => Ok (Pair (TLam name Rig1 inner) ec1)
+  )
 
 -- 隐式索引 binder（`{n : Nat}`）：绑成擦除的 lambda（Rig0），体在扩展上下文里继续。
 bindIndexBinderFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> String -> Value -> Closure -> List Pat -> Expr -> Span -> Result (Pair Term Ec)
@@ -1094,7 +1112,8 @@ checkBodyAtEndFuel fuel globals ctx ec body expected sp = if fuel <= 0 then Err 
 else case body of
   ELam names lambdaBody lambdaSp => checkE globals ctx ec body expected
   _ => case forceVal ec expected of
-    VPi name implicit rig dom clo => if implicit then if isImplicitDomain ctx ec dom then bindIndexBinderFuel (fuel - 1) globals ctx ec name dom clo [] body sp
+    VPi name implicit rig dom clo => if implicit then if isDictDomain ec dom then bindDictBinderFuel (fuel - 1) globals ctx ec name dom clo [] body sp
+    else if isImplicitDomain ctx ec dom then bindIndexBinderFuel (fuel - 1) globals ctx ec name dom clo [] body sp
     else tcErr0 sp ImplicitParamKind
     else
       let
@@ -1113,7 +1132,8 @@ else
   let
     forced = forceVal ec expected
   in case forced of
-    VPi name implicit rig dom clo => if implicit then if isImplicitDomain ctx ec dom then bindIndexBinderFuel (fuel - 1) globals ctx ec name dom clo (pat :: rest) body sp
+    VPi name implicit rig dom clo => if implicit then if isDictDomain ec dom then bindDictBinderFuel (fuel - 1) globals ctx ec name dom clo (pat :: rest) body sp
+    else if isImplicitDomain ctx ec dom then bindIndexBinderFuel (fuel - 1) globals ctx ec name dom clo (pat :: rest) body sp
     else tcErr0 sp ImplicitParamKind
     else case pat of
       PVar pname psp => bindOnePatternFuel (fuel - 1) globals ctx ec pname rest body dom clo sp

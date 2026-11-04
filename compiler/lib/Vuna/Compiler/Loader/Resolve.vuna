@@ -93,7 +93,7 @@ traitImportHint _ = ""
 declValueNames : Decl -> List String
 declValueNames d = case d of
   DFun name pats body sp => [name]
-  DSig name ty sp => [name]
+  DSig name ctx ty sp => [name]
   -- M28：axiom 是无体的值命名空间条目（类型层使用；运行时使用由 Elab/Codegen 拒绝）。
   DAxiom name ty sp => [name]
   DInstance ctxE head methods sp => []
@@ -453,6 +453,21 @@ else andThen (modulesExportingType modules imports name) (\pairs => case pairs o
   _ => andThen (unifyEntryPairs label "type" name pairs) (\p => Ok (entryTarget (secondOf p)))
 )
 
+-- M32：约束项（签名 ctx / 实例 ctx）的接口名单独报错。`C a` 的 `C` 未绑定时若直接走
+-- `resolveTypeExpr`，类型位置会退化成构造子解析并报 "unknown constructor C"——对约束语义
+-- 是误导。这里先解析头名，未绑定即报 `unknown interface`；头名合法时其余实参仍按类型解析。
+resolveConstraintExpr : List Module -> String -> String -> Namespaces -> List Import -> Expr -> Result Expr
+resolveConstraintExpr modules label prefix ns imports cx = case constraintHeadOf cx of
+  Just n => case resolveTypeName modules label prefix ns imports n of
+    Err _ => Err (label ++ ": unknown interface " ++ n)
+    Ok _ => resolveTypeExpr resolveFuelBound modules label prefix ns imports cx
+  Nothing => resolveTypeExpr resolveFuelBound modules label prefix ns imports cx
+
+constraintHeadOf : Expr -> Maybe String
+constraintHeadOf (EApp (EVar n _) _ _) = Just n
+constraintHeadOf (EVar n _) = Just n
+constraintHeadOf _ = Nothing
+
 resolveTypeExpr : Int -> List Module -> String -> String -> Namespaces -> List Import -> Expr -> Result Expr
 resolveTypeExpr fuel modules label prefix ns imports ty = if fuel <= 0 then Err "DT: resolve fuel exhausted (internal: resolver made no progress)"
 else case ty of
@@ -491,12 +506,11 @@ resolveDecl modules label prefix ns imports d = case d of
     andThen (resolveTypeTopName label prefix tname)
       (\tn => andThen (traverse (resolveTraitMethod modules label prefix ns imports) methods) (\ms => Ok (DTrait tn params ms sp)))
   DInstance ctxE head methods sp =>
-    andThen
-      (traverse (\cx => resolveTypeExpr resolveFuelBound modules label prefix ns imports cx) ctxE)
+    andThen (traverse (\cx => resolveConstraintExpr modules label prefix ns imports cx) ctxE)
       (\ctx2 => andThen (resolveTypeExpr resolveFuelBound modules label prefix ns imports head) (\head2 => andThen (traverse (resolveInstanceMethod modules label prefix ns imports) methods) (\ms => Ok (DInstance ctx2 head2 ms sp))))
-  DSig name ty sp =>
+  DSig name ctx ty sp =>
     andThen (resolveTopName label prefix name)
-      (\n => andThen (resolveTypeExpr resolveFuelBound modules label prefix ns imports ty) (\ty2 => Ok (DSig n ty2 sp)))
+      (\n => andThen (traverse (\cx => resolveConstraintExpr modules label prefix ns imports cx) ctx) (\ctx2 => andThen (resolveTypeExpr resolveFuelBound modules label prefix ns imports ty) (\ty2 => Ok (DSig n ctx2 ty2 sp))))
   -- M28：axiom 与签名一样解析类型表达式；名字按顶层名 mangle。
   DAxiom name ty sp =>
     andThen (resolveTopName label prefix name)
@@ -516,9 +530,9 @@ resolveTraitMethod modules label prefix ns imports (TraitMethod mname ty sp) =
     (\n => andThen (resolveTypeExpr resolveFuelBound modules label prefix ns imports ty) (\ty2 => Ok (TraitMethod n ty2 sp)))
 
 resolveInstanceMethod : List Module -> String -> String -> Namespaces -> List Import -> Decl -> Result Decl
-resolveInstanceMethod modules label prefix ns imports (DSig name ty sp) =
+resolveInstanceMethod modules label prefix ns imports (DSig name ctx ty sp) =
   andThen (checkTopName label name)
-    (\_ => andThen (resolveTypeExpr resolveFuelBound modules label prefix ns imports ty) (\ty2 => Ok (DSig name ty2 sp)))
+    (\_ => andThen (traverse (\cx => resolveConstraintExpr modules label prefix ns imports cx) ctx) (\ctx2 => andThen (resolveTypeExpr resolveFuelBound modules label prefix ns imports ty) (\ty2 => Ok (DSig name ctx2 ty2 sp))))
 resolveInstanceMethod modules label prefix ns imports (DFun name pats body sp) =
   andThen (checkTopName label name)
     (\_ => andThen (traverse (resolvePattern resolveFuelBound modules label prefix ns imports) pats) (\parts => andThen (resolveExpr resolveFuelBound modules label prefix ns imports (concatMap secondOf parts) body) (\b => Ok (DFun name (map firstOf parts) b sp))))

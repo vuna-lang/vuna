@@ -1060,7 +1060,7 @@ hasImplicitPi _ = False
 sigTyOf : String -> List Decl -> Maybe Expr
 sigTyOf name [] = Nothing
 sigTyOf name (d :: rest) = case d of
-  DSig n ty sp => if n == name then Just ty else sigTyOf name rest
+  DSig n ctx ty sp => if n == name then Just ty else sigTyOf name rest
   _ => sigTyOf name rest
 
 hasImplicitSig : String -> List Decl -> Bool

@@ -227,7 +227,9 @@ reorderDecl t (DData name params kind ctors derivings sp) =
   andThen (reorderExpr t kind)
     (\k2 => andThen (traverse (\c => reorderCtor t c) ctors) (\cs => Ok (DData name params k2 cs derivings sp)))
 reorderDecl t (DAxiom name ty sp) = andThen (reorderExpr t ty) (\ty2 => Ok (DAxiom name ty2 sp))
-reorderDecl t (DSig name ty sp) = andThen (reorderExpr t ty) (\ty2 => Ok (DSig name ty2 sp))
+reorderDecl t (DSig name ctx ty sp) =
+  andThen (traverse (\e => reorderExpr t e) ctx)
+    (\ctx2 => andThen (reorderExpr t ty) (\ty2 => Ok (DSig name ctx2 ty2 sp)))
 reorderDecl t (DFun name pats body sp) =
   andThen (traverse (\p => reorderPattern t p) pats)
     (\pats2 => andThen (reorderExpr t body) (\b2 => Ok (DFun name pats2 b2 sp)))
@@ -253,8 +255,9 @@ reorderTraitMethod t (TraitMethod name ty sp) =
   andThen (reorderExpr t ty) (\ty2 => Ok (TraitMethod name ty2 sp))
 
 reorderInstanceMethodDecl : FixityTable -> Decl -> Result Decl
-reorderInstanceMethodDecl t (DSig name ty sp) =
-  andThen (reorderExpr t ty) (\ty2 => Ok (DSig name ty2 sp))
+reorderInstanceMethodDecl t (DSig name ctx ty sp) =
+  andThen (traverse (\e => reorderExpr t e) ctx)
+    (\ctx2 => andThen (reorderExpr t ty) (\ty2 => Ok (DSig name ctx2 ty2 sp)))
 reorderInstanceMethodDecl t (DFun name pats body sp) =
   andThen (traverse (\p => reorderPattern t p) pats)
     (\pats2 => andThen (reorderExpr t body) (\b2 => Ok (DFun name pats2 b2 sp)))

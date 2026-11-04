@@ -9,6 +9,7 @@ module Vuna.Compiler.Elab.Sig
   , qualifiedBannedTbl
   , quantifyTopSig
   , quantifyTopSigCached
+  , quantifyTopSigCtxCached
   , quantifyTraitSig
   , topQuantBanned
   ) where
@@ -193,6 +194,16 @@ quantifyTopSigCached : String -> HashTbl Bool -> HashTbl Bool -> Expr -> Span ->
 quantifyTopSigCached prefix banned preludeBanned ty sp =
   quantifyTopKinds (keepOutQualified prefix banned preludeBanned (freeNames (\n => False) ty)) ty ty
     sp
+
+-- M32：带 trait 约束的顶层签名量化。约束实参与返回类型**一起**参与自由名扫描与
+-- kind 推断（只出现在 `Eq a` 里的 `a` 也要量化），但只把 Pi 链包在返回类型上：
+-- `f : Eq a => a -> Bool` 量化成 `{a : Type} -> (Eq a => a -> Bool)`。
+quantifyTopSigCtxCached : String -> HashTbl Bool -> HashTbl Bool -> List Expr -> Expr -> Span -> Expr
+quantifyTopSigCtxCached prefix banned preludeBanned ctx ty sp =
+  let
+    combined = EApp (EVar "#sig" sp) (append ctx [ty]) sp
+    names = keepOutQualified prefix banned preludeBanned (freeNames (\n => False) combined)
+  in quantifyTopKinds names combined ty sp
 
 keepOutQualified : String -> HashTbl Bool -> HashTbl Bool -> List String -> List String
 keepOutQualified prefix banned preludeBanned [] = []

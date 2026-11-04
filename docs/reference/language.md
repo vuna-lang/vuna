@@ -145,6 +145,12 @@ idT x = x
   有定义体（`[TC_AxiomWithDefinition]`），也不能重复声明；
 - `axiom` 是保留关键字；当前编译器自身不用 axiom（旧 seed 必须能编译新源码）。
 
+## 签名的 trait 约束（M32）
+
+顶层签名可写约束前缀（`f : Eq a, Show a => a -> String`）；语义、绑定顺序、诊断与边界见
+[records-traits.md](records-traits.md)。约束只允许在顶层签名上，其它位置写 `=>` 报
+`[PS_ConstraintUnsupportedHere]`。
+
 ## 函数定义与 η 展开
 
 定义子句的参数可以少于签名：剩余 Pi 链按 **η 展开**自动补参数（`\_arityN`，body 应用到

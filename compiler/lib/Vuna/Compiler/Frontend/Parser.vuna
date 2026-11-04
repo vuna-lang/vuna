@@ -131,7 +131,8 @@ parseDecl st blockCol = case peekTok st of
   PTok (TIdent name) p =>
     let
       st1 = advance st
-    in if atSym st1 ":" then parseSignature st1 blockCol name p else parseClause st1 blockCol name p
+    in if atSym st1 ":" then parseSignature st1 blockCol True name p
+    else parseClause st1 blockCol name p
   _ => psErr0 ExpectedTopLevelDecl
 
 -- M28 axiom 声明（决策 5 / D10）：`axiom name : Ty`，无 `=` 体。
@@ -139,12 +140,28 @@ parseDecl st blockCol = case peekTok st of
 parseAxiom : PState -> Int -> Pos -> Result (Pair Decl PState)
 parseAxiom st blockCol kwPos =
   step (expectKw st "axiom")
-    (\_, st1 => step (expectIdent st1) (\name, st2 => step (expectSym st2 ":") (\_, st3 => step (parseExpr (stateFuel st3) st3 blockCol 0) (\ty, st4 => Ok (Pair (DAxiom name ty (Span (fileOf st) (posLine kwPos) (posCol kwPos) (posLine (lastPos st4)) (posCol (lastPos st4)))) st4)))))
+    (\_, st1 => step (expectIdent st1) (\name, st2 => step (expectSym st2 ":") (\_, st3 => step (parseExpr (stateFuel st3) st3 blockCol 0) (\ty, st4 => step (rejectCtxSuffix st4) (\_, st5 => Ok (Pair (DAxiom name ty (Span (fileOf st) (posLine kwPos) (posCol kwPos) (posLine (lastPos st5)) (posCol (lastPos st5)))) st5))))))
 
-parseSignature : PState -> Int -> String -> Pos -> Result (Pair Decl PState)
-parseSignature st blockCol name namePos =
-  step (expectSym st ":")
-    (\_, st1 => step (parseExpr (stateFuel st1) st1 blockCol 0) (\ty, st2 => Ok (Pair (DSig name ty (Span (fileOf st) (posLine namePos) (posCol namePos) (posLine (lastPos st2)) (posCol (lastPos st2)))) st2)))
+-- M32：只有顶层签名允许 trait 约束 `C a =>`。其它签名位置（axiom / where / let /
+-- trait 方法 / 构造子 / 记录字段）见到 `=>` 时直接给出明确诊断，而不是让 `=>` 作为
+-- 残留 token 触发难懂的收尾错误。
+rejectCtxSuffix : PState -> Result (Pair Int PState)
+rejectCtxSuffix st = if atSym st "=>" then psErr0 ConstraintUnsupportedHere else Ok (Pair 0 st)
+
+-- 顶层签名：`name : [C1 a, C2 b =>] τ`。`allowCtx=False` 供 instance 方法签名复用同一
+-- 解析入口（instance 方法的约束由实例 ctx 提供，签名上写 `=>` 报明确诊断）。
+parseSignature : PState -> Int -> Bool -> String -> Pos -> Result (Pair Decl PState)
+parseSignature st blockCol allowCtx name namePos = step (expectSym st ":") (\_, st1 => step (parseCtxThenExpr (stateFuel st1) st1 blockCol) (\hc, st2 => case hc of
+  Pair ctx ty => case ctx of
+    [] =>
+      Ok
+        (Pair (DSig name [] ty (Span (fileOf st) (posLine namePos) (posCol namePos) (posLine (lastPos st2)) (posCol (lastPos st2)))) st2)
+    _ =>
+      if allowCtx then Ok
+        (Pair (DSig name ctx ty (Span (fileOf st) (posLine namePos) (posCol namePos) (posLine (lastPos st2)) (posCol (lastPos st2)))) st2)
+      else psErr0 ConstraintUnsupportedHere
+)
+)
 
 parseClause : PState -> Int -> String -> Pos -> Result (Pair Decl PState)
 parseClause st blockCol name namePos = step (parseClausePatterns (stateFuel st) st blockCol) (\pats, st1 => step (expectSym st1 "=") (\_, st2 => step (parseExpr (stateFuel st2) st2 blockCol 0) (\body, st3 => step (parseWhere st3 blockCol) (\wheres, st4 => let
@@ -204,7 +221,7 @@ parseBindingItem fuel st bindCol = if fuel <= 0 then Err "DT: parser fuel exhaus
 else step (parsePatternSingle (stateFuel st) st bindCol) (\pat, st1 => case pat of
   PVar name psp =>
     if atSym st1 ":" then step (expectSym st1 ":")
-      (\_, st2 => step (parseExpr (fuel - 1) st2 bindCol 0) (\ty, st3 => Ok (Pair (BISig name ty (spanOf st st3)) st3)))
+      (\_, st2 => step (parseExpr (fuel - 1) st2 bindCol 0) (\ty, st3 => step (rejectCtxSuffix st3) (\_, st4 => Ok (Pair (BISig name ty (spanOf st st4)) st4))))
     else parseBindingDef (fuel - 1) st st1 bindCol pat
   _ => parseBindingDef (fuel - 1) st st1 bindCol pat
 )
@@ -313,7 +330,7 @@ else if isEof st then Ok (Pair [] st)
 else case peekPos st of
   Pos line col =>
     if col == fieldCol then step (expectIdent st)
-      (\name, st1 => step (expectSym st1 ":") (\_, st2 => step (parseExpr (stateFuel st2) st2 fieldCol 0) (\ty, st3 => step (parseFieldList (fuel - 1) st3 fieldCol) (\rest, st4 => Ok (Pair (Field name ty (spanOf st st3) :: rest) st4)))))
+      (\name, st1 => step (expectSym st1 ":") (\_, st2 => step (parseExpr (stateFuel st2) st2 fieldCol 0) (\ty, st3 => step (rejectCtxSuffix st3) (\_, st3b => step (parseFieldList (fuel - 1) st3b fieldCol) (\rest, st4 => Ok (Pair (Field name ty (spanOf st st3) :: rest) st4))))))
     else if col > fieldCol then psErr0 UnexpectedIndentInRecord else Ok (Pair [] st)
 
 -- deriving (TraitA, TraitB)；可出现在 data/record 的构造器/字段块之后。
@@ -347,14 +364,15 @@ else if isEof st then Ok (Pair [] st)
 else case peekPos st of
   Pos line col =>
     if col == methodCol then step (expectIdent st)
-      (\name, st1 => step (expectSym st1 ":") (\_, st2 => step (parseExpr (stateFuel st2) st2 methodCol 0) (\ty, st3 => step (parseMethodSigList (fuel - 1) st3 methodCol) (\rest, st4 => Ok (Pair (TraitMethod name ty (spanOf st st3) :: rest) st4)))))
+      (\name, st1 => step (expectSym st1 ":") (\_, st2 => step (parseExpr (stateFuel st2) st2 methodCol 0) (\ty, st3 => step (rejectCtxSuffix st3) (\_, st3b => step (parseMethodSigList (fuel - 1) st3b methodCol) (\rest, st4 => Ok (Pair (TraitMethod name ty (spanOf st st3) :: rest) st4))))))
     else if col > methodCol then psErr0 UnexpectedIndentInTrait else Ok (Pair [] st)
 
 -- instance 声明（M10.5 / M29）：`instance [<ctx> ,... =>] Head where` + 缩进方法定义。
 -- ctx 是逗号分隔的字典约束（每个形如 `C arg`；M29 只支持单参数 trait）。
 -- M29-T2b：命名实例（`as name`）已删除。
+-- M32：实例头与顶层签名共用「[ctx , ... =>] expr」解析（ctx 为空 = 无约束）。
 parseInstance : PState -> Int -> Pos -> Result (Pair Decl PState)
-parseInstance st blockCol kwPos = step (expectKw st "instance") (\_, st1 => step (parseInstanceHeadCtx (stateFuel st1) st1 blockCol) (\hc, st2 => case hc of
+parseInstance st blockCol kwPos = step (expectKw st "instance") (\_, st1 => step (parseCtxThenExpr (stateFuel st1) st1 blockCol) (\hc, st2 => case hc of
   Pair ctxE head => parseInstanceTail ctxE head st blockCol kwPos st2
 )
 )
@@ -364,20 +382,20 @@ parseInstanceTail ctxE head st blockCol kwPos st2 =
   step (expectKw st2 "where")
     (\_, st3 => step (parseInstanceBody st3 blockCol) (\methods, st4 => Ok (Pair (DInstance ctxE head methods (Span (fileOf st) (posLine kwPos) (posCol kwPos) (posLine (lastPos st4)) (posCol (lastPos st4)))) st4)))
 
-parseInstanceHeadCtx : Int -> PState -> Int -> Result (Pair (Pair (List Expr) Expr) PState)
-parseInstanceHeadCtx fuel st blockCol =
+parseCtxThenExpr : Int -> PState -> Int -> Result (Pair (Pair (List Expr) Expr) PState)
+parseCtxThenExpr fuel st blockCol =
   if fuel <= 0 then Err "DT: parser fuel exhausted (internal: parser made no progress)"
   else step (parseExpr fuel st blockCol 0)
-    (\e1, st1 => if atSym st1 "=>" then step (parseExpr (fuel - 1) (advance st1) blockCol 0) (\hd, st2 => Ok (Pair (Pair [e1] hd) st2)) else if atSym st1 "," then parseInstanceCtxRest (fuel - 1) (advance st1) [e1] blockCol else Ok (Pair (Pair [] e1) st1))
+    (\e1, st1 => if atSym st1 "=>" then step (parseExpr (fuel - 1) (advance st1) blockCol 0) (\hd, st2 => Ok (Pair (Pair [e1] hd) st2)) else if atSym st1 "," then parseCtxRest (fuel - 1) (advance st1) [e1] blockCol else Ok (Pair (Pair [] e1) st1))
 
 -- ctx 列表的剩余部分：`e , e ... => head`。
-parseInstanceCtxRest : Int -> PState -> List Expr -> Int -> Result (Pair (Pair (List Expr) Expr) PState)
-parseInstanceCtxRest fuel st acc blockCol =
+parseCtxRest : Int -> PState -> List Expr -> Int -> Result (Pair (Pair (List Expr) Expr) PState)
+parseCtxRest fuel st acc blockCol =
   if fuel <= 0 then Err "DT: parser fuel exhausted (internal: parser made no progress)"
   else if atSym st "=>" then step (parseExpr (fuel - 1) (advance st) blockCol 0)
     (\hd, st1 => Ok (Pair (Pair (reverse acc) hd) st1))
   else step (parseExpr fuel st blockCol 0)
-    (\e, st1 => if atSym st1 "," then parseInstanceCtxRest (fuel - 1) (advance st1) (e :: acc) blockCol else step (expectSym st1 "=>") (\_, st2 => step (parseExpr (fuel - 1) st2 blockCol 0) (\hd, st3 => Ok (Pair (Pair (reverse (e :: acc)) hd) st3))))
+    (\e, st1 => if atSym st1 "," then parseCtxRest (fuel - 1) (advance st1) (e :: acc) blockCol else step (expectSym st1 "=>") (\_, st2 => step (parseExpr (fuel - 1) st2 blockCol 0) (\hd, st3 => Ok (Pair (Pair (reverse (e :: acc)) hd) st3))))
 
 parseInstanceBody : PState -> Int -> Result (Pair (List Decl) PState)
 parseInstanceBody st blockCol = if isEof st then Ok (Pair [] st)
@@ -399,7 +417,8 @@ parseInstanceDecl st blockCol = case peekTok st of
   PTok (TIdent name) p =>
     let
       st1 = advance st
-    in if atSym st1 ":" then parseSignature st1 blockCol name p else parseClause st1 blockCol name p
+    in if atSym st1 ":" then parseSignature st1 blockCol False name p
+    else parseClause st1 blockCol name p
   _ => psErr0 ExpectedInstanceMethod
 
 parseParams : Int -> PState -> Result (Pair (List String) PState)
@@ -420,7 +439,7 @@ else if isEof st then Ok (Pair [] st)
 else case peekPos st of
   Pos line col =>
     if col == ctorCol then step (expectIdent st)
-      (\name, st1 => step (expectSym st1 ":") (\_, st2 => step (parseExpr (stateFuel st2) st2 ctorCol 0) (\ty, st3 => step (parseCtorList (fuel - 1) st3 ctorCol) (\rest, st4 => Ok (Pair (Ctor name ty (countArrows ty) (spanOf st st3) :: rest) st4)))))
+      (\name, st1 => step (expectSym st1 ":") (\_, st2 => step (parseExpr (stateFuel st2) st2 ctorCol 0) (\ty, st3 => step (rejectCtxSuffix st3) (\_, st3b => step (parseCtorList (fuel - 1) st3b ctorCol) (\rest, st4 => Ok (Pair (Ctor name ty (countArrows ty) (spanOf st st3) :: rest) st4))))))
     else if col > ctorCol then psErr0 UnexpectedIndentInData else Ok (Pair [] st)
 
 parseExpr : Int -> PState -> Int -> Int -> Result (Pair Expr PState)

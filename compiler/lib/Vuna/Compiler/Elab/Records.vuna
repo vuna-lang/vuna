@@ -157,7 +157,7 @@ desugarRecordDecl records d = case d of
   DTrait name params methods sp => Ok d
   DInstance ctxE head methods sp =>
     andThen (traverse (desugarRecordDecl records) methods) (\ms => Ok (DInstance ctxE head ms sp))
-  DSig name ty sp => Ok d
+  DSig name ctx ty sp => Ok d
   -- M28：axiom 的类型表达式里可能有 record 语法吗？类型位置不走 record 降级
   -- （record 是值层记法），原样返回。
   DAxiom name ty sp => Ok d

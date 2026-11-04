@@ -1,0 +1,9 @@
+-- M32：多个约束（`Eq a, Ord a =>`）按源码顺序生成多只字典 binder；body 里 `==` / `<`
+-- 分别命中对应假设。
+import Prelude
+
+compare : Eq a, Ord a => a -> a -> String
+compare x y = if x == y then "eq" else if x < y then "lt" else "gt"
+
+main : String
+main = compare 1 2 ++ "/" ++ compare 2 2 ++ "/" ++ compare "b" "a"

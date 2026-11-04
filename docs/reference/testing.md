@@ -98,10 +98,14 @@ nix run .#vuna-run-tests [-- --list | --only 34 | --only dt | --vuna stable]
 - `corpus/traits/`：正例 `interp` 与 `compile` 比对 golden（含泛型字典穿参、多类型
   default；`14_constrained_instance`（`instance Eq a => Eq (Box a)` +
   `mem (Box 1) [...]`）、`15_parametric_deriving`（参数化 `deriving (Show, Eq, Ord)`）、
-  `16_eq_ord_alias`（`==` / `eq`、`<` / `lt` 走同一路径，Int/String 特化 + Bool 实例））；
+  `16_eq_ord_alias`（`==` / `eq`、`<` / `lt` 走同一路径，Int/String 特化 + Bool 实例）、
+  `17`–`22`（M32 显式签名约束：单 / 多约束、结构化 `Eq (Box a)`、高阶 kind `Monad m`、
+  约束函数互调、未使用约束））；
   命名实例特性不存在。错误例 90–95、98 要求错误片段、非 0 退出、不写
   输出（重复实例 / 相干性、head 不符、缺 / 未知方法、显式只写 `Trait` 不写 `(..)`；
   `90_orphan_default` 实际覆盖重复实例，孤儿规则表述已随 M31.1 删除，见 B23）；
+  `99_explicit_*`（M32 约束负例：未知接口、非单参数应用、kind 不符、where / trait 方法
+  位置不支持）。
   `96_named_instance_removed` / `97_instance_sel_removed` 是 `as` / `@` 语法的解析负例；
 - `corpus/monad/`：`do` / `>>=` / `>>` 在 Maybe/List 上的正例，含高阶 kind 泛型
   `bindPair : m a -> m b -> m (Pair a b)`；`04_kind_generic`（多隐式参数字典）check /

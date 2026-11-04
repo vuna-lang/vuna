@@ -1,0 +1,8 @@
+-- M32 负例：签名约束里的接口必须已声明（`Bogus` 不存在）。
+import Prelude
+
+f : Bogus a => a -> Bool
+f x = True
+
+main : Bool
+main = f 1

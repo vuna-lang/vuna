@@ -252,7 +252,7 @@ modDeclItemAnchors (ModDecl _ _ items _) = map exportItemSpan items
 declAnchors : Decl -> List Span
 declAnchors (DData name params kind ctors derivings sp) = sp :: map ctorSpan ctors
 declAnchors (DAxiom name ty sp) = [sp]
-declAnchors (DSig name ty sp) = [sp]
+declAnchors (DSig name ctx ty sp) = [sp]
 declAnchors (DFun name pats body sp) = sp :: exprAnchors body
 declAnchors (DRecord name params fields derivings sp) = sp :: map fieldSpan fields
 declAnchors (DTrait name params methods sp) = sp :: map traitMethodAnchor methods

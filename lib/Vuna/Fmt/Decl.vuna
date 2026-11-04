@@ -23,8 +23,8 @@ renderDeclAt at lineInd decl = attachAt at (declSpan decl) lineInd (renderDeclBo
 renderDeclBody : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Decl -> List String
 renderDeclBody at lineInd (DData name params kind ctors derivings sp) =
   renderDataDecl at name params kind ctors derivings
-renderDeclBody at lineInd (DAxiom name ty sp) = renderSigLine at lineInd "axiom " name ty
-renderDeclBody at lineInd (DSig name ty sp) = renderSigLine at lineInd "" name ty
+renderDeclBody at lineInd (DAxiom name ty sp) = renderSigLine at lineInd "axiom " name [] ty
+renderDeclBody at lineInd (DSig name ctx ty sp) = renderSigLine at lineInd "" name ctx ty
 renderDeclBody at lineInd (DFun name pats body sp) = renderClause at lineInd name pats body
 renderDeclBody at lineInd (DRecord name params fields derivings sp) =
   renderRecordDecl at name params fields derivings
@@ -32,9 +32,10 @@ renderDeclBody at lineInd (DTrait name params methods sp) = renderTraitDecl at n
 renderDeclBody at lineInd (DInstance ctxE head methods sp) = renderInstanceDecl at ctxE head methods
 
 -- 顶层签名与 axiom 声明共用：`<prefix>name : Ty`（prefix 为 "" 或 "axiom "）。
-renderSigLine : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> String -> String -> Expr -> List String
-renderSigLine at lineInd prefix name ty =
-  prefixFirst (spaces lineInd ++ prefix ++ name ++ " : ") (renderTypeExpr at lineInd ty)
+renderSigLine : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> String -> String -> List Expr -> Expr -> List String
+renderSigLine at lineInd prefix name ctx ty =
+  prefixFirst (spaces lineInd ++ prefix ++ name ++ " : " ++ renderInstanceCtx ctx)
+    (renderTypeExpr at lineInd ty)
 
 renderDataDecl : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> String -> List String -> Expr -> List Ctor -> List String -> List String
 renderDataDecl at name params kind ctors derivings =
@@ -183,7 +184,7 @@ attachDecl prev _ = False
 
 declNamed : Decl -> String -> Bool
 declNamed (DFun m pats body sp) n = m == n
-declNamed (DSig m ty sp) n = m == n
+declNamed (DSig m ctx ty sp) n = m == n
 declNamed _ n = False
 
 -- ---------------------------------------------------------------

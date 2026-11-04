@@ -69,7 +69,7 @@ findOwnFn : String -> List Decl -> Maybe String
 findOwnFn name [] = Nothing
 findOwnFn name (d :: rest) = case d of
   DFun n pats body sp => if n == name then Just name else findOwnFn name rest
-  DSig n ty sp => if n == name then Just name else findOwnFn name rest
+  DSig n ctx ty sp => if n == name then Just name else findOwnFn name rest
   DAxiom n ty sp => if n == name then Just name else findOwnFn name rest
   _ => findOwnFn name rest
 
@@ -128,7 +128,7 @@ declImplicitExports prefix d = case d of
       :: ownCtorEntries prefix tname (map traitMethodName methods)
   -- M29-T2b：命名实例已删除，实例不出现在导出表（字典按实例表注册）。
   DInstance ctxE head methods sp => []
-  DSig name ty sp =>
+  DSig name ctx ty sp =>
     if isPrivateName name then []
     else [ExportEntry { kind = "val", public = name, target = mangle prefix name, parent = "" }]
   -- M28：axiom 是无体的可擦除顶层，导出层按值条目处理（类型层引用跨模块可见）。

@@ -260,7 +260,7 @@ memDefName : String -> List (Pair String Term) -> Bool
 memDefName name [] = False
 memDefName name ((Pair n ty) :: rest) = if n == name then True else memDefName name rest
 
-collectSigs : List Decl -> Result (List (Pair String Expr))
+collectSigs : List Decl -> Result (List (Pair String (Pair (List Expr) (Pair Expr Span))))
 collectSigs decls =
   let
     defined = definedNames decls
@@ -274,24 +274,25 @@ collectSigs decls =
 -- M28 / C29：banned 集按**签名所属模块**作用域；M30（D18）把这张集合改成共享缓存：
 -- `banned` 的键是「模块前缀 \t 名字」（`Sig.qualifiedBannedTbl`），`preludeBanned` 是
 -- 全局 prelude 名单，两者都只建一次。
-collectSigsInto : HashTbl Bool -> HashTbl Bool -> HashTbl Bool -> List (Pair String Expr) -> List Decl -> Result (List (Pair String Expr))
+collectSigsInto : HashTbl Bool -> HashTbl Bool -> HashTbl Bool -> List (Pair String (Pair (List Expr) (Pair Expr Span))) -> List Decl -> Result (List (Pair String (Pair (List Expr) (Pair Expr Span))))
 collectSigsInto banned preludeBanned seen acc [] = Ok (reverse acc)
 collectSigsInto banned preludeBanned seen acc (d :: rest) = case d of
-  DSig name ty sp => collectSigOne banned preludeBanned seen acc name ty sp rest
+  DSig name ctx ty sp => collectSigOne banned preludeBanned seen acc name ctx ty sp rest
   -- M28：axiom 与签名同一套类型检查/量化；区别只在 `checkAllDefined` 不要求它有体。
-  DAxiom name ty sp => collectSigOne banned preludeBanned seen acc name ty sp rest
+  DAxiom name ty sp => collectSigOne banned preludeBanned seen acc name [] ty sp rest
   DFun name pats body sp => collectSigsInto banned preludeBanned seen acc rest
   DData name params kind ctors derivings sp => collectSigsInto banned preludeBanned seen acc rest
   DRecord name params fields derivings sp => errAt sp "DT: internal: record was not desugared"
   DTrait name params methods sp => collectSigsInto banned preludeBanned seen acc rest
   DInstance ctxE head methods sp => collectSigsInto banned preludeBanned seen acc rest
 
-collectSigOne : HashTbl Bool -> HashTbl Bool -> HashTbl Bool -> List (Pair String Expr) -> String -> Expr -> Span -> List Decl -> Result (List (Pair String Expr))
-collectSigOne banned preludeBanned seen acc name ty sp rest =
+collectSigOne : HashTbl Bool -> HashTbl Bool -> HashTbl Bool -> List (Pair String (Pair (List Expr) (Pair Expr Span))) -> String -> List Expr -> Expr -> Span -> List Decl -> Result (List (Pair String (Pair (List Expr) (Pair Expr Span))))
+collectSigOne banned preludeBanned seen acc name ctx ty sp rest =
   if memName name preludeNames then tcErr1 sp (CannotRedefineBuiltin name) name
   else if tblMem name seen then tcErr1 sp (DuplicateSignature name) name
   else collectSigsInto banned preludeBanned (tblInsert name True seen)
-    (Pair name (quantifyTopSigCached (modulePrefixOf name) banned preludeBanned ty sp) :: acc) rest
+    (Pair name (Pair ctx (Pair (quantifyTopSigCtxCached (modulePrefixOf name) banned preludeBanned ctx ty sp) sp)) :: acc)
+    rest
 
 -- 已精化的族按源顺序积累在 Ec 的 datas 里（case 精化需要族的 ctor telescope）。
 -- 收集 data 声明（按源顺序）。

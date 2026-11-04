@@ -150,8 +150,9 @@ $ vuna doc <dir> <out.md>
 | `TC_CannotSolveHigherOrder` | 精化 | 非 Miller pattern 的元变量应用 |
 | `TC_NoInstanceFound` | 精化 | 接口字典找不到实例 |
 | `TC_AmbiguousInstance` | 精化 | 多个实例头部都能统一 |
-| `TC_UnknownInterface` | 精化 | instance 头不是已声明接口 |
+| `TC_UnknownInterface` | 精化 | instance 头 / 签名约束头能解析成名字但不是已声明接口 |
 | `TC_InstanceHeadNotApp` | 精化 | instance 头形态不合法 |
+| `TC_ConstraintNotDict` | 精化 | 约束项不是单参数 trait 应用 |
 | `TC_InstanceMissingMethod` | 精化 | 实例漏实现方法 |
 | `TC_CannotProveTermination` | 终止性 | 递归调用没有结构下降 |
 | `TC_NotExhaustive` | 覆盖性 | 漏写可达分支 |

@@ -81,6 +81,10 @@ main = pretty Red ++ "/" ++ show Red
 - **参数化 `deriving (Show, Eq, Ord)`**：按 data 的每个类型参数生成 ctx（形态是约束
   实例 `instance Eq a => Eq (F a)`）；`Show` 要求字段可 show。`mem (Box 1) [...]`
   这类需要 `Dict_Eq (Box Int)` 的用法因此可用。
+- **顶层函数签名也可以写约束（M32）**：`f : Eq a, Show a => a -> String`。约束是定义体的
+  字典假设（隐式 Rig1 参数），body 的方法调用优先命中它；调用点仍按实例搜索补字典。
+  签名不写约束的旧形态继续按推断提升（`mem : a -> L a -> Bool` 内部仍是
+  `{a} -> {d : Dict_Eq a} -> ...`）。语法与边界见 [language.md](language.md) §签名的 trait 约束。
 - **`Show` / `Eq` / `Ord` 是库里的普通 trait（M31.1 起声明与实例分离）**：声明在
   `Base.Show` / `Base.Eq` / `Base.Ord`；实例按**落点规则**分布：`Int` → `Base.Int`、
   `String` → `Base.String`、`Bool` → `Base.Eq` / `Base.Ord`。运算符 `==` / `/=` / `<`
@@ -100,6 +104,26 @@ main = pretty Red ++ "/" ++ show Red
   （含方法），显式导出列表需 `Trait(..)` 才导出方法；实例按整个程序（flatten）参与
   搜索。
 - 相等 / 比较的规则（证据驱动、无泛型兜底）见 [type-system.md](type-system.md)。
+
+### 签名的 trait 约束（M32）
+
+顶层签名可以写约束前缀（逗号分隔，与 instance 头 ctx 同一套语法）：
+
+```vuna
+describe : Show a, Eq a => a -> a -> String
+describe x y = if x == y then show x else show x ++ "/" ++ show y
+```
+
+- `C a` 里的 `a` 不是新参数：它是签名自由小写名的隐式类型参数（见
+  [type-system.md](type-system.md)）；约束另外生成隐式**字典参数**
+  `{_ctx0 : Dict_C a}`（Rig1 运行时保留），插在类型参数之后、显式参数之前。
+- body 的方法调用优先命中声明的假设；签名没覆盖的刚性需求仍按旧规则提升成额外隐式
+  参数（与不写约束的签名同一条推断路径，`mem : a -> L a -> Bool` 因此不变）。
+- 调用点没有新语法：类型实参由统一解出，字典实参按实例搜索填充。
+- 只支持顶层签名：`where` / `let`、`axiom`、trait 方法、构造子 / 记录字段写 `=>` 报
+  `[PS_ConstraintUnsupportedHere]`（trait 方法约束是父类语义，归 F4）。未声明接口头报
+  `unknown interface <name>`；非单参数应用报 `[TC_ConstraintNotDict]`；kind 不符报
+  `[TC_TypeMismatch]`。
 
 ## do、Monad 与 Functor
 

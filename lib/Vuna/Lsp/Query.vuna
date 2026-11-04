@@ -312,7 +312,7 @@ dedupeNamesGo (x :: rest) seen acc =
 declNameOf : Decl -> String
 declNameOf (DData name params kind ctors derivings sp) = name
 declNameOf (DAxiom name ty sp) = name
-declNameOf (DSig name ty sp) = name
+declNameOf (DSig name ctx ty sp) = name
 declNameOf (DFun name pats body sp) = name
 declNameOf (DRecord name params fields derivings sp) = name
 declNameOf (DTrait name params methods sp) = name
@@ -325,7 +325,7 @@ declSymbolKind (DData name params kind ctors derivings sp) = 23
 declSymbolKind (DRecord name params fields derivings sp) = 23
 declSymbolKind (DTrait name params methods sp) = 11
 declSymbolKind (DAxiom name ty sp) = 14
-declSymbolKind (DSig name ty sp) = 12
+declSymbolKind (DSig name ctx ty sp) = 12
 declSymbolKind (DFun name pats body sp) = 12
 declSymbolKind (DInstance ctxE head methods sp) = 12
 

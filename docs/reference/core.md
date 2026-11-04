@@ -88,7 +88,7 @@ data Term where
 ## 5. 擦除
 
 - **唯一判据链**：`Elab.Meta.isTypeDomain`（域在类型层？）→ `binderRig`（构造 `Rig`）→
-  `Core.rigIsErased`（读取）。隐式 binder 恒 `Rig0`；显式 binder 仅当域在类型层
+  `Core.rigIsErased`（读取）。隐式 binder 恒 `Rig0`（**例外**：M32 为 trait 约束生成的隐式字典 binder 是 `Rig1`）；显式 binder 仅当域在类型层
   （宇宙，或域全为类型层的 Pi 链）才 `Rig0`；显式索引 `(n : Nat)` 是 `Rig1`，保留运行时
   字段。**不做整程序使用分析**：索引擦除策略 = 写成隐式 binder。
 - 精化器产出的项，其 lambda 链元数必须与该类型的 Pi 链逐 binder 对齐，`Rig0` 位置两侧
