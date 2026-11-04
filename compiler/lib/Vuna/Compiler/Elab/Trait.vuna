@@ -13,6 +13,7 @@ module Vuna.Compiler.Elab.Trait
   , ctorResultType
   , defBodyOf
   , defTypeOrDefault
+  , defTypeOrDefaultTbl
   , elabConstraintDomains
   , elabFunDef
   , elabInstance
@@ -1034,14 +1035,15 @@ elabInstancesGo (d :: rest) classes datas globals ec acc = andThen (elabInstance
 -- 找不到的生成项给 `Nothing`，诊断保持无位置）。
 extraDefsOf : List (Pair String Term) -> Ec -> List (Pair String Span) -> List DtDef -> List DtDef
 extraDefsOf globals ec srcSpans sourceDefs =
-  extraDefsGo globals (Base.HashMap.ofNames (map dtDefName sourceDefs)) srcSpans (ecDefs ec) []
+  extraDefsGo (ecGlobalsTbl ec) (Base.HashMap.ofNames (map dtDefName sourceDefs)) srcSpans
+    (ecDefs ec) []
 
-extraDefsGo : List (Pair String Term) -> HashMap Bool -> List (Pair String Span) -> List (Pair String Term) -> List DtDef -> List DtDef
-extraDefsGo globals sourceNames srcSpans [] acc = reverse acc
-extraDefsGo globals sourceNames srcSpans (d :: rest) acc =
-  if Base.HashMap.member (firstOf d) sourceNames then extraDefsGo globals sourceNames srcSpans rest acc
-  else extraDefsGo globals sourceNames srcSpans rest
-    (DtDef (firstOf d) (defTypeOrDefault globals (firstOf d)) (secondOf d) (spanOfName (firstOf d) srcSpans) :: acc)
+extraDefsGo : HashMap Term -> HashMap Bool -> List (Pair String Span) -> List (Pair String Term) -> List DtDef -> List DtDef
+extraDefsGo globalsTbl sourceNames srcSpans [] acc = reverse acc
+extraDefsGo globalsTbl sourceNames srcSpans (d :: rest) acc =
+  if Base.HashMap.member (firstOf d) sourceNames then extraDefsGo globalsTbl sourceNames srcSpans rest acc
+  else extraDefsGo globalsTbl sourceNames srcSpans rest
+    (DtDef (firstOf d) (defTypeOrDefaultTbl globalsTbl (firstOf d)) (secondOf d) (spanOfName (firstOf d) srcSpans) :: acc)
 
 -- 名字→span 表的线性查找（生成定义数量小，不做哈希表）。
 spanOfName : String -> List (Pair String Span) -> Maybe Span
@@ -1050,6 +1052,12 @@ spanOfName name ((Pair n sp) :: rest) = if n == name then Just sp else spanOfNam
 
 defTypeOrDefault : List (Pair String Term) -> String -> Term
 defTypeOrDefault globals name = case globalLookup name globals of
+  Just ty => ty
+  Nothing => TGlobal "Int"
+
+-- O(1) 版：extraDefsOf 对每条生成定义查 globals 表（M34；调用点用 7700+ 条 globals）。
+defTypeOrDefaultTbl : HashMap Term -> String -> Term
+defTypeOrDefaultTbl tbl name = case Base.HashMap.lookup name tbl of
   Just ty => ty
   Nothing => TGlobal "Int"
 

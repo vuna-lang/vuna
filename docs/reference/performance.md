@@ -215,6 +215,34 @@ W3 落地的容器与表示（`Intrinsics` / `Elab.Prelude` / `Codegen.Decl` / `
 
 优化后重跑 `--json bench/baseline.json` 更新基线并在这里记录。
 
+## 9. 编译器基准（M34）
+
+`sh bench/compiler.sh`（仓库根；`--runs N` / `--check` / `--save-baseline`）测编译器 / 工具链
+自身墙钟：`check .`、`check compiler`、`build --no-compile compiler`、`vuna map` 冷 / 热、`fmt --check`。
+基线 `bench/compiler-baseline.txt`（机器相关，只做同机回归对比；`--check` 超 20% 打 WARN，
+软门槛，退出 0）。**M34 第一波（termination worklist / 表化 / 索引线性化）前后读数**：
+
+| benchmark | 优化前 | 优化后 |
+| --- | --- | --- |
+| check . | ~10.8 s | ~7.2 s |
+| check compiler | ~3.6 s | ~2.8 s |
+| build --no-compile compiler | ~3.9 s | ~3.1 s |
+| vuna map 冷启动 | ~0.64 s | ~0.61 s |
+| vuna map 热缓存 | ~0.35 s | ~0.35 s |
+| fmt --check | ~0.55 s | ~0.54 s |
+
+主要改动（语义等价，全量夹具验证）：
+
+1. `checkTerminationDecls` 的 `computePosFacts` 改 **worklist 不动点**：首轮只扫有出边的
+   caller，之后只重扫「新 facts 的 callee 的 callers」，不再每轮全量 `posWalk` 所有 defs；
+   facts 查找与集合操作（filter / 并集 / 相等）改 name→位置表；
+2. `groupDefs`、`Elab/Trait.extraDefsOf` 的线性查找改 `Base.HashMap` 表；
+3. `vuna map` 索引：`refsInExpr` 改累积器（O(n²)→O(n)），跨文件累积改逆序前插（消除每文件
+   `append` 复制整个已累积列表）。
+
+**剩余（M34 后续）**：单文件 / 模块级 elab 缓存（M34.5，依赖 Core Term / DtProgram 序列化）、
+workspace 并行 `check`、`check .` 对依赖包模块的重复精化（缓存落地后消除）。
+
 ## 相关阅读
 
 - 规模不变量与边界：[limits.md](limits.md)

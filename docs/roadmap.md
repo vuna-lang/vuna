@@ -93,7 +93,12 @@ M33（语言能写高性能系统程序）已收尾，历史在 git；剩下两�
 **依赖**：M33 已落地（测量 / 容器 / codegen 基础）；5 依赖序列化与接口摘要。
 **退出标准**：`check .` 从当前 ~8 s 降至目标；`vuna map` 冷启动从 ~31 s 降至秒级；单文件
 增量进入秒级以下；LSP 编辑反馈明显下降；性能 CI 门槛可用（[debt.md](reference/debt.md) C33）。
-**映射 debt**：C30、C31、C32、C33、C34、E01、E04、E06。
+**映射 debt**：C30、C31、C32、C33、E01、E04、E06。
+
+**进度（M34 第一波）**：`bench/compiler.sh` 编译器基准 + 软门槛已落地（C33 部分、C34 关闭）；
+`check .` 10.8s→7.2s（termination worklist 不动点、`groupDefs`/`extraDefsOf` 表化、
+`vuna map` 索引 O(n²)→O(n)）。剩余：单文件 / 模块级 elab 缓存（M34.5，前置 C32 序列化）、
+workspace 并行 check、`Sort`/`append` 剩余热点。
 
 ### M35：并发 / 服务端
 

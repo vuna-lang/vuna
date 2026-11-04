@@ -1,0 +1,6 @@
+check-all 7343
+check-compiler 2847
+build-compiler 3085
+map-cold 612
+map-hot 351
+fmt-check 537

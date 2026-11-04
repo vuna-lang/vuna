@@ -293,66 +293,96 @@ segmentModule dir path =
 -- 引用抽取（语法级，保守：收集所有出现过的变量名 + 出现位置）
 -- ---------------------------------------------------------------
 refsInDecls : String -> List Decl -> List Ref
-refsInDecls sMod decls = concatMap (refsInDecl sMod) decls
+refsInDecls sMod decls = reverse (refsInDeclsGo sMod decls [])
 
-refsInDecl : String -> Decl -> List Ref
-refsInDecl sMod (DFun name pats body sp) = refsInExpr sMod body
-refsInDecl sMod (DData name params kind ctors derivings sp) =
-  concatMap (\c => refsInExpr sMod (ctorType c)) ctors
-refsInDecl sMod (DRecord name params fields derivings sp) =
-  concatMap (\f => refsInExpr sMod (fieldType f)) fields
-refsInDecl sMod (DTrait name params methods sp) = concatMap (refsInMethod sMod) methods
-refsInDecl sMod (DInstance ctxE head methods sp) =
-  append (refsInExpr sMod head) (concatMap (refsInDecl sMod) methods)
-refsInDecl sMod _ = []
+refsInDeclsGo : String -> List Decl -> List Ref -> List Ref
+refsInDeclsGo sMod [] acc = acc
+refsInDeclsGo sMod (d :: rest) acc = refsInDeclsGo sMod rest (refsInDecl sMod d acc)
 
-refsInMethod : String -> TraitMethod -> List Ref
-refsInMethod sMod m = refsInExpr sMod (traitMethodType m)
+refsInDecl : String -> Decl -> List Ref -> List Ref
+refsInDecl sMod (DFun name pats body sp) acc = refsInExprGo sMod body acc
+refsInDecl sMod (DData name params kind ctors derivings sp) acc = refsInCtors sMod ctors acc
+refsInDecl sMod (DRecord name params fields derivings sp) acc = refsInFieldTypes sMod fields acc
+refsInDecl sMod (DTrait name params methods sp) acc = refsInMethods sMod methods acc
+refsInDecl sMod (DInstance ctxE head methods sp) acc =
+  refsInDeclsGo sMod methods (refsInExprGo sMod head acc)
+refsInDecl sMod _ acc = acc
+
+refsInCtors : String -> List Ctor -> List Ref -> List Ref
+refsInCtors sMod [] acc = acc
+refsInCtors sMod (c :: rest) acc = refsInCtors sMod rest (refsInExprGo sMod (ctorType c) acc)
+
+refsInMethods : String -> List TraitMethod -> List Ref -> List Ref
+refsInMethods sMod [] acc = acc
+refsInMethods sMod (m :: rest) acc =
+  refsInMethods sMod rest (refsInExprGo sMod (traitMethodType m) acc)
+
+refsInFieldTypes : String -> List Field -> List Ref -> List Ref
+refsInFieldTypes sMod [] acc = acc
+refsInFieldTypes sMod (f :: rest) acc =
+  refsInFieldTypes sMod rest (refsInExprGo sMod (fieldType f) acc)
 
 -- record 字面量/更新里的字段值（名字, 表达式）。
-refsInField : String -> Pair String Expr -> List Ref
-refsInField sMod (Pair fname value) = refsInExpr sMod value
+refsInFields : String -> List (Pair String Expr) -> List Ref -> List Ref
+refsInFields sMod [] acc = acc
+refsInFields sMod ((Pair fname value) :: rest) acc =
+  refsInFields sMod rest (refsInExprGo sMod value acc)
 
-refsInBind : String -> Pair Pat Expr -> List Ref
-refsInBind sMod (Pair p x) = refsInExpr sMod x
+refsInBinds : String -> List (Pair Pat Expr) -> List Ref -> List Ref
+refsInBinds sMod [] acc = acc
+refsInBinds sMod ((Pair p x) :: rest) acc = refsInBinds sMod rest (refsInExprGo sMod x acc)
 
-refsInLocalClause : String -> Pair (List Pat) Expr -> List Ref
-refsInLocalClause sMod (Pair pats body) = refsInExpr sMod body
+refsInLocalClauses : String -> List (Pair (List Pat) Expr) -> List Ref -> List Ref
+refsInLocalClauses sMod [] acc = acc
+refsInLocalClauses sMod ((Pair pats body) :: rest) acc =
+  refsInLocalClauses sMod rest (refsInExprGo sMod body acc)
 
-refsInDoStmt : String -> DoStmt -> List Ref
-refsInDoStmt sMod (DBind p x tsp) = refsInExpr sMod x
-refsInDoStmt sMod (DExpr x tsp) = refsInExpr sMod x
+refsInArgs : String -> List Expr -> List Ref -> List Ref
+refsInArgs sMod [] acc = acc
+refsInArgs sMod (a :: rest) acc = refsInArgs sMod rest (refsInExprGo sMod a acc)
 
+refsInDoStmts : String -> List DoStmt -> List Ref -> List Ref
+refsInDoStmts sMod [] acc = acc
+refsInDoStmts sMod (s :: rest) acc = case s of
+  DBind p x tsp => refsInDoStmts sMod rest (refsInExprGo sMod x acc)
+  DExpr x tsp => refsInDoStmts sMod rest (refsInExprGo sMod x acc)
+
+-- 累积器版本（difference list 语义）：每节点 O(1) cons，最后 reverse 一次。
+-- 旧实现每个分支左结合 append 子树的引用列表，在应用 spine / 嵌套表达式上呈 O(n²)；
+-- 这里保持与旧实现**相同的引用顺序**（先逆序收集，reverse 后还原）。
 refsInExpr : String -> Expr -> List Ref
-refsInExpr sMod e = case e of
-  EVar n sp => [Ref sMod n (spanStartLine sp) (spanStartCol sp)]
-  EInt n sp => []
-  EStr s sp => []
-  ELam ps body sp => refsInExpr sMod body
-  EApp f args sp => append (refsInExpr sMod f) (concatMap (refsInExpr sMod) args)
-  EPi n i dom cod sp => append (refsInExpr sMod dom) (refsInExpr sMod cod)
-  ELet binds body isRec sp => append (concatMap (refsInBind sMod) binds) (refsInExpr sMod body)
-  ECase scrut alts sp => append (refsInExpr sMod scrut) (concatMap (refsInBind sMod) alts)
+refsInExpr sMod e = reverse (refsInExprGo sMod e [])
+
+refsInExprGo : String -> Expr -> List Ref -> List Ref
+refsInExprGo sMod e acc = case e of
+  EVar n sp => Ref sMod n (spanStartLine sp) (spanStartCol sp) :: acc
+  EInt n sp => acc
+  EStr s sp => acc
+  ELam ps body sp => refsInExprGo sMod body acc
+  EApp f args sp => refsInArgs sMod args (refsInExprGo sMod f acc)
+  EPi n i dom cod sp => refsInExprGo sMod cod (refsInExprGo sMod dom acc)
+  ELet binds body isRec sp => refsInBinds sMod binds (refsInExprGo sMod body acc)
+  ECase scrut alts sp => refsInBinds sMod alts (refsInExprGo sMod scrut acc)
   -- A2：where/let 多 clause 局部函数：只看各 clause 的 body（与 refsInBind 一致，不看模式）。
-  ELocalFun clauses sp => concatMap (refsInLocalClause sMod) clauses
-  EIf c t e2 sp => append (refsInExpr sMod c) (append (refsInExpr sMod t) (refsInExpr sMod e2))
-  EField r fname sp => refsInExpr sMod r
-  ERecord tn fields sp => concatMap (refsInField sMod) fields
-  ERecUpdate r fields sp => append (refsInExpr sMod r) (concatMap (refsInField sMod) fields)
-  EDo stmts sp => concatMap (refsInDoStmt sMod) stmts
-  EAnn value ty sp => append (refsInExpr sMod value) (refsInExpr sMod ty)
+  ELocalFun clauses sp => refsInLocalClauses sMod clauses acc
+  EIf c t e2 sp => refsInExprGo sMod c (refsInExprGo sMod t (refsInExprGo sMod e2 acc))
+  EField r fname sp => refsInExprGo sMod r acc
+  ERecord tn fields sp => refsInFields sMod fields acc
+  ERecUpdate r fields sp => refsInExprGo sMod r (refsInFields sMod fields acc)
+  EDo stmts sp => refsInDoStmts sMod stmts acc
+  EAnn value ty sp => refsInExprGo sMod value (refsInExprGo sMod ty acc)
   -- M31.3：keep 模式（index/fmt）下反引号中缀与 section **保留原形**（不像 EParen/EInfix
   -- 会被重排消掉），所以这里必须显式处理：反引号里的名字本身也是引用，操作数继续递归，
   -- 不能像旧 wildcard 那样静默丢整棵子树。
   EBacktick nm l r sp =>
-    append [Ref sMod nm (spanStartLine sp) (spanStartCol sp)]
-      (append (refsInExpr sMod l) (refsInExpr sMod r))
-  ESectOp op sp => [Ref sMod op (spanStartLine sp) (spanStartCol sp)]
+    refsInExprGo sMod l
+      (refsInExprGo sMod r (Ref sMod nm (spanStartLine sp) (spanStartCol sp) :: acc))
+  ESectOp op sp => Ref sMod op (spanStartLine sp) (spanStartCol sp) :: acc
   ESectL op inner sp =>
-    append [Ref sMod op (spanStartLine sp) (spanStartCol sp)] (refsInExpr sMod inner)
+    refsInExprGo sMod inner (Ref sMod op (spanStartLine sp) (spanStartCol sp) :: acc)
   ESectR inner op sp =>
-    append [Ref sMod op (spanStartLine sp) (spanStartCol sp)] (refsInExpr sMod inner)
-  _ => []
+    refsInExprGo sMod inner (Ref sMod op (spanStartLine sp) (spanStartCol sp) :: acc)
+  _ => acc
 
 -- ---------------------------------------------------------------
 -- 全量构建
@@ -415,6 +445,11 @@ accSymbols (Acc ms syms refs warns) = syms
 accRefs : Acc -> List Ref
 accRefs (Acc ms syms refs warns) = refs
 
+-- 把 xs 逆序前插到 ys（O(#xs)）：跨文件累积用，避免每文件 append 复制整个已累积列表（M34）。
+prependRev : List a -> List a -> List a
+prependRev [] ys = ys
+prependRev (x :: rest) ys = prependRev rest (x :: ys)
+
 accWarns : Acc -> List String
 accWarns (Acc ms syms refs warns) = warns
 
@@ -434,7 +469,7 @@ indexFileInto env dir pkgName path acc = case indexOne env dir pkgName path of
     Err e => Pair env2 (Acc (accModules acc) (accSymbols acc) (accRefs acc) (e :: accWarns acc))
     Ok b =>
       Pair env2
-        (Acc (append (accModules acc) (builtModules b)) (append (accSymbols acc) (builtSymbols b)) (append (accRefs acc) (builtRefs b)) (accWarns acc))
+        (Acc (prependRev (builtModules b) (accModules acc)) (prependRev (builtSymbols b) (accSymbols acc)) (prependRev (builtRefs b) (accRefs acc)) (accWarns acc))
 
 collectAll : FixityEnv -> List (Pair String String) -> Acc -> Pair FixityEnv Acc
 collectAll env [] acc = Pair env acc
@@ -452,7 +487,8 @@ buildIndex repo =
   let
     stepped = collectAll emptyFixityEnv (packageDirs repo) (Acc [] [] [] [])
     acc = secondOf stepped
-  in Ok (Index (accModules acc) (dedupeSymbols (accSymbols acc)) (accRefs acc))
+  in Ok
+    (Index (reverse (accModules acc)) (dedupeSymbols (reverse (accSymbols acc))) (reverse (accRefs acc)))
 
 -- ---------------------------------------------------------------
 -- 缓存读写（v2：内容哈希）
