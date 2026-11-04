@@ -169,9 +169,8 @@ data BranchVerdict : Type where
   BranchImpossibleEmptyCtx : BranchVerdict
 
 branchIsReachable : BranchVerdict -> Bool
-branchIsReachable v = case v of
-  BranchOk => True
-  _ => False
+branchIsReachable BranchOk = True
+branchIsReachable _ = False
 
 -- 索引合一成功之后的判定：上下文空族（与覆盖率完全同一实现）。
 branchAfterUnify : Ec -> Ctx -> List (Pair Int Value) -> BranchVerdict
@@ -195,21 +194,19 @@ wildArgs n = if n <= 0 then [] else PWild (Span "" 0 0 0 0) :: wildArgs (n - 1)
 
 -- 构造子类型的显式 binder 个数 = case 分支要写的模式个数（隐式 binder 由 bindCtorTele 自理）。
 ctorExplicitArity : Term -> Int
-ctorExplicitArity t = case t of
-  TPi n implicit rig dom cod =>
-    if implicit then ctorExplicitArity cod else 1 + ctorExplicitArity cod
-  _ => 0
+ctorExplicitArity (TPi n implicit rig dom cod) =
+  if implicit then ctorExplicitArity cod else 1 + ctorExplicitArity cod
+ctorExplicitArity _ = 0
 
 -- 分支上下文里是否有 binder 的类型求值后是空归纳族。
 ctxHasEmptyBinder : Ec -> Ctx -> Bool
 ctxHasEmptyBinder ec ctx = ctxHasEmptyBinderAt ec ctx 0 (ctxItems ctx)
 
 ctxHasEmptyBinderAt : Ec -> Ctx -> Int -> List (Pair String Term) -> Bool
-ctxHasEmptyBinderAt ec ctx idx items = case items of
-  [] => False
-  (Pair name ty) :: rest =>
-    if isEmptyFamilyValue ec (ctxDepth ctx) (varTypeValue ctx idx ty) then True
-    else ctxHasEmptyBinderAt ec ctx (idx + 1) rest
+ctxHasEmptyBinderAt ec ctx idx [] = False
+ctxHasEmptyBinderAt ec ctx idx ((Pair name ty) :: rest) =
+  if isEmptyFamilyValue ec (ctxDepth ctx) (varTypeValue ctx idx ty) then True
+  else ctxHasEmptyBinderAt ec ctx (idx + 1) rest
 
 -- 值是不是「空归纳族」：族已知，且**每个**构造子的结果索引都与这些索引合一失败
 -- （`Fin Zero`、零构造子的族都算）。合一是本地试算、不提交，所以只会误判成「非空」（保守）。
@@ -231,13 +228,12 @@ rigidIdxVals [] = True
 rigidIdxVals (x :: rest) = isRigidVal x && rigidIdxVals rest
 
 isRigidVal : Value -> Bool
-isRigidVal v = case v of
-  VCon c args => rigidIdxVals args
-  VType l => True
-  VInt n => True
-  VStr s => True
-  VBool b => True
-  _ => False
+isRigidVal (VCon c args) = rigidIdxVals args
+isRigidVal (VType l) = True
+isRigidVal (VInt n) = True
+isRigidVal (VStr s) = True
+isRigidVal (VBool b) = True
+isRigidVal _ = False
 
 allCtorsUnsatisfiable : Ec -> DtData -> List Value -> Int -> Bool
 allCtorsUnsatisfiable ec dd idxs depth = allCtorsUnsatisfiableGo ec (dtDataCtors dd) idxs depth
@@ -343,10 +339,9 @@ reflectScrutinee ec depth refs ctorVal scrutVal = case force (ecDefTbl ec) (ecSo
 -- （子模式全是变量/通配），或同一字面量已经出现过。真正需要模式矩阵的重复
 -- （`Just (TStr s)` 之后的 `Just v`）不算重复：矩阵降级会让两条分支都可达。
 patIrrefutable : Pat -> Bool
-patIrrefutable p = case p of
-  PVar name sp => True
-  PWild sp => True
-  _ => False
+patIrrefutable (PVar name sp) = True
+patIrrefutable (PWild sp) = True
+patIrrefutable _ = False
 
 patsAllIrrefutable : List Pat -> Bool
 patsAllIrrefutable [] = True
@@ -361,9 +356,9 @@ ctorHeadCovered cname prevs = case prevs of
     _ => ctorHeadCovered cname rest
 
 litHeadCovered : Pat -> List (Pair Pat Expr) -> Bool
-litHeadCovered lit prevs = case prevs of
-  [] => False
-  (Pair pat body) :: rest => if litPatEq lit pat then True else litHeadCovered lit rest
+litHeadCovered lit [] = False
+litHeadCovered lit ((Pair pat body) :: rest) =
+  if litPatEq lit pat then True else litHeadCovered lit rest
 
 litPatEq : Pat -> Pat -> Bool
 litPatEq lit p = case lit of
@@ -376,10 +371,9 @@ litPatEq lit p = case lit of
   _ => False
 
 litLabel : Pat -> String
-litLabel p = case p of
-  PInt n sp => strFromInt n
-  PStr s sp => "\"" ++ s ++ "\""
-  _ => ""
+litLabel (PInt n sp) = strFromInt n
+litLabel (PStr s sp) = "\"" ++ s ++ "\""
+litLabel _ = ""
 
 -- 源级校验：唯一入口。返回 `Ok 0`（成功）或第一条稳定诊断。
 checkCaseAltsFlat : List (Pair Pat Expr) -> Result Int
@@ -450,9 +444,8 @@ anyNestedPat [] = False
 anyNestedPat ((Pair pat body) :: rest) = if nestedInPat pat then True else anyNestedPat rest
 
 nestedInPat : Pat -> Bool
-nestedInPat p = case p of
-  PCon c args sp => anyNestedArg args
-  _ => False
+nestedInPat (PCon c args sp) = anyNestedArg args
+nestedInPat _ = False
 
 anyNestedArg : List Pat -> Bool
 anyNestedArg [] = False

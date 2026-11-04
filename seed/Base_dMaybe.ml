@@ -16,32 +16,32 @@ let v_Monad_uBase_dMaybe_dMaybe = (C_Dict_uBase_dMonad_dMonad_MkDict_uBase_dMona
   | _ -> failwith "DT: impossible branch"
 ))), (fun x -> (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (x)))))
 
-let v_Base_dMaybe_dfromMaybe = (fun d -> (fun m -> (match m with
-  | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> d
+let v_Base_dMaybe_dfromMaybe = (fun mc0 -> (fun mc1 -> (match mc1 with
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__2) -> dtb__2
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> mc0
   | _ -> failwith "DT: impossible branch"
 )))
 
-let v_Base_dMaybe_disJust = (fun m -> (match m with
-  | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> false
+let v_Base_dMaybe_disJust = (fun mc0 -> (match mc0 with
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__3) -> true
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> false
   | _ -> failwith "DT: impossible branch"
 ))
 
-let v_Base_dMaybe_disNothing = (fun m -> (match m with
-  | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> true
+let v_Base_dMaybe_disNothing = (fun mc0 -> (match mc0 with
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__4) -> false
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> true
   | _ -> failwith "DT: impossible branch"
 ))
 
-let v_Base_dMaybe_dmaybe = (fun d -> (fun f -> (fun m -> (match m with
-  | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> d
-  | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__5) -> (f dtb__5)
+let v_Base_dMaybe_dmaybe = (fun mc0 -> (fun mc1 -> (fun mc2 -> (match mc2 with
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__5) -> (mc1 dtb__5)
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> mc0
   | _ -> failwith "DT: impossible branch"
 ))))
 
-let v_Base_dMaybe_dmapJust = (fun f -> (fun m -> (match m with
+let v_Base_dMaybe_dmapJust = (fun mc0 -> (fun mc1 -> (match mc1 with
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__6) -> (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust ((mc0 dtb__6)))
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing
-  | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__6) -> (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust ((f dtb__6)))
   | _ -> failwith "DT: impossible branch"
 )))

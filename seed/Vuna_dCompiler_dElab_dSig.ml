@@ -46,28 +46,28 @@ let rec v_Vuna_dCompiler_dElab_dSig_dmaxIntList = (fun mc0 -> (match mc0 with
   | _ -> failwith "DT: impossible branch"
 ))
 
-let rec v_Vuna_dCompiler_dElab_dSig_dexprMaxAppArity = (fun pname -> (fun e -> ((fun nd_uscrut2 -> (match nd_uscrut2 with
-  | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dERecUpdate (dtb__2, dtb__3, dtb__4) -> ((v_Vuna_dCompiler_dElab_dSig_dexprMaxAppArity pname) dtb__2)
-  | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dERecord (dtb__5, dtb__6, dtb__7) -> (v_Vuna_dCompiler_dElab_dSig_dmaxIntList ((v_Base_dList_dmap (fun p -> ((v_Vuna_dCompiler_dElab_dSig_dexprMaxAppArity pname) (v_Base_dPair_dsecondOf p)))) dtb__6))
-  | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEField (dtb__8, dtb__9, dtb__10) -> ((v_Vuna_dCompiler_dElab_dSig_dexprMaxAppArity pname) dtb__8)
-  | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEIf (dtb__11, dtb__12, dtb__13, dtb__14) -> (v_Vuna_dCompiler_dElab_dSig_dmaxIntList (C_Base_dList_dList_Base_dList_dCons (((v_Vuna_dCompiler_dElab_dSig_dexprMaxAppArity pname) dtb__11), (C_Base_dList_dList_Base_dList_dCons (((v_Vuna_dCompiler_dElab_dSig_dexprMaxAppArity pname) dtb__12), (C_Base_dList_dList_Base_dList_dCons (((v_Vuna_dCompiler_dElab_dSig_dexprMaxAppArity pname) dtb__13), C_Base_dList_dList_Base_dList_dNil)))))))
-  | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dECase (dtb__15, dtb__16, dtb__17) -> (v_Vuna_dCompiler_dElab_dSig_dmaxIntList (C_Base_dList_dList_Base_dList_dCons (((v_Vuna_dCompiler_dElab_dSig_dexprMaxAppArity pname) dtb__15), ((v_Base_dList_dmap (fun a -> ((v_Vuna_dCompiler_dElab_dSig_dexprMaxAppArity pname) (v_Base_dPair_dsecondOf a)))) dtb__16))))
-  | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dELet (dtb__18, dtb__19, dtb__20, dtb__21) -> (v_Vuna_dCompiler_dElab_dSig_dmaxIntList (C_Base_dList_dList_Base_dList_dCons (((v_Vuna_dCompiler_dElab_dSig_dexprMaxAppArity pname) dtb__19), ((v_Base_dList_dmap (fun b -> ((v_Vuna_dCompiler_dElab_dSig_dexprMaxAppArity pname) (v_Base_dPair_dsecondOf b)))) dtb__18))))
-  | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEPi (dtb__22, dtb__23, dtb__24, dtb__25, dtb__26) -> (v_Vuna_dCompiler_dElab_dSig_dmaxIntList (C_Base_dList_dList_Base_dList_dCons (((v_Vuna_dCompiler_dElab_dSig_dexprMaxAppArity pname) dtb__24), (C_Base_dList_dList_Base_dList_dCons (((v_Vuna_dCompiler_dElab_dSig_dexprMaxAppArity pname) dtb__25), C_Base_dList_dList_Base_dList_dNil)))))
-  | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dELam (dtb__27, dtb__28, dtb__29) -> ((v_Vuna_dCompiler_dElab_dSig_dexprMaxAppArity pname) dtb__28)
+let rec v_Vuna_dCompiler_dElab_dSig_dexprMaxAppArity = (fun mc0 -> (fun mc1 -> (match mc1 with
+  | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dERecUpdate (dtb__2, dtb__3, dtb__4) -> ((v_Vuna_dCompiler_dElab_dSig_dexprMaxAppArity mc0) dtb__2)
+  | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dERecord (dtb__5, dtb__6, dtb__7) -> (v_Vuna_dCompiler_dElab_dSig_dmaxIntList ((v_Base_dList_dmap (fun p -> ((v_Vuna_dCompiler_dElab_dSig_dexprMaxAppArity mc0) (v_Base_dPair_dsecondOf p)))) dtb__6))
+  | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEField (dtb__8, dtb__9, dtb__10) -> ((v_Vuna_dCompiler_dElab_dSig_dexprMaxAppArity mc0) dtb__8)
+  | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEIf (dtb__11, dtb__12, dtb__13, dtb__14) -> (v_Vuna_dCompiler_dElab_dSig_dmaxIntList (C_Base_dList_dList_Base_dList_dCons (((v_Vuna_dCompiler_dElab_dSig_dexprMaxAppArity mc0) dtb__11), (C_Base_dList_dList_Base_dList_dCons (((v_Vuna_dCompiler_dElab_dSig_dexprMaxAppArity mc0) dtb__12), (C_Base_dList_dList_Base_dList_dCons (((v_Vuna_dCompiler_dElab_dSig_dexprMaxAppArity mc0) dtb__13), C_Base_dList_dList_Base_dList_dNil)))))))
+  | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dECase (dtb__15, dtb__16, dtb__17) -> (v_Vuna_dCompiler_dElab_dSig_dmaxIntList (C_Base_dList_dList_Base_dList_dCons (((v_Vuna_dCompiler_dElab_dSig_dexprMaxAppArity mc0) dtb__15), ((v_Base_dList_dmap (fun a -> ((v_Vuna_dCompiler_dElab_dSig_dexprMaxAppArity mc0) (v_Base_dPair_dsecondOf a)))) dtb__16))))
+  | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dELet (dtb__18, dtb__19, dtb__20, dtb__21) -> (v_Vuna_dCompiler_dElab_dSig_dmaxIntList (C_Base_dList_dList_Base_dList_dCons (((v_Vuna_dCompiler_dElab_dSig_dexprMaxAppArity mc0) dtb__19), ((v_Base_dList_dmap (fun b -> ((v_Vuna_dCompiler_dElab_dSig_dexprMaxAppArity mc0) (v_Base_dPair_dsecondOf b)))) dtb__18))))
+  | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEPi (dtb__22, dtb__23, dtb__24, dtb__25, dtb__26) -> (v_Vuna_dCompiler_dElab_dSig_dmaxIntList (C_Base_dList_dList_Base_dList_dCons (((v_Vuna_dCompiler_dElab_dSig_dexprMaxAppArity mc0) dtb__24), (C_Base_dList_dList_Base_dList_dCons (((v_Vuna_dCompiler_dElab_dSig_dexprMaxAppArity mc0) dtb__25), C_Base_dList_dList_Base_dList_dNil)))))
+  | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dELam (dtb__27, dtb__28, dtb__29) -> ((v_Vuna_dCompiler_dElab_dSig_dexprMaxAppArity mc0) dtb__28)
   | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEApp (dtb__30, dtb__31, dtb__32) -> (match dtb__30 with
-  | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEVar (dtb__33, dtb__34) -> (if ((bi_eq_str dtb__33) pname) then (v_Vuna_dCompiler_dElab_dSig_dmaxIntList (C_Base_dList_dList_Base_dList_dCons ((v_Base_dList_dlength dtb__31), ((v_Base_dList_dmap (v_Vuna_dCompiler_dElab_dSig_dexprMaxAppArity pname)) dtb__31)))) else (v_Vuna_dCompiler_dElab_dSig_dmaxIntList ((v_Base_dList_dmap (v_Vuna_dCompiler_dElab_dSig_dexprMaxAppArity pname)) dtb__31)))
-  | _ -> (v_Vuna_dCompiler_dElab_dSig_dmaxIntList (C_Base_dList_dList_Base_dList_dCons (((v_Vuna_dCompiler_dElab_dSig_dexprMaxAppArity pname) dtb__30), ((v_Base_dList_dmap (v_Vuna_dCompiler_dElab_dSig_dexprMaxAppArity pname)) dtb__31))))
+  | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEVar (dtb__33, dtb__34) -> (if ((bi_eq_str dtb__33) mc0) then (v_Vuna_dCompiler_dElab_dSig_dmaxIntList (C_Base_dList_dList_Base_dList_dCons ((v_Base_dList_dlength dtb__31), ((v_Base_dList_dmap (v_Vuna_dCompiler_dElab_dSig_dexprMaxAppArity mc0)) dtb__31)))) else (v_Vuna_dCompiler_dElab_dSig_dmaxIntList ((v_Base_dList_dmap (v_Vuna_dCompiler_dElab_dSig_dexprMaxAppArity mc0)) dtb__31)))
+  | _ -> (v_Vuna_dCompiler_dElab_dSig_dmaxIntList (C_Base_dList_dList_Base_dList_dCons (((v_Vuna_dCompiler_dElab_dSig_dexprMaxAppArity mc0) dtb__30), ((v_Base_dList_dmap (v_Vuna_dCompiler_dElab_dSig_dexprMaxAppArity mc0)) dtb__31))))
 )
   | _ -> 0
-)) e)))
+)))
 
 let v_Vuna_dCompiler_dElab_dSig_dmethodMaxAppArity = (fun pname -> (fun methods -> (v_Vuna_dCompiler_dElab_dSig_dmaxIntList ((v_Base_dList_dmap (fun m -> ((v_Vuna_dCompiler_dElab_dSig_dexprMaxAppArity pname) (v_Base_dPair_dsecondOf m)))) methods))))
 
 let v_Vuna_dCompiler_dElab_dSig_dclassParamKind = (fun pname -> (fun methods -> ((v_Vuna_dCompiler_dElab_dSig_darityFun ((v_Vuna_dCompiler_dElab_dSig_dmethodMaxAppArity pname) methods)) (C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTType (v_Vuna_dCompiler_dCore_dTerm_dlevelZero)))))
 
-let rec v_Vuna_dCompiler_dElab_dSig_dmethodArgRigsOfGo = (fun rigOf -> (fun ty -> (fun env -> (match ty with
-  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTPi (dtb__35, dtb__36, dtb__37, dtb__38, dtb__39) -> ((fun domVal -> ((fun v -> (C_Base_dList_dList_Base_dList_dCons (((rigOf dtb__36) domVal), (((v_Vuna_dCompiler_dElab_dSig_dmethodArgRigsOfGo rigOf) dtb__39) (C_Base_dList_dList_Base_dList_dCons (v, env)))))) (C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVNeutral ((C_Vuna_dCompiler_dCore_dTerm_dNeutral_Vuna_dCompiler_dCore_dTerm_dNVar (dtb__35, (v_Base_dList_dlength env), C_Base_dList_dList_Base_dList_dNil)))))) ((v_Vuna_dCompiler_dCore_dEval_deval env) dtb__38))
+let rec v_Vuna_dCompiler_dElab_dSig_dmethodArgRigsOfGo = (fun mc0 -> (fun mc1 -> (fun mc2 -> (match mc1 with
+  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTPi (dtb__35, dtb__36, dtb__37, dtb__38, dtb__39) -> ((fun domVal -> ((fun v -> (C_Base_dList_dList_Base_dList_dCons (((mc0 dtb__36) domVal), (((v_Vuna_dCompiler_dElab_dSig_dmethodArgRigsOfGo mc0) dtb__39) (C_Base_dList_dList_Base_dList_dCons (v, mc2)))))) (C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVNeutral ((C_Vuna_dCompiler_dCore_dTerm_dNeutral_Vuna_dCompiler_dCore_dTerm_dNVar (dtb__35, (v_Base_dList_dlength mc2), C_Base_dList_dList_Base_dList_dNil)))))) ((v_Vuna_dCompiler_dCore_dEval_deval mc2) dtb__38))
   | _ -> C_Base_dList_dList_Base_dList_dNil
 ))))
 
@@ -93,7 +93,7 @@ let rec v_Vuna_dCompiler_dElab_dSig_dquantifyTopKinds = (fun mc0 -> (fun mc1 -> 
   | _ -> failwith "DT: impossible branch"
 )))))
 
-let rec v_Vuna_dCompiler_dElab_dSig_dpiBoundNames = (fun e -> (match e with
+let rec v_Vuna_dCompiler_dElab_dSig_dpiBoundNames = (fun mc0 -> (match mc0 with
   | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEPi (dtb__46, dtb__47, dtb__48, dtb__49, dtb__50) -> (C_Base_dList_dList_Base_dList_dCons (dtb__46, (v_Vuna_dCompiler_dElab_dSig_dpiBoundNames dtb__49)))
   | _ -> C_Base_dList_dList_Base_dList_dNil
 ))
@@ -104,17 +104,17 @@ let v_Vuna_dCompiler_dElab_dSig_disLowerIdent = (fun n -> (match (dtp_unpack n) 
   | _ -> failwith "DT: impossible branch"
 ))
 
-let rec v_Vuna_dCompiler_dElab_dSig_dexprLowerVars = (fun e -> (match e with
-  | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEVar (dtb__53, dtb__54) -> (if (v_Vuna_dCompiler_dElab_dSig_disLowerIdent dtb__53) then (C_Base_dList_dList_Base_dList_dCons (dtb__53, C_Base_dList_dList_Base_dList_dNil)) else C_Base_dList_dList_Base_dList_dNil)
-  | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEApp (dtb__55, dtb__56, dtb__57) -> ((v_Base_dList_dappend (v_Vuna_dCompiler_dElab_dSig_dexprLowerVars dtb__55)) ((v_Base_dList_dconcatMap v_Vuna_dCompiler_dElab_dSig_dexprLowerVars) dtb__56))
-  | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dELam (dtb__58, dtb__59, dtb__60) -> (v_Vuna_dCompiler_dElab_dSig_dexprLowerVars dtb__59)
-  | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEPi (dtb__61, dtb__62, dtb__63, dtb__64, dtb__65) -> ((v_Base_dList_dappend (v_Vuna_dCompiler_dElab_dSig_dexprLowerVars dtb__63)) (v_Vuna_dCompiler_dElab_dSig_dexprLowerVars dtb__64))
-  | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEIf (dtb__66, dtb__67, dtb__68, dtb__69) -> ((v_Base_dList_dappend (v_Vuna_dCompiler_dElab_dSig_dexprLowerVars dtb__66)) ((v_Base_dList_dappend (v_Vuna_dCompiler_dElab_dSig_dexprLowerVars dtb__67)) (v_Vuna_dCompiler_dElab_dSig_dexprLowerVars dtb__68)))
-  | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dELet (dtb__70, dtb__71, dtb__72, dtb__73) -> ((v_Base_dList_dappend ((v_Base_dList_dconcatMap (fun b -> (v_Vuna_dCompiler_dElab_dSig_dexprLowerVars (v_Base_dPair_dsecondOf b)))) dtb__70)) (v_Vuna_dCompiler_dElab_dSig_dexprLowerVars dtb__71))
-  | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dECase (dtb__74, dtb__75, dtb__76) -> ((v_Base_dList_dappend (v_Vuna_dCompiler_dElab_dSig_dexprLowerVars dtb__74)) ((v_Base_dList_dconcatMap (fun a -> (v_Vuna_dCompiler_dElab_dSig_dexprLowerVars (v_Base_dPair_dsecondOf a)))) dtb__75))
-  | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEField (dtb__77, dtb__78, dtb__79) -> (v_Vuna_dCompiler_dElab_dSig_dexprLowerVars dtb__77)
-  | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dERecord (dtb__80, dtb__81, dtb__82) -> ((v_Base_dList_dconcatMap (fun p -> (v_Vuna_dCompiler_dElab_dSig_dexprLowerVars (v_Base_dPair_dsecondOf p)))) dtb__81)
-  | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dERecUpdate (dtb__83, dtb__84, dtb__85) -> (v_Vuna_dCompiler_dElab_dSig_dexprLowerVars dtb__83)
+let rec v_Vuna_dCompiler_dElab_dSig_dexprLowerVars = (fun mc0 -> (match mc0 with
+  | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dERecUpdate (dtb__53, dtb__54, dtb__55) -> (v_Vuna_dCompiler_dElab_dSig_dexprLowerVars dtb__53)
+  | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dERecord (dtb__56, dtb__57, dtb__58) -> ((v_Base_dList_dconcatMap (fun p -> (v_Vuna_dCompiler_dElab_dSig_dexprLowerVars (v_Base_dPair_dsecondOf p)))) dtb__57)
+  | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEField (dtb__59, dtb__60, dtb__61) -> (v_Vuna_dCompiler_dElab_dSig_dexprLowerVars dtb__59)
+  | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dECase (dtb__62, dtb__63, dtb__64) -> ((v_Base_dList_dappend (v_Vuna_dCompiler_dElab_dSig_dexprLowerVars dtb__62)) ((v_Base_dList_dconcatMap (fun a -> (v_Vuna_dCompiler_dElab_dSig_dexprLowerVars (v_Base_dPair_dsecondOf a)))) dtb__63))
+  | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dELet (dtb__65, dtb__66, dtb__67, dtb__68) -> ((v_Base_dList_dappend ((v_Base_dList_dconcatMap (fun b -> (v_Vuna_dCompiler_dElab_dSig_dexprLowerVars (v_Base_dPair_dsecondOf b)))) dtb__65)) (v_Vuna_dCompiler_dElab_dSig_dexprLowerVars dtb__66))
+  | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEIf (dtb__69, dtb__70, dtb__71, dtb__72) -> ((v_Base_dList_dappend (v_Vuna_dCompiler_dElab_dSig_dexprLowerVars dtb__69)) ((v_Base_dList_dappend (v_Vuna_dCompiler_dElab_dSig_dexprLowerVars dtb__70)) (v_Vuna_dCompiler_dElab_dSig_dexprLowerVars dtb__71)))
+  | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEPi (dtb__73, dtb__74, dtb__75, dtb__76, dtb__77) -> ((v_Base_dList_dappend (v_Vuna_dCompiler_dElab_dSig_dexprLowerVars dtb__75)) (v_Vuna_dCompiler_dElab_dSig_dexprLowerVars dtb__76))
+  | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dELam (dtb__78, dtb__79, dtb__80) -> (v_Vuna_dCompiler_dElab_dSig_dexprLowerVars dtb__79)
+  | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEApp (dtb__81, dtb__82, dtb__83) -> ((v_Base_dList_dappend (v_Vuna_dCompiler_dElab_dSig_dexprLowerVars dtb__81)) ((v_Base_dList_dconcatMap v_Vuna_dCompiler_dElab_dSig_dexprLowerVars) dtb__82))
+  | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEVar (dtb__84, dtb__85) -> (if (v_Vuna_dCompiler_dElab_dSig_disLowerIdent dtb__84) then (C_Base_dList_dList_Base_dList_dCons (dtb__84, C_Base_dList_dList_Base_dList_dNil)) else C_Base_dList_dList_Base_dList_dNil)
   | _ -> C_Base_dList_dList_Base_dList_dNil
 ))
 

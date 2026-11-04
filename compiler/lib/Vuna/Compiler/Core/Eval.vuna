@@ -148,9 +148,8 @@ evalIf (VBool b) th el = if b then th else el
 evalIf c th el = VIf c th el
 
 spineAppend : Neutral -> Value -> Neutral
-spineAppend n a = case n of
-  NVar name level sp => NVar name level (append sp [a])
-  NGlobal g sp => NGlobal g (append sp [a])
+spineAppend (NVar name level sp) a = NVar name level (append sp [a])
+spineAppend (NGlobal g sp) a = NGlobal g (append sp [a])
 
 applyValue : Value -> Value -> Value
 applyValue f a = applyValueFuel 128 f a
@@ -219,19 +218,16 @@ else case v of
 
 -- ---------------------------------------------------------------
 asInt : Value -> Maybe Int
-asInt v = case v of
-  VInt n => Just n
-  _ => Nothing
+asInt (VInt n) = Just n
+asInt _ = Nothing
 
 asStr : Value -> Maybe String
-asStr v = case v of
-  VStr s => Just s
-  _ => Nothing
+asStr (VStr s) = Just s
+asStr _ = Nothing
 
 asBool : Value -> Maybe Bool
-asBool v = case v of
-  VBool b => Just b
-  _ => Nothing
+asBool (VBool b) = Just b
+asBool _ = Nothing
 
 intPrim2 : List Value -> (Int -> Int -> Value) -> Maybe Value
 intPrim2 ([a, b]) f = case asInt a of

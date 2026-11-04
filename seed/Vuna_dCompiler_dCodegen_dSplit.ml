@@ -125,13 +125,13 @@ let v_Vuna_dCompiler_dCodegen_dSplit_dsplitInstanceOwnerOf = (fun owner -> (fun 
   | _ -> C_Base_dList_dList_Base_dList_dNil
 )))
 
-let v_Vuna_dCompiler_dCodegen_dSplit_dsplitTraitDefOwnerOf = (fun owner -> (fun d -> (match d with
-  | C_Vuna_dCompiler_dFrontend_dAst_dDecl_Vuna_dCompiler_dFrontend_dAst_dDTrait (dtb__64, dtb__65, dtb__66, dtb__67) -> ((v_Base_dList_dmap (fun m -> (C_Base_dPair_dPair_Base_dPair_dPair ((v_Vuna_dCompiler_dFrontend_dAst_dtraitMethodName m), owner)))) dtb__66)
+let v_Vuna_dCompiler_dCodegen_dSplit_dsplitTraitDefOwnerOf = (fun mc0 -> (fun mc1 -> (match mc1 with
+  | C_Vuna_dCompiler_dFrontend_dAst_dDecl_Vuna_dCompiler_dFrontend_dAst_dDTrait (dtb__64, dtb__65, dtb__66, dtb__67) -> ((v_Base_dList_dmap (fun m -> (C_Base_dPair_dPair_Base_dPair_dPair ((v_Vuna_dCompiler_dFrontend_dAst_dtraitMethodName m), mc0)))) dtb__66)
   | _ -> C_Base_dList_dList_Base_dList_dNil
 )))
 
-let v_Vuna_dCompiler_dCodegen_dSplit_dsplitTraitDataOwnerOf = (fun owner -> (fun d -> (match d with
-  | C_Vuna_dCompiler_dFrontend_dAst_dDecl_Vuna_dCompiler_dFrontend_dAst_dDTrait (dtb__68, dtb__69, dtb__70, dtb__71) -> (C_Base_dList_dList_Base_dList_dCons ((C_Base_dPair_dPair_Base_dPair_dPair (((bi_concat "Dict_") dtb__68), owner)), C_Base_dList_dList_Base_dList_dNil))
+let v_Vuna_dCompiler_dCodegen_dSplit_dsplitTraitDataOwnerOf = (fun mc0 -> (fun mc1 -> (match mc1 with
+  | C_Vuna_dCompiler_dFrontend_dAst_dDecl_Vuna_dCompiler_dFrontend_dAst_dDTrait (dtb__68, dtb__69, dtb__70, dtb__71) -> (C_Base_dList_dList_Base_dList_dCons ((C_Base_dPair_dPair_Base_dPair_dPair (((bi_concat "Dict_") dtb__68), mc0)), C_Base_dList_dList_Base_dList_dNil))
   | _ -> C_Base_dList_dList_Base_dList_dNil
 )))
 
@@ -208,41 +208,40 @@ let rec v_Vuna_dCompiler_dCodegen_dSplit_dnameOwnerPairsOfDatas = (fun mc0 -> (f
   | _ -> failwith "DT: impossible branch"
 )))
 
-let rec v_Vuna_dCompiler_dCodegen_dSplit_dmapOwnerOf = (fun mc0 -> (fun mc1 -> (match mc0 with
-  | C_Base_dList_dList_Base_dList_dCons (dtb__97, dtb__98) -> (match dtb__97 with
-  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__99, dtb__100) -> (if ((bi_eq_str dtb__99) mc1) then dtb__100 else ((v_Vuna_dCompiler_dCodegen_dSplit_dmapOwnerOf dtb__98) mc1))
-  | _ -> failwith "DT: impossible branch"
-)
-  | C_Base_dList_dList_Base_dList_dNil -> ""
+let v_Vuna_dCompiler_dCodegen_dSplit_downerTblOf = (fun pairs -> ((v_Vuna_dCompiler_dCommon_dtblInsertAll pairs) v_Vuna_dCompiler_dCommon_dtblEmpty))
+
+let v_Vuna_dCompiler_dCodegen_dSplit_downerOfTbl = (fun t -> (fun name -> (match ((v_Vuna_dCompiler_dCommon_dtblLookup name) t) with
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__97) -> dtb__97
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> ""
   | _ -> failwith "DT: impossible branch"
 )))
 
-let v_Vuna_dCompiler_dCodegen_dSplit_ddatasInUnit = (fun pairs -> (fun u -> (fun datas -> ((v_Base_dList_dfilter (fun d -> ((bi_eq_str ((v_Vuna_dCompiler_dCodegen_dSplit_dmapOwnerOf pairs) (v_Vuna_dCompiler_dElab_dTypes_ddtDataName d))) u))) datas))))
+let v_Vuna_dCompiler_dCodegen_dSplit_ddatasInUnit = (fun ownerT -> (fun u -> (fun datas -> ((v_Base_dList_dfilter (fun d -> ((bi_eq_str ((v_Vuna_dCompiler_dCodegen_dSplit_downerOfTbl ownerT) (v_Vuna_dCompiler_dElab_dTypes_ddtDataName d))) u))) datas))))
 
-let v_Vuna_dCompiler_dCodegen_dSplit_ddefsInUnit = (fun pairs -> (fun u -> (fun defs -> ((v_Base_dList_dfilter (fun d -> ((bi_eq_str ((v_Vuna_dCompiler_dCodegen_dSplit_dmapOwnerOf pairs) (v_Vuna_dCompiler_dElab_dTypes_ddtDefName d))) u))) defs))))
+let v_Vuna_dCompiler_dCodegen_dSplit_ddefsInUnit = (fun ownerT -> (fun u -> (fun defs -> ((v_Base_dList_dfilter (fun d -> ((bi_eq_str ((v_Vuna_dCompiler_dCodegen_dSplit_downerOfTbl ownerT) (v_Vuna_dCompiler_dElab_dTypes_ddtDefName d))) u))) defs))))
 
-let rec v_Vuna_dCompiler_dCodegen_dSplit_dsplitModuleFiles = (fun mc0 -> (fun mc1 -> (fun mc2 -> (fun mc3 -> (fun mc4 -> (fun mc5 -> (match mc5 with
-  | C_Base_dList_dList_Base_dList_dCons (dtb__101, dtb__102) -> (match dtb__101 with
-  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__103, dtb__104) -> ((fun unit -> ((fun unitDatas -> ((fun unitDefs -> ((v_Base_dResult_dandThen (v_Vuna_dCompiler_dCodegen_dErase_dgroupRuntimeDefs unitDefs)) (fun groups -> ((v_Base_dResult_dandThen ((((v_Vuna_dCompiler_dCodegen_dAssembly_dgenUnitParts ((v_Base_dList_dappend (C_Base_dList_dList_Base_dList_dCons (v_Vuna_dCompiler_dCodegen_dSplit_druntimeUnit, C_Base_dList_dList_Base_dList_dNil))) mc4)) mc0) unitDatas) groups)) (fun parts -> ((v_Base_dResult_dandThen ((((((v_Vuna_dCompiler_dCodegen_dSplit_dsplitModuleFiles mc0) mc1) mc2) mc3) ((v_Base_dList_dappend mc4) (C_Base_dList_dList_Base_dList_dCons (unit, C_Base_dList_dList_Base_dList_dNil)))) dtb__102)) (fun tail -> (C_Base_dResult_dResult_Base_dResult_dOk ((C_Base_dList_dList_Base_dList_dCons ((C_Vuna_dCompiler_dDriver_dSplit_dSplitFile_Vuna_dCompiler_dDriver_dSplit_dSplitFile (((bi_concat unit) ".ml"), ((bi_concat (v_Vuna_dCompiler_dCodegen_dAssembly_dgenUnitText parts)) "\n"))), tail))))))))))) (((v_Vuna_dCompiler_dCodegen_dSplit_ddefsInUnit mc2) dtb__103) mc1))) (((v_Vuna_dCompiler_dCodegen_dSplit_ddatasInUnit mc3) dtb__103) mc0))) (v_Vuna_dCompiler_dCodegen_dSplit_dsplitUnitOfModule dtb__103))
+let rec v_Vuna_dCompiler_dCodegen_dSplit_dsplitModuleFiles = (fun mc0 -> (fun mc1 -> (fun mc2 -> (fun mc3 -> (fun mc4 -> (fun mc5 -> (fun mc6 -> (match mc6 with
+  | C_Base_dList_dList_Base_dList_dCons (dtb__98, dtb__99) -> (match dtb__98 with
+  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__100, dtb__101) -> ((fun unit -> ((fun unitDatas -> ((fun unitDefs -> ((v_Base_dResult_dandThen (v_Vuna_dCompiler_dCodegen_dErase_dgroupRuntimeDefs unitDefs)) (fun groups -> ((v_Base_dResult_dandThen (((((v_Vuna_dCompiler_dCodegen_dAssembly_dgenUnitParts mc0) ((v_Base_dList_dappend (C_Base_dList_dList_Base_dList_dCons (v_Vuna_dCompiler_dCodegen_dSplit_druntimeUnit, C_Base_dList_dList_Base_dList_dNil))) mc5)) mc1) unitDatas) groups)) (fun parts -> ((v_Base_dResult_dandThen (((((((v_Vuna_dCompiler_dCodegen_dSplit_dsplitModuleFiles mc0) mc1) mc2) mc3) mc4) ((v_Base_dList_dappend mc5) (C_Base_dList_dList_Base_dList_dCons (unit, C_Base_dList_dList_Base_dList_dNil)))) dtb__99)) (fun tail -> (C_Base_dResult_dResult_Base_dResult_dOk ((C_Base_dList_dList_Base_dList_dCons ((C_Vuna_dCompiler_dDriver_dSplit_dSplitFile_Vuna_dCompiler_dDriver_dSplit_dSplitFile (((bi_concat unit) ".ml"), ((bi_concat (v_Vuna_dCompiler_dCodegen_dAssembly_dgenUnitText parts)) "\n"))), tail))))))))))) (((v_Vuna_dCompiler_dCodegen_dSplit_ddefsInUnit mc3) dtb__100) mc2))) (((v_Vuna_dCompiler_dCodegen_dSplit_ddatasInUnit mc4) dtb__100) mc1))) (v_Vuna_dCompiler_dCodegen_dSplit_dsplitUnitOfModule dtb__100))
   | _ -> failwith "DT: impossible branch"
 )
   | C_Base_dList_dList_Base_dList_dNil -> (C_Base_dResult_dResult_Base_dResult_dOk (C_Base_dList_dList_Base_dList_dNil))
   | _ -> failwith "DT: impossible branch"
-)))))))
+))))))))
 
-let v_Vuna_dCompiler_dCodegen_dSplit_dsplitMainFile = (fun allDatas -> (fun allDefs -> (fun defPairs -> (fun dataPairs -> (fun printResult -> (fun opens -> ((fun entryDefs -> ((fun entryDatas -> ((v_Base_dResult_dandThen (v_Vuna_dCompiler_dCodegen_dErase_dgroupRuntimeDefs entryDefs)) (fun groups -> ((v_Base_dResult_dandThen ((((v_Vuna_dCompiler_dCodegen_dAssembly_dgenUnitParts opens) allDatas) entryDatas) groups)) (fun parts -> ((v_Base_dResult_dandThen (((v_Vuna_dCompiler_dCodegen_dAssembly_dmainHook (C_Base_dPair_dPair_Base_dPair_dPair (allDatas, allDefs))) allDefs) printResult)) (fun hook -> (C_Base_dResult_dResult_Base_dResult_dOk ((C_Vuna_dCompiler_dDriver_dSplit_dSplitFile_Vuna_dCompiler_dDriver_dSplit_dSplitFile ("Main.ml", ((bi_concat (v_Vuna_dCompiler_dCodegen_dAssembly_dgenUnitText parts)) hook)))))))))))) (((v_Vuna_dCompiler_dCodegen_dSplit_ddatasInUnit dataPairs) v_Vuna_dCompiler_dCodegen_dSplit_dentryOwner) allDatas))) (((v_Vuna_dCompiler_dCodegen_dSplit_ddefsInUnit defPairs) v_Vuna_dCompiler_dCodegen_dSplit_dentryOwner) allDefs))))))))
+let v_Vuna_dCompiler_dCodegen_dSplit_dsplitMainFile = (fun usedTbl -> (fun allDatas -> (fun allDefs -> (fun defOwnerT -> (fun dataOwnerT -> (fun printResult -> (fun opens -> ((fun entryDefs -> ((fun entryDatas -> ((v_Base_dResult_dandThen (v_Vuna_dCompiler_dCodegen_dErase_dgroupRuntimeDefs entryDefs)) (fun groups -> ((v_Base_dResult_dandThen (((((v_Vuna_dCompiler_dCodegen_dAssembly_dgenUnitParts usedTbl) opens) allDatas) entryDatas) groups)) (fun parts -> ((v_Base_dResult_dandThen (((v_Vuna_dCompiler_dCodegen_dAssembly_dmainHook (C_Base_dPair_dPair_Base_dPair_dPair (allDatas, allDefs))) allDefs) printResult)) (fun hook -> (C_Base_dResult_dResult_Base_dResult_dOk ((C_Vuna_dCompiler_dDriver_dSplit_dSplitFile_Vuna_dCompiler_dDriver_dSplit_dSplitFile ("Main.ml", ((bi_concat (v_Vuna_dCompiler_dCodegen_dAssembly_dgenUnitText parts)) hook)))))))))))) (((v_Vuna_dCompiler_dCodegen_dSplit_ddatasInUnit dataOwnerT) v_Vuna_dCompiler_dCodegen_dSplit_dentryOwner) allDatas))) (((v_Vuna_dCompiler_dCodegen_dSplit_ddefsInUnit defOwnerT) v_Vuna_dCompiler_dCodegen_dSplit_dentryOwner) allDefs)))))))))
 
 let v_Vuna_dCompiler_dCodegen_dSplit_dcheckModuleDeclName = (fun knownModules -> (fun mname -> (fun name -> (if (v_Vuna_dCompiler_dCommon_dcontainsDot name) then (if ((v_Base_dList_dmemName (v_Vuna_dCompiler_dCodegen_dSplit_dmodulePrefixOfName name)) knownModules) then (C_Base_dResult_dResult_Base_dResult_dOk (0)) else (C_Base_dResult_dResult_Base_dResult_dErr (((bi_concat "DT: internal: module ") ((bi_concat mname) ((bi_concat " declares `") ((bi_concat name) ((bi_concat "` whose module prefix `") ((bi_concat (v_Vuna_dCompiler_dCodegen_dSplit_dmodulePrefixOfName name)) "` is not a known module (codegen requires Loader-resolved decls)"))))))))) else (C_Base_dResult_dResult_Base_dResult_dErr (((bi_concat "DT: internal: module ") ((bi_concat mname) ((bi_concat " has an unresolved declaration name `") ((bi_concat name) "` (codegen requires Loader-resolved decls)"))))))))))
 
 let rec v_Vuna_dCompiler_dCodegen_dSplit_dcheckModuleDeclNames = (fun mc0 -> (fun mc1 -> (fun mc2 -> (match mc2 with
-  | C_Base_dList_dList_Base_dList_dCons (dtb__105, dtb__106) -> ((v_Base_dResult_dandThen (((v_Vuna_dCompiler_dCodegen_dSplit_dcheckModuleDeclName mc0) mc1) dtb__105)) (fun _u -> (((v_Vuna_dCompiler_dCodegen_dSplit_dcheckModuleDeclNames mc0) mc1) dtb__106)))
+  | C_Base_dList_dList_Base_dList_dCons (dtb__102, dtb__103) -> ((v_Base_dResult_dandThen (((v_Vuna_dCompiler_dCodegen_dSplit_dcheckModuleDeclName mc0) mc1) dtb__102)) (fun _u -> (((v_Vuna_dCompiler_dCodegen_dSplit_dcheckModuleDeclNames mc0) mc1) dtb__103)))
   | C_Base_dList_dList_Base_dList_dNil -> (C_Base_dResult_dResult_Base_dResult_dOk (0))
   | _ -> failwith "DT: impossible branch"
 ))))
 
 let rec v_Vuna_dCompiler_dCodegen_dSplit_dcheckModuleDecls = (fun mc0 -> (fun mc1 -> (match mc1 with
-  | C_Base_dList_dList_Base_dList_dCons (dtb__107, dtb__108) -> (match dtb__107 with
-  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__109, dtb__110) -> ((v_Base_dResult_dandThen (((v_Vuna_dCompiler_dCodegen_dSplit_dcheckModuleDeclNames mc0) dtb__109) (v_Vuna_dCompiler_dCodegen_dSplit_dsplitDeclNames dtb__110))) (fun _u -> ((v_Vuna_dCompiler_dCodegen_dSplit_dcheckModuleDecls mc0) dtb__108)))
+  | C_Base_dList_dList_Base_dList_dCons (dtb__104, dtb__105) -> (match dtb__104 with
+  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__106, dtb__107) -> ((v_Base_dResult_dandThen (((v_Vuna_dCompiler_dCodegen_dSplit_dcheckModuleDeclNames mc0) dtb__106) (v_Vuna_dCompiler_dCodegen_dSplit_dsplitDeclNames dtb__107))) (fun _u -> ((v_Vuna_dCompiler_dCodegen_dSplit_dcheckModuleDecls mc0) dtb__105)))
   | _ -> failwith "DT: impossible branch"
 )
   | C_Base_dList_dList_Base_dList_dNil -> (C_Base_dResult_dResult_Base_dResult_dOk (0))
@@ -250,12 +249,12 @@ let rec v_Vuna_dCompiler_dCodegen_dSplit_dcheckModuleDecls = (fun mc0 -> (fun mc
 )))
 
 let rec v_Vuna_dCompiler_dCodegen_dSplit_dentryDeclIdentities = (fun mc0 -> (match mc0 with
-  | C_Base_dList_dList_Base_dList_dCons (dtb__111, dtb__112) -> (match dtb__111 with
-  | C_Vuna_dCompiler_dFrontend_dAst_dDecl_Vuna_dCompiler_dFrontend_dAst_dDSig (dtb__113, dtb__114, dtb__115) -> (C_Base_dList_dList_Base_dList_dCons (dtb__113, (v_Vuna_dCompiler_dCodegen_dSplit_dentryDeclIdentities dtb__112)))
-  | C_Vuna_dCompiler_dFrontend_dAst_dDecl_Vuna_dCompiler_dFrontend_dAst_dDData (dtb__116, dtb__117, dtb__118, dtb__119, dtb__120, dtb__121) -> (C_Base_dList_dList_Base_dList_dCons (dtb__116, (v_Vuna_dCompiler_dCodegen_dSplit_dentryDeclIdentities dtb__112)))
-  | C_Vuna_dCompiler_dFrontend_dAst_dDecl_Vuna_dCompiler_dFrontend_dAst_dDRecord (dtb__122, dtb__123, dtb__124, dtb__125, dtb__126) -> (C_Base_dList_dList_Base_dList_dCons (dtb__122, (v_Vuna_dCompiler_dCodegen_dSplit_dentryDeclIdentities dtb__112)))
-  | C_Vuna_dCompiler_dFrontend_dAst_dDecl_Vuna_dCompiler_dFrontend_dAst_dDTrait (dtb__127, dtb__128, dtb__129, dtb__130) -> (C_Base_dList_dList_Base_dList_dCons (dtb__127, (v_Vuna_dCompiler_dCodegen_dSplit_dentryDeclIdentities dtb__112)))
-  | _ -> (v_Vuna_dCompiler_dCodegen_dSplit_dentryDeclIdentities dtb__112)
+  | C_Base_dList_dList_Base_dList_dCons (dtb__108, dtb__109) -> (match dtb__108 with
+  | C_Vuna_dCompiler_dFrontend_dAst_dDecl_Vuna_dCompiler_dFrontend_dAst_dDSig (dtb__110, dtb__111, dtb__112) -> (C_Base_dList_dList_Base_dList_dCons (dtb__110, (v_Vuna_dCompiler_dCodegen_dSplit_dentryDeclIdentities dtb__109)))
+  | C_Vuna_dCompiler_dFrontend_dAst_dDecl_Vuna_dCompiler_dFrontend_dAst_dDData (dtb__113, dtb__114, dtb__115, dtb__116, dtb__117, dtb__118) -> (C_Base_dList_dList_Base_dList_dCons (dtb__113, (v_Vuna_dCompiler_dCodegen_dSplit_dentryDeclIdentities dtb__109)))
+  | C_Vuna_dCompiler_dFrontend_dAst_dDecl_Vuna_dCompiler_dFrontend_dAst_dDRecord (dtb__119, dtb__120, dtb__121, dtb__122, dtb__123) -> (C_Base_dList_dList_Base_dList_dCons (dtb__119, (v_Vuna_dCompiler_dCodegen_dSplit_dentryDeclIdentities dtb__109)))
+  | C_Vuna_dCompiler_dFrontend_dAst_dDecl_Vuna_dCompiler_dFrontend_dAst_dDTrait (dtb__124, dtb__125, dtb__126, dtb__127) -> (C_Base_dList_dList_Base_dList_dCons (dtb__124, (v_Vuna_dCompiler_dCodegen_dSplit_dentryDeclIdentities dtb__109)))
+  | _ -> (v_Vuna_dCompiler_dCodegen_dSplit_dentryDeclIdentities dtb__109)
 )
   | C_Base_dList_dList_Base_dList_dNil -> C_Base_dList_dList_Base_dList_dNil
   | _ -> failwith "DT: impossible branch"
@@ -264,7 +263,7 @@ let rec v_Vuna_dCompiler_dCodegen_dSplit_dentryDeclIdentities = (fun mc0 -> (mat
 let v_Vuna_dCompiler_dCodegen_dSplit_dcheckEntryDeclName = (fun seen -> (fun name -> (if ((bi_eq_str name) "") then (C_Base_dResult_dResult_Base_dResult_dErr ("DT: internal: entry declaration has an empty name")) else (if (v_Vuna_dCompiler_dCommon_dcontainsDot name) then (C_Base_dResult_dResult_Base_dResult_dErr (((bi_concat "DT: internal: entry declaration `") ((bi_concat name) "` must not contain a module prefix (codegen requires Loader-resolved decls)")))) else (if ((v_Base_dList_dmemName name) seen) then (C_Base_dResult_dResult_Base_dResult_dErr (((bi_concat "DT: internal: duplicate entry declaration `") ((bi_concat name) "`")))) else (C_Base_dResult_dResult_Base_dResult_dOk (0)))))))
 
 let rec v_Vuna_dCompiler_dCodegen_dSplit_dcheckEntryDeclsGo = (fun mc0 -> (fun mc1 -> (match mc1 with
-  | C_Base_dList_dList_Base_dList_dCons (dtb__131, dtb__132) -> ((v_Base_dResult_dandThen ((v_Vuna_dCompiler_dCodegen_dSplit_dcheckEntryDeclName mc0) dtb__131)) (fun _u -> ((v_Vuna_dCompiler_dCodegen_dSplit_dcheckEntryDeclsGo (C_Base_dList_dList_Base_dList_dCons (dtb__131, mc0))) dtb__132)))
+  | C_Base_dList_dList_Base_dList_dCons (dtb__128, dtb__129) -> ((v_Base_dResult_dandThen ((v_Vuna_dCompiler_dCodegen_dSplit_dcheckEntryDeclName mc0) dtb__128)) (fun _u -> ((v_Vuna_dCompiler_dCodegen_dSplit_dcheckEntryDeclsGo (C_Base_dList_dList_Base_dList_dCons (dtb__128, mc0))) dtb__129)))
   | C_Base_dList_dList_Base_dList_dNil -> (C_Base_dResult_dResult_Base_dResult_dOk (0))
   | _ -> failwith "DT: impossible branch"
 )))
@@ -272,13 +271,13 @@ let rec v_Vuna_dCompiler_dCodegen_dSplit_dcheckEntryDeclsGo = (fun mc0 -> (fun m
 let v_Vuna_dCompiler_dCodegen_dSplit_dcheckEntryDecls = (fun decls -> ((v_Vuna_dCompiler_dCodegen_dSplit_dcheckEntryDeclsGo C_Base_dList_dList_Base_dList_dNil) (v_Vuna_dCompiler_dCodegen_dSplit_dentryDeclIdentities decls)))
 
 let rec v_Vuna_dCompiler_dCodegen_dSplit_dcheckDefOwners = (fun mc0 -> (fun mc1 -> (match mc1 with
-  | C_Base_dList_dList_Base_dList_dCons (dtb__133, dtb__134) -> ((v_Base_dResult_dandThen ((v_Vuna_dCompiler_dCodegen_dSplit_dsplitDefOwnerOf mc0) (v_Vuna_dCompiler_dElab_dTypes_ddtDefName dtb__133))) (fun _u -> ((v_Vuna_dCompiler_dCodegen_dSplit_dcheckDefOwners mc0) dtb__134)))
+  | C_Base_dList_dList_Base_dList_dCons (dtb__130, dtb__131) -> ((v_Base_dResult_dandThen ((v_Vuna_dCompiler_dCodegen_dSplit_dsplitDefOwnerOf mc0) (v_Vuna_dCompiler_dElab_dTypes_ddtDefName dtb__130))) (fun _u -> ((v_Vuna_dCompiler_dCodegen_dSplit_dcheckDefOwners mc0) dtb__131)))
   | C_Base_dList_dList_Base_dList_dNil -> (C_Base_dResult_dResult_Base_dResult_dOk (0))
   | _ -> failwith "DT: impossible branch"
 )))
 
 let rec v_Vuna_dCompiler_dCodegen_dSplit_dcheckDataOwners = (fun mc0 -> (fun mc1 -> (match mc1 with
-  | C_Base_dList_dList_Base_dList_dCons (dtb__135, dtb__136) -> ((v_Base_dResult_dandThen ((v_Vuna_dCompiler_dCodegen_dSplit_dsplitDataOwnerOf mc0) dtb__135)) (fun _u -> ((v_Vuna_dCompiler_dCodegen_dSplit_dcheckDataOwners mc0) dtb__136)))
+  | C_Base_dList_dList_Base_dList_dCons (dtb__132, dtb__133) -> ((v_Base_dResult_dandThen ((v_Vuna_dCompiler_dCodegen_dSplit_dsplitDataOwnerOf mc0) dtb__132)) (fun _u -> ((v_Vuna_dCompiler_dCodegen_dSplit_dcheckDataOwners mc0) dtb__133)))
   | C_Base_dList_dList_Base_dList_dNil -> (C_Base_dResult_dResult_Base_dResult_dOk (0))
   | _ -> failwith "DT: impossible branch"
 )))
@@ -286,6 +285,6 @@ let rec v_Vuna_dCompiler_dCodegen_dSplit_dcheckDataOwners = (fun mc0 -> (fun mc1
 let v_Vuna_dCompiler_dCodegen_dSplit_dcheckResolvedModules = (fun meta -> (fun modules -> (fun entryDecls -> (fun runtime -> (fun datas -> ((v_Base_dResult_dandThen ((v_Vuna_dCompiler_dCodegen_dSplit_dcheckModuleDecls (v_Vuna_dCompiler_dCodegen_dSplit_dsmKnownModules meta)) modules)) (fun _u -> ((v_Base_dResult_dandThen (v_Vuna_dCompiler_dCodegen_dSplit_dcheckEntryDecls entryDecls)) (fun _u -> ((v_Base_dResult_dandThen ((v_Vuna_dCompiler_dCodegen_dSplit_dcheckDefOwners meta) runtime)) (fun _u -> ((v_Vuna_dCompiler_dCodegen_dSplit_dcheckDataOwners meta) datas))))))))))))
 
 let v_Vuna_dCompiler_dCodegen_dSplit_dgenerateDtSplitProgram = (fun modules -> (fun entryDecls -> (fun prog -> (fun printResult -> ((fun allDatas -> ((fun allDefs -> ((fun meta -> ((v_Base_dResult_dandThen (v_Vuna_dCompiler_dCodegen_dAssembly_dprepareDtProgram (C_Base_dPair_dPair_Base_dPair_dPair ((v_Vuna_dCompiler_dElab_dTypes_ddtProgDatas prog), allDefs)))) (fun p -> (match p with
-  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__137, dtb__138) -> ((v_Base_dResult_dandThen (((((v_Vuna_dCompiler_dCodegen_dSplit_dcheckResolvedModules meta) modules) entryDecls) dtb__137) allDatas)) (fun _u -> ((v_Base_dResult_dandThen ((v_Vuna_dCompiler_dCodegen_dSplit_dnameOwnerPairsOfDefs meta) dtb__137)) (fun defPairs -> ((v_Base_dResult_dandThen ((v_Vuna_dCompiler_dCodegen_dSplit_dnameOwnerPairsOfDatas meta) allDatas)) (fun dataPairs -> ((v_Base_dResult_dandThen ((((((v_Vuna_dCompiler_dCodegen_dSplit_dsplitModuleFiles allDatas) dtb__137) defPairs) dataPairs) C_Base_dList_dList_Base_dList_dNil) modules)) (fun moduleFiles -> ((fun unitNames -> ((v_Base_dResult_dandThen ((((((v_Vuna_dCompiler_dCodegen_dSplit_dsplitMainFile allDatas) dtb__137) defPairs) dataPairs) printResult) ((v_Base_dList_dappend (C_Base_dList_dList_Base_dList_dCons (v_Vuna_dCompiler_dCodegen_dSplit_druntimeUnit, C_Base_dList_dList_Base_dList_dNil))) unitNames))) (fun mainFile -> (C_Base_dResult_dResult_Base_dResult_dOk ((C_Base_dList_dList_Base_dList_dCons ((C_Vuna_dCompiler_dDriver_dSplit_dSplitFile_Vuna_dCompiler_dDriver_dSplit_dSplitFile ("Vuna_runtime.ml", v_Vuna_dCompiler_dCodegen_dTerm_ddtRuntime)), ((v_Base_dList_dappend moduleFiles) (C_Base_dList_dList_Base_dList_dCons (mainFile, C_Base_dList_dList_Base_dList_dNil)))))))))) ((v_Base_dList_dmap (fun q -> (v_Vuna_dCompiler_dCodegen_dSplit_dsplitUnitOfModule (v_Base_dPair_dfirstOf q)))) modules))))))))))
+  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__134, dtb__135) -> ((v_Base_dResult_dandThen (((((v_Vuna_dCompiler_dCodegen_dSplit_dcheckResolvedModules meta) modules) entryDecls) dtb__134) allDatas)) (fun _u -> ((v_Base_dResult_dandThen ((v_Vuna_dCompiler_dCodegen_dSplit_dnameOwnerPairsOfDefs meta) dtb__134)) (fun defPairs -> ((v_Base_dResult_dandThen ((v_Vuna_dCompiler_dCodegen_dSplit_dnameOwnerPairsOfDatas meta) allDatas)) (fun dataPairs -> ((fun defOwnerT -> ((fun dataOwnerT -> ((v_Base_dResult_dandThen (((((((v_Vuna_dCompiler_dCodegen_dSplit_dsplitModuleFiles (v_Vuna_dCompiler_dCodegen_dDecl_dusedTableOf allDatas)) allDatas) dtb__134) defOwnerT) dataOwnerT) C_Base_dList_dList_Base_dList_dNil) modules)) (fun moduleFiles -> ((fun unitNames -> ((v_Base_dResult_dandThen (((((((v_Vuna_dCompiler_dCodegen_dSplit_dsplitMainFile (v_Vuna_dCompiler_dCodegen_dDecl_dusedTableOf allDatas)) allDatas) dtb__134) defOwnerT) dataOwnerT) printResult) ((v_Base_dList_dappend (C_Base_dList_dList_Base_dList_dCons (v_Vuna_dCompiler_dCodegen_dSplit_druntimeUnit, C_Base_dList_dList_Base_dList_dNil))) unitNames))) (fun mainFile -> (C_Base_dResult_dResult_Base_dResult_dOk ((C_Base_dList_dList_Base_dList_dCons ((C_Vuna_dCompiler_dDriver_dSplit_dSplitFile_Vuna_dCompiler_dDriver_dSplit_dSplitFile ("Vuna_runtime.ml", v_Vuna_dCompiler_dCodegen_dTerm_ddtRuntime)), ((v_Base_dList_dappend moduleFiles) (C_Base_dList_dList_Base_dList_dCons (mainFile, C_Base_dList_dList_Base_dList_dNil)))))))))) ((v_Base_dList_dmap (fun q -> (v_Vuna_dCompiler_dCodegen_dSplit_dsplitUnitOfModule (v_Base_dPair_dfirstOf q)))) modules))))) (v_Vuna_dCompiler_dCodegen_dSplit_downerTblOf dataPairs))) (v_Vuna_dCompiler_dCodegen_dSplit_downerTblOf defPairs))))))))
   | _ -> failwith "DT: impossible branch"
 )))) ((v_Vuna_dCompiler_dCodegen_dSplit_dsplitMetaOf modules) entryDecls))) (v_Vuna_dCompiler_dElab_dTypes_ddtProgDefs prog))) (v_Vuna_dCompiler_dCodegen_dDecl_druntimeDatas (v_Vuna_dCompiler_dElab_dTypes_ddtProgDatas prog)))))))

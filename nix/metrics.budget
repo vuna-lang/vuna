@@ -56,15 +56,15 @@
 #   `vuna build --no-compile --out out compiler` 实测重新标定：
 #   bytes 1713842 / lines 15710 / maxline 34902 / longlines 4823 / letrec 587 /
 #   strcat 1 / eqint 142 / zeroarg 6 / ctorcount 4475。
-bytes 1959985
-lines 17640
+bytes 1958974
+lines 17643
 maxline 30618
-longlines 5472
-letrec 665
+longlines 5450
+letrec 664
 strcat 1
 eqint 154
 zeroarg 6
-ctorcount 5013
+ctorcount 5012
 # M23 夹具迁移与 interp 切换：编译器源码新增 DT 能力（零参构造子求值、record update 降级、
 #   参数化 record、@inst 选择、实例诊断、&&|| 短路、REPL 表达式求值、DtDerive/CoreCodegen
 #   修正）约 250 行；且本预算自 751ba49（Elab +467 行）起就已失效——HEAD 实测已是
@@ -158,3 +158,8 @@ ctorcount 5013
 #   strcat 1 / eqint 154 / zeroarg 6 / ctorcount 5013。
 #   增量来自 ELocalFun 相关分支与局部函数模式矩阵复用；工具链 lint 重写不进 seed 闭包
 #   语义，但指标统计根包 codegen 产物。
+# M30 并行收尾（case-to-clauses 放宽后全仓 `--fix` 把枚举/映射 case 拆成多 clause，
+#   与另一进程的 codegen 性能优化叠加）后按实测重新标定：
+#   files 71 / bytes 1958974 / lines 17643 / maxline 30618 / longlines 5450 / letrec 664 /
+#   strcat 1 / eqint 154 / zeroarg 6 / ctorcount 5012。
+#   增量来自多 clause 函数的 codegen 产物；性能优化同时压低了 bytes/longlines。

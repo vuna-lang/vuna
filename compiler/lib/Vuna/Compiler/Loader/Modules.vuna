@@ -143,9 +143,8 @@ data ExportRef : Type where
   ExportRef : String -> String -> String -> ExportRef
 
 allIdentChars : List Int -> Bool
-allIdentChars chars = case chars of
-  [] => True
-  c :: rest => if isIdentStart c || isDigit c then allIdentChars rest else False
+allIdentChars [] = True
+allIdentChars (c :: rest) = if isIdentStart c || isDigit c then allIdentChars rest else False
 
 validSegment : String -> Bool
 validSegment seg = case strUnpack seg of
@@ -192,14 +191,13 @@ importAliases imports = case imports of
     Just alias => Pair alias (importName imp) :: importAliases rest
 
 checkImportAliases : String -> List String -> List (Pair String String) -> Result (List a)
-checkImportAliases label moduleNames aliases = case aliases of
-  [] => Ok []
-  (Pair alias m) :: rest =>
-    if validSegment alias then if memName alias (map firstOf rest) then Err (label ++ ": duplicate module alias " ++ alias)
-    else if memName alias moduleNames then if alias == m then checkImportAliases label moduleNames rest
-    else Err (label ++ ": module alias " ++ alias ++ " conflicts with an imported module")
-    else checkImportAliases label moduleNames rest
-    else Err (label ++ ": invalid module alias " ++ alias)
+checkImportAliases label moduleNames [] = Ok []
+checkImportAliases label moduleNames ((Pair alias m) :: rest) =
+  if validSegment alias then if memName alias (map firstOf rest) then Err (label ++ ": duplicate module alias " ++ alias)
+  else if memName alias moduleNames then if alias == m then checkImportAliases label moduleNames rest
+  else Err (label ++ ": module alias " ++ alias ++ " conflicts with an imported module")
+  else checkImportAliases label moduleNames rest
+  else Err (label ++ ": invalid module alias " ++ alias)
 
 validateImports : String -> List Import -> Result (List a)
 validateImports label imports =
@@ -207,10 +205,9 @@ validateImports label imports =
   else checkImportAliases label (importModuleNames imports) (importAliases imports)
 
 openModuleNames : List Import -> List String
-openModuleNames imports = case imports of
-  [] => []
-  imp :: rest =>
-    if importIsQualified imp then openModuleNames rest else importName imp :: openModuleNames rest
+openModuleNames [] = []
+openModuleNames (imp :: rest) =
+  if importIsQualified imp then openModuleNames rest else importName imp :: openModuleNames rest
 
 findImportPrefix : List Import -> String -> Maybe String
 findImportPrefix imports prefix = case imports of
@@ -261,11 +258,10 @@ entryParent e = e.parent
 
 -- 按命名空间查公开名：kinds 是允许的 kind 列表（val / ctor / type）。
 lookupExport : List String -> String -> List ExportEntry -> Maybe ExportEntry
-lookupExport kinds name entries = case entries of
-  [] => Nothing
-  e :: rest =>
-    if memName (entryKind e) kinds && entryPublic e == name then Just e
-    else lookupExport kinds name rest
+lookupExport kinds name [] = Nothing
+lookupExport kinds name (e :: rest) =
+  if memName (entryKind e) kinds && entryPublic e == name then Just e
+  else lookupExport kinds name rest
 
 findExportValue : List ExportEntry -> String -> Maybe ExportEntry
 findExportValue entries name = lookupExport ["val", "ctor"] name entries
@@ -314,9 +310,9 @@ modulesExportingType modules imports name =
 
 -- 重导出时同名可能来自多个模块；只要 target 相同就不是歧义（门面伞模块常见）。
 sameTargetRest : ExportEntry -> List (Pair a ExportEntry) -> Bool
-sameTargetRest e pairs = case pairs of
-  [] => True
-  (Pair m e2) :: rest => if entryTarget e == entryTarget e2 then sameTargetRest e rest else False
+sameTargetRest e [] = True
+sameTargetRest e ((Pair m e2) :: rest) =
+  if entryTarget e == entryTarget e2 then sameTargetRest e rest else False
 
 unifyEntryPairs : String -> String -> String -> List (Pair String ExportEntry) -> Result (Pair String ExportEntry)
 unifyEntryPairs label kindLabel name [] = Err (label ++ ": unknown " ++ kindLabel ++ " " ++ name)
@@ -335,14 +331,13 @@ rootAllows importerPkg root name = case rootExports root of
   Just mods => rootName root == importerPkg || memName name mods
 
 collectModuleFiles : List Root -> String -> String -> List (Pair String Root) -> List String -> Pair (List (Pair String Root)) (List String)
-collectModuleFiles roots name importerPkg allowed hidden = case roots of
-  [] => Pair (reverse allowed) (reverse hidden)
-  root :: rest =>
-    let
-      path = modulePath root name
-    in if prim_fileExists path then if rootAllows importerPkg root name then collectModuleFiles rest name importerPkg (Pair path root :: allowed) hidden
-    else collectModuleFiles rest name importerPkg allowed (rootName root :: hidden)
-    else collectModuleFiles rest name importerPkg allowed hidden
+collectModuleFiles [] name importerPkg allowed hidden = Pair (reverse allowed) (reverse hidden)
+collectModuleFiles (root :: rest) name importerPkg allowed hidden =
+  let
+    path = modulePath root name
+  in if prim_fileExists path then if rootAllows importerPkg root name then collectModuleFiles rest name importerPkg (Pair path root :: allowed) hidden
+  else collectModuleFiles rest name importerPkg allowed (rootName root :: hidden)
+  else collectModuleFiles rest name importerPkg allowed hidden
 
 _joinRootDirs : List Root -> String
 _joinRootDirs roots = _joinNames (map rootDir roots)
@@ -362,11 +357,10 @@ findModuleFile roots name importerPkg = case collectModuleFiles roots name impor
         ("ambiguous module " ++ name ++ " (found in: " ++ _joinNames (map candidateDir allowed) ++ ")")
 
 findModule : List Module -> String -> Maybe Module
-findModule modules name = case modules of
-  [] => Nothing
-  (Module mname mpkg imports imps decls exports mcaps) :: rest =>
-    if mname == name then Just (Module mname mpkg imports imps decls exports mcaps)
-    else findModule rest name
+findModule [] name = Nothing
+findModule ((Module mname mpkg imports imps decls exports mcaps) :: rest) name =
+  if mname == name then Just (Module mname mpkg imports imps decls exports mcaps)
+  else findModule rest name
 
 refKind : ExportRef -> String
 refKind (ExportRef k tgt parent) = k

@@ -189,9 +189,8 @@ else
     Nothing => Just i
 
 memMetaId : Int -> List Int -> Bool
-memMetaId i ids = case ids of
-  [] => False
-  x :: rest => if x == i then True else memMetaId i rest
+memMetaId i [] = False
+memMetaId i (x :: rest) = if x == i then True else memMetaId i rest
 
 relevantMetas : Ec -> List Int
 relevantMetas ec =
@@ -200,41 +199,40 @@ relevantMetas ec =
 
 -- 运行时位置：构造子/函数应用的擦除实参不生成代码，跳过；其余位置都算。
 termMetasRuntime : Term -> List Int
-termMetasRuntime t = case t of
-  TMeta m => [m]
-  TVar n i => []
-  TGlobal g => []
-  TType l => []
-  TPi n implicit rig dom cod => append (termMetasAll dom) (termMetasAll cod)
-  TLam n rig body => termMetasRuntime body
-  TApp f a rig =>
-    if rigIsErased rig then termMetasRuntime f else append (termMetasRuntime f) (termMetasRuntime a)
-  TCon c args =>
-    concatMap (\p => if rigIsErased (secondOf p) then [] else termMetasRuntime (firstOf p)) args
-  TCase scrut alts =>
-    append (termMetasRuntime scrut) (concatMap (\alt => termMetasRuntime (caseAltBody alt)) alts)
-  TInt n => []
-  TStr s => []
-  TBool b => []
-  TIf c th el => append (termMetasRuntime c) (append (termMetasRuntime th) (termMetasRuntime el))
+termMetasRuntime (TMeta m) = [m]
+termMetasRuntime (TVar n i) = []
+termMetasRuntime (TGlobal g) = []
+termMetasRuntime (TType l) = []
+termMetasRuntime (TPi n implicit rig dom cod) = append (termMetasAll dom) (termMetasAll cod)
+termMetasRuntime (TLam n rig body) = termMetasRuntime body
+termMetasRuntime (TApp f a rig) =
+  if rigIsErased rig then termMetasRuntime f else append (termMetasRuntime f) (termMetasRuntime a)
+termMetasRuntime (TCon c args) =
+  concatMap (\p => if rigIsErased (secondOf p) then [] else termMetasRuntime (firstOf p)) args
+termMetasRuntime (TCase scrut alts) =
+  append (termMetasRuntime scrut) (concatMap (\alt => termMetasRuntime (caseAltBody alt)) alts)
+termMetasRuntime (TInt n) = []
+termMetasRuntime (TStr s) = []
+termMetasRuntime (TBool b) = []
+termMetasRuntime (TIf c th el) =
+  append (termMetasRuntime c) (append (termMetasRuntime th) (termMetasRuntime el))
 
 -- 全部位置（类型里出现的元变量也算）。
 termMetasAll : Term -> List Int
-termMetasAll t = case t of
-  TMeta m => [m]
-  TVar n i => []
-  TGlobal g => []
-  TType l => []
-  TPi n implicit rig dom cod => append (termMetasAll dom) (termMetasAll cod)
-  TLam n rig body => termMetasAll body
-  TApp f a rig => append (termMetasAll f) (termMetasAll a)
-  TCon c args => concatMap (\p => termMetasAll (firstOf p)) args
-  TCase scrut alts =>
-    append (termMetasAll scrut) (concatMap (\alt => termMetasAll (caseAltBody alt)) alts)
-  TInt n => []
-  TStr s => []
-  TBool b => []
-  TIf c th el => append (termMetasAll c) (append (termMetasAll th) (termMetasAll el))
+termMetasAll (TMeta m) = [m]
+termMetasAll (TVar n i) = []
+termMetasAll (TGlobal g) = []
+termMetasAll (TType l) = []
+termMetasAll (TPi n implicit rig dom cod) = append (termMetasAll dom) (termMetasAll cod)
+termMetasAll (TLam n rig body) = termMetasAll body
+termMetasAll (TApp f a rig) = append (termMetasAll f) (termMetasAll a)
+termMetasAll (TCon c args) = concatMap (\p => termMetasAll (firstOf p)) args
+termMetasAll (TCase scrut alts) =
+  append (termMetasAll scrut) (concatMap (\alt => termMetasAll (caseAltBody alt)) alts)
+termMetasAll (TInt n) = []
+termMetasAll (TStr s) = []
+termMetasAll (TBool b) = []
+termMetasAll (TIf c th el) = append (termMetasAll c) (append (termMetasAll th) (termMetasAll el))
 
 maxInt : Int -> Int -> Int
 maxInt a b = if a >= b then a else b
@@ -322,24 +320,22 @@ nonEmpty (_ :: _) = True
 --   结构里出现的宇宙层级非负——kind 会被存进 globals 并在别处按域求值，负层级是
 --   内部不变量被破坏的信号，必须就地拒绝。
 kindWellFormed : Term -> Bool
-kindWellFormed ty = case ty of
-  TPi name implicit rig dom cod => kindDomainWellFormed dom && kindWellFormed cod
-  TType l => levelToInt l >= 0
-  _ => False
+kindWellFormed (TPi name implicit rig dom cod) = kindDomainWellFormed dom && kindWellFormed cod
+kindWellFormed (TType l) = levelToInt l >= 0
+kindWellFormed _ = False
 
 -- kind binder 域的防御性复核：宇宙层级非负；Pi 链逐层递归；其余形态（类型变量 /
 -- 归纳族 / 族应用）是索引域，类型正确性已由 checkType 保证。
 kindDomainWellFormed : Term -> Bool
-kindDomainWellFormed dom = case dom of
-  TType l => levelToInt l >= 0
-  TPi _ _ _ d c => kindDomainWellFormed d && kindDomainWellFormed c
-  _ => True
+kindDomainWellFormed (TType l) = levelToInt l >= 0
+kindDomainWellFormed (TPi _ _ _ d c) = kindDomainWellFormed d && kindDomainWellFormed c
+kindDomainWellFormed _ = True
 
 -- 族的参数/索引 telescope：binder 名 + 是否擦除（域是宇宙）。
 splitKind : Term -> List (Pair String Rig)
-splitKind ty = case ty of
-  TPi name implicit _ dom cod => Pair name (binderRig implicit (eval [] dom)) :: splitKind cod
-  _ => []
+splitKind (TPi name implicit _ dom cod) =
+  Pair name (binderRig implicit (eval [] dom)) :: splitKind cod
+splitKind _ = []
 
 dtDataLookup : String -> List DtData -> Maybe DtData
 dtDataLookup name [] = Nothing
@@ -415,14 +411,13 @@ teleOfType : Term -> List (Pair String Rig)
 teleOfType ty = teleOf ty []
 
 teleOf : Term -> List Value -> List (Pair String Rig)
-teleOf ty env = case ty of
-  TPi name implicit rig dom cod =>
-    let
-      domVal = eval env dom
-      v = VNeutral (NVar name (length env) [])
-      rig = binderRig implicit domVal
-    in Pair name rig :: teleOf cod (v :: env)
-  _ => []
+teleOf (TPi name implicit rig dom cod) env =
+  let
+    domVal = eval env dom
+    v = VNeutral (NVar name (length env) [])
+    rig = binderRig implicit domVal
+  in Pair name rig :: teleOf cod (v :: env)
+teleOf _ env = []
 
 -- 结果类型 `F r1..rk` 的「头 + 实参」。
 spineOfType : Term -> Pair String (List Term)
@@ -485,15 +480,14 @@ else case alt0 of
 
 -- quote 出来的项里出现负 index：解引用了当前项作用域外的变量，不能替换。
 hasOutOfScopeVar : Term -> Bool
-hasOutOfScopeVar t = case t of
-  TVar name i => i < 0
-  TPi n i r d c => hasOutOfScopeVar d || hasOutOfScopeVar c
-  TLam n r b => hasOutOfScopeVar b
-  TApp f a r => hasOutOfScopeVar f || hasOutOfScopeVar a
-  TCon c args => hasOutOfScopeVarArgs args
-  TCase s alts => hasOutOfScopeVar s || hasOutOfScopeVarAlts alts
-  TIf c th el => hasOutOfScopeVar c || hasOutOfScopeVar th || hasOutOfScopeVar el
-  _ => False
+hasOutOfScopeVar (TVar name i) = i < 0
+hasOutOfScopeVar (TPi n i r d c) = hasOutOfScopeVar d || hasOutOfScopeVar c
+hasOutOfScopeVar (TLam n r b) = hasOutOfScopeVar b
+hasOutOfScopeVar (TApp f a r) = hasOutOfScopeVar f || hasOutOfScopeVar a
+hasOutOfScopeVar (TCon c args) = hasOutOfScopeVarArgs args
+hasOutOfScopeVar (TCase s alts) = hasOutOfScopeVar s || hasOutOfScopeVarAlts alts
+hasOutOfScopeVar (TIf c th el) = hasOutOfScopeVar c || hasOutOfScopeVar th || hasOutOfScopeVar el
+hasOutOfScopeVar _ = False
 
 hasOutOfScopeVarArgs : List (Pair Term Rig) -> Bool
 hasOutOfScopeVarArgs [] = False
@@ -505,9 +499,9 @@ hasOutOfScopeVarAlts ((CaseAlt n bs b) :: rest) = hasOutOfScopeVar b || hasOutOf
 
 -- 族的 kind 里的参数个数，补成隐式 `EPi`。
 prependFamParams : Term -> Expr -> Span -> Expr
-prependFamParams kindTerm tyExpr sp = case kindTerm of
-  TPi n implicit rigB dom cod => EPi n True (EVar "Type" sp) (prependFamParams cod tyExpr sp) sp
-  _ => tyExpr
+prependFamParams (TPi n implicit rigB dom cod) tyExpr sp =
+  EPi n True (EVar "Type" sp) (prependFamParams cod tyExpr sp) sp
+prependFamParams _ tyExpr sp = tyExpr
 
 -- 剥掉外层 Pi（`resultSpine` 需要看返回类型）。
 dropParams : Term -> Term
@@ -532,11 +526,10 @@ dataHeadArity : DataHead -> Int
 dataHeadArity (DataHead n k a) = a
 
 lookupDataHead : String -> List DataHead -> Maybe (Pair Term Int)
-lookupDataHead name heads = case heads of
-  [] => Nothing
-  h :: rest =>
-    if dataHeadName h == name then Just (Pair (dataHeadKind h) (dataHeadArity h))
-    else lookupDataHead name rest
+lookupDataHead name [] = Nothing
+lookupDataHead name (h :: rest) =
+  if dataHeadName h == name then Just (Pair (dataHeadKind h) (dataHeadArity h))
+  else lookupDataHead name rest
 
 -- ---------------------------------------------------------------
 -- M15：接口（trait）与实例（instance）——字典编码
@@ -575,11 +568,10 @@ methodArgTerms : List Rig -> Int -> List (Pair Term Rig)
 methodArgTerms rigs nFields = methodArgTermsGo rigs nFields 0 (length rigs)
 
 methodArgTermsGo : List Rig -> Int -> Int -> Int -> List (Pair Term Rig)
-methodArgTermsGo rigs nFields i arity = case rigs of
-  [] => []
-  rig :: rest =>
-    Pair (TVar ("x" ++ strFromInt i) (nFields + (arity - 1 - i))) rig
-      :: methodArgTermsGo rest nFields (i + 1) arity
+methodArgTermsGo [] nFields i arity = []
+methodArgTermsGo (rig :: rest) nFields i arity =
+  Pair (TVar ("x" ++ strFromInt i) (nFields + (arity - 1 - i))) rig
+    :: methodArgTermsGo rest nFields (i + 1) arity
 
 -- 逐层 lambda 绑定方法参数（x_0 最外），每层用各自 rig。
 methodArgLams : List Rig -> Int -> Term -> Term
@@ -761,14 +753,12 @@ freshVarValue name level = VNeutral (NVar name level [])
 -- ---------------------------------------------------------------
 -- `if` 条件 / `Bool` 判定：只认 canonical `Base.Bool.Bool`（`NGlobal boolTypeName`）。
 isBoolType : Value -> Bool
-isBoolType v = case v of
-  VNeutral n => isBoolGlobal (neutralHeadName n)
-  _ => False
+isBoolType (VNeutral n) = isBoolGlobal (neutralHeadName n)
+isBoolType _ = False
 
 neutralHeadName : Neutral -> String
-neutralHeadName n = case n of
-  NVar name _ _ => name
-  NGlobal name _ => name
+neutralHeadName (NVar name _ _) = name
+neutralHeadName (NGlobal name _) = name
 
 isBoolGlobal : String -> Bool
 isBoolGlobal name = name == boolTypeName
@@ -855,9 +845,8 @@ foldAppTerms fn ((Pair arg erased) :: rest) = foldAppTerms (TApp fn arg erased) 
 -- 运行时类型参数表与构造子 telescope 对不上）。record 降级生成的构造子类型用
 -- 匿名显式 `EPi "_" False` 写字段，因此仍要走 `prependFamParams`。
 hasFamParams : Expr -> Bool
-hasFamParams e = case e of
-  EPi n implicit dom cod sp => n /= "_"
-  _ => False
+hasFamParams (EPi n implicit dom cod sp) = n /= "_"
+hasFamParams _ = False
 
 -- 模块限定名的最后一段（`Base.Monad.fmap` → `fmap`）。
 baseNameOf : String -> String

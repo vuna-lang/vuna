@@ -91,17 +91,16 @@ testFiles [] = []
 testFiles (name :: rest) = if endsWith ".vuna" name then name :: testFiles rest else testFiles rest
 
 runTestFiles : PackageContext -> String -> List String -> Int -> Int -> Pair Int Int
-runTestFiles ctx dir files pass fail = case files of
-  [] =>
-    let
-      _ = prim_print ("\n" ++ strFromInt pass ++ " passed, " ++ strFromInt fail ++ " failed\n")
-    in Pair pass fail
-  name :: rest =>
-    let
-      path = dir ++ "/" ++ name
-      ok = runOneTest ctx path name
-    in if ok then runTestFiles ctx dir rest (pass + 1) fail
-    else runTestFiles ctx dir rest pass (fail + 1)
+runTestFiles ctx dir [] pass fail =
+  let
+    _ = prim_print ("\n" ++ strFromInt pass ++ " passed, " ++ strFromInt fail ++ " failed\n")
+  in Pair pass fail
+runTestFiles ctx dir (name :: rest) pass fail =
+  let
+    path = dir ++ "/" ++ name
+    ok = runOneTest ctx path name
+  in if ok then runTestFiles ctx dir rest (pass + 1) fail
+  else runTestFiles ctx dir rest pass (fail + 1)
 
 -- 单个测试：按 main 的返回类别选执行路径。
 runOneTest : PackageContext -> String -> String -> Bool

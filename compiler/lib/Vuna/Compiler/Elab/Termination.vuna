@@ -9,20 +9,18 @@ import Vuna.Compiler.Elab.Termination.Measure
 import Vuna.Compiler.Elab.Termination.Scc
 
 patNames : Pat -> List String
-patNames p = case p of
-  PVar n sp => [n]
-  PCon c ps sp => concatMap patNames ps
-  PRecord rn fields sp => concatMap (\q => patNames (secondOf q)) fields
-  PWild sp => []
-  _ => []
+patNames (PVar n sp) = [n]
+patNames (PCon c ps sp) = concatMap patNames ps
+patNames (PRecord rn fields sp) = concatMap (\q => patNames (secondOf q)) fields
+patNames (PWild sp) = []
+patNames _ = []
 
 patsNames : List Pat -> List String
 patsNames ps = concatMap patNames ps
 
 refsOfStmt : List String -> DoStmt -> Pair (List String) (List String)
-refsOfStmt bound stmt = case stmt of
-  DBind pat e sp => Pair (patNames pat) (exprRefsB bound e)
-  DExpr e sp => Pair [] (exprRefsB bound e)
+refsOfStmt bound (DBind pat e sp) = Pair (patNames pat) (exprRefsB bound e)
+refsOfStmt bound (DExpr e sp) = Pair [] (exprRefsB bound e)
 
 refsOfStmts : List String -> List DoStmt -> Pair (List String) (List String)
 refsOfStmts bound [] = Pair [] []

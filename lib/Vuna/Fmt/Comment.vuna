@@ -82,10 +82,10 @@ commentContinuation indent stripN line =
 
 -- 最后一行保留原行尾空白（`-}` 前通常有一个空格），只去除起始列缩进。
 commentTailLines : Int -> Int -> List String -> List String
-commentTailLines indent stripN lines = case lines of
-  [] => []
-  [line] => [spaces indent ++ dropSpacesUpTo stripN line ++ "-}"]
-  line :: rest => commentContinuation indent stripN line :: commentTailLines indent stripN rest
+commentTailLines indent stripN [] = []
+commentTailLines indent stripN ([line]) = [spaces indent ++ dropSpacesUpTo stripN line ++ "-}"]
+commentTailLines indent stripN (line :: rest) =
+  commentContinuation indent stripN line :: commentTailLines indent stripN rest
 
 blockCommentLines : Int -> Comment -> List String
 blockCommentLines indent c =
@@ -134,10 +134,9 @@ sameKey (Pair l c) (Pair l2 c2) = l == l2 && c == c2
 
 -- 附件表：条目起点 (行, 列) -> (前置注释, 行尾注释)。
 lookupSlot : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Int -> Maybe (Pair (List Comment) (List Comment))
-lookupSlot at line col = case at of
-  [] => Nothing
-  (Pair key slot) :: rest =>
-    if sameKey key (Pair line col) then Just slot else lookupSlot rest line col
+lookupSlot [] line col = Nothing
+lookupSlot ((Pair key slot) :: rest) line col =
+  if sameKey key (Pair line col) then Just slot else lookupSlot rest line col
 
 leadOf : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Int -> List Comment
 leadOf at line col = case lookupSlot at line col of
@@ -243,23 +242,21 @@ importAnchor : Import -> Span
 importAnchor imp = importSpan imp
 
 headerAnchors : Maybe ModDecl -> List Span
-headerAnchors hdr = case hdr of
-  Nothing => []
-  Just m => append [modDeclSpan m] (modDeclItemAnchors m)
+headerAnchors Nothing = []
+headerAnchors (Just m) = append [modDeclSpan m] (modDeclItemAnchors m)
 
 -- 导出项也作为注释锚点：排序时项注释随项移动。
 modDeclItemAnchors : ModDecl -> List Span
 modDeclItemAnchors (ModDecl _ _ items _) = map exportItemSpan items
 
 declAnchors : Decl -> List Span
-declAnchors d = case d of
-  DData name params kind ctors derivings sp => sp :: map ctorSpan ctors
-  DAxiom name ty sp => [sp]
-  DSig name ty sp => [sp]
-  DFun name pats body sp => sp :: exprAnchors body
-  DRecord name params fields derivings sp => sp :: map fieldSpan fields
-  DTrait name params methods sp => sp :: map traitMethodAnchor methods
-  DInstance ctxE head methods sp => sp :: concatMap declAnchors methods
+declAnchors (DData name params kind ctors derivings sp) = sp :: map ctorSpan ctors
+declAnchors (DAxiom name ty sp) = [sp]
+declAnchors (DSig name ty sp) = [sp]
+declAnchors (DFun name pats body sp) = sp :: exprAnchors body
+declAnchors (DRecord name params fields derivings sp) = sp :: map fieldSpan fields
+declAnchors (DTrait name params methods sp) = sp :: map traitMethodAnchor methods
+declAnchors (DInstance ctxE head methods sp) = sp :: concatMap declAnchors methods
 
 bindingAnchor : Pair Pat Expr -> Span
 bindingAnchor (Pair pat value) = patSpan pat
@@ -277,9 +274,8 @@ fieldExprAnchors : Pair String Expr -> List Span
 fieldExprAnchors (Pair fname value) = exprAnchors value
 
 doStmtAnchors : DoStmt -> List Span
-doStmtAnchors stmt = case stmt of
-  DBind pat value sp => sp :: exprAnchors value
-  DExpr value sp => sp :: exprAnchors value
+doStmtAnchors (DBind pat value sp) = sp :: exprAnchors value
+doStmtAnchors (DExpr value sp) = sp :: exprAnchors value
 
 exprAnchors : Expr -> List Span
 exprAnchors e = case e of

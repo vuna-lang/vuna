@@ -158,11 +158,10 @@ renderTy ty = case ty of
   _ => renderTyPlain ty
 
 renderTyPlain : Expr -> String
-renderTyPlain ty = case ty of
-  EApp f args sp => renderTyAtom f ++ " " ++ join " " (map renderTyArg args)
-  EInt n sp => strFromInt n
-  EStr s sp => "\"" ++ s ++ "\""
-  _ => "_"
+renderTyPlain (EApp f args sp) = renderTyAtom f ++ " " ++ join " " (map renderTyArg args)
+renderTyPlain (EInt n sp) = strFromInt n
+renderTyPlain (EStr s sp) = "\"" ++ s ++ "\""
+renderTyPlain _ = "_"
 
 renderTyArg : Expr -> String
 renderTyArg (EVar name sp) = name
@@ -269,9 +268,8 @@ dedupeGo (s :: rest) seen acc =
 -- ---------------------------------------------------------------
 -- 模块全名：源码模块头优先；无模块头时按路径推导。
 moduleNameOf : String -> String -> Maybe ModDecl -> String
-moduleNameOf dir path srcHdr = case srcHdr of
-  Just (ModDecl name explicit items sp) => name
-  Nothing => segmentModule dir path
+moduleNameOf dir path (Just (ModDecl name explicit items sp)) = name
+moduleNameOf dir path Nothing = segmentModule dir path
 
 segmentModule : String -> String -> String
 segmentModule dir path =
@@ -288,14 +286,15 @@ refsInDecls : String -> List Decl -> List Ref
 refsInDecls sMod decls = concatMap (refsInDecl sMod) decls
 
 refsInDecl : String -> Decl -> List Ref
-refsInDecl sMod d = case d of
-  DFun name pats body sp => refsInExpr sMod body
-  DData name params kind ctors derivings sp => concatMap (\c => refsInExpr sMod (ctorType c)) ctors
-  DRecord name params fields derivings sp => concatMap (\f => refsInExpr sMod (fieldType f)) fields
-  DTrait name params methods sp => concatMap (refsInMethod sMod) methods
-  DInstance ctxE head methods sp =>
-    append (refsInExpr sMod head) (concatMap (refsInDecl sMod) methods)
-  _ => []
+refsInDecl sMod (DFun name pats body sp) = refsInExpr sMod body
+refsInDecl sMod (DData name params kind ctors derivings sp) =
+  concatMap (\c => refsInExpr sMod (ctorType c)) ctors
+refsInDecl sMod (DRecord name params fields derivings sp) =
+  concatMap (\f => refsInExpr sMod (fieldType f)) fields
+refsInDecl sMod (DTrait name params methods sp) = concatMap (refsInMethod sMod) methods
+refsInDecl sMod (DInstance ctxE head methods sp) =
+  append (refsInExpr sMod head) (concatMap (refsInDecl sMod) methods)
+refsInDecl sMod _ = []
 
 refsInMethod : String -> TraitMethod -> List Ref
 refsInMethod sMod m = refsInExpr sMod (traitMethodType m)
@@ -311,9 +310,8 @@ refsInLocalClause : String -> Pair (List Pat) Expr -> List Ref
 refsInLocalClause sMod (Pair pats body) = refsInExpr sMod body
 
 refsInDoStmt : String -> DoStmt -> List Ref
-refsInDoStmt sMod s = case s of
-  DBind p x tsp => refsInExpr sMod x
-  DExpr x tsp => refsInExpr sMod x
+refsInDoStmt sMod (DBind p x tsp) = refsInExpr sMod x
+refsInDoStmt sMod (DExpr x tsp) = refsInExpr sMod x
 
 refsInExpr : String -> Expr -> List Ref
 refsInExpr sMod e = case e of

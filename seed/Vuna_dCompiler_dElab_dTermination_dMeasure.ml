@@ -53,7 +53,7 @@ open Vuna_dCompiler_dElab_dDerive
 open Vuna_dCompiler_dElab_dRecords
 let v_Vuna_dCompiler_dElab_dTermination_dMeasure_dmaxInt = (fun a -> (fun b -> (if ((bi_ge_int a) b) then a else b)))
 
-let v_Vuna_dCompiler_dElab_dTermination_dMeasure_dnotEmpty = (fun xs -> (match xs with
+let v_Vuna_dCompiler_dElab_dTermination_dMeasure_dnotEmpty = (fun mc0 -> (match mc0 with
   | C_Base_dList_dList_Base_dList_dNil -> false
   | _ -> true
 ))
@@ -205,12 +205,12 @@ let rec v_Vuna_dCompiler_dElab_dTermination_dMeasure_dctorNamesOf = (fun mc0 -> 
   | _ -> failwith "DT: impossible branch"
 ))
 
-let rec v_Vuna_dCompiler_dElab_dTermination_dMeasure_dpatSizeStrict = (fun pat -> (fun base -> (fun path -> (fun acc -> (match pat with
-  | C_Vuna_dCompiler_dFrontend_dAst_dPat_Vuna_dCompiler_dFrontend_dAst_dPVar (dtb__68, dtb__69) -> (C_Base_dList_dList_Base_dList_dCons ((C_Base_dPair_dPair_Base_dPair_dPair (dtb__68, (C_Base_dPair_dPair_Base_dPair_dPair (base, (C_Base_dPair_dPair_Base_dPair_dPair ((v_Base_dList_dlength path), path)))))), acc))
-  | C_Vuna_dCompiler_dFrontend_dAst_dPat_Vuna_dCompiler_dFrontend_dAst_dPWild (dtb__70) -> acc
-  | C_Vuna_dCompiler_dFrontend_dAst_dPat_Vuna_dCompiler_dFrontend_dAst_dPCon (dtb__71, dtb__72, dtb__73) -> (((((v_Vuna_dCompiler_dElab_dTermination_dMeasure_dpatsSizeStrict dtb__72) base) path) 0) acc)
-  | C_Vuna_dCompiler_dFrontend_dAst_dPat_Vuna_dCompiler_dFrontend_dAst_dPRecord (dtb__74, dtb__75, dtb__76) -> (((((v_Vuna_dCompiler_dElab_dTermination_dMeasure_dfieldsSizeStrict dtb__75) base) path) 0) acc)
-  | _ -> acc
+let rec v_Vuna_dCompiler_dElab_dTermination_dMeasure_dpatSizeStrict = (fun mc0 -> (fun mc1 -> (fun mc2 -> (fun mc3 -> (match mc0 with
+  | C_Vuna_dCompiler_dFrontend_dAst_dPat_Vuna_dCompiler_dFrontend_dAst_dPRecord (dtb__68, dtb__69, dtb__70) -> (((((v_Vuna_dCompiler_dElab_dTermination_dMeasure_dfieldsSizeStrict dtb__69) mc1) mc2) 0) mc3)
+  | C_Vuna_dCompiler_dFrontend_dAst_dPat_Vuna_dCompiler_dFrontend_dAst_dPCon (dtb__71, dtb__72, dtb__73) -> (((((v_Vuna_dCompiler_dElab_dTermination_dMeasure_dpatsSizeStrict dtb__72) mc1) mc2) 0) mc3)
+  | C_Vuna_dCompiler_dFrontend_dAst_dPat_Vuna_dCompiler_dFrontend_dAst_dPWild (dtb__74) -> mc3
+  | C_Vuna_dCompiler_dFrontend_dAst_dPat_Vuna_dCompiler_dFrontend_dAst_dPVar (dtb__75, dtb__76) -> (C_Base_dList_dList_Base_dList_dCons ((C_Base_dPair_dPair_Base_dPair_dPair (dtb__75, (C_Base_dPair_dPair_Base_dPair_dPair (mc1, (C_Base_dPair_dPair_Base_dPair_dPair ((v_Base_dList_dlength mc2), mc2)))))), mc3))
+  | _ -> mc3
 )))))
 and v_Vuna_dCompiler_dElab_dTermination_dMeasure_dpatsSizeStrict = (fun mc0 -> (fun mc1 -> (fun mc2 -> (fun mc3 -> (fun mc4 -> (match mc0 with
   | C_Base_dList_dList_Base_dList_dCons (dtb__77, dtb__78) -> (((((v_Vuna_dCompiler_dElab_dTermination_dMeasure_dpatsSizeStrict dtb__78) mc1) mc2) ((bi_add mc3) 1)) ((((v_Vuna_dCompiler_dElab_dTermination_dMeasure_dpatSizeStrict dtb__77) mc1) ((v_Base_dList_dappend mc2) (C_Base_dList_dList_Base_dList_dCons (mc3, C_Base_dList_dList_Base_dList_dNil)))) mc4))
@@ -262,7 +262,7 @@ let v_Vuna_dCompiler_dElab_dTermination_dMeasure_dextendSizesStrict = (fun sizes
   | _ -> sizes
 ))))
 
-let v_Vuna_dCompiler_dElab_dTermination_dMeasure_dvarOfExpr = (fun e -> (match e with
+let v_Vuna_dCompiler_dElab_dTermination_dMeasure_dvarOfExpr = (fun mc0 -> (match mc0 with
   | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEVar (dtb__102, dtb__103) -> (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__102))
   | _ -> C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing
 ))
@@ -342,11 +342,11 @@ and v_Vuna_dCompiler_dElab_dTermination_dMeasure_dpathInFields = (fun mc0 -> (fu
   | C_Base_dList_dList_Base_dList_dNil -> C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing
   | _ -> failwith "DT: impossible branch"
 )))))
-and v_Vuna_dCompiler_dElab_dTermination_dMeasure_dpathInPat = (fun v -> (fun pat -> (fun path -> (match pat with
-  | C_Vuna_dCompiler_dFrontend_dAst_dPat_Vuna_dCompiler_dFrontend_dAst_dPVar (dtb__135, dtb__136) -> (if ((bi_eq_str dtb__135) v) then (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (path)) else C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing)
-  | C_Vuna_dCompiler_dFrontend_dAst_dPat_Vuna_dCompiler_dFrontend_dAst_dPWild (dtb__137) -> C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing
-  | C_Vuna_dCompiler_dFrontend_dAst_dPat_Vuna_dCompiler_dFrontend_dAst_dPCon (dtb__138, dtb__139, dtb__140) -> ((((v_Vuna_dCompiler_dElab_dTermination_dMeasure_dpathInPats v) dtb__139) path) 0)
-  | C_Vuna_dCompiler_dFrontend_dAst_dPat_Vuna_dCompiler_dFrontend_dAst_dPRecord (dtb__141, dtb__142, dtb__143) -> ((((v_Vuna_dCompiler_dElab_dTermination_dMeasure_dpathInFields v) dtb__142) path) 0)
+and v_Vuna_dCompiler_dElab_dTermination_dMeasure_dpathInPat = (fun mc0 -> (fun mc1 -> (fun mc2 -> (match mc1 with
+  | C_Vuna_dCompiler_dFrontend_dAst_dPat_Vuna_dCompiler_dFrontend_dAst_dPRecord (dtb__135, dtb__136, dtb__137) -> ((((v_Vuna_dCompiler_dElab_dTermination_dMeasure_dpathInFields mc0) dtb__136) mc2) 0)
+  | C_Vuna_dCompiler_dFrontend_dAst_dPat_Vuna_dCompiler_dFrontend_dAst_dPCon (dtb__138, dtb__139, dtb__140) -> ((((v_Vuna_dCompiler_dElab_dTermination_dMeasure_dpathInPats mc0) dtb__139) mc2) 0)
+  | C_Vuna_dCompiler_dFrontend_dAst_dPat_Vuna_dCompiler_dFrontend_dAst_dPWild (dtb__141) -> C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing
+  | C_Vuna_dCompiler_dFrontend_dAst_dPat_Vuna_dCompiler_dFrontend_dAst_dPVar (dtb__142, dtb__143) -> (if ((bi_eq_str dtb__142) mc0) then (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (mc2)) else C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing)
   | _ -> C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing
 ))))
 
@@ -431,11 +431,11 @@ let v_Vuna_dCompiler_dElab_dTermination_dMeasure_darithMinusBase = (fun p -> (fu
   | _ -> C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing
 ))))))))
 
-let v_Vuna_dCompiler_dElab_dTermination_dMeasure_darithMinus = (fun p -> (fun args -> (fun sizes -> (fun caller -> (fun facts -> (fun region -> ((fun nd_uscrut6 -> (match nd_uscrut6 with
+let v_Vuna_dCompiler_dElab_dTermination_dMeasure_darithMinus = (fun mc0 -> (fun mc1 -> (fun mc2 -> (fun mc3 -> (fun mc4 -> (fun mc5 -> (match mc1 with
   | C_Base_dList_dList_Base_dList_dCons (dtb__176, dtb__177) -> (match dtb__177 with
   | C_Base_dList_dList_Base_dList_dCons (dtb__178, dtb__179) -> (match dtb__178 with
   | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEInt (dtb__180, dtb__181) -> (match dtb__179 with
-  | C_Base_dList_dList_Base_dList_dNil -> (if ((bi_gt_int dtb__180) 0) then (((((((v_Vuna_dCompiler_dElab_dTermination_dMeasure_darithMinusBase p) dtb__176) dtb__180) sizes) caller) facts) region) else C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing)
+  | C_Base_dList_dList_Base_dList_dNil -> (if ((bi_gt_int dtb__180) 0) then (((((((v_Vuna_dCompiler_dElab_dTermination_dMeasure_darithMinusBase mc0) dtb__176) dtb__180) mc2) mc3) mc4) mc5) else C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing)
   | _ -> C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing
 )
   | _ -> C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing
@@ -443,15 +443,15 @@ let v_Vuna_dCompiler_dElab_dTermination_dMeasure_darithMinus = (fun p -> (fun ar
   | _ -> C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing
 )
   | _ -> C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing
-)) args)))))))
+)))))))
 
-let v_Vuna_dCompiler_dElab_dTermination_dMeasure_darithRel = (fun p -> (fun a -> (fun sizes -> (fun caller -> (fun facts -> (fun region -> ((fun nd_uscrut6 -> (match nd_uscrut6 with
+let v_Vuna_dCompiler_dElab_dTermination_dMeasure_darithRel = (fun mc0 -> (fun mc1 -> (fun mc2 -> (fun mc3 -> (fun mc4 -> (fun mc5 -> (match mc1 with
   | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEApp (dtb__182, dtb__183, dtb__184) -> (match dtb__182 with
-  | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEVar (dtb__185, dtb__186) -> (if ((bi_eq_str dtb__185) "-") then ((((((v_Vuna_dCompiler_dElab_dTermination_dMeasure_darithMinus p) dtb__183) sizes) caller) facts) region) else C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing)
+  | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEVar (dtb__185, dtb__186) -> (if ((bi_eq_str dtb__185) "-") then ((((((v_Vuna_dCompiler_dElab_dTermination_dMeasure_darithMinus mc0) dtb__183) mc2) mc3) mc4) mc5) else C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing)
   | _ -> C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing
 )
   | _ -> C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing
-)) a)))))))
+)))))))
 
 let v_Vuna_dCompiler_dElab_dTermination_dMeasure_dprojRel = (fun p -> (fun cargs -> (fun sizes -> ((fun nd_uscrut3 -> (match nd_uscrut3 with
   | C_Base_dList_dList_Base_dList_dCons (dtb__187, dtb__188) -> (match dtb__188 with
@@ -497,8 +497,8 @@ let v_Vuna_dCompiler_dElab_dTermination_dMeasure_dmarkInvalid = (fun acc -> (C_B
 
 let v_Vuna_dCompiler_dElab_dTermination_dMeasure_daddEdgeMode = (fun caller -> (fun callee -> (fun m -> (fun acc -> (C_Base_dPair_dPair_Base_dPair_dPair ((v_Base_dPair_dfirstOf acc), (C_Base_dList_dList_Base_dList_dCons ((C_Base_dPair_dPair_Base_dPair_dPair ((C_Base_dPair_dPair_Base_dPair_dPair (caller, callee)), m)), (v_Base_dPair_dsecondOf acc)))))))))
 
-let v_Vuna_dCompiler_dElab_dTermination_dMeasure_dgroupHead = (fun comp -> (fun fn -> (match fn with
-  | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEVar (dtb__208, dtb__209) -> (if ((v_Base_dList_dmemName dtb__208) comp) then (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__208)) else C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing)
+let v_Vuna_dCompiler_dElab_dTermination_dMeasure_dgroupHead = (fun mc0 -> (fun mc1 -> (match mc1 with
+  | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEVar (dtb__208, dtb__209) -> (if ((v_Base_dList_dmemName dtb__208) mc0) then (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__208)) else C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing)
   | _ -> C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing
 )))
 

@@ -80,23 +80,20 @@ docModule path = case readText path of
         (Pair (moduleNameOfPath path hdr) (moduleHeaderLine path hdr ++ "\n\n```vuna\n" ++ join "\n" (declLines decls) ++ "\n```\n"))
 
 moduleNameOfPath : String -> Maybe ModDecl -> String
-moduleNameOfPath path hdr = case hdr of
-  Just (ModDecl name hasList items sp) => name
-  Nothing => stripVunaSuffix (baseName path)
+moduleNameOfPath path (Just (ModDecl name hasList items sp)) = name
+moduleNameOfPath path Nothing = stripVunaSuffix (baseName path)
 
 moduleHeaderLine : String -> Maybe ModDecl -> String
-moduleHeaderLine path hdr = case hdr of
-  Just (ModDecl name hasList items sp) => "## " ++ name
-  Nothing => "## " ++ stripVunaSuffix (baseName path)
+moduleHeaderLine path (Just (ModDecl name hasList items sp)) = "## " ++ name
+moduleHeaderLine path Nothing = "## " ++ stripVunaSuffix (baseName path)
 
 stripVunaSuffix : String -> String
 stripVunaSuffix name = if endsWith ".vuna" name then substring 0 (strLength name - 5) name else name
 
 -- [export].modules 过滤：按 manifest 顺序输出；缺失模块是配置错误（exit 2）。
 selectSections : Maybe (List String) -> List (Pair String String) -> Result (List String)
-selectSections exports sections = case exports of
-  Nothing => Ok (map secondOf sections)
-  Just mods => selectMods mods sections []
+selectSections Nothing sections = Ok (map secondOf sections)
+selectSections (Just mods) sections = selectMods mods sections []
 
 selectMods : List String -> List (Pair String String) -> List String -> Result (List String)
 selectMods [] sections acc = Ok (reverse acc)
@@ -105,30 +102,29 @@ selectMods (name :: rest) sections acc = case findSection name sections of
   Just section => selectMods rest sections (section :: acc)
 
 findSection : String -> List (Pair String String) -> Maybe String
-findSection name sections = case sections of
-  [] => Nothing
-  (Pair modName section) :: rest => if modName == name then Just section else findSection name rest
+findSection name [] = Nothing
+findSection name ((Pair modName section) :: rest) =
+  if modName == name then Just section else findSection name rest
 
 -- 顶层声明渲染：类型/记录/trait 展开成员，签名单行；无签名函数不列出。
 declLines : List Decl -> List String
 declLines decls = concatMap declLinesOf decls
 
 declLinesOf : Decl -> List String
-declLinesOf d = case d of
-  DData name params kind ctors derivings sp =>
-    if isPrivate name then []
-    else append
-      (("data " ++ name ++ paramSuffix params ++ " : " ++ renderTy kind ++ " where") :: map ctorLine ctors)
-      (derivingLines derivings)
-  DRecord name params fields derivings sp =>
-    if isPrivate name then []
-    else append (("record " ++ name ++ paramSuffix params ++ " where") :: map fieldLine fields)
-      (derivingLines derivings)
-  DTrait name params methods sp =>
-    if isPrivate name then []
-    else ("trait " ++ name ++ paramSuffix params ++ " where") :: map methodLine methods
-  DSig name ty sp => if isPrivate name then [] else ["", name ++ " : " ++ renderTy ty]
-  _ => []
+declLinesOf (DData name params kind ctors derivings sp) =
+  if isPrivate name then []
+  else append
+    (("data " ++ name ++ paramSuffix params ++ " : " ++ renderTy kind ++ " where") :: map ctorLine ctors)
+    (derivingLines derivings)
+declLinesOf (DRecord name params fields derivings sp) =
+  if isPrivate name then []
+  else append (("record " ++ name ++ paramSuffix params ++ " where") :: map fieldLine fields)
+    (derivingLines derivings)
+declLinesOf (DTrait name params methods sp) =
+  if isPrivate name then []
+  else ("trait " ++ name ++ paramSuffix params ++ " where") :: map methodLine methods
+declLinesOf (DSig name ty sp) = if isPrivate name then [] else ["", name ++ " : " ++ renderTy ty]
+declLinesOf _ = []
 
 paramSuffix : List String -> String
 paramSuffix [] = ""
@@ -164,11 +160,10 @@ renderTy (EPi name implicit dom cod sp) =
 renderTy ty = renderTyPlain ty
 
 renderTyPlain : Expr -> String
-renderTyPlain ty = case ty of
-  EApp f args sp => renderTyAtom f ++ " " ++ join " " (map renderTyArg args)
-  EInt n sp => strFromInt n
-  EStr s sp => "\"" ++ s ++ "\""
-  _ => "_"
+renderTyPlain (EApp f args sp) = renderTyAtom f ++ " " ++ join " " (map renderTyArg args)
+renderTyPlain (EInt n sp) = strFromInt n
+renderTyPlain (EStr s sp) = "\"" ++ s ++ "\""
+renderTyPlain _ = "_"
 
 renderTyArg : Expr -> String
 renderTyArg ty = case ty of

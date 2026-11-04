@@ -355,9 +355,13 @@ let v_Vuna_dCompiler_dCodegen_dDecl_disBoolFamilyName = (fun name -> ((bi_eq_str
 
 let v_Vuna_dCompiler_dCodegen_dDecl_druntimeDatas = (fun datas -> ((v_Base_dList_dfilter (fun d -> (if (v_Vuna_dCompiler_dCodegen_dDecl_disBoolFamilyName (v_Vuna_dCompiler_dElab_dTypes_ddtDataName d)) then false else true))) datas))
 
-let v_Vuna_dCompiler_dCodegen_dDecl_dgenTypeDeclsOf = (fun mc0 -> (fun mc1 -> (match mc1 with
+let v_Vuna_dCompiler_dCodegen_dDecl_dusedTableOf = (fun datas -> ((v_Vuna_dCompiler_dCodegen_dDecl_dusedTableFix datas) ((v_Base_dList_dmap (fun d -> (C_Base_dPair_dPair_Base_dPair_dPair ((v_Vuna_dCompiler_dElab_dTypes_ddtDataName d), C_Base_dList_dList_Base_dList_dNil)))) datas)))
+
+let v_Vuna_dCompiler_dCodegen_dDecl_dgenTypeDeclsWith = (fun mc0 -> (fun mc1 -> (fun mc2 -> (match mc2 with
   | C_Base_dList_dList_Base_dList_dNil -> (C_Base_dResult_dResult_Base_dResult_dOk (""))
-  | _ -> ((fun table -> ((v_Base_dResult_dandThen ((v_Base_dResult_dtraverse ((v_Vuna_dCompiler_dCodegen_dDecl_dgenDataDecl table) mc0)) mc1)) (fun parts -> (C_Base_dResult_dResult_Base_dResult_dOk (((bi_concat "type ") ((bi_concat ((v_Vuna_dCompiler_dCodegen_dDecl_djoinWith "\nand ") parts)) "\n\n"))))))) ((v_Vuna_dCompiler_dCodegen_dDecl_dusedTableFix mc0) ((v_Base_dList_dmap (fun d -> (C_Base_dPair_dPair_Base_dPair_dPair ((v_Vuna_dCompiler_dElab_dTypes_ddtDataName d), C_Base_dList_dList_Base_dList_dNil)))) mc0)))
-)))
+  | _ -> ((v_Base_dResult_dandThen ((v_Base_dResult_dtraverse ((v_Vuna_dCompiler_dCodegen_dDecl_dgenDataDecl mc0) mc1)) mc2)) (fun parts -> (C_Base_dResult_dResult_Base_dResult_dOk (((bi_concat "type ") ((bi_concat ((v_Vuna_dCompiler_dCodegen_dDecl_djoinWith "\nand ") parts)) "\n\n"))))))
+))))
+
+let v_Vuna_dCompiler_dCodegen_dDecl_dgenTypeDeclsOf = (fun allDatas -> (fun subset -> (((v_Vuna_dCompiler_dCodegen_dDecl_dgenTypeDeclsWith (v_Vuna_dCompiler_dCodegen_dDecl_dusedTableOf allDatas)) allDatas) subset)))
 
 let v_Vuna_dCompiler_dCodegen_dDecl_dcollectUsedSpine = (fun a1 -> (fun a2 -> (fun a3 -> (fun a4 -> (fun a5 -> ((((((v_Vuna_dCompiler_dCodegen_dDecl_dcollectUsedSpineFuel 512) a1) a2) a3) a4) a5))))))

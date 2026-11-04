@@ -97,7 +97,7 @@ let rec v_Vuna_dCompiler_dElab_dDict_dallInstancesMono = (fun mc0 -> (match mc0 
   | _ -> failwith "DT: impossible branch"
 ))
 
-let v_Vuna_dCompiler_dElab_dDict_dtermMetaId = (fun t -> (match t with
+let v_Vuna_dCompiler_dElab_dDict_dtermMetaId = (fun mc0 -> (match mc0 with
   | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTMeta (dtb__15) -> dtb__15
   | _ -> 0
 ))
@@ -138,7 +138,7 @@ let rec v_Vuna_dCompiler_dElab_dDict_dfoldSpineWithTyRigs = (fun mc0 -> (fun mc1
   | _ -> failwith "DT: impossible branch"
 ))))
 
-let rec v_Vuna_dCompiler_dElab_dDict_dpiRigs = (fun t -> (match t with
+let rec v_Vuna_dCompiler_dElab_dDict_dpiRigs = (fun mc0 -> (match mc0 with
   | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTPi (dtb__30, dtb__31, dtb__32, dtb__33, dtb__34) -> (C_Base_dList_dList_Base_dList_dCons (dtb__32, (v_Vuna_dCompiler_dElab_dDict_dpiRigs dtb__34)))
   | _ -> C_Base_dList_dList_Base_dList_dNil
 ))
@@ -389,9 +389,9 @@ let v_Vuna_dCompiler_dElab_dDict_dcmpOps = (C_Base_dList_dList_Base_dList_dCons 
 
 let v_Vuna_dCompiler_dElab_dDict_disCmpOp = (fun name -> ((v_Base_dList_dmemName name) v_Vuna_dCompiler_dElab_dDict_dcmpOps))
 
-let v_Vuna_dCompiler_dElab_dDict_dcmpMethodName = (fun name -> (if ((bi_eq_str name) "<") then "lt" else (if ((bi_eq_str name) "<=") then "le" else (if ((bi_eq_str name) ">") then "gt" else "ge"))))
+let v_Vuna_dCompiler_dElab_dDict_dcmpMethodName = (fun mc0 -> (if ((bi_eq_str mc0) "<") then "lt" else (if ((bi_eq_str mc0) "<=") then "le" else (if ((bi_eq_str mc0) ">") then "gt" else "ge"))))
 
-let v_Vuna_dCompiler_dElab_dDict_dcmpGenericName = (fun name -> (if ((bi_eq_str name) "<") then "bi_lt_generic" else (if ((bi_eq_str name) "<=") then "bi_le_generic" else (if ((bi_eq_str name) ">") then "bi_gt_generic" else "bi_ge_generic"))))
+let v_Vuna_dCompiler_dElab_dDict_dcmpGenericName = (fun mc0 -> (if ((bi_eq_str mc0) "<") then "bi_lt_generic" else (if ((bi_eq_str mc0) "<=") then "bi_le_generic" else (if ((bi_eq_str mc0) ">") then "bi_gt_generic" else "bi_ge_generic"))))
 
 let v_Vuna_dCompiler_dElab_dDict_dcmpRuntimeName = (fun sp -> (fun name -> (fun tyName -> (if ((bi_eq_str tyName) "Int") then (if ((bi_eq_str name) "<") then (C_Base_dResult_dResult_Base_dResult_dOk ("bi_lt_int")) else (if ((bi_eq_str name) "<=") then (C_Base_dResult_dResult_Base_dResult_dOk ("bi_le_int")) else (if ((bi_eq_str name) ">") then (C_Base_dResult_dResult_Base_dResult_dOk ("bi_gt_int")) else (C_Base_dResult_dResult_Base_dResult_dOk ("bi_ge_int"))))) else (if ((bi_eq_str tyName) "String") then (C_Base_dResult_dResult_Base_dResult_dOk ((v_Vuna_dCompiler_dElab_dDict_dcmpGenericName name))) else (if ((bi_eq_str tyName) v_Vuna_dCompiler_dIntrinsics_dboolTypeName) then (C_Base_dResult_dResult_Base_dResult_dOk ((v_Vuna_dCompiler_dElab_dDict_dcmpGenericName name))) else ((((v_Vuna_dCompiler_dDiagnostics_dTc_dtcErr2 sp) (C_Vuna_dCompiler_dDiagnostics_dTc_dTcErr_Vuna_dCompiler_dDiagnostics_dTc_dOpNotDefinedFor (name, tyName))) name) tyName)))))))
 

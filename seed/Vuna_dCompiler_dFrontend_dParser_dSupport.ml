@@ -43,8 +43,8 @@ let v_Vuna_dCompiler_dFrontend_dParser_dSupport_dfileOf = (fun mc0 -> (match mc0
 
 let v_Vuna_dCompiler_dFrontend_dParser_dSupport_dpeekTok = (fun mc0 -> (match mc0 with
   | C_Vuna_dCompiler_dFrontend_dParser_dSupport_dPState_Vuna_dCompiler_dFrontend_dParser_dSupport_dPState (dtb__8, dtb__9, dtb__10, dtb__11) -> (match dtb__9 with
-  | C_Base_dList_dList_Base_dList_dCons (dtb__12, dtb__13) -> dtb__12
   | C_Base_dList_dList_Base_dList_dNil -> (C_Vuna_dCompiler_dFrontend_dLexer_dPTok_Vuna_dCompiler_dFrontend_dLexer_dPTok (C_Vuna_dCompiler_dFrontend_dLexer_dTok_Vuna_dCompiler_dFrontend_dLexer_dTEof, (C_Vuna_dCompiler_dCommon_dPos_Vuna_dCompiler_dCommon_dPos (1, 1))))
+  | C_Base_dList_dList_Base_dList_dCons (dtb__12, dtb__13) -> dtb__12
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
@@ -219,7 +219,7 @@ let v_Vuna_dCompiler_dFrontend_dParser_dSupport_dopExpr = (fun mc0 -> (fun mc1 -
 
 let v_Vuna_dCompiler_dFrontend_dParser_dSupport_dmkInfixExpr = (fun mc0 -> (fun mc1 -> (fun mc2 -> (fun mc3 -> (if ((bi_eq_str mc0) ">>") then (C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEApp ((C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEVar ("bind", mc3)), (C_Base_dList_dList_Base_dList_dCons (mc1, (C_Base_dList_dList_Base_dList_dCons ((C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dELam ((C_Base_dList_dList_Base_dList_dCons ("vuna_seq_ignore", C_Base_dList_dList_Base_dList_dNil)), mc2, mc3)), C_Base_dList_dList_Base_dList_dNil)))), mc3)) else (C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEApp (((v_Vuna_dCompiler_dFrontend_dParser_dSupport_dopExpr mc0) mc3), (C_Base_dList_dList_Base_dList_dCons (mc1, (C_Base_dList_dList_Base_dList_dCons (mc2, C_Base_dList_dList_Base_dList_dNil)))), mc3)))))))
 
-let rec v_Vuna_dCompiler_dFrontend_dParser_dSupport_dcountArrows = (fun e -> ((fun nd_uscrut1 -> (match nd_uscrut1 with
+let rec v_Vuna_dCompiler_dFrontend_dParser_dSupport_dcountArrows = (fun mc0 -> (match mc0 with
   | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEApp (dtb__85, dtb__86, dtb__87) -> (match dtb__85 with
   | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEVar (dtb__88, dtb__89) -> (if ((bi_eq_str dtb__88) "->") then (match dtb__86 with
   | C_Base_dList_dList_Base_dList_dCons (dtb__90, dtb__91) -> (match dtb__91 with
@@ -234,16 +234,16 @@ let rec v_Vuna_dCompiler_dFrontend_dParser_dSupport_dcountArrows = (fun e -> ((f
   | _ -> 0
 )
   | _ -> 0
-)) e))
+))
 
-let v_Vuna_dCompiler_dFrontend_dParser_dSupport_dterminatesExpression = (fun tok -> ((fun nd_uscrut1 -> (match nd_uscrut1 with
+let v_Vuna_dCompiler_dFrontend_dParser_dSupport_dterminatesExpression = (fun mc0 -> (match mc0 with
   | C_Vuna_dCompiler_dFrontend_dLexer_dPTok_Vuna_dCompiler_dFrontend_dLexer_dPTok (dtb__94, dtb__95) -> (match dtb__94 with
   | C_Vuna_dCompiler_dFrontend_dLexer_dTok_Vuna_dCompiler_dFrontend_dLexer_dTKw (dtb__96) -> (if ((bi_eq_str dtb__96) "else") then true else (if ((bi_eq_str dtb__96) "in") then true else (if ((bi_eq_str dtb__96) "then") then true else false)))
   | C_Vuna_dCompiler_dFrontend_dLexer_dTok_Vuna_dCompiler_dFrontend_dLexer_dTSym (dtb__97) -> (if ((bi_eq_str dtb__97) ")") then true else (if ((bi_eq_str dtb__97) "]") then true else (if ((bi_eq_str dtb__97) ",") then true else false)))
   | _ -> false
 )
   | _ -> failwith "DT: impossible branch"
-)) tok))
+))
 
 let v_Vuna_dCompiler_dFrontend_dParser_dSupport_dbadCaseIndent = (fun st -> (fun altCol -> (if (v_Vuna_dCompiler_dFrontend_dParser_dSupport_disEof st) then false else (match (v_Vuna_dCompiler_dFrontend_dParser_dSupport_dpeekPos st) with
   | C_Vuna_dCompiler_dCommon_dPos_Vuna_dCompiler_dCommon_dPos (dtb__98, dtb__99) -> (if ((bi_gt_int dtb__99) altCol) then (if (v_Vuna_dCompiler_dFrontend_dParser_dSupport_dterminatesExpression (v_Vuna_dCompiler_dFrontend_dParser_dSupport_dpeekTok st)) then false else true) else false)

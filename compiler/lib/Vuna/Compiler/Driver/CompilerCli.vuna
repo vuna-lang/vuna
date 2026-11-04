@@ -137,9 +137,8 @@ printWarnings (w :: rest) =
   in printWarnings rest
 
 defaultDir : Maybe String -> String
-defaultDir dir = case dir of
-  Just dir2 => dir2
-  Nothing => "."
+defaultDir (Just dir2) = dir2
+defaultDir Nothing = "."
 
 -- 路径既不是文件也不是目录时的统一错误（先 prim_fileExists 再 prim_isDirectory：
 -- 内建 prim_isDirectory 对不存在的路径会抛异常）。
@@ -288,17 +287,15 @@ buildRun noCompile dir outM pkgM = case workspacePackages dir of
 -- 单包目录且是库包（没有 app/Main.vuna）→ build 必须报错（不是静默 skip）。
 -- workspace 根里的库成员仍走 skip（构建单元覆盖全部可执行成员）。
 isSingleLibraryPackage : List Package -> Bool
-isSingleLibraryPackage pkgs = case pkgs of
-  [pkg] => not (prim_fileExists (packageEntry pkg))
-  _ => False
+isSingleLibraryPackage ([pkg]) = not (prim_fileExists (packageEntry pkg))
+isSingleLibraryPackage _ = False
 
 libraryOnlyMessage : List Package -> String
-libraryOnlyMessage pkgs = case pkgs of
-  pkg :: _ =>
-    "library package "
-      ++ packageName pkg
-      ++ " has no app/Main.vuna (executable package required; use `check` for libraries)"
-  [] => "no package to build"
+libraryOnlyMessage (pkg :: _) =
+  "library package "
+    ++ packageName pkg
+    ++ " has no app/Main.vuna (executable package required; use `check` for libraries)"
+libraryOnlyMessage [] = "no package to build"
 
 selectBuildTargets : Maybe String -> List Package -> Result (List Package)
 selectBuildTargets pkgM pkgs = case pkgM of

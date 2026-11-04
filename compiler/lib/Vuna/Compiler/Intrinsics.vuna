@@ -64,12 +64,11 @@ data Capability : Type where
   CapClock : Capability
 
 capabilityName : Capability -> String
-capabilityName c = case c of
-  CapConsole => "console"
-  CapFs => "fs"
-  CapProcess => "process"
-  CapEnv => "env"
-  CapClock => "clock"
+capabilityName CapConsole = "console"
+capabilityName CapFs = "fs"
+capabilityName CapProcess = "process"
+capabilityName CapEnv = "env"
+capabilityName CapClock = "clock"
 
 capabilityNames : List String
 capabilityNames = map capabilityName allCapabilities
@@ -78,13 +77,12 @@ allCapabilities : List Capability
 allCapabilities = [CapConsole, CapFs, CapProcess, CapEnv, CapClock]
 
 parseCapability : String -> Maybe Capability
-parseCapability name = case name of
-  "console" => Just CapConsole
-  "fs" => Just CapFs
-  "process" => Just CapProcess
-  "env" => Just CapEnv
-  "clock" => Just CapClock
-  _ => Nothing
+parseCapability "console" = Just CapConsole
+parseCapability "fs" = Just CapFs
+parseCapability "process" = Just CapProcess
+parseCapability "env" = Just CapEnv
+parseCapability "clock" = Just CapClock
+parseCapability _ = Nothing
 
 -- ---------------------------------------------------------------
 -- 签名形状：只表达内建签名需要的形状（不含依赖 pi / 多态细节）
@@ -102,9 +100,8 @@ data IType : Type where
   IPolyEq : IType
 
 arityOfType : IType -> Int
-arityOfType t = case t of
-  IFun _ cod => 1 + arityOfType cod
-  _ => 0
+arityOfType (IFun _ cod) = 1 + arityOfType cod
+arityOfType _ = 0
 
 -- ---------------------------------------------------------------
 -- interp 归约标签（Core.Eval 按它归约；OpNone = 不在 interp 归约）

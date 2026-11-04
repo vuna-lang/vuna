@@ -110,20 +110,17 @@ data Rig : Type where
 
 -- 「是否擦除」唯一判据：Elab 与 Codegen 都走这里，不直接模式匹配 Rig。
 rigIsErased : Rig -> Bool
-rigIsErased r = case r of
-  Rig0 => True
-  Rig1 => False
-  RigOmega => False
+rigIsErased Rig0 = True
+rigIsErased Rig1 = False
+rigIsErased RigOmega = False
 
 rigIsLinear : Rig -> Bool
-rigIsLinear r = case r of
-  Rig1 => True
-  _ => False
+rigIsLinear Rig1 = True
+rigIsLinear _ = False
 
 rigIsOmega : Rig -> Bool
-rigIsOmega r = case r of
-  RigOmega => True
-  _ => False
+rigIsOmega RigOmega = True
+rigIsOmega _ = False
 
 -- 精化器的判据：隐式 binder 恒 Rig0；显式 binder 只有域是宇宙才 Rig0。
 -- 注意这是**构造** Rig 的唯一入口，Elab 不自己写 `if ... then Rig0 else Rig1`。
@@ -330,20 +327,20 @@ notBool b = if b then False else True
 
 -- 闭合项检查：TVar 只有在被 lambda/Pi 绑定时才允许。
 hasFreeVar : Int -> Term -> Bool
-hasFreeVar depth t = case t of
-  TVar name i => if i >= depth then True else False
-  TMeta m => False
-  TGlobal g => False
-  TType l => False
-  TPi name implicit rig dom cod => hasFreeVar depth dom || hasFreeVar (depth + 1) cod
-  TLam name rig body => hasFreeVar (depth + 1) body
-  TApp f a rig => hasFreeVar depth f || hasFreeVar depth a
-  TCon c args => hasFreeVarArgs depth args
-  TCase scrut alts => hasFreeVar depth scrut || hasFreeVarAlts depth alts
-  TInt n => False
-  TStr s => False
-  TBool b => False
-  TIf c th el => hasFreeVar depth c || hasFreeVar depth th || hasFreeVar depth el
+hasFreeVar depth (TVar name i) = if i >= depth then True else False
+hasFreeVar depth (TMeta m) = False
+hasFreeVar depth (TGlobal g) = False
+hasFreeVar depth (TType l) = False
+hasFreeVar depth (TPi name implicit rig dom cod) =
+  hasFreeVar depth dom || hasFreeVar (depth + 1) cod
+hasFreeVar depth (TLam name rig body) = hasFreeVar (depth + 1) body
+hasFreeVar depth (TApp f a rig) = hasFreeVar depth f || hasFreeVar depth a
+hasFreeVar depth (TCon c args) = hasFreeVarArgs depth args
+hasFreeVar depth (TCase scrut alts) = hasFreeVar depth scrut || hasFreeVarAlts depth alts
+hasFreeVar depth (TInt n) = False
+hasFreeVar depth (TStr s) = False
+hasFreeVar depth (TBool b) = False
+hasFreeVar depth (TIf c th el) = hasFreeVar depth c || hasFreeVar depth th || hasFreeVar depth el
 
 hasFreeVarArgs : Int -> List (Pair Term Rig) -> Bool
 hasFreeVarArgs depth [] = False
@@ -355,20 +352,19 @@ hasFreeVarAlts depth (alt :: rest) =
   hasFreeVar (depth + length (caseAltBinders alt)) (caseAltBody alt) || hasFreeVarAlts depth rest
 
 hasMeta : Int -> Int -> Term -> Bool
-hasMeta m depth t = case t of
-  TMeta j => m == j
-  TVar name i => False
-  TGlobal g => False
-  TType l => False
-  TPi name implicit rig dom cod => hasMeta m depth dom || hasMeta m (depth + 1) cod
-  TLam name rig body => hasMeta m (depth + 1) body
-  TApp f a rig => hasMeta m depth f || hasMeta m depth a
-  TCon c args => hasMetaArgs m depth args
-  TCase scrut alts => hasMeta m depth scrut || hasMetaAlts m depth alts
-  TInt n => False
-  TStr s => False
-  TBool b => False
-  TIf c th el => hasMeta m depth c || hasMeta m depth th || hasMeta m depth el
+hasMeta m depth (TMeta j) = m == j
+hasMeta m depth (TVar name i) = False
+hasMeta m depth (TGlobal g) = False
+hasMeta m depth (TType l) = False
+hasMeta m depth (TPi name implicit rig dom cod) = hasMeta m depth dom || hasMeta m (depth + 1) cod
+hasMeta m depth (TLam name rig body) = hasMeta m (depth + 1) body
+hasMeta m depth (TApp f a rig) = hasMeta m depth f || hasMeta m depth a
+hasMeta m depth (TCon c args) = hasMetaArgs m depth args
+hasMeta m depth (TCase scrut alts) = hasMeta m depth scrut || hasMetaAlts m depth alts
+hasMeta m depth (TInt n) = False
+hasMeta m depth (TStr s) = False
+hasMeta m depth (TBool b) = False
+hasMeta m depth (TIf c th el) = hasMeta m depth c || hasMeta m depth th || hasMeta m depth el
 
 hasMetaArgs : Int -> Int -> List (Pair Term Rig) -> Bool
 hasMetaArgs m depth [] = False
@@ -478,9 +474,8 @@ cutoffOf : Int -> Int -> Int
 cutoffOf total idx = if total - (idx + 1) <= 0 then 0 else total - (idx + 1)
 
 countPis : Term -> Int
-countPis t = case t of
-  TPi n i r d c => 1 + countPis c
-  _ => 0
+countPis (TPi n i r d c) = 1 + countPis c
+countPis _ = 0
 
 -- M20 字典提升：在 `TLam` 链索引 `idx` 的绑定子后插入 `TLam d`。
 -- M29（C05）：插入点之后的体 `b` 的自由变量全部位于插入点**外侧**，因此 shift 的 cutoff
@@ -497,21 +492,19 @@ insertLamBinderGo name idx depth (TLam n r b) =
 insertLamBinderGo name idx depth t = t
 
 countLams : Term -> Int
-countLams t = case t of
-  TLam n r b => 1 + countLams b
-  _ => 0
+countLams (TLam n r b) = 1 + countLams b
+countLams _ = 0
 
 -- 项里是否有自由变量（`i >= depth` 的 `TVar`）。闭项无自由变量。
 hasFreeTermVar : Int -> Term -> Bool
-hasFreeTermVar d t = case t of
-  TVar n i => i >= d
-  TPi n i r dm cd => hasFreeTermVar d dm || hasFreeTermVar (d + 1) cd
-  TLam n r b => hasFreeTermVar (d + 1) b
-  TApp f a r => hasFreeTermVar d f || hasFreeTermVar d a
-  TCon c args => anyPairFree d args
-  TCase s alts => hasFreeTermVar d s || anyAltFree d alts
-  TIf c th el => hasFreeTermVar d c || hasFreeTermVar d th || hasFreeTermVar d el
-  _ => False
+hasFreeTermVar d (TVar n i) = i >= d
+hasFreeTermVar d (TPi n i r dm cd) = hasFreeTermVar d dm || hasFreeTermVar (d + 1) cd
+hasFreeTermVar d (TLam n r b) = hasFreeTermVar (d + 1) b
+hasFreeTermVar d (TApp f a r) = hasFreeTermVar d f || hasFreeTermVar d a
+hasFreeTermVar d (TCon c args) = anyPairFree d args
+hasFreeTermVar d (TCase s alts) = hasFreeTermVar d s || anyAltFree d alts
+hasFreeTermVar d (TIf c th el) = hasFreeTermVar d c || hasFreeTermVar d th || hasFreeTermVar d el
+hasFreeTermVar d _ = False
 
 anyPairFree : Int -> List (Pair Term Rig) -> Bool
 anyPairFree d [] = False
@@ -569,14 +562,12 @@ else case clo of
 -- 宇宙 helper
 -- ---------------------------------------------------------------
 isTypeValue : Value -> Bool
-isTypeValue v = case v of
-  VType l => True
-  _ => False
+isTypeValue (VType l) = True
+isTypeValue _ = False
 
 typeLevelOf : Value -> Maybe Level
-typeLevelOf v = case v of
-  VType l => Just l
-  _ => Nothing
+typeLevelOf (VType l) = Just l
+typeLevelOf _ = Nothing
 
 -- ---------------------------------------------------------------
 -- 打印（错误信息与 interp --dt 结果展示）
@@ -608,23 +599,22 @@ levelEscapesClo : Int -> Closure -> Bool
 levelEscapesClo limit (Clos env body) = levelEscapesList limit env
 
 showTerm : Term -> String
-showTerm t = case t of
-  TVar name i => name
-  TMeta m => "?" ++ strFromInt m
-  TGlobal g => g
-  TType l => if levelToInt l == 0 then "Type" else "Type " ++ strFromInt (levelToInt l)
-  TPi name implicit rig dom cod =>
-    if name == "_" then showTerm dom ++ " -> " ++ showTerm cod
-    else if implicit then "{" ++ name ++ " : " ++ showTerm dom ++ "} -> " ++ showTerm cod
-    else "(" ++ name ++ " : " ++ showTerm dom ++ ") -> " ++ showTerm cod
-  TLam name rig body => "\\" ++ name ++ " => " ++ showTerm body
-  TApp f a rig => "(" ++ showTerm f ++ " " ++ showTerm a ++ ")"
-  TCon c args => "(" ++ c ++ showArgTerms args ++ ")"
-  TCase scrut alts => "case " ++ showTerm scrut ++ " of " ++ showCoreAlts alts
-  TInt n => strFromInt n
-  TStr s => showCoreString s
-  TBool b => if b then "True" else "False"
-  TIf c th el => "if " ++ showTerm c ++ " then " ++ showTerm th ++ " else " ++ showTerm el
+showTerm (TVar name i) = name
+showTerm (TMeta m) = "?" ++ strFromInt m
+showTerm (TGlobal g) = g
+showTerm (TType l) = if levelToInt l == 0 then "Type" else "Type " ++ strFromInt (levelToInt l)
+showTerm (TPi name implicit rig dom cod) =
+  if name == "_" then showTerm dom ++ " -> " ++ showTerm cod
+  else if implicit then "{" ++ name ++ " : " ++ showTerm dom ++ "} -> " ++ showTerm cod
+  else "(" ++ name ++ " : " ++ showTerm dom ++ ") -> " ++ showTerm cod
+showTerm (TLam name rig body) = "\\" ++ name ++ " => " ++ showTerm body
+showTerm (TApp f a rig) = "(" ++ showTerm f ++ " " ++ showTerm a ++ ")"
+showTerm (TCon c args) = "(" ++ c ++ showArgTerms args ++ ")"
+showTerm (TCase scrut alts) = "case " ++ showTerm scrut ++ " of " ++ showCoreAlts alts
+showTerm (TInt n) = strFromInt n
+showTerm (TStr s) = showCoreString s
+showTerm (TBool b) = if b then "True" else "False"
+showTerm (TIf c th el) = "if " ++ showTerm c ++ " then " ++ showTerm th ++ " else " ++ showTerm el
 
 showArgTerms : List (Pair Term Rig) -> String
 showArgTerms [] = ""

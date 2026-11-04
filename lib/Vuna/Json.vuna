@@ -50,9 +50,8 @@ jsonObjSingle k v = JObj [Pair k v]
 -- 访问器
 -- ---------------------------------------------------------------
 jsonGet : String -> Json -> Maybe Json
-jsonGet key v = case v of
-  JObj kvs => lookupKV key kvs
-  _ => Nothing
+jsonGet key (JObj kvs) = lookupKV key kvs
+jsonGet key _ = Nothing
 
 lookupKV : String -> List (Pair String Json) -> Maybe Json
 lookupKV key [] = Nothing
@@ -66,56 +65,47 @@ jsonGetIn (k :: rest) v = case jsonGet k v of
   Just inner => jsonGetIn rest inner
 
 jsonAsStr : Json -> Maybe String
-jsonAsStr v = case v of
-  JStr s => Just s
-  _ => Nothing
+jsonAsStr (JStr s) = Just s
+jsonAsStr _ = Nothing
 
 jsonAsInt : Json -> Maybe Int
-jsonAsInt v = case v of
-  JNum n => Just n
-  _ => Nothing
+jsonAsInt (JNum n) = Just n
+jsonAsInt _ = Nothing
 
 jsonAsBool : Json -> Maybe Bool
-jsonAsBool v = case v of
-  JBool b => Just b
-  _ => Nothing
+jsonAsBool (JBool b) = Just b
+jsonAsBool _ = Nothing
 
 jsonAsArr : Json -> Maybe (List Json)
-jsonAsArr v = case v of
-  JArr xs => Just xs
-  _ => Nothing
+jsonAsArr (JArr xs) = Just xs
+jsonAsArr _ = Nothing
 
 jsonAsObj : Json -> Maybe (List (Pair String Json))
-jsonAsObj v = case v of
-  JObj kvs => Just kvs
-  _ => Nothing
+jsonAsObj (JObj kvs) = Just kvs
+jsonAsObj _ = Nothing
 
 jsonStrOr : String -> Json -> String
-jsonStrOr d v = case v of
-  JStr s => s
-  _ => d
+jsonStrOr d (JStr s) = s
+jsonStrOr d _ = d
 
 jsonIntOr : Int -> Json -> Int
-jsonIntOr d v = case v of
-  JNum n => n
-  _ => d
+jsonIntOr d (JNum n) = n
+jsonIntOr d _ = d
 
 jsonBoolOr : Bool -> Json -> Bool
-jsonBoolOr d v = case v of
-  JBool b => b
-  _ => d
+jsonBoolOr d (JBool b) = b
+jsonBoolOr d _ = d
 
 -- ---------------------------------------------------------------
 -- 渲染
 -- ---------------------------------------------------------------
 renderJson : Json -> String
-renderJson v = case v of
-  JNull => "null"
-  JBool b => if b then "true" else "false"
-  JNum n => strFromInt n
-  JStr s => renderJsonString s
-  JArr xs => "[" ++ join "," (map renderJson xs) ++ "]"
-  JObj kvs => "{" ++ join "," (map renderMember kvs) ++ "}"
+renderJson JNull = "null"
+renderJson (JBool b) = if b then "true" else "false"
+renderJson (JNum n) = strFromInt n
+renderJson (JStr s) = renderJsonString s
+renderJson (JArr xs) = "[" ++ join "," (map renderJson xs) ++ "]"
+renderJson (JObj kvs) = "{" ++ join "," (map renderMember kvs) ++ "}"
 
 renderMember : Pair String Json -> String
 renderMember kv = renderJsonString (firstOf kv) ++ ":" ++ renderJson (secondOf kv)
@@ -325,11 +315,10 @@ signOf chars = case chars of
 
 -- 返回 (数值, (位数, 余下字符))。
 parseIntDigits : List Int -> Int -> Int -> Pair Int (Pair Int (List Int))
-parseIntDigits chars acc count = case chars of
-  c :: rest =>
-    if isDigitChar c then parseIntDigits rest (acc * 10 + (c - 48)) (count + 1)
-    else Pair acc (Pair count (c :: rest))
-  [] => Pair acc (Pair count [])
+parseIntDigits (c :: rest) acc count =
+  if isDigitChar c then parseIntDigits rest (acc * 10 + (c - 48)) (count + 1)
+  else Pair acc (Pair count (c :: rest))
+parseIntDigits [] acc count = Pair acc (Pair count [])
 
 -- 小数与指数：语法校验后丢弃（值保持整数）。
 skipNumberTail : List Int -> Pair (List Int) Bool

@@ -87,9 +87,9 @@ let v_Vuna_dCompiler_dPackages_dPkg_dpackageName = (fun package -> (match (v_Vun
 
 let v_Vuna_dCompiler_dPackages_dPkg_dpackageExports = (fun package -> (v_Vuna_dCompiler_dFrontend_dManifest_dmanifestExports (v_Vuna_dCompiler_dPackages_dPkg_dpackageManifest package)))
 
-let rec v_Vuna_dCompiler_dPackages_dPkg_dsplitSlashChars = (fun chars -> (fun acc -> (fun seg -> (match chars with
-  | C_Base_dList_dList_Base_dList_dNil -> (v_Base_dList_dreverse (C_Base_dList_dList_Base_dList_dCons ((dtp_pack (v_Base_dList_dreverse seg)), acc)))
-  | C_Base_dList_dList_Base_dList_dCons (dtb__51, dtb__52) -> (if ((bi_eq_int dtb__51) 47) then (((v_Vuna_dCompiler_dPackages_dPkg_dsplitSlashChars dtb__52) (C_Base_dList_dList_Base_dList_dCons ((dtp_pack (v_Base_dList_dreverse seg)), acc))) C_Base_dList_dList_Base_dList_dNil) else (((v_Vuna_dCompiler_dPackages_dPkg_dsplitSlashChars dtb__52) acc) (C_Base_dList_dList_Base_dList_dCons (dtb__51, seg))))
+let rec v_Vuna_dCompiler_dPackages_dPkg_dsplitSlashChars = (fun mc0 -> (fun mc1 -> (fun mc2 -> (match mc0 with
+  | C_Base_dList_dList_Base_dList_dCons (dtb__51, dtb__52) -> (if ((bi_eq_int dtb__51) 47) then (((v_Vuna_dCompiler_dPackages_dPkg_dsplitSlashChars dtb__52) (C_Base_dList_dList_Base_dList_dCons ((dtp_pack (v_Base_dList_dreverse mc2)), mc1))) C_Base_dList_dList_Base_dList_dNil) else (((v_Vuna_dCompiler_dPackages_dPkg_dsplitSlashChars dtb__52) mc1) (C_Base_dList_dList_Base_dList_dCons (dtb__51, mc2))))
+  | C_Base_dList_dList_Base_dList_dNil -> (v_Base_dList_dreverse (C_Base_dList_dList_Base_dList_dCons ((dtp_pack (v_Base_dList_dreverse mc2)), mc1)))
   | _ -> failwith "DT: impossible branch"
 ))))
 
@@ -142,9 +142,9 @@ let v_Vuna_dCompiler_dPackages_dPkg_dmanifestNameString = (fun manifest -> (matc
   | _ -> failwith "DT: impossible branch"
 ))
 
-let rec v_Vuna_dCompiler_dPackages_dPkg_dmemStackDir = (fun d494 -> (fun dir -> (fun stack -> (match stack with
+let rec v_Vuna_dCompiler_dPackages_dPkg_dmemStackDir = (fun d494 -> (fun mc0 -> (fun mc1 -> (match mc1 with
+  | C_Base_dList_dList_Base_dList_dCons (dtb__66, dtb__67) -> (if (((v_Base_dEq_deq d494) (v_Base_dPair_dfirstOf dtb__66)) mc0) then true else (((v_Vuna_dCompiler_dPackages_dPkg_dmemStackDir d494) mc0) dtb__67))
   | C_Base_dList_dList_Base_dList_dNil -> false
-  | C_Base_dList_dList_Base_dList_dCons (dtb__66, dtb__67) -> (if (((v_Base_dEq_deq d494) (v_Base_dPair_dfirstOf dtb__66)) dir) then true else (((v_Vuna_dCompiler_dPackages_dPkg_dmemStackDir d494) dir) dtb__67))
   | _ -> failwith "DT: impossible branch"
 ))))
 
@@ -168,15 +168,15 @@ let v_Vuna_dCompiler_dPackages_dPkg_dcycleMessage = (fun dir -> (fun depName -> 
   | _ -> failwith "DT: impossible branch"
 ))))
 
-let v_Vuna_dCompiler_dPackages_dPkg_ddependencyNameOk = (fun d521 -> (fun depName -> (fun actual -> (match depName with
+let v_Vuna_dCompiler_dPackages_dPkg_ddependencyNameOk = (fun d521 -> (fun mc0 -> (fun mc1 -> (match mc0 with
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__73) -> (((v_Base_dEq_deq d521) dtb__73) mc1)
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> true
-  | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__73) -> (((v_Base_dEq_deq d521) dtb__73) actual)
   | _ -> failwith "DT: impossible branch"
 ))))
 
-let v_Vuna_dCompiler_dPackages_dPkg_dmismatchMessage = (fun depName -> (fun actual -> (match depName with
+let v_Vuna_dCompiler_dPackages_dPkg_dmismatchMessage = (fun mc0 -> (fun mc1 -> (match mc0 with
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__74) -> ((bi_concat "pkg: dependency ") ((bi_concat dtb__74) ((bi_concat " expects package name ") ((bi_concat dtb__74) ((bi_concat " but found ") mc1)))))
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> "pkg: package name mismatch"
-  | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__74) -> ((bi_concat "pkg: dependency ") ((bi_concat dtb__74) ((bi_concat " expects package name ") ((bi_concat dtb__74) ((bi_concat " but found ") actual)))))
   | _ -> failwith "DT: impossible branch"
 )))
 
@@ -207,20 +207,20 @@ and v_Vuna_dCompiler_dPackages_dPkg_dloadPackageWalk = (fun fuel -> (fun stack -
 ))) (v_Vuna_dCompiler_dPackages_dPkg_dnormalizeDir dir)))))))
 
 let rec v_Vuna_dCompiler_dPackages_dPkg_dcollectPackageIds = (fun package -> (C_Base_dList_dList_Base_dList_dCons ((C_Base_dPair_dPair_Base_dPair_dPair ((v_Vuna_dCompiler_dPackages_dPkg_dpackageName package), (v_Vuna_dCompiler_dPackages_dPkg_dpackageDir package))), (v_Vuna_dCompiler_dPackages_dPkg_dcollectDependencyIds (v_Vuna_dCompiler_dPackages_dPkg_dpackageDependencies package)))))
-and v_Vuna_dCompiler_dPackages_dPkg_dcollectDependencyIds = (fun packages -> (match packages with
-  | C_Base_dList_dList_Base_dList_dNil -> C_Base_dList_dList_Base_dList_dNil
+and v_Vuna_dCompiler_dPackages_dPkg_dcollectDependencyIds = (fun mc0 -> (match mc0 with
   | C_Base_dList_dList_Base_dList_dCons (dtb__87, dtb__88) -> ((v_Base_dList_dappend (v_Vuna_dCompiler_dPackages_dPkg_dcollectPackageIds dtb__87)) (v_Vuna_dCompiler_dPackages_dPkg_dcollectDependencyIds dtb__88))
+  | C_Base_dList_dList_Base_dList_dNil -> C_Base_dList_dList_Base_dList_dNil
   | _ -> failwith "DT: impossible branch"
 ))
 
-let rec v_Vuna_dCompiler_dPackages_dPkg_dlookupPackageDir = (fun name -> (fun ids -> ((fun nd_uscrut2 -> (match nd_uscrut2 with
+let rec v_Vuna_dCompiler_dPackages_dPkg_dlookupPackageDir = (fun mc0 -> (fun mc1 -> (match mc1 with
   | C_Base_dList_dList_Base_dList_dCons (dtb__89, dtb__90) -> (match dtb__89 with
-  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__91, dtb__92) -> (if ((bi_eq_str dtb__91) name) then (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__92)) else ((v_Vuna_dCompiler_dPackages_dPkg_dlookupPackageDir name) dtb__90))
+  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__91, dtb__92) -> (if ((bi_eq_str dtb__91) mc0) then (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__92)) else ((v_Vuna_dCompiler_dPackages_dPkg_dlookupPackageDir mc0) dtb__90))
   | _ -> failwith "DT: impossible branch"
 )
   | C_Base_dList_dList_Base_dList_dNil -> C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing
   | _ -> failwith "DT: impossible branch"
-)) ids)))
+)))
 
 let rec v_Vuna_dCompiler_dPackages_dPkg_dcheckUniqueNamesGo = (fun seen -> (fun ids -> ((fun nd_uscrut2 -> (match nd_uscrut2 with
   | C_Base_dList_dList_Base_dList_dCons (dtb__93, dtb__94) -> (match dtb__93 with

@@ -66,9 +66,8 @@ spanOf st st2 =
     (posCol (lastPos st2))
 
 peekTok : PState -> PTok
-peekTok (PState file toks last count) = case toks of
-  t :: rest => t
-  [] => PTok TEof (Pos 1 1)
+peekTok (PState file (t :: rest) last count) = t
+peekTok (PState file [] last count) = PTok TEof (Pos 1 1)
 
 peekPos : PState -> Pos
 peekPos st = posOf (peekTok st)
@@ -238,19 +237,17 @@ mkInfixExpr ">>" lhs rhs sp = EApp (EVar "bind" sp) [lhs, ELam ["vuna_seq_ignore
 mkInfixExpr op lhs rhs sp = EApp (opExpr op sp) [lhs, rhs] sp
 
 countArrows : Expr -> Int
-countArrows e = case e of
-  EApp (EVar "->" _) ([x, rest]) _ => 1 + countArrows rest
-  _ => 0
+countArrows (EApp (EVar "->" _) ([x, rest]) _) = 1 + countArrows rest
+countArrows _ = 0
 
 terminatesExpression : PTok -> Bool
-terminatesExpression tok = case tok of
-  PTok (TSym ")") p => True
-  PTok (TSym "]") p => True
-  PTok (TSym ",") p => True
-  PTok (TKw "else") p => True
-  PTok (TKw "in") p => True
-  PTok (TKw "then") p => True
-  _ => False
+terminatesExpression (PTok (TSym ")") p) = True
+terminatesExpression (PTok (TSym "]") p) = True
+terminatesExpression (PTok (TSym ",") p) = True
+terminatesExpression (PTok (TKw "else") p) = True
+terminatesExpression (PTok (TKw "in") p) = True
+terminatesExpression (PTok (TKw "then") p) = True
+terminatesExpression _ = False
 
 badCaseIndent : PState -> Int -> Bool
 badCaseIndent st altCol = if isEof st then False

@@ -81,9 +81,8 @@ showSpanLoc : Span -> String
 showSpanLoc (Span f sl sc el ec) = f ++ ":" ++ strFromInt sl ++ ":" ++ strFromInt sc
 
 memChar : Int -> List Int -> Bool
-memChar c chars = case chars of
-  [] => False
-  x :: rest => if x == c then True else memChar c rest
+memChar c [] = False
+memChar c (x :: rest) = if x == c then True else memChar c rest
 
 -- 模块路径工具：`A.B.C` 的拆分/拼接（编译器专属）。
 containsDot : String -> Bool
@@ -93,11 +92,10 @@ splitOnDot : String -> List String
 splitOnDot s = splitCharsOnDot (strUnpack s) [] []
 
 splitCharsOnDot : List Int -> List String -> List Int -> List String
-splitCharsOnDot chars acc seg = case chars of
-  [] => reverse (strPack (reverse seg) :: acc)
-  c :: rest =>
-    if c == 46 then splitCharsOnDot rest (strPack (reverse seg) :: acc) []
-    else splitCharsOnDot rest acc (c :: seg)
+splitCharsOnDot [] acc seg = reverse (strPack (reverse seg) :: acc)
+splitCharsOnDot (c :: rest) acc seg =
+  if c == 46 then splitCharsOnDot rest (strPack (reverse seg) :: acc) []
+  else splitCharsOnDot rest acc (c :: seg)
 
 splitLastDot : List String -> Pair (List String) String
 splitLastDot parts = case reverse parts of
@@ -173,14 +171,12 @@ replicate : Int -> a -> List a
 replicate n x = if n <= 0 then [] else x :: replicate (n - 1) x
 
 nthOr : Int -> a -> List a -> a
-nthOr i d xs = case xs of
-  [] => d
-  x :: rest => if i <= 0 then x else nthOr (i - 1) d rest
+nthOr i d [] = d
+nthOr i d (x :: rest) = if i <= 0 then x else nthOr (i - 1) d rest
 
 putNth : Int -> a -> List a -> List a
-putNth i v xs = case xs of
-  [] => []
-  x :: rest => if i <= 0 then v :: rest else x :: putNth (i - 1) v rest
+putNth i v [] = []
+putNth i v (x :: rest) = if i <= 0 then v :: rest else x :: putNth (i - 1) v rest
 
 mod1024 : Int -> Int
 mod1024 x = x - x / 1024 * 1024
@@ -220,9 +216,8 @@ tblInsert key v (MkHashTbl outers) =
   in MkHashTbl (putNth oi (putNth ii (Pair key v :: inner) outer) outers)
 
 lookupAssoc : String -> List (Pair String a) -> Maybe a
-lookupAssoc key pairs = case pairs of
-  [] => Nothing
-  (Pair k v) :: rest => if key == k then Just v else lookupAssoc key rest
+lookupAssoc key [] = Nothing
+lookupAssoc key ((Pair k v) :: rest) = if key == k then Just v else lookupAssoc key rest
 
 tblLookup : String -> HashTbl a -> Maybe a
 tblLookup key (MkHashTbl outers) =
@@ -233,13 +228,11 @@ tblLookup key (MkHashTbl outers) =
   in lookupAssoc key (nthOr ii [] (nthOr oi [] outers))
 
 tblFromList : List (Pair String a) -> HashTbl a
-tblFromList pairs = case pairs of
-  [] => tblEmpty
-  (Pair k v) :: rest => tblInsert k v (tblFromList rest)
+tblFromList [] = tblEmpty
+tblFromList ((Pair k v) :: rest) = tblInsert k v (tblFromList rest)
 
 -- 批量插入（用于「按当前列表建表」或把一批新条目并入已有索引）。列表顺序 =
 -- 新值优先：先插入前面的条目，后面的同键条目覆盖前面的（与关联表查找语义一致）。
 tblInsertAll : List (Pair String a) -> HashTbl a -> HashTbl a
-tblInsertAll pairs tbl = case pairs of
-  [] => tbl
-  (Pair k v) :: rest => tblInsertAll rest (tblInsert k v tbl)
+tblInsertAll [] tbl = tbl
+tblInsertAll ((Pair k v) :: rest) tbl = tblInsertAll rest (tblInsert k v tbl)

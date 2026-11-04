@@ -311,9 +311,9 @@ samePath (x :: xs) (y :: ys) = if x == y then samePath xs ys else False
 samePath _ _ = False
 
 memSectionPath : List a -> List (List a) -> Bool
-memSectionPath section seen = case seen of
-  [] => False
-  s :: rest => if samePath section s then True else memSectionPath section rest
+memSectionPath section [] = False
+memSectionPath section (s :: rest) =
+  if samePath section s then True else memSectionPath section rest
 
 sectionSuffix : List String -> String
 sectionSuffix section = case section of
@@ -321,10 +321,9 @@ sectionSuffix section = case section of
   first :: rest => " in [" ++ joinDots section ++ "]"
 
 hasEntry : List String -> String -> List TomlEntry -> Bool
-hasEntry section key entries = case entries of
-  [] => False
-  (TomlEntry s k v line) :: rest =>
-    if samePath section s && k == key then True else hasEntry section key rest
+hasEntry section key [] = False
+hasEntry section key ((TomlEntry s k v line) :: rest) =
+  if samePath section s && k == key then True else hasEntry section key rest
 
 parseEntryValue : Int -> String -> TomlCursor -> Int -> String -> List String -> List (List String) -> List TomlEntry -> Result (List TomlEntry)
 parseEntryValue fuel path cs keyLine key section seen entries = if fuel <= 0 then Err "DT: toml fuel exhausted (internal: toml parser made no progress)"
@@ -381,13 +380,11 @@ parseTomlAt path source =
   in parseTomlLoop (lineFuel cs) path cs [] [] []
 
 lookupEntry : List String -> String -> List TomlEntry -> Maybe TomlValue
-lookupEntry section key entries = case entries of
-  [] => Nothing
-  (TomlEntry s k v line) :: rest =>
-    if samePath section s && k == key then Just v else lookupEntry section key rest
+lookupEntry section key [] = Nothing
+lookupEntry section key ((TomlEntry s k v line) :: rest) =
+  if samePath section s && k == key then Just v else lookupEntry section key rest
 
 lookupEntryLine : List String -> String -> List TomlEntry -> Maybe Int
-lookupEntryLine section key entries = case entries of
-  [] => Nothing
-  (TomlEntry s k v line) :: rest =>
-    if samePath section s && k == key then Just line else lookupEntryLine section key rest
+lookupEntryLine section key [] = Nothing
+lookupEntryLine section key ((TomlEntry s k v line) :: rest) =
+  if samePath section s && k == key then Just line else lookupEntryLine section key rest

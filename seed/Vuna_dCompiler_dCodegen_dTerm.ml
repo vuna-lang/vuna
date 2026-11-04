@@ -142,7 +142,7 @@ let rec v_Vuna_dCompiler_dCodegen_dTerm_dctorTableOf = (fun mc0 -> (match mc0 wi
 
 let v_Vuna_dCompiler_dCodegen_dTerm_dmkGenSt = (fun datas -> (C_Vuna_dCompiler_dCodegen_dTerm_dGenSt_Vuna_dCompiler_dCodegen_dTerm_dGenSt (((v_Base_dList_dmap v_Vuna_dCompiler_dElab_dTypes_ddtDataName) datas), (v_Vuna_dCompiler_dCodegen_dTerm_dctorTableOf datas), (v_Vuna_dCompiler_dCodegen_dDecl_dctorShapeOf datas), 0)))
 
-let rec v_Vuna_dCompiler_dCodegen_dTerm_druntimeArity = (fun t -> (match t with
+let rec v_Vuna_dCompiler_dCodegen_dTerm_druntimeArity = (fun mc0 -> (match mc0 with
   | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTLam (dtb__32, dtb__33, dtb__34) -> (if (v_Vuna_dCompiler_dCore_dTerm_drigIsErased dtb__33) then (v_Vuna_dCompiler_dCodegen_dTerm_druntimeArity dtb__34) else ((bi_add 1) (v_Vuna_dCompiler_dCodegen_dTerm_druntimeArity dtb__34)))
   | _ -> 0
 ))
@@ -370,9 +370,9 @@ let v_Vuna_dCompiler_dCodegen_dTerm_dgroupNeedsRec = (fun mc0 -> (fun mc1 -> (ma
   | _ -> failwith "DT: impossible branch"
 )))
 
-let rec v_Vuna_dCompiler_dCodegen_dTerm_drecursiveValueAllowed = (fun t -> (match t with
-  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTLam (dtb__152, dtb__153, dtb__154) -> (if (v_Vuna_dCompiler_dCore_dTerm_drigIsErased dtb__153) then (v_Vuna_dCompiler_dCodegen_dTerm_drecursiveValueAllowed dtb__154) else true)
-  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTCon (dtb__155, dtb__156) -> true
+let rec v_Vuna_dCompiler_dCodegen_dTerm_drecursiveValueAllowed = (fun mc0 -> (match mc0 with
+  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTCon (dtb__152, dtb__153) -> true
+  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTLam (dtb__154, dtb__155, dtb__156) -> (if (v_Vuna_dCompiler_dCore_dTerm_drigIsErased dtb__155) then (v_Vuna_dCompiler_dCodegen_dTerm_drecursiveValueAllowed dtb__156) else true)
   | _ -> false
 ))
 

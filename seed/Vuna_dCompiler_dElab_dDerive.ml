@@ -59,11 +59,11 @@ let v_Vuna_dCompiler_dElab_dDerive_dtraitMethodGlobal = (fun tname -> (fun metho
   | _ -> failwith "DT: impossible branch"
 )))
 
-let rec v_Vuna_dCompiler_dElab_dDerive_dexprMentionsName = (fun p -> (fun e -> (match e with
-  | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEVar (dtb__2, dtb__3) -> ((bi_eq_str dtb__2) p)
-  | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEApp (dtb__4, dtb__5, dtb__6) -> (if ((v_Vuna_dCompiler_dElab_dDerive_dexprMentionsName p) dtb__4) then true else ((v_Vuna_dCompiler_dElab_dDerive_danyExprMentions p) dtb__5))
-  | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEPi (dtb__7, dtb__8, dtb__9, dtb__10, dtb__11) -> (if ((v_Vuna_dCompiler_dElab_dDerive_dexprMentionsName p) dtb__9) then true else ((v_Vuna_dCompiler_dElab_dDerive_dexprMentionsName p) dtb__10))
-  | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEAnn (dtb__12, dtb__13, dtb__14) -> (if ((v_Vuna_dCompiler_dElab_dDerive_dexprMentionsName p) dtb__12) then true else ((v_Vuna_dCompiler_dElab_dDerive_dexprMentionsName p) dtb__13))
+let rec v_Vuna_dCompiler_dElab_dDerive_dexprMentionsName = (fun mc0 -> (fun mc1 -> (match mc1 with
+  | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEAnn (dtb__2, dtb__3, dtb__4) -> (if ((v_Vuna_dCompiler_dElab_dDerive_dexprMentionsName mc0) dtb__2) then true else ((v_Vuna_dCompiler_dElab_dDerive_dexprMentionsName mc0) dtb__3))
+  | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEPi (dtb__5, dtb__6, dtb__7, dtb__8, dtb__9) -> (if ((v_Vuna_dCompiler_dElab_dDerive_dexprMentionsName mc0) dtb__7) then true else ((v_Vuna_dCompiler_dElab_dDerive_dexprMentionsName mc0) dtb__8))
+  | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEApp (dtb__10, dtb__11, dtb__12) -> (if ((v_Vuna_dCompiler_dElab_dDerive_dexprMentionsName mc0) dtb__10) then true else ((v_Vuna_dCompiler_dElab_dDerive_danyExprMentions mc0) dtb__11))
+  | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEVar (dtb__13, dtb__14) -> ((bi_eq_str dtb__13) mc0)
   | _ -> false
 )))
 and v_Vuna_dCompiler_dElab_dDerive_danyExprMentions = (fun mc0 -> (fun mc1 -> (match mc1 with

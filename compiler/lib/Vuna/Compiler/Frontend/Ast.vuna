@@ -154,51 +154,46 @@ data SourceFile : Type where
 
 -- 各节点的源码 span 访问器。
 patSpan : Pat -> Span
-patSpan pat = case pat of
-  PVar name sp => sp
-  PWild sp => sp
-  PCon name pats sp => sp
-  PInt n sp => sp
-  PStr s sp => sp
-  PRecord name fields sp => sp
+patSpan (PVar name sp) = sp
+patSpan (PWild sp) = sp
+patSpan (PCon name pats sp) = sp
+patSpan (PInt n sp) = sp
+patSpan (PStr s sp) = sp
+patSpan (PRecord name fields sp) = sp
 
 exprSpan : Expr -> Span
-exprSpan expr = case expr of
-  EVar name sp => sp
-  EInt n sp => sp
-  EStr s sp => sp
-  ELam ps body sp => sp
-  EApp fn args sp => sp
-  EPi name implicit dom cod sp => sp
-  ELet binds body _ sp => sp
-  ELocalFun clauses sp => sp
-  ECase scrut alts sp => sp
-  EIf c t e sp => sp
-  EField base f sp => sp
-  ERecord name fields sp => sp
-  ERecUpdate base fields sp => sp
-  EDo stmts sp => sp
-  EAnn inner ty sp => sp
+exprSpan (EVar name sp) = sp
+exprSpan (EInt n sp) = sp
+exprSpan (EStr s sp) = sp
+exprSpan (ELam ps body sp) = sp
+exprSpan (EApp fn args sp) = sp
+exprSpan (EPi name implicit dom cod sp) = sp
+exprSpan (ELet binds body _ sp) = sp
+exprSpan (ELocalFun clauses sp) = sp
+exprSpan (ECase scrut alts sp) = sp
+exprSpan (EIf c t e sp) = sp
+exprSpan (EField base f sp) = sp
+exprSpan (ERecord name fields sp) = sp
+exprSpan (ERecUpdate base fields sp) = sp
+exprSpan (EDo stmts sp) = sp
+exprSpan (EAnn inner ty sp) = sp
 
 doStmtSpan : DoStmt -> Span
-doStmtSpan stmt = case stmt of
-  DBind pat expr sp => sp
-  DExpr expr sp => sp
+doStmtSpan (DBind pat expr sp) = sp
+doStmtSpan (DExpr expr sp) = sp
 
 doStmtExpr : DoStmt -> Expr
-doStmtExpr stmt = case stmt of
-  DBind pat expr sp => expr
-  DExpr expr sp => expr
+doStmtExpr (DBind pat expr sp) = expr
+doStmtExpr (DExpr expr sp) = expr
 
 declSpan : Decl -> Span
-declSpan decl = case decl of
-  DData name params kind ctors derivings sp => sp
-  DAxiom name ty sp => sp
-  DSig name ty sp => sp
-  DFun name pats body sp => sp
-  DRecord name params fields derivings sp => sp
-  DTrait name params methods sp => sp
-  DInstance ctxE head methods sp => sp
+declSpan (DData name params kind ctors derivings sp) = sp
+declSpan (DAxiom name ty sp) = sp
+declSpan (DSig name ty sp) = sp
+declSpan (DFun name pats body sp) = sp
+declSpan (DRecord name params fields derivings sp) = sp
+declSpan (DTrait name params methods sp) = sp
+declSpan (DInstance ctxE head methods sp) = sp
 
 ctorSpan : Ctor -> Span
 ctorSpan (Ctor name ty arity sp) = sp
@@ -231,10 +226,9 @@ modDeclSpan : ModDecl -> Span
 modDeclSpan (ModDecl name explicit items sp) = sp
 
 exportItemSpan : ExportItem -> Span
-exportItemSpan item = case item of
-  XBare name sp => sp
-  XTypeAll name sp => sp
-  XModule name sp => sp
+exportItemSpan (XBare name sp) = sp
+exportItemSpan (XTypeAll name sp) = sp
+exportItemSpan (XModule name sp) = sp
 
 collectClauses : List Decl -> String -> List (Pair (List Pat) Expr)
 collectClauses [] name = []
@@ -258,17 +252,16 @@ ctorType : Ctor -> Expr
 ctorType (Ctor name ty arity _) = ty
 
 typeArity : Expr -> Int
-typeArity ty = case ty of
-  EApp (EVar "->" _) ([x, rest]) _ => 1 + typeArity rest
-  _ => 0
+typeArity (EApp (EVar "->" _) ([x, rest]) _) = 1 + typeArity rest
+typeArity _ = 0
 
 ctorArityOf : Ctor -> Int
 ctorArityOf (Ctor name ty arity _) = arity
 
 lookupCtorArity : String -> List Ctor -> Maybe Int
-lookupCtorArity name ctors = case ctors of
-  [] => Nothing
-  c :: rest => if ctorName c == name then Just (ctorArityOf c) else lookupCtorArity name rest
+lookupCtorArity name [] = Nothing
+lookupCtorArity name (c :: rest) =
+  if ctorName c == name then Just (ctorArityOf c) else lookupCtorArity name rest
 
 ctorArity : String -> List Decl -> Maybe Int
 ctorArity name decls = case decls of
@@ -282,14 +275,13 @@ ctorArity name decls = case decls of
     _ => ctorArity name rest
 
 declNames : Decl -> List String
-declNames d = case d of
-  DFun name pats body _ => [name]
-  DAxiom name ty _ => [name]
-  DSig name ty _ => [name]
-  DData dname params kind ctors derivings _ => map ctorName ctors
-  DRecord dname params fields derivings _ => [dname]
-  DTrait tname params methods _ => map traitMethodName methods
-  DInstance ctxE head methods _ => []
+declNames (DFun name pats body _) = [name]
+declNames (DAxiom name ty _) = [name]
+declNames (DSig name ty _) = [name]
+declNames (DData dname params kind ctors derivings _) = map ctorName ctors
+declNames (DRecord dname params fields derivings _) = [dname]
+declNames (DTrait tname params methods _) = map traitMethodName methods
+declNames (DInstance ctxE head methods _) = []
 
 -- 顶层可见名字（M20：把 data / record / trait 的**类型名**也算进来）。
 -- Loader 用它判断「是不是本模块声明的名字」；DT 的类型名可以在值层位置出现
@@ -304,27 +296,24 @@ declAllNames (DTrait tname params methods _) = tname :: map traitMethodName meth
 declAllNames d = declNames d
 
 _declCtors : Decl -> List String
-_declCtors d = case d of
-  DData dname params kind ctors derivings _ => map ctorName ctors
-  DRecord dname params fields derivings _ => [dname]
-  DTrait tname params methods _ => map traitMethodName methods
-  _ => []
+_declCtors (DData dname params kind ctors derivings _) = map ctorName ctors
+_declCtors (DRecord dname params fields derivings _) = [dname]
+_declCtors (DTrait tname params methods _) = map traitMethodName methods
+_declCtors _ = []
 
 ctorsOf : List Decl -> List String
 ctorsOf decls = concatMap _declCtors decls
 
 declTypeNames : Decl -> List String
-declTypeNames d = case d of
-  DData name params kind ctors derivings _ => [name]
-  DRecord name params fields derivings _ => [name]
-  DTrait name params methods _ => [name]
-  _ => []
+declTypeNames (DData name params kind ctors derivings _) = [name]
+declTypeNames (DRecord name params fields derivings _) = [name]
+declTypeNames (DTrait name params methods _) = [name]
+declTypeNames _ = []
 
 typeNamesOf : List Decl -> List String
 typeNamesOf decls = concatMap declTypeNames decls
 
 declDerivings : Decl -> List String
-declDerivings d = case d of
-  DData name params kind ctors derivings _ => derivings
-  DRecord name params fields derivings _ => derivings
-  _ => []
+declDerivings (DData name params kind ctors derivings _) = derivings
+declDerivings (DRecord name params fields derivings _) = derivings
+declDerivings _ = []

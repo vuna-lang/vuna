@@ -21,35 +21,35 @@ let rec v_Base_dResult_dtraverse = (fun mc0 -> (fun mc1 -> (match mc1 with
   | _ -> failwith "DT: impossible branch"
 )))
 
-let v_Base_dResult_dandThen = (fun r -> (fun f -> (match r with
-  | C_Base_dResult_dResult_Base_dResult_dOk (dtb__6) -> (f dtb__6)
-  | C_Base_dResult_dResult_Base_dResult_dErr (dtb__7) -> (C_Base_dResult_dResult_Base_dResult_dErr (dtb__7))
+let v_Base_dResult_dandThen = (fun mc0 -> (fun mc1 -> (match mc0 with
+  | C_Base_dResult_dResult_Base_dResult_dErr (dtb__6) -> (C_Base_dResult_dResult_Base_dResult_dErr (dtb__6))
+  | C_Base_dResult_dResult_Base_dResult_dOk (dtb__7) -> (mc1 dtb__7)
   | _ -> failwith "DT: impossible branch"
 )))
 
-let v_Base_dResult_dstep = (fun r -> (fun k -> ((fun nd_uscrut5 -> (match nd_uscrut5 with
+let v_Base_dResult_dstep = (fun mc0 -> (fun mc1 -> (match mc0 with
   | C_Base_dResult_dResult_Base_dResult_dErr (dtb__8) -> (C_Base_dResult_dResult_Base_dResult_dErr (dtb__8))
   | C_Base_dResult_dResult_Base_dResult_dOk (dtb__9) -> (match dtb__9 with
-  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__10, dtb__11) -> ((k dtb__10) dtb__11)
+  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__10, dtb__11) -> ((mc1 dtb__10) dtb__11)
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
-)) r)))
+)))
 
-let v_Base_dResult_dmapResult = (fun f -> (fun r -> (match r with
-  | C_Base_dResult_dResult_Base_dResult_dOk (dtb__12) -> (C_Base_dResult_dResult_Base_dResult_dOk ((f dtb__12)))
-  | C_Base_dResult_dResult_Base_dResult_dErr (dtb__13) -> (C_Base_dResult_dResult_Base_dResult_dErr (dtb__13))
+let v_Base_dResult_dmapResult = (fun mc0 -> (fun mc1 -> (match mc1 with
+  | C_Base_dResult_dResult_Base_dResult_dErr (dtb__12) -> (C_Base_dResult_dResult_Base_dResult_dErr (dtb__12))
+  | C_Base_dResult_dResult_Base_dResult_dOk (dtb__13) -> (C_Base_dResult_dResult_Base_dResult_dOk ((mc0 dtb__13)))
   | _ -> failwith "DT: impossible branch"
 )))
 
-let v_Base_dResult_dmapError = (fun f -> (fun r -> (match r with
-  | C_Base_dResult_dResult_Base_dResult_dOk (dtb__14) -> (C_Base_dResult_dResult_Base_dResult_dOk (dtb__14))
-  | C_Base_dResult_dResult_Base_dResult_dErr (dtb__15) -> (C_Base_dResult_dResult_Base_dResult_dErr ((f dtb__15)))
+let v_Base_dResult_dmapError = (fun mc0 -> (fun mc1 -> (match mc1 with
+  | C_Base_dResult_dResult_Base_dResult_dErr (dtb__14) -> (C_Base_dResult_dResult_Base_dResult_dErr ((mc0 dtb__14)))
+  | C_Base_dResult_dResult_Base_dResult_dOk (dtb__15) -> (C_Base_dResult_dResult_Base_dResult_dOk (dtb__15))
   | _ -> failwith "DT: impossible branch"
 )))
 
-let v_Base_dResult_dwithDefault = (fun d -> (fun r -> (match r with
-  | C_Base_dResult_dResult_Base_dResult_dOk (dtb__16) -> dtb__16
-  | C_Base_dResult_dResult_Base_dResult_dErr (dtb__17) -> d
+let v_Base_dResult_dwithDefault = (fun mc0 -> (fun mc1 -> (match mc1 with
+  | C_Base_dResult_dResult_Base_dResult_dErr (dtb__16) -> mc0
+  | C_Base_dResult_dResult_Base_dResult_dOk (dtb__17) -> dtb__17
   | _ -> failwith "DT: impossible branch"
 )))

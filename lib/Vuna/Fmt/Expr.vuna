@@ -47,9 +47,8 @@ else if name == "Cons" then case pats of
 else Nothing
 
 patListElems : Pat -> Maybe (List Pat)
-patListElems pat = case pat of
-  PCon name pats sp => patListElemsOf name pats
-  _ => Nothing
+patListElems (PCon name pats sp) = patListElemsOf name pats
+patListElems _ = Nothing
 
 -- 列表渲染改为显式结构递归：`map renderPatGo` 的 λ 没有 size 关系，SCT 会判成无下降环。
 renderPatElemsGo : Int -> List Pat -> String
@@ -134,25 +133,24 @@ else case pat of
 -- inlinePrecGo 按运算符优先级决定是否补括号；块结构（case/let/do）返回 Nothing。
 -- ---------------------------------------------------------------
 infixPrec : String -> Maybe (Pair Int Int)
-infixPrec op = case op of
-  "->" => Just (Pair 1 1)
-  ">>=" => Just (Pair 1 1)
-  "||" => Just (Pair 2 0)
-  "&&" => Just (Pair 3 0)
-  "==" => Just (Pair 4 0)
-  "/=" => Just (Pair 4 0)
-  "<" => Just (Pair 4 0)
-  "<=" => Just (Pair 4 0)
-  ">" => Just (Pair 4 0)
-  ">=" => Just (Pair 4 0)
-  "++" => Just (Pair 5 1)
-  "+" => Just (Pair 6 0)
-  "-" => Just (Pair 6 0)
-  "*" => Just (Pair 7 0)
-  "/" => Just (Pair 7 0)
-  "::" => Just (Pair 8 1)
-  "Cons" => Just (Pair 8 1)
-  _ => Nothing
+infixPrec "->" = Just (Pair 1 1)
+infixPrec ">>=" = Just (Pair 1 1)
+infixPrec "||" = Just (Pair 2 0)
+infixPrec "&&" = Just (Pair 3 0)
+infixPrec "==" = Just (Pair 4 0)
+infixPrec "/=" = Just (Pair 4 0)
+infixPrec "<" = Just (Pair 4 0)
+infixPrec "<=" = Just (Pair 4 0)
+infixPrec ">" = Just (Pair 4 0)
+infixPrec ">=" = Just (Pair 4 0)
+infixPrec "++" = Just (Pair 5 1)
+infixPrec "+" = Just (Pair 6 0)
+infixPrec "-" = Just (Pair 6 0)
+infixPrec "*" = Just (Pair 7 0)
+infixPrec "/" = Just (Pair 7 0)
+infixPrec "::" = Just (Pair 8 1)
+infixPrec "Cons" = Just (Pair 8 1)
+infixPrec _ = Nothing
 
 opText : String -> String
 opText op = if op == "Cons" then "::" else op

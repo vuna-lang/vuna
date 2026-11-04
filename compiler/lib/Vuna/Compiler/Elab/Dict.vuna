@@ -155,9 +155,8 @@ allocTeleMetas ctx ec (t :: rest) = case newMeta ctx ec of
     Pair ids ec2 => Pair (termMetaId tm :: ids) ec2
 
 termMetaId : Term -> Int
-termMetaId t = case t of
-  TMeta m => m
-  _ => 0
+termMetaId (TMeta m) = m
+termMetaId _ = 0
 
 solveTeleMetas : Ec -> List Int -> Maybe (List Value)
 solveTeleMetas ec [] = Just []
@@ -250,9 +249,8 @@ piRigsOfGlobal ec g = case tblLookup g (ecGlobalsTbl ec) of
   Nothing => []
 
 piRigs : Term -> List Rig
-piRigs t = case t of
-  TPi n i r dom cod => r :: piRigs cod
-  _ => []
+piRigs (TPi n i r dom cod) = r :: piRigs cod
+piRigs _ = []
 
 joinInstNames : List DtInst -> String
 joinInstNames [] = ""
@@ -390,11 +388,10 @@ isCmpOp : String -> Bool
 isCmpOp name = memName name cmpOps
 
 cmpMethodName : String -> String
-cmpMethodName name = case name of
-  "<" => "lt"
-  "<=" => "le"
-  ">" => "gt"
-  _ => "ge"
+cmpMethodName "<" = "lt"
+cmpMethodName "<=" = "le"
+cmpMethodName ">" = "gt"
+cmpMethodName _ = "ge"
 
 cmpRuntimeName : Span -> String -> String -> Result String
 cmpRuntimeName sp name tyName = case tyName of
@@ -409,11 +406,10 @@ cmpRuntimeName sp name tyName = case tyName of
     else tcErr2 sp (OpNotDefinedFor name tyName) name tyName
 
 cmpGenericName : String -> String
-cmpGenericName name = case name of
-  "<" => "bi_lt_generic"
-  "<=" => "bi_le_generic"
-  ">" => "bi_gt_generic"
-  _ => "bi_ge_generic"
+cmpGenericName "<" = "bi_lt_generic"
+cmpGenericName "<=" = "bi_le_generic"
+cmpGenericName ">" = "bi_gt_generic"
+cmpGenericName _ = "bi_ge_generic"
 
 -- 字典的类参数还是未解元变量时**不做实例搜索**：否则会像 `srt (\x,y => x <= y) xs`
 -- 那样被第一个内建实例（Ord Int）提前定死，随后与 `List a` 统一时报 occurs check。

@@ -66,9 +66,8 @@ appendLast suffix (l :: rest) = l :: appendLast suffix rest
 
 -- 把 argLines 追加到 lines 的最后一个物理行后面（前置分隔串 sep）。
 appendBefore : String -> List String -> List String -> List String
-appendBefore sep lines argLines = case argLines of
-  [] => lines
-  a :: rest => append (appendLast (sep ++ a) lines) rest
+appendBefore sep lines [] = lines
+appendBefore sep lines (a :: rest) = append (appendLast (sep ++ a) lines) rest
 
 isNilList : List a -> Bool
 isNilList [] = True

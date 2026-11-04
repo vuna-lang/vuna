@@ -123,11 +123,10 @@ packageExports package = manifestExports (packageManifest package)
 
 -- ---------------------------------------------------------------- 路径工具
 splitSlashChars : List Int -> List String -> List Int -> List String
-splitSlashChars chars acc seg = case chars of
-  [] => reverse (strPack (reverse seg) :: acc)
-  c :: rest =>
-    if c == 47 then splitSlashChars rest (strPack (reverse seg) :: acc) []
-    else splitSlashChars rest acc (c :: seg)
+splitSlashChars [] acc seg = reverse (strPack (reverse seg) :: acc)
+splitSlashChars (c :: rest) acc seg =
+  if c == 47 then splitSlashChars rest (strPack (reverse seg) :: acc) []
+  else splitSlashChars rest acc (c :: seg)
 
 splitOnSlash : String -> List String
 splitOnSlash path = splitSlashChars (strUnpack path) [] []
@@ -192,9 +191,8 @@ manifestNameString manifest = case manifestName manifest of
 -- ---------------------------------------------------------------- 加载包
 -- 依赖链栈：每个元素是 (规范化目录, 包名)；只用于循环检测。
 memStackDir : a -> List (Pair a b) -> Bool
-memStackDir dir stack = case stack of
-  [] => False
-  pair :: rest => if firstOf pair == dir then True else memStackDir dir rest
+memStackDir dir [] = False
+memStackDir dir (pair :: rest) = if firstOf pair == dir then True else memStackDir dir rest
 
 cyclePrefix : a -> List (Pair a b) -> Maybe (List (Pair a b))
 cyclePrefix dir stack = case stack of
@@ -213,20 +211,13 @@ cycleMessage dir depName stack = case depName of
       "pkg: dependency cycle: " ++ joinArrows (append (map secondOf (reverse prefix)) [dep])
 
 dependencyNameOk : Maybe a -> a -> Bool
-dependencyNameOk depName actual = case depName of
-  Nothing => True
-  Just expected => expected == actual
+dependencyNameOk Nothing actual = True
+dependencyNameOk (Just expected) actual = expected == actual
 
 mismatchMessage : Maybe String -> String -> String
-mismatchMessage depName actual = case depName of
-  Nothing => "pkg: package name mismatch"
-  Just expected =>
-    "pkg: dependency "
-      ++ expected
-      ++ " expects package name "
-      ++ expected
-      ++ " but found "
-      ++ actual
+mismatchMessage Nothing actual = "pkg: package name mismatch"
+mismatchMessage (Just expected) actual =
+  "pkg: dependency " ++ expected ++ " expects package name " ++ expected ++ " but found " ++ actual
 
 loadDependencyList : Int -> List (Pair String String) -> String -> List (Pair String String) -> Result (List Package)
 loadDependencyList fuel stack baseDir deps = if fuel <= 0 then Err "DT: pkg fuel exhausted (internal: dependency graph too deep)"
@@ -268,14 +259,14 @@ collectPackageIds package =
     :: collectDependencyIds (packageDependencies package)
 
 collectDependencyIds : List Package -> List (Pair String String)
-collectDependencyIds packages = case packages of
-  [] => []
-  package :: rest => append (collectPackageIds package) (collectDependencyIds rest)
+collectDependencyIds [] = []
+collectDependencyIds (package :: rest) =
+  append (collectPackageIds package) (collectDependencyIds rest)
 
 lookupPackageDir : String -> List (Pair String String) -> Maybe String
-lookupPackageDir name ids = case ids of
-  [] => Nothing
-  (Pair n dir) :: rest => if n == name then Just dir else lookupPackageDir name rest
+lookupPackageDir name [] = Nothing
+lookupPackageDir name ((Pair n dir) :: rest) =
+  if n == name then Just dir else lookupPackageDir name rest
 
 checkUniqueNamesGo : List (Pair String String) -> List (Pair String String) -> Result Int
 checkUniqueNamesGo seen ids = case ids of

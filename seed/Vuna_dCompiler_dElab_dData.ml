@@ -46,13 +46,13 @@ open Vuna_dCompiler_dElab_dMatch
 open Vuna_dCompiler_dElab_dTerm_dSupport
 open Vuna_dCompiler_dElab_dTerm_dImpl
 open Vuna_dCompiler_dElab_dTerm
-let rec v_Vuna_dCompiler_dElab_dData_dkindResultLevel = (fun ty -> (match ty with
-  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTPi (dtb__0, dtb__1, dtb__2, dtb__3, dtb__4) -> (v_Vuna_dCompiler_dElab_dData_dkindResultLevel dtb__4)
-  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTType (dtb__5) -> (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__5))
+let rec v_Vuna_dCompiler_dElab_dData_dkindResultLevel = (fun mc0 -> (match mc0 with
+  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTType (dtb__0) -> (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__0))
+  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTPi (dtb__1, dtb__2, dtb__3, dtb__4, dtb__5) -> (v_Vuna_dCompiler_dElab_dData_dkindResultLevel dtb__5)
   | _ -> C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing
 ))
 
-let rec v_Vuna_dCompiler_dElab_dData_dcountSurfacePis = (fun e -> ((fun nd_uscrut1 -> (match nd_uscrut1 with
+let rec v_Vuna_dCompiler_dElab_dData_dcountSurfacePis = (fun mc0 -> (match mc0 with
   | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEApp (dtb__6, dtb__7, dtb__8) -> (match dtb__6 with
   | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEVar (dtb__9, dtb__10) -> (if ((bi_eq_str dtb__9) "->") then (match dtb__7 with
   | C_Base_dList_dList_Base_dList_dCons (dtb__11, dtb__12) -> (match dtb__12 with
@@ -68,30 +68,30 @@ let rec v_Vuna_dCompiler_dElab_dData_dcountSurfacePis = (fun e -> ((fun nd_uscru
 )
   | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEPi (dtb__15, dtb__16, dtb__17, dtb__18, dtb__19) -> ((bi_add 1) (v_Vuna_dCompiler_dElab_dData_dcountSurfacePis dtb__18))
   | _ -> 0
-)) e))
+))
 
-let rec v_Vuna_dCompiler_dElab_dData_dcountTelePis = (fun t -> (match t with
+let rec v_Vuna_dCompiler_dElab_dData_dcountTelePis = (fun mc0 -> (match mc0 with
   | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTPi (dtb__20, dtb__21, dtb__22, dtb__23, dtb__24) -> ((bi_add 1) (v_Vuna_dCompiler_dElab_dData_dcountTelePis dtb__24))
   | _ -> 0
 ))
 
-let rec v_Vuna_dCompiler_dElab_dData_dctorFieldSortsGo = (fun globals -> (fun ctx -> (fun ec -> (fun pos -> (fun arity -> (fun famLevel -> (fun cname -> (fun csp -> (fun tyExpr -> ((fun nd_uscrut9 -> (match nd_uscrut9 with
+let rec v_Vuna_dCompiler_dElab_dData_dctorFieldSortsGo = (fun mc0 -> (fun mc1 -> (fun mc2 -> (fun mc3 -> (fun mc4 -> (fun mc5 -> (fun mc6 -> (fun mc7 -> (fun mc8 -> (match mc8 with
   | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEApp (dtb__25, dtb__26, dtb__27) -> (match dtb__25 with
   | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEVar (dtb__28, dtb__29) -> (if ((bi_eq_str dtb__28) "->") then (match dtb__26 with
   | C_Base_dList_dList_Base_dList_dCons (dtb__30, dtb__31) -> (match dtb__31 with
   | C_Base_dList_dList_Base_dList_dCons (dtb__32, dtb__33) -> (match dtb__33 with
-  | C_Base_dList_dList_Base_dList_dNil -> (((((((((((v_Vuna_dCompiler_dElab_dData_dctorFieldSortsBinder globals) ctx) ec) pos) arity) famLevel) cname) csp) "_") dtb__30) dtb__32)
-  | _ -> (C_Base_dResult_dResult_Base_dResult_dOk (ec))
+  | C_Base_dList_dList_Base_dList_dNil -> (((((((((((v_Vuna_dCompiler_dElab_dData_dctorFieldSortsBinder mc0) mc1) mc2) mc3) mc4) mc5) mc6) mc7) "_") dtb__30) dtb__32)
+  | _ -> (C_Base_dResult_dResult_Base_dResult_dOk (mc2))
 )
-  | _ -> (C_Base_dResult_dResult_Base_dResult_dOk (ec))
+  | _ -> (C_Base_dResult_dResult_Base_dResult_dOk (mc2))
 )
-  | _ -> (C_Base_dResult_dResult_Base_dResult_dOk (ec))
-) else (C_Base_dResult_dResult_Base_dResult_dOk (ec)))
-  | _ -> (C_Base_dResult_dResult_Base_dResult_dOk (ec))
+  | _ -> (C_Base_dResult_dResult_Base_dResult_dOk (mc2))
+) else (C_Base_dResult_dResult_Base_dResult_dOk (mc2)))
+  | _ -> (C_Base_dResult_dResult_Base_dResult_dOk (mc2))
 )
-  | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEPi (dtb__34, dtb__35, dtb__36, dtb__37, dtb__38) -> (((((((((((v_Vuna_dCompiler_dElab_dData_dctorFieldSortsBinder globals) ctx) ec) pos) arity) famLevel) cname) csp) dtb__34) dtb__36) dtb__37)
-  | _ -> (C_Base_dResult_dResult_Base_dResult_dOk (ec))
-)) tyExpr))))))))))
+  | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEPi (dtb__34, dtb__35, dtb__36, dtb__37, dtb__38) -> (((((((((((v_Vuna_dCompiler_dElab_dData_dctorFieldSortsBinder mc0) mc1) mc2) mc3) mc4) mc5) mc6) mc7) dtb__34) dtb__36) dtb__37)
+  | _ -> (C_Base_dResult_dResult_Base_dResult_dOk (mc2))
+))))))))))
 and v_Vuna_dCompiler_dElab_dData_dctorFieldSortsBinder = (fun globals -> (fun ctx -> (fun ec -> (fun pos -> (fun arity -> (fun famLevel -> (fun cname -> (fun csp -> (fun name -> (fun dom -> (fun cod -> ((v_Base_dResult_dandThen ((((v_Vuna_dCompiler_dElab_dTerm_dcheckType globals) ctx) ec) dom)) (fun p -> ((fun nd_uscrut12 -> (match nd_uscrut12 with
   | C_Base_dPair_dPair_Base_dPair_dPair (dtb__39, dtb__40) -> (match dtb__40 with
   | C_Base_dPair_dPair_Base_dPair_dPair (dtb__41, dtb__42) -> ((fun ctx2 -> (if ((bi_lt_int pos) arity) then (((((((((v_Vuna_dCompiler_dElab_dData_dctorFieldSortsGo globals) ctx2) dtb__42) ((bi_add pos) 1)) arity) famLevel) cname) csp) cod) else (if (if ((v_Vuna_dCompiler_dCore_dTerm_dlevelLt dtb__41) famLevel) then true else ((v_Vuna_dCompiler_dCore_dTerm_dlevelEq dtb__41) famLevel)) then (((((((((v_Vuna_dCompiler_dElab_dData_dctorFieldSortsGo globals) ctx2) dtb__42) ((bi_add pos) 1)) arity) famLevel) cname) csp) cod) else ((fun field -> ((fun msg -> ((((v_Vuna_dCompiler_dDiagnostics_dTc_dtcErr2 csp) (C_Vuna_dCompiler_dDiagnostics_dTc_dTcErr_Vuna_dCompiler_dDiagnostics_dTc_dCtorError (cname, msg))) cname) msg)) ((bi_concat "field #") ((bi_concat (bi_strFromInt field)) ((bi_concat ": its type sorts into Type ") ((bi_concat (bi_strFromInt (v_Vuna_dCompiler_dCore_dTerm_dlevelToInt dtb__41))) ((bi_concat ", above the family level Type ") (bi_strFromInt (v_Vuna_dCompiler_dCore_dTerm_dlevelToInt famLevel))))))))) ((bi_sub pos) arity))))) (((v_Vuna_dCompiler_dElab_dTypes_dctxBind name) dtb__39) ctx))
@@ -237,27 +237,27 @@ let v_Vuna_dCompiler_dElab_dData_delabDatas = (fun decls -> (fun globals -> (fun
   | _ -> failwith "DT: impossible branch"
 )) p))))))
 
-let rec v_Vuna_dCompiler_dElab_dData_dctorFieldGo = (fun arity -> (fun t -> (fun acc -> (match t with
-  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTPi (dtb__113, dtb__114, dtb__115, dtb__116, dtb__117) -> (if ((bi_gt_int arity) 0) then (((v_Vuna_dCompiler_dElab_dData_dctorFieldGo ((bi_sub arity) 1)) dtb__117) acc) else (((v_Vuna_dCompiler_dElab_dData_dctorFieldGo 0) dtb__117) (C_Base_dList_dList_Base_dList_dCons (dtb__116, acc))))
-  | _ -> (v_Base_dList_dreverse acc)
+let rec v_Vuna_dCompiler_dElab_dData_dctorFieldGo = (fun mc0 -> (fun mc1 -> (fun mc2 -> (match mc1 with
+  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTPi (dtb__113, dtb__114, dtb__115, dtb__116, dtb__117) -> (if ((bi_gt_int mc0) 0) then (((v_Vuna_dCompiler_dElab_dData_dctorFieldGo ((bi_sub mc0) 1)) dtb__117) mc2) else (((v_Vuna_dCompiler_dElab_dData_dctorFieldGo 0) dtb__117) (C_Base_dList_dList_Base_dList_dCons (dtb__116, mc2))))
+  | _ -> (v_Base_dList_dreverse mc2)
 ))))
 
 let v_Vuna_dCompiler_dElab_dData_dctorFieldTerms = (fun arity -> (fun ty -> (((v_Vuna_dCompiler_dElab_dData_dctorFieldGo arity) ty) C_Base_dList_dList_Base_dList_dNil)))
 
-let rec v_Vuna_dCompiler_dElab_dData_dtermUsesVar = (fun depth -> (fun t -> (match t with
-  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTVar (dtb__118, dtb__119) -> ((bi_eq_int dtb__119) depth)
-  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTMeta (dtb__120) -> false
-  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTGlobal (dtb__121) -> false
-  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTType (dtb__122) -> false
-  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTPi (dtb__123, dtb__124, dtb__125, dtb__126, dtb__127) -> (if ((v_Vuna_dCompiler_dElab_dData_dtermUsesVar depth) dtb__126) then true else ((v_Vuna_dCompiler_dElab_dData_dtermUsesVar ((bi_add depth) 1)) dtb__127))
-  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTLam (dtb__128, dtb__129, dtb__130) -> ((v_Vuna_dCompiler_dElab_dData_dtermUsesVar ((bi_add depth) 1)) dtb__130)
-  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTApp (dtb__131, dtb__132, dtb__133) -> (if ((v_Vuna_dCompiler_dElab_dData_dtermUsesVar depth) dtb__131) then true else ((v_Vuna_dCompiler_dElab_dData_dtermUsesVar depth) dtb__132))
-  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTCon (dtb__134, dtb__135) -> ((v_Vuna_dCompiler_dElab_dData_dtermUsesVarArgs depth) dtb__135)
-  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTCase (dtb__136, dtb__137) -> (if ((v_Vuna_dCompiler_dElab_dData_dtermUsesVar depth) dtb__136) then true else ((v_Vuna_dCompiler_dElab_dData_dtermUsesVarAlts depth) dtb__137))
-  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTInt (dtb__138) -> false
-  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTStr (dtb__139) -> false
-  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTBool (dtb__140) -> false
-  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTIf (dtb__141, dtb__142, dtb__143) -> (if (if ((v_Vuna_dCompiler_dElab_dData_dtermUsesVar depth) dtb__141) then true else ((v_Vuna_dCompiler_dElab_dData_dtermUsesVar depth) dtb__142)) then true else ((v_Vuna_dCompiler_dElab_dData_dtermUsesVar depth) dtb__143))
+let rec v_Vuna_dCompiler_dElab_dData_dtermUsesVar = (fun mc0 -> (fun mc1 -> (match mc1 with
+  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTIf (dtb__118, dtb__119, dtb__120) -> (if (if ((v_Vuna_dCompiler_dElab_dData_dtermUsesVar mc0) dtb__118) then true else ((v_Vuna_dCompiler_dElab_dData_dtermUsesVar mc0) dtb__119)) then true else ((v_Vuna_dCompiler_dElab_dData_dtermUsesVar mc0) dtb__120))
+  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTBool (dtb__121) -> false
+  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTStr (dtb__122) -> false
+  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTInt (dtb__123) -> false
+  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTCase (dtb__124, dtb__125) -> (if ((v_Vuna_dCompiler_dElab_dData_dtermUsesVar mc0) dtb__124) then true else ((v_Vuna_dCompiler_dElab_dData_dtermUsesVarAlts mc0) dtb__125))
+  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTCon (dtb__126, dtb__127) -> ((v_Vuna_dCompiler_dElab_dData_dtermUsesVarArgs mc0) dtb__127)
+  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTApp (dtb__128, dtb__129, dtb__130) -> (if ((v_Vuna_dCompiler_dElab_dData_dtermUsesVar mc0) dtb__128) then true else ((v_Vuna_dCompiler_dElab_dData_dtermUsesVar mc0) dtb__129))
+  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTLam (dtb__131, dtb__132, dtb__133) -> ((v_Vuna_dCompiler_dElab_dData_dtermUsesVar ((bi_add mc0) 1)) dtb__133)
+  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTPi (dtb__134, dtb__135, dtb__136, dtb__137, dtb__138) -> (if ((v_Vuna_dCompiler_dElab_dData_dtermUsesVar mc0) dtb__137) then true else ((v_Vuna_dCompiler_dElab_dData_dtermUsesVar ((bi_add mc0) 1)) dtb__138))
+  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTType (dtb__139) -> false
+  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTGlobal (dtb__140) -> false
+  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTMeta (dtb__141) -> false
+  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTVar (dtb__142, dtb__143) -> ((bi_eq_int dtb__143) mc0)
   | _ -> failwith "DT: impossible branch"
 )))
 and v_Vuna_dCompiler_dElab_dData_dtermUsesVarArgs = (fun mc0 -> (fun mc1 -> (match mc1 with

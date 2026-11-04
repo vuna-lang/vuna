@@ -42,14 +42,12 @@ data ArgSpec : Type where
   ValueFlag : String -> ArgSpec
 
 specName : ArgSpec -> String
-specName spec = case spec of
-  BoolFlag name => name
-  ValueFlag name => name
+specName (BoolFlag name) = name
+specName (ValueFlag name) = name
 
 specOf : String -> List ArgSpec -> Maybe ArgSpec
-specOf name specs = case specs of
-  [] => Nothing
-  spec :: rest => if specName spec == name then Just spec else specOf name rest
+specOf name [] = Nothing
+specOf name (spec :: rest) = if specName spec == name then Just spec else specOf name rest
 
 -- 参数错误：统一由 `argErrText` 渲染成单行可读文案。
 data ArgErr : Type where
@@ -84,9 +82,9 @@ flagValue : Parsed -> String -> Maybe String
 flagValue parsed name = lookupValue name (valuesOf parsed)
 
 lookupValue : String -> List (Pair String String) -> Maybe String
-lookupValue name values = case values of
-  [] => Nothing
-  (Pair key value) :: rest => if key == name then Just value else lookupValue name rest
+lookupValue name [] = Nothing
+lookupValue name ((Pair key value) :: rest) =
+  if key == name then Just value else lookupValue name rest
 
 hasValue : String -> List (Pair String String) -> Bool
 hasValue name values = case lookupValue name values of
@@ -198,11 +196,10 @@ parentText path = case splitLastSlash (strUnpack path) [] [] of
   Pair parent _ => parent
 
 splitLastSlash : List Int -> List Int -> List String -> Pair String String
-splitLastSlash chars current parts = case chars of
-  [] => Pair (joinSlashParts parts) (strPack (reverse current))
-  c :: rest =>
-    if c == 47 then splitLastSlash rest [] (strPack (reverse current) :: parts)
-    else splitLastSlash rest (c :: current) parts
+splitLastSlash [] current parts = Pair (joinSlashParts parts) (strPack (reverse current))
+splitLastSlash (c :: rest) current parts =
+  if c == 47 then splitLastSlash rest [] (strPack (reverse current) :: parts)
+  else splitLastSlash rest (c :: current) parts
 
 -- parts 是倒序累积的，拼接前先 reverse（否则绝对路径会丢首斜杠）。
 joinSlashParts : List String -> String

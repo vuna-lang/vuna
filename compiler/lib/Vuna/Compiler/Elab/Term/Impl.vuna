@@ -554,45 +554,48 @@ checkLetFuel fuel globals ctx ec binds body rec_ expected sp =
 -- 只展开**顶层** `ELocalFun`；结果里嵌套的 `ELocalFun` 由 `checkEFuel`/`inferEFuel` 的
 -- `ELocalFun` 分支在继续精化时再展开（结构递归只沿输入表达式的子项，SCT 可证）。
 expandLocalFuns : Ec -> Expr -> Result Expr
-expandLocalFuns ec e = case e of
-  ELocalFun clauses sp => multiToExpr (ctorFamilyTable ec) clauses
-  EVar name sp => Ok (EVar name sp)
-  EInt n sp => Ok (EInt n sp)
-  EStr s sp => Ok (EStr s sp)
-  ELam names body sp => andThen (expandLocalFuns ec body) (\b2 => Ok (ELam names b2 sp))
-  EApp fn args sp =>
-    andThen (expandLocalFuns ec fn)
-      (\fn2 => andThen (traverse (expandLocalFuns ec) args) (\args2 => Ok (EApp fn2 args2 sp)))
-  EPi name implicit dom cod sp =>
-    andThen (expandLocalFuns ec dom)
-      (\dom2 => andThen (expandLocalFuns ec cod) (\cod2 => Ok (EPi name implicit dom2 cod2 sp)))
-  ELet binds body rec_ sp =>
-    andThen (traverse (expandBind ec) binds)
-      (\binds2 => andThen (expandLocalFuns ec body) (\body2 => Ok (ELet binds2 body2 rec_ sp)))
-  ECase scrut alts sp =>
-    andThen (expandLocalFuns ec scrut)
-      (\scrut2 => andThen (traverse (expandBind ec) alts) (\alts2 => Ok (ECase scrut2 alts2 sp)))
-  EIf c t el sp =>
-    andThen (expandLocalFuns ec c)
-      (\c2 => andThen (expandLocalFuns ec t) (\t2 => andThen (expandLocalFuns ec el) (\el2 => Ok (EIf c2 t2 el2 sp))))
-  EField base fname sp => andThen (expandLocalFuns ec base) (\base2 => Ok (EField base2 fname sp))
-  ERecord rname fields sp =>
-    andThen
-      (traverse (\fv => andThen (expandLocalFuns ec (secondOf fv)) (\v2 => Ok (Pair (firstOf fv) v2))) fields)
-      (\fields2 => Ok (ERecord rname fields2 sp))
-  ERecUpdate base fields sp =>
-    andThen (expandLocalFuns ec base)
-      (\base2 => andThen (traverse (\fv => andThen (expandLocalFuns ec (secondOf fv)) (\v2 => Ok (Pair (firstOf fv) v2))) fields) (\fields2 => Ok (ERecUpdate base2 fields2 sp)))
-  EDo stmts sp => andThen (traverse (expandDoStmt ec) stmts) (\stmts2 => Ok (EDo stmts2 sp))
-  EAnn value ty sp => andThen (expandLocalFuns ec value) (\value2 => Ok (EAnn value2 ty sp))
+expandLocalFuns ec (ELocalFun clauses sp) = multiToExpr (ctorFamilyTable ec) clauses
+expandLocalFuns ec (EVar name sp) = Ok (EVar name sp)
+expandLocalFuns ec (EInt n sp) = Ok (EInt n sp)
+expandLocalFuns ec (EStr s sp) = Ok (EStr s sp)
+expandLocalFuns ec (ELam names body sp) =
+  andThen (expandLocalFuns ec body) (\b2 => Ok (ELam names b2 sp))
+expandLocalFuns ec (EApp fn args sp) =
+  andThen (expandLocalFuns ec fn)
+    (\fn2 => andThen (traverse (expandLocalFuns ec) args) (\args2 => Ok (EApp fn2 args2 sp)))
+expandLocalFuns ec (EPi name implicit dom cod sp) =
+  andThen (expandLocalFuns ec dom)
+    (\dom2 => andThen (expandLocalFuns ec cod) (\cod2 => Ok (EPi name implicit dom2 cod2 sp)))
+expandLocalFuns ec (ELet binds body rec_ sp) =
+  andThen (traverse (expandBind ec) binds)
+    (\binds2 => andThen (expandLocalFuns ec body) (\body2 => Ok (ELet binds2 body2 rec_ sp)))
+expandLocalFuns ec (ECase scrut alts sp) =
+  andThen (expandLocalFuns ec scrut)
+    (\scrut2 => andThen (traverse (expandBind ec) alts) (\alts2 => Ok (ECase scrut2 alts2 sp)))
+expandLocalFuns ec (EIf c t el sp) =
+  andThen (expandLocalFuns ec c)
+    (\c2 => andThen (expandLocalFuns ec t) (\t2 => andThen (expandLocalFuns ec el) (\el2 => Ok (EIf c2 t2 el2 sp))))
+expandLocalFuns ec (EField base fname sp) =
+  andThen (expandLocalFuns ec base) (\base2 => Ok (EField base2 fname sp))
+expandLocalFuns ec (ERecord rname fields sp) =
+  andThen
+    (traverse (\fv => andThen (expandLocalFuns ec (secondOf fv)) (\v2 => Ok (Pair (firstOf fv) v2))) fields)
+    (\fields2 => Ok (ERecord rname fields2 sp))
+expandLocalFuns ec (ERecUpdate base fields sp) =
+  andThen (expandLocalFuns ec base)
+    (\base2 => andThen (traverse (\fv => andThen (expandLocalFuns ec (secondOf fv)) (\v2 => Ok (Pair (firstOf fv) v2))) fields) (\fields2 => Ok (ERecUpdate base2 fields2 sp)))
+expandLocalFuns ec (EDo stmts sp) =
+  andThen (traverse (expandDoStmt ec) stmts) (\stmts2 => Ok (EDo stmts2 sp))
+expandLocalFuns ec (EAnn value ty sp) =
+  andThen (expandLocalFuns ec value) (\value2 => Ok (EAnn value2 ty sp))
 
 expandBind : Ec -> Pair Pat Expr -> Result (Pair Pat Expr)
 expandBind ec (Pair pat value) = andThen (expandLocalFuns ec value) (\v2 => Ok (Pair pat v2))
 
 expandDoStmt : Ec -> DoStmt -> Result DoStmt
-expandDoStmt ec stmt = case stmt of
-  DBind pat value sp => andThen (expandLocalFuns ec value) (\v2 => Ok (DBind pat v2 sp))
-  DExpr value sp => andThen (expandLocalFuns ec value) (\v2 => Ok (DExpr v2 sp))
+expandDoStmt ec (DBind pat value sp) =
+  andThen (expandLocalFuns ec value) (\v2 => Ok (DBind pat v2 sp))
+expandDoStmt ec (DExpr value sp) = andThen (expandLocalFuns ec value) (\v2 => Ok (DExpr v2 sp))
 
 -- M19：推断位的 `let`（嵌套 let 的 value 位置就是推断位）。
 inferLetFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> List (Pair Pat Expr) -> Expr -> Bool -> Span -> Result (Pair Term (Pair Value Ec))

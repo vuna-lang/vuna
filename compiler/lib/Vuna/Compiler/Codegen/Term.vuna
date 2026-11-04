@@ -229,9 +229,8 @@ mkGenSt datas = GenSt (map dtDataName datas) (ctorTableOf datas) (ctorShapeOf da
 -- 运行时参数个数为 0 的定义（无 TLam 或只有擦除 TLam）。A05 后零参定义就是普通值
 -- 绑定（`let v_x = body`，模块初始化时求值），这里只用于递归值守卫的判据。
 runtimeArity : Term -> Int
-runtimeArity t = case t of
-  TLam n r b => if rigIsErased r then runtimeArity b else 1 + runtimeArity b
-  _ => 0
+runtimeArity (TLam n r b) = if rigIsErased r then runtimeArity b else 1 + runtimeArity b
+runtimeArity _ = 0
 
 -- case 分支的绑定环境：全部 telescope binder 都进环境（擦除的用占位名 + True），
 -- 顺序为 telescope 表面顺序的逆序；pattern 只保留未擦除的 fresh 名。
@@ -490,10 +489,9 @@ groupNeedsRec adjT group = True
 -- 定义时，环无法安全落地，必须在生成前报 `CG_RecursiveValueDefinition`（带定义名）。
 -- 擦除 lambda 会在生成时消失，所以先剥掉再判定「真正落盘的右值形状」。
 recursiveValueAllowed : Term -> Bool
-recursiveValueAllowed t = case t of
-  TLam n rig b => if rigIsErased rig then recursiveValueAllowed b else True
-  TCon c args => True
-  _ => False
+recursiveValueAllowed (TLam n rig b) = if rigIsErased rig then recursiveValueAllowed b else True
+recursiveValueAllowed (TCon c args) = True
+recursiveValueAllowed _ = False
 
 firstBadRecursiveValue : List DtDef -> Maybe String
 firstBadRecursiveValue [] = Nothing

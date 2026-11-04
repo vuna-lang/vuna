@@ -90,9 +90,9 @@ let v_Vuna_dCompiler_dFrontend_dManifest_dstringListField = (fun path -> (fun se
   | _ -> failwith "DT: impossible branch"
 )) (((v_Vuna_dCompiler_dFrontend_dToml_dlookupEntry section) key) entries))))))
 
-let v_Vuna_dCompiler_dFrontend_dManifest_dorEmptyList = (fun maybe -> (match maybe with
-  | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> C_Base_dList_dList_Base_dList_dNil
+let v_Vuna_dCompiler_dFrontend_dManifest_dorEmptyList = (fun mc0 -> (match mc0 with
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__45) -> dtb__45
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> C_Base_dList_dList_Base_dList_dNil
   | _ -> failwith "DT: impossible branch"
 ))
 
@@ -159,44 +159,44 @@ let rec v_Vuna_dCompiler_dFrontend_dManifest_dvalidModuleSegments = (fun mc0 -> 
 
 let v_Vuna_dCompiler_dFrontend_dManifest_dvalidModuleName = (fun name -> (v_Vuna_dCompiler_dFrontend_dManifest_dvalidModuleSegments (v_Vuna_dCompiler_dCommon_dsplitOnDot name)))
 
-let v_Vuna_dCompiler_dFrontend_dManifest_dvalidateName = (fun path -> (fun name -> (match name with
-  | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> (C_Base_dResult_dResult_Base_dResult_dErr (((v_Vuna_dCompiler_dFrontend_dManifest_dmanifestErr path) "missing [package] name")))
-  | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__69) -> (if ((bi_eq_str dtb__69) "") then (C_Base_dResult_dResult_Base_dResult_dErr (((v_Vuna_dCompiler_dFrontend_dManifest_dmanifestErr path) "package name must not be empty"))) else (if (v_Vuna_dCompiler_dFrontend_dManifest_dvalidPackageName dtb__69) then (C_Base_dResult_dResult_Base_dResult_dOk (0)) else (C_Base_dResult_dResult_Base_dResult_dErr (((v_Vuna_dCompiler_dFrontend_dManifest_dmanifestErr path) ((bi_concat "invalid package name \"") ((bi_concat dtb__69) "\" (allowed characters: a-z, 0-9, '-')")))))))
+let v_Vuna_dCompiler_dFrontend_dManifest_dvalidateName = (fun mc0 -> (fun mc1 -> (match mc1 with
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__69) -> (if ((bi_eq_str dtb__69) "") then (C_Base_dResult_dResult_Base_dResult_dErr (((v_Vuna_dCompiler_dFrontend_dManifest_dmanifestErr mc0) "package name must not be empty"))) else (if (v_Vuna_dCompiler_dFrontend_dManifest_dvalidPackageName dtb__69) then (C_Base_dResult_dResult_Base_dResult_dOk (0)) else (C_Base_dResult_dResult_Base_dResult_dErr (((v_Vuna_dCompiler_dFrontend_dManifest_dmanifestErr mc0) ((bi_concat "invalid package name \"") ((bi_concat dtb__69) "\" (allowed characters: a-z, 0-9, '-')")))))))
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> (C_Base_dResult_dResult_Base_dResult_dErr (((v_Vuna_dCompiler_dFrontend_dManifest_dmanifestErr mc0) "missing [package] name")))
   | _ -> failwith "DT: impossible branch"
 )))
 
-let rec v_Vuna_dCompiler_dFrontend_dManifest_dvalidateMembers = (fun path -> (fun members -> (match members with
+let rec v_Vuna_dCompiler_dFrontend_dManifest_dvalidateMembers = (fun mc0 -> (fun mc1 -> (match mc1 with
+  | C_Base_dList_dList_Base_dList_dCons (dtb__70, dtb__71) -> (if ((bi_eq_str dtb__70) "") then (C_Base_dResult_dResult_Base_dResult_dErr (((v_Vuna_dCompiler_dFrontend_dManifest_dmanifestErr mc0) "workspace member must not be empty"))) else ((v_Vuna_dCompiler_dFrontend_dManifest_dvalidateMembers mc0) dtb__71))
   | C_Base_dList_dList_Base_dList_dNil -> (C_Base_dResult_dResult_Base_dResult_dOk (0))
-  | C_Base_dList_dList_Base_dList_dCons (dtb__70, dtb__71) -> (if ((bi_eq_str dtb__70) "") then (C_Base_dResult_dResult_Base_dResult_dErr (((v_Vuna_dCompiler_dFrontend_dManifest_dmanifestErr path) "workspace member must not be empty"))) else ((v_Vuna_dCompiler_dFrontend_dManifest_dvalidateMembers path) dtb__71))
   | _ -> failwith "DT: impossible branch"
 )))
 
-let rec v_Vuna_dCompiler_dFrontend_dManifest_dvalidateModules = (fun path -> (fun modules -> (match modules with
+let rec v_Vuna_dCompiler_dFrontend_dManifest_dvalidateModules = (fun mc0 -> (fun mc1 -> (match mc1 with
+  | C_Base_dList_dList_Base_dList_dCons (dtb__72, dtb__73) -> (if (v_Vuna_dCompiler_dFrontend_dManifest_dvalidModuleName dtb__72) then ((v_Vuna_dCompiler_dFrontend_dManifest_dvalidateModules mc0) dtb__73) else (C_Base_dResult_dResult_Base_dResult_dErr (((v_Vuna_dCompiler_dFrontend_dManifest_dmanifestErr mc0) ((bi_concat "invalid export module \"") ((bi_concat dtb__72) "\" (segments must match [A-Z][A-Za-z0-9_]*)"))))))
   | C_Base_dList_dList_Base_dList_dNil -> (C_Base_dResult_dResult_Base_dResult_dOk (0))
-  | C_Base_dList_dList_Base_dList_dCons (dtb__72, dtb__73) -> (if (v_Vuna_dCompiler_dFrontend_dManifest_dvalidModuleName dtb__72) then ((v_Vuna_dCompiler_dFrontend_dManifest_dvalidateModules path) dtb__73) else (C_Base_dResult_dResult_Base_dResult_dErr (((v_Vuna_dCompiler_dFrontend_dManifest_dmanifestErr path) ((bi_concat "invalid export module \"") ((bi_concat dtb__72) "\" (segments must match [A-Z][A-Za-z0-9_]*)"))))))
   | _ -> failwith "DT: impossible branch"
 )))
 
-let v_Vuna_dCompiler_dFrontend_dManifest_dvalidateExports = (fun path -> (fun exports -> (match exports with
+let v_Vuna_dCompiler_dFrontend_dManifest_dvalidateExports = (fun mc0 -> (fun mc1 -> (match mc1 with
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__74) -> ((v_Vuna_dCompiler_dFrontend_dManifest_dvalidateModules mc0) dtb__74)
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> (C_Base_dResult_dResult_Base_dResult_dOk (0))
-  | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__74) -> ((v_Vuna_dCompiler_dFrontend_dManifest_dvalidateModules path) dtb__74)
   | _ -> failwith "DT: impossible branch"
 )))
 
-let rec v_Vuna_dCompiler_dFrontend_dManifest_dvalidateDepsSeen = (fun path -> (fun seen -> (fun deps -> ((fun nd_uscrut3 -> (match nd_uscrut3 with
+let rec v_Vuna_dCompiler_dFrontend_dManifest_dvalidateDepsSeen = (fun mc0 -> (fun mc1 -> (fun mc2 -> (match mc2 with
   | C_Base_dList_dList_Base_dList_dCons (dtb__75, dtb__76) -> (match dtb__75 with
-  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__77, dtb__78) -> (if ((bi_eq_str dtb__77) "") then (C_Base_dResult_dResult_Base_dResult_dErr (((v_Vuna_dCompiler_dFrontend_dManifest_dmanifestErr path) "dependency name must not be empty"))) else (if ((bi_eq_str dtb__78) "") then (C_Base_dResult_dResult_Base_dResult_dErr (((v_Vuna_dCompiler_dFrontend_dManifest_dmanifestErr path) ((bi_concat "dependency \"") ((bi_concat dtb__77) "\" path must not be empty"))))) else (if ((v_Base_dList_dmemName dtb__77) seen) then (C_Base_dResult_dResult_Base_dResult_dErr (((v_Vuna_dCompiler_dFrontend_dManifest_dmanifestErr path) ((bi_concat "duplicate dependency \"") ((bi_concat dtb__77) "\""))))) else (((v_Vuna_dCompiler_dFrontend_dManifest_dvalidateDepsSeen path) (C_Base_dList_dList_Base_dList_dCons (dtb__77, seen))) dtb__76))))
+  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__77, dtb__78) -> (if ((bi_eq_str dtb__77) "") then (C_Base_dResult_dResult_Base_dResult_dErr (((v_Vuna_dCompiler_dFrontend_dManifest_dmanifestErr mc0) "dependency name must not be empty"))) else (if ((bi_eq_str dtb__78) "") then (C_Base_dResult_dResult_Base_dResult_dErr (((v_Vuna_dCompiler_dFrontend_dManifest_dmanifestErr mc0) ((bi_concat "dependency \"") ((bi_concat dtb__77) "\" path must not be empty"))))) else (if ((v_Base_dList_dmemName dtb__77) mc1) then (C_Base_dResult_dResult_Base_dResult_dErr (((v_Vuna_dCompiler_dFrontend_dManifest_dmanifestErr mc0) ((bi_concat "duplicate dependency \"") ((bi_concat dtb__77) "\""))))) else (((v_Vuna_dCompiler_dFrontend_dManifest_dvalidateDepsSeen mc0) (C_Base_dList_dList_Base_dList_dCons (dtb__77, mc1))) dtb__76))))
   | _ -> failwith "DT: impossible branch"
 )
   | C_Base_dList_dList_Base_dList_dNil -> (C_Base_dResult_dResult_Base_dResult_dOk (0))
   | _ -> failwith "DT: impossible branch"
-)) deps))))
+))))
 
 let v_Vuna_dCompiler_dFrontend_dManifest_dvalidateDependencies = (fun path -> (fun deps -> (((v_Vuna_dCompiler_dFrontend_dManifest_dvalidateDepsSeen path) C_Base_dList_dList_Base_dList_dNil) deps)))
 
-let rec v_Vuna_dCompiler_dFrontend_dManifest_dvalidateCapsSeen = (fun path -> (fun seen -> (fun caps -> (match caps with
+let rec v_Vuna_dCompiler_dFrontend_dManifest_dvalidateCapsSeen = (fun mc0 -> (fun mc1 -> (fun mc2 -> (match mc2 with
+  | C_Base_dList_dList_Base_dList_dCons (dtb__79, dtb__80) -> (if ((bi_eq_str dtb__79) "") then (C_Base_dResult_dResult_Base_dResult_dErr (((v_Vuna_dCompiler_dFrontend_dManifest_dmanifestErr mc0) "capability name must not be empty"))) else (if ((v_Base_dList_dmemName dtb__79) mc1) then (C_Base_dResult_dResult_Base_dResult_dErr (((v_Vuna_dCompiler_dFrontend_dManifest_dmanifestErr mc0) ((bi_concat "duplicate capability \"") ((bi_concat dtb__79) "\""))))) else (((v_Vuna_dCompiler_dFrontend_dManifest_dvalidateCapsSeen mc0) (C_Base_dList_dList_Base_dList_dCons (dtb__79, mc1))) dtb__80)))
   | C_Base_dList_dList_Base_dList_dNil -> (C_Base_dResult_dResult_Base_dResult_dOk (0))
-  | C_Base_dList_dList_Base_dList_dCons (dtb__79, dtb__80) -> (if ((bi_eq_str dtb__79) "") then (C_Base_dResult_dResult_Base_dResult_dErr (((v_Vuna_dCompiler_dFrontend_dManifest_dmanifestErr path) "capability name must not be empty"))) else (if ((v_Base_dList_dmemName dtb__79) seen) then (C_Base_dResult_dResult_Base_dResult_dErr (((v_Vuna_dCompiler_dFrontend_dManifest_dmanifestErr path) ((bi_concat "duplicate capability \"") ((bi_concat dtb__79) "\""))))) else (((v_Vuna_dCompiler_dFrontend_dManifest_dvalidateCapsSeen path) (C_Base_dList_dList_Base_dList_dCons (dtb__79, seen))) dtb__80)))
   | _ -> failwith "DT: impossible branch"
 ))))
 

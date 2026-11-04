@@ -75,10 +75,9 @@ elabCtors globals fam arity famLevel ec (c :: rest) = andThen (elabCtor globals 
 -- ---------------------------------------------------------------
 -- 族 kind 的结果层级（`... -> Type l` 的 l）。`kindWellFormed` 已保证该层存在。
 kindResultLevel : Term -> Maybe Level
-kindResultLevel ty = case ty of
-  TPi _ _ _ _ cod => kindResultLevel cod
-  TType l => Just l
-  _ => Nothing
+kindResultLevel (TPi _ _ _ _ cod) = kindResultLevel cod
+kindResultLevel (TType l) = Just l
+kindResultLevel _ = Nothing
 
 -- 对构造子的**表面**类型表达式做受控遍历：逐段 `checkType` 取域的 sort，并带 binder
 -- 进入 `Ctx`（后续依赖域的 sort 必须在正确上下文里算）。前 arity 个 binder 是族参数 /
@@ -98,24 +97,21 @@ checkCtorFieldSorts globals ctx ec arity famLevel cname csp tyPis tyExpr =
   else ctorFieldSortsGo globals ctx ec 0 arity famLevel cname csp tyExpr
 
 countSurfacePis : Expr -> Int
-countSurfacePis e = case e of
-  EPi _ _ _ cod _ => 1 + countSurfacePis cod
-  EApp (EVar "->" _) ([_, b]) _ => 1 + countSurfacePis b
-  _ => 0
+countSurfacePis (EPi _ _ _ cod _) = 1 + countSurfacePis cod
+countSurfacePis (EApp (EVar "->" _) ([_, b]) _) = 1 + countSurfacePis b
+countSurfacePis _ = 0
 
 -- 已精化构造子类型的 Pi 层数（与表面形态同构；见 checkCtorFieldSorts 的防御）。
 countTelePis : Term -> Int
-countTelePis t = case t of
-  TPi _ _ _ _ cod => 1 + countTelePis cod
-  _ => 0
+countTelePis (TPi _ _ _ _ cod) = 1 + countTelePis cod
+countTelePis _ = 0
 
 ctorFieldSortsGo : List (Pair String Term) -> Ctx -> Ec -> Int -> Int -> Level -> String -> Span -> Expr -> Result Ec
-ctorFieldSortsGo globals ctx ec pos arity famLevel cname csp tyExpr = case tyExpr of
-  EPi name _ dom cod _ =>
-    ctorFieldSortsBinder globals ctx ec pos arity famLevel cname csp name dom cod
-  EApp (EVar "->" _) ([a, b]) _ =>
-    ctorFieldSortsBinder globals ctx ec pos arity famLevel cname csp "_" a b
-  _ => Ok ec
+ctorFieldSortsGo globals ctx ec pos arity famLevel cname csp (EPi name _ dom cod _) =
+  ctorFieldSortsBinder globals ctx ec pos arity famLevel cname csp name dom cod
+ctorFieldSortsGo globals ctx ec pos arity famLevel cname csp (EApp (EVar "->" _) ([a, b]) _) =
+  ctorFieldSortsBinder globals ctx ec pos arity famLevel cname csp "_" a b
+ctorFieldSortsGo globals ctx ec pos arity famLevel cname csp _ = Ok ec
 
 ctorFieldSortsBinder : List (Pair String Term) -> Ctx -> Ec -> Int -> Int -> Level -> String -> Span -> String -> Expr -> Expr -> Result Ec
 ctorFieldSortsBinder globals ctx ec pos arity famLevel cname csp name dom cod = andThen (checkType globals ctx ec dom) (\p => case p of
@@ -269,10 +265,9 @@ ctorFieldTerms : Int -> Term -> List Term
 ctorFieldTerms arity ty = ctorFieldGo arity ty []
 
 ctorFieldGo : Int -> Term -> List Term -> List Term
-ctorFieldGo arity t acc = case t of
-  TPi name implicit rig dom cod =>
-    if arity > 0 then ctorFieldGo (arity - 1) cod acc else ctorFieldGo 0 cod (dom :: acc)
-  _ => reverse acc
+ctorFieldGo arity (TPi name implicit rig dom cod) acc =
+  if arity > 0 then ctorFieldGo (arity - 1) cod acc else ctorFieldGo 0 cod (dom :: acc)
+ctorFieldGo arity _ acc = reverse acc
 
 usedInTele : Int -> Int -> Int -> List Term -> Bool
 usedInTele i arity k ts = usedInTeleGo (k + arity) ts
@@ -282,20 +277,21 @@ usedInTeleGo depth [] = False
 usedInTeleGo depth (t :: rest) = termUsesVar depth t || usedInTeleGo depth rest
 
 termUsesVar : Int -> Term -> Bool
-termUsesVar depth t = case t of
-  TVar n i => i == depth
-  TMeta m => False
-  TGlobal g => False
-  TType l => False
-  TPi n implicit rig dom cod => termUsesVar depth dom || termUsesVar (depth + 1) cod
-  TLam n erased body => termUsesVar (depth + 1) body
-  TApp f a erased => termUsesVar depth f || termUsesVar depth a
-  TCon c args => termUsesVarArgs depth args
-  TCase scrut alts => termUsesVar depth scrut || termUsesVarAlts depth alts
-  TInt n => False
-  TStr s => False
-  TBool b => False
-  TIf c th el => termUsesVar depth c || termUsesVar depth th || termUsesVar depth el
+termUsesVar depth (TVar n i) = i == depth
+termUsesVar depth (TMeta m) = False
+termUsesVar depth (TGlobal g) = False
+termUsesVar depth (TType l) = False
+termUsesVar depth (TPi n implicit rig dom cod) =
+  termUsesVar depth dom || termUsesVar (depth + 1) cod
+termUsesVar depth (TLam n erased body) = termUsesVar (depth + 1) body
+termUsesVar depth (TApp f a erased) = termUsesVar depth f || termUsesVar depth a
+termUsesVar depth (TCon c args) = termUsesVarArgs depth args
+termUsesVar depth (TCase scrut alts) = termUsesVar depth scrut || termUsesVarAlts depth alts
+termUsesVar depth (TInt n) = False
+termUsesVar depth (TStr s) = False
+termUsesVar depth (TBool b) = False
+termUsesVar depth (TIf c th el) =
+  termUsesVar depth c || termUsesVar depth th || termUsesVar depth el
 
 termUsesVarArgs : Int -> List (Pair Term Rig) -> Bool
 termUsesVarArgs depth [] = False

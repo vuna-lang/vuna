@@ -61,14 +61,14 @@ let v_Vuna_dCompiler_dElab_dPrelude_deqRuntimeName = (fun mc0 -> (fun mc1 -> (if
 
 let v_Vuna_dCompiler_dElab_dPrelude_dpolyEqTy = (C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTPi ("a", true, C_Vuna_dCompiler_dCore_dTerm_dRig_Vuna_dCompiler_dCore_dTerm_dRig0, (C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTType (v_Vuna_dCompiler_dCore_dTerm_dlevelZero)), (((v_Vuna_dCompiler_dElab_dPrelude_dfun2 (C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTVar ("a", 0))) (C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTVar ("a", 0))) v_Vuna_dCompiler_dElab_dPrelude_dboolTy)))
 
-let rec v_Vuna_dCompiler_dElab_dPrelude_dityToTerm = (fun t -> (match t with
-  | C_Vuna_dCompiler_dIntrinsics_dIType_Vuna_dCompiler_dIntrinsics_dITy -> (C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTType (v_Vuna_dCompiler_dCore_dTerm_dlevelZero))
-  | C_Vuna_dCompiler_dIntrinsics_dIType_Vuna_dCompiler_dIntrinsics_dIInt -> v_Vuna_dCompiler_dElab_dPrelude_dintTy
-  | C_Vuna_dCompiler_dIntrinsics_dIType_Vuna_dCompiler_dIntrinsics_dIStr -> v_Vuna_dCompiler_dElab_dPrelude_dstrTy
-  | C_Vuna_dCompiler_dIntrinsics_dIType_Vuna_dCompiler_dIntrinsics_dIBool -> v_Vuna_dCompiler_dElab_dPrelude_dboolTy
-  | C_Vuna_dCompiler_dIntrinsics_dIType_Vuna_dCompiler_dIntrinsics_dIList (dtb__3) -> (C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTApp ((C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTGlobal (v_Vuna_dCompiler_dIntrinsics_dlistFamilyName)), (v_Vuna_dCompiler_dElab_dPrelude_dityToTerm dtb__3), C_Vuna_dCompiler_dCore_dTerm_dRig_Vuna_dCompiler_dCore_dTerm_dRig1))
-  | C_Vuna_dCompiler_dIntrinsics_dIType_Vuna_dCompiler_dIntrinsics_dIFun (dtb__4, dtb__5) -> (C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTPi ("_", false, C_Vuna_dCompiler_dCore_dTerm_dRig_Vuna_dCompiler_dCore_dTerm_dRig1, (v_Vuna_dCompiler_dElab_dPrelude_dityToTerm dtb__4), (v_Vuna_dCompiler_dElab_dPrelude_dityToTerm dtb__5)))
+let rec v_Vuna_dCompiler_dElab_dPrelude_dityToTerm = (fun mc0 -> (match mc0 with
   | C_Vuna_dCompiler_dIntrinsics_dIType_Vuna_dCompiler_dIntrinsics_dIPolyEq -> v_Vuna_dCompiler_dElab_dPrelude_dpolyEqTy
+  | C_Vuna_dCompiler_dIntrinsics_dIType_Vuna_dCompiler_dIntrinsics_dIFun (dtb__3, dtb__4) -> (C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTPi ("_", false, C_Vuna_dCompiler_dCore_dTerm_dRig_Vuna_dCompiler_dCore_dTerm_dRig1, (v_Vuna_dCompiler_dElab_dPrelude_dityToTerm dtb__3), (v_Vuna_dCompiler_dElab_dPrelude_dityToTerm dtb__4)))
+  | C_Vuna_dCompiler_dIntrinsics_dIType_Vuna_dCompiler_dIntrinsics_dIList (dtb__5) -> (C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTApp ((C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTGlobal (v_Vuna_dCompiler_dIntrinsics_dlistFamilyName)), (v_Vuna_dCompiler_dElab_dPrelude_dityToTerm dtb__5), C_Vuna_dCompiler_dCore_dTerm_dRig_Vuna_dCompiler_dCore_dTerm_dRig1))
+  | C_Vuna_dCompiler_dIntrinsics_dIType_Vuna_dCompiler_dIntrinsics_dIBool -> v_Vuna_dCompiler_dElab_dPrelude_dboolTy
+  | C_Vuna_dCompiler_dIntrinsics_dIType_Vuna_dCompiler_dIntrinsics_dIStr -> v_Vuna_dCompiler_dElab_dPrelude_dstrTy
+  | C_Vuna_dCompiler_dIntrinsics_dIType_Vuna_dCompiler_dIntrinsics_dIInt -> v_Vuna_dCompiler_dElab_dPrelude_dintTy
+  | C_Vuna_dCompiler_dIntrinsics_dIType_Vuna_dCompiler_dIntrinsics_dITy -> (C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTType (v_Vuna_dCompiler_dCore_dTerm_dlevelZero))
   | _ -> failwith "DT: impossible branch"
 ))
 

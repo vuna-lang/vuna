@@ -106,9 +106,9 @@ let rec v_Vuna_dCompiler_dDriver_dCompilerCli_dprintWarnings = (fun mc0 -> (matc
   | _ -> failwith "DT: impossible branch"
 ))
 
-let v_Vuna_dCompiler_dDriver_dCompilerCli_ddefaultDir = (fun dir -> (match dir with
-  | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__5) -> dtb__5
+let v_Vuna_dCompiler_dDriver_dCompilerCli_ddefaultDir = (fun mc0 -> (match mc0 with
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> "."
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__5) -> dtb__5
   | _ -> failwith "DT: impossible branch"
 ))
 
@@ -203,17 +203,17 @@ let v_Vuna_dCompiler_dDriver_dCompilerCli_dcheckArgs = (fun prog -> (fun args ->
   | _ -> failwith "DT: impossible branch"
 )))
 
-let v_Vuna_dCompiler_dDriver_dCompilerCli_disSingleLibraryPackage = (fun pkgs -> ((fun nd_uscrut1 -> (match nd_uscrut1 with
+let v_Vuna_dCompiler_dDriver_dCompilerCli_disSingleLibraryPackage = (fun mc0 -> (match mc0 with
   | C_Base_dList_dList_Base_dList_dCons (dtb__32, dtb__33) -> (match dtb__33 with
   | C_Base_dList_dList_Base_dList_dNil -> (v_Base_dBool_dnot (dtp_fileExists (v_Vuna_dCompiler_dPackages_dPkg_dpackageEntry dtb__32)))
   | _ -> false
 )
   | _ -> false
-)) pkgs))
+))
 
-let v_Vuna_dCompiler_dDriver_dCompilerCli_dlibraryOnlyMessage = (fun pkgs -> (match pkgs with
-  | C_Base_dList_dList_Base_dList_dCons (dtb__34, dtb__35) -> ((bi_concat "library package ") ((bi_concat (v_Vuna_dCompiler_dPackages_dPkg_dpackageName dtb__34)) " has no app/Main.vuna (executable package required; use `check` for libraries)"))
+let v_Vuna_dCompiler_dDriver_dCompilerCli_dlibraryOnlyMessage = (fun mc0 -> (match mc0 with
   | C_Base_dList_dList_Base_dList_dNil -> "no package to build"
+  | C_Base_dList_dList_Base_dList_dCons (dtb__34, dtb__35) -> ((bi_concat "library package ") ((bi_concat (v_Vuna_dCompiler_dPackages_dPkg_dpackageName dtb__34)) " has no app/Main.vuna (executable package required; use `check` for libraries)"))
   | _ -> failwith "DT: impossible branch"
 ))
 

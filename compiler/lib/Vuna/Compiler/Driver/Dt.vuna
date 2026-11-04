@@ -185,10 +185,9 @@ evalDtMain program = case findMainDef (dtProgDefs program) of
 
 -- main 的类型是不是 base 的 canonical `IO a`（完整符号 `Base.IO.IO`，M27）。
 isIOType : Term -> Bool
-isIOType t = case t of
-  TApp fn _ _ => isIOType fn
-  TGlobal g => g == ioFamilyName
-  _ => False
+isIOType (TApp fn _ _) = isIOType fn
+isIOType (TGlobal g) = g == ioFamilyName
+isIOType _ = False
 
 findMainDef : List DtDef -> Maybe DtDef
 findMainDef [] = Nothing

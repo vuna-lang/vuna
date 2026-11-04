@@ -257,9 +257,8 @@ bestSymbol idx curMod token = case findSymbol idx token of
 
 -- 当前文档的模块名（无 module 头 → ""）。
 currentModuleName : List Decl -> Maybe ModDecl -> String
-currentModuleName decls hdr = case hdr of
-  Nothing => ""
-  Just (ModDecl name explicit items sp) => name
+currentModuleName decls Nothing = ""
+currentModuleName decls (Just (ModDecl name explicit items sp)) = name
 
 -- 当前缓冲里的顶层名字（类型名 + 声明名），供补全使用。
 declBufferNames : Decl -> List String
@@ -282,26 +281,24 @@ dedupeNamesGo (x :: rest) seen acc =
 -- documentSymbol：AST 声明树
 -- ---------------------------------------------------------------
 declNameOf : Decl -> String
-declNameOf d = case d of
-  DData name params kind ctors derivings sp => name
-  DAxiom name ty sp => name
-  DSig name ty sp => name
-  DFun name pats body sp => name
-  DRecord name params fields derivings sp => name
-  DTrait name params methods sp => name
-  DInstance ctxE head methods sp => "instance"
+declNameOf (DData name params kind ctors derivings sp) = name
+declNameOf (DAxiom name ty sp) = name
+declNameOf (DSig name ty sp) = name
+declNameOf (DFun name pats body sp) = name
+declNameOf (DRecord name params fields derivings sp) = name
+declNameOf (DTrait name params methods sp) = name
+declNameOf (DInstance ctxE head methods sp) = "instance"
 
 -- LSP SymbolKind：Function=12、Field=8、Interface=11、Constant=14、
 -- EnumMember=22、Struct=23、Method=6。
 declSymbolKind : Decl -> Int
-declSymbolKind d = case d of
-  DData name params kind ctors derivings sp => 23
-  DRecord name params fields derivings sp => 23
-  DTrait name params methods sp => 11
-  DAxiom name ty sp => 14
-  DSig name ty sp => 12
-  DFun name pats body sp => 12
-  DInstance ctxE head methods sp => 12
+declSymbolKind (DData name params kind ctors derivings sp) = 23
+declSymbolKind (DRecord name params fields derivings sp) = 23
+declSymbolKind (DTrait name params methods sp) = 11
+declSymbolKind (DAxiom name ty sp) = 14
+declSymbolKind (DSig name ty sp) = 12
+declSymbolKind (DFun name pats body sp) = 12
+declSymbolKind (DInstance ctxE head methods sp) = 12
 
 symbolJson : String -> Int -> Json -> Json -> List Json -> Json
 symbolJson name kind range sel children =
@@ -325,11 +322,12 @@ methodSymbolJson lines m =
     (nameSelRange lines (traitMethodSpan m) (traitMethodName m)) []
 
 declChildrenJson : List String -> Decl -> List Json
-declChildrenJson lines d = case d of
-  DData name params kind ctors derivings sp => map (ctorSymbolJson lines) ctors
-  DRecord name params fields derivings sp => map (fieldSymbolJson lines) fields
-  DTrait name params methods sp => map (methodSymbolJson lines) methods
-  _ => []
+declChildrenJson lines (DData name params kind ctors derivings sp) =
+  map (ctorSymbolJson lines) ctors
+declChildrenJson lines (DRecord name params fields derivings sp) =
+  map (fieldSymbolJson lines) fields
+declChildrenJson lines (DTrait name params methods sp) = map (methodSymbolJson lines) methods
+declChildrenJson lines _ = []
 
 declSymbolJson : List String -> Decl -> Json
 declSymbolJson lines d =
@@ -471,9 +469,9 @@ keywordCompls : List Compl
 keywordCompls = map (\n => Compl n 14 "") lspKeywords
 
 indexCompls : Maybe Index -> List Compl
-indexCompls midx = case midx of
-  Nothing => []
-  Just idx => map (\s => Compl (symName s) (symCompletionKind s) (symSig s)) (indexSymbols idx)
+indexCompls Nothing = []
+indexCompls (Just idx) =
+  map (\s => Compl (symName s) (symCompletionKind s) (symSig s)) (indexSymbols idx)
 
 hasPrefix : String -> List Compl -> List Compl
 hasPrefix prefix items = filter (\c => startsWith prefix (complLabel c)) items
@@ -483,19 +481,18 @@ finishCompls items = map complJson (take maxCompletions (dedupeCompls items))
 
 -- `.` 之后的限定补全：前缀是模块名，按 `<module>.` 过滤符号全名。
 qualifiedCompletions : String -> List Int -> Int -> String -> Maybe Index -> List Json
-qualifiedCompletions ln chars prefixStart prefix midx = case midx of
-  Nothing => []
-  Just idx =>
-    let
-      beforeDotChars = take (prefixStart - 1) chars
-      modLen = qualPrefixLen (reverse beforeDotChars)
-      modStart = length beforeDotChars - modLen
-      modPrefix = substring modStart modLen ln
-      fullPrefix = modPrefix ++ "."
-      hits =
-        filter (\s => startsWith fullPrefix (symFullName s) && startsWith prefix (symName s))
-          (indexSymbols idx)
-    in finishCompls (map (\s => Compl (symName s) (symCompletionKind s) (symSig s)) hits)
+qualifiedCompletions ln chars prefixStart prefix Nothing = []
+qualifiedCompletions ln chars prefixStart prefix (Just idx) =
+  let
+    beforeDotChars = take (prefixStart - 1) chars
+    modLen = qualPrefixLen (reverse beforeDotChars)
+    modStart = length beforeDotChars - modLen
+    modPrefix = substring modStart modLen ln
+    fullPrefix = modPrefix ++ "."
+    hits =
+      filter (\s => startsWith fullPrefix (symFullName s) && startsWith prefix (symName s))
+        (indexSymbols idx)
+  in finishCompls (map (\s => Compl (symName s) (symCompletionKind s) (symSig s)) hits)
 
 completionItems : String -> Int -> Int -> Maybe Index -> List Json
 completionItems text line0 col0 midx =
@@ -529,11 +526,10 @@ symbolInfoJson idx s = case symLocation idx s of
       (JObj (append [Pair "name" (JStr (symName s)), Pair "kind" (JNum (symSymbolKind s)), Pair "location" loc] (if symModule s == "" then [] else [Pair "containerName" (JStr (symModule s))])))
 
 workspaceSymbols : Maybe Index -> String -> List Json
-workspaceSymbols midx query = case midx of
-  Nothing => []
-  Just idx =>
-    let
-      syms = if query == "" then indexSymbols idx else matchingSymbols idx query
-    in mapMaybe (symbolInfoJson idx) (take maxWorkspaceSymbols syms)
+workspaceSymbols Nothing query = []
+workspaceSymbols (Just idx) query =
+  let
+    syms = if query == "" then indexSymbols idx else matchingSymbols idx query
+  in mapMaybe (symbolInfoJson idx) (take maxWorkspaceSymbols syms)
 
 -- ---------------------------------------------------------------

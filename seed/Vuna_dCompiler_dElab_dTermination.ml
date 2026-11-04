@@ -53,19 +53,19 @@ open Vuna_dCompiler_dElab_dDerive
 open Vuna_dCompiler_dElab_dRecords
 open Vuna_dCompiler_dElab_dTermination_dMeasure
 open Vuna_dCompiler_dElab_dTermination_dScc
-let rec v_Vuna_dCompiler_dElab_dTermination_dpatNames = (fun p -> (match p with
-  | C_Vuna_dCompiler_dFrontend_dAst_dPat_Vuna_dCompiler_dFrontend_dAst_dPVar (dtb__0, dtb__1) -> (C_Base_dList_dList_Base_dList_dCons (dtb__0, C_Base_dList_dList_Base_dList_dNil))
-  | C_Vuna_dCompiler_dFrontend_dAst_dPat_Vuna_dCompiler_dFrontend_dAst_dPCon (dtb__2, dtb__3, dtb__4) -> ((v_Base_dList_dconcatMap v_Vuna_dCompiler_dElab_dTermination_dpatNames) dtb__3)
-  | C_Vuna_dCompiler_dFrontend_dAst_dPat_Vuna_dCompiler_dFrontend_dAst_dPRecord (dtb__5, dtb__6, dtb__7) -> ((v_Base_dList_dconcatMap (fun q -> (v_Vuna_dCompiler_dElab_dTermination_dpatNames (v_Base_dPair_dsecondOf q)))) dtb__6)
-  | C_Vuna_dCompiler_dFrontend_dAst_dPat_Vuna_dCompiler_dFrontend_dAst_dPWild (dtb__8) -> C_Base_dList_dList_Base_dList_dNil
+let rec v_Vuna_dCompiler_dElab_dTermination_dpatNames = (fun mc0 -> (match mc0 with
+  | C_Vuna_dCompiler_dFrontend_dAst_dPat_Vuna_dCompiler_dFrontend_dAst_dPWild (dtb__0) -> C_Base_dList_dList_Base_dList_dNil
+  | C_Vuna_dCompiler_dFrontend_dAst_dPat_Vuna_dCompiler_dFrontend_dAst_dPRecord (dtb__1, dtb__2, dtb__3) -> ((v_Base_dList_dconcatMap (fun q -> (v_Vuna_dCompiler_dElab_dTermination_dpatNames (v_Base_dPair_dsecondOf q)))) dtb__2)
+  | C_Vuna_dCompiler_dFrontend_dAst_dPat_Vuna_dCompiler_dFrontend_dAst_dPCon (dtb__4, dtb__5, dtb__6) -> ((v_Base_dList_dconcatMap v_Vuna_dCompiler_dElab_dTermination_dpatNames) dtb__5)
+  | C_Vuna_dCompiler_dFrontend_dAst_dPat_Vuna_dCompiler_dFrontend_dAst_dPVar (dtb__7, dtb__8) -> (C_Base_dList_dList_Base_dList_dCons (dtb__7, C_Base_dList_dList_Base_dList_dNil))
   | _ -> C_Base_dList_dList_Base_dList_dNil
 ))
 
 let v_Vuna_dCompiler_dElab_dTermination_dpatsNames = (fun ps -> ((v_Base_dList_dconcatMap v_Vuna_dCompiler_dElab_dTermination_dpatNames) ps))
 
-let rec v_Vuna_dCompiler_dElab_dTermination_drefsOfStmt = (fun bound -> (fun stmt -> (match stmt with
-  | C_Vuna_dCompiler_dFrontend_dAst_dDoStmt_Vuna_dCompiler_dFrontend_dAst_dDBind (dtb__9, dtb__10, dtb__11) -> (C_Base_dPair_dPair_Base_dPair_dPair ((v_Vuna_dCompiler_dElab_dTermination_dpatNames dtb__9), ((v_Vuna_dCompiler_dElab_dTermination_dexprRefsB bound) dtb__10)))
-  | C_Vuna_dCompiler_dFrontend_dAst_dDoStmt_Vuna_dCompiler_dFrontend_dAst_dDExpr (dtb__12, dtb__13) -> (C_Base_dPair_dPair_Base_dPair_dPair (C_Base_dList_dList_Base_dList_dNil, ((v_Vuna_dCompiler_dElab_dTermination_dexprRefsB bound) dtb__12)))
+let rec v_Vuna_dCompiler_dElab_dTermination_drefsOfStmt = (fun mc0 -> (fun mc1 -> (match mc1 with
+  | C_Vuna_dCompiler_dFrontend_dAst_dDoStmt_Vuna_dCompiler_dFrontend_dAst_dDExpr (dtb__9, dtb__10) -> (C_Base_dPair_dPair_Base_dPair_dPair (C_Base_dList_dList_Base_dList_dNil, ((v_Vuna_dCompiler_dElab_dTermination_dexprRefsB mc0) dtb__9)))
+  | C_Vuna_dCompiler_dFrontend_dAst_dDoStmt_Vuna_dCompiler_dFrontend_dAst_dDBind (dtb__11, dtb__12, dtb__13) -> (C_Base_dPair_dPair_Base_dPair_dPair ((v_Vuna_dCompiler_dElab_dTermination_dpatNames dtb__11), ((v_Vuna_dCompiler_dElab_dTermination_dexprRefsB mc0) dtb__12)))
   | _ -> failwith "DT: impossible branch"
 )))
 and v_Vuna_dCompiler_dElab_dTermination_drefsOfStmts = (fun mc0 -> (fun mc1 -> (match mc1 with

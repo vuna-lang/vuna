@@ -66,18 +66,17 @@ dtPreludeNames = append ["Type", "->", "_"] (append typeIntrinsicNames preludeVa
 -- M24.7：trait 迁到库后，缺 import 是最常见的错误来源。除了常规的
 -- unbound/unknown 诊断，再给一条可操作提示（单文件 / 未 import 的场景）。
 traitImportHint : String -> String
-traitImportHint name = case name of
-  "Show" => " (trait Show is not in scope; add `import Base.Show`)"
-  "Eq" => " (trait Eq is not in scope; add `import Base.Eq`)"
-  "Ord" => " (trait Ord is not in scope; add `import Base.Ord`)"
-  "show" => " (trait method show; add `import Base.Show`)"
-  "eq" => " (trait method eq; add `import Base.Eq`)"
-  "neq" => " (trait method neq; add `import Base.Eq`)"
-  "lt" => " (trait method lt; add `import Base.Ord`)"
-  "le" => " (trait method le; add `import Base.Ord`)"
-  "gt" => " (trait method gt; add `import Base.Ord`)"
-  "ge" => " (trait method ge; add `import Base.Ord`)"
-  _ => ""
+traitImportHint "Show" = " (trait Show is not in scope; add `import Base.Show`)"
+traitImportHint "Eq" = " (trait Eq is not in scope; add `import Base.Eq`)"
+traitImportHint "Ord" = " (trait Ord is not in scope; add `import Base.Ord`)"
+traitImportHint "show" = " (trait method show; add `import Base.Show`)"
+traitImportHint "eq" = " (trait method eq; add `import Base.Eq`)"
+traitImportHint "neq" = " (trait method neq; add `import Base.Eq`)"
+traitImportHint "lt" = " (trait method lt; add `import Base.Ord`)"
+traitImportHint "le" = " (trait method le; add `import Base.Ord`)"
+traitImportHint "gt" = " (trait method gt; add `import Base.Ord`)"
+traitImportHint "ge" = " (trait method ge; add `import Base.Ord`)"
+traitImportHint _ = ""
 
 -- ---------------------------------------------------------------
 -- M28（B18）：type / value / ctor 三个命名空间（不再拍平成一个表）
@@ -508,14 +507,14 @@ resolveTraitMethod modules label prefix ns imports (TraitMethod mname ty sp) =
     (\n => andThen (resolveTypeExpr resolveFuelBound modules label prefix ns imports ty) (\ty2 => Ok (TraitMethod n ty2 sp)))
 
 resolveInstanceMethod : List Module -> String -> String -> Namespaces -> List Import -> Decl -> Result Decl
-resolveInstanceMethod modules label prefix ns imports d = case d of
-  DSig name ty sp =>
-    andThen (checkTopName label name)
-      (\_ => andThen (resolveTypeExpr resolveFuelBound modules label prefix ns imports ty) (\ty2 => Ok (DSig name ty2 sp)))
-  DFun name pats body sp =>
-    andThen (checkTopName label name)
-      (\_ => andThen (traverse (resolvePattern resolveFuelBound modules label prefix ns imports) pats) (\parts => andThen (resolveExpr resolveFuelBound modules label prefix ns imports (concatMap secondOf parts) body) (\b => Ok (DFun name (map firstOf parts) b sp))))
-  _ => Err (label ++ ": instance body may only contain method signatures/definitions")
+resolveInstanceMethod modules label prefix ns imports (DSig name ty sp) =
+  andThen (checkTopName label name)
+    (\_ => andThen (resolveTypeExpr resolveFuelBound modules label prefix ns imports ty) (\ty2 => Ok (DSig name ty2 sp)))
+resolveInstanceMethod modules label prefix ns imports (DFun name pats body sp) =
+  andThen (checkTopName label name)
+    (\_ => andThen (traverse (resolvePattern resolveFuelBound modules label prefix ns imports) pats) (\parts => andThen (resolveExpr resolveFuelBound modules label prefix ns imports (concatMap secondOf parts) body) (\b => Ok (DFun name (map firstOf parts) b sp))))
+resolveInstanceMethod modules label prefix ns imports _ =
+  Err (label ++ ": instance body may only contain method signatures/definitions")
 
 resolveProgram : List Module -> String -> String -> Namespaces -> List Import -> List Decl -> Result (List Decl)
 resolveProgram modules label prefix ns imports decls =
@@ -563,9 +562,8 @@ capabilityError label name =
   Err (label ++ ": unknown capability \"" ++ name ++ "\" (known: console, fs, process, env, clock)")
 
 checkCapabilities : String -> List String -> Result Int
-checkCapabilities label caps = case caps of
-  [] => Ok 0
-  name :: rest => checkOneCapability label name rest
+checkCapabilities label [] = Ok 0
+checkCapabilities label (name :: rest) = checkOneCapability label name rest
 
 checkOneCapability : String -> String -> List String -> Result Int
 checkOneCapability label name rest = case parseCapability name of
@@ -635,20 +633,18 @@ effFields [] = Nothing
 effFields ((Pair fname value) :: rest) = firstEffect [effExpr value, effFields rest]
 
 effDo : DoStmt -> Maybe String
-effDo s = case s of
-  DBind pat value sp => effExpr value
-  DExpr value sp => effExpr value
+effDo (DBind pat value sp) = effExpr value
+effDo (DExpr value sp) = effExpr value
 
 effDos : List DoStmt -> Maybe String
 effDos [] = Nothing
 effDos (s :: rest) = firstEffect [effDo s, effDos rest]
 
 effDecl : Decl -> Maybe String
-effDecl d = case d of
-  DFun n pats body sp => effExpr body
-  DTrait n ps methods sp => Nothing
-  DInstance ctxE headTy methods sp => effDecls methods
-  _ => Nothing
+effDecl (DFun n pats body sp) = effExpr body
+effDecl (DTrait n ps methods sp) = Nothing
+effDecl (DInstance ctxE headTy methods sp) = effDecls methods
+effDecl _ = Nothing
 
 effDecls : List Decl -> Maybe String
 effDecls [] = Nothing
@@ -672,14 +668,13 @@ checkEffectsBuiltins label pkg caps decls = andThen (checkCapabilities label cap
 )
 
 tyShape : Expr -> String
-tyShape ty = case ty of
-  EVar n _ => "var " ++ n
-  EApp f a _ => "app"
-  EInt n _ => "int"
-  EStr s _ => "str"
-  ELam ps b _ => "lam"
-  ELet bs b _ _ => "let"
-  ECase s alts _ => "case"
-  EIf c t e _ => "if"
-  EDo stmts _ => "do"
-  _ => "other"
+tyShape (EVar n _) = "var " ++ n
+tyShape (EApp f a _) = "app"
+tyShape (EInt n _) = "int"
+tyShape (EStr s _) = "str"
+tyShape (ELam ps b _) = "lam"
+tyShape (ELet bs b _ _) = "let"
+tyShape (ECase s alts _) = "case"
+tyShape (EIf c t e _) = "if"
+tyShape (EDo stmts _) = "do"
+tyShape _ = "other"

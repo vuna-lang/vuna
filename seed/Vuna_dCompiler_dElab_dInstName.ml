@@ -75,14 +75,14 @@ let v_Vuna_dCompiler_dElab_dInstName_dargSuffixTail = (fun mc0 -> (match mc0 wit
   | _ -> failwith "DT: impossible branch"
 ))
 
-let v_Vuna_dCompiler_dElab_dInstName_dderivedInstName = (fun e -> (match e with
+let v_Vuna_dCompiler_dElab_dInstName_dderivedInstName = (fun mc0 -> (match mc0 with
   | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEApp (dtb__20, dtb__21, dtb__22) -> (v_Vuna_dCompiler_dElab_dInstName_dargSuffixTail dtb__21)
-  | dtb__23 -> (v_Vuna_dCompiler_dElab_dInstName_dexprNameFor dtb__23)
+  | _ -> (v_Vuna_dCompiler_dElab_dInstName_dexprNameFor mc0)
 ))
 
 let v_Vuna_dCompiler_dElab_dInstName_dinstanceName = (fun cname -> (fun headExpr -> ((bi_concat (v_Vuna_dCompiler_dElab_dMeta_dbaseNameOf cname)) ((bi_concat "_") (v_Vuna_dCompiler_dElab_dInstName_dderivedInstName headExpr)))))
 
-let v_Vuna_dCompiler_dElab_dInstName_dargNameOf = (fun e -> (match e with
-  | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEVar (dtb__24, dtb__25) -> dtb__24
+let v_Vuna_dCompiler_dElab_dInstName_dargNameOf = (fun mc0 -> (match mc0 with
+  | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEVar (dtb__23, dtb__24) -> dtb__23
   | _ -> "Int"
 ))

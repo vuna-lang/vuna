@@ -91,18 +91,16 @@ litBranchClauses : Pat -> String -> List (Pair (List Pat) Expr) -> List (Pair (L
 litBranchClauses lit pos clauses = filterLitBranch lit pos clauses []
 
 filterLitBranch : Pat -> String -> List (Pair (List Pat) Expr) -> List (Pair (List Pat) Expr) -> List (Pair (List Pat) Expr)
-filterLitBranch lit pos rows acc = case rows of
-  [] => reverse acc
-  (Pair (p :: ps) body) :: rest =>
-    if litPatMatches lit p then filterLitBranch lit pos rest (Pair ps (literalBranchBody pos p body) :: acc)
-    else filterLitBranch lit pos rest acc
-  (Pair [] body) :: rest => filterLitBranch lit pos rest acc
+filterLitBranch lit pos [] acc = reverse acc
+filterLitBranch lit pos ((Pair (p :: ps) body) :: rest) acc =
+  if litPatMatches lit p then filterLitBranch lit pos rest (Pair ps (literalBranchBody pos p body) :: acc)
+  else filterLitBranch lit pos rest acc
+filterLitBranch lit pos ((Pair [] body) :: rest) acc = filterLitBranch lit pos rest acc
 
 -- 同字面量行直接用体；变量/通配行把该列的头变量改写成位置名。
 literalBranchBody : String -> Pat -> Expr -> Expr
-literalBranchBody pos p body = case p of
-  PVar nm psp => renameExpr nm pos body
-  _ => body
+literalBranchBody pos (PVar nm psp) body = renameExpr nm pos body
+literalBranchBody pos _ body = body
 
 litPatMatches : Pat -> Pat -> Bool
 litPatMatches lit p = case lit of
@@ -120,10 +118,9 @@ litPatMatches lit p = case lit of
 
 -- 把字面量模式还原成表达式（Int / String）。
 litPatExpr : Pat -> Expr
-litPatExpr p = case p of
-  PInt n sp => EInt n sp
-  PStr s sp => EStr s sp
-  _ => EInt 0 (Span "" 0 0 0 0)
+litPatExpr (PInt n sp) = EInt n sp
+litPatExpr (PStr s sp) = EStr s sp
+litPatExpr _ = EInt 0 (Span "" 0 0 0 0)
 
 buildColumnExpr : List (Pair String (List String)) -> List (Pair (List Pat) Expr) -> List String -> Int -> Result Expr
 buildColumnExpr table clauses params fuel = if fuel <= 0 then Err (tcMsg PatternFuel VNil)
@@ -140,9 +137,8 @@ else case params of
 -- 合成 case 的位置：用首个 clause 的模式 span，让覆盖性错误能指回源码
 -- （M23：此前用空 span，DT 的穷尽性诊断会报错在 :0:0）。
 firstPatSpan : List (Pair (List Pat) Expr) -> Span
-firstPatSpan clauses = case clauses of
-  (Pair (p :: ps) body) :: rest => patSpan p
-  _ => Span "" 0 0 0 0
+firstPatSpan ((Pair (p :: ps) body) :: rest) = patSpan p
+firstPatSpan _ = Span "" 0 0 0 0
 
 -- 构造子列：每个构造子一个分支。**该族构造子已经全覆盖时不再生成兜底分支**——
 -- 变量/通配 head 的 clause 已经被 `clausesForCtor` 分发进每个构造子分支，
@@ -201,15 +197,13 @@ allEmptyPats (c :: rest) = case c of
   _ => False
 
 bodyOfFirst : List (Pair (List Pat) Expr) -> Expr
-bodyOfFirst clauses = case clauses of
-  (Pair pats body) :: rest => body
-  [] => EInt 0 (Span "" 0 0 0 0)
+bodyOfFirst ((Pair pats body) :: rest) = body
+bodyOfFirst [] = EInt 0 (Span "" 0 0 0 0)
 
 isVarPatD : Pat -> Bool
-isVarPatD p = case p of
-  PVar n sp => True
-  PWild sp => True
-  _ => False
+isVarPatD (PVar n sp) = True
+isVarPatD (PWild sp) = True
+isVarPatD _ = False
 
 allVarHeads : List (Pair (List Pat) Expr) -> Bool
 allVarHeads [] = True
@@ -281,13 +275,12 @@ bindNames [] = []
 bindNames (b :: rest) = append (patNamesOf (firstOf b)) (bindNames rest)
 
 patNamesOf : Pat -> List String
-patNamesOf p = case p of
-  PVar n sp => [n]
-  PWild sp => []
-  PCon cn ps sp => concatMap patNamesOf ps
-  PInt n sp => []
-  PStr s sp => []
-  PRecord rn fields sp => concatMap (\f => patNamesOf (secondOf f)) fields
+patNamesOf (PVar n sp) = [n]
+patNamesOf (PWild sp) = []
+patNamesOf (PCon cn ps sp) = concatMap patNamesOf ps
+patNamesOf (PInt n sp) = []
+patNamesOf (PStr s sp) = []
+patNamesOf (PRecord rn fields sp) = concatMap (\f => patNamesOf (secondOf f)) fields
 
 renameAlt : String -> String -> Pair Pat Expr -> Pair Pat Expr
 renameAlt oldName newName alt =

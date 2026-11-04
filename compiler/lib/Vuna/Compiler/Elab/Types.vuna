@@ -378,14 +378,13 @@ ecPutSolsRaw (Ec next sols defs datas depths goals insts classes dgoals deftbl g
 
 -- 新解是前插的：旧表头编号之前的条目就是本次新增的解。
 solsDelta : List (Pair Int Value) -> List (Pair Int Value) -> List (Pair Int Value)
-solsDelta old cur = case old of
-  [] => cur
-  (Pair oid ov) :: rest => prefixUntilId oid cur
+solsDelta [] cur = cur
+solsDelta ((Pair oid ov) :: rest) cur = prefixUntilId oid cur
 
 prefixUntilId : Int -> List (Pair Int Value) -> List (Pair Int Value)
-prefixUntilId pid cur = case cur of
-  [] => []
-  (Pair cid cv) :: rest => if cid == pid then [] else Pair cid cv :: prefixUntilId pid rest
+prefixUntilId pid [] = []
+prefixUntilId pid ((Pair cid cv) :: rest) =
+  if cid == pid then [] else Pair cid cv :: prefixUntilId pid rest
 
 ecAddDef : Ec -> Pair String Term -> Ec
 ecAddDef (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl defvals) d =

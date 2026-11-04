@@ -79,14 +79,13 @@ polyEqTy = TPi "a" True Rig0 (TType levelZero) (fun2 (TVar "a" 0) (TVar "a" 0) b
 -- ---------------------------------------------------------------
 -- 所有 IType 都是闭项（没有自由变量），因此 codomain 不需要 shift。
 ityToTerm : IType -> Term
-ityToTerm t = case t of
-  ITy => TType levelZero
-  IInt => intTy
-  IStr => strTy
-  IBool => boolTy
-  IList elem => TApp (TGlobal listFamilyName) (ityToTerm elem) Rig1
-  IFun a b => TPi "_" False Rig1 (ityToTerm a) (ityToTerm b)
-  IPolyEq => polyEqTy
+ityToTerm ITy = TType levelZero
+ityToTerm IInt = intTy
+ityToTerm IStr = strTy
+ityToTerm IBool = boolTy
+ityToTerm (IList elem) = TApp (TGlobal listFamilyName) (ityToTerm elem) Rig1
+ityToTerm (IFun a b) = TPi "_" False Rig1 (ityToTerm a) (ityToTerm b)
+ityToTerm IPolyEq = polyEqTy
 
 -- ---------------------------------------------------------------
 -- prelude globals / 名字名单

@@ -292,9 +292,9 @@ let rec v_Vuna_dCompiler_dFrontend_dToml_dsamePath = (fun d304 -> (fun mc0 -> (f
   | _ -> failwith "DT: impossible branch"
 ))))
 
-let rec v_Vuna_dCompiler_dFrontend_dToml_dmemSectionPath = (fun d307 -> (fun section -> (fun seen -> (match seen with
+let rec v_Vuna_dCompiler_dFrontend_dToml_dmemSectionPath = (fun d307 -> (fun mc0 -> (fun mc1 -> (match mc1 with
+  | C_Base_dList_dList_Base_dList_dCons (dtb__121, dtb__122) -> (if (((v_Vuna_dCompiler_dFrontend_dToml_dsamePath d307) mc0) dtb__121) then true else (((v_Vuna_dCompiler_dFrontend_dToml_dmemSectionPath d307) mc0) dtb__122))
   | C_Base_dList_dList_Base_dList_dNil -> false
-  | C_Base_dList_dList_Base_dList_dCons (dtb__121, dtb__122) -> (if (((v_Vuna_dCompiler_dFrontend_dToml_dsamePath d307) section) dtb__121) then true else (((v_Vuna_dCompiler_dFrontend_dToml_dmemSectionPath d307) section) dtb__122))
   | _ -> failwith "DT: impossible branch"
 ))))
 
@@ -304,14 +304,14 @@ let v_Vuna_dCompiler_dFrontend_dToml_dsectionSuffix = (fun section -> (match sec
   | _ -> failwith "DT: impossible branch"
 ))
 
-let rec v_Vuna_dCompiler_dFrontend_dToml_dhasEntry = (fun section -> (fun key -> (fun entries -> ((fun nd_uscrut3 -> (match nd_uscrut3 with
+let rec v_Vuna_dCompiler_dFrontend_dToml_dhasEntry = (fun mc0 -> (fun mc1 -> (fun mc2 -> (match mc2 with
   | C_Base_dList_dList_Base_dList_dCons (dtb__125, dtb__126) -> (match dtb__125 with
-  | C_Vuna_dCompiler_dFrontend_dToml_dTomlEntry_Vuna_dCompiler_dFrontend_dToml_dTomlEntry (dtb__127, dtb__128, dtb__129, dtb__130) -> (if (if (((v_Vuna_dCompiler_dFrontend_dToml_dsamePath v_Eq_uString) section) dtb__127) then ((bi_eq_str dtb__128) key) else false) then true else (((v_Vuna_dCompiler_dFrontend_dToml_dhasEntry section) key) dtb__126))
+  | C_Vuna_dCompiler_dFrontend_dToml_dTomlEntry_Vuna_dCompiler_dFrontend_dToml_dTomlEntry (dtb__127, dtb__128, dtb__129, dtb__130) -> (if (if (((v_Vuna_dCompiler_dFrontend_dToml_dsamePath v_Eq_uString) mc0) dtb__127) then ((bi_eq_str dtb__128) mc1) else false) then true else (((v_Vuna_dCompiler_dFrontend_dToml_dhasEntry mc0) mc1) dtb__126))
   | _ -> failwith "DT: impossible branch"
 )
   | C_Base_dList_dList_Base_dList_dNil -> false
   | _ -> failwith "DT: impossible branch"
-)) entries))))
+))))
 
 let rec v_Vuna_dCompiler_dFrontend_dToml_dparseEntryValue = (fun fuel -> (fun path -> (fun cs -> (fun keyLine -> (fun key -> (fun section -> (fun seen -> (fun entries -> (if ((bi_le_int fuel) 0) then (C_Base_dResult_dResult_Base_dResult_dErr ("DT: toml fuel exhausted (internal: toml parser made no progress)")) else ((fun nd_uscrut8 -> (match nd_uscrut8 with
   | C_Base_dResult_dResult_Base_dResult_dOk (dtb__131) -> (match dtb__131 with
@@ -363,20 +363,20 @@ let v_Vuna_dCompiler_dFrontend_dToml_dparseTomlAt = (fun path -> (fun source -> 
 
 let v_Vuna_dCompiler_dFrontend_dToml_dparseToml = (fun source -> ((v_Vuna_dCompiler_dFrontend_dToml_dparseTomlAt "") source))
 
-let rec v_Vuna_dCompiler_dFrontend_dToml_dlookupEntry = (fun section -> (fun key -> (fun entries -> ((fun nd_uscrut3 -> (match nd_uscrut3 with
+let rec v_Vuna_dCompiler_dFrontend_dToml_dlookupEntry = (fun mc0 -> (fun mc1 -> (fun mc2 -> (match mc2 with
   | C_Base_dList_dList_Base_dList_dCons (dtb__154, dtb__155) -> (match dtb__154 with
-  | C_Vuna_dCompiler_dFrontend_dToml_dTomlEntry_Vuna_dCompiler_dFrontend_dToml_dTomlEntry (dtb__156, dtb__157, dtb__158, dtb__159) -> (if (if (((v_Vuna_dCompiler_dFrontend_dToml_dsamePath v_Eq_uString) section) dtb__156) then ((bi_eq_str dtb__157) key) else false) then (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__158)) else (((v_Vuna_dCompiler_dFrontend_dToml_dlookupEntry section) key) dtb__155))
+  | C_Vuna_dCompiler_dFrontend_dToml_dTomlEntry_Vuna_dCompiler_dFrontend_dToml_dTomlEntry (dtb__156, dtb__157, dtb__158, dtb__159) -> (if (if (((v_Vuna_dCompiler_dFrontend_dToml_dsamePath v_Eq_uString) mc0) dtb__156) then ((bi_eq_str dtb__157) mc1) else false) then (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__158)) else (((v_Vuna_dCompiler_dFrontend_dToml_dlookupEntry mc0) mc1) dtb__155))
   | _ -> failwith "DT: impossible branch"
 )
   | C_Base_dList_dList_Base_dList_dNil -> C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing
   | _ -> failwith "DT: impossible branch"
-)) entries))))
+))))
 
-let rec v_Vuna_dCompiler_dFrontend_dToml_dlookupEntryLine = (fun section -> (fun key -> (fun entries -> ((fun nd_uscrut3 -> (match nd_uscrut3 with
+let rec v_Vuna_dCompiler_dFrontend_dToml_dlookupEntryLine = (fun mc0 -> (fun mc1 -> (fun mc2 -> (match mc2 with
   | C_Base_dList_dList_Base_dList_dCons (dtb__160, dtb__161) -> (match dtb__160 with
-  | C_Vuna_dCompiler_dFrontend_dToml_dTomlEntry_Vuna_dCompiler_dFrontend_dToml_dTomlEntry (dtb__162, dtb__163, dtb__164, dtb__165) -> (if (if (((v_Vuna_dCompiler_dFrontend_dToml_dsamePath v_Eq_uString) section) dtb__162) then ((bi_eq_str dtb__163) key) else false) then (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__165)) else (((v_Vuna_dCompiler_dFrontend_dToml_dlookupEntryLine section) key) dtb__161))
+  | C_Vuna_dCompiler_dFrontend_dToml_dTomlEntry_Vuna_dCompiler_dFrontend_dToml_dTomlEntry (dtb__162, dtb__163, dtb__164, dtb__165) -> (if (if (((v_Vuna_dCompiler_dFrontend_dToml_dsamePath v_Eq_uString) mc0) dtb__162) then ((bi_eq_str dtb__163) mc1) else false) then (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__165)) else (((v_Vuna_dCompiler_dFrontend_dToml_dlookupEntryLine mc0) mc1) dtb__161))
   | _ -> failwith "DT: impossible branch"
 )
   | C_Base_dList_dList_Base_dList_dNil -> C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing
   | _ -> failwith "DT: impossible branch"
-)) entries))))
+))))

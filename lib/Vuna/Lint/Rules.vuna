@@ -97,9 +97,8 @@ notBool : Bool -> Bool
 notBool b = if b then False else True
 
 atLeastTwo : List a -> Bool
-atLeastTwo xs = case xs of
-  x :: y :: rest => True
-  _ => False
+atLeastTwo (x :: y :: rest) = True
+atLeastTwo _ = False
 
 -- ---------------------------------------------------------------
 -- 行 / 字符工具
@@ -264,19 +263,16 @@ tokCol : PTok -> Int
 tokCol tok = posCol (tokPos tok)
 
 tokIsKw : PTok -> String -> Bool
-tokIsKw tok key = case tok of
-  PTok (TKw x) p => x == key
-  _ => False
+tokIsKw (PTok (TKw x) p) key = x == key
+tokIsKw _ key = False
 
 tokIdentOf : PTok -> Maybe String
-tokIdentOf tok = case tok of
-  PTok (TIdent x) p => Just x
-  _ => Nothing
+tokIdentOf (PTok (TIdent x) p) = Just x
+tokIdentOf _ = Nothing
 
 tokIsEof : PTok -> Bool
-tokIsEof tok = case tok of
-  PTok TEof p => True
-  _ => False
+tokIsEof (PTok TEof p) = True
+tokIsEof _ = False
 
 headToken : List a -> Maybe a
 headToken [] = Nothing
@@ -539,25 +535,22 @@ removeName name [] = []
 removeName name (x :: rest) = if x == name then removeName name rest else x :: removeName name rest
 
 liftablePat : Pat -> Bool
-liftablePat pat = case pat of
-  PCon name args sp => True
-  PInt n sp => True
-  PStr s sp => True
-  PRecord name fields sp => True
-  _ => False
+liftablePat (PCon name args sp) = True
+liftablePat (PInt n sp) = True
+liftablePat (PStr s sp) = True
+liftablePat (PRecord name fields sp) = True
+liftablePat _ = False
 
 -- 带参数的模式放进 clause 参数位置时必须加括号（`(VBool b)`），否则会被解析成
 -- 多个参数模式（0 元构造子与后续模式分开）。无参数构造子/字面量/变量不需要。
 patNeedsParen : Pat -> Bool
-patNeedsParen pat = case pat of
-  PCon _ args _ => notEmptyPatList args
-  PRecord _ _ _ => True
-  _ => False
+patNeedsParen (PCon _ args _) = notEmptyPatList args
+patNeedsParen (PRecord _ _ _) = True
+patNeedsParen _ = False
 
 notEmptyPatList : List Pat -> Bool
-notEmptyPatList pats = case pats of
-  [] => False
-  _ => True
+notEmptyPatList [] = False
+notEmptyPatList _ = True
 
 -- ---------------------------------------------------------------
 -- 表达式 / 模式的自由名引用
@@ -674,10 +667,9 @@ renderChainItem indent (ChainItem lit thenText expr) =
   spaces (indent + 2) ++ lit ++ " => " ++ thenText
 
 itemsSegmentsOk : List String -> List PTok -> List ChainItem -> Bool
-itemsSegmentsOk lines toks items = case items of
-  [] => True
-  (ChainItem lit thenText expr) :: rest =>
-    segmentOk lines toks expr && itemsSegmentsOk lines toks rest
+itemsSegmentsOk lines toks [] = True
+itemsSegmentsOk lines toks ((ChainItem lit thenText expr) :: rest) =
+  segmentOk lines toks expr && itemsSegmentsOk lines toks rest
 
 chainFixable : List String -> List PTok -> Span -> List ChainItem -> Expr -> Bool
 chainFixable lines toks sp items defaultExpr =
@@ -717,29 +709,24 @@ else case items of
 -- 规则 2：lift-destructure
 -- ---------------------------------------------------------------
 laneHeadLine : Lane -> Int
-laneHeadLine lane = case lane of
-  LClause line pats last => line
-  LAlt line pat last => line
+laneHeadLine (LClause line pats last) = line
+laneHeadLine (LAlt line pat last) = line
 
 laneLast : Lane -> Bool
-laneLast lane = case lane of
-  LClause line pats last => last
-  LAlt line pat last => last
+laneLast (LClause line pats last) = last
+laneLast (LAlt line pat last) = last
 
 laneVars : Lane -> List String
-laneVars lane = case lane of
-  LClause line pats last => patVars pats
-  LAlt line pat last => patVarFuel lintFuel pat
+laneVars (LClause line pats last) = patVars pats
+laneVars (LAlt line pat last) = patVarFuel lintFuel pat
 
 countLaneVar : String -> Lane -> Int
-countLaneVar name lane = case lane of
-  LClause line pats last => countVar name pats
-  LAlt line pat last => countPatFuel lintFuel name pat
+countLaneVar name (LClause line pats last) = countVar name pats
+countLaneVar name (LAlt line pat last) = countPatFuel lintFuel name pat
 
 laneVarSpan : String -> Lane -> Maybe Span
-laneVarSpan name lane = case lane of
-  LClause line pats last => patVarSpanInPats name pats
-  LAlt line pat last => patVarSpan name pat
+laneVarSpan name (LClause line pats last) = patVarSpanInPats name pats
+laneVarSpan name (LAlt line pat last) = patVarSpan name pat
 
 laneHeadText : List String -> Lane -> Int -> Int -> String
 laneHeadText lines lane startLine startCol =
@@ -749,15 +736,13 @@ laneHeadText lines lane startLine startCol =
   else lineAt lines line
 
 patsOnLine : List Pat -> Int -> Bool
-patsOnLine pats line = case pats of
-  [] => True
-  p :: rest =>
-    spanStartLine (patSpan p) == line && spanEndLine (patSpan p) == line && patsOnLine rest line
+patsOnLine [] line = True
+patsOnLine (p :: rest) line =
+  spanStartLine (patSpan p) == line && spanEndLine (patSpan p) == line && patsOnLine rest line
 
 laneHeadSingleLine : Lane -> Bool
-laneHeadSingleLine lane = case lane of
-  LClause line pats last => patsOnLine pats line
-  LAlt line pat last => spanSingleLine (patSpan pat)
+laneHeadSingleLine (LClause line pats last) = patsOnLine pats line
+laneHeadSingleLine (LAlt line pat last) = spanSingleLine (patSpan pat)
 
 -- 把外层 head 里的被提升变量替换成新模式。startLine/startCol 是被提升表达式
 -- 的起点：嵌在 head 行内时只保留表达式之前的前缀（避免把 `case p of` 留在 clause 头）。
@@ -814,12 +799,11 @@ liftCase lines toks lane caseExpr scrut alts sp = case alts of
   _ => []
 
 liftLet : List String -> List PTok -> Lane -> Span -> Pat -> Expr -> Expr -> List Finding
-liftLet lines toks lane sp pat value body = case value of
-  EVar name nsp =>
-    if liftablePat pat && countLaneVar name lane == 1 && notBool (exprMentions name body) && notBool (intersectsNames (patVarFuel lintFuel pat) (removeName name (laneVars lane))) && liftLetFixable lines toks lane pat body sp then [ Finding (spanStartLine sp) (spanStartCol sp) (lintCode LiftDestructure) (lintRule LiftDestructure) (lintMsg LiftDestructure name) (Just (liftLetEdit lines toks lane pat body name sp))
-    ]
-    else []
-  _ => []
+liftLet lines toks lane sp pat (EVar name nsp) body =
+  if liftablePat pat && countLaneVar name lane == 1 && notBool (exprMentions name body) && notBool (intersectsNames (patVarFuel lintFuel pat) (removeName name (laneVars lane))) && liftLetFixable lines toks lane pat body sp then [ Finding (spanStartLine sp) (spanStartCol sp) (lintCode LiftDestructure) (lintRule LiftDestructure) (lintMsg LiftDestructure name) (Just (liftLetEdit lines toks lane pat body name sp))
+  ]
+  else []
+liftLet lines toks lane sp pat _ body = []
 
 liftLetFixable : List String -> List PTok -> Lane -> Pat -> Expr -> Span -> Bool
 liftLetFixable lines toks lane pat body sp =
@@ -858,39 +842,12 @@ liftFindings lines toks lane expr = case expr of
 -- ---------------------------------------------------------------
 -- 规则 3：case-to-clauses
 -- ---------------------------------------------------------------
-lastPatOf : List (Pair Pat Expr) -> Maybe Pat
-lastPatOf alts = case alts of
-  [] => Nothing
-  (Pair pat body) :: rest => case rest of
-    [] => Just pat
-    _ => lastPatOf rest
-
-wildcardLast : List (Pair Pat Expr) -> Bool
-wildcardLast alts = case lastPatOf alts of
-  Nothing => False
-  Just pat => case pat of
-    PWild sp => True
-    PVar n sp => True
-    _ => False
-
-lengthTwo : List a -> Bool
-lengthTwo xs = case xs of
-  [a, b] => True
-  _ => False
-
-nilConsShape : List (Pair Pat Expr) -> Bool
-nilConsShape alts = case alts of
-  [Pair (PCon "Nil" nilArgs nilSp) firstBody, Pair (PCon "Cons" consArgs consSp) secondBody] =>
-    isNilList nilArgs && lengthTwo consArgs
-  _ => False
-
-provablyExhaustive : List (Pair Pat Expr) -> Bool
-provablyExhaustive alts = wildcardLast alts || nilConsShape alts
-
+-- 判据不再语法层证明穷尽性：lint 的输入应视为能通过 `vuna check` 的程序，
+-- 而 DT 已强制 `case` 穷尽；`case` 与多 clause 的匹配语义等价（分支/clause 顺序一致）。
+-- 纯映射表（分支体不引用 scrutinee）同样拆成多 clause。
 isWildPat : Pat -> Bool
-isWildPat pat = case pat of
-  PWild sp => True
-  _ => False
+isWildPat (PWild sp) = True
+isWildPat _ = False
 
 caseAltLiftableOk : String -> List String -> Pair Pat Expr -> Bool
 caseAltLiftableOk x others (Pair pat body) =
@@ -898,19 +855,12 @@ caseAltLiftableOk x others (Pair pat body) =
     && (if exprMentions x body then isWildPat pat else True)
 
 altsLiftableGo : String -> List String -> List (Pair Pat Expr) -> Bool
-altsLiftableGo x others alts = case alts of
-  [] => True
-  alt :: rest => caseAltLiftableOk x others alt && altsLiftableGo x others rest
+altsLiftableGo x others [] = True
+altsLiftableGo x others (alt :: rest) =
+  caseAltLiftableOk x others alt && altsLiftableGo x others rest
 
 altsLiftable : String -> List Pat -> List (Pair Pat Expr) -> Bool
 altsLiftable x pats alts = altsLiftableGo x (removeName x (patVars pats)) alts
-
--- 至少一个分支体真的用到 scrutinee 变量：全不引用时 lift 后参数只剩模式匹配，
--- 不是本规则的目标形态（也避免把 literal-if-chain 生成的 case 再拆成 clause）。
-altsUseVar : String -> List (Pair Pat Expr) -> Bool
-altsUseVar x alts = case alts of
-  [] => False
-  (Pair pat body) :: rest => exprMentions x body || altsUseVar x rest
 
 caseAltClauseLines : List String -> List PTok -> String -> PTok -> String -> Int -> Pat -> Expr -> List String
 caseAltClauseLines lines toks headPrefix varTok x headIndent pat body =
@@ -923,17 +873,15 @@ caseAltClauseLines lines toks headPrefix varTok x headIndent pat body =
   else newHead :: blockBodyLines lines body (headIndent + 2)
 
 clausesForAlts : List String -> List PTok -> String -> PTok -> String -> Int -> List (Pair Pat Expr) -> List String
-clausesForAlts lines toks headPrefix varTok x headIndent alts = case alts of
-  [] => []
-  (Pair pat body) :: rest =>
-    append (caseAltClauseLines lines toks headPrefix varTok x headIndent pat body)
-      (clausesForAlts lines toks headPrefix varTok x headIndent rest)
+clausesForAlts lines toks headPrefix varTok x headIndent [] = []
+clausesForAlts lines toks headPrefix varTok x headIndent ((Pair pat body) :: rest) =
+  append (caseAltClauseLines lines toks headPrefix varTok x headIndent pat body)
+    (clausesForAlts lines toks headPrefix varTok x headIndent rest)
 
 altsPlacementOk : List String -> List PTok -> List (Pair Pat Expr) -> Bool
-altsPlacementOk lines toks alts = case alts of
-  [] => True
-  (Pair pat body) :: rest =>
-    liftBodyPlacementOk lines toks pat body && altsPlacementOk lines toks rest
+altsPlacementOk lines toks [] = True
+altsPlacementOk lines toks ((Pair pat body) :: rest) =
+  liftBodyPlacementOk lines toks pat body && altsPlacementOk lines toks rest
 
 caseToClausesFixable : List String -> List PTok -> List Pat -> Int -> Span -> List (Pair Pat Expr) -> Bool
 caseToClausesFixable lines toks pats headLine sp alts =
@@ -961,7 +909,7 @@ caseToClauses : List String -> List PTok -> Int -> String -> List Pat -> Expr ->
 caseToClauses lines toks headLine name pats body singleClause = case body of
   ECase scrut alts sp => case scrut of
     EVar x xsp =>
-      if singleClause && countVar x pats == 1 && atLeastTwo alts && provablyExhaustive alts && altsUseVar x alts && altsLiftable x pats alts && caseToClausesFixable lines toks pats headLine sp alts then [ Finding (spanStartLine sp) (spanStartCol sp) (lintCode CaseToClauses) (lintRule CaseToClauses) (lintMsg CaseToClauses x) (Just (caseToClausesEdit lines toks x pats headLine sp alts))
+      if singleClause && countVar x pats == 1 && atLeastTwo alts && altsLiftable x pats alts && caseToClausesFixable lines toks pats headLine sp alts then [ Finding (spanStartLine sp) (spanStartCol sp) (lintCode CaseToClauses) (lintRule CaseToClauses) (lintMsg CaseToClauses x) (Just (caseToClausesEdit lines toks x pats headLine sp alts))
       ]
       else []
     _ => []
@@ -1081,10 +1029,9 @@ laterHasFun name decls = case decls of
 -- 模式会改变模式矩阵与隐式 Pi 的对齐（实测 `vhead : (a : Type) -> {n : Nat} -> ...`
 -- 会把 `VCons` 模式错配到 `n : Nat`）。literal-if-chain 与函数参数无关，不受影响。
 hasImplicitPi : Expr -> Bool
-hasImplicitPi e = case e of
-  EPi name implicit dom cod sp => if implicit then True else hasImplicitPi cod
-  EApp (EVar "->" _) ([dom, cod]) sp => hasImplicitPi dom || hasImplicitPi cod
-  _ => False
+hasImplicitPi (EPi name implicit dom cod sp) = if implicit then True else hasImplicitPi cod
+hasImplicitPi (EApp (EVar "->" _) ([dom, cod]) sp) = hasImplicitPi dom || hasImplicitPi cod
+hasImplicitPi _ = False
 
 sigTyOf : String -> List Decl -> Maybe Expr
 sigTyOf name decls = case decls of
@@ -1127,9 +1074,9 @@ declFindings lines toks allDecls d rest = case d of
   _ => []
 
 scanDecls : List String -> List PTok -> List Decl -> List Decl -> List Finding
-scanDecls lines toks allDecls decls = case decls of
-  [] => []
-  d :: rest => append (declFindings lines toks allDecls d rest) (scanDecls lines toks allDecls rest)
+scanDecls lines toks allDecls [] = []
+scanDecls lines toks allDecls (d :: rest) =
+  append (declFindings lines toks allDecls d rest) (scanDecls lines toks allDecls rest)
 
 sortFindings : List Finding -> List Finding
 sortFindings [] = []

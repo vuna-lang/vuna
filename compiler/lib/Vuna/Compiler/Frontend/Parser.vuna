@@ -230,14 +230,12 @@ localFunMerge name value acc = case acc of
 
 -- 绑定名（非简单变量绑定返回空串，永远匹配不到签名）。
 patBoundName : Pat -> String
-patBoundName pat = case pat of
-  PVar name sp => name
-  _ => ""
+patBoundName (PVar name sp) = name
+patBoundName _ = ""
 
 bindingSigOf : String -> List (Pair String (Pair Expr Span)) -> Maybe (Pair Expr Span)
-bindingSigOf name sigs = case sigs of
-  [] => Nothing
-  (Pair n v) :: rest => if n == name then Just v else bindingSigOf name rest
+bindingSigOf name [] = Nothing
+bindingSigOf name ((Pair n v) :: rest) = if n == name then Just v else bindingSigOf name rest
 
 hasBindingSig : String -> List (Pair String (Pair Expr Span)) -> Bool
 hasBindingSig name sigs = case bindingSigOf name sigs of

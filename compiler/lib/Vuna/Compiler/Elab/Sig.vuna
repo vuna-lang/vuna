@@ -38,23 +38,25 @@ maxIntList [] = 0
 maxIntList (x :: rest) = if x >= maxIntList rest then x else maxIntList rest
 
 exprMaxAppArity : String -> Expr -> Int
-exprMaxAppArity pname e = case e of
-  EApp (EVar f fsp) args sp =>
-    if f == pname then maxIntList (length args :: map (exprMaxAppArity pname) args)
-    else maxIntList (map (exprMaxAppArity pname) args)
-  EApp fn args sp => maxIntList (exprMaxAppArity pname fn :: map (exprMaxAppArity pname) args)
-  ELam names body sp => exprMaxAppArity pname body
-  EPi n implicit dom cod sp => maxIntList [exprMaxAppArity pname dom, exprMaxAppArity pname cod]
-  ELet binds body rec_ sp =>
-    maxIntList (exprMaxAppArity pname body :: map (\b => exprMaxAppArity pname (secondOf b)) binds)
-  ECase scrut alts sp =>
-    maxIntList (exprMaxAppArity pname scrut :: map (\a => exprMaxAppArity pname (secondOf a)) alts)
-  EIf c t f sp =>
-    maxIntList [exprMaxAppArity pname c, exprMaxAppArity pname t, exprMaxAppArity pname f]
-  EField b fname sp => exprMaxAppArity pname b
-  ERecord rn fields sp => maxIntList (map (\p => exprMaxAppArity pname (secondOf p)) fields)
-  ERecUpdate b fields sp => exprMaxAppArity pname b
-  _ => 0
+exprMaxAppArity pname (EApp (EVar f fsp) args sp) =
+  if f == pname then maxIntList (length args :: map (exprMaxAppArity pname) args)
+  else maxIntList (map (exprMaxAppArity pname) args)
+exprMaxAppArity pname (EApp fn args sp) =
+  maxIntList (exprMaxAppArity pname fn :: map (exprMaxAppArity pname) args)
+exprMaxAppArity pname (ELam names body sp) = exprMaxAppArity pname body
+exprMaxAppArity pname (EPi n implicit dom cod sp) =
+  maxIntList [exprMaxAppArity pname dom, exprMaxAppArity pname cod]
+exprMaxAppArity pname (ELet binds body rec_ sp) =
+  maxIntList (exprMaxAppArity pname body :: map (\b => exprMaxAppArity pname (secondOf b)) binds)
+exprMaxAppArity pname (ECase scrut alts sp) =
+  maxIntList (exprMaxAppArity pname scrut :: map (\a => exprMaxAppArity pname (secondOf a)) alts)
+exprMaxAppArity pname (EIf c t f sp) =
+  maxIntList [exprMaxAppArity pname c, exprMaxAppArity pname t, exprMaxAppArity pname f]
+exprMaxAppArity pname (EField b fname sp) = exprMaxAppArity pname b
+exprMaxAppArity pname (ERecord rn fields sp) =
+  maxIntList (map (\p => exprMaxAppArity pname (secondOf p)) fields)
+exprMaxAppArity pname (ERecUpdate b fields sp) = exprMaxAppArity pname b
+exprMaxAppArity pname _ = 0
 
 -- 方法的显式参数各自的 multiplicity（M19）：逐 binder 按域判断，判据由调用方传入
 -- （`Elab` 的 `binderRig`——`Elab.Sig` 不重复定义擦除规则，保持单一入口）。
@@ -62,13 +64,12 @@ methodArgRigsOf : (Bool -> Value -> Rig) -> Term -> List Rig
 methodArgRigsOf rigOf ty = methodArgRigsOfGo rigOf ty []
 
 methodArgRigsOfGo : (Bool -> Value -> Rig) -> Term -> List Value -> List Rig
-methodArgRigsOfGo rigOf ty env = case ty of
-  TPi name implicit rigB dom cod =>
-    let
-      domVal = eval env dom
-      v = VNeutral (NVar name (length env) [])
-    in rigOf implicit domVal :: methodArgRigsOfGo rigOf cod (v :: env)
-  _ => []
+methodArgRigsOfGo rigOf (TPi name implicit rigB dom cod) env =
+  let
+    domVal = eval env dom
+    v = VNeutral (NVar name (length env) [])
+  in rigOf implicit domVal :: methodArgRigsOfGo rigOf cod (v :: env)
+methodArgRigsOfGo rigOf _ env = []
 
 -- ---------------------------------------------------------------------------
 -- 顶层签名量化（原 Elab/Quant.vuna）
@@ -104,28 +105,26 @@ kindArrowExpr k sp =
   if k <= 0 then EVar "Type" sp else EPi "_" False (EVar "Type" sp) (kindArrowExpr (k - 1) sp) sp
 
 piBoundNames : Expr -> List String
-piBoundNames e = case e of
-  EPi n implicit dom cod sp => n :: piBoundNames cod
-  _ => []
+piBoundNames (EPi n implicit dom cod sp) = n :: piBoundNames cod
+piBoundNames _ = []
 
 lowerVarNames : Expr -> List String
 lowerVarNames e = dedupNames (exprLowerVars e)
 
 exprLowerVars : Expr -> List String
-exprLowerVars e = case e of
-  EVar n sp => if isLowerIdent n then [n] else []
-  EApp fn args sp => append (exprLowerVars fn) (concatMap exprLowerVars args)
-  ELam names body sp => exprLowerVars body
-  EPi n implicit dom cod sp => append (exprLowerVars dom) (exprLowerVars cod)
-  EIf c t f sp => append (exprLowerVars c) (append (exprLowerVars t) (exprLowerVars f))
-  ELet binds body rec_ sp =>
-    append (concatMap (\b => exprLowerVars (secondOf b)) binds) (exprLowerVars body)
-  ECase scrut alts sp =>
-    append (exprLowerVars scrut) (concatMap (\a => exprLowerVars (secondOf a)) alts)
-  EField b f sp => exprLowerVars b
-  ERecord rn fields sp => concatMap (\p => exprLowerVars (secondOf p)) fields
-  ERecUpdate b fields sp => exprLowerVars b
-  _ => []
+exprLowerVars (EVar n sp) = if isLowerIdent n then [n] else []
+exprLowerVars (EApp fn args sp) = append (exprLowerVars fn) (concatMap exprLowerVars args)
+exprLowerVars (ELam names body sp) = exprLowerVars body
+exprLowerVars (EPi n implicit dom cod sp) = append (exprLowerVars dom) (exprLowerVars cod)
+exprLowerVars (EIf c t f sp) = append (exprLowerVars c) (append (exprLowerVars t) (exprLowerVars f))
+exprLowerVars (ELet binds body rec_ sp) =
+  append (concatMap (\b => exprLowerVars (secondOf b)) binds) (exprLowerVars body)
+exprLowerVars (ECase scrut alts sp) =
+  append (exprLowerVars scrut) (concatMap (\a => exprLowerVars (secondOf a)) alts)
+exprLowerVars (EField b f sp) = exprLowerVars b
+exprLowerVars (ERecord rn fields sp) = concatMap (\p => exprLowerVars (secondOf p)) fields
+exprLowerVars (ERecUpdate b fields sp) = exprLowerVars b
+exprLowerVars _ = []
 
 isLowerIdent : String -> Bool
 isLowerIdent n = case strUnpack n of

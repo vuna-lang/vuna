@@ -8,17 +8,15 @@ OUT=${1:-program}
 FLAGS="-g -w -a+39 -warn-error +39"
 MODULES="Vuna_runtime Base_dPair Base_dBool Base_dMonad Base_dMaybe Base_dEq Base_dList Base_dResult Base_dString Base_dShow Base_dOrd Prelude Vuna_dCompiler_dCommon Vuna_dCompiler_dFrontend_dToml Vuna_dCompiler_dFrontend_dManifest Vuna_dCompiler_dPackages_dPkg Vuna_dCompiler_dDebug Base_dNat Base_dVec Vuna_dCompiler_dDiagnostics_dCommon Vuna_dCompiler_dDiagnostics_dCg Vuna_dCompiler_dDiagnostics_dTc Vuna_dCompiler_dDiagnostics Vuna_dCompiler_dFrontend_dAst Vuna_dCompiler_dFrontend_dDiagnostics Vuna_dCompiler_dFrontend_dLexer Vuna_dCompiler_dFrontend_dParser_dSupport Vuna_dCompiler_dFrontend_dParser Vuna_dCompiler_dLoader_dDiagnostics Vuna_dCompiler_dLoader_dModules Vuna_dCompiler_dIntrinsics Vuna_dCompiler_dLoader_dResolve Vuna_dCompiler_dLoader_dFlatten Vuna_dCompiler_dLoader Vuna_dCompiler_dCore_dTerm Vuna_dCompiler_dCore_dEval Vuna_dCompiler_dCore_dConv Vuna_dCompiler_dCore Vuna_dCompiler_dElab_dTypes Vuna_dCompiler_dElab_dPrelude Vuna_dCompiler_dElab_dSig Vuna_dCompiler_dElab_dMeta Vuna_dCompiler_dElab_dCase Vuna_dCompiler_dElab_dDict Vuna_dCompiler_dElab_dMatch Vuna_dCompiler_dElab_dTerm_dSupport Vuna_dCompiler_dElab_dTerm_dImpl Vuna_dCompiler_dElab_dTerm Vuna_dCompiler_dElab_dData Vuna_dCompiler_dElab_dInstName Vuna_dCompiler_dElab_dTrait Vuna_dCompiler_dElab_dDerive Vuna_dCompiler_dElab_dRecords Vuna_dCompiler_dElab_dTermination_dMeasure Vuna_dCompiler_dElab_dTermination_dScc Vuna_dCompiler_dElab_dTermination Vuna_dCompiler_dElab_dDriver Vuna_dCompiler_dElab Vuna_dCompiler_dCodegen_dDecl Vuna_dCompiler_dCodegen_dErase Vuna_dCompiler_dCodegen_dTerm Vuna_dCompiler_dCodegen_dAssembly Vuna_dCompiler_dDriver_dSplit Vuna_dCompiler_dCodegen_dSplit Vuna_dCompiler_dCodegen Vuna_dCompiler_dDriver_dDt Vuna_dCompiler_dVersion Vuna_dCompiler_dDriver_dCompile Vuna_dCompiler_dDriver_dCompilerCli Base_dIO Main "
 hash_of() {
-  acc=""
   for f in "$@"; do
-    if [ -f "$f" ]; then acc="$acc$(sha256sum < "$f")"; else acc="${acc}-"; fi
-  done
-  printf '%s' "$acc" | sha256sum | awk '{print $1}'
+    if [ -f "$f" ]; then cat "$f"; else printf '%s' '-'; fi
+  done | sha256sum | awk '{print $1}'
 }
 stamp_want() {
   base=$1
   shift
   deps=""
-  for d in "$@"; do deps="$deps $d.cmi $d.cmx"; done
+  for d in "$@"; do deps="$deps $d.stamp"; done
   hash_of "$base.ml" "$base.mli" $deps
 }
 clean=1

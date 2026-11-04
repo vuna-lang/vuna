@@ -207,11 +207,13 @@ DT 设计见 [docs/dt-core.md](../dt-core.md)。
 - `vuna lint`（M30 AST 驱动）只报告**可安全自动修复**的形态，三条规则：`literal-if-chain`
   （String/Int 字面量 if/else-if 链，含 `= if` 链首与链尾 inline `else`）、
   `lift-destructure`（单分支 case / let 模式解构 → 外层模式）、`case-to-clauses`（顶层
-  case → 多 clause）。不可安全折叠的情形（非最后 clause、clause head 跨行、含注释/tab/CR、
-  分支体无法安全收束）**不报告**；签名含隐式 Pi 的函数跳过 clause 级改写（模式矩阵与隐式
-  参数对齐，见 `Base.Vec.vhead` 的坑）。`--fix` 遇到注释、tab、CRLF 也跳过。`vuna lint`
-  **必须显式给路径**，无参数是用法错误（退出码 2）。`checks.vuna-lint` 对全部包源码要求
-  零 finding；规则语义与边界见 [lint.md](lint.md)。
+  case → 多 clause，含枚举分派与纯映射表）。不可安全折叠的情形（非最后 clause、clause head
+  跨行、含注释/tab/CR、分支体无法安全收束）**不报告**；签名含隐式 Pi 的函数跳过 clause 级
+  改写（模式矩阵与隐式参数对齐，见 `Base.Vec.vhead` 的坑）。`case-to-clauses` 不再语法证明
+  穷尽性（交给 `vuna check`），非穷尽 case 对编译不过的文件可能拆出不完整 clause。
+  `--fix` 遇到注释、tab、CRLF 也跳过。`vuna lint` **必须显式给路径**，无参数是用法错误
+  （退出码 2）。`checks.vuna-lint` 对全部包源码要求零 finding；规则语义与边界见
+  [lint.md](lint.md)。
 - `vuna fmt --check` 省略 PATH 时按 workspace 包约定扫描各包 `lib/app/test`（缺目录不再
   崩溃）；M30 起非包目录 / 不存在路径都是可读错误 exit 2，`map` 同类场景也给出明确错误
   而非静默空输出（C12 已修）。`vuna doc` 尊重 `[export].modules`，`--with-comments`

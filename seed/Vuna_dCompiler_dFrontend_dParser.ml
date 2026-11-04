@@ -72,19 +72,19 @@ let v_Vuna_dCompiler_dFrontend_dParser_dlocalFunMerge = (fun name -> (fun value 
   | _ -> C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing
 )) acc))))
 
-let v_Vuna_dCompiler_dFrontend_dParser_dpatBoundName = (fun pat -> (match pat with
+let v_Vuna_dCompiler_dFrontend_dParser_dpatBoundName = (fun mc0 -> (match mc0 with
   | C_Vuna_dCompiler_dFrontend_dAst_dPat_Vuna_dCompiler_dFrontend_dAst_dPVar (dtb__21, dtb__22) -> dtb__21
   | _ -> ""
 ))
 
-let rec v_Vuna_dCompiler_dFrontend_dParser_dbindingSigOf = (fun name -> (fun sigs -> ((fun nd_uscrut2 -> (match nd_uscrut2 with
+let rec v_Vuna_dCompiler_dFrontend_dParser_dbindingSigOf = (fun mc0 -> (fun mc1 -> (match mc1 with
   | C_Base_dList_dList_Base_dList_dCons (dtb__23, dtb__24) -> (match dtb__23 with
-  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__25, dtb__26) -> (if ((bi_eq_str dtb__25) name) then (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__26)) else ((v_Vuna_dCompiler_dFrontend_dParser_dbindingSigOf name) dtb__24))
+  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__25, dtb__26) -> (if ((bi_eq_str dtb__25) mc0) then (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__26)) else ((v_Vuna_dCompiler_dFrontend_dParser_dbindingSigOf mc0) dtb__24))
   | _ -> failwith "DT: impossible branch"
 )
   | C_Base_dList_dList_Base_dList_dNil -> C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing
   | _ -> failwith "DT: impossible branch"
-)) sigs)))
+)))
 
 let v_Vuna_dCompiler_dFrontend_dParser_dhasBindingSig = (fun name -> (fun sigs -> (match ((v_Vuna_dCompiler_dFrontend_dParser_dbindingSigOf name) sigs) with
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__27) -> true

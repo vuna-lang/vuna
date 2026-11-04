@@ -404,6 +404,5 @@ countChar : Int -> String -> Int
 countChar c text = countCharGo c (strUnpack text)
 
 countCharGo : Int -> List Int -> Int
-countCharGo c chars = case chars of
-  [] => 0
-  x :: rest => if x == c then 1 + countCharGo c rest else countCharGo c rest
+countCharGo c [] = 0
+countCharGo c (x :: rest) = if x == c then 1 + countCharGo c rest else countCharGo c rest

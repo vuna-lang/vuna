@@ -1,8 +1,7 @@
 pick : String -> Int
-pick a = case a of
-  "x" => 1
-  "y" => 2
-  _ => 0
+pick "x" = 1
+pick "y" = 2
+pick _ = 0
 
 main : Int
 main = pick "x"

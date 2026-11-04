@@ -353,9 +353,8 @@ groupOf allNames ([x]) = [x]
 groupOf allNames g = filterNames (\m => tblMem m (tblOfNames g)) allNames
 
 filterNames : (String -> Bool) -> List String -> List String
-filterNames pred names = case names of
-  [] => []
-  n :: rest => if pred n then n :: filterNames pred rest else filterNames pred rest
+filterNames pred [] = []
+filterNames pred (n :: rest) = if pred n then n :: filterNames pred rest else filterNames pred rest
 
 notIn : String -> List String -> Bool
 notIn name names = if memName name names then False else True
@@ -371,9 +370,8 @@ groupDeps adjT group =
   filterNames (\n => notIn n group) (uniqueNames (concatMap (neighborsOf adjT) group))
 
 allIn : List String -> HashTbl Bool -> Bool
-allIn names allowed = case names of
-  [] => True
-  n :: rest => if tblMem n allowed then allIn rest allowed else False
+allIn [] allowed = True
+allIn (n :: rest) allowed = if tblMem n allowed then allIn rest allowed else False
 
 groupReady : HashTbl (List String) -> List String -> HashTbl Bool -> Bool
 groupReady adjT group emitted = allIn (groupDeps adjT group) emitted
@@ -469,29 +467,29 @@ ensureUniqueOcamlNames datas defs =
 -- （含类型级定义，它们现在整体擦除、不再过擦除检查）做一次作用域验证，任何
 -- 越界/负 index 都在 check 期报内部错误，而不是在 codegen/OCaml 阶段才炸。
 checkTermScopes : Int -> Term -> Result Int
-checkTermScopes depth t = case t of
-  TVar name i =>
-    if i >= 0 then if i < depth then Ok 0
-    else Err
-      ("DT: internal: out-of-scope de Bruijn index " ++ strFromInt i ++ " (depth " ++ strFromInt depth ++ ")")
-    else Err ("DT: internal: negative de Bruijn index " ++ strFromInt i)
-  TGlobal name => Ok 0
-  TInt n => Ok 0
-  TStr s => Ok 0
-  TBool b => Ok 0
-  TType l => Ok 0
-  TMeta m => Ok 0
-  TApp f a rig =>
-    if rigIsErased rig then checkTermScopes depth f
-    else andThen (checkTermScopes depth f) (\_ => checkTermScopes depth a)
-  TCon c args => checkTermScopesArgs depth args
-  TLam name rig body => checkTermScopes (depth + 1) body
-  TPi name implicit rig dom cod =>
-    andThen (checkTermScopes depth dom) (\_ => checkTermScopes (depth + 1) cod)
-  TIf c th el =>
-    andThen (checkTermScopes depth c)
-      (\_ => andThen (checkTermScopes depth th) (\_ => checkTermScopes depth el))
-  TCase scrut alts => andThen (checkTermScopes depth scrut) (\_ => checkAltScopes depth alts)
+checkTermScopes depth (TVar name i) =
+  if i >= 0 then if i < depth then Ok 0
+  else Err
+    ("DT: internal: out-of-scope de Bruijn index " ++ strFromInt i ++ " (depth " ++ strFromInt depth ++ ")")
+  else Err ("DT: internal: negative de Bruijn index " ++ strFromInt i)
+checkTermScopes depth (TGlobal name) = Ok 0
+checkTermScopes depth (TInt n) = Ok 0
+checkTermScopes depth (TStr s) = Ok 0
+checkTermScopes depth (TBool b) = Ok 0
+checkTermScopes depth (TType l) = Ok 0
+checkTermScopes depth (TMeta m) = Ok 0
+checkTermScopes depth (TApp f a rig) =
+  if rigIsErased rig then checkTermScopes depth f
+  else andThen (checkTermScopes depth f) (\_ => checkTermScopes depth a)
+checkTermScopes depth (TCon c args) = checkTermScopesArgs depth args
+checkTermScopes depth (TLam name rig body) = checkTermScopes (depth + 1) body
+checkTermScopes depth (TPi name implicit rig dom cod) =
+  andThen (checkTermScopes depth dom) (\_ => checkTermScopes (depth + 1) cod)
+checkTermScopes depth (TIf c th el) =
+  andThen (checkTermScopes depth c)
+    (\_ => andThen (checkTermScopes depth th) (\_ => checkTermScopes depth el))
+checkTermScopes depth (TCase scrut alts) =
+  andThen (checkTermScopes depth scrut) (\_ => checkAltScopes depth alts)
 
 checkTermScopesArgs : Int -> List (Pair Term Rig) -> Result Int
 checkTermScopesArgs depth [] = Ok 0

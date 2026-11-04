@@ -195,9 +195,9 @@ projectionBody ctor fieldIdx rigs nFields =
   in TLam "_p" Rig0 (TLam "_d" Rig1 lamArgs)
 
 explicitPiArity : Term -> Int
-explicitPiArity t = case t of
-  TPi n implicit rig dom cod => if implicit then explicitPiArity cod else 1 + explicitPiArity cod
-  _ => 0
+explicitPiArity (TPi n implicit rig dom cod) =
+  if implicit then explicitPiArity cod else 1 + explicitPiArity cod
+explicitPiArity _ = 0
 
 -- 投影定义表：每个方法一条 `m = <投影定义体>`。
 projectionDefs : String -> String -> List (Pair String Expr) -> List Term -> Int -> List (Pair String Term)
@@ -374,12 +374,11 @@ instanceTeleOf banned combined exprs =
   in map (\v => Pair v (arityFun (exprMaxAppArity v combined) (TType levelZero))) vars
 
 exprFreeLower : Expr -> List String
-exprFreeLower e = case e of
-  EVar n sp => if isLowerStart n then [n] else []
-  EApp fn args sp => append (exprFreeLower fn) (concatMap exprFreeLower args)
-  EPi n i dom cod sp => append (exprFreeLower dom) (exprFreeLower cod)
-  EAnn v ty sp => append (exprFreeLower v) (exprFreeLower ty)
-  _ => []
+exprFreeLower (EVar n sp) = if isLowerStart n then [n] else []
+exprFreeLower (EApp fn args sp) = append (exprFreeLower fn) (concatMap exprFreeLower args)
+exprFreeLower (EPi n i dom cod sp) = append (exprFreeLower dom) (exprFreeLower cod)
+exprFreeLower (EAnn v ty sp) = append (exprFreeLower v) (exprFreeLower ty)
+exprFreeLower _ = []
 
 uniqNames : List String -> List String
 uniqNames [] = []
@@ -460,10 +459,9 @@ instTypeTele body ((Pair n k) :: rest) = TPi n True Rig0 k (instTypeTele body re
 -- 实例头 `Show Int` 的类型项（`Dict_Show Int`）。
 -- 实例头的实参项：`Pretty Color` → `TGlobal "Color"`（M15 只支持单参数接口）。
 instanceHeadTerm : Expr -> Term
-instanceHeadTerm e = case e of
-  EApp fn (a :: rest) sp => TGlobal (argNameOf a)
-  EVar n sp => TGlobal n
-  _ => TGlobal "Int"
+instanceHeadTerm (EApp fn (a :: rest) sp) = TGlobal (argNameOf a)
+instanceHeadTerm (EVar n sp) = TGlobal n
+instanceHeadTerm _ = TGlobal "Int"
 
 -- 实例里出现 trait 没声明的方法 ⇒ 硬错误（旧实现静默忽略多余方法）。
 firstUnknownInstanceMethod : DtClass -> List Decl -> Maybe String
@@ -700,9 +698,8 @@ substMetaTermAlt m rep depth (CaseAlt n bs b) =
   CaseAlt n bs (substMetaTermGo m rep (depth + length bs) b)
 
 clauseSpanOf : List (Pair (List Pat) Expr) -> Span
-clauseSpanOf clauses = case clauses of
-  [] => Span "" 0 0 0 0
-  c :: rest => exprSpan (secondOf c)
+clauseSpanOf [] = Span "" 0 0 0 0
+clauseSpanOf (c :: rest) = exprSpan (secondOf c)
 
 -- ---------------------------------------------------------------
 -- 泛型实例约束提升（M20 剩余 / M22 前置 / M29 C05）
@@ -744,9 +741,8 @@ domainsEqual ec a b = case conv (ecDefTbl ec) (ecSolsP ec) 0 a b of
 
 -- 签名 Term 的隐式 Pi 前缀长度（`{a} -> {b} -> ...` 的隐式 binder 数）。
 leadingImplicitCount : Term -> Int
-leadingImplicitCount t = case t of
-  TPi n True rig dom cod => 1 + leadingImplicitCount cod
-  _ => 0
+leadingImplicitCount (TPi n True rig dom cod) = 1 + leadingImplicitCount cod
+leadingImplicitCount _ = 0
 
 -- 解掉被替换出体的孤儿 `?m`（否则 `unsolvedMeta` 报未解元变量）。`level` 是该字典 binder
 -- 的 de Bruijn level（从最外层数），供后续 quote/zonk 还原正确索引。

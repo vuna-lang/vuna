@@ -302,23 +302,23 @@ let v_Vuna_dCompiler_dElab_dTypes_decPutSolsRaw = (fun mc0 -> (fun mc1 -> (fun m
   | _ -> failwith "DT: impossible branch"
 ))))
 
-let rec v_Vuna_dCompiler_dElab_dTypes_dprefixUntilId = (fun pid -> (fun cur -> ((fun nd_uscrut2 -> (match nd_uscrut2 with
+let rec v_Vuna_dCompiler_dElab_dTypes_dprefixUntilId = (fun mc0 -> (fun mc1 -> (match mc1 with
   | C_Base_dList_dList_Base_dList_dCons (dtb__518, dtb__519) -> (match dtb__518 with
-  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__520, dtb__521) -> (if ((bi_eq_int dtb__520) pid) then C_Base_dList_dList_Base_dList_dNil else (C_Base_dList_dList_Base_dList_dCons ((C_Base_dPair_dPair_Base_dPair_dPair (dtb__520, dtb__521)), ((v_Vuna_dCompiler_dElab_dTypes_dprefixUntilId pid) dtb__519))))
+  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__520, dtb__521) -> (if ((bi_eq_int dtb__520) mc0) then C_Base_dList_dList_Base_dList_dNil else (C_Base_dList_dList_Base_dList_dCons ((C_Base_dPair_dPair_Base_dPair_dPair (dtb__520, dtb__521)), ((v_Vuna_dCompiler_dElab_dTypes_dprefixUntilId mc0) dtb__519))))
   | _ -> failwith "DT: impossible branch"
 )
   | C_Base_dList_dList_Base_dList_dNil -> C_Base_dList_dList_Base_dList_dNil
   | _ -> failwith "DT: impossible branch"
-)) cur)))
+)))
 
-let v_Vuna_dCompiler_dElab_dTypes_dsolsDelta = (fun old -> (fun cur -> ((fun nd_uscrut2 -> (match nd_uscrut2 with
+let v_Vuna_dCompiler_dElab_dTypes_dsolsDelta = (fun mc0 -> (fun mc1 -> (match mc0 with
   | C_Base_dList_dList_Base_dList_dCons (dtb__522, dtb__523) -> (match dtb__522 with
-  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__524, dtb__525) -> ((v_Vuna_dCompiler_dElab_dTypes_dprefixUntilId dtb__524) cur)
+  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__524, dtb__525) -> ((v_Vuna_dCompiler_dElab_dTypes_dprefixUntilId dtb__524) mc1)
   | _ -> failwith "DT: impossible branch"
 )
-  | C_Base_dList_dList_Base_dList_dNil -> cur
+  | C_Base_dList_dList_Base_dList_dNil -> mc1
   | _ -> failwith "DT: impossible branch"
-)) old)))
+)))
 
 let v_Vuna_dCompiler_dElab_dTypes_decPutSols = (fun ec -> (fun sols2 -> ((fun delta -> ((fun soltbl2 -> (((v_Vuna_dCompiler_dElab_dTypes_decPutSolsRaw ec) sols2) soltbl2)) ((v_Vuna_dCompiler_dCommon_dtblInsertAll ((v_Base_dList_dmap (fun p -> (C_Base_dPair_dPair_Base_dPair_dPair ((bi_strFromInt (v_Base_dPair_dfirstOf p)), (v_Base_dPair_dsecondOf p))))) delta)) (v_Vuna_dCompiler_dElab_dTypes_decSolTbl ec)))) ((v_Vuna_dCompiler_dElab_dTypes_dsolsDelta (v_Vuna_dCompiler_dElab_dTypes_decSols ec)) sols2))))
 

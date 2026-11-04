@@ -95,9 +95,8 @@ maxInt : Int -> Int -> Int
 maxInt a b = if a >= b then a else b
 
 notEmpty : List a -> Bool
-notEmpty xs = case xs of
-  [] => False
-  _ => True
+notEmpty [] = False
+notEmpty _ = True
 
 allEqTo : Int -> List Int -> Bool
 allEqTo x [] = True
@@ -191,12 +190,11 @@ ctorNameOf : Ctor -> String
 ctorNameOf (Ctor name ty arity sp) = name
 
 patSizeStrict : Pat -> Int -> List Int -> List (Pair String (Pair Int (Pair Int (List Int)))) -> List (Pair String (Pair Int (Pair Int (List Int))))
-patSizeStrict pat base path acc = case pat of
-  PVar n sp => Pair n (Pair base (Pair (length path) path)) :: acc
-  PWild sp => acc
-  PCon c ps sp => patsSizeStrict ps base path 0 acc
-  PRecord rn fields sp => fieldsSizeStrict fields base path 0 acc
-  _ => acc
+patSizeStrict (PVar n sp) base path acc = Pair n (Pair base (Pair (length path) path)) :: acc
+patSizeStrict (PWild sp) base path acc = acc
+patSizeStrict (PCon c ps sp) base path acc = patsSizeStrict ps base path 0 acc
+patSizeStrict (PRecord rn fields sp) base path acc = fieldsSizeStrict fields base path 0 acc
+patSizeStrict _ base path acc = acc
 
 patsSizeStrict : List Pat -> Int -> List Int -> Int -> List (Pair String (Pair Int (Pair Int (List Int)))) -> List (Pair String (Pair Int (Pair Int (List Int))))
 patsSizeStrict [] base path k acc = acc
@@ -265,9 +263,8 @@ guardLT args = case args of
   _ => Nothing
 
 varOfExpr : Expr -> Maybe String
-varOfExpr e = case e of
-  EVar n sp => Just n
-  _ => Nothing
+varOfExpr (EVar n sp) = Just n
+varOfExpr _ = Nothing
 
 -- 一个实参是否「已知为正」：字面量 >0，或变量处于守卫区 / 调用方同位置形参已有正事实。
 argPositive : List Expr -> Int -> List (Pair String (Pair Int (Pair Int (List Int)))) -> String -> List (Pair String Int) -> List String -> Bool
@@ -411,12 +408,11 @@ pathInFields v ((Pair fn fp) :: rest) path k = case pathInPat v fp (append path 
   Nothing => pathInFields v rest path (k + 1)
 
 pathInPat : String -> Pat -> List Int -> Maybe (List Int)
-pathInPat v pat path = case pat of
-  PVar n sp => if n == v then Just path else Nothing
-  PWild sp => Nothing
-  PCon c ps sp => pathInPats v ps path 0
-  PRecord rn fields sp => pathInFields v fields path 0
-  _ => Nothing
+pathInPat v (PVar n sp) path = if n == v then Just path else Nothing
+pathInPat v (PWild sp) path = Nothing
+pathInPat v (PCon c ps sp) path = pathInPats v ps path 0
+pathInPat v (PRecord rn fields sp) path = pathInFields v fields path 0
+pathInPat v _ path = Nothing
 
 projectionOfDef : Pair String (List (Pair (List Pat) Expr)) -> Maybe (Pair String (List Int))
 projectionOfDef d = case secondOf d of
@@ -461,15 +457,14 @@ posVarIn : String -> Int -> String -> List (Pair String Int) -> List String -> B
 posVarIn x p caller facts region = if memName x region then True else posHas caller p facts
 
 arithRel : Int -> Expr -> List (Pair String (Pair Int (Pair Int (List Int)))) -> String -> List (Pair String Int) -> List String -> Maybe Int
-arithRel p a sizes caller facts region = case a of
-  EApp (EVar op osp) args sp =>
-    if op == "-" then arithMinus p args sizes caller facts region else Nothing
-  _ => Nothing
+arithRel p (EApp (EVar op osp) args sp) sizes caller facts region =
+  if op == "-" then arithMinus p args sizes caller facts region else Nothing
+arithRel p _ sizes caller facts region = Nothing
 
 arithMinus : Int -> List Expr -> List (Pair String (Pair Int (Pair Int (List Int)))) -> String -> List (Pair String Int) -> List String -> Maybe Int
-arithMinus p args sizes caller facts region = case args of
-  [base, EInt k ksp] => if k > 0 then arithMinusBase p base k sizes caller facts region else Nothing
-  _ => Nothing
+arithMinus p ([base, EInt k ksp]) sizes caller facts region =
+  if k > 0 then arithMinusBase p base k sizes caller facts region else Nothing
+arithMinus p _ sizes caller facts region = Nothing
 
 arithMinusBase : Int -> Expr -> Int -> List (Pair String (Pair Int (Pair Int (List Int)))) -> String -> List (Pair String Int) -> List String -> Maybe Int
 arithMinusBase p base k sizes caller facts region = case base of
@@ -518,9 +513,8 @@ addEdgeMode : String -> String -> Int -> Pair Bool (List (Pair (Pair String Stri
 addEdgeMode caller callee m acc = Pair (firstOf acc) (Pair (Pair caller callee) m :: secondOf acc)
 
 groupHead : List String -> Expr -> Maybe String
-groupHead comp fn = case fn of
-  EVar n sp => if memName n comp then Just n else Nothing
-  _ => Nothing
+groupHead comp (EVar n sp) = if memName n comp then Just n else Nothing
+groupHead comp _ = Nothing
 
 nthExpr : List Expr -> Int -> Maybe Expr
 nthExpr [] i = Nothing

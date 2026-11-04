@@ -43,7 +43,7 @@ open Vuna_dCompiler_dElab_dMeta
 open Vuna_dCompiler_dElab_dCase
 open Vuna_dCompiler_dElab_dDict
 open Vuna_dCompiler_dElab_dMatch
-let rec v_Vuna_dCompiler_dElab_dTerm_dSupport_dallImplicitPrefix = (fun t -> (match t with
+let rec v_Vuna_dCompiler_dElab_dTerm_dSupport_dallImplicitPrefix = (fun mc0 -> (match mc0 with
   | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTPi (dtb__0, dtb__1, dtb__2, dtb__3, dtb__4) -> (if dtb__1 then (v_Vuna_dCompiler_dElab_dTerm_dSupport_dallImplicitPrefix dtb__4) else false)
   | _ -> true
 ))
@@ -75,7 +75,7 @@ let v_Vuna_dCompiler_dElab_dTerm_dSupport_dinferVarRef = (fun globals -> (fun ct
   | _ -> failwith "DT: impossible branch"
 )) ((v_Vuna_dCompiler_dElab_dTypes_dctxLookup name) ctx)))))))
 
-let v_Vuna_dCompiler_dElab_dTerm_dSupport_dwhereBindingName = (fun pat -> (match pat with
+let v_Vuna_dCompiler_dElab_dTerm_dSupport_dwhereBindingName = (fun mc0 -> (match mc0 with
   | C_Vuna_dCompiler_dFrontend_dAst_dPat_Vuna_dCompiler_dFrontend_dAst_dPVar (dtb__18, dtb__19) -> dtb__18
   | _ -> "_"
 ))

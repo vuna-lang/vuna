@@ -39,9 +39,8 @@ inferVarRef globals ctx ec name sp = case ctxLookup name ctx of
 
 -- 签名项是否以隐式 Pi 开头并最终落到值（{a : Type} -> Result a）；显式 Pi 不算。
 allImplicitPrefix : Term -> Bool
-allImplicitPrefix t = case t of
-  TPi n implicit rig dom cod => if implicit then allImplicitPrefix cod else False
-  _ => True
+allImplicitPrefix (TPi n implicit rig dom cod) = if implicit then allImplicitPrefix cod else False
+allImplicitPrefix _ = True
 
 -- 实例化全隐式前缀：逐个插元变量，得到「值 + 剩余值类型」。
 instantiateAllImplicit : Ctx -> Ec -> Term -> Value -> List (Pair Term Rig) -> Pair Term (Pair Value Ec)
@@ -76,6 +75,5 @@ checkWhereSigs (bind :: rest) = case secondOf bind of
     in tcErr2 (patSpan (firstOf bind)) (WhereNeedsSig name name) name name
 
 whereBindingName : Pat -> String
-whereBindingName pat = case pat of
-  PVar name sp => name
-  _ => "_"
+whereBindingName (PVar name sp) = name
+whereBindingName _ = "_"

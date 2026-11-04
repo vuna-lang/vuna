@@ -56,20 +56,20 @@ let rec v_Vuna_dCompiler_dLoader_dFlatten_dfindOwnFn = (fun name -> (fun decls -
   | _ -> failwith "DT: impossible branch"
 )))
 
-let rec v_Vuna_dCompiler_dLoader_dFlatten_dfindCtorNamed = (fun name -> (fun ctors -> (match ctors with
+let rec v_Vuna_dCompiler_dLoader_dFlatten_dfindCtorNamed = (fun mc0 -> (fun mc1 -> (match mc1 with
+  | C_Base_dList_dList_Base_dList_dCons (dtb__29, dtb__30) -> (if ((bi_eq_str (v_Vuna_dCompiler_dFrontend_dAst_dctorName dtb__29)) mc0) then (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust ((v_Vuna_dCompiler_dFrontend_dAst_dctorName dtb__29))) else ((v_Vuna_dCompiler_dLoader_dFlatten_dfindCtorNamed mc0) dtb__30))
   | C_Base_dList_dList_Base_dList_dNil -> C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing
-  | C_Base_dList_dList_Base_dList_dCons (dtb__29, dtb__30) -> (if ((bi_eq_str (v_Vuna_dCompiler_dFrontend_dAst_dctorName dtb__29)) name) then (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust ((v_Vuna_dCompiler_dFrontend_dAst_dctorName dtb__29))) else ((v_Vuna_dCompiler_dLoader_dFlatten_dfindCtorNamed name) dtb__30))
   | _ -> failwith "DT: impossible branch"
 )))
 
-let rec v_Vuna_dCompiler_dLoader_dFlatten_dfindMethodNamed = (fun name -> (fun methods -> ((fun nd_uscrut2 -> (match nd_uscrut2 with
+let rec v_Vuna_dCompiler_dLoader_dFlatten_dfindMethodNamed = (fun mc0 -> (fun mc1 -> (match mc1 with
   | C_Base_dList_dList_Base_dList_dCons (dtb__31, dtb__32) -> (match dtb__31 with
-  | C_Vuna_dCompiler_dFrontend_dAst_dTraitMethod_Vuna_dCompiler_dFrontend_dAst_dTraitMethod (dtb__33, dtb__34, dtb__35) -> (if ((bi_eq_str dtb__33) name) then (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__33)) else ((v_Vuna_dCompiler_dLoader_dFlatten_dfindMethodNamed name) dtb__32))
+  | C_Vuna_dCompiler_dFrontend_dAst_dTraitMethod_Vuna_dCompiler_dFrontend_dAst_dTraitMethod (dtb__33, dtb__34, dtb__35) -> (if ((bi_eq_str dtb__33) mc0) then (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__33)) else ((v_Vuna_dCompiler_dLoader_dFlatten_dfindMethodNamed mc0) dtb__32))
   | _ -> failwith "DT: impossible branch"
 )
   | C_Base_dList_dList_Base_dList_dNil -> C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing
   | _ -> failwith "DT: impossible branch"
-)) methods)))
+)))
 
 let rec v_Vuna_dCompiler_dLoader_dFlatten_dfindOwnCtorName = (fun name -> (fun decls -> (match decls with
   | C_Base_dList_dList_Base_dList_dNil -> C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing
@@ -90,15 +90,15 @@ let rec v_Vuna_dCompiler_dLoader_dFlatten_dfindOwnCtorName = (fun name -> (fun d
   | _ -> failwith "DT: impossible branch"
 )))
 
-let rec v_Vuna_dCompiler_dLoader_dFlatten_downCtorEntries = (fun prefix -> (fun dname -> (fun names -> (match names with
+let rec v_Vuna_dCompiler_dLoader_dFlatten_downCtorEntries = (fun mc0 -> (fun mc1 -> (fun mc2 -> (match mc2 with
+  | C_Base_dList_dList_Base_dList_dCons (dtb__55, dtb__56) -> (if (v_Vuna_dCompiler_dLoader_dFlatten_disPrivateName dtb__55) then (((v_Vuna_dCompiler_dLoader_dFlatten_downCtorEntries mc0) mc1) dtb__56) else (C_Base_dList_dList_Base_dList_dCons ((C_Vuna_dCompiler_dLoader_dModules_dExportEntry_Vuna_dCompiler_dLoader_dModules_dExportEntry ("ctor", dtb__55, ((v_Vuna_dCompiler_dLoader_dModules_dmangle mc0) dtb__55), ((v_Vuna_dCompiler_dLoader_dModules_dmangle mc0) mc1))), (((v_Vuna_dCompiler_dLoader_dFlatten_downCtorEntries mc0) mc1) dtb__56))))
   | C_Base_dList_dList_Base_dList_dNil -> C_Base_dList_dList_Base_dList_dNil
-  | C_Base_dList_dList_Base_dList_dCons (dtb__55, dtb__56) -> (if (v_Vuna_dCompiler_dLoader_dFlatten_disPrivateName dtb__55) then (((v_Vuna_dCompiler_dLoader_dFlatten_downCtorEntries prefix) dname) dtb__56) else (C_Base_dList_dList_Base_dList_dCons ((C_Vuna_dCompiler_dLoader_dModules_dExportEntry_Vuna_dCompiler_dLoader_dModules_dExportEntry ("ctor", dtb__55, ((v_Vuna_dCompiler_dLoader_dModules_dmangle prefix) dtb__55), ((v_Vuna_dCompiler_dLoader_dModules_dmangle prefix) dname))), (((v_Vuna_dCompiler_dLoader_dFlatten_downCtorEntries prefix) dname) dtb__56))))
   | _ -> failwith "DT: impossible branch"
 ))))
 
-let rec v_Vuna_dCompiler_dLoader_dFlatten_dctorEntriesOfType = (fun typeTarget -> (fun entries -> (match entries with
+let rec v_Vuna_dCompiler_dLoader_dFlatten_dctorEntriesOfType = (fun mc0 -> (fun mc1 -> (match mc1 with
+  | C_Base_dList_dList_Base_dList_dCons (dtb__57, dtb__58) -> (if (if ((bi_eq_str (v_Vuna_dCompiler_dLoader_dModules_dentryKind dtb__57)) "ctor") then ((bi_eq_str (v_Vuna_dCompiler_dLoader_dModules_dentryParent dtb__57)) mc0) else false) then (C_Base_dList_dList_Base_dList_dCons (dtb__57, ((v_Vuna_dCompiler_dLoader_dFlatten_dctorEntriesOfType mc0) dtb__58))) else ((v_Vuna_dCompiler_dLoader_dFlatten_dctorEntriesOfType mc0) dtb__58))
   | C_Base_dList_dList_Base_dList_dNil -> C_Base_dList_dList_Base_dList_dNil
-  | C_Base_dList_dList_Base_dList_dCons (dtb__57, dtb__58) -> (if (if ((bi_eq_str (v_Vuna_dCompiler_dLoader_dModules_dentryKind dtb__57)) "ctor") then ((bi_eq_str (v_Vuna_dCompiler_dLoader_dModules_dentryParent dtb__57)) typeTarget) else false) then (C_Base_dList_dList_Base_dList_dCons (dtb__57, ((v_Vuna_dCompiler_dLoader_dFlatten_dctorEntriesOfType typeTarget) dtb__58))) else ((v_Vuna_dCompiler_dLoader_dFlatten_dctorEntriesOfType typeTarget) dtb__58))
   | _ -> failwith "DT: impossible branch"
 )))
 
@@ -278,15 +278,15 @@ let v_Vuna_dCompiler_dLoader_dFlatten_dexportItemEntries = (fun modules -> (fun 
   | _ -> failwith "DT: impossible branch"
 ))))))
 
-let rec v_Vuna_dCompiler_dLoader_dFlatten_dhasSamePublicKind = (fun e -> (fun entries -> (match entries with
+let rec v_Vuna_dCompiler_dLoader_dFlatten_dhasSamePublicKind = (fun mc0 -> (fun mc1 -> (match mc1 with
+  | C_Base_dList_dList_Base_dList_dCons (dtb__150, dtb__151) -> (if (if ((bi_eq_str (v_Vuna_dCompiler_dLoader_dModules_dentryKind mc0)) (v_Vuna_dCompiler_dLoader_dModules_dentryKind dtb__150)) then ((bi_eq_str (v_Vuna_dCompiler_dLoader_dModules_dentryPublic mc0)) (v_Vuna_dCompiler_dLoader_dModules_dentryPublic dtb__150)) else false) then true else ((v_Vuna_dCompiler_dLoader_dFlatten_dhasSamePublicKind mc0) dtb__151))
   | C_Base_dList_dList_Base_dList_dNil -> false
-  | C_Base_dList_dList_Base_dList_dCons (dtb__150, dtb__151) -> (if (if ((bi_eq_str (v_Vuna_dCompiler_dLoader_dModules_dentryKind e)) (v_Vuna_dCompiler_dLoader_dModules_dentryKind dtb__150)) then ((bi_eq_str (v_Vuna_dCompiler_dLoader_dModules_dentryPublic e)) (v_Vuna_dCompiler_dLoader_dModules_dentryPublic dtb__150)) else false) then true else ((v_Vuna_dCompiler_dLoader_dFlatten_dhasSamePublicKind e) dtb__151))
   | _ -> failwith "DT: impossible branch"
 )))
 
-let rec v_Vuna_dCompiler_dLoader_dFlatten_dhasConflictingExport = (fun e -> (fun entries -> (match entries with
+let rec v_Vuna_dCompiler_dLoader_dFlatten_dhasConflictingExport = (fun mc0 -> (fun mc1 -> (match mc1 with
+  | C_Base_dList_dList_Base_dList_dCons (dtb__152, dtb__153) -> (if (if (if ((bi_eq_str (v_Vuna_dCompiler_dLoader_dModules_dentryKind mc0)) (v_Vuna_dCompiler_dLoader_dModules_dentryKind dtb__152)) then ((bi_eq_str (v_Vuna_dCompiler_dLoader_dModules_dentryPublic mc0)) (v_Vuna_dCompiler_dLoader_dModules_dentryPublic dtb__152)) else false) then ((bi_neq_str (v_Vuna_dCompiler_dLoader_dModules_dentryTarget mc0)) (v_Vuna_dCompiler_dLoader_dModules_dentryTarget dtb__152)) else false) then true else ((v_Vuna_dCompiler_dLoader_dFlatten_dhasConflictingExport mc0) dtb__153))
   | C_Base_dList_dList_Base_dList_dNil -> false
-  | C_Base_dList_dList_Base_dList_dCons (dtb__152, dtb__153) -> (if (if (if ((bi_eq_str (v_Vuna_dCompiler_dLoader_dModules_dentryKind e)) (v_Vuna_dCompiler_dLoader_dModules_dentryKind dtb__152)) then ((bi_eq_str (v_Vuna_dCompiler_dLoader_dModules_dentryPublic e)) (v_Vuna_dCompiler_dLoader_dModules_dentryPublic dtb__152)) else false) then ((bi_neq_str (v_Vuna_dCompiler_dLoader_dModules_dentryTarget e)) (v_Vuna_dCompiler_dLoader_dModules_dentryTarget dtb__152)) else false) then true else ((v_Vuna_dCompiler_dLoader_dFlatten_dhasConflictingExport e) dtb__153))
   | _ -> failwith "DT: impossible branch"
 )))
 
@@ -312,21 +312,21 @@ let rec v_Vuna_dCompiler_dLoader_dFlatten_dcheckExportDuplicates = (fun mc0 -> (
   | _ -> failwith "DT: impossible branch"
 )))
 
-let v_Vuna_dCompiler_dLoader_dFlatten_dexportItemKey = (fun item -> (match item with
-  | C_Vuna_dCompiler_dFrontend_dAst_dExportItem_Vuna_dCompiler_dFrontend_dAst_dXBare (dtb__159, dtb__160) -> ((bi_concat "bare:") dtb__159)
+let v_Vuna_dCompiler_dLoader_dFlatten_dexportItemKey = (fun mc0 -> (match mc0 with
+  | C_Vuna_dCompiler_dFrontend_dAst_dExportItem_Vuna_dCompiler_dFrontend_dAst_dXModule (dtb__159, dtb__160) -> ((bi_concat "module:") dtb__159)
   | C_Vuna_dCompiler_dFrontend_dAst_dExportItem_Vuna_dCompiler_dFrontend_dAst_dXTypeAll (dtb__161, dtb__162) -> ((bi_concat "typeall:") dtb__161)
-  | C_Vuna_dCompiler_dFrontend_dAst_dExportItem_Vuna_dCompiler_dFrontend_dAst_dXModule (dtb__163, dtb__164) -> ((bi_concat "module:") dtb__163)
+  | C_Vuna_dCompiler_dFrontend_dAst_dExportItem_Vuna_dCompiler_dFrontend_dAst_dXBare (dtb__163, dtb__164) -> ((bi_concat "bare:") dtb__163)
   | _ -> failwith "DT: impossible branch"
 ))
 
-let rec v_Vuna_dCompiler_dLoader_dFlatten_dmemFirstOf = (fun key -> (fun rest -> ((fun nd_uscrut2 -> (match nd_uscrut2 with
+let rec v_Vuna_dCompiler_dLoader_dFlatten_dmemFirstOf = (fun mc0 -> (fun mc1 -> (match mc1 with
   | C_Base_dList_dList_Base_dList_dCons (dtb__165, dtb__166) -> (match dtb__165 with
-  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__167, dtb__168) -> (if ((bi_eq_str key) dtb__167) then true else ((v_Vuna_dCompiler_dLoader_dFlatten_dmemFirstOf key) dtb__166))
+  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__167, dtb__168) -> (if ((bi_eq_str mc0) dtb__167) then true else ((v_Vuna_dCompiler_dLoader_dFlatten_dmemFirstOf mc0) dtb__166))
   | _ -> failwith "DT: impossible branch"
 )
   | C_Base_dList_dList_Base_dList_dNil -> false
   | _ -> failwith "DT: impossible branch"
-)) rest)))
+)))
 
 let rec v_Vuna_dCompiler_dLoader_dFlatten_ddupItemKeys = (fun mc0 -> (match mc0 with
   | C_Base_dList_dList_Base_dList_dCons (dtb__169, dtb__170) -> (match dtb__169 with
@@ -337,10 +337,10 @@ let rec v_Vuna_dCompiler_dLoader_dFlatten_ddupItemKeys = (fun mc0 -> (match mc0 
   | _ -> failwith "DT: impossible branch"
 ))
 
-let v_Vuna_dCompiler_dLoader_dFlatten_dexportItemName = (fun item -> (match item with
-  | C_Vuna_dCompiler_dFrontend_dAst_dExportItem_Vuna_dCompiler_dFrontend_dAst_dXBare (dtb__173, dtb__174) -> dtb__173
+let v_Vuna_dCompiler_dLoader_dFlatten_dexportItemName = (fun mc0 -> (match mc0 with
+  | C_Vuna_dCompiler_dFrontend_dAst_dExportItem_Vuna_dCompiler_dFrontend_dAst_dXModule (dtb__173, dtb__174) -> dtb__173
   | C_Vuna_dCompiler_dFrontend_dAst_dExportItem_Vuna_dCompiler_dFrontend_dAst_dXTypeAll (dtb__175, dtb__176) -> dtb__175
-  | C_Vuna_dCompiler_dFrontend_dAst_dExportItem_Vuna_dCompiler_dFrontend_dAst_dXModule (dtb__177, dtb__178) -> dtb__177
+  | C_Vuna_dCompiler_dFrontend_dAst_dExportItem_Vuna_dCompiler_dFrontend_dAst_dXBare (dtb__177, dtb__178) -> dtb__177
   | _ -> failwith "DT: impossible branch"
 ))
 
@@ -363,23 +363,23 @@ let v_Vuna_dCompiler_dLoader_dFlatten_dexplicitExports = (fun mc0 -> (fun mc1 ->
   | _ -> ((v_Base_dResult_dandThen ((v_Vuna_dCompiler_dLoader_dFlatten_dcheckExportItems mc1) mc4)) (fun _u -> ((v_Base_dResult_dandThen (((((v_Vuna_dCompiler_dLoader_dFlatten_dexportItemsAll mc0) mc1) mc2) mc3) mc4)) (fun es -> (C_Base_dResult_dResult_Base_dResult_dOk ((v_Vuna_dCompiler_dLoader_dFlatten_ddedupeExportEntries es)))))))
 ))))))
 
-let v_Vuna_dCompiler_dLoader_dFlatten_dvalidateModuleHeader = (fun label -> (fun hdr -> ((fun nd_uscrut3 -> (match nd_uscrut3 with
+let v_Vuna_dCompiler_dLoader_dFlatten_dvalidateModuleHeader = (fun mc0 -> (fun mc1 -> (match mc1 with
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__182) -> (match dtb__182 with
-  | C_Vuna_dCompiler_dFrontend_dAst_dModDecl_Vuna_dCompiler_dFrontend_dAst_dModDecl (dtb__183, dtb__184, dtb__185, dtb__186) -> (if ((bi_eq_str dtb__183) label) then (C_Base_dResult_dResult_Base_dResult_dOk (C_Base_dList_dList_Base_dList_dNil)) else (C_Base_dResult_dResult_Base_dResult_dErr (((bi_concat label) ((bi_concat ": ") ((bi_concat (v_Vuna_dCompiler_dCommon_dshowSpanLoc dtb__186)) ((bi_concat ": module name mismatch: source declares ") dtb__183)))))))
+  | C_Vuna_dCompiler_dFrontend_dAst_dModDecl_Vuna_dCompiler_dFrontend_dAst_dModDecl (dtb__183, dtb__184, dtb__185, dtb__186) -> (if ((bi_eq_str dtb__183) mc0) then (C_Base_dResult_dResult_Base_dResult_dOk (C_Base_dList_dList_Base_dList_dNil)) else (C_Base_dResult_dResult_Base_dResult_dErr (((bi_concat mc0) ((bi_concat ": ") ((bi_concat (v_Vuna_dCompiler_dCommon_dshowSpanLoc dtb__186)) ((bi_concat ": module name mismatch: source declares ") dtb__183)))))))
   | _ -> failwith "DT: impossible branch"
 )
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> (C_Base_dResult_dResult_Base_dResult_dOk (C_Base_dList_dList_Base_dList_dNil))
   | _ -> failwith "DT: impossible branch"
-)) hdr)))
+)))
 
-let v_Vuna_dCompiler_dLoader_dFlatten_dcomputeExports = (fun modules -> (fun prefix -> (fun hdr -> (fun imports -> (fun decls -> ((fun nd_uscrut5 -> (match nd_uscrut5 with
+let v_Vuna_dCompiler_dLoader_dFlatten_dcomputeExports = (fun mc0 -> (fun mc1 -> (fun mc2 -> (fun mc3 -> (fun mc4 -> (match mc2 with
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__187) -> (match dtb__187 with
-  | C_Vuna_dCompiler_dFrontend_dAst_dModDecl_Vuna_dCompiler_dFrontend_dAst_dModDecl (dtb__188, dtb__189, dtb__190, dtb__191) -> (if dtb__189 then ((v_Base_dResult_dandThen (((((v_Vuna_dCompiler_dLoader_dFlatten_dexplicitExports modules) prefix) decls) imports) dtb__190)) (fun es -> ((v_Base_dResult_dandThen ((v_Vuna_dCompiler_dLoader_dFlatten_dcheckExportDuplicates prefix) es)) (fun _u -> (C_Base_dResult_dResult_Base_dResult_dOk (es)))))) else (C_Base_dResult_dResult_Base_dResult_dOk (((v_Vuna_dCompiler_dLoader_dFlatten_dimplicitExports prefix) decls))))
+  | C_Vuna_dCompiler_dFrontend_dAst_dModDecl_Vuna_dCompiler_dFrontend_dAst_dModDecl (dtb__188, dtb__189, dtb__190, dtb__191) -> (if dtb__189 then ((v_Base_dResult_dandThen (((((v_Vuna_dCompiler_dLoader_dFlatten_dexplicitExports mc0) mc1) mc4) mc3) dtb__190)) (fun es -> ((v_Base_dResult_dandThen ((v_Vuna_dCompiler_dLoader_dFlatten_dcheckExportDuplicates mc1) es)) (fun _u -> (C_Base_dResult_dResult_Base_dResult_dOk (es)))))) else (C_Base_dResult_dResult_Base_dResult_dOk (((v_Vuna_dCompiler_dLoader_dFlatten_dimplicitExports mc1) mc4))))
   | _ -> failwith "DT: impossible branch"
 )
-  | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> (C_Base_dResult_dResult_Base_dResult_dOk (((v_Vuna_dCompiler_dLoader_dFlatten_dimplicitExports prefix) decls)))
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> (C_Base_dResult_dResult_Base_dResult_dOk (((v_Vuna_dCompiler_dLoader_dFlatten_dimplicitExports mc1) mc4)))
   | _ -> failwith "DT: impossible branch"
-)) hdr))))))
+))))))
 
 let v_Vuna_dCompiler_dLoader_dFlatten_dshowCycle = (fun name -> (fun stack -> (v_Vuna_dCompiler_dCommon_djoinArrows (v_Base_dList_dreverse (C_Base_dList_dList_Base_dList_dCons (name, stack))))))
 

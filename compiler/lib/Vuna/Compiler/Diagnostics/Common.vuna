@@ -26,9 +26,8 @@ diagErrAt sp msg = Err (showSpanLoc sp ++ ": " ++ msg)
 -- 定义级诊断位置前缀（M29 A14）：`文件:行:列: in `name`: `；没有 span 时退回
 -- `in `name`: `（不改变既有夹具断言的子串）。
 diagDefLoc : Maybe Span -> String -> String
-diagDefLoc span name = case span of
-  Just sp => showSpanLoc sp ++ ": in `" ++ name ++ "`: "
-  Nothing => "in `" ++ name ++ "`: "
+diagDefLoc (Just sp) name = showSpanLoc sp ++ ": in `" ++ name ++ "`: "
+diagDefLoc Nothing name = "in `" ++ name ++ "`: "
 
 -- 分块拼接：`tcAll` / `cgAll` 按 ≤8 项分块后按顺序还原成一张表。
 -- split codegen 把单个列表字面量打成一行，整表字面量会产生超长行（M30 B19）；

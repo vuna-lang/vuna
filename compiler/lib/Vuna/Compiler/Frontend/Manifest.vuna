@@ -93,9 +93,8 @@ stringListField path section key entries = case lookupEntry section key entries 
     Err (fieldLoc path section key entries ++ "expected an array of strings for \"" ++ key ++ "\"")
 
 orEmptyList : Maybe (List a) -> List a
-orEmptyList maybe = case maybe of
-  Nothing => []
-  Just xs => xs
+orEmptyList Nothing = []
+orEmptyList (Just xs) = xs
 
 -- 只接受约定表；未知表 / 未知 key 报带行号的错误（防止字段拼写错误被静默忽略）。
 checkOneEntry : String -> TomlEntry -> Result Int
@@ -170,45 +169,40 @@ validModuleTail (c :: rest) =
   else False
 
 validateName : String -> Maybe String -> Result Int
-validateName path name = case name of
-  Nothing => Err (manifestErr path "missing [package] name")
-  Just n =>
-    if n == "" then Err (manifestErr path "package name must not be empty")
-    else if validPackageName n then Ok 0
-    else Err
-      (manifestErr path ("invalid package name \"" ++ n ++ "\" (allowed characters: a-z, 0-9, '-')"))
+validateName path Nothing = Err (manifestErr path "missing [package] name")
+validateName path (Just n) =
+  if n == "" then Err (manifestErr path "package name must not be empty")
+  else if validPackageName n then Ok 0
+  else Err
+    (manifestErr path ("invalid package name \"" ++ n ++ "\" (allowed characters: a-z, 0-9, '-')"))
 
 validateMembers : String -> List String -> Result Int
-validateMembers path members = case members of
-  [] => Ok 0
-  m :: rest =>
-    if m == "" then Err (manifestErr path "workspace member must not be empty")
-    else validateMembers path rest
+validateMembers path [] = Ok 0
+validateMembers path (m :: rest) =
+  if m == "" then Err (manifestErr path "workspace member must not be empty")
+  else validateMembers path rest
 
 validateModules : String -> List String -> Result Int
-validateModules path modules = case modules of
-  [] => Ok 0
-  m :: rest =>
-    if validModuleName m then validateModules path rest
-    else Err
-      (manifestErr path ("invalid export module \"" ++ m ++ "\" (segments must match [A-Z][A-Za-z0-9_]*)"))
+validateModules path [] = Ok 0
+validateModules path (m :: rest) =
+  if validModuleName m then validateModules path rest
+  else Err
+    (manifestErr path ("invalid export module \"" ++ m ++ "\" (segments must match [A-Z][A-Za-z0-9_]*)"))
 
 validateExports : String -> Maybe (List String) -> Result Int
-validateExports path exports = case exports of
-  Nothing => Ok 0
-  Just modules => validateModules path modules
+validateExports path Nothing = Ok 0
+validateExports path (Just modules) = validateModules path modules
 
 validateDependencies : String -> List (Pair String String) -> Result Int
 validateDependencies path deps = validateDepsSeen path [] deps
 
 validateDepsSeen : String -> List String -> List (Pair String String) -> Result Int
-validateDepsSeen path seen deps = case deps of
-  [] => Ok 0
-  (Pair name rel) :: rest =>
-    if name == "" then Err (manifestErr path "dependency name must not be empty")
-    else if rel == "" then Err (manifestErr path ("dependency \"" ++ name ++ "\" path must not be empty"))
-    else if memName name seen then Err (manifestErr path ("duplicate dependency \"" ++ name ++ "\""))
-    else validateDepsSeen path (name :: seen) rest
+validateDepsSeen path seen [] = Ok 0
+validateDepsSeen path seen ((Pair name rel) :: rest) =
+  if name == "" then Err (manifestErr path "dependency name must not be empty")
+  else if rel == "" then Err (manifestErr path ("dependency \"" ++ name ++ "\" path must not be empty"))
+  else if memName name seen then Err (manifestErr path ("duplicate dependency \"" ++ name ++ "\""))
+  else validateDepsSeen path (name :: seen) rest
 
 -- M27：能力声明只做结构校验（非空、无重复）；合法能力名的语义表在 Loader 侧，
 -- 这里不重复一份名字表（避免两处真源漂移）。
@@ -216,12 +210,11 @@ validateCapabilities : String -> List String -> Result Int
 validateCapabilities path caps = validateCapsSeen path [] caps
 
 validateCapsSeen : String -> List String -> List String -> Result Int
-validateCapsSeen path seen caps = case caps of
-  [] => Ok 0
-  c :: rest =>
-    if c == "" then Err (manifestErr path "capability name must not be empty")
-    else if memName c seen then Err (manifestErr path ("duplicate capability \"" ++ c ++ "\""))
-    else validateCapsSeen path (c :: seen) rest
+validateCapsSeen path seen [] = Ok 0
+validateCapsSeen path seen (c :: rest) =
+  if c == "" then Err (manifestErr path "capability name must not be empty")
+  else if memName c seen then Err (manifestErr path ("duplicate capability \"" ++ c ++ "\""))
+  else validateCapsSeen path (c :: seen) rest
 
 validateManifest : Manifest -> Result Manifest
 validateManifest (Manifest name members exports deps caps path) =

@@ -61,16 +61,15 @@ findOwnFn name decls = case decls of
     _ => findOwnFn name rest
 
 findCtorNamed : String -> List Ctor -> Maybe String
-findCtorNamed name ctors = case ctors of
-  [] => Nothing
-  c :: rest => if ctorName c == name then Just (ctorName c) else findCtorNamed name rest
+findCtorNamed name [] = Nothing
+findCtorNamed name (c :: rest) =
+  if ctorName c == name then Just (ctorName c) else findCtorNamed name rest
 
 -- M30（B20）：trait 方法现在带 span，按 `TraitMethod` 取名字即可（不再是 Pair）。
 findMethodNamed : String -> List TraitMethod -> Maybe String
-findMethodNamed name methods = case methods of
-  [] => Nothing
-  (TraitMethod mname ty msp) :: rest =>
-    if mname == name then Just mname else findMethodNamed name rest
+findMethodNamed name [] = Nothing
+findMethodNamed name ((TraitMethod mname ty msp) :: rest) =
+  if mname == name then Just mname else findMethodNamed name rest
 
 findOwnCtorName : String -> List Decl -> Maybe (Pair String String)
 findOwnCtorName name decls = case decls of
@@ -87,21 +86,19 @@ findOwnCtorName name decls = case decls of
     _ => findOwnCtorName name rest
 
 ownCtorEntries : String -> String -> List String -> List ExportEntry
-ownCtorEntries prefix dname names = case names of
-  [] => []
-  cname :: rest =>
-    if isPrivateName cname then ownCtorEntries prefix dname rest
-    else ExportEntry { kind = "ctor", public = cname, target = mangle prefix cname, parent = mangle prefix dname }
-      :: ownCtorEntries prefix dname rest
+ownCtorEntries prefix dname [] = []
+ownCtorEntries prefix dname (cname :: rest) =
+  if isPrivateName cname then ownCtorEntries prefix dname rest
+  else ExportEntry { kind = "ctor", public = cname, target = mangle prefix cname, parent = mangle prefix dname }
+    :: ownCtorEntries prefix dname rest
 
 -- 从某模块的导出表里取某数据类型的构造器条目：重导出 `T(..)` 时只重新公开
 -- 源模块本来就公开的构造器，从而保持源模块的抽象性。
 ctorEntriesOfType : String -> List ExportEntry -> List ExportEntry
-ctorEntriesOfType typeTarget entries = case entries of
-  [] => []
-  e :: rest =>
-    if entryKind e == "ctor" && entryParent e == typeTarget then e :: ctorEntriesOfType typeTarget rest
-    else ctorEntriesOfType typeTarget rest
+ctorEntriesOfType typeTarget [] = []
+ctorEntriesOfType typeTarget (e :: rest) =
+  if entryKind e == "ctor" && entryParent e == typeTarget then e :: ctorEntriesOfType typeTarget rest
+  else ctorEntriesOfType typeTarget rest
 
 declImplicitExports : String -> Decl -> List ExportEntry
 declImplicitExports prefix d = case d of
@@ -289,20 +286,18 @@ exportItemEntries modules prefix decls imports item = case item of
   XBare name sp => exportBare modules prefix decls imports name sp
 
 hasSamePublicKind : ExportEntry -> List ExportEntry -> Bool
-hasSamePublicKind e entries = case entries of
-  [] => False
-  e2 :: rest =>
-    if entryKind e == entryKind e2 && entryPublic e == entryPublic e2 then True
-    else hasSamePublicKind e rest
+hasSamePublicKind e [] = False
+hasSamePublicKind e (e2 :: rest) =
+  if entryKind e == entryKind e2 && entryPublic e == entryPublic e2 then True
+  else hasSamePublicKind e rest
 
 -- 冲突判定：同名同 kind 但**定义处不同**才算重复导出。同一个定义经两条路径重导出
 -- （门面同时导出 Base.Monad 与 Base.IO，两者都重导出 `Functor(..)`）不是冲突。
 hasConflictingExport : ExportEntry -> List ExportEntry -> Bool
-hasConflictingExport e entries = case entries of
-  [] => False
-  e2 :: rest =>
-    if entryKind e == entryKind e2 && entryPublic e == entryPublic e2 && entryTarget e /= entryTarget e2 then True
-    else hasConflictingExport e rest
+hasConflictingExport e [] = False
+hasConflictingExport e (e2 :: rest) =
+  if entryKind e == entryKind e2 && entryPublic e == entryPublic e2 && entryTarget e /= entryTarget e2 then True
+  else hasConflictingExport e rest
 
 sameExportEntry : ExportEntry -> ExportEntry -> Bool
 sameExportEntry e e2 =
@@ -337,10 +332,9 @@ checkExportDuplicates prefix (e :: rest) =
 -- 但同一个**定义**经不同模块重导出（门面同时导出 Base.Monad 与 Base.IO，两者都
 -- 重导出 `Functor(..)`）不是冲突——条目按 target 去重即可。
 exportItemKey : ExportItem -> String
-exportItemKey item = case item of
-  XBare n sp => "bare:" ++ n
-  XTypeAll n sp => "typeall:" ++ n
-  XModule n sp => "module:" ++ n
+exportItemKey (XBare n sp) = "bare:" ++ n
+exportItemKey (XTypeAll n sp) = "typeall:" ++ n
+exportItemKey (XModule n sp) = "module:" ++ n
 
 duplicateExportItem : List ExportItem -> Maybe String
 duplicateExportItem items =
@@ -352,15 +346,13 @@ dupItemKeys [] = Nothing
 dupItemKeys ((Pair key name) :: rest) = if memFirstOf key rest then Just name else dupItemKeys rest
 
 memFirstOf : String -> List (Pair String String) -> Bool
-memFirstOf key rest = case rest of
-  [] => False
-  (Pair k n) :: more => if key == k then True else memFirstOf key more
+memFirstOf key [] = False
+memFirstOf key ((Pair k n) :: more) = if key == k then True else memFirstOf key more
 
 exportItemName : ExportItem -> String
-exportItemName item = case item of
-  XBare n sp => n
-  XTypeAll n sp => n
-  XModule n sp => n
+exportItemName (XBare n sp) = n
+exportItemName (XTypeAll n sp) = n
+exportItemName (XModule n sp) = n
 
 checkExportItems : String -> List ExportItem -> Result Int
 checkExportItems prefix items = case duplicateExportItem items of
@@ -382,19 +374,17 @@ exportItemsAll modules prefix decls imports (item :: rest) =
     (\es => andThen (exportItemsAll modules prefix decls imports rest) (\tail => Ok (append es tail)))
 
 validateModuleHeader : String -> Maybe ModDecl -> Result (List a)
-validateModuleHeader label hdr = case hdr of
-  Nothing => Ok []
-  Just (ModDecl declared hasList items sp) =>
-    if declared == label then Ok []
-    else Err (label ++ ": " ++ showSpanLoc sp ++ ": module name mismatch: source declares " ++ declared)
+validateModuleHeader label Nothing = Ok []
+validateModuleHeader label (Just (ModDecl declared hasList items sp)) =
+  if declared == label then Ok []
+  else Err (label ++ ": " ++ showSpanLoc sp ++ ": module name mismatch: source declares " ++ declared)
 
 computeExports : List Module -> String -> Maybe ModDecl -> List Import -> List Decl -> Result (List ExportEntry)
-computeExports modules prefix hdr imports decls = case hdr of
-  Nothing => Ok (implicitExports prefix decls)
-  Just (ModDecl declared hasList items sp) =>
-    if hasList then andThen (explicitExports modules prefix decls imports items)
-      (\es => andThen (checkExportDuplicates prefix es) (\_ => Ok es))
-    else Ok (implicitExports prefix decls)
+computeExports modules prefix Nothing imports decls = Ok (implicitExports prefix decls)
+computeExports modules prefix (Just (ModDecl declared hasList items sp)) imports decls =
+  if hasList then andThen (explicitExports modules prefix decls imports items)
+    (\es => andThen (checkExportDuplicates prefix es) (\_ => Ok es))
+  else Ok (implicitExports prefix decls)
 
 showCycle : String -> List String -> String
 showCycle name stack = joinArrows (reverse (name :: stack))

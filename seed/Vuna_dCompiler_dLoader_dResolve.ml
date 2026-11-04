@@ -47,7 +47,7 @@ let v_Vuna_dCompiler_dLoader_dResolve_ddtPreludeNames = ((v_Base_dList_dappend (
 
 let v_Vuna_dCompiler_dLoader_dResolve_disDtPreludeName = (fun name -> ((v_Base_dList_dmemName name) v_Vuna_dCompiler_dLoader_dResolve_ddtPreludeNames))
 
-let v_Vuna_dCompiler_dLoader_dResolve_dtraitImportHint = (fun name -> (if ((bi_eq_str name) "Show") then " (trait Show is not in scope; add `import Base.Show`)" else (if ((bi_eq_str name) "Eq") then " (trait Eq is not in scope; add `import Base.Eq`)" else (if ((bi_eq_str name) "Ord") then " (trait Ord is not in scope; add `import Base.Ord`)" else (if ((bi_eq_str name) "show") then " (trait method show; add `import Base.Show`)" else (if ((bi_eq_str name) "eq") then " (trait method eq; add `import Base.Eq`)" else (if ((bi_eq_str name) "neq") then " (trait method neq; add `import Base.Eq`)" else (if ((bi_eq_str name) "lt") then " (trait method lt; add `import Base.Ord`)" else (if ((bi_eq_str name) "le") then " (trait method le; add `import Base.Ord`)" else (if ((bi_eq_str name) "gt") then " (trait method gt; add `import Base.Ord`)" else (if ((bi_eq_str name) "ge") then " (trait method ge; add `import Base.Ord`)" else "")))))))))))
+let v_Vuna_dCompiler_dLoader_dResolve_dtraitImportHint = (fun mc0 -> (if ((bi_eq_str mc0) "Show") then " (trait Show is not in scope; add `import Base.Show`)" else (if ((bi_eq_str mc0) "Eq") then " (trait Eq is not in scope; add `import Base.Eq`)" else (if ((bi_eq_str mc0) "Ord") then " (trait Ord is not in scope; add `import Base.Ord`)" else (if ((bi_eq_str mc0) "show") then " (trait method show; add `import Base.Show`)" else (if ((bi_eq_str mc0) "eq") then " (trait method eq; add `import Base.Eq`)" else (if ((bi_eq_str mc0) "neq") then " (trait method neq; add `import Base.Eq`)" else (if ((bi_eq_str mc0) "lt") then " (trait method lt; add `import Base.Ord`)" else (if ((bi_eq_str mc0) "le") then " (trait method le; add `import Base.Ord`)" else (if ((bi_eq_str mc0) "gt") then " (trait method gt; add `import Base.Ord`)" else (if ((bi_eq_str mc0) "ge") then " (trait method ge; add `import Base.Ord`)" else "")))))))))))
 
 let v_Vuna_dCompiler_dLoader_dResolve_ddeclValueNames = (fun d -> (match d with
   | C_Vuna_dCompiler_dFrontend_dAst_dDecl_Vuna_dCompiler_dFrontend_dAst_dDFun (dtb__2, dtb__3, dtb__4, dtb__5) -> (C_Base_dList_dList_Base_dList_dCons (dtb__2, C_Base_dList_dList_Base_dList_dNil))
@@ -358,9 +358,9 @@ let v_Vuna_dCompiler_dLoader_dResolve_dcheckEntryCtors = (fun label -> (fun decl
 
 let v_Vuna_dCompiler_dLoader_dResolve_dcapabilityError = (fun label -> (fun name -> (C_Base_dResult_dResult_Base_dResult_dErr (((bi_concat label) ((bi_concat ": unknown capability \"") ((bi_concat name) "\" (known: console, fs, process, env, clock)")))))))
 
-let rec v_Vuna_dCompiler_dLoader_dResolve_dcheckCapabilities = (fun label -> (fun caps -> (match caps with
+let rec v_Vuna_dCompiler_dLoader_dResolve_dcheckCapabilities = (fun mc0 -> (fun mc1 -> (match mc1 with
+  | C_Base_dList_dList_Base_dList_dCons (dtb__175, dtb__176) -> (((v_Vuna_dCompiler_dLoader_dResolve_dcheckOneCapability mc0) dtb__175) dtb__176)
   | C_Base_dList_dList_Base_dList_dNil -> (C_Base_dResult_dResult_Base_dResult_dOk (0))
-  | C_Base_dList_dList_Base_dList_dCons (dtb__175, dtb__176) -> (((v_Vuna_dCompiler_dLoader_dResolve_dcheckOneCapability label) dtb__175) dtb__176)
   | _ -> failwith "DT: impossible branch"
 )))
 and v_Vuna_dCompiler_dLoader_dResolve_dcheckOneCapability = (fun label -> (fun name -> (fun rest -> (match (v_Vuna_dCompiler_dIntrinsics_dparseCapability name) with
@@ -452,9 +452,9 @@ and v_Vuna_dCompiler_dLoader_dResolve_deffFields = (fun mc0 -> (match mc0 with
   | C_Base_dList_dList_Base_dList_dNil -> C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing
   | _ -> failwith "DT: impossible branch"
 ))
-and v_Vuna_dCompiler_dLoader_dResolve_deffDo = (fun s -> (match s with
-  | C_Vuna_dCompiler_dFrontend_dAst_dDoStmt_Vuna_dCompiler_dFrontend_dAst_dDBind (dtb__246, dtb__247, dtb__248) -> (v_Vuna_dCompiler_dLoader_dResolve_deffExpr dtb__247)
-  | C_Vuna_dCompiler_dFrontend_dAst_dDoStmt_Vuna_dCompiler_dFrontend_dAst_dDExpr (dtb__249, dtb__250) -> (v_Vuna_dCompiler_dLoader_dResolve_deffExpr dtb__249)
+and v_Vuna_dCompiler_dLoader_dResolve_deffDo = (fun mc0 -> (match mc0 with
+  | C_Vuna_dCompiler_dFrontend_dAst_dDoStmt_Vuna_dCompiler_dFrontend_dAst_dDExpr (dtb__246, dtb__247) -> (v_Vuna_dCompiler_dLoader_dResolve_deffExpr dtb__246)
+  | C_Vuna_dCompiler_dFrontend_dAst_dDoStmt_Vuna_dCompiler_dFrontend_dAst_dDBind (dtb__248, dtb__249, dtb__250) -> (v_Vuna_dCompiler_dLoader_dResolve_deffExpr dtb__249)
   | _ -> failwith "DT: impossible branch"
 ))
 and v_Vuna_dCompiler_dLoader_dResolve_deffDos = (fun mc0 -> (match mc0 with
@@ -463,10 +463,10 @@ and v_Vuna_dCompiler_dLoader_dResolve_deffDos = (fun mc0 -> (match mc0 with
   | _ -> failwith "DT: impossible branch"
 ))
 
-let rec v_Vuna_dCompiler_dLoader_dResolve_deffDecl = (fun d -> (match d with
-  | C_Vuna_dCompiler_dFrontend_dAst_dDecl_Vuna_dCompiler_dFrontend_dAst_dDFun (dtb__253, dtb__254, dtb__255, dtb__256) -> (v_Vuna_dCompiler_dLoader_dResolve_deffExpr dtb__255)
+let rec v_Vuna_dCompiler_dLoader_dResolve_deffDecl = (fun mc0 -> (match mc0 with
+  | C_Vuna_dCompiler_dFrontend_dAst_dDecl_Vuna_dCompiler_dFrontend_dAst_dDInstance (dtb__253, dtb__254, dtb__255, dtb__256) -> (v_Vuna_dCompiler_dLoader_dResolve_deffDecls dtb__255)
   | C_Vuna_dCompiler_dFrontend_dAst_dDecl_Vuna_dCompiler_dFrontend_dAst_dDTrait (dtb__257, dtb__258, dtb__259, dtb__260) -> C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing
-  | C_Vuna_dCompiler_dFrontend_dAst_dDecl_Vuna_dCompiler_dFrontend_dAst_dDInstance (dtb__261, dtb__262, dtb__263, dtb__264) -> (v_Vuna_dCompiler_dLoader_dResolve_deffDecls dtb__263)
+  | C_Vuna_dCompiler_dFrontend_dAst_dDecl_Vuna_dCompiler_dFrontend_dAst_dDFun (dtb__261, dtb__262, dtb__263, dtb__264) -> (v_Vuna_dCompiler_dLoader_dResolve_deffExpr dtb__263)
   | _ -> C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing
 ))
 and v_Vuna_dCompiler_dLoader_dResolve_deffDecls = (fun mc0 -> (match mc0 with
@@ -491,16 +491,16 @@ let v_Vuna_dCompiler_dLoader_dResolve_dcheckEffectsBuiltins = (fun label -> (fun
   | _ -> failwith "DT: impossible branch"
 )))))))
 
-let v_Vuna_dCompiler_dLoader_dResolve_dtyShape = (fun ty -> (match ty with
-  | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEVar (dtb__270, dtb__271) -> ((bi_concat "var ") dtb__270)
-  | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEApp (dtb__272, dtb__273, dtb__274) -> "app"
-  | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEInt (dtb__275, dtb__276) -> "int"
-  | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEStr (dtb__277, dtb__278) -> "str"
-  | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dELam (dtb__279, dtb__280, dtb__281) -> "lam"
-  | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dELet (dtb__282, dtb__283, dtb__284, dtb__285) -> "let"
-  | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dECase (dtb__286, dtb__287, dtb__288) -> "case"
-  | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEIf (dtb__289, dtb__290, dtb__291, dtb__292) -> "if"
-  | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEDo (dtb__293, dtb__294) -> "do"
+let v_Vuna_dCompiler_dLoader_dResolve_dtyShape = (fun mc0 -> (match mc0 with
+  | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEDo (dtb__270, dtb__271) -> "do"
+  | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEIf (dtb__272, dtb__273, dtb__274, dtb__275) -> "if"
+  | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dECase (dtb__276, dtb__277, dtb__278) -> "case"
+  | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dELet (dtb__279, dtb__280, dtb__281, dtb__282) -> "let"
+  | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dELam (dtb__283, dtb__284, dtb__285) -> "lam"
+  | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEStr (dtb__286, dtb__287) -> "str"
+  | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEInt (dtb__288, dtb__289) -> "int"
+  | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEApp (dtb__290, dtb__291, dtb__292) -> "app"
+  | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEVar (dtb__293, dtb__294) -> ((bi_concat "var ") dtb__293)
   | _ -> "other"
 ))
 
@@ -530,10 +530,10 @@ let v_Vuna_dCompiler_dLoader_dResolve_dresolveTraitMethod = (fun mc0 -> (fun mc1
   | _ -> failwith "DT: impossible branch"
 )))))))
 
-let v_Vuna_dCompiler_dLoader_dResolve_dresolveInstanceMethod = (fun modules -> (fun label -> (fun prefix -> (fun ns -> (fun imports -> (fun d -> (match d with
-  | C_Vuna_dCompiler_dFrontend_dAst_dDecl_Vuna_dCompiler_dFrontend_dAst_dDSig (dtb__319, dtb__320, dtb__321) -> ((v_Base_dResult_dandThen ((v_Vuna_dCompiler_dLoader_dResolve_dcheckTopName label) dtb__319)) (fun _u -> ((v_Base_dResult_dandThen (((((((v_Vuna_dCompiler_dLoader_dResolve_dresolveTypeExpr v_Vuna_dCompiler_dLoader_dResolve_dresolveFuelBound) modules) label) prefix) ns) imports) dtb__320)) (fun ty2 -> (C_Base_dResult_dResult_Base_dResult_dOk ((C_Vuna_dCompiler_dFrontend_dAst_dDecl_Vuna_dCompiler_dFrontend_dAst_dDSig (dtb__319, ty2, dtb__321))))))))
-  | C_Vuna_dCompiler_dFrontend_dAst_dDecl_Vuna_dCompiler_dFrontend_dAst_dDFun (dtb__322, dtb__323, dtb__324, dtb__325) -> ((v_Base_dResult_dandThen ((v_Vuna_dCompiler_dLoader_dResolve_dcheckTopName label) dtb__322)) (fun _u -> ((v_Base_dResult_dandThen ((v_Base_dResult_dtraverse ((((((v_Vuna_dCompiler_dLoader_dResolve_dresolvePattern v_Vuna_dCompiler_dLoader_dResolve_dresolveFuelBound) modules) label) prefix) ns) imports)) dtb__323)) (fun parts -> ((v_Base_dResult_dandThen ((((((((v_Vuna_dCompiler_dLoader_dResolve_dresolveExpr v_Vuna_dCompiler_dLoader_dResolve_dresolveFuelBound) modules) label) prefix) ns) imports) ((v_Base_dList_dconcatMap v_Base_dPair_dsecondOf) parts)) dtb__324)) (fun b -> (C_Base_dResult_dResult_Base_dResult_dOk ((C_Vuna_dCompiler_dFrontend_dAst_dDecl_Vuna_dCompiler_dFrontend_dAst_dDFun (dtb__322, ((v_Base_dList_dmap v_Base_dPair_dfirstOf) parts), b, dtb__325))))))))))
-  | _ -> (C_Base_dResult_dResult_Base_dResult_dErr (((bi_concat label) ": instance body may only contain method signatures/definitions")))
+let v_Vuna_dCompiler_dLoader_dResolve_dresolveInstanceMethod = (fun mc0 -> (fun mc1 -> (fun mc2 -> (fun mc3 -> (fun mc4 -> (fun mc5 -> (match mc5 with
+  | C_Vuna_dCompiler_dFrontend_dAst_dDecl_Vuna_dCompiler_dFrontend_dAst_dDFun (dtb__319, dtb__320, dtb__321, dtb__322) -> ((v_Base_dResult_dandThen ((v_Vuna_dCompiler_dLoader_dResolve_dcheckTopName mc1) dtb__319)) (fun _u -> ((v_Base_dResult_dandThen ((v_Base_dResult_dtraverse ((((((v_Vuna_dCompiler_dLoader_dResolve_dresolvePattern v_Vuna_dCompiler_dLoader_dResolve_dresolveFuelBound) mc0) mc1) mc2) mc3) mc4)) dtb__320)) (fun parts -> ((v_Base_dResult_dandThen ((((((((v_Vuna_dCompiler_dLoader_dResolve_dresolveExpr v_Vuna_dCompiler_dLoader_dResolve_dresolveFuelBound) mc0) mc1) mc2) mc3) mc4) ((v_Base_dList_dconcatMap v_Base_dPair_dsecondOf) parts)) dtb__321)) (fun b -> (C_Base_dResult_dResult_Base_dResult_dOk ((C_Vuna_dCompiler_dFrontend_dAst_dDecl_Vuna_dCompiler_dFrontend_dAst_dDFun (dtb__319, ((v_Base_dList_dmap v_Base_dPair_dfirstOf) parts), b, dtb__322))))))))))
+  | C_Vuna_dCompiler_dFrontend_dAst_dDecl_Vuna_dCompiler_dFrontend_dAst_dDSig (dtb__323, dtb__324, dtb__325) -> ((v_Base_dResult_dandThen ((v_Vuna_dCompiler_dLoader_dResolve_dcheckTopName mc1) dtb__323)) (fun _u -> ((v_Base_dResult_dandThen (((((((v_Vuna_dCompiler_dLoader_dResolve_dresolveTypeExpr v_Vuna_dCompiler_dLoader_dResolve_dresolveFuelBound) mc0) mc1) mc2) mc3) mc4) dtb__324)) (fun ty2 -> (C_Base_dResult_dResult_Base_dResult_dOk ((C_Vuna_dCompiler_dFrontend_dAst_dDecl_Vuna_dCompiler_dFrontend_dAst_dDSig (dtb__323, ty2, dtb__325))))))))
+  | _ -> (C_Base_dResult_dResult_Base_dResult_dErr (((bi_concat mc1) ": instance body may only contain method signatures/definitions")))
 )))))))
 
 let v_Vuna_dCompiler_dLoader_dResolve_dresolveDecl = (fun modules -> (fun label -> (fun prefix -> (fun ns -> (fun imports -> (fun d -> (match d with

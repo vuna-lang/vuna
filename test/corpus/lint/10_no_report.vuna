@@ -1,9 +1,7 @@
+-- 不报的形态：body 引用 scrutinee 且分支模式是构造子（无法用 clause 模式绑定），
+-- 以及多 clause 函数（规则只处理单 clause 顶层函数）。
 keep p = case p of
   Pair a b => p
-
-choose x = case x of
-  Just a => a
-  Nothing => 0
 
 split allDatas subset = case subset of
   [] => ""

@@ -23,9 +23,9 @@ let v_Vuna_dCompiler_dDiagnostics_dCommon_ddiagErr = (fun msg -> (C_Base_dResult
 
 let v_Vuna_dCompiler_dDiagnostics_dCommon_ddiagErrAt = (fun sp -> (fun msg -> (C_Base_dResult_dResult_Base_dResult_dErr (((bi_concat (v_Vuna_dCompiler_dCommon_dshowSpanLoc sp)) ((bi_concat ": ") msg))))))
 
-let v_Vuna_dCompiler_dDiagnostics_dCommon_ddiagDefLoc = (fun span -> (fun name -> (match span with
-  | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__0) -> ((bi_concat (v_Vuna_dCompiler_dCommon_dshowSpanLoc dtb__0)) ((bi_concat ": in `") ((bi_concat name) "`: ")))
-  | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> ((bi_concat "in `") ((bi_concat name) "`: "))
+let v_Vuna_dCompiler_dDiagnostics_dCommon_ddiagDefLoc = (fun mc0 -> (fun mc1 -> (match mc0 with
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> ((bi_concat "in `") ((bi_concat mc1) "`: "))
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__0) -> ((bi_concat (v_Vuna_dCompiler_dCommon_dshowSpanLoc dtb__0)) ((bi_concat ": in `") ((bi_concat mc1) "`: ")))
   | _ -> failwith "DT: impossible branch"
 )))
 

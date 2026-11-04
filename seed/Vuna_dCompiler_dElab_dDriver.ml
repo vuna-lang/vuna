@@ -119,20 +119,20 @@ let rec v_Vuna_dCompiler_dElab_dDriver_ddeclFunNames = (fun mc0 -> (match mc0 wi
 
 let v_Vuna_dCompiler_dElab_dDriver_dfutureBodyTbl = (fun decls -> (fun instHeads -> ((v_Vuna_dCompiler_dCommon_dtblInsertAll ((v_Base_dList_dmap (fun n -> (C_Base_dPair_dPair_Base_dPair_dPair (n, true)))) ((v_Base_dList_dappend (v_Vuna_dCompiler_dElab_dDriver_ddeclFunNames decls)) ((v_Base_dList_dmap v_Base_dPair_dfirstOf) instHeads)))) v_Vuna_dCompiler_dCommon_dtblEmpty)))
 
-let rec v_Vuna_dCompiler_dElab_dDriver_dtermGlobalRefs = (fun t -> (match t with
-  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTVar (dtb__24, dtb__25) -> C_Base_dList_dList_Base_dList_dNil
-  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTMeta (dtb__26) -> C_Base_dList_dList_Base_dList_dNil
-  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTGlobal (dtb__27) -> (C_Base_dList_dList_Base_dList_dCons (dtb__27, C_Base_dList_dList_Base_dList_dNil))
-  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTType (dtb__28) -> C_Base_dList_dList_Base_dList_dNil
-  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTPi (dtb__29, dtb__30, dtb__31, dtb__32, dtb__33) -> ((v_Base_dList_dappend (v_Vuna_dCompiler_dElab_dDriver_dtermGlobalRefs dtb__32)) (v_Vuna_dCompiler_dElab_dDriver_dtermGlobalRefs dtb__33))
-  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTLam (dtb__34, dtb__35, dtb__36) -> (v_Vuna_dCompiler_dElab_dDriver_dtermGlobalRefs dtb__36)
-  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTApp (dtb__37, dtb__38, dtb__39) -> ((v_Base_dList_dappend (v_Vuna_dCompiler_dElab_dDriver_dtermGlobalRefs dtb__37)) (v_Vuna_dCompiler_dElab_dDriver_dtermGlobalRefs dtb__38))
-  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTCon (dtb__40, dtb__41) -> ((v_Base_dList_dconcatMap (fun p -> (v_Vuna_dCompiler_dElab_dDriver_dtermGlobalRefs (v_Base_dPair_dfirstOf p)))) dtb__41)
-  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTCase (dtb__42, dtb__43) -> ((v_Base_dList_dappend (v_Vuna_dCompiler_dElab_dDriver_dtermGlobalRefs dtb__42)) ((v_Base_dList_dconcatMap (fun alt -> (v_Vuna_dCompiler_dElab_dDriver_dtermGlobalRefs (v_Vuna_dCompiler_dCore_dTerm_dcaseAltBody alt)))) dtb__43))
-  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTInt (dtb__44) -> C_Base_dList_dList_Base_dList_dNil
-  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTStr (dtb__45) -> C_Base_dList_dList_Base_dList_dNil
-  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTBool (dtb__46) -> C_Base_dList_dList_Base_dList_dNil
-  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTIf (dtb__47, dtb__48, dtb__49) -> ((v_Base_dList_dappend (v_Vuna_dCompiler_dElab_dDriver_dtermGlobalRefs dtb__47)) ((v_Base_dList_dappend (v_Vuna_dCompiler_dElab_dDriver_dtermGlobalRefs dtb__48)) (v_Vuna_dCompiler_dElab_dDriver_dtermGlobalRefs dtb__49)))
+let rec v_Vuna_dCompiler_dElab_dDriver_dtermGlobalRefs = (fun mc0 -> (match mc0 with
+  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTIf (dtb__24, dtb__25, dtb__26) -> ((v_Base_dList_dappend (v_Vuna_dCompiler_dElab_dDriver_dtermGlobalRefs dtb__24)) ((v_Base_dList_dappend (v_Vuna_dCompiler_dElab_dDriver_dtermGlobalRefs dtb__25)) (v_Vuna_dCompiler_dElab_dDriver_dtermGlobalRefs dtb__26)))
+  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTBool (dtb__27) -> C_Base_dList_dList_Base_dList_dNil
+  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTStr (dtb__28) -> C_Base_dList_dList_Base_dList_dNil
+  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTInt (dtb__29) -> C_Base_dList_dList_Base_dList_dNil
+  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTCase (dtb__30, dtb__31) -> ((v_Base_dList_dappend (v_Vuna_dCompiler_dElab_dDriver_dtermGlobalRefs dtb__30)) ((v_Base_dList_dconcatMap (fun alt -> (v_Vuna_dCompiler_dElab_dDriver_dtermGlobalRefs (v_Vuna_dCompiler_dCore_dTerm_dcaseAltBody alt)))) dtb__31))
+  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTCon (dtb__32, dtb__33) -> ((v_Base_dList_dconcatMap (fun p -> (v_Vuna_dCompiler_dElab_dDriver_dtermGlobalRefs (v_Base_dPair_dfirstOf p)))) dtb__33)
+  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTApp (dtb__34, dtb__35, dtb__36) -> ((v_Base_dList_dappend (v_Vuna_dCompiler_dElab_dDriver_dtermGlobalRefs dtb__34)) (v_Vuna_dCompiler_dElab_dDriver_dtermGlobalRefs dtb__35))
+  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTLam (dtb__37, dtb__38, dtb__39) -> (v_Vuna_dCompiler_dElab_dDriver_dtermGlobalRefs dtb__39)
+  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTPi (dtb__40, dtb__41, dtb__42, dtb__43, dtb__44) -> ((v_Base_dList_dappend (v_Vuna_dCompiler_dElab_dDriver_dtermGlobalRefs dtb__43)) (v_Vuna_dCompiler_dElab_dDriver_dtermGlobalRefs dtb__44))
+  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTType (dtb__45) -> C_Base_dList_dList_Base_dList_dNil
+  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTGlobal (dtb__46) -> (C_Base_dList_dList_Base_dList_dCons (dtb__46, C_Base_dList_dList_Base_dList_dNil))
+  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTMeta (dtb__47) -> C_Base_dList_dList_Base_dList_dNil
+  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTVar (dtb__48, dtb__49) -> C_Base_dList_dList_Base_dList_dNil
   | _ -> failwith "DT: impossible branch"
 ))
 
@@ -240,44 +240,44 @@ let v_Vuna_dCompiler_dElab_dDriver_ddtEvalExprInInfo = (fun prog -> (fun expr ->
 
 let v_Vuna_dCompiler_dElab_dDriver_ddtEvalExprIn = (fun prog -> (fun expr -> ((v_Base_dResult_dandThen ((v_Vuna_dCompiler_dElab_dDriver_ddtEvalExprInInfo prog) expr)) (fun p -> (C_Base_dResult_dResult_Base_dResult_dOk ((v_Base_dPair_dfirstOf p)))))))
 
-let rec v_Vuna_dCompiler_dElab_dDriver_dtermHasMeta = (fun m -> (fun t -> (match t with
-  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTMeta (dtb__101) -> ((bi_eq_int dtb__101) m)
-  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTVar (dtb__102, dtb__103) -> false
-  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTGlobal (dtb__104) -> false
-  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTType (dtb__105) -> false
-  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTPi (dtb__106, dtb__107, dtb__108, dtb__109, dtb__110) -> (if ((v_Vuna_dCompiler_dElab_dDriver_dtermHasMeta m) dtb__109) then true else ((v_Vuna_dCompiler_dElab_dDriver_dtermHasMeta m) dtb__110))
-  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTLam (dtb__111, dtb__112, dtb__113) -> ((v_Vuna_dCompiler_dElab_dDriver_dtermHasMeta m) dtb__113)
-  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTApp (dtb__114, dtb__115, dtb__116) -> (if ((v_Vuna_dCompiler_dElab_dDriver_dtermHasMeta m) dtb__114) then true else ((v_Vuna_dCompiler_dElab_dDriver_dtermHasMeta m) dtb__115))
-  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTCon (dtb__117, dtb__118) -> ((v_Vuna_dCompiler_dElab_dDriver_danyArgHasMeta m) dtb__118)
-  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTCase (dtb__119, dtb__120) -> (if ((v_Vuna_dCompiler_dElab_dDriver_dtermHasMeta m) dtb__119) then true else ((v_Vuna_dCompiler_dElab_dDriver_danyAltHasMeta m) dtb__120))
-  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTInt (dtb__121) -> false
-  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTStr (dtb__122) -> false
-  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTBool (dtb__123) -> false
-  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTIf (dtb__124, dtb__125, dtb__126) -> (if (if ((v_Vuna_dCompiler_dElab_dDriver_dtermHasMeta m) dtb__124) then true else ((v_Vuna_dCompiler_dElab_dDriver_dtermHasMeta m) dtb__125)) then true else ((v_Vuna_dCompiler_dElab_dDriver_dtermHasMeta m) dtb__126))
+let rec v_Vuna_dCompiler_dElab_dDriver_dtermHasMeta = (fun mc0 -> (fun mc1 -> (match mc1 with
+  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTIf (dtb__101, dtb__102, dtb__103) -> (if (if ((v_Vuna_dCompiler_dElab_dDriver_dtermHasMeta mc0) dtb__101) then true else ((v_Vuna_dCompiler_dElab_dDriver_dtermHasMeta mc0) dtb__102)) then true else ((v_Vuna_dCompiler_dElab_dDriver_dtermHasMeta mc0) dtb__103))
+  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTBool (dtb__104) -> false
+  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTStr (dtb__105) -> false
+  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTInt (dtb__106) -> false
+  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTCase (dtb__107, dtb__108) -> (if ((v_Vuna_dCompiler_dElab_dDriver_dtermHasMeta mc0) dtb__107) then true else ((v_Vuna_dCompiler_dElab_dDriver_danyAltHasMeta mc0) dtb__108))
+  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTCon (dtb__109, dtb__110) -> ((v_Vuna_dCompiler_dElab_dDriver_danyArgHasMeta mc0) dtb__110)
+  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTApp (dtb__111, dtb__112, dtb__113) -> (if ((v_Vuna_dCompiler_dElab_dDriver_dtermHasMeta mc0) dtb__111) then true else ((v_Vuna_dCompiler_dElab_dDriver_dtermHasMeta mc0) dtb__112))
+  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTLam (dtb__114, dtb__115, dtb__116) -> ((v_Vuna_dCompiler_dElab_dDriver_dtermHasMeta mc0) dtb__116)
+  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTPi (dtb__117, dtb__118, dtb__119, dtb__120, dtb__121) -> (if ((v_Vuna_dCompiler_dElab_dDriver_dtermHasMeta mc0) dtb__120) then true else ((v_Vuna_dCompiler_dElab_dDriver_dtermHasMeta mc0) dtb__121))
+  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTType (dtb__122) -> false
+  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTGlobal (dtb__123) -> false
+  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTVar (dtb__124, dtb__125) -> false
+  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTMeta (dtb__126) -> ((bi_eq_int dtb__126) mc0)
   | _ -> failwith "DT: impossible branch"
 )))
-and v_Vuna_dCompiler_dElab_dDriver_danyArgHasMeta = (fun m -> (fun args -> ((fun nd_uscrut2 -> (match nd_uscrut2 with
+and v_Vuna_dCompiler_dElab_dDriver_danyArgHasMeta = (fun mc0 -> (fun mc1 -> (match mc1 with
   | C_Base_dList_dList_Base_dList_dCons (dtb__127, dtb__128) -> (match dtb__127 with
-  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__129, dtb__130) -> (if ((v_Vuna_dCompiler_dElab_dDriver_dtermHasMeta m) dtb__129) then true else ((v_Vuna_dCompiler_dElab_dDriver_danyArgHasMeta m) dtb__128))
+  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__129, dtb__130) -> (if ((v_Vuna_dCompiler_dElab_dDriver_dtermHasMeta mc0) dtb__129) then true else ((v_Vuna_dCompiler_dElab_dDriver_danyArgHasMeta mc0) dtb__128))
   | _ -> failwith "DT: impossible branch"
 )
   | C_Base_dList_dList_Base_dList_dNil -> false
   | _ -> failwith "DT: impossible branch"
-)) args)))
-and v_Vuna_dCompiler_dElab_dDriver_danyAltHasMeta = (fun m -> (fun alts -> (match alts with
+)))
+and v_Vuna_dCompiler_dElab_dDriver_danyAltHasMeta = (fun mc0 -> (fun mc1 -> (match mc1 with
+  | C_Base_dList_dList_Base_dList_dCons (dtb__131, dtb__132) -> (if ((v_Vuna_dCompiler_dElab_dDriver_dtermHasMeta mc0) (v_Vuna_dCompiler_dCore_dTerm_dcaseAltBody dtb__131)) then true else ((v_Vuna_dCompiler_dElab_dDriver_danyAltHasMeta mc0) dtb__132))
   | C_Base_dList_dList_Base_dList_dNil -> false
-  | C_Base_dList_dList_Base_dList_dCons (dtb__131, dtb__132) -> (if ((v_Vuna_dCompiler_dElab_dDriver_dtermHasMeta m) (v_Vuna_dCompiler_dCore_dTerm_dcaseAltBody dtb__131)) then true else ((v_Vuna_dCompiler_dElab_dDriver_danyAltHasMeta m) dtb__132))
   | _ -> failwith "DT: impossible branch"
 )))
 
-let rec v_Vuna_dCompiler_dElab_dDriver_dfindDefWithMeta = (fun defs -> (fun m -> ((fun nd_uscrut2 -> (match nd_uscrut2 with
+let rec v_Vuna_dCompiler_dElab_dDriver_dfindDefWithMeta = (fun mc0 -> (fun mc1 -> (match mc0 with
   | C_Base_dList_dList_Base_dList_dCons (dtb__133, dtb__134) -> (match dtb__133 with
-  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__135, dtb__136) -> (if ((v_Vuna_dCompiler_dElab_dDriver_dtermHasMeta m) dtb__136) then (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (((bi_concat dtb__135) ((bi_concat " body=") (v_Vuna_dCompiler_dCore_dTerm_dshowTerm dtb__136))))) else ((v_Vuna_dCompiler_dElab_dDriver_dfindDefWithMeta dtb__134) m))
+  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__135, dtb__136) -> (if ((v_Vuna_dCompiler_dElab_dDriver_dtermHasMeta mc1) dtb__136) then (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (((bi_concat dtb__135) ((bi_concat " body=") (v_Vuna_dCompiler_dCore_dTerm_dshowTerm dtb__136))))) else ((v_Vuna_dCompiler_dElab_dDriver_dfindDefWithMeta dtb__134) mc1))
   | _ -> failwith "DT: impossible branch"
 )
   | C_Base_dList_dList_Base_dList_dNil -> C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing
   | _ -> failwith "DT: impossible branch"
-)) defs)))
+)))
 
 let v_Vuna_dCompiler_dElab_dDriver_dmetaOwnerHint = (fun ec -> (fun m -> (match ((v_Vuna_dCompiler_dElab_dDriver_dfindDefWithMeta (v_Vuna_dCompiler_dElab_dTypes_decDefs ec)) m) with
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__137) -> ((bi_concat " (in `") ((bi_concat dtb__137) "`)"))

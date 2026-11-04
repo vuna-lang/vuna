@@ -41,9 +41,8 @@ instanceName cname headExpr = baseNameOf cname ++ "_" ++ derivedInstName headExp
 -- 实例头的名字后缀（类名本身不计入，类短名已由 `instanceName` 加过一次）：
 -- `Eq Int` → `Int`、`Eq Base.Bool.Bool` → `Base.Bool.Bool`、`Eq (Box a)` → `Box_a`。
 derivedInstName : Expr -> String
-derivedInstName e = case e of
-  EApp fn args sp => argSuffixTail args
-  other => exprNameFor other
+derivedInstName (EApp fn args sp) = argSuffixTail args
+derivedInstName other = exprNameFor other
 
 -- 头实参的完整名序列（首项无前导下划线；嵌套应用递归拼）。
 argSuffixTail : List Expr -> String
@@ -67,6 +66,5 @@ exprNameFor e = case e of
 
 -- 实例头实参的名字（`Pretty Color` 里的 `Color`）。
 argNameOf : Expr -> String
-argNameOf e = case e of
-  EVar n sp => n
-  _ => "Int"
+argNameOf (EVar n sp) = n
+argNameOf _ = "Int"

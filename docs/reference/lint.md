@@ -98,16 +98,23 @@ first (Pair a b) = a
 ### 3.3 `case-to-clauses`
 
 顶层 `DFun name pats` 的 body 直接是 `ECase (EVar x) alts`；`x` 是 `pats` 中的顶层
-`PVar` 且恰好一次；`alts` ≥2；语法可证穷尽（最后一个模式是 `PWild`/`PVar`，或恰好
-`Nil` + `Cons` 两分支）；该函数名只有一条 clause；至少一个分支体引用 `x`（全不引用时
-lift 后参数只剩模式匹配，不是本规则的目标形态）；每个分支可提升：分支体引用 `x` 时
-该分支模式必须是 `PWild`（提升后写成 `x` 绑定），`PVar`/构造子模式且 body 引用 `x`
+`PVar` 且恰好一次；`alts` ≥2；该函数名只有一条 clause；每个分支可提升：分支体引用 `x`
+时该分支模式必须是 `PWild`（提升后写成 `x` 绑定），`PVar`/构造子模式且 body 引用 `x`
 则不报；分支模式变量与外层其它参数不冲突。
 
-Edit 把 `[clause 起始行 .. case 末行]` 替换为 N 条 clause：单行 body 与 head 同行，
-多行 body 换行并重排缩进到 clause 缩进 +2：
+**穷尽性不由语法层证明**：`case` 与多 clause 的匹配语义等价（分支/clause 顺序一致），
+且 lint 的输入应视为能通过 `vuna check` 的程序——DT 已强制 `case` 穷尽。因此枚举分派
+（`case c of CapConsole => ...; ...`，无 `_` 兜底）与**纯映射表**（分支体全是字面量/
+常量、不引用 `x`）都会拆成多 clause：
 
 ```console
+capabilityName c = case c of
+  CapConsole => "console"
+  ...
+# =>
+capabilityName CapConsole = "console"
+capabilityName CapFs = "fs"
+...
 genTypeDeclsOf allDatas subset = case subset of
   [] => Ok ""
   _ => <多行 body>
@@ -124,10 +131,11 @@ genTypeDeclsOf allDatas subset = <多行 body 重排>
 `test/run-tests.sh` 第 15/16 段：
 
 - `test/corpus/lint/*.vuna` + `.out`：报告 golden 与退出码（01–04 为回归基线，
-  05–11 覆盖三条规则与「不报」形态：inline else、Int 链、`= if` 链首、`= case` 单分支、
-  `genTypeDeclsOf`、多分支无兜底/body 引用 x/多 clause、let 解构）；
+  05–12 覆盖三条规则与「不报」形态：inline else、Int 链、`= if` 链首、`= case` 单分支、
+  `genTypeDeclsOf`、body 引用 x 的构造子分支/多 clause、let 解构、枚举映射表）；
 - `test/corpus/fix/*.vuna` + `.expected`：`--fix` 产物与二次运行幂等（01–06 回归基线，
-  07–12 覆盖三条规则与 let 解构）。
+  07–13 覆盖三条规则与 let 解构；01/07/08/09 的期望产物是链式 `if → case → 多 clause`
+  的最终形态）。
 
 ## 5. 已知边界
 
@@ -137,6 +145,8 @@ genTypeDeclsOf allDatas subset = <多行 body 重排>
 - **签名含隐式 Pi 的函数跳过 clause 级改写**：`{n : Nat} -> ...` 这类隐式参数由精化器
   插入，把 `case` 折叠进 clause 模式会改变模式矩阵与隐式 Pi 的对齐（`Base.Vec.vhead`
   实测会把 `VCons` 错配到 `n : Nat`）；`literal-if-chain` 与函数参数无关，不受影响。
+- **穷尽性依赖类型检查**：`case-to-clauses` 不再做语法穷尽性证明；非穷尽 `case`（本来就
+  编译不过）也会被拆出不完整 clause——lint 的前提输入是通过 `vuna check` 的程序。
 - **CI 门禁**：`nix/checks/vuna-lint.sh` 现在扫全部包源码
   （`find compiler/lib base/lib lib app -name '*.vuna'`），要求零 finding；规则不再产生
   “只报告”项，因此门禁可通过。
@@ -144,8 +154,8 @@ genTypeDeclsOf allDatas subset = <多行 body 重排>
   保留旧的「行首 `case`」形态）。新增 fix 语料按 fmt 规范形态设计并验证幂等。
 - `lift-destructure` 只处理顶层 DFun 的 clause 与 case alt 的直接体；instance 方法、
   `where` 绑定不参与 clause 级提升（`ELocalFun`/`EAnn` 只做遍历）。
-- 规则不做类型/语义推理，只做语法可证的改写（穷尽性仅限 wildcard 或 Nil/Cons 形态）。
-- `case-to-clauses` 要求 `case` 直接是函数体；`x` 未被任何分支引用时不触发。
+- 规则不做类型/语义推理，只做语法可证的改写；`case-to-clauses` 要求 `case` 直接是函数体，
+  多 clause 函数与 `where`/`let` 内的 case 不拆。
 
 ## 6. 相关文件
 

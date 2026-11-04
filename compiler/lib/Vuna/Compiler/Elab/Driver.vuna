@@ -166,21 +166,21 @@ declFunNames (d :: rest) = case d of
 
 -- 项里出现的全局名（结构递归；TCon 的名字是构造子、不是全局定义，不计）。
 termGlobalRefs : Term -> List String
-termGlobalRefs t = case t of
-  TVar name i => []
-  TMeta m => []
-  TGlobal g => [g]
-  TType l => []
-  TPi name implicit rig dom cod => append (termGlobalRefs dom) (termGlobalRefs cod)
-  TLam name rig body => termGlobalRefs body
-  TApp f a rig => append (termGlobalRefs f) (termGlobalRefs a)
-  TCon c args => concatMap (\p => termGlobalRefs (firstOf p)) args
-  TCase scrut alts =>
-    append (termGlobalRefs scrut) (concatMap (\alt => termGlobalRefs (caseAltBody alt)) alts)
-  TInt n => []
-  TStr s => []
-  TBool b => []
-  TIf c th el => append (termGlobalRefs c) (append (termGlobalRefs th) (termGlobalRefs el))
+termGlobalRefs (TVar name i) = []
+termGlobalRefs (TMeta m) = []
+termGlobalRefs (TGlobal g) = [g]
+termGlobalRefs (TType l) = []
+termGlobalRefs (TPi name implicit rig dom cod) = append (termGlobalRefs dom) (termGlobalRefs cod)
+termGlobalRefs (TLam name rig body) = termGlobalRefs body
+termGlobalRefs (TApp f a rig) = append (termGlobalRefs f) (termGlobalRefs a)
+termGlobalRefs (TCon c args) = concatMap (\p => termGlobalRefs (firstOf p)) args
+termGlobalRefs (TCase scrut alts) =
+  append (termGlobalRefs scrut) (concatMap (\alt => termGlobalRefs (caseAltBody alt)) alts)
+termGlobalRefs (TInt n) = []
+termGlobalRefs (TStr s) = []
+termGlobalRefs (TBool b) = []
+termGlobalRefs (TIf c th el) =
+  append (termGlobalRefs c) (append (termGlobalRefs th) (termGlobalRefs el))
 
 memoUnsafe : Int -> HashTbl Bool -> HashTbl Term -> HashTbl Value -> String -> HashTbl Bool -> List String -> Bool
 memoUnsafe fuel future defs defvals self seen refs = if fuel <= 0 then True
@@ -432,36 +432,32 @@ metaOwnerHint ec m = case findDefWithMeta (ecDefs ec) m of
   Nothing => ""
 
 findDefWithMeta : List (Pair String Term) -> Int -> Maybe String
-findDefWithMeta defs m = case defs of
-  [] => Nothing
-  (Pair name body) :: rest =>
-    if termHasMeta m body then Just (name ++ " body=" ++ showTerm body) else findDefWithMeta rest m
+findDefWithMeta [] m = Nothing
+findDefWithMeta ((Pair name body) :: rest) m =
+  if termHasMeta m body then Just (name ++ " body=" ++ showTerm body) else findDefWithMeta rest m
 
 termHasMeta : Int -> Term -> Bool
-termHasMeta m t = case t of
-  TMeta k => k == m
-  TVar n i => False
-  TGlobal n => False
-  TType l => False
-  TPi n implicit rig dom cod => termHasMeta m dom || termHasMeta m cod
-  TLam n rig body => termHasMeta m body
-  TApp f a rig => termHasMeta m f || termHasMeta m a
-  TCon c args => anyArgHasMeta m args
-  TCase scrut alts => termHasMeta m scrut || anyAltHasMeta m alts
-  TInt n => False
-  TStr s => False
-  TBool b => False
-  TIf c th el => termHasMeta m c || termHasMeta m th || termHasMeta m el
+termHasMeta m (TMeta k) = k == m
+termHasMeta m (TVar n i) = False
+termHasMeta m (TGlobal n) = False
+termHasMeta m (TType l) = False
+termHasMeta m (TPi n implicit rig dom cod) = termHasMeta m dom || termHasMeta m cod
+termHasMeta m (TLam n rig body) = termHasMeta m body
+termHasMeta m (TApp f a rig) = termHasMeta m f || termHasMeta m a
+termHasMeta m (TCon c args) = anyArgHasMeta m args
+termHasMeta m (TCase scrut alts) = termHasMeta m scrut || anyAltHasMeta m alts
+termHasMeta m (TInt n) = False
+termHasMeta m (TStr s) = False
+termHasMeta m (TBool b) = False
+termHasMeta m (TIf c th el) = termHasMeta m c || termHasMeta m th || termHasMeta m el
 
 anyArgHasMeta : Int -> List (Pair Term Rig) -> Bool
-anyArgHasMeta m args = case args of
-  [] => False
-  (Pair a rig) :: rest => termHasMeta m a || anyArgHasMeta m rest
+anyArgHasMeta m [] = False
+anyArgHasMeta m ((Pair a rig) :: rest) = termHasMeta m a || anyArgHasMeta m rest
 
 anyAltHasMeta : Int -> List CaseAlt -> Bool
-anyAltHasMeta m alts = case alts of
-  [] => False
-  alt :: rest => termHasMeta m (caseAltBody alt) || anyAltHasMeta m rest
+anyAltHasMeta m [] = False
+anyAltHasMeta m (alt :: rest) = termHasMeta m (caseAltBody alt) || anyAltHasMeta m rest
 
 -- 洞目标里的类型是 level 形态，show 时深度取快照上下文的长度。
 ctxDepthOf : DtGoal -> Int

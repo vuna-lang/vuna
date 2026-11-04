@@ -21,14 +21,15 @@ renderDeclAt : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -
 renderDeclAt at lineInd decl = attachAt at (declSpan decl) lineInd (renderDeclBody at lineInd decl)
 
 renderDeclBody : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Decl -> List String
-renderDeclBody at lineInd decl = case decl of
-  DData name params kind ctors derivings sp => renderDataDecl at name params kind ctors derivings
-  DAxiom name ty sp => renderSigLine at lineInd "axiom " name ty
-  DSig name ty sp => renderSigLine at lineInd "" name ty
-  DFun name pats body sp => renderClause at lineInd name pats body
-  DRecord name params fields derivings sp => renderRecordDecl at name params fields derivings
-  DTrait name params methods sp => renderTraitDecl at name params methods
-  DInstance ctxE head methods sp => renderInstanceDecl at ctxE head methods
+renderDeclBody at lineInd (DData name params kind ctors derivings sp) =
+  renderDataDecl at name params kind ctors derivings
+renderDeclBody at lineInd (DAxiom name ty sp) = renderSigLine at lineInd "axiom " name ty
+renderDeclBody at lineInd (DSig name ty sp) = renderSigLine at lineInd "" name ty
+renderDeclBody at lineInd (DFun name pats body sp) = renderClause at lineInd name pats body
+renderDeclBody at lineInd (DRecord name params fields derivings sp) =
+  renderRecordDecl at name params fields derivings
+renderDeclBody at lineInd (DTrait name params methods sp) = renderTraitDecl at name params methods
+renderDeclBody at lineInd (DInstance ctxE head methods sp) = renderInstanceDecl at ctxE head methods
 
 -- 顶层签名与 axiom 声明共用：`<prefix>name : Ty`（prefix 为 "" 或 "axiom "）。
 renderSigLine : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> String -> String -> Expr -> List String
@@ -161,10 +162,9 @@ renderWhereBindingBody at lineInd pat value = case pat of
 
 -- A2：where 内部多 clause 局部函数：每个 clause 走 `renderClause`（与顶层子句同形）。
 renderLocalFunClauses : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> String -> List (Pair (List Pat) Expr) -> List String
-renderLocalFunClauses at lineInd name clauses = case clauses of
-  [] => []
-  (Pair pats body) :: rest =>
-    append (renderClause at lineInd name pats body) (renderLocalFunClauses at lineInd name rest)
+renderLocalFunClauses at lineInd name [] = []
+renderLocalFunClauses at lineInd name ((Pair pats body) :: rest) =
+  append (renderClause at lineInd name pats body) (renderLocalFunClauses at lineInd name rest)
 
 -- 顶层声明：不同函数之间一个空行；类型签名紧贴同名函数子句。
 renderTopDecls : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> List Decl -> List String
@@ -178,15 +178,13 @@ renderTopRest at prev (d :: rest) =
   else "" :: append (renderDeclAt at 0 d) (renderTopRest at d rest)
 
 attachDecl : Decl -> Decl -> Bool
-attachDecl prev d = case d of
-  DFun n pats body sp => declNamed prev n
-  _ => False
+attachDecl prev (DFun n pats body sp) = declNamed prev n
+attachDecl prev _ = False
 
 declNamed : Decl -> String -> Bool
-declNamed d n = case d of
-  DFun m pats body sp => m == n
-  DSig m ty sp => m == n
-  _ => False
+declNamed (DFun m pats body sp) n = m == n
+declNamed (DSig m ty sp) n = m == n
+declNamed _ n = False
 
 -- ---------------------------------------------------------------
 -- 模块头 / import / 文件组装
@@ -225,16 +223,14 @@ renderExportLine at prefixText item =
   attachAt at (exportItemSpan item) 2 [prefixText ++ renderExportItem item]
 
 renderExportItem : ExportItem -> String
-renderExportItem item = case item of
-  XBare name sp => name
-  XTypeAll name sp => name ++ "(..)"
-  XModule name sp => "module " ++ name
+renderExportItem (XBare name sp) = name
+renderExportItem (XTypeAll name sp) = name ++ "(..)"
+renderExportItem (XModule name sp) = "module " ++ name
 
 -- 排序键：分组前缀（`module B` = 1，其余 = 0）++ 字面文本；稳定排序保证幂等。
 exportRank : ExportItem -> Int
-exportRank item = case item of
-  XModule _ _ => 1
-  _ => 0
+exportRank (XModule _ _) = 1
+exportRank _ = 0
 
 exportKey : ExportItem -> String
 exportKey item = strFromInt (exportRank item) ++ renderExportItem item
@@ -259,14 +255,12 @@ renderImport (Import name isQualified alias sp) =
   "import " ++ (if isQualified then "qualified " else "") ++ name ++ aliasSuffix alias
 
 aliasSuffix : Maybe String -> String
-aliasSuffix maybeAlias = case maybeAlias of
-  Nothing => ""
-  Just a => " as " ++ a
+aliasSuffix Nothing = ""
+aliasSuffix (Just a) = " as " ++ a
 
 renderHeader : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Maybe ModDecl -> List String
-renderHeader at maybeHeader = case maybeHeader of
-  Nothing => []
-  Just m => attachAt at (modDeclSpan m) 0 (renderModDecl at m)
+renderHeader at Nothing = []
+renderHeader at (Just m) = attachAt at (modDeclSpan m) 0 (renderModDecl at m)
 
 renderImportLine : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Import -> List String
 renderImportLine at imp = attachAt at (importSpan imp) 0 [renderImport imp]

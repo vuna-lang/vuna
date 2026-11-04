@@ -474,6 +474,8 @@
   `case-to-clauses`（`LN_CaseToClauses`，顶层 case → 多 clause）；`literal-if-chain` 支持
   Int 字面量/`= if` 链首/链尾 inline else。规则只报告**可安全自动修复**的形态，
   签名含隐式 Pi 的函数跳过 clause 级改写；`checks.vuna-lint` 扩到全部包源码。
+  `case-to-clauses` 随后放宽：不再语法证明穷尽性（交给 `vuna check`），枚举分派与纯映射表
+  （分支体不引用 scrutinee）也拆成多 clause（如 `Intrinsics.capabilityName`）。
   新参考页 [reference/lint.md](reference/lint.md)。
 - **C26–C28**：逐点采用结构递归或证明界（`Base.String.split`、Lexer/Parser/Toml/Pkg/
   Resolve、Json/Fmt/Files/Index/Repl/Lsp），measure 表见 `reference/limits.md`；压力探针

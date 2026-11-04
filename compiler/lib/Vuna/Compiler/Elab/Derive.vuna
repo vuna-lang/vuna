@@ -77,12 +77,11 @@ anyCtorMentions p ((Ctor cn ty ar cnsp) :: rest) =
   if exprMentionsName p ty then True else anyCtorMentions p rest
 
 exprMentionsName : String -> Expr -> Bool
-exprMentionsName p e = case e of
-  EVar n sp => n == p
-  EApp fn args sp => exprMentionsName p fn || anyExprMentions p args
-  EPi n i dom cod sp => exprMentionsName p dom || exprMentionsName p cod
-  EAnn v ty sp => exprMentionsName p v || exprMentionsName p ty
-  _ => False
+exprMentionsName p (EVar n sp) = n == p
+exprMentionsName p (EApp fn args sp) = exprMentionsName p fn || anyExprMentions p args
+exprMentionsName p (EPi n i dom cod sp) = exprMentionsName p dom || exprMentionsName p cod
+exprMentionsName p (EAnn v ty sp) = exprMentionsName p v || exprMentionsName p ty
+exprMentionsName p _ = False
 
 anyExprMentions : String -> List Expr -> Bool
 anyExprMentions p [] = False
