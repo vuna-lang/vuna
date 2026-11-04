@@ -16,6 +16,7 @@ open Vuna_dCompiler_dFrontend_dToml
 open Vuna_dCompiler_dFrontend_dManifest
 open Base_dIO
 open Vuna_dCompiler_dPackages_dPkg
+open Base_dArray
 open Base_dHashMap
 open Vuna_dCompiler_dDebug
 open Base_dNat
@@ -36,27 +37,13 @@ open Vuna_dCompiler_dIntrinsics
 open Vuna_dCompiler_dLoader_dResolve
 open Vuna_dCompiler_dLoader_dFlatten
 open Vuna_dCompiler_dLoader
-type 'a0 t_Base_dIntMap_dIntMap = C_Base_dIntMap_dIntMap_Base_dIntMap_dMkIntMap of ((int, 'a0) t_Base_dPair_dPair t_Base_dList_dList t_Base_dList_dList t_Base_dList_dList)
-
-let rec v_Base_dIntMap_d_ureplicate = (fun n x -> (if (n <= 0) then C_Base_dList_dList_Base_dList_dNil else (C_Base_dList_dList_Base_dList_dCons (x, ((v_Base_dIntMap_d_ureplicate (n - 1)) x)))))
-
-let rec v_Base_dIntMap_d_unthOr = (fun mc0 mc1 mc2 -> (match mc2 with
-  | C_Base_dList_dList_Base_dList_dCons (dtb__0, dtb__1) -> (if (mc0 <= 0) then dtb__0 else (((v_Base_dIntMap_d_unthOr (mc0 - 1)) mc1) dtb__1))
-  | C_Base_dList_dList_Base_dList_dNil -> mc1
-  | _ -> failwith "DT: impossible branch"
-))
-
-let rec v_Base_dIntMap_d_uputNth = (fun mc0 mc1 mc2 -> (match mc2 with
-  | C_Base_dList_dList_Base_dList_dCons (dtb__2, dtb__3) -> (if (mc0 <= 0) then (C_Base_dList_dList_Base_dList_dCons (mc1, dtb__3)) else (C_Base_dList_dList_Base_dList_dCons (dtb__2, (((v_Base_dIntMap_d_uputNth (mc0 - 1)) mc1) dtb__3))))
-  | C_Base_dList_dList_Base_dList_dNil -> C_Base_dList_dList_Base_dList_dNil
-  | _ -> failwith "DT: impossible branch"
-))
+type 'a0 t_Base_dIntMap_dIntMap = C_Base_dIntMap_dIntMap_Base_dIntMap_dMkIntMap of ((((int, 'a0) t_Base_dPair_dPair t_Base_dList_dList array) array))
 
 let v_Base_dIntMap_d_uhashInt = (fun n -> ((fun m -> (if (m < 0) then (m + 1024) else m)) (n - ((if 1024 = 0 then failwith "division by zero" else n / 1024) * 1024))))
 
 let rec v_Base_dIntMap_d_ulookupAssoc = (fun mc0 mc1 -> (match mc1 with
-  | C_Base_dList_dList_Base_dList_dCons (dtb__4, dtb__5) -> (match dtb__4 with
-  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__6, dtb__7) -> (if (mc0 = dtb__6) then (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__7)) else ((v_Base_dIntMap_d_ulookupAssoc mc0) dtb__5))
+  | C_Base_dList_dList_Base_dList_dCons (dtb__0, dtb__1) -> (match dtb__0 with
+  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__2, dtb__3) -> (if (mc0 = dtb__2) then (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__3)) else ((v_Base_dIntMap_d_ulookupAssoc mc0) dtb__1))
   | _ -> failwith "DT: impossible branch"
 )
   | C_Base_dList_dList_Base_dList_dNil -> C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing
@@ -64,8 +51,8 @@ let rec v_Base_dIntMap_d_ulookupAssoc = (fun mc0 mc1 -> (match mc1 with
 ))
 
 let rec v_Base_dIntMap_d_uhasKeyIn = (fun mc0 mc1 -> (match mc1 with
-  | C_Base_dList_dList_Base_dList_dCons (dtb__8, dtb__9) -> (match dtb__8 with
-  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__10, dtb__11) -> (if (mc0 = dtb__10) then true else ((v_Base_dIntMap_d_uhasKeyIn mc0) dtb__9))
+  | C_Base_dList_dList_Base_dList_dCons (dtb__4, dtb__5) -> (match dtb__4 with
+  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__6, dtb__7) -> (if (mc0 = dtb__6) then true else ((v_Base_dIntMap_d_uhasKeyIn mc0) dtb__5))
   | _ -> failwith "DT: impossible branch"
 )
   | C_Base_dList_dList_Base_dList_dNil -> false
@@ -73,8 +60,8 @@ let rec v_Base_dIntMap_d_uhasKeyIn = (fun mc0 mc1 -> (match mc1 with
 ))
 
 let rec v_Base_dIntMap_d_udedupGo = (fun mc0 mc1 -> (match mc0 with
-  | C_Base_dList_dList_Base_dList_dCons (dtb__12, dtb__13) -> (match dtb__12 with
-  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__14, dtb__15) -> (if ((v_Base_dIntMap_d_uhasKeyIn dtb__14) mc1) then ((v_Base_dIntMap_d_udedupGo dtb__13) mc1) else ((v_Base_dIntMap_d_udedupGo dtb__13) (C_Base_dList_dList_Base_dList_dCons ((C_Base_dPair_dPair_Base_dPair_dPair (dtb__14, dtb__15)), mc1))))
+  | C_Base_dList_dList_Base_dList_dCons (dtb__8, dtb__9) -> (match dtb__8 with
+  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__10, dtb__11) -> (if ((v_Base_dIntMap_d_uhasKeyIn dtb__10) mc1) then ((v_Base_dIntMap_d_udedupGo dtb__9) mc1) else ((v_Base_dIntMap_d_udedupGo dtb__9) (C_Base_dList_dList_Base_dList_dCons ((C_Base_dPair_dPair_Base_dPair_dPair (dtb__10, dtb__11)), mc1))))
   | _ -> failwith "DT: impossible branch"
 )
   | C_Base_dList_dList_Base_dList_dNil -> (v_Base_dList_dreverse mc1)
@@ -83,27 +70,25 @@ let rec v_Base_dIntMap_d_udedupGo = (fun mc0 mc1 -> (match mc0 with
 
 let v_Base_dIntMap_d_udedupBucket = (fun xs -> ((v_Base_dIntMap_d_udedupGo xs) C_Base_dList_dList_Base_dList_dNil))
 
-let v_Base_dIntMap_dempty = (C_Base_dIntMap_dIntMap_Base_dIntMap_dMkIntMap (((v_Base_dIntMap_d_ureplicate 32) ((v_Base_dIntMap_d_ureplicate 32) C_Base_dList_dList_Base_dList_dNil))))
-
 let v_Base_dIntMap_dinsert = (fun mc0 mc1 mc2 -> (match mc2 with
-  | C_Base_dIntMap_dIntMap_Base_dIntMap_dMkIntMap (dtb__16) -> ((fun b -> ((fun oi -> ((fun ii -> ((fun outer -> ((fun inner -> (C_Base_dIntMap_dIntMap_Base_dIntMap_dMkIntMap ((((v_Base_dIntMap_d_uputNth oi) (((v_Base_dIntMap_d_uputNth ii) (C_Base_dList_dList_Base_dList_dCons ((C_Base_dPair_dPair_Base_dPair_dPair (mc0, mc1)), inner))) outer)) dtb__16)))) (((v_Base_dIntMap_d_unthOr ii) C_Base_dList_dList_Base_dList_dNil) outer))) (((v_Base_dIntMap_d_unthOr oi) ((v_Base_dIntMap_d_ureplicate 32) C_Base_dList_dList_Base_dList_dNil)) dtb__16))) (b - (oi * 32)))) (if 32 = 0 then failwith "division by zero" else b / 32))) (v_Base_dIntMap_d_uhashInt mc0))
+  | C_Base_dIntMap_dIntMap_Base_dIntMap_dMkIntMap (dtb__12) -> ((fun base -> ((fun b -> ((fun oi -> ((fun ii -> ((fun outer -> ((fun inner -> (C_Base_dIntMap_dIntMap_Base_dIntMap_dMkIntMap ((((v_Base_dArray_dset base) oi) (((v_Base_dArray_dset outer) ii) (C_Base_dList_dList_Base_dList_dCons ((C_Base_dPair_dPair_Base_dPair_dPair (mc0, mc1)), inner))))))) ((v_Base_dArray_dget outer) ii))) ((v_Base_dArray_dget base) oi))) (b - (oi * 32)))) (if 32 = 0 then failwith "division by zero" else b / 32))) (v_Base_dIntMap_d_uhashInt mc0))) (if ((v_Base_dArray_dlength dtb__12) = 0) then ((v_Base_dArray_dmake 32) ((v_Base_dArray_dmake 32) C_Base_dList_dList_Base_dList_dNil)) else dtb__12))
   | _ -> failwith "DT: impossible branch"
 ))
 
 let v_Base_dIntMap_dlookup = (fun mc0 mc1 -> (match mc1 with
-  | C_Base_dIntMap_dIntMap_Base_dIntMap_dMkIntMap (dtb__17) -> ((fun b -> ((fun oi -> ((fun ii -> ((v_Base_dIntMap_d_ulookupAssoc mc0) (((v_Base_dIntMap_d_unthOr ii) C_Base_dList_dList_Base_dList_dNil) (((v_Base_dIntMap_d_unthOr oi) C_Base_dList_dList_Base_dList_dNil) dtb__17)))) (b - (oi * 32)))) (if 32 = 0 then failwith "division by zero" else b / 32))) (v_Base_dIntMap_d_uhashInt mc0))
+  | C_Base_dIntMap_dIntMap_Base_dIntMap_dMkIntMap (dtb__13) -> (if ((v_Base_dArray_dlength dtb__13) = 0) then C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing else ((fun b -> ((fun oi -> ((fun ii -> ((v_Base_dIntMap_d_ulookupAssoc mc0) ((v_Base_dArray_dget ((v_Base_dArray_dget dtb__13) oi)) ii))) (b - (oi * 32)))) (if 32 = 0 then failwith "division by zero" else b / 32))) (v_Base_dIntMap_d_uhashInt mc0)))
   | _ -> failwith "DT: impossible branch"
 ))
 
 let v_Base_dIntMap_dmember = (fun key t -> (match ((v_Base_dIntMap_dlookup key) t) with
-  | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__18) -> true
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__14) -> true
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> false
   | _ -> failwith "DT: impossible branch"
 ))
 
 let rec v_Base_dIntMap_dinsertAll = (fun mc0 mc1 -> (match mc0 with
-  | C_Base_dList_dList_Base_dList_dCons (dtb__19, dtb__20) -> (match dtb__19 with
-  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__21, dtb__22) -> ((v_Base_dIntMap_dinsertAll dtb__20) (((v_Base_dIntMap_dinsert dtb__21) dtb__22) mc1))
+  | C_Base_dList_dList_Base_dList_dCons (dtb__15, dtb__16) -> (match dtb__15 with
+  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__17, dtb__18) -> ((v_Base_dIntMap_dinsertAll dtb__16) (((v_Base_dIntMap_dinsert dtb__17) dtb__18) mc1))
   | _ -> failwith "DT: impossible branch"
 )
   | C_Base_dList_dList_Base_dList_dNil -> mc1
@@ -111,16 +96,16 @@ let rec v_Base_dIntMap_dinsertAll = (fun mc0 mc1 -> (match mc0 with
 ))
 
 let rec v_Base_dIntMap_dfromList = (fun mc0 -> (match mc0 with
-  | C_Base_dList_dList_Base_dList_dCons (dtb__23, dtb__24) -> (match dtb__23 with
-  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__25, dtb__26) -> (((v_Base_dIntMap_dinsert dtb__25) dtb__26) (v_Base_dIntMap_dfromList dtb__24))
+  | C_Base_dList_dList_Base_dList_dCons (dtb__19, dtb__20) -> (match dtb__19 with
+  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__21, dtb__22) -> (((v_Base_dIntMap_dinsert dtb__21) dtb__22) (v_Base_dIntMap_dfromList dtb__20))
   | _ -> failwith "DT: impossible branch"
 )
-  | C_Base_dList_dList_Base_dList_dNil -> v_Base_dIntMap_dempty
+  | C_Base_dList_dList_Base_dList_dNil -> (C_Base_dIntMap_dIntMap_Base_dIntMap_dMkIntMap ([||]))
   | _ -> failwith "DT: impossible branch"
 ))
 
 let v_Base_dIntMap_dtoList = (fun mc0 -> (match mc0 with
-  | C_Base_dIntMap_dIntMap_Base_dIntMap_dMkIntMap (dtb__27) -> ((v_Base_dList_dconcatMap (fun row -> ((v_Base_dList_dconcatMap v_Base_dIntMap_d_udedupBucket) row))) dtb__27)
+  | C_Base_dIntMap_dIntMap_Base_dIntMap_dMkIntMap (dtb__23) -> ((v_Base_dList_dconcatMap (fun outer -> ((v_Base_dList_dconcatMap (fun inner -> (v_Base_dIntMap_d_udedupBucket inner))) (v_Base_dArray_dtoList outer)))) (v_Base_dArray_dtoList dtb__23))
   | _ -> failwith "DT: impossible branch"
 ))
 

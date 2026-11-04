@@ -13,7 +13,7 @@ data HashSet : Type where
   MkHashSet : HashMap Bool -> HashSet
 
 empty : HashSet
-empty = MkHashSet Base.HashMap.empty
+empty = MkHashSet (Base.HashMap.fromList [])
 
 insert : String -> HashSet -> HashSet
 insert key (MkHashSet t) = MkHashSet (Base.HashMap.insert key True t)

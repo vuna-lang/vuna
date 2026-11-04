@@ -23,7 +23,7 @@ VUNA_BIN=${VUNA:-vuna}
 OCAMLOPT_BIN=${OCAMLOPT:-ocamlopt}
 VUNA_BASE_OVERRIDE=${VUNA_BASE:-}
 
-BENCHES="arith string_ops hashmap list_recursion gc_pressure"
+BENCHES="arith string_ops hashmap list_recursion gc_pressure array"
 
 usage() {
   cat <<'EOF'

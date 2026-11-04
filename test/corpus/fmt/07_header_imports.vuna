@@ -1,4 +1,4 @@
-module Vuna.Sample (module Base.List, Base.String.strLength, area, Shape, Point(..), Base.HashMap.empty) where
+module Vuna.Sample (module Base.List, Base.String.strLength, area, Shape, Point(..), Base.HashMap.fromList) where
 
 import Base.String
 import Base.HashMap

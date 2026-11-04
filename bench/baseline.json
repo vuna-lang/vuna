@@ -1,9 +1,9 @@
 {
   "schema": 1,
   "meta": {
-    "timestamp": "2026-11-04T14:13:33Z",
+    "timestamp": "2026-11-04T14:43:28Z",
     "repo": "/home/grass/workspace/personal/vuna",
-    "git_head": "06b163bd0cb542cd9bbea9bfddc852e557877fc0",
+    "git_head": "a2ab0aa86952690e8c32b6b53186f45a86209e2f",
     "git_dirty": true,
     "compiler": "vuna 0.1.0",
     "ocamlopt": "5.5.1",
@@ -13,10 +13,11 @@
     "warmup": 1
   },
   "benchmarks": {
-    "arith": { "vuna": { "median_ms": 7, "rss_kb": 3736, "gc": { "minor_words": 864, "major_words": 0, "minor_collections": 1, "major_collections": 0, "top_heap_words": 53248 } }, "ocaml": { "median_ms": 6, "rss_kb": 2476 }, "ratio": 1.17 },
-    "string_ops": { "vuna": { "median_ms": 29, "rss_kb": 54768, "gc": { "minor_words": 867, "major_words": 3360932, "minor_collections": 1, "major_collections": 0, "top_heap_words": 53248 } }, "ocaml": { "median_ms": 8, "rss_kb": 6564 }, "ratio": 3.62 },
-    "hashmap": { "vuna": { "median_ms": 12, "rss_kb": 14448, "gc": { "minor_words": 864, "major_words": 0, "minor_collections": 1, "major_collections": 0, "top_heap_words": 53248 } }, "ocaml": { "median_ms": 4, "rss_kb": 4024 }, "ratio": 3.00 },
-    "list_recursion": { "vuna": { "median_ms": 11, "rss_kb": 13644, "gc": { "minor_words": 867, "major_words": 0, "minor_collections": 1, "major_collections": 0, "top_heap_words": 53248 } }, "ocaml": { "median_ms": 14, "rss_kb": 11216 }, "ratio": 0.79 },
-    "gc_pressure": { "vuna": { "median_ms": 26, "rss_kb": 20368, "gc": { "minor_words": 867, "major_words": 0, "minor_collections": 1, "major_collections": 0, "top_heap_words": 53248 } }, "ocaml": { "median_ms": 27, "rss_kb": 11340 }, "ratio": 0.96 }
+    "arith": { "vuna": { "median_ms": 6, "rss_kb": 3816, "gc": { "minor_words": 864, "major_words": 0, "minor_collections": 1, "major_collections": 0, "top_heap_words": 53248 } }, "ocaml": { "median_ms": 5, "rss_kb": 2388 }, "ratio": 1.20 },
+    "string_ops": { "vuna": { "median_ms": 27, "rss_kb": 54924, "gc": { "minor_words": 867, "major_words": 3360932, "minor_collections": 1, "major_collections": 0, "top_heap_words": 53248 } }, "ocaml": { "median_ms": 8, "rss_kb": 6664 }, "ratio": 3.38 },
+    "hashmap": { "vuna": { "median_ms": 8, "rss_kb": 9076, "gc": { "minor_words": 864, "major_words": 0, "minor_collections": 1, "major_collections": 0, "top_heap_words": 53248 } }, "ocaml": { "median_ms": 4, "rss_kb": 4024 }, "ratio": 2.00 },
+    "list_recursion": { "vuna": { "median_ms": 12, "rss_kb": 13680, "gc": { "minor_words": 867, "major_words": 0, "minor_collections": 1, "major_collections": 0, "top_heap_words": 53248 } }, "ocaml": { "median_ms": 14, "rss_kb": 11436 }, "ratio": 0.86 },
+    "gc_pressure": { "vuna": { "median_ms": 27, "rss_kb": 20288, "gc": { "minor_words": 867, "major_words": 0, "minor_collections": 1, "major_collections": 0, "top_heap_words": 53248 } }, "ocaml": { "median_ms": 27, "rss_kb": 11084 }, "ratio": 1.00 },
+    "array": { "vuna": { "median_ms": 17, "rss_kb": 19296, "gc": { "minor_words": 864, "major_words": 0, "minor_collections": 1, "major_collections": 0, "top_heap_words": 53248 } }, "ocaml": { "median_ms": 18, "rss_kb": 15652 }, "ratio": 0.94 }
   }
 }

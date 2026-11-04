@@ -269,11 +269,11 @@ addDependents src (m :: rest) t =
   in addDependents src rest (Base.HashMap.insert m (src :: cur) t)
 
 reverseAdjTbl : List (Pair String (List String)) -> HashMap (List String)
-reverseAdjTbl [] = Base.HashMap.empty
+reverseAdjTbl [] = Base.HashMap.fromList []
 reverseAdjTbl ((Pair n ns) :: rest) = addDependents n ns (reverseAdjTbl rest)
 
 adjTblOf : List (Pair String (List String)) -> HashMap (List String)
-adjTblOf adj = Base.HashMap.insertAll adj Base.HashMap.empty
+adjTblOf adj = Base.HashMap.insertAll adj (Base.HashMap.fromList [])
 
 foldNeighborsPost : HashMap (List String) -> List String -> HashMap Bool -> List String -> Pair (HashMap Bool) (List String)
 foldNeighborsPost adjT ms visited order = foldNeighborsPostFuel 100000 adjT ms visited order
@@ -328,7 +328,7 @@ else case dfsCollect adjT n (Base.HashMap.insert n True visited) [] of
 -- 名字 → 所属分量（一次构建，O(1) 查）。
 componentTblOf : List (List String) -> HashMap (List String)
 componentTblOf comps =
-  Base.HashMap.insertAll (concatMap (\g => map (\n => Pair n g) g) comps) Base.HashMap.empty
+  Base.HashMap.insertAll (concatMap (\g => map (\n => Pair n g) g) comps) (Base.HashMap.fromList [])
 
 addAllNames : List String -> HashMap Bool -> HashMap Bool
 addAllNames [] t = t
@@ -337,7 +337,7 @@ addAllNames (n :: rest) t = addAllNames rest (Base.HashMap.insert n True t)
 -- 按 names 首次出现顺序产出 SCC，组内成员按 names 顺序排列。
 groupsFromComps : List (List String) -> List String -> List (List String)
 groupsFromComps comps names =
-  groupsFromCompsGo (componentTblOf comps) names names Base.HashMap.empty
+  groupsFromCompsGo (componentTblOf comps) names names (Base.HashMap.fromList [])
 
 groupsFromCompsGo : HashMap (List String) -> List String -> List String -> HashMap Bool -> List (List String)
 groupsFromCompsGo compTbl allNames [] emitted = []
@@ -386,7 +386,7 @@ pickReadyAcc adjT (g :: rest) before emitted =
   else pickReadyAcc adjT rest (g :: before) emitted
 
 orderGroups : HashMap (List String) -> List (List String) -> Result (List (List String))
-orderGroups adjT groups = orderGroupsAcc adjT groups Base.HashMap.empty
+orderGroups adjT groups = orderGroupsAcc adjT groups (Base.HashMap.fromList [])
 
 orderGroupsAcc : HashMap (List String) -> List (List String) -> HashMap Bool -> Result (List (List String))
 orderGroupsAcc adjT remaining emitted =
@@ -421,15 +421,16 @@ groupRuntimeDefs defs =
     adj = depAdjacency defs
     adjT = adjTblOf adj
     revT = reverseAdjTbl adj
-  in case postOrder adjT names Base.HashMap.empty [] of
+  in case postOrder adjT names (Base.HashMap.fromList []) [] of
     Pair _ order =>
       let
-        comps = collectComps revT order Base.HashMap.empty []
+        comps = collectComps revT order (Base.HashMap.fromList []) []
         groups = groupsFromComps comps names
       in andThen (orderGroups adjT groups) (\ordered => Ok (map (groupDefsOf defsTbl) ordered))
 
 dtDefTblOf : List DtDef -> HashMap DtDef
-dtDefTblOf defs = Base.HashMap.insertAll (map (\d => Pair (dtDefName d) d) defs) Base.HashMap.empty
+dtDefTblOf defs =
+  Base.HashMap.insertAll (map (\d => Pair (dtDefName d) d) defs) (Base.HashMap.fromList [])
 
 groupDefsOf : HashMap DtDef -> List String -> List DtDef
 groupDefsOf defsTbl [] = []
@@ -442,7 +443,7 @@ groupDefsOf defsTbl (n :: rest) = case Base.HashMap.lookup n defsTbl of
 -- value/type/ctor 名字做去重校验，任何未来改动引入碰撞都在 check 期报错，而不是
 -- 静默覆盖（三族前缀 v_/t_/C_ 互不相同，只需族内校验）。
 checkNoDupOcamlNames : String -> List String -> Result Int
-checkNoDupOcamlNames kind names = checkNoDupOcamlNamesGo kind names Base.HashMap.empty
+checkNoDupOcamlNames kind names = checkNoDupOcamlNamesGo kind names (Base.HashMap.fromList [])
 
 checkNoDupOcamlNamesGo : String -> List String -> HashMap Bool -> Result Int
 checkNoDupOcamlNamesGo kind [] seen = Ok 0

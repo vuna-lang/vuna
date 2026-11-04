@@ -23,6 +23,10 @@ modules = [
   "Base.HashMap",
   "Base.HashSet",
   "Base.IntMap",
+  "Base.Array",
+  "Base.IORef",
+  "Base.MArray",
+  "Base.Buffer",
   "Base.Monad",
   "Base.IO",
   "Prelude"

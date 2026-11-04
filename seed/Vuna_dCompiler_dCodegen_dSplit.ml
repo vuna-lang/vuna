@@ -16,6 +16,7 @@ open Vuna_dCompiler_dFrontend_dToml
 open Vuna_dCompiler_dFrontend_dManifest
 open Base_dIO
 open Vuna_dCompiler_dPackages_dPkg
+open Base_dArray
 open Base_dHashMap
 open Vuna_dCompiler_dDebug
 open Base_dNat
@@ -213,7 +214,7 @@ let rec v_Vuna_dCompiler_dCodegen_dSplit_dnameOwnerPairsOfDatas = (fun mc0 mc1 -
   | _ -> failwith "DT: impossible branch"
 ))
 
-let v_Vuna_dCompiler_dCodegen_dSplit_downerTblOf = (fun pairs -> ((v_Base_dHashMap_dinsertAll pairs) v_Base_dHashMap_dempty))
+let v_Vuna_dCompiler_dCodegen_dSplit_downerTblOf = (fun pairs -> ((v_Base_dHashMap_dinsertAll pairs) (v_Base_dHashMap_dfromList C_Base_dList_dList_Base_dList_dNil)))
 
 let v_Vuna_dCompiler_dCodegen_dSplit_downerOfTbl = (fun t name -> (match ((v_Base_dHashMap_dlookup name) t) with
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__98) -> dtb__98

@@ -1,0 +1,18 @@
+-- M33 W3：不可变 Array 基准（fromList / get / set 返回新数组 / length）。
+-- 手写 OCaml 对照见 array.ml（同算法：Array.of_list / Array.get / Array.copy+set）。
+import Base.Array
+import Base.List
+
+build : Int -> Int -> List Int
+build i k = if k <= 0 then [] else i :: build (i + 1) (k - 1)
+
+sumGet : Array Int -> Int -> Int -> Int -> Int
+sumGet a i k acc = if k <= 0 then acc else sumGet a (i + 1) (k - 1) (acc + Base.Array.get a i)
+
+main : Int
+main =
+  let
+    xs = build 0 200000
+    a = Base.Array.fromList xs
+    b = Base.Array.set a 0 7
+  in sumGet b 0 (Base.Array.length b) 0 + Base.Array.length a

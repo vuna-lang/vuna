@@ -16,6 +16,7 @@ open Vuna_dCompiler_dFrontend_dToml
 open Vuna_dCompiler_dFrontend_dManifest
 open Base_dIO
 open Vuna_dCompiler_dPackages_dPkg
+open Base_dArray
 open Base_dHashMap
 let v_Vuna_dCompiler_dDebug_dargs = (v_Base_dIO_drunIO (C_Base_dIO_dIO_Base_dIO_dMkIO (fun _ -> (dtp_listOf (dtp_getArgs ())))))
 

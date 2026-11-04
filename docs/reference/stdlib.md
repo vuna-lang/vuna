@@ -15,6 +15,10 @@
 | `Base.HashMap` | `String` 键、值泛型的持久哈希映射（1024 桶；empty/insert/insertAll/lookup/member/fromList/toList/size/ofNames、公开 `hashStr`）；大表、构造后频繁查找 |
 | `Base.HashSet` | `String` 集合（内部 `HashMap Bool`；empty/insert/member/fromList/toList/size） |
 | `Base.IntMap` | `Int` 键、值泛型的持久哈希映射（同 1024 桶结构；整数键免字符串编码） |
+| `Base.Array` | 不可变数组（内建类型构造子 `Array`；`fromList` / `toList` / `length` / `get` / `set` / `make`，`set` 返回新数组） |
+| `Base.IORef` | IO 内的可变引用（`newRef` / `readRef` / `writeRef` / `modifyRef`，全部 `IO`） |
+| `Base.MArray` | IO 内的可变数组（`new` / `read` / `write` / `length`，全部 `IO`） |
+| `Base.Buffer` | 可变字符串缓冲（`new` / `add` / `contents` / `length`，全部 `IO`） |
 | `Base.Nat` | `Nat(..)`（`Zero` / `Succ`）；DT 夹具与错误码表使用 |
 | `Base.Vec` | `Vec(..)` 与 `substTemplate` / `vhead` / `vlen` / `vtail` |
 | `Base.Monad` | `Functor` / `Monad` trait |
@@ -124,13 +128,20 @@ module Base.IO (IO, print, println, readFile, writeFile, readLine, readDir, ...)
 
 - `Map` 是关联表（assoc list）实现的抽象类型，无平衡树；适合小表；
 - `HashMap` / `IntMap` 是 1024 桶的持久哈希表：无 `remove`、无 resize；`toList` 按桶序
-  展开（不保证插入序）；`size` 是 O(n)（没有计数字段）；
+  展开（不保证插入序）；`size` 是 O(n)（没有计数字段）；M33 W3 起桶结构是
+  `Array (Array (List ...))`（`Array.get` O(1)，`insert` 两次 32 元素 copy-on-write）；
+- **`empty` 已移除**：`HashMap` / `IntMap` 的空表统一写 `fromList []`。原因是空表在
+  OCaml 侧用 `Array.make` 构造会引入弱类型变量（`'_weak`），跨模块使用时被固定成某个
+  `a`；`fromList []` 走 `MkHashMap arrayEmpty`（`[||]` 字面量，non-expansive）可正常泛化；
 - **`fromList` 与 `insertAll` 的冲突语义不同**：`fromList` 列表**前面**的条目优先（与
   `Base.Map.fromList` 的查找语义一致），`insertAll` **后面**的条目覆盖前面的。两者都是
   编译器历史 API 的语义，不要合并或用错；
 - 键只覆盖 `String`（`HashMap`/`HashSet`）与 `Int`（`IntMap`）：没有泛型 `Hashable`
-  trait（trait 仅单参数、无 `deriving Hash`），也没有有序持久容器（TreeMap/TreeSet）
-  与可变/数组容器；需要有序时用 `Base.Sort`，大表查找用哈希容器；
+  trait（trait 仅单参数、无 `deriving Hash`），也没有有序持久容器（TreeMap/TreeSet）；
+  需要有序时用 `Base.Sort`，大表查找用哈希容器；
+- **容器与可变数据（M33 W3）**：不可变 `Base.Array`、IO 内 `IORef` / `MArray` / `Buffer`
+  已落地；`Array.get` / `MArray.read` 越界是宿主 `Invalid_argument`；`Array.set` 返回新数组；
+  可变句柄只经 `IO` 动作使用（`runIO` 逃逸需要 `unsafe`）；没有线性 / 唯一性类型与 ST；
 - `Result` 暂无 `Functor` / `Monad` 实例；
 - 抽象类型（`Map`、`IO`）跨包不可构造、不可模式匹配，只能经 API 使用。
 

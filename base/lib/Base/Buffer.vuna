@@ -1,0 +1,20 @@
+module Base.Buffer (add, contents, length, new) where
+
+-- Base.Buffer：可变字符串缓冲区（M33 W3）。内建类型构造子 `Buffer`，OCaml 表示 `Buffer.t`。
+--
+-- 所有操作都是 IO 动作。用于多次追加后一次性取串，避免 `++` 链的 O(n²) 拷贝；
+-- W4 之后的字符串构建器 / IO 组合子会以它为底层。
+import Base.Monad
+import Base.IO
+
+new : IO Buffer
+new = prim_newBuffer
+
+add : Buffer -> String -> IO Int
+add b s = prim_bufferAdd b s
+
+contents : Buffer -> IO String
+contents b = prim_bufferContents b
+
+length : Buffer -> IO Int
+length b = prim_bufferLength b

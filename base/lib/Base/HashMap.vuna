@@ -1,6 +1,5 @@
 module Base.HashMap
   ( HashMap
-  , empty
   , fromList
   , hashStr
   , insert
@@ -14,8 +13,10 @@ module Base.HashMap
 
 -- Base.HashMap：String 键、值泛型的持久哈希映射（1024 桶，两层 32 叉）。
 --
--- 单次查找 ≈ 32 步列表遍历 + 桶内 1–2 次字符串比较；桶内前插，同键**新值优先**
--- （与关联表的查找语义一致）。构造器不导出，跨模块只能经本模块 API 使用。
+-- M33 W3：桶结构从 list-of-list 改成 `Array (Array (List (Pair String a)))`；
+-- `Array.get` 是 O(1)，`insert` 的 `Array.set` 复制 32 元素数组（copy-on-write，
+-- 每次 insert 两次 32 元素复制）。比旧的 `_nthOr` 两次线性遍历 + 重建 64 个 cons
+-- 更少分配。桶内前插，同键**新值优先**（与关联表的查找语义一致）。
 --
 -- 与 Base.Map 的分工：Map 是 assoc list（小表、语义简单），HashMap 适合构造后
 -- 频繁查找的大表；toList 按桶序展开，**不保证插入序**；size 是 O(n)。
@@ -24,6 +25,7 @@ module Base.HashMap
 -- docs/reference/primitives.md）；`Debug` / `Index.Scan` 的采样键需要它。
 --
 -- base 模块不自动注入 Prelude，`==` / `<=` 的方法名与实例需要显式 import。
+import Base.Array
 import Base.Bool
 import Base.Eq
 import Base.Int
@@ -34,18 +36,7 @@ import Base.Pair
 import Base.String
 
 data HashMap a : Type where
-  MkHashMap : List (List (List (Pair String a))) -> HashMap a
-
-_replicate : Int -> a -> List a
-_replicate n x = if n <= 0 then [] else x :: _replicate (n - 1) x
-
-_nthOr : Int -> a -> List a -> a
-_nthOr i d [] = d
-_nthOr i d (x :: rest) = if i <= 0 then x else _nthOr (i - 1) d rest
-
-_putNth : Int -> a -> List a -> List a
-_putNth i v [] = []
-_putNth i v (x :: rest) = if i <= 0 then v :: rest else x :: _putNth (i - 1) v rest
+  MkHashMap : Array (Array (List (Pair String a))) -> HashMap a
 
 hashStr : String -> Int
 hashStr s = strHash s
@@ -68,26 +59,29 @@ _dedupGo ((Pair k v) :: rest) acc =
 _dedupBucket : List (Pair String a) -> List (Pair String a)
 _dedupBucket xs = _dedupGo xs []
 
-empty : HashMap a
-empty = MkHashMap (_replicate 32 (_replicate 32 []))
-
+-- 空表用 `[||]` 字面量表示：它是 non-expansive 的，`empty` / `fromList []` 因此在
+-- OCaml 侧可泛化（`Array.make 32 ...` 是函数应用，会触发弱类型变量）；第一次 `insert`
+-- 时才分配 32×32 桶。内层空数组可以共享（`Array.set` 不修改原数组）。
 insert : String -> a -> HashMap a -> HashMap a
 insert key v (MkHashMap outers) =
   let
+    base =
+      if Base.Array.length outers == 0 then Base.Array.make 32 (Base.Array.make 32 []) else outers
     b = hashStr key
     oi = b / 32
     ii = b - oi * 32
-    outer = _nthOr oi (_replicate 32 []) outers
-    inner = _nthOr ii [] outer
-  in MkHashMap (_putNth oi (_putNth ii (Pair key v :: inner) outer) outers)
+    outer = Base.Array.get base oi
+    inner = Base.Array.get outer ii
+  in MkHashMap (Base.Array.set base oi (Base.Array.set outer ii (Pair key v :: inner)))
 
 lookup : String -> HashMap a -> Maybe a
-lookup key (MkHashMap outers) =
+lookup key (MkHashMap outers) = if Base.Array.length outers == 0 then Nothing
+else
   let
     b = hashStr key
     oi = b / 32
     ii = b - oi * 32
-  in _lookupAssoc key (_nthOr ii [] (_nthOr oi [] outers))
+  in _lookupAssoc key (Base.Array.get (Base.Array.get outers oi) ii)
 
 member : String -> HashMap a -> Bool
 member key t = case lookup key t of
@@ -102,15 +96,17 @@ insertAll ((Pair k v) :: rest) t = insertAll rest (insert k v t)
 -- `insertAll` 相反：后面的条目覆盖前面的。两个语义都有编译器调用点（历史的
 -- `tblFromList` / `tblInsertAll`），不要合并。
 fromList : List (Pair String a) -> HashMap a
-fromList [] = empty
+fromList [] = MkHashMap arrayEmpty
 fromList ((Pair k v) :: rest) = insert k v (fromList rest)
 
 -- 名字集合的成员判定表（编译器历史上叫 `tblOfNames`）。
 ofNames : List String -> HashMap Bool
-ofNames xs = insertAll (map (\n => Pair n True) xs) empty
+ofNames xs = insertAll (map (\n => Pair n True) xs) (fromList [])
 
 toList : HashMap a -> List (Pair String a)
-toList (MkHashMap outers) = concatMap (\row => concatMap _dedupBucket row) outers
+toList (MkHashMap outers) =
+  concatMap (\outer => concatMap (\inner => _dedupBucket inner) (Base.Array.toList outer))
+    (Base.Array.toList outers)
 
 size : HashMap a -> Int
-size t = length (toList t)
+size t = Base.List.length (toList t)

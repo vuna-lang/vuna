@@ -16,6 +16,7 @@ open Vuna_dCompiler_dFrontend_dToml
 open Vuna_dCompiler_dFrontend_dManifest
 open Base_dIO
 open Vuna_dCompiler_dPackages_dPkg
+open Base_dArray
 open Base_dHashMap
 open Vuna_dCompiler_dDebug
 open Base_dNat
@@ -160,7 +161,7 @@ let rec v_Vuna_dCompiler_dElab_dSig_dfilterNamesInModule = (fun mc0 mc1 -> (matc
 
 let v_Vuna_dCompiler_dElab_dSig_dqualifiedKey = (fun prefix name -> (String.concat "" [prefix; "\t"; name]))
 
-let v_Vuna_dCompiler_dElab_dSig_dqualifiedBannedTbl = (fun defined -> ((v_Base_dHashMap_dinsertAll ((v_Base_dList_dmap (fun n -> (C_Base_dPair_dPair_Base_dPair_dPair (((v_Vuna_dCompiler_dElab_dSig_dqualifiedKey (v_Vuna_dCompiler_dElab_dSig_dmodulePrefixOf n)) n), true)))) defined)) v_Base_dHashMap_dempty))
+let v_Vuna_dCompiler_dElab_dSig_dqualifiedBannedTbl = (fun defined -> ((v_Base_dHashMap_dinsertAll ((v_Base_dList_dmap (fun n -> (C_Base_dPair_dPair_Base_dPair_dPair (((v_Vuna_dCompiler_dElab_dSig_dqualifiedKey (v_Vuna_dCompiler_dElab_dSig_dmodulePrefixOf n)) n), true)))) defined)) (v_Base_dHashMap_dfromList C_Base_dList_dList_Base_dList_dNil)))
 
 let rec v_Vuna_dCompiler_dElab_dSig_dkeepOutQualified = (fun mc0 mc1 mc2 mc3 -> (match mc3 with
   | C_Base_dList_dList_Base_dList_dCons (dtb__96, dtb__97) -> (if ((v_Base_dHashMap_dmember dtb__96) mc2) then ((((v_Vuna_dCompiler_dElab_dSig_dkeepOutQualified mc0) mc1) mc2) dtb__97) else (if ((v_Base_dHashMap_dmember ((v_Vuna_dCompiler_dElab_dSig_dqualifiedKey mc0) dtb__96)) mc1) then ((((v_Vuna_dCompiler_dElab_dSig_dkeepOutQualified mc0) mc1) mc2) dtb__97) else (C_Base_dList_dList_Base_dList_dCons (dtb__96, ((((v_Vuna_dCompiler_dElab_dSig_dkeepOutQualified mc0) mc1) mc2) dtb__97)))))

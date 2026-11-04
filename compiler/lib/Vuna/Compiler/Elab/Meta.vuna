@@ -269,7 +269,7 @@ collectSigs decls =
     -- 旧实现每签名扫全 defined 并重建表（O(#sigs × #defined)），实测 collectSigs 12.9 s。
     banned = qualifiedBannedTbl defined
     preludeBanned = topQuantBanned []
-  in collectSigsInto banned preludeBanned Base.HashMap.empty [] decls
+  in collectSigsInto banned preludeBanned (Base.HashMap.fromList []) [] decls
 
 -- 声明收集（M20：签名里的自由小写名量化为隐式类型参数，见 `Elab.Sig.quantifyTopSig`）。
 -- M28 / C29：banned 集按**签名所属模块**作用域；M30（D18）把这张集合改成共享缓存：

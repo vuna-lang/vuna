@@ -1,5 +1,5 @@
 module Vuna.Sample
-  ( Base.HashMap.empty
+  ( Base.HashMap.fromList
   , Base.String.strLength
   , Point(..)
   , Shape

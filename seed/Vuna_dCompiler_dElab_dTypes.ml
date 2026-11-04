@@ -16,6 +16,7 @@ open Vuna_dCompiler_dFrontend_dToml
 open Vuna_dCompiler_dFrontend_dManifest
 open Base_dIO
 open Vuna_dCompiler_dPackages_dPkg
+open Base_dArray
 open Base_dHashMap
 open Vuna_dCompiler_dDebug
 open Base_dNat
@@ -295,7 +296,7 @@ let v_Vuna_dCompiler_dElab_dTypes_decAddDictGoal = (fun mc0 mc1 -> (match mc0 wi
   | _ -> failwith "DT: impossible branch"
 ))
 
-let v_Vuna_dCompiler_dElab_dTypes_decEmpty = (C_Vuna_dCompiler_dElab_dTypes_dEc_Vuna_dCompiler_dElab_dTypes_dEc (0, C_Base_dList_dList_Base_dList_dNil, C_Base_dList_dList_Base_dList_dNil, C_Base_dList_dList_Base_dList_dNil, C_Base_dList_dList_Base_dList_dNil, C_Base_dList_dList_Base_dList_dNil, C_Base_dList_dList_Base_dList_dNil, C_Base_dList_dList_Base_dList_dNil, C_Base_dList_dList_Base_dList_dNil, v_Base_dHashMap_dempty, v_Base_dHashMap_dempty, v_Base_dIntMap_dempty, v_Base_dIntMap_dempty, false, v_Base_dHashMap_dempty, v_Base_dHashMap_dempty, v_Base_dHashMap_dempty))
+let v_Vuna_dCompiler_dElab_dTypes_decEmpty = (C_Vuna_dCompiler_dElab_dTypes_dEc_Vuna_dCompiler_dElab_dTypes_dEc (0, C_Base_dList_dList_Base_dList_dNil, C_Base_dList_dList_Base_dList_dNil, C_Base_dList_dList_Base_dList_dNil, C_Base_dList_dList_Base_dList_dNil, C_Base_dList_dList_Base_dList_dNil, C_Base_dList_dList_Base_dList_dNil, C_Base_dList_dList_Base_dList_dNil, C_Base_dList_dList_Base_dList_dNil, (v_Base_dHashMap_dfromList C_Base_dList_dList_Base_dList_dNil), (v_Base_dHashMap_dfromList C_Base_dList_dList_Base_dList_dNil), (v_Base_dIntMap_dfromList C_Base_dList_dList_Base_dList_dNil), (v_Base_dIntMap_dfromList C_Base_dList_dList_Base_dList_dNil), false, (v_Base_dHashMap_dfromList C_Base_dList_dList_Base_dList_dNil), (v_Base_dHashMap_dfromList C_Base_dList_dList_Base_dList_dNil), (v_Base_dHashMap_dfromList C_Base_dList_dList_Base_dList_dNil)))
 
 let v_Vuna_dCompiler_dElab_dTypes_decSolTbl = (fun mc0 -> (match mc0 with
   | C_Vuna_dCompiler_dElab_dTypes_dEc_Vuna_dCompiler_dElab_dTypes_dEc (dtb__484, dtb__485, dtb__486, dtb__487, dtb__488, dtb__489, dtb__490, dtb__491, dtb__492, dtb__493, dtb__494, dtb__495, dtb__496, dtb__497, dtb__498, dtb__499, dtb__500) -> dtb__495
@@ -339,7 +340,7 @@ let v_Vuna_dCompiler_dElab_dTypes_decAddData = (fun mc0 mc1 -> (match mc0 with
   | _ -> failwith "DT: impossible branch"
 ))
 
-let v_Vuna_dCompiler_dElab_dTypes_dctorTblOfDatas = (fun datas -> ((v_Base_dHashMap_dinsertAll ((v_Base_dList_dconcatMap v_Vuna_dCompiler_dElab_dTypes_ddataCtorPairs) datas)) v_Base_dHashMap_dempty))
+let v_Vuna_dCompiler_dElab_dTypes_dctorTblOfDatas = (fun datas -> ((v_Base_dHashMap_dinsertAll ((v_Base_dList_dconcatMap v_Vuna_dCompiler_dElab_dTypes_ddataCtorPairs) datas)) (v_Base_dHashMap_dfromList C_Base_dList_dList_Base_dList_dNil)))
 
 let v_Vuna_dCompiler_dElab_dTypes_decCtorTbl = (fun mc0 -> (match mc0 with
   | C_Vuna_dCompiler_dElab_dTypes_dEc_Vuna_dCompiler_dElab_dTypes_dEc (dtb__560, dtb__561, dtb__562, dtb__563, dtb__564, dtb__565, dtb__566, dtb__567, dtb__568, dtb__569, dtb__570, dtb__571, dtb__572, dtb__573, dtb__574, dtb__575, dtb__576) -> dtb__575
@@ -505,4 +506,4 @@ let v_Vuna_dCompiler_dElab_dTypes_ddtProgNext = (fun mc0 -> (match mc0 with
   | _ -> failwith "DT: impossible branch"
 ))
 
-let v_Vuna_dCompiler_dElab_dTypes_dsolsToTbl = (fun sols -> ((v_Base_dIntMap_dinsertAll sols) v_Base_dIntMap_dempty))
+let v_Vuna_dCompiler_dElab_dTypes_dsolsToTbl = (fun sols -> ((v_Base_dIntMap_dinsertAll sols) (v_Base_dIntMap_dfromList C_Base_dList_dList_Base_dList_dNil)))

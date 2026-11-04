@@ -7,7 +7,7 @@ keysFrom i k = if k <= 0 then [] else strFromInt i :: keysFrom (i + 1) (k - 1)
 
 fill : List String -> Int -> HashMap Int
 fill ks i = case ks of
-  [] => Base.HashMap.empty
+  [] => (Base.HashMap.fromList [])
   k :: rest => Base.HashMap.insert k (i * 3) (fill rest (i + 1))
 
 total : List String -> HashMap Int -> Int

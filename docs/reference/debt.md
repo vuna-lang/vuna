@@ -21,12 +21,12 @@
 | B25 | `Int` / `String` 是 primitive（无 `data` 声明、无类型声明文件）；是否引入 `primitive type` 声明把类型身份搬进库（canonical 名、字面量/覆盖性/codegen 全链路）待评估；M31.1 保持 primitive，只把实例放 `Base.Int` / `Base.String` | `Intrinsics.typeIntrinsicNames`；`Elab/Prelude`；`Codegen` | F/研究（M31.3 已收尾，可评估） |
 | B28 | 工具链 `Lint` / `Index` 对 `Expr` 的穷尽 case 仍有兜底分支（`_ => []`；`EInfix` / `EParen` / M31.3 的 `EBacktick` / `ESect*` 正常在 Loader 重排后不存在，M31.3 已给新节点补显式递归）；若将来新增 AST 节点或前端入口绕过重排，兜底会**静默丢子树**（Elab / Resolve 是显式 internal error，Fmt / Doc 显式处理，工具链是空值） | `lib/Vuna/{Lint,Index}`；`Loader/Resolve`、`Elab/*` | 后续：统一改显式 internal error 或断言 |
 | B29 | M32 的显式 trait 约束只支持顶层签名；`where` / `let` 绑定、`axiom`、trait 方法、构造子 / 记录字段上的 `C a =>` 都不支持（trait 方法约束是父类语义，归 F4） | `Parser.rejectCtxSuffix` / `PS_ConstraintUnsupportedHere`；`test/corpus/traits/99_explicit_*_rejected` | F4（父类 / 局部约束） |
-| B30 | 标准库容器只覆盖 `String` / `Int` 键：无泛型 `Hashable`（trait 仅单参数、无 `deriving Hash`）、无有序持久容器（TreeMap/TreeSet）、无可变/数组容器（`Array` / `ST` / `IORef`）。编译器热点已由 `HashMap`/`IntMap` 覆盖；其余场景按实测需求再评估 | `base/lib/Base/{HashMap,HashSet,IntMap}.vuna`；[stdlib.md](stdlib.md) 的容器边界 | F4（容器）/ F3（效应系统） |
+| B30 | 标准库容器仍缺：泛型 `Hashable`（trait 仅单参数、无 `deriving Hash`）、有序持久容器（TreeMap/TreeSet）。不可变 `Array`、IO 内 `IORef` / `MArray` / `Buffer` 与 `HashMap`/`IntMap` 的 `Array` 桶已落地（M33 W3）；编译器热点由 `HashMap`/`IntMap` 覆盖 | `base/lib/Base/{HashMap,HashSet,IntMap,Array,IORef,MArray,Buffer}.vuna`；[stdlib.md](stdlib.md) 的容器边界 | F4（容器） |
 | C07 | 擦除位的作用域护栏按约定跳过，未对擦除位置做完整 de Bruijn 校验 | `Codegen/Erase.checkAllDefScopes`：跳过擦除实参 | 待定 |
 | D12 | 证明 ergonomics 进阶未实现：absurd / 空族消去语法、`rewrite` / `with`；隐式模式与 `auto` 见 B09/D08 | `limits.md` 的证明 ergonomics 边界；`tooling.md` §5 | F4 |
 | D19 | 类型级部分应用不可用（如把 `Vec Int` 当类型参数传给 `Sigma Nat`） | `checkAppUnderTypeFuel` 报 `expected Nat, got Int` | F4 |
 | D21 | 无 FFI：不能调用外部 C 函数 / 导出函数；无 ABI、GC root / pin、回调约定 | `Intrinsics.allIntrinsics` 无外来调用原语；[limits.md](limits.md) 无该边界 | M33 |
-| D22 | 无可变数据（`IORef` / 可变数组）与 ST / region；无线性 / 唯一性类型，`runST` 无法类型安全表达 | `limits.md`；无 `Ref` / `Array` 原语 | M33 |
+| D22 | 无线性 / 唯一性类型与 ST / region：可变数据（`IORef` / `MArray` / `Buffer`）已按 IO 隔离落地（M33 W3），但类型上无法表达「句柄不逃逸」，`runST` 仍无法类型安全表达 | `limits.md` 的「容器与可变数据」；[primitives.md](primitives.md) §6.1 | 研究储备（线性类型）/ M33 后续 |
 
 ## 工具、构建与验证
 
@@ -49,7 +49,7 @@
 | D01 | 模块系统无签名 / 接口、无 functor / 嵌套 / 局部模块、import 仅文件顶部、无选择性 import | F1 |
 | D02 | 运行时 / 后端未定型：GC、后端无关 IR、Wasm/JS（当前绑 OCaml runtime） | F2（M33 表示 / 运行时；自研 GC / 后端不做，Wasm / JS 暂缓） |
 | D03 | 无通用效应系统 / 并发 / async；`IO` 仍是 thunk + IO 化的 `prim_*`（M31：动作只在 `main`，`runIO` 是能力门控逃逸） | F3（M33 最小效应接口、M35 并发 / async） |
-| D04 | 包生态：registry、版本解析、lockfile、文档托管、DT 验证库（Vec/Fin/Map/Set） | F4（M33 容器 / 库部分） |
+| D04 | 包生态：registry、版本解析、lockfile、文档托管、DT 验证库（Vec/Fin/Map/Set）；容器部分已落地（M33 W3，残留见 B30） | F4（生态） |
 | D06 | 完整依赖 kind / CoC 依赖消除（当前只检查 kind 形状与层级） | 研究储备 |
 | D17 | `main` 的展示仍限 `Int` / `String` / `Bool`；任意类型展示需要运行时 `Show` 证据 | F3 |
 

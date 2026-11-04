@@ -1,14 +1,17 @@
-module Base.IntMap (IntMap, empty, fromList, insert, insertAll, lookup, member, size, toList) where
+module Base.IntMap (IntMap, fromList, insert, insertAll, lookup, member, size, toList) where
 
 -- Base.IntMap：Int 键、值泛型的持久哈希映射（1024 桶，两层 32 叉）。
 --
--- 与 `Base.HashMap` 同结构，但键是 `Int` 且直接取哈希（无字符串编码/哈希开销）：
--- 元变量编号（0..n）这类稠密小整数几乎不冲突。桶内前插，同键**新值优先**。
+-- M33 W3：与 `Base.HashMap` 同步改成 `Array (Array (List (Pair Int a)))` 的桶结构
+-- （`Array.get` O(1)，`insert` 两次 32 元素 copy-on-write）。键是 `Int` 且直接取哈希
+-- （无字符串编码/哈希开销）：元变量编号（0..n）这类稠密小整数几乎不冲突。
+-- 桶内前插，同键**新值优先**。
 --
 -- 负键与 `min_int` 都要落到 0..1023：`n - n / 1024 * 1024` 在负数时仍为负，
 -- 再补 1024；`min_int` 在 63 位回绕后余数为 0，结果仍是合法桶号。
 --
 -- base 模块不自动注入 Prelude，`==` / `<` 的方法名与 Int 实例需要显式 import。
+import Base.Array
 import Base.Bool
 import Base.Eq
 import Base.Int
@@ -18,18 +21,7 @@ import Base.Ord
 import Base.Pair
 
 data IntMap a : Type where
-  MkIntMap : List (List (List (Pair Int a))) -> IntMap a
-
-_replicate : Int -> a -> List a
-_replicate n x = if n <= 0 then [] else x :: _replicate (n - 1) x
-
-_nthOr : Int -> a -> List a -> a
-_nthOr i d [] = d
-_nthOr i d (x :: rest) = if i <= 0 then x else _nthOr (i - 1) d rest
-
-_putNth : Int -> a -> List a -> List a
-_putNth i v [] = []
-_putNth i v (x :: rest) = if i <= 0 then v :: rest else x :: _putNth (i - 1) v rest
+  MkIntMap : Array (Array (List (Pair Int a))) -> IntMap a
 
 _hashInt : Int -> Int
 _hashInt n =
@@ -55,26 +47,28 @@ _dedupGo ((Pair k v) :: rest) acc =
 _dedupBucket : List (Pair Int a) -> List (Pair Int a)
 _dedupBucket xs = _dedupGo xs []
 
-empty : IntMap a
-empty = MkIntMap (_replicate 32 (_replicate 32 []))
-
+-- 空表用 `[||]` 字面量表示（non-expansive，`empty` / `fromList []` 在 OCaml 侧可泛化）；
+-- 第一次 `insert` 时才分配 32×32 桶。
 insert : Int -> a -> IntMap a -> IntMap a
 insert key v (MkIntMap outers) =
   let
+    base =
+      if Base.Array.length outers == 0 then Base.Array.make 32 (Base.Array.make 32 []) else outers
     b = _hashInt key
     oi = b / 32
     ii = b - oi * 32
-    outer = _nthOr oi (_replicate 32 []) outers
-    inner = _nthOr ii [] outer
-  in MkIntMap (_putNth oi (_putNth ii (Pair key v :: inner) outer) outers)
+    outer = Base.Array.get base oi
+    inner = Base.Array.get outer ii
+  in MkIntMap (Base.Array.set base oi (Base.Array.set outer ii (Pair key v :: inner)))
 
 lookup : Int -> IntMap a -> Maybe a
-lookup key (MkIntMap outers) =
+lookup key (MkIntMap outers) = if Base.Array.length outers == 0 then Nothing
+else
   let
     b = _hashInt key
     oi = b / 32
     ii = b - oi * 32
-  in _lookupAssoc key (_nthOr ii [] (_nthOr oi [] outers))
+  in _lookupAssoc key (Base.Array.get (Base.Array.get outers oi) ii)
 
 member : Int -> IntMap a -> Bool
 member key t = case lookup key t of
@@ -89,11 +83,13 @@ insertAll ((Pair k v) :: rest) t = insertAll rest (insert k v t)
 -- `insertAll` 相反：后面的条目覆盖前面的。两个语义都有编译器调用点（历史的
 -- `tblFromList` / `tblInsertAll`），不要合并。
 fromList : List (Pair Int a) -> IntMap a
-fromList [] = empty
+fromList [] = MkIntMap arrayEmpty
 fromList ((Pair k v) :: rest) = insert k v (fromList rest)
 
 toList : IntMap a -> List (Pair Int a)
-toList (MkIntMap outers) = concatMap (\row => concatMap _dedupBucket row) outers
+toList (MkIntMap outers) =
+  concatMap (\outer => concatMap (\inner => _dedupBucket inner) (Base.Array.toList outer))
+    (Base.Array.toList outers)
 
 size : IntMap a -> Int
-size t = length (toList t)
+size t = Base.List.length (toList t)

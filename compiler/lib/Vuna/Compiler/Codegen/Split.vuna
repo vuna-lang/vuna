@@ -184,7 +184,7 @@ nameOwnerPairsOfDatas meta (d :: rest) =
 -- 名字 → 归属单元的哈希索引。旧实现对**每个**模块把全部 def/data 逐个做
 -- `mapOwnerOf`（线性扫 pairs）⇒ O(#模块 × #def × #pairs)，大包上就是几秒。
 ownerTblOf : List (Pair String String) -> HashMap String
-ownerTblOf pairs = Base.HashMap.insertAll pairs Base.HashMap.empty
+ownerTblOf pairs = Base.HashMap.insertAll pairs (Base.HashMap.fromList [])
 
 ownerOfTbl : HashMap String -> String -> String
 ownerOfTbl t name = case Base.HashMap.lookup name t of

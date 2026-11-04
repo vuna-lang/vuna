@@ -1,0 +1,21 @@
+module Base.MArray (length, new, read, write) where
+
+-- Base.MArray：IO 内的可变数组（M33 W3）。内建类型构造子 `MArray`，OCaml 表示
+-- `'a array`（与不可变 `Array` 同一表示，靠类型区分可变性）。
+--
+-- 所有操作都是 IO 动作；`read` / `write` 越界是宿主 `Invalid_argument`。
+-- 没有线性 / 唯一性类型前，安全边界是「只在 IO 内使用」（`runIO` 逃逸需 `unsafe`）。
+import Base.Monad
+import Base.IO
+
+new : Int -> a -> IO (MArray a)
+new n v = prim_newMArray n v
+
+length : MArray a -> IO Int
+length a = prim_mArrayLength a
+
+read : MArray a -> Int -> IO a
+read a i = prim_readMArray a i
+
+write : MArray a -> Int -> a -> IO Int
+write a i v = prim_writeMArray a i v

@@ -16,6 +16,7 @@ open Vuna_dCompiler_dFrontend_dToml
 open Vuna_dCompiler_dFrontend_dManifest
 open Base_dIO
 open Vuna_dCompiler_dPackages_dPkg
+open Base_dArray
 open Base_dHashMap
 open Vuna_dCompiler_dDebug
 open Base_dNat
@@ -120,7 +121,7 @@ let v_Vuna_dCompiler_dElab_dTermination_dadjOf = (fun n g -> (match ((v_Base_dHa
   | _ -> failwith "DT: impossible branch"
 ))
 
-let v_Vuna_dCompiler_dElab_dTermination_dadjTblOf = (fun g -> ((v_Base_dHashMap_dinsertAll g) v_Base_dHashMap_dempty))
+let v_Vuna_dCompiler_dElab_dTermination_dadjTblOf = (fun g -> ((v_Base_dHashMap_dinsertAll g) (v_Base_dHashMap_dfromList C_Base_dList_dList_Base_dList_dNil)))
 
 let rec v_Vuna_dCompiler_dElab_dTermination_daddSrcs = (fun mc0 mc1 mc2 -> (match mc1 with
   | C_Base_dList_dList_Base_dList_dCons (dtb__70, dtb__71) -> ((fun cur -> (((v_Vuna_dCompiler_dElab_dTermination_daddSrcs mc0) dtb__71) (((v_Base_dHashMap_dinsert dtb__70) (C_Base_dList_dList_Base_dList_dCons (mc0, cur))) mc2))) (match ((v_Base_dHashMap_dlookup dtb__70) mc2) with
@@ -137,7 +138,7 @@ let rec v_Vuna_dCompiler_dElab_dTermination_dreverseAdjOf = (fun mc0 -> (match m
   | C_Base_dPair_dPair_Base_dPair_dPair (dtb__75, dtb__76) -> (((v_Vuna_dCompiler_dElab_dTermination_daddSrcs dtb__75) dtb__76) (v_Vuna_dCompiler_dElab_dTermination_dreverseAdjOf dtb__74))
   | _ -> failwith "DT: impossible branch"
 )
-  | C_Base_dList_dList_Base_dList_dNil -> v_Base_dHashMap_dempty
+  | C_Base_dList_dList_Base_dList_dNil -> (v_Base_dHashMap_dfromList C_Base_dList_dList_Base_dList_dNil)
   | _ -> failwith "DT: impossible branch"
 ))
 
@@ -211,7 +212,7 @@ let rec v_Vuna_dCompiler_dElab_dTermination_ddfsAll = (fun mc0 mc1 mc2 mc3 mc4 -
   | _ -> failwith "DT: impossible branch"
 ))
 
-let v_Vuna_dCompiler_dElab_dTermination_dpostOrder = (fun gT g nodes -> (((((v_Vuna_dCompiler_dElab_dTermination_ddfsAll nodes) ((v_Vuna_dCompiler_dElab_dTermination_dgraphFuel g) nodes)) gT) v_Base_dHashMap_dempty) C_Base_dList_dList_Base_dList_dNil))
+let v_Vuna_dCompiler_dElab_dTermination_dpostOrder = (fun gT g nodes -> (((((v_Vuna_dCompiler_dElab_dTermination_ddfsAll nodes) ((v_Vuna_dCompiler_dElab_dTermination_dgraphFuel g) nodes)) gT) (v_Base_dHashMap_dfromList C_Base_dList_dList_Base_dList_dNil)) C_Base_dList_dList_Base_dList_dNil))
 
 let rec v_Vuna_dCompiler_dElab_dTermination_dcollectComp = (fun stack fuel rg assigned comp -> (if (fuel <= 0) then (C_Base_dPair_dPair_Base_dPair_dPair (assigned, comp)) else (match stack with
   | C_Base_dList_dList_Base_dList_dNil -> (C_Base_dPair_dPair_Base_dPair_dPair (assigned, comp))
@@ -435,4 +436,4 @@ let rec v_Vuna_dCompiler_dElab_dTermination_dcheckSccs = (fun mc0 mc1 mc2 mc3 mc
   | _ -> failwith "DT: impossible branch"
 ))
 
-let v_Vuna_dCompiler_dElab_dTermination_dcheckTerminationDecls = (fun decls -> ((fun defs -> ((fun ctors -> ((fun projs -> ((fun facts -> ((fun g -> ((fun gT -> ((fun nodes -> ((fun rgT -> ((fun fuel -> ((fun post -> ((fun comps -> ((((((v_Vuna_dCompiler_dElab_dTermination_dcheckSccs (v_Base_dList_dreverse comps)) defs) ctors) projs) gT) facts)) (((((v_Vuna_dCompiler_dElab_dTermination_dsccOf post) fuel) rgT) v_Base_dHashMap_dempty) C_Base_dList_dList_Base_dList_dNil))) (((v_Vuna_dCompiler_dElab_dTermination_dpostOrder gT) g) nodes))) ((v_Vuna_dCompiler_dElab_dTermination_dgraphFuel g) nodes))) (v_Vuna_dCompiler_dElab_dTermination_dreverseAdjOf g))) (v_Vuna_dCompiler_dElab_dTermination_dMeasure_ddefNames defs))) (v_Vuna_dCompiler_dElab_dTermination_dadjTblOf g))) (v_Vuna_dCompiler_dElab_dTermination_dcallGraph defs))) (((v_Vuna_dCompiler_dElab_dTermination_dMeasure_dcomputePosFacts defs) 16) C_Base_dList_dList_Base_dList_dNil))) (v_Vuna_dCompiler_dElab_dTermination_dMeasure_dprojectionsOf defs))) (v_Vuna_dCompiler_dElab_dTermination_dMeasure_dctorNamesOf decls))) (v_Vuna_dCompiler_dElab_dTermination_dMeasure_dgroupDefs decls)))
+let v_Vuna_dCompiler_dElab_dTermination_dcheckTerminationDecls = (fun decls -> ((fun defs -> ((fun ctors -> ((fun projs -> ((fun facts -> ((fun g -> ((fun gT -> ((fun nodes -> ((fun rgT -> ((fun fuel -> ((fun post -> ((fun comps -> ((((((v_Vuna_dCompiler_dElab_dTermination_dcheckSccs (v_Base_dList_dreverse comps)) defs) ctors) projs) gT) facts)) (((((v_Vuna_dCompiler_dElab_dTermination_dsccOf post) fuel) rgT) (v_Base_dHashMap_dfromList C_Base_dList_dList_Base_dList_dNil)) C_Base_dList_dList_Base_dList_dNil))) (((v_Vuna_dCompiler_dElab_dTermination_dpostOrder gT) g) nodes))) ((v_Vuna_dCompiler_dElab_dTermination_dgraphFuel g) nodes))) (v_Vuna_dCompiler_dElab_dTermination_dreverseAdjOf g))) (v_Vuna_dCompiler_dElab_dTermination_dMeasure_ddefNames defs))) (v_Vuna_dCompiler_dElab_dTermination_dadjTblOf g))) (v_Vuna_dCompiler_dElab_dTermination_dcallGraph defs))) (((v_Vuna_dCompiler_dElab_dTermination_dMeasure_dcomputePosFacts defs) 16) C_Base_dList_dList_Base_dList_dNil))) (v_Vuna_dCompiler_dElab_dTermination_dMeasure_dprojectionsOf defs))) (v_Vuna_dCompiler_dElab_dTermination_dMeasure_dctorNamesOf decls))) (v_Vuna_dCompiler_dElab_dTermination_dMeasure_dgroupDefs decls)))

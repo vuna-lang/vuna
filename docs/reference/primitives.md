@@ -104,6 +104,52 @@
 
 `strHash` 的 interp 实现（`Core.Eval.strHashOf`）与 runtime `dtp_strHash` 是同一公式。
 
+## 6.1 容器与可变数据原语（M33 W3）
+
+**内建类型构造子**（名字恒可见，与 `Int` / `String` 一样不能被用户重定义；参数个数唯一
+真源是 `Intrinsics.typeIntrinsicArities`，OCaml 表示的渲染在 `Codegen.Decl`）：
+
+| 类型 | kind | OCaml 表示 |
+| --- | --- | --- |
+| `Array a` | `Type -> Type` | `'a array`（不可变语义：不暴露原地写） |
+| `IORef a` | `Type -> Type` | `'a ref` |
+| `MArray a` | `Type -> Type` | `'a array`（可变语义） |
+| `Buffer` | `Type` | `Buffer.t` |
+
+这些是**类型层构造子**，不是 `data` 声明：没有构造子可模式匹配，只能经原语 / 库 API 使用。
+类型参数在签名里用隐式 `{a : Type}` 绑定（`Elab.Prelude.ityToTerm` 生成 de Bruijn）。
+
+**纯原语**（无能力，直接返回值）：
+
+| 原语 | 签名 | runtime |
+| --- | --- | --- |
+| `arrayLength` | `Array a -> Int` | `Array.length` |
+| `arrayGet` | `Array a -> Int -> a` | `Array.get` |
+| `arraySet` | `Array a -> Int -> a -> Array a` | `dtp_arraySet`（`Array.copy` 后 `Array.set`，copy-on-write） |
+| `arrayMake` | `Int -> a -> Array a` | `Array.make` |
+| `arrayFromList` | `List a -> Array a` | `Array.of_list`（经 List 桥接 `dtp_ocamlOf`） |
+| `arrayToList` | `Array a -> List a` | `Array.to_list`（经 `dtp_listOf`） |
+
+**IO 原语**（返回 `IO` 动作，无能力：不触碰外部世界；经 `Base.IORef` / `Base.MArray` /
+`Base.Buffer` 使用）：
+
+| 原语 | 签名 | runtime |
+| --- | --- | --- |
+| `prim_newRef` / `prim_readRef` / `prim_writeRef` | `a -> IO (IORef a)` / `IORef a -> IO a` / `IORef a -> a -> IO Int` | `ref` / `!` / `:=` |
+| `prim_newMArray` / `prim_readMArray` / `prim_writeMArray` / `prim_mArrayLength` | `Int -> a -> IO (MArray a)` / `MArray a -> Int -> IO a` / `MArray a -> Int -> a -> IO Int` / `MArray a -> IO Int` | `Array.make` / `Array.get` / `Array.set` / `Array.length` |
+| `prim_newBuffer` / `prim_bufferAdd` / `prim_bufferContents` / `prim_bufferLength` | `IO Buffer` / `Buffer -> String -> IO Int` / `Buffer -> IO String` / `Buffer -> IO Int` | `Buffer.create` / `add_string` / `contents` / `length` |
+
+- 效果原语的 runtime 表达仍是「立即算完的 OCaml 表达式」，由 `ioPrimLam` 按 arity 包成
+  `MkIO (fun _ -> ...)`；零参 `prim_newBuffer` 是动作**值**。
+- `arrayFromList` / `arrayToList` 依赖 canonical `Base.List.List` 桥接（`needsListBridge`），
+  没有 List 族的程序使用时报 `ListBridgeRequired`。
+- **interp 不归约**全部容器原语（`OpNone`）：夹具带 `.nointerp`，只 compile + 运行。
+- 越界行为：`arrayGet` / `MArray.read` 越界是宿主 `Invalid_argument`（不是 `strAt` 的
+  -1 哨兵，也没有语言层诊断）；`Array.set` 先 `Array.copy`，原数组不变。
+- 可变数据的安全边界是 **IO 隔离**：`IORef` / `MArray` / `Buffer` 的句柄只能在 `IO` 动作里
+  使用；`runIO` 是 main 外的逃逸口、需要 `unsafe`。**没有线性 / 唯一性类型与 ST/region**
+  （见 [limits.md](limits.md)）。
+
 ## 7. 效果原语、IO 动作与能力（M31）
 
 **类型**：全部效果原语返回 `IO` 动作，而不是「立刻算完的值」：`prim_print : String -> IO Int`、

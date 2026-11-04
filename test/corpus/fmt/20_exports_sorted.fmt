@@ -1,6 +1,6 @@
 module Vuna.Zeta
   ( Alpha(..)
-  , Base.HashMap.empty
+  , Base.HashMap.fromList
   , Gamma
   , beta
   , zeta

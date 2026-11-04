@@ -91,6 +91,9 @@ let dtp_timeUs () = int_of_float (Unix.gettimeofday () *. 1000000.0)
 let dtp_getenv k = try Sys.getenv k with Not_found -> ""
 let dtp_getcwd () = try Sys.getcwd () with _ -> "."
 let dtp_execPath () = try Unix.readlink "/proc/self/exe" with _ -> Sys.executable_name
+let dtp_arraySet (a : 'a array) (i : int) (v : 'a) =
+  let b = Array.copy a in
+  Array.set b i v; b
 let dtp_strHash (s : string) =
   let h = ref 0 in
   String.iter (fun c -> h := ((!h * 33) + Char.code c) land 1023) s;

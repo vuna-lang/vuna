@@ -15,11 +15,11 @@ showMaybeInt (Just x) = "Just " ++ strFromInt x
 main : String
 main =
   let
-    m = Base.IntMap.insert 0 10 (Base.IntMap.insert 1024 11 Base.IntMap.empty)
+    m = Base.IntMap.insert 0 10 (Base.IntMap.insert 1024 11 (Base.IntMap.fromList []))
     m2 = Base.IntMap.fromList [Pair 0 1, Pair 0 2, Pair (0 - 1) 3]
-    m3 = Base.IntMap.insert (0 - 1024) 7 Base.IntMap.empty
-    mn = Base.IntMap.insert minKey 9 Base.IntMap.empty
-    m4 = Base.IntMap.insertAll [Pair 0 1, Pair 0 2] Base.IntMap.empty
+    m3 = Base.IntMap.insert (0 - 1024) 7 (Base.IntMap.fromList [])
+    mn = Base.IntMap.insert minKey 9 (Base.IntMap.fromList [])
+    m4 = Base.IntMap.insertAll [Pair 0 1, Pair 0 2] (Base.IntMap.fromList [])
   in "a=" ++ showMaybeInt (Base.IntMap.lookup 0 m)
        ++ " b=" ++ showMaybeInt (Base.IntMap.lookup 1024 m)
        ++ " sz=" ++ strFromInt (Base.IntMap.size m)

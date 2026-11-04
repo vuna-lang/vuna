@@ -46,7 +46,7 @@ visibleFixitiesOf modules imports = concatMap (\imp => case findModule modules (
 -- 拼接出来的列表长度就爆炸（`append` 递归直接爆栈）。去重后每个模块的可见表只含
 -- 不同运算符（O(运算符数)），闭包计算回到线性。
 dedupeFixities : List FixityDecl -> List FixityDecl
-dedupeFixities ds = dedupeFixitiesGo ds Base.HashMap.empty []
+dedupeFixities ds = dedupeFixitiesGo ds (Base.HashMap.fromList []) []
 
 dedupeFixitiesGo : List FixityDecl -> HashMap Int -> List FixityDecl -> List FixityDecl
 dedupeFixitiesGo [] seen acc = reverse acc
@@ -165,7 +165,7 @@ implicitExports prefix decls = dedupeImplicitExports (concatMap (declImplicitExp
 -- 没有模块头 = 导出全部：类型签名 DSig 与子句 DFun 会为同一个函数各产生一条
 -- val 条目，必须去重，否则重导出该模块时会在 duplicate export 检查里误报。
 dedupeImplicitExports : List ExportEntry -> List ExportEntry
-dedupeImplicitExports entries = dedupeByPublic entries Base.HashMap.empty []
+dedupeImplicitExports entries = dedupeByPublic entries (Base.HashMap.fromList []) []
 
 -- 按 (kind, public) 去重：类型签名与子句会为同一个函数各产生一条 val 条目。
 dedupeByPublic : List ExportEntry -> HashMap Int -> List ExportEntry -> List ExportEntry
@@ -338,7 +338,7 @@ sameExportEntry e e2 =
     && entryParent e == entryParent e2
 
 dedupeExportEntries : List ExportEntry -> List ExportEntry
-dedupeExportEntries entries = dedupeByFullKey entries Base.HashMap.empty []
+dedupeExportEntries entries = dedupeByFullKey entries (Base.HashMap.fromList []) []
 
 exportEntryKey : ExportEntry -> String
 exportEntryKey e =

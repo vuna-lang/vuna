@@ -260,11 +260,12 @@ data Sols : Type where
   Sols : IntMap Value -> List (Pair Int Value) -> IntMap Int -> HashMap Value -> Sols
 
 solsEmpty : Sols
-solsEmpty = Sols Base.IntMap.empty [] Base.IntMap.empty Base.HashMap.empty
+solsEmpty = Sols (Base.IntMap.fromList []) [] (Base.IntMap.fromList []) (Base.HashMap.fromList [])
 
 solsFromList : List (Pair Int Value) -> Sols
 solsFromList xs =
-  Sols (Base.IntMap.insertAll xs Base.IntMap.empty) xs Base.IntMap.empty Base.HashMap.empty
+  Sols (Base.IntMap.insertAll xs (Base.IntMap.fromList [])) xs (Base.IntMap.fromList [])
+    (Base.HashMap.fromList [])
 
 -- Elab 侧构造：解表（list 权威）+ 解索引 + 元变量创建深度索引 + 定义值缓存。
 solsOf : IntMap Value -> List (Pair Int Value) -> IntMap Int -> HashMap Value -> Sols

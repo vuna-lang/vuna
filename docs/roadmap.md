@@ -30,8 +30,11 @@ vuna 尚未发布任何版本：没有外部用户、下游生态与历史包袱
   references / 格式化 / 符号）；REPL 多行 + IO compile+run；`vuna test` 纯 / 效果双路径；
   VSCode 扩展。
 - **容器与查找表**：标准库有 `Base.HashMap` / `Base.HashSet` / `Base.IntMap`（1024 桶持久
-  哈希表）；编译器查找表（defs / globals / ctor / clause / defVals）用 `HashMap`，元变量
-  解表与创建深度表用 `IntMap`（`metaLookup` 走索引，不再线性扫 / 不再 `strFromInt`）。
+  哈希表；M33 W3 起桶是 `Array (Array (List ...))`）、不可变 `Base.Array`（copy-on-write）
+  与 IO 内 `Base.IORef` / `Base.MArray` / `Base.Buffer`；内建类型构造子 `Array` / `IORef` /
+  `MArray` / `Buffer`（M33 W3）。编译器查找表（defs / globals / ctor / clause / defVals）用
+  `HashMap`，元变量解表与创建深度表用 `IntMap`（`metaLookup` 走索引，不再线性扫 /
+  不再 `strFromInt`）。
 - **质量门禁**：`nix flake check`（packages + seed-selfhost + tests + typecheck + lint + fmt +
   index + metrics + package + context-budget + vscode-ext）、原生测试、lint / fmt / metrics /
   文档预算。
@@ -52,8 +55,12 @@ vuna 尚未发布任何版本：没有外部用户、下游生态与历史包袱
 ## 下一步
 
 **M31 系列已收尾**（M31.1–M31.3：运算符=方法别名、parser 去优先级、库内 `infix*` 声明成为
-fixity 唯一来源、反引号中缀 / section / 用户符号名、fmt 程序级 fixity）。下一步是已排期的
-**M33–M35 性能轨道**（见下）：按「语言能写高性能系统程序 → 编译器快 → 并发 / 服务端」推进。
+fixity 唯一来源、反引号中缀 / section / 用户符号名、fmt 程序级 fixity）。**M33 性能轨道进行中**：
+W1 测量地基（`nix run .#vuna-perf` + 基线）、W2 codegen/运行时（内建饱和内联、多参数 lambda
+链、字符串批量拼接、`VN_PERF_STATS` GC 统计）、W3 容器与表示（内建类型构造子 +
+`Array`/`IORef`/`MArray`/`Buffer`、`HashMap`/`IntMap` 的 `Array` 桶、`empty` → `fromList []`）
+已落地；剩 W4 可变数据边界 / ST 裁剪、W5 受限 FFI、W6 最小效应接口。M33 完成后按维护规则
+删除阶段记录。下一步是 **M34/M35**：按「语言能写高性能系统程序 → 编译器快 → 并发 / 服务端」推进。
 新阶段必须映射到 debt 条目，并在「范围」里列明关闭哪些项；B / C / E 系列残留按需插入。
 
 ## 性能轨道（M33–M35）

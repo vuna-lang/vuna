@@ -1,0 +1,29 @@
+module Base.Array (fromList, get, length, make, set, toList) where
+
+-- Base.Array：不可变数组（M33 W3）。内建类型构造子 `Array`，OCaml 表示 `'a array`。
+--
+-- 构造器不可见：只能经 `fromList` / `make` 构造；`set` 返回**新数组**（copy-on-write），
+-- 原数组不变。`get` / `set` 越界是宿主 `Invalid_argument`（与 `strAt` 的 -1 哨兵语义
+-- 不同，见 docs/reference/limits.md）。
+--
+-- 与 Base.List 的 `length` / `get` 同名：同文件混用多个容器时写完整限定名
+-- `Base.Array.length` / `Base.Array.get`（与 Map/HashMap 的约定一致）。
+import Base.List
+
+fromList : List a -> Array a
+fromList xs = arrayFromList xs
+
+toList : Array a -> List a
+toList a = arrayToList a
+
+length : Array a -> Int
+length a = arrayLength a
+
+get : Array a -> Int -> a
+get a i = arrayGet a i
+
+set : Array a -> Int -> a -> Array a
+set a i v = arraySet a i v
+
+make : Int -> a -> Array a
+make n v = arrayMake n v

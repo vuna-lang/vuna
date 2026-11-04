@@ -61,7 +61,7 @@ isDtPreludeName : String -> Bool
 isDtPreludeName name = memName name dtPreludeNames
 
 dtPreludeNames : List String
-dtPreludeNames = append ["Type", "->", "_"] (append typeIntrinsicNames preludeValueNames)
+dtPreludeNames = append ["Type", "->", "_"] (append preludeTypeNames preludeValueNames)
 
 -- M31.2：运算符别名替换与中缀重排已由 `Loader.Fixity` 在 resolve **之前**完成
 -- （`==` 等已变成 `eq` 等名字），这里不再有运算符别名表。

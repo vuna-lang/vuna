@@ -351,8 +351,9 @@ ecAddDictGoal (Ec next sols defs datas depths goals insts classes dgoals deftbl 
 
 ecEmpty : Ec
 ecEmpty =
-  Ec 0 [] [] [] [] [] [] [] [] Base.HashMap.empty Base.HashMap.empty Base.IntMap.empty
-    Base.IntMap.empty False Base.HashMap.empty Base.HashMap.empty Base.HashMap.empty
+  Ec 0 [] [] [] [] [] [] [] [] (Base.HashMap.fromList []) (Base.HashMap.fromList [])
+    (Base.IntMap.fromList []) (Base.IntMap.fromList []) False (Base.HashMap.fromList [])
+    (Base.HashMap.fromList []) (Base.HashMap.fromList [])
 
 -- 解表的哈希索引（键 = 元变量编号的十进制串）：`substDictTerm`/`rezonkDefs` 会对每个
 -- 定义体的每个元变量查解，关联表是 O(#解) 一次；索引把它降到 O(1)。
@@ -401,7 +402,8 @@ ecAddData (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl
 
 -- 构造子索引：名字 → DtCtor（唯一真相仍是 `ecDatas`；表只是可重建缓存）。
 ctorTblOfDatas : List DtData -> HashMap DtCtor
-ctorTblOfDatas datas = Base.HashMap.insertAll (concatMap dataCtorPairs datas) Base.HashMap.empty
+ctorTblOfDatas datas =
+  Base.HashMap.insertAll (concatMap dataCtorPairs datas) (Base.HashMap.fromList [])
 
 dataCtorPairs : DtData -> List (Pair String DtCtor)
 dataCtorPairs d = map (\c => Pair (dtCtorName c) c) (dtDataCtors d)
@@ -540,7 +542,7 @@ dtProgDatas (DtProgram datas defs goals sols globals insts classes next defvals)
 dtProgDefs : DtProgram -> List DtDef
 dtProgDefs (DtProgram datas defs goals sols globals insts classes next defvals) = defs
 
--- M30（D18）：定义体求值结果的共享缓存（`Ec.ecDefVals` 的收尾快照）；「没有」= `Base.HashMap.empty`。
+-- M30（D18）：定义体求值结果的共享缓存（`Ec.ecDefVals` 的收尾快照）；「没有」= `(Base.HashMap.fromList [])`。
 dtProgDefVals : DtProgram -> HashMap Value
 dtProgDefVals (DtProgram datas defs goals sols globals insts classes next defvals) = defvals
 
@@ -564,4 +566,4 @@ dtProgNext (DtProgram datas defs goals sols globals insts classes next defvals) 
 
 -- 解表 → 索引（键 = 元变量编号的十进制串）。解表里每个元变量最多一条解，顺序无关。
 solsToTbl : List (Pair Int Value) -> IntMap Value
-solsToTbl sols = Base.IntMap.insertAll sols Base.IntMap.empty
+solsToTbl sols = Base.IntMap.insertAll sols (Base.IntMap.fromList [])

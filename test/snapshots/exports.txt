@@ -1,13 +1,17 @@
 # M26 导出面快照（module X (...) where 的项，排序规范化；无 header => (implicit)）
 base/lib/Base.vuna: module Base.Bool, module Base.Eq, module Base.IO, module Base.List, module Base.Map, module Base.Maybe, module Base.Monad, module Base.Ord, module Base.Pair, module Base.Result, module Base.Show, module Base.Sort, module Base.String
+base/lib/Base/Array.vuna: fromList, get, length, make, set, toList
 base/lib/Base/Bool.vuna: Bool(..), and, bool, not, or, xor
+base/lib/Base/Buffer.vuna: add, contents, length, new
 base/lib/Base/Eq.vuna: Eq(..)
-base/lib/Base/HashMap.vuna: HashMap, empty, fromList, hashStr, insert, insertAll, lookup, member, ofNames, size, toList
+base/lib/Base/HashMap.vuna: HashMap, fromList, hashStr, insert, insertAll, lookup, member, ofNames, size, toList
 base/lib/Base/HashSet.vuna: HashSet, empty, fromList, insert, member, size, toList
 base/lib/Base/IO.vuna: Functor(..), IO, Monad(..), exit, fileExists, fileMtime, fileSize, getArgs, isDirectory, makeDir, print, println, readDir, readFile, readLine, removeFile, runIO, writeFile
+base/lib/Base/IORef.vuna: modifyRef, newRef, readRef, writeRef
 base/lib/Base/Int.vuna: (implicit)
-base/lib/Base/IntMap.vuna: IntMap, empty, fromList, insert, insertAll, lookup, member, size, toList
+base/lib/Base/IntMap.vuna: IntMap, fromList, insert, insertAll, lookup, member, size, toList
 base/lib/Base/List.vuna: List(..), append, concatMap, drop, filter, flatMap, foldl, foldr, length, lookupPair, map, mapMaybe, mem, memName, range, reverse, take, zip
+base/lib/Base/MArray.vuna: length, new, read, write
 base/lib/Base/Map.vuna: Map, empty, fromList, insert, keys, lookup, remove, size, toList, values
 base/lib/Base/Maybe.vuna: Maybe(..), fromMaybe, isJust, isNothing, mapJust, maybe
 base/lib/Base/Monad.vuna: Functor(..), Monad(..)
@@ -67,7 +71,7 @@ compiler/lib/Vuna/Compiler/Frontend/Manifest.vuna: Manifest(..), manifestCapabil
 compiler/lib/Vuna/Compiler/Frontend/Parser.vuna: parseExpressionSource, parseSource
 compiler/lib/Vuna/Compiler/Frontend/Parser/Support.vuna: PState(..), advance, atKw, atSym, badCaseIndent, binderHeadName, canContinue, closeParenNext, countArrows, ctorPatternStart, expectIdent, expectKw, expectSym, expectValueName, fileOf, isEof, isReservedValueName, isSyntaxSym, lastPos, nthTok, peekPos, peekTok, peekTokAt, posOf, sameLineState, sectionOpAt, spanOf, startsAtom, startsPatternAtom, stateFuel, terminatesExpression, tokOf, toksLeft, toksOf, underscoreCtorName, upperFirst
 compiler/lib/Vuna/Compiler/Frontend/Toml.vuna: TomlEntry(..), TomlValue(..), lookupEntry, lookupEntryLine, parseToml, parseTomlAt
-compiler/lib/Vuna/Compiler/Intrinsics.vuna: Capability(..), IType(..), Intrinsic, IntrinsicOp(..), allIntrinsics, arityOfType, boolFalseCtor, boolTrueCtor, boolTypeName, canonicalCtorsFor, capabilityName, capabilityNames, findIntrinsic, intTypeName, intrinsicArity, intrinsicCapability, intrinsicName, intrinsicOp, intrinsicReturnsIO, intrinsicRuntime, intrinsicSignature, intrinsicVisible, ioFamilyName, isEffectfulIntrinsic, isIntrinsicName, isIntrinsicTypeName, listConsCtor, listFamilyName, listNilCtor, needsListBridge, parseCapability, preludeValueNames, strTypeName, typeIntrinsicNames, userIntrinsics
+compiler/lib/Vuna/Compiler/Intrinsics.vuna: Capability(..), IType(..), Intrinsic, IntrinsicOp(..), TypeIntrinsic(..), allIntrinsics, arityOfType, boolFalseCtor, boolTrueCtor, boolTypeName, canonicalCtorsFor, capabilityName, capabilityNames, findIntrinsic, intTypeName, intrinsicArity, intrinsicCapability, intrinsicName, intrinsicOp, intrinsicReturnsIO, intrinsicRuntime, intrinsicSignature, intrinsicVisible, ioFamilyName, isEffectfulIntrinsic, isIntrinsicName, isIntrinsicTypeName, listConsCtor, listFamilyName, listNilCtor, needsListBridge, parseCapability, preludeTypeNames, preludeValueNames, strTypeName, typeIntrinsicArities, typeIntrinsicArityOf, typeIntrinsicCtorArity, typeIntrinsicCtorName, typeIntrinsicCtorNames, typeIntrinsicNames, userIntrinsics
 compiler/lib/Vuna/Compiler/Loader.vuna: ExportEntry, Module, Project, entryKind, entryParent, entryPublic, entryTarget, loadModuleSource, loadProject, loadProjectModules, loadProjectSource, moduleAllImportsOf, moduleDeclsOf, moduleExportsOf, moduleImplicitImportsOf, moduleImportsOf, moduleNameOf, modulePackageOf, projectEntryAllImports, projectEntryDecls, projectEntryImports, projectModules, resolveProject
 compiler/lib/Vuna/Compiler/Loader/Diagnostics.vuna: LdDiag(..), LdEntry(..), ldAll, ldCode, ldEntryCode, ldEntryDesc, ldEntryTemplate, ldErr, ldErr0, ldErr1, ldErr2, ldMsg, ldTemplate, module Base.Nat, module Base.Vec
 compiler/lib/Vuna/Compiler/Loader/Fixity.vuna: FixityTable, lookupFixity, lookupFixityDecl, reorderExpr, reorderPattern, reorderProgram, symbolOfTargetIn, syntaxFixityDecls, tableOf, tableOfKeepOps

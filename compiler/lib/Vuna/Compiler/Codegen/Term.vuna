@@ -101,6 +101,7 @@ dtPrimRuntime =
     ++ "let dtp_getenv k = try Sys.getenv k with Not_found -> \"\"\n"
     ++ "let dtp_getcwd () = try Sys.getcwd () with _ -> \".\"\n"
     ++ "let dtp_execPath () = try Unix.readlink \"/proc/self/exe\" with _ -> Sys.executable_name\n"
+    ++ "let dtp_arraySet (a : 'a array) (i : int) (v : 'a) =\n  let b = Array.copy a in\n  Array.set b i v; b\n"
     ++ "let dtp_strHash (s : string) =\n  let h = ref 0 in\n  String.iter (fun c -> h := ((!h * 33) + Char.code c) land 1023) s;\n  !h\n"
     ++ "let dtp_strAt (s : string) (i : int) = if i < 0 || i >= String.length s then -1 else Char.code s.[i]\n"
     ++ "let dtp_exit n = exit n\n"

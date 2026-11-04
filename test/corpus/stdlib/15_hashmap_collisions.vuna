@@ -8,7 +8,7 @@ manyKeys : List String
 manyKeys = map strFromInt (range 0 1024)
 
 buildMany : List String -> Base.HashMap.HashMap Int
-buildMany ks = foldl (\acc, k => Base.HashMap.insert k (strLength k) acc) Base.HashMap.empty ks
+buildMany ks = foldl (\acc, k => Base.HashMap.insert k (strLength k) acc) (Base.HashMap.fromList []) ks
 
 allThere : List String -> Base.HashMap.HashMap Int -> Bool
 allThere [] _ = True

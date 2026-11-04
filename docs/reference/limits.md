@@ -144,6 +144,22 @@
   桥接只为 canonical `Base.List.List` 生成；`Prelude` 自动注入 `Base.List`，因此正常上下文
   总可用，闭包里没有该族时这些原语不可用。
 
+## 容器与可变数据（M33 W3）
+
+- **内建类型构造子**：`Array a` / `IORef a` / `MArray a` / `Buffer` 是类型层构造子（不是
+  `data` 声明），名字恒可见、不能重定义；没有构造子可模式匹配，只能经原语 / `Base.*` API。
+- **不可变 `Array`**：`fromList` / `toList` / `length` / `get` / `set` / `make`；`set` 是
+  copy-on-write（`Array.copy` + `Array.set`），原数组不变；越界是宿主 `Invalid_argument`。
+- **IO 内可变数据**：`IORef` / `MArray` / `Buffer` 的操作全部是 `IO` 动作，只能经
+  `Base.IORef` / `Base.MArray` / `Base.Buffer` 使用；`runIO` 是 main 外唯一执行入口、需要
+  `unsafe`。**没有线性 / 唯一性类型与 ST / region**：类型上无法表达「句柄不逃逸」，
+  可变句柄的安全边界目前是 IO 隔离 + `unsafe` 的显式放行（D22 部分关闭）。
+- **哈希容器**：桶是 `Array (Array (List ...))`（`Array.get` O(1)，`insert` copy-on-write）；
+  `empty` 已移除、统一写 `fromList []`（见 stdlib.md 的弱类型变量说明）。
+- **没有泛型 `Hashable`**：`HashMap` / `HashSet` 只覆盖 `String`，`IntMap` 只覆盖 `Int`；
+  无 `deriving Hash`（trait 单参数限制）；无有序持久容器。
+- `Base.Sort` 仍是插入排序（O(n²)，编译器热点之外的库算法项）。
+
 ## fuel / measure 站点
 
 工具链 / 前端 / 加载器 / 库的状态机逐点采用结构递归或可证明的界，不再有「无静态上界的

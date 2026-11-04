@@ -1,0 +1,13 @@
+import Base.IO
+-- M33 W3：Buffer（new / add / contents / length）。
+import Base.Buffer
+
+main : IO Int
+main = do
+  b <- new
+  _ <- add b "hello"
+  _ <- add b " "
+  _ <- add b "vuna"
+  s <- contents b
+  n <- Base.Buffer.length b
+  pure (strLength s + n)

@@ -186,7 +186,7 @@ modulePrefixOf name = case splitLastDot (splitOnDot name) of
 qualifiedBannedTbl : List String -> HashMap Bool
 qualifiedBannedTbl defined =
   Base.HashMap.insertAll (map (\n => Pair (qualifiedKey (modulePrefixOf n) n) True) defined)
-    Base.HashMap.empty
+    (Base.HashMap.fromList [])
 
 qualifiedKey : String -> String -> String
 qualifiedKey prefix name = prefix ++ "\t" ++ name

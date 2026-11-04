@@ -65,23 +65,51 @@ eqRuntimeName method tyName =
 -- ---------------------------------------------------------------
 -- IType → Core Term
 -- ---------------------------------------------------------------
--- 所有 IType 都是闭项（没有自由变量），因此 codomain 不需要 shift。
+-- 签名里的类型变量用名字 + binder 环境换成 de Bruijn（M33 W3：Array / IORef 等
+-- 内建类型构造子的签名带隐式 `{a : Type}`）。所有 IType 都是闭项或无自由变量。
+indexOfNameGo : String -> List String -> Int -> Maybe Int
+indexOfNameGo name [] i = Nothing
+indexOfNameGo name (x :: rest) i = if x == name then Just i else indexOfNameGo name rest (i + 1)
+
+indexOfName : String -> List String -> Maybe Int
+indexOfName name env = indexOfNameGo name env 0
+
 ityToTerm : IType -> Term
-ityToTerm ITy = TType levelZero
-ityToTerm IInt = intTy
-ityToTerm IStr = strTy
-ityToTerm IBool = boolTy
-ityToTerm (IList elem) = TApp (TGlobal listFamilyName) (ityToTerm elem) Rig1
+ityToTerm ty = ityToTermEnv [] ty
+
+ityToTermEnv : List String -> IType -> Term
+ityToTermEnv env ITy = TType levelZero
+ityToTermEnv env IInt = intTy
+ityToTermEnv env IStr = strTy
+ityToTermEnv env IBool = boolTy
+ityToTermEnv env (IList elem) = TApp (TGlobal listFamilyName) (ityToTermEnv env elem) Rig1
 -- M31：效果原语的返回类型是 canonical `Base.IO.IO a`（与 main 钩子同一族身份）。
-ityToTerm (IIO elem) = TApp (TGlobal ioFamilyName) (ityToTerm elem) Rig1
-ityToTerm (IFun a b) = TPi "_" False Rig1 (ityToTerm a) (ityToTerm b)
+ityToTermEnv env (IIO elem) = TApp (TGlobal ioFamilyName) (ityToTermEnv env elem) Rig1
+-- cod 在 binder 下：env 加匿名占位，保证外层 IVar 的 de Bruijn 索引随 Pi 深度 shift。
+ityToTermEnv env (IFun a b) = TPi "_" False Rig1 (ityToTermEnv env a) (ityToTermEnv ("_" :: env) b)
+ityToTermEnv env (IVar name) = case indexOfName name env of
+  Just i => TVar name i
+  Nothing => TGlobal name
+ityToTermEnv env (IArray elem) = TApp (TGlobal "Array") (ityToTermEnv env elem) Rig1
+ityToTermEnv env (IRef elem) = TApp (TGlobal "IORef") (ityToTermEnv env elem) Rig1
+ityToTermEnv env (IMArray elem) = TApp (TGlobal "MArray") (ityToTermEnv env elem) Rig1
+ityToTermEnv env IBuf = TGlobal "Buffer"
+ityToTermEnv env (IPi name body) =
+  TPi name True Rig0 (TType levelZero) (ityToTermEnv (name :: env) body)
 
 -- ---------------------------------------------------------------
 -- prelude globals / 名字名单
 -- ---------------------------------------------------------------
--- 类型 primitive 先于值（`Int : Type` 等），值按 Intrinsics 表顺序。
+-- 类型层：primitive 类型名（`Int : Type` 等）+ 内建类型构造子（`Array : Type -> Type`）。
+typeCtorKindTerm : Int -> Term
+typeCtorKindTerm arity =
+  if arity <= 0 then TType levelZero
+  else TPi "_" False Rig0 (TType levelZero) (typeCtorKindTerm (arity - 1))
+
 preludeTypeGlobals : List (Pair String Term)
-preludeTypeGlobals = map (\n => Pair n (TType levelZero)) typeIntrinsicNames
+preludeTypeGlobals =
+  append (map (\n => Pair n (TType levelZero)) typeIntrinsicNames)
+    (map (\t => Pair (typeIntrinsicCtorName t) (typeCtorKindTerm (typeIntrinsicCtorArity t))) typeIntrinsicArities)
 
 preludeValueGlobals : List (Pair String Term)
 preludeValueGlobals =
@@ -90,10 +118,10 @@ preludeValueGlobals =
 preludeGlobals : List (Pair String Term)
 preludeGlobals = append preludeTypeGlobals preludeValueGlobals
 
--- 「禁止重定义」名单：primitive 类型名 + 全部用户可见内建值名。
+-- 「禁止重定义」名单：primitive 类型名 + 内建类型构造子 + 全部用户可见内建值名。
 -- 只在入口（ad-hoc）文件里可能命中——模块内声明会被 mangle 成 `<Module>.name`。
 preludeNames : List String
-preludeNames = append typeIntrinsicNames preludeValueNames
+preludeNames = append preludeTypeNames preludeValueNames
 
 -- 只认内建可特化类型（`Int` / `String`）；其它类型在 DT 里走 `Eq` 实例。
 builtinEqTyName : Value -> Maybe String

@@ -235,7 +235,7 @@ applyDeclaredDictSubsts (s :: rest) body =
 -- 子句表（名字 → 该函数的全部 clause，源顺序）。旧实现每个定义都扫一遍剩余声明
 -- （clausesFor）⇒ O(n²)；这里在 bodies 开始时建一次表，查表 O(1)。
 clausesTblOf : List Decl -> HashMap (List (Pair (List Pat) Expr))
-clausesTblOf decls = clausesTblGo decls Base.HashMap.empty
+clausesTblOf decls = clausesTblGo decls (Base.HashMap.fromList [])
 
 clausesTblGo : List Decl -> HashMap (List (Pair (List Pat) Expr)) -> HashMap (List (Pair (List Pat) Expr))
 clausesTblGo [] t = t
@@ -295,7 +295,7 @@ futureBodyTbl : List Decl -> List (Pair String Term) -> HashMap Bool
 futureBodyTbl decls instHeads =
   Base.HashMap.insertAll
     (map (\n => Pair n True) (append (declFunNames decls) (map firstOf instHeads)))
-    Base.HashMap.empty
+    (Base.HashMap.fromList [])
 
 -- 之后会有定义体的 DFun 名（实例字典名由 `instHeads` 单独提供）。
 declFunNames : List Decl -> List String
@@ -341,7 +341,7 @@ memoDefValue : HashMap Bool -> Ec -> String -> Term -> Maybe Value
 memoDefValue future ec name body =
   if hasFreeTermVar 0 body then Nothing
   else if termHasUnsolvedMeta (ecSolsP ec) body then Nothing
-  else if memoUnsafe 4096 future (ecDefTbl ec) (ecDefVals ec) name Base.HashMap.empty (termGlobalRefs body) then Nothing
+  else if memoUnsafe 4096 future (ecDefTbl ec) (ecDefVals ec) name (Base.HashMap.fromList []) (termGlobalRefs body) then Nothing
   else Just (force (ecDefTbl ec) (ecSolsP ec) defaultFuel (VNeutral (NGlobal name [])))
 
 -- 尝试把当前定义体求出的值写进 `ecDefVals`（不满足安全条件时原样返回）。
@@ -439,8 +439,8 @@ dtEvalExprInInfo prog expr = case prog of
       -- M30（D18）：表达式求值与程序同一套环（构造子索引 + 定义值共享缓存）。
       ec0 =
         Ec next sols (reverse bodies) datas [] [] insts classes [] (Base.HashMap.fromList bodies)
-          (Base.HashMap.fromList globals) (solsToTbl sols) Base.IntMap.empty True Base.HashMap.empty
-          (ctorTblOfDatas datas) defvals
+          (Base.HashMap.fromList globals) (solsToTbl sols) (Base.IntMap.fromList []) True
+          (Base.HashMap.fromList []) (ctorTblOfDatas datas) defvals
     in andThen (inferE globals emptyCtx ec0 expr) (\p => case p of
       Pair term (Pair ty ec1) =>
         let
@@ -523,7 +523,7 @@ in andThen (elabDatas (collectDataDecls decls []) preludeGlobals ecEmpty) (\pd =
                               defsTblOut =
                                 Base.HashMap.insertAll
                                   (map (\x => Pair (dtDefName x) (dtDefType x)) allDefs)
-                                  Base.HashMap.empty
+                                  (Base.HashMap.fromList [])
                               globalsOut = map (\g => case Base.HashMap.lookup (firstOf g) defsTblOut of
                                 Just ty => Pair (firstOf g) ty
                                 Nothing => g
@@ -636,7 +636,7 @@ goalInfoOf sols g =
 
 -- 洞目标里的类型可能仍含已解元变量：用当前解表 force 一遍再 show。
 zonkGoal : List (Pair Int Value) -> Value -> Value
-zonkGoal sols v = force Base.HashMap.empty (solsFromList sols) defaultFuel v
+zonkGoal sols v = force (Base.HashMap.fromList []) (solsFromList sols) defaultFuel v
 
 -- 上下文条目（名字 + 类型）用于显示：类型项按快照深度用中性环境求值后 show。
 ctxEntriesOf : List (Pair String Term) -> List (Pair String String)
