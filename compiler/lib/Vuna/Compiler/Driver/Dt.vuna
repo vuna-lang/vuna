@@ -20,6 +20,7 @@ module Vuna.Compiler.Driver.Dt
 -- 唯一 codegen 入口是 `dtSplitProject`（逐模块 split 输出模型）；DT 精化器按
 -- **整程序**精化，模块边界对精化不构成约束。
 import Vuna.Compiler.Common
+import Base.HashMap
 import Vuna.Compiler.Debug
 import Vuna.Compiler.Diagnostics
 import Vuna.Compiler.Frontend.Ast
@@ -134,7 +135,7 @@ dtMainKind : PackageContext -> String -> Result String
 dtMainKind ctx entry = andThen (dtLoad ctx entry) (\decls => andThen (elabProgram decls) (\p => case findMainDef (secondOf p) of
   Nothing => cgErr0 NoMain
   Just mainDef => if isIOType (dtDefType mainDef) then Ok "IO"
-  else case force (tblFromList (defTableOf (secondOf p))) solsEmpty defaultFuel (eval [] (dtDefType mainDef)) of
+  else case force (Base.HashMap.fromList (defTableOf (secondOf p))) solsEmpty defaultFuel (eval [] (dtDefType mainDef)) of
     VNeutral n => case n of
       NGlobal g sp => case sp of
         [] => mainKindForName g
@@ -175,7 +176,8 @@ evalDtMain program = case findMainDef (dtProgDefs program) of
     let
       table = defTableOf (dtProgDefs program)
       sols = solsPutDefVals solsEmpty (dtProgDefVals program)
-      mainVal = normalize (tblFromList table) sols defaultFuel (VNeutral (NGlobal "main" []))
+      mainVal =
+        normalize (Base.HashMap.fromList table) sols defaultFuel (VNeutral (NGlobal "main" []))
     in if isIOType (dtDefType mainDef) then cgErr0 InterpCannotExecuteEffects
     else case mainVal of
       VInt n => Ok (strFromInt n)

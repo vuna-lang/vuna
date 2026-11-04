@@ -1,0 +1,31 @@
+module Base.HashSet (HashSet, empty, fromList, insert, member, size, toList) where
+
+-- Base.HashSet：String 集合，内部是 `HashMap Bool`。
+--
+-- 与 HashMap 一样，构造器不导出；toList 按桶序展开，**不保证插入序**；size 是 O(n)。
+-- base 模块不自动注入 Prelude，容器的限定名（HashMap.*）需要显式 import。
+import Base.Bool
+import Base.HashMap
+import Base.List
+import Base.Pair
+
+data HashSet : Type where
+  MkHashSet : HashMap Bool -> HashSet
+
+empty : HashSet
+empty = MkHashSet Base.HashMap.empty
+
+insert : String -> HashSet -> HashSet
+insert key (MkHashSet t) = MkHashSet (Base.HashMap.insert key True t)
+
+member : String -> HashSet -> Bool
+member key (MkHashSet t) = Base.HashMap.member key t
+
+fromList : List String -> HashSet
+fromList xs = foldl (\acc, x => insert x acc) empty xs
+
+toList : HashSet -> List String
+toList (MkHashSet t) = map firstOf (Base.HashMap.toList t)
+
+size : HashSet -> Int
+size s = length (toList s)

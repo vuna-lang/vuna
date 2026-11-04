@@ -16,6 +16,7 @@ open Vuna_dCompiler_dFrontend_dToml
 open Vuna_dCompiler_dFrontend_dManifest
 open Base_dIO
 open Vuna_dCompiler_dPackages_dPkg
+open Base_dHashMap
 open Vuna_dCompiler_dDebug
 open Base_dNat
 open Base_dVec
@@ -35,6 +36,7 @@ open Vuna_dCompiler_dIntrinsics
 open Vuna_dCompiler_dLoader_dResolve
 open Vuna_dCompiler_dLoader_dFlatten
 open Vuna_dCompiler_dLoader
+open Base_dIntMap
 open Vuna_dCompiler_dCore_dTerm
 open Vuna_dCompiler_dCore_dEval
 open Vuna_dCompiler_dCore_dConv
@@ -211,9 +213,9 @@ let rec v_Vuna_dCompiler_dCodegen_dSplit_dnameOwnerPairsOfDatas = (fun mc0 -> (f
   | _ -> failwith "DT: impossible branch"
 )))
 
-let v_Vuna_dCompiler_dCodegen_dSplit_downerTblOf = (fun pairs -> ((v_Vuna_dCompiler_dCommon_dtblInsertAll pairs) v_Vuna_dCompiler_dCommon_dtblEmpty))
+let v_Vuna_dCompiler_dCodegen_dSplit_downerTblOf = (fun pairs -> ((v_Base_dHashMap_dinsertAll pairs) v_Base_dHashMap_dempty))
 
-let v_Vuna_dCompiler_dCodegen_dSplit_downerOfTbl = (fun t -> (fun name -> (match ((v_Vuna_dCompiler_dCommon_dtblLookup name) t) with
+let v_Vuna_dCompiler_dCodegen_dSplit_downerOfTbl = (fun t -> (fun name -> (match ((v_Base_dHashMap_dlookup name) t) with
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__98) -> dtb__98
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> ""
   | _ -> failwith "DT: impossible branch"

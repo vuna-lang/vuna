@@ -23,6 +23,7 @@
 | B27 | Fmt 的打印 fixity 表用内建兜底表（跨模块 / 用户声明的自定义优先级不感知）：`formatSource` 的重排用本地 `Source.fixities`，但打印函数 `Fmt/Expr.infixPrec` 只有内建表；自定义运算符或覆盖内建优先级时可能加括号不足 / 过多（语义风险） | `lib/Vuna/Fmt.vuna`；`lib/Vuna/Fmt/Expr.vuna` | M31.3（fmt 从 Loader 取程序级 fixity，或把表贯穿渲染函数） |
 | B28 | `Elab` / `Lint` / `Index` 等对 `Expr` 的穷尽 case 在 M31.2 补了 `_ => Err/[]/False/...` 兜底分支（`EInfix` / `EParen` 正常在 Loader 重排后不存在）；若将来某个前端入口绕过重排，这些兜底会**静默丢表达式**（Elab / Resolve 是显式 internal error，工具链是空值） | `Elab/*`、`lib/Vuna/{Lint,Index,Lsp,Doc}` | 后续：统一改显式 internal error 或断言 |
 | B29 | M32 的显式 trait 约束只支持顶层签名；`where` / `let` 绑定、`axiom`、trait 方法、构造子 / 记录字段上的 `C a =>` 都不支持（trait 方法约束是父类语义，归 F4） | `Parser.rejectCtxSuffix` / `PS_ConstraintUnsupportedHere`；`test/corpus/traits/99_explicit_*_rejected` | F4（父类 / 局部约束） |
+| B30 | 标准库容器只覆盖 `String` / `Int` 键：无泛型 `Hashable`（trait 仅单参数、无 `deriving Hash`）、无有序持久容器（TreeMap/TreeSet）、无可变/数组容器（`Array` / `ST` / `IORef`）。编译器热点已由 `HashMap`/`IntMap` 覆盖；其余场景按实测需求再评估 | `base/lib/Base/{HashMap,HashSet,IntMap}.vuna`；[stdlib.md](stdlib.md) 的容器边界 | F4（容器）/ F3（效应系统） |
 | C07 | 擦除位的作用域护栏按约定跳过，未对擦除位置做完整 de Bruijn 校验 | `Codegen/Erase.checkAllDefScopes`：跳过擦除实参 | 待定 |
 | D12 | 证明 ergonomics 进阶未实现：absurd / 空族消去语法、`rewrite` / `with`；隐式模式与 `auto` 见 B09/D08 | `limits.md` 的证明 ergonomics 边界；`tooling.md` §5 | F4 |
 | D19 | 类型级部分应用不可用（如把 `Vec Int` 当类型参数传给 `Sigma Nat`） | `checkAppUnderTypeFuel` 报 `expected Nat, got Int` | F4 |

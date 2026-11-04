@@ -10,6 +10,7 @@ module Vuna.Compiler.Codegen.Split (generateDtSplitProgram) where
 -- 方法投影名与 `Dict_<trait>`）；不再有字符串前缀表（`Show_Show_*` / 内建方法名表）。
 -- 推导不到的带点名字回落到「模块前缀必须是已知模块」，否则报错。
 import Vuna.Compiler.Common
+import Base.HashMap
 import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Driver.Split
 import Vuna.Compiler.Elab
@@ -182,21 +183,21 @@ nameOwnerPairsOfDatas meta (d :: rest) =
 -- ---------------------------------------------------------------
 -- 名字 → 归属单元的哈希索引。旧实现对**每个**模块把全部 def/data 逐个做
 -- `mapOwnerOf`（线性扫 pairs）⇒ O(#模块 × #def × #pairs)，大包上就是几秒。
-ownerTblOf : List (Pair String String) -> HashTbl String
-ownerTblOf pairs = tblInsertAll pairs tblEmpty
+ownerTblOf : List (Pair String String) -> HashMap String
+ownerTblOf pairs = Base.HashMap.insertAll pairs Base.HashMap.empty
 
-ownerOfTbl : HashTbl String -> String -> String
-ownerOfTbl t name = case tblLookup name t of
+ownerOfTbl : HashMap String -> String -> String
+ownerOfTbl t name = case Base.HashMap.lookup name t of
   Just o => o
   Nothing => ""
 
-datasInUnit : HashTbl String -> String -> List DtData -> List DtData
+datasInUnit : HashMap String -> String -> List DtData -> List DtData
 datasInUnit ownerT u datas = filter (\d => ownerOfTbl ownerT (dtDataName d) == u) datas
 
-defsInUnit : HashTbl String -> String -> List DtDef -> List DtDef
+defsInUnit : HashMap String -> String -> List DtDef -> List DtDef
 defsInUnit ownerT u defs = filter (\d => ownerOfTbl ownerT (dtDefName d) == u) defs
 
-splitModuleFiles : List (Pair String (List Int)) -> List DtData -> List DtDef -> HashTbl String -> HashTbl String -> List String -> List (Pair String (List Decl)) -> Result (List SplitFile)
+splitModuleFiles : List (Pair String (List Int)) -> List DtData -> List DtDef -> HashMap String -> HashMap String -> List String -> List (Pair String (List Decl)) -> Result (List SplitFile)
 splitModuleFiles usedTbl allDatas allDefs defOwnerT dataOwnerT earlier [] = Ok []
 splitModuleFiles usedTbl allDatas allDefs defOwnerT dataOwnerT earlier ((Pair mname decls) :: rest) =
   let
@@ -206,7 +207,7 @@ splitModuleFiles usedTbl allDatas allDefs defOwnerT dataOwnerT earlier ((Pair mn
   in andThen (groupRuntimeDefs unitDefs)
     (\groups => andThen (genUnitParts usedTbl (append [runtimeUnit] earlier) allDatas unitDatas groups) (\parts => andThen (splitModuleFiles usedTbl allDatas allDefs defOwnerT dataOwnerT (append earlier [unit]) rest) (\tail => Ok (SplitFile (unit ++ ".ml") (genUnitText parts ++ "\n") :: tail))))
 
-splitMainFile : List (Pair String (List Int)) -> List DtData -> List DtDef -> HashTbl String -> HashTbl String -> Bool -> List String -> Result SplitFile
+splitMainFile : List (Pair String (List Int)) -> List DtData -> List DtDef -> HashMap String -> HashMap String -> Bool -> List String -> Result SplitFile
 splitMainFile usedTbl allDatas allDefs defOwnerT dataOwnerT printResult opens =
   let
     entryDefs = defsInUnit defOwnerT entryOwner allDefs

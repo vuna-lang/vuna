@@ -65,6 +65,7 @@ module Vuna.Compiler.Core
   , levelToInt
   , levelZero
   , metaLookup
+  , metaLookupList
   , normalize
   , quote
   , rigIsErased

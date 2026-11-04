@@ -86,6 +86,7 @@ module Vuna.Compiler.Elab.Meta
 -- 擦除判据（binderRig / isIndexDomain 等）、以及 trait/instance 的命名辅助。
 -- 拆自 M24 的单一 `Elab.vuna`（按真实调用图切；门面仍是 `Vuna.Compiler.Elab`）。
 import Vuna.Compiler.Common
+import Base.HashMap
 import Vuna.Compiler.Debug
 import Vuna.Compiler.Core
 import Vuna.Compiler.Diagnostics
@@ -184,7 +185,7 @@ unsolvedFromGo remaining stop sols = if remaining <= 0 then Nothing
 else
   let
     i = stop - remaining
-  in case metaLookup i sols of
+  in case metaLookupList i sols of
     Just _ => unsolvedFromGo (remaining - 1) stop sols
     Nothing => Just i
 
@@ -245,7 +246,7 @@ globalLookup name ((Pair n ty) :: rest) = if name == n then Just ty else globalL
 -- 回落是必要的：索引只在 `elabBodies` 之前从当时的 globals 建一次，之前的数据族/trait/
 -- 签名阶段索引为空（那些阶段总量小，线性扫可接受）；索引与 globals 不一致时以列表为准。
 globalsLookup : String -> List (Pair String Term) -> Ec -> Maybe Term
-globalsLookup name globals ec = case tblLookup name (ecGlobalsTbl ec) of
+globalsLookup name globals ec = case Base.HashMap.lookup name (ecGlobalsTbl ec) of
   Just ty => Just ty
   -- 表已完整（bodies 阶段）时，未命中就意味着「不是全局」：省掉线性扫全 globals
   -- 的回落（未命中的绝大多数是数据族名，如 Base.List.List / String / Int）。
@@ -268,13 +269,13 @@ collectSigs decls =
     -- 旧实现每签名扫全 defined 并重建表（O(#sigs × #defined)），实测 collectSigs 12.9 s。
     banned = qualifiedBannedTbl defined
     preludeBanned = topQuantBanned []
-  in collectSigsInto banned preludeBanned tblEmpty [] decls
+  in collectSigsInto banned preludeBanned Base.HashMap.empty [] decls
 
 -- 声明收集（M20：签名里的自由小写名量化为隐式类型参数，见 `Elab.Sig.quantifyTopSig`）。
 -- M28 / C29：banned 集按**签名所属模块**作用域；M30（D18）把这张集合改成共享缓存：
 -- `banned` 的键是「模块前缀 \t 名字」（`Sig.qualifiedBannedTbl`），`preludeBanned` 是
 -- 全局 prelude 名单，两者都只建一次。
-collectSigsInto : HashTbl Bool -> HashTbl Bool -> HashTbl Bool -> List (Pair String (Pair (List Expr) (Pair Expr Span))) -> List Decl -> Result (List (Pair String (Pair (List Expr) (Pair Expr Span))))
+collectSigsInto : HashMap Bool -> HashMap Bool -> HashMap Bool -> List (Pair String (Pair (List Expr) (Pair Expr Span))) -> List Decl -> Result (List (Pair String (Pair (List Expr) (Pair Expr Span))))
 collectSigsInto banned preludeBanned seen acc [] = Ok (reverse acc)
 collectSigsInto banned preludeBanned seen acc (d :: rest) = case d of
   DSig name ctx ty sp => collectSigOne banned preludeBanned seen acc name ctx ty sp rest
@@ -286,11 +287,11 @@ collectSigsInto banned preludeBanned seen acc (d :: rest) = case d of
   DTrait name params methods sp => collectSigsInto banned preludeBanned seen acc rest
   DInstance ctxE head methods sp => collectSigsInto banned preludeBanned seen acc rest
 
-collectSigOne : HashTbl Bool -> HashTbl Bool -> HashTbl Bool -> List (Pair String (Pair (List Expr) (Pair Expr Span))) -> String -> List Expr -> Expr -> Span -> List Decl -> Result (List (Pair String (Pair (List Expr) (Pair Expr Span))))
+collectSigOne : HashMap Bool -> HashMap Bool -> HashMap Bool -> List (Pair String (Pair (List Expr) (Pair Expr Span))) -> String -> List Expr -> Expr -> Span -> List Decl -> Result (List (Pair String (Pair (List Expr) (Pair Expr Span))))
 collectSigOne banned preludeBanned seen acc name ctx ty sp rest =
   if memName name preludeNames then tcErr1 sp (CannotRedefineBuiltin name) name
-  else if tblMem name seen then tcErr1 sp (DuplicateSignature name) name
-  else collectSigsInto banned preludeBanned (tblInsert name True seen)
+  else if Base.HashMap.member name seen then tcErr1 sp (DuplicateSignature name) name
+  else collectSigsInto banned preludeBanned (Base.HashMap.insert name True seen)
     (Pair name (Pair ctx (Pair (quantifyTopSigCtxCached (modulePrefixOf name) banned preludeBanned ctx ty sp) sp)) :: acc)
     rest
 
@@ -356,7 +357,7 @@ dtCtorLookup name (d :: rest) = case findCtorIn name (dtDataCtors d) of
 -- 线性扫族表。索引是可重建缓存（真相仍是 `ecDatas`）：建表前的阶段（data 精化中途）
 -- 或者 `ecAddData` 之外的旁路构造都会 miss，回落保证语义不变。
 dtCtorLookupEc : Ec -> String -> Maybe DtCtor
-dtCtorLookupEc ec name = case tblLookup name (ecCtorTbl ec) of
+dtCtorLookupEc ec name = case Base.HashMap.lookup name (ecCtorTbl ec) of
   Just c => Just c
   Nothing => dtCtorLookup name (ecDatas ec)
 
@@ -450,7 +451,7 @@ zonkTerm ec depth t = zonkTermFuel 64 ec depth t
 zonkTermFuel : Int -> Ec -> Int -> Term -> Term
 zonkTermFuel fuel ec depth t = if fuel <= 0 then t
 else case t of
-  TMeta m => case metaLookup m (ecSols ec) of
+  TMeta m => case metaLookup m (ecSolTbl ec) of
     Just v =>
       let
         q = quote depth v

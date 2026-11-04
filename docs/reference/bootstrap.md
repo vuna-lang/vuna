@@ -38,8 +38,8 @@ stage 0 / stage 1 / 产品 CLI；`checks.seed-selfhost` 守整条链。
 种子（`seed/`）**提交入库**，是构建输入而不是构建产物。种子是**多文件文件集**：每个 vuna
 模块对应一个 OCaml 模块（`.ml`），外加共享 runtime 模块与 `build.sh`。种子**只覆盖 compiler
 包**（`compiler/app/Main.vuna` 的 import 闭包）：工具链（fmt/lint/repl/doc/test/lsp）由
-编译器编译出来，不在信任锚点里。当前入库 `seed/` 为 **71 个 `.ml` / 72 个文件**
-（`nix/seed-count.txt` = 71）。唯一的硬性不变量：
+编译器编译出来，不在信任锚点里。当前入库 `seed/` 为 **75 个 `.ml` / 76 个文件**
+（`nix/seed-count.txt` = 75）。唯一的硬性不变量：
 
 > **当前入库的种子必须能编译当前的 vuna 源码，且与当前源码的生成结果同步。**
 

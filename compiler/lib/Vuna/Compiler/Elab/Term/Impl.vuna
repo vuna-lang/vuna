@@ -489,7 +489,7 @@ else case dictClassArg ec dom of
       -- 类参数是裸元变量：在**副本**上推断显式实参以确定它（`MkB` → `?a = B`），
       -- 但只把 `?a` 的解带回真实 ec，`inferEFuel (fuel - 1)` 新建的孤儿元变量随副本丢弃——
       -- 否则 `bind (pure 41)` 的 `pure` 类参数（`?3`）会变成未解孤儿报 M13。
-      VMeta a [] => andThen (constrainDictDomGoKFuel (fuel - 1) globals ec ctx argTy argKind args sp) (\ecProbe => case metaLookup a (ecSols ecProbe) of
+      VMeta a [] => andThen (constrainDictDomGoKFuel (fuel - 1) globals ec ctx argTy argKind args sp) (\ecProbe => case metaLookup a (ecSolTbl ecProbe) of
         Just v => case solveMeta (ecDefTbl ec) (ecSolsP ec) 0 a [] v of
           Ok sols2 => Ok (ecPutSols ec (solsList sols2))
           Err e => Ok ec

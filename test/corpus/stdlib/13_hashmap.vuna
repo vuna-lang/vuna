@@ -1,0 +1,24 @@
+-- stdlib：Base.HashMap / Base.HashSet（String 键的持久哈希容器）。
+import Base.HashMap
+import Base.HashSet
+import Base.List
+import Base.Maybe
+import Base.Pair
+
+showMaybeInt : Maybe Int -> String
+showMaybeInt Nothing = "Nothing"
+showMaybeInt (Just x) = "Just " ++ strFromInt x
+
+main : String
+main =
+  let
+    m = Base.HashMap.insert "b" 2 (Base.HashMap.insert "a" 1 Base.HashMap.empty)
+    m2 = Base.HashMap.fromList [Pair "b" 2, Pair "a" 1, Pair "c" 3]
+    s = Base.HashSet.fromList ["x", "y", "x"]
+  in "lk=" ++ showMaybeInt (Base.HashMap.lookup "a" m)
+       ++ " miss=" ++ showMaybeInt (Base.HashMap.lookup "z" m)
+       ++ " mem=" ++ (if Base.HashMap.member "b" m then "True" else "False")
+       ++ " sz=" ++ strFromInt (Base.HashMap.size m)
+       ++ " sz2=" ++ strFromInt (Base.HashMap.size m2)
+       ++ " hs=" ++ strFromInt (Base.HashSet.size s)
+       ++ " hx=" ++ (if Base.HashSet.member "x" s then "True" else "False")

@@ -35,6 +35,8 @@ module Vuna.Compiler.Elab.Driver
 -- 以及目标（goal）收集与未解元变量的诊断（zonkGoal/goalsOfProgram/elabProgram*）。
 -- 拆自 M24 的单一 `Elab.vuna`（按真实调用图切；门面仍是 `Vuna.Compiler.Elab`）。
 import Vuna.Compiler.Common
+import Base.HashMap
+import Base.IntMap
 import Vuna.Compiler.Debug
 import Vuna.Compiler.Core
 import Vuna.Compiler.Diagnostics
@@ -66,7 +68,7 @@ unsolvedFromRelevantGo remaining stop sols relevant goals = if remaining <= 0 th
 else
   let
     i = stop - remaining
-  in case metaLookup i sols of
+  in case metaLookupList i sols of
     Just _ => unsolvedFromRelevantGo (remaining - 1) stop sols relevant goals
     Nothing =>
       if memMetaId i relevant || isJust (findGoal i goals) then Just i
@@ -78,7 +80,8 @@ else
 -- 按源顺序精化签名：每个签名只对「prelude + 之前的签名」可见。
 elabSigs : List (Pair String (Pair (List Expr) (Pair Expr Span))) -> List (Pair String Term) -> Ec -> Result (Pair (List (Pair String Term)) Ec)
 elabSigs sigs globals ec =
-  elabSigsGo sigs globals (ecSetGlobalsComplete (ecPutGlobalsTbl ec (tblFromList globals)) True) []
+  elabSigsGo sigs globals
+    (ecSetGlobalsComplete (ecPutGlobalsTbl ec (Base.HashMap.fromList globals)) True) []
 
 -- 新签名先前插到 acc（末尾一次 reverse 还原源顺序）；后续签名检查要看得到**已收集**的
 -- 签名，所以 live（globals 参数）也用前插累积（查找顺序无关语义）。
@@ -91,7 +94,8 @@ elabSigsGo ((Pair name (Pair ctxExprs (Pair tyExpr sigSpan))) :: rest) globals e
       let
         sigTy = zonkTerm ec2 0 tyTerm1
       in elabSigsGo rest (Pair name sigTy :: globals)
-        (ecPutGlobalsTbl ec2 (tblInsert name sigTy (ecGlobalsTbl ec2))) (Pair name sigTy :: acc)
+        (ecPutGlobalsTbl ec2 (Base.HashMap.insert name sigTy (ecGlobalsTbl ec2)))
+        (Pair name sigTy :: acc)
   )
 )
 
@@ -197,7 +201,7 @@ dictSubstQ (DictSubst m name q) = q
 solveDeclaredDictGoalsGo : Ec -> List DeclDictBinder -> List DtDictGoal -> List DtDictGoal -> List DictSubst -> Pair (List DictSubst) Ec
 solveDeclaredDictGoalsGo ec binders goals kept acc = case goals of
   [] => Pair (reverse acc) (ecPutDictGoals ec (reverse kept))
-  (g@(DtDictGoal m dom)) :: rest => case metaLookup m (ecSols ec) of
+  (g@(DtDictGoal m dom)) :: rest => case metaLookup m (ecSolTbl ec) of
     Just _ => solveDeclaredDictGoalsGo ec binders rest (g :: kept) acc
     Nothing => case firstMatchDictBinder ec binders dom of
       Nothing => solveDeclaredDictGoalsGo ec binders rest (g :: kept) acc
@@ -230,27 +234,27 @@ applyDeclaredDictSubsts (s :: rest) body =
 
 -- 子句表（名字 → 该函数的全部 clause，源顺序）。旧实现每个定义都扫一遍剩余声明
 -- （clausesFor）⇒ O(n²)；这里在 bodies 开始时建一次表，查表 O(1)。
-clausesTblOf : List Decl -> HashTbl (List (Pair (List Pat) Expr))
-clausesTblOf decls = clausesTblGo decls tblEmpty
+clausesTblOf : List Decl -> HashMap (List (Pair (List Pat) Expr))
+clausesTblOf decls = clausesTblGo decls Base.HashMap.empty
 
-clausesTblGo : List Decl -> HashTbl (List (Pair (List Pat) Expr)) -> HashTbl (List (Pair (List Pat) Expr))
+clausesTblGo : List Decl -> HashMap (List (Pair (List Pat) Expr)) -> HashMap (List (Pair (List Pat) Expr))
 clausesTblGo [] t = t
 clausesTblGo (d :: rest) t = case d of
   DFun n pats body sp =>
     let
-      cur = case tblLookup n t of
+      cur = case Base.HashMap.lookup n t of
         Just xs => xs
         Nothing => []
-    in clausesTblGo rest (tblInsert n (append cur [Pair pats body]) t)
+    in clausesTblGo rest (Base.HashMap.insert n (append cur [Pair pats body]) t)
   _ => clausesTblGo rest t
 
 clausesOfTbl : Ec -> List Decl -> String -> List (Pair (List Pat) Expr)
-clausesOfTbl ec decls name = case tblLookup name (ecClausesTbl ec) of
+clausesOfTbl ec decls name = case Base.HashMap.lookup name (ecClausesTbl ec) of
   Just cs => cs
   Nothing => clausesFor decls name
 
 defAlreadyDone : String -> Ec -> Bool
-defAlreadyDone name ec = case tblLookup name (ecDefTbl ec) of
+defAlreadyDone name ec = case Base.HashMap.lookup name (ecDefTbl ec) of
   Just _ => True
   Nothing => False
 
@@ -287,10 +291,11 @@ defBodyPair d = case dtDefBody d of
 --
 -- fuel = 4096 只是**证明界**：每次访问消耗 1，且 `seen` 保证每个名字的体最多展开
 -- 一次 ⇒ 实际访问数 ≤ 当前 defs 表项数（编译器全包 ~1.6k）；超出按「不安全」处理。
-futureBodyTbl : List Decl -> List (Pair String Term) -> HashTbl Bool
+futureBodyTbl : List Decl -> List (Pair String Term) -> HashMap Bool
 futureBodyTbl decls instHeads =
-  tblInsertAll (map (\n => Pair n True) (append (declFunNames decls) (map firstOf instHeads)))
-    tblEmpty
+  Base.HashMap.insertAll
+    (map (\n => Pair n True) (append (declFunNames decls) (map firstOf instHeads)))
+    Base.HashMap.empty
 
 -- 之后会有定义体的 DFun 名（实例字典名由 `instHeads` 单独提供）。
 declFunNames : List Decl -> List String
@@ -317,34 +322,35 @@ termGlobalRefs (TBool b) = []
 termGlobalRefs (TIf c th el) =
   append (termGlobalRefs c) (append (termGlobalRefs th) (termGlobalRefs el))
 
-memoUnsafe : Int -> HashTbl Bool -> HashTbl Term -> HashTbl Value -> String -> HashTbl Bool -> List String -> Bool
+memoUnsafe : Int -> HashMap Bool -> HashMap Term -> HashMap Value -> String -> HashMap Bool -> List String -> Bool
 memoUnsafe fuel future defs defvals self seen refs = if fuel <= 0 then True
 else case refs of
   [] => False
   g :: rest => if g == self then True
-  else if isJust (tblLookup g defvals) then memoUnsafe (fuel - 1) future defs defvals self seen rest
-  else if tblMem g seen then memoUnsafe (fuel - 1) future defs defvals self seen rest
-  else case tblLookup g defs of
+  else if isJust (Base.HashMap.lookup g defvals) then memoUnsafe (fuel - 1) future defs defvals self seen rest
+  else if Base.HashMap.member g seen then memoUnsafe (fuel - 1) future defs defvals self seen rest
+  else case Base.HashMap.lookup g defs of
     Just body =>
-      memoUnsafe (fuel - 1) future defs defvals self (tblInsert g True seen)
+      memoUnsafe (fuel - 1) future defs defvals self (Base.HashMap.insert g True seen)
         (append (termGlobalRefs body) rest)
     Nothing =>
-      if tblMem g future then True else memoUnsafe (fuel - 1) future defs defvals self seen rest
+      if Base.HashMap.member g future then True
+      else memoUnsafe (fuel - 1) future defs defvals self seen rest
 
-memoDefValue : HashTbl Bool -> Ec -> String -> Term -> Maybe Value
+memoDefValue : HashMap Bool -> Ec -> String -> Term -> Maybe Value
 memoDefValue future ec name body =
   if hasFreeTermVar 0 body then Nothing
   else if termHasUnsolvedMeta (ecSolsP ec) body then Nothing
-  else if memoUnsafe 4096 future (ecDefTbl ec) (ecDefVals ec) name tblEmpty (termGlobalRefs body) then Nothing
+  else if memoUnsafe 4096 future (ecDefTbl ec) (ecDefVals ec) name Base.HashMap.empty (termGlobalRefs body) then Nothing
   else Just (force (ecDefTbl ec) (ecSolsP ec) defaultFuel (VNeutral (NGlobal name [])))
 
 -- 尝试把当前定义体求出的值写进 `ecDefVals`（不满足安全条件时原样返回）。
-memoizeDef : HashTbl Bool -> Ec -> String -> Term -> Ec
+memoizeDef : HashMap Bool -> Ec -> String -> Term -> Ec
 memoizeDef future ec name body = case memoDefValue future ec name body of
-  Just v => ecPutDefVals ec (tblInsert name v (ecDefVals ec))
+  Just v => ecPutDefVals ec (Base.HashMap.insert name v (ecDefVals ec))
   Nothing => ec
 
-elabBodies : HashTbl Bool -> List Decl -> List (Pair String Term) -> List (Pair String Term) -> List DtDef -> Ec -> Result (Pair (List DtDef) Ec)
+elabBodies : HashMap Bool -> List Decl -> List (Pair String Term) -> List (Pair String Term) -> List DtDef -> Ec -> Result (Pair (List DtDef) Ec)
 elabBodies future [] globals doneDefs acc ec = Ok (Pair (reverse acc) ec)
 elabBodies future (d :: rest) globals doneDefs acc ec = case d of
   DFun name pats body sp => case globalsLookup name globals ec of
@@ -371,7 +377,8 @@ elabBodies future (d :: rest) globals doneDefs acc ec = case d of
             -- 正文检查读的是哈希索引：只插表，不逐定义重建 globals list
             -- （replaceGlobalType 是 O(#globals)/定义 ⇒ 整程序 O(n²)；该 list 只在
             -- 签名阶段与最终 DtProgram 里用，正文阶段以表为准）。
-            ecGlobals = ecPutGlobalsTbl liftedEc (tblInsert name liftedTy (ecGlobalsTbl liftedEc))
+            ecGlobals =
+              ecPutGlobalsTbl liftedEc (Base.HashMap.insert name liftedTy (ecGlobalsTbl liftedEc))
             ecWithDef = ecAddDef ecGlobals (Pair name cleanTerm)
             ecNext2 = memoizeDef future ecWithDef name cleanTerm
           in elabBodies future rest globals (Pair name liftedTy :: doneDefs)
@@ -431,18 +438,19 @@ dtEvalExprInInfo prog expr = case prog of
       bodies = defBodyPairs defs
       -- M30（D18）：表达式求值与程序同一套环（构造子索引 + 定义值共享缓存）。
       ec0 =
-        Ec next sols (reverse bodies) datas [] [] insts classes [] (tblFromList bodies)
-          (tblFromList globals) (solsToTbl sols) tblEmpty True tblEmpty (ctorTblOfDatas datas)
-          defvals
+        Ec next sols (reverse bodies) datas [] [] insts classes [] (Base.HashMap.fromList bodies)
+          (Base.HashMap.fromList globals) (solsToTbl sols) Base.IntMap.empty True Base.HashMap.empty
+          (ctorTblOfDatas datas) defvals
     in andThen (inferE globals emptyCtx ec0 expr) (\p => case p of
       Pair term (Pair ty ec1) =>
         let
           ec2 = resolveDictGoalsFix globals ec1 8
           sols2 = ecSols ec2
-          tyText = showTerm (quote 0 (force (tblFromList bodies) (ecSolsP ec2) defaultFuel ty))
+          tyText =
+            showTerm (quote 0 (force (Base.HashMap.fromList bodies) (ecSolsP ec2) defaultFuel ty))
         in case unsolvedFrom next (ecNext ec2) sols2 of
           Just m => tcErr1 (exprSpan expr) (UnsolvedMetavarInfer (strFromInt m)) (strFromInt m)
-          Nothing => case normalize (tblFromList bodies) (ecSolsP ec2) defaultFuel (eval [] term) of
+          Nothing => case normalize (Base.HashMap.fromList bodies) (ecSolsP ec2) defaultFuel (eval [] term) of
             VInt n => Ok (Pair (strFromInt n) tyText)
             v => Ok (Pair (showValue v) tyText)
     )
@@ -483,7 +491,7 @@ in andThen (elabDatas (collectDataDecls decls []) preludeGlobals ecEmpty) (\pd =
                   -- 正文检查前的唯一一次建表：globals 此时已固定（sigs + inst heads）。
                   ec2b =
                     ecPutClausesTbl
-                      (ecSetGlobalsComplete (ecPutGlobalsTbl ec2 (tblFromList globals)) True)
+                      (ecSetGlobalsComplete (ecPutGlobalsTbl ec2 (Base.HashMap.fromList globals)) True)
                       (clausesTblOf decls)
                   _ = stamp "sigs-elab-done"
                 in andThen (checkAllDefined sigs globals decls) (\_ => andThen (elabBodies future decls globals [] [] ec2b) (\q => case q of
@@ -513,9 +521,10 @@ in andThen (elabDatas (collectDataDecls decls []) preludeGlobals ecEmpty) (\pd =
                               -- bodies 阶段不再逐定义重建 globals（O(n²)）；这里用最终
                               -- 定义集一次性把签名类型换成提升后的类型（O(n)）。
                               defsTblOut =
-                                tblInsertAll (map (\x => Pair (dtDefName x) (dtDefType x)) allDefs)
-                                  tblEmpty
-                              globalsOut = map (\g => case tblLookup (firstOf g) defsTblOut of
+                                Base.HashMap.insertAll
+                                  (map (\x => Pair (dtDefName x) (dtDefType x)) allDefs)
+                                  Base.HashMap.empty
+                              globalsOut = map (\g => case Base.HashMap.lookup (firstOf g) defsTblOut of
                                 Just ty => Pair (firstOf g) ty
                                 Nothing => g
                               ) globals
@@ -627,7 +636,7 @@ goalInfoOf sols g =
 
 -- 洞目标里的类型可能仍含已解元变量：用当前解表 force 一遍再 show。
 zonkGoal : List (Pair Int Value) -> Value -> Value
-zonkGoal sols v = force tblEmpty (solsFromList sols) defaultFuel v
+zonkGoal sols v = force Base.HashMap.empty (solsFromList sols) defaultFuel v
 
 -- 上下文条目（名字 + 类型）用于显示：类型项按快照深度用中性环境求值后 show。
 ctxEntriesOf : List (Pair String Term) -> List (Pair String String)

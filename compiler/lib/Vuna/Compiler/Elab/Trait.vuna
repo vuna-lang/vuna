@@ -69,6 +69,7 @@ module Vuna.Compiler.Elab.Trait
 -- `elabFunDef`（实例方法体复用同一套模式矩阵降级）。
 -- 拆自 M24 的单一 `Elab.vuna`（按真实调用图切；门面仍是 `Vuna.Compiler.Elab`）。
 import Vuna.Compiler.Common
+import Base.HashMap
 import Vuna.Compiler.Debug
 import Vuna.Compiler.Core
 import Vuna.Compiler.Diagnostics
@@ -366,7 +367,7 @@ isLowerStart n = case strUnpack n of
   [] => False
   c :: rest => c >= 97 && c <= 122
 
-instanceTeleOf : HashTbl Bool -> Expr -> List Expr -> List (Pair String Term)
+instanceTeleOf : HashMap Bool -> Expr -> List Expr -> List (Pair String Term)
 instanceTeleOf banned combined exprs =
   let
     vars = uniqNames (keepOutBanned banned (concatMap exprFreeLower exprs))
@@ -383,10 +384,10 @@ uniqNames : List String -> List String
 uniqNames [] = []
 uniqNames (n :: rest) = if memName n rest then uniqNames rest else n :: uniqNames rest
 
-keepOutBanned : HashTbl Bool -> List String -> List String
+keepOutBanned : HashMap Bool -> List String -> List String
 keepOutBanned tbl [] = []
 keepOutBanned tbl (n :: rest) =
-  if tblMem n tbl then keepOutBanned tbl rest else n :: keepOutBanned tbl rest
+  if Base.HashMap.member n tbl then keepOutBanned tbl rest else n :: keepOutBanned tbl rest
 
 -- tele 的局部上下文（声明顺序绑定；`TVar 0` = 最内层 tele）。
 instanceTeleCtx : List (Pair String Term) -> Ctx
@@ -613,7 +614,7 @@ solveCtxGoals ctx nCtx nTele ec acc = solveCtxGoalsGo ctx nCtx ec (ecDictGoals e
 
 solveCtxGoalsGo : Ctx -> Int -> Ec -> List DtDictGoal -> List DtDictGoal -> List (Pair Int Int) -> Pair (List (Pair Int Int)) Ec
 solveCtxGoalsGo ctx nCtx ec [] kept acc = Pair (reverse acc) (ecPutDictGoals ec (reverse kept))
-solveCtxGoalsGo ctx nCtx ec ((g@(DtDictGoal m dom)) :: rest) kept acc = case metaLookup m (ecSols ec) of
+solveCtxGoalsGo ctx nCtx ec ((g@(DtDictGoal m dom)) :: rest) kept acc = case metaLookup m (ecSolTbl ec) of
   Just _ => solveCtxGoalsGo ctx nCtx ec rest kept acc
   Nothing => case matchCtxDictIdx ctx nCtx dom ec of
     Nothing => solveCtxGoalsGo ctx nCtx ec rest (g :: kept) acc
@@ -716,10 +717,9 @@ freeDictGoals ec = freeDictGoalsGo ec (ecDictGoals ec) []
 freeDictGoalsGo : Ec -> List DtDictGoal -> List DictGoalGroup -> List DictGoalGroup
 freeDictGoalsGo ec [] acc = acc
 freeDictGoalsGo ec (g :: rest) acc = case g of
-  DtDictGoal m dom => if isRigidDictArg ec dom then case metaLookup m (ecSols ec) of
-    -- 已提升过的目标不再重复提升（`solveLiftedMeta` 已把 ?m 解成 `d`）；
-    -- 否则后续每个定义都会被塞进一个多余的字典 binder（曾把 `xor` 的
-    -- `not b` 破坏成一次字典搜索）。
+  DtDictGoal m dom => if isRigidDictArg ec dom then case metaLookup m (ecSolTbl ec) of
+    -- 已提升过的目标不再重复提升（`solveLiftedMeta` 已把 ?m 解成 `d`）；否则后续每个
+    -- 定义都会被塞进一个多余的字典 binder（曾把 `xor` 的 `not b` 破坏成一次字典搜索）。
     Just _ => freeDictGoalsGo ec rest acc
     Nothing => freeDictGoalsGo ec rest (addDictGoalGroup ec m dom acc)
   else freeDictGoalsGo ec rest acc
@@ -987,7 +987,7 @@ elabInstanceBodiesGo (d :: rest) allDecls classes datas globals ec acc = andThen
     let
       -- M29（A14）：实例生成的字典/方法定义统一挂**实例声明 span**（`d` 的 span）。
       newDefs = instanceDefsOf ec ec1 (Just (secondOf d)) gs
-      ecTbl = ecPutGlobalsTbl ec1 (tblInsertAll gs (ecGlobalsTbl ec1))
+      ecTbl = ecPutGlobalsTbl ec1 (Base.HashMap.insertAll gs (ecGlobalsTbl ec1))
     in elabInstanceBodiesGo rest allDecls classes datas (append globals gs) ecTbl (append newDefs acc)
 )
 
@@ -999,7 +999,7 @@ instanceDefsOf ecBefore ecAfter srcSpan gs =
     (\g => DtDef (firstOf g) (defTypeOrDefault gs (firstOf g)) (substDictTerm ecAfter (defBodyOf (ecDefTbl ecAfter) (firstOf g))) srcSpan)
     gs
 
-defBodyOf : HashTbl Term -> String -> Term
+defBodyOf : HashMap Term -> String -> Term
 defBodyOf defs name = case defLookup name defs of
   Just body => body
   Nothing => TInt 0
@@ -1034,12 +1034,12 @@ elabInstancesGo (d :: rest) classes datas globals ec acc = andThen (elabInstance
 -- 找不到的生成项给 `Nothing`，诊断保持无位置）。
 extraDefsOf : List (Pair String Term) -> Ec -> List (Pair String Span) -> List DtDef -> List DtDef
 extraDefsOf globals ec srcSpans sourceDefs =
-  extraDefsGo globals (tblOfNames (map dtDefName sourceDefs)) srcSpans (ecDefs ec) []
+  extraDefsGo globals (Base.HashMap.ofNames (map dtDefName sourceDefs)) srcSpans (ecDefs ec) []
 
-extraDefsGo : List (Pair String Term) -> HashTbl Bool -> List (Pair String Span) -> List (Pair String Term) -> List DtDef -> List DtDef
+extraDefsGo : List (Pair String Term) -> HashMap Bool -> List (Pair String Span) -> List (Pair String Term) -> List DtDef -> List DtDef
 extraDefsGo globals sourceNames srcSpans [] acc = reverse acc
 extraDefsGo globals sourceNames srcSpans (d :: rest) acc =
-  if tblMem (firstOf d) sourceNames then extraDefsGo globals sourceNames srcSpans rest acc
+  if Base.HashMap.member (firstOf d) sourceNames then extraDefsGo globals sourceNames srcSpans rest acc
   else extraDefsGo globals sourceNames srcSpans rest
     (DtDef (firstOf d) (defTypeOrDefault globals (firstOf d)) (secondOf d) (spanOfName (firstOf d) srcSpans) :: acc)
 

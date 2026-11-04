@@ -1,0 +1,23 @@
+-- stdlib：Base.HashMap 的碰撞覆盖（1024 个键铺满全部桶，必然出现哈希碰撞）。
+-- 规模超出 interp 的默认燃料（512），因此标记 .nointerp：只 check + compile + run。
+import Base.HashMap
+import Base.List
+import Base.Pair
+
+manyKeys : List String
+manyKeys = map strFromInt (range 0 1024)
+
+buildMany : List String -> Base.HashMap.HashMap Int
+buildMany ks = foldl (\acc, k => Base.HashMap.insert k (strLength k) acc) Base.HashMap.empty ks
+
+allThere : List String -> Base.HashMap.HashMap Int -> Bool
+allThere [] _ = True
+allThere (k :: rest) m =
+  if Base.HashMap.member k m then allThere rest m else False
+
+main : String
+main =
+  let
+    big = buildMany manyKeys
+  in "big=" ++ strFromInt (Base.HashMap.size big)
+       ++ " all=" ++ (if allThere manyKeys big then "True" else "False")

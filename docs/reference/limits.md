@@ -187,7 +187,9 @@
   注释只作前置注释。`where` 块的绑定签名行按源码顺序保留、幂等。
 - REPL 支持多行续行（括号 / 字符串 / 注释 / 尾 token），但每个提交项仍是一个完整表达式或
   一条定义；顶层定义必须**先写签名**（DT 签名必填）；依赖只支持本地路径（registry / 锁文件
-  未做）；`Map` 是关联表实现的抽象类型（无平衡树）；`Result` 暂无 Functor / Monad 实例。
+  未做）；`Map` 是关联表实现的抽象类型（无平衡树）；`HashMap` / `HashSet` / `IntMap` 是
+  1024 桶的持久哈希容器（无 `remove` / resize，键限 `String` / `Int`，`toList` 桶序、
+  `size` O(n)）；`Result` 暂无 Functor / Monad 实例。
 - `vuna lint` 只报告**可安全自动修复**的形态，三条规则：`literal-if-chain`、
   `lift-destructure`、`case-to-clauses`。不可安全折叠的情形（非最后 clause、clause head
   跨行、含注释 / tab / CR、分支体无法安全收束）**不报告**；签名含隐式 Pi 的函数跳过

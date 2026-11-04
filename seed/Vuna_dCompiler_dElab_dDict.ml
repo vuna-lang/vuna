@@ -16,6 +16,7 @@ open Vuna_dCompiler_dFrontend_dToml
 open Vuna_dCompiler_dFrontend_dManifest
 open Base_dIO
 open Vuna_dCompiler_dPackages_dPkg
+open Base_dHashMap
 open Vuna_dCompiler_dDebug
 open Base_dNat
 open Base_dVec
@@ -35,6 +36,7 @@ open Vuna_dCompiler_dIntrinsics
 open Vuna_dCompiler_dLoader_dResolve
 open Vuna_dCompiler_dLoader_dFlatten
 open Vuna_dCompiler_dLoader
+open Base_dIntMap
 open Vuna_dCompiler_dCore_dTerm
 open Vuna_dCompiler_dCore_dEval
 open Vuna_dCompiler_dCore_dConv
@@ -118,7 +120,7 @@ let rec v_Vuna_dCompiler_dElab_dDict_dallocTeleMetas = (fun mc0 -> (fun mc1 -> (
 ))))
 
 let rec v_Vuna_dCompiler_dElab_dDict_dsolveTeleMetas = (fun mc0 -> (fun mc1 -> (match mc1 with
-  | C_Base_dList_dList_Base_dList_dCons (dtb__22, dtb__23) -> (match ((v_Vuna_dCompiler_dCore_dTerm_dmetaLookup dtb__22) (v_Vuna_dCompiler_dElab_dTypes_decSols mc0)) with
+  | C_Base_dList_dList_Base_dList_dCons (dtb__22, dtb__23) -> (match ((v_Vuna_dCompiler_dCore_dTerm_dmetaLookup dtb__22) (v_Vuna_dCompiler_dElab_dTypes_decSolTbl mc0)) with
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__24) -> (match ((v_Vuna_dCompiler_dElab_dDict_dsolveTeleMetas mc0) dtb__23) with
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing
@@ -146,7 +148,7 @@ let rec v_Vuna_dCompiler_dElab_dDict_dpiRigs = (fun mc0 -> (match mc0 with
   | _ -> C_Base_dList_dList_Base_dList_dNil
 ))
 
-let v_Vuna_dCompiler_dElab_dDict_dpiRigsOfGlobal = (fun ec -> (fun g -> (match ((v_Vuna_dCompiler_dCommon_dtblLookup g) (v_Vuna_dCompiler_dElab_dTypes_decGlobalsTbl ec)) with
+let v_Vuna_dCompiler_dElab_dDict_dpiRigsOfGlobal = (fun ec -> (fun g -> (match ((v_Base_dHashMap_dlookup g) (v_Vuna_dCompiler_dElab_dTypes_decGlobalsTbl ec)) with
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__35) -> (v_Vuna_dCompiler_dElab_dDict_dpiRigs dtb__35)
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> C_Base_dList_dList_Base_dList_dNil
   | _ -> failwith "DT: impossible branch"
@@ -167,7 +169,7 @@ let rec v_Vuna_dCompiler_dElab_dDict_dsubstDictTermGo = (fun mc0 -> (fun mc1 -> 
   | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTApp (dtb__46, dtb__47, dtb__48) -> (C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTApp ((((v_Vuna_dCompiler_dElab_dDict_dsubstDictTermGo mc0) mc1) dtb__46), (((v_Vuna_dCompiler_dElab_dDict_dsubstDictTermGo mc0) mc1) dtb__47), dtb__48))
   | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTLam (dtb__49, dtb__50, dtb__51) -> (C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTLam (dtb__49, dtb__50, (((v_Vuna_dCompiler_dElab_dDict_dsubstDictTermGo mc0) ((bi_add mc1) 1)) dtb__51)))
   | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTPi (dtb__52, dtb__53, dtb__54, dtb__55, dtb__56) -> (C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTPi (dtb__52, dtb__53, dtb__54, (((v_Vuna_dCompiler_dElab_dDict_dsubstDictTermGo mc0) mc1) dtb__55), (((v_Vuna_dCompiler_dElab_dDict_dsubstDictTermGo mc0) ((bi_add mc1) 1)) dtb__56)))
-  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTMeta (dtb__57) -> (match ((v_Vuna_dCompiler_dCore_dTerm_dmetaLookup dtb__57) (v_Vuna_dCompiler_dElab_dTypes_decSols mc0)) with
+  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTMeta (dtb__57) -> (match ((v_Vuna_dCompiler_dCore_dTerm_dmetaLookup dtb__57) (v_Vuna_dCompiler_dElab_dTypes_decSolTbl mc0)) with
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> mc2
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__58) -> (match ((v_Vuna_dCompiler_dElab_dDict_ddictTermOfValue mc0) dtb__58) with
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__59) -> (if ((v_Vuna_dCompiler_dCore_dTerm_dhasFreeTermVar 0) dtb__59) then mc2 else (((v_Vuna_dCompiler_dCore_dTerm_dshift 0) mc1) dtb__59))
@@ -410,7 +412,7 @@ let v_Vuna_dCompiler_dElab_dDict_dcmpRuntimeName = (fun mc0 -> (fun mc1 -> (fun 
 
 let v_Vuna_dCompiler_dElab_dDict_ddictArgUnsolvedMeta = (fun ec -> (fun dom -> (match ((v_Vuna_dCompiler_dElab_dDict_ddictClassArg ec) dom) with
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__151) -> (match ((v_Vuna_dCompiler_dElab_dTypes_dforceVal ec) dtb__151) with
-  | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVMeta (dtb__152, dtb__153) -> (match ((v_Vuna_dCompiler_dCore_dTerm_dmetaLookup dtb__152) (v_Vuna_dCompiler_dElab_dTypes_decSols ec)) with
+  | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVMeta (dtb__152, dtb__153) -> (match ((v_Vuna_dCompiler_dCore_dTerm_dmetaLookup dtb__152) (v_Vuna_dCompiler_dElab_dTypes_decSolTbl ec)) with
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__154) -> false
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> true
   | _ -> failwith "DT: impossible branch"

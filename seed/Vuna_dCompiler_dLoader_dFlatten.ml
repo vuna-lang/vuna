@@ -16,6 +16,7 @@ open Vuna_dCompiler_dFrontend_dToml
 open Vuna_dCompiler_dFrontend_dManifest
 open Base_dIO
 open Vuna_dCompiler_dPackages_dPkg
+open Base_dHashMap
 open Vuna_dCompiler_dDebug
 open Base_dNat
 open Base_dVec
@@ -129,16 +130,16 @@ let v_Vuna_dCompiler_dLoader_dFlatten_ddeclImplicitExports = (fun prefix -> (fun
 )))
 
 let rec v_Vuna_dCompiler_dLoader_dFlatten_ddedupeByPublic = (fun mc0 -> (fun mc1 -> (fun mc2 -> (match mc0 with
-  | C_Base_dList_dList_Base_dList_dCons (dtb__93, dtb__94) -> ((fun key -> (match ((v_Vuna_dCompiler_dCommon_dtblLookup key) mc1) with
+  | C_Base_dList_dList_Base_dList_dCons (dtb__93, dtb__94) -> ((fun key -> (match ((v_Base_dHashMap_dlookup key) mc1) with
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__95) -> (((v_Vuna_dCompiler_dLoader_dFlatten_ddedupeByPublic dtb__94) mc1) mc2)
-  | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> (((v_Vuna_dCompiler_dLoader_dFlatten_ddedupeByPublic dtb__94) (((v_Vuna_dCompiler_dCommon_dtblInsert key) 1) mc1)) (C_Base_dList_dList_Base_dList_dCons (dtb__93, mc2)))
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> (((v_Vuna_dCompiler_dLoader_dFlatten_ddedupeByPublic dtb__94) (((v_Base_dHashMap_dinsert key) 1) mc1)) (C_Base_dList_dList_Base_dList_dCons (dtb__93, mc2)))
   | _ -> failwith "DT: impossible branch"
 )) ((bi_concat (v_Vuna_dCompiler_dLoader_dModules_dentryKind dtb__93)) ((bi_concat "|") (v_Vuna_dCompiler_dLoader_dModules_dentryPublic dtb__93))))
   | C_Base_dList_dList_Base_dList_dNil -> (v_Base_dList_dreverse mc2)
   | _ -> failwith "DT: impossible branch"
 ))))
 
-let v_Vuna_dCompiler_dLoader_dFlatten_ddedupeImplicitExports = (fun entries -> (((v_Vuna_dCompiler_dLoader_dFlatten_ddedupeByPublic entries) v_Vuna_dCompiler_dCommon_dtblEmpty) C_Base_dList_dList_Base_dList_dNil))
+let v_Vuna_dCompiler_dLoader_dFlatten_ddedupeImplicitExports = (fun entries -> (((v_Vuna_dCompiler_dLoader_dFlatten_ddedupeByPublic entries) v_Base_dHashMap_dempty) C_Base_dList_dList_Base_dList_dNil))
 
 let v_Vuna_dCompiler_dLoader_dFlatten_dimplicitExports = (fun prefix -> (fun decls -> (v_Vuna_dCompiler_dLoader_dFlatten_ddedupeImplicitExports ((v_Base_dList_dconcatMap (v_Vuna_dCompiler_dLoader_dFlatten_ddeclImplicitExports prefix)) decls))))
 
@@ -310,16 +311,16 @@ let v_Vuna_dCompiler_dLoader_dFlatten_dsameExportEntry = (fun e -> (fun e2 -> (i
 let v_Vuna_dCompiler_dLoader_dFlatten_dexportEntryKey = (fun e -> ((bi_concat (v_Vuna_dCompiler_dLoader_dModules_dentryKind e)) ((bi_concat "|") ((bi_concat (v_Vuna_dCompiler_dLoader_dModules_dentryPublic e)) ((bi_concat "|") ((bi_concat (v_Vuna_dCompiler_dLoader_dModules_dentryTarget e)) ((bi_concat "|") (v_Vuna_dCompiler_dLoader_dModules_dentryParent e))))))))
 
 let rec v_Vuna_dCompiler_dLoader_dFlatten_ddedupeByFullKey = (fun mc0 -> (fun mc1 -> (fun mc2 -> (match mc0 with
-  | C_Base_dList_dList_Base_dList_dCons (dtb__160, dtb__161) -> ((fun key -> (match ((v_Vuna_dCompiler_dCommon_dtblLookup key) mc1) with
+  | C_Base_dList_dList_Base_dList_dCons (dtb__160, dtb__161) -> ((fun key -> (match ((v_Base_dHashMap_dlookup key) mc1) with
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__162) -> (((v_Vuna_dCompiler_dLoader_dFlatten_ddedupeByFullKey dtb__161) mc1) mc2)
-  | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> (((v_Vuna_dCompiler_dLoader_dFlatten_ddedupeByFullKey dtb__161) (((v_Vuna_dCompiler_dCommon_dtblInsert key) 1) mc1)) (C_Base_dList_dList_Base_dList_dCons (dtb__160, mc2)))
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> (((v_Vuna_dCompiler_dLoader_dFlatten_ddedupeByFullKey dtb__161) (((v_Base_dHashMap_dinsert key) 1) mc1)) (C_Base_dList_dList_Base_dList_dCons (dtb__160, mc2)))
   | _ -> failwith "DT: impossible branch"
 )) (v_Vuna_dCompiler_dLoader_dFlatten_dexportEntryKey dtb__160))
   | C_Base_dList_dList_Base_dList_dNil -> (v_Base_dList_dreverse mc2)
   | _ -> failwith "DT: impossible branch"
 ))))
 
-let v_Vuna_dCompiler_dLoader_dFlatten_ddedupeExportEntries = (fun entries -> (((v_Vuna_dCompiler_dLoader_dFlatten_ddedupeByFullKey entries) v_Vuna_dCompiler_dCommon_dtblEmpty) C_Base_dList_dList_Base_dList_dNil))
+let v_Vuna_dCompiler_dLoader_dFlatten_ddedupeExportEntries = (fun entries -> (((v_Vuna_dCompiler_dLoader_dFlatten_ddedupeByFullKey entries) v_Base_dHashMap_dempty) C_Base_dList_dList_Base_dList_dNil))
 
 let rec v_Vuna_dCompiler_dLoader_dFlatten_dcheckExportDuplicates = (fun mc0 -> (fun mc1 -> (match mc1 with
   | C_Base_dList_dList_Base_dList_dCons (dtb__163, dtb__164) -> (if ((v_Vuna_dCompiler_dLoader_dFlatten_dhasConflictingExport dtb__163) dtb__164) then (C_Base_dResult_dResult_Base_dResult_dErr (((bi_concat mc0) ((bi_concat ": duplicate export ") (v_Vuna_dCompiler_dLoader_dModules_dentryPublic dtb__163))))) else ((v_Vuna_dCompiler_dLoader_dFlatten_dcheckExportDuplicates mc0) dtb__164))

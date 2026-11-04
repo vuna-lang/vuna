@@ -16,6 +16,7 @@ open Vuna_dCompiler_dFrontend_dToml
 open Vuna_dCompiler_dFrontend_dManifest
 open Base_dIO
 open Vuna_dCompiler_dPackages_dPkg
+open Base_dHashMap
 open Vuna_dCompiler_dDebug
 open Base_dNat
 open Base_dVec
@@ -35,6 +36,7 @@ open Vuna_dCompiler_dIntrinsics
 open Vuna_dCompiler_dLoader_dResolve
 open Vuna_dCompiler_dLoader_dFlatten
 open Vuna_dCompiler_dLoader
+open Base_dIntMap
 open Vuna_dCompiler_dCore_dTerm
 open Vuna_dCompiler_dCore_dEval
 open Vuna_dCompiler_dCore_dConv
@@ -113,7 +115,7 @@ let rec v_Vuna_dCompiler_dCodegen_dErase_dpartitionDefsGo = (fun mc0 -> (fun mc1
   | _ -> failwith "DT: impossible branch"
 )))))
 
-let v_Vuna_dCompiler_dCodegen_dErase_dpartitionDefs = (fun table -> (fun defs -> ((((v_Vuna_dCompiler_dCodegen_dErase_dpartitionDefsGo (v_Vuna_dCompiler_dCommon_dtblFromList table)) defs) C_Base_dList_dList_Base_dList_dNil) C_Base_dList_dList_Base_dList_dNil)))
+let v_Vuna_dCompiler_dCodegen_dErase_dpartitionDefs = (fun table -> (fun defs -> ((((v_Vuna_dCompiler_dCodegen_dErase_dpartitionDefsGo (v_Base_dHashMap_dfromList table)) defs) C_Base_dList_dList_Base_dList_dNil) C_Base_dList_dList_Base_dList_dNil)))
 
 let v_Vuna_dCompiler_dCodegen_dErase_ddefLocPrefix = (fun d -> ((v_Vuna_dCompiler_dDiagnostics_dCg_dcgDefLoc (v_Vuna_dCompiler_dElab_dTypes_ddtDefSpan d)) (v_Vuna_dCompiler_dElab_dTypes_ddtDefName d)))
 
@@ -176,7 +178,7 @@ let rec v_Vuna_dCompiler_dCodegen_dErase_daddName = (fun mc0 -> (fun mc1 -> (mat
 )))
 
 let rec v_Vuna_dCompiler_dCodegen_dErase_dtermDepsIntoFuel = (fun fuel -> (fun runtimeNames -> (fun acc -> (fun t -> (if ((bi_le_int fuel) 0) then acc else (match t with
-  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTGlobal (dtb__65) -> (if ((v_Vuna_dCompiler_dCommon_dtblMem dtb__65) runtimeNames) then ((v_Vuna_dCompiler_dCodegen_dErase_daddName dtb__65) acc) else acc)
+  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTGlobal (dtb__65) -> (if ((v_Base_dHashMap_dmember dtb__65) runtimeNames) then ((v_Vuna_dCompiler_dCodegen_dErase_daddName dtb__65) acc) else acc)
   | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTVar (dtb__66, dtb__67) -> acc
   | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTMeta (dtb__68) -> acc
   | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTType (dtb__69) -> acc
@@ -220,14 +222,14 @@ let rec v_Vuna_dCompiler_dCodegen_dErase_druntimeNamesOf = (fun mc0 -> (match mc
 
 let v_Vuna_dCompiler_dCodegen_dErase_dlookupDtDef = (fun defs -> (fun name -> ((v_Vuna_dCompiler_dCodegen_dErase_dfindDtDef name) defs)))
 
-let v_Vuna_dCompiler_dCodegen_dErase_dneighborsOf = (fun adjT -> (fun name -> (match ((v_Vuna_dCompiler_dCommon_dtblLookup name) adjT) with
+let v_Vuna_dCompiler_dCodegen_dErase_dneighborsOf = (fun adjT -> (fun name -> (match ((v_Base_dHashMap_dlookup name) adjT) with
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__102) -> dtb__102
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> C_Base_dList_dList_Base_dList_dNil
   | _ -> failwith "DT: impossible branch"
 )))
 
 let rec v_Vuna_dCompiler_dCodegen_dErase_daddDependents = (fun mc0 -> (fun mc1 -> (fun mc2 -> (match mc1 with
-  | C_Base_dList_dList_Base_dList_dCons (dtb__103, dtb__104) -> ((fun cur -> (((v_Vuna_dCompiler_dCodegen_dErase_daddDependents mc0) dtb__104) (((v_Vuna_dCompiler_dCommon_dtblInsert dtb__103) (C_Base_dList_dList_Base_dList_dCons (mc0, cur))) mc2))) (match ((v_Vuna_dCompiler_dCommon_dtblLookup dtb__103) mc2) with
+  | C_Base_dList_dList_Base_dList_dCons (dtb__103, dtb__104) -> ((fun cur -> (((v_Vuna_dCompiler_dCodegen_dErase_daddDependents mc0) dtb__104) (((v_Base_dHashMap_dinsert dtb__103) (C_Base_dList_dList_Base_dList_dCons (mc0, cur))) mc2))) (match ((v_Base_dHashMap_dlookup dtb__103) mc2) with
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__105) -> dtb__105
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> C_Base_dList_dList_Base_dList_dNil
   | _ -> failwith "DT: impossible branch"
@@ -241,15 +243,15 @@ let rec v_Vuna_dCompiler_dCodegen_dErase_dreverseAdjTbl = (fun mc0 -> (match mc0
   | C_Base_dPair_dPair_Base_dPair_dPair (dtb__108, dtb__109) -> (((v_Vuna_dCompiler_dCodegen_dErase_daddDependents dtb__108) dtb__109) (v_Vuna_dCompiler_dCodegen_dErase_dreverseAdjTbl dtb__107))
   | _ -> failwith "DT: impossible branch"
 )
-  | C_Base_dList_dList_Base_dList_dNil -> v_Vuna_dCompiler_dCommon_dtblEmpty
+  | C_Base_dList_dList_Base_dList_dNil -> v_Base_dHashMap_dempty
   | _ -> failwith "DT: impossible branch"
 ))
 
-let v_Vuna_dCompiler_dCodegen_dErase_dadjTblOf = (fun adj -> ((v_Vuna_dCompiler_dCommon_dtblInsertAll adj) v_Vuna_dCompiler_dCommon_dtblEmpty))
+let v_Vuna_dCompiler_dCodegen_dErase_dadjTblOf = (fun adj -> ((v_Base_dHashMap_dinsertAll adj) v_Base_dHashMap_dempty))
 
 let rec v_Vuna_dCompiler_dCodegen_dErase_dfoldNeighborsPostFuel = (fun fuel -> (fun adjT -> (fun ms -> (fun visited -> (fun order -> (if ((bi_le_int fuel) 0) then (C_Base_dPair_dPair_Base_dPair_dPair (visited, order)) else (match ms with
   | C_Base_dList_dList_Base_dList_dNil -> (C_Base_dPair_dPair_Base_dPair_dPair (visited, order))
-  | C_Base_dList_dList_Base_dList_dCons (dtb__110, dtb__111) -> (if ((v_Vuna_dCompiler_dCommon_dtblMem dtb__110) visited) then (((((v_Vuna_dCompiler_dCodegen_dErase_dfoldNeighborsPostFuel ((bi_sub fuel) 1)) adjT) dtb__111) visited) order) else (match (((((v_Vuna_dCompiler_dCodegen_dErase_ddfsPostFuel ((bi_sub fuel) 1)) adjT) dtb__110) (((v_Vuna_dCompiler_dCommon_dtblInsert dtb__110) true) visited)) order) with
+  | C_Base_dList_dList_Base_dList_dCons (dtb__110, dtb__111) -> (if ((v_Base_dHashMap_dmember dtb__110) visited) then (((((v_Vuna_dCompiler_dCodegen_dErase_dfoldNeighborsPostFuel ((bi_sub fuel) 1)) adjT) dtb__111) visited) order) else (match (((((v_Vuna_dCompiler_dCodegen_dErase_ddfsPostFuel ((bi_sub fuel) 1)) adjT) dtb__110) (((v_Base_dHashMap_dinsert dtb__110) true) visited)) order) with
   | C_Base_dPair_dPair_Base_dPair_dPair (dtb__112, dtb__113) -> (((((v_Vuna_dCompiler_dCodegen_dErase_dfoldNeighborsPostFuel ((bi_sub fuel) 1)) adjT) dtb__111) dtb__112) dtb__113)
   | _ -> failwith "DT: impossible branch"
 ))
@@ -265,7 +267,7 @@ let v_Vuna_dCompiler_dCodegen_dErase_dfoldNeighborsPost = (fun adjT -> (fun ms -
 let v_Vuna_dCompiler_dCodegen_dErase_ddfsPost = (fun adjT -> (fun n -> (fun visited -> (fun order -> (((((v_Vuna_dCompiler_dCodegen_dErase_ddfsPostFuel 100000) adjT) n) visited) order)))))
 
 let rec v_Vuna_dCompiler_dCodegen_dErase_dpostOrder = (fun mc0 -> (fun mc1 -> (fun mc2 -> (fun mc3 -> (match mc1 with
-  | C_Base_dList_dList_Base_dList_dCons (dtb__116, dtb__117) -> (if ((v_Vuna_dCompiler_dCommon_dtblMem dtb__116) mc2) then ((((v_Vuna_dCompiler_dCodegen_dErase_dpostOrder mc0) dtb__117) mc2) mc3) else (match ((((v_Vuna_dCompiler_dCodegen_dErase_ddfsPost mc0) dtb__116) (((v_Vuna_dCompiler_dCommon_dtblInsert dtb__116) true) mc2)) mc3) with
+  | C_Base_dList_dList_Base_dList_dCons (dtb__116, dtb__117) -> (if ((v_Base_dHashMap_dmember dtb__116) mc2) then ((((v_Vuna_dCompiler_dCodegen_dErase_dpostOrder mc0) dtb__117) mc2) mc3) else (match ((((v_Vuna_dCompiler_dCodegen_dErase_ddfsPost mc0) dtb__116) (((v_Base_dHashMap_dinsert dtb__116) true) mc2)) mc3) with
   | C_Base_dPair_dPair_Base_dPair_dPair (dtb__118, dtb__119) -> ((((v_Vuna_dCompiler_dCodegen_dErase_dpostOrder mc0) dtb__117) dtb__118) dtb__119)
   | _ -> failwith "DT: impossible branch"
 ))
@@ -275,7 +277,7 @@ let rec v_Vuna_dCompiler_dCodegen_dErase_dpostOrder = (fun mc0 -> (fun mc1 -> (f
 
 let rec v_Vuna_dCompiler_dCodegen_dErase_dfoldNeighborsCollectFuel = (fun fuel -> (fun adjT -> (fun ms -> (fun visited -> (fun comp -> (if ((bi_le_int fuel) 0) then (C_Base_dPair_dPair_Base_dPair_dPair (visited, comp)) else (match ms with
   | C_Base_dList_dList_Base_dList_dNil -> (C_Base_dPair_dPair_Base_dPair_dPair (visited, comp))
-  | C_Base_dList_dList_Base_dList_dCons (dtb__120, dtb__121) -> (if ((v_Vuna_dCompiler_dCommon_dtblMem dtb__120) visited) then (((((v_Vuna_dCompiler_dCodegen_dErase_dfoldNeighborsCollectFuel ((bi_sub fuel) 1)) adjT) dtb__121) visited) comp) else (match (((((v_Vuna_dCompiler_dCodegen_dErase_ddfsCollectFuel ((bi_sub fuel) 1)) adjT) dtb__120) (((v_Vuna_dCompiler_dCommon_dtblInsert dtb__120) true) visited)) comp) with
+  | C_Base_dList_dList_Base_dList_dCons (dtb__120, dtb__121) -> (if ((v_Base_dHashMap_dmember dtb__120) visited) then (((((v_Vuna_dCompiler_dCodegen_dErase_dfoldNeighborsCollectFuel ((bi_sub fuel) 1)) adjT) dtb__121) visited) comp) else (match (((((v_Vuna_dCompiler_dCodegen_dErase_ddfsCollectFuel ((bi_sub fuel) 1)) adjT) dtb__120) (((v_Base_dHashMap_dinsert dtb__120) true) visited)) comp) with
   | C_Base_dPair_dPair_Base_dPair_dPair (dtb__122, dtb__123) -> (((((v_Vuna_dCompiler_dCodegen_dErase_dfoldNeighborsCollectFuel ((bi_sub fuel) 1)) adjT) dtb__121) dtb__122) dtb__123)
   | _ -> failwith "DT: impossible branch"
 ))
@@ -291,7 +293,7 @@ let v_Vuna_dCompiler_dCodegen_dErase_dfoldNeighborsCollect = (fun adjT -> (fun m
 let v_Vuna_dCompiler_dCodegen_dErase_ddfsCollect = (fun adjT -> (fun n -> (fun visited -> (fun comp -> (((((v_Vuna_dCompiler_dCodegen_dErase_ddfsCollectFuel 100000) adjT) n) visited) comp)))))
 
 let rec v_Vuna_dCompiler_dCodegen_dErase_dcollectComps = (fun mc0 -> (fun mc1 -> (fun mc2 -> (fun mc3 -> (match mc1 with
-  | C_Base_dList_dList_Base_dList_dCons (dtb__126, dtb__127) -> (if ((v_Vuna_dCompiler_dCommon_dtblMem dtb__126) mc2) then ((((v_Vuna_dCompiler_dCodegen_dErase_dcollectComps mc0) dtb__127) mc2) mc3) else (match ((((v_Vuna_dCompiler_dCodegen_dErase_ddfsCollect mc0) dtb__126) (((v_Vuna_dCompiler_dCommon_dtblInsert dtb__126) true) mc2)) C_Base_dList_dList_Base_dList_dNil) with
+  | C_Base_dList_dList_Base_dList_dCons (dtb__126, dtb__127) -> (if ((v_Base_dHashMap_dmember dtb__126) mc2) then ((((v_Vuna_dCompiler_dCodegen_dErase_dcollectComps mc0) dtb__127) mc2) mc3) else (match ((((v_Vuna_dCompiler_dCodegen_dErase_ddfsCollect mc0) dtb__126) (((v_Base_dHashMap_dinsert dtb__126) true) mc2)) C_Base_dList_dList_Base_dList_dNil) with
   | C_Base_dPair_dPair_Base_dPair_dPair (dtb__128, dtb__129) -> ((((v_Vuna_dCompiler_dCodegen_dErase_dcollectComps mc0) dtb__127) dtb__128) (C_Base_dList_dList_Base_dList_dCons (dtb__129, mc3)))
   | _ -> failwith "DT: impossible branch"
 ))
@@ -299,10 +301,10 @@ let rec v_Vuna_dCompiler_dCodegen_dErase_dcollectComps = (fun mc0 -> (fun mc1 ->
   | _ -> failwith "DT: impossible branch"
 )))))
 
-let v_Vuna_dCompiler_dCodegen_dErase_dcomponentTblOf = (fun comps -> ((v_Vuna_dCompiler_dCommon_dtblInsertAll ((v_Base_dList_dconcatMap (fun g -> ((v_Base_dList_dmap (fun n -> (C_Base_dPair_dPair_Base_dPair_dPair (n, g)))) g))) comps)) v_Vuna_dCompiler_dCommon_dtblEmpty))
+let v_Vuna_dCompiler_dCodegen_dErase_dcomponentTblOf = (fun comps -> ((v_Base_dHashMap_dinsertAll ((v_Base_dList_dconcatMap (fun g -> ((v_Base_dList_dmap (fun n -> (C_Base_dPair_dPair_Base_dPair_dPair (n, g)))) g))) comps)) v_Base_dHashMap_dempty))
 
 let rec v_Vuna_dCompiler_dCodegen_dErase_daddAllNames = (fun mc0 -> (fun mc1 -> (match mc0 with
-  | C_Base_dList_dList_Base_dList_dCons (dtb__130, dtb__131) -> ((v_Vuna_dCompiler_dCodegen_dErase_daddAllNames dtb__131) (((v_Vuna_dCompiler_dCommon_dtblInsert dtb__130) true) mc1))
+  | C_Base_dList_dList_Base_dList_dCons (dtb__130, dtb__131) -> ((v_Vuna_dCompiler_dCodegen_dErase_daddAllNames dtb__131) (((v_Base_dHashMap_dinsert dtb__130) true) mc1))
   | C_Base_dList_dList_Base_dList_dNil -> mc1
   | _ -> failwith "DT: impossible branch"
 )))
@@ -316,13 +318,13 @@ let rec v_Vuna_dCompiler_dCodegen_dErase_dfilterNames = (fun mc0 -> (fun mc1 -> 
 let v_Vuna_dCompiler_dCodegen_dErase_dgroupOf = (fun mc0 -> (fun mc1 -> (match mc1 with
   | C_Base_dList_dList_Base_dList_dCons (dtb__134, dtb__135) -> (match dtb__135 with
   | C_Base_dList_dList_Base_dList_dNil -> (C_Base_dList_dList_Base_dList_dCons (dtb__134, C_Base_dList_dList_Base_dList_dNil))
-  | _ -> ((v_Vuna_dCompiler_dCodegen_dErase_dfilterNames (fun m -> ((v_Vuna_dCompiler_dCommon_dtblMem m) (v_Vuna_dCompiler_dCommon_dtblOfNames mc1)))) mc0)
+  | _ -> ((v_Vuna_dCompiler_dCodegen_dErase_dfilterNames (fun m -> ((v_Base_dHashMap_dmember m) (v_Base_dHashMap_dofNames mc1)))) mc0)
 )
-  | _ -> ((v_Vuna_dCompiler_dCodegen_dErase_dfilterNames (fun m -> ((v_Vuna_dCompiler_dCommon_dtblMem m) (v_Vuna_dCompiler_dCommon_dtblOfNames mc1)))) mc0)
+  | _ -> ((v_Vuna_dCompiler_dCodegen_dErase_dfilterNames (fun m -> ((v_Base_dHashMap_dmember m) (v_Base_dHashMap_dofNames mc1)))) mc0)
 )))
 
 let rec v_Vuna_dCompiler_dCodegen_dErase_dgroupsFromCompsGo = (fun mc0 -> (fun mc1 -> (fun mc2 -> (fun mc3 -> (match mc2 with
-  | C_Base_dList_dList_Base_dList_dCons (dtb__136, dtb__137) -> (if ((v_Vuna_dCompiler_dCommon_dtblMem dtb__136) mc3) then ((((v_Vuna_dCompiler_dCodegen_dErase_dgroupsFromCompsGo mc0) mc1) dtb__137) mc3) else (match ((v_Vuna_dCompiler_dCommon_dtblLookup dtb__136) mc0) with
+  | C_Base_dList_dList_Base_dList_dCons (dtb__136, dtb__137) -> (if ((v_Base_dHashMap_dmember dtb__136) mc3) then ((((v_Vuna_dCompiler_dCodegen_dErase_dgroupsFromCompsGo mc0) mc1) dtb__137) mc3) else (match ((v_Base_dHashMap_dlookup dtb__136) mc0) with
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__138) -> (C_Base_dList_dList_Base_dList_dCons (((v_Vuna_dCompiler_dCodegen_dErase_dgroupOf mc1) dtb__138), ((((v_Vuna_dCompiler_dCodegen_dErase_dgroupsFromCompsGo mc0) mc1) dtb__137) ((v_Vuna_dCompiler_dCodegen_dErase_daddAllNames dtb__138) mc3))))
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> ((((v_Vuna_dCompiler_dCodegen_dErase_dgroupsFromCompsGo mc0) mc1) dtb__137) mc3)
   | _ -> failwith "DT: impossible branch"
@@ -331,7 +333,7 @@ let rec v_Vuna_dCompiler_dCodegen_dErase_dgroupsFromCompsGo = (fun mc0 -> (fun m
   | _ -> failwith "DT: impossible branch"
 )))))
 
-let v_Vuna_dCompiler_dCodegen_dErase_dgroupsFromComps = (fun comps -> (fun names -> ((((v_Vuna_dCompiler_dCodegen_dErase_dgroupsFromCompsGo (v_Vuna_dCompiler_dCodegen_dErase_dcomponentTblOf comps)) names) names) v_Vuna_dCompiler_dCommon_dtblEmpty)))
+let v_Vuna_dCompiler_dCodegen_dErase_dgroupsFromComps = (fun comps -> (fun names -> ((((v_Vuna_dCompiler_dCodegen_dErase_dgroupsFromCompsGo (v_Vuna_dCompiler_dCodegen_dErase_dcomponentTblOf comps)) names) names) v_Base_dHashMap_dempty)))
 
 let v_Vuna_dCompiler_dCodegen_dErase_dnotIn = (fun name -> (fun names -> (if ((v_Base_dList_dmemName name) names) then false else true)))
 
@@ -344,7 +346,7 @@ let rec v_Vuna_dCompiler_dCodegen_dErase_duniqueNames = (fun mc0 -> (match mc0 w
 let v_Vuna_dCompiler_dCodegen_dErase_dgroupDeps = (fun adjT -> (fun group -> ((v_Vuna_dCompiler_dCodegen_dErase_dfilterNames (fun n -> ((v_Vuna_dCompiler_dCodegen_dErase_dnotIn n) group))) (v_Vuna_dCompiler_dCodegen_dErase_duniqueNames ((v_Base_dList_dconcatMap (v_Vuna_dCompiler_dCodegen_dErase_dneighborsOf adjT)) group)))))
 
 let rec v_Vuna_dCompiler_dCodegen_dErase_dallIn = (fun mc0 -> (fun mc1 -> (match mc0 with
-  | C_Base_dList_dList_Base_dList_dCons (dtb__141, dtb__142) -> (if ((v_Vuna_dCompiler_dCommon_dtblMem dtb__141) mc1) then ((v_Vuna_dCompiler_dCodegen_dErase_dallIn dtb__142) mc1) else false)
+  | C_Base_dList_dList_Base_dList_dCons (dtb__141, dtb__142) -> (if ((v_Base_dHashMap_dmember dtb__141) mc1) then ((v_Vuna_dCompiler_dCodegen_dErase_dallIn dtb__142) mc1) else false)
   | C_Base_dList_dList_Base_dList_dNil -> true
   | _ -> failwith "DT: impossible branch"
 )))
@@ -373,12 +375,12 @@ let rec v_Vuna_dCompiler_dCodegen_dErase_dorderGroupsAccFuel = (fun fuel -> (fun
 
 let v_Vuna_dCompiler_dCodegen_dErase_dorderGroupsAcc = (fun adjT -> (fun remaining -> (fun emitted -> ((((v_Vuna_dCompiler_dCodegen_dErase_dorderGroupsAccFuel ((bi_add (v_Base_dList_dlength remaining)) 1)) adjT) remaining) emitted))))
 
-let v_Vuna_dCompiler_dCodegen_dErase_dorderGroups = (fun adjT -> (fun groups -> (((v_Vuna_dCompiler_dCodegen_dErase_dorderGroupsAcc adjT) groups) v_Vuna_dCompiler_dCommon_dtblEmpty)))
+let v_Vuna_dCompiler_dCodegen_dErase_dorderGroups = (fun adjT -> (fun groups -> (((v_Vuna_dCompiler_dCodegen_dErase_dorderGroupsAcc adjT) groups) v_Base_dHashMap_dempty)))
 
-let v_Vuna_dCompiler_dCodegen_dErase_ddtDefTblOf = (fun defs -> ((v_Vuna_dCompiler_dCommon_dtblInsertAll ((v_Base_dList_dmap (fun d -> (C_Base_dPair_dPair_Base_dPair_dPair ((v_Vuna_dCompiler_dElab_dTypes_ddtDefName d), d)))) defs)) v_Vuna_dCompiler_dCommon_dtblEmpty))
+let v_Vuna_dCompiler_dCodegen_dErase_ddtDefTblOf = (fun defs -> ((v_Base_dHashMap_dinsertAll ((v_Base_dList_dmap (fun d -> (C_Base_dPair_dPair_Base_dPair_dPair ((v_Vuna_dCompiler_dElab_dTypes_ddtDefName d), d)))) defs)) v_Base_dHashMap_dempty))
 
 let rec v_Vuna_dCompiler_dCodegen_dErase_dgroupDefsOf = (fun mc0 -> (fun mc1 -> (match mc1 with
-  | C_Base_dList_dList_Base_dList_dCons (dtb__148, dtb__149) -> (match ((v_Vuna_dCompiler_dCommon_dtblLookup dtb__148) mc0) with
+  | C_Base_dList_dList_Base_dList_dCons (dtb__148, dtb__149) -> (match ((v_Base_dHashMap_dlookup dtb__148) mc0) with
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> ((v_Vuna_dCompiler_dCodegen_dErase_dgroupDefsOf mc0) dtb__149)
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__150) -> (C_Base_dList_dList_Base_dList_dCons (dtb__150, ((v_Vuna_dCompiler_dCodegen_dErase_dgroupDefsOf mc0) dtb__149)))
   | _ -> failwith "DT: impossible branch"
@@ -388,12 +390,12 @@ let rec v_Vuna_dCompiler_dCodegen_dErase_dgroupDefsOf = (fun mc0 -> (fun mc1 -> 
 )))
 
 let rec v_Vuna_dCompiler_dCodegen_dErase_dcheckNoDupOcamlNamesGo = (fun mc0 -> (fun mc1 -> (fun mc2 -> (match mc1 with
-  | C_Base_dList_dList_Base_dList_dCons (dtb__151, dtb__152) -> (if ((v_Vuna_dCompiler_dCommon_dtblMem dtb__151) mc2) then (C_Base_dResult_dResult_Base_dResult_dErr (((bi_concat "DT: internal: OCaml name collision among ") ((bi_concat mc0) ((bi_concat "s: `") ((bi_concat dtb__151) "`")))))) else (((v_Vuna_dCompiler_dCodegen_dErase_dcheckNoDupOcamlNamesGo mc0) dtb__152) (((v_Vuna_dCompiler_dCommon_dtblInsert dtb__151) true) mc2)))
+  | C_Base_dList_dList_Base_dList_dCons (dtb__151, dtb__152) -> (if ((v_Base_dHashMap_dmember dtb__151) mc2) then (C_Base_dResult_dResult_Base_dResult_dErr (((bi_concat "DT: internal: OCaml name collision among ") ((bi_concat mc0) ((bi_concat "s: `") ((bi_concat dtb__151) "`")))))) else (((v_Vuna_dCompiler_dCodegen_dErase_dcheckNoDupOcamlNamesGo mc0) dtb__152) (((v_Base_dHashMap_dinsert dtb__151) true) mc2)))
   | C_Base_dList_dList_Base_dList_dNil -> (C_Base_dResult_dResult_Base_dResult_dOk (0))
   | _ -> failwith "DT: impossible branch"
 ))))
 
-let v_Vuna_dCompiler_dCodegen_dErase_dcheckNoDupOcamlNames = (fun kind -> (fun names -> (((v_Vuna_dCompiler_dCodegen_dErase_dcheckNoDupOcamlNamesGo kind) names) v_Vuna_dCompiler_dCommon_dtblEmpty)))
+let v_Vuna_dCompiler_dCodegen_dErase_dcheckNoDupOcamlNames = (fun kind -> (fun names -> (((v_Vuna_dCompiler_dCodegen_dErase_dcheckNoDupOcamlNamesGo kind) names) v_Base_dHashMap_dempty)))
 
 let v_Vuna_dCompiler_dCodegen_dErase_densureUniqueOcamlNames = (fun datas -> (fun defs -> ((fun runtime -> ((fun valueNames -> ((fun typeNames -> ((fun ctorNames -> ((v_Base_dResult_dandThen ((v_Vuna_dCompiler_dCodegen_dErase_dcheckNoDupOcamlNames "value") valueNames)) (fun _u -> ((v_Base_dResult_dandThen ((v_Vuna_dCompiler_dCodegen_dErase_dcheckNoDupOcamlNames "type") typeNames)) (fun _u -> ((v_Vuna_dCompiler_dCodegen_dErase_dcheckNoDupOcamlNames "constructor") ctorNames)))))) ((v_Base_dList_dconcatMap (fun d -> ((v_Base_dList_dmap (fun c -> ((v_Vuna_dCompiler_dCodegen_dDecl_dctorOcamlName (v_Vuna_dCompiler_dElab_dTypes_ddtCtorFamily c)) (v_Vuna_dCompiler_dElab_dTypes_ddtCtorName c)))) (v_Vuna_dCompiler_dElab_dTypes_ddtDataCtors d)))) runtime))) ((v_Base_dList_dmap (fun d -> (v_Vuna_dCompiler_dCodegen_dDecl_dtypeName (v_Vuna_dCompiler_dElab_dTypes_ddtDataName d)))) runtime))) ((v_Base_dList_dmap (fun d -> (v_Vuna_dCompiler_dCodegen_dDecl_dvalueName (v_Vuna_dCompiler_dElab_dTypes_ddtDefName d)))) defs))) (v_Vuna_dCompiler_dCodegen_dDecl_druntimeDatas datas))))
 
@@ -457,16 +459,16 @@ let rec v_Vuna_dCompiler_dCodegen_dErase_dcheckNoAxiomRuntimeGo = (fun mc0 -> (f
   | _ -> failwith "DT: impossible branch"
 )))
 
-let v_Vuna_dCompiler_dCodegen_dErase_dcheckNoAxiomRuntime = (fun axiomNames -> (fun defs -> ((v_Vuna_dCompiler_dCodegen_dErase_dcheckNoAxiomRuntimeGo (v_Vuna_dCompiler_dCommon_dtblOfNames axiomNames)) defs)))
+let v_Vuna_dCompiler_dCodegen_dErase_dcheckNoAxiomRuntime = (fun axiomNames -> (fun defs -> ((v_Vuna_dCompiler_dCodegen_dErase_dcheckNoAxiomRuntimeGo (v_Base_dHashMap_dofNames axiomNames)) defs)))
 
 let v_Vuna_dCompiler_dCodegen_dErase_ddepAdjacency = (fun defs -> ((fun names -> ((v_Base_dList_dmap (fun d -> (match (v_Vuna_dCompiler_dElab_dTypes_ddtDefBody d) with
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__195) -> (C_Base_dPair_dPair_Base_dPair_dPair ((v_Vuna_dCompiler_dElab_dTypes_ddtDefName d), (((v_Vuna_dCompiler_dCodegen_dErase_dtermDepsInto names) C_Base_dList_dList_Base_dList_dNil) dtb__195)))
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> (C_Base_dPair_dPair_Base_dPair_dPair ((v_Vuna_dCompiler_dElab_dTypes_ddtDefName d), C_Base_dList_dList_Base_dList_dNil))
   | _ -> failwith "DT: impossible branch"
-))) defs)) (v_Vuna_dCompiler_dCommon_dtblOfNames (v_Vuna_dCompiler_dCodegen_dErase_druntimeNamesOf defs))))
+))) defs)) (v_Base_dHashMap_dofNames (v_Vuna_dCompiler_dCodegen_dErase_druntimeNamesOf defs))))
 
-let v_Vuna_dCompiler_dCodegen_dErase_dgroupRuntimeDefs = (fun defs -> ((fun names -> ((fun defsTbl -> ((fun adj -> ((fun adjT -> ((fun revT -> (match ((((v_Vuna_dCompiler_dCodegen_dErase_dpostOrder adjT) names) v_Vuna_dCompiler_dCommon_dtblEmpty) C_Base_dList_dList_Base_dList_dNil) with
-  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__196, dtb__197) -> ((fun comps -> ((fun groups -> ((v_Base_dResult_dandThen ((v_Vuna_dCompiler_dCodegen_dErase_dorderGroups adjT) groups)) (fun ordered -> (C_Base_dResult_dResult_Base_dResult_dOk (((v_Base_dList_dmap (v_Vuna_dCompiler_dCodegen_dErase_dgroupDefsOf defsTbl)) ordered)))))) ((v_Vuna_dCompiler_dCodegen_dErase_dgroupsFromComps comps) names))) ((((v_Vuna_dCompiler_dCodegen_dErase_dcollectComps revT) dtb__197) v_Vuna_dCompiler_dCommon_dtblEmpty) C_Base_dList_dList_Base_dList_dNil))
+let v_Vuna_dCompiler_dCodegen_dErase_dgroupRuntimeDefs = (fun defs -> ((fun names -> ((fun defsTbl -> ((fun adj -> ((fun adjT -> ((fun revT -> (match ((((v_Vuna_dCompiler_dCodegen_dErase_dpostOrder adjT) names) v_Base_dHashMap_dempty) C_Base_dList_dList_Base_dList_dNil) with
+  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__196, dtb__197) -> ((fun comps -> ((fun groups -> ((v_Base_dResult_dandThen ((v_Vuna_dCompiler_dCodegen_dErase_dorderGroups adjT) groups)) (fun ordered -> (C_Base_dResult_dResult_Base_dResult_dOk (((v_Base_dList_dmap (v_Vuna_dCompiler_dCodegen_dErase_dgroupDefsOf defsTbl)) ordered)))))) ((v_Vuna_dCompiler_dCodegen_dErase_dgroupsFromComps comps) names))) ((((v_Vuna_dCompiler_dCodegen_dErase_dcollectComps revT) dtb__197) v_Base_dHashMap_dempty) C_Base_dList_dList_Base_dList_dNil))
   | _ -> failwith "DT: impossible branch"
 )) (v_Vuna_dCompiler_dCodegen_dErase_dreverseAdjTbl adj))) (v_Vuna_dCompiler_dCodegen_dErase_dadjTblOf adj))) (v_Vuna_dCompiler_dCodegen_dErase_ddepAdjacency defs))) (v_Vuna_dCompiler_dCodegen_dErase_ddtDefTblOf defs))) (v_Vuna_dCompiler_dCodegen_dErase_druntimeNamesOf defs)))
 

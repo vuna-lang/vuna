@@ -22,6 +22,7 @@ module Vuna.Compiler.Elab.Dict
 -- 这一层必须在 `Elab.Term` 之前：`inferArgs` 的隐式字典插入要调用它。
 -- 拆自 M24 的单一 `Elab.vuna`（按真实调用图切；门面仍是 `Vuna.Compiler.Elab`）。
 import Vuna.Compiler.Common
+import Base.HashMap
 import Vuna.Compiler.Core
 import Vuna.Compiler.Core.Term
 import Vuna.Compiler.Diagnostics
@@ -160,7 +161,7 @@ termMetaId _ = 0
 
 solveTeleMetas : Ec -> List Int -> Maybe (List Value)
 solveTeleMetas ec [] = Just []
-solveTeleMetas ec (m :: rest) = case metaLookup m (ecSols ec) of
+solveTeleMetas ec (m :: rest) = case metaLookup m (ecSolTbl ec) of
   Nothing => Nothing
   Just v => case solveTeleMetas ec rest of
     Nothing => Nothing
@@ -207,7 +208,7 @@ substDictTerm : Ec -> Term -> Term
 substDictTerm ec t = substDictTermGo ec 0 t
 
 substDictTermGo : Ec -> Int -> Term -> Term
-substDictTermGo ec depth (t@(TMeta m)) = case metaLookup m (ecSols ec) of
+substDictTermGo ec depth (t@(TMeta m)) = case metaLookup m (ecSolTbl ec) of
   Nothing => t
   Just v => case dictTermOfValue ec v of
     Just soln => if hasFreeTermVar 0 soln then t else shift 0 depth soln
@@ -246,7 +247,7 @@ foldSpineWithTyRigs fn (v :: rest) rigs = case rigs of
   [] => foldSpineWithTyRigs (TApp fn (quote 0 v) Rig1) rest []
 
 piRigsOfGlobal : Ec -> String -> List Rig
-piRigsOfGlobal ec g = case tblLookup g (ecGlobalsTbl ec) of
+piRigsOfGlobal ec g = case Base.HashMap.lookup g (ecGlobalsTbl ec) of
   Just ty => piRigs ty
   Nothing => []
 
@@ -458,7 +459,7 @@ cmpGenericName _ = "bi_ge_generic"
 dictArgUnsolvedMeta : Ec -> Value -> Bool
 dictArgUnsolvedMeta ec dom = case dictClassArg ec dom of
   Just arg => case forceVal ec arg of
-    VMeta m sp => case metaLookup m (ecSols ec) of
+    VMeta m sp => case metaLookup m (ecSolTbl ec) of
       Just _ => False
       Nothing => True
     _ => False

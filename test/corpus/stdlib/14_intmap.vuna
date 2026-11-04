@@ -1,0 +1,31 @@
+-- stdlib：Base.IntMap（Int 键的持久哈希容器；0 与 1024 必碰撞）。
+import Base.IntMap
+import Base.List
+import Base.Maybe
+import Base.Pair
+
+-- 63 位 Int 的字面量越界回绕：该字面量等于 min_int。
+minKey : Int
+minKey = 4611686018427387904
+
+showMaybeInt : Maybe Int -> String
+showMaybeInt Nothing = "Nothing"
+showMaybeInt (Just x) = "Just " ++ strFromInt x
+
+main : String
+main =
+  let
+    m = Base.IntMap.insert 0 10 (Base.IntMap.insert 1024 11 Base.IntMap.empty)
+    m2 = Base.IntMap.fromList [Pair 0 1, Pair 0 2, Pair (0 - 1) 3]
+    m3 = Base.IntMap.insert (0 - 1024) 7 Base.IntMap.empty
+    mn = Base.IntMap.insert minKey 9 Base.IntMap.empty
+    m4 = Base.IntMap.insertAll [Pair 0 1, Pair 0 2] Base.IntMap.empty
+  in "a=" ++ showMaybeInt (Base.IntMap.lookup 0 m)
+       ++ " b=" ++ showMaybeInt (Base.IntMap.lookup 1024 m)
+       ++ " sz=" ++ strFromInt (Base.IntMap.size m)
+       ++ " fl=" ++ showMaybeInt (Base.IntMap.lookup 0 m2)
+       ++ " insall=" ++ showMaybeInt (Base.IntMap.lookup 0 m4)
+       ++ " neg=" ++ showMaybeInt (Base.IntMap.lookup (0 - 1) m2)
+       ++ " neg2=" ++ showMaybeInt (Base.IntMap.lookup (0 - 1024) m3)
+       ++ " min=" ++ showMaybeInt (Base.IntMap.lookup minKey mn)
+       ++ " miss=" ++ showMaybeInt (Base.IntMap.lookup 5 m)

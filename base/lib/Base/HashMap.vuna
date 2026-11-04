@@ -1,0 +1,116 @@
+module Base.HashMap
+  ( HashMap
+  , empty
+  , fromList
+  , hashStr
+  , insert
+  , insertAll
+  , lookup
+  , member
+  , ofNames
+  , size
+  , toList
+  ) where
+
+-- Base.HashMap：String 键、值泛型的持久哈希映射（1024 桶，两层 32 叉）。
+--
+-- 单次查找 ≈ 32 步列表遍历 + 桶内 1–2 次字符串比较；桶内前插，同键**新值优先**
+-- （与关联表的查找语义一致）。构造器不导出，跨模块只能经本模块 API 使用。
+--
+-- 与 Base.Map 的分工：Map 是 assoc list（小表、语义简单），HashMap 适合构造后
+-- 频繁查找的大表；toList 按桶序展开，**不保证插入序**；size 是 O(n)。
+--
+-- `hashStr` 是公开的 0..1023 哈希（intrinsic `strHash` 的同一公式，见
+-- docs/reference/primitives.md）；`Debug` / `Index.Scan` 的采样键需要它。
+--
+-- base 模块不自动注入 Prelude，`==` / `<=` 的方法名与实例需要显式 import。
+import Base.Bool
+import Base.Eq
+import Base.Int
+import Base.List
+import Base.Maybe
+import Base.Ord
+import Base.Pair
+import Base.String
+
+data HashMap a : Type where
+  MkHashMap : List (List (List (Pair String a))) -> HashMap a
+
+_replicate : Int -> a -> List a
+_replicate n x = if n <= 0 then [] else x :: _replicate (n - 1) x
+
+_nthOr : Int -> a -> List a -> a
+_nthOr i d [] = d
+_nthOr i d (x :: rest) = if i <= 0 then x else _nthOr (i - 1) d rest
+
+_putNth : Int -> a -> List a -> List a
+_putNth i v [] = []
+_putNth i v (x :: rest) = if i <= 0 then v :: rest else x :: _putNth (i - 1) v rest
+
+hashStr : String -> Int
+hashStr s = strHash s
+
+_lookupAssoc : String -> List (Pair String a) -> Maybe a
+_lookupAssoc key [] = Nothing
+_lookupAssoc key ((Pair k v) :: rest) = if key == k then Just v else _lookupAssoc key rest
+
+-- insert 走「桶内前插」：新值在桶首，lookup 天然新值优先；重复键的历史条目留着，
+-- 由 toList 在冷路径去重（保留桶首 = 最新值）。这样热路径 insert 不付去重成本。
+_hasKeyIn : String -> List (Pair String a) -> Bool
+_hasKeyIn key [] = False
+_hasKeyIn key ((Pair k v) :: rest) = if key == k then True else _hasKeyIn key rest
+
+_dedupGo : List (Pair String a) -> List (Pair String a) -> List (Pair String a)
+_dedupGo [] acc = reverse acc
+_dedupGo ((Pair k v) :: rest) acc =
+  if _hasKeyIn k acc then _dedupGo rest acc else _dedupGo rest (Pair k v :: acc)
+
+_dedupBucket : List (Pair String a) -> List (Pair String a)
+_dedupBucket xs = _dedupGo xs []
+
+empty : HashMap a
+empty = MkHashMap (_replicate 32 (_replicate 32 []))
+
+insert : String -> a -> HashMap a -> HashMap a
+insert key v (MkHashMap outers) =
+  let
+    b = hashStr key
+    oi = b / 32
+    ii = b - oi * 32
+    outer = _nthOr oi (_replicate 32 []) outers
+    inner = _nthOr ii [] outer
+  in MkHashMap (_putNth oi (_putNth ii (Pair key v :: inner) outer) outers)
+
+lookup : String -> HashMap a -> Maybe a
+lookup key (MkHashMap outers) =
+  let
+    b = hashStr key
+    oi = b / 32
+    ii = b - oi * 32
+  in _lookupAssoc key (_nthOr ii [] (_nthOr oi [] outers))
+
+member : String -> HashMap a -> Bool
+member key t = case lookup key t of
+  Just _ => True
+  Nothing => False
+
+insertAll : List (Pair String a) -> HashMap a -> HashMap a
+insertAll [] t = t
+insertAll ((Pair k v) :: rest) t = insertAll rest (insert k v t)
+
+-- 列表**前面**的条目优先（先插 rest 再插头部，与 Base.Map.fromList 的查找语义一致）；
+-- `insertAll` 相反：后面的条目覆盖前面的。两个语义都有编译器调用点（历史的
+-- `tblFromList` / `tblInsertAll`），不要合并。
+fromList : List (Pair String a) -> HashMap a
+fromList [] = empty
+fromList ((Pair k v) :: rest) = insert k v (fromList rest)
+
+-- 名字集合的成员判定表（编译器历史上叫 `tblOfNames`）。
+ofNames : List String -> HashMap Bool
+ofNames xs = insertAll (map (\n => Pair n True) xs) empty
+
+toList : HashMap a -> List (Pair String a)
+toList (MkHashMap outers) = concatMap (\row => concatMap _dedupBucket row) outers
+
+size : HashMap a -> Int
+size t = length (toList t)

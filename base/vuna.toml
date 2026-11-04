@@ -20,6 +20,9 @@ modules = [
   "Base.String",
   "Base.Sort",
   "Base.Map",
+  "Base.HashMap",
+  "Base.HashSet",
+  "Base.IntMap",
   "Base.Monad",
   "Base.IO",
   "Prelude"

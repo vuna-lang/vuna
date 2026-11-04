@@ -22,6 +22,7 @@ module Vuna.Index.Scan (buildIndex, loadOrBuild) where
 --     只建内存索引、跳过写缓存；过期锁 `rm -rf` 后重试一次；结束时 rmdir；
 --   - 缓存不可写 / 写失败一律降级为纯内存索引（不报错）。
 import Vuna.Compiler.Common
+import Base.HashMap
 import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Loader.Fixity
 import Vuna.Compiler.Frontend.Lexer
@@ -454,7 +455,10 @@ lockPath repo = cacheDir repo ++ "/cache.lock"
 -- 哈希 = strHash(content) 与 strHash("v2:" ++ content) 的组合（同一内容必须得到同一
 -- 字符串；两个 10 位哈希组合降低「同 size 同 mtime 内容变更」漏判的概率）。
 contentHash : String -> String
-contentHash content = strFromInt (hashStr content) ++ "-" ++ strFromInt (hashStr ("v2:" ++ content))
+contentHash content =
+  strFromInt (Base.HashMap.hashStr content)
+    ++ "-"
+    ++ strFromInt (Base.HashMap.hashStr ("v2:" ++ content))
 
 entryPath : Pair String (Pair Int String) -> String
 entryPath entry = firstOf entry

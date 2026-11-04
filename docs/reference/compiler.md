@@ -7,7 +7,7 @@
 ## 模块地图
 
 `compiler/` 是编译器包（seed 的唯一来源）。入口 `compiler/app/Main.vuna` 的 import 闭包
-就是 `seed/` 的内容（当前 **71 个 `.ml` / 72 个文件**，以 `seed/` 与
+就是 `seed/` 的内容（当前 **75 个 `.ml` / 76 个文件**，以 `seed/` 与
 `nix/seed-count.txt` 为准）；工具链（fmt/lint/repl/doc/test/lsp）在根包 `lib/`，不在闭包里。
 代码按**目录即层**组织：Frontend → Packages → Loader → Core → Elab → Codegen → Driver，
 同层模块可互相 import，上层只能依赖下层。每层 `X.vuna` 是**门面**：只 import 子模块并选择性

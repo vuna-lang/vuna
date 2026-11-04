@@ -53,6 +53,7 @@ module Vuna.Compiler.Intrinsics
 --     `Base.List.List` / `Base.IO.IO`（见 `Loader`/`Codegen` 的常量）；
 --   - 隐藏的内部 runtime 名（`bi_*`）只供 codegen 映射，不对用户源码可见。
 import Vuna.Compiler.Common
+import Base.HashMap
 
 -- ---------------------------------------------------------------
 -- 能力（capability）：显式、不可按包名伪造的效应声明面
@@ -300,11 +301,12 @@ allIntrinsics =
     MkIntrinsic "bi_ge_generic" (IFun IInt (IFun IInt IBool)) OpGeGeneric Nothing "bi_ge_generic" False
   ]
 
-intrinsicTbl : HashTbl Intrinsic
-intrinsicTbl = tblInsertAll (map (\i => Pair (intrinsicName i) i) allIntrinsics) tblEmpty
+intrinsicTbl : HashMap Intrinsic
+intrinsicTbl =
+  Base.HashMap.insertAll (map (\i => Pair (intrinsicName i) i) allIntrinsics) Base.HashMap.empty
 
 findIntrinsic : String -> Maybe Intrinsic
-findIntrinsic name = tblLookup name intrinsicTbl
+findIntrinsic name = Base.HashMap.lookup name intrinsicTbl
 
 isIntrinsicName : String -> Bool
 isIntrinsicName name = case findIntrinsic name of

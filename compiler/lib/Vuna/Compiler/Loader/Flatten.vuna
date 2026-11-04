@@ -16,6 +16,7 @@ module Vuna.Compiler.Loader.Flatten
 import Base.IO
 import Vuna.Compiler.Loader.Diagnostics
 import Vuna.Compiler.Common
+import Base.HashMap
 import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Frontend.Parser
 import Vuna.Compiler.Loader.Fixity
@@ -145,17 +146,17 @@ implicitExports prefix decls = dedupeImplicitExports (concatMap (declImplicitExp
 -- 没有模块头 = 导出全部：类型签名 DSig 与子句 DFun 会为同一个函数各产生一条
 -- val 条目，必须去重，否则重导出该模块时会在 duplicate export 检查里误报。
 dedupeImplicitExports : List ExportEntry -> List ExportEntry
-dedupeImplicitExports entries = dedupeByPublic entries tblEmpty []
+dedupeImplicitExports entries = dedupeByPublic entries Base.HashMap.empty []
 
 -- 按 (kind, public) 去重：类型签名与子句会为同一个函数各产生一条 val 条目。
-dedupeByPublic : List ExportEntry -> HashTbl Int -> List ExportEntry -> List ExportEntry
+dedupeByPublic : List ExportEntry -> HashMap Int -> List ExportEntry -> List ExportEntry
 dedupeByPublic [] seen acc = reverse acc
 dedupeByPublic (e :: rest) seen acc =
   let
     key = entryKind e ++ "|" ++ entryPublic e
-  in case tblLookup key seen of
+  in case Base.HashMap.lookup key seen of
     Just _ => dedupeByPublic rest seen acc
-    Nothing => dedupeByPublic rest (tblInsert key 1 seen) (e :: acc)
+    Nothing => dedupeByPublic rest (Base.HashMap.insert key 1 seen) (e :: acc)
 
 -- 裸名导出时，若名字是 **record 类型** 且与其同名构造器 target 相同，只导出类型、
 -- 不导出构造器：抽象记录必须写 T(..) 才公开构造器。（普通 data 里 ctor 与类型同名
@@ -318,20 +319,20 @@ sameExportEntry e e2 =
     && entryParent e == entryParent e2
 
 dedupeExportEntries : List ExportEntry -> List ExportEntry
-dedupeExportEntries entries = dedupeByFullKey entries tblEmpty []
+dedupeExportEntries entries = dedupeByFullKey entries Base.HashMap.empty []
 
 exportEntryKey : ExportEntry -> String
 exportEntryKey e =
   entryKind e ++ "|" ++ entryPublic e ++ "|" ++ entryTarget e ++ "|" ++ entryParent e
 
-dedupeByFullKey : List ExportEntry -> HashTbl Int -> List ExportEntry -> List ExportEntry
+dedupeByFullKey : List ExportEntry -> HashMap Int -> List ExportEntry -> List ExportEntry
 dedupeByFullKey [] seen acc = reverse acc
 dedupeByFullKey (e :: rest) seen acc =
   let
     key = exportEntryKey e
-  in case tblLookup key seen of
+  in case Base.HashMap.lookup key seen of
     Just _ => dedupeByFullKey rest seen acc
-    Nothing => dedupeByFullKey rest (tblInsert key 1 seen) (e :: acc)
+    Nothing => dedupeByFullKey rest (Base.HashMap.insert key 1 seen) (e :: acc)
 
 checkExportDuplicates : String -> List ExportEntry -> Result (List a)
 checkExportDuplicates prefix [] = Ok []

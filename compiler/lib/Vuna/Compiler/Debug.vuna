@@ -10,6 +10,7 @@ module Vuna.Compiler.Debug (debugOn, note, noteInt, sampleKey, stamp, stampSampl
 --   `DEBUG <text>`        任意诊断文本（表规模等）。
 -- 关闭时每次调用只花一次 `prim_getArgs`（微秒级），可长期留在生产代码里。
 import Vuna.Compiler.Common
+import Base.HashMap
 import Base.IO
 
 args : List String
@@ -37,11 +38,11 @@ stampNow label =
 stamp : String -> Int
 stamp label = if debugOn then stampNow label else 0
 
--- 采样键：1/64 命中（名字哈希低位为 0），与 `hashStr` 同一哈希，结果确定。
+-- 采样键：1/64 命中（名字哈希低位为 0），与 `Base.HashMap.hashStr` 同一哈希，结果确定。
 sampleKey : String -> Bool
 sampleKey name =
   let
-    h = hashStr name
+    h = Base.HashMap.hashStr name
   in h - h / 64 * 64 == 0
 
 stampSample : String -> String -> Int

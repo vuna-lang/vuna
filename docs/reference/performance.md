@@ -19,6 +19,15 @@
 | `fmt --check`（全仓） | ~0.3 s |
 | `lint` / `doc` / `map` / `gen-errors` | 均 <1 s |
 
+容器改造（私有 `HashTbl` → `Base.HashMap`，元变量解表 → `Base.IntMap`）的实测对比：
+同一 worktree、同一份源码、独立进程各 3 次取中位数（本机绝对值与上表历史读数不可直接
+比较；改造前 = 编译器内部哈希表 + 解表 String 键，改造后 = 标准库容器 + Int 键索引）：
+
+| 命令 | 改造前 | 改造后 | 变化 |
+| --- | --- | --- | --- |
+| `check compiler` | ~4.87 s | ~4.18 s | -14% |
+| `check .` | ~13.4 s | ~11.3 s | -15% |
+
 所有命令都在 10 s 以内；增长率见 §5。构建口径必须一致：同一份源码在逐模块 split 产物下
 测量；`compile` / `build` / seed 只有这一种产物，不再有单文件 `main.ml` 口径。
 
@@ -49,24 +58,33 @@ vuna check compiler --debug-perf
 fork 抖动同量级），要判断趋势请用「同形规模的合成探针」对比总时间，而不是对比相邻两行。
 关闭开关时：`stamp` 只花一次 `getArgs`（微秒级），`stampSample` 只花一次字符串哈希。
 
-## 3. 查找表：`HashTbl`
+## 3. 查找表：`Base.HashMap` / `Base.IntMap`
 
-`compiler/lib/Vuna/Compiler/Common.vuna` 提供 1024 桶（两层 32 叉）的持久哈希表：
+容器在标准库（`base/lib/Base/HashMap.vuna` / `base/lib/Base/IntMap.vuna`）：1024 桶
+（两层 32 叉）的持久哈希表、桶内前插、同键新值优先。编译器不再有私有 `HashTbl`。
 
 ```text
-tblEmpty / tblInsert k v / tblLookup k / tblFromList pairs / tblInsertAll pairs
+HashMap.empty / insert / insertAll / lookup / member / fromList / ofNames
+IntMap.empty  / insert / insertAll / lookup / member / fromList
 ```
 
-单次查找 ≈ 64 步列表遍历 + 桶内 1–2 次字符串比较；桶内前插，「新值优先」与旧关联表一致。
+单次查找 ≈ 32 步列表遍历 + 桶内 1–2 次比较；`IntMap` 的键是 `Int`，没有
+`strFromInt` 编码与字符串哈希开销（元变量编号这类稠密小整数几乎不冲突）。
 `Base.Map` **不是**可用的替代：它是关联列表（assoc list），换过去复杂度不变。
+
+`Sols` 里有两张表：解表（`solsTbl`）与元变量创建深度表（`solsDepth`），键都是元变量
+编号，均用 `IntMap`；`metaLookup` 查 `ecSolTbl`（O(1)），`metaLookupList` 只保留给
+「只有解表 list、没有索引」的少量纯 list 场景。
 
 索引点（都在 `Ec` 里，作为可重建的缓存；**真相永远是列表**）：
 
-| 字段 | 索引什么 | 维护方式 |
+| 字段 | 容器 / 索引什么 | 维护方式 |
 | --- | --- | --- |
-| `ecDefTbl` | 定义体（`force` 的 delta 展开） | `ecAddDef` 增量插入 |
-| `ecGlobalsTbl` | 全局签名（含构造子 / 族名） | `elabBodies` 前用当时 `globals` 建一次；每精化一个定义插入其提升后的类型 |
-| `ecSolTbl` | 解表（元变量 → 值） | `ecPutSols` 只插入本次新增的解（`solsDelta`） |
+| `ecDefTbl` | `HashMap`：定义体（`force` 的 delta 展开） | `ecAddDef` 增量插入 |
+| `ecGlobalsTbl` | `HashMap`：全局签名（含构造子 / 族名） | `elabBodies` 前用当时 `globals` 建一次；每精化一个定义插入其提升后的类型 |
+| `ecSolTbl` | `IntMap`：解表（元变量编号 → 值） | `ecPutSols` 只插入本次新增的解（`solsDelta`） |
+| `ecDepthTbl` | `IntMap`：元变量创建深度（编号 → Int） | `newMeta` / `newHoleMeta` 增量插入 |
+| `ecCtorTbl` / `ecClausesTbl` / `ecDefVals` | `HashMap`：构造子、clause 表、定义体值缓存 | `ctorTblOfDatas` / `elabBodies` 增量插入 |
 
 不变量：索引与列表可能短暂不同步（例如建表前的数据族 / trait / 签名阶段），因此热路径入口
 `globalsLookup` **先查索引、未命中回落线性扫列表**；语义永远以列表为准。
@@ -81,10 +99,13 @@ tblEmpty / tblInsert k v / tblLookup k / tblFromList pairs / tblInsertAll pairs
    WHNF 是 `VLam`（`eval [] body` O(1)），force 的 NGlobal 绝大多数是数据族 / 内建；继续
    降低需要参数相关共享或减少 conv 的 force 调用量。
 3. **ctor 索引已加**：`Ec` 里 `dtCtorLookupEc` 先查表、未命中回落线性扫。
-4. **仍可做的下一步**：conv 的「同 head 同 spine 直接成功」快速路径（`fastSame` 已覆盖
-   原子形态）、减少 `applySpine` / `quote` 的分配、termination 的 list→表化、以及
-   `check .` 在 workspace 单元下的并行 / 增量检查。
-5. **GC 仍占可观测比例**：runtime 设 16MB minor heap（`Gc.set`，
+4. **元变量解表已表化**：`Ec`/`Sols` 的解表与创建深度表改成 `IntMap`（键 = 元变量
+   编号），`metaLookup` 走索引、不再对 `ecSols` 线性扫；`ecPutSols` 不再逐解
+   `strFromInt`。剩余热点集中在 `applySpine` / `quote` 的分配与 `conv` 的重算。
+5. **仍可做的下一步**：conv 的「同 head 同 spine 直接成功」快速路径（`fastSame` 已覆盖
+   原子形态）、减少 `applySpine` / `quote` 的分配、termination 准备阶段的 list 实现，
+   以及 `check .` 在 workspace 单元下的并行 / 增量检查。
+6. **GC 仍占可观测比例**：runtime 设 16MB minor heap（`Gc.set`，
    `space_overhead = 200`），之后仍有约 15–20% 时间在 GC；减少分配比继续调参更有效。
 
 ## 5. 增长率（合成包）

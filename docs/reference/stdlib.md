@@ -11,7 +11,10 @@
 | `Base.Pair` / `Base.Bool` / `Base.List` / `Base.Maybe` / `Base.Result` | 核心代数数据类型与常用 helper（append/reverse/map/filter/foldl/foldr/traverse/andThen/step/...） |
 | `Base.String` | split/join/lines/unlines/trim/contains/startsWith/endsWith/repeat/substring |
 | `Base.Sort` | 稳定归并排序 `mergeSort` / `sortBy` |
-| `Base.Map` | 关联表实现的抽象 Map（empty/insert/lookup/remove/keys/values/size/...） |
+| `Base.Map` | 关联表实现的抽象 Map（empty/insert/lookup/remove/keys/values/size/...）；小表用 |
+| `Base.HashMap` | `String` 键、值泛型的持久哈希映射（1024 桶；empty/insert/insertAll/lookup/member/fromList/toList/size/ofNames、公开 `hashStr`）；大表、构造后频繁查找 |
+| `Base.HashSet` | `String` 集合（内部 `HashMap Bool`；empty/insert/member/fromList/toList/size） |
+| `Base.IntMap` | `Int` 键、值泛型的持久哈希映射（同 1024 桶结构；整数键免字符串编码） |
 | `Base.Nat` | `Nat(..)`（`Zero` / `Succ`）；DT 夹具与错误码表使用 |
 | `Base.Vec` | `Vec(..)` 与 `substTemplate` / `vhead` / `vlen` / `vtail` |
 | `Base.Monad` | `Functor` / `Monad` trait |
@@ -23,8 +26,12 @@
 | `Base` | 包门面：整模块重导出核心模块（不含 `Nat` / `Vec`；`import Base` 即可用） |
 | `Prelude` | 顶层模块（`base/lib/Prelude.vuna`）：重导出 `Base.Pair` / `Bool` / `Eq` / `Ord` / `Show` / `List` / `Maybe` / `Result` / `String` / `Monad`，**包上下文内所有源文件（含无 manifest 的 ad-hoc 单文件）自动导入**；显式 `import` 时不再重复注入；刻意不含 `Base.IO`（效果 API 需显式 import，效果面不进入自动注入） |
 
-跨包使用时只可见 `base/vuna.toml` `[export]` 列出的模块；抽象类型（`Map`、`IO`）的构造器
-保持私有。`Map` / `Sort` 不在 `Prelude` 里，需要显式 import。
+跨包使用时只可见 `base/vuna.toml` `[export]` 列出的模块；抽象类型（`Map`、`HashMap`、
+`HashSet`、`IntMap`、`IO`）的构造器保持私有。`Map` / `Sort` / `HashMap` / `HashSet` /
+`IntMap` 都不在 `Prelude` 里，需要显式 import；也**不进 `Base` 门面**——`Base` 门面整模块
+重导出 `Base.Map`，而 `HashMap` / `IntMap` 与它同名导出 `empty`/`insert`/`lookup`/
+`fromList`/`toList`/`size`，同时重导出会触发 `duplicate export` 硬错误。同文件使用多个
+容器时写完整限定名（`HashMap.insert` / `IntMap.lookup` / `HashSet.member`）。
 
 模块导出清单（`base/lib/*.vuna`、`base/lib/Base/*.vuna` 的模块头）：
 
@@ -47,6 +54,10 @@ module Base.String (split, join, lines, unlines, trim, trimLeft, trimRight, cont
                     startsWith, endsWith, repeat, substring) where
 module Base.Sort (mergeSort, sortBy) where
 module Base.Map (Map, empty, insert, lookup, remove, keys, values, size, fromList, toList) where
+module Base.HashMap (HashMap, empty, fromList, hashStr, insert, insertAll, lookup, member,
+                     ofNames, size, toList) where
+module Base.HashSet (HashSet, empty, fromList, insert, member, size, toList) where
+module Base.IntMap (IntMap, empty, fromList, insert, insertAll, lookup, member, size, toList) where
 module Base.Nat (Nat(..)) where
 module Base.Vec (Vec(..), substTemplate, vhead, vlen, vtail) where
 module Base.Monad (Functor(..), Monad(..)) where
@@ -111,7 +122,15 @@ module Base.IO (IO, print, println, readFile, writeFile, readLine, readDir, ...)
 
 ## 已知边界
 
-- `Map` 是关联表（assoc list）实现的抽象类型，无平衡树；
+- `Map` 是关联表（assoc list）实现的抽象类型，无平衡树；适合小表；
+- `HashMap` / `IntMap` 是 1024 桶的持久哈希表：无 `remove`、无 resize；`toList` 按桶序
+  展开（不保证插入序）；`size` 是 O(n)（没有计数字段）；
+- **`fromList` 与 `insertAll` 的冲突语义不同**：`fromList` 列表**前面**的条目优先（与
+  `Base.Map.fromList` 的查找语义一致），`insertAll` **后面**的条目覆盖前面的。两者都是
+  编译器历史 API 的语义，不要合并或用错；
+- 键只覆盖 `String`（`HashMap`/`HashSet`）与 `Int`（`IntMap`）：没有泛型 `Hashable`
+  trait（trait 仅单参数、无 `deriving Hash`），也没有有序持久容器（TreeMap/TreeSet）
+  与可变/数组容器；需要有序时用 `Base.Sort`，大表查找用哈希容器；
 - `Result` 暂无 `Functor` / `Monad` 实例；
 - 抽象类型（`Map`、`IO`）跨包不可构造、不可模式匹配，只能经 API 使用。
 
