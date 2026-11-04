@@ -161,6 +161,29 @@ defs / globals / sols 三张索引表。要继续压，先看 bodies（逐定义
 - 基准入口：`nix run .#vuna-bench`（手动，非 CI check），基线文件与软告警见
   [testing.md](testing.md)。
 
+## 8. 生成程序基准（M33）
+
+`nix run .#vuna-perf`（逻辑在 `bench/run.sh`）测**生成程序运行时**：每个 benchmark 是一对
+同算法实现（`bench/programs/<name>.vuna` vs `<name>.ml` 手写 OCaml），先校验两侧输出与
+golden 一致，再 warmup + 多次取中位数；RSS 用 GNU time 的 max RSS。跨机器只比
+`ratio = vuna/ocaml`（绝对 ms 不可比）。
+
+口径与基线维护见 `bench/README.md`；基线 `bench/baseline.json` 入库，`--check` 对超阈值项
+软告警。与 `nix/bench.sh` 的分工：后者测构建 / 编译墙钟与产物尺寸，本设施测运行期。
+
+M33 起点读数（`--runs 3 --warmup 1`，x86_64 / 16 核 / ocamlopt 5.5.1 非 flambda）：
+
+| benchmark | vuna | 手写 OCaml | ratio | 首要成本 |
+| --- | --- | --- | --- | --- |
+| arith | ~58 ms | ~5 ms | ~11.6x | `bi_*` 在 `Vuna_runtime` 跨模块调用，非 flambda 不内联 |
+| string_ops | ~202 ms | ~7 ms | ~28.9x | `++` 链 O(n²)、`strPack` / `substring` 的 `List.nth` |
+| hashmap | ~38 ms | ~4 ms | ~9.5x | 1024 桶用 list-of-list，`_nthOr` 线性遍历 |
+| list_recursion | ~29 ms | ~14 ms | ~2.1x | 已接近目标 |
+| gc_pressure | ~34 ms | ~26 ms | ~1.3x | 已接近目标 |
+
+这三项是 M33 的优化优先序：codegen 内联 / 直接调用（W2）、字符串与库算法（W2）、哈希桶
+表示（W3）。优化后重跑 `--json bench/baseline.json` 更新基线并在这里记录。
+
 ## 相关阅读
 
 - 规模不变量与边界：[limits.md](limits.md)

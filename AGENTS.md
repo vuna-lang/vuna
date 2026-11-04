@@ -66,6 +66,7 @@
 nix build .#vuna --out-link result   # 产品 CLI；.#vuna-compiler / .#vuna-seed 同理
 nix flake check                      # 13 项：3 packages + 10 checks（含 vscode-ext）
 nix run .#vuna-run-tests [-- --list | --only dt]   # 原生测试；nix run .#vuna-bench -- --quick
+nix run .#vuna-perf [-- --runs 3 --check]          # 生成程序基准（vuna 产物 vs 手写 OCaml，软门槛）
 vuna check .                         # 包级类型检查（自检）；vuna build . → .output/bin/<包名>
 vuna fmt --check <PATH>...           # 格式化检查（省略 PATH = workspace 各包 lib/app/test）；vuna lint <file>...
 vuna doc [DIR [OUT]] | gen-errors [ROOT]  # API 文档 / 错误码文档（默认 docs/api.md / docs/.generated/errors.md，gitignored）
@@ -80,7 +81,8 @@ vuna map [...] | vuna api <Module.name>  # 模块总览 / 定位符号 / 改动�
 `base/` = 标准库 `vuna-base`（`Base.*` + `Prelude`，**进 seed**）；`lib/` = 根包工具链
 （Cli/Interp/Files/Fmt/Lint/Repl/Doc/Index/Lsp/TestRunner，**不进 seed**）；`app/` = 产品
 CLI 入口；`seed/` = 提交入库的多文件 OCaml 信任锚点（生成物，禁止手改、别读）；`test/` =
-`run-tests.sh` + `corpus/` 夹具；`vscode/` = VSCode 扩展（高亮 + LSP + lint/fmt/check/build，`dist/` 提交）；`nix/` = 构建图（packages/checks）+ rotate/metrics/bench；`docs/` = 分层文档。
+`run-tests.sh` + `corpus/` 夹具；`bench/` = M33 生成程序基准（`nix run .#vuna-perf`）；
+`vscode/` = VSCode 扩展（高亮 + LSP + lint/fmt/check/build，`dist/` 提交）；`nix/` = 构建图（packages/checks）+ rotate/metrics/bench；`docs/` = 分层文档。
 
 ## 文档导航
 

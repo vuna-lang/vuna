@@ -88,6 +88,13 @@ let
     tools = shellTools;
   };
 
+  # M33：生成程序运行时基准（bench/run.sh；vuna 用 nix 构建的产物）。
+  vuna-perf = import ./perf.nix {
+    inherit pkgs;
+    tools = shellTools;
+    inherit vuna;
+  };
+
   vuna-run-tests = import ./run-tests.nix {
     inherit pkgs;
     tools = shellTools;
@@ -101,6 +108,7 @@ in
     vuna-seed
     vuna-compiler
     vuna-bench
+    vuna-perf
     vuna-run-tests
     ;
 }

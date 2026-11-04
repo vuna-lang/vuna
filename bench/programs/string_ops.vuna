@@ -1,0 +1,12 @@
+-- 字符串基准：递归拼接链（`++`）、库的 repeat / substring。
+-- 手写 OCaml 对照见 string_ops.ml（同算法；substring 复刻 base 的 unpack/take/drop/pack）。
+import Base.String
+
+build : Int -> String
+build n = if n <= 0 then "" else "0123456789" ++ build (n - 1)
+
+main : Int
+main =
+  let
+    s = build 3000
+  in strLength s + strLength (repeat 2000 "xy") + strLength (substring 100 20000 s)

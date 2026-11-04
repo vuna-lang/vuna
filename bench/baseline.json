@@ -1,0 +1,22 @@
+{
+  "schema": 1,
+  "meta": {
+    "timestamp": "2026-11-04T14:02:06Z",
+    "repo": "/home/grass/workspace/personal/vuna",
+    "git_head": "351641a90274453c009dd758146d466d9c8a38df",
+    "git_dirty": true,
+    "compiler": "vuna 0.1.0",
+    "ocamlopt": "5.5.1",
+    "arch": "x86_64",
+    "nproc": 16,
+    "runs": 3,
+    "warmup": 1
+  },
+  "benchmarks": {
+    "arith": { "vuna": { "median_ms": 58, "rss_kb": 120876 }, "ocaml": { "median_ms": 5, "rss_kb": 2476 }, "ratio": 11.60 },
+    "string_ops": { "vuna": { "median_ms": 202, "rss_kb": 55648 }, "ocaml": { "median_ms": 7, "rss_kb": 6700 }, "ratio": 28.86 },
+    "hashmap": { "vuna": { "median_ms": 38, "rss_kb": 70140 }, "ocaml": { "median_ms": 4, "rss_kb": 3972 }, "ratio": 9.50 },
+    "list_recursion": { "vuna": { "median_ms": 29, "rss_kb": 49320 }, "ocaml": { "median_ms": 14, "rss_kb": 11492 }, "ratio": 2.07 },
+    "gc_pressure": { "vuna": { "median_ms": 34, "rss_kb": 35924 }, "ocaml": { "median_ms": 26, "rss_kb": 11292 }, "ratio": 1.31 }
+  }
+}

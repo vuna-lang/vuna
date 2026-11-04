@@ -1,0 +1,9 @@
+-- 分配压力基准：每轮分配字符串（strFromInt / repeat），总量受控、结果可校验。
+-- 手写 OCaml 对照见 gc_pressure.ml（同算法）。
+churn : Int -> Int
+churn n =
+  if n <= 0 then 0
+  else strLength (strFromInt n) + strLength (repeat 1 "0123456789abcdef") + churn (n - 1)
+
+main : Int
+main = churn 200000

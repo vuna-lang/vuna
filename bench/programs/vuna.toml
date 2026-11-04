@@ -1,0 +1,7 @@
+# vuna-bench 的基准夹具是独立包上下文（只依赖 vuna-base）。
+# 单个 .vuna 无模块头 → ad-hoc 入口，自动注入 Prelude；HashMap 等需显式 import。
+[package]
+name = "vuna-bench"
+
+[dependencies]
+vuna-base = "../../base"
