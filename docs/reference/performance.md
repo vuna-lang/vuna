@@ -211,3 +211,50 @@ star-graph 与字典收敛的实例搜索空转）。现在 n ≤ 4000 时每翻
 `termination`（n=4000 时 403 ms，准备阶段的 `callGraph`/`transpose`/`postOrder`/`sccOf`
 仍是 list 实现）与 loader `resolve`（162 ms），下一轮继续表化；真实仓库（~2400 定义）
 当前 check 4.4 s / build 7.1 s，仍有 2 倍以上余量。
+
+## 10. 第 9 轮：M26–M30 之后的回退（build.sh 哈希 / split 归属表 / 并行测试）
+
+M26–M30 的包上下文、split codegen、工具链与并行测试让「每定义成本」之外又冒出三处
+整程序级回退。读数（`nix build .#vuna` 产物，三次平均或单次独立进程）：
+
+| 命令 | 回退后 | 修复后 | 说明 |
+| --- | --- | --- | --- |
+| `build .`（干净） | 51.4 s | **16.9 s** | 扣掉 build.sh 的 O(n²) 哈希后只剩两次 ocamlopt |
+| `build . --no-compile` | 12.3 s | **9.3 s** | split 归属表 + usedTable 提升 |
+| `check .` | 8.6 s | 8.6 s | 精化主导（bodies 2.4 s / termination 1.5 s / cg-groups 0.93 s，见 §4） |
+| `run-tests`（串行） | 166 s | **136 s** | 每个 compile 夹具的 build.sh 742 → 419 ms |
+| `run-tests --jobs 8` | — | **58 s** | 1448 checks，与串行同结果 |
+
+三处根因：
+
+1. **build.sh 的 stamp 是 O(n²) 次 `sha256sum` fork**：每个模块的 stamp 都对「自身
+   .ml/.mli + 全部依赖的 .cmi/.cmx」重新哈希 ⇒ 99 模块要 fork 近 1 万次（干净构建 39 s）。
+   改成 **Merkle**：stamp = hash(自身 .ml/.mli + 依赖的 .stamp)，单 `sha256sum` 一次算完
+   （`Driver/Split.vuna` 的 `hash_of`/`stamp_want`）。内容哈希语义不变。
+2. **split codegen 的归属查找是线性扫**：`datasInUnit`/`defsInUnit` 对每个模块把全部
+   def/data 逐个 `mapOwnerOf`（扫 pairs）⇒ O(#模块 × #def × #pairs)；`genTypeDeclsOf`
+   每个模块重算 `usedTableFix`（族参数不动点，只依赖全体 datas）。改为一次建
+   `HashTbl` 归属表 + `usedTableOf` 算一次传入（`Codegen/Split.vuna`、`Codegen/Decl.vuna`、
+   `Codegen/Assembly.vuna`）；逐模块 codegen 26 ms → 1.2 ms。
+3. **测试第 34 段复用第 30 段的 `$tmp/fmt-pkg`**：`--only 34` 与并行跑章节都会缺文件。
+   第 34 段自己准备包上下文（`test/run-tests.sh`），章节从此相互独立。
+
+并行测试：`nix run .#vuna-run-tests -- --jobs N`（`nix/run-tests.sh`）把 42 个章节按
+「preamble + 章节 + summary」切片后并发跑，日志按章节顺序回放、汇总 pass/fail；
+默认 `--jobs 1` 等价原脚本。CI 的 `checks.vuna-tests` 仍是串行全量（权威口径）。
+
+**nix check 与 run-tests 的重叠**：`checks.vuna-tests` 跑全量 run-tests；其余 check 与
+它重叠的部分是
+
+| check | 内容 | 与 run-tests 重叠 |
+| --- | --- | --- |
+| `vuna-package` | `build examples/multi` / `test` / `fmt` / `doc` / **`build .`** | §28 包模式、§31 doc、§41 build |
+| `vuna-fmt` | 全仓 `fmt --check` | §30/§32 只查 `test/corpus/` 夹具（文件不同，成本小） |
+| `vuna-lint` | 全仓 `lint` | §15/§16 只查 `corpus/lint/` 夹具 |
+| `vuna-index` | Index 自检 + `nix/index-check.sh` | §40 的 Index v2 自检 |
+| `seed-selfhost` | seed → stage1 → stage2 逐字节 fixed point | §13 种子冒烟（只跑一个程序） |
+| `vuna-typecheck` / `vuna-metrics` | `check .` / 代码体积预算 | 无（各自独立面） |
+
+可省的重复：`vuna-package` 的 `vuna build .`（~17 s，根包产品 CLI）与 `vuna-typecheck`
+的 `vuna check .`（~8.6 s）跑的是同一批源码的相近阶段；若 CI 时间吃紧，可把根包
+`build .` 只留在 `seed-selfhost`/本地，或让 `vuna-package` 复用 `check .` 的产物。

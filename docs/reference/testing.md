@@ -31,6 +31,12 @@ nix run .#vuna-run-tests [-- --list | --only 34 | --only dt | --vuna stable]
 `--only` 支持重复与逗号分隔（纯数字按章节序号匹配）；`VUNA` / `VUNA_SEED` 可直接覆盖
 编译器（覆盖时不再调用 `nix build`）。
 
+**并行**：`--jobs N` 把选中的章节切片后并发跑（每章节独立临时目录；日志按章节顺序
+回放并汇总 pass/fail）。M30 实测 1448 checks：串行 ~136 s → `--jobs 8` **~58 s**。
+各章节必须相互独立（第 34 段原先依赖第 30 段的 `$tmp/fmt-pkg`，已改成自己准备上下文）；
+写仓库 `.output` 的章节（§28/§41 一类）与其它章节并发时可能竞争，定位阶段用
+`--only` 排除即可。CI 的 `checks.vuna-tests` 仍是串行全量（权威口径）。
+
 所有语言夹具与包构建都走 DT（`interp` = DT 精化 + 核心求值，`check` / `compile` =
 DT 精化 + 擦除 codegen，`build` = DT 逐模块 codegen + `build.sh`）。没有按检查器
 分支的段，也没有第二套 codegen 输出模型。
