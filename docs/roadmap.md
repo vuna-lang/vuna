@@ -24,6 +24,9 @@ vuna 尚未发布任何版本：没有外部用户、下游生态与历史包袱
 - **工具链**：CLI 统一参数 / 错误出口；LSP 走包上下文（诊断 / hover / 补全 / 定位 /
   references / 格式化 / 符号）；REPL 多行 + IO compile+run；`vuna test` 纯 / 效果双路径；
   VSCode 扩展。
+- **容器与查找表**：标准库有 `Base.HashMap` / `Base.HashSet` / `Base.IntMap`（1024 桶持久
+  哈希表）；编译器查找表（defs / globals / ctor / clause / defVals）用 `HashMap`，元变量
+  解表与创建深度表用 `IntMap`（`metaLookup` 走索引，不再线性扫 / 不再 `strFromInt`）。
 - **质量门禁**：`nix flake check`（packages + seed-selfhost + tests + typecheck + lint + fmt +
   index + metrics + package + context-budget + vscode-ext）、原生测试、lint / fmt / metrics /
   文档预算。
@@ -43,18 +46,12 @@ vuna 尚未发布任何版本：没有外部用户、下游生态与历史包袱
 
 ## 下一步
 
-**M31 已落地**：效果原语 IO 化 + `runIO` 能力门控（`prim_*` 返回 `IO` 动作、只在 `main`
-执行；`runIO` 需 `unsafe`，工具链专属）；**M31.1**（运算符 = `Eq` / `Ord` 方法别名、
-trait 声明与实例分离）与 **M31.2**（parser 只产出 `EInfix` / `EParen`、`Loader.Fixity`
-统一重排、parser / fmt 固定表删除）已落地。**M31.3**（反引号中缀 / section / 用户符号名、
-库内 `infix*` 声明替代内建兜底表）待做；M31 范围（debt）剩 B23–B28、C31。**M32 已落地**：
-顶层签名 trait 约束（`f : Eq a, Show a => τ`；约束与类型一起量化，精化成隐式 Rig1 字典
-参数，body 的延迟字典目标先解到声明的 ctx binder，剩余才走 `liftFreeDictGoals` 提升）。
-M32 只留 B29（局部 / 父类位置的约束归 F4）。
+**M31.3 待做**（B26 / B27：库内 `infix*` 声明替代内建兜底表、fmt 感知程序级 fixity；
+反引号中缀 / section / 用户符号名）与性能轨道无硬依赖，可按需插入；B 系列语言 / 精化器
+残留与 C / E 系列工具项也按需插入。
 
 **M33–M35 性能轨道已排期**（见下）：按「语言能写高性能系统程序 → 编译器快 → 并发 / 服务端」
-推进。M31.3（B26 / B27）与性能轨道无硬依赖，可按需插入；B 系列语言 / 精化器残留与
-C / E 系列工具项也按需插入。新阶段必须映射到 debt 条目，并在「范围」里列明关闭哪些项。
+推进。新阶段必须映射到 debt 条目，并在「范围」里列明关闭哪些项。
 
 ## 性能轨道（M33–M35）
 
@@ -69,8 +66,8 @@ C / E 系列工具项也按需插入。新阶段必须映射到 debt 条目，�
    峰值内存统计；复用同一套设施做编译器基准；
 2. **codegen / 运行时质量**（最高优先，编译器也受益）：单态化 / 字典消除、去装箱、内联、
    尾调用、闭包转换、常量折叠、`String` / `Bytes` / Buffer、记录与变体布局、GC 统计与调优；
-3. **容器与表示**：`Base.HashMap` / `HashSet` / `IntMap`；不可变 `Array`；可变数组 /
-   `IORef`（IO 内）；M34 复用同一实现；
+3. **容器与表示（剩余）**：不可变 `Array`；可变数组 / `IORef`（IO 内）；M34 复用同一
+   实现（`HashMap` / `HashSet` / `IntMap` 已落地，见「当前基线」）；
 4. **可变数据 / ST / 类型系统**：先 `IORef` / 可变数组 → 线性 / 唯一性类型（或 rank-2 /
    存在类型）→ ST / region；顺序不可颠倒（见 [debt.md](reference/debt.md) D22）；
 5. **FFI**：先受限 FFI（纯 C 函数、基本类型、无回调 / GC 交互），再字符串 / 数组 / 回调 /
@@ -81,14 +78,15 @@ C / E 系列工具项也按需插入。新阶段必须映射到 debt 条目，�
 **依赖**：1 先于其余；2 / 3 可并行；4 依赖 2 / 3；5 依赖 2 与 4 的能力边界；6 可在尾段启动。
 **退出标准**：生成程序基准达到设定门槛（例如典型负载在 2× 手写 OCaml 内）；编译器重编译
 后自身有可测下降；FFI / 可变数据可用；ST 是否完成取决于线性类型进度。
-**映射 debt**：D02（部分：表示与运行时性能）、D03（部分：IO 正式化）、D04（容器 / 库）、
-D21、D22。
+**映射 debt**：D02（部分：表示与运行时性能）、D03（部分：IO 正式化）、D04（容器基础已
+落地，剩 DT 验证库 / 库）、D21、D22。
 
 ### M34：编译器快
 
 1. **基准与门槛**：复用 M33 的测量，设 `check` / `build` / LSP 的软 / 硬门槛；
-2. **数据与算法**：容器 / 索引、`metaLookup` 索引化、去 `strFromInt`、`append` O(n²)、
-   SCC / 终止性 / loader 的 list→表、`Sort` 的 O(n²)、字符串 Buffer；
+2. **数据与算法（剩余）**：`append` O(n²)、SCC / 终止性 / loader 的 list→表、
+   `Sort` 的 O(n²)、字符串 Buffer（容器 / 索引、`metaLookup` 索引化、去 `strFromInt`
+   已落地）；
 3. **分配削减**：`Ec` / `Sols` 复制、Term / Value 表示、`normalize` / `force` 复用、
    hash-consing / interning；
 4. **并行 / 增量**：workspace 并行 `check`（纯核心 + 确定性合并）、模块级并行 codegen、
