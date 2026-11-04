@@ -17,7 +17,9 @@
 | `build . --no-compile` | ~9.3 s |
 | `build .` | ~16.9 s |
 | `fmt --check`（全仓） | ~0.3 s |
-| `lint` / `doc` / `map` / `gen-errors` | 均 <1 s |
+| `map`（热缓存命中） | ~0.46 s |
+| `map` 冷启动全量重建 | ~31–33 s（索引缓存失效后整仓重扫；原因见 C34：`refsInExpr` 的左结合 `append` 呈 O(n²)） |
+| `lint` / `doc` / `api` / `gen-errors` | 均 <1 s |
 
 容器改造（私有 `HashTbl` → `Base.HashMap`，元变量解表 → `Base.IntMap`）的实测对比：
 同一 worktree、同一份源码、独立进程各 3 次取中位数（本机绝对值与上表历史读数不可直接
@@ -28,8 +30,9 @@
 | `check compiler` | ~4.87 s | ~4.18 s | -14% |
 | `check .` | ~13.4 s | ~11.3 s | -15% |
 
-所有命令都在 10 s 以内；增长率见 §5。构建口径必须一致：同一份源码在逐模块 split 产物下
-测量；`compile` / `build` / seed 只有这一种产物，不再有单文件 `main.ml` 口径。
+除 `map` 冷启动全量重建（C34）外，所有命令都在 10 s 以内；增长率见 §5。构建口径必须一致：
+同一份源码在逐模块 split 产物下测量；`compile` / `build` / seed 只有这一种产物，不再有
+单文件 `main.ml` 口径。
 
 ## 2. 探针设施：`Vuna.Compiler.Debug`
 

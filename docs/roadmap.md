@@ -89,7 +89,9 @@ fixity 唯一来源、反引号中缀 / section / 用户符号名、fmt 程序�
 1. **基准与门槛**：复用 M33 的测量，设 `check` / `build` / LSP 的软 / 硬门槛；
 2. **数据与算法（剩余）**：`append` O(n²)、SCC / 终止性 / loader 的 list→表、
    `Sort` 的 O(n²)、字符串 Buffer（容器 / 索引、`metaLookup` 索引化、去 `strFromInt`
-   已落地）；
+   已落地）；**`vuna map` 冷启动全量重建 ~31 s**：索引缓存内容哈希失效后整仓重扫，且
+   `Vuna.Index.Scan.refsInExpr` 用左结合 `append` 拼接子树引用列表，嵌套表达式 / 应用
+   spine 上呈 O(n²)（热缓存读数 ~0.46 s；见 [debt.md](reference/debt.md) C34）；
 3. **分配削减**：`Ec` / `Sols` 复制、Term / Value 表示、`normalize` / `force` 复用、
    hash-consing / interning；
 4. **并行 / 增量**：workspace 并行 `check`（纯核心 + 确定性合并）、模块级并行 codegen、
@@ -101,9 +103,9 @@ fixity 唯一来源、反引号中缀 / section / 用户符号名、fmt 程序�
 6. **吃 M33 红利**：编译器重编译后验证 codegen / 运行时的收益并设门槛。
 
 **依赖**：M33 的 1 / 2 / 3；2 可与 M33 并行；5 依赖序列化与接口摘要。
-**退出标准**：`check .` 从当前 ~8 s 降至目标；单文件增量进入秒级以下；LSP 编辑反馈明显
-下降；性能 CI 门槛可用（[debt.md](reference/debt.md) C33）。
-**映射 debt**：C30、C31、C32、C33、E01、E04、E06。
+**退出标准**：`check .` 从当前 ~8 s 降至目标；`vuna map` 冷启动从 ~31 s 降至秒级；单文件
+增量进入秒级以下；LSP 编辑反馈明显下降；性能 CI 门槛可用（[debt.md](reference/debt.md) C33）。
+**映射 debt**：C30、C31、C32、C33、C34、E01、E04、E06。
 
 ### M35：并发 / 服务端
 

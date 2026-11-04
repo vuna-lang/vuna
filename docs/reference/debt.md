@@ -40,6 +40,7 @@
 | C30 | `vuna build` 的 build meta 不含 manifest 摘要：改 `vuna.toml` 能力声明后 `build` 报 "up to date"、跳过重检查与重编（`vuna check` 仍全量） | `Driver/Compile.buildMetaText` / `metaUpToDate` | 待定 |
 | C32 | 无单文件 / 模块级 elab 缓存与序列化格式（只有 build 产物级增量） | `Driver/Compile.buildMetaText`；无 Core Term / DtProgram 序列化 | M34 |
 | C33 | 无性能 CI 门槛与分配 / GC 统计：bench 仅手动、`--check` 软对比 | `nix/bench.sh` 非 check；`performance.md` §2 只有时间戳打点 | M34 |
+| C34 | `vuna map` 冷启动全量重建 ~31 s：索引缓存的内容哈希失效后整仓重扫，且 `refsInExpr` 把子树引用列表用左结合 `append` 拼接，嵌套表达式 / 应用 spine 呈 O(n²) | 冷启动 `./result/bin/vuna map` ~32.5 s、热缓存 ~0.46 s（`.local/index/` 命中）；`lib/Vuna/Index/Scan.vuna:324` `refsInExpr` | M34 |
 
 ## 未来能力（F1–F4）
 
