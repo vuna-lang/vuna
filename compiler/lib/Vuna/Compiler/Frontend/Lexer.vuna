@@ -83,7 +83,7 @@ isOpChar c =
     || c == 126
     || c == 58
 
--- 关键字表（M28 增 `axiom`）。
+-- 关键字表（M28 增 `axiom`；M31.2 增 `infixl` / `infixr` / `infix`）。
 isKeyword : String -> Bool
 isKeyword s =
   s == "data"
@@ -106,6 +106,9 @@ isKeyword s =
     || s == "instance"
     || s == "deriving"
     || s == "do"
+    || s == "infixl"
+    || s == "infixr"
+    || s == "infix"
 
 classifyIdent : String -> Tok
 classifyIdent s = if isKeyword s then TKw s else TIdent s

@@ -143,7 +143,7 @@ percentDecodeChars (c :: rest) acc = if c == 37 then case rest of
     let
       hv = hexValue h
       lv = hexValue l
-    in if hv >= 0 && lv >= 0 then percentDecodeChars more ((hv * 16 + lv) :: acc)
+    in if hv >= 0 && lv >= 0 then percentDecodeChars more (hv * 16 + lv :: acc)
     else percentDecodeChars rest (37 :: acc)
   _ => percentDecodeChars rest (37 :: acc)
 else percentDecodeChars rest (c :: acc)

@@ -53,6 +53,7 @@ exprRefsB bound e = case e of
   -- A2：局部函数组：每个 clause 的参数模式绑定在其体内可见。
   ELocalFun clauses sp =>
     concatMap (\c => exprRefsB (append (patsNames (firstOf c)) bound) (secondOf c)) clauses
+  _ => []
 
 refsOfDef : List (Pair (List Pat) Expr) -> List String
 refsOfDef clauses = dedup (concatMap (\c => exprRefsB (patsNames (firstOf c)) (secondOf c)) clauses)

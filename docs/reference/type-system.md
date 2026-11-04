@@ -77,8 +77,8 @@ Core 表示与合一实现见 [core.md](core.md)，当前边界清单见 [limits
   （`TC_NoInstanceFound` / `TC_EqRequiresEvidence`）。**没有泛型结构比较兜底**，
   interp 与编译产物也没有第二套相等算法。
 - **运算符是方法别名（M31.1）**：`==` / `/=` / `<` / `<=` / `>` / `>=` 不是独立的语义
-  入口，Loader 把它们解析成 `eq` / `neq` / `lt` / `le` / `gt` / `ge`
-  （`Loader.Resolve.builtinOpAlias`）。`a == b`、`eq a b`、``a `eq` b`` 是同一个调用；
+  入口，Loader 把它们解析成 `eq` / `neq` / `lt` / `le` / `gt` / `ge`（M31.2 起统一在
+  `Loader.Fixity` 的重排与别名表里）。`a == b`、`eq a b`、``a `eq` b`` 是同一个调用；
   Elab 的特化按「`Eq` / `Ord` 方法投影的饱和应用」判定（`Elab.Dict.isEqMethod` /
   `isCmpMethod`），不按运算符名。运算符不产生新的运行时名字。实例落点规则见
   [operators.md](operators.md)。

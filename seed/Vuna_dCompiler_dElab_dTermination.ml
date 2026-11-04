@@ -29,6 +29,7 @@ open Vuna_dCompiler_dFrontend_dLexer
 open Vuna_dCompiler_dFrontend_dParser_dSupport
 open Vuna_dCompiler_dFrontend_dParser
 open Vuna_dCompiler_dLoader_dDiagnostics
+open Vuna_dCompiler_dLoader_dFixity
 open Vuna_dCompiler_dLoader_dModules
 open Vuna_dCompiler_dIntrinsics
 open Vuna_dCompiler_dLoader_dResolve
@@ -98,7 +99,7 @@ and v_Vuna_dCompiler_dElab_dTermination_dexprRefsB = (fun bound -> (fun e -> (ma
   | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEDo (dtb__60, dtb__61) -> (v_Base_dPair_dsecondOf ((v_Vuna_dCompiler_dElab_dTermination_drefsOfStmts bound) dtb__60))
   | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEAnn (dtb__62, dtb__63, dtb__64) -> ((v_Base_dList_dappend ((v_Vuna_dCompiler_dElab_dTermination_dexprRefsB bound) dtb__62)) ((v_Vuna_dCompiler_dElab_dTermination_dexprRefsB bound) dtb__63))
   | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dELocalFun (dtb__65, dtb__66) -> ((v_Base_dList_dconcatMap (fun c -> ((v_Vuna_dCompiler_dElab_dTermination_dexprRefsB ((v_Base_dList_dappend (v_Vuna_dCompiler_dElab_dTermination_dpatsNames (v_Base_dPair_dfirstOf c))) bound)) (v_Base_dPair_dsecondOf c)))) dtb__65)
-  | _ -> failwith "DT: impossible branch"
+  | _ -> C_Base_dList_dList_Base_dList_dNil
 )))
 
 let v_Vuna_dCompiler_dElab_dTermination_drefsOfDef = (fun clauses -> (v_Vuna_dCompiler_dElab_dTermination_dMeasure_ddedup ((v_Base_dList_dconcatMap (fun c -> ((v_Vuna_dCompiler_dElab_dTermination_dexprRefsB (v_Vuna_dCompiler_dElab_dTermination_dpatsNames (v_Base_dPair_dfirstOf c))) (v_Base_dPair_dsecondOf c)))) clauses)))

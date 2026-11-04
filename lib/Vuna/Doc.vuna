@@ -13,6 +13,7 @@ module Vuna.Doc (runDoc) where
 import Vuna.Cli.Args
 import Vuna.Compiler.Common
 import Vuna.Compiler.Frontend.Ast
+import Vuna.Compiler.Loader.Fixity
 import Vuna.Compiler.Frontend.Manifest
 import Vuna.Compiler.Frontend.Parser
 import Vuna.Compiler.Packages.Pkg
@@ -78,9 +79,11 @@ docModule path = case readText path of
   Err e => Err e
   Ok source => case parseSource path source of
     Err e => Err (path ++ ": " ++ e)
-    Ok (Source hdr imports decls) =>
-      Ok
-        (Pair (moduleNameOfPath path hdr) (moduleHeaderLine path hdr ++ "\n\n```vuna\n" ++ join "\n" (declLines decls) ++ "\n```\n"))
+    Ok (Source hdr imports fx decls0) => case reorderProgram (tableOfKeepOps fx) decls0 of
+      Err e => Err (path ++ ": " ++ e)
+      Ok decls =>
+        Ok
+          (Pair (moduleNameOfPath path hdr) (moduleHeaderLine path hdr ++ "\n\n```vuna\n" ++ join "\n" (declLines decls) ++ "\n```\n"))
 
 moduleNameOfPath : String -> Maybe ModDecl -> String
 moduleNameOfPath path (Just (ModDecl name hasList items sp)) = name

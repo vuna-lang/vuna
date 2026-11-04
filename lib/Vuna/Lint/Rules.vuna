@@ -35,6 +35,7 @@ module Vuna.Lint.Rules
 -- 折叠产生互相冲突的 Edit。
 import Vuna.Compiler.Common
 import Vuna.Compiler.Frontend.Ast
+import Vuna.Compiler.Loader.Fixity
 import Vuna.Compiler.Frontend.Lexer
 import Vuna.Compiler.Frontend.Parser
 import Vuna.Lint.Diagnostics
@@ -358,6 +359,7 @@ else case e of
   EDo stmts sp => minPair (startFromSpan sp) (startStmts (fuel - 1) stmts)
   EAnn value ty sp =>
     minPair (startFromSpan sp) (minPair (startExpr (fuel - 1) value) (startExpr (fuel - 1) ty))
+  _ => Pair 0 0
 
 startExprs : Int -> List Expr -> Pair Int Int
 startExprs fuel exprs = if fuel <= 0 then Pair 1000000000 1000000000
@@ -592,6 +594,7 @@ else case e of
     mentionsExpr (fuel - 1) name base || mentionsFields (fuel - 1) name fields
   EDo stmts sp => mentionsStmts (fuel - 1) name stmts
   EAnn value ty sp => mentionsExpr (fuel - 1) name value || mentionsExpr (fuel - 1) name ty
+  _ => False
 
 mentionsExprs : Int -> String -> List Expr -> Bool
 mentionsExprs fuel name exprs = if fuel <= 0 then False
@@ -972,6 +975,7 @@ else case e of
   EDo stmts sp => walkStmts (fuel - 1) lines toks stmts
   EAnn value ty sp =>
     append (walkExpr (fuel - 1) lines toks value) (walkExpr (fuel - 1) lines toks ty)
+  _ => []
 
 walkIf : Int -> List String -> List PTok -> Expr -> Expr -> Expr -> Expr -> List Finding
 walkIf fuel lines toks e cond yes no = if fuel <= 0 then []
@@ -1133,13 +1137,15 @@ dedupGo kept (f :: rest) = if coveredBy kept f then dedupGo kept rest else dedup
 lintSource : String -> Result (List Finding)
 lintSource source = case parseSource "<lint>" source of
   Err e => Err e
-  Ok ignored => case lexSource source of
+  -- M31.2：规则看 AST 的中缀结构，先按本地 fixity 声明重排（保留运算符原名）。
+  Ok (Source _ _ fx decls0) => case reorderProgram (tableOfKeepOps fx) decls0 of
     Err e => Err e
-    Ok toks =>
-      let
-        lines = splitLines source
-        decls = sourceDecls ignored
-      in Ok (dedupFindings (sortFindings (scanDecls lines toks decls decls)))
+    Ok decls => case lexSource source of
+      Err e => Err e
+      Ok toks =>
+        let
+          lines = splitLines source
+        in Ok (dedupFindings (sortFindings (scanDecls lines toks decls decls)))
 
 sourceDecls : SourceFile -> List Decl
-sourceDecls (Source hdr imports decls) = decls
+sourceDecls (Source hdr imports fx decls) = decls

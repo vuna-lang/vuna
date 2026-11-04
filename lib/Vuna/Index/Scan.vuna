@@ -23,6 +23,7 @@ module Vuna.Index.Scan (buildIndex, loadOrBuild) where
 --   - 缓存不可写 / 写失败一律降级为纯内存索引（不报错）。
 import Vuna.Compiler.Common
 import Vuna.Compiler.Frontend.Ast
+import Vuna.Compiler.Loader.Fixity
 import Vuna.Compiler.Frontend.Lexer
 import Vuna.Compiler.Frontend.Parser
 import Vuna.Compiler.Packages.Pkg
@@ -331,6 +332,7 @@ refsInExpr sMod e = case e of
   ERecUpdate r fields sp => append (refsInExpr sMod r) (concatMap (refsInField sMod) fields)
   EDo stmts sp => concatMap (refsInDoStmt sMod) stmts
   EAnn value ty sp => append (refsInExpr sMod value) (refsInExpr sMod ty)
+  _ => []
 
 -- ---------------------------------------------------------------
 -- 全量构建
@@ -360,16 +362,18 @@ indexOneExisting dir pkgName path =
     bytes = strLength source
   in case parseSource path source of
     Err e => Err (path ++ ": " ++ e)
-    Ok (Source srcHdr imports decls) =>
-      let
-        sMod = moduleNameOf dir path srcHdr
-        comments = case lexComments source of
-          Err e => []
-          Ok cs => cs
-        info = ModuleInfo sMod pkgName path bytes (length decls)
-        syms = symbolsOfModule sMod decls comments
-        refs = refsInDecls sMod decls
-      in Ok (Built [info] syms refs)
+    Ok (Source srcHdr imports fx decls0) => case reorderProgram (tableOfKeepOps fx) decls0 of
+      Err e => Err (path ++ ": " ++ e)
+      Ok decls =>
+        let
+          sMod = moduleNameOf dir path srcHdr
+          comments = case lexComments source of
+            Err e => []
+            Ok cs => cs
+          info = ModuleInfo sMod pkgName path bytes (length decls)
+          syms = symbolsOfModule sMod decls comments
+          refs = refsInDecls sMod decls
+        in Ok (Built [info] syms refs)
 
 data Acc : Type where
   Acc : List ModuleInfo -> List Sym -> List Ref -> List String -> Acc

@@ -190,6 +190,8 @@ ctorNameOf : Ctor -> String
 ctorNameOf (Ctor name ty arity sp) = name
 
 patSizeStrict : Pat -> Int -> List Int -> List (Pair String (Pair Int (Pair Int (List Int)))) -> List (Pair String (Pair Int (Pair Int (List Int))))
+patSizeStrict (PAs n inner sp) base path acc =
+  patSizeStrict inner base path (Pair n (Pair base (Pair (length path) path)) :: acc)
 patSizeStrict (PVar n sp) base path acc = Pair n (Pair base (Pair (length path) path)) :: acc
 patSizeStrict (PWild sp) base path acc = acc
 patSizeStrict (PCon c ps sp) base path acc = patsSizeStrict ps base path 0 acc

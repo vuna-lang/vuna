@@ -29,6 +29,7 @@ import Vuna.Compiler.Common
 import Vuna.Compiler.Driver.Dt
 import Vuna.Compiler.Elab
 import Vuna.Compiler.Frontend.Ast
+import Vuna.Compiler.Loader.Fixity
 import Vuna.Compiler.Frontend.Parser
 import Vuna.Compiler.Packages.Pkg
 import Vuna.Fmt
@@ -158,7 +159,7 @@ symbolHoverJson s line startCol token =
 currentModuleNameOf : String -> String
 currentModuleNameOf text = case parseSource "<lsp>" text of
   Err e => ""
-  Ok (Source hdr imports decls) => currentModuleName decls hdr
+  Ok (Source hdr imports fx decls) => currentModuleName decls hdr
 
 -- hover 的第一段：DT 洞目标（包上下文；与 `vuna goal` 同源）。
 -- 快速判据：文本里没有独立的 `_` token 时直接跳过——否则每次 hover 都要跑一遍
@@ -295,7 +296,7 @@ declBufferNames d = append (typeNamesOf [d]) (declNames d)
 bufferNames : String -> List String
 bufferNames text = case parseSource "<completion>" text of
   Err e => []
-  Ok (Source hdr imports decls) => dedupeNames (concatMap declBufferNames decls)
+  Ok (Source hdr imports fx decls) => dedupeNames (concatMap declBufferNames decls)
 
 dedupeNames : List String -> List String
 dedupeNames xs = dedupeNamesGo xs [] []
@@ -368,7 +369,9 @@ declSymbolJson lines d =
 documentSymbols : String -> String -> List Json
 documentSymbols uri text = case parseSource uri text of
   Err e => []
-  Ok (Source hdr imports decls) => map (declSymbolJson (split "\n" text)) decls
+  Ok (Source hdr imports fx decls0) => case reorderProgram (tableOfKeepOps fx) decls0 of
+    Err e => []
+    Ok decls => map (declSymbolJson (split "\n" text)) decls
 
 -- ---------------------------------------------------------------
 -- definition：位置 → token → Index → Location
@@ -382,7 +385,7 @@ findDeclByName name (d :: rest) =
 bufferDefinition : String -> String -> String -> Json
 bufferDefinition uri text token = case parseSource uri text of
   Err e => JNull
-  Ok (Source hdr imports decls) => case findDeclByName (lastSegment token) decls of
+  Ok (Source hdr imports fx decls) => case findDeclByName (lastSegment token) decls of
     Nothing => JNull
     Just d =>
       JArr

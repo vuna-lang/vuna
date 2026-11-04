@@ -29,6 +29,7 @@ open Vuna_dCompiler_dFrontend_dLexer
 open Vuna_dCompiler_dFrontend_dParser_dSupport
 open Vuna_dCompiler_dFrontend_dParser
 open Vuna_dCompiler_dLoader_dDiagnostics
+open Vuna_dCompiler_dLoader_dFixity
 open Vuna_dCompiler_dLoader_dModules
 open Vuna_dCompiler_dIntrinsics
 open Vuna_dCompiler_dLoader_dResolve
@@ -149,15 +150,9 @@ let v_Vuna_dCompiler_dElab_dMeta_dglobalsLookup = (fun name -> (fun globals -> (
   | _ -> failwith "DT: impossible branch"
 ))))
 
-<<<<<<< HEAD
-let rec v_Vuna_dCompiler_dElab_dMeta_dmemSig = (fun d5229 -> (fun mc0 -> (fun mc1 -> (match mc0 with
+let rec v_Vuna_dCompiler_dElab_dMeta_dmemSig = (fun d5556 -> (fun mc0 -> (fun mc1 -> (match mc0 with
   | C_Base_dList_dList_Base_dList_dCons (dtb__72, dtb__73) -> (match dtb__72 with
-  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__74, dtb__75) -> (if (((v_Base_dEq_deq d5229) dtb__74) mc1) then true else (((v_Vuna_dCompiler_dElab_dMeta_dmemSig d5229) dtb__73) mc1))
-=======
-let rec v_Vuna_dCompiler_dElab_dMeta_dmemSig = (fun d5150 -> (fun mc0 -> (fun mc1 -> (match mc0 with
-  | C_Base_dList_dList_Base_dList_dCons (dtb__72, dtb__73) -> (match dtb__72 with
-  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__74, dtb__75) -> (if (((v_Base_dEq_deq d5150) dtb__74) mc1) then true else (((v_Vuna_dCompiler_dElab_dMeta_dmemSig d5150) dtb__73) mc1))
->>>>>>> 92571c3 (feat(m31): 运算符改为 Eq/Ord 方法别名，trait 声明与实例分离)
+  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__74, dtb__75) -> (if (((v_Base_dEq_deq d5556) dtb__74) mc1) then true else (((v_Vuna_dCompiler_dElab_dMeta_dmemSig d5556) dtb__73) mc1))
   | _ -> failwith "DT: impossible branch"
 )
   | C_Base_dList_dList_Base_dList_dNil -> false

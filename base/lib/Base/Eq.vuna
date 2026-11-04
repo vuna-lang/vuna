@@ -10,6 +10,8 @@ module Base.Eq (Eq(..)) where
 -- `==` / `/=` 不再是编译器内建全局：Loader 把它们解析成 `eq` / `neq` 的别名（M31.1），
 -- 因此 `a == b`、`eq a b` 是同一个调用；Int / String 上的内建特化（`bi_eq_*`）是
 -- 这两个类的内建实例实现，而不是运算符的独立语义。
+-- `==` / `/=` 是 `eq` / `neq` 的 fixity/别名声明（M31.2：优先级与别名由库声明，
+-- Loader 在中缀重排时消费；M31.1 的编译器内建别名表已删除）。
 import Base.Bool
 
 trait Eq a where

@@ -36,6 +36,7 @@ import Base.Bool
 import Base.Eq
 import Base.Ord
 
+-- M31.2：`++` 的 fixity 声明（字符串拼接是内建值）。
 split : String -> String -> List String
 split sep text =
   if strLength sep == 0 then map (\c => strPack [c]) (strUnpack text)

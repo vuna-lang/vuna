@@ -215,11 +215,7 @@ let v_Vuna_dCompiler_dFrontend_dParser_dSupport_dstartsPatternAtom = (fun st -> 
   | _ -> failwith "DT: impossible branch"
 )) (v_Vuna_dCompiler_dFrontend_dParser_dSupport_dpeekTok st)))
 
-let v_Vuna_dCompiler_dFrontend_dParser_dSupport_dinfixInfo = (fun mc0 -> (if ((bi_eq_str mc0) "->") then (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust ((C_Base_dPair_dPair_Base_dPair_dPair (1, 1)))) else (if ((bi_eq_str mc0) "||") then (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust ((C_Base_dPair_dPair_Base_dPair_dPair (2, 0)))) else (if ((bi_eq_str mc0) "&&") then (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust ((C_Base_dPair_dPair_Base_dPair_dPair (3, 0)))) else (if ((bi_eq_str mc0) "==") then (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust ((C_Base_dPair_dPair_Base_dPair_dPair (4, 0)))) else (if ((bi_eq_str mc0) "/=") then (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust ((C_Base_dPair_dPair_Base_dPair_dPair (4, 0)))) else (if ((bi_eq_str mc0) "<") then (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust ((C_Base_dPair_dPair_Base_dPair_dPair (4, 0)))) else (if ((bi_eq_str mc0) "<=") then (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust ((C_Base_dPair_dPair_Base_dPair_dPair (4, 0)))) else (if ((bi_eq_str mc0) ">") then (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust ((C_Base_dPair_dPair_Base_dPair_dPair (4, 0)))) else (if ((bi_eq_str mc0) ">=") then (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust ((C_Base_dPair_dPair_Base_dPair_dPair (4, 0)))) else (if ((bi_eq_str mc0) "++") then (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust ((C_Base_dPair_dPair_Base_dPair_dPair (5, 1)))) else (if ((bi_eq_str mc0) "+") then (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust ((C_Base_dPair_dPair_Base_dPair_dPair (6, 0)))) else (if ((bi_eq_str mc0) "-") then (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust ((C_Base_dPair_dPair_Base_dPair_dPair (6, 0)))) else (if ((bi_eq_str mc0) "*") then (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust ((C_Base_dPair_dPair_Base_dPair_dPair (7, 0)))) else (if ((bi_eq_str mc0) "/") then (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust ((C_Base_dPair_dPair_Base_dPair_dPair (7, 0)))) else (if ((bi_eq_str mc0) "::") then (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust ((C_Base_dPair_dPair_Base_dPair_dPair (8, 1)))) else (if ((bi_eq_str mc0) ">>=") then (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust ((C_Base_dPair_dPair_Base_dPair_dPair (1, 1)))) else (if ((bi_eq_str mc0) ">>") then (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust ((C_Base_dPair_dPair_Base_dPair_dPair (1, 0)))) else C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing))))))))))))))))))
-
-let v_Vuna_dCompiler_dFrontend_dParser_dSupport_dopExpr = (fun mc0 -> (fun mc1 -> (if ((bi_eq_str mc0) "::") then (C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEVar ("Cons", mc1)) else (if ((bi_eq_str mc0) ">>=") then (C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEVar ("bind", mc1)) else (C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEVar (mc0, mc1))))))
-
-let v_Vuna_dCompiler_dFrontend_dParser_dSupport_dmkInfixExpr = (fun mc0 -> (fun mc1 -> (fun mc2 -> (fun mc3 -> (if ((bi_eq_str mc0) ">>") then (C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEApp ((C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEVar ("bind", mc3)), (C_Base_dList_dList_Base_dList_dCons (mc1, (C_Base_dList_dList_Base_dList_dCons ((C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dELam ((C_Base_dList_dList_Base_dList_dCons ("vuna_seq_ignore", C_Base_dList_dList_Base_dList_dNil)), mc2, mc3)), C_Base_dList_dList_Base_dList_dNil)))), mc3)) else (C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEApp (((v_Vuna_dCompiler_dFrontend_dParser_dSupport_dopExpr mc0) mc3), (C_Base_dList_dList_Base_dList_dCons (mc1, (C_Base_dList_dList_Base_dList_dCons (mc2, C_Base_dList_dList_Base_dList_dNil)))), mc3)))))))
+let v_Vuna_dCompiler_dFrontend_dParser_dSupport_disSyntaxSym = (fun op -> (if ((bi_eq_str op) "=") then true else (if ((bi_eq_str op) ":") then true else (if ((bi_eq_str op) ",") then true else (if ((bi_eq_str op) ";") then true else (if ((bi_eq_str op) "|") then true else (if ((bi_eq_str op) "=>") then true else (if ((bi_eq_str op) "<-") then true else (if ((bi_eq_str op) "\\") then true else (if ((bi_eq_str op) ".") then true else (if ((bi_eq_str op) "..") then true else (if ((bi_eq_str op) "@") then true else (if ((bi_eq_str op) "(") then true else (if ((bi_eq_str op) ")") then true else (if ((bi_eq_str op) "[") then true else (if ((bi_eq_str op) "]") then true else (if ((bi_eq_str op) "{") then true else (if ((bi_eq_str op) "}") then true else false))))))))))))))))))
 
 let rec v_Vuna_dCompiler_dFrontend_dParser_dSupport_dcountArrows = (fun mc0 -> (match mc0 with
   | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEApp (dtb__85, dtb__86, dtb__87) -> (match dtb__85 with
@@ -235,19 +231,20 @@ let rec v_Vuna_dCompiler_dFrontend_dParser_dSupport_dcountArrows = (fun mc0 -> (
 ) else 0)
   | _ -> 0
 )
+  | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEInfix (dtb__94, dtb__95, dtb__96, dtb__97) -> (if ((bi_eq_str dtb__94) "->") then ((bi_add 1) (v_Vuna_dCompiler_dFrontend_dParser_dSupport_dcountArrows dtb__96)) else 0)
   | _ -> 0
 ))
 
 let v_Vuna_dCompiler_dFrontend_dParser_dSupport_dterminatesExpression = (fun mc0 -> (match mc0 with
-  | C_Vuna_dCompiler_dFrontend_dLexer_dPTok_Vuna_dCompiler_dFrontend_dLexer_dPTok (dtb__94, dtb__95) -> (match dtb__94 with
-  | C_Vuna_dCompiler_dFrontend_dLexer_dTok_Vuna_dCompiler_dFrontend_dLexer_dTKw (dtb__96) -> (if ((bi_eq_str dtb__96) "else") then true else (if ((bi_eq_str dtb__96) "in") then true else (if ((bi_eq_str dtb__96) "then") then true else false)))
-  | C_Vuna_dCompiler_dFrontend_dLexer_dTok_Vuna_dCompiler_dFrontend_dLexer_dTSym (dtb__97) -> (if ((bi_eq_str dtb__97) ")") then true else (if ((bi_eq_str dtb__97) "]") then true else (if ((bi_eq_str dtb__97) ",") then true else false)))
+  | C_Vuna_dCompiler_dFrontend_dLexer_dPTok_Vuna_dCompiler_dFrontend_dLexer_dPTok (dtb__98, dtb__99) -> (match dtb__98 with
+  | C_Vuna_dCompiler_dFrontend_dLexer_dTok_Vuna_dCompiler_dFrontend_dLexer_dTKw (dtb__100) -> (if ((bi_eq_str dtb__100) "else") then true else (if ((bi_eq_str dtb__100) "in") then true else (if ((bi_eq_str dtb__100) "then") then true else false)))
+  | C_Vuna_dCompiler_dFrontend_dLexer_dTok_Vuna_dCompiler_dFrontend_dLexer_dTSym (dtb__101) -> (if ((bi_eq_str dtb__101) ")") then true else (if ((bi_eq_str dtb__101) "]") then true else (if ((bi_eq_str dtb__101) ",") then true else false)))
   | _ -> false
 )
   | _ -> failwith "DT: impossible branch"
 ))
 
 let v_Vuna_dCompiler_dFrontend_dParser_dSupport_dbadCaseIndent = (fun st -> (fun altCol -> (if (v_Vuna_dCompiler_dFrontend_dParser_dSupport_disEof st) then false else (match (v_Vuna_dCompiler_dFrontend_dParser_dSupport_dpeekPos st) with
-  | C_Vuna_dCompiler_dCommon_dPos_Vuna_dCompiler_dCommon_dPos (dtb__98, dtb__99) -> (if ((bi_gt_int dtb__99) altCol) then (if (v_Vuna_dCompiler_dFrontend_dParser_dSupport_dterminatesExpression (v_Vuna_dCompiler_dFrontend_dParser_dSupport_dpeekTok st)) then false else true) else false)
+  | C_Vuna_dCompiler_dCommon_dPos_Vuna_dCompiler_dCommon_dPos (dtb__102, dtb__103) -> (if ((bi_gt_int dtb__103) altCol) then (if (v_Vuna_dCompiler_dFrontend_dParser_dSupport_dterminatesExpression (v_Vuna_dCompiler_dFrontend_dParser_dSupport_dpeekTok st)) then false else true) else false)
   | _ -> failwith "DT: impossible branch"
 ))))

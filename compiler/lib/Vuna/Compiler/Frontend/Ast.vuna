@@ -17,10 +17,12 @@ module Vuna.Compiler.Frontend.Ast
   , EDo
   , EField
   , EIf
+  , EInfix
   , EInt
   , ELam
   , ELet
   , ELocalFun
+  , EParen
   , EPi
   , ERecUpdate
   , ERecord
@@ -29,6 +31,7 @@ module Vuna.Compiler.Frontend.Ast
   , ExportItem
   , Expr
   , Field
+  , FixityDecl
   , Import
   , ModDecl
   , PAs
@@ -62,6 +65,11 @@ module Vuna.Compiler.Frontend.Ast
   , fieldName
   , fieldSpan
   , fieldType
+  , fixityAssoc
+  , fixityLevel
+  , fixityOp
+  , fixitySpan
+  , fixityTarget
   , funArity
   , importSpan
   , modDeclSpan
@@ -115,10 +123,36 @@ data Expr : Type where
   ERecord : String -> List (Pair String Expr) -> Span -> Expr
   ERecUpdate : Expr -> List (Pair String Expr) -> Span -> Expr
   EDo : List DoStmt -> Span -> Expr
+  -- M31.2：中缀链与括号。parser 的**中间产物**：Loader 按 fixity 表重排并消除它们
+  -- （`Loader.Resolve.reorderProgram`），Elab / codegen 永远不应看到（残留即 internal
+  -- error）；Fmt / Index / Lsp 在 parse 后处理它们。
+  EInfix : String -> Expr -> Expr -> Span -> Expr
+  EParen : Expr -> Span -> Expr
   -- M24：表达式类型标注。只由 parser 的 where 绑定签名生成（`g : Int -> Int` 行
   -- 绑定到随后的 `g ... = ...` 子句），Elab 精化时据此把 where 组按签名递归提升；
   -- 普通表达式位置不产生它，Fmt 在非 where 位置把它当透明括号渲染。
   EAnn : Expr -> Expr -> Span -> Expr
+
+-- M31.2：fixity / 别名声明（`infixl 6 +`、`infixr 5 :: = Cons`、`infix 4 == = eq`）。
+-- 只进入 `Source.fixities`，由 Loader 在中缀重排时消费；**不进入 `Decl`**，避免所有
+-- Decl 匹配点扩散。
+data FixityDecl : Type where
+  FixityDecl : String -> Int -> Int -> Maybe String -> Span -> FixityDecl
+
+fixityOp : FixityDecl -> String
+fixityOp (FixityDecl op level assoc target sp) = op
+
+fixityLevel : FixityDecl -> Int
+fixityLevel (FixityDecl op level assoc target sp) = level
+
+fixityAssoc : FixityDecl -> Int
+fixityAssoc (FixityDecl op level assoc target sp) = assoc
+
+fixityTarget : FixityDecl -> Maybe String
+fixityTarget (FixityDecl op level assoc target sp) = target
+
+fixitySpan : FixityDecl -> Span
+fixitySpan (FixityDecl op level assoc target sp) = sp
 
 -- do 语句（M11）：`pat <- expr` 或裸表达式；最后一条必须是裸表达式。
 data DoStmt : Type where
@@ -151,9 +185,9 @@ data ExportItem : Type where
 data ModDecl : Type where
   ModDecl : String -> Bool -> List ExportItem -> Span -> ModDecl
 
--- parser 的产物：可选模块头 + imports + 顶层声明。
+-- parser 的产物：可选模块头 + imports + fixity/别名声明 + 顶层声明。
 data SourceFile : Type where
-  Source : Maybe ModDecl -> List Import -> List Decl -> SourceFile
+  Source : Maybe ModDecl -> List Import -> List FixityDecl -> List Decl -> SourceFile
 
 -- 各节点的源码 span 访问器。
 patSpan : Pat -> Span
@@ -167,6 +201,8 @@ patSpan (PRecord name fields sp) = sp
 
 exprSpan : Expr -> Span
 exprSpan (EVar name sp) = sp
+exprSpan (EInfix op lhs rhs sp) = sp
+exprSpan (EParen inner sp) = exprSpan inner
 exprSpan (EInt n sp) = sp
 exprSpan (EStr s sp) = sp
 exprSpan (ELam ps body sp) = sp

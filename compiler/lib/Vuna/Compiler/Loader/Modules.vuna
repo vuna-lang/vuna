@@ -23,6 +23,7 @@ module Vuna.Compiler.Loader.Modules
   , moduleCapabilities
   , moduleDeclsOf
   , moduleExportsOf
+  , moduleFixitiesOf
   , moduleImplicitImportsOf
   , moduleImportsOf
   , moduleNameOf
@@ -36,6 +37,7 @@ module Vuna.Compiler.Loader.Modules
   , projectEntryAllImports
   , projectEntryCapabilities
   , projectEntryDecls
+  , projectEntryFixities
   , projectEntryImports
   , projectEntryPkg
   , projectModules
@@ -59,55 +61,64 @@ import Vuna.Compiler.Packages.Pkg
 
 -- 显式 import 与自动注入的 Prelude（隐式 import）分开保存：
 -- 名字解析与 codegen 拓扑序用 all；模块重导出/include 只认显式 import。
+-- M31.2：最后一个字段是**可见 fixity 表**（本模块声明 + imports 闭包，查找时本模块优先；
+-- 中缀重排见 `Loader.Fixity`）。
 data Module : Type where
-  Module : String -> String -> List Import -> List Import -> List Decl -> List ExportEntry -> List String -> Module
+  Module : String -> String -> List Import -> List Import -> List Decl -> List ExportEntry -> List String -> List FixityDecl -> Module
 
 -- 已加载项目：入口声明/import + 依赖模块列表（M12 分离编译用；保持 flatten 前的形态）。
 -- entryPkg 用于按包限制 effectful 内建（M12.6：普通包只能通过 Base.IO 使用效果）。
+-- M31.2：entryFixities 是入口文件自己的 fixity 声明（入口 decls 的重排要用）。
 data Project : Type where
-  Project : List Decl -> List Import -> List Import -> List Module -> String -> List String -> Project
+  Project : List Decl -> List Import -> List Import -> List Module -> String -> List String -> List FixityDecl -> Project
 
 moduleNameOf : Module -> String
-moduleNameOf (Module n p is imps ds es cs) = n
+moduleNameOf (Module n p is imps ds es cs fx) = n
 
 modulePackageOf : Module -> String
-modulePackageOf (Module n p is imps ds es cs) = p
+modulePackageOf (Module n p is imps ds es cs fx) = p
 
 moduleImportsOf : Module -> List Import
-moduleImportsOf (Module n p is imps ds es cs) = is
+moduleImportsOf (Module n p is imps ds es cs fx) = is
 
 moduleImplicitImportsOf : Module -> List Import
-moduleImplicitImportsOf (Module n p is imps ds es cs) = imps
+moduleImplicitImportsOf (Module n p is imps ds es cs fx) = imps
 
 moduleAllImportsOf : Module -> List Import
-moduleAllImportsOf (Module n p is imps ds es cs) = append is imps
+moduleAllImportsOf (Module n p is imps ds es cs fx) = append is imps
 
 moduleDeclsOf : Module -> List Decl
-moduleDeclsOf (Module n p is imps ds es cs) = ds
+moduleDeclsOf (Module n p is imps ds es cs fx) = ds
 
 moduleExportsOf : Module -> List ExportEntry
-moduleExportsOf (Module n p is imps ds es cs) = es
+moduleExportsOf (Module n p is imps ds es cs fx) = es
 
 moduleCapabilities : Module -> List String
-moduleCapabilities (Module n p is imps ds es cs) = cs
+moduleCapabilities (Module n p is imps ds es cs fx) = cs
+
+moduleFixitiesOf : Module -> List FixityDecl
+moduleFixitiesOf (Module n p is imps ds es cs fx) = fx
 
 projectEntryDecls : Project -> List Decl
-projectEntryDecls (Project ds is imps ms pkg pcaps) = ds
+projectEntryDecls (Project ds is imps ms pkg pcaps fx) = ds
 
 projectEntryImports : Project -> List Import
-projectEntryImports (Project ds is imps ms pkg pcaps) = is
+projectEntryImports (Project ds is imps ms pkg pcaps fx) = is
 
 projectEntryAllImports : Project -> List Import
-projectEntryAllImports (Project ds is imps ms pkg pcaps) = append is imps
+projectEntryAllImports (Project ds is imps ms pkg pcaps fx) = append is imps
 
 projectModules : Project -> List Module
-projectModules (Project ds is imps ms pkg pcaps) = ms
+projectModules (Project ds is imps ms pkg pcaps fx) = ms
 
 projectEntryPkg : Project -> String
-projectEntryPkg (Project ds is imps ms pkg pcaps) = pkg
+projectEntryPkg (Project ds is imps ms pkg pcaps fx) = pkg
 
 projectEntryCapabilities : Project -> List String
-projectEntryCapabilities (Project ds is imps ms pkg pcaps) = pcaps
+projectEntryCapabilities (Project ds is imps ms pkg pcaps fx) = pcaps
+
+projectEntryFixities : Project -> List FixityDecl
+projectEntryFixities (Project ds is imps ms pkg pcaps fx) = fx
 
 -- M28（B18）：解析期的三个命名空间，与导出表 kind 一一对应，**不再拍平**。
 --   values = 值命名空间（DFun / 签名 / 实例名；导出 kind "val"）
@@ -231,7 +242,7 @@ missingModule name =
 
 moduleDecls : List Module -> String -> Result (List Decl)
 moduleDecls modules name = case findModule modules name of
-  Just (Module mname mpkg imports imps decls exports mcaps) => Ok decls
+  Just (Module mname mpkg imports imps decls exports mcaps fx) => Ok decls
   Nothing => missingModule name
 
 moduleCtors : List Module -> String -> Result (List String)
@@ -239,7 +250,7 @@ moduleCtors modules name = andThen (moduleDecls modules name) (\decls => Ok (cto
 
 exportsOf : List Module -> String -> Result (List ExportEntry)
 exportsOf modules name = case findModule modules name of
-  Just (Module mname mpkg imports imps decls exports mcaps) => Ok exports
+  Just (Module mname mpkg imports imps decls exports mcaps fx) => Ok exports
   Nothing => missingModule name
 
 entryKind : ExportEntry -> String
@@ -353,8 +364,8 @@ findModuleFile roots name importerPkg = case collectModuleFiles roots name impor
 
 findModule : List Module -> String -> Maybe Module
 findModule [] name = Nothing
-findModule ((Module mname mpkg imports imps decls exports mcaps) :: rest) name =
-  if mname == name then Just (Module mname mpkg imports imps decls exports mcaps)
+findModule ((Module mname mpkg imports imps decls exports mcaps fx) :: rest) name =
+  if mname == name then Just (Module mname mpkg imports imps decls exports mcaps fx)
   else findModule rest name
 
 refKind : ExportRef -> String

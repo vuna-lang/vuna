@@ -28,6 +28,7 @@ modules = [
   "Vuna.Compiler.Frontend.Manifest",
   "Vuna.Compiler.Packages.Pkg",
   "Vuna.Compiler.Loader",
+  "Vuna.Compiler.Loader.Fixity",
   "Vuna.Compiler.Loader.Modules",
   "Vuna.Compiler.Loader.Resolve",
   "Vuna.Compiler.Loader.Flatten",

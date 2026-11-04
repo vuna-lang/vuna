@@ -29,6 +29,7 @@ open Vuna_dCompiler_dFrontend_dLexer
 open Vuna_dCompiler_dFrontend_dParser_dSupport
 open Vuna_dCompiler_dFrontend_dParser
 open Vuna_dCompiler_dLoader_dDiagnostics
+open Vuna_dCompiler_dLoader_dFixity
 open Vuna_dCompiler_dLoader_dModules
 open Vuna_dCompiler_dIntrinsics
 open Vuna_dCompiler_dLoader_dResolve
@@ -97,26 +98,16 @@ let rec v_Vuna_dCompiler_dElab_dRecords_dfieldNamesOf = (fun mc0 -> (match mc0 w
   | _ -> failwith "DT: impossible branch"
 ))
 
-<<<<<<< HEAD
-let rec v_Vuna_dCompiler_dElab_dRecords_dfieldIndexAt = (fun d7606 -> (fun mc0 -> (fun mc1 -> (fun mc2 -> (match mc1 with
+let rec v_Vuna_dCompiler_dElab_dRecords_dfieldIndexAt = (fun d7937 -> (fun mc0 -> (fun mc1 -> (fun mc2 -> (match mc1 with
   | C_Base_dList_dList_Base_dList_dCons (dtb__36, dtb__37) -> (match dtb__36 with
-  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__38, dtb__39) -> (if (((v_Base_dEq_deq d7606) dtb__38) mc0) then (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (mc2)) else ((((v_Vuna_dCompiler_dElab_dRecords_dfieldIndexAt d7606) mc0) dtb__37) ((bi_add mc2) 1)))
-=======
-let rec v_Vuna_dCompiler_dElab_dRecords_dfieldIndexAt = (fun d7510 -> (fun mc0 -> (fun mc1 -> (fun mc2 -> (match mc1 with
-  | C_Base_dList_dList_Base_dList_dCons (dtb__36, dtb__37) -> (match dtb__36 with
-  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__38, dtb__39) -> (if (((v_Base_dEq_deq d7510) dtb__38) mc0) then (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (mc2)) else ((((v_Vuna_dCompiler_dElab_dRecords_dfieldIndexAt d7510) mc0) dtb__37) ((bi_add mc2) 1)))
->>>>>>> 92571c3 (feat(m31): 运算符改为 Eq/Ord 方法别名，trait 声明与实例分离)
+  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__38, dtb__39) -> (if (((v_Base_dEq_deq d7937) dtb__38) mc0) then (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (mc2)) else ((((v_Vuna_dCompiler_dElab_dRecords_dfieldIndexAt d7937) mc0) dtb__37) ((bi_add mc2) 1)))
   | _ -> failwith "DT: impossible branch"
 )
   | C_Base_dList_dList_Base_dList_dNil -> C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing
   | _ -> failwith "DT: impossible branch"
 )))))
 
-<<<<<<< HEAD
-let v_Vuna_dCompiler_dElab_dRecords_dfieldIndex = (fun d7613 -> (fun fname -> (fun fields -> ((((v_Vuna_dCompiler_dElab_dRecords_dfieldIndexAt d7613) fname) fields) 0))))
-=======
-let v_Vuna_dCompiler_dElab_dRecords_dfieldIndex = (fun d7517 -> (fun fname -> (fun fields -> ((((v_Vuna_dCompiler_dElab_dRecords_dfieldIndexAt d7517) fname) fields) 0))))
->>>>>>> 92571c3 (feat(m31): 运算符改为 Eq/Ord 方法别名，trait 声明与实例分离)
+let v_Vuna_dCompiler_dElab_dRecords_dfieldIndex = (fun d7944 -> (fun fname -> (fun fields -> ((((v_Vuna_dCompiler_dElab_dRecords_dfieldIndexAt d7944) fname) fields) 0))))
 
 let rec v_Vuna_dCompiler_dElab_dRecords_dlookupProvided = (fun mc0 -> (fun mc1 -> (match mc1 with
   | C_Base_dList_dList_Base_dList_dCons (dtb__40, dtb__41) -> (match dtb__40 with
@@ -339,7 +330,7 @@ let rec v_Vuna_dCompiler_dElab_dRecords_ddesugarExprFuel = (fun fuel -> (fun rec
   | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEDo (dtb__183, dtb__184) -> ((v_Base_dResult_dandThen ((v_Base_dResult_dtraverse ((v_Vuna_dCompiler_dElab_dRecords_ddesugarDoStmtFuel ((bi_sub fuel) 1)) records)) dtb__183)) (fun s2 -> (C_Base_dResult_dResult_Base_dResult_dOk ((C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEDo (s2, dtb__184))))))
   | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEPi (dtb__185, dtb__186, dtb__187, dtb__188, dtb__189) -> ((v_Base_dResult_dandThen (((v_Vuna_dCompiler_dElab_dRecords_ddesugarExprFuel ((bi_sub fuel) 1)) records) dtb__187)) (fun d2 -> ((v_Base_dResult_dandThen (((v_Vuna_dCompiler_dElab_dRecords_ddesugarExprFuel ((bi_sub fuel) 1)) records) dtb__188)) (fun c2 -> (C_Base_dResult_dResult_Base_dResult_dOk ((C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEPi (dtb__185, dtb__186, d2, c2, dtb__189))))))))
   | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEAnn (dtb__190, dtb__191, dtb__192) -> ((v_Base_dResult_dandThen (((v_Vuna_dCompiler_dElab_dRecords_ddesugarExprFuel ((bi_sub fuel) 1)) records) dtb__190)) (fun v2 -> ((v_Base_dResult_dandThen (((v_Vuna_dCompiler_dElab_dRecords_ddesugarExprFuel ((bi_sub fuel) 1)) records) dtb__191)) (fun t2 -> (C_Base_dResult_dResult_Base_dResult_dOk ((C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEAnn (v2, t2, dtb__192))))))))
-  | _ -> failwith "DT: impossible branch"
+  | _ -> (C_Base_dResult_dResult_Base_dResult_dErr ("DT: internal: unreordered infix/paren in elaboration"))
 )))))
 and v_Vuna_dCompiler_dElab_dRecords_ddesugarDoStmtFuel = (fun fuel -> (fun records -> (fun stmt -> (if ((bi_le_int fuel) 0) then (C_Base_dResult_dResult_Base_dResult_dErr ("DT: internal: record desugar fuel exhausted")) else (match stmt with
   | C_Vuna_dCompiler_dFrontend_dAst_dDoStmt_Vuna_dCompiler_dFrontend_dAst_dDBind (dtb__193, dtb__194, dtb__195) -> ((v_Base_dResult_dandThen (((v_Vuna_dCompiler_dElab_dRecords_ddesugarPatternFuel ((bi_sub fuel) 1)) records) dtb__193)) (fun p2 -> ((v_Base_dResult_dandThen (((v_Vuna_dCompiler_dElab_dRecords_ddesugarExprFuel ((bi_sub fuel) 1)) records) dtb__194)) (fun e2 -> (C_Base_dResult_dResult_Base_dResult_dOk ((C_Vuna_dCompiler_dFrontend_dAst_dDoStmt_Vuna_dCompiler_dFrontend_dAst_dDBind (p2, e2, dtb__195))))))))

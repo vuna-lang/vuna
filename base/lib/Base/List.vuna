@@ -32,6 +32,7 @@ import Base.Eq
 -- 因此 take/drop/rangeFrom 的 `<=` 需要 Ord 方法名可见。
 import Base.Ord
 
+-- M31.2：`::` 是 canonical 构造子 `Cons` 的中缀别名（表达式与 pattern 都走这条声明）。
 data List a : Type where
   Nil : List a
   Cons : a -> List a -> List a

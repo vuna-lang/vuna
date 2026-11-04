@@ -248,6 +248,7 @@ else case e of
   EAnn value ty sp =>
     andThen (desugarExprFuel (fuel - 1) records value)
       (\v2 => andThen (desugarExprFuel (fuel - 1) records ty) (\t2 => Ok (EAnn v2 t2 sp)))
+  _ => Err "DT: internal: unreordered infix/paren in elaboration"
 
 desugarDoStmtFuel : Int -> List RecordInfo -> DoStmt -> Result DoStmt
 desugarDoStmtFuel fuel records stmt = if fuel <= 0 then Err "DT: internal: record desugar fuel exhausted"

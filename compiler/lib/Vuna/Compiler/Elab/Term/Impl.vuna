@@ -329,6 +329,7 @@ else case expr of
   ERecUpdate base fields sp => tcErr0 sp RecordUpdateUnsupported
   EDo stmts sp => tcErr0 sp DoUnsupported
   EAnn value ty sp => inferAnnFuel (fuel - 1) globals ctx ec value ty sp
+  _ => Err "DT: internal: unreordered infix/paren in elaboration"
 
 -- M24：where 绑定签名 `EAnn value ty`（parser 从 `name : Ty` 行生成）。
 -- 先检查 ty 是合法类型，再把 value 按该类型 check；推导位返回 eval ty 作为类型。
@@ -595,6 +596,7 @@ expandLocalFuns ec (EDo stmts sp) =
   andThen (traverse (expandDoStmt ec) stmts) (\stmts2 => Ok (EDo stmts2 sp))
 expandLocalFuns ec (EAnn value ty sp) =
   andThen (expandLocalFuns ec value) (\value2 => Ok (EAnn value2 ty sp))
+expandLocalFuns ec _ = Err "DT: internal: unreordered infix/paren in elaboration"
 
 expandBind : Ec -> Pair Pat Expr -> Result (Pair Pat Expr)
 expandBind ec (Pair pat value) = andThen (expandLocalFuns ec value) (\v2 => Ok (Pair pat v2))

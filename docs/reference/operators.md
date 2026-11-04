@@ -14,12 +14,27 @@
 | 阶段 | 内容 | 状态 |
 | --- | --- | --- |
 | M31.1 | `==` `/=` `<` `<=` `>` `>=` 变成 Eq/Ord **方法名的解析期别名**；trait 声明与实例分离；Int/String 内建特化 | 已落地 |
-| M31.2 | fixity / 别名声明进库与用户源码（`infixl 6 +`、`infix 4 == = eq`），删除 parser 与 fmt 的固定表；`::` / `>>=` / `>>` 离开 parser | 待做 |
-| M31.3 | 反引号中缀、section `(+)` / `(+ 3)` / `(3 +)`、用户符号名函数 | 待做 |
+| M31.2 | parser 只产出 `EInfix`/`EParen`；fixity 与别名声明由 `Loader.Fixity` 在 resolve 前重排消费；删除 parser 与 fmt 的固定优先级表；`::` / `>>=` / `>>` 离开 parser | 已落地 |
+| M31.3 | 反引号中缀、section `(+)` / `(+ 3)` / `(3 +)`、用户符号名函数；库内 `infix*` 声明替代内建兜底表 | 待做 |
 
-M31.1 的别名表在 `Loader.Resolve.builtinOpAlias`（`==`→`eq`、`/=`→`neq`、`<`→`lt`、
-`<=`→`le`、`>`→`gt`、`>=`→`ge`）；M31.2 会把它换成库里的 `infix ... = ...` 声明并删除
-本表。别名是**解析期替换**：替换目标按正常 import 解析，不产生新的运行时名字。
+M31.2 的机制（实现见 `Vuna.Compiler.Loader.Fixity`）：
+
+1. **parser 不做优先级**：任意中缀符号链收成右嵌套的 `EInfix op lhs rhs`（括号收成
+   `EParen` 以保留分组边界）；`::` 在 pattern 里也保留符号原形。
+2. **Loader 在名字解析之前重排**：按模块可见的 fixity 表做 precedence climbing，把
+   `EInfix` 链重排成 `EApp`/`EPi`；同一步完成**别名替换**（`==`→`eq`、`::`→`Cons`、
+   `>>=`→`bind`）与 `>>` 的 do 派生展开（`a >> b` = `bind a (\_ -> b)`）。
+3. **重排后 AST 不再含 `EInfix`/`EParen`**：Elab / codegen 看到的是普通应用；`Resolve`
+   对残留节点报 internal error（不静默透传）。
+4. **fixity 表来源**：M31.2 用 `Loader.Fixity.builtinFixityDecls` 兜底表（`->` 1 右结合、
+   `::` 5 右、`==` 等 4 左、`&&` 3、`||` 2、`++` 5 右、`+`/`-` 6、`*`/`/` 7、`>>=` 1 右、
+   `>>` 1）；M31.3 把它们变成 `base/lib` 里的 `infixl/infixr/infix` 声明并删除兜底表
+   （M31.2 已实现声明语法与重排，但库声明需在新种子下写，见 debt B26）。
+5. **Fmt**：`formatSource` 先用 `tableOfKeepOps` 重排（保留运算符原名、不展开 `>>`），
+   打印时按同一 fixity 表决定括号；跨模块 fixity 与本地声明对打印的影响见 debt B27。
+
+M31.1 的编译器别名表（`Loader.Resolve.builtinOpAlias`）已删除；别名与 fixity 都在
+`Loader.Fixity` 的表里，来源（M31.3 起）是库/用户源码的声明。
 
 ## `Eq` / `Ord` 的唯一真源
 
@@ -53,23 +68,28 @@ M31.1 的别名表在 `Loader.Resolve.builtinOpAlias`（`==`→`eq`、`/=`→`ne
 
 ## 系统边界
 
-- **语法性符号**仍由编译器处理：`->`（Pi）、`=`（定义/绑定）、`|`、`,`、`\`、`=>`。
-  它们不是可声明的值名。
+- **语法性符号**仍由编译器处理：`->`（Pi）、`=`（定义/绑定）、`|`、`,`、`\`、`=>`
+  以及括号/分隔符（`(` `)` `[` `]` `{` `}`）、`.`（字段选择）——它们出现在表达式位置时
+  parser 立即停止中缀链，不是可声明的值名。
 - **内部生成名**：`Elab.Derive`（deriving 展开）与 `Elab.Match`（字面量模式降级）在
-  Elab 内部直接构造 `EVar "=="` / `EVar "<"`，不经过 Loader 别名；`Elab.Dict`
+  Elab 内部直接构造 `EVar "=="` / `EVar "<"`，不经过 Loader 重排；`Elab.Dict`
   的 `isEqMethod` / `isCmpMethod` 显式接受这些内部名并把它们映射到方法短名。
-  用户源码的 `==` 一律在 Loader 被别名成 `eq`，因此内部名不会泄漏到用户语义。
-- **parser / fmt 固定表（M31.1 遗留）**：`Frontend/Parser/Support.vuna` 的
-  `infixInfo`（优先级）与 `Fmt/Expr.vuna` 的 `infixPrec` 仍在；`::` / `>>=` 仍是 parser
-  字符串改写（`Cons` / `bind`）。这些在 M31.2 移入库声明。
-- **`&&` / `||`** 仍是短路内建（不是 trait 方法），不参与别名。
-- **`+` / `-` / `*` / `/` / `++`** 仍是内建值（Int/String 原语；数值 trait 归 F4）。
+  用户源码的 `==` 一律在 Loader 重排里变成 `eq`，因此内部名不会泄漏到用户语义。
+- **parser / fmt 固定表已删除**：`Frontend/Parser/Support.vuna` 不再有 `infixInfo`，
+  `Fmt/Expr.vuna` 不再硬编码优先级；`::` / `>>=` 由 fixity 表的别名声明（M31.2 兜底表，
+  M31.3 起为库声明）处理，不再由 parser 字符串改写。`[]` / `[a, b]` 列表字面量与 pattern
+  仍以 `Cons`/`Nil` 折叠（语法糖，不是运算符）。
+- **`&&` / `||`** 仍是短路内建（不是 trait 方法），fixity 在表里（3 / 2，左结合）。
+- **`+` / `-` / `*` / `/` / `++`** 仍是内建值（Int/String 原语；数值 trait 归 F4），
+  fixity 在表里（6 / 6 / 7 / 7 / 5 右结合）。
 
 ## 实现落点
 
 | 关注点 | 位置 |
 | --- | --- |
-| 运算符别名表（M31.1，M31.2 删除） | `Loader.Resolve.builtinOpAlias` |
+| 中缀重排 / fixity 表 / 别名替换 | `Loader.Fixity`（`reorderProgram` / `lookupFixity` / `tableOf`） |
+| fixity 声明语法与收集 | `Frontend.Parser`（`parseFixityDecl`）+ `Frontend.Ast`（`FixityDecl`/`Source.fixities`） |
+| 模块可见 fixity 闭包 | `Loader.Modules.Module` 的 `fixities` 字段 + `Loader.Flatten.visibleFixitiesOf` |
 | 方法投影判定 / 特化 | `Elab.Dict.isEqMethod` / `isCmpMethod` / `specializeEqTy` / `specializeCmpTy` |
 | 内建 runtime 名 | `Vuna.Compiler.Intrinsics.allIntrinsics`（`bi_*` 仅内部可见） |
 | trait 声明 | `base/lib/Base/Eq.vuna` / `base/lib/Base/Ord.vuna` |

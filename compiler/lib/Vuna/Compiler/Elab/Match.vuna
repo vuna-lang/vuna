@@ -278,6 +278,9 @@ renameExpr oldName newName e = case e of
   ERecUpdate b fields sp =>
     ERecUpdate (renameExpr oldName newName b) (map (renameFieldValue oldName newName) fields) sp
   EDo stmts sp => EDo stmts sp
+  -- M31.2：parser 中间产物；Elab 阶段正常不存在（Loader 重排已消除），这里保持结构递归。
+  EInfix op l r sp => EInfix op (renameExpr oldName newName l) (renameExpr oldName newName r) sp
+  EParen inner sp => EParen (renameExpr oldName newName inner) sp
   EAnn value ty sp => EAnn (renameExpr oldName newName value) (renameExpr oldName newName ty) sp
 
 renameExprUnless : String -> String -> List String -> Expr -> Expr

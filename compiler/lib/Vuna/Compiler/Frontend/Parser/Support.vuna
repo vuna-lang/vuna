@@ -12,12 +12,10 @@ module Vuna.Compiler.Frontend.Parser.Support
   , expectKw
   , expectSym
   , fileOf
-  , infixInfo
   , isEof
+  , isSyntaxSym
   , lastPos
-  , mkInfixExpr
   , nthTok
-  , opExpr
   , peekPos
   , peekTok
   , peekTokAt
@@ -205,37 +203,33 @@ startsPatternAtom st = case peekTok st of
   PTok (TSym "[") p => True
   _ => False
 
-infixInfo : String -> Maybe (Pair Int Int)
-infixInfo "->" = Just (Pair 1 1)
-infixInfo "||" = Just (Pair 2 0)
-infixInfo "&&" = Just (Pair 3 0)
-infixInfo "==" = Just (Pair 4 0)
-infixInfo "/=" = Just (Pair 4 0)
-infixInfo "<" = Just (Pair 4 0)
-infixInfo "<=" = Just (Pair 4 0)
-infixInfo ">" = Just (Pair 4 0)
-infixInfo ">=" = Just (Pair 4 0)
-infixInfo "++" = Just (Pair 5 1)
-infixInfo "+" = Just (Pair 6 0)
-infixInfo "-" = Just (Pair 6 0)
-infixInfo "*" = Just (Pair 7 0)
-infixInfo "/" = Just (Pair 7 0)
-infixInfo "::" = Just (Pair 8 1)
-infixInfo ">>=" = Just (Pair 1 1)
-infixInfo ">>" = Just (Pair 1 0)
-infixInfo _ = Nothing
-
-opExpr : String -> Span -> Expr
-opExpr "::" sp = EVar "Cons" sp
-opExpr ">>=" sp = EVar "bind" sp
-opExpr op sp = EVar op sp
-
--- `>>` 是 do 的派生：`a >> b` = `bind a (\_ -> b)`。
-mkInfixExpr : String -> Expr -> Expr -> Span -> Expr
-mkInfixExpr ">>" lhs rhs sp = EApp (EVar "bind" sp) [lhs, ELam ["vuna_seq_ignore"] rhs sp] sp
-mkInfixExpr op lhs rhs sp = EApp (opExpr op sp) [lhs, rhs] sp
+-- M31.2：中缀解析不再有固定优先级表——`infix*` 声明随模块进入 Loader，重排时才消费。
+-- 这里只判定「哪些符号在表达式位置属于语法、遇到就停止」，其余 TSym 都当运算符。
+isSyntaxSym : String -> Bool
+isSyntaxSym op = case op of
+  "=" => True
+  ":" => True
+  "," => True
+  ";" => True
+  "|" => True
+  "=>" => True
+  "<-" => True
+  "\\" => True
+  "." => True
+  ".." => True
+  "@" => True
+  -- 括号/分隔符：表达式位置出现时是语法边界，不是运算符（否则 `(a + b)` 的 `)` 会被
+  -- 当成中缀符号吞掉）。
+  "(" => True
+  ")" => True
+  "[" => True
+  "]" => True
+  "{" => True
+  "}" => True
+  _ => False
 
 countArrows : Expr -> Int
+countArrows (EInfix "->" _ rest _) = 1 + countArrows rest
 countArrows (EApp (EVar "->" _) ([x, rest]) _) = 1 + countArrows rest
 countArrows _ = 0
 

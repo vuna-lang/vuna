@@ -14,9 +14,9 @@ vuna 尚未发布任何版本：没有外部用户、下游生态与历史包袱
 - **一条路径**：`Parser → Loader → DT 精化 → 擦除 codegen → OCaml`；DT 是唯一检查器，
   没有第二套 checker / codegen，也没有可切换开关。
 - **名字与运算符**：`==` / `/=` / `<` / `<=` / `>` / `>=` 是 `Eq` / `Ord` 方法
-  （`eq` / `neq` / `lt` / `le` / `gt` / `ge`）的解析期别名，trait 声明与实例分离
-  （M31.1）；fixity 声明与 parser / fmt 固定表的清理是 M31.2（见
-  [operators.md](reference/operators.md)）。
+  （`eq` / `neq` / `lt` / `le` / `gt` / `ge`）的 fixity / 别名声明；parser 只产出
+  `EInfix` / `EParen`，`Loader.Fixity` 在 resolve 前按模块可见 fixity 表重排并做别名
+  替换（M31.1–M31.2，见 [operators.md](reference/operators.md)）。
 - **自举**：`seed/` 是 compiler 包入口闭包的多文件 OCaml 信任锚点；旧 seed 能编译当前
   源码，rotation 后 stage1 == stage2。工具链（fmt/lint/repl/doc/test/LSP/Index）不进 TCB。
 - **包与构建**：workspace 根即包；每文件唯一包上下文；声明式效应能力；逐模块 split 输出；
@@ -44,10 +44,11 @@ vuna 尚未发布任何版本：没有外部用户、下游生态与历史包袱
 ## 下一步
 
 **M31 已落地**：效果原语 IO 化 + `runIO` 能力门控（`prim_*` 返回 `IO` 动作、只在 `main`
-执行；`runIO` 需 `unsafe`，工具链专属）。同一阶段的 **M31.1**（运算符 = `Eq` / `Ord`
-方法别名、trait 声明与实例分离）已落地，**M31.2**（fixity / 别名声明进库与源码、parser
-与 fmt 固定表删除）待做，**M31.3**（反引号中缀 / section / 用户符号名）在其后。下一阶段从
-M32 起按需排期；当前没有已承诺的阶段。候选来自
+执行；`runIO` 需 `unsafe`，工具链专属）；**M31.1**（运算符 = `Eq` / `Ord` 方法别名、
+trait 声明与实例分离）与 **M31.2**（parser 只产出 `EInfix` / `EParen`、`Loader.Fixity`
+统一重排、parser / fmt 固定表删除）已落地。**M31.3**（反引号中缀 / section / 用户符号名、
+库内 `infix*` 声明替代内建兜底表）待做；M31 范围（debt）剩 B23–B28、C31。之后从 M32 起
+按需排期；当前没有已承诺的阶段。候选来自
 [debt.md](reference/debt.md) 的开放项（语言 / 精化器残留、工具与构建、F1–F4 能力缺口）。
 新阶段必须映射到 debt 条目，并在「范围」里列明关闭哪些项。
 

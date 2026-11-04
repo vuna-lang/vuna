@@ -3,6 +3,8 @@ module Base.Monad (Functor(..), Monad(..)) where
 -- Base.Monad：Functor / Monad trait（M11-B：支持高阶 kind 与约束泛化）。
 -- do 语法糖在 loader 里 desugar 成 bind / lambda；pure、fmap 是普通 trait 方法。
 -- 约定方法名固定：Functor.fmap、Monad.bind、Monad.pure（`>>=`/`>>`/do 依赖 bind）。
+-- M31.2：`>>=` / `>>` 的 fixity 声明；`>>=` 别名到 bind，`>>` 仍由 Loader 做
+-- `bind a (\_ -> b)` 的派生展开（M31.3 再库化成函数）。
 trait Functor f where
   fmap : (a -> b) -> f a -> f b
 

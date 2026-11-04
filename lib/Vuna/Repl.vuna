@@ -196,7 +196,7 @@ addImport ctx st line =
 -- 定义还是表达式：整段能解析成顶层声明就追加到定义缓冲，否则按表达式求值。
 submitText : PackageContext -> ReplState -> String -> ReplOutcome
 submitText ctx st text = case parseSource replTempFile (stateImports st ++ stateDefs st ++ text ++ "\n") of
-  Ok (Source hdr imp decls) => case hdr of
+  Ok (Source hdr imp fx decls) => case hdr of
     Just md => evalText ctx st text
     Nothing => ReplContinue (replState (stateImports st) (stateDefs st ++ text ++ "\n") "")
   Err e => evalText ctx st text
@@ -267,7 +267,7 @@ hasUnsolvedMeta tyText = contains "?" tyText
 hasMainDef : String -> String -> Bool
 hasMainDef imports defs = case parseSource replTempFile (imports ++ "\n" ++ defs) of
   Err e => False
-  Ok (Source hdr imp decls) => memName "main" (topNames decls)
+  Ok (Source hdr imp fx decls) => memName "main" (topNames decls)
 
 -- 顶层类型文本是 canonical `IO a` 吗？`dtEvalExprInfo` 的 showTerm 把 TApp 渲染成
 -- `(Base.IO.IO Int)`（canonical 全名），函数类型则是 `(...) -> ...`，前缀不会命中。

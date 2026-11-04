@@ -16,6 +16,7 @@ module Vuna.Fmt.Expr
 -- 注释锚点由 Vuna.Fmt.Comment 提供（attachAt）。
 import Vuna.Compiler.Common
 import Vuna.Compiler.Frontend.Ast
+import Vuna.Compiler.Loader.Fixity
 import Vuna.Compiler.Frontend.Lexer
 import Vuna.Fmt.Comment
 import Vuna.Fmt.Util
@@ -134,28 +135,29 @@ else case pat of
 -- 单行表达式：inlineExprGo / inlinePrecGo / inlineAtomGo
 -- inlinePrecGo 按运算符优先级决定是否补括号；块结构（case/let/do）返回 Nothing。
 -- ---------------------------------------------------------------
+isOpIn : List FixityDecl -> String -> Bool
+isOpIn [] op = False
+isOpIn (d :: rest) op = if fixityOp d == op then True else isOpIn rest op
+
 infixPrec : String -> Maybe (Pair Int Int)
-infixPrec "->" = Just (Pair 1 1)
-infixPrec ">>=" = Just (Pair 1 1)
-infixPrec "||" = Just (Pair 2 0)
-infixPrec "&&" = Just (Pair 3 0)
-infixPrec "==" = Just (Pair 4 0)
-infixPrec "/=" = Just (Pair 4 0)
-infixPrec "<" = Just (Pair 4 0)
-infixPrec "<=" = Just (Pair 4 0)
-infixPrec ">" = Just (Pair 4 0)
-infixPrec ">=" = Just (Pair 4 0)
-infixPrec "++" = Just (Pair 5 1)
-infixPrec "+" = Just (Pair 6 0)
-infixPrec "-" = Just (Pair 6 0)
-infixPrec "*" = Just (Pair 7 0)
-infixPrec "/" = Just (Pair 7 0)
-infixPrec "::" = Just (Pair 8 1)
-infixPrec "Cons" = Just (Pair 8 1)
-infixPrec _ = Nothing
+infixPrec op = case symbolOfTarget op of
+  Just sym => infixPrecOf sym
+  Nothing => infixPrecOf op
+
+infixPrecOf : String -> Maybe (Pair Int Int)
+infixPrecOf op = if isOpIn builtinFixityDecls op then
+  let
+    fx = lookupFixity (tableOfKeepOps []) op
+  in Just (Pair (firstOf fx) (if secondOf fx == 2 then 1 else 0))
+else if op == "Cons" || op == "bind" then Just (Pair 8 1) else Nothing
 
 opText : String -> String
-opText op = if op == "Cons" then "::" else op
+opText op = case symbolOfTarget op of
+  Just sym => sym
+  Nothing => case op of
+    "Cons" => "::"
+    "bind" => ">>="
+    _ => op
 
 listExprElems : Expr -> Maybe (List Expr)
 listExprElems (EVar "Nil" sp) = Just []
@@ -212,6 +214,7 @@ else case e of
   -- M24：非 where 位置（例如 `let` 绑定值）的 `EAnn` 透明渲染内部表达式：
   -- 表达式位置没有 `: Ty` 语法，输出标注会让 fmt 产物无法重新 parse。
   EAnn value ty sp => inlinePrecGo (fuel - 1) minPrec value
+  _ => Nothing
 
 wrapPrec : Bool -> String -> String
 wrapPrec need s = if need then "(" ++ s ++ ")" else s
@@ -392,6 +395,7 @@ else case e of
   EVar name sp => [name]
   EInt n sp => [strFromInt n]
   EStr s sp => [renderStr s]
+  _ => []
 
 renderScrutGo : Int -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Expr -> List String
 renderScrutGo fuel at lineInd e = if fuel <= 0 then []

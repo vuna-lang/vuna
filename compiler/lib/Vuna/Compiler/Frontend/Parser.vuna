@@ -20,11 +20,13 @@ parseExpressionSource source =
 
 -- 可选模块头（M10）：`module M (导出项, ...) where`；列表省略 = 导出全部。
 parseSourceFile : PState -> Result (Pair SourceFile PState)
-parseSourceFile st = step (parseModDecl st) (\hdr, st1 => step (parseImports (stateFuel st1) st1) (\imports, st2 => if isEof st2 then Ok (Pair (Source hdr imports []) st2)
+parseSourceFile st = step (parseModDecl st) (\hdr, st1 => step (parseImports (stateFuel st1) st1) (\imports, st2 => if isEof st2 then Ok (Pair (Source hdr imports [] []) st2)
 else case peekPos st2 of
-  Pos line col =>
-    step (parseDecls (stateFuel st2) st2 col)
-      (\decls, st3 => if isEof st3 then Ok (Pair (Source hdr imports decls) st3) else psErr0 ExpectedEndOfInput)
+  Pos line col => step (parseDecls (stateFuel st2) st2 col [] []) (\p, st3 => case p of
+    Pair fixities decls =>
+      if isEof st3 then Ok (Pair (Source hdr imports fixities decls) st3)
+      else psErr0 ExpectedEndOfInput
+  )
 )
 )
 
@@ -75,14 +77,49 @@ parseImports fuel st =
     (\imp, st1 => step (parseImports (fuel - 1) st1) (\rest, st2 => Ok (Pair (imp :: rest) st2)))
   else Ok (Pair [] st)
 
-parseDecls : Int -> PState -> Int -> Result (Pair (List Decl) PState)
-parseDecls fuel st blockCol = if fuel <= 0 then Err "DT: parser fuel exhausted (internal: parser made no progress)"
-else if isEof st then Ok (Pair [] st)
+-- M31.2：`infixl` / `infixr` / `infix` 声明与顶层声明穿插收集（声明本身不进入 Decl，
+-- 由 Loader 在中缀重排时消费；见 `Source.fixities`）。
+parseDecls : Int -> PState -> Int -> List FixityDecl -> List Decl -> Result (Pair (Pair (List FixityDecl) (List Decl)) PState)
+parseDecls fuel st blockCol fixAcc declAcc = if fuel <= 0 then Err "DT: parser fuel exhausted (internal: parser made no progress)"
+else if isEof st then Ok (Pair (Pair (reverse fixAcc) (reverse declAcc)) st)
 else case peekPos st of
-  Pos line col =>
-    if col == blockCol then step (parseDecl st blockCol)
-      (\decl, st1 => step (parseDecls (fuel - 1) st1 blockCol) (\rest, st2 => Ok (Pair (decl :: rest) st2)))
-    else psErr1 (ExpectedDeclAtColumn (strFromInt blockCol)) (strFromInt blockCol)
+  Pos line col => if col == blockCol then step (parseFixityOrDecl st blockCol) (\p, st1 => case p of
+    Pair fd dl => case fd of
+      Just f => parseDecls (fuel - 1) st1 blockCol (f :: fixAcc) declAcc
+      Nothing => case dl of
+        d :: _ => parseDecls (fuel - 1) st1 blockCol fixAcc (d :: declAcc)
+        [] => Err "DT: internal: parseFixityOrDecl returned nothing"
+  )
+  else psErr1 (ExpectedDeclAtColumn (strFromInt blockCol)) (strFromInt blockCol)
+
+-- 一条顶层声明：fixity 声明（返回 Just）或普通 Decl（返回单元素列表）。
+parseFixityOrDecl : PState -> Int -> Result (Pair (Pair (Maybe FixityDecl) (List Decl)) PState)
+parseFixityOrDecl st blockCol = case peekTok st of
+  PTok (TKw "infixl") p =>
+    step (parseFixityDecl st blockCol 1 p) (\fd, st1 => Ok (Pair (Pair (Just fd) []) st1))
+  PTok (TKw "infixr") p =>
+    step (parseFixityDecl st blockCol 2 p) (\fd, st1 => Ok (Pair (Pair (Just fd) []) st1))
+  PTok (TKw "infix") p =>
+    step (parseFixityDecl st blockCol 0 p) (\fd, st1 => Ok (Pair (Pair (Just fd) []) st1))
+  _ => step (parseDecl st blockCol) (\decl, st1 => Ok (Pair (Pair Nothing [decl]) st1))
+
+-- `infixl 6 +` / `infixr 5 :: = Cons` / `infix 4 == = eq`。
+parseFixityDecl : PState -> Int -> Int -> Pos -> Result (Pair FixityDecl PState)
+parseFixityDecl st blockCol assoc kwPos =
+  step (expectFixityLevel (advance st))
+    (\level, st1 => step (expectOpName st1) (\op, st2 => if atSym st2 "=" then step (expectSym st2 "=") (\_, st3 => step (expectOpName st3) (\target, st4 => Ok (Pair (FixityDecl op level assoc (Just target) (Span (fileOf st) (posLine kwPos) (posCol kwPos) (posLine (lastPos st4)) (posCol (lastPos st4)))) st4))) else Ok (Pair (FixityDecl op level assoc Nothing (Span (fileOf st) (posLine kwPos) (posCol kwPos) (posLine (lastPos st2)) (posCol (lastPos st2)))) st2)))
+
+expectFixityLevel : PState -> Result (Pair Int PState)
+expectFixityLevel st = case peekTok st of
+  PTok (TInt n) p => if n >= 0 && n <= 9 then Ok (Pair n (advance st)) else psErr0 FixityLevelRange
+  _ => psErr0 ExpectedFixityLevel
+
+-- fixity/别名声明里的运算符名：符号（`+`、`::`）或标识符（`eq`）。
+expectOpName : PState -> Result (Pair String PState)
+expectOpName st = case peekTok st of
+  PTok (TSym op) p => Ok (Pair op (advance st))
+  PTok (TIdent name) p => Ok (Pair name (advance st))
+  _ => psErr1 (ExpectedToken "operator") "operator"
 
 parseDecl : PState -> Int -> Result (Pair Decl PState)
 parseDecl st blockCol = case peekTok st of
@@ -394,17 +431,15 @@ parseExpr fuel st blockCol minPrec =
     (\lhs, st1 => parseInfix (fuel - 1) st1 blockCol minPrec lhs)
   else psErr0 ExprNotIndented
 
+-- M31.2：优先级/结合性不在 parser 决定——中缀链原样收成 `EInfix`（右嵌套，保留
+-- 括号边界用 `EParen`），Loader 按 `infix*` 声明重排。`minPrec` 参数保留只为少改调用点。
 parseInfix : Int -> PState -> Int -> Int -> Expr -> Result (Pair Expr PState)
 parseInfix fuel st blockCol minPrec lhs = if fuel <= 0 then Err "DT: parser fuel exhausted (internal: parser made no progress)"
 else case peekTok st of
-  PTok (TSym op) p => case infixInfo op of
-    Just (Pair prec assoc) => if prec >= minPrec && canContinue st blockCol then
-      let
-        rhsPrec = if assoc == 0 then prec + 1 else prec
-      in step (parseExpr (fuel - 1) (advance st) blockCol rhsPrec)
-        (\rhs, st2 => parseInfix (fuel - 1) st2 blockCol minPrec (mkInfixExpr op lhs rhs (spanOf st st2)))
+  PTok (TSym op) p =>
+    if canContinue st blockCol && not (isSyntaxSym op) then step (parseExpr (fuel - 1) (advance st) blockCol 0)
+      (\rhs, st2 => parseInfix (fuel - 1) st2 blockCol minPrec (EInfix op lhs rhs (spanOf st st2)))
     else Ok (Pair lhs st)
-    Nothing => Ok (Pair lhs st)
   _ => Ok (Pair lhs st)
 
 parseLhs : Int -> PState -> Int -> Result (Pair Expr PState)
@@ -469,7 +504,7 @@ else case peekTok st of
     Just name => parsePiBinder (fuel - 1) st blockCol name False "(" ")"
     Nothing =>
       step (parseExpr (fuel - 1) (advance st) blockCol 0)
-        (\inner, st1 => step (expectSym st1 ")") (\_, st2 => Ok (Pair inner st2)))
+        (\inner, st1 => step (expectSym st1 ")") (\_, st2 => Ok (Pair (EParen inner (spanOf st st2)) st2)))
   PTok (TSym "[") p => parseListExpr (fuel - 1) st blockCol
   PTok (TSym "{") p => case binderHeadName (advance st) of
     Just name => parsePiBinder (fuel - 1) st blockCol name True "{" "}"
@@ -627,10 +662,12 @@ parsePatternSingle fuel st blockCol =
   else parsePatternCons (fuel - 1) st blockCol
 
 parsePatternCons : Int -> PState -> Int -> Result (Pair Pat PState)
+-- M31.2：pattern 里的 `::` 保留符号原形，由 Loader 按 fixity/别名声明换成
+-- canonical `Cons`（base 声明 `infixr 5 :: = Cons`）。
 parsePatternCons fuel st blockCol =
   if fuel <= 0 then Err "DT: parser fuel exhausted (internal: parser made no progress)"
   else step (parsePatternHead (fuel - 1) st blockCol)
-    (\lhs, st1 => if atSym st1 "::" && canContinue st1 blockCol then step (parsePatternCons (fuel - 1) (advance st1) blockCol) (\rhs, st2 => Ok (Pair (PCon "Cons" [lhs, rhs] (spanOf st st2)) st2)) else Ok (Pair lhs st1))
+    (\lhs, st1 => if atSym st1 "::" && canContinue st1 blockCol then step (parsePatternCons (fuel - 1) (advance st1) blockCol) (\rhs, st2 => Ok (Pair (PCon "::" [lhs, rhs] (spanOf st st2)) st2)) else Ok (Pair lhs st1))
 
 parsePatternHead : Int -> PState -> Int -> Result (Pair Pat PState)
 parsePatternHead fuel st blockCol = if fuel <= 0 then Err "DT: parser fuel exhausted (internal: parser made no progress)"

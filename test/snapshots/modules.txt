@@ -78,6 +78,7 @@ Vuna.Compiler.Frontend.Parser  compiler/lib/Vuna/Compiler/Frontend/Parser.vuna
 Vuna.Compiler.Frontend.Toml  compiler/lib/Vuna/Compiler/Frontend/Toml.vuna
 Vuna.Compiler.Intrinsics  compiler/lib/Vuna/Compiler/Intrinsics.vuna
 Vuna.Compiler.Loader.Diagnostics  compiler/lib/Vuna/Compiler/Loader/Diagnostics.vuna
+Vuna.Compiler.Loader.Fixity  compiler/lib/Vuna/Compiler/Loader/Fixity.vuna
 Vuna.Compiler.Loader.Flatten  compiler/lib/Vuna/Compiler/Loader/Flatten.vuna
 Vuna.Compiler.Loader.Modules  compiler/lib/Vuna/Compiler/Loader/Modules.vuna
 Vuna.Compiler.Loader.Resolve  compiler/lib/Vuna/Compiler/Loader/Resolve.vuna
@@ -155,6 +156,7 @@ Vuna.Compiler.Frontend.Parser  ./lib/Vuna/Compiler/Frontend/Parser.vuna
 Vuna.Compiler.Frontend.Toml  ./lib/Vuna/Compiler/Frontend/Toml.vuna
 Vuna.Compiler.Intrinsics  ./lib/Vuna/Compiler/Intrinsics.vuna
 Vuna.Compiler.Loader.Diagnostics  ./lib/Vuna/Compiler/Loader/Diagnostics.vuna
+Vuna.Compiler.Loader.Fixity  ./lib/Vuna/Compiler/Loader/Fixity.vuna
 Vuna.Compiler.Loader.Flatten  ./lib/Vuna/Compiler/Loader/Flatten.vuna
 Vuna.Compiler.Loader.Modules  ./lib/Vuna/Compiler/Loader/Modules.vuna
 Vuna.Compiler.Loader.Resolve  ./lib/Vuna/Compiler/Loader/Resolve.vuna

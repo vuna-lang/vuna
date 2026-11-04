@@ -1,0 +1,271 @@
+module Vuna.Compiler.Loader.Fixity
+  ( FixityTable
+  , builtinFixityDecls
+  , lookupFixity
+  , reorderExpr
+  , reorderPattern
+  , reorderProgram
+  , symbolOfTarget
+  , tableOf
+  , tableOfKeepOps
+  ) where
+
+-- Vuna.Compiler.Loader.Fixity：中缀重排（M31.2）。
+--
+-- parser 不做优先级判断：中缀链统一收成右嵌套的 `EInfix`，括号收成 `EParen`（括号是
+-- 重排的边界，必须显式保留）。本模块按模块可见的 `infix*` 声明（`FixityDecl`：优先级
+-- 0–9、结合性 0/1/2、可选别名）把 `EInfix` 链重排成 `EApp`，并**在这一步**完成：
+--   - 运算符别名替换（`==` → `eq`、`::` → `Cons`、`>>=` → `bind`）；
+--   - `>>` 的 do 派生展开（`a >> b` = `bind a (\_ -> b)`，M31.3 再库化成函数）。
+--
+-- 重排后 AST 不含 `EInfix` / `EParen`；Elab / codegen 不应看到它们（残留即 internal
+-- error）。Fmt / Index / Lsp 在 parse 后阶段各自处理这两个节点。
+--
+-- 内建兜底表：库声明优先；库没有声明时（旧包/未加载 base 的探针）用它保证语义不变。
+-- M31.3 库声明齐全后删除兜底表（登记 debt）。
+import Vuna.Compiler.Common
+import Vuna.Compiler.Frontend.Ast
+
+data FixityTable : Type where
+  MkFixityTable : Bool -> List FixityDecl -> FixityTable
+
+tableOf : List FixityDecl -> FixityTable
+tableOf ds = MkFixityTable True ds
+
+-- Fmt 用：不替换别名、不展开 `>>`（打印时保留源码里的运算符写法）。
+tableOfKeepOps : List FixityDecl -> FixityTable
+tableOfKeepOps ds = MkFixityTable False ds
+
+builtinFixityDecls : List FixityDecl
+builtinFixityDecls =
+  [ FixityDecl "->" 1 2 Nothing (Span "" 0 0 0 0),
+    FixityDecl ">>=" 1 2 (Just "bind") (Span "" 0 0 0 0),
+    FixityDecl ">>" 1 1 Nothing (Span "" 0 0 0 0),
+    FixityDecl "||" 2 1 Nothing (Span "" 0 0 0 0),
+    FixityDecl "&&" 3 1 Nothing (Span "" 0 0 0 0),
+    FixityDecl "==" 4 1 (Just "eq") (Span "" 0 0 0 0),
+    FixityDecl "/=" 4 1 (Just "neq") (Span "" 0 0 0 0),
+    FixityDecl "<" 4 1 (Just "lt") (Span "" 0 0 0 0),
+    FixityDecl "<=" 4 1 (Just "le") (Span "" 0 0 0 0),
+    FixityDecl ">" 4 1 (Just "gt") (Span "" 0 0 0 0),
+    FixityDecl ">=" 4 1 (Just "ge") (Span "" 0 0 0 0),
+    FixityDecl "++" 5 2 Nothing (Span "" 0 0 0 0),
+    FixityDecl "::" 5 2 (Just "Cons") (Span "" 0 0 0 0),
+    FixityDecl "+" 6 1 Nothing (Span "" 0 0 0 0),
+    FixityDecl "-" 6 1 Nothing (Span "" 0 0 0 0),
+    FixityDecl "*" 7 1 Nothing (Span "" 0 0 0 0),
+    FixityDecl "/" 7 1 Nothing (Span "" 0 0 0 0)
+  ]
+
+-- 反向别名：方法名/构造子名（`eq`/`Cons`/`bind`）-> 运算符符号。Fmt 打印用。
+findTarget : List FixityDecl -> String -> Maybe String
+findTarget [] name = Nothing
+findTarget (d :: rest) name = case fixityTarget d of
+  Just t => if t == name then Just (fixityOp d) else findTarget rest name
+  Nothing => findTarget rest name
+
+symbolOfTarget : String -> Maybe String
+symbolOfTarget name = findTarget builtinFixityDecls name
+
+-- 第一处匹配生效：调用方把「本模块 + imports 闭包」放在前面、兜底表放在后面。
+lookupDecl : String -> List FixityDecl -> Maybe FixityDecl
+lookupDecl op [] = Nothing
+lookupDecl op (d :: rest) = if fixityOp d == op then Just d else lookupDecl op rest
+
+lookupFixity : FixityTable -> String -> Pair Int Int
+lookupFixity (MkFixityTable _ ds) op = case lookupDecl op ds of
+  Just d => Pair (fixityLevel d) (fixityAssoc d)
+  Nothing => case lookupDecl op builtinFixityDecls of
+    Just d => Pair (fixityLevel d) (fixityAssoc d)
+    Nothing => Pair 9 1
+
+aliasOf : FixityTable -> String -> String
+aliasOf (MkFixityTable _ ds) op = case lookupDecl op ds of
+  Just d => case fixityTarget d of
+    Just t => t
+    Nothing => op
+  Nothing => case lookupDecl op builtinFixityDecls of
+    Just d => case fixityTarget d of
+      Just t => t
+      Nothing => op
+    Nothing => op
+
+renameMode : FixityTable -> Bool
+renameMode (MkFixityTable r ds) = r
+
+infixTerm : FixityTable -> String -> Expr -> Expr -> Span -> Expr
+infixTerm t op lhs rhs sp = if renameMode t then case op of
+  ">>" => EApp (EVar "bind" sp) [lhs, ELam ["vuna_seq_ignore"] rhs sp] sp
+  _ => EApp (EVar (aliasOf t op) sp) [lhs, rhs] sp
+else EApp (EVar op sp) [lhs, rhs] sp
+
+-- 把右嵌套的 `EInfix` 链展平成「首操作数 + (运算符, 操作数) 列表」；括号 / 应用 / 原子
+-- 作为边界操作数（先递归重排，EParen 在这里消失）。
+collectChain : FixityTable -> Expr -> Result (Pair Expr (List (Pair String Expr)))
+collectChain t e = case e of
+  EInfix op l r sp => andThen (reorderExpr t l) (\l2 => andThen (collectChain t r) (\p => case p of
+    Pair first rest => Ok (Pair l2 (Pair op first :: rest))
+  )
+  )
+  _ => andThen (reorderExpr t e) (\e2 => Ok (Pair e2 []))
+
+-- precedence climbing：`rest` 里同级/更高级的运算符继续被消费。
+-- 显式 fuel 计步（M31.2：`more` 是列表模式变量，SCT 对「tuple 列表」的递减度量
+-- 不闭合；按 R2「守卫 Int」判据给上界，每次递归消费一个运算符）。
+climb : Int -> FixityTable -> Int -> Expr -> List (Pair String Expr) -> Span -> Result (Pair Expr (List (Pair String Expr)))
+climb fuel t minPrec lhs rest sp = if fuel <= 0 then Err "DT: internal: infix reorder fuel exhausted"
+else case rest of
+  [] => Ok (Pair lhs [])
+  (Pair op rhs) :: more =>
+    let
+      fx = lookupFixity t op
+      level = firstOf fx
+      assoc = secondOf fx
+    in if level < minPrec then Ok (Pair lhs rest)
+    else
+      let
+        nextMin = if assoc == 2 then level else level + 1
+      in andThen (climb (fuel - 1) t nextMin rhs more sp) (\p => case p of
+        Pair rhs2 more2 => climb (fuel - 1) t minPrec (infixTerm t op lhs rhs2 sp) more2 sp
+      )
+
+reorderExpr : FixityTable -> Expr -> Result Expr
+reorderExpr t e = case e of
+  EVar name sp => Ok (EVar name sp)
+  EInt n sp => Ok (EInt n sp)
+  EStr s sp => Ok (EStr s sp)
+  EInfix op l r sp => andThen (collectChain t (EInfix op l r sp)) (\p => case p of
+    Pair first rest => andThen (climb (2 * length rest + 2) t 0 first rest sp) (\q => case q of
+      Pair out leftover =>
+        if length leftover == 0 then Ok out else Err "DT: internal: infix reorder left an operator"
+    )
+  )
+  EParen inner sp => reorderExpr t inner
+  ELam names body sp => andThen (reorderExpr t body) (\b => Ok (ELam names b sp))
+  EApp fn args sp =>
+    andThen (reorderExpr t fn)
+      (\fn2 => andThen (traverse (\a => reorderExpr t a) args) (\args2 => Ok (EApp fn2 args2 sp)))
+  EPi name implicit dom cod sp =>
+    andThen (reorderExpr t dom)
+      (\dom2 => andThen (reorderExpr t cod) (\cod2 => Ok (EPi name implicit dom2 cod2 sp)))
+  ELet binds body rec_ sp =>
+    andThen (reorderBinds t binds)
+      (\binds2 => andThen (reorderExpr t body) (\body2 => Ok (ELet binds2 body2 rec_ sp)))
+  ELocalFun clauses sp => andThen (reorderClauses t clauses) (\cs => Ok (ELocalFun cs sp))
+  ECase scrut alts sp =>
+    andThen (reorderExpr t scrut)
+      (\scrut2 => andThen (reorderAlts t alts) (\alts2 => Ok (ECase scrut2 alts2 sp)))
+  EIf c th el sp =>
+    andThen (reorderExpr t c)
+      (\c2 => andThen (reorderExpr t th) (\th2 => andThen (reorderExpr t el) (\el2 => Ok (EIf c2 th2 el2 sp))))
+  EField base fname sp => andThen (reorderExpr t base) (\b => Ok (EField b fname sp))
+  ERecord rname fields sp => andThen (reorderFields t fields) (\fs => Ok (ERecord rname fs sp))
+  ERecUpdate base fields sp =>
+    andThen (reorderExpr t base)
+      (\b => andThen (reorderFields t fields) (\fs => Ok (ERecUpdate b fs sp)))
+  EDo stmts sp => andThen (traverse (\v => reorderDoStmt t v) stmts) (\ss => Ok (EDo ss sp))
+  EAnn inner ty sp =>
+    andThen (reorderExpr t inner) (\i2 => andThen (reorderExpr t ty) (\t2 => Ok (EAnn i2 t2 sp)))
+
+reorderBinds : FixityTable -> List (Pair Pat Expr) -> Result (List (Pair Pat Expr))
+reorderBinds t binds = traverse (\v => reorderBind t v) binds
+
+reorderBind : FixityTable -> Pair Pat Expr -> Result (Pair Pat Expr)
+reorderBind t p = case p of
+  Pair pat value =>
+    andThen (reorderPattern t pat) (\p2 => andThen (reorderExpr t value) (\v2 => Ok (Pair p2 v2)))
+
+reorderFields : FixityTable -> List (Pair String Expr) -> Result (List (Pair String Expr))
+reorderFields t fields = traverse (\v => reorderField t v) fields
+
+reorderField : FixityTable -> Pair String Expr -> Result (Pair String Expr)
+reorderField t p = case p of
+  Pair fname value => andThen (reorderExpr t value) (\v2 => Ok (Pair fname v2))
+
+reorderClauses : FixityTable -> List (Pair (List Pat) Expr) -> Result (List (Pair (List Pat) Expr))
+reorderClauses t clauses = traverse (\v => reorderClause t v) clauses
+
+-- `case ... of` 的分支是 `Pair Pat Expr`（局部函数 clause 才是 `Pair (List Pat) Expr`）。
+reorderAlts : FixityTable -> List (Pair Pat Expr) -> Result (List (Pair Pat Expr))
+reorderAlts t alts = traverse (\a => reorderAlt t a) alts
+
+reorderAlt : FixityTable -> Pair Pat Expr -> Result (Pair Pat Expr)
+reorderAlt t p = case p of
+  Pair pat body =>
+    andThen (reorderPattern t pat) (\p2 => andThen (reorderExpr t body) (\b2 => Ok (Pair p2 b2)))
+
+reorderClause : FixityTable -> Pair (List Pat) Expr -> Result (Pair (List Pat) Expr)
+reorderClause t p = case p of
+  Pair pats body =>
+    andThen (traverse (\pat => reorderPattern t pat) pats)
+      (\pats2 => andThen (reorderExpr t body) (\b2 => Ok (Pair pats2 b2)))
+
+reorderDoStmt : FixityTable -> DoStmt -> Result DoStmt
+reorderDoStmt t stmt = case stmt of
+  DBind pat expr sp =>
+    andThen (reorderPattern t pat)
+      (\p2 => andThen (reorderExpr t expr) (\e2 => Ok (DBind p2 e2 sp)))
+  DExpr expr sp => andThen (reorderExpr t expr) (\e2 => Ok (DExpr e2 sp))
+
+reorderPattern : FixityTable -> Pat -> Result Pat
+reorderPattern t pat = case pat of
+  PVar name sp => Ok (PVar name sp)
+  PWild sp => Ok (PWild sp)
+  PInt n sp => Ok (PInt n sp)
+  PStr s sp => Ok (PStr s sp)
+  PCon name pats sp =>
+    let
+      -- M31.2：中缀构造子（`::`）按别名表换成 canonical 名（`Cons`）。
+      name2 = if name == "::" && renameMode t then aliasOf t "::" else name
+    in andThen (traverse (\p => reorderPattern t p) pats) (\pats2 => Ok (PCon name2 pats2 sp))
+  -- M30（main）：as-pattern `x@pat` 只递归内层模式。
+  PAs name inner sp => andThen (reorderPattern t inner) (\inner2 => Ok (PAs name inner2 sp))
+  PRecord rname fields sp =>
+    andThen (traverse (\p => reorderRecPatField t p) fields) (\fs => Ok (PRecord rname fs sp))
+
+reorderRecPatField : FixityTable -> Pair String Pat -> Result (Pair String Pat)
+reorderRecPatField t p = case p of
+  Pair fname pat => andThen (reorderPattern t pat) (\p2 => Ok (Pair fname p2))
+
+-- 类型表达式同样走重排（`a -> b -> c` 是 `EInfix "->"` 链）。
+reorderDecl : FixityTable -> Decl -> Result Decl
+reorderDecl t d = case d of
+  DData name params kind ctors derivings sp =>
+    andThen (reorderExpr t kind)
+      (\k2 => andThen (traverse (\c => reorderCtor t c) ctors) (\cs => Ok (DData name params k2 cs derivings sp)))
+  DAxiom name ty sp => andThen (reorderExpr t ty) (\ty2 => Ok (DAxiom name ty2 sp))
+  DSig name ty sp => andThen (reorderExpr t ty) (\ty2 => Ok (DSig name ty2 sp))
+  DFun name pats body sp =>
+    andThen (traverse (\p => reorderPattern t p) pats)
+      (\pats2 => andThen (reorderExpr t body) (\b2 => Ok (DFun name pats2 b2 sp)))
+  DRecord name params fields derivings sp =>
+    andThen (traverse (\v => reorderRecordField t v) fields)
+      (\fs => Ok (DRecord name params fs derivings sp))
+  DTrait name params methods sp =>
+    andThen (traverse (\v => reorderTraitMethod t v) methods) (\ms => Ok (DTrait name params ms sp))
+  DInstance ctx head methods sp =>
+    andThen (traverse (\e => reorderExpr t e) ctx)
+      (\ctx2 => andThen (reorderExpr t head) (\head2 => andThen (traverse (\v => reorderInstanceMethodDecl t v) methods) (\ms => Ok (DInstance ctx2 head2 ms sp))))
+
+reorderCtor : FixityTable -> Ctor -> Result Ctor
+reorderCtor t c = case c of
+  Ctor name ty arity sp => andThen (reorderExpr t ty) (\ty2 => Ok (Ctor name ty2 arity sp))
+
+reorderRecordField : FixityTable -> Field -> Result Field
+reorderRecordField t f = case f of
+  Field name ty sp => andThen (reorderExpr t ty) (\ty2 => Ok (Field name ty2 sp))
+
+reorderTraitMethod : FixityTable -> TraitMethod -> Result TraitMethod
+reorderTraitMethod t m = case m of
+  TraitMethod name ty sp => andThen (reorderExpr t ty) (\ty2 => Ok (TraitMethod name ty2 sp))
+
+reorderInstanceMethodDecl : FixityTable -> Decl -> Result Decl
+reorderInstanceMethodDecl t d = case d of
+  DSig name ty sp => andThen (reorderExpr t ty) (\ty2 => Ok (DSig name ty2 sp))
+  DFun name pats body sp =>
+    andThen (traverse (\p => reorderPattern t p) pats)
+      (\pats2 => andThen (reorderExpr t body) (\b2 => Ok (DFun name pats2 b2 sp)))
+  other => Ok other
+
+reorderProgram : FixityTable -> List Decl -> Result (List Decl)
+reorderProgram t decls = traverse (\v => reorderDecl t v) decls

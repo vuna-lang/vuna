@@ -299,6 +299,8 @@ exprAnchors e = case e of
   EAnn value ty sp => sp :: exprAnchors value
   -- A2：where/let 多 clause 局部函数：每个 clause body 的表达式锚点。
   ELocalFun clauses sp => concatMap localClauseAnchors clauses
+  EInfix op l r sp => append (exprAnchors l) (exprAnchors r)
+  EParen inner sp => exprAnchors inner
 
 localClauseAnchors : Pair (List Pat) Expr -> List Span
 localClauseAnchors (Pair pats body) = exprAnchors body

@@ -24,6 +24,7 @@ import Vuna.Compiler.Version
 import Vuna.Interp
 import Vuna.Compiler.Frontend.Parser
 import Vuna.Compiler.Frontend.Ast
+import Vuna.Compiler.Loader.Fixity
 import Vuna.Compiler.Elab
 import Vuna.Fmt
 import Vuna.Files
@@ -455,12 +456,14 @@ goalRun file = case readText file of
   Err e => toolError e
   Ok source => case parseSource file source of
     Err e => toolFailure e
-    Ok (Source _ _ decls) => case goalsOfProgram decls of
+    Ok (Source _ _ fx decls0) => case reorderProgram (tableOfKeepOps fx) decls0 of
       Err e => toolFailure e
-      Ok infos =>
-        let
-          _ = runIO (prim_print (goalHeader file (length infos) ++ renderGoals file infos))
-        in 0
+      Ok decls => case goalsOfProgram decls of
+        Err e => toolFailure e
+        Ok infos =>
+          let
+            _ = runIO (prim_print (goalHeader file (length infos) ++ renderGoals file infos))
+          in 0
 
 renderGoals : String -> List DtGoalInfo -> String
 renderGoals file [] = ""
