@@ -12,7 +12,6 @@ module Vuna.Compiler.Elab.Trait
   , constraintPartsOf
   , ctorResultType
   , defBodyOf
-  , defTypeOrDefault
   , defTypeOrDefaultTbl
   , elabConstraintDomains
   , elabFunDef
@@ -997,7 +996,7 @@ elabInstanceBodiesGo (d :: rest) allDecls classes datas globals ec acc = andThen
 instanceDefsOf : Ec -> Ec -> Maybe Span -> List (Pair String Term) -> List DtDef
 instanceDefsOf ecBefore ecAfter srcSpan gs =
   map
-    (\g => DtDef (firstOf g) (defTypeOrDefault gs (firstOf g)) (substDictTerm ecAfter (defBodyOf (ecDefTbl ecAfter) (firstOf g))) srcSpan)
+    (\g => DtDef (firstOf g) (defTypeOrDefaultTbl (Base.HashMap.fromList gs) (firstOf g)) (substDictTerm ecAfter (defBodyOf (ecDefTbl ecAfter) (firstOf g))) srcSpan)
     gs
 
 defBodyOf : HashMap Term -> String -> Term
@@ -1045,17 +1044,10 @@ extraDefsGo globalsTbl sourceNames srcSpans (d :: rest) acc =
   else extraDefsGo globalsTbl sourceNames srcSpans rest
     (DtDef (firstOf d) (defTypeOrDefaultTbl globalsTbl (firstOf d)) (secondOf d) (spanOfName (firstOf d) srcSpans) :: acc)
 
--- 名字→span 表的线性查找（生成定义数量小，不做哈希表）。
 spanOfName : String -> List (Pair String Span) -> Maybe Span
 spanOfName name [] = Nothing
 spanOfName name ((Pair n sp) :: rest) = if n == name then Just sp else spanOfName name rest
 
-defTypeOrDefault : List (Pair String Term) -> String -> Term
-defTypeOrDefault globals name = case globalLookup name globals of
-  Just ty => ty
-  Nothing => TGlobal "Int"
-
--- O(1) 版：extraDefsOf 对每条生成定义查 globals 表（M34；调用点用 7700+ 条 globals）。
 defTypeOrDefaultTbl : HashMap Term -> String -> Term
 defTypeOrDefaultTbl tbl name = case Base.HashMap.lookup name tbl of
   Just ty => ty
