@@ -168,6 +168,8 @@ let rec v_Vuna_dCompiler_dElab_dSig_dkeepOutQualified = (fun mc0 -> (fun mc1 -> 
 
 let v_Vuna_dCompiler_dElab_dSig_dquantifyTopSigCached = (fun prefix -> (fun banned -> (fun preludeBanned -> (fun ty -> (fun sp -> ((((v_Vuna_dCompiler_dElab_dSig_dquantifyTopKinds ((((v_Vuna_dCompiler_dElab_dSig_dkeepOutQualified prefix) banned) preludeBanned) ((v_Vuna_dCompiler_dElab_dSig_dfreeNames (fun n -> false)) ty))) ty) ty) sp))))))
 
+let v_Vuna_dCompiler_dElab_dSig_dquantifyTopSigCtxCached = (fun prefix -> (fun banned -> (fun preludeBanned -> (fun ctx -> (fun ty -> (fun sp -> ((fun combined -> ((fun names -> ((((v_Vuna_dCompiler_dElab_dSig_dquantifyTopKinds names) combined) ty) sp)) ((((v_Vuna_dCompiler_dElab_dSig_dkeepOutQualified prefix) banned) preludeBanned) ((v_Vuna_dCompiler_dElab_dSig_dfreeNames (fun n -> false)) combined)))) (C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEApp ((C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEVar ("#sig", sp)), ((v_Base_dList_dappend ctx) (C_Base_dList_dList_Base_dList_dCons (ty, C_Base_dList_dList_Base_dList_dNil))), sp)))))))))
+
 let rec v_Vuna_dCompiler_dElab_dSig_dkeepOutTbl = (fun mc0 -> (fun mc1 -> (match mc1 with
   | C_Base_dList_dList_Base_dList_dCons (dtb__98, dtb__99) -> (if ((v_Vuna_dCompiler_dCommon_dtblMem dtb__98) mc0) then ((v_Vuna_dCompiler_dElab_dSig_dkeepOutTbl mc0) dtb__99) else (C_Base_dList_dList_Base_dList_dCons (dtb__98, ((v_Vuna_dCompiler_dElab_dSig_dkeepOutTbl mc0) dtb__99))))
   | C_Base_dList_dList_Base_dList_dNil -> C_Base_dList_dList_Base_dList_dNil
