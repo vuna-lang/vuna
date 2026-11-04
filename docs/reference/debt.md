@@ -39,6 +39,7 @@
 | E06 | seed rotation 替换步骤非原子：校验通过后 `rm -rf seed && cp -r` | `nix/seed-rotate.sh` | 待定 |
 | C32 | 单文件 / LSP 级 elab 缓存与接口摘要未做；已有 check/build 级 elab 缓存（`Compile` 的 check 结果缓存 + `List SplitFile` 缓存），但序列化用 OCaml Marshal（非自描述，靠编译器二进制指纹失效） | `Driver/Compile`（`checkCacheKey*`/`splitCacheKey`）；[performance.md](performance.md) §9 | M34（后续规范化） |
 | C33 | 性能 CI 门槛只有软对比：`bench/compiler.sh --check` 与 `bench/run.sh --check` 是 20% 软 WARN（退出 0），没有硬 CI check 与分配统计报告 | `bench/compiler.sh`；[performance.md](performance.md) §9 | M34（后续） |
+| C35 | `Codegen.Split` 的每个模块文件 `open` **所有前序单元**（`genUnitParts` 的 `[runtimeUnit] ++ earlier`），依赖图退化为全序；模块级并行 codegen / 编译需要先改成精确 per-module open（按 imports），否则分层并行不可能 | `Codegen/Split.splitModuleFiles` / `genUnitParts`；`Driver/Split.buildScript` | M34.4（后续） |
 
 ## 未来能力（F1–F4）
 

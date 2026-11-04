@@ -99,8 +99,9 @@ M33（语言能写高性能系统程序）已收尾，历史在 git；剩下两�
 `groupDefs`/`extraDefsOf`/`Namespaces` 表化、`vuna map` 索引 O(n²)→O(n)、C30）；M34.3 部分
 （`termHasAnyMeta` 快速路径；`Ec`/`Sols` 已是 O(1) cons 与增量 delta）；M34.5 的 check/build 级
 elab 缓存（`$TMPDIR/vuna-cache`，冷/热：check . 6.5s→25ms、build --no-compile 2.8s→21ms）；M34.6 读数
-随基准。剩余：M34.3 的 hash-consing；M34.4 workspace 并行 check / 模块级并行 codegen /
-LSP 增量；M34.5 的接口摘要 + 规范序列化（C32）。
+随基准。剩余：M34.3 的 hash-consing；M34.4 workspace 并行 check（需进程原语）、模块级并行
+codegen（受 C35 的全序 open 模型限制，需先做精确 per-module open）、LSP 增量（接口摘要）；
+M34.5 的接口摘要 + 规范序列化（C32）。
 
 ### M35：并发 / 服务端
 

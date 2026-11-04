@@ -256,7 +256,8 @@ W3 落地的容器与表示（`Intrinsics` / `Elab.Prelude` / `Codegen.Decl` / `
 （C32）留后续。
 
 **剩余（M34 后续）**：LSP 增量与单文件级缓存（需接口摘要 + 只精化本包模块）、workspace
-并行 `check`、`check .` 对依赖包模块的重复精化（接口摘要后消除）。
+并行 `check`（需进程原语）、模块级并行 codegen（受 C35 的全序 open 模型限制）、`check .`
+对依赖包模块的重复精化（接口摘要后消除）。
 
 ## 相关阅读
 
