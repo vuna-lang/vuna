@@ -24,6 +24,7 @@ module Vuna.Compiler.Elab.Driver
   , metaOwnerHint
   , resolveDictGoalsFix
   , rezonkDefs
+  , termHasAnyMeta
   , termHasMeta
   , unsolvedFromRelevant
   , unsolvedMessage
@@ -374,7 +375,8 @@ elabBodies future (d :: rest) globals doneDefs acc ec = case d of
             liftedTy = firstOf lifted
             liftedBody = firstOf (secondOf lifted)
             liftedEc = secondOf (secondOf lifted)
-            cleanTerm = substDictTerm liftedEc liftedBody
+            cleanTerm =
+              if termHasAnyMeta liftedBody then substDictTerm liftedEc liftedBody else liftedBody
             -- 正文检查读的是哈希索引：只插表，不逐定义重建 globals list
             -- （replaceGlobalType 是 O(#globals)/定义 ⇒ 整程序 O(n²)；该 list 只在
             -- 签名阶段与最终 DtProgram 里用，正文阶段以表为准）。
@@ -585,7 +587,9 @@ in andThen (elabDatas (collectDataDecls decls []) preludeGlobals ecEmpty) (\pd =
 -- 用当前解重新 zonk 定义体（延迟字典元变量 → 实例项）；axiom 无体，原样保留。
 rezonkDefs : Ec -> List DtDef -> List DtDef
 rezonkDefs ec defs = map (\d => case dtDefBody d of
-  Just body => DtDef (dtDefName d) (dtDefType d) (substDictTerm ec body) (dtDefSpan d)
+  Just body =>
+    if termHasAnyMeta body then DtDef (dtDefName d) (dtDefType d) (substDictTerm ec body) (dtDefSpan d)
+    else d
   Nothing => d
 ) defs
 
@@ -646,6 +650,31 @@ anyArgHasMeta m ((Pair a rig) :: rest) = termHasMeta m a || anyArgHasMeta m rest
 anyAltHasMeta : Int -> List CaseAlt -> Bool
 anyAltHasMeta m [] = False
 anyAltHasMeta m (alt :: rest) = termHasMeta m (caseAltBody alt) || anyAltHasMeta m rest
+
+-- M34：是否存在**任意**未解 meta（只读，不分配）。rezonkDefs / cleanTerm 用它跳过
+-- 「本来就无 TMeta」的定义体，避免对全部定义体重建 Term（分配削减）。
+termHasAnyMeta : Term -> Bool
+termHasAnyMeta (TMeta k) = True
+termHasAnyMeta (TVar n i) = False
+termHasAnyMeta (TGlobal n) = False
+termHasAnyMeta (TType l) = False
+termHasAnyMeta (TPi n implicit rig dom cod) = termHasAnyMeta dom || termHasAnyMeta cod
+termHasAnyMeta (TLam n rig body) = termHasAnyMeta body
+termHasAnyMeta (TApp f a rig) = termHasAnyMeta f || termHasAnyMeta a
+termHasAnyMeta (TCon c args) = anyArgHasAnyMeta args
+termHasAnyMeta (TCase scrut alts) = termHasAnyMeta scrut || anyAltHasAnyMeta alts
+termHasAnyMeta (TInt n) = False
+termHasAnyMeta (TStr s) = False
+termHasAnyMeta (TBool b) = False
+termHasAnyMeta (TIf c th el) = termHasAnyMeta c || termHasAnyMeta th || termHasAnyMeta el
+
+anyArgHasAnyMeta : List (Pair Term Rig) -> Bool
+anyArgHasAnyMeta [] = False
+anyArgHasAnyMeta ((Pair a rig) :: rest) = termHasAnyMeta a || anyArgHasAnyMeta rest
+
+anyAltHasAnyMeta : List CaseAlt -> Bool
+anyAltHasAnyMeta [] = False
+anyAltHasAnyMeta (alt :: rest) = termHasAnyMeta (caseAltBody alt) || anyAltHasAnyMeta rest
 
 -- 洞目标里的类型是 level 形态，show 时深度取快照上下文的长度。
 ctxDepthOf : DtGoal -> Int

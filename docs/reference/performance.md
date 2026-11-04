@@ -240,8 +240,23 @@ W3 落地的容器与表示（`Intrinsics` / `Elab.Prelude` / `Codegen.Decl` / `
 3. `vuna map` 索引：`refsInExpr` 改累积器（O(n²)→O(n)），跨文件累积改逆序前插（消除每文件
    `append` 复制整个已累积列表）。
 
-**剩余（M34 后续）**：单文件 / 模块级 elab 缓存（M34.5，依赖 Core Term / DtProgram 序列化）、
-workspace 并行 `check`、`check .` 对依赖包模块的重复精化（缓存落地后消除）。
+**M34.5 缓存（check/build）后**：
+
+| benchmark | 冷（首次） | 热（缓存命中） |
+| --- | --- | --- |
+| check . | ~6.8 s | ~25 ms |
+| check compiler | ~2.8 s | ~11 ms |
+| build --no-compile compiler | ~2.9 s | ~18 ms |
+| build compiler（完整链接） | ~6.7 s | ~16 ms |
+
+缓存 key = 包闭包源哈希 + 依赖包哈希 + manifest 哈希 + 编译器二进制指纹 + schema 版本；
+路径 `$TMPDIR/vuna-cache/<包路径哈希>/{check,split}`（Nix 构建的源树只读、沙箱 TMPDIR 每次新
+⇒ 构建内不命中，无害）。check 只缓存成功结果（失败不缓存）；`List SplitFile` 是纯数据，用
+`prim_marshal`/`prim_unmarshal`（OCaml Marshal）落盘——过渡实现，规范的自描述序列化格式
+（C32）留后续。
+
+**剩余（M34 后续）**：LSP 增量与单文件级缓存（需接口摘要 + 只精化本包模块）、workspace
+并行 `check`、`check .` 对依赖包模块的重复精化（接口摘要后消除）。
 
 ## 相关阅读
 

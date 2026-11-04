@@ -316,6 +316,7 @@ allIntrinsics : List Intrinsic
 -- 纯 Array 原语无能力；IORef / MArray / Buffer 都是 IO 动作（无能力：不触碰外部世界）。
 -- 空数组字面量：non-expansive 的 OCaml `[||]`，让 `HashMap` 的空表这类零参多态值可泛化。
 -- M33 W4：字节切片（clamp 语义与 Base.String.substring 一致），避免 List 桥接。
+-- M34.5：编译器内部缓存原语（Marshal 纯数据；含闭包会在运行期失败）。
 allIntrinsics =
   [ MkIntrinsic "+" (IFun IInt (IFun IInt IInt)) OpAdd Nothing "bi_add" True,
     MkIntrinsic "-" (IFun IInt (IFun IInt IInt)) OpSub Nothing "bi_sub" True,
@@ -334,6 +335,8 @@ allIntrinsics =
     MkIntrinsic "strHash" (IFun IStr IInt) OpStrHash Nothing "dtp_strHash" True,
     MkIntrinsic "strAt" (IFun IStr (IFun IInt IInt)) OpStrAt Nothing "dtp_strAt" True,
     MkIntrinsic "strSubstring" (IFun IInt (IFun IInt (IFun IStr IStr))) OpStrSubstring Nothing "dtp_substring" True,
+    MkIntrinsic "prim_marshal" (IPi "a" (IFun (IVar "a") IStr)) OpNone Nothing "dtp_marshal" True,
+    MkIntrinsic "prim_unmarshal" (IPi "a" (IFun IStr (IVar "a"))) OpNone Nothing "dtp_unmarshal" True,
     MkIntrinsic "strShow" (IFun IStr IStr) OpStrShow Nothing "dt_show_string" True,
     MkIntrinsic "arrayLength" (IPi "a" (IFun (IArray (IVar "a")) IInt)) OpNone Nothing "Array.length" True,
     MkIntrinsic "arrayEmpty" (IPi "a" (IArray (IVar "a"))) OpNone Nothing "[||]" True,

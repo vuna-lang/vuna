@@ -31,8 +31,11 @@ module Vuna.Compiler.Loader.Modules
   , modulesExportingCtor
   , modulesExportingType
   , modulesExportingValue
+  , nsCtorSet
   , nsCtors
+  , nsTypeSet
   , nsTypes
+  , nsValueSet
   , nsValues
   , projectEntryAllImports
   , projectEntryCapabilities
@@ -53,6 +56,7 @@ module Vuna.Compiler.Loader.Modules
 -- 导出表计算、加载流程与 flatten 在 Flatten；门面 `Vuna.Compiler.Loader` 保持原 API。
 import Vuna.Compiler.Loader.Diagnostics
 import Vuna.Compiler.Common
+import Base.HashMap
 import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Frontend.Lexer
 import Base.Eq
@@ -129,16 +133,30 @@ record Namespaces where
   nsValues : List String
   nsCtors : List String
   nsTypes : List String
+  -- M34：解析期查找的 O(1) 版本（每个 EVar 都会查这三个集合；list 线性查找在几十万
+  -- 节点上是主要 resolve 成本）。list 字段保留给错误提示的 suggest。
+  nsValueSet : HashMap Bool
+  nsCtorSet : HashMap Bool
+  nsTypeSet : HashMap Bool
 
 -- 记录字段不是全局名（字段访问在 Elab 里降级成模式绑定），所以显式写访问器。
 nsValues : Namespaces -> List String
-nsValues (Namespaces values ctors types) = values
+nsValues (Namespaces values ctors types vset cset tset) = values
 
 nsCtors : Namespaces -> List String
-nsCtors (Namespaces values ctors types) = ctors
+nsCtors (Namespaces values ctors types vset cset tset) = ctors
 
 nsTypes : Namespaces -> List String
-nsTypes (Namespaces values ctors types) = types
+nsTypes (Namespaces values ctors types vset cset tset) = types
+
+nsValueSet : Namespaces -> HashMap Bool
+nsValueSet (Namespaces values ctors types vset cset tset) = vset
+
+nsCtorSet : Namespaces -> HashMap Bool
+nsCtorSet (Namespaces values ctors types vset cset tset) = cset
+
+nsTypeSet : Namespaces -> HashMap Bool
+nsTypeSet (Namespaces values ctors types vset cset tset) = tset
 
 -- 模块导出表（M10）。每条是「本模块公开名 → 定义处带模块前缀的名字」。
 -- kind 用字符串区分两套命名空间：val（函数/值）、ctor（构造器）、type（类型名）。

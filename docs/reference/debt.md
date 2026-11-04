@@ -37,7 +37,7 @@
 | E03 | `result*` out-link 可过期（手工指向某次构建），文档只能提示重建 | `nix build ... --out-link` 的语义 | 待定 |
 | E04 | TCB 只有黑名单 + 闭包数量断言，没有完整 allowlist | `nix/tcb-check.sh` + `nix/seed-count.txt` | 待定 |
 | E06 | seed rotation 替换步骤非原子：校验通过后 `rm -rf seed && cp -r` | `nix/seed-rotate.sh` | 待定 |
-| C32 | 无单文件 / 模块级 elab 缓存与序列化格式（只有 build 产物级增量） | `Driver/Compile.buildMetaText`；无 Core Term / DtProgram 序列化 | M34 |
+| C32 | 单文件 / LSP 级 elab 缓存与接口摘要未做；已有 check/build 级 elab 缓存（`Compile` 的 check 结果缓存 + `List SplitFile` 缓存），但序列化用 OCaml Marshal（非自描述，靠编译器二进制指纹失效） | `Driver/Compile`（`checkCacheKey*`/`splitCacheKey`）；[performance.md](performance.md) §9 | M34（后续规范化） |
 | C33 | 性能 CI 门槛只有软对比：`bench/compiler.sh --check` 与 `bench/run.sh --check` 是 20% 软 WARN（退出 0），没有硬 CI check 与分配统计报告 | `bench/compiler.sh`；[performance.md](performance.md) §9 | M34（后续） |
 
 ## 未来能力（F1–F4）

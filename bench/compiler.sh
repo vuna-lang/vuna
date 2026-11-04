@@ -8,6 +8,10 @@
 # 上做回归对比）。`--check` 与 `bench/compiler-baseline.txt` 比，超过 --threshold% 打 WARN
 # （软门槛，退出 0）；`--save-baseline` 重写基线（复核读数后手动执行）。
 #
+# 冷/热语义（M34.5 缓存落地后）：
+#   check-all / check-compiler / build-compiler  先清对应缓存（冷，代表首次构建）
+#   check-warm / build-warm                      先预热一次再计时（热，代表缓存命中）
+#
 # 用法（仓库根目录）：
 #   sh bench/compiler.sh                    # 测量全部并打印表格
 #   sh bench/compiler.sh --runs 5 --check   # 与基线对比
@@ -44,7 +48,7 @@ options:
   --threshold N          回退阈值，百分比（默认 20）
   -h, --help             显示帮助
 
-benchmark 名: check-all check-compiler build-compiler map-cold map-hot fmt-check
+benchmark 名: check-all check-compiler check-warm build-compiler build-warm map-cold map-hot fmt-check
 EOF
 }
 
@@ -73,7 +77,7 @@ done
 
 case $RUNS in ''|*[!0-9]*|0) die "--runs must be a positive integer" ;; esac
 
-NAMES="check-all check-compiler build-compiler map-cold map-hot fmt-check"
+NAMES="check-all check-compiler check-warm build-compiler build-warm map-cold map-hot fmt-check"
 if [ -n "$ONLY" ]; then
   for n in $ONLY; do
     case " $NAMES " in *" $n "*) ;; *) die "unknown benchmark: $n" ;; esac
@@ -81,16 +85,40 @@ if [ -n "$ONLY" ]; then
   NAMES=$ONLY
 fi
 
+clear_check_cache() {
+  rm -rf "${TMPDIR:-/tmp}/vuna-cache"
+}
+
+clear_split_cache() {
+  rm -rf "${TMPDIR:-/tmp}/vuna-cache"
+}
+
 # 单项一次（成功才输出 ms；失败时打印错误并退出）。
 run_once() {
   local name=$1 t0 t1 rc
   case $name in
-    check-all) t0=$(date +%s%3N); (cd "$ROOT" && "$VUNA_BIN" check . >/dev/null 2>&1); rc=$?; t1=$(date +%s%3N) ;;
-    check-compiler) t0=$(date +%s%3N); (cd "$ROOT" && "$VUNA_BIN" check compiler >/dev/null 2>&1); rc=$?; t1=$(date +%s%3N) ;;
-    build-compiler) t0=$(date +%s%3N); (cd "$ROOT" && "$VUNA_BIN" build --no-compile --out "$WORK/build" compiler >/dev/null 2>&1); rc=$?; t1=$(date +%s%3N) ;;
-    map-cold) rm -rf "$ROOT/.local/index"; t0=$(date +%s%3N); (cd "$ROOT" && "$VUNA_BIN" map >/dev/null 2>&1); rc=$?; t1=$(date +%s%3N) ;;
-    map-hot) t0=$(date +%s%3N); (cd "$ROOT" && "$VUNA_BIN" map >/dev/null 2>&1); rc=$?; t1=$(date +%s%3N) ;;
-    fmt-check) t0=$(date +%s%3N); (cd "$ROOT" && "$VUNA_BIN" fmt --check >/dev/null 2>&1); rc=$?; t1=$(date +%s%3N) ;;
+    check-all)
+      clear_check_cache
+      t0=$(date +%s%3N); (cd "$ROOT" && "$VUNA_BIN" check . >/dev/null 2>&1); rc=$?; t1=$(date +%s%3N) ;;
+    check-compiler)
+      rm -rf "$ROOT/compiler/.local/check-cache"
+      t0=$(date +%s%3N); (cd "$ROOT" && "$VUNA_BIN" check compiler >/dev/null 2>&1); rc=$?; t1=$(date +%s%3N) ;;
+    check-warm)
+      (cd "$ROOT" && "$VUNA_BIN" check . >/dev/null 2>&1)
+      t0=$(date +%s%3N); (cd "$ROOT" && "$VUNA_BIN" check . >/dev/null 2>&1); rc=$?; t1=$(date +%s%3N) ;;
+    build-compiler)
+      clear_split_cache
+      t0=$(date +%s%3N); (cd "$ROOT" && "$VUNA_BIN" build --no-compile --out "$WORK/build" compiler >/dev/null 2>&1); rc=$?; t1=$(date +%s%3N) ;;
+    build-warm)
+      (cd "$ROOT" && "$VUNA_BIN" build --no-compile --out "$WORK/bwarm" compiler >/dev/null 2>&1)
+      t0=$(date +%s%3N); (cd "$ROOT" && "$VUNA_BIN" build --no-compile --out "$WORK/bwarm" compiler >/dev/null 2>&1); rc=$?; t1=$(date +%s%3N) ;;
+    map-cold)
+      rm -rf "$ROOT/.local/index"
+      t0=$(date +%s%3N); (cd "$ROOT" && "$VUNA_BIN" map >/dev/null 2>&1); rc=$?; t1=$(date +%s%3N) ;;
+    map-hot)
+      t0=$(date +%s%3N); (cd "$ROOT" && "$VUNA_BIN" map >/dev/null 2>&1); rc=$?; t1=$(date +%s%3N) ;;
+    fmt-check)
+      t0=$(date +%s%3N); (cd "$ROOT" && "$VUNA_BIN" fmt --check >/dev/null 2>&1); rc=$?; t1=$(date +%s%3N) ;;
     *) die "unknown benchmark: $name" ;;
   esac
   [ "$rc" -eq 0 ] || { printf 'vuna-compiler-perf: %s failed (exit %s)\n' "$name" "$rc" >&2; return 1; }
@@ -102,7 +130,6 @@ median() { printf '%s\n' "$@" | sort -n | awk '{a[NR]=$1} END { if (NR%2) print 
 declare -A MED
 printf '%-18s %10s\n' benchmark ms
 for name in $NAMES; do
-  [ "$name" = map-cold ] || :
   for _ in $(seq 1 "$WARMUP"); do run_once "$name" >/dev/null || exit 1; done
   times=""
   for _ in $(seq 1 "$RUNS"); do
