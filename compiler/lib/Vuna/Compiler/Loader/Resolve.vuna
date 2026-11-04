@@ -594,9 +594,18 @@ firstEffect [] = Nothing
 firstEffect (Nothing :: rest) = firstEffect rest
 firstEffect ((Just n) :: rest) = Just n
 
+-- M31：`runIO` 是唯一的「main 之外执行 IO」入口，要求能力 `unsafe`。
+-- 名字是 resolve 后的模块全名（`Base.IO.runIO`）；必须在 `effExpr` 里被认作 effect 名，
+-- 否则 `checkEffectsBuiltins` 永远看不到它（不是 intrinsic）。
+unsafeExecutorName : String
+unsafeExecutorName = "Base.IO.runIO"
+
+isUnsafeExecutor : String -> Bool
+isUnsafeExecutor name = name == unsafeExecutorName
+
 effExpr : Expr -> Maybe String
 effExpr e = case e of
-  EVar n sp => if isEffectfulBuiltin n then Just n else Nothing
+  EVar n sp => if isEffectfulBuiltin n || isUnsafeExecutor n then Just n else Nothing
   EInt n sp => Nothing
   EStr s sp => Nothing
   ELam ps body sp => effExpr body
@@ -657,14 +666,6 @@ effDecls (d :: rest) = firstEffect [effDecl d, effDecls rest]
 -- 效果被拒的上下文描述：ad-hoc 文件（无 manifest、base-only 上下文）没有包名。
 packageLabelForEffects : String -> String
 packageLabelForEffects pkg = if pkg == "" then "ad-hoc file (no package)" else "package " ++ pkg
-
--- M31：`runIO` 是唯一的「main 之外执行 IO」入口，要求能力 `unsafe`。
--- 名字是 resoved 后的模块全名（`Base.IO.runIO`）。
-unsafeExecutorName : String
-unsafeExecutorName = "Base.IO.runIO"
-
-isUnsafeExecutor : String -> Bool
-isUnsafeExecutor name = name == unsafeExecutorName
 
 checkEffectsBuiltins : String -> String -> List String -> List Decl -> Result (List Decl)
 checkEffectsBuiltins label pkg caps decls = andThen (checkCapabilities label caps) (\_ => case effDecls decls of

@@ -1,0 +1,5 @@
+-- M31：`runIO` 在 main 之外执行 IO 动作，必须显式声明 `unsafe` 能力。
+import Base.IO
+
+main : Int
+main = runIO (print "runio without unsafe\n")
