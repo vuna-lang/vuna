@@ -61,7 +61,7 @@
   局部多 clause 函数（复用模式矩阵，穷尽性同 `case`；签名只能写一条、覆盖全部子句，非相邻
   同名子句报 `PS_WhereSigMultiClause`）。局部函数仍不支持递归。
 - **as-pattern**：`x@pat` 可用于函数子句参数与嵌套模式（模式矩阵注入绑定，STR 视作整个
-  值），`case` 分支左端尚未接入；`vuna lint` 的 `case-to-clauses` 对递归 / 互递归函数保持
+  值），`case` 分支左端也支持 as-pattern（desugar 为 `let` 绑定）。`vuna lint` 的 `case-to-clauses` 对递归 / 互递归函数
   `case`（与 STR 的已知冲突，见 [lint.md](lint.md) §5）。
 - **`vuna interp` 不执行效果**：任何 `main : IO a` 一律报
   `DT: interp cannot execute effects (main : IO a); compile and run the program instead`
@@ -192,7 +192,7 @@
   尊重 `[export].modules`。
 - **as-pattern 与 lint**：`case-to-clauses` 拆分「分支体引用 scrutinee」的函数时自动生成
   `x@pat` 保持绑定；STR 把 as 绑定视作整个值，递归/互递归函数也能通过终止性检查。
-  `case` 分支左端的 as-pattern 暂未接入（只支持函数子句参数与嵌套模式）。
+  `case` 分支左端也支持 as-pattern（desugar 为 `let` 绑定，scrutinee 纯表达式重复求值语义等价）。
 ## 命名与构建
 
 - 标准库包名 `vuna-base`、模块根 `Base.*`，编译器模块 `Vuna.Compiler.*`（门面

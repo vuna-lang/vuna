@@ -8,8 +8,8 @@
 # 规则：本文件是精确基线（`=<expected>`），不是上限；不等即失败（双向捕获膨胀与
 #       优化丢失）。种子尺寸不在这里设阈值（见 docs/reference/compiler.md）。
 files =4
-bytes =5027
-lines =134
+bytes =5087
+lines =138
 maxline =758
 longlines =7
 letrec =1

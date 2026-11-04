@@ -161,8 +161,8 @@ idT x = x
   `advance (PState file toks@(t :: rest) last count) = ...`；带参数的内层模式需括号
   （`x@(t :: rest)`），变量 / 字面量 / 0 元构造子不需要（`x@True`、`x@42`）。
   编译期由模式矩阵注入绑定（`Elab.Match`）；STR 把 as 绑定视为整个值（不改变结构下降）。
-  `case` 分支左端的 as-pattern 尚未接入（当前只支持函数子句参数 / 嵌套模式）。
-
+  `case` 分支左端也支持 as-pattern（`case xs of y@(t :: rest) => ...`，desugar 为
+  `case` 分支左端也支持 as-pattern（desugar 为 `let` 绑定；scrutinee 纯表达式重复求值语义等价）。
 - 变量 / 通配兜底只能放**最后一个**分支，否则报 `TC_CatchAllNotLast`；
 - `Bool` 的 `case` 只认 `True` / `False` / 变量 / 通配（`TC_BoolCaseRestriction`）；
 - `Int` / `String` 的 `case` 必须有一个变量 / 通配兜底（`TC_IntStringCaseNeedsFallback`），

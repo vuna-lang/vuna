@@ -219,7 +219,7 @@ else case e of
       (\c2 => Ok (ELocalFun c2 sp))
   ECase scrut alts sp =>
     andThen (desugarExprFuel (fuel - 1) records scrut)
-      (\s2 => andThen (traverse (desugarAltFuel (fuel - 1) records) alts) (\a2 => Ok (ECase s2 a2 sp)))
+      (\s2 => andThen (traverse (desugarAltFuel (fuel - 1) records) alts) (\a2 => Ok (ECase s2 (map (expandCaseAs s2) a2) sp)))
   EIf c t el sp =>
     andThen (desugarExprFuel (fuel - 1) records c)
       (\c2 => andThen (desugarExprFuel (fuel - 1) records t) (\t2 => andThen (desugarExprFuel (fuel - 1) records el) (\e2 => Ok (EIf c2 t2 e2 sp))))
@@ -397,3 +397,13 @@ desugarDoStmt a1 a2 = desugarDoStmtFuel 512 a1 a2
 
 desugarExpr : List RecordInfo -> Expr -> Result Expr
 desugarExpr a1 a2 = desugarExprFuel 512 a1 a2
+
+-- case 分支左端的 as-pattern（`y@pat => body`）：等价于 `pat => let y = <scrutinee> in body`。
+-- 纯语言里 scrutinee 可重复求值；常见形态（scrutinee 是变量）无额外开销。
+expandCaseAs : Expr -> Pair Pat Expr -> Pair Pat Expr
+expandCaseAs scrut (Pair pat body) = expandCaseAsGo scrut pat body
+
+expandCaseAsGo : Expr -> Pat -> Expr -> Pair Pat Expr
+expandCaseAsGo scrut (PAs n inner psp) body =
+  expandCaseAsGo scrut inner (ELet [Pair (PVar n psp) scrut] body False psp)
+expandCaseAsGo scrut pat body = Pair pat body

@@ -169,5 +169,4 @@ advance (PState file toks@[]) last count = ...
 ```
 
 STR 把 as 绑定视作整个值（`patNames` / `pathInPat` / `patSizeStrict` 已支持），
-递归/互递归函数拆分后仍能通过终止性检查。`case` 分支左端的 as-pattern 暂未接入
-（只支持函数子句参数与嵌套模式位置）。
+递归/互递归函数拆分后仍能通过终止性检查；`case` 分支左端也支持 as-pattern。

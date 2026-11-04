@@ -102,12 +102,11 @@ else EApp (EVar op sp) [lhs, rhs] sp
 -- 把右嵌套的 `EInfix` 链展平成「首操作数 + (运算符, 操作数) 列表」；括号 / 应用 / 原子
 -- 作为边界操作数（先递归重排，EParen 在这里消失）。
 collectChain : FixityTable -> Expr -> Result (Pair Expr (List (Pair String Expr)))
-collectChain t e = case e of
-  EInfix op l r sp => andThen (reorderExpr t l) (\l2 => andThen (collectChain t r) (\p => case p of
-    Pair first rest => Ok (Pair l2 (Pair op first :: rest))
-  )
-  )
-  _ => andThen (reorderExpr t e) (\e2 => Ok (Pair e2 []))
+collectChain t (EInfix op l r sp) = andThen (reorderExpr t l) (\l2 => andThen (collectChain t r) (\p => case p of
+  Pair first rest => Ok (Pair l2 (Pair op first :: rest))
+)
+)
+collectChain t e = andThen (reorderExpr t e) (\e2 => Ok (Pair e2 []))
 
 -- precedence climbing：`rest` 里同级/更高级的运算符继续被消费。
 -- 显式 fuel 计步（M31.2：`more` 是列表模式变量，SCT 对「tuple 列表」的递减度量
@@ -130,57 +129,57 @@ else case rest of
       )
 
 reorderExpr : FixityTable -> Expr -> Result Expr
-reorderExpr t e = case e of
-  EVar name sp => Ok (EVar name sp)
-  EInt n sp => Ok (EInt n sp)
-  EStr s sp => Ok (EStr s sp)
-  EInfix op l r sp => andThen (collectChain t (EInfix op l r sp)) (\p => case p of
-    Pair first rest => andThen (climb (2 * length rest + 2) t 0 first rest sp) (\q => case q of
-      Pair out leftover =>
-        if length leftover == 0 then Ok out else Err "DT: internal: infix reorder left an operator"
-    )
+reorderExpr t (EVar name sp) = Ok (EVar name sp)
+reorderExpr t (EInt n sp) = Ok (EInt n sp)
+reorderExpr t (EStr s sp) = Ok (EStr s sp)
+reorderExpr t (EInfix op l r sp) = andThen (collectChain t (EInfix op l r sp)) (\p => case p of
+  Pair first rest => andThen (climb (2 * length rest + 2) t 0 first rest sp) (\q => case q of
+    Pair out leftover =>
+      if length leftover == 0 then Ok out else Err "DT: internal: infix reorder left an operator"
   )
-  EParen inner sp => reorderExpr t inner
-  ELam names body sp => andThen (reorderExpr t body) (\b => Ok (ELam names b sp))
-  EApp fn args sp =>
-    andThen (reorderExpr t fn)
-      (\fn2 => andThen (traverse (\a => reorderExpr t a) args) (\args2 => Ok (EApp fn2 args2 sp)))
-  EPi name implicit dom cod sp =>
-    andThen (reorderExpr t dom)
-      (\dom2 => andThen (reorderExpr t cod) (\cod2 => Ok (EPi name implicit dom2 cod2 sp)))
-  ELet binds body rec_ sp =>
-    andThen (reorderBinds t binds)
-      (\binds2 => andThen (reorderExpr t body) (\body2 => Ok (ELet binds2 body2 rec_ sp)))
-  ELocalFun clauses sp => andThen (reorderClauses t clauses) (\cs => Ok (ELocalFun cs sp))
-  ECase scrut alts sp =>
-    andThen (reorderExpr t scrut)
-      (\scrut2 => andThen (reorderAlts t alts) (\alts2 => Ok (ECase scrut2 alts2 sp)))
-  EIf c th el sp =>
-    andThen (reorderExpr t c)
-      (\c2 => andThen (reorderExpr t th) (\th2 => andThen (reorderExpr t el) (\el2 => Ok (EIf c2 th2 el2 sp))))
-  EField base fname sp => andThen (reorderExpr t base) (\b => Ok (EField b fname sp))
-  ERecord rname fields sp => andThen (reorderFields t fields) (\fs => Ok (ERecord rname fs sp))
-  ERecUpdate base fields sp =>
-    andThen (reorderExpr t base)
-      (\b => andThen (reorderFields t fields) (\fs => Ok (ERecUpdate b fs sp)))
-  EDo stmts sp => andThen (traverse (\v => reorderDoStmt t v) stmts) (\ss => Ok (EDo ss sp))
-  EAnn inner ty sp =>
-    andThen (reorderExpr t inner) (\i2 => andThen (reorderExpr t ty) (\t2 => Ok (EAnn i2 t2 sp)))
+)
+reorderExpr t (EParen inner sp) = reorderExpr t inner
+reorderExpr t (ELam names body sp) = andThen (reorderExpr t body) (\b => Ok (ELam names b sp))
+reorderExpr t (EApp fn args sp) =
+  andThen (reorderExpr t fn)
+    (\fn2 => andThen (traverse (\a => reorderExpr t a) args) (\args2 => Ok (EApp fn2 args2 sp)))
+reorderExpr t (EPi name implicit dom cod sp) =
+  andThen (reorderExpr t dom)
+    (\dom2 => andThen (reorderExpr t cod) (\cod2 => Ok (EPi name implicit dom2 cod2 sp)))
+reorderExpr t (ELet binds body rec_ sp) =
+  andThen (reorderBinds t binds)
+    (\binds2 => andThen (reorderExpr t body) (\body2 => Ok (ELet binds2 body2 rec_ sp)))
+reorderExpr t (ELocalFun clauses sp) =
+  andThen (reorderClauses t clauses) (\cs => Ok (ELocalFun cs sp))
+reorderExpr t (ECase scrut alts sp) =
+  andThen (reorderExpr t scrut)
+    (\scrut2 => andThen (reorderAlts t alts) (\alts2 => Ok (ECase scrut2 alts2 sp)))
+reorderExpr t (EIf c th el sp) =
+  andThen (reorderExpr t c)
+    (\c2 => andThen (reorderExpr t th) (\th2 => andThen (reorderExpr t el) (\el2 => Ok (EIf c2 th2 el2 sp))))
+reorderExpr t (EField base fname sp) = andThen (reorderExpr t base) (\b => Ok (EField b fname sp))
+reorderExpr t (ERecord rname fields sp) =
+  andThen (reorderFields t fields) (\fs => Ok (ERecord rname fs sp))
+reorderExpr t (ERecUpdate base fields sp) =
+  andThen (reorderExpr t base)
+    (\b => andThen (reorderFields t fields) (\fs => Ok (ERecUpdate b fs sp)))
+reorderExpr t (EDo stmts sp) =
+  andThen (traverse (\v => reorderDoStmt t v) stmts) (\ss => Ok (EDo ss sp))
+reorderExpr t (EAnn inner ty sp) =
+  andThen (reorderExpr t inner) (\i2 => andThen (reorderExpr t ty) (\t2 => Ok (EAnn i2 t2 sp)))
 
 reorderBinds : FixityTable -> List (Pair Pat Expr) -> Result (List (Pair Pat Expr))
 reorderBinds t binds = traverse (\v => reorderBind t v) binds
 
 reorderBind : FixityTable -> Pair Pat Expr -> Result (Pair Pat Expr)
-reorderBind t p = case p of
-  Pair pat value =>
-    andThen (reorderPattern t pat) (\p2 => andThen (reorderExpr t value) (\v2 => Ok (Pair p2 v2)))
+reorderBind t (Pair pat value) =
+  andThen (reorderPattern t pat) (\p2 => andThen (reorderExpr t value) (\v2 => Ok (Pair p2 v2)))
 
 reorderFields : FixityTable -> List (Pair String Expr) -> Result (List (Pair String Expr))
 reorderFields t fields = traverse (\v => reorderField t v) fields
 
 reorderField : FixityTable -> Pair String Expr -> Result (Pair String Expr)
-reorderField t p = case p of
-  Pair fname value => andThen (reorderExpr t value) (\v2 => Ok (Pair fname v2))
+reorderField t (Pair fname value) = andThen (reorderExpr t value) (\v2 => Ok (Pair fname v2))
 
 reorderClauses : FixityTable -> List (Pair (List Pat) Expr) -> Result (List (Pair (List Pat) Expr))
 reorderClauses t clauses = traverse (\v => reorderClause t v) clauses
@@ -190,22 +189,18 @@ reorderAlts : FixityTable -> List (Pair Pat Expr) -> Result (List (Pair Pat Expr
 reorderAlts t alts = traverse (\a => reorderAlt t a) alts
 
 reorderAlt : FixityTable -> Pair Pat Expr -> Result (Pair Pat Expr)
-reorderAlt t p = case p of
-  Pair pat body =>
-    andThen (reorderPattern t pat) (\p2 => andThen (reorderExpr t body) (\b2 => Ok (Pair p2 b2)))
+reorderAlt t (Pair pat body) =
+  andThen (reorderPattern t pat) (\p2 => andThen (reorderExpr t body) (\b2 => Ok (Pair p2 b2)))
 
 reorderClause : FixityTable -> Pair (List Pat) Expr -> Result (Pair (List Pat) Expr)
-reorderClause t p = case p of
-  Pair pats body =>
-    andThen (traverse (\pat => reorderPattern t pat) pats)
-      (\pats2 => andThen (reorderExpr t body) (\b2 => Ok (Pair pats2 b2)))
+reorderClause t (Pair pats body) =
+  andThen (traverse (\pat => reorderPattern t pat) pats)
+    (\pats2 => andThen (reorderExpr t body) (\b2 => Ok (Pair pats2 b2)))
 
 reorderDoStmt : FixityTable -> DoStmt -> Result DoStmt
-reorderDoStmt t stmt = case stmt of
-  DBind pat expr sp =>
-    andThen (reorderPattern t pat)
-      (\p2 => andThen (reorderExpr t expr) (\e2 => Ok (DBind p2 e2 sp)))
-  DExpr expr sp => andThen (reorderExpr t expr) (\e2 => Ok (DExpr e2 sp))
+reorderDoStmt t (DBind pat expr sp) =
+  andThen (reorderPattern t pat) (\p2 => andThen (reorderExpr t expr) (\e2 => Ok (DBind p2 e2 sp)))
+reorderDoStmt t (DExpr expr sp) = andThen (reorderExpr t expr) (\e2 => Ok (DExpr e2 sp))
 
 reorderPattern : FixityTable -> Pat -> Result Pat
 reorderPattern t pat = case pat of
@@ -224,48 +219,46 @@ reorderPattern t pat = case pat of
     andThen (traverse (\p => reorderRecPatField t p) fields) (\fs => Ok (PRecord rname fs sp))
 
 reorderRecPatField : FixityTable -> Pair String Pat -> Result (Pair String Pat)
-reorderRecPatField t p = case p of
-  Pair fname pat => andThen (reorderPattern t pat) (\p2 => Ok (Pair fname p2))
+reorderRecPatField t (Pair fname pat) = andThen (reorderPattern t pat) (\p2 => Ok (Pair fname p2))
 
 -- 类型表达式同样走重排（`a -> b -> c` 是 `EInfix "->"` 链）。
 reorderDecl : FixityTable -> Decl -> Result Decl
-reorderDecl t d = case d of
-  DData name params kind ctors derivings sp =>
-    andThen (reorderExpr t kind)
-      (\k2 => andThen (traverse (\c => reorderCtor t c) ctors) (\cs => Ok (DData name params k2 cs derivings sp)))
-  DAxiom name ty sp => andThen (reorderExpr t ty) (\ty2 => Ok (DAxiom name ty2 sp))
-  DSig name ty sp => andThen (reorderExpr t ty) (\ty2 => Ok (DSig name ty2 sp))
-  DFun name pats body sp =>
-    andThen (traverse (\p => reorderPattern t p) pats)
-      (\pats2 => andThen (reorderExpr t body) (\b2 => Ok (DFun name pats2 b2 sp)))
-  DRecord name params fields derivings sp =>
-    andThen (traverse (\v => reorderRecordField t v) fields)
-      (\fs => Ok (DRecord name params fs derivings sp))
-  DTrait name params methods sp =>
-    andThen (traverse (\v => reorderTraitMethod t v) methods) (\ms => Ok (DTrait name params ms sp))
-  DInstance ctx head methods sp =>
-    andThen (traverse (\e => reorderExpr t e) ctx)
-      (\ctx2 => andThen (reorderExpr t head) (\head2 => andThen (traverse (\v => reorderInstanceMethodDecl t v) methods) (\ms => Ok (DInstance ctx2 head2 ms sp))))
+reorderDecl t (DData name params kind ctors derivings sp) =
+  andThen (reorderExpr t kind)
+    (\k2 => andThen (traverse (\c => reorderCtor t c) ctors) (\cs => Ok (DData name params k2 cs derivings sp)))
+reorderDecl t (DAxiom name ty sp) = andThen (reorderExpr t ty) (\ty2 => Ok (DAxiom name ty2 sp))
+reorderDecl t (DSig name ty sp) = andThen (reorderExpr t ty) (\ty2 => Ok (DSig name ty2 sp))
+reorderDecl t (DFun name pats body sp) =
+  andThen (traverse (\p => reorderPattern t p) pats)
+    (\pats2 => andThen (reorderExpr t body) (\b2 => Ok (DFun name pats2 b2 sp)))
+reorderDecl t (DRecord name params fields derivings sp) =
+  andThen (traverse (\v => reorderRecordField t v) fields)
+    (\fs => Ok (DRecord name params fs derivings sp))
+reorderDecl t (DTrait name params methods sp) =
+  andThen (traverse (\v => reorderTraitMethod t v) methods) (\ms => Ok (DTrait name params ms sp))
+reorderDecl t (DInstance ctx head methods sp) =
+  andThen (traverse (\e => reorderExpr t e) ctx)
+    (\ctx2 => andThen (reorderExpr t head) (\head2 => andThen (traverse (\v => reorderInstanceMethodDecl t v) methods) (\ms => Ok (DInstance ctx2 head2 ms sp))))
 
 reorderCtor : FixityTable -> Ctor -> Result Ctor
-reorderCtor t c = case c of
-  Ctor name ty arity sp => andThen (reorderExpr t ty) (\ty2 => Ok (Ctor name ty2 arity sp))
+reorderCtor t (Ctor name ty arity sp) =
+  andThen (reorderExpr t ty) (\ty2 => Ok (Ctor name ty2 arity sp))
 
 reorderRecordField : FixityTable -> Field -> Result Field
-reorderRecordField t f = case f of
-  Field name ty sp => andThen (reorderExpr t ty) (\ty2 => Ok (Field name ty2 sp))
+reorderRecordField t (Field name ty sp) =
+  andThen (reorderExpr t ty) (\ty2 => Ok (Field name ty2 sp))
 
 reorderTraitMethod : FixityTable -> TraitMethod -> Result TraitMethod
-reorderTraitMethod t m = case m of
-  TraitMethod name ty sp => andThen (reorderExpr t ty) (\ty2 => Ok (TraitMethod name ty2 sp))
+reorderTraitMethod t (TraitMethod name ty sp) =
+  andThen (reorderExpr t ty) (\ty2 => Ok (TraitMethod name ty2 sp))
 
 reorderInstanceMethodDecl : FixityTable -> Decl -> Result Decl
-reorderInstanceMethodDecl t d = case d of
-  DSig name ty sp => andThen (reorderExpr t ty) (\ty2 => Ok (DSig name ty2 sp))
-  DFun name pats body sp =>
-    andThen (traverse (\p => reorderPattern t p) pats)
-      (\pats2 => andThen (reorderExpr t body) (\b2 => Ok (DFun name pats2 b2 sp)))
-  other => Ok other
+reorderInstanceMethodDecl t (DSig name ty sp) =
+  andThen (reorderExpr t ty) (\ty2 => Ok (DSig name ty2 sp))
+reorderInstanceMethodDecl t (DFun name pats body sp) =
+  andThen (traverse (\p => reorderPattern t p) pats)
+    (\pats2 => andThen (reorderExpr t body) (\b2 => Ok (DFun name pats2 b2 sp)))
+reorderInstanceMethodDecl t other = Ok other
 
 reorderProgram : FixityTable -> List Decl -> Result (List Decl)
 reorderProgram t decls = traverse (\v => reorderDecl t v) decls

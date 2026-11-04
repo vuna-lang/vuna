@@ -216,15 +216,14 @@ strSizeEntriesGo [] i = []
 strSizeEntriesGo (p :: rest) i = append (patSizeStrict p i [] []) (strSizeEntriesGo rest (i + 1))
 
 extendSizesStrict : List (Pair String (Pair Int (Pair Int (List Int)))) -> Expr -> Pat -> List (Pair String (Pair Int (Pair Int (List Int))))
-extendSizesStrict sizes scrut pat = case scrut of
-  EVar vname vsp => case sizeOfVarStrict vname sizes of
-    Just sz => case sz of
-      Pair base (Pair depth path) => case pat of
-        PCon c ps sp2 => append sizes (patsSizeStrict ps base path 0 [])
-        PRecord rn fields sp2 => append sizes (fieldsSizeStrict fields base path 0 [])
-        _ => sizes
-    Nothing => sizes
-  _ => sizes
+extendSizesStrict sizes (EVar vname vsp) pat = case sizeOfVarStrict vname sizes of
+  Just sz => case sz of
+    Pair base (Pair depth path) => case pat of
+      PCon c ps sp2 => append sizes (patsSizeStrict ps base path 0 [])
+      PRecord rn fields sp2 => append sizes (fieldsSizeStrict fields base path 0 [])
+      _ => sizes
+  Nothing => sizes
+extendSizesStrict sizes _ pat = sizes
 
 sizeOfVarStrict : String -> List (Pair String (Pair Int (Pair Int (List Int)))) -> Maybe (Pair Int (Pair Int (List Int)))
 sizeOfVarStrict name [] = Nothing
@@ -253,25 +252,22 @@ opBaseName : String -> String
 opBaseName name = secondOf (splitLastDot (splitOnDot name))
 
 guardLE : List Expr -> Maybe String
-guardLE args = case args of
-  [lhs, rhs] => case rhs of
-    EInt k ksp => if k == 0 then varOfExpr lhs else Nothing
-    _ => Nothing
+guardLE ([lhs, rhs]) = case rhs of
+  EInt k ksp => if k == 0 then varOfExpr lhs else Nothing
   _ => Nothing
+guardLE _ = Nothing
 
 guardGE : List Expr -> Maybe String
-guardGE args = case args of
-  [lhs, rhs] => case lhs of
-    EInt k ksp => if k == 0 then varOfExpr rhs else Nothing
-    _ => Nothing
+guardGE ([lhs, rhs]) = case lhs of
+  EInt k ksp => if k == 0 then varOfExpr rhs else Nothing
   _ => Nothing
+guardGE _ = Nothing
 
 guardLT : List Expr -> Maybe String
-guardLT args = case args of
-  [lhs, rhs] => case rhs of
-    EInt k ksp => if k == 1 then varOfExpr lhs else Nothing
-    _ => Nothing
+guardLT ([lhs, rhs]) = case rhs of
+  EInt k ksp => if k == 1 then varOfExpr lhs else Nothing
   _ => Nothing
+guardLT _ = Nothing
 
 varOfExpr : Expr -> Maybe String
 varOfExpr (EVar n sp) = Just n
@@ -326,46 +322,47 @@ posWalkStmts names caller sizes facts region (s :: rest) st = case s of
     posWalkStmts names caller sizes facts region rest (posWalk names caller sizes facts region e st)
 
 posWalk : List String -> String -> List (Pair String (Pair Int (Pair Int (List Int)))) -> List (Pair String Int) -> List String -> Expr -> Pair (List (Pair String Int)) (List (Pair String Int)) -> Pair (List (Pair String Int)) (List (Pair String Int))
-posWalk names caller sizes facts region e st = case e of
-  EApp fn args sp => case fn of
-    EVar g gsp =>
-      if memName g names then posWalkArgs names caller sizes facts region args
-        (posWalkCallee names caller sizes facts region g 0 args st)
-      else posWalkArgs names caller sizes facts region args
-        (posWalk names caller sizes facts region fn st)
-    _ =>
-      posWalkArgs names caller sizes facts region args
-        (posWalk names caller sizes facts region fn st)
-  EIf c t el sp => case guardPosVar c of
-    Just v =>
-      let
-        st1 = posWalk names caller sizes facts region c st
-        st2 = posWalk names caller sizes facts region t st1
-      in posWalk names caller sizes facts (v :: region) el st2
-    Nothing =>
-      let
-        st1 = posWalk names caller sizes facts region c st
-        st2 = posWalk names caller sizes facts region t st1
-      in posWalk names caller sizes facts region el st2
-  ECase scrut alts sp =>
-    posWalkAlts names caller sizes facts region alts
-      (posWalk names caller sizes facts region scrut st)
-  ELam ns b sp => posWalk names caller sizes facts region b st
-  ELet binds body rec_ sp =>
-    posWalk names caller sizes facts region body
-      (posWalkBinds names caller sizes facts region binds st)
-  EPi n implicit dom cod sp =>
-    posWalk names caller sizes facts region cod (posWalk names caller sizes facts region dom st)
-  EField base f sp => posWalk names caller sizes facts region base st
-  ERecord rn fields sp => posWalkFields names caller sizes facts region fields st
-  ERecUpdate base fields sp =>
-    posWalkFields names caller sizes facts region fields
-      (posWalk names caller sizes facts region base st)
-  EDo stmts sp => posWalkStmts names caller sizes facts region stmts st
-  EAnn value ty sp =>
-    posWalk names caller sizes facts region ty (posWalk names caller sizes facts region value st)
-  EVar n sp => st
-  _ => st
+posWalk names caller sizes facts region (EApp fn args sp) st = case fn of
+  EVar g gsp =>
+    if memName g names then posWalkArgs names caller sizes facts region args
+      (posWalkCallee names caller sizes facts region g 0 args st)
+    else posWalkArgs names caller sizes facts region args (posWalk names caller sizes facts region fn st)
+  _ =>
+    posWalkArgs names caller sizes facts region args (posWalk names caller sizes facts region fn st)
+posWalk names caller sizes facts region (EIf c t el sp) st = case guardPosVar c of
+  Just v =>
+    let
+      st1 = posWalk names caller sizes facts region c st
+      st2 = posWalk names caller sizes facts region t st1
+    in posWalk names caller sizes facts (v :: region) el st2
+  Nothing =>
+    let
+      st1 = posWalk names caller sizes facts region c st
+      st2 = posWalk names caller sizes facts region t st1
+    in posWalk names caller sizes facts region el st2
+posWalk names caller sizes facts region (ECase scrut alts sp) st =
+  posWalkAlts names caller sizes facts region alts
+    (posWalk names caller sizes facts region scrut st)
+posWalk names caller sizes facts region (ELam ns b sp) st =
+  posWalk names caller sizes facts region b st
+posWalk names caller sizes facts region (ELet binds body rec_ sp) st =
+  posWalk names caller sizes facts region body
+    (posWalkBinds names caller sizes facts region binds st)
+posWalk names caller sizes facts region (EPi n implicit dom cod sp) st =
+  posWalk names caller sizes facts region cod (posWalk names caller sizes facts region dom st)
+posWalk names caller sizes facts region (EField base f sp) st =
+  posWalk names caller sizes facts region base st
+posWalk names caller sizes facts region (ERecord rn fields sp) st =
+  posWalkFields names caller sizes facts region fields st
+posWalk names caller sizes facts region (ERecUpdate base fields sp) st =
+  posWalkFields names caller sizes facts region fields
+    (posWalk names caller sizes facts region base st)
+posWalk names caller sizes facts region (EDo stmts sp) st =
+  posWalkStmts names caller sizes facts region stmts st
+posWalk names caller sizes facts region (EAnn value ty sp) st =
+  posWalk names caller sizes facts region ty (posWalk names caller sizes facts region value st)
+posWalk names caller sizes facts region (EVar n sp) st = st
+posWalk names caller sizes facts region _ st = st
 
 posWalkCallee : List String -> String -> List (Pair String (Pair Int (Pair Int (List Int)))) -> List (Pair String Int) -> List String -> String -> Int -> List Expr -> Pair (List (Pair String Int)) (List (Pair String Int)) -> Pair (List (Pair String Int)) (List (Pair String Int))
 posWalkCallee names caller sizes facts region g i args st =
@@ -478,39 +475,36 @@ arithMinus p ([base, EInt k ksp]) sizes caller facts region =
 arithMinus p _ sizes caller facts region = Nothing
 
 arithMinusBase : Int -> Expr -> Int -> List (Pair String (Pair Int (Pair Int (List Int)))) -> String -> List (Pair String Int) -> List String -> Maybe Int
-arithMinusBase p base k sizes caller facts region = case base of
-  EVar x xsp => case sizeOfVarStrict x sizes of
-    Just sz => case sz of
-      Pair baseIdx (Pair depth path) =>
-        if baseIdx == p then if depth == 0 then if posVarIn x p caller facts region then Just 4 else Nothing else Nothing
-        else Nothing
-    Nothing => Nothing
-  _ => Nothing
+arithMinusBase p (EVar x xsp) k sizes caller facts region = case sizeOfVarStrict x sizes of
+  Just sz => case sz of
+    Pair baseIdx (Pair depth path) =>
+      if baseIdx == p then if depth == 0 then if posVarIn x p caller facts region then Just 4 else Nothing else Nothing
+      else Nothing
+  Nothing => Nothing
+arithMinusBase p _ k sizes caller facts region = Nothing
 
 -- 投影调用 `proj v`：v 是 p 位置形参（或其次子项）时，结果是严格子项 ⇒ 直接下降。
 projRel : Int -> List Expr -> List (Pair String (Pair Int (Pair Int (List Int)))) -> Maybe Int
-projRel p cargs sizes = case cargs of
-  [v] => case v of
-    EVar x xsp => case sizeOfVarStrict x sizes of
-      Just sz => case sz of
-        Pair base (Pair depth path) => if base == p then Just 1 else Nothing
-      Nothing => Nothing
-    _ => Nothing
+projRel p ([v]) sizes = case v of
+  EVar x xsp => case sizeOfVarStrict x sizes of
+    Just sz => case sz of
+      Pair base (Pair depth path) => if base == p then Just 1 else Nothing
+    Nothing => Nothing
   _ => Nothing
+projRel p _ sizes = Nothing
 
 relOfArg : Int -> Expr -> List (Pair String (Pair Int (Pair Int (List Int)))) -> List String -> List (Pair String (List Int)) -> String -> List (Pair String Int) -> List String -> Maybe Int
-relOfArg p a sizes ctors projs caller facts region = case a of
-  EVar n sp => case sizeOfVarStrict n sizes of
-    Just sz => case sz of
-      Pair base (Pair depth path) =>
-        if base == p then if depth > 0 then Just 1 else Just 0 else Nothing
-    Nothing => Nothing
-  EApp fn cargs sp => case fn of
-    EVar c csp =>
-      if memName c ctors then findWrapField p cargs sizes 0
-      else if projHas c projs then projRel p cargs sizes else arithRel p a sizes caller facts region
-    _ => arithRel p a sizes caller facts region
-  _ => Nothing
+relOfArg p (EVar n sp) sizes ctors projs caller facts region = case sizeOfVarStrict n sizes of
+  Just sz => case sz of
+    Pair base (Pair depth path) =>
+      if base == p then if depth > 0 then Just 1 else Just 0 else Nothing
+  Nothing => Nothing
+relOfArg p (a@(EApp fn cargs sp)) sizes ctors projs caller facts region = case fn of
+  EVar c csp =>
+    if memName c ctors then findWrapField p cargs sizes 0
+    else if projHas c projs then projRel p cargs sizes else arithRel p a sizes caller facts region
+  _ => arithRel p a sizes caller facts region
+relOfArg p _ sizes ctors projs caller facts region = Nothing
 
 argRel : Int -> List Expr -> List (Pair String (Pair Int (Pair Int (List Int)))) -> List String -> List (Pair String (List Int)) -> String -> List (Pair String Int) -> List String -> Maybe Int
 argRel p args sizes ctors projs caller facts region = case nthExpr args p of
@@ -542,13 +536,11 @@ isMapLike n =
   else if dotBase n == "mapMaybe" then True else dotBase n == "filter"
 
 extendElemSizes : List (Pair String (Pair Int (Pair Int (List Int)))) -> Expr -> String -> List (Pair String (Pair Int (Pair Int (List Int))))
-extendElemSizes sizes lst v = case lst of
-  EVar n sp => case sizeOfVarStrict n sizes of
-    Just sz => case sz of
-      Pair base (Pair depth path) =>
-        Pair v (Pair base (Pair (depth + 1) (append path [0]))) :: sizes
-    Nothing => sizes
-  _ => sizes
+extendElemSizes sizes (EVar n sp) v = case sizeOfVarStrict n sizes of
+  Just sz => case sz of
+    Pair base (Pair depth path) => Pair v (Pair base (Pair (depth + 1) (append path [0]))) :: sizes
+  Nothing => sizes
+extendElemSizes sizes _ v = sizes
 
 edgeStrict : String -> String -> List (Pair (Pair String String) Int) -> Bool
 edgeStrict f g edges = edgeStrictGo f g edges False True
