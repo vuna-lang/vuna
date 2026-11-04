@@ -714,7 +714,7 @@ else
         -- M18.5：lambda 形参与定义参数同一条规则——隐式 binder 恒擦除（隐式实参由
         -- 精化器插入，运行时不传），显式 binder 只有域是宇宙才擦除。
         -- 之前无条件写 True：形参在运行时被使用时硬报错，未被使用时静默少生成一层
-        -- `fun`（能 check 不能 compile）。见 docs/reference/dt-parity.md §3。
+        -- `fun`（能 check 不能 compile）。见 docs/reference/limits.md 的擦除边界。
         lamRig = binderRig implicit dom
       in andThen (checkLamFuel (fuel - 1) globals ctx2 ec rest body expected2 sp) (\p => case p of
         Pair inner ec1 => Ok (Pair (TLam name lamRig inner) ec1)

@@ -7,19 +7,17 @@
 **vuna 尚未发布任何版本**：没有外部用户、下游生态与历史包袱，全部源码都在本仓库内。
 因此**任何设计、接口、命令、实现、哲学都允许被推翻**（包括本文件与 roadmap 已写下的
 决策）；「保留兼容层」「以后可能有人依赖」不构成保留理由——评估一个遗留物只看一条：
-**它在终态里还成立吗**。推翻旧决策时不要静默改写历史，在 roadmap 的「决策变更」表记
-一行、里程碑记录进 `docs/history.md`（实现细节在 git 历史）。当前路线：**终态单一 DT
-路径，已在 M24 落地**（唯一检查器与 codegen，见 roadmap「阶段状态总览」）。
+**它在终态里还成立吗**。推翻旧决策时在提交信息与对应主题页说明，不静默改写；已完成阶段
+与历史细节在 git 历史。当前路线：**单一 DT 路径**（唯一检查器与 codegen）。
 
 ## 阅读顺序
 
 1. `AGENTS.md`（本文件）——不变量、纪律、常用命令；
 2. [`docs/architecture.md`](docs/architecture.md)——子系统地图：哪条链路、入口符号、连带改动、测试标签；
-3. 需要时再下钻：[`docs/reference/`](docs/reference/)（各语言/包/编译器/测试参考页）、
-   [roadmap](docs/roadmap.md)、[dt-core](docs/dt-core.md)、[history](docs/history.md)。
+3. 需要时再下钻：[`docs/reference/`](docs/reference/)（类型系统 / Core / 编译器 / 包 / 工具 / 测试参考页）、
+   [roadmap](docs/roadmap.md)、[debt](docs/reference/debt.md)。
 
-**定位符号**用 `vuna map --find` / `--impact` / `vuna api`（规程见 repo-navigation 技能）。
-**不要做的事**：通读全仓；读 `seed/` 或 `docs/api.md`（生成物）。
+**定位符号**用 `vuna map --find` / `--impact` / `vuna api`（规程见 repo-navigation 技能）；**不要做的事**：通读全仓、读 `seed/` 或 `docs/api.md`（生成物）。
 
 ## 编译器选取规则
 
@@ -61,8 +59,7 @@
   本地 `./result/bin/vuna` 做小范围验证。
 - **探索按场景选工具**（规程见技能 `.agents/skills/repo-navigation/SKILL.md`）：要改的
   模块整篇 `read`；不改只引用的用 `vuna map` / `vuna api`，**不要 grep**（拿多拿少又没签名）。
-- **探索完必须落盘**：数据流 / 不变量 / 边界写进 `docs/` 并接进导航，别只留在会话里。
-- **git线性历史**: 优先ff-only merge/rebase/cherr-pick/挤压提交
+- **探索完必须落盘**：数据流 / 不变量 / 边界写进 `docs/` 并接进导航，别只留在会话里；**git 线性历史**：优先 ff-only merge / rebase / cherry-pick / 挤压提交
 
 ## 常用命令速查
 
@@ -89,18 +86,19 @@ CLI 入口；`seed/` = 提交入库的多文件 OCaml 信任锚点（生成物�
 ## 文档导航
 
 - 子系统地图、改动定位：[`docs/architecture.md`](docs/architecture.md)
-- 语言语义：[language.md](docs/reference/language.md)、[type-system.md](docs/reference/type-system.md)、
+- 语言与类型：[language.md](docs/reference/language.md)（语法/模块）、
+  [type-system.md](docs/reference/type-system.md)（宇宙/索引族/依赖匹配/相等/擦除）、
+  [records-traits.md](docs/reference/records-traits.md)（记录/trait/do）、
   [stdlib.md](docs/reference/stdlib.md)、[packages.md](docs/reference/packages.md)、
-  [dt.md](docs/reference/dt.md)、[primitives.md](docs/reference/primitives.md)（内建/原语/能力）、
-  [dt-parity.md](docs/reference/dt-parity.md)（历史证据）
-- 编译器实现与 codegen：[compiler.md](docs/reference/compiler.md)；DT 工具链（洞目标、LSP、
-  错误码体系与错误索引；`vuna gen-errors` 生成 `docs/.generated/errors.md`）：[dt-tooling.md](docs/reference/dt-tooling.md)；lint：[lint.md](docs/reference/lint.md)
+  [primitives.md](docs/reference/primitives.md)（内建/原语/能力）
+- 编译器实现：[compiler.md](docs/reference/compiler.md)（模块与输出模型）、
+  [core.md](docs/reference/core.md)（Core TT / NbE / 精化器）
+- 工具链（`goal` / LSP / `doc` / 错误码；`vuna gen-errors` 生成
+  `docs/.generated/errors.md`）：[tooling.md](docs/reference/tooling.md)；lint：[lint.md](docs/reference/lint.md)
 - 仓库探索（按场景选工具、探索后落盘）：技能 `.agents/skills/repo-navigation/SKILL.md`
 - 自举与种子：[bootstrap.md](docs/reference/bootstrap.md)；测试与 CI：[testing.md](docs/reference/testing.md)；
   已知边界：[limits.md](docs/reference/limits.md)；性能：[performance.md](docs/reference/performance.md)
-- 技术债务与缺陷登记：[debt.md](docs/reference/debt.md)（M25–M30 关闭清单，A/B/C/D/E 五类）
-- 路线图 / 历史 / DT 状态：[docs/roadmap.md](docs/roadmap.md)（「阶段状态总览」）、
-  [docs/history.md](docs/history.md)、[docs/dt-core.md](docs/dt-core.md)
+- 债务 / 能力缺口与路线图：[debt.md](docs/reference/debt.md)（只含开放项）、[docs/roadmap.md](docs/roadmap.md)（基线、终态、下一阶段、F1–F4）
 
 > 文档分层规则：`README.md` 只保留定位/上手/目录/硬约束/导航；细节在 `docs/reference/`；
-> roadmap 的「已完成」只保留一句话摘要，里程碑历史在 `docs/history.md`（实现细节在 git 历史）。
+> roadmap 只保留当前基线与未来方向；已完成阶段 / 已落地决策 / 历史在 git 历史。

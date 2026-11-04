@@ -1,11 +1,12 @@
 # 原语语义规范（Int / String / Show / 效果原语与能力）
 
-本文是 vuna **原语语义的唯一权威**：值域与宽度、字符串编码、错误行为、interp 归约
-边界、效果原语与能力模型、生成 runtime 的契约。内建声明面只有一份真源
+本文是 vuna **原语语义的唯一权威**：值域与宽度、字符串编码、错误行为、interp 归约边界、
+效果原语与能力模型、生成 runtime 的契约。内建声明面只有一份真源
 `Vuna.Compiler.Intrinsics`（`allIntrinsics` / `Capability` / `IntrinsicOp`），消费方是
 `Loader.Resolve`（解析 + 能力检查）、`Elab.Prelude`（签名）、`Codegen.Term`（runtime
-映射）、`Core.Eval`（interp 归约）。语法见 [language.md](language.md)，DT 侧见
-[dt.md](dt.md)，库的边界见 [stdlib.md](stdlib.md)，边界清单见 [limits.md](limits.md)。
+映射）、`Core.Eval`（interp 归约）。语法见 [language.md](language.md)，类型规则见
+[type-system.md](type-system.md)，库的边界见 [stdlib.md](stdlib.md)，边界清单见
+[limits.md](limits.md)。
 
 ## 1. 术语
 
@@ -20,7 +21,7 @@
 ## 2. 身份与常量
 
 - **`Int` / `String` 是语言 primitive 类型**（`Intrinsics.typeIntrinsicNames = [Int, String]`）：
-  prelude 直接提供 `Int : Type` / `String : Type`；入口/未限定名处的 `data Int` /
+  prelude 直接提供 `Int : Type` / `String : Type`；入口 / 未限定名处的 `data Int` /
   `data String` 报 `CannotRedefineBuiltin`（模块内声明会 mangle 成 `M.Int`，属于不同符号）。
 - **`Bool` / `List` / `IO` 是 base 的普通 `data` 声明**，身份是完整符号而不是短名：
 
@@ -33,10 +34,10 @@
 
 - `True` / `False` 精化为核心 `TBool`，codegen 的运行时表示是 OCaml `bool`：canonical Bool
   族**不生成变体声明**（`Codegen.Decl.runtimeDatas` 按 `boolTypeName` 过滤）。
-- **不再有短名 / `lastName` 判定，也不再有「全局构造子放行」**：`True`/`False`/`Cons`/`Nil`
-  与其他构造子一样经 import 的导出表解析（`Prelude` 自动注入 `Base.Bool` / `Base.List`，
-  所以裸名可用）。类型位置按 `resolveTypeName` 判定：`Int`/`String`/`Type`/`->` 是内建，
-  其余（含 `Bool`）查导出表。
+- **没有短名 / `lastName` 判定，也没有「全局构造子放行」**：`True` / `False` / `Cons` /
+  `Nil` 与其他构造子一样经 import 的导出表解析（`Prelude` 自动注入 `Base.Bool` /
+  `Base.List`，所以裸名可用）。类型位置按 `resolveTypeName` 判定：`Int` / `String` /
+  `Type` / `->` 是内建，其余（含 `Bool`）查导出表。
 - 用户写的 `data Bool` / `data List` / `data IO` 是**普通 data**、不与 canonical 冲突：
   模块内名字被 mangle 成 `<Module>.Bool`；入口文件（不做 mangle）里声明 `data Bool` 时
   族名就是 `Bool`，与 `Base.Bool.Bool` 是两个族。`if` / 字面量 `case` 等只认 canonical。
@@ -44,14 +45,14 @@
 ## 3. Int
 
 - 表示：宿主 OCaml `int`，**固定 63 位**：`max_int = 4611686018427387903`、
-  `min_int = -4611686018427387904`。类型层没有宽度/区间信息，`Int` 就是 `Type`。
+  `min_int = -4611686018427387904`。类型层没有宽度 / 区间信息，`Int` 就是 `Type`。
 - 算术：`+` `-` `*` 在溢出时按**二进制补码回绕**（`max_int + 1 = min_int`），不报错、
-  不饱和、不提升为大整数。**无大整数计划**（roadmap 决策 D16）。
+  不饱和、不提升为大整数。**无大整数计划**。
 - `/`：整数除法向零截断；`a / 0` 在产物运行期抛 `Failure "division by zero"`
   （runtime `bi_div` 显式检查）；`min_int / -1` 回绕成 `min_int`，不报错。
 - 字面量：十进制数字序列，按 `acc * 10 + digit` 累加，**越界同样回绕**（`Lexer.collectInt`）；
   没有一元负号，负数写成 `0 - n`。
-- 比较：`==` `/=` `<` `<=` `>` `>=` 返回 canonical `Bool`（`Base.Bool.Bool`）。
+- 比较：`==` `/=` `<` `<=` `>` `>=` 返回 canonical `Bool`。
 
 ## 4. String
 
@@ -67,12 +68,12 @@
   `compare`（OCaml 字符串字节序）。
 - 源码字面量转义（`Lexer.scanString` / `scanEscape`）：`\n` `\t` `\r` `\"` `\\` `\'`；
   其它 `\x` 报 `UnknownEscape`；字符串字面量不能跨行。
-- 展示/转义统一走 `strShow`（§5），没有第二套实现。
+- 展示 / 转义统一走 `strShow`（§5），没有第二套实现。
 
 ## 5. Show 与 main 展示
 
-`strShow : String -> String`（intrinsic，runtime `dt_show_string`）是**唯一**的字符串
-展示实现：加双引号，并转义 `"` → `\"`、`\` → `\\`、LF → `\n`、TAB → `\t`、CR → `\r`；
+`strShow : String -> String`（intrinsic，runtime `dt_show_string`）是**唯一**的字符串展示
+实现：加双引号，并转义 `"` → `\"`、`\` → `\\`、LF → `\n`、TAB → `\t`、CR → `\r`；
 其余字节原样输出（不走 OCaml 源码发射时的 `\ddd` 转义——那是 `Codegen.Decl` 的内部细节）。
 
 - `Base.Show` 的 `String` 实例委托给它：`show s = strShow s`，因此 `show` 与
@@ -98,8 +99,7 @@
 
 ## 7. 效果原语与能力
 
-**名字面**：效果原语只保留 `prim_*` 名，旧公开名（`readFile` / `print` / `exit` / …）
-已删除。用户有两条合法用法：
+**名字面**：效果原语只保留 `prim_*` 名。用户有两条合法用法：
 
 1. `import Base.IO`，使用返回 `IO` 动作的 API（`print` / `readFile` / …）；
 2. 在自己的 `vuna.toml` 声明所需能力后**直接**调用 `prim_*`。
@@ -119,8 +119,8 @@
 - 用到但未声明报
   `` effectful builtin `<name>` requires capability `<cap>` in <package> (declare [capabilities] effects = ["<cap>"] or use Base.IO) ``
   （`Loader.Resolve.checkEffectsBuiltins`）。
-- **这是权限声明，不是检查豁免**：能力不改变类型检查、擦除或 codegen 语义，只决定能否
-  在源码里直接引用效果原语；不再有任何按包名字符串判定的 allowlist。
+- **这是权限声明，不是检查豁免**：能力不改变类型检查、擦除或 codegen 语义，只决定能否在
+  源码里直接引用效果原语；没有按包名字符串判定的 allowlist。
 - `Base.IO` 自身声明 `["console", "fs", "process"]`；编译器与产品 CLI 声明全部五个能力。
 
 ## 8. 生成 runtime 的契约
@@ -138,9 +138,9 @@
 | `prim_writeFile` | 二进制写整串，返回**字节数**；IO 失败抛宿主异常 |
 | `prim_readFile` | 读整个文件为字节串；IO 失败抛宿主异常 |
 | `prim_readLine` | 读一行；EOF 返回 `""`（与空行不可区分） |
-| `prim_readBytes` | `Int -> String`：最多读 n 字节，**有数据就立即返回**（可能少于 n），EOF 返回 `""`；调用方负责循环/拼接（LSP 帧读取用） |
-| `prim_readDir` | 目录项按字符串排序；目录不存在/不可读时抛宿主异常 |
-| `prim_makeDir` / `prim_removeFile` | **幂等**：已存在/不存在时直接返回 `0` |
+| `prim_readBytes` | `Int -> String`：最多读 n 字节，**有数据就立即返回**（可能少于 n），EOF 返回 `""`；调用方负责循环 / 拼接（LSP 帧读取用） |
+| `prim_readDir` | 目录项按字符串排序；目录不存在 / 不可读时抛宿主异常 |
+| `prim_makeDir` / `prim_removeFile` | **幂等**：已存在 / 不存在时直接返回 `0` |
 | `prim_fileExists` | 路径不存在时为 `False` |
 | `prim_isDirectory` | 普通路径检查；**不存在**的路径抛宿主异常（`Sys_error` → `failwith`） |
 | `prim_fileMtime` / `prim_fileSize` | 秒级 mtime / 字节数；取不到时**静默返回 0** |
@@ -182,12 +182,6 @@
 - `prim_execPath` 依赖 `/proc/self/exe`（Linux），其它平台走 `Sys.executable_name`。
 - `strPack` / `strUnpack` 的 List 桥接、`strSubstTemplate` 的模板扫描均在 runtime 里实现，
   interp 不覆盖（§9）。
-- 效果原语的失败（IO 错误、`strPack` 越界、`exit`）都是**宿主异常/进程退出**，不是语言的
-  可捕获错误。
-
-## 相关阅读
-
-- 语法与模块系统、内建名可见范围：[language.md](language.md)
-- 库的边界（`Base.Show` / `Base.IO` / 能力声明）：[stdlib.md](stdlib.md)
-- DT 侧身份判定与字面量模式：[dt.md](dt.md)；边界清单：[limits.md](limits.md)
-- 生成器与产物布局：[compiler.md](compiler.md)
+- 效果原语的失败（IO 错误、`strPack` 越界、`exit`）都是**宿主异常 / 进程退出**，不是语言
+  的可捕获错误。
+- 完整边界清单见 [limits.md](limits.md)。

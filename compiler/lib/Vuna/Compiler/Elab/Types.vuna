@@ -488,7 +488,7 @@ refineLookup : Int -> List (Pair Int Value) -> Maybe Value
 refineLookup lvl [] = Nothing
 refineLookup lvl ((Pair l v) :: rest) = if l == lvl then Just v else refineLookup lvl rest
 
--- M21：在取用点把精化代入求值环境再 eval（闭包捕获环境，域/余域递归精化）。见 history.md。
+-- 在取用点把精化代入求值环境再 eval（闭包捕获环境，域/余域递归精化）。见 docs/reference/core.md。
 evalCtx : Ctx -> Term -> Value
 evalCtx (Ctx items refs) ty =
   eval (map (refineValue refs defaultFuel) (ctxEnvAt items 0 (length items))) ty

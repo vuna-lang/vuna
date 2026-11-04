@@ -537,7 +537,7 @@ lookupDataHead name (h :: rest) =
 -- `trait Show a` ⇒ `data Dict_Show : Type -> Type` + 方法投影
 -- `show : {a : Type} -> {d : Dict_Show a} -> a -> String`（字典当隐式参数穿进来）。
 -- 实例搜索发生在隐式 binder 的域是接口字典时：在已注册实例里找头能统一到 `Dict_C args`
--- 的那一个并插入；找不到 ⇒ 明确缺失诊断。设计见 `docs/dt-core.md`。
+-- 的那一个并插入；找不到 ⇒ 明确缺失诊断。设计见 `docs/reference/core.md`。
 dictTypeName : String -> String
 dictTypeName cname = "Dict_" ++ cname
 

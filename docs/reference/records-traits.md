@@ -1,0 +1,137 @@
+# 记录、trait 与 do/Monad
+
+本文覆盖建立在核心类型系统之上的语言机制：记录、trait / 实例 / `deriving`、`do` 与
+Monad / Functor。宇宙、索引族、依赖匹配、相等证据与擦除规则见
+[type-system.md](type-system.md)；基础语法与模块系统见 [language.md](language.md)；
+标准库模块清单见 [stdlib.md](stdlib.md)。
+
+## 记录
+
+```vuna
+record Point where
+  x : Int
+  y : Int
+
+p : Point
+p = Point { y = 2, x = 1 }         -- 字段顺序任意，但必须给全
+
+q : Point
+q = { p | x = 3 }                  -- 字段更新，可一次更新多个字段
+
+sum : Point -> Int
+sum p = case p of
+  Point { x = a, y = b } => a + b  -- 可省略字段（省略 = 通配）
+
+onlyX : Point -> Int
+onlyX p = case p of
+  Point { x } => x                 -- pun：等价于 Point { x = x }
+```
+
+- 记录可以参数化（`record Pair a b where`）；记录类型名同时是它的构造器名。
+- 字段访问写作 `p.x`，支持链式（如 `s.start.x`）。
+- 导出遵循模块规则：`T` 只导出记录类型（构造器隐藏，跨模块不能构造 / 模式匹配，即
+  抽象），`T(..)` 才公开记录构造器。
+- 实现上记录在精化前降级为单构造器 `data`（`Elab.Records`）：构造 = 构造器应用，
+  字段访问 / 更新 = 内联 `case`，所以核心求值器与 codegen 行为一致。
+- 字段访问 / 更新的 base 类型必须可推断；推断不出时报
+  `cannot resolve record type ... add a type signature`，给函数参数补类型签名即可。
+- 错误：缺字段 / 重复字段 / 未知字段 / 非记录类型；记录支持 `deriving (Show, Eq, Ord)`。
+
+## trait 与实例
+
+```vuna
+trait Pretty a where
+  pretty : a -> String
+
+data Color : Type where
+  Red : Color
+  Blue : Color
+  deriving (Show, Eq)
+
+instance Pretty Color where          -- 实例按 head 唯一（无命名实例）
+  pretty c = case c of
+    Red => "red"
+    Blue => "blue"
+
+main : String
+main = pretty Red ++ "/" ++ show Red
+```
+
+- **trait 只支持单参数**；多参数 trait、默认方法、父类、关联类型未实现（F4，见
+  [limits.md](limits.md)）。
+- **实例按 head 全局唯一**：同一 head 的重复 / 重叠实例报 `duplicate instance` /
+  `overlapping instance`（含 `deriving` 生成的实例）。**没有命名实例**：不存在
+  `instance C T as name` 或 `@name` 选择，相干性只靠「同一 head 唯一」。
+- **孤儿规则**：trait 与类型都不在本模块定义时禁止写实例。
+- **约束实例**：ctx 写在 head 前，搜索时递归求解：
+
+  ```vuna
+  data Box a : Type where
+    MkBox : a -> Box a
+
+  instance Eq a => Eq (Box a) where  -- 字典 def 带隐式类型参数 + ctx 字典参数
+    eq x y = case x of
+      MkBox a => case y of
+        MkBox b => a == b
+  ```
+
+- **参数化 `deriving (Show, Eq, Ord)`**：按 data 的每个类型参数生成 ctx（形态是约束
+  实例 `instance Eq a => Eq (F a)`）；`Show` 要求字段可 show。`mem (Box 1) [...]`
+  这类需要 `Dict_Eq (Box Int)` 的用法因此可用。
+- **`Show` / `Eq` / `Ord` 是库里的普通 trait**：声明、方法投影与 `Int` / `String` /
+  `Bool` 实例在 `Base.Show` / `Base.Eq` / `Base.Ord`，随 `Prelude` 自动导入；
+  `show` / `eq` / `lt` 等短名不再由编译器放行，必须经 import 解析。`deriving` 的展开
+  使用 Loader 解析后的完整类名（如 `Base.Show.Show`）。
+- **没有结构性自动回退**：`List a` / `Box a` 这类要能比较 / 展示，必须有约束实例或
+  具体实例；Base 只带 `Int` / `String` / `Bool` 的实例。字符串展示只有 `strShow`
+  一个实现。
+- 实现：字典按 trait 方法扁平化（`data Dict_C` + 方法投影 + 实例搜索）。具体类型的
+  调用点走静态派发；方法调用点类型是**裸类型变量**时做方法级字典穿参（类型检查给该
+  函数增加方法函数参数），支持跨函数传播、前向引用与递归。高阶 kind 与一般约束泛化
+  可用（如 `Monad m` 的 `m a`）。
+- 命名空间与导出：trait 名在类型命名空间、方法名在值命名空间；无模块头 = 全部导出
+  （含方法），显式导出列表需 `Trait(..)` 才导出方法；实例按整个程序（flatten）参与
+  搜索。
+- 相等 / 比较的规则（证据驱动、无泛型兜底）见 [type-system.md](type-system.md)。
+
+## do、Monad 与 Functor
+
+- 语法：`do` 块，语句是 `pat <- expr`（pat 只支持变量或 `_`）或裸表达式，最后一条
+  必须是裸表达式；`a >>= f` 等价 `bind a f`，`a >> b` 等价
+  `bind a (\_ -> b)`（顺序执行）。
+- `do` 在 Loader 里 desugar 成 `bind` / lambda（Parser 保留 `EDo`，formatter 因此能
+  还原 do 语法）：
+
+  ```vuna
+  import Base.Monad
+  import Base.Maybe
+
+  safeDiv : Int -> Int -> Maybe Int
+  safeDiv a b = if b == 0 then Nothing else Just (a / b)
+
+  main : Maybe Int
+  main = do
+    x <- safeDiv 10 2
+    y <- safeDiv x 0
+    pure (x + y)
+  ```
+
+- `Functor`（`fmap`）与 `Monad`（`bind` / `pure`）在 `base/lib/Base/Monad.vuna`；
+  `Maybe` / `List` / `IO` 各有 `Functor` / `Monad` 实例。`Monad m` 的 `m` 是
+  kind `* -> *`：trait 声明的类型参数可以当类型构造器应用（`m a`），实例 head 是
+  类型构造器本身（`instance Monad Maybe`），kind 不符（如 `instance Monad Int`）在
+  声明期报错。
+- **`IO`** 是 `base/lib/Base/IO.vuna` 的抽象类型（构造器私有）；组合统一用
+  `Functor` / `Monad` trait 的 `fmap` / `bind` / `pure`、`>>=` 与 `do`，**没有公开的
+  `runIO` / `unsafeRunIO`**：IO 动作只能由运行时在 `main` 处执行。
+- 效果 API 直接返回 IO：`print` / `println` / `readFile` / `writeFile` / `readLine` /
+  `readDir` / `isDirectory` / `makeDir` / `removeFile` / `fileExists` / `getArgs` /
+  `exit`（例如 `getArgs : IO (List String)`、`print : String -> IO Int`）；内部用
+  不导出的 `prim_*` 原语。普通包只能经 `Base.IO` 使用效果；要在源码里直接调用
+  `prim_*`，必须在 `vuna.toml` 声明 `[capabilities] effects`（见
+  [primitives.md](primitives.md)）。
+- 可执行包 / `vuna build` 要求 `main : IO a`；`vuna interp` 是纯核心求值，任何
+  `main : IO a` 一律报错。`vuna test` 的纯 `String` / `Int` / `Bool` 测试走核心求值，
+  `main : IO ...` 走 compile + 运行；REPL 的 IO 表达式经临时包 compile + 运行。
+- 实现：`Elab/Dict`、`Elab/Trait`、`Elab/Derive`；降级与字典编码在
+  [core.md](core.md)。

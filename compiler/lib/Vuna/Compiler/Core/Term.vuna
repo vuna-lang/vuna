@@ -88,7 +88,7 @@ module Vuna.Compiler.Core.Term
 --
 -- **表示层定型（M18.6）**：擦除标志用三值 `Rig`（QTT 预留），宇宙层级用不透明
 -- `Level`。`Vuna.Compiler.Core` 之外**禁止**解构 `Rig` / `Level`，只能走访问器；
--- 详见 docs/dt-core.md §24 的映射表与不变量。
+-- 详见 docs/reference/core.md 的映射表与不变量。
 --
 -- M24 后维护（源码重组）：从原 1227 行 Core.vuna 拆出；本模块是 Core 的叶子，只依赖 Common。
 import Vuna.Compiler.Common

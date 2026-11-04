@@ -1,36 +1,35 @@
 # 语言参考：core-v0（语法与模块系统）
 
-本文是 vuna 语言 core-v0 的语法与模块系统参考，内容自根 [README](../../README.md)
-拆出。记录 / trait / do / Monad / 标准库见 [type-system.md](type-system.md)，
-包管理与工具链命令见 [packages.md](packages.md)，依赖类型子集见 [dt.md](dt.md)。
+本文是 vuna 语言 core-v0 的语法与模块系统参考。类型规则（宇宙、索引族、依赖匹配、相等、
+擦除）见 [type-system.md](type-system.md)；记录 / trait / `do` 见
+[records-traits.md](records-traits.md)；包管理与工具链命令见 [packages.md](packages.md)。
 
 ## core-v0 语法
 
 - 类型：`Int` / `String`（语言 primitive 类型）、`data` 声明的代数数据类型、函数；
-  类型签名参与 DT 精化，运行时是否保留由擦除判据（`Rig`）决定；
-- 语法：Idris2 风格 `data ... where`、多子句函数、顶层 `axiom` 声明（M28，无体/不透明
-  顶层）、`case ... of`、`let ... in`（绑定块可选签名行，M28）、
-  lambda、`if then else`、`do` 块（M11）、整数/字符串字面量、`[..]` 与
-  `x :: xs` 列表糖、中缀运算符
+  类型签名参与精化，运行时是否保留由擦除判据（`Rig`）决定；
+- 语法：Idris2 风格 `data ... where`、多子句函数、顶层 `axiom` 声明（无体 / 不透明）、
+  `case ... of`、`let ... in`（绑定块可选签名行）、lambda、`if then else`、`do` 块、
+  整数 / 字符串字面量、`[..]` 与 `x :: xs` 列表糖、中缀运算符
   （`-> || && == /= < <= > >= ++ + - * / :: >>= >>`）；
-- layout：offside 规则；顶层声明、`data` 构造器块、`case` 分支、`let` 绑定按块列
-  对齐，表达式跨行必须缩进超过所在块列；
+- layout：offside 规则；顶层声明、`data` 构造器块、`case` 分支、`let` 绑定按块列对齐，
+  表达式跨行必须缩进超过所在块列；
 - `main` 必须是零参数定义；展示由编译器钩子完成（`Int` → 十进制、`String` → `strShow`、
   `Bool` → `True` / `False`）。`show` 是 `Base.Show` 的 trait 方法，不是 `main` 的展示
-  钩子。`vuna interp` 只展示 `Int`/`String`/`Bool` 的 `main` 值（interp 是 DT 精化后的
+  钩子。`vuna interp` 只展示 `Int` / `String` / `Bool` 的 `main` 值（interp 是精化后的
   纯核心求值，见 [limits.md](limits.md)）；
 - 内建值（`Vuna.Compiler.Intrinsics.allIntrinsics` 里用户可见的项）：`+ - * /`、
   `== /= < <= > >=`、`&& ||`、`++`、`strFromInt` / `strUnpack` / `strPack` /
   `strLength` / `strConcatMany` / `strSubstTemplate` / `strHash` / `strAt` / `strShow`、
   `timeUs`。宽度、编码、转义与 interp 边界见 [primitives.md](primitives.md)；
 - 效果原语**只有 `prim_*` 名**（`prim_print` / `prim_readFile` / `prim_getArgs` /
-  `prim_getenv` / …，旧的公开名已删除）：用户经 `Base.IO` 的 IO 动作使用，或在
-  `vuna.toml` 用 `[capabilities].effects` 声明能力后直接调用；见
-  [primitives.md](primitives.md) 的效果原语与能力一节；
-- `&&` / `||` 短路求值：先求左操作数，左侧能决定结果时不求值右侧（核心求值器与
-  codegen 一致）；
-- `where` 子句：函数体后可跟缩进的 `where` 块；绑定块（`let` 与 `where` 同一套模型）
-  是**顺序作用域 + 可选签名**，其中 `where` 块要求每个绑定写显式签名；见下节；
+  `prim_getenv` / …）：用户经 `Base.IO` 的 IO 动作使用，或在 `vuna.toml` 用
+  `[capabilities].effects` 声明能力后直接调用；见 [primitives.md](primitives.md) 的
+  效果原语与能力一节；
+- `&&` / `||` 短路求值：先求左操作数，左侧能决定结果时不求值右侧（核心求值器与 codegen
+  一致）；
+- `where` 子句：函数体后可跟缩进的 `where` 块；绑定块（`let` 与 `where` 同一套模型）是
+  **顺序作用域 + 可选签名**，其中 `where` 块要求每个绑定写显式签名；见下节；
 - 类型身份：`Int` / `String` 是语言 primitive 类型；`Bool` / `List` / `IO` 是 base 的
   普通 `data` 声明（canonical 身份 `Base.Bool.Bool` / `Base.List.List` / `Base.IO.IO`，
   经自动注入的 `Prelude` 可见）。用户写同名 `data` 是普通声明，不与 canonical 冲突。
@@ -39,7 +38,7 @@
 
 ## `let` / `where` 绑定块与显式签名
 
-`let` 与 `where` 共用同一套**绑定块**模型（顺序作用域 + 可选签名），M28 起实现只有一份
+`let` 与 `where` 共用同一套**绑定块**模型（顺序作用域 + 可选签名），实现只有一份
 （parser 的 `parseBindingItemsAt` / `bindingItemsToBinds`，Elab 的 `checkBindingSigs`）：
 
 ```vuna
@@ -62,15 +61,15 @@ g =
   in addK 4
 ```
 
-- 两条记法只差一条约束：**`where` 块每个绑定必须写签名行**（缺签名报
+- 两种记法只差一条约束：**`where` 块每个绑定必须写签名行**（缺签名报
   `[TC_WhereNeedsSig] where binding ... needs a type signature`）；`let` 块的签名行可选；
 - 两种子句形态都支持：`pat = expr` 与函数子句 `name pats = expr`；
-- **局部多 clause 函数**（M30）：同一名字的**相邻**多条子句合并成一个局部函数（`where`
-  与 `let` 都支持），参数是任意模式（构造子/字面量/记录/变量），匹配语义与顶层函数
-  子句一致（编译期走 `Elab.Match.multiToExpr` 的模式矩阵，穷尽性同 `case`）；
-  - 一条签名行覆盖该名字的**全部**子句（签名写在第一条子句之前）；非相邻的同名子句
-    仍报 `[PS_WhereSigMultiClause]`（保留为历史诊断）；
-  - 局部函数仍是**顺序作用域**：不能自递归/互递归；需要递归时放到顶层定义组。
+- **局部多 clause 函数**：同一名字的**相邻**多条子句合并成一个局部函数（`where` 与
+  `let` 都支持），参数是任意模式（构造子 / 字面量 / 记录 / 变量），匹配语义与顶层函数
+  子句一致（编译期走 `Elab.Match` 的模式矩阵，穷尽性同 `case`）；
+  - 一条签名行覆盖该名字的**全部**子句（签名写在第一条子句之前）；非相邻的同名子句仍报
+    `[PS_WhereSigMultiClause]`；
+  - 局部函数仍是**顺序作用域**：不能自递归 / 互递归；需要递归时放到顶层定义组。
 
   ```vuna
   main : Int
@@ -81,11 +80,10 @@ g =
     pick (Succ _) (Succ _) = 3
   ```
 
-- **`let` 模式解构**（M30）：`let` 绑定左端可以是构造子/记录/字面量模式（不再只允许
-  简单名/通配）。语义等价单分支 `case`：模式必须不可失败（穷尽），否则报
-  `[TC_NotExhaustive] case is not exhaustive: missing ...`；模式绑定出的变量在后续绑定
-  与 `in` body 中可见。`TC_LetBindingPattern`（“let bindings must be simple names or
-  wildcards”）不再产生，保留为历史诊断码。
+- **`let` 模式解构**：`let` 绑定左端可以是构造子 / 记录 / 字面量模式（不再只允许简单名 /
+  通配）。语义等价单分支 `case`：模式必须不可失败（穷尽），否则报
+  `[TC_NotExhaustive] case is not exhaustive: missing ...`；模式绑定出的变量在后续绑定与
+  `in` body 中可见。
 
   ```vuna
   main : Int
@@ -110,14 +108,14 @@ g =
 - 有签名的绑定按签名以 checking 模式精化（先检查签名是合法类型，再按该类型检查值），
   因此不需要推断无签名 lambda 的类型；无签名绑定走推断；
 - 绑定块是**顺序作用域**：每个绑定只能引用它**之前**的绑定，不支持前向引用、自递归或
-  互递归（递归放进顶层定义组，顶层定义组支持互递归/自递归/前向引用）；
-- `where` 绑定的名字只在该函数体内可见（不导出、不参与模块导出列表），与顶层定义同名
-  时以局部绑定为准；`let` 绑定同理只在该表达式内可见；
+  互递归（递归放进顶层定义组，顶层定义组支持互递归 / 自递归 / 前向引用）；
+- `where` 绑定的名字只在该函数体内可见（不导出、不参与模块导出列表），与顶层定义同名时
+  以局部绑定为准；`let` 绑定同理只在该表达式内可见；
 - `vuna fmt` 保留签名行并按「签名行 + 子句」输出（let 与 where 都幂等），缩进 2 空格。
 
-## `axiom` 声明（M28）
+## `axiom` 声明
 
-`axiom name : Ty` 声明一个**无体/不透明**顶层（决策 5 / D10）。它不是函数定义：
+`axiom name : Ty` 声明一个**无体 / 不透明**顶层：
 
 ```vuna
 axiom t : Type
@@ -127,48 +125,46 @@ idT : t -> t
 idT x = x
 ```
 
-- axiom 是**擦除/类型层**定义：只参与类型检查与类型层计算，codegen 不生成运行时定义
-  （`DtAxiom`，没有 `dtDefBody`）；
-- 类型层引用合法（上面的 `t` 作类型常量、`step` 作类型层值）；签名里的自由小写名与
-  普通签名一样量化为隐式类型参数（`axiom anyEq : a -> a` 等价 `{a : Type} -> a -> a`）；
+- axiom 是**擦除 / 类型层**定义：只参与类型检查与类型层计算，codegen 不生成运行时定义
+  （`DtAxiom`，没有定义体）；
+- 类型层引用合法（上面的 `t` 作类型常量、`step` 作类型层值）；签名里的自由小写名与普通
+  签名一样量化为隐式类型参数（`axiom anyEq : a -> a` 等价 `{a : Type} -> a -> a`）；
 - 运行时位置使用 axiom 是硬错误（`check` 与 `compile` 同一条诊断）：
   `[CG_AxiomAtRuntime] axiom ... cannot be used at runtime (it has no runtime definition)`；
-- axiom 是普通顶层声明：名字自动 mangle、`_` 前缀私有、可进模块导出表；同一名字不能
-  再有定义体（`[TC_AxiomWithDefinition]`），也不能重复声明；
-- `axiom` 是保留关键字；当前**编译器自身不用** axiom（旧 seed 必须能编译新源码）。
+- axiom 是普通顶层声明：名字自动 mangle、`_` 前缀私有、可进模块导出表；同一名字不能再
+  有定义体（`[TC_AxiomWithDefinition]`），也不能重复声明；
+- `axiom` 是保留关键字；当前编译器自身不用 axiom（旧 seed 必须能编译新源码）。
 
-## 函数定义与 η 展开（M28）
+## 函数定义与 η 展开
 
 定义子句的参数可以少于签名：剩余 Pi 链按 **η 展开**自动补参数（`\_arityN`，body 应用到
 这些新参数），所以 `f : Int -> Int` 配 `f = inc` 合法；参数**多于**签名仍报
-`[TC_DefMoreParams]`。旧的 `[TC_DefFewerParams]` 码保留在错误表里，M28 起不再触发。
-多 clause 与 where 绑定共用同一条精化路径，行为一致。
+`[TC_DefMoreParams]`。多 clause 与 where 绑定共用同一条精化路径，行为一致。
 
 ## `case` 分支与模式
 
 `case e of` 的每个分支左端是模式：构造子模式（可嵌套，如 `Cons x (Cons y ys)`）、
 `Int` / `String` 字面量模式、变量或通配。分支按书写顺序匹配，因此：
 
-- **as-pattern**（M30）：`x@pat` 匹配 `pat` 并把整个匹配值绑定到 `x`（Idris2 风格；
-  `_@x` 等价于 `x@_`）。可用于顶层/局部函数子句的参数与嵌套模式位置，如
+- **as-pattern**：`x@pat` 匹配 `pat` 并把整个匹配值绑定到 `x`（Idris2 风格；`_@x` 等价于
+  `x@_`）。可用于顶层 / 局部函数子句的参数与嵌套模式位置，如
   `advance (PState file toks@(t :: rest) last count) = ...`；带参数的内层模式需括号
-  （`x@(t :: rest)`），变量/字面量/0 元构造子不需要（`x@True`、`x@42`）。
+  （`x@(t :: rest)`），变量 / 字面量 / 0 元构造子不需要（`x@True`、`x@42`）。
   编译期由模式矩阵注入绑定（`Elab.Match`）；STR 把 as 绑定视为整个值（不改变结构下降）。
-  `case` 分支左端的 as-pattern 尚未接入（当前只支持函数子句参数/嵌套模式）。
+  `case` 分支左端的 as-pattern 尚未接入（当前只支持函数子句参数 / 嵌套模式）。
 
-- 变量/通配兜底只能放**最后一个**分支，否则报 `TC_CatchAllNotLast`；
+- 变量 / 通配兜底只能放**最后一个**分支，否则报 `TC_CatchAllNotLast`；
 - `Bool` 的 `case` 只认 `True` / `False` / 变量 / 通配（`TC_BoolCaseRestriction`）；
-- `Int` / `String` 的 `case` 必须有一个变量/通配兜底（`TC_IntStringCaseNeedsFallback`），
+- `Int` / `String` 的 `case` 必须有一个变量 / 通配兜底（`TC_IntStringCaseNeedsFallback`），
   字面量分支降级成嵌套 `if` 链；
 - 不可达分支是**错误**：重复构造子分支、重复字面量、兜底之后的分支分别报
   `TC_RedundantCtorBranch` / `TC_RedundantLiteralBranch` / `TC_BranchAfterCatchAll`；
   被索引排除的分支与分支上下文含空归纳族的分支可以**省略**，写出来报
-  `TC_ImpossibleBranchIndex` / `TC_ImpossibleBranchEmptyCtx`（M28：省略与写出走同一套
-  `allCtorsUnsatisfiable` 判据——判为不可达的分支省略合法、写出报错；判为可达的分支必须
-  写出、写出即接受；索引含中性项时保守判可达）；
+  `TC_ImpossibleBranchIndex` / `TC_ImpossibleBranchEmptyCtx`（省略与写出走同一套
+  `allCtorsUnsatisfiable` 判据；索引含中性项时保守判可达）；
 - 嵌套模式与同一构造子的多个分支由模式矩阵降级（规范形：每构造子一个分支 + 变量子模式），
-  语义与手写嵌套 `case` 一致；依赖索引的细化细节见 [dt.md](dt.md) 的「case 分支与模式 /
-  可达性」两条。
+  语义与手写嵌套 `case` 一致；依赖索引的细化细节见 [type-system.md](type-system.md) 的
+  「依赖模式匹配与 case」。
 
 ## 模块系统
 
@@ -180,7 +176,7 @@ idT x = x
   `<exeDir>/../../../base`，都找不到时明确报错；这类 ad-hoc 单文件与包内模块一样
   **自动导入 `Prelude`**（显式 `import` 仍可用）；
 - 模块按可用根查找；同名模块出现在多个根时是硬错误（不静默覆盖）；
-- 路径段必须匹配 `[A-Z][A-Za-z0-9_]*`，路径/文件名与模块名**精确一致**，没有大小写映射；
+- 路径段必须匹配 `[A-Z][A-Za-z0-9_]*`，路径 / 文件名与模块名**精确一致**，没有大小写映射；
 - 入口文件可以在模块根外（如 `app/Main.vuna`），它本身不是模块，不能写模块头；目录入口
   （`check/build <dir>`）只认该目录自己的 `vuna.toml`，**不向上找**；
 - 包模式下模块根由 `vuna.toml` 解析：本包 `lib/` + 依赖包 `lib/`（按依赖 DAG 排序，
@@ -197,8 +193,8 @@ idT x = x
   import qualified Vuna.Compiler.Frontend.Lexer as L  -- 只依赖，并可用 L.PTok
   ```
 
-  alias 只是额外的限定前缀，原全名仍然可用；alias 必须是单个大写段、全文件唯一，
-  且不能与另一个被 import 的模块名冲突；
+  alias 只是额外的限定前缀，原全名仍然可用；alias 必须是单个大写段、全文件唯一，且不能
+  与另一个被 import 的模块名冲突；
 - **模块头**：模块文件可以在 `import` 之前写一个模块头声明导出项（导出列表可以跨行；
   入口文件不能写）：
 
@@ -218,21 +214,20 @@ idT x = x
   单行。排序只影响书写顺序——导出仍是集合，语义不变。
 
   模块名必须与路径推导出的模块名一致（`lib/Vuna/Math.vuna` ⇔ `Vuna.Math`），不一致是
-  硬错误。导出项按「类型名/值名」两套命名空间解析（`module B` 是整模块重导出，不属于
+  硬错误。导出项按「类型名 / 值名」两套命名空间解析（`module B` 是整模块重导出，不属于
   单个名字）：
 
-  - `name`：裸名，类型/值两套命名空间都解析，同名都导出（构造器名按值命名空间解析）；
+  - `name`：裸名，类型 / 值两套命名空间都解析，同名都导出（构造器名按值命名空间解析）；
     单独导出类型名时只导出类型本身（构造器不可见，即抽象类型）；
   - `Name(..)`：导出类型及全部非私有构造器（重导出已导入的类型时只公开源模块本来就
     公开的构造器，保持源的抽象性）；
   - `module B`：整模块重导出，B 必须是直接 import 的模块，保留 B 的抽象性；
   - `B.name`：从 B 选择性重导出，B 必须是直接 import 的模块；
 
-  这里的 B 可以用模块全名或 import alias 引用。暂不支持重命名重导出
-  （`foo = B.foo`）和构造器子集（`T(C1,C2)`）；同一 (kind, 名字) 重复导出（包括
-  `module B` 已覆盖的名字再单独写 `B.x`）是 `duplicate export` 硬错误；导出当前作用域
-  不可见的名字也是硬错误；
-- **`_` 前缀私有**：任何顶层名字（值/类型/构造器）以 `_` 开头即模块私有，不能导出；
+  这里的 B 可以用模块全名或 import alias 引用。暂不支持重命名重导出（`foo = B.foo`）和
+  构造器子集（`T(C1,C2)`）；同一 (kind, 名字) 重复导出（包括 `module B` 已覆盖的名字再
+  单独写 `B.x`）是 `duplicate export` 硬错误；导出当前作用域不可见的名字也是硬错误；
+- **`_` 前缀私有**：任何顶层名字（值 / 类型 / 构造器）以 `_` 开头即模块私有，不能导出；
   显式导出 `_` 名是硬错误（不是静默剔除），裸 `_` 也不能作顶层名；`(..)` 同样不会让
   `_` 构造器变公开；
 - **抽象类型**：导出项 `T` 只导出类型、不导出构造器，跨模块既不能构造也不能模式匹配；
@@ -241,22 +236,20 @@ idT x = x
   因此 `lib/Vuna.vuna`（模块 `Vuna`）与 `lib/Vuna/Compiler/Frontend/Parser.vuna`（模块
   `Vuna.Compiler.Frontend.Parser`）能在同一个根下共存、没有歧义，包门面可以直接命名为
   `Base` 或 `Vuna`；
-- 模块导出只算聚合层；包级隐藏（哪些模块对外公开）留给 M11.5 的根 manifest；
-- 非限定名的查找顺序（值位置）：局部绑定 → 本模块值定义（定义/签名/实例名）→ 本模块
-  构造子 → 内建（intrinsic）/DT prelude → 已自动 open 的 import 导出（先值项、再构造子）
-  → 本模块类型名（**类型作为项**的最后退路，见下节）。两个 open import 导出同名但指向
-  不同定义时，裸名报歧义（指向同一定义的重复导出不算歧义，例如原模块与它的门面重导出）；
-  写全名或 alias 即可消歧；import 只提供目标模块**导出列表**中的名字（省略模块头 =
-  全部导出，`_` 前缀除外）；
-- 限定名用**完整模块名**或 alias，永远不会歧义，但同样只解析目标模块的导出项；
-  注意 import 只算直接依赖，**不传递**：
-  A import B，C import A 看不到 B 的名字——除非 A 用 `module B` / `B.name` 显式重导出，
-  这是受控例外，只有显式写出的名字经 A 重新可见；
-- loader 解析 import 图、做名字解析后 **flatten** 成一个 program（内部名字带模块前缀，
-  如 `Vuna.Compiler.Frontend.Parser.parseSource`），解释器与 codegen 复用同一份实现；`show` 只显示
-  最后一段，所以输出与包内程序一致。
+- 非限定名的查找顺序（值位置）：局部绑定 → 本模块值定义（定义 / 签名 / 实例名）→ 本模块
+  构造子 → 内建（intrinsic）/ 精化器 prelude → 已自动 open 的 import 导出（先值项、再
+  构造子）→ 本模块类型名（**类型作为项**的最后退路，见下节）。两个 open import 导出同名
+  但指向不同定义时，裸名报歧义（指向同一定义的重复导出不算歧义，例如原模块与它的门面
+  重导出）；写全名或 alias 即可消歧；import 只提供目标模块**导出列表**中的名字（省略
+  模块头 = 全部导出，`_` 前缀除外）；
+- 限定名用**完整模块名**或 alias，永远不会歧义，但同样只解析目标模块的导出项；import
+  只算直接依赖，**不传递**：A import B，C import A 看不到 B 的名字——除非 A 用
+  `module B` / `B.name` 显式重导出；
+- Loader 解析 import 图、做名字解析后 **flatten** 成一个 program（内部名字带模块前缀，
+  如 `Vuna.Compiler.Frontend.Parser.parseSource`），解释器与 codegen 复用同一份实现；
+  `show` 只显示最后一段，所以输出与包内程序一致。
 
-## type / value 双命名空间（M28）
+## type / value 双命名空间
 
 解析层有三个命名空间，与导出表的 kind 一一对应，**不存在一张拍平的总表**：
 
@@ -266,21 +259,21 @@ idT x = x
 | 构造子 | data 构造子、record 名、trait 方法 | `ctor` |
 | 类型 | data / record / trait 的类型名 | `type` |
 
-- **类型位置只查类型命名空间**：先本模块声明的类型名（**优先于内建名**——`Base.Bool`
-  重新声明 `Bool` 就靠这条），再内建类型名；小写名保持为隐式类型变量（未被本模块值
-  定义占用时）。都没有再查 import 导出的类型。退化约定：非小写名找不到类型时按**索引
-  构造子**解析（`Vec a Zero` 的 `Zero`），最后才退到本模块值定义（类型层 def，
-  如 `sel : Nat -> Type`）。
+- **类型位置只查类型命名空间**：先本模块声明的类型名（**优先于内建名**——`Base.Bool` 重新
+  声明 `Bool` 就靠这条），再内建类型名；小写名保持为隐式类型变量（未被本模块值定义占用
+  时）。都没有再查 import 导出的类型。退化约定：非小写名找不到类型时按**索引构造子**解析
+  （`Vec a Zero` 的 `Zero`），最后才退到本模块值定义（类型层 def，如 `sel : Nat -> Type`）。
 - **值位置查值命名空间**：局部绑定 → 本模块值定义 → 本模块构造子 → 内建 → import 导出
   （值项、再构造子）→ **本模块类型名作为项**（最后退路）。因此
   `data Pair a b where Pair : a -> b -> Pair a b` 的 `Pair` 在类型位置是族、在值位置是
   构造子；显式 `(a : Type)` 参数处的族名（`firstTy Pair ...`）作为类型层实参可用。
-- **不同命名空间不互相遮蔽**：本模块声明的**类型**名不再抢走同名的导入**值**
-  （`import Values (token)` + 本地 `data token : Type`：值位置的 `token` 是导入的 Int 值，
-  类型位置的 `token` 是本地类型）；本模块的值定义也不进类型命名空间（除非走上面的
-  类型层 def 退化路径）。
-- 导出侧仍按名字各自的命名空间解析（裸 `T` 导出类型、`T(..)` 导出构造子，见「模块系统」）；
-  解析层的三张表与导出 kind 的 `val` / `ctor` / `type` 一一对应，解析器不再把三者拍平，
-  精化器（Elab）也不需要靠「kind 是不是宇宙」猜名字属于哪个命名空间。
-- 已知边界：类型层 def 退化路径只看**本模块**同名值定义；跨模块类型层定义（含 `axiom t :
-  Type`）在类型位置写**限定名** `M.t`（M28 起回退到导入值命名空间），裸小写名仍是类型变量。
+- **不同命名空间不互相遮蔽**：本模块声明的**类型**名不再抢走同名的导入**值**（
+  `import Values (token)` + 本地 `data token : Type`：值位置的 `token` 是导入的 Int 值，
+  类型位置的 `token` 是本地类型）；本模块的值定义也不进类型命名空间（除非走上面的类型层
+  def 退化路径）。
+- 导出侧仍按名字各自的命名空间解析（裸 `T` 导出类型、`T(..)` 导出构造子）；解析层的三张表
+  与导出 kind 的 `val` / `ctor` / `type` 一一对应，解析器不再把三者拍平，精化器也不需要靠
+  「kind 是不是宇宙」猜名字属于哪个命名空间。
+- 已知边界：类型层 def 退化路径只看**本模块**同名值定义；跨模块类型层定义（含
+  `axiom t : Type`）在类型位置写**限定名** `M.t`（回退到导入值命名空间），裸小写名仍是
+  类型变量。其它边界见 [limits.md](limits.md)。

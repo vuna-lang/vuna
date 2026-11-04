@@ -9,8 +9,7 @@ vuna 是一个函数式编程语言，本仓库是它的编译器与工具链。
 编译器完全用 vuna 自己写：编译器包 `compiler/`（`vuna-compiler`，模块 `Vuna.Compiler.*`）
 + 根包 `vuna`（产品 CLI 与工具链 fmt/lint/repl/doc/test/lsp）+ 成员包 `base/`（`vuna-base`）。
 `seed/` 只由 compiler 包的入口闭包生成——**可固化成种子的部分与产品工具链明确分开**；
-仓库通过提交入库的 OCaml 种子自举，不依赖外部编译器（早期 OCaml 实现 `vunax` 已在 M6 后
-删除，历史见 git log）。
+仓库通过提交入库的 OCaml 种子自举，不依赖外部编译器。
 
 > **AI agent 请先读 [AGENTS.md](AGENTS.md)**；架构与改动定位见
 > [docs/architecture.md](docs/architecture.md)。本 README 只保留定位、上手、目录、
@@ -90,7 +89,7 @@ fork `vuna-compiler`）；`vuna build` 在 codegen 后执行生成的 `build.sh`
 **包上下文是唯一的加载语义**：每个源文件向上找最近的 `vuna.toml`（该包 + 依赖闭包解析
 import）；无 manifest 时只有 base 上下文（`VUNA_BASE` 覆盖，否则按可执行文件相对布局
 探测），ad-hoc 单文件自动注入 `Prelude`。目录入口（`check/build <dir>`）只认该目录自己的
-manifest，不向上找。环境根开关、raw 模式、`--split` 与 `seed` 均已删除。命令语义与包格式
+manifest，不向上找。命令语义与包格式
 （含 `[capabilities]`）见 [packages.md](docs/reference/packages.md)，语言语义见
 [language.md](docs/reference/language.md)。
 
@@ -140,25 +139,24 @@ manifest，不向上找。环境根开关、raw 模式、`--split` 与 `seed` �
 | [AGENTS.md](AGENTS.md) | AI agent 唯一固定入口：阅读顺序、不变量、纪律、命令速查 |
 | [docs/architecture.md](docs/architecture.md) | 子系统地图：五条链路、入口符号、连带改动、测试标签 |
 | [docs/reference/language.md](docs/reference/language.md) | core-v0 语法、模块系统、import 与导出规则 |
-| [docs/reference/type-system.md](docs/reference/type-system.md) | 记录类型、trait 与实例、`do` / Monad / Functor |
+| [docs/reference/type-system.md](docs/reference/type-system.md) | 类型系统：宇宙/kind、索引归纳族、依赖匹配、相等证据、擦除、终止性 |
+| [docs/reference/records-traits.md](docs/reference/records-traits.md) | 记录、trait / 实例 / `deriving`、`do` / Monad / IO |
 | [docs/reference/stdlib.md](docs/reference/stdlib.md) | 标准库 `vuna-base` 模块清单与 `Prelude` 自动导入 |
 | [docs/reference/primitives.md](docs/reference/primitives.md) | 内建/原语唯一声明面、Int/String/IO 语义、效应能力（`[capabilities]`） |
 | [docs/reference/packages.md](docs/reference/packages.md) | `vuna.toml` 包格式、workspace / 依赖 DAG、工具链命令一览 |
-| [docs/reference/dt.md](docs/reference/dt.md) | DT 子集：索引归纳族、依赖模式匹配、硬边界与夹具 |
-| [docs/reference/dt-tooling.md](docs/reference/dt-tooling.md) | DT 工具链：洞目标、LSP、`vuna doc`、错误码体系与错误索引 |
-| [docs/reference/dt-parity.md](docs/reference/dt-parity.md) | DT 取代 HM 的历史证据表（当前状态见 roadmap） |
-| [docs/reference/compiler.md](docs/reference/compiler.md) | 编译器模块职责、codegen 表示与优化、机器无关指标 |
+| [docs/reference/core.md](docs/reference/core.md) | Core TT / NbE / 合一 / 精化器 / 擦除 / codegen 护栏的实现参考 |
+| [docs/reference/tooling.md](docs/reference/tooling.md) | 工具链：`vuna goal`、LSP、`vuna doc`、错误码体系与代表性错误索引 |
+| [docs/reference/compiler.md](docs/reference/compiler.md) | 编译器模块职责、codegen 表示与输出模型、机器无关指标 |
 | [docs/reference/bootstrap.md](docs/reference/bootstrap.md) | 种子策略、rotation 流程、fixed point、TCB 边界 |
 | [docs/reference/testing.md](docs/reference/testing.md) | 测试体系、corpus 分类、nix checks 清单、性能基准 |
 | [docs/reference/lint.md](docs/reference/lint.md) | lint 规则（AST 驱动、`--fix` 与门禁） |
-| [docs/reference/limits.md](docs/reference/limits.md) | 当前限制与已知边界（编译模型 / IO / 工具链细节） |
-| [docs/reference/debt.md](docs/reference/debt.md) | 技术债务与缺陷登记（A/B/C/D/E 五类，按 M25–M30 关闭） |
-| [docs/history.md](docs/history.md) | 里程碑历史（一览；实现细节在 git 历史） |
-| [docs/roadmap.md](docs/roadmap.md) | 路线图：终态 + 正本清源阶段（M25–M30）+ 不排期轨道（F1–F4）+ 决策变更表 |
-| [docs/dt-core.md](docs/dt-core.md) | DT 核心类型论与精化器设计稿（M13–M14） |
+| [docs/reference/limits.md](docs/reference/limits.md) | 当前限制与已知边界（编译模型 / 类型系统 / IO / 工具链细节） |
+| [docs/reference/debt.md](docs/reference/debt.md) | 仍未关闭的债务、缺陷与未实现能力（按语言 / 工具 / F1–F4 分组） |
+| [docs/roadmap.md](docs/roadmap.md) | 当前基线、终态方向、下一阶段与不排期轨道（F1–F4） |
 
 文档分层规则：README 只保留定位/上手/目录/硬约束/导航；细节在 `docs/reference/`；
-roadmap 的「已完成」只保留一句话摘要，里程碑历史在 `docs/history.md`（实现细节在 git 历史）。
+roadmap 只保留当前基线与未来方向，里程碑历史在 git 历史；已知边界与开放债务分别归
+`limits.md` 与 `debt.md`。
 
 ## 许可
 

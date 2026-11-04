@@ -1,6 +1,6 @@
 -- M29（B13/D12）：依赖索引 lookup —— 元素类型随位置变化时，把「类型码 + 该项」藏进
 -- Σ（Tarski 风格存在式），lookup 只返回存在式。于是不需要精化器写出「按位置变化的
--- 类型族」（dt-core.md §6.3 的边界）：存在式本身就是索引隐藏手段。
+-- 类型族」（`docs/reference/type-system.md` 的依赖索引取值）：存在式本身就是索引隐藏手段。
 -- 没有这层 Σ 时，递归步会把 `Ctx n` 精化成 `Ctx (Succ n)` 而拿不出 `Tm (Succ n)`
 -- （负例：test/corpus/dt_err/46_lookup_no_sigma.vuna）。
 -- Σ 的通用构造/投影/嵌套见 test/corpus/dt/62_sigma_basic.vuna。

@@ -239,7 +239,7 @@ elabDatas decls globals ec = andThen (elabDataHeads decls globals ec []) (\p => 
 -- 索引**不能无条件擦**：`vlen a n xs = case xs of Cons b m y ys => 1 + vlen b m ys` 把索引 `m`
 -- 当递归参数传下去，运行时**真的被读取**；无条件擦除会让这类定义无法生成代码。
 -- 正确擦除需要整程序使用分析，M16 落地的是**分析 + 诊断**：`eraseIndexMask` 给出保守可擦判定，
--- `indexNeedsRuntime` 给出是否真的被用到。详见 `docs/dt-core.md` 的「已知限制」。
+-- `indexNeedsRuntime` 给出是否真的被用到。详见 `docs/reference/limits.md` 的索引边界。
 eraseIndexMask : DtData -> List Bool
 eraseIndexMask dd = eraseMaskGo dd (dtDataParams dd) 0 []
 
