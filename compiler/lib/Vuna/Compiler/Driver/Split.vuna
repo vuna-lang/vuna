@@ -17,6 +17,7 @@ module Vuna.Compiler.Driver.Split
 --   - 最后链接成可执行文件。
 -- 构建脚本只用 POSIX sh + ocamlopt，可在 Nix 沙箱内复现。
 import Vuna.Compiler.Common
+import Base.IO
 
 data SplitFile : Type where
   SplitFile : String -> String -> SplitFile
@@ -35,7 +36,7 @@ splitInitFiles (f :: rest) = splitName f :: splitInitFiles rest
 writeSplitFiles : String -> List SplitFile -> Result Int
 writeSplitFiles dir [] = Ok 0
 writeSplitFiles dir (f :: rest) = andThen (writeSplitFiles dir rest) (\n => let
-  _ = prim_writeFile (dir ++ "/" ++ splitName f) (splitText f)
+  _ = runIO (prim_writeFile (dir ++ "/" ++ splitName f) (splitText f))
 in Ok (n + 1)
 )
 
@@ -45,8 +46,8 @@ writeSplitFilesIfChanged dir [] = Ok 0
 writeSplitFilesIfChanged dir (f :: rest) = andThen (writeSplitFilesIfChanged dir rest) (\n => let
   path = dir ++ "/" ++ splitName f
   text = splitText f
-  same = prim_fileExists path && prim_readFile path == text
-  _ = if same then 0 else prim_writeFile path text
+  same = runIO (prim_fileExists path) && runIO (prim_readFile path) == text
+  _ = if same then 0 else runIO (prim_writeFile path text)
 in Ok (n + 1)
 )
 

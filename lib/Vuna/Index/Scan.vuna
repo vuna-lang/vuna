@@ -27,6 +27,7 @@ import Vuna.Compiler.Frontend.Lexer
 import Vuna.Compiler.Frontend.Parser
 import Vuna.Compiler.Packages.Pkg
 import Vuna.Index.Types
+import Base.IO
 
 -- ---------------------------------------------------------------
 -- 小型 helper（本模块自用，避免污染 Base）
@@ -112,7 +113,7 @@ collectVuna dir = collectVunaGo 1048576 dir
 -- 目录树递归（符号链接可成环）用显式 fuel 守卫；每次下钻一层消耗 1。
 collectVunaGo : Int -> String -> List String
 collectVunaGo fuel dir =
-  if fuel <= 0 then [] else concatMap (walkVunaGo (fuel - 1) dir) (prim_readDir dir)
+  if fuel <= 0 then [] else concatMap (walkVunaGo (fuel - 1) dir) (runIO (prim_readDir dir))
 
 walkVunaGo : Int -> String -> String -> List String
 walkVunaGo fuel dir name = if fuel <= 0 then []
@@ -125,7 +126,7 @@ else
 
 -- prim_isDirectory 对不存在的路径会抛异常，必须先判存在。
 dirExists : String -> Bool
-dirExists path = prim_fileExists path && prim_isDirectory path
+dirExists path = runIO (prim_fileExists path) && runIO (prim_isDirectory path)
 
 -- 包的索引范围：<pkg>/lib 与 <pkg>/app（模块源码）。刻意不扫 test/ 与 examples/
 -- （夹具含故意不合法的语法，不是模块源码）。
@@ -350,12 +351,13 @@ builtRefs (Built ms syms refs) = refs
 -- 索引一个文件。parse 失败返回 Err（调用方转成 warning），不中断整体。
 indexOne : String -> String -> String -> Result Built
 indexOne dir pkgName path =
-  if prim_fileExists path then indexOneExisting dir pkgName path else Err (path ++ ": no such file")
+  if runIO (prim_fileExists path) then indexOneExisting dir pkgName path
+  else Err (path ++ ": no such file")
 
 indexOneExisting : String -> String -> String -> Result Built
 indexOneExisting dir pkgName path =
   let
-    source = prim_readFile path
+    source = runIO (prim_readFile path)
     bytes = strLength source
   in case parseSource path source of
     Err e => Err (path ++ ": " ++ e)
@@ -457,12 +459,13 @@ entryHash entry = secondOf (secondOf entry)
 
 -- 磁盘上的当前文件元数据（path, bytes, hash）。读内容算哈希，不 parse。
 scanFile : String -> Pair String (Pair Int String)
-scanFile path = if prim_fileExists path then scanFileExisting path else Pair path (Pair 0 "")
+scanFile path =
+  if runIO (prim_fileExists path) then scanFileExisting path else Pair path (Pair 0 "")
 
 scanFileExisting : String -> Pair String (Pair Int String)
 scanFileExisting path =
   let
-    source = prim_readFile path
+    source = runIO (prim_readFile path)
   in Pair path (Pair (strLength source) (contentHash source))
 
 scanRoot : Pair String String -> List (Pair String (Pair Int String))
@@ -508,7 +511,7 @@ readManifestEntries : String -> Maybe (List (Pair String (Pair Int String)))
 readManifestEntries repo =
   let
     path = manifestPath repo
-  in if prim_fileExists path then parseManifestV2 (prim_readFile path) else Nothing
+  in if runIO (prim_fileExists path) then parseManifestV2 (runIO (prim_readFile path)) else Nothing
 
 manifestMatches : String -> List (Pair String (Pair Int String)) -> Bool
 manifestMatches repo entries = case readManifestEntries repo of
@@ -532,27 +535,27 @@ ensureCacheDir repo =
   in if dirExists (cacheDir repo) then 0 else primRunMkdir repo ".local/index"
 
 primRunMkdir : String -> String -> Int
-primRunMkdir repo name = prim_runIn repo ["mkdir", name]
+primRunMkdir repo name = runIO (prim_runIn repo ["mkdir", name])
 
 -- 目录可写性探测（test -w 不写文件）：不可写时不做任何写缓存动作。
 writableDir : String -> Bool
-writableDir dir = prim_runIn dir ["test", "-w", "."] == 0
+writableDir dir = runIO (prim_runIn dir ["test", "-w", "."]) == 0
 
 -- 锁年龄判定：`timeUs` 是时钟能力（vuna 根包 manifest 已声明 clock）。
 nowSeconds : Int -> Int
-nowSeconds _ = timeUs / 1000000
+nowSeconds _ = runIO timeUs / 1000000
 
 lockIsFresh : Int -> String -> Bool
 lockIsFresh _ path =
   let
-    age = nowSeconds 0 - prim_fileMtime path
+    age = nowSeconds 0 - runIO (prim_fileMtime path)
   in age >= 0 && age < 60
 
 -- `mkdir` 是原子创建：返回 0 表示本进程拿到锁；非 0（已存在/不可写）表示放弃写缓存。
 -- 用 prim_runIn 而不是 prim_makeDir：后者在并发竞争（路径刚被另一进程创建）时
 -- 会抛宿主 failwith，而锁失败按约定必须静默降级。
 tryMkdirLock : String -> Bool
-tryMkdirLock repo = prim_runIn (cacheDir repo) ["mkdir", "cache.lock"] == 0
+tryMkdirLock repo = runIO (prim_runIn (cacheDir repo) ["mkdir", "cache.lock"]) == 0
 
 acquireLock : String -> Bool
 acquireLock repo =
@@ -561,12 +564,12 @@ acquireLock repo =
   in if dirExists path then if lockIsFresh 0 path then False
   else
     let
-      _ = prim_runIn (cacheDir repo) ["rm", "-rf", "cache.lock"]
+      _ = runIO (prim_runIn (cacheDir repo) ["rm", "-rf", "cache.lock"])
     in tryMkdirLock repo
   else tryMkdirLock repo
 
 releaseLock : String -> Int
-releaseLock repo = prim_runIn (cacheDir repo) ["rm", "-rf", "cache.lock"]
+releaseLock repo = runIO (prim_runIn (cacheDir repo) ["rm", "-rf", "cache.lock"])
 
 -- 过期残留锁清理：缓存命中时不会走 saveIndex，但上一次崩溃/并发留下的**过期**锁
 -- 必须清掉，否则它会在下一次缓存失效时让写缓存白等（<60s 新鲜锁仍尊重持有者）。
@@ -574,7 +577,7 @@ cleanupStaleLock : String -> Int
 cleanupStaleLock repo =
   let
     path = lockPath repo
-  in if dirExists path then if lockIsFresh 0 path then 0 else prim_runIn (cacheDir repo) ["rm", "-rf", "cache.lock"]
+  in if dirExists path then if lockIsFresh 0 path then 0 else runIO (prim_runIn (cacheDir repo) ["rm", "-rf", "cache.lock"])
   else 0
 
 -- 每个缓存文件先写 `<name>.tmp`，再 `mv` 同目录原子替换（rename(2)）。
@@ -583,8 +586,8 @@ writeAtomic repo name content =
   let
     dir = cacheDir repo
     tmpName = name ++ ".tmp"
-    _ = prim_writeFile (dir ++ "/" ++ tmpName) content
-  in prim_runIn dir ["mv", tmpName, name]
+    _ = runIO (prim_writeFile (dir ++ "/" ++ tmpName) content)
+  in runIO (prim_runIn dir ["mv", tmpName, name])
 
 -- 数据文件先写、manifest 最后：manifest 存在即表示其余文件都已提交。
 -- 任一数据文件写失败都不写 manifest（降级为内存索引，下次重建）。
@@ -623,7 +626,7 @@ loadIndexFromCache repo =
     (parseRefs (parseLines (readOrEmpty (refsPath repo))))
 
 readOrEmpty : String -> String
-readOrEmpty path = if prim_fileExists path then prim_readFile path else ""
+readOrEmpty path = if runIO (prim_fileExists path) then runIO (prim_readFile path) else ""
 
 parseLines : String -> List String
 parseLines text = filterNonEmpty (splitOnNewline text)
@@ -667,7 +670,7 @@ parseRefs (line :: rest) = case splitOnTab line of
 -- 非 workspace（向上找不到 vuna.toml）是**输入错误**，不再静默建空索引。
 loadOrBuild : String -> Result Index
 loadOrBuild repo = case findManifestDirMaybe repo of
-  Nothing => Err ("index: no vuna.toml found from " ++ prim_getcwd ++ " (searched upward)")
+  Nothing => Err ("index: no vuna.toml found from " ++ runIO prim_getcwd ++ " (searched upward)")
   Just manifestDir =>
     let
       entries = scanSources repo

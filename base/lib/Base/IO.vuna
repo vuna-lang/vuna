@@ -15,22 +15,34 @@ module Base.IO
   , readFile
   , readLine
   , removeFile
+  , runIO
   , writeFile
   ) where
 
--- Base.IO：抽象 IO 动作与效果 API（M11-C / M12.6）。
--- 表示是「世界令牌 Int -> a」的挂起函数；构造器 MkIO 私有。
--- 没有公开的 runIO / unsafeRunIO：IO 动作只能由运行时在 `main` 处执行。
--- 组合统一用 Functor/Monad trait（fmap/bind/pure、`>>=`、`do`），不导出 bindIO 等。
+-- Base.IO：抽象 IO 动作与效果 API（M11-C / M12.6 / M31）。
+-- 表示是「世界令牌 Int -> a」的挂起函数（thunk）；构造器 MkIO 私有。
 --
--- 这里的效果函数就是用户可见的 print / readFile / getArgs / exit：
--- 它们直接返回 IO，内部由 prim_* 原语实现；普通包不能调用 prim_*。
+-- M31：效果原语 `prim_*` 本身已经是 IO 动作（`String -> IO String` 等），所以下面
+-- 的 print / readFile / … 都是**别名**，不再有 `MkIO (\w => prim_*)` 包装。
+--
+-- 执行入口只有两个：
+--   1. `main : IO a`：运行时在入口用世界令牌 0 执行一次；
+--   2. `runIO : IO a -> a`：**特权**逃逸口。只有 manifest `[capabilities] effects`
+--      声明了 "unsafe" 的包才能在源码里引用它（`Loader.Resolve.checkEffectsBuiltins`）。
+--      工具链（vuna / vuna-compiler）用它把宿主效果放在 main 之外执行；普通包不应
+--      使用——`runIO` 会破坏「IO 只在 main 执行」的保证。
+--
+-- `runIO` 每次调用都重新执行动作（动作值可以复用，效果不缓存）。
 import Base.List
 import Base.Bool
 import Base.Monad
 
 data IO a : Type where
   MkIO : (Int -> a) -> IO a
+
+-- 特权执行入口：`MkIO f` 拿到世界令牌 0 立即执行；能力门控在 Loader.Resolve。
+runIO : IO a -> a
+runIO (MkIO f) = f 0
 
 -- 内部构造器（不导出）：Functor/Monad 实例的实现细节。
 ioPure : a -> IO a
@@ -44,49 +56,50 @@ ioBind (MkIO f) k = MkIO (\w => case k (f w) of
 ioFmap : (a -> b) -> IO a -> IO b
 ioFmap f (MkIO g) = MkIO (\w => f (g w))
 
+-- 效果 API：直接别名到 IO 化的原语（M31）。
 print : String -> IO Int
-print s = MkIO (\w => prim_print s)
+print = prim_print
 
 println : String -> IO Int
 println s = print (s ++ "\n")
 
 readFile : String -> IO String
-readFile path = MkIO (\w => prim_readFile path)
+readFile = prim_readFile
 
 writeFile : String -> String -> IO Int
-writeFile path contents = MkIO (\w => prim_writeFile path contents)
+writeFile = prim_writeFile
 
 readLine : IO String
-readLine = MkIO (\w => prim_readLine)
+readLine = prim_readLine
 
 readDir : String -> IO (List String)
-readDir path = MkIO (\w => prim_readDir path)
+readDir = prim_readDir
 
 isDirectory : String -> IO Bool
-isDirectory path = MkIO (\w => prim_isDirectory path)
+isDirectory = prim_isDirectory
 
 makeDir : String -> IO Int
-makeDir path = MkIO (\w => prim_makeDir path)
+makeDir = prim_makeDir
 
 removeFile : String -> IO Int
-removeFile path = MkIO (\w => prim_removeFile path)
+removeFile = prim_removeFile
 
 fileExists : String -> IO Bool
-fileExists path = MkIO (\w => prim_fileExists path)
+fileExists = prim_fileExists
 
 -- 文件元数据（工具链）：秒级 mtime 与字节数；路径不存在时都返回 0。
 -- 供索引器判断「源码是否变化」，避免每次重算内容摘要。
 fileMtime : String -> IO Int
-fileMtime path = MkIO (\w => prim_fileMtime path)
+fileMtime = prim_fileMtime
 
 fileSize : String -> IO Int
-fileSize path = MkIO (\w => prim_fileSize path)
+fileSize = prim_fileSize
 
 getArgs : IO (List String)
-getArgs = MkIO (\w => prim_getArgs)
+getArgs = prim_getArgs
 
 exit : Int -> IO Int
-exit code = MkIO (\w => prim_exit code)
+exit = prim_exit
 
 instance Functor IO where
   fmap f io = ioFmap f io

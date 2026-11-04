@@ -13,6 +13,7 @@ open Prelude
 open Vuna_dCompiler_dCommon
 open Vuna_dCompiler_dFrontend_dToml
 open Vuna_dCompiler_dFrontend_dManifest
+open Base_dIO
 open Vuna_dCompiler_dPackages_dPkg
 open Vuna_dCompiler_dDebug
 open Base_dNat

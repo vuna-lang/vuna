@@ -72,4 +72,4 @@ vuna-base = "../base"
 
 # M27：效应能力声明（编译器自身直接使用 effectful 内建）。
 [capabilities]
-effects = ["console", "fs", "process", "env", "clock"]
+effects = ["console", "fs", "process", "env", "clock", "unsafe"]

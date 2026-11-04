@@ -17,6 +17,7 @@ import Vuna.Compiler.Packages.Pkg
 import Vuna.Compiler.Driver.Compile
 import Vuna.Compiler.Driver.Dt
 import Vuna.Compiler.Version
+import Base.IO
 
 compilerUsageLines : String -> String
 compilerUsageLines prog =
@@ -62,7 +63,7 @@ runCompilerCliFor1 prog args = case args of
 printVersion : Int -> Int
 printVersion _ =
   let
-    _ = prim_print ("vuna-compiler " ++ vunaVersion ++ "\n")
+    _ = runIO (prim_print ("vuna-compiler " ++ vunaVersion ++ "\n"))
   in 0
 
 anyHelp : List String -> Bool
@@ -72,27 +73,27 @@ anyHelp (arg :: rest) = if arg == "-h" || arg == "--help" then True else anyHelp
 helpFor : String -> Int
 helpFor prog =
   let
-    _ = prim_print (compilerUsage prog)
+    _ = runIO (prim_print (compilerUsage prog))
   in 0
 
 usageErr : String -> Int
 usageErr prog =
   let
-    _ = prim_print (compilerUsage prog)
+    _ = runIO (prim_print (compilerUsage prog))
   in 2
 
 unknownCommand : String -> String -> Int
 unknownCommand prog arg =
   let
     _ =
-      prim_print
-        ("error: unknown command `" ++ arg ++ "`\n" ++ "run `" ++ prog ++ " help` for the command list\n")
+      runIO
+        (prim_print ("error: unknown command `" ++ arg ++ "`\n" ++ "run `" ++ prog ++ " help` for the command list\n"))
   in 2
 
 removedCommand : String -> String -> String -> Int
 removedCommand prog cmd hint =
   let
-    _ = prim_print ("error: `" ++ cmd ++ "` has been removed; " ++ hint ++ "\n")
+    _ = runIO (prim_print ("error: `" ++ cmd ++ "` has been removed; " ++ hint ++ "\n"))
   in 2
 
 -- 被删除 flag 的可操作提示（Vuna.Cli 的工具命令复用同一张表）。
@@ -117,13 +118,13 @@ removedFlag prog flag = case removedFlagHint flag of
   Nothing => usageErr prog
   Just hint =>
     let
-      _ = prim_print ("error: " ++ flag ++ " has been removed; " ++ hint ++ "\n")
+      _ = runIO (prim_print ("error: " ++ flag ++ " has been removed; " ++ hint ++ "\n"))
     in 2
 
 printErrText : String -> Int
 printErrText e =
   let
-    _ = prim_print e
+    _ = runIO (prim_print e)
   in 1
 
 printErr : String -> Int
@@ -133,7 +134,7 @@ printWarnings : List String -> Int
 printWarnings [] = 0
 printWarnings (w :: rest) =
   let
-    _ = prim_print (w ++ "\n")
+    _ = runIO (prim_print (w ++ "\n"))
   in printWarnings rest
 
 defaultDir : Maybe String -> String
@@ -148,14 +149,14 @@ dtPathErr path = printErr ("no such file or package directory: " ++ path)
 -- 可执行包解析：必须是目录、能读 vuna.toml、且有 app/Main.vuna。
 executablePackage : String -> String -> Result Package
 executablePackage label dir =
-  if prim_fileExists dir then if prim_isDirectory dir then executablePackageAt label dir
+  if runIO (prim_fileExists dir) then if runIO (prim_isDirectory dir) then executablePackageAt label dir
   else Err (label ++ ": expects a package directory, not a file: " ++ dir)
   else Err ("no such file or package directory: " ++ dir)
 
 executablePackageAt : String -> String -> Result Package
 executablePackageAt label dir =
   andThen (loadPackage dir)
-    (\pkg => if prim_fileExists (packageEntry pkg) then Ok pkg else Err (label ++ ": library package " ++ packageName pkg ++ " has no app/Main.vuna (executable package required)"))
+    (\pkg => if runIO (prim_fileExists (packageEntry pkg)) then Ok pkg else Err (label ++ ": library package " ++ packageName pkg ++ " has no app/Main.vuna (executable package required)"))
 
 -- ---------------------------------------------------------------
 -- compile：文件入口（最近的 vuna.toml 包上下文 / 无 manifest 的 base-only）
@@ -183,7 +184,7 @@ compileFinish prog printResult (Just e) outDir = case outDir of
 
 compileRun : Bool -> String -> String -> Int
 compileRun printResult entry outDir =
-  if prim_fileExists entry then if prim_isDirectory entry then compilePkgDir printResult entry outDir
+  if runIO (prim_fileExists entry) then if runIO (prim_isDirectory entry) then compilePkgDir printResult entry outDir
   else compileFileEntry printResult entry outDir
   else dtPathErr entry
 
@@ -213,7 +214,7 @@ else case rest of
 
 checkEmit : String -> Int
 checkEmit path =
-  if prim_fileExists path then if prim_isDirectory path then checkPkgDir path else checkFileEntry path
+  if runIO (prim_fileExists path) then if runIO (prim_isDirectory path) then checkPkgDir path else checkFileEntry path
   else dtPathErr path
 
 checkPkgDir : String -> Int
@@ -230,7 +231,7 @@ checkPackages (pkg :: rest) code =
     c = case checkPackage pkg of
       Err e =>
         let
-          _ = prim_print ("error: [" ++ packageName pkg ++ "] " ++ e ++ "\n")
+          _ = runIO (prim_print ("error: [" ++ packageName pkg ++ "] " ++ e ++ "\n"))
         in 1
       Ok warnings => printWarnings warnings
     next = if c > code then c else code
@@ -285,7 +286,7 @@ buildRun noCompile dir outM pkgM = case workspacePackages dir of
 -- 单包目录且是库包（没有 app/Main.vuna）→ build 必须报错（不是静默 skip）。
 -- workspace 根里的库成员仍走 skip（构建单元覆盖全部可执行成员）。
 isSingleLibraryPackage : List Package -> Bool
-isSingleLibraryPackage ([pkg]) = not (prim_fileExists (packageEntry pkg))
+isSingleLibraryPackage ([pkg]) = not (runIO (prim_fileExists (packageEntry pkg)))
 isSingleLibraryPackage _ = False
 
 libraryOnlyMessage : List Package -> String
@@ -323,14 +324,14 @@ buildOne noCompile multiOut outM pkg =
       Just out => if multiOut then out ++ "/" ++ name else out
       Nothing => packageDir pkg ++ "/.output"
     entry = packageEntry pkg
-  in if prim_fileExists entry then
+  in if runIO (prim_fileExists entry) then
     let
       ctx = packageContext pkg
       binPath = outDir ++ "/bin/" ++ name
     in if noCompile then compileCodegen ctx entry outDir
     else if metaUpToDate outDir ctx entry binPath then
       let
-        _ = prim_print ("up to date: " ++ binPath ++ "\n")
+        _ = runIO (prim_print ("up to date: " ++ binPath ++ "\n"))
       in 0
     else case compileToDir ctx entry True outDir of
       Err e => printErr e
@@ -340,7 +341,7 @@ buildOne noCompile multiOut outM pkg =
     Ok warnings =>
       let
         _ = printWarnings warnings
-        _ = prim_print ("skipped (library): " ++ name ++ " -> " ++ outDir ++ "\n")
+        _ = runIO (prim_print ("skipped (library): " ++ name ++ " -> " ++ outDir ++ "\n"))
       in 0
 
 compileCodegen : PackageContext -> String -> String -> Int
@@ -359,5 +360,5 @@ buildLinked ctx entry outDir name =
     Ok _ =>
       let
         _ = writeBuildMeta outDir ctx entry True
-        _ = prim_print ("built " ++ outDir ++ "/bin/" ++ name ++ "\n")
+        _ = runIO (prim_print ("built " ++ outDir ++ "/bin/" ++ name ++ "\n"))
       in 0

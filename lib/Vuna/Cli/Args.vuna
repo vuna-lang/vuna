@@ -32,6 +32,7 @@ module Vuna.Cli.Args
 -- `requireExists` / `requireDirectory` 是唯一入口。
 import Vuna.Compiler.Common
 import Vuna.Compiler.Driver.CompilerCli
+import Base.IO
 
 -- ---------------------------------------------------------------
 -- 参数说明表
@@ -168,17 +169,18 @@ argErrText cmd (MissingValue flag) = "flag requires a value: " ++ flag
 -- 读一个文本文件：先判存在、再判目录，最后才读。
 readText : String -> Result String
 readText path =
-  if prim_fileExists path then if prim_isDirectory path then Err ("is a directory: " ++ path) else Ok (prim_readFile path)
+  if runIO (prim_fileExists path) then if runIO (prim_isDirectory path) then Err ("is a directory: " ++ path)
+  else Ok (runIO (prim_readFile path))
   else Err ("no such file: " ++ path)
 
 -- 要求路径存在（文件或目录均可）。
 requireExists : String -> Result Int
-requireExists path = if prim_fileExists path then Ok 0 else Err ("no such file: " ++ path)
+requireExists path = if runIO (prim_fileExists path) then Ok 0 else Err ("no such file: " ++ path)
 
 -- 要求路径存在且是目录。
 requireDirectory : String -> Result Int
 requireDirectory path =
-  if prim_fileExists path then if prim_isDirectory path then Ok 0 else Err ("not a directory: " ++ path)
+  if runIO (prim_fileExists path) then if runIO (prim_isDirectory path) then Ok 0 else Err ("not a directory: " ++ path)
   else Err ("no such directory: " ++ path)
 
 -- ---------------------------------------------------------------
@@ -221,7 +223,7 @@ else if pathExistsDirSafe path then 0
 else
   let
     _ = ensureDirPathGo (fuel - 1) (parentOf path)
-  in if pathExistsDirSafe path then 0 else prim_makeDir path
+  in if pathExistsDirSafe path then 0 else runIO (prim_makeDir path)
 
 pathExistsDirSafe : String -> Bool
-pathExistsDirSafe path = prim_fileExists path && prim_isDirectory path
+pathExistsDirSafe path = runIO (prim_fileExists path) && runIO (prim_isDirectory path)

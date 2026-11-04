@@ -13,6 +13,7 @@ open Prelude
 open Vuna_dCompiler_dCommon
 open Vuna_dCompiler_dFrontend_dToml
 open Vuna_dCompiler_dFrontend_dManifest
+open Base_dIO
 open Vuna_dCompiler_dPackages_dPkg
 open Vuna_dCompiler_dDebug
 open Base_dNat
@@ -79,13 +80,13 @@ let rec v_Vuna_dCompiler_dDriver_dSplit_dsplitInitFiles = (fun mc0 -> (match mc0
 ))
 
 let rec v_Vuna_dCompiler_dDriver_dSplit_dwriteSplitFiles = (fun mc0 -> (fun mc1 -> (match mc1 with
-  | C_Base_dList_dList_Base_dList_dCons (dtb__6, dtb__7) -> ((v_Base_dResult_dandThen ((v_Vuna_dCompiler_dDriver_dSplit_dwriteSplitFiles mc0) dtb__7)) (fun n -> ((fun _u -> (C_Base_dResult_dResult_Base_dResult_dOk (((bi_add n) 1)))) ((dtp_writeFile ((bi_concat mc0) ((bi_concat "/") (v_Vuna_dCompiler_dDriver_dSplit_dsplitName dtb__6)))) (v_Vuna_dCompiler_dDriver_dSplit_dsplitText dtb__6)))))
+  | C_Base_dList_dList_Base_dList_dCons (dtb__6, dtb__7) -> ((v_Base_dResult_dandThen ((v_Vuna_dCompiler_dDriver_dSplit_dwriteSplitFiles mc0) dtb__7)) (fun n -> ((fun _u -> (C_Base_dResult_dResult_Base_dResult_dOk (((bi_add n) 1)))) (v_Base_dIO_drunIO (((fun dtio_0 dtio_1 -> C_Base_dIO_dIO_Base_dIO_dMkIO (fun _ -> dtp_writeFile dtio_0 dtio_1)) ((bi_concat mc0) ((bi_concat "/") (v_Vuna_dCompiler_dDriver_dSplit_dsplitName dtb__6)))) (v_Vuna_dCompiler_dDriver_dSplit_dsplitText dtb__6))))))
   | C_Base_dList_dList_Base_dList_dNil -> (C_Base_dResult_dResult_Base_dResult_dOk (0))
   | _ -> failwith "DT: impossible branch"
 )))
 
 let rec v_Vuna_dCompiler_dDriver_dSplit_dwriteSplitFilesIfChanged = (fun mc0 -> (fun mc1 -> (match mc1 with
-  | C_Base_dList_dList_Base_dList_dCons (dtb__8, dtb__9) -> ((v_Base_dResult_dandThen ((v_Vuna_dCompiler_dDriver_dSplit_dwriteSplitFilesIfChanged mc0) dtb__9)) (fun n -> ((fun path -> ((fun text -> ((fun same -> ((fun _u -> (C_Base_dResult_dResult_Base_dResult_dOk (((bi_add n) 1)))) (if same then 0 else ((dtp_writeFile path) text)))) (if (dtp_fileExists path) then ((bi_eq_str (dtp_readFile path)) text) else false))) (v_Vuna_dCompiler_dDriver_dSplit_dsplitText dtb__8))) ((bi_concat mc0) ((bi_concat "/") (v_Vuna_dCompiler_dDriver_dSplit_dsplitName dtb__8))))))
+  | C_Base_dList_dList_Base_dList_dCons (dtb__8, dtb__9) -> ((v_Base_dResult_dandThen ((v_Vuna_dCompiler_dDriver_dSplit_dwriteSplitFilesIfChanged mc0) dtb__9)) (fun n -> ((fun path -> ((fun text -> ((fun same -> ((fun _u -> (C_Base_dResult_dResult_Base_dResult_dOk (((bi_add n) 1)))) (if same then 0 else (v_Base_dIO_drunIO (((fun dtio_0 dtio_1 -> C_Base_dIO_dIO_Base_dIO_dMkIO (fun _ -> dtp_writeFile dtio_0 dtio_1)) path) text))))) (if (v_Base_dIO_drunIO ((fun dtio_0 -> C_Base_dIO_dIO_Base_dIO_dMkIO (fun _ -> dtp_fileExists dtio_0)) path)) then ((bi_eq_str (v_Base_dIO_drunIO ((fun dtio_0 -> C_Base_dIO_dIO_Base_dIO_dMkIO (fun _ -> dtp_readFile dtio_0)) path))) text) else false))) (v_Vuna_dCompiler_dDriver_dSplit_dsplitText dtb__8))) ((bi_concat mc0) ((bi_concat "/") (v_Vuna_dCompiler_dDriver_dSplit_dsplitName dtb__8))))))
   | C_Base_dList_dList_Base_dList_dNil -> (C_Base_dResult_dResult_Base_dResult_dOk (0))
   | _ -> failwith "DT: impossible branch"
 )))

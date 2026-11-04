@@ -35,6 +35,7 @@ import Vuna.TestRunner
 import Vuna.Lsp
 import Vuna.Cli.Args
 import qualified Vuna.Lint
+import Base.IO
 
 toolUsageLines : String -> String
 toolUsageLines prog =
@@ -127,7 +128,7 @@ runCli1 args = case args of
 printVersion : Int -> Int
 printVersion _ =
   let
-    _ = prim_print ("vuna " ++ vunaVersion ++ "\n")
+    _ = runIO (prim_print ("vuna " ++ vunaVersion ++ "\n"))
   in 0
 
 anyHelp : List String -> Bool
@@ -137,19 +138,21 @@ anyHelp (arg :: rest) = if arg == "-h" || arg == "--help" then True else anyHelp
 help : Int -> Int
 help _ =
   let
-    _ = prim_print (usageFor "vuna")
+    _ = runIO (prim_print (usageFor "vuna"))
   in 0
 
 usageError : Int -> Int
 usageError _ =
   let
-    _ = prim_print (usageFor "vuna")
+    _ = runIO (prim_print (usageFor "vuna"))
   in 2
 
 unknownCommand : String -> String -> Int
 unknownCommand prog arg =
   let
-    _ = prim_print ("error: unknown command `" ++ arg ++ "`\n" ++ "run `" ++ prog ++ " help`\n")
+    _ =
+      runIO
+        (prim_print ("error: unknown command `" ++ arg ++ "`\n" ++ "run `" ++ prog ++ " help`\n"))
   in 2
 
 -- ---------------------------------------------------------------
@@ -158,19 +161,20 @@ unknownCommand prog arg =
 toolError : String -> Int
 toolError e =
   let
-    _ = prim_print ("error: " ++ e ++ "\n")
+    _ = runIO (prim_print ("error: " ++ e ++ "\n"))
   in 2
 
 toolFailure : String -> Int
 toolFailure e =
   let
-    _ = prim_print ("error: " ++ e ++ "\n")
+    _ = runIO (prim_print ("error: " ++ e ++ "\n"))
   in 1
 
 -- 显式路径的批量存在性检查：一次给出第一个缺失的路径（不静默跳过）。
 firstMissingPath : List String -> Maybe String
 firstMissingPath [] = Nothing
-firstMissingPath (path :: rest) = if prim_fileExists path then firstMissingPath rest else Just path
+firstMissingPath (path :: rest) =
+  if runIO (prim_fileExists path) then firstMissingPath rest else Just path
 
 -- ---------------------------------------------------------------
 -- interp
@@ -186,7 +190,7 @@ interpArgs args = case parseToolArgs "vuna interp" [] args of
 interpFile : String -> Int
 interpFile path = case requireExists path of
   Err e => toolError e
-  Ok _ => if prim_isDirectory path then interpDirErr path else interpEmit path
+  Ok _ => if runIO (prim_isDirectory path) then interpDirErr path else interpEmit path
 
 interpDirErr : String -> Int
 interpDirErr path = toolError ("interp takes a single file, not a package directory: " ++ path)
@@ -198,7 +202,7 @@ interpEmit path = case contextForFile path of
     let
       output = interpretFile ctx path
     in let
-      _ = prim_print (output ++ "\n")
+      _ = runIO (prim_print (output ++ "\n"))
     in if startsWith "error:" output then 2 else 0
 
 -- ---------------------------------------------------------------
@@ -243,7 +247,7 @@ fmtDefaultTargets : Int -> Result (List String)
 fmtDefaultTargets _ = case findManifestDirMaybe "." of
   Nothing =>
     Err
-      ("not inside a vuna workspace (no vuna.toml found from " ++ prim_getcwd ++ "); pass PATH explicitly")
+      ("not inside a vuna workspace (no vuna.toml found from " ++ runIO prim_getcwd ++ "); pass PATH explicitly")
   Just dir => case workspacePackages dir of
     Err e => Err e
     Ok pkgs =>
@@ -267,7 +271,7 @@ expandPath path = if pathExistsDir path then collectVunaFiles path else [path]
 fmtFiles : Bool -> List String -> Int -> Int
 fmtFiles check [] changed = if check && changed > 0 then
   let
-    _ = prim_print (strFromInt changed ++ " file(s) need formatting\n")
+    _ = runIO (prim_print (strFromInt changed ++ " file(s) need formatting\n"))
   in 1
 else 0
 fmtFiles check (path :: rest) changed = case readText path of
@@ -277,13 +281,13 @@ fmtFiles check (path :: rest) changed = case readText path of
     Ok formatted => if formatted == original then fmtFiles check rest changed
     else if check then
       let
-        _ = prim_print ("would reformat: " ++ path ++ "\n")
+        _ = runIO (prim_print ("would reformat: " ++ path ++ "\n"))
       in fmtFiles check rest (changed + 1)
     else
       let
-        _ = prim_writeFile path formatted
+        _ = runIO (prim_writeFile path formatted)
       in let
-        _ = prim_print ("formatted " ++ path ++ "\n")
+        _ = runIO (prim_print ("formatted " ++ path ++ "\n"))
       in fmtFiles check rest (changed + 1)
 
 -- ---------------------------------------------------------------
@@ -360,7 +364,7 @@ withIndex : (Index -> Int) -> Int
 withIndex f = case findManifestDirMaybe "." of
   Nothing =>
     toolError
-      ("not inside a vuna workspace (no vuna.toml found from " ++ prim_getcwd ++ "); run `vuna map` from a package or workspace root")
+      ("not inside a vuna workspace (no vuna.toml found from " ++ runIO prim_getcwd ++ "); run `vuna map` from a package or workspace root")
   Just _ => case loadOrBuild "." of
     Err e => toolError e
     Ok index => f index
@@ -369,7 +373,7 @@ printOverview : Bool -> Int
 printOverview modulesOnly = withIndex (\index => let
   text = if modulesOnly then renderModules index else renderOverview index
 in let
-  _ = prim_print (text ++ "\n")
+  _ = runIO (prim_print (text ++ "\n"))
 in 0
 )
 
@@ -377,19 +381,19 @@ runFind : String -> Int
 runFind query = withIndex (\index => case findSymbol index query of
   Err e =>
     let
-      _ = prim_print ("error: " ++ e ++ "\n")
+      _ = runIO (prim_print ("error: " ++ e ++ "\n"))
     in 1
   Ok hits =>
     let
-      _ = map (\s => prim_print (symLineText s ++ "\n")) hits
+      _ = map (\s => runIO (prim_print (symLineText s ++ "\n"))) hits
     in case hits of
       [] => 1
       [_] => 0
       _ =>
         let
           _ =
-            prim_print
-              ("ambiguous: " ++ strFromInt (length hits) ++ " candidates, use a full Module.name\n")
+            runIO
+              (prim_print ("ambiguous: " ++ strFromInt (length hits) ++ " candidates, use a full Module.name\n"))
         in 2
 )
 
@@ -408,11 +412,11 @@ runImpact : String -> Int
 runImpact query = withIndex (\index => case impactOf index query of
   Err e =>
     let
-      _ = prim_print ("error: " ++ e ++ "\n")
+      _ = runIO (prim_print ("error: " ++ e ++ "\n"))
     in 1
   Ok text =>
     let
-      _ = prim_print (text ++ "\n")
+      _ = runIO (prim_print (text ++ "\n"))
     in 0
 )
 
@@ -427,11 +431,11 @@ runApi : String -> Int
 runApi modName = withIndex (\index => case renderApi index modName of
   Err e =>
     let
-      _ = prim_print ("error: " ++ e ++ "\n")
+      _ = runIO (prim_print ("error: " ++ e ++ "\n"))
     in 1
   Ok text =>
     let
-      _ = prim_print (text ++ "\n")
+      _ = runIO (prim_print (text ++ "\n"))
     in 0
 )
 
@@ -455,7 +459,7 @@ goalRun file = case readText file of
       Err e => toolFailure e
       Ok infos =>
         let
-          _ = prim_print (goalHeader file (length infos) ++ renderGoals file infos)
+          _ = runIO (prim_print (goalHeader file (length infos) ++ renderGoals file infos))
         in 0
 
 renderGoals : String -> List DtGoalInfo -> String

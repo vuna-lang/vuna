@@ -22,10 +22,11 @@ import Vuna.Compiler.Packages.Pkg
 import Vuna.Compiler.Driver.Dt
 import Vuna.Compiler.Driver.Split
 import Vuna.Compiler.Version
+import Base.IO
 
 -- 包级 check：可执行包检查 app/Main.vuna；库包检查 [export].modules。
 checkPackage : Package -> Result (List String)
-checkPackage pkg = if prim_fileExists (packageEntry pkg) then dtCheck (packageContext pkg) (packageEntry pkg)
+checkPackage pkg = if runIO (prim_fileExists (packageEntry pkg)) then dtCheck (packageContext pkg) (packageEntry pkg)
 else case packageExports pkg of
   Nothing =>
     Err
@@ -40,11 +41,11 @@ ensureDirPath path = ensureDirPathFuel 256 path
 ensureDirPathFuel : Int -> String -> Int
 ensureDirPathFuel fuel path = if fuel <= 0 then 0
 else if path == "" || path == "." || path == "/" then 0
-else if prim_fileExists path then 0
+else if runIO (prim_fileExists path) then 0
 else
   let
     _ = ensureDirPathFuel (fuel - 1) (parentOfPath path)
-  in prim_makeDir path
+  in runIO (prim_makeDir path)
 
 -- 去掉最后一段（`a/b/c` -> `a/b`；无 `/` -> "."；绝对路径的父仍绝对）。
 -- 先 reverse，跳过第一个 `/` 后剩下的字符再 reverse 回来。
@@ -73,7 +74,7 @@ compileToDir ctx entry printResult outDir = andThen (dtSplitProject ctx entry pr
 in andThen (writeSplitFilesIfChanged outDir files) (\n => let
   order = splitCompileOrder (splitInitFiles files)
 in let
-  _ = prim_writeFile (outDir ++ "/build.sh") (buildScript order)
+  _ = runIO (prim_writeFile (outDir ++ "/build.sh") (buildScript order))
 in Ok n
 )
 )
@@ -119,7 +120,7 @@ skipMetaDir name =
 collectVunaMeta : Int -> String -> List String
 collectVunaMeta fuel dir =
   if fuel <= 0 then []
-  else if prim_fileExists dir && prim_isDirectory dir then concatMap (walkVunaMeta (fuel - 1) dir) (prim_readDir dir)
+  else if runIO (prim_fileExists dir) && runIO (prim_isDirectory dir) then concatMap (walkVunaMeta (fuel - 1) dir) (runIO (prim_readDir dir))
   else []
 
 walkVunaMeta : Int -> String -> String -> List String
@@ -131,7 +132,7 @@ else case name of
   else
     let
       path = dir ++ "/" ++ name
-    in if prim_fileExists path && prim_isDirectory path then collectVunaMeta (fuel - 1) path
+    in if runIO (prim_fileExists path) && runIO (prim_isDirectory path) then collectVunaMeta (fuel - 1) path
     else if endsWith ".vuna" name then [path] else []
 
 dropPrefixMeta : String -> String -> String
@@ -153,7 +154,7 @@ moduleNameOfPath rootPath path =
 
 rootSources : Root -> List (Pair String Int)
 rootSources root =
-  map (\p => Pair (moduleNameOfPath (rootDir root) p) (textHash (prim_readFile p)))
+  map (\p => Pair (moduleNameOfPath (rootDir root) p) (textHash (runIO (prim_readFile p))))
     (collectVunaMeta 1048576 (rootDir root))
 
 rootHash : Root -> Int
@@ -165,7 +166,7 @@ closureHashOf ((Pair name h) :: rest) acc = closureHashOf rest (acc * 1000003 + 
 
 -- 入口文件 + 所有模块根的源码（模块名 → 哈希）。
 entrySource : String -> Pair String Int
-entrySource entry = Pair "<entry>" (textHash (prim_readFile entry))
+entrySource entry = Pair "<entry>" (textHash (runIO (prim_readFile entry)))
 
 contextSources : PackageContext -> String -> List (Pair String Int)
 contextSources ctx entry = append (concatMap rootSources (contextRoots ctx)) [entrySource entry]
@@ -223,14 +224,14 @@ metaPathOf outDir = outDir ++ "/" ++ metaFileName
 
 writeBuildMeta : String -> PackageContext -> String -> Bool -> Int
 writeBuildMeta outDir ctx entry linked =
-  prim_writeFile (metaPathOf outDir) (buildMetaText ctx entry linked)
+  runIO (prim_writeFile (metaPathOf outDir) (buildMetaText ctx entry linked))
 
 -- 同哈希跳过：meta 内容与期望（linked=true）完全一致，且产物二进制存在。
 metaUpToDate : String -> PackageContext -> String -> String -> Bool
 metaUpToDate outDir ctx entry binPath =
   let
     path = metaPathOf outDir
-  in if prim_fileExists path && prim_fileExists binPath then prim_readFile path == buildMetaText ctx entry True
+  in if runIO (prim_fileExists path) && runIO (prim_fileExists binPath) then runIO (prim_readFile path) == buildMetaText ctx entry True
   else False
 
 -- 在 dir 里跑生成的 build.sh：`sh build.sh <out>`（out 相对 dir，例如 "bin/<pkg>"）。
@@ -238,7 +239,7 @@ metaUpToDate outDir ctx entry binPath =
 runBuildScript : String -> String -> String -> Result Int
 runBuildScript dir out name =
   let
-    code = prim_runIn dir ["sh", "build.sh", out]
+    code = runIO (prim_runIn dir ["sh", "build.sh", out])
   in if code == 0 then Ok 0
   else Err
     ("build: " ++ name ++ ": `sh build.sh " ++ out ++ "` failed in " ++ dir ++ " (exit " ++ strFromInt code ++ ")")

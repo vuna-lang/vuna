@@ -63,6 +63,8 @@ data Capability : Type where
   CapProcess : Capability
   CapEnv : Capability
   CapClock : Capability
+  -- 允许在 main 之外执行 IO 动作（`Base.IO.runIO`；工具链特权，M31）。
+  CapUnsafe : Capability
 
 capabilityName : Capability -> String
 capabilityName CapConsole = "console"
@@ -70,12 +72,13 @@ capabilityName CapFs = "fs"
 capabilityName CapProcess = "process"
 capabilityName CapEnv = "env"
 capabilityName CapClock = "clock"
+capabilityName CapUnsafe = "unsafe"
 
 capabilityNames : List String
 capabilityNames = map capabilityName allCapabilities
 
 allCapabilities : List Capability
-allCapabilities = [CapConsole, CapFs, CapProcess, CapEnv, CapClock]
+allCapabilities = [CapConsole, CapFs, CapProcess, CapEnv, CapClock, CapUnsafe]
 
 parseCapability : String -> Maybe Capability
 parseCapability "console" = Just CapConsole
@@ -83,6 +86,7 @@ parseCapability "fs" = Just CapFs
 parseCapability "process" = Just CapProcess
 parseCapability "env" = Just CapEnv
 parseCapability "clock" = Just CapClock
+parseCapability "unsafe" = Just CapUnsafe
 parseCapability _ = Nothing
 
 -- ---------------------------------------------------------------
@@ -268,28 +272,28 @@ allIntrinsics =
     MkIntrinsic "strLength" (IFun IStr IInt) OpStrLength Nothing "bi_strLength" True,
     MkIntrinsic "strConcatMany" (IFun (IList IStr) IStr) OpStrConcatMany Nothing "dtp_concatMany" True,
     MkIntrinsic "strSubstTemplate" (IFun IStr (IFun (IList IStr) IStr)) OpStrSubstTemplate Nothing "dtp_substTemplate" True,
-    MkIntrinsic "timeUs" IInt OpNone (Just CapClock) "(dtp_timeUs ())" True,
+    MkIntrinsic "timeUs" (IIO IInt) OpNone (Just CapClock) "(dtp_timeUs ())" True,
     MkIntrinsic "strHash" (IFun IStr IInt) OpStrHash Nothing "dtp_strHash" True,
     MkIntrinsic "strAt" (IFun IStr (IFun IInt IInt)) OpStrAt Nothing "dtp_strAt" True,
     MkIntrinsic "strShow" (IFun IStr IStr) OpStrShow Nothing "dt_show_string" True,
-    MkIntrinsic "prim_print" (IFun IStr IInt) OpNone (Just CapConsole) "dtp_print" True,
-    MkIntrinsic "prim_readFile" (IFun IStr IStr) OpNone (Just CapFs) "dtp_readFile" True,
-    MkIntrinsic "prim_writeFile" (IFun IStr (IFun IStr IInt)) OpNone (Just CapFs) "dtp_writeFile" True,
-    MkIntrinsic "prim_readLine" IStr OpNone (Just CapConsole) "(dtp_readLine ())" True,
-    MkIntrinsic "prim_readBytes" (IFun IInt IStr) OpNone (Just CapConsole) "dtp_readBytes" True,
-    MkIntrinsic "prim_getArgs" (IList IStr) OpNone (Just CapProcess) "(dtp_listOf (dtp_getArgs ()))" True,
-    MkIntrinsic "prim_readDir" (IFun IStr (IList IStr)) OpNone (Just CapFs) "(fun p -> dtp_listOf (dtp_readDir p))" True,
-    MkIntrinsic "prim_isDirectory" (IFun IStr IBool) OpNone (Just CapFs) "dtp_isDirectory" True,
-    MkIntrinsic "prim_makeDir" (IFun IStr IInt) OpNone (Just CapFs) "dtp_makeDir" True,
-    MkIntrinsic "prim_removeFile" (IFun IStr IInt) OpNone (Just CapFs) "dtp_removeFile" True,
-    MkIntrinsic "prim_fileExists" (IFun IStr IBool) OpNone (Just CapFs) "dtp_fileExists" True,
-    MkIntrinsic "prim_fileMtime" (IFun IStr IInt) OpNone (Just CapFs) "dtp_fileMtime" True,
-    MkIntrinsic "prim_fileSize" (IFun IStr IInt) OpNone (Just CapFs) "dtp_fileSize" True,
-    MkIntrinsic "prim_exit" (IFun IInt IInt) OpNone (Just CapProcess) "dtp_exit" True,
-    MkIntrinsic "prim_runIn" (IFun IStr (IFun (IList IStr) IInt)) OpNone (Just CapProcess) "(fun dir args -> dtp_runIn dir (dtp_ocamlOf args))" True,
-    MkIntrinsic "prim_getenv" (IFun IStr IStr) OpNone (Just CapEnv) "dtp_getenv" True,
-    MkIntrinsic "prim_getcwd" IStr OpNone (Just CapEnv) "(dtp_getcwd ())" True,
-    MkIntrinsic "prim_execPath" IStr OpNone (Just CapEnv) "(dtp_execPath ())" True,
+    MkIntrinsic "prim_print" (IFun IStr (IIO IInt)) OpNone (Just CapConsole) "dtp_print" True,
+    MkIntrinsic "prim_readFile" (IFun IStr (IIO IStr)) OpNone (Just CapFs) "dtp_readFile" True,
+    MkIntrinsic "prim_writeFile" (IFun IStr (IFun IStr (IIO IInt))) OpNone (Just CapFs) "dtp_writeFile" True,
+    MkIntrinsic "prim_readLine" (IIO IStr) OpNone (Just CapConsole) "(dtp_readLine ())" True,
+    MkIntrinsic "prim_readBytes" (IFun IInt (IIO IStr)) OpNone (Just CapConsole) "dtp_readBytes" True,
+    MkIntrinsic "prim_getArgs" (IIO (IList IStr)) OpNone (Just CapProcess) "(dtp_listOf (dtp_getArgs ()))" True,
+    MkIntrinsic "prim_readDir" (IFun IStr (IIO (IList IStr))) OpNone (Just CapFs) "(fun p -> dtp_listOf (dtp_readDir p))" True,
+    MkIntrinsic "prim_isDirectory" (IFun IStr (IIO IBool)) OpNone (Just CapFs) "dtp_isDirectory" True,
+    MkIntrinsic "prim_makeDir" (IFun IStr (IIO IInt)) OpNone (Just CapFs) "dtp_makeDir" True,
+    MkIntrinsic "prim_removeFile" (IFun IStr (IIO IInt)) OpNone (Just CapFs) "dtp_removeFile" True,
+    MkIntrinsic "prim_fileExists" (IFun IStr (IIO IBool)) OpNone (Just CapFs) "dtp_fileExists" True,
+    MkIntrinsic "prim_fileMtime" (IFun IStr (IIO IInt)) OpNone (Just CapFs) "dtp_fileMtime" True,
+    MkIntrinsic "prim_fileSize" (IFun IStr (IIO IInt)) OpNone (Just CapFs) "dtp_fileSize" True,
+    MkIntrinsic "prim_exit" (IFun IInt (IIO IInt)) OpNone (Just CapProcess) "dtp_exit" True,
+    MkIntrinsic "prim_runIn" (IFun IStr (IFun (IList IStr) (IIO IInt))) OpNone (Just CapProcess) "(fun dir args -> dtp_runIn dir (dtp_ocamlOf args))" True,
+    MkIntrinsic "prim_getenv" (IFun IStr (IIO IStr)) OpNone (Just CapEnv) "dtp_getenv" True,
+    MkIntrinsic "prim_getcwd" (IIO IStr) OpNone (Just CapEnv) "(dtp_getcwd ())" True,
+    MkIntrinsic "prim_execPath" (IIO IStr) OpNone (Just CapEnv) "(dtp_execPath ())" True,
     MkIntrinsic "bi_eq_int" (IFun IInt (IFun IInt IBool)) OpEqInt Nothing "bi_eq_int" False,
     MkIntrinsic "bi_neq_int" (IFun IInt (IFun IInt IBool)) OpNeqInt Nothing "bi_neq_int" False,
     MkIntrinsic "bi_eq_str" (IFun IStr (IFun IStr IBool)) OpEqStr Nothing "bi_eq_str" False,

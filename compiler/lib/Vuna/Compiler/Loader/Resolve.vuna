@@ -562,7 +562,8 @@ resolveModules modules = case modules of
 -- ---------------------------------------------------------------
 capabilityError : String -> String -> Result a
 capabilityError label name =
-  Err (label ++ ": unknown capability \"" ++ name ++ "\" (known: console, fs, process, env, clock)")
+  Err
+    (label ++ ": unknown capability \"" ++ name ++ "\" (known: " ++ join ", " capabilityNames ++ ")")
 
 checkCapabilities : String -> List String -> Result Int
 checkCapabilities label [] = Ok 0
@@ -657,10 +658,21 @@ effDecls (d :: rest) = firstEffect [effDecl d, effDecls rest]
 packageLabelForEffects : String -> String
 packageLabelForEffects pkg = if pkg == "" then "ad-hoc file (no package)" else "package " ++ pkg
 
+-- M31：`runIO` 是唯一的「main 之外执行 IO」入口，要求能力 `unsafe`。
+-- 名字是 resoved 后的模块全名（`Base.IO.runIO`）。
+unsafeExecutorName : String
+unsafeExecutorName = "Base.IO.runIO"
+
+isUnsafeExecutor : String -> Bool
+isUnsafeExecutor name = name == unsafeExecutorName
+
 checkEffectsBuiltins : String -> String -> List String -> List Decl -> Result (List Decl)
 checkEffectsBuiltins label pkg caps decls = andThen (checkCapabilities label caps) (\_ => case effDecls decls of
   Nothing => Ok decls
-  Just name => if allowsEffect caps name then Ok decls
+  Just name => if isUnsafeExecutor name then if memName "unsafe" caps then Ok decls
+  else Err
+    (label ++ ": `runIO` executes IO outside main; requires capability `unsafe` in " ++ packageLabelForEffects pkg ++ " (declare [capabilities] effects = [\"unsafe\"])")
+  else if allowsEffect caps name then Ok decls
   else case findIntrinsic name of
     Just i => case intrinsicCapability i of
       Just c =>

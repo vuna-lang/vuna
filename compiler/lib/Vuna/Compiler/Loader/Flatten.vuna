@@ -19,6 +19,7 @@ import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Frontend.Parser
 import Vuna.Compiler.Loader.Modules
 import Vuna.Compiler.Loader.Resolve
+import Base.IO
 import Vuna.Compiler.Packages.Pkg
 
 -- ---------------------------------------------------------------
@@ -424,7 +425,7 @@ else case findModule modules name of
     path = firstOf found
   in let
     root = secondOf found
-  in andThen (parseSource path (prim_readFile path)) (\src => case src of
+  in andThen (parseSource path (runIO (prim_readFile path))) (\src => case src of
     Source hdr imports decls =>
       andThen (validateModuleHeader name hdr)
         (\_ => andThen (validateImports name imports) (\_ => andThen (implicitPrelude roots (rootName root) name imports) (\implicit => andThen (loadAll (fuel - 1) roots (rootName root) modules (name :: stack) (append imports implicit)) (\modules2 => andThen (computeExports modules2 name hdr imports decls) (\exports => Ok (Module name (rootName root) imports implicit decls exports (rootCapabilities root) :: modules2))))))
@@ -436,7 +437,7 @@ else case findModule modules name of
 -- （决定同包/跨包导出可见性与 manifest 能力声明）。
 -- loadProject 返回 flatten 前的形态（入口声明 + 依赖模块列表），供分离编译使用。
 loadProject : PackageContext -> String -> Result Project
-loadProject ctx entry = if prim_fileExists entry then andThen (parseSource entry (prim_readFile entry)) (\src => case src of
+loadProject ctx entry = if runIO (prim_fileExists entry) then andThen (parseSource entry (runIO (prim_readFile entry))) (\src => case src of
   Source hdr imports decls => case hdr of
     Just (ModDecl dname hasList items sp) => ldErr1 (ModuleHeaderInEntryFile entry) entry
     Nothing =>

@@ -649,7 +649,8 @@ done
 # 29) 包模式错误：缺依赖 / 依赖环 / 隐藏模块（[export] 限制）/ 依赖包歧义 → 非 0、含片段、
 #     不写产物。`vuna build` 在写 .output 前就做包解析与 DT 精化，失败不得留下任何产物。
 #     95_cross_dep 是两包方向性实验（父目录本身不是包），见段 39。
-for dir in corpus/packages/9[0-9]_*/; do
+for dir in corpus/packages/9[0-9]_*/ corpus/packages/m31_*/; do
+  [ -d "$dir" ] || continue
   dir=${dir%/}
   case "$dir" in
     *95_cross_dep) continue ;;

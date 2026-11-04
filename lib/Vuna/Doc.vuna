@@ -17,6 +17,7 @@ import Vuna.Compiler.Frontend.Manifest
 import Vuna.Compiler.Frontend.Parser
 import Vuna.Compiler.Packages.Pkg
 import Vuna.Files
+import Base.IO
 
 runDoc : String -> String -> Int
 runDoc dir outPath = case requireDirectory dir of
@@ -38,7 +39,7 @@ runDoc dir outPath = case requireDirectory dir of
 docError : String -> Int
 docError e =
   let
-    _ = prim_print ("error: " ++ e ++ "\n")
+    _ = runIO (prim_print ("error: " ++ e ++ "\n"))
   in 2
 
 writeDoc : String -> List String -> Int
@@ -46,8 +47,10 @@ writeDoc outPath rendered =
   let
     content = "# vuna API\n\n由 `vuna doc` 从源码生成。\n\n" ++ join "\n" rendered ++ "\n"
     _ = ensureDirPath (parentOf outPath)
-    _ = prim_writeFile outPath content
-    _ = prim_print ("wrote " ++ outPath ++ " (" ++ strFromInt (length rendered) ++ " modules)\n")
+    _ = runIO (prim_writeFile outPath content)
+    _ =
+      runIO
+        (prim_print ("wrote " ++ outPath ++ " (" ++ strFromInt (length rendered) ++ " modules)\n"))
   in 0
 
 -- 目录自己的 vuna.toml（不向上搜索：DIR 就是文档根）决定 [export] 过滤。
@@ -55,7 +58,7 @@ docManifestExports : String -> Result (Maybe (List String))
 docManifestExports dir =
   let
     manifestFile = dir ++ "/vuna.toml"
-  in if prim_fileExists manifestFile then case loadManifestAt manifestFile of
+  in if runIO (prim_fileExists manifestFile) then case loadManifestAt manifestFile of
     Err e => Err e
     Ok manifest => Ok (manifestExports manifest)
   else Ok Nothing

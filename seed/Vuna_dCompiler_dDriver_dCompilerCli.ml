@@ -13,6 +13,7 @@ open Prelude
 open Vuna_dCompiler_dCommon
 open Vuna_dCompiler_dFrontend_dToml
 open Vuna_dCompiler_dFrontend_dManifest
+open Base_dIO
 open Vuna_dCompiler_dPackages_dPkg
 open Vuna_dCompiler_dDebug
 open Base_dNat
@@ -70,7 +71,7 @@ let v_Vuna_dCompiler_dDriver_dCompilerCli_dcompilerUsageLines = (fun prog -> ((b
 
 let v_Vuna_dCompiler_dDriver_dCompilerCli_dcompilerUsage = (fun prog -> ((bi_concat "usage:\n") (v_Vuna_dCompiler_dDriver_dCompilerCli_dcompilerUsageLines prog)))
 
-let v_Vuna_dCompiler_dDriver_dCompilerCli_dprintVersion = (fun _u -> ((fun _u -> 0) (dtp_print ((bi_concat "vuna-compiler ") ((bi_concat v_Vuna_dCompiler_dVersion_dvunaVersion) "\n")))))
+let v_Vuna_dCompiler_dDriver_dCompilerCli_dprintVersion = (fun _u -> ((fun _u -> 0) (v_Base_dIO_drunIO ((fun dtio_0 -> C_Base_dIO_dIO_Base_dIO_dMkIO (fun _ -> dtp_print dtio_0)) ((bi_concat "vuna-compiler ") ((bi_concat v_Vuna_dCompiler_dVersion_dvunaVersion) "\n"))))))
 
 let rec v_Vuna_dCompiler_dDriver_dCompilerCli_danyHelp = (fun mc0 -> (match mc0 with
   | C_Base_dList_dList_Base_dList_dCons (dtb__0, dtb__1) -> (if (if ((bi_eq_str dtb__0) "-h") then true else ((bi_eq_str dtb__0) "--help")) then true else (v_Vuna_dCompiler_dDriver_dCompilerCli_danyHelp dtb__1))
@@ -78,13 +79,13 @@ let rec v_Vuna_dCompiler_dDriver_dCompilerCli_danyHelp = (fun mc0 -> (match mc0 
   | _ -> failwith "DT: impossible branch"
 ))
 
-let v_Vuna_dCompiler_dDriver_dCompilerCli_dhelpFor = (fun prog -> ((fun _u -> 0) (dtp_print (v_Vuna_dCompiler_dDriver_dCompilerCli_dcompilerUsage prog))))
+let v_Vuna_dCompiler_dDriver_dCompilerCli_dhelpFor = (fun prog -> ((fun _u -> 0) (v_Base_dIO_drunIO ((fun dtio_0 -> C_Base_dIO_dIO_Base_dIO_dMkIO (fun _ -> dtp_print dtio_0)) (v_Vuna_dCompiler_dDriver_dCompilerCli_dcompilerUsage prog)))))
 
-let v_Vuna_dCompiler_dDriver_dCompilerCli_dusageErr = (fun prog -> ((fun _u -> 2) (dtp_print (v_Vuna_dCompiler_dDriver_dCompilerCli_dcompilerUsage prog))))
+let v_Vuna_dCompiler_dDriver_dCompilerCli_dusageErr = (fun prog -> ((fun _u -> 2) (v_Base_dIO_drunIO ((fun dtio_0 -> C_Base_dIO_dIO_Base_dIO_dMkIO (fun _ -> dtp_print dtio_0)) (v_Vuna_dCompiler_dDriver_dCompilerCli_dcompilerUsage prog)))))
 
-let v_Vuna_dCompiler_dDriver_dCompilerCli_dunknownCommand = (fun prog -> (fun arg -> ((fun _u -> 2) (dtp_print ((bi_concat "error: unknown command `") ((bi_concat arg) ((bi_concat "`\n") ((bi_concat "run `") ((bi_concat prog) " help` for the command list\n")))))))))
+let v_Vuna_dCompiler_dDriver_dCompilerCli_dunknownCommand = (fun prog -> (fun arg -> ((fun _u -> 2) (v_Base_dIO_drunIO ((fun dtio_0 -> C_Base_dIO_dIO_Base_dIO_dMkIO (fun _ -> dtp_print dtio_0)) ((bi_concat "error: unknown command `") ((bi_concat arg) ((bi_concat "`\n") ((bi_concat "run `") ((bi_concat prog) " help` for the command list\n"))))))))))
 
-let v_Vuna_dCompiler_dDriver_dCompilerCli_dremovedCommand = (fun prog -> (fun cmd -> (fun hint -> ((fun _u -> 2) (dtp_print ((bi_concat "error: `") ((bi_concat cmd) ((bi_concat "` has been removed; ") ((bi_concat hint) "\n")))))))))
+let v_Vuna_dCompiler_dDriver_dCompilerCli_dremovedCommand = (fun prog -> (fun cmd -> (fun hint -> ((fun _u -> 2) (v_Base_dIO_drunIO ((fun dtio_0 -> C_Base_dIO_dIO_Base_dIO_dMkIO (fun _ -> dtp_print dtio_0)) ((bi_concat "error: `") ((bi_concat cmd) ((bi_concat "` has been removed; ") ((bi_concat hint) "\n"))))))))))
 
 let v_Vuna_dCompiler_dDriver_dCompilerCli_ddashFlag = (fun name -> ((bi_concat "-") ((bi_concat "-") name)))
 
@@ -92,16 +93,16 @@ let v_Vuna_dCompiler_dDriver_dCompilerCli_dremovedFlagHint = (fun flag -> (if ((
 
 let v_Vuna_dCompiler_dDriver_dCompilerCli_dremovedFlag = (fun prog -> (fun flag -> (match (v_Vuna_dCompiler_dDriver_dCompilerCli_dremovedFlagHint flag) with
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> (v_Vuna_dCompiler_dDriver_dCompilerCli_dusageErr prog)
-  | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__2) -> ((fun _u -> 2) (dtp_print ((bi_concat "error: ") ((bi_concat flag) ((bi_concat " has been removed; ") ((bi_concat dtb__2) "\n"))))))
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__2) -> ((fun _u -> 2) (v_Base_dIO_drunIO ((fun dtio_0 -> C_Base_dIO_dIO_Base_dIO_dMkIO (fun _ -> dtp_print dtio_0)) ((bi_concat "error: ") ((bi_concat flag) ((bi_concat " has been removed; ") ((bi_concat dtb__2) "\n")))))))
   | _ -> failwith "DT: impossible branch"
 )))
 
-let v_Vuna_dCompiler_dDriver_dCompilerCli_dprintErrText = (fun e -> ((fun _u -> 1) (dtp_print e)))
+let v_Vuna_dCompiler_dDriver_dCompilerCli_dprintErrText = (fun e -> ((fun _u -> 1) (v_Base_dIO_drunIO ((fun dtio_0 -> C_Base_dIO_dIO_Base_dIO_dMkIO (fun _ -> dtp_print dtio_0)) e))))
 
 let v_Vuna_dCompiler_dDriver_dCompilerCli_dprintErr = (fun e -> (v_Vuna_dCompiler_dDriver_dCompilerCli_dprintErrText ((bi_concat "error: ") ((bi_concat e) "\n"))))
 
 let rec v_Vuna_dCompiler_dDriver_dCompilerCli_dprintWarnings = (fun mc0 -> (match mc0 with
-  | C_Base_dList_dList_Base_dList_dCons (dtb__3, dtb__4) -> ((fun _u -> (v_Vuna_dCompiler_dDriver_dCompilerCli_dprintWarnings dtb__4)) (dtp_print ((bi_concat dtb__3) "\n")))
+  | C_Base_dList_dList_Base_dList_dCons (dtb__3, dtb__4) -> ((fun _u -> (v_Vuna_dCompiler_dDriver_dCompilerCli_dprintWarnings dtb__4)) (v_Base_dIO_drunIO ((fun dtio_0 -> C_Base_dIO_dIO_Base_dIO_dMkIO (fun _ -> dtp_print dtio_0)) ((bi_concat dtb__3) "\n"))))
   | C_Base_dList_dList_Base_dList_dNil -> 0
   | _ -> failwith "DT: impossible branch"
 ))
@@ -114,9 +115,9 @@ let v_Vuna_dCompiler_dDriver_dCompilerCli_ddefaultDir = (fun mc0 -> (match mc0 w
 
 let v_Vuna_dCompiler_dDriver_dCompilerCli_ddtPathErr = (fun path -> (v_Vuna_dCompiler_dDriver_dCompilerCli_dprintErr ((bi_concat "no such file or package directory: ") path)))
 
-let v_Vuna_dCompiler_dDriver_dCompilerCli_dexecutablePackageAt = (fun label -> (fun dir -> ((v_Base_dResult_dandThen (v_Vuna_dCompiler_dPackages_dPkg_dloadPackage dir)) (fun pkg -> (if (dtp_fileExists (v_Vuna_dCompiler_dPackages_dPkg_dpackageEntry pkg)) then (C_Base_dResult_dResult_Base_dResult_dOk (pkg)) else (C_Base_dResult_dResult_Base_dResult_dErr (((bi_concat label) ((bi_concat ": library package ") ((bi_concat (v_Vuna_dCompiler_dPackages_dPkg_dpackageName pkg)) " has no app/Main.vuna (executable package required)"))))))))))
+let v_Vuna_dCompiler_dDriver_dCompilerCli_dexecutablePackageAt = (fun label -> (fun dir -> ((v_Base_dResult_dandThen (v_Vuna_dCompiler_dPackages_dPkg_dloadPackage dir)) (fun pkg -> (if (v_Base_dIO_drunIO ((fun dtio_0 -> C_Base_dIO_dIO_Base_dIO_dMkIO (fun _ -> dtp_fileExists dtio_0)) (v_Vuna_dCompiler_dPackages_dPkg_dpackageEntry pkg))) then (C_Base_dResult_dResult_Base_dResult_dOk (pkg)) else (C_Base_dResult_dResult_Base_dResult_dErr (((bi_concat label) ((bi_concat ": library package ") ((bi_concat (v_Vuna_dCompiler_dPackages_dPkg_dpackageName pkg)) " has no app/Main.vuna (executable package required)"))))))))))
 
-let v_Vuna_dCompiler_dDriver_dCompilerCli_dexecutablePackage = (fun label -> (fun dir -> (if (dtp_fileExists dir) then (if (dtp_isDirectory dir) then ((v_Vuna_dCompiler_dDriver_dCompilerCli_dexecutablePackageAt label) dir) else (C_Base_dResult_dResult_Base_dResult_dErr (((bi_concat label) ((bi_concat ": expects a package directory, not a file: ") dir))))) else (C_Base_dResult_dResult_Base_dResult_dErr (((bi_concat "no such file or package directory: ") dir))))))
+let v_Vuna_dCompiler_dDriver_dCompilerCli_dexecutablePackage = (fun label -> (fun dir -> (if (v_Base_dIO_drunIO ((fun dtio_0 -> C_Base_dIO_dIO_Base_dIO_dMkIO (fun _ -> dtp_fileExists dtio_0)) dir)) then (if (v_Base_dIO_drunIO ((fun dtio_0 -> C_Base_dIO_dIO_Base_dIO_dMkIO (fun _ -> dtp_isDirectory dtio_0)) dir)) then ((v_Vuna_dCompiler_dDriver_dCompilerCli_dexecutablePackageAt label) dir) else (C_Base_dResult_dResult_Base_dResult_dErr (((bi_concat label) ((bi_concat ": expects a package directory, not a file: ") dir))))) else (C_Base_dResult_dResult_Base_dResult_dErr (((bi_concat "no such file or package directory: ") dir))))))
 
 let v_Vuna_dCompiler_dDriver_dCompilerCli_dcompileFileEntry = (fun printResult -> (fun entry -> (fun outDir -> (match (v_Vuna_dCompiler_dPackages_dPkg_dcontextForFile entry) with
   | C_Base_dResult_dResult_Base_dResult_dErr (dtb__6) -> (v_Vuna_dCompiler_dDriver_dCompilerCli_dprintErr dtb__6)
@@ -138,7 +139,7 @@ let v_Vuna_dCompiler_dDriver_dCompilerCli_dcompilePkgDir = (fun printResult -> (
   | _ -> failwith "DT: impossible branch"
 ))))
 
-let v_Vuna_dCompiler_dDriver_dCompilerCli_dcompileRun = (fun printResult -> (fun entry -> (fun outDir -> (if (dtp_fileExists entry) then (if (dtp_isDirectory entry) then (((v_Vuna_dCompiler_dDriver_dCompilerCli_dcompilePkgDir printResult) entry) outDir) else (((v_Vuna_dCompiler_dDriver_dCompilerCli_dcompileFileEntry printResult) entry) outDir)) else (v_Vuna_dCompiler_dDriver_dCompilerCli_ddtPathErr entry)))))
+let v_Vuna_dCompiler_dDriver_dCompilerCli_dcompileRun = (fun printResult -> (fun entry -> (fun outDir -> (if (v_Base_dIO_drunIO ((fun dtio_0 -> C_Base_dIO_dIO_Base_dIO_dMkIO (fun _ -> dtp_fileExists dtio_0)) entry)) then (if (v_Base_dIO_drunIO ((fun dtio_0 -> C_Base_dIO_dIO_Base_dIO_dMkIO (fun _ -> dtp_isDirectory dtio_0)) entry)) then (((v_Vuna_dCompiler_dDriver_dCompilerCli_dcompilePkgDir printResult) entry) outDir) else (((v_Vuna_dCompiler_dDriver_dCompilerCli_dcompileFileEntry printResult) entry) outDir)) else (v_Vuna_dCompiler_dDriver_dCompilerCli_ddtPathErr entry)))))
 
 let v_Vuna_dCompiler_dDriver_dCompilerCli_dcompileFinish = (fun mc0 -> (fun mc1 -> (fun mc2 -> (fun mc3 -> (match mc2 with
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__14) -> (match mc3 with
@@ -168,7 +169,7 @@ let v_Vuna_dCompiler_dDriver_dCompilerCli_dcompileArgs = (fun prog -> (fun args 
 
 let rec v_Vuna_dCompiler_dDriver_dCompilerCli_dcheckPackages = (fun mc0 -> (fun mc1 -> (match mc0 with
   | C_Base_dList_dList_Base_dList_dCons (dtb__20, dtb__21) -> ((fun c -> ((fun next -> ((v_Vuna_dCompiler_dDriver_dCompilerCli_dcheckPackages dtb__21) next)) (if ((bi_gt_int c) mc1) then c else mc1))) (match (v_Vuna_dCompiler_dDriver_dCompile_dcheckPackage dtb__20) with
-  | C_Base_dResult_dResult_Base_dResult_dErr (dtb__22) -> ((fun _u -> 1) (dtp_print ((bi_concat "error: [") ((bi_concat (v_Vuna_dCompiler_dPackages_dPkg_dpackageName dtb__20)) ((bi_concat "] ") ((bi_concat dtb__22) "\n"))))))
+  | C_Base_dResult_dResult_Base_dResult_dErr (dtb__22) -> ((fun _u -> 1) (v_Base_dIO_drunIO ((fun dtio_0 -> C_Base_dIO_dIO_Base_dIO_dMkIO (fun _ -> dtp_print dtio_0)) ((bi_concat "error: [") ((bi_concat (v_Vuna_dCompiler_dPackages_dPkg_dpackageName dtb__20)) ((bi_concat "] ") ((bi_concat dtb__22) "\n")))))))
   | C_Base_dResult_dResult_Base_dResult_dOk (dtb__23) -> (v_Vuna_dCompiler_dDriver_dCompilerCli_dprintWarnings dtb__23)
   | _ -> failwith "DT: impossible branch"
 ))
@@ -192,7 +193,7 @@ let v_Vuna_dCompiler_dDriver_dCompilerCli_dcheckFileEntry = (fun path -> (match 
   | _ -> failwith "DT: impossible branch"
 ))
 
-let v_Vuna_dCompiler_dDriver_dCompilerCli_dcheckEmit = (fun path -> (if (dtp_fileExists path) then (if (dtp_isDirectory path) then (v_Vuna_dCompiler_dDriver_dCompilerCli_dcheckPkgDir path) else (v_Vuna_dCompiler_dDriver_dCompilerCli_dcheckFileEntry path)) else (v_Vuna_dCompiler_dDriver_dCompilerCli_ddtPathErr path)))
+let v_Vuna_dCompiler_dDriver_dCompilerCli_dcheckEmit = (fun path -> (if (v_Base_dIO_drunIO ((fun dtio_0 -> C_Base_dIO_dIO_Base_dIO_dMkIO (fun _ -> dtp_fileExists dtio_0)) path)) then (if (v_Base_dIO_drunIO ((fun dtio_0 -> C_Base_dIO_dIO_Base_dIO_dMkIO (fun _ -> dtp_isDirectory dtio_0)) path)) then (v_Vuna_dCompiler_dDriver_dCompilerCli_dcheckPkgDir path) else (v_Vuna_dCompiler_dDriver_dCompilerCli_dcheckFileEntry path)) else (v_Vuna_dCompiler_dDriver_dCompilerCli_ddtPathErr path)))
 
 let v_Vuna_dCompiler_dDriver_dCompilerCli_dcheckArgs = (fun mc0 -> (fun mc1 -> (match mc1 with
   | C_Base_dList_dList_Base_dList_dCons (dtb__30, dtb__31) -> (if ((v_Base_dString_dstartsWith "-") dtb__30) then ((v_Vuna_dCompiler_dDriver_dCompilerCli_dremovedFlag mc0) dtb__30) else (match dtb__31 with
@@ -205,7 +206,7 @@ let v_Vuna_dCompiler_dDriver_dCompilerCli_dcheckArgs = (fun mc0 -> (fun mc1 -> (
 
 let v_Vuna_dCompiler_dDriver_dCompilerCli_disSingleLibraryPackage = (fun mc0 -> (match mc0 with
   | C_Base_dList_dList_Base_dList_dCons (dtb__32, dtb__33) -> (match dtb__33 with
-  | C_Base_dList_dList_Base_dList_dNil -> (v_Base_dBool_dnot (dtp_fileExists (v_Vuna_dCompiler_dPackages_dPkg_dpackageEntry dtb__32)))
+  | C_Base_dList_dList_Base_dList_dNil -> (v_Base_dBool_dnot (v_Base_dIO_drunIO ((fun dtio_0 -> C_Base_dIO_dIO_Base_dIO_dMkIO (fun _ -> dtp_fileExists dtio_0)) (v_Vuna_dCompiler_dPackages_dPkg_dpackageEntry dtb__32))))
   | _ -> false
 )
   | _ -> false
@@ -241,17 +242,17 @@ let v_Vuna_dCompiler_dDriver_dCompilerCli_dcompileCodegen = (fun ctx -> (fun ent
 
 let v_Vuna_dCompiler_dDriver_dCompilerCli_dbuildLinked = (fun ctx -> (fun entry -> (fun outDir -> (fun name -> ((fun _u -> (match (((v_Vuna_dCompiler_dDriver_dCompile_drunBuildScript outDir) ((bi_concat "bin/") name)) name) with
   | C_Base_dResult_dResult_Base_dResult_dErr (dtb__42) -> (v_Vuna_dCompiler_dDriver_dCompilerCli_dprintErr dtb__42)
-  | C_Base_dResult_dResult_Base_dResult_dOk (dtb__43) -> ((fun _u -> ((fun _u -> 0) (dtp_print ((bi_concat "built ") ((bi_concat outDir) ((bi_concat "/bin/") ((bi_concat name) "\n"))))))) ((((v_Vuna_dCompiler_dDriver_dCompile_dwriteBuildMeta outDir) ctx) entry) true))
+  | C_Base_dResult_dResult_Base_dResult_dOk (dtb__43) -> ((fun _u -> ((fun _u -> 0) (v_Base_dIO_drunIO ((fun dtio_0 -> C_Base_dIO_dIO_Base_dIO_dMkIO (fun _ -> dtp_print dtio_0)) ((bi_concat "built ") ((bi_concat outDir) ((bi_concat "/bin/") ((bi_concat name) "\n")))))))) ((((v_Vuna_dCompiler_dDriver_dCompile_dwriteBuildMeta outDir) ctx) entry) true))
   | _ -> failwith "DT: impossible branch"
 )) (v_Vuna_dCompiler_dDriver_dCompile_densureDirPath ((bi_concat outDir) "/bin")))))))
 
-let v_Vuna_dCompiler_dDriver_dCompilerCli_dbuildOne = (fun noCompile -> (fun multiOut -> (fun outM -> (fun pkg -> ((fun name -> ((fun outDir -> ((fun entry -> (if (dtp_fileExists entry) then ((fun ctx -> ((fun binPath -> (if noCompile then (((v_Vuna_dCompiler_dDriver_dCompilerCli_dcompileCodegen ctx) entry) outDir) else (if ((((v_Vuna_dCompiler_dDriver_dCompile_dmetaUpToDate outDir) ctx) entry) binPath) then ((fun _u -> 0) (dtp_print ((bi_concat "up to date: ") ((bi_concat binPath) "\n")))) else (match ((((v_Vuna_dCompiler_dDriver_dCompile_dcompileToDir ctx) entry) true) outDir) with
+let v_Vuna_dCompiler_dDriver_dCompilerCli_dbuildOne = (fun noCompile -> (fun multiOut -> (fun outM -> (fun pkg -> ((fun name -> ((fun outDir -> ((fun entry -> (if (v_Base_dIO_drunIO ((fun dtio_0 -> C_Base_dIO_dIO_Base_dIO_dMkIO (fun _ -> dtp_fileExists dtio_0)) entry)) then ((fun ctx -> ((fun binPath -> (if noCompile then (((v_Vuna_dCompiler_dDriver_dCompilerCli_dcompileCodegen ctx) entry) outDir) else (if ((((v_Vuna_dCompiler_dDriver_dCompile_dmetaUpToDate outDir) ctx) entry) binPath) then ((fun _u -> 0) (v_Base_dIO_drunIO ((fun dtio_0 -> C_Base_dIO_dIO_Base_dIO_dMkIO (fun _ -> dtp_print dtio_0)) ((bi_concat "up to date: ") ((bi_concat binPath) "\n"))))) else (match ((((v_Vuna_dCompiler_dDriver_dCompile_dcompileToDir ctx) entry) true) outDir) with
   | C_Base_dResult_dResult_Base_dResult_dErr (dtb__44) -> (v_Vuna_dCompiler_dDriver_dCompilerCli_dprintErr dtb__44)
   | C_Base_dResult_dResult_Base_dResult_dOk (dtb__45) -> ((((v_Vuna_dCompiler_dDriver_dCompilerCli_dbuildLinked ctx) entry) outDir) name)
   | _ -> failwith "DT: impossible branch"
 )))) ((bi_concat outDir) ((bi_concat "/bin/") name)))) (v_Vuna_dCompiler_dPackages_dPkg_dpackageContext pkg)) else (match (v_Vuna_dCompiler_dDriver_dCompile_dcheckPackage pkg) with
   | C_Base_dResult_dResult_Base_dResult_dErr (dtb__46) -> (v_Vuna_dCompiler_dDriver_dCompilerCli_dprintErr dtb__46)
-  | C_Base_dResult_dResult_Base_dResult_dOk (dtb__47) -> ((fun _u -> ((fun _u -> 0) (dtp_print ((bi_concat "skipped (library): ") ((bi_concat name) ((bi_concat " -> ") ((bi_concat outDir) "\n"))))))) (v_Vuna_dCompiler_dDriver_dCompilerCli_dprintWarnings dtb__47))
+  | C_Base_dResult_dResult_Base_dResult_dOk (dtb__47) -> ((fun _u -> ((fun _u -> 0) (v_Base_dIO_drunIO ((fun dtio_0 -> C_Base_dIO_dIO_Base_dIO_dMkIO (fun _ -> dtp_print dtio_0)) ((bi_concat "skipped (library): ") ((bi_concat name) ((bi_concat " -> ") ((bi_concat outDir) "\n")))))))) (v_Vuna_dCompiler_dDriver_dCompilerCli_dprintWarnings dtb__47))
   | _ -> failwith "DT: impossible branch"
 ))) (v_Vuna_dCompiler_dPackages_dPkg_dpackageEntry pkg))) (match outM with
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__48) -> (if multiOut then ((bi_concat dtb__48) ((bi_concat "/") name)) else dtb__48)

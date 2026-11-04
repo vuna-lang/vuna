@@ -1,6 +1,8 @@
--- M27：包显式声明能力后可以直接调用对应 prim_*。
+-- M31：包显式声明能力后可以直接调用对应 prim_*；原语现在返回 IO 动作。
 -- 能力使用点放在未求值的定义里：`vuna test` 只 interp main（纯），能力检查仍覆盖全文件。
-probe : Bool
+import Base.IO
+
+probe : IO Bool
 probe = prim_fileExists "/"
 
 main : Int

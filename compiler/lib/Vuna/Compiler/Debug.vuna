@@ -10,9 +10,10 @@ module Vuna.Compiler.Debug (debugOn, note, noteInt, sampleKey, stamp, stampSampl
 --   `DEBUG <text>`        任意诊断文本（表规模等）。
 -- 关闭时每次调用只花一次 `prim_getArgs`（微秒级），可长期留在生产代码里。
 import Vuna.Compiler.Common
+import Base.IO
 
 args : List String
-args = prim_getArgs
+args = runIO prim_getArgs
 
 debugOn : Bool
 debugOn = memName "--debug-perf" args
@@ -20,7 +21,7 @@ debugOn = memName "--debug-perf" args
 note : String -> Int
 note msg = if debugOn then
   let
-    _ = prim_print ("DEBUG " ++ msg ++ "\n")
+    _ = runIO (prim_print ("DEBUG " ++ msg ++ "\n"))
   in 0
 else 0
 
@@ -30,7 +31,7 @@ noteInt label n = note (label ++ "=" ++ strFromInt n)
 stampNow : String -> Int
 stampNow label =
   let
-    _ = prim_print ("PERF " ++ label ++ " " ++ strFromInt timeUs ++ "\n")
+    _ = runIO (prim_print ("PERF " ++ label ++ " " ++ strFromInt (runIO timeUs) ++ "\n"))
   in 0
 
 stamp : String -> Int

@@ -37,9 +37,11 @@
 3. **`seed/` 只含 compiler 包入口闭包**（`compiler/app/Main.vuna` 的 import 闭包）；
 4. **工具链不进 TCB**：`fmt`/`lint`/`repl`/`doc`/`test`/`Index`/`LSP`（以及未来的
    package manager）永不进入 seed 闭包；黑名单见 `nix/tcb-forbidden.txt`；
-5. **效应内建按 manifest 显式能力**：包声明 `[capabilities] effects`
-   （`console`/`fs`/`process`/`env`/`clock`）才能直接调 effectful `prim_*`，否则经
-   `Base.IO`（唯一真源 `Vuna.Compiler.Intrinsics` + `Loader.Resolve.checkEffectsBuiltins`）；
+5. **效应原语返回 `IO` 动作，执行入口唯一**：包声明 `[capabilities] effects`
+   （`console`/`fs`/`process`/`env`/`clock`）才能直接调 effectful `prim_*`（得到 `IO a`），
+   否则经 `Base.IO`（`prim_*` 的别名）；动作只在 `main` 执行，`Base.IO.runIO : IO a -> a`
+   是唯一的「main 之外执行」入口、要求能力 `unsafe`（工具链特权）。唯一真源
+   `Vuna.Compiler.Intrinsics` + `Loader.Resolve.checkEffectsBuiltins`；
 6. **唯一路径**：语言夹具、`vuna interp`、包构建与 seed 全部走 DT（精化 + 擦除
    codegen，`vuna check .` 也是 DT 自检）；没有可切换的检查器，也没有第二套 codegen；
 7. 编译器自检通过：`vuna check .` 必须能检查自身源码（`checks.vuna-typecheck`）。
