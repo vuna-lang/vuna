@@ -1,0 +1,34 @@
+module Fancy where
+
+-- codegen 夹具：多构造子 data + 大 case（ctorcount/maxline）、as-pattern（多 clause）、
+-- let 多 clause。
+import Base.List
+
+data Shape : Type where
+  Circle : Int -> Shape
+  Square : Int -> Shape
+  Triangle : Int -> Int -> Shape
+  Rect : Int -> Int -> Shape
+  Pentagon : Int -> Shape
+  Hexagon : Int -> Int -> Shape
+
+area : Shape -> Int
+area s = case s of
+  Circle r => r * r
+  Square a => a * a
+  Triangle b h => b * h
+  Rect w h => w * h
+  Pentagon a => a * a
+  Hexagon w h => w * h
+
+firstTwo : List Int -> Int
+firstTwo [] = 0
+firstTwo (all@(x :: rest)) = x + length all + length rest
+
+swapAdd : Int -> Int
+swapAdd n =
+  let
+    f : Int -> Int
+    f 0 = n
+    f _ = n + 1
+  in f 2

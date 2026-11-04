@@ -176,7 +176,9 @@ nix run .#vuna-run-tests [-- --list | --only 34 | --only dt | --vuna stable]
 - `vuna-typecheck` / `vuna-lint`：`vuna check .` 自检、lint 零 finding；
 - `vuna-fmt`：workspace 全包与 `examples/`；
 - `vuna-package`：`examples/multi` 的 build/test/fmt/doc + 根包构建；
-- `vuna-metrics`：seed 闭包的 codegen 指标对 `nix/metrics.budget`；
+- `vuna-metrics`：冻结夹具（`test/corpus/codegen`）的 codegen 产物对
+  `nix/codegen.baseline` 的精确基线；种子尺寸不设门槛（见 [compiler.md](compiler.md)
+  §codegen 夹具基线）；
 - `vuna-index`：`map` / `--find` / `--impact` / `api` 与内容哈希缓存失效；
 - `context-budget`：入口文档字节数与单模块行数对 `nix/context.budget`；
 - `vscode-ext`：提交的 `vscode/dist/extension.js` 与清单 / 语法文件的离线自检，不跑

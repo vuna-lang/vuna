@@ -1,0 +1,19 @@
+# codegen 夹具基线（精确值；任何漂移 = codegen 输出变化，必须复核后更新）。
+#
+# 夹具：test/corpus/codegen（冻结包；改夹具、base 接口或 codegen 后重跑
+#       checks.vuna-metrics 取新值并复核 diff）。
+# 口径：`vuna build --no-compile --out` 后剔除 Base_*.ml / Prelude.ml /
+#       Vuna_runtime.ml，只量夹具自有模块——base/runtime 随功能增长，纳入会重新
+#       引入「移动靶」。指标定义见 nix/metrics.sh 头注释。
+# 规则：本文件是精确基线（`=<expected>`），不是上限；不等即失败（双向捕获膨胀与
+#       优化丢失）。种子尺寸不在这里设阈值（见 docs/reference/compiler.md）。
+files =4
+bytes =5027
+lines =134
+maxline =758
+longlines =7
+letrec =1
+strcat =0
+eqint =3
+zeroarg =0
+ctorcount =20

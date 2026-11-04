@@ -153,12 +153,23 @@
 `checkResolvedModules`、entryDecls 与归属校验、`ensureUniqueOcamlNames`）见
 [core.md](core.md) §7。
 
-## 机器无关指标
+## codegen 夹具基线
 
-`nix/metrics.sh` 聚合 seed 闭包（`vuna build --no-compile --out` 产物）的 `.ml`，统计
-bytes / lines / maxline / longlines / `letrec` / `strcat` / `eqint` / `zeroarg` /
-`ctorcount`，与 `nix/metrics.budget` 比较；`checks.vuna-metrics` 用它守 codegen 回归
-（有意改变 codegen 后需复测并更新预算文件）。
+codegen 健康由**固定夹具**度量：`test/corpus/codegen/` 是冻结的包（data/多构造子、case、
+record、trait/instance/deriving、as-pattern、where/let 多 clause、List 结构递归、Int 相等、
+零参定义、IO/do、`prim_*` 的 IO 包装、跨模块 split）。`checks.vuna-metrics` 用
+`vuna build --no-compile` 生成它，剔除 `Base_*.ml` / `Prelude.ml` / `Vuna_runtime.ml` 后，
+用 `nix/metrics.sh` 与 `nix/codegen.baseline` 做**精确基线**比较
+（`<metric> =<expected>`，不等即失败）。
+
+输入固定，所以任何漂移都是 codegen 输出变化，必须复核后更新基线；剔除 base/runtime 是
+因为它们的尺寸随功能增长，纳入会重新引入「移动靶」。正常语言/检查器功能提交不改基线；
+有意改 codegen、夹具或 base 接口时，重跑 `sh nix/checks/vuna-metrics.sh` 取新值并复核
+diff。盲区：base/runtime 自身的 codegen 不在这条门禁里；尺寸也不等于耗时——耗时/内存看
+`nix/bench.sh`。
+
+**种子尺寸不设门槛**：`seed/` 的绝对 bytes/lines 随功能增长，没有可比性；bench 的
+`sizes.seed_bytes` / `stage1_bytes` 只作参考，`nix/metrics.sh` 仍可手动量任意产物。
 
 ## 相关阅读
 

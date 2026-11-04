@@ -126,10 +126,10 @@ in
   vuna-metrics = mkCheck {
     name = "vuna-metrics";
     srcs = [
-      ../../compiler
+      ../../test/corpus/codegen
       ../../base
       ../../nix/metrics.sh
-      ../../nix/metrics.budget
+      ../../nix/codegen.baseline
     ];
     env = {
       VUNA = "${vuna}/bin/vuna";
