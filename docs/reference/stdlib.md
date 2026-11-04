@@ -16,8 +16,9 @@
 | `Base.Vec` | `Vec(..)` 与 `substTemplate` / `vhead` / `vlen` / `vtail` |
 | `Base.Monad` | `Functor` / `Monad` trait |
 | `Base.Show` | `Show` trait（`show : a -> String`）+ `Int` / `String` / `Bool` 实例 |
-| `Base.Eq` | `Eq` trait（`eq` / `neq : a -> a -> Bool`）+ `Int` / `String` / `Bool` 实例 |
-| `Base.Ord` | `Ord` trait（`lt` / `le` / `gt` / `ge : a -> a -> Bool`）+ `Int` / `String` / `Bool` 实例 |
+| `Base.Eq` | `Eq` trait（`eq` / `neq : a -> a -> Bool`）+ `Bool` 实例（Bool 是 `Eq` 返回类型，实例随 trait） |
+| `Base.Ord` | `Ord` trait（`lt` / `le` / `gt` / `ge : a -> a -> Bool`）+ `Bool` 实例 |
+| `Base.Int` | `Int` 的 `Eq` / `Ord` 实例宿主（`Int` 是 primitive 类型；实例跟类型模块走） |
 | `Base.IO` | 抽象 `IO a` 与 IO 组合子（实例 + print/readFile/writeFile/getArgs/exit，直接别名到 IO 化的 `prim_*` 动作）+ 特权执行入口 `runIO : IO a -> a`（要求 `unsafe` 能力） |
 | `Base` | 包门面：整模块重导出核心模块（不含 `Nat` / `Vec`；`import Base` 即可用） |
 | `Prelude` | 顶层模块（`base/lib/Prelude.vuna`）：重导出 `Base.Pair` / `Bool` / `Eq` / `Ord` / `Show` / `List` / `Maybe` / `Result` / `String` / `Monad`，**包上下文内所有源文件（含无 manifest 的 ad-hoc 单文件）自动导入**；显式 `import` 时不再重复注入；刻意不含 `Base.IO`（效果 API 需显式 import，效果面不进入自动注入） |
@@ -36,6 +37,7 @@ module Base.Bool (Bool(..), not, and, or, xor, bool) where
 module Base.Show (Show(..)) where
 module Base.Eq (Eq(..)) where
 module Base.Ord (Ord(..)) where
+module Base.Int where
 module Base.List (List(..), append, reverse, length, map, filter, foldl, foldr, concatMap,
                   flatMap, mem, memName, lookupPair, zip, take, drop, range, mapMaybe) where
 module Base.Maybe (Maybe(..), fromMaybe, isJust, isNothing, maybe, mapJust) where
@@ -81,14 +83,21 @@ module Base.IO (IO, print, println, readFile, writeFile, readLine, readDir, ...)
   `prim_getArgs`）经 List 桥接 helper（`dtp_unpack` / `dtp_pack` / `dtp_listOf`）落地，
   桥接只为 canonical `Base.List.List` 生成；`Prelude` 自动注入 `Base.List`，所以正常上下文
   里总可用。
-- **`Show` / `Eq` / `Ord` 在库**：trait 声明、方法投影与 `Int` / `String` / `Bool` 实例全在
-  `Base.Show` / `Base.Eq` / `Base.Ord`，随 `Prelude` 自动导入。编译器只保留**机制**：
-  `deriving (Show, Eq, Ord)` 的展开、`==` / `/=` 与比较的 `Int` / `String` 运行时特化、
-  `if` / 字面量等语法。相等是证据驱动的：`==` / `/=` 只有 Int/String 内建特化或 `Eq`
-  证据（实例 / `deriving` / 约束实例），无实例与函数相等在 check 期报错；参数化类型的
-  `deriving` 展开成约束实例。字符串展示只有一个实现 `strShow`——`Base.Show` 的 `String`
-  实例是 `show s = strShow s`，库不再另写一套转义；`Show Bool` 用 `if` 输出
-  `True` / `False`，`Eq Bool` 方法体用析取（不能自递归）。
+- **`Show` / `Eq` / `Ord` 在库（M31.1 起声明与实例分离）**：`Base.Show` / `Base.Eq` /
+  `Base.Ord` 承载 trait 声明；实例按**落点规则**分布（见 [operators.md](operators.md)）：
+  `Int` → `Base.Int`、`String` → `Base.String`、`Bool` → `Base.Eq` / `Base.Ord`
+  （Bool 是方法返回类型，放 `Base.Bool` 会成 import 环）。实例随 `Prelude` 自动导入
+  （`Prelude` 显式 `import Base.Int` 加载 Int 实例）。编译器只保留**机制**：
+  `deriving (Show, Eq, Ord)` 的展开、`eq` / `lt` 等的 `Int` / `String` 运行时特化、
+  `if` / 字面量等语法。**M31.1 起运算符是方法别名**：`==` / `/=` / `<` / `<=` / `>` / `>=`
+  在 Loader 被解析成 `eq` / `neq` / `lt` / `le` / `gt` / `ge`
+  （`Loader.Resolve.builtinOpAlias`），因此 `a == b` 与 `eq a b` 是同一条路径。
+  **M29 起相等证据驱动**：`eq`（含运算符写法）只有 Int/String 内建特化或 `Eq` 证据
+  （实例 / `deriving` / 约束实例），无实例与函数相等在 check 期报错；参数化类型的
+  `deriving` 展开成约束实例（`instance Eq a => Eq (F a)`），库里可写的容器实例也按这个
+  形态声明。字符串展示只有一个实现 `strShow`——`Base.Show` 的 `String` 实例是
+  `show s = strShow s`，库不再另写一套转义；`Show Bool` 用 `if` 输出 `True` / `False`；
+  `Eq Bool` / `Ord Bool` 用模式匹配穷尽（不依赖 `==` / `<`，避免实例体自引用）。
 - **效果原语只有 `prim_*` 名，且返回 `IO` 动作（M31）**：`Base.IO` 是默认用户面
   （`print` / `readFile` / … 直接别名到 `prim_*`，类型形如 `… -> IO a`），并在
   `base/vuna.toml` 声明 `[capabilities].effects = ["console", "fs", "process"]`；动作只在

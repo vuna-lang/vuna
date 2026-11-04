@@ -391,7 +391,14 @@ else case fn of
                 Ok (Pair (ctorAppTerm (ecDatas ec2) (TGlobal name) argTerms) (Pair resTy ec2))
             )
           )
-          Nothing => tcErr1 vsp (UnknownName name) name
+          -- M31.1：`==` / `<` 等已不是 prelude globals（用户源码的运算符在 Loader 被
+          -- 别名成方法名），但 `Elab.Derive`（deriving 展开）与 `Elab.Match`（字面量
+          -- 模式）仍直接构造 `EVar "=="` 这类内部生成名，且实例方法体没有签名、走推断。
+          -- 因此推断位置在没有 globals 项时也要先试运算符特化，再报 UnknownName。
+          Nothing => andThen (specializeOpAppFuel (fuel - 1) globals ctx ec name args sp) (\mspec => case mspec of
+            Just pair => Ok pair
+            Nothing => tcErr1 vsp (UnknownName name) name
+          )
     _ => inferAppGeneralFuel (fuel - 1) globals ctx ec fn args sp
 
 inferAppGeneralFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Expr -> List Expr -> Span -> Result (Pair Term (Pair Value Ec))
@@ -804,7 +811,7 @@ else case globalsLookup name globals ec of
 -- 因此 codegen 只需要名字映射（不感知类型），M18.6 的封装不被破坏。
 specializeEqAppFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> String -> List Expr -> Span -> Result (Maybe (Pair Term (Pair Value Ec)))
 specializeEqAppFuel fuel globals ctx ec name args sp = if fuel <= 0 then Err "DT: internal: inference fuel exhausted"
-else if isEqOp name then case args of
+else if isEqMethod ec name then case args of
   [a, b] => andThen (inferEFuel (fuel - 1) globals ctx ec a) (\pa => case pa of
     Pair aTerm (Pair aTy ec1) => andThen (inferEFuel (fuel - 1) globals ctx ec1 b) (\pb => case pb of
       Pair bTerm (Pair bTy ec2) =>
@@ -817,7 +824,7 @@ else Ok Nothing
 
 specializeCmpAppFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> String -> List Expr -> Span -> Result (Maybe (Pair Term (Pair Value Ec)))
 specializeCmpAppFuel fuel globals ctx ec name args sp = if fuel <= 0 then Err "DT: internal: inference fuel exhausted"
-else if isCmpOp name then case args of
+else if isCmpMethod ec name then case args of
   [a, b] => andThen (inferEFuel (fuel - 1) globals ctx ec a) (\pa => case pa of
     Pair aTerm (Pair aTy ec1) => andThen (inferEFuel (fuel - 1) globals ctx ec1 b) (\pb => case pb of
       Pair bTerm (Pair bTy ec2) =>

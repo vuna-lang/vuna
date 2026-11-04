@@ -4,8 +4,13 @@ open Base_dBool
 open Base_dMonad
 open Base_dMaybe
 open Base_dEq
+open Base_dOrd
 open Base_dList
 open Base_dResult
+let v_Eq_uString = (C_Dict_uBase_dEq_dEq_MkDict_uBase_dEq_dEq ((fun x -> (fun y -> ((bi_eq_str x) y))), (fun x -> (fun y -> ((bi_neq_str x) y)))))
+
+let v_Ord_uString = (C_Dict_uBase_dOrd_dOrd_MkDict_uBase_dOrd_dOrd ((fun x -> (fun y -> ((bi_lt_generic x) y))), (fun x -> (fun y -> ((bi_le_generic x) y))), (fun x -> (fun y -> ((bi_gt_generic x) y))), (fun x -> (fun y -> ((bi_ge_generic x) y)))))
+
 let rec v_Base_dString_djoin = (fun mc0 -> (fun mc1 -> (match mc1 with
   | C_Base_dList_dList_Base_dList_dCons (dtb__0, dtb__1) -> (match dtb__1 with
   | C_Base_dList_dList_Base_dList_dNil -> dtb__0

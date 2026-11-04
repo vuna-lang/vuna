@@ -35,14 +35,14 @@
 #   - 文档按主题重整：删除 history/dt-core/dt-parity/dt.md，新增 core/tooling/records-traits
 #     并把 DT 语义并入 type-system；合并 main 的 LSP/readBytes 文档后按实测复标定：
 #     coldstart 29731 / agents 104 / arch 167 / readme 163 / max_ref 279。
-coldstart_bytes 29731
+coldstart_bytes 29930
 agents_lines 104
 arch_lines 167
-readme_lines 163
+readme_lines 164
 #   - M24.5：dt-parity.md §6 重写（实测能力表 + 边界）到 203 行；Elab 新增 scrutinee 反射、
 #     不可达分支、inlineSolvedMetas（3348 → 3513）。按实测重标定 max_ref 208 / max_module 3530；
 #     入口文档（coldstart/agents/arch/readme）不变。
-max_ref_lines 279
+max_ref_lines 283
 max_module_lines 1195
 #   - M27：新增 `primitives.md` 与内建/原语/能力文档、`Vuna.Compiler.Intrinsics` 模块；
 #     按 `sh nix/context-budget.sh .` 实测收紧：coldstart 29055 / agents 104 / arch 156 /
@@ -74,3 +74,9 @@ max_module_lines 1195
 #     本分支 architecture 的 LSP 段改写 +15B。按 `sh nix/context-budget.sh .` 实测复标定：
 #     coldstart 30268 / agents 106；arch 165 / readme 165 / max_ref 286 / max_module 1175
 #     仍低于原预算，不变。
+#   - M31（操作符与名字统一）：新增 `docs/reference/operators.md`，并把「运算符 = Eq/Ord 方法
+#     别名、实例落点规则」接进 AGENTS / README / language / type-system / records-traits /
+#     limits / stdlib / testing / debt / roadmap。按主题重整后的预算没有覆盖这组新增能力文档，
+#     按 `sh nix/context-budget.sh .` 实测复标定：coldstart 29930 / readme 164 / max_ref 283
+#     （M31.1）；agents 104 / arch 167 / max_module 1175 不变。仍低于文档重整前的
+#     coldstart 30268 / max_ref 286 量级。

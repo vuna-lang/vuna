@@ -109,7 +109,9 @@
   指标族 `Tm : Ty -> Type` + `Some`）表达。**泛型 Σ 的值级构造仍是边界**（类型不能依赖
   运行时值），归 F4。空族判定在索引含中性项时仍保守。
 - **命名实例不存在**：没有 `as name` / `@name`；实例按 head 全局唯一（相干性），重复报
-  `duplicate instance`；孤儿实例（trait 与类型都不在本模块定义）仍被拒。
+  `duplicate instance`。**M31.1**：实例按**落点规则**分布（跟类型模块走，trait 签名
+  直接依赖的类型例外，见 [operators.md](operators.md)），不再声称「孤儿实例被拒」
+  （实现从未强制，B23）。
 - **type-as-value**：**不引入 type codes**；Type 级等式走擦除的 `Eq` 证据 + `cast`
   组合子；把类型放到**运行时位置**仍被擦除检查拒（`CG_TypeUsedAtRuntime` /
   `CG_TypeLevelBindingRuntime` / `CG_TypeLevelNameRuntime`）。

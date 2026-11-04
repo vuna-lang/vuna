@@ -32,6 +32,9 @@ module Base.String
 --   空 sep 走单独分支（不消耗 fuel），不受影响；分离器长度不进入逐字符循环的计数。
 import Base.List
 import Base.Bool
+-- M31.1：`String` 是 primitive 类型，Eq / Ord 实例跟类型模块走（落点规则见 Base/Eq.vuna）。
+import Base.Eq
+import Base.Ord
 
 split : String -> String -> List String
 split sep text =
@@ -111,3 +114,15 @@ _containsChars needle text = if _startsWithChars needle text then True
 else case text of
   [] => False
   c :: rest => _containsChars needle rest
+
+-- M31.1：primitive 没有构造子，实例实现走编译器内建特化（`bi_eq_str` / 泛型比较运行时），
+-- 不会自递归。
+instance Eq String where
+  eq x y = x == y
+  neq x y = x /= y
+
+instance Ord String where
+  lt x y = x < y
+  le x y = x <= y
+  gt x y = x > y
+  ge x y = x >= y

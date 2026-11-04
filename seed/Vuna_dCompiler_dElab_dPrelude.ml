@@ -4,11 +4,12 @@ open Base_dBool
 open Base_dMonad
 open Base_dMaybe
 open Base_dEq
+open Base_dOrd
 open Base_dList
 open Base_dResult
 open Base_dString
 open Base_dShow
-open Base_dOrd
+open Base_dInt
 open Prelude
 open Vuna_dCompiler_dCommon
 open Vuna_dCompiler_dFrontend_dToml
@@ -46,10 +47,6 @@ let v_Vuna_dCompiler_dElab_dPrelude_dboolTy = (C_Vuna_dCompiler_dCore_dTerm_dTer
 
 let v_Vuna_dCompiler_dElab_dPrelude_dfun2 = (fun a -> (fun b -> (fun c -> (C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTPi ("_", false, C_Vuna_dCompiler_dCore_dTerm_dRig_Vuna_dCompiler_dCore_dTerm_dRig1, a, (C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTPi ("_", false, C_Vuna_dCompiler_dCore_dTerm_dRig_Vuna_dCompiler_dCore_dTerm_dRig1, (((v_Vuna_dCompiler_dCore_dTerm_dshift 0) 1) b), (((v_Vuna_dCompiler_dCore_dTerm_dshift 0) 2) c))))))))
 
-let v_Vuna_dCompiler_dElab_dPrelude_deqOps = (C_Base_dList_dList_Base_dList_dCons ("==", (C_Base_dList_dList_Base_dList_dCons ("/=", C_Base_dList_dList_Base_dList_dNil))))
-
-let v_Vuna_dCompiler_dElab_dPrelude_disEqOp = (fun name -> ((v_Base_dList_dmemName name) v_Vuna_dCompiler_dElab_dPrelude_deqOps))
-
 let v_Vuna_dCompiler_dElab_dPrelude_dbuiltinTyName = (fun v -> (match v with
   | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVNeutral (dtb__0) -> (match dtb__0 with
   | C_Vuna_dCompiler_dCore_dTerm_dNeutral_Vuna_dCompiler_dCore_dTerm_dNGlobal (dtb__1, dtb__2) -> (if ((bi_eq_int (v_Base_dList_dlength dtb__2)) 0) then (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__1)) else C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing)
@@ -58,12 +55,9 @@ let v_Vuna_dCompiler_dElab_dPrelude_dbuiltinTyName = (fun v -> (match v with
   | _ -> C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing
 ))
 
-let v_Vuna_dCompiler_dElab_dPrelude_deqRuntimeName = (fun mc0 -> (fun mc1 -> (if ((bi_eq_str mc1) "Int") then (if ((bi_eq_str mc0) "==") then (C_Base_dResult_dResult_Base_dResult_dOk ("bi_eq_int")) else (C_Base_dResult_dResult_Base_dResult_dOk ("bi_neq_int"))) else (if ((bi_eq_str mc1) "String") then (if ((bi_eq_str mc0) "==") then (C_Base_dResult_dResult_Base_dResult_dOk ("bi_eq_str")) else (C_Base_dResult_dResult_Base_dResult_dOk ("bi_neq_str"))) else (C_Base_dResult_dResult_Base_dResult_dErr (((v_Vuna_dCompiler_dDiagnostics_dTc_dtcMsg (C_Vuna_dCompiler_dDiagnostics_dTc_dTcErr_Vuna_dCompiler_dDiagnostics_dTc_dOpOnlyIntString (mc0, mc1))) (C_Base_dVec_dVec_Base_dVec_dVCons (mc0, (C_Base_dVec_dVec_Base_dVec_dVCons (mc1, C_Base_dVec_dVec_Base_dVec_dVNil)))))))))))
-
-let v_Vuna_dCompiler_dElab_dPrelude_dpolyEqTy = (C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTPi ("a", true, C_Vuna_dCompiler_dCore_dTerm_dRig_Vuna_dCompiler_dCore_dTerm_dRig0, (C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTType (v_Vuna_dCompiler_dCore_dTerm_dlevelZero)), (((v_Vuna_dCompiler_dElab_dPrelude_dfun2 (C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTVar ("a", 0))) (C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTVar ("a", 0))) v_Vuna_dCompiler_dElab_dPrelude_dboolTy)))
+let v_Vuna_dCompiler_dElab_dPrelude_deqRuntimeName = (fun mc0 -> (fun mc1 -> (if ((bi_eq_str mc1) "Int") then (if ((bi_eq_str mc0) "eq") then (C_Base_dResult_dResult_Base_dResult_dOk ("bi_eq_int")) else (C_Base_dResult_dResult_Base_dResult_dOk ("bi_neq_int"))) else (if ((bi_eq_str mc1) "String") then (if ((bi_eq_str mc0) "eq") then (C_Base_dResult_dResult_Base_dResult_dOk ("bi_eq_str")) else (C_Base_dResult_dResult_Base_dResult_dOk ("bi_neq_str"))) else (C_Base_dResult_dResult_Base_dResult_dErr (((v_Vuna_dCompiler_dDiagnostics_dTc_dtcMsg (C_Vuna_dCompiler_dDiagnostics_dTc_dTcErr_Vuna_dCompiler_dDiagnostics_dTc_dOpOnlyIntString (mc0, mc1))) (C_Base_dVec_dVec_Base_dVec_dVCons (mc0, (C_Base_dVec_dVec_Base_dVec_dVCons (mc1, C_Base_dVec_dVec_Base_dVec_dVNil)))))))))))
 
 let rec v_Vuna_dCompiler_dElab_dPrelude_dityToTerm = (fun mc0 -> (match mc0 with
-  | C_Vuna_dCompiler_dIntrinsics_dIType_Vuna_dCompiler_dIntrinsics_dIPolyEq -> v_Vuna_dCompiler_dElab_dPrelude_dpolyEqTy
   | C_Vuna_dCompiler_dIntrinsics_dIType_Vuna_dCompiler_dIntrinsics_dIFun (dtb__3, dtb__4) -> (C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTPi ("_", false, C_Vuna_dCompiler_dCore_dTerm_dRig_Vuna_dCompiler_dCore_dTerm_dRig1, (v_Vuna_dCompiler_dElab_dPrelude_dityToTerm dtb__3), (v_Vuna_dCompiler_dElab_dPrelude_dityToTerm dtb__4)))
   | C_Vuna_dCompiler_dIntrinsics_dIType_Vuna_dCompiler_dIntrinsics_dIIO (dtb__5) -> (C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTApp ((C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTGlobal (v_Vuna_dCompiler_dIntrinsics_dioFamilyName)), (v_Vuna_dCompiler_dElab_dPrelude_dityToTerm dtb__5), C_Vuna_dCompiler_dCore_dTerm_dRig_Vuna_dCompiler_dCore_dTerm_dRig1))
   | C_Vuna_dCompiler_dIntrinsics_dIType_Vuna_dCompiler_dIntrinsics_dIList (dtb__6) -> (C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTApp ((C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTGlobal (v_Vuna_dCompiler_dIntrinsics_dlistFamilyName)), (v_Vuna_dCompiler_dElab_dPrelude_dityToTerm dtb__6), C_Vuna_dCompiler_dCore_dTerm_dRig_Vuna_dCompiler_dCore_dTerm_dRig1))

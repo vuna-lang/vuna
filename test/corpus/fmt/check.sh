@@ -55,6 +55,27 @@ cp -R "$REPO/base/lib/Base/." "$pkg/lib/Base/"
 cp "$REPO/base/lib/Base.vuna" "$pkg/lib/Base.vuna"
 cp "$REPO/base/lib/Prelude.vuna" "$pkg/lib/Prelude.vuna"
 cp "$HERE/_probe.vuna" "$pkg/app/Main.vuna"
+# M31.1：合成包**没有依赖包**，因此 Loader 不注入自动 Prelude；而工具链/编译器源码里的
+# `==` / `<=` 等现在是 Eq / Ord 方法名的别名（需要对应方法在作用域）。真实包靠自动注入，
+# 这里在模块头 `where` 之后补 `import Prelude`（已显式 import 的文件跳过）。
+inject_prelude() { # file
+  f=$1
+  if ! grep -q '^import Prelude$' "$f"; then
+    if grep -q '^module[[:space:]]' "$f"; then
+      awk '
+        BEGIN { done = 0; inmod = 0 }
+        { print }
+        !done && /^module[[:space:]]/ { inmod = 1 }
+        !done && inmod && /where[[:space:]]*$/ { print "import Prelude"; done = 1 }
+      ' "$f" >"$f.tmp" && mv "$f.tmp" "$f"
+    else
+      # 无 module 头的入口文件（app/Main.vuna）：import 在文件最前。
+      { echo "import Prelude"; cat "$f"; } >"$f.tmp" && mv "$f.tmp" "$f"
+    fi
+  fi
+}
+for f in $(find "$pkg/lib/Vuna" -name '*.vuna'); do inject_prelude "$f"; done
+inject_prelude "$pkg/app/Main.vuna"
 cat >"$pkg/vuna.toml" <<'EOF'
 [package]
 name = "vuna"

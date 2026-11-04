@@ -4,6 +4,7 @@ open Base_dBool
 open Base_dMonad
 open Base_dMaybe
 open Base_dEq
+open Base_dOrd
 open Base_dList
 type 'a0 t_Base_dResult_dResult = C_Base_dResult_dResult_Base_dResult_dOk of ('a0) | C_Base_dResult_dResult_Base_dResult_dErr of (string)
 

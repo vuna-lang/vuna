@@ -19,9 +19,13 @@
   钩子。`vuna interp` 只展示 `Int` / `String` / `Bool` 的 `main` 值（interp 是精化后的
   纯核心求值，见 [limits.md](limits.md)）；
 - 内建值（`Vuna.Compiler.Intrinsics.allIntrinsics` 里用户可见的项）：`+ - * /`、
-  `== /= < <= > >=`、`&& ||`、`++`、`strFromInt` / `strUnpack` / `strPack` /
+  `&& ||`、`++`、`strFromInt` / `strUnpack` / `strPack` /
   `strLength` / `strConcatMany` / `strSubstTemplate` / `strHash` / `strAt` / `strShow`、
   `timeUs`。宽度、编码、转义与 interp 边界见 [primitives.md](primitives.md)；
+- **运算符 = 方法别名（M31.1）**：`==` / `/=` / `<` / `<=` / `>` / `>=` 不是内建值，
+  而是 `Base.Eq` / `Base.Ord` 的方法（`eq` / `neq` / `lt` / `le` / `gt` / `ge`）的
+  **解析期别名**：`a == b` 与 `eq a b` 同义，Int / String 上由内建实例特化，其它类型
+  走 `Eq` / `Ord` 字典。trait 声明与实例的落点规则见 [operators.md](operators.md)；
 - 效果原语**只有 `prim_*` 名**（`prim_print` / `prim_readFile` / `prim_getArgs` /
   `prim_getenv` / …）：用户经 `Base.IO` 的 IO 动作使用，或在 `vuna.toml` 用
   `[capabilities].effects` 声明能力后直接调用；见 [primitives.md](primitives.md) 的

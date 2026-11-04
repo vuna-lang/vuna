@@ -62,7 +62,10 @@ main = pretty Red ++ "/" ++ show Red
 - **实例按 head 全局唯一**：同一 head 的重复 / 重叠实例报 `duplicate instance` /
   `overlapping instance`（含 `deriving` 生成的实例）。**没有命名实例**：不存在
   `instance C T as name` 或 `@name` 选择，相干性只靠「同一 head 唯一」。
-- **孤儿规则**：trait 与类型都不在本模块定义时禁止写实例。
+- **实例落点**：实例跟类型模块走；trait 签名直接依赖该类型、放类型模块会成 import 环时
+  例外（`Bool` 是 `Eq` / `Ord` 方法的返回类型，实例随 trait 留在 `Base.Eq` /
+  `Base.Ord`，放 `Base.Bool` 会成环）。**不再有「孤儿实例被拒」的表述**——实现从未强制
+  该检查（B23）。规则与理由见 [operators.md](operators.md)。
 - **约束实例**：ctx 写在 head 前，搜索时递归求解：
 
   ```vuna
@@ -78,10 +81,14 @@ main = pretty Red ++ "/" ++ show Red
 - **参数化 `deriving (Show, Eq, Ord)`**：按 data 的每个类型参数生成 ctx（形态是约束
   实例 `instance Eq a => Eq (F a)`）；`Show` 要求字段可 show。`mem (Box 1) [...]`
   这类需要 `Dict_Eq (Box Int)` 的用法因此可用。
-- **`Show` / `Eq` / `Ord` 是库里的普通 trait**：声明、方法投影与 `Int` / `String` /
-  `Bool` 实例在 `Base.Show` / `Base.Eq` / `Base.Ord`，随 `Prelude` 自动导入；
-  `show` / `eq` / `lt` 等短名不再由编译器放行，必须经 import 解析。`deriving` 的展开
-  使用 Loader 解析后的完整类名（如 `Base.Show.Show`）。
+- **`Show` / `Eq` / `Ord` 是库里的普通 trait（M31.1 起声明与实例分离）**：声明在
+  `Base.Show` / `Base.Eq` / `Base.Ord`；实例按**落点规则**分布：`Int` → `Base.Int`、
+  `String` → `Base.String`、`Bool` → `Base.Eq` / `Base.Ord`。运算符 `==` / `/=` / `<`
+  等是这些方法的解析期别名（见 [type-system.md](type-system.md)）。包上下文内所有源文件
+  （含 ad-hoc 单文件）随自动注入的 `Prelude` 可用（`Prelude` 显式 `import Base.Int`
+  以加载 Int 实例）；`show` / `eq` / `lt` 等短名不由编译器放行，必须经 import 解析。
+  `deriving` 的展开使用 Loader 解析后的完整类名（如 `Base.Show.Show`）。详见
+  [operators.md](operators.md)。
 - **没有结构性自动回退**：`List a` / `Box a` 这类要能比较 / 展示，必须有约束实例或
   具体实例；Base 只带 `Int` / `String` / `Bool` 的实例。字符串展示只有 `strShow`
   一个实现。

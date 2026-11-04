@@ -6,8 +6,6 @@ module Vuna.Compiler.Elab.Prelude
   , eqRuntimeName
   , fun2
   , intTy
-  , isEqOp
-  , polyEqTy
   , preludeGlobals
   , preludeNames
   , prependParams
@@ -44,17 +42,10 @@ fun2 : Term -> Term -> Term -> Term
 fun2 a b c = TPi "_" False Rig1 a (TPi "_" False Rig1 (shift 0 1 b) (shift 0 2 c))
 
 -- ---------------------------------------------------------------
--- `==` / `/=` 的跨类型特化
+-- `eq` / `neq` 的跨类型特化
 -- ---------------------------------------------------------------
--- 泛化签名 `{a : Type} -> a -> a -> Bool`；精化到饱和应用时按第一个实参类型选
--- runtime 函数名（`bi_eq_int` / `bi_eq_str` / `bi_neq_int` / `bi_neq_str`）。
--- 特化在精化期完成，codegen 只按名字映射。
-eqOps : List String
-eqOps = ["==", "/="]
-
-isEqOp : String -> Bool
-isEqOp name = memName name eqOps
-
+-- M31.1：`==` / `/=` 已变成 `eq` / `neq` 的解析期别名（Loader），所以特化按**方法短名**
+-- （`eq` / `neq`）选 runtime 函数名。特化在精化期完成，codegen 只按名字映射。
 -- 内建类型名（`VNeutral (NGlobal g [])` 形态）。
 builtinTyName : Value -> Maybe String
 builtinTyName v = case v of
@@ -64,15 +55,12 @@ builtinTyName v = case v of
     _ => Nothing
   _ => Nothing
 
--- 按实参类型选 runtime 函数名（只有 Int / String 可特化；其它类型走 Eq 字典）。
+-- 按实参类型 + 方法短名选 runtime 函数名（只有 Int / String 可特化；其它类型走 Eq 字典）。
 eqRuntimeName : String -> String -> Result String
-eqRuntimeName op "Int" = if op == "==" then Ok "bi_eq_int" else Ok "bi_neq_int"
-eqRuntimeName op "String" = if op == "==" then Ok "bi_eq_str" else Ok "bi_neq_str"
-eqRuntimeName op tyName = Err (tcMsg (OpOnlyIntString op tyName) (VCons op (VCons tyName VNil)))
-
--- 泛化后的 `==` / `/=` 签名：`{a : Type} -> a -> a -> Bool`。
-polyEqTy : Term
-polyEqTy = TPi "a" True Rig0 (TType levelZero) (fun2 (TVar "a" 0) (TVar "a" 0) boolTy)
+eqRuntimeName method "Int" = if method == "eq" then Ok "bi_eq_int" else Ok "bi_neq_int"
+eqRuntimeName method "String" = if method == "eq" then Ok "bi_eq_str" else Ok "bi_neq_str"
+eqRuntimeName method tyName =
+  Err (tcMsg (OpOnlyIntString method tyName) (VCons method (VCons tyName VNil)))
 
 -- ---------------------------------------------------------------
 -- IType → Core Term
@@ -87,7 +75,6 @@ ityToTerm (IList elem) = TApp (TGlobal listFamilyName) (ityToTerm elem) Rig1
 -- M31：效果原语的返回类型是 canonical `Base.IO.IO a`（与 main 钩子同一族身份）。
 ityToTerm (IIO elem) = TApp (TGlobal ioFamilyName) (ityToTerm elem) Rig1
 ityToTerm (IFun a b) = TPi "_" False Rig1 (ityToTerm a) (ityToTerm b)
-ityToTerm IPolyEq = polyEqTy
 
 -- ---------------------------------------------------------------
 -- prelude globals / 名字名单

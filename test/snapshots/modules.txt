@@ -88,6 +88,7 @@ app.Main  compiler/app/Main.vuna
 Base.Bool  base/lib/Base/Bool.vuna
 Base.Eq  base/lib/Base/Eq.vuna
 Base.IO  base/lib/Base/IO.vuna
+Base.Int  base/lib/Base/Int.vuna
 Base.List  base/lib/Base/List.vuna
 Base.Map  base/lib/Base/Map.vuna
 Base.Maybe  base/lib/Base/Maybe.vuna
@@ -167,6 +168,7 @@ app.Main  ./app/Main.vuna
 Base.Bool  ./lib/Base/Bool.vuna
 Base.Eq  ./lib/Base/Eq.vuna
 Base.IO  ./lib/Base/IO.vuna
+Base.Int  ./lib/Base/Int.vuna
 Base.List  ./lib/Base/List.vuna
 Base.Map  ./lib/Base/Map.vuna
 Base.Maybe  ./lib/Base/Maybe.vuna

@@ -1,0 +1,35 @@
+-- M31.1：`==` / `/=` / `<` 等是 `eq` / `neq` / `lt` 等方法的**解析期别名**；
+-- Int / String 走内建特化，Bool 走 Base.Eq / Base.Ord 的模式匹配实例，用户 data 走
+-- deriving 生成的实例（`==` 与 `eq` 必须得到同一结果）。
+import Prelude
+
+data Color : Type where
+  Red : Color
+  Blue : Color
+deriving (Eq, Ord)
+
+main : String
+main =
+  let
+    a = 1 == 1
+    b = eq 1 1
+    c = "x" == "x"
+    d = eq "x" "y"
+    e = Red == Red
+    f = Red == Blue
+    g = True == False
+    h = 1 < 2
+    i = lt 1 2
+    j = False < True
+    k = mem 1 [1, 2]
+  in show a
+    ++ show b
+    ++ show c
+    ++ show d
+    ++ show e
+    ++ show f
+    ++ show g
+    ++ show h
+    ++ show i
+    ++ show j
+    ++ show k

@@ -89,7 +89,8 @@ CLI 入口；`seed/` = 提交入库的多文件 OCaml 信任锚点（生成物�
   [type-system.md](docs/reference/type-system.md)（宇宙/索引族/依赖匹配/相等/擦除）、
   [records-traits.md](docs/reference/records-traits.md)（记录/trait/do）、
   [stdlib.md](docs/reference/stdlib.md)、[packages.md](docs/reference/packages.md)、
-  [primitives.md](docs/reference/primitives.md)（内建/原语/能力）
+  [primitives.md](docs/reference/primitives.md)（内建/原语/能力）、
+  [operators.md](docs/reference/operators.md)（运算符=方法别名、实例落点规则）
 - 编译器实现：[compiler.md](docs/reference/compiler.md)（模块与输出模型）、
   [core.md](docs/reference/core.md)（Core TT / NbE / 精化器）
 - 工具链（`goal` / LSP / `doc` / 错误码；`vuna gen-errors` 生成

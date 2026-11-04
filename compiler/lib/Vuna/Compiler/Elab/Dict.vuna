@@ -5,8 +5,9 @@ module Vuna.Compiler.Elab.Dict
   , dictArgKind
   , dictArgUnsolvedMeta
   , dictClassArg
-  , isCmpOp
+  , isCmpMethod
   , isDictDomain
+  , isEqMethod
   , isRigidDictArg
   , neutralHeadOrSelf
   , resolveDictGoals
@@ -35,10 +36,11 @@ isDictDomain : Ec -> Value -> Bool
 isDictDomain ec dom = isDictValue ec (forceVal ec dom)
 
 isDictValue : Ec -> Value -> Bool
-isDictValue ec (VNeutral n) = case n of
-  NGlobal g sp => isDictFamily ec g
+isDictValue ec v = case v of
+  VNeutral n => case n of
+    NGlobal g sp => isDictFamily ec g
+    _ => False
   _ => False
-isDictValue ec _ = False
 
 isDictFamily : Ec -> String -> Bool
 isDictFamily ec g = memName g (map (\c => dictTypeName (dtClassName c)) (ecClasses ec))
@@ -206,26 +208,24 @@ substDictTerm : Ec -> Term -> Term
 substDictTerm ec t = substDictTermGo ec 0 t
 
 substDictTermGo : Ec -> Int -> Term -> Term
-substDictTermGo ec depth (t@(TMeta m)) = case metaLookup m (ecSols ec) of
-  Nothing => t
-  Just v => case dictTermOfValue ec v of
-    Just soln => if hasFreeTermVar 0 soln then t else shift 0 depth soln
-    Nothing =>
-      let
-        soln0 = quote 0 v
-      in if hasFreeTermVar 0 soln0 then t else soln0
-substDictTermGo ec depth (TPi n i r dom cod) =
-  TPi n i r (substDictTermGo ec depth dom) (substDictTermGo ec (depth + 1) cod)
-substDictTermGo ec depth (TLam n r b) = TLam n r (substDictTermGo ec (depth + 1) b)
-substDictTermGo ec depth (TApp f a r) =
-  TApp (substDictTermGo ec depth f) (substDictTermGo ec depth a) r
-substDictTermGo ec depth (TCon c args) =
-  TCon c (map (\p => Pair (substDictTermGo ec depth (firstOf p)) (secondOf p)) args)
-substDictTermGo ec depth (TCase s alts) =
-  TCase (substDictTermGo ec depth s) (map (\alt => substDictTermAlt ec depth alt) alts)
-substDictTermGo ec depth (TIf c th el) =
-  TIf (substDictTermGo ec depth c) (substDictTermGo ec depth th) (substDictTermGo ec depth el)
-substDictTermGo ec depth t = t
+substDictTermGo ec depth t = case t of
+  TMeta m => case metaLookup m (ecSols ec) of
+    Nothing => t
+    Just v => case dictTermOfValue ec v of
+      Just soln => if hasFreeTermVar 0 soln then t else shift 0 depth soln
+      Nothing =>
+        let
+          soln0 = quote 0 v
+        in if hasFreeTermVar 0 soln0 then t else soln0
+  TPi n i r dom cod => TPi n i r (substDictTermGo ec depth dom) (substDictTermGo ec (depth + 1) cod)
+  TLam n r b => TLam n r (substDictTermGo ec (depth + 1) b)
+  TApp f a r => TApp (substDictTermGo ec depth f) (substDictTermGo ec depth a) r
+  TCon c args => TCon c (map (\p => Pair (substDictTermGo ec depth (firstOf p)) (secondOf p)) args)
+  TCase s alts =>
+    TCase (substDictTermGo ec depth s) (map (\alt => substDictTermAlt ec depth alt) alts)
+  TIf c th el =>
+    TIf (substDictTermGo ec depth c) (substDictTermGo ec depth th) (substDictTermGo ec depth el)
+  _ => t
 
 substDictTermAlt : Ec -> Int -> CaseAlt -> CaseAlt
 substDictTermAlt ec depth (CaseAlt n bs b) = CaseAlt n bs (substDictTermGo ec (depth + length bs) b)
@@ -332,9 +332,60 @@ anyValueHasRigidNVar ec fuel [] = False
 anyValueHasRigidNVar ec fuel (v :: rest) =
   valueHasRigidNVar ec fuel v || anyValueHasRigidNVar ec fuel rest
 
--- `==` / `/=` 的饱和应用（M19/M29）：`Int` / `String` 特化成具体运行时函数；其它类型解析成
--- `Eq` 字典的方法投影（手写实例、`deriving (Eq)`、约束实例都算证据）。
+-- M31.1：`==` / `/=` / `<` 等已由 Loader 解析成 Eq / Ord 的**方法名**，Elab 看到的
+-- 是方法投影的完整名（如 `Base.Eq.eq`）。特化入口按「名字是否为该类的方法投影」
+-- 判定（从类表取投影名，不硬编码模块前缀），不再有运算符名判断。
+classHasProjection : String -> String -> String -> Ec -> Bool
+classHasProjection className short name ec = case findClassByShortName className (ecClasses ec) of
+  Nothing => False
+  Just cls => classMethodProjection (dtClassMethods cls) short == name
+
+isEqMethod : Ec -> String -> Bool
+-- 后两个是**内部生成名**：`Elab.Derive`（deriving 展开）与 `Elab.Match`（字面量模式）
+-- 直接构造 `EVar "=="` / `EVar "/="`，不经过 Loader 别名；用户源码的 `==` 一律在
+-- Loader 被换成 `eq`，所以内部名不会泄漏到用户语义。
+isEqMethod ec name =
+  classHasProjection "Eq" "eq" name ec
+    || classHasProjection "Eq" "neq" name ec
+    || name == "=="
+    || name == "/="
+
+isCmpMethod : Ec -> String -> Bool
+isCmpMethod ec name =
+  classHasProjection "Ord" "lt" name ec
+    || classHasProjection "Ord" "le" name ec
+    || classHasProjection "Ord" "gt" name ec
+    || classHasProjection "Ord" "ge" name ec
+    || name == "<"
+    || name == "<="
+    || name == ">"
+    || name == ">="
+
+-- 方法投影的**短名**（`Base.Eq.eq` → `eq`）：特化只按短名选 runtime 函数。
+methodShortOf : String -> String
+methodShortOf name = secondOf (splitLastDot (splitOnDot name))
+
+-- 内部生成名（`==` 等）到方法短名的映射；方法投影完整名直接取最后一段。
+eqMethodShortOf : String -> String
+eqMethodShortOf name = case name of
+  "==" => "eq"
+  "/=" => "neq"
+  _ => methodShortOf name
+
+cmpMethodShortOf : String -> String
+cmpMethodShortOf name = case name of
+  "<" => "lt"
+  "<=" => "le"
+  ">" => "gt"
+  ">=" => "ge"
+  _ => methodShortOf name
+
+-- `eq` / `neq` 的饱和应用（M19/M29，M31.1 运算符改为方法别名）：`Int` / `String`
+-- 特化成具体运行时函数；其它类型解析成 `Eq` 字典的方法投影（手写实例、`deriving (Eq)`、
+-- 约束实例都算证据）。
 -- M24.7：方法投影名与字典名从库里短名 `Eq` 的类表项取（`Base.Eq.Eq`），不用硬编码 `Dict_Eq`。
+-- M31.1：`name` 已是被解析成方法投影的完整名（`Base.Eq.eq` / `.neq`），因此字典分支
+-- 直接用它，不再有 `==` → `eq` 的映射。
 --
 -- M29（决策 A）：**删除泛型结构比较兜底**——程序里没有 `Eq` 类、或具体类型搜不到实例时
 -- 在 check 期报错（`TC_EqRequiresEvidence` / `TC_NoInstanceFound`），不再退回
@@ -342,7 +393,7 @@ anyValueHasRigidNVar ec fuel (v :: rest) =
 specializeEqTy : List (Pair String Term) -> Ctx -> String -> Term -> Term -> Span -> Value -> Ec -> Result (Maybe (Pair Term (Pair Value Ec)))
 specializeEqTy globals ctx name aTerm bTerm sp aTy ec = case builtinEqTyName (forceVal ec aTy) of
   Just tyName =>
-    andThen (eqRuntimeName name tyName)
+    andThen (eqRuntimeName (eqMethodShortOf name) tyName)
       (\rt => Ok (Just (Pair (TApp (TApp (TGlobal rt) aTerm Rig1) bTerm Rig1) (Pair (VNeutral (NGlobal boolTypeName [])) ec))))
   Nothing => case findClassByShortName "Eq" (ecClasses ec) of
     Nothing =>
@@ -351,7 +402,9 @@ specializeEqTy globals ctx name aTerm bTerm sp aTy ec = case builtinEqTyName (fo
       in tcErr1 sp (EqRequiresEvidence st) st
     Just cls =>
       let
-        mname = classMethodProjection (dtClassMethods cls) (if name == "==" then "eq" else "neq")
+        mname =
+          if name == "==" || name == "/=" then classMethodProjection (dtClassMethods cls) (eqMethodShortOf name)
+          else name
         -- 类型项必须按**当前上下文深度** quote：`quote 0` 会把刚性变量拍成 level 0，
         -- 字典的类参数就会指向错误的 binder（两个以上类型参数时提到别的参数上）。
         tyTerm = quote (ctxDepth ctx) aTy
@@ -377,38 +430,28 @@ deferEqDict globals ctx mname tyTerm aTerm bTerm sp dictTy ec =
         (Just (Pair (TApp (TApp (TApp (TApp (TGlobal mname) tyTerm Rig0) metaTerm Rig1) aTerm Rig1) bTerm Rig1) (Pair (VNeutral (NGlobal boolTypeName [])) (ecAddDictGoal ec1 (DtDictGoal m dictTy)))))
 
 -- ---------------------------------------------------------------
--- M22.2：`<` / `<=` / `>` / `>=` 的饱和应用按实参类型特化
+-- M22.2 / M31.1：`lt` / `le` / `gt` / `ge` 的饱和应用按实参类型特化
 -- ---------------------------------------------------------------
--- 与 `==` / `/=` 同构：`Int` 走具体运行时函数；`String` / `Bool` 走 OCaml `compare`
+-- 与 `eq` / `neq` 同构：`Int` 走具体运行时函数；`String` / `Bool` 走 OCaml `compare`
 -- 的泛型运行时；其它类型解析成 `Ord` 字典的方法投影（`deriving (Ord)` 生效），
 -- 刚性类参数延迟提升成 `{d : Dict_Ord a}`。
-cmpOps : List String
-cmpOps = ["<", "<=", ">", ">="]
-
-isCmpOp : String -> Bool
-isCmpOp name = memName name cmpOps
-
-cmpMethodName : String -> String
-cmpMethodName "<" = "lt"
-cmpMethodName "<=" = "le"
-cmpMethodName ">" = "gt"
-cmpMethodName _ = "ge"
-
+-- M31.1：`name` 是方法投影完整名（`Base.Ord.lt` 等），特化只按短名选 runtime 名。
 cmpRuntimeName : Span -> String -> String -> Result String
-cmpRuntimeName sp name "Int" = case name of
-  "<" => Ok "bi_lt_int"
-  "<=" => Ok "bi_le_int"
-  ">" => Ok "bi_gt_int"
-  _ => Ok "bi_ge_int"
-cmpRuntimeName sp name "String" = Ok (cmpGenericName name)
-cmpRuntimeName sp name tyName =
-  if tyName == boolTypeName then Ok (cmpGenericName name)
-  else tcErr2 sp (OpNotDefinedFor name tyName) name tyName
+cmpRuntimeName sp method tyName = case tyName of
+  "Int" => case method of
+    "lt" => Ok "bi_lt_int"
+    "le" => Ok "bi_le_int"
+    "gt" => Ok "bi_gt_int"
+    _ => Ok "bi_ge_int"
+  "String" => Ok (cmpGenericName method)
+  _ =>
+    if tyName == boolTypeName then Ok (cmpGenericName method)
+    else tcErr2 sp (OpNotDefinedFor method tyName) method tyName
 
 cmpGenericName : String -> String
-cmpGenericName "<" = "bi_lt_generic"
-cmpGenericName "<=" = "bi_le_generic"
-cmpGenericName ">" = "bi_gt_generic"
+cmpGenericName "lt" = "bi_lt_generic"
+cmpGenericName "le" = "bi_le_generic"
+cmpGenericName "gt" = "bi_gt_generic"
 cmpGenericName _ = "bi_ge_generic"
 
 -- 字典的类参数还是未解元变量时**不做实例搜索**：否则会像 `srt (\x,y => x <= y) xs`
@@ -425,20 +468,23 @@ dictArgUnsolvedMeta ec dom = case dictClassArg ec dom of
 
 specializeCmpTy : List (Pair String Term) -> Ctx -> String -> Term -> Term -> Span -> Value -> Ec -> Result (Maybe (Pair Term (Pair Value Ec)))
 -- M24.7：`Ord` 类/实例在库（`Base.Ord`），按短名查类并用真实字典名/方法投影名。
+-- M31.1：`name` 是方法投影完整名（`Base.Ord.lt` 等），字典分支直接使用。
 -- M29：**删除「无 Ord 类 → 任意类型泛型比较」兜底**——没有 `Ord` 证据时在 check 期报错
 -- （`Ord instance required`），不再生成 `bi_lt_generic` 等对用户 data 的 `compare`。
 specializeCmpTy globals ctx name aTerm bTerm sp aTy ec = case cmpBuiltinTyName (forceVal ec aTy) of
   Just tyName =>
-    andThen (cmpRuntimeName sp name tyName)
+    andThen (cmpRuntimeName sp (cmpMethodShortOf name) tyName)
       (\rt => Ok (Just (Pair (TApp (TApp (TGlobal rt) aTerm Rig1) bTerm Rig1) (Pair (VNeutral (NGlobal boolTypeName [])) ec))))
   Nothing => case findClassByShortName "Ord" (ecClasses ec) of
     Nothing =>
       let
         st = showValue (forceVal ec aTy)
-      in tcErr2 sp (OpNotDefinedFor name st) name st
+      in tcErr2 sp (OpNotDefinedFor (cmpMethodShortOf name) st) (cmpMethodShortOf name) st
     Just cls =>
       let
-        mname = classMethodProjection (dtClassMethods cls) (cmpMethodName name)
+        mname =
+          if name == "<" || name == "<=" || name == ">" || name == ">=" then classMethodProjection (dtClassMethods cls) (cmpMethodShortOf name)
+          else name
         tyTerm = quote (ctxDepth ctx) aTy
         dictTy = VNeutral (NGlobal (dictTypeName (dtClassName cls)) [aTy])
       in if dictArgUnsolvedMeta ec dictTy then deferEqDict globals ctx mname tyTerm aTerm bTerm sp dictTy ec

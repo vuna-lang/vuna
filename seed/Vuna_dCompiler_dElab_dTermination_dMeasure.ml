@@ -4,11 +4,12 @@ open Base_dBool
 open Base_dMonad
 open Base_dMaybe
 open Base_dEq
+open Base_dOrd
 open Base_dList
 open Base_dResult
 open Base_dString
 open Base_dShow
-open Base_dOrd
+open Base_dInt
 open Prelude
 open Vuna_dCompiler_dCommon
 open Vuna_dCompiler_dFrontend_dToml
@@ -264,6 +265,8 @@ let v_Vuna_dCompiler_dElab_dTermination_dMeasure_dextendSizesStrict = (fun mc0 -
   | _ -> mc0
 ))))
 
+let v_Vuna_dCompiler_dElab_dTermination_dMeasure_dopBaseName = (fun name -> (v_Base_dPair_dsecondOf (v_Vuna_dCompiler_dCommon_dsplitLastDot (v_Vuna_dCompiler_dCommon_dsplitOnDot name))))
+
 let v_Vuna_dCompiler_dElab_dTermination_dMeasure_dvarOfExpr = (fun mc0 -> (match mc0 with
   | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEVar (dtb__105, dtb__106) -> (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__105))
   | _ -> C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing
@@ -311,9 +314,15 @@ let v_Vuna_dCompiler_dElab_dTermination_dMeasure_dguardLT = (fun mc0 -> (match m
   | _ -> C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing
 ))
 
+<<<<<<< HEAD
 let v_Vuna_dCompiler_dElab_dTermination_dMeasure_dguardPosVar = (fun mc0 -> (match mc0 with
   | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEApp (dtb__125, dtb__126, dtb__127) -> (match dtb__125 with
   | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEVar (dtb__128, dtb__129) -> (if ((bi_eq_str dtb__128) "<=") then (v_Vuna_dCompiler_dElab_dTermination_dMeasure_dguardLE dtb__126) else (if ((bi_eq_str dtb__128) ">=") then (v_Vuna_dCompiler_dElab_dTermination_dMeasure_dguardGE dtb__126) else (if ((bi_eq_str dtb__128) "<") then (v_Vuna_dCompiler_dElab_dTermination_dMeasure_dguardLT dtb__126) else C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing)))
+=======
+let v_Vuna_dCompiler_dElab_dTermination_dMeasure_dguardPosVar = (fun e -> ((fun nd_uscrut1 -> (match nd_uscrut1 with
+  | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEApp (dtb__122, dtb__123, dtb__124) -> (match dtb__122 with
+  | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEVar (dtb__125, dtb__126) -> (if ((bi_eq_str (v_Vuna_dCompiler_dElab_dTermination_dMeasure_dopBaseName dtb__125)) "le") then (v_Vuna_dCompiler_dElab_dTermination_dMeasure_dguardLE dtb__123) else (if ((bi_eq_str (v_Vuna_dCompiler_dElab_dTermination_dMeasure_dopBaseName dtb__125)) "ge") then (v_Vuna_dCompiler_dElab_dTermination_dMeasure_dguardGE dtb__123) else (if ((bi_eq_str (v_Vuna_dCompiler_dElab_dTermination_dMeasure_dopBaseName dtb__125)) "lt") then (v_Vuna_dCompiler_dElab_dTermination_dMeasure_dguardLT dtb__123) else (if ((bi_eq_str (v_Vuna_dCompiler_dElab_dTermination_dMeasure_dopBaseName dtb__125)) "<=") then (v_Vuna_dCompiler_dElab_dTermination_dMeasure_dguardLE dtb__123) else (if ((bi_eq_str (v_Vuna_dCompiler_dElab_dTermination_dMeasure_dopBaseName dtb__125)) ">=") then (v_Vuna_dCompiler_dElab_dTermination_dMeasure_dguardGE dtb__123) else (if ((bi_eq_str (v_Vuna_dCompiler_dElab_dTermination_dMeasure_dopBaseName dtb__125)) "<") then (v_Vuna_dCompiler_dElab_dTermination_dMeasure_dguardLT dtb__123) else C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing))))))
+>>>>>>> 92571c3 (feat(m31): 运算符改为 Eq/Ord 方法别名，trait 声明与实例分离)
   | _ -> C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing
 )
   | _ -> C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing

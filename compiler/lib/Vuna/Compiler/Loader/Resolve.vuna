@@ -63,6 +63,24 @@ isDtPreludeName name = memName name dtPreludeNames
 dtPreludeNames : List String
 dtPreludeNames = append ["Type", "->", "_"] (append typeIntrinsicNames preludeValueNames)
 
+-- M31.1：比较/相等运算符是 Eq / Ord **方法名的解析期别名**。
+--
+-- 真源是 `Base.Eq.eq` / `Base.Ord.lt` 等方法（trait 声明在库）；`==` 等符号由本表
+-- 换成方法短名后走常规名字解析（import 的导出表 + 提示）。这样 `a == b`、`eq a b`
+-- 在 Elab 看到同一个名字，特化/字典只有一条路径。
+--
+-- M31.2 会把这些别名变成库里的 `infix 4 == = eq` 声明并删除本表（届时别名目标与
+-- fixity 都来自用户/库声明）。
+builtinOpAlias : String -> Maybe String
+builtinOpAlias name = case name of
+  "==" => Just "eq"
+  "/=" => Just "neq"
+  "<" => Just "lt"
+  "<=" => Just "le"
+  ">" => Just "gt"
+  ">=" => Just "ge"
+  _ => Nothing
+
 -- M24.7：trait 迁到库后，缺 import 是最常见的错误来源。除了常规的
 -- unbound/unknown 诊断，再给一条可操作提示（单文件 / 未 import 的场景）。
 traitImportHint : String -> String
@@ -323,9 +341,12 @@ resolveRecValues fuel modules label prefix ns imports scope ((Pair pat value) ::
 resolveExpr : Int -> List Module -> String -> String -> Namespaces -> List Import -> List String -> Expr -> Result Expr
 resolveExpr fuel modules label prefix ns imports scope expr = if fuel <= 0 then Err "DT: resolve fuel exhausted (internal: resolver made no progress)"
 else case expr of
-  EVar name sp =>
-    if containsDot name then resolveDottedExpr modules label prefix ns imports scope name sp
-    else andThen (resolveGlobal modules label prefix ns imports scope name) (\n => Ok (EVar n sp))
+  EVar name sp => if containsDot name then resolveDottedExpr modules label prefix ns imports scope name sp
+  else case builtinOpAlias name of
+    Just target =>
+      andThen (resolveGlobal modules label prefix ns imports scope target) (\n => Ok (EVar n sp))
+    Nothing =>
+      andThen (resolveGlobal modules label prefix ns imports scope name) (\n => Ok (EVar n sp))
   EInt n sp => Ok (EInt n sp)
   EStr s sp => Ok (EStr s sp)
   ELam params body sp =>

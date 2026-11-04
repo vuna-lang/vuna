@@ -103,8 +103,6 @@ data IType : Type where
   -- `Base.IO.IO <arg>`：效果原语返回的 IO 动作（M31 起效果原语类型化）
   IIO : IType -> IType
   IFun : IType -> IType -> IType
-  -- `{a : Type} -> a -> a -> Bool`（`==` / `/=` 的泛化签名）
-  IPolyEq : IType
 
 arityOfType : IType -> Int
 arityOfType (IFun _ cod) = 1 + arityOfType cod
@@ -257,12 +255,6 @@ allIntrinsics =
     MkIntrinsic "-" (IFun IInt (IFun IInt IInt)) OpSub Nothing "bi_sub" True,
     MkIntrinsic "*" (IFun IInt (IFun IInt IInt)) OpMul Nothing "bi_mul" True,
     MkIntrinsic "/" (IFun IInt (IFun IInt IInt)) OpDiv Nothing "bi_div" True,
-    MkIntrinsic "==" IPolyEq OpEqInt Nothing "bi_eq_int" True,
-    MkIntrinsic "/=" IPolyEq OpNeqInt Nothing "bi_neq_int" True,
-    MkIntrinsic "<" (IFun IInt (IFun IInt IBool)) OpLtInt Nothing "bi_lt_int" True,
-    MkIntrinsic "<=" (IFun IInt (IFun IInt IBool)) OpLeInt Nothing "bi_le_int" True,
-    MkIntrinsic ">" (IFun IInt (IFun IInt IBool)) OpGtInt Nothing "bi_gt_int" True,
-    MkIntrinsic ">=" (IFun IInt (IFun IInt IBool)) OpGeInt Nothing "bi_ge_int" True,
     MkIntrinsic "++" (IFun IStr (IFun IStr IStr)) OpConcat Nothing "bi_concat" True,
     MkIntrinsic "&&" (IFun IBool (IFun IBool IBool)) OpAnd Nothing "bi_and" True,
     MkIntrinsic "||" (IFun IBool (IFun IBool IBool)) OpOr Nothing "bi_or" True,

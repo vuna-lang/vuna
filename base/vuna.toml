@@ -11,6 +11,7 @@ modules = [
   "Base.Show",
   "Base.Eq",
   "Base.Ord",
+  "Base.Int",
   "Base.List",
   "Base.Nat",
   "Base.Vec",

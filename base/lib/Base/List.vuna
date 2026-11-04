@@ -28,6 +28,9 @@ import Base.Monad
 -- M24.7：`mem` 的 `==` 在刚性类型上提升成 Dict_Eq；显式 import Base.Eq 既保证类存在，
 -- 也让 split 产物有正确的单元依赖顺序（生成代码引用 Base.Eq.eq 投影）。
 import Base.Eq
+-- M31.1：`==` / `<=` 是 Eq / Ord 方法名的别名，base 模块不自动注入 Prelude，
+-- 因此 take/drop/rangeFrom 的 `<=` 需要 Ord 方法名可见。
+import Base.Ord
 
 data List a : Type where
   Nil : List a

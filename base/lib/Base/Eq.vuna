@@ -1,29 +1,28 @@
 module Base.Eq (Eq(..)) where
 
--- Base.Eq：`Eq` trait 与内建类型实例（M24.7：从编译器合成迁到库）。
+-- Base.Eq：`Eq` trait 的**声明**（M31.1：trait 声明与实例分离）。
 --
--- 方法与编译器内建 `Eq` 的方法面**逐位对齐**（`eq` / `neq`，参数顺序与返回类型
--- 相同）：下一波删除 `DtDerive` 的内建 trait/实例、并把 `==` / `/=` 的实例搜索从
--- 硬编码短名切到类表后，这两个方法就是 `==` / `/=` 的字典字段。
+-- 实例落点规则：实例跟类型模块走；唯独 `Bool` 是 `Eq` 方法签名的一部分（返回类型），
+-- 放 `Base.Bool` 会形成 `Base.Bool ↔ Base.Eq` 的 import 环（Loader 报 ImportCycle），
+-- 所以 Bool 实例随 trait 留在本模块。`Int` / `String` 是 language primitive 类型，
+-- 实例在 `Base.Int` / `Base.String`。
 --
--- `Int` / `String` 的 `eq` / `neq` 复用 `==` / `/=`：它们在精化期特化成
--- `bi_eq_int` / `bi_eq_str`（不走实例搜索），因此不会自递归。
+-- `==` / `/=` 不再是编译器内建全局：Loader 把它们解析成 `eq` / `neq` 的别名（M31.1），
+-- 因此 `a == b`、`eq a b` 是同一个调用；Int / String 上的内建特化（`bi_eq_*`）是
+-- 这两个类的内建实例实现，而不是运算符的独立语义。
 import Base.Bool
 
 trait Eq a where
   eq : a -> a -> Bool
   neq : a -> a -> Bool
 
-instance Eq Int where
-  eq x y = x == y
-  neq x y = x /= y
-
-instance Eq String where
-  eq x y = x == y
-  neq x y = x /= y
-
--- `Bool == Bool` 会走本实例（`==` 只对 Int / String 做精化期特化），因此方法体
--- **不能用 `==` / `/=`：改写为析取；`not` 来自 Base.Bool。
+-- `Bool` 的相等用模式匹配直接表达（不依赖 `==` / `eq`，避免实例体自引用）。
 instance Eq Bool where
-  eq x y = x && y || not x && not y
-  neq x y = x && not y || not x && y
+  eq True True = True
+  eq True False = False
+  eq False True = False
+  eq False False = True
+  neq True True = False
+  neq True False = True
+  neq False True = True
+  neq False False = False

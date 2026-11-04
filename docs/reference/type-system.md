@@ -71,16 +71,25 @@ Core 表示与合一实现见 [core.md](core.md)，当前边界清单见 [limits
 ## 相等与比较
 
 - **`==` / `/=` 是证据驱动的**，只有两条路径：
-  1. `Int` / `String` 的内建特化（`bi_eq_int` / `bi_eq_str`）；
+  1. `Int` / `String` 的内建特化（`bi_eq_int` / `bi_eq_str` / `bi_*_int` / `bi_*_generic`）；
   2. `Eq` 证据：手写实例、`deriving (Eq)` 生成的实例、约束实例。
   具体类型没有实例、函数类型相等、`Eq` 类不在作用域，都在 `check` 期报错
   （`TC_NoInstanceFound` / `TC_EqRequiresEvidence`）。**没有泛型结构比较兜底**，
   interp 与编译产物也没有第二套相等算法。
+- **运算符是方法别名（M31.1）**：`==` / `/=` / `<` / `<=` / `>` / `>=` 不是独立的语义
+  入口，Loader 把它们解析成 `eq` / `neq` / `lt` / `le` / `gt` / `ge`
+  （`Loader.Resolve.builtinOpAlias`）。`a == b`、`eq a b`、``a `eq` b`` 是同一个调用；
+  Elab 的特化按「`Eq` / `Ord` 方法投影的饱和应用」判定（`Elab.Dict.isEqMethod` /
+  `isCmpMethod`），不按运算符名。运算符不产生新的运行时名字。实例落点规则见
+  [operators.md](operators.md)。
 - **`<` / `<=` / `>` / `>=`**：`Int` 内建特化；`String` / `Bool` 保留泛型运行时；
   其它类型必须有 `Ord` 证据，无实例 / 无类在 `check` 期报错。
 - 相等发生在**刚性类型变量**上时，搜不到实例会提升成隐式字典参数（延迟到调用点），
-  实例（含 `deriving` 生成的）仍优先。`Eq` / `Ord` / `Show` 的声明与实例在
-  `Base.Eq` / `Base.Ord` / `Base.Show`，随 `Prelude` 自动导入；trait 与实例语义见
+  实例（含 `deriving` 生成的）仍优先。`Eq` / `Ord` / `Show` 的**声明**在
+  `Base.Eq` / `Base.Ord` / `Base.Show`；实例按**落点规则**分布（跟类型模块走，
+  `Bool` 是方法返回类型，实例随 trait）：`Int` → `Base.Int`、`String` → `Base.String`、
+  `Bool` → `Base.Eq` / `Base.Ord`。包上下文内所有源文件（含 ad-hoc 单文件）随自动注入的
+  `Prelude` 可用（`Prelude` 显式 `import Base.Int` 以加载 Int 实例）；trait 与实例语义见
   [records-traits.md](records-traits.md)。
 - **type-as-value**：不引入 type codes。Type 级等式走**擦除的 `Eq` 证据 + `cast`
   组合子**；把类型放到**运行时位置**仍被擦除检查拒（`CG_TypeUsedAtRuntime` /

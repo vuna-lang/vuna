@@ -23,6 +23,13 @@
 - **`Int` / `String` 是语言 primitive 类型**（`Intrinsics.typeIntrinsicNames = [Int, String]`）：
   prelude 直接提供 `Int : Type` / `String : Type`；入口 / 未限定名处的 `data Int` /
   `data String` 报 `CannotRedefineBuiltin`（模块内声明会 mangle 成 `M.Int`，属于不同符号）。
+  M31.1 起它们的 **Eq / Ord 实例宿主模块**是 `Base.Int` / `Base.String`（实例跟类型模块走；
+  primitive 无构造子，实例体走 Int/String 内建特化）。类型身份仍由本文件的内建表提供，
+  `Base.Int` 不声明类型。实例落点规则见 [operators.md](operators.md)。
+- **比较/相等运算符不是内建值（M31.1）**：`==` `/=` `<` `<=` `>` `>=` 是 `Base.Eq` /
+  `Base.Ord` 方法（`eq` / `neq` / `lt` / `le` / `gt` / `ge`）的解析期别名；Int/String 上的
+  `bi_eq_int` / `bi_eq_str` / `bi_*_int` / `bi_*_generic` 是这两个类的**内建实例实现**
+  （不是运算符的独立语义）。详见 [operators.md](operators.md)。
 - **`Bool` / `List` / `IO` 是 base 的普通 `data` 声明**，身份是完整符号而不是短名：
 
   | 声明 | canonical 符号 | 来源 | 常量 |

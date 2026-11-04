@@ -4,6 +4,7 @@ open Base_dBool
 open Base_dMonad
 open Base_dMaybe
 open Base_dEq
+open Base_dOrd
 type 'a0 t_Base_dList_dList = C_Base_dList_dList_Base_dList_dNil | C_Base_dList_dList_Base_dList_dCons of ('a0) * ('a0 t_Base_dList_dList)
 
 
