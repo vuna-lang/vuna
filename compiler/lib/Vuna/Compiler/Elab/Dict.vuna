@@ -35,11 +35,10 @@ isDictDomain : Ec -> Value -> Bool
 isDictDomain ec dom = isDictValue ec (forceVal ec dom)
 
 isDictValue : Ec -> Value -> Bool
-isDictValue ec v = case v of
-  VNeutral n => case n of
-    NGlobal g sp => isDictFamily ec g
-    _ => False
+isDictValue ec (VNeutral n) = case n of
+  NGlobal g sp => isDictFamily ec g
   _ => False
+isDictValue ec _ = False
 
 isDictFamily : Ec -> String -> Bool
 isDictFamily ec g = memName g (map (\c => dictTypeName (dtClassName c)) (ecClasses ec))
@@ -207,24 +206,26 @@ substDictTerm : Ec -> Term -> Term
 substDictTerm ec t = substDictTermGo ec 0 t
 
 substDictTermGo : Ec -> Int -> Term -> Term
-substDictTermGo ec depth t = case t of
-  TMeta m => case metaLookup m (ecSols ec) of
-    Nothing => t
-    Just v => case dictTermOfValue ec v of
-      Just soln => if hasFreeTermVar 0 soln then t else shift 0 depth soln
-      Nothing =>
-        let
-          soln0 = quote 0 v
-        in if hasFreeTermVar 0 soln0 then t else soln0
-  TPi n i r dom cod => TPi n i r (substDictTermGo ec depth dom) (substDictTermGo ec (depth + 1) cod)
-  TLam n r b => TLam n r (substDictTermGo ec (depth + 1) b)
-  TApp f a r => TApp (substDictTermGo ec depth f) (substDictTermGo ec depth a) r
-  TCon c args => TCon c (map (\p => Pair (substDictTermGo ec depth (firstOf p)) (secondOf p)) args)
-  TCase s alts =>
-    TCase (substDictTermGo ec depth s) (map (\alt => substDictTermAlt ec depth alt) alts)
-  TIf c th el =>
-    TIf (substDictTermGo ec depth c) (substDictTermGo ec depth th) (substDictTermGo ec depth el)
-  _ => t
+substDictTermGo ec depth (t@(TMeta m)) = case metaLookup m (ecSols ec) of
+  Nothing => t
+  Just v => case dictTermOfValue ec v of
+    Just soln => if hasFreeTermVar 0 soln then t else shift 0 depth soln
+    Nothing =>
+      let
+        soln0 = quote 0 v
+      in if hasFreeTermVar 0 soln0 then t else soln0
+substDictTermGo ec depth (TPi n i r dom cod) =
+  TPi n i r (substDictTermGo ec depth dom) (substDictTermGo ec (depth + 1) cod)
+substDictTermGo ec depth (TLam n r b) = TLam n r (substDictTermGo ec (depth + 1) b)
+substDictTermGo ec depth (TApp f a r) =
+  TApp (substDictTermGo ec depth f) (substDictTermGo ec depth a) r
+substDictTermGo ec depth (TCon c args) =
+  TCon c (map (\p => Pair (substDictTermGo ec depth (firstOf p)) (secondOf p)) args)
+substDictTermGo ec depth (TCase s alts) =
+  TCase (substDictTermGo ec depth s) (map (\alt => substDictTermAlt ec depth alt) alts)
+substDictTermGo ec depth (TIf c th el) =
+  TIf (substDictTermGo ec depth c) (substDictTermGo ec depth th) (substDictTermGo ec depth el)
+substDictTermGo ec depth t = t
 
 substDictTermAlt : Ec -> Int -> CaseAlt -> CaseAlt
 substDictTermAlt ec depth (CaseAlt n bs b) = CaseAlt n bs (substDictTermGo ec (depth + length bs) b)
@@ -394,16 +395,15 @@ cmpMethodName ">" = "gt"
 cmpMethodName _ = "ge"
 
 cmpRuntimeName : Span -> String -> String -> Result String
-cmpRuntimeName sp name tyName = case tyName of
-  "Int" => case name of
-    "<" => Ok "bi_lt_int"
-    "<=" => Ok "bi_le_int"
-    ">" => Ok "bi_gt_int"
-    _ => Ok "bi_ge_int"
-  "String" => Ok (cmpGenericName name)
-  _ =>
-    if tyName == boolTypeName then Ok (cmpGenericName name)
-    else tcErr2 sp (OpNotDefinedFor name tyName) name tyName
+cmpRuntimeName sp name "Int" = case name of
+  "<" => Ok "bi_lt_int"
+  "<=" => Ok "bi_le_int"
+  ">" => Ok "bi_gt_int"
+  _ => Ok "bi_ge_int"
+cmpRuntimeName sp name "String" = Ok (cmpGenericName name)
+cmpRuntimeName sp name tyName =
+  if tyName == boolTypeName then Ok (cmpGenericName name)
+  else tcErr2 sp (OpNotDefinedFor name tyName) name tyName
 
 cmpGenericName : String -> String
 cmpGenericName "<" = "bi_lt_generic"

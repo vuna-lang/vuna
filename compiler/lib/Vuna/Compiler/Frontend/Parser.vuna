@@ -216,17 +216,16 @@ bindingBindsGo (item :: rest) sigs bound acc = case item of
 -- 签名保留在合并后的条目上（`EAnn` 只包裹第一条的 `ELocalFun`）；不连续的同名子句
 -- 不合并，仍按旧的 `WhereSigMultiClause` 报错。
 localFunMerge : String -> Expr -> List (Pair Pat Expr) -> Maybe (List (Pair Pat Expr))
-localFunMerge name value acc = case acc of
-  (Pair (PVar n nsp) (ELocalFun cs0 sp0)) :: rest => if n == name then case value of
-    ELocalFun cs1 sp1 => Just (Pair (PVar n nsp) (ELocalFun (append cs0 cs1) sp0) :: rest)
-    _ => Nothing
-  else Nothing
-  (Pair (PVar n nsp) (EAnn (ELocalFun cs0 sp0) ty annSp)) :: rest => if n == name then case value of
-    ELocalFun cs1 sp1 =>
-      Just (Pair (PVar n nsp) (EAnn (ELocalFun (append cs0 cs1) sp0) ty annSp) :: rest)
-    _ => Nothing
-  else Nothing
+localFunMerge name value ((Pair (PVar n nsp) (ELocalFun cs0 sp0)) :: rest) = if n == name then case value of
+  ELocalFun cs1 sp1 => Just (Pair (PVar n nsp) (ELocalFun (append cs0 cs1) sp0) :: rest)
   _ => Nothing
+else Nothing
+localFunMerge name value ((Pair (PVar n nsp) (EAnn (ELocalFun cs0 sp0) ty annSp)) :: rest) = if n == name then case value of
+  ELocalFun cs1 sp1 =>
+    Just (Pair (PVar n nsp) (EAnn (ELocalFun (append cs0 cs1) sp0) ty annSp) :: rest)
+  _ => Nothing
+else Nothing
+localFunMerge name value _ = Nothing
 
 -- 绑定名（非简单变量绑定返回空串，永远匹配不到签名）。
 patBoundName : Pat -> String
@@ -678,7 +677,35 @@ parsePatternAtoms fuel st blockCol =
   else Ok (Pair [] st)
 
 parsePatternAtom : Int -> PState -> Int -> Result (Pair Pat PState)
-parsePatternAtom fuel st blockCol = if fuel <= 0 then Err "DT: parser fuel exhausted (internal: parser made no progress)"
+parsePatternAtom fuel st blockCol =
+  if fuel <= 0 then Err "DT: parser fuel exhausted (internal: parser made no progress)"
+  else step (parsePatternAtomBase (fuel - 1) st blockCol)
+    (\base, st1 => finishAsPattern (fuel - 1) st base st1 blockCol)
+
+-- as-pattern：`x@pat`（前缀）与 `(pat)@x`（后缀）；`_@x` 等价于 `x@_`。
+finishAsPattern : Int -> PState -> Pat -> PState -> Int -> Result (Pair Pat PState)
+finishAsPattern fuel st base st1 blockCol = if fuel <= 0 then Err "DT: parser fuel exhausted (internal: parser made no progress)"
+else if atSym st1 "@" && canContinue st1 blockCol then case base of
+  PVar "_" psp =>
+    step (parseAsName (fuel - 1) (advance st1))
+      (\name, st2 => Ok (Pair (PAs name (PWild psp) (spanOf st st2)) st2))
+  PVar name psp =>
+    step (parsePatternAtom (fuel - 1) (advance st1) blockCol)
+      (\rhs, st2 => Ok (Pair (PAs name rhs (spanOf st st2)) st2))
+  _ =>
+    step (parseAsName (fuel - 1) (advance st1))
+      (\name, st2 => Ok (Pair (PAs name base (spanOf st st2)) st2))
+else Ok (Pair base st1)
+
+parseAsName : Int -> PState -> Result (Pair String PState)
+parseAsName fuel st = if fuel <= 0 then Err "DT: parser fuel exhausted (internal: parser made no progress)"
+else case peekTok st of
+  PTok (TIdent name) p =>
+    if name == "_" then psErr0 ExpectedPattern else Ok (Pair name (advance st))
+  _ => psErr0 ExpectedPattern
+
+parsePatternAtomBase : Int -> PState -> Int -> Result (Pair Pat PState)
+parsePatternAtomBase fuel st blockCol = if fuel <= 0 then Err "DT: parser fuel exhausted (internal: parser made no progress)"
 else case peekTok st of
   PTok (TIdent "_") p => Ok (Pair (PWild (spanOf st (advance st))) (advance st))
   PTok (TIdent name) p =>

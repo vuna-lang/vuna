@@ -156,12 +156,11 @@ removedHintFor flag = case toolRemovedFlagHint flag of
 
 -- 渲染参数错误；`cmd` 是完整命令名（如 "vuna fmt"），只用在不涉及已删 flag 的文案里。
 argErrText : String -> ArgErr -> String
-argErrText cmd e = case e of
-  UnknownFlag flag => case removedHintFor flag of
-    Just hint => flag ++ " has been removed; " ++ hint
-    Nothing => "unknown flag for `" ++ cmd ++ "`: " ++ flag
-  DuplicateFlag flag => "duplicate flag: " ++ flag
-  MissingValue flag => "flag requires a value: " ++ flag
+argErrText cmd (UnknownFlag flag) = case removedHintFor flag of
+  Just hint => flag ++ " has been removed; " ++ hint
+  Nothing => "unknown flag for `" ++ cmd ++ "`: " ++ flag
+argErrText cmd (DuplicateFlag flag) = "duplicate flag: " ++ flag
+argErrText cmd (MissingValue flag) = "flag requires a value: " ++ flag
 
 -- ---------------------------------------------------------------
 -- 读盘守卫（禁止在不存在路径上调 prim_isDirectory）

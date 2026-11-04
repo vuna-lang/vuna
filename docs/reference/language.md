@@ -149,6 +149,13 @@ idT x = x
 `case e of` 的每个分支左端是模式：构造子模式（可嵌套，如 `Cons x (Cons y ys)`）、
 `Int` / `String` 字面量模式、变量或通配。分支按书写顺序匹配，因此：
 
+- **as-pattern**（M30）：`x@pat` 匹配 `pat` 并把整个匹配值绑定到 `x`（Idris2 风格；
+  `_@x` 等价于 `x@_`）。可用于顶层/局部函数子句的参数与嵌套模式位置，如
+  `advance (PState file toks@(t :: rest) last count) = ...`；带参数的内层模式需括号
+  （`x@(t :: rest)`），变量/字面量/0 元构造子不需要（`x@True`、`x@42`）。
+  编译期由模式矩阵注入绑定（`Elab.Match`）；STR 把 as 绑定视为整个值（不改变结构下降）。
+  `case` 分支左端的 as-pattern 尚未接入（当前只支持函数子句参数/嵌套模式）。
+
 - 变量/通配兜底只能放**最后一个**分支，否则报 `TC_CatchAllNotLast`；
 - `Bool` 的 `case` 只认 `True` / `False` / 变量 / 通配（`TC_BoolCaseRestriction`）；
 - `Int` / `String` 的 `case` 必须有一个变量/通配兜底（`TC_IntStringCaseNeedsFallback`），

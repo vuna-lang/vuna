@@ -176,11 +176,10 @@ compileParse prog printResult entry outDir args = case args of
       Just _ => usageErr prog
 
 compileFinish : String -> Bool -> Maybe String -> Maybe String -> Int
-compileFinish prog printResult entry outDir = case entry of
+compileFinish prog printResult Nothing outDir = usageErr prog
+compileFinish prog printResult (Just e) outDir = case outDir of
   Nothing => usageErr prog
-  Just e => case outDir of
-    Nothing => usageErr prog
-    Just out => compileRun printResult e out
+  Just out => compileRun printResult e out
 
 compileRun : Bool -> String -> String -> Int
 compileRun printResult entry outDir =
@@ -206,12 +205,11 @@ compilePkgDir printResult dir outDir = case executablePackage "compile" dir of
 -- check：文件入口（包上下文）或包目录（可执行包 check 入口；库包 check [export].modules）
 -- ---------------------------------------------------------------
 checkArgs : String -> List String -> Int
-checkArgs prog args = case args of
-  [] => usageErr prog
-  arg :: rest => if startsWith "-" arg then removedFlag prog arg
-  else case rest of
-    [] => checkEmit arg
-    _ => usageErr prog
+checkArgs prog [] = usageErr prog
+checkArgs prog (arg :: rest) = if startsWith "-" arg then removedFlag prog arg
+else case rest of
+  [] => checkEmit arg
+  _ => usageErr prog
 
 checkEmit : String -> Int
 checkEmit path =
@@ -298,11 +296,10 @@ libraryOnlyMessage (pkg :: _) =
 libraryOnlyMessage [] = "no package to build"
 
 selectBuildTargets : Maybe String -> List Package -> Result (List Package)
-selectBuildTargets pkgM pkgs = case pkgM of
-  Nothing => Ok pkgs
-  Just name => case findPackageByName name pkgs of
-    Nothing => Err ("no such package in workspace: " ++ name)
-    Just pkg => Ok [pkg]
+selectBuildTargets Nothing pkgs = Ok pkgs
+selectBuildTargets (Just name) pkgs = case findPackageByName name pkgs of
+  Nothing => Err ("no such package in workspace: " ++ name)
+  Just pkg => Ok [pkg]
 
 findPackageByName : String -> List Package -> Maybe Package
 findPackageByName name [] = Nothing

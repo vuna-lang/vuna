@@ -276,23 +276,20 @@ countKept [] = 0
 countKept (k :: rest) = if k then 1 + countKept rest else countKept rest
 
 altEnvFull : GenSt -> String -> List (Pair String Rig) -> List (Pair String Rig) -> List Bool -> List String -> Result AltEnv
-altEnvFull st label outer binders flags pats = case binders of
-  [] => case flags of
-    [] => Ok (AltEnv outer (reverse pats) st)
-    _ :: _ =>
-      Err
-        ("DT: internal: constructor " ++ label ++ ": case branch has fewer binders than its shape")
-  (Pair name rig) :: rest => case flags of
-    [] =>
-      Err ("DT: internal: constructor " ++ label ++ ": case branch has more binders than its shape")
-    keep :: flags2 => if flagMatchesRig keep rig then if keep then
-      let
-        fresh = gsNext st
-        nm = "dtb__" ++ strFromInt fresh
-      in altEnvFull (gsPutNext st (fresh + 1)) label (Pair nm Rig1 :: outer) rest flags2 (nm :: pats)
-    else altEnvFull st label (Pair "" Rig0 :: outer) rest flags2 pats
-    else Err
-      ("DT: internal: constructor " ++ label ++ ": case branch binder rig disagrees with its shape")
+altEnvFull st label outer [] flags pats = case flags of
+  [] => Ok (AltEnv outer (reverse pats) st)
+  _ :: _ =>
+    Err ("DT: internal: constructor " ++ label ++ ": case branch has fewer binders than its shape")
+altEnvFull st label outer ((Pair name rig) :: rest) flags pats = case flags of
+  [] =>
+    Err ("DT: internal: constructor " ++ label ++ ": case branch has more binders than its shape")
+  keep :: flags2 => if flagMatchesRig keep rig then if keep then
+    let
+      fresh = gsNext st
+      nm = "dtb__" ++ strFromInt fresh
+    in altEnvFull (gsPutNext st (fresh + 1)) label (Pair nm Rig1 :: outer) rest flags2 (nm :: pats)
+  else altEnvFull st label (Pair "" Rig0 :: outer) rest flags2 pats
+  else Err ("DT: internal: constructor " ++ label ++ ": case branch binder rig disagrees with its shape")
 
 altEnvKept : GenSt -> String -> List (Pair String Rig) -> List (Pair String Rig) -> List String -> Result AltEnv
 altEnvKept st label outer [] pats = Ok (AltEnv outer (reverse pats) st)
@@ -535,11 +532,10 @@ mainShow table tyTerm = case force (tblFromList table) solsEmpty defaultFuel (ev
 
 -- 把 `IO a` 拆成内层类型 `a`；不是 **base 的 canonical IO** 则 Nothing（M27：完整符号身份）。
 ioResultTy : Term -> Maybe Term
-ioResultTy t = case t of
-  TApp fn arg _ => case fn of
-    TGlobal g => if g == ioFamilyName then Just arg else Nothing
-    _ => Nothing
+ioResultTy (TApp fn arg _) = case fn of
+  TGlobal g => if g == ioFamilyName then Just arg else Nothing
   _ => Nothing
+ioResultTy _ = Nothing
 
 -- 找 canonical IO 族的（族名, 构造子名），用于生成 `match main with C_IO_MkIO f -> f 0`。
 ioCtorOf : List DtData -> Maybe (Pair String String)

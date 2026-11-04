@@ -140,13 +140,13 @@ let v_Vuna_dCompiler_dDriver_dCompilerCli_dcompilePkgDir = (fun printResult -> (
 
 let v_Vuna_dCompiler_dDriver_dCompilerCli_dcompileRun = (fun printResult -> (fun entry -> (fun outDir -> (if (dtp_fileExists entry) then (if (dtp_isDirectory entry) then (((v_Vuna_dCompiler_dDriver_dCompilerCli_dcompilePkgDir printResult) entry) outDir) else (((v_Vuna_dCompiler_dDriver_dCompilerCli_dcompileFileEntry printResult) entry) outDir)) else (v_Vuna_dCompiler_dDriver_dCompilerCli_ddtPathErr entry)))))
 
-let v_Vuna_dCompiler_dDriver_dCompilerCli_dcompileFinish = (fun prog -> (fun printResult -> (fun entry -> (fun outDir -> (match entry with
-  | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> (v_Vuna_dCompiler_dDriver_dCompilerCli_dusageErr prog)
-  | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__14) -> (match outDir with
-  | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> (v_Vuna_dCompiler_dDriver_dCompilerCli_dusageErr prog)
-  | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__15) -> (((v_Vuna_dCompiler_dDriver_dCompilerCli_dcompileRun printResult) dtb__14) dtb__15)
+let v_Vuna_dCompiler_dDriver_dCompilerCli_dcompileFinish = (fun mc0 -> (fun mc1 -> (fun mc2 -> (fun mc3 -> (match mc2 with
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__14) -> (match mc3 with
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> (v_Vuna_dCompiler_dDriver_dCompilerCli_dusageErr mc0)
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__15) -> (((v_Vuna_dCompiler_dDriver_dCompilerCli_dcompileRun mc1) dtb__14) dtb__15)
   | _ -> failwith "DT: impossible branch"
 )
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> (v_Vuna_dCompiler_dDriver_dCompilerCli_dusageErr mc0)
   | _ -> failwith "DT: impossible branch"
 )))))
 
@@ -194,12 +194,12 @@ let v_Vuna_dCompiler_dDriver_dCompilerCli_dcheckFileEntry = (fun path -> (match 
 
 let v_Vuna_dCompiler_dDriver_dCompilerCli_dcheckEmit = (fun path -> (if (dtp_fileExists path) then (if (dtp_isDirectory path) then (v_Vuna_dCompiler_dDriver_dCompilerCli_dcheckPkgDir path) else (v_Vuna_dCompiler_dDriver_dCompilerCli_dcheckFileEntry path)) else (v_Vuna_dCompiler_dDriver_dCompilerCli_ddtPathErr path)))
 
-let v_Vuna_dCompiler_dDriver_dCompilerCli_dcheckArgs = (fun prog -> (fun args -> (match args with
-  | C_Base_dList_dList_Base_dList_dNil -> (v_Vuna_dCompiler_dDriver_dCompilerCli_dusageErr prog)
-  | C_Base_dList_dList_Base_dList_dCons (dtb__30, dtb__31) -> (if ((v_Base_dString_dstartsWith "-") dtb__30) then ((v_Vuna_dCompiler_dDriver_dCompilerCli_dremovedFlag prog) dtb__30) else (match dtb__31 with
+let v_Vuna_dCompiler_dDriver_dCompilerCli_dcheckArgs = (fun mc0 -> (fun mc1 -> (match mc1 with
+  | C_Base_dList_dList_Base_dList_dCons (dtb__30, dtb__31) -> (if ((v_Base_dString_dstartsWith "-") dtb__30) then ((v_Vuna_dCompiler_dDriver_dCompilerCli_dremovedFlag mc0) dtb__30) else (match dtb__31 with
   | C_Base_dList_dList_Base_dList_dNil -> (v_Vuna_dCompiler_dDriver_dCompilerCli_dcheckEmit dtb__30)
-  | _ -> (v_Vuna_dCompiler_dDriver_dCompilerCli_dusageErr prog)
+  | _ -> (v_Vuna_dCompiler_dDriver_dCompilerCli_dusageErr mc0)
 ))
+  | C_Base_dList_dList_Base_dList_dNil -> (v_Vuna_dCompiler_dDriver_dCompilerCli_dusageErr mc0)
   | _ -> failwith "DT: impossible branch"
 )))
 
@@ -223,13 +223,13 @@ let rec v_Vuna_dCompiler_dDriver_dCompilerCli_dfindPackageByName = (fun mc0 -> (
   | _ -> failwith "DT: impossible branch"
 )))
 
-let v_Vuna_dCompiler_dDriver_dCompilerCli_dselectBuildTargets = (fun pkgM -> (fun pkgs -> (match pkgM with
-  | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> (C_Base_dResult_dResult_Base_dResult_dOk (pkgs))
-  | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__38) -> (match ((v_Vuna_dCompiler_dDriver_dCompilerCli_dfindPackageByName dtb__38) pkgs) with
+let v_Vuna_dCompiler_dDriver_dCompilerCli_dselectBuildTargets = (fun mc0 -> (fun mc1 -> (match mc0 with
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__38) -> (match ((v_Vuna_dCompiler_dDriver_dCompilerCli_dfindPackageByName dtb__38) mc1) with
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> (C_Base_dResult_dResult_Base_dResult_dErr (((bi_concat "no such package in workspace: ") dtb__38)))
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__39) -> (C_Base_dResult_dResult_Base_dResult_dOk ((C_Base_dList_dList_Base_dList_dCons (dtb__39, C_Base_dList_dList_Base_dList_dNil))))
   | _ -> failwith "DT: impossible branch"
 )
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> (C_Base_dResult_dResult_Base_dResult_dOk (mc1))
   | _ -> failwith "DT: impossible branch"
 )))
 

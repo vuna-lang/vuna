@@ -27,10 +27,10 @@ module Vuna.Lint.Rules
 --   * literal-if-chain：`if x == lit then a else if x == lit then b else c` 链，
 --     lit 为 String/Int 字面量且 else 链同一 scrutinee → `case x of lit => a ... _ => c`；
 --   * lift-destructure：单候选解构（单 alt case / 单绑定 let）提升到外层 clause/alt 模式
---     （原 redundant-case 的扩展；旧 RedundantCase 别名已删除）；
+--     （原 redundant-case 的扩展；旧 RedundantCase 保留为历史别名，不再产生）；
 --   * case-to-clauses：顶层单 clause 函数的 `case` 分支提升为多条同名 clause。
 --
--- 三条规则都只做语法可证的改写：判据不满足时不报告（只报可安全自动修复的形态）。
+-- 三条规则都只做语法可证的改写：判据不满足时只报告、不给 Edit（`findingEdit = Nothing`）。
 -- 候选按（行, 列）排序，被更大 Edit 行范围包含的内层 finding 会被丢弃，避免同一链/同一次
 -- 折叠产生互相冲突的 Edit。
 import Vuna.Compiler.Common
@@ -199,9 +199,9 @@ prefixChars (p :: prest) text = case text of
   t :: trest => if p == t then prefixChars prest trest else False
 
 containsSubChars : List Int -> List Int -> Bool
-containsSubChars pat text = case text of
-  [] => False
-  c :: rest => if prefixChars pat text then True else containsSubChars pat rest
+containsSubChars pat [] = False
+containsSubChars pat (c :: rest) =
+  if prefixChars pat (c :: rest) then True else containsSubChars pat rest
 
 containsChar : Int -> List Int -> Bool
 containsChar c [] = False
@@ -315,9 +315,8 @@ exprStartPos : Expr -> Pair Int Int
 exprStartPos e = startExpr lintFuel e
 
 minPair : Pair Int Int -> Pair Int Int -> Pair Int Int
-minPair a b = case a of
-  Pair la ca => case b of
-    Pair lb cb => if la < lb then a else if la == lb && ca <= cb then a else b
+minPair (a@(Pair la ca)) (b@(Pair lb cb)) =
+  if la < lb then a else if la == lb && ca <= cb then a else b
 
 startFromSpan : Span -> Pair Int Int
 startFromSpan sp = Pair (spanStartLine sp) (spanStartCol sp)
@@ -461,6 +460,7 @@ patVarFuel : Int -> Pat -> List String
 patVarFuel fuel pat = if fuel <= 0 then []
 else case pat of
   PVar name sp => [name]
+  PAs name inner sp => name :: patVarFuel (fuel - 1) inner
   PWild sp => []
   PCon name args sp => patVarsFuel (fuel - 1) args
   PInt n sp => []
@@ -628,25 +628,23 @@ else case stmt of
 -- 规则 1：literal-if-chain
 -- ---------------------------------------------------------------
 condShape : List String -> List PTok -> Expr -> Maybe (Pair String String)
-condShape lines toks cond = case cond of
-  EApp (EVar op opSp) args appSp => if op == "==" then case args of
-    [lhs, rhs] => case lhs of
-      EVar name nsp => case rhs of
-        EStr s rsp => Just (Pair name (spanText lines toks (exprSpan rhs)))
-        EInt n rsp => Just (Pair name (spanText lines toks (exprSpan rhs)))
-        _ => Nothing
+condShape lines toks (EApp (EVar op opSp) args appSp) = if op == "==" then case args of
+  [lhs, rhs] => case lhs of
+    EVar name nsp => case rhs of
+      EStr s rsp => Just (Pair name (spanText lines toks (exprSpan rhs)))
+      EInt n rsp => Just (Pair name (spanText lines toks (exprSpan rhs)))
       _ => Nothing
     _ => Nothing
-  else Nothing
   _ => Nothing
+else Nothing
+condShape lines toks _ = Nothing
 
 chainOf : List String -> List PTok -> Expr -> Maybe ChainRes
-chainOf lines toks e = case e of
-  EIf cond yes no sp => case condShape lines toks cond of
-    Nothing => Nothing
-    Just (Pair name lit) =>
-      Just (chainCollect lines toks name [ChainItem lit (exprText lines toks yes) yes] no)
-  _ => Nothing
+chainOf lines toks (EIf cond yes no sp) = case condShape lines toks cond of
+  Nothing => Nothing
+  Just (Pair name lit) =>
+    Just (chainCollect lines toks name [ChainItem lit (exprText lines toks yes) yes] no)
+chainOf lines toks _ = Nothing
 
 chainCollect : List String -> List PTok -> String -> List ChainItem -> Expr -> ChainRes
 chainCollect lines toks name acc expr = chainCollectFuel lintFuel lines toks name acc expr
@@ -792,11 +790,10 @@ liftCaseOk lines toks lane pat body name sp =
   else []
 
 liftCase : List String -> List PTok -> Lane -> Expr -> Expr -> List (Pair Pat Expr) -> Span -> List Finding
-liftCase lines toks lane caseExpr scrut alts sp = case alts of
-  [Pair pat body] => case scrut of
-    EVar name nsp => liftCaseOk lines toks lane pat body name sp
-    _ => []
+liftCase lines toks lane caseExpr scrut ([Pair pat body]) sp = case scrut of
+  EVar name nsp => liftCaseOk lines toks lane pat body name sp
   _ => []
+liftCase lines toks lane caseExpr scrut _ sp = []
 
 liftLet : List String -> List PTok -> Lane -> Span -> Pat -> Expr -> Expr -> List Finding
 liftLet lines toks lane sp pat (EVar name nsp) body =
@@ -831,20 +828,43 @@ liftLetEdit lines toks lane pat body name sp =
   in Edit headLine (spanEndLine sp) newLines
 
 liftFindings : List String -> List PTok -> Lane -> Expr -> List Finding
-liftFindings lines toks lane expr = case expr of
-  ECase scrut alts sp => liftCase lines toks lane expr scrut alts sp
-  ELet binds body recFlag sp => if notBool recFlag then case binds of
-    [Pair pat value] => liftLet lines toks lane sp pat value body
-    _ => []
-  else []
+liftFindings lines toks lane (expr@(ECase scrut alts sp)) =
+  liftCase lines toks lane expr scrut alts sp
+liftFindings lines toks lane (ELet binds body recFlag sp) = if notBool recFlag then case binds of
+  [Pair pat value] => liftLet lines toks lane sp pat value body
   _ => []
+else []
+liftFindings lines toks lane _ = []
 
 -- ---------------------------------------------------------------
 -- 规则 3：case-to-clauses
 -- ---------------------------------------------------------------
--- 判据不再语法层证明穷尽性：lint 的输入应视为能通过 `vuna check` 的程序，
--- 而 DT 已强制 `case` 穷尽；`case` 与多 clause 的匹配语义等价（分支/clause 顺序一致）。
--- 纯映射表（分支体不引用 scrutinee）同样拆成多 clause。
+lastPatOf : List (Pair Pat Expr) -> Maybe Pat
+lastPatOf [] = Nothing
+lastPatOf ((Pair pat body) :: rest) = case rest of
+  [] => Just pat
+  _ => lastPatOf rest
+
+wildcardLast : List (Pair Pat Expr) -> Bool
+wildcardLast alts = case lastPatOf alts of
+  Nothing => False
+  Just pat => case pat of
+    PWild sp => True
+    PVar n sp => True
+    _ => False
+
+lengthTwo : List a -> Bool
+lengthTwo ([a, b]) = True
+lengthTwo _ = False
+
+nilConsShape : List (Pair Pat Expr) -> Bool
+nilConsShape ([Pair (PCon "Nil" nilArgs nilSp) firstBody, Pair (PCon "Cons" consArgs consSp) secondBody]) =
+  isNilList nilArgs && lengthTwo consArgs
+nilConsShape _ = False
+
+provablyExhaustive : List (Pair Pat Expr) -> Bool
+provablyExhaustive alts = wildcardLast alts || nilConsShape alts
+
 isWildPat : Pat -> Bool
 isWildPat (PWild sp) = True
 isWildPat _ = False
@@ -861,6 +881,12 @@ altsLiftableGo x others (alt :: rest) =
 
 altsLiftable : String -> List Pat -> List (Pair Pat Expr) -> Bool
 altsLiftable x pats alts = altsLiftableGo x (removeName x (patVars pats)) alts
+
+-- 至少一个分支体真的用到 scrutinee 变量：全不引用时 lift 后参数只剩模式匹配，
+-- 不是本规则的目标形态（也避免把 literal-if-chain 生成的 case 再拆成 clause）。
+altsUseVar : String -> List (Pair Pat Expr) -> Bool
+altsUseVar x [] = False
+altsUseVar x ((Pair pat body) :: rest) = exprMentions x body || altsUseVar x rest
 
 caseAltClauseLines : List String -> List PTok -> String -> PTok -> String -> Int -> Pat -> Expr -> List String
 caseAltClauseLines lines toks headPrefix varTok x headIndent pat body =
@@ -906,14 +932,13 @@ caseToClausesEdit lines toks x pats headLine sp alts =
   in Edit headLine (spanEndLine sp) (clausesForAlts lines toks headPrefix varTok x headIndent alts)
 
 caseToClauses : List String -> List PTok -> Int -> String -> List Pat -> Expr -> Bool -> List Finding
-caseToClauses lines toks headLine name pats body singleClause = case body of
-  ECase scrut alts sp => case scrut of
-    EVar x xsp =>
-      if singleClause && countVar x pats == 1 && atLeastTwo alts && altsLiftable x pats alts && caseToClausesFixable lines toks pats headLine sp alts then [ Finding (spanStartLine sp) (spanStartCol sp) (lintCode CaseToClauses) (lintRule CaseToClauses) (lintMsg CaseToClauses x) (Just (caseToClausesEdit lines toks x pats headLine sp alts))
-      ]
-      else []
-    _ => []
+caseToClauses lines toks headLine name pats (ECase scrut alts sp) singleClause = case scrut of
+  EVar x xsp =>
+    if singleClause && countVar x pats == 1 && atLeastTwo alts && provablyExhaustive alts && altsUseVar x alts && altsLiftable x pats alts && caseToClausesFixable lines toks pats headLine sp alts then [ Finding (spanStartLine sp) (spanStartCol sp) (lintCode CaseToClauses) (lintRule CaseToClauses) (lintMsg CaseToClauses x) (Just (caseToClausesEdit lines toks x pats headLine sp alts))
+    ]
+    else []
   _ => []
+caseToClauses lines toks headLine name pats _ singleClause = []
 
 -- ---------------------------------------------------------------
 -- AST 遍历（覆盖全部 Expr 构造子，含 ELocalFun / EAnn）
@@ -1018,11 +1043,10 @@ else case stmt of
 -- 声明遍历与结果整理
 -- ---------------------------------------------------------------
 laterHasFun : String -> List Decl -> Bool
-laterHasFun name decls = case decls of
-  [] => False
-  d :: rest => case d of
-    DFun n pats body sp => if n == name then True else laterHasFun name rest
-    _ => laterHasFun name rest
+laterHasFun name [] = False
+laterHasFun name (d :: rest) = case d of
+  DFun n pats body sp => if n == name then True else laterHasFun name rest
+  _ => laterHasFun name rest
 
 -- 签名里出现隐式 Pi（`{n : Nat} -> ...`）的函数跳过 clause 级改写：
 -- parser 的 clause 模式是所有显式参数，隐式参数由精化器插入；把 case 折叠进 clause
@@ -1034,11 +1058,10 @@ hasImplicitPi (EApp (EVar "->" _) ([dom, cod]) sp) = hasImplicitPi dom || hasImp
 hasImplicitPi _ = False
 
 sigTyOf : String -> List Decl -> Maybe Expr
-sigTyOf name decls = case decls of
-  [] => Nothing
-  d :: rest => case d of
-    DSig n ty sp => if n == name then Just ty else sigTyOf name rest
-    _ => sigTyOf name rest
+sigTyOf name [] = Nothing
+sigTyOf name (d :: rest) = case d of
+  DSig n ty sp => if n == name then Just ty else sigTyOf name rest
+  _ => sigTyOf name rest
 
 hasImplicitSig : String -> List Decl -> Bool
 hasImplicitSig name decls = case sigTyOf name decls of
@@ -1046,32 +1069,30 @@ hasImplicitSig name decls = case sigTyOf name decls of
   Just ty => hasImplicitPi ty
 
 countFunClauses : String -> List Decl -> Int
-countFunClauses name decls = case decls of
-  [] => 0
-  d :: rest => case d of
-    DFun n pats body sp => (if n == name then 1 else 0) + countFunClauses name rest
-    _ => countFunClauses name rest
+countFunClauses name [] = 0
+countFunClauses name (d :: rest) = case d of
+  DFun n pats body sp => (if n == name then 1 else 0) + countFunClauses name rest
+  _ => countFunClauses name rest
 
 scanMethodDecls : List String -> List PTok -> List Decl -> List Finding
-scanMethodDecls lines toks decls = case decls of
-  [] => []
-  d :: rest => case d of
-    DFun name pats body sp =>
-      append (walkExpr lintFuel lines toks body) (scanMethodDecls lines toks rest)
-    _ => scanMethodDecls lines toks rest
+scanMethodDecls lines toks [] = []
+scanMethodDecls lines toks (d :: rest) = case d of
+  DFun name pats body sp =>
+    append (walkExpr lintFuel lines toks body) (scanMethodDecls lines toks rest)
+  _ => scanMethodDecls lines toks rest
 
 declFindings : List String -> List PTok -> List Decl -> Decl -> List Decl -> List Finding
-declFindings lines toks allDecls d rest = case d of
-  DFun name pats body sp => if hasImplicitSig name allDecls then []
-  else
-    let
-      lastForName = notBool (laterHasFun name rest)
-      singleClause = countFunClauses name allDecls == 1
-      lane = LClause (spanStartLine sp) pats lastForName
-    in append (caseToClauses lines toks (spanStartLine sp) name pats body singleClause)
-      (scanBodyPos lintFuel lines toks (Just lane) body)
-  DInstance ctxE head methods sp => scanMethodDecls lines toks methods
-  _ => []
+declFindings lines toks allDecls (DFun name pats body sp) rest = if hasImplicitSig name allDecls then []
+else
+  let
+    lastForName = notBool (laterHasFun name rest)
+    singleClause = countFunClauses name allDecls == 1
+    lane = LClause (spanStartLine sp) pats lastForName
+  in append (caseToClauses lines toks (spanStartLine sp) name pats body singleClause)
+    (scanBodyPos lintFuel lines toks (Just lane) body)
+declFindings lines toks allDecls (DInstance ctxE head methods sp) rest =
+  scanMethodDecls lines toks methods
+declFindings lines toks allDecls _ rest = []
 
 scanDecls : List String -> List PTok -> List Decl -> List Decl -> List Finding
 scanDecls lines toks allDecls [] = []

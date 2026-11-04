@@ -164,3 +164,9 @@ genTypeDeclsOf allDatas subset = <多行 body 重排>
 - `lib/Vuna/Lint/Diagnostics.vuna`：`LintRule` 枚举（code/rule/消息/可修复性/文档项）；
 - `lib/Vuna/Lint.vuna`：CLI 参数、打印、退出码；
 - `lib/Vuna/Lsp/Diagnostics.vuna`：LSP 诊断合并。
+## 6. 已知冲突：case-to-clauses 与 STR
+
+递归 / 互递归函数拆成多 clause 后，SCT 可能失去下降环（`Doc.renderTy*`、
+`Index.Scan.renderTy*`、`Fmt.Expr` 的若干函数、`Loader.Resolve.resolveModules`）。
+这些函数保持 `case` 形态；`nix/checks/vuna-lint.sh` 按 finding 过滤（见脚本注释）。
+后续把 STR 对多 clause 的下降分析补齐后可移除豁免。

@@ -57,23 +57,23 @@ splitDataNames (d :: rest) = case d of
   _ => splitDataNames rest
 
 headClassName : Expr -> Maybe String
-headClassName e = case e of
-  EApp fn args sp => case fn of
-    EVar n fsp => Just n
-    _ => Nothing
-  EVar n sp => Just n
+headClassName (EApp fn args sp) = case fn of
+  EVar n fsp => Just n
   _ => Nothing
+headClassName (EVar n sp) = Just n
+headClassName _ = Nothing
 
 -- 实例名与派生实例名用 Elab 的同一实现（`Elab.instanceName` / `Elab.instHead`），
 -- 不再复制命名逻辑：Elab 生成的 `DtDef` 名字与本表逐字一致。
 splitInstanceOwnerOf : String -> Decl -> List (Pair String String)
-splitInstanceOwnerOf owner d = case d of
-  DInstance ctxE headExpr methods sp => case headClassName headExpr of
-    Just c => [Pair (instanceName c headExpr) owner]
-    Nothing => []
-  DData dname params kind ctors derivings sp => splitDerivedOwners owner dname params derivings
-  DRecord dname params fields derivings sp => splitDerivedOwners owner dname params derivings
-  _ => []
+splitInstanceOwnerOf owner (DInstance ctxE headExpr methods sp) = case headClassName headExpr of
+  Just c => [Pair (instanceName c headExpr) owner]
+  Nothing => []
+splitInstanceOwnerOf owner (DData dname params kind ctors derivings sp) =
+  splitDerivedOwners owner dname params derivings
+splitInstanceOwnerOf owner (DRecord dname params fields derivings sp) =
+  splitDerivedOwners owner dname params derivings
+splitInstanceOwnerOf owner _ = []
 
 splitDerivedOwners : String -> String -> List String -> List String -> List (Pair String String)
 splitDerivedOwners owner dname params [] = []

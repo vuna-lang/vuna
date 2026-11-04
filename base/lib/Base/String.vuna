@@ -39,20 +39,18 @@ split sep text =
   else splitAcc (strUnpack sep) (strUnpack text) (2 * strLength text + strLength sep + 2) [] []
 
 splitAcc : List Int -> List Int -> Int -> List Int -> List String -> List String
-splitAcc sep chars fuel acc parts = case chars of
-  [] => reverse (strPack (reverse acc) :: parts)
-  c :: rest =>
-    if fuel <= 0 then reverse (strPack (reverse acc) :: parts)
-    else if _startsWithChars sep chars then skipSep sep chars (fuel - 1) (length sep) [] (strPack (reverse acc) :: parts)
-    else splitAcc sep rest (fuel - 1) (c :: acc) parts
+splitAcc sep [] fuel acc parts = reverse (strPack (reverse acc) :: parts)
+splitAcc sep (chars@(c :: rest)) fuel acc parts =
+  if fuel <= 0 then reverse (strPack (reverse acc) :: parts)
+  else if _startsWithChars sep chars then skipSep sep chars (fuel - 1) (length sep) [] (strPack (reverse acc) :: parts)
+  else splitAcc sep rest (fuel - 1) (c :: acc) parts
 
 skipSep : List Int -> List Int -> Int -> Int -> List Int -> List String -> List String
-skipSep sep chars fuel n acc parts = case chars of
-  [] => reverse (strPack (reverse acc) :: parts)
-  c :: rest =>
-    if fuel <= 0 then reverse (strPack (reverse acc) :: parts)
-    else if n <= 0 then splitAcc sep chars (fuel - 1) acc parts
-    else skipSep sep rest (fuel - 1) (n - 1) acc parts
+skipSep sep [] fuel n acc parts = reverse (strPack (reverse acc) :: parts)
+skipSep sep (chars@(c :: rest)) fuel n acc parts =
+  if fuel <= 0 then reverse (strPack (reverse acc) :: parts)
+  else if n <= 0 then splitAcc sep chars (fuel - 1) acc parts
+  else skipSep sep rest (fuel - 1) (n - 1) acc parts
 
 join : String -> List String -> String
 join sep [] = ""

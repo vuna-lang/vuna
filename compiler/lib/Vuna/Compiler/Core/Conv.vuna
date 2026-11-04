@@ -61,13 +61,12 @@ isNilList [] = True
 isNilList _ = False
 
 sameNeutralAtom : Neutral -> Neutral -> Bool
-sameNeutralAtom n1 n2 = case n1 of
-  NGlobal g1 sp1 => case n2 of
-    NGlobal g2 sp2 => g1 == g2 && isNilList sp1 && isNilList sp2
-    _ => False
-  NVar name1 lvl1 sp1 => case n2 of
-    NVar name2 lvl2 sp2 => name1 == name2 && lvl1 == lvl2 && isNilList sp1 && isNilList sp2
-    _ => False
+sameNeutralAtom (NGlobal g1 sp1) n2 = case n2 of
+  NGlobal g2 sp2 => g1 == g2 && isNilList sp1 && isNilList sp2
+  _ => False
+sameNeutralAtom (NVar name1 lvl1 sp1) n2 = case n2 of
+  NVar name2 lvl2 sp2 => name1 == name2 && lvl1 == lvl2 && isNilList sp1 && isNilList sp2
+  _ => False
 
 convFuel : Int -> HashTbl Term -> Sols -> Int -> Value -> Value -> Result Sols
 convFuel fuel defs sols depth a b = if fuel <= 0 then Err "DT: internal: conv fuel exhausted"
@@ -237,30 +236,30 @@ metaCreatedDepth sols depth m = case solsDepth m sols of
 -- 项在「创建深度 created、quote 深度 depth、已进入 extra 个内部 binder」下是否只引用
 -- 本地 binder / 创建深度之前的自由变量 / pattern spine 里的变量。
 termScopedTo : Int -> Int -> Int -> List (Pair String Int) -> Term -> Bool
-termScopedTo created depth extra levels t = case t of
-  TVar name i => if i < extra then True
-  else
-    let
-      level = depth + extra - 1 - i
-    in level >= 0 && (level < created || memLevel level levels)
-  TMeta m => True
-  TGlobal g => True
-  TType l => True
-  TPi name implicit rig dom cod =>
-    termScopedTo created depth extra levels dom && termScopedTo created depth (extra + 1) levels cod
-  TLam name rig body => termScopedTo created depth (extra + 1) levels body
-  TApp f a rig =>
-    termScopedTo created depth extra levels f && termScopedTo created depth extra levels a
-  TCon c args => argsScopedTo created depth extra levels args
-  TCase scrut alts =>
-    termScopedTo created depth extra levels scrut && altsScopedTo created depth extra levels alts
-  TInt n => True
-  TStr s => True
-  TBool b => True
-  TIf c th el =>
-    termScopedTo created depth extra levels c
-      && termScopedTo created depth extra levels th
-      && termScopedTo created depth extra levels el
+termScopedTo created depth extra levels (TVar name i) = if i < extra then True
+else
+  let
+    level = depth + extra - 1 - i
+  in level >= 0 && (level < created || memLevel level levels)
+termScopedTo created depth extra levels (TMeta m) = True
+termScopedTo created depth extra levels (TGlobal g) = True
+termScopedTo created depth extra levels (TType l) = True
+termScopedTo created depth extra levels (TPi name implicit rig dom cod) =
+  termScopedTo created depth extra levels dom && termScopedTo created depth (extra + 1) levels cod
+termScopedTo created depth extra levels (TLam name rig body) =
+  termScopedTo created depth (extra + 1) levels body
+termScopedTo created depth extra levels (TApp f a rig) =
+  termScopedTo created depth extra levels f && termScopedTo created depth extra levels a
+termScopedTo created depth extra levels (TCon c args) = argsScopedTo created depth extra levels args
+termScopedTo created depth extra levels (TCase scrut alts) =
+  termScopedTo created depth extra levels scrut && altsScopedTo created depth extra levels alts
+termScopedTo created depth extra levels (TInt n) = True
+termScopedTo created depth extra levels (TStr s) = True
+termScopedTo created depth extra levels (TBool b) = True
+termScopedTo created depth extra levels (TIf c th el) =
+  termScopedTo created depth extra levels c
+    && termScopedTo created depth extra levels th
+    && termScopedTo created depth extra levels el
 
 argsScopedTo : Int -> Int -> Int -> List (Pair String Int) -> List (Pair Term Rig) -> Bool
 argsScopedTo created depth extra levels [] = True
@@ -309,32 +308,32 @@ spineLevels (p :: rest) = secondOf p :: spineLevels rest
 --   * 创建深度之前的自由变量 → `i + n`（n 个新 binder 在外侧）；
 --   * 内部 binder 变量（i < extra）保持原索引。
 absPatternBody : Int -> Int -> Int -> Int -> List Int -> Term -> Term
-absPatternBody n created depth extra levels t = case t of
-  TVar name i => if i < extra then t
-  else
-    let
-      level = depth + extra - 1 - i
-    in case levelPos level levels of
-      Just pos => TVar name (extra + n - 1 - pos)
-      Nothing => TVar name (i + n)
-  TPi name implicit rig dom cod =>
-    TPi name implicit rig (absPatternBody n created depth extra levels dom)
-      (absPatternBody n created depth (extra + 1) levels cod)
-  TLam name rig body => TLam name rig (absPatternBody n created depth (extra + 1) levels body)
-  TApp f a rig =>
-    TApp (absPatternBody n created depth extra levels f)
-      (absPatternBody n created depth extra levels a) rig
-  TCon c args =>
-    TCon c
-      (map (\p => Pair (absPatternBody n created depth extra levels (firstOf p)) (secondOf p)) args)
-  TCase scrut alts =>
-    TCase (absPatternBody n created depth extra levels scrut)
-      (map (\alt => CaseAlt (caseAltName alt) (caseAltBinders alt) (absPatternBody n created depth (extra + length (caseAltBinders alt)) levels (caseAltBody alt))) alts)
-  TIf c th el =>
-    TIf (absPatternBody n created depth extra levels c)
-      (absPatternBody n created depth extra levels th)
-      (absPatternBody n created depth extra levels el)
-  _ => t
+absPatternBody n created depth extra levels (t@(TVar name i)) = if i < extra then t
+else
+  let
+    level = depth + extra - 1 - i
+  in case levelPos level levels of
+    Just pos => TVar name (extra + n - 1 - pos)
+    Nothing => TVar name (i + n)
+absPatternBody n created depth extra levels (TPi name implicit rig dom cod) =
+  TPi name implicit rig (absPatternBody n created depth extra levels dom)
+    (absPatternBody n created depth (extra + 1) levels cod)
+absPatternBody n created depth extra levels (TLam name rig body) =
+  TLam name rig (absPatternBody n created depth (extra + 1) levels body)
+absPatternBody n created depth extra levels (TApp f a rig) =
+  TApp (absPatternBody n created depth extra levels f)
+    (absPatternBody n created depth extra levels a) rig
+absPatternBody n created depth extra levels (TCon c args) =
+  TCon c
+    (map (\p => Pair (absPatternBody n created depth extra levels (firstOf p)) (secondOf p)) args)
+absPatternBody n created depth extra levels (TCase scrut alts) =
+  TCase (absPatternBody n created depth extra levels scrut)
+    (map (\alt => CaseAlt (caseAltName alt) (caseAltBinders alt) (absPatternBody n created depth (extra + length (caseAltBinders alt)) levels (caseAltBody alt))) alts)
+absPatternBody n created depth extra levels (TIf c th el) =
+  TIf (absPatternBody n created depth extra levels c)
+    (absPatternBody n created depth extra levels th)
+    (absPatternBody n created depth extra levels el)
+absPatternBody n created depth extra levels t = t
 
 -- 解里的 λ 链：spine 头部为最外层绑定。
 wrapPatternLams : List (Pair String Int) -> Term -> Term
@@ -360,9 +359,9 @@ patternSolution ((Pair name lvl) :: rest) created depth body =
 -- 空 spine：直接存解，但先就地检查作用域（自由变量必须早于创建深度）。
 -- `?m = ?m`（同一个未解元变量）是恒真约束，不能走 occurs 检查。
 solveMetaEmpty : Sols -> Int -> Int -> Value -> Result Sols
-solveMetaEmpty sols depth m rhs = case rhs of
-  VMeta n [] => if n == m then Ok sols else solveMetaEmptyStore sols depth m rhs
-  _ => solveMetaEmptyStore sols depth m rhs
+solveMetaEmpty sols depth m (rhs@(VMeta n [])) =
+  if n == m then Ok sols else solveMetaEmptyStore sols depth m rhs
+solveMetaEmpty sols depth m rhs = solveMetaEmptyStore sols depth m rhs
 
 solveMetaEmptyStore : Sols -> Int -> Int -> Value -> Result Sols
 solveMetaEmptyStore sols depth m rhs =

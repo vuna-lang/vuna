@@ -116,15 +116,14 @@ skipLineComment (Chars (c :: rest) p) =
   if c == 10 then Chars (c :: rest) p else skipLineComment (Chars rest (advanceChar c p))
 
 skipBlockComment : Int -> Chars -> Result Chars
-skipBlockComment depth cs = case cs of
-  Chars [] p => lexErr0 UnterminatedBlockComment
-  Chars (c :: rest) p => case rest of
-    c2 :: rest2 =>
-      if c == 123 && c2 == 45 then skipBlockComment (depth + 1) (Chars rest2 (advanceChar c2 (advanceChar c p)))
-      else if c == 45 && c2 == 125 then if depth == 1 then Ok (Chars rest2 (advanceChar c2 (advanceChar c p)))
-      else skipBlockComment (depth - 1) (Chars rest2 (advanceChar c2 (advanceChar c p)))
-      else skipBlockComment depth (Chars rest (advanceChar c p))
-    [] => skipBlockComment depth (Chars rest (advanceChar c p))
+skipBlockComment depth (Chars [] p) = lexErr0 UnterminatedBlockComment
+skipBlockComment depth (Chars (c :: rest) p) = case rest of
+  c2 :: rest2 =>
+    if c == 123 && c2 == 45 then skipBlockComment (depth + 1) (Chars rest2 (advanceChar c2 (advanceChar c p)))
+    else if c == 45 && c2 == 125 then if depth == 1 then Ok (Chars rest2 (advanceChar c2 (advanceChar c p)))
+    else skipBlockComment (depth - 1) (Chars rest2 (advanceChar c2 (advanceChar c p)))
+    else skipBlockComment depth (Chars rest (advanceChar c p))
+  [] => skipBlockComment depth (Chars rest (advanceChar c p))
 
 skipTrivia : Int -> Chars -> Result Chars
 skipTrivia fuel cs = if fuel <= 0 then Err "DT: lexer fuel exhausted (internal: lexer made no progress)"

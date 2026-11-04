@@ -39,26 +39,23 @@ privateExportMsg prefix sp name =
 -- 本模块里与导出相关的「数据类型」信息：类型名 + 公开构造器名列表。
 -- data / record / trait 都按同一套 T / T(..) 规则导出（trait 的方法是它的「构造器」）。
 findOwnData : String -> List Decl -> Maybe (Pair String (List String))
-findOwnData name decls = case decls of
-  [] => Nothing
-  d :: rest => case d of
-    DData dname params kind ctors derivings sp =>
-      if dname == name then Just (Pair dname (map ctorName ctors)) else findOwnData name rest
-    DRecord dname params fields derivings sp =>
-      if dname == name then Just (Pair dname [dname]) else findOwnData name rest
-    DTrait tname params methods sp =>
-      if tname == name then Just (Pair tname (map traitMethodName methods))
-      else findOwnData name rest
-    _ => findOwnData name rest
+findOwnData name [] = Nothing
+findOwnData name (d :: rest) = case d of
+  DData dname params kind ctors derivings sp =>
+    if dname == name then Just (Pair dname (map ctorName ctors)) else findOwnData name rest
+  DRecord dname params fields derivings sp =>
+    if dname == name then Just (Pair dname [dname]) else findOwnData name rest
+  DTrait tname params methods sp =>
+    if tname == name then Just (Pair tname (map traitMethodName methods)) else findOwnData name rest
+  _ => findOwnData name rest
 
 findOwnFn : String -> List Decl -> Maybe String
-findOwnFn name decls = case decls of
-  [] => Nothing
-  d :: rest => case d of
-    DFun n pats body sp => if n == name then Just name else findOwnFn name rest
-    DSig n ty sp => if n == name then Just name else findOwnFn name rest
-    DAxiom n ty sp => if n == name then Just name else findOwnFn name rest
-    _ => findOwnFn name rest
+findOwnFn name [] = Nothing
+findOwnFn name (d :: rest) = case d of
+  DFun n pats body sp => if n == name then Just name else findOwnFn name rest
+  DSig n ty sp => if n == name then Just name else findOwnFn name rest
+  DAxiom n ty sp => if n == name then Just name else findOwnFn name rest
+  _ => findOwnFn name rest
 
 findCtorNamed : String -> List Ctor -> Maybe String
 findCtorNamed name [] = Nothing
@@ -72,18 +69,17 @@ findMethodNamed name ((TraitMethod mname ty msp) :: rest) =
   if mname == name then Just mname else findMethodNamed name rest
 
 findOwnCtorName : String -> List Decl -> Maybe (Pair String String)
-findOwnCtorName name decls = case decls of
-  [] => Nothing
-  d :: rest => case d of
-    DData dname params kind ctors derivings sp => case findCtorNamed name ctors of
-      Just cname => Just (Pair dname cname)
-      Nothing => findOwnCtorName name rest
-    DRecord dname params fields derivings sp =>
-      if dname == name then Just (Pair dname dname) else findOwnCtorName name rest
-    DTrait tname params methods sp => case findMethodNamed name methods of
-      Just mname => Just (Pair tname mname)
-      Nothing => findOwnCtorName name rest
-    _ => findOwnCtorName name rest
+findOwnCtorName name [] = Nothing
+findOwnCtorName name (d :: rest) = case d of
+  DData dname params kind ctors derivings sp => case findCtorNamed name ctors of
+    Just cname => Just (Pair dname cname)
+    Nothing => findOwnCtorName name rest
+  DRecord dname params fields derivings sp =>
+    if dname == name then Just (Pair dname dname) else findOwnCtorName name rest
+  DTrait tname params methods sp => case findMethodNamed name methods of
+    Just mname => Just (Pair tname mname)
+    Nothing => findOwnCtorName name rest
+  _ => findOwnCtorName name rest
 
 ownCtorEntries : String -> String -> List String -> List ExportEntry
 ownCtorEntries prefix dname [] = []
@@ -149,13 +145,12 @@ dedupeByPublic (e :: rest) seen acc =
 -- 不导出构造器：抽象记录必须写 T(..) 才公开构造器。（普通 data 里 ctor 与类型同名
 -- 的情形保持 v0 语义：裸名两者都导出。）
 typeRefDominates : List Module -> List Decl -> String -> Maybe ExportRef -> Maybe ExportRef -> Bool
-typeRefDominates modules decls prefix tr vr = case tr of
-  Just (ExportRef tk tt tp) => case vr of
-    Just (ExportRef vk vt vp) =>
-      if tk == "type" && vk == "ctor" && tt == vt then isRecordTarget modules decls prefix tt
-      else False
-    Nothing => False
+typeRefDominates modules decls prefix (Just (ExportRef tk tt tp)) vr = case vr of
+  Just (ExportRef vk vt vp) =>
+    if tk == "type" && vk == "ctor" && tt == vt then isRecordTarget modules decls prefix tt
+    else False
   Nothing => False
+typeRefDominates modules decls prefix Nothing vr = False
 
 isRecordTarget : List Module -> List Decl -> String -> String -> Bool
 isRecordTarget modules decls prefix target = case splitLastDot (splitOnDot target) of
@@ -168,11 +163,10 @@ isRecordTarget modules decls prefix target = case splitLastDot (splitOnDot targe
       Nothing => False
 
 isRecordDecl : String -> List Decl -> Bool
-isRecordDecl dname decls = case decls of
-  [] => False
-  d :: rest => case d of
-    DRecord dn params fields derivings sp => if dn == dname then True else isRecordDecl dname rest
-    _ => isRecordDecl dname rest
+isRecordDecl dname [] = False
+isRecordDecl dname (d :: rest) = case d of
+  DRecord dn params fields derivings sp => if dn == dname then True else isRecordDecl dname rest
+  _ => isRecordDecl dname rest
 
 refEntryList : String -> Maybe ExportRef -> List ExportEntry
 refEntryList pub Nothing = []
@@ -278,12 +272,13 @@ exportTypeAll modules prefix decls imports name sp = case splitLastDot (splitOnD
         )
 
 exportItemEntries : List Module -> String -> List Decl -> List Import -> ExportItem -> Result (List ExportEntry)
-exportItemEntries modules prefix decls imports item = case item of
-  XModule name sp => case findImportPrefix imports name of
-    Nothing => Err (prefix ++ ": " ++ showSpanLoc sp ++ ": module " ++ name ++ " is not imported")
-    Just m => exportsOf modules m
-  XTypeAll name sp => exportTypeAll modules prefix decls imports name sp
-  XBare name sp => exportBare modules prefix decls imports name sp
+exportItemEntries modules prefix decls imports (XModule name sp) = case findImportPrefix imports name of
+  Nothing => Err (prefix ++ ": " ++ showSpanLoc sp ++ ": module " ++ name ++ " is not imported")
+  Just m => exportsOf modules m
+exportItemEntries modules prefix decls imports (XTypeAll name sp) =
+  exportTypeAll modules prefix decls imports name sp
+exportItemEntries modules prefix decls imports (XBare name sp) =
+  exportBare modules prefix decls imports name sp
 
 hasSamePublicKind : ExportEntry -> List ExportEntry -> Bool
 hasSamePublicKind e [] = False

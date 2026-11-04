@@ -227,6 +227,9 @@ resolvePattern fuel modules label prefix ns imports pat = if fuel <= 0 then Err 
 else case pat of
   PWild sp => Ok (Pair (PWild sp) [])
   PVar name sp => andThen (checkBinder label name) (\_ => Ok (Pair (PVar name sp) [name]))
+  PAs name inner sp =>
+    andThen (resolvePattern (fuel - 1) modules label prefix ns imports inner)
+      (\p => Ok (Pair (PAs name (firstOf p) sp) (name :: secondOf p)))
   PInt n sp => Ok (Pair (PInt n sp) [])
   PStr s sp => Ok (Pair (PStr s sp) [])
   PCon name pats sp =>

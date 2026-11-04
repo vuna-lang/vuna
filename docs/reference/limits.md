@@ -230,4 +230,6 @@ DT 设计见 [docs/dt-core.md](../dt-core.md)。
 
 - 阶段状态、当前阻碍与「决策变更」以 [roadmap.md](../roadmap.md) 为唯一口径；里程碑的
   实现细节见 [history.md](../history.md)（更细的在 git 历史）。**本文件只保留当前仍
-  成立的边界，不复制里程碑清单**，避免 roadmap / history / limits 三处漂移。
+  成立的边界，不复制里程碑清单**，避免 roadmap / history / limits 三处漂移。- as-pattern（`x@pat`）已支持函数子句参数与嵌套模式（模式矩阵注入绑定，STR 视作整个值），
+  `case` 分支左端暂未接入；`vuna lint` 的 case-to-clauses 对递归/互递归函数暂保持 case
+  （与 STR 的已知冲突，见 [lint.md](lint.md) §6 与门禁脚本注释）。

@@ -362,22 +362,21 @@ else case v of
 
 -- 单个字段的 OCaml 类型 + 下一个不透明参数槽。
 renderFieldTy : List Int -> List (Pair String (List Int)) -> List DtData -> Int -> Value -> Int -> Pair String Int
-renderFieldTy levels table datas lvl dom slot = case dom of
-  VPi name implicit rig d clo =>
-    if implicit then Pair (typeParamName slot) (slot + 1)
-    else Pair (renderPiTy levels table datas lvl dom) slot
-  VNeutral n => case n of
-    NVar name lvl2 sp => case levelSlot levels lvl2 of
-      Just s => Pair (typeParamName s) slot
-      Nothing => Pair (typeParamName slot) (slot + 1)
-    NGlobal g sp => if g == intTypeName then Pair "int" slot
-    else if g == strTypeName then Pair "string" slot
-    else if g == boolTypeName then Pair "bool" slot
-    else case findDtData g datas of
-      Just gd =>
-        Pair (familyTyText g (renderFamilyArgs levels table datas (lookupUsed table g) sp)) slot
-      Nothing => Pair (typeParamName slot) (slot + 1)
-  _ => Pair (typeParamName slot) (slot + 1)
+renderFieldTy levels table datas lvl (dom@(VPi name implicit rig d clo)) slot =
+  if implicit then Pair (typeParamName slot) (slot + 1)
+  else Pair (renderPiTy levels table datas lvl dom) slot
+renderFieldTy levels table datas lvl (VNeutral n) slot = case n of
+  NVar name lvl2 sp => case levelSlot levels lvl2 of
+    Just s => Pair (typeParamName s) slot
+    Nothing => Pair (typeParamName slot) (slot + 1)
+  NGlobal g sp => if g == intTypeName then Pair "int" slot
+  else if g == strTypeName then Pair "string" slot
+  else if g == boolTypeName then Pair "bool" slot
+  else case findDtData g datas of
+    Just gd =>
+      Pair (familyTyText g (renderFamilyArgs levels table datas (lookupUsed table g) sp)) slot
+    Nothing => Pair (typeParamName slot) (slot + 1)
+renderFieldTy levels table datas lvl _ slot = Pair (typeParamName slot) (slot + 1)
 
 -- 构造子字段形状的**唯一真源**（M24.6 第一级）：从 telescope 的 rig 算出 keep flags
 -- （True = 该 binder 进运行时表示）。类型声明、构造子应用、case 分支绑定三处都消费

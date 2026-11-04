@@ -47,12 +47,12 @@ open Vuna_dCompiler_dElab_dTerm_dSupport
 open Vuna_dCompiler_dElab_dTerm_dImpl
 open Vuna_dCompiler_dElab_dTerm
 open Vuna_dCompiler_dElab_dData
-let v_Vuna_dCompiler_dElab_dInstName_dinstanceHeadName = (fun e -> (match e with
-  | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEVar (dtb__0, dtb__1) -> (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__0))
-  | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEApp (dtb__2, dtb__3, dtb__4) -> (match dtb__2 with
-  | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEVar (dtb__5, dtb__6) -> (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__5))
+let v_Vuna_dCompiler_dElab_dInstName_dinstanceHeadName = (fun mc0 -> (match mc0 with
+  | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEApp (dtb__0, dtb__1, dtb__2) -> (match dtb__0 with
+  | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEVar (dtb__3, dtb__4) -> (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__3))
   | _ -> C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing
 )
+  | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEVar (dtb__5, dtb__6) -> (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__5))
   | _ -> C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing
 ))
 

@@ -258,12 +258,11 @@ elabInstance instDecls allDecls globals classes datas ec ds = case ds of
 
 -- 实例头/上下文的语法拆分：头是 `C arg`（M29 单参数 trait），约束是 `C arg`。
 instanceHeadParts : Expr -> Maybe (Pair String (List Expr))
-instanceHeadParts e = case e of
-  EVar n sp => Just (Pair n [])
-  EApp fn args sp => case fn of
-    EVar n fsp => Just (Pair n args)
-    _ => Nothing
+instanceHeadParts (EVar n sp) = Just (Pair n [])
+instanceHeadParts (EApp fn args sp) = case fn of
+  EVar n fsp => Just (Pair n args)
   _ => Nothing
+instanceHeadParts _ = Nothing
 
 constraintPartsOf : Span -> List Expr -> Result (List (Pair String Expr))
 constraintPartsOf sp [] = Ok []
@@ -272,11 +271,10 @@ constraintPartsOf sp (e :: rest) = case instanceConstraintParts e of
   Just p => andThen (constraintPartsOf sp rest) (\ps => Ok (p :: ps))
 
 instanceConstraintParts : Expr -> Maybe (Pair String Expr)
-instanceConstraintParts e = case e of
-  EApp fn (a :: rest) sp => case fn of
-    EVar n fsp => Just (Pair n a)
-    _ => Nothing
+instanceConstraintParts (EApp fn (a :: rest) sp) = case fn of
+  EVar n fsp => Just (Pair n a)
   _ => Nothing
+instanceConstraintParts _ = Nothing
 
 -- 实例 signatrue 的精化结果：类名、tele、ctx 字典域、头实参（tele 内）、结果头。
 data InstSigInfo : Type where
@@ -339,14 +337,13 @@ elabInstanceConstrained classes globals defined ec0 sp cls argExpr ctxParts =
 -- 只做语法 → 核心项的机械转换（EVar → TGlobal、应用落成 Rig0 TApp）；
 -- 裸 EVar（`Color` / `Int`）与旧 `instanceHeadTerm` 逐字节一致。
 closedTypeTerm : Expr -> Maybe Term
-closedTypeTerm e = case e of
-  EVar n sp => Just (TGlobal n)
-  EApp fn args sp => case closedTypeTerm fn of
+closedTypeTerm (EVar n sp) = Just (TGlobal n)
+closedTypeTerm (EApp fn args sp) = case closedTypeTerm fn of
+  Nothing => Nothing
+  Just f => case closedTypeArgs args of
     Nothing => Nothing
-    Just f => case closedTypeArgs args of
-      Nothing => Nothing
-      Just ts => Just (foldAppTerms f ts)
-  _ => Nothing
+    Just ts => Just (foldAppTerms f ts)
+closedTypeTerm _ = Nothing
 
 closedTypeArgs : List Expr -> Maybe (List (Pair Term Rig))
 closedTypeArgs [] = Just []
@@ -498,10 +495,9 @@ hasMethodClauses name (d :: rest) = case d of
 -- 都是 mangle 后的全名（与 `dtClassMethods` / `firstMissingInstanceMethod` 一致）。
 findTraitDecl : String -> List (Pair Decl Span) -> Maybe Decl
 findTraitDecl cname [] = Nothing
-findTraitDecl cname (pd :: rest) = case pd of
-  Pair d dsp => case d of
-    DTrait tname params methods _ => if tname == cname then Just d else findTraitDecl cname rest
-    _ => findTraitDecl cname rest
+findTraitDecl cname ((Pair d dsp) :: rest) = case d of
+  DTrait tname params methods _ => if tname == cname then Just d else findTraitDecl cname rest
+  _ => findTraitDecl cname rest
 
 findTraitMethodSpan : String -> List TraitMethod -> Maybe Span
 findTraitMethodSpan mname [] = Nothing
@@ -545,20 +541,19 @@ substInstParam : Term -> Term -> Term
 substInstParam arg t = substInstParamGo arg 0 t
 
 substInstParamGo : Term -> Int -> Term -> Term
-substInstParamGo arg depth t = case t of
-  TVar n i => if i == depth then shift 0 depth arg else t
-  TPi n i r dom cod =>
-    TPi n i r (substInstParamGo arg depth dom) (substInstParamGo arg (depth + 1) cod)
-  TLam n r body => TLam n r (substInstParamGo arg (depth + 1) body)
-  TApp f a r => TApp (substInstParamGo arg depth f) (substInstParamGo arg depth a) r
-  TCon c args =>
-    TCon c (map (\p => Pair (substInstParamGo arg depth (firstOf p)) (secondOf p)) args)
-  TCase scrut alts =>
-    TCase (substInstParamGo arg depth scrut) (map (\alt => substInstParamAlt arg depth alt) alts)
-  TIf c th el =>
-    TIf (substInstParamGo arg depth c) (substInstParamGo arg depth th)
-      (substInstParamGo arg depth el)
-  _ => t
+substInstParamGo arg depth (t@(TVar n i)) = if i == depth then shift 0 depth arg else t
+substInstParamGo arg depth (TPi n i r dom cod) =
+  TPi n i r (substInstParamGo arg depth dom) (substInstParamGo arg (depth + 1) cod)
+substInstParamGo arg depth (TLam n r body) = TLam n r (substInstParamGo arg (depth + 1) body)
+substInstParamGo arg depth (TApp f a r) =
+  TApp (substInstParamGo arg depth f) (substInstParamGo arg depth a) r
+substInstParamGo arg depth (TCon c args) =
+  TCon c (map (\p => Pair (substInstParamGo arg depth (firstOf p)) (secondOf p)) args)
+substInstParamGo arg depth (TCase scrut alts) =
+  TCase (substInstParamGo arg depth scrut) (map (\alt => substInstParamAlt arg depth alt) alts)
+substInstParamGo arg depth (TIf c th el) =
+  TIf (substInstParamGo arg depth c) (substInstParamGo arg depth th) (substInstParamGo arg depth el)
+substInstParamGo arg depth t = t
 
 substInstParamAlt : Term -> Int -> CaseAlt -> CaseAlt
 substInstParamAlt arg depth (CaseAlt n bs b) =
@@ -614,18 +609,17 @@ solveCtxGoals ctx nCtx nTele ec acc = solveCtxGoalsGo ctx nCtx ec (ecDictGoals e
 
 solveCtxGoalsGo : Ctx -> Int -> Ec -> List DtDictGoal -> List DtDictGoal -> List (Pair Int Int) -> Pair (List (Pair Int Int)) Ec
 solveCtxGoalsGo ctx nCtx ec [] kept acc = Pair (reverse acc) (ecPutDictGoals ec (reverse kept))
-solveCtxGoalsGo ctx nCtx ec (g :: rest) kept acc = case g of
-  DtDictGoal m dom => case metaLookup m (ecSols ec) of
-    Just _ => solveCtxGoalsGo ctx nCtx ec rest kept acc
-    Nothing => case matchCtxDictIdx ctx nCtx dom ec of
-      Nothing => solveCtxGoalsGo ctx nCtx ec rest (g :: kept) acc
-      Just i =>
-        let
-          k = nCtx - 1 - i
-        in case solveMeta (ecDefTbl ec) (ecSolsP ec) 0 m [] (VNeutral (NVar (ctxDictName k) (ctxDepth ctx - nCtx + k) [])) of
-          Ok sols2 =>
-            solveCtxGoalsGo ctx nCtx (ecPutSols ec (solsList sols2)) rest kept (Pair m k :: acc)
-          Err e => solveCtxGoalsGo ctx nCtx ec rest kept acc
+solveCtxGoalsGo ctx nCtx ec ((g@(DtDictGoal m dom)) :: rest) kept acc = case metaLookup m (ecSols ec) of
+  Just _ => solveCtxGoalsGo ctx nCtx ec rest kept acc
+  Nothing => case matchCtxDictIdx ctx nCtx dom ec of
+    Nothing => solveCtxGoalsGo ctx nCtx ec rest (g :: kept) acc
+    Just i =>
+      let
+        k = nCtx - 1 - i
+      in case solveMeta (ecDefTbl ec) (ecSolsP ec) 0 m [] (VNeutral (NVar (ctxDictName k) (ctxDepth ctx - nCtx + k) [])) of
+        Ok sols2 =>
+          solveCtxGoalsGo ctx nCtx (ecPutSols ec (solsList sols2)) rest kept (Pair m k :: acc)
+        Err e => solveCtxGoalsGo ctx nCtx ec rest kept acc
 
 matchCtxDictIdx : Ctx -> Int -> Value -> Ec -> Maybe Int
 matchCtxDictIdx ctx nCtx dom ec = matchCtxDictIdxGo ctx nCtx dom ec 0 (ctxItems ctx)
@@ -658,15 +652,14 @@ resolveRigidGoals globals ctx sp goals acc ec = resolveRigidGoalsGo globals ctx 
 resolveRigidGoalsGo : List (Pair String Term) -> Ctx -> Span -> List DtDictGoal -> List DtDictGoal -> List (Pair Int Term) -> Ec -> Result (Pair (List (Pair Int Term)) Ec)
 resolveRigidGoalsGo globals ctx sp [] kept acc ec =
   Ok (Pair (reverse acc) (ecPutDictGoals ec (reverse kept)))
-resolveRigidGoalsGo globals ctx sp (g :: rest) kept acc ec = case g of
-  DtDictGoal m dom => if isRigidDictArg ec dom then case searchInstanceIn globals ctx ec dom sp of
-    Err e => tcErr1 sp (InstanceContextMissing (showValue dom)) (showValue dom)
-    Ok (Pair rep ec1) => case solveMeta (ecDefTbl ec1) (ecSolsP ec1) 0 m [] (eval (ctxEnv ctx) rep) of
-      Ok sols2 =>
-        resolveRigidGoalsGo globals ctx sp rest kept (Pair m rep :: acc)
-          (ecPutSols ec1 (solsList sols2))
-      Err e => resolveRigidGoalsGo globals ctx sp rest kept (Pair m rep :: acc) ec1
-  else resolveRigidGoalsGo globals ctx sp rest (g :: kept) acc ec
+resolveRigidGoalsGo globals ctx sp ((g@(DtDictGoal m dom)) :: rest) kept acc ec = if isRigidDictArg ec dom then case searchInstanceIn globals ctx ec dom sp of
+  Err e => tcErr1 sp (InstanceContextMissing (showValue dom)) (showValue dom)
+  Ok (Pair rep ec1) => case solveMeta (ecDefTbl ec1) (ecSolsP ec1) 0 m [] (eval (ctxEnv ctx) rep) of
+    Ok sols2 =>
+      resolveRigidGoalsGo globals ctx sp rest kept (Pair m rep :: acc)
+        (ecPutSols ec1 (solsList sols2))
+    Err e => resolveRigidGoalsGo globals ctx sp rest kept (Pair m rep :: acc) ec1
+else resolveRigidGoalsGo globals ctx sp rest (g :: kept) acc ec
 
 -- meta → 任意 term 的替换（term 在 `bodyDepth` 下有效；出现点 depth 更深时整体 shift）。
 applyTermSubstsTo : Int -> List (Pair Int Term) -> Term -> Term
@@ -678,20 +671,20 @@ substMetaTerm : Int -> Term -> Term -> Term
 substMetaTerm m rep t = substMetaTermGo m rep 0 t
 
 substMetaTermGo : Int -> Term -> Int -> Term -> Term
-substMetaTermGo m rep depth t = case t of
-  TMeta n => if n == m then shift 0 depth rep else t
-  TPi n i r dom cod =>
-    TPi n i r (substMetaTermGo m rep depth dom) (substMetaTermGo m rep (depth + 1) cod)
-  TLam n r b => TLam n r (substMetaTermGo m rep (depth + 1) b)
-  TApp f a r => TApp (substMetaTermGo m rep depth f) (substMetaTermGo m rep depth a) r
-  TCon c args =>
-    TCon c (map (\p => Pair (substMetaTermGo m rep depth (firstOf p)) (secondOf p)) args)
-  TCase s alts =>
-    TCase (substMetaTermGo m rep depth s) (map (\alt => substMetaTermAlt m rep depth alt) alts)
-  TIf c th el =>
-    TIf (substMetaTermGo m rep depth c) (substMetaTermGo m rep depth th)
-      (substMetaTermGo m rep depth el)
-  _ => t
+substMetaTermGo m rep depth (t@(TMeta n)) = if n == m then shift 0 depth rep else t
+substMetaTermGo m rep depth (TPi n i r dom cod) =
+  TPi n i r (substMetaTermGo m rep depth dom) (substMetaTermGo m rep (depth + 1) cod)
+substMetaTermGo m rep depth (TLam n r b) = TLam n r (substMetaTermGo m rep (depth + 1) b)
+substMetaTermGo m rep depth (TApp f a r) =
+  TApp (substMetaTermGo m rep depth f) (substMetaTermGo m rep depth a) r
+substMetaTermGo m rep depth (TCon c args) =
+  TCon c (map (\p => Pair (substMetaTermGo m rep depth (firstOf p)) (secondOf p)) args)
+substMetaTermGo m rep depth (TCase s alts) =
+  TCase (substMetaTermGo m rep depth s) (map (\alt => substMetaTermAlt m rep depth alt) alts)
+substMetaTermGo m rep depth (TIf c th el) =
+  TIf (substMetaTermGo m rep depth c) (substMetaTermGo m rep depth th)
+    (substMetaTermGo m rep depth el)
+substMetaTermGo m rep depth t = t
 
 substMetaTermAlt : Int -> Term -> Int -> CaseAlt -> CaseAlt
 substMetaTermAlt m rep depth (CaseAlt n bs b) =
@@ -884,22 +877,21 @@ checkInstanceHeads decls classes globals ec = checkInstanceHeadsGo decls classes
 checkInstanceHeadsGo : List (Pair Decl Span) -> List DtClass -> List (Pair String Term) -> Ec -> List (Pair String Term) -> List DtInst -> List DtInst -> Result (Pair (List (Pair String Term)) Ec)
 checkInstanceHeadsGo [] classes globals ec acc insts seen =
   Ok (Pair (reverse acc) (foldlAddInst ec (reverse insts)))
-checkInstanceHeadsGo (d :: rest) classes globals ec acc insts seen = case d of
-  Pair decl dsp => case decl of
-    DInstance ctxE headExpr methods msp => andThen (elabInstanceSig classes globals (definedNames (map firstOf (d :: rest))) ec msp headExpr ctxE) (\p => case p of
-      Pair info ec1 =>
-        let
-          iname = instanceName (instSigClass info) headExpr
-          ty = instTypeOf info
-          inst = DtInst iname (instSigTele info) (instSigCtx info) (instSigHead info)
-        in case findInstanceClash ec1 iname (instSigTele info) (instSigHead info) seen of
-          Pair (Just ClashDuplicate) ec2 => tcErr1 msp (DuplicateInstance iname) iname
-          Pair (Just ClashOverlap) ec2 => tcErr1 msp (OverlappingInstances iname) iname
-          Pair Nothing ec2 =>
-            checkInstanceHeadsGo rest classes globals ec2 (Pair iname ty :: acc) (inst :: insts)
-              (inst :: seen)
-    )
-    _ => checkInstanceHeadsGo rest classes globals ec acc insts seen
+checkInstanceHeadsGo ((d@(Pair decl dsp)) :: rest) classes globals ec acc insts seen = case decl of
+  DInstance ctxE headExpr methods msp => andThen (elabInstanceSig classes globals (definedNames (map firstOf (d :: rest))) ec msp headExpr ctxE) (\p => case p of
+    Pair info ec1 =>
+      let
+        iname = instanceName (instSigClass info) headExpr
+        ty = instTypeOf info
+        inst = DtInst iname (instSigTele info) (instSigCtx info) (instSigHead info)
+      in case findInstanceClash ec1 iname (instSigTele info) (instSigHead info) seen of
+        Pair (Just ClashDuplicate) ec2 => tcErr1 msp (DuplicateInstance iname) iname
+        Pair (Just ClashOverlap) ec2 => tcErr1 msp (OverlappingInstances iname) iname
+        Pair Nothing ec2 =>
+          checkInstanceHeadsGo rest classes globals ec2 (Pair iname ty :: acc) (inst :: insts)
+            (inst :: seen)
+  )
+  _ => checkInstanceHeadsGo rest classes globals ec acc insts seen
 
 -- 实例冲突：精确重复（同 head，modulo tele 改名）优先，其次「可合一但不同」= 重叠。
 -- M30（B22）：名字 = 单类前缀 + **完整 head 名**，所以不同 head（含不同模块的同名 data）

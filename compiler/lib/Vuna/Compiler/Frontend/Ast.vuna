@@ -31,6 +31,7 @@ module Vuna.Compiler.Frontend.Ast
   , Field
   , Import
   , ModDecl
+  , PAs
   , PCon
   , PInt
   , PRecord
@@ -86,6 +87,8 @@ data TraitMethod : Type where
 
 data Pat : Type where
   PVar : String -> Span -> Pat
+  -- as-pattern（`x@pat` / `(pat)@x`）：匹配内层模式，并把整个匹配值绑定到 x。
+  PAs : String -> Pat -> Span -> Pat
   PWild : Span -> Pat
   PCon : String -> List Pat -> Span -> Pat
   PInt : Int -> Span -> Pat
@@ -155,6 +158,7 @@ data SourceFile : Type where
 -- 各节点的源码 span 访问器。
 patSpan : Pat -> Span
 patSpan (PVar name sp) = sp
+patSpan (PAs name inner sp) = sp
 patSpan (PWild sp) = sp
 patSpan (PCon name pats sp) = sp
 patSpan (PInt n sp) = sp
@@ -264,15 +268,14 @@ lookupCtorArity name (c :: rest) =
   if ctorName c == name then Just (ctorArityOf c) else lookupCtorArity name rest
 
 ctorArity : String -> List Decl -> Maybe Int
-ctorArity name decls = case decls of
-  [] => Nothing
-  d :: rest => case d of
-    DData dname params kind ctors derivings sp => case lookupCtorArity name ctors of
-      Just arity => Just arity
-      Nothing => ctorArity name rest
-    DRecord dname params fields derivings sp =>
-      if name == dname then Just (length fields) else ctorArity name rest
-    _ => ctorArity name rest
+ctorArity name [] = Nothing
+ctorArity name (d :: rest) = case d of
+  DData dname params kind ctors derivings sp => case lookupCtorArity name ctors of
+    Just arity => Just arity
+    Nothing => ctorArity name rest
+  DRecord dname params fields derivings sp =>
+    if name == dname then Just (length fields) else ctorArity name rest
+  _ => ctorArity name rest
 
 declNames : Decl -> List String
 declNames (DFun name pats body _) = [name]

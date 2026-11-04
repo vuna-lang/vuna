@@ -1,0 +1,12 @@
+-- as-pattern（`x@pat`）：匹配内层模式并绑定整个值，支持子模式位置。
+import Base.List
+
+data PState : Type where
+  PState : List Int -> Int -> PState
+
+advance : PState -> Int
+advance (PState (t :: rest)@toks n) = t + n + length toks
+advance (PState []@toks n) = n + length toks
+
+main : Int
+main = advance (PState [1, 2] 10) + advance (PState [] 5)

@@ -153,12 +153,12 @@ renderWhereSigLine at lineInd pat ty =
   prefixFirst (spaces lineInd ++ renderPat pat ++ " : ") (renderTypeExpr at lineInd ty)
 
 renderWhereBindingBody : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Pat -> Expr -> List String
-renderWhereBindingBody at lineInd pat value = case pat of
-  PVar name psp => case value of
-    ELocalFun clauses lsp => renderLocalFunClauses at lineInd name clauses
-    ELam ps inner lsp => renderClause at lineInd name (map (\n => PVar n dummySpan) ps) inner
-    _ => renderBindingValue at lineInd (name ++ " =") value
-  _ => renderBindingValue at lineInd (renderPat pat ++ " =") value
+renderWhereBindingBody at lineInd (PVar name psp) value = case value of
+  ELocalFun clauses lsp => renderLocalFunClauses at lineInd name clauses
+  ELam ps inner lsp => renderClause at lineInd name (map (\n => PVar n dummySpan) ps) inner
+  _ => renderBindingValue at lineInd (name ++ " =") value
+renderWhereBindingBody at lineInd pat value =
+  renderBindingValue at lineInd (renderPat pat ++ " =") value
 
 -- A2：where 内部多 clause 局部函数：每个 clause 走 `renderClause`（与顶层子句同形）。
 renderLocalFunClauses : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> String -> List (Pair (List Pat) Expr) -> List String

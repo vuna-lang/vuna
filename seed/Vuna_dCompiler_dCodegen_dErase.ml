@@ -57,16 +57,16 @@ open Vuna_dCompiler_dElab_dTermination
 open Vuna_dCompiler_dElab_dDriver
 open Vuna_dCompiler_dElab
 open Vuna_dCompiler_dCodegen_dDecl
-let rec v_Vuna_dCompiler_dCodegen_dErase_dflattenConApp = (fun t -> (match t with
-  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTApp (dtb__0, dtb__1, dtb__2) -> ((fun nd_uscrut4 -> (match nd_uscrut4 with
+let rec v_Vuna_dCompiler_dCodegen_dErase_dflattenConApp = (fun mc0 -> (match mc0 with
+  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTCon (dtb__0, dtb__1) -> (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust ((C_Base_dPair_dPair_Base_dPair_dPair (dtb__0, dtb__1))))
+  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTApp (dtb__2, dtb__3, dtb__4) -> ((fun nd_uscrut4 -> (match nd_uscrut4 with
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing
-  | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__3) -> (match dtb__3 with
-  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__4, dtb__5) -> (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust ((C_Base_dPair_dPair_Base_dPair_dPair (dtb__4, ((v_Base_dList_dappend dtb__5) (C_Base_dList_dList_Base_dList_dCons ((C_Base_dPair_dPair_Base_dPair_dPair (dtb__1, dtb__2)), C_Base_dList_dList_Base_dList_dNil)))))))
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__5) -> (match dtb__5 with
+  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__6, dtb__7) -> (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust ((C_Base_dPair_dPair_Base_dPair_dPair (dtb__6, ((v_Base_dList_dappend dtb__7) (C_Base_dList_dList_Base_dList_dCons ((C_Base_dPair_dPair_Base_dPair_dPair (dtb__3, dtb__4)), C_Base_dList_dList_Base_dList_dNil)))))))
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
-)) (v_Vuna_dCompiler_dCodegen_dErase_dflattenConApp dtb__0))
-  | C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTCon (dtb__6, dtb__7) -> (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust ((C_Base_dPair_dPair_Base_dPair_dPair (dtb__6, dtb__7))))
+)) (v_Vuna_dCompiler_dCodegen_dErase_dflattenConApp dtb__2))
   | _ -> C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing
 ))
 
@@ -261,12 +261,12 @@ let v_Vuna_dCompiler_dCodegen_dErase_dfoldNeighborsPost = (fun adjT -> (fun ms -
 
 let v_Vuna_dCompiler_dCodegen_dErase_ddfsPost = (fun adjT -> (fun n -> (fun visited -> (fun order -> (((((v_Vuna_dCompiler_dCodegen_dErase_ddfsPostFuel 100000) adjT) n) visited) order)))))
 
-let rec v_Vuna_dCompiler_dCodegen_dErase_dpostOrder = (fun adjT -> (fun nodes -> (fun visited -> (fun order -> (match nodes with
-  | C_Base_dList_dList_Base_dList_dNil -> (C_Base_dPair_dPair_Base_dPair_dPair (visited, order))
-  | C_Base_dList_dList_Base_dList_dCons (dtb__116, dtb__117) -> (if ((v_Vuna_dCompiler_dCommon_dtblMem dtb__116) visited) then ((((v_Vuna_dCompiler_dCodegen_dErase_dpostOrder adjT) dtb__117) visited) order) else (match ((((v_Vuna_dCompiler_dCodegen_dErase_ddfsPost adjT) dtb__116) (((v_Vuna_dCompiler_dCommon_dtblInsert dtb__116) true) visited)) order) with
-  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__118, dtb__119) -> ((((v_Vuna_dCompiler_dCodegen_dErase_dpostOrder adjT) dtb__117) dtb__118) dtb__119)
+let rec v_Vuna_dCompiler_dCodegen_dErase_dpostOrder = (fun mc0 -> (fun mc1 -> (fun mc2 -> (fun mc3 -> (match mc1 with
+  | C_Base_dList_dList_Base_dList_dCons (dtb__116, dtb__117) -> (if ((v_Vuna_dCompiler_dCommon_dtblMem dtb__116) mc2) then ((((v_Vuna_dCompiler_dCodegen_dErase_dpostOrder mc0) dtb__117) mc2) mc3) else (match ((((v_Vuna_dCompiler_dCodegen_dErase_ddfsPost mc0) dtb__116) (((v_Vuna_dCompiler_dCommon_dtblInsert dtb__116) true) mc2)) mc3) with
+  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__118, dtb__119) -> ((((v_Vuna_dCompiler_dCodegen_dErase_dpostOrder mc0) dtb__117) dtb__118) dtb__119)
   | _ -> failwith "DT: impossible branch"
 ))
+  | C_Base_dList_dList_Base_dList_dNil -> (C_Base_dPair_dPair_Base_dPair_dPair (mc2, mc3))
   | _ -> failwith "DT: impossible branch"
 )))))
 
@@ -287,12 +287,12 @@ let v_Vuna_dCompiler_dCodegen_dErase_dfoldNeighborsCollect = (fun adjT -> (fun m
 
 let v_Vuna_dCompiler_dCodegen_dErase_ddfsCollect = (fun adjT -> (fun n -> (fun visited -> (fun comp -> (((((v_Vuna_dCompiler_dCodegen_dErase_ddfsCollectFuel 100000) adjT) n) visited) comp)))))
 
-let rec v_Vuna_dCompiler_dCodegen_dErase_dcollectComps = (fun adjT -> (fun nodes -> (fun visited -> (fun comps -> (match nodes with
-  | C_Base_dList_dList_Base_dList_dNil -> comps
-  | C_Base_dList_dList_Base_dList_dCons (dtb__126, dtb__127) -> (if ((v_Vuna_dCompiler_dCommon_dtblMem dtb__126) visited) then ((((v_Vuna_dCompiler_dCodegen_dErase_dcollectComps adjT) dtb__127) visited) comps) else (match ((((v_Vuna_dCompiler_dCodegen_dErase_ddfsCollect adjT) dtb__126) (((v_Vuna_dCompiler_dCommon_dtblInsert dtb__126) true) visited)) C_Base_dList_dList_Base_dList_dNil) with
-  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__128, dtb__129) -> ((((v_Vuna_dCompiler_dCodegen_dErase_dcollectComps adjT) dtb__127) dtb__128) (C_Base_dList_dList_Base_dList_dCons (dtb__129, comps)))
+let rec v_Vuna_dCompiler_dCodegen_dErase_dcollectComps = (fun mc0 -> (fun mc1 -> (fun mc2 -> (fun mc3 -> (match mc1 with
+  | C_Base_dList_dList_Base_dList_dCons (dtb__126, dtb__127) -> (if ((v_Vuna_dCompiler_dCommon_dtblMem dtb__126) mc2) then ((((v_Vuna_dCompiler_dCodegen_dErase_dcollectComps mc0) dtb__127) mc2) mc3) else (match ((((v_Vuna_dCompiler_dCodegen_dErase_ddfsCollect mc0) dtb__126) (((v_Vuna_dCompiler_dCommon_dtblInsert dtb__126) true) mc2)) C_Base_dList_dList_Base_dList_dNil) with
+  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__128, dtb__129) -> ((((v_Vuna_dCompiler_dCodegen_dErase_dcollectComps mc0) dtb__127) dtb__128) (C_Base_dList_dList_Base_dList_dCons (dtb__129, mc3)))
   | _ -> failwith "DT: impossible branch"
 ))
+  | C_Base_dList_dList_Base_dList_dNil -> mc3
   | _ -> failwith "DT: impossible branch"
 )))))
 

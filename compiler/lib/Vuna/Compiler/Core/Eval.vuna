@@ -286,17 +286,16 @@ strEq : String -> String -> Bool
 strEq a b = a == b
 
 genericCmp : Value -> Value -> Maybe Int
-genericCmp a b = case a of
-  VInt x => case b of
-    VInt y => Just (cmpInt x y)
-    _ => Nothing
-  VStr x => case b of
-    VStr y => Just (if x == y then 0 else if x < y then 0 - 1 else 1)
-    _ => Nothing
-  VBool x => case b of
-    VBool y => Just (if x == y then 0 else if x then 1 else 0 - 1)
-    _ => Nothing
+genericCmp (VInt x) b = case b of
+  VInt y => Just (cmpInt x y)
   _ => Nothing
+genericCmp (VStr x) b = case b of
+  VStr y => Just (if x == y then 0 else if x < y then 0 - 1 else 1)
+  _ => Nothing
+genericCmp (VBool x) b = case b of
+  VBool y => Just (if x == y then 0 else if x then 1 else 0 - 1)
+  _ => Nothing
+genericCmp _ b = Nothing
 
 cmpInt : Int -> Int -> Int
 cmpInt a b = if a == b then 0 else if a < b then 0 - 1 else 1
@@ -366,13 +365,12 @@ strHashChars (c :: rest) h = strHashChars rest (h * 33 + c - (h * 33 + c) / 1024
 
 -- `strAt`：按字节取；越界返回 -1（与 runtime `dtp_strAt` 一致）。
 atPrim : List Value -> Maybe Value
-atPrim sp = case sp of
-  [a, b] => case asStr a of
-    Just s => case asInt b of
-      Just i => Just (VInt (strAtBytes s i))
-      Nothing => Nothing
+atPrim ([a, b]) = case asStr a of
+  Just s => case asInt b of
+    Just i => Just (VInt (strAtBytes s i))
     Nothing => Nothing
-  _ => Nothing
+  Nothing => Nothing
+atPrim _ = Nothing
 
 strAtBytes : String -> Int -> Int
 strAtBytes s i = if i < 0 || i >= strLength s then 0 - 1 else nthByte (strUnpack s) i
@@ -521,20 +519,23 @@ applyTermSpine head (a :: rest) = applyTermSpine (TApp head a Rig1) rest
 -- 类型/索引元变量（Rig0）可留在项里。字典解（实例构造子）是闭的，`quote 0` 安全；
 -- 带自由变量（非闭）的解跳过——它们只可能是擦除元变量，codegen 跳过。
 substSolvedMetas : List (Pair Int Value) -> Term -> Term
-substSolvedMetas sols t = case t of
-  TMeta m => case metaLookup m sols of
-    Just v =>
-      let
-        soln = quote 0 v
-      in if hasFreeTermVar 0 soln then t else soln
-    Nothing => t
-  TPi n i r d c => TPi n i r (substSolvedMetas sols d) (substSolvedMetas sols c)
-  TLam n r b => TLam n r (substSolvedMetas sols b)
-  TApp f a r => TApp (substSolvedMetas sols f) (substSolvedMetas sols a) r
-  TCon c args => TCon c (map (\p => Pair (substSolvedMetas sols (firstOf p)) (secondOf p)) args)
-  TCase s alts => TCase (substSolvedMetas sols s) (map (substSolvedAlt sols) alts)
-  TIf c th el => TIf (substSolvedMetas sols c) (substSolvedMetas sols th) (substSolvedMetas sols el)
-  _ => t
+substSolvedMetas sols (t@(TMeta m)) = case metaLookup m sols of
+  Just v =>
+    let
+      soln = quote 0 v
+    in if hasFreeTermVar 0 soln then t else soln
+  Nothing => t
+substSolvedMetas sols (TPi n i r d c) =
+  TPi n i r (substSolvedMetas sols d) (substSolvedMetas sols c)
+substSolvedMetas sols (TLam n r b) = TLam n r (substSolvedMetas sols b)
+substSolvedMetas sols (TApp f a r) = TApp (substSolvedMetas sols f) (substSolvedMetas sols a) r
+substSolvedMetas sols (TCon c args) =
+  TCon c (map (\p => Pair (substSolvedMetas sols (firstOf p)) (secondOf p)) args)
+substSolvedMetas sols (TCase s alts) =
+  TCase (substSolvedMetas sols s) (map (substSolvedAlt sols) alts)
+substSolvedMetas sols (TIf c th el) =
+  TIf (substSolvedMetas sols c) (substSolvedMetas sols th) (substSolvedMetas sols el)
+substSolvedMetas sols t = t
 
 substSolvedAlt : List (Pair Int Value) -> CaseAlt -> CaseAlt
 substSolvedAlt sols (CaseAlt n bs b) = CaseAlt n bs (substSolvedMetas sols b)
@@ -550,20 +551,22 @@ substSolvedMetasAt d [] t = t
 substSolvedMetasAt d sols t = substSolvedMetasAtGo d sols t
 
 substSolvedMetasAtGo : Int -> List (Pair Int Value) -> Term -> Term
-substSolvedMetasAtGo depth sols t = case t of
-  TMeta m => case metaLookup m sols of
-    Just v => quote depth v
-    Nothing => t
-  TPi n i r d c => TPi n i r (substSolvedMetasAtGo depth sols d) (substSolvedMetasAtGo depth sols c)
-  TLam n r b => TLam n r (substSolvedMetasAtGo depth sols b)
-  TApp f a r => TApp (substSolvedMetasAtGo depth sols f) (substSolvedMetasAtGo depth sols a) r
-  TCon c args =>
-    TCon c (map (\p => Pair (substSolvedMetasAtGo depth sols (firstOf p)) (secondOf p)) args)
-  TCase s alts => TCase (substSolvedMetasAtGo depth sols s) (map (substSolvedAltAt depth sols) alts)
-  TIf c th el =>
-    TIf (substSolvedMetasAtGo depth sols c) (substSolvedMetasAtGo depth sols th)
-      (substSolvedMetasAtGo depth sols el)
-  _ => t
+substSolvedMetasAtGo depth sols (t@(TMeta m)) = case metaLookup m sols of
+  Just v => quote depth v
+  Nothing => t
+substSolvedMetasAtGo depth sols (TPi n i r d c) =
+  TPi n i r (substSolvedMetasAtGo depth sols d) (substSolvedMetasAtGo depth sols c)
+substSolvedMetasAtGo depth sols (TLam n r b) = TLam n r (substSolvedMetasAtGo depth sols b)
+substSolvedMetasAtGo depth sols (TApp f a r) =
+  TApp (substSolvedMetasAtGo depth sols f) (substSolvedMetasAtGo depth sols a) r
+substSolvedMetasAtGo depth sols (TCon c args) =
+  TCon c (map (\p => Pair (substSolvedMetasAtGo depth sols (firstOf p)) (secondOf p)) args)
+substSolvedMetasAtGo depth sols (TCase s alts) =
+  TCase (substSolvedMetasAtGo depth sols s) (map (substSolvedAltAt depth sols) alts)
+substSolvedMetasAtGo depth sols (TIf c th el) =
+  TIf (substSolvedMetasAtGo depth sols c) (substSolvedMetasAtGo depth sols th)
+    (substSolvedMetasAtGo depth sols el)
+substSolvedMetasAtGo depth sols t = t
 
 substSolvedAltAt : Int -> List (Pair Int Value) -> CaseAlt -> CaseAlt
 substSolvedAltAt depth sols (CaseAlt n bs b) = CaseAlt n bs (substSolvedMetasAtGo depth sols b)
@@ -604,38 +607,41 @@ normalizeIf a1 a2 a3 a4 a5 a6 = normalizeIfFuel 1024 a1 a2 a3 a4 a5 a6
 -- 关联表在千级解表上是 O(#解) 每次；索引把整次替换降成 O(#元变量)。
 -- 同 `substSolvedMetasTbl`，但按给定深度 quote（字典提升路径用；O(1) 查解）。
 substSolvedMetasAtTbl : HashTbl Value -> Int -> Term -> Term
-substSolvedMetasAtTbl sols depth t = case t of
-  TMeta m => case tblLookup (strFromInt m) sols of
-    Just v => quote depth v
-    Nothing => t
-  TPi n i r d c =>
-    TPi n i r (substSolvedMetasAtTbl sols depth d) (substSolvedMetasAtTbl sols (depth + 1) c)
-  TLam n r b => TLam n r (substSolvedMetasAtTbl sols (depth + 1) b)
-  TApp f a r => TApp (substSolvedMetasAtTbl sols depth f) (substSolvedMetasAtTbl sols depth a) r
-  TCon c args =>
-    TCon c (map (\p => Pair (substSolvedMetasAtTbl sols depth (firstOf p)) (secondOf p)) args)
-  TCase sc alts => TCase (substSolvedMetasAtTbl sols depth sc) alts
-  TIf c th el =>
-    TIf (substSolvedMetasAtTbl sols depth c) (substSolvedMetasAtTbl sols depth th)
-      (substSolvedMetasAtTbl sols depth el)
-  _ => t
+substSolvedMetasAtTbl sols depth (t@(TMeta m)) = case tblLookup (strFromInt m) sols of
+  Just v => quote depth v
+  Nothing => t
+substSolvedMetasAtTbl sols depth (TPi n i r d c) =
+  TPi n i r (substSolvedMetasAtTbl sols depth d) (substSolvedMetasAtTbl sols (depth + 1) c)
+substSolvedMetasAtTbl sols depth (TLam n r b) = TLam n r (substSolvedMetasAtTbl sols (depth + 1) b)
+substSolvedMetasAtTbl sols depth (TApp f a r) =
+  TApp (substSolvedMetasAtTbl sols depth f) (substSolvedMetasAtTbl sols depth a) r
+substSolvedMetasAtTbl sols depth (TCon c args) =
+  TCon c (map (\p => Pair (substSolvedMetasAtTbl sols depth (firstOf p)) (secondOf p)) args)
+substSolvedMetasAtTbl sols depth (TCase sc alts) = TCase (substSolvedMetasAtTbl sols depth sc) alts
+substSolvedMetasAtTbl sols depth (TIf c th el) =
+  TIf (substSolvedMetasAtTbl sols depth c) (substSolvedMetasAtTbl sols depth th)
+    (substSolvedMetasAtTbl sols depth el)
+substSolvedMetasAtTbl sols depth t = t
 
 substSolvedMetasTbl : HashTbl Value -> Term -> Term
-substSolvedMetasTbl sols t = case t of
-  TMeta m => case tblLookup (strFromInt m) sols of
-    Just v =>
-      let
-        soln = quote 0 v
-      in if hasFreeTermVar 0 soln then t else soln
-    Nothing => t
-  TPi n i r d c => TPi n i r (substSolvedMetasTbl sols d) (substSolvedMetasTbl sols c)
-  TLam n r b => TLam n r (substSolvedMetasTbl sols b)
-  TApp f a r => TApp (substSolvedMetasTbl sols f) (substSolvedMetasTbl sols a) r
-  TCon c args => TCon c (map (\p => Pair (substSolvedMetasTbl sols (firstOf p)) (secondOf p)) args)
-  TCase s alts => TCase (substSolvedMetasTbl sols s) (map (substSolvedAltTbl sols) alts)
-  TIf c th el =>
-    TIf (substSolvedMetasTbl sols c) (substSolvedMetasTbl sols th) (substSolvedMetasTbl sols el)
-  _ => t
+substSolvedMetasTbl sols (t@(TMeta m)) = case tblLookup (strFromInt m) sols of
+  Just v =>
+    let
+      soln = quote 0 v
+    in if hasFreeTermVar 0 soln then t else soln
+  Nothing => t
+substSolvedMetasTbl sols (TPi n i r d c) =
+  TPi n i r (substSolvedMetasTbl sols d) (substSolvedMetasTbl sols c)
+substSolvedMetasTbl sols (TLam n r b) = TLam n r (substSolvedMetasTbl sols b)
+substSolvedMetasTbl sols (TApp f a r) =
+  TApp (substSolvedMetasTbl sols f) (substSolvedMetasTbl sols a) r
+substSolvedMetasTbl sols (TCon c args) =
+  TCon c (map (\p => Pair (substSolvedMetasTbl sols (firstOf p)) (secondOf p)) args)
+substSolvedMetasTbl sols (TCase s alts) =
+  TCase (substSolvedMetasTbl sols s) (map (substSolvedAltTbl sols) alts)
+substSolvedMetasTbl sols (TIf c th el) =
+  TIf (substSolvedMetasTbl sols c) (substSolvedMetasTbl sols th) (substSolvedMetasTbl sols el)
+substSolvedMetasTbl sols t = t
 
 substSolvedAltTbl : HashTbl Value -> CaseAlt -> CaseAlt
 substSolvedAltTbl sols (CaseAlt n bs b) = CaseAlt n bs (substSolvedMetasTbl sols b)

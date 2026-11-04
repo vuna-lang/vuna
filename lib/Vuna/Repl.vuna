@@ -328,13 +328,12 @@ needsMore text =
 
 -- 字符串/块注释里的括号不算结构；行注释一直吃到行尾。
 scanText : List Int -> Int -> Int -> Int -> ScanState
-scanText chars state depth brackets = case chars of
-  [] => MkScanState state depth brackets
-  c :: rest => case state of
-    0 => scanNormal c rest depth brackets
-    1 => scanInString c rest depth brackets
-    2 => scanInBlock c rest depth brackets
-    _ => scanInLine c rest depth brackets
+scanText [] state depth brackets = MkScanState state depth brackets
+scanText (c :: rest) state depth brackets = case state of
+  0 => scanNormal c rest depth brackets
+  1 => scanInString c rest depth brackets
+  2 => scanInBlock c rest depth brackets
+  _ => scanInLine c rest depth brackets
 
 -- 普通状态：`"` 进字符串、`{-` 进块注释、`--` 进行注释、其余是括号配平。
 scanNormal : Int -> List Int -> Int -> Int -> ScanState

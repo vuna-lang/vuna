@@ -135,17 +135,16 @@ splitOnSlash path = splitSlashChars (strUnpack path) [] []
 -- `..` 分支原本拆到 normalizeParent，形成互递归且下降位置不一致；这里内联成
 -- 同一个对 `segments` 的结构递归（每个分支都只递归到 rest），终止性可直接证明。
 normalizeAcc : Bool -> List String -> List String -> List String
-normalizeAcc absolute segments acc = case segments of
-  [] => acc
-  seg :: rest => case seg of
-    "" => normalizeAcc absolute rest acc
-    "." => normalizeAcc absolute rest acc
-    ".." => case acc of
-      [] => if absolute then normalizeAcc absolute rest [] else normalizeAcc absolute rest [".."]
-      prev :: prevRest =>
-        if prev == ".." then normalizeAcc absolute rest (".." :: acc)
-        else normalizeAcc absolute rest prevRest
-    _ => normalizeAcc absolute rest (seg :: acc)
+normalizeAcc absolute [] acc = acc
+normalizeAcc absolute (seg :: rest) acc = case seg of
+  "" => normalizeAcc absolute rest acc
+  "." => normalizeAcc absolute rest acc
+  ".." => case acc of
+    [] => if absolute then normalizeAcc absolute rest [] else normalizeAcc absolute rest [".."]
+    prev :: prevRest =>
+      if prev == ".." then normalizeAcc absolute rest (".." :: acc)
+      else normalizeAcc absolute rest prevRest
+  _ => normalizeAcc absolute rest (seg :: acc)
 
 -- 目录字符串规范化（lexical，不解析符号链接）："a/./b/../c/" -> "a/c"。
 -- 相对路径空结果归一为 "."，绝对路径空结果归一为 "/"。
@@ -195,20 +194,18 @@ memStackDir dir [] = False
 memStackDir dir (pair :: rest) = if firstOf pair == dir then True else memStackDir dir rest
 
 cyclePrefix : a -> List (Pair a b) -> Maybe (List (Pair a b))
-cyclePrefix dir stack = case stack of
-  [] => Nothing
-  pair :: rest => if firstOf pair == dir then Just [pair]
-  else case cyclePrefix dir rest of
-    Nothing => Nothing
-    Just prefix => Just (pair :: prefix)
+cyclePrefix dir [] = Nothing
+cyclePrefix dir (pair :: rest) = if firstOf pair == dir then Just [pair]
+else case cyclePrefix dir rest of
+  Nothing => Nothing
+  Just prefix => Just (pair :: prefix)
 
 cycleMessage : String -> Maybe String -> List (Pair String String) -> String
-cycleMessage dir depName stack = case depName of
+cycleMessage dir Nothing stack = "pkg: dependency cycle at " ++ dir
+cycleMessage dir (Just dep) stack = case cyclePrefix dir stack of
   Nothing => "pkg: dependency cycle at " ++ dir
-  Just dep => case cyclePrefix dir stack of
-    Nothing => "pkg: dependency cycle at " ++ dir
-    Just prefix =>
-      "pkg: dependency cycle: " ++ joinArrows (append (map secondOf (reverse prefix)) [dep])
+  Just prefix =>
+    "pkg: dependency cycle: " ++ joinArrows (append (map secondOf (reverse prefix)) [dep])
 
 dependencyNameOk : Maybe a -> a -> Bool
 dependencyNameOk Nothing actual = True
@@ -269,14 +266,13 @@ lookupPackageDir name ((Pair n dir) :: rest) =
   if n == name then Just dir else lookupPackageDir name rest
 
 checkUniqueNamesGo : List (Pair String String) -> List (Pair String String) -> Result Int
-checkUniqueNamesGo seen ids = case ids of
-  [] => Ok 0
-  (Pair name dir) :: rest => case lookupPackageDir name seen of
-    Nothing => checkUniqueNamesGo (Pair name dir :: seen) rest
-    Just prevDir =>
-      if prevDir == dir then checkUniqueNamesGo seen rest
-      else Err
-        ("pkg: duplicate package name \"" ++ name ++ "\" in " ++ prevDir ++ " and " ++ dir ++ " (package names must be unique within a dependency graph)")
+checkUniqueNamesGo seen [] = Ok 0
+checkUniqueNamesGo seen ((Pair name dir) :: rest) = case lookupPackageDir name seen of
+  Nothing => checkUniqueNamesGo (Pair name dir :: seen) rest
+  Just prevDir =>
+    if prevDir == dir then checkUniqueNamesGo seen rest
+    else Err
+      ("pkg: duplicate package name \"" ++ name ++ "\" in " ++ prevDir ++ " and " ++ dir ++ " (package names must be unique within a dependency graph)")
 
 checkUniquePackageNames : List Package -> Result Int
 checkUniquePackageNames packages = checkUniqueNamesGo [] (collectDependencyIds packages)
@@ -300,13 +296,12 @@ loadPackage dir =
 
 -- ---------------------------------------------------------------- workspace
 loadMembers : String -> List String -> Result (List Package)
-loadMembers baseDir members = case members of
-  [] => Ok []
-  rel :: rest => case loadPackage (joinPath baseDir rel) of
+loadMembers baseDir [] = Ok []
+loadMembers baseDir (rel :: rest) = case loadPackage (joinPath baseDir rel) of
+  Err e => Err e
+  Ok memberPackage => case loadMembers baseDir rest of
     Err e => Err e
-    Ok memberPackage => case loadMembers baseDir rest of
-      Err e => Err e
-      Ok memberPackages => Ok (memberPackage :: memberPackages)
+    Ok memberPackages => Ok (memberPackage :: memberPackages)
 
 -- 根包 + [workspace].members（顺序同 manifest）；没有 members 时只含根包。
 -- 每个成员自己的依赖图已由 loadPackage 校验；这里再校验并集，捕获跨成员的
@@ -334,12 +329,11 @@ dependencyRootOf package =
 -- 按名字去重不会再丢掉不同目录的依赖。
 -- 返回 (更新后的 seen, 根列表)。
 dependencyRoots : List String -> List Package -> Pair (List String) (List Root)
-dependencyRoots seen packages = case packages of
-  [] => Pair seen []
-  package :: rest => if memName (packageName package) seen then dependencyRoots seen rest
-  else case dependencyRoots (packageName package :: seen) (packageDependencies package) of
-    Pair seen1 transitive => case dependencyRoots seen1 rest of
-      Pair seen2 siblings => Pair seen2 (append transitive (dependencyRootOf package :: siblings))
+dependencyRoots seen [] = Pair seen []
+dependencyRoots seen (package :: rest) = if memName (packageName package) seen then dependencyRoots seen rest
+else case dependencyRoots (packageName package :: seen) (packageDependencies package) of
+  Pair seen1 transitive => case dependencyRoots seen1 rest of
+    Pair seen2 siblings => Pair seen2 (append transitive (dependencyRootOf package :: siblings))
 
 -- 自身 lib 根在最前（exports = Nothing：本包内全部可见）；
 -- 随后是传递依赖的 lib 根（依赖优先的 DFS 后序），各自用 [export].modules 限制。

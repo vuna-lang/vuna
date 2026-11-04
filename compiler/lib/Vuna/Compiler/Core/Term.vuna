@@ -291,23 +291,24 @@ solsCons i v (Sols t xs d dv) = Sols (tblInsert (strFromInt i) v t) (Pair i v ::
 -- 项里是否有**未解**元变量（D18 的值共享安全条件之一：含未解 meta 的体不缓存）。
 -- 已解的 TMeta 不算：缓存里留下的是已解值，后续求解不会改写既有解。
 termHasUnsolvedMeta : Sols -> Term -> Bool
-termHasUnsolvedMeta sols t = case t of
-  TMeta m => case solsLookup m sols of
-    Just _ => False
-    Nothing => True
-  TVar name i => False
-  TGlobal g => False
-  TType l => False
-  TPi name implicit rig dom cod => termHasUnsolvedMeta sols dom || termHasUnsolvedMeta sols cod
-  TLam name rig body => termHasUnsolvedMeta sols body
-  TApp f a rig => termHasUnsolvedMeta sols f || termHasUnsolvedMeta sols a
-  TCon c args => termHasUnsolvedMetaArgs sols args
-  TCase scrut alts => termHasUnsolvedMeta sols scrut || termHasUnsolvedMetaAlts sols alts
-  TInt n => False
-  TStr s => False
-  TBool b => False
-  TIf c th el =>
-    termHasUnsolvedMeta sols c || termHasUnsolvedMeta sols th || termHasUnsolvedMeta sols el
+termHasUnsolvedMeta sols (TMeta m) = case solsLookup m sols of
+  Just _ => False
+  Nothing => True
+termHasUnsolvedMeta sols (TVar name i) = False
+termHasUnsolvedMeta sols (TGlobal g) = False
+termHasUnsolvedMeta sols (TType l) = False
+termHasUnsolvedMeta sols (TPi name implicit rig dom cod) =
+  termHasUnsolvedMeta sols dom || termHasUnsolvedMeta sols cod
+termHasUnsolvedMeta sols (TLam name rig body) = termHasUnsolvedMeta sols body
+termHasUnsolvedMeta sols (TApp f a rig) = termHasUnsolvedMeta sols f || termHasUnsolvedMeta sols a
+termHasUnsolvedMeta sols (TCon c args) = termHasUnsolvedMetaArgs sols args
+termHasUnsolvedMeta sols (TCase scrut alts) =
+  termHasUnsolvedMeta sols scrut || termHasUnsolvedMetaAlts sols alts
+termHasUnsolvedMeta sols (TInt n) = False
+termHasUnsolvedMeta sols (TStr s) = False
+termHasUnsolvedMeta sols (TBool b) = False
+termHasUnsolvedMeta sols (TIf c th el) =
+  termHasUnsolvedMeta sols c || termHasUnsolvedMeta sols th || termHasUnsolvedMeta sols el
 
 termHasUnsolvedMetaArgs : Sols -> List (Pair Term Rig) -> Bool
 termHasUnsolvedMetaArgs sols [] = False
@@ -380,21 +381,22 @@ hasMetaAlts m depth (alt :: rest) =
 -- 局部上下文的类型按「绑定时上下文」存储，取用时需要 shift 0 (idx+1)。
 -- ---------------------------------------------------------------
 shift : Int -> Int -> Term -> Term
-shift depth amount t = case t of
-  TVar name i => if i >= depth then TVar name (i + amount) else t
-  TMeta m => t
-  TGlobal g => t
-  TType l => t
-  TPi name implicit rig dom cod =>
-    TPi name implicit rig (shift depth amount dom) (shift (depth + 1) amount cod)
-  TLam name rig body => TLam name rig (shift (depth + 1) amount body)
-  TApp f a rig => TApp (shift depth amount f) (shift depth amount a) rig
-  TCon c args => TCon c (shiftArgs depth amount args)
-  TCase scrut alts => TCase (shift depth amount scrut) (shiftAlts depth amount alts)
-  TInt n => t
-  TStr s => t
-  TBool b => t
-  TIf c th el => TIf (shift depth amount c) (shift depth amount th) (shift depth amount el)
+shift depth amount (t@(TVar name i)) = if i >= depth then TVar name (i + amount) else t
+shift depth amount (t@(TMeta m)) = t
+shift depth amount (t@(TGlobal g)) = t
+shift depth amount (t@(TType l)) = t
+shift depth amount (TPi name implicit rig dom cod) =
+  TPi name implicit rig (shift depth amount dom) (shift (depth + 1) amount cod)
+shift depth amount (TLam name rig body) = TLam name rig (shift (depth + 1) amount body)
+shift depth amount (TApp f a rig) = TApp (shift depth amount f) (shift depth amount a) rig
+shift depth amount (TCon c args) = TCon c (shiftArgs depth amount args)
+shift depth amount (TCase scrut alts) =
+  TCase (shift depth amount scrut) (shiftAlts depth amount alts)
+shift depth amount (t@(TInt n)) = t
+shift depth amount (t@(TStr s)) = t
+shift depth amount (t@(TBool b)) = t
+shift depth amount (TIf c th el) =
+  TIf (shift depth amount c) (shift depth amount th) (shift depth amount el)
 
 shiftArgs : Int -> Int -> List (Pair Term Rig) -> List (Pair Term Rig)
 shiftArgs depth amount [] = []
@@ -411,21 +413,23 @@ shiftAlt depth amount (CaseAlt name binders body) =
 
 -- 把项里对 de Bruijn 索引 `idx` 的变量引用替换成项 `arg`（按索引替换，不按名字）。
 substVarAt : Int -> Term -> Term -> Term
-substVarAt idx arg t = case t of
-  TVar n i => if i == idx then arg else t
-  TMeta m => t
-  TGlobal g => t
-  TType l => t
-  TPi n implicit rig dom cod =>
-    TPi n implicit rig (substVarAt idx arg dom) (substVarAt (idx + 1) arg cod)
-  TLam n erased body => TLam n erased (substVarAt (idx + 1) arg body)
-  TApp f a erased => TApp (substVarAt idx arg f) (substVarAt idx arg a) erased
-  TCon c cargs => TCon c (map (\p => Pair (substVarAt idx arg (firstOf p)) (secondOf p)) cargs)
-  TCase scrut alts => TCase (substVarAt idx arg scrut) (map (substAltAt idx arg) alts)
-  TInt n => t
-  TStr s => t
-  TBool b => t
-  TIf c th el => TIf (substVarAt idx arg c) (substVarAt idx arg th) (substVarAt idx arg el)
+substVarAt idx arg (t@(TVar n i)) = if i == idx then arg else t
+substVarAt idx arg (t@(TMeta m)) = t
+substVarAt idx arg (t@(TGlobal g)) = t
+substVarAt idx arg (t@(TType l)) = t
+substVarAt idx arg (TPi n implicit rig dom cod) =
+  TPi n implicit rig (substVarAt idx arg dom) (substVarAt (idx + 1) arg cod)
+substVarAt idx arg (TLam n erased body) = TLam n erased (substVarAt (idx + 1) arg body)
+substVarAt idx arg (TApp f a erased) = TApp (substVarAt idx arg f) (substVarAt idx arg a) erased
+substVarAt idx arg (TCon c cargs) =
+  TCon c (map (\p => Pair (substVarAt idx arg (firstOf p)) (secondOf p)) cargs)
+substVarAt idx arg (TCase scrut alts) =
+  TCase (substVarAt idx arg scrut) (map (substAltAt idx arg) alts)
+substVarAt idx arg (t@(TInt n)) = t
+substVarAt idx arg (t@(TStr s)) = t
+substVarAt idx arg (t@(TBool b)) = t
+substVarAt idx arg (TIf c th el) =
+  TIf (substVarAt idx arg c) (substVarAt idx arg th) (substVarAt idx arg el)
 
 substAltAt : Int -> Term -> CaseAlt -> CaseAlt
 substAltAt idx arg alt =
@@ -436,20 +440,20 @@ substMetaVar : Int -> String -> Int -> Term -> Term
 substMetaVar m name q t = substMetaVarGo m name q 0 t
 
 substMetaVarGo : Int -> String -> Int -> Int -> Term -> Term
-substMetaVarGo m name q depth t = case t of
-  TMeta n => if n == m then TVar name (depth - q) else t
-  TPi n i r d c =>
-    TPi n i r (substMetaVarGo m name q depth d) (substMetaVarGo m name q (depth + 1) c)
-  TLam n r b => TLam n r (substMetaVarGo m name q (depth + 1) b)
-  TApp f a r => TApp (substMetaVarGo m name q depth f) (substMetaVarGo m name q depth a) r
-  TCon c args =>
-    TCon c (map (\p => Pair (substMetaVarGo m name q depth (firstOf p)) (secondOf p)) args)
-  TCase s alts =>
-    TCase (substMetaVarGo m name q depth s) (map (substMetaVarAlt m name q depth) alts)
-  TIf c th el =>
-    TIf (substMetaVarGo m name q depth c) (substMetaVarGo m name q depth th)
-      (substMetaVarGo m name q depth el)
-  _ => t
+substMetaVarGo m name q depth (t@(TMeta n)) = if n == m then TVar name (depth - q) else t
+substMetaVarGo m name q depth (TPi n i r d c) =
+  TPi n i r (substMetaVarGo m name q depth d) (substMetaVarGo m name q (depth + 1) c)
+substMetaVarGo m name q depth (TLam n r b) = TLam n r (substMetaVarGo m name q (depth + 1) b)
+substMetaVarGo m name q depth (TApp f a r) =
+  TApp (substMetaVarGo m name q depth f) (substMetaVarGo m name q depth a) r
+substMetaVarGo m name q depth (TCon c args) =
+  TCon c (map (\p => Pair (substMetaVarGo m name q depth (firstOf p)) (secondOf p)) args)
+substMetaVarGo m name q depth (TCase s alts) =
+  TCase (substMetaVarGo m name q depth s) (map (substMetaVarAlt m name q depth) alts)
+substMetaVarGo m name q depth (TIf c th el) =
+  TIf (substMetaVarGo m name q depth c) (substMetaVarGo m name q depth th)
+    (substMetaVarGo m name q depth el)
+substMetaVarGo m name q depth t = t
 
 substMetaVarAlt : Int -> String -> Int -> Int -> CaseAlt -> CaseAlt
 substMetaVarAlt m name q depth (CaseAlt bn bs b) =
@@ -574,22 +578,22 @@ typeLevelOf _ = Nothing
 -- ---------------------------------------------------------------
 -- 解里是否出现 level ≥ limit 的局部变量（即创建该元变量之后才绑定的变量）。
 levelEscapes : Int -> Int -> Value -> Bool
-levelEscapes limit depth v = case v of
-  VNeutral n => case n of
-    NVar name lvl sp => lvl >= limit || levelEscapesList limit sp
-    NGlobal g sp => levelEscapesList limit sp
-  VPi name implicit rig dom clo => levelEscapes limit depth dom || levelEscapesClo limit clo
-  VLam name rig clo => levelEscapesClo limit clo
-  VMeta m sp => levelEscapesList limit sp
-  VCon c args => levelEscapesList limit args
-  VApp f a => levelEscapes limit depth f || levelEscapes limit depth a
-  VCase scrut alts => levelEscapes limit depth scrut
-  VIf c th el =>
-    levelEscapes limit depth c || levelEscapes limit depth th || levelEscapes limit depth el
-  VType l => False
-  VInt n => False
-  VStr s => False
-  VBool b => False
+levelEscapes limit depth (VNeutral n) = case n of
+  NVar name lvl sp => lvl >= limit || levelEscapesList limit sp
+  NGlobal g sp => levelEscapesList limit sp
+levelEscapes limit depth (VPi name implicit rig dom clo) =
+  levelEscapes limit depth dom || levelEscapesClo limit clo
+levelEscapes limit depth (VLam name rig clo) = levelEscapesClo limit clo
+levelEscapes limit depth (VMeta m sp) = levelEscapesList limit sp
+levelEscapes limit depth (VCon c args) = levelEscapesList limit args
+levelEscapes limit depth (VApp f a) = levelEscapes limit depth f || levelEscapes limit depth a
+levelEscapes limit depth (VCase scrut alts) = levelEscapes limit depth scrut
+levelEscapes limit depth (VIf c th el) =
+  levelEscapes limit depth c || levelEscapes limit depth th || levelEscapes limit depth el
+levelEscapes limit depth (VType l) = False
+levelEscapes limit depth (VInt n) = False
+levelEscapes limit depth (VStr s) = False
+levelEscapes limit depth (VBool b) = False
 
 levelEscapesList : Int -> List Value -> Bool
 levelEscapesList limit [] = False

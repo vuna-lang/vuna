@@ -26,6 +26,8 @@ allVarPats [] = True
 allVarPats (p :: rest) = case p of
   PVar _ _ => allVarPats rest
   PWild _ => allVarPats rest
+  -- as-pattern 引入绑定，必须走模式矩阵（multiToExpr）而不是 checkDef 快速路径。
+  PAs _ _ _ => False
   _ => False
 
 multiToExpr : List (Pair String (List String)) -> List (Pair (List Pat) Expr) -> Result Expr
@@ -103,18 +105,17 @@ literalBranchBody pos (PVar nm psp) body = renameExpr nm pos body
 literalBranchBody pos _ body = body
 
 litPatMatches : Pat -> Pat -> Bool
-litPatMatches lit p = case lit of
-  PInt n sp => case p of
-    PInt m sp2 => n == m
-    PVar nm psp => True
-    PWild psp => True
-    _ => False
-  PStr s sp => case p of
-    PStr t sp2 => s == t
-    PVar nm psp => True
-    PWild psp => True
-    _ => False
+litPatMatches (PInt n sp) p = case p of
+  PInt m sp2 => n == m
+  PVar nm psp => True
+  PWild psp => True
   _ => False
+litPatMatches (PStr s sp) p = case p of
+  PStr t sp2 => s == t
+  PVar nm psp => True
+  PWild psp => True
+  _ => False
+litPatMatches _ p = False
 
 -- 把字面量模式还原成表达式（Int / String）。
 litPatExpr : Pat -> Expr
@@ -128,11 +129,39 @@ else if allEmptyPats clauses then Ok (bodyOfFirst clauses)
 else case params of
   [] => Err (tcMsg ClauseTooManyPatterns VNil)
   pos :: restParams =>
-    if allVarHeads clauses then andThen (buildColumnExpr table (stripFirstCol clauses) restParams (fuel - 1))
+    if hasAsHead clauses then asColumn table clauses pos restParams fuel
+    else if allVarHeads clauses then andThen (buildColumnExpr table (stripFirstCol clauses) restParams (fuel - 1))
       (\inner => Ok (renameFirstVars clauses pos inner))
     else if allCtorHeads clauses then ctorColumn table clauses pos restParams fuel
     else if hasCtorHead clauses then ctorColumn table clauses pos restParams fuel
     else litAltExpr table clauses pos restParams (fuel - 1)
+
+-- as-pattern 列：先把该列 head 统一成变量（body 里的绑定名改写成该列变量 pos），
+-- 再把内层模式作为「新列」对同一 pos 分派（等价于 `case pos of <inner> => body`）。
+hasAsHead : List (Pair (List Pat) Expr) -> Bool
+hasAsHead [] = False
+hasAsHead (c :: rest) = case c of
+  Pair ((PAs _ _ _) :: ps) body => True
+  _ => hasAsHead rest
+
+asColumn : List (Pair String (List String)) -> List (Pair (List Pat) Expr) -> String -> List String -> Int -> Result Expr
+asColumn table clauses pos restParams fuel =
+  if fuel <= 0 then Err (tcMsg PatternFuel VNil)
+  else andThen (buildColumnExpr table (map (asInnerClause pos) clauses) (pos :: restParams) (fuel - 1))
+    (\e => Ok e)
+
+asInnerClause : String -> Pair (List Pat) Expr -> Pair (List Pat) Expr
+asInnerClause pos (Pair (p :: ps) body) = Pair (append [innerOfHead p] ps) (renameAsHead pos p body)
+asInnerClause pos (c@(Pair [] body)) = c
+
+innerOfHead : Pat -> Pat
+innerOfHead (PAs n inner sp) = inner
+innerOfHead p = p
+
+renameAsHead : String -> Pat -> Expr -> Expr
+renameAsHead pos (PAs n inner sp) body = renameExpr n pos body
+renameAsHead pos (PVar n sp) body = renameExpr n pos body
+renameAsHead pos p body = body
 
 -- 合成 case 的位置：用首个 clause 的模式 span，让覆盖性错误能指回源码
 -- （M23：此前用空 span，DT 的穷尽性诊断会报错在 :0:0）。
@@ -161,11 +190,10 @@ familyOfCtor (p :: rest) ctor =
   if memName ctor (secondOf p) then Just (secondOf p) else familyOfCtor rest ctor
 
 familyCovered : List (Pair String (List String)) -> List String -> Bool
-familyCovered table heads = case heads of
-  [] => False
-  h :: rest => case familyOfCtor table h of
-    Nothing => False
-    Just ctors => allNamesIn ctors heads
+familyCovered table [] = False
+familyCovered table (heads@(h :: rest)) = case familyOfCtor table h of
+  Nothing => False
+  Just ctors => allNamesIn ctors heads
 
 allNamesIn : List String -> List String -> Bool
 allNamesIn [] heads = True
@@ -220,12 +248,11 @@ stripFirstCol (c :: rest) = case c of
 -- 整列都是变量：把该列用户写的名字改写成位置名，再继续处理剩余列。
 -- 每 clause 的体各自改名（不同 clause 可以用不同的变量名）。
 renameFirstVars : List (Pair (List Pat) Expr) -> String -> Expr -> Expr
-renameFirstVars clauses pos inner = case clauses of
-  [] => inner
-  (Pair (p :: ps) body) :: rest => case p of
-    PVar nm psp => renameFirstVars rest pos (renameExpr nm pos inner)
-    _ => renameFirstVars rest pos inner
-  (Pair [] body) :: rest => renameFirstVars rest pos inner
+renameFirstVars [] pos inner = inner
+renameFirstVars ((Pair (p :: ps) body) :: rest) pos inner = case p of
+  PVar nm psp => renameFirstVars rest pos (renameExpr nm pos inner)
+  _ => renameFirstVars rest pos inner
+renameFirstVars ((Pair [] body) :: rest) pos inner = renameFirstVars rest pos inner
 
 renameExpr : String -> String -> Expr -> Expr
 renameExpr oldName newName e = case e of
@@ -276,6 +303,7 @@ bindNames (b :: rest) = append (patNamesOf (firstOf b)) (bindNames rest)
 
 patNamesOf : Pat -> List String
 patNamesOf (PVar n sp) = [n]
+patNamesOf (PAs n inner sp) = n :: patNamesOf inner
 patNamesOf (PWild sp) = []
 patNamesOf (PCon cn ps sp) = concatMap patNamesOf ps
 patNamesOf (PInt n sp) = []

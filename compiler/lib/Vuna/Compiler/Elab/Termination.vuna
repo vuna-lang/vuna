@@ -10,6 +10,7 @@ import Vuna.Compiler.Elab.Termination.Scc
 
 patNames : Pat -> List String
 patNames (PVar n sp) = [n]
+patNames (PAs n inner sp) = n :: patNames inner
 patNames (PCon c ps sp) = concatMap patNames ps
 patNames (PRecord rn fields sp) = concatMap (\q => patNames (secondOf q)) fields
 patNames (PWild sp) = []
@@ -347,15 +348,14 @@ else
     p = maxP - remaining
   in case collectMeasure comp defs ctors projs p facts comp (Pair True []) of
     Err e => Err e
-    Ok res => case res of
-      Pair valid edges => if valid then
-        let
-          modes = filterModes (map secondOf edges)
-        in if notEmpty modes then if allSame modes then if hasWeakCycle comp edges then tryMeasureGo comp defs ctors projs facts (remaining - 1) maxP
-        else Ok 0
-        else tryMeasureGo comp defs ctors projs facts (remaining - 1) maxP
-        else tryMeasureGo comp defs ctors projs facts (remaining - 1) maxP
+    Ok (Pair valid edges) => if valid then
+      let
+        modes = filterModes (map secondOf edges)
+      in if notEmpty modes then if allSame modes then if hasWeakCycle comp edges then tryMeasureGo comp defs ctors projs facts (remaining - 1) maxP
+      else Ok 0
       else tryMeasureGo comp defs ctors projs facts (remaining - 1) maxP
+      else tryMeasureGo comp defs ctors projs facts (remaining - 1) maxP
+    else tryMeasureGo comp defs ctors projs facts (remaining - 1) maxP
 
 checkStrictGroup : List String -> List (Pair String (List (Pair (List Pat) Expr))) -> List String -> List (Pair String (List Int)) -> List (Pair String Int) -> Result Int
 checkStrictGroup comp defs ctors projs facts = case tryMeasure comp defs ctors projs facts 0 (maxArityOf comp defs) of
@@ -365,10 +365,10 @@ checkStrictGroup comp defs ctors projs facts = case tryMeasure comp defs ctors p
     Err e2 => sctCheck comp defs ctors projs facts e2
 
 checkComp : List String -> List (Pair String (List (Pair (List Pat) Expr))) -> List String -> List (Pair String (List Int)) -> HashTbl (List String) -> List (Pair String Int) -> Result Int
-checkComp comp defs ctors projs g facts = case comp of
-  [] => Ok 0
-  [f] => if memName f (adjOf f g) then checkStrictGroup comp defs ctors projs facts else Ok 0
-  _ => checkStrictGroup comp defs ctors projs facts
+checkComp [] defs ctors projs g facts = Ok 0
+checkComp (comp@([f])) defs ctors projs g facts =
+  if memName f (adjOf f g) then checkStrictGroup comp defs ctors projs facts else Ok 0
+checkComp comp defs ctors projs g facts = checkStrictGroup comp defs ctors projs facts
 
 checkSccs : List (List String) -> List (Pair String (List (Pair (List Pat) Expr))) -> List String -> List (Pair String (List Int)) -> HashTbl (List String) -> List (Pair String Int) -> Result Int
 checkSccs [] defs ctors projs g facts = Ok 0

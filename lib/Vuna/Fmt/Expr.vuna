@@ -75,6 +75,7 @@ renderPatGo : Int -> Pat -> String
 renderPatGo fuel pat = if fuel <= 0 then ""
 else case pat of
   PVar name sp => name
+  PAs name inner sp => name ++ "@" ++ renderPatAtomGo (fuel - 1) inner
   PWild sp => "_"
   PInt n sp => strFromInt n
   PStr s sp => renderStr s
@@ -109,6 +110,7 @@ renderPatAtomGo : Int -> Pat -> String
 renderPatAtomGo fuel pat = if fuel <= 0 then ""
 else case pat of
   PVar name sp => name
+  PAs name inner sp => "(" ++ name ++ "@" ++ renderPatAtomGo (fuel - 1) inner ++ ")"
   PWild sp => "_"
   PInt n sp => strFromInt n
   PStr s sp => renderStr s

@@ -495,3 +495,9 @@
   REPL/test、`.nointerp` 负向）；LSP smoke 72 项；快照 `exports/modules/split-*` 重生成；
   `nix/metrics.budget` 按 B19 拆分与 B20 span 复标定（maxline 降）；`context.budget` 按
   M30 文档结构复标定。
+- **as-pattern（M30）**：模式支持 `x@pat`（Idris2 风格，`_@x` 等价 `x@_`），可用于
+  函数子句参数与嵌套模式（`advance (PState file toks@(t :: rest) last count) = ...`）；
+  AST 新增 `PAs`，Parser/Fmt/Resolve/Records/Match/Elab.Case/Termination 全链路支持；
+  `Elab.Match` 的模式矩阵把 as 列解包为「变量列 + 内层列」注入绑定。STR 的
+  `patNames`/`pathInPat`/`patSizeStrict` 视 as 绑定为整个值。`case` 分支 as 暂未接入；
+  case-to-clauses 对递归/互递归函数保持 case（STR 冲突，门禁过滤）。

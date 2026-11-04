@@ -61,6 +61,7 @@ let v_Vuna_dCompiler_dFrontend_dParser_dSupport_dspanOf = (fun st -> (fun st2 ->
 
 let v_Vuna_dCompiler_dFrontend_dParser_dSupport_dadvance = (fun mc0 -> (match mc0 with
   | C_Vuna_dCompiler_dFrontend_dParser_dSupport_dPState_Vuna_dCompiler_dFrontend_dParser_dSupport_dPState (dtb__18, dtb__19, dtb__20, dtb__21) -> (match dtb__19 with
+  | C_Base_dList_dList_Base_dList_dNil -> (C_Vuna_dCompiler_dFrontend_dParser_dSupport_dPState_Vuna_dCompiler_dFrontend_dParser_dSupport_dPState (dtb__18, dtb__19, dtb__20, dtb__21))
   | C_Base_dList_dList_Base_dList_dCons (dtb__22, dtb__23) -> ((fun nd_uscrut8 -> (match nd_uscrut8 with
   | C_Vuna_dCompiler_dFrontend_dLexer_dPTok_Vuna_dCompiler_dFrontend_dLexer_dPTok (dtb__24, dtb__25) -> (match dtb__24 with
   | C_Vuna_dCompiler_dFrontend_dLexer_dTok_Vuna_dCompiler_dFrontend_dLexer_dTEof -> (C_Vuna_dCompiler_dFrontend_dParser_dSupport_dPState_Vuna_dCompiler_dFrontend_dParser_dSupport_dPState (dtb__18, dtb__19, dtb__20, dtb__21))
@@ -68,7 +69,6 @@ let v_Vuna_dCompiler_dFrontend_dParser_dSupport_dadvance = (fun mc0 -> (match mc
 )
   | _ -> failwith "DT: impossible branch"
 )) dtb__22)
-  | C_Base_dList_dList_Base_dList_dNil -> (C_Vuna_dCompiler_dFrontend_dParser_dSupport_dPState_Vuna_dCompiler_dFrontend_dParser_dSupport_dPState (dtb__18, dtb__19, dtb__20, dtb__21))
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"

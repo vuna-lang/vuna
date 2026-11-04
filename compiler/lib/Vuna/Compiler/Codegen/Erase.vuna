@@ -38,12 +38,11 @@ import Vuna.Compiler.Codegen.Decl
 -- 也可能直接给 `TCon c [a, b]`。这里统一折叠成 (构造子名, 实参列表)：
 -- 擦除/依赖分析按实参自带的擦除标志判断，生成侧好一次性 tupled 出来。
 flattenConApp : Term -> Maybe (Pair String (List (Pair Term Rig)))
-flattenConApp t = case t of
-  TApp f a rig => case flattenConApp f of
-    Just (Pair c args) => Just (Pair c (append args [Pair a rig]))
-    Nothing => Nothing
-  TCon c args => Just (Pair c args)
-  _ => Nothing
+flattenConApp (TApp f a rig) = case flattenConApp f of
+  Just (Pair c args) => Just (Pair c (append args [Pair a rig]))
+  Nothing => Nothing
+flattenConApp (TCon c args) = Just (Pair c args)
+flattenConApp _ = Nothing
 
 -- ---------------------------------------------------------------
 -- 预处理：分区（类型级 / 运行时）、擦除检查、依赖拓扑排序
@@ -295,11 +294,10 @@ else case foldNeighborsPostFuel (fuel - 1) adjT (neighborsOf adjT n) visited ord
   Pair visited2 order2 => Pair visited2 (n :: order2)
 
 postOrder : HashTbl (List String) -> List String -> HashTbl Bool -> List String -> Pair (HashTbl Bool) (List String)
-postOrder adjT nodes visited order = case nodes of
-  [] => Pair visited order
-  n :: rest => if tblMem n visited then postOrder adjT rest visited order
-  else case dfsPost adjT n (tblInsert n True visited) order of
-    Pair visited2 order2 => postOrder adjT rest visited2 order2
+postOrder adjT [] visited order = Pair visited order
+postOrder adjT (n :: rest) visited order = if tblMem n visited then postOrder adjT rest visited order
+else case dfsPost adjT n (tblInsert n True visited) order of
+  Pair visited2 order2 => postOrder adjT rest visited2 order2
 
 foldNeighborsCollect : HashTbl (List String) -> List String -> HashTbl Bool -> List String -> Pair (HashTbl Bool) (List String)
 foldNeighborsCollect adjT ms visited comp = foldNeighborsCollectFuel 100000 adjT ms visited comp
@@ -321,11 +319,10 @@ else case foldNeighborsCollectFuel (fuel - 1) adjT (neighborsOf adjT n) visited 
   Pair visited2 comp2 => Pair visited2 (n :: comp2)
 
 collectComps : HashTbl (List String) -> List String -> HashTbl Bool -> List (List String) -> List (List String)
-collectComps adjT nodes visited comps = case nodes of
-  [] => comps
-  n :: rest => if tblMem n visited then collectComps adjT rest visited comps
-  else case dfsCollect adjT n (tblInsert n True visited) [] of
-    Pair visited2 comp => collectComps adjT rest visited2 (comp :: comps)
+collectComps adjT [] visited comps = comps
+collectComps adjT (n :: rest) visited comps = if tblMem n visited then collectComps adjT rest visited comps
+else case dfsCollect adjT n (tblInsert n True visited) [] of
+  Pair visited2 comp => collectComps adjT rest visited2 (comp :: comps)
 
 -- 名字 → 所属分量（一次构建，O(1) 查）。
 componentTblOf : List (List String) -> HashTbl (List String)

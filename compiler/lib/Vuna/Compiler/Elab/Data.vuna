@@ -156,12 +156,11 @@ elabDataHead globals ec ds = case ds of
     _ => errAt dsp "DT: internal: expected a data declaration"
 
 elabDataHeadsRound : List (Pair Decl Span) -> List (Pair String Term) -> Ec -> List DataHead -> List (Pair Decl Span) -> Pair (List DataHead) (Pair (List (Pair String Term)) (Pair Ec (List (Pair Decl Span))))
-elabDataHeadsRound pending globals ec heads failed = case pending of
-  [] => Pair heads (Pair globals (Pair ec (reverse failed)))
-  ds :: rest => case elabDataHead globals ec ds of
-    Err _ => elabDataHeadsRound rest globals ec heads (ds :: failed)
-    Ok (Pair head (Pair delta ec1)) =>
-      elabDataHeadsRound rest (append globals delta) ec1 (head :: heads) failed
+elabDataHeadsRound [] globals ec heads failed = Pair heads (Pair globals (Pair ec (reverse failed)))
+elabDataHeadsRound (ds :: rest) globals ec heads failed = case elabDataHead globals ec ds of
+  Err _ => elabDataHeadsRound rest globals ec heads (ds :: failed)
+  Ok (Pair head (Pair delta ec1)) =>
+    elabDataHeadsRound rest (append globals delta) ec1 (head :: heads) failed
 
 elabDataHeads : List (Pair Decl Span) -> List (Pair String Term) -> Ec -> List DataHead -> Result (Pair (List DataHead) (Pair (List (Pair String Term)) Ec))
 elabDataHeads pending globals ec heads = elabDataHeadsFuel 64 pending globals ec heads
@@ -179,11 +178,10 @@ else case pending of
 
 -- 一轮毫无进展：重跑首个失败声明，把它的真实错误报出去（通常是 kind 依赖成环）。
 elabDataHeadsNoProgress : List (Pair String Term) -> Ec -> List (Pair Decl Span) -> Result (Pair (List DataHead) (Pair (List (Pair String Term)) Ec))
-elabDataHeadsNoProgress globals ec failed = case failed of
-  [] => Err "DT: internal: no failed data declarations"
-  ds :: rest => case elabDataHead globals ec ds of
-    Err e => Err e
-    Ok _ => Err "DT: internal: data head registration made no progress"
+elabDataHeadsNoProgress globals ec [] = Err "DT: internal: no failed data declarations"
+elabDataHeadsNoProgress globals ec (ds :: rest) = case elabDataHead globals ec ds of
+  Err e => Err e
+  Ok _ => Err "DT: internal: data head registration made no progress"
 
 -- Phase B：所有族名都已就位，按源顺序精化构造子（构造子字段可引用任意已声明族，
 -- 含互递归族）。构造子 globals 仍按族逐批追加，索引项里的构造子按源码顺序可见。

@@ -152,12 +152,11 @@ validSegment seg = case strUnpack seg of
   c :: rest => isUpperChar c && allIdentChars rest
 
 allSegmentsValid : List String -> Bool
-allSegmentsValid segs = case segs of
-  [] => False
-  seg :: rest => if validSegment seg then case rest of
-    [] => True
-    _ => allSegmentsValid rest
-  else False
+allSegmentsValid [] = False
+allSegmentsValid (seg :: rest) = if validSegment seg then case rest of
+  [] => True
+  _ => allSegmentsValid rest
+else False
 
 validModuleName : String -> Bool
 validModuleName name = case splitOnDot name of
@@ -184,11 +183,10 @@ hasDuplicateName [] = False
 hasDuplicateName (x :: rest) = if memName x rest then True else hasDuplicateName rest
 
 importAliases : List Import -> List (Pair String String)
-importAliases imports = case imports of
-  [] => []
-  imp :: rest => case importAlias imp of
-    Nothing => importAliases rest
-    Just alias => Pair alias (importName imp) :: importAliases rest
+importAliases [] = []
+importAliases (imp :: rest) = case importAlias imp of
+  Nothing => importAliases rest
+  Just alias => Pair alias (importName imp) :: importAliases rest
 
 checkImportAliases : String -> List String -> List (Pair String String) -> Result (List a)
 checkImportAliases label moduleNames [] = Ok []
@@ -210,12 +208,11 @@ openModuleNames (imp :: rest) =
   if importIsQualified imp then openModuleNames rest else importName imp :: openModuleNames rest
 
 findImportPrefix : List Import -> String -> Maybe String
-findImportPrefix imports prefix = case imports of
-  [] => Nothing
-  imp :: rest => if importName imp == prefix then Just (importName imp)
-  else case importAlias imp of
-    Just alias => if alias == prefix then Just (importName imp) else findImportPrefix rest prefix
-    Nothing => findImportPrefix rest prefix
+findImportPrefix [] prefix = Nothing
+findImportPrefix (imp :: rest) prefix = if importName imp == prefix then Just (importName imp)
+else case importAlias imp of
+  Just alias => if alias == prefix then Just (importName imp) else findImportPrefix rest prefix
+  Nothing => findImportPrefix rest prefix
 
 _joinNames : List String -> String
 _joinNames [] = ""
@@ -273,36 +270,33 @@ findExportType : List ExportEntry -> String -> Maybe ExportEntry
 findExportType entries name = lookupExport ["type"] name entries
 
 modulesExportingValueFrom : List Module -> List String -> String -> Result (List (Pair String ExportEntry))
-modulesExportingValueFrom modules names name = case names of
-  [] => Ok []
-  m :: rest => andThen (exportsOf modules m) (\es => case findExportValue es name of
-    Just e => andThen (modulesExportingValueFrom modules rest name) (\more => Ok (Pair m e :: more))
-    Nothing => modulesExportingValueFrom modules rest name
-  )
+modulesExportingValueFrom modules [] name = Ok []
+modulesExportingValueFrom modules (m :: rest) name = andThen (exportsOf modules m) (\es => case findExportValue es name of
+  Just e => andThen (modulesExportingValueFrom modules rest name) (\more => Ok (Pair m e :: more))
+  Nothing => modulesExportingValueFrom modules rest name
+)
 
 modulesExportingValue : List Module -> List Import -> String -> Result (List (Pair String ExportEntry))
 modulesExportingValue modules imports name =
   modulesExportingValueFrom modules (openModuleNames imports) name
 
 modulesExportingCtorFrom : List Module -> List String -> String -> Result (List (Pair String ExportEntry))
-modulesExportingCtorFrom modules names name = case names of
-  [] => Ok []
-  m :: rest => andThen (exportsOf modules m) (\es => case findExportCtor es name of
-    Just e => andThen (modulesExportingCtorFrom modules rest name) (\more => Ok (Pair m e :: more))
-    Nothing => modulesExportingCtorFrom modules rest name
-  )
+modulesExportingCtorFrom modules [] name = Ok []
+modulesExportingCtorFrom modules (m :: rest) name = andThen (exportsOf modules m) (\es => case findExportCtor es name of
+  Just e => andThen (modulesExportingCtorFrom modules rest name) (\more => Ok (Pair m e :: more))
+  Nothing => modulesExportingCtorFrom modules rest name
+)
 
 modulesExportingCtor : List Module -> List Import -> String -> Result (List (Pair String ExportEntry))
 modulesExportingCtor modules imports name =
   modulesExportingCtorFrom modules (openModuleNames imports) name
 
 modulesExportingTypeFrom : List Module -> List String -> String -> Result (List (Pair String ExportEntry))
-modulesExportingTypeFrom modules names name = case names of
-  [] => Ok []
-  m :: rest => andThen (exportsOf modules m) (\es => case findExportType es name of
-    Just e => andThen (modulesExportingTypeFrom modules rest name) (\more => Ok (Pair m e :: more))
-    Nothing => modulesExportingTypeFrom modules rest name
-  )
+modulesExportingTypeFrom modules [] name = Ok []
+modulesExportingTypeFrom modules (m :: rest) name = andThen (exportsOf modules m) (\es => case findExportType es name of
+  Just e => andThen (modulesExportingTypeFrom modules rest name) (\more => Ok (Pair m e :: more))
+  Nothing => modulesExportingTypeFrom modules rest name
+)
 
 modulesExportingType : List Module -> List Import -> String -> Result (List (Pair String ExportEntry))
 modulesExportingType modules imports name =

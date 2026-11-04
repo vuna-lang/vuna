@@ -298,9 +298,9 @@ let rec v_Vuna_dCompiler_dFrontend_dToml_dmemSectionPath = (fun d307 -> (fun mc0
   | _ -> failwith "DT: impossible branch"
 ))))
 
-let v_Vuna_dCompiler_dFrontend_dToml_dsectionSuffix = (fun section -> (match section with
+let v_Vuna_dCompiler_dFrontend_dToml_dsectionSuffix = (fun mc0 -> (match mc0 with
+  | C_Base_dList_dList_Base_dList_dCons (dtb__123, dtb__124) -> ((bi_concat " in [") ((bi_concat (v_Vuna_dCompiler_dCommon_djoinDots mc0)) "]"))
   | C_Base_dList_dList_Base_dList_dNil -> ""
-  | C_Base_dList_dList_Base_dList_dCons (dtb__123, dtb__124) -> ((bi_concat " in [") ((bi_concat (v_Vuna_dCompiler_dCommon_djoinDots section)) "]"))
   | _ -> failwith "DT: impossible branch"
 ))
 

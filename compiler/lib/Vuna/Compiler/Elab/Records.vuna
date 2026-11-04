@@ -170,6 +170,7 @@ desugarPatternFuel fuel records pat = if fuel <= 0 then Ok pat
 else case pat of
   PWild sp => Ok (PWild sp)
   PVar n sp => Ok (PVar n sp)
+  PAs n inner sp => andThen (desugarPatternFuel (fuel - 1) records inner) (\p => Ok (PAs n p sp))
   PInt n sp => Ok (PInt n sp)
   PStr s sp => Ok (PStr s sp)
   PCon name pats sp =>
@@ -282,24 +283,23 @@ desugarFieldValueFuel fuel records (Pair fname v) =
 -- 模式绑定子用 `vuna_ru<i>` 前缀，降低与用户表达式里同名变量发生捕获的概率
 -- （记录更新右侧表达式按外层作用域求值）。
 desugarRecUpdate : List RecordInfo -> Expr -> List (Pair String Expr) -> Span -> Result Expr
-desugarRecUpdate records base fields sp = case fields of
-  [] => Err (showSpanLoc sp ++ ": record update needs at least one field")
-  (Pair fname fv) :: rest => if hasDuplicateFieldNames fields then Err (duplicateFieldMsg sp)
-  else case recordsWithField fname records of
-    [] => Err (unknownFieldMsg sp fname)
-    [one] => desugarRecUpdateWith one base fields sp
-    _ => Err (showSpanLoc sp ++ ": ambiguous field " ++ fname ++ " (declared by multiple records)")
+desugarRecUpdate records base [] sp =
+  Err (showSpanLoc sp ++ ": record update needs at least one field")
+desugarRecUpdate records base (fields@((Pair fname fv) :: rest)) sp = if hasDuplicateFieldNames fields then Err (duplicateFieldMsg sp)
+else case recordsWithField fname records of
+  [] => Err (unknownFieldMsg sp fname)
+  [one] => desugarRecUpdateWith one base fields sp
+  _ => Err (showSpanLoc sp ++ ": ambiguous field " ++ fname ++ " (declared by multiple records)")
 
 desugarRecUpdateWith : RecordInfo -> Expr -> List (Pair String Expr) -> Span -> Result Expr
-desugarRecUpdateWith info base fields sp = case info of
-  RecordInfo rname params fdefs derivings ctor => if hasUnknownFields (fieldNamesOf fdefs) fields then Err (firstUnknownFieldMsg sp (fieldNamesOf fdefs) fields)
-  else
-    let
-      vars = recUpdateVars (length fdefs)
-      pats = map (\v => PVar v sp) vars
-      args = recUpdateArgs fdefs fields vars 0 sp
-      pat = PCon ctor pats sp
-    in Ok (ECase base [Pair pat (EApp (EVar ctor sp) args sp)] sp)
+desugarRecUpdateWith (RecordInfo rname params fdefs derivings ctor) base fields sp = if hasUnknownFields (fieldNamesOf fdefs) fields then Err (firstUnknownFieldMsg sp (fieldNamesOf fdefs) fields)
+else
+  let
+    vars = recUpdateVars (length fdefs)
+    pats = map (\v => PVar v sp) vars
+    args = recUpdateArgs fdefs fields vars 0 sp
+    pat = PCon ctor pats sp
+  in Ok (ECase base [Pair pat (EApp (EVar ctor sp) args sp)] sp)
 
 recUpdateVars : Int -> List String
 recUpdateVars n = recUpdateVarsAt 0 n
@@ -342,10 +342,9 @@ desugarAltFuel fuel records (Pair pat body) =
 -- 声明了该字段的 record 列表（字段访问的语法层消歧用）。
 recordsWithField : String -> List RecordInfo -> List RecordInfo
 recordsWithField fname [] = []
-recordsWithField fname (r :: rest) = case r of
-  RecordInfo rname params fdefs derivings ctor =>
-    if memName fname (fieldNamesOf fdefs) then r :: recordsWithField fname rest
-    else recordsWithField fname rest
+recordsWithField fname ((r@(RecordInfo rname params fdefs derivings ctor)) :: rest) =
+  if memName fname (fieldNamesOf fdefs) then r :: recordsWithField fname rest
+  else recordsWithField fname rest
 
 -- 字段访问降级：`case base of Mk<R> f0 .. fn => f_k`（缺省位置补通配）。
 fieldAccessExpr : RecordInfo -> String -> Expr -> Span -> Expr

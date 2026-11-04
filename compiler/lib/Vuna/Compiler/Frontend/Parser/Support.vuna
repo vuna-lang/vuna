@@ -76,11 +76,10 @@ lastPos : PState -> Pos
 lastPos (PState file toks last count) = last
 
 advance : PState -> PState
-advance (PState file toks last count) = case toks of
-  t :: rest => case t of
-    PTok TEof p => PState file toks last count
-    _ => PState file rest (posOf t) (if count > 0 then count - 1 else 0)
-  [] => PState file toks last count
+advance (PState file (toks@(t :: rest)) last count) = case t of
+  PTok TEof p => PState file toks last count
+  _ => PState file rest (posOf t) (if count > 0 then count - 1 else 0)
+advance (PState file (toks@[]) last count) = PState file toks last count
 
 isEof : PState -> Bool
 isEof st = case peekTok st of

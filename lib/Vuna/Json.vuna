@@ -309,9 +309,8 @@ parseNumber chars = case signOf chars of
         Pair rest3 ok => if ok then Ok (Pair (JNum signed) rest3) else Err "invalid number"
 
 signOf : List Int -> Pair Bool (List Int)
-signOf chars = case chars of
-  c :: rest => if c == 45 then Pair True rest else Pair False chars
-  [] => Pair False []
+signOf (chars@(c :: rest)) = if c == 45 then Pair True rest else Pair False chars
+signOf [] = Pair False []
 
 -- 返回 (数值, (位数, 余下字符))。
 parseIntDigits : List Int -> Int -> Int -> Pair Int (Pair Int (List Int))
@@ -322,23 +321,21 @@ parseIntDigits [] acc count = Pair acc (Pair count [])
 
 -- 小数与指数：语法校验后丢弃（值保持整数）。
 skipNumberTail : List Int -> Pair (List Int) Bool
-skipNumberTail chars = case chars of
-  c :: rest => if c == 46 then case parseIntDigits rest 0 0 of
-    Pair value (Pair count rest2) => if count == 0 then Pair chars False else skipExponent rest2
-  else skipExponent chars
-  [] => Pair [] True
+skipNumberTail (chars@(c :: rest)) = if c == 46 then case parseIntDigits rest 0 0 of
+  Pair value (Pair count rest2) => if count == 0 then Pair chars False else skipExponent rest2
+else skipExponent chars
+skipNumberTail [] = Pair [] True
 
 skipExponent : List Int -> Pair (List Int) Bool
-skipExponent chars = case chars of
-  c :: rest => if c == 101 || c == 69 then
-    let
-      afterSign = case rest of
-        s :: rest2 => if s == 43 || s == 45 then rest2 else rest
-        [] => []
-    in case parseIntDigits afterSign 0 0 of
-      Pair value (Pair count rest3) => if count == 0 then Pair chars False else Pair rest3 True
-  else Pair chars True
-  [] => Pair [] True
+skipExponent (chars@(c :: rest)) = if c == 101 || c == 69 then
+  let
+    afterSign = case rest of
+      s :: rest2 => if s == 43 || s == 45 then rest2 else rest
+      [] => []
+  in case parseIntDigits afterSign 0 0 of
+    Pair value (Pair count rest3) => if count == 0 then Pair chars False else Pair rest3 True
+else Pair chars True
+skipExponent [] = Pair [] True
 
 -- 取前 n 个字符；不足 n 个返回 Nothing。
 splitAtCharCount : Int -> List Int -> Maybe (Pair (List Int) (List Int))

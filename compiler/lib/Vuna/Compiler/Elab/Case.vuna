@@ -100,21 +100,20 @@ else
 
 -- occurs check：精化成自己会导致无限链。
 occursLevel : Int -> Value -> Bool
-occursLevel lvl v = case v of
-  VNeutral n => case n of
-    NVar name l sp => l == lvl || occursLevelList lvl sp
-    NGlobal g sp => occursLevelList lvl sp
-  VPi name implicit rig dom clo => occursLevel lvl dom || occursLevelClo lvl clo
-  VLam name rig clo => occursLevelClo lvl clo
-  VMeta m sp => occursLevelList lvl sp
-  VCon c args => occursLevelList lvl args
-  VApp f a => occursLevel lvl f || occursLevel lvl a
-  VCase scrut alts => occursLevel lvl scrut
-  VIf c th el => occursLevel lvl c || occursLevel lvl th || occursLevel lvl el
-  VType l => False
-  VInt n => False
-  VStr s => False
-  VBool b => False
+occursLevel lvl (VNeutral n) = case n of
+  NVar name l sp => l == lvl || occursLevelList lvl sp
+  NGlobal g sp => occursLevelList lvl sp
+occursLevel lvl (VPi name implicit rig dom clo) = occursLevel lvl dom || occursLevelClo lvl clo
+occursLevel lvl (VLam name rig clo) = occursLevelClo lvl clo
+occursLevel lvl (VMeta m sp) = occursLevelList lvl sp
+occursLevel lvl (VCon c args) = occursLevelList lvl args
+occursLevel lvl (VApp f a) = occursLevel lvl f || occursLevel lvl a
+occursLevel lvl (VCase scrut alts) = occursLevel lvl scrut
+occursLevel lvl (VIf c th el) = occursLevel lvl c || occursLevel lvl th || occursLevel lvl el
+occursLevel lvl (VType l) = False
+occursLevel lvl (VInt n) = False
+occursLevel lvl (VStr s) = False
+occursLevel lvl (VBool b) = False
 
 occursLevelList : Int -> List Value -> Bool
 occursLevelList lvl [] = False
@@ -348,12 +347,11 @@ patsAllIrrefutable [] = True
 patsAllIrrefutable (p :: rest) = patIrrefutable p && patsAllIrrefutable rest
 
 ctorHeadCovered : String -> List (Pair Pat Expr) -> Bool
-ctorHeadCovered cname prevs = case prevs of
-  [] => False
-  (Pair pat body) :: rest => case pat of
-    PCon cn subps psp =>
-      if cn == cname && patsAllIrrefutable subps then True else ctorHeadCovered cname rest
-    _ => ctorHeadCovered cname rest
+ctorHeadCovered cname [] = False
+ctorHeadCovered cname ((Pair pat body) :: rest) = case pat of
+  PCon cn subps psp =>
+    if cn == cname && patsAllIrrefutable subps then True else ctorHeadCovered cname rest
+  _ => ctorHeadCovered cname rest
 
 litHeadCovered : Pat -> List (Pair Pat Expr) -> Bool
 litHeadCovered lit [] = False
@@ -361,14 +359,13 @@ litHeadCovered lit ((Pair pat body) :: rest) =
   if litPatEq lit pat then True else litHeadCovered lit rest
 
 litPatEq : Pat -> Pat -> Bool
-litPatEq lit p = case lit of
-  PInt n sp => case p of
-    PInt m sp2 => n == m
-    _ => False
-  PStr s sp => case p of
-    PStr t sp2 => s == t
-    _ => False
+litPatEq (PInt n sp) p = case p of
+  PInt m sp2 => n == m
   _ => False
+litPatEq (PStr s sp) p = case p of
+  PStr t sp2 => s == t
+  _ => False
+litPatEq _ p = False
 
 litLabel : Pat -> String
 litLabel (PInt n sp) = strFromInt n
@@ -386,6 +383,8 @@ checkCaseAltsGo prevs alts = case alts of
     PCon cname args psp =>
       if ctorHeadCovered cname prevs then tcErr1 psp (RedundantCtorBranch cname) cname
       else checkCaseAltsGo (Pair pat body :: prevs) rest
+    -- as-pattern：覆盖性按内层模式判定（`x@pat` 与 `pat` 的头部相同）。
+    PAs name inner psp => checkCaseAltsGo prevs (Pair inner body :: rest)
     PInt n psp => checkLitHead prevs (Pair pat body) rest psp
     PStr s psp => checkLitHead prevs (Pair pat body) rest psp
     PVar pname psp => checkCatchAll prevs (Pair pat body) rest psp
@@ -407,29 +406,26 @@ checkCatchAll prevs alt rest sp =
   if hasLitHead rest then tcErr0 sp BranchAfterCatchAll else tcErr0 sp CatchAllNotLast
 
 hasLitHead : List (Pair Pat Expr) -> Bool
-hasLitHead alts = case alts of
-  [] => False
-  (Pair pat body) :: rest => case pat of
-    PInt n psp => True
-    PStr s psp => True
-    _ => hasLitHead rest
+hasLitHead [] = False
+hasLitHead ((Pair pat body) :: rest) = case pat of
+  PInt n psp => True
+  PStr s psp => True
+  _ => hasLitHead rest
 
 -- ---------------------------------------------------------------
 -- M19：模式辅助（覆盖面 / 矩阵降级判定）
 -- ---------------------------------------------------------------
 altNames : List (Pair Pat Expr) -> List String
 altNames [] = []
-altNames (alt :: rest) = case alt of
-  Pair pat body => case pat of
-    PCon cname args psp => cname :: altNames rest
-    _ => altNames rest
+altNames ((Pair pat body) :: rest) = case pat of
+  PCon cname args psp => cname :: altNames rest
+  _ => altNames rest
 
 hasCatchAll : List (Pair Pat Expr) -> Bool
 hasCatchAll [] = False
-hasCatchAll (alt :: rest) = case alt of
-  Pair pat body => case pat of
-    PCon cname args psp => hasCatchAll rest
-    _ => True
+hasCatchAll ((Pair pat body) :: rest) = case pat of
+  PCon cname args psp => hasCatchAll rest
+  _ => True
 
 hasDupNames : List String -> Bool
 hasDupNames [] = False

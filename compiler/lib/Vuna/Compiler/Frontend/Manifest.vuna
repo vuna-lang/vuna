@@ -112,22 +112,20 @@ checkOneEntry path (TomlEntry section key value line) =
   else Err (atLine path line ("unknown section [" ++ joinDots section ++ "]"))
 
 checkEntries : String -> List TomlEntry -> Result Int
-checkEntries path entries = case entries of
-  [] => Ok 0
-  entry :: rest => case checkOneEntry path entry of
-    Err e => Err e
-    Ok ok => checkEntries path rest
+checkEntries path [] = Ok 0
+checkEntries path (entry :: rest) = case checkOneEntry path entry of
+  Err e => Err e
+  Ok ok => checkEntries path rest
 
 collectDependencies : String -> List TomlEntry -> Result (List (Pair String String))
 collectDependencies path entries = collectDependenciesAcc path entries []
 
 collectDependenciesAcc : String -> List TomlEntry -> List (Pair String String) -> Result (List (Pair String String))
-collectDependenciesAcc path entries acc = case entries of
-  [] => Ok (reverse acc)
-  (TomlEntry section key value line) :: rest => if sameSection section ["dependencies"] then case value of
-    TStr rel => collectDependenciesAcc path rest (Pair key rel :: acc)
-    _ => Err (atLine path line ("dependency \"" ++ key ++ "\" must have a string relative path"))
-  else collectDependenciesAcc path rest acc
+collectDependenciesAcc path [] acc = Ok (reverse acc)
+collectDependenciesAcc path ((TomlEntry section key value line) :: rest) acc = if sameSection section ["dependencies"] then case value of
+  TStr rel => collectDependenciesAcc path rest (Pair key rel :: acc)
+  _ => Err (atLine path line ("dependency \"" ++ key ++ "\" must have a string relative path"))
+else collectDependenciesAcc path rest acc
 
 buildManifest : String -> List TomlEntry -> Result Manifest
 buildManifest path entries =

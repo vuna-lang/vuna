@@ -316,9 +316,8 @@ memSectionPath section (s :: rest) =
   if samePath section s then True else memSectionPath section rest
 
 sectionSuffix : List String -> String
-sectionSuffix section = case section of
-  [] => ""
-  first :: rest => " in [" ++ joinDots section ++ "]"
+sectionSuffix [] = ""
+sectionSuffix (section@(first :: rest)) = " in [" ++ joinDots section ++ "]"
 
 hasEntry : List String -> String -> List TomlEntry -> Bool
 hasEntry section key [] = False

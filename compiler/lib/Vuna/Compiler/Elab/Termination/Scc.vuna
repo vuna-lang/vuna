@@ -437,11 +437,10 @@ sctCheck comp defs ctors projs facts msg =
 -- callee 在 fuel <= 0 时不再递归）。这是通用规则，不涉及具体函数/豁免。
 -- ===============================================================
 firstParamName : List Pat -> Maybe String
-firstParamName pats = case pats of
-  [] => Nothing
-  p :: rest => case p of
-    PVar n sp => Just n
-    _ => Nothing
+firstParamName [] = Nothing
+firstParamName (p :: rest) = case p of
+  PVar n sp => Just n
+  _ => Nothing
 
 firstParamOf : String -> List (Pair String (List (Pair (List Pat) Expr))) -> String
 firstParamOf name defs = case clausesOfDef name defs of
@@ -451,11 +450,10 @@ firstParamOf name defs = case clausesOfDef name defs of
     Nothing => ""
 
 hasFuelGuard : String -> Expr -> Bool
-hasFuelGuard p0 e = case e of
-  EIf c t el sp => case guardPosVar c of
-    Just v => if v == p0 then True else False
-    Nothing => False
-  _ => False
+hasFuelGuard p0 (EIf c t el sp) = case guardPosVar c of
+  Just v => if v == p0 then True else False
+  Nothing => False
+hasFuelGuard p0 _ = False
 
 -- 单个调用点：callee 第 0 实参是否 = caller 的 fuel（False）或 fuel-k（True）。
 siteFuelStrict : String -> Site -> Maybe Bool

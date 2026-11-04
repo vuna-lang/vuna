@@ -17,12 +17,11 @@ import Vuna.Compiler.Frontend.Ast
 
 -- 实例头 `Show Int` 的类名与实参。
 instanceHeadName : Expr -> Maybe String
-instanceHeadName e = case e of
-  EVar n sp => Just n
-  EApp fn args sp => case fn of
-    EVar n fsp => Just n
-    _ => Nothing
+instanceHeadName (EVar n sp) = Just n
+instanceHeadName (EApp fn args sp) = case fn of
+  EVar n fsp => Just n
   _ => Nothing
+instanceHeadName _ = Nothing
 
 -- 实例定义名：**单类前缀 + 完整 head 名**（`Eq_Int`、`Eq_Base.Bool.Bool`、`Show_Box_a`）。
 -- M29-T2b：命名实例（`as name`）已删除，不再有覆盖名；按「类名 + 头实参」派生仍是唯一规则

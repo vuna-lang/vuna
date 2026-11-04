@@ -146,29 +146,29 @@ let v_Vuna_dCompiler_dElab_dData_delabDataHead = (fun globals -> (fun ec -> (fun
   | _ -> failwith "DT: impossible branch"
 ))))
 
-let rec v_Vuna_dCompiler_dElab_dData_delabDataHeadsRound = (fun pending -> (fun globals -> (fun ec -> (fun heads -> (fun failed -> (match pending with
-  | C_Base_dList_dList_Base_dList_dNil -> (C_Base_dPair_dPair_Base_dPair_dPair (heads, (C_Base_dPair_dPair_Base_dPair_dPair (globals, (C_Base_dPair_dPair_Base_dPair_dPair (ec, (v_Base_dList_dreverse failed)))))))
+let rec v_Vuna_dCompiler_dElab_dData_delabDataHeadsRound = (fun mc0 -> (fun mc1 -> (fun mc2 -> (fun mc3 -> (fun mc4 -> (match mc0 with
   | C_Base_dList_dList_Base_dList_dCons (dtb__72, dtb__73) -> ((fun nd_uscrut8 -> (match nd_uscrut8 with
   | C_Base_dResult_dResult_Base_dResult_dOk (dtb__74) -> (match dtb__74 with
   | C_Base_dPair_dPair_Base_dPair_dPair (dtb__75, dtb__76) -> (match dtb__76 with
-  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__77, dtb__78) -> (((((v_Vuna_dCompiler_dElab_dData_delabDataHeadsRound dtb__73) ((v_Base_dList_dappend globals) dtb__77)) dtb__78) (C_Base_dList_dList_Base_dList_dCons (dtb__75, heads))) failed)
+  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__77, dtb__78) -> (((((v_Vuna_dCompiler_dElab_dData_delabDataHeadsRound dtb__73) ((v_Base_dList_dappend mc1) dtb__77)) dtb__78) (C_Base_dList_dList_Base_dList_dCons (dtb__75, mc3))) mc4)
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
 )
-  | C_Base_dResult_dResult_Base_dResult_dErr (dtb__79) -> (((((v_Vuna_dCompiler_dElab_dData_delabDataHeadsRound dtb__73) globals) ec) heads) (C_Base_dList_dList_Base_dList_dCons (dtb__72, failed)))
+  | C_Base_dResult_dResult_Base_dResult_dErr (dtb__79) -> (((((v_Vuna_dCompiler_dElab_dData_delabDataHeadsRound dtb__73) mc1) mc2) mc3) (C_Base_dList_dList_Base_dList_dCons (dtb__72, mc4)))
   | _ -> failwith "DT: impossible branch"
-)) (((v_Vuna_dCompiler_dElab_dData_delabDataHead globals) ec) dtb__72))
+)) (((v_Vuna_dCompiler_dElab_dData_delabDataHead mc1) mc2) dtb__72))
+  | C_Base_dList_dList_Base_dList_dNil -> (C_Base_dPair_dPair_Base_dPair_dPair (mc3, (C_Base_dPair_dPair_Base_dPair_dPair (mc1, (C_Base_dPair_dPair_Base_dPair_dPair (mc2, (v_Base_dList_dreverse mc4)))))))
   | _ -> failwith "DT: impossible branch"
 ))))))
 
-let v_Vuna_dCompiler_dElab_dData_delabDataHeadsNoProgress = (fun globals -> (fun ec -> (fun failed -> (match failed with
-  | C_Base_dList_dList_Base_dList_dNil -> (C_Base_dResult_dResult_Base_dResult_dErr ("DT: internal: no failed data declarations"))
-  | C_Base_dList_dList_Base_dList_dCons (dtb__80, dtb__81) -> (match (((v_Vuna_dCompiler_dElab_dData_delabDataHead globals) ec) dtb__80) with
+let v_Vuna_dCompiler_dElab_dData_delabDataHeadsNoProgress = (fun mc0 -> (fun mc1 -> (fun mc2 -> (match mc2 with
+  | C_Base_dList_dList_Base_dList_dCons (dtb__80, dtb__81) -> (match (((v_Vuna_dCompiler_dElab_dData_delabDataHead mc0) mc1) dtb__80) with
   | C_Base_dResult_dResult_Base_dResult_dErr (dtb__82) -> (C_Base_dResult_dResult_Base_dResult_dErr (dtb__82))
   | C_Base_dResult_dResult_Base_dResult_dOk (dtb__83) -> (C_Base_dResult_dResult_Base_dResult_dErr ("DT: internal: data head registration made no progress"))
   | _ -> failwith "DT: impossible branch"
 )
+  | C_Base_dList_dList_Base_dList_dNil -> (C_Base_dResult_dResult_Base_dResult_dErr ("DT: internal: no failed data declarations"))
   | _ -> failwith "DT: impossible branch"
 ))))
 

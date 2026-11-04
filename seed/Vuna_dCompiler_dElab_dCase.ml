@@ -44,23 +44,23 @@ type t_Vuna_dCompiler_dElab_dCase_dBranchVerdict = C_Vuna_dCompiler_dElab_dCase_
 
 let v_Vuna_dCompiler_dElab_dCase_dunifyErr = (C_Base_dResult_dResult_Base_dResult_dErr (((v_Vuna_dCompiler_dDiagnostics_dTc_dtcMsg C_Vuna_dCompiler_dDiagnostics_dTc_dTcErr_Vuna_dCompiler_dDiagnostics_dTc_dImpossibleBranchIndex) C_Base_dVec_dVec_Base_dVec_dVNil)))
 
-let rec v_Vuna_dCompiler_dElab_dCase_doccursLevel = (fun lvl -> (fun v -> (match v with
-  | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVNeutral (dtb__0) -> (match dtb__0 with
-  | C_Vuna_dCompiler_dCore_dTerm_dNeutral_Vuna_dCompiler_dCore_dTerm_dNVar (dtb__1, dtb__2, dtb__3) -> (if ((bi_eq_int dtb__2) lvl) then true else ((v_Vuna_dCompiler_dElab_dCase_doccursLevelList lvl) dtb__3))
-  | C_Vuna_dCompiler_dCore_dTerm_dNeutral_Vuna_dCompiler_dCore_dTerm_dNGlobal (dtb__4, dtb__5) -> ((v_Vuna_dCompiler_dElab_dCase_doccursLevelList lvl) dtb__5)
+let rec v_Vuna_dCompiler_dElab_dCase_doccursLevel = (fun mc0 -> (fun mc1 -> (match mc1 with
+  | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVBool (dtb__0) -> false
+  | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVStr (dtb__1) -> false
+  | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVInt (dtb__2) -> false
+  | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVType (dtb__3) -> false
+  | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVIf (dtb__4, dtb__5, dtb__6) -> (if (if ((v_Vuna_dCompiler_dElab_dCase_doccursLevel mc0) dtb__4) then true else ((v_Vuna_dCompiler_dElab_dCase_doccursLevel mc0) dtb__5)) then true else ((v_Vuna_dCompiler_dElab_dCase_doccursLevel mc0) dtb__6))
+  | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVCase (dtb__7, dtb__8) -> ((v_Vuna_dCompiler_dElab_dCase_doccursLevel mc0) dtb__7)
+  | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVApp (dtb__9, dtb__10) -> (if ((v_Vuna_dCompiler_dElab_dCase_doccursLevel mc0) dtb__9) then true else ((v_Vuna_dCompiler_dElab_dCase_doccursLevel mc0) dtb__10))
+  | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVCon (dtb__11, dtb__12) -> ((v_Vuna_dCompiler_dElab_dCase_doccursLevelList mc0) dtb__12)
+  | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVMeta (dtb__13, dtb__14) -> ((v_Vuna_dCompiler_dElab_dCase_doccursLevelList mc0) dtb__14)
+  | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVLam (dtb__15, dtb__16, dtb__17) -> ((v_Vuna_dCompiler_dElab_dCase_doccursLevelClo mc0) dtb__17)
+  | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVPi (dtb__18, dtb__19, dtb__20, dtb__21, dtb__22) -> (if ((v_Vuna_dCompiler_dElab_dCase_doccursLevel mc0) dtb__21) then true else ((v_Vuna_dCompiler_dElab_dCase_doccursLevelClo mc0) dtb__22))
+  | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVNeutral (dtb__23) -> (match dtb__23 with
+  | C_Vuna_dCompiler_dCore_dTerm_dNeutral_Vuna_dCompiler_dCore_dTerm_dNVar (dtb__24, dtb__25, dtb__26) -> (if ((bi_eq_int dtb__25) mc0) then true else ((v_Vuna_dCompiler_dElab_dCase_doccursLevelList mc0) dtb__26))
+  | C_Vuna_dCompiler_dCore_dTerm_dNeutral_Vuna_dCompiler_dCore_dTerm_dNGlobal (dtb__27, dtb__28) -> ((v_Vuna_dCompiler_dElab_dCase_doccursLevelList mc0) dtb__28)
   | _ -> failwith "DT: impossible branch"
 )
-  | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVPi (dtb__6, dtb__7, dtb__8, dtb__9, dtb__10) -> (if ((v_Vuna_dCompiler_dElab_dCase_doccursLevel lvl) dtb__9) then true else ((v_Vuna_dCompiler_dElab_dCase_doccursLevelClo lvl) dtb__10))
-  | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVLam (dtb__11, dtb__12, dtb__13) -> ((v_Vuna_dCompiler_dElab_dCase_doccursLevelClo lvl) dtb__13)
-  | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVMeta (dtb__14, dtb__15) -> ((v_Vuna_dCompiler_dElab_dCase_doccursLevelList lvl) dtb__15)
-  | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVCon (dtb__16, dtb__17) -> ((v_Vuna_dCompiler_dElab_dCase_doccursLevelList lvl) dtb__17)
-  | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVApp (dtb__18, dtb__19) -> (if ((v_Vuna_dCompiler_dElab_dCase_doccursLevel lvl) dtb__18) then true else ((v_Vuna_dCompiler_dElab_dCase_doccursLevel lvl) dtb__19))
-  | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVCase (dtb__20, dtb__21) -> ((v_Vuna_dCompiler_dElab_dCase_doccursLevel lvl) dtb__20)
-  | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVIf (dtb__22, dtb__23, dtb__24) -> (if (if ((v_Vuna_dCompiler_dElab_dCase_doccursLevel lvl) dtb__22) then true else ((v_Vuna_dCompiler_dElab_dCase_doccursLevel lvl) dtb__23)) then true else ((v_Vuna_dCompiler_dElab_dCase_doccursLevel lvl) dtb__24))
-  | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVType (dtb__25) -> false
-  | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVInt (dtb__26) -> false
-  | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVStr (dtb__27) -> false
-  | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVBool (dtb__28) -> false
   | _ -> failwith "DT: impossible branch"
 )))
 and v_Vuna_dCompiler_dElab_dCase_doccursLevelList = (fun mc0 -> (fun mc1 -> (match mc1 with
@@ -313,25 +313,25 @@ let rec v_Vuna_dCompiler_dElab_dCase_dpatsAllIrrefutable = (fun mc0 -> (match mc
   | _ -> failwith "DT: impossible branch"
 ))
 
-let rec v_Vuna_dCompiler_dElab_dCase_dctorHeadCovered = (fun cname -> (fun prevs -> ((fun nd_uscrut2 -> (match nd_uscrut2 with
+let rec v_Vuna_dCompiler_dElab_dCase_dctorHeadCovered = (fun mc0 -> (fun mc1 -> (match mc1 with
   | C_Base_dList_dList_Base_dList_dCons (dtb__135, dtb__136) -> (match dtb__135 with
   | C_Base_dPair_dPair_Base_dPair_dPair (dtb__137, dtb__138) -> (match dtb__137 with
-  | C_Vuna_dCompiler_dFrontend_dAst_dPat_Vuna_dCompiler_dFrontend_dAst_dPCon (dtb__139, dtb__140, dtb__141) -> (if (if ((bi_eq_str dtb__139) cname) then (v_Vuna_dCompiler_dElab_dCase_dpatsAllIrrefutable dtb__140) else false) then true else ((v_Vuna_dCompiler_dElab_dCase_dctorHeadCovered cname) dtb__136))
-  | _ -> ((v_Vuna_dCompiler_dElab_dCase_dctorHeadCovered cname) dtb__136)
+  | C_Vuna_dCompiler_dFrontend_dAst_dPat_Vuna_dCompiler_dFrontend_dAst_dPCon (dtb__139, dtb__140, dtb__141) -> (if (if ((bi_eq_str dtb__139) mc0) then (v_Vuna_dCompiler_dElab_dCase_dpatsAllIrrefutable dtb__140) else false) then true else ((v_Vuna_dCompiler_dElab_dCase_dctorHeadCovered mc0) dtb__136))
+  | _ -> ((v_Vuna_dCompiler_dElab_dCase_dctorHeadCovered mc0) dtb__136)
 )
   | _ -> failwith "DT: impossible branch"
 )
   | C_Base_dList_dList_Base_dList_dNil -> false
   | _ -> failwith "DT: impossible branch"
-)) prevs)))
+)))
 
-let v_Vuna_dCompiler_dElab_dCase_dlitPatEq = (fun lit -> (fun p -> (match lit with
-  | C_Vuna_dCompiler_dFrontend_dAst_dPat_Vuna_dCompiler_dFrontend_dAst_dPInt (dtb__142, dtb__143) -> (match p with
-  | C_Vuna_dCompiler_dFrontend_dAst_dPat_Vuna_dCompiler_dFrontend_dAst_dPInt (dtb__144, dtb__145) -> ((bi_eq_int dtb__142) dtb__144)
+let v_Vuna_dCompiler_dElab_dCase_dlitPatEq = (fun mc0 -> (fun mc1 -> (match mc0 with
+  | C_Vuna_dCompiler_dFrontend_dAst_dPat_Vuna_dCompiler_dFrontend_dAst_dPStr (dtb__142, dtb__143) -> (match mc1 with
+  | C_Vuna_dCompiler_dFrontend_dAst_dPat_Vuna_dCompiler_dFrontend_dAst_dPStr (dtb__144, dtb__145) -> ((bi_eq_str dtb__142) dtb__144)
   | _ -> false
 )
-  | C_Vuna_dCompiler_dFrontend_dAst_dPat_Vuna_dCompiler_dFrontend_dAst_dPStr (dtb__146, dtb__147) -> (match p with
-  | C_Vuna_dCompiler_dFrontend_dAst_dPat_Vuna_dCompiler_dFrontend_dAst_dPStr (dtb__148, dtb__149) -> ((bi_eq_str dtb__146) dtb__148)
+  | C_Vuna_dCompiler_dFrontend_dAst_dPat_Vuna_dCompiler_dFrontend_dAst_dPInt (dtb__146, dtb__147) -> (match mc1 with
+  | C_Vuna_dCompiler_dFrontend_dAst_dPat_Vuna_dCompiler_dFrontend_dAst_dPInt (dtb__148, dtb__149) -> ((bi_eq_int dtb__146) dtb__148)
   | _ -> false
 )
   | _ -> false
@@ -352,7 +352,7 @@ let v_Vuna_dCompiler_dElab_dCase_dlitLabel = (fun mc0 -> (match mc0 with
   | _ -> ""
 ))
 
-let rec v_Vuna_dCompiler_dElab_dCase_dhasLitHead = (fun alts -> ((fun nd_uscrut1 -> (match nd_uscrut1 with
+let rec v_Vuna_dCompiler_dElab_dCase_dhasLitHead = (fun mc0 -> (match mc0 with
   | C_Base_dList_dList_Base_dList_dCons (dtb__158, dtb__159) -> (match dtb__158 with
   | C_Base_dPair_dPair_Base_dPair_dPair (dtb__160, dtb__161) -> (match dtb__160 with
   | C_Vuna_dCompiler_dFrontend_dAst_dPat_Vuna_dCompiler_dFrontend_dAst_dPInt (dtb__162, dtb__163) -> true
@@ -363,7 +363,7 @@ let rec v_Vuna_dCompiler_dElab_dCase_dhasLitHead = (fun alts -> ((fun nd_uscrut1
 )
   | C_Base_dList_dList_Base_dList_dNil -> false
   | _ -> failwith "DT: impossible branch"
-)) alts))
+))
 
 let v_Vuna_dCompiler_dElab_dCase_dcheckCatchAll = (fun mc0 -> (fun mc1 -> (fun mc2 -> (fun mc3 -> (match mc2 with
   | C_Base_dList_dList_Base_dList_dNil -> (C_Base_dResult_dResult_Base_dResult_dOk (0))
@@ -374,11 +374,12 @@ let rec v_Vuna_dCompiler_dElab_dCase_dcheckCaseAltsGo = (fun prevs -> (fun alts 
   | C_Base_dList_dList_Base_dList_dCons (dtb__166, dtb__167) -> (match dtb__166 with
   | C_Base_dPair_dPair_Base_dPair_dPair (dtb__168, dtb__169) -> (match dtb__168 with
   | C_Vuna_dCompiler_dFrontend_dAst_dPat_Vuna_dCompiler_dFrontend_dAst_dPCon (dtb__170, dtb__171, dtb__172) -> (if ((v_Vuna_dCompiler_dElab_dCase_dctorHeadCovered dtb__170) prevs) then (((v_Vuna_dCompiler_dDiagnostics_dTc_dtcErr1 dtb__172) (C_Vuna_dCompiler_dDiagnostics_dTc_dTcErr_Vuna_dCompiler_dDiagnostics_dTc_dRedundantCtorBranch (dtb__170))) dtb__170) else ((v_Vuna_dCompiler_dElab_dCase_dcheckCaseAltsGo (C_Base_dList_dList_Base_dList_dCons ((C_Base_dPair_dPair_Base_dPair_dPair (dtb__168, dtb__169)), prevs))) dtb__167))
-  | C_Vuna_dCompiler_dFrontend_dAst_dPat_Vuna_dCompiler_dFrontend_dAst_dPInt (dtb__173, dtb__174) -> ((((v_Vuna_dCompiler_dElab_dCase_dcheckLitHead prevs) (C_Base_dPair_dPair_Base_dPair_dPair (dtb__168, dtb__169))) dtb__167) dtb__174)
-  | C_Vuna_dCompiler_dFrontend_dAst_dPat_Vuna_dCompiler_dFrontend_dAst_dPStr (dtb__175, dtb__176) -> ((((v_Vuna_dCompiler_dElab_dCase_dcheckLitHead prevs) (C_Base_dPair_dPair_Base_dPair_dPair (dtb__168, dtb__169))) dtb__167) dtb__176)
-  | C_Vuna_dCompiler_dFrontend_dAst_dPat_Vuna_dCompiler_dFrontend_dAst_dPVar (dtb__177, dtb__178) -> ((((v_Vuna_dCompiler_dElab_dCase_dcheckCatchAll prevs) (C_Base_dPair_dPair_Base_dPair_dPair (dtb__168, dtb__169))) dtb__167) dtb__178)
-  | C_Vuna_dCompiler_dFrontend_dAst_dPat_Vuna_dCompiler_dFrontend_dAst_dPWild (dtb__179) -> ((((v_Vuna_dCompiler_dElab_dCase_dcheckCatchAll prevs) (C_Base_dPair_dPair_Base_dPair_dPair (dtb__168, dtb__169))) dtb__167) dtb__179)
-  | C_Vuna_dCompiler_dFrontend_dAst_dPat_Vuna_dCompiler_dFrontend_dAst_dPRecord (dtb__180, dtb__181, dtb__182) -> ((v_Vuna_dCompiler_dElab_dCase_dcheckCaseAltsGo (C_Base_dList_dList_Base_dList_dCons ((C_Base_dPair_dPair_Base_dPair_dPair (dtb__168, dtb__169)), prevs))) dtb__167)
+  | C_Vuna_dCompiler_dFrontend_dAst_dPat_Vuna_dCompiler_dFrontend_dAst_dPAs (dtb__173, dtb__174, dtb__175) -> ((v_Vuna_dCompiler_dElab_dCase_dcheckCaseAltsGo prevs) (C_Base_dList_dList_Base_dList_dCons ((C_Base_dPair_dPair_Base_dPair_dPair (dtb__174, dtb__169)), dtb__167)))
+  | C_Vuna_dCompiler_dFrontend_dAst_dPat_Vuna_dCompiler_dFrontend_dAst_dPInt (dtb__176, dtb__177) -> ((((v_Vuna_dCompiler_dElab_dCase_dcheckLitHead prevs) (C_Base_dPair_dPair_Base_dPair_dPair (dtb__168, dtb__169))) dtb__167) dtb__177)
+  | C_Vuna_dCompiler_dFrontend_dAst_dPat_Vuna_dCompiler_dFrontend_dAst_dPStr (dtb__178, dtb__179) -> ((((v_Vuna_dCompiler_dElab_dCase_dcheckLitHead prevs) (C_Base_dPair_dPair_Base_dPair_dPair (dtb__168, dtb__169))) dtb__167) dtb__179)
+  | C_Vuna_dCompiler_dFrontend_dAst_dPat_Vuna_dCompiler_dFrontend_dAst_dPVar (dtb__180, dtb__181) -> ((((v_Vuna_dCompiler_dElab_dCase_dcheckCatchAll prevs) (C_Base_dPair_dPair_Base_dPair_dPair (dtb__168, dtb__169))) dtb__167) dtb__181)
+  | C_Vuna_dCompiler_dFrontend_dAst_dPat_Vuna_dCompiler_dFrontend_dAst_dPWild (dtb__182) -> ((((v_Vuna_dCompiler_dElab_dCase_dcheckCatchAll prevs) (C_Base_dPair_dPair_Base_dPair_dPair (dtb__168, dtb__169))) dtb__167) dtb__182)
+  | C_Vuna_dCompiler_dFrontend_dAst_dPat_Vuna_dCompiler_dFrontend_dAst_dPRecord (dtb__183, dtb__184, dtb__185) -> ((v_Vuna_dCompiler_dElab_dCase_dcheckCaseAltsGo (C_Base_dList_dList_Base_dList_dCons ((C_Base_dPair_dPair_Base_dPair_dPair (dtb__168, dtb__169)), prevs))) dtb__167)
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
@@ -391,10 +392,10 @@ and v_Vuna_dCompiler_dElab_dCase_dcheckLitHead = (fun prevs -> (fun alt -> (fun 
 let v_Vuna_dCompiler_dElab_dCase_dcheckCaseAltsFlat = (fun alts -> ((v_Vuna_dCompiler_dElab_dCase_dcheckCaseAltsGo C_Base_dList_dList_Base_dList_dNil) alts))
 
 let rec v_Vuna_dCompiler_dElab_dCase_daltNames = (fun mc0 -> (match mc0 with
-  | C_Base_dList_dList_Base_dList_dCons (dtb__183, dtb__184) -> (match dtb__183 with
-  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__185, dtb__186) -> (match dtb__185 with
-  | C_Vuna_dCompiler_dFrontend_dAst_dPat_Vuna_dCompiler_dFrontend_dAst_dPCon (dtb__187, dtb__188, dtb__189) -> (C_Base_dList_dList_Base_dList_dCons (dtb__187, (v_Vuna_dCompiler_dElab_dCase_daltNames dtb__184)))
-  | _ -> (v_Vuna_dCompiler_dElab_dCase_daltNames dtb__184)
+  | C_Base_dList_dList_Base_dList_dCons (dtb__186, dtb__187) -> (match dtb__186 with
+  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__188, dtb__189) -> (match dtb__188 with
+  | C_Vuna_dCompiler_dFrontend_dAst_dPat_Vuna_dCompiler_dFrontend_dAst_dPCon (dtb__190, dtb__191, dtb__192) -> (C_Base_dList_dList_Base_dList_dCons (dtb__190, (v_Vuna_dCompiler_dElab_dCase_daltNames dtb__187)))
+  | _ -> (v_Vuna_dCompiler_dElab_dCase_daltNames dtb__187)
 )
   | _ -> failwith "DT: impossible branch"
 )
@@ -403,9 +404,9 @@ let rec v_Vuna_dCompiler_dElab_dCase_daltNames = (fun mc0 -> (match mc0 with
 ))
 
 let rec v_Vuna_dCompiler_dElab_dCase_dhasCatchAll = (fun mc0 -> (match mc0 with
-  | C_Base_dList_dList_Base_dList_dCons (dtb__190, dtb__191) -> (match dtb__190 with
-  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__192, dtb__193) -> (match dtb__192 with
-  | C_Vuna_dCompiler_dFrontend_dAst_dPat_Vuna_dCompiler_dFrontend_dAst_dPCon (dtb__194, dtb__195, dtb__196) -> (v_Vuna_dCompiler_dElab_dCase_dhasCatchAll dtb__191)
+  | C_Base_dList_dList_Base_dList_dCons (dtb__193, dtb__194) -> (match dtb__193 with
+  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__195, dtb__196) -> (match dtb__195 with
+  | C_Vuna_dCompiler_dFrontend_dAst_dPat_Vuna_dCompiler_dFrontend_dAst_dPCon (dtb__197, dtb__198, dtb__199) -> (v_Vuna_dCompiler_dElab_dCase_dhasCatchAll dtb__194)
   | _ -> true
 )
   | _ -> failwith "DT: impossible branch"
@@ -415,15 +416,15 @@ let rec v_Vuna_dCompiler_dElab_dCase_dhasCatchAll = (fun mc0 -> (match mc0 with
 ))
 
 let rec v_Vuna_dCompiler_dElab_dCase_dhasDupNames = (fun mc0 -> (match mc0 with
-  | C_Base_dList_dList_Base_dList_dCons (dtb__197, dtb__198) -> (if ((v_Base_dList_dmemName dtb__197) dtb__198) then true else (v_Vuna_dCompiler_dElab_dCase_dhasDupNames dtb__198))
+  | C_Base_dList_dList_Base_dList_dCons (dtb__200, dtb__201) -> (if ((v_Base_dList_dmemName dtb__200) dtb__201) then true else (v_Vuna_dCompiler_dElab_dCase_dhasDupNames dtb__201))
   | C_Base_dList_dList_Base_dList_dNil -> false
   | _ -> failwith "DT: impossible branch"
 ))
 
 let rec v_Vuna_dCompiler_dElab_dCase_danyNestedArg = (fun mc0 -> (match mc0 with
-  | C_Base_dList_dList_Base_dList_dCons (dtb__199, dtb__200) -> (match dtb__199 with
-  | C_Vuna_dCompiler_dFrontend_dAst_dPat_Vuna_dCompiler_dFrontend_dAst_dPVar (dtb__201, dtb__202) -> (v_Vuna_dCompiler_dElab_dCase_danyNestedArg dtb__200)
-  | C_Vuna_dCompiler_dFrontend_dAst_dPat_Vuna_dCompiler_dFrontend_dAst_dPWild (dtb__203) -> (v_Vuna_dCompiler_dElab_dCase_danyNestedArg dtb__200)
+  | C_Base_dList_dList_Base_dList_dCons (dtb__202, dtb__203) -> (match dtb__202 with
+  | C_Vuna_dCompiler_dFrontend_dAst_dPat_Vuna_dCompiler_dFrontend_dAst_dPVar (dtb__204, dtb__205) -> (v_Vuna_dCompiler_dElab_dCase_danyNestedArg dtb__203)
+  | C_Vuna_dCompiler_dFrontend_dAst_dPat_Vuna_dCompiler_dFrontend_dAst_dPWild (dtb__206) -> (v_Vuna_dCompiler_dElab_dCase_danyNestedArg dtb__203)
   | _ -> true
 )
   | C_Base_dList_dList_Base_dList_dNil -> false
@@ -431,13 +432,13 @@ let rec v_Vuna_dCompiler_dElab_dCase_danyNestedArg = (fun mc0 -> (match mc0 with
 ))
 
 let v_Vuna_dCompiler_dElab_dCase_dnestedInPat = (fun mc0 -> (match mc0 with
-  | C_Vuna_dCompiler_dFrontend_dAst_dPat_Vuna_dCompiler_dFrontend_dAst_dPCon (dtb__204, dtb__205, dtb__206) -> (v_Vuna_dCompiler_dElab_dCase_danyNestedArg dtb__205)
+  | C_Vuna_dCompiler_dFrontend_dAst_dPat_Vuna_dCompiler_dFrontend_dAst_dPCon (dtb__207, dtb__208, dtb__209) -> (v_Vuna_dCompiler_dElab_dCase_danyNestedArg dtb__208)
   | _ -> false
 ))
 
 let rec v_Vuna_dCompiler_dElab_dCase_danyNestedPat = (fun mc0 -> (match mc0 with
-  | C_Base_dList_dList_Base_dList_dCons (dtb__207, dtb__208) -> (match dtb__207 with
-  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__209, dtb__210) -> (if (v_Vuna_dCompiler_dElab_dCase_dnestedInPat dtb__209) then true else (v_Vuna_dCompiler_dElab_dCase_danyNestedPat dtb__208))
+  | C_Base_dList_dList_Base_dList_dCons (dtb__210, dtb__211) -> (match dtb__210 with
+  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__212, dtb__213) -> (if (v_Vuna_dCompiler_dElab_dCase_dnestedInPat dtb__212) then true else (v_Vuna_dCompiler_dElab_dCase_danyNestedPat dtb__211))
   | _ -> failwith "DT: impossible branch"
 )
   | C_Base_dList_dList_Base_dList_dNil -> false
@@ -445,7 +446,7 @@ let rec v_Vuna_dCompiler_dElab_dCase_danyNestedPat = (fun mc0 -> (match mc0 with
 ))
 
 let rec v_Vuna_dCompiler_dElab_dCase_dcheckCovered = (fun mc0 -> (fun mc1 -> (fun mc2 -> (fun mc3 -> (fun mc4 -> (fun mc5 -> (fun mc6 -> (fun mc7 -> (match mc7 with
-  | C_Base_dList_dList_Base_dList_dCons (dtb__211, dtb__212) -> (if ((v_Base_dList_dmemName (v_Vuna_dCompiler_dElab_dTypes_ddtCtorName dtb__211)) mc4) then ((((((((v_Vuna_dCompiler_dElab_dCase_dcheckCovered mc0) mc1) mc2) mc3) mc4) mc5) mc6) dtb__212) else (if ((((v_Vuna_dCompiler_dElab_dCase_dbranchReachable mc0) mc1) mc3) dtb__211) then (((v_Vuna_dCompiler_dDiagnostics_dTc_dtcErr1 mc6) (C_Vuna_dCompiler_dDiagnostics_dTc_dTcErr_Vuna_dCompiler_dDiagnostics_dTc_dNotExhaustive ((v_Vuna_dCompiler_dElab_dTypes_ddtCtorName dtb__211)))) (v_Vuna_dCompiler_dElab_dTypes_ddtCtorName dtb__211)) else ((((((((v_Vuna_dCompiler_dElab_dCase_dcheckCovered mc0) mc1) mc2) mc3) mc4) mc5) mc6) dtb__212)))
+  | C_Base_dList_dList_Base_dList_dCons (dtb__214, dtb__215) -> (if ((v_Base_dList_dmemName (v_Vuna_dCompiler_dElab_dTypes_ddtCtorName dtb__214)) mc4) then ((((((((v_Vuna_dCompiler_dElab_dCase_dcheckCovered mc0) mc1) mc2) mc3) mc4) mc5) mc6) dtb__215) else (if ((((v_Vuna_dCompiler_dElab_dCase_dbranchReachable mc0) mc1) mc3) dtb__214) then (((v_Vuna_dCompiler_dDiagnostics_dTc_dtcErr1 mc6) (C_Vuna_dCompiler_dDiagnostics_dTc_dTcErr_Vuna_dCompiler_dDiagnostics_dTc_dNotExhaustive ((v_Vuna_dCompiler_dElab_dTypes_ddtCtorName dtb__214)))) (v_Vuna_dCompiler_dElab_dTypes_ddtCtorName dtb__214)) else ((((((((v_Vuna_dCompiler_dElab_dCase_dcheckCovered mc0) mc1) mc2) mc3) mc4) mc5) mc6) dtb__215)))
   | C_Base_dList_dList_Base_dList_dNil -> (C_Base_dResult_dResult_Base_dResult_dOk (0))
   | _ -> failwith "DT: impossible branch"
 )))))))))

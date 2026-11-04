@@ -168,34 +168,31 @@ holeHoverAt uri line col text = case contextForDoc uri of
 
 -- hover 的第二段：光标标识符的签名/注释（Index；不可用/未命中 → null）。
 symbolHoverResult : String -> Int -> Int -> String -> Maybe Index -> Json
-symbolHoverResult uri line col text midx = case midx of
+symbolHoverResult uri line col text Nothing = JNull
+symbolHoverResult uri line col text (Just idx) = case tokenAtCursor text line col of
   Nothing => JNull
-  Just idx => case tokenAtCursor text line col of
+  Just (Pair startCol token) => case bestSymbol idx (currentModuleNameOf text) token of
     Nothing => JNull
-    Just (Pair startCol token) => case bestSymbol idx (currentModuleNameOf text) token of
-      Nothing => JNull
-      Just sym => symbolHoverJson sym
+    Just sym => symbolHoverJson sym
 
 -- definition：光标 token → Index 符号 → Location；Index 不可用/未命中时同文件兜底。
 definitionResult : String -> Int -> Int -> String -> Maybe Index -> Json
-definitionResult uri line col text midx = case midx of
-  Nothing =>
-    bufferDefinition uri text (fromMaybe "" (mapJust secondOf (tokenAtCursor text line col)))
-  Just idx => case tokenAtCursor text line col of
-    Nothing => JNull
-    Just (Pair startCol token) => case bestSymbol idx (currentModuleNameOf text) token of
+definitionResult uri line col text Nothing =
+  bufferDefinition uri text (fromMaybe "" (mapJust secondOf (tokenAtCursor text line col)))
+definitionResult uri line col text (Just idx) = case tokenAtCursor text line col of
+  Nothing => JNull
+  Just (Pair startCol token) => case bestSymbol idx (currentModuleNameOf text) token of
+    Nothing => bufferDefinition uri text token
+    Just sym => case symLocation idx sym of
       Nothing => bufferDefinition uri text token
-      Just sym => case symLocation idx sym of
-        Nothing => bufferDefinition uri text token
-        Just loc => JArr [loc]
+      Just loc => JArr [loc]
 
 -- references：定义位置 + Index refs 的出现位置。
 referencesResult : String -> Int -> Int -> String -> Maybe Index -> List Json
-referencesResult uri line col text midx = case midx of
+referencesResult uri line col text Nothing = []
+referencesResult uri line col text (Just idx) = case tokenAtCursor text line col of
   Nothing => []
-  Just idx => case tokenAtCursor text line col of
-    Nothing => []
-    Just (Pair startCol token) => referencesFor idx (currentModuleNameOf text) token
+  Just (Pair startCol token) => referencesFor idx (currentModuleNameOf text) token
 
 -- formatting：formatSource 成功且内容有变化 ⇒ 全文 TextEdit；否则 []。
 formattingEdits : String -> List Json

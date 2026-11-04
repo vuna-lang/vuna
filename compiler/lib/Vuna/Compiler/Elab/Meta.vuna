@@ -421,11 +421,10 @@ teleOf _ env = []
 
 -- 结果类型 `F r1..rk` 的「头 + 实参」。
 spineOfType : Term -> Pair String (List Term)
-spineOfType t = case t of
-  TApp f a erased => case spineOfType f of
-    Pair h args => Pair h (append args [a])
-  TGlobal g => Pair g []
-  _ => Pair "" []
+spineOfType (TApp f a erased) = case spineOfType f of
+  Pair h args => Pair h (append args [a])
+spineOfType (TGlobal g) = Pair g []
+spineOfType _ = Pair "" []
 
 resultSpine : Term -> Pair String (List Term)
 resultSpine (TPi name implicit rig dom cod) = resultSpine cod
@@ -612,12 +611,11 @@ litEqName : String -> String
 litEqName tyName = if tyName == "String" then "bi_eq_str" else "bi_eq_int"
 
 flattenTaggedApp : Term -> Maybe (Pair String (List (Pair Term Rig)))
-flattenTaggedApp t = case t of
-  TApp f a rig => case flattenTaggedApp f of
-    Just (Pair g args) => Just (Pair g (append args [Pair a rig]))
-    Nothing => Nothing
-  TGlobal g => Just (Pair g [])
-  _ => Nothing
+flattenTaggedApp (TApp f a rig) = case flattenTaggedApp f of
+  Just (Pair g args) => Just (Pair g (append args [Pair a rig]))
+  Nothing => Nothing
+flattenTaggedApp (TGlobal g) = Just (Pair g [])
+flattenTaggedApp _ = Nothing
 
 -- M14：隐式 binder 的域可以是：宇宙、已声明归纳族（`{n : Nat}` 这类索引），或**高阶 kind**
 -- （`{f : Type -> Type}`，M19 起 `trait Mapper f` 需要）。其它类型（Int/String/…）仍
@@ -737,13 +735,12 @@ else case v of
   _ => False
 
 isDataHead : List DtData -> Value -> Bool
-isDataHead datas v = case v of
-  VNeutral n => case n of
-    NGlobal g sp => case dtDataLookup g datas of
-      Just _ => True
-      Nothing => False
-    _ => False
+isDataHead datas (VNeutral n) = case n of
+  NGlobal g sp => case dtDataLookup g datas of
+    Just _ => True
+    Nothing => False
   _ => False
+isDataHead datas _ = False
 
 freshVarValue : String -> Int -> Value
 freshVarValue name level = VNeutral (NVar name level [])
@@ -861,7 +858,6 @@ ctorFamilyTable ec = map (\d => Pair (dtDataName d) (map dtCtorName (dtDataCtors
 -- 后续分支里的兜底体（`case` 最后一个变量/通配分支），供嵌套模式的折叠使用。
 findCatchAllBody : List (Pair Pat Expr) -> Maybe Expr
 findCatchAllBody [] = Nothing
-findCatchAllBody (alt :: rest) = case alt of
-  Pair pat body => case pat of
-    PCon cname args psp => findCatchAllBody rest
-    _ => Just body
+findCatchAllBody ((Pair pat body) :: rest) = case pat of
+  PCon cname args psp => findCatchAllBody rest
+  _ => Just body

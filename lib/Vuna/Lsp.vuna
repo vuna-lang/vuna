@@ -108,9 +108,10 @@ setIndexTried : Bool -> LspState -> LspState
 setIndexTried tried (LspState docs s idx _ hint logs) = LspState docs s idx tried hint logs
 
 setRootHintIfEmpty : String -> LspState -> LspState
-setRootHintIfEmpty hint (LspState docs s idx tried existing logs) = case existing of
-  Just prev => LspState docs s idx tried existing logs
-  Nothing => LspState docs s idx tried (Just hint) logs
+setRootHintIfEmpty hint (LspState docs s idx tried (existing@(Just prev)) logs) =
+  LspState docs s idx tried existing logs
+setRootHintIfEmpty hint (LspState docs s idx tried Nothing logs) =
+  LspState docs s idx tried (Just hint) logs
 
 logTo : String -> LspState -> LspState
 logTo line (LspState docs s idx tried hint logs) = LspState docs s idx tried hint (line :: logs)

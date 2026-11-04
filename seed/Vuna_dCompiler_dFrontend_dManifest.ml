@@ -101,27 +101,27 @@ let v_Vuna_dCompiler_dFrontend_dManifest_dcheckOneEntry = (fun mc0 -> (fun mc1 -
   | _ -> failwith "DT: impossible branch"
 )))
 
-let rec v_Vuna_dCompiler_dFrontend_dManifest_dcheckEntries = (fun path -> (fun entries -> (match entries with
-  | C_Base_dList_dList_Base_dList_dNil -> (C_Base_dResult_dResult_Base_dResult_dOk (0))
-  | C_Base_dList_dList_Base_dList_dCons (dtb__50, dtb__51) -> (match ((v_Vuna_dCompiler_dFrontend_dManifest_dcheckOneEntry path) dtb__50) with
+let rec v_Vuna_dCompiler_dFrontend_dManifest_dcheckEntries = (fun mc0 -> (fun mc1 -> (match mc1 with
+  | C_Base_dList_dList_Base_dList_dCons (dtb__50, dtb__51) -> (match ((v_Vuna_dCompiler_dFrontend_dManifest_dcheckOneEntry mc0) dtb__50) with
   | C_Base_dResult_dResult_Base_dResult_dErr (dtb__52) -> (C_Base_dResult_dResult_Base_dResult_dErr (dtb__52))
-  | C_Base_dResult_dResult_Base_dResult_dOk (dtb__53) -> ((v_Vuna_dCompiler_dFrontend_dManifest_dcheckEntries path) dtb__51)
+  | C_Base_dResult_dResult_Base_dResult_dOk (dtb__53) -> ((v_Vuna_dCompiler_dFrontend_dManifest_dcheckEntries mc0) dtb__51)
   | _ -> failwith "DT: impossible branch"
 )
+  | C_Base_dList_dList_Base_dList_dNil -> (C_Base_dResult_dResult_Base_dResult_dOk (0))
   | _ -> failwith "DT: impossible branch"
 )))
 
-let rec v_Vuna_dCompiler_dFrontend_dManifest_dcollectDependenciesAcc = (fun path -> (fun entries -> (fun acc -> ((fun nd_uscrut3 -> (match nd_uscrut3 with
+let rec v_Vuna_dCompiler_dFrontend_dManifest_dcollectDependenciesAcc = (fun mc0 -> (fun mc1 -> (fun mc2 -> (match mc1 with
   | C_Base_dList_dList_Base_dList_dCons (dtb__54, dtb__55) -> (match dtb__54 with
   | C_Vuna_dCompiler_dFrontend_dToml_dTomlEntry_Vuna_dCompiler_dFrontend_dToml_dTomlEntry (dtb__56, dtb__57, dtb__58, dtb__59) -> (if (((v_Vuna_dCompiler_dFrontend_dManifest_dsameSection v_Eq_uString) dtb__56) (C_Base_dList_dList_Base_dList_dCons ("dependencies", C_Base_dList_dList_Base_dList_dNil))) then (match dtb__58 with
-  | C_Vuna_dCompiler_dFrontend_dToml_dTomlValue_Vuna_dCompiler_dFrontend_dToml_dTStr (dtb__60) -> (((v_Vuna_dCompiler_dFrontend_dManifest_dcollectDependenciesAcc path) dtb__55) (C_Base_dList_dList_Base_dList_dCons ((C_Base_dPair_dPair_Base_dPair_dPair (dtb__57, dtb__60)), acc)))
-  | _ -> (C_Base_dResult_dResult_Base_dResult_dErr ((((v_Vuna_dCompiler_dFrontend_dManifest_datLine path) dtb__59) ((bi_concat "dependency \"") ((bi_concat dtb__57) "\" must have a string relative path")))))
-) else (((v_Vuna_dCompiler_dFrontend_dManifest_dcollectDependenciesAcc path) dtb__55) acc))
+  | C_Vuna_dCompiler_dFrontend_dToml_dTomlValue_Vuna_dCompiler_dFrontend_dToml_dTStr (dtb__60) -> (((v_Vuna_dCompiler_dFrontend_dManifest_dcollectDependenciesAcc mc0) dtb__55) (C_Base_dList_dList_Base_dList_dCons ((C_Base_dPair_dPair_Base_dPair_dPair (dtb__57, dtb__60)), mc2)))
+  | _ -> (C_Base_dResult_dResult_Base_dResult_dErr ((((v_Vuna_dCompiler_dFrontend_dManifest_datLine mc0) dtb__59) ((bi_concat "dependency \"") ((bi_concat dtb__57) "\" must have a string relative path")))))
+) else (((v_Vuna_dCompiler_dFrontend_dManifest_dcollectDependenciesAcc mc0) dtb__55) mc2))
   | _ -> failwith "DT: impossible branch"
 )
-  | C_Base_dList_dList_Base_dList_dNil -> (C_Base_dResult_dResult_Base_dResult_dOk ((v_Base_dList_dreverse acc)))
+  | C_Base_dList_dList_Base_dList_dNil -> (C_Base_dResult_dResult_Base_dResult_dOk ((v_Base_dList_dreverse mc2)))
   | _ -> failwith "DT: impossible branch"
-)) entries))))
+))))
 
 let v_Vuna_dCompiler_dFrontend_dManifest_dcollectDependencies = (fun path -> (fun entries -> (((v_Vuna_dCompiler_dFrontend_dManifest_dcollectDependenciesAcc path) entries) C_Base_dList_dList_Base_dList_dNil)))
 

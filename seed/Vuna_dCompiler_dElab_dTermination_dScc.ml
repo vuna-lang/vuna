@@ -540,12 +540,12 @@ let v_Vuna_dCompiler_dElab_dTermination_dScc_dsctCheck = (fun comp -> (fun defs 
   | _ -> failwith "DT: impossible branch"
 )) ((((v_Vuna_dCompiler_dElab_dTermination_dScc_dinitialTable sites) ctors) projs) facts))) (((((v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteCollect comp) ctors) projs) defs) facts))))))))
 
-let v_Vuna_dCompiler_dElab_dTermination_dScc_dfirstParamName = (fun pats -> (match pats with
-  | C_Base_dList_dList_Base_dList_dNil -> C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing
+let v_Vuna_dCompiler_dElab_dTermination_dScc_dfirstParamName = (fun mc0 -> (match mc0 with
   | C_Base_dList_dList_Base_dList_dCons (dtb__249, dtb__250) -> (match dtb__249 with
   | C_Vuna_dCompiler_dFrontend_dAst_dPat_Vuna_dCompiler_dFrontend_dAst_dPVar (dtb__251, dtb__252) -> (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__251))
   | _ -> C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing
 )
+  | C_Base_dList_dList_Base_dList_dNil -> C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing
   | _ -> failwith "DT: impossible branch"
 ))
 
@@ -559,9 +559,9 @@ let v_Vuna_dCompiler_dElab_dTermination_dScc_dfirstParamOf = (fun name -> (fun d
   | _ -> failwith "DT: impossible branch"
 )))
 
-let v_Vuna_dCompiler_dElab_dTermination_dScc_dhasFuelGuard = (fun p0 -> (fun e -> (match e with
+let v_Vuna_dCompiler_dElab_dTermination_dScc_dhasFuelGuard = (fun mc0 -> (fun mc1 -> (match mc1 with
   | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEIf (dtb__256, dtb__257, dtb__258, dtb__259) -> (match (v_Vuna_dCompiler_dElab_dTermination_dMeasure_dguardPosVar dtb__256) with
-  | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__260) -> (if ((bi_eq_str dtb__260) p0) then true else false)
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__260) -> (if ((bi_eq_str dtb__260) mc0) then true else false)
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> false
   | _ -> failwith "DT: impossible branch"
 )
