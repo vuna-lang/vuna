@@ -126,11 +126,14 @@ checkAllErasure typeNames (d :: rest) =
 -- 报错带上定义名：同一份程序里哪个函数有问题要能一眼看出来。
 -- M29（A14）：有 span 时前缀 `file:line:col:`（保留原有的 `in `name`: ` 形状）。
 checkOneErasure : List String -> DtDef -> Result Int
-checkOneErasure typeNames d = case dtDefBody d of
-  Nothing => Err "DT: internal: axiom reached the runtime erasure check (partition must erase it)"
-  Just body => case checkErasure typeNames [] body of
-    Err e => Err (defLocPrefix d ++ e)
-    Ok n => Ok n
+checkOneErasure typeNames d = case dtDefExtern d of
+  -- M33 W5：extern 没有 vuna 体，运行时实现由 OCaml `external` 提供；不参与擦除检查。
+  Just _ => Ok 0
+  Nothing => case dtDefBody d of
+    Nothing => Err "DT: internal: axiom reached the runtime erasure check (partition must erase it)"
+    Just body => case checkErasure typeNames [] body of
+      Err e => Err (defLocPrefix d ++ e)
+      Ok n => Ok n
 
 -- binders：最近绑定在前（名字 + 是否擦除）。
 showMetaHint : Int -> String

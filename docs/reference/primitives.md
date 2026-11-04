@@ -249,7 +249,33 @@
   （`CG_InterpCannotExecuteEffects`），不做「纯动作求值、效果丢弃」。
 - 相关夹具带 `.nointerp` 标记，只做 `compile` + 运行产物。
 
-## 10. 已知边界
+## 10. 受限 FFI（M33 W5）
+
+语法（顶层声明，任意模块；入口与库模块一致）：
+
+```vuna
+extern c_add "vuna_add" : Int -> Int -> Int
+```
+
+- `extern` 后是 vuna 值名，字符串是 C 符号名；无 `=` 体。运行时由包根 `ffi/*.c`
+  提供的 C 函数实现。
+- **允许的类型**（`Elab.Driver.checkExternTy`）：`Int` / `String` / `Bool`，以及
+  `Array Int` / `Array String` / `Array Bool`；只允许显式参数（不允许隐式、依赖类型、
+  泛型、函数参数 / 回调）。超出子集报 `TC_FfiTypeUnsupported`。
+- **codegen**：`DtExtern` 在运行时分组生成 OCaml
+  `external v_<name> : <ocaml ty> = "<c_symbol>"`；`compileToDir` 把包根 `ffi/*.c`
+  复制到 `OUTDIR/ffi/`，生成的 `build.sh` 用 `ocamlopt -c` 编译并按 `.o` 链接
+  （确定性构建；C 编译失败是构建期错误）。
+- **C ABI**：`int` 在 C 侧是 tagged `value`（`Long_val` / `Val_long`，见
+  `caml/mlvalues.h`）；`Bool` 用 `Bool_val` / `Val_bool`；`String` 用
+  `String_val`（只读，不保证 NUL 结尾之外的布局）。不要用 32 位 `int` / `intnat`
+  直接接 OCaml 的 `int`。
+- **边界**：没有回调 / GC root / pin、没有字符串 / 数组的双向可变共享（String 只读传递）、
+  没有 C 头文件解析（符号名与签名都要手写）；interp 不执行 extern（`main` 里用到时
+  只走 compile + 运行）。
+- C 实现是包的一部分：`ffi/` 目录随包走，不改变 `vuna.toml` 形状。
+
+## 11. 已知边界
 
 - 无大整数、无溢出诊断；`Int` 的 63 位宽度是宿主实现事实。
 - 无 Unicode 码点 API / 无 UTF-8 校验；`String` 是字节串，`strPack` 越界是宿主错误。

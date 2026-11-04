@@ -44,6 +44,7 @@ splitDeclNames : List Decl -> List String
 splitDeclNames [] = []
 splitDeclNames (d :: rest) = case d of
   DSig name ctx ty sp => name :: splitDeclNames rest
+  DExtern name cName ty sp => name :: splitDeclNames rest
   DFun name pats body sp => name :: splitDeclNames rest
   DData name params kind ctors derivings sp => name :: splitDeclNames rest
   DRecord name params fields derivings sp => name :: splitDeclNames rest
@@ -244,6 +245,7 @@ entryDeclIdentities : List Decl -> List String
 entryDeclIdentities [] = []
 entryDeclIdentities (d :: rest) = case d of
   DSig name ctx ty sp => name :: entryDeclIdentities rest
+  DExtern name cName ty sp => name :: entryDeclIdentities rest
   DData name params kind ctors derivings sp => name :: entryDeclIdentities rest
   DRecord name params fields derivings sp => name :: entryDeclIdentities rest
   DTrait name params methods sp => name :: entryDeclIdentities rest

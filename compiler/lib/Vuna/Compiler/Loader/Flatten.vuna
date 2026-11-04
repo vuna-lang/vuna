@@ -91,6 +91,7 @@ findOwnFn name (d :: rest) = case d of
   DFun n pats body sp => if n == name then Just name else findOwnFn name rest
   DSig n ctx ty sp => if n == name then Just name else findOwnFn name rest
   DAxiom n ty sp => if n == name then Just name else findOwnFn name rest
+  DExtern n c ty sp => if n == name then Just name else findOwnFn name rest
   _ => findOwnFn name rest
 
 findCtorNamed : String -> List Ctor -> Maybe String
@@ -153,6 +154,9 @@ declImplicitExports prefix d = case d of
     else [ExportEntry { kind = "val", public = name, target = mangle prefix name, parent = "" }]
   -- M28：axiom 是无体的可擦除顶层，导出层按值条目处理（类型层引用跨模块可见）。
   DAxiom name ty sp =>
+    if isPrivateName name then []
+    else [ExportEntry { kind = "val", public = name, target = mangle prefix name, parent = "" }]
+  DExtern name cName ty sp =>
     if isPrivateName name then []
     else [ExportEntry { kind = "val", public = name, target = mangle prefix name, parent = "" }]
   DFun name pats body sp =>

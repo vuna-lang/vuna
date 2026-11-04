@@ -29,6 +29,8 @@ renderDeclBody : List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Commen
 renderDeclBody env at lineInd (DData name params kind ctors derivings sp) =
   renderDataDecl env at name params kind ctors derivings
 renderDeclBody env at lineInd (DAxiom name ty sp) = renderSigLine env at lineInd "axiom " name [] ty
+renderDeclBody env at lineInd (DExtern name cName ty sp) =
+  renderSigLine env at lineInd ("extern " ++ name ++ " " ++ strShow cName) "" [] ty
 renderDeclBody env at lineInd (DSig name ctx ty sp) = renderSigLine env at lineInd "" name ctx ty
 renderDeclBody env at lineInd (DFun name pats body sp) = renderClause env at lineInd name pats body
 renderDeclBody env at lineInd (DRecord name params fields derivings sp) =

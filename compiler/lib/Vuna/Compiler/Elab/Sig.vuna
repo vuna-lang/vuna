@@ -228,4 +228,5 @@ definedNames [] = []
 definedNames (d :: rest) = case d of
   DFun n pats body sp => n :: definedNames rest
   DAxiom n ty sp => n :: definedNames rest
+  DExtern n c ty sp => n :: definedNames rest
   _ => definedNames rest

@@ -235,6 +235,8 @@ symbolsOfDecl sMod decls comments d =
     DSig name ctx ty sp => []
     DAxiom name ty sp =>
       [Sym sMod name "axiom" ("axiom " ++ name ++ " : " ++ renderTy ty) doc line col]
+    DExtern name cName ty sp =>
+      [Sym sMod name "extern" ("extern " ++ name ++ " : " ++ renderTy ty) doc line col]
     DFun name pats body sp => [Sym sMod name "fun" (signatureOf name decls) doc line col]
     -- M29-T2b：命名实例已删除，实例不再产生符号（字典按实例表注册）。
     DInstance ctxE head methods sp => []

@@ -191,6 +191,7 @@ let rec v_Vuna_dCompiler_dElab_dSig_ddefinedNames = (fun mc0 -> (match mc0 with
   | C_Base_dList_dList_Base_dList_dCons (dtb__100, dtb__101) -> (match dtb__100 with
   | C_Vuna_dCompiler_dFrontend_dAst_dDecl_Vuna_dCompiler_dFrontend_dAst_dDFun (dtb__102, dtb__103, dtb__104, dtb__105) -> (C_Base_dList_dList_Base_dList_dCons (dtb__102, (v_Vuna_dCompiler_dElab_dSig_ddefinedNames dtb__101)))
   | C_Vuna_dCompiler_dFrontend_dAst_dDecl_Vuna_dCompiler_dFrontend_dAst_dDAxiom (dtb__106, dtb__107, dtb__108) -> (C_Base_dList_dList_Base_dList_dCons (dtb__106, (v_Vuna_dCompiler_dElab_dSig_ddefinedNames dtb__101)))
+  | C_Vuna_dCompiler_dFrontend_dAst_dDecl_Vuna_dCompiler_dFrontend_dAst_dDExtern (dtb__109, dtb__110, dtb__111, dtb__112) -> (C_Base_dList_dList_Base_dList_dCons (dtb__109, (v_Vuna_dCompiler_dElab_dSig_ddefinedNames dtb__101)))
   | _ -> (v_Vuna_dCompiler_dElab_dSig_ddefinedNames dtb__101)
 )
   | C_Base_dList_dList_Base_dList_dNil -> C_Base_dList_dList_Base_dList_dNil

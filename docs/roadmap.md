@@ -59,10 +59,12 @@ fixity 唯一来源、反引号中缀 / section / 用户符号名、fmt 程序�
 W1 测量地基（`nix run .#vuna-perf` + 基线）、W2 codegen/运行时（内建饱和内联、多参数 lambda
 链、字符串批量拼接、`VN_PERF_STATS` GC 统计）、W3 容器与表示（内建类型构造子 +
 `Array`/`IORef`/`MArray`/`Buffer`、`HashMap`/`IntMap` 的 `Array` 桶、`empty` → `fromList []`）、
-W4 可变数据边界与字符串补齐（`strSubstring`、`repeat` 批拼；线性类型 / ST 明确裁剪）已落地，
-生成程序基准全部进入 2× 手写 OCaml；剩 W5 受限 FFI、W6 最小效应接口。M33 完成后按维护规则
-删除阶段记录。下一步是 **M34/M35**：按「语言能写高性能系统程序 → 编译器快 → 并发 / 服务端」推进。
-新阶段必须映射到 debt 条目，并在「范围」里列明关闭哪些项；B / C / E 系列残留按需插入。
+W4 可变数据边界与字符串补齐（`strSubstring`、`repeat` 批拼；线性类型 / ST 明确裁剪）、
+W5 受限 FFI（`extern name "c_symbol" : ty` + 包根 `ffi/*.c`，基本类型 / 无回调）已落地，
+生成程序基准全部进入 2× 手写 OCaml；剩 W6 最小效应接口（State/Reader/Error 库级）。M33
+完成后按维护规则删除阶段记录。下一步是 **M34/M35**：按「语言能写高性能系统程序 → 编译器快 →
+并发 / 服务端」推进。新阶段必须映射到 debt 条目，并在「范围」里列明关闭哪些项；B / C / E
+系列残留按需插入。
 
 ## 性能轨道（M33–M35）
 

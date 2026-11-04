@@ -101,16 +101,16 @@ let rec v_Vuna_dCompiler_dElab_dRecords_dfieldNamesOf = (fun mc0 -> (match mc0 w
   | _ -> failwith "DT: impossible branch"
 ))
 
-let rec v_Vuna_dCompiler_dElab_dRecords_dfieldIndexAt = (fun d8614 mc0 mc1 mc2 -> (match mc1 with
+let rec v_Vuna_dCompiler_dElab_dRecords_dfieldIndexAt = (fun d8668 mc0 mc1 mc2 -> (match mc1 with
   | C_Base_dList_dList_Base_dList_dCons (dtb__36, dtb__37) -> (match dtb__36 with
-  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__38, dtb__39) -> (if (((v_Base_dEq_deq d8614) dtb__38) mc0) then (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (mc2)) else ((((v_Vuna_dCompiler_dElab_dRecords_dfieldIndexAt d8614) mc0) dtb__37) (mc2 + 1)))
+  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__38, dtb__39) -> (if (((v_Base_dEq_deq d8668) dtb__38) mc0) then (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (mc2)) else ((((v_Vuna_dCompiler_dElab_dRecords_dfieldIndexAt d8668) mc0) dtb__37) (mc2 + 1)))
   | _ -> failwith "DT: impossible branch"
 )
   | C_Base_dList_dList_Base_dList_dNil -> C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing
   | _ -> failwith "DT: impossible branch"
 ))
 
-let v_Vuna_dCompiler_dElab_dRecords_dfieldIndex = (fun d8621 fname fields -> ((((v_Vuna_dCompiler_dElab_dRecords_dfieldIndexAt d8621) fname) fields) 0))
+let v_Vuna_dCompiler_dElab_dRecords_dfieldIndex = (fun d8675 fname fields -> ((((v_Vuna_dCompiler_dElab_dRecords_dfieldIndexAt d8675) fname) fields) 0))
 
 let rec v_Vuna_dCompiler_dElab_dRecords_dlookupProvided = (fun mc0 mc1 -> (match mc1 with
   | C_Base_dList_dList_Base_dList_dCons (dtb__40, dtb__41) -> (match dtb__40 with
@@ -398,6 +398,7 @@ let rec v_Vuna_dCompiler_dElab_dRecords_ddesugarRecordDecl = (fun records d -> (
   | C_Vuna_dCompiler_dFrontend_dAst_dDecl_Vuna_dCompiler_dFrontend_dAst_dDInstance (dtb__233, dtb__234, dtb__235, dtb__236) -> ((v_Base_dResult_dandThen ((v_Base_dResult_dtraverse (v_Vuna_dCompiler_dElab_dRecords_ddesugarRecordDecl records)) dtb__235)) (fun ms -> (C_Base_dResult_dResult_Base_dResult_dOk ((C_Vuna_dCompiler_dFrontend_dAst_dDecl_Vuna_dCompiler_dFrontend_dAst_dDInstance (dtb__233, dtb__234, ms, dtb__236))))))
   | C_Vuna_dCompiler_dFrontend_dAst_dDecl_Vuna_dCompiler_dFrontend_dAst_dDSig (dtb__237, dtb__238, dtb__239, dtb__240) -> (C_Base_dResult_dResult_Base_dResult_dOk (d))
   | C_Vuna_dCompiler_dFrontend_dAst_dDecl_Vuna_dCompiler_dFrontend_dAst_dDAxiom (dtb__241, dtb__242, dtb__243) -> (C_Base_dResult_dResult_Base_dResult_dOk (d))
+  | C_Vuna_dCompiler_dFrontend_dAst_dDecl_Vuna_dCompiler_dFrontend_dAst_dDExtern (dtb__244, dtb__245, dtb__246, dtb__247) -> (C_Base_dResult_dResult_Base_dResult_dOk (d))
   | _ -> failwith "DT: impossible branch"
 ))
 

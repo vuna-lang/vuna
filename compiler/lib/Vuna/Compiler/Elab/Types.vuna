@@ -31,6 +31,7 @@ module Vuna.Compiler.Elab.Types
   , dtDataName
   , dtDataParams
   , dtDefBody
+  , dtDefExtern
   , dtDefHasBody
   , dtDefName
   , dtDefSpan
@@ -119,28 +120,40 @@ import Vuna.Compiler.Frontend.Ast
 data DtDef : Type where
   DtDef : String -> Term -> Term -> Maybe Span -> DtDef
   DtAxiom : String -> Term -> Maybe Span -> DtDef
+  -- M33 W5：受限 FFI：签名 + C 符号名，运行时由生成代码的 OCaml `external` 提供。
+  DtExtern : String -> Term -> String -> Maybe Span -> DtDef
 
 dtDefName : DtDef -> String
 dtDefName (DtDef name ty body span) = name
 dtDefName (DtAxiom name ty span) = name
+dtDefName (DtExtern name ty cName span) = name
 
 dtDefType : DtDef -> Term
 dtDefType (DtDef name ty body span) = ty
 dtDefType (DtAxiom name ty span) = ty
+dtDefType (DtExtern name ty cName span) = ty
 
 dtDefBody : DtDef -> Maybe Term
 dtDefBody (DtDef name ty body span) = Just body
 dtDefBody (DtAxiom name ty span) = Nothing
+dtDefBody (DtExtern name ty cName span) = Nothing
 
 -- 有运行时定义体的定义（axiom 不算）：构造 def 表 / 求值环境时用它滤掉无体顶层。
 dtDefHasBody : DtDef -> Bool
 dtDefHasBody (DtDef name ty body span) = True
 dtDefHasBody (DtAxiom name ty span) = False
+dtDefHasBody (DtExtern name ty cName span) = True
+
+-- extern 的 C 符号名（Nothing = 不是 extern 定义）。
+dtDefExtern : DtDef -> Maybe String
+dtDefExtern (DtExtern name ty cName span) = Just cName
+dtDefExtern _ = Nothing
 
 -- 来源 span（A14 唯一读入口）：诊断在 def 粒度补 `file:line:col:` 前缀；`Nothing` 时保持无位置。
 dtDefSpan : DtDef -> Maybe Span
 dtDefSpan (DtDef name ty body span) = span
 dtDefSpan (DtAxiom name ty span) = span
+dtDefSpan (DtExtern name ty cName span) = span
 
 -- M14：一个构造子。telescope 是「族参数 + 字段」的完整 binder 表（名字 / 擦除标志），
 -- 类型项是闭合的（`{a : Type} -> {n : Nat} -> a -> Vec a n -> Vec a (Succ n)` 形态）。

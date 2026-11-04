@@ -281,6 +281,7 @@ collectSigsInto banned preludeBanned seen acc (d :: rest) = case d of
   DSig name ctx ty sp => collectSigOne banned preludeBanned seen acc name ctx ty sp rest
   -- M28：axiom 与签名同一套类型检查/量化；区别只在 `checkAllDefined` 不要求它有体。
   DAxiom name ty sp => collectSigOne banned preludeBanned seen acc name [] ty sp rest
+  DExtern name cName ty sp => collectSigOne banned preludeBanned seen acc name [] ty sp rest
   DFun name pats body sp => collectSigsInto banned preludeBanned seen acc rest
   DData name params kind ctors derivings sp => collectSigsInto banned preludeBanned seen acc rest
   DRecord name params fields derivings sp => errAt sp "DT: internal: record was not desugared"

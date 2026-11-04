@@ -662,13 +662,54 @@ else andThen (genTermFuel (fuel - 1) st binders scrut) (\p => case p of
 -- UnsolvedMetavarRuntime / ListBridgeRequired / 构造子 arity 内部错等）都在这里统一收口，
 -- 生成定义（trait 投影 / instance 字典 / deriving）因此能指回 trait/instance/data 声明行。
 genGroupDef : GenSt -> DtDef -> Result (Pair String GenSt)
-genGroupDef st d = case dtDefBody d of
-  Just body => case genTerm st [] body of
+genGroupDef st d = case dtDefExtern d of
+  -- M33 W5：受限 FFI → OCaml `external`；C 符号名由 `ffi/*.c` 提供（build.sh 编译链接）。
+  Just cName => case genExternTy (dtDefType d) of
     Err e => Err (cgDefLoc (dtDefSpan d) (dtDefName d) ++ e)
-    Ok (Pair bodyText st2) => Ok (Pair (valueName (dtDefName d) ++ " = " ++ bodyText) st2)
-  Nothing =>
-    Err
-      (cgDefLoc (dtDefSpan d) (dtDefName d) ++ "DT: internal: axiom reached runtime code generation (partition must erase it)")
+    Ok tyText =>
+      Ok
+        (Pair ("external " ++ valueName (dtDefName d) ++ " : " ++ tyText ++ " = " ++ ocamlString cName) st)
+  Nothing => case dtDefBody d of
+    Just body => case genTerm st [] body of
+      Err e => Err (cgDefLoc (dtDefSpan d) (dtDefName d) ++ e)
+      Ok (Pair bodyText st2) => Ok (Pair (valueName (dtDefName d) ++ " = " ++ bodyText) st2)
+    Nothing =>
+      Err
+        (cgDefLoc (dtDefSpan d) (dtDefName d) ++ "DT: internal: axiom reached runtime code generation (partition must erase it)")
+
+-- extern 的类型 → OCaml 类型文本（Int/String/Bool/Array 基本类型；Elab 已限制形状，
+-- 这里再护栏一次，fuel 递减保证终止）。
+genExternTy : Term -> Result String
+genExternTy ty = externTyText 64 0 (eval [] ty)
+
+externTyText : Int -> Int -> Value -> Result String
+externTyText fuel lvl v = if fuel <= 0 then Err "DT: internal: extern type is too deep"
+else case v of
+  VPi name implicit rig dom clo =>
+    if implicit then Err "DT: internal: extern has an implicit parameter"
+    else andThen (externDomText dom)
+      (\domText => andThen (externTyText (fuel - 1) (lvl + 1) (applyClosure clo (VNeutral (NVar name lvl [])))) (\resText => Ok ("(" ++ domText ++ ") -> " ++ resText)))
+  _ => externDomText v
+
+externDomText : Value -> Result String
+externDomText v = case v of
+  VNeutral n => case n of
+    NGlobal g args => if g == "Array" then case args of
+      [elem] => andThen (externBasicText elem) (\e => Ok ("(" ++ e ++ " array)"))
+      _ => Err "DT: internal: extern Array needs one type argument"
+    else externBasicText v
+    _ => externBasicText v
+  _ => externBasicText v
+
+externBasicText : Value -> Result String
+externBasicText v = case v of
+  VNeutral n => case n of
+    NGlobal g args =>
+      if g == intTypeName then Ok "int"
+      else if g == strTypeName then Ok "string"
+      else if g == boolTypeName then Ok "bool" else Err ("DT: internal: extern type is not basic: " ++ g)
+    _ => Err "DT: internal: extern type is not a global type"
+  _ => Err "DT: internal: extern type is not basic"
 
 genGroupBodies : GenSt -> List DtDef -> Result (Pair (List String) GenSt)
 genGroupBodies st [] = Ok (Pair [] st)
@@ -713,7 +754,12 @@ else genGroupLet st group False
 
 genGroupLet : GenSt -> List DtDef -> Bool -> Result (Pair String GenSt)
 genGroupLet st group isRec = andThen (genGroupBodies st group) (\p => case p of
-  Pair defs st2 => Ok (Pair ((if isRec then "let rec " else "let ") ++ joinWith "\nand " defs) st2)
+  Pair defs st2 => case group of
+    -- M33 W5：单个 extern 定义直接生成 `external ...`（不能加 `let` 前缀）。
+    [d] => case dtDefExtern d of
+      Just _ => Ok (Pair (joinWith "\n" defs) st2)
+      Nothing => Ok (Pair ((if isRec then "let rec " else "let ") ++ joinWith "\nand " defs) st2)
+    _ => Ok (Pair ((if isRec then "let rec " else "let ") ++ joinWith "\nand " defs) st2)
 )
 
 genGroups : HashMap (List String) -> GenSt -> List (List DtDef) -> Result (Pair (List String) GenSt)

@@ -61,11 +61,13 @@ stripMl : String -> String
 stripMl name = substring 0 (strLength name - 3) name
 
 -- 构建脚本；names 是编译单元（无扩展名）顺序，最后 Link 到 "$OUT"。
+-- M33 W5：cFiles 是包根 `ffi/*.c` 复制到 OUTDIR 后的相对路径（如 `ffi/add.c`），
+-- 由 ocamlopt 编译成 .o 并参与链接；空列表时行为与旧版完全一致。
 -- 干净构建（没有 .cmx，例如 Nix 构建 seed / stage1）走一次 ocamlopt 调用，
 -- 避免几十次进程启动；已有 .cmx 时按**内容哈希**（.ml/.mli + 依赖 .cmi/.cmx）增量编译，
 -- 不再用 mtime（M30/D15：同输入同产物，不受复制/checkout 时间影响）。
-buildScript : List String -> String
-buildScript names =
+buildScript : List String -> List String -> String
+buildScript names cFiles =
   "#!/bin/sh\n"
     ++ "# 由 vuna 生成：分离编译构建脚本（M30：按内容哈希增量）。用法: ./build.sh [OUT]\n"
     ++ "# 干净构建：一次 ocamlopt 编译全部 .mli/.ml 并链接；\n"
@@ -77,6 +79,13 @@ buildScript names =
     ++ "MODULES=\""
     ++ spaceJoin names
     ++ "\"\n"
+    ++ "C_MODULES=\""
+    ++ spaceJoin cFiles
+    ++ "\"\n"
+    ++ "C_OBJS=\"\"\n"
+    ++ "if [ -n \"$C_MODULES\" ]; then\n"
+    ++ "  for c in $C_MODULES; do ocamlopt -I +unix -c \"$c\"; b=${c##*/}; C_OBJS=\"$C_OBJS ${b%.c}.o\"; done\n"
+    ++ "fi\n"
     ++ "hash_of() {\n"
     ++ "  for f in \"$@\"; do\n"
     ++ "    if [ -f \"$f\" ]; then cat \"$f\"; else printf '%s' '-'; fi\n"
@@ -99,7 +108,7 @@ buildScript names =
     ++ "    if [ -f \"$m.mli\" ]; then SOURCES=\"$SOURCES $m.mli\"; fi\n"
     ++ "    SOURCES=\"$SOURCES $m.ml\"\n"
     ++ "  done\n"
-    ++ "  ocamlopt $FLAGS -I +unix -o \"$OUT\" unix.cmxa $SOURCES\n"
+    ++ "  ocamlopt $FLAGS -I +unix -o \"$OUT\" unix.cmxa $SOURCES $C_OBJS\n"
     ++ stampWrites names []
     ++ "  echo \"built $OUT\"\n"
     ++ "  exit 0\n"
@@ -117,7 +126,7 @@ buildScript names =
     ++ compileCalls names []
     ++ "ocamlopt $FLAGS -I +unix -o \"$OUT\" unix.cmxa "
     ++ joinCmxs names
-    ++ "\n"
+    ++ " $C_OBJS\n"
     ++ "echo \"built $OUT\"\n"
 
 -- 干净构建成功后写每个模块的 stamp（与增量路径的 stamp 公式一致）。

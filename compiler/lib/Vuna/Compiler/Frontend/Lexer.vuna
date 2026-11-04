@@ -88,6 +88,7 @@ isKeyword : String -> Bool
 isKeyword s =
   s == "data"
     || s == "axiom"
+    || s == "extern"
     || s == "case"
     || s == "of"
     || s == "let"

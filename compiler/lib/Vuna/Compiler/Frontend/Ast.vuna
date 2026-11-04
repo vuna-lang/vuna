@@ -4,6 +4,7 @@ module Vuna.Compiler.Frontend.Ast
   , DBind
   , DData
   , DExpr
+  , DExtern
   , DFun
   , DInstance
   , DRecord
@@ -180,6 +181,8 @@ data Decl : Type where
   -- M28：`axiom name : Ty` —— 无体的可擦除/不透明顶层（决策 5 / D10）。
   -- 它是**类型层**定义：类型层引用合法，运行时使用由擦除检查报错。
   DAxiom : String -> Expr -> Span -> Decl
+  -- M33 W5：受限 FFI：`extern "c_name" : Ty`（无体；运行时由 C 链接提供）。
+  DExtern : String -> String -> Expr -> Span -> Decl
   -- M32：顶层签名可带 trait 约束上下文（`f : Eq a, Show b => τ`）；ctx 是约束表达式
   -- （洞形 `C arg`，每个都是单参数 trait 应用）。空 ctx = 无显式约束（旧形态）。
   DSig : String -> List Expr -> Expr -> Span -> Decl
@@ -247,6 +250,7 @@ doStmtExpr (DExpr expr sp) = expr
 declSpan : Decl -> Span
 declSpan (DData name params kind ctors derivings sp) = sp
 declSpan (DAxiom name ty sp) = sp
+declSpan (DExtern name cName ty sp) = sp
 declSpan (DSig name ctx ty sp) = sp
 declSpan (DFun name pats body sp) = sp
 declSpan (DRecord name params fields derivings sp) = sp
@@ -334,6 +338,7 @@ ctorArity name (d :: rest) = case d of
 declNames : Decl -> List String
 declNames (DFun name pats body _) = [name]
 declNames (DAxiom name ty _) = [name]
+declNames (DExtern name cName ty _) = [name]
 declNames (DSig name ctx ty _) = [name]
 declNames (DData dname params kind ctors derivings _) = map ctorName ctors
 declNames (DRecord dname params fields derivings _) = [dname]

@@ -50,6 +50,7 @@ import Vuna.Compiler.Elab.Term
 import Vuna.Compiler.Elab.Termination
 import Vuna.Compiler.Elab.Trait
 import Vuna.Compiler.Elab.Types
+import Vuna.Compiler.Intrinsics
 import Vuna.Compiler.Frontend.Ast
 
 unsolvedMeta : Ec -> Maybe Int
@@ -389,6 +390,12 @@ elabBodies future (d :: rest) globals doneDefs acc ec = case d of
   DAxiom name tyExpr sp => case globalsLookup name globals ec of
     Nothing => tcErr1 sp (ExpectedSignature name) name
     Just tyTerm => elabBodies future rest globals doneDefs (DtAxiom name tyTerm (Just sp) :: acc) ec
+  -- M33 W5：extern 的签名同样已在 globals；这里只做受限 FFI 类型检查并落成 DtExtern。
+  DExtern name cName tyExpr sp => case globalsLookup name globals ec of
+    Nothing => tcErr1 sp (ExpectedSignature name) name
+    Just tyTerm =>
+      andThen (checkExternTy sp tyTerm)
+        (\_ => elabBodies future rest globals doneDefs (DtExtern name tyTerm cName (Just sp) :: acc) ec)
   _ => elabBodies future rest globals doneDefs acc ec
 
 -- 每个签名都必须有定义；`axiom`（DAxiom）是无体的可擦除顶层，不要求 DFun。
@@ -417,9 +424,44 @@ axiomSpanOf : String -> List Decl -> Maybe Span
 axiomSpanOf name [] = Nothing
 axiomSpanOf name (d :: rest) = case d of
   DAxiom n ty sp => if n == name then Just sp else axiomSpanOf name rest
+  DExtern n c ty sp => if n == name then Just sp else axiomSpanOf name rest
   _ => axiomSpanOf name rest
 
 -- ---------------------------------------------------------------
+-- M33 W5：受限 FFI 类型检查。允许的类型：Int / String / Bool，以及 Array Int /
+-- Array String / Array Bool；只允许显式参数（不允许隐式 / 依赖类型 / 回调 / 泛型）。
+checkExternTy : Span -> Term -> Result Int
+checkExternTy sp tyTerm = checkExternValue sp 64 0 (eval [] tyTerm)
+
+checkExternValue : Span -> Int -> Int -> Value -> Result Int
+checkExternValue sp fuel lvl v = if fuel <= 0 then tcErr1 sp (FfiTypeUnsupported "too many parameters") "too many parameters"
+else case v of
+  VPi name implicit rig dom clo =>
+    if implicit then tcErr1 sp (FfiTypeUnsupported "implicit parameter") "implicit parameter"
+    else andThen (checkExternDomain sp dom)
+      (\_ => checkExternValue sp (fuel - 1) (lvl + 1) (applyClosure clo (VNeutral (NVar name lvl []))))
+  _ => checkExternDomain sp v
+
+checkExternDomain : Span -> Value -> Result Int
+checkExternDomain sp v = case v of
+  VNeutral n => case n of
+    NGlobal g args => if g == intTypeName || g == strTypeName || g == boolTypeName then Ok 0
+    else if g == "Array" then case args of
+      [elem] => checkExternArrayElem sp elem
+      _ => tcErr1 sp (FfiTypeUnsupported "Array needs one type argument") "Array"
+    else tcErr1 sp (FfiTypeUnsupported g) g
+    _ => tcErr1 sp (FfiTypeUnsupported "non-global type") "non-global"
+  _ => tcErr1 sp (FfiTypeUnsupported "non-basic type") "non-basic"
+
+checkExternArrayElem : Span -> Value -> Result Int
+checkExternArrayElem sp v = case v of
+  VNeutral n => case n of
+    NGlobal g args =>
+      if g == intTypeName || g == strTypeName || g == boolTypeName then Ok 0
+      else tcErr1 sp (FfiTypeUnsupported ("Array " ++ g)) g
+    _ => tcErr1 sp (FfiTypeUnsupported "Array element is not a basic type") "array-element"
+  _ => tcErr1 sp (FfiTypeUnsupported "Array element is not a basic type") "array-element"
+
 -- M23：REPL 表达式求值（`Vuna.Compiler.Driver.Dt.dtEvalExpr` 的下半段）
 -- ---------------------------------------------------------------
 -- 在**已精化程序**的环境（globals / 实例表 / 类表 / 解表）里精化并求值一条表达式。

@@ -160,6 +160,14 @@
   无 `deriving Hash`（trait 单参数限制）；无有序持久容器。
 - `Base.Sort` 仍是插入排序（O(n²)，编译器热点之外的库算法项）。
 
+## 受限 FFI（M33 W5）
+
+- 只支持 `Int` / `String` / `Bool` / `Array Int|String|Bool` 的**显式参数**；无回调 /
+  GC root / pin、无 C 头文件解析、无字符串双向可变共享（String 只读传递）、无泛型。
+- C 源在包根 `ffi/*.c`，随生成的 `build.sh` 编译并链接；没有 `ffi/` 的包行为不变。
+- `extern` 的名字与签名都手写（不 import C 头）；超出子集报 `TC_FfiTypeUnsupported`。
+- interp 不执行 extern（只走 compile + 运行）；`extern` 声明本身不参与 `interp` 求值。
+
 ## fuel / measure 站点
 
 工具链 / 前端 / 加载器 / 库的状态机逐点采用结构递归或可证明的界，不再有「无静态上界的

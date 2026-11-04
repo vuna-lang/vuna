@@ -802,6 +802,20 @@ for file in corpus/dt_err/*.vuna; do
   fi
 done
 
+# 33b) 受限 FFI（M33 W5）：`extern name "c_symbol" : 基本类型` + 包根 `ffi/*.c`，
+#      由生成的 build.sh 编译并链接；运行输出与 expected.out 一致。
+for dir in corpus/ffi/*/; do
+  dir=${dir%/}
+  expected=$(cat "$dir/expected.out")
+  rm -rf "$dir/.output"
+  if ! ffi_out=$("$VUNA" build "$dir" 2>&1); then
+    bad "$dir (ffi build)" "exit 0" "$ffi_out"
+    continue
+  fi
+  actual=$("$dir/.output/bin/ffi-add" 2>&1)
+  check_eq "$dir (ffi run)" "$expected" "$actual"
+done
+
 # 34a) DT + Base 库（M21）：包上下文（vuna-base 依赖）下 import Base.* 的三路一致性。
 # 全部夹具都是纯计算（core evaluator 不执行效果），因此可保留 interp == run 对拍。
 # 例外：带 `.nointerp` 标记的夹具（如 strUnpack/strPack 桥接尚不可归约）只要求

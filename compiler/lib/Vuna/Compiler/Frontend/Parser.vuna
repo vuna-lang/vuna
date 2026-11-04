@@ -134,6 +134,7 @@ parseDecl : PState -> Int -> Result (Pair Decl PState)
 parseDecl st blockCol = case peekTok st of
   PTok (TKw "data") p => parseData st blockCol p
   PTok (TKw "axiom") p => parseAxiom st blockCol p
+  PTok (TKw "extern") p => parseExtern st blockCol p
   PTok (TKw "record") p => parseRecord st blockCol p
   PTok (TKw "trait") p => parseTrait st blockCol p
   PTok (TKw "instance") p => parseInstance st blockCol p
@@ -157,6 +158,17 @@ parseAxiom : PState -> Int -> Pos -> Result (Pair Decl PState)
 parseAxiom st blockCol kwPos =
   step (expectKw st "axiom")
     (\_, st1 => step (expectIdent st1) (\name, st2 => step (expectSym st2 ":") (\_, st3 => step (parseExpr (stateFuel st3) st3 blockCol 0) (\ty, st4 => step (rejectCtxSuffix st4) (\_, st5 => Ok (Pair (DAxiom name ty (Span (fileOf st) (posLine kwPos) (posCol kwPos) (posLine (lastPos st5)) (posCol (lastPos st5)))) st5))))))
+
+-- M33 W5：受限 FFI 声明 `extern name "c_name" : Ty`（无体）。类型只允许基本类型，
+-- 由 Elab 检查；运行时由包根 `ffi/*.c` 提供，codegen 生成 OCaml `external`。
+parseExtern : PState -> Int -> Pos -> Result (Pair Decl PState)
+parseExtern st blockCol kwPos = step (expectKw st "extern") (\_, st1 => step (expectIdent st1) (\name, st2 => case peekTok st2 of
+  PTok (TStr cName) cp =>
+    step (Ok (Pair cName (advance st2)))
+      (\cName2, st3 => step (expectSym st3 ":") (\_, st4 => step (parseExpr (stateFuel st4) st4 blockCol 0) (\ty, st5 => step (rejectCtxSuffix st5) (\_, st6 => Ok (Pair (DExtern name cName2 ty (Span (fileOf st) (posLine kwPos) (posCol kwPos) (posLine (lastPos st6)) (posCol (lastPos st6)))) st6)))))
+  _ => psErr1 (ExpectedToken "string") "string"
+)
+)
 
 -- M32：只有顶层签名允许 trait 约束 `C a =>`。其它签名位置（axiom / where / let /
 -- trait 方法 / 构造子 / 记录字段）见到 `=>` 时直接给出明确诊断，而不是让 `=>` 作为

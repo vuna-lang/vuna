@@ -96,6 +96,7 @@ declValueNames d = case d of
   DSig name ctx ty sp => [name]
   -- M28：axiom 是无体的值命名空间条目（类型层使用；运行时使用由 Elab/Codegen 拒绝）。
   DAxiom name ty sp => [name]
+  DExtern name cName ty sp => [name]
   DInstance ctxE head methods sp => []
   _ => []
 
@@ -524,6 +525,9 @@ resolveDecl modules label prefix ns imports d = case d of
   DAxiom name ty sp =>
     andThen (resolveTopName label prefix name)
       (\n => andThen (resolveTypeExpr resolveFuelBound modules label prefix ns imports ty) (\ty2 => Ok (DAxiom n ty2 sp)))
+  DExtern name cName ty sp =>
+    andThen (resolveTopName label prefix name)
+      (\n => andThen (resolveTypeExpr resolveFuelBound modules label prefix ns imports ty) (\ty2 => Ok (DExtern n cName ty2 sp)))
   DFun name pats body sp =>
     andThen (resolveTopName label prefix name)
       (\n => andThen (traverse (resolvePattern resolveFuelBound modules label prefix ns imports) pats) (\parts => andThen (resolveExpr resolveFuelBound modules label prefix ns imports (concatMap secondOf parts) body) (\b => Ok (DFun n (map firstOf parts) b sp))))

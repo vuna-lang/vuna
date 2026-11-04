@@ -92,6 +92,8 @@ data TcErr : Nat -> Type where
   DuplicateSignature : String -> TcErr (Succ Zero)
   ExpectedSignature : String -> TcErr (Succ Zero)
   ExpectedType : String -> TcErr (Succ Zero)
+  -- M33 W5：extern 签名超出受限 FFI 子集（基本类型 + 简单 Array）。
+  FfiTypeUnsupported : String -> TcErr (Succ Zero)
   EqRequiresEvidence : String -> TcErr (Succ Zero)
   InstanceNotTrait : String -> TcErr (Succ Zero)
   InstanceUnknownMethod : String -> TcErr (Succ Zero)
@@ -179,6 +181,7 @@ tcCode (OverlappingInstances _) = "TC_OverlappingInstances"
 tcCode (DuplicateSignature _) = "TC_DuplicateSignature"
 tcCode (ExpectedSignature _) = "TC_ExpectedSignature"
 tcCode (ExpectedType _) = "TC_ExpectedType"
+tcCode (FfiTypeUnsupported _) = "TC_FfiTypeUnsupported"
 tcCode (EqRequiresEvidence _) = "TC_EqRequiresEvidence"
 tcCode (InstanceNotTrait _) = "TC_InstanceNotTrait"
 tcCode (InstanceUnknownMethod _) = "TC_InstanceUnknownMethod"
@@ -274,6 +277,7 @@ tcTemplate (OverlappingInstances _) = "overlapping instance <0>"
 tcTemplate (DuplicateSignature _) = "duplicate signature for <0>"
 tcTemplate (ExpectedSignature _) = "expected a type signature for <0>"
 tcTemplate (ExpectedType _) = "expected a type, but this expression has type <0>"
+tcTemplate (FfiTypeUnsupported _) = "extern type is outside the supported FFI subset: <0>"
 tcTemplate (EqRequiresEvidence _) =
   "cannot use == or /= on values of type <0>: provide an Eq instance (or derive Eq); the Eq trait must be in scope"
 tcTemplate (InstanceNotTrait _) = "instance <0> is not an instance of a trait"
@@ -407,6 +411,7 @@ tcChunk6 =
     TcEntry (tcCode (DuplicateSignature "")) (tcTemplate (DuplicateSignature "")) "重复的签名",
     TcEntry (tcCode (ExpectedSignature "")) (tcTemplate (ExpectedSignature "")) "缺少类型签名",
     TcEntry (tcCode (ExpectedType "")) (tcTemplate (ExpectedType "")) "期望类型",
+    TcEntry (tcCode (FfiTypeUnsupported "")) (tcTemplate (FfiTypeUnsupported "")) "extern 类型超出受限 FFI 子集",
     TcEntry (tcCode (EqRequiresEvidence "")) (tcTemplate (EqRequiresEvidence "")) "相等需要 Eq 证据（无泛型兜底）",
     TcEntry (tcCode (InstanceNotTrait "")) (tcTemplate (InstanceNotTrait "")) "instance 不属于 trait"
   ]

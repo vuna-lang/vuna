@@ -68,16 +68,36 @@ parentOfPath path =
 
 -- 逐模块 split 输出到 outDir：各模块 .ml + Main.ml + build.sh；Ok 写出的文件数。
 -- outDir 在 codegen 成功后才创建（精化失败不留产物）。
+-- M33 W5：包根 `ffi/*.c` 复制到 `OUTDIR/ffi/` 并写进 build.sh（受限 FFI 的 C 实现）。
 compileToDir : PackageContext -> String -> Bool -> String -> Result Int
 compileToDir ctx entry printResult outDir = andThen (dtSplitProject ctx entry printResult) (\files => let
   _ = ensureDirPath outDir
 in andThen (writeSplitFilesIfChanged outDir files) (\n => let
   order = splitCompileOrder (splitInitFiles files)
+  cFiles = copyFfiFiles (contextDir ctx) outDir
 in let
-  _ = runIO (prim_writeFile (outDir ++ "/build.sh") (buildScript order))
+  _ = runIO (prim_writeFile (outDir ++ "/build.sh") (buildScript order cFiles))
 in Ok n
 )
 )
+
+-- 包根 `ffi/*.c` → OUTDIR/ffi/<name>.c；返回写进 build.sh 的相对路径列表。
+-- 没有 ffi/ 目录时返回 []（旧包行为不变）。
+copyFfiFiles : String -> String -> List String
+copyFfiFiles ctxDir outDir =
+  let
+    ffiDir = ctxDir ++ "/ffi"
+    exists = runIO (prim_fileExists ffiDir) && runIO (prim_isDirectory ffiDir)
+  in if exists then
+    let
+      cs = filter (\n => endsWith ".c" n) (runIO (prim_readDir ffiDir))
+      _ = ensureDirPath (outDir ++ "/ffi")
+      _ =
+        map
+          (\n => runIO (prim_writeFile (outDir ++ "/ffi/" ++ n) (runIO (prim_readFile (ffiDir ++ "/" ++ n)))))
+          cs
+    in map (\n => "ffi/" ++ n) cs
+  else []
 
 -- loadPackage + compileToDir：给定包目录的代码生成（seed rotation / 测试用）。
 buildSplit : String -> String -> Result Int

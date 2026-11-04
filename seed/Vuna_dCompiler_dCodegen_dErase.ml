@@ -479,18 +479,22 @@ let v_Vuna_dCompiler_dCodegen_dErase_dtermDepsAlts = (fun a1 a2 a3 -> ((((v_Vuna
 
 let v_Vuna_dCompiler_dCodegen_dErase_dcheckErasure = (fun a1 a2 a3 -> ((((v_Vuna_dCompiler_dCodegen_dErase_dcheckErasureFuel 512) a1) a2) a3))
 
-let v_Vuna_dCompiler_dCodegen_dErase_dcheckOneErasure = (fun typeNames d -> (match (v_Vuna_dCompiler_dElab_dTypes_ddtDefBody d) with
+let v_Vuna_dCompiler_dCodegen_dErase_dcheckOneErasure = (fun typeNames d -> (match (v_Vuna_dCompiler_dElab_dTypes_ddtDefExtern d) with
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__198) -> (C_Base_dResult_dResult_Base_dResult_dOk (0))
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> (match (v_Vuna_dCompiler_dElab_dTypes_ddtDefBody d) with
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> (C_Base_dResult_dResult_Base_dResult_dErr ("DT: internal: axiom reached the runtime erasure check (partition must erase it)"))
-  | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__198) -> (match (((v_Vuna_dCompiler_dCodegen_dErase_dcheckErasure typeNames) C_Base_dList_dList_Base_dList_dNil) dtb__198) with
-  | C_Base_dResult_dResult_Base_dResult_dErr (dtb__199) -> (C_Base_dResult_dResult_Base_dResult_dErr (((v_Vuna_dCompiler_dCodegen_dErase_ddefLocPrefix d) ^ dtb__199)))
-  | C_Base_dResult_dResult_Base_dResult_dOk (dtb__200) -> (C_Base_dResult_dResult_Base_dResult_dOk (dtb__200))
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__199) -> (match (((v_Vuna_dCompiler_dCodegen_dErase_dcheckErasure typeNames) C_Base_dList_dList_Base_dList_dNil) dtb__199) with
+  | C_Base_dResult_dResult_Base_dResult_dErr (dtb__200) -> (C_Base_dResult_dResult_Base_dResult_dErr (((v_Vuna_dCompiler_dCodegen_dErase_ddefLocPrefix d) ^ dtb__200)))
+  | C_Base_dResult_dResult_Base_dResult_dOk (dtb__201) -> (C_Base_dResult_dResult_Base_dResult_dOk (dtb__201))
+  | _ -> failwith "DT: impossible branch"
+)
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
 ))
 
 let rec v_Vuna_dCompiler_dCodegen_dErase_dcheckAllErasure = (fun mc0 mc1 -> (match mc1 with
-  | C_Base_dList_dList_Base_dList_dCons (dtb__201, dtb__202) -> ((v_Base_dResult_dandThen ((v_Vuna_dCompiler_dCodegen_dErase_dcheckOneErasure mc0) dtb__201)) (fun _u -> ((v_Vuna_dCompiler_dCodegen_dErase_dcheckAllErasure mc0) dtb__202)))
+  | C_Base_dList_dList_Base_dList_dCons (dtb__202, dtb__203) -> ((v_Base_dResult_dandThen ((v_Vuna_dCompiler_dCodegen_dErase_dcheckOneErasure mc0) dtb__202)) (fun _u -> ((v_Vuna_dCompiler_dCodegen_dErase_dcheckAllErasure mc0) dtb__203)))
   | C_Base_dList_dList_Base_dList_dNil -> (C_Base_dResult_dResult_Base_dResult_dOk (0))
   | _ -> failwith "DT: impossible branch"
 ))

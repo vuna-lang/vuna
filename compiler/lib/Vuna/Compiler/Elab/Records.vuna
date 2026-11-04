@@ -161,6 +161,7 @@ desugarRecordDecl records d = case d of
   -- M28：axiom 的类型表达式里可能有 record 语法吗？类型位置不走 record 降级
   -- （record 是值层记法），原样返回。
   DAxiom name ty sp => Ok d
+  DExtern name cName ty sp => Ok d
 
 desugarPattern : List RecordInfo -> Pat -> Result Pat
 desugarPattern records pat = desugarPatternFuel 64 records pat
