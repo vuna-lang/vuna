@@ -6,11 +6,12 @@ data Capability : Type where
   CapClock : Capability
 
 capabilityName : Capability -> String
-capabilityName CapConsole = "console"
-capabilityName CapFs = "fs"
-capabilityName CapProcess = "process"
-capabilityName CapEnv = "env"
-capabilityName CapClock = "clock"
+capabilityName c = case c of
+  CapConsole => "console"
+  CapFs => "fs"
+  CapProcess => "process"
+  CapEnv => "env"
+  CapClock => "clock"
 
 main : Int
 main = 0

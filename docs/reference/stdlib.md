@@ -18,7 +18,7 @@
 | `Base.Show` | `Show` trait（`show : a -> String`）+ `Int` / `String` / `Bool` 实例 |
 | `Base.Eq` | `Eq` trait（`eq` / `neq : a -> a -> Bool`）+ `Int` / `String` / `Bool` 实例 |
 | `Base.Ord` | `Ord` trait（`lt` / `le` / `gt` / `ge : a -> a -> Bool`）+ `Int` / `String` / `Bool` 实例 |
-| `Base.IO` | 抽象 `IO a` 与 IO 组合子（实例 + print/readFile/writeFile/getArgs/exit，内部包装 `prim_*` 效果原语） |
+| `Base.IO` | 抽象 `IO a` 与 IO 组合子（实例 + print/readFile/writeFile/getArgs/exit，直接别名到 IO 化的 `prim_*` 动作）+ 特权执行入口 `runIO : IO a -> a`（要求 `unsafe` 能力） |
 | `Base` | 包门面：整模块重导出核心模块（不含 `Nat` / `Vec`；`import Base` 即可用） |
 | `Prelude` | 顶层模块（`base/lib/Prelude.vuna`）：重导出 `Base.Pair` / `Bool` / `Eq` / `Ord` / `Show` / `List` / `Maybe` / `Result` / `String` / `Monad`，**包上下文内所有源文件（含无 manifest 的 ad-hoc 单文件）自动导入**；显式 `import` 时不再重复注入；刻意不含 `Base.IO`（效果 API 需显式 import，效果面不进入自动注入） |
 
@@ -89,10 +89,11 @@ module Base.IO (IO, print, println, readFile, writeFile, readLine, readDir, ...)
   `deriving` 展开成约束实例。字符串展示只有一个实现 `strShow`——`Base.Show` 的 `String`
   实例是 `show s = strShow s`，库不再另写一套转义；`Show Bool` 用 `if` 输出
   `True` / `False`，`Eq Bool` 方法体用析取（不能自递归）。
-- **效果原语只有 `prim_*` 名**：`Base.IO` 是默认用户面（把 `prim_*` 包成 `IO` 动作），并在
-  `base/vuna.toml` 声明 `[capabilities].effects = ["console", "fs", "process"]`；普通包不
-  声明能力就只能经 `Base.IO`，声明能力后可直接调用 `prim_*`。能力是**权限声明**，不是
-  检查豁免（`Loader.Resolve.checkEffectsBuiltins`）。
+- **效果原语只有 `prim_*` 名，且返回 `IO` 动作（M31）**：`Base.IO` 是默认用户面
+  （`print` / `readFile` / … 直接别名到 `prim_*`，类型形如 `… -> IO a`），并在
+  `base/vuna.toml` 声明 `[capabilities].effects = ["console", "fs", "process"]`；动作只在
+  `main` 执行，`runIO` 是唯一的 main 外入口、需 `unsafe`。能力是**权限声明**，不是检查豁免
+  （`Loader.Resolve.checkEffectsBuiltins`）。
 - **ad-hoc 单文件与包内模块一致**：`Prelude` 自动注入，`Show` / `Eq` / `Ord` 及其实例开箱
   可用；诊断在缺少显式 import 时仍会提示加对应 import。ad-hoc 文件没有能力，效果只能经
   `Base.IO`。

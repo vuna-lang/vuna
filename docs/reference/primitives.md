@@ -93,35 +93,51 @@
 | `strAt` | `String -> Int -> Int` | 见 §4（越界 `-1`） |
 | `strConcatMany` | `List String -> String` | 一次性拼接（OCaml `String.concat ""`） |
 | `strSubstTemplate` | `String -> List String -> String` | `<N>` 占位符按序号替换；非数字 `<`、越界序号原样保留（`Base.Vec.substTemplate`） |
-| `timeUs` | `Int`（**值**，非函数） | 微秒时间戳（`Unix.gettimeofday`）；效果原语，能力 `clock` |
+| `timeUs` | `IO Int` | 微秒时间戳（`Unix.gettimeofday`）；效果原语，能力 `clock` |
 
 `strHash` 的 interp 实现（`Core.Eval.strHashOf`）与 runtime `dtp_strHash` 是同一公式。
 
-## 7. 效果原语与能力
+## 7. 效果原语、IO 动作与能力（M31）
+
+**类型**：全部效果原语返回 `IO` 动作，而不是「立刻算完的值」：`prim_print : String -> IO Int`、
+`prim_readFile : String -> IO String`、`prim_readLine : IO String`、
+`prim_readDir : String -> IO (List String)`、`prim_isDirectory` / `prim_fileExists : String -> IO Bool`、
+`prim_makeDir` / `prim_removeFile` / `prim_fileMtime` / `prim_fileSize : String -> IO Int`、
+`prim_getArgs : IO (List String)`、`prim_getenv : String -> IO String`、
+`prim_getcwd` / `prim_execPath : IO String`、`prim_exit : Int -> IO Int`（执行即退出、不返回）、
+`prim_runIn : String -> List String -> IO Int`、`prim_readBytes : Int -> IO String`、
+`timeUs : IO Int`。零参原语因此是**真正的值**（动作值）：引用不执行、也不重新求值。
 
 **名字面**：效果原语只保留 `prim_*` 名。用户有两条合法用法：
 
-1. `import Base.IO`，使用返回 `IO` 动作的 API（`print` / `readFile` / …）；
-2. 在自己的 `vuna.toml` 声明所需能力后**直接**调用 `prim_*`。
+1. `import Base.IO`，使用返回 `IO` 动作的 API（`print` / `readFile` / …——它们是 `prim_*` 的**别名**）；
+2. 在 `vuna.toml` 声明所需能力后**直接**调用 `prim_*`，同样得到 `IO` 动作。
 
-| 能力 | 原语 |
+**执行入口**：动作只在 `main` 处由运行时执行。`Base.IO.runIO : IO a -> a` 是唯一的
+「main 之外执行」入口，要求能力 `unsafe`（工具链特权）：未声明时报
+`` `runIO` executes IO outside main; requires capability `unsafe` ... ``；`runIO` 每次调用
+都重新执行动作（动作值可复用、效果不缓存）。
+
+| 能力 | 原语 / 入口 |
 | --- | --- |
 | `console` | `prim_print`、`prim_readLine`、`prim_readBytes` |
 | `fs` | `prim_readFile`、`prim_writeFile`、`prim_readDir`、`prim_isDirectory`、`prim_makeDir`、`prim_removeFile`、`prim_fileExists`、`prim_fileMtime`、`prim_fileSize` |
 | `process` | `prim_getArgs`、`prim_exit`、`prim_runIn` |
 | `env` | `prim_getenv`、`prim_getcwd`、`prim_execPath` |
 | `clock` | `timeUs` |
+| `unsafe` | `Base.IO.runIO`（无 intrinsic：在 main 之外执行 IO 动作） |
 
 - 声明面：manifest `[capabilities] effects = ["console", "fs", ...]`，按**包**声明
   （`Frontend.Manifest.manifestCapabilities`）；无 manifest 的 ad-hoc 文件没有能力。
-- 未知能力名报 `unknown capability "<name>" (known: console, fs, process, env, clock)`
+- 未知能力名报 `unknown capability "<name>" (known: console, fs, process, env, clock, unsafe)`
   （`Loader.Resolve.checkCapabilities`）。
 - 用到但未声明报
   `` effectful builtin `<name>` requires capability `<cap>` in <package> (declare [capabilities] effects = ["<cap>"] or use Base.IO) ``
   （`Loader.Resolve.checkEffectsBuiltins`）。
 - **这是权限声明，不是检查豁免**：能力不改变类型检查、擦除或 codegen 语义，只决定能否在
-  源码里直接引用效果原语；没有按包名字符串判定的 allowlist。
-- `Base.IO` 自身声明 `["console", "fs", "process"]`；编译器与产品 CLI 声明全部五个能力。
+  源码里直接引用效果原语 / `runIO`；没有按包名字符串判定的 allowlist。
+- `Base.IO` 自身声明 `["console", "fs", "process"]`（只做别名，不调用 `runIO`）；编译器与
+  产品 CLI 声明全部六个能力（含 `unsafe`）。
 
 ## 8. 生成 runtime 的契约
 
@@ -148,12 +164,16 @@
 | `prim_getcwd` | 失败时返回 `"."` |
 | `prim_execPath` | 先读 `/proc/self/exe`（**Linux 假设**），失败回落 `Sys.executable_name` |
 | `prim_getArgs` | 排除 `argv[0]` 的其余参数 |
-| `prim_exit` | 立即退出进程（类型 `Int -> Int` 但**不返回**） |
+| `prim_exit` | 立即退出进程（原语类型 `Int -> IO Int`，执行即退出、**不返回**） |
 | `prim_runIn` | 在给定目录执行 `sh` 命令并返回退出码，执行后恢复原 cwd |
 
-零参效果原语（`prim_getArgs` / `prim_readLine` / `prim_getcwd` / `prim_execPath` / `timeUs`）
-是**值形式的名字**，但 runtime 映射是表达式，所以**每次引用都会重新求值**
-（`Codegen.Term.globalRef` 映射成 `(dtp_*(()))` 一类表达式）；需要快照时先 `let` 绑定。
+效果原语的 runtime 表（`dtp_*`）仍是**立即执行**的 OCaml 函数；生成器
+（`Codegen.Term.ioPrimText`）按 `Intrinsic` 的 arity 把它们包成动作值，例如
+`prim_getcwd` → `MkIO (fun _ -> dtp_getcwd ())`、`prim_print` →
+`fun s -> MkIO (fun _ -> dtp_print s)`。`MkIO` 只在 canonical `Base.IO.IO` 声明存在时可用；
+用了 `prim_*` 却没 `import Base.IO` 报 `CG_EffectPrimRequiresIO`。因此零参原语
+（`prim_getArgs` / `prim_readLine` / `prim_getcwd` / `prim_execPath` / `timeUs`）是动作**值**：
+引用不执行、不重新求值；需要快照 / 执行时显式 `let t = runIO timeUs` 或在 `do` 里 `<-`。
 
 ## 9. interp 归约边界
 

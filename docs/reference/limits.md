@@ -154,10 +154,11 @@
 ## main 与 IO
 
 - 可执行入口（`vuna build`）要求 `main : IO a`（`IO` 判定只认 canonical `Base.IO.IO`），
-  由运行时执行动作（没有公开的 `runIO` / `unsafeRunIO`）。
+  由运行时执行动作；「main 之外执行」只有 `Base.IO.runIO`（要求能力 `unsafe`，工具链特权）。
+- **效果原语返回 `IO` 动作（M31）**：纯 `main` 直呼 `prim_*` 是类型错误（`TC_TypeMismatch`）。
 - **效果靠显式能力**：效果原语只有 `prim_*` 名。普通包不能直接调用它们，只能经
   `Base.IO`；要在源码里直接调用，必须在 `vuna.toml` 的 `[capabilities].effects` 声明对应
-  能力（`console` / `fs` / `process` / `env` / `clock`）。无 manifest 的 ad-hoc 文件没有
+  能力（`console` / `fs` / `process` / `env` / `clock` / `unsafe`）。无 manifest 的 ad-hoc 文件没有
   能力。未声明时报 `` requires capability `<cap>` ... ``
   （`Loader.Resolve.checkEffectsBuiltins`）。这是**权限声明**，不是检查豁免；不存在按包名
   字符串判定的 allowlist。完整表见 [primitives.md](primitives.md)。`vuna interp` /
@@ -165,8 +166,8 @@
 - `vuna interp` 只做**纯**核心求值：任何 `main : IO a` 一律报错并提示 `compile` + 运行
   产物；纯 `main : Int/String/Bool` 的结果展示仍保留为调试约定（`String` 走 `strShow`
   转义）。IO 组合统一用 `Functor` / `Monad` trait（`fmap` / `bind` / `pure`、`>>=`、
-  `do`），不导出 `bindIO` / `pureIO` / `fmapIO`；`Base.IO` API 直接返回 IO，内部包装
-  `prim_*` 效果原语。`IO` 仍是库层 thunk 表示，不是完整的 effect 类型系统（归 F3）。
+  `do`），不导出 `bindIO` / `pureIO` / `fmapIO`；`Base.IO` API 直接别名到 IO 化的
+  `prim_*` 原语（M31）。`IO` 仍是库层 thunk 表示，不是完整的 effect 类型系统（归 F3）。
 - IO 失败（如读缺失文件）在产物里抛宿主异常，但入口文件缺失返回普通错误；CLI 用
   `prim_exit` 返回非 0 退出码（compile 错误 1、lint 有 finding 1、用法 / 解析 / IO 错误 2）。
 

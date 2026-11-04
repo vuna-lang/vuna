@@ -121,10 +121,10 @@ manifest，不向上找。命令语义与包格式
 
 1. **当前 seed 必须能编译当前源码**，rotation 后 stage1 == stage2（fixed point）；
 2. **`seed/` 只含 compiler 包入口闭包**：工具链不进 TCB（`nix/tcb-forbidden.txt`）；
-3. **效应内建按 manifest 显式能力**：包在 `[capabilities] effects` 声明
-   `console`/`fs`/`process`/`env`/`clock` 后才能直接调用 effectful `prim_*`，否则只能经
-   `Base.IO`（`Vuna.Compiler.Intrinsics` + `Loader.Resolve.checkEffectsBuiltins`，
-   没有包名 allowlist）；
+3. **效果原语返回 `IO` 动作**：包在 `[capabilities] effects` 声明
+   `console`/`fs`/`process`/`env`/`clock`/`unsafe` 后才能直接调用 effectful `prim_*`，
+   否则经 `Base.IO`；动作只在 `main` 执行（`Intrinsics` + `checkEffectsBuiltins`，没有包名
+   allowlist）；
 4. **唯一路径**：语言夹具、`vuna interp`、包构建与 seed 全部走 DT；没有第二套
    checker/codegen；
 5. 编译器自检通过（`vuna check .`）；`seed/` 是生成物，禁止手改。

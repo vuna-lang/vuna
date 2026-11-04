@@ -124,12 +124,12 @@ vuna.toml → Frontend.{Toml.parseToml, Manifest.parseManifest/validateManifest}
   实际 `Driver.Dt.dtEvalFile`）、`Vuna.Repl.runRepl`、`Vuna.TestRunner.runTests`、
   `Vuna.Doc.runDoc`、`Vuna.Files.collectVunaFiles`；fmt/lint 见 `Fmt.formatSource` /
   `Lint.runLint`（+ 子模块）。
-- 进程执行只在 `Driver.CompilerCli.runIn`（`prim_runIn`，需要 `process` 能力）。
+- 进程执行只在 `Driver.CompilerCli.runIn`（`prim_runIn`，需要 `process`；工具链经 `runIO`）。
 - **TCB**：工具链永不进 seed（`compiler/app/Main.vuna` 闭包不含 `Vuna.*` 工具模块；
-  `nix/tcb-forbidden.txt` 唯一黑名单）；效应边界是 manifest 显式能力
-  （`[capabilities].effects` ∈ console/fs/process/env/clock），
-  `Loader.Resolve.checkEffectsBuiltins` 按 `Intrinsics` 能力位检查；未声明能力的包只能经
-  `Base.IO`，没有按包名 / 路由的 allowlist。
+  `nix/tcb-forbidden.txt` 黑名单）；效应边界是 manifest 显式能力
+  （`[capabilities].effects` ∈ console/fs/process/env/clock/unsafe），
+  `checkEffectsBuiltins` 按 `Intrinsics` 能力位检查；原语返回 `IO` 动作（只在 `main` 执行），
+  未声明能力的包只能经 `Base.IO`，`runIO` 需 `unsafe`。
 
 ## 4. LSP 与索引（工具链侧，不进 seed）
 

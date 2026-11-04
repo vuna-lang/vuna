@@ -96,9 +96,9 @@ fixed point → 全部通过后才替换 `seed/`，因此中间失败不会破�
 声明**，不是按包名 allowlist：
 
 - 包在 `vuna.toml` 的 `[capabilities] effects` 里声明 `console` / `fs` / `process` / `env` /
-  `clock` 的任意子集（合法名与放行判定在 `Vuna.Compiler.Intrinsics` +
+  `clock` / `unsafe` 的任意子集（合法名与放行判定在 `Vuna.Compiler.Intrinsics` +
   `Loader.Resolve.checkEffectsBuiltins`；未知 / 重复能力名直接报错）；
-- 效果原语只有 `prim_*` 名；每个内建的能力位、签名与 runtime 名同源在
+- 效果原语只有 `prim_*` 名并返回 `IO` 动作（M31）；每个内建的能力位、签名与 runtime 名同源在
   `Vuna.Compiler.Intrinsics`。未声明能力的包只能经 `Base.IO` 使用效果；
 - 仓库内三个包的能力声明见各自 `vuna.toml`：根包与 `vuna-compiler` 五个能力，`vuna-base`
   只声明 `console` / `fs` / `process`（`Base.IO` 的封装面）；`test/corpus` 与夹具 manifest

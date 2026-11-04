@@ -56,15 +56,15 @@
 #   `vuna build --no-compile --out out compiler` 实测重新标定：
 #   bytes 1713842 / lines 15710 / maxline 34902 / longlines 4823 / letrec 587 /
 #   strcat 1 / eqint 142 / zeroarg 6 / ctorcount 4475。
-bytes 1967216
-lines 17707
-maxline 31198
-longlines 5466
-letrec 665
+bytes 1978716
+lines 17749
+maxline 32566
+longlines 5482
+letrec 668
 strcat 1
-eqint 154
+eqint 155
 zeroarg 6
-ctorcount 5035
+ctorcount 5047
 # M23 夹具迁移与 interp 切换：编译器源码新增 DT 能力（零参构造子求值、record update 降级、
 #   参数化 record、@inst 选择、实例诊断、&&|| 短路、REPL 表达式求值、DtDerive/CoreCodegen
 #   修正）约 250 行；且本预算自 751ba49（Elab +467 行）起就已失效——HEAD 实测已是
@@ -175,3 +175,10 @@ ctorcount 5035
 #   按 `vuna build --no-compile --out out compiler && sh nix/metrics.sh out` 实测重新标定：
 #   files 71 / bytes 1967216 / lines 17707 / maxline 31198 / longlines 5466 / letrec 665 /
 #   strcat 1 / eqint 154 / zeroarg 6 / ctorcount 5035（其余指标不变）。
+# M31（效果原语 IO 化，rebase 到 main 后）：`Capability` 增加 `CapUnsafe`、`IType` 增加
+#   `IIO`、Diagnostics 增加 `CG_EffectPrimRequiresIO`，`Intrinsics` 新增 `intrinsicReturnsIO`
+#   与 IO 化签名（含 `prim_readBytes`）；`Codegen.Term` 新增 `ioPrimText`/`ioPrimLam`（把
+#   runtime 包成 `MkIO` 动作值）。按 `vuna build --no-compile --out out compiler &&
+#   sh nix/metrics.sh out` 实测重新标定：
+#   files 71 / bytes 1978716 / lines 17749 / maxline 32566 / longlines 5482 / letrec 668 /
+#   strcat 1 / eqint 155 / zeroarg 6 / ctorcount 5047。
