@@ -84,14 +84,13 @@ splitDerivedOwners owner dname params (t :: rest) =
 -- trait 的运行时产物不在顶层声明名里：方法投影定义与字典类型都由 Elab 生成，
 -- 因此按 `DTrait` 结构显式补上（入口 trait 没有模块前缀，这一步是唯一归属来源）。
 splitTraitDefOwnerOf : String -> Decl -> List (Pair String String)
-splitTraitDefOwnerOf owner d = case d of
-  DTrait tname params methods sp => map (\m => Pair (traitMethodName m) owner) methods
-  _ => []
+splitTraitDefOwnerOf owner (DTrait tname params methods sp) =
+  map (\m => Pair (traitMethodName m) owner) methods
+splitTraitDefOwnerOf owner _ = []
 
 splitTraitDataOwnerOf : String -> Decl -> List (Pair String String)
-splitTraitDataOwnerOf owner d = case d of
-  DTrait tname params methods sp => [Pair ("Dict_" ++ tname) owner]
-  _ => []
+splitTraitDataOwnerOf owner (DTrait tname params methods sp) = [Pair ("Dict_" ++ tname) owner]
+splitTraitDataOwnerOf owner _ = []
 
 splitInstanceOwnersGo : String -> List Decl -> List (Pair String String)
 splitInstanceOwnersGo owner [] = []
@@ -181,33 +180,39 @@ nameOwnerPairsOfDatas meta (d :: rest) =
 -- ---------------------------------------------------------------
 -- 按归属过滤 + 生成
 -- ---------------------------------------------------------------
-mapOwnerOf : List (Pair String String) -> String -> String
-mapOwnerOf [] name = ""
-mapOwnerOf ((Pair n o) :: rest) name = if n == name then o else mapOwnerOf rest name
+-- 名字 → 归属单元的哈希索引。旧实现对**每个**模块把全部 def/data 逐个做
+-- `mapOwnerOf`（线性扫 pairs）⇒ O(#模块 × #def × #pairs)，大包上就是几秒。
+ownerTblOf : List (Pair String String) -> HashTbl String
+ownerTblOf pairs = tblInsertAll pairs tblEmpty
 
-datasInUnit : List (Pair String String) -> String -> List DtData -> List DtData
-datasInUnit pairs u datas = filter (\d => mapOwnerOf pairs (dtDataName d) == u) datas
+ownerOfTbl : HashTbl String -> String -> String
+ownerOfTbl t name = case tblLookup name t of
+  Just o => o
+  Nothing => ""
 
-defsInUnit : List (Pair String String) -> String -> List DtDef -> List DtDef
-defsInUnit pairs u defs = filter (\d => mapOwnerOf pairs (dtDefName d) == u) defs
+datasInUnit : HashTbl String -> String -> List DtData -> List DtData
+datasInUnit ownerT u datas = filter (\d => ownerOfTbl ownerT (dtDataName d) == u) datas
 
-splitModuleFiles : List DtData -> List DtDef -> List (Pair String String) -> List (Pair String String) -> List String -> List (Pair String (List Decl)) -> Result (List SplitFile)
-splitModuleFiles allDatas allDefs defPairs dataPairs earlier [] = Ok []
-splitModuleFiles allDatas allDefs defPairs dataPairs earlier ((Pair mname decls) :: rest) =
+defsInUnit : HashTbl String -> String -> List DtDef -> List DtDef
+defsInUnit ownerT u defs = filter (\d => ownerOfTbl ownerT (dtDefName d) == u) defs
+
+splitModuleFiles : List (Pair String (List Int)) -> List DtData -> List DtDef -> HashTbl String -> HashTbl String -> List String -> List (Pair String (List Decl)) -> Result (List SplitFile)
+splitModuleFiles usedTbl allDatas allDefs defOwnerT dataOwnerT earlier [] = Ok []
+splitModuleFiles usedTbl allDatas allDefs defOwnerT dataOwnerT earlier ((Pair mname decls) :: rest) =
   let
     unit = splitUnitOfModule mname
-    unitDatas = datasInUnit dataPairs mname allDatas
-    unitDefs = defsInUnit defPairs mname allDefs
+    unitDatas = datasInUnit dataOwnerT mname allDatas
+    unitDefs = defsInUnit defOwnerT mname allDefs
   in andThen (groupRuntimeDefs unitDefs)
-    (\groups => andThen (genUnitParts (append [runtimeUnit] earlier) allDatas unitDatas groups) (\parts => andThen (splitModuleFiles allDatas allDefs defPairs dataPairs (append earlier [unit]) rest) (\tail => Ok (SplitFile (unit ++ ".ml") (genUnitText parts ++ "\n") :: tail))))
+    (\groups => andThen (genUnitParts usedTbl (append [runtimeUnit] earlier) allDatas unitDatas groups) (\parts => andThen (splitModuleFiles usedTbl allDatas allDefs defOwnerT dataOwnerT (append earlier [unit]) rest) (\tail => Ok (SplitFile (unit ++ ".ml") (genUnitText parts ++ "\n") :: tail))))
 
-splitMainFile : List DtData -> List DtDef -> List (Pair String String) -> List (Pair String String) -> Bool -> List String -> Result SplitFile
-splitMainFile allDatas allDefs defPairs dataPairs printResult opens =
+splitMainFile : List (Pair String (List Int)) -> List DtData -> List DtDef -> HashTbl String -> HashTbl String -> Bool -> List String -> Result SplitFile
+splitMainFile usedTbl allDatas allDefs defOwnerT dataOwnerT printResult opens =
   let
-    entryDefs = defsInUnit defPairs entryOwner allDefs
-    entryDatas = datasInUnit dataPairs entryOwner allDatas
+    entryDefs = defsInUnit defOwnerT entryOwner allDefs
+    entryDatas = datasInUnit dataOwnerT entryOwner allDatas
   in andThen (groupRuntimeDefs entryDefs)
-    (\groups => andThen (genUnitParts opens allDatas entryDatas groups) (\parts => andThen (mainHook (Pair allDatas allDefs) allDefs printResult) (\hook => Ok (SplitFile "Main.ml" (genUnitText parts ++ hook)))))
+    (\groups => andThen (genUnitParts usedTbl opens allDatas entryDatas groups) (\parts => andThen (mainHook (Pair allDatas allDefs) allDefs printResult) (\hook => Ok (SplitFile "Main.ml" (genUnitText parts ++ hook)))))
 
 -- ---------------------------------------------------------------
 -- 生成前护栏（C08）：模块声明必须已 resolved、入口声明必须是裸名、归属必须全覆盖
@@ -283,10 +288,13 @@ generateDtSplitProgram modules entryDecls prog printResult =
     allDefs = dtProgDefs prog
     meta = splitMetaOf modules entryDecls
   in andThen (prepareDtProgram (Pair (dtProgDatas prog) allDefs)) (\p => case p of
-    Pair runtime groups => andThen (checkResolvedModules meta modules entryDecls runtime allDatas) (\_ => andThen (nameOwnerPairsOfDefs meta runtime) (\defPairs => andThen (nameOwnerPairsOfDatas meta allDatas) (\dataPairs => andThen (splitModuleFiles allDatas runtime defPairs dataPairs [] modules) (\moduleFiles => let
+    Pair runtime groups => andThen (checkResolvedModules meta modules entryDecls runtime allDatas) (\_ => andThen (nameOwnerPairsOfDefs meta runtime) (\defPairs => andThen (nameOwnerPairsOfDatas meta allDatas) (\dataPairs => let
+      defOwnerT = ownerTblOf defPairs
+      dataOwnerT = ownerTblOf dataPairs
+    in andThen (splitModuleFiles (usedTableOf allDatas) allDatas runtime defOwnerT dataOwnerT [] modules) (\moduleFiles => let
       unitNames = map (\q => splitUnitOfModule (firstOf q)) modules
     in andThen
-      (splitMainFile allDatas runtime defPairs dataPairs printResult (append [runtimeUnit] unitNames))
+      (splitMainFile (usedTableOf allDatas) allDatas runtime defOwnerT dataOwnerT printResult (append [runtimeUnit] unitNames))
       (\mainFile => Ok (SplitFile "Vuna_runtime.ml" dtRuntime :: append moduleFiles [mainFile]))
     )
     )

@@ -61,8 +61,8 @@ prepareDtProgram program =
 --   allDatas  ：整个程序的运行时族（类型渲染与构造子表的完整视图）
 --   unitDatas ：写进本单元的类型声明
 --   groups    ：本单元运行时分组的 SCC 序（由调用方按归属过滤后分组）
-genUnitParts : List String -> List DtData -> List DtData -> List (List DtDef) -> Result UnitParts
-genUnitParts opens allDatas unitDatas groups = andThen (genTypeDeclsOf allDatas unitDatas) (\typeText => let
+genUnitParts : List (Pair String (List Int)) -> List String -> List DtData -> List DtData -> List (List DtDef) -> Result UnitParts
+genUnitParts usedTbl opens allDatas unitDatas groups = andThen (genTypeDeclsWith usedTbl allDatas unitDatas) (\typeText => let
   _ = stamp "cg-typedecls-done"
 in andThen (genGroups (adjTblOf (depAdjacency (concatGroups groups))) (mkGenSt allDatas) groups) (\p => case p of
   Pair bodies st =>
@@ -100,7 +100,7 @@ checkDtProgram program = andThen (prepareDtProgram program) (\p => let
 in case p of
   Pair runtime groups =>
     andThen
-      (genUnitParts [] (runtimeDatas (firstOf program)) (runtimeDatas (firstOf program)) groups)
+      (genUnitParts (usedTableOf (runtimeDatas (firstOf program))) [] (runtimeDatas (firstOf program)) (runtimeDatas (firstOf program)) groups)
       (\_ => Ok 0)
 )
 

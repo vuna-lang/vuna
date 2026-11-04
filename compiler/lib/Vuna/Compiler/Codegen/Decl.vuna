@@ -5,12 +5,14 @@ module Vuna.Compiler.Codegen.Decl
   , ctorShapeOf
   , flagMatchesRig
   , genTypeDeclsOf
+  , genTypeDeclsWith
   , joinWith
   , ocamlBinderName
   , ocamlString
   , runtimeDatas
   , sanitizeName
   , typeName
+  , usedTableOf
   , valueName
   ) where
 
@@ -462,12 +464,18 @@ runtimeDatas datas = filter (\d => if isBoolFamilyName (dtDataName d) then False
 
 -- 类型声明：`allDatas` 用于族间参数推断（跨模块字段类型照旧渲染成全局类型名），
 -- `subset` 是实际写进本文件的族。
+-- 族参数「用到哪些」的不动点只依赖全体 datas；split 逐模块生成时必须把它一次算好
+-- 传进来（旧实现每个模块都重算一遍 ⇒ O(#模块 × #datas × 构造子)）。
+usedTableOf : List DtData -> List (Pair String (List Int))
+usedTableOf datas = usedTableFix datas (map (\d => Pair (dtDataName d) []) datas)
+
 genTypeDeclsOf : List DtData -> List DtData -> Result String
-genTypeDeclsOf allDatas [] = Ok ""
-genTypeDeclsOf allDatas subset =
-  let
-    table = usedTableFix allDatas (map (\d => Pair (dtDataName d) []) allDatas)
-  in andThen (traverse (genDataDecl table allDatas) subset)
+genTypeDeclsOf allDatas subset = genTypeDeclsWith (usedTableOf allDatas) allDatas subset
+
+genTypeDeclsWith : List (Pair String (List Int)) -> List DtData -> List DtData -> Result String
+genTypeDeclsWith table allDatas [] = Ok ""
+genTypeDeclsWith table allDatas subset =
+  andThen (traverse (genDataDecl table allDatas) subset)
     (\parts => Ok ("type " ++ joinWith "\nand " parts ++ "\n\n"))
 
 collectUsedSpine : List Int -> List (Pair String (List Int)) -> List DtData -> Int -> List Value -> List Int

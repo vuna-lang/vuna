@@ -18,7 +18,7 @@ base/lib/Base/Vec.vuna: Vec(..), substTemplate, vhead, vlen, vtail
 base/lib/Prelude.vuna: module Base.Bool, module Base.Eq, module Base.List, module Base.Maybe, module Base.Monad, module Base.Ord, module Base.Pair, module Base.Result, module Base.Show, module Base.String
 compiler/lib/Vuna/Compiler/Codegen.vuna: module Vuna.Compiler.Codegen.Assembly, module Vuna.Compiler.Codegen.Split
 compiler/lib/Vuna/Compiler/Codegen/Assembly.vuna: UnitParts, checkDtProgram, genUnitParts, genUnitText, mainHook, prepareDtProgram
-compiler/lib/Vuna/Compiler/Codegen/Decl.vuna: boolText, ctorKeepFlags, ctorOcamlName, ctorShapeOf, flagMatchesRig, genTypeDeclsOf, joinWith, ocamlBinderName, ocamlString, runtimeDatas, sanitizeName, typeName, valueName
+compiler/lib/Vuna/Compiler/Codegen/Decl.vuna: boolText, ctorKeepFlags, ctorOcamlName, ctorShapeOf, flagMatchesRig, genTypeDeclsOf, genTypeDeclsWith, joinWith, ocamlBinderName, ocamlString, runtimeDatas, sanitizeName, typeName, usedTableOf, valueName
 compiler/lib/Vuna/Compiler/Codegen/Erase.vuna: adjTblOf, axiomNamesOf, binderAt, checkAllDefScopes, checkAllErasure, checkNoAxiomRuntime, defTable, depAdjacency, ensureUniqueOcamlNames, findDtDef, flattenConApp, groupRuntimeDefs, neighborsOf, partitionDefs, showMetaHint
 compiler/lib/Vuna/Compiler/Codegen/Split.vuna: generateDtSplitProgram
 compiler/lib/Vuna/Compiler/Codegen/Term.vuna: GenSt, dtListBridge, dtRuntime, findListFamilyData, genDtHook, genGroups, ioResultTy, ioRunText, mkGenSt
