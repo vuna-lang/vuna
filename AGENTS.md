@@ -62,6 +62,7 @@
 - **探索按场景选工具**（规程见技能 `.agents/skills/repo-navigation/SKILL.md`）：要改的
   模块整篇 `read`；不改只引用的用 `vuna map` / `vuna api`，**不要 grep**（拿多拿少又没签名）。
 - **探索完必须落盘**：数据流 / 不变量 / 边界写进 `docs/` 并接进导航，别只留在会话里。
+- **git线性历史**: 优先ff-only merge/rebase/cherr-pick/挤压提交
 
 ## 常用命令速查
 
