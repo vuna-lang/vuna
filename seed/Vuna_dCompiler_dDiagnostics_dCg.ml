@@ -79,14 +79,14 @@ let v_Vuna_dCompiler_dDiagnostics_dCg_dcgChunk1 = (C_Base_dList_dList_Base_dList
 
 let v_Vuna_dCompiler_dDiagnostics_dCg_dcgAll = (v_Vuna_dCompiler_dDiagnostics_dCommon_dconcatLists (C_Base_dList_dList_Base_dList_dCons (v_Vuna_dCompiler_dDiagnostics_dCg_dcgChunk0, (C_Base_dList_dList_Base_dList_dCons (v_Vuna_dCompiler_dDiagnostics_dCg_dcgChunk1, C_Base_dList_dList_Base_dList_dNil)))))
 
-let v_Vuna_dCompiler_dDiagnostics_dCg_dcgMsg = (fun e -> (fun args -> (((v_Vuna_dCompiler_dDiagnostics_dCommon_ddiagMsg (v_Vuna_dCompiler_dDiagnostics_dCg_dcgCode e)) (v_Vuna_dCompiler_dDiagnostics_dCg_dcgTemplate e)) args)))
+let v_Vuna_dCompiler_dDiagnostics_dCg_dcgMsg = (fun e args -> (((v_Vuna_dCompiler_dDiagnostics_dCommon_ddiagMsg (v_Vuna_dCompiler_dDiagnostics_dCg_dcgCode e)) (v_Vuna_dCompiler_dDiagnostics_dCg_dcgTemplate e)) args))
 
-let v_Vuna_dCompiler_dDiagnostics_dCg_dcgErr = (fun e -> (fun args -> (v_Vuna_dCompiler_dDiagnostics_dCommon_ddiagErr ((v_Vuna_dCompiler_dDiagnostics_dCg_dcgMsg e) args))))
+let v_Vuna_dCompiler_dDiagnostics_dCg_dcgErr = (fun e args -> (v_Vuna_dCompiler_dDiagnostics_dCommon_ddiagErr ((v_Vuna_dCompiler_dDiagnostics_dCg_dcgMsg e) args)))
 
 let v_Vuna_dCompiler_dDiagnostics_dCg_dcgErr0 = (fun e -> ((v_Vuna_dCompiler_dDiagnostics_dCg_dcgErr e) C_Base_dVec_dVec_Base_dVec_dVNil))
 
-let v_Vuna_dCompiler_dDiagnostics_dCg_dcgErr1 = (fun e -> (fun a0 -> ((v_Vuna_dCompiler_dDiagnostics_dCg_dcgErr e) (C_Base_dVec_dVec_Base_dVec_dVCons (a0, C_Base_dVec_dVec_Base_dVec_dVNil)))))
+let v_Vuna_dCompiler_dDiagnostics_dCg_dcgErr1 = (fun e a0 -> ((v_Vuna_dCompiler_dDiagnostics_dCg_dcgErr e) (C_Base_dVec_dVec_Base_dVec_dVCons (a0, C_Base_dVec_dVec_Base_dVec_dVNil))))
 
-let v_Vuna_dCompiler_dDiagnostics_dCg_dcgDefLoc = (fun span -> (fun name -> ((v_Vuna_dCompiler_dDiagnostics_dCommon_ddiagDefLoc span) name)))
+let v_Vuna_dCompiler_dDiagnostics_dCg_dcgDefLoc = (fun span name -> ((v_Vuna_dCompiler_dDiagnostics_dCommon_ddiagDefLoc span) name))
 
-let v_Vuna_dCompiler_dDiagnostics_dCg_dcgErrDefAt = (fun span -> (fun name -> (fun e -> (fun args -> (C_Base_dResult_dResult_Base_dResult_dErr (((bi_concat ((v_Vuna_dCompiler_dDiagnostics_dCg_dcgDefLoc span) name)) ((v_Vuna_dCompiler_dDiagnostics_dCg_dcgMsg e) args))))))))
+let v_Vuna_dCompiler_dDiagnostics_dCg_dcgErrDefAt = (fun span name e args -> (C_Base_dResult_dResult_Base_dResult_dErr ((((v_Vuna_dCompiler_dDiagnostics_dCg_dcgDefLoc span) name) ^ ((v_Vuna_dCompiler_dDiagnostics_dCg_dcgMsg e) args)))))

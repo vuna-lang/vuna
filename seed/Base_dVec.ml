@@ -33,7 +33,7 @@ let v_Base_dVec_dvtail = (fun xs -> (match xs with
 
 let rec v_Base_dVec_dvlen = (fun xs -> (match xs with
   | C_Base_dVec_dVec_Base_dVec_dVNil -> 0
-  | C_Base_dVec_dVec_Base_dVec_dVCons (dtb__4, dtb__5) -> ((bi_add 1) (v_Base_dVec_dvlen dtb__5))
+  | C_Base_dVec_dVec_Base_dVec_dVCons (dtb__4, dtb__5) -> (1 + (v_Base_dVec_dvlen dtb__5))
   | _ -> failwith "DT: impossible branch"
 ))
 
@@ -43,4 +43,4 @@ let rec v_Base_dVec_dvecToList = (fun mc0 -> (match mc0 with
   | _ -> failwith "DT: impossible branch"
 ))
 
-let v_Base_dVec_dsubstTemplate = (fun template -> (fun args -> ((dtp_substTemplate template) (v_Base_dVec_dvecToList args))))
+let v_Base_dVec_dsubstTemplate = (fun template args -> ((dtp_substTemplate template) (v_Base_dVec_dvecToList args)))

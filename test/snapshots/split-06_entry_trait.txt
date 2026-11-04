@@ -35,6 +35,7 @@ let v_Eq_uInt
 let v_Ord_uInt
 
 == Base_dList.ml
+let v_Base_dList_dconcatMap
 let v_Base_dList_dflatMap
 let v_Base_dList_drange
 let v_Base_dList_dreverse
@@ -83,6 +84,7 @@ let v_Show_uString
 let v_Base_dString_d_uisSpace
 let v_Base_dString_dcontains
 let v_Base_dString_dendsWith
+let v_Base_dString_djoin
 let v_Base_dString_dlines
 let v_Base_dString_dsplit
 let v_Base_dString_dstartsWith
@@ -90,6 +92,7 @@ let v_Base_dString_dsubstring
 let v_Base_dString_dtrim
 let v_Base_dString_dtrimLeft
 let v_Base_dString_dtrimRight
+let v_Base_dString_dunlines
 let v_Eq_uString
 let v_Ord_uString
 

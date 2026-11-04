@@ -21,14 +21,14 @@ let v_Vuna_dCompiler_dDebug_dargs = (v_Base_dIO_drunIO (C_Base_dIO_dIO_Base_dIO_
 
 let v_Vuna_dCompiler_dDebug_ddebugOn = ((v_Base_dList_dmemName "--debug-perf") v_Vuna_dCompiler_dDebug_dargs)
 
-let v_Vuna_dCompiler_dDebug_dnote = (fun msg -> (if v_Vuna_dCompiler_dDebug_ddebugOn then ((fun _u -> 0) (v_Base_dIO_drunIO ((fun dtio_0 -> C_Base_dIO_dIO_Base_dIO_dMkIO (fun _ -> dtp_print dtio_0)) ((bi_concat "DEBUG ") ((bi_concat msg) "\n"))))) else 0))
+let v_Vuna_dCompiler_dDebug_dnote = (fun msg -> (if v_Vuna_dCompiler_dDebug_ddebugOn then ((fun _u -> 0) (v_Base_dIO_drunIO ((fun dtio_0 -> C_Base_dIO_dIO_Base_dIO_dMkIO (fun _ -> dtp_print dtio_0)) (String.concat "" ["DEBUG "; msg; "\n"])))) else 0))
 
-let v_Vuna_dCompiler_dDebug_dnoteInt = (fun label -> (fun n -> (v_Vuna_dCompiler_dDebug_dnote ((bi_concat label) ((bi_concat "=") (bi_strFromInt n))))))
+let v_Vuna_dCompiler_dDebug_dnoteInt = (fun label n -> (v_Vuna_dCompiler_dDebug_dnote (String.concat "" [label; "="; (bi_strFromInt n)])))
 
-let v_Vuna_dCompiler_dDebug_dstampNow = (fun label -> ((fun _u -> 0) (v_Base_dIO_drunIO ((fun dtio_0 -> C_Base_dIO_dIO_Base_dIO_dMkIO (fun _ -> dtp_print dtio_0)) ((bi_concat "PERF ") ((bi_concat label) ((bi_concat " ") ((bi_concat (bi_strFromInt (v_Base_dIO_drunIO (C_Base_dIO_dIO_Base_dIO_dMkIO (fun _ -> (dtp_timeUs ())))))) "\n"))))))))
+let v_Vuna_dCompiler_dDebug_dstampNow = (fun label -> ((fun _u -> 0) (v_Base_dIO_drunIO ((fun dtio_0 -> C_Base_dIO_dIO_Base_dIO_dMkIO (fun _ -> dtp_print dtio_0)) (String.concat "" ["PERF "; label; " "; (bi_strFromInt (v_Base_dIO_drunIO (C_Base_dIO_dIO_Base_dIO_dMkIO (fun _ -> (dtp_timeUs ()))))); "\n"])))))
 
 let v_Vuna_dCompiler_dDebug_dstamp = (fun label -> (if v_Vuna_dCompiler_dDebug_ddebugOn then (v_Vuna_dCompiler_dDebug_dstampNow label) else 0))
 
-let v_Vuna_dCompiler_dDebug_dsampleKey = (fun name -> ((fun h -> ((bi_eq_int ((bi_sub h) ((bi_mul ((bi_div h) 64)) 64))) 0)) (v_Base_dHashMap_dhashStr name)))
+let v_Vuna_dCompiler_dDebug_dsampleKey = (fun name -> ((fun h -> ((h - ((if 64 = 0 then failwith "division by zero" else h / 64) * 64)) = 0)) (v_Base_dHashMap_dhashStr name)))
 
-let v_Vuna_dCompiler_dDebug_dstampSample = (fun key -> (fun label -> (if (v_Vuna_dCompiler_dDebug_dsampleKey key) then (v_Vuna_dCompiler_dDebug_dstamp label) else 0)))
+let v_Vuna_dCompiler_dDebug_dstampSample = (fun key label -> (if (v_Vuna_dCompiler_dDebug_dsampleKey key) then (v_Vuna_dCompiler_dDebug_dstamp label) else 0))

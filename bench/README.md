@@ -45,17 +45,19 @@ VUNA=$PWD/result/bin/vuna ./bench/run.sh --runs 3
   `--json bench/baseline.json`，并在提交信息里写明原因（例如 M33 某波次落地后的预期变化）。
 - 基线是**软门槛**：不为跨机器/环境差异改写基线；只有确认是生成程序质量的真实变化才更新。
 
-## 当前基线（M33 起点）
+## 当前基线（M33 W2 后）
 
-`--runs 3 --warmup 1`，x86_64 / 16 核 / ocamlopt 5.5.1（非 flambda）：
+`--runs 3 --warmup 1`，x86_64 / 16 核 / ocamlopt 5.5.1（非 flambda）。起点（W1）与 W2 后的
+ratio 对比见 [docs/reference/performance.md §8](../docs/reference/performance.md)：
 
-| benchmark | vuna | 手写 OCaml | ratio |
-| --- | --- | --- | --- |
-| arith | ~58 ms | ~5 ms | ~11.6x |
-| string_ops | ~202 ms | ~7 ms | ~28.9x |
-| hashmap | ~38 ms | ~4 ms | ~9.5x |
-| list_recursion | ~29 ms | ~14 ms | ~2.1x |
-| gc_pressure | ~34 ms | ~26 ms | ~1.3x |
+| benchmark | 起点 ratio | W2 后 ratio |
+| --- | --- | --- |
+| arith | ~11.6x | ~1.2x |
+| string_ops | ~28.9x | ~3.6x |
+| hashmap | ~9.5x | ~3.0x |
+| list_recursion | ~2.1x | ~0.8x |
+| gc_pressure | ~1.3x | ~1.0x |
 
-读数表明 M33 的优化优先级：`bi_*` 跨模块调用（arith）、`++` 链与 `strPack`（string_ops）、
-哈希桶表示（hashmap）是前三项；`list_recursion` / `gc_pressure` 已接近目标。
+W2 的三项 codegen 改进（内建饱和内联、多参数 lambda 链、`++` 链 `String.concat`）把前三项
+拉到接近手写 OCaml；hashmap 的剩余差距是桶表示（W3 换 `Array` 后继续降）。分配 / GC 统计
+由生成 runtime 的 `VN_PERF_STATS=1` 输出，`bench/run.sh` 采集进 JSON 的 `vuna.gc` 字段。

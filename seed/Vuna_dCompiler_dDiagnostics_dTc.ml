@@ -130,8 +130,8 @@ let v_Vuna_dCompiler_dDiagnostics_dTc_dtcTemplate = (fun mc0 -> (match mc0 with
   | C_Vuna_dCompiler_dDiagnostics_dTc_dTcErr_Vuna_dCompiler_dDiagnostics_dTc_dUnknownName (dtb__81) -> "unknown name <0>"
   | C_Vuna_dCompiler_dDiagnostics_dTc_dTcErr_Vuna_dCompiler_dDiagnostics_dTc_dUnknownInterface (dtb__82) -> "unknown interface <0> in instance head or constraint"
   | C_Vuna_dCompiler_dDiagnostics_dTc_dTcErr_Vuna_dCompiler_dDiagnostics_dTc_dSignatureNoDef (dtb__83) -> "signature for <0> has no definition"
-  | C_Vuna_dCompiler_dDiagnostics_dTc_dTcErr_Vuna_dCompiler_dDiagnostics_dTc_dRedundantLiteralBranch (dtb__84) -> ((bi_concat "redundant literal branch: ") ((bi_concat dtb__84) " is already covered by an earlier branch"))
-  | C_Vuna_dCompiler_dDiagnostics_dTc_dTcErr_Vuna_dCompiler_dDiagnostics_dTc_dRedundantCtorBranch (dtb__85) -> ((bi_concat "redundant constructor branch: `") ((bi_concat dtb__85) "` is already covered by an earlier branch"))
+  | C_Vuna_dCompiler_dDiagnostics_dTc_dTcErr_Vuna_dCompiler_dDiagnostics_dTc_dRedundantLiteralBranch (dtb__84) -> (String.concat "" ["redundant literal branch: "; dtb__84; " is already covered by an earlier branch"])
+  | C_Vuna_dCompiler_dDiagnostics_dTc_dTcErr_Vuna_dCompiler_dDiagnostics_dTc_dRedundantCtorBranch (dtb__85) -> (String.concat "" ["redundant constructor branch: `"; dtb__85; "` is already covered by an earlier branch"])
   | C_Vuna_dCompiler_dDiagnostics_dTc_dTcErr_Vuna_dCompiler_dDiagnostics_dTc_dNotExhaustive (dtb__86) -> "case is not exhaustive: missing <0>"
   | C_Vuna_dCompiler_dDiagnostics_dTc_dTcErr_Vuna_dCompiler_dDiagnostics_dTc_dNoInstanceFound (dtb__87) -> "no instance found for <0>"
   | C_Vuna_dCompiler_dDiagnostics_dTc_dTcErr_Vuna_dCompiler_dDiagnostics_dTc_dNeedsTwoArgs (dtb__88) -> "`<0>` needs exactly two arguments"
@@ -234,18 +234,18 @@ let v_Vuna_dCompiler_dDiagnostics_dTc_dtcChunk10 = (C_Base_dList_dList_Base_dLis
 
 let v_Vuna_dCompiler_dDiagnostics_dTc_dtcAll = (v_Vuna_dCompiler_dDiagnostics_dCommon_dconcatLists (C_Base_dList_dList_Base_dList_dCons (v_Vuna_dCompiler_dDiagnostics_dTc_dtcChunk0, (C_Base_dList_dList_Base_dList_dCons (v_Vuna_dCompiler_dDiagnostics_dTc_dtcChunk1, (C_Base_dList_dList_Base_dList_dCons (v_Vuna_dCompiler_dDiagnostics_dTc_dtcChunk2, (C_Base_dList_dList_Base_dList_dCons (v_Vuna_dCompiler_dDiagnostics_dTc_dtcChunk3, (C_Base_dList_dList_Base_dList_dCons (v_Vuna_dCompiler_dDiagnostics_dTc_dtcChunk4, (C_Base_dList_dList_Base_dList_dCons (v_Vuna_dCompiler_dDiagnostics_dTc_dtcChunk5, (C_Base_dList_dList_Base_dList_dCons (v_Vuna_dCompiler_dDiagnostics_dTc_dtcChunk6, (C_Base_dList_dList_Base_dList_dCons (v_Vuna_dCompiler_dDiagnostics_dTc_dtcChunk7, (C_Base_dList_dList_Base_dList_dCons (v_Vuna_dCompiler_dDiagnostics_dTc_dtcChunk8, (C_Base_dList_dList_Base_dList_dCons (v_Vuna_dCompiler_dDiagnostics_dTc_dtcChunk9, (C_Base_dList_dList_Base_dList_dCons (v_Vuna_dCompiler_dDiagnostics_dTc_dtcChunk10, C_Base_dList_dList_Base_dList_dNil)))))))))))))))))))))))
 
-let v_Vuna_dCompiler_dDiagnostics_dTc_dtcMsg = (fun e -> (fun args -> (((v_Vuna_dCompiler_dDiagnostics_dCommon_ddiagMsg (v_Vuna_dCompiler_dDiagnostics_dTc_dtcCode e)) (v_Vuna_dCompiler_dDiagnostics_dTc_dtcTemplate e)) args)))
+let v_Vuna_dCompiler_dDiagnostics_dTc_dtcMsg = (fun e args -> (((v_Vuna_dCompiler_dDiagnostics_dCommon_ddiagMsg (v_Vuna_dCompiler_dDiagnostics_dTc_dtcCode e)) (v_Vuna_dCompiler_dDiagnostics_dTc_dtcTemplate e)) args))
 
-let v_Vuna_dCompiler_dDiagnostics_dTc_dtcErr = (fun sp -> (fun e -> (fun args -> ((v_Vuna_dCompiler_dDiagnostics_dCommon_ddiagErrAt sp) ((v_Vuna_dCompiler_dDiagnostics_dTc_dtcMsg e) args)))))
+let v_Vuna_dCompiler_dDiagnostics_dTc_dtcErr = (fun sp e args -> ((v_Vuna_dCompiler_dDiagnostics_dCommon_ddiagErrAt sp) ((v_Vuna_dCompiler_dDiagnostics_dTc_dtcMsg e) args)))
 
-let v_Vuna_dCompiler_dDiagnostics_dTc_dtcErr0 = (fun sp -> (fun e -> (((v_Vuna_dCompiler_dDiagnostics_dTc_dtcErr sp) e) C_Base_dVec_dVec_Base_dVec_dVNil)))
+let v_Vuna_dCompiler_dDiagnostics_dTc_dtcErr0 = (fun sp e -> (((v_Vuna_dCompiler_dDiagnostics_dTc_dtcErr sp) e) C_Base_dVec_dVec_Base_dVec_dVNil))
 
-let v_Vuna_dCompiler_dDiagnostics_dTc_dtcErr1 = (fun sp -> (fun e -> (fun a0 -> (((v_Vuna_dCompiler_dDiagnostics_dTc_dtcErr sp) e) (C_Base_dVec_dVec_Base_dVec_dVCons (a0, C_Base_dVec_dVec_Base_dVec_dVNil))))))
+let v_Vuna_dCompiler_dDiagnostics_dTc_dtcErr1 = (fun sp e a0 -> (((v_Vuna_dCompiler_dDiagnostics_dTc_dtcErr sp) e) (C_Base_dVec_dVec_Base_dVec_dVCons (a0, C_Base_dVec_dVec_Base_dVec_dVNil))))
 
-let v_Vuna_dCompiler_dDiagnostics_dTc_dtcErr2 = (fun sp -> (fun e -> (fun a0 -> (fun a1 -> (((v_Vuna_dCompiler_dDiagnostics_dTc_dtcErr sp) e) (C_Base_dVec_dVec_Base_dVec_dVCons (a0, (C_Base_dVec_dVec_Base_dVec_dVCons (a1, C_Base_dVec_dVec_Base_dVec_dVNil)))))))))
+let v_Vuna_dCompiler_dDiagnostics_dTc_dtcErr2 = (fun sp e a0 a1 -> (((v_Vuna_dCompiler_dDiagnostics_dTc_dtcErr sp) e) (C_Base_dVec_dVec_Base_dVec_dVCons (a0, (C_Base_dVec_dVec_Base_dVec_dVCons (a1, C_Base_dVec_dVec_Base_dVec_dVNil))))))
 
 let v_Vuna_dCompiler_dDiagnostics_dTc_dtcErr0NoLoc = (fun e -> (C_Base_dResult_dResult_Base_dResult_dErr (((v_Vuna_dCompiler_dDiagnostics_dTc_dtcMsg e) C_Base_dVec_dVec_Base_dVec_dVNil))))
 
-let v_Vuna_dCompiler_dDiagnostics_dTc_dtcErr1NoLoc = (fun e -> (fun a0 -> (C_Base_dResult_dResult_Base_dResult_dErr (((v_Vuna_dCompiler_dDiagnostics_dTc_dtcMsg e) (C_Base_dVec_dVec_Base_dVec_dVCons (a0, C_Base_dVec_dVec_Base_dVec_dVNil)))))))
+let v_Vuna_dCompiler_dDiagnostics_dTc_dtcErr1NoLoc = (fun e a0 -> (C_Base_dResult_dResult_Base_dResult_dErr (((v_Vuna_dCompiler_dDiagnostics_dTc_dtcMsg e) (C_Base_dVec_dVec_Base_dVec_dVCons (a0, C_Base_dVec_dVec_Base_dVec_dVNil))))))
 
-let v_Vuna_dCompiler_dDiagnostics_dTc_dtcErr2NoLoc = (fun e -> (fun a0 -> (fun a1 -> (C_Base_dResult_dResult_Base_dResult_dErr (((v_Vuna_dCompiler_dDiagnostics_dTc_dtcMsg e) (C_Base_dVec_dVec_Base_dVec_dVCons (a0, (C_Base_dVec_dVec_Base_dVec_dVCons (a1, C_Base_dVec_dVec_Base_dVec_dVNil))))))))))
+let v_Vuna_dCompiler_dDiagnostics_dTc_dtcErr2NoLoc = (fun e a0 a1 -> (C_Base_dResult_dResult_Base_dResult_dErr (((v_Vuna_dCompiler_dDiagnostics_dTc_dtcMsg e) (C_Base_dVec_dVec_Base_dVec_dVCons (a0, (C_Base_dVec_dVec_Base_dVec_dVCons (a1, C_Base_dVec_dVec_Base_dVec_dVNil))))))))

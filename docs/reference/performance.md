@@ -171,18 +171,30 @@ golden 一致，再 warmup + 多次取中位数；RSS 用 GNU time 的 max RSS�
 口径与基线维护见 `bench/README.md`；基线 `bench/baseline.json` 入库，`--check` 对超阈值项
 软告警。与 `nix/bench.sh` 的分工：后者测构建 / 编译墙钟与产物尺寸，本设施测运行期。
 
-M33 起点读数（`--runs 3 --warmup 1`，x86_64 / 16 核 / ocamlopt 5.5.1 非 flambda）：
+M33 起点 / W2 后读数（`--runs 3 --warmup 1`，x86_64 / 16 核 / ocamlopt 5.5.1 非 flambda；
+绝对 ms 随机器变化，只比较 ratio）：
 
-| benchmark | vuna | 手写 OCaml | ratio | 首要成本 |
-| --- | --- | --- | --- | --- |
-| arith | ~58 ms | ~5 ms | ~11.6x | `bi_*` 在 `Vuna_runtime` 跨模块调用，非 flambda 不内联 |
-| string_ops | ~202 ms | ~7 ms | ~28.9x | `++` 链 O(n²)、`strPack` / `substring` 的 `List.nth` |
-| hashmap | ~38 ms | ~4 ms | ~9.5x | 1024 桶用 list-of-list，`_nthOr` 线性遍历 |
-| list_recursion | ~29 ms | ~14 ms | ~2.1x | 已接近目标 |
-| gc_pressure | ~34 ms | ~26 ms | ~1.3x | 已接近目标 |
+| benchmark | 起点 ratio | W2 后 ratio | 首要成本 / W2 处理 |
+| --- | --- | --- | --- |
+| arith | ~11.6x | ~1.2x | `bi_*` 跨模块调用、`fun a -> fun b` 递归每轮分配闭包 → 饱和内联 + 多参数 lambda 链 |
+| string_ops | ~28.9x | ~3.6x | `++` 链 O(n²)、`strPack` / `substring` 的 `List.nth` → `String.concat` 批量拼接 + `Array.of_list` |
+| hashmap | ~9.5x | ~3.0x | 1024 桶用 list-of-list（W3 换 `Array` 后继续降） |
+| list_recursion | ~2.1x | ~0.8x | 已达标 |
+| gc_pressure | ~1.3x | ~1.0x | 已达标 |
 
-这三项是 M33 的优化优先序：codegen 内联 / 直接调用（W2）、字符串与库算法（W2）、哈希桶
-表示（W3）。优化后重跑 `--json bench/baseline.json` 更新基线并在这里记录。
+W2 落地的 codegen / 运行时改进（都在 `Codegen/Term.vuna` 与 `base/`）：
+
+1. **内建饱和应用内联**：`+ - * /`、比较 / 相等特化、`&& ||`、`++` 直接生成 OCaml
+   运算符表达式；部分应用 / 高阶引用仍走 runtime 函数。
+2. **多参数 lambda 链**：连续 `TLam` 合并成 `(fun x y -> body)`，擦除 binder 只占 de Bruijn
+   位置；消除 curried 递归的每轮闭包分配（arith 的主因）。
+3. **`++` 链展平**：`a ++ b ++ c` 生成 `(String.concat "" [a; b; c])`；`strPack` / `dtp_pack`
+   改 `Array.of_list`；`Base.List.concatMap` 改尾递归 accumulator；`Base.String.join` /
+   `unlines` 改一次 `strConcatMany`。
+4. **GC 统计**：生成 runtime 支持 `VN_PERF_STATS=1`（退出打印 `Gc.quick_stat` 的
+   minor/major words、collections、top_heap_words），`bench/run.sh` 采集进 JSON。
+
+优化后重跑 `--json bench/baseline.json` 更新基线并在这里记录。
 
 ## 相关阅读
 

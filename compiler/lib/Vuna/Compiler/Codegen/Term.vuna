@@ -31,6 +31,12 @@ dtRuntime =
   "let () =\n"
     ++ "  let c = Gc.get () in\n"
     ++ "  Gc.set { c with minor_heap_size = 16 * 1024 * 1024; space_overhead = 200 }\n"
+    ++ "let () =\n"
+    ++ "  if (try Sys.getenv \"VN_PERF_STATS\" with Not_found -> \"\") <> \"\" then\n"
+    ++ "    at_exit (fun () ->\n"
+    ++ "      let s = Gc.quick_stat () in\n"
+    ++ "      Printf.eprintf \"VN_PERF minor_words=%.0f major_words=%.0f minor_collections=%d major_collections=%d top_heap_words=%d\\n\"\n"
+    ++ "        s.Gc.minor_words s.Gc.major_words s.Gc.minor_collections s.Gc.major_collections s.Gc.top_heap_words)\n"
     ++ "let bi_add a b = a + b\n"
     ++ "let bi_sub a b = a - b\n"
     ++ "let bi_mul a b = a * b\n"
@@ -42,7 +48,7 @@ dtRuntime =
     ++ "let bi_strFromInt (n : int) = string_of_int n\n"
     ++ "let bi_strLength (s : string) = String.length s\n"
     ++ "let bi_strUnpack (s : string) = List.init (String.length s) (fun i -> Char.code s.[i])\n"
-    ++ "let bi_strPack (cs : int list) = String.init (List.length cs) (fun i -> Char.chr (List.nth cs i))\n"
+    ++ "let bi_strPack (cs : int list) =\n  let a = Array.of_list cs in\n  String.init (Array.length a) (fun i -> Char.chr a.(i))\n"
     ++ "let bi_lt_int (a : int) (b : int) = a < b\n"
     ++ "let bi_le_int (a : int) (b : int) = a <= b\n"
     ++ "let bi_gt_int (a : int) (b : int) = a > b\n"
@@ -132,8 +138,8 @@ dtListBridge datas = case findListFamilyData datas of
           ++ " -> [] | "
           ++ consMl
           ++ " (x, rest) -> x :: to_list rest in\n"
-          ++ "  let cs = to_list xs in\n"
-          ++ "  String.init (List.length cs) (fun i -> Char.chr (List.nth cs i))\n"
+          ++ "  let cs = Array.of_list (to_list xs) in\n"
+          ++ "  String.init (Array.length cs) (fun i -> Char.chr cs.(i))\n"
           ++ "\nlet dtp_listOf xs = List.fold_right (fun x acc -> "
           ++ consMl
           ++ " (x, acc)) xs "
@@ -358,17 +364,38 @@ else case t of
   TType l => cgErr0 TypeUsedAtRuntime
   TMeta m => cgErr1 (UnsolvedMetavarRuntime (showMetaHint m)) (showMetaHint m)
 
+-- M33 W2：多参数 lambda 链合并。
+-- 旧实现每个 `TLam` 生成 `(fun x -> (fun y -> body))`；OCaml 把外层看成 arity-1 的
+-- 函数，`f x y` 的每次递归调用都会**分配一个 partial-application 闭包**（arith 基准
+-- 的 12x 主因，Gc 统计显示每轮约 40 字节分配）。这里把连续的 `TLam` 收成一条链，
+-- 擦除 binder 只占 de Bruijn 位置、不作为 OCaml 参数，生成 `(fun x y -> body)`。
+data LamChain : Type where
+  LamChain : List (Pair String Rig) -> Term -> LamChain
+
+collectLamChain : Term -> LamChain
+collectLamChain (TLam name rig body) = case collectLamChain body of
+  LamChain rest inner => LamChain (Pair name rig :: rest) inner
+collectLamChain t = LamChain [] t
+
+lamParamPair : Pair String Rig -> Pair String Rig
+lamParamPair (Pair name rig) =
+  if rigIsErased rig then Pair "" Rig0 else Pair (ocamlBinderName name) Rig1
+
+lamParamName : Pair String Rig -> List String
+lamParamName (Pair name rig) = if rigIsErased rig then [] else [ocamlBinderName name]
+
 genTermLamFuel : Int -> GenSt -> List (Pair String Rig) -> String -> Rig -> Term -> Result (Pair String GenSt)
 genTermLamFuel fuel st binders name rig body = if fuel <= 0 then Err "DT: internal: codegen fuel exhausted"
-else if rigIsErased rig then andThen (genTermFuel (fuel - 1) st (Pair "" Rig0 :: binders) body) (\p => case p of
-  Pair b st2 => Ok (Pair b st2)
-)
-else
-  let
-    ocName = ocamlBinderName name
-  in andThen (genTermFuel (fuel - 1) st (Pair ocName Rig1 :: binders) body) (\p => case p of
-    Pair b st2 => Ok (Pair ("(fun " ++ ocName ++ " -> " ++ b ++ ")") st2)
-  )
+else case collectLamChain (TLam name rig body) of
+  LamChain params inner =>
+    let
+      env = append (reverse (map lamParamPair params)) binders
+      names = concatMap lamParamName params
+    in andThen (genTermFuel (fuel - 1) st env inner) (\p => case p of
+      Pair b st2 => case names of
+        [] => Ok (Pair b st2)
+        _ => Ok (Pair ("(fun " ++ joinWith " " names ++ " -> " ++ b ++ ")") st2)
+    )
 
 -- 应用：精化器可能把饱和的构造子应用表示成嵌套 `TApp (TApp (TCon c []) a) b`。
 -- 这种形态必须先折叠成 `TCon c [a, b]`，否则 OCaml 侧会把它当成 curried 调用
@@ -378,11 +405,153 @@ genAppFuel fuel st binders f a rig = if fuel <= 0 then Err "DT: internal: codege
 else if rigIsErased rig then genTermFuel (fuel - 1) st binders f
 else case flattenConApp (TApp f a rig) of
   Just (Pair c args) => genConAppFuel (fuel - 1) st binders c args
-  Nothing => andThen (genTermFuel (fuel - 1) st binders f) (\pf => case pf of
-    Pair fs st1 => andThen (genTermFuel (fuel - 1) st1 binders a) (\pa => case pa of
-      Pair at st2 => Ok (Pair ("(" ++ fs ++ " " ++ at ++ ")") st2)
-    )
+  Nothing => genAppOptimizedFuel (fuel - 1) st binders (TApp f a rig)
+
+-- ---------------------------------------------------------------
+-- M33 W2：内建饱和应用的内联
+-- ---------------------------------------------------------------
+-- `bi_*` / 运算符的 runtime 是 Vuna_runtime.ml 里的顶层 OCaml 函数。产物按模块分离
+-- 编译，非 flambda 的 ocamlopt **不做跨模块内联**，所以 `bi_add a b` / `bi_eq_int a b`
+-- 每次算术 / 比较都是真实调用（arith 基准的首要大成本）。这里对**饱和应用**直接生成
+-- OCaml 运算符表达式；部分应用 / 高阶引用仍回落到 runtime 函数（`genGlobalRef`）。
+--
+-- `++` 另外做链式展平：`a ++ b ++ c` 生成 `String.concat "" [a; b; c]`（>=3 个叶子），
+-- 避免逐级 `^` 的 O(n²) 拷贝。只改生成文本，语义与 `bi_*` 一致。
+inlineOpArity : String -> Int
+inlineOpArity "+" = 2
+inlineOpArity "-" = 2
+inlineOpArity "*" = 2
+inlineOpArity "/" = 2
+inlineOpArity "&&" = 2
+inlineOpArity "||" = 2
+inlineOpArity "++" = 2
+inlineOpArity "bi_eq_int" = 2
+inlineOpArity "bi_neq_int" = 2
+inlineOpArity "bi_eq_str" = 2
+inlineOpArity "bi_neq_str" = 2
+inlineOpArity "bi_lt_int" = 2
+inlineOpArity "bi_le_int" = 2
+inlineOpArity "bi_gt_int" = 2
+inlineOpArity "bi_ge_int" = 2
+inlineOpArity "bi_lt_generic" = 2
+inlineOpArity "bi_le_generic" = 2
+inlineOpArity "bi_gt_generic" = 2
+inlineOpArity "bi_ge_generic" = 2
+inlineOpArity _ = 0
+
+inlineText : String -> List String -> Maybe String
+inlineText "+" ([a, b]) = Just ("(" ++ a ++ " + " ++ b ++ ")")
+inlineText "-" ([a, b]) = Just ("(" ++ a ++ " - " ++ b ++ ")")
+inlineText "*" ([a, b]) = Just ("(" ++ a ++ " * " ++ b ++ ")")
+inlineText "/" ([a, b]) =
+  Just ("(if " ++ b ++ " = 0 then failwith \"division by zero\" else " ++ a ++ " / " ++ b ++ ")")
+inlineText "&&" ([a, b]) = Just ("(" ++ a ++ " && " ++ b ++ ")")
+inlineText "||" ([a, b]) = Just ("(" ++ a ++ " || " ++ b ++ ")")
+inlineText "++" ([a, b]) = Just ("(" ++ a ++ " ^ " ++ b ++ ")")
+inlineText "bi_eq_int" ([a, b]) = Just ("(" ++ a ++ " = " ++ b ++ ")")
+inlineText "bi_neq_int" ([a, b]) = Just ("(" ++ a ++ " <> " ++ b ++ ")")
+inlineText "bi_eq_str" ([a, b]) = Just ("(" ++ a ++ " = " ++ b ++ ")")
+inlineText "bi_neq_str" ([a, b]) = Just ("(" ++ a ++ " <> " ++ b ++ ")")
+inlineText "bi_lt_int" ([a, b]) = Just ("(" ++ a ++ " < " ++ b ++ ")")
+inlineText "bi_le_int" ([a, b]) = Just ("(" ++ a ++ " <= " ++ b ++ ")")
+inlineText "bi_gt_int" ([a, b]) = Just ("(" ++ a ++ " > " ++ b ++ ")")
+inlineText "bi_ge_int" ([a, b]) = Just ("(" ++ a ++ " >= " ++ b ++ ")")
+inlineText "bi_lt_generic" ([a, b]) = Just ("(" ++ a ++ " < " ++ b ++ ")")
+inlineText "bi_le_generic" ([a, b]) = Just ("(" ++ a ++ " <= " ++ b ++ ")")
+inlineText "bi_gt_generic" ([a, b]) = Just ("(" ++ a ++ " > " ++ b ++ ")")
+inlineText "bi_ge_generic" ([a, b]) = Just ("(" ++ a ++ " >= " ++ b ++ ")")
+inlineText _ _ = Nothing
+
+inlineArityMatches : String -> List (Pair Term Rig) -> Bool
+inlineArityMatches name args =
+  if inlineOpArity name <= 0 then False else length args == inlineOpArity name
+
+-- `f a1 ... an` 的 head 是内建、且每个实参都未擦除时，收集 (名字, 实参)（左→右）。
+flattenIntrinsicApp : Term -> Maybe (Pair String (List (Pair Term Rig)))
+flattenIntrinsicApp (TApp f a rig) = if rigIsErased rig then Nothing
+else case f of
+  TGlobal name => if inlineOpArity name > 0 then Just (Pair name [Pair a rig]) else Nothing
+  _ => case flattenIntrinsicApp f of
+    Just (Pair name args) => Just (Pair name (append args [Pair a rig]))
+    Nothing => Nothing
+flattenIntrinsicApp _ = Nothing
+
+-- `++` 应用树展平成叶子列表（右结合 / 左结合都吃）；非 `++` 根返回 Nothing。
+flattenConcatChain : Term -> Maybe (List Term)
+flattenConcatChain (TApp (TApp head l rl) r rr) = if rigIsErased rl || rigIsErased rr then Nothing
+else case head of
+  TGlobal g => if g == "++" then Just (append (concatLeaves l) (concatLeaves r)) else Nothing
+  _ => Nothing
+flattenConcatChain _ = Nothing
+
+concatLeaves : Term -> List Term
+concatLeaves (TApp (TApp head l rl) r rr) = if rigIsErased rl || rigIsErased rr then [TApp (TApp head l rl) r rr]
+else case head of
+  TGlobal g =>
+    if g == "++" then append (concatLeaves l) (concatLeaves r) else [TApp (TApp head l rl) r rr]
+  _ => [TApp (TApp head l rl) r rr]
+concatLeaves t = [t]
+
+genAppOptimizedFuel : Int -> GenSt -> List (Pair String Rig) -> Term -> Result (Pair String GenSt)
+genAppOptimizedFuel fuel st binders t = if fuel <= 0 then Err "DT: internal: codegen fuel exhausted"
+else case flattenConcatChain t of
+  Just parts =>
+    if length parts >= 3 then genConcatPartsFuel (fuel - 1) st binders parts
+    else genPlainAppFuel fuel st binders t
+  Nothing => genPlainAppFuel fuel st binders t
+
+genPlainAppFuel : Int -> GenSt -> List (Pair String Rig) -> Term -> Result (Pair String GenSt)
+genPlainAppFuel fuel st binders t = if fuel <= 0 then Err "DT: internal: codegen fuel exhausted"
+else case t of
+  TApp f a rig => case flattenIntrinsicApp t of
+    Just (Pair name args) =>
+      if inlineArityMatches name args then genInlineAppFuel (fuel - 1) st binders name args
+      else genPlainAppFallback (fuel - 1) st binders f a rig
+    Nothing => genPlainAppFallback (fuel - 1) st binders f a rig
+  _ => Err "DT: internal: genPlainAppFuel expects an application"
+
+genPlainAppFallback : Int -> GenSt -> List (Pair String Rig) -> Term -> Term -> Rig -> Result (Pair String GenSt)
+genPlainAppFallback fuel st binders f a rig = if fuel <= 0 then Err "DT: internal: codegen fuel exhausted"
+else andThen (genTermFuel (fuel - 1) st binders f) (\pf => case pf of
+  Pair fs st1 => andThen (genTermFuel (fuel - 1) st1 binders a) (\pa => case pa of
+    Pair at st2 => Ok (Pair ("(" ++ fs ++ " " ++ at ++ ")") st2)
   )
+)
+
+genInlineAppFuel : Int -> GenSt -> List (Pair String Rig) -> String -> List (Pair Term Rig) -> Result (Pair String GenSt)
+genInlineAppFuel fuel st binders name args = if fuel <= 0 then Err "DT: internal: codegen fuel exhausted"
+else andThen (genInlineArgsFuel (fuel - 1) st binders args) (\p => case p of
+  Pair texts st2 => case inlineText name texts of
+    Just text => Ok (Pair text st2)
+    Nothing => Err ("DT: internal: no inline text for builtin `" ++ name ++ "`")
+)
+
+genInlineArgsFuel : Int -> GenSt -> List (Pair String Rig) -> List (Pair Term Rig) -> Result (Pair (List String) GenSt)
+genInlineArgsFuel fuel st binders [] =
+  if fuel <= 0 then Err "DT: internal: codegen fuel exhausted" else Ok (Pair [] st)
+genInlineArgsFuel fuel st binders ((Pair arg rig) :: rest) = if fuel <= 0 then Err "DT: internal: codegen fuel exhausted"
+else if rigIsErased rig then Err "DT: internal: erased argument in inlined builtin application"
+else andThen (genTermFuel (fuel - 1) st binders arg) (\p => case p of
+  Pair text st2 => andThen (genInlineArgsFuel (fuel - 1) st2 binders rest) (\q => case q of
+    Pair texts st3 => Ok (Pair (text :: texts) st3)
+  )
+)
+
+genConcatPartsFuel : Int -> GenSt -> List (Pair String Rig) -> List Term -> Result (Pair String GenSt)
+genConcatPartsFuel fuel st binders parts = if fuel <= 0 then Err "DT: internal: codegen fuel exhausted"
+else andThen (genConcatPartTexts (fuel - 1) st binders parts) (\p => case p of
+  Pair texts st2 => Ok (Pair ("(String.concat \"\" [" ++ joinWith "; " texts ++ "])") st2)
+)
+
+genConcatPartTexts : Int -> GenSt -> List (Pair String Rig) -> List Term -> Result (Pair (List String) GenSt)
+genConcatPartTexts fuel st binders [] =
+  if fuel <= 0 then Err "DT: internal: codegen fuel exhausted" else Ok (Pair [] st)
+genConcatPartTexts fuel st binders (t :: rest) = if fuel <= 0 then Err "DT: internal: codegen fuel exhausted"
+else andThen (genTermFuel (fuel - 1) st binders t) (\p => case p of
+  Pair text st2 => andThen (genConcatPartTexts (fuel - 1) st2 binders rest) (\q => case q of
+    Pair texts st3 => Ok (Pair (text :: texts) st3)
+  )
+)
 
 -- OCaml 的多参变体构造子是 **tupled**（`C of t1 * t2` 写作 `C (a, b)`），
 -- 不是 curried，所以多实参必须用逗号包成一个元组。

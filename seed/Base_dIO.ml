@@ -23,30 +23,30 @@ let v_Base_dIO_drunIO = (fun mc0 -> (match mc0 with
 
 let v_Base_dIO_dioPure = (fun x -> (C_Base_dIO_dIO_Base_dIO_dMkIO ((fun w -> x))))
 
-let v_Base_dIO_dioBind = (fun mc0 -> (fun mc1 -> (match mc0 with
+let v_Base_dIO_dioBind = (fun mc0 mc1 -> (match mc0 with
   | C_Base_dIO_dIO_Base_dIO_dMkIO (dtb__1) -> (C_Base_dIO_dIO_Base_dIO_dMkIO ((fun w -> (match (mc1 (dtb__1 w)) with
   | C_Base_dIO_dIO_Base_dIO_dMkIO (dtb__2) -> (dtb__2 w)
   | _ -> failwith "DT: impossible branch"
 ))))
   | _ -> failwith "DT: impossible branch"
-)))
+))
 
-let v_Monad_uBase_dIO_dIO = (C_Dict_uBase_dMonad_dMonad_MkDict_uBase_dMonad_dMonad ((fun io -> (fun k -> ((v_Base_dIO_dioBind io) k))), (fun x -> (v_Base_dIO_dioPure x))))
+let v_Monad_uBase_dIO_dIO = (C_Dict_uBase_dMonad_dMonad_MkDict_uBase_dMonad_dMonad ((fun io k -> ((v_Base_dIO_dioBind io) k)), (fun x -> (v_Base_dIO_dioPure x))))
 
-let v_Base_dIO_dioFmap = (fun mc0 -> (fun mc1 -> (match mc1 with
+let v_Base_dIO_dioFmap = (fun mc0 mc1 -> (match mc1 with
   | C_Base_dIO_dIO_Base_dIO_dMkIO (dtb__3) -> (C_Base_dIO_dIO_Base_dIO_dMkIO ((fun w -> (mc0 (dtb__3 w)))))
   | _ -> failwith "DT: impossible branch"
-)))
+))
 
-let v_Functor_uBase_dIO_dIO = (C_Dict_uBase_dMonad_dFunctor_MkDict_uBase_dMonad_dFunctor ((fun f -> (fun io -> ((v_Base_dIO_dioFmap f) io)))))
+let v_Functor_uBase_dIO_dIO = (C_Dict_uBase_dMonad_dFunctor_MkDict_uBase_dMonad_dFunctor ((fun f io -> ((v_Base_dIO_dioFmap f) io))))
 
 let v_Base_dIO_dprint = (fun _uarity0 -> ((fun dtio_0 -> C_Base_dIO_dIO_Base_dIO_dMkIO (fun _ -> dtp_print dtio_0)) _uarity0))
 
-let v_Base_dIO_dprintln = (fun s -> (v_Base_dIO_dprint ((bi_concat s) "\n")))
+let v_Base_dIO_dprintln = (fun s -> (v_Base_dIO_dprint (s ^ "\n")))
 
 let v_Base_dIO_dreadFile = (fun _uarity0 -> ((fun dtio_0 -> C_Base_dIO_dIO_Base_dIO_dMkIO (fun _ -> dtp_readFile dtio_0)) _uarity0))
 
-let v_Base_dIO_dwriteFile = (fun _uarity0 -> (fun _uarity1 -> (((fun dtio_0 dtio_1 -> C_Base_dIO_dIO_Base_dIO_dMkIO (fun _ -> dtp_writeFile dtio_0 dtio_1)) _uarity0) _uarity1)))
+let v_Base_dIO_dwriteFile = (fun _uarity0 _uarity1 -> (((fun dtio_0 dtio_1 -> C_Base_dIO_dIO_Base_dIO_dMkIO (fun _ -> dtp_writeFile dtio_0 dtio_1)) _uarity0) _uarity1))
 
 let v_Base_dIO_dreadLine = (C_Base_dIO_dIO_Base_dIO_dMkIO (fun _ -> (dtp_readLine ())))
 

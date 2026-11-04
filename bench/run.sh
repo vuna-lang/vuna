@@ -166,6 +166,7 @@ selected() {
 }
 
 declare -A VUNA_MED VUNA_RSS OCAML_MED OCAML_RSS RATIO
+declare -A GC_MINOR_WORDS GC_MAJOR_WORDS GC_MINOR_COLLECTIONS GC_MAJOR_COLLECTIONS GC_TOP_HEAP
 ORDER=()
 
 # 校验产物输出与 golden 一致（vuna 与手写 OCaml 两侧都校验）。
@@ -220,9 +221,21 @@ run_bench() { # name
   VUNA_RSS[$name]=$(rss_of "$vprog")
   OCAML_RSS[$name]=$(rss_of "$oprog")
   RATIO[$name]=$(awk -v a="${VUNA_MED[$name]}" -v b="${OCAML_MED[$name]}" 'BEGIN { if (b <= 0) print "0"; else printf "%.2f", a / b }')
+  # 分配 / GC 统计：生成 runtime 在 VN_PERF_STATS=1 时退出打印（M33 W2）。
+  # 放在计时之后，不影响墙钟读数。
+  local gc_line
+  gc_line=$(VN_PERF_STATS=1 "$vprog" 2>&1 >/dev/null | grep '^VN_PERF ' | tail -n 1 || true)
+  GC_MINOR_WORDS[$name]=$(printf '%s' "$gc_line" | sed -n 's/.*minor_words=\([0-9][0-9]*\).*/\1/p')
+  GC_MAJOR_WORDS[$name]=$(printf '%s' "$gc_line" | sed -n 's/.*major_words=\([0-9][0-9]*\).*/\1/p')
+  GC_MINOR_COLLECTIONS[$name]=$(printf '%s' "$gc_line" | sed -n 's/.*minor_collections=\([0-9][0-9]*\).*/\1/p')
+  GC_MAJOR_COLLECTIONS[$name]=$(printf '%s' "$gc_line" | sed -n 's/.*major_collections=\([0-9][0-9]*\).*/\1/p')
+  GC_TOP_HEAP[$name]=$(printf '%s' "$gc_line" | sed -n 's/.*top_heap_words=\([0-9][0-9]*\).*/\1/p')
   ORDER+=("$name")
   note "  vuna  ${VUNA_MED[$name]} ms  ${VUNA_RSS[$name]} KB"
   note "  ocaml ${OCAML_MED[$name]} ms  ${OCAML_RSS[$name]} KB  ratio ${RATIO[$name]}x"
+  if [ -n "${GC_MINOR_WORDS[$name]:-}" ]; then
+    note "  gc    minor_words=${GC_MINOR_WORDS[$name]} major_words=${GC_MAJOR_WORDS[$name]} top_heap=${GC_TOP_HEAP[$name]}"
+  fi
 }
 
 for name in $BENCHES; do
@@ -250,8 +263,11 @@ emit_json() {
   for name in "${ORDER[@]}"; do
     [ "$first" = 1 ] || printf ',\n'
     first=0
-    printf '    "%s": { "vuna": { "median_ms": %s, "rss_kb": %s }, "ocaml": { "median_ms": %s, "rss_kb": %s }, "ratio": %s }' \
-      "$name" "${VUNA_MED[$name]}" "${VUNA_RSS[$name]}" "${OCAML_MED[$name]}" "${OCAML_RSS[$name]}" "${RATIO[$name]}"
+    printf '    "%s": { "vuna": { "median_ms": %s, "rss_kb": %s, "gc": { "minor_words": %s, "major_words": %s, "minor_collections": %s, "major_collections": %s, "top_heap_words": %s } }, "ocaml": { "median_ms": %s, "rss_kb": %s }, "ratio": %s }' \
+      "$name" "${VUNA_MED[$name]}" "${VUNA_RSS[$name]}" \
+      "${GC_MINOR_WORDS[$name]:-0}" "${GC_MAJOR_WORDS[$name]:-0}" \
+      "${GC_MINOR_COLLECTIONS[$name]:-0}" "${GC_MAJOR_COLLECTIONS[$name]:-0}" "${GC_TOP_HEAP[$name]:-0}" \
+      "${OCAML_MED[$name]}" "${OCAML_RSS[$name]}" "${RATIO[$name]}"
   done
   printf '\n  }\n}\n'
 }

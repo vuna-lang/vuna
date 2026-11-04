@@ -62,16 +62,21 @@ skipSep sep (chars@(c :: rest)) fuel n acc parts =
   else skipSep sep rest (fuel - 1) (n - 1) acc parts
 
 join : String -> List String -> String
-join sep [] = ""
-join sep ([x]) = x
-join sep (x :: rest) = x ++ sep ++ join sep rest
+join sep xs = strConcatMany (_interleave sep xs)
+
+-- M33 W2：`join` 原来用 `x ++ sep ++ join sep rest` 逐段拼接，总拷贝 O(n²)；
+-- 改成一次 `strConcatMany`（runtime `String.concat ""`，单遍分配）。
+_interleave : String -> List String -> List String
+_interleave sep [] = []
+_interleave sep ([x]) = [x]
+_interleave sep (x :: rest) = x :: sep :: _interleave sep rest
 
 lines : String -> List String
 lines s = split "\n" s
 
 unlines : List String -> String
 unlines [] = ""
-unlines (x :: rest) = x ++ "\n" ++ unlines rest
+unlines xs = strConcatMany (map (\x => x ++ "\n") xs)
 
 trimLeft : String -> String
 trimLeft s = strPack (_dropSpace (strUnpack s))
