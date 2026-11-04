@@ -927,6 +927,16 @@ check_contains "$dt_src (build library error)" "$dt_lib_err" "library package"
 if [ "$dt_lib_code" -ne 0 ]; then ok; else bad "$dt_src (build library exit)" "non-zero" "$dt_lib_code"; fi
 
 # DT fmt round-trip：Pi 语法格式化后仍解析为同一程序且幂等
+# 自己准备包上下文（不依赖第 30 段留下的 $tmp/fmt-pkg），这样 `--only 34` 与
+# 并行跑章节（nix/run-tests.sh --jobs）都能独立通过。
+mkdir -p "$tmp/fmt-pkg"
+cat > "$tmp/fmt-pkg/vuna.toml" <<EOF
+[package]
+name = "fmt-roundtrip"
+
+[dependencies]
+vuna-base = "$VUNA_BASE"
+EOF
 cp corpus/dt/03_compose.vuna "$tmp/fmt-pkg/dt_fmt.vuna"
 chmod u+w "$tmp/fmt-pkg/dt_fmt.vuna"
 "$VUNA" fmt "$tmp/fmt-pkg/dt_fmt.vuna" >/dev/null 2>&1
