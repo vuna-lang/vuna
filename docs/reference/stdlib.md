@@ -19,6 +19,7 @@
 | `Base.IORef` | IO 内的可变引用（`newRef` / `readRef` / `writeRef` / `modifyRef`，全部 `IO`） |
 | `Base.MArray` | IO 内的可变数组（`new` / `read` / `write` / `length`，全部 `IO`） |
 | `Base.Buffer` | 可变字符串缓冲（`new` / `add` / `contents` / `length`，全部 `IO`） |
+| `Base.State` / `Base.Reader` / `Base.Error` | 库级效应（M33 W6）：纯函数表示，手写 `bind` / `map` / `pure` 组合子；`State` 是 `s -> Pair a s`、`Reader` 是 `e -> a`、`Error` 是泛型 `Ok`/`Err` 和；暂不声明 trait 实例（等 F4 的 trait 能力） |
 | `Base.Nat` | `Nat(..)`（`Zero` / `Succ`）；DT 夹具与错误码表使用 |
 | `Base.Vec` | `Vec(..)` 与 `substTemplate` / `vhead` / `vlen` / `vtail` |
 | `Base.Monad` | `Functor` / `Monad` trait |
@@ -142,6 +143,9 @@ module Base.IO (IO, print, println, readFile, writeFile, readLine, readDir, ...)
 - **容器与可变数据（M33 W3）**：不可变 `Base.Array`、IO 内 `IORef` / `MArray` / `Buffer`
   已落地；`Array.get` / `MArray.read` 越界是宿主 `Invalid_argument`；`Array.set` 返回新数组；
   可变句柄只经 `IO` 动作使用（`runIO` 逃逸需要 `unsafe`）；没有线性 / 唯一性类型与 ST；
+- **库级效应（M33 W6）**：`State` / `Reader` / `Error` 是纯函数库，**不进入 `Prelude` /
+  `Base` 门面**（显式 import）；没有 trait 实例（trait 单参数 / 类型级部分应用限制），
+  `bind` / `map` / `pure` 组合子手写；没有语言级效应系统 / 并发（M35）；
 - `Result` 暂无 `Functor` / `Monad` 实例；
 - 抽象类型（`Map`、`IO`）跨包不可构造、不可模式匹配，只能经 API 使用。
 

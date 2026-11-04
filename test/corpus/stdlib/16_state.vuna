@@ -1,0 +1,12 @@
+-- M33 W6：库级 State 效应（纯函数表示，interp 可归约）。
+import Base.State
+import Base.Pair
+import Base.Int
+
+counter : State Int Int
+counter =
+  Base.State.bindState Base.State.get
+    (\n => Base.State.bindState (Base.State.put (n + 1)) (\_ => Base.State.pureState (n + 1)))
+
+main : Int
+main = Base.State.evalState counter 41

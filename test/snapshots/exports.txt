@@ -4,6 +4,7 @@ base/lib/Base/Array.vuna: fromList, get, length, make, set, toList
 base/lib/Base/Bool.vuna: Bool(..), and, bool, not, or, xor
 base/lib/Base/Buffer.vuna: add, contents, length, new
 base/lib/Base/Eq.vuna: Eq(..)
+base/lib/Base/Error.vuna: Error, bindError, catchError, mapError, pureError, runError, throwError
 base/lib/Base/HashMap.vuna: HashMap, fromList, hashStr, insert, insertAll, lookup, member, ofNames, size, toList
 base/lib/Base/HashSet.vuna: HashSet, empty, fromList, insert, member, size, toList
 base/lib/Base/IO.vuna: Functor(..), IO, Monad(..), exit, fileExists, fileMtime, fileSize, getArgs, isDirectory, makeDir, print, println, readDir, readFile, readLine, removeFile, runIO, writeFile
@@ -18,9 +19,11 @@ base/lib/Base/Monad.vuna: Functor(..), Monad(..)
 base/lib/Base/Nat.vuna: Nat(..)
 base/lib/Base/Ord.vuna: Ord(..)
 base/lib/Base/Pair.vuna: Pair(..), firstOf, secondOf
+base/lib/Base/Reader.vuna: Reader, ask, bindReader, local, mapReader, pureReader, runReader
 base/lib/Base/Result.vuna: Result(..), andThen, mapError, mapResult, step, traverse, withDefault
 base/lib/Base/Show.vuna: Show(..)
 base/lib/Base/Sort.vuna: mergeSort, sortBy
+base/lib/Base/State.vuna: State, bindState, evalState, execState, get, mapState, modify, pureState, put, runState
 base/lib/Base/String.vuna: contains, endsWith, join, lines, repeat, split, startsWith, substring, trim, trimLeft, trimRight, unlines
 base/lib/Base/Vec.vuna: Vec(..), substTemplate, vhead, vlen, vtail
 base/lib/Prelude.vuna: module Base.Bool, module Base.Eq, module Base.List, module Base.Maybe, module Base.Monad, module Base.Ord, module Base.Pair, module Base.Result, module Base.Show, module Base.String

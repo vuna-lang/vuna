@@ -1,0 +1,26 @@
+module Base.Reader (Reader, ask, bindReader, local, mapReader, pureReader, runReader) where
+
+-- Base.Reader：库级 Reader 效应（M33 W6）。表示是 `e -> a` 的纯函数；
+-- 组合子手写（trait 单参数 / 类型级部分应用限制，暂不声明 Functor/Monad 实例）。
+import Base.Pair
+
+data Reader e a : Type where
+  MkReader : (e -> a) -> Reader e a
+
+runReader : Reader e a -> e -> a
+runReader (MkReader f) e = f e
+
+pureReader : a -> Reader e a
+pureReader a = MkReader (\e => a)
+
+mapReader : (a -> b) -> Reader e a -> Reader e b
+mapReader f r = MkReader (\e => f (runReader r e))
+
+bindReader : Reader e a -> (a -> Reader e b) -> Reader e b
+bindReader r k = MkReader (\e => runReader (k (runReader r e)) e)
+
+ask : Reader e e
+ask = MkReader (\e => e)
+
+local : (e -> e) -> Reader e a -> Reader e a
+local f r = MkReader (\e => runReader r (f e))

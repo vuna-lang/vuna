@@ -1,0 +1,9 @@
+-- M33 W6：库级 Error 效应（泛型错误类型，interp 可归约）。
+import Base.Error
+import Base.Int
+
+safeDiv : Int -> Int -> Error String Int
+safeDiv a b = if b == 0 then Base.Error.throwError "div0" else Base.Error.pureError (a / b)
+
+main : Int
+main = Base.Error.runError (safeDiv 84 2) (\_ => 0) (\v => v)

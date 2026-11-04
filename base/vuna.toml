@@ -27,6 +27,9 @@ modules = [
   "Base.IORef",
   "Base.MArray",
   "Base.Buffer",
+  "Base.State",
+  "Base.Reader",
+  "Base.Error",
   "Base.Monad",
   "Base.IO",
   "Prelude"
