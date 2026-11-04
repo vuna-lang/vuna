@@ -84,6 +84,8 @@ ityToTerm IInt = intTy
 ityToTerm IStr = strTy
 ityToTerm IBool = boolTy
 ityToTerm (IList elem) = TApp (TGlobal listFamilyName) (ityToTerm elem) Rig1
+-- M31：效果原语的返回类型是 canonical `Base.IO.IO a`（与 main 钩子同一族身份）。
+ityToTerm (IIO elem) = TApp (TGlobal ioFamilyName) (ityToTerm elem) Rig1
 ityToTerm (IFun a b) = TPi "_" False Rig1 (ityToTerm a) (ityToTerm b)
 ityToTerm IPolyEq = polyEqTy
 

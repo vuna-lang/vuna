@@ -17,6 +17,7 @@ module Vuna.Compiler.Intrinsics
   , intrinsicCapability
   , intrinsicName
   , intrinsicOp
+  , intrinsicReturnsIO
   , intrinsicRuntime
   , intrinsicSignature
   , intrinsicVisible
@@ -95,6 +96,8 @@ data IType : Type where
   IBool : IType
   -- `Base.List.List <arg>`：族身份固定为 base 的普通 data 声明
   IList : IType -> IType
+  -- `Base.IO.IO <arg>`：效果原语返回的 IO 动作（M31 起效果原语类型化）
+  IIO : IType -> IType
   IFun : IType -> IType -> IType
   -- `{a : Type} -> a -> a -> Bool`（`==` / `/=` 的泛化签名）
   IPolyEq : IType
@@ -186,6 +189,16 @@ canonicalCtorsFor name =
 
 intrinsicArity : Intrinsic -> Int
 intrinsicArity i = arityOfType (intrinsicSignature i)
+
+-- 签名尾部是 `IIO _`：该内建返回 IO 动作，codegen 必须把 runtime 表达式包成
+-- `MkIO (fun _ -> …)` 值（M31；零参原语因此成为真正的值而不是每次求值的表达式）。
+intrinsicReturnsIO : Intrinsic -> Bool
+intrinsicReturnsIO i = typeReturnsIO (intrinsicSignature i)
+
+typeReturnsIO : IType -> Bool
+typeReturnsIO (IIO _) = True
+typeReturnsIO (IFun _ cod) = typeReturnsIO cod
+typeReturnsIO _ = False
 
 isEffectfulIntrinsic : Intrinsic -> Bool
 isEffectfulIntrinsic i = case intrinsicCapability i of
