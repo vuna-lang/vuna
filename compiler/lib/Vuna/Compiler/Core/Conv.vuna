@@ -214,6 +214,9 @@ mismatchAt depth a b =
     sa = showValueAt depth a
     sb = showValueAt depth b
     _ = note ("mismatch: " ++ sa ++ " <> " ++ sb)
+    _ =
+      note
+        ("mismatch-term: " ++ showTerm (quote depth a) ++ " <> " ++ showTerm (quote depth b) ++ " =" ++ strFromInt depth)
   in tcErr2NoLoc (TypeMismatch sa sb) sa sb
 
 -- ---------------------------------------------------------------
