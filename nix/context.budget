@@ -35,14 +35,14 @@
 #   - 文档按主题重整：删除 history/dt-core/dt-parity/dt.md，新增 core/tooling/records-traits
 #     并把 DT 语义并入 type-system；合并 main 的 LSP/readBytes 文档后按实测复标定：
 #     coldstart 29731 / agents 104 / arch 167 / readme 163 / max_ref 279。
-coldstart_bytes 33752
-agents_lines 112
+coldstart_bytes 33989
+agents_lines 113
 arch_lines 185
-readme_lines 169
+readme_lines 170
 #   - M24.5：dt-parity.md §6 重写（实测能力表 + 边界）到 203 行；Elab 新增 scrutinee 反射、
 #     不可达分支、inlineSolvedMetas（3348 → 3513）。按实测重标定 max_ref 208 / max_module 3530；
 #     入口文档（coldstart/agents/arch/readme）不变。
-max_ref_lines 340
+max_ref_lines 341
 max_module_lines 1208
 #   - M27：新增 `primitives.md` 与内建/原语/能力文档、`Vuna.Compiler.Intrinsics` 模块；
 #     按 `sh nix/context-budget.sh .` 实测收紧：coldstart 29055 / agents 104 / arch 156 /
@@ -127,3 +127,6 @@ max_module_lines 1208
 #     `sh nix/context-budget.sh .` 实测复标定：coldstart 33752 / agents 112 / arch 185 /
 #     readme 169 / max_ref 340（primitives.md 新增两条调试原语）；max_module_lines 保持
 #     1208（实测最大 Codegen/Term.vuna 1163，未放宽）。
+#   - M38 QTT 与 M38 调试分支合并（rebase 到 main）：qtt.md 及导航并入后按
+#     `sh nix/context-budget.sh .` 实测复标定 coldstart 33989 / agents 113 / readme 170 /
+#     max_ref 341；arch 185、max_module 1208 不变。
