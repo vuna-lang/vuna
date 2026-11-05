@@ -19,7 +19,7 @@
 | `Common` | 编译器门面：整模块重导出 `Base.Pair`/`Bool`/`List`/`Maybe`/`Result`/`String`，并保留 `Pos`/`Span`、模块路径与诊断工具 | `showSpanLoc`、`suggest`、`splitPath` |
 | `Diagnostics`（门面） | 错误码体系入口：整模块重导出 `Diagnostics.Tc`/`Cg`/`Common` 与 `Base.Nat`/`Vec`，调用点名字集合不变 | `tcErr0`、`cgErr0`、`tcAll`、`cgAll` |
 | `Diagnostics.Tc` / `Cg` | `TcErr : Nat -> Type` / `CgErr : Nat -> Type` 域枚举（构造子携带模板、arity 由索引锁定）；`tcAll`/`cgAll` 按 arity 分块（避免单行巨表） | `tcCode`、`tcTemplate`、`cgCode`、`cgTemplate` |
-| `Intrinsics` | **内建声明唯一真源**：名字/签名形状（`IType`）/arity/归约标签（`IntrinsicOp`）/能力（`Capability`）/runtime 名/用户可见性；内置身份按声明 symbol（`Base.Bool.Bool` / `Base.List.List` / `Base.IO.IO`） | `findIntrinsic`、`intrinsicRuntime`、`intrinsicCapability`、`parseCapability` |
+| `Intrinsics` | **内建声明唯一真源**：名字/签名形状（`IType`）/arity/归约标签（`IntrinsicOp`）/能力（`Capability`）/runtime 名/用户可见性；内置身份按声明 symbol（`IO` 内建；`Base.Bool.Bool` / `Base.List.List` / `Base.Nat.Nat`） | `findIntrinsic`、`intrinsicRuntime`、`intrinsicCapability`、`parseCapability` |
 | `Frontend.Ast` | 语法类型与 AST helper（`Expr`/`Decl`/`Pat`/`Ctor`/`Import`/`ModDecl`/`TraitMethod`） | `clausesFor`、`funArity`、`declNames` |
 | `Frontend.Lexer` | 字符游标、token 与位置；注释单独 lex 出来供 formatter 使用 | `lexSource`、`lexComments` |
 | `Frontend.Parser` | offside layout parser → AST + imports；`where` 块与绑定签名行；方法签名带 span；M32 起顶层签名可带约束 ctx（`C a =>`） | `parseSource`、`parseExpressionSource` |
@@ -53,7 +53,7 @@
 | `Codegen`（门面） | DT 擦除 codegen 的稳定入口；重导出 `Codegen.Assembly` 与 `Codegen.Split` | `checkDtProgram`、`generateDtSplitProgram` |
 | `Codegen.Decl` | OCaml 名字编码（sanitize/前缀/保留字）+ 跨单元引用限定（`Unit.name`）+ 变体类型声明；构造子字段形状 keep flags 的实际消费点；内置身份按完整符号（canonical Bool 族不进运行时变体） | `ctorOcamlName`、`qualValueText`、`qualCtorText`、`qualTypeText`、`genTypeDecls`、`ctorKeepFlags` |
 | `Codegen.Erase` | 擦除检查、de Bruijn 作用域/名字护栏、依赖分析与 SCC 分组；axiom 强制进类型级分区，运行时使用报 `CG_AxiomAtRuntime` | `checkAllErasure`、`checkAllDefScopes`、`ensureUniqueOcamlNames`、`checkNoAxiomRuntime` |
-| `Codegen.Term` | 项 → OCaml（擦除驱动）+ DT 运行时前缀（`bi_*`、`dtp_*`、IO 桥接）；全局名 → runtime 映射消费 `Intrinsics` | `dtRuntime`、`genDtHook`、`genGroups` |
+| `Codegen.Term` | 项 → OCaml（擦除驱动）+ DT 运行时前缀（`bi_*`、`dtp_*`、IO 桥接）+ M38 定义位置表/异常报告器；全局名 → runtime 映射消费 `Intrinsics` | `dtRuntime`、`dtRuntimeWith`、`dtDefLocTable`、`genDtHook`、`genGroups` |
 | `Codegen.Assembly` | 同一份 `DtProgram` 的装配与检查入口 | `prepareDtProgram`、`genUnitText`、`mainHook`、`checkDtProgram` |
 | `Codegen.Split` | **唯一** codegen 生成器：逐模块 split 的声明归属表与分文件装配 | `generateDtSplitProgram` |
 | `Driver.Split` | 输出文件模型与构建脚本生成：`SplitFile`、依赖序、按内容哈希增量的 `build.sh` | `SplitFile`、`buildScript`、`writeSplitFiles`、`writeSplitFilesIfChanged` |
@@ -76,7 +76,9 @@
 | `Vuna.Fmt`（+ `Fmt.Comment`/`Decl`/`Expr`/`Util`） | 源码格式化器（`vuna fmt`，parse → 规范打印；门面只导出 `formatSourceWith`） |
 | `Vuna.Lint`（+ `Lint.Rules`/`Fix`/`Diagnostics`） | 风格检查与自动修复（`vuna lint`）；规则见 [lint.md](lint.md) |
 | `Vuna.Repl` | 交互式 REPL（`vuna repl`；表达式经 DT 求值，顶层定义需先写签名） |
-| `Vuna.Doc` | API 文档生成（`vuna doc`，扫描 `lib/` 输出 Markdown） |
+| `Vuna.Doc`（+ `Doc.Types`/`Comments`/`Model`/`Prose`/`Html`/`Run`） | docstring 提取 + 单文件交互 HTML（`vuna doc`）；见 [api-docs.md](api-docs.md) |
+| `Vuna.Sig` | 语法级类型打印单一真源（api / doc / search 共用） |
+| `Vuna.Search`（+ `Search.Types`/`Query`/`Run`） | 名称 / docstring / 类型检索（`vuna search`） |
 | `Vuna.Index`（+ `Index.Types`/`Scan`/`Query`/`Render`） | 源码符号索引（`vuna map` / `vuna api`；parse 级，缓存在 `.local/index/`） |
 | `Vuna.Lsp`（+ `Lsp.Protocol`/`Diagnostics`/`Query`） | LSP 服务端（JSON-RPC over stdio；方法见 [tooling.md](tooling.md)） |
 | `Vuna.Json` | 最小 JSON 读写（LSP 用） |
@@ -167,8 +169,8 @@ check pkg
 （`TBool`），`List`/`IO` 按完整符号生成普通变体；`case` 编译成 OCaml `match`、构造器直接
 构造变体。`Base.Nat.Nat` 同样不进运行时变体：零/后继、字面量与 `case` 降成 OCaml `int`
 与 `if`/`let`（`Codegen.Decl.runtimeDatas` 过滤族；`Codegen.Term` 折叠 Succ 链、降级 Nat case），
-算术走 `bi_nat*`。运行时表示只由 `Core.rigIsErased` 判定（隐式 binder 与 `Type` 域擦除，显式值 /
-显式索引保留），不做整程序使用分析。运行时前导代码（`bi_*`、`dtp_*`、IO 桥接等）在
+算术走 `bi_nat*`。运行时表示只由 `Core.rigIsErased` 判定（0 擦除，1/ω 保留）；
+`Elab.Usage` 另做整程序用量检查（QTT 0/1/ω，见 [qtt.md](qtt.md)），不依赖 multiplicity。运行时前导代码（`bi_*`、`dtp_*`、IO 桥接等）在
 `Codegen.Term.dtRuntime`，无条件依赖 Unix（`Unix.stat` / `gettimeofday` / `readlink`）——
 原语语义见 [primitives.md](primitives.md)。
 
@@ -198,7 +200,10 @@ check pkg
 = 文件名 + 文本 + **直接依赖单元列表**（含 `Vuna_runtime`、不含自身；runtime 单元依赖为空，
 其余依赖只记实际引用到的单元，不是「所有前序单元」）：
 
-1. `Vuna_runtime.ml`：`dtRuntime`；
+1. `Vuna_runtime.ml`：`dtRuntimeWith`（`Codegen.Term`）= 运行时常量 + `dt_def_locs`
+   定义位置表（mangled 值名 → `定义名 (相对路径:行)`，路径已按模块根/包目录归一，
+   保证同输入产物与 rotation 的确定性）+ `dt_report_exn` 未捕获异常报告器（M38，
+   见 [debugging.md](debugging.md)）；
 2. 每个源码模块一个 `<Module>.ml`（OCaml 编译单元名 = 模块名点转 `_d`，如
    `Vuna_dCompiler_dFrontend_dParser.ml`；拓扑序）。文件头**只** `open Vuna_runtime`，
    没有 open 链；跨单元引用（值 `v_*` / 构造子 `C_*` / 类型 `t_*`）一律渲染成 OCaml
@@ -206,6 +211,7 @@ check pkg
    `Base_dList.C_Base_dList_dList_Cons`），同单元内仍是裸名；`List` 桥接放在声明 `List`
    族的模块文件里；
 3. `Main.ml`：entry decls 的 datas + defs + `main` 钩子（入口文件里的 `data` 也必须发进来）；
+   首行是 `Printexc.record_backtrace` 序言，钩子在 `try` 内执行入口动作（M38）；
 4. `build.sh`：不在生成器内，由 `Driver.Compile.compileToDir` 用 `Driver.Split.buildScript`
    写盘；`vuna build` 随后执行它。
 

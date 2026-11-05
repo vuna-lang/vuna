@@ -32,10 +32,12 @@
 
 ## 类型系统边界
 
-- **身份按声明符号判定**：`Int` / `String` 是 language primitive 类型；`Bool` / `List` /
-  `IO` 是 base 的普通 `data` 声明，canonical 身份分别是 `Base.Bool.Bool` /
-  `Base.List.List` / `Base.IO.IO`。没有短名判定、没有 prelude 桩、没有全局构造子放行；
-  用户同名 `data` 是普通声明。原语语义与身份常量表见 [primitives.md](primitives.md)。
+- **身份按声明符号判定**：`Int` / `String` 是 language primitive 类型，`IO` 是语言内建
+  效应类型（kind `Type -> Type`，无构造器）；`Bool` / `List` / `Nat` 是 base 的普通
+  `data` 声明，canonical 身份分别是 `Base.Bool.Bool` / `Base.List.List` / `Base.Nat.Nat`。
+  没有短名判定、没有 prelude 桩、没有全局构造子放行；用户同名 `data` 是普通声明
+  （`IO` 例外：ad-hoc 入口重定义报 `TC_CannotRedefineBuiltin`）。原语语义与身份常量表
+  见 [primitives.md](primitives.md)。
 - **擦除由单一判据驱动**：`Elab.Meta.isTypeDomain` / `binderRig` 是唯一入口——隐式 binder
   恒 `Rig0`，显式 binder 仅当域在类型层（宇宙或域全为类型层的 Pi 链）才 `Rig0`，其余
   `Rig1`。**索引擦除策略 = 写成隐式 binder**：隐式索引 `{n : Nat}` 无运行时字段，显式索引
@@ -152,6 +154,9 @@
 - **字面量**：期望类型是 Nat 时，字面量在**编译期**展开成 `Zero`/`Succ` 链（类型层可合一），
   codegen 再折回整数字面量；超大 Nat 字面量有编译期节点成本（暂不做惰性 `TNat`）。
   超出 63 位报 `TC_NatLiteralOutOfRange`。Nat 字面量模式（`case n of 0 =>`）尚不支持。
+- **模板插值（M36）**：`${e}` 要求 `Interp`/`Show` 实例（缺则 `TC_InterpNoInstance`）；
+  不支持 `deriving (Interp)`、不支持模式里的插值（`PS_TemplateInPattern`）；`${...}` 里的
+  注释不进 AST、fmt 会丢弃。规则与边界见 [templates.md](templates.md)。
 - **提升**：只允许 `Nat → Int`（精化期插 `natToInt`，运行时恒等）；`Int → Nat` 必须显式
   `Base.Nat.fromInt`（负数 clamp 0，有损）或 `fromIntMaybe`。混合算术结果由操作数决定：
   两侧 Nat（或 Nat + 字面量）→ Nat；出现真正 Int → Int。
@@ -170,8 +175,15 @@
   copy-on-write（`Array.copy` + `Array.set`），原数组不变；越界是宿主 `Invalid_argument`。
 - **IO 内可变数据**：`IORef` / `MArray` / `Buffer` 的操作全部是 `IO` 动作，只能经
   `Base.IORef` / `Base.MArray` / `Base.Buffer` 使用；`runIO` 是 main 外唯一执行入口、需要
-  `unsafe`。**没有线性 / 唯一性类型与 ST / region**：类型上无法表达「句柄不逃逸」，
-  可变句柄的安全边界目前是 IO 隔离 + `unsafe` 的显式放行（D22 部分关闭）。
+  `unsafe`。
+- **ST / region（M35.1；M37 改建在 IO 上）**：`Base.ST` 提供 `ST r a`（包 `IO a`）+
+  `runST`（`{a} -> ((r : Type) -> ST r a) -> a`）与 `Ref r a` / `SArray r a` 句柄；区域由
+  显式类型 binder 引入、库外不可命名，句柄不能逃出 `runST`（负例 `dt_err/56`）。
+  `runST` 入口执行一次 `runIO`（真实 `IORef` / `MArray`），因此 ST 动作**不进 interp**。
+  **M38 起** `Ref` / `SArray` 是 linear record（恰好一次、不可复制），线性结果用
+  `bindST1` 线程化；`ST` 动作本身仍沿用 IO 的可复制语义（无线性箭头在动作内部线程化
+  线性值），一次性续延未表达；ST 不声明 `Monad` 实例（字典提升顺序）。细节见
+  [qtt.md](qtt.md) / [effects.md](effects.md)。
 - **哈希容器**：桶是 `Array (Array (List ...))`（`Array.get` O(1)，`insert` copy-on-write）；
   `empty` 已移除、统一写 `fromList []`（见 stdlib.md 的弱类型变量说明）。
 - **没有泛型 `Hashable`**：`HashMap` / `HashSet` 只覆盖 `String`，`IntMap` 只覆盖 `Int`；
@@ -209,8 +221,9 @@
 
 ## main 与 IO
 
-- 可执行入口（`vuna build`）要求 `main : IO a`（`IO` 判定只认 canonical `Base.IO.IO`），
-  由运行时执行动作；「main 之外执行」只有 `Base.IO.runIO`（要求能力 `unsafe`，工具链特权）。
+- 可执行入口（`vuna build`）要求 `main : IO a`（`IO` 是内建效应类型，M37），由运行时
+  执行动作（产物钩子 `v_main 0`）；「main 之外执行」只有 `Base.IO.runIO` / `prim_runIO`
+  （要求能力 `unsafe`，工具链特权）。
 - **效果原语返回 `IO` 动作（M31）**：纯 `main` 直呼 `prim_*` 是类型错误（`TC_TypeMismatch`）。
 - **效果靠显式能力**：效果原语只有 `prim_*` 名。普通包不能直接调用它们，只能经
   `Base.IO`；要在源码里直接调用，必须在 `vuna.toml` 的 `[capabilities].effects` 声明对应
@@ -218,12 +231,24 @@
   能力。未声明时报 `` requires capability `<cap>` ... ``
   （`Loader.Resolve.checkEffectsBuiltins`）。这是**权限声明**，不是检查豁免；不存在按包名
   字符串判定的 allowlist。完整表见 [primitives.md](primitives.md)。`vuna interp` /
-  `vuna test` 的入口文件同样受限。
+  `vuna test` 的入口文件同样受限。IO 升格后，声明了能力的包可以直接用 `prim_*` 而不
+  `import Base.IO`（`IO` 类型恒可见）。
+- **运行时错误报告不是异常处理**（M38）：未捕获异常由生成的 main 钩子统一报告为
+  `vuna: runtime error: ...` + 定义级位置帧 + exit 2（见 [debugging.md](debugging.md)）；
+  语言没有 `try`/`catch`、没有 Effect handler，`Base.Debug.trace` 是调试专用逃逸
+  （用 base 的 `unsafe` `runIO`），不构成效应系统的一部分。
 - `vuna interp` 只做**纯**核心求值：任何 `main : IO a` 一律报错并提示 `compile` + 运行
   产物；纯 `main : Int/String/Bool` 的结果展示仍保留为调试约定（`String` 走 `strShow`
   转义）。IO 组合统一用 `Functor` / `Monad` trait（`fmap` / `bind` / `pure`、`>>=`、
-  `do`），不导出 `bindIO` / `pureIO` / `fmapIO`；`Base.IO` API 直接别名到 IO 化的
-  `prim_*` 原语（M31）。`IO` 仍是库层 thunk 表示，不是完整的 effect 类型系统（归 F3）。
+  `do`；`Base.ST` 用显式 `bindST` / `pureST`）与 `Base.Effect.MonadIO`+transformer
+  （`StateT` / `ReaderT` / `ErrorT`，M37）；不导出 `bindIO` / `pureIO` / `fmapIO`；
+  `Base.IO` API 直接别名到 IO 化的 `prim_*` 原语（M31）。IO 已是正式的内建效应类型
+  （`prim_pureIO` / `prim_bindIO` / `prim_runIO`），但通用 `Eff` / 能力行仍归 F3
+  （见 [effects.md](effects.md)）。
+- **`base` 的 `unsafe`**：`vuna.toml` 的 `[capabilities].effects` 含 `unsafe`，使用点是
+  `Base.IO.runIO = prim_runIO` 的别名定义与 `Base.ST` 的 `runST`；用户包调用
+  `Base.ST.runST` 不需要自己的能力，但 base 内部其它模块获得了 `runIO` 权限（信任点，
+  debt D28）。
 - IO 失败（如读缺失文件）在产物里抛宿主异常，但入口文件缺失返回普通错误；CLI 用
   `prim_exit` 返回非 0 退出码（compile 错误 1、lint 有 finding 1、用法 / 解析 / IO 错误 2）。
 
@@ -234,7 +259,9 @@
   注释只作前置注释。`where` 块的绑定签名行按源码顺序保留、幂等。`infix*` 声明被打印在
   imports 之后、源码顺序、每条一行；fixity 是**程序级**属性，CLI / LSP 用
   `Loader.Flatten.fixitiesForSource` 取可见闭包；取不到（上下文 / 依赖加载失败）时 fmt 报错、
-  不格式化该文件；未知符号运算符同样报错（不静默按默认优先级重排）。
+  不格式化该文件；未知符号运算符同样报错（不静默按默认优先级重排）。模板字面量按
+  [templates.md](templates.md) 的规范形重写：`"""` 内容逐字（不 dedent），`\$` 自动补齐，
+  `${...}` 里的注释会被丢弃（词法不进 AST）。
 - REPL 支持多行续行（括号 / 字符串 / 注释 / 尾 token），但每个提交项仍是一个完整表达式或
   一条定义；顶层定义必须**先写签名**（DT 签名必填）；依赖只支持本地路径（registry / 锁文件
   未做）；`Map` 是关联表实现的抽象类型（无平衡树）；`HashMap` / `HashSet` / `IntMap` 是
@@ -256,7 +283,7 @@
 
 - 标准库包名 `vuna-base`、模块根 `Base.*`，编译器模块 `Vuna.Compiler.*`（门面
   `Vuna.Compiler.Common`）；包上下文内所有源文件（含 ad-hoc 单文件）自动导入 `Prelude`；
-  `vuna build` 需要 PATH 中有 `ocamlopt`；`Prelude` 刻意不含 `Base.IO`（效果 API 需显式
-  import）。
+  `vuna build` 需要 PATH 中有 `ocamlopt`；`Prelude` 刻意不含 `Base.IO`（`IO` 类型
+  恒可见，但效果 API 与实例仍需显式 import）。
 - `seed/` 是生成物，只能通过 rotation 更新；当前文件集以 `seed/` 与
   `nix/seed-count.txt` 为准。流程与不变量见 [bootstrap.md](bootstrap.md)。

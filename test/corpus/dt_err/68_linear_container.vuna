@@ -1,0 +1,5 @@
+linear data Token : Type where
+  MkToken : (1 x : Int) -> Token
+
+main : Maybe Token
+main = Just (MkToken 1)

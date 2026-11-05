@@ -1,0 +1,9 @@
+msg : String -> String
+msg name = "hi ${name}"
+
+main : String
+main = msg "vuna" ++ (" / " ++ ("""multi
+line two
+"""
+)
+)

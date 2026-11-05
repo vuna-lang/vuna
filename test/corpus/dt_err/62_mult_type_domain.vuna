@@ -1,0 +1,6 @@
+-- M38：类型层 binder 必须为 0。
+f : (1 a : Type) -> Type
+f a = Int
+
+main : Int
+main = 0

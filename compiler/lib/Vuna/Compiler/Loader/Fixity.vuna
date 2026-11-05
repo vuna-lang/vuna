@@ -172,9 +172,9 @@ reorderExpr t (ELam names body sp) = andThen (reorderExpr t body) (\b => Ok (ELa
 reorderExpr t (EApp fn args sp) =
   andThen (reorderExpr t fn)
     (\fn2 => andThen (traverse (\a => reorderExpr t a) args) (\args2 => Ok (EApp fn2 args2 sp)))
-reorderExpr t (EPi name implicit dom cod sp) =
+reorderExpr t (EPi name implicit qty dom cod sp) =
   andThen (reorderExpr t dom)
-    (\dom2 => andThen (reorderExpr t cod) (\cod2 => Ok (EPi name implicit dom2 cod2 sp)))
+    (\dom2 => andThen (reorderExpr t cod) (\cod2 => Ok (EPi name implicit qty dom2 cod2 sp)))
 reorderExpr t (ELet binds body rec_ sp) =
   andThen (reorderBinds t binds)
     (\binds2 => andThen (reorderExpr t body) (\body2 => Ok (ELet binds2 body2 rec_ sp)))
@@ -196,7 +196,20 @@ reorderExpr t (EDo stmts sp) =
   andThen (traverse (\v => reorderDoStmt t v) stmts) (\ss => Ok (EDo ss sp))
 reorderExpr t (EAnn inner ty sp) =
   andThen (reorderExpr t inner) (\i2 => andThen (reorderExpr t ty) (\t2 => Ok (EAnn i2 t2 sp)))
+-- M36：模板字面量是 parser 的**保留语法**（fmt/lint/index/doc 要看原形），重排只递归洞内
+-- 表达式；降级为 `interp` 调用发生在 `Loader.Resolve`（rename 之后）。
+reorderExpr t (EInterp multi parts sp) =
+  andThen (reorderInterpParts t parts) (\ps => Ok (EInterp multi ps sp))
 reorderExpr t other = Err "DT: internal: Fixity.reorderExpr: unexpected expression form"
+
+-- 模板片段列表（`EInterp` 的洞内表达式同样要按 fixity 重排）。
+reorderInterpParts : FixityTable -> List InterpPart -> Result (List InterpPart)
+reorderInterpParts t [] = Ok []
+reorderInterpParts t (p :: rest) = case p of
+  IPText s => andThen (reorderInterpParts t rest) (\ps => Ok (IPText s :: ps))
+  IPHole e =>
+    andThen (reorderExpr t e)
+      (\e2 => andThen (reorderInterpParts t rest) (\ps => Ok (IPHole e2 :: ps)))
 
 reorderBinds : FixityTable -> List (Pair Pat Expr) -> Result (List (Pair Pat Expr))
 reorderBinds t binds = traverse (\v => reorderBind t v) binds
@@ -253,9 +266,9 @@ reorderRecPatField t (Pair fname pat) = andThen (reorderPattern t pat) (\p2 => O
 
 -- 类型表达式同样走重排（`a -> b -> c` 是 `EInfix "->"` 链）。
 reorderDecl : FixityTable -> Decl -> Result Decl
-reorderDecl t (DData name params kind ctors derivings sp) =
+reorderDecl t (DData name params kind ctors derivings lin sp) =
   andThen (reorderExpr t kind)
-    (\k2 => andThen (traverse (\c => reorderCtor t c) ctors) (\cs => Ok (DData name params k2 cs derivings sp)))
+    (\k2 => andThen (traverse (\c => reorderCtor t c) ctors) (\cs => Ok (DData name params k2 cs derivings lin sp)))
 reorderDecl t (DAxiom name ty sp) = andThen (reorderExpr t ty) (\ty2 => Ok (DAxiom name ty2 sp))
 reorderDecl t (DExtern name cName ty sp) =
   andThen (reorderExpr t ty) (\ty2 => Ok (DExtern name cName ty2 sp))
@@ -265,9 +278,9 @@ reorderDecl t (DSig name ctx ty sp) =
 reorderDecl t (DFun name pats body sp) =
   andThen (traverse (\p => reorderPattern t p) pats)
     (\pats2 => andThen (reorderExpr t body) (\b2 => Ok (DFun name pats2 b2 sp)))
-reorderDecl t (DRecord name params fields derivings sp) =
+reorderDecl t (DRecord name params fields derivings lin sp) =
   andThen (traverse (\v => reorderRecordField t v) fields)
-    (\fs => Ok (DRecord name params fs derivings sp))
+    (\fs => Ok (DRecord name params fs derivings lin sp))
 reorderDecl t (DTrait name params methods sp) =
   andThen (traverse (\v => reorderTraitMethod t v) methods) (\ms => Ok (DTrait name params ms sp))
 reorderDecl t (DInstance ctx head methods sp) =

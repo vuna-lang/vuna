@@ -13,12 +13,14 @@ module Vuna.Index.Types
   , refModule
   , refName
   , symCol
+  , symDoc
   , symFullName
   , symKind
   , symLine
   , symModule
   , symName
   , symSig
+  , symType
   ) where
 
 -- Vuna.Index.Types：源码符号索引的数据模型与字段访问子（M24 后维护·源码重组）。
@@ -51,36 +53,45 @@ modBytes (ModuleInfo m p path bytes decls) = bytes
 modDecls : ModuleInfo -> Int
 modDecls (ModuleInfo m p path bytes decls) = decls
 
--- 符号：模块全名、名字、种类、签名、文档注释、起始行列。
+-- 符号：模块全名、名字、种类、显示签名、语法类型、docstring、起始行列。
+-- `symType` 是 `Vuna.Sig.renderType` 的**可回读**类型文本（函数/构造子/字段/
+-- 方法/axiom/extern）；data/record/trait 为空。`vuna search --type` 用它建类型表。
 record Sym where
   symModule : String
   symName : String
   symKind : String
   symSig : String
+  symType : String
   symDoc : String
   symLine : Int
   symCol : Int
 
 symModule : Sym -> String
-symModule (Sym sMod sName sKind sSig sDoc sLine sCol) = sMod
+symModule (Sym sMod sName sKind sSig sType sDoc sLine sCol) = sMod
 
 symName : Sym -> String
-symName (Sym sMod sName sKind sSig sDoc sLine sCol) = sName
+symName (Sym sMod sName sKind sSig sType sDoc sLine sCol) = sName
 
 symKind : Sym -> String
-symKind (Sym sMod sName sKind sSig sDoc sLine sCol) = sKind
+symKind (Sym sMod sName sKind sSig sType sDoc sLine sCol) = sKind
 
 symSig : Sym -> String
-symSig (Sym sMod sName sKind sSig sDoc sLine sCol) = sSig
+symSig (Sym sMod sName sKind sSig sType sDoc sLine sCol) = sSig
+
+symType : Sym -> String
+symType (Sym sMod sName sKind sSig sType sDoc sLine sCol) = sType
+
+symDoc : Sym -> String
+symDoc (Sym sMod sName sKind sSig sType sDoc sLine sCol) = sDoc
 
 symLine : Sym -> Int
-symLine (Sym sMod sName sKind sSig sDoc sLine sCol) = sLine
+symLine (Sym sMod sName sKind sSig sType sDoc sLine sCol) = sLine
 
 symCol : Sym -> Int
-symCol (Sym sMod sName sKind sSig sDoc sLine sCol) = sCol
+symCol (Sym sMod sName sKind sSig sType sDoc sLine sCol) = sCol
 
 symFullName : Sym -> String
-symFullName (Sym sMod sName sKind sSig sDoc sLine sCol) = sMod ++ "." ++ sName
+symFullName (Sym sMod sName sKind sSig sType sDoc sLine sCol) = sMod ++ "." ++ sName
 
 -- 引用：引用方模块、被引用的名字、引用出现处（行、列）。M30：refs 不只记录
 -- 「模块引用了哪些名字」，还记录出现位置，供 `referencesAt` 与影响面分析使用。

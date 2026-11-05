@@ -1,7 +1,9 @@
 module Vuna.Compiler.Codegen.Term
   ( GenSt(..)
+  , dtDefLocTable
   , dtListBridge
   , dtRuntime
+  , dtRuntimeWith
   , findListFamilyData
   , genDtHook
   , genGroups
@@ -120,6 +122,69 @@ dtPrimRuntime =
     ++ "let dtp_spawn (args : string list) : int =\n  let prog = Sys.executable_name in\n  Unix.create_process prog (Array.of_list (prog :: args)) Unix.stdin Unix.stdout Unix.stderr\n"
     ++ "let dtp_wait (pid : int) : int =\n  let (_, st) = Unix.waitpid [] pid in\n  match st with Unix.WEXITED c -> c | _ -> 1\n"
 
+-- M38：运行时错误报告器。位置表的键是 OCaml 值名（如 `v_main`）；回栈帧名形如
+-- `Main.v_main`（跨单元调用）或 `Main.v_main.(fun)`（lambda 内联后）。报告器取帧名
+-- 最后一个**非 `(fun)`** 的 '.' 分量查表，渲染成 `main (app/Main.vuna:12)`。
+-- 命中帧最多打印 12 条，未命中帧（如 `Stdlib.failwith`）跳过。
+dtReporterRuntime : String
+dtReporterRuntime =
+  "let rec dt_frame_key parts =\n"
+    ++ "  match parts with\n"
+    ++ "  | [] -> None\n"
+    ++ "  | part :: rest -> if part = \"(fun)\" then dt_frame_key rest else Some part\n"
+    ++ "let dt_frame_label slot =\n"
+    ++ "  match Printexc.Slot.name slot with\n"
+    ++ "  | None -> None\n"
+    ++ "  | Some nm ->\n"
+    ++ "    match dt_frame_key (List.rev (String.split_on_char '.' nm)) with\n"
+    ++ "    | None -> None\n"
+    ++ "    | Some key ->\n"
+    ++ "      (match List.assoc_opt key dt_def_locs with\n"
+    ++ "       | Some (display, loc) -> Some (display ^ \" (\" ^ loc ^ \")\")\n"
+    ++ "       | None -> None)\n"
+    ++ "let dt_report_exn e bt =\n"
+    ++ "  let msg = match e with Failure m -> m | _ -> Printexc.to_string e in\n"
+    ++ "  Printf.eprintf \"vuna: runtime error: %s\\n%!\" msg;\n"
+    ++ "  match Printexc.backtrace_slots bt with\n"
+    ++ "  | None -> ()\n"
+    ++ "  | Some slots ->\n"
+    ++ "    let rec go rest shown =\n"
+    ++ "      if shown >= 12 then ()\n"
+    ++ "      else match rest with\n"
+    ++ "      | [] -> ()\n"
+    ++ "      | slot :: tl ->\n"
+    ++ "        (match dt_frame_label slot with\n"
+    ++ "         | Some s -> Printf.eprintf \"  at %s\\n%!\" s; go tl (shown + 1)\n"
+    ++ "         | None -> go tl shown)\n"
+    ++ "    in go (Array.to_list slots) 0\n"
+
+-- 定义位置表：OCaml 值名 → (vuna 定义名, 文件:行)。无 span 的定义跳过（axiom/生成项
+-- 里没有来源的那些）；顺序严格按传入列表，生成是确定性的。`norm` 负责把 span 里的
+-- 文件路径归一到模块根 / 包目录下（见 Codegen.Split）。
+dtDefLocTable : (String -> String) -> List DtDef -> String
+dtDefLocTable norm [] = ""
+dtDefLocTable norm (d :: rest) = case dtDefSpan d of
+  Nothing => dtDefLocTable norm rest
+  Just sp =>
+    let
+      row =
+        "  ("
+          ++ ocamlString (valueName (dtDefName d))
+          ++ ", ("
+          ++ ocamlString (dtDefName d)
+          ++ ", "
+          ++ ocamlString (norm sp.spanFile ++ ":" ++ strFromInt (spanStartLine sp))
+          ++ "));\n"
+    in row ++ dtDefLocTable norm rest
+
+-- 运行时文本 = 既有常量部分（`dtRuntime`） + 注入的定义位置表 + 报告器。
+-- `dt_def_locs` 必须定义在报告器之前（报告器读它）；空表写成 `[]`。
+dtRuntimeWith : String -> String
+dtRuntimeWith locs =
+  dtRuntime
+    ++ (if locs == "" then "let dt_def_locs = []\n" else "let dt_def_locs = [\n" ++ locs ++ "]\n")
+    ++ dtReporterRuntime
+
 -- M19：`==` / `/=` 的跨类型特化（精化期已按实参类型重写成 `bi_eq_int` / `bi_eq_str`
 -- 这类名字），以及 str* 内建。codegen 只做名字映射、不感知类型——M18.6 的
 -- M22.2：`strUnpack` / `strPack` 的运行时桥接。
@@ -206,7 +271,8 @@ else case lookupPair name st.gsCtors of
       p = genCtorRef st family name
     in Ok (Pair (firstOf p) (secondOf p))
   Nothing => case findIntrinsic name of
-    Just i => if intrinsicReturnsIO i then ioPrimText st name i
+    Just i => if isIOAlgebraName name then ioAlgebraText st name
+    else if intrinsicReturnsIO i then ioPrimText st name i
     else if needsListBridge i then if memName listFamilyName st.gsFamilies then
       let
         p = genBridgeRef st i.intrinsicRuntime
@@ -218,37 +284,38 @@ else case lookupPair name st.gsCtors of
         p = genValueRef st name
       in Ok (Pair (firstOf p) (secondOf p))
 
--- M31：效果原语的 runtime 是「立刻算完的表达式」；IO 化后必须包成 `MkIO` 动作值，
--- 由 main 钩子或 `runIO` 执行。构造子从 datas 表（gsCtors 的族反查）取，缺失时报
--- `CG_EffectPrimRequiresIO`（用了 prim_* 却没 import Base.IO）；构造子按 IO 族的
--- 归属单元限定（C35，跨单元引用不再依赖 open 链）。
--- `prim_getArgs` / `prim_readDir` 一类返回 `List` 的 effect 原语，其 runtime 文本里
--- 内嵌 List 桥接 helper 调用（`dtp_listOf`），同样要按声明 List 族的单元限定。
+-- M37：效果原语的 runtime 是「立刻算完的表达式」；IO 是内建效应类型（运行时 = 裸
+-- thunk `int -> 'a`），所以按 arity 包成 `fun args -> fun _ -> rt args`，由 main 钩子
+-- 或 `runIO` 执行。`prim_getArgs` / `prim_readDir` 一类返回 `List` 的原语，其 runtime
+-- 文本里内嵌 List 桥接 helper 调用（`dtp_listOf`），仍要按声明 List 族的单元限定。
 ioPrimText : GenSt -> String -> Intrinsic -> Result (Pair String GenSt)
-ioPrimText st name i = case ioCtorNameOf st of
-  Nothing => cgErr1 (EffectPrimRequiresIO name) name
-  Just (Pair family ctor) =>
-    let
-      p = genCtorRef st family ctor
-      rt =
-        if needsListBridge i then genBridgeRef (secondOf p) i.intrinsicRuntime
-        else Pair i.intrinsicRuntime (secondOf p)
-    in Ok (Pair (ioPrimLam (firstOf p) (firstOf rt) (intrinsicArity i)) (secondOf rt))
+ioPrimText st name i = if needsListBridge i then
+  let
+    rt = genBridgeRef st i.intrinsicRuntime
+  in Ok (Pair (ioPrimThunkText (firstOf rt) (intrinsicArity i)) (secondOf rt))
+else Ok (Pair (ioPrimThunkText i.intrinsicRuntime (intrinsicArity i)) st)
 
-ioCtorNameOf : GenSt -> Maybe (Pair String String)
-ioCtorNameOf st = ioCtorNameGo st.gsCtors
-
-ioCtorNameGo : List (Pair String String) -> Maybe (Pair String String)
-ioCtorNameGo [] = Nothing
-ioCtorNameGo ((Pair ctor family) :: rest) =
-  if family == ioFamilyName then Just (Pair family ctor) else ioCtorNameGo rest
-
-ioPrimLam : String -> String -> Int -> String
-ioPrimLam ctor rt arity = if arity == 0 then "(" ++ ctor ++ " (fun _ -> " ++ rt ++ "))"
-else
+-- 内建模式的 thunk 包装：`prim_print` → `(fun s -> fun (_ : int) -> dtp_print s)`；
+-- 零参 `prim_getArgs` → `(fun (_ : int) -> (dtp_listOf (dtp_getArgs ())))`。
+-- token 必须标注 `int`：否则 OCaml 把世界令牌推成弱类型变量（`'_weak -> a`），
+-- 部分应用的动作值（`readFile "x"`）会因值限制报 non-generalizable。
+ioPrimThunkText : String -> Int -> String
+ioPrimThunkText rt arity =
   let
     argText = joinWith " " (takeNames arity ioParamNames)
-  in "(fun " ++ argText ++ " -> " ++ ctor ++ " (fun _ -> " ++ rt ++ " " ++ argText ++ "))"
+  in if arity == 0 then "(fun (_ : int) -> " ++ rt ++ ")"
+  else "(fun " ++ argText ++ " -> fun (_ : int) -> " ++ rt ++ " " ++ argText ++ ")"
+
+-- IO 代数原语（`prim_pureIO` / `prim_bindIO` / `prim_runIO`）的 runtime：它们**本身**
+-- 产生 IO 动作（thunk 值），不能套通用的 eager 包装，因此单独生成。
+ioAlgebraText : GenSt -> String -> Result (Pair String GenSt)
+ioAlgebraText st name = Ok (Pair (ioAlgebraIntrinsicText name) st)
+
+ioAlgebraIntrinsicText : String -> String
+ioAlgebraIntrinsicText name =
+  if name == primPureIOName then "(fun x -> fun (_ : int) -> x)"
+  else if name == primBindIOName || name == primBindIO1Name then "(fun io k -> fun (w : int) -> k (io w) w)"
+  else "(fun io -> io 0)"
 
 -- 原语最多 2 个运行时参数（`prim_writeFile` / `prim_runIn`）；表比实际用到的长，
 -- `takeNames` 按 arity 截断（结构递归在表尾上，终止性检查可见）。
@@ -894,8 +961,23 @@ else andThen (genTermFuel (fuel - 1) st binders scrut) (\p => case p of
 -- `genTerm` 内部的错误（TypeUsedAtRuntime / TypeLevelBindingRuntime / TypeLevelNameRuntime /
 -- UnsolvedMetavarRuntime / ListBridgeRequired / 构造子 arity 内部错等）都在这里统一收口，
 -- 生成定义（trait 投影 / instance 字典 / deriving）因此能指回 trait/instance/data 声明行。
-genGroupDef : GenSt -> DtDef -> Result (Pair String GenSt)
-genGroupDef st d = case dtDefExtern d of
+-- M38：split 的入口单元名（= `sanitizeName "Main"`，见 `Codegen.Split.entryOwner`）。
+-- 只在生成期用于识别「main 的零参值绑定」这一个特例。
+mainUnitName : String
+mainUnitName = "Main"
+
+-- M38：入口单元里 `main` 的零参值绑定在**模块初始化期**求值，发生在 main 钩子的
+-- try 之前，钩子捕不到；这里给它套同一个报告器。IO main 的身体是 thunk（运行时
+-- arity ≥ 1），由钩子在 try 内执行，不套；`let rec` 的右值不允许 try（OCaml 限制），
+-- isRec 时一律跳过；lambda（含擦除 lambda 剥完之后的函数）也不套——try 会破坏尾调。
+mainInitWrap : GenSt -> Bool -> String -> Term -> Bool
+mainInitWrap st isRec name body =
+  if isRec then False
+  else if st.gsQual.qcUnit == mainUnitName && name == "main" && runtimeArity body == 0 then True
+  else False
+
+genGroupDef : GenSt -> Bool -> DtDef -> Result (Pair String GenSt)
+genGroupDef st isRec d = case dtDefExtern d of
   -- M33 W5：受限 FFI → OCaml `external`；C 符号名由 `ffi/*.c` 提供（build.sh 编译链接）。
   Just cName => case genExternTy (dtDefType d) of
     Err e => Err (cgDefLoc (dtDefSpan d) (dtDefName d) ++ e)
@@ -905,7 +987,14 @@ genGroupDef st d = case dtDefExtern d of
   Nothing => case dtDefBody d of
     Just body => case genTerm st [] body of
       Err e => Err (cgDefLoc (dtDefSpan d) (dtDefName d) ++ e)
-      Ok (Pair bodyText st2) => Ok (Pair (valueName (dtDefName d) ++ " = " ++ bodyText) st2)
+      Ok (Pair bodyText st2) =>
+        let
+          finalText =
+            if mainInitWrap st isRec (dtDefName d) body then "(try "
+              ++ bodyText
+              ++ " with e -> dt_report_exn e (Printexc.get_raw_backtrace ()); exit 2)"
+            else bodyText
+        in Ok (Pair (valueName (dtDefName d) ++ " = " ++ finalText) st2)
     Nothing =>
       Err
         (cgDefLoc (dtDefSpan d) (dtDefName d) ++ "DT: internal: axiom reached runtime code generation (partition must erase it)")
@@ -939,10 +1028,10 @@ externBasicText (VNeutral (NGlobal g args)) =
 externBasicText (VNeutral _) = Err "DT: internal: extern type is not a global type"
 externBasicText _ = Err "DT: internal: extern type is not basic"
 
-genGroupBodies : GenSt -> List DtDef -> Result (Pair (List String) GenSt)
-genGroupBodies st [] = Ok (Pair [] st)
-genGroupBodies st (d :: rest) = andThen (genGroupDef st d) (\p => case p of
-  Pair def st2 => andThen (genGroupBodies st2 rest) (\q => case q of
+genGroupBodies : GenSt -> Bool -> List DtDef -> Result (Pair (List String) GenSt)
+genGroupBodies st isRec [] = Ok (Pair [] st)
+genGroupBodies st isRec (d :: rest) = andThen (genGroupDef st isRec d) (\p => case p of
+  Pair def st2 => andThen (genGroupBodies st2 isRec rest) (\q => case q of
     Pair defs st3 => Ok (Pair (def :: defs) st3)
   )
 )
@@ -981,7 +1070,7 @@ genGroup adj st group = if groupNeedsRec adj group then case firstBadRecursiveVa
 else genGroupLet st group False
 
 genGroupLet : GenSt -> List DtDef -> Bool -> Result (Pair String GenSt)
-genGroupLet st group isRec = andThen (genGroupBodies st group) (\p => case p of
+genGroupLet st group isRec = andThen (genGroupBodies st isRec group) (\p => case p of
   Pair defs st2 => case group of
     -- M33 W5：单个 extern 定义直接生成 `external ...`（不能加 `let` 前缀）。
     [d] => case dtDefExtern d of
@@ -1014,16 +1103,6 @@ ioResultTy (TApp fn arg _) = case fn of
   _ => Nothing
 ioResultTy _ = Nothing
 
--- 找 canonical IO 族的（族名, 构造子名），用于生成 `match main with C_IO_MkIO f -> f 0`。
-ioCtorOf : List DtData -> Maybe (Pair String String)
-ioCtorOf [] = Nothing
-ioCtorOf (d :: rest) = if dtDataName d == ioFamilyName then firstCtorOf d else ioCtorOf rest
-
-firstCtorOf : DtData -> Maybe (Pair String String)
-firstCtorOf d = case dtDataCtors d of
-  c :: _ => Just (Pair (dtDataName d) (dtCtorName c))
-  [] => Nothing
-
 mainShowForName : String -> Result (Pair String String)
 mainShowForName g =
   if g == intTypeName then Ok (Pair "string_of_int" "int")
@@ -1035,26 +1114,30 @@ mainShowErr : Result (Pair String String)
 mainShowErr = cgErr0 MainReturnType
 
 -- main 钩子：`mainExpr` 是运行时求 main 值的表达式（普通 main 直接是 `v_main`；
--- main : IO a 则是 `match v_main with C_IO_MkIO f -> f 0`），按类型 `tyTerm` 选展示函数。
+-- main : IO a 则是 `v_main 0`），按类型 `tyTerm` 选展示函数。
+-- M38：动作整体包进 `try`——未捕获异常交给运行时报告器（dt_report_exn）打印
+-- "vuna: runtime error: ..." + 命中的 vuna 位置帧，然后 exit 2（不再是 OCaml 的
+-- Fatal error 形态）。try 只包 main 这一处，不碰 lambda，尾调不受影响。
 genDtHook : String -> List (Pair String Term) -> Term -> String -> Bool -> Result String
 genDtHook bodyText table tyTerm mainExpr printResult = andThen (mainShow table tyTerm) (\showPair => case showPair of
   Pair showFn kind =>
     let
+      action =
+        if printResult then "print_endline (" ++ showFn ++ " (" ++ mainExpr ++ "))"
+        else "ignore (" ++ mainExpr ++ ")"
       hook =
-        if printResult then "let () = print_endline (" ++ showFn ++ " (" ++ mainExpr ++ "))\n"
-        else "let () = ignore (" ++ mainExpr ++ ")\n"
+        "let () =\n"
+          ++ "  Printexc.record_backtrace true;\n"
+          ++ "  try "
+          ++ action
+          ++ "\n"
+          ++ "  with e -> dt_report_exn e (Printexc.get_raw_backtrace ()); exit 2\n"
     in Ok (bodyText ++ "\n" ++ hook)
 )
 
--- `match v_main with C_IO_MkIO f -> f 0`（找不到 IO 构造子时回退为原样引用）。
--- IO 构造子按 IO 族的归属单元限定（C35）：返回 (文本, 依赖单元或 "")。
+-- `main : IO a` 的执行：IO = 裸 thunk，直接对世界令牌 0 应用（无构造子 / 无跨单元依赖）。
 ioRunText : QualCtx -> Pair (List DtData) (List DtDef) -> String -> Pair String String
-ioRunText qc program mainRef = case ioCtorOf (firstOf program) of
-  Just (Pair family ctor) =>
-    let
-      p = qualCtorText qc family ctor
-    in Pair ("match " ++ mainRef ++ " with " ++ firstOf p ++ " f -> f 0") (secondOf p)
-  Nothing => Pair mainRef ""
+ioRunText qc program mainRef = Pair (mainRef ++ " 0") ""
 
 genTerm : GenSt -> List (Pair String Rig) -> Term -> Result (Pair String GenSt)
 genTerm a1 a2 a3 = genTermFuel 512 a1 a2 a3

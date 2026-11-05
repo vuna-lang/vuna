@@ -22,12 +22,14 @@ module Vuna.Index
   , renderModules
   , renderOverview
   , symCol
+  , symDoc
   , symFullName
   , symKind
   , symLine
   , symModule
   , symName
   , symSig
+  , symType
   , symbolAt
   ) where
 
@@ -37,10 +39,10 @@ module Vuna.Index
 -- 全仓。索引只依赖 parse 级信息（AST + Span + lexComments），不跑类型检查。
 --
 -- 缓存设计（`.local/index/`，已 gitignore；M30 起 v2 内容哈希 + 原子写 + 目录锁）：
---   - `manifest.txt` 首行 `vuna-index 2`，随后每行 `path TAB bytes TAB hash`——
+--   - `manifest.txt` 首行 `vuna-index 3`，随后每行 `path TAB bytes TAB hash`——
 --     新鲜度判定的唯一依据（内容哈希；不再用 mtime+size，C11）；旧格式全量重建；
 --   - `modules.txt`  每行 `module TAB pkg TAB path TAB bytes TAB declCount`；
---   - `symbols.txt`  每行 `module TAB name TAB kind TAB line TAB col TAB sig TAB doc`；
+--   - `symbols.txt`  每行 `module TAB name TAB kind TAB line TAB col TAB sig TAB doc TAB type`；
 --   - `refs.txt`     每行 `module TAB name TAB line TAB col`（引用出现位置）。
 --
 -- 新鲜度：每次调用先遍历目录 + 读文件算内容哈希（不读 AST），与 manifest 逐条一致就

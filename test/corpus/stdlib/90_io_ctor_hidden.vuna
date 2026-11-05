@@ -1,4 +1,4 @@
--- stdlib 反例：IO 抽象类型，构造器 MkIO 不导出。
+-- stdlib 反例：IO 是内建效应类型，没有构造器可引用（`MkIO` 不存在）。
 import Base.IO
 
 main : IO Int

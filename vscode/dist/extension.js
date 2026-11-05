@@ -18460,6 +18460,8 @@ var OUTPUT_CHANNEL_NAME = "Vuna";
 var TRACE_CHANNEL_NAME = "Vuna Language Server Trace";
 var LINT_SOURCE = "vuna lint";
 var BUILD_TERMINAL_NAME = "vuna build";
+var RUN_TERMINAL_NAME = "vuna run";
+var TEST_TERMINAL_NAME = "vuna test";
 var DEFAULT_TIMEOUT_MS = 12e4;
 var client;
 var outputChannel;
@@ -18468,6 +18470,8 @@ var statusBar;
 var lintDiagnostics;
 var fileWatcher;
 var buildTerminal;
+var runTerminal;
+var testTerminal;
 var resolvedServer;
 var lintInFlight = /* @__PURE__ */ new Set();
 function activate(context) {
@@ -18494,6 +18498,8 @@ function activate(context) {
     }),
     vscode.window.onDidCloseTerminal((terminal) => {
       if (terminal === buildTerminal) buildTerminal = void 0;
+      if (terminal === runTerminal) runTerminal = void 0;
+      if (terminal === testTerminal) testTerminal = void 0;
     })
   );
   registerCommands(context);
@@ -18520,6 +18526,14 @@ function registerCommands(context) {
     vscode.commands.registerCommand(
       "vuna.buildPackage",
       (resource) => buildPackage(resource)
+    ),
+    vscode.commands.registerCommand(
+      "vuna.runPackage",
+      (resource) => runPackage(resource)
+    ),
+    vscode.commands.registerCommand(
+      "vuna.runTests",
+      (resource) => runTests(resource)
     ),
     vscode.commands.registerCommand("vuna.showVersion", () => showVersion())
   );
@@ -19025,6 +19039,69 @@ function getBuildTerminal(cwd) {
   if (buildTerminal) return buildTerminal;
   buildTerminal = vscode.window.createTerminal({ name: BUILD_TERMINAL_NAME, cwd });
   return buildTerminal;
+}
+async function runPackage(resource) {
+  const resolution = await cliResolution("vuna run");
+  if (!resolution) return;
+  const packageDir = findPackageDir(resource);
+  if (!packageDir) {
+    void vscode.window.showWarningMessage(
+      "Vuna: no vuna.toml found for this file (searched upwards from the file and the workspace)."
+    );
+    return;
+  }
+  const terminal = getRunTerminal(packageDir);
+  terminal.show(false);
+  const commandLine = [quoteShell(resolution.command), "run", quoteShell(packageDir)].join(" ");
+  log(`[vuna] terminal: ${commandLine}`);
+  terminal.sendText(commandLine, true);
+}
+function getRunTerminal(cwd) {
+  if (runTerminal) return runTerminal;
+  runTerminal = vscode.window.createTerminal({ name: RUN_TERMINAL_NAME, cwd });
+  return runTerminal;
+}
+async function runTests(resource) {
+  const resolution = await cliResolution("vuna test");
+  if (!resolution) return;
+  const packageDir = findPackageDir(resource) ?? primaryWorkspaceFolder()?.uri.fsPath;
+  if (!packageDir) {
+    void vscode.window.showWarningMessage(
+      "Vuna: open a .vuna file or a workspace folder first (no package root found)."
+    );
+    return;
+  }
+  const parts = [quoteShell(resolution.command), "test", quoteShell(packageDir)];
+  const editor = vscode.window.activeTextEditor;
+  if (editor && editor.document.languageId === LANGUAGE_ID) {
+    const file = editor.document.uri.fsPath;
+    const base = path.basename(file, ".vuna");
+    if (base && isInside(path.join(packageDir, "test"), file)) {
+      parts.push("--filter", quoteShell(base));
+    }
+  }
+  const terminal = getTestTerminal(packageDir);
+  terminal.show(false);
+  const commandLine = parts.join(" ");
+  log(`[vuna] terminal: ${commandLine}`);
+  terminal.sendText(commandLine, true);
+}
+function getTestTerminal(cwd) {
+  if (testTerminal) return testTerminal;
+  testTerminal = vscode.window.createTerminal({ name: TEST_TERMINAL_NAME, cwd });
+  return testTerminal;
+}
+function isInside(dir, file) {
+  const resolvedDir = path.resolve(dir) + path.sep;
+  return path.resolve(file).startsWith(resolvedDir);
+}
+async function cliResolution(label) {
+  try {
+    return await getServerResolution();
+  } catch (error) {
+    await showRunError(label, error);
+    return void 0;
+  }
 }
 function findPackageDir(resource) {
   let start = resource?.fsPath;

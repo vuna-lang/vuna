@@ -70,7 +70,8 @@ fixCtor : IntMap Value -> DtCtor -> DtCtor
 fixCtor tbl (DtCtor n fam tele ty) = DtCtor n fam tele (fixTerm tbl 0 ty)
 
 fixData : IntMap Value -> DtData -> DtData
-fixData tbl (DtData n ps ctors kind) = DtData n ps (map (fixCtor tbl) ctors) (fixTerm tbl 0 kind)
+fixData tbl (DtData n ps ctors kind lin) =
+  DtData n ps (map (fixCtor tbl) ctors) (fixTerm tbl 0 kind) lin
 
 -- 投影签名是闭合的 Pi 链（`{p} -> {d} -> <方法类型>`）；字段类型只精化在类参数 binder 之下
 -- （深度 1），自定义实例时由 `substInstParam` 把类参数换成头实参。
@@ -331,8 +332,8 @@ shiftCtor : Int -> DtCtor -> DtCtor
 shiftCtor off (DtCtor n fam tele ty) = DtCtor n fam tele (shiftTerm off ty)
 
 shiftData : Int -> DtData -> DtData
-shiftData off (DtData n ps ctors kind) =
-  DtData n ps (map (shiftCtor off) ctors) (shiftTerm off kind)
+shiftData off (DtData n ps ctors kind lin) =
+  DtData n ps (map (shiftCtor off) ctors) (shiftTerm off kind) lin
 
 shiftClass : Int -> DtClass -> DtClass
 shiftClass off (DtClass n ps projs tys) =

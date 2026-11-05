@@ -1,0 +1,10 @@
+-- M38：QTT 用量检查正例——0 只做类型/丢弃用途、1 恰好一次、未标注 ω 可多次；
+-- 线性值在 if 的两个分支各消费一次（join = 1）。
+f : (0 n : Int) -> (1 x : Int) -> (y : Int) -> Int
+f n x y = x + y
+
+g : Bool -> (1 x : Int) -> Int
+g b x = if b then x else x
+
+main : Int
+main = f 0 1 2 + g True 3

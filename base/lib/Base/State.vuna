@@ -1,23 +1,12 @@
-module Base.State
-  ( State
-  , bindState
-  , evalState
-  , execState
-  , get
-  , mapState
-  , modify
-  , pureState
-  , put
-  , runState
-  ) where
+module Base.State (State, evalState, execState, get, modify, put, runState) where
 
--- Base.State：库级 State 效应（M33 W6）。表示是 `s -> Pair a s` 的纯函数，
--- 不引入语言级效应：`bindState` / `mapState` / `pureState` 手写组合子（trait 只支持
--- 单参数、类型级部分应用还不支持，所以暂不声明 Functor/Monad 实例；`do` 留到 F4）。
+-- Base.State：库级 State monad（M33 W6 落地；M35.1 补 Functor/Monad 实例，`do` 可用）。
 --
--- `get` / `put` / `modify` 是常见操作；`evalState` 取结果、`execState` 取状态。
+-- 表示是 `s -> Pair a s` 的纯函数：没有语言级效应，handler 就是 `runState` /
+-- `evalState` / `execState`。`bind` / `pure` / `fmap` 走 Base.Monad 的 trait 实例。
 import Base.Pair
 import Base.Int
+import Base.Monad
 
 record State s a where
   stateRun : s -> Pair a s
@@ -31,18 +20,16 @@ evalState st s = firstOf (runState st s)
 execState : State s a -> s -> s
 execState st s = secondOf (runState st s)
 
-pureState : a -> State s a
-pureState a = State (\s => Pair a s)
+instance Functor (State s) where
+  fmap f st = State (\s => case st.stateRun s of
+    Pair a s2 => Pair (f a) s2
+  )
 
-mapState : (a -> b) -> State s a -> State s b
-mapState f st = State (\s => case runState st s of
-  Pair a s2 => Pair (f a) s2
-)
-
-bindState : State s a -> (a -> State s b) -> State s b
-bindState st k = State (\s => case runState st s of
-  Pair a s2 => runState (k a) s2
-)
+instance Monad (State s) where
+  bind st k = State (\s => case st.stateRun s of
+    Pair a s2 => (k a).stateRun s2
+  )
+  pure a = State (\s => Pair a s)
 
 get : State s s
 get = State (\s => Pair s s)

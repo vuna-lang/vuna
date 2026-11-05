@@ -261,8 +261,9 @@ renameExpr oldName newName e = case e of
   EStr s sp => EStr s sp
   ELam names body sp => ELam names (renameExprUnless oldName newName names body) sp
   EApp fn args sp => EApp (renameExpr oldName newName fn) (map (renameExpr oldName newName) args) sp
-  EPi nm implicit dom cod sp =>
-    EPi nm implicit (renameExpr oldName newName dom) (renameExprUnless oldName newName [nm] cod) sp
+  EPi nm implicit qty dom cod sp =>
+    EPi nm implicit qty (renameExpr oldName newName dom) (renameExprUnless oldName newName [nm] cod)
+      sp
   ELet binds body rec_ sp =>
     ELet (map (renameBind oldName newName) binds)
       (renameExprUnless oldName newName (bindNames binds) body) rec_ sp
@@ -288,6 +289,16 @@ renameExpr oldName newName e = case e of
   ESectR lhs op sp => ESectR (renameExpr oldName newName lhs) op sp
   EParen inner sp => EParen (renameExpr oldName newName inner) sp
   EAnn value ty sp => EAnn (renameExpr oldName newName value) (renameExpr oldName newName ty) sp
+  -- M36：模板字面量在 Elab 之前已被 Loader 降级（正常不存在）；保持结构递归，
+  -- 不静默丢洞内子表达式。
+  EInterp multi parts sp => EInterp multi (renameInterpParts oldName newName parts) sp
+
+renameInterpParts : String -> String -> List InterpPart -> List InterpPart
+renameInterpParts oldName newName [] = []
+renameInterpParts oldName newName ((IPText s) :: rest) =
+  IPText s :: renameInterpParts oldName newName rest
+renameInterpParts oldName newName ((IPHole e) :: rest) =
+  IPHole (renameExpr oldName newName e) :: renameInterpParts oldName newName rest
 
 renameExprUnless : String -> String -> List String -> Expr -> Expr
 renameExprUnless oldName newName names body =

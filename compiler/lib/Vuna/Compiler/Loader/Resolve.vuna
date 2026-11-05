@@ -327,6 +327,32 @@ resolveRecValues fuel modules label prefix ns imports scope ((Pair pat value) ::
   else andThen (resolveExpr (fuel - 1) modules label prefix ns imports scope value)
     (\value2 => andThen (resolveRecValues (fuel - 1) modules label prefix ns imports scope rest) (\tail => Ok (Pair pat value2 :: tail)))
 
+-- M36：模板字符串降级（rename 之后、Elab 之前）。
+--
+--   * 文本块 → `EStr`（空文本块跳过）；
+--   * 洞 → `EApp (EVar "Base.Interp.interp") [e]`：转换语义**完全由 base 的 `Interp`
+--     实例决定**（blanket `Show a => Interp a` / `Interp String` / 用户实例），编译器
+--     只负责这一步纯语法糖；
+--   * 整体用 `++` 左结合链串起来（1 块直接返回；模板通常只有少量块）。
+--
+-- 生成的名字已是 canonical（`Base.Interp.interp` 由 `Intrinsics` 唯一给出，`++` 是内建名），
+-- 不再走二次名字解析。
+lowerTemplate : Span -> List InterpPart -> Expr
+lowerTemplate sp parts = case templateChunks sp parts of
+  [] => EStr "" sp
+  first :: rest => concatLeft sp first rest
+
+templateChunks : Span -> List InterpPart -> List Expr
+templateChunks sp [] = []
+templateChunks sp ((IPText s) :: rest) =
+  if s == "" then templateChunks sp rest else EStr s sp :: templateChunks sp rest
+templateChunks sp ((IPHole e) :: rest) =
+  EApp (EVar interpMethodName (exprSpan e)) [e] (exprSpan e) :: templateChunks sp rest
+
+concatLeft : Span -> Expr -> List Expr -> Expr
+concatLeft sp acc [] = acc
+concatLeft sp acc (e :: rest) = concatLeft sp (EApp (EVar "++" sp) [acc, e] sp) rest
+
 resolveExpr : Int -> List Module -> String -> String -> Namespaces -> List Import -> List String -> Expr -> Result Expr
 resolveExpr fuel modules label prefix ns imports scope expr = if fuel <= 0 then Err "DT: resolve fuel exhausted (internal: resolver made no progress)"
 else case expr of
@@ -348,6 +374,11 @@ else case expr of
   EParen inner sp => resolveExpr (fuel - 1) modules label prefix ns imports scope inner
   EInt n sp => Ok (EInt n sp)
   EStr s sp => Ok (EStr s sp)
+  -- M36：模板字面量在 rename 之后降级为纯表达式（文本块 → `EStr`，洞 → `interp e`），
+  -- 于是 Elab / codegen 永远看不到 `EInterp`；fmt / lint / index / doc 只做 parse，仍看原形。
+  EInterp multi parts sp =>
+    andThen (resolveInterpParts (fuel - 1) modules label prefix ns imports scope parts)
+      (\ps => Ok (lowerTemplate sp ps))
   ELam params body sp =>
     andThen (traverse (checkBinder label) params)
       (\_ => andThen (resolveExpr (fuel - 1) modules label prefix ns imports (append params scope) body) (\b => Ok (ELam params b sp)))
@@ -358,9 +389,9 @@ else case expr of
   -- 不经 Loader，所以这条以前直接拒绝；M20 起 `--dt` 复用 Loader，而依赖类型是 DT 的
   -- 核心语法。放行判定的责任交给下游检查器：早期 HM 的 `Typecheck`（已删除）曾报
   -- `dependent function type requires --dt`（既有行为不变），DT 的 `Elab` 正常精化。
-  EPi name implicit dom cod sp =>
+  EPi name implicit qty dom cod sp =>
     andThen (resolveExpr (fuel - 1) modules label prefix ns imports scope dom)
-      (\dom2 => andThen (resolveExpr (fuel - 1) modules label prefix ns imports (append [name] scope) cod) (\cod2 => Ok (EPi name implicit dom2 cod2 sp)))
+      (\dom2 => andThen (resolveExpr (fuel - 1) modules label prefix ns imports (append [name] scope) cod) (\cod2 => Ok (EPi name implicit qty dom2 cod2 sp)))
   ELet binds body rec_ sp => andThen (resolveLet (fuel - 1) modules label prefix ns imports scope rec_ binds body) (\r => case r of
     Pair binds2 body2 => Ok (ELet binds2 body2 rec_ sp)
   )
@@ -390,6 +421,18 @@ else case expr of
   EAnn value ty sp =>
     andThen (resolveExpr (fuel - 1) modules label prefix ns imports scope value)
       (\v2 => andThen (resolveExpr (fuel - 1) modules label prefix ns imports scope ty) (\t2 => Ok (EAnn v2 t2 sp)))
+
+-- M36：模板片段的名字解析（洞内表达式按普通作用域解析；文本块原样）。
+resolveInterpParts : Int -> List Module -> String -> String -> Namespaces -> List Import -> List String -> List InterpPart -> Result (List InterpPart)
+resolveInterpParts fuel modules label prefix ns imports scope parts = if fuel <= 0 then Err "DT: resolve fuel exhausted (internal: resolver made no progress)"
+else case parts of
+  [] => Ok []
+  (IPText s) :: rest =>
+    andThen (resolveInterpParts (fuel - 1) modules label prefix ns imports scope rest)
+      (\ps => Ok (IPText s :: ps))
+  (IPHole e) :: rest =>
+    andThen (resolveExpr (fuel - 1) modules label prefix ns imports scope e)
+      (\e2 => andThen (resolveInterpParts (fuel - 1) modules label prefix ns imports scope rest) (\ps => Ok (IPHole e2 :: ps)))
 
 -- do（M11）在这里 desugar 成 bind/pure 的普通应用，后续类型检查与 codegen 无需认识 do。
 -- 最后一条裸表达式即块结果（`do e` = `e`）；裸语句用 `bind e (\_ -> rest)` 顺序化。
@@ -494,9 +537,9 @@ else case ty of
     andThen (resolveTypeExpr (fuel - 1) modules label prefix ns imports fn)
       (\fn2 => andThen (traverse (\dtv => resolveTypeExpr (fuel - 1) modules label prefix ns imports dtv) args) (\args2 => Ok (EApp fn2 args2 sp)))
   -- M20：同上——只做结构递归，允许与否交给下游检查器。
-  EPi name implicit dom cod sp =>
+  EPi name implicit qty dom cod sp =>
     andThen (resolveTypeExpr (fuel - 1) modules label prefix ns imports dom)
-      (\dom2 => andThen (resolveTypeExpr (fuel - 1) modules label prefix ns imports cod) (\cod2 => Ok (EPi name implicit dom2 cod2 sp)))
+      (\dom2 => andThen (resolveTypeExpr (fuel - 1) modules label prefix ns imports cod) (\cod2 => Ok (EPi name implicit qty dom2 cod2 sp)))
   _ => Err (label ++ ": invalid type expression (" ++ tyShape ty ++ ")")
 
 resolveTypeTopName : String -> String -> String -> Result String
@@ -510,12 +553,12 @@ resolveCtorSpec modules label prefix ns imports (Ctor ctor ty arity sp) =
 
 resolveDecl : List Module -> String -> String -> Namespaces -> List Import -> Decl -> Result Decl
 resolveDecl modules label prefix ns imports d = case d of
-  DData dname params kind ctors derivings sp =>
+  DData dname params kind ctors derivings lin sp =>
     andThen (resolveTypeTopName label prefix dname)
-      (\dn => andThen (resolveTypeExpr resolveFuelBound modules label prefix ns imports kind) (\kind2 => andThen (traverse (resolveCtorSpec modules label prefix ns imports) ctors) (\ctors2 => andThen (traverse (resolveTypeName modules label prefix ns imports) derivings) (\ds2 => Ok (DData dn params kind2 ctors2 ds2 sp)))))
-  DRecord dname params fields derivings sp =>
+      (\dn => andThen (resolveTypeExpr resolveFuelBound modules label prefix ns imports kind) (\kind2 => andThen (traverse (resolveCtorSpec modules label prefix ns imports) ctors) (\ctors2 => andThen (traverse (resolveTypeName modules label prefix ns imports) derivings) (\ds2 => Ok (DData dn params kind2 ctors2 ds2 lin sp)))))
+  DRecord dname params fields derivings lin sp =>
     andThen (resolveTypeTopName label prefix dname)
-      (\dn => andThen (traverse (resolveRecordField modules label prefix ns imports) fields) (\fields2 => andThen (traverse (resolveTypeName modules label prefix ns imports) derivings) (\ds2 => Ok (DRecord dn params fields2 ds2 sp))))
+      (\dn => andThen (traverse (resolveRecordField modules label prefix ns imports) fields) (\fields2 => andThen (traverse (resolveTypeName modules label prefix ns imports) derivings) (\ds2 => Ok (DRecord dn params fields2 ds2 lin sp))))
   DTrait tname params methods sp =>
     andThen (resolveTypeTopName label prefix tname)
       (\tn => andThen (traverse (resolveTraitMethod modules label prefix ns imports) methods) (\ms => Ok (DTrait tn params ms sp)))
@@ -565,7 +608,7 @@ resolveProgram modules label prefix ns imports decls =
 entryCtorNames : List Decl -> List String
 entryCtorNames [] = []
 entryCtorNames (d :: rest) = case d of
-  DData _ _ _ ctors _ _ => append (map ctorName ctors) (entryCtorNames rest)
+  DData _ _ _ ctors _ _ _ => append (map ctorName ctors) (entryCtorNames rest)
   _ => entryCtorNames rest
 
 firstDupName : List String -> Maybe String
@@ -654,8 +697,11 @@ effExpr e = case e of
   ERecord name fields sp => effFields fields
   ERecUpdate base fields sp => firstEffect [effExpr base, effFields fields]
   -- M20：`EPi` 是 DT 的核心语法，这里只做结构递归（类型层不算 effect）。
-  EPi name implicit dom cod sp => firstEffect [effExpr dom, effExpr cod]
+  EPi name implicit qty dom cod sp => firstEffect [effExpr dom, effExpr cod]
   EDo stmts sp => effDos stmts
+  -- M36：模板字面量在 rename 后已被降级成 `interp` 调用，正常路径走不到这里；
+  -- 仍然结构递归洞内表达式（不丢 effect），防御未来直接喂未降级 AST。
+  EInterp multi parts sp => effInterpParts parts
   -- M31.2：parser 中间产物（重排后不应出现；这里只做结构递归）。
   EInfix op l r sp => firstEffect [effExpr l, effExpr r]
   -- M31.3：反引号中缀 / section 同理（重排后不出现，保持结构递归以不丢 effect）。
@@ -684,6 +730,11 @@ effAlts ((Pair pat body) :: rest) = firstEffect [effExpr body, effAlts rest]
 effLocalClauses : List (Pair (List Pat) Expr) -> Maybe String
 effLocalClauses [] = Nothing
 effLocalClauses ((Pair pats body) :: rest) = firstEffect [effExpr body, effLocalClauses rest]
+
+effInterpParts : List InterpPart -> Maybe String
+effInterpParts [] = Nothing
+effInterpParts ((IPText s) :: rest) = effInterpParts rest
+effInterpParts ((IPHole e) :: rest) = firstEffect [effExpr e, effInterpParts rest]
 
 effFields : List (Pair String Expr) -> Maybe String
 effFields [] = Nothing

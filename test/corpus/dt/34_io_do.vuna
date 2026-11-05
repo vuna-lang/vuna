@@ -1,5 +1,5 @@
--- M27：canonical IO（base 的普通 data 声明 `Base.IO.IO`）+ do 块（loader 降级 bind/pure）。
--- IO 构造器 MkIO 不导出，只能用 Base.IO 的 IO API / pure 构造动作。
+-- M37：IO 是内建效应类型（没有构造器）；do 块由 loader 降级到 bind/pure，
+-- 实例来自 Base.IO，main 钩子是 `v_main 0`。
 import Base.IO
 
 main : IO Int

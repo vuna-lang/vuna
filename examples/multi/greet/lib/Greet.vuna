@@ -1,13 +1,16 @@
+-- | 示例包：生成问候语。
 module Greet (greeting, shout) where
 
 import Base.List
 import Base.String
 
+-- | 生成 `n` 次 `hi` 的问候语。
 greeting : Int -> String
 greeting n = join " " (repeatText n "hi")
 
 repeatText : Int -> String -> List String
 repeatText n s = if n <= 0 then [] else s :: repeatText (n - 1) s
 
+-- | 在字符串末尾加感叹号。
 shout : String -> String
 shout s = s ++ "!"

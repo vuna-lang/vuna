@@ -5,17 +5,22 @@
 
 ## 原生测试：`test/run-tests.sh`
 
-vuna 原生测试按编号章节组织（**43 个章节**：编号到 44，无第 12 段；34a–34d 归在第 34
+vuna 原生测试按编号章节组织（**49 个章节**：编号到 50，无第 12 段；34a–34d 归在第 34
 段内）。用 `vuna` / `vuna-seed` 驱动，不依赖外部 vuna 实现，但需要 `ocamlopt` 作为 codegen
 后端。精确 checks 数随夹具增删变化，以运行输出为准。测试覆盖：
 
 - `corpus/cli/check.sh`：CLI 错误矩阵（参数 / 路径 / workspace / 包目录）；
-- `corpus/index/check.sh`：Index v2（内容哈希缓存、原子写、refs 位置）；
-- `corpus/doc/01_export`：`vuna doc` 尊重 `[export]`；
+- `corpus/index/check.sh`：Index v3（内容哈希缓存、原子写、doc/type 字段、refs 位置）；
+- `corpus/doc/check.sh`：`vuna doc` 单文件 HTML、docstring 提取、`--check`、确定性；
+- `corpus/search/check.sh`：`vuna search` 名称/doc/类型检索、JSON、退出码；
 - `corpus/packages/{09_workspace_member_error, 10_workspace_build}`：workspace check/build；
+- `corpus/packages/11_run_args`：`vuna run` 的构建+参数透传夹具；
 - `corpus/test-m30/`：REPL / effect test；
-- LSP smoke：`corpus/lsp/smoke.sh`；
-- 接口摘要（check 期模块化精化）：`corpus/packages/m34_summary/` + 仓库自身预热回归。
+- LSP smoke：`corpus/lsp/smoke.sh`（含 M38 codeAction quick fix）；
+- 接口摘要（check 期模块化精化）：`corpus/packages/m34_summary/` + 仓库自身预热回归；
+- **M38（§45–§50）**：运行时错误报告（`vuna: runtime error` + 位置帧 + exit 2）、
+  `Base.Debug`（trace/assert/todo）、`vuna test` 的 `--list/--filter/--verbose/--fail-fast`、
+  `vuna run`、REPL `:type/:load/:reload/:browse`、CLI 诊断源码片段。
 
 ```console
 sh test/run-tests.sh        # 需要 PATH 中有 vuna 与 vuna-seed
@@ -81,7 +86,7 @@ nix run .#vuna-run-tests [-- --list | --only 34 | --only dt | --vuna stable]
 `<base>.vuna.nointerp` 标记跳过 interp 对拍，只做 `compile` + 运行，用于效果程序
 （`main : IO a`）与核心求值器不可归约的夹具（`strUnpack` / `strPack` / `strConcatMany` /
 `strSubstTemplate`；这些内建的 interp 不归约是显式分类）。当前 `.nointerp` 包括 `dt/34`、
-`dt/35`、`dt/56`、`dt_base/01`–`03`/`06`、`run/10`/`16`/`17`、`stdlib/03`/`07`/`09`/`10`。
+`dt/35`、`dt/56`、`dt_base/01`–`03`/`06`/`10`、`run/10`/`16`/`17`、`stdlib/03`/`07`/`09`/`10`。
 第 43 段对每个标记夹具跑一次 `interp`，断言**非 0（明确拒绝：效果不可执行或不归约为
 值）**；`.nocompile` 死标记已从 runner 删除。负例 `.err` 是稳定诊断子串，interp / compile
 文案不同时用 `.cerr`。

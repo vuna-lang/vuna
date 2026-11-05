@@ -51,6 +51,8 @@ const OUTPUT_CHANNEL_NAME = 'Vuna';
 const TRACE_CHANNEL_NAME = 'Vuna Language Server Trace';
 const LINT_SOURCE = 'vuna lint';
 const BUILD_TERMINAL_NAME = 'vuna build';
+const RUN_TERMINAL_NAME = 'vuna run';
+const TEST_TERMINAL_NAME = 'vuna test';
 const DEFAULT_TIMEOUT_MS = 120_000;
 
 let client: LanguageClient | undefined;
@@ -60,6 +62,8 @@ let statusBar: vscode.StatusBarItem | undefined;
 let lintDiagnostics: vscode.DiagnosticCollection | undefined;
 let fileWatcher: vscode.FileSystemWatcher | undefined;
 let buildTerminal: vscode.Terminal | undefined;
+let runTerminal: vscode.Terminal | undefined;
+let testTerminal: vscode.Terminal | undefined;
 let resolvedServer: ServerResolution | undefined;
 const lintInFlight = new Set<string>();
 
@@ -128,6 +132,8 @@ export function activate(context: vscode.ExtensionContext): void {
     }),
     vscode.window.onDidCloseTerminal((terminal) => {
       if (terminal === buildTerminal) buildTerminal = undefined;
+      if (terminal === runTerminal) runTerminal = undefined;
+      if (terminal === testTerminal) testTerminal = undefined;
     }),
   );
 
@@ -157,6 +163,12 @@ function registerCommands(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand('vuna.checkFile', () => checkActiveFile()),
     vscode.commands.registerCommand('vuna.buildPackage', (resource?: vscode.Uri) =>
       buildPackage(resource),
+    ),
+    vscode.commands.registerCommand('vuna.runPackage', (resource?: vscode.Uri) =>
+      runPackage(resource),
+    ),
+    vscode.commands.registerCommand('vuna.runTests', (resource?: vscode.Uri) =>
+      runTests(resource),
     ),
     vscode.commands.registerCommand('vuna.showVersion', () => showVersion()),
   );
@@ -753,6 +765,77 @@ function getBuildTerminal(cwd: string): vscode.Terminal {
   if (buildTerminal) return buildTerminal;
   buildTerminal = vscode.window.createTerminal({ name: BUILD_TERMINAL_NAME, cwd });
   return buildTerminal;
+}
+
+// `vuna run`：增量 build + 执行包内可执行入口（没有可执行入口的库包由 CLI 报错）。
+async function runPackage(resource?: vscode.Uri): Promise<void> {
+  const resolution = await cliResolution('vuna run');
+  if (!resolution) return;
+  const packageDir = findPackageDir(resource);
+  if (!packageDir) {
+    void vscode.window.showWarningMessage(
+      'Vuna: no vuna.toml found for this file (searched upwards from the file and the workspace).',
+    );
+    return;
+  }
+  const terminal = getRunTerminal(packageDir);
+  terminal.show(false);
+  const commandLine = [quoteShell(resolution.command), 'run', quoteShell(packageDir)].join(' ');
+  log(`[vuna] terminal: ${commandLine}`);
+  terminal.sendText(commandLine, true);
+}
+
+function getRunTerminal(cwd: string): vscode.Terminal {
+  if (runTerminal) return runTerminal;
+  runTerminal = vscode.window.createTerminal({ name: RUN_TERMINAL_NAME, cwd });
+  return runTerminal;
+}
+
+// `vuna test`：当前文件在包的 `test/` 下时按文件名过滤，否则跑整包（workspace 根则整 workspace）。
+async function runTests(resource?: vscode.Uri): Promise<void> {
+  const resolution = await cliResolution('vuna test');
+  if (!resolution) return;
+  const packageDir = findPackageDir(resource) ?? primaryWorkspaceFolder()?.uri.fsPath;
+  if (!packageDir) {
+    void vscode.window.showWarningMessage(
+      'Vuna: open a .vuna file or a workspace folder first (no package root found).',
+    );
+    return;
+  }
+  const parts = [quoteShell(resolution.command), 'test', quoteShell(packageDir)];
+  const editor = vscode.window.activeTextEditor;
+  if (editor && editor.document.languageId === LANGUAGE_ID) {
+    const file = editor.document.uri.fsPath;
+    const base = path.basename(file, '.vuna');
+    if (base && isInside(path.join(packageDir, 'test'), file)) {
+      parts.push('--filter', quoteShell(base));
+    }
+  }
+  const terminal = getTestTerminal(packageDir);
+  terminal.show(false);
+  const commandLine = parts.join(' ');
+  log(`[vuna] terminal: ${commandLine}`);
+  terminal.sendText(commandLine, true);
+}
+
+function getTestTerminal(cwd: string): vscode.Terminal {
+  if (testTerminal) return testTerminal;
+  testTerminal = vscode.window.createTerminal({ name: TEST_TERMINAL_NAME, cwd });
+  return testTerminal;
+}
+
+function isInside(dir: string, file: string): boolean {
+  const resolvedDir = path.resolve(dir) + path.sep;
+  return path.resolve(file).startsWith(resolvedDir);
+}
+
+async function cliResolution(label: string): Promise<ServerResolution | undefined> {
+  try {
+    return await getServerResolution();
+  } catch (error) {
+    await showRunError(label, error);
+    return undefined;
+  }
 }
 
 function findPackageDir(resource?: vscode.Uri): string | undefined {

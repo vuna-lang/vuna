@@ -97,7 +97,7 @@ checkCtorFieldSorts globals ctx ec arity famLevel cname csp tyPis tyExpr =
   else ctorFieldSortsGo globals ctx ec 0 arity famLevel cname csp tyExpr
 
 countSurfacePis : Expr -> Int
-countSurfacePis (EPi _ _ _ cod _) = 1 + countSurfacePis cod
+countSurfacePis (EPi _ _ _ _ cod _) = 1 + countSurfacePis cod
 countSurfacePis (EApp (EVar "->" _) ([_, b]) _) = 1 + countSurfacePis b
 countSurfacePis _ = 0
 
@@ -107,7 +107,7 @@ countTelePis (TPi _ _ _ _ cod) = 1 + countTelePis cod
 countTelePis _ = 0
 
 ctorFieldSortsGo : List (Pair String Term) -> Ctx -> Ec -> Int -> Int -> Level -> String -> Span -> Expr -> Result Ec
-ctorFieldSortsGo globals ctx ec pos arity famLevel cname csp (EPi name _ dom cod _) =
+ctorFieldSortsGo globals ctx ec pos arity famLevel cname csp (EPi name _ _ dom cod _) =
   ctorFieldSortsBinder globals ctx ec pos arity famLevel cname csp name dom cod
 ctorFieldSortsGo globals ctx ec pos arity famLevel cname csp (EApp (EVar "->" _) ([a, b]) _) =
   ctorFieldSortsBinder globals ctx ec pos arity famLevel cname csp "_" a b
@@ -140,7 +140,7 @@ ctorFieldSortsBinder globals ctx ec pos arity famLevel cname csp name dom cod = 
 elabDataHead : List (Pair String Term) -> Ec -> Pair Decl Span -> Result (Pair DataHead (Pair (List (Pair String Term)) Ec))
 elabDataHead globals ec ds = case ds of
   Pair d dsp => case d of
-    DData dname writtenParams kindExpr ctors derivings dsp2 => if memName dname preludeNames then tcErr1 dsp2 (CannotRedefineBuiltin dname) dname
+    DData dname writtenParams kindExpr ctors derivings lin dsp2 => if memName dname preludeNames then tcErr1 dsp2 (CannotRedefineBuiltin dname) dname
     else andThen (checkType globals emptyCtx ec kindExpr) (\pk => case pk of
       Pair kindTerm0 (Pair kindSort ec1) =>
         let
@@ -190,7 +190,7 @@ elabDataBodies decls heads globals ec acc = case decls of
   [] => Ok (Pair (reverse acc) (Pair globals ec))
   ds :: rest => case ds of
     Pair d dsp => case d of
-      DData dname writtenParams kindExpr ctors derivings dsp2 => case lookupDataHead dname heads of
+      DData dname writtenParams kindExpr ctors derivings lin dsp2 => case lookupDataHead dname heads of
         Nothing => errAt dsp2 ("DT: internal: missing data head for " ++ dname)
         Just (Pair fullKind arity) =>
           let
@@ -203,7 +203,7 @@ elabDataBodies decls heads globals ec acc = case decls of
           in andThen (elabCtors globals dname arity famLevel ec ctors) (\q => case q of
             Pair dctors ec2 =>
               let
-                dd = DtData dname tele dctors fullKind
+                dd = DtData dname tele dctors fullKind lin
               in case canonicalCtorsFor dname of
                 Just expected =>
                   if sameCtorSet expected (map dtCtorName dctors) then elabDataBodies rest heads (append globals (ctorGlobals dctors)) (ecAddData ec2 dd)
@@ -215,8 +215,9 @@ elabDataBodies decls heads globals ec acc = case decls of
           )
       _ => elabDataBodies rest heads globals ec acc
 
--- canonical 族（`Base.Bool.Bool` / `Base.List.List` / `Base.IO.IO`）只能以固定的构造子
--- 集合声明：伪造同名族会让精化与 codegen 的 canonical 判定失配（M27 防御）。
+-- canonical 族（`Base.Bool.Bool` / `Base.List.List` / `Base.Nat.Nat`）只能以固定的
+-- 构造子集合声明：伪造同名族会让精化与 codegen 的 canonical 判定失配（M27 防御）。
+-- IO 不在此列：M37 起它是编译器内建效应类型（没有构造子）。
 sameCtorSet : List String -> List String -> Bool
 sameCtorSet expected actual = length expected == length actual && allIn expected actual
 

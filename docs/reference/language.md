@@ -11,6 +11,9 @@
 - 语法：Idris2 风格 `data ... where`、多子句函数、顶层 `axiom` 声明（无体 / 不透明）、
   `case ... of`、`let ... in`（绑定块可选签名行）、lambda、`if then else`、`do` 块、
   整数 / 字符串字面量、`[..]` 与 `x :: xs` 列表糖、中缀 / 反引号中缀 / section / 用户符号名运算符；
+- **模板字符串与多行字面量**（M36）："hi ${name}" 插值、"""...""" 多行（内容逐字，
+  只丢开引号后的一个换行）；洞降级成 `Base.Interp.interp` 调用，转换语义由 `Interp`
+  实例决定。规则、转义 `\$`、边界见 [templates.md](templates.md)；
 - **运算符 = 有 fixity 的普通名字**：`a op b` 与 `op a b` 同义，`` a `f` b `` 与 `f a b` 同义，
   运算符不拥有独立语义；parser 不做优先级（中缀链收成右嵌套中间节点），`Loader.Fixity` 按
   模块可见 fixity 表重排。fixity / 别名的**唯一来源**是 `infixl N op` / `infixr N op` /
@@ -40,9 +43,11 @@
   一致）；
 - `where` 子句：函数体后可跟缩进的 `where` 块；绑定块（`let` 与 `where` 同一套模型）是
   **顺序作用域 + 可选签名**，其中 `where` 块要求每个绑定写显式签名；见下节；
-- 类型身份：`Int` / `String` 是语言 primitive 类型；`Bool` / `List` / `IO` 是 base 的
-  普通 `data` 声明（canonical 身份 `Base.Bool.Bool` / `Base.List.List` / `Base.IO.IO`，
-  经自动注入的 `Prelude` 可见）。用户写同名 `data` 是普通声明，不与 canonical 冲突。
+- 类型身份：`Int` / `String` 是语言 primitive 类型；`IO` 是语言内建效应类型（M37，
+  kind `Type -> Type`，无构造器）；`Bool` / `List` / `Nat` 是 base 的普通 `data` 声明
+  （canonical 身份 `Base.Bool.Bool` / `Base.List.List` / `Base.Nat.Nat`，经自动注入的
+  `Prelude` 可见）。用户写同名 `data` 是普通声明，不与 canonical 冲突（`IO` 例外：
+  ad-hoc 入口重定义报错）。
   `True` / `False` / `Cons` / `Nil` 与其他构造子一样**按声明身份**解析，没有「内建全局
   构造子放行」；身份规则见 [primitives.md](primitives.md)。
 

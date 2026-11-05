@@ -19,17 +19,22 @@
 | `Base.IORef` | IO 内的可变引用（`newRef` / `readRef` / `writeRef` / `modifyRef`，全部 `IO`） |
 | `Base.MArray` | IO 内的可变数组（`new` / `read` / `write` / `length`，全部 `IO`） |
 | `Base.Buffer` | 可变字符串缓冲（`new` / `add` / `contents` / `length`，全部 `IO`） |
-| `Base.State` / `Base.Reader` / `Base.Error` | 库级效应（M33 W6）：纯函数表示，手写 `bind` / `map` / `pure` 组合子；`State` 是 `s -> Pair a s`、`Reader` 是 `e -> a`、`Error` 是泛型 `Ok`/`Err` 和；暂不声明 trait 实例（等 F4 的 trait 能力） |
+| `Base.ST` | region 隔离的局部可变数据（M35.1；M37 改建在 IO 上）：`ST r a`（包 `IO a`）+ `runST`（显式 region binder，句柄不逃逸）+ `Ref r a` / `SArray r a` + 显式组合子 `bindST` / `bindST1` / `pureST` / `fmapST`；`Ref`/`SArray` 为 linear record（消费式 API，结果记录 `RefPair` 等），`bindST1` 线程化线性结果；不声明 `Functor`/`Monad` 实例，`runST` 入口执行一次 `runIO` |
+| `Base.State` / `Base.Reader` / `Base.Error` | 库级效应 monad（M35.1）：纯函数表示 + `Functor`/`Monad` 实例（`do` 可用）；`State` 是 `s -> Pair a s`、`Reader` 是 `e -> a`、`Error` 是泛型 `Ok`/`Err` 和；handler 是 `runState` / `evalState` / `execState`、`runReader` / `ask` / `local`、`runError` / `throwError` / `catchError`；M33 的手写组合子（`bindState` 等）已删除。通用签名索引效应（通用 `Eff`）未实现，见 [effects.md](effects.md) |
 | `Base.Nat` | 非负整数（`Zero` / `Succ`）；运行时是 OCaml `int`。`plus` / `minus` / `mult` / `div` / `toInt` / `fromInt` / `fromIntMaybe` / `pred` / `isZero` + `Eq` / `Ord` / `Show` 实例 |
 | `Base.Vec` | `Vec(..)` 与 `substTemplate` / `vhead` / `vlen` / `vtail` |
 | `Base.Monad` | `Functor` / `Monad` trait |
 | `Base.Show` | `Show` trait（`show : a -> String`）+ `Int` / `String` / `Bool` 实例 |
+| `Base.Interp` | 模板插值的转换 trait（M36）：`Interp a` + blanket `Show a => Interp a`（默认 = `show`）+ 具体 `Interp String`（原样输出）；插值降级与规则见 [templates.md](templates.md) |
 | `Base.Eq` | `Eq` trait（`eq` / `neq : a -> a -> Bool`）+ `Bool` 实例（Bool 是 `Eq` 返回类型，实例随 trait） |
 | `Base.Ord` | `Ord` trait（`lt` / `le` / `gt` / `ge : a -> a -> Bool`）+ `Bool` 实例 |
 | `Base.Int` | `Int` 的 `Eq` / `Ord` 实例宿主（`Int` 是 primitive 类型；实例跟类型模块走） |
-| `Base.IO` | 抽象 `IO a` 与 IO 组合子（实例 + print/readFile/writeFile/getArgs/exit，直接别名到 IO 化的 `prim_*` 动作）+ 特权执行入口 `runIO : IO a -> a`（要求 `unsafe` 能力） |
+| `Base.IO` | `IO` 的公开 API 与实例（`IO` 本身是内建类型，不再由本模块声明）：print/readFile/writeFile/getArgs/exit 直接别名到 `prim_*`，`Functor`/`Monad IO` 经 `prim_pureIO`/`prim_bindIO`；`runIO : IO a -> a` = `prim_runIO`（要求 `unsafe` 能力） |
+| `Base.Debug` | 调试工具（M38，**显式 import**，不进 `Prelude`/`Base` 门面）：`trace` / `traceShow` 写 stderr 后返回原值，`assert` / `todo` 失败走 `prim_fail` → 运行时报告器；见 [debugging.md](debugging.md) |
+| `Base.Effect` | `MonadIO` trait（`liftIO : IO a -> m a`）+ `MonadIO IO` 实例 |
+| `Base.StateT` / `Base.ReaderT` / `Base.ErrorT` | IO 基座的效应栈（M37）：`StateT s a` = `s -> IO (Pair a s)`、`ReaderT e a` = `e -> IO a`、`ErrorT e a` = `IO (Error e a)`；各带 handler、`Functor`/`Monad`/`MonadIO` 实例；固定以 IO 为基座（泛化到任意 monad 需要隐式参数 kind 推断，见 debt） |
 | `Base` | 包门面：整模块重导出核心模块（含 `Base.Nat`，不含 `Vec`；`import Base` 即可用） |
-| `Prelude` | 顶层模块（`base/lib/Prelude.vuna`）：重导出 `Base.Pair` / `Bool` / `Eq` / `Ord` / `Show` / `List` / `Maybe` / `Result` / `String` / `Monad`，**包上下文内所有源文件（含无 manifest 的 ad-hoc 单文件）自动导入**；显式 `import` 时不再重复注入；刻意不含 `Base.IO`（效果 API 需显式 import，效果面不进入自动注入） |
+| `Prelude` | 顶层模块（`base/lib/Prelude.vuna`）：重导出 `Base.Pair` / `Bool` / `Eq` / `Ord` / `Show` / `Interp` / `List` / `Maybe` / `Result` / `String` / `Monad`，**包上下文内所有源文件（含无 manifest 的 ad-hoc 单文件）自动导入**；显式 `import` 时不再重复注入；刻意不含 `Base.IO`（效果 API 需显式 import，效果面不进入自动注入） |
 
 跨包使用时只可见 `base/vuna.toml` `[export]` 列出的模块；抽象类型（`Map`、`HashMap`、
 `HashSet`、`IntMap`、`IO`）的构造器保持私有。`Map` / `Sort` / `HashMap` / `HashSet` /
@@ -43,10 +48,12 @@
 ```vuna
 module Base (module Base.Pair, module Base.Bool, module Base.List, module Base.Maybe,
              module Base.Result, module Base.String, module Base.Sort, module Base.Map,
-             module Base.Monad, module Base.IO, module Base.Show, module Base.Eq,
+             module Base.Monad, module Base.Effect, module Base.IO, module Base.Show, module Base.Eq,
+             module Base.Interp,
              module Base.Ord, module Base.Nat) where
 module Base.Bool (Bool(..), not, and, or, xor, bool) where
 module Base.Show (Show(..)) where
+module Base.Interp (Interp(..)) where
 module Base.Eq (Eq(..)) where
 module Base.Ord (Ord(..)) where
 module Base.Int where
@@ -67,7 +74,12 @@ module Base.Nat (Nat(..), plus, minus, mult, div, toInt, fromInt, fromIntMaybe,
                  pred, isZero) where
 module Base.Vec (Vec(..), substTemplate, vhead, vlen, vtail) where
 module Base.Monad (Functor(..), Monad(..)) where
-module Base.IO (IO, print, println, readFile, writeFile, readLine, readDir, ...) where
+module Base.IO (print, println, readFile, writeFile, readLine, readDir, ...) where
+module Base.Error (Error, catchError, ok, runError, throwError) where
+module Base.Effect (MonadIO(..)) where
+module Base.StateT (StateT, get, put, modify, runStateT, evalStateT, execStateT) where
+module Base.ReaderT (ReaderT, ask, local, runReaderT) where
+module Base.ErrorT (ErrorT, throwError, catchError, runErrorT) where
 ```
 
 `Base.IO` 完整导出见 `base/lib/Base/IO.vuna` 的模块头；`Prelude` 的导出列表见
@@ -93,8 +105,8 @@ module Base.IO (IO, print, println, readFile, writeFile, readLine, readDir, ...)
 - `base/lib/` 是 vuna 模块根，不是 OCaml 库目录；
 - `Prelude` 是唯一自动注入的模块：包上下文内所有源文件（含无 manifest 的 ad-hoc 单文件）
   都自动导入；没有第二套加载模式；
-- `Base.IO` 刻意不在 `Prelude` 中：效果 API 需要显式 `import Base.IO`，效果面不随自动注入
-  进入每个源文件；
+- `Base.IO` 刻意不在 `Prelude` 中：`IO` 类型是内建、恒可见，但效果 API 与 `Monad IO`
+  实例仍需要显式 `import Base.IO`，效果面不随自动注入进入每个源文件；
 - `base/` 在 seed 闭包内：修改 seed 闭包内的源码需要 seed rotation，见
   [bootstrap.md](bootstrap.md)。
 
@@ -110,11 +122,13 @@ module Base.IO (IO, print, println, readFile, writeFile, readLine, readDir, ...)
   `True` / `False` 精化为 `TBool`，codegen 表示是 OCaml `bool`，不生成变体。
   `if` / `case` / `main : Bool` 按 canonical 符号判定，没有短名判定或 prelude 桩。
   用户写同名 `data Bool` 是普通 data，不与 canonical 冲突。
-- **`List` / `IO` 也是 base 的普通 `data` 声明**：canonical 身份 `Base.List.List` /
-  `Base.IO.IO`。返回或接收 `List` 的原语（`strUnpack` / `strPack` / `prim_readDir` /
-  `prim_getArgs`）经 List 桥接 helper（`dtp_unpack` / `dtp_pack` / `dtp_listOf`）落地，
-  桥接只为 canonical `Base.List.List` 生成；`Prelude` 自动注入 `Base.List`，所以正常上下文
-  里总可用。
+- **`List` 也是 base 的普通 `data` 声明**：canonical 身份 `Base.List.List`。返回或接收
+  `List` 的原语（`strUnpack` / `strPack` / `prim_readDir` / `prim_getArgs`）经 List 桥接
+  helper（`dtp_unpack` / `dtp_pack` / `dtp_listOf`）落地，桥接只为 canonical
+  `Base.List.List` 生成；`Prelude` 自动注入 `Base.List`，所以正常上下文里总可用。
+- **`IO` 是语言内建效应类型（M37）**：kind `Type -> Type`，运行时裸 thunk
+  `int -> 'a`，无构造器；`Base.IO` 只提供 API 与实例。细节见
+  [effects.md](effects.md) §2。
 - **`Show` / `Eq` / `Ord` 在库（M31.1 起声明与实例分离）**：`Base.Show` / `Base.Eq` /
   `Base.Ord` 承载 trait 声明；实例按**落点规则**分布（见 [operators.md](operators.md)）：
   `Int` → `Base.Int`、`String` → `Base.String`、`Bool` → `Base.Eq` / `Base.Ord`
@@ -133,8 +147,9 @@ module Base.IO (IO, print, println, readFile, writeFile, readLine, readDir, ...)
 - **效果原语只有 `prim_*` 名，且返回 `IO` 动作（M31）**：`Base.IO` 是默认用户面
   （`print` / `readFile` / … 直接别名到 `prim_*`，类型形如 `… -> IO a`），并在
   `base/vuna.toml` 声明 `[capabilities].effects = ["console", "fs", "process"]`；动作只在
-  `main` 执行，`runIO` 是唯一的 main 外入口、需 `unsafe`。能力是**权限声明**，不是检查豁免
-  （`Loader.Resolve.checkEffectsBuiltins`）。
+  `main` 执行（产物钩子 `v_main 0`），`runIO`/`prim_runIO` 是唯一的 main 外入口、需
+  `unsafe`。能力是**权限声明**，不是检查豁免（`Loader.Resolve.checkEffectsBuiltins`）。
+  声明了能力的包可以直接用 `prim_*` 而不 import `Base.IO`（`IO` 类型是内建的）。
 - **ad-hoc 单文件与包内模块一致**：`Prelude` 自动注入，`Show` / `Eq` / `Ord` 及其实例开箱
   可用；诊断在缺少显式 import 时仍会提示加对应 import。ad-hoc 文件没有能力，效果只能经
   `Base.IO`。
@@ -156,17 +171,22 @@ module Base.IO (IO, print, println, readFile, writeFile, readLine, readDir, ...)
 - 键只覆盖 `String`（`HashMap`/`HashSet`）与 `Int`（`IntMap`）：没有泛型 `Hashable`
   trait（trait 仅单参数、无 `deriving Hash`），也没有有序持久容器（TreeMap/TreeSet）；
   需要有序时用 `Base.Sort`，大表查找用哈希容器；
-- **容器与可变数据（M33 W3）**：不可变 `Base.Array`、IO 内 `IORef` / `MArray` / `Buffer`
-  已落地；`Array.get` / `MArray.read` 越界是宿主 `Invalid_argument`；`Array.set` 返回新数组；
-  可变句柄只经 `IO` 动作使用（`runIO` 逃逸需要 `unsafe`）；没有线性 / 唯一性类型与 ST；
-- **库级效应（M33 W6）**：`State` / `Reader` / `Error` 是纯函数库，**不进入 `Prelude` /
-  `Base` 门面**（显式 import）；没有 trait 实例（trait 单参数 / 类型级部分应用限制），
-  `bind` / `map` / `pure` 组合子手写；没有语言级效应系统 / 并发（M34.7）；
+- **容器与可变数据（M33 W3 / M35.1 ST）**：不可变 `Base.Array`、IO 内 `IORef` / `MArray` /
+  `Buffer`、ST 内 `Base.ST` 的 `Ref` / `SArray` 已落地；`Array.get` / `MArray.read` 越界是
+  宿主 `Invalid_argument`；`Array.set` 返回新数组；IO 句柄只经 `IO` 动作使用，ST 句柄
+  只经 `ST r` 使用且不能逃出 `runST`（见 [effects.md](effects.md)）；M38 起
+  `Ref`/`SArray` 是 linear record（恰好一次、不可复制），ST 动作本身仍可复制；
+- **库级效应（M35.1）**：`State` / `Reader` / `Error` 是带 `Functor`/`Monad` 实例的纯函数
+  monad（**不进入 `Prelude` / `Base` 门面**，显式 import）；`do` 可用；`Base.ST` 的 region
+  隔离与「不声明 `Monad` 实例」的原因见 [effects.md](effects.md)；通用签名索引效应
+  （用户自定义 op + 深 handler + 行/重排）未实现（debt D03 / D26）；没有语言级并发 / async
+  （M35.2）；
 - `Result` 暂无 `Functor` / `Monad` 实例；
 - 抽象类型（`Map`、`IO`）跨包不可构造、不可模式匹配，只能经 API 使用。
 
 ## 相关阅读
 
 - 记录、trait、do/Monad 语义：[records-traits.md](records-traits.md)
+- 效应 monad / ST / 通用 Eff 的边界：[effects.md](effects.md)
 - 包与 workspace 机制、工具链命令：[packages.md](packages.md)
 - 编译器门面与 seed 闭包：[compiler.md](compiler.md)、[bootstrap.md](bootstrap.md)

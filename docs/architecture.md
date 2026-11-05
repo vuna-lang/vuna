@@ -2,13 +2,13 @@
 
 本文是 vuna 仓库的**子系统地图**：回答“改一个功能要在哪些模块动手、该跑哪段测试”。逐模块
 职责见 [compiler.md](reference/compiler.md)，Core / 精化器见 [core.md](reference/core.md)，
-语义见 [language.md](reference/language.md) / [type-system.md](reference/type-system.md)，
+语义见 [language.md](reference/language.md) / [type-system.md](reference/type-system.md) / [qtt.md](reference/qtt.md)，
 自举 / 内建原语能力见 [bootstrap.md](reference/bootstrap.md) / [primitives.md](reference/primitives.md)。
 
 ## 仓库分层
 
 ```text
-compiler/lib/Vuna/Compiler/   （55 个模块：54 个导出 + 内部 Debug；目录即层：
+compiler/lib/Vuna/Compiler/   （59 个模块：58 个导出 + 内部 Debug；目录即层：
                                 Frontend → Packages → Loader → Core → Elab → Codegen → Driver）
 ├─ Common.vuna                公共门面（Base 类型 + Pos/Span/诊断）
 ├─ Intrinsics.vuna            内建声明唯一真源（名字/签名/arity/能力/runtime/可见性）
@@ -22,14 +22,14 @@ compiler/lib/Vuna/Compiler/   （55 个模块：54 个导出 + 内部 Debug；�
 ├─ Codegen.vuna + Codegen/    Decl Erase Term Assembly Split  擦除检查 + OCaml 生成
 └─ Driver/                    Split Dt Compile CompilerCli     输出模型 / facade / 编译入口 / CLI
 根包 vuna（模块根 lib/，入口 app/Main.vuna）：Cli/Interp/Fmt/Lint/Index（门面+子模块）、
-  Repl/Doc/Lsp/Json/TestRunner/Files
+  Repl/Run/Doc（+子模块）/Search（+子模块）/Sig/Lsp/Json/TestRunner/Files
 依赖图：vuna → vuna-compiler → vuna-base（根包也直接依赖 base）
 ```
 
 **目录即层**：目录 = 依赖层次，上层可 import 下层、反向禁止。**门面模式**：`X.vuna` 只
 import 子模块并选择性重导出（对外名字面不变），实现只在叶子；**数据定义只在叶子**
 （`Core.Term`、`Elab.Types` 等）。目标每模块 ≤~800 行（当前最大 `Elab/Trait.vuna`，约 1.2k）。
-`compiler/` 是 seed 唯一来源（`compiler/app/Main.vuna` 的 import 闭包，当前 71 `.ml` / 72
+`compiler/` 是 seed 唯一来源（`compiler/app/Main.vuna` 的 import 闭包，当前 80 `.ml` / 81
 文件，以 `seed/` 与 `nix/seed-count.txt` 为准）；`lib/` 工具链与 `app/` 在 TCB 之外；`base/` 模块名即 API。
 
 ## 1. 编译链：Frontend → Loader → Elab → Codegen
@@ -48,6 +48,13 @@ import 子模块并选择性重导出（对外名字面不变），实现只在�
  → sh build.sh                   （Driver.Split：层内并行；ocamlopt 链接）
 ```
 
+**运行时错误报告（M38）**：`Vuna_runtime.ml` 由 `Codegen.Term.dtRuntimeWith` 生成 =
+运行时常量 + `dt_def_locs`（定义位置表：mangled 值名 → `定义名 (相对路径:行)`，路径按
+`PackageContext` 的模块根/包目录归一）+ `dt_report_exn`（未捕获异常报告器）。
+`Codegen.Assembly` 的 main 钩子在入口动作外包 `try`；入口零参 `main` 的初始化期绑定也套
+同一报告器，`Main.ml` 首行开 `Printexc.record_backtrace`。详见
+[debugging.md](reference/debugging.md)。
+
 **名字解析三命名空间**：`Loader.Resolve` 的解析期状态是三个**分开**的表
 （`Loader.Modules.Namespaces`：值 `nsValues` / 构造子 `nsCtors` / 类型 `nsTypes`，与导出
 `kind` 的 `val` / `ctor` / `type` 一一对应）。类型位置只查类型表（退化：索引构造子 →
@@ -59,6 +66,11 @@ import 子模块并选择性重导出（对外名字面不变），实现只在�
 `Loader.Fixity.reorderProgram` 重排 / 换别名 / 展开 section。表来源 = 源码 `infix*` 声明
 （`->` 由 `syntaxFixityDecls` 恒可见；未知符号运算符报错）；fmt / LSP / lint 用
 `fixitiesForSource(In)` 取程序级闭包。详见 [operators.md](reference/operators.md)。
+
+**模板字符串**：lexer 产出 `TTmpl`（洞内 token 原位保留），parser 组成 `EInterp`；
+`Loader.Resolve` 在名字解析后**降级**成 `Base.Interp.interp` 调用 + `++` 链（纯语法糖，
+Elab/codegen 看不到模板）。fmt/lint/index/doc 只 parse，仍按 `EInterp` 处理。详见
+[templates.md](reference/templates.md)。
 
 **擦除 / 合一 / 定义形式**：擦除只有单一判据链（`Elab.Meta.isTypeDomain` →
 `binderRig` → `Core.rigOfBinder`，读取侧统一 `Core.rigIsErased`）；元变量求解在
@@ -74,8 +86,8 @@ import 子模块并选择性重导出（对外名字面不变），实现只在�
 
 **内建单一真源**：`Vuna.Compiler.Intrinsics` 是名字 / 签名 / arity / 归约 / 能力 / runtime /
 可见性的唯一真源；`Loader.Resolve`（arity、放行、能力）、`Elab.Prelude`（签名）、
-`Core.Eval`（归约）、`Codegen.Term`（runtime）都消费它。内置身份按声明 symbol 判定：
-`Bool` / `List` / `IO` 是 base 普通 data（`Base.Bool.Bool` / `Base.List.List` / `Base.IO.IO`），不按短名。
+`Core.Eval`（归约）、`Codegen.Term`（runtime）都消费它。内置身份按声明 symbol 判定：`IO` 是内建效应类型；`Bool` / `List` / `Nat` 是 base 普通
+data（`Base.Bool.Bool` / `Base.List.List` / `Base.Nat.Nat`），不按短名。
 
 擦除检查由 `Codegen.Assembly.checkDtProgram` 负责（判据 `Core.rigIsErased`）。`vuna interp`
 走同一精化链后由 `Driver.Dt.dtEvalFile` 求 `main`（纯求值：只展示 `Int`/`String`/`Bool`，
@@ -122,23 +134,29 @@ vuna.toml → Frontend.{Toml.parseToml, Manifest.parseManifest/validateManifest}
 **何时该看这里**：改 `vuna` 子命令、fmt/lint/repl/doc/test/map、解释器 facade。
 
 - `Vuna.Cli.runCli` 分发；`Vuna.Interp.interpretFile/interpretExpr`（`PackageContext` 入参，
-  实际 `Driver.Dt.dtEvalFile`）、`Vuna.Repl.runRepl`、`Vuna.TestRunner.runTests`、
-  `Vuna.Doc.runDoc`、`Vuna.Files.collectVunaFiles`；fmt/lint 见 `Fmt.formatSourceWith` /
-  `Lint.runLint`。
+  实际 `Driver.Dt.dtEvalFile`）、`Vuna.Repl.runRepl`（`:type/:load/:reload/:browse`）、
+  `Vuna.Run.runRun`（`vuna run`）、`Vuna.TestRunner.runTests`（`TestOpts`：filter/list/verbose/
+  fail-fast）、`Vuna.Doc.runDoc`（docstring -> 单文件 HTML；`Vuna.Doc.{Comments,Model,Prose,Html,Run}`）、
+  `Vuna.Search.runSearch`、`Vuna.Files.collectVunaFiles`；fmt/lint 见 `Fmt.formatSourceWith` /
+  `Lint.runLint`；CLI 诊断片段见 `Driver/DiagRender`；API 文档与检索见
+  [api-docs.md](reference/api-docs.md)，调试工作流见 [debugging.md](reference/debugging.md)。
 - 进程执行只在 `Driver.CompilerCli.runIn`（`prim_runIn`，需要 `process`；工具链经 `runIO`）。
 - **TCB**：工具链永不进 seed（`compiler/app/Main.vuna` 闭包不含 `Vuna.*` 工具模块；
   `nix/tcb-forbidden.txt` 黑名单）；效应边界是 manifest 显式能力
   （`[capabilities].effects` ∈ console/fs/process/env/clock/unsafe），
-  `checkEffectsBuiltins` 按 `Intrinsics` 能力位检查；原语返回 `IO` 动作（只在 `main` 执行），
-  未声明能力的包只能经 `Base.IO`，`runIO` 需 `unsafe`。
+  `checkEffectsBuiltins` 按 `Intrinsics` 能力位检查；原语返回 `IO` 动作（只在 `main` 执行，
+  M37 起钩子是 `v_main 0`），未声明能力的包只能经 `Base.IO`，`runIO`/`prim_runIO` 需
+  `unsafe`；`base` 自身声明 `unsafe`（`Base.IO.runIO` 别名与 `Base.ST.runST`，见
+  [effects.md](reference/effects.md)）。
 
 ## 4. LSP 与索引（工具链侧，不进 seed）
 
 - `Vuna.Lsp.runLsp`：JSON-RPC over stdio；帧按字节读（body 后无换行，见
   [tooling.md](reference/tooling.md) §2）；诊断走 `Pkg.contextForFile` + DT 精化；hover = 洞目标 +
-  Index 符号；另有 formatting / documentSymbol / definition / references / completion / lint 诊断。
-- `Vuna.Index`：parse 级索引（`vuna map` / `vuna api`，缓存 `.local/index/`，内容哈希判定
-  新鲜度）。
+  Index 符号；另有 formatting / documentSymbol / definition / references / completion /
+  codeAction（lint quick fix）/ lint 诊断。
+- `Vuna.Index`：parse 级索引 v3（`vuna map` / `vuna api`，`symDoc` / `symType`，缓存
+  `.local/index/`，内容哈希判定新鲜度）；`Vuna.Search` 消费它做名称/doc/类型检索。
 
 ## 5. 自举链：seed → vuna-seed → vuna-compiler → vuna
 
@@ -159,6 +177,9 @@ sh s1/build.sh）→ stage1 →（build --no-compile --out s2 compiler）→ dif
 | 你改了什么 | 最小验证 |
 | --- | --- |
 | `lib/` / `base/` | 第 14–16、26–27、30–32 段 + `vuna check .` |
+| `base/` 的效应 monad / `Base.ST` / `Base.Debug` | 第 27 段 + `dt` / `dt_base` / `dt_err` 夹具 + `vuna check .`（见 [effects.md](reference/effects.md)、[debugging.md](reference/debugging.md)） |
 | `compiler/`（语法 / 类型 / 精化 / 擦除） | 全量测试 + `flake check`（至少 seed-selfhost） |
+| codegen 运行时 / main 钩子 / 位置表 | 第 6、13、38 段 + 第 45–46 段 + seed rotation（[debugging.md](reference/debugging.md)） |
+| CLI 工具（`run` / `test` 选项 / REPL / LSP） | 第 40、42、47–49 段 + `corpus/lsp/smoke.sh` + `vuna check .` |
 | split 输出 / `vuna.toml` | 第 28–29、33–34、38–39 段 + `checks.vuna-package` |
 | Nix | `nix flake check` + `nix build .#vuna` |

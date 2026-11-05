@@ -1,5 +1,4 @@
--- M27：main : IO a 的 hook 只认 canonical `Base.IO.IO`；`pure` 构造 IO 动作，
--- 执行时对世界令牌 0 应用。
+-- M37：main : IO a 的 hook 对动作应用世界令牌 0；pure 构造 IO 动作。
 import Base.IO
 
 main : IO String

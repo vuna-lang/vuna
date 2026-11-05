@@ -4,7 +4,7 @@ module Vuna.Compiler.Frontend.Parser.Support
   , atKw
   , atSym
   , badCaseIndent
-  , binderHeadName
+  , binderHead
   , canContinue
   , closeParenNext
   , countArrows
@@ -124,13 +124,23 @@ nthTok (t :: rest) n = if n <= 0 then Just t else nthTok rest (n - 1)
 peekTokAt : PState -> Int -> Maybe PTok
 peekTokAt st n = nthTok st.toksOf n
 
--- bindhead：下一个 token 是 `标识符 :`（M13：`(x : A) -> B` / `{x : A} -> B`）。
-binderHeadName : PState -> Maybe String
-binderHeadName st = case peekTok st of
-  PTok (TIdent name) p => case peekTokAt st 1 of
-    Just (PTok (TSym ":") _) => Just name
-    _ => Nothing
+-- M38：Pi binder 头：`标识符 :`、`0 标识符 :`、`1 标识符 :`（`(x : A) -> B` / `{x : A} -> B`）。
+binderHead : PState -> Maybe (Pair (Maybe Qty) String)
+binderHead st = case peekTok st of
+  PTok (TIdent name) _ => if symAt st 1 ":" then Just (Pair Nothing name) else Nothing
+  PTok (TInt 0) _ => quantifiedHead st Q0
+  PTok (TInt 1) _ => quantifiedHead st Q1
   _ => Nothing
+
+quantifiedHead : PState -> Qty -> Maybe (Pair (Maybe Qty) String)
+quantifiedHead st q = case peekTokAt st 1 of
+  Just (PTok (TIdent name) _) => if symAt st 2 ":" then Just (Pair (Just q) name) else Nothing
+  _ => Nothing
+
+symAt : PState -> Int -> String -> Bool
+symAt st n s = case peekTokAt st n of
+  Just (PTok (TSym x) _) => x == s
+  _ => False
 
 atKw : PState -> String -> Bool
 atKw st k = case peekTok st of
@@ -192,6 +202,7 @@ startsAtom st = case peekTok st of
   PTok (TIdent x) p => True
   PTok (TInt x) p => True
   PTok (TStr x) p => True
+  PTok (TTmpl m parts ep) p => True
   PTok (TKw "Type") p => True
   PTok (TSym "(") p => True
   PTok (TSym "[") p => True
@@ -202,6 +213,7 @@ startsPatternAtom st = case peekTok st of
   PTok (TIdent x) p => True
   PTok (TInt x) p => True
   PTok (TStr x) p => True
+  PTok (TTmpl m parts ep) p => True
   PTok (TSym "(") p => True
   PTok (TSym "[") p => True
   _ => False

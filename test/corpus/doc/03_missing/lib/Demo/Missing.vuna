@@ -1,0 +1,8 @@
+module Demo.Missing where
+
+-- | Documented.
+documented : Int
+documented = 1
+
+needDoc : Int
+needDoc = 2

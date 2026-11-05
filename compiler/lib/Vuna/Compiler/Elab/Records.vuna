@@ -97,7 +97,7 @@ recordsOfDecls : (String -> String) -> List Decl -> Pair (List RecordInfo) (List
 recordsOfDecls ctorOf [] = Pair [] []
 recordsOfDecls ctorOf (d :: rest) = case recordsOfDecls ctorOf rest of
   Pair recs ds => case d of
-    DRecord dname params fields derivings sp =>
+    DRecord dname params fields derivings lin sp =>
       let
         info = RecordInfo dname params (map recordFieldPair fields) derivings (ctorOf dname)
       in Pair (info :: recs) (recordDeclToData d (ctorOf dname) :: ds)
@@ -118,13 +118,14 @@ recordRetType dname params sp = EApp (EVar dname sp) (recordParamVarExprs params
 -- **输出**，交给下游检查器，不应当依赖某个检查器对箭头语法的特殊处理。
 recordArrowType : List Field -> Expr -> Span -> Expr
 recordArrowType [] ret sp = ret
-recordArrowType (f :: fs) ret sp = EPi "_" False (fieldType f) (recordArrowType fs ret sp) sp
+recordArrowType (f :: fs) ret sp =
+  EPi "_" False Nothing (fieldType f) (recordArrowType fs ret sp) sp
 
 recordDeclToData : Decl -> String -> Decl
-recordDeclToData (DRecord dname params fields derivings sp) ctor =
+recordDeclToData (DRecord dname params fields derivings lin sp) ctor =
   DData dname params (EVar "Type" sp)
     [Ctor ctor (recordArrowType fields (recordRetType dname params sp) sp) (length fields) sp]
-    derivings sp
+    derivings lin sp
 -- M23：DT 要求函数 clause 覆盖所有构造子（非 record 声明原样返回）。
 recordDeclToData d ctor = d
 
@@ -137,8 +138,8 @@ desugarRecordDecl records d = case d of
   DFun name pats body sp =>
     andThen (traverse (desugarPattern records) pats)
       (\pats2 => andThen (desugarExpr records body) (\body2 => Ok (DFun name pats2 body2 sp)))
-  DData name params kind ctors derivings sp => Ok d
-  DRecord name params fields derivings sp => Ok d
+  DData name params kind ctors derivings lin sp => Ok d
+  DRecord name params fields derivings lin sp => Ok d
   DTrait name params methods sp => Ok d
   DInstance ctxE head methods sp =>
     andThen (traverse (desugarRecordDecl records) methods) (\ms => Ok (DInstance ctxE head ms sp))
@@ -227,9 +228,9 @@ else case e of
   EDo stmts sp =>
     andThen (traverse (desugarDoStmtFuel (fuel - 1) records) stmts) (\s2 => Ok (EDo s2 sp))
   -- EPi 的可用性由各自的检查器判定（HM 报错、DT 支持），降级这里只做结构递归。
-  EPi name implicit dom cod sp =>
+  EPi name implicit qty dom cod sp =>
     andThen (desugarExprFuel (fuel - 1) records dom)
-      (\d2 => andThen (desugarExprFuel (fuel - 1) records cod) (\c2 => Ok (EPi name implicit d2 c2 sp)))
+      (\d2 => andThen (desugarExprFuel (fuel - 1) records cod) (\c2 => Ok (EPi name implicit qty d2 c2 sp)))
   -- M24：where 绑定签名（`EAnn value ty`）两边都做结构递归（record 可出现在值里）。
   EAnn value ty sp =>
     andThen (desugarExprFuel (fuel - 1) records value)

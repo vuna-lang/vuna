@@ -1,5 +1,6 @@
 open Vuna_runtime
-type t_Vuna_dCompiler_dFrontend_dLexer_dTok = C_Vuna_dCompiler_dFrontend_dLexer_dTok_Vuna_dCompiler_dFrontend_dLexer_dTIdent of (string) | C_Vuna_dCompiler_dFrontend_dLexer_dTok_Vuna_dCompiler_dFrontend_dLexer_dTKw of (string) | C_Vuna_dCompiler_dFrontend_dLexer_dTok_Vuna_dCompiler_dFrontend_dLexer_dTInt of (int) | C_Vuna_dCompiler_dFrontend_dLexer_dTok_Vuna_dCompiler_dFrontend_dLexer_dTStr of (string) | C_Vuna_dCompiler_dFrontend_dLexer_dTok_Vuna_dCompiler_dFrontend_dLexer_dTSym of (string) | C_Vuna_dCompiler_dFrontend_dLexer_dTok_Vuna_dCompiler_dFrontend_dLexer_dTEof
+type t_Vuna_dCompiler_dFrontend_dLexer_dTmplPart = C_Vuna_dCompiler_dFrontend_dLexer_dTmplPart_Vuna_dCompiler_dFrontend_dLexer_dTPText of (string) | C_Vuna_dCompiler_dFrontend_dLexer_dTmplPart_Vuna_dCompiler_dFrontend_dLexer_dTPHole of (t_Vuna_dCompiler_dFrontend_dLexer_dPTok Base_dList.t_Base_dList_dList)
+and t_Vuna_dCompiler_dFrontend_dLexer_dTok = C_Vuna_dCompiler_dFrontend_dLexer_dTok_Vuna_dCompiler_dFrontend_dLexer_dTIdent of (string) | C_Vuna_dCompiler_dFrontend_dLexer_dTok_Vuna_dCompiler_dFrontend_dLexer_dTKw of (string) | C_Vuna_dCompiler_dFrontend_dLexer_dTok_Vuna_dCompiler_dFrontend_dLexer_dTInt of (int) | C_Vuna_dCompiler_dFrontend_dLexer_dTok_Vuna_dCompiler_dFrontend_dLexer_dTStr of (string) | C_Vuna_dCompiler_dFrontend_dLexer_dTok_Vuna_dCompiler_dFrontend_dLexer_dTTmpl of (bool) * (t_Vuna_dCompiler_dFrontend_dLexer_dTmplPart Base_dList.t_Base_dList_dList) * (Vuna_dCompiler_dCommon.t_Vuna_dCompiler_dCommon_dPos) | C_Vuna_dCompiler_dFrontend_dLexer_dTok_Vuna_dCompiler_dFrontend_dLexer_dTSym of (string) | C_Vuna_dCompiler_dFrontend_dLexer_dTok_Vuna_dCompiler_dFrontend_dLexer_dTEof
 and t_Vuna_dCompiler_dFrontend_dLexer_dPTok = C_Vuna_dCompiler_dFrontend_dLexer_dPTok_Vuna_dCompiler_dFrontend_dLexer_dPTok of (t_Vuna_dCompiler_dFrontend_dLexer_dTok) * (Vuna_dCompiler_dCommon.t_Vuna_dCompiler_dCommon_dPos)
 and t_Vuna_dCompiler_dFrontend_dLexer_dChars = C_Vuna_dCompiler_dFrontend_dLexer_dChars_Vuna_dCompiler_dFrontend_dLexer_dChars of (int Base_dList.t_Base_dList_dList) * (Vuna_dCompiler_dCommon.t_Vuna_dCompiler_dCommon_dPos)
 and t_Vuna_dCompiler_dFrontend_dLexer_dCKind = C_Vuna_dCompiler_dFrontend_dLexer_dCKind_Vuna_dCompiler_dFrontend_dLexer_dCLine | C_Vuna_dCompiler_dFrontend_dLexer_dCKind_Vuna_dCompiler_dFrontend_dLexer_dCBlock
@@ -24,7 +25,7 @@ let v_Vuna_dCompiler_dFrontend_dLexer_disSpace = (fun c -> (if (if (if (c = 32) 
 
 let v_Vuna_dCompiler_dFrontend_dLexer_disOpChar = (fun c -> (if (if (if (if (if (if (if (if (if (if (if (if (if (if (if (if (if (if (c = 33) then true else (c = 36)) then true else (c = 37)) then true else (c = 38)) then true else (c = 42)) then true else (c = 43)) then true else (c = 45)) then true else (c = 46)) then true else (c = 47)) then true else (c = 60)) then true else (c = 61)) then true else (c = 62)) then true else (c = 63)) then true else (c = 64)) then true else (c = 92)) then true else (c = 94)) then true else (c = 124)) then true else (c = 126)) then true else (c = 58)))
 
-let v_Vuna_dCompiler_dFrontend_dLexer_disKeyword = (fun s -> (if (if (if (if (if (if (if (if (if (if (if (if (if (if (if (if (if (if (if (if (if (if (if (s = "data") then true else (s = "axiom")) then true else (s = "extern")) then true else (s = "case")) then true else (s = "of")) then true else (s = "let")) then true else (s = "in")) then true else (s = "if")) then true else (s = "then")) then true else (s = "else")) then true else (s = "where")) then true else (s = "Type")) then true else (s = "import")) then true else (s = "module")) then true else (s = "qualified")) then true else (s = "as")) then true else (s = "record")) then true else (s = "trait")) then true else (s = "instance")) then true else (s = "deriving")) then true else (s = "do")) then true else (s = "infixl")) then true else (s = "infixr")) then true else (s = "infix")))
+let v_Vuna_dCompiler_dFrontend_dLexer_disKeyword = (fun s -> (if (if (if (if (if (if (if (if (if (if (if (if (if (if (if (if (if (if (if (if (if (if (if (if (s = "data") then true else (s = "axiom")) then true else (s = "extern")) then true else (s = "case")) then true else (s = "of")) then true else (s = "let")) then true else (s = "in")) then true else (s = "if")) then true else (s = "then")) then true else (s = "else")) then true else (s = "where")) then true else (s = "linear")) then true else (s = "Type")) then true else (s = "import")) then true else (s = "module")) then true else (s = "qualified")) then true else (s = "as")) then true else (s = "record")) then true else (s = "trait")) then true else (s = "instance")) then true else (s = "deriving")) then true else (s = "do")) then true else (s = "infixl")) then true else (s = "infixr")) then true else (s = "infix")))
 
 let v_Vuna_dCompiler_dFrontend_dLexer_dclassifyIdent = (fun s -> (if (v_Vuna_dCompiler_dFrontend_dLexer_disKeyword s) then (C_Vuna_dCompiler_dFrontend_dLexer_dTok_Vuna_dCompiler_dFrontend_dLexer_dTKw (s)) else (C_Vuna_dCompiler_dFrontend_dLexer_dTok_Vuna_dCompiler_dFrontend_dLexer_dTIdent (s))))
 
@@ -98,121 +99,201 @@ let rec v_Vuna_dCompiler_dFrontend_dLexer_dcollectOp = (fun mc0 mc1 -> (match mc
   | _ -> failwith "DT: impossible branch"
 ))
 
-let rec v_Vuna_dCompiler_dFrontend_dLexer_dscanString = (fun mc0 mc1 -> (match mc0 with
+let v_Vuna_dCompiler_dFrontend_dLexer_ddecodeEscape = (fun mc0 -> (if (mc0 = 110) then (Base_dMaybe.C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (10)) else (if (mc0 = 116) then (Base_dMaybe.C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (9)) else (if (mc0 = 114) then (Base_dMaybe.C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (13)) else (if (mc0 = 34) then (Base_dMaybe.C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (34)) else (if (mc0 = 92) then (Base_dMaybe.C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (92)) else (if (mc0 = 39) then (Base_dMaybe.C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (39)) else (if (mc0 = 36) then (Base_dMaybe.C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (36)) else Base_dMaybe.C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing))))))))
+
+let v_Vuna_dCompiler_dFrontend_dLexer_ddropOpeningNewline = (fun mc0 -> (match mc0 with
   | C_Vuna_dCompiler_dFrontend_dLexer_dChars_Vuna_dCompiler_dFrontend_dLexer_dChars (dtb__34, dtb__35) -> (match dtb__34 with
-  | Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__36, dtb__37) -> (if (dtb__36 = 34) then (Base_dResult.C_Base_dResult_dResult_Base_dResult_dOk ((Base_dPair.C_Base_dPair_dPair_Base_dPair_dPair ((Base_dList.dtp_pack (Base_dList.v_Base_dList_dreverse mc1)), (C_Vuna_dCompiler_dFrontend_dLexer_dChars_Vuna_dCompiler_dFrontend_dLexer_dChars (dtb__37, ((v_Vuna_dCompiler_dFrontend_dLexer_dadvanceChar dtb__36) dtb__35))))))) else (if (dtb__36 = 10) then (Vuna_dCompiler_dFrontend_dDiagnostics.v_Vuna_dCompiler_dFrontend_dDiagnostics_dlexErr0 Vuna_dCompiler_dFrontend_dDiagnostics.C_Vuna_dCompiler_dFrontend_dDiagnostics_dLexDiag_Vuna_dCompiler_dFrontend_dDiagnostics_dUnterminatedString) else (if (dtb__36 = 92) then ((v_Vuna_dCompiler_dFrontend_dLexer_dscanEscape (C_Vuna_dCompiler_dFrontend_dLexer_dChars_Vuna_dCompiler_dFrontend_dLexer_dChars (dtb__37, ((v_Vuna_dCompiler_dFrontend_dLexer_dadvanceChar dtb__36) dtb__35)))) mc1) else ((v_Vuna_dCompiler_dFrontend_dLexer_dscanString (C_Vuna_dCompiler_dFrontend_dLexer_dChars_Vuna_dCompiler_dFrontend_dLexer_dChars (dtb__37, ((v_Vuna_dCompiler_dFrontend_dLexer_dadvanceChar dtb__36) dtb__35)))) (Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__36, mc1))))))
-  | Base_dList.C_Base_dList_dList_Base_dList_dNil -> (Vuna_dCompiler_dFrontend_dDiagnostics.v_Vuna_dCompiler_dFrontend_dDiagnostics_dlexErr0 Vuna_dCompiler_dFrontend_dDiagnostics.C_Vuna_dCompiler_dFrontend_dDiagnostics_dLexDiag_Vuna_dCompiler_dFrontend_dDiagnostics_dUnterminatedString)
-  | _ -> failwith "DT: impossible branch"
-)
-  | _ -> failwith "DT: impossible branch"
-))
-and v_Vuna_dCompiler_dFrontend_dLexer_dscanEscape = (fun mc0 mc1 -> (match mc0 with
-  | C_Vuna_dCompiler_dFrontend_dLexer_dChars_Vuna_dCompiler_dFrontend_dLexer_dChars (dtb__38, dtb__39) -> (match dtb__38 with
-  | Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__40, dtb__41) -> (if (dtb__40 = 110) then ((v_Vuna_dCompiler_dFrontend_dLexer_dscanString (C_Vuna_dCompiler_dFrontend_dLexer_dChars_Vuna_dCompiler_dFrontend_dLexer_dChars (dtb__41, ((v_Vuna_dCompiler_dFrontend_dLexer_dadvanceChar dtb__40) dtb__39)))) (Base_dList.C_Base_dList_dList_Base_dList_dCons (10, mc1))) else (if (dtb__40 = 116) then ((v_Vuna_dCompiler_dFrontend_dLexer_dscanString (C_Vuna_dCompiler_dFrontend_dLexer_dChars_Vuna_dCompiler_dFrontend_dLexer_dChars (dtb__41, ((v_Vuna_dCompiler_dFrontend_dLexer_dadvanceChar dtb__40) dtb__39)))) (Base_dList.C_Base_dList_dList_Base_dList_dCons (9, mc1))) else (if (dtb__40 = 114) then ((v_Vuna_dCompiler_dFrontend_dLexer_dscanString (C_Vuna_dCompiler_dFrontend_dLexer_dChars_Vuna_dCompiler_dFrontend_dLexer_dChars (dtb__41, ((v_Vuna_dCompiler_dFrontend_dLexer_dadvanceChar dtb__40) dtb__39)))) (Base_dList.C_Base_dList_dList_Base_dList_dCons (13, mc1))) else (if (dtb__40 = 34) then ((v_Vuna_dCompiler_dFrontend_dLexer_dscanString (C_Vuna_dCompiler_dFrontend_dLexer_dChars_Vuna_dCompiler_dFrontend_dLexer_dChars (dtb__41, ((v_Vuna_dCompiler_dFrontend_dLexer_dadvanceChar dtb__40) dtb__39)))) (Base_dList.C_Base_dList_dList_Base_dList_dCons (34, mc1))) else (if (dtb__40 = 92) then ((v_Vuna_dCompiler_dFrontend_dLexer_dscanString (C_Vuna_dCompiler_dFrontend_dLexer_dChars_Vuna_dCompiler_dFrontend_dLexer_dChars (dtb__41, ((v_Vuna_dCompiler_dFrontend_dLexer_dadvanceChar dtb__40) dtb__39)))) (Base_dList.C_Base_dList_dList_Base_dList_dCons (92, mc1))) else (if (dtb__40 = 39) then ((v_Vuna_dCompiler_dFrontend_dLexer_dscanString (C_Vuna_dCompiler_dFrontend_dLexer_dChars_Vuna_dCompiler_dFrontend_dLexer_dChars (dtb__41, ((v_Vuna_dCompiler_dFrontend_dLexer_dadvanceChar dtb__40) dtb__39)))) (Base_dList.C_Base_dList_dList_Base_dList_dCons (39, mc1))) else (Vuna_dCompiler_dFrontend_dDiagnostics.v_Vuna_dCompiler_dFrontend_dDiagnostics_dlexErr0 Vuna_dCompiler_dFrontend_dDiagnostics.C_Vuna_dCompiler_dFrontend_dDiagnostics_dLexDiag_Vuna_dCompiler_dFrontend_dDiagnostics_dUnknownEscape)))))))
-  | Base_dList.C_Base_dList_dList_Base_dList_dNil -> (Vuna_dCompiler_dFrontend_dDiagnostics.v_Vuna_dCompiler_dFrontend_dDiagnostics_dlexErr0 Vuna_dCompiler_dFrontend_dDiagnostics.C_Vuna_dCompiler_dFrontend_dDiagnostics_dLexDiag_Vuna_dCompiler_dFrontend_dDiagnostics_dUnterminatedString)
+  | Base_dList.C_Base_dList_dList_Base_dList_dNil -> mc0
+  | Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__36, dtb__37) -> (if (dtb__36 = 10) then (C_Vuna_dCompiler_dFrontend_dLexer_dChars_Vuna_dCompiler_dFrontend_dLexer_dChars (dtb__37, ((v_Vuna_dCompiler_dFrontend_dLexer_dadvanceChar dtb__36) dtb__35))) else mc0)
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
 ))
 
-let rec v_Vuna_dCompiler_dFrontend_dLexer_dlexChars = (fun fuel cs -> (if (fuel <= 0) then (Base_dResult.C_Base_dResult_dResult_Base_dResult_dErr ("DT: lexer fuel exhausted (internal: lexer made no progress)")) else (match ((v_Vuna_dCompiler_dFrontend_dLexer_dskipTrivia (fuel - 1)) cs) with
-  | Base_dResult.C_Base_dResult_dResult_Base_dResult_dErr (dtb__42) -> (Base_dResult.C_Base_dResult_dResult_Base_dResult_dErr (dtb__42))
-  | Base_dResult.C_Base_dResult_dResult_Base_dResult_dOk (dtb__43) -> ((fun nd_uscrut4 -> (match nd_uscrut4 with
-  | C_Vuna_dCompiler_dFrontend_dLexer_dChars_Vuna_dCompiler_dFrontend_dLexer_dChars (dtb__44, dtb__45) -> (match dtb__44 with
-  | Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__46, dtb__47) -> ((((v_Vuna_dCompiler_dFrontend_dLexer_dlexToken (fuel - 1)) dtb__46) dtb__47) dtb__45)
-  | Base_dList.C_Base_dList_dList_Base_dList_dNil -> (Base_dResult.C_Base_dResult_dResult_Base_dResult_dOk ((Base_dList.C_Base_dList_dList_Base_dList_dCons ((C_Vuna_dCompiler_dFrontend_dLexer_dPTok_Vuna_dCompiler_dFrontend_dLexer_dPTok (C_Vuna_dCompiler_dFrontend_dLexer_dTok_Vuna_dCompiler_dFrontend_dLexer_dTEof, dtb__45)), Base_dList.C_Base_dList_dList_Base_dList_dNil))))
+let v_Vuna_dCompiler_dFrontend_dLexer_dflushText = (fun mc0 mc1 -> (match mc0 with
+  | Base_dList.C_Base_dList_dList_Base_dList_dNil -> mc1
+  | _ -> (Base_dList.C_Base_dList_dList_Base_dList_dCons ((C_Vuna_dCompiler_dFrontend_dLexer_dTmplPart_Vuna_dCompiler_dFrontend_dLexer_dTPText ((Base_dList.dtp_pack (Base_dList.v_Base_dList_dreverse mc0)))), mc1))
+))
+
+let v_Vuna_dCompiler_dFrontend_dLexer_ddepthAfter = (fun mc0 mc1 -> (match mc1 with
+  | C_Vuna_dCompiler_dFrontend_dLexer_dTok_Vuna_dCompiler_dFrontend_dLexer_dTSym (dtb__38) -> (if (dtb__38 = "{") then (mc0 + 1) else (if (dtb__38 = "}") then (if (mc0 > 0) then (mc0 - 1) else 0) else mc0))
+  | _ -> mc0
+))
+
+let rec v_Vuna_dCompiler_dFrontend_dLexer_dscanTemplateText = (fun fuel multi cs acc parts -> (if (fuel <= 0) then (Base_dResult.C_Base_dResult_dResult_Base_dResult_dErr ("DT: lexer fuel exhausted (internal: lexer made no progress)")) else ((fun nd_uscrut5 -> (match nd_uscrut5 with
+  | C_Vuna_dCompiler_dFrontend_dLexer_dChars_Vuna_dCompiler_dFrontend_dLexer_dChars (dtb__39, dtb__40) -> (match dtb__39 with
+  | Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__41, dtb__42) -> (if (dtb__41 = 36) then (match dtb__42 with
+  | Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__43, dtb__44) -> (if (dtb__43 = 123) then ((fun holeStart -> ((fun nd_uscrut15 -> (match nd_uscrut15 with
+  | Base_dResult.C_Base_dResult_dResult_Base_dResult_dOk (dtb__45) -> (match dtb__45 with
+  | Base_dPair.C_Base_dPair_dPair_Base_dPair_dPair (dtb__46, dtb__47) -> ((fun nd_uscrut22 -> (match nd_uscrut22 with
+  | C_Vuna_dCompiler_dFrontend_dLexer_dChars_Vuna_dCompiler_dFrontend_dLexer_dChars (dtb__48, dtb__49) -> (match dtb__48 with
+  | Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__50, dtb__51) -> (if (dtb__50 = 125) then (((((v_Vuna_dCompiler_dFrontend_dLexer_dscanTemplateText (fuel - 1)) multi) (C_Vuna_dCompiler_dFrontend_dLexer_dChars_Vuna_dCompiler_dFrontend_dLexer_dChars (dtb__51, ((v_Vuna_dCompiler_dFrontend_dLexer_dadvanceChar 125) dtb__49)))) Base_dList.C_Base_dList_dList_Base_dList_dNil) (Base_dList.C_Base_dList_dList_Base_dList_dCons ((C_Vuna_dCompiler_dFrontend_dLexer_dTmplPart_Vuna_dCompiler_dFrontend_dLexer_dTPHole (dtb__46)), ((v_Vuna_dCompiler_dFrontend_dLexer_dflushText acc) parts)))) else (Vuna_dCompiler_dFrontend_dDiagnostics.v_Vuna_dCompiler_dFrontend_dDiagnostics_dlexErr0 Vuna_dCompiler_dFrontend_dDiagnostics.C_Vuna_dCompiler_dFrontend_dDiagnostics_dLexDiag_Vuna_dCompiler_dFrontend_dDiagnostics_dUnterminatedInterpolation))
+  | _ -> (Vuna_dCompiler_dFrontend_dDiagnostics.v_Vuna_dCompiler_dFrontend_dDiagnostics_dlexErr0 Vuna_dCompiler_dFrontend_dDiagnostics.C_Vuna_dCompiler_dFrontend_dDiagnostics_dLexDiag_Vuna_dCompiler_dFrontend_dDiagnostics_dUnterminatedInterpolation)
+)
+  | _ -> failwith "DT: impossible branch"
+)) dtb__47)
+  | _ -> failwith "DT: impossible branch"
+)
+  | Base_dResult.C_Base_dResult_dResult_Base_dResult_dErr (dtb__52) -> (Base_dResult.C_Base_dResult_dResult_Base_dResult_dErr (dtb__52))
+  | _ -> failwith "DT: impossible branch"
+)) ((((v_Vuna_dCompiler_dFrontend_dLexer_dlexHoleTokens (fuel - 1)) 0) (C_Vuna_dCompiler_dFrontend_dLexer_dChars_Vuna_dCompiler_dFrontend_dLexer_dChars (dtb__44, holeStart))) Base_dList.C_Base_dList_dList_Base_dList_dNil))) ((v_Vuna_dCompiler_dFrontend_dLexer_dadvanceChar dtb__43) ((v_Vuna_dCompiler_dFrontend_dLexer_dadvanceChar dtb__41) dtb__40))) else (((((v_Vuna_dCompiler_dFrontend_dLexer_dscanTemplateText (fuel - 1)) multi) (C_Vuna_dCompiler_dFrontend_dLexer_dChars_Vuna_dCompiler_dFrontend_dLexer_dChars (dtb__42, ((v_Vuna_dCompiler_dFrontend_dLexer_dadvanceChar dtb__41) dtb__40)))) (Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__41, acc))) parts))
+  | Base_dList.C_Base_dList_dList_Base_dList_dNil -> (((((v_Vuna_dCompiler_dFrontend_dLexer_dscanTemplateText (fuel - 1)) multi) (C_Vuna_dCompiler_dFrontend_dLexer_dChars_Vuna_dCompiler_dFrontend_dLexer_dChars (dtb__42, ((v_Vuna_dCompiler_dFrontend_dLexer_dadvanceChar dtb__41) dtb__40)))) (Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__41, acc))) parts)
+  | _ -> failwith "DT: impossible branch"
+) else (if (dtb__41 = 92) then (match dtb__42 with
+  | Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__53, dtb__54) -> (match (v_Vuna_dCompiler_dFrontend_dLexer_ddecodeEscape dtb__53) with
+  | Base_dMaybe.C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> (Vuna_dCompiler_dFrontend_dDiagnostics.v_Vuna_dCompiler_dFrontend_dDiagnostics_dlexErr0 Vuna_dCompiler_dFrontend_dDiagnostics.C_Vuna_dCompiler_dFrontend_dDiagnostics_dLexDiag_Vuna_dCompiler_dFrontend_dDiagnostics_dUnknownEscape)
+  | Base_dMaybe.C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__55) -> (((((v_Vuna_dCompiler_dFrontend_dLexer_dscanTemplateText (fuel - 1)) multi) (C_Vuna_dCompiler_dFrontend_dLexer_dChars_Vuna_dCompiler_dFrontend_dLexer_dChars (dtb__54, ((v_Vuna_dCompiler_dFrontend_dLexer_dadvanceChar dtb__53) ((v_Vuna_dCompiler_dFrontend_dLexer_dadvanceChar dtb__41) dtb__40))))) (Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__55, acc))) parts)
+  | _ -> failwith "DT: impossible branch"
+)
+  | Base_dList.C_Base_dList_dList_Base_dList_dNil -> (Vuna_dCompiler_dFrontend_dDiagnostics.v_Vuna_dCompiler_dFrontend_dDiagnostics_dlexErr0 Vuna_dCompiler_dFrontend_dDiagnostics.C_Vuna_dCompiler_dFrontend_dDiagnostics_dLexDiag_Vuna_dCompiler_dFrontend_dDiagnostics_dUnterminatedString)
+  | _ -> failwith "DT: impossible branch"
+) else (if (if multi then (dtb__41 = 34) else false) then (match dtb__42 with
+  | Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__56, dtb__57) -> (match dtb__57 with
+  | Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__58, dtb__59) -> (if (if (dtb__56 = 34) then (dtb__58 = 34) else false) then ((fun pos2 -> ((fun pos3 -> (Base_dResult.C_Base_dResult_dResult_Base_dResult_dOk ((Base_dPair.C_Base_dPair_dPair_Base_dPair_dPair ((Base_dList.v_Base_dList_dreverse ((v_Vuna_dCompiler_dFrontend_dLexer_dflushText acc) parts)), (Base_dPair.C_Base_dPair_dPair_Base_dPair_dPair ((C_Vuna_dCompiler_dFrontend_dLexer_dChars_Vuna_dCompiler_dFrontend_dLexer_dChars (dtb__59, ((v_Vuna_dCompiler_dFrontend_dLexer_dadvanceChar dtb__58) pos3))), pos3))))))) ((v_Vuna_dCompiler_dFrontend_dLexer_dadvanceChar dtb__58) pos2))) ((v_Vuna_dCompiler_dFrontend_dLexer_dadvanceChar dtb__56) ((v_Vuna_dCompiler_dFrontend_dLexer_dadvanceChar dtb__41) dtb__40))) else (((((v_Vuna_dCompiler_dFrontend_dLexer_dscanTemplateText (fuel - 1)) multi) (C_Vuna_dCompiler_dFrontend_dLexer_dChars_Vuna_dCompiler_dFrontend_dLexer_dChars (dtb__42, ((v_Vuna_dCompiler_dFrontend_dLexer_dadvanceChar dtb__41) dtb__40)))) (Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__41, acc))) parts))
+  | Base_dList.C_Base_dList_dList_Base_dList_dNil -> (Vuna_dCompiler_dFrontend_dDiagnostics.v_Vuna_dCompiler_dFrontend_dDiagnostics_dlexErr0 Vuna_dCompiler_dFrontend_dDiagnostics.C_Vuna_dCompiler_dFrontend_dDiagnostics_dLexDiag_Vuna_dCompiler_dFrontend_dDiagnostics_dUnterminatedString)
+  | _ -> failwith "DT: impossible branch"
+)
+  | Base_dList.C_Base_dList_dList_Base_dList_dNil -> (Vuna_dCompiler_dFrontend_dDiagnostics.v_Vuna_dCompiler_dFrontend_dDiagnostics_dlexErr0 Vuna_dCompiler_dFrontend_dDiagnostics.C_Vuna_dCompiler_dFrontend_dDiagnostics_dLexDiag_Vuna_dCompiler_dFrontend_dDiagnostics_dUnterminatedString)
+  | _ -> failwith "DT: impossible branch"
+) else (if (if (Base_dBool.v_Base_dBool_dnot multi) then (dtb__41 = 34) else false) then (Base_dResult.C_Base_dResult_dResult_Base_dResult_dOk ((Base_dPair.C_Base_dPair_dPair_Base_dPair_dPair ((Base_dList.v_Base_dList_dreverse ((v_Vuna_dCompiler_dFrontend_dLexer_dflushText acc) parts)), (Base_dPair.C_Base_dPair_dPair_Base_dPair_dPair ((C_Vuna_dCompiler_dFrontend_dLexer_dChars_Vuna_dCompiler_dFrontend_dLexer_dChars (dtb__42, ((v_Vuna_dCompiler_dFrontend_dLexer_dadvanceChar dtb__41) dtb__40))), dtb__40)))))) else (if (if (Base_dBool.v_Base_dBool_dnot multi) then (dtb__41 = 10) else false) then (Vuna_dCompiler_dFrontend_dDiagnostics.v_Vuna_dCompiler_dFrontend_dDiagnostics_dlexErr0 Vuna_dCompiler_dFrontend_dDiagnostics.C_Vuna_dCompiler_dFrontend_dDiagnostics_dLexDiag_Vuna_dCompiler_dFrontend_dDiagnostics_dUnterminatedString) else (((((v_Vuna_dCompiler_dFrontend_dLexer_dscanTemplateText (fuel - 1)) multi) (C_Vuna_dCompiler_dFrontend_dLexer_dChars_Vuna_dCompiler_dFrontend_dLexer_dChars (dtb__42, ((v_Vuna_dCompiler_dFrontend_dLexer_dadvanceChar dtb__41) dtb__40)))) (Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__41, acc))) parts))))))
+  | Base_dList.C_Base_dList_dList_Base_dList_dNil -> (Vuna_dCompiler_dFrontend_dDiagnostics.v_Vuna_dCompiler_dFrontend_dDiagnostics_dlexErr0 Vuna_dCompiler_dFrontend_dDiagnostics.C_Vuna_dCompiler_dFrontend_dDiagnostics_dLexDiag_Vuna_dCompiler_dFrontend_dDiagnostics_dUnterminatedString)
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
-)) dtb__43)
+)) cs)))
+and v_Vuna_dCompiler_dFrontend_dLexer_dlexHoleTokens = (fun fuel depth cs acc -> (if (fuel <= 0) then (Base_dResult.C_Base_dResult_dResult_Base_dResult_dErr ("DT: lexer fuel exhausted (internal: lexer made no progress)")) else (match ((v_Vuna_dCompiler_dFrontend_dLexer_dskipTrivia (fuel - 1)) cs) with
+  | Base_dResult.C_Base_dResult_dResult_Base_dResult_dErr (dtb__60) -> (Base_dResult.C_Base_dResult_dResult_Base_dResult_dErr (dtb__60))
+  | Base_dResult.C_Base_dResult_dResult_Base_dResult_dOk (dtb__61) -> ((fun nd_uscrut6 -> (match nd_uscrut6 with
+  | C_Vuna_dCompiler_dFrontend_dLexer_dChars_Vuna_dCompiler_dFrontend_dLexer_dChars (dtb__62, dtb__63) -> (match dtb__62 with
+  | Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__64, dtb__65) -> (if (if (dtb__64 = 125) then (depth = 0) else false) then (Base_dResult.C_Base_dResult_dResult_Base_dResult_dOk ((Base_dPair.C_Base_dPair_dPair_Base_dPair_dPair ((Base_dList.v_Base_dList_dreverse acc), dtb__61)))) else ((fun nd_uscrut12 -> (match nd_uscrut12 with
+  | Base_dResult.C_Base_dResult_dResult_Base_dResult_dOk (dtb__66) -> (match dtb__66 with
+  | Base_dPair.C_Base_dPair_dPair_Base_dPair_dPair (dtb__67, dtb__68) -> ((((v_Vuna_dCompiler_dFrontend_dLexer_dlexHoleTokens (fuel - 1)) ((v_Vuna_dCompiler_dFrontend_dLexer_ddepthAfter depth) (match dtb__67 with
+  | C_Vuna_dCompiler_dFrontend_dLexer_dPTok_Vuna_dCompiler_dFrontend_dLexer_dPTok (dtb__69, dtb__70) -> dtb__69
+  | _ -> failwith "DT: impossible branch"
+))) dtb__68) (Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__67, acc)))
+  | _ -> failwith "DT: impossible branch"
+)
+  | Base_dResult.C_Base_dResult_dResult_Base_dResult_dErr (dtb__71) -> (Base_dResult.C_Base_dResult_dResult_Base_dResult_dErr (dtb__71))
+  | _ -> failwith "DT: impossible branch"
+)) ((v_Vuna_dCompiler_dFrontend_dLexer_dlexOneToken (fuel - 1)) dtb__61)))
+  | Base_dList.C_Base_dList_dList_Base_dList_dNil -> (Vuna_dCompiler_dFrontend_dDiagnostics.v_Vuna_dCompiler_dFrontend_dDiagnostics_dlexErr0 Vuna_dCompiler_dFrontend_dDiagnostics.C_Vuna_dCompiler_dFrontend_dDiagnostics_dLexDiag_Vuna_dCompiler_dFrontend_dDiagnostics_dUnterminatedInterpolation)
+  | _ -> failwith "DT: impossible branch"
+)
+  | _ -> failwith "DT: impossible branch"
+)) dtb__61)
   | _ -> failwith "DT: impossible branch"
 )))
-and v_Vuna_dCompiler_dFrontend_dLexer_dlexToken = (fun fuel c rest p -> (if (fuel <= 0) then (Base_dResult.C_Base_dResult_dResult_Base_dResult_dErr ("DT: lexer fuel exhausted (internal: lexer made no progress)")) else (if (v_Vuna_dCompiler_dFrontend_dLexer_disIdentStart c) then (match ((v_Vuna_dCompiler_dFrontend_dLexer_dcollectIdent (C_Vuna_dCompiler_dFrontend_dLexer_dChars_Vuna_dCompiler_dFrontend_dLexer_dChars (rest, ((v_Vuna_dCompiler_dFrontend_dLexer_dadvanceChar c) p)))) (Base_dList.C_Base_dList_dList_Base_dList_dCons (c, Base_dList.C_Base_dList_dList_Base_dList_dNil))) with
-  | Base_dPair.C_Base_dPair_dPair_Base_dPair_dPair (dtb__48, dtb__49) -> (match ((v_Vuna_dCompiler_dFrontend_dLexer_dlexChars (fuel - 1)) dtb__49) with
-  | Base_dResult.C_Base_dResult_dResult_Base_dResult_dErr (dtb__50) -> (Base_dResult.C_Base_dResult_dResult_Base_dResult_dErr (dtb__50))
-  | Base_dResult.C_Base_dResult_dResult_Base_dResult_dOk (dtb__51) -> (Base_dResult.C_Base_dResult_dResult_Base_dResult_dOk ((Base_dList.C_Base_dList_dList_Base_dList_dCons ((C_Vuna_dCompiler_dFrontend_dLexer_dPTok_Vuna_dCompiler_dFrontend_dLexer_dPTok ((v_Vuna_dCompiler_dFrontend_dLexer_dclassifyIdent dtb__48), p)), dtb__51))))
+and v_Vuna_dCompiler_dFrontend_dLexer_dlexOneToken = (fun fuel cs -> (if (fuel <= 0) then (Base_dResult.C_Base_dResult_dResult_Base_dResult_dErr ("DT: lexer fuel exhausted (internal: lexer made no progress)")) else ((fun nd_uscrut2 -> (match nd_uscrut2 with
+  | C_Vuna_dCompiler_dFrontend_dLexer_dChars_Vuna_dCompiler_dFrontend_dLexer_dChars (dtb__72, dtb__73) -> (match dtb__72 with
+  | Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__74, dtb__75) -> (if (v_Vuna_dCompiler_dFrontend_dLexer_disIdentStart dtb__74) then (match ((v_Vuna_dCompiler_dFrontend_dLexer_dcollectIdent (C_Vuna_dCompiler_dFrontend_dLexer_dChars_Vuna_dCompiler_dFrontend_dLexer_dChars (dtb__75, ((v_Vuna_dCompiler_dFrontend_dLexer_dadvanceChar dtb__74) dtb__73)))) (Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__74, Base_dList.C_Base_dList_dList_Base_dList_dNil))) with
+  | Base_dPair.C_Base_dPair_dPair_Base_dPair_dPair (dtb__76, dtb__77) -> (Base_dResult.C_Base_dResult_dResult_Base_dResult_dOk ((Base_dPair.C_Base_dPair_dPair_Base_dPair_dPair ((C_Vuna_dCompiler_dFrontend_dLexer_dPTok_Vuna_dCompiler_dFrontend_dLexer_dPTok ((v_Vuna_dCompiler_dFrontend_dLexer_dclassifyIdent dtb__76), dtb__73)), dtb__77))))
+  | _ -> failwith "DT: impossible branch"
+) else (if (v_Vuna_dCompiler_dFrontend_dLexer_disDigit dtb__74) then (match ((v_Vuna_dCompiler_dFrontend_dLexer_dcollectInt (C_Vuna_dCompiler_dFrontend_dLexer_dChars_Vuna_dCompiler_dFrontend_dLexer_dChars (dtb__75, ((v_Vuna_dCompiler_dFrontend_dLexer_dadvanceChar dtb__74) dtb__73)))) (dtb__74 - 48)) with
+  | Base_dPair.C_Base_dPair_dPair_Base_dPair_dPair (dtb__78, dtb__79) -> (Base_dResult.C_Base_dResult_dResult_Base_dResult_dOk ((Base_dPair.C_Base_dPair_dPair_Base_dPair_dPair ((C_Vuna_dCompiler_dFrontend_dLexer_dPTok_Vuna_dCompiler_dFrontend_dLexer_dPTok ((C_Vuna_dCompiler_dFrontend_dLexer_dTok_Vuna_dCompiler_dFrontend_dLexer_dTInt (dtb__78)), dtb__73)), dtb__79))))
+  | _ -> failwith "DT: impossible branch"
+) else (if (dtb__74 = 34) then ((((v_Vuna_dCompiler_dFrontend_dLexer_dlexStringToken (fuel - 1)) dtb__74) dtb__75) dtb__73) else (if (if (if (if (if (if (if (dtb__74 = 40) then true else (dtb__74 = 41)) then true else (dtb__74 = 91)) then true else (dtb__74 = 93)) then true else (dtb__74 = 44)) then true else (dtb__74 = 123)) then true else (dtb__74 = 125)) then (Base_dResult.C_Base_dResult_dResult_Base_dResult_dOk ((Base_dPair.C_Base_dPair_dPair_Base_dPair_dPair ((C_Vuna_dCompiler_dFrontend_dLexer_dPTok_Vuna_dCompiler_dFrontend_dLexer_dPTok ((C_Vuna_dCompiler_dFrontend_dLexer_dTok_Vuna_dCompiler_dFrontend_dLexer_dTSym ((Base_dList.dtp_pack (Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__74, Base_dList.C_Base_dList_dList_Base_dList_dNil))))), dtb__73)), (C_Vuna_dCompiler_dFrontend_dLexer_dChars_Vuna_dCompiler_dFrontend_dLexer_dChars (dtb__75, ((v_Vuna_dCompiler_dFrontend_dLexer_dadvanceChar dtb__74) dtb__73))))))) else (if (dtb__74 = 96) then (Base_dResult.C_Base_dResult_dResult_Base_dResult_dOk ((Base_dPair.C_Base_dPair_dPair_Base_dPair_dPair ((C_Vuna_dCompiler_dFrontend_dLexer_dPTok_Vuna_dCompiler_dFrontend_dLexer_dPTok ((C_Vuna_dCompiler_dFrontend_dLexer_dTok_Vuna_dCompiler_dFrontend_dLexer_dTSym ("`")), dtb__73)), (C_Vuna_dCompiler_dFrontend_dLexer_dChars_Vuna_dCompiler_dFrontend_dLexer_dChars (dtb__75, ((v_Vuna_dCompiler_dFrontend_dLexer_dadvanceChar dtb__74) dtb__73))))))) else (if (v_Vuna_dCompiler_dFrontend_dLexer_disOpChar dtb__74) then (match ((v_Vuna_dCompiler_dFrontend_dLexer_dcollectOp (C_Vuna_dCompiler_dFrontend_dLexer_dChars_Vuna_dCompiler_dFrontend_dLexer_dChars (dtb__75, ((v_Vuna_dCompiler_dFrontend_dLexer_dadvanceChar dtb__74) dtb__73)))) (Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__74, Base_dList.C_Base_dList_dList_Base_dList_dNil))) with
+  | Base_dPair.C_Base_dPair_dPair_Base_dPair_dPair (dtb__80, dtb__81) -> (Base_dResult.C_Base_dResult_dResult_Base_dResult_dOk ((Base_dPair.C_Base_dPair_dPair_Base_dPair_dPair ((C_Vuna_dCompiler_dFrontend_dLexer_dPTok_Vuna_dCompiler_dFrontend_dLexer_dPTok ((C_Vuna_dCompiler_dFrontend_dLexer_dTok_Vuna_dCompiler_dFrontend_dLexer_dTSym (dtb__80)), dtb__73)), dtb__81))))
+  | _ -> failwith "DT: impossible branch"
+) else (Vuna_dCompiler_dFrontend_dDiagnostics.v_Vuna_dCompiler_dFrontend_dDiagnostics_dlexErr0 Vuna_dCompiler_dFrontend_dDiagnostics.C_Vuna_dCompiler_dFrontend_dDiagnostics_dLexDiag_Vuna_dCompiler_dFrontend_dDiagnostics_dUnexpectedCharacter)))))))
+  | Base_dList.C_Base_dList_dList_Base_dList_dNil -> (Base_dResult.C_Base_dResult_dResult_Base_dResult_dErr ("DT: internal: lexOneToken on empty input"))
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
-) else (if (v_Vuna_dCompiler_dFrontend_dLexer_disDigit c) then (match ((v_Vuna_dCompiler_dFrontend_dLexer_dcollectInt (C_Vuna_dCompiler_dFrontend_dLexer_dChars_Vuna_dCompiler_dFrontend_dLexer_dChars (rest, ((v_Vuna_dCompiler_dFrontend_dLexer_dadvanceChar c) p)))) (c - 48)) with
-  | Base_dPair.C_Base_dPair_dPair_Base_dPair_dPair (dtb__52, dtb__53) -> (match ((v_Vuna_dCompiler_dFrontend_dLexer_dlexChars (fuel - 1)) dtb__53) with
-  | Base_dResult.C_Base_dResult_dResult_Base_dResult_dErr (dtb__54) -> (Base_dResult.C_Base_dResult_dResult_Base_dResult_dErr (dtb__54))
-  | Base_dResult.C_Base_dResult_dResult_Base_dResult_dOk (dtb__55) -> (Base_dResult.C_Base_dResult_dResult_Base_dResult_dOk ((Base_dList.C_Base_dList_dList_Base_dList_dCons ((C_Vuna_dCompiler_dFrontend_dLexer_dPTok_Vuna_dCompiler_dFrontend_dLexer_dPTok ((C_Vuna_dCompiler_dFrontend_dLexer_dTok_Vuna_dCompiler_dFrontend_dLexer_dTInt (dtb__52)), p)), dtb__55))))
-  | _ -> failwith "DT: impossible branch"
-)
-  | _ -> failwith "DT: impossible branch"
-) else (if (c = 34) then ((fun nd_uscrut4 -> (match nd_uscrut4 with
-  | Base_dResult.C_Base_dResult_dResult_Base_dResult_dOk (dtb__56) -> (match dtb__56 with
-  | Base_dPair.C_Base_dPair_dPair_Base_dPair_dPair (dtb__57, dtb__58) -> (match ((v_Vuna_dCompiler_dFrontend_dLexer_dlexChars (fuel - 1)) dtb__58) with
-  | Base_dResult.C_Base_dResult_dResult_Base_dResult_dErr (dtb__59) -> (Base_dResult.C_Base_dResult_dResult_Base_dResult_dErr (dtb__59))
-  | Base_dResult.C_Base_dResult_dResult_Base_dResult_dOk (dtb__60) -> (Base_dResult.C_Base_dResult_dResult_Base_dResult_dOk ((Base_dList.C_Base_dList_dList_Base_dList_dCons ((C_Vuna_dCompiler_dFrontend_dLexer_dPTok_Vuna_dCompiler_dFrontend_dLexer_dPTok ((C_Vuna_dCompiler_dFrontend_dLexer_dTok_Vuna_dCompiler_dFrontend_dLexer_dTStr (dtb__57)), p)), dtb__60))))
+)) cs)))
+and v_Vuna_dCompiler_dFrontend_dLexer_dlexStringToken = (fun fuel c rest p -> (if (fuel <= 0) then (Base_dResult.C_Base_dResult_dResult_Base_dResult_dErr ("DT: lexer fuel exhausted (internal: lexer made no progress)")) else (match rest with
+  | Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__82, dtb__83) -> (match dtb__83 with
+  | Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__84, dtb__85) -> (if (if (dtb__82 = 34) then (dtb__84 = 34) else false) then ((fun bodyStart -> ((fun nd_uscrut11 -> (match nd_uscrut11 with
+  | Base_dResult.C_Base_dResult_dResult_Base_dResult_dOk (dtb__86) -> (match dtb__86 with
+  | Base_dPair.C_Base_dPair_dPair_Base_dPair_dPair (dtb__87, dtb__88) -> (match dtb__88 with
+  | Base_dPair.C_Base_dPair_dPair_Base_dPair_dPair (dtb__89, dtb__90) -> (Base_dResult.C_Base_dResult_dResult_Base_dResult_dOk ((Base_dPair.C_Base_dPair_dPair_Base_dPair_dPair ((C_Vuna_dCompiler_dFrontend_dLexer_dPTok_Vuna_dCompiler_dFrontend_dLexer_dPTok ((C_Vuna_dCompiler_dFrontend_dLexer_dTok_Vuna_dCompiler_dFrontend_dLexer_dTTmpl (true, dtb__87, dtb__90)), p)), dtb__89))))
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
 )
-  | Base_dResult.C_Base_dResult_dResult_Base_dResult_dErr (dtb__61) -> (Base_dResult.C_Base_dResult_dResult_Base_dResult_dErr (dtb__61))
+  | Base_dResult.C_Base_dResult_dResult_Base_dResult_dErr (dtb__91) -> (Base_dResult.C_Base_dResult_dResult_Base_dResult_dErr (dtb__91))
   | _ -> failwith "DT: impossible branch"
-)) ((v_Vuna_dCompiler_dFrontend_dLexer_dscanString (C_Vuna_dCompiler_dFrontend_dLexer_dChars_Vuna_dCompiler_dFrontend_dLexer_dChars (rest, ((v_Vuna_dCompiler_dFrontend_dLexer_dadvanceChar c) p)))) Base_dList.C_Base_dList_dList_Base_dList_dNil)) else (if (if (if (if (if (if (if (c = 40) then true else (c = 41)) then true else (c = 91)) then true else (c = 93)) then true else (c = 44)) then true else (c = 123)) then true else (c = 125)) then (match ((v_Vuna_dCompiler_dFrontend_dLexer_dlexChars (fuel - 1)) (C_Vuna_dCompiler_dFrontend_dLexer_dChars_Vuna_dCompiler_dFrontend_dLexer_dChars (rest, ((v_Vuna_dCompiler_dFrontend_dLexer_dadvanceChar c) p)))) with
-  | Base_dResult.C_Base_dResult_dResult_Base_dResult_dErr (dtb__62) -> (Base_dResult.C_Base_dResult_dResult_Base_dResult_dErr (dtb__62))
-  | Base_dResult.C_Base_dResult_dResult_Base_dResult_dOk (dtb__63) -> (Base_dResult.C_Base_dResult_dResult_Base_dResult_dOk ((Base_dList.C_Base_dList_dList_Base_dList_dCons ((C_Vuna_dCompiler_dFrontend_dLexer_dPTok_Vuna_dCompiler_dFrontend_dLexer_dPTok ((C_Vuna_dCompiler_dFrontend_dLexer_dTok_Vuna_dCompiler_dFrontend_dLexer_dTSym ((Base_dList.dtp_pack (Base_dList.C_Base_dList_dList_Base_dList_dCons (c, Base_dList.C_Base_dList_dList_Base_dList_dNil))))), p)), dtb__63))))
+)) (((((v_Vuna_dCompiler_dFrontend_dLexer_dscanTemplateText (fuel - 1)) true) (v_Vuna_dCompiler_dFrontend_dLexer_ddropOpeningNewline (C_Vuna_dCompiler_dFrontend_dLexer_dChars_Vuna_dCompiler_dFrontend_dLexer_dChars (dtb__85, bodyStart)))) Base_dList.C_Base_dList_dList_Base_dList_dNil) Base_dList.C_Base_dList_dList_Base_dList_dNil))) ((v_Vuna_dCompiler_dFrontend_dLexer_dadvanceChar dtb__84) ((v_Vuna_dCompiler_dFrontend_dLexer_dadvanceChar dtb__82) ((v_Vuna_dCompiler_dFrontend_dLexer_dadvanceChar c) p)))) else (((v_Vuna_dCompiler_dFrontend_dLexer_dlexSingleStringToken (fuel - 1)) (C_Vuna_dCompiler_dFrontend_dLexer_dChars_Vuna_dCompiler_dFrontend_dLexer_dChars (rest, ((v_Vuna_dCompiler_dFrontend_dLexer_dadvanceChar c) p)))) p))
+  | Base_dList.C_Base_dList_dList_Base_dList_dNil -> (((v_Vuna_dCompiler_dFrontend_dLexer_dlexSingleStringToken (fuel - 1)) (C_Vuna_dCompiler_dFrontend_dLexer_dChars_Vuna_dCompiler_dFrontend_dLexer_dChars (rest, ((v_Vuna_dCompiler_dFrontend_dLexer_dadvanceChar c) p)))) p)
   | _ -> failwith "DT: impossible branch"
-) else (if (c = 96) then (match ((v_Vuna_dCompiler_dFrontend_dLexer_dlexChars (fuel - 1)) (C_Vuna_dCompiler_dFrontend_dLexer_dChars_Vuna_dCompiler_dFrontend_dLexer_dChars (rest, ((v_Vuna_dCompiler_dFrontend_dLexer_dadvanceChar c) p)))) with
-  | Base_dResult.C_Base_dResult_dResult_Base_dResult_dErr (dtb__64) -> (Base_dResult.C_Base_dResult_dResult_Base_dResult_dErr (dtb__64))
-  | Base_dResult.C_Base_dResult_dResult_Base_dResult_dOk (dtb__65) -> (Base_dResult.C_Base_dResult_dResult_Base_dResult_dOk ((Base_dList.C_Base_dList_dList_Base_dList_dCons ((C_Vuna_dCompiler_dFrontend_dLexer_dPTok_Vuna_dCompiler_dFrontend_dLexer_dPTok ((C_Vuna_dCompiler_dFrontend_dLexer_dTok_Vuna_dCompiler_dFrontend_dLexer_dTSym ("`")), p)), dtb__65))))
+)
+  | Base_dList.C_Base_dList_dList_Base_dList_dNil -> (((v_Vuna_dCompiler_dFrontend_dLexer_dlexSingleStringToken (fuel - 1)) (C_Vuna_dCompiler_dFrontend_dLexer_dChars_Vuna_dCompiler_dFrontend_dLexer_dChars (rest, ((v_Vuna_dCompiler_dFrontend_dLexer_dadvanceChar c) p)))) p)
   | _ -> failwith "DT: impossible branch"
-) else (if (v_Vuna_dCompiler_dFrontend_dLexer_disOpChar c) then (match ((v_Vuna_dCompiler_dFrontend_dLexer_dcollectOp (C_Vuna_dCompiler_dFrontend_dLexer_dChars_Vuna_dCompiler_dFrontend_dLexer_dChars (rest, ((v_Vuna_dCompiler_dFrontend_dLexer_dadvanceChar c) p)))) (Base_dList.C_Base_dList_dList_Base_dList_dCons (c, Base_dList.C_Base_dList_dList_Base_dList_dNil))) with
-  | Base_dPair.C_Base_dPair_dPair_Base_dPair_dPair (dtb__66, dtb__67) -> (match ((v_Vuna_dCompiler_dFrontend_dLexer_dlexChars (fuel - 1)) dtb__67) with
-  | Base_dResult.C_Base_dResult_dResult_Base_dResult_dErr (dtb__68) -> (Base_dResult.C_Base_dResult_dResult_Base_dResult_dErr (dtb__68))
-  | Base_dResult.C_Base_dResult_dResult_Base_dResult_dOk (dtb__69) -> (Base_dResult.C_Base_dResult_dResult_Base_dResult_dOk ((Base_dList.C_Base_dList_dList_Base_dList_dCons ((C_Vuna_dCompiler_dFrontend_dLexer_dPTok_Vuna_dCompiler_dFrontend_dLexer_dPTok ((C_Vuna_dCompiler_dFrontend_dLexer_dTok_Vuna_dCompiler_dFrontend_dLexer_dTSym (dtb__66)), p)), dtb__69))))
+)))
+and v_Vuna_dCompiler_dFrontend_dLexer_dlexSingleStringToken = (fun fuel body p -> (if (fuel <= 0) then (Base_dResult.C_Base_dResult_dResult_Base_dResult_dErr ("DT: lexer fuel exhausted (internal: lexer made no progress)")) else ((fun nd_uscrut3 -> (match nd_uscrut3 with
+  | Base_dResult.C_Base_dResult_dResult_Base_dResult_dOk (dtb__92) -> (match dtb__92 with
+  | Base_dPair.C_Base_dPair_dPair_Base_dPair_dPair (dtb__93, dtb__94) -> (match dtb__94 with
+  | Base_dPair.C_Base_dPair_dPair_Base_dPair_dPair (dtb__95, dtb__96) -> ((fun nd_uscrut14 -> (match nd_uscrut14 with
+  | Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__97, dtb__98) -> (match dtb__97 with
+  | C_Vuna_dCompiler_dFrontend_dLexer_dTmplPart_Vuna_dCompiler_dFrontend_dLexer_dTPText (dtb__99) -> (match dtb__98 with
+  | Base_dList.C_Base_dList_dList_Base_dList_dNil -> (Base_dResult.C_Base_dResult_dResult_Base_dResult_dOk ((Base_dPair.C_Base_dPair_dPair_Base_dPair_dPair ((C_Vuna_dCompiler_dFrontend_dLexer_dPTok_Vuna_dCompiler_dFrontend_dLexer_dPTok ((C_Vuna_dCompiler_dFrontend_dLexer_dTok_Vuna_dCompiler_dFrontend_dLexer_dTStr (dtb__99)), p)), dtb__95))))
+  | _ -> (Base_dResult.C_Base_dResult_dResult_Base_dResult_dOk ((Base_dPair.C_Base_dPair_dPair_Base_dPair_dPair ((C_Vuna_dCompiler_dFrontend_dLexer_dPTok_Vuna_dCompiler_dFrontend_dLexer_dPTok ((C_Vuna_dCompiler_dFrontend_dLexer_dTok_Vuna_dCompiler_dFrontend_dLexer_dTTmpl (false, dtb__93, dtb__96)), p)), dtb__95))))
+)
+  | _ -> (Base_dResult.C_Base_dResult_dResult_Base_dResult_dOk ((Base_dPair.C_Base_dPair_dPair_Base_dPair_dPair ((C_Vuna_dCompiler_dFrontend_dLexer_dPTok_Vuna_dCompiler_dFrontend_dLexer_dPTok ((C_Vuna_dCompiler_dFrontend_dLexer_dTok_Vuna_dCompiler_dFrontend_dLexer_dTTmpl (false, dtb__93, dtb__96)), p)), dtb__95))))
+)
+  | _ -> (Base_dResult.C_Base_dResult_dResult_Base_dResult_dOk ((Base_dPair.C_Base_dPair_dPair_Base_dPair_dPair ((C_Vuna_dCompiler_dFrontend_dLexer_dPTok_Vuna_dCompiler_dFrontend_dLexer_dPTok ((C_Vuna_dCompiler_dFrontend_dLexer_dTok_Vuna_dCompiler_dFrontend_dLexer_dTTmpl (false, dtb__93, dtb__96)), p)), dtb__95))))
+)) dtb__93)
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
-) else (Vuna_dCompiler_dFrontend_dDiagnostics.v_Vuna_dCompiler_dFrontend_dDiagnostics_dlexErr0 Vuna_dCompiler_dFrontend_dDiagnostics.C_Vuna_dCompiler_dFrontend_dDiagnostics_dLexDiag_Vuna_dCompiler_dFrontend_dDiagnostics_dUnexpectedCharacter)))))))))
+)
+  | Base_dResult.C_Base_dResult_dResult_Base_dResult_dErr (dtb__100) -> (Base_dResult.C_Base_dResult_dResult_Base_dResult_dErr (dtb__100))
+  | _ -> failwith "DT: impossible branch"
+)) (((((v_Vuna_dCompiler_dFrontend_dLexer_dscanTemplateText (fuel - 1)) false) body) Base_dList.C_Base_dList_dList_Base_dList_dNil) Base_dList.C_Base_dList_dList_Base_dList_dNil))))
 
-let v_Vuna_dCompiler_dFrontend_dLexer_dsourceFuel = (fun source -> ((2 * (bi_strLength source)) + 64))
+let rec v_Vuna_dCompiler_dFrontend_dLexer_dlexChars = (fun fuel cs -> (if (fuel <= 0) then (Base_dResult.C_Base_dResult_dResult_Base_dResult_dErr ("DT: lexer fuel exhausted (internal: lexer made no progress)")) else (match ((v_Vuna_dCompiler_dFrontend_dLexer_dskipTrivia fuel) cs) with
+  | Base_dResult.C_Base_dResult_dResult_Base_dResult_dErr (dtb__101) -> (Base_dResult.C_Base_dResult_dResult_Base_dResult_dErr (dtb__101))
+  | Base_dResult.C_Base_dResult_dResult_Base_dResult_dOk (dtb__102) -> ((fun nd_uscrut4 -> (match nd_uscrut4 with
+  | C_Vuna_dCompiler_dFrontend_dLexer_dChars_Vuna_dCompiler_dFrontend_dLexer_dChars (dtb__103, dtb__104) -> (match dtb__103 with
+  | Base_dList.C_Base_dList_dList_Base_dList_dNil -> (Base_dResult.C_Base_dResult_dResult_Base_dResult_dOk ((Base_dList.C_Base_dList_dList_Base_dList_dCons ((C_Vuna_dCompiler_dFrontend_dLexer_dPTok_Vuna_dCompiler_dFrontend_dLexer_dPTok (C_Vuna_dCompiler_dFrontend_dLexer_dTok_Vuna_dCompiler_dFrontend_dLexer_dTEof, dtb__104)), Base_dList.C_Base_dList_dList_Base_dList_dNil))))
+  | _ -> ((fun nd_uscrut7 -> (match nd_uscrut7 with
+  | Base_dResult.C_Base_dResult_dResult_Base_dResult_dOk (dtb__105) -> (match dtb__105 with
+  | Base_dPair.C_Base_dPair_dPair_Base_dPair_dPair (dtb__106, dtb__107) -> (match ((v_Vuna_dCompiler_dFrontend_dLexer_dlexChars (fuel - 1)) dtb__107) with
+  | Base_dResult.C_Base_dResult_dResult_Base_dResult_dErr (dtb__108) -> (Base_dResult.C_Base_dResult_dResult_Base_dResult_dErr (dtb__108))
+  | Base_dResult.C_Base_dResult_dResult_Base_dResult_dOk (dtb__109) -> (Base_dResult.C_Base_dResult_dResult_Base_dResult_dOk ((Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__106, dtb__109))))
+  | _ -> failwith "DT: impossible branch"
+)
+  | _ -> failwith "DT: impossible branch"
+)
+  | Base_dResult.C_Base_dResult_dResult_Base_dResult_dErr (dtb__110) -> (Base_dResult.C_Base_dResult_dResult_Base_dResult_dErr (dtb__110))
+  | _ -> failwith "DT: impossible branch"
+)) ((v_Vuna_dCompiler_dFrontend_dLexer_dlexOneToken fuel) dtb__102))
+)
+  | _ -> failwith "DT: impossible branch"
+)) dtb__102)
+  | _ -> failwith "DT: impossible branch"
+)))
+
+let v_Vuna_dCompiler_dFrontend_dLexer_dsourceFuel = (fun source -> ((4 * (bi_strLength source)) + 64))
 
 let v_Vuna_dCompiler_dFrontend_dLexer_dlexSource = (fun source -> ((v_Vuna_dCompiler_dFrontend_dLexer_dlexChars (v_Vuna_dCompiler_dFrontend_dLexer_dsourceFuel source)) (C_Vuna_dCompiler_dFrontend_dLexer_dChars_Vuna_dCompiler_dFrontend_dLexer_dChars ((Base_dList.dtp_unpack source), (Vuna_dCompiler_dCommon.C_Vuna_dCompiler_dCommon_dPos_Vuna_dCompiler_dCommon_dPos (1, 1))))))
 
 let v_Vuna_dCompiler_dFrontend_dLexer_dcommentSpan = (fun mc0 -> (match mc0 with
-  | C_Vuna_dCompiler_dFrontend_dLexer_dComment_Vuna_dCompiler_dFrontend_dLexer_dComment (dtb__70, dtb__71, dtb__72) -> dtb__72
+  | C_Vuna_dCompiler_dFrontend_dLexer_dComment_Vuna_dCompiler_dFrontend_dLexer_dComment (dtb__111, dtb__112, dtb__113) -> dtb__113
   | _ -> failwith "DT: impossible branch"
 ))
 
 let rec v_Vuna_dCompiler_dFrontend_dLexer_ddropTrailingSpace = (fun mc0 -> (match mc0 with
-  | Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__73, dtb__74) -> (if (if (if (dtb__73 = 32) then true else (dtb__73 = 9)) then true else (dtb__73 = 13)) then (v_Vuna_dCompiler_dFrontend_dLexer_ddropTrailingSpace dtb__74) else (Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__73, dtb__74)))
+  | Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__114, dtb__115) -> (if (if (if (dtb__114 = 32) then true else (dtb__114 = 9)) then true else (dtb__114 = 13)) then (v_Vuna_dCompiler_dFrontend_dLexer_ddropTrailingSpace dtb__115) else (Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__114, dtb__115)))
   | Base_dList.C_Base_dList_dList_Base_dList_dNil -> Base_dList.C_Base_dList_dList_Base_dList_dNil
   | _ -> failwith "DT: impossible branch"
 ))
 
 let v_Vuna_dCompiler_dFrontend_dLexer_dtrimTrailingSpace = (fun s -> (Base_dList.dtp_pack (Base_dList.v_Base_dList_dreverse (v_Vuna_dCompiler_dFrontend_dLexer_ddropTrailingSpace (Base_dList.v_Base_dList_dreverse (Base_dList.dtp_unpack s))))))
 
-let rec v_Vuna_dCompiler_dFrontend_dLexer_dskipStringBody = (fun mc0 -> (match mc0 with
-  | C_Vuna_dCompiler_dFrontend_dLexer_dChars_Vuna_dCompiler_dFrontend_dLexer_dChars (dtb__75, dtb__76) -> (match dtb__75 with
-  | Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__77, dtb__78) -> (if (dtb__77 = 34) then (Base_dResult.C_Base_dResult_dResult_Base_dResult_dOk ((C_Vuna_dCompiler_dFrontend_dLexer_dChars_Vuna_dCompiler_dFrontend_dLexer_dChars (dtb__78, ((v_Vuna_dCompiler_dFrontend_dLexer_dadvanceChar dtb__77) dtb__76))))) else (if (dtb__77 = 92) then (match dtb__78 with
-  | Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__79, dtb__80) -> (v_Vuna_dCompiler_dFrontend_dLexer_dskipStringBody (C_Vuna_dCompiler_dFrontend_dLexer_dChars_Vuna_dCompiler_dFrontend_dLexer_dChars (dtb__80, ((v_Vuna_dCompiler_dFrontend_dLexer_dadvanceChar dtb__79) ((v_Vuna_dCompiler_dFrontend_dLexer_dadvanceChar dtb__77) dtb__76)))))
-  | Base_dList.C_Base_dList_dList_Base_dList_dNil -> (Vuna_dCompiler_dFrontend_dDiagnostics.v_Vuna_dCompiler_dFrontend_dDiagnostics_dlexErr0 Vuna_dCompiler_dFrontend_dDiagnostics.C_Vuna_dCompiler_dFrontend_dDiagnostics_dLexDiag_Vuna_dCompiler_dFrontend_dDiagnostics_dUnterminatedString)
-  | _ -> failwith "DT: impossible branch"
-) else (v_Vuna_dCompiler_dFrontend_dLexer_dskipStringBody (C_Vuna_dCompiler_dFrontend_dLexer_dChars_Vuna_dCompiler_dFrontend_dLexer_dChars (dtb__78, ((v_Vuna_dCompiler_dFrontend_dLexer_dadvanceChar dtb__77) dtb__76))))))
-  | Base_dList.C_Base_dList_dList_Base_dList_dNil -> (Vuna_dCompiler_dFrontend_dDiagnostics.v_Vuna_dCompiler_dFrontend_dDiagnostics_dlexErr0 Vuna_dCompiler_dFrontend_dDiagnostics.C_Vuna_dCompiler_dFrontend_dDiagnostics_dLexDiag_Vuna_dCompiler_dFrontend_dDiagnostics_dUnterminatedString)
-  | _ -> failwith "DT: impossible branch"
-)
-  | _ -> failwith "DT: impossible branch"
-))
-
 let rec v_Vuna_dCompiler_dFrontend_dLexer_dcollectLineBody = (fun mc0 mc1 mc2 -> (match mc0 with
-  | C_Vuna_dCompiler_dFrontend_dLexer_dChars_Vuna_dCompiler_dFrontend_dLexer_dChars (dtb__81, dtb__82) -> (match dtb__81 with
-  | Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__83, dtb__84) -> (if (dtb__83 = 10) then (Base_dPair.C_Base_dPair_dPair_Base_dPair_dPair ((Base_dList.dtp_pack (Base_dList.v_Base_dList_dreverse mc1)), (Base_dPair.C_Base_dPair_dPair_Base_dPair_dPair ((C_Vuna_dCompiler_dFrontend_dLexer_dChars_Vuna_dCompiler_dFrontend_dLexer_dChars ((Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__83, dtb__84)), dtb__82)), mc2)))) else (((v_Vuna_dCompiler_dFrontend_dLexer_dcollectLineBody (C_Vuna_dCompiler_dFrontend_dLexer_dChars_Vuna_dCompiler_dFrontend_dLexer_dChars (dtb__84, ((v_Vuna_dCompiler_dFrontend_dLexer_dadvanceChar dtb__83) dtb__82)))) (Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__83, mc1))) dtb__82))
-  | Base_dList.C_Base_dList_dList_Base_dList_dNil -> (Base_dPair.C_Base_dPair_dPair_Base_dPair_dPair ((Base_dList.dtp_pack (Base_dList.v_Base_dList_dreverse mc1)), (Base_dPair.C_Base_dPair_dPair_Base_dPair_dPair ((C_Vuna_dCompiler_dFrontend_dLexer_dChars_Vuna_dCompiler_dFrontend_dLexer_dChars (Base_dList.C_Base_dList_dList_Base_dList_dNil, dtb__82)), mc2))))
+  | C_Vuna_dCompiler_dFrontend_dLexer_dChars_Vuna_dCompiler_dFrontend_dLexer_dChars (dtb__116, dtb__117) -> (match dtb__116 with
+  | Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__118, dtb__119) -> (if (dtb__118 = 10) then (Base_dPair.C_Base_dPair_dPair_Base_dPair_dPair ((Base_dList.dtp_pack (Base_dList.v_Base_dList_dreverse mc1)), (Base_dPair.C_Base_dPair_dPair_Base_dPair_dPair ((C_Vuna_dCompiler_dFrontend_dLexer_dChars_Vuna_dCompiler_dFrontend_dLexer_dChars ((Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__118, dtb__119)), dtb__117)), mc2)))) else (((v_Vuna_dCompiler_dFrontend_dLexer_dcollectLineBody (C_Vuna_dCompiler_dFrontend_dLexer_dChars_Vuna_dCompiler_dFrontend_dLexer_dChars (dtb__119, ((v_Vuna_dCompiler_dFrontend_dLexer_dadvanceChar dtb__118) dtb__117)))) (Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__118, mc1))) dtb__117))
+  | Base_dList.C_Base_dList_dList_Base_dList_dNil -> (Base_dPair.C_Base_dPair_dPair_Base_dPair_dPair ((Base_dList.dtp_pack (Base_dList.v_Base_dList_dreverse mc1)), (Base_dPair.C_Base_dPair_dPair_Base_dPair_dPair ((C_Vuna_dCompiler_dFrontend_dLexer_dChars_Vuna_dCompiler_dFrontend_dLexer_dChars (Base_dList.C_Base_dList_dList_Base_dList_dNil, dtb__117)), mc2))))
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
 ))
 
 let rec v_Vuna_dCompiler_dFrontend_dLexer_dcollectBlockBody = (fun mc0 mc1 mc2 mc3 -> (match mc0 with
-  | C_Vuna_dCompiler_dFrontend_dLexer_dChars_Vuna_dCompiler_dFrontend_dLexer_dChars (dtb__85, dtb__86) -> (match dtb__85 with
-  | Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__87, dtb__88) -> (match dtb__88 with
-  | Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__89, dtb__90) -> (if (if (dtb__87 = 123) then (dtb__89 = 45) else false) then ((((v_Vuna_dCompiler_dFrontend_dLexer_dcollectBlockBody (C_Vuna_dCompiler_dFrontend_dLexer_dChars_Vuna_dCompiler_dFrontend_dLexer_dChars (dtb__90, ((v_Vuna_dCompiler_dFrontend_dLexer_dadvanceChar dtb__89) ((v_Vuna_dCompiler_dFrontend_dLexer_dadvanceChar dtb__87) dtb__86))))) (mc1 + 1)) (Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__89, (Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__87, mc2))))) ((v_Vuna_dCompiler_dFrontend_dLexer_dadvanceChar dtb__89) dtb__86)) else (if (if (dtb__87 = 45) then (dtb__89 = 125) else false) then (if (mc1 = 1) then (Base_dResult.C_Base_dResult_dResult_Base_dResult_dOk ((Base_dPair.C_Base_dPair_dPair_Base_dPair_dPair ((Base_dList.dtp_pack (Base_dList.v_Base_dList_dreverse mc2)), (Base_dPair.C_Base_dPair_dPair_Base_dPair_dPair ((C_Vuna_dCompiler_dFrontend_dLexer_dChars_Vuna_dCompiler_dFrontend_dLexer_dChars (dtb__90, ((v_Vuna_dCompiler_dFrontend_dLexer_dadvanceChar dtb__89) ((v_Vuna_dCompiler_dFrontend_dLexer_dadvanceChar dtb__87) dtb__86)))), ((v_Vuna_dCompiler_dFrontend_dLexer_dadvanceChar dtb__89) dtb__86))))))) else ((((v_Vuna_dCompiler_dFrontend_dLexer_dcollectBlockBody (C_Vuna_dCompiler_dFrontend_dLexer_dChars_Vuna_dCompiler_dFrontend_dLexer_dChars (dtb__90, ((v_Vuna_dCompiler_dFrontend_dLexer_dadvanceChar dtb__89) ((v_Vuna_dCompiler_dFrontend_dLexer_dadvanceChar dtb__87) dtb__86))))) (mc1 - 1)) (Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__89, (Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__87, mc2))))) ((v_Vuna_dCompiler_dFrontend_dLexer_dadvanceChar dtb__89) dtb__86))) else ((((v_Vuna_dCompiler_dFrontend_dLexer_dcollectBlockBody (C_Vuna_dCompiler_dFrontend_dLexer_dChars_Vuna_dCompiler_dFrontend_dLexer_dChars (dtb__88, ((v_Vuna_dCompiler_dFrontend_dLexer_dadvanceChar dtb__87) dtb__86)))) mc1) (Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__87, mc2))) dtb__86)))
-  | Base_dList.C_Base_dList_dList_Base_dList_dNil -> ((((v_Vuna_dCompiler_dFrontend_dLexer_dcollectBlockBody (C_Vuna_dCompiler_dFrontend_dLexer_dChars_Vuna_dCompiler_dFrontend_dLexer_dChars (dtb__88, ((v_Vuna_dCompiler_dFrontend_dLexer_dadvanceChar dtb__87) dtb__86)))) mc1) (Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__87, mc2))) dtb__86)
+  | C_Vuna_dCompiler_dFrontend_dLexer_dChars_Vuna_dCompiler_dFrontend_dLexer_dChars (dtb__120, dtb__121) -> (match dtb__120 with
+  | Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__122, dtb__123) -> (match dtb__123 with
+  | Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__124, dtb__125) -> (if (if (dtb__122 = 123) then (dtb__124 = 45) else false) then ((((v_Vuna_dCompiler_dFrontend_dLexer_dcollectBlockBody (C_Vuna_dCompiler_dFrontend_dLexer_dChars_Vuna_dCompiler_dFrontend_dLexer_dChars (dtb__125, ((v_Vuna_dCompiler_dFrontend_dLexer_dadvanceChar dtb__124) ((v_Vuna_dCompiler_dFrontend_dLexer_dadvanceChar dtb__122) dtb__121))))) (mc1 + 1)) (Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__124, (Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__122, mc2))))) ((v_Vuna_dCompiler_dFrontend_dLexer_dadvanceChar dtb__124) dtb__121)) else (if (if (dtb__122 = 45) then (dtb__124 = 125) else false) then (if (mc1 = 1) then (Base_dResult.C_Base_dResult_dResult_Base_dResult_dOk ((Base_dPair.C_Base_dPair_dPair_Base_dPair_dPair ((Base_dList.dtp_pack (Base_dList.v_Base_dList_dreverse mc2)), (Base_dPair.C_Base_dPair_dPair_Base_dPair_dPair ((C_Vuna_dCompiler_dFrontend_dLexer_dChars_Vuna_dCompiler_dFrontend_dLexer_dChars (dtb__125, ((v_Vuna_dCompiler_dFrontend_dLexer_dadvanceChar dtb__124) ((v_Vuna_dCompiler_dFrontend_dLexer_dadvanceChar dtb__122) dtb__121)))), ((v_Vuna_dCompiler_dFrontend_dLexer_dadvanceChar dtb__124) dtb__121))))))) else ((((v_Vuna_dCompiler_dFrontend_dLexer_dcollectBlockBody (C_Vuna_dCompiler_dFrontend_dLexer_dChars_Vuna_dCompiler_dFrontend_dLexer_dChars (dtb__125, ((v_Vuna_dCompiler_dFrontend_dLexer_dadvanceChar dtb__124) ((v_Vuna_dCompiler_dFrontend_dLexer_dadvanceChar dtb__122) dtb__121))))) (mc1 - 1)) (Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__124, (Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__122, mc2))))) ((v_Vuna_dCompiler_dFrontend_dLexer_dadvanceChar dtb__124) dtb__121))) else ((((v_Vuna_dCompiler_dFrontend_dLexer_dcollectBlockBody (C_Vuna_dCompiler_dFrontend_dLexer_dChars_Vuna_dCompiler_dFrontend_dLexer_dChars (dtb__123, ((v_Vuna_dCompiler_dFrontend_dLexer_dadvanceChar dtb__122) dtb__121)))) mc1) (Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__122, mc2))) dtb__121)))
+  | Base_dList.C_Base_dList_dList_Base_dList_dNil -> ((((v_Vuna_dCompiler_dFrontend_dLexer_dcollectBlockBody (C_Vuna_dCompiler_dFrontend_dLexer_dChars_Vuna_dCompiler_dFrontend_dLexer_dChars (dtb__123, ((v_Vuna_dCompiler_dFrontend_dLexer_dadvanceChar dtb__122) dtb__121)))) mc1) (Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__122, mc2))) dtb__121)
   | _ -> failwith "DT: impossible branch"
 )
   | Base_dList.C_Base_dList_dList_Base_dList_dNil -> (Vuna_dCompiler_dFrontend_dDiagnostics.v_Vuna_dCompiler_dFrontend_dDiagnostics_dlexErr0 Vuna_dCompiler_dFrontend_dDiagnostics.C_Vuna_dCompiler_dFrontend_dDiagnostics_dLexDiag_Vuna_dCompiler_dFrontend_dDiagnostics_dUnterminatedBlockComment)
@@ -223,30 +304,62 @@ let rec v_Vuna_dCompiler_dFrontend_dLexer_dcollectBlockBody = (fun mc0 mc1 mc2 m
 
 let v_Vuna_dCompiler_dFrontend_dLexer_dcommentSpanOf = (fun startP endP -> (Vuna_dCompiler_dCommon.C_Vuna_dCompiler_dCommon_dSpan_Vuna_dCompiler_dCommon_dSpan ("", (Vuna_dCompiler_dCommon.v_Vuna_dCompiler_dCommon_dposLine startP), (Vuna_dCompiler_dCommon.v_Vuna_dCompiler_dCommon_dposCol startP), (Vuna_dCompiler_dCommon.v_Vuna_dCompiler_dCommon_dposLine endP), (Vuna_dCompiler_dCommon.v_Vuna_dCompiler_dCommon_dposCol endP))))
 
+let v_Vuna_dCompiler_dFrontend_dLexer_dskipSingleStringLiteral = (fun fuel body -> ((fun nd_uscrut2 -> (match nd_uscrut2 with
+  | Base_dResult.C_Base_dResult_dResult_Base_dResult_dOk (dtb__126) -> (match dtb__126 with
+  | Base_dPair.C_Base_dPair_dPair_Base_dPair_dPair (dtb__127, dtb__128) -> (match dtb__128 with
+  | Base_dPair.C_Base_dPair_dPair_Base_dPair_dPair (dtb__129, dtb__130) -> (Base_dResult.C_Base_dResult_dResult_Base_dResult_dOk (dtb__129))
+  | _ -> failwith "DT: impossible branch"
+)
+  | _ -> failwith "DT: impossible branch"
+)
+  | Base_dResult.C_Base_dResult_dResult_Base_dResult_dErr (dtb__131) -> (Base_dResult.C_Base_dResult_dResult_Base_dResult_dErr (dtb__131))
+  | _ -> failwith "DT: impossible branch"
+)) (((((v_Vuna_dCompiler_dFrontend_dLexer_dscanTemplateText (fuel - 1)) false) body) Base_dList.C_Base_dList_dList_Base_dList_dNil) Base_dList.C_Base_dList_dList_Base_dList_dNil)))
+
+let v_Vuna_dCompiler_dFrontend_dLexer_dskipStringLiteral = (fun mc0 mc1 mc2 mc3 -> (match mc2 with
+  | Base_dList.C_Base_dList_dList_Base_dList_dNil -> ((v_Vuna_dCompiler_dFrontend_dLexer_dskipSingleStringLiteral mc0) (C_Vuna_dCompiler_dFrontend_dLexer_dChars_Vuna_dCompiler_dFrontend_dLexer_dChars (mc2, ((v_Vuna_dCompiler_dFrontend_dLexer_dadvanceChar mc1) mc3))))
+  | Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__132, dtb__133) -> (match dtb__133 with
+  | Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__134, dtb__135) -> (if (if (dtb__132 = 34) then (dtb__134 = 34) else false) then ((fun bodyStart -> ((fun nd_uscrut11 -> (match nd_uscrut11 with
+  | Base_dResult.C_Base_dResult_dResult_Base_dResult_dOk (dtb__136) -> (match dtb__136 with
+  | Base_dPair.C_Base_dPair_dPair_Base_dPair_dPair (dtb__137, dtb__138) -> (match dtb__138 with
+  | Base_dPair.C_Base_dPair_dPair_Base_dPair_dPair (dtb__139, dtb__140) -> (Base_dResult.C_Base_dResult_dResult_Base_dResult_dOk (dtb__139))
+  | _ -> failwith "DT: impossible branch"
+)
+  | _ -> failwith "DT: impossible branch"
+)
+  | Base_dResult.C_Base_dResult_dResult_Base_dResult_dErr (dtb__141) -> (Base_dResult.C_Base_dResult_dResult_Base_dResult_dErr (dtb__141))
+  | _ -> failwith "DT: impossible branch"
+)) (((((v_Vuna_dCompiler_dFrontend_dLexer_dscanTemplateText (mc0 - 1)) true) (v_Vuna_dCompiler_dFrontend_dLexer_ddropOpeningNewline (C_Vuna_dCompiler_dFrontend_dLexer_dChars_Vuna_dCompiler_dFrontend_dLexer_dChars (dtb__135, bodyStart)))) Base_dList.C_Base_dList_dList_Base_dList_dNil) Base_dList.C_Base_dList_dList_Base_dList_dNil))) ((v_Vuna_dCompiler_dFrontend_dLexer_dadvanceChar dtb__134) ((v_Vuna_dCompiler_dFrontend_dLexer_dadvanceChar dtb__132) ((v_Vuna_dCompiler_dFrontend_dLexer_dadvanceChar mc1) mc3)))) else ((v_Vuna_dCompiler_dFrontend_dLexer_dskipSingleStringLiteral mc0) (C_Vuna_dCompiler_dFrontend_dLexer_dChars_Vuna_dCompiler_dFrontend_dLexer_dChars (mc2, ((v_Vuna_dCompiler_dFrontend_dLexer_dadvanceChar mc1) mc3)))))
+  | Base_dList.C_Base_dList_dList_Base_dList_dNil -> ((v_Vuna_dCompiler_dFrontend_dLexer_dskipSingleStringLiteral mc0) (C_Vuna_dCompiler_dFrontend_dLexer_dChars_Vuna_dCompiler_dFrontend_dLexer_dChars (mc2, ((v_Vuna_dCompiler_dFrontend_dLexer_dadvanceChar mc1) mc3))))
+  | _ -> failwith "DT: impossible branch"
+)
+  | _ -> failwith "DT: impossible branch"
+))
+
 let rec v_Vuna_dCompiler_dFrontend_dLexer_dscanComments = (fun mc0 mc1 mc2 -> (match mc1 with
-  | C_Vuna_dCompiler_dFrontend_dLexer_dChars_Vuna_dCompiler_dFrontend_dLexer_dChars (dtb__91, dtb__92) -> (match dtb__91 with
-  | Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__93, dtb__94) -> (if (mc0 <= 0) then (Base_dResult.C_Base_dResult_dResult_Base_dResult_dErr ("DT: lexer fuel exhausted (internal: lexer made no progress)")) else (if (dtb__93 = 34) then (match (v_Vuna_dCompiler_dFrontend_dLexer_dskipStringBody (C_Vuna_dCompiler_dFrontend_dLexer_dChars_Vuna_dCompiler_dFrontend_dLexer_dChars (dtb__94, ((v_Vuna_dCompiler_dFrontend_dLexer_dadvanceChar dtb__93) dtb__92)))) with
-  | Base_dResult.C_Base_dResult_dResult_Base_dResult_dErr (dtb__95) -> (Base_dResult.C_Base_dResult_dResult_Base_dResult_dErr (dtb__95))
-  | Base_dResult.C_Base_dResult_dResult_Base_dResult_dOk (dtb__96) -> (((v_Vuna_dCompiler_dFrontend_dLexer_dscanComments (mc0 - 1)) dtb__96) mc2)
+  | C_Vuna_dCompiler_dFrontend_dLexer_dChars_Vuna_dCompiler_dFrontend_dLexer_dChars (dtb__142, dtb__143) -> (match dtb__142 with
+  | Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__144, dtb__145) -> (if (mc0 <= 0) then (Base_dResult.C_Base_dResult_dResult_Base_dResult_dErr ("DT: lexer fuel exhausted (internal: lexer made no progress)")) else (if (dtb__144 = 34) then (match ((((v_Vuna_dCompiler_dFrontend_dLexer_dskipStringLiteral (mc0 - 1)) dtb__144) dtb__145) dtb__143) with
+  | Base_dResult.C_Base_dResult_dResult_Base_dResult_dErr (dtb__146) -> (Base_dResult.C_Base_dResult_dResult_Base_dResult_dErr (dtb__146))
+  | Base_dResult.C_Base_dResult_dResult_Base_dResult_dOk (dtb__147) -> (((v_Vuna_dCompiler_dFrontend_dLexer_dscanComments (mc0 - 1)) dtb__147) mc2)
   | _ -> failwith "DT: impossible branch"
-) else (match dtb__94 with
-  | Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__97, dtb__98) -> (if (if (dtb__93 = 45) then (dtb__97 = 45) else false) then ((fun nd_uscrut11 -> (match nd_uscrut11 with
-  | Base_dPair.C_Base_dPair_dPair_Base_dPair_dPair (dtb__99, dtb__100) -> (match dtb__100 with
-  | Base_dPair.C_Base_dPair_dPair_Base_dPair_dPair (dtb__101, dtb__102) -> (((v_Vuna_dCompiler_dFrontend_dLexer_dscanComments (mc0 - 1)) dtb__101) (Base_dList.C_Base_dList_dList_Base_dList_dCons ((C_Vuna_dCompiler_dFrontend_dLexer_dComment_Vuna_dCompiler_dFrontend_dLexer_dComment (C_Vuna_dCompiler_dFrontend_dLexer_dCKind_Vuna_dCompiler_dFrontend_dLexer_dCLine, (v_Vuna_dCompiler_dFrontend_dLexer_dtrimTrailingSpace dtb__99), ((v_Vuna_dCompiler_dFrontend_dLexer_dcommentSpanOf dtb__92) dtb__102))), mc2)))
-  | _ -> failwith "DT: impossible branch"
-)
-  | _ -> failwith "DT: impossible branch"
-)) (((v_Vuna_dCompiler_dFrontend_dLexer_dcollectLineBody (C_Vuna_dCompiler_dFrontend_dLexer_dChars_Vuna_dCompiler_dFrontend_dLexer_dChars (dtb__98, ((v_Vuna_dCompiler_dFrontend_dLexer_dadvanceChar dtb__97) ((v_Vuna_dCompiler_dFrontend_dLexer_dadvanceChar dtb__93) dtb__92))))) Base_dList.C_Base_dList_dList_Base_dList_dNil) ((v_Vuna_dCompiler_dFrontend_dLexer_dadvanceChar dtb__97) dtb__92))) else (if (if (dtb__93 = 123) then (dtb__97 = 45) else false) then ((fun nd_uscrut11 -> (match nd_uscrut11 with
-  | Base_dResult.C_Base_dResult_dResult_Base_dResult_dOk (dtb__103) -> (match dtb__103 with
-  | Base_dPair.C_Base_dPair_dPair_Base_dPair_dPair (dtb__104, dtb__105) -> (match dtb__105 with
-  | Base_dPair.C_Base_dPair_dPair_Base_dPair_dPair (dtb__106, dtb__107) -> (((v_Vuna_dCompiler_dFrontend_dLexer_dscanComments (mc0 - 1)) dtb__106) (Base_dList.C_Base_dList_dList_Base_dList_dCons ((C_Vuna_dCompiler_dFrontend_dLexer_dComment_Vuna_dCompiler_dFrontend_dLexer_dComment (C_Vuna_dCompiler_dFrontend_dLexer_dCKind_Vuna_dCompiler_dFrontend_dLexer_dCBlock, dtb__104, ((v_Vuna_dCompiler_dFrontend_dLexer_dcommentSpanOf dtb__92) dtb__107))), mc2)))
+) else (match dtb__145 with
+  | Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__148, dtb__149) -> (if (if (dtb__144 = 45) then (dtb__148 = 45) else false) then ((fun nd_uscrut11 -> (match nd_uscrut11 with
+  | Base_dPair.C_Base_dPair_dPair_Base_dPair_dPair (dtb__150, dtb__151) -> (match dtb__151 with
+  | Base_dPair.C_Base_dPair_dPair_Base_dPair_dPair (dtb__152, dtb__153) -> (((v_Vuna_dCompiler_dFrontend_dLexer_dscanComments (mc0 - 1)) dtb__152) (Base_dList.C_Base_dList_dList_Base_dList_dCons ((C_Vuna_dCompiler_dFrontend_dLexer_dComment_Vuna_dCompiler_dFrontend_dLexer_dComment (C_Vuna_dCompiler_dFrontend_dLexer_dCKind_Vuna_dCompiler_dFrontend_dLexer_dCLine, (v_Vuna_dCompiler_dFrontend_dLexer_dtrimTrailingSpace dtb__150), ((v_Vuna_dCompiler_dFrontend_dLexer_dcommentSpanOf dtb__143) dtb__153))), mc2)))
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
-)
-  | Base_dResult.C_Base_dResult_dResult_Base_dResult_dErr (dtb__108) -> (Base_dResult.C_Base_dResult_dResult_Base_dResult_dErr (dtb__108))
+)) (((v_Vuna_dCompiler_dFrontend_dLexer_dcollectLineBody (C_Vuna_dCompiler_dFrontend_dLexer_dChars_Vuna_dCompiler_dFrontend_dLexer_dChars (dtb__149, ((v_Vuna_dCompiler_dFrontend_dLexer_dadvanceChar dtb__148) ((v_Vuna_dCompiler_dFrontend_dLexer_dadvanceChar dtb__144) dtb__143))))) Base_dList.C_Base_dList_dList_Base_dList_dNil) ((v_Vuna_dCompiler_dFrontend_dLexer_dadvanceChar dtb__148) dtb__143))) else (if (if (dtb__144 = 123) then (dtb__148 = 45) else false) then ((fun nd_uscrut11 -> (match nd_uscrut11 with
+  | Base_dResult.C_Base_dResult_dResult_Base_dResult_dOk (dtb__154) -> (match dtb__154 with
+  | Base_dPair.C_Base_dPair_dPair_Base_dPair_dPair (dtb__155, dtb__156) -> (match dtb__156 with
+  | Base_dPair.C_Base_dPair_dPair_Base_dPair_dPair (dtb__157, dtb__158) -> (((v_Vuna_dCompiler_dFrontend_dLexer_dscanComments (mc0 - 1)) dtb__157) (Base_dList.C_Base_dList_dList_Base_dList_dCons ((C_Vuna_dCompiler_dFrontend_dLexer_dComment_Vuna_dCompiler_dFrontend_dLexer_dComment (C_Vuna_dCompiler_dFrontend_dLexer_dCKind_Vuna_dCompiler_dFrontend_dLexer_dCBlock, dtb__155, ((v_Vuna_dCompiler_dFrontend_dLexer_dcommentSpanOf dtb__143) dtb__158))), mc2)))
   | _ -> failwith "DT: impossible branch"
-)) ((((v_Vuna_dCompiler_dFrontend_dLexer_dcollectBlockBody (C_Vuna_dCompiler_dFrontend_dLexer_dChars_Vuna_dCompiler_dFrontend_dLexer_dChars (dtb__98, ((v_Vuna_dCompiler_dFrontend_dLexer_dadvanceChar dtb__97) ((v_Vuna_dCompiler_dFrontend_dLexer_dadvanceChar dtb__93) dtb__92))))) 1) Base_dList.C_Base_dList_dList_Base_dList_dNil) ((v_Vuna_dCompiler_dFrontend_dLexer_dadvanceChar dtb__97) dtb__92))) else (((v_Vuna_dCompiler_dFrontend_dLexer_dscanComments (mc0 - 1)) (C_Vuna_dCompiler_dFrontend_dLexer_dChars_Vuna_dCompiler_dFrontend_dLexer_dChars (dtb__94, ((v_Vuna_dCompiler_dFrontend_dLexer_dadvanceChar dtb__93) dtb__92)))) mc2)))
+)
+  | _ -> failwith "DT: impossible branch"
+)
+  | Base_dResult.C_Base_dResult_dResult_Base_dResult_dErr (dtb__159) -> (Base_dResult.C_Base_dResult_dResult_Base_dResult_dErr (dtb__159))
+  | _ -> failwith "DT: impossible branch"
+)) ((((v_Vuna_dCompiler_dFrontend_dLexer_dcollectBlockBody (C_Vuna_dCompiler_dFrontend_dLexer_dChars_Vuna_dCompiler_dFrontend_dLexer_dChars (dtb__149, ((v_Vuna_dCompiler_dFrontend_dLexer_dadvanceChar dtb__148) ((v_Vuna_dCompiler_dFrontend_dLexer_dadvanceChar dtb__144) dtb__143))))) 1) Base_dList.C_Base_dList_dList_Base_dList_dNil) ((v_Vuna_dCompiler_dFrontend_dLexer_dadvanceChar dtb__148) dtb__143))) else (((v_Vuna_dCompiler_dFrontend_dLexer_dscanComments (mc0 - 1)) (C_Vuna_dCompiler_dFrontend_dLexer_dChars_Vuna_dCompiler_dFrontend_dLexer_dChars (dtb__145, ((v_Vuna_dCompiler_dFrontend_dLexer_dadvanceChar dtb__144) dtb__143)))) mc2)))
   | Base_dList.C_Base_dList_dList_Base_dList_dNil -> (Base_dResult.C_Base_dResult_dResult_Base_dResult_dOk ((Base_dList.v_Base_dList_dreverse mc2)))
   | _ -> failwith "DT: impossible branch"
 )))

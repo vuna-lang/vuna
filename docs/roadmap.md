@@ -27,8 +27,13 @@ vuna 尚未发布任何版本：没有外部用户、下游生态与历史包袱
 - **包与构建**：workspace 根即包；每文件唯一包上下文；声明式效应能力；逐模块 split 输出；
   确定性产物 + 依赖闭包哈希 + 按模块内容哈希增量。
 - **工具链**：CLI 统一参数 / 错误出口；LSP 走包上下文（诊断 / hover / 补全 / 定位 /
-  references / 格式化 / 符号）；REPL 多行 + IO compile+run；`vuna test` 纯 / 效果双路径；
-  VSCode 扩展。
+  references / 格式化 / 符号 / lint quick fix）；REPL 多行 + IO compile+run + `:type/:load/:reload/:browse`；
+  `vuna test` 纯 / 效果双路径 + `--list/--filter/--verbose/--fail-fast`；`vuna run` 增量构建并执行；
+  诊断源码片段；VSCode 扩展（build/run/tests）。
+- **调试支持（M38）**：运行时未捕获异常由生成代码统一报告为 `vuna: runtime error: ...` +
+  定义级位置帧 + exit 2（位置表随产物生成、路径归一）；`Base.Debug`（`trace`/`traceShow`/
+  `assert`/`todo`）与 `prim_eprint`/`prim_fail`；边界见 [debugging.md](reference/debugging.md)，
+  开放项见 debt D33–D35 / C38–C39。
 - **容器与查找表**：标准库有 `Base.HashMap` / `Base.HashSet` / `Base.IntMap`（1024 桶持久
   哈希表；M33 W3 起桶是 `Array (Array (List ...))`）、不可变 `Base.Array`（copy-on-write）
   与 IO 内 `Base.IORef` / `Base.MArray` / `Base.Buffer`；内建类型构造子 `Array` / `IORef` /
@@ -44,6 +49,11 @@ vuna 尚未发布任何版本：没有外部用户、下游生态与历史包袱
   负载 ≤2×）；codegen 内建内联 / 多参数 lambda 链 / 字符串批拼；`Array` / `IORef` / `MArray` /
   `Buffer` 与 IO 隔离的可变数据；受限 FFI（`extern` + 包根 `ffi/*.c`）；库级 `State` /
   `Reader` / `Error`。测量设施与基线在 `bench/`。
+- **效应（M35.1 / M37）**：`IO` 已升格为内建效应类型（`prim_pureIO` / `prim_bindIO` /
+  `prim_runIO`，main 钩子 `v_main 0`，无构造器）；`Base.State` / `Reader` / `Error` 是纯
+  函数效应 monad（`do` 可用）；`Base.ST` 改建在 `IO` 上（`runST` 一次 `runIO`）；
+  `Base.Effect.MonadIO` + `StateT` / `ReaderT` / `ErrorT` 提供 IO 基座效应栈；通用签名
+  索引效应（`Eff` / 能力行）受擦除后端限制，归 F3（[effects.md](reference/effects.md)）。
 - **质量门禁**：`nix flake check`（packages + seed-selfhost + tests + typecheck + lint + fmt +
   index + metrics + package + context-budget + vscode-ext）、原生测试、lint / fmt / metrics /
   文档预算。
@@ -52,7 +62,8 @@ vuna 尚未发布任何版本：没有外部用户、下游生态与历史包袱
 
 **一套表面语言、一个类型检查器、一条 codegen、一个 seed，且检查器本身可信。**
 
-- **类型理论**：依赖类型 + 归纳族；严格分层宇宙；擦除由单一判据驱动，QTT 的完整变体留研究。
+- **类型理论**：依赖类型 + 归纳族；严格分层宇宙；擦除由单一判据驱动；QTT 核心（0/1/ω、用量检查、线性数据）已落地，
+  依赖 multiplicity / 线性箭头留后续。
 - **路径**：单文件只是包内 ad-hoc 入口，与包内模块走同一装配 / codegen；不存在第二套加载
   语义。
 - **可信性**：不存在「跳过检查但不告知」的通道；任何放行都是显式、可审计、有诊断的。
@@ -71,6 +82,10 @@ fixity 唯一来源、反引号中缀 / section / 用户符号名、fmt 程序�
 2× 手写 OCaml；线性类型 / ST 按计划裁剪，见 debt D22）。下一步是已排期的 **M34（编译器快）**，
 再往后 **M35（并发 / 服务端）**。新阶段必须映射到 debt 条目，并在「范围」里列明关闭哪些项；
 B / C / E 系列残留按需插入。
+
+**M38（开发与调试体验）已收尾**：`vuna test` 筛选/耗时、`vuna run`、REPL 调试命令、LSP
+lint quick fix、CLI 诊断源码片段、运行时错误报告（定义级帧）与 `Base.Debug`。新阶段仍须
+映射 debt 并列出关闭项；未排期项见 debt D33–D35 / C38–C39。
 
 ## 性能轨道（M34–M35）
 
@@ -119,7 +134,13 @@ LSP 诊断帧进程内缓存（同 uri+内容重复请求命中，编辑后仍�
 
 ### M35：并发 / 服务端
 
-1. **效应系统 / 代数效应**：effect rows 或等价设计、handler、与 ST / 可变数据整合；
+1. **效应系统 / 代数效应（M35.1，设计/参考页 [effects.md](reference/effects.md)）**：
+   **已落地（2026-11）**：参数化效应 monad + `do`（`Base.State` / `Base.Reader` /
+   `Base.Error`）、`Base.ST` region 隔离可变数据（句柄不逃逸 + 负例夹具）、三处前置编译器
+   修复（构造子族参数反推、实例头按类参数 kind、刚性类参数的泛型实例搜索）。
+   **剩余（F3）**：通用签名索引效应（用户自定义 op + 深 handler + 行/重排）被擦除后端
+   挡住——擦除依赖的续延域在 OCaml 里没有表示（D27）；三条路线（QTT / 不透明擦除值 /
+   运行时类型码）先在 F3 决策。**明确不做**：语言级 `handle` / `perform`、行多态、自动 lift；
 2. **结构化并发 / async**：调度器、取消 / 超时、结构化作用域、内存模型；先库级
    （线程池 / 事件循环 + IO），再语言级；
 3. **网络 / 系统库与完整 FFI**：socket / 文件 / 进程、异步 IO、回调 / GC 交互；
@@ -127,7 +148,8 @@ LSP 诊断帧进程内缓存（同 uri+内容重复请求命中，编辑后仍�
 
 **依赖**：M33 的运行时 / 受限 FFI / 库级效应已落地；M34 的确定性与缓存。
 **退出标准**：并发 echo / HTTP 基准；取消 / 超时语义正确；无数据竞争（类型层或运行时检测）。
-**映射 debt**：D03（关闭）、D02（运行时决策）、D04（生态，可选）。
+**映射 debt**：M35.1 收窄 D03 / D22 并新增 D27 / D28；M35 整体 → D02（运行时决策）、
+D04（生态，可选）。
 
 **明确排除**：不自研后端 / GC / LLVM / native；OCaml 后端长期保留（D02 的该分支关闭）。
 Wasm / JS 暂缓，不排期；若未来需要单独立项。性能轨道不改变「单一 DT 路径」、seed 不变量
@@ -172,10 +194,10 @@ registry（没有外部用户时 registry 没有意义）。
 
 ## 研究储备（不排期，不占编号）
 
-- QTT 的完整变体（依赖 multiplicity、资源安全）。
+- QTT 的完整变体（依赖 multiplicity、线性箭头/多态、一次性续延）。
 - 宇宙多态 / 累积性的更强形式。
 - CoC 补完：非直谓 Prop、完整依赖消除的进阶形态。
-- 线性 / 唯一性类型的进阶形态（M33 只取可变数据 / ST 所需子集；完整 QTT 见上）。
+- 线性 / 唯一性类型的进阶形态（M38 已取 ST 所需子集；依赖 multiplicity 与线性箭头见上）。
 - 证明自动化 / tactics / reflection、`rewrite` / `with` 的进阶形态。
 - 效应行多态（若 F3 未采用）。
 
@@ -196,6 +218,6 @@ registry（没有外部用户时 registry 没有意义）。
 
 - 债务与缺陷逐条登记：[debt.md](reference/debt.md)
 - 子系统地图：[architecture.md](architecture.md)
-- 类型系统 / Core 实现：[type-system.md](reference/type-system.md)、[core.md](reference/core.md)
+- 类型系统 / Core 实现：[type-system.md](reference/type-system.md)、[core.md](reference/core.md)；QTT/线性：[qtt.md](reference/qtt.md)
 - 自举链：[bootstrap.md](reference/bootstrap.md)；测试与 CI：[testing.md](reference/testing.md)；
   已知边界：[limits.md](reference/limits.md)

@@ -31,9 +31,11 @@ import Vuna.Fmt
 import Vuna.Files
 import Vuna.Index
 import Vuna.Repl
+import Vuna.Search
 import Vuna.Doc
 import Vuna.GenErrors
 import Vuna.TestRunner
+import Vuna.Run
 import Vuna.Lsp
 import Vuna.Cli.Args
 import qualified Vuna.Lint
@@ -49,7 +51,10 @@ toolUsageLines prog =
     ++ " interp <file.vuna>                   精化后核心求值（纯；不执行效果）\n"
     ++ "  "
     ++ prog
-    ++ " test [DIR]                           运行包内 test/*.vuna（纯 String/Int/Bool 走核心求值；main : IO ... 走 compile+运行）\n"
+    ++ " test [--list] [--filter PAT]... [--verbose] [--fail-fast] [DIR]\n      运行包内 test/*.vuna（纯 String/Int/Bool 走核心求值；main : IO ... 走 compile+运行）\n"
+    ++ "  "
+    ++ prog
+    ++ " run [--no-build] [--package NAME] [DIR] [-- ARG]...\n      构建并运行包的可执行入口（`--` 之后的参数原样透传）\n"
     ++ "  "
     ++ prog
     ++ " fmt [--check] [PATH]...              格式化（PATH 可为文件或目录；省略 = workspace 内各包的 lib/app/test）\n"
@@ -58,7 +63,10 @@ toolUsageLines prog =
     ++ " repl                                 交互式 REPL\n"
     ++ "  "
     ++ prog
-    ++ " doc [DIR [OUT]]    生成 API 文档（默认 OUT=DIR/docs/api.md；有 [export].modules 时只渲染导出模块）\n"
+    ++ " doc [--check] [--package NAME] [DIR [OUT]]\n      生成单文件交互 HTML API 文档（默认 OUT=DIR/docs/api.html）\n"
+    ++ "  "
+    ++ prog
+    ++ " search [--type|--name|--doc] [--module PFX] [--limit N] [--json] <query...>\n      名称 / docstring / 类型检索（类型检索为 parse 级）\n"
     ++ "  "
     ++ prog
     ++ " gen-errors [ROOT]  从枚举真源生成错误码文档（ROOT 必须是已存在目录；输出 ROOT/docs/.generated/errors.md）\n"
@@ -97,7 +105,14 @@ stripDebugFlags (a :: rest) =
   if a == "--debug-perf" then stripDebugFlags rest else a :: stripDebugFlags rest
 
 runCli : List String -> Int
-runCli args = if anyHelp args then help 0 else runCli1 (stripDebugFlags args)
+runCli args = if anyHelp (helpSurface args) then help 0 else runCli1 (stripDebugFlags args)
+
+-- `--` 之后是字面量参数（`vuna run <pkg> -- --help` 必须透传给子进程），不参与
+-- help 扫描；其余命令的 `--` 语义与 `Vuna.Cli.Args` 一致。
+helpSurface : List String -> List String
+helpSurface [] = []
+helpSurface ("--" :: rest) = []
+helpSurface (arg :: rest) = arg :: helpSurface rest
 
 -- 编译器命令在 CompilerCli 里实现；`seed` 已删除，仍分发给 CompilerCli 是为了统一
 -- 给出迁移提示（`build --out OUT [DIR]` / `compile DIR OUT`）。
@@ -112,9 +127,11 @@ runCli1 args = case args of
     "lint" => Vuna.Lint.runLint rest
     "interp" => interpArgs rest
     "test" => testArgs rest
+    "run" => Vuna.Run.runRun rest
     "fmt" => fmtArgs rest
     "repl" => replArgs rest
-    "doc" => docArgs rest
+    "doc" => Vuna.Doc.runDoc rest
+    "search" => Vuna.Search.runSearch rest
     "gen-errors" => genErrorsArgs rest
     "map" => mapArgs rest
     "api" => apiArgs rest
@@ -208,22 +225,27 @@ interpEmit path = case contextForFile path of
     in if startsWith "error:" output then 2 else 0
 
 -- ---------------------------------------------------------------
--- test（包模式）
+-- test（包模式；M38：--list / --filter / --verbose / --fail-fast）
 -- ---------------------------------------------------------------
 testArgs : List String -> Int
-testArgs args = case parseToolArgs "vuna test" [] args of
+testArgs args = case parseToolArgs "vuna test" [BoolFlag "list", BoolFlag "verbose", BoolFlag "fail-fast", MultiValueFlag "filter"] args of
   Err e => toolError e
   Ok parsed => case parsed.positionals of
-    [] => testRun "."
-    [dir] => testRun dir
+    [] => testRun (testOptsOf parsed) "."
+    [dir] => testRun (testOptsOf parsed) dir
     _ => usageError 0
 
-testRun : String -> Int
-testRun dir = case requireDirectory dir of
+testOptsOf : Parsed -> TestOpts
+testOptsOf parsed =
+  TestOpts (flagValues parsed "filter") (flagSet parsed "list") (flagSet parsed "verbose")
+    (flagSet parsed "fail-fast")
+
+testRun : TestOpts -> String -> Int
+testRun opts dir = case requireDirectory dir of
   Err e => toolError e
   Ok _ => case loadPackage dir of
     Err e => toolFailure e
-    Ok pkg => runTests pkg
+    Ok pkg => runTests opts pkg
 
 -- ---------------------------------------------------------------
 -- fmt
@@ -318,24 +340,6 @@ replRun : Int -> Int
 replRun _ = case contextForDir "." of
   Err e => toolFailure e
   Ok ctx => runRepl ctx
-
--- ---------------------------------------------------------------
--- doc
--- ---------------------------------------------------------------
-docArgs : List String -> Int
-docArgs args = case parseToolArgs "vuna doc" [] args of
-  Err e => toolError e
-  Ok parsed => case parsed.positionals of
-    [] => docRun "." "docs/api.md"
-    [dir] => docRun dir (docDefaultOut dir)
-    [dir, out] => docRun dir out
-    _ => usageError 0
-
-docDefaultOut : String -> String
-docDefaultOut dir = if dir == "." then "docs/api.md" else dir ++ "/docs/api.md"
-
-docRun : String -> String -> Int
-docRun dir out = runDoc dir out
 
 -- ---------------------------------------------------------------
 -- gen-errors（错误码文档生成）

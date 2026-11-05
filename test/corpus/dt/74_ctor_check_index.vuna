@@ -1,0 +1,31 @@
+-- M35.1 前置：检查方向构造子应用的族参数反推。
+--
+-- 构造子字段依赖族参数（CPS `Eff` / 任何依赖字段）时，旧路径先给隐式族参数插元变量、
+-- 再统一期望类型；检查字段 lambda 时族参数还是元变量，`alg op k` 会要求解
+-- `?a ≡ res op` 这类 flex-flex 约束（`res` 在 λ 内才绑定）→ 报
+-- `cannot solve metavariable (solution would escape its scope)`。
+-- 现在先由期望类型 `F r1..rk` 喂满 telescope 的前 k 个隐式族 binder，再检查字段。
+--
+-- 只对恒等结果索引（`F x1..xk`，xi 就是第 i 个 binder 本身）生效：
+-- `Vec a (Succ n)` 这类非恒等索引仍走旧路径，避免把 `n` 误喂成结果索引。
+data Box : (f : Type) -> (res : f -> Type) -> (x : f) -> Type where
+  MkBox : {f : Type} -> {res : f -> Type} -> {x : f} -> res x -> Box f res x
+
+data C : Type where
+  MkC : C
+
+rC : C -> Type
+rC MkC = Int
+
+-- 回归点：隐式族参数 + 依赖字段的构造子检查（旧实现在 `MkBox v` 上报逃逸元变量）。
+mkBox : {f : Type} -> {res : f -> Type} -> {x : f} -> res x -> Box f res x
+mkBox v = MkBox v
+
+useBox : Box C rC MkC -> Int
+useBox (MkBox v) = v
+
+make : rC MkC -> Box C rC MkC
+make v = MkBox v
+
+main : Int
+main = useBox (make 7)

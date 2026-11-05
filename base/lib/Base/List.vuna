@@ -1,3 +1,4 @@
+-- | 列表类型与常用操作。
 module Base.List
   ( List(..)
   , append
@@ -39,10 +40,14 @@ import Base.Int
 -- `::` 是 canonical 构造子 `Cons` 的中缀别名（表达式与 pattern 都走这条声明）。
 infixr 5 :: = Cons
 
+-- | 列表类型。
 data List a : Type where
+  -- | 空列表。
   Nil : List a
+  -- | 非空列表：头 `a` 与尾 `List a`。
   Cons : a -> List a -> List a
 
+-- | 拼接两个列表。
 append : List a -> List a -> List a
 append [] ys = ys
 append (x :: xs) ys = x :: append xs ys
@@ -51,10 +56,12 @@ reverseOnto : List a -> List a -> List a
 reverseOnto [] acc = acc
 reverseOnto (x :: xs) acc = reverseOnto xs (x :: acc)
 
+-- | 反转列表。
 reverse : List a -> List a
 reverse xs = reverseOnto xs []
 
 -- 度量是 Nat；实现内部用 Int 累加，末尾一次 natFromInt，避免逐元素 Nat 加法。
+-- | 列表长度（`Nat`）。
 length : List a -> Nat
 length xs = natFromInt (lengthInt xs)
 
@@ -62,18 +69,22 @@ lengthInt : List a -> Int
 lengthInt [] = 0
 lengthInt (x :: xs) = 1 + lengthInt xs
 
+-- | 对每个元素应用函数。
 map : (a -> b) -> List a -> List b
 map f [] = []
 map f (x :: xs) = f x :: map f xs
 
+-- | 保留满足谓词的元素。
 filter : (a -> Bool) -> List a -> List a
 filter p [] = []
 filter p (x :: xs) = if p x then x :: filter p xs else filter p xs
 
+-- | 左折叠。
 foldl : (b -> a -> b) -> b -> List a -> b
 foldl f acc [] = acc
 foldl f acc (x :: xs) = foldl f (f acc x) xs
 
+-- | 右折叠。
 foldr : (a -> b -> b) -> b -> List a -> b
 foldr f acc [] = acc
 foldr f acc (x :: xs) = f x (foldr f acc xs)
@@ -81,6 +92,7 @@ foldr f acc (x :: xs) = f x (foldr f acc xs)
 -- M33 W2：原来的 `append (f x) (concatMap f rest)` 在「每段都较长」时是 O(n²)
 -- （每层 append 复制 f x）。改成尾递归 accumulator：把每段逆序前插，最后整体 reverse，
 -- 总代价 O(所有段长之和)。终止性仍是结构递归（rest）。
+-- | 对每个元素执行返回列表的函数并拼接。
 concatMap : (a -> List b) -> List a -> List b
 concatMap f xs = concatMapGo f xs []
 
@@ -88,29 +100,36 @@ concatMapGo : (a -> List b) -> List a -> List b -> List b
 concatMapGo f [] acc = reverse acc
 concatMapGo f (x :: rest) acc = concatMapGo f rest (append (reverse (f x)) acc)
 
+-- | `concatMap` 的别名。
 flatMap : (a -> List b) -> List a -> List b
 flatMap f xs = concatMap f xs
 
+-- | 列表成员判断（`Eq` 字典）。
 mem : Eq a => a -> List a -> Bool
 mem x [] = False
 mem x (y :: rest) = x == y || mem x rest
 
+-- | 字符串列表成员判断（`Eq` 的 String 特化）。
 memName : String -> List String -> Bool
 memName name [] = False
 memName name (x :: rest) = x == name || memName name rest
 
+-- | 按键查找 `Pair` 列表中的值。
 lookupPair : String -> List (Pair String v) -> Maybe v
 lookupPair name [] = Nothing
 lookupPair name (p :: rest) = if firstOf p == name then Just (secondOf p) else lookupPair name rest
 
+-- | 把两个列表逐项配对；长度取较短者。
 zip : List a -> List b -> List (Pair a b)
 zip (x :: xs) (y :: ys) = Pair x y :: zip xs ys
 zip _ _ = []
 
+-- | 取前 `n` 个元素（不足则返回全部）。
 take : Int -> List a -> List a
 take n [] = []
 take n (x :: xs) = if n <= 0 then [] else x :: take (n - 1) xs
 
+-- | 丢弃前 `n` 个元素。
 drop : Int -> List a -> List a
 drop n [] = []
 drop n (x :: xs) = if n <= 0 then x :: xs else drop (n - 1) xs
@@ -118,12 +137,15 @@ drop n (x :: xs) = if n <= 0 then x :: xs else drop (n - 1) xs
 -- M25.2b：原来的升序写法 `i :: range (i + 1) n` 需要「有界计数器」规则才能证明；
 -- 改成对「剩余个数」倒计数（`k = n - i`，每次 `k - 1`，由 `k <= 0` 守卫），
 -- 终止性由 R2 直接可证；语义与原来一致（`i >= n` 时 `k <= 0` 返回空表）。
+-- | 从 0 到 `to`（不含）的整数列表。
 range : Int -> Int -> List Int
 range i n = rangeFrom i (n - i)
 
+-- | 从 `from` 到 `to`（不含 `to`）的整数列表。
 rangeFrom : Int -> Int -> List Int
 rangeFrom i k = if k <= 0 then [] else i :: rangeFrom (i + 1) (k - 1)
 
+-- | 映射并丢弃 `Nothing` 元素。
 mapMaybe : (a -> Maybe b) -> List a -> List b
 mapMaybe f [] = []
 mapMaybe f (x :: xs) = case f x of

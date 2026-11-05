@@ -1,0 +1,130 @@
+module Base.ST
+  ( ArrayPair(..)
+  , ArrayRead(..)
+  , ArrayWrite(..)
+  , Ref
+  , RefPair(..)
+  , RefWrite(..)
+  , SArray
+  , ST
+  , bindST
+  , bindST1
+  , fmapST
+  , freeArray
+  , freeRef
+  , lengthArray
+  , newArray
+  , newRef
+  , pureST
+  , readArray
+  , readRef
+  , runST
+  , writeArray
+  , writeRef
+  ) where
+
+-- Base.ST：region 隔离的局部可变数据 + 线性 ST 子集（M35.1 起源，M38 线性化）。
+--
+-- `ST r a` 的 `r` 是 **region 索引**（类型级、擦除）；`Ref r a` / `SArray r a` 是
+-- region 句柄。M38 起 `Ref` / `SArray` 是 **linear record**：
+--
+--   * 一个 `Ref` / `SArray` 必须恰好被消费一次（读/写/释放都消费并返回新句柄）；
+--   * 句柄不能逃出 `runST`（原有 region 逃逸检查仍在）；
+--   * `ST` 动作本身沿用 IO 的可复制语义（当前没有线性箭头，无法在动作内部
+--     线程化线性值而不放大用量）；这是本阶段的已知边界，见 docs/reference/qtt.md。
+--
+-- 因为 vuna 目前没有线性箭头/借用，操作采用**单参数 + 线性结果记录**风格：
+--   `readRef : (1 h : Ref r a) -> ST r (RefPair r a)`
+-- 用户用 `bindST1` 把线性结果线程化下去；`bindST` 留给非线性的结果类型。
+--
+-- 执行：`runST` 在入口用一次 `runIO`；`ST r a` 运行时是 `IO a` 的单构造子 data。
+-- 低层 `IORef` / `MArray` 仍是非线性内建类型，但字段不导出；用户只能经这里的线性包装
+-- 使用（信任点在 `Base.ST`）。
+import Base.IO
+import Base.Int
+import Base.Nat
+
+linear record Ref r a where
+  refSlot : IORef a
+
+linear record SArray r a where
+  arraySlot : MArray a
+
+-- ST 动作。M38 只把句柄（Ref/SArray）设为线性；动作值本身按 IO 风格可重复使用。
+data ST r a : Type where
+  MkST : {r : Type} -> {a : Type} -> (stIO : IO a) -> ST r a
+
+-- readRef 的结果：值 + 继续可用的句柄。记录整体线性；句柄字段的类型线性 ⇒ binder 为 1。
+linear record RefPair r a where
+  refPairValue : a
+  refPairRef : Ref r a
+
+-- writeRef 的参数：句柄 + 新值。
+linear record RefWrite r a where
+  refWriteRef : Ref r a
+  refWriteValue : a
+
+linear record ArrayPair r a where
+  arrayPairValue : a
+  arrayPairArray : SArray r a
+
+linear record ArrayRead r a where
+  arrayReadArray : SArray r a
+  arrayReadIndex : Nat
+
+linear record ArrayWrite r a where
+  arrayWriteArray : SArray r a
+  arrayWriteIndex : Nat
+  arrayWriteValue : a
+
+-- 唯一执行入口：region 由显式类型 binder 提供（库外不可命名）；实现把它实例化为 Int。
+runST : ((r : Type) -> ST r a) -> a
+runST body = runIO (stIOOf (body Int))
+
+-- 内部：消费 ST 动作，取出 IO thunk。线性 binder 让 `ST` 值只被消费一次。
+stIOOf : (1 m : ST r a) -> IO a
+stIOOf (MkST io) = io
+
+-- 非线性结果值的 continuation（`a` 不要求恰好一次）。
+bindST : (1 m : ST r a) -> (k : a -> ST r b) -> ST r b
+bindST (MkST io) k = MkST (io >>= (\a => stIOOf (k a)))
+
+-- 线性结果值的 continuation：`k` 的参数 binder 是 1，才能把线性值传进去。
+bindST1 : (1 m : ST r a) -> (k : (1 x : a) -> ST r b) -> ST r b
+bindST1 (MkST io) k = MkST (prim_bindIO1 io (\x => stIOOf (k x)))
+
+pureST : a -> ST r a
+pureST x = MkST (pure x)
+
+fmapST : (a -> b) -> (1 m : ST r a) -> ST r b
+fmapST f (MkST io) = MkST (fmap f io)
+
+newRef : a -> ST r (Ref r a)
+newRef x = MkST (fmap (\slot => Ref slot) (prim_newRef x))
+
+readRef : (1 h : Ref r a) -> ST r (RefPair r a)
+readRef (Ref slot) = MkST (fmap (\x => RefPair x (Ref slot)) (prim_readRef slot))
+
+writeRef : (1 arg : RefWrite r a) -> ST r (Ref r a)
+writeRef (RefWrite (Ref slot) v) = MkST (fmap (\_ => Ref slot) (prim_writeRef slot v))
+
+-- 显式释放：线性句柄必须被消费；没有 drop 就会编译失败。
+freeRef : (1 h : Ref r a) -> ST r Int
+freeRef (Ref _) = MkST (pure 0)
+
+newArray : Nat -> a -> ST r (SArray r a)
+newArray n v = MkST (fmap (\slot => SArray slot) (prim_newMArray (natToInt n) v))
+
+readArray : (1 arg : ArrayRead r a) -> ST r (ArrayPair r a)
+readArray (ArrayRead (SArray slot) i) =
+  MkST (fmap (\x => ArrayPair x (SArray slot)) (prim_readMArray slot (natToInt i)))
+
+writeArray : (1 arg : ArrayWrite r a) -> ST r (SArray r a)
+writeArray (ArrayWrite (SArray slot) i v) =
+  MkST (fmap (\_ => SArray slot) (prim_writeMArray slot (natToInt i) v))
+
+lengthArray : (1 arr : SArray r a) -> ST r Nat
+lengthArray (SArray slot) = MkST (fmap natFromInt (prim_mArrayLength slot))
+
+freeArray : (1 arr : SArray r a) -> ST r Int
+freeArray (SArray _) = MkST (pure 0)

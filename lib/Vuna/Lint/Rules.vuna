@@ -308,10 +308,11 @@ else case e of
   EVar n sp => startFromSpan sp
   EInt n sp => startFromSpan sp
   EStr s sp => startFromSpan sp
+  EInterp multi parts sp => startFromSpan sp
   ELam ps body sp => minPair (startFromSpan sp) (startExpr (fuel - 1) body)
   EApp fn args sp =>
     minPair (startFromSpan sp) (minPair (startExpr (fuel - 1) fn) (startExprs (fuel - 1) args))
-  EPi n implicit dom cod sp =>
+  EPi n implicit _ dom cod sp =>
     minPair (startFromSpan sp) (minPair (startExpr (fuel - 1) dom) (startExpr (fuel - 1) cod))
   ELet binds body recFlag sp =>
     minPair (startFromSpan sp) (minPair (startBinds (fuel - 1) binds) (startExpr (fuel - 1) body))
@@ -555,7 +556,8 @@ else case e of
   EStr s sp => False
   ELam ps body sp => mentionsExpr (fuel - 1) name body
   EApp fn args sp => mentionsExpr (fuel - 1) name fn || mentionsExprs (fuel - 1) name args
-  EPi n implicit dom cod sp => mentionsExpr (fuel - 1) name dom || mentionsExpr (fuel - 1) name cod
+  EPi n implicit _ dom cod sp =>
+    mentionsExpr (fuel - 1) name dom || mentionsExpr (fuel - 1) name cod
   ELet binds body recFlag sp =>
     mentionsBinds (fuel - 1) name binds || mentionsExpr (fuel - 1) name body
   ELocalFun clauses sp => mentionsClauses (fuel - 1) name clauses
@@ -576,7 +578,16 @@ else case e of
   ESectOp op sp => op == name
   ESectL op rhs sp => op == name || mentionsExpr (fuel - 1) name rhs
   ESectR lhs op sp => op == name || mentionsExpr (fuel - 1) name lhs
+  -- M36：模板字面量：洞内引用照常算 mention（否则 where 变量会被误报未使用）。
+  EInterp multi parts sp => mentionsInterpParts (fuel - 1) name parts
   _ => False
+
+mentionsInterpParts : Int -> String -> List InterpPart -> Bool
+mentionsInterpParts fuel name parts = if fuel <= 0 then False
+else case parts of
+  [] => False
+  (IPText s) :: rest => mentionsInterpParts (fuel - 1) name rest
+  (IPHole e) :: rest => mentionsExpr (fuel - 1) name e || mentionsInterpParts (fuel - 1) name rest
 
 mentionsExprs : Int -> String -> List Expr -> Bool
 mentionsExprs fuel name exprs = if fuel <= 0 then False
@@ -939,7 +950,7 @@ else case e of
   ELam ps body sp => walkExpr (fuel - 1) lines toks body
   EApp fn args sp =>
     append (walkExpr (fuel - 1) lines toks fn) (walkExprs (fuel - 1) lines toks args)
-  EPi name implicit dom cod sp =>
+  EPi name implicit _ dom cod sp =>
     append (walkExpr (fuel - 1) lines toks dom) (walkExpr (fuel - 1) lines toks cod)
   ELet binds body recFlag sp =>
     append (walkBinds (fuel - 1) lines toks binds) (walkExpr (fuel - 1) lines toks body)
@@ -960,7 +971,17 @@ else case e of
   ESectOp op sp => []
   ESectL op rhs sp => walkExpr (fuel - 1) lines toks rhs
   ESectR lhs op sp => walkExpr (fuel - 1) lines toks lhs
+  -- M36：模板字面量：洞内表达式同样参与规则遍历。
+  EInterp multi parts sp => walkInterpParts (fuel - 1) lines toks parts
   _ => []
+
+walkInterpParts : Int -> List String -> List PTok -> List InterpPart -> List Finding
+walkInterpParts fuel lines toks parts = if fuel <= 0 then []
+else case parts of
+  [] => []
+  (IPText s) :: rest => walkInterpParts (fuel - 1) lines toks rest
+  (IPHole e) :: rest =>
+    append (walkExpr (fuel - 1) lines toks e) (walkInterpParts (fuel - 1) lines toks rest)
 
 walkIf : Int -> List String -> List PTok -> Expr -> Expr -> Expr -> Expr -> List Finding
 walkIf fuel lines toks e cond yes no = if fuel <= 0 then []
@@ -1038,7 +1059,7 @@ laterHasFun name (d :: rest) = case d of
 -- 模式会改变模式矩阵与隐式 Pi 的对齐（实测 `vhead : {n : Nat} -> Vec a (Succ n) -> a`
 -- 会把 `VCons` 模式错配到 `n : Nat`）。literal-if-chain 与函数参数无关，不受影响。
 hasImplicitPi : Expr -> Bool
-hasImplicitPi (EPi name implicit dom cod sp) = implicit || hasImplicitPi cod
+hasImplicitPi (EPi name implicit _ dom cod sp) = implicit || hasImplicitPi cod
 hasImplicitPi (EApp (EVar "->" _) ([dom, cod]) sp) = hasImplicitPi dom || hasImplicitPi cod
 hasImplicitPi _ = False
 

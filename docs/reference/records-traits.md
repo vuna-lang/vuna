@@ -67,6 +67,10 @@ main = pretty Red ++ "/" ++ show Red
 - **实例按 head 全局唯一**：同一 head 的重复 / 重叠实例报 `duplicate instance` /
   `overlapping instance`（含 `deriving` 生成的实例）。**没有命名实例**：不存在
   `instance C T as name` 或 `@name` 选择，相干性只靠「同一 head 唯一」。
+- **blanket 实例是 fallback（M36）**：head 实参是裸类参数（全部 tele 都是类参数）的实例
+  是兜底，例如 base 的 `instance Show a => Interp a`；搜索分两阶段——具体实例先匹配，匹配
+  不到才试 blanket。**具体实例覆盖 blanket**（`instance Interp String` 赢过 blanket），
+  具体实例之间仍禁止重叠；两个 blanket 仍报 `TC_DuplicateInstance`（见 [templates.md](templates.md)）。
 - **实例落点**：实例跟类型模块走；trait 签名直接依赖该类型、放类型模块会成 import 环时
   例外（`Bool` 是 `Eq` / `Ord` 方法的返回类型，实例随 trait 留在 `Base.Eq` /
   `Base.Ord`，放 `Base.Bool` 会成环）。**不再有「孤儿实例被拒」的表述**——实现从未强制
@@ -158,8 +162,10 @@ describe x y = if x == y then show x else show x ++ "/" ++ show y
   类型构造器本身（`instance Monad Maybe`），kind 不符（如 `instance Monad Int`）在
   声明期报错。
 - **`IO`** 是 `base/lib/Base/IO.vuna` 的抽象类型（构造器私有）；组合统一用
-  `Functor` / `Monad` trait 的 `fmap` / `bind` / `pure`、`>>=` 与 `do`，**没有公开的
-  `runIO` / `unsafeRunIO`**：IO 动作只能由运行时在 `main` 处执行。
+  `Functor` / `Monad` trait 的 `fmap` / `bind` / `pure`、`>>=` 与 `do`。IO 动作只在 `main`
+  执行；`Base.IO.runIO` 是唯一的 main 外入口、需要能力 `unsafe`（工具链与 `Base.ST` 用）。
+  参数化效应 monad（`Base.State` / `Base.Reader` / `Base.Error`）与 ST 见
+  [effects.md](effects.md)。
 - 效果 API 直接返回 IO：`print` / `println` / `readFile` / `writeFile` / `readLine` /
   `readDir` / `isDirectory` / `makeDir` / `removeFile` / `fileExists` / `getArgs` /
   `exit`（例如 `getArgs : IO (List String)`、`print : String -> IO Int`）；内部用

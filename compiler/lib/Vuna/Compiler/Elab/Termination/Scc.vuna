@@ -83,7 +83,7 @@ else case e of
   ELet binds body rec_ sp =>
     siteWalkC (fuel - 1) comp ctors projs caller facts sizes region body
       (siteCollectBinds (fuel - 1) comp ctors projs caller facts sizes region binds acc)
-  EPi n implicit dom cod sp =>
+  EPi n implicit _ dom cod sp =>
     siteWalkC (fuel - 1) comp ctors projs caller facts sizes region cod
       (siteWalkC (fuel - 1) comp ctors projs caller facts sizes region dom acc)
   EField base f sp => siteWalkC (fuel - 1) comp ctors projs caller facts sizes region base acc

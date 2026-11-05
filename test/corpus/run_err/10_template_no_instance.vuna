@@ -1,0 +1,5 @@
+data Foo : Type where
+  MkFoo : Foo
+
+main : String
+main = "${interp MkFoo}"

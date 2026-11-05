@@ -37,9 +37,9 @@ import Vuna.Compiler.Packages.Pkg
 -- `corpus/term/05_multi_clause.vuna` 的入口，报 `LD_ModuleHeaderInEntryFile`）。
 -- 这里用 5 条独立 lane 拼成 ~50 bit，并把 schema 版本拌进 key；payload 还带源文本做
 -- 回读校验（见下）：**改 `Frontend.Ast` 的 Marshal 布局时必须 bump `astCacheSchema`**
--- （否则旧缓存会被按新布局 `prim_unmarshal`）。
+-- （否则旧缓存会被按新布局 `prim_unmarshal`）。模板字面量（M36）新增 AST 构造子，schema 4 → 5。
 astCacheSchema : String
-astCacheSchema = "vuna-ast-cache 4"
+astCacheSchema = "vuna-ast-cache 6"
 
 astCacheDir : String
 astCacheDir =
@@ -163,9 +163,9 @@ privateExportMsg prefix sp name =
 findOwnData : String -> List Decl -> Maybe (Pair String (List String))
 findOwnData name [] = Nothing
 findOwnData name (d :: rest) = case d of
-  DData dname params kind ctors derivings sp =>
+  DData dname params kind ctors derivings lin sp =>
     if dname == name then Just (Pair dname (map ctorName ctors)) else findOwnData name rest
-  DRecord dname params fields derivings sp =>
+  DRecord dname params fields derivings lin sp =>
     if dname == name then Just (Pair dname [dname]) else findOwnData name rest
   DTrait tname params methods sp =>
     if tname == name then Just (Pair tname (map traitMethodName methods)) else findOwnData name rest
@@ -194,10 +194,10 @@ findMethodNamed name ((TraitMethod mname ty msp) :: rest) =
 findOwnCtorName : String -> List Decl -> Maybe (Pair String String)
 findOwnCtorName name [] = Nothing
 findOwnCtorName name (d :: rest) = case d of
-  DData dname params kind ctors derivings sp => case findCtorNamed name ctors of
+  DData dname params kind ctors derivings lin sp => case findCtorNamed name ctors of
     Just cname => Just (Pair dname cname)
     Nothing => findOwnCtorName name rest
-  DRecord dname params fields derivings sp =>
+  DRecord dname params fields derivings lin sp =>
     if dname == name then Just (Pair dname dname) else findOwnCtorName name rest
   DTrait tname params methods sp => case findMethodNamed name methods of
     Just mname => Just (Pair tname mname)
@@ -221,11 +221,11 @@ ctorEntriesOfType typeTarget (e :: rest) =
 
 declImplicitExports : String -> Decl -> List ExportEntry
 declImplicitExports prefix d = case d of
-  DData dname params kind ctors derivings sp =>
+  DData dname params kind ctors derivings lin sp =>
     if isPrivateName dname then []
     else ExportEntry { kind = "type", public = dname, target = mangle prefix dname, parent = "" }
       :: ownCtorEntries prefix dname (map ctorName ctors)
-  DRecord dname params fields derivings sp =>
+  DRecord dname params fields derivings lin sp =>
     if isPrivateName dname then []
     else ExportEntry { kind = "type", public = dname, target = mangle prefix dname, parent = "" }
       :: ownCtorEntries prefix dname [dname]
@@ -291,7 +291,7 @@ isRecordTarget modules decls prefix target = case splitLastDot (splitOnDot targe
 isRecordDecl : String -> List Decl -> Bool
 isRecordDecl dname [] = False
 isRecordDecl dname (d :: rest) = case d of
-  DRecord dn params fields derivings sp => dn == dname || isRecordDecl dname rest
+  DRecord dn params fields derivings lin sp => dn == dname || isRecordDecl dname rest
   _ => isRecordDecl dname rest
 
 refEntryList : String -> Maybe ExportRef -> List ExportEntry

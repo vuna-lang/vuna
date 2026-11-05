@@ -17,7 +17,7 @@
 3. 需要时再下钻：[`docs/reference/`](docs/reference/)（类型系统 / Core / 编译器 / 包 / 工具 / 测试参考页）、
    [roadmap](docs/roadmap.md)、[debt](docs/reference/debt.md)。
 
-**定位符号**用 `vuna map --find` / `--impact` / `vuna api`（规程见 repo-navigation 技能）；**不要做的事**：通读全仓、读 `seed/` 或 `docs/api.md`（生成物）。
+**定位符号**用 `vuna map --find` / `--impact` / `vuna api`（规程见 repo-navigation 技能）；**不要做的事**：通读全仓、读 `seed/` 或 `docs/api.html`（生成物）。
 
 ## 编译器选取规则
 
@@ -37,8 +37,8 @@
 3. **`seed/` 只含 compiler 包入口闭包**（`compiler/app/Main.vuna` 的 import 闭包）；
 4. **工具链不进 TCB**：`fmt`/`lint`/`repl`/`doc`/`test`/`Index`/`LSP`（以及未来的
    package manager）永不进入 seed 闭包；黑名单见 `nix/tcb-forbidden.txt`；
-5. **效应原语返回 `IO` 动作**：声明 `[capabilities] effects` 才可直调 effectful `prim_*`，
-   否则经 `Base.IO`；动作只在 `main` 执行，`Base.IO.runIO` 是唯一 main 外入口、需 `unsafe`；
+5. **IO 是内建效应类型**：动作由 `prim_pureIO`/`prim_bindIO` 构造，只在 `main`（`v_main 0`）
+   或 `runIO`/`prim_runIO`（需 `unsafe`）执行；效果原语 `prim_*` 需 `[capabilities] effects`；
 6. **唯一路径**：语言夹具、`vuna interp`、包构建与 seed 全部走 DT（精化 + 擦除
    codegen，`vuna check .` 也是 DT 自检）；没有可切换的检查器，也没有第二套 codegen；
 7. 编译器自检通过：`vuna check .` 必须能检查自身源码（`checks.vuna-typecheck`）。
@@ -68,16 +68,21 @@ nix flake check                      # 13 项：3 packages + 10 checks（含 vsc
 nix run .#vuna-run-tests [-- --list | --only dt]   # 原生测试；bench：.#vuna-bench --quick / .#vuna-perf --check
 vuna check .                         # 包级类型检查（自检）；vuna build . → .output/bin/<包名>
 vuna fmt --check <PATH>...           # 格式化检查（省略 PATH = workspace 各包 lib/app/test）；vuna lint <file>...
-vuna doc [DIR [OUT]] | gen-errors [ROOT]  # API 文档 / 错误码文档（默认 docs/api.md / docs/.generated/errors.md）
+vuna doc [--check] [--package NAME] [DIR [OUT]]  # 生成单文件交互 HTML API 文档（默认 DIR/docs/api.html）
+vuna gen-errors [ROOT]               # 从枚举真源生成错误码文档（默认 ROOT/docs/.generated/errors.md）
 vuna interp <file.vuna>              # DT 精化 + 核心求值（纯；只展示 Int/String/Bool）
+vuna test [DIR] [--list|--filter PAT|--verbose|--fail-fast]  # 包内测试；默认输出不变
+vuna run [DIR] [--package NAME] [--no-build] [-- ARGS...]    # 增量 build + 执行入口（透传参数/退出码）
+vuna repl                            # :type / :load / :reload / :browse
 vuna build --no-compile --out <OUT> compiler   # 逐模块 DT codegen 到目录（= vuna compile compiler <OUT>；rotation 用 nix/seed-rotate.sh）
+vuna search [--type|--name|--doc] [--module PFX] [--limit N] [--json] <query...>  # 名称/docstring/类型检索
 vuna map [...] | vuna api <Module.name>  # 模块总览 / 定位符号 / 改动影响面 / 签名面
 ```
 ## 目录速览
 
 `compiler/` = 编译器包（`Vuna.Compiler.*`，入口 `app/Main.vuna`，**进 seed**）；`base/` =
 标准库 `vuna-base`（`Base.*` + `Prelude`，**进 seed**）；`lib/` = 根包工具链（Cli/Interp/
-Files/Fmt/Lint/Repl/Doc/Index/Lsp/TestRunner，**不进 seed**）；`app/` = 产品 CLI 入口；
+Files/Fmt/Lint/Repl/Run/Doc/Index/Lsp/TestRunner，**不进 seed**）；`app/` = 产品 CLI 入口；
 `seed/` = 提交入库的 OCaml 信任锚点（生成物，禁止手改、别读）；`test/` = `run-tests.sh` +
 `corpus/` 夹具 + `bench/` 生成程序基准；`vscode/` = VSCode 扩展（高亮 + LSP + lint/fmt/check/
 build，`dist/` 提交）；`nix/` = 构建图 + rotate/metrics/bench；`docs/` = 分层文档。
@@ -87,14 +92,18 @@ build，`dist/` 提交）；`nix/` = 构建图 + rotate/metrics/bench；`docs/` 
 - 子系统地图、改动定位：[`docs/architecture.md`](docs/architecture.md)
 - 语言与类型：[language.md](docs/reference/language.md)（语法/模块）、
   [type-system.md](docs/reference/type-system.md)（宇宙/索引族/依赖匹配/相等/擦除）、
+  [qtt.md](docs/reference/qtt.md)（quantity/用量检查/线性数据）、
   [records-traits.md](docs/reference/records-traits.md)（记录/trait/do）、
+  [effects.md](docs/reference/effects.md)（IO 内建效应/效应栈）、
   [stdlib.md](docs/reference/stdlib.md)、[packages.md](docs/reference/packages.md)、
   [primitives.md](docs/reference/primitives.md)（内建/原语/能力）、
   [operators.md](docs/reference/operators.md)（运算符=方法别名、实例落点规则）
 - 编译器实现：[compiler.md](docs/reference/compiler.md)（模块与输出模型、接口摘要）、
   [core.md](docs/reference/core.md)（Core TT / NbE / 精化器）
-- 工具链（`goal` / LSP / `doc` / 错误码；`vuna gen-errors` 生成
-  `docs/.generated/errors.md`）：[tooling.md](docs/reference/tooling.md)；lint：[lint.md](docs/reference/lint.md)
+- 工具链（`goal` / LSP / `doc` / `search` / 错误码；`vuna gen-errors` 生成
+  `docs/.generated/errors.md`）：[tooling.md](docs/reference/tooling.md)；API 文档与检索：
+  [api-docs.md](docs/reference/api-docs.md)；lint：[lint.md](docs/reference/lint.md)；
+  调试与运行时错误：[debugging.md](docs/reference/debugging.md)（片段/运行时报告/`Base.Debug`/`vuna run`/REPL）
 - 仓库探索（按场景选工具、探索后落盘）：技能 `.agents/skills/repo-navigation/SKILL.md`
 - 自举与种子：[bootstrap.md](docs/reference/bootstrap.md)；测试与 CI：[testing.md](docs/reference/testing.md)；
   已知边界：[limits.md](docs/reference/limits.md)；性能：[performance.md](docs/reference/performance.md)

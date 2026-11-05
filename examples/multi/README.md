@@ -11,5 +11,5 @@ vuna build --no-compile examples/multi  # 只生成 .output/{main.ml,build.sh}
 vuna build --split /tmp/multi-split examples/multi  # 逐模块 OCaml 源码 + build.sh
 vuna test examples/multi             # DT 核心求值 test/*.vuna，main : String 空串为通过
 vuna fmt --check examples/multi      # 格式化检查
-vuna doc examples/multi              # -> examples/multi/docs/api.md
+vuna doc examples/multi              # -> examples/multi/docs/api.html
 ```

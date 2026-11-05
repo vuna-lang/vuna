@@ -46,6 +46,7 @@ module Vuna.Compiler.Core
   , caseAltName
   , conv
   , defLookup
+  , defaultExplicitRig
   , defaultFuel
   , eval
   , evalCase
@@ -68,11 +69,16 @@ module Vuna.Compiler.Core
   , natValueToInt
   , normalize
   , quote
+  , rigAdd
+  , rigExact
   , rigIsErased
   , rigIsLinear
   , rigIsOmega
+  , rigJoin
   , rigOfBinder
+  , rigScale
   , shift
+  , showRig
   , showTerm
   , showValue
   , showValueAt

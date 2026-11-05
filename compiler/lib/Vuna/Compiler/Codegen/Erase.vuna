@@ -68,20 +68,6 @@ axiomNamesOf [] = []
 axiomNamesOf (d :: rest) =
   if isAxiomDef d then dtDefName d :: axiomNamesOf rest else axiomNamesOf rest
 
--- 类型级定义的判据：定义**类型** force 后以宇宙收尾（`Type` 或 `... -> Type` 的 Pi 链）。
--- 旧实现只看 `isTypeValue`（仅裸 `Type`），于是 `sel : Nat -> Type` 一类类型族被判成
--- 运行时定义，生成的 OCaml 里出现未定义的 `v_Int`/`v_String`（M24.5 发现的预存在 bug）。
-isTypeForming : Value -> Bool
-isTypeForming v = isTypeFormingFuel 128 v
-
-isTypeFormingFuel : Int -> Value -> Bool
-isTypeFormingFuel fuel v = if fuel <= 0 then False
-else case v of
-  VType l => True
-  VPi name implicit rig dom clo =>
-    isTypeFormingFuel (fuel - 1) (applyClosure clo (VNeutral (NVar name 0 [])))
-  _ => False
-
 isTypeLevelDef : HashMap Term -> DtDef -> Bool
 isTypeLevelDef tbl d = isTypeForming (force tbl solsEmpty defaultFuel (eval [] (dtDefType d)))
 

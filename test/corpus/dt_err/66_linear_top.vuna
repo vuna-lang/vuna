@@ -1,0 +1,8 @@
+linear data Token : Type where
+  MkToken : (1 x : Int) -> Token
+
+r : Token
+r = MkToken 1
+
+main : Int
+main = 0

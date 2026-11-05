@@ -358,7 +358,7 @@ absPatternBody n created depth extra levels t = t
 -- 解里的 λ 链：spine 头部为最外层绑定。
 wrapPatternLams : List (Pair String Int) -> Term -> Term
 wrapPatternLams [] body = body
-wrapPatternLams ((Pair name lvl) :: rest) body = TLam name Rig1 (wrapPatternLams rest body)
+wrapPatternLams ((Pair name lvl) :: rest) body = TLam name RigOmega (wrapPatternLams rest body)
 
 -- 闭包环境：按 level 复原创建点的上下文变量。第一个条目对应 level `depth-1`；创建深度
 -- 之后的 level 在作用域检查后不可能被引用（占位 0，避免 levelEscapes 误判）。
@@ -374,7 +374,7 @@ else
 patternSolution : List (Pair String Int) -> Int -> Int -> Term -> Value
 patternSolution [] created depth body = VType levelZero
 patternSolution ((Pair name lvl) :: rest) created depth body =
-  VLam name Rig1 (Closure (patternEnv created depth) (wrapPatternLams rest body))
+  VLam name RigOmega (Closure (patternEnv created depth) (wrapPatternLams rest body))
 
 -- 空 spine：直接存解，但先就地检查作用域（自由变量必须早于创建深度）。
 -- `?m = ?m`（同一个未解元变量）是恒真约束，不能走 occurs 检查。

@@ -38,7 +38,7 @@ exprRefsB bound e = case e of
   EStr s sp => []
   ELam ns b sp => exprRefsB (append ns bound) b
   EApp fn args sp => append (exprRefsB bound fn) (concatMap (exprRefsB bound) args)
-  EPi n implicit dom cod sp => append (exprRefsB bound dom) (exprRefsB (n :: bound) cod)
+  EPi n implicit _ dom cod sp => append (exprRefsB bound dom) (exprRefsB (n :: bound) cod)
   ELet binds b rec_ sp =>
     append (concatMap (\bd => exprRefsB bound (secondOf bd)) binds)
       (exprRefsB (append (concatMap (\bd => patNames (firstOf bd)) binds) bound) b)
@@ -182,7 +182,7 @@ else case e of
   ELet binds body rec_ sp =>
     strWalk (fuel - 1) comp ctors projs p sizes caller facts region body
       (strWalkBinds (fuel - 1) comp ctors projs p sizes caller facts region binds acc)
-  EPi n implicit dom cod sp =>
+  EPi n implicit _ dom cod sp =>
     strWalk (fuel - 1) comp ctors projs p sizes caller facts region cod
       (strWalk (fuel - 1) comp ctors projs p sizes caller facts region dom acc)
   EField base f sp => strWalk (fuel - 1) comp ctors projs p sizes caller facts region base acc

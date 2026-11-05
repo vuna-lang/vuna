@@ -1,0 +1,402 @@
+module Vuna.Search.Query (searchNameDoc, searchType, typeNameMap) where
+
+-- Vuna.Search.Query：名称 / docstring / 类型检索的纯函数部分（工具链；永不进 seed 闭包）。
+--
+-- 名称：全名/裸名精确 > 前缀 > 子串 > 子序列，doc 命中加分。
+-- doc：查询按空白分词，要求全部 token 出现在 docstring 中。
+-- 类型：parse 级结构化匹配（exact / alpha / general / specific / result / overlap）。
+--       签名与查询都从 `symType` 的**可回读**文本重新 parse；不做实例/隐式解析。
+import Vuna.Compiler.Common
+import Vuna.Compiler.Frontend.Ast
+import Vuna.Compiler.Frontend.Parser
+import Vuna.Index.Types
+import Vuna.Search.Types
+import Base.Nat
+import Base.Sort
+
+-- ---------------------------------------------------------------
+-- 名称 / doc
+-- ---------------------------------------------------------------
+lowerAscii : String -> String
+lowerAscii s = lowerAsciiChars (strUnpack s) ""
+
+lowerAsciiChars : List Int -> String -> String
+lowerAsciiChars [] acc = acc
+lowerAsciiChars (c :: rest) acc =
+  if c >= 65 && c <= 90 then lowerAsciiChars rest (acc ++ strPack [c + 32])
+  else lowerAsciiChars rest (acc ++ strPack [c])
+
+wordsOf : String -> List String
+wordsOf s = filterNotEmpty (split " " s)
+
+filterNotEmpty : List String -> List String
+filterNotEmpty [] = []
+filterNotEmpty (s :: rest) = if s == "" then filterNotEmpty rest else s :: filterNotEmpty rest
+
+nameScore : String -> Sym -> Int
+nameScore query s =
+  let
+    q = lowerAscii query
+    full = lowerAscii (symModule s ++ "." ++ symName s)
+    bare = lowerAscii (symName s)
+    mod = lowerAscii (symModule s)
+  in if q == full then 1000
+  else if q == bare then 900
+  else if startsWith q bare then 700
+  else if contains q bare then 500
+  else if startsWith q full then 450
+  else if contains q full then 400 else if contains q mod then 200 else 0
+
+docScore : String -> Sym -> Int
+docScore query s =
+  let
+    tokens = wordsOf (lowerAscii query)
+    doc = lowerAscii (symDoc s)
+  in if length tokens == 0 then 0
+  else if allTokens tokens doc then 100 + (if contains (lowerAscii query) doc then 50 else 0) else 0
+
+allTokens : List String -> String -> Bool
+allTokens [] doc = True
+allTokens (t :: rest) doc = if contains t doc then allTokens rest doc else False
+
+privateSym : Sym -> Bool
+privateSym s = startsWith "_" (symName s)
+
+searchNameDoc : Index -> String -> Bool -> Bool -> List SearchHit
+searchNameDoc index query nameOnly docOnly =
+  let
+    syms = filter (\s => not (privateSym s)) index.indexSymbols
+    scored = map (scoreSym query nameOnly docOnly) syms
+  in sortHits (filter (\h => hitScore h > 0) scored)
+
+scoreSym : String -> Bool -> Bool -> Sym -> SearchHit
+scoreSym query nameOnly docOnly s =
+  let
+    ns = if docOnly then 0 else nameScore query s
+    ds = if nameOnly then 0 else docScore query s
+    label = if ns > 0 && ds > 0 then "name+doc" else if ns > 0 then "name" else "doc"
+  in SearchHit (symName s) (symModule s) (symKind s) (symSig s) (symDoc s) (symLine s) (ns + ds) label
+
+sortHits : List SearchHit -> List SearchHit
+sortHits hits = sortBy hitLe hits
+
+hitLe : SearchHit -> SearchHit -> Bool
+hitLe a b =
+  if hitScore a > hitScore b then True
+  else if hitScore a < hitScore b then False else hitName a <= hitName b
+
+-- ---------------------------------------------------------------
+-- 类型：归一化
+-- ---------------------------------------------------------------
+data Ty : Type where
+  TVar : Int -> Ty
+  TCon : String -> Ty
+  TApp : Ty -> List Ty -> Ty
+  TArr : Ty -> Ty -> Ty
+  TWild : Ty
+
+record NormState where
+  normNext : Int
+  normEnv : List (Pair String Int)
+
+normNext : NormState -> Int
+normNext (NormState n env) = n
+
+normEnv : NormState -> List (Pair String Int)
+normEnv (NormState n env) = env
+
+lookupVar : String -> List (Pair String Int) -> Maybe Int
+lookupVar name [] = Nothing
+lookupVar name ((Pair k v) :: rest) = if k == name then Just v else lookupVar name rest
+
+allocNamed : String -> NormState -> Pair NormState Int
+allocNamed name st =
+  Pair (NormState (normNext st + 1) (Pair name (normNext st) :: normEnv st)) (normNext st)
+
+bindVar : String -> Int -> NormState -> NormState
+bindVar name id st = NormState (normNext st) (Pair name id :: normEnv st)
+
+typeNameMap : Index -> List (Pair String String)
+typeNameMap index =
+  let
+    types = filter isTypeSym index.indexSymbols
+    entries = map (\s => Pair (symName s) (symModule s ++ "." ++ symName s)) types
+  in filter (\p => countShort (firstOf p) entries == 1) entries
+
+isTypeSym : Sym -> Bool
+isTypeSym s = symKind s == "data" || symKind s == "record" || symKind s == "trait"
+
+countShort : String -> List (Pair String String) -> Int
+countShort name entries = toInt (length (filter (\p => firstOf p == name) entries))
+
+canonName : List (Pair String String) -> String -> String
+canonName names name = case lookupName name names of
+  Just full => full
+  Nothing => name
+
+lookupName : String -> List (Pair String String) -> Maybe String
+lookupName name [] = Nothing
+lookupName name ((Pair k v) :: rest) = if k == name then Just v else lookupName name rest
+
+isVarName : String -> Bool
+isVarName name = case strUnpack name of
+  c :: rest => c >= 97 && c <= 122
+  [] => False
+
+normExpr : List (Pair String String) -> NormState -> Expr -> Pair NormState (Maybe Ty)
+normExpr names st (EVar name sp) = if name == "_" then Pair st (Just TWild)
+else case lookupVar name (normEnv st) of
+  Just id => Pair st (Just (TVar id))
+  Nothing => if isVarName name then
+    let
+      paired = allocNamed name st
+    in Pair (firstOf paired) (Just (TVar (secondOf paired)))
+  else Pair st (Just (TCon (canonName names name)))
+normExpr names st (EParen inner sp) = normExpr names st inner
+normExpr names st (EApp f args sp) =
+  let
+    pf = normExpr names st f
+  in case secondOf pf of
+    Nothing => Pair (firstOf pf) Nothing
+    Just tf =>
+      let
+        pargs = normExprs names (firstOf pf) args
+      in case secondOf pargs of
+        Nothing => Pair (firstOf pargs) Nothing
+        Just targs => if tfIsArrow tf && length targs == 2 then case targs of
+          [ta, tb] => Pair (firstOf pargs) (Just (TArr ta tb))
+          _ => Pair (firstOf pargs) (Just (TApp tf targs))
+        else Pair (firstOf pargs) (Just (TApp tf targs))
+normExpr names st (EPi name implicit _ dom cod sp) = if implicit then
+  let
+    id = normNext st
+    st2 = bindVar name id st
+    pc = normExpr names st2 cod
+  in Pair (firstOf pc) (secondOf pc)
+else
+  let
+    pd = normExpr names st dom
+    id = normNext (firstOf pd)
+    st2 = bindVar name id (firstOf pd)
+    pc = normExpr names st2 cod
+  in case secondOf pd of
+    Nothing => Pair (firstOf pc) Nothing
+    Just td => case secondOf pc of
+      Nothing => Pair (firstOf pc) Nothing
+      Just tc => Pair (firstOf pc) (Just (TArr td tc))
+normExpr names st (EInfix op l r sp) = if op == "->" then
+  let
+    pl = normExpr names st l
+    pr = normExpr names (firstOf pl) r
+  in case secondOf pl of
+    Nothing => Pair (firstOf pr) Nothing
+    Just tl => case secondOf pr of
+      Nothing => Pair (firstOf pr) Nothing
+      Just tr => Pair (firstOf pr) (Just (TArr tl tr))
+else
+  let
+    pl = normExpr names st l
+    pr = normExpr names (firstOf pl) r
+  in case secondOf pl of
+    Nothing => Pair (firstOf pr) Nothing
+    Just tl => case secondOf pr of
+      Nothing => Pair (firstOf pr) Nothing
+      Just tr => Pair (firstOf pr) (Just (TApp (TCon op) [tl, tr]))
+normExpr names st (EBacktick nm l r sp) =
+  let
+    pl = normExpr names st l
+    pr = normExpr names (firstOf pl) r
+  in case secondOf pl of
+    Nothing => Pair (firstOf pr) Nothing
+    Just tl => case secondOf pr of
+      Nothing => Pair (firstOf pr) Nothing
+      Just tr => Pair (firstOf pr) (Just (TApp (TCon nm) [tl, tr]))
+normExpr names st (EInt n sp) = Pair st (Just (TCon (strFromInt n)))
+normExpr names st (EStr s sp) = Pair st (Just (TCon s))
+normExpr names st _ = Pair st Nothing
+
+tfIsArrow : Ty -> Bool
+tfIsArrow (TCon "->") = True
+tfIsArrow _ = False
+
+normExprs : List (Pair String String) -> NormState -> List Expr -> Pair NormState (Maybe (List Ty))
+normExprs names st [] = Pair st (Just [])
+normExprs names st (e :: rest) =
+  let
+    pe = normExpr names st e
+  in case secondOf pe of
+    Nothing => Pair (firstOf pe) Nothing
+    Just te =>
+      let
+        pr = normExprs names (firstOf pe) rest
+      in case secondOf pr of
+        Nothing => Pair (firstOf pr) Nothing
+        Just ts => Pair (firstOf pr) (Just (te :: ts))
+
+schemeOf : List (Pair String String) -> Expr -> Maybe Ty
+schemeOf names e = secondOf (normExpr names (NormState 0 []) e)
+
+-- ---------------------------------------------------------------
+-- 类型：匹配
+-- ---------------------------------------------------------------
+record Subst where
+  substList : List (Pair Int Ty)
+
+substList : Subst -> List (Pair Int Ty)
+substList (Subst xs) = xs
+
+lookupSubst : Int -> List (Pair Int Ty) -> Maybe Ty
+lookupSubst id [] = Nothing
+lookupSubst id ((Pair k v) :: rest) = if k == id then Just v else lookupSubst id rest
+
+bindSubst : Int -> Ty -> Subst -> Subst
+bindSubst id ty (Subst xs) = Subst (Pair id ty :: xs)
+
+record AlphaState where
+  alphaEnv : List (Pair Int Int)
+  alphaNext : Int
+
+alphaEnv : AlphaState -> List (Pair Int Int)
+alphaEnv (AlphaState env next) = env
+
+alphaNext : AlphaState -> Int
+alphaNext (AlphaState env next) = next
+
+lookupInt : Int -> List (Pair Int Int) -> Maybe Int
+lookupInt id [] = Nothing
+lookupInt id ((Pair k v) :: rest) = if k == id then Just v else lookupInt id rest
+
+alphaKey : Ty -> String
+alphaKey ty = firstOf (alphaGo ty (AlphaState [] 0))
+
+alphaGo : Ty -> AlphaState -> Pair String AlphaState
+alphaGo (TVar id) st = case lookupInt id (alphaEnv st) of
+  Just idx => Pair ("$" ++ strFromInt idx) st
+  Nothing =>
+    Pair ("$" ++ strFromInt (alphaNext st))
+      (AlphaState (Pair id (alphaNext st) :: alphaEnv st) (alphaNext st + 1))
+alphaGo TWild st = Pair "_" st
+alphaGo (TCon name) st = Pair name st
+alphaGo (TApp f args) st =
+  let
+    pf = alphaGo f st
+    pArgs = alphaArgs args (secondOf pf)
+  in Pair ("(" ++ firstOf pf ++ " " ++ firstOf pArgs ++ ")") (secondOf pArgs)
+alphaGo (TArr a b) st =
+  let
+    pa = alphaGo a st
+    pb = alphaGo b (secondOf pa)
+  in Pair ("(" ++ firstOf pa ++ "->" ++ firstOf pb ++ ")") (secondOf pb)
+
+alphaArgs : List Ty -> AlphaState -> Pair String AlphaState
+alphaArgs [] st = Pair "" st
+alphaArgs (x :: rest) st =
+  let
+    px = alphaGo x st
+    pr = alphaArgs rest (secondOf px)
+  in Pair (" " ++ firstOf px ++ firstOf pr) (secondOf pr)
+
+alphaEqual : Ty -> Ty -> Bool
+alphaEqual a b = alphaKey a == alphaKey b
+
+resultType : Ty -> Ty
+resultType (TArr a b) = resultType b
+resultType ty = ty
+
+headKey : Ty -> Pair String Int
+headKey (TCon name) = Pair name 0
+headKey (TApp f args) = case f of
+  TCon name => Pair name (toInt (length args))
+  _ => Pair "?" 0
+headKey (TArr a b) = Pair "->" 2
+headKey _ = Pair "?" 0
+
+overlap : Ty -> Ty -> Bool
+overlap a b =
+  let
+    ha = headKey a
+    hb = headKey b
+  in firstOf ha == firstOf hb && secondOf ha == secondOf hb
+
+typeScore : Ty -> Ty -> Pair Int String
+typeScore query sig = if alphaEqual query sig then Pair 90 "alpha"
+else case unifyFlex 100 (Subst []) query sig of
+  Just _ => Pair 80 "general"
+  Nothing => case unifyFlex 100 (Subst []) sig query of
+    Just _ => Pair 70 "specific"
+    Nothing => case unifyFlex 100 (Subst []) query (resultType sig) of
+      Just _ => Pair 50 "result"
+      Nothing => if overlap query (resultType sig) then Pair 20 "overlap" else Pair 0 ""
+
+-- ---------------------------------------------------------------
+-- 类型检索
+-- ---------------------------------------------------------------
+parseQuery : String -> Result Expr
+parseQuery query = case parseSource "<type-query>" ("q : " ++ query) of
+  Err e => Err e
+  Ok (SourceFile hdr imports fx decls) => case decls of
+    (DSig name ctx ty sp) :: rest => Ok ty
+    _ => Err "type query is not a signature"
+
+parseSymType : List (Pair String String) -> Sym -> Maybe Ty
+parseSymType names s = case parseExpressionSource (symType s) of
+  Err e => Nothing
+  Ok e => schemeOf names e
+
+searchType : Index -> String -> Result (List SearchHit)
+searchType index query = case parseQuery query of
+  Err e => Err ("cannot parse type query: " ++ e)
+  Ok queryExpr =>
+    let
+      names = typeNameMap index
+    in case schemeOf names queryExpr of
+      Nothing => Err "cannot normalize type query"
+      Just queryTy =>
+        let
+          syms = filter (\s => symType s /= "" && not (privateSym s)) index.indexSymbols
+          hits = map (typeHit names query queryTy) syms
+        in Ok (sortHits (filter (\h => hitScore h > 0) hits))
+
+typeHit : List (Pair String String) -> String -> Ty -> Sym -> SearchHit
+typeHit names query queryTy s = case parseSymType names s of
+  Nothing => SearchHit (symName s) (symModule s) (symKind s) (symSig s) (symDoc s) (symLine s) 0 ""
+  Just sigTy =>
+    let
+      scored = typeScore queryTy sigTy
+      exactBonus = if symType s == query then 100 else 0
+    in SearchHit (symName s) (symModule s) (symKind s) (symSig s) (symDoc s) (symLine s)
+      (firstOf scored + exactBonus) (secondOf scored)
+
+unifyFlex : Int -> Subst -> Ty -> Ty -> Maybe Subst
+unifyFlex fuel s a b = if fuel <= 0 then Nothing
+else case a of
+  TWild => Just s
+  TVar i => case lookupSubst i (substList s) of
+    Just bound => unifyFlex (fuel - 1) s bound b
+    Nothing => Just (bindSubst i b s)
+  TCon x => case b of
+    TCon y => if x == y then Just s else Nothing
+    _ => case b of
+      TWild => Just s
+      _ => Nothing
+  TApp f args => case b of
+    TApp g args2 => if length args == length args2 then case unifyFlex (fuel - 1) s f g of
+      Nothing => Nothing
+      Just s2 => unifyFlexList (fuel - 1) s2 args args2
+    else Nothing
+    TWild => Just s
+    _ => Nothing
+  TArr x y => case b of
+    TArr c d => case unifyFlex (fuel - 1) s x c of
+      Nothing => Nothing
+      Just s2 => unifyFlex (fuel - 1) s2 y d
+    TWild => Just s
+    _ => Nothing
+
+unifyFlexList : Int -> Subst -> List Ty -> List Ty -> Maybe Subst
+unifyFlexList fuel s [] [] = if fuel <= 0 then Nothing else Just s
+unifyFlexList fuel s (x :: xs) (y :: ys) = if fuel <= 0 then Nothing
+else case unifyFlex (fuel - 1) s x y of
+  Nothing => Nothing
+  Just s2 => unifyFlexList (fuel - 1) s2 xs ys
+unifyFlexList fuel s _ _ = Nothing

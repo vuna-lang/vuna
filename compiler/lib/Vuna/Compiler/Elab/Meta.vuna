@@ -13,6 +13,7 @@ module Vuna.Compiler.Elab.Meta
   , ctorFamilyTable
   , ctorGlobals
   , ctorRefTerm
+  , ctxHasLinear
   , dataNamesOf
   , dictCtorName
   , dictTypeName
@@ -38,11 +39,14 @@ module Vuna.Compiler.Elab.Meta
   , hasOutOfScopeVarArgs
   , inferCtorRef
   , instantiateNullaryCtor
+  , isBlanketInst
+  , isBlanketInstHead
   , isBoolGlobal
   , isBoolType
   , isDataHead
   , isImplicitDomain
   , isIndexDomain
+  , isLinearType
   , isSortVal
   , isTypeDomain
   , isTypeLayerValue
@@ -64,11 +68,16 @@ module Vuna.Compiler.Elab.Meta
   , prependFamParams
   , relevantMetas
   , resultSpine
+  , rigCaseField
+  , rigForLinearDomain
+  , rigOfLinearValue
+  , rigOfQty
   , spineOfType
   , splitKind
   , substClassParam
   , teleOf
   , teleOfType
+  , termHasOuterLinear
   , termMetasAll
   , termMetasRuntime
   , typeLookup
@@ -281,8 +290,9 @@ collectSigsInto banned preludeBanned seen acc (d :: rest) = case d of
   DAxiom name ty sp => collectSigOne banned preludeBanned seen acc name [] ty sp rest
   DExtern name cName ty sp => collectSigOne banned preludeBanned seen acc name [] ty sp rest
   DFun name pats body sp => collectSigsInto banned preludeBanned seen acc rest
-  DData name params kind ctors derivings sp => collectSigsInto banned preludeBanned seen acc rest
-  DRecord name params fields derivings sp => errAt sp "DT: internal: record was not desugared"
+  DData name params kind ctors derivings lin sp =>
+    collectSigsInto banned preludeBanned seen acc rest
+  DRecord name params fields derivings lin sp => errAt sp "DT: internal: record was not desugared"
   DTrait name params methods sp => collectSigsInto banned preludeBanned seen acc rest
   DInstance ctxE head methods sp => collectSigsInto banned preludeBanned seen acc rest
 
@@ -299,14 +309,14 @@ collectSigOne banned preludeBanned seen acc name ctx ty sp rest =
 collectDataDecls : List Decl -> List (Pair Decl Span) -> List (Pair Decl Span)
 collectDataDecls [] acc = reverse acc
 collectDataDecls (d :: rest) acc = case d of
-  DData dname params kind ctors derivings sp => collectDataDecls rest (Pair d sp :: acc)
+  DData dname params kind ctors derivings lin sp => collectDataDecls rest (Pair d sp :: acc)
   _ => collectDataDecls rest acc
 
 -- 绑到实际族上。
 dataNamesOf : List Decl -> List String
 dataNamesOf [] = []
 dataNamesOf (d :: rest) = case d of
-  DData dname params kind ctors derivings sp => dname :: dataNamesOf rest
+  DData dname params kind ctors derivings lin sp => dname :: dataNamesOf rest
   _ => dataNamesOf rest
 
 nonEmpty : List a -> Bool
@@ -332,10 +342,9 @@ kindDomainWellFormed (TType l) = levelToInt l >= 0
 kindDomainWellFormed (TPi _ _ _ d c) = kindDomainWellFormed d && kindDomainWellFormed c
 kindDomainWellFormed _ = True
 
--- 族的参数/索引 telescope：binder 名 + 是否擦除（域是宇宙）。
+-- 族的参数/索引 telescope：binder 名 + 声明的 Rig（M38：直接用 TPi 携带的量，不重算）。
 splitKind : Term -> List (Pair String Rig)
-splitKind (TPi name implicit _ dom cod) =
-  Pair name (binderRig implicit (eval [] dom)) :: splitKind cod
+splitKind (TPi name implicit rig dom cod) = Pair name rig :: splitKind cod
 splitKind _ = []
 
 dtDataLookup : String -> List DtData -> Maybe DtData
@@ -413,9 +422,7 @@ teleOfType ty = teleOf ty []
 teleOf : Term -> List Value -> List (Pair String Rig)
 teleOf (TPi name implicit rig dom cod) env =
   let
-    domVal = eval env dom
     v = VNeutral (NVar name (length env) [])
-    rig = binderRig implicit domVal
   in Pair name rig :: teleOf cod (v :: env)
 teleOf _ env = []
 
@@ -499,7 +506,7 @@ hasOutOfScopeVarAlts ((CaseAlt n bs b) :: rest) = hasOutOfScopeVar b || hasOutOf
 -- 族的 kind 里的参数个数，补成隐式 `EPi`。
 prependFamParams : Term -> Expr -> Span -> Expr
 prependFamParams (TPi n implicit rigB dom cod) tyExpr sp =
-  EPi n True (EVar "Type" sp) (prependFamParams cod tyExpr sp) sp
+  EPi n True Nothing (EVar "Type" sp) (prependFamParams cod tyExpr sp) sp
 prependFamParams _ tyExpr sp = tyExpr
 
 -- 剥掉外层 Pi（`resultSpine` 需要看返回类型）。
@@ -584,7 +591,7 @@ fieldBinderGo n i acc = fieldBinderGoGo (n - i) n acc
 fieldBinderGoGo : Int -> Int -> List (Pair String Rig) -> List (Pair String Rig)
 fieldBinderGoGo remaining n acc =
   if remaining <= 0 then reverse acc
-  else fieldBinderGoGo (remaining - 1) n (Pair (fieldVarName (n - remaining)) Rig1 :: acc)
+  else fieldBinderGoGo (remaining - 1) n (Pair (fieldVarName (n - remaining)) RigOmega :: acc)
 
 -- M24.7：按**短名**查类（库里的类名带模块前缀，如 `Base.Eq.Eq`；`==` / `<` 的字典
 -- 查找从 `ecClasses` 按最后一段反查，找不到时调用方退回泛型运行时兜底）。
@@ -592,6 +599,21 @@ findClassByShortName : String -> List DtClass -> Maybe DtClass
 findClassByShortName short [] = Nothing
 findClassByShortName short (c :: rest) =
   if baseNameOf (dtClassName c) == short then Just c else findClassByShortName short rest
+
+-- M36：blanket 实例（fallback 实例）判定——头是 `Dict_C x`，且 `x` 是本实例自己的
+-- **裸 tele 变量**（例如 `instance Show a => Interp a`）。`n` 是 tele 长度，head 在该
+-- n 个 binder 之下，所以合法索引是 0..n-1。
+--
+-- 用途分两处消费：`Elab/InstCoherence`（coherence：blanket 与具体实例可共存）与
+-- `Elab/Dict`（实例搜索：具体实例优先、blanket 兜底）。
+isBlanketInstHead : Int -> Term -> Bool
+isBlanketInstHead n head = if n <= 0 then False
+else case head of
+  TApp (TGlobal dictName) (TVar vname i) rig => i >= 0 && i < n
+  _ => False
+
+isBlanketInst : DtInst -> Bool
+isBlanketInst (DtInst name tele ctx head) = isBlanketInstHead (length tele) head
 
 -- 把方法类型里对类参数的引用（de Bruijn 0）替换成实例头实参。
 -- 字段类型是在 `{a : Type}` 之下检查的闭合项，所以类参数恒为 index 0；
@@ -698,9 +720,10 @@ ctxItemAt i (x :: rest) = if i <= 0 then Just x else ctxItemAt (i - 1) rest
 -- ---------------------------------------------------------------
 -- 擦除判据（M18.5 起全仓唯一入口；M28 收成一个谓词）
 -- ---------------------------------------------------------------
--- 规则：**隐式 binder 恒擦除；显式 binder 当且仅当域在类型层时擦除**。索引
--- （`{n : Nat}` 这类隐式族索引、以及显式 `(n : Nat)`）按**显式标注**决定：写成隐式就擦除，
--- 写成显式就保留运行时表示（`vlen` 能读回来）。不做整程序使用分析。
+-- 规则：隐式 / 类型层 binder 擦除（rig 0）；显式 binder 按 quantity：`0` 擦除、`1`/ω 保留。
+-- 显式索引 `(n : Nat)` 未标注时是 ω（保留，`vlen` 能读回来）；写成隐式才擦除。
+-- M38 起 quantity 由 `rigOfQty` 决定；
+-- 用量检查在 `Elab.Usage`（精化后），这里只算擦除 rig。
 --
 -- `isTypeDomain` 是**唯一的域判据**：宇宙 `Type n`，或「每个域都是类型层的 Pi 链」
 -- （`Type -> Type` 这类高阶 kind）。判据必须递归：值层函数类型 `a -> b` 也是 Pi，但它的
@@ -714,6 +737,94 @@ isTypeDomain v = isTypeLayerValue v
 
 binderRig : Bool -> Value -> Rig
 binderRig implicit dom = rigOfBinder implicit (isTypeDomain dom)
+
+-- M38：源码 quantity → Rig（唯一映射；隐式/类型层域强制 0，标注由上层校验）。
+rigOfQty : Bool -> Bool -> Maybe Qty -> Rig
+rigOfQty implicit isTypeDom qty = if implicit || isTypeDom then Rig0
+else case qty of
+  Nothing => RigOmega
+  Just Q0 => Rig0
+  Just Q1 => Rig1
+
+-- M38：线性类型判定（结构保守）：线性族头，或非线性的类型应用带线性实参。
+isLinearType : Ec -> Value -> Bool
+isLinearType ec v = if ecHasLinear ec then isLinearTypeFuel 64 ec v else False
+
+isLinearTypeFuel : Int -> Ec -> Value -> Bool
+isLinearTypeFuel fuel ec v = if fuel <= 0 then False
+else case forceVal ec v of
+  VNeutral n => case n of
+    NGlobal g sp => dataLinearName ec g
+    NVar name lvl sp => False
+  VCon c args => ctorLinearName ec c
+  _ => False
+
+anyLinearVals : Int -> Ec -> List Value -> Bool
+anyLinearVals fuel ec [] = False
+anyLinearVals fuel ec (v :: rest) = isLinearTypeFuel fuel ec v || anyLinearVals fuel ec rest
+
+dataLinearName : Ec -> String -> Bool
+dataLinearName ec g = case dtDataLookup g (ecDatas ec) of
+  Just d => dtDataLinear d
+  Nothing => False
+
+ctorLinearName : Ec -> String -> Bool
+ctorLinearName ec c = case dtCtorLookupEc ec c of
+  Just ctor => dataLinearName ec (dtCtorFamily ctor)
+  Nothing => False
+
+-- M38：Pi 域若线性，binder 必须是 1；否则保留声明量。
+rigForLinearDomain : Ec -> Span -> String -> Rig -> Value -> Result Rig
+rigForLinearDomain ec sp name rig dom = if isLinearType ec dom then case rig of
+  Rig1 => Ok Rig1
+  _ => tcErr1 sp (LinearValueNeedsLinearBinder name) name
+else Ok rig
+
+-- case 分支字段：线性域强制 1（构造侧已经检查过；这里防御旧值/unsafe）。
+rigCaseField : Ec -> Value -> Rig -> Rig
+rigCaseField ec dom rig = if isLinearType ec dom then Rig1 else rig
+
+-- let 绑定：线性值必须按 1 绑定；其余默认 ω。
+rigOfLinearValue : Ec -> Value -> Rig
+rigOfLinearValue ec dom = if isLinearType ec dom then Rig1 else RigOmega
+
+-- 外层 context 是否含线性类型（决定是否需要对 λ body 做捕获扫描）。
+ctxHasLinear : Ec -> Ctx -> Bool
+ctxHasLinear ec (Ctx items refs) = ctxHasLinearItems ec (Ctx items refs) items 0
+
+ctxHasLinearItems : Ec -> Ctx -> List (Pair String Term) -> Int -> Bool
+ctxHasLinearItems ec ctx [] i = False
+ctxHasLinearItems ec ctx ((Pair name ty) :: rest) i =
+  isLinearType ec (varTypeValue ctx i ty) || ctxHasLinearItems ec ctx rest (i + 1)
+
+-- λ body 是否引用了外层（非本 λ binder）的线性值。ctx 传当前 binder 已入栈的上下文；
+-- 变量 index 与 ctx 的对应：depth 个内层 binder 之后，i > depth 才指向 ctx。
+termHasOuterLinear : Ec -> Ctx -> Term -> Bool
+termHasOuterLinear ec ctx t = outerScan ec ctx 0 t
+
+outerScan : Ec -> Ctx -> Int -> Term -> Bool
+outerScan ec ctx depth (TVar name i) = if i > depth then case ctxItemAt (i - depth) ctx.ctxItems of
+  Just (Pair n ty) => isLinearType ec (varTypeValue ctx (i - depth) ty)
+  Nothing => False
+else False
+outerScan ec ctx depth (TPi n i r dom cod) = False
+outerScan ec ctx depth (TLam n r b) = outerScan ec ctx (depth + 1) b
+outerScan ec ctx depth (TApp f a r) = outerScan ec ctx depth f || outerScan ec ctx depth a
+outerScan ec ctx depth (TCon c args) = outerScanArgs ec ctx depth args
+outerScan ec ctx depth (TCase s alts) = outerScan ec ctx depth s || outerScanAlts ec ctx depth alts
+outerScan ec ctx depth (TIf c th el) =
+  outerScan ec ctx depth c || outerScan ec ctx depth th || outerScan ec ctx depth el
+outerScan ec ctx depth t = False
+
+outerScanArgs : Ec -> Ctx -> Int -> List (Pair Term Rig) -> Bool
+outerScanArgs ec ctx depth [] = False
+outerScanArgs ec ctx depth ((Pair a r) :: rest) =
+  outerScan ec ctx depth a || outerScanArgs ec ctx depth rest
+
+outerScanAlts : Ec -> Ctx -> Int -> List CaseAlt -> Bool
+outerScanAlts ec ctx depth [] = False
+outerScanAlts ec ctx depth ((CaseAlt n bs b) :: rest) =
+  outerScan ec ctx (depth + natToInt (length bs)) b || outerScanAlts ec ctx depth rest
 
 isTypeLayerValue : Value -> Bool
 isTypeLayerValue v = isTypeLayerValueFuel 128 v
@@ -835,7 +946,7 @@ foldAppTerms fn ((Pair arg erased) :: rest) = foldAppTerms (TApp fn arg erased) 
 -- 运行时类型参数表与构造子 telescope 对不上）。record 降级生成的构造子类型用
 -- 匿名显式 `EPi "_" False` 写字段，因此仍要走 `prependFamParams`。
 hasFamParams : Expr -> Bool
-hasFamParams (EPi n implicit dom cod sp) = n /= "_"
+hasFamParams (EPi n implicit _ dom cod sp) = n /= "_"
 hasFamParams _ = False
 
 -- 模块限定名的最后一段（`Base.Monad.fmap` → `fmap`）。

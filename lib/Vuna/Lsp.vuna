@@ -153,7 +153,7 @@ textForUri uri st = case docLookup uri st.stateDocs of
 serverCapabilities : Json
 serverCapabilities =
   JObj
-    [Pair "textDocumentSync" (JObj [Pair "openClose" (JBool True), Pair "change" (JNum syncKindFull)]), Pair "completionProvider" (JObj [Pair "triggerCharacters" (JArr [JStr "."]), Pair "resolveProvider" (JBool False)]), Pair "definitionProvider" (JBool True), Pair "referencesProvider" (JBool True), Pair "documentSymbolProvider" (JBool True), Pair "documentFormattingProvider" (JBool True), Pair "workspaceSymbolProvider" (JBool True), Pair "hoverProvider" (JBool True), Pair "codeActionProvider" (JBool True)]
+    [Pair "textDocumentSync" (JObj [Pair "openClose" (JBool True), Pair "change" (JNum syncKindFull)]), Pair "completionProvider" (JObj [Pair "triggerCharacters" (JArr [JStr "."]), Pair "resolveProvider" (JBool False)]), Pair "definitionProvider" (JBool True), Pair "referencesProvider" (JBool True), Pair "documentSymbolProvider" (JBool True), Pair "documentFormattingProvider" (JBool True), Pair "workspaceSymbolProvider" (JBool True), Pair "hoverProvider" (JBool True), Pair "codeActionProvider" (JObj [Pair "codeActionKinds" (JArr [JStr "quickfix"])])]
 
 -- ---------------------------------------------------------------
 -- 请求分发
@@ -281,6 +281,31 @@ handleFormatting msg state =
     text = textForUri uri state
   in Pair False (Pair state [responseOk (idOf msg) (JArr (formattingEdits uri text))])
 
+-- ---------------------------------------------------------------
+-- codeAction（M38 P1c：lint quick fix）
+-- ---------------------------------------------------------------
+-- 请求 range 是 0-based；Query 侧用 1-based 行区间。`context.only` 是客户端想要的
+-- CodeActionKind 列表：本服务器只提供 quickfix，不含 quickfix 就回空数组。
+rangeLineOf : String -> Json -> Int
+rangeLineOf key params = fromMaybe 0 (jsonGetIn ["range", key, "line"] params >>= jsonAsInt)
+
+onlyAllowsQuickfix : Json -> Bool
+onlyAllowsQuickfix params = case jsonGetIn ["context", "only"] params >>= jsonAsArr of
+  Nothing => True
+  Just kinds => memName "quickfix" (mapMaybe jsonAsStr kinds)
+
+-- codeAction：当前缓冲 → lint finding 的 quick fix（纯查询，服务器状态不变）。
+handleCodeAction : Json -> LspState -> Pair Bool (Pair LspState (List Json))
+handleCodeAction msg state =
+  let
+    params = paramsOf msg
+    uri = uriOfParams params
+    text = textForUri uri state
+    startLine = rangeLineOf "start" params + 1
+    endLine = rangeLineOf "end" params + 1
+    actions = if onlyAllowsQuickfix params then codeActionsFor uri text startLine endLine else []
+  in Pair False (Pair state [responseOk (idOf msg) (JArr actions)])
+
 -- documentSymbol：当前缓冲的 AST 声明树（不要求磁盘上存在）。
 handleDocumentSymbol : Json -> LspState -> Pair Bool (Pair LspState (List Json))
 handleDocumentSymbol msg state =
@@ -367,8 +392,7 @@ dispatch "textDocument/definition" msg state = handleDefinition msg state
 dispatch "textDocument/references" msg state = handleReferences msg state
 dispatch "textDocument/documentSymbol" msg state = handleDocumentSymbol msg state
 dispatch "textDocument/formatting" msg state = handleFormatting msg state
-dispatch "textDocument/codeAction" msg state =
-  Pair False (Pair state [responseOk (idOf msg) (JArr [])])
+dispatch "textDocument/codeAction" msg state = handleCodeAction msg state
 dispatch "workspace/symbol" msg state = handleWorkspaceSymbol msg state
 -- 客户端能力注册（vscode-languageclient 的 fileEvents 等）：服务器不消费这些注册，
 -- 但必须回成功，否则客户端会把「注册失败」当成错误刷日志。

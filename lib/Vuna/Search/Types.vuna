@@ -1,0 +1,51 @@
+module Vuna.Search.Types
+  ( SearchHit(..)
+  , hitDoc
+  , hitKind
+  , hitLine
+  , hitMatch
+  , hitModule
+  , hitName
+  , hitScore
+  , hitSignature
+  ) where
+
+-- Vuna.Search.Types：检索结果的数据模型（工具链；永不进 seed 闭包）。
+import Vuna.Compiler.Common
+
+record SearchHit where
+  hitName : String
+  hitModule : String
+  hitKind : String
+  hitSignature : String
+  hitDoc : String
+  hitLine : Int
+  hitScore : Int
+  hitMatch : String
+
+hitName : SearchHit -> String
+hitName (SearchHit name mod kind sig doc line score match) = name
+
+hitModule : SearchHit -> String
+hitModule (SearchHit name mod kind sig doc line score match) = mod
+
+hitKind : SearchHit -> String
+hitKind (SearchHit name mod kind sig doc line score match) = kind
+
+hitSignature : SearchHit -> String
+hitSignature (SearchHit name mod kind sig doc line score match) = sig
+
+hitDoc : SearchHit -> String
+hitDoc (SearchHit name mod kind sig doc line score match) = doc
+
+hitLine : SearchHit -> Int
+hitLine (SearchHit name mod kind sig doc line score match) = line
+
+hitScore : SearchHit -> Int
+hitScore (SearchHit name mod kind sig doc line score match) = score
+
+hitMatch : SearchHit -> String
+hitMatch (SearchHit name mod kind sig doc line score match) = match
+
+hitFullName : SearchHit -> String
+hitFullName h = hitModule h ++ "." ++ hitName h

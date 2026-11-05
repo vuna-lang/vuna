@@ -38,8 +38,8 @@ stage 0 / stage 1 / 产品 CLI；`checks.seed-selfhost` 守整条链。
 种子（`seed/`）**提交入库**，是构建输入而不是构建产物。种子是**多文件文件集**：每个 vuna
 模块对应一个 OCaml 模块（`.ml`），外加共享 runtime 模块与 `build.sh`。种子**只覆盖 compiler
 包**（`compiler/app/Main.vuna` 的 import 闭包）：工具链（fmt/lint/repl/doc/test/lsp）由
-编译器编译出来，不在信任锚点里。当前入库 `seed/` 为 **75 个 `.ml` / 76 个文件**
-（`nix/seed-count.txt` = 75）。唯一的硬性不变量：
+编译器编译出来，不在信任锚点里。当前入库 `seed/` 为 **79 个 `.ml` / 80 个文件**
+（`nix/seed-count.txt` = 79）。唯一的硬性不变量：
 
 > **当前入库的种子必须能编译当前的 vuna 源码，且与当前源码的生成结果同步。**
 
@@ -98,10 +98,12 @@ fixed point → 全部通过后才替换 `seed/`，因此中间失败不会破�
 - 包在 `vuna.toml` 的 `[capabilities] effects` 里声明 `console` / `fs` / `process` / `env` /
   `clock` / `unsafe` 的任意子集（合法名与放行判定在 `Vuna.Compiler.Intrinsics` +
   `Loader.Resolve.checkEffectsBuiltins`；未知 / 重复能力名直接报错）；
-- 效果原语只有 `prim_*` 名并返回 `IO` 动作（M31）；每个内建的能力位、签名与 runtime 名同源在
-  `Vuna.Compiler.Intrinsics`。未声明能力的包只能经 `Base.IO` 使用效果；
+- 效果原语只有 `prim_*` 名并返回 `IO` 动作（M31）；`IO` 是内建效应类型（M37，无构造器），
+  每个内建的能力位、签名与 runtime 名同源在 `Vuna.Compiler.Intrinsics`。未声明能力的包
+  只能经 `Base.IO` 使用效果；声明了能力的包可直接用 `prim_*`（不需要 import `Base.IO`）；
 - 仓库内三个包的能力声明见各自 `vuna.toml`：根包与 `vuna-compiler` 五个能力，`vuna-base`
-  只声明 `console` / `fs` / `process`（`Base.IO` 的封装面）；`test/corpus` 与夹具 manifest
+  声明 `console` / `fs` / `process`（`Base.IO` 的封装面）+ `unsafe`（`Base.IO.runIO` 与
+  `Base.ST.runST` 的信任点）；`test/corpus` 与夹具 manifest
   不声明能力，只能经 `Base.IO`；
 - 能力随包上下文传递（`PackageContext` / `Root` / `Module` / `Project`），无 manifest 的
   ad-hoc 文件没有能力；

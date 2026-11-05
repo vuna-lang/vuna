@@ -2,8 +2,8 @@
 
 本文是编译器内部实现参考：Core 类型论的表示、NbE / 定义性相等、双向精化器的规则、
 擦除与 case 可达性的实现，以及 codegen 侧的护栏。**用户可见的类型规则**见
-[type-system.md](type-system.md)；模块职责与输出模型见 [compiler.md](compiler.md)；
-当前边界见 [limits.md](limits.md)。
+[type-system.md](type-system.md)（quantity/线性见 [qtt.md](qtt.md)）；模块职责与输出模型见
+[compiler.md](compiler.md)；当前边界见 [limits.md](limits.md)。
 
 ## 1. Core 表示
 
@@ -92,10 +92,10 @@ data Term where
 
 ## 5. 擦除
 
-- **唯一判据链**：`Elab.Meta.isTypeDomain`（域在类型层？）→ `binderRig`（构造 `Rig`）→
-  `Core.rigIsErased`（读取）。隐式 binder 恒 `Rig0`（**例外**：M32 为 trait 约束生成的隐式字典 binder 是 `Rig1`）；显式 binder 仅当域在类型层
-  （宇宙，或域全为类型层的 Pi 链）才 `Rig0`；显式索引 `(n : Nat)` 是 `Rig1`，保留运行时
-  字段。**不做整程序使用分析**：索引擦除策略 = 写成隐式 binder。
+- **唯一判据链**：quantity → `Rig`（`rigOfQty`）→ `Core.rigIsErased`（读取）。隐式 / 类型层 binder 恒 `Rig0`；
+  显式 `(0 x : A)` 是 0、`(1 x : A)` 是 1、未标注显式 binder 是 ω；线性类型域强制 1。
+  擦除仍只看 `Rig0`（0 与 1 都产生运行时字段，1 额外受恰好一次检查）；
+  `Elab.Usage` 在精化后做整程序用量检查，不改变擦除判据。
 - 精化器产出的项，其 lambda 链元数必须与该类型的 Pi 链逐 binder 对齐，`Rig0` 位置两侧
   都跳过；trait 投影 / 方法调用共用同一份 rigs（`methodArgRigsOf` / `methodArgLams`）。
 - 擦除检查在 `check` 与 `compile` 都跑：运行时位置引用被擦除绑定 / 类型级定义 / `TPi`

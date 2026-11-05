@@ -21,6 +21,7 @@ module Vuna.Compiler.Frontend.Ast
   , EIf
   , EInfix
   , EInt
+  , EInterp
   , ELam
   , ELet
   , ELocalFun
@@ -37,7 +38,10 @@ module Vuna.Compiler.Frontend.Ast
   , Expr
   , Field(..)
   , FixityDecl(..)
+  , IPHole
+  , IPText
   , Import(..)
+  , InterpPart
   , ModDecl(..)
   , PAs
   , PCon
@@ -47,6 +51,7 @@ module Vuna.Compiler.Frontend.Ast
   , PVar
   , PWild
   , Pat
+  , Qty(..)
   , SourceFile(..)
   , TraitMethod(..)
   , XBare
@@ -71,6 +76,7 @@ module Vuna.Compiler.Frontend.Ast
   , fixitySpan
   , funArity
   , patSpan
+  , qtyIsZero
   , topNames
   , traitMethodName
   , traitMethodSpan
@@ -103,6 +109,20 @@ data Pat : Type where
   PStr : String -> Span -> Pat
   PRecord : String -> List (Pair String Pat) -> Span -> Pat
 
+data InterpPart : Type where
+  IPText : String -> InterpPart
+  IPHole : Expr -> InterpPart
+
+-- M38：显式 binder quantity。源码写法 `(0 x : A)` / `(1 x : A)`；不写 = ω。
+-- 只列可写出的两档；`RigOmega` 由「没有 Qty」表示，不引入 ω 字形。
+data Qty : Type where
+  Q0 : Qty
+  Q1 : Qty
+
+qtyIsZero : Qty -> Bool
+qtyIsZero Q0 = True
+qtyIsZero Q1 = False
+
 data Expr : Type where
   EVar : String -> Span -> Expr
   EInt : Int -> Span -> Expr
@@ -110,8 +130,9 @@ data Expr : Type where
   ELam : List String -> Expr -> Span -> Expr
   EApp : Expr -> List Expr -> Span -> Expr
   -- DT（M13）命名 Pi：`(x : A) -> B` 与隐式 `{x : A} -> B`。
-  -- 匿名 `A -> B` 仍沿用 `EApp (EVar "->") [A, B]` 编码（既有路径零改动）。
-  EPi : String -> Bool -> Expr -> Expr -> Span -> Expr
+  -- M38：第三个字段是显式 quantity（`Nothing` = 默认 ω）。
+  -- 匿名 `A -> B` 仍沿用 `EApp (EVar "->") [A, B]` 编码（默认 ω）。
+  EPi : String -> Bool -> Maybe Qty -> Expr -> Expr -> Span -> Expr
   ELet : List (Pair Pat Expr) -> Expr -> Bool -> Span -> Expr
   -- A2：局部函数组（where/let 内的多 clause 函数）。
   -- 只作为 `ELet` 绑定值出现：每个 clause 是「参数模式列表 + body」。
@@ -140,6 +161,10 @@ data Expr : Type where
   -- 绑定到随后的 `g ... = ...` 子句），Elab 精化时据此把 where 组按签名递归提升；
   -- 普通表达式位置不产生它，Fmt 在非 where 位置把它当透明括号渲染。
   EAnn : Expr -> Expr -> Span -> Expr
+  -- M36：模板字符串字面量。`multi` = 是否 `"""` 形式（Fmt 用它保留书写形式；单行
+  -- 字面量保持单行转义形式）。`Loader.Resolve` 把它降级成 `Base.Interp.interp`
+  -- 调用 + `++` 链；Fmt / Lint / Index / Doc 在 parse 后处理它。
+  EInterp : Bool -> List InterpPart -> Span -> Expr
 
 -- M31.2：fixity / 别名声明（`infixl 6 +`、`infixr 5 :: = Cons`、`infix 4 == = eq`）。
 -- 只进入 `SourceFile.fixities`，由 Loader 在中缀重排时消费；**不进入 `Decl`**，避免所有
@@ -167,7 +192,8 @@ record Ctor where
 
 data Decl : Type where
   -- M14：`data Name params : kind where`；kind 是索引族的类型表达式（HM 路径只接受 `Type`）。
-  DData : String -> List String -> Expr -> List Ctor -> List String -> Span -> Decl
+  -- M38：末位 `Bool` 是 `lin data` 标记。
+  DData : String -> List String -> Expr -> List Ctor -> List String -> Bool -> Span -> Decl
   -- M28：`axiom name : Ty` —— 无体的可擦除/不透明顶层（决策 5 / D10）。
   -- 它是**类型层**定义：类型层引用合法，运行时使用由擦除检查报错。
   DAxiom : String -> Expr -> Span -> Decl
@@ -177,7 +203,8 @@ data Decl : Type where
   -- （洞形 `C arg`，每个都是单参数 trait 应用）。空 ctx = 无显式约束（旧形态）。
   DSig : String -> List Expr -> Expr -> Span -> Decl
   DFun : String -> List Pat -> Expr -> Span -> Decl
-  DRecord : String -> List String -> List Field -> List String -> Span -> Decl
+  -- M38：末位 `Bool` 是 `lin record` 标记（降级成 DData 时透传）。
+  DRecord : String -> List String -> List Field -> List String -> Bool -> Span -> Decl
   DTrait : String -> List String -> List TraitMethod -> Span -> Decl
   DInstance : List Expr -> Expr -> List Decl -> Span -> Decl
 
@@ -224,7 +251,7 @@ exprSpan (EInt n sp) = sp
 exprSpan (EStr s sp) = sp
 exprSpan (ELam ps body sp) = sp
 exprSpan (EApp fn args sp) = sp
-exprSpan (EPi name implicit dom cod sp) = sp
+exprSpan (EPi name implicit qty dom cod sp) = sp
 exprSpan (ELet binds body _ sp) = sp
 exprSpan (ELocalFun clauses sp) = sp
 exprSpan (ECase scrut alts sp) = sp
@@ -234,6 +261,7 @@ exprSpan (ERecord name fields sp) = sp
 exprSpan (ERecUpdate base fields sp) = sp
 exprSpan (EDo stmts sp) = sp
 exprSpan (EAnn inner ty sp) = sp
+exprSpan (EInterp multi parts sp) = sp
 
 doStmtSpan : DoStmt -> Span
 doStmtSpan (DBind pat expr sp) = sp
@@ -244,12 +272,12 @@ doStmtExpr (DBind pat expr sp) = expr
 doStmtExpr (DExpr expr sp) = expr
 
 declSpan : Decl -> Span
-declSpan (DData name params kind ctors derivings sp) = sp
+declSpan (DData name params kind ctors derivings lin sp) = sp
 declSpan (DAxiom name ty sp) = sp
 declSpan (DExtern name cName ty sp) = sp
 declSpan (DSig name ctx ty sp) = sp
 declSpan (DFun name pats body sp) = sp
-declSpan (DRecord name params fields derivings sp) = sp
+declSpan (DRecord name params fields derivings lin sp) = sp
 declSpan (DTrait name params methods sp) = sp
 declSpan (DInstance ctxE head methods sp) = sp
 
@@ -315,10 +343,10 @@ lookupCtorArity name (c :: rest) =
 ctorArity : String -> List Decl -> Maybe Int
 ctorArity name [] = Nothing
 ctorArity name (d :: rest) = case d of
-  DData dname params kind ctors derivings sp => case lookupCtorArity name ctors of
+  DData dname params kind ctors derivings lin sp => case lookupCtorArity name ctors of
     Just arity => Just arity
     Nothing => ctorArity name rest
-  DRecord dname params fields derivings sp =>
+  DRecord dname params fields derivings lin sp =>
     if name == dname then Just (natToInt (length fields)) else ctorArity name rest
   _ => ctorArity name rest
 
@@ -327,8 +355,8 @@ declNames (DFun name pats body _) = [name]
 declNames (DAxiom name ty _) = [name]
 declNames (DExtern name cName ty _) = [name]
 declNames (DSig name ctx ty _) = [name]
-declNames (DData dname params kind ctors derivings _) = map ctorName ctors
-declNames (DRecord dname params fields derivings _) = [dname]
+declNames (DData dname params kind ctors derivings lin _) = map ctorName ctors
+declNames (DRecord dname params fields derivings lin _) = [dname]
 declNames (DTrait tname params methods _) = map traitMethodName methods
 declNames (DInstance ctxE head methods _) = []
 
@@ -339,14 +367,14 @@ topNames : List Decl -> List String
 topNames decls = concatMap declNames decls
 
 declAllNames : Decl -> List String
-declAllNames (DData dname params kind ctors derivings _) = dname :: map ctorName ctors
-declAllNames (DRecord dname params fields derivings _) = [dname]
+declAllNames (DData dname params kind ctors derivings lin _) = dname :: map ctorName ctors
+declAllNames (DRecord dname params fields derivings lin _) = [dname]
 declAllNames (DTrait tname params methods _) = tname :: map traitMethodName methods
 declAllNames d = declNames d
 
 _declCtors : Decl -> List String
-_declCtors (DData dname params kind ctors derivings _) = map ctorName ctors
-_declCtors (DRecord dname params fields derivings _) = [dname]
+_declCtors (DData dname params kind ctors derivings lin _) = map ctorName ctors
+_declCtors (DRecord dname params fields derivings lin _) = [dname]
 _declCtors (DTrait tname params methods _) = map traitMethodName methods
 _declCtors _ = []
 
@@ -354,8 +382,8 @@ ctorsOf : List Decl -> List String
 ctorsOf decls = concatMap _declCtors decls
 
 declTypeNames : Decl -> List String
-declTypeNames (DData name params kind ctors derivings _) = [name]
-declTypeNames (DRecord name params fields derivings _) = [name]
+declTypeNames (DData name params kind ctors derivings lin _) = [name]
+declTypeNames (DRecord name params fields derivings lin _) = [name]
 declTypeNames (DTrait name params methods _) = [name]
 declTypeNames _ = []
 
@@ -363,6 +391,6 @@ typeNamesOf : List Decl -> List String
 typeNamesOf decls = concatMap declTypeNames decls
 
 declDerivings : Decl -> List String
-declDerivings (DData name params kind ctors derivings _) = derivings
-declDerivings (DRecord name params fields derivings _) = derivings
+declDerivings (DData name params kind ctors derivings lin _) = derivings
+declDerivings (DRecord name params fields derivings lin _) = derivings
 declDerivings _ = []

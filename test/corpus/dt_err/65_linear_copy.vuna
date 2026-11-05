@@ -1,0 +1,8 @@
+linear data Token : Type where
+  MkToken : (1 x : Int) -> Token
+
+f : Token -> Int
+f t = (case t of MkToken x => x) + (case t of MkToken x => x)
+
+main : Int
+main = f (MkToken 1)

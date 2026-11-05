@@ -55,7 +55,7 @@ let v_Vuna_dCompiler_dElab_dTerm_delabCatchAll = (fun a1 a2 a3 a4 a5 a6 a7 a8 a9
 
 let v_Vuna_dCompiler_dElab_dTerm_dcheckE = (fun a1 a2 a3 a4 a5 -> ((((((Vuna_dCompiler_dElab_dTerm_dImpl.v_Vuna_dCompiler_dElab_dTerm_dImpl_dcheckEFuel 256) a1) a2) a3) a4) a5))
 
-let v_Vuna_dCompiler_dElab_dTerm_dinferPi = (fun a1 a2 a3 a4 a5 a6 a7 a8 -> (((((((((Vuna_dCompiler_dElab_dTerm_dImpl.v_Vuna_dCompiler_dElab_dTerm_dImpl_dinferPiFuel 256) a1) a2) a3) a4) a5) a6) a7) a8))
+let v_Vuna_dCompiler_dElab_dTerm_dinferPi = (fun a1 a2 a3 a4 a5 a6 a7 a8 a9 -> ((((((((((Vuna_dCompiler_dElab_dTerm_dImpl.v_Vuna_dCompiler_dElab_dTerm_dImpl_dinferPiFuel 256) a1) a2) a3) a4) a5) a6) a7) a8) a9))
 
 let v_Vuna_dCompiler_dElab_dTerm_dinferAnn = (fun a1 a2 a3 a4 a5 a6 -> (((((((Vuna_dCompiler_dElab_dTerm_dImpl.v_Vuna_dCompiler_dElab_dTerm_dImpl_dinferAnnFuel 256) a1) a2) a3) a4) a5) a6))
 

@@ -3,6 +3,7 @@
 Base_dBool.ml
 Base_dEq.ml
 Base_dInt.ml
+Base_dInterp.ml
 Base_dList.ml
 Base_dMaybe.ml
 Base_dMonad.ml
@@ -34,6 +35,11 @@ let v_Eq_uBase_dBool_dBool
 == Base_dInt.ml
 let v_Eq_uInt
 let v_Ord_uInt
+
+== Base_dInterp.ml
+let v_Base_dInterp_dinterp
+let v_Interp_uString
+let v_Interp_ua
 
 == Base_dList.ml
 let v_Base_dList_dconcatMap

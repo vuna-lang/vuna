@@ -97,6 +97,8 @@ data TcErr : Nat -> Type where
   InstanceUnknownMethod : String -> TcErr (Succ Zero)
   NeedsTwoArgs : String -> TcErr (Succ Zero)
   NoInstanceFound : String -> TcErr (Succ Zero)
+  -- M36：模板字符串插值（`${e}` → `Base.Interp.interp e`）找不到 `Interp`/`Show` 实例。
+  InterpNoInstance : String -> TcErr (Succ Zero)
   NotExhaustive : String -> TcErr (Succ Zero)
   RedundantCtorBranch : String -> TcErr (Succ Zero)
   RedundantLiteralBranch : String -> TcErr (Succ Zero)
@@ -106,6 +108,16 @@ data TcErr : Nat -> Type where
   UnknownNamedInstance : String -> TcErr (Succ Zero)
   UnsolvedHole : String -> TcErr (Succ Zero)
   UnsolvedMetavarInfer : String -> TcErr (Succ Zero)
+  -- M38（QTT）：用量检查。
+  LinearUnused : String -> TcErr (Succ Zero)
+  LinearOverused : String -> TcErr (Succ Zero)
+  ErasedBinderUsed : String -> TcErr (Succ Zero)
+  MultiplicityImplicit : String -> TcErr (Succ Zero)
+  MultiplicityTypeDomain : String -> TcErr (Succ Zero)
+  LinearTypeNeedsOne : String -> TcErr (Succ Zero)
+  LinearValueNeedsLinearBinder : String -> TcErr (Succ Zero)
+  LinearTopLevel : String -> TcErr (Succ Zero)
+  LinearCaptureEscapes : String -> TcErr (Succ Zero)
   -- arity 2
   AmbiguousInstance : String -> String -> TcErr (Succ (Succ Zero))
   AppliedNotType : String -> TcErr (Succ Zero)
@@ -173,6 +185,15 @@ tcCode (CannotRedefineBuiltin _) = "TC_CannotRedefineBuiltin"
 tcCode (CannotSolveMetavar _) = "TC_CannotSolveMetavar"
 tcCode (CannotSolveHigherOrder _) = "TC_CannotSolveHigherOrder"
 tcCode (CannotSolveOccurs _) = "TC_CannotSolveOccurs"
+tcCode (LinearUnused _) = "TC_LinearUnused"
+tcCode (LinearOverused _) = "TC_LinearOverused"
+tcCode (ErasedBinderUsed _) = "TC_ErasedBinderUsed"
+tcCode (MultiplicityImplicit _) = "TC_MultiplicityImplicit"
+tcCode (MultiplicityTypeDomain _) = "TC_MultiplicityTypeDomain"
+tcCode (LinearTypeNeedsOne _) = "TC_LinearTypeNeedsOne"
+tcCode (LinearValueNeedsLinearBinder _) = "TC_LinearValueNeedsLinearBinder"
+tcCode (LinearTopLevel _) = "TC_LinearTopLevel"
+tcCode (LinearCaptureEscapes _) = "TC_LinearCaptureEscapes"
 tcCode (TypeMismatchCaseVars _) = "TC_TypeMismatchCaseVars"
 tcCode (DuplicateInstance _) = "TC_DuplicateInstance"
 tcCode (InstanceContextMissing _) = "TC_InstanceContextMissing"
@@ -186,6 +207,7 @@ tcCode (InstanceNotTrait _) = "TC_InstanceNotTrait"
 tcCode (InstanceUnknownMethod _) = "TC_InstanceUnknownMethod"
 tcCode (NeedsTwoArgs _) = "TC_NeedsTwoArgs"
 tcCode (NoInstanceFound _) = "TC_NoInstanceFound"
+tcCode (InterpNoInstance _) = "TC_InterpNoInstance"
 tcCode (NotExhaustive _) = "TC_NotExhaustive"
 tcCode (RedundantCtorBranch _) = "TC_RedundantCtorBranch"
 tcCode (RedundantLiteralBranch _) = "TC_RedundantLiteralBranch"
@@ -284,6 +306,8 @@ tcTemplate (InstanceNotTrait _) = "instance <0> is not an instance of a trait"
 tcTemplate (InstanceUnknownMethod _) = "instance has unknown method <0>"
 tcTemplate (NeedsTwoArgs _) = "`<0>` needs exactly two arguments"
 tcTemplate (NoInstanceFound _) = "no instance found for <0>"
+tcTemplate (InterpNoInstance _) =
+  "template interpolation needs an `Interp` or `Show` instance for <0> (add `deriving (Show)`, define `instance Interp <0>`, or convert explicitly with `show`/`strFromInt`)"
 tcTemplate (NotExhaustive _) = "case is not exhaustive: missing <0>"
 tcTemplate (RedundantCtorBranch cname) =
   "redundant constructor branch: `" ++ cname ++ "` is already covered by an earlier branch"
@@ -310,6 +334,20 @@ tcTemplate (TypeMismatch _ _) = "type mismatch: expected <0>, got <1>"
 tcTemplate (TypeMismatchCaseBranch _ _) = "type mismatch: case branch <0> vs <1>"
 tcTemplate (WhereNeedsSig _ _) =
   "where binding `<0>` needs a type signature (write `<1> : <type>` before the clause)"
+tcTemplate (LinearUnused _) =
+  "linear binder `<0>` must be used exactly once at runtime, but it is never used"
+tcTemplate (LinearOverused _) =
+  "linear binder `<0>` must be used exactly once at runtime, but it is used more than once"
+tcTemplate (ErasedBinderUsed _) = "binder `<0>` has multiplicity 0, but it is used at runtime"
+tcTemplate (MultiplicityImplicit _) = "implicit binder `<0>` must have multiplicity 0"
+tcTemplate (MultiplicityTypeDomain _) =
+  "binder `<0>` has a type-level domain and must have multiplicity 0"
+tcTemplate (LinearTypeNeedsOne _) = "binder `<0>` has a linear type; its multiplicity must be 1"
+tcTemplate (LinearValueNeedsLinearBinder _) =
+  "linear value `<0>` can only be bound or passed at multiplicity 1"
+tcTemplate (LinearTopLevel _) = "top-level `<0>` has a linear type; linear values cannot be global"
+tcTemplate (LinearCaptureEscapes _) =
+  "lambda `<0>` captures a linear value from its context and may escape"
 
 -- ---------------------------------------------------------------
 -- 文档遍历源（同构 List；`gen-errors` 遍历渲染；不承载 arity——arity 在构造子类型里）
@@ -415,6 +453,7 @@ tcChunk7 =
   [ TcEntry (tcCode (InstanceUnknownMethod "")) (tcTemplate (InstanceUnknownMethod "")) "instance 含未知方法",
     TcEntry (tcCode (NeedsTwoArgs "")) (tcTemplate (NeedsTwoArgs "")) "需要恰好两个实参",
     TcEntry (tcCode (NoInstanceFound "")) (tcTemplate (NoInstanceFound "")) "找不到 instance",
+    TcEntry (tcCode (InterpNoInstance "")) (tcTemplate (InterpNoInstance "")) "插值缺少 Interp/Show 实例",
     TcEntry (tcCode (NotExhaustive "")) (tcTemplate (NotExhaustive "")) "case 漏写可达分支",
     TcEntry (tcCode (RedundantCtorBranch "")) (tcTemplate (RedundantCtorBranch "")) "重复的构造子分支（不可达）",
     TcEntry (tcCode (RedundantLiteralBranch "")) (tcTemplate (RedundantLiteralBranch "")) "重复的字面量分支（不可达）",
@@ -451,10 +490,23 @@ tcChunk10 =
   [ TcEntry (tcCode (WhereNeedsSig "" "")) (tcTemplate (WhereNeedsSig "" "")) "where 绑定缺类型签名"
   ]
 
+tcChunk11 : List TcEntry
+tcChunk11 =
+  [ TcEntry (tcCode (LinearUnused "")) (tcTemplate (LinearUnused "")) "声明 1 的 binder 在运行时未使用",
+    TcEntry (tcCode (LinearOverused "")) (tcTemplate (LinearOverused "")) "声明 1 的 binder 在运行时使用多于一次",
+    TcEntry (tcCode (ErasedBinderUsed "")) (tcTemplate (ErasedBinderUsed "")) "声明 0 的 binder 在运行时被使用",
+    TcEntry (tcCode (MultiplicityImplicit "")) (tcTemplate (MultiplicityImplicit "")) "隐式 binder 必须为 0",
+    TcEntry (tcCode (MultiplicityTypeDomain "")) (tcTemplate (MultiplicityTypeDomain "")) "类型层 binder 必须为 0",
+    TcEntry (tcCode (LinearTypeNeedsOne "")) (tcTemplate (LinearTypeNeedsOne "")) "线性类型的 binder 必须是 1",
+    TcEntry (tcCode (LinearValueNeedsLinearBinder "")) (tcTemplate (LinearValueNeedsLinearBinder "")) "线性值只能在 quantity 1 的 binder 使用",
+    TcEntry (tcCode (LinearTopLevel "")) (tcTemplate (LinearTopLevel "")) "顶层定义不能是线性类型",
+    TcEntry (tcCode (LinearCaptureEscapes "")) (tcTemplate (LinearCaptureEscapes "")) "λ 捕获线性值并可能逃逸"
+  ]
+
 tcAll : List TcEntry
 tcAll =
   concatLists
-    [tcChunk0, tcChunk1, tcChunk2, tcChunk3, tcChunk4, tcChunk5, tcChunk6, tcChunk7, tcChunk8, tcChunk9, tcChunk10]
+    [tcChunk0, tcChunk1, tcChunk2, tcChunk3, tcChunk4, tcChunk5, tcChunk6, tcChunk7, tcChunk8, tcChunk9, tcChunk10, tcChunk11]
 
 -- ---------------------------------------------------------------
 -- throw：拼 `[CODE] 消息`（去掉旧 `DT: ` 前缀）；TC 的 Span 经 Common.showSpanLoc 拼在头部

@@ -1,0 +1,6 @@
+-- M38：声明 1 但运行时使用两次。
+f : (1 x : Int) -> Int
+f x = x + x
+
+main : Int
+main = f 1

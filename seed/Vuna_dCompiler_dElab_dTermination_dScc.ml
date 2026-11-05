@@ -59,75 +59,75 @@ and v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteWalkC = (fun fuel comp ctors p
 )
   | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dELam (dtb__36, dtb__37, dtb__38) -> ((((((((((v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteWalkC (fuel - 1)) comp) ctors) projs) caller) facts) sizes) region) dtb__37) acc)
   | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dELet (dtb__39, dtb__40, dtb__41, dtb__42) -> ((((((((((v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteWalkC (fuel - 1)) comp) ctors) projs) caller) facts) sizes) region) dtb__40) ((((((((((v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteCollectBinds (fuel - 1)) comp) ctors) projs) caller) facts) sizes) region) dtb__39) acc))
-  | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEPi (dtb__43, dtb__44, dtb__45, dtb__46, dtb__47) -> ((((((((((v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteWalkC (fuel - 1)) comp) ctors) projs) caller) facts) sizes) region) dtb__46) ((((((((((v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteWalkC (fuel - 1)) comp) ctors) projs) caller) facts) sizes) region) dtb__45) acc))
-  | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEField (dtb__48, dtb__49, dtb__50) -> ((((((((((v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteWalkC (fuel - 1)) comp) ctors) projs) caller) facts) sizes) region) dtb__48) acc)
-  | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dERecord (dtb__51, dtb__52, dtb__53) -> ((((((((((v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteCollectFields (fuel - 1)) comp) ctors) projs) caller) facts) sizes) region) dtb__52) acc)
-  | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dERecUpdate (dtb__54, dtb__55, dtb__56) -> ((((((((((v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteCollectFields (fuel - 1)) comp) ctors) projs) caller) facts) sizes) region) dtb__55) ((((((((((v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteWalkC (fuel - 1)) comp) ctors) projs) caller) facts) sizes) region) dtb__54) acc))
-  | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEDo (dtb__57, dtb__58) -> ((((((((((v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteCollectStmts (fuel - 1)) comp) ctors) projs) caller) facts) sizes) region) dtb__57) acc)
-  | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEAnn (dtb__59, dtb__60, dtb__61) -> ((((((((((v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteWalkC (fuel - 1)) comp) ctors) projs) caller) facts) sizes) region) dtb__60) ((((((((((v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteWalkC (fuel - 1)) comp) ctors) projs) caller) facts) sizes) region) dtb__59) acc))
-  | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dELocalFun (dtb__62, dtb__63) -> ((((((((((v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteCollectBinds (fuel - 1)) comp) ctors) projs) caller) facts) sizes) region) (v_Vuna_dCompiler_dElab_dTermination_dScc_dlocalClauseBinds dtb__62)) acc)
-  | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEVar (dtb__64, dtb__65) -> (if ((Base_dList.v_Base_dList_dmemName dtb__64) comp) then (Base_dList.C_Base_dList_dList_Base_dList_dCons ((C_Vuna_dCompiler_dElab_dTermination_dScc_dSite_Vuna_dCompiler_dElab_dTermination_dScc_dSite (caller, dtb__64, Base_dList.C_Base_dList_dList_Base_dList_dNil, sizes, region)), acc)) else acc)
+  | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEPi (dtb__43, dtb__44, dtb__45, dtb__46, dtb__47, dtb__48) -> ((((((((((v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteWalkC (fuel - 1)) comp) ctors) projs) caller) facts) sizes) region) dtb__47) ((((((((((v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteWalkC (fuel - 1)) comp) ctors) projs) caller) facts) sizes) region) dtb__46) acc))
+  | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEField (dtb__49, dtb__50, dtb__51) -> ((((((((((v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteWalkC (fuel - 1)) comp) ctors) projs) caller) facts) sizes) region) dtb__49) acc)
+  | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dERecord (dtb__52, dtb__53, dtb__54) -> ((((((((((v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteCollectFields (fuel - 1)) comp) ctors) projs) caller) facts) sizes) region) dtb__53) acc)
+  | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dERecUpdate (dtb__55, dtb__56, dtb__57) -> ((((((((((v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteCollectFields (fuel - 1)) comp) ctors) projs) caller) facts) sizes) region) dtb__56) ((((((((((v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteWalkC (fuel - 1)) comp) ctors) projs) caller) facts) sizes) region) dtb__55) acc))
+  | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEDo (dtb__58, dtb__59) -> ((((((((((v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteCollectStmts (fuel - 1)) comp) ctors) projs) caller) facts) sizes) region) dtb__58) acc)
+  | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEAnn (dtb__60, dtb__61, dtb__62) -> ((((((((((v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteWalkC (fuel - 1)) comp) ctors) projs) caller) facts) sizes) region) dtb__61) ((((((((((v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteWalkC (fuel - 1)) comp) ctors) projs) caller) facts) sizes) region) dtb__60) acc))
+  | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dELocalFun (dtb__63, dtb__64) -> ((((((((((v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteCollectBinds (fuel - 1)) comp) ctors) projs) caller) facts) sizes) region) (v_Vuna_dCompiler_dElab_dTermination_dScc_dlocalClauseBinds dtb__63)) acc)
+  | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEVar (dtb__65, dtb__66) -> (if ((Base_dList.v_Base_dList_dmemName dtb__65) comp) then (Base_dList.C_Base_dList_dList_Base_dList_dCons ((C_Vuna_dCompiler_dElab_dTermination_dScc_dSite_Vuna_dCompiler_dElab_dTermination_dScc_dSite (caller, dtb__65, Base_dList.C_Base_dList_dList_Base_dList_dNil, sizes, region)), acc)) else acc)
   | _ -> acc
 )))
 and v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteWalkEApp = (fun fuel comp ctors projs caller facts sizes region fn args acc -> (if (fuel <= 0) then acc else (match ((Vuna_dCompiler_dElab_dTermination_dMeasure.v_Vuna_dCompiler_dElab_dTermination_dMeasure_dgroupHead comp) fn) with
-  | Base_dMaybe.C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__66) -> ((((((((((v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteCollectList (fuel - 1)) comp) ctors) projs) caller) facts) sizes) region) args) (Base_dList.C_Base_dList_dList_Base_dList_dCons ((C_Vuna_dCompiler_dElab_dTermination_dScc_dSite_Vuna_dCompiler_dElab_dTermination_dScc_dSite (caller, dtb__66, args, sizes, region)), acc)))
+  | Base_dMaybe.C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__67) -> ((((((((((v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteCollectList (fuel - 1)) comp) ctors) projs) caller) facts) sizes) region) args) (Base_dList.C_Base_dList_dList_Base_dList_dCons ((C_Vuna_dCompiler_dElab_dTermination_dScc_dSite_Vuna_dCompiler_dElab_dTermination_dScc_dSite (caller, dtb__67, args, sizes, region)), acc)))
   | Base_dMaybe.C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> (match fn with
-  | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEVar (dtb__67, dtb__68) -> (if (Vuna_dCompiler_dElab_dTermination_dMeasure.v_Vuna_dCompiler_dElab_dTermination_dMeasure_disMapLike dtb__67) then (((((((((((v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteWalkEAppMap (fuel - 1)) comp) ctors) projs) caller) facts) sizes) region) fn) args) acc) else ((((((((((v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteCollectList (fuel - 1)) comp) ctors) projs) caller) facts) sizes) region) args) ((((((((((v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteWalkC (fuel - 1)) comp) ctors) projs) caller) facts) sizes) region) fn) acc)))
+  | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEVar (dtb__68, dtb__69) -> (if (Vuna_dCompiler_dElab_dTermination_dMeasure.v_Vuna_dCompiler_dElab_dTermination_dMeasure_disMapLike dtb__68) then (((((((((((v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteWalkEAppMap (fuel - 1)) comp) ctors) projs) caller) facts) sizes) region) fn) args) acc) else ((((((((((v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteCollectList (fuel - 1)) comp) ctors) projs) caller) facts) sizes) region) args) ((((((((((v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteWalkC (fuel - 1)) comp) ctors) projs) caller) facts) sizes) region) fn) acc)))
   | _ -> ((((((((((v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteCollectList (fuel - 1)) comp) ctors) projs) caller) facts) sizes) region) args) ((((((((((v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteWalkC (fuel - 1)) comp) ctors) projs) caller) facts) sizes) region) fn) acc))
 )
   | _ -> failwith "DT: impossible branch"
 )))
 and v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteWalkEAppMap = (fun fuel comp ctors projs caller facts sizes region fn args acc -> (if (fuel <= 0) then acc else ((fun nd_uscrut11 -> (match nd_uscrut11 with
-  | Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__69, dtb__70) -> (match dtb__69 with
-  | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dELam (dtb__71, dtb__72, dtb__73) -> (match dtb__71 with
-  | Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__74, dtb__75) -> (match dtb__75 with
-  | Base_dList.C_Base_dList_dList_Base_dList_dNil -> (match dtb__70 with
-  | Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__76, dtb__77) -> (match dtb__77 with
-  | Base_dList.C_Base_dList_dList_Base_dList_dNil -> ((fun acc1 -> ((fun sizes2 -> ((((((((((v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteWalkC (fuel - 1)) comp) ctors) projs) caller) facts) sizes2) region) dtb__72) acc1)) (((Vuna_dCompiler_dElab_dTermination_dMeasure.v_Vuna_dCompiler_dElab_dTermination_dMeasure_dextendElemSizes sizes) dtb__76) dtb__74))) ((((((((((v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteWalkC (fuel - 1)) comp) ctors) projs) caller) facts) sizes) region) dtb__76) acc))
+  | Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__70, dtb__71) -> (match dtb__70 with
+  | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dELam (dtb__72, dtb__73, dtb__74) -> (match dtb__72 with
+  | Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__75, dtb__76) -> (match dtb__76 with
+  | Base_dList.C_Base_dList_dList_Base_dList_dNil -> (match dtb__71 with
+  | Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__77, dtb__78) -> (match dtb__78 with
+  | Base_dList.C_Base_dList_dList_Base_dList_dNil -> ((fun acc1 -> ((fun sizes2 -> ((((((((((v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteWalkC (fuel - 1)) comp) ctors) projs) caller) facts) sizes2) region) dtb__73) acc1)) (((Vuna_dCompiler_dElab_dTermination_dMeasure.v_Vuna_dCompiler_dElab_dTermination_dMeasure_dextendElemSizes sizes) dtb__77) dtb__75))) ((((((((((v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteWalkC (fuel - 1)) comp) ctors) projs) caller) facts) sizes) region) dtb__77) acc))
   | _ -> ((((((((((v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteCollectList (fuel - 1)) comp) ctors) projs) caller) facts) sizes) region) args) acc)
 )
   | _ -> ((((((((((v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteCollectList (fuel - 1)) comp) ctors) projs) caller) facts) sizes) region) args) acc)
 )
-  | _ -> (match dtb__70 with
-  | Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__78, dtb__79) -> (match dtb__79 with
+  | _ -> (match dtb__71 with
+  | Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__79, dtb__80) -> (match dtb__80 with
   | Base_dList.C_Base_dList_dList_Base_dList_dNil -> ((fun nd_uscrut25 -> (match nd_uscrut25 with
-  | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEVar (dtb__80, dtb__81) -> (if ((Base_dList.v_Base_dList_dmemName dtb__80) comp) then (((((((((((((v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteWalkMapPartialInline (fuel - 1)) comp) ctors) projs) caller) facts) sizes) region) dtb__80) Base_dList.C_Base_dList_dList_Base_dList_dNil) dtb__78) dtb__81) acc) else ((((((((((v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteCollectList (fuel - 1)) comp) ctors) projs) caller) facts) sizes) region) args) acc))
-  | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEApp (dtb__82, dtb__83, dtb__84) -> (match dtb__82 with
-  | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEVar (dtb__85, dtb__86) -> (if ((Base_dList.v_Base_dList_dmemName dtb__85) comp) then (((((((((((((v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteWalkMapPartialInline (fuel - 1)) comp) ctors) projs) caller) facts) sizes) region) dtb__85) dtb__83) dtb__78) dtb__84) acc) else ((((((((((v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteCollectList (fuel - 1)) comp) ctors) projs) caller) facts) sizes) region) args) acc))
+  | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEVar (dtb__81, dtb__82) -> (if ((Base_dList.v_Base_dList_dmemName dtb__81) comp) then (((((((((((((v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteWalkMapPartialInline (fuel - 1)) comp) ctors) projs) caller) facts) sizes) region) dtb__81) Base_dList.C_Base_dList_dList_Base_dList_dNil) dtb__79) dtb__82) acc) else ((((((((((v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteCollectList (fuel - 1)) comp) ctors) projs) caller) facts) sizes) region) args) acc))
+  | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEApp (dtb__83, dtb__84, dtb__85) -> (match dtb__83 with
+  | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEVar (dtb__86, dtb__87) -> (if ((Base_dList.v_Base_dList_dmemName dtb__86) comp) then (((((((((((((v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteWalkMapPartialInline (fuel - 1)) comp) ctors) projs) caller) facts) sizes) region) dtb__86) dtb__84) dtb__79) dtb__85) acc) else ((((((((((v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteCollectList (fuel - 1)) comp) ctors) projs) caller) facts) sizes) region) args) acc))
   | _ -> ((((((((((v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteCollectList (fuel - 1)) comp) ctors) projs) caller) facts) sizes) region) args) acc)
 )
   | _ -> ((((((((((v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteCollectList (fuel - 1)) comp) ctors) projs) caller) facts) sizes) region) args) acc)
-)) dtb__69)
+)) dtb__70)
   | _ -> ((((((((((v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteCollectList (fuel - 1)) comp) ctors) projs) caller) facts) sizes) region) args) acc)
 )
   | _ -> ((((((((((v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteCollectList (fuel - 1)) comp) ctors) projs) caller) facts) sizes) region) args) acc)
 )
 )
-  | _ -> (match dtb__70 with
-  | Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__87, dtb__88) -> (match dtb__88 with
+  | _ -> (match dtb__71 with
+  | Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__88, dtb__89) -> (match dtb__89 with
   | Base_dList.C_Base_dList_dList_Base_dList_dNil -> ((fun nd_uscrut22 -> (match nd_uscrut22 with
-  | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEVar (dtb__89, dtb__90) -> (if ((Base_dList.v_Base_dList_dmemName dtb__89) comp) then (((((((((((((v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteWalkMapPartialInline (fuel - 1)) comp) ctors) projs) caller) facts) sizes) region) dtb__89) Base_dList.C_Base_dList_dList_Base_dList_dNil) dtb__87) dtb__90) acc) else ((((((((((v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteCollectList (fuel - 1)) comp) ctors) projs) caller) facts) sizes) region) args) acc))
-  | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEApp (dtb__91, dtb__92, dtb__93) -> (match dtb__91 with
-  | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEVar (dtb__94, dtb__95) -> (if ((Base_dList.v_Base_dList_dmemName dtb__94) comp) then (((((((((((((v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteWalkMapPartialInline (fuel - 1)) comp) ctors) projs) caller) facts) sizes) region) dtb__94) dtb__92) dtb__87) dtb__93) acc) else ((((((((((v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteCollectList (fuel - 1)) comp) ctors) projs) caller) facts) sizes) region) args) acc))
+  | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEVar (dtb__90, dtb__91) -> (if ((Base_dList.v_Base_dList_dmemName dtb__90) comp) then (((((((((((((v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteWalkMapPartialInline (fuel - 1)) comp) ctors) projs) caller) facts) sizes) region) dtb__90) Base_dList.C_Base_dList_dList_Base_dList_dNil) dtb__88) dtb__91) acc) else ((((((((((v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteCollectList (fuel - 1)) comp) ctors) projs) caller) facts) sizes) region) args) acc))
+  | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEApp (dtb__92, dtb__93, dtb__94) -> (match dtb__92 with
+  | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEVar (dtb__95, dtb__96) -> (if ((Base_dList.v_Base_dList_dmemName dtb__95) comp) then (((((((((((((v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteWalkMapPartialInline (fuel - 1)) comp) ctors) projs) caller) facts) sizes) region) dtb__95) dtb__93) dtb__88) dtb__94) acc) else ((((((((((v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteCollectList (fuel - 1)) comp) ctors) projs) caller) facts) sizes) region) args) acc))
   | _ -> ((((((((((v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteCollectList (fuel - 1)) comp) ctors) projs) caller) facts) sizes) region) args) acc)
 )
   | _ -> ((((((((((v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteCollectList (fuel - 1)) comp) ctors) projs) caller) facts) sizes) region) args) acc)
-)) dtb__69)
+)) dtb__70)
   | _ -> ((((((((((v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteCollectList (fuel - 1)) comp) ctors) projs) caller) facts) sizes) region) args) acc)
 )
   | _ -> ((((((((((v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteCollectList (fuel - 1)) comp) ctors) projs) caller) facts) sizes) region) args) acc)
 )
 )
-  | _ -> (match dtb__70 with
-  | Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__96, dtb__97) -> (match dtb__97 with
+  | _ -> (match dtb__71 with
+  | Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__97, dtb__98) -> (match dtb__98 with
   | Base_dList.C_Base_dList_dList_Base_dList_dNil -> ((fun nd_uscrut19 -> (match nd_uscrut19 with
-  | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEVar (dtb__98, dtb__99) -> (if ((Base_dList.v_Base_dList_dmemName dtb__98) comp) then (((((((((((((v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteWalkMapPartialInline (fuel - 1)) comp) ctors) projs) caller) facts) sizes) region) dtb__98) Base_dList.C_Base_dList_dList_Base_dList_dNil) dtb__96) dtb__99) acc) else ((((((((((v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteCollectList (fuel - 1)) comp) ctors) projs) caller) facts) sizes) region) args) acc))
-  | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEApp (dtb__100, dtb__101, dtb__102) -> (match dtb__100 with
-  | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEVar (dtb__103, dtb__104) -> (if ((Base_dList.v_Base_dList_dmemName dtb__103) comp) then (((((((((((((v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteWalkMapPartialInline (fuel - 1)) comp) ctors) projs) caller) facts) sizes) region) dtb__103) dtb__101) dtb__96) dtb__102) acc) else ((((((((((v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteCollectList (fuel - 1)) comp) ctors) projs) caller) facts) sizes) region) args) acc))
+  | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEVar (dtb__99, dtb__100) -> (if ((Base_dList.v_Base_dList_dmemName dtb__99) comp) then (((((((((((((v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteWalkMapPartialInline (fuel - 1)) comp) ctors) projs) caller) facts) sizes) region) dtb__99) Base_dList.C_Base_dList_dList_Base_dList_dNil) dtb__97) dtb__100) acc) else ((((((((((v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteCollectList (fuel - 1)) comp) ctors) projs) caller) facts) sizes) region) args) acc))
+  | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEApp (dtb__101, dtb__102, dtb__103) -> (match dtb__101 with
+  | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEVar (dtb__104, dtb__105) -> (if ((Base_dList.v_Base_dList_dmemName dtb__104) comp) then (((((((((((((v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteWalkMapPartialInline (fuel - 1)) comp) ctors) projs) caller) facts) sizes) region) dtb__104) dtb__102) dtb__97) dtb__103) acc) else ((((((((((v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteCollectList (fuel - 1)) comp) ctors) projs) caller) facts) sizes) region) args) acc))
   | _ -> ((((((((((v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteCollectList (fuel - 1)) comp) ctors) projs) caller) facts) sizes) region) args) acc)
 )
   | _ -> ((((((((((v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteCollectList (fuel - 1)) comp) ctors) projs) caller) facts) sizes) region) args) acc)
-)) dtb__69)
+)) dtb__70)
   | _ -> ((((((((((v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteCollectList (fuel - 1)) comp) ctors) projs) caller) facts) sizes) region) args) acc)
 )
   | _ -> ((((((((((v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteCollectList (fuel - 1)) comp) ctors) projs) caller) facts) sizes) region) args) acc)
@@ -138,13 +138,13 @@ and v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteWalkEAppMap = (fun fuel comp c
 and v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteWalkMapPartialInline = (fun fuel comp ctors projs caller facts sizes region g pargs lst cbsp acc -> (if (fuel <= 0) then acc else ((fun acc1 -> ((fun elems -> ((fun fullArgs -> ((fun acc2 -> (Base_dList.C_Base_dList_dList_Base_dList_dCons ((C_Vuna_dCompiler_dElab_dTermination_dScc_dSite_Vuna_dCompiler_dElab_dTermination_dScc_dSite (caller, g, fullArgs, elems, region)), acc2))) ((((((((((v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteCollectList (fuel - 1)) comp) ctors) projs) caller) facts) sizes) region) pargs) acc1))) ((Base_dList.v_Base_dList_dappend pargs) (Base_dList.C_Base_dList_dList_Base_dList_dCons ((Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEVar ("$elem", cbsp)), Base_dList.C_Base_dList_dList_Base_dList_dNil))))) (((Vuna_dCompiler_dElab_dTermination_dMeasure.v_Vuna_dCompiler_dElab_dTermination_dMeasure_dextendElemSizes sizes) lst) "$elem"))) ((((((((((v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteWalkC (fuel - 1)) comp) ctors) projs) caller) facts) sizes) region) lst) acc))))
 
 let rec v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteCollectClauses = (fun mc0 mc1 mc2 mc3 mc4 mc5 mc6 -> (match mc5 with
-  | Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__105, dtb__106) -> (((((((v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteCollectClauses mc0) mc1) mc2) mc3) mc4) dtb__106) ((((((((((v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteWalkC 100000) mc0) mc1) mc2) mc4) mc3) (Vuna_dCompiler_dElab_dTermination_dMeasure.v_Vuna_dCompiler_dElab_dTermination_dMeasure_dstrSizeEntries (Base_dPair.v_Base_dPair_dfirstOf dtb__105))) Base_dList.C_Base_dList_dList_Base_dList_dNil) (Base_dPair.v_Base_dPair_dsecondOf dtb__105)) mc6))
+  | Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__106, dtb__107) -> (((((((v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteCollectClauses mc0) mc1) mc2) mc3) mc4) dtb__107) ((((((((((v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteWalkC 100000) mc0) mc1) mc2) mc4) mc3) (Vuna_dCompiler_dElab_dTermination_dMeasure.v_Vuna_dCompiler_dElab_dTermination_dMeasure_dstrSizeEntries (Base_dPair.v_Base_dPair_dfirstOf dtb__106))) Base_dList.C_Base_dList_dList_Base_dList_dNil) (Base_dPair.v_Base_dPair_dsecondOf dtb__106)) mc6))
   | Base_dList.C_Base_dList_dList_Base_dList_dNil -> mc6
   | _ -> failwith "DT: impossible branch"
 ))
 
 let rec v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteCollectGo = (fun mc0 mc1 mc2 mc3 mc4 mc5 mc6 -> (match mc5 with
-  | Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__107, dtb__108) -> (((((((v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteCollectGo mc0) mc1) mc2) mc3) mc4) dtb__108) (((((((v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteCollectClauses mc0) mc1) mc2) mc4) dtb__107) ((Vuna_dCompiler_dElab_dTermination_dMeasure.v_Vuna_dCompiler_dElab_dTermination_dMeasure_dclausesOfDefTbl dtb__107) mc3)) mc6))
+  | Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__108, dtb__109) -> (((((((v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteCollectGo mc0) mc1) mc2) mc3) mc4) dtb__109) (((((((v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteCollectClauses mc0) mc1) mc2) mc4) dtb__108) ((Vuna_dCompiler_dElab_dTermination_dMeasure.v_Vuna_dCompiler_dElab_dTermination_dMeasure_dclausesOfDefTbl dtb__108) mc3)) mc6))
   | Base_dList.C_Base_dList_dList_Base_dList_dNil -> mc6
   | _ -> failwith "DT: impossible branch"
 ))
@@ -154,10 +154,10 @@ let v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteCollect = (fun comp ctors proj
 let v_Vuna_dCompiler_dElab_dTermination_dScc_dscIsStrict = (fun m -> (m <> 0))
 
 let rec v_Vuna_dCompiler_dElab_dTermination_dScc_dmaxBaseOf = (fun mc0 -> (match mc0 with
-  | Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__109, dtb__110) -> (match dtb__109 with
-  | Base_dPair.C_Base_dPair_dPair_Base_dPair_dPair (dtb__111, dtb__112) -> (match dtb__112 with
-  | Base_dPair.C_Base_dPair_dPair_Base_dPair_dPair (dtb__113, dtb__114) -> (match dtb__114 with
-  | Base_dPair.C_Base_dPair_dPair_Base_dPair_dPair (dtb__115, dtb__116) -> ((Vuna_dCompiler_dElab_dTermination_dMeasure.v_Vuna_dCompiler_dElab_dTermination_dMeasure_dmaxInt dtb__113) (v_Vuna_dCompiler_dElab_dTermination_dScc_dmaxBaseOf dtb__110))
+  | Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__110, dtb__111) -> (match dtb__110 with
+  | Base_dPair.C_Base_dPair_dPair_Base_dPair_dPair (dtb__112, dtb__113) -> (match dtb__113 with
+  | Base_dPair.C_Base_dPair_dPair_Base_dPair_dPair (dtb__114, dtb__115) -> (match dtb__115 with
+  | Base_dPair.C_Base_dPair_dPair_Base_dPair_dPair (dtb__116, dtb__117) -> ((Vuna_dCompiler_dElab_dTermination_dMeasure.v_Vuna_dCompiler_dElab_dTermination_dMeasure_dmaxInt dtb__114) (v_Vuna_dCompiler_dElab_dTermination_dScc_dmaxBaseOf dtb__111))
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
@@ -169,65 +169,65 @@ let rec v_Vuna_dCompiler_dElab_dTermination_dScc_dmaxBaseOf = (fun mc0 -> (match
 ))
 
 let rec v_Vuna_dCompiler_dElab_dTermination_dScc_dinsertEdge = (fun mc0 mc1 -> (match mc1 with
-  | Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__117, dtb__118) -> (if ((match mc0 with
-  | C_Vuna_dCompiler_dElab_dTermination_dScc_dScEdge_Vuna_dCompiler_dElab_dTermination_dScc_dScEdge (dtb__119, dtb__120, dtb__121) -> dtb__119
+  | Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__118, dtb__119) -> (if ((match mc0 with
+  | C_Vuna_dCompiler_dElab_dTermination_dScc_dScEdge_Vuna_dCompiler_dElab_dTermination_dScc_dScEdge (dtb__120, dtb__121, dtb__122) -> dtb__120
   | _ -> failwith "DT: impossible branch"
-) < (match dtb__117 with
-  | C_Vuna_dCompiler_dElab_dTermination_dScc_dScEdge_Vuna_dCompiler_dElab_dTermination_dScc_dScEdge (dtb__122, dtb__123, dtb__124) -> dtb__122
+) < (match dtb__118 with
+  | C_Vuna_dCompiler_dElab_dTermination_dScc_dScEdge_Vuna_dCompiler_dElab_dTermination_dScc_dScEdge (dtb__123, dtb__124, dtb__125) -> dtb__123
   | _ -> failwith "DT: impossible branch"
-)) then (Base_dList.C_Base_dList_dList_Base_dList_dCons (mc0, (Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__117, dtb__118)))) else (if ((match mc0 with
-  | C_Vuna_dCompiler_dElab_dTermination_dScc_dScEdge_Vuna_dCompiler_dElab_dTermination_dScc_dScEdge (dtb__125, dtb__126, dtb__127) -> dtb__125
+)) then (Base_dList.C_Base_dList_dList_Base_dList_dCons (mc0, (Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__118, dtb__119)))) else (if ((match mc0 with
+  | C_Vuna_dCompiler_dElab_dTermination_dScc_dScEdge_Vuna_dCompiler_dElab_dTermination_dScc_dScEdge (dtb__126, dtb__127, dtb__128) -> dtb__126
   | _ -> failwith "DT: impossible branch"
-) = (match dtb__117 with
-  | C_Vuna_dCompiler_dElab_dTermination_dScc_dScEdge_Vuna_dCompiler_dElab_dTermination_dScc_dScEdge (dtb__128, dtb__129, dtb__130) -> dtb__128
+) = (match dtb__118 with
+  | C_Vuna_dCompiler_dElab_dTermination_dScc_dScEdge_Vuna_dCompiler_dElab_dTermination_dScc_dScEdge (dtb__129, dtb__130, dtb__131) -> dtb__129
   | _ -> failwith "DT: impossible branch"
 )) then (if ((match mc0 with
-  | C_Vuna_dCompiler_dElab_dTermination_dScc_dScEdge_Vuna_dCompiler_dElab_dTermination_dScc_dScEdge (dtb__131, dtb__132, dtb__133) -> dtb__132
+  | C_Vuna_dCompiler_dElab_dTermination_dScc_dScEdge_Vuna_dCompiler_dElab_dTermination_dScc_dScEdge (dtb__132, dtb__133, dtb__134) -> dtb__133
   | _ -> failwith "DT: impossible branch"
-) <= (match dtb__117 with
-  | C_Vuna_dCompiler_dElab_dTermination_dScc_dScEdge_Vuna_dCompiler_dElab_dTermination_dScc_dScEdge (dtb__134, dtb__135, dtb__136) -> dtb__135
+) <= (match dtb__118 with
+  | C_Vuna_dCompiler_dElab_dTermination_dScc_dScEdge_Vuna_dCompiler_dElab_dTermination_dScc_dScEdge (dtb__135, dtb__136, dtb__137) -> dtb__136
   | _ -> failwith "DT: impossible branch"
-)) then (Base_dList.C_Base_dList_dList_Base_dList_dCons (mc0, (Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__117, dtb__118)))) else (Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__117, ((v_Vuna_dCompiler_dElab_dTermination_dScc_dinsertEdge mc0) dtb__118)))) else (Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__117, ((v_Vuna_dCompiler_dElab_dTermination_dScc_dinsertEdge mc0) dtb__118)))))
+)) then (Base_dList.C_Base_dList_dList_Base_dList_dCons (mc0, (Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__118, dtb__119)))) else (Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__118, ((v_Vuna_dCompiler_dElab_dTermination_dScc_dinsertEdge mc0) dtb__119)))) else (Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__118, ((v_Vuna_dCompiler_dElab_dTermination_dScc_dinsertEdge mc0) dtb__119)))))
   | Base_dList.C_Base_dList_dList_Base_dList_dNil -> (Base_dList.C_Base_dList_dList_Base_dList_dCons (mc0, Base_dList.C_Base_dList_dList_Base_dList_dNil))
   | _ -> failwith "DT: impossible branch"
 ))
 
 let rec v_Vuna_dCompiler_dElab_dTermination_dScc_dsortEdges = (fun mc0 -> (match mc0 with
-  | Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__137, dtb__138) -> ((v_Vuna_dCompiler_dElab_dTermination_dScc_dinsertEdge dtb__137) (v_Vuna_dCompiler_dElab_dTermination_dScc_dsortEdges dtb__138))
+  | Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__138, dtb__139) -> ((v_Vuna_dCompiler_dElab_dTermination_dScc_dinsertEdge dtb__138) (v_Vuna_dCompiler_dElab_dTermination_dScc_dsortEdges dtb__139))
   | Base_dList.C_Base_dList_dList_Base_dList_dNil -> Base_dList.C_Base_dList_dList_Base_dList_dNil
   | _ -> failwith "DT: impossible branch"
 ))
 
 let v_Vuna_dCompiler_dElab_dTermination_dScc_dmergeStrict = (fun a b -> (C_Vuna_dCompiler_dElab_dTermination_dScc_dScEdge_Vuna_dCompiler_dElab_dTermination_dScc_dScEdge ((match a with
-  | C_Vuna_dCompiler_dElab_dTermination_dScc_dScEdge_Vuna_dCompiler_dElab_dTermination_dScc_dScEdge (dtb__139, dtb__140, dtb__141) -> dtb__139
+  | C_Vuna_dCompiler_dElab_dTermination_dScc_dScEdge_Vuna_dCompiler_dElab_dTermination_dScc_dScEdge (dtb__140, dtb__141, dtb__142) -> dtb__140
   | _ -> failwith "DT: impossible branch"
 ), (match a with
-  | C_Vuna_dCompiler_dElab_dTermination_dScc_dScEdge_Vuna_dCompiler_dElab_dTermination_dScc_dScEdge (dtb__142, dtb__143, dtb__144) -> dtb__143
+  | C_Vuna_dCompiler_dElab_dTermination_dScc_dScEdge_Vuna_dCompiler_dElab_dTermination_dScc_dScEdge (dtb__143, dtb__144, dtb__145) -> dtb__144
   | _ -> failwith "DT: impossible branch"
 ), (if (match a with
-  | C_Vuna_dCompiler_dElab_dTermination_dScc_dScEdge_Vuna_dCompiler_dElab_dTermination_dScc_dScEdge (dtb__145, dtb__146, dtb__147) -> dtb__147
+  | C_Vuna_dCompiler_dElab_dTermination_dScc_dScEdge_Vuna_dCompiler_dElab_dTermination_dScc_dScEdge (dtb__146, dtb__147, dtb__148) -> dtb__148
   | _ -> failwith "DT: impossible branch"
 ) then true else (match b with
-  | C_Vuna_dCompiler_dElab_dTermination_dScc_dScEdge_Vuna_dCompiler_dElab_dTermination_dScc_dScEdge (dtb__148, dtb__149, dtb__150) -> dtb__150
+  | C_Vuna_dCompiler_dElab_dTermination_dScc_dScEdge_Vuna_dCompiler_dElab_dTermination_dScc_dScEdge (dtb__149, dtb__150, dtb__151) -> dtb__151
   | _ -> failwith "DT: impossible branch"
 )))))
 
 let rec v_Vuna_dCompiler_dElab_dTermination_dScc_dcompactEdges = (fun mc0 -> (match mc0 with
-  | Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__151, dtb__152) -> (match dtb__152 with
-  | Base_dList.C_Base_dList_dList_Base_dList_dNil -> (Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__151, Base_dList.C_Base_dList_dList_Base_dList_dNil))
-  | Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__153, dtb__154) -> (if ((match dtb__151 with
-  | C_Vuna_dCompiler_dElab_dTermination_dScc_dScEdge_Vuna_dCompiler_dElab_dTermination_dScc_dScEdge (dtb__155, dtb__156, dtb__157) -> dtb__155
+  | Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__152, dtb__153) -> (match dtb__153 with
+  | Base_dList.C_Base_dList_dList_Base_dList_dNil -> (Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__152, Base_dList.C_Base_dList_dList_Base_dList_dNil))
+  | Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__154, dtb__155) -> (if ((match dtb__152 with
+  | C_Vuna_dCompiler_dElab_dTermination_dScc_dScEdge_Vuna_dCompiler_dElab_dTermination_dScc_dScEdge (dtb__156, dtb__157, dtb__158) -> dtb__156
   | _ -> failwith "DT: impossible branch"
-) = (match dtb__153 with
-  | C_Vuna_dCompiler_dElab_dTermination_dScc_dScEdge_Vuna_dCompiler_dElab_dTermination_dScc_dScEdge (dtb__158, dtb__159, dtb__160) -> dtb__158
+) = (match dtb__154 with
+  | C_Vuna_dCompiler_dElab_dTermination_dScc_dScEdge_Vuna_dCompiler_dElab_dTermination_dScc_dScEdge (dtb__159, dtb__160, dtb__161) -> dtb__159
   | _ -> failwith "DT: impossible branch"
-)) then (if ((match dtb__151 with
-  | C_Vuna_dCompiler_dElab_dTermination_dScc_dScEdge_Vuna_dCompiler_dElab_dTermination_dScc_dScEdge (dtb__161, dtb__162, dtb__163) -> dtb__162
+)) then (if ((match dtb__152 with
+  | C_Vuna_dCompiler_dElab_dTermination_dScc_dScEdge_Vuna_dCompiler_dElab_dTermination_dScc_dScEdge (dtb__162, dtb__163, dtb__164) -> dtb__163
   | _ -> failwith "DT: impossible branch"
-) = (match dtb__153 with
-  | C_Vuna_dCompiler_dElab_dTermination_dScc_dScEdge_Vuna_dCompiler_dElab_dTermination_dScc_dScEdge (dtb__164, dtb__165, dtb__166) -> dtb__165
+) = (match dtb__154 with
+  | C_Vuna_dCompiler_dElab_dTermination_dScc_dScEdge_Vuna_dCompiler_dElab_dTermination_dScc_dScEdge (dtb__165, dtb__166, dtb__167) -> dtb__166
   | _ -> failwith "DT: impossible branch"
-)) then (Base_dList.C_Base_dList_dList_Base_dList_dCons (((v_Vuna_dCompiler_dElab_dTermination_dScc_dmergeStrict dtb__151) dtb__153), (v_Vuna_dCompiler_dElab_dTermination_dScc_dcompactEdges dtb__154))) else (Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__151, (v_Vuna_dCompiler_dElab_dTermination_dScc_dcompactEdges dtb__152)))) else (Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__151, (v_Vuna_dCompiler_dElab_dTermination_dScc_dcompactEdges dtb__152))))
+)) then (Base_dList.C_Base_dList_dList_Base_dList_dCons (((v_Vuna_dCompiler_dElab_dTermination_dScc_dmergeStrict dtb__152) dtb__154), (v_Vuna_dCompiler_dElab_dTermination_dScc_dcompactEdges dtb__155))) else (Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__152, (v_Vuna_dCompiler_dElab_dTermination_dScc_dcompactEdges dtb__153)))) else (Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__152, (v_Vuna_dCompiler_dElab_dTermination_dScc_dcompactEdges dtb__153))))
   | _ -> failwith "DT: impossible branch"
 )
   | Base_dList.C_Base_dList_dList_Base_dList_dNil -> Base_dList.C_Base_dList_dList_Base_dList_dNil
@@ -238,31 +238,31 @@ let v_Vuna_dCompiler_dElab_dTermination_dScc_dcanonEdges = (fun edges -> (v_Vuna
 
 let rec v_Vuna_dCompiler_dElab_dTermination_dScc_dedgesEqCanon = (fun mc0 mc1 -> (match mc0 with
   | Base_dList.C_Base_dList_dList_Base_dList_dNil -> (match mc1 with
-  | Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__167, dtb__168) -> false
+  | Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__168, dtb__169) -> false
   | Base_dList.C_Base_dList_dList_Base_dList_dNil -> true
   | _ -> failwith "DT: impossible branch"
 )
-  | Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__169, dtb__170) -> (match mc1 with
+  | Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__170, dtb__171) -> (match mc1 with
   | Base_dList.C_Base_dList_dList_Base_dList_dNil -> false
-  | Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__171, dtb__172) -> (if ((match dtb__169 with
-  | C_Vuna_dCompiler_dElab_dTermination_dScc_dScEdge_Vuna_dCompiler_dElab_dTermination_dScc_dScEdge (dtb__173, dtb__174, dtb__175) -> dtb__173
+  | Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__172, dtb__173) -> (if ((match dtb__170 with
+  | C_Vuna_dCompiler_dElab_dTermination_dScc_dScEdge_Vuna_dCompiler_dElab_dTermination_dScc_dScEdge (dtb__174, dtb__175, dtb__176) -> dtb__174
   | _ -> failwith "DT: impossible branch"
-) = (match dtb__171 with
-  | C_Vuna_dCompiler_dElab_dTermination_dScc_dScEdge_Vuna_dCompiler_dElab_dTermination_dScc_dScEdge (dtb__176, dtb__177, dtb__178) -> dtb__176
+) = (match dtb__172 with
+  | C_Vuna_dCompiler_dElab_dTermination_dScc_dScEdge_Vuna_dCompiler_dElab_dTermination_dScc_dScEdge (dtb__177, dtb__178, dtb__179) -> dtb__177
   | _ -> failwith "DT: impossible branch"
-)) then (if ((match dtb__169 with
-  | C_Vuna_dCompiler_dElab_dTermination_dScc_dScEdge_Vuna_dCompiler_dElab_dTermination_dScc_dScEdge (dtb__179, dtb__180, dtb__181) -> dtb__180
+)) then (if ((match dtb__170 with
+  | C_Vuna_dCompiler_dElab_dTermination_dScc_dScEdge_Vuna_dCompiler_dElab_dTermination_dScc_dScEdge (dtb__180, dtb__181, dtb__182) -> dtb__181
   | _ -> failwith "DT: impossible branch"
-) = (match dtb__171 with
-  | C_Vuna_dCompiler_dElab_dTermination_dScc_dScEdge_Vuna_dCompiler_dElab_dTermination_dScc_dScEdge (dtb__182, dtb__183, dtb__184) -> dtb__183
+) = (match dtb__172 with
+  | C_Vuna_dCompiler_dElab_dTermination_dScc_dScEdge_Vuna_dCompiler_dElab_dTermination_dScc_dScEdge (dtb__183, dtb__184, dtb__185) -> dtb__184
   | _ -> failwith "DT: impossible branch"
-)) then (if (((Base_dEq.v_Base_dEq_deq Base_dEq.v_Eq_uBase_dBool_dBool) (match dtb__169 with
-  | C_Vuna_dCompiler_dElab_dTermination_dScc_dScEdge_Vuna_dCompiler_dElab_dTermination_dScc_dScEdge (dtb__185, dtb__186, dtb__187) -> dtb__187
+)) then (if (((Base_dEq.v_Base_dEq_deq Base_dEq.v_Eq_uBase_dBool_dBool) (match dtb__170 with
+  | C_Vuna_dCompiler_dElab_dTermination_dScc_dScEdge_Vuna_dCompiler_dElab_dTermination_dScc_dScEdge (dtb__186, dtb__187, dtb__188) -> dtb__188
   | _ -> failwith "DT: impossible branch"
-)) (match dtb__171 with
-  | C_Vuna_dCompiler_dElab_dTermination_dScc_dScEdge_Vuna_dCompiler_dElab_dTermination_dScc_dScEdge (dtb__188, dtb__189, dtb__190) -> dtb__190
+)) (match dtb__172 with
+  | C_Vuna_dCompiler_dElab_dTermination_dScc_dScEdge_Vuna_dCompiler_dElab_dTermination_dScc_dScEdge (dtb__189, dtb__190, dtb__191) -> dtb__191
   | _ -> failwith "DT: impossible branch"
-)) then ((v_Vuna_dCompiler_dElab_dTermination_dScc_dedgesEqCanon dtb__170) dtb__172) else false) else false) else false)
+)) then ((v_Vuna_dCompiler_dElab_dTermination_dScc_dedgesEqCanon dtb__171) dtb__173) else false) else false) else false)
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
@@ -271,31 +271,31 @@ let rec v_Vuna_dCompiler_dElab_dTermination_dScc_dedgesEqCanon = (fun mc0 mc1 ->
 let v_Vuna_dCompiler_dElab_dTermination_dScc_dedgesEq = (fun a b -> ((v_Vuna_dCompiler_dElab_dTermination_dScc_dedgesEqCanon (v_Vuna_dCompiler_dElab_dTermination_dScc_dcanonEdges a)) (v_Vuna_dCompiler_dElab_dTermination_dScc_dcanonEdges b)))
 
 let rec v_Vuna_dCompiler_dElab_dTermination_dScc_dcombineWith = (fun mc0 mc1 -> (match mc1 with
-  | Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__191, dtb__192) -> (if ((match mc0 with
-  | C_Vuna_dCompiler_dElab_dTermination_dScc_dScEdge_Vuna_dCompiler_dElab_dTermination_dScc_dScEdge (dtb__193, dtb__194, dtb__195) -> dtb__194
+  | Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__192, dtb__193) -> (if ((match mc0 with
+  | C_Vuna_dCompiler_dElab_dTermination_dScc_dScEdge_Vuna_dCompiler_dElab_dTermination_dScc_dScEdge (dtb__194, dtb__195, dtb__196) -> dtb__195
   | _ -> failwith "DT: impossible branch"
-) = (match dtb__191 with
-  | C_Vuna_dCompiler_dElab_dTermination_dScc_dScEdge_Vuna_dCompiler_dElab_dTermination_dScc_dScEdge (dtb__196, dtb__197, dtb__198) -> dtb__196
+) = (match dtb__192 with
+  | C_Vuna_dCompiler_dElab_dTermination_dScc_dScEdge_Vuna_dCompiler_dElab_dTermination_dScc_dScEdge (dtb__197, dtb__198, dtb__199) -> dtb__197
   | _ -> failwith "DT: impossible branch"
 )) then (Base_dList.C_Base_dList_dList_Base_dList_dCons ((C_Vuna_dCompiler_dElab_dTermination_dScc_dScEdge_Vuna_dCompiler_dElab_dTermination_dScc_dScEdge ((match mc0 with
-  | C_Vuna_dCompiler_dElab_dTermination_dScc_dScEdge_Vuna_dCompiler_dElab_dTermination_dScc_dScEdge (dtb__199, dtb__200, dtb__201) -> dtb__199
+  | C_Vuna_dCompiler_dElab_dTermination_dScc_dScEdge_Vuna_dCompiler_dElab_dTermination_dScc_dScEdge (dtb__200, dtb__201, dtb__202) -> dtb__200
   | _ -> failwith "DT: impossible branch"
-), (match dtb__191 with
-  | C_Vuna_dCompiler_dElab_dTermination_dScc_dScEdge_Vuna_dCompiler_dElab_dTermination_dScc_dScEdge (dtb__202, dtb__203, dtb__204) -> dtb__203
+), (match dtb__192 with
+  | C_Vuna_dCompiler_dElab_dTermination_dScc_dScEdge_Vuna_dCompiler_dElab_dTermination_dScc_dScEdge (dtb__203, dtb__204, dtb__205) -> dtb__204
   | _ -> failwith "DT: impossible branch"
 ), (if (match mc0 with
-  | C_Vuna_dCompiler_dElab_dTermination_dScc_dScEdge_Vuna_dCompiler_dElab_dTermination_dScc_dScEdge (dtb__205, dtb__206, dtb__207) -> dtb__207
+  | C_Vuna_dCompiler_dElab_dTermination_dScc_dScEdge_Vuna_dCompiler_dElab_dTermination_dScc_dScEdge (dtb__206, dtb__207, dtb__208) -> dtb__208
   | _ -> failwith "DT: impossible branch"
-) then true else (match dtb__191 with
-  | C_Vuna_dCompiler_dElab_dTermination_dScc_dScEdge_Vuna_dCompiler_dElab_dTermination_dScc_dScEdge (dtb__208, dtb__209, dtb__210) -> dtb__210
+) then true else (match dtb__192 with
+  | C_Vuna_dCompiler_dElab_dTermination_dScc_dScEdge_Vuna_dCompiler_dElab_dTermination_dScc_dScEdge (dtb__209, dtb__210, dtb__211) -> dtb__211
   | _ -> failwith "DT: impossible branch"
-)))), ((v_Vuna_dCompiler_dElab_dTermination_dScc_dcombineWith mc0) dtb__192))) else ((v_Vuna_dCompiler_dElab_dTermination_dScc_dcombineWith mc0) dtb__192))
+)))), ((v_Vuna_dCompiler_dElab_dTermination_dScc_dcombineWith mc0) dtb__193))) else ((v_Vuna_dCompiler_dElab_dTermination_dScc_dcombineWith mc0) dtb__193))
   | Base_dList.C_Base_dList_dList_Base_dList_dNil -> Base_dList.C_Base_dList_dList_Base_dList_dNil
   | _ -> failwith "DT: impossible branch"
 ))
 
 let rec v_Vuna_dCompiler_dElab_dTermination_dScc_dcomposeGo = (fun mc0 mc1 -> (match mc0 with
-  | Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__211, dtb__212) -> ((Base_dList.v_Base_dList_dappend ((v_Vuna_dCompiler_dElab_dTermination_dScc_dcombineWith dtb__211) mc1)) ((v_Vuna_dCompiler_dElab_dTermination_dScc_dcomposeGo dtb__212) mc1))
+  | Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__212, dtb__213) -> ((Base_dList.v_Base_dList_dappend ((v_Vuna_dCompiler_dElab_dTermination_dScc_dcombineWith dtb__212) mc1)) ((v_Vuna_dCompiler_dElab_dTermination_dScc_dcomposeGo dtb__213) mc1))
   | Base_dList.C_Base_dList_dList_Base_dList_dNil -> Base_dList.C_Base_dList_dList_Base_dList_dNil
   | _ -> failwith "DT: impossible branch"
 ))
@@ -303,10 +303,10 @@ let rec v_Vuna_dCompiler_dElab_dTermination_dScc_dcomposeGo = (fun mc0 mc1 -> (m
 let v_Vuna_dCompiler_dElab_dTermination_dScc_dcomposeEdges = (fun g1 g2 -> (v_Vuna_dCompiler_dElab_dTermination_dScc_dcanonEdges ((v_Vuna_dCompiler_dElab_dTermination_dScc_dcomposeGo g1) g2)))
 
 let rec v_Vuna_dCompiler_dElab_dTermination_dScc_dhasStrict = (fun mc0 -> (match mc0 with
-  | Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__213, dtb__214) -> (if (match dtb__213 with
-  | C_Vuna_dCompiler_dElab_dTermination_dScc_dScEdge_Vuna_dCompiler_dElab_dTermination_dScc_dScEdge (dtb__215, dtb__216, dtb__217) -> dtb__217
+  | Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__214, dtb__215) -> (if (match dtb__214 with
+  | C_Vuna_dCompiler_dElab_dTermination_dScc_dScEdge_Vuna_dCompiler_dElab_dTermination_dScc_dScEdge (dtb__216, dtb__217, dtb__218) -> dtb__218
   | _ -> failwith "DT: impossible branch"
-) then true else (v_Vuna_dCompiler_dElab_dTermination_dScc_dhasStrict dtb__214))
+) then true else (v_Vuna_dCompiler_dElab_dTermination_dScc_dhasStrict dtb__215))
   | Base_dList.C_Base_dList_dList_Base_dList_dNil -> false
   | _ -> failwith "DT: impossible branch"
 ))
@@ -316,7 +316,7 @@ let v_Vuna_dCompiler_dElab_dTermination_dScc_dgraphIdempotent = (fun edges -> ((
 let v_Vuna_dCompiler_dElab_dTermination_dScc_dgraphOK = (fun edges -> (if (v_Vuna_dCompiler_dElab_dTermination_dScc_dgraphIdempotent edges) then (v_Vuna_dCompiler_dElab_dTermination_dScc_dhasStrict edges) else true))
 
 let rec v_Vuna_dCompiler_dElab_dTermination_dScc_dgraphsOK = (fun mc0 -> (match mc0 with
-  | Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__218, dtb__219) -> (if (v_Vuna_dCompiler_dElab_dTermination_dScc_dgraphOK dtb__218) then (v_Vuna_dCompiler_dElab_dTermination_dScc_dgraphsOK dtb__219) else false)
+  | Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__219, dtb__220) -> (if (v_Vuna_dCompiler_dElab_dTermination_dScc_dgraphOK dtb__219) then (v_Vuna_dCompiler_dElab_dTermination_dScc_dgraphsOK dtb__220) else false)
   | Base_dList.C_Base_dList_dList_Base_dList_dNil -> true
   | _ -> failwith "DT: impossible branch"
 ))
@@ -324,8 +324,8 @@ let rec v_Vuna_dCompiler_dElab_dTermination_dScc_dgraphsOK = (fun mc0 -> (match 
 let v_Vuna_dCompiler_dElab_dTermination_dScc_dtableGraphCap = 512
 
 let rec v_Vuna_dCompiler_dElab_dTermination_dScc_dtableLookup = (fun mc0 mc1 -> (match mc1 with
-  | Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__220, dtb__221) -> (match dtb__220 with
-  | Base_dPair.C_Base_dPair_dPair_Base_dPair_dPair (dtb__222, dtb__223) -> (if ((Base_dPair.v_Base_dPair_dfirstOf mc0) = (Base_dPair.v_Base_dPair_dfirstOf dtb__222)) then (if ((Base_dPair.v_Base_dPair_dsecondOf mc0) = (Base_dPair.v_Base_dPair_dsecondOf dtb__222)) then (Base_dMaybe.C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__223)) else ((v_Vuna_dCompiler_dElab_dTermination_dScc_dtableLookup mc0) dtb__221)) else ((v_Vuna_dCompiler_dElab_dTermination_dScc_dtableLookup mc0) dtb__221))
+  | Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__221, dtb__222) -> (match dtb__221 with
+  | Base_dPair.C_Base_dPair_dPair_Base_dPair_dPair (dtb__223, dtb__224) -> (if ((Base_dPair.v_Base_dPair_dfirstOf mc0) = (Base_dPair.v_Base_dPair_dfirstOf dtb__223)) then (if ((Base_dPair.v_Base_dPair_dsecondOf mc0) = (Base_dPair.v_Base_dPair_dsecondOf dtb__223)) then (Base_dMaybe.C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__224)) else ((v_Vuna_dCompiler_dElab_dTermination_dScc_dtableLookup mc0) dtb__222)) else ((v_Vuna_dCompiler_dElab_dTermination_dScc_dtableLookup mc0) dtb__222))
   | _ -> failwith "DT: impossible branch"
 )
   | Base_dList.C_Base_dList_dList_Base_dList_dNil -> Base_dMaybe.C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing
@@ -333,21 +333,21 @@ let rec v_Vuna_dCompiler_dElab_dTermination_dScc_dtableLookup = (fun mc0 mc1 -> 
 ))
 
 let rec v_Vuna_dCompiler_dElab_dTermination_dScc_dgraphListHas = (fun mc0 mc1 -> (match mc1 with
-  | Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__224, dtb__225) -> (if ((v_Vuna_dCompiler_dElab_dTermination_dScc_dedgesEq mc0) dtb__224) then true else ((v_Vuna_dCompiler_dElab_dTermination_dScc_dgraphListHas mc0) dtb__225))
+  | Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__225, dtb__226) -> (if ((v_Vuna_dCompiler_dElab_dTermination_dScc_dedgesEq mc0) dtb__225) then true else ((v_Vuna_dCompiler_dElab_dTermination_dScc_dgraphListHas mc0) dtb__226))
   | Base_dList.C_Base_dList_dList_Base_dList_dNil -> false
   | _ -> failwith "DT: impossible branch"
 ))
 
 let rec v_Vuna_dCompiler_dElab_dTermination_dScc_dgraphListSubset = (fun mc0 mc1 -> (match mc0 with
-  | Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__226, dtb__227) -> (if ((v_Vuna_dCompiler_dElab_dTermination_dScc_dgraphListHas dtb__226) mc1) then ((v_Vuna_dCompiler_dElab_dTermination_dScc_dgraphListSubset dtb__227) mc1) else false)
+  | Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__227, dtb__228) -> (if ((v_Vuna_dCompiler_dElab_dTermination_dScc_dgraphListHas dtb__227) mc1) then ((v_Vuna_dCompiler_dElab_dTermination_dScc_dgraphListSubset dtb__228) mc1) else false)
   | Base_dList.C_Base_dList_dList_Base_dList_dNil -> true
   | _ -> failwith "DT: impossible branch"
 ))
 
 let rec v_Vuna_dCompiler_dElab_dTermination_dScc_dtableAddPair = (fun mc0 mc1 mc2 mc3 -> (match mc3 with
-  | Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__228, dtb__229) -> (match dtb__228 with
-  | Base_dPair.C_Base_dPair_dPair_Base_dPair_dPair (dtb__230, dtb__231) -> (match dtb__230 with
-  | Base_dPair.C_Base_dPair_dPair_Base_dPair_dPair (dtb__232, dtb__233) -> (if (mc0 = dtb__232) then (if (mc1 = dtb__233) then (Base_dList.C_Base_dList_dList_Base_dList_dCons ((Base_dPair.C_Base_dPair_dPair_Base_dPair_dPair ((Base_dPair.C_Base_dPair_dPair_Base_dPair_dPair (mc0, mc1)), ((Base_dList.v_Base_dList_dappend dtb__231) (Base_dList.C_Base_dList_dList_Base_dList_dCons (mc2, Base_dList.C_Base_dList_dList_Base_dList_dNil))))), dtb__229)) else (Base_dList.C_Base_dList_dList_Base_dList_dCons ((Base_dPair.C_Base_dPair_dPair_Base_dPair_dPair ((Base_dPair.C_Base_dPair_dPair_Base_dPair_dPair (dtb__232, dtb__233)), dtb__231)), ((((v_Vuna_dCompiler_dElab_dTermination_dScc_dtableAddPair mc0) mc1) mc2) dtb__229)))) else (Base_dList.C_Base_dList_dList_Base_dList_dCons ((Base_dPair.C_Base_dPair_dPair_Base_dPair_dPair ((Base_dPair.C_Base_dPair_dPair_Base_dPair_dPair (dtb__232, dtb__233)), dtb__231)), ((((v_Vuna_dCompiler_dElab_dTermination_dScc_dtableAddPair mc0) mc1) mc2) dtb__229))))
+  | Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__229, dtb__230) -> (match dtb__229 with
+  | Base_dPair.C_Base_dPair_dPair_Base_dPair_dPair (dtb__231, dtb__232) -> (match dtb__231 with
+  | Base_dPair.C_Base_dPair_dPair_Base_dPair_dPair (dtb__233, dtb__234) -> (if (mc0 = dtb__233) then (if (mc1 = dtb__234) then (Base_dList.C_Base_dList_dList_Base_dList_dCons ((Base_dPair.C_Base_dPair_dPair_Base_dPair_dPair ((Base_dPair.C_Base_dPair_dPair_Base_dPair_dPair (mc0, mc1)), ((Base_dList.v_Base_dList_dappend dtb__232) (Base_dList.C_Base_dList_dList_Base_dList_dCons (mc2, Base_dList.C_Base_dList_dList_Base_dList_dNil))))), dtb__230)) else (Base_dList.C_Base_dList_dList_Base_dList_dCons ((Base_dPair.C_Base_dPair_dPair_Base_dPair_dPair ((Base_dPair.C_Base_dPair_dPair_Base_dPair_dPair (dtb__233, dtb__234)), dtb__232)), ((((v_Vuna_dCompiler_dElab_dTermination_dScc_dtableAddPair mc0) mc1) mc2) dtb__230)))) else (Base_dList.C_Base_dList_dList_Base_dList_dCons ((Base_dPair.C_Base_dPair_dPair_Base_dPair_dPair ((Base_dPair.C_Base_dPair_dPair_Base_dPair_dPair (dtb__233, dtb__234)), dtb__232)), ((((v_Vuna_dCompiler_dElab_dTermination_dScc_dtableAddPair mc0) mc1) mc2) dtb__230))))
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
@@ -358,13 +358,13 @@ let rec v_Vuna_dCompiler_dElab_dTermination_dScc_dtableAddPair = (fun mc0 mc1 mc
 
 let v_Vuna_dCompiler_dElab_dTermination_dScc_dtableAdd = (fun f g edges table -> (match ((v_Vuna_dCompiler_dElab_dTermination_dScc_dtableLookup (Base_dPair.C_Base_dPair_dPair_Base_dPair_dPair (f, g))) table) with
   | Base_dMaybe.C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> (Base_dPair.C_Base_dPair_dPair_Base_dPair_dPair (((((v_Vuna_dCompiler_dElab_dTermination_dScc_dtableAddPair f) g) edges) table), true))
-  | Base_dMaybe.C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__234) -> (if ((v_Vuna_dCompiler_dElab_dTermination_dScc_dgraphListHas edges) dtb__234) then (Base_dPair.C_Base_dPair_dPair_Base_dPair_dPair (table, true)) else (if ((Base_dList.v_Base_dList_dlength dtb__234) >= v_Vuna_dCompiler_dElab_dTermination_dScc_dtableGraphCap) then (Base_dPair.C_Base_dPair_dPair_Base_dPair_dPair (table, false)) else (Base_dPair.C_Base_dPair_dPair_Base_dPair_dPair (((((v_Vuna_dCompiler_dElab_dTermination_dScc_dtableAddPair f) g) edges) table), true))))
+  | Base_dMaybe.C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__235) -> (if ((v_Vuna_dCompiler_dElab_dTermination_dScc_dgraphListHas edges) dtb__235) then (Base_dPair.C_Base_dPair_dPair_Base_dPair_dPair (table, true)) else (if ((Base_dList.v_Base_dList_dlength dtb__235) >= v_Vuna_dCompiler_dElab_dTermination_dScc_dtableGraphCap) then (Base_dPair.C_Base_dPair_dPair_Base_dPair_dPair (table, false)) else (Base_dPair.C_Base_dPair_dPair_Base_dPair_dPair (((((v_Vuna_dCompiler_dElab_dTermination_dScc_dtableAddPair f) g) edges) table), true))))
   | _ -> failwith "DT: impossible branch"
 ))
 
 let rec v_Vuna_dCompiler_dElab_dTermination_dScc_dclosureStepHs = (fun mc0 mc1 mc2 mc3 mc4 -> (match mc3 with
-  | Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__235, dtb__236) -> (match ((((v_Vuna_dCompiler_dElab_dTermination_dScc_dtableAdd mc0) mc1) ((v_Vuna_dCompiler_dElab_dTermination_dScc_dcomposeEdges mc2) dtb__235)) mc4) with
-  | Base_dPair.C_Base_dPair_dPair_Base_dPair_dPair (dtb__237, dtb__238) -> (if dtb__238 then (((((v_Vuna_dCompiler_dElab_dTermination_dScc_dclosureStepHs mc0) mc1) mc2) dtb__236) dtb__237) else (Base_dPair.C_Base_dPair_dPair_Base_dPair_dPair (dtb__237, false)))
+  | Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__236, dtb__237) -> (match ((((v_Vuna_dCompiler_dElab_dTermination_dScc_dtableAdd mc0) mc1) ((v_Vuna_dCompiler_dElab_dTermination_dScc_dcomposeEdges mc2) dtb__236)) mc4) with
+  | Base_dPair.C_Base_dPair_dPair_Base_dPair_dPair (dtb__238, dtb__239) -> (if dtb__239 then (((((v_Vuna_dCompiler_dElab_dTermination_dScc_dclosureStepHs mc0) mc1) mc2) dtb__237) dtb__238) else (Base_dPair.C_Base_dPair_dPair_Base_dPair_dPair (dtb__238, false)))
   | _ -> failwith "DT: impossible branch"
 )
   | Base_dList.C_Base_dList_dList_Base_dList_dNil -> (Base_dPair.C_Base_dPair_dPair_Base_dPair_dPair (mc4, true))
@@ -372,12 +372,12 @@ let rec v_Vuna_dCompiler_dElab_dTermination_dScc_dclosureStepHs = (fun mc0 mc1 m
 ))
 
 let rec v_Vuna_dCompiler_dElab_dTermination_dScc_dclosureStepOneGo = (fun mc0 mc1 mc2 mc3 mc4 mc5 -> (match mc3 with
-  | Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__239, dtb__240) -> (match dtb__239 with
-  | Base_dPair.C_Base_dPair_dPair_Base_dPair_dPair (dtb__241, dtb__242) -> (match dtb__241 with
-  | Base_dPair.C_Base_dPair_dPair_Base_dPair_dPair (dtb__243, dtb__244) -> (if (dtb__243 = mc1) then (match (((((v_Vuna_dCompiler_dElab_dTermination_dScc_dclosureStepHs mc0) dtb__244) mc2) dtb__242) mc4) with
-  | Base_dPair.C_Base_dPair_dPair_Base_dPair_dPair (dtb__245, dtb__246) -> (if dtb__246 then ((((((v_Vuna_dCompiler_dElab_dTermination_dScc_dclosureStepOneGo mc0) mc1) mc2) dtb__240) dtb__245) dtb__246) else (Base_dPair.C_Base_dPair_dPair_Base_dPair_dPair (dtb__245, false)))
+  | Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__240, dtb__241) -> (match dtb__240 with
+  | Base_dPair.C_Base_dPair_dPair_Base_dPair_dPair (dtb__242, dtb__243) -> (match dtb__242 with
+  | Base_dPair.C_Base_dPair_dPair_Base_dPair_dPair (dtb__244, dtb__245) -> (if (dtb__244 = mc1) then (match (((((v_Vuna_dCompiler_dElab_dTermination_dScc_dclosureStepHs mc0) dtb__245) mc2) dtb__243) mc4) with
+  | Base_dPair.C_Base_dPair_dPair_Base_dPair_dPair (dtb__246, dtb__247) -> (if dtb__247 then ((((((v_Vuna_dCompiler_dElab_dTermination_dScc_dclosureStepOneGo mc0) mc1) mc2) dtb__241) dtb__246) dtb__247) else (Base_dPair.C_Base_dPair_dPair_Base_dPair_dPair (dtb__246, false)))
   | _ -> failwith "DT: impossible branch"
-) else ((((((v_Vuna_dCompiler_dElab_dTermination_dScc_dclosureStepOneGo mc0) mc1) mc2) dtb__240) mc4) mc5))
+) else ((((((v_Vuna_dCompiler_dElab_dTermination_dScc_dclosureStepOneGo mc0) mc1) mc2) dtb__241) mc4) mc5))
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
@@ -389,8 +389,8 @@ let rec v_Vuna_dCompiler_dElab_dTermination_dScc_dclosureStepOneGo = (fun mc0 mc
 let v_Vuna_dCompiler_dElab_dTermination_dScc_dclosureStepOne = (fun f g a table acc -> ((((((v_Vuna_dCompiler_dElab_dTermination_dScc_dclosureStepOneGo f) g) a) table) acc) true))
 
 let rec v_Vuna_dCompiler_dElab_dTermination_dScc_dclosureStepGraphs = (fun mc0 mc1 mc2 mc3 mc4 -> (match mc2 with
-  | Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__247, dtb__248) -> (match (((((v_Vuna_dCompiler_dElab_dTermination_dScc_dclosureStepOne mc0) mc1) dtb__247) mc3) mc4) with
-  | Base_dPair.C_Base_dPair_dPair_Base_dPair_dPair (dtb__249, dtb__250) -> (if dtb__250 then (((((v_Vuna_dCompiler_dElab_dTermination_dScc_dclosureStepGraphs mc0) mc1) dtb__248) mc3) dtb__249) else (Base_dPair.C_Base_dPair_dPair_Base_dPair_dPair (dtb__249, false)))
+  | Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__248, dtb__249) -> (match (((((v_Vuna_dCompiler_dElab_dTermination_dScc_dclosureStepOne mc0) mc1) dtb__248) mc3) mc4) with
+  | Base_dPair.C_Base_dPair_dPair_Base_dPair_dPair (dtb__250, dtb__251) -> (if dtb__251 then (((((v_Vuna_dCompiler_dElab_dTermination_dScc_dclosureStepGraphs mc0) mc1) dtb__249) mc3) dtb__250) else (Base_dPair.C_Base_dPair_dPair_Base_dPair_dPair (dtb__250, false)))
   | _ -> failwith "DT: impossible branch"
 )
   | Base_dList.C_Base_dList_dList_Base_dList_dNil -> (Base_dPair.C_Base_dPair_dPair_Base_dPair_dPair (mc4, true))
@@ -398,10 +398,10 @@ let rec v_Vuna_dCompiler_dElab_dTermination_dScc_dclosureStepGraphs = (fun mc0 m
 ))
 
 let rec v_Vuna_dCompiler_dElab_dTermination_dScc_dclosureStepGo = (fun mc0 mc1 mc2 -> (match mc0 with
-  | Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__251, dtb__252) -> (match dtb__251 with
-  | Base_dPair.C_Base_dPair_dPair_Base_dPair_dPair (dtb__253, dtb__254) -> (match dtb__253 with
-  | Base_dPair.C_Base_dPair_dPair_Base_dPair_dPair (dtb__255, dtb__256) -> (match (((((v_Vuna_dCompiler_dElab_dTermination_dScc_dclosureStepGraphs dtb__255) dtb__256) dtb__254) mc1) mc2) with
-  | Base_dPair.C_Base_dPair_dPair_Base_dPair_dPair (dtb__257, dtb__258) -> (if dtb__258 then (((v_Vuna_dCompiler_dElab_dTermination_dScc_dclosureStepGo dtb__252) mc1) dtb__257) else (Base_dPair.C_Base_dPair_dPair_Base_dPair_dPair (dtb__257, false)))
+  | Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__252, dtb__253) -> (match dtb__252 with
+  | Base_dPair.C_Base_dPair_dPair_Base_dPair_dPair (dtb__254, dtb__255) -> (match dtb__254 with
+  | Base_dPair.C_Base_dPair_dPair_Base_dPair_dPair (dtb__256, dtb__257) -> (match (((((v_Vuna_dCompiler_dElab_dTermination_dScc_dclosureStepGraphs dtb__256) dtb__257) dtb__255) mc1) mc2) with
+  | Base_dPair.C_Base_dPair_dPair_Base_dPair_dPair (dtb__258, dtb__259) -> (if dtb__259 then (((v_Vuna_dCompiler_dElab_dTermination_dScc_dclosureStepGo dtb__253) mc1) dtb__258) else (Base_dPair.C_Base_dPair_dPair_Base_dPair_dPair (dtb__258, false)))
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
@@ -415,10 +415,10 @@ let rec v_Vuna_dCompiler_dElab_dTermination_dScc_dclosureStepGo = (fun mc0 mc1 m
 let v_Vuna_dCompiler_dElab_dTermination_dScc_dclosureStep = (fun table -> (((v_Vuna_dCompiler_dElab_dTermination_dScc_dclosureStepGo table) table) table))
 
 let rec v_Vuna_dCompiler_dElab_dTermination_dScc_dtableSubset = (fun mc0 mc1 -> (match mc0 with
-  | Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__259, dtb__260) -> (match dtb__259 with
-  | Base_dPair.C_Base_dPair_dPair_Base_dPair_dPair (dtb__261, dtb__262) -> (match ((v_Vuna_dCompiler_dElab_dTermination_dScc_dtableLookup dtb__261) mc1) with
+  | Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__260, dtb__261) -> (match dtb__260 with
+  | Base_dPair.C_Base_dPair_dPair_Base_dPair_dPair (dtb__262, dtb__263) -> (match ((v_Vuna_dCompiler_dElab_dTermination_dScc_dtableLookup dtb__262) mc1) with
   | Base_dMaybe.C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> false
-  | Base_dMaybe.C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__263) -> (if ((v_Vuna_dCompiler_dElab_dTermination_dScc_dgraphListSubset dtb__262) dtb__263) then ((v_Vuna_dCompiler_dElab_dTermination_dScc_dtableSubset dtb__260) mc1) else false)
+  | Base_dMaybe.C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__264) -> (if ((v_Vuna_dCompiler_dElab_dTermination_dScc_dgraphListSubset dtb__263) dtb__264) then ((v_Vuna_dCompiler_dElab_dTermination_dScc_dtableSubset dtb__261) mc1) else false)
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
@@ -430,27 +430,27 @@ let rec v_Vuna_dCompiler_dElab_dTermination_dScc_dtableSubset = (fun mc0 mc1 -> 
 let v_Vuna_dCompiler_dElab_dTermination_dScc_dtableSame = (fun a b -> (if ((Base_dList.v_Base_dList_dlength a) = (Base_dList.v_Base_dList_dlength b)) then ((v_Vuna_dCompiler_dElab_dTermination_dScc_dtableSubset a) b) else false))
 
 let rec v_Vuna_dCompiler_dElab_dTermination_dScc_dclosureLoop = (fun table fuel -> (if (fuel <= 0) then (Base_dPair.C_Base_dPair_dPair_Base_dPair_dPair (table, false)) else (match (v_Vuna_dCompiler_dElab_dTermination_dScc_dclosureStep table) with
-  | Base_dPair.C_Base_dPair_dPair_Base_dPair_dPair (dtb__264, dtb__265) -> (if dtb__265 then (if ((v_Vuna_dCompiler_dElab_dTermination_dScc_dtableSame table) dtb__264) then (Base_dPair.C_Base_dPair_dPair_Base_dPair_dPair (dtb__264, true)) else ((v_Vuna_dCompiler_dElab_dTermination_dScc_dclosureLoop dtb__264) (fuel - 1))) else (Base_dPair.C_Base_dPair_dPair_Base_dPair_dPair (dtb__264, false)))
+  | Base_dPair.C_Base_dPair_dPair_Base_dPair_dPair (dtb__265, dtb__266) -> (if dtb__266 then (if ((v_Vuna_dCompiler_dElab_dTermination_dScc_dtableSame table) dtb__265) then (Base_dPair.C_Base_dPair_dPair_Base_dPair_dPair (dtb__265, true)) else ((v_Vuna_dCompiler_dElab_dTermination_dScc_dclosureLoop dtb__265) (fuel - 1))) else (Base_dPair.C_Base_dPair_dPair_Base_dPair_dPair (dtb__265, false)))
   | _ -> failwith "DT: impossible branch"
 )))
 
 let v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteEdgeAt = (fun i j s ctors projs facts -> (match ((Vuna_dCompiler_dElab_dTermination_dMeasure.v_Vuna_dCompiler_dElab_dTermination_dMeasure_dnthExpr (match s with
-  | C_Vuna_dCompiler_dElab_dTermination_dScc_dSite_Vuna_dCompiler_dElab_dTermination_dScc_dSite (dtb__266, dtb__267, dtb__268, dtb__269, dtb__270) -> dtb__268
+  | C_Vuna_dCompiler_dElab_dTermination_dScc_dSite_Vuna_dCompiler_dElab_dTermination_dScc_dSite (dtb__267, dtb__268, dtb__269, dtb__270, dtb__271) -> dtb__269
   | _ -> failwith "DT: impossible branch"
 )) j) with
   | Base_dMaybe.C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> Base_dList.C_Base_dList_dList_Base_dList_dNil
-  | Base_dMaybe.C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__271) -> (match ((((((((Vuna_dCompiler_dElab_dTermination_dMeasure.v_Vuna_dCompiler_dElab_dTermination_dMeasure_drelOfArg i) dtb__271) (match s with
-  | C_Vuna_dCompiler_dElab_dTermination_dScc_dSite_Vuna_dCompiler_dElab_dTermination_dScc_dSite (dtb__272, dtb__273, dtb__274, dtb__275, dtb__276) -> dtb__275
+  | Base_dMaybe.C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__272) -> (match ((((((((Vuna_dCompiler_dElab_dTermination_dMeasure.v_Vuna_dCompiler_dElab_dTermination_dMeasure_drelOfArg i) dtb__272) (match s with
+  | C_Vuna_dCompiler_dElab_dTermination_dScc_dSite_Vuna_dCompiler_dElab_dTermination_dScc_dSite (dtb__273, dtb__274, dtb__275, dtb__276, dtb__277) -> dtb__276
   | _ -> failwith "DT: impossible branch"
 )) ctors) projs) (match s with
-  | C_Vuna_dCompiler_dElab_dTermination_dScc_dSite_Vuna_dCompiler_dElab_dTermination_dScc_dSite (dtb__277, dtb__278, dtb__279, dtb__280, dtb__281) -> dtb__277
+  | C_Vuna_dCompiler_dElab_dTermination_dScc_dSite_Vuna_dCompiler_dElab_dTermination_dScc_dSite (dtb__278, dtb__279, dtb__280, dtb__281, dtb__282) -> dtb__278
   | _ -> failwith "DT: impossible branch"
 )) facts) (match s with
-  | C_Vuna_dCompiler_dElab_dTermination_dScc_dSite_Vuna_dCompiler_dElab_dTermination_dScc_dSite (dtb__282, dtb__283, dtb__284, dtb__285, dtb__286) -> dtb__286
+  | C_Vuna_dCompiler_dElab_dTermination_dScc_dSite_Vuna_dCompiler_dElab_dTermination_dScc_dSite (dtb__283, dtb__284, dtb__285, dtb__286, dtb__287) -> dtb__287
   | _ -> failwith "DT: impossible branch"
 )) with
   | Base_dMaybe.C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> Base_dList.C_Base_dList_dList_Base_dList_dNil
-  | Base_dMaybe.C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__287) -> (Base_dList.C_Base_dList_dList_Base_dList_dCons ((C_Vuna_dCompiler_dElab_dTermination_dScc_dScEdge_Vuna_dCompiler_dElab_dTermination_dScc_dScEdge (i, j, (v_Vuna_dCompiler_dElab_dTermination_dScc_dscIsStrict dtb__287))), Base_dList.C_Base_dList_dList_Base_dList_dNil))
+  | Base_dMaybe.C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__288) -> (Base_dList.C_Base_dList_dList_Base_dList_dCons ((C_Vuna_dCompiler_dElab_dTermination_dScc_dScEdge_Vuna_dCompiler_dElab_dTermination_dScc_dScEdge (i, j, (v_Vuna_dCompiler_dElab_dTermination_dScc_dscIsStrict dtb__288))), Base_dList.C_Base_dList_dList_Base_dList_dNil))
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
@@ -459,26 +459,26 @@ let v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteEdgeAt = (fun i j s ctors proj
 let rec v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteEdgesJ = (fun i count s ctors projs facts -> (if (count <= 0) then Base_dList.C_Base_dList_dList_Base_dList_dNil else ((Base_dList.v_Base_dList_dappend ((((((v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteEdgeAt i) (count - 1)) s) ctors) projs) facts)) ((((((v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteEdgesJ i) (count - 1)) s) ctors) projs) facts))))
 
 let rec v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteEdgesI = (fun i s ctors projs facts -> (if (i <= 0) then ((((((v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteEdgesJ 0) (Base_dList.v_Base_dList_dlength (match s with
-  | C_Vuna_dCompiler_dElab_dTermination_dScc_dSite_Vuna_dCompiler_dElab_dTermination_dScc_dSite (dtb__288, dtb__289, dtb__290, dtb__291, dtb__292) -> dtb__290
+  | C_Vuna_dCompiler_dElab_dTermination_dScc_dSite_Vuna_dCompiler_dElab_dTermination_dScc_dSite (dtb__289, dtb__290, dtb__291, dtb__292, dtb__293) -> dtb__291
   | _ -> failwith "DT: impossible branch"
 ))) s) ctors) projs) facts) else ((Base_dList.v_Base_dList_dappend ((((((v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteEdgesJ i) (Base_dList.v_Base_dList_dlength (match s with
-  | C_Vuna_dCompiler_dElab_dTermination_dScc_dSite_Vuna_dCompiler_dElab_dTermination_dScc_dSite (dtb__293, dtb__294, dtb__295, dtb__296, dtb__297) -> dtb__295
+  | C_Vuna_dCompiler_dElab_dTermination_dScc_dSite_Vuna_dCompiler_dElab_dTermination_dScc_dSite (dtb__294, dtb__295, dtb__296, dtb__297, dtb__298) -> dtb__296
   | _ -> failwith "DT: impossible branch"
 ))) s) ctors) projs) facts)) (((((v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteEdgesI (i - 1)) s) ctors) projs) facts))))
 
 let v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteEdgesOf = (fun ctors projs facts s -> (((((v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteEdgesI (v_Vuna_dCompiler_dElab_dTermination_dScc_dmaxBaseOf (match s with
-  | C_Vuna_dCompiler_dElab_dTermination_dScc_dSite_Vuna_dCompiler_dElab_dTermination_dScc_dSite (dtb__298, dtb__299, dtb__300, dtb__301, dtb__302) -> dtb__301
+  | C_Vuna_dCompiler_dElab_dTermination_dScc_dSite_Vuna_dCompiler_dElab_dTermination_dScc_dSite (dtb__299, dtb__300, dtb__301, dtb__302, dtb__303) -> dtb__302
   | _ -> failwith "DT: impossible branch"
 ))) s) ctors) projs) facts))
 
 let rec v_Vuna_dCompiler_dElab_dTermination_dScc_dinitialTableGo = (fun mc0 mc1 mc2 mc3 mc4 -> (match mc0 with
-  | Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__303, dtb__304) -> (((((v_Vuna_dCompiler_dElab_dTermination_dScc_dinitialTableGo dtb__304) mc1) mc2) mc3) ((((v_Vuna_dCompiler_dElab_dTermination_dScc_dtableAddPair (match dtb__303 with
-  | C_Vuna_dCompiler_dElab_dTermination_dScc_dSite_Vuna_dCompiler_dElab_dTermination_dScc_dSite (dtb__305, dtb__306, dtb__307, dtb__308, dtb__309) -> dtb__305
+  | Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__304, dtb__305) -> (((((v_Vuna_dCompiler_dElab_dTermination_dScc_dinitialTableGo dtb__305) mc1) mc2) mc3) ((((v_Vuna_dCompiler_dElab_dTermination_dScc_dtableAddPair (match dtb__304 with
+  | C_Vuna_dCompiler_dElab_dTermination_dScc_dSite_Vuna_dCompiler_dElab_dTermination_dScc_dSite (dtb__306, dtb__307, dtb__308, dtb__309, dtb__310) -> dtb__306
   | _ -> failwith "DT: impossible branch"
-)) (match dtb__303 with
-  | C_Vuna_dCompiler_dElab_dTermination_dScc_dSite_Vuna_dCompiler_dElab_dTermination_dScc_dSite (dtb__310, dtb__311, dtb__312, dtb__313, dtb__314) -> dtb__311
+)) (match dtb__304 with
+  | C_Vuna_dCompiler_dElab_dTermination_dScc_dSite_Vuna_dCompiler_dElab_dTermination_dScc_dSite (dtb__311, dtb__312, dtb__313, dtb__314, dtb__315) -> dtb__312
   | _ -> failwith "DT: impossible branch"
-)) ((((v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteEdgesOf mc1) mc2) mc3) dtb__303)) mc4))
+)) ((((v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteEdgesOf mc1) mc2) mc3) dtb__304)) mc4))
   | Base_dList.C_Base_dList_dList_Base_dList_dNil -> mc4
   | _ -> failwith "DT: impossible branch"
 ))
@@ -486,9 +486,9 @@ let rec v_Vuna_dCompiler_dElab_dTermination_dScc_dinitialTableGo = (fun mc0 mc1 
 let v_Vuna_dCompiler_dElab_dTermination_dScc_dinitialTable = (fun sites ctors projs facts -> (((((v_Vuna_dCompiler_dElab_dTermination_dScc_dinitialTableGo sites) ctors) projs) facts) Base_dList.C_Base_dList_dList_Base_dList_dNil))
 
 let rec v_Vuna_dCompiler_dElab_dTermination_dScc_dsctCheckTable = (fun mc0 -> (match mc0 with
-  | Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__315, dtb__316) -> (match dtb__315 with
-  | Base_dPair.C_Base_dPair_dPair_Base_dPair_dPair (dtb__317, dtb__318) -> (match dtb__317 with
-  | Base_dPair.C_Base_dPair_dPair_Base_dPair_dPair (dtb__319, dtb__320) -> (if (dtb__319 = dtb__320) then (if (v_Vuna_dCompiler_dElab_dTermination_dScc_dgraphsOK dtb__318) then (v_Vuna_dCompiler_dElab_dTermination_dScc_dsctCheckTable dtb__316) else false) else (v_Vuna_dCompiler_dElab_dTermination_dScc_dsctCheckTable dtb__316))
+  | Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__316, dtb__317) -> (match dtb__316 with
+  | Base_dPair.C_Base_dPair_dPair_Base_dPair_dPair (dtb__318, dtb__319) -> (match dtb__318 with
+  | Base_dPair.C_Base_dPair_dPair_Base_dPair_dPair (dtb__320, dtb__321) -> (if (dtb__320 = dtb__321) then (if (v_Vuna_dCompiler_dElab_dTermination_dScc_dgraphsOK dtb__319) then (v_Vuna_dCompiler_dElab_dTermination_dScc_dsctCheckTable dtb__317) else false) else (v_Vuna_dCompiler_dElab_dTermination_dScc_dsctCheckTable dtb__317))
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
@@ -498,15 +498,15 @@ let rec v_Vuna_dCompiler_dElab_dTermination_dScc_dsctCheckTable = (fun mc0 -> (m
 ))
 
 let rec v_Vuna_dCompiler_dElab_dTermination_dScc_dsctBadGraphs = (fun mc0 mc1 -> (match mc1 with
-  | Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__321, dtb__322) -> (if (v_Vuna_dCompiler_dElab_dTermination_dScc_dgraphOK dtb__321) then ((v_Vuna_dCompiler_dElab_dTermination_dScc_dsctBadGraphs mc0) dtb__322) else (Base_dList.C_Base_dList_dList_Base_dList_dCons (mc0, ((v_Vuna_dCompiler_dElab_dTermination_dScc_dsctBadGraphs mc0) dtb__322))))
+  | Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__322, dtb__323) -> (if (v_Vuna_dCompiler_dElab_dTermination_dScc_dgraphOK dtb__322) then ((v_Vuna_dCompiler_dElab_dTermination_dScc_dsctBadGraphs mc0) dtb__323) else (Base_dList.C_Base_dList_dList_Base_dList_dCons (mc0, ((v_Vuna_dCompiler_dElab_dTermination_dScc_dsctBadGraphs mc0) dtb__323))))
   | Base_dList.C_Base_dList_dList_Base_dList_dNil -> Base_dList.C_Base_dList_dList_Base_dList_dNil
   | _ -> failwith "DT: impossible branch"
 ))
 
 let rec v_Vuna_dCompiler_dElab_dTermination_dScc_dsctBadPairs = (fun mc0 -> (match mc0 with
-  | Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__323, dtb__324) -> (match dtb__323 with
-  | Base_dPair.C_Base_dPair_dPair_Base_dPair_dPair (dtb__325, dtb__326) -> (match dtb__325 with
-  | Base_dPair.C_Base_dPair_dPair_Base_dPair_dPair (dtb__327, dtb__328) -> (if (dtb__327 = dtb__328) then ((Base_dList.v_Base_dList_dappend ((v_Vuna_dCompiler_dElab_dTermination_dScc_dsctBadGraphs dtb__327) dtb__326)) (v_Vuna_dCompiler_dElab_dTermination_dScc_dsctBadPairs dtb__324)) else (v_Vuna_dCompiler_dElab_dTermination_dScc_dsctBadPairs dtb__324))
+  | Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__324, dtb__325) -> (match dtb__324 with
+  | Base_dPair.C_Base_dPair_dPair_Base_dPair_dPair (dtb__326, dtb__327) -> (match dtb__326 with
+  | Base_dPair.C_Base_dPair_dPair_Base_dPair_dPair (dtb__328, dtb__329) -> (if (dtb__328 = dtb__329) then ((Base_dList.v_Base_dList_dappend ((v_Vuna_dCompiler_dElab_dTermination_dScc_dsctBadGraphs dtb__328) dtb__327)) (v_Vuna_dCompiler_dElab_dTermination_dScc_dsctBadPairs dtb__325)) else (v_Vuna_dCompiler_dElab_dTermination_dScc_dsctBadPairs dtb__325))
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
@@ -516,45 +516,45 @@ let rec v_Vuna_dCompiler_dElab_dTermination_dScc_dsctBadPairs = (fun mc0 -> (mat
 ))
 
 let v_Vuna_dCompiler_dElab_dTermination_dScc_dstrictEdgeText = (fun e -> (String.concat "" [(bi_strFromInt (match e with
-  | C_Vuna_dCompiler_dElab_dTermination_dScc_dScEdge_Vuna_dCompiler_dElab_dTermination_dScc_dScEdge (dtb__329, dtb__330, dtb__331) -> dtb__329
+  | C_Vuna_dCompiler_dElab_dTermination_dScc_dScEdge_Vuna_dCompiler_dElab_dTermination_dScc_dScEdge (dtb__330, dtb__331, dtb__332) -> dtb__330
   | _ -> failwith "DT: impossible branch"
 )); "->>"; (bi_strFromInt (match e with
-  | C_Vuna_dCompiler_dElab_dTermination_dScc_dScEdge_Vuna_dCompiler_dElab_dTermination_dScc_dScEdge (dtb__332, dtb__333, dtb__334) -> dtb__333
+  | C_Vuna_dCompiler_dElab_dTermination_dScc_dScEdge_Vuna_dCompiler_dElab_dTermination_dScc_dScEdge (dtb__333, dtb__334, dtb__335) -> dtb__334
   | _ -> failwith "DT: impossible branch"
 ))]))
 
 let v_Vuna_dCompiler_dElab_dTermination_dScc_dweakEdgeText = (fun e -> (String.concat "" [(bi_strFromInt (match e with
-  | C_Vuna_dCompiler_dElab_dTermination_dScc_dScEdge_Vuna_dCompiler_dElab_dTermination_dScc_dScEdge (dtb__335, dtb__336, dtb__337) -> dtb__335
+  | C_Vuna_dCompiler_dElab_dTermination_dScc_dScEdge_Vuna_dCompiler_dElab_dTermination_dScc_dScEdge (dtb__336, dtb__337, dtb__338) -> dtb__336
   | _ -> failwith "DT: impossible branch"
 )); "->"; (bi_strFromInt (match e with
-  | C_Vuna_dCompiler_dElab_dTermination_dScc_dScEdge_Vuna_dCompiler_dElab_dTermination_dScc_dScEdge (dtb__338, dtb__339, dtb__340) -> dtb__339
+  | C_Vuna_dCompiler_dElab_dTermination_dScc_dScEdge_Vuna_dCompiler_dElab_dTermination_dScc_dScEdge (dtb__339, dtb__340, dtb__341) -> dtb__340
   | _ -> failwith "DT: impossible branch"
 ))]))
 
 let v_Vuna_dCompiler_dElab_dTermination_dScc_dedgeText = (fun e -> (if (match e with
-  | C_Vuna_dCompiler_dElab_dTermination_dScc_dScEdge_Vuna_dCompiler_dElab_dTermination_dScc_dScEdge (dtb__341, dtb__342, dtb__343) -> dtb__343
+  | C_Vuna_dCompiler_dElab_dTermination_dScc_dScEdge_Vuna_dCompiler_dElab_dTermination_dScc_dScEdge (dtb__342, dtb__343, dtb__344) -> dtb__344
   | _ -> failwith "DT: impossible branch"
 ) then (v_Vuna_dCompiler_dElab_dTermination_dScc_dstrictEdgeText e) else (v_Vuna_dCompiler_dElab_dTermination_dScc_dweakEdgeText e)))
 
 let rec v_Vuna_dCompiler_dElab_dTermination_dScc_dedgesText = (fun mc0 -> (match mc0 with
-  | Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__344, dtb__345) -> (match dtb__345 with
-  | Base_dList.C_Base_dList_dList_Base_dList_dNil -> (v_Vuna_dCompiler_dElab_dTermination_dScc_dedgeText dtb__344)
-  | _ -> (String.concat "" [(v_Vuna_dCompiler_dElab_dTermination_dScc_dedgeText dtb__344); ","; (v_Vuna_dCompiler_dElab_dTermination_dScc_dedgesText dtb__345)])
+  | Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__345, dtb__346) -> (match dtb__346 with
+  | Base_dList.C_Base_dList_dList_Base_dList_dNil -> (v_Vuna_dCompiler_dElab_dTermination_dScc_dedgeText dtb__345)
+  | _ -> (String.concat "" [(v_Vuna_dCompiler_dElab_dTermination_dScc_dedgeText dtb__345); ","; (v_Vuna_dCompiler_dElab_dTermination_dScc_dedgesText dtb__346)])
 )
   | Base_dList.C_Base_dList_dList_Base_dList_dNil -> ""
   | _ -> failwith "DT: impossible branch"
 ))
 
 let rec v_Vuna_dCompiler_dElab_dTermination_dScc_dbadGraphText = (fun mc0 mc1 -> (match mc1 with
-  | Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__346, dtb__347) -> (if (v_Vuna_dCompiler_dElab_dTermination_dScc_dgraphOK dtb__346) then ((v_Vuna_dCompiler_dElab_dTermination_dScc_dbadGraphText mc0) dtb__347) else (Base_dList.C_Base_dList_dList_Base_dList_dCons ((String.concat "" [mc0; "{"; (v_Vuna_dCompiler_dElab_dTermination_dScc_dedgesText dtb__346); "}"]), ((v_Vuna_dCompiler_dElab_dTermination_dScc_dbadGraphText mc0) dtb__347))))
+  | Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__347, dtb__348) -> (if (v_Vuna_dCompiler_dElab_dTermination_dScc_dgraphOK dtb__347) then ((v_Vuna_dCompiler_dElab_dTermination_dScc_dbadGraphText mc0) dtb__348) else (Base_dList.C_Base_dList_dList_Base_dList_dCons ((String.concat "" [mc0; "{"; (v_Vuna_dCompiler_dElab_dTermination_dScc_dedgesText dtb__347); "}"]), ((v_Vuna_dCompiler_dElab_dTermination_dScc_dbadGraphText mc0) dtb__348))))
   | Base_dList.C_Base_dList_dList_Base_dList_dNil -> Base_dList.C_Base_dList_dList_Base_dList_dNil
   | _ -> failwith "DT: impossible branch"
 ))
 
 let rec v_Vuna_dCompiler_dElab_dTermination_dScc_dsctBadText = (fun mc0 -> (match mc0 with
-  | Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__348, dtb__349) -> (match dtb__348 with
-  | Base_dPair.C_Base_dPair_dPair_Base_dPair_dPair (dtb__350, dtb__351) -> (match dtb__350 with
-  | Base_dPair.C_Base_dPair_dPair_Base_dPair_dPair (dtb__352, dtb__353) -> (if (dtb__352 = dtb__353) then ((Base_dList.v_Base_dList_dappend ((v_Vuna_dCompiler_dElab_dTermination_dScc_dbadGraphText dtb__352) dtb__351)) (v_Vuna_dCompiler_dElab_dTermination_dScc_dsctBadText dtb__349)) else (v_Vuna_dCompiler_dElab_dTermination_dScc_dsctBadText dtb__349))
+  | Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__349, dtb__350) -> (match dtb__349 with
+  | Base_dPair.C_Base_dPair_dPair_Base_dPair_dPair (dtb__351, dtb__352) -> (match dtb__351 with
+  | Base_dPair.C_Base_dPair_dPair_Base_dPair_dPair (dtb__353, dtb__354) -> (if (dtb__353 = dtb__354) then ((Base_dList.v_Base_dList_dappend ((v_Vuna_dCompiler_dElab_dTermination_dScc_dbadGraphText dtb__353) dtb__352)) (v_Vuna_dCompiler_dElab_dTermination_dScc_dsctBadText dtb__350)) else (v_Vuna_dCompiler_dElab_dTermination_dScc_dsctBadText dtb__350))
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
@@ -566,13 +566,13 @@ let rec v_Vuna_dCompiler_dElab_dTermination_dScc_dsctBadText = (fun mc0 -> (matc
 let v_Vuna_dCompiler_dElab_dTermination_dScc_dsctDiag = (fun table -> (Vuna_dCompiler_dElab_dTermination_dMeasure.v_Vuna_dCompiler_dElab_dTermination_dMeasure_djoinComma (Vuna_dCompiler_dElab_dTermination_dMeasure.v_Vuna_dCompiler_dElab_dTermination_dMeasure_ddedup (v_Vuna_dCompiler_dElab_dTermination_dScc_dsctBadText table))))
 
 let v_Vuna_dCompiler_dElab_dTermination_dScc_dsctCheck = (fun comp defTbl ctors projs facts msg -> ((fun sites -> ((fun table0 -> (match ((v_Vuna_dCompiler_dElab_dTermination_dScc_dclosureLoop table0) 240) with
-  | Base_dPair.C_Base_dPair_dPair_Base_dPair_dPair (dtb__354, dtb__355) -> (if dtb__355 then (if (v_Vuna_dCompiler_dElab_dTermination_dScc_dsctCheckTable dtb__354) then (Base_dResult.C_Base_dResult_dResult_Base_dResult_dOk (0)) else (Base_dResult.C_Base_dResult_dResult_Base_dResult_dErr ((String.concat "" [msg; " [SCT \230\151\160\228\184\139\233\153\141\231\142\175: "; (v_Vuna_dCompiler_dElab_dTermination_dScc_dsctDiag dtb__354); "]"])))) else (Base_dResult.C_Base_dResult_dResult_Base_dResult_dErr (msg)))
+  | Base_dPair.C_Base_dPair_dPair_Base_dPair_dPair (dtb__355, dtb__356) -> (if dtb__356 then (if (v_Vuna_dCompiler_dElab_dTermination_dScc_dsctCheckTable dtb__355) then (Base_dResult.C_Base_dResult_dResult_Base_dResult_dOk (0)) else (Base_dResult.C_Base_dResult_dResult_Base_dResult_dErr ((String.concat "" [msg; " [SCT \230\151\160\228\184\139\233\153\141\231\142\175: "; (v_Vuna_dCompiler_dElab_dTermination_dScc_dsctDiag dtb__355); "]"])))) else (Base_dResult.C_Base_dResult_dResult_Base_dResult_dErr (msg)))
   | _ -> failwith "DT: impossible branch"
 )) ((((v_Vuna_dCompiler_dElab_dTermination_dScc_dinitialTable sites) ctors) projs) facts))) (((((v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteCollect comp) ctors) projs) defTbl) facts)))
 
 let v_Vuna_dCompiler_dElab_dTermination_dScc_dfirstParamName = (fun mc0 -> (match mc0 with
-  | Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__356, dtb__357) -> (match dtb__356 with
-  | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dPat_Vuna_dCompiler_dFrontend_dAst_dPVar (dtb__358, dtb__359) -> (Base_dMaybe.C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__358))
+  | Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__357, dtb__358) -> (match dtb__357 with
+  | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dPat_Vuna_dCompiler_dFrontend_dAst_dPVar (dtb__359, dtb__360) -> (Base_dMaybe.C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__359))
   | _ -> Base_dMaybe.C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing
 )
   | Base_dList.C_Base_dList_dList_Base_dList_dNil -> Base_dMaybe.C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing
@@ -581,8 +581,8 @@ let v_Vuna_dCompiler_dElab_dTermination_dScc_dfirstParamName = (fun mc0 -> (matc
 
 let v_Vuna_dCompiler_dElab_dTermination_dScc_dfirstParamOf = (fun name defTbl -> (match ((Vuna_dCompiler_dElab_dTermination_dMeasure.v_Vuna_dCompiler_dElab_dTermination_dMeasure_dclausesOfDefTbl name) defTbl) with
   | Base_dList.C_Base_dList_dList_Base_dList_dNil -> ""
-  | Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__360, dtb__361) -> (match (v_Vuna_dCompiler_dElab_dTermination_dScc_dfirstParamName (Base_dPair.v_Base_dPair_dfirstOf dtb__360)) with
-  | Base_dMaybe.C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__362) -> dtb__362
+  | Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__361, dtb__362) -> (match (v_Vuna_dCompiler_dElab_dTermination_dScc_dfirstParamName (Base_dPair.v_Base_dPair_dfirstOf dtb__361)) with
+  | Base_dMaybe.C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__363) -> dtb__363
   | Base_dMaybe.C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> ""
   | _ -> failwith "DT: impossible branch"
 )
@@ -590,8 +590,8 @@ let v_Vuna_dCompiler_dElab_dTermination_dScc_dfirstParamOf = (fun name defTbl ->
 ))
 
 let v_Vuna_dCompiler_dElab_dTermination_dScc_dhasFuelGuard = (fun mc0 mc1 -> (match mc1 with
-  | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEIf (dtb__363, dtb__364, dtb__365, dtb__366) -> (match (Vuna_dCompiler_dElab_dTermination_dMeasure.v_Vuna_dCompiler_dElab_dTermination_dMeasure_dguardPosVar dtb__363) with
-  | Base_dMaybe.C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__367) -> (dtb__367 = mc0)
+  | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEIf (dtb__364, dtb__365, dtb__366, dtb__367) -> (match (Vuna_dCompiler_dElab_dTermination_dMeasure.v_Vuna_dCompiler_dElab_dTermination_dMeasure_dguardPosVar dtb__364) with
+  | Base_dMaybe.C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__368) -> (dtb__368 = mc0)
   | Base_dMaybe.C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> false
   | _ -> failwith "DT: impossible branch"
 )
@@ -599,18 +599,18 @@ let v_Vuna_dCompiler_dElab_dTermination_dScc_dhasFuelGuard = (fun mc0 mc1 -> (ma
 ))
 
 let v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteFuelStrict = (fun callerFuel site -> (match ((Vuna_dCompiler_dElab_dTermination_dMeasure.v_Vuna_dCompiler_dElab_dTermination_dMeasure_dnthExpr (match site with
-  | C_Vuna_dCompiler_dElab_dTermination_dScc_dSite_Vuna_dCompiler_dElab_dTermination_dScc_dSite (dtb__368, dtb__369, dtb__370, dtb__371, dtb__372) -> dtb__370
+  | C_Vuna_dCompiler_dElab_dTermination_dScc_dSite_Vuna_dCompiler_dElab_dTermination_dScc_dSite (dtb__369, dtb__370, dtb__371, dtb__372, dtb__373) -> dtb__371
   | _ -> failwith "DT: impossible branch"
 )) 0) with
   | Base_dMaybe.C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> Base_dMaybe.C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing
-  | Base_dMaybe.C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__373) -> ((fun nd_uscrut4 -> (match nd_uscrut4 with
-  | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEApp (dtb__374, dtb__375, dtb__376) -> (match dtb__374 with
-  | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEVar (dtb__377, dtb__378) -> (if (dtb__377 = "-") then ((fun nd_uscrut10 -> (match nd_uscrut10 with
-  | Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__379, dtb__380) -> (match dtb__379 with
-  | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEVar (dtb__381, dtb__382) -> (match dtb__380 with
-  | Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__383, dtb__384) -> (match dtb__383 with
-  | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEInt (dtb__385, dtb__386) -> (match dtb__384 with
-  | Base_dList.C_Base_dList_dList_Base_dList_dNil -> (if (dtb__381 = callerFuel) then (if (dtb__385 > 0) then (Base_dMaybe.C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (true)) else Base_dMaybe.C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing) else Base_dMaybe.C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing)
+  | Base_dMaybe.C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__374) -> ((fun nd_uscrut4 -> (match nd_uscrut4 with
+  | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEApp (dtb__375, dtb__376, dtb__377) -> (match dtb__375 with
+  | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEVar (dtb__378, dtb__379) -> (if (dtb__378 = "-") then ((fun nd_uscrut10 -> (match nd_uscrut10 with
+  | Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__380, dtb__381) -> (match dtb__380 with
+  | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEVar (dtb__382, dtb__383) -> (match dtb__381 with
+  | Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__384, dtb__385) -> (match dtb__384 with
+  | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEInt (dtb__386, dtb__387) -> (match dtb__385 with
+  | Base_dList.C_Base_dList_dList_Base_dList_dNil -> (if (dtb__382 = callerFuel) then (if (dtb__386 > 0) then (Base_dMaybe.C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (true)) else Base_dMaybe.C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing) else Base_dMaybe.C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing)
   | _ -> Base_dMaybe.C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing
 )
   | _ -> Base_dMaybe.C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing
@@ -620,28 +620,28 @@ let v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteFuelStrict = (fun callerFuel s
   | _ -> Base_dMaybe.C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing
 )
   | _ -> Base_dMaybe.C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing
-)) dtb__375) else Base_dMaybe.C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing)
+)) dtb__376) else Base_dMaybe.C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing)
   | _ -> Base_dMaybe.C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing
 )
-  | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEVar (dtb__387, dtb__388) -> (if (dtb__387 = callerFuel) then (Base_dMaybe.C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (false)) else Base_dMaybe.C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing)
+  | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEVar (dtb__388, dtb__389) -> (if (dtb__388 = callerFuel) then (Base_dMaybe.C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (false)) else Base_dMaybe.C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing)
   | _ -> Base_dMaybe.C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing
-)) dtb__373)
+)) dtb__374)
   | _ -> failwith "DT: impossible branch"
 ))
 
 let rec v_Vuna_dCompiler_dElab_dTermination_dScc_dfuelEdgesGo = (fun mc0 mc1 mc2 mc3 mc4 -> (match mc2 with
-  | Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__389, dtb__390) -> (match ((v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteFuelStrict ((v_Vuna_dCompiler_dElab_dTermination_dScc_dfirstParamOf (match dtb__389 with
-  | C_Vuna_dCompiler_dElab_dTermination_dScc_dSite_Vuna_dCompiler_dElab_dTermination_dScc_dSite (dtb__391, dtb__392, dtb__393, dtb__394, dtb__395) -> dtb__391
+  | Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__390, dtb__391) -> (match ((v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteFuelStrict ((v_Vuna_dCompiler_dElab_dTermination_dScc_dfirstParamOf (match dtb__390 with
+  | C_Vuna_dCompiler_dElab_dTermination_dScc_dSite_Vuna_dCompiler_dElab_dTermination_dScc_dSite (dtb__392, dtb__393, dtb__394, dtb__395, dtb__396) -> dtb__392
   | _ -> failwith "DT: impossible branch"
-)) mc1)) dtb__389) with
-  | Base_dMaybe.C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> (((((v_Vuna_dCompiler_dElab_dTermination_dScc_dfuelEdgesGo mc0) mc1) dtb__390) false) mc4)
-  | Base_dMaybe.C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__396) -> (((((v_Vuna_dCompiler_dElab_dTermination_dScc_dfuelEdgesGo mc0) mc1) dtb__390) mc3) (Base_dList.C_Base_dList_dList_Base_dList_dCons ((Base_dPair.C_Base_dPair_dPair_Base_dPair_dPair ((Base_dPair.C_Base_dPair_dPair_Base_dPair_dPair ((match dtb__389 with
-  | C_Vuna_dCompiler_dElab_dTermination_dScc_dSite_Vuna_dCompiler_dElab_dTermination_dScc_dSite (dtb__397, dtb__398, dtb__399, dtb__400, dtb__401) -> dtb__397
+)) mc1)) dtb__390) with
+  | Base_dMaybe.C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> (((((v_Vuna_dCompiler_dElab_dTermination_dScc_dfuelEdgesGo mc0) mc1) dtb__391) false) mc4)
+  | Base_dMaybe.C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__397) -> (((((v_Vuna_dCompiler_dElab_dTermination_dScc_dfuelEdgesGo mc0) mc1) dtb__391) mc3) (Base_dList.C_Base_dList_dList_Base_dList_dCons ((Base_dPair.C_Base_dPair_dPair_Base_dPair_dPair ((Base_dPair.C_Base_dPair_dPair_Base_dPair_dPair ((match dtb__390 with
+  | C_Vuna_dCompiler_dElab_dTermination_dScc_dSite_Vuna_dCompiler_dElab_dTermination_dScc_dSite (dtb__398, dtb__399, dtb__400, dtb__401, dtb__402) -> dtb__398
   | _ -> failwith "DT: impossible branch"
-), (match dtb__389 with
-  | C_Vuna_dCompiler_dElab_dTermination_dScc_dSite_Vuna_dCompiler_dElab_dTermination_dScc_dSite (dtb__402, dtb__403, dtb__404, dtb__405, dtb__406) -> dtb__403
+), (match dtb__390 with
+  | C_Vuna_dCompiler_dElab_dTermination_dScc_dSite_Vuna_dCompiler_dElab_dTermination_dScc_dSite (dtb__403, dtb__404, dtb__405, dtb__406, dtb__407) -> dtb__404
   | _ -> failwith "DT: impossible branch"
-))), (if dtb__396 then 1 else 0))), mc4)))
+))), (if dtb__397 then 1 else 0))), mc4)))
   | _ -> failwith "DT: impossible branch"
 )
   | Base_dList.C_Base_dList_dList_Base_dList_dNil -> mc4
@@ -651,11 +651,11 @@ let rec v_Vuna_dCompiler_dElab_dTermination_dScc_dfuelEdgesGo = (fun mc0 mc1 mc2
 let v_Vuna_dCompiler_dElab_dTermination_dScc_dfuelEdgesOf = (fun comp defTbl sites -> (((((v_Vuna_dCompiler_dElab_dTermination_dScc_dfuelEdgesGo comp) defTbl) sites) true) Base_dList.C_Base_dList_dList_Base_dList_dNil))
 
 let rec v_Vuna_dCompiler_dElab_dTermination_dScc_dfuelMembersGuarded = (fun mc0 mc1 -> (match mc0 with
-  | Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__407, dtb__408) -> (match ((Vuna_dCompiler_dElab_dTermination_dMeasure.v_Vuna_dCompiler_dElab_dTermination_dMeasure_dclausesOfDefTbl dtb__407) mc1) with
+  | Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__408, dtb__409) -> (match ((Vuna_dCompiler_dElab_dTermination_dMeasure.v_Vuna_dCompiler_dElab_dTermination_dMeasure_dclausesOfDefTbl dtb__408) mc1) with
   | Base_dList.C_Base_dList_dList_Base_dList_dNil -> false
-  | Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__409, dtb__410) -> (match (v_Vuna_dCompiler_dElab_dTermination_dScc_dfirstParamName (Base_dPair.v_Base_dPair_dfirstOf dtb__409)) with
+  | Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__410, dtb__411) -> (match (v_Vuna_dCompiler_dElab_dTermination_dScc_dfirstParamName (Base_dPair.v_Base_dPair_dfirstOf dtb__410)) with
   | Base_dMaybe.C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> false
-  | Base_dMaybe.C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__411) -> (if ((v_Vuna_dCompiler_dElab_dTermination_dScc_dhasFuelGuard dtb__411) (Base_dPair.v_Base_dPair_dsecondOf dtb__409)) then ((v_Vuna_dCompiler_dElab_dTermination_dScc_dfuelMembersGuarded dtb__408) mc1) else false)
+  | Base_dMaybe.C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__412) -> (if ((v_Vuna_dCompiler_dElab_dTermination_dScc_dhasFuelGuard dtb__412) (Base_dPair.v_Base_dPair_dsecondOf dtb__410)) then ((v_Vuna_dCompiler_dElab_dTermination_dScc_dfuelMembersGuarded dtb__409) mc1) else false)
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"

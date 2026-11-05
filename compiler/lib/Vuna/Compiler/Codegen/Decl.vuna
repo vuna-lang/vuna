@@ -470,6 +470,8 @@ renderTypeIntrinsic "Array" ([a]) = Just ("(" ++ a ++ " array)")
 renderTypeIntrinsic "IORef" ([a]) = Just ("(" ++ a ++ " ref)")
 renderTypeIntrinsic "MArray" ([a]) = Just ("(" ++ a ++ " array)")
 renderTypeIntrinsic "Buffer" [] = Just "Buffer.t"
+-- IO 是内建效应类型（M37）：运行时表示是裸 thunk `int -> .a`。
+renderTypeIntrinsic "IO" ([a]) = Just ("(int -> " ++ a ++ ")")
 renderTypeIntrinsic _ _ = Nothing
 
 -- 单个字段的 OCaml 类型 + 下一个不透明参数槽。

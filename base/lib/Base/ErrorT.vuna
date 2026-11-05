@@ -1,0 +1,40 @@
+module Base.ErrorT (ErrorT, catchError, runErrorT, throwError) where
+
+-- Base.ErrorT：IO 之上的 Error 效应（M37 效应栈）。
+--
+-- `ErrorT e a` 包 `IO (Error e a)`：handler 是 `runErrorT`；`throwError` /
+-- `catchError` 是 transformer 版本（与 `Base.Error` 的纯版同名，同时使用时写限定名）。
+-- `Base.Error` 只导出 `ok` / `throwError` 等构造面，不暴露 `MkOk` / `MkErr`，这里用
+-- `runError` + `ok` / `throwError` 组合。`MonadIO (ErrorT e)` 让 IO 动作经 `liftIO`
+-- 进入本层。边界同 StateT：固定以 IO 为基座（record 参数的 kind 限制）。
+import Base.Effect
+import Base.Error
+import Base.IO
+import Base.Monad
+
+record ErrorT e a where
+  errorTRun : IO (Error e a)
+
+runErrorT : ErrorT e a -> IO (Error e a)
+runErrorT t = t.errorTRun
+
+throwError : e -> ErrorT e a
+throwError e = ErrorT (pure (Base.Error.throwError e))
+
+catchError : ErrorT e a -> (e -> ErrorT e a) -> ErrorT e a
+catchError t h =
+  ErrorT (t.errorTRun >>= (\r => runError r (\e => (h e).errorTRun) (\a => pure (Base.Error.ok a))))
+
+instance Functor (ErrorT e) where
+  fmap f t =
+    ErrorT
+      (t.errorTRun >>= (\r => runError r (\e => pure (Base.Error.throwError e)) (\a => pure (Base.Error.ok (f a)))))
+
+instance Monad (ErrorT e) where
+  bind t k =
+    ErrorT
+      (t.errorTRun >>= (\r => runError r (\e => pure (Base.Error.throwError e)) (\a => (k a).errorTRun)))
+  pure a = ErrorT (pure (Base.Error.ok a))
+
+instance MonadIO (ErrorT e) where
+  liftIO io = ErrorT (io >>= (\a => pure (Base.Error.ok a)))

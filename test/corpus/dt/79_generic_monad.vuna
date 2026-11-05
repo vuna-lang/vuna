@@ -1,0 +1,19 @@
+-- M35.1：泛型实例在刚性上下文里的解析（`Monad (State s)`，s 隐式量化）。
+-- 旧实现里「刚性类参数一律跳过实例搜索」的快路径会让这里提升出解不出的字典参数。
+import Base.State
+import Base.Int
+
+pair : {s : Type} -> State s Int
+pair = pure 41
+
+bump : {s : Type} -> State s Int
+bump = do
+  x <- pair
+  pure (x + 1)
+
+use : State Int Int
+use = bump
+
+main : Int
+main = case runState use 0 of
+  Pair a s => a + s

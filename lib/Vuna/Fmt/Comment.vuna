@@ -251,12 +251,12 @@ modDeclItemAnchors : ModDecl -> List Span
 modDeclItemAnchors (ModDecl _ _ items _) = map exportItemSpan items
 
 declAnchors : Decl -> List Span
-declAnchors (DData name params kind ctors derivings sp) = sp :: map ctorSpan ctors
+declAnchors (DData name params kind ctors derivings lin sp) = sp :: map ctorSpan ctors
 declAnchors (DAxiom name ty sp) = [sp]
 declAnchors (DExtern name cName ty sp) = [sp]
 declAnchors (DSig name ctx ty sp) = [sp]
 declAnchors (DFun name pats body sp) = sp :: exprAnchors body
-declAnchors (DRecord name params fields derivings sp) = sp :: map fieldSpan fields
+declAnchors (DRecord name params fields derivings lin sp) = sp :: map fieldSpan fields
 declAnchors (DTrait name params methods sp) = sp :: map traitMethodAnchor methods
 declAnchors (DInstance ctxE head methods sp) = sp :: concatMap declAnchors methods
 
@@ -286,7 +286,7 @@ exprAnchors e = case e of
   EStr s sp => []
   ELam ps body sp => exprAnchors body
   EApp fn args sp => append (exprAnchors fn) (concatMap exprAnchors args)
-  EPi name implicit dom cod sp => append (exprAnchors dom) (exprAnchors cod)
+  EPi name implicit _ dom cod sp => append (exprAnchors dom) (exprAnchors cod)
   ELet binds body rec_ sp =>
     append (append (map bindingAnchor binds) (concatMap bindingValueAnchors binds))
       (exprAnchors body)
@@ -308,6 +308,13 @@ exprAnchors e = case e of
   ESectOp op sp => []
   ESectL op inner sp => exprAnchors inner
   ESectR inner op sp => exprAnchors inner
+  -- M36：模板字面量：洞内表达式的注释锚点照常收集（注释仍在字面量内，但会被提升到
+  -- 外层条目——注释在 `${...}` 里不进 AST，见 Lexer 的说明）。
+  EInterp multi parts sp => concatMap interpPartAnchors parts
+
+interpPartAnchors : InterpPart -> List Span
+interpPartAnchors (IPText s) = []
+interpPartAnchors (IPHole e) = exprAnchors e
 
 localClauseAnchors : Pair (List Pat) Expr -> List Span
 localClauseAnchors (Pair pats body) = exprAnchors body

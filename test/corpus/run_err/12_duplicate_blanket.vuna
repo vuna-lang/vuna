@@ -1,0 +1,11 @@
+trait Wrap a where
+  wrap : a -> String
+
+instance Wrap a where
+  wrap x = "a"
+
+instance Wrap a where
+  wrap x = "b"
+
+main : String
+main = wrap 1

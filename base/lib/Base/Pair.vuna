@@ -1,12 +1,16 @@
+-- | 二元组类型与投影函数。
 module Base.Pair (Pair(..), firstOf, secondOf) where
 
 -- Base.Pair：二元组类型与投影函数。无依赖模块。
+-- | 二元组 `Pair a b`；构造子字段是 `first` / `second`。
 record Pair a b where
   first : a
   second : b
 
+-- | 取第一个分量。
 firstOf : Pair a b -> a
 firstOf (Pair a b) = a
 
+-- | 取第二个分量。
 secondOf : Pair a b -> b
 secondOf (Pair a b) = b

@@ -1,0 +1,30 @@
+module Base.Interp (Interp(..)) where
+
+-- Base.Interp：模板字符串插值的转换 trait。
+--
+-- 模板里每个 `${e}` 由编译器降级为 `Base.Interp.interp e`（纯语法糖，见
+-- docs/reference/templates.md）。转换语义完全由实例决定：
+--
+--   * blanket 实例 `Show a => Interp a`：任何实现了 `Show` 的类型免费获得插值，
+--     默认输出 = `show`；
+--   * `String` 的**具体实例**覆盖 blanket：插值原样输出（不走 `strShow`，不加引号）；
+--   * 用户可为自己类型写 `instance Interp T` 覆盖 blanket 的展示。
+--
+-- 覆盖规则依赖编译器的实例解析：blanket（头实参是裸类参数）是 fallback，具体实例优先
+-- （见 docs/reference/records-traits.md）。具体实例之间仍禁止重叠。
+--
+-- 刻意**不**提供 `deriving (Interp)`：需要默认展示用 `deriving (Show)`，需要自定义
+-- 就手写 `instance Interp T`。
+import Base.Show
+
+-- 插值的唯一方法：把值转成要拼进字符串的文本。
+trait Interp a where
+  interp : a -> String
+
+-- blanket：`Show a` ⇒ 免费插值（默认 = show）。
+instance Show a => Interp a where
+  interp x = show x
+
+-- String 覆盖 blanket：插值原样输出（`Show String` 会加引号并转义，不是插值想要的）。
+instance Interp String where
+  interp s = s

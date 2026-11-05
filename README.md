@@ -43,7 +43,7 @@ nix run .#vuna-run-tests                            # 原生测试（= sh test/r
 nix run .#vuna-run-tests -- --list                  # 列出章节（--only <章节> 只跑某段）
 ./result/bin/vuna fmt --check examples/multi   # 格式化检查（也可逐个给文件/目录）
 ./result/bin/vuna lint compiler/lib/Vuna/Compiler/Elab/Term.vuna   # 风格检查（必须给路径）
-./result/bin/vuna doc                          # 生成 docs/api.md（gitignored）
+./result/bin/vuna doc                          # 生成 docs/api.html（gitignored）
 ```
 
 自己新建包：`vuna.toml` + `app/Main.vuna`，入口 `main : IO a`，效果 API 来自 `Base.IO`。
@@ -71,10 +71,12 @@ vuna check (<entry.vuna> | <package-dir>)
 vuna build [--no-compile] [--out DIR] [PKG-DIR]  # 默认 `<PKG-DIR>/.output`；跑 build.sh → 输出目录/bin/<包名>
 vuna lint [--fix] <file.vuna>...
 vuna interp <file.vuna>                   # 精化后核心求值（纯；不执行效果）
-vuna test [DIR]                           # 运行 test/*.vuna（DT 核心求值，main : String 空串通过）
+vuna test [DIR] [--list|--filter PAT|--verbose|--fail-fast]  # 运行 test/*.vuna（main : String 空串通过）
+vuna run [DIR] [--package NAME] [--no-build] [-- ARGS...]    # 增量 build + 执行 .output/bin/<包名>
 vuna fmt [--check] [PATH]...
 vuna repl
-vuna doc [DIR [OUT]]                      # 默认 DIR/docs/api.md
+vuna doc [--check] [--package NAME] [DIR [OUT]]  # 默认 DIR/docs/api.html
+vuna search [--type|--name|--doc] [--module PFX] [--limit N] [--json] <query...>
 vuna map [...] | vuna api <Module.name>  # 模块总览 / 定位符号 / 改动影响面 / 签名面
 vuna help, -h
 ```
@@ -140,13 +142,17 @@ manifest，不向上找。命令语义与包格式
 | [docs/architecture.md](docs/architecture.md) | 子系统地图：五条链路、入口符号、连带改动、测试标签 |
 | [docs/reference/language.md](docs/reference/language.md) | core-v0 语法、模块系统、import 与导出规则 |
 | [docs/reference/type-system.md](docs/reference/type-system.md) | 类型系统：宇宙/kind、索引归纳族、依赖匹配、相等证据、擦除、终止性 |
+| [docs/reference/qtt.md](docs/reference/qtt.md) | QTT：quantity 0/1/ω、用量检查、线性数据/记录、线性 ST 子集 |
 | [docs/reference/records-traits.md](docs/reference/records-traits.md) | 记录、trait / 实例 / `deriving`、`do` / Monad / IO |
+| [docs/reference/effects.md](docs/reference/effects.md) | 效应：IO 内建效应类型、MonadIO + StateT/ReaderT/ErrorT、ST/region、通用 Eff 的阻塞与 F3 路线 |
 | [docs/reference/stdlib.md](docs/reference/stdlib.md) | 标准库 `vuna-base` 模块清单与 `Prelude` 自动导入 |
 | [docs/reference/operators.md](docs/reference/operators.md) | 运算符=方法别名、`Eq`/`Ord` 真源、实例落点规则 |
 | [docs/reference/primitives.md](docs/reference/primitives.md) | 内建/原语唯一声明面、Int/String/IO 语义、效应能力（`[capabilities]`） |
 | [docs/reference/packages.md](docs/reference/packages.md) | `vuna.toml` 包格式、workspace / 依赖 DAG、工具链命令一览 |
 | [docs/reference/core.md](docs/reference/core.md) | Core TT / NbE / 合一 / 精化器 / 擦除 / codegen 护栏的实现参考 |
-| [docs/reference/tooling.md](docs/reference/tooling.md) | 工具链：`vuna goal`、LSP、`vuna doc`、错误码体系与代表性错误索引 |
+| [docs/reference/api-docs.md](docs/reference/api-docs.md) | API 文档：docstring、单文件 HTML、`vuna search` / 类型检索 |
+| [docs/reference/tooling.md](docs/reference/tooling.md) | 工具链：`vuna goal`、LSP（含 codeAction quick fix）、`vuna doc`（单文件 HTML）、`vuna run` / REPL 调试命令、错误码体系与代表性错误索引 |
+| [docs/reference/debugging.md](docs/reference/debugging.md) | 调试：诊断源码片段、运行时错误报告（`vuna: runtime error` + 定义级帧 + exit 2）、`Base.Debug`（trace/assert）、`vuna run` / `test --verbose` / REPL `:type` |
 | [docs/reference/compiler.md](docs/reference/compiler.md) | 编译器模块职责、codegen 表示与输出模型、接口摘要（TTC 式模块化精化）、夹具指标 |
 | [docs/reference/bootstrap.md](docs/reference/bootstrap.md) | 种子策略、rotation 流程、fixed point、TCB 边界 |
 | [docs/reference/testing.md](docs/reference/testing.md) | 测试体系、corpus 分类、nix checks 清单、性能基准 |

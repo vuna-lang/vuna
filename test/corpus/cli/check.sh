@@ -8,7 +8,7 @@
 #         无 PATH 时默认识别 workspace 并格式化/--check；
 #   - map/api：非 workspace → 可读错误 + exit 2；
 #   - doc：--with-comments 已删提示；目录/源文件校验；[export].modules 过滤（按
-#         manifest 顺序、缺模块报错）；默认 OUT=DIR/docs/api.md；输出父目录递归创建；
+#         manifest 顺序、缺模块报错）；默认 OUT=DIR/docs/api.html；输出父目录递归创建；
 #   - gen-errors：ROOT 必须存在且是目录；docs/.generated 递归创建；
 #   - test/interp/goal/lint：不存在路径或目录输入给可读错误；
 #   - 参数模型：未知/重复/缺值 flag 给可读错误 + exit 2（不再吞掉或抛宿主异常）。
@@ -127,11 +127,11 @@ check_contains "doc empty dir error" "$out" "no vuna sources found"
 mkdir -p "$tmp/docpkg/lib"
 cp "$export_fixture/vuna.toml" "$tmp/docpkg/vuna.toml"
 cp "$export_fixture/lib/"*.vuna "$tmp/docpkg/lib/"
-run "doc [export] filter" "$tmp" doc "$tmp/docpkg" "$tmp/deep/nested/api.md"
+run "doc [export] filter" "$tmp" doc "$tmp/docpkg" "$tmp/deep/nested/api.html"
 check_eq "doc [export] exit" "0" "$code"
-doc_text=$(cat "$tmp/deep/nested/api.md" 2>/dev/null)
-check_contains "doc [export] renders exported module" "$doc_text" "## Visible"
-check_absent "doc [export] skips hidden module" "$doc_text" "## Hidden"
+doc_text=$(cat "$tmp/deep/nested/api.html" 2>/dev/null)
+check_contains "doc [export] renders exported module" "$doc_text" "id='visible'"
+check_absent "doc [export] skips hidden module" "$doc_text" "id='hidden'"
 check_contains "doc [export] counts rendered modules" "$out" "(1 modules)"
 
 # 缺导出模块 → 错误。
@@ -142,14 +142,14 @@ run "doc missing exported module" "$tmp" doc "$tmp/badexport" "$tmp/bad.md"
 check_eq "doc missing export exit" "2" "$code"
 check_contains "doc missing export error" "$out" "exported module not found"
 
-# 默认 OUT：DIR/docs/api.md（父目录不存在也要能建）。
+# 默认 OUT：DIR/docs/api.html（父目录不存在也要能建）。
 mkdir -p "$tmp/docpkg2/lib/Vuna"
 printf '[package]\nname = "docpkg2"\n' >"$tmp/docpkg2/vuna.toml"
 printf 'module Vuna.Only (x) where\n\nx : Int\nx = 1\n' >"$tmp/docpkg2/lib/Vuna/Only.vuna"
 run "doc default OUT" "$tmp/docpkg2" doc
 check_eq "doc default OUT exit" "0" "$code"
-if [ -f "$tmp/docpkg2/docs/api.md" ]; then ok; else bad "doc default OUT did not write DIR/docs/api.md"; fi
-check_contains "doc default OUT default content" "$(cat "$tmp/docpkg2/docs/api.md" 2>/dev/null)" "## Vuna.Only"
+if [ -f "$tmp/docpkg2/docs/api.html" ]; then ok; else bad "doc default OUT did not write DIR/docs/api.html"; fi
+check_contains "doc default OUT default content" "$(cat "$tmp/docpkg2/docs/api.html" 2>/dev/null)" "Vuna.Only"
 
 # ---------------------------------------------------------------
 # 4) gen-errors：ROOT 校验 + docs/.generated 递归创建

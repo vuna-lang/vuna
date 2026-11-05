@@ -23,14 +23,19 @@
 | B29 | M32 的显式 trait 约束只支持顶层签名；`where` / `let` 绑定、`axiom`、trait 方法、构造子 / 记录字段上的 `C a =>` 都不支持（trait 方法约束是父类语义，归 F4） | `Parser.rejectCtxSuffix` / `PS_ConstraintUnsupportedHere`；`test/corpus/traits/99_explicit_*_rejected` | F4（父类 / 局部约束） |
 | B30 | 标准库容器仍缺：泛型 `Hashable`（trait 仅单参数、无 `deriving Hash`）、有序持久容器（TreeMap/TreeSet）。不可变 `Array`、IO 内 `IORef` / `MArray` / `Buffer` 与 `HashMap`/`IntMap` 的 `Array` 桶已落地（M33 W3）；编译器热点由 `HashMap`/`IntMap` 覆盖 | `base/lib/Base/{HashMap,HashSet,IntMap,Array,IORef,MArray,Buffer}.vuna`；[stdlib.md](stdlib.md) 的容器边界 | F4（容器） |
 | C07 | 擦除位的作用域护栏按约定跳过，未对擦除位置做完整 de Bruijn 校验 | `Codegen/Erase.checkAllDefScopes`：跳过擦除实参 | 待定 |
-| D12 | 证明 ergonomics 进阶未实现：absurd / 空族消去语法、`rewrite` / `with`；隐式模式与 `auto` 见 B09/D08 | `limits.md` 的证明 ergonomics 边界；`tooling.md` §5 | F4 |
+| D12 | 证明 ergonomics 进阶未实现：absurd / 空族消去语法、`rewrite` / `with`；隐式模式与 `auto` 见 B09/D08 | `limits.md` 的证明 ergonomics 边界；`tooling.md` §6 | F4 |
 | D19 | 类型级部分应用不可用（如把 `Vec Int` 当类型参数传给 `Sigma Nat`） | `checkAppUnderTypeFuel` 报 `expected Nat, got Int` | F4 |
 | D21 | 完整 FFI 未做：受限 FFI（`Int` / `String` / `Bool` / `Array Int|String|Bool` 显式参数 + C 纯函数，包根 `ffi/*.c`）已落地（M33 W5）；仍无回调 / GC root / pin、无 C 头文件解析、无字符串双向可变共享 | [primitives.md](primitives.md) §10；[limits.md](limits.md) | 后续 / M35 |
-| D22 | 无线性 / 唯一性类型与 ST / region：可变数据（`IORef` / `MArray` / `Buffer`）已按 IO 隔离落地（M33 W3），但类型上无法表达「句柄不逃逸」，`runST` 仍无法类型安全表达 | `limits.md` 的「容器与可变数据」；[primitives.md](primitives.md) §6.1 | 研究储备（线性类型）/ M33 后续 |
+| D22 | QTT 核心已落地（M38：quantity 0/1/ω、用量检查、`linear data`/`linear record`、`Ref`/`SArray` 线性化）；仍无依赖 multiplicity、multiplicity 多态、线性箭头/借用、一次性续延，`ST` 动作本身仍可复制（无线性箭头线程化动作内部值），因此动作复制可产生同一底层 IORef 的多个句柄 | `compiler/lib/Vuna/Compiler/Elab/Usage.vuna`、`base/lib/Base/ST.vuna`；[qtt.md](qtt.md)、[effects.md](effects.md) §4 | 后续：线性箭头/多态 / F3 |
 | D23 | `+ - * /` 只有 Int/Nat 的类型定向特化，没有通用 `Num`/`FromInteger` 类；用户自定义数值类型不能重载字面量与算术 | `Elab/Term/Impl.specializeArith*`；[operators.md](operators.md) | F4 / 后续 |
 | D24 | Nat 字面量在**编译期**展开成 Zero/Succ 链（无惰性 `TNat`），超大 Nat 字面量有编译期节点成本；`case n of 0 =>` 字面量模式未支持 | `Elab/Term/Impl.natLitTerm`；[limits.md](limits.md) | 后续 |
 | D25 | Int→Nat 全库迁移只覆盖 Base 公开度量与必要消费点；`compiler/` 内部 level/meta/fuel/span/arity 与工具链多数内部字节计数仍保留 Int（按 M34.7 边界），`Base.IO.print/writeFile` 返回值也仍 Int | `docs/reference/limits.md` 的 Nat/Int 边界；`lib/` 中剩余 `strLength` | 后续（按性能/语义逐点） |
-| D26 | `Base.IO` 仍是 `data IO a where MkIO : ...`：canonical 构造子身份写死在 `Intrinsics.ioMkIoCtor`，改名为 record 需要「先放宽接受 MkIO/IO 两种 → rotation → 再改 Base.IO → rotation」两阶段过渡；字段访问收益小，本轮未做 | `base/lib/Base/IO.vuna`；`Elab.Term.Impl`/`Intrinsics.ioMkIoCtor` | 后续 |
+| D27 | 擦除依赖续延的运行时表示缺失：签名索引 `Eff`（CPS 版）的续延域 `res op` 在 OCaml 里不可命名（codegen 渲染成 `unit`，与真实续延类型冲突）；数据版 free monad 的 `bind` 触发终止性检查；Type-1 行编码 codegen 损坏。三条路线：QTT（不解决该表示轴）/ 后端不透明擦除值 / 运行时类型码 | [effects.md](effects.md) §5、§6 | F3 |
+| D28 | `base` 声明了 `unsafe`（使用点：`Base.IO.runIO = prim_runIO` 别名定义、`Base.ST.runST`），但没有机制约束「仅这些信任点使用」；收紧需要 per-module 能力或 QTT 线性 | `base/vuna.toml`；`base/lib/Base/{IO,ST}.vuna` | 后续（F3 / QTT） |
+| D32 | transformer 固定以 `IO` 为基座（`StateT s a` 而非 `StateT s m a`）：record 参数统一按 `Type` kind 降级，且顶层签名/实例头里的自由隐式变量 kind 只按「被应用次数」推断、不会从构造子 kind 反推，`m : Type -> Type` 在实参位置会被误判成 `Type`。泛化需要「隐式参数 kind 从构造子 kind 推断」（签名 `quantifyTopSig` + 实例头 `instanceTeleOf` 两处） | `base/lib/Base/{StateT,ReaderT,ErrorT}.vuna`；`Elab/Sig.vuna`、`Elab/Trait.vuna` | M37 后续（F3 前置） |
+| D29 | 类型检索是 parse 级：不做实例/隐式参数/依赖相等/类型别名展开；语义级（DT 精化后比较）只保留内部 `TypeMode.Semantic` 接口，CLI 不暴露 `--semantic` | `lib/Vuna/Search/Query.vuna`；[api-docs.md](api-docs.md) §3.2 | 后续（性能/精度权衡） |
+| D30 | docstring 覆盖未全仓化：当前仅试点 `base/` 部分模块；`vuna doc --check` 为 opt-in，未接 `nix flake check`；`-- ^` 尾随 doc、成员级 `--check`、多页/HTML 站点未做 | `lib/Vuna/Doc/*`；`docs/reference/api-docs.md` | 后续（按模块迁移） |
+| D31 | 类型名解析是语法级：短名歧义回退源码短名；不按 import 闭包把类型名规范化为 canonical 身份 | `Vuna.Search.Query.typeNameMap` / `canonName` | 后续（与 Loader 共享名字解析） |
 
 ## 工具、构建与验证
 
@@ -46,13 +51,19 @@
 | C36 | 泛型函数体内对 `Int` 的比较/算术（`<=` / `+` / `-`）走方法别名的隐式实例搜索，其隐式变量与函数泛型类型变量同名合并——泛型函数里混用「Int 辅助逻辑 + 泛型数据」时，`fuel <= 0` 会把泛型 `a` 统一成 `Int`（归并排序 `sortByFuel` 复现）；目前只能拆独立函数或显式类型规避，且数值递减的 SCT 判定被包裹函数阻断 | `Base/Sort.vuna` 注释；`Elab/Trait` 实例解糖 | M34.3（后续） |
 | C37 | 接口摘要（check 期包级 TTC 式模块化精化）**已落地**：摘要 = 闭合结果（datas + defs 含 body + globals + insts + classes），不含 `sols`/`next`；`deftbl` 只装定义体（历史根因：签名项进 deftbl 会让 `force` 把 `Int`/`String` 归约成 `Type`，报 `TC_AmbiguousInstance (Eq Type)`）；写侧按出现点深度 zonk，读侧 `cachedProgramValid` 校验。**开放项**：① 接口粒度是**包**不是模块——依赖包未被根包 import 的实例/类也会进视图（过近似），模块级接口与模块级签名隔离是后续（roadmap 第 2 步）；② codegen 模块级缓存：C35 的依赖模型前提已就绪（直接依赖 + 全限定跨单元引用 + 分层并行构建），模块级复用/缓存本身待做；③ 依赖 `defVals` 未序列化（摘要路径 delta 现算 body，只影响速度）；④ 擦除位置残留未解 meta 仍靠包段 `(idx+1)<<30` 重编号，彻底方案是精化收尾消除残 meta；⑤ LSP 尚未消费接口摘要（仍全量精化）。历史根因链（4 层修复 + 最终定位）见 git 历史 M34.5 提交 | `Driver/Cache`、`Driver/Dt.depStartOf`、`Driver/Compile`、`Elab/Driver.elabProgramFullWithAux`；[compiler.md](compiler.md) §接口摘要 | M34.5（模块级/后续） |
 
+| D33 | 运行时错误只有**定义级**位置：无表达式级 span、无局部变量值、无断点（无 DAP）；`ocamlopt` 内联会把抛错点归到调用者帧；非入口单元顶层初始化的异常不在捕获范围 | `Codegen/Term.dtDefLocTable`/`dtRuntimeWith`；[debugging.md](debugging.md) §2 | 后续（真正调试器另立项） |
+| D34 | `Base.Debug.trace/traceShow` 以 `unsafe` 的 `runIO`（`prim_eprint`）实现：纯代码里引入调试副作用，无类型/能力层约束 | `base/lib/Base/Debug.vuna`；[effects.md](effects.md) D28 | 后续（QTT / 正式 trace 效应） |
+| D35 | `vuna run` 只执行默认 `.output/bin/<包名>`（无 `--out`；workspace 多可执行包须显式 `--package`）；REPL 无行编辑历史 / 补全；`:browse` 首次可能触发索引重建 | `lib/Vuna/{Run,Repl}.vuna` | 后续 |
+| C38 | LSP codeAction 只有 lint quick fix：无 rename、无 case split、无 command 形式；`diagnostics` 只带 `code`（严格 LSP 还需 range/message） | `lib/Vuna/Lsp/Query.codeActionsFor`；[tooling.md](tooling.md) §2 | 后续 |
+| C39 | `vuna test` 仍串行（`nix/run-tests.sh` 的 `--jobs` 只并行章节）、无单测超时（沿 C23） | `lib/Vuna/TestRunner.vuna`；[testing.md](testing.md) | 后续 |
+
 ## 未来能力（F1–F4）
 
 | ID | 摘要 | 归属 |
 | --- | --- | --- |
 | D01 | 模块系统无签名 / 接口、无 functor / 嵌套 / 局部模块、import 仅文件顶部、无选择性 import | F1 |
 | D02 | 运行时 / 后端未定型：GC、后端无关 IR、Wasm/JS（当前绑 OCaml runtime） | F2（M33 表示 / 运行时；自研 GC / 后端不做，Wasm / JS 暂缓） |
-| D03 | 无通用效应系统 / 并发 / async；`IO` 仍是 thunk + IO 化的 `prim_*`（M31：动作只在 `main`，`runIO` 是能力门控逃逸）。**M33 的最小效应接口已落地为库级 `State` / `Reader` / `Error`**（纯函数、显式 import）；正式效应接口与并发留 M35 | [stdlib.md](stdlib.md)；[limits.md](limits.md) | F3（M35） |
+| D03 | 通用签名索引效应（用户自定义 op、深 handler 组合、行 / 重排）未实现。M35.1 已落地参数化纯效应 monad（`Base.State` / `Reader` / `Error`）与 `Base.ST` region 隔离；M37 已把 `IO` 升格为内建效应类型（`prim_pureIO` / `prim_bindIO` / `prim_runIO`）并给出 IO 基座 `MonadIO` + transformer。剩余阻塞的技术根因见 D27 | [effects.md](effects.md) §3；[limits.md](limits.md) | F3 |
 | D04 | 包生态：registry、版本解析、lockfile、文档托管、DT 验证库（Vec/Fin/Map/Set）；容器部分已落地（M33 W3，残留见 B30） | F4（生态） |
 | D06 | 完整依赖 kind / CoC 依赖消除（当前只检查 kind 形状与层级） | 研究储备 |
 | D17 | `main` 的展示只覆盖内建 `Int` / `Nat` / `String` / `Bool`；任意类型展示需要运行时 `Show` 证据 | F3 |

@@ -1,0 +1,8 @@
+[package]
+name = "prim-io"
+
+[dependencies]
+vuna-base = "../../../../base"
+
+[capabilities]
+effects = ["console", "process"]

@@ -4,7 +4,7 @@ vuna 只有一套类型检查器：依赖类型（DT）的双向精化 + NbE 定
 检查器，也没有「DT 子集」开关；所有命令（`check` / `compile` / `build` / `interp` /
 LSP / 测试夹具）都走它。本文是类型规则的语义页；语法与模块系统见
 [language.md](language.md)，记录 / trait / `do` 见 [records-traits.md](records-traits.md)，
-Core 表示与合一实现见 [core.md](core.md)，当前边界清单见 [limits.md](limits.md)。
+quantity/线性规则见 [qtt.md](qtt.md)；Core 表示与合一实现见 [core.md](core.md)，当前边界清单见 [limits.md](limits.md)。
 
 ## 宇宙与 kind
 
@@ -142,7 +142,7 @@ Core 表示与合一实现见 [core.md](core.md)，当前边界清单见 [limits
 - **零参顶层定义求值一次**：生成 `let v_x = body`；递归组里的零参非构造子 RHS 报
   `CG_RecursiveValueDefinition`。
 - **`main`**：`check` 不要求 `main`，`compile` / `build` 要求；`main` 可为
-  `Int` / `String` / `Bool` 或 `IO a`（`IO` 只认 canonical `Base.IO.IO`）。
+  `Int` / `String` / `Bool` 或 `IO a`（`IO` 是内建效应类型，M37）。
   `vuna interp` 是纯核心求值，只展示 `Int` / `String` / `Bool`，任何 `main : IO a`
   一律明确报错。
 - 洞 `_` 未解时报 `TC_UnsolvedHole`（带位置与目标类型）；`vuna goal` 列出全部洞
