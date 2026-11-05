@@ -67,6 +67,7 @@ modules = [
   "Vuna.Compiler.Driver.Dt",
   "Vuna.Compiler.Driver.Compile",
   "Vuna.Compiler.Driver.Cache",
+  "Vuna.Compiler.Driver.DiagRender",
   "Vuna.Compiler.Driver.CompilerCli"
 ]
 

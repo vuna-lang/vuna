@@ -15,6 +15,7 @@ module Vuna.Compiler.Driver.CompilerCli
 import Vuna.Compiler.Common
 import Vuna.Compiler.Packages.Pkg
 import Vuna.Compiler.Driver.Compile
+import Vuna.Compiler.Driver.DiagRender
 import Vuna.Compiler.Driver.Dt
 import Vuna.Compiler.Version
 import Base.IO
@@ -121,10 +122,12 @@ removedFlag prog flag = case removedFlagHint flag of
       _ = runIO (prim_print ("error: " ++ flag ++ " has been removed; " ++ hint ++ "\n"))
     in 2
 
+-- 诊断打印统一走 DiagRender：能定位到源码时追加「位置 + 源码行 + 插入符」片段，
+-- 定位失败（无位置 / 文件不可读 / 行越界 / 消息含换行）时逐字原样输出。
 printErrText : String -> Int
 printErrText e =
   let
-    _ = runIO (prim_print e)
+    _ = runIO (prim_print (renderCliDiagnostic e))
   in 1
 
 printErr : String -> Int
@@ -134,7 +137,7 @@ printWarnings : List String -> Int
 printWarnings [] = 0
 printWarnings (w :: rest) =
   let
-    _ = runIO (prim_print (w ++ "\n"))
+    _ = runIO (prim_print (renderCliDiagnostic (w ++ "\n")))
   in printWarnings rest
 
 defaultDir : Maybe String -> String
@@ -255,7 +258,8 @@ checkPackageSeq pkg code =
     c = case checkPackage pkg of
       Err e =>
         let
-          _ = runIO (prim_print ("error: [" ++ packageName pkg ++ "] " ++ e ++ "\n"))
+          _ =
+            runIO (prim_print (renderWithPrefix ("error: [" ++ packageName pkg ++ "] ") e ++ "\n"))
         in 1
       Ok warnings => printWarnings warnings
   in if c > code then c else code
