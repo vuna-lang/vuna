@@ -310,7 +310,7 @@ runBuildScript dir out name =
 -- 典型的「依赖包全部缓存命中」场景：重复 `vuna check .` / 多包 workspace / LSP 重启。
 -- ---------------------------------------------------------------
 checkCacheSchema : String
-checkCacheSchema = "vuna-check-cache 3"
+checkCacheSchema = "vuna-check-cache 4"
 
 checkCacheDir : PackageContext -> String
 checkCacheDir ctx = cacheBase ++ "/" ++ hashText (textHash (contextDir ctx)) ++ "/check"
@@ -356,20 +356,27 @@ checkCachedExe ctx entry =
   in if runIO (prim_fileExists path) then Ok []
   else checkAndCache ctx entry path (dtCheckWithProgram ctx entry)
 
--- M34.5 接口摘要路径的安全阀：只有全部直接依赖的缓存摘要都命中、且无残留 TMeta
--- 才返回；否则回退全量精化（静默漏检不可接受）。
+-- M34.5 接口摘要路径的安全阀：只有全部直接依赖的缓存摘要都命中、且签名面无残留
+-- TMeta 才返回；否则回退全量精化（静默漏检不可接受）。每个依赖包分配一个
+-- `idx << 30` 的编号段（per-module/包段编号），跨包合并的 TMeta/sols 不再冲突。
 depProgramsOf : PackageContext -> Maybe (List DtProgram)
 depProgramsOf ctx = case contextPackage ctx of
   Nothing => Nothing
-  Just pkg => depProgramsOfGo (packageDependencies pkg) []
+  Just pkg => depProgramsOfGo 0 (packageDependencies pkg) []
 
-depProgramsOfGo : List Package -> List DtProgram -> Maybe (List DtProgram)
-depProgramsOfGo [] acc = Just (reverse acc)
-depProgramsOfGo (d :: rest) acc = case readProgramCache d of
-  Just prog => if dtProgramHasMetas prog then Nothing else depProgramsOfGo rest (prog :: acc)
+metaSegment : Int
+metaSegment = 1073741824
+
+depProgramsOfGo : Int -> List Package -> List DtProgram -> Maybe (List DtProgram)
+depProgramsOfGo _ [] acc = Just (reverse acc)
+depProgramsOfGo idx (d :: rest) acc = case readProgramCache d of
+  Just cached =>
+    let
+      prog = programOfCached (shiftCachedProgram (idx * metaSegment) cached)
+    in if dtProgramHasMetas prog then Nothing else depProgramsOfGo (idx + 1) rest (prog :: acc)
   Nothing => Nothing
 
-readProgramCache : Package -> Maybe DtProgram
+readProgramCache : Package -> Maybe CachedProgram
 readProgramCache dep =
   let
     dctx = packageContext dep
@@ -377,7 +384,7 @@ readProgramCache dep =
       Just names => checkCacheKeyLib dctx names
       Nothing => checkCacheKeyExe dctx (packageEntry dep)
     path = checkCachePath dctx key
-  in if runIO (prim_fileExists path) then Just (programOfCached (prim_unmarshal (runIO (prim_readFile path))))
+  in if runIO (prim_fileExists path) then Just (prim_unmarshal (runIO (prim_readFile path)))
   else Nothing
 
 checkAndCache : PackageContext -> String -> String -> Result (Pair (List String) DtProgram) -> Result (List String)

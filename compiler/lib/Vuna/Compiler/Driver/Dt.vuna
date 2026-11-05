@@ -259,13 +259,15 @@ depStartOf progs =
   let
     datas = dedupDatas (concatMap dtProgDatas progs)
     globals = dedupGlobals (concatMap dtProgGlobals progs)
+    sols = concatMap dtProgSols progs
     ec0 = ecEmpty
     ec1 = addDatasEc ec0 datas
     ec2 = addInstsEc ec1 (dedupInsts (concatMap dtProgInsts progs))
     ec3 = addClassesEc ec2 (dedupClasses (concatMap dtProgClasses progs))
-    ec4 = ecPutNext ec3 (maxNext progs)
-    ec5 = ecPutGlobalsTbl ec4 (Base.HashMap.fromList globals)
-  in Pair ec5 globals
+    ec4 = ecPutSols ec3 sols
+    ec5 = ecPutNext ec4 0
+    ec6 = ecPutGlobalsTbl ec5 (Base.HashMap.fromList globals)
+  in Pair ec6 globals
 
 dedupDatas : List DtData -> List DtData
 dedupDatas [] = []

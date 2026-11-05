@@ -43,7 +43,7 @@ compiler/lib/Vuna/Compiler/Diagnostics.vuna: module Base.Nat, module Base.Vec, m
 compiler/lib/Vuna/Compiler/Diagnostics/Cg.vuna: CgEntry(..), CgErr(..), cgAll, cgCode, cgDefLoc, cgEntryCode, cgEntryDesc, cgEntryTemplate, cgErr, cgErr0, cgErr1, cgErrDefAt, cgMsg, cgTemplate
 compiler/lib/Vuna/Compiler/Diagnostics/Common.vuna: concatLists, diagDefLoc, diagErr, diagErrAt, diagMsg
 compiler/lib/Vuna/Compiler/Diagnostics/Tc.vuna: TcEntry(..), TcErr(..), tcAll, tcCode, tcEntryCode, tcEntryDesc, tcEntryTemplate, tcErr, tcErr0, tcErr0NoLoc, tcErr1, tcErr1NoLoc, tcErr2, tcErr2NoLoc, tcMsg, tcTemplate
-compiler/lib/Vuna/Compiler/Driver/Cache.vuna: CachedProgram(..), cachedOfProgram, programOfCached
+compiler/lib/Vuna/Compiler/Driver/Cache.vuna: CachedProgram(..), cachedOfProgram, programOfCached, shiftCachedProgram
 compiler/lib/Vuna/Compiler/Driver/Compile.vuna: buildMetaText, buildSplit, checkPackage, compileToDir, ensureDirPath, metaUpToDate, runBuildScript, writeBuildMeta
 compiler/lib/Vuna/Compiler/Driver/CompilerCli.vuna: compilerUsageLines, removedFlagHint, runCompilerCli, runCompilerCliFor
 compiler/lib/Vuna/Compiler/Driver/Dt.vuna: dtCheck, dtCheckLibrary, dtCheckLibraryWithProgram, dtCheckPackageWithDeps, dtCheckSource, dtCheckWithProgram, dtEvalExpr, dtEvalExprInfo, dtEvalFile, dtGoalsSource, dtMainKind, dtProgramHasMetas, dtSplitProject
