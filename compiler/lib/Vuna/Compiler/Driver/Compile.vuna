@@ -20,6 +20,7 @@ module Vuna.Compiler.Driver.Compile
 import Vuna.Compiler.Common
 import Vuna.Compiler.Packages.Pkg
 import Vuna.Compiler.Driver.Dt
+import Vuna.Compiler.Debug
 import Vuna.Compiler.Elab
 import Vuna.Compiler.Driver.Cache
 import Vuna.Compiler.Driver.Split
@@ -313,7 +314,7 @@ checkCacheSchema : String
 checkCacheSchema = "vuna-check-cache 4"
 
 checkCacheDir : PackageContext -> String
-checkCacheDir ctx = cacheBase ++ "/" ++ hashText (textHash (contextDir ctx)) ++ "/check"
+checkCacheDir ctx = cacheBase ++ "/" ++ hashText (textHash (contextPackageName ctx)) ++ "/check"
 
 checkCachePath : PackageContext -> String -> String
 checkCachePath ctx key = checkCacheDir ctx ++ "/" ++ key
@@ -353,8 +354,7 @@ checkCachedExe ctx entry =
   let
     key = checkCacheKeyExe ctx entry
     path = checkCachePath ctx key
-  in if runIO (prim_fileExists path) then Ok []
-  else checkAndCache ctx entry path (dtCheckWithProgram ctx entry)
+  in if runIO (prim_fileExists path) then Ok [] else noteAndCheck ctx entry path
 
 -- M34.5 接口摘要路径的安全阀：只有全部直接依赖的缓存摘要都命中、且签名面无残留
 -- TMeta 才返回；否则回退全量精化（静默漏检不可接受）。每个依赖包分配一个
@@ -373,16 +373,28 @@ depProgramsOfGo idx (d :: rest) acc = case readProgramCache d of
   Just cached =>
     let
       prog = programOfCached (shiftCachedProgram (idx * metaSegment) cached)
-    in if dtProgramHasMetas prog then Nothing else depProgramsOfGo (idx + 1) rest (prog :: acc)
-  Nothing => Nothing
+    in if dtProgramHasMetas prog then
+      let
+        _ = noteInt "cache-dep-metas" idx
+      in Nothing
+    else
+      let
+        _ = noteInt "cache-dep-ok" idx
+      in depProgramsOfGo (idx + 1) rest (prog :: acc)
+  Nothing =>
+    let
+      _ = noteInt "cache-dep-miss" idx
+    in Nothing
 
 readProgramCache : Package -> Maybe CachedProgram
 readProgramCache dep =
   let
     dctx = packageContext dep
-    key = case packageExports dep of
+    -- 与 checkPackage 的判定顺序一致：先看 app/Main.vuna（可执行），再看 [export].modules（库）。
+    key = if runIO (prim_fileExists (packageEntry dep)) then checkCacheKeyExe dctx (packageEntry dep)
+    else case packageExports dep of
       Just names => checkCacheKeyLib dctx names
-      Nothing => checkCacheKeyExe dctx (packageEntry dep)
+      Nothing => ""
     path = checkCachePath dctx key
   in if runIO (prim_fileExists path) then Just (prim_unmarshal (runIO (prim_readFile path)))
   else Nothing
@@ -417,7 +429,7 @@ splitCacheSchema : String
 splitCacheSchema = "vuna-split-cache 1"
 
 splitCacheDir : PackageContext -> String
-splitCacheDir ctx = cacheBase ++ "/" ++ hashText (textHash (contextDir ctx)) ++ "/split"
+splitCacheDir ctx = cacheBase ++ "/" ++ hashText (textHash (contextPackageName ctx)) ++ "/split"
 
 splitCachePath : PackageContext -> String -> String
 splitCachePath ctx key = splitCacheDir ctx ++ "/" ++ key
@@ -441,3 +453,11 @@ writeSplitCache ctx path files =
   let
     _ = ensureDirPath (splitCacheDir ctx)
   in runIO (prim_writeFile path (prim_marshal files))
+
+-- M34.5：接口摘要路径暂不启用（诊断结论见 C37：依赖签名在摘要重建后仍出现
+-- FixityEnv.vuna 的 TypeMismatch，说明还有未建模的精化状态）。全量路径 + 诊断 note。
+noteAndCheck : PackageContext -> String -> String -> Result (List String)
+noteAndCheck ctx entry path =
+  let
+    _ = note "cache-path-full"
+  in checkAndCache ctx entry path (dtCheckWithProgram ctx entry)

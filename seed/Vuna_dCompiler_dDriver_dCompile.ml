@@ -174,7 +174,7 @@ let v_Vuna_dCompiler_dDriver_dCompile_dcheckCacheSchema = "vuna-check-cache 4"
 
 let v_Vuna_dCompiler_dDriver_dCompile_dhashText = (fun n -> (bi_strFromInt (n - ((if 1000000007 = 0 then failwith "division by zero" else n / 1000000007) * 1000000007))))
 
-let v_Vuna_dCompiler_dDriver_dCompile_dcheckCacheDir = (fun ctx -> (String.concat "" [v_Vuna_dCompiler_dDriver_dCompile_dcacheBase; "/"; (v_Vuna_dCompiler_dDriver_dCompile_dhashText (v_Vuna_dCompiler_dDriver_dCompile_dtextHash (v_Vuna_dCompiler_dPackages_dPkg_dcontextDir ctx))); "/check"]))
+let v_Vuna_dCompiler_dDriver_dCompile_dcheckCacheDir = (fun ctx -> (String.concat "" [v_Vuna_dCompiler_dDriver_dCompile_dcacheBase; "/"; (v_Vuna_dCompiler_dDriver_dCompile_dhashText (v_Vuna_dCompiler_dDriver_dCompile_dtextHash (v_Vuna_dCompiler_dPackages_dPkg_dcontextPackageName ctx))); "/check"]))
 
 let v_Vuna_dCompiler_dDriver_dCompile_dcheckCachePath = (fun ctx key -> (String.concat "" [(v_Vuna_dCompiler_dDriver_dCompile_dcheckCacheDir ctx); "/"; key]))
 
@@ -184,16 +184,16 @@ let v_Vuna_dCompiler_dDriver_dCompile_dcheckCacheKeyLib = (fun ctx names -> ((fu
 
 let v_Vuna_dCompiler_dDriver_dCompile_dmetaSegment = 1073741824
 
-let v_Vuna_dCompiler_dDriver_dCompile_dreadProgramCache = (fun dep -> ((fun dctx -> ((fun key -> ((fun path -> (if (v_Base_dIO_drunIO ((fun dtio_0 -> C_Base_dIO_dIO_Base_dIO_dMkIO (fun _ -> dtp_fileExists dtio_0)) path)) then (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust ((dtp_unmarshal (v_Base_dIO_drunIO ((fun dtio_0 -> C_Base_dIO_dIO_Base_dIO_dMkIO (fun _ -> dtp_readFile dtio_0)) path))))) else C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing)) ((v_Vuna_dCompiler_dDriver_dCompile_dcheckCachePath dctx) key))) (match (v_Vuna_dCompiler_dPackages_dPkg_dpackageExports dep) with
+let v_Vuna_dCompiler_dDriver_dCompile_dreadProgramCache = (fun dep -> ((fun dctx -> ((fun key -> ((fun path -> (if (v_Base_dIO_drunIO ((fun dtio_0 -> C_Base_dIO_dIO_Base_dIO_dMkIO (fun _ -> dtp_fileExists dtio_0)) path)) then (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust ((dtp_unmarshal (v_Base_dIO_drunIO ((fun dtio_0 -> C_Base_dIO_dIO_Base_dIO_dMkIO (fun _ -> dtp_readFile dtio_0)) path))))) else C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing)) ((v_Vuna_dCompiler_dDriver_dCompile_dcheckCachePath dctx) key))) (if (v_Base_dIO_drunIO ((fun dtio_0 -> C_Base_dIO_dIO_Base_dIO_dMkIO (fun _ -> dtp_fileExists dtio_0)) (v_Vuna_dCompiler_dPackages_dPkg_dpackageEntry dep))) then ((v_Vuna_dCompiler_dDriver_dCompile_dcheckCacheKeyExe dctx) (v_Vuna_dCompiler_dPackages_dPkg_dpackageEntry dep)) else (match (v_Vuna_dCompiler_dPackages_dPkg_dpackageExports dep) with
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__16) -> ((v_Vuna_dCompiler_dDriver_dCompile_dcheckCacheKeyLib dctx) dtb__16)
-  | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> ((v_Vuna_dCompiler_dDriver_dCompile_dcheckCacheKeyExe dctx) (v_Vuna_dCompiler_dPackages_dPkg_dpackageEntry dep))
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> ""
   | _ -> failwith "DT: impossible branch"
-))) (v_Vuna_dCompiler_dPackages_dPkg_dpackageContext dep)))
+)))) (v_Vuna_dCompiler_dPackages_dPkg_dpackageContext dep)))
 
 let rec v_Vuna_dCompiler_dDriver_dCompile_ddepProgramsOfGo = (fun mc0 mc1 mc2 -> (match mc1 with
   | C_Base_dList_dList_Base_dList_dCons (dtb__17, dtb__18) -> (match (v_Vuna_dCompiler_dDriver_dCompile_dreadProgramCache dtb__17) with
-  | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__19) -> ((fun prog -> (if (v_Vuna_dCompiler_dDriver_dDt_ddtProgramHasMetas prog) then C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing else (((v_Vuna_dCompiler_dDriver_dCompile_ddepProgramsOfGo (mc0 + 1)) dtb__18) (C_Base_dList_dList_Base_dList_dCons (prog, mc2))))) (v_Vuna_dCompiler_dDriver_dCache_dprogramOfCached ((v_Vuna_dCompiler_dDriver_dCache_dshiftCachedProgram (mc0 * v_Vuna_dCompiler_dDriver_dCompile_dmetaSegment)) dtb__19)))
-  | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__19) -> ((fun prog -> (if (v_Vuna_dCompiler_dDriver_dDt_ddtProgramHasMetas prog) then ((fun _u -> C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing) ((v_Vuna_dCompiler_dDebug_dnoteInt "cache-dep-metas") mc0)) else ((fun _u -> (((v_Vuna_dCompiler_dDriver_dCompile_ddepProgramsOfGo (mc0 + 1)) dtb__18) (C_Base_dList_dList_Base_dList_dCons (prog, mc2)))) ((v_Vuna_dCompiler_dDebug_dnoteInt "cache-dep-ok") mc0)))) (v_Vuna_dCompiler_dDriver_dCache_dprogramOfCached ((v_Vuna_dCompiler_dDriver_dCache_dshiftCachedProgram (mc0 * v_Vuna_dCompiler_dDriver_dCompile_dmetaSegment)) dtb__19)))
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> ((fun _u -> C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing) ((v_Vuna_dCompiler_dDebug_dnoteInt "cache-dep-miss") mc0))
   | _ -> failwith "DT: impossible branch"
 )
   | C_Base_dList_dList_Base_dList_dNil -> (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust ((v_Base_dList_dreverse mc2)))
@@ -208,19 +208,11 @@ let v_Vuna_dCompiler_dDriver_dCompile_ddepProgramsOf = (fun ctx -> (match (v_Vun
 
 let v_Vuna_dCompiler_dDriver_dCompile_dcheckAndCache = (fun ctx entry path checked -> ((v_Base_dResult_dandThen checked) (fun r -> ((fun _u -> ((fun _u -> (C_Base_dResult_dResult_Base_dResult_dOk ((v_Base_dPair_dfirstOf r)))) (v_Base_dIO_drunIO (((fun dtio_0 dtio_1 -> C_Base_dIO_dIO_Base_dIO_dMkIO (fun _ -> dtp_writeFile dtio_0 dtio_1)) path) (dtp_marshal (v_Vuna_dCompiler_dDriver_dCache_dcachedOfProgram (v_Base_dPair_dsecondOf r))))))) (v_Vuna_dCompiler_dDriver_dCompile_densureDirPath (v_Vuna_dCompiler_dDriver_dCompile_dcheckCacheDir ctx))))))
 
-let v_Vuna_dCompiler_dDriver_dCompile_dcheckCachedExe = (fun ctx entry -> ((fun key -> ((fun path -> (if (v_Base_dIO_drunIO ((fun dtio_0 -> C_Base_dIO_dIO_Base_dIO_dMkIO (fun _ -> dtp_fileExists dtio_0)) path)) then (C_Base_dResult_dResult_Base_dResult_dOk (C_Base_dList_dList_Base_dList_dNil)) else ((((v_Vuna_dCompiler_dDriver_dCompile_dcheckAndCache ctx) entry) path) ((v_Vuna_dCompiler_dDriver_dDt_ddtCheckWithProgram ctx) entry)))) ((v_Vuna_dCompiler_dDriver_dCompile_dcheckCachePath ctx) key))) ((v_Vuna_dCompiler_dDriver_dCompile_dcheckCacheKeyExe ctx) entry)))
-
 let v_Vuna_dCompiler_dDriver_dCompile_dcheckCachedLib = (fun ctx names -> ((fun key -> ((fun path -> (if (v_Base_dIO_drunIO ((fun dtio_0 -> C_Base_dIO_dIO_Base_dIO_dMkIO (fun _ -> dtp_fileExists dtio_0)) path)) then (C_Base_dResult_dResult_Base_dResult_dOk (C_Base_dList_dList_Base_dList_dNil)) else ((v_Base_dResult_dandThen ((v_Vuna_dCompiler_dDriver_dDt_ddtCheckLibraryWithProgram ctx) names)) (fun r -> ((fun _u -> ((fun _u -> (C_Base_dResult_dResult_Base_dResult_dOk ((v_Base_dPair_dfirstOf r)))) (v_Base_dIO_drunIO (((fun dtio_0 dtio_1 -> C_Base_dIO_dIO_Base_dIO_dMkIO (fun _ -> dtp_writeFile dtio_0 dtio_1)) path) (dtp_marshal (v_Vuna_dCompiler_dDriver_dCache_dcachedOfProgram (v_Base_dPair_dsecondOf r))))))) (v_Vuna_dCompiler_dDriver_dCompile_densureDirPath (v_Vuna_dCompiler_dDriver_dCompile_dcheckCacheDir ctx))))))) ((v_Vuna_dCompiler_dDriver_dCompile_dcheckCachePath ctx) key))) ((v_Vuna_dCompiler_dDriver_dCompile_dcheckCacheKeyLib ctx) names)))
-
-let v_Vuna_dCompiler_dDriver_dCompile_dcheckPackage = (fun pkg -> (if (v_Base_dIO_drunIO ((fun dtio_0 -> C_Base_dIO_dIO_Base_dIO_dMkIO (fun _ -> dtp_fileExists dtio_0)) (v_Vuna_dCompiler_dPackages_dPkg_dpackageEntry pkg))) then ((v_Vuna_dCompiler_dDriver_dCompile_dcheckCachedExe (v_Vuna_dCompiler_dPackages_dPkg_dpackageContext pkg)) (v_Vuna_dCompiler_dPackages_dPkg_dpackageEntry pkg)) else (match (v_Vuna_dCompiler_dPackages_dPkg_dpackageExports pkg) with
-  | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> (C_Base_dResult_dResult_Base_dResult_dErr ((String.concat "" ["check: library package "; (v_Vuna_dCompiler_dPackages_dPkg_dpackageName pkg); " has no app/Main.vuna (executable) and no [export].modules (library)"])))
-  | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__21) -> ((v_Vuna_dCompiler_dDriver_dCompile_dcheckCachedLib (v_Vuna_dCompiler_dPackages_dPkg_dpackageContext pkg)) dtb__21)
-  | _ -> failwith "DT: impossible branch"
-)))
 
 let v_Vuna_dCompiler_dDriver_dCompile_dsplitCacheSchema = "vuna-split-cache 1"
 
-let v_Vuna_dCompiler_dDriver_dCompile_dsplitCacheDir = (fun ctx -> (String.concat "" [v_Vuna_dCompiler_dDriver_dCompile_dcacheBase; "/"; (v_Vuna_dCompiler_dDriver_dCompile_dhashText (v_Vuna_dCompiler_dDriver_dCompile_dtextHash (v_Vuna_dCompiler_dPackages_dPkg_dcontextDir ctx))); "/split"]))
+let v_Vuna_dCompiler_dDriver_dCompile_dsplitCacheDir = (fun ctx -> (String.concat "" [v_Vuna_dCompiler_dDriver_dCompile_dcacheBase; "/"; (v_Vuna_dCompiler_dDriver_dCompile_dhashText (v_Vuna_dCompiler_dDriver_dCompile_dtextHash (v_Vuna_dCompiler_dPackages_dPkg_dcontextPackageName ctx))); "/split"]))
 
 let v_Vuna_dCompiler_dDriver_dCompile_dsplitCachePath = (fun ctx key -> (String.concat "" [(v_Vuna_dCompiler_dDriver_dCompile_dsplitCacheDir ctx); "/"; key]))
 
@@ -231,9 +223,19 @@ let v_Vuna_dCompiler_dDriver_dCompile_dreadSplitCache = (fun path -> (if (v_Base
 let v_Vuna_dCompiler_dDriver_dCompile_dwriteSplitCache = (fun ctx path files -> ((fun _u -> (v_Base_dIO_drunIO (((fun dtio_0 dtio_1 -> C_Base_dIO_dIO_Base_dIO_dMkIO (fun _ -> dtp_writeFile dtio_0 dtio_1)) path) (dtp_marshal files)))) (v_Vuna_dCompiler_dDriver_dCompile_densureDirPath (v_Vuna_dCompiler_dDriver_dCompile_dsplitCacheDir ctx))))
 
 let v_Vuna_dCompiler_dDriver_dCompile_dcompileToDir = (fun ctx entry printResult outDir -> ((fun key -> ((fun path -> (match (v_Vuna_dCompiler_dDriver_dCompile_dreadSplitCache path) with
-  | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__22) -> (((v_Vuna_dCompiler_dDriver_dCompile_dwriteCompiled ctx) outDir) dtb__22)
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__21) -> (((v_Vuna_dCompiler_dDriver_dCompile_dwriteCompiled ctx) outDir) dtb__21)
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> ((v_Base_dResult_dandThen (((v_Vuna_dCompiler_dDriver_dDt_ddtSplitProject ctx) entry) printResult)) (fun files -> ((v_Base_dResult_dandThen (((v_Vuna_dCompiler_dDriver_dCompile_dwriteCompiled ctx) outDir) files)) (fun n -> ((fun _u -> (C_Base_dResult_dResult_Base_dResult_dOk (n))) (((v_Vuna_dCompiler_dDriver_dCompile_dwriteSplitCache ctx) path) files))))))
   | _ -> failwith "DT: impossible branch"
 )) ((v_Vuna_dCompiler_dDriver_dCompile_dsplitCachePath ctx) key))) (((v_Vuna_dCompiler_dDriver_dCompile_dsplitCacheKey ctx) entry) printResult)))
 
 let v_Vuna_dCompiler_dDriver_dCompile_dbuildSplit = (fun dir outDir -> ((v_Base_dResult_dandThen (v_Vuna_dCompiler_dPackages_dPkg_dloadPackage dir)) (fun pkg -> ((((v_Vuna_dCompiler_dDriver_dCompile_dcompileToDir (v_Vuna_dCompiler_dPackages_dPkg_dpackageContext pkg)) (v_Vuna_dCompiler_dPackages_dPkg_dpackageEntry pkg)) true) outDir))))
+
+let v_Vuna_dCompiler_dDriver_dCompile_dnoteAndCheck = (fun ctx entry path -> ((fun _u -> ((((v_Vuna_dCompiler_dDriver_dCompile_dcheckAndCache ctx) entry) path) ((v_Vuna_dCompiler_dDriver_dDt_ddtCheckWithProgram ctx) entry))) (v_Vuna_dCompiler_dDebug_dnote "cache-path-full")))
+
+let v_Vuna_dCompiler_dDriver_dCompile_dcheckCachedExe = (fun ctx entry -> ((fun key -> ((fun path -> (if (v_Base_dIO_drunIO ((fun dtio_0 -> C_Base_dIO_dIO_Base_dIO_dMkIO (fun _ -> dtp_fileExists dtio_0)) path)) then (C_Base_dResult_dResult_Base_dResult_dOk (C_Base_dList_dList_Base_dList_dNil)) else (((v_Vuna_dCompiler_dDriver_dCompile_dnoteAndCheck ctx) entry) path))) ((v_Vuna_dCompiler_dDriver_dCompile_dcheckCachePath ctx) key))) ((v_Vuna_dCompiler_dDriver_dCompile_dcheckCacheKeyExe ctx) entry)))
+
+let v_Vuna_dCompiler_dDriver_dCompile_dcheckPackage = (fun pkg -> (if (v_Base_dIO_drunIO ((fun dtio_0 -> C_Base_dIO_dIO_Base_dIO_dMkIO (fun _ -> dtp_fileExists dtio_0)) (v_Vuna_dCompiler_dPackages_dPkg_dpackageEntry pkg))) then ((v_Vuna_dCompiler_dDriver_dCompile_dcheckCachedExe (v_Vuna_dCompiler_dPackages_dPkg_dpackageContext pkg)) (v_Vuna_dCompiler_dPackages_dPkg_dpackageEntry pkg)) else (match (v_Vuna_dCompiler_dPackages_dPkg_dpackageExports pkg) with
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> (C_Base_dResult_dResult_Base_dResult_dErr ((String.concat "" ["check: library package "; (v_Vuna_dCompiler_dPackages_dPkg_dpackageName pkg); " has no app/Main.vuna (executable) and no [export].modules (library)"])))
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__22) -> ((v_Vuna_dCompiler_dDriver_dCompile_dcheckCachedLib (v_Vuna_dCompiler_dPackages_dPkg_dpackageContext pkg)) dtb__22)
+  | _ -> failwith "DT: impossible branch"
+)))
