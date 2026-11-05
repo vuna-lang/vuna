@@ -159,19 +159,10 @@ convNeutralFuel : Int -> HashMap Term -> Sols -> Int -> Neutral -> Neutral -> Va
 convNeutralFuel fuel defs sols depth n1 n2 v1 v2 = if fuel <= 0 then Err "DT: internal: conv fuel exhausted"
 else case n1 of
   NVar name level sp => case n2 of
-    NVar name2 level2 sp2 => if level == level2 then convSpinesFuel (fuel - 1) defs sols depth sp sp2 v1 v2
-    else
-      let
-        _ =
-          note
-            ("nvar-mm: " ++ name ++ "/" ++ strFromInt level ++ " vs " ++ name2 ++ "/" ++ strFromInt level2 ++ " @d=" ++ strFromInt depth)
-      in mismatchAt depth defs v1 v2
-    _ =>
-      let
-        _ =
-          note
-            ("nvar-mm2: " ++ name ++ "/" ++ strFromInt level ++ " vs " ++ showValueAt depth v2 ++ " @d=" ++ strFromInt depth)
-      in mismatchAt depth defs v1 v2
+    NVar name2 level2 sp2 =>
+      if level == level2 then convSpinesFuel (fuel - 1) defs sols depth sp sp2 v1 v2
+      else mismatchAt depth defs v1 v2
+    _ => mismatchAt depth defs v1 v2
   NGlobal g sp => case n2 of
     NGlobal g2 sp2 =>
       if g == g2 then convSpinesFuel (fuel - 1) defs sols depth sp sp2 v1 v2
