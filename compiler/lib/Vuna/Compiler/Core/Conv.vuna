@@ -126,7 +126,12 @@ else case a of
     _ => mismatchAt depth defs a b
   VApp f x => case b of
     VApp f2 x2 =>
-      andThen (convFuel (fuel - 1) defs sols depth f f2)
+      let
+        _ =
+          if debugOn then note
+            ("vapp: " ++ showValue a ++ " <> " ++ showValue b ++ " | x=" ++ showValue x ++ " x2=" ++ showValue x2)
+          else 0
+      in andThen (convFuel (fuel - 1) defs sols depth f f2)
         (\sols2 => convFuel (fuel - 1) defs sols2 depth x x2)
     _ => mismatchAt depth defs a b
   VCase scrut alts => case b of

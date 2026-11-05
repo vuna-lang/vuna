@@ -267,7 +267,8 @@ depStartOf progs =
   let
     datas = dedupDatas (concatMap dtProgDatas progs)
     defGlobals =
-      filter (\p => memName (firstOf p) (map dtDataName datas) == False)
+      filter
+        (\p => memName (firstOf p) (append (map dtDataName datas) (concatMap (\d => map dtCtorName (dtDataCtors d)) datas)) == False)
         (append preludeValueGlobals (dedupGlobals (concatMap dtProgGlobals progs)))
     globals = append defGlobals (map (\d => Pair (dtDataName d) (dtDataKind d)) datas)
     ec0 = ecEmpty
