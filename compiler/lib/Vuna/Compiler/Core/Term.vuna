@@ -1,7 +1,7 @@
 module Vuna.Compiler.Core.Term
   ( CaseAlt(..)
   , Closure(..)
-  , Level
+  , Level(..)
   , Neutral(..)
   , Rig(..)
   , Sols(..)
@@ -9,6 +9,8 @@ module Vuna.Compiler.Core.Term
   , VCaseAlt(..)
   , Value(..)
   , anyAltFree
+  , anyNegativeVarAlts
+  , anyNegativeVarArgs
   , anyPairFree
   , caseAltBinders
   , caseAltBody
@@ -25,6 +27,7 @@ module Vuna.Compiler.Core.Term
   , hasMeta
   , hasMetaAlts
   , hasMetaArgs
+  , hasNegativeVar
   , hasUnsolvedMetaClo
   , hasUnsolvedMetaList
   , hasUnsolvedMetaValue
@@ -45,7 +48,7 @@ module Vuna.Compiler.Core.Term
   , levelZero
   , metaLookup
   , metaLookupList
-  , notBool
+  , not
   , rigIsErased
   , rigIsLinear
   , rigIsOmega
@@ -61,7 +64,6 @@ module Vuna.Compiler.Core.Term
   , showCoreString
   , showTerm
   , solsCons
-  , solsDefVals
   , solsDepth
   , solsEmpty
   , solsFromList
@@ -69,7 +71,6 @@ module Vuna.Compiler.Core.Term
   , solsLookup
   , solsOf
   , solsPutDefVals
-  , solsTbl
   , substAltAt
   , substMetaVar
   , substMetaVarAlt
@@ -77,9 +78,6 @@ module Vuna.Compiler.Core.Term
   , substVarAt
   , termHasUnsolvedMeta
   , typeLevelOf
-  , vCaseAltBinders
-  , vCaseAltClosure
-  , vCaseAltName
   ) where
 
 -- Vuna.Compiler.Core.Term：core 类型论的表示层与纯数据操作。
@@ -88,7 +86,7 @@ module Vuna.Compiler.Core.Term
 -- 真源），以及不涉及求值/quote/conv 的项变换（shift/subst/显示/自由变量检查）。
 --
 -- **表示层定型（M18.6）**：擦除标志用三值 `Rig`（QTT 预留），宇宙层级用不透明
--- `Level`。`Vuna.Compiler.Core` 之外**禁止**解构 `Rig` / `Level`，只能走访问器；
+-- `Level`。`Vuna.Compiler.Core` 之外**禁止**解构 `Rig` / `Level`，只能走字段/访问器；
 -- 详见 docs/reference/core.md 的映射表与不变量。
 --
 -- M24 后维护（源码重组）：从原 1227 行 Core.vuna 拆出；本模块是 Core 的叶子，只依赖 Common。
@@ -133,30 +131,30 @@ rigOfBinder implicit isTypeDom = if implicit then Rig0 else if isTypeDom then Ri
 -- 宇宙层级：不透明。`Level` 的表示（现在就是一个非负 Int）只有本模块可见；
 -- 其它模块只能经 levelZero / levelSucc / levelMax / levelToInt / levelEq / levelLt
 -- 与 `TType` / `VType` 触碰层级，**禁止**自己做 `Int` 算术或模式匹配。
-data Level : Type where
-  MkLevel : Int -> Level
+record Level where
+  levelToInt : Int
 
 levelZero : Level
-levelZero = MkLevel 0
+levelZero = Level 0
 
 levelSucc : Level -> Level
-levelSucc (MkLevel n) = MkLevel (n + 1)
+levelSucc (Level n) = Level (n + 1)
 
 levelMax : Level -> Level -> Level
-levelMax (MkLevel a) (MkLevel b) = MkLevel (if a >= b then a else b)
+levelMax (Level a) (Level b) = Level (if a >= b then a else b)
 
 levelToInt : Level -> Int
-levelToInt (MkLevel n) = n
+levelToInt (Level n) = n
 
 -- 只给输入语法 `Type n` 与解析器/测试用；生产路径一律经 levelSucc / levelMax。
 levelOfInt : Int -> Level
-levelOfInt n = MkLevel n
+levelOfInt n = Level n
 
 levelEq : Level -> Level -> Bool
-levelEq (MkLevel a) (MkLevel b) = a == b
+levelEq (Level a) (Level b) = a == b
 
 levelLt : Level -> Level -> Bool
-levelLt (MkLevel a) (MkLevel b) = a < b
+levelLt (Level a) (Level b) = a < b
 
 data Term : Type where
   TVar : String -> Int -> Term
@@ -177,8 +175,10 @@ data Term : Type where
   TIf : Term -> Term -> Term -> Term
 
 -- case 分支：构造子名 + 绑定子（名字 / multiplicity）+ 体。
-data CaseAlt : Type where
-  CaseAlt : String -> List (Pair String Rig) -> Term -> CaseAlt
+record CaseAlt where
+  caseAltName : String
+  caseAltBinders : List (Pair String Rig)
+  caseAltBody : Term
 
 caseAltName : CaseAlt -> String
 caseAltName (CaseAlt name binders body) = name
@@ -189,8 +189,9 @@ caseAltBinders (CaseAlt name binders body) = binders
 caseAltBody : CaseAlt -> Term
 caseAltBody (CaseAlt name binders body) = body
 
-data Closure : Type where
-  Clos : List Value -> Term -> Closure
+record Closure where
+  closureEnv : List Value
+  closureBody : Term
 
 data Neutral : Type where
   NVar : String -> Int -> List Value -> Neutral
@@ -214,17 +215,10 @@ data Value : Type where
   VIf : Value -> Value -> Value -> Value
 
 -- case 分支的值形态：绑定子 + 悬挂在「绑定子入环境后」的闭包。
-data VCaseAlt : Type where
-  VCaseAlt : String -> List (Pair String Rig) -> Closure -> VCaseAlt
-
-vCaseAltName : VCaseAlt -> String
-vCaseAltName (VCaseAlt name binders clo) = name
-
-vCaseAltBinders : VCaseAlt -> List (Pair String Rig)
-vCaseAltBinders (VCaseAlt name binders clo) = binders
-
-vCaseAltClosure : VCaseAlt -> Closure
-vCaseAltClosure (VCaseAlt name binders clo) = clo
+record VCaseAlt where
+  vCaseAltName : String
+  vCaseAltBinders : List (Pair String Rig)
+  vCaseAltClosure : Closure
 
 defaultFuel : Int
 defaultFuel = 512
@@ -256,8 +250,11 @@ metaLookupList i ((Pair j t) :: rest) = if i == j then Just t else metaLookupLis
 -- 它是可重建缓存：未命中一律回落 `force` 原来的 defs 表 delta 展开，所以缓存内容
 -- 少一点只影响速度、不影响语义。缓存写入只发生在 `Elab.Driver.elabBodies` 的安全
 -- 前缀检查之后（闭项、无未解元变量、可达全局名全部已缓存或永不定义），见那里的证明。
-data Sols : Type where
-  Sols : IntMap Value -> List (Pair Int Value) -> IntMap Int -> HashMap Value -> Sols
+record Sols where
+  solsTbl : IntMap Value
+  solsList : List (Pair Int Value)
+  solsDepth : IntMap Int
+  solsDefVals : HashMap Value
 
 solsEmpty : Sols
 solsEmpty = Sols (Base.IntMap.fromList []) [] (Base.IntMap.fromList []) (Base.HashMap.fromList [])
@@ -274,13 +271,7 @@ solsOf t xs d dv = Sols t xs d dv
 solsList : Sols -> List (Pair Int Value)
 solsList (Sols t xs d dv) = xs
 
-solsTbl : Sols -> IntMap Value
-solsTbl (Sols t xs d dv) = t
-
 -- 定义值缓存（`force` 的 delta 展开先查它；未命中才回落 defs 表）。
-solsDefVals : Sols -> HashMap Value
-solsDefVals (Sols t xs d dv) = dv
-
 solsPutDefVals : Sols -> HashMap Value -> Sols
 solsPutDefVals (Sols t xs d dv) dv2 = Sols t xs d dv2
 
@@ -331,12 +322,9 @@ termHasUnsolvedMetaAlts sols (alt :: rest) =
 defLookup : String -> HashMap Term -> Maybe Term
 defLookup name tbl = Base.HashMap.lookup name tbl
 
-notBool : Bool -> Bool
-notBool b = if b then False else True
-
 -- 闭合项检查：TVar 只有在被 lambda/Pi 绑定时才允许。
 hasFreeVar : Int -> Term -> Bool
-hasFreeVar depth (TVar name i) = if i >= depth then True else False
+hasFreeVar depth (TVar name i) = i >= depth
 hasFreeVar depth (TMeta m) = False
 hasFreeVar depth (TGlobal g) = False
 hasFreeVar depth (TType l) = False
@@ -526,6 +514,27 @@ anyAltFree : Int -> List CaseAlt -> Bool
 anyAltFree d [] = False
 anyAltFree d ((CaseAlt n bs b) :: rest) = hasFreeTermVar (d + length bs) b || anyAltFree d rest
 
+-- 负 de Bruijn 索引：quote 的越界产物（`varIndex` 对越界 level 返回 -1）。`hasFreeTermVar`
+-- 只查上界，负索引会被 `lookupEnv` 的 `i <= 0` 当成**最内层**变量（静默错位），所以
+-- 序列化/摘要校验必须单独拒绝它。
+hasNegativeVar : Term -> Bool
+hasNegativeVar (TVar n i) = i < 0
+hasNegativeVar (TPi n i r d c) = hasNegativeVar d || hasNegativeVar c
+hasNegativeVar (TLam n r b) = hasNegativeVar b
+hasNegativeVar (TApp f a r) = hasNegativeVar f || hasNegativeVar a
+hasNegativeVar (TCon c args) = anyNegativeVarArgs args
+hasNegativeVar (TCase s alts) = hasNegativeVar s || anyNegativeVarAlts alts
+hasNegativeVar (TIf c th el) = hasNegativeVar c || hasNegativeVar th || hasNegativeVar el
+hasNegativeVar _ = False
+
+anyNegativeVarArgs : List (Pair Term Rig) -> Bool
+anyNegativeVarArgs [] = False
+anyNegativeVarArgs ((Pair a r) :: rest) = hasNegativeVar a || anyNegativeVarArgs rest
+
+anyNegativeVarAlts : List CaseAlt -> Bool
+anyNegativeVarAlts [] = False
+anyNegativeVarAlts ((CaseAlt n bs b) :: rest) = hasNegativeVar b || anyNegativeVarAlts rest
+
 -- M20：值里是否还有未解元变量（`VMeta m` 未解，或解里仍有未解）。
 hasUnsolvedMetaValue : Sols -> Value -> Bool
 hasUnsolvedMetaValue sols v = hasUnsolvedMetaValueFuel 64 sols v
@@ -568,7 +577,7 @@ hasUnsolvedMetaClo sols clo = hasUnsolvedMetaCloFuel 64 sols clo
 hasUnsolvedMetaCloFuel : Int -> Sols -> Closure -> Bool
 hasUnsolvedMetaCloFuel fuel sols clo = if fuel <= 0 then False
 else case clo of
-  Clos env body => hasUnsolvedMetaListFuel (fuel - 1) sols env
+  Closure env body => hasUnsolvedMetaListFuel (fuel - 1) sols env
 
 -- ---------------------------------------------------------------
 -- 宇宙 helper
@@ -608,7 +617,7 @@ levelEscapesList limit [] = False
 levelEscapesList limit (v :: rest) = levelEscapes limit 0 v || levelEscapesList limit rest
 
 levelEscapesClo : Int -> Closure -> Bool
-levelEscapesClo limit (Clos env body) = levelEscapesList limit env
+levelEscapesClo limit (Closure env body) = levelEscapesList limit env
 
 showTerm : Term -> String
 showTerm (TVar name i) = name

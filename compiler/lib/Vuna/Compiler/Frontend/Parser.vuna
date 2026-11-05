@@ -20,11 +20,11 @@ parseExpressionSource source =
 
 -- 可选模块头（M10）：`module M (导出项, ...) where`；列表省略 = 导出全部。
 parseSourceFile : PState -> Result (Pair SourceFile PState)
-parseSourceFile st = step (parseModDecl st) (\hdr, st1 => step (parseImports (stateFuel st1) st1) (\imports, st2 => if isEof st2 then Ok (Pair (Source hdr imports [] []) st2)
+parseSourceFile st = step (parseModDecl st) (\hdr, st1 => step (parseImports (stateFuel st1) st1) (\imports, st2 => if isEof st2 then Ok (Pair (SourceFile hdr imports [] []) st2)
 else case peekPos st2 of
   Pos line col => step (parseDecls (stateFuel st2) st2 col [] []) (\p, st3 => case p of
     Pair fixities decls =>
-      if isEof st3 then Ok (Pair (Source hdr imports fixities decls) st3)
+      if isEof st3 then Ok (Pair (SourceFile hdr imports fixities decls) st3)
       else psErr0 ExpectedEndOfInput
   )
 )
@@ -82,7 +82,7 @@ parseImports fuel st =
   else Ok (Pair [] st)
 
 -- M31.2：`infixl` / `infixr` / `infix` 声明与顶层声明穿插收集（声明本身不进入 Decl，
--- 由 Loader 在中缀重排时消费；见 `Source.fixities`）。
+-- 由 Loader 在中缀重排时消费；见 `SourceFile.fixities`）。
 parseDecls : Int -> PState -> Int -> List FixityDecl -> List Decl -> Result (Pair (Pair (List FixityDecl) (List Decl)) PState)
 parseDecls fuel st blockCol fixAcc declAcc = if fuel <= 0 then Err "DT: parser fuel exhausted (internal: parser made no progress)"
 else if isEof st then Ok (Pair (Pair (reverse fixAcc) (reverse declAcc)) st)
@@ -519,7 +519,7 @@ spanFromExpr : Expr -> PState -> Span
 spanFromExpr e st2 =
   let
     sp = exprSpan e
-  in Span (spanFile sp) (spanStartLine sp) (spanStartCol sp) (posLine (lastPos st2))
+  in Span sp.spanFile (spanStartLine sp) (spanStartCol sp) (posLine (lastPos st2))
     (posCol (lastPos st2))
 
 parseArgs : Int -> PState -> Int -> Result (Pair (List Expr) PState)

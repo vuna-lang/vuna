@@ -17,9 +17,7 @@ module Vuna.Compiler.Intrinsics
   , intrinsicArity
   , intrinsicCapability
   , intrinsicName
-  , intrinsicOp
   , intrinsicReturnsIO
-  , intrinsicRuntime
   , intrinsicSignature
   , intrinsicVisible
   , ioFamilyName
@@ -29,6 +27,9 @@ module Vuna.Compiler.Intrinsics
   , listConsCtor
   , listFamilyName
   , listNilCtor
+  , natSuccCtor
+  , natTypeName
+  , natZeroCtor
   , needsListBridge
   , parseCapability
   , preludeTypeNames
@@ -106,6 +107,8 @@ data IType : Type where
   IInt : IType
   IStr : IType
   IBool : IType
+  -- `Base.Nat.Nat`：canonical 归纳族，运行时表示是 OCaml `int`（见 Codegen）。
+  INat : IType
   -- `Base.List.List <arg>`：族身份固定为 base 的普通 data 声明
   IList : IType -> IType
   -- `Base.IO.IO <arg>`：效果原语返回的 IO 动作（M31 起效果原语类型化）
@@ -131,21 +134,22 @@ arityOfType _ = 0
 -- 与 `Int` / `String` 两个 primitive 类型名不同，这些是**带参数的**类型构造子：
 -- 名字恒可见（prelude 类型层），codegen 按固定 OCaml 类型渲染（见 Codegen.Decl）。
 -- 参数个数的唯一真源在此；Elab.Prelude 据此生成 kind，Codegen.Decl 据此渲染。
-data TypeIntrinsic : Type where
-  MkTypeIntrinsic : String -> Int -> TypeIntrinsic
+record TypeIntrinsic where
+  typeIntrinsicCtorName : String
+  typeIntrinsicCtorArity : Int
 
 typeIntrinsicCtorName : TypeIntrinsic -> String
-typeIntrinsicCtorName (MkTypeIntrinsic name arity) = name
+typeIntrinsicCtorName (TypeIntrinsic name arity) = name
 
 typeIntrinsicCtorArity : TypeIntrinsic -> Int
-typeIntrinsicCtorArity (MkTypeIntrinsic name arity) = arity
+typeIntrinsicCtorArity (TypeIntrinsic name arity) = arity
 
 typeIntrinsicArities : List TypeIntrinsic
 typeIntrinsicArities =
-  [ MkTypeIntrinsic "Array" 1,
-    MkTypeIntrinsic "IORef" 1,
-    MkTypeIntrinsic "MArray" 1,
-    MkTypeIntrinsic "Buffer" 0
+  [ TypeIntrinsic "Array" 1,
+    TypeIntrinsic "IORef" 1,
+    TypeIntrinsic "MArray" 1,
+    TypeIntrinsic "Buffer" 0
   ]
 
 -- `-1` = 不是内建类型构造子。
@@ -199,6 +203,13 @@ data IntrinsicOp : Type where
   OpStrAt : IntrinsicOp
   OpStrSubstring : IntrinsicOp
   OpStrShow : IntrinsicOp
+  -- Nat 的纯原语：饱和/截断语义与生成 runtime 的 bi_nat* 一致。
+  OpNatAdd : IntrinsicOp
+  OpNatSub : IntrinsicOp
+  OpNatMul : IntrinsicOp
+  OpNatDiv : IntrinsicOp
+  OpNatToInt : IntrinsicOp
+  OpNatFromInt : IntrinsicOp
 
 -- ---------------------------------------------------------------
 -- 内建声明
@@ -206,31 +217,30 @@ data IntrinsicOp : Type where
 --
 -- 字段：名字、签名形状、interp 归约标签、所需能力（Nothing = 纯）、runtime 表达式、
 -- 是否对用户源码可见（False = 只供 codegen 映射的内部名）。
-data Intrinsic : Type where
-  MkIntrinsic : String -> IType -> IntrinsicOp -> Maybe Capability -> String -> Bool -> Intrinsic
+record Intrinsic where
+  intrinsicName : String
+  intrinsicSignature : IType
+  intrinsicOp : IntrinsicOp
+  intrinsicCapability : Maybe Capability
+  intrinsicRuntime : String
+  intrinsicVisible : Bool
 
 intrinsicName : Intrinsic -> String
-intrinsicName (MkIntrinsic name sig op cap runtime visible) = name
+intrinsicName (Intrinsic name sig op cap runtime visible) = name
 
 intrinsicSignature : Intrinsic -> IType
-intrinsicSignature (MkIntrinsic name sig op cap runtime visible) = sig
-
-intrinsicOp : Intrinsic -> IntrinsicOp
-intrinsicOp (MkIntrinsic name sig op cap runtime visible) = op
+intrinsicSignature (Intrinsic name sig op cap runtime visible) = sig
 
 intrinsicCapability : Intrinsic -> Maybe Capability
-intrinsicCapability (MkIntrinsic name sig op cap runtime visible) = cap
-
-intrinsicRuntime : Intrinsic -> String
-intrinsicRuntime (MkIntrinsic name sig op cap runtime visible) = runtime
+intrinsicCapability (Intrinsic name sig op cap runtime visible) = cap
 
 intrinsicVisible : Intrinsic -> Bool
-intrinsicVisible (MkIntrinsic name sig op cap runtime visible) = visible
+intrinsicVisible (Intrinsic name sig op cap runtime visible) = visible
 
 -- 该内建的 runtime 表达式依赖 canonical `Base.List.List` 桥接 helper（`dtp_*`）。
 -- 没有 base 的包用这些内建时，生成前必须报错（而不是产出 Unbound value）。
 needsListBridge : Intrinsic -> Bool
-needsListBridge i = case intrinsicRuntime i of
+needsListBridge i = case i.intrinsicRuntime of
   "dtp_unpack" => True
   "dtp_pack" => True
   "dtp_concatMany" => True
@@ -248,7 +258,8 @@ canonicalCtorsFor : String -> Maybe (List String)
 canonicalCtorsFor name =
   if name == boolTypeName then Just [boolTrueCtor, boolFalseCtor]
   else if name == listFamilyName then Just [listNilCtor, listConsCtor]
-  else if name == ioFamilyName then Just [ioMkIoCtor] else Nothing
+  else if name == ioFamilyName then Just [ioMkIoCtor]
+  else if name == natTypeName then Just [natZeroCtor, natSuccCtor] else Nothing
 
 intrinsicArity : Intrinsic -> Int
 intrinsicArity i = arityOfType (intrinsicSignature i)
@@ -289,6 +300,17 @@ boolTrueCtor = "Base.Bool.True"
 boolFalseCtor : String
 boolFalseCtor = "Base.Bool.False"
 
+-- Nat 是 base 里的普通 data 声明（`Base.Nat`），身份 = 完整符号；运行时表示固定为
+-- OCaml `int`（Zero=0、Succ n=n+1 饱和），所以**不生成**变体类型（见 Codegen.Decl）。
+natTypeName : String
+natTypeName = "Base.Nat.Nat"
+
+natZeroCtor : String
+natZeroCtor = "Base.Nat.Zero"
+
+natSuccCtor : String
+natSuccCtor = "Base.Nat.Succ"
+
 -- 类型位置的放行面：primitive 类型名 + 内建类型构造子（M33 W3）。
 isIntrinsicTypeName : String -> Bool
 isIntrinsicTypeName name = memName name preludeTypeNames
@@ -319,77 +341,86 @@ allIntrinsics : List Intrinsic
 -- M33 W4：字节切片（clamp 语义与 Base.String.substring 一致），避免 List 桥接。
 -- M34.5：编译器内部缓存原语（Marshal 纯数据；含闭包会在运行期失败）。
 -- M34.4：异步子进程（workspace 并行 check）。spawn 返回 pid，wait 返回退出码。
+-- Nat 度量/算术：运行时表示是 OCaml int（Zero=0、Succ 饱和 +1）。
+-- 语义：add/mul 饱和到 max_int，sub 截断到 0，div 除零与 Int 同文案失败。
 allIntrinsics =
-  [ MkIntrinsic "+" (IFun IInt (IFun IInt IInt)) OpAdd Nothing "bi_add" True,
-    MkIntrinsic "-" (IFun IInt (IFun IInt IInt)) OpSub Nothing "bi_sub" True,
-    MkIntrinsic "*" (IFun IInt (IFun IInt IInt)) OpMul Nothing "bi_mul" True,
-    MkIntrinsic "/" (IFun IInt (IFun IInt IInt)) OpDiv Nothing "bi_div" True,
-    MkIntrinsic "++" (IFun IStr (IFun IStr IStr)) OpConcat Nothing "bi_concat" True,
-    MkIntrinsic "&&" (IFun IBool (IFun IBool IBool)) OpAnd Nothing "bi_and" True,
-    MkIntrinsic "||" (IFun IBool (IFun IBool IBool)) OpOr Nothing "bi_or" True,
-    MkIntrinsic "strFromInt" (IFun IInt IStr) OpStrFromInt Nothing "bi_strFromInt" True,
-    MkIntrinsic "strUnpack" (IFun IStr (IList IInt)) OpStrUnpack Nothing "dtp_unpack" True,
-    MkIntrinsic "strPack" (IFun (IList IInt) IStr) OpStrPack Nothing "dtp_pack" True,
-    MkIntrinsic "strLength" (IFun IStr IInt) OpStrLength Nothing "bi_strLength" True,
-    MkIntrinsic "strConcatMany" (IFun (IList IStr) IStr) OpStrConcatMany Nothing "dtp_concatMany" True,
-    MkIntrinsic "strSubstTemplate" (IFun IStr (IFun (IList IStr) IStr)) OpStrSubstTemplate Nothing "dtp_substTemplate" True,
-    MkIntrinsic "timeUs" (IIO IInt) OpNone (Just CapClock) "(dtp_timeUs ())" True,
-    MkIntrinsic "strHash" (IFun IStr IInt) OpStrHash Nothing "dtp_strHash" True,
-    MkIntrinsic "strAt" (IFun IStr (IFun IInt IInt)) OpStrAt Nothing "dtp_strAt" True,
-    MkIntrinsic "strSubstring" (IFun IInt (IFun IInt (IFun IStr IStr))) OpStrSubstring Nothing "dtp_substring" True,
-    MkIntrinsic "prim_marshal" (IPi "a" (IFun (IVar "a") IStr)) OpNone Nothing "dtp_marshal" True,
-    MkIntrinsic "prim_unmarshal" (IPi "a" (IFun IStr (IVar "a"))) OpNone Nothing "dtp_unmarshal" True,
-    MkIntrinsic "strShow" (IFun IStr IStr) OpStrShow Nothing "dt_show_string" True,
-    MkIntrinsic "arrayLength" (IPi "a" (IFun (IArray (IVar "a")) IInt)) OpNone Nothing "Array.length" True,
-    MkIntrinsic "arrayEmpty" (IPi "a" (IArray (IVar "a"))) OpNone Nothing "[||]" True,
-    MkIntrinsic "arrayGet" (IPi "a" (IFun (IArray (IVar "a")) (IFun IInt (IVar "a")))) OpNone Nothing "Array.get" True,
-    MkIntrinsic "arraySet" (IPi "a" (IFun (IArray (IVar "a")) (IFun IInt (IFun (IVar "a") (IArray (IVar "a")))))) OpNone Nothing "dtp_arraySet" True,
-    MkIntrinsic "arrayMake" (IPi "a" (IFun IInt (IFun (IVar "a") (IArray (IVar "a"))))) OpNone Nothing "Array.make" True,
-    MkIntrinsic "arrayFromList" (IPi "a" (IFun (IList (IVar "a")) (IArray (IVar "a")))) OpNone Nothing "(fun xs -> Array.of_list (dtp_ocamlOf xs))" True,
-    MkIntrinsic "arrayToList" (IPi "a" (IFun (IArray (IVar "a")) (IList (IVar "a")))) OpNone Nothing "(fun a -> dtp_listOf (Array.to_list a))" True,
-    MkIntrinsic "prim_newRef" (IPi "a" (IFun (IVar "a") (IIO (IRef (IVar "a"))))) OpNone Nothing "(fun x -> ref x)" True,
-    MkIntrinsic "prim_readRef" (IPi "a" (IFun (IRef (IVar "a")) (IIO (IVar "a")))) OpNone Nothing "(fun r -> !r)" True,
-    MkIntrinsic "prim_writeRef" (IPi "a" (IFun (IRef (IVar "a")) (IFun (IVar "a") (IIO IInt)))) OpNone Nothing "(fun r v -> r := v; 0)" True,
-    MkIntrinsic "prim_newMArray" (IPi "a" (IFun IInt (IFun (IVar "a") (IIO (IMArray (IVar "a")))))) OpNone Nothing "(fun n v -> Array.make n v)" True,
-    MkIntrinsic "prim_readMArray" (IPi "a" (IFun (IMArray (IVar "a")) (IFun IInt (IIO (IVar "a"))))) OpNone Nothing "(fun a i -> Array.get a i)" True,
-    MkIntrinsic "prim_writeMArray" (IPi "a" (IFun (IMArray (IVar "a")) (IFun IInt (IFun (IVar "a") (IIO IInt))))) OpNone Nothing "(fun a i v -> Array.set a i v; 0)" True,
-    MkIntrinsic "prim_mArrayLength" (IPi "a" (IFun (IMArray (IVar "a")) (IIO IInt))) OpNone Nothing "(fun a -> Array.length a)" True,
-    MkIntrinsic "prim_newBuffer" (IIO IBuf) OpNone Nothing "(Buffer.create 16)" True,
-    MkIntrinsic "prim_bufferAdd" (IFun IBuf (IFun IStr (IIO IInt))) OpNone Nothing "(fun b s -> Buffer.add_string b s; String.length s)" True,
-    MkIntrinsic "prim_bufferContents" (IFun IBuf (IIO IStr)) OpNone Nothing "(fun b -> Buffer.contents b)" True,
-    MkIntrinsic "prim_bufferLength" (IFun IBuf (IIO IInt)) OpNone Nothing "(fun b -> Buffer.length b)" True,
-    MkIntrinsic "prim_print" (IFun IStr (IIO IInt)) OpNone (Just CapConsole) "dtp_print" True,
-    MkIntrinsic "prim_readFile" (IFun IStr (IIO IStr)) OpNone (Just CapFs) "dtp_readFile" True,
-    MkIntrinsic "prim_writeFile" (IFun IStr (IFun IStr (IIO IInt))) OpNone (Just CapFs) "dtp_writeFile" True,
-    MkIntrinsic "prim_readLine" (IIO IStr) OpNone (Just CapConsole) "(dtp_readLine ())" True,
-    MkIntrinsic "prim_readBytes" (IFun IInt (IIO IStr)) OpNone (Just CapConsole) "dtp_readBytes" True,
-    MkIntrinsic "prim_getArgs" (IIO (IList IStr)) OpNone (Just CapProcess) "(dtp_listOf (dtp_getArgs ()))" True,
-    MkIntrinsic "prim_readDir" (IFun IStr (IIO (IList IStr))) OpNone (Just CapFs) "(fun p -> dtp_listOf (dtp_readDir p))" True,
-    MkIntrinsic "prim_isDirectory" (IFun IStr (IIO IBool)) OpNone (Just CapFs) "dtp_isDirectory" True,
-    MkIntrinsic "prim_makeDir" (IFun IStr (IIO IInt)) OpNone (Just CapFs) "dtp_makeDir" True,
-    MkIntrinsic "prim_removeFile" (IFun IStr (IIO IInt)) OpNone (Just CapFs) "dtp_removeFile" True,
-    MkIntrinsic "prim_fileExists" (IFun IStr (IIO IBool)) OpNone (Just CapFs) "dtp_fileExists" True,
-    MkIntrinsic "prim_fileMtime" (IFun IStr (IIO IInt)) OpNone (Just CapFs) "dtp_fileMtime" True,
-    MkIntrinsic "prim_fileSize" (IFun IStr (IIO IInt)) OpNone (Just CapFs) "dtp_fileSize" True,
-    MkIntrinsic "prim_exit" (IFun IInt (IIO IInt)) OpNone (Just CapProcess) "dtp_exit" True,
-    MkIntrinsic "prim_runIn" (IFun IStr (IFun (IList IStr) (IIO IInt))) OpNone (Just CapProcess) "(fun dir args -> dtp_runIn dir (dtp_ocamlOf args))" True,
-    MkIntrinsic "prim_spawn" (IFun (IList IStr) (IIO IInt)) OpNone (Just CapProcess) "(fun args -> dtp_spawn (dtp_ocamlOf args))" True,
-    MkIntrinsic "prim_wait" (IFun IInt (IIO IInt)) OpNone (Just CapProcess) "dtp_wait" True,
-    MkIntrinsic "prim_getenv" (IFun IStr (IIO IStr)) OpNone (Just CapEnv) "dtp_getenv" True,
-    MkIntrinsic "prim_getcwd" (IIO IStr) OpNone (Just CapEnv) "(dtp_getcwd ())" True,
-    MkIntrinsic "prim_execPath" (IIO IStr) OpNone (Just CapEnv) "(dtp_execPath ())" True,
-    MkIntrinsic "bi_eq_int" (IFun IInt (IFun IInt IBool)) OpEqInt Nothing "bi_eq_int" False,
-    MkIntrinsic "bi_neq_int" (IFun IInt (IFun IInt IBool)) OpNeqInt Nothing "bi_neq_int" False,
-    MkIntrinsic "bi_eq_str" (IFun IStr (IFun IStr IBool)) OpEqStr Nothing "bi_eq_str" False,
-    MkIntrinsic "bi_neq_str" (IFun IStr (IFun IStr IBool)) OpNeqStr Nothing "bi_neq_str" False,
-    MkIntrinsic "bi_lt_int" (IFun IInt (IFun IInt IBool)) OpLtInt Nothing "bi_lt_int" False,
-    MkIntrinsic "bi_le_int" (IFun IInt (IFun IInt IBool)) OpLeInt Nothing "bi_le_int" False,
-    MkIntrinsic "bi_gt_int" (IFun IInt (IFun IInt IBool)) OpGtInt Nothing "bi_gt_int" False,
-    MkIntrinsic "bi_ge_int" (IFun IInt (IFun IInt IBool)) OpGeInt Nothing "bi_ge_int" False,
-    MkIntrinsic "bi_lt_generic" (IFun IInt (IFun IInt IBool)) OpLtGeneric Nothing "bi_lt_generic" False,
-    MkIntrinsic "bi_le_generic" (IFun IInt (IFun IInt IBool)) OpLeGeneric Nothing "bi_le_generic" False,
-    MkIntrinsic "bi_gt_generic" (IFun IInt (IFun IInt IBool)) OpGtGeneric Nothing "bi_gt_generic" False,
-    MkIntrinsic "bi_ge_generic" (IFun IInt (IFun IInt IBool)) OpGeGeneric Nothing "bi_ge_generic" False
+  [ Intrinsic "+" (IFun IInt (IFun IInt IInt)) OpAdd Nothing "bi_add" True,
+    Intrinsic "-" (IFun IInt (IFun IInt IInt)) OpSub Nothing "bi_sub" True,
+    Intrinsic "*" (IFun IInt (IFun IInt IInt)) OpMul Nothing "bi_mul" True,
+    Intrinsic "/" (IFun IInt (IFun IInt IInt)) OpDiv Nothing "bi_div" True,
+    Intrinsic "++" (IFun IStr (IFun IStr IStr)) OpConcat Nothing "bi_concat" True,
+    Intrinsic "&&" (IFun IBool (IFun IBool IBool)) OpAnd Nothing "bi_and" True,
+    Intrinsic "||" (IFun IBool (IFun IBool IBool)) OpOr Nothing "bi_or" True,
+    Intrinsic "strFromInt" (IFun IInt IStr) OpStrFromInt Nothing "bi_strFromInt" True,
+    Intrinsic "strUnpack" (IFun IStr (IList IInt)) OpStrUnpack Nothing "dtp_unpack" True,
+    Intrinsic "strPack" (IFun (IList IInt) IStr) OpStrPack Nothing "dtp_pack" True,
+    Intrinsic "strLength" (IFun IStr IInt) OpStrLength Nothing "bi_strLength" True,
+    Intrinsic "strConcatMany" (IFun (IList IStr) IStr) OpStrConcatMany Nothing "dtp_concatMany" True,
+    Intrinsic "strSubstTemplate" (IFun IStr (IFun (IList IStr) IStr)) OpStrSubstTemplate Nothing "dtp_substTemplate" True,
+    Intrinsic "timeUs" (IIO IInt) OpNone (Just CapClock) "(dtp_timeUs ())" True,
+    Intrinsic "strHash" (IFun IStr IInt) OpStrHash Nothing "dtp_strHash" True,
+    Intrinsic "strAt" (IFun IStr (IFun IInt IInt)) OpStrAt Nothing "dtp_strAt" True,
+    Intrinsic "strSubstring" (IFun IInt (IFun IInt (IFun IStr IStr))) OpStrSubstring Nothing "dtp_substring" True,
+    Intrinsic "prim_marshal" (IPi "a" (IFun (IVar "a") IStr)) OpNone Nothing "dtp_marshal" True,
+    Intrinsic "prim_unmarshal" (IPi "a" (IFun IStr (IVar "a"))) OpNone Nothing "dtp_unmarshal" True,
+    Intrinsic "strShow" (IFun IStr IStr) OpStrShow Nothing "dt_show_string" True,
+    Intrinsic "natAdd" (IFun INat (IFun INat INat)) OpNatAdd Nothing "bi_natAdd" True,
+    Intrinsic "natSub" (IFun INat (IFun INat INat)) OpNatSub Nothing "bi_natSub" True,
+    Intrinsic "natMul" (IFun INat (IFun INat INat)) OpNatMul Nothing "bi_natMul" True,
+    Intrinsic "natDiv" (IFun INat (IFun INat INat)) OpNatDiv Nothing "bi_natDiv" True,
+    Intrinsic "natToInt" (IFun INat IInt) OpNatToInt Nothing "bi_natToInt" True,
+    Intrinsic "natFromInt" (IFun IInt INat) OpNatFromInt Nothing "bi_natFromInt" True,
+    Intrinsic "arrayLength" (IPi "a" (IFun (IArray (IVar "a")) IInt)) OpNone Nothing "Array.length" True,
+    Intrinsic "arrayEmpty" (IPi "a" (IArray (IVar "a"))) OpNone Nothing "[||]" True,
+    Intrinsic "arrayGet" (IPi "a" (IFun (IArray (IVar "a")) (IFun IInt (IVar "a")))) OpNone Nothing "Array.get" True,
+    Intrinsic "arraySet" (IPi "a" (IFun (IArray (IVar "a")) (IFun IInt (IFun (IVar "a") (IArray (IVar "a")))))) OpNone Nothing "dtp_arraySet" True,
+    Intrinsic "arrayMake" (IPi "a" (IFun IInt (IFun (IVar "a") (IArray (IVar "a"))))) OpNone Nothing "Array.make" True,
+    Intrinsic "arrayFromList" (IPi "a" (IFun (IList (IVar "a")) (IArray (IVar "a")))) OpNone Nothing "(fun xs -> Array.of_list (dtp_ocamlOf xs))" True,
+    Intrinsic "arrayToList" (IPi "a" (IFun (IArray (IVar "a")) (IList (IVar "a")))) OpNone Nothing "(fun a -> dtp_listOf (Array.to_list a))" True,
+    Intrinsic "prim_newRef" (IPi "a" (IFun (IVar "a") (IIO (IRef (IVar "a"))))) OpNone Nothing "(fun x -> ref x)" True,
+    Intrinsic "prim_readRef" (IPi "a" (IFun (IRef (IVar "a")) (IIO (IVar "a")))) OpNone Nothing "(fun r -> !r)" True,
+    Intrinsic "prim_writeRef" (IPi "a" (IFun (IRef (IVar "a")) (IFun (IVar "a") (IIO IInt)))) OpNone Nothing "(fun r v -> r := v; 0)" True,
+    Intrinsic "prim_newMArray" (IPi "a" (IFun IInt (IFun (IVar "a") (IIO (IMArray (IVar "a")))))) OpNone Nothing "(fun n v -> Array.make n v)" True,
+    Intrinsic "prim_readMArray" (IPi "a" (IFun (IMArray (IVar "a")) (IFun IInt (IIO (IVar "a"))))) OpNone Nothing "(fun a i -> Array.get a i)" True,
+    Intrinsic "prim_writeMArray" (IPi "a" (IFun (IMArray (IVar "a")) (IFun IInt (IFun (IVar "a") (IIO IInt))))) OpNone Nothing "(fun a i v -> Array.set a i v; 0)" True,
+    Intrinsic "prim_mArrayLength" (IPi "a" (IFun (IMArray (IVar "a")) (IIO IInt))) OpNone Nothing "(fun a -> Array.length a)" True,
+    Intrinsic "prim_newBuffer" (IIO IBuf) OpNone Nothing "(Buffer.create 16)" True,
+    Intrinsic "prim_bufferAdd" (IFun IBuf (IFun IStr (IIO IInt))) OpNone Nothing "(fun b s -> Buffer.add_string b s; String.length s)" True,
+    Intrinsic "prim_bufferContents" (IFun IBuf (IIO IStr)) OpNone Nothing "(fun b -> Buffer.contents b)" True,
+    Intrinsic "prim_bufferLength" (IFun IBuf (IIO IInt)) OpNone Nothing "(fun b -> Buffer.length b)" True,
+    Intrinsic "prim_print" (IFun IStr (IIO IInt)) OpNone (Just CapConsole) "dtp_print" True,
+    Intrinsic "prim_readFile" (IFun IStr (IIO IStr)) OpNone (Just CapFs) "dtp_readFile" True,
+    Intrinsic "prim_writeFile" (IFun IStr (IFun IStr (IIO IInt))) OpNone (Just CapFs) "dtp_writeFile" True,
+    Intrinsic "prim_writeFileAtomic" (IFun IStr (IFun IStr (IIO IInt))) OpNone (Just CapFs) "dtp_writeFileAtomic" True,
+    Intrinsic "prim_readLine" (IIO IStr) OpNone (Just CapConsole) "(dtp_readLine ())" True,
+    Intrinsic "prim_readBytes" (IFun IInt (IIO IStr)) OpNone (Just CapConsole) "dtp_readBytes" True,
+    Intrinsic "prim_getArgs" (IIO (IList IStr)) OpNone (Just CapProcess) "(dtp_listOf (dtp_getArgs ()))" True,
+    Intrinsic "prim_readDir" (IFun IStr (IIO (IList IStr))) OpNone (Just CapFs) "(fun p -> dtp_listOf (dtp_readDir p))" True,
+    Intrinsic "prim_isDirectory" (IFun IStr (IIO IBool)) OpNone (Just CapFs) "dtp_isDirectory" True,
+    Intrinsic "prim_makeDir" (IFun IStr (IIO IInt)) OpNone (Just CapFs) "dtp_makeDir" True,
+    Intrinsic "prim_removeFile" (IFun IStr (IIO IInt)) OpNone (Just CapFs) "dtp_removeFile" True,
+    Intrinsic "prim_fileExists" (IFun IStr (IIO IBool)) OpNone (Just CapFs) "dtp_fileExists" True,
+    Intrinsic "prim_fileMtime" (IFun IStr (IIO IInt)) OpNone (Just CapFs) "dtp_fileMtime" True,
+    Intrinsic "prim_fileSize" (IFun IStr (IIO IInt)) OpNone (Just CapFs) "dtp_fileSize" True,
+    Intrinsic "prim_exit" (IFun IInt (IIO IInt)) OpNone (Just CapProcess) "dtp_exit" True,
+    Intrinsic "prim_runIn" (IFun IStr (IFun (IList IStr) (IIO IInt))) OpNone (Just CapProcess) "(fun dir args -> dtp_runIn dir (dtp_ocamlOf args))" True,
+    Intrinsic "prim_spawn" (IFun (IList IStr) (IIO IInt)) OpNone (Just CapProcess) "(fun args -> dtp_spawn (dtp_ocamlOf args))" True,
+    Intrinsic "prim_wait" (IFun IInt (IIO IInt)) OpNone (Just CapProcess) "dtp_wait" True,
+    Intrinsic "prim_getenv" (IFun IStr (IIO IStr)) OpNone (Just CapEnv) "dtp_getenv" True,
+    Intrinsic "prim_getcwd" (IIO IStr) OpNone (Just CapEnv) "(dtp_getcwd ())" True,
+    Intrinsic "prim_execPath" (IIO IStr) OpNone (Just CapEnv) "(dtp_execPath ())" True,
+    Intrinsic "bi_eq_int" (IFun IInt (IFun IInt IBool)) OpEqInt Nothing "bi_eq_int" False,
+    Intrinsic "bi_neq_int" (IFun IInt (IFun IInt IBool)) OpNeqInt Nothing "bi_neq_int" False,
+    Intrinsic "bi_eq_str" (IFun IStr (IFun IStr IBool)) OpEqStr Nothing "bi_eq_str" False,
+    Intrinsic "bi_neq_str" (IFun IStr (IFun IStr IBool)) OpNeqStr Nothing "bi_neq_str" False,
+    Intrinsic "bi_lt_int" (IFun IInt (IFun IInt IBool)) OpLtInt Nothing "bi_lt_int" False,
+    Intrinsic "bi_le_int" (IFun IInt (IFun IInt IBool)) OpLeInt Nothing "bi_le_int" False,
+    Intrinsic "bi_gt_int" (IFun IInt (IFun IInt IBool)) OpGtInt Nothing "bi_gt_int" False,
+    Intrinsic "bi_ge_int" (IFun IInt (IFun IInt IBool)) OpGeInt Nothing "bi_ge_int" False,
+    Intrinsic "bi_lt_generic" (IFun IInt (IFun IInt IBool)) OpLtGeneric Nothing "bi_lt_generic" False,
+    Intrinsic "bi_le_generic" (IFun IInt (IFun IInt IBool)) OpLeGeneric Nothing "bi_le_generic" False,
+    Intrinsic "bi_gt_generic" (IFun IInt (IFun IInt IBool)) OpGtGeneric Nothing "bi_gt_generic" False,
+    Intrinsic "bi_ge_generic" (IFun IInt (IFun IInt IBool)) OpGeGeneric Nothing "bi_ge_generic" False
   ]
 
 intrinsicTbl : HashMap Intrinsic

@@ -21,11 +21,12 @@ import Vuna.Compiler.Loader.Modules
 import Vuna.Compiler.Packages.Pkg
 
 -- 表示抽象：只有 emptyFixityEnv / fixitiesForFile 能构造与推进缓存。
-data FixityEnv : Type where
-  MkFixityEnv : List (Pair String PackageContext) -> List (Pair String (List Module)) -> FixityEnv
+record FixityEnv where
+  fixityEnvCtxCache : List (Pair String PackageContext)
+  fixityEnvModCache : List (Pair String (List Module))
 
 emptyFixityEnv : FixityEnv
-emptyFixityEnv = MkFixityEnv [] []
+emptyFixityEnv = FixityEnv [] []
 
 -- 缓存键：文件所在目录（无 `/` 时用 "."）。同一目录的文件共享上下文；
 -- 相对/绝对路径写法不同只会造成一次缓存 miss，不影响正确性。
@@ -48,14 +49,14 @@ cachePut key value entries = Pair key value :: cacheForget key entries
 -- 取一个文件的程序级 fixity：`Pair env' (Result (List FixityDecl))`。
 -- env' 带回推进后的缓存（即使本次失败，已成功的上下文缓存仍可复用）。
 fixitiesForFile : FixityEnv -> String -> String -> Pair FixityEnv (Result (List FixityDecl))
-fixitiesForFile (MkFixityEnv ctxCache modCache) path source =
+fixitiesForFile (FixityEnv ctxCache modCache) path source =
   let
     dir = dirKey path
     ctxRes = case cacheLookup dir ctxCache of
       Just ctx => Ok ctx
       Nothing => contextForFile path
   in case ctxRes of
-    Err e => Pair (MkFixityEnv ctxCache modCache) (Err e)
+    Err e => Pair (FixityEnv ctxCache modCache) (Err e)
     Ok ctx =>
       let
         ctxCache2 = cachePut dir ctx ctxCache
@@ -64,5 +65,5 @@ fixitiesForFile (MkFixityEnv ctxCache modCache) path source =
           Just ms => ms
           Nothing => []
       in case fixitiesForSourceIn ctx mods path source of
-        Err e => Pair (MkFixityEnv ctxCache2 modCache) (Err e)
-        Ok (Pair mods2 fx) => Pair (MkFixityEnv ctxCache2 (cachePut modKey mods2 modCache)) (Ok fx)
+        Err e => Pair (FixityEnv ctxCache2 modCache) (Err e)
+        Ok (Pair mods2 fx) => Pair (FixityEnv ctxCache2 (cachePut modKey mods2 modCache)) (Ok fx)

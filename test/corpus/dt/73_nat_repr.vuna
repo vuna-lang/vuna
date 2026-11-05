@@ -1,0 +1,5 @@
+-- 表示断言夹具：Nat 必须是 int，不得生成变体类型/构造子。
+import Base.Nat
+
+main : Nat
+main = 3 + 4

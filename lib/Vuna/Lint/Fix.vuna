@@ -16,11 +16,11 @@ sortEdits (e :: rest) = insertEdit e (sortEdits rest)
 insertEdit : Edit -> List Edit -> List Edit
 insertEdit e [] = [e]
 insertEdit e (f :: rest) =
-  if editStart e > editStart f then e :: f :: rest else f :: insertEdit e rest
+  if e.editStart > f.editStart then e :: f :: rest else f :: insertEdit e rest
 
 collectEdits : List Finding -> List Edit -> List Edit
 collectEdits [] acc = acc
-collectEdits (f :: rest) acc = case findingEdit f of
+collectEdits (f :: rest) acc = case f.findingEdit of
   Nothing => collectEdits rest acc
   Just e => collectEdits rest (e :: acc)
 
@@ -41,8 +41,7 @@ replaceRange start stop newLines lines =
 applyEditList : List Edit -> List String -> Int -> Int -> Pair Int (List String)
 applyEditList [] lines limit count = Pair count lines
 applyEditList (e :: rest) lines limit count =
-  if editEnd e < limit then applyEditList rest (replaceRange (editStart e) (editEnd e) (editLines e) lines) (editStart e)
-    (count + 1)
+  if e.editEnd < limit then applyEditList rest (replaceRange e.editStart e.editEnd e.editLines lines) e.editStart (count + 1)
   else applyEditList rest lines limit count
 
 applyFixes : String -> List Finding -> Result (Pair Int String)

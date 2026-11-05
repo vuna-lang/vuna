@@ -112,10 +112,11 @@ runOneTest ctx path name = case dtMainKind ctx path of
     "IO" => runIOTest ctx path name
     "String" => pureTest name (interpretFile ctx path) "\"\""
     "Int" => pureTest name (interpretFile ctx path) "0"
+    "Nat" => pureTest name (interpretFile ctx path) "0"
     "Bool" => pureTest name (interpretFile ctx path) "True"
     _ =>
       testFail name
-        ("unsupported test main type: " ++ kind ++ " (expected `main : String` (empty = pass), `main : Int` (0 = pass), `main : Bool` (True = pass) or `main : IO a` (exit code 0 = pass))")
+        ("unsupported test main type: " ++ kind ++ " (expected `main : String` (empty = pass), `main : Int`/`Nat` (0 = pass), `main : Bool` (True = pass) or `main : IO a` (exit code 0 = pass))")
 
 -- 纯测试：`interpretFile` 的核心求值结果与期望值逐字比较。
 pureTest : String -> String -> String -> Bool

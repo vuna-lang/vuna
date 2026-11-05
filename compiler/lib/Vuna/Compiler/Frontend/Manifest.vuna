@@ -1,12 +1,6 @@
 module Vuna.Compiler.Frontend.Manifest
   ( Manifest(..)
-  , manifestCapabilities
-  , manifestDependencies
   , manifestDir
-  , manifestExports
-  , manifestMembers
-  , manifestName
-  , manifestPath
   , parseManifest
   , resolveManifestPath
   , validateManifest
@@ -25,29 +19,16 @@ module Vuna.Compiler.Frontend.Manifest
 import Vuna.Compiler.Common
 import Vuna.Compiler.Frontend.Toml
 
-data Manifest : Type where
-  Manifest : Maybe String -> List String -> Maybe (List String) -> List (Pair String String) -> List String -> String -> Manifest
-
-manifestName : Manifest -> Maybe String
-manifestName (Manifest name members exports deps caps path) = name
-
-manifestMembers : Manifest -> List String
-manifestMembers (Manifest name members exports deps caps path) = members
-
-manifestExports : Manifest -> Maybe (List String)
-manifestExports (Manifest name members exports deps caps path) = exports
-
-manifestDependencies : Manifest -> List (Pair String String)
-manifestDependencies (Manifest name members exports deps caps path) = deps
+record Manifest where
+  manifestName : Maybe String
+  manifestMembers : List String
+  manifestExports : Maybe (List String)
+  manifestDependencies : List (Pair String String)
+  manifestCapabilities : List String
+  manifestPath : String
 
 -- M27：manifest 的 `[capabilities].effects` 声明；空列表表示该包没有直接使用
 -- effectful 内建的能力（只能经 Base.IO）。
-manifestCapabilities : Manifest -> List String
-manifestCapabilities (Manifest name members exports deps caps path) = caps
-
-manifestPath : Manifest -> String
-manifestPath (Manifest name members exports deps caps path) = path
-
 -- 字符分类（与 Toml 内部约定一致；vuna 无字符字面量，统一用 char code）。
 isDigitChar : Int -> Bool
 isDigitChar c = c >= 48 && c <= 57
@@ -67,9 +48,9 @@ atLine path line msg =
 manifestErr : String -> String -> String
 manifestErr path msg = if path == "" then msg else path ++ ": " ++ msg
 
-sameSection : List a -> List a -> Bool
+sameSection : Eq a => List a -> List a -> Bool
 sameSection [] [] = True
-sameSection (x :: xs) (y :: ys) = if x == y then sameSection xs ys else False
+sameSection (x :: xs) (y :: ys) = x == y && sameSection xs ys
 sameSection _ _ = False
 
 fieldLoc : String -> List String -> String -> List TomlEntry -> String
@@ -143,22 +124,21 @@ validPackageName name = validPackageChars (strUnpack name)
 validPackageChars : List Int -> Bool
 validPackageChars [] = True
 validPackageChars (c :: rest) =
-  if isLowerAlphaChar c || isDigitChar c || c == 45 then validPackageChars rest else False
+  (isLowerAlphaChar c || isDigitChar c || c == 45) && validPackageChars rest
 
 validModuleName : String -> Bool
 validModuleName name = validModuleSegments (splitOnDot name)
 
 validModuleSegments : List String -> Bool
 validModuleSegments [] = True
-validModuleSegments (seg :: rest) =
-  if validModuleSegment seg then validModuleSegments rest else False
+validModuleSegments (seg :: rest) = validModuleSegment seg && validModuleSegments rest
 
 validModuleSegment : String -> Bool
 validModuleSegment seg = validModuleSegmentChars (strUnpack seg)
 
 validModuleSegmentChars : List Int -> Bool
 validModuleSegmentChars [] = False
-validModuleSegmentChars (c :: rest) = if isUpperAlphaChar c then validModuleTail rest else False
+validModuleSegmentChars (c :: rest) = isUpperAlphaChar c && validModuleTail rest
 
 validModuleTail : List Int -> Bool
 validModuleTail [] = True
@@ -234,5 +214,5 @@ dirResult dir = if dir == "" then "/" else dir
 resolveManifestPath : Manifest -> String -> String
 resolveManifestPath manifest rel =
   let
-    dir = manifestDir (manifestPath manifest)
+    dir = manifestDir manifest.manifestPath
   in if startsWith "/" rel then rel else if dir == "." then rel else dir ++ "/" ++ rel

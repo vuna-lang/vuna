@@ -8,6 +8,7 @@ module Vuna.Compiler.Core.Eval
   , argValsAt
   , asBool
   , asInt
+  , asNat
   , asStr
   , boolPrim2
   , catchAllEnv
@@ -26,6 +27,8 @@ module Vuna.Compiler.Core.Eval
   , intPrim2
   , intPrim2Div
   , lookupEnv
+  , natValue
+  , natValueToInt
   , normalize
   , normalizeCase
   , normalizeIf
@@ -49,7 +52,6 @@ module Vuna.Compiler.Core.Eval
   , substSolvedMetasAt
   , substSolvedMetasAtGo
   , substSolvedMetasAtTbl
-  , substSolvedMetasTbl
   , varIndex
   ) where
 
@@ -87,8 +89,8 @@ else case t of
   TGlobal g => VNeutral (NGlobal g [])
   TType l => VType l
   TPi name implicit rig dom cod =>
-    VPi name implicit rig (evalFuel (fuel - 1) env dom) (Clos env cod)
-  TLam name rig body => VLam name rig (Clos env body)
+    VPi name implicit rig (evalFuel (fuel - 1) env dom) (Closure env cod)
+  TLam name rig body => VLam name rig (Closure env body)
   TApp f a rig => applyValueFuel (fuel - 1) (evalFuel (fuel - 1) env f) (evalFuel (fuel - 1) env a)
   TCon c args => VCon c (evalArgTermsFuel (fuel - 1) env args)
   TCase scrut alts => evalCaseFuel (fuel - 1) (evalFuel (fuel - 1) env scrut) (evalAlts env alts)
@@ -99,7 +101,7 @@ else case t of
     evalIf (evalFuel (fuel - 1) env c) (evalFuel (fuel - 1) env th) (evalFuel (fuel - 1) env el)
 
 evalAlt : List Value -> CaseAlt -> VCaseAlt
-evalAlt env (CaseAlt name binders body) = VCaseAlt name binders (Clos env body)
+evalAlt env (CaseAlt name binders body) = VCaseAlt name binders (Closure env body)
 
 evalAlts : List Value -> List CaseAlt -> List VCaseAlt
 evalAlts env [] = []
@@ -132,16 +134,16 @@ applyCaseAltFuel : Int -> String -> List Value -> List VCaseAlt -> Value
 applyCaseAltFuel fuel c args alts = if fuel <= 0 then VType levelZero
 else case alts of
   [] => VCase (VCon c args) []
-  alt :: rest => if vCaseAltName alt == c then case vCaseAltClosure alt of
-    Clos env body => evalFuel (fuel - 1) (append (reverse args) env) body
-  else if vCaseAltName alt == "" then case vCaseAltClosure alt of
+  alt :: rest => if alt.vCaseAltName == c then case alt.vCaseAltClosure of
+    Closure env body => evalFuel (fuel - 1) (append (reverse args) env) body
+  else if alt.vCaseAltName == "" then case alt.vCaseAltClosure of
     -- 兜底分支（源码里写的是变量/通配，精化后名字为空串）。变量兜底带一个 binder，
     -- 要把 scrutinee 压进环境；通配兜底无 binder。
-    Clos env body => evalFuel (fuel - 1) (catchAllEnv alt (VCon c args) env) body
+    Closure env body => evalFuel (fuel - 1) (catchAllEnv alt (VCon c args) env) body
   else applyCaseAltFuel (fuel - 1) c args rest
 
 catchAllEnv : VCaseAlt -> Value -> List Value -> List Value
-catchAllEnv alt scrut env = case vCaseAltBinders alt of
+catchAllEnv alt scrut env = case alt.vCaseAltBinders of
   [] => env
   _ => scrut :: env
 
@@ -159,13 +161,13 @@ applyValue f a = applyValueFuel 128 f a
 applyValueFuel : Int -> Value -> Value -> Value
 applyValueFuel fuel f a = if fuel <= 0 then VType levelZero
 else case f of
-  VLam name rig (Clos env body) => evalFuel (fuel - 1) (a :: env) body
+  VLam name rig (Closure env body) => evalFuel (fuel - 1) (a :: env) body
   VNeutral n => VNeutral (spineAppend n a)
   VMeta m sp => VMeta m (append sp [a])
   _ => VApp f a
 
 applyClosure : Closure -> Value -> Value
-applyClosure (Clos env body) v = eval (v :: env) body
+applyClosure (Closure env body) v = eval (v :: env) body
 
 applySpine : Value -> List Value -> Value
 applySpine v [] = v
@@ -209,7 +211,7 @@ else case v of
       _ => VApp f2 a
   VNeutral n => case n of
     NGlobal g sp => case defLookup g defs of
-      Just body => case Base.HashMap.lookup g (solsDefVals sols) of
+      Just body => case Base.HashMap.lookup g sols.solsDefVals of
         Just cached => force defs sols (fuel - 1) (applySpine cached sp)
         Nothing => force defs sols (fuel - 1) (applySpine (eval [] body) sp)
       Nothing => case primReduce defs sols (fuel - 1) g sp of
@@ -222,6 +224,48 @@ else case v of
 asInt : Value -> Maybe Int
 asInt (VInt n) = Just n
 asInt _ = Nothing
+
+-- Nat 在核心里的表示仍是归纳构造子链（类型层要能归纳/合一）；只有 codegen 把它降成
+-- OCaml int。interp 的 Nat 原语把链折成 Int 计算、再重建链，因此与产物语义一致。
+natMax : Int
+natMax = 4611686018427387903
+
+natClamp : Int -> Int
+natClamp n = if n <= 0 then 0 else if n >= natMax then natMax else n
+
+natSatAdd : Int -> Int -> Int
+natSatAdd a b = if a > natMax - b then natMax else a + b
+
+natSatMul : Int -> Int -> Int
+natSatMul a b = if a <= 0 || b <= 0 then 0 else if a > natMax / b then natMax else a * b
+
+natTruncSub : Int -> Int -> Int
+natTruncSub a b = if a <= b then 0 else a - b
+
+natValueGo : Int -> Value -> Value
+natValueGo n acc = if n <= 0 then acc else natValueGo (n - 1) (VCon natSuccCtor [acc])
+
+natValue : Int -> Value
+natValue n = natValueGo (natClamp n) (VCon natZeroCtor [])
+
+natValueToInt : Value -> Maybe Int
+natValueToInt (VInt n) = Just n
+natValueToInt (VCon c args) = natCtorInt c args
+natValueToInt _ = Nothing
+
+natCtorInt : String -> List Value -> Maybe Int
+natCtorInt c args = if c == natZeroCtor then case args of
+  [] => Just 0
+  _ => Nothing
+else if c == natSuccCtor then case args of
+  [arg] => case natValueToInt arg of
+    Just n => Just (natSatAdd n 1)
+    Nothing => Nothing
+  _ => Nothing
+else Nothing
+
+asNat : Value -> Maybe Int
+asNat v = natValueToInt v
 
 asStr : Value -> Maybe String
 asStr (VStr s) = Just s
@@ -277,6 +321,28 @@ intPrim1 ([a]) f = case asInt a of
   Nothing => Nothing
 intPrim1 sp f = Nothing
 
+natPrim1 : List Value -> (Int -> Value) -> Maybe Value
+natPrim1 ([a]) f = case asNat a of
+  Just x => Just (f x)
+  Nothing => Nothing
+natPrim1 sp f = Nothing
+
+natPrim2 : List Value -> (Int -> Int -> Value) -> Maybe Value
+natPrim2 ([a, b]) f = case asNat a of
+  Just x => case asNat b of
+    Just y => Just (f x y)
+    Nothing => Nothing
+  Nothing => Nothing
+natPrim2 sp f = Nothing
+
+natPrim2Div : List Value -> Maybe Value
+natPrim2Div ([a, b]) = case asNat a of
+  Just x => case asNat b of
+    Just y => if y <= 0 then Nothing else Just (natValue (x / y))
+    Nothing => Nothing
+  Nothing => Nothing
+natPrim2Div sp = Nothing
+
 strPrim1 : List Value -> (String -> Value) -> Maybe Value
 strPrim1 ([a]) f = case asStr a of
   Just x => Just (f x)
@@ -323,19 +389,19 @@ strPrim3 sp f = Nothing
 primReduce : HashMap Term -> Sols -> Int -> String -> List Value -> Maybe Value
 primReduce defs sols fuel g sp = if fuel <= 0 then Nothing
 else case findIntrinsic g of
-  Just i => case intrinsicOp i of
+  Just i => case i.intrinsicOp of
     OpAdd => intPrim2 sp (\a, b => VInt (a + b))
     OpSub => intPrim2 sp (\a, b => VInt (a - b))
     OpMul => intPrim2 sp (\a, b => VInt (a * b))
     OpDiv => intPrim2Div sp
     OpEqInt => intPrim2 sp (\a, b => VBool (a == b))
-    OpNeqInt => intPrim2 sp (\a, b => VBool (notBool (a == b)))
+    OpNeqInt => intPrim2 sp (\a, b => VBool (not (a == b)))
     OpLtInt => intPrim2 sp (\a, b => VBool (a < b))
     OpLeInt => intPrim2 sp (\a, b => VBool (a <= b))
     OpGtInt => intPrim2 sp (\a, b => VBool (a > b))
     OpGeInt => intPrim2 sp (\a, b => VBool (a >= b))
     OpEqStr => strPrim2 sp (\a, b => VBool (strEq a b))
-    OpNeqStr => strPrim2 sp (\a, b => VBool (notBool (strEq a b)))
+    OpNeqStr => strPrim2 sp (\a, b => VBool (not (strEq a b)))
     OpLtGeneric => genericPrim2 sp (\o => o < 0)
     OpLeGeneric => genericPrim2 sp (\o => o <= 0)
     OpGtGeneric => genericPrim2 sp (\o => o > 0)
@@ -349,6 +415,13 @@ else case findIntrinsic g of
     OpStrAt => atPrim sp
     OpStrSubstring => substringPrim sp
     OpStrShow => strPrim1 sp (\s => VStr (showCoreString s))
+    -- Nat 原语：与 runtime bi_nat* 同一套饱和/截断/除零语义。
+    OpNatAdd => natPrim2 sp (\a, b => natValue (natSatAdd a b))
+    OpNatSub => natPrim2 sp (\a, b => natValue (natTruncSub a b))
+    OpNatMul => natPrim2 sp (\a, b => natValue (natSatMul a b))
+    OpNatDiv => natPrim2Div sp
+    OpNatToInt => natPrim1 sp (\n => VInt n)
+    OpNatFromInt => intPrim1 sp (\n => natValue (natClamp n))
     -- interp 边界（显式分类，见 docs/reference/primitives.md）：List 桥接依赖 base 的
     -- `Base.List.List` 构造子表示，核心求值器无法安全构造；除零/运行期失败同理。
     OpStrUnpack => Nothing
@@ -523,7 +596,8 @@ argValsAt ((Pair name rig) :: rest) depth i =
 -- 逐个把实参喂给闭包：闭包 env 是分支外环境，实参按 arg0 先喂的顺序。
 applyClosureBinder : Closure -> List Value -> Value
 applyClosureBinder clo [] = VCon "_alt" []
-applyClosureBinder (Clos env body) (a :: rest) = applyClosureBinder (Clos (a :: env) body) rest
+applyClosureBinder (Closure env body) (a :: rest) =
+  applyClosureBinder (Closure (a :: env) body) rest
 
 freshVar : String -> Int -> Value
 freshVar name level = VNeutral (NVar name level [])
@@ -621,6 +695,10 @@ showValueAt depth v = case v of
     NGlobal g sp => if isNilList sp then g else showTerm (quote depth v)
     NVar name lvl sp => if isNilList sp then name else showTerm (quote depth v)
   VMeta m sp => if isNilList sp then "?" ++ strFromInt m else showTerm (quote depth v)
+  -- canonical Nat 链显示成十进制（诊断/REPL 与产物 `main : Nat` 一致）。
+  VCon c args => case natCtorInt c args of
+    Just n => strFromInt n
+    Nothing => showTerm (quote depth v)
   _ => showTerm (quote depth v)
 
 showValue : Value -> String
@@ -638,45 +716,45 @@ normalizeNeutral a1 a2 a3 a4 = normalizeNeutralFuel 1024 a1 a2 a3 a4
 normalizeIf : HashMap Term -> Sols -> Int -> Value -> Value -> Value -> Value
 normalizeIf a1 a2 a3 a4 a5 a6 = normalizeIfFuel 1024 a1 a2 a3 a4 a5 a6
 
--- 与 `substSolvedMetas` 相同，但解表用哈希索引：定义体的 zonk 会逐元变量查解，
--- 关联表在千级解表上是 O(#解) 每次；索引把整次替换降成 O(#元变量)。
--- 同 `substSolvedMetasTbl`，但按给定深度 quote（字典提升路径用；O(1) 查解）。
+-- 已解元变量的**深度感知**内联（接口摘要 zonk 与字典提升共用的唯一入口）。
+-- `depth` 是 `?m` 出现点的 binder 深度：解是 level 形态的 Value，必须按出现点深度 quote，
+-- 否则 binder 下的解会得到错位的 de Bruijn 索引（旧实现把整项按深度 0 quote，产生
+-- `TVar "b" (-1)` 这类越界索引；`lookupEnv` 对 `i <= 0` 取最内层变量 ⇒ 静默取错 binder）。
+-- 解 quote 后若含负索引，说明它引用了出现点作用域外的 binder（跨定义上下文），
+-- **不内联**、保留 `TMeta`，由接口摘要安全阀拒绝这份摘要（宁可回退全量，不静默错）。
+-- 替换出来的项可能仍含已解元变量：同深度递归（限 fuel 防环）。
 substSolvedMetasAtTbl : IntMap Value -> Int -> Term -> Term
-substSolvedMetasAtTbl sols depth (t@(TMeta m)) = case Base.IntMap.lookup m sols of
-  Just v => quote depth v
-  Nothing => t
-substSolvedMetasAtTbl sols depth (TPi n i r d c) =
-  TPi n i r (substSolvedMetasAtTbl sols depth d) (substSolvedMetasAtTbl sols (depth + 1) c)
-substSolvedMetasAtTbl sols depth (TLam n r b) = TLam n r (substSolvedMetasAtTbl sols (depth + 1) b)
-substSolvedMetasAtTbl sols depth (TApp f a r) =
-  TApp (substSolvedMetasAtTbl sols depth f) (substSolvedMetasAtTbl sols depth a) r
-substSolvedMetasAtTbl sols depth (TCon c args) =
-  TCon c (map (\p => Pair (substSolvedMetasAtTbl sols depth (firstOf p)) (secondOf p)) args)
-substSolvedMetasAtTbl sols depth (TCase sc alts) = TCase (substSolvedMetasAtTbl sols depth sc) alts
-substSolvedMetasAtTbl sols depth (TIf c th el) =
-  TIf (substSolvedMetasAtTbl sols depth c) (substSolvedMetasAtTbl sols depth th)
-    (substSolvedMetasAtTbl sols depth el)
-substSolvedMetasAtTbl sols depth t = t
+substSolvedMetasAtTbl sols depth t = substSolvedMetasAtTblFuel 128 sols depth t
 
-substSolvedMetasTbl : IntMap Value -> Term -> Term
-substSolvedMetasTbl sols (t@(TMeta m)) = case Base.IntMap.lookup m sols of
-  Just v =>
-    let
-      soln = quote 0 v
-    in if hasFreeTermVar 0 soln then t else soln
-  Nothing => t
-substSolvedMetasTbl sols (TPi n i r d c) =
-  TPi n i r (substSolvedMetasTbl sols d) (substSolvedMetasTbl sols c)
-substSolvedMetasTbl sols (TLam n r b) = TLam n r (substSolvedMetasTbl sols b)
-substSolvedMetasTbl sols (TApp f a r) =
-  TApp (substSolvedMetasTbl sols f) (substSolvedMetasTbl sols a) r
-substSolvedMetasTbl sols (TCon c args) =
-  TCon c (map (\p => Pair (substSolvedMetasTbl sols (firstOf p)) (secondOf p)) args)
-substSolvedMetasTbl sols (TCase s alts) =
-  TCase (substSolvedMetasTbl sols s) (map (substSolvedAltTbl sols) alts)
-substSolvedMetasTbl sols (TIf c th el) =
-  TIf (substSolvedMetasTbl sols c) (substSolvedMetasTbl sols th) (substSolvedMetasTbl sols el)
-substSolvedMetasTbl sols t = t
+substSolvedMetasAtTblFuel : Int -> IntMap Value -> Int -> Term -> Term
+substSolvedMetasAtTblFuel fuel sols depth t = if fuel <= 0 then t
+else case t of
+  TMeta m => case Base.IntMap.lookup m sols of
+    Nothing => t
+    Just v =>
+      let
+        q = quote depth v
+      in if hasNegativeVar q then t else substSolvedMetasAtTblFuel (fuel - 1) sols depth q
+  TPi n i r d c =>
+    TPi n i r (substSolvedMetasAtTblFuel (fuel - 1) sols depth d)
+      (substSolvedMetasAtTblFuel (fuel - 1) sols (depth + 1) c)
+  TLam n r b => TLam n r (substSolvedMetasAtTblFuel (fuel - 1) sols (depth + 1) b)
+  TApp f a r =>
+    TApp (substSolvedMetasAtTblFuel (fuel - 1) sols depth f)
+      (substSolvedMetasAtTblFuel (fuel - 1) sols depth a) r
+  TCon c args =>
+    TCon c
+      (map (\p => Pair (substSolvedMetasAtTblFuel (fuel - 1) sols depth (firstOf p)) (secondOf p)) args)
+  TCase sc alts =>
+    TCase (substSolvedMetasAtTblFuel (fuel - 1) sols depth sc)
+      (map (substSolvedAltAtTbl (fuel - 1) sols depth) alts)
+  TIf c th el =>
+    TIf (substSolvedMetasAtTblFuel (fuel - 1) sols depth c)
+      (substSolvedMetasAtTblFuel (fuel - 1) sols depth th)
+      (substSolvedMetasAtTblFuel (fuel - 1) sols depth el)
+  _ => t
 
-substSolvedAltTbl : IntMap Value -> CaseAlt -> CaseAlt
-substSolvedAltTbl sols (CaseAlt n bs b) = CaseAlt n bs (substSolvedMetasTbl sols b)
+-- 分支体在 `depth + #分支绑定子` 的上下文里。
+substSolvedAltAtTbl : Int -> IntMap Value -> Int -> CaseAlt -> CaseAlt
+substSolvedAltAtTbl fuel sols depth (CaseAlt n bs b) =
+  CaseAlt n bs (substSolvedMetasAtTblFuel fuel sols (depth + length bs) b)

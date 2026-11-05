@@ -17,6 +17,10 @@ module Vuna.Compiler.Driver.Compile
 -- M30：`build` 在链接成功后写 `build-meta.json`（源/依赖闭包内容哈希 + compiler 版本），
 -- 同哈希直接跳过；`compile` / `build --no-compile` 不写 meta（seed rotation 与快照
 -- 只认 .ml/build.sh 的确定性产物）。
+-- C35：codegen 改为全限定跨单元引用后，每个模块只 `open` / 依赖它真正引用的前序单元；
+-- `writeCompiled` 把 SplitFile 的直接依赖传给 `buildScript`，生成的 build.sh 按 vuna
+-- 预先算好的层**分层并行**编译 + 精确增量（每单元 stamp 只含直接依赖），依赖图不再
+-- 退化为全序链。
 import Vuna.Compiler.Common
 import Vuna.Compiler.Packages.Pkg
 import Vuna.Compiler.Driver.Dt
@@ -92,9 +96,9 @@ writeCompiled ctx outDir files =
   let
     _ = ensureDirPath outDir
   in andThen (writeSplitFilesIfChanged outDir files) (\n => let
-    order = splitCompileOrder (splitInitFiles files)
+    graph = splitGraph files
     cFiles = copyFfiFiles (contextDir ctx) outDir
-    _ = runIO (prim_writeFile (outDir ++ "/build.sh") (buildScript order cFiles))
+    _ = runIO (prim_writeFile (outDir ++ "/build.sh") (buildScript graph cFiles))
   in Ok n
   )
 
@@ -192,7 +196,8 @@ else case name of
 
 dropPrefixMeta : String -> String -> String
 dropPrefixMeta prefix s =
-  if startsWith prefix s then substring (strLength prefix) (strLength s - strLength prefix) s else s
+  if startsWith prefix s then substring (byteLength prefix) (byteLength s - byteLength prefix) s
+  else s
 
 slashesToDots : String -> String
 slashesToDots s = strPack (map slashToDot (strUnpack s))
@@ -204,7 +209,7 @@ moduleNameOfPath : String -> String -> String
 moduleNameOfPath rootPath path =
   let
     rel0 = dropPrefixMeta (rootPath ++ "/") path
-    rel = if endsWith ".vuna" rel0 then substring 0 (strLength rel0 - 5) rel0 else rel0
+    rel = if endsWith ".vuna" rel0 then substring 0 (byteLength rel0 - 5) rel0 else rel0
   in slashesToDots rel
 
 rootSources : Root -> List (Pair String Int)
@@ -311,7 +316,7 @@ runBuildScript dir out name =
 -- 典型的「依赖包全部缓存命中」场景：重复 `vuna check .` / 多包 workspace / LSP 重启。
 -- ---------------------------------------------------------------
 checkCacheSchema : String
-checkCacheSchema = "vuna-check-cache 4"
+checkCacheSchema = "vuna-check-cache 6"
 
 checkCacheDir : PackageContext -> String
 checkCacheDir ctx = cacheBase ++ "/" ++ hashText (textHash (contextPackageName ctx)) ++ "/check"
@@ -354,36 +359,68 @@ checkCachedExe ctx entry =
   let
     key = checkCacheKeyExe ctx entry
     path = checkCachePath ctx key
-  in if runIO (prim_fileExists path) then Ok [] else noteAndCheck ctx entry path
+  in if runIO (prim_fileExists path) then Ok [] else checkUncachedExe ctx entry path
 
--- M34.5 接口摘要路径的安全阀：只有全部直接依赖的缓存摘要都命中、且签名面无残留
--- TMeta 才返回；否则回退全量精化（静默漏检不可接受）。每个依赖包分配一个
--- `idx << 30` 的编号段（per-module/包段编号），跨包合并的 TMeta/sols 不再冲突。
-depProgramsOf : PackageContext -> Maybe (List DtProgram)
-depProgramsOf ctx = case contextPackage ctx of
+-- 缓存未命中时的精化入口：默认「依赖接口摘要齐全 ⇒ 摘要路径，否则全量」。
+-- 摘要路径返回 `Err` 时**直接上报**（不回退——回退会吞掉本包真实错误）。
+-- `VUNA_ELAB_FULL=1` 强制全量：排障/A-B 对拍用（测试里对两份诊断逐字节比较）。
+checkUncachedExe : PackageContext -> String -> String -> Result (List String)
+checkUncachedExe ctx entry path = if elabFullRequested then fullCheckExe ctx entry path
+else case depProgramsOf ctx of
+  Nothing => fullCheckExe ctx entry path
+  Just deps =>
+    let
+      _ = note ("cache-path=summary deps=" ++ strFromInt (length deps))
+    in checkAndCache ctx path (dtCheckPackageWithDeps ctx entry deps)
+
+fullCheckExe : PackageContext -> String -> String -> Result (List String)
+fullCheckExe ctx entry path =
+  let
+    _ = note "cache-path=full"
+  in checkAndCache ctx path (dtCheckWithProgram ctx entry)
+
+-- `VUNA_ELAB_FULL=1`：强制全量精化（接口摘要路径的排障开关；默认关闭）。
+elabFullRequested : Bool
+elabFullRequested = runIO (prim_getenv "VUNA_ELAB_FULL") == "1"
+
+-- 依赖接口摘要：按**传递依赖闭包**逐包读缓存（每个摘要只含本包自己的声明）。
+-- 任一缓存缺失、或摘要不闭合（`cachedProgramValid = False`）⇒ `Nothing` ⇒ 全量回退。
+depProgramsOf : PackageContext -> Maybe (List CachedProgram)
+depProgramsOf ctx = case ctx.contextPackage of
   Nothing => Nothing
-  Just pkg => depProgramsOfGo 0 (packageDependencies pkg) []
+  Just pkg => depProgramsOfGo 0 (secondOf (collectDepPackages [] pkg.packageDependencies)) []
 
-metaSegment : Int
-metaSegment = 1073741824
+-- 依赖优先的 DFS 后序 + 按包名去重（与 Packages.Pkg.dependencyRoots 同规则）。
+-- 记录字段访问（`p.packageDependencies`）不再被终止性判据识别为「结构投影」，
+-- 非结构递归在 SCT 里没有下降参数；用 fuel 守卫（同 loader 的遍历惯例）。
+collectDepPackages : List String -> List Package -> Pair (List String) (List Package)
+collectDepPackages seen ps = collectDepPackagesFuel 4096 seen ps
 
-depProgramsOfGo : Int -> List Package -> List DtProgram -> Maybe (List DtProgram)
+collectDepPackagesFuel : Int -> List String -> List Package -> Pair (List String) (List Package)
+collectDepPackagesFuel fuel seen [] = Pair seen []
+collectDepPackagesFuel fuel seen (p :: rest) = if fuel <= 0 then Pair seen (p :: rest)
+else if memName (packageName p) seen then collectDepPackagesFuel (fuel - 1) seen rest
+else case collectDepPackagesFuel (fuel - 1) (packageName p :: seen) p.packageDependencies of
+  Pair seen1 transitive => case collectDepPackagesFuel (fuel - 1) seen1 rest of
+    Pair seen2 siblings => Pair seen2 (append transitive (p :: siblings))
+
+depProgramsOfGo : Int -> List Package -> List CachedProgram -> Maybe (List CachedProgram)
 depProgramsOfGo _ [] acc = Just (reverse acc)
 depProgramsOfGo idx (d :: rest) acc = case readProgramCache d of
-  Just cached =>
+  Just cached => if cachedProgramValid cached then
     let
-      prog = programOfCached (shiftCachedProgram (idx * metaSegment) cached)
-    in if dtProgramHasMetas prog then
-      let
-        _ = noteInt "cache-dep-metas" idx
-      in Nothing
-    else
-      let
-        _ = noteInt "cache-dep-ok" idx
-      in depProgramsOfGo (idx + 1) rest (prog :: acc)
+      -- 第 idx 个依赖取 (idx+1) << 30 段：段 0 留给根包，摘要内残留的擦除 meta 与根包
+      -- 元变量编号不冲突（见 Cache.summaryMetaSegment）。
+      shifted = shiftCachedProgram ((idx + 1) * summaryMetaSegment) cached
+      _ = note ("cache-dep-ok " ++ packageName d)
+    in depProgramsOfGo (idx + 1) rest (shifted :: acc)
+  else
+    let
+      _ = note ("cache-dep-invalid " ++ packageName d ++ ": " ++ cachedProgramIssue cached)
+    in Nothing
   Nothing =>
     let
-      _ = noteInt "cache-dep-miss" idx
+      _ = note ("cache-dep-miss " ++ packageName d)
     in Nothing
 
 readProgramCache : Package -> Maybe CachedProgram
@@ -399,10 +436,12 @@ readProgramCache dep =
   in if runIO (prim_fileExists path) then Just (prim_unmarshal (runIO (prim_readFile path)))
   else Nothing
 
-checkAndCache : PackageContext -> String -> String -> Result (Pair (List String) DtProgram) -> Result (List String)
-checkAndCache ctx entry path checked = andThen checked (\r => let
+-- 写过缓存：检查成功才写；缓存内容对依赖方是接口摘要（读方校验），对本包是「同哈希跳过」标记
+-- （命中直接 Ok，不用重读内容——key 已含源哈希与编译器指纹）。
+checkAndCache : PackageContext -> String -> Result (Pair (List String) DtProgram) -> Result (List String)
+checkAndCache ctx path checked = andThen checked (\r => let
   _ = ensureDirPath (checkCacheDir ctx)
-  _ = runIO (prim_writeFile path (prim_marshal (cachedOfProgram (secondOf r))))
+  _ = runIO (prim_writeFileAtomic path (prim_marshal (cachedOfProgram (secondOf r))))
 in Ok (firstOf r)
 )
 
@@ -411,22 +450,32 @@ checkCachedLib ctx names =
   let
     key = checkCacheKeyLib ctx names
     path = checkCachePath ctx key
-  in if runIO (prim_fileExists path) then Ok []
-  else andThen (dtCheckLibraryWithProgram ctx names) (\r => let
-    _ = ensureDirPath (checkCacheDir ctx)
-    _ = runIO (prim_writeFile path (prim_marshal (cachedOfProgram (secondOf r))))
-  in Ok (firstOf r)
-  )
+  in if runIO (prim_fileExists path) then Ok [] else checkUncachedLib ctx names path
 
--- ---------------------------------------------------------------
+checkUncachedLib : PackageContext -> List String -> String -> Result (List String)
+checkUncachedLib ctx names path = if elabFullRequested then fullCheckLib ctx names path
+else case depProgramsOf ctx of
+  Nothing => fullCheckLib ctx names path
+  Just deps =>
+    let
+      _ = note ("cache-path=summary deps=" ++ strFromInt (length deps))
+    in checkAndCache ctx path (dtCheckLibraryPackageWithDeps ctx names deps)
+
+fullCheckLib : PackageContext -> List String -> String -> Result (List String)
+fullCheckLib ctx names path =
+  let
+    _ = note "cache-path=full"
+  in checkAndCache ctx path (dtCheckLibraryWithProgram ctx names)
+
 -- M34.5：elab + codegen 产物缓存（`List SplitFile` 是纯数据，可 Marshal）
 --
 -- key = 闭包源哈希 + 依赖哈希 + schema/版本 + 编译器二进制指纹 + printResult；
 -- 命中直接写文件（省 load/resolve/elab/codegen）。`ffi/*.c` 每次重新复制（C 源小）。
 -- 缓存放包根 `.local/split-cache/`（gitignored）。
+-- C35：SplitFile 增加 splitDeps 字段（形状变了），schema 升到 2，旧缓存自然失效。
 -- ---------------------------------------------------------------
 splitCacheSchema : String
-splitCacheSchema = "vuna-split-cache 1"
+splitCacheSchema = "vuna-split-cache 2"
 
 splitCacheDir : PackageContext -> String
 splitCacheDir ctx = cacheBase ++ "/" ++ hashText (textHash (contextPackageName ctx)) ++ "/split"
@@ -452,12 +501,4 @@ writeSplitCache : PackageContext -> String -> List SplitFile -> Int
 writeSplitCache ctx path files =
   let
     _ = ensureDirPath (splitCacheDir ctx)
-  in runIO (prim_writeFile path (prim_marshal files))
-
--- M34.5：接口摘要路径暂不启用（诊断结论见 C37：依赖签名在摘要重建后仍出现
--- FixityEnv.vuna 的 TypeMismatch，说明还有未建模的精化状态）。全量路径 + 诊断 note。
-noteAndCheck : PackageContext -> String -> String -> Result (List String)
-noteAndCheck ctx entry path =
-  let
-    _ = note "cache-path-full"
-  in checkAndCache ctx entry path (dtCheckWithProgram ctx entry)
+  in runIO (prim_writeFileAtomic path (prim_marshal files))

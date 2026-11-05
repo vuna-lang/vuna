@@ -20,16 +20,16 @@ printFinding path fixMode f =
     text =
       path
         ++ ":"
-        ++ strFromInt (findingLine f)
+        ++ strFromInt f.findingLine
         ++ ":"
-        ++ strFromInt (findingCol f)
+        ++ strFromInt f.findingCol
         ++ ": "
         ++ "["
-        ++ findingCode f
+        ++ f.findingCode
         ++ "] "
-        ++ findingRule f
+        ++ f.findingRule
         ++ ": "
-        ++ findingMessage f
+        ++ f.findingMessage
         ++ suffix
         ++ "\n"
   in let
@@ -124,6 +124,6 @@ runLint args = case parseToolArgs "vuna lint" [BoolFlag "fix"] args of
     let
       _ = runIO (prim_print ("error: " ++ e ++ "\n"))
     in 2
-  Ok parsed => case positionals parsed of
+  Ok parsed => case parsed.positionals of
     [] => lintUsageError 0
     files => lintFiles (flagSet parsed "fix") emptyFixityEnv files

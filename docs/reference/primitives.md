@@ -38,6 +38,7 @@
   | `True` / `False` | `Base.Bool.True` / `Base.Bool.False` | 同上 | `boolTrueCtor` / `boolFalseCtor` |
   | `List` | `Base.List.List`（`Cons` / `Nil` 同理） | `Base.List` | `listFamilyName` / `listConsCtor` / `listNilCtor` |
   | `IO` | `Base.IO.IO` | `Base.IO` | `ioFamilyName` |
+  | `Nat` | `Base.Nat.Nat`（`Zero` / `Succ` 同理） | `Base.Nat` | `natTypeName` / `natZeroCtor` / `natSuccCtor` |
 
 - `True` / `False` 精化为核心 `TBool`，codegen 的运行时表示是 OCaml `bool`：canonical Bool
   族**不生成变体声明**（`Codegen.Decl.runtimeDatas` 按 `boolTypeName` 过滤）。
@@ -60,6 +61,21 @@
 - 字面量：十进制数字序列，按 `acc * 10 + digit` 累加，**越界同样回绕**（`Lexer.collectInt`）；
   没有一元负号，负数写成 `0 - n`。
 - 比较：`==` `/=` `<` `<=` `>` `>=` 返回 canonical `Bool`。
+
+## 3.1 Nat（M34.7）
+
+- **身份**：`Base.Nat.Nat` 是 canonical data（固定 `Zero` / `Succ`），类型层仍是普通归纳族；
+  运行时表示是 OCaml `int`：`Zero = 0`、`Succ n = min(n+1, max_int)`，**不生成变体类型**。
+- **字面量**：期望类型为 Nat 时 `3` 展开成 `Succ (Succ (Succ Zero))`（类型层可合一），
+  codegen 折回整数字面量；推断位置仍默认 `Int`。超出 63 位（词法回绕成负数）报
+  `TC_NatLiteralOutOfRange`。
+- **纯 intrinsic**：`natAdd` / `natSub` / `natMul` / `natDiv`（饱和、减截断到 0、除零与 Int
+  同文案）、`natToInt`（恒等）、`natFromInt`（负数 clamp 0）。interp 与产物同语义；
+  `+ - * /` 在 Nat 上下文由精化器特化到这些名字（见 [operators.md](operators.md)）。
+- **提升**：只允许 `Nat → Int`（精化期插入 `natToInt`，零成本）；`Int → Nat` 必须显式
+  `Base.Nat.fromInt` / `fromIntMaybe`。低层原语（`strLength` / `arrayLength` 等）仍是 Int，
+  Base 负责暴露 Nat 度量。
+- **展示**：`main : Nat` 与 interp 都输出十进制。
 
 ## 4. String
 
@@ -85,7 +101,7 @@
 
 - `Base.Show` 的 `String` 实例委托给它：`show s = strShow s`，因此 `show` 与
   `main : String` 的展示一致。
-- `main` 展示钩子（`Codegen.Term.mainShowForName`）：`Int` → `string_of_int`、
+- `main` 展示钩子（`Codegen.Term.mainShowForName`）：`Int` / `Nat` → `string_of_int`、
   `String` → `strShow`、`Bool` → `dt_show_bool`（输出 `True` / `False`）。
 - interp 展示（`Core.Eval.showValue`，字符串走 `Core.Term.showCoreString`）与 `strShow`
   同规则、逐字节一致，因此 `main : String` 在 interp 与产物中输出相同。
@@ -176,7 +192,7 @@
 | 能力 | 原语 / 入口 |
 | --- | --- |
 | `console` | `prim_print`、`prim_readLine`、`prim_readBytes` |
-| `fs` | `prim_readFile`、`prim_writeFile`、`prim_readDir`、`prim_isDirectory`、`prim_makeDir`、`prim_removeFile`、`prim_fileExists`、`prim_fileMtime`、`prim_fileSize` |
+| `fs` | `prim_readFile`、`prim_writeFile`、`prim_writeFileAtomic`、`prim_readDir`、`prim_isDirectory`、`prim_makeDir`、`prim_removeFile`、`prim_fileExists`、`prim_fileMtime`、`prim_fileSize` |
 | `process` | `prim_getArgs`、`prim_exit`、`prim_runIn`、`prim_spawn`、`prim_wait` |
 | `env` | `prim_getenv`、`prim_getcwd`、`prim_execPath` |
 | `clock` | `timeUs` |
@@ -207,6 +223,7 @@
 | --- | --- |
 | `prim_print` | 写 stdout 并 flush，返回**字节数** |
 | `prim_writeFile` | 二进制写整串，返回**字节数**；IO 失败抛宿主异常 |
+| `prim_writeFileAtomic` | 同 `prim_writeFile`，但写 `<path>.<pid>.tmp` 后 `Sys.rename` 原子替换：并发读者只会看到完整旧内容或完整新内容（workspace 并行 check 的子进程共享缓存目录，必须原子写） |
 | `prim_readFile` | 读整个文件为字节串；IO 失败抛宿主异常 |
 | `prim_readLine` | 读一行；EOF 返回 `""`（与空行不可区分） |
 | `prim_readBytes` | `Int -> String`：最多读 n 字节，**有数据就立即返回**（可能少于 n），EOF 返回 `""`；调用方负责循环 / 拼接（LSP 帧读取用） |

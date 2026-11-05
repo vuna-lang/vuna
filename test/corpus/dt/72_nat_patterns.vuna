@@ -1,0 +1,41 @@
+-- Nat case 降级：构造子顺序、Succ _、兜底变量、嵌套模式都要正确。
+import Base.Nat
+
+classify : Nat -> Int
+classify n = case n of
+  Succ (Succ k) => 2
+  Succ k => 1
+  Zero => 0
+
+order : Nat -> Int
+order n = case n of
+  Succ k => 1
+  Zero => 0
+
+fallback : Nat -> Int
+fallback n = case n of
+  Zero => 10
+  _ => 20
+
+ignoreSucc : Nat -> Int
+ignoreSucc n = case n of
+  Succ _ => 7
+  Zero => 8
+
+catchVar : Nat -> Int
+catchVar n = case n of
+  Zero => 1
+  m => 2
+
+main : Int
+main =
+  classify 2
+    + classify 1
+    + classify 0
+    + order 5
+    + fallback 0
+    + fallback 3
+    + ignoreSucc 1
+    + ignoreSucc 0
+    + catchVar 0
+    + catchVar 5

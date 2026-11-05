@@ -1,0 +1,5 @@
+-- main : Nat 直接展示十进制；字面量与 Nat 算术都落在 int 表示上。
+import Base.Nat
+
+main : Nat
+main = 2 + 3

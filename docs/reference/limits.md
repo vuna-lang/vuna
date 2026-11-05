@@ -144,6 +144,24 @@
   桥接只为 canonical `Base.List.List` 生成；`Prelude` 自动注入 `Base.List`，因此正常上下文
   总可用，闭包里没有该族时这些原语不可用。
 
+## Nat 与 Int（M34.7）
+
+- **值域**：`Nat` 运行时是 OCaml `int`，取 `0..max_int`（4611686018427387903）；`Succ`
+  与 `plus` / `mult` 在边界**饱和**而不是回绕，`minus` 截断到 0，`div` 除零在产物运行期
+  抛 `Failure "division by zero"`。没有大整数计划。
+- **字面量**：期望类型是 Nat 时，字面量在**编译期**展开成 `Zero`/`Succ` 链（类型层可合一），
+  codegen 再折回整数字面量；超大 Nat 字面量有编译期节点成本（暂不做惰性 `TNat`）。
+  超出 63 位报 `TC_NatLiteralOutOfRange`。Nat 字面量模式（`case n of 0 =>`）尚不支持。
+- **提升**：只允许 `Nat → Int`（精化期插 `natToInt`，运行时恒等）；`Int → Nat` 必须显式
+  `Base.Nat.fromInt`（负数 clamp 0，有损）或 `fromIntMaybe`。混合算术结果由操作数决定：
+  两侧 Nat（或 Nat + 字面量）→ Nat；出现真正 Int → Int。
+- **算术特化不是通用重载**：`+ - * /` 仍是内建运算符，只在 Int/Nat 上按期望类型/实参类型
+  特化；用户自定义数值类型不能重载。泛型 `Num`/`FromInteger` 见 debt。
+- **边界**：源码位置/span、fuel/终止性度量、de Bruijn level、meta id、哈希、退出码/状态、
+  时间、`-1` 哨兵、`List.take/drop/range` 的计数参数保留 `Int`；Base 的公开度量
+  （List/Array/MArray/Buffer/String/IO/Map/Vec）是 Nat。低层原语保持 Int。
+- 受限 FFI 仍只接受 Int/String/Bool/Array 基本类型，**不支持 Nat**。
+
 ## 容器与可变数据（M33 W3）
 
 - **内建类型构造子**：`Array a` / `IORef a` / `MArray a` / `Buffer` 是类型层构造子（不是

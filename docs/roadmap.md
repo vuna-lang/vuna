@@ -35,6 +35,11 @@ vuna 尚未发布任何版本：没有外部用户、下游生态与历史包袱
   `MArray` / `Buffer`（M33 W3）。编译器查找表（defs / globals / ctor / clause / defVals）用
   `HashMap`，元变量解表与创建深度表用 `IntMap`（`metaLookup` 走索引，不再线性扫 /
   不再 `strFromInt`）。
+- **Nat 零开销表示（M34.7）**：`Base.Nat` 保持归纳族语义，运行时是 OCaml `int`（无变体 /
+  无分配）；期望类型处的字面量编译期展开、codegen 折回整数；`Zero`/`Succ` 与 `case` 降成
+  整数与 `if`；`+ - * /` 在 Nat 上下文特化到 `bi_nat*`（饱和/截断），`Nat → Int` 隐式提升，
+  反向显式 `fromInt`。Base 公开度量（List/Array/MArray/Buffer/String/IO/Map/Vec）迁到 Nat；
+  低层原语、位置/fuel/level/meta/哈希等仍 Int（见 [limits.md](reference/limits.md)）。
 - **系统编程能力（M33）**：生成程序基准 `nix run .#vuna-perf`（vuna vs 手写 OCaml，典型
   负载 ≤2×）；codegen 内建内联 / 多参数 lambda 链 / 字符串批拼；`Array` / `IORef` / `MArray` /
   `Buffer` 与 IO 隔离的可变数据；受限 FFI（`extern` + 包根 `ffi/*.c`）；库级 `State` /
@@ -106,8 +111,11 @@ LSP 诊断帧进程内缓存（同 uri+内容重复请求命中，编辑后仍�
 自由变量过滤（`freeVarTerm` + dropped 安全阀）；剩 1 层（`runIO` 隐式 `a` 的求解路径，
 `Interp.vuna:70` 的 `b <> String`）未定位，作为独立后续阶段（跨包 elab 状态复用需要完整
 的作用域/实例化语义恢复）。其余剩余：M34.3 的 hash-consing（需全局 intern 表，与纯精化
-路径冲突）；M34.4 模块级并行 codegen（C35：codegen open 全序 + 构造子名非模块限定）；
+路径冲突）；M34.4 模块级并行 codegen（C35 已关闭：分层直接依赖 + 全限定跨单元引用已落地，
+构建侧分层并行已在 `build.sh` 层内 `&` + `wait`；codegen 进程内仍串行，作为后续项保留）；
 规范序列化格式（C32）。
+
+**TTC 模块化精化收尾（2026-11）**：AST 缓存已落地（`Loader/Flatten.parseFileWithPath`，key = schema + 路径 + 源内容，5 条独立 lane + 回读校验，`$TMPDIR/vuna-cache/ast`，原子写）。接口摘要（第 1 步，包级）**已完成**：闭合摘要模型（`CachedProgram` 不含 sols/next）+ `deftbl` 只装定义体（修掉 `Eq Type` 假歧义的根因）+ 深度感知 zonk + 读侧安全阀 + 传递依赖 + `check` 期启用；仓库自身 `check .` 摘要路径通过（根包 ~8.0 s vs 全量 ~14.7 s，依赖缓存预热前提）。第 2 步（**模块级**接口 / 模块级签名隔离）仍在后续；第 3 步（codegen 模块级缓存）的依赖模型前提已就绪（C35 已关闭：直接依赖 + 全限定跨单元引用 + 分层并行构建），模块级复用本身待做。开放项见 debt C37。
 
 ### M35：并发 / 服务端
 

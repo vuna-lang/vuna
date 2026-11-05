@@ -14,8 +14,8 @@
 #   strcat     `String.concat ""` 出现次数（运行时 dtp_concatMany 的标记）
 #   eqint      `bi_eq_int` 出现次数（Int 相等快速路径的标记）
 #   zeroarg    `fun () ->` 出现次数；内嵌 runtime 文本里的同串也计入
-#   ctorcount  `^  | C_` 行数 = 生成代码里以构造子模式开头的 match 臂；
-#              单行 `type t_ = C_ ...` 声明不计（名字是历史遗留）
+#   ctorcount  以构造子模式开头的 match 臂行数（`^  | C_` 或 C35 后的
+#              `^  | <Unit>.C_` 全限定形态）；单行 `type t_ = C_ ...` 声明不计（名字是历史遗留）
 set -eu
 export LC_ALL=C
 
@@ -47,7 +47,7 @@ letrec=$(grep -c 'let rec ' "$ALL" 2>/dev/null || true)
 strcat=$(grep -c 'String.concat ""' "$ALL" 2>/dev/null || true)
 eqint=$(grep -c 'bi_eq_int' "$ALL" 2>/dev/null || true)
 zeroarg=$(grep -c 'fun () ->' "$ALL" 2>/dev/null || true)
-ctorcount=$(grep -c '^  | C_' "$ALL" 2>/dev/null || true)
+ctorcount=$(grep -cE '^  \| ([A-Z][A-Za-z0-9_]*\.)?C_' "$ALL" 2>/dev/null || true)
 
 say() { printf '%s %s\n' "$1" "$2"; }
 

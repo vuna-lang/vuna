@@ -39,7 +39,7 @@ inferVarRef globals ctx ec name sp = case ctxLookup name ctx of
 
 -- 签名项是否以隐式 Pi 开头并最终落到值（{a : Type} -> Result a）；显式 Pi 不算。
 allImplicitPrefix : Term -> Bool
-allImplicitPrefix (TPi n implicit rig dom cod) = if implicit then allImplicitPrefix cod else False
+allImplicitPrefix (TPi n implicit rig dom cod) = implicit && allImplicitPrefix cod
 allImplicitPrefix _ = True
 
 -- 实例化全隐式前缀：逐个插元变量，得到「值 + 剩余值类型」。

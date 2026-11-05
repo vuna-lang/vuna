@@ -5,11 +5,6 @@ module Vuna.Lint.Diagnostics
   , lintCode
   , lintDesc
   , lintEdit
-  , lintEntryCode
-  , lintEntryDesc
-  , lintEntryEdit
-  , lintEntryFixable
-  , lintEntryRule
   , lintFixable
   , lintMsg
   , lintRule
@@ -94,23 +89,12 @@ lintFixable LiftDestructure = True
 lintFixable CaseToClauses = True
 
 -- 文档遍历项（同构 List；gen-errors 遍历它渲染 LN_ 段）
-data LintEntry : Type where
-  LintEntry : String -> String -> String -> Bool -> String -> LintEntry
-
-lintEntryCode : LintEntry -> String
-lintEntryCode (LintEntry c r d f e) = c
-
-lintEntryRule : LintEntry -> String
-lintEntryRule (LintEntry c r d f e) = r
-
-lintEntryDesc : LintEntry -> String
-lintEntryDesc (LintEntry c r d f e) = d
-
-lintEntryFixable : LintEntry -> Bool
-lintEntryFixable (LintEntry c r d f e) = f
-
-lintEntryEdit : LintEntry -> String
-lintEntryEdit (LintEntry c r d f e) = e
+record LintEntry where
+  lintEntryCode : String
+  lintEntryRule : String
+  lintEntryDesc : String
+  lintEntryFixable : Bool
+  lintEntryEdit : String
 
 -- 全部规则（新增规则必须在此登记，否则文档缺失）
 lintAll : List LintEntry

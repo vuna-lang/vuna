@@ -1,4 +1,4 @@
-module Base.Int where
+module Base.Int () where
 
 -- Base.Int：`Int` 的实例宿主（M31.1）。
 --

@@ -91,7 +91,7 @@ build，`dist/` 提交）；`nix/` = 构建图 + rotate/metrics/bench；`docs/` 
   [stdlib.md](docs/reference/stdlib.md)、[packages.md](docs/reference/packages.md)、
   [primitives.md](docs/reference/primitives.md)（内建/原语/能力）、
   [operators.md](docs/reference/operators.md)（运算符=方法别名、实例落点规则）
-- 编译器实现：[compiler.md](docs/reference/compiler.md)（模块与输出模型）、
+- 编译器实现：[compiler.md](docs/reference/compiler.md)（模块与输出模型、接口摘要）、
   [core.md](docs/reference/core.md)（Core TT / NbE / 精化器）
 - 工具链（`goal` / LSP / `doc` / 错误码；`vuna gen-errors` 生成
   `docs/.generated/errors.md`）：[tooling.md](docs/reference/tooling.md)；lint：[lint.md](docs/reference/lint.md)

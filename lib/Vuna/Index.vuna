@@ -8,8 +8,6 @@ module Vuna.Index
   , findSymbol
   , impactOf
   , indexModules
-  , indexRefs
-  , indexSymbols
   , listAllSymbols
   , loadOrBuild
   , modBytes
@@ -17,8 +15,6 @@ module Vuna.Index
   , modName
   , modPackage
   , modPath
-  , refCol
-  , refLine
   , refModule
   , refName
   , referencesAt
@@ -26,7 +22,6 @@ module Vuna.Index
   , renderModules
   , renderOverview
   , symCol
-  , symDoc
   , symFullName
   , symKind
   , symLine

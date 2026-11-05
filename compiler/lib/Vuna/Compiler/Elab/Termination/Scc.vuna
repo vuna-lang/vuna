@@ -7,26 +7,17 @@ import Base.HashMap
 import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Elab.Termination.Measure
 
-data Site : Type where
-  MkSite : String -> String -> List Expr -> List (Pair String (Pair Int (Pair Int (List Int)))) -> List String -> Site
+record Site where
+  siteCaller : String
+  siteCallee : String
+  siteArgs : List Expr
+  siteSizes : List (Pair String (Pair Int (Pair Int (List Int))))
+  siteRegion : List String
 
-data ScEdge : Type where
-  MkScEdge : Int -> Int -> Bool -> ScEdge
-
-siteCaller : Site -> String
-siteCaller (MkSite c g args sizes region) = c
-
-siteCallee : Site -> String
-siteCallee (MkSite c g args sizes region) = g
-
-siteArgs : Site -> List Expr
-siteArgs (MkSite c g args sizes region) = args
-
-siteSizes : Site -> List (Pair String (Pair Int (Pair Int (List Int))))
-siteSizes (MkSite c g args sizes region) = sizes
-
-siteRegion : Site -> List String
-siteRegion (MkSite c g args sizes region) = region
+record ScEdge where
+  edgeFrom : Int
+  edgeTo : Int
+  scStrictEdge : Bool
 
 siteCollectList : Int -> List String -> List String -> List (Pair String (List Int)) -> String -> HashMap (List Int) -> List (Pair String (Pair Int (Pair Int (List Int)))) -> List String -> List Expr -> List Site -> List Site
 siteCollectList fuel comp ctors projs caller facts sizes region [] acc =
@@ -110,7 +101,7 @@ else case e of
   ELocalFun clauses sp =>
     siteCollectBinds (fuel - 1) comp ctors projs caller facts sizes region
       (localClauseBinds clauses) acc
-  EVar n sp => if memName n comp then MkSite caller n [] sizes region :: acc else acc
+  EVar n sp => if memName n comp then Site caller n [] sizes region :: acc else acc
   _ => acc
 
 -- A2：把局部函数的 clause 列表转成 `siteCollectBinds` 能吃的 binds（模式仅占位）。
@@ -124,7 +115,7 @@ siteWalkEApp fuel comp ctors projs caller facts sizes region fn args acc = if fu
 else case groupHead comp fn of
   Just callee =>
     siteCollectList (fuel - 1) comp ctors projs caller facts sizes region args
-      (MkSite caller callee args sizes region :: acc)
+      (Site caller callee args sizes region :: acc)
   Nothing => case fn of
     EVar nm nsp =>
       if isMapLike nm then siteWalkEAppMap (fuel - 1) comp ctors projs caller facts sizes region fn args acc
@@ -162,7 +153,7 @@ else
     elems = extendElemSizes sizes lst "$elem"
     fullArgs = append pargs [EVar "$elem" cbsp]
     acc2 = siteCollectList (fuel - 1) comp ctors projs caller facts sizes region pargs acc1
-  in MkSite caller g fullArgs elems region :: acc2
+  in Site caller g fullArgs elems region :: acc2
 
 siteCollectClauses : List String -> List String -> List (Pair String (List Int)) -> HashMap (List Int) -> String -> List (Pair (List Pat) Expr) -> List Site -> List Site
 siteCollectClauses comp ctors projs facts caller [] acc = acc
@@ -179,17 +170,8 @@ siteCollectGo comp ctors projs defTbl facts (f :: rest) acc =
   siteCollectGo comp ctors projs defTbl facts rest
     (siteCollectClauses comp ctors projs facts f (clausesOfDefTbl f defTbl) acc)
 
-edgeFrom : ScEdge -> Int
-edgeFrom (MkScEdge i j strict) = i
-
-edgeTo : ScEdge -> Int
-edgeTo (MkScEdge i j strict) = j
-
-scStrictEdge : ScEdge -> Bool
-scStrictEdge (MkScEdge i j strict) = strict
-
 scIsStrict : Int -> Bool
-scIsStrict m = if m == 0 then False else True
+scIsStrict m = m /= 0
 
 maxBaseOf : List (Pair String (Pair Int (Pair Int (List Int)))) -> Int
 maxBaseOf [] = 0
@@ -198,8 +180,8 @@ maxBaseOf ((Pair n (Pair base (Pair depth path))) :: rest) = maxInt base (maxBas
 insertEdge : ScEdge -> List ScEdge -> List ScEdge
 insertEdge e [] = [e]
 insertEdge e (x :: rest) =
-  if edgeFrom e < edgeFrom x then e :: x :: rest
-  else if edgeFrom e == edgeFrom x then if edgeTo e <= edgeTo x then e :: x :: rest else x :: insertEdge e rest
+  if e.edgeFrom < x.edgeFrom then e :: x :: rest
+  else if e.edgeFrom == x.edgeFrom then if e.edgeTo <= x.edgeTo then e :: x :: rest else x :: insertEdge e rest
   else x :: insertEdge e rest
 
 sortEdges : List ScEdge -> List ScEdge
@@ -207,14 +189,14 @@ sortEdges [] = []
 sortEdges (e :: rest) = insertEdge e (sortEdges rest)
 
 mergeStrict : ScEdge -> ScEdge -> ScEdge
-mergeStrict a b = MkScEdge (edgeFrom a) (edgeTo a) (if scStrictEdge a then True else scStrictEdge b)
+mergeStrict a b = ScEdge a.edgeFrom a.edgeTo (if a.scStrictEdge then True else b.scStrictEdge)
 
 compactEdges : List ScEdge -> List ScEdge
 compactEdges [] = []
 compactEdges (e :: rest) = case rest of
   [] => [e]
   x :: xs =>
-    if edgeFrom e == edgeFrom x then if edgeTo e == edgeTo x then mergeStrict e x :: compactEdges xs else e :: compactEdges rest
+    if e.edgeFrom == x.edgeFrom then if e.edgeTo == x.edgeTo then mergeStrict e x :: compactEdges xs else e :: compactEdges rest
     else e :: compactEdges rest
 
 canonEdges : List ScEdge -> List ScEdge
@@ -223,7 +205,7 @@ canonEdges edges = compactEdges (sortEdges edges)
 edgesEqCanon : List ScEdge -> List ScEdge -> Bool
 edgesEqCanon [] [] = True
 edgesEqCanon (x :: xs) (y :: ys) =
-  if edgeFrom x == edgeFrom y then if edgeTo x == edgeTo y then if scStrictEdge x == scStrictEdge y then edgesEqCanon xs ys else False
+  if x.edgeFrom == y.edgeFrom then if x.edgeTo == y.edgeTo then if x.scStrictEdge == y.scStrictEdge then edgesEqCanon xs ys else False
   else False
   else False
 edgesEqCanon (x :: xs) [] = False
@@ -235,8 +217,7 @@ edgesEq a b = edgesEqCanon (canonEdges a) (canonEdges b)
 combineWith : ScEdge -> List ScEdge -> List ScEdge
 combineWith e [] = []
 combineWith e (x :: rest) =
-  if edgeTo e == edgeFrom x then MkScEdge (edgeFrom e) (edgeTo x) (if scStrictEdge e then True else scStrictEdge x)
-    :: combineWith e rest
+  if e.edgeTo == x.edgeFrom then ScEdge e.edgeFrom x.edgeTo (if e.scStrictEdge then True else x.scStrictEdge) :: combineWith e rest
   else combineWith e rest
 
 composeGo : List ScEdge -> List ScEdge -> List ScEdge
@@ -248,7 +229,7 @@ composeEdges g1 g2 = canonEdges (composeGo g1 g2)
 
 hasStrict : List ScEdge -> Bool
 hasStrict [] = False
-hasStrict (e :: rest) = if scStrictEdge e then True else hasStrict rest
+hasStrict (e :: rest) = e.scStrictEdge || hasStrict rest
 
 graphIdempotent : List ScEdge -> Bool
 graphIdempotent edges = edgesEq (composeEdges edges edges) edges
@@ -258,7 +239,7 @@ graphOK edges = if graphIdempotent edges then hasStrict edges else True
 
 graphsOK : List (List ScEdge) -> Bool
 graphsOK [] = True
-graphsOK (g :: rest) = if graphOK g then graphsOK rest else False
+graphsOK (g :: rest) = graphOK g && graphsOK rest
 
 -- ---------------------------------------------------------------
 -- 表：pair -> 图集合
@@ -274,11 +255,11 @@ tableLookup k ((Pair k2 gs) :: rest) =
 
 graphListHas : List ScEdge -> List (List ScEdge) -> Bool
 graphListHas g [] = False
-graphListHas g (x :: rest) = if edgesEq g x then True else graphListHas g rest
+graphListHas g (x :: rest) = edgesEq g x || graphListHas g rest
 
 graphListSubset : List (List ScEdge) -> List (List ScEdge) -> Bool
 graphListSubset [] b = True
-graphListSubset (g :: rest) b = if graphListHas g b then graphListSubset rest b else False
+graphListSubset (g :: rest) b = graphListHas g b && graphListSubset rest b
 
 tableAddPair : String -> String -> List ScEdge -> List (Pair (Pair String String) (List (List ScEdge))) -> List (Pair (Pair String String) (List (List ScEdge)))
 tableAddPair f g edges [] = [Pair (Pair f g) [edges]]
@@ -326,13 +307,13 @@ closureStep : List (Pair (Pair String String) (List (List ScEdge))) -> Pair (Lis
 closureStep table = closureStepGo table table table
 
 tableSame : List (Pair (Pair String String) (List (List ScEdge))) -> List (Pair (Pair String String) (List (List ScEdge))) -> Bool
-tableSame a b = if length a == length b then tableSubset a b else False
+tableSame a b = length a == length b && tableSubset a b
 
 tableSubset : List (Pair (Pair String String) (List (List ScEdge))) -> List (Pair (Pair String String) (List (List ScEdge))) -> Bool
 tableSubset [] b = True
 tableSubset ((Pair k gs) :: rest) b = case tableLookup k b of
   Nothing => False
-  Just gs2 => if graphListSubset gs gs2 then tableSubset rest b else False
+  Just gs2 => graphListSubset gs gs2 && tableSubset rest b
 
 closureLoop : List (Pair (Pair String String) (List (List ScEdge))) -> Int -> Pair (List (Pair (Pair String String) (List (List ScEdge)))) Bool
 closureLoop table fuel = if fuel <= 0 then Pair table False
@@ -345,11 +326,11 @@ else case closureStep table of
 -- 从调用点构造图
 -- ---------------------------------------------------------------
 siteEdgeAt : Int -> Int -> Site -> List String -> List (Pair String (List Int)) -> HashMap (List Int) -> List ScEdge
-siteEdgeAt i j s ctors projs facts = case nthExpr (siteArgs s) j of
+siteEdgeAt i j s ctors projs facts = case nthExpr s.siteArgs j of
   Nothing => []
-  Just a => case relOfArg i a (siteSizes s) ctors projs (siteCaller s) facts (siteRegion s) of
+  Just a => case relOfArg i a s.siteSizes ctors projs s.siteCaller facts s.siteRegion of
     Nothing => []
-    Just m => [MkScEdge i j (scIsStrict m)]
+    Just m => [ScEdge i j (scIsStrict m)]
 
 siteEdgesJ : Int -> Int -> Site -> List String -> List (Pair String (List Int)) -> HashMap (List Int) -> List ScEdge
 siteEdgesJ i count s ctors projs facts =
@@ -359,12 +340,12 @@ siteEdgesJ i count s ctors projs facts =
 
 siteEdgesI : Int -> Site -> List String -> List (Pair String (List Int)) -> HashMap (List Int) -> List ScEdge
 siteEdgesI i s ctors projs facts =
-  if i <= 0 then siteEdgesJ 0 (length (siteArgs s)) s ctors projs facts
-  else append (siteEdgesJ i (length (siteArgs s)) s ctors projs facts)
+  if i <= 0 then siteEdgesJ 0 (length s.siteArgs) s ctors projs facts
+  else append (siteEdgesJ i (length s.siteArgs) s ctors projs facts)
     (siteEdgesI (i - 1) s ctors projs facts)
 
 siteEdgesOf : List String -> List (Pair String (List Int)) -> HashMap (List Int) -> Site -> List ScEdge
-siteEdgesOf ctors projs facts s = siteEdgesI (maxBaseOf (siteSizes s)) s ctors projs facts
+siteEdgesOf ctors projs facts s = siteEdgesI (maxBaseOf s.siteSizes) s ctors projs facts
 
 initialTable : List Site -> List String -> List (Pair String (List Int)) -> HashMap (List Int) -> List (Pair (Pair String String) (List (List ScEdge)))
 initialTable sites ctors projs facts = initialTableGo sites ctors projs facts []
@@ -373,7 +354,7 @@ initialTableGo : List Site -> List String -> List (Pair String (List Int)) -> Ha
 initialTableGo [] ctors projs facts acc = acc
 initialTableGo (s :: rest) ctors projs facts acc =
   initialTableGo rest ctors projs facts
-    (tableAddPair (siteCaller s) (siteCallee s) (siteEdgesOf ctors projs facts s) acc)
+    (tableAddPair s.siteCaller s.siteCallee (siteEdgesOf ctors projs facts s) acc)
 
 -- ---------------------------------------------------------------
 -- 判定
@@ -393,13 +374,13 @@ sctBadPairs ((Pair (Pair f g) gs) :: rest) =
   if f == g then append (sctBadGraphs f gs) (sctBadPairs rest) else sctBadPairs rest
 
 edgeText : ScEdge -> String
-edgeText e = if scStrictEdge e then strictEdgeText e else weakEdgeText e
+edgeText e = if e.scStrictEdge then strictEdgeText e else weakEdgeText e
 
 strictEdgeText : ScEdge -> String
-strictEdgeText e = strFromInt (edgeFrom e) ++ "->>" ++ strFromInt (edgeTo e)
+strictEdgeText e = strFromInt e.edgeFrom ++ "->>" ++ strFromInt e.edgeTo
 
 weakEdgeText : ScEdge -> String
-weakEdgeText e = strFromInt (edgeFrom e) ++ "->" ++ strFromInt (edgeTo e)
+weakEdgeText e = strFromInt e.edgeFrom ++ "->" ++ strFromInt e.edgeTo
 
 edgesText : List ScEdge -> String
 edgesText [] = ""
@@ -452,13 +433,13 @@ firstParamOf name defTbl = case clausesOfDefTbl name defTbl of
 
 hasFuelGuard : String -> Expr -> Bool
 hasFuelGuard p0 (EIf c t el sp) = case guardPosVar c of
-  Just v => if v == p0 then True else False
+  Just v => v == p0
   Nothing => False
 hasFuelGuard p0 _ = False
 
 -- 单个调用点：callee 第 0 实参是否 = caller 的 fuel（False）或 fuel-k（True）。
 siteFuelStrict : String -> Site -> Maybe Bool
-siteFuelStrict callerFuel site = case nthExpr (siteArgs site) 0 of
+siteFuelStrict callerFuel site = case nthExpr site.siteArgs 0 of
   Nothing => Nothing
   Just a => case a of
     EVar n sp => if n == callerFuel then Just False else Nothing
@@ -474,11 +455,11 @@ fuelEdgesOf comp defTbl sites = fuelEdgesGo comp defTbl sites True []
 
 fuelEdgesGo : List String -> HashMap (List (Pair (List Pat) Expr)) -> List Site -> Bool -> List (Pair (Pair String String) Int) -> List (Pair (Pair String String) Int)
 fuelEdgesGo comp defTbl [] ok acc = acc
-fuelEdgesGo comp defTbl (s :: rest) ok acc = case siteFuelStrict (firstParamOf (siteCaller s) defTbl) s of
+fuelEdgesGo comp defTbl (s :: rest) ok acc = case siteFuelStrict (firstParamOf s.siteCaller defTbl) s of
   Nothing => fuelEdgesGo comp defTbl rest False acc
   Just strict =>
     fuelEdgesGo comp defTbl rest ok
-      (Pair (Pair (siteCaller s) (siteCallee s)) (if strict then 1 else 0) :: acc)
+      (Pair (Pair s.siteCaller s.siteCallee) (if strict then 1 else 0) :: acc)
 
 fuelMembersGuarded : List String -> HashMap (List (Pair (List Pat) Expr)) -> Bool
 fuelMembersGuarded [] defTbl = True
@@ -486,7 +467,7 @@ fuelMembersGuarded (f :: rest) defTbl = case clausesOfDefTbl f defTbl of
   [] => False
   cl :: cls => case firstParamName (firstOf cl) of
     Nothing => False
-    Just p0 => if hasFuelGuard p0 (secondOf cl) then fuelMembersGuarded rest defTbl else False
+    Just p0 => hasFuelGuard p0 (secondOf cl) && fuelMembersGuarded rest defTbl
 
 tryFuelThread : List String -> HashMap (List (Pair (List Pat) Expr)) -> List String -> List (Pair String (List Int)) -> HashMap (List Int) -> String -> Result Int
 tryFuelThread comp defTbl ctors projs facts msg =

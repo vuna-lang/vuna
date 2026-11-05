@@ -1,19 +1,4 @@
 open Vuna_runtime
-open Base_dPair
-open Base_dBool
-open Base_dMonad
-open Base_dMaybe
-open Base_dEq
-open Base_dOrd
-open Base_dInt
-open Base_dList
-open Base_dResult
-open Base_dString
-open Base_dShow
-open Prelude
-open Vuna_dCompiler_dCommon
-open Vuna_dCompiler_dFrontend_dToml
-open Vuna_dCompiler_dFrontend_dManifest
 type 'a0 t_Base_dIO_dIO = C_Base_dIO_dIO_Base_dIO_dMkIO of ((int) -> 'a0)
 
 let v_Base_dIO_drunIO = (fun mc0 -> (match mc0 with
@@ -31,14 +16,14 @@ let v_Base_dIO_dioBind = (fun mc0 mc1 -> (match mc0 with
   | _ -> failwith "DT: impossible branch"
 ))
 
-let v_Monad_uBase_dIO_dIO = (C_Dict_uBase_dMonad_dMonad_MkDict_uBase_dMonad_dMonad ((fun io k -> ((v_Base_dIO_dioBind io) k)), (fun x -> (v_Base_dIO_dioPure x))))
+let v_Monad_uBase_dIO_dIO = (Base_dMonad.C_Dict_uBase_dMonad_dMonad_MkDict_uBase_dMonad_dMonad ((fun io k -> ((v_Base_dIO_dioBind io) k)), (fun x -> (v_Base_dIO_dioPure x))))
 
 let v_Base_dIO_dioFmap = (fun mc0 mc1 -> (match mc1 with
   | C_Base_dIO_dIO_Base_dIO_dMkIO (dtb__3) -> (C_Base_dIO_dIO_Base_dIO_dMkIO ((fun w -> (mc0 (dtb__3 w)))))
   | _ -> failwith "DT: impossible branch"
 ))
 
-let v_Functor_uBase_dIO_dIO = (C_Dict_uBase_dMonad_dFunctor_MkDict_uBase_dMonad_dFunctor ((fun f io -> ((v_Base_dIO_dioFmap f) io))))
+let v_Functor_uBase_dIO_dIO = (Base_dMonad.C_Dict_uBase_dMonad_dFunctor_MkDict_uBase_dMonad_dFunctor ((fun f io -> ((v_Base_dIO_dioFmap f) io))))
 
 let v_Base_dIO_dprint = (fun _uarity0 -> ((fun dtio_0 -> C_Base_dIO_dIO_Base_dIO_dMkIO (fun _ -> dtp_print dtio_0)) _uarity0))
 
@@ -50,7 +35,9 @@ let v_Base_dIO_dwriteFile = (fun _uarity0 _uarity1 -> (((fun dtio_0 dtio_1 -> C_
 
 let v_Base_dIO_dreadLine = (C_Base_dIO_dIO_Base_dIO_dMkIO (fun _ -> (dtp_readLine ())))
 
-let v_Base_dIO_dreadDir = (fun _uarity0 -> ((fun dtio_0 -> C_Base_dIO_dIO_Base_dIO_dMkIO (fun _ -> (fun p -> dtp_listOf (dtp_readDir p)) dtio_0)) _uarity0))
+let v_Base_dIO_dreadBytes = (fun n -> ((fun dtio_0 -> C_Base_dIO_dIO_Base_dIO_dMkIO (fun _ -> dtp_readBytes dtio_0)) n))
+
+let v_Base_dIO_dreadDir = (fun _uarity0 -> ((fun dtio_0 -> C_Base_dIO_dIO_Base_dIO_dMkIO (fun _ -> (fun p -> Base_dList.dtp_listOf (dtp_readDir p)) dtio_0)) _uarity0))
 
 let v_Base_dIO_disDirectory = (fun _uarity0 -> ((fun dtio_0 -> C_Base_dIO_dIO_Base_dIO_dMkIO (fun _ -> dtp_isDirectory dtio_0)) _uarity0))
 
@@ -62,8 +49,8 @@ let v_Base_dIO_dfileExists = (fun _uarity0 -> ((fun dtio_0 -> C_Base_dIO_dIO_Bas
 
 let v_Base_dIO_dfileMtime = (fun _uarity0 -> ((fun dtio_0 -> C_Base_dIO_dIO_Base_dIO_dMkIO (fun _ -> dtp_fileMtime dtio_0)) _uarity0))
 
-let v_Base_dIO_dfileSize = (fun _uarity0 -> ((fun dtio_0 -> C_Base_dIO_dIO_Base_dIO_dMkIO (fun _ -> dtp_fileSize dtio_0)) _uarity0))
+let v_Base_dIO_dfileSize = (fun path -> (((Base_dMonad.v_Base_dMonad_dfmap v_Functor_uBase_dIO_dIO) bi_natFromInt) ((fun dtio_0 -> C_Base_dIO_dIO_Base_dIO_dMkIO (fun _ -> dtp_fileSize dtio_0)) path)))
 
-let v_Base_dIO_dgetArgs = (C_Base_dIO_dIO_Base_dIO_dMkIO (fun _ -> (dtp_listOf (dtp_getArgs ()))))
+let v_Base_dIO_dgetArgs = (C_Base_dIO_dIO_Base_dIO_dMkIO (fun _ -> (Base_dList.dtp_listOf (dtp_getArgs ()))))
 
 let v_Base_dIO_dexit = (fun _uarity0 -> ((fun dtio_0 -> C_Base_dIO_dIO_Base_dIO_dMkIO (fun _ -> dtp_exit dtio_0)) _uarity0))

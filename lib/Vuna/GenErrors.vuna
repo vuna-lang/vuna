@@ -20,23 +20,13 @@ import Base.List
 import Base.String
 import Base.IO
 
-data Entry : Type where
-  Entry : String -> String -> String -> String -> String -> Bool -> Entry
-
-entryCode : Entry -> String
-entryCode (Entry c m d r e f) = c
-
-entryMsg : Entry -> String
-entryMsg (Entry c m d r e f) = m
-
-entryDesc : Entry -> String
-entryDesc (Entry c m d r e f) = d
-
-entryRule : Entry -> String
-entryRule (Entry c m d r e f) = r
-
-entryEdit : Entry -> String
-entryEdit (Entry c m d r e f) = e
+record Entry where
+  entryCode : String
+  entryMsg : String
+  entryDesc : String
+  entryRule : String
+  entryEdit : String
+  entryFixable : Bool
 
 entryFixable : Entry -> Bool
 entryFixable (Entry c m d r e f) = f
@@ -45,24 +35,23 @@ entryFixable (Entry c m d r e f) = f
 -- 枚举表 → Entry（唯一数据来源）
 -- ---------------------------------------------------------------
 tcEntryToEntry : TcEntry -> Entry
-tcEntryToEntry e = Entry (tcEntryCode e) (tcEntryTemplate e) (tcEntryDesc e) "" "" False
+tcEntryToEntry e = Entry e.tcEntryCode e.tcEntryTemplate e.tcEntryDesc "" "" False
 
 cgEntryToEntry : CgEntry -> Entry
-cgEntryToEntry e = Entry (cgEntryCode e) (cgEntryTemplate e) (cgEntryDesc e) "" "" False
+cgEntryToEntry e = Entry e.cgEntryCode e.cgEntryTemplate e.cgEntryDesc "" "" False
 
 lintEntryToEntry : LintEntry -> Entry
 lintEntryToEntry e =
-  Entry (lintEntryCode e) "" (lintEntryDesc e) (lintEntryRule e) (lintEntryEdit e)
-    (lintEntryFixable e)
+  Entry e.lintEntryCode "" e.lintEntryDesc e.lintEntryRule e.lintEntryEdit e.lintEntryFixable
 
 lexEntryToEntry : LexEntry -> Entry
-lexEntryToEntry e = Entry (lexEntryCode e) (lexEntryTemplate e) (lexEntryDesc e) "" "" False
+lexEntryToEntry e = Entry e.lexEntryCode e.lexEntryTemplate e.lexEntryDesc "" "" False
 
 psEntryToEntry : PsEntry -> Entry
-psEntryToEntry e = Entry (psEntryCode e) (psEntryTemplate e) (psEntryDesc e) "" "" False
+psEntryToEntry e = Entry e.psEntryCode e.psEntryTemplate e.psEntryDesc "" "" False
 
 ldEntryToEntry : LdEntry -> Entry
-ldEntryToEntry e = Entry (ldEntryCode e) (ldEntryTemplate e) (ldEntryDesc e) "" "" False
+ldEntryToEntry e = Entry e.ldEntryCode e.ldEntryTemplate e.ldEntryDesc "" "" False
 
 allEntries : List Entry
 allEntries =
@@ -131,7 +120,7 @@ renderDoc entries =
     ++ "\n"
 
 isDomain : String -> Entry -> Bool
-isDomain dom e = startsWith dom (entryCode e)
+isDomain dom e = startsWith dom e.entryCode
 
 renderTable : List Entry -> String
 renderTable [] = "（无）\n"
@@ -139,8 +128,7 @@ renderTable entries =
   "| code | 消息 | 说明 |\n| --- | --- | --- |\n" ++ join "\n" (map renderRow entries) ++ "\n"
 
 renderRow : Entry -> String
-renderRow e =
-  "| " ++ entryCode e ++ " | `" ++ escapeMsg (entryMsg e) ++ "` | " ++ entryDesc e ++ " |"
+renderRow e = "| " ++ e.entryCode ++ " | `" ++ escapeMsg e.entryMsg ++ "` | " ++ e.entryDesc ++ " |"
 
 renderLintTable : List Entry -> String
 renderLintTable [] = "（无）\n"
@@ -152,11 +140,11 @@ renderLintTable entries =
 renderLintRow : Entry -> String
 renderLintRow e =
   "| "
-    ++ entryCode e
+    ++ e.entryCode
     ++ " | `"
-    ++ entryRule e
+    ++ e.entryRule
     ++ "` | "
-    ++ entryDesc e
+    ++ e.entryDesc
     ++ " | "
     ++ fixCell e
     ++ " |"
@@ -174,5 +162,5 @@ fixEntries entries = map fxOf (filter entryFixable (filter (isDomain "LN_") entr
 
 fxOf : Entry -> Entry
 fxOf e =
-  Entry ("FX_" ++ join "" (split "-" (entryRule e))) (entryMsg e) (entryEdit e) (entryRule e)
-    (entryEdit e) True
+  Entry ("FX_" ++ join "" (split "-" e.entryRule)) e.entryMsg e.entryEdit e.entryRule e.entryEdit
+    True

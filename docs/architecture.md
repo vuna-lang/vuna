@@ -43,9 +43,9 @@ import 子模块并选择性重导出（对外名字面不变），实现只在�
  → Packages.Pkg.contextForFile   （最近 vuna.toml + 依赖闭包 → PackageContext；无则 base-only）
  → Loader.Flatten.loadProject    （import 图 → 名字解析 → flatten；ad-hoc 自动注入 Prelude）
  → Elab.Driver.elabProgramFull   （Records/Derive 降级 → 精化；NbE / 索引合一 / 实例搜索）
- → Codegen.Assembly              （同一份 DtProgram 的 unit 划分 / 文本 / main 钩子）
- → Codegen.Split.generateDtSplitProgram  （唯一生成器：Vuna_runtime + 各模块 + Main + build.sh）
- → sh build.sh                   （ocamlopt 逐模块编译并链接）
+ → Codegen.Assembly              （DtProgram 的 unit 划分/文本/main 钩子）
+ → Codegen.Split.generateDtSplitProgram  （唯一生成器：runtime + 各模块 + Main，带直接依赖）
+ → sh build.sh                   （Driver.Split：层内并行；ocamlopt 链接）
 ```
 
 **名字解析三命名空间**：`Loader.Resolve` 的解析期状态是三个**分开**的表

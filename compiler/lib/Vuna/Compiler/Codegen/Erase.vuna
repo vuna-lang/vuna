@@ -61,7 +61,7 @@ findDtDef name (d :: rest) = if dtDefName d == name then Just d else findDtDef n
 
 -- M28：无体/不透明顶层（`axiom`）判据（`Elab.Types.dtDefHasBody` 是唯一真源）。
 isAxiomDef : DtDef -> Bool
-isAxiomDef d = if dtDefHasBody d then False else True
+isAxiomDef d = not (dtDefHasBody d)
 
 axiomNamesOf : List DtDef -> List String
 axiomNamesOf [] = []
@@ -360,7 +360,7 @@ filterNames pred [] = []
 filterNames pred (n :: rest) = if pred n then n :: filterNames pred rest else filterNames pred rest
 
 notIn : String -> List String -> Bool
-notIn name names = if memName name names then False else True
+notIn name names = not (memName name names)
 
 uniqueNames : List String -> List String
 uniqueNames [] = []
@@ -374,7 +374,7 @@ groupDeps adjT group =
 
 allIn : List String -> HashMap Bool -> Bool
 allIn [] allowed = True
-allIn (n :: rest) allowed = if Base.HashMap.member n allowed then allIn rest allowed else False
+allIn (n :: rest) allowed = Base.HashMap.member n allowed && allIn rest allowed
 
 groupReady : HashMap (List String) -> List String -> HashMap Bool -> Bool
 groupReady adjT group emitted = allIn (groupDeps adjT group) emitted

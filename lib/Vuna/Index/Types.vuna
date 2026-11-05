@@ -5,19 +5,14 @@ module Vuna.Index.Types
   , Sym(..)
   , distinct
   , indexModules
-  , indexRefs
-  , indexSymbols
   , modBytes
   , modDecls
   , modName
   , modPackage
   , modPath
-  , refCol
-  , refLine
   , refModule
   , refName
   , symCol
-  , symDoc
   , symFullName
   , symKind
   , symLine
@@ -34,8 +29,12 @@ import Vuna.Compiler.Common
 -- 数据模型
 -- ---------------------------------------------------------------
 -- 模块元信息（不含 AST，可安全序列化到缓存）。
-data ModuleInfo : Type where
-  ModuleInfo : String -> String -> String -> Int -> Int -> ModuleInfo
+record ModuleInfo where
+  modName : String
+  modPackage : String
+  modPath : String
+  modBytes : Int
+  modDecls : Int
 
 modName : ModuleInfo -> String
 modName (ModuleInfo m p path bytes decls) = m
@@ -53,8 +52,14 @@ modDecls : ModuleInfo -> Int
 modDecls (ModuleInfo m p path bytes decls) = decls
 
 -- 符号：模块全名、名字、种类、签名、文档注释、起始行列。
-data Sym : Type where
-  Sym : String -> String -> String -> String -> String -> Int -> Int -> Sym
+record Sym where
+  symModule : String
+  symName : String
+  symKind : String
+  symSig : String
+  symDoc : String
+  symLine : Int
+  symCol : Int
 
 symModule : Sym -> String
 symModule (Sym sMod sName sKind sSig sDoc sLine sCol) = sMod
@@ -68,9 +73,6 @@ symKind (Sym sMod sName sKind sSig sDoc sLine sCol) = sKind
 symSig : Sym -> String
 symSig (Sym sMod sName sKind sSig sDoc sLine sCol) = sSig
 
-symDoc : Sym -> String
-symDoc (Sym sMod sName sKind sSig sDoc sLine sCol) = sDoc
-
 symLine : Sym -> Int
 symLine (Sym sMod sName sKind sSig sDoc sLine sCol) = sLine
 
@@ -82,8 +84,11 @@ symFullName (Sym sMod sName sKind sSig sDoc sLine sCol) = sMod ++ "." ++ sName
 
 -- 引用：引用方模块、被引用的名字、引用出现处（行、列）。M30：refs 不只记录
 -- 「模块引用了哪些名字」，还记录出现位置，供 `referencesAt` 与影响面分析使用。
-data Ref : Type where
-  Ref : String -> String -> Int -> Int -> Ref
+record Ref where
+  refModule : String
+  refName : String
+  refLine : Int
+  refCol : Int
 
 refModule : Ref -> String
 refModule (Ref refMod refNm refLn refCl) = refMod
@@ -91,24 +96,14 @@ refModule (Ref refMod refNm refLn refCl) = refMod
 refName : Ref -> String
 refName (Ref refMod refNm refLn refCl) = refNm
 
-refLine : Ref -> Int
-refLine (Ref refMod refNm refLn refCl) = refLn
-
-refCol : Ref -> Int
-refCol (Ref refMod refNm refLn refCl) = refCl
-
 -- 索引：模块 + 符号 + 反向边（引用方模块 → 引用位置）。
-data Index : Type where
-  Index : List ModuleInfo -> List Sym -> List Ref -> Index
+record Index where
+  indexModules : List ModuleInfo
+  indexSymbols : List Sym
+  indexRefs : List Ref
 
 indexModules : Index -> List ModuleInfo
 indexModules (Index ms syms refs) = ms
-
-indexSymbols : Index -> List Sym
-indexSymbols (Index ms syms refs) = syms
-
-indexRefs : Index -> List Ref
-indexRefs (Index ms syms refs) = refs
 
 -- 去重（保持首次出现顺序）：Scan 的引用抽取与 Render 的分组共用。
 distinct : List String -> List String

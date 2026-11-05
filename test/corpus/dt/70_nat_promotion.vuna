@@ -1,0 +1,14 @@
+-- Nat→Int 隐式提升：混合算术、if 分支汇合、把 Nat 传给 Int 参数都是零成本。
+import Base.Nat
+
+mixed : Int -> Nat -> Int
+mixed i n = i + n
+
+pairMixed : Int -> Nat -> Int
+pairMixed i n = if True then n else i
+
+useInt : Int -> Int
+useInt x = x
+
+main : Int
+main = mixed 10 5 + pairMixed 1 2 + useInt 3

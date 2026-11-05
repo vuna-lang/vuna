@@ -101,6 +101,18 @@
 - 调用方（`vuna fmt` CLI 与 LSP formatting）用 `Loader.Flatten.fixitiesForSource` 取闭包；
   取不到（上下文/依赖加载失败）时 fmt 报错并**不格式化**该文件，不静默按默认优先级处理。
 
+## 算术运算符的 Int/Nat 特化（M34.7）
+
+`+ - * /` 仍是**内建值**（不是 trait 方法）；精化器按期望类型/实参类型把它们特化：
+
+- 期望类型或两侧都是 Nat（含 Nat + 整数字面量）→ `natAdd/natSub/natMul/natDiv`，结果 Nat；
+- 任一操作数是真正的 `Int` → 保持 Int intrinsic，Nat 一侧插入 `natToInt`（隐式提升）；
+- 期望 Int 而表达式推出 Nat → 整个表达式提升；期望 Nat 而操作数是 Int（非字面量）→ 类型错误；
+- 只有 Int/Nat 有这种特化，用户自定义数值类型不能重载 `+ - * /`（通用 `Num` 是 debt）。
+
+实现入口：`Elab/Term/Impl.specializeArithCheck/AppFuel`（与 `==`/比较特化同一层）；
+Codegen 对 Int 路径继续用内联运算符，对 Nat 路径用 `bi_nat*` helper。
+
 ## 系统边界
 
 - **语法性符号**仍由编译器处理：`->`（Pi）、`=`（定义/绑定）、`|`、`,`、`\`、`=>`、反引号

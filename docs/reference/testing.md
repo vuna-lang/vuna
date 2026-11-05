@@ -5,7 +5,7 @@
 
 ## 原生测试：`test/run-tests.sh`
 
-vuna 原生测试按编号章节组织（**42 个章节**：编号到 43，无第 12 段；34a–34d 归在第 34
+vuna 原生测试按编号章节组织（**43 个章节**：编号到 44，无第 12 段；34a–34d 归在第 34
 段内）。用 `vuna` / `vuna-seed` 驱动，不依赖外部 vuna 实现，但需要 `ocamlopt` 作为 codegen
 后端。精确 checks 数随夹具增删变化，以运行输出为准。测试覆盖：
 
@@ -14,7 +14,8 @@ vuna 原生测试按编号章节组织（**42 个章节**：编号到 43，无�
 - `corpus/doc/01_export`：`vuna doc` 尊重 `[export]`；
 - `corpus/packages/{09_workspace_member_error, 10_workspace_build}`：workspace check/build；
 - `corpus/test-m30/`：REPL / effect test；
-- LSP smoke：`corpus/lsp/smoke.sh`。
+- LSP smoke：`corpus/lsp/smoke.sh`；
+- 接口摘要（check 期模块化精化）：`corpus/packages/m34_summary/` + 仓库自身预热回归。
 
 ```console
 sh test/run-tests.sh        # 需要 PATH 中有 vuna 与 vuna-seed
@@ -24,6 +25,13 @@ sh test/run-tests.sh        # 需要 PATH 中有 vuna 与 vuna-seed
 （默认 `ocamlopt`）。脚本会 `cd "$(dirname "$0")"`，从仓库根直接跑即可；并导出
 **`VUNA_BASE="$PWD/../base"`**——runner 写进 `$tmp` 的**无 manifest 临时夹具**靠它定位
 base 上下文（corpus 内的夹具由 `test/corpus/vuna.toml` 给出包上下文）。
+
+**接口摘要路径的测试**（第 44 段）：依赖包先单独 `check`（写摘要缓存），再 `check` 根包 ——
+`--debug-perf` 应出现 `cache-path=summary deps=N`；负例注入后摘要路径与
+`VUNA_ELAB_FULL=1` 全量路径的诊断逐字节一致；最后对仓库自身做「预热 base/compiler →
+`check .`」回归（C37 的 `Eq Type` 假歧义）。`VUNA_ELAB_FULL=1` 是排障/A-B 对拍开关
+（强制全量精化），默认不设。
+
 推荐入口（`nix/run-tests.nix` 包装，不修改原脚本；无参数等价于直接跑）：
 
 ```console

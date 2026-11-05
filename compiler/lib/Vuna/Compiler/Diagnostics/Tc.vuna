@@ -3,9 +3,6 @@ module Vuna.Compiler.Diagnostics.Tc
   , TcErr(..)
   , tcAll
   , tcCode
-  , tcEntryCode
-  , tcEntryDesc
-  , tcEntryTemplate
   , tcErr
   , tcErr0
   , tcErr0NoLoc
@@ -66,6 +63,7 @@ data TcErr : Nat -> Type where
   LambdaTooManyParams : TcErr Zero
   LetBindingPattern : TcErr Zero
   NestedPatterns : TcErr Zero
+  NatLiteralOutOfRange : TcErr Zero
   NotInductiveFamily : TcErr Zero
   OnlyCtorPatterns : TcErr Zero
   PatternFuel : TcErr Zero
@@ -156,6 +154,7 @@ tcCode LambdaNoSignature = "TC_LambdaNoSignature"
 tcCode LambdaTooManyParams = "TC_LambdaTooManyParams"
 tcCode LetBindingPattern = "TC_LetBindingPattern"
 tcCode NestedPatterns = "TC_NestedPatterns"
+tcCode NatLiteralOutOfRange = "TC_NatLiteralOutOfRange"
 tcCode NotInductiveFamily = "TC_NotInductiveFamily"
 tcCode OnlyCtorPatterns = "TC_OnlyCtorPatterns"
 tcCode PatternFuel = "TC_PatternFuel"
@@ -249,6 +248,7 @@ tcTemplate LambdaNoSignature = "cannot infer the type of a lambda; add a signatu
 tcTemplate LambdaTooManyParams = "lambda has more parameters than the expected function type"
 tcTemplate LetBindingPattern = "let bindings must be simple names or wildcards (M19)"
 tcTemplate NestedPatterns = "nested patterns must be constructor patterns (M19)"
+tcTemplate NatLiteralOutOfRange = "Nat literal is out of range (max is 4611686018427387903)"
 tcTemplate NotInductiveFamily = "case scrutinee is not an inductive family"
 tcTemplate OnlyCtorPatterns = "only constructor patterns are supported in case (M14)"
 tcTemplate PatternFuel = "pattern matrix recursion ran out of fuel"
@@ -314,17 +314,10 @@ tcTemplate (WhereNeedsSig _ _) =
 -- ---------------------------------------------------------------
 -- 文档遍历源（同构 List；`gen-errors` 遍历渲染；不承载 arity——arity 在构造子类型里）
 -- ---------------------------------------------------------------
-data TcEntry : Type where
-  TcEntry : String -> String -> String -> TcEntry
-
-tcEntryCode : TcEntry -> String
-tcEntryCode (TcEntry code template desc) = code
-
-tcEntryTemplate : TcEntry -> String
-tcEntryTemplate (TcEntry code template desc) = template
-
-tcEntryDesc : TcEntry -> String
-tcEntryDesc (TcEntry code template desc) = desc
+record TcEntry where
+  tcEntryCode : String
+  tcEntryTemplate : String
+  tcEntryDesc : String
 
 -- ---------------------------------------------------------------
 -- 文档遍历源：**按 ≤8 项分块**（M30 B19）。split codegen 会把单个列表字面量打成一行，
@@ -374,6 +367,7 @@ tcChunk3 =
     TcEntry (tcCode LambdaNoSignature) (tcTemplate LambdaNoSignature) "lambda 缺签名",
     TcEntry (tcCode LambdaTooManyParams) (tcTemplate LambdaTooManyParams) "lambda 参数多于期望函数类型",
     TcEntry (tcCode LetBindingPattern) (tcTemplate LetBindingPattern) "let 绑定必须是简单名或通配",
+    TcEntry (tcCode NatLiteralOutOfRange) (tcTemplate NatLiteralOutOfRange) "Nat 字面量超出范围",
     TcEntry (tcCode NestedPatterns) (tcTemplate NestedPatterns) "嵌套模式必须是构造子模式",
     TcEntry (tcCode NotInductiveFamily) (tcTemplate NotInductiveFamily) "case 被检查项不是归纳族",
     TcEntry (tcCode OnlyCtorPatterns) (tcTemplate OnlyCtorPatterns) "case 只支持构造子模式"

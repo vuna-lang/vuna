@@ -1,26 +1,16 @@
 module Vuna.Compiler.Loader
-  ( ExportEntry
-  , Module
-  , Project
-  , entryKind
-  , entryParent
-  , entryPublic
-  , entryTarget
+  ( ExportEntry(..)
+  , Module(..)
+  , Project(..)
   , loadModuleSource
   , loadProject
   , loadProjectModules
   , loadProjectSource
   , moduleAllImportsOf
   , moduleDeclsOf
-  , moduleExportsOf
-  , moduleImplicitImportsOf
-  , moduleImportsOf
   , moduleNameOf
   , modulePackageOf
   , projectEntryAllImports
-  , projectEntryDecls
-  , projectEntryImports
-  , projectModules
   , resolveProject
   ) where
 

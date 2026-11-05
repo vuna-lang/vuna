@@ -69,7 +69,7 @@ tempBase _ =
   let
     env = runIO (prim_getenv "TMPDIR")
   in if env == "" then "/tmp"
-  else if endsWith "/" env then substring 0 (strLength env - 1) env else env
+  else if endsWith "/" env then substring 0 (byteLength env - 1) env else env
 
 -- 微秒时间戳命名 + 冲突探测：同一进程内连续执行不会撞名。探测走 `range` 生成的
 -- 有界列表（结构下降），异常情况最多换 1000 个后缀，都不行就用基名（失败由编译报）。
@@ -97,7 +97,7 @@ effectDep root = Pair (rootName root) (absoluteDir (rootPackageDir (rootDir root
 
 -- 模块根固定是 <包目录>/lib；去掉后缀得到包目录（manifest 的 [dependencies] 吃包目录）。
 rootPackageDir : String -> String
-rootPackageDir dir = if endsWith "/lib" dir then substring 0 (strLength dir - 4) dir else dir
+rootPackageDir dir = if endsWith "/lib" dir then substring 0 (byteLength dir - 4) dir else dir
 
 -- 依赖路径必须是绝对路径（临时包不在调用方的工作目录下，相对路径会解析错）。
 absoluteDir : String -> String

@@ -36,7 +36,7 @@ import Vuna.Compiler.Debug
 fastSame : Value -> Value -> Bool
 fastSame a b = case a of
   VType i => case b of
-    -- M29：Level 是 `MkLevel` 数据；用 `levelEq`（内部只比 Int 字段）避免在相等
+    -- M29：Level 是 `Level` 数据；用 `levelEq`（内部只比 Int 字段）避免在相等
     -- 路径上依赖泛型结构比较兜底（`==` 的兜底将在 M29 删除）。
     VType j => levelEq i j
     _ => False
@@ -47,7 +47,7 @@ fastSame a b = case a of
     VStr j => i == j
     _ => False
   VBool i => case b of
-    VBool j => if i then j else notBool j
+    VBool j => if i then j else not j
     _ => False
   VNeutral n1 => case b of
     VNeutral n2 => sameNeutralAtom n1 n2
@@ -126,7 +126,12 @@ else case a of
     _ => mismatchAt depth defs a b
   VApp f x => case b of
     VApp f2 x2 =>
-      andThen (convFuel (fuel - 1) defs sols depth f f2)
+      let
+        _ =
+          if debugOn then note
+            ("vapp: " ++ showValue a ++ " <> " ++ showValue b ++ " | x=" ++ showValue x ++ " x2=" ++ showValue x2)
+          else 0
+      in andThen (convFuel (fuel - 1) defs sols depth f f2)
         (\sols2 => convFuel (fuel - 1) defs sols2 depth x x2)
     _ => mismatchAt depth defs a b
   VCase scrut alts => case b of
@@ -197,12 +202,11 @@ convCaseAltsFuel : Int -> HashMap Term -> Sols -> Int -> List VCaseAlt -> List V
 convCaseAltsFuel fuel defs sols depth [] [] =
   if fuel <= 0 then Err "DT: internal: conv fuel exhausted" else Ok sols
 convCaseAltsFuel fuel defs sols depth (a :: rest) (b :: rest2) = if fuel <= 0 then Err "DT: internal: conv fuel exhausted"
-else if vCaseAltName a == vCaseAltName b then if length (vCaseAltBinders a) == length (vCaseAltBinders b) then case convOneAltFuel (fuel - 1) defs sols depth a b of
+else if a.vCaseAltName == b.vCaseAltName then if length a.vCaseAltBinders == length b.vCaseAltBinders then case convOneAltFuel (fuel - 1) defs sols depth a b of
   Err e => Err e
   Ok sols2 => convCaseAltsFuel (fuel - 1) defs sols2 depth rest rest2
-else tcErr1NoLoc (TypeMismatchCaseVars (vCaseAltName a)) (vCaseAltName a)
-else tcErr2NoLoc (TypeMismatchCaseBranch (vCaseAltName a) (vCaseAltName b)) (vCaseAltName a)
-  (vCaseAltName b)
+else tcErr1NoLoc (TypeMismatchCaseVars a.vCaseAltName) a.vCaseAltName
+else tcErr2NoLoc (TypeMismatchCaseBranch a.vCaseAltName b.vCaseAltName) a.vCaseAltName b.vCaseAltName
 convCaseAltsFuel fuel defs sols depth _ _ =
   if fuel <= 0 then Err "DT: internal: conv fuel exhausted" else tcErr0NoLoc TypeMismatchCaseCount
 
@@ -210,11 +214,11 @@ convOneAltFuel : Int -> HashMap Term -> Sols -> Int -> VCaseAlt -> VCaseAlt -> R
 convOneAltFuel fuel defs sols depth a b = if fuel <= 0 then Err "DT: internal: conv fuel exhausted"
 else
   let
-    bs = vCaseAltBinders a
+    bs = a.vCaseAltBinders
     n = length bs
     args = argValsAt bs depth 0
-  in convFuel (fuel - 1) defs sols (depth + n) (applyClosureBinder (vCaseAltClosure a) args)
-    (applyClosureBinder (vCaseAltClosure b) args)
+  in convFuel (fuel - 1) defs sols (depth + n) (applyClosureBinder a.vCaseAltClosure args)
+    (applyClosureBinder b.vCaseAltClosure args)
 
 mismatchAt : Int -> HashMap Term -> Value -> Value -> Result a
 mismatchAt depth defs a b =
@@ -306,7 +310,7 @@ isNilSpine _ = False
 
 memLevel : Int -> List (Pair String Int) -> Bool
 memLevel level [] = False
-memLevel level ((Pair n l) :: rest) = if l == level then True else memLevel level rest
+memLevel level ((Pair n l) :: rest) = l == level || memLevel level rest
 
 levelPos : Int -> List Int -> Maybe Int
 levelPos level levels = levelPosGo level levels 0
@@ -370,7 +374,7 @@ else
 patternSolution : List (Pair String Int) -> Int -> Int -> Term -> Value
 patternSolution [] created depth body = VType levelZero
 patternSolution ((Pair name lvl) :: rest) created depth body =
-  VLam name Rig1 (Clos (patternEnv created depth) (wrapPatternLams rest body))
+  VLam name Rig1 (Closure (patternEnv created depth) (wrapPatternLams rest body))
 
 -- 空 spine：直接存解，但先就地检查作用域（自由变量必须早于创建深度）。
 -- `?m = ?m`（同一个未解元变量）是恒真约束，不能走 occurs 检查。
@@ -463,12 +467,13 @@ solveMetaNew : HashMap Term -> Sols -> Int -> Int -> Value -> Result Sols
 solveMetaNew defs sols depth m rhs = solveMetaEmpty sols depth m rhs
 
 conv : HashMap Term -> Sols -> Int -> Value -> Value -> Result Sols
-conv a1 a2 a3 a4 a5 =
+conv a1 a2 a3 a4 a5 = if debugOn then
   let
     _ =
       note
         ("conv-in: " ++ showTerm (quote a3 a4) ++ " <> " ++ showTerm (quote a3 a5) ++ " |v: " ++ showValueAt a3 a4 ++ " <> " ++ showValueAt a3 a5 ++ " @" ++ strFromInt a3)
   in convFuel 64 a1 a2 a3 a4 a5
+else convFuel 64 a1 a2 a3 a4 a5
 
 convBoth : HashMap Term -> Sols -> Int -> Value -> Value -> Result Sols
 convBoth a1 a2 a3 a4 a5 = convBothFuel 64 a1 a2 a3 a4 a5

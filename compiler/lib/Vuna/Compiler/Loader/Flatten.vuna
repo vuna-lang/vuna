@@ -29,10 +29,96 @@ import Vuna.Compiler.Packages.Pkg
 -- M31.2：imports 模块的**可见 fixity 表**（Module 里已含各自的 import 闭包）。
 -- 本模块声明由调用方放在返回列表最前，查找时第一处匹配生效。
 -- M31.2：parse 错误带文件名（前端诊断无位置，加载器知道路径）。
+-- M34.5 第 4 步：AST 缓存。parse 结果按「路径 + 源内容」哈希复用——LSP 反复检查同一
+-- 文件、workspace 多次 check 时省掉重复 parse。缓存目录随 `$TMPDIR` 清理。
+--
+-- key 的**强度**必须够：内建 `strHash` 只有 10 bit（运行时 `land 1023`），初版把两路
+-- 10-bit + 长度拼起来，实测在测试套件里发生跨文件命中（其它文件的 AST 被当作
+-- `corpus/term/05_multi_clause.vuna` 的入口，报 `LD_ModuleHeaderInEntryFile`）。
+-- 这里用 5 条独立 lane 拼成 ~50 bit，并把 schema 版本拌进 key；payload 还带源文本做
+-- 回读校验（见下）：**改 `Frontend.Ast` 的 Marshal 布局时必须 bump `astCacheSchema`**
+-- （否则旧缓存会被按新布局 `prim_unmarshal`）。
+astCacheSchema : String
+astCacheSchema = "vuna-ast-cache 4"
+
+astCacheDir : String
+astCacheDir =
+  let
+    base = runIO (prim_getenv "TMPDIR")
+  in (if base == "" then "/tmp" else base) ++ "/vuna-cache/ast"
+
+astKeyOf : String -> String -> String
+astKeyOf path src = strFromInt (astStrongHash (astCacheSchema ++ "\t" ++ path ++ "\t" ++ src))
+
+-- 5 条**独立** lane（不同乘子 + 不同素数模）拼成 ~50 bit。不能用
+-- `strHash (salt ++ ":" ++ s)` 这类「加盐前缀」：内建 strHash 是
+-- `h := (h*33 + c) land 1023` 的仿射迭代，换初值只会得到 h_k = A*k + const (mod 1024)，
+-- 五条 lane 彼此完全相关（有效熵仍只有 ~10 bit + 长度，实测测试套件里 7x 夹具读到了
+-- 15_private_implicit 的 AST，报出本不存在的 `module Priv not found`）。
+astStrongHash : String -> Int
+astStrongHash s =
+  let
+    cs = strUnpack s
+  in astLane cs 33 1021 0
+    + astLane cs 131 1019 7 * 1024
+    + astLane cs 257 1013 13 * 1048576
+    + astLane cs 65599 1009 29 * 1073741824
+    + astLane cs 16777619 997 61 * 1099511627776
+
+astLane : List Int -> Int -> Int -> Int -> Int
+astLane [] mult modulus acc = acc
+astLane (c :: rest) mult modulus acc =
+  let
+    v = acc * mult + c
+  in astLane rest mult modulus (v - v / modulus * modulus)
+
+-- 缓存**回读校验**：payload 带原始源文本，命中时逐字节比较——key 即使碰撞也不会把
+-- 别的文件的 AST 当成本文件；不匹配就重新 parse 并覆盖该条目（只损失这一条缓存）。
+data AstCacheEntry : Type where
+  AstCacheEntry : String -> SourceFile -> AstCacheEntry
+
+astCacheSource : AstCacheEntry -> String
+astCacheSource (AstCacheEntry src file) = src
+
+astCacheFile : AstCacheEntry -> SourceFile
+astCacheFile (AstCacheEntry src file) = file
+
+readAstCache : String -> AstCacheEntry
+readAstCache cpath = prim_unmarshal (runIO (prim_readFile cpath))
+
+storeAstCache : String -> String -> SourceFile -> SourceFile
+storeAstCache cpath src parsed =
+  let
+    _ = ensureDirPath astCacheDir
+    _ = runIO (prim_writeFileAtomic cpath (prim_marshal (AstCacheEntry src parsed)))
+  in parsed
+
+ensureDirPath : String -> Int
+ensureDirPath path = ensureDirPathFuel 256 path
+
+ensureDirPathFuel : Int -> String -> Int
+ensureDirPathFuel fuel path = if fuel <= 0 then 0
+else if path == "" || path == "." || path == "/" then 0
+else if runIO (prim_fileExists path) then 0
+else
+  let
+    _ = ensureDirPathFuel (fuel - 1) (parentOfPath path)
+  in runIO (prim_makeDir path)
+
 parseFileWithPath : String -> String -> Result SourceFile
-parseFileWithPath path src = case parseSource path src of
-  Err e => Err (path ++ ": " ++ e)
-  Ok src2 => Ok src2
+parseFileWithPath path src =
+  let
+    cpath = astCacheDir ++ "/" ++ astKeyOf path src
+  in if runIO (prim_fileExists cpath) then
+    let
+      entry = readAstCache cpath
+    in if astCacheSource entry == src then Ok (astCacheFile entry)
+    else case parseSource path src of
+      Err e => Err (path ++ ": " ++ e)
+      Ok parsed => Ok (storeAstCache cpath src parsed)
+  else case parseSource path src of
+    Err e => Err (path ++ ": " ++ e)
+    Ok parsed => Ok (storeAstCache cpath src parsed)
 
 visibleFixitiesOf : List Module -> List Import -> List FixityDecl
 visibleFixitiesOf modules imports = concatMap (\imp => case findModule modules (importName imp) of
@@ -52,7 +138,7 @@ dedupeFixitiesGo : List FixityDecl -> HashMap Int -> List FixityDecl -> List Fix
 dedupeFixitiesGo [] seen acc = reverse acc
 dedupeFixitiesGo (d :: rest) seen acc =
   let
-    key = fixityOp d
+    key = d.fixityOp
   in case Base.HashMap.lookup key seen of
     Just _ => dedupeFixitiesGo rest seen acc
     Nothing => dedupeFixitiesGo rest (Base.HashMap.insert key 1 seen) (d :: acc)
@@ -130,7 +216,7 @@ ownCtorEntries prefix dname (cname :: rest) =
 ctorEntriesOfType : String -> List ExportEntry -> List ExportEntry
 ctorEntriesOfType typeTarget [] = []
 ctorEntriesOfType typeTarget (e :: rest) =
-  if entryKind e == "ctor" && entryParent e == typeTarget then e :: ctorEntriesOfType typeTarget rest
+  if e.kind == "ctor" && e.parent == typeTarget then e :: ctorEntriesOfType typeTarget rest
   else ctorEntriesOfType typeTarget rest
 
 declImplicitExports : String -> Decl -> List ExportEntry
@@ -176,7 +262,7 @@ dedupeByPublic : List ExportEntry -> HashMap Int -> List ExportEntry -> List Exp
 dedupeByPublic [] seen acc = reverse acc
 dedupeByPublic (e :: rest) seen acc =
   let
-    key = entryKind e ++ "|" ++ entryPublic e
+    key = e.kind ++ "|" ++ e.public
   in case Base.HashMap.lookup key seen of
     Just _ => dedupeByPublic rest seen acc
     Nothing => dedupeByPublic rest (Base.HashMap.insert key 1 seen) (e :: acc)
@@ -205,7 +291,7 @@ isRecordTarget modules decls prefix target = case splitLastDot (splitOnDot targe
 isRecordDecl : String -> List Decl -> Bool
 isRecordDecl dname [] = False
 isRecordDecl dname (d :: rest) = case d of
-  DRecord dn params fields derivings sp => if dn == dname then True else isRecordDecl dname rest
+  DRecord dn params fields derivings sp => dn == dname || isRecordDecl dname rest
   _ => isRecordDecl dname rest
 
 refEntryList : String -> Maybe ExportRef -> List ExportEntry
@@ -220,7 +306,7 @@ ownOrImportedTypeRef modules prefix decls imports name = case findOwnData name d
     [] => Ok Nothing
     _ =>
       andThen (unifyEntryPairs prefix "type" name pairs)
-        (\p => Ok (Just (ExportRef "type" (entryTarget (secondOf p)) "")))
+        (\p => Ok (Just (ExportRef "type" (secondOf p).target "")))
   )
 
 ownOrImportedValueRef : List Module -> String -> List Decl -> List Import -> String -> Result (Maybe ExportRef)
@@ -236,7 +322,7 @@ ownOrImportedValueRef2 modules prefix decls imports name = case findOwnCtorName 
     [] => Ok Nothing
     _ => andThen (unifyEntryPairs prefix "name" name pairs) (\p => let
       e = secondOf p
-    in Ok (Just (ExportRef (entryKind e) (entryTarget e) (entryParent e)))
+    in Ok (Just (ExportRef e.kind e.target e.parent))
     )
   )
 
@@ -268,13 +354,11 @@ exportSelective modules prefix m base name sp = andThen (exportsOf modules m) (\
   Just e => case findExportType es base of
     Just te =>
       Ok
-        [ExportEntry { kind = entryKind e, public = base, target = entryTarget e, parent = entryParent e }, ExportEntry { kind = "type", public = base, target = entryTarget te, parent = "" }]
+        [ExportEntry { kind = e.kind, public = base, target = e.target, parent = e.parent }, ExportEntry { kind = "type", public = base, target = te.target, parent = "" }]
     Nothing =>
-      Ok
-        [ExportEntry { kind = entryKind e, public = base, target = entryTarget e, parent = entryParent e }]
+      Ok [ExportEntry { kind = e.kind, public = base, target = e.target, parent = e.parent }]
   Nothing => case findExportType es base of
-    Just te =>
-      Ok [ExportEntry { kind = "type", public = base, target = entryTarget te, parent = "" }]
+    Just te => Ok [ExportEntry { kind = "type", public = base, target = te.target, parent = "" }]
     Nothing => Err (prefix ++ ": " ++ showSpanLoc sp ++ ": cannot export unknown name " ++ name)
 )
 
@@ -291,7 +375,7 @@ exportTypeAll modules prefix decls imports name sp = case splitLastDot (splitOnD
         _ => andThen (unifyEntryPairs prefix "type" name pairs) (\p => let
           m = firstOf p
         in let
-          tgt = entryTarget (secondOf p)
+          tgt = (secondOf p).target
         in andThen (exportsOf modules m)
           (\es => Ok (ExportEntry { kind = "type", public = name, target = tgt, parent = "" } :: ctorEntriesOfType tgt es))
         )
@@ -305,7 +389,7 @@ exportTypeAll modules prefix decls imports name sp = case splitLastDot (splitOnD
         Just m => andThen (exportsOf modules m) (\es => case findExportType es base of
           Just e =>
             Ok
-              (ExportEntry { kind = "type", public = base, target = entryTarget e, parent = "" } :: ctorEntriesOfType (entryTarget e) es)
+              (ExportEntry { kind = "type", public = base, target = e.target, parent = "" } :: ctorEntriesOfType e.target es)
           Nothing =>
             Err
               (prefix ++ ": " ++ showSpanLoc sp ++ ": type " ++ base ++ " is not exported by " ++ m)
@@ -323,30 +407,24 @@ exportItemEntries modules prefix decls imports (XBare name sp) =
 hasSamePublicKind : ExportEntry -> List ExportEntry -> Bool
 hasSamePublicKind e [] = False
 hasSamePublicKind e (e2 :: rest) =
-  if entryKind e == entryKind e2 && entryPublic e == entryPublic e2 then True
-  else hasSamePublicKind e rest
+  e.kind == e2.kind && e.public == e2.public || hasSamePublicKind e rest
 
 -- 冲突判定：同名同 kind 但**定义处不同**才算重复导出。同一个定义经两条路径重导出
 -- （门面同时导出 Base.Monad 与 Base.IO，两者都重导出 `Functor(..)`）不是冲突。
 hasConflictingExport : ExportEntry -> List ExportEntry -> Bool
 hasConflictingExport e [] = False
 hasConflictingExport e (e2 :: rest) =
-  if entryKind e == entryKind e2 && entryPublic e == entryPublic e2 && entryTarget e /= entryTarget e2 then True
-  else hasConflictingExport e rest
+  e.kind == e2.kind && e.public == e2.public && e.target /= e2.target || hasConflictingExport e rest
 
 sameExportEntry : ExportEntry -> ExportEntry -> Bool
 sameExportEntry e e2 =
-  entryKind e == entryKind e2
-    && entryPublic e == entryPublic e2
-    && entryTarget e == entryTarget e2
-    && entryParent e == entryParent e2
+  e.kind == e2.kind && e.public == e2.public && e.target == e2.target && e.parent == e2.parent
 
 dedupeExportEntries : List ExportEntry -> List ExportEntry
 dedupeExportEntries entries = dedupeByFullKey entries (Base.HashMap.fromList []) []
 
 exportEntryKey : ExportEntry -> String
-exportEntryKey e =
-  entryKind e ++ "|" ++ entryPublic e ++ "|" ++ entryTarget e ++ "|" ++ entryParent e
+exportEntryKey e = e.kind ++ "|" ++ e.public ++ "|" ++ e.target ++ "|" ++ e.parent
 
 dedupeByFullKey : List ExportEntry -> HashMap Int -> List ExportEntry -> List ExportEntry
 dedupeByFullKey [] seen acc = reverse acc
@@ -360,7 +438,7 @@ dedupeByFullKey (e :: rest) seen acc =
 checkExportDuplicates : String -> List ExportEntry -> Result (List a)
 checkExportDuplicates prefix [] = Ok []
 checkExportDuplicates prefix (e :: rest) =
-  if hasConflictingExport e rest then Err (prefix ++ ": duplicate export " ++ entryPublic e)
+  if hasConflictingExport e rest then Err (prefix ++ ": duplicate export " ++ e.public)
   else checkExportDuplicates prefix rest
 
 -- 显式导出列表里「同一个名字写了两遍」是错误（`module M (foo, foo)`）；
@@ -382,7 +460,7 @@ dupItemKeys ((Pair key name) :: rest) = if memFirstOf key rest then Just name el
 
 memFirstOf : String -> List (Pair String String) -> Bool
 memFirstOf key [] = False
-memFirstOf key ((Pair k n) :: more) = if key == k then True else memFirstOf key more
+memFirstOf key ((Pair k n) :: more) = key == k || memFirstOf key more
 
 exportItemName : ExportItem -> String
 exportItemName (XBare n sp) = n
@@ -465,7 +543,7 @@ else case findModule modules name of
   in let
     root = secondOf found
   in andThen (parseFileWithPath path (runIO (prim_readFile path))) (\src => case src of
-    Source hdr imports fixities decls => andThen (validateModuleHeader name hdr) (\_ => andThen (validateImports name imports) (\_ => andThen (implicitPrelude roots (rootName root) name imports) (\implicit => andThen (loadAll (fuel - 1) roots (rootName root) modules (name :: stack) (append imports implicit)) (\modules2 => andThen (computeExports modules2 name hdr imports decls) (\exports => let
+    SourceFile hdr imports fixities decls => andThen (validateModuleHeader name hdr) (\_ => andThen (validateImports name imports) (\_ => andThen (implicitPrelude roots (rootName root) name imports) (\implicit => andThen (loadAll (fuel - 1) roots (rootName root) modules (name :: stack) (append imports implicit)) (\modules2 => andThen (computeExports modules2 name hdr imports decls) (\exports => let
       visible =
         dedupeFixities (append fixities (visibleFixitiesOf modules2 (append imports implicit)))
     in Ok
@@ -484,7 +562,7 @@ else case findModule modules name of
 -- loadProject 返回 flatten 前的形态（入口声明 + 依赖模块列表），供分离编译使用。
 loadProject : PackageContext -> String -> Result Project
 loadProject ctx entry = if runIO (prim_fileExists entry) then andThen (parseFileWithPath entry (runIO (prim_readFile entry))) (\src => case src of
-  Source hdr imports fixities decls => case hdr of
+  SourceFile hdr imports fixities decls => case hdr of
     Just (ModDecl dname hasList items sp) => ldErr1 (ModuleHeaderInEntryFile entry) entry
     Nothing =>
       andThen (validateImports "<entry>" imports)
@@ -504,7 +582,7 @@ loadProjectModules ctx names =
 -- roots 从磁盘解析）；隐式 Prelude 与文件入口同规则（ad-hoc 单文件也自动注入）。
 loadProjectSource : PackageContext -> String -> String -> Result Project
 loadProjectSource ctx label source = andThen (parseFileWithPath label source) (\src => case src of
-  Source hdr imports fixities decls => case hdr of
+  SourceFile hdr imports fixities decls => case hdr of
     Just (ModDecl dname hasList items sp) => ldErr1 (ModuleHeaderInEntrySource label) label
     Nothing =>
       andThen (validateImports "<entry>" imports)
@@ -518,7 +596,7 @@ loadProjectSource ctx label source = andThen (parseFileWithPath label source) (\
 -- 入口声明保持为空：调用方（LSP）只需要逐模块已解析的声明。
 loadModuleSource : PackageContext -> String -> String -> Result Project
 loadModuleSource ctx label source = andThen (parseFileWithPath label source) (\src => case src of
-  Source hdr imports fixities decls => case hdr of
+  SourceFile hdr imports fixities decls => case hdr of
     Nothing => loadProjectSource ctx label source
     Just (ModDecl name hasList items sp) => andThen (validateImports name imports) (\_ => andThen (implicitPrelude (contextRoots ctx) (contextPackageName ctx) name imports) (\implicit => andThen (loadAll 1048576 (contextRoots ctx) (contextPackageName ctx) [] [] (append imports implicit)) (\modules => andThen (computeExports modules name hdr imports decls) (\exports => let
       visible =
@@ -542,7 +620,7 @@ loadModuleSource ctx label source = andThen (parseFileWithPath label source) (\s
 -- 注意：本函数及其包装进 seed 闭包（compiler 包），保持小而纯。
 fixitiesForSourceIn : PackageContext -> List Module -> String -> String -> Result (Pair (List Module) (List FixityDecl))
 fixitiesForSourceIn ctx modules0 label source = andThen (parseFileWithPath label source) (\src => case src of
-  Source hdr imports fixities decls => case hdr of
+  SourceFile hdr imports fixities decls => case hdr of
     Nothing =>
       andThen (validateImports label imports)
         (\_ => andThen (implicitPrelude (contextRoots ctx) (contextPackageName ctx) "" imports) (\implicit => andThen (loadAll 1048576 (contextRoots ctx) (contextPackageName ctx) modules0 [] (append imports implicit)) (\modules => Ok (Pair modules (dedupeFixities (append fixities (visibleFixitiesOf modules (append imports implicit))))))))
@@ -571,3 +649,20 @@ resolveModulesKeep [] = Ok []
 resolveModulesKeep ((Module name pkg imports implicit decls exports mcaps fixities) :: rest) =
   andThen (reorderProgram (tableOf fixities) decls)
     (\decls2 => andThen (andThen (resolveProgram (Module name pkg imports implicit decls2 exports mcaps fixities :: rest) name name (namespacesOf decls2) (append imports implicit) decls2) (\d => checkEffectsBuiltins name pkg mcaps d)) (\d1 => andThen (resolveModulesKeep rest) (\d2 => Ok (Module name pkg imports implicit d1 exports mcaps fixities :: d2))))
+
+dropPastSlash : List Int -> List Int
+dropPastSlash [] = []
+dropPastSlash (c :: rest) = if c == 47 then rest else dropPastSlash rest
+
+parentOfPath : String -> String
+parentOfPath path =
+  let
+    chars = strUnpack path
+    rev = reverse chars
+    after = dropPastSlash rev
+  in if length after == length rev then "."
+  else
+    let
+      parent = strPack (reverse after)
+    in if parent == "" then if startsWith "/" path then "/" else "."
+    else if startsWith "/" path && not (startsWith "/" parent) then "/" ++ parent else parent

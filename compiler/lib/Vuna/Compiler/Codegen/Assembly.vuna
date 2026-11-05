@@ -5,6 +5,8 @@ module Vuna.Compiler.Codegen.Assembly
   , genUnitText
   , mainHook
   , prepareDtProgram
+  , runtimeUnit
+  , unitPartsDeps
   ) where
 
 -- Vuna.Compiler.Codegen.Assembly：split 产物的**唯一装配实现**（M26；原 Program）。
@@ -14,6 +16,10 @@ module Vuna.Compiler.Codegen.Assembly
 -- 生成状态（check 只走到这里、丢弃文本，保留原 `buildText=False` 的性能语义）；
 -- `genUnitText` 把片段拼成单元正文；`mainHook` 是 main 输出钩子的唯一实现；
 -- `checkDtProgram` = prepare + genUnitParts 后丢弃文本，保证「能 check 就能 build」。
+--
+-- C35：单元文件头只 `open Vuna_runtime`，其余跨单元引用一律由 `Codegen.Decl` /
+-- `Codegen.Term` 生成 `Unit.name` 全限定名；`UnitParts` 同时带出该单元**直接引用**
+-- 到的依赖单元（`unitPartsDeps`），供 `Codegen.Split` 写进 `SplitFile` 与 build.sh。
 import Vuna.Compiler.Common
 import Vuna.Compiler.Debug
 import Vuna.Compiler.Diagnostics
@@ -22,10 +28,21 @@ import Vuna.Compiler.Codegen.Decl
 import Vuna.Compiler.Codegen.Erase
 import Vuna.Compiler.Codegen.Term
 
--- 装配片段：文件头（open 链）、类型声明、List 桥接、按 SCC 顺序的正文，外加生成状态。
--- 构造子不导出：调用方只能经 `genUnitText` 拼接，避免各处重复实现拼接顺序。
-data UnitParts : Type where
-  UnitParts : List String -> List String -> GenSt -> UnitParts
+-- 运行时前缀单元：`Vuna_runtime.ml` 只有 `dtRuntime`，是唯一被其余单元 open 的单元。
+runtimeUnit : String
+runtimeUnit = "Vuna_runtime"
+
+-- 装配片段：文件头（open 头）、类型声明、List 桥接、按 SCC 顺序的正文，外加生成状态
+-- 与该单元的直接依赖单元。构造子不导出：调用方只能经 `genUnitText` / `unitPartsDeps`
+-- 读取，避免各处重复实现拼接顺序。
+record UnitParts where
+  unitPartsFragments : List String
+  unitPartsBodies : List String
+  unitPartsState : GenSt
+  unitPartsDeps : List String
+
+unitPartsDeps : UnitParts -> List String
+unitPartsDeps (UnitParts fragments bodies st deps) = deps
 
 -- check / split 共用的准备阶段：名字护栏 + 分区 + 擦除检查 + SCC 分组。
 -- 返回 (运行时定义（源码顺序）, 已按依赖排序的分组)。
@@ -57,39 +74,57 @@ prepareDtProgram program =
       )
 
 -- 单个单元的装配片段。
---   opens     ：本单元要 open 的更早单元（编译顺序 = open 链顺序）
+--   qc        ：跨单元限定上下文（当前单元 + 名字归属表；check 路径用 `noQual`）
 --   allDatas  ：整个程序的运行时族（类型渲染与构造子表的完整视图）
 --   unitDatas ：写进本单元的类型声明
 --   groups    ：本单元运行时分组的 SCC 序（由调用方按归属过滤后分组）
-genUnitParts : List (Pair String (List Int)) -> List String -> List DtData -> List DtData -> List (List DtDef) -> Result UnitParts
-genUnitParts usedTbl opens allDatas unitDatas groups = andThen (genTypeDeclsWith usedTbl allDatas unitDatas) (\typeText => let
+genUnitParts : List (Pair String (List Int)) -> QualCtx -> List DtData -> List DtData -> List (List DtDef) -> Result UnitParts
+genUnitParts usedTbl qc allDatas unitDatas groups = andThen (genTypeDeclsWith qc usedTbl allDatas unitDatas) (\typeText => let
   _ = stamp "cg-typedecls-done"
-in andThen (genGroups (adjTblOf (depAdjacency (concatGroups groups))) (mkGenSt allDatas) groups) (\p => case p of
+in andThen (genGroups (adjTblOf (depAdjacency (concatGroups groups))) (mkGenSt qc allDatas) groups) (\p => case p of
   Pair bodies st =>
     let
       _ = stamp "cg-genGroups-done"
-    in Ok (UnitParts [openHeader opens, typeText, listBridgeFor allDatas unitDatas] bodies st)
+      deps = uniqueDeps (append (append [runtimeUnit] (typeDepsOf qc unitDatas)) st.gsDeps)
+    in Ok (UnitParts [openHeader qc, typeText, listBridgeFor allDatas unitDatas] bodies st deps)
 )
 )
 
--- 片段拼接：open 链 + 类型 + 桥接 + 正文（正文之间空行分隔，末尾不带换行；
+-- 依赖清单去重（保持首次出现顺序；生成期只按引用顺序累积）。
+addDep : List String -> String -> List String
+addDep acc dep = if dep == "" || memName dep acc then acc else append acc [dep]
+
+uniqueDeps : List String -> List String
+uniqueDeps deps = foldl addDep [] deps
+
+-- 片段拼接：open 头 + 类型 + 桥接 + 正文（正文之间空行分隔，末尾不带换行；
 -- 调用方按需要补换行/钩子）。
 genUnitText : UnitParts -> String
-genUnitText (UnitParts fragments bodies st) =
+genUnitText (UnitParts fragments bodies st deps) =
   strConcatMany (append fragments [joinWith "\n\n" bodies])
 
 -- main 输出钩子的唯一实现（原 Program.generateDtProgram 与 Split.splitMainHook 合并）。
 -- 返回的文本以换行开头，调用方直接接在正文之后；`main : IO a` 时先跑 IO 动作。
-mainHook : Pair (List DtData) (List DtDef) -> List DtDef -> Bool -> Result String
-mainHook program runtimeDefs printResult = case findDtDef "main" runtimeDefs of
+-- 第二个分量是 main 钩子引用到的依赖单元（IO 构造子所属单元，C35）。
+mainHook : QualCtx -> Pair (List DtData) (List DtDef) -> List DtDef -> Bool -> Result (Pair String (List String))
+mainHook qc program runtimeDefs printResult = case findDtDef "main" runtimeDefs of
   Nothing => cgErr0 NoMain
   Just mainDef =>
     let
       table = defTable (secondOf program)
       mainRef = valueName "main"
     in case ioResultTy (dtDefType mainDef) of
-      Just innerTy => genDtHook "" table innerTy (ioRunText program mainRef) printResult
-      Nothing => genDtHook "" table (dtDefType mainDef) mainRef printResult
+      Just innerTy =>
+        let
+          p = ioRunText qc program mainRef
+        in andThen (genDtHook "" table innerTy (firstOf p) printResult)
+          (\hook => Ok (Pair hook (hookDeps (secondOf p))))
+      Nothing =>
+        andThen (genDtHook "" table (dtDefType mainDef) mainRef printResult)
+          (\hook => Ok (Pair hook []))
+
+hookDeps : String -> List String
+hookDeps dep = if dep == "" then [] else [dep]
 
 -- `vuna check` 跑一遍完整装配（丢弃文本），保证「能 check 就能 build」：
 -- 擦除检查、构造子引用、SCC 分组、类型声明与函数生成都在这一步走到。
@@ -100,20 +135,21 @@ checkDtProgram program = andThen (prepareDtProgram program) (\p => let
 in case p of
   Pair runtime groups =>
     andThen
-      (genUnitParts (usedTableOf (runtimeDatas (firstOf program))) [] (runtimeDatas (firstOf program)) (runtimeDatas (firstOf program)) groups)
+      (genUnitParts (usedTableOf (runtimeDatas (firstOf program))) noQual (runtimeDatas (firstOf program)) (runtimeDatas (firstOf program)) groups)
       (\_ => Ok 0)
 )
 
--- `open` 链（每行一个），更早单元在前。
-openHeader : List String -> String
-openHeader [] = ""
-openHeader (u :: rest) = "open " ++ u ++ "\n" ++ openHeader rest
+-- 单元文件头：只 open 运行时单元（C35：其余跨单元引用都是 `Unit.name` 全限定，没有
+-- open 链，因此文件顺序不再决定可见性，只看 `unitPartsDeps`）。check 路径（`noQual`，
+-- qcUnit="") 不写 open。
+openHeader : QualCtx -> String
+openHeader qc = if qc.qcUnit == "" then "" else "open " ++ runtimeUnit ++ "\n"
 
 concatGroups : List (List DtDef) -> List DtDef
 concatGroups [] = []
 concatGroups (g :: rest) = append g (concatGroups rest)
 
--- List 族桥接只写进声明该族的单元（后续模块 open 后即可用）。
+-- List 族桥接只写进声明该族的单元；其它单元通过 `Unit.dtp_*` 全限定名引用（C35）。
 listBridgeFor : List DtData -> List DtData -> String
 listBridgeFor allDatas unitDatas = case findListFamilyData allDatas of
   Nothing => ""
@@ -121,4 +157,4 @@ listBridgeFor allDatas unitDatas = case findListFamilyData allDatas of
 
 memDataName : String -> List DtData -> Bool
 memDataName name [] = False
-memDataName name (d :: rest) = if dtDataName d == name then True else memDataName name rest
+memDataName name (d :: rest) = dtDataName d == name || memDataName name rest

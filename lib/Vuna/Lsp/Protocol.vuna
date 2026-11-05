@@ -62,7 +62,7 @@ isDigitCode c = c >= 48 && c <= 57
 
 allDigitCodes : List Int -> Bool
 allDigitCodes [] = True
-allDigitCodes (c :: rest) = if isDigitCode c then allDigitCodes rest else False
+allDigitCodes (c :: rest) = isDigitCode c && allDigitCodes rest
 
 allDigits : String -> Bool
 allDigits s = s /= "" && allDigitCodes (strUnpack s)
@@ -166,7 +166,7 @@ pathToUri path = fileScheme ++ percentEncode path
 
 decodeUri : String -> String
 decodeUri uri =
-  if startsWith fileScheme uri then percentDecode (substring 7 (strLength uri - 7) uri) else ""
+  if startsWith fileScheme uri then percentDecode (substring 7 (byteLength uri - 7) uri) else ""
 
 -- 路径工具：注意 `Vuna.Compiler.Common.splitPath` 按**第一个** `/` 切
 -- （Driver/Compile 也注明它不适合取 basename），不能用来取目录/文件名；
@@ -181,12 +181,14 @@ lastSlashIndex s = lastSlashGo (strUnpack s) 0 (0 - 1)
 -- 目录部分（无 "/" 时返回 "."；根 "/" 返回 "/"）。
 dirOfPath : String -> String
 dirOfPath path = case lastSlashIndex path of
-  i => if i < 0 then "." else if i == 0 then "/" else substring 0 i path
+  i => if i < 0 then "." else if i == 0 then "/" else substring 0 (natFromInt i) path
 
 -- 最后一段（文件名/目录名）。
 fileNameOf : String -> String
 fileNameOf path = case lastSlashIndex path of
-  i => if i < 0 then path else substring (i + 1) (strLength path - i - 1) path
+  i =>
+    if i < 0 then path
+    else substring (natFromInt (i + 1)) (natFromInt (strLength path - i - 1)) path
 
 parentDir : String -> String
 parentDir path =
@@ -228,7 +230,7 @@ lspRange : Int -> Int -> Int -> Int -> Json
 lspRange sl sc el ec = JObj [Pair "start" (lspPosition sl sc), Pair "end" (lspPosition el ec)]
 
 spanRange : Span -> Json
-spanRange sp = lspRange (spanStartLine sp) (spanStartCol sp) (spanEndLine sp) (spanEndCol sp)
+spanRange sp = lspRange (spanStartLine sp) (spanStartCol sp) (spanEndLine sp) sp.spanEndCol
 
 -- 文档位置上的 token / 名字
 -- ---------------------------------------------------------------
@@ -254,7 +256,7 @@ tokenAtCursor text line col =
   in if endP - startP <= 0 then Nothing
   else
     let
-      token = stripTrailingDots (substring startP (endP - startP) ln)
+      token = stripTrailingDots (substring (natFromInt startP) (natFromInt (endP - startP)) ln)
     in if token == "" then Nothing else Just (Pair (startP + 1) token)
 
 -- 日志行前缀；退出时一次写出（`prim_writeFile "/dev/stderr"` 每次打开都会截断，
@@ -288,7 +290,8 @@ findFromGo : String -> String -> List Int -> Int
 findFromGo needle hay [] = 0 - 1
 findFromGo needle hay (k :: rest) =
   if k + strLength needle > strLength hay then 0 - 1
-  else if substring k (strLength needle) hay == needle then k else findFromGo needle hay rest
+  else if substring (natFromInt k) (byteLength needle) hay == needle then k
+  else findFromGo needle hay rest
 
 crlfCrlf : String
 crlfCrlf = strPack [13, 10, 13, 10]
@@ -298,7 +301,8 @@ lfLf = strPack [10, 10]
 
 cutHeaders : Int -> String -> Int -> Pair String String
 cutHeaders at buf gap =
-  Pair (substring 0 at buf) (substring (at + gap) (strLength buf - at - gap) buf)
+  Pair (substring 0 (natFromInt at) buf)
+    (substring (natFromInt (at + gap)) (natFromInt (strLength buf - at - gap)) buf)
 
 -- 切出 header 块（到第一个 `\r\n\r\n` 或 `\n\n`），返回 (header 块, 之后的缓冲)。
 -- 同时容忍规范要求的 CRLF 与部分客户端用的裸 LF（`\n\n`），取**最靠前**的结束符。
@@ -318,7 +322,7 @@ parseContentLength : String -> Maybe Int
 parseContentLength line =
   let
     trimmed = trim line
-  in if startsWith "content-length:" (asciiLower trimmed) then parseIntFull (trim (substring 15 (strLength trimmed - 15) trimmed))
+  in if startsWith "content-length:" (asciiLower trimmed) then parseIntFull (trim (substring 15 (byteLength trimmed - 15) trimmed))
   else Nothing
 
 findLengthLine : List String -> Maybe Int

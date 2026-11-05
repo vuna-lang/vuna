@@ -1,13 +1,64 @@
-module Base.Nat (Nat(..)) where
+module Base.Nat (Nat(..), div, fromInt, fromIntMaybe, isZero, minus, mult, plus, pred, toInt) where
 
--- Base.Nat：Peano 自然数，DT 的长度/arity 索引。
+-- Base.Nat：非负整数。
 --
--- 此前源码里没有 Nat（只有 DT 夹具 `dt/10_vec` 等各自定义）。错误码体系重构（M30）需要
--- 一个**编译期**长度索引来锁定诊断模板的插值个数（arity），Nat 作为索引真源，故入库到
--- Base，供 `Base.Vec` / 诊断 `Args` 共用。
+-- 类型层仍是普通归纳族 `Zero`/`Succ`（`Vec` 索引、覆盖性、终止性、索引合一全部复用），
+-- 但 codegen 的运行时表示是 **OCaml int**：`Zero = 0`、`Succ n = n + 1`（饱和到
+-- max_int = 4611686018427387903）。因此 Nat 没有变体分配，模式匹配降成整数比较。
 --
--- 索引用法见 `Base.Vec`：`Vec a n` 的 `n` 写隐式 `{n : Nat}` 时是 Rig0，运行时擦除——
--- arity 拼错编译失败，运行时零开销。
+-- 算术语义（与 `Vuna.Compiler.Intrinsics` 的 bi_nat* / Core.Eval 的 interp 实现一致）：
+--   * `plus` / `mult` 饱和到 max_int；
+--   * `minus` 截断到 0（不会产生负数）；
+--   * `div` 向下取整；除零与 Int `/` 同样在运行期 `Failure "division by zero"`。
+-- `toInt` 是无损提升（运行时恒等）；`fromInt` 有损（负数 clamp 成 0），需要区分时用
+-- `fromIntMaybe`。`+ - * /` 在 Nat 上下文由精化器特化，直接走同一组原语。
+import Base.Bool
+import Base.Eq
+import Base.Int
+import Base.Maybe
+import Base.Ord
+import Base.Show
+
 data Nat : Type where
   Zero : Nat
   Succ : Nat -> Nat
+
+plus : Nat -> Nat -> Nat
+plus = natAdd
+
+minus : Nat -> Nat -> Nat
+minus = natSub
+
+mult : Nat -> Nat -> Nat
+mult = natMul
+
+div : Nat -> Nat -> Nat
+div = natDiv
+
+toInt : Nat -> Int
+toInt = natToInt
+
+fromInt : Int -> Nat
+fromInt = natFromInt
+
+fromIntMaybe : Int -> Maybe Nat
+fromIntMaybe n = if n < 0 then Nothing else Just (fromInt n)
+
+pred : Nat -> Nat
+pred n = minus n 1
+
+isZero : Nat -> Bool
+isZero n = toInt n == 0
+
+instance Eq Nat where
+  eq x y = toInt x == toInt y
+  neq x y = toInt x /= toInt y
+
+instance Ord Nat where
+  lt x y = toInt x < toInt y
+  le x y = toInt x <= toInt y
+  gt x y = toInt x > toInt y
+  ge x y = toInt x >= toInt y
+
+instance Show Nat where
+  show n = strFromInt (toInt n)

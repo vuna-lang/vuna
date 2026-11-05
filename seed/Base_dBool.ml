@@ -1,5 +1,4 @@
 open Vuna_runtime
-open Base_dPair
 let v_Base_dBool_dnot = (fun b -> (if b then false else true))
 
 let v_Base_dBool_dand = (fun a b -> (if a then b else false))

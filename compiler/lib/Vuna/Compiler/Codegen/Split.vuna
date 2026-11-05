@@ -2,9 +2,13 @@ module Vuna.Compiler.Codegen.Split (generateDtSplitProgram) where
 
 -- Vuna.Compiler.Codegen.Split：逐模块 split 生成（`compile` / `build` / `seed` 的唯一输出模型）。
 --
--- 把同一份精化结果按「声明归属」切到各模块文件：跨模块引用靠全局唯一 OCaml 名字 +
--- open 链，因此文件顺序即依赖顺序。装配（prepare / 类型 / 桥接 / 正文 / main 钩子）
--- 全部由 `Codegen.Assembly` 提供，本模块只做「归属表 + 按归属过滤 + 分文件」。
+-- 把同一份精化结果按「声明归属」切到各模块文件。C35 后每个单元只 `open Vuna_runtime`，
+-- 跨单元引用（值 / 构造子 / 类型）由 `Codegen.Decl` / `Codegen.Term` 生成
+-- `Unit.name` 全限定名；每个 `SplitFile` 因此带一张**直接依赖单元**表（实际引用到的
+-- 单元，由 `Codegen.Assembly.UnitParts` 累积），文件顺序仍是拓扑序但编译不再依赖
+-- open 链 —— 依赖图是精确 DAG，可分层/并行编译。
+-- 装配（prepare / 类型 / 桥接 / 正文 / main 钩子）全部由 `Codegen.Assembly` 提供，
+-- 本模块只做「归属表 + 按归属过滤 + 分文件 + 依赖序校验」。
 --
 -- 归属表**只从 Loader-resolved 的声明结构派生**（声明名、实例名、派生实例名、trait
 -- 方法投影名与 `Dict_<trait>`）；不再有字符串前缀表（`Show_Show_*` / 内建方法名表）。
@@ -25,10 +29,6 @@ splitNoSpan = Span "" 0 0 0 0
 -- 入口单元的固定名（入口声明不带模块前缀，统一归到 `Main`）。
 entryOwner : String
 entryOwner = "Main"
-
--- 运行时前缀单元：`Vuna_runtime.ml` 只有 `dtRuntime`，其余单元都 open 它。
-runtimeUnit : String
-runtimeUnit = "Vuna_runtime"
 
 splitUnitOfModule : String -> String
 splitUnitOfModule modName = sanitizeName modName
@@ -119,17 +119,10 @@ splitDataOwnerEntriesOfModules [] = []
 splitDataOwnerEntriesOfModules ((Pair mname decls) :: rest) =
   append (splitDataOwnerEntriesOf mname decls) (splitDataOwnerEntriesOfModules rest)
 
-data SplitMeta : Type where
-  SplitMeta : List (Pair String String) -> List (Pair String String) -> List String -> SplitMeta
-
-smDefOwners : SplitMeta -> List (Pair String String)
-smDefOwners (SplitMeta defOwners dataOwners knownModules) = defOwners
-
-smDataOwners : SplitMeta -> List (Pair String String)
-smDataOwners (SplitMeta defOwners dataOwners knownModules) = dataOwners
-
-smKnownModules : SplitMeta -> List String
-smKnownModules (SplitMeta defOwners dataOwners knownModules) = knownModules
+record SplitMeta where
+  smDefOwners : List (Pair String String)
+  smDataOwners : List (Pair String String)
+  smKnownModules : List String
 
 splitMetaOf : List (Pair String (List Decl)) -> List Decl -> SplitMeta
 splitMetaOf modules entryDecls =
@@ -154,17 +147,17 @@ knownModuleOrErr knownModules what name =
     ("DT split: `" ++ what ++ "` " ++ name ++ " has module prefix `" ++ prefix ++ "` but no such module")
 
 splitDataOwnerOf : SplitMeta -> DtData -> Result String
-splitDataOwnerOf meta d = case lookupModuleOf (smDataOwners meta) (dtDataName d) of
+splitDataOwnerOf meta d = case lookupModuleOf meta.smDataOwners (dtDataName d) of
   Just o => Ok o
   Nothing =>
-    if containsDot (dtDataName d) then knownModuleOrErr (smKnownModules meta) "data" (dtDataName d)
+    if containsDot (dtDataName d) then knownModuleOrErr meta.smKnownModules "data" (dtDataName d)
     else Err ("DT split: cannot determine module for data `" ++ dtDataName d ++ "`")
 
 splitDefOwnerOf : SplitMeta -> String -> Result String
-splitDefOwnerOf meta name = case lookupModuleOf (smDefOwners meta) name of
+splitDefOwnerOf meta name = case lookupModuleOf meta.smDefOwners name of
   Just o => Ok o
   Nothing =>
-    if containsDot name then knownModuleOrErr (smKnownModules meta) "definition" name
+    if containsDot name then knownModuleOrErr meta.smKnownModules "definition" name
     else Err ("DT split: cannot determine module for definition `" ++ name ++ "`")
 
 nameOwnerPairsOfDefs : SplitMeta -> List DtDef -> Result (List (Pair String String))
@@ -198,23 +191,71 @@ datasInUnit ownerT u datas = filter (\d => ownerOfTbl ownerT (dtDataName d) == u
 defsInUnit : HashMap String -> String -> List DtDef -> List DtDef
 defsInUnit ownerT u defs = filter (\d => ownerOfTbl ownerT (dtDefName d) == u) defs
 
-splitModuleFiles : List (Pair String (List Int)) -> List DtData -> List DtDef -> HashMap String -> HashMap String -> List String -> List (Pair String (List Decl)) -> Result (List SplitFile)
-splitModuleFiles usedTbl allDatas allDefs defOwnerT dataOwnerT earlier [] = Ok []
-splitModuleFiles usedTbl allDatas allDefs defOwnerT dataOwnerT earlier ((Pair mname decls) :: rest) =
+-- ---------------------------------------------------------------
+-- 依赖序（C35）：每单元的直接依赖必须全部落在更早的模块里。
+-- 生成器累积的依赖来自**实际引用**（`QualCtx` 限定 / 类型声明 / List 桥接 / main
+-- 钩子），所以这里只需校验拓扑序并按编译顺序排列（build.sh 的分层吃这份顺序）。
+-- ---------------------------------------------------------------
+-- 位置以 1 起算，0 = 不在表里（vuna 没有负整数字面量，不用 -1 哨兵）。
+posOfName : String -> List String -> Int
+posOfName name units = posOfNameGo 1 name units
+
+posOfNameGo : Int -> String -> List String -> Int
+posOfNameGo i name [] = 0
+posOfNameGo i name (u :: rest) = if u == name then i else posOfNameGo (i + 1) name rest
+
+checkDepsOrder : List String -> String -> List String -> Result Int
+checkDepsOrder ordered self [] = Ok 0
+checkDepsOrder ordered self (d :: rest) =
+  let
+    selfPos = posOfName self ordered
+    depPos = posOfName d ordered
+  in if depPos == 0 then Err ("DT: internal: " ++ self ++ " references unknown unit `" ++ d ++ "`")
+  else if selfPos == 0 then Err ("DT: internal: split unit `" ++ self ++ "` is not in the module order")
+  else if depPos >= selfPos then Err ("DT: internal: split dependency is not in topological order: " ++ self ++ " -> " ++ d)
+  else checkDepsOrder ordered self rest
+
+depsInOrder : List String -> String -> List String -> List String
+depsInOrder ordered self deps = filter (\u => not (u == self) && memName u deps) ordered
+
+unitDepsOf : List String -> String -> List String -> Result (List String)
+unitDepsOf ordered self deps =
+  andThen (checkDepsOrder ordered self deps) (\_ => Ok (depsInOrder ordered self deps))
+
+-- 分文件生成的共享上下文（归属表一次建好，所有单元复用）。
+record SplitGenCtx where
+  sgcUsedTbl : List (Pair String (List Int))
+  sgcAllDatas : List DtData
+  sgcAllDefs : List DtDef
+  sgcDefOwnerT : HashMap String
+  sgcDataOwnerT : HashMap String
+  sgcDefUnitT : HashMap String
+  sgcDataUnitT : HashMap String
+  sgcOrdered : List String
+
+mapToUnit : List (Pair String String) -> List (Pair String String)
+mapToUnit pairs = map (\q => Pair (firstOf q) (splitUnitOfModule (secondOf q))) pairs
+
+splitModuleFiles : SplitGenCtx -> List (Pair String (List Decl)) -> Result (List SplitFile)
+splitModuleFiles ctx [] = Ok []
+splitModuleFiles ctx ((Pair mname decls) :: rest) =
   let
     unit = splitUnitOfModule mname
-    unitDatas = datasInUnit dataOwnerT mname allDatas
-    unitDefs = defsInUnit defOwnerT mname allDefs
+    unitDatas = datasInUnit ctx.sgcDataOwnerT mname ctx.sgcAllDatas
+    unitDefs = defsInUnit ctx.sgcDefOwnerT mname ctx.sgcAllDefs
+    qc = QualCtx unit ctx.sgcDefUnitT ctx.sgcDataUnitT
   in andThen (groupRuntimeDefs unitDefs)
-    (\groups => andThen (genUnitParts usedTbl (append [runtimeUnit] earlier) allDatas unitDatas groups) (\parts => andThen (splitModuleFiles usedTbl allDatas allDefs defOwnerT dataOwnerT (append earlier [unit]) rest) (\tail => Ok (SplitFile (unit ++ ".ml") (genUnitText parts ++ "\n") :: tail))))
+    (\groups => andThen (genUnitParts ctx.sgcUsedTbl qc ctx.sgcAllDatas unitDatas groups) (\parts => andThen (splitModuleFiles ctx rest) (\tail => andThen (unitDepsOf ctx.sgcOrdered unit (unitPartsDeps parts)) (\deps => Ok (SplitFile (unit ++ ".ml") (genUnitText parts ++ "\n") deps :: tail)))))
 
-splitMainFile : List (Pair String (List Int)) -> List DtData -> List DtDef -> HashMap String -> HashMap String -> Bool -> List String -> Result SplitFile
-splitMainFile usedTbl allDatas allDefs defOwnerT dataOwnerT printResult opens =
+splitMainFile : SplitGenCtx -> Bool -> Result SplitFile
+splitMainFile ctx printResult =
   let
-    entryDefs = defsInUnit defOwnerT entryOwner allDefs
-    entryDatas = datasInUnit dataOwnerT entryOwner allDatas
+    entryUnit = splitUnitOfModule entryOwner
+    entryDefs = defsInUnit ctx.sgcDefOwnerT entryOwner ctx.sgcAllDefs
+    entryDatas = datasInUnit ctx.sgcDataOwnerT entryOwner ctx.sgcAllDatas
+    qc = QualCtx entryUnit ctx.sgcDefUnitT ctx.sgcDataUnitT
   in andThen (groupRuntimeDefs entryDefs)
-    (\groups => andThen (genUnitParts usedTbl opens allDatas entryDatas groups) (\parts => andThen (mainHook (Pair allDatas allDefs) allDefs printResult) (\hook => Ok (SplitFile "Main.ml" (genUnitText parts ++ hook)))))
+    (\groups => andThen (genUnitParts ctx.sgcUsedTbl qc ctx.sgcAllDatas entryDatas groups) (\parts => andThen (mainHook qc (Pair ctx.sgcAllDatas ctx.sgcAllDefs) ctx.sgcAllDefs printResult) (\hook => andThen (unitDepsOf ctx.sgcOrdered entryUnit (append (unitPartsDeps parts) (secondOf hook))) (\deps => Ok (SplitFile "Main.ml" (genUnitText parts ++ firstOf hook) deps)))))
 
 -- ---------------------------------------------------------------
 -- 生成前护栏（C08）：模块声明必须已 resolved、入口声明必须是裸名、归属必须全覆盖
@@ -281,7 +322,7 @@ checkDataOwners meta (d :: rest) =
 
 checkResolvedModules : SplitMeta -> List (Pair String (List Decl)) -> List Decl -> List DtDef -> List DtData -> Result Int
 checkResolvedModules meta modules entryDecls runtime datas =
-  andThen (checkModuleDecls (smKnownModules meta) modules)
+  andThen (checkModuleDecls meta.smKnownModules modules)
     (\_ => andThen (checkEntryDecls entryDecls) (\_ => andThen (checkDefOwners meta runtime) (\_ => checkDataOwners meta datas)))
 
 generateDtSplitProgram : List (Pair String (List Decl)) -> List Decl -> DtProgram -> Bool -> Result (List SplitFile)
@@ -291,16 +332,25 @@ generateDtSplitProgram modules entryDecls prog printResult =
     allDefs = dtProgDefs prog
     meta = splitMetaOf modules entryDecls
   in andThen (prepareDtProgram (Pair (dtProgDatas prog) allDefs)) (\p => case p of
-    Pair runtime groups => andThen (checkResolvedModules meta modules entryDecls runtime allDatas) (\_ => andThen (nameOwnerPairsOfDefs meta runtime) (\defPairs => andThen (nameOwnerPairsOfDatas meta allDatas) (\dataPairs => let
-      defOwnerT = ownerTblOf defPairs
-      dataOwnerT = ownerTblOf dataPairs
-    in andThen (splitModuleFiles (usedTableOf allDatas) allDatas runtime defOwnerT dataOwnerT [] modules) (\moduleFiles => let
-      unitNames = map (\q => splitUnitOfModule (firstOf q)) modules
-    in andThen
-      (splitMainFile (usedTableOf allDatas) allDatas runtime defOwnerT dataOwnerT printResult (append [runtimeUnit] unitNames))
-      (\mainFile => Ok (SplitFile "Vuna_runtime.ml" dtRuntime :: append moduleFiles [mainFile]))
-    )
-    )
-    )
-    )
+    Pair runtime groups =>
+      splitProgramFiles modules entryDecls printResult runtime allDatas allDefs meta
   )
+
+splitProgramFiles : List (Pair String (List Decl)) -> List Decl -> Bool -> List DtDef -> List DtData -> List DtDef -> SplitMeta -> Result (List SplitFile)
+splitProgramFiles modules entryDecls printResult runtime allDatas allDefs meta =
+  andThen (checkResolvedModules meta modules entryDecls runtime allDatas)
+    (\_ => andThen (nameOwnerPairsOfDefs meta runtime) (\defPairs => andThen (nameOwnerPairsOfDatas meta allDatas) (\dataPairs => splitWithOwners modules printResult runtime allDatas allDefs defPairs dataPairs)))
+
+splitWithOwners : List (Pair String (List Decl)) -> Bool -> List DtDef -> List DtData -> List DtDef -> List (Pair String String) -> List (Pair String String) -> Result (List SplitFile)
+splitWithOwners modules printResult runtime allDatas allDefs defPairs dataPairs =
+  let
+    defUnitT = unitTblOf (mapToUnit defPairs)
+    dataUnitT = unitTblOf (mapToUnit dataPairs)
+    ordered =
+      append (append [runtimeUnit] (map (\q => splitUnitOfModule (firstOf q)) modules))
+        [splitUnitOfModule entryOwner]
+    ctx =
+      SplitGenCtx (usedTableOf allDatas) allDatas runtime (ownerTblOf defPairs)
+        (ownerTblOf dataPairs) defUnitT dataUnitT ordered
+  in andThen (splitModuleFiles ctx modules)
+    (\moduleFiles => andThen (splitMainFile ctx printResult) (\mainFile => Ok (SplitFile "Vuna_runtime.ml" dtRuntime [] :: append moduleFiles [mainFile])))

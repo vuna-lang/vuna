@@ -106,7 +106,7 @@ notEmpty _ = True
 
 allEqTo : Int -> List Int -> Bool
 allEqTo x [] = True
-allEqTo x (y :: rest) = if x == y then allEqTo x rest else False
+allEqTo x (y :: rest) = x == y && allEqTo x rest
 
 allSame : List Int -> Bool
 allSame [] = True
@@ -145,17 +145,17 @@ posHasTbl f i tbl = case Base.HashMap.lookup f tbl of
 
 memInt : Int -> List Int -> Bool
 memInt i [] = False
-memInt i (x :: rest) = if i == x then True else memInt i rest
+memInt i (x :: rest) = i == x || memInt i rest
 
 posAdd : String -> Int -> List (Pair String Int) -> List (Pair String Int)
 posAdd f i facts = if posHas f i facts then facts else Pair f i :: facts
 
 posSubset : List (Pair String Int) -> List (Pair String Int) -> Bool
 posSubset [] b = True
-posSubset ((Pair f i) :: rest) b = if posHas f i b then posSubset rest b else False
+posSubset ((Pair f i) :: rest) b = posHas f i b && posSubset rest b
 
 posSetEq : List (Pair String Int) -> List (Pair String Int) -> Bool
-posSetEq a b = if length a == length b then posSubset a b else False
+posSetEq a b = length a == length b && posSubset a b
 
 posFilter : List (Pair String Int) -> List (Pair String Int) -> List (Pair String Int)
 posFilter [] neg = []
@@ -175,7 +175,7 @@ posFilterTbl ((Pair f i) :: rest) neg =
 
 posSubsetTbl : List (Pair String Int) -> HashMap (List Int) -> Bool
 posSubsetTbl [] b = True
-posSubsetTbl ((Pair f i) :: rest) b = if posHasTbl f i b then posSubsetTbl rest b else False
+posSubsetTbl ((Pair f i) :: rest) b = posHasTbl f i b && posSubsetTbl rest b
 
 posSetEqTbl : List (Pair String Int) -> List (Pair String Int) -> Bool
 posSetEqTbl a b = length a == length b && posSubsetTbl a (posTblOf b) && posSubsetTbl b (posTblOf a)
@@ -252,8 +252,9 @@ ctorNameOf (Ctor name ty arity sp) = name
 
 patSizeStrict : Pat -> Int -> List Int -> List (Pair String (Pair Int (Pair Int (List Int)))) -> List (Pair String (Pair Int (Pair Int (List Int))))
 patSizeStrict (PAs n inner sp) base path acc =
-  patSizeStrict inner base path (Pair n (Pair base (Pair (length path) path)) :: acc)
-patSizeStrict (PVar n sp) base path acc = Pair n (Pair base (Pair (length path) path)) :: acc
+  patSizeStrict inner base path (Pair n (Pair base (Pair (natToInt (length path)) path)) :: acc)
+patSizeStrict (PVar n sp) base path acc =
+  Pair n (Pair base (Pair (natToInt (length path)) path)) :: acc
 patSizeStrict (PWild sp) base path acc = acc
 patSizeStrict (PCon c ps sp) base path acc = patsSizeStrict ps base path 0 acc
 patSizeStrict (PRecord rn fields sp) base path acc = fieldsSizeStrict fields base path 0 acc
@@ -343,7 +344,7 @@ argPositive args i sizes caller facts region = case nthExpr args i of
     EVar n sp => if memName n region then True
     else case sizeOfVarStrict n sizes of
       Just sz => case sz of
-        Pair base (Pair depth path) => if depth == 0 then posHasTbl caller base facts else False
+        Pair base (Pair depth path) => depth == 0 && posHasTbl caller base facts
       Nothing => False
     _ => False
 
@@ -512,7 +513,7 @@ projectionsOf (d :: rest) = case projectionOfDef d of
 
 projHas : String -> List (Pair String (List Int)) -> Bool
 projHas f [] = False
-projHas f ((Pair g path) :: rest) = if f == g then True else projHas f rest
+projHas f ((Pair g path) :: rest) = f == g || projHas f rest
 
 findWrapField : Int -> List Expr -> List (Pair String (Pair Int (Pair Int (List Int)))) -> Int -> Maybe Int
 findWrapField p [] sizes k = Nothing
@@ -533,7 +534,7 @@ wrapCheck p rest sizes k depth path = case depth > 0 of
   False => findWrapField p rest sizes (k + 1)
 
 posVarIn : String -> Int -> String -> HashMap (List Int) -> List String -> Bool
-posVarIn x p caller facts region = if memName x region then True else posHasTbl caller p facts
+posVarIn x p caller facts region = memName x region || posHasTbl caller p facts
 
 arithRel : Int -> Expr -> List (Pair String (Pair Int (Pair Int (List Int)))) -> String -> HashMap (List Int) -> List String -> Maybe Int
 arithRel p (EApp (EVar op osp) args sp) sizes caller facts region =
@@ -601,10 +602,11 @@ dotBase n = secondOf (splitLastDot (splitOnDot n))
 
 isMapLike : String -> Bool
 isMapLike n =
-  if dotBase n == "map" then True
-  else if dotBase n == "traverse" then True
-  else if dotBase n == "concatMap" then True
-  else if dotBase n == "mapMaybe" then True else dotBase n == "filter"
+  dotBase n == "map"
+    || dotBase n == "traverse"
+    || dotBase n == "concatMap"
+    || dotBase n == "mapMaybe"
+    || dotBase n == "filter"
 
 extendElemSizes : List (Pair String (Pair Int (Pair Int (List Int)))) -> Expr -> String -> List (Pair String (Pair Int (Pair Int (List Int))))
 extendElemSizes sizes (EVar n sp) v = case sizeOfVarStrict n sizes of
@@ -658,10 +660,10 @@ hasWeakCycle comp edges = hasWeakCycleGo comp edges comp
 hasWeakCycleGo : List String -> List (Pair (Pair String String) Int) -> List String -> Bool
 hasWeakCycleGo comp edges [] = False
 hasWeakCycleGo comp edges (f :: rest) =
-  if weakReach comp edges f (weakAdj comp edges f) [f] then True else hasWeakCycleGo comp edges rest
+  weakReach comp edges f (weakAdj comp edges f) [f] || hasWeakCycleGo comp edges rest
 
 isDescent : Int -> Bool
-isDescent m = if m == 0 then False else True
+isDescent m = m /= 0
 
 filterModes : List Int -> List Int
 filterModes [] = []

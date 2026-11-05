@@ -1,14 +1,4 @@
 open Vuna_runtime
-open Base_dPair
-open Base_dBool
-open Base_dMonad
-open Base_dMaybe
-open Base_dEq
-open Base_dOrd
-open Base_dInt
-open Base_dList
-open Base_dResult
-open Base_dString
 type 'a0 t_Dict_uBase_dShow_dShow = C_Dict_uBase_dShow_dShow_MkDict_uBase_dShow_dShow of (('a0) -> string)
 
 let v_Show_uInt = (C_Dict_uBase_dShow_dShow_MkDict_uBase_dShow_dShow ((fun x -> (bi_strFromInt x))))

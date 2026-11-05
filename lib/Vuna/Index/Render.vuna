@@ -35,7 +35,7 @@ renderModules index =
 renderApi : Index -> String -> Result String
 renderApi index modQuery =
   let
-    syms = filter (\s => symModule s == modQuery) (indexSymbols index)
+    syms = filter (\s => symModule s == modQuery) index.indexSymbols
   in if length syms == 0 then Err ("no such module: " ++ modQuery)
   else Ok ("## " ++ modQuery ++ "\n\n" ++ join "\n" (map apiRow syms))
 
@@ -47,4 +47,4 @@ apiRow s =
     ++ symSig s
     ++ "  -- line "
     ++ strFromInt (symLine s)
-    ++ (if symDoc s == "" then "" else "\n      " ++ symDoc s)
+    ++ (if s.symDoc == "" then "" else "\n      " ++ s.symDoc)

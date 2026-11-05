@@ -128,15 +128,17 @@ Main
 
 - `Vuna_runtime`：`Codegen.Term.dtRuntime`（`bi_*` / `dtp_*` 等运行时）。
 - 每个源码模块一个 `<Module>.ml`（依赖序；OCaml 编译单元名 = 模块名点转 `_d`），文件头
-  `open` runtime 与所有更早模块；`List` 桥接（`dtp_unpack/pack`）放在声明 `List` 族的模块
+  **只** `open Vuna_runtime`（没有 open 链），跨单元引用写成 OCaml 限定名 `Unit.name`
+  （值 / 构造子 / 类型一致）；`List` 桥接（`dtp_unpack/pack`）放在声明 `List` 族的模块
   文件里；`Vuna_dCompiler_dIntrinsics.ml` 是内建声明的唯一真源。
 - `Main.ml`：entry decls 的 datas + defs 与 `main` 钩子（入口文件里声明的 `data` 也必须发进
   `Main.ml`）。**不生成 `.mli`**。
 - 没有只为形状稳定而保留的空编译单元。
 
 `seed/build.sh` 由 codegen 生成：干净构建一次 `ocamlopt` 编译全部 `.ml` 并链接；增量构建
-按内容哈希逐模块重编。编译 flag 统一为 `-g -w -a+39 -warn-error +39`（warning 39 =
-unused rec，设 warn-error），并链接 `unix.cmxa`——runtime 仍无条件依赖 Unix
+按内容哈希**按直接依赖分层**重编（层内并行，每模块 stamp 只含直接依赖的 `.stamp`）。编译
+flag 统一为 `-g -w -a+39 -warn-error +39`（warning 39 = unused rec，设 warn-error），并
+链接 `unix.cmxa`——runtime 仍无条件依赖 Unix
 （`Unix.stat` / `gettimeofday` / `readlink` 等；语义与分类见 [primitives.md](primitives.md)）。
 
 ## 相关阅读

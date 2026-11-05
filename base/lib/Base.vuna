@@ -6,6 +6,7 @@ module Base
   , module Base.Map
   , module Base.Maybe
   , module Base.Monad
+  , module Base.Nat
   , module Base.Ord
   , module Base.Pair
   , module Base.Result
@@ -25,6 +26,7 @@ import Base.Ord
 import Base.Int
 import Base.List
 import Base.Maybe
+import Base.Nat
 import Base.Result
 import Base.String
 import Base.Sort

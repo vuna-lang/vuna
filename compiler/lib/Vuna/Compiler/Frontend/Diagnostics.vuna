@@ -5,18 +5,12 @@ module Vuna.Compiler.Frontend.Diagnostics
   , PsEntry(..)
   , lexAll
   , lexCode
-  , lexEntryCode
-  , lexEntryDesc
-  , lexEntryTemplate
   , lexErr
   , lexErr0
   , lexMsg
   , lexTemplate
   , psAll
   , psCode
-  , psEntryCode
-  , psEntryDesc
-  , psEntryTemplate
   , psErr
   , psErr0
   , psErr1
@@ -197,29 +191,15 @@ psTemplate (WhereSigNoDef _) = "binding signature for `<0>` has no definition"
 -- ---------------------------------------------------------------
 -- 文档遍历源
 -- ---------------------------------------------------------------
-data LexEntry : Type where
-  LexEntry : String -> String -> String -> LexEntry
+record LexEntry where
+  lexEntryCode : String
+  lexEntryTemplate : String
+  lexEntryDesc : String
 
-lexEntryCode : LexEntry -> String
-lexEntryCode (LexEntry c t d) = c
-
-lexEntryTemplate : LexEntry -> String
-lexEntryTemplate (LexEntry c t d) = t
-
-lexEntryDesc : LexEntry -> String
-lexEntryDesc (LexEntry c t d) = d
-
-data PsEntry : Type where
-  PsEntry : String -> String -> String -> PsEntry
-
-psEntryCode : PsEntry -> String
-psEntryCode (PsEntry c t d) = c
-
-psEntryTemplate : PsEntry -> String
-psEntryTemplate (PsEntry c t d) = t
-
-psEntryDesc : PsEntry -> String
-psEntryDesc (PsEntry c t d) = d
+record PsEntry where
+  psEntryCode : String
+  psEntryTemplate : String
+  psEntryDesc : String
 
 lexAll : List LexEntry
 lexAll =

@@ -11,15 +11,15 @@ module Vuna.Compiler.Elab.Driver
   , ctxEntriesOf
   , dtEvalExprIn
   , dtEvalExprInInfo
-  , dtGoalInfoCtx
-  , dtGoalInfoGoal
-  , dtGoalInfoSpan
   , ecOfProgram
   , elabBodies
   , elabProgram
   , elabProgramFull
+  , elabProgramFullWith
+  , elabProgramFullWithAux
   , elabProgramGo
   , elabProgramGoWith
+  , elabProgramGoWithAux
   , elabSigs
   , findDefWithMeta
   , findGoal
@@ -160,17 +160,10 @@ sigDictName k = "_ctx" ++ strFromInt k
 -- body 精化时，调用点的字典实参在类参数还没解出时被延迟成 `DtDictGoal`（裸 meta）；
 -- 若签名声明了 `C a`，这些目标应解到声明的 `_ctx<k>` binder，而不是再被
 -- `liftFreeDictGoals` 提升成新的隐式参数。目标域与 binder 类型 conv 相等即命中。
-data DeclDictBinder : Type where
-  DeclDictBinder : String -> Int -> Value -> DeclDictBinder
-
-declDictName : DeclDictBinder -> String
-declDictName (DeclDictBinder n l d) = n
-
-declDictLevel : DeclDictBinder -> Int
-declDictLevel (DeclDictBinder n l d) = l
-
-declDictDom : DeclDictBinder -> Value
-declDictDom (DeclDictBinder n l d) = d
+record DeclDictBinder where
+  declDictName : String
+  declDictLevel : Int
+  declDictDom : Value
 
 -- 签名前导隐式前缀里的字典 binder（源码顺序 = level 升序）。
 declaredDictBinders : Ec -> Term -> List DeclDictBinder
@@ -193,17 +186,10 @@ solveDeclaredDictGoals ec ty body = case declaredDictBinders ec ty of
       solved = solveDeclaredDictGoalsGo ec binders (ecDictGoals ec) [] []
     in Pair (applyDeclaredDictSubsts (firstOf solved) body) (secondOf solved)
 
-data DictSubst : Type where
-  DictSubst : Int -> String -> Int -> DictSubst
-
-dictSubstMeta : DictSubst -> Int
-dictSubstMeta (DictSubst m name q) = m
-
-dictSubstName : DictSubst -> String
-dictSubstName (DictSubst m name q) = name
-
-dictSubstQ : DictSubst -> Int
-dictSubstQ (DictSubst m name q) = q
+record DictSubst where
+  dictSubstMeta : Int
+  dictSubstName : String
+  dictSubstQ : Int
 
 solveDeclaredDictGoalsGo : Ec -> List DeclDictBinder -> List DtDictGoal -> List DtDictGoal -> List DictSubst -> Pair (List DictSubst) Ec
 solveDeclaredDictGoalsGo ec binders goals kept acc = case goals of
@@ -216,17 +202,17 @@ solveDeclaredDictGoalsGo ec binders goals kept acc = case goals of
         let
           -- q = level + 1：出现点（term 根下的 lambda 深度 depth）的 index = depth - q，正好等于
           -- 该 binder 在「全部隐式 binder 之外再加 depth 层 λ」处的 de Bruijn index。
-          q = declDictLevel b + 1
-        in case solveMeta (ecDefTbl ec) (ecSolsP ec) 0 m [] (VNeutral (NVar (declDictName b) (declDictLevel b) [])) of
+          q = b.declDictLevel + 1
+        in case solveMeta (ecDefTbl ec) (ecSolsP ec) 0 m [] (VNeutral (NVar b.declDictName b.declDictLevel [])) of
           Ok sols2 =>
             solveDeclaredDictGoalsGo (ecPutSols ec (solsList sols2)) binders rest kept
-              (DictSubst m (declDictName b) q :: acc)
+              (DictSubst m b.declDictName q :: acc)
           Err e => solveDeclaredDictGoalsGo ec binders rest (g :: kept) acc
 
 firstMatchDictBinder : Ec -> List DeclDictBinder -> Value -> Maybe DeclDictBinder
 firstMatchDictBinder ec [] dom = Nothing
 firstMatchDictBinder ec (b :: rest) dom =
-  if dictDomMatches ec (declDictDom b) dom then Just b else firstMatchDictBinder ec rest dom
+  if dictDomMatches ec b.declDictDom dom then Just b else firstMatchDictBinder ec rest dom
 
 dictDomMatches : Ec -> Value -> Value -> Bool
 dictDomMatches ec a b = case conv (ecDefTbl ec) (ecSolsP ec) 0 (forceVal ec a) (forceVal ec b) of
@@ -236,8 +222,7 @@ dictDomMatches ec a b = case conv (ecDefTbl ec) (ecSolsP ec) 0 (forceVal ec a) (
 applyDeclaredDictSubsts : List DictSubst -> Term -> Term
 applyDeclaredDictSubsts [] body = body
 applyDeclaredDictSubsts (s :: rest) body =
-  applyDeclaredDictSubsts rest
-    (substMetaVar (dictSubstMeta s) (dictSubstName s) (dictSubstQ s) body)
+  applyDeclaredDictSubsts rest (substMetaVar s.dictSubstMeta s.dictSubstName s.dictSubstQ body)
 
 -- 子句表（名字 → 该函数的全部 clause，源顺序）。旧实现每个定义都扫一遍剩余声明
 -- （clausesFor）⇒ O(n²)；这里在 bodies 开始时建一次表，查表 O(1)。
@@ -256,7 +241,7 @@ clausesTblGo (d :: rest) t = case d of
   _ => clausesTblGo rest t
 
 clausesOfTbl : Ec -> List Decl -> String -> List (Pair (List Pat) Expr)
-clausesOfTbl ec decls name = case Base.HashMap.lookup name (ecClausesTbl ec) of
+clausesOfTbl ec decls name = case Base.HashMap.lookup name ec.ecClausesTbl of
   Just cs => cs
   Nothing => clausesFor decls name
 
@@ -341,8 +326,7 @@ else case refs of
       memoUnsafe (fuel - 1) future defs defvals self (Base.HashMap.insert g True seen)
         (append (termGlobalRefs body) rest)
     Nothing =>
-      if Base.HashMap.member g future then True
-      else memoUnsafe (fuel - 1) future defs defvals self seen rest
+      Base.HashMap.member g future || memoUnsafe (fuel - 1) future defs defvals self seen rest
 
 memoDefValue : HashMap Bool -> Ec -> String -> Term -> Maybe Value
 memoDefValue future ec name body =
@@ -423,7 +407,7 @@ checkAllDefinedGo ((Pair name (Pair ctx (Pair tyExpr sigSpan))) :: rest) globals
 hasFunClause : String -> List Decl -> Bool
 hasFunClause name [] = False
 hasFunClause name (d :: rest) = case d of
-  DFun n pats body sp => if n == name then True else hasFunClause name rest
+  DFun n pats body sp => n == name || hasFunClause name rest
   _ => hasFunClause name rest
 
 -- 该名字是否由 `axiom` 声明（有则返回其 span，用于「axiom 不能有定义」诊断）。
@@ -510,10 +494,26 @@ elabProgramFull decls =
 elabProgramGo : List Decl -> Result DtProgram
 elabProgramGo decls = elabProgramGoWith ecEmpty preludeGlobals decls
 
+-- 接口摘要路径的完整入口：与 elabProgramFull 同一条前置降级链（record / deriving），
+-- 但起始 Ec / globals 由依赖摘要注入。
+elabProgramFullWith : Ec -> List (Pair String Term) -> List Decl -> Result DtProgram
+elabProgramFullWith startEc startGlobals decls =
+  elabProgramFullWithAux startEc startGlobals [] decls
+
+-- termAux：只供终止性分析使用的「依赖包声明」（跨包投影/构造子/子句关系）；不参与精化。
+-- 依赖包自己的终止性已在它自己的 check 里验过（本路径只报告本包函数的失败）。
+elabProgramFullWithAux : Ec -> List (Pair String Term) -> List Decl -> List Decl -> Result DtProgram
+elabProgramFullWithAux startEc startGlobals termAux decls =
+  andThen (prepareDeclsWith termAux decls)
+    (\ds => andThen (expandDerivings ds) (\ds2 => andThen (prepareDecls termAux) (\ads => andThen (expandDerivings ads) (\ads2 => elabProgramGoWithAux startEc startGlobals ads2 ds2))))
+
 -- M34.5 接口摘要第一步：起始状态（依赖包的签名 globals + Ec 摘要）参数化，供
 -- 「只精化本包 decls、复用依赖包摘要」的调用方注入。行为与 elabProgramGo 完全一致。
 elabProgramGoWith : Ec -> List (Pair String Term) -> List Decl -> Result DtProgram
-elabProgramGoWith startEc startGlobals decls = andThen (collectSigs decls) (\sigs => let
+elabProgramGoWith startEc startGlobals decls = elabProgramGoWithAux startEc startGlobals [] decls
+
+elabProgramGoWithAux : Ec -> List (Pair String Term) -> List Decl -> List Decl -> Result DtProgram
+elabProgramGoWithAux startEc startGlobals termAux decls = andThen (collectSigs decls) (\sigs => let
   _ = stamp "collectSigs-done"
 in andThen (elabDatas (collectDataDecls decls []) startGlobals startEc) (\pd => case pd of
   Pair datas (Pair globals0 ec0) =>
@@ -523,12 +523,16 @@ in andThen (elabDatas (collectDataDecls decls []) startGlobals startEc) (\pd => 
       ec0b = ecPutCtorTbl ec0 (ctorTblOfDatas (ecDatas ec0))
       _ = stamp "datas-done"
     in andThen (elabTraits (collectTraitDecls decls []) globals0 ec0b) (\pt => case pt of
-      Pair classDatas (Pair projGlobals (Pair classes (Pair projSpans ec1))) =>
+      Pair classDatas (Pair projGlobals (Pair _ (Pair projSpans ec1))) =>
         let
           globals1 = append globals0 projGlobals
           datas1 = append datas classDatas
+          -- 接口摘要路径：起始 Ec 已带依赖包的类表；实例头/体必须看**全部**类，
+          -- 不能只看本包 `elabTraits` 新声明的那些（否则 `deriving (Eq)` 解析出的
+          -- `Base.Eq.Eq` 找不到）。全量路径下两者相同。
+          classesAll = ecClasses ec1
           _ = stamp "traits-done"
-        in andThen (checkInstanceHeads (collectInstDecls decls []) classes globals1 ec1) (\pih => case pih of
+        in andThen (checkInstanceHeads (collectInstDecls decls []) classesAll globals1 ec1) (\pih => case pih of
           Pair instHeads ec1b =>
             let
               globals2 = append globals1 instHeads
@@ -557,7 +561,7 @@ in andThen (elabDatas (collectDataDecls decls []) startGlobals startEc) (\pd => 
                       _ =
                         stamp
                           ("bodies-done g=" ++ strFromInt (length globals) ++ " sols=" ++ strFromInt (length (ecSols ec3a)) ++ " defs=" ++ strFromInt (length (ecDefs ec3a)) ++ " metas=" ++ strFromInt (ecNext ec3a) ++ " dgoals=" ++ strFromInt (length (ecDictGoals ec3a)) ++ " datas=" ++ strFromInt (length (ecDatas ec3a)) ++ " insts=" ++ strFromInt (length (ecInsts ec3a)) ++ " classes=" ++ strFromInt (length (ecClasses ec3a)))
-                    in andThen (elabInstanceBodies decls classes datas1 globals ec3) (\pi => case pi of
+                    in andThen (elabInstanceBodies decls classesAll datas1 globals ec3) (\pi => case pi of
                       Pair instDefs0 ec4a =>
                         let
                           ec4 = resolveDictGoalsFix globals ec4a 8
@@ -580,7 +584,7 @@ in andThen (elabDatas (collectDataDecls decls []) startGlobals startEc) (\pd => 
                                 Nothing => g
                               ) globals
                               _ = stamp "extradefs-done"
-                            in andThen (checkTerminationDecls decls) (\_ => let
+                            in andThen (checkTerminationDeclsWith (declFunNames decls) (append termAux decls)) (\_ => let
                               _ = stamp "termination-done"
                             in Ok
                               (DtProgram datas1 allDefs (ecGoals ec4) (ecSols ec4) globalsOut (ecInsts ec4) (ecClasses ec4) (ecNext ec4) (ecDefVals ec4) (Base.IntMap.toList (ecDepthTbl ec4)))
@@ -617,8 +621,7 @@ unsolvedMessage : Ec -> Int -> String
 unsolvedMessage ec m = case findGoal m (ecGoals ec) of
   Just g =>
     let
-      detail =
-        showSpanLoc (dtGoalSpan g) ++ " with goal " ++ showValueAt (ctxDepthOf g) (dtGoalType g)
+      detail = showSpanLoc g.dtGoalSpan ++ " with goal " ++ showValueAt (ctxDepthOf g) g.dtGoalType
     in tcMsg (UnsolvedHole detail) (VCons detail VNil)
   Nothing =>
     let
@@ -688,29 +691,22 @@ anyAltHasAnyMeta (alt :: rest) = termHasAnyMeta (caseAltBody alt) || anyAltHasAn
 
 -- 洞目标里的类型是 level 形态，show 时深度取快照上下文的长度。
 ctxDepthOf : DtGoal -> Int
-ctxDepthOf g = length (dtGoalCtx g)
+ctxDepthOf g = length g.dtGoalCtx
 
 findGoal : Int -> List DtGoal -> Maybe DtGoal
 findGoal m [] = Nothing
-findGoal m (g :: rest) = if dtGoalMeta g == m then Just g else findGoal m rest
+findGoal m (g :: rest) = if g.dtGoalMeta == m then Just g else findGoal m rest
 
 -- M15：面向工具链的洞目标查询（LSP / `vuna goal` 用）。
-data DtGoalInfo : Type where
-  DtGoalInfo : Span -> String -> List (Pair String String) -> DtGoalInfo
-
-dtGoalInfoSpan : DtGoalInfo -> Span
-dtGoalInfoSpan (DtGoalInfo sp goal ctx) = sp
-
-dtGoalInfoGoal : DtGoalInfo -> String
-dtGoalInfoGoal (DtGoalInfo sp goal ctx) = goal
-
-dtGoalInfoCtx : DtGoalInfo -> List (Pair String String)
-dtGoalInfoCtx (DtGoalInfo sp goal ctx) = ctx
+record DtGoalInfo where
+  dtGoalInfoSpan : Span
+  dtGoalInfoGoal : String
+  dtGoalInfoCtx : List (Pair String String)
 
 goalInfoOf : List (Pair Int Value) -> DtGoal -> DtGoalInfo
 goalInfoOf sols g =
-  DtGoalInfo (dtGoalSpan g) (showValueAt (ctxDepthOf g) (zonkGoal sols (dtGoalType g)))
-    (ctxEntriesOf (dtGoalCtx g))
+  DtGoalInfo g.dtGoalSpan (showValueAt (ctxDepthOf g) (zonkGoal sols g.dtGoalType))
+    (ctxEntriesOf g.dtGoalCtx)
 
 -- 洞目标里的类型可能仍含已解元变量：用当前解表 force 一遍再 show。
 zonkGoal : List (Pair Int Value) -> Value -> Value
@@ -748,7 +744,7 @@ ecOfProgram prog =
     ec3 = addClassesEc ec2 (dtProgClasses prog)
     ec4 = ecPutCtorTbl ec3 (ctorTblOfDatas (dtProgDatas prog))
     ec5 = ecPutSols ec4 (dtProgSols prog)
-    ec6 = ecPutNext ec5 (dtProgNext prog)
+    ec6 = ecPutNext ec5 prog.dtProgNext
     ec7 = ecPutGlobalsTbl ec6 (Base.HashMap.fromList (dtProgGlobals prog))
   in Pair ec7 (dtProgGlobals prog)
 

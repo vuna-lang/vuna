@@ -73,7 +73,7 @@ findSubGo needle (c :: rest) idx =
 isPrefixChars : List Int -> List Int -> Bool
 isPrefixChars [] _ = True
 isPrefixChars _ [] = False
-isPrefixChars (x :: xs) (y :: ys) = if x == y then isPrefixChars xs ys else False
+isPrefixChars (x :: xs) (y :: ys) = x == y && isPrefixChars xs ys
 
 -- 在 span 覆盖的行范围里找名字的起始位置（1-based line/col）。
 findNamePos : List String -> Span -> String -> Maybe (Pair Int Int)
@@ -88,7 +88,7 @@ else case remaining of
   ln :: rest =>
     let
       from0 = clampInt 0 (if isFirst then firstCol - 1 else 0) (strLength ln)
-      tailPart = substring from0 (strLength ln - from0) ln
+      tailPart = substring (natFromInt from0) (natFromInt (strLength ln - from0)) ln
     in case findSubstring name tailPart of
       hit =>
         if hit >= 0 then Just (Pair lineNo (hit + from0 + 1))
@@ -115,18 +115,17 @@ contextBlock ctx = "\nContext:\n" ++ join "" (map ctxLine ctx)
 goalContents : DtGoalInfo -> Json
 goalContents g =
   JObj
-    [Pair "kind" (JStr "markdown"), Pair "value" (JStr ("```vuna\n" ++ dtGoalInfoGoal g ++ "\n```\n" ++ contextBlock (dtGoalInfoCtx g)))]
+    [Pair "kind" (JStr "markdown"), Pair "value" (JStr ("```vuna\n" ++ g.dtGoalInfoGoal ++ "\n```\n" ++ contextBlock g.dtGoalInfoCtx))]
 
 holeContains : Int -> Int -> DtGoalInfo -> Bool
 holeContains line col g =
   let
-    sp = dtGoalInfoSpan g
+    sp = g.dtGoalInfoSpan
     sl = spanStartLine sp
     sc = spanStartCol sp
     el = spanEndLine sp
-    ec = spanEndCol sp
-  in if line < sl || line > el then False
-  else if line == sl && col < sc then False else if line == el && col > ec then False else True
+    ec = sp.spanEndCol
+  in not (line < sl || line > el || line == sl && col < sc || line == el && col > ec)
 
 holeAt : Int -> Int -> List DtGoalInfo -> Maybe DtGoalInfo
 holeAt line col [] = Nothing
@@ -135,9 +134,9 @@ holeAt line col (g :: rest) = if holeContains line col g then Just g else holeAt
 holeHoverJson : DtGoalInfo -> Json
 holeHoverJson g =
   let
-    sp = dtGoalInfoSpan g
+    sp = g.dtGoalInfoSpan
   in JObj
-    [Pair "contents" (goalContents g), Pair "range" (lspRange (spanStartLine sp) (spanStartCol sp) (spanEndLine sp) (spanEndCol sp))]
+    [Pair "contents" (goalContents g), Pair "range" (lspRange (spanStartLine sp) (spanStartCol sp) (spanEndLine sp) sp.spanEndCol)]
 
 symbolHoverBody : Sym -> String
 symbolHoverBody s =
@@ -145,7 +144,7 @@ symbolHoverBody s =
     body =
       if symKind s == "fun" then symFullName s ++ " : " ++ symSig s
       else if symSig s == "" then symFullName s else symSig s
-    doc = if symDoc s == "" then "" else "\n\n" ++ symDoc s
+    doc = if s.symDoc == "" then "" else "\n\n" ++ s.symDoc
   in "```vuna\n" ++ body ++ "\n```" ++ doc
 
 -- hover 的 range 必须是**光标下的 token**，不是符号定义位置：客户端（VS Code）用
@@ -160,7 +159,7 @@ symbolHoverJson s line startCol token =
 currentModuleNameOf : String -> String
 currentModuleNameOf text = case parseSource "<lsp>" text of
   Err e => ""
-  Ok (Source hdr imports fx decls) => currentModuleName decls hdr
+  Ok (SourceFile hdr imports fx decls) => currentModuleName decls hdr
 
 -- hover 的第一段：DT 洞目标（包上下文；与 `vuna goal` 同源）。
 -- 快速判据：文本里没有独立的 `_` token 时直接跳过——否则每次 hover 都要跑一遍
@@ -309,7 +308,7 @@ declBufferNames d = append (typeNamesOf [d]) (declNames d)
 bufferNames : String -> List String
 bufferNames text = case parseSource "<completion>" text of
   Err e => []
-  Ok (Source hdr imports fx decls) => dedupeNames (concatMap declBufferNames decls)
+  Ok (SourceFile hdr imports fx decls) => dedupeNames (concatMap declBufferNames decls)
 
 dedupeNames : List String -> List String
 dedupeNames xs = dedupeNamesGo xs [] []
@@ -384,7 +383,7 @@ declSymbolJson lines d =
 documentSymbols : String -> String -> List Json
 documentSymbols uri text = case parseSource uri text of
   Err e => []
-  Ok (Source hdr imports fx decls0) => case formattingFixities uri text of
+  Ok (SourceFile hdr imports fx decls0) => case formattingFixities uri text of
     Err _ => []
     Ok programFixities => case reorderProgram (tableOfKeepOps (append programFixities fx)) decls0 of
       Err e => []
@@ -402,7 +401,7 @@ findDeclByName name (d :: rest) =
 bufferDefinition : String -> String -> String -> Json
 bufferDefinition uri text token = case parseSource uri text of
   Err e => JNull
-  Ok (Source hdr imports fx decls) => case findDeclByName (lastSegment token) decls of
+  Ok (SourceFile hdr imports fx decls) => case findDeclByName (lastSegment token) decls of
     Nothing => JNull
     Just d =>
       JArr
@@ -416,7 +415,7 @@ refLocation idx r = case modulePathOf idx (refModule r) of
   Nothing => Nothing
   Just path =>
     Just
-      (JObj [Pair "uri" (JStr (pathToUri path)), Pair "range" (lspRange (refLine r) (refCol r) (refLine r) (refCol r + strLength (refName r)))])
+      (JObj [Pair "uri" (JStr (pathToUri path)), Pair "range" (lspRange r.refLine r.refCol r.refLine (r.refCol + strLength (refName r)))])
 
 referencesFor : Index -> String -> String -> List Json
 referencesFor idx curMod token = case bestSymbol idx curMod token of
@@ -435,17 +434,13 @@ referencesFor idx curMod token = case bestSymbol idx curMod token of
 -- ---------------------------------------------------------------
 -- completion
 -- ---------------------------------------------------------------
-data Compl : Type where
-  Compl : String -> Int -> String -> Compl
+record Compl where
+  complLabel : String
+  complKind : Int
+  complDetail : String
 
 complLabel : Compl -> String
 complLabel (Compl label kind detail) = label
-
-complKind : Compl -> Int
-complKind (Compl label kind detail) = kind
-
-complDetail : Compl -> String
-complDetail (Compl label kind detail) = detail
 
 -- CompletionItemKind：Method=2、Function=3、Constructor=4、Field=5、Variable=6、
 -- Class=7、Interface=8、Module=9、Keyword=14、Constant=21、Struct=22。
@@ -475,7 +470,7 @@ symSymbolKind s = case symKind s of
 complJson : Compl -> Json
 complJson c =
   JObj
-    (append [Pair "label" (JStr (complLabel c)), Pair "kind" (JNum (complKind c))] (if complDetail c == "" then [] else [Pair "detail" (JStr (complDetail c))]))
+    (append [Pair "label" (JStr (complLabel c)), Pair "kind" (JNum c.complKind)] (if c.complDetail == "" then [] else [Pair "detail" (JStr c.complDetail)]))
 
 dedupeCompls : List Compl -> List Compl
 dedupeCompls xs = dedupeComplsGo xs [] []
@@ -519,7 +514,7 @@ keywordCompls = map (\n => Compl n 14 "") lspKeywords
 indexCompls : Maybe Index -> List Compl
 indexCompls Nothing = []
 indexCompls (Just idx) =
-  map (\s => Compl (symName s) (symCompletionKind s) (symSig s)) (indexSymbols idx)
+  map (\s => Compl (symName s) (symCompletionKind s) (symSig s)) idx.indexSymbols
 
 hasPrefix : String -> List Compl -> List Compl
 hasPrefix prefix items = filter (\c => startsWith prefix (complLabel c)) items
@@ -535,11 +530,11 @@ qualifiedCompletions ln chars prefixStart prefix (Just idx) =
     beforeDotChars = take (prefixStart - 1) chars
     modLen = qualPrefixLen (reverse beforeDotChars)
     modStart = length beforeDotChars - modLen
-    modPrefix = substring modStart modLen ln
+    modPrefix = substring (natFromInt modStart) (natFromInt modLen) ln
     fullPrefix = modPrefix ++ "."
     hits =
       filter (\s => startsWith fullPrefix (symFullName s) && startsWith prefix (symName s))
-        (indexSymbols idx)
+        idx.indexSymbols
   in finishCompls (map (\s => Compl (symName s) (symCompletionKind s) (symSig s)) hits)
 
 completionItems : String -> Int -> Int -> Maybe Index -> List Json
@@ -552,7 +547,7 @@ completionItems text line0 col0 midx =
     prefixLen = wordPrefixLen left
     prefixStart = p0 - prefixLen
     afterDot = prefixStart > 0 && nthCode chars (prefixStart - 1) == 46
-    prefix = substring prefixStart prefixLen ln
+    prefix = substring (natFromInt prefixStart) (natFromInt prefixLen) ln
   in if afterDot then qualifiedCompletions ln chars prefixStart prefix midx
   else finishCompls
     (append (hasPrefix prefix keywordCompls) (append (hasPrefix prefix (bufferCompls text)) (hasPrefix prefix (indexCompls midx))))
@@ -564,7 +559,7 @@ matchingSymbols : Index -> String -> List Sym
 matchingSymbols idx query = case findSymbol idx query of
   Ok syms => syms
   Err e =>
-    filter (\s => contains query (symName s) || contains query (symFullName s)) (indexSymbols idx)
+    filter (\s => contains query (symName s) || contains query (symFullName s)) idx.indexSymbols
 
 symbolInfoJson : Index -> Sym -> Maybe Json
 symbolInfoJson idx s = case symLocation idx s of
@@ -577,7 +572,7 @@ workspaceSymbols : Maybe Index -> String -> List Json
 workspaceSymbols Nothing query = []
 workspaceSymbols (Just idx) query =
   let
-    syms = if query == "" then indexSymbols idx else matchingSymbols idx query
+    syms = if query == "" then idx.indexSymbols else matchingSymbols idx query
   in mapMaybe (symbolInfoJson idx) (take maxWorkspaceSymbols syms)
 
 -- ---------------------------------------------------------------

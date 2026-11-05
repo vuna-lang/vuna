@@ -23,21 +23,17 @@ data TomlValue : Type where
   TList : List String -> TomlValue
 
 -- section path、key、value 与 key 所在行号（从 1 开始）。
-data TomlEntry : Type where
-  TomlEntry : List String -> String -> TomlValue -> Int -> TomlEntry
+record TomlEntry where
+  tomlEntrySection : List String
+  tomlEntryKey : String
+  tomlEntryValue : TomlValue
+  tomlEntryLine : Int
 
 -- 字符游标：剩余字符、当前行、当前列（行/列均从 1 开始）。
-data TomlCursor : Type where
-  TomlCursor : List Int -> Int -> Int -> TomlCursor
-
-cursorChars : TomlCursor -> List Int
-cursorChars (TomlCursor chars line col) = chars
-
-cursorLine : TomlCursor -> Int
-cursorLine (TomlCursor chars line col) = line
-
-cursorCol : TomlCursor -> Int
-cursorCol (TomlCursor chars line col) = col
+record TomlCursor where
+  cursorChars : List Int
+  cursorLine : Int
+  cursorCol : Int
 
 -- 显式 fuel（M30/C27：收紧到证明界）。两类状态机用不同的测度：
 --
@@ -138,16 +134,16 @@ collectBareKey (TomlCursor (c :: rest) line col) acc =
   else Pair (strPack (reverse acc)) (TomlCursor (c :: rest) line col)
 
 parseBareKey : String -> TomlCursor -> Result (Pair String TomlCursor)
-parseBareKey path cs = case cursorChars cs of
-  [] => failAt path (cursorLine cs) "expected a key"
+parseBareKey path cs = case cs.cursorChars of
+  [] => failAt path cs.cursorLine "expected a key"
   c :: rest => if isBareKeyChar c then case collectBareKey cs [] of
     Pair name after => Ok (Pair name after)
-  else failAt path (cursorLine cs) "expected a key"
+  else failAt path cs.cursorLine "expected a key"
 
 -- basic string：返回原始字符串与游标（不含两侧引号）。
 parseStringValue : String -> TomlCursor -> Result (Pair String TomlCursor)
-parseStringValue path cs = case cursorChars cs of
-  [] => failAt path (cursorLine cs) "unterminated basic string"
+parseStringValue path cs = case cs.cursorChars of
+  [] => failAt path cs.cursorLine "unterminated basic string"
   c :: rest =>
     let
       cs1 = advanceCursor cs
@@ -155,18 +151,18 @@ parseStringValue path cs = case cursorChars cs of
 
 parseStringChars : Int -> String -> TomlCursor -> TomlCursor -> List Int -> Result (Pair String TomlCursor)
 parseStringChars fuel path startCs cs acc = if fuel <= 0 then Err "DT: toml fuel exhausted (internal: toml parser made no progress)"
-else case cursorChars cs of
-  [] => failAt path (cursorLine startCs) "unterminated basic string"
+else case cs.cursorChars of
+  [] => failAt path startCs.cursorLine "unterminated basic string"
   c :: rest => case c of
     34 => Ok (Pair (strPack (reverse acc)) (advanceCursor cs))
-    10 => failAt path (cursorLine startCs) "unterminated basic string (newline in string)"
+    10 => failAt path startCs.cursorLine "unterminated basic string (newline in string)"
     92 => parseStringEscape (fuel - 1) path startCs (advanceCursor cs) acc
     _ => parseStringChars (fuel - 1) path startCs (advanceCursor cs) (c :: acc)
 
 parseStringEscape : Int -> String -> TomlCursor -> TomlCursor -> List Int -> Result (Pair String TomlCursor)
 parseStringEscape fuel path startCs cs acc = if fuel <= 0 then Err "DT: toml fuel exhausted (internal: toml parser made no progress)"
-else case cursorChars cs of
-  [] => failAt path (cursorLine startCs) "unterminated escape sequence"
+else case cs.cursorChars of
+  [] => failAt path startCs.cursorLine "unterminated escape sequence"
   c :: rest => case c of
     110 => parseStringChars (fuel - 1) path startCs (advanceCursor cs) (10 :: acc)
     116 => parseStringChars (fuel - 1) path startCs (advanceCursor cs) (9 :: acc)
@@ -175,20 +171,20 @@ else case cursorChars cs of
     102 => parseStringChars (fuel - 1) path startCs (advanceCursor cs) (12 :: acc)
     34 => parseStringChars (fuel - 1) path startCs (advanceCursor cs) (34 :: acc)
     92 => parseStringChars (fuel - 1) path startCs (advanceCursor cs) (92 :: acc)
-    _ => failAt path (cursorLine cs) ("unknown escape sequence \\" ++ strPack [c])
+    _ => failAt path cs.cursorLine ("unknown escape sequence \\" ++ strPack [c])
 
 -- 整数：可选前导 '-'，至少一位十进制数字；小数点/尾随字母报错。
 parseInteger : String -> TomlCursor -> Result (Pair Int TomlCursor)
-parseInteger path cs = case cursorChars cs of
-  [] => failAt path (cursorLine cs) "expected an integer"
+parseInteger path cs = case cs.cursorChars of
+  [] => failAt path cs.cursorLine "expected an integer"
   c :: rest =>
     if c == 45 then parseIntegerDigits (cursorFuel cs) path cs (advanceCursor cs) 0 0 True
     else if isDigitChar c then parseIntegerDigits (cursorFuel cs) path cs cs 0 0 False
-    else failAt path (cursorLine cs) "expected an integer"
+    else failAt path cs.cursorLine "expected an integer"
 
 parseIntegerDigits : Int -> String -> TomlCursor -> TomlCursor -> Int -> Int -> Bool -> Result (Pair Int TomlCursor)
 parseIntegerDigits fuel path startCs cs count acc negative = if fuel <= 0 then Err "DT: toml fuel exhausted (internal: toml parser made no progress)"
-else case cursorChars cs of
+else case cs.cursorChars of
   [] => finishInteger path startCs cs count acc negative
   c :: rest =>
     if isDigitChar c then parseIntegerDigits (fuel - 1) path startCs (advanceCursor cs) (count + 1) (acc * 10 + (c - 48))
@@ -196,12 +192,12 @@ else case cursorChars cs of
     else finishInteger path startCs cs count acc negative
 
 finishInteger : String -> TomlCursor -> TomlCursor -> Int -> Int -> Bool -> Result (Pair Int TomlCursor)
-finishInteger path startCs cs count acc negative = if count == 0 then failAt path (cursorLine startCs) "expected digits for integer"
-else case cursorChars cs of
+finishInteger path startCs cs count acc negative = if count == 0 then failAt path startCs.cursorLine "expected digits for integer"
+else case cs.cursorChars of
   [] => Ok (Pair (makeInteger acc negative) cs)
   c :: rest =>
-    if c == 46 then failAt path (cursorLine startCs) "floating point numbers are not supported"
-    else if isBareKeyChar c then failAt path (cursorLine startCs) "invalid integer literal"
+    if c == 46 then failAt path startCs.cursorLine "floating point numbers are not supported"
+    else if isBareKeyChar c then failAt path startCs.cursorLine "invalid integer literal"
     else Ok (Pair (makeInteger acc negative) cs)
 
 makeInteger : Int -> Bool -> Int
@@ -222,14 +218,14 @@ matchChars (want :: wants) (TomlCursor (c :: rest) line col) =
 matchWord : String -> TomlCursor -> Maybe TomlCursor
 matchWord word cs = case matchChars (strUnpack word) cs of
   Nothing => Nothing
-  Just after => case cursorChars after of
+  Just after => case after.cursorChars of
     [] => Just after
     c :: rest => if isBareKeyChar c then Nothing else Just after
 
 -- 字符串数组：字符串可空、可跨行，元素间允许空格/换行/注释，允许尾逗号。
 parseStringArray : String -> TomlCursor -> Result (Pair TomlValue TomlCursor)
-parseStringArray path cs = case cursorChars cs of
-  [] => failAt path (cursorLine cs) "unterminated array"
+parseStringArray path cs = case cs.cursorChars of
+  [] => failAt path cs.cursorLine "unterminated array"
   c :: rest =>
     let
       cs1 = advanceCursor cs
@@ -258,8 +254,8 @@ else case parseStringValue path cs of
         _ => failAt path line "expected ',' or ']' in array"
 
 parseValue : String -> TomlCursor -> Result (Pair TomlValue TomlCursor)
-parseValue path cs = case cursorChars cs of
-  [] => failAt path (cursorLine cs) "expected a value"
+parseValue path cs = case cs.cursorChars of
+  [] => failAt path cs.cursorLine "expected a value"
   c :: rest => if c == 34 then case parseStringValue path cs of
     Err e => Err e
     Ok (Pair s afterString) => Ok (Pair (TStr s) afterString)
@@ -270,7 +266,7 @@ parseValue path cs = case cursorChars cs of
     Just afterTrue => Ok (Pair (TBool True) afterTrue)
     Nothing => case matchWord "false" cs of
       Just afterFalse => Ok (Pair (TBool False) afterFalse)
-      Nothing => failAt path (cursorLine cs) "expected a value"
+      Nothing => failAt path cs.cursorLine "expected a value"
 
 -- [section] / [section.sub]：段之间允许空格，例如 [ a . b ]。
 parseSectionPath : String -> TomlCursor -> Result (Pair (List String) TomlCursor)
@@ -295,7 +291,7 @@ expectEol path cs = case skipBlank cs of
     c :: rest => case c of
       10 => Ok (TomlCursor rest (line + 1) 1)
       35 => expectEolAfterComment path (TomlCursor chars line col)
-      _ => failAt path (cursorLine cs) "unexpected character at end of line"
+      _ => failAt path cs.cursorLine "unexpected character at end of line"
 
 expectEolAfterComment : String -> TomlCursor -> Result TomlCursor
 expectEolAfterComment path cs = case skipComment cs of
@@ -305,15 +301,14 @@ expectEolAfterComment path cs = case skipComment cs of
       if c == 10 then Ok (TomlCursor rest (line + 1) 1)
       else failAt path line "unexpected character after comment"
 
-samePath : List a -> List a -> Bool
+samePath : Eq a => List a -> List a -> Bool
 samePath [] [] = True
-samePath (x :: xs) (y :: ys) = if x == y then samePath xs ys else False
+samePath (x :: xs) (y :: ys) = x == y && samePath xs ys
 samePath _ _ = False
 
-memSectionPath : List a -> List (List a) -> Bool
+memSectionPath : Eq a => List a -> List (List a) -> Bool
 memSectionPath section [] = False
-memSectionPath section (s :: rest) =
-  if samePath section s then True else memSectionPath section rest
+memSectionPath section (s :: rest) = samePath section s || memSectionPath section rest
 
 sectionSuffix : List String -> String
 sectionSuffix [] = ""
@@ -322,7 +317,7 @@ sectionSuffix (section@(first :: rest)) = " in [" ++ joinDots section ++ "]"
 hasEntry : List String -> String -> List TomlEntry -> Bool
 hasEntry section key [] = False
 hasEntry section key ((TomlEntry s k v line) :: rest) =
-  if samePath section s && k == key then True else hasEntry section key rest
+  samePath section s && k == key || hasEntry section key rest
 
 parseEntryValue : Int -> String -> TomlCursor -> Int -> String -> List String -> List (List String) -> List TomlEntry -> Result (List TomlEntry)
 parseEntryValue fuel path cs keyLine key section seen entries = if fuel <= 0 then Err "DT: toml fuel exhausted (internal: toml parser made no progress)"
@@ -341,17 +336,17 @@ else case parseBareKey path cs of
   Err e => Err e
   Ok (Pair key afterKey) => case skipBlank afterKey of
     TomlCursor chars line col => case chars of
-      [] => failAt path (cursorLine cs) "expected '=' after key"
+      [] => failAt path cs.cursorLine "expected '=' after key"
       c :: rest =>
-        if c == 61 then parseEntryValue (fuel - 1) path (TomlCursor rest line (col + 1)) (cursorLine cs) key section
+        if c == 61 then parseEntryValue (fuel - 1) path (TomlCursor rest line (col + 1)) cs.cursorLine key section
           seen entries
-        else failAt path (cursorLine cs) ("expected '=' after key \"" ++ key ++ "\"")
+        else failAt path cs.cursorLine ("expected '=' after key \"" ++ key ++ "\"")
 
 parseSectionLine : Int -> String -> TomlCursor -> a -> List (List String) -> List TomlEntry -> Result (List TomlEntry)
 parseSectionLine fuel path cs section seen entries = if fuel <= 0 then Err "DT: toml fuel exhausted (internal: toml parser made no progress)"
 else case parseSectionPath path (advanceCursor cs) of
   Err e => Err e
-  Ok (Pair newSection afterHeader) => if memSectionPath newSection seen then failAt path (cursorLine cs) ("duplicate section [" ++ joinDots newSection ++ "]")
+  Ok (Pair newSection afterHeader) => if memSectionPath newSection seen then failAt path cs.cursorLine ("duplicate section [" ++ joinDots newSection ++ "]")
   else case expectEol path afterHeader of
     Err e => Err e
     Ok afterLine => parseTomlLoop (fuel - 1) path afterLine newSection (newSection :: seen) entries
@@ -363,7 +358,7 @@ parseTomlLoop fuel path cs section seen entries =
 
 parseTomlLoopAt : Int -> String -> TomlCursor -> List String -> List (List String) -> List TomlEntry -> Result (List TomlEntry)
 parseTomlLoopAt fuel path cs section seen entries = if fuel <= 0 then Err "DT: toml fuel exhausted (internal: toml parser made no progress)"
-else case cursorChars cs of
+else case cs.cursorChars of
   [] => Ok (reverse entries)
   c :: rest =>
     if c == 91 then parseSectionLine (fuel - 1) path cs section seen entries

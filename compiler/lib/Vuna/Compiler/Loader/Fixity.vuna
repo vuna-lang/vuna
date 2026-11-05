@@ -29,21 +29,19 @@ module Vuna.Compiler.Loader.Fixity
 import Vuna.Compiler.Common
 import Vuna.Compiler.Frontend.Ast
 
-data FixityTable : Type where
-  MkFixityTable : Bool -> List FixityDecl -> FixityTable
+record FixityTable where
+  renameMode : Bool
+  fixityDecls : List FixityDecl
 
 tableOf : List FixityDecl -> FixityTable
-tableOf ds = MkFixityTable True ds
+tableOf ds = FixityTable True ds
 
 -- Fmt 用：不替换别名（打印时保留源码里的运算符写法）；section 与反引号保留原形。
 tableOfKeepOps : List FixityDecl -> FixityTable
-tableOfKeepOps ds = MkFixityTable False ds
+tableOfKeepOps ds = FixityTable False ds
 
 renameMode : FixityTable -> Bool
-renameMode (MkFixityTable r ds) = r
-
-fixityDecls : FixityTable -> List FixityDecl
-fixityDecls (MkFixityTable r ds) = ds
+renameMode (FixityTable r ds) = r
 
 -- 语法运算符：`->` 由 parser/Elab 消费，不属于任何库模块，因此恒可见（不是用户表兜底）。
 syntaxFixityDecls : List FixityDecl
@@ -52,8 +50,8 @@ syntaxFixityDecls = [FixityDecl "->" 1 2 Nothing (Span "" 0 0 0 0)]
 -- 反向别名：方法名/构造子名（`eq`/`Cons`/`bind`）-> 运算符符号。Fmt 打印用。
 findTarget : List FixityDecl -> String -> Maybe String
 findTarget [] name = Nothing
-findTarget (d :: rest) name = case fixityTarget d of
-  Just t => if t == name then Just (fixityOp d) else findTarget rest name
+findTarget (d :: rest) name = case d.fixityTarget of
+  Just t => if t == name then Just d.fixityOp else findTarget rest name
   Nothing => findTarget rest name
 
 -- Fmt 用：按调用方给的**程序级**声明表反查符号。
@@ -63,38 +61,31 @@ symbolOfTargetIn ds name = findTarget ds name
 -- 第一处匹配生效：调用方把「本模块 + imports 闭包」放在前面、语法表放在后面。
 lookupDecl : String -> List FixityDecl -> Maybe FixityDecl
 lookupDecl op [] = Nothing
-lookupDecl op (d :: rest) = if fixityOp d == op then Just d else lookupDecl op rest
+lookupDecl op (d :: rest) = if d.fixityOp == op then Just d else lookupDecl op rest
 
 -- 查找顺序：调用方给的声明（本模块 + import 闭包）→ 语法表（`->`）。没有别处兜底。
 lookupFixityDecl : FixityTable -> String -> Maybe FixityDecl
-lookupFixityDecl t op = case lookupDecl op (fixityDecls t) of
+lookupFixityDecl t op = case lookupDecl op t.fixityDecls of
   Just d => Just d
   Nothing => lookupDecl op syntaxFixityDecls
 
 lookupFixity : FixityTable -> String -> Maybe (Pair Int Int)
 lookupFixity t op = case lookupFixityDecl t op of
-  Just d => Just (Pair (fixityLevel d) (fixityAssoc d))
+  Just d => Just (Pair d.fixityLevel d.fixityAssoc)
   Nothing => Nothing
 
 aliasOf : FixityTable -> String -> String
 aliasOf t op = case lookupFixityDecl t op of
-  Just d => case fixityTarget d of
+  Just d => case d.fixityTarget of
     Just t2 => t2
     Nothing => op
   Nothing => op
 
 -- 链元素：运算符名、是否反引号写法（fmt keep 模式要按原样重建）、右操作数。
-data ChainOp : Type where
-  MkChainOp : String -> Bool -> Expr -> ChainOp
-
-chainOp : ChainOp -> String
-chainOp (MkChainOp op isBt rhs) = op
-
-chainIsBacktick : ChainOp -> Bool
-chainIsBacktick (MkChainOp op isBt rhs) = isBt
-
-chainRhs : ChainOp -> Expr
-chainRhs (MkChainOp op isBt rhs) = rhs
+record ChainOp where
+  chainOp : String
+  chainIsBacktick : Bool
+  chainRhs : Expr
 
 -- 未知运算符的诊断（严格表）：不静默默认优先级。
 unknownFixityMsg : String -> String
@@ -105,28 +96,28 @@ unknownFixityMsg op =
 -- 一律报错（严格表与宽松表同判据）——fmt 宁可拒绝格式化也不按错优先级重排改变语义
 -- （宽松表只保证「不因缺声明而崩溃」这件事已经不需要了）。
 fixityOf : FixityTable -> ChainOp -> Result (Pair Int Int)
-fixityOf t c = case lookupFixity t (chainOp c) of
+fixityOf t c = case lookupFixity t c.chainOp of
   Just p => Ok p
-  Nothing => if chainIsBacktick c then Ok (Pair 9 1) else Err (unknownFixityMsg (chainOp c))
+  Nothing => if c.chainIsBacktick then Ok (Pair 9 1) else Err (unknownFixityMsg c.chainOp)
 
 -- rename 模式产出普通应用（别名已替换，`>>` 也走别名到库函数）；keep 模式保留反引号原形
 -- 供 fmt 打印（普通运算符仍是 `EApp (EVar op)`，fmt 按 fixity 打回中缀）。
 infixTerm : FixityTable -> ChainOp -> Expr -> Expr -> Span -> Expr
 infixTerm t c lhs rhs sp =
-  if renameMode t then if chainOp c == ">>" then EApp (EVar "bind" sp) [lhs, ELam ["vuna_seq_ignore"] rhs sp] sp
-  else EApp (EVar (aliasOf t (chainOp c)) sp) [lhs, rhs] sp
-  else if chainIsBacktick c then EBacktick (chainOp c) lhs rhs sp
-  else EApp (EVar (chainOp c) sp) [lhs, rhs] sp
+  if renameMode t then if c.chainOp == ">>" then EApp (EVar "bind" sp) [lhs, ELam ["vuna_seq_ignore"] rhs sp] sp
+  else EApp (EVar (aliasOf t c.chainOp) sp) [lhs, rhs] sp
+  else if c.chainIsBacktick then EBacktick c.chainOp lhs rhs sp
+  else EApp (EVar c.chainOp sp) [lhs, rhs] sp
 
 -- 把右嵌套的 `EInfix` / `EBacktick` 链展平成「首操作数 + 链元素列表」；括号 / 应用 / 原子
 -- 作为边界操作数（先递归重排，EParen 在这里消失）。
 collectChain : FixityTable -> Expr -> Result (Pair Expr (List ChainOp))
 collectChain t (EInfix op l r sp) = andThen (reorderExpr t l) (\l2 => andThen (collectChain t r) (\p => case p of
-  Pair first rest => Ok (Pair l2 (MkChainOp op False first :: rest))
+  Pair first rest => Ok (Pair l2 (ChainOp op False first :: rest))
 )
 )
 collectChain t (EBacktick name l r sp) = andThen (reorderExpr t l) (\l2 => andThen (collectChain t r) (\p => case p of
-  Pair first rest => Ok (Pair l2 (MkChainOp name True first :: rest))
+  Pair first rest => Ok (Pair l2 (ChainOp name True first :: rest))
 )
 )
 collectChain t e = andThen (reorderExpr t e) (\e2 => Ok (Pair e2 []))
@@ -145,7 +136,7 @@ else case rest of
         level = firstOf fx
         assoc = secondOf fx
         nextMin = if assoc == 2 then level else level + 1
-        rhs = chainRhs c
+        rhs = c.chainRhs
       in if level < minPrec then Ok (Pair lhs rest)
       else andThen (climb (fuel - 1) t nextMin rhs more sp) (\p => case p of
         Pair rhs2 more2 => climb (fuel - 1) t minPrec (infixTerm t c lhs rhs2 sp) more2 sp

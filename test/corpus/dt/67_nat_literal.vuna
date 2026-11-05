@@ -1,0 +1,24 @@
+-- Nat 零开销表示：字面量构造、Nat 字段、Vec 字面量索引、Zero/Succ 模式。
+import Base.Nat
+import Base.Vec
+
+toInt : Nat -> Int
+toInt n = case n of
+  Zero => 0
+  Succ k => 1 + toInt k
+
+data Box : Type where
+  MkBox : Nat -> Box
+
+unbox : Box -> Nat
+unbox (MkBox n) = n
+
+v3 : Vec Int 3
+v3 = VCons 1 (VCons 2 (VCons 3 VNil))
+
+vsum : Vec Int 3 -> Int
+vsum xs = case xs of
+  VCons a (VCons b (VCons c VNil)) => a + b + c
+
+main : Int
+main = toInt (unbox (MkBox 3)) + vsum v3

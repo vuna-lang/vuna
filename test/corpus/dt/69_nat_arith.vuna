@@ -1,0 +1,19 @@
+-- Nat 的 + - * /：减法截断到 0，其余饱和；interp 与产物必须一致。
+import Base.Nat
+
+toInt : Nat -> Int
+toInt n = case n of
+  Zero => 0
+  Succ k => 1 + toInt k
+
+sub : Nat -> Nat -> Nat
+sub a b = a - b
+
+mul : Nat -> Nat -> Nat
+mul a b = a * b
+
+div : Nat -> Nat -> Nat
+div a b = a / b
+
+main : Int
+main = toInt (sub 2 5) + toInt (mul 6 7) + toInt (div 7 2)

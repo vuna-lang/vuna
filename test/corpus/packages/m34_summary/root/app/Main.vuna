@@ -1,0 +1,24 @@
+import Dep
+import Base.Maybe
+
+-- M34.5 接口摘要夹具（根包侧）：
+--   * `x == ""` 走 primitive `Eq String` 特化——摘要路径的 deftbl 若混入签名
+--     （`String ↦ Type`），`force` 会把 String 归约成 Type，报 `Eq Type` 假歧义；
+--   * `deriving (Eq)` 需要依赖包摘要里的类表（`Base.Eq.Eq`）与字典构造子
+--     （`MkDict_Base.Eq.Eq` 在 base 的 datas 里）；
+--   * `paint Red` 需要依赖包的实例表，`unbox (MkBox 41)` 需要依赖包的定义体。
+data Pair0 : Type where
+  MkPair0 : Int -> String -> Pair0
+deriving (Eq)
+
+x : String
+x = ""
+
+tag : String
+tag = paint Red
+
+boxed : Int
+boxed = unbox (MkBox 41)
+
+main : Int
+main = if x == "" then boxed + 1 else 0

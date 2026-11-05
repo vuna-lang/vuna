@@ -3,9 +3,6 @@ module Vuna.Compiler.Loader.Diagnostics
   , LdEntry(..)
   , ldAll
   , ldCode
-  , ldEntryCode
-  , ldEntryDesc
-  , ldEntryTemplate
   , ldErr
   , ldErr0
   , ldErr1
@@ -54,17 +51,10 @@ ldTemplate (ModuleHeaderInEntrySource _) = "module header is not allowed in entr
 ldTemplate (ModuleNotFound _ _) = "module <0> not found (roots: <1>)"
 ldTemplate (ModuleNotExported _ _) = "module <0> is not exported by package <1>"
 
-data LdEntry : Type where
-  LdEntry : String -> String -> String -> LdEntry
-
-ldEntryCode : LdEntry -> String
-ldEntryCode (LdEntry c t d) = c
-
-ldEntryTemplate : LdEntry -> String
-ldEntryTemplate (LdEntry c t d) = t
-
-ldEntryDesc : LdEntry -> String
-ldEntryDesc (LdEntry c t d) = d
+record LdEntry where
+  ldEntryCode : String
+  ldEntryTemplate : String
+  ldEntryDesc : String
 
 ldAll : List LdEntry
 ldAll =

@@ -120,7 +120,7 @@ occursLevelList lvl [] = False
 occursLevelList lvl (v :: rest) = occursLevel lvl v || occursLevelList lvl rest
 
 occursLevelClo : Int -> Closure -> Bool
-occursLevelClo lvl (Clos env body) = occursLevelList lvl env
+occursLevelClo lvl (Closure env body) = occursLevelList lvl env
 
 -- 刚性位置：构造子/中性头按结构递归，其余回落到 conv 的相等性判定。
 unifyIdxRigid : Ec -> List (Pair Int Value) -> Int -> Int -> Value -> Value -> Result (List (Pair Int Value))
@@ -199,13 +199,13 @@ ctorExplicitArity _ = 0
 
 -- 分支上下文里是否有 binder 的类型求值后是空归纳族。
 ctxHasEmptyBinder : Ec -> Ctx -> Bool
-ctxHasEmptyBinder ec ctx = ctxHasEmptyBinderAt ec ctx 0 (ctxItems ctx)
+ctxHasEmptyBinder ec ctx = ctxHasEmptyBinderAt ec ctx 0 ctx.ctxItems
 
 ctxHasEmptyBinderAt : Ec -> Ctx -> Int -> List (Pair String Term) -> Bool
 ctxHasEmptyBinderAt ec ctx idx [] = False
 ctxHasEmptyBinderAt ec ctx idx ((Pair name ty) :: rest) =
-  if isEmptyFamilyValue ec (ctxDepth ctx) (varTypeValue ctx idx ty) then True
-  else ctxHasEmptyBinderAt ec ctx (idx + 1) rest
+  isEmptyFamilyValue ec (ctxDepth ctx) (varTypeValue ctx idx ty)
+    || ctxHasEmptyBinderAt ec ctx (idx + 1) rest
 
 -- 值是不是「空归纳族」：族已知，且**每个**构造子的结果索引都与这些索引合一失败
 -- （`Fin Zero`、零构造子的族都算）。合一是本地试算、不提交，所以只会误判成「非空」（保守）。
@@ -349,14 +349,12 @@ patsAllIrrefutable (p :: rest) = patIrrefutable p && patsAllIrrefutable rest
 ctorHeadCovered : String -> List (Pair Pat Expr) -> Bool
 ctorHeadCovered cname [] = False
 ctorHeadCovered cname ((Pair pat body) :: rest) = case pat of
-  PCon cn subps psp =>
-    if cn == cname && patsAllIrrefutable subps then True else ctorHeadCovered cname rest
+  PCon cn subps psp => cn == cname && patsAllIrrefutable subps || ctorHeadCovered cname rest
   _ => ctorHeadCovered cname rest
 
 litHeadCovered : Pat -> List (Pair Pat Expr) -> Bool
 litHeadCovered lit [] = False
-litHeadCovered lit ((Pair pat body) :: rest) =
-  if litPatEq lit pat then True else litHeadCovered lit rest
+litHeadCovered lit ((Pair pat body) :: rest) = litPatEq lit pat || litHeadCovered lit rest
 
 litPatEq : Pat -> Pat -> Bool
 litPatEq (PInt n sp) p = case p of
@@ -437,7 +435,7 @@ hasDupNames (x :: rest) = memName x rest || hasDupNames rest
 -- 按作用域解析，不会错位。
 anyNestedPat : List (Pair Pat Expr) -> Bool
 anyNestedPat [] = False
-anyNestedPat ((Pair pat body) :: rest) = if nestedInPat pat then True else anyNestedPat rest
+anyNestedPat ((Pair pat body) :: rest) = nestedInPat pat || anyNestedPat rest
 
 nestedInPat : Pat -> Bool
 nestedInPat (PCon c args sp) = anyNestedArg args

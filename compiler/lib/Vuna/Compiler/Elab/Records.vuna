@@ -11,12 +11,8 @@ module Vuna.Compiler.Elab.Records
   , lookupRecord
   , missingFieldMsg
   , prepareDecls
+  , prepareDeclsWith
   , recordDeclToData
-  , recordInfoCtor
-  , recordInfoDerivings
-  , recordInfoFields
-  , recordInfoName
-  , recordInfoParams
   , recordsOfDecls
   , unknownFieldMsg
   ) where
@@ -36,23 +32,12 @@ import Vuna.Compiler.Frontend.Ast
 
 -- 记录声明信息。第五个字段是**构造子名**：与记录名同名（M23 起；Elab 让值位置先查
 -- 构造子表、类型位置走 globals，两者同名不再冲突）。
-data RecordInfo : Type where
-  RecordInfo : String -> List String -> List (Pair String Expr) -> List String -> String -> RecordInfo
-
-recordInfoName : RecordInfo -> String
-recordInfoName (RecordInfo name params fields derivings ctor) = name
-
-recordInfoParams : RecordInfo -> List String
-recordInfoParams (RecordInfo name params fields derivings ctor) = params
-
-recordInfoFields : RecordInfo -> List (Pair String Expr)
-recordInfoFields (RecordInfo name params fields derivings ctor) = fields
-
-recordInfoDerivings : RecordInfo -> List String
-recordInfoDerivings (RecordInfo name params fields derivings ctor) = derivings
-
-recordInfoCtor : RecordInfo -> String
-recordInfoCtor (RecordInfo name params fields derivings ctor) = ctor
+record RecordInfo where
+  recordInfoName : String
+  recordInfoParams : List String
+  recordInfoFields : List (Pair String Expr)
+  recordInfoDerivings : List String
+  recordInfoCtor : String
 
 lookupRecord : String -> List RecordInfo -> Maybe RecordInfo
 lookupRecord name [] = Nothing
@@ -64,12 +49,12 @@ fieldNamesOf : List (Pair a b) -> List a
 fieldNamesOf [] = []
 fieldNamesOf ((Pair n t) :: rest) = n :: fieldNamesOf rest
 
-fieldIndexAt : a -> List (Pair a b) -> Int -> Maybe Int
+fieldIndexAt : Eq a => a -> List (Pair a b) -> Int -> Maybe Int
 fieldIndexAt fname [] i = Nothing
 fieldIndexAt fname ((Pair n t) :: rest) i =
   if n == fname then Just i else fieldIndexAt fname rest (i + 1)
 
-fieldIndex : a -> List (Pair a b) -> Maybe Int
+fieldIndex : Eq a => a -> List (Pair a b) -> Maybe Int
 fieldIndex fname fields = fieldIndexAt fname fields 0
 
 lookupProvided : String -> List (Pair String a) -> Maybe a
@@ -366,10 +351,16 @@ fieldAccessPats fname ((Pair f alt) :: rest) =
 -- DT 的一步式入口：抽取 record 信息并完成全部降级。
 -- `Elab.elabProgramFull` 只需 `andThen (prepareDecls decls) elabProgramGo`。
 prepareDecls : List Decl -> Result (List Decl)
-prepareDecls decls0 =
+prepareDecls decls0 = prepareDeclsWith [] decls0
+
+-- M34.5 接口摘要路径：本包的 record 降级需要**依赖包 record 头**参与字段访问/record 更新/
+-- 模式降级的消解（依赖包只提供语法头，不精化）；auxDecls 是依赖模块的原始 decls。
+prepareDeclsWith : List Decl -> List Decl -> Result (List Decl)
+prepareDeclsWith auxDecls decls0 =
   let
+    auxSplit = recordsOfDecls ctorName auxDecls
     split = recordsOfDecls ctorName decls0
-    records = firstOf split
+    records = append (firstOf auxSplit) (firstOf split)
     decls = secondOf split
   in desugarRecords records decls
 

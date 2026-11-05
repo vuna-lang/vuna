@@ -13,9 +13,6 @@ module Vuna.Compiler.Elab.Meta
   , ctorFamilyTable
   , ctorGlobals
   , ctorRefTerm
-  , dataHeadArity
-  , dataHeadKind
-  , dataHeadName
   , dataNamesOf
   , dictCtorName
   , dictTypeName
@@ -192,7 +189,7 @@ else
 
 memMetaId : Int -> List Int -> Bool
 memMetaId i [] = False
-memMetaId i (x :: rest) = if x == i then True else memMetaId i rest
+memMetaId i (x :: rest) = x == i || memMetaId i rest
 
 relevantMetas : Ec -> List Int
 relevantMetas ec =
@@ -251,16 +248,16 @@ globalsLookup name globals ec = case Base.HashMap.lookup name (ecGlobalsTbl ec) 
   Just ty => Just ty
   -- 表已完整（bodies 阶段）时，未命中就意味着「不是全局」：省掉线性扫全 globals
   -- 的回落（未命中的绝大多数是数据族名，如 Base.List.List / String / Int）。
-  Nothing => if ecGlobalsComplete ec then Nothing else globalLookup name globals
+  Nothing => if ec.ecGlobalsComplete then Nothing else globalLookup name globals
 
 -- ---------------------------------------------------------------
-memSig : List (Pair a b) -> a -> Bool
+memSig : Eq a => List (Pair a b) -> a -> Bool
 memSig [] name = False
-memSig ((Pair n ty) :: rest) name = if n == name then True else memSig rest name
+memSig ((Pair n ty) :: rest) name = n == name || memSig rest name
 
 memDefName : String -> List (Pair String Term) -> Bool
 memDefName name [] = False
-memDefName name ((Pair n ty) :: rest) = if n == name then True else memDefName name rest
+memDefName name ((Pair n ty) :: rest) = n == name || memDefName name rest
 
 collectSigs : List Decl -> Result (List (Pair String (Pair (List Expr) (Pair Expr Span))))
 collectSigs decls =
@@ -359,7 +356,7 @@ dtCtorLookup name (d :: rest) = case findCtorIn name (dtDataCtors d) of
 -- 线性扫族表。索引是可重建缓存（真相仍是 `ecDatas`）：建表前的阶段（data 精化中途）
 -- 或者 `ecAddData` 之外的旁路构造都会 miss，回落保证语义不变。
 dtCtorLookupEc : Ec -> String -> Maybe DtCtor
-dtCtorLookupEc ec name = case Base.HashMap.lookup name (ecCtorTbl ec) of
+dtCtorLookupEc ec name = case Base.HashMap.lookup name ec.ecCtorTbl of
   Just c => Just c
   Nothing => dtCtorLookup name (ecDatas ec)
 
@@ -387,8 +384,7 @@ isTypeLevelGlobal globals ec name = case globalsLookup name globals ec of
   Nothing => False
 
 isTypeName : List (Pair String Term) -> Ec -> String -> Bool
-isTypeName globals ec name =
-  if isTypeLevelGlobal globals ec name then True else isDataFamilyName ec name
+isTypeName globals ec name = isTypeLevelGlobal globals ec name || isDataFamilyName ec name
 
 -- 类型位置查类型命名空间：返回该名字的签名项（族的 kind / 类型层 def 的类型）。
 typeLookup : List (Pair String Term) -> Ec -> String -> Maybe Term
@@ -516,22 +512,15 @@ ctorGlobals [] = []
 ctorGlobals (c :: rest) = Pair (dtCtorName c) (dtCtorType c) :: ctorGlobals rest
 
 -- 一个 data 头的两阶段精化结果（M23）：族名、完整 kind、参数个数。
-data DataHead : Type where
-  DataHead : String -> Term -> Int -> DataHead
-
-dataHeadName : DataHead -> String
-dataHeadName (DataHead n k a) = n
-
-dataHeadKind : DataHead -> Term
-dataHeadKind (DataHead n k a) = k
-
-dataHeadArity : DataHead -> Int
-dataHeadArity (DataHead n k a) = a
+record DataHead where
+  dataHeadName : String
+  dataHeadKind : Term
+  dataHeadArity : Int
 
 lookupDataHead : String -> List DataHead -> Maybe (Pair Term Int)
 lookupDataHead name [] = Nothing
 lookupDataHead name (h :: rest) =
-  if dataHeadName h == name then Just (Pair (dataHeadKind h) (dataHeadArity h))
+  if h.dataHeadName == name then Just (Pair h.dataHeadKind h.dataHeadArity)
   else lookupDataHead name rest
 
 -- ---------------------------------------------------------------
@@ -666,7 +655,7 @@ neutralBinderType ctx ec lvl =
     idx = d - lvl - 1
   in if lvl < 0 then Nothing
   else if idx < 0 then Nothing
-  else case ctxItemAt idx (ctxItems ctx) of
+  else case ctxItemAt idx ctx.ctxItems of
     Nothing => Nothing
     Just item => Just (varTypeValue ctx idx (secondOf item))
 

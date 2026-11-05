@@ -17,11 +17,12 @@ import Base.Eq
 import Base.Int
 import Base.List
 import Base.Maybe
+import Base.Nat
 import Base.Ord
 import Base.Pair
 
-data IntMap a : Type where
-  MkIntMap : Array (Array (List (Pair Int a))) -> IntMap a
+record IntMap a where
+  intMapBuckets : Array (Array (List (Pair Int a)))
 
 _hashInt : Int -> Int
 _hashInt n =
@@ -37,7 +38,7 @@ _lookupAssoc key ((Pair k v) :: rest) = if key == k then Just v else _lookupAsso
 -- 由 toList 在冷路径去重（保留桶首 = 最新值）。这样热路径 insert 不付去重成本。
 _hasKeyIn : Int -> List (Pair Int a) -> Bool
 _hasKeyIn key [] = False
-_hasKeyIn key ((Pair k v) :: rest) = if key == k then True else _hasKeyIn key rest
+_hasKeyIn key ((Pair k v) :: rest) = key == k || _hasKeyIn key rest
 
 _dedupGo : List (Pair Int a) -> List (Pair Int a) -> List (Pair Int a)
 _dedupGo [] acc = reverse acc
@@ -50,24 +51,26 @@ _dedupBucket xs = _dedupGo xs []
 -- 空表用 `[||]` 字面量表示（non-expansive，`empty` / `fromList []` 在 OCaml 侧可泛化）；
 -- 第一次 `insert` 时才分配 32×32 桶。
 insert : Int -> a -> IntMap a -> IntMap a
-insert key v (MkIntMap outers) =
+insert key v (IntMap outers) =
   let
     base =
       if Base.Array.length outers == 0 then Base.Array.make 32 (Base.Array.make 32 []) else outers
     b = _hashInt key
-    oi = b / 32
-    ii = b - oi * 32
+    qi = b / 32
+    oi = natFromInt qi
+    ii = natFromInt (b - qi * 32)
     outer = Base.Array.get base oi
     inner = Base.Array.get outer ii
-  in MkIntMap (Base.Array.set base oi (Base.Array.set outer ii (Pair key v :: inner)))
+  in IntMap (Base.Array.set base oi (Base.Array.set outer ii (Pair key v :: inner)))
 
 lookup : Int -> IntMap a -> Maybe a
-lookup key (MkIntMap outers) = if Base.Array.length outers == 0 then Nothing
+lookup key (IntMap outers) = if Base.Array.length outers == 0 then Nothing
 else
   let
     b = _hashInt key
-    oi = b / 32
-    ii = b - oi * 32
+    qi = b / 32
+    oi = natFromInt qi
+    ii = natFromInt (b - qi * 32)
   in _lookupAssoc key (Base.Array.get (Base.Array.get outers oi) ii)
 
 member : Int -> IntMap a -> Bool
@@ -83,13 +86,13 @@ insertAll ((Pair k v) :: rest) t = insertAll rest (insert k v t)
 -- `insertAll` 相反：后面的条目覆盖前面的。两个语义都有编译器调用点（历史的
 -- `tblFromList` / `tblInsertAll`），不要合并。
 fromList : List (Pair Int a) -> IntMap a
-fromList [] = MkIntMap arrayEmpty
+fromList [] = IntMap arrayEmpty
 fromList ((Pair k v) :: rest) = insert k v (fromList rest)
 
 toList : IntMap a -> List (Pair Int a)
-toList (MkIntMap outers) =
+toList (IntMap outers) =
   concatMap (\outer => concatMap (\inner => _dedupBucket inner) (Base.Array.toList outer))
     (Base.Array.toList outers)
 
-size : IntMap a -> Int
+size : IntMap a -> Nat
 size t = Base.List.length (toList t)
