@@ -101,8 +101,13 @@ M34.1 基准/软门槛/分配统计（C34 关闭、C33 部分）；M34.2 热点�
 （`termHasAnyMeta` 快速路径；`Ec`/`Sols` 已是 O(1) cons 与增量 delta）；M34.5 的 check/build 级
 elab 缓存（`$TMPDIR/vuna-cache`，冷/热：check . 6.5s→25ms、build --no-compile 2.8s→21ms）；M34.6 读数
 随基准。M34.4 workspace 并行 check 完成（`prim_spawn`/`prim_wait`；check . 冷 6.5s→4.1s；根包串行 + 成员并行）；
-LSP 诊断帧进程内缓存（同 uri+内容重复请求命中，编辑后仍全量精化）。剩余：M34.3 的 hash-consing；M34.4 模块级并行 codegen（C35）；LSP 增量与 M34.5 接口摘要
-（C37：跨包元变量编号空间需要 per-module 编号或摘要含完全解出的 Term）；规范序列化格式（C32）。
+LSP 诊断帧进程内缓存（同 uri+内容重复请求命中，编辑后仍全量精化）。剩余（M34 收尾状态）：M34.5 接口摘要（C37）已修复 3 层真实缺陷——`quote 0` 的负索引
+（`NVar "b" (-1)`）、深度感知序列化（`DtProgram.depths` + `quote d` + 占位环境恢复）、
+自由变量过滤（`freeVarTerm` + dropped 安全阀）；剩 1 层（`runIO` 隐式 `a` 的求解路径，
+`Interp.vuna:70` 的 `b <> String`）未定位，作为独立后续阶段（跨包 elab 状态复用需要完整
+的作用域/实例化语义恢复）。其余剩余：M34.3 的 hash-consing（需全局 intern 表，与纯精化
+路径冲突）；M34.4 模块级并行 codegen（C35：codegen open 全序 + 构造子名非模块限定）；
+规范序列化格式（C32）。
 
 ### M35：并发 / 服务端
 
