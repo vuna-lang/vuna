@@ -2,10 +2,15 @@ module Vuna.Compiler.Loader.Flatten
   ( fixitiesForSource
   , fixitiesForSourceIn
   , loadModuleSource
+  , loadModuleSourceWithPreloaded
   , loadProject
   , loadProjectModules
+  , loadProjectModulesWithPreloaded
   , loadProjectSource
+  , loadProjectSourceWithPreloaded
+  , loadProjectWithPreloaded
   , resolveProject
+  , resolveProjectKeeping
   ) where
 
 -- Vuna.Compiler.Loader.Flatten：模块导出表计算、加载流程与 flatten（M24 后维护（源码重组）从 Loader.vuna 拆出）。
@@ -24,6 +29,7 @@ import Vuna.Compiler.Frontend.Parser
 import Vuna.Compiler.Loader.Fixity
 import Vuna.Compiler.Loader.Modules
 import Vuna.Compiler.Loader.Resolve
+import Vuna.Compiler.Debug
 import Vuna.Compiler.Packages.Pkg
 
 -- M31.2：imports 模块的**可见 fixity 表**（Module 里已含各自的 import 闭包）。
@@ -542,6 +548,7 @@ else case findModule modules name of
     path = firstOf found
   in let
     root = secondOf found
+    _ = note ("parse-module=" ++ name)
   in andThen (parseFileWithPath path (runIO (prim_readFile path))) (\src => case src of
     SourceFile hdr imports fixities decls => andThen (validateModuleHeader name hdr) (\_ => andThen (validateImports name imports) (\_ => andThen (implicitPrelude roots (rootName root) name imports) (\implicit => andThen (loadAll (fuel - 1) roots (rootName root) modules (name :: stack) (append imports implicit)) (\modules2 => andThen (computeExports modules2 name hdr imports decls) (\exports => let
       visible =
@@ -561,32 +568,46 @@ else case findModule modules name of
 -- （决定同包/跨包导出可见性与 manifest 能力声明）。
 -- loadProject 返回 flatten 前的形态（入口声明 + 依赖模块列表），供分离编译使用。
 loadProject : PackageContext -> String -> Result Project
-loadProject ctx entry = if runIO (prim_fileExists entry) then andThen (parseFileWithPath entry (runIO (prim_readFile entry))) (\src => case src of
+loadProject ctx entry = loadProjectWithPreloaded ctx entry []
+
+-- M34.5（S2）：接口模式加载。`preloaded` 是依赖包里**已解析**的模块（来自模块接口），
+-- 加载器把它们当「已加载模块」直接命中：不读源码、不 parse、不算导出表。本包模块与入口
+-- 仍按源码加载；模块表的顺序约定与 `loadAll` 一致（新加载模块前插，dependents-first），
+-- 所以调用方应把 `preloaded` 按 reverse(topo) 传入。
+loadProjectWithPreloaded : PackageContext -> String -> List Module -> Result Project
+loadProjectWithPreloaded ctx entry preloaded = if runIO (prim_fileExists entry) then andThen (parseFileWithPath entry (runIO (prim_readFile entry))) (\src => case src of
   SourceFile hdr imports fixities decls => case hdr of
     Just (ModDecl dname hasList items sp) => ldErr1 (ModuleHeaderInEntryFile entry) entry
     Nothing =>
       andThen (validateImports "<entry>" imports)
-        (\_ => andThen (implicitPrelude (contextRoots ctx) (contextPackageName ctx) "" imports) (\implicit => andThen (loadAll 1048576 (contextRoots ctx) (contextPackageName ctx) [] [] (append imports implicit)) (\modules => Ok (Project decls imports implicit modules (contextPackageName ctx) (contextCapabilities ctx) fixities))))
+        (\_ => andThen (implicitPrelude (contextRoots ctx) (contextPackageName ctx) "" imports) (\implicit => andThen (loadAll 1048576 (contextRoots ctx) (contextPackageName ctx) preloaded [] (append imports implicit)) (\modules => Ok (Project decls imports implicit modules (contextPackageName ctx) (contextCapabilities ctx) fixities))))
 )
 else ldErr1 (EntryFileNotFound entry) entry
 
 -- 库包入口：不带 app/Main.vuna 的包，以 [export].modules 作为根模块集合。
 loadProjectModules : PackageContext -> List String -> Result Project
-loadProjectModules ctx names =
+loadProjectModules ctx names = loadProjectModulesWithPreloaded ctx names []
+
+loadProjectModulesWithPreloaded : PackageContext -> List String -> List Module -> Result Project
+loadProjectModulesWithPreloaded ctx names preloaded =
   let
     entryImports = map (\n => Import n False Nothing (Span "" 0 0 0 0)) names
-  in andThen (loadAll 1048576 (contextRoots ctx) (contextPackageName ctx) [] [] entryImports)
+  in andThen (loadAll 1048576 (contextRoots ctx) (contextPackageName ctx) preloaded [] entryImports)
     (\modules => Ok (Project [] [] [] modules (contextPackageName ctx) (contextCapabilities ctx) []))
 
 -- 入口以**源码字符串**给出（REPL 的表达式求值）：入口不落盘（import 仍按上下文的
 -- roots 从磁盘解析）；隐式 Prelude 与文件入口同规则（ad-hoc 单文件也自动注入）。
 loadProjectSource : PackageContext -> String -> String -> Result Project
-loadProjectSource ctx label source = andThen (parseFileWithPath label source) (\src => case src of
+loadProjectSource ctx label source = loadProjectSourceWithPreloaded ctx label source []
+
+-- M34.5（LSP/REPL 消费接口）：入口以源码字符串给出，依赖包模块可预置（零 parse）。
+loadProjectSourceWithPreloaded : PackageContext -> String -> String -> List Module -> Result Project
+loadProjectSourceWithPreloaded ctx label source preloaded = andThen (parseFileWithPath label source) (\src => case src of
   SourceFile hdr imports fixities decls => case hdr of
     Just (ModDecl dname hasList items sp) => ldErr1 (ModuleHeaderInEntrySource label) label
     Nothing =>
       andThen (validateImports "<entry>" imports)
-        (\_ => andThen (implicitPrelude (contextRoots ctx) (contextPackageName ctx) "" imports) (\implicit => andThen (loadAll 1048576 (contextRoots ctx) (contextPackageName ctx) [] [] (append imports implicit)) (\modules => Ok (Project decls imports implicit modules (contextPackageName ctx) (contextCapabilities ctx) fixities))))
+        (\_ => andThen (implicitPrelude (contextRoots ctx) (contextPackageName ctx) "" imports) (\implicit => andThen (loadAll 1048576 (contextRoots ctx) (contextPackageName ctx) preloaded [] (append imports implicit)) (\modules => Ok (Project decls imports implicit modules (contextPackageName ctx) (contextCapabilities ctx) fixities))))
 )
 
 -- 以**源码字符串**给出一个**库模块**（M30 · LSP）：源码允许带 `module ... where`
@@ -595,10 +616,14 @@ loadProjectSource ctx label source = andThen (parseFileWithPath label source) (\
 -- 无模块头时退化为入口语义（与 `loadProjectSource` 相同）。
 -- 入口声明保持为空：调用方（LSP）只需要逐模块已解析的声明。
 loadModuleSource : PackageContext -> String -> String -> Result Project
-loadModuleSource ctx label source = andThen (parseFileWithPath label source) (\src => case src of
+loadModuleSource ctx label source = loadModuleSourceWithPreloaded ctx label source []
+
+-- M34.5（LSP）：依赖包模块可预置（来自接口的 `Module`），只 parse 当前文件与同包源码。
+loadModuleSourceWithPreloaded : PackageContext -> String -> String -> List Module -> Result Project
+loadModuleSourceWithPreloaded ctx label source preloaded = andThen (parseFileWithPath label source) (\src => case src of
   SourceFile hdr imports fixities decls => case hdr of
-    Nothing => loadProjectSource ctx label source
-    Just (ModDecl name hasList items sp) => andThen (validateImports name imports) (\_ => andThen (implicitPrelude (contextRoots ctx) (contextPackageName ctx) name imports) (\implicit => andThen (loadAll 1048576 (contextRoots ctx) (contextPackageName ctx) [] [] (append imports implicit)) (\modules => andThen (computeExports modules name hdr imports decls) (\exports => let
+    Nothing => loadProjectSourceWithPreloaded ctx label source preloaded
+    Just (ModDecl name hasList items sp) => andThen (validateImports name imports) (\_ => andThen (implicitPrelude (contextRoots ctx) (contextPackageName ctx) name imports) (\implicit => andThen (loadAll 1048576 (contextRoots ctx) (contextPackageName ctx) preloaded [] (append imports implicit)) (\modules => andThen (computeExports modules name hdr imports decls) (\exports => let
       visible =
         dedupeFixities (append fixities (visibleFixitiesOf modules (append imports implicit)))
     in Ok
@@ -636,19 +661,25 @@ fixitiesForSource ctx label source =
 
 -- 返回逐模块已解析（未 flatten）的声明，供 M12 分离编译使用。
 resolveProject : Project -> Result (Pair (List Decl) (List Module))
-resolveProject (Project decls imports implicit modules entryPkg entryCaps entryFixes) =
+resolveProject project = resolveProjectKeeping [] project
+
+-- M34.5（S2）：`keep` 里的模块已经解析过（来自接口文件），原样保留、不重解析。
+resolveProjectKeeping : List String -> Project -> Result (Pair (List Decl) (List Module))
+resolveProjectKeeping keep (Project decls imports implicit modules entryPkg entryCaps entryFixes) =
   let
     entryTable =
       tableOf
         (dedupeFixities (append entryFixes (visibleFixitiesOf modules (append imports implicit))))
   in andThen (reorderProgram entryTable decls)
-    (\decls2 => andThen (resolveEntry modules entryPkg entryCaps (append imports implicit) decls2) (\entryDecls => andThen (resolveModulesKeep modules) (\modules2 => Ok (Pair entryDecls modules2))))
+    (\decls2 => andThen (resolveEntry modules entryPkg entryCaps (append imports implicit) decls2) (\entryDecls => andThen (resolveModulesKeep keep modules) (\modules2 => Ok (Pair entryDecls modules2))))
 
-resolveModulesKeep : List Module -> Result (List Module)
-resolveModulesKeep [] = Ok []
-resolveModulesKeep ((Module name pkg imports implicit decls exports mcaps fixities) :: rest) =
-  andThen (reorderProgram (tableOf fixities) decls)
-    (\decls2 => andThen (andThen (resolveProgram (Module name pkg imports implicit decls2 exports mcaps fixities :: rest) name name (namespacesOf decls2) (append imports implicit) decls2) (\d => checkEffectsBuiltins name pkg mcaps d)) (\d1 => andThen (resolveModulesKeep rest) (\d2 => Ok (Module name pkg imports implicit d1 exports mcaps fixities :: d2))))
+resolveModulesKeep : List String -> List Module -> Result (List Module)
+resolveModulesKeep keep [] = Ok []
+resolveModulesKeep keep ((Module name pkg imports implicit decls exports mcaps fixities) :: rest) =
+  if memName name keep then andThen (resolveModulesKeep keep rest)
+    (\d2 => Ok (Module name pkg imports implicit decls exports mcaps fixities :: d2))
+  else andThen (reorderProgram (tableOf fixities) decls)
+    (\decls2 => andThen (andThen (resolveProgram (Module name pkg imports implicit decls2 exports mcaps fixities :: rest) name name (namespacesOf decls2) (append imports implicit) decls2) (\d => checkEffectsBuiltins name pkg mcaps d)) (\d1 => andThen (resolveModulesKeep keep rest) (\d2 => Ok (Module name pkg imports implicit d1 exports mcaps fixities :: d2))))
 
 dropPastSlash : List Int -> List Int
 dropPastSlash [] = []

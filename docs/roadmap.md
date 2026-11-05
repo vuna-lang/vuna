@@ -130,7 +130,7 @@ LSP 诊断帧进程内缓存（同 uri+内容重复请求命中，编辑后仍�
 构建侧分层并行已在 `build.sh` 层内 `&` + `wait`；codegen 进程内仍串行，作为后续项保留）；
 规范序列化格式（C32）。
 
-**TTC 模块化精化收尾（2026-11）**：AST 缓存已落地（`Loader/Flatten.parseFileWithPath`，key = schema + 路径 + 源内容，5 条独立 lane + 回读校验，`$TMPDIR/vuna-cache/ast`，原子写）。接口摘要（第 1 步，包级）**已完成**：闭合摘要模型（`CachedProgram` 不含 sols/next）+ `deftbl` 只装定义体（修掉 `Eq Type` 假歧义的根因）+ 深度感知 zonk + 读侧安全阀 + 传递依赖 + `check` 期启用；仓库自身 `check .` 摘要路径通过（根包 ~8.0 s vs 全量 ~14.7 s，依赖缓存预热前提）。第 2 步（**模块级**接口 / 模块级签名隔离）仍在后续；第 3 步（codegen 模块级缓存）的依赖模型前提已就绪（C35 已关闭：直接依赖 + 全限定跨单元引用 + 分层并行构建），模块级复用本身待做。开放项见 debt C37。
+**TTC 模块化精化收尾（2026-11）**：AST 缓存已落地（`Loader/Flatten.parseFileWithPath`，key = schema + 路径 + 源内容，5 条独立 lane + 回读校验，`$TMPDIR/vuna-cache/ast`，原子写）。接口摘要分两步：**包级**（M34.5，已完成：`CachedProgram` 闭合模型 + `deftbl` 只装定义体 + 深度感知 zonk + 读侧安全阀 + 传递依赖）；**模块级**（S1/S2，已完成依赖侧）：`Driver.Iface.ModuleIface`（闭合产物 + 已解析 decls + exports/fixities/imports + `miIfaceHash`/`miDepHashes`）、每模块 iface 文件 + 包级 manifest（写侧只重写变化模块，mtime 快判可选）、依赖模块由 Loader 预置（零 parse/resolve）、接口哈希链校验与回退、`check`/`build` 共用接口路径（[cache.md](reference/cache.md)）。第 2 步已完成：**包内逐模块增量**（S4：干净模块预置、只精化脏模块、依赖脏则依赖者脏）；剩余模块签名隔离；第 3 步 codegen 单元级缓存已落地（S5：`VUNA_UNIT_CACHE=1` opt-in，按单元 key 复用 SplitFile + 规范化顺序）；第 4 步 LSP/REPL 已接接口（`VUNA_IFACE_TOOL=1` opt-in；惰性闭包 + 会话缓存待做）。开放项见 debt C37/C32。
 
 ### M35：并发 / 服务端
 

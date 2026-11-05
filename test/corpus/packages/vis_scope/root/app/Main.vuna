@@ -1,0 +1,7 @@
+import VisData
+import VisTrait
+
+-- 只 import trait/data，不 import 提供实例的 VisInst：应报 TC_NoInstanceFound
+--（全量与摘要路径必须一致）。
+main : String
+main = pretty Red

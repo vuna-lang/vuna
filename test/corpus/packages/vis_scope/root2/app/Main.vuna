@@ -1,0 +1,6 @@
+import VisData
+import VisTrait
+import VisInst
+
+main : String
+main = pretty Red

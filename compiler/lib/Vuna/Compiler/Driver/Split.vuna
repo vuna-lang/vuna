@@ -1,6 +1,7 @@
 module Vuna.Compiler.Driver.Split
   ( SplitFile(..)
   , buildScript
+  , canonicalTopo
   , splitGraph
   , splitLayers
   , writeSplitFiles
@@ -228,3 +229,97 @@ joinCmxs : List String -> String
 joinCmxs [] = ""
 joinCmxs ([name]) = name ++ ".cmx"
 joinCmxs (name :: rest) = name ++ ".cmx " ++ joinCmxs rest
+
+-- M34.5（S5）：把 split 文件列表规范化为**确定性拓扑序**（依赖在前；同层按名字哈希
+-- 排序）。单元缓存复用旧 `SplitFile` 后列表顺序会随命中集合变化，build.sh 的层/顺序
+-- 不能因此漂移（否则增量/全量产物不一致）。深度用迭代松弛算（与列表顺序无关）。
+unitTieKey : String -> Int
+unitTieKey name = strHash name * 1000003 + strHash ("t:" ++ name)
+
+findFileNamed : List SplitFile -> String -> Maybe SplitFile
+findFileNamed [] _ = Nothing
+findFileNamed (f :: rest) name =
+  if splitName f == name ++ ".ml" then Just f else findFileNamed rest name
+
+unitDepthLookup : List (Pair String Int) -> String -> Int
+unitDepthLookup [] _ = 0
+unitDepthLookup (p :: rest) name =
+  if firstOf p == name then secondOf p else unitDepthLookup rest name
+
+maxDepth : List (Pair String Int) -> List String -> Int
+maxDepth memo [] = 0 - 1
+maxDepth memo (d :: rest) =
+  let
+    dd = unitDepthLookup memo d
+    mm = maxDepth memo rest
+  in if dd > mm then dd else mm
+
+stepDepthEntry : List (Pair String Int) -> Pair String (List String) -> Pair String Int
+stepDepthEntry memo p =
+  let
+    md = maxDepth memo (secondOf p)
+  in Pair (firstOf p) (if md < 0 then 0 else md + 1)
+
+stepDepths : List (Pair String Int) -> List (Pair String (List String)) -> List (Pair String Int)
+stepDepths memo [] = []
+stepDepths memo (p :: rest) = stepDepthEntry memo p :: stepDepths memo rest
+
+sameDepthValue : List (Pair String Int) -> List (Pair String Int) -> Bool
+sameDepthValue a b = length a == length b && allDepthIn a b
+
+allDepthIn : List (Pair String Int) -> List (Pair String Int) -> Bool
+allDepthIn [] _ = True
+allDepthIn ((Pair n d) :: rest) ys = unitDepthLookup ys n == d && allDepthIn rest ys
+
+fixDepths : Int -> List (Pair String (List String)) -> List (Pair String Int) -> List (Pair String Int)
+fixDepths fuel graph memo = if fuel <= 0 then memo
+else
+  let
+    next = stepDepths memo graph
+  in if sameDepthValue next memo then memo else fixDepths (fuel - 1) graph next
+
+depthEntryLess : Pair String Int -> Pair String Int -> Bool
+depthEntryLess a b =
+  if secondOf a /= secondOf b then secondOf a < secondOf b
+  else unitTieKey (firstOf a) <= unitTieKey (firstOf b)
+
+insertDepthEntry : Pair String Int -> List (Pair String Int) -> List (Pair String Int)
+insertDepthEntry x [] = [x]
+insertDepthEntry x (y :: rest) =
+  if depthEntryLess x y then x :: y :: rest else y :: insertDepthEntry x rest
+
+sortDepthEntries : List (Pair String Int) -> List (Pair String Int)
+sortDepthEntries [] = []
+sortDepthEntries (x :: rest) = insertDepthEntry x (sortDepthEntries rest)
+
+filesOfDepthEntries : List SplitFile -> List (Pair String Int) -> List SplitFile
+filesOfDepthEntries files [] = []
+filesOfDepthEntries files (p :: rest) = case findFileNamed files (firstOf p) of
+  Just f => f :: filesOfDepthEntries files rest
+  Nothing => filesOfDepthEntries files rest
+
+graphName : Pair String (List String) -> String
+graphName p = firstOf p
+
+canonicalTopo : List SplitFile -> List SplitFile
+canonicalTopo files =
+  let
+    graph = splitGraph files
+    names = map graphName graph
+    baseMemo = map (\p => Pair (firstOf p) 0) graph
+    depths = fixDepths (length names + 2) graph baseMemo
+    ordered =
+      sortDepthEntries (map (\p => Pair (firstOf p) (unitDepthLookup depths (firstOf p))) graph)
+  in map normalizeFileDeps (filesOfDepthEntries files ordered)
+
+sortDepsByTie : List String -> List String
+sortDepsByTie [] = []
+sortDepsByTie (x :: rest) = insertDep x (sortDepsByTie rest)
+
+insertDep : String -> List String -> List String
+insertDep x [] = [x]
+insertDep x (y :: rest) =
+  if unitTieKey x <= unitTieKey y then x :: y :: rest else y :: insertDep x rest
+
+normalizeFileDeps : SplitFile -> SplitFile
+normalizeFileDeps f = SplitFile (splitName f) (splitText f) (sortDepsByTie (splitDeps f))

@@ -25,7 +25,7 @@ s1 == s2（文件集合逐字节）即 fixed point
 `build --no-compile --out` 并与种子 `diff -r`，同样要求逐字节一致后才替换 `seed/`。
 
 seed 与 `compile` / `build` 的目录产物都由**同一个** DT split codegen 生成
-（`Codegen.Split.generateDtSplitProgram`，包级入口 `Driver.Dt.dtSplitProject`；输出模型是
+（`Codegen.Split.generateDtSplitProgram`，入口 `Driver.Dt.dtSplitProjectParts`（接口路径 `dtSplitProjectWithIfaces`）；输出模型是
 `Driver.Split.SplitFile` + `Driver.Split.buildScript`）：每个源码模块一个 `.ml`，另有共享
 runtime 模块、`Main.ml` 与 `build.sh`；**不生成 `.mli`**。没有第二套输出模型或 `--split`
 开关。

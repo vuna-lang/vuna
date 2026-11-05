@@ -3,12 +3,13 @@
 本文是 vuna 仓库的**子系统地图**：回答“改一个功能要在哪些模块动手、该跑哪段测试”。逐模块
 职责见 [compiler.md](reference/compiler.md)，Core / 精化器见 [core.md](reference/core.md)，
 语义见 [language.md](reference/language.md) / [type-system.md](reference/type-system.md) / [qtt.md](reference/qtt.md)，
-自举 / 内建原语能力见 [bootstrap.md](reference/bootstrap.md) / [primitives.md](reference/primitives.md)。
+自举 / 内建原语能力见 [bootstrap.md](reference/bootstrap.md) / [primitives.md](reference/primitives.md)，
+模块级接口缓存见 [cache.md](reference/cache.md)。
 
 ## 仓库分层
 
 ```text
-compiler/lib/Vuna/Compiler/   （59 个模块：58 个导出 + 内部 Debug；目录即层：
+compiler/lib/Vuna/Compiler/   （60 个模块：59 个导出 + 内部 Debug；目录即层：
                                 Frontend → Packages → Loader → Core → Elab → Codegen → Driver）
 ├─ Common.vuna                公共门面（Base 类型 + Pos/Span/诊断）
 ├─ Intrinsics.vuna            内建声明唯一真源（名字/签名/arity/能力/runtime/可见性）
@@ -20,7 +21,9 @@ compiler/lib/Vuna/Compiler/   （59 个模块：58 个导出 + 内部 Debug；�
 │                             Data Trait InstName Driver Termination
 │                             Prelude Match Records Derive     双向精化
 ├─ Codegen.vuna + Codegen/    Decl Erase Term Assembly Split  擦除检查 + OCaml 生成
-└─ Driver/                    Split Dt Compile CompilerCli     输出模型 / facade / 编译入口 / CLI
+└─ Driver/                    Split Dt Compile CompilerCli      输出模型 / facade / 编译入口 / CLI
+  PerfCache                          codegen 单元缓存（S5）
+                              Owner Iface Cache                 归属表 / 模块接口 / 包级摘要
 根包 vuna（模块根 lib/，入口 app/Main.vuna）：Cli/Interp/Fmt/Lint/Index（门面+子模块）、
   Repl/Run/Doc（+子模块）/Search（+子模块）/Sig/Lsp/Json/TestRunner/Files
 依赖图：vuna → vuna-compiler → vuna-base（根包也直接依赖 base）
@@ -93,7 +96,7 @@ data（`Base.Bool.Bool` / `Base.List.List` / `Base.Nat.Nat`），不按短名。
 走同一精化链后由 `Driver.Dt.dtEvalFile` 求 `main`（纯求值：只展示 `Int`/`String`/`Bool`，
 任何 `main : IO a` 报错并提示 `compile`）。
 
-**入口符号**：`Driver.Dt.dtCheck` / `dtCheckLibrary` / `dtSplitProject` / `dtEvalFile` /
+**入口符号**：`Driver.Dt.dtCheck` / `dtCheckWithProgramParts` / `dtCheckPackageWithIfacesParts` / `dtSplitProjectParts` / `dtEvalFile` /
 `dtEvalExpr`；`Loader.Flatten.loadProject*` / `resolveProject`；`Elab.Driver.elabProgramFull`
 （洞目标 `goalsOfProgram`）、`Elab.Termination.checkTerminationDecls`、`Elab.Match.multiToExpr`、
 `Core.Eval` / `Core.Conv`；`Intrinsics.findIntrinsic`、`Loader.Resolve.checkEffectsBuiltins`；
@@ -168,7 +171,7 @@ sh s1/build.sh）→ stage1 →（build --no-compile --out s2 compiler）→ dif
  → vuna-compiler build . → .output/bin/vuna（同为逐模块输出）
 ```
 
-命令 / 入口：`build --no-compile --out`（`compileToDir` → `dtSplitProject` →
+命令 / 入口：`build --no-compile --out`（`compileToDir` → `dtSplitProjectParts` / `dtSplitProjectWithIfaces` →
 `generateDtSplitProgram`）、`nix/seed-rotate.sh`、`checks.seed-selfhost`。**硬不变量**：
 旧 seed 能编译新源码；rotation 后 stage1 == stage2；seed 只含 compiler 包入口闭包。
 测试：第 13/38 段 + `checks.seed-selfhost`，详见 [bootstrap.md](reference/bootstrap.md)。

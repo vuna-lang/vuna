@@ -1,0 +1,7 @@
+module VisData (Color(..)) where
+
+-- M34.5（S6）可见性夹具：data 与 trait 在 dep 的可见模块里，实例在**未被 import 的**
+-- 模块 `VisInst` 里。摘要路径不得把整包 dep 的实例并入视图，因此 root 应报 no instance。
+data Color : Type where
+  Red : Color
+  Blue : Color

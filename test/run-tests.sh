@@ -1333,23 +1333,70 @@ mkdir -p "$summ_cache"
 summ_vuna=$(command -v "$VUNA" 2>/dev/null || true)
 [ -n "$summ_vuna" ] || summ_vuna="$VUNA"
 
-# 44a) 依赖闭包自底向上预热：base（无依赖）→ dep（库包，消费 base 摘要）→ root。
-if TMPDIR="$summ_cache" "$summ_vuna" check "$VUNA_BASE" >/dev/null 2>&1; then
+# 44a) 依赖闭包自底向上预热：base（无依赖）→ dep（库包，消费 base 接口）→ root。
+#      `VUNA_IFACE_SELFTEST=1` 让写侧读回校验（Marshal 稳定性 / 包接口 / 模块名集合）。
+if TMPDIR="$summ_cache" VUNA_IFACE_SELFTEST=1 "$summ_vuna" check "$VUNA_BASE" --debug-perf >"$tmp/summ-base.log" 2>&1; then
   ok
 else
-  bad "summary base check exit" "0" "failed"
+  bad "summary base check exit" "0" "$(tail -3 "$tmp/summ-base.log")"
 fi
-if TMPDIR="$summ_cache" "$summ_vuna" check "$summ_pkg/dep" >"$tmp/summ-dep.log" 2>&1; then
+check_contains "summary base iface selftest" "$(cat "$tmp/summ-base.log")" "iface-selftest=ok"
+if TMPDIR="$summ_cache" VUNA_IFACE_SELFTEST=1 "$summ_vuna" check "$summ_pkg/dep" --debug-perf >"$tmp/summ-dep.log" 2>&1; then
   ok
 else
   bad "summary dep check exit" "0" "$(tail -3 "$tmp/summ-dep.log")"
 fi
+check_contains "summary dep iface selftest" "$(cat "$tmp/summ-dep.log")" "iface-selftest=ok"
 
-# 44b) 根包：依赖摘要命中 ⇒ 摘要路径；check 通过。
-summ_root=$(TMPDIR="$summ_cache" "$summ_vuna" check "$summ_pkg/root" --debug-perf 2>&1)
+# 44a-2) per-module 布局：manifest + 每模块一个 iface 文件；删掉 check 缓存后重算但接口
+#        未变 ⇒ 写侧只重写 manifest（`iface-write=0/`）。
+summ_iface_dir=$(ls -d "$summ_cache"/vuna-cache/iface-* 2>/dev/null | head -1)
+if [ -n "$summ_iface_dir" ] && [ -f "$summ_iface_dir/manifest" ] && ls "$summ_iface_dir"/*.iface >/dev/null 2>&1; then
+  ok
+else
+  bad "summary per-module iface files" "manifest + *.iface" "missing under $summ_iface_dir"
+fi
+find "$summ_cache"/vuna-cache -type d -name check -prune -exec rm -rf {} + 2>/dev/null || true
+if TMPDIR="$summ_cache" VUNA_IFACE_SELFTEST=1 "$summ_vuna" check "$VUNA_BASE" --debug-perf >"$tmp/summ-base2.log" 2>&1; then
+  check_contains "summary per-module rewrite skip" "$(cat "$tmp/summ-base2.log")" "iface-write=0/"
+else
+  bad "summary per-module rewrite recheck" "0" "$(tail -3 "$tmp/summ-base2.log")"
+fi
+
+# 44a-3) 损坏的模块接口文件：读侧按自描述头拒绝 ⇒ 回退全量；写侧强制全量重写并修复
+#        （不会因为「manifest 说哈希没变」而永久跳过损坏文件）。
+corrupt_file=$(ls "$summ_iface_dir"/*.iface 2>/dev/null | head -1)
+printf 'not-a-valid-iface' > "$corrupt_file"
+rm -rf "$summ_cache"/vuna-cache/*/check
+if TMPDIR="$summ_cache" VUNA_IFACE_SELFTEST=1 "$summ_vuna" check "$VUNA_BASE" --debug-perf >"$tmp/summ-corrupt.log" 2>&1; then
+  check_contains "summary corrupt iface falls back" "$(cat "$tmp/summ-corrupt.log")" "cache-path=summary deps=0"
+  check_contains "summary corrupt iface repaired" "$(cat "$tmp/summ-corrupt.log")" "iface-selftest=ok"
+  check_contains "summary corrupt iface rewritten" "$(head -c 40 "$corrupt_file")" "vuna-iface-file 1"
+else
+  bad "summary corrupt iface check" "0" "$(tail -3 "$tmp/summ-corrupt.log")"
+fi
+
+# 44b) 根包（入口-only 包，没有 lib 模块接口可写）：依赖接口命中 ⇒ 摘要路径；依赖模块
+#     **不再 parse 源码**；check 通过。
+summ_root=$(TMPDIR="$summ_cache" VUNA_IFACE_SELFTEST=1 "$summ_vuna" check "$summ_pkg/root" --debug-perf 2>&1)
 summ_root_code=$?
 check_eq "summary root check exit" "0" "$summ_root_code"
 check_contains "summary path used" "$summ_root" "cache-path=summary deps=2"
+if printf '%s' "$summ_root" | grep -q "parse-module=Dep"; then
+  bad "summary dep module not parsed" "absent" "found parse-module=Dep"
+else
+  ok
+fi
+
+
+# 44b-2) mtime 快路径：独立缓存里以 `VUNA_CACHE_MTIME=1` 预热 base/dep 后，根包仍命中摘要
+#        路径（读侧用 mtime+size 快判；写侧仍存内容哈希）。
+summ_mt_cache="$tmp/summary-mtime-cache"
+mkdir -p "$summ_mt_cache"
+TMPDIR="$summ_mt_cache" VUNA_CACHE_MTIME=1 "$summ_vuna" check "$VUNA_BASE" >/dev/null 2>&1
+TMPDIR="$summ_mt_cache" VUNA_CACHE_MTIME=1 "$summ_vuna" check "$summ_pkg/dep" >/dev/null 2>&1
+summ_root_mt=$(TMPDIR="$summ_mt_cache" VUNA_CACHE_MTIME=1 "$summ_vuna" check "$summ_pkg/root" --debug-perf 2>&1)
+check_contains "summary mtime fast path" "$summ_root_mt" "cache-path=summary deps=2"
 
 # 44c) 同一份源码全量路径也通过；构建产物正确（摘要只服务 check，codegen 仍全量）。
 if TMPDIR="$tmp/summary-full-cache" VUNA_ELAB_FULL=1 "$summ_vuna" check "$summ_pkg/root" >/dev/null 2>&1; then ok; else bad "summary full-path check exit" "0" "$?"; fi
@@ -1370,6 +1417,21 @@ summ_bad_out=$(TMPDIR="$summ_cache" "$summ_vuna" check "$summ_bad" 2>&1)
 summ_bad_code=$?
 if [ "$summ_bad_code" -ne 0 ]; then ok; else bad "summary negative check exit" "non-zero" "$summ_bad_code"; fi
 check_contains "summary negative diagnostic" "$summ_bad_out" "TC_TypeMismatch"
+
+# 44c-2) 模块接口构建路径与全量构建路径的 codegen 产物逐字节一致（只 codegen、不链接）。
+rm -rf "$tmp/summary-gen-iface" "$tmp/summary-gen-full"
+mkdir -p "$tmp/summary-gen-cache-iface" "$tmp/summary-gen-cache-full"
+if TMPDIR="$tmp/summary-gen-cache-iface" "$summ_vuna" compile "$summ_pkg/root" "$tmp/summary-gen-iface" >/dev/null 2>&1 \
+  && TMPDIR="$tmp/summary-gen-cache-full" VUNA_ELAB_FULL=1 "$summ_vuna" compile "$summ_pkg/root" "$tmp/summary-gen-full" >/dev/null 2>&1; then
+  if diff -r "$tmp/summary-gen-iface" "$tmp/summary-gen-full" >"$tmp/summary-gen.diff" 2>&1; then
+    ok
+  else
+    bad "summary codegen iface/full identical" "identical" "$(head -10 "$tmp/summary-gen.diff")"
+  fi
+else
+  bad "summary codegen iface/full build" "exit 0" "failed"
+fi
+
 summ_bad_full=$(TMPDIR="$tmp/summary-bad-full" VUNA_ELAB_FULL=1 "$summ_vuna" check "$summ_bad" 2>&1)
 summ_bad_full_code=$?
 if [ "$summ_bad_full_code" -ne 0 ]; then ok; else bad "summary negative full-path exit" "non-zero" "$summ_bad_full_code"; fi
@@ -1581,6 +1643,92 @@ case "$m38_noloc" in
   *"-->"*) bad "m38 diag no-location single line" "no snippet" "$m38_noloc" ;;
   *) ok ;;
 esac
+# 44f) 包内逐模块增量（S4）：复制 base，改一个叶子模块后重算——其余模块复用、只 parse
+#      改动模块、第二次运行收敛（全部干净、零重写）、manifest 与全量路径逐字节一致，
+#      注入类型错误后增量与全量诊断逐字节一致。
+incr_base="$tmp/incr-base"
+incr_cache="$tmp/incr-cache"
+cp -r "$VUNA_BASE" "$incr_base"
+if ! TMPDIR="$incr_cache" "$summ_vuna" check "$incr_base" >/dev/null 2>&1; then
+  bad "summary incremental cold check" "0" "cold base copy failed"
+else
+  printf '\nincrProbe : Int\nincrProbe = 1\n' >> "$incr_base/lib/Base/Error.vuna"
+  incr_log=$(TMPDIR="$incr_cache" "$summ_vuna" check "$incr_base" --debug-perf 2>&1)
+  incr_code=$?
+  check_eq "summary incremental check exit" "0" "$incr_code"
+  incr_total=$(find "$incr_cache"/vuna-cache/iface-* -name "*.iface" 2>/dev/null | wc -l)
+  incr_clean=$(printf %s "$incr_log" | sed -n "s/.*cache-own-clean=\([0-9][0-9]*\).*/\1/p")
+  if [ -n "$incr_clean" ] && [ "$incr_total" -gt 0 ] && [ "$incr_clean" -lt "$incr_total" ]; then ok; else bad "summary incremental reuses clean modules" "0 < clean < $incr_total" "clean=$incr_clean total=$incr_total"; fi
+  incr_parse=$(printf %s "$incr_log" | grep -c "parse-module=Base\." || true)
+  check_eq "summary incremental parses only dirty modules" "$((incr_total - incr_clean))" "$incr_parse"
+  incr_writes=$(printf %s "$incr_log" | grep -o "iface-write=[0-9]*" | head -1 | cut -d= -f2)
+  if [ -n "$incr_writes" ] && [ "$incr_writes" -ge 1 ]; then ok; else bad "summary incremental writes changed module" ">=1" "writes=$incr_writes"; fi
+  rm -rf "$incr_cache"/vuna-cache/*/check
+  incr_log2=$(TMPDIR="$incr_cache" "$summ_vuna" check "$incr_base" --debug-perf 2>&1)
+  check_contains "summary incremental converged clean" "$incr_log2" "cache-own-clean=$incr_total"
+  check_contains "summary incremental converged writes" "$incr_log2" "iface-write=0/"
+  printf '\nbadProbe : Int\nbadProbe = "x"\n' >> "$incr_base/lib/Base/Error.vuna"
+  TMPDIR="$incr_cache" "$summ_vuna" check "$incr_base" >"$tmp/incr-bad.log" 2>&1
+  incr_bad=$(grep -vE "^(DEBUG|PERF) " "$tmp/incr-bad.log")
+  TMPDIR="$tmp/incr-bad-full" VUNA_ELAB_FULL=1 "$summ_vuna" check "$incr_base" >"$tmp/incr-bad-full.log" 2>&1
+  full_bad=$(grep -vE "^(DEBUG|PERF) " "$tmp/incr-bad-full.log")
+  check_contains "summary incremental negative diagnostic" "$incr_bad" "TC_TypeMismatch"
+  check_eq "summary incremental/full diagnostics identical" "$full_bad" "$incr_bad"
+fi
+
+# 44g) LSP/REPL 消费依赖接口（`VUNA_IFACE_TOOL=1`，默认关闭）：预热依赖接口后，
+#      REPL 求值走接口路径（`iface-source=repl`），LSP 诊断链仍全部通过；默认路径不变。
+repo_iface_repl=$( cd .. && TMPDIR="$repo_cache" VUNA_IFACE_TOOL=1 VUNA_DEBUG_PERF=1 sh -c 'printf "x : Int\nx = 1 + 1\nx + 40\n:q\n" | "$0" repl' "$summ_vuna" 2>&1 )
+check_contains "summary repl consumes dep ifaces" "$repo_iface_repl" "iface-source=repl modules="
+check_contains "summary repl iface eval" "$repo_iface_repl" "42"
+if ( cd .. && TMPDIR="$repo_cache" VUNA_IFACE_TOOL=1 sh test/corpus/lsp/smoke.sh "$summ_vuna" >/dev/null 2>&1 ); then
+  ok
+else
+  bad "summary lsp consumes dep ifaces" "0" "smoke failed"
+fi
+
+# 44h) codegen 单元级缓存（S5）：改入口后重建——依赖单元命中缓存，产物与干净重建逐字节一致。
+unit_pkg="$tmp/unit-pkg"
+cp -r "$summ_pkg" "$unit_pkg"
+sed -i "s|\.\./\.\./\.\./\.\./\.\./base|$VUNA_BASE|" "$unit_pkg/root/vuna.toml"
+sed -i "s|\.\./\.\./\.\./\.\./\.\./base|$VUNA_BASE|" "$unit_pkg/dep/vuna.toml" 2>/dev/null || true
+unit_cache="$tmp/unit-cache"
+rm -rf "$tmp/unit-gen1" "$tmp/unit-gen2"
+if TMPDIR="$unit_cache" VUNA_UNIT_CACHE=1 "$summ_vuna" build --no-compile --out "$tmp/unit-gen1" "$unit_pkg/root" >/dev/null 2>&1; then
+  printf '\nunitProbe : Int\nunitProbe = 1\n' >> "$unit_pkg/root/app/Main.vuna"
+  unit_log=$(TMPDIR="$unit_cache" VUNA_UNIT_CACHE=1 VUNA_DEBUG_PERF=1 "$summ_vuna" build --no-compile --out "$tmp/unit-gen1" "$unit_pkg/root" 2>&1)
+  check_contains "summary unit cache hit" "$unit_log" "unit-cache-hit "
+  TMPDIR="$tmp/unit-fresh-cache" VUNA_UNIT_CACHE=1 "$summ_vuna" build --no-compile --out "$tmp/unit-gen2" "$unit_pkg/root" >/dev/null 2>&1
+  if diff -r "$tmp/unit-gen1" "$tmp/unit-gen2" >"$tmp/unit-gen.diff" 2>&1; then
+    ok
+  else
+    bad "summary unit cache output identical" "identical" "$(head -5 "$tmp/unit-gen.diff")"
+  fi
+else
+  bad "summary unit cache cold build" "0" "failed"
+fi
+
+# 44i) 依赖可见性收敛（S6）：dep 的实例在**未被 import** 的模块里时，摘要路径与全量路径
+#      必须一致地拒绝（不能把整包实例并入视图）；import 后两条路径都必须接受。
+vis_base="$tmp/vis-base"
+cp -r "$VUNA_BASE" "$vis_base"
+vis_pkgdir="$tmp/vis-pkg"
+rm -rf "$vis_pkgdir"
+cp -r corpus/packages/vis_scope/. "$vis_pkgdir/"
+sed -i "s|\.\./\.\./\.\./\.\./\.\./base|$vis_base|" "$vis_pkgdir/dep/vuna.toml" "$vis_pkgdir/root/vuna.toml" "$vis_pkgdir/root2/vuna.toml"
+vis_cache="$tmp/vis-cache"
+if TMPDIR="$vis_cache" "$VUNA" check "$vis_base" >/dev/null 2>&1 && TMPDIR="$vis_cache" "$VUNA" check "$vis_pkgdir/dep" >/dev/null 2>&1; then
+  vis_root_sum=$(TMPDIR="$vis_cache" "$VUNA" build --no-compile --out "$tmp/vis-root-out" "$vis_pkgdir/root" 2>&1); vis_root_sum_exit=$?
+  vis_root_full=$(TMPDIR="$vis_cache" VUNA_ELAB_FULL=1 "$VUNA" build --no-compile --out "$tmp/vis-root-out-full" "$vis_pkgdir/root" 2>&1); vis_root_full_exit=$?
+  if [ "$vis_root_sum_exit" -ne 0 ] && [ "$vis_root_full_exit" -ne 0 ]; then ok; else bad "summary vis root rejected" "nonzero/nonzero" "summary=$vis_root_sum_exit full=$vis_root_full_exit"; fi
+  check_contains "summary vis root error code" "$vis_root_sum" "TC_"
+  vis_root2_sum=$(TMPDIR="$vis_cache" "$VUNA" build --no-compile --out "$tmp/vis-root2-out" "$vis_pkgdir/root2" 2>&1); vis_root2_sum_exit=$?
+  vis_root2_full=$(TMPDIR="$vis_cache" VUNA_ELAB_FULL=1 "$VUNA" build --no-compile --out "$tmp/vis-root2-out-full" "$vis_pkgdir/root2" 2>&1); vis_root2_full_exit=$?
+  check_eq "summary vis root2 accepted (summary)" "0" "$vis_root2_sum_exit"
+  check_eq "summary vis root2 accepted (full)" "0" "$vis_root2_full_exit"
+else
+  bad "summary vis fixture warmup" "0" "base/dep check failed"
+fi
 
 if [ "$fail" -ne 0 ]; then
   printf '%s passed, %s failed\n' "$pass" "$fail"

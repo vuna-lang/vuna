@@ -1,5 +1,5 @@
 module Vuna.Compiler.Elab.Records
-  ( RecordInfo
+  ( RecordInfo(..)
   , checkProvidedFields
   , desugarRecords
   , duplicateFieldMsg

@@ -1,0 +1,4 @@
+module VisTrait (Pretty, pretty) where
+
+trait Pretty a where
+  pretty : a -> String

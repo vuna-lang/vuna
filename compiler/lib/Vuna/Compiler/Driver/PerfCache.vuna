@@ -1,0 +1,129 @@
+module Vuna.Compiler.Driver.PerfCache
+  ( unitCacheDir
+  , unitCacheRead
+  , unitCacheTag
+  , unitCacheWrite
+  ) where
+
+-- Vuna.Compiler.Driver.PerfCache：codegen **单元级**缓存（M34.5 S5）的磁盘层。
+--
+-- 与包级 split 缓存（`List SplitFile` 一把存）不同，这里按**单元**存生成结果：
+-- 包内一个模块改动时，其余单元（源码/依赖哈希都没变）直接复用上次生成的 `SplitFile`
+-- 文本，不重新跑 codegen。key 由调用方（`Driver.Dt`）算好：单元名 + 声明/import 内容
+-- + 传递依赖单元 key + printResult。
+--
+-- 文件 = 自描述头（tag，含 schema/编译器指纹）+ Marshal 的 `SplitFile`；头不符即视为
+-- 未命中（编译器或格式变化后旧缓存自然失效）。产物放 `<cacheBase>/<pkg>/split-units/`。
+import Vuna.Compiler.Common
+import Vuna.Compiler.Driver.Split
+import Vuna.Compiler.Version
+import Base.IO
+
+unitCacheSchema : String
+unitCacheSchema = "vuna-unit-cache 1"
+
+-- 编译器二进制指纹（argv[0] 内容哈希；与 Compile.check 缓存同一思路）。
+binaryFingerprint : Int
+binaryFingerprint =
+  let
+    argv = runIO prim_getArgs
+  in case argv of
+    [] => textHashOf vunaVersion
+    a :: rest =>
+      if runIO (prim_fileExists a) then textHashOf (runIO (prim_readFile a))
+      else textHashOf vunaVersion
+
+textHashOf : String -> Int
+textHashOf s = strHash s * 1000003 + strHash ("unit:" ++ s) + strLength s
+
+unitCacheTag : String
+unitCacheTag = unitCacheSchema ++ "/" ++ vunaVersion ++ "/" ++ strFromInt binaryFingerprint
+
+cacheBaseOf : String
+cacheBaseOf = case runIO (prim_getenv "TMPDIR") of
+  "" => "/tmp"
+  t => t
+
+unitCacheDir : String -> String
+unitCacheDir pkg = cacheBaseOf ++ "/vuna-cache/" ++ hashTextOf pkg ++ "/split-units"
+
+hashTextOf : String -> String
+hashTextOf s = strFromInt (textHashOf s)
+
+unitCachePath : String -> String -> String -> String
+unitCachePath dir name key =
+  let
+    h1 = textHashOf ("k1:" ++ key)
+    h2 = textHashOf ("k2:" ++ key)
+    h3 = textHashOf ("k3:" ++ key)
+  in dir
+    ++ "/"
+    ++ unitNameSafe name
+    ++ "-"
+    ++ strFromInt h1
+    ++ "-"
+    ++ strFromInt h2
+    ++ "-"
+    ++ strFromInt h3
+    ++ ".unit"
+
+unitNameSafe : String -> String
+unitNameSafe s = strPack (map charSafe (strUnpack s))
+
+charSafe : Int -> Int
+charSafe c = if c == 46 then 95 else c
+
+unitCacheRead : String -> String -> String -> Maybe SplitFile
+unitCacheRead dir name key =
+  let
+    path = unitCachePath dir name key
+  in if runIO (prim_fileExists path) then
+    let
+      raw = runIO (prim_readFile path)
+    in case breakFirstNewline (strUnpack raw) [] of
+      Just p => if firstOf p == unitCacheTag then Just (prim_unmarshal (secondOf p)) else Nothing
+      Nothing => Nothing
+  else Nothing
+
+unitCacheWrite : String -> String -> String -> SplitFile -> Int
+unitCacheWrite dir name key sf =
+  let
+    _ = ensureDirPath dir
+    payload = unitCacheTag ++ "\n" ++ prim_marshal sf
+  in runIO (prim_writeFileAtomic (unitCachePath dir name key) payload)
+
+breakFirstNewline : List Int -> List Int -> Maybe (Pair String String)
+breakFirstNewline [] _ = Nothing
+breakFirstNewline (c :: rest) acc =
+  if c == 10 then Just (Pair (strPack (reverse acc)) (strPack rest))
+  else breakFirstNewline rest (c :: acc)
+
+ensureDirPath : String -> Int
+ensureDirPath path = ensureDirPathFuel 64 path
+
+ensureDirPathFuel : Int -> String -> Int
+ensureDirPathFuel fuel path = if fuel <= 0 then 0
+else
+  let
+    parent = parentOf path
+  in if path == "" || path == "/" || path == "." then 0
+  else
+    let
+      _ = if parent == path then 0 else ensureDirPathFuel (fuel - 1) parent
+    in if runIO (prim_fileExists path) then 0 else runIO (prim_makeDir path)
+
+parentOf : String -> String
+parentOf path =
+  let
+    chars = reverse (strUnpack path)
+    after = dropPastSlash chars
+  in if length after == length chars then "."
+  else
+    let
+      p = strPack (reverse after)
+    in if p == "" then if startsWith "/" path then "/" else "."
+    else if startsWith "/" path && not (startsWith "/" p) then "/" ++ p else p
+
+dropPastSlash : List Int -> List Int
+dropPastSlash [] = []
+dropPastSlash (c :: rest) = if c == 47 then rest else dropPastSlash rest

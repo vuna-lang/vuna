@@ -31,11 +31,30 @@ sh test/run-tests.sh        # 需要 PATH 中有 vuna 与 vuna-seed
 **`VUNA_BASE="$PWD/../base"`**——runner 写进 `$tmp` 的**无 manifest 临时夹具**靠它定位
 base 上下文（corpus 内的夹具由 `test/corpus/vuna.toml` 给出包上下文）。
 
-**接口摘要路径的测试**（第 44 段）：依赖包先单独 `check`（写摘要缓存），再 `check` 根包 ——
-`--debug-perf` 应出现 `cache-path=summary deps=N`；负例注入后摘要路径与
-`VUNA_ELAB_FULL=1` 全量路径的诊断逐字节一致；最后对仓库自身做「预热 base/compiler →
-`check .`」回归（C37 的 `Eq Type` 假歧义）。`VUNA_ELAB_FULL=1` 是排障/A-B 对拍开关
-（强制全量精化），默认不设。
+**接口摘要路径的测试**（第 44 段，包级 + 模块级 S1/S2/S3/S4）：依赖包先单独 `check`（写摘要
+缓存与 per-module 接口 + manifest），再 `check` 根包 —— `--debug-perf` 应出现
+`cache-path=summary deps=N` 与 `iface-selftest=ok`（`VUNA_IFACE_SELFTEST=1` 打开写侧读回
+校验），且依赖模块**不再被 parse**（断言输出里没有 `parse-module=<依赖模块>`）；per-module
+布局断言（`manifest` + `*.iface` 存在）、删掉 check 缓存后重算但接口未变时写侧只写
+
+manifest（`iface-write=0/`）；损坏模块文件按自描述头拒绝、回退全量并强制重写修复；独立缓存里以 `VUNA_CACHE_MTIME=1` 预热后根包仍命中摘要路径；
+负例注入后摘要路径与 `VUNA_ELAB_FULL=1` 全量路径的诊断逐字节一致；模块接口路径与全量
+路径的 `compile` 产物 `diff -r` 全等；最后对仓库自身做「预热 base/compiler → `check .`」
+回归（C37 的 `Eq Type` 假歧义）。`VUNA_ELAB_FULL=1` 是排障/A-B 对拍开关（强制全量精化），
+默认不设；`VUNA_DEBUG_PERF=1` 等价于 `--debug-perf`（给 `vuna-compiler` 这类不经
+`Vuna.Cli` 的入口用）；`VUNA_CACHE_MTIME=1` 开 mtime+size 快判（默认内容哈希）。模块级
+设计见 [cache.md](cache.md)。
+
+第 44f 段是包内增量回归：复制 `base`、改一个叶子模块后重算——其余模块复用、只 parse 改动
+模块、第二次运行收敛（`cache-own-clean=30`、`iface-write=0/`）；增量 `manifest` 与全量路径
+逐字节一致；注入类型错误后增量与全量诊断逐字节一致。
+
+第 44g 段开 `VUNA_IFACE_TOOL=1` 验证 LSP/REPL 消费依赖接口（REPL 输出
+`iface-source=repl modules=N` 且求值正确，LSP smoke 全过）；默认路径不受影响。
+
+第 44h 段验证 codegen 单元级缓存（`VUNA_UNIT_CACHE=1`）：改入口重建命中依赖单元，
+增量产物与干净重建逐字节一致。第 44i 段验证依赖可见性收敛（S6）：dep 的实例在未 import
+的模块里时摘要/全量路径一致拒绝，import 后一致接受。
 
 推荐入口（`nix/run-tests.nix` 包装，不修改原脚本；无参数等价于直接跑）：
 

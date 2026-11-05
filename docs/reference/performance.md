@@ -281,6 +281,34 @@ parse 结果（`$TMPDIR/vuna-cache/ast`，LSP/workspace 重复检查省 parse）
 「依赖未变」的增量场景；冷 workspace / CI 仍是全量。正确性由 `test/run-tests.sh` 第 44 段
 （摘要路径命中 + 负例诊断与全量路径逐字节一致）守住。
 
+
+**M34.5 模块级接口（S1/S2/S3）**：接口单位从包降到模块（每模块 `<Module.Name>.iface` +
+包级 `manifest`），依赖侧按模块装载并逐项校验（见 [cache.md](cache.md)）。本机读数
+（M36 源码 + S3，干净 TMPDIR、单次采样，噪声 ±10%）：
+
+- 依赖模块**零 parse**：`check compiler`（base 已写成接口）时 `--debug-perf` 的
+  `parse-module=` 只剩 60 个 `Vuna.*`（本包模块），base 的 30 个模块一条都没有；
+  `check .` 同理（base + compiler 都零 parse）。
+- 墙钟：`check compiler` 接口路径 ~10.7 s vs 全量 ~8.9 s；`check .` 接口路径 ~16.2 s vs
+  全量 ~17.8 s。接口路径省掉的是依赖模块的 parse/resolve/elab/终止性，但**包内仍整包
+  重精化**（逐模块增量未做），且接口路径会把依赖 decls 作为 record/终止性上下文注入，
+  在 compiler 包上仍慢于全量——这两列只用于确认「换成接口加载后没有回退」。
+- **per-module 写**：冷写 `iface-write=30/30`（base），删掉 check 缓存后重算但接口未变
+  时 `iface-write=0/30`（只写 manifest）；`VUNA_CACHE_MTIME=1` 时读侧用 mtime+size 快判
+  （默认内容哈希）。
+- 正确性对拍：`test/corpus/dt` + `dt_err` 137 个夹具新旧编译器输出逐字节一致；
+  `build --no-compile compiler` 在「旧二进制 / 接口路径 / 全量路径」三份产物 `diff -r`
+  全等；`test/run-tests.sh` 第 44 段新增 per-module 写/快判、codegen A/B 与写侧自检。
+
+
+
+**M34.5 包内逐模块增量（S4）**：干净模块（源哈希 + 依赖接口哈希都没变）以预置模块进入
+Loader，只精化脏模块；脏性沿 import 边保守传播（依赖脏 ⇒ 依赖者脏）。base 副本改一个叶子
+模块（30 模块）：冷 268ms → 增量 64ms → 全干净 50ms；同场景全量路径 210ms（单次采样，
+M36 源码）。`iface` 的写判定同时看接口哈希与依赖哈希，脏模块重写后下一次运行全部干净、
+零重写。哈希做顺序/残 meta 规范化，`manifest` 与全量路径逐字节一致；`VUNA_ELAB_FULL=1`
+仍可强制全量对拍。
+
 **M34.2 未解元变量扫描**：`unsolvedFrom` / `unsolvedFromRelevant` 的查找从 list（每次
 O(#sols)）改成 `IntMap` 索引（O(1)）——每次 check 结束的「全编号 x 全解表」扫描从 O(n²)
 降到 O(n)（check . 4.1s→3.6s、check compiler 2.5s→2.2s）。
@@ -302,8 +330,8 @@ O(#sols)）改成 `IntMap` 索引（O(1)）——每次 check 结束的「全编
 
 **剩余（M34 后续）**：LSP 增量与单文件级缓存（需接口摘要 + 只精化本包模块）、模块级并行
 codegen（C35 的全序 open 模型已解除：分层直接依赖 + 全限定跨单元引用已落地，并行构建由
-`build.sh` 的层内 `&` + `wait` 体现；codegen 本身仍进程内串行，作为后续项保留）、`check .`
-对依赖包模块的重复精化（接口摘要后消除）。
+`build.sh` 的层内 `&` + `wait` 体现；codegen 本身仍进程内串行，作为后续项保留）、依赖包
+模块的重复精化（模块接口已消除）、**包内逐模块增量**（当前仍整包重精化）。
 
 **M34 退出标准状态**：`check .` ~8s→3.6s（热 23ms）✓；`vuna map` ~31s→0.54s ✓；单文件
 增量秒级以下 ✓；性能 CI 门槛（软对比 + 缓存有效性 + 分配统计）✓；LSP 编辑反馈——同内容

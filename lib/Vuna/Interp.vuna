@@ -33,14 +33,20 @@ interpretFile ctx entry = case dtEvalFile ctx entry of
 -- REPL 用：program（imports + 定义，定义必须已写签名）与表达式都在内存里求值，
 -- 不需要临时文件；表达式类型由 DT 精化器推断，值用 showValue 展示。
 interpretExpr : PackageContext -> String -> String -> String
-interpretExpr ctx program expr = case dtEvalExpr ctx program expr of
-  Err e => "error: " ++ e
-  Ok output => output
+interpretExpr ctx program expr = case depIfacesForTool ctx of
+  Just ifaces => case dtEvalExprWithIfaces ctx program expr ifaces of
+    Err e => "error: " ++ e
+    Ok output => output
+  Nothing => case dtEvalExpr ctx program expr of
+    Err e => "error: " ++ e
+    Ok output => output
 
 -- M30 · REPL：值文本 + zonk 后的类型文本（`showTerm` 渲染，可直接写回合成签名）。
 -- 类型文本形如 `(Base.IO.IO Int)`（canonical 全名）；REPL 据此决定是否走效果执行。
 evalExprInfo : PackageContext -> String -> String -> Result (Pair String String)
-evalExprInfo ctx program expr = dtEvalExprInfo ctx program expr
+evalExprInfo ctx program expr = case depIfacesForTool ctx of
+  Just ifaces => dtEvalExprInfoWithIfaces ctx program expr ifaces
+  Nothing => dtEvalExprInfo ctx program expr
 
 -- ---------------------------------------------------------------
 -- 效果程序执行（REPL 的 IO 表达式 + `vuna test` 的 IO 测试）

@@ -57,9 +57,11 @@
 | `Codegen.Assembly` | 同一份 `DtProgram` 的装配与检查入口 | `prepareDtProgram`、`genUnitText`、`mainHook`、`checkDtProgram` |
 | `Codegen.Split` | **唯一** codegen 生成器：逐模块 split 的声明归属表与分文件装配 | `generateDtSplitProgram` |
 | `Driver.Split` | 输出文件模型与构建脚本生成：`SplitFile`、依赖序、按内容哈希增量的 `build.sh` | `SplitFile`、`buildScript`、`writeSplitFiles`、`writeSplitFilesIfChanged` |
+| `Driver.Owner` | **声明归属表**（从 `Codegen.Split` 抽出）：声明名 / 实例名 / 派生实例名 / trait 投影名 / `Dict_` → 模块；codegen 与接口切分共用 | `splitMetaOf`、`splitOwnerEntriesOfModules`、`splitDefOwnerOf` |
 | `Driver.Cache` | 接口摘要载体（TTC 思路）：`CachedProgram` = 闭合 datas / defs（含 body）/ globals / insts / classes（**不含 sols/next**）；写侧按出现点深度 zonk，读侧 `cachedProgramValid` 校验（无 meta/负索引/自由变量；body 擦除位置的未解 meta 允许并按包段重编号） | `cachedOfProgram`、`cachedProgramValid`、`shiftCachedProgram`、`summaryMetaSegment` |
-| `Driver.Dt` | DT 路径 facade（供 `Compile` / `CompilerCli` / `Interp` / LSP 使用）：单一 `PackageContext` 加载形状；内存源码检查/洞目标、`dtMainKind`、`dtEvalExprInfo`；接口摘要路径的起始 Ec 组装（`depStartOf`） | `dtCheck`、`dtCheckLibrary`、`dtCheckPackageWithDeps`、`dtCheckLibraryPackageWithDeps`、`dtCheckSource`、`dtGoalsSource`、`dtSplitProject`、`dtEvalFile`、`dtMainKind` |
-| `Driver.Compile` | 编译入口：`PackageContext` 检查/编译、目录式 codegen、构建脚本执行；build meta（确定性/依赖闭包哈希/同哈希跳过）与递归建目录；check 缓存 + 接口摘要路径（`VUNA_ELAB_FULL=1` 强制全量） | `checkPackage`、`compileToDir`、`buildMetaText`、`metaUpToDate`、`writeBuildMeta` |
+| `Driver.Iface` | **模块级接口**（TTC 思路）：`ModuleIface`（闭合产物 + 已解析 decls + exports/fixities/imports + `miIfaceHash`/`miDepHashes`/`miSource`）、per-module 文件 + `PackageManifest`（模块名→文件/源信息/接口哈希）；按归属把 `DtProgram` 切成每模块摘要、强哈希、原子读写 | `ifaceOfPackage`、`readPackageIface`、`writePackageIface`、`packageIfaceValid` |
+| `Driver.Dt` | DT 路径 facade（供 `Compile` / `CompilerCli` / `Interp` / LSP 使用）：单一 `PackageContext` 加载形状；内存源码检查/洞目标、`dtMainKind`、`dtEvalExprInfo`；接口摘要路径的起始 Ec 组装（`depStartOf`）与接口/预置模块入口 | `dtCheck`、`dtCheckWithProgramParts`、`dtCheckPackageWithIfacesParts`、`dtSplitProjectParts`、`dtSplitProjectWithIfaces`、`CheckedPackage` |
+| `Driver.Compile` | 编译入口：`PackageContext` 检查/编译、目录式 codegen、构建脚本执行；build meta 与递归建目录；check 缓存 + 依赖接口校验（`depIfacesOf`）+ 接口影子写（`writeIfaceShadow`）；`VUNA_ELAB_FULL=1` 强制全量 | `checkPackage`、`compileToDir`、`depIfacesOf`、`buildMetaText`、`metaUpToDate`、`writeBuildMeta` |
 | `Driver.CompilerCli` | 编译器自己的 CLI（`vuna-compiler`）；含受限进程执行入口 `runIn`；workspace check/build 单元、`build --package`、`version` | `runCompilerCli`、`compilerUsageLines`、`runIn` |
 | `Version` | 版本号唯一真源；产品 CLI / `vuna-compiler` / build meta / VSCode 探测共用 | `vunaVersion` |
 
@@ -109,32 +111,44 @@
 `check` 只做精化 + 擦除检查并返回警告，不生成代码；包级检查：有 `app/Main.vuna` 的可执行包
 检查该入口，库包以 `[export].modules` 为根。
 
-## 接口摘要（check 期的 TTC 式模块化精化）
+## 接口摘要（TTC 式模块化精化）
 
-`vuna check` 的包级检查可以**只精化本包声明**：依赖包的 `DtProgram` 被压缩成闭合的接口
-摘要（`Driver.Cache.CachedProgram`），根包从这份摘要重建精化起始状态。模型参考 Idris2 的
-TTC：**摘要只含闭合结果，不携带 elab 状态**（没有跨包 `sols` / `next` / dict goals）。这一步
-只服务 `check`；`build` / `compile`（codegen）仍是整闭包全量精化（模块级 codegen 缓存见 C35）。
+`vuna check` / `build` / `compile` 可以**只精化本包声明**：依赖包的模块产物被压缩成闭合的
+接口摘要，根包从接口重建精化起始状态。模型参考 Idris2 的 TTC：**摘要只含闭合结果，不携带
+elab 状态**（没有跨包 `sols` / `next` / dict goals）。
+
+粒度分两层：
+
+- **包级摘要**（M34.5 起）：`Driver.Cache.CachedProgram`，一个包一份 datas / defs / globals /
+  insts / classes；
+- **模块级接口**（M34.5 S1/S2/S3）：`Driver.Iface.ModuleIface`，每模块一个
+  `<Module.Name>.iface` + 包级 `manifest`（S3；写侧只重写接口哈希变化的模块），依赖侧
+  按模块装载、逐项校验。设计、字段、失效判定见
+  [cache.md](cache.md)。
 
 ### 数据流
 
 ```text
-check pkg
-  ├─ 缓存命中（key = 源哈希 + 依赖哈希 + manifest + 编译器指纹 + schema）→ Ok
+check / build pkg
+  ├─ 包级 check 缓存命中（key = 源哈希 + 依赖哈希 + manifest + 编译器指纹 + schema）→ Ok
   └─ 未命中
-      ├─ VUNA_ELAB_FULL=1 → 全量：elabProgramFull（整闭包）→ 写缓存
-      └─ depProgramsOf：按**传递依赖闭包**读每个依赖的 CachedProgram
-            ├─ 任一缺失 / cachedProgramValid = False → 全量回退
-            └─ 全部可用 → 摘要路径：
-                  depStartOf（起始 Ec + globals）
-                    → elabProgramFullWithAux（只喂本包 decls；依赖 decls 只作终止性 SCT 上下文）
+      ├─ VUNA_ELAB_FULL=1 → 全量：loadProject + elabProgramFull（整闭包）
+      └─ depIfacesOf：逐依赖包读 iface.pkg（S4：本包有干净模块时走增量）
+            ├─ schema/编译器/包名、模块源哈希、miDepHashes 链、源码模块集合 任一失败
+            │     → 全量回退（并重写本包接口）
+            └─ 全部可用 → 接口路径（无干净模块 = 包内全量；S4 有干净模块 = 只精化脏模块）：
+                  modulesOfIfaces + cleanModules → Loader.loadProjectWithPreloaded（依赖 + 干净模块零 parse）
+                    → resolveProjectKeeping（种子模块已解析，跳过）
+                    → depStartOf（起始 Ec + globals；依赖 artifacts 来自模块摘要）
+                    → elabProgramFullWithAux（只喂脏模块 decls + 入口；干净/依赖 decls 只作终止性/record 上下文）
                     → checkDtProgram（擦除/名字护栏；datas = 依赖 datas + 本包 datas）
-                    → 写本包摘要（cachedOfProgram，按出现点深度 zonk）
+                    → 写本包 per-module 接口（ifaceOfPackage：按归属切分 + zonk + 接口哈希）
 ```
 
 摘要字段（每包只存**自己的声明**，依赖闭包由读方逐包合并）：`datas`（kind + 构造子类型）、
 `defs`（type + body）、`globals`（签名面）、`insts`（tele / 约束 / 头）、`classes`（投影 /
-字段类型）。
+字段类型）、`miDecls`（已解析源码声明，供 record 降级与终止性 SCT 使用）、exports /
+fixities / imports / capabilities、`miSource`、`miIfaceHash`、`miDepHashes`。
 
 ### 硬不变量
 
@@ -145,21 +159,25 @@ check pkg
 2. 摘要项必须**闭合、无 `TMeta`、无负 de Bruijn 索引**；已解元变量按出现点深度 quote
    （`Core.Eval.substSolvedMetasAtTbl`，`quote 0` 会把 binder 下的解拍成负/错位索引，而
    `lookupEnv` 对 `i <= 0` 取最内层变量 ⇒ 静默取错 binder）。
-3. 失败语义：摘要缺失/不闭合 ⇒ 回退全量；**摘要路径的 `Err` 必须上报**（绝不回退，否则吞掉
-   本包真实错误）。安全阀宁可慢，不静默漏检。
+3. 失败语义：摘要缺失/不闭合/校验失败 ⇒ 回退全量；**摘要路径的 `Err` 必须上报**（绝不回退，
+   否则吞掉本包真实错误）。安全阀宁可慢，不静默漏检。
 4. 精化器允许**擦除位置**的未解元变量：摘要里这类 meta 按包段 `(idx+1) << 30` 重编号，消费方
    当作新的未解元变量（只出现在不生成代码、不参与运行时比较的位置）。
 5. **record 降级需要依赖包的 record 头**：字段访问 / record 更新 / record 模式是语法降级
-   （`Elab.Records`），候选 record 来自**源码 decls**。摘要路径把依赖模块的 decls 作为
+   （`Elab.Records`），候选 record 来自**源码 decls**。接口路径把依赖模块的 `miDecls` 作为
    `termAux` 传入 `prepareDeclsWith`，只取 record 头参与降级、不精化它们——缺了它，依赖包
    类型上的字段访问会报 `unknown field`（如 `c.commentKind`）。
+6. **接口哈希链必须闭合**：`miIfaceHash` 覆盖导出面 + 导出定义体（不含 span / 源路径）；
+   `miDepHashes` 记录直接 import 的接口哈希，读侧逐项比对（包内模块也参与）。
 
 ### 已知边界
 
-- 接口粒度是**包**而非模块：依赖摘要包含该包被检查时的全部声明，因此依赖包里根包没有
-  import 的实例/类也会进入视图（过近似）。模块级接口与模块级精化见 roadmap 第 2 步。
-- 依赖 `defVals` 未序列化：摘要路径的 delta 只能现算 body（只影响速度，不影响正确性）。
-- 残留擦除位 meta 依赖包段重编号；彻底方案是精化收尾时消除残 meta。
+- 接口物理单位是**模块**（per-module 文件 + manifest）；包内精化已按模块增量（S4：干净模块复用、脏性沿 import 保守传播）。
+- 依赖包的实例/类仍全部并入视图（过近似，与包级摘要一致）；模块签名隔离另立项。
+- codegen 已按单元缓存（S5）；纯代码生成仍整包跑（elab 主导，收益有限）。
+- LSP / REPL 已能消费接口（`VUNA_IFACE_TOOL=1`，默认关；惰性闭包 + 会话缓存未做）；
+  依赖 `defVals` 未序列化；残留擦除位 meta 依赖包段重编号。
+- 快判默认内容哈希，`VUNA_CACHE_MTIME=1` 可开 mtime+size 快路径；接口格式仍是 Marshal。
 
 ## codegen 的表示
 
@@ -195,7 +213,7 @@ check pkg
 
 ### 输出模型（唯一：逐模块 split）
 
-`Codegen.Split.generateDtSplitProgram`（包级入口 `Driver.Dt.dtSplitProject`）接收 loader 的
+`Codegen.Split.generateDtSplitProgram`（入口 `Driver.Dt.dtSplitProjectParts`（接口路径 `dtSplitProjectWithIfaces`））接收 loader 的
 模块序（依赖在前）、entry decls 与完整 `DtProgram`，产出 `List SplitFile`；每个 `SplitFile`
 = 文件名 + 文本 + **直接依赖单元列表**（含 `Vuna_runtime`、不含自身；runtime 单元依赖为空，
 其余依赖只记实际引用到的单元，不是「所有前序单元」）：
