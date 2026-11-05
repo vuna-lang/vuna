@@ -89,11 +89,16 @@ else case a of
     VType j => if levelEq i j then Ok sols else mismatchAt depth defs a b
     _ => mismatchAt depth defs a b
   VPi name implicit rig dom cod => case b of
-    VPi name2 implicit2 rig2 dom2 cod2 => if implicit == implicit2 then andThen (convFuel (fuel - 1) defs sols depth dom dom2) (\sols2 => let
-      v = freshVar name depth
-    in convFuel (fuel - 1) defs sols2 (depth + 1) (applyClosure cod v) (applyClosure cod2 v)
-    )
-    else mismatchAt depth defs a b
+    VPi name2 implicit2 rig2 dom2 cod2 =>
+      let
+        _ =
+          note
+            ("vpi: " ++ name ++ " impl=" ++ boolText implicit ++ " <> " ++ name2 ++ " impl=" ++ boolText implicit2)
+      in if implicit == implicit2 then andThen (convFuel (fuel - 1) defs sols depth dom dom2) (\sols2 => let
+        v = freshVar name depth
+      in convFuel (fuel - 1) defs sols2 (depth + 1) (applyClosure cod v) (applyClosure cod2 v)
+      )
+      else mismatchAt depth defs a b
     _ => mismatchAt depth defs a b
   VLam name rig clo => case b of
     VLam name2 rig2 clo2 =>
@@ -486,3 +491,6 @@ solveMeta a1 a2 a3 a4 a5 a6 = solveMetaFuel 64 a1 a2 a3 a4 a5 a6
 
 sigText : Pair String Term -> String
 sigText p = firstOf p ++ ":" ++ showTerm (secondOf p)
+
+boolText : Bool -> String
+boolText b = if b then "T" else "F"
