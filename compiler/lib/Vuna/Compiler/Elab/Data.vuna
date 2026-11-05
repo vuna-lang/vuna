@@ -218,12 +218,11 @@ elabDataBodies decls heads globals ec acc = case decls of
 -- canonical 族（`Base.Bool.Bool` / `Base.List.List` / `Base.IO.IO`）只能以固定的构造子
 -- 集合声明：伪造同名族会让精化与 codegen 的 canonical 判定失配（M27 防御）。
 sameCtorSet : List String -> List String -> Bool
-sameCtorSet expected actual =
-  if length expected == length actual then allIn expected actual else False
+sameCtorSet expected actual = length expected == length actual && allIn expected actual
 
 allIn : List String -> List String -> Bool
 allIn [] actual = True
-allIn (e :: rest) actual = if memName e actual then allIn rest actual else False
+allIn (e :: rest) actual = memName e actual && allIn rest actual
 
 -- 两阶段精化所有 data 声明（M23：允许 data 之间的前向引用与互递归）。
 elabDatas : List (Pair Decl Span) -> List (Pair String Term) -> Ec -> Result (Pair (List DtData) (Pair (List (Pair String Term)) Ec))
@@ -241,7 +240,7 @@ elabDatas decls globals ec = andThen (elabDataHeads decls globals ec []) (\p => 
 -- 正确擦除需要整程序使用分析，M16 落地的是**分析 + 诊断**：`eraseIndexMask` 给出保守可擦判定，
 -- `indexNeedsRuntime` 给出是否真的被用到。详见 `docs/reference/limits.md` 的索引边界。
 eraseIndexMask : DtData -> List Bool
-eraseIndexMask dd = eraseMaskGo dd (dtDataParams dd) 0 []
+eraseIndexMask dd = eraseMaskGo dd dd.dtDataParams 0 []
 
 eraseMaskGo : DtData -> List (Pair String Rig) -> Int -> List Bool -> List Bool
 eraseMaskGo dd [] i acc = reverse acc
@@ -249,7 +248,7 @@ eraseMaskGo dd (p :: rest) i acc =
   eraseMaskGo dd rest (i + 1) (not (paramUsedInFieldTys dd i) :: acc)
 
 paramUsedInFieldTys : DtData -> Int -> Bool
-paramUsedInFieldTys dd i = usedInCtors i (length (dtDataParams dd)) (dtDataCtors dd)
+paramUsedInFieldTys dd i = usedInCtors i (length dd.dtDataParams) (dtDataCtors dd)
 
 usedInCtors : Int -> Int -> List DtCtor -> Bool
 usedInCtors i arity [] = False
@@ -306,7 +305,7 @@ indexErasureCandidates [] = []
 indexErasureCandidates (d :: rest) = candidateOf d :: indexErasureCandidates rest
 
 candidateOf : DtData -> Pair String (List String)
-candidateOf d = Pair (dtDataName d) (candidateNames (dtDataParams d) (eraseIndexMask d))
+candidateOf d = Pair (dtDataName d) (candidateNames d.dtDataParams (eraseIndexMask d))
 
 candidateNames : List (Pair String Rig) -> List Bool -> List String
 candidateNames [] ms = []

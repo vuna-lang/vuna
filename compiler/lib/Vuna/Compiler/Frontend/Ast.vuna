@@ -1,5 +1,5 @@
 module Vuna.Compiler.Frontend.Ast
-  ( Ctor
+  ( Ctor(..)
   , DAxiom
   , DBind
   , DData
@@ -35,10 +35,10 @@ module Vuna.Compiler.Frontend.Ast
   , EVar
   , ExportItem
   , Expr
-  , Field
-  , FixityDecl
-  , Import
-  , ModDecl
+  , Field(..)
+  , FixityDecl(..)
+  , Import(..)
+  , ModDecl(..)
   , PAs
   , PCon
   , PInt
@@ -47,15 +47,13 @@ module Vuna.Compiler.Frontend.Ast
   , PVar
   , PWild
   , Pat
-  , Source
-  , SourceFile
-  , TraitMethod
+  , SourceFile(..)
+  , TraitMethod(..)
   , XBare
   , XModule
   , XTypeAll
   , clausesFor
   , ctorArity
-  , ctorArityOf
   , ctorName
   , ctorSpan
   , ctorType
@@ -70,19 +68,12 @@ module Vuna.Compiler.Frontend.Ast
   , fieldName
   , fieldSpan
   , fieldType
-  , fixityAssoc
-  , fixityLevel
-  , fixityOp
   , fixitySpan
-  , fixityTarget
   , funArity
-  , importSpan
-  , modDeclSpan
   , patSpan
   , topNames
   , traitMethodName
   , traitMethodSpan
-  , traitMethodType
   , typeNamesOf
   ) where
 
@@ -90,13 +81,17 @@ module Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Common
 
 -- 记录字段：字段名 + 类型表达式 + span（M10.5）。
-data Field : Type where
-  Field : String -> Expr -> Span -> Field
+record Field where
+  fieldName : String
+  fieldType : Expr
+  fieldSpan : Span
 
 -- trait 方法签名：方法名 + 类型表达式 + span（M30 B20：span 覆盖「方法名到类型结束」，
 -- 让方法级诊断/符号/注释锚点能落到方法行，而不是整条 trait 声明行）。
-data TraitMethod : Type where
-  TraitMethod : String -> Expr -> Span -> TraitMethod
+record TraitMethod where
+  traitMethodName : String
+  traitMethodType : Expr
+  traitMethodSpan : Span
 
 data Pat : Type where
   PVar : String -> Span -> Pat
@@ -147,22 +142,14 @@ data Expr : Type where
   EAnn : Expr -> Expr -> Span -> Expr
 
 -- M31.2：fixity / 别名声明（`infixl 6 +`、`infixr 5 :: = Cons`、`infix 4 == = eq`）。
--- 只进入 `Source.fixities`，由 Loader 在中缀重排时消费；**不进入 `Decl`**，避免所有
+-- 只进入 `SourceFile.fixities`，由 Loader 在中缀重排时消费；**不进入 `Decl`**，避免所有
 -- Decl 匹配点扩散。
-data FixityDecl : Type where
-  FixityDecl : String -> Int -> Int -> Maybe String -> Span -> FixityDecl
-
-fixityOp : FixityDecl -> String
-fixityOp (FixityDecl op level assoc target sp) = op
-
-fixityLevel : FixityDecl -> Int
-fixityLevel (FixityDecl op level assoc target sp) = level
-
-fixityAssoc : FixityDecl -> Int
-fixityAssoc (FixityDecl op level assoc target sp) = assoc
-
-fixityTarget : FixityDecl -> Maybe String
-fixityTarget (FixityDecl op level assoc target sp) = target
+record FixityDecl where
+  fixityOp : String
+  fixityLevel : Int
+  fixityAssoc : Int
+  fixityTarget : Maybe String
+  fixitySpan : Span
 
 fixitySpan : FixityDecl -> Span
 fixitySpan (FixityDecl op level assoc target sp) = sp
@@ -172,8 +159,11 @@ data DoStmt : Type where
   DBind : Pat -> Expr -> Span -> DoStmt
   DExpr : Expr -> Span -> DoStmt
 
-data Ctor : Type where
-  Ctor : String -> Expr -> Int -> Span -> Ctor
+record Ctor where
+  ctorName : String
+  ctorType : Expr
+  ctorArity : Int
+  ctorSpan : Span
 
 data Decl : Type where
   -- M14：`data Name params : kind where`；kind 是索引族的类型表达式（HM 路径只接受 `Type`）。
@@ -199,12 +189,18 @@ data ExportItem : Type where
   XModule : String -> Span -> ExportItem
 
 -- 模块头：模块名、是否写了显式导出列表、导出项、span。
-data ModDecl : Type where
-  ModDecl : String -> Bool -> List ExportItem -> Span -> ModDecl
+record ModDecl where
+  modDeclName : String
+  modDeclHasExportList : Bool
+  modDeclExportItems : List ExportItem
+  modDeclSpan : Span
 
 -- parser 的产物：可选模块头 + imports + fixity/别名声明 + 顶层声明。
-data SourceFile : Type where
-  Source : Maybe ModDecl -> List Import -> List FixityDecl -> List Decl -> SourceFile
+record SourceFile where
+  sourceFileModDecl : Maybe ModDecl
+  sourceFileImports : List Import
+  sourceFileFixities : List FixityDecl
+  sourceFileDecls : List Decl
 
 -- 各节点的源码 span 访问器。
 patSpan : Pat -> Span
@@ -272,20 +268,14 @@ fieldType (Field name ty sp) = ty
 traitMethodName : TraitMethod -> String
 traitMethodName (TraitMethod name ty sp) = name
 
-traitMethodType : TraitMethod -> Expr
-traitMethodType (TraitMethod name ty sp) = ty
-
 traitMethodSpan : TraitMethod -> Span
 traitMethodSpan (TraitMethod name ty sp) = sp
 
-data Import : Type where
-  Import : String -> Bool -> Maybe String -> Span -> Import
-
-importSpan : Import -> Span
-importSpan (Import name isQualified alias sp) = sp
-
-modDeclSpan : ModDecl -> Span
-modDeclSpan (ModDecl name explicit items sp) = sp
+record Import where
+  importName : String
+  importIsQualified : Bool
+  importAlias : Maybe String
+  importSpan : Span
 
 exportItemSpan : ExportItem -> Span
 exportItemSpan (XBare name sp) = sp
@@ -317,13 +307,10 @@ typeArity : Expr -> Int
 typeArity (EApp (EVar "->" _) ([x, rest]) _) = 1 + typeArity rest
 typeArity _ = 0
 
-ctorArityOf : Ctor -> Int
-ctorArityOf (Ctor name ty arity _) = arity
-
 lookupCtorArity : String -> List Ctor -> Maybe Int
 lookupCtorArity name [] = Nothing
 lookupCtorArity name (c :: rest) =
-  if ctorName c == name then Just (ctorArityOf c) else lookupCtorArity name rest
+  if ctorName c == name then Just c.ctorArity else lookupCtorArity name rest
 
 ctorArity : String -> List Decl -> Maybe Int
 ctorArity name [] = Nothing

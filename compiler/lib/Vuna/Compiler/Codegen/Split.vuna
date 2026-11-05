@@ -119,17 +119,10 @@ splitDataOwnerEntriesOfModules [] = []
 splitDataOwnerEntriesOfModules ((Pair mname decls) :: rest) =
   append (splitDataOwnerEntriesOf mname decls) (splitDataOwnerEntriesOfModules rest)
 
-data SplitMeta : Type where
-  SplitMeta : List (Pair String String) -> List (Pair String String) -> List String -> SplitMeta
-
-smDefOwners : SplitMeta -> List (Pair String String)
-smDefOwners (SplitMeta defOwners dataOwners knownModules) = defOwners
-
-smDataOwners : SplitMeta -> List (Pair String String)
-smDataOwners (SplitMeta defOwners dataOwners knownModules) = dataOwners
-
-smKnownModules : SplitMeta -> List String
-smKnownModules (SplitMeta defOwners dataOwners knownModules) = knownModules
+record SplitMeta where
+  smDefOwners : List (Pair String String)
+  smDataOwners : List (Pair String String)
+  smKnownModules : List String
 
 splitMetaOf : List (Pair String (List Decl)) -> List Decl -> SplitMeta
 splitMetaOf modules entryDecls =
@@ -154,17 +147,17 @@ knownModuleOrErr knownModules what name =
     ("DT split: `" ++ what ++ "` " ++ name ++ " has module prefix `" ++ prefix ++ "` but no such module")
 
 splitDataOwnerOf : SplitMeta -> DtData -> Result String
-splitDataOwnerOf meta d = case lookupModuleOf (smDataOwners meta) (dtDataName d) of
+splitDataOwnerOf meta d = case lookupModuleOf meta.smDataOwners (dtDataName d) of
   Just o => Ok o
   Nothing =>
-    if containsDot (dtDataName d) then knownModuleOrErr (smKnownModules meta) "data" (dtDataName d)
+    if containsDot (dtDataName d) then knownModuleOrErr meta.smKnownModules "data" (dtDataName d)
     else Err ("DT split: cannot determine module for data `" ++ dtDataName d ++ "`")
 
 splitDefOwnerOf : SplitMeta -> String -> Result String
-splitDefOwnerOf meta name = case lookupModuleOf (smDefOwners meta) name of
+splitDefOwnerOf meta name = case lookupModuleOf meta.smDefOwners name of
   Just o => Ok o
   Nothing =>
-    if containsDot name then knownModuleOrErr (smKnownModules meta) "definition" name
+    if containsDot name then knownModuleOrErr meta.smKnownModules "definition" name
     else Err ("DT split: cannot determine module for definition `" ++ name ++ "`")
 
 nameOwnerPairsOfDefs : SplitMeta -> List DtDef -> Result (List (Pair String String))
@@ -281,7 +274,7 @@ checkDataOwners meta (d :: rest) =
 
 checkResolvedModules : SplitMeta -> List (Pair String (List Decl)) -> List Decl -> List DtDef -> List DtData -> Result Int
 checkResolvedModules meta modules entryDecls runtime datas =
-  andThen (checkModuleDecls (smKnownModules meta) modules)
+  andThen (checkModuleDecls meta.smKnownModules modules)
     (\_ => andThen (checkEntryDecls entryDecls) (\_ => andThen (checkDefOwners meta runtime) (\_ => checkDataOwners meta datas)))
 
 generateDtSplitProgram : List (Pair String (List Decl)) -> List Decl -> DtProgram -> Bool -> Result (List SplitFile)

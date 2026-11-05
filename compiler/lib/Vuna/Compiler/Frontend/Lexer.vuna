@@ -2,8 +2,8 @@ module Vuna.Compiler.Frontend.Lexer
   ( CBlock
   , CKind
   , CLine
-  , Comment
-  , PTok
+  , Comment(..)
+  , PTok(..)
   , TEof
   , TIdent
   , TInt
@@ -11,9 +11,7 @@ module Vuna.Compiler.Frontend.Lexer
   , TStr
   , TSym
   , Tok
-  , commentKind
   , commentSpan
-  , commentText
   , isDigit
   , isIdentStart
   , isLowerChar
@@ -34,11 +32,13 @@ data Tok : Type where
   TSym : String -> Tok
   TEof : Tok
 
-data PTok : Type where
-  PTok : Tok -> Pos -> PTok
+record PTok where
+  ptokTok : Tok
+  ptokPos : Pos
 
-data Chars : Type where
-  Chars : List Int -> Pos -> Chars
+record Chars where
+  charsRemaining : List Int
+  charsPos : Pos
 
 advanceChar : Int -> Pos -> Pos
 advanceChar c (Pos line col) = if c == 10 then Pos (line + 1) 1 else Pos line (col + 1)
@@ -246,14 +246,10 @@ data CKind : Type where
   CLine : CKind
   CBlock : CKind
 
-data Comment : Type where
-  Comment : CKind -> String -> Span -> Comment
-
-commentKind : Comment -> CKind
-commentKind (Comment kind text sp) = kind
-
-commentText : Comment -> String
-commentText (Comment kind text sp) = text
+record Comment where
+  commentKind : CKind
+  commentText : String
+  commentSpan : Span
 
 commentSpan : Comment -> Span
 commentSpan (Comment kind text sp) = sp

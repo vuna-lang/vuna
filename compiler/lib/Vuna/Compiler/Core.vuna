@@ -1,8 +1,7 @@
 module Vuna.Compiler.Core
-  ( CaseAlt
-  , Clos
-  , Closure
-  , Level
+  ( CaseAlt(..)
+  , Closure(..)
+  , Level(..)
   , NGlobal
   , NVar
   , Neutral
@@ -28,7 +27,7 @@ module Vuna.Compiler.Core
   , VApp
   , VBool
   , VCase
-  , VCaseAlt
+  , VCaseAlt(..)
   , VCon
   , VIf
   , VInt
@@ -78,7 +77,6 @@ module Vuna.Compiler.Core
   , showValue
   , showValueAt
   , solsCons
-  , solsDefVals
   , solsDepth
   , solsEmpty
   , solsFromList
@@ -86,7 +84,6 @@ module Vuna.Compiler.Core
   , solsLookup
   , solsOf
   , solsPutDefVals
-  , solsTbl
   , solveMeta
   , substMetaVar
   , substSolvedMetas
@@ -96,9 +93,6 @@ module Vuna.Compiler.Core
   , substVarAt
   , termHasUnsolvedMeta
   , typeLevelOf
-  , vCaseAltBinders
-  , vCaseAltClosure
-  , vCaseAltName
   ) where
 
 -- Vuna.Compiler.Core：M13 的 core 类型论表示、NbE 求值与定义性相等（门面）。
@@ -108,7 +102,7 @@ module Vuna.Compiler.Core
 -- de Bruijn level 决定。
 --
 -- **表示层定型（M18.6）**：擦除标志用三值 `Rig`（QTT 预留），宇宙层级用不透明
--- `Level`。`Core` 之外**禁止**解构 `Rig` / `Level`，只能走访问器；详见
+-- `Level`。`Core` 之外**禁止**解构 `Rig` / `Level`，只能走字段/访问器；详见
 -- docs/reference/core.md 的映射表与不变量。
 --
 -- M24 后维护（源码重组）：实现在 Core/Term（表示层与纯数据操作）、Core/Eval（求值/quote）、

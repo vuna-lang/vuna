@@ -22,7 +22,6 @@ module Vuna.Compiler.Frontend.Parser.Support
   , peekPos
   , peekTok
   , peekTokAt
-  , posOf
   , sameLineState
   , sectionOpAt
   , spanOf
@@ -30,9 +29,6 @@ module Vuna.Compiler.Frontend.Parser.Support
   , startsPatternAtom
   , stateFuel
   , terminatesExpression
-  , tokOf
-  , toksLeft
-  , toksOf
   , underscoreCtorName
   , upperFirst
   ) where
@@ -45,19 +41,16 @@ import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Frontend.Lexer
 import Vuna.Compiler.Frontend.Diagnostics
 
-data PState : Type where
-  PState : String -> List PTok -> Pos -> Int -> PState
+record PState where
+  fileOf : String
+  toksOf : List PTok
+  lastPos : Pos
+  toksLeft : Int
 
 -- 余下 token 数（O(1) 维护）：stateFuel 旧实现 `128 * length toks + 1024` 每次调用都遍历
 -- 剩余 token 列表，而它在每个声明/表达式循环入口都被调用 ⇒ 大文件解析 O(n²)。
 -- vuna 源码 parser（offside layout）
 -- ---------------------------------------------------------------
-posOf : PTok -> Pos
-posOf (PTok t p) = p
-
-tokOf : PTok -> Tok
-tokOf (PTok t p) = t
-
 fileOf : PState -> String
 fileOf (PState file toks last count) = file
 
@@ -72,7 +65,7 @@ peekTok (PState file (t :: rest) last count) = t
 peekTok (PState file [] last count) = PTok TEof (Pos 1 1)
 
 peekPos : PState -> Pos
-peekPos st = posOf (peekTok st)
+peekPos st = (peekTok st).ptokPos
 
 lastPos : PState -> Pos
 lastPos (PState file toks last count) = last
@@ -80,7 +73,7 @@ lastPos (PState file toks last count) = last
 advance : PState -> PState
 advance (PState file (toks@(t :: rest)) last count) = case t of
   PTok TEof p => PState file toks last count
-  _ => PState file rest (posOf t) (if count > 0 then count - 1 else 0)
+  _ => PState file rest t.ptokPos (if count > 0 then count - 1 else 0)
 advance (PState file (toks@[]) last count) = PState file toks last count
 
 isEof : PState -> Bool
@@ -90,9 +83,6 @@ isEof st = case peekTok st of
 
 -- 让下一个 token 视作「与上一 token 同一行」：do 语句块里新起一行的裸表达式
 -- 需要这一点，否则首 token 会被 canContinue 判成缩进不足。
-toksOf : PState -> List PTok
-toksOf (PState file toks last count) = toks
-
 -- 显式 fuel（M30/C27 保留，给出证明界）：parser 的递归都经「返回新状态再递归」，
 -- 递归实参是**游标状态**而不是某个形参的真子项（PState 不可分解成更小的 token 列表），
 -- 所以现有 SCT 判据看不到结构下降；每个解析循环带 fuel 并在入口 `if fuel <= 0` 守卫、
@@ -115,14 +105,11 @@ toksOf (PState file toks last count) = toks
 --      也按**当前**剩余 token 数线性放大，不变量保持。
 --   于是任何可由内存构造的合法输入都不会触发 `parser fuel exhausted`。
 stateFuel : PState -> Int
-stateFuel st = 128 * toksLeft st + 1024
-
-toksLeft : PState -> Int
-toksLeft (PState file toks last count) = count
+stateFuel st = 128 * st.toksLeft + 1024
 
 sameLineState : PState -> PState
 sameLineState st = case peekPos st of
-  Pos line col => PState (fileOf st) (toksOf st) (Pos line 0) (toksLeft st)
+  Pos line col => PState (fileOf st) st.toksOf (Pos line 0) st.toksLeft
 
 atSym : PState -> String -> Bool
 atSym st s = case peekTok st of
@@ -135,7 +122,7 @@ nthTok [] n = Nothing
 nthTok (t :: rest) n = if n <= 0 then Just t else nthTok rest (n - 1)
 
 peekTokAt : PState -> Int -> Maybe PTok
-peekTokAt st n = nthTok (toksOf st) n
+peekTokAt st n = nthTok st.toksOf n
 
 -- bindhead：下一个 token 是 `标识符 :`（M13：`(x : A) -> B` / `{x : A} -> B`）。
 binderHeadName : PState -> Maybe String

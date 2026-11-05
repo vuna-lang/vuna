@@ -19,11 +19,11 @@ module Base.State
 import Base.Pair
 import Base.Int
 
-data State s a : Type where
-  MkState : (s -> Pair a s) -> State s a
+record State s a where
+  stateRun : s -> Pair a s
 
 runState : State s a -> s -> Pair a s
-runState (MkState f) s = f s
+runState (State f) s = f s
 
 evalState : State s a -> s -> a
 evalState st s = firstOf (runState st s)
@@ -32,23 +32,23 @@ execState : State s a -> s -> s
 execState st s = secondOf (runState st s)
 
 pureState : a -> State s a
-pureState a = MkState (\s => Pair a s)
+pureState a = State (\s => Pair a s)
 
 mapState : (a -> b) -> State s a -> State s b
-mapState f st = MkState (\s => case runState st s of
+mapState f st = State (\s => case runState st s of
   Pair a s2 => Pair (f a) s2
 )
 
 bindState : State s a -> (a -> State s b) -> State s b
-bindState st k = MkState (\s => case runState st s of
+bindState st k = State (\s => case runState st s of
   Pair a s2 => runState (k a) s2
 )
 
 get : State s s
-get = MkState (\s => Pair s s)
+get = State (\s => Pair s s)
 
 put : s -> State s Int
-put s = MkState (\_ => Pair 0 s)
+put s = State (\_ => Pair 0 s)
 
 modify : (s -> s) -> State s Int
-modify f = MkState (\s => Pair 0 (f s))
+modify f = State (\s => Pair 0 (f s))

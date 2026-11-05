@@ -1,6 +1,6 @@
 module Vuna.Compiler.Common
-  ( Pos
-  , Span
+  ( Pos(..)
+  , Span(..)
   , baseName
   , containsDot
   , joinArrows
@@ -9,9 +9,7 @@ module Vuna.Compiler.Common
   , posCol
   , posLine
   , showSpanLoc
-  , spanEndCol
   , spanEndLine
-  , spanFile
   , spanStartCol
   , spanStartLine
   , splitLastDot
@@ -38,22 +36,24 @@ import Base.Result
 import Base.String
 
 -- 源码位置（行、列，均从 1 开始）。
-data Pos : Type where
-  Pos : Int -> Int -> Pos
+record Pos where
+  posLine : Int
+  posCol : Int
 
 -- 源码 span：文件、起始行列、结束行列。文件在解析时由调用方注入，
 -- 供跨模块 flatten 后仍能追溯每个表达式来自哪个源文件。
-data Span : Type where
-  Span : String -> Int -> Int -> Int -> Int -> Span
+record Span where
+  spanFile : String
+  spanStartLine : Int
+  spanStartCol : Int
+  spanEndLine : Int
+  spanEndCol : Int
 
 posLine : Pos -> Int
 posLine (Pos l c) = l
 
 posCol : Pos -> Int
 posCol (Pos l c) = c
-
-spanFile : Span -> String
-spanFile (Span f sl sc el ec) = f
 
 spanStartLine : Span -> Int
 spanStartLine (Span f sl sc el ec) = sl
@@ -64,16 +64,13 @@ spanStartCol (Span f sl sc el ec) = sc
 spanEndLine : Span -> Int
 spanEndLine (Span f sl sc el ec) = el
 
-spanEndCol : Span -> Int
-spanEndCol (Span f sl sc el ec) = ec
-
 -- 把 span 渲染成 `文件:行:列`（错误信息前缀）。
 showSpanLoc : Span -> String
 showSpanLoc (Span f sl sc el ec) = f ++ ":" ++ strFromInt sl ++ ":" ++ strFromInt sc
 
 memChar : Int -> List Int -> Bool
 memChar c [] = False
-memChar c (x :: rest) = if x == c then True else memChar c rest
+memChar c (x :: rest) = x == c || memChar c rest
 
 -- 模块路径工具：`A.B.C` 的拆分/拼接（编译器专属）。
 containsDot : String -> Bool

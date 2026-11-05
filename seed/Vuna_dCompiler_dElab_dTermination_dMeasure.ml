@@ -692,7 +692,7 @@ let v_Vuna_dCompiler_dElab_dTermination_dMeasure_dargRel = (fun p args sizes cto
 
 let v_Vuna_dCompiler_dElab_dTermination_dMeasure_ddotBase = (fun n -> (v_Base_dPair_dsecondOf (v_Vuna_dCompiler_dCommon_dsplitLastDot (v_Vuna_dCompiler_dCommon_dsplitOnDot n))))
 
-let v_Vuna_dCompiler_dElab_dTermination_dMeasure_disMapLike = (fun n -> (if ((v_Vuna_dCompiler_dElab_dTermination_dMeasure_ddotBase n) = "map") then true else (if ((v_Vuna_dCompiler_dElab_dTermination_dMeasure_ddotBase n) = "traverse") then true else (if ((v_Vuna_dCompiler_dElab_dTermination_dMeasure_ddotBase n) = "concatMap") then true else (if ((v_Vuna_dCompiler_dElab_dTermination_dMeasure_ddotBase n) = "mapMaybe") then true else ((v_Vuna_dCompiler_dElab_dTermination_dMeasure_ddotBase n) = "filter"))))))
+let v_Vuna_dCompiler_dElab_dTermination_dMeasure_disMapLike = (fun n -> (if (if (if (if ((v_Vuna_dCompiler_dElab_dTermination_dMeasure_ddotBase n) = "map") then true else ((v_Vuna_dCompiler_dElab_dTermination_dMeasure_ddotBase n) = "traverse")) then true else ((v_Vuna_dCompiler_dElab_dTermination_dMeasure_ddotBase n) = "concatMap")) then true else ((v_Vuna_dCompiler_dElab_dTermination_dMeasure_ddotBase n) = "mapMaybe")) then true else ((v_Vuna_dCompiler_dElab_dTermination_dMeasure_ddotBase n) = "filter")))
 
 let v_Vuna_dCompiler_dElab_dTermination_dMeasure_dextendElemSizes = (fun mc0 mc1 mc2 -> (match mc1 with
   | C_Vuna_dCompiler_dFrontend_dAst_dExpr_Vuna_dCompiler_dFrontend_dAst_dEVar (dtb__312, dtb__313) -> (match ((v_Vuna_dCompiler_dElab_dTermination_dMeasure_dsizeOfVarStrict dtb__312) mc0) with
@@ -761,7 +761,7 @@ let rec v_Vuna_dCompiler_dElab_dTermination_dMeasure_dhasWeakCycleGo = (fun mc0 
 
 let v_Vuna_dCompiler_dElab_dTermination_dMeasure_dhasWeakCycle = (fun comp edges -> (((v_Vuna_dCompiler_dElab_dTermination_dMeasure_dhasWeakCycleGo comp) edges) comp))
 
-let v_Vuna_dCompiler_dElab_dTermination_dMeasure_disDescent = (fun m -> (if (m = 0) then false else true))
+let v_Vuna_dCompiler_dElab_dTermination_dMeasure_disDescent = (fun m -> (m <> 0))
 
 let rec v_Vuna_dCompiler_dElab_dTermination_dMeasure_dfilterModes = (fun mc0 -> (match mc0 with
   | C_Base_dList_dList_Base_dList_dCons (dtb__337, dtb__338) -> (if (v_Vuna_dCompiler_dElab_dTermination_dMeasure_disDescent dtb__337) then (C_Base_dList_dList_Base_dList_dCons (dtb__337, (v_Vuna_dCompiler_dElab_dTermination_dMeasure_dfilterModes dtb__338))) else (v_Vuna_dCompiler_dElab_dTermination_dMeasure_dfilterModes dtb__338))

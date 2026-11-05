@@ -54,58 +54,36 @@ errMethodNotFound = 0 - 32601
 
 -- 打开的文档表
 -- ---------------------------------------------------------------
-data Doc : Type where
-  Doc : String -> Int -> String -> Doc
-
-docUri : Doc -> String
-docUri (Doc uri version text) = uri
-
-docVersion : Doc -> Int
-docVersion (Doc uri version text) = version
-
-docText : Doc -> String
-docText (Doc uri version text) = text
+record Doc where
+  docUri : String
+  docVersion : Int
+  docText : String
 
 docLookup : String -> List Doc -> Maybe Doc
 docLookup uri [] = Nothing
-docLookup uri (d :: rest) = if docUri d == uri then Just d else docLookup uri rest
+docLookup uri (d :: rest) = if d.docUri == uri then Just d else docLookup uri rest
 
 docSet : Doc -> List Doc -> List Doc
 docSet d [] = [d]
-docSet d (x :: rest) = if docUri x == docUri d then d :: rest else x :: docSet d rest
+docSet d (x :: rest) = if x.docUri == d.docUri then d :: rest else x :: docSet d rest
 
 docRemove : String -> List Doc -> List Doc
 docRemove uri [] = []
-docRemove uri (x :: rest) = if docUri x == uri then docRemove uri rest else x :: docRemove uri rest
+docRemove uri (x :: rest) = if x.docUri == uri then docRemove uri rest else x :: docRemove uri rest
 
 -- ---------------------------------------------------------------
 -- 服务器状态
 -- ---------------------------------------------------------------
 -- docs：打开的文档（按 uri 去重）；shutdownReq：是否收到 shutdown；
 -- index：惰性构建的索引（Nothing = 尚未成功构建）；indexTried：是否尝试过构建；
-data LspState : Type where
-  LspState : List Doc -> Bool -> Maybe Index -> Bool -> Maybe String -> List String -> List (Pair Int Json) -> LspState
-
-stateDocs : LspState -> List Doc
-stateDocs (LspState docs shutdownReq index tried rootHint logs diagCache) = docs
-
-stateShutdown : LspState -> Bool
-stateShutdown (LspState docs shutdownReq index tried rootHint logs diagCache) = shutdownReq
-
-stateIndex : LspState -> Maybe Index
-stateIndex (LspState docs shutdownReq index tried rootHint logs diagCache) = index
-
-stateIndexTried : LspState -> Bool
-stateIndexTried (LspState docs shutdownReq index tried rootHint logs diagCache) = tried
-
-stateRootHint : LspState -> Maybe String
-stateRootHint (LspState docs shutdownReq index tried rootHint logs diagCache) = rootHint
-
-stateLogs : LspState -> List String
-stateLogs (LspState docs shutdownReq index tried rootHint logs diagCache) = logs
-
-stateDiagCache : LspState -> List (Pair Int Json)
-stateDiagCache (LspState docs shutdownReq index tried rootHint logs diagCache) = diagCache
+record LspState where
+  stateDocs : List Doc
+  stateShutdown : Bool
+  stateIndex : Maybe Index
+  stateIndexTried : Bool
+  stateRootHint : Maybe String
+  stateLogs : List String
+  stateDiagCache : List (Pair Int Json)
 
 setDocs : List Doc -> LspState -> LspState
 setDocs docs (LspState _ s idx tried hint logs dc) = LspState docs s idx tried hint logs dc
@@ -143,13 +121,13 @@ logTo line (LspState docs s idx tried hint logs dc) =
 
 -- 退出时一次写出（内存累积的日志，见 Protocol.flushLogLines）。
 flushLogs : LspState -> Int
-flushLogs st = flushLogLines (stateLogs st)
+flushLogs st = flushLogLines st.stateLogs
 
 -- 首次需要索引时构建；失败一次后不再重试（避免每个请求都全量扫描磁盘）。
 ensureIndex : String -> LspState -> Pair LspState (Maybe Index)
-ensureIndex uri st = case stateIndex st of
+ensureIndex uri st = case st.stateIndex of
   Just idx => Pair st (Just idx)
-  Nothing => if stateIndexTried st then Pair st Nothing
+  Nothing => if st.stateIndexTried then Pair st Nothing
   else
     let
       root = workspaceRoot uri
@@ -165,9 +143,9 @@ ensureIndex uri st = case stateIndex st of
 
 -- 打开的文档文本（未打开 → ""）。
 textForUri : String -> LspState -> String
-textForUri uri st = case docLookup uri (stateDocs st) of
+textForUri uri st = case docLookup uri st.stateDocs of
   Nothing => ""
-  Just d => docText d
+  Just d => d.docText
 
 -- ---------------------------------------------------------------
 -- capabilities（M30 P2：全套）
@@ -229,7 +207,7 @@ handleDidOpen msg state =
     uri = uriOfParams params
     version = versionOfParams params
     text = textOfParams params
-    docs = docSet (Doc uri version text) (stateDocs state)
+    docs = docSet (Doc uri version text) state.stateDocs
     pair = diagnoseCached uri version text state
   in Pair False (Pair (setRootHintIfEmpty uri (setDocs docs (firstOf pair))) [secondOf pair])
 
@@ -239,14 +217,14 @@ handleDidChange msg state =
   let
     params = paramsOf msg
     uri = uriOfParams params
-    oldVersion = case docLookup uri (stateDocs state) of
+    oldVersion = case docLookup uri state.stateDocs of
       Nothing => 0
-      Just d => docVersion d
+      Just d => d.docVersion
     version = case jsonGetIn ["textDocument", "version"] params >>= jsonAsInt of
       Nothing => oldVersion
       Just v => v
     text = changedText params
-    docs = docSet (Doc uri version text) (stateDocs state)
+    docs = docSet (Doc uri version text) state.stateDocs
     pair = diagnoseCached uri version text state
   in Pair False (Pair (setDocs docs (firstOf pair)) [secondOf pair])
 
@@ -255,7 +233,7 @@ diagnoseCached : String -> Int -> String -> LspState -> Pair LspState Json
 diagnoseCached uri version text state =
   let
     key = strHash uri * 1000003 + strHash text
-  in case lookupDiag key (stateDiagCache state) of
+  in case lookupDiag key state.stateDiagCache of
     Just frame => Pair state frame
     Nothing =>
       let
@@ -273,7 +251,7 @@ handleDidClose msg state =
   let
     params = paramsOf msg
     uri = uriOfParams params
-    docs = docRemove uri (stateDocs state)
+    docs = docRemove uri state.stateDocs
   in Pair False (Pair (setDocs docs state) [publishDiagnosticsFor uri 0 ""])
 
 -- hover：先查洞目标（包上下文），未命中再查标识符签名/注释。
@@ -360,7 +338,7 @@ handleWorkspaceSymbol msg state =
   let
     params = paramsOf msg
     query = fromMaybe "" (jsonGet "query" params >>= jsonAsStr)
-    hint = fromMaybe "" (stateRootHint state)
+    hint = fromMaybe "" state.stateRootHint
     indexPair = ensureIndex hint state
     state1 = firstOf indexPair
     midx = secondOf indexPair
@@ -461,7 +439,7 @@ exitCodeOf : LspState -> Int
 exitCodeOf state =
   let
     _ = flushLogs state
-  in if stateShutdown state then 0 else 1
+  in if state.stateShutdown then 0 else 1
 
 -- 非正常结束（stdin EOF / 空输入）：flush 日志后一律退 1，
 -- 不能把 flushLogs 的「写入字节数」当退出码。

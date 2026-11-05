@@ -62,7 +62,7 @@ docManifestExports dir =
     manifestFile = dir ++ "/vuna.toml"
   in if runIO (prim_fileExists manifestFile) then case loadManifestAt manifestFile of
     Err e => Err e
-    Ok manifest => Ok (manifestExports manifest)
+    Ok manifest => Ok manifest.manifestExports
   else Ok Nothing
 
 -- 解析出的模块：模块全名 + 渲染段落（用于按 [export] 顺序过滤）。
@@ -91,7 +91,7 @@ docModule env path = case readText path of
       Err e => Pair env2 (Err (path ++ ": cannot load package fixity context: " ++ e))
       Ok programFixities => case parseSource path source of
         Err e => Pair env2 (Err (path ++ ": " ++ e))
-        Ok (Source hdr imports fx decls0) => case reorderProgram (tableOfKeepOps (append programFixities fx)) decls0 of
+        Ok (SourceFile hdr imports fx decls0) => case reorderProgram (tableOfKeepOps (append programFixities fx)) decls0 of
           Err e => Pair env2 (Err (path ++ ": " ++ e))
           Ok decls =>
             Pair env2
@@ -161,7 +161,7 @@ fieldLine : Field -> String
 fieldLine (Field name ty sp) = "  " ++ name ++ " : " ++ renderTy ty
 
 methodLine : TraitMethod -> String
-methodLine m = "  " ++ traitMethodName m ++ " : " ++ renderTy (traitMethodType m)
+methodLine m = "  " ++ traitMethodName m ++ " : " ++ renderTy m.traitMethodType
 
 isPrivate : String -> Bool
 isPrivate name = case strUnpack name of

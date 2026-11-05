@@ -24,8 +24,10 @@ import Vuna.Compiler.Codegen.Term
 
 -- 装配片段：文件头（open 链）、类型声明、List 桥接、按 SCC 顺序的正文，外加生成状态。
 -- 构造子不导出：调用方只能经 `genUnitText` 拼接，避免各处重复实现拼接顺序。
-data UnitParts : Type where
-  UnitParts : List String -> List String -> GenSt -> UnitParts
+record UnitParts where
+  unitPartsFragments : List String
+  unitPartsBodies : List String
+  unitPartsState : GenSt
 
 -- check / split 共用的准备阶段：名字护栏 + 分区 + 擦除检查 + SCC 分组。
 -- 返回 (运行时定义（源码顺序）, 已按依赖排序的分组)。
@@ -121,4 +123,4 @@ listBridgeFor allDatas unitDatas = case findListFamilyData allDatas of
 
 memDataName : String -> List DtData -> Bool
 memDataName name [] = False
-memDataName name (d :: rest) = if dtDataName d == name then True else memDataName name rest
+memDataName name (d :: rest) = dtDataName d == name || memDataName name rest

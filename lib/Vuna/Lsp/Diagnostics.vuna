@@ -33,34 +33,19 @@ severityWarning = 2
 -- 诊断
 -- ---------------------------------------------------------------
 -- 行/列 1-based；code 为空串表示无规则码（编译错误）。
-data Diag : Type where
-  Diag : Int -> Int -> Int -> Int -> Int -> String -> String -> Diag
-
-diagStartLine : Diag -> Int
-diagStartLine (Diag sl sc el ec sev code msg) = sl
-
-diagStartCol : Diag -> Int
-diagStartCol (Diag sl sc el ec sev code msg) = sc
-
-diagEndLine : Diag -> Int
-diagEndLine (Diag sl sc el ec sev code msg) = el
-
-diagEndCol : Diag -> Int
-diagEndCol (Diag sl sc el ec sev code msg) = ec
-
-diagSeverity : Diag -> Int
-diagSeverity (Diag sl sc el ec sev code msg) = sev
-
-diagCode : Diag -> String
-diagCode (Diag sl sc el ec sev code msg) = code
-
-diagMessage : Diag -> String
-diagMessage (Diag sl sc el ec sev code msg) = msg
+record Diag where
+  diagStartLine : Int
+  diagStartCol : Int
+  diagEndLine : Int
+  diagEndCol : Int
+  diagSeverity : Int
+  diagCode : String
+  diagMessage : String
 
 diagJson : Diag -> Json
 diagJson d =
   JObj
-    (append [Pair "range" (lspRange (diagStartLine d) (diagStartCol d) (diagEndLine d) (diagEndCol d)), Pair "severity" (JNum (diagSeverity d)), Pair "source" (JStr "vuna")] (append (if diagCode d == "" then [] else [Pair "code" (JStr (diagCode d))]) [Pair "message" (JStr (diagMessage d))]))
+    (append [Pair "range" (lspRange d.diagStartLine d.diagStartCol d.diagEndLine d.diagEndCol), Pair "severity" (JNum d.diagSeverity), Pair "source" (JStr "vuna")] (append (if d.diagCode == "" then [] else [Pair "code" (JStr d.diagCode)]) [Pair "message" (JStr d.diagMessage)]))
 
 -- 编译器的错误/警告串形如 `<file>:<line>:<col>: <msg>`；file 本身可能含冒号
 -- （例如 URI `file:///x.vuna:2:7: ...`）。所以扫描第一个「连续两段都是数字」的位置，
@@ -132,8 +117,8 @@ lintDiagnostics label text = case fixitiesForFile emptyFixityEnv label text of
 
 lintDiag : Finding -> Diag
 lintDiag f =
-  Diag (findingLine f) (findingCol f) (findingLine f) (findingCol f + 1) severityWarning
-    (findingCode f) (findingMessage f)
+  Diag f.findingLine f.findingCol f.findingLine (f.findingCol + 1) severityWarning f.findingCode
+    f.findingMessage
 
 diagnosticsFor : String -> String -> List Diag
 diagnosticsFor uri text = case contextForDoc uri of

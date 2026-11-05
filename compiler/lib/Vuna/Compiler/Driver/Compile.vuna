@@ -361,9 +361,9 @@ checkCachedExe ctx entry =
 -- TMeta 才返回；否则回退全量精化（静默漏检不可接受）。每个依赖包分配一个
 -- `idx << 30` 的编号段（per-module/包段编号），跨包合并的 TMeta/sols 不再冲突。
 depProgramsOf : PackageContext -> Maybe (List DtProgram)
-depProgramsOf ctx = case contextPackage ctx of
+depProgramsOf ctx = case ctx.contextPackage of
   Nothing => Nothing
-  Just pkg => depProgramsOfGo 0 (packageDependencies pkg) []
+  Just pkg => depProgramsOfGo 0 pkg.packageDependencies []
 
 metaSegment : Int
 metaSegment = 1073741824

@@ -73,8 +73,7 @@ deriveCtxParams (p :: rest) ctors =
 
 anyCtorMentions : String -> List Ctor -> Bool
 anyCtorMentions p [] = False
-anyCtorMentions p ((Ctor cn ty ar cnsp) :: rest) =
-  if exprMentionsName p ty then True else anyCtorMentions p rest
+anyCtorMentions p ((Ctor cn ty ar cnsp) :: rest) = exprMentionsName p ty || anyCtorMentions p rest
 
 exprMentionsName : String -> Expr -> Bool
 exprMentionsName p (EVar n sp) = n == p

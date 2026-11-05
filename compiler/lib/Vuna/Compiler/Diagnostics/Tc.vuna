@@ -3,9 +3,6 @@ module Vuna.Compiler.Diagnostics.Tc
   , TcErr(..)
   , tcAll
   , tcCode
-  , tcEntryCode
-  , tcEntryDesc
-  , tcEntryTemplate
   , tcErr
   , tcErr0
   , tcErr0NoLoc
@@ -317,17 +314,10 @@ tcTemplate (WhereNeedsSig _ _) =
 -- ---------------------------------------------------------------
 -- 文档遍历源（同构 List；`gen-errors` 遍历渲染；不承载 arity——arity 在构造子类型里）
 -- ---------------------------------------------------------------
-data TcEntry : Type where
-  TcEntry : String -> String -> String -> TcEntry
-
-tcEntryCode : TcEntry -> String
-tcEntryCode (TcEntry code template desc) = code
-
-tcEntryTemplate : TcEntry -> String
-tcEntryTemplate (TcEntry code template desc) = template
-
-tcEntryDesc : TcEntry -> String
-tcEntryDesc (TcEntry code template desc) = desc
+record TcEntry where
+  tcEntryCode : String
+  tcEntryTemplate : String
+  tcEntryDesc : String
 
 -- ---------------------------------------------------------------
 -- 文档遍历源：**按 ≤8 项分块**（M30 B19）。split codegen 会把单个列表字面量打成一行，

@@ -156,7 +156,7 @@ elabTrait globals ec ds = case ds of
 -- trait 方法列表 → 旧内部形态（名字, 类型）对。span 走 `traitMethodSpan`。
 traitMethodPairs : List TraitMethod -> List (Pair String Expr)
 traitMethodPairs [] = []
-traitMethodPairs (m :: rest) = Pair (traitMethodName m) (traitMethodType m) :: traitMethodPairs rest
+traitMethodPairs (m :: rest) = Pair (traitMethodName m) m.traitMethodType :: traitMethodPairs rest
 
 -- 方法投影的签名与定义体：
 --   sig:  `{p : <kind>} -> {d : Dict_C p} -> <方法类型>`
@@ -280,8 +280,12 @@ instanceConstraintParts (EApp fn ([a]) sp) = case fn of
 instanceConstraintParts _ = Nothing
 
 -- 实例 signatrue 的精化结果：类名、tele、ctx 字典域、头实参（tele 内）、结果头。
-data InstSigInfo : Type where
-  InstSigInfo : String -> List (Pair String Term) -> List Term -> Term -> Term -> InstSigInfo
+record InstSigInfo where
+  instSigClass : String
+  instSigTele : List (Pair String Term)
+  instSigCtx : List Term
+  instSigArg : Term
+  instSigHead : Term
 
 instSigClass : InstSigInfo -> String
 instSigClass (InstSigInfo c tele ctxE arg head) = c
@@ -468,7 +472,7 @@ instanceHeadTerm _ = TGlobal "Int"
 -- 实例里出现 trait 没声明的方法 ⇒ 硬错误（旧实现静默忽略多余方法）。
 firstUnknownInstanceMethod : DtClass -> List Decl -> Maybe String
 firstUnknownInstanceMethod cls methods =
-  firstUnknownInstanceMethodGo (map (\m => baseNameOf (firstOf m)) (dtClassMethods cls)) methods
+  firstUnknownInstanceMethodGo (map (\m => baseNameOf (firstOf m)) cls.dtClassMethods) methods
 
 firstUnknownInstanceMethodGo : List String -> List Decl -> Maybe String
 firstUnknownInstanceMethodGo known [] = Nothing
@@ -480,7 +484,7 @@ firstUnknownInstanceMethodGo known (d :: rest) = case d of
 -- 缺方法要在**精化方法体之前**判定：方法体本身可能还有类型错误（例如跨模块 trait
 -- 的泛型方法参数被写错类型），先报体错误会把「缺实现」这个更根本的诊断盖掉。
 firstMissingInstanceMethod : DtClass -> List Decl -> Maybe String
-firstMissingInstanceMethod cls methods = firstMissingInstanceMethodGo (dtClassMethods cls) methods
+firstMissingInstanceMethod cls methods = firstMissingInstanceMethodGo cls.dtClassMethods methods
 
 firstMissingInstanceMethodGo : List (Pair String Term) -> List Decl -> Maybe String
 firstMissingInstanceMethodGo [] decls = Nothing
@@ -491,7 +495,7 @@ firstMissingInstanceMethodGo (m :: rest) decls =
 hasMethodClauses : String -> List Decl -> Bool
 hasMethodClauses name [] = False
 hasMethodClauses name (d :: rest) = case d of
-  DFun n pats body sp => if baseNameOf n == name then True else hasMethodClauses name rest
+  DFun n pats body sp => baseNameOf n == name || hasMethodClauses name rest
   _ => hasMethodClauses name rest
 
 -- M30（B20）：实例缺方法时把诊断落到 trait 里的**方法签名行**——先按类全名找到
@@ -527,12 +531,12 @@ findClass name (c :: rest) = if dtClassName c == name then Just c else findClass
 -- 于是方法体里对 tele 变量的字典需求能命中局部 ctx binder（`searchInstanceIn` 的 local 分支）。
 elabInstanceMethodsCtx : List (Pair String Term) -> DtClass -> Ctx -> Int -> Term -> Ec -> List Decl -> Span -> Result (Pair (List Term) (Pair (List (Pair Term Rig)) Ec))
 elabInstanceMethodsCtx globals cls ctx nCtx headArg ec methods sp =
-  elabInstanceMethodsGo globals ctx nCtx ec (zipClassFields cls) (paramNameOf (dtClassParams cls))
+  elabInstanceMethodsGo globals ctx nCtx ec (zipClassFields cls) (paramNameOf cls.dtClassParams)
     headArg methods [] [] sp
 
 -- 方法名 + 字段类型（方法声明顺序）。
 zipClassFields : DtClass -> List (Pair String Term)
-zipClassFields cls = zipMethodFields (dtClassMethods cls) (dtClassFieldTys cls)
+zipClassFields cls = zipMethodFields cls.dtClassMethods cls.dtClassFieldTys
 
 zipMethodFields : List (Pair String Term) -> List Term -> List (Pair String Term)
 zipMethodFields [] fieldTys = []
@@ -627,7 +631,7 @@ solveCtxGoalsGo ctx nCtx ec ((g@(DtDictGoal m dom)) :: rest) kept acc = case met
         Err e => solveCtxGoalsGo ctx nCtx ec rest kept acc
 
 matchCtxDictIdx : Ctx -> Int -> Value -> Ec -> Maybe Int
-matchCtxDictIdx ctx nCtx dom ec = matchCtxDictIdxGo ctx nCtx dom ec 0 (ctxItems ctx)
+matchCtxDictIdx ctx nCtx dom ec = matchCtxDictIdxGo ctx nCtx dom ec 0 ctx.ctxItems
 
 matchCtxDictIdxGo : Ctx -> Int -> Value -> Ec -> Int -> List (Pair String Term) -> Maybe Int
 matchCtxDictIdxGo ctx nCtx dom ec i [] = Nothing
@@ -708,8 +712,10 @@ clauseSpanOf (c :: rest) = exprSpan (secondOf c)
 --
 -- M29（C05）：同一 domain 的多个目标只提升成**一只**字典 binder（否则 `bind ma` / `bind mb` /
 -- `pure` 各产生一只 `Dict_Monad m`，arity 膨胀且泛型调用链上继续复制）。
-data DictGoalGroup : Type where
-  DictGoalGroup : Int -> Value -> List Int -> DictGoalGroup
+record DictGoalGroup where
+  dictGoalGroupRep : Int
+  dictGoalGroupDom : Value
+  dictGoalGroupExtras : List Int
 
 freeDictGoals : Ec -> List DictGoalGroup
 freeDictGoals ec = freeDictGoalsGo ec (ecDictGoals ec) []
@@ -915,20 +921,20 @@ findInstanceClash ec name tele head seen =
 anyInstanceExact : Ec -> Int -> Term -> List DtInst -> Bool
 anyInstanceExact ec n head [] = False
 anyInstanceExact ec n head (i :: rest) =
-  if length (dtInstTele i) == n then if headsAlphaEqual ec n head (dtInstHead i) then True else anyInstanceExact ec n head rest
+  if length i.dtInstTele == n then if headsAlphaEqual ec n head i.dtInstHead then True else anyInstanceExact ec n head rest
   else anyInstanceExact ec n head rest
 
 anyInstanceOverlap : Ec -> List (Pair String Term) -> Term -> List DtInst -> Pair (Maybe InstClash) Ec
 anyInstanceOverlap ec [] head [] = Pair Nothing ec
 anyInstanceOverlap ec (t :: ts) head [] = Pair Nothing ec
 anyInstanceOverlap ec tele head (i :: rest) = if instanceExactQuiet ec (length tele) head i then anyInstanceOverlap ec tele head rest
-else case headsOverlap ec tele head (dtInstTele i) (dtInstHead i) of
+else case headsOverlap ec tele head i.dtInstTele i.dtInstHead of
   Pair True ec1 => Pair (Just ClashOverlap) ec1
   Pair False ec1 => anyInstanceOverlap ec tele head rest
 
 instanceExactQuiet : Ec -> Int -> Term -> DtInst -> Bool
 instanceExactQuiet ec n head inst =
-  if length (dtInstTele inst) == n then headsAlphaEqual ec n head (dtInstHead inst) else False
+  length inst.dtInstTele == n && headsAlphaEqual ec n head inst.dtInstHead
 
 -- 同一 tele 长度下按 index 对齐的 α-等价（两个 head 的 tele 变量都映射到同一组占位 level）。
 headsAlphaEqual : Ec -> Int -> Term -> Term -> Bool

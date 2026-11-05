@@ -90,7 +90,7 @@ renderTraitDecl env at name params methods =
 renderMethodSig : List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> TraitMethod -> List String
 renderMethodSig env at m =
   attachAt at (traitMethodSpan m) 2
-    (prefixFirst ("  " ++ traitMethodName m ++ " : ") (renderTypeExpr env at 2 (traitMethodType m)))
+    (prefixFirst ("  " ++ traitMethodName m ++ " : ") (renderTypeExpr env at 2 m.traitMethodType))
 
 renderInstanceDecl : List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> List Expr -> Expr -> List Decl -> List String
 renderInstanceDecl env at ctxE head methods =
@@ -251,7 +251,7 @@ strLeChars : List Int -> List Int -> Bool
 strLeChars [] [] = True
 strLeChars [] (y :: ys) = True
 strLeChars (x :: xs) [] = False
-strLeChars (x :: xs) (y :: ys) = if x < y then True else if x > y then False else strLeChars xs ys
+strLeChars (x :: xs) (y :: ys) = x < y || (if x > y then False else strLeChars xs ys)
 
 strLe : String -> String -> Bool
 strLe a b = strLeChars (strUnpack a) (strUnpack b)
@@ -290,10 +290,10 @@ renderFixityLine at d = attachAt at (fixitySpan d) 0 [renderFixityDecl d]
 
 renderHeader : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Maybe ModDecl -> List String
 renderHeader at Nothing = []
-renderHeader at (Just m) = attachAt at (modDeclSpan m) 0 (renderModDecl at m)
+renderHeader at (Just m) = attachAt at m.modDeclSpan 0 (renderModDecl at m)
 
 renderImportLine : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Import -> List String
-renderImportLine at imp = attachAt at (importSpan imp) 0 [renderImport imp]
+renderImportLine at imp = attachAt at imp.importSpan 0 [renderImport imp]
 
 renderEofComments : List Comment -> List String
 renderEofComments [] = []

@@ -29,7 +29,7 @@ data Term where
   `NVar name level spine` 或 `NGlobal name spine`。
 - `Rig` 是三值格子（`Rig0` / `Rig1` / `RigOmega`），当前只产生前两个；**读取判据只有
   `rigIsErased`**，构造入口只有 `rigOfBinder`，`Core` 之外不得模式匹配 `Rig`。
-- `Level` 不透明：内部是 `MkLevel Int`，外部只能经 `levelZero` / `levelSucc` /
+- `Level` 不透明：内部是 `Level Int`（字段 `levelToInt`），外部只能经 `levelZero` / `levelSucc` /
   `levelMax` / `levelToInt` / `levelEq` / `levelLt` 访问，不得自行做 Int 算术。
 - `Sols` 携带解表（list 权威 + 哈希索引）、元变量创建深度索引与定义值缓存
   （`defVals`）；缓存是可重建的，未命中回落 `force` 的 delta 展开，不影响语义。

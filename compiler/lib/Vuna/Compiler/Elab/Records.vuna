@@ -12,11 +12,6 @@ module Vuna.Compiler.Elab.Records
   , missingFieldMsg
   , prepareDecls
   , recordDeclToData
-  , recordInfoCtor
-  , recordInfoDerivings
-  , recordInfoFields
-  , recordInfoName
-  , recordInfoParams
   , recordsOfDecls
   , unknownFieldMsg
   ) where
@@ -36,23 +31,12 @@ import Vuna.Compiler.Frontend.Ast
 
 -- 记录声明信息。第五个字段是**构造子名**：与记录名同名（M23 起；Elab 让值位置先查
 -- 构造子表、类型位置走 globals，两者同名不再冲突）。
-data RecordInfo : Type where
-  RecordInfo : String -> List String -> List (Pair String Expr) -> List String -> String -> RecordInfo
-
-recordInfoName : RecordInfo -> String
-recordInfoName (RecordInfo name params fields derivings ctor) = name
-
-recordInfoParams : RecordInfo -> List String
-recordInfoParams (RecordInfo name params fields derivings ctor) = params
-
-recordInfoFields : RecordInfo -> List (Pair String Expr)
-recordInfoFields (RecordInfo name params fields derivings ctor) = fields
-
-recordInfoDerivings : RecordInfo -> List String
-recordInfoDerivings (RecordInfo name params fields derivings ctor) = derivings
-
-recordInfoCtor : RecordInfo -> String
-recordInfoCtor (RecordInfo name params fields derivings ctor) = ctor
+record RecordInfo where
+  recordInfoName : String
+  recordInfoParams : List String
+  recordInfoFields : List (Pair String Expr)
+  recordInfoDerivings : List String
+  recordInfoCtor : String
 
 lookupRecord : String -> List RecordInfo -> Maybe RecordInfo
 lookupRecord name [] = Nothing
@@ -64,12 +48,12 @@ fieldNamesOf : List (Pair a b) -> List a
 fieldNamesOf [] = []
 fieldNamesOf ((Pair n t) :: rest) = n :: fieldNamesOf rest
 
-fieldIndexAt : a -> List (Pair a b) -> Int -> Maybe Int
+fieldIndexAt : Eq a => a -> List (Pair a b) -> Int -> Maybe Int
 fieldIndexAt fname [] i = Nothing
 fieldIndexAt fname ((Pair n t) :: rest) i =
   if n == fname then Just i else fieldIndexAt fname rest (i + 1)
 
-fieldIndex : a -> List (Pair a b) -> Maybe Int
+fieldIndex : Eq a => a -> List (Pair a b) -> Maybe Int
 fieldIndex fname fields = fieldIndexAt fname fields 0
 
 lookupProvided : String -> List (Pair String a) -> Maybe a

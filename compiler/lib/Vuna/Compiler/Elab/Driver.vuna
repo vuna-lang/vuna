@@ -11,9 +11,6 @@ module Vuna.Compiler.Elab.Driver
   , ctxEntriesOf
   , dtEvalExprIn
   , dtEvalExprInInfo
-  , dtGoalInfoCtx
-  , dtGoalInfoGoal
-  , dtGoalInfoSpan
   , ecOfProgram
   , elabBodies
   , elabProgram
@@ -160,17 +157,10 @@ sigDictName k = "_ctx" ++ strFromInt k
 -- body 精化时，调用点的字典实参在类参数还没解出时被延迟成 `DtDictGoal`（裸 meta）；
 -- 若签名声明了 `C a`，这些目标应解到声明的 `_ctx<k>` binder，而不是再被
 -- `liftFreeDictGoals` 提升成新的隐式参数。目标域与 binder 类型 conv 相等即命中。
-data DeclDictBinder : Type where
-  DeclDictBinder : String -> Int -> Value -> DeclDictBinder
-
-declDictName : DeclDictBinder -> String
-declDictName (DeclDictBinder n l d) = n
-
-declDictLevel : DeclDictBinder -> Int
-declDictLevel (DeclDictBinder n l d) = l
-
-declDictDom : DeclDictBinder -> Value
-declDictDom (DeclDictBinder n l d) = d
+record DeclDictBinder where
+  declDictName : String
+  declDictLevel : Int
+  declDictDom : Value
 
 -- 签名前导隐式前缀里的字典 binder（源码顺序 = level 升序）。
 declaredDictBinders : Ec -> Term -> List DeclDictBinder
@@ -193,17 +183,10 @@ solveDeclaredDictGoals ec ty body = case declaredDictBinders ec ty of
       solved = solveDeclaredDictGoalsGo ec binders (ecDictGoals ec) [] []
     in Pair (applyDeclaredDictSubsts (firstOf solved) body) (secondOf solved)
 
-data DictSubst : Type where
-  DictSubst : Int -> String -> Int -> DictSubst
-
-dictSubstMeta : DictSubst -> Int
-dictSubstMeta (DictSubst m name q) = m
-
-dictSubstName : DictSubst -> String
-dictSubstName (DictSubst m name q) = name
-
-dictSubstQ : DictSubst -> Int
-dictSubstQ (DictSubst m name q) = q
+record DictSubst where
+  dictSubstMeta : Int
+  dictSubstName : String
+  dictSubstQ : Int
 
 solveDeclaredDictGoalsGo : Ec -> List DeclDictBinder -> List DtDictGoal -> List DtDictGoal -> List DictSubst -> Pair (List DictSubst) Ec
 solveDeclaredDictGoalsGo ec binders goals kept acc = case goals of
@@ -216,17 +199,17 @@ solveDeclaredDictGoalsGo ec binders goals kept acc = case goals of
         let
           -- q = level + 1：出现点（term 根下的 lambda 深度 depth）的 index = depth - q，正好等于
           -- 该 binder 在「全部隐式 binder 之外再加 depth 层 λ」处的 de Bruijn index。
-          q = declDictLevel b + 1
-        in case solveMeta (ecDefTbl ec) (ecSolsP ec) 0 m [] (VNeutral (NVar (declDictName b) (declDictLevel b) [])) of
+          q = b.declDictLevel + 1
+        in case solveMeta (ecDefTbl ec) (ecSolsP ec) 0 m [] (VNeutral (NVar b.declDictName b.declDictLevel [])) of
           Ok sols2 =>
             solveDeclaredDictGoalsGo (ecPutSols ec (solsList sols2)) binders rest kept
-              (DictSubst m (declDictName b) q :: acc)
+              (DictSubst m b.declDictName q :: acc)
           Err e => solveDeclaredDictGoalsGo ec binders rest (g :: kept) acc
 
 firstMatchDictBinder : Ec -> List DeclDictBinder -> Value -> Maybe DeclDictBinder
 firstMatchDictBinder ec [] dom = Nothing
 firstMatchDictBinder ec (b :: rest) dom =
-  if dictDomMatches ec (declDictDom b) dom then Just b else firstMatchDictBinder ec rest dom
+  if dictDomMatches ec b.declDictDom dom then Just b else firstMatchDictBinder ec rest dom
 
 dictDomMatches : Ec -> Value -> Value -> Bool
 dictDomMatches ec a b = case conv (ecDefTbl ec) (ecSolsP ec) 0 (forceVal ec a) (forceVal ec b) of
@@ -236,8 +219,7 @@ dictDomMatches ec a b = case conv (ecDefTbl ec) (ecSolsP ec) 0 (forceVal ec a) (
 applyDeclaredDictSubsts : List DictSubst -> Term -> Term
 applyDeclaredDictSubsts [] body = body
 applyDeclaredDictSubsts (s :: rest) body =
-  applyDeclaredDictSubsts rest
-    (substMetaVar (dictSubstMeta s) (dictSubstName s) (dictSubstQ s) body)
+  applyDeclaredDictSubsts rest (substMetaVar s.dictSubstMeta s.dictSubstName s.dictSubstQ body)
 
 -- 子句表（名字 → 该函数的全部 clause，源顺序）。旧实现每个定义都扫一遍剩余声明
 -- （clausesFor）⇒ O(n²)；这里在 bodies 开始时建一次表，查表 O(1)。
@@ -256,7 +238,7 @@ clausesTblGo (d :: rest) t = case d of
   _ => clausesTblGo rest t
 
 clausesOfTbl : Ec -> List Decl -> String -> List (Pair (List Pat) Expr)
-clausesOfTbl ec decls name = case Base.HashMap.lookup name (ecClausesTbl ec) of
+clausesOfTbl ec decls name = case Base.HashMap.lookup name ec.ecClausesTbl of
   Just cs => cs
   Nothing => clausesFor decls name
 
@@ -341,8 +323,7 @@ else case refs of
       memoUnsafe (fuel - 1) future defs defvals self (Base.HashMap.insert g True seen)
         (append (termGlobalRefs body) rest)
     Nothing =>
-      if Base.HashMap.member g future then True
-      else memoUnsafe (fuel - 1) future defs defvals self seen rest
+      Base.HashMap.member g future || memoUnsafe (fuel - 1) future defs defvals self seen rest
 
 memoDefValue : HashMap Bool -> Ec -> String -> Term -> Maybe Value
 memoDefValue future ec name body =
@@ -423,7 +404,7 @@ checkAllDefinedGo ((Pair name (Pair ctx (Pair tyExpr sigSpan))) :: rest) globals
 hasFunClause : String -> List Decl -> Bool
 hasFunClause name [] = False
 hasFunClause name (d :: rest) = case d of
-  DFun n pats body sp => if n == name then True else hasFunClause name rest
+  DFun n pats body sp => n == name || hasFunClause name rest
   _ => hasFunClause name rest
 
 -- 该名字是否由 `axiom` 声明（有则返回其 span，用于「axiom 不能有定义」诊断）。
@@ -617,8 +598,7 @@ unsolvedMessage : Ec -> Int -> String
 unsolvedMessage ec m = case findGoal m (ecGoals ec) of
   Just g =>
     let
-      detail =
-        showSpanLoc (dtGoalSpan g) ++ " with goal " ++ showValueAt (ctxDepthOf g) (dtGoalType g)
+      detail = showSpanLoc g.dtGoalSpan ++ " with goal " ++ showValueAt (ctxDepthOf g) g.dtGoalType
     in tcMsg (UnsolvedHole detail) (VCons detail VNil)
   Nothing =>
     let
@@ -688,29 +668,22 @@ anyAltHasAnyMeta (alt :: rest) = termHasAnyMeta (caseAltBody alt) || anyAltHasAn
 
 -- 洞目标里的类型是 level 形态，show 时深度取快照上下文的长度。
 ctxDepthOf : DtGoal -> Int
-ctxDepthOf g = length (dtGoalCtx g)
+ctxDepthOf g = length g.dtGoalCtx
 
 findGoal : Int -> List DtGoal -> Maybe DtGoal
 findGoal m [] = Nothing
-findGoal m (g :: rest) = if dtGoalMeta g == m then Just g else findGoal m rest
+findGoal m (g :: rest) = if g.dtGoalMeta == m then Just g else findGoal m rest
 
 -- M15：面向工具链的洞目标查询（LSP / `vuna goal` 用）。
-data DtGoalInfo : Type where
-  DtGoalInfo : Span -> String -> List (Pair String String) -> DtGoalInfo
-
-dtGoalInfoSpan : DtGoalInfo -> Span
-dtGoalInfoSpan (DtGoalInfo sp goal ctx) = sp
-
-dtGoalInfoGoal : DtGoalInfo -> String
-dtGoalInfoGoal (DtGoalInfo sp goal ctx) = goal
-
-dtGoalInfoCtx : DtGoalInfo -> List (Pair String String)
-dtGoalInfoCtx (DtGoalInfo sp goal ctx) = ctx
+record DtGoalInfo where
+  dtGoalInfoSpan : Span
+  dtGoalInfoGoal : String
+  dtGoalInfoCtx : List (Pair String String)
 
 goalInfoOf : List (Pair Int Value) -> DtGoal -> DtGoalInfo
 goalInfoOf sols g =
-  DtGoalInfo (dtGoalSpan g) (showValueAt (ctxDepthOf g) (zonkGoal sols (dtGoalType g)))
-    (ctxEntriesOf (dtGoalCtx g))
+  DtGoalInfo g.dtGoalSpan (showValueAt (ctxDepthOf g) (zonkGoal sols g.dtGoalType))
+    (ctxEntriesOf g.dtGoalCtx)
 
 -- 洞目标里的类型可能仍含已解元变量：用当前解表 force 一遍再 show。
 zonkGoal : List (Pair Int Value) -> Value -> Value
@@ -748,7 +721,7 @@ ecOfProgram prog =
     ec3 = addClassesEc ec2 (dtProgClasses prog)
     ec4 = ecPutCtorTbl ec3 (ctorTblOfDatas (dtProgDatas prog))
     ec5 = ecPutSols ec4 (dtProgSols prog)
-    ec6 = ecPutNext ec5 (dtProgNext prog)
+    ec6 = ecPutNext ec5 prog.dtProgNext
     ec7 = ecPutGlobalsTbl ec6 (Base.HashMap.fromList (dtProgGlobals prog))
   in Pair ec7 (dtProgGlobals prog)
 

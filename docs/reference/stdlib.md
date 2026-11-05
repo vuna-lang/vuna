@@ -149,7 +149,7 @@ module Base.IO (IO, print, println, readFile, writeFile, readLine, readDir, ...)
   `Array (Array (List ...))`（`Array.get` O(1)，`insert` 两次 32 元素 copy-on-write）；
 - **`empty` 已移除**：`HashMap` / `IntMap` 的空表统一写 `fromList []`。原因是空表在
   OCaml 侧用 `Array.make` 构造会引入弱类型变量（`'_weak`），跨模块使用时被固定成某个
-  `a`；`fromList []` 走 `MkHashMap arrayEmpty`（`[||]` 字面量，non-expansive）可正常泛化；
+  `a`；`fromList []` 走 `HashMap arrayEmpty`（`[||]` 字面量，non-expansive）可正常泛化；
 - **`fromList` 与 `insertAll` 的冲突语义不同**：`fromList` 列表**前面**的条目优先（与
   `Base.Map.fromList` 的查找语义一致），`insertAll` **后面**的条目覆盖前面的。两者都是
   编译器历史 API 的语义，不要合并或用错；

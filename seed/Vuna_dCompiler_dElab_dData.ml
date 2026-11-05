@@ -296,20 +296,26 @@ let rec v_Vuna_dCompiler_dElab_dData_dusedInCtors = (fun mc0 mc1 mc2 -> (match m
   | _ -> failwith "DT: impossible branch"
 ))
 
-let v_Vuna_dCompiler_dElab_dData_dparamUsedInFieldTys = (fun dd i -> (((v_Vuna_dCompiler_dElab_dData_dusedInCtors i) (v_Base_dList_dlength (v_Vuna_dCompiler_dElab_dTypes_ddtDataParams dd))) (v_Vuna_dCompiler_dElab_dTypes_ddtDataCtors dd)))
+let v_Vuna_dCompiler_dElab_dData_dparamUsedInFieldTys = (fun dd i -> (((v_Vuna_dCompiler_dElab_dData_dusedInCtors i) (v_Base_dList_dlength (match dd with
+  | C_Vuna_dCompiler_dElab_dTypes_dDtData_Vuna_dCompiler_dElab_dTypes_dDtData (dtb__154, dtb__155, dtb__156, dtb__157) -> dtb__155
+  | _ -> failwith "DT: impossible branch"
+))) (v_Vuna_dCompiler_dElab_dTypes_ddtDataCtors dd)))
 
 let rec v_Vuna_dCompiler_dElab_dData_deraseMaskGo = (fun mc0 mc1 mc2 mc3 -> (match mc1 with
-  | C_Base_dList_dList_Base_dList_dCons (dtb__154, dtb__155) -> ((((v_Vuna_dCompiler_dElab_dData_deraseMaskGo mc0) dtb__155) (mc2 + 1)) (C_Base_dList_dList_Base_dList_dCons ((v_Base_dBool_dnot ((v_Vuna_dCompiler_dElab_dData_dparamUsedInFieldTys mc0) mc2)), mc3)))
+  | C_Base_dList_dList_Base_dList_dCons (dtb__158, dtb__159) -> ((((v_Vuna_dCompiler_dElab_dData_deraseMaskGo mc0) dtb__159) (mc2 + 1)) (C_Base_dList_dList_Base_dList_dCons ((v_Base_dBool_dnot ((v_Vuna_dCompiler_dElab_dData_dparamUsedInFieldTys mc0) mc2)), mc3)))
   | C_Base_dList_dList_Base_dList_dNil -> (v_Base_dList_dreverse mc3)
   | _ -> failwith "DT: impossible branch"
 ))
 
-let v_Vuna_dCompiler_dElab_dData_deraseIndexMask = (fun dd -> ((((v_Vuna_dCompiler_dElab_dData_deraseMaskGo dd) (v_Vuna_dCompiler_dElab_dTypes_ddtDataParams dd)) 0) C_Base_dList_dList_Base_dList_dNil))
+let v_Vuna_dCompiler_dElab_dData_deraseIndexMask = (fun dd -> ((((v_Vuna_dCompiler_dElab_dData_deraseMaskGo dd) (match dd with
+  | C_Vuna_dCompiler_dElab_dTypes_dDtData_Vuna_dCompiler_dElab_dTypes_dDtData (dtb__160, dtb__161, dtb__162, dtb__163) -> dtb__161
+  | _ -> failwith "DT: impossible branch"
+)) 0) C_Base_dList_dList_Base_dList_dNil))
 
 let rec v_Vuna_dCompiler_dElab_dData_dcandidateNames = (fun mc0 mc1 -> (match mc0 with
-  | C_Base_dList_dList_Base_dList_dCons (dtb__156, dtb__157) -> (match dtb__156 with
-  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__158, dtb__159) -> (match mc1 with
-  | C_Base_dList_dList_Base_dList_dCons (dtb__160, dtb__161) -> (if dtb__160 then (C_Base_dList_dList_Base_dList_dCons (dtb__158, ((v_Vuna_dCompiler_dElab_dData_dcandidateNames dtb__157) dtb__161))) else ((v_Vuna_dCompiler_dElab_dData_dcandidateNames dtb__157) dtb__161))
+  | C_Base_dList_dList_Base_dList_dCons (dtb__164, dtb__165) -> (match dtb__164 with
+  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__166, dtb__167) -> (match mc1 with
+  | C_Base_dList_dList_Base_dList_dCons (dtb__168, dtb__169) -> (if dtb__168 then (C_Base_dList_dList_Base_dList_dCons (dtb__166, ((v_Vuna_dCompiler_dElab_dData_dcandidateNames dtb__165) dtb__169))) else ((v_Vuna_dCompiler_dElab_dData_dcandidateNames dtb__165) dtb__169))
   | C_Base_dList_dList_Base_dList_dNil -> C_Base_dList_dList_Base_dList_dNil
   | _ -> failwith "DT: impossible branch"
 )
@@ -319,10 +325,13 @@ let rec v_Vuna_dCompiler_dElab_dData_dcandidateNames = (fun mc0 mc1 -> (match mc
   | _ -> failwith "DT: impossible branch"
 ))
 
-let v_Vuna_dCompiler_dElab_dData_dcandidateOf = (fun d -> (C_Base_dPair_dPair_Base_dPair_dPair ((v_Vuna_dCompiler_dElab_dTypes_ddtDataName d), ((v_Vuna_dCompiler_dElab_dData_dcandidateNames (v_Vuna_dCompiler_dElab_dTypes_ddtDataParams d)) (v_Vuna_dCompiler_dElab_dData_deraseIndexMask d)))))
+let v_Vuna_dCompiler_dElab_dData_dcandidateOf = (fun d -> (C_Base_dPair_dPair_Base_dPair_dPair ((v_Vuna_dCompiler_dElab_dTypes_ddtDataName d), ((v_Vuna_dCompiler_dElab_dData_dcandidateNames (match d with
+  | C_Vuna_dCompiler_dElab_dTypes_dDtData_Vuna_dCompiler_dElab_dTypes_dDtData (dtb__170, dtb__171, dtb__172, dtb__173) -> dtb__171
+  | _ -> failwith "DT: impossible branch"
+)) (v_Vuna_dCompiler_dElab_dData_deraseIndexMask d)))))
 
 let rec v_Vuna_dCompiler_dElab_dData_dindexErasureCandidates = (fun mc0 -> (match mc0 with
-  | C_Base_dList_dList_Base_dList_dCons (dtb__162, dtb__163) -> (C_Base_dList_dList_Base_dList_dCons ((v_Vuna_dCompiler_dElab_dData_dcandidateOf dtb__162), (v_Vuna_dCompiler_dElab_dData_dindexErasureCandidates dtb__163)))
+  | C_Base_dList_dList_Base_dList_dCons (dtb__174, dtb__175) -> (C_Base_dList_dList_Base_dList_dCons ((v_Vuna_dCompiler_dElab_dData_dcandidateOf dtb__174), (v_Vuna_dCompiler_dElab_dData_dindexErasureCandidates dtb__175)))
   | C_Base_dList_dList_Base_dList_dNil -> C_Base_dList_dList_Base_dList_dNil
   | _ -> failwith "DT: impossible branch"
 ))

@@ -92,7 +92,7 @@ let rec v_Vuna_dCompiler_dCodegen_dErase_dfindDtDef = (fun mc0 mc1 -> (match mc1
   | _ -> failwith "DT: impossible branch"
 ))
 
-let v_Vuna_dCompiler_dCodegen_dErase_disAxiomDef = (fun d -> (if (v_Vuna_dCompiler_dElab_dTypes_ddtDefHasBody d) then false else true))
+let v_Vuna_dCompiler_dCodegen_dErase_disAxiomDef = (fun d -> (v_Base_dBool_dnot (v_Vuna_dCompiler_dElab_dTypes_ddtDefHasBody d)))
 
 let rec v_Vuna_dCompiler_dCodegen_dErase_daxiomNamesOf = (fun mc0 -> (match mc0 with
   | C_Base_dList_dList_Base_dList_dCons (dtb__13, dtb__14) -> (if (v_Vuna_dCompiler_dCodegen_dErase_disAxiomDef dtb__13) then (C_Base_dList_dList_Base_dList_dCons ((v_Vuna_dCompiler_dElab_dTypes_ddtDefName dtb__13), (v_Vuna_dCompiler_dCodegen_dErase_daxiomNamesOf dtb__14))) else (v_Vuna_dCompiler_dCodegen_dErase_daxiomNamesOf dtb__14))
@@ -336,7 +336,7 @@ let rec v_Vuna_dCompiler_dCodegen_dErase_dgroupsFromCompsGo = (fun mc0 mc1 mc2 m
 
 let v_Vuna_dCompiler_dCodegen_dErase_dgroupsFromComps = (fun comps names -> ((((v_Vuna_dCompiler_dCodegen_dErase_dgroupsFromCompsGo (v_Vuna_dCompiler_dCodegen_dErase_dcomponentTblOf comps)) names) names) (v_Base_dHashMap_dfromList C_Base_dList_dList_Base_dList_dNil)))
 
-let v_Vuna_dCompiler_dCodegen_dErase_dnotIn = (fun name names -> (if ((v_Base_dList_dmemName name) names) then false else true))
+let v_Vuna_dCompiler_dCodegen_dErase_dnotIn = (fun name names -> (v_Base_dBool_dnot ((v_Base_dList_dmemName name) names)))
 
 let rec v_Vuna_dCompiler_dCodegen_dErase_duniqueNames = (fun mc0 -> (match mc0 with
   | C_Base_dList_dList_Base_dList_dCons (dtb__139, dtb__140) -> (if (dtb__139 = "") then (v_Vuna_dCompiler_dCodegen_dErase_duniqueNames dtb__140) else (if ((v_Base_dList_dmemName dtb__139) dtb__140) then (v_Vuna_dCompiler_dCodegen_dErase_duniqueNames dtb__140) else (C_Base_dList_dList_Base_dList_dCons (dtb__139, (v_Vuna_dCompiler_dCodegen_dErase_duniqueNames dtb__140)))))

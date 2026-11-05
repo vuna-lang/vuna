@@ -18,7 +18,7 @@ open Vuna_dCompiler_dFrontend_dManifest
 open Base_dIO
 open Vuna_dCompiler_dPackages_dPkg
 open Base_dArray
-type 'a0 t_Base_dHashMap_dHashMap = C_Base_dHashMap_dHashMap_Base_dHashMap_dMkHashMap of ((((string, 'a0) t_Base_dPair_dPair t_Base_dList_dList array) array))
+type 'a0 t_Base_dHashMap_dHashMap = C_Base_dHashMap_dHashMap_Base_dHashMap_dHashMap of ((((string, 'a0) t_Base_dPair_dPair t_Base_dList_dList array) array))
 
 let v_Base_dHashMap_dhashStr = (fun s -> (dtp_strHash s))
 
@@ -52,12 +52,12 @@ let rec v_Base_dHashMap_d_udedupGo = (fun mc0 mc1 -> (match mc0 with
 let v_Base_dHashMap_d_udedupBucket = (fun xs -> ((v_Base_dHashMap_d_udedupGo xs) C_Base_dList_dList_Base_dList_dNil))
 
 let v_Base_dHashMap_dinsert = (fun mc0 mc1 mc2 -> (match mc2 with
-  | C_Base_dHashMap_dHashMap_Base_dHashMap_dMkHashMap (dtb__12) -> ((fun base -> ((fun b -> ((fun qi -> ((fun oi -> ((fun ii -> ((fun outer -> ((fun inner -> (C_Base_dHashMap_dHashMap_Base_dHashMap_dMkHashMap ((((v_Base_dArray_dset base) oi) (((v_Base_dArray_dset outer) ii) (C_Base_dList_dList_Base_dList_dCons ((C_Base_dPair_dPair_Base_dPair_dPair (mc0, mc1)), inner))))))) ((v_Base_dArray_dget outer) ii))) ((v_Base_dArray_dget base) oi))) (bi_natFromInt (b - (qi * 32))))) (bi_natFromInt qi))) (if 32 = 0 then failwith "division by zero" else b / 32))) (v_Base_dHashMap_dhashStr mc0))) (if ((v_Base_dArray_dlength dtb__12) = 0) then ((v_Base_dArray_dmake 32) ((v_Base_dArray_dmake 32) C_Base_dList_dList_Base_dList_dNil)) else dtb__12))
+  | C_Base_dHashMap_dHashMap_Base_dHashMap_dHashMap (dtb__12) -> ((fun base -> ((fun b -> ((fun qi -> ((fun oi -> ((fun ii -> ((fun outer -> ((fun inner -> (C_Base_dHashMap_dHashMap_Base_dHashMap_dHashMap ((((v_Base_dArray_dset base) oi) (((v_Base_dArray_dset outer) ii) (C_Base_dList_dList_Base_dList_dCons ((C_Base_dPair_dPair_Base_dPair_dPair (mc0, mc1)), inner))))))) ((v_Base_dArray_dget outer) ii))) ((v_Base_dArray_dget base) oi))) (bi_natFromInt (b - (qi * 32))))) (bi_natFromInt qi))) (if 32 = 0 then failwith "division by zero" else b / 32))) (v_Base_dHashMap_dhashStr mc0))) (if ((v_Base_dArray_dlength dtb__12) = 0) then ((v_Base_dArray_dmake 32) ((v_Base_dArray_dmake 32) C_Base_dList_dList_Base_dList_dNil)) else dtb__12))
   | _ -> failwith "DT: impossible branch"
 ))
 
 let v_Base_dHashMap_dlookup = (fun mc0 mc1 -> (match mc1 with
-  | C_Base_dHashMap_dHashMap_Base_dHashMap_dMkHashMap (dtb__13) -> (if ((v_Base_dArray_dlength dtb__13) = 0) then C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing else ((fun b -> ((fun qi -> ((fun oi -> ((fun ii -> ((v_Base_dHashMap_d_ulookupAssoc mc0) ((v_Base_dArray_dget ((v_Base_dArray_dget dtb__13) oi)) ii))) (bi_natFromInt (b - (qi * 32))))) (bi_natFromInt qi))) (if 32 = 0 then failwith "division by zero" else b / 32))) (v_Base_dHashMap_dhashStr mc0)))
+  | C_Base_dHashMap_dHashMap_Base_dHashMap_dHashMap (dtb__13) -> (if ((v_Base_dArray_dlength dtb__13) = 0) then C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing else ((fun b -> ((fun qi -> ((fun oi -> ((fun ii -> ((v_Base_dHashMap_d_ulookupAssoc mc0) ((v_Base_dArray_dget ((v_Base_dArray_dget dtb__13) oi)) ii))) (bi_natFromInt (b - (qi * 32))))) (bi_natFromInt qi))) (if 32 = 0 then failwith "division by zero" else b / 32))) (v_Base_dHashMap_dhashStr mc0)))
   | _ -> failwith "DT: impossible branch"
 ))
 
@@ -81,14 +81,14 @@ let rec v_Base_dHashMap_dfromList = (fun mc0 -> (match mc0 with
   | C_Base_dPair_dPair_Base_dPair_dPair (dtb__21, dtb__22) -> (((v_Base_dHashMap_dinsert dtb__21) dtb__22) (v_Base_dHashMap_dfromList dtb__20))
   | _ -> failwith "DT: impossible branch"
 )
-  | C_Base_dList_dList_Base_dList_dNil -> (C_Base_dHashMap_dHashMap_Base_dHashMap_dMkHashMap ([||]))
+  | C_Base_dList_dList_Base_dList_dNil -> (C_Base_dHashMap_dHashMap_Base_dHashMap_dHashMap ([||]))
   | _ -> failwith "DT: impossible branch"
 ))
 
 let v_Base_dHashMap_dofNames = (fun xs -> ((v_Base_dHashMap_dinsertAll ((v_Base_dList_dmap (fun n -> (C_Base_dPair_dPair_Base_dPair_dPair (n, true)))) xs)) (v_Base_dHashMap_dfromList C_Base_dList_dList_Base_dList_dNil)))
 
 let v_Base_dHashMap_dtoList = (fun mc0 -> (match mc0 with
-  | C_Base_dHashMap_dHashMap_Base_dHashMap_dMkHashMap (dtb__23) -> ((v_Base_dList_dconcatMap (fun outer -> ((v_Base_dList_dconcatMap (fun inner -> (v_Base_dHashMap_d_udedupBucket inner))) (v_Base_dArray_dtoList outer)))) (v_Base_dArray_dtoList dtb__23))
+  | C_Base_dHashMap_dHashMap_Base_dHashMap_dHashMap (dtb__23) -> ((v_Base_dList_dconcatMap (fun outer -> ((v_Base_dList_dconcatMap (fun inner -> (v_Base_dHashMap_d_udedupBucket inner))) (v_Base_dArray_dtoList outer)))) (v_Base_dArray_dtoList dtb__23))
   | _ -> failwith "DT: impossible branch"
 ))
 

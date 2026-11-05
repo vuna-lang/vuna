@@ -151,6 +151,20 @@ idT x = x
 [records-traits.md](records-traits.md)。约束只允许在顶层签名上，其它位置写 `=>` 报
 `[PS_ConstraintUnsupportedHere]`。
 
+## 源码写法惯例（现代形态）
+
+vuna/base/compiler 三包源码统一按当前语言能力书写，新增/修改代码沿用：
+
+- **签名不写可量化的类型参数**：自由小写名由精化器量化为隐式参数（`vhead : Vec a n -> a`
+  等价 `{a : Type} -> ...`）；纯索引写 `{n : Nat} ->`，子句与调用点不再手写该参数；
+- **trait 约束显式**：泛型函数依赖 Eq/Ord/Show 字典时在顶层签名写 `Eq a =>`（M32 形态），
+  不依赖 body 里 `==` 的隐式字典提升；
+- **Bool 不做字面量搬运**：`if c then True else False` 写 `c`，`if c then e else False` 写
+  `c && e`，`not (a == b)` 写 `a /= b`；单簇 helper 用 `Base.Bool.not`，不再自建；
+- **单构造器类型用 `record` + 字段访问**：位置访问器在有高阶使用（`map acc`）或终止性
+  投影处保留为函数，其余调用点写 `x.field`；
+- **模块头显式导出列表**：不写「省略 = 全导出」的 v0 形态（空导出写 `()`）。
+
 ## 函数定义与 η 展开
 
 定义子句的参数可以少于签名：剩余 Pi 链按 **η 展开**自动补参数（`\_arityN`，body 应用到

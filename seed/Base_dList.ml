@@ -104,8 +104,8 @@ let v_Monad_uBase_dList_dList = (C_Dict_uBase_dMonad_dMonad_MkDict_uBase_dMonad_
 
 let v_Base_dList_dflatMap = (fun f xs -> ((v_Base_dList_dconcatMap f) xs))
 
-let rec v_Base_dList_dmem = (fun d34 mc0 mc1 -> (match mc1 with
-  | C_Base_dList_dList_Base_dList_dCons (dtb__16, dtb__17) -> (if (((v_Base_dEq_deq d34) mc0) dtb__16) then true else (((v_Base_dList_dmem d34) mc0) dtb__17))
+let rec v_Base_dList_dmem = (fun _uctx0 mc0 mc1 -> (match mc1 with
+  | C_Base_dList_dList_Base_dList_dCons (dtb__16, dtb__17) -> (if (((v_Base_dEq_deq _uctx0) mc0) dtb__16) then true else (((v_Base_dList_dmem _uctx0) mc0) dtb__17))
   | C_Base_dList_dList_Base_dList_dNil -> false
   | _ -> failwith "DT: impossible branch"
 ))

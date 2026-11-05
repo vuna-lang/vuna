@@ -6,7 +6,6 @@ module Vuna.Compiler.Packages.Pkg
   , contextDir
   , contextForDir
   , contextForFile
-  , contextPackage
   , contextPackageName
   , contextRoots
   , findManifestDir
@@ -15,16 +14,13 @@ module Vuna.Compiler.Packages.Pkg
   , loadPackage
   , locateBase
   , packageContext
-  , packageDependencies
   , packageDir
   , packageEntry
   , packageExports
-  , packageManifest
   , packageName
   , packageRoots
   , rootCapabilities
   , rootDir
-  , rootExports
   , rootName
   , rootPackage
   , workspacePackages
@@ -52,75 +48,75 @@ import Base.IO
 -- `[capabilities].effects`）。
 -- exports = Nothing 表示该根不限制导出（自己包）；exports = Just mods 表示只有
 -- mods 里的模块可被跨包 import。
--- 抽象性：导出表只写 `Root`（不含 `(..)`）。v0 的 data 会把**与类型同名**的构造子
--- 随裸类型名一起导出，所以构造子命名为 `MkRoot`，外部只能经本模块的访问器使用。
-data Root : Type where
-  MkRoot : String -> String -> Maybe (List String) -> List String -> Root
+-- 抽象性：导出表只写 `Root`（不含 `(..)`）——record 的裸导出隐藏构造子，
+-- 外部只能读字段、不能构造。
+record Root where
+  rootDir : String
+  rootName : String
+  rootExports : Maybe (List String)
+  rootCapabilities : List String
 
 -- 已解析的包：manifest、直接依赖（顺序同 [dependencies]）、包目录（已规范化）。
-data Package : Type where
-  Package : Manifest -> List Package -> String -> Package
+record Package where
+  packageManifest : Manifest
+  packageDependencies : List Package
+  packageDir : String
 
--- 文件/目录的包上下文（抽象：构造子不导出，只能经 `contextForFile` /
--- `contextForDir` / `packageContext` 获得；构造子命名为 `MkPackageContext` 的原因同上）。
+packageDependencies : Package -> List Package
+packageDependencies (Package m ds p) = ds
+
+-- 文件/目录的包上下文（抽象：record 裸导出隐藏构造子，只能经 `contextForFile` /
+-- `contextForDir` / `packageContext` 构造；字段可跨模块读取）。
 --   - String         = 上下文目录（包目录；base-only 时为 ""）
 --   - Maybe Package  = 包本体（base-only 时为 Nothing：文件不属于任何包）
 --   - List Root      = 模块根列表（自己 lib 在最前，随后是依赖闭包）
 --   - String         = 包名（base-only 时为 ""，无显式能力、effectful prim_* 被拒）
 --   - List String    = 本包 manifest 声明的能力（M27；base-only 时为 []）
-data PackageContext : Type where
-  MkPackageContext : String -> Maybe Package -> List Root -> String -> List String -> PackageContext
+record PackageContext where
+  contextDir : String
+  contextPackage : Maybe Package
+  contextRoots : List Root
+  contextPackageName : String
+  contextCapabilities : List String
 
 rootDir : Root -> String
-rootDir (MkRoot dir name exports caps) = dir
+rootDir (Root dir name exports caps) = dir
 
 rootName : Root -> String
-rootName (MkRoot dir name exports caps) = name
+rootName (Root dir name exports caps) = name
 
 -- rootName 的别名（Loader/CLI 侧更常用的叫法）。
 rootPackage : Root -> String
 rootPackage root = rootName root
 
-rootExports : Root -> Maybe (List String)
-rootExports (MkRoot dir name exports caps) = exports
-
 -- M27：该模块根所属包声明的效应能力（空列表 = 只能经 Base.IO）。
 rootCapabilities : Root -> List String
-rootCapabilities (MkRoot dir name exports caps) = caps
+rootCapabilities (Root dir name exports caps) = caps
 
 contextDir : PackageContext -> String
-contextDir (MkPackageContext dir pkg roots name caps) = dir
-
-contextPackage : PackageContext -> Maybe Package
-contextPackage (MkPackageContext dir pkg roots name caps) = pkg
+contextDir (PackageContext dir pkg roots name caps) = dir
 
 contextRoots : PackageContext -> List Root
-contextRoots (MkPackageContext dir pkg roots name caps) = roots
+contextRoots (PackageContext dir pkg roots name caps) = roots
 
 -- 上下文包名：base-only（ad-hoc）为空串；Loader 用它判同包可见性与效果内建。
 contextPackageName : PackageContext -> String
-contextPackageName (MkPackageContext dir pkg roots name caps) = name
+contextPackageName (PackageContext dir pkg roots name caps) = name
 
 -- M27：本包声明的效应能力（入口文件用；base-only / ad-hoc 为 []）。
 contextCapabilities : PackageContext -> List String
-contextCapabilities (MkPackageContext dir pkg roots name caps) = caps
-
-packageManifest : Package -> Manifest
-packageManifest (Package manifest dependencies dir) = manifest
-
-packageDependencies : Package -> List Package
-packageDependencies (Package manifest dependencies dir) = dependencies
+contextCapabilities (PackageContext dir pkg roots name caps) = caps
 
 packageDir : Package -> String
 packageDir (Package manifest dependencies dir) = dir
 
 packageName : Package -> String
-packageName package = case manifestName (packageManifest package) of
+packageName package = case package.packageManifest.manifestName of
   Nothing => ""
   Just name => name
 
 packageExports : Package -> Maybe (List String)
-packageExports package = manifestExports (packageManifest package)
+packageExports package = package.packageManifest.manifestExports
 
 -- ---------------------------------------------------------------- 路径工具
 splitSlashChars : List Int -> List String -> List Int -> List String
@@ -184,17 +180,17 @@ loadManifestAt path = if runIO (prim_fileExists path) then case parseManifest pa
 else Err ("pkg: missing vuna.toml in " ++ normalizeDir (manifestDir path))
 
 manifestNameString : Manifest -> String
-manifestNameString manifest = case manifestName manifest of
+manifestNameString manifest = case manifest.manifestName of
   Nothing => ""
   Just name => name
 
 -- ---------------------------------------------------------------- 加载包
 -- 依赖链栈：每个元素是 (规范化目录, 包名)；只用于循环检测。
-memStackDir : a -> List (Pair a b) -> Bool
+memStackDir : Eq a => a -> List (Pair a b) -> Bool
 memStackDir dir [] = False
-memStackDir dir (pair :: rest) = if firstOf pair == dir then True else memStackDir dir rest
+memStackDir dir (pair :: rest) = firstOf pair == dir || memStackDir dir rest
 
-cyclePrefix : a -> List (Pair a b) -> Maybe (List (Pair a b))
+cyclePrefix : Eq a => a -> List (Pair a b) -> Maybe (List (Pair a b))
 cyclePrefix dir [] = Nothing
 cyclePrefix dir (pair :: rest) = if firstOf pair == dir then Just [pair]
 else case cyclePrefix dir rest of
@@ -208,7 +204,7 @@ cycleMessage dir (Just dep) stack = case cyclePrefix dir stack of
   Just prefix =>
     "pkg: dependency cycle: " ++ joinArrows (append (map secondOf (reverse prefix)) [dep])
 
-dependencyNameOk : Maybe a -> a -> Bool
+dependencyNameOk : Eq a => Maybe a -> a -> Bool
 dependencyNameOk Nothing actual = True
 dependencyNameOk (Just expected) actual = expected == actual
 
@@ -238,7 +234,7 @@ else
     Ok manifest =>
       let
         name = manifestNameString manifest
-      in if dependencyNameOk depName name then case loadDependencyList (fuel - 1) (Pair normalized name :: stack) normalized (manifestDependencies manifest) of
+      in if dependencyNameOk depName name then case loadDependencyList (fuel - 1) (Pair normalized name :: stack) normalized manifest.manifestDependencies of
         Err e => Err e
         Ok dependencies => Ok (Package manifest dependencies normalized)
       else Err (mismatchMessage depName name)
@@ -313,7 +309,7 @@ workspacePackages rootBaseDir =
     base = normalizeDir rootBaseDir
   in case loadPackage base of
     Err e => Err e
-    Ok rootPackage => case loadMembers base (manifestMembers (packageManifest rootPackage)) of
+    Ok rootPackage => case loadMembers base rootPackage.packageManifest.manifestMembers of
       Err e => Err e
       Ok members =>
         andThen (checkUniquePackageNames (rootPackage :: members))
@@ -322,8 +318,8 @@ workspacePackages rootBaseDir =
 -- ---------------------------------------------------------------- 模块根
 dependencyRootOf : Package -> Root
 dependencyRootOf package =
-  MkRoot (packageDir package ++ "/lib") (packageName package) (packageExports package)
-    (manifestCapabilities (packageManifest package))
+  Root (packageDir package ++ "/lib") (packageName package) (packageExports package)
+    package.packageManifest.manifestCapabilities
 
 -- DFS 后序：先深依赖、再直接依赖本体；按包名去重（首次出现保留）。
 -- 包名唯一性由 `checkUniquePackageNames` 在加载期保证（同名 ⇒ 同目录），所以
@@ -343,9 +339,9 @@ packageRoots package =
   let
     selfName = packageName package
     selfRoot =
-      MkRoot (packageDir package ++ "/lib") selfName Nothing
-        (manifestCapabilities (packageManifest package))
-  in case dependencyRoots [selfName] (packageDependencies package) of
+      Root (packageDir package ++ "/lib") selfName Nothing
+        package.packageManifest.manifestCapabilities
+  in case dependencyRoots [selfName] package.packageDependencies of
     Pair seen roots => selfRoot :: roots
 
 -- 包入口固定为 <dir>/app/Main.vuna。
@@ -355,8 +351,8 @@ packageEntry package = packageDir package ++ "/app/Main.vuna"
 -- 已知 Package 的上下文（调用方已有包对象时不必重新读盘）。
 packageContext : Package -> PackageContext
 packageContext package =
-  MkPackageContext (packageDir package) (Just package) (packageRoots package) (packageName package)
-    (manifestCapabilities (packageManifest package))
+  PackageContext (packageDir package) (Just package) (packageRoots package) (packageName package)
+    package.packageManifest.manifestCapabilities
 
 -- ---------------------------------------------------------------- 查找
 findManifestUpMaybe : Int -> String -> Maybe String
@@ -435,7 +431,7 @@ locateBase _ =
 baseOnlyContext : String -> Result PackageContext
 baseOnlyContext base =
   andThen (loadPackage base)
-    (\package => Ok (MkPackageContext "" Nothing [dependencyRootOf package] "" []))
+    (\package => Ok (PackageContext "" Nothing [dependencyRootOf package] "" []))
 
 -- 从 start（已绝对化的目录）向上找最近 manifest；找不到 → base-only。
 -- manifest 非法（解析/校验失败）必须报错，不回退到 base-only。

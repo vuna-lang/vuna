@@ -197,7 +197,7 @@ familyCovered table (heads@(h :: rest)) = case familyOfCtor table h of
 
 allNamesIn : List String -> List String -> Bool
 allNamesIn [] heads = True
-allNamesIn (c :: rest) heads = if memName c heads then allNamesIn rest heads else False
+allNamesIn (c :: rest) heads = memName c heads && allNamesIn rest heads
 
 -- 该列至少有一个构造子模式（与变量/通配混合时也要走构造子分支 + 兜底，
 -- 不能落到 `litAltExpr`——它不会展开构造子子模式，丢失子模式绑定）。

@@ -1,14 +1,13 @@
 module Vuna.Cli.Args
   ( ArgErr(..)
   , ArgSpec(..)
-  , Parsed
+  , Parsed(..)
   , argErrText
   , ensureDirPath
   , flagSet
   , flagValue
   , parentOf
   , parseToolArgs
-  , positionals
   , readText
   , requireDirectory
   , requireExists
@@ -57,30 +56,23 @@ data ArgErr : Type where
   MissingValue : String -> ArgErr
 
 -- 解析结果：开关名集合、取值 flag 的 (name, value)、按用户顺序的位置参数。
-data Parsed : Type where
-  Parsed : List String -> List (Pair String String) -> List String -> Parsed
+record Parsed where
+  flagNames : List String
+  valuesOf : List (Pair String String)
+  positionals : List String
 
 -- 内部解析结果（Base.Result 的错误固定是 String，不能携带结构化 ArgErr）。
 data ParseOut : Type where
   POk : Parsed -> ParseOut
   PErr : ArgErr -> ParseOut
 
-flagNames : Parsed -> List String
-flagNames (Parsed flags values items) = flags
-
-valuesOf : Parsed -> List (Pair String String)
-valuesOf (Parsed flags values items) = values
-
-positionals : Parsed -> List String
-positionals (Parsed flags values items) = items
-
 -- 某开关是否出现（名字不带 `--`）。
 flagSet : Parsed -> String -> Bool
-flagSet parsed name = memName name (flagNames parsed)
+flagSet parsed name = memName name parsed.flagNames
 
 -- 某取值 flag 的值（名字不带 `--`）。
 flagValue : Parsed -> String -> Maybe String
-flagValue parsed name = lookupValue name (valuesOf parsed)
+flagValue parsed name = lookupValue name parsed.valuesOf
 
 lookupValue : String -> List (Pair String String) -> Maybe String
 lookupValue name [] = Nothing

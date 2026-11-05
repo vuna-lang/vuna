@@ -2,8 +2,8 @@ module Base.Vec (Vec(..), substTemplate, vhead, vlen, vtail) where
 
 -- Base.Vec：长度索引向量，`Vec a n` 的 `n` 是 `Base.Nat` 索引。
 --
--- 用途：诊断模板的插值向量（arity 锁定）。`a` 与 `n` **双隐式**（照 `dt/38_explicit_index`
--- 的 `Cons : {a : Type} -> {n : Nat} -> ...`）=> 两者皆 Rig0，运行时擦除——已验：生成的
+-- 用途：诊断模板的插值向量（arity 锁定）。`a` 由签名自由名量化成隐式参数、`n` 写成
+-- 隐式索引 => 两者皆 Rig0，运行时擦除——已验：生成的
 -- OCaml 是 `C_Vec_VCons of ('a0) * ('a0 t_Vec)`，零索引字段，arity 编译期锁定、运行时零开销。
 --
 -- 索引排除不可能分支：`vhead` / `vtail` 只在 `Succ n` 上定义，对 `Nil` 类型不可达，
@@ -20,20 +20,20 @@ data Vec : Type -> Nat -> Type where
 
 -- 首元素：长度至少 1（`Succ n`），索引排除空向量。
 -- `n` 隐式（Rig0）：递归/调用时由 `Vec a (Succ n)` 的索引反推，不必手写。
-vhead : (a : Type) -> {n : Nat} -> Vec a (Succ n) -> a
-vhead a xs = case xs of
+vhead : {n : Nat} -> Vec a (Succ n) -> a
+vhead xs = case xs of
   VCons y ys => y
 
 -- 去尾：长度至少 1，结果长度 `n`。
-vtail : (a : Type) -> {n : Nat} -> Vec a (Succ n) -> Vec a n
-vtail a xs = case xs of
+vtail : {n : Nat} -> Vec a (Succ n) -> Vec a n
+vtail xs = case xs of
   VCons y ys => ys
 
 -- 长度（`n` 是 Rig0 索引，这里走运行时计数，与 `List.length` 同义）。
-vlen : (a : Type) -> {n : Nat} -> Vec a n -> Nat
-vlen a xs = case xs of
+vlen : {n : Nat} -> Vec a n -> Nat
+vlen xs = case xs of
   VNil => 0
-  VCons y ys => 1 + vlen a ys
+  VCons y ys => 1 + vlen ys
 
 -- ---------------------------------------------------------------
 -- 模板渲染：占位符 `<0>` `<1>` `<2>`…（序号 = 实参位置）

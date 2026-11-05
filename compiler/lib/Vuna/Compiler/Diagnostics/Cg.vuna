@@ -4,9 +4,6 @@ module Vuna.Compiler.Diagnostics.Cg
   , cgAll
   , cgCode
   , cgDefLoc
-  , cgEntryCode
-  , cgEntryDesc
-  , cgEntryTemplate
   , cgErr
   , cgErr0
   , cgErr1
@@ -80,17 +77,10 @@ cgTemplate (TypeLevelBindingRuntime _) = "type-level binding `<0>` is used at ru
 cgTemplate (TypeLevelNameRuntime _) = "type-level name `<0>` is used at runtime"
 cgTemplate (UnsolvedMetavarRuntime _) = "unsolved metavariable in runtime code<0>"
 
-data CgEntry : Type where
-  CgEntry : String -> String -> String -> CgEntry
-
-cgEntryCode : CgEntry -> String
-cgEntryCode (CgEntry code template desc) = code
-
-cgEntryTemplate : CgEntry -> String
-cgEntryTemplate (CgEntry code template desc) = template
-
-cgEntryDesc : CgEntry -> String
-cgEntryDesc (CgEntry code template desc) = desc
+record CgEntry where
+  cgEntryCode : String
+  cgEntryTemplate : String
+  cgEntryDesc : String
 
 cgAll : List CgEntry
 cgAll = concatLists [cgChunk0, cgChunk1]

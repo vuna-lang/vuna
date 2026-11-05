@@ -188,9 +188,9 @@ paramSuffix params = " " ++ join " " params
 -- 注释 → 文档
 -- ---------------------------------------------------------------
 commentBody : Comment -> String
-commentBody c = case commentKind c of
-  CLine => trimBoth (commentText c)
-  CBlock => trimBoth (commentText c)
+commentBody c = case c.commentKind of
+  CLine => trimBoth c.commentText
+  CBlock => trimBoth c.commentText
 
 -- 声明行之前紧邻（行距 <= 2）的最后一条注释，作为该符号的文档。
 nearBefore : List Comment -> Int -> String
@@ -258,7 +258,7 @@ fieldSymbols sMod fields comments =
 -- （不再是 trait 声明行）；list 输出与 `vuna map` 的行号因此能点回方法行。
 methodSymbol : String -> TraitMethod -> Sym
 methodSymbol sMod m =
-  Sym sMod (traitMethodName m) "method" (traitMethodName m ++ " : " ++ renderTy (traitMethodType m))
+  Sym sMod (traitMethodName m) "method" (traitMethodName m ++ " : " ++ renderTy m.traitMethodType)
     "" (spanStartLine (traitMethodSpan m)) (spanStartCol (traitMethodSpan m))
 
 methodSymbols : String -> List TraitMethod -> List Sym
@@ -316,7 +316,7 @@ refsInCtors sMod (c :: rest) acc = refsInCtors sMod rest (refsInExprGo sMod (cto
 refsInMethods : String -> List TraitMethod -> List Ref -> List Ref
 refsInMethods sMod [] acc = acc
 refsInMethods sMod (m :: rest) acc =
-  refsInMethods sMod rest (refsInExprGo sMod (traitMethodType m) acc)
+  refsInMethods sMod rest (refsInExprGo sMod m.traitMethodType acc)
 
 refsInFieldTypes : String -> List Field -> List Ref -> List Ref
 refsInFieldTypes sMod [] acc = acc
@@ -388,17 +388,10 @@ refsInExprGo sMod e acc = case e of
 -- ---------------------------------------------------------------
 -- 全量构建
 -- ---------------------------------------------------------------
-data Built : Type where
-  Built : List ModuleInfo -> List Sym -> List Ref -> Built
-
-builtModules : Built -> List ModuleInfo
-builtModules (Built ms syms refs) = ms
-
-builtSymbols : Built -> List Sym
-builtSymbols (Built ms syms refs) = syms
-
-builtRefs : Built -> List Ref
-builtRefs (Built ms syms refs) = refs
+record Built where
+  builtModules : List ModuleInfo
+  builtSymbols : List Sym
+  builtRefs : List Ref
 
 -- 索引一个文件。parse/fixity 失败返回 Err（调用方转成 warning），不中断整体。
 -- 返回推进后的 `FixityEnv`：按目录复用包上下文与已加载模块图（见 Vuna.FixityEnv）。
@@ -421,7 +414,7 @@ indexOneExisting env dir pkgName path =
       -- M31.3（B26/B27）：必须按**程序级** fixity 重排（本文件声明 ++ import 闭包，
       -- 本地优先）。只用本地声明会让用到 `+`/`==`/`::` 的文件报 unknown fixity，
       -- 然后被当错误跳过 → `vuna map` 静默漏模块。
-      Ok (Source srcHdr imports fx decls0) => case reorderProgram (tableOfKeepOps (append programFixities fx)) decls0 of
+      Ok (SourceFile srcHdr imports fx decls0) => case reorderProgram (tableOfKeepOps (append programFixities fx)) decls0 of
         Err e => Pair env2 (Err (path ++ ": " ++ e))
         Ok decls =>
           let
@@ -434,25 +427,16 @@ indexOneExisting env dir pkgName path =
             refs = refsInDecls sMod decls
           in Pair env2 (Ok (Built [info] syms refs))
 
-data Acc : Type where
-  Acc : List ModuleInfo -> List Sym -> List Ref -> List String -> Acc
-
-accModules : Acc -> List ModuleInfo
-accModules (Acc ms syms refs warns) = ms
-
-accSymbols : Acc -> List Sym
-accSymbols (Acc ms syms refs warns) = syms
-
-accRefs : Acc -> List Ref
-accRefs (Acc ms syms refs warns) = refs
+record Acc where
+  accModules : List ModuleInfo
+  accSymbols : List Sym
+  accRefs : List Ref
+  accWarns : List String
 
 -- 把 xs 逆序前插到 ys（O(#xs)）：跨文件累积用，避免每文件 append 复制整个已累积列表（M34）。
 prependRev : List a -> List a -> List a
 prependRev [] ys = ys
 prependRev (x :: rest) ys = prependRev rest (x :: ys)
-
-accWarns : Acc -> List String
-accWarns (Acc ms syms refs warns) = warns
 
 indexPackage : FixityEnv -> String -> String -> List String -> Acc -> Pair FixityEnv Acc
 indexPackage env dir pkgName files acc = foldFiles env dir pkgName files acc
@@ -467,10 +451,10 @@ foldFiles env dir pkgName (path :: rest) acc =
 indexFileInto : FixityEnv -> String -> String -> String -> Acc -> Pair FixityEnv Acc
 indexFileInto env dir pkgName path acc = case indexOne env dir pkgName path of
   Pair env2 result => case result of
-    Err e => Pair env2 (Acc (accModules acc) (accSymbols acc) (accRefs acc) (e :: accWarns acc))
+    Err e => Pair env2 (Acc acc.accModules acc.accSymbols acc.accRefs (e :: acc.accWarns))
     Ok b =>
       Pair env2
-        (Acc (prependRev (builtModules b) (accModules acc)) (prependRev (builtSymbols b) (accSymbols acc)) (prependRev (builtRefs b) (accRefs acc)) (accWarns acc))
+        (Acc (prependRev b.builtModules acc.accModules) (prependRev b.builtSymbols acc.accSymbols) (prependRev b.builtRefs acc.accRefs) acc.accWarns)
 
 collectAll : FixityEnv -> List (Pair String String) -> Acc -> Pair FixityEnv Acc
 collectAll env [] acc = Pair env acc
@@ -488,8 +472,7 @@ buildIndex repo =
   let
     stepped = collectAll emptyFixityEnv (packageDirs repo) (Acc [] [] [] [])
     acc = secondOf stepped
-  in Ok
-    (Index (reverse (accModules acc)) (dedupeSymbols (reverse (accSymbols acc))) (reverse (accRefs acc)))
+  in Ok (Index (reverse acc.accModules) (dedupeSymbols (reverse acc.accSymbols)) (reverse acc.accRefs))
 
 -- ---------------------------------------------------------------
 -- 缓存读写（v2：内容哈希）
@@ -499,9 +482,6 @@ cacheVersion = "vuna-index 2"
 
 cacheDir : String -> String
 cacheDir repo = repo ++ "/.local/index"
-
-manifestPath : String -> String
-manifestPath repo = cacheDir repo ++ "/manifest.txt"
 
 modulesPath : String -> String
 modulesPath repo = cacheDir repo ++ "/modules.txt"
@@ -565,7 +545,7 @@ manifestEntrySame a b =
 manifestEntriesSame : List (Pair String (Pair Int String)) -> List (Pair String (Pair Int String)) -> Bool
 manifestEntriesSame [] [] = True
 manifestEntriesSame (a :: rest) (b :: rest2) =
-  if manifestEntrySame a b then manifestEntriesSame rest rest2 else False
+  manifestEntrySame a b && manifestEntriesSame rest rest2
 manifestEntriesSame _ _ = False
 
 -- v2 manifest：首行必须是版本行；旧格式（无版本行）返回 Nothing → 触发全量重建。
@@ -582,6 +562,9 @@ parseManifestLine line = case splitOnTab line of
     Just b => [Pair path (Pair b hash)]
     Nothing => []
   _ => []
+
+manifestPath : String -> String
+manifestPath repo = cacheDir repo ++ "/manifest.txt"
 
 readManifestEntries : String -> Maybe (List (Pair String (Pair Int String)))
 readManifestEntries repo =
@@ -783,7 +766,7 @@ moduleLine m =
     ++ strFromInt (modDecls m)
 
 symbolsText : Index -> String
-symbolsText index = join "\n" (map symLine0 (indexSymbols index)) ++ "\n"
+symbolsText index = join "\n" (map symLine0 index.indexSymbols) ++ "\n"
 
 symLine0 : Sym -> String
 symLine0 s =
@@ -799,17 +782,11 @@ symLine0 s =
     ++ "\t"
     ++ flattenText (symSig s)
     ++ "\t"
-    ++ flattenText (symDoc s)
+    ++ flattenText s.symDoc
 
 refsText : Index -> String
-refsText index = join "\n" (map refLineText (indexRefs index)) ++ "\n"
+refsText index = join "\n" (map refLineText index.indexRefs) ++ "\n"
 
 refLineText : Ref -> String
 refLineText r =
-  refModule r
-    ++ "\t"
-    ++ refName r
-    ++ "\t"
-    ++ strFromInt (refLine r)
-    ++ "\t"
-    ++ strFromInt (refCol r)
+  refModule r ++ "\t" ++ refName r ++ "\t" ++ strFromInt r.refLine ++ "\t" ++ strFromInt r.refCol

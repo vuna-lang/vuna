@@ -166,7 +166,7 @@ isOpCharCode c =
 
 allOpChars : List Int -> Bool
 allOpChars [] = True
-allOpChars (c :: rest) = if isOpCharCode c then allOpChars rest else False
+allOpChars (c :: rest) = isOpCharCode c && allOpChars rest
 
 -- 符号名（`+`、`<+>`、`->`、`::`…）：中缀位置按 fixity 打印，原子/前缀位置必须打成
 -- `(op)`，否则产物不可重新 parse。普通标识符（含 `bind`/`eq` 这类别名目标）按原样打印
@@ -194,7 +194,7 @@ hasOpAlias env name = case symbolOfTargetIn env name of
 -- 中缀打印用的 (优先级, 结合性)：1 = 右，0 = 左/未知。
 infixPrecOf : List FixityDecl -> String -> Maybe (Pair Int Int)
 infixPrecOf env op = case opDeclOf env op of
-  Just d => Just (Pair (fixityLevel d) (if fixityAssoc d == 2 then 1 else 0))
+  Just d => Just (Pair d.fixityLevel (if d.fixityAssoc == 2 then 1 else 0))
   Nothing => if isSymbolName op then Just (Pair 9 0) else Nothing
 
 -- 打印侧优先级查询。Loader 的 keep 模式已对未知**符号**运算符报错，所以正常路径这里
@@ -207,7 +207,7 @@ infixPrec env op = case infixPrecOf env op of
 -- 反引号中缀的 fixity：普通名字无声明时按 9 左（与 Haskell 一致），符号名查声明表。
 backtickPrec : List FixityDecl -> String -> Pair Int Int
 backtickPrec env name = case opDeclOf env name of
-  Just d => Pair (fixityLevel d) (if fixityAssoc d == 2 then 1 else 0)
+  Just d => Pair d.fixityLevel (if d.fixityAssoc == 2 then 1 else 0)
   Nothing => Pair 9 0
 
 -- 打印用的运算符文本：canonical 名字经反向别名还原（keep 模式下通常是原样）。

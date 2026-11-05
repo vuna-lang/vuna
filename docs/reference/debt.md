@@ -30,6 +30,7 @@
 | D23 | `+ - * /` 只有 Int/Nat 的类型定向特化，没有通用 `Num`/`FromInteger` 类；用户自定义数值类型不能重载字面量与算术 | `Elab/Term/Impl.specializeArith*`；[operators.md](operators.md) | F4 / 后续 |
 | D24 | Nat 字面量在**编译期**展开成 Zero/Succ 链（无惰性 `TNat`），超大 Nat 字面量有编译期节点成本；`case n of 0 =>` 字面量模式未支持 | `Elab/Term/Impl.natLitTerm`；[limits.md](limits.md) | 后续 |
 | D25 | Int→Nat 全库迁移只覆盖 Base 公开度量与必要消费点；`compiler/` 内部 level/meta/fuel/span/arity 与工具链多数内部字节计数仍保留 Int（按 M34.7 边界），`Base.IO.print/writeFile` 返回值也仍 Int | `docs/reference/limits.md` 的 Nat/Int 边界；`lib/` 中剩余 `strLength` | 后续（按性能/语义逐点） |
+| D26 | `Base.IO` 仍是 `data IO a where MkIO : ...`：canonical 构造子身份写死在 `Intrinsics.ioMkIoCtor`，改名为 record 需要「先放宽接受 MkIO/IO 两种 → rotation → 再改 Base.IO → rotation」两阶段过渡；字段访问收益小，本轮未做 | `base/lib/Base/IO.vuna`；`Elab.Term.Impl`/`Intrinsics.ioMkIoCtor` | 后续 |
 
 ## 工具、构建与验证
 

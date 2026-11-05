@@ -200,9 +200,15 @@ let rec v_Vuna_dCompiler_dDriver_dCompile_ddepProgramsOfGo = (fun mc0 mc1 mc2 ->
   | _ -> failwith "DT: impossible branch"
 ))
 
-let v_Vuna_dCompiler_dDriver_dCompile_ddepProgramsOf = (fun ctx -> (match (v_Vuna_dCompiler_dPackages_dPkg_dcontextPackage ctx) with
+let v_Vuna_dCompiler_dDriver_dCompile_ddepProgramsOf = (fun ctx -> (match (match ctx with
+  | C_Vuna_dCompiler_dPackages_dPkg_dPackageContext_Vuna_dCompiler_dPackages_dPkg_dPackageContext (dtb__20, dtb__21, dtb__22, dtb__23, dtb__24) -> dtb__21
+  | _ -> failwith "DT: impossible branch"
+) with
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing
-  | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__20) -> (((v_Vuna_dCompiler_dDriver_dCompile_ddepProgramsOfGo 0) (v_Vuna_dCompiler_dPackages_dPkg_dpackageDependencies dtb__20)) C_Base_dList_dList_Base_dList_dNil)
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__25) -> (((v_Vuna_dCompiler_dDriver_dCompile_ddepProgramsOfGo 0) (match dtb__25 with
+  | C_Vuna_dCompiler_dPackages_dPkg_dPackage_Vuna_dCompiler_dPackages_dPkg_dPackage (dtb__26, dtb__27, dtb__28) -> dtb__27
+  | _ -> failwith "DT: impossible branch"
+)) C_Base_dList_dList_Base_dList_dNil)
   | _ -> failwith "DT: impossible branch"
 ))
 
@@ -223,7 +229,7 @@ let v_Vuna_dCompiler_dDriver_dCompile_dreadSplitCache = (fun path -> (if (v_Base
 let v_Vuna_dCompiler_dDriver_dCompile_dwriteSplitCache = (fun ctx path files -> ((fun _u -> (v_Base_dIO_drunIO (((fun dtio_0 dtio_1 -> C_Base_dIO_dIO_Base_dIO_dMkIO (fun _ -> dtp_writeFile dtio_0 dtio_1)) path) (dtp_marshal files)))) (v_Vuna_dCompiler_dDriver_dCompile_densureDirPath (v_Vuna_dCompiler_dDriver_dCompile_dsplitCacheDir ctx))))
 
 let v_Vuna_dCompiler_dDriver_dCompile_dcompileToDir = (fun ctx entry printResult outDir -> ((fun key -> ((fun path -> (match (v_Vuna_dCompiler_dDriver_dCompile_dreadSplitCache path) with
-  | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__21) -> (((v_Vuna_dCompiler_dDriver_dCompile_dwriteCompiled ctx) outDir) dtb__21)
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__29) -> (((v_Vuna_dCompiler_dDriver_dCompile_dwriteCompiled ctx) outDir) dtb__29)
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> ((v_Base_dResult_dandThen (((v_Vuna_dCompiler_dDriver_dDt_ddtSplitProject ctx) entry) printResult)) (fun files -> ((v_Base_dResult_dandThen (((v_Vuna_dCompiler_dDriver_dCompile_dwriteCompiled ctx) outDir) files)) (fun n -> ((fun _u -> (C_Base_dResult_dResult_Base_dResult_dOk (n))) (((v_Vuna_dCompiler_dDriver_dCompile_dwriteSplitCache ctx) path) files))))))
   | _ -> failwith "DT: impossible branch"
 )) ((v_Vuna_dCompiler_dDriver_dCompile_dsplitCachePath ctx) key))) (((v_Vuna_dCompiler_dDriver_dCompile_dsplitCacheKey ctx) entry) printResult)))
@@ -236,6 +242,6 @@ let v_Vuna_dCompiler_dDriver_dCompile_dcheckCachedExe = (fun ctx entry -> ((fun 
 
 let v_Vuna_dCompiler_dDriver_dCompile_dcheckPackage = (fun pkg -> (if (v_Base_dIO_drunIO ((fun dtio_0 -> C_Base_dIO_dIO_Base_dIO_dMkIO (fun _ -> dtp_fileExists dtio_0)) (v_Vuna_dCompiler_dPackages_dPkg_dpackageEntry pkg))) then ((v_Vuna_dCompiler_dDriver_dCompile_dcheckCachedExe (v_Vuna_dCompiler_dPackages_dPkg_dpackageContext pkg)) (v_Vuna_dCompiler_dPackages_dPkg_dpackageEntry pkg)) else (match (v_Vuna_dCompiler_dPackages_dPkg_dpackageExports pkg) with
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> (C_Base_dResult_dResult_Base_dResult_dErr ((String.concat "" ["check: library package "; (v_Vuna_dCompiler_dPackages_dPkg_dpackageName pkg); " has no app/Main.vuna (executable) and no [export].modules (library)"])))
-  | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__22) -> ((v_Vuna_dCompiler_dDriver_dCompile_dcheckCachedLib (v_Vuna_dCompiler_dPackages_dPkg_dpackageContext pkg)) dtb__22)
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__30) -> ((v_Vuna_dCompiler_dDriver_dCompile_dcheckCachedLib (v_Vuna_dCompiler_dPackages_dPkg_dpackageContext pkg)) dtb__30)
   | _ -> failwith "DT: impossible branch"
 )))

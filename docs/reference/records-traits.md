@@ -29,6 +29,11 @@ onlyX p = case p of
 
 - 记录可以参数化（`record Pair a b where`）；记录类型名同时是它的构造器名。
 - 字段访问写作 `p.x`，支持链式（如 `s.start.x`）。
+- **字段名在 flatten 后的整个程序里必须唯一**：`EField` 按字段名查记录（`recordsWithField`），
+  同名多声明报 `ambiguous field`；新增 record 的字段名请带类型前缀。
+- 编译器/stdlib 内部单构造器产品类型用 `record` + 字段访问取代「data + 位置访问器」；
+  只有需要作为函数值传递（`map acc`）或参与终止性投影（递归实参）的投影才保留为访问器，
+  因为无签名 lambda 没有参数类型推断、字段访问在其中不可类型化。
 - 导出遵循模块规则：`T` 只导出记录类型（构造器隐藏，跨模块不能构造 / 模式匹配，即
   抽象），`T(..)` 才公开记录构造器。
 - 实现上记录在精化前降级为单构造器 `data`（`Elab.Records`）：构造 = 构造器应用，
@@ -83,8 +88,8 @@ main = pretty Red ++ "/" ++ show Red
   这类需要 `Dict_Eq (Box Int)` 的用法因此可用。
 - **顶层函数签名也可以写约束（M32）**：`f : Eq a, Show a => a -> String`。约束是定义体的
   字典假设（隐式 Rig1 参数），body 的方法调用优先命中它；调用点仍按实例搜索补字典。
-  签名不写约束的旧形态继续按推断提升（`mem : a -> L a -> Bool` 内部仍是
-  `{a} -> {d : Dict_Eq a} -> ...`）。语法与边界见 [language.md](language.md) §签名的 trait 约束。
+  不写约束的形态仍按推断提升（`{a} -> {d : Dict_Eq a} -> ...`）；三包源码自本轮起
+  统一写显式约束，不再依赖该旧形态。语法与边界见 [language.md](language.md) §签名的 trait 约束。
 - **`Show` / `Eq` / `Ord` 是库里的普通 trait（M31.1 起声明与实例分离）**：声明在
   `Base.Show` / `Base.Eq` / `Base.Ord`；实例按**落点规则**分布：`Int` → `Base.Int`、
   `String` → `Base.String`、`Bool` → `Base.Eq` / `Base.Ord`。运算符 `==` / `/=` / `<`

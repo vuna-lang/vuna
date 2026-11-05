@@ -1,14 +1,10 @@
 module Vuna.Compiler.Loader.Modules
   ( ExportEntry(..)
-  , ExportRef
-  , Module
+  , ExportRef(..)
+  , Module(..)
   , Namespaces(..)
-  , Project
+  , Project(..)
   , collectModuleFiles
-  , entryKind
-  , entryParent
-  , entryPublic
-  , entryTarget
   , exportsOf
   , findExportCtor
   , findExportType
@@ -20,30 +16,14 @@ module Vuna.Compiler.Loader.Modules
   , importName
   , mangle
   , moduleAllImportsOf
-  , moduleCapabilities
   , moduleDeclsOf
-  , moduleExportsOf
   , moduleFixitiesOf
-  , moduleImplicitImportsOf
-  , moduleImportsOf
   , moduleNameOf
   , modulePackageOf
   , modulesExportingCtor
   , modulesExportingType
   , modulesExportingValue
-  , nsCtorSet
-  , nsCtors
-  , nsTypeSet
-  , nsTypes
-  , nsValueSet
-  , nsValues
   , projectEntryAllImports
-  , projectEntryCapabilities
-  , projectEntryDecls
-  , projectEntryFixities
-  , projectEntryImports
-  , projectEntryPkg
-  , projectModules
   , unifyEntryPairs
   , validModuleName
   , validateImports
@@ -67,14 +47,27 @@ import Vuna.Compiler.Packages.Pkg
 -- 名字解析与 codegen 拓扑序用 all；模块重导出/include 只认显式 import。
 -- M31.2：最后一个字段是**可见 fixity 表**（本模块声明 + imports 闭包，查找时本模块优先；
 -- 中缀重排见 `Loader.Fixity`）。
-data Module : Type where
-  Module : String -> String -> List Import -> List Import -> List Decl -> List ExportEntry -> List String -> List FixityDecl -> Module
+record Module where
+  moduleNameOf : String
+  modulePackageOf : String
+  moduleImportsOf : List Import
+  moduleImplicitImportsOf : List Import
+  moduleDeclsOf : List Decl
+  moduleExportsOf : List ExportEntry
+  moduleCapabilities : List String
+  moduleFixitiesOf : List FixityDecl
 
 -- 已加载项目：入口声明/import + 依赖模块列表（M12 分离编译用；保持 flatten 前的形态）。
 -- entryPkg 用于按包限制 effectful 内建（M12.6：普通包只能通过 Base.IO 使用效果）。
 -- M31.2：entryFixities 是入口文件自己的 fixity 声明（入口 decls 的重排要用）。
-data Project : Type where
-  Project : List Decl -> List Import -> List Import -> List Module -> String -> List String -> List FixityDecl -> Project
+record Project where
+  projectEntryDecls : List Decl
+  projectEntryImports : List Import
+  projectImplicitImports : List Import
+  projectModules : List Module
+  projectEntryPkg : String
+  projectEntryCapabilities : List String
+  projectEntryFixities : List FixityDecl
 
 moduleNameOf : Module -> String
 moduleNameOf (Module n p is imps ds es cs fx) = n
@@ -82,47 +75,17 @@ moduleNameOf (Module n p is imps ds es cs fx) = n
 modulePackageOf : Module -> String
 modulePackageOf (Module n p is imps ds es cs fx) = p
 
-moduleImportsOf : Module -> List Import
-moduleImportsOf (Module n p is imps ds es cs fx) = is
-
-moduleImplicitImportsOf : Module -> List Import
-moduleImplicitImportsOf (Module n p is imps ds es cs fx) = imps
-
 moduleAllImportsOf : Module -> List Import
 moduleAllImportsOf (Module n p is imps ds es cs fx) = append is imps
 
 moduleDeclsOf : Module -> List Decl
 moduleDeclsOf (Module n p is imps ds es cs fx) = ds
 
-moduleExportsOf : Module -> List ExportEntry
-moduleExportsOf (Module n p is imps ds es cs fx) = es
-
-moduleCapabilities : Module -> List String
-moduleCapabilities (Module n p is imps ds es cs fx) = cs
-
 moduleFixitiesOf : Module -> List FixityDecl
 moduleFixitiesOf (Module n p is imps ds es cs fx) = fx
 
-projectEntryDecls : Project -> List Decl
-projectEntryDecls (Project ds is imps ms pkg pcaps fx) = ds
-
-projectEntryImports : Project -> List Import
-projectEntryImports (Project ds is imps ms pkg pcaps fx) = is
-
 projectEntryAllImports : Project -> List Import
 projectEntryAllImports (Project ds is imps ms pkg pcaps fx) = append is imps
-
-projectModules : Project -> List Module
-projectModules (Project ds is imps ms pkg pcaps fx) = ms
-
-projectEntryPkg : Project -> String
-projectEntryPkg (Project ds is imps ms pkg pcaps fx) = pkg
-
-projectEntryCapabilities : Project -> List String
-projectEntryCapabilities (Project ds is imps ms pkg pcaps fx) = pcaps
-
-projectEntryFixities : Project -> List FixityDecl
-projectEntryFixities (Project ds is imps ms pkg pcaps fx) = fx
 
 -- M28（B18）：解析期的三个命名空间，与导出表 kind 一一对应，**不再拍平**。
 --   values = 值命名空间（DFun / 签名 / 实例名；导出 kind "val"）
@@ -139,25 +102,7 @@ record Namespaces where
   nsCtorSet : HashMap Bool
   nsTypeSet : HashMap Bool
 
--- 记录字段不是全局名（字段访问在 Elab 里降级成模式绑定），所以显式写访问器。
-nsValues : Namespaces -> List String
-nsValues (Namespaces values ctors types vset cset tset) = values
-
-nsCtors : Namespaces -> List String
-nsCtors (Namespaces values ctors types vset cset tset) = ctors
-
-nsTypes : Namespaces -> List String
-nsTypes (Namespaces values ctors types vset cset tset) = types
-
-nsValueSet : Namespaces -> HashMap Bool
-nsValueSet (Namespaces values ctors types vset cset tset) = vset
-
-nsCtorSet : Namespaces -> HashMap Bool
-nsCtorSet (Namespaces values ctors types vset cset tset) = cset
-
-nsTypeSet : Namespaces -> HashMap Bool
-nsTypeSet (Namespaces values ctors types vset cset tset) = tset
-
+-- 字段访问按全局唯一字段名解析（Elab 降级成模式绑定）；构造用命名字段。
 -- 模块导出表（M10）。每条是「本模块公开名 → 定义处带模块前缀的名字」。
 -- kind 用字符串区分两套命名空间：val（函数/值）、ctor（构造器）、type（类型名）。
 -- ctor 条目额外记录所属数据类型的定义名，供 `T(..)` 重导出保持源模块的抽象性。
@@ -169,12 +114,14 @@ record ExportEntry where
   parent : String
 deriving (Eq)
 
-data ExportRef : Type where
-  ExportRef : String -> String -> String -> ExportRef
+record ExportRef where
+  refKind : String
+  refTarget : String
+  refParent : String
 
 allIdentChars : List Int -> Bool
 allIdentChars [] = True
-allIdentChars (c :: rest) = if isIdentStart c || isDigit c then allIdentChars rest else False
+allIdentChars (c :: rest) = (isIdentStart c || isDigit c) && allIdentChars rest
 
 validSegment : String -> Bool
 validSegment seg = case strUnpack seg of
@@ -199,22 +146,16 @@ mangle prefix name = if prefix == "" then name else prefix ++ "." ++ name
 importName : Import -> String
 importName (Import name isQualified alias sp) = name
 
-importIsQualified : Import -> Bool
-importIsQualified (Import name isQualified alias sp) = isQualified
-
-importAlias : Import -> Maybe String
-importAlias (Import name isQualified alias sp) = alias
-
 importModuleNames : List Import -> List String
 importModuleNames imports = map importName imports
 
 hasDuplicateName : List String -> Bool
 hasDuplicateName [] = False
-hasDuplicateName (x :: rest) = if memName x rest then True else hasDuplicateName rest
+hasDuplicateName (x :: rest) = memName x rest || hasDuplicateName rest
 
 importAliases : List Import -> List (Pair String String)
 importAliases [] = []
-importAliases (imp :: rest) = case importAlias imp of
+importAliases (imp :: rest) = case imp.importAlias of
   Nothing => importAliases rest
   Just alias => Pair alias (importName imp) :: importAliases rest
 
@@ -235,12 +176,12 @@ validateImports label imports =
 openModuleNames : List Import -> List String
 openModuleNames [] = []
 openModuleNames (imp :: rest) =
-  if importIsQualified imp then openModuleNames rest else importName imp :: openModuleNames rest
+  if imp.importIsQualified then openModuleNames rest else importName imp :: openModuleNames rest
 
 findImportPrefix : List Import -> String -> Maybe String
 findImportPrefix [] prefix = Nothing
 findImportPrefix (imp :: rest) prefix = if importName imp == prefix then Just (importName imp)
-else case importAlias imp of
+else case imp.importAlias of
   Just alias => if alias == prefix then Just (importName imp) else findImportPrefix rest prefix
   Nothing => findImportPrefix rest prefix
 
@@ -271,24 +212,11 @@ exportsOf modules name = case findModule modules name of
   Just (Module mname mpkg imports imps decls exports mcaps fx) => Ok exports
   Nothing => missingModule name
 
-entryKind : ExportEntry -> String
-entryKind e = e.kind
-
-entryPublic : ExportEntry -> String
-entryPublic e = e.public
-
-entryTarget : ExportEntry -> String
-entryTarget e = e.target
-
-entryParent : ExportEntry -> String
-entryParent e = e.parent
-
 -- 按命名空间查公开名：kinds 是允许的 kind 列表（val / ctor / type）。
 lookupExport : List String -> String -> List ExportEntry -> Maybe ExportEntry
 lookupExport kinds name [] = Nothing
 lookupExport kinds name (e :: rest) =
-  if memName (entryKind e) kinds && entryPublic e == name then Just e
-  else lookupExport kinds name rest
+  if memName e.kind kinds && e.public == name then Just e else lookupExport kinds name rest
 
 findExportValue : List ExportEntry -> String -> Maybe ExportEntry
 findExportValue entries name = lookupExport ["val", "ctor"] name entries
@@ -335,8 +263,7 @@ modulesExportingType modules imports name =
 -- 重导出时同名可能来自多个模块；只要 target 相同就不是歧义（门面伞模块常见）。
 sameTargetRest : ExportEntry -> List (Pair a ExportEntry) -> Bool
 sameTargetRest e [] = True
-sameTargetRest e ((Pair m e2) :: rest) =
-  if entryTarget e == entryTarget e2 then sameTargetRest e rest else False
+sameTargetRest e ((Pair m e2) :: rest) = e.target == e2.target && sameTargetRest e rest
 
 unifyEntryPairs : String -> String -> String -> List (Pair String ExportEntry) -> Result (Pair String ExportEntry)
 unifyEntryPairs label kindLabel name [] = Err (label ++ ": unknown " ++ kindLabel ++ " " ++ name)
@@ -350,7 +277,7 @@ modulePath root name = rootDir root ++ "/" ++ joinSlashes (splitOnDot name) ++ "
 
 -- 当前导入方所在包能否看到该 root 中的模块：同包永远可见；跨包只认 [export] 列表。
 rootAllows : String -> Root -> String -> Bool
-rootAllows importerPkg root name = case rootExports root of
+rootAllows importerPkg root name = case root.rootExports of
   Nothing => True
   Just mods => rootName root == importerPkg || memName name mods
 
@@ -385,9 +312,3 @@ findModule [] name = Nothing
 findModule ((Module mname mpkg imports imps decls exports mcaps fx) :: rest) name =
   if mname == name then Just (Module mname mpkg imports imps decls exports mcaps fx)
   else findModule rest name
-
-refKind : ExportRef -> String
-refKind (ExportRef k tgt parent) = k
-
-refTarget : ExportRef -> String
-refTarget (ExportRef k tgt parent) = tgt

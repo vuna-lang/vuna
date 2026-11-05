@@ -8,9 +8,6 @@ module Vuna.Compiler.Elab
   , Driver.addInstsEc
   , Driver.dtEvalExprIn
   , Driver.dtEvalExprInInfo
-  , Driver.dtGoalInfoCtx
-  , Driver.dtGoalInfoGoal
-  , Driver.dtGoalInfoSpan
   , Driver.ecOfProgram
   , Driver.elabProgram
   , Driver.elabProgramFull
@@ -28,29 +25,20 @@ module Vuna.Compiler.Elab
   , Types.DtDef
   , Types.DtGoal
   , Types.DtProgram
-  , Types.dtClassFieldTys
-  , Types.dtClassMethods
   , Types.dtClassName
-  , Types.dtClassParams
   , Types.dtCtorFamily
   , Types.dtCtorName
   , Types.dtCtorTelescope
   , Types.dtCtorType
   , Types.dtDataCtors
   , Types.dtDataName
-  , Types.dtDataParams
   , Types.dtDefBody
   , Types.dtDefExtern
   , Types.dtDefHasBody
   , Types.dtDefName
   , Types.dtDefSpan
   , Types.dtDefType
-  , Types.dtGoalCtx
-  , Types.dtGoalMeta
-  , Types.dtGoalSpan
-  , Types.dtGoalType
   , Types.dtProgDatas
-  , Types.dtProgDefVals
   , Types.dtProgDefs
   , Types.dtProgGoals
   , Types.dtProgSols

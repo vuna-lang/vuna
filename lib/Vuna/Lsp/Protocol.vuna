@@ -62,7 +62,7 @@ isDigitCode c = c >= 48 && c <= 57
 
 allDigitCodes : List Int -> Bool
 allDigitCodes [] = True
-allDigitCodes (c :: rest) = if isDigitCode c then allDigitCodes rest else False
+allDigitCodes (c :: rest) = isDigitCode c && allDigitCodes rest
 
 allDigits : String -> Bool
 allDigits s = s /= "" && allDigitCodes (strUnpack s)
@@ -230,7 +230,7 @@ lspRange : Int -> Int -> Int -> Int -> Json
 lspRange sl sc el ec = JObj [Pair "start" (lspPosition sl sc), Pair "end" (lspPosition el ec)]
 
 spanRange : Span -> Json
-spanRange sp = lspRange (spanStartLine sp) (spanStartCol sp) (spanEndLine sp) (spanEndCol sp)
+spanRange sp = lspRange (spanStartLine sp) (spanStartCol sp) (spanEndLine sp) sp.spanEndCol
 
 -- 文档位置上的 token / 名字
 -- ---------------------------------------------------------------

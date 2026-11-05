@@ -59,14 +59,12 @@ searchInstanceIn globals ctx ec dom sp = searchInstFuel globals ctx 16 ec dom sp
 searchInstance : Ec -> Value -> Span -> Result (Pair Term Ec)
 searchInstance ec dom sp = searchInstanceIn [] emptyCtx ec dom sp
 
-data InstMatch : Type where
-  InstMatch : DtInst -> Term -> InstMatch
+record InstMatch where
+  instMatchInst : DtInst
+  instMatchTerm : Term
 
 instMatchInst : InstMatch -> DtInst
 instMatchInst (InstMatch i t) = i
-
-instMatchTerm : InstMatch -> Term
-instMatchTerm (InstMatch i t) = t
 
 -- 递归深度上限（实例 ctx 链）；`fuel` 在每个递归层减 1。
 searchInstFuel : List (Pair String Term) -> Ctx -> Int -> Ec -> Value -> Span -> Result (Pair Term Ec)
@@ -82,7 +80,7 @@ else
     Nothing => if rigidSearchFast ec dom then missingInstance ec dom sp
     else case matchInstances globals ctx fuel ec dom sp (ecInsts ec) [] of
       Pair [] ec1 => missingInstance ec1 dom sp
-      Pair ([m]) ec1 => Ok (Pair (instMatchTerm m) ec1)
+      Pair ([m]) ec1 => Ok (Pair m.instMatchTerm ec1)
       Pair ms ec1 =>
         let
           _ =
@@ -101,9 +99,9 @@ missingInstance ec dom sp =
 
 -- 局部上下文查找：ctxItems 最近的 binder 在前，其 de Bruijn index 就是下标 i。
 localDictLookup : Ctx -> Int -> Value -> Ec -> Maybe (Pair Term Ec)
-localDictLookup ctx i dom ec = case ctxItems ctx of
+localDictLookup ctx i dom ec = case ctx.ctxItems of
   [] => Nothing
-  _ => localDictLookupGo ctx i dom ec (ctxItems ctx)
+  _ => localDictLookupGo ctx i dom ec ctx.ctxItems
 
 localDictLookupGo : Ctx -> Int -> Value -> Ec -> List (Pair String Term) -> Maybe (Pair Term Ec)
 localDictLookupGo ctx i dom ec [] = Nothing
@@ -117,12 +115,12 @@ localDictLookupGo ctx i dom ec ((Pair name ty) :: rest) =
 
 -- 刚性类参数快路径：只有当所有实例都是单态（tele/ctx 均空）时才可确定匹配不上。
 rigidSearchFast : Ec -> Value -> Bool
-rigidSearchFast ec dom = if isRigidDictArg ec dom then allInstancesMono (ecInsts ec) else False
+rigidSearchFast ec dom = isRigidDictArg ec dom && allInstancesMono (ecInsts ec)
 
 allInstancesMono : List DtInst -> Bool
 allInstancesMono [] = True
-allInstancesMono (i :: rest) = case dtInstTele i of
-  [] => case dtInstCtx i of
+allInstancesMono (i :: rest) = case i.dtInstTele of
+  [] => case i.dtInstCtx of
     [] => allInstancesMono rest
     _ => False
   _ => False
@@ -137,14 +135,14 @@ matchInstances globals ctx fuel ec dom sp (i :: rest) acc = case tryMatchInst gl
 -- `TGlobal inst <typeArgs(Rig0)> <dictArgs(Rig1)>`。
 tryMatchInst : List (Pair String Term) -> Ctx -> Int -> Ec -> DtInst -> Value -> Span -> Maybe (Pair Term Ec)
 tryMatchInst globals ctx fuel ec inst dom sp = if fuel <= 0 then Nothing
-else case allocTeleMetas ctx ec (dtInstTele inst) of
+else case allocTeleMetas ctx ec inst.dtInstTele of
   Pair metas ec1 =>
     let
       _ =
         if debugOn then note
-          ("inst-try: " ++ dtInstName inst ++ " head=" ++ showTerm (dtInstHead inst) ++ " tele=" ++ strFromInt (length (dtInstTele inst)))
+          ("inst-try: " ++ dtInstName inst ++ " head=" ++ showTerm inst.dtInstHead ++ " tele=" ++ strFromInt (length inst.dtInstTele))
         else 0
-      hd = eval (map (\m => VMeta m []) metas) (dtInstHead inst)
+      hd = eval (map (\m => VMeta m []) metas) inst.dtInstHead
     in case conv (ecDefTbl ec1) (ecSolsP ec1) 0 dom hd of
       Err e =>
         let
@@ -163,7 +161,7 @@ else case allocTeleMetas ctx ec (dtInstTele inst) of
               teleArgs =
                 map (\v => Pair (quote (ctxDepth ctx) (forceVal ec2 v)) Rig0) (reverse solved)
               env2 = map (\v => forceVal ec2 v) solved
-              ctxVals = map (\t => forceVal ec2 (eval env2 t)) (dtInstCtx inst)
+              ctxVals = map (\t => forceVal ec2 (eval env2 t)) inst.dtInstCtx
             in case solveDictCtxs globals ctx (fuel - 1) ec2 sp ctxVals [] of
               Nothing => Nothing
               Just (Pair dictArgs ec3) =>
@@ -361,7 +359,7 @@ anyValueHasRigidNVar ec fuel (v :: rest) =
 classHasProjection : String -> String -> String -> Ec -> Bool
 classHasProjection className short name ec = case findClassByShortName className (ecClasses ec) of
   Nothing => False
-  Just cls => classMethodProjection (dtClassMethods cls) short == name
+  Just cls => classMethodProjection cls.dtClassMethods short == name
 
 isEqMethod : Ec -> String -> Bool
 -- 后两个是**内部生成名**：`Elab.Derive`（deriving 展开）与 `Elab.Match`（字面量模式）
@@ -424,7 +422,7 @@ specializeEqTy globals ctx name aTerm bTerm sp aTy ec = case builtinEqTyName (fo
     Just cls =>
       let
         mname =
-          if name == "==" || name == "/=" then classMethodProjection (dtClassMethods cls) (eqMethodShortOf name)
+          if name == "==" || name == "/=" then classMethodProjection cls.dtClassMethods (eqMethodShortOf name)
           else name
         -- 类型项必须按**当前上下文深度** quote：`quote 0` 会把刚性变量拍成 level 0，
         -- 字典的类参数就会指向错误的 binder（两个以上类型参数时提到别的参数上）。
@@ -503,7 +501,7 @@ specializeCmpTy globals ctx name aTerm bTerm sp aTy ec = case cmpBuiltinTyName (
     Just cls =>
       let
         mname =
-          if name == "<" || name == "<=" || name == ">" || name == ">=" then classMethodProjection (dtClassMethods cls) (cmpMethodShortOf name)
+          if name == "<" || name == "<=" || name == ">" || name == ">=" then classMethodProjection cls.dtClassMethods (cmpMethodShortOf name)
           else name
         tyTerm = quote (ctxDepth ctx) aTy
         dictTy = VNeutral (NGlobal (dictTypeName (dtClassName cls)) [aTy])

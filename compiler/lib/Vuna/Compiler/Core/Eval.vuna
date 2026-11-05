@@ -90,8 +90,8 @@ else case t of
   TGlobal g => VNeutral (NGlobal g [])
   TType l => VType l
   TPi name implicit rig dom cod =>
-    VPi name implicit rig (evalFuel (fuel - 1) env dom) (Clos env cod)
-  TLam name rig body => VLam name rig (Clos env body)
+    VPi name implicit rig (evalFuel (fuel - 1) env dom) (Closure env cod)
+  TLam name rig body => VLam name rig (Closure env body)
   TApp f a rig => applyValueFuel (fuel - 1) (evalFuel (fuel - 1) env f) (evalFuel (fuel - 1) env a)
   TCon c args => VCon c (evalArgTermsFuel (fuel - 1) env args)
   TCase scrut alts => evalCaseFuel (fuel - 1) (evalFuel (fuel - 1) env scrut) (evalAlts env alts)
@@ -102,7 +102,7 @@ else case t of
     evalIf (evalFuel (fuel - 1) env c) (evalFuel (fuel - 1) env th) (evalFuel (fuel - 1) env el)
 
 evalAlt : List Value -> CaseAlt -> VCaseAlt
-evalAlt env (CaseAlt name binders body) = VCaseAlt name binders (Clos env body)
+evalAlt env (CaseAlt name binders body) = VCaseAlt name binders (Closure env body)
 
 evalAlts : List Value -> List CaseAlt -> List VCaseAlt
 evalAlts env [] = []
@@ -135,16 +135,16 @@ applyCaseAltFuel : Int -> String -> List Value -> List VCaseAlt -> Value
 applyCaseAltFuel fuel c args alts = if fuel <= 0 then VType levelZero
 else case alts of
   [] => VCase (VCon c args) []
-  alt :: rest => if vCaseAltName alt == c then case vCaseAltClosure alt of
-    Clos env body => evalFuel (fuel - 1) (append (reverse args) env) body
-  else if vCaseAltName alt == "" then case vCaseAltClosure alt of
+  alt :: rest => if alt.vCaseAltName == c then case alt.vCaseAltClosure of
+    Closure env body => evalFuel (fuel - 1) (append (reverse args) env) body
+  else if alt.vCaseAltName == "" then case alt.vCaseAltClosure of
     -- 兜底分支（源码里写的是变量/通配，精化后名字为空串）。变量兜底带一个 binder，
     -- 要把 scrutinee 压进环境；通配兜底无 binder。
-    Clos env body => evalFuel (fuel - 1) (catchAllEnv alt (VCon c args) env) body
+    Closure env body => evalFuel (fuel - 1) (catchAllEnv alt (VCon c args) env) body
   else applyCaseAltFuel (fuel - 1) c args rest
 
 catchAllEnv : VCaseAlt -> Value -> List Value -> List Value
-catchAllEnv alt scrut env = case vCaseAltBinders alt of
+catchAllEnv alt scrut env = case alt.vCaseAltBinders of
   [] => env
   _ => scrut :: env
 
@@ -162,13 +162,13 @@ applyValue f a = applyValueFuel 128 f a
 applyValueFuel : Int -> Value -> Value -> Value
 applyValueFuel fuel f a = if fuel <= 0 then VType levelZero
 else case f of
-  VLam name rig (Clos env body) => evalFuel (fuel - 1) (a :: env) body
+  VLam name rig (Closure env body) => evalFuel (fuel - 1) (a :: env) body
   VNeutral n => VNeutral (spineAppend n a)
   VMeta m sp => VMeta m (append sp [a])
   _ => VApp f a
 
 applyClosure : Closure -> Value -> Value
-applyClosure (Clos env body) v = eval (v :: env) body
+applyClosure (Closure env body) v = eval (v :: env) body
 
 applySpine : Value -> List Value -> Value
 applySpine v [] = v
@@ -212,7 +212,7 @@ else case v of
       _ => VApp f2 a
   VNeutral n => case n of
     NGlobal g sp => case defLookup g defs of
-      Just body => case Base.HashMap.lookup g (solsDefVals sols) of
+      Just body => case Base.HashMap.lookup g sols.solsDefVals of
         Just cached => force defs sols (fuel - 1) (applySpine cached sp)
         Nothing => force defs sols (fuel - 1) (applySpine (eval [] body) sp)
       Nothing => case primReduce defs sols (fuel - 1) g sp of
@@ -390,19 +390,19 @@ strPrim3 sp f = Nothing
 primReduce : HashMap Term -> Sols -> Int -> String -> List Value -> Maybe Value
 primReduce defs sols fuel g sp = if fuel <= 0 then Nothing
 else case findIntrinsic g of
-  Just i => case intrinsicOp i of
+  Just i => case i.intrinsicOp of
     OpAdd => intPrim2 sp (\a, b => VInt (a + b))
     OpSub => intPrim2 sp (\a, b => VInt (a - b))
     OpMul => intPrim2 sp (\a, b => VInt (a * b))
     OpDiv => intPrim2Div sp
     OpEqInt => intPrim2 sp (\a, b => VBool (a == b))
-    OpNeqInt => intPrim2 sp (\a, b => VBool (notBool (a == b)))
+    OpNeqInt => intPrim2 sp (\a, b => VBool (not (a == b)))
     OpLtInt => intPrim2 sp (\a, b => VBool (a < b))
     OpLeInt => intPrim2 sp (\a, b => VBool (a <= b))
     OpGtInt => intPrim2 sp (\a, b => VBool (a > b))
     OpGeInt => intPrim2 sp (\a, b => VBool (a >= b))
     OpEqStr => strPrim2 sp (\a, b => VBool (strEq a b))
-    OpNeqStr => strPrim2 sp (\a, b => VBool (notBool (strEq a b)))
+    OpNeqStr => strPrim2 sp (\a, b => VBool (not (strEq a b)))
     OpLtGeneric => genericPrim2 sp (\o => o < 0)
     OpLeGeneric => genericPrim2 sp (\o => o <= 0)
     OpGtGeneric => genericPrim2 sp (\o => o > 0)
@@ -597,7 +597,8 @@ argValsAt ((Pair name rig) :: rest) depth i =
 -- 逐个把实参喂给闭包：闭包 env 是分支外环境，实参按 arg0 先喂的顺序。
 applyClosureBinder : Closure -> List Value -> Value
 applyClosureBinder clo [] = VCon "_alt" []
-applyClosureBinder (Clos env body) (a :: rest) = applyClosureBinder (Clos (a :: env) body) rest
+applyClosureBinder (Closure env body) (a :: rest) =
+  applyClosureBinder (Closure (a :: env) body) rest
 
 freshVar : String -> Int -> Value
 freshVar name level = VNeutral (NVar name level [])

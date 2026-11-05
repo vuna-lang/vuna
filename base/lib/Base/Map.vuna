@@ -1,7 +1,7 @@
 module Base.Map (Map, empty, fromList, insert, keys, lookup, remove, size, toList, values) where
 
 -- Base.Map：基于 assoc list 的抽象映射类型。
--- 模块头只导出 Map（不含构造器 MkMap），跨模块只能通过 API 使用。
+-- 模块头只导出 Map（不含构造器 Map），跨模块只能通过 API 使用。
 --
 -- 辅助函数必须定义在公开函数**之前**：`_insertPair` 的 `==` 会把 `Dict_Eq k` 提升成
 -- 隐式参数，调用点要看到提升后的签名才能补字典实参（前向引用看到的是旧签名）。
@@ -13,46 +13,46 @@ import Base.Nat
 -- 类存在与 split 单元顺序。
 import Base.Eq
 
-data Map k v : Type where
-  MkMap : List (Pair k v) -> Map k v
+record Map k v where
+  toList : List (Pair k v)
 
-_insertPair : k -> v -> List (Pair k v) -> List (Pair k v)
+_insertPair : Eq k => k -> v -> List (Pair k v) -> List (Pair k v)
 _insertPair key value [] = [Pair key value]
 _insertPair key value ((Pair k2 v2) :: rest) =
   if k2 == key then Pair key value :: rest else Pair k2 v2 :: _insertPair key value rest
 
-_lookupPair : k -> List (Pair k v) -> Maybe v
+_lookupPair : Eq k => k -> List (Pair k v) -> Maybe v
 _lookupPair key [] = Nothing
 _lookupPair key ((Pair k2 v2) :: rest) = if k2 == key then Just v2 else _lookupPair key rest
 
-_removePair : k -> List (Pair k v) -> List (Pair k v)
+_removePair : Eq k => k -> List (Pair k v) -> List (Pair k v)
 _removePair key [] = []
 _removePair key ((Pair k2 v2) :: rest) =
   if k2 == key then rest else Pair k2 v2 :: _removePair key rest
 
 empty : Map k v
-empty = MkMap []
+empty = Map []
 
-insert : k -> v -> Map k v -> Map k v
-insert key value (MkMap pairs) = MkMap (_insertPair key value pairs)
+insert : Eq k => k -> v -> Map k v -> Map k v
+insert key value (Map pairs) = Map (_insertPair key value pairs)
 
-lookup : k -> Map k v -> Maybe v
-lookup key (MkMap pairs) = _lookupPair key pairs
+lookup : Eq k => k -> Map k v -> Maybe v
+lookup key (Map pairs) = _lookupPair key pairs
 
-remove : k -> Map k v -> Map k v
-remove key (MkMap pairs) = MkMap (_removePair key pairs)
+remove : Eq k => k -> Map k v -> Map k v
+remove key (Map pairs) = Map (_removePair key pairs)
 
 keys : Map k v -> List k
-keys (MkMap pairs) = map firstOf pairs
+keys (Map pairs) = map firstOf pairs
 
 values : Map k v -> List v
-values (MkMap pairs) = map secondOf pairs
+values (Map pairs) = map secondOf pairs
 
 size : Map k v -> Nat
-size (MkMap pairs) = length pairs
+size (Map pairs) = length pairs
 
 fromList : List (Pair k v) -> Map k v
-fromList pairs = MkMap pairs
+fromList pairs = Map pairs
 
 toList : Map k v -> List (Pair k v)
-toList (MkMap pairs) = pairs
+toList (Map pairs) = pairs

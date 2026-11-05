@@ -91,13 +91,13 @@ concatMapGo f (x :: rest) acc = concatMapGo f rest (append (reverse (f x)) acc)
 flatMap : (a -> List b) -> List a -> List b
 flatMap f xs = concatMap f xs
 
-mem : a -> List a -> Bool
+mem : Eq a => a -> List a -> Bool
 mem x [] = False
-mem x (y :: rest) = if x == y then True else mem x rest
+mem x (y :: rest) = x == y || mem x rest
 
 memName : String -> List String -> Bool
 memName name [] = False
-memName name (x :: rest) = if x == name then True else memName name rest
+memName name (x :: rest) = x == name || memName name rest
 
 lookupPair : String -> List (Pair String v) -> Maybe v
 lookupPair name [] = Nothing

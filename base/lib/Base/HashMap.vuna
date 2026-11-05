@@ -36,8 +36,8 @@ import Base.Ord
 import Base.Pair
 import Base.String
 
-data HashMap a : Type where
-  MkHashMap : Array (Array (List (Pair String a))) -> HashMap a
+record HashMap a where
+  hashMapBuckets : Array (Array (List (Pair String a)))
 
 hashStr : String -> Int
 hashStr s = strHash s
@@ -50,7 +50,7 @@ _lookupAssoc key ((Pair k v) :: rest) = if key == k then Just v else _lookupAsso
 -- 由 toList 在冷路径去重（保留桶首 = 最新值）。这样热路径 insert 不付去重成本。
 _hasKeyIn : String -> List (Pair String a) -> Bool
 _hasKeyIn key [] = False
-_hasKeyIn key ((Pair k v) :: rest) = if key == k then True else _hasKeyIn key rest
+_hasKeyIn key ((Pair k v) :: rest) = key == k || _hasKeyIn key rest
 
 _dedupGo : List (Pair String a) -> List (Pair String a) -> List (Pair String a)
 _dedupGo [] acc = reverse acc
@@ -64,7 +64,7 @@ _dedupBucket xs = _dedupGo xs []
 -- OCaml 侧可泛化（`Array.make 32 ...` 是函数应用，会触发弱类型变量）；第一次 `insert`
 -- 时才分配 32×32 桶。内层空数组可以共享（`Array.set` 不修改原数组）。
 insert : String -> a -> HashMap a -> HashMap a
-insert key v (MkHashMap outers) =
+insert key v (HashMap outers) =
   let
     base =
       if Base.Array.length outers == 0 then Base.Array.make 32 (Base.Array.make 32 []) else outers
@@ -74,10 +74,10 @@ insert key v (MkHashMap outers) =
     ii = natFromInt (b - qi * 32)
     outer = Base.Array.get base oi
     inner = Base.Array.get outer ii
-  in MkHashMap (Base.Array.set base oi (Base.Array.set outer ii (Pair key v :: inner)))
+  in HashMap (Base.Array.set base oi (Base.Array.set outer ii (Pair key v :: inner)))
 
 lookup : String -> HashMap a -> Maybe a
-lookup key (MkHashMap outers) = if Base.Array.length outers == 0 then Nothing
+lookup key (HashMap outers) = if Base.Array.length outers == 0 then Nothing
 else
   let
     b = hashStr key
@@ -99,7 +99,7 @@ insertAll ((Pair k v) :: rest) t = insertAll rest (insert k v t)
 -- `insertAll` 相反：后面的条目覆盖前面的。两个语义都有编译器调用点（历史的
 -- `tblFromList` / `tblInsertAll`），不要合并。
 fromList : List (Pair String a) -> HashMap a
-fromList [] = MkHashMap arrayEmpty
+fromList [] = HashMap arrayEmpty
 fromList ((Pair k v) :: rest) = insert k v (fromList rest)
 
 -- 名字集合的成员判定表（编译器历史上叫 `tblOfNames`）。
@@ -107,7 +107,7 @@ ofNames : List String -> HashMap Bool
 ofNames xs = insertAll (map (\n => Pair n True) xs) (fromList [])
 
 toList : HashMap a -> List (Pair String a)
-toList (MkHashMap outers) =
+toList (HashMap outers) =
   concatMap (\outer => concatMap (\inner => _dedupBucket inner) (Base.Array.toList outer))
     (Base.Array.toList outers)
 

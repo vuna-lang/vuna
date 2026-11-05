@@ -19,8 +19,9 @@ module Vuna.Compiler.Driver.Split
 import Vuna.Compiler.Common
 import Base.IO
 
-data SplitFile : Type where
-  SplitFile : String -> String -> SplitFile
+record SplitFile where
+  splitName : String
+  splitText : String
 
 splitName : SplitFile -> String
 splitName (SplitFile name text) = name

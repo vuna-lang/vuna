@@ -189,7 +189,7 @@ typeParamDecl n = case typeParamNames n of
 
 -- kind 里的候选类型参数位置（域是宇宙的族参数）。
 typeParamLevels : DtData -> List Int
-typeParamLevels d = typeParamLevelsGo (dtDataParams d) 0
+typeParamLevels d = typeParamLevelsGo d.dtDataParams 0
 
 typeParamLevelsGo : List (Pair String Rig) -> Int -> List Int
 typeParamLevelsGo [] i = []
@@ -203,7 +203,7 @@ findDtData name (d :: rest) = if dtDataName d == name then Just d else findDtDat
 
 memInt : Int -> List Int -> Bool
 memInt i [] = False
-memInt i (x :: rest) = if x == i then True else memInt i rest
+memInt i (x :: rest) = x == i || memInt i rest
 
 levelSlot : List Int -> Int -> Maybe Int
 levelSlot levels lvl = levelSlotGo levels lvl 0
@@ -288,7 +288,7 @@ dataUsedLevels d table datas =
 -- 这里显式按元素比较（元素是 Int，`==` 走特化路径）。
 levelListEq : List Int -> List Int -> Bool
 levelListEq [] [] = True
-levelListEq (x :: xs) (y :: ys) = if x == y then levelListEq xs ys else False
+levelListEq (x :: xs) (y :: ys) = x == y && levelListEq xs ys
 levelListEq _ _ = False
 
 sameLevelTable : List (Pair String (List Int)) -> List (Pair String (List Int)) -> Bool
@@ -490,9 +490,7 @@ isNatFamilyName name = name == natTypeName
 
 runtimeDatas : List DtData -> List DtData
 runtimeDatas datas =
-  filter
-    (\d => if isBoolFamilyName (dtDataName d) then False else if isNatFamilyName (dtDataName d) then False else True)
-    datas
+  filter (\d => not (isBoolFamilyName (dtDataName d)) && not (isNatFamilyName (dtDataName d))) datas
 
 -- 类型声明：`allDatas` 用于族间参数推断（跨模块字段类型照旧渲染成全局类型名），
 -- `subset` 是实际写进本文件的族。

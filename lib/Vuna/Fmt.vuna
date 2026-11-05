@@ -31,7 +31,7 @@ import Vuna.Fmt.Util
 formatSourceWith : List FixityDecl -> String -> Result String
 formatSourceWith programFixities source = case parseSource "<fmt>" source of
   Err e => Err e
-  Ok (Source hdr imports fx decls0) => case reorderProgram (tableOfKeepOps (append fx programFixities)) decls0 of
+  Ok (SourceFile hdr imports fx decls0) => case reorderProgram (tableOfKeepOps (append fx programFixities)) decls0 of
     Err e => Err e
     Ok decls => case lexComments source of
       Err e => Err e

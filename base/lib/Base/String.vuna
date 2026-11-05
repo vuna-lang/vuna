@@ -127,7 +127,7 @@ _startsWithChars : List Int -> List Int -> Bool
 _startsWithChars [] text = True
 _startsWithChars (p :: prest) text = case text of
   [] => False
-  t :: trest => if p == t then _startsWithChars prest trest else False
+  t :: trest => p == t && _startsWithChars prest trest
 
 _containsChars : List Int -> List Int -> Bool
 _containsChars needle text = if _startsWithChars needle text then True
