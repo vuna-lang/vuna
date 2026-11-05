@@ -261,7 +261,9 @@ depStartOf : List DtProgram -> Pair Ec (List (Pair String Term))
 depStartOf progs =
   let
     datas = dedupDatas (concatMap dtProgDatas progs)
-    globals = append preludeGlobals (dedupGlobals (concatMap dtProgGlobals progs))
+    globals =
+      append preludeGlobals
+        (append (map (\d => Pair (dtDataName d) (dtDataKind d)) datas) (dedupGlobals (concatMap dtProgGlobals progs)))
     sols = concatMap dtProgSols progs
     ec0 = ecEmpty
     ec1 = addDatasEc ec0 datas

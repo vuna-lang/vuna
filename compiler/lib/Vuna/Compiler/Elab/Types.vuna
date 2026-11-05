@@ -28,6 +28,7 @@ module Vuna.Compiler.Elab.Types
   , dtCtorTelescope
   , dtCtorType
   , dtDataCtors
+  , dtDataKind
   , dtDataName
   , dtDataParams
   , dtDefBody
@@ -175,16 +176,19 @@ dtCtorType (DtCtor name family tele ty) = ty
 
 -- M14：一个归纳族（索引族）。params 来自 kind 的 Pi binder（域是宇宙的擦除）。
 data DtData : Type where
-  DtData : String -> List (Pair String Rig) -> List DtCtor -> DtData
+  DtData : String -> List (Pair String Rig) -> List DtCtor -> Term -> DtData
 
 dtDataName : DtData -> String
-dtDataName (DtData name params ctors) = name
+dtDataName (DtData name params ctors kind) = name
 
 dtDataParams : DtData -> List (Pair String Rig)
-dtDataParams (DtData name params ctors) = params
+dtDataParams (DtData name params ctors kind) = params
 
 dtDataCtors : DtData -> List DtCtor
-dtDataCtors (DtData name params ctors) = ctors
+dtDataCtors (DtData name params ctors kind) = ctors
+
+dtDataKind : DtData -> Term
+dtDataKind (DtData name params ctors kind) = kind
 
 -- M15：一个洞的目标。编号、位置、目标类型（level 形态）、绑定时上下文快照。
 data DtGoal : Type where

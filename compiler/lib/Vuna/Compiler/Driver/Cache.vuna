@@ -37,7 +37,7 @@ fixCtor : IntMap Value -> DtCtor -> DtCtor
 fixCtor tbl (DtCtor n fam tele ty) = DtCtor n fam tele (fixTerm tbl ty)
 
 fixData : IntMap Value -> DtData -> DtData
-fixData tbl (DtData n ps ctors) = DtData n ps (map (fixCtor tbl) ctors)
+fixData tbl (DtData n ps ctors kind) = DtData n ps (map (fixCtor tbl) ctors) (fixTerm tbl kind)
 
 fixClass : IntMap Value -> DtClass -> DtClass
 fixClass tbl (DtClass n ps projs tys) =
@@ -90,7 +90,8 @@ shiftCtor : Int -> DtCtor -> DtCtor
 shiftCtor off (DtCtor n fam tele ty) = DtCtor n fam tele (shiftTermMetas off ty)
 
 shiftData : Int -> DtData -> DtData
-shiftData off (DtData n ps ctors) = DtData n ps (map (shiftCtor off) ctors)
+shiftData off (DtData n ps ctors kind) =
+  DtData n ps (map (shiftCtor off) ctors) (shiftTermMetas off kind)
 
 shiftClass : Int -> DtClass -> DtClass
 shiftClass off (DtClass n ps projs tys) =

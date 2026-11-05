@@ -203,7 +203,7 @@ elabDataBodies decls heads globals ec acc = case decls of
           in andThen (elabCtors globals dname arity famLevel ec ctors) (\q => case q of
             Pair dctors ec2 =>
               let
-                dd = DtData dname tele dctors
+                dd = DtData dname tele dctors fullKind
               in case canonicalCtorsFor dname of
                 Just expected =>
                   if sameCtorSet expected (map dtCtorName dctors) then elabDataBodies rest heads (append globals (ctorGlobals dctors)) (ecAddData ec2 dd)

@@ -142,7 +142,9 @@ elabTrait globals ec ds = case ds of
             dapp = foldAppTerms (TGlobal dname) [Pair (TVar pname 0) Rig0]
             ctorTy = TPi pname True Rig0 pKind (foldPiFieldTys fieldTys dapp)
             tele = teleOfType ctorTy
-            dd = DtData dname tele [DtCtor cname dname tele ctorTy]
+            dd =
+              DtData dname tele [DtCtor cname dname tele ctorTy]
+                (TPi pname True Rig0 pKind (TType levelZero))
             projs = methodProjections tname pname pKind methodsP fieldTys
             projSpans = map (\m => Pair (traitMethodName m) (traitMethodSpan m)) methods
             projBodies = projectionDefs tname pname methodsP fieldTys (length methods)
