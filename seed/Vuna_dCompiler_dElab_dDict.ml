@@ -325,7 +325,7 @@ and v_Vuna_dCompiler_dElab_dDict_dmatchInstances = (fun mc0 mc1 mc2 mc3 mc4 mc5 
   | _ -> failwith "DT: impossible branch"
 ))
 and v_Vuna_dCompiler_dElab_dDict_dtryMatchInst = (fun globals ctx fuel ec inst dom sp -> (if (fuel <= 0) then C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing else (match (((v_Vuna_dCompiler_dElab_dDict_dallocTeleMetas ctx) ec) (v_Vuna_dCompiler_dElab_dTypes_ddtInstTele inst)) with
-  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__123, dtb__124) -> ((fun hd -> (match (((((v_Vuna_dCompiler_dCore_dConv_dconv (v_Vuna_dCompiler_dElab_dTypes_decDefTbl dtb__124)) (v_Vuna_dCompiler_dElab_dTypes_decSolsP dtb__124)) 0) dom) hd) with
+  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__123, dtb__124) -> ((fun _u -> ((fun hd -> (match (((((v_Vuna_dCompiler_dCore_dConv_dconv (v_Vuna_dCompiler_dElab_dTypes_decDefTbl dtb__124)) (v_Vuna_dCompiler_dElab_dTypes_decSolsP dtb__124)) 0) dom) hd) with
   | C_Base_dResult_dResult_Base_dResult_dErr (dtb__125) -> C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing
   | C_Base_dResult_dResult_Base_dResult_dOk (dtb__126) -> ((fun ec2 -> (match ((v_Vuna_dCompiler_dElab_dDict_dsolveTeleMetas ec2) dtb__123) with
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing
@@ -340,7 +340,7 @@ and v_Vuna_dCompiler_dElab_dDict_dtryMatchInst = (fun globals ctx fuel ec inst d
   | _ -> failwith "DT: impossible branch"
 )) ((v_Vuna_dCompiler_dElab_dTypes_decPutSols dtb__124) (v_Vuna_dCompiler_dCore_dTerm_dsolsList dtb__126)))
   | _ -> failwith "DT: impossible branch"
-)) ((v_Vuna_dCompiler_dCore_dEval_deval ((v_Base_dList_dmap (fun m -> (C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVMeta (m, C_Base_dList_dList_Base_dList_dNil)))) dtb__123)) (v_Vuna_dCompiler_dElab_dTypes_ddtInstHead inst)))
+)) ((v_Vuna_dCompiler_dCore_dEval_deval ((v_Base_dList_dmap (fun m -> (C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVMeta (m, C_Base_dList_dList_Base_dList_dNil)))) dtb__123)) (v_Vuna_dCompiler_dElab_dTypes_ddtInstHead inst)))) (if v_Vuna_dCompiler_dDebug_ddebugOn then (v_Vuna_dCompiler_dDebug_dnote (String.concat "" ["inst-try: "; (v_Vuna_dCompiler_dElab_dTypes_ddtInstName inst); " head="; (v_Vuna_dCompiler_dCore_dTerm_dshowTerm (v_Vuna_dCompiler_dElab_dTypes_ddtInstHead inst)); " tele="; (bi_strFromInt (v_Base_dList_dlength (v_Vuna_dCompiler_dElab_dTypes_ddtInstTele inst)))])) else 0))
   | _ -> failwith "DT: impossible branch"
 )))
 and v_Vuna_dCompiler_dElab_dDict_dsolveDictCtxs = (fun mc0 mc1 mc2 mc3 mc4 mc5 mc6 -> (match mc5 with
