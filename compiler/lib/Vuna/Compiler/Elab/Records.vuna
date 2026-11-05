@@ -11,6 +11,7 @@ module Vuna.Compiler.Elab.Records
   , lookupRecord
   , missingFieldMsg
   , prepareDecls
+  , prepareDeclsWith
   , recordDeclToData
   , recordsOfDecls
   , unknownFieldMsg
@@ -350,10 +351,16 @@ fieldAccessPats fname ((Pair f alt) :: rest) =
 -- DT 的一步式入口：抽取 record 信息并完成全部降级。
 -- `Elab.elabProgramFull` 只需 `andThen (prepareDecls decls) elabProgramGo`。
 prepareDecls : List Decl -> Result (List Decl)
-prepareDecls decls0 =
+prepareDecls decls0 = prepareDeclsWith [] decls0
+
+-- M34.5 接口摘要路径：本包的 record 降级需要**依赖包 record 头**参与字段访问/record 更新/
+-- 模式降级的消解（依赖包只提供语法头，不精化）；auxDecls 是依赖模块的原始 decls。
+prepareDeclsWith : List Decl -> List Decl -> Result (List Decl)
+prepareDeclsWith auxDecls decls0 =
   let
+    auxSplit = recordsOfDecls ctorName auxDecls
     split = recordsOfDecls ctorName decls0
-    records = firstOf split
+    records = append (firstOf auxSplit) (firstOf split)
     decls = secondOf split
   in desugarRecords records decls
 

@@ -1,6 +1,7 @@
 module Vuna.Compiler.Driver.Dt
   ( dtCheck
   , dtCheckLibrary
+  , dtCheckLibraryPackageWithDeps
   , dtCheckLibraryWithProgram
   , dtCheckPackageWithDeps
   , dtCheckSource
@@ -10,7 +11,6 @@ module Vuna.Compiler.Driver.Dt
   , dtEvalFile
   , dtGoalsSource
   , dtMainKind
-  , dtProgramHasMetas
   , dtSplitProject
   ) where
 
@@ -35,9 +35,9 @@ import Vuna.Compiler.Core
 import Vuna.Compiler.Elab
 import Vuna.Compiler.Elab.Types
 import Vuna.Compiler.Elab.Prelude
-import Vuna.Compiler.Elab.Meta
 import Vuna.Compiler.Intrinsics
 import Vuna.Compiler.Codegen
+import Vuna.Compiler.Driver.Cache
 import Vuna.Compiler.Driver.Split
 
 -- 项目声明的拼接顺序：Loader 的 modules 列表是「依赖在前」的**反序**（依赖者先
@@ -247,42 +247,77 @@ in andThen (elabProgramFull allDecls)
 dtLoadParts : PackageContext -> String -> Result (Pair (List Decl) (List Module))
 dtLoadParts ctx entry = andThen (loadProject ctx entry) (\project => resolveProject project)
 
--- 只精化本包模块：依赖包的 DtProgram（缓存摘要）重建起始 Ec / globals，跳过依赖包 body。
--- 安全阀在调用方：摘要必须已完全解出（无残留 TMeta）且缓存命中，否则回退全量路径。
-dtCheckPackageWithDeps : PackageContext -> String -> List DtProgram -> Result (Pair (List String) DtProgram)
-dtCheckPackageWithDeps ctx entry deps = andThen (dtLoadParts ctx entry) (\parts => let
-  pkgName = contextPackageName ctx
-  ours = filter (\m => modulePackageOf m == pkgName) (reverse (secondOf parts))
-  decls = append (concatMap moduleDeclsOf ours) (firstOf parts)
-  start = depStartOf deps
-  _ = note ("summ-List=" ++ globalTextOf "List" (secondOf start))
-  _ = note
-  _ = note
-  _ = note ("summ-Pair=" ++ globalTextOf "Pair" (secondOf start))
-  _ = note ("summ-getenv=" ++ globalTextOf "prim_getenv" (secondOf start))
-  _ = note ("summ-runIO=" ++ globalTextOf "Base.IO.runIO" (secondOf start))
-  _ = note ("summ-IO=" ++ globalTextOf "Base.IO.IO" (secondOf start))
-in andThen (elabProgramGoWith (firstOf start) (secondOf start) decls)
-  (\prog => andThen (checkDtProgram (Pair (dtProgDatas prog) (dtProgDefs prog))) (\_ => Ok (Pair [] prog)))
-)
+-- 只精化本包模块：依赖包的 CachedProgram（闭合接口摘要）重建起始 Ec / globals，
+-- 跳过依赖包 body。摘要可用性校验在调用方（`cachedProgramValid`）：任一依赖摘要缺失或
+-- 不闭合 ⇒ 回退全量路径。
+dtCheckPackageWithDeps : PackageContext -> String -> List CachedProgram -> Result (Pair (List String) DtProgram)
+dtCheckPackageWithDeps ctx entry deps =
+  andThen (dtLoadParts ctx entry) (\parts => dtCheckOurs ctx parts deps)
 
-depStartOf : List DtProgram -> Pair Ec (List (Pair String Term))
+-- 库包版本：入口是 [export].modules（没有 app/Main.vuna）。
+dtCheckLibraryPackageWithDeps : PackageContext -> List String -> List CachedProgram -> Result (Pair (List String) DtProgram)
+dtCheckLibraryPackageWithDeps ctx names deps =
+  andThen (loadProjectModules ctx names)
+    (\project => andThen (resolveProject project) (\parts => dtCheckOurs ctx parts deps))
+
+dtCheckOurs : PackageContext -> Pair (List Decl) (List Module) -> List CachedProgram -> Result (Pair (List String) DtProgram)
+dtCheckOurs ctx parts deps =
+  let
+    pkgName = contextPackageName ctx
+    modules = reverse (secondOf parts)
+    ours = filter (\m => modulePackageOf m == pkgName) modules
+    depsOnly = filter (\m => modulePackageOf m /= pkgName) modules
+    -- 本包声明：本包模块 + 入口声明；依赖模块只作为终止性分析上下文（不精化）。
+    decls = append (concatMap moduleDeclsOf ours) (firstOf parts)
+    termAux = concatMap moduleDeclsOf depsOnly
+    start = depStartOf deps
+  in andThen (elabProgramFullWithAux (firstOf start) (secondOf start) termAux decls) (\prog => let
+    -- codegen 的 check（擦除/名字/构造子护栏）需要依赖包的 datas（构造子与标签信息）；
+    -- 只生成本包 defs（依赖包 body 不重精化、不重新生成）。
+    allDatas = append (concatMap cachedDatas deps) (dtProgDatas prog)
+  in andThen (checkDtProgram (Pair allDatas (dtProgDefs prog))) (\_ => Ok (Pair [] prog))
+  )
+
+-- 依赖接口 → 精化起始状态。
+-- **硬不变量**：deftbl 只能装定义体（body）。签名项（尤其 `Int ↦ Type` 这类内建类型
+-- global）一旦进 deftbl，`force` 的 delta 展开就会把 primitive 类型归约成 `Type`
+-- （`Eq String` 的类参数变成 `Type`，所有实例头同归约 ⇒ 假歧义，C37 的
+-- `TC_AmbiguousInstance (Eq Type)` 即此）。
+depStartOf : List CachedProgram -> Pair Ec (List (Pair String Term))
 depStartOf progs =
   let
-    datas = dedupDatas (concatMap dtProgDatas progs)
+    datas = dedupDatas (concatMap cachedDatas progs)
+    dataKeys =
+      append (map dtDataName datas) (concatMap (\d => map dtCtorName (dtDataCtors d)) datas)
     defGlobals =
-      filter
-        (\p => memName (firstOf p) (append (map dtDataName datas) (concatMap (\d => map dtCtorName (dtDataCtors d)) datas)) == False)
-        (append preludeValueGlobals (dedupGlobals (concatMap dtProgGlobals progs)))
+      filter (\p => memName (firstOf p) dataKeys == False)
+        (dedupGlobals (append preludeGlobals (concatMap cachedGlobals progs)))
     globals = append defGlobals (map (\d => Pair (dtDataName d) (dtDataKind d)) datas)
+    bodies = dedupDefBodies (concatMap cachedDefs progs)
     ec0 = ecEmpty
     ec1 = addDatasEc ec0 datas
-    ec2 = addInstsEc ec1 (dedupInsts (concatMap dtProgInsts progs))
-    ec3 = addClassesEc ec2 (dedupClasses (concatMap dtProgClasses progs))
+    ec2 = addInstsEc ec1 (dedupInsts (concatMap cachedInsts progs))
+    ec3 = addClassesEc ec2 (dedupClasses (concatMap cachedClasses progs))
     ec4 = ecPutNext ec3 0
     ec5 = ecPutGlobalsTbl ec4 (Base.HashMap.fromList globals)
-    ec6 = ecPutDefTbl ec5 (Base.HashMap.fromList defGlobals)
+    ec6 = ecPutDefTbl ec5 (Base.HashMap.fromList bodies)
   in Pair ec6 globals
+
+-- 定义体表（delta 展开的唯一来源）：只取有体的 `DtDef`（axiom / extern 跳过）；
+-- 依赖包之间的共享声明按名字去重（后出现者胜，与 datas/insts/classes 一致）。
+dedupDefBodies : List DtDef -> List (Pair String Term)
+dedupDefBodies ds = bodyPairs (dedupDefs ds)
+
+dedupDefs : List DtDef -> List DtDef
+dedupDefs [] = []
+dedupDefs (d :: rest) =
+  if memName (dtDefName d) (map dtDefName rest) then dedupDefs rest else d :: dedupDefs rest
+
+bodyPairs : List DtDef -> List (Pair String Term)
+bodyPairs [] = []
+bodyPairs (d :: rest) = case dtDefBody d of
+  Just body => Pair (dtDefName d) body :: bodyPairs rest
+  Nothing => bodyPairs rest
 
 dedupDatas : List DtData -> List DtData
 dedupDatas [] = []
@@ -304,46 +339,3 @@ dedupGlobals : List (Pair String Term) -> List (Pair String Term)
 dedupGlobals [] = []
 dedupGlobals (g :: rest) =
   if memName (firstOf g) (map firstOf rest) then dedupGlobals rest else g :: dedupGlobals rest
-
-maxNext : List DtProgram -> Int
-maxNext [] = 0
-maxNext (p :: rest) = if p.dtProgNext > maxNext rest then p.dtProgNext else maxNext rest
-
--- M34.5 安全阀：摘要是否残留未替换的 TMeta。接口摘要路径只接受完全解出的摘要
--- M34.5 安全阀：摘要的**签名面**是否残留未替换的 TMeta。接口摘要路径只接受签名完全
--- 解出的摘要（否则编号空间可能跨包冲突，静默漏检）。body 的 TMeta 不参与：根包只看
--- 依赖签名（codegen 只生成本包 body），解含自由变量的 body 元变量不影响类型检查。
-dtProgramHasMetas : DtProgram -> Bool
-dtProgramHasMetas prog =
-  defsHaveMetas (dtProgDefs prog)
-    || globalsHaveMetas (dtProgGlobals prog)
-    || datasHaveMetas (dtProgDatas prog)
-    || instsHaveMetas (dtProgInsts prog)
-    || classesHaveMetas (dtProgClasses prog)
-
-defsHaveMetas : List DtDef -> Bool
-defsHaveMetas [] = False
-defsHaveMetas (d :: rest) = length (termMetasAll (dtDefType d)) > 0 || defsHaveMetas rest
-
-globalsHaveMetas : List (Pair String Term) -> Bool
-globalsHaveMetas [] = False
-globalsHaveMetas (g :: rest) = length (termMetasAll (secondOf g)) > 0 || globalsHaveMetas rest
-
-datasHaveMetas : List DtData -> Bool
-datasHaveMetas [] = False
-datasHaveMetas (d :: rest) =
-  length (concatMap (\c => termMetasAll (dtCtorType c)) (dtDataCtors d)) > 0 || datasHaveMetas rest
-
-instsHaveMetas : List DtInst -> Bool
-instsHaveMetas [] = False
-instsHaveMetas (i :: rest) = length (concatMap termMetasAll i.dtInstCtx) > 0 || instsHaveMetas rest
-
-classesHaveMetas : List DtClass -> Bool
-classesHaveMetas [] = False
-classesHaveMetas (c :: rest) =
-  length (concatMap termMetasAll c.dtClassFieldTys) > 0 || classesHaveMetas rest
-
--- M34.5 诊断（--debug-perf）：打印 globals 里某个名字的签名文本（摘要/全量对比用）。
-globalTextOf : String -> List (Pair String Term) -> String
-globalTextOf name [] = "MISSING"
-globalTextOf name ((Pair n t) :: rest) = if n == name then showTerm t else globalTextOf name rest

@@ -229,12 +229,13 @@ substDictTerm ec t = substDictTermGo ec 0 t
 substDictTermGo : Ec -> Int -> Term -> Term
 substDictTermGo ec depth (t@(TMeta m)) = case metaLookup m (ecSolTbl ec) of
   Nothing => t
-  Just v => case dictTermOfValue ec v of
-    Just soln => if hasFreeTermVar 0 soln then t else shift 0 depth soln
+  Just v => case dictTermOfValueAt ec depth v of
+    -- 解按**出现点深度** quote 成项；越界/负索引说明它引用了出现点之外的 binder，保留元变量。
+    Just soln => if hasFreeTermVar depth soln || hasNegativeVar soln then t else soln
     Nothing =>
       let
-        soln0 = quote 0 v
-      in if hasFreeTermVar 0 soln0 then t else soln0
+        soln0 = quote depth v
+      in if hasFreeTermVar depth soln0 || hasNegativeVar soln0 then t else soln0
 substDictTermGo ec depth (TPi n i r dom cod) =
   TPi n i r (substDictTermGo ec depth dom) (substDictTermGo ec (depth + 1) cod)
 substDictTermGo ec depth (TLam n r b) = TLam n r (substDictTermGo ec (depth + 1) b)
@@ -252,18 +253,19 @@ substDictTermAlt : Ec -> Int -> CaseAlt -> CaseAlt
 substDictTermAlt ec depth (CaseAlt n bs b) = CaseAlt n bs (substDictTermGo ec (depth + length bs) b)
 
 -- 把 Value 里的全局应用脊还原成 Term，并按全局签名恢复每个实参的 rig。
-dictTermOfValue : Ec -> Value -> Maybe Term
-dictTermOfValue ec v = case forceVal ec v of
+-- 实参按出现点深度 quote（旧实现按 0 quote，binder 下的解会得到负索引/错位索引）。
+dictTermOfValueAt : Ec -> Int -> Value -> Maybe Term
+dictTermOfValueAt ec depth v = case forceVal ec v of
   VNeutral n => case n of
-    NGlobal g sp => Just (foldSpineWithTyRigs (TGlobal g) sp (piRigsOfGlobal ec g))
+    NGlobal g sp => Just (foldSpineWithTyRigsAt depth (TGlobal g) sp (piRigsOfGlobal ec g))
     _ => Nothing
   _ => Nothing
 
-foldSpineWithTyRigs : Term -> List Value -> List Rig -> Term
-foldSpineWithTyRigs fn [] rigs = fn
-foldSpineWithTyRigs fn (v :: rest) rigs = case rigs of
-  r :: rs => foldSpineWithTyRigs (TApp fn (quote 0 v) r) rest rs
-  [] => foldSpineWithTyRigs (TApp fn (quote 0 v) Rig1) rest []
+foldSpineWithTyRigsAt : Int -> Term -> List Value -> List Rig -> Term
+foldSpineWithTyRigsAt depth fn [] rigs = fn
+foldSpineWithTyRigsAt depth fn (v :: rest) rigs = case rigs of
+  r :: rs => foldSpineWithTyRigsAt depth (TApp fn (quote depth v) r) rest rs
+  [] => foldSpineWithTyRigsAt depth (TApp fn (quote depth v) Rig1) rest []
 
 piRigsOfGlobal : Ec -> String -> List Rig
 piRigsOfGlobal ec g = case Base.HashMap.lookup g (ecGlobalsTbl ec) of

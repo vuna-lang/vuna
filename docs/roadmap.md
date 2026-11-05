@@ -115,7 +115,7 @@ LSP 诊断帧进程内缓存（同 uri+内容重复请求命中，编辑后仍�
 构建侧分层并行已在 `build.sh` 层内 `&` + `wait`；codegen 进程内仍串行，作为后续项保留）；
 规范序列化格式（C32）。
 
-**TTC 模块化精化收尾（2026-11）**：AST 缓存已落地（`Loader/Flatten.parseFileWithPath`，key = 路径 + 源内容哈希，`$TMPDIR/vuna-cache/ast`）。接口摘要（第 1 步）已修 4 层缺陷，摘要路径 779–955 ms，但 `Eq Type` 歧义未定位（详见 debt C37）。第 3 步的依赖模型前提已就绪（C35 关闭：直接依赖 + 全限定引用，`build.sh` 分层并行）；第 2 步需模块级签名隔离。
+**TTC 模块化精化收尾（2026-11）**：AST 缓存已落地（`Loader/Flatten.parseFileWithPath`，key = schema + 路径 + 源内容，5 条独立 lane + 回读校验，`$TMPDIR/vuna-cache/ast`，原子写）。接口摘要（第 1 步，包级）**已完成**：闭合摘要模型（`CachedProgram` 不含 sols/next）+ `deftbl` 只装定义体（修掉 `Eq Type` 假歧义的根因）+ 深度感知 zonk + 读侧安全阀 + 传递依赖 + `check` 期启用；仓库自身 `check .` 摘要路径通过（根包 ~8.0 s vs 全量 ~14.7 s，依赖缓存预热前提）。第 2 步（**模块级**接口 / 模块级签名隔离）仍在后续；第 3 步（codegen 模块级缓存）的依赖模型前提已就绪（C35 已关闭：直接依赖 + 全限定跨单元引用 + 分层并行构建），模块级复用本身待做。开放项见 debt C37。
 
 ### M35：并发 / 服务端
 

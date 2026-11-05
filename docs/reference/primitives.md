@@ -192,7 +192,7 @@
 | 能力 | 原语 / 入口 |
 | --- | --- |
 | `console` | `prim_print`、`prim_readLine`、`prim_readBytes` |
-| `fs` | `prim_readFile`、`prim_writeFile`、`prim_readDir`、`prim_isDirectory`、`prim_makeDir`、`prim_removeFile`、`prim_fileExists`、`prim_fileMtime`、`prim_fileSize` |
+| `fs` | `prim_readFile`、`prim_writeFile`、`prim_writeFileAtomic`、`prim_readDir`、`prim_isDirectory`、`prim_makeDir`、`prim_removeFile`、`prim_fileExists`、`prim_fileMtime`、`prim_fileSize` |
 | `process` | `prim_getArgs`、`prim_exit`、`prim_runIn`、`prim_spawn`、`prim_wait` |
 | `env` | `prim_getenv`、`prim_getcwd`、`prim_execPath` |
 | `clock` | `timeUs` |
@@ -223,6 +223,7 @@
 | --- | --- |
 | `prim_print` | 写 stdout 并 flush，返回**字节数** |
 | `prim_writeFile` | 二进制写整串，返回**字节数**；IO 失败抛宿主异常 |
+| `prim_writeFileAtomic` | 同 `prim_writeFile`，但写 `<path>.<pid>.tmp` 后 `Sys.rename` 原子替换：并发读者只会看到完整旧内容或完整新内容（workspace 并行 check 的子进程共享缓存目录，必须原子写） |
 | `prim_readFile` | 读整个文件为字节串；IO 失败抛宿主异常 |
 | `prim_readLine` | 读一行；EOF 返回 `""`（与空行不可区分） |
 | `prim_readBytes` | `Int -> String`：最多读 n 字节，**有数据就立即返回**（可能少于 n），EOF 返回 `""`；调用方负责循环 / 拼接（LSP 帧读取用） |

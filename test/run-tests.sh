@@ -1317,6 +1317,70 @@ for mark in $(find corpus -name '*.vuna.nointerp' | LC_ALL=C sort); do
   fi
 done
 
+# 44) M34.5 接口摘要（TTC 式模块化精化）：依赖包缓存预热后，根包只精化本包 decls。
+#     正向：摘要路径命中（cache-path=summary）且 check 通过、产物正确；
+#     负向：注入类型错误时摘要路径与全量路径（VUNA_ELAB_FULL=1）诊断逐字节一致；
+#     回归：仓库自身 check . 在摘要路径下通过（C37 的 Eq Type 假歧义）。
+summ_pkg=corpus/packages/m34_summary
+summ_cache="$tmp/summary-cache"
+mkdir -p "$summ_cache"
+summ_vuna=$(command -v "$VUNA" 2>/dev/null || true)
+[ -n "$summ_vuna" ] || summ_vuna="$VUNA"
+
+# 44a) 依赖闭包自底向上预热：base（无依赖）→ dep（库包，消费 base 摘要）→ root。
+if TMPDIR="$summ_cache" "$summ_vuna" check "$VUNA_BASE" >/dev/null 2>&1; then
+  ok
+else
+  bad "summary base check exit" "0" "failed"
+fi
+if TMPDIR="$summ_cache" "$summ_vuna" check "$summ_pkg/dep" >"$tmp/summ-dep.log" 2>&1; then
+  ok
+else
+  bad "summary dep check exit" "0" "$(tail -3 "$tmp/summ-dep.log")"
+fi
+
+# 44b) 根包：依赖摘要命中 ⇒ 摘要路径；check 通过。
+summ_root=$(TMPDIR="$summ_cache" "$summ_vuna" check "$summ_pkg/root" --debug-perf 2>&1)
+summ_root_code=$?
+check_eq "summary root check exit" "0" "$summ_root_code"
+check_contains "summary path used" "$summ_root" "cache-path=summary deps=2"
+
+# 44c) 同一份源码全量路径也通过；构建产物正确（摘要只服务 check，codegen 仍全量）。
+if TMPDIR="$tmp/summary-full-cache" VUNA_ELAB_FULL=1 "$summ_vuna" check "$summ_pkg/root" >/dev/null 2>&1; then ok; else bad "summary full-path check exit" "0" "$?"; fi
+rm -rf "$tmp/summary-out"
+if ! "$summ_vuna" build --out "$tmp/summary-out" "$summ_pkg/root" >/dev/null 2>&1; then
+  bad "summary build exit" "0" "failed"
+else
+  check_eq "summary build runs" "42" "$("$tmp/summary-out/bin/summary-root" 2>&1)"
+fi
+
+# 44d) 负例：摘要路径不得漏检；与全量路径诊断逐字节一致。
+summ_bad="$tmp/summary-bad"
+mkdir -p "$summ_bad/app"
+cp "$summ_pkg/root/app/Main.vuna" "$summ_bad/app/Main.vuna"
+printf '\nbroken : Int\nbroken = "x"\n' >> "$summ_bad/app/Main.vuna"
+sed "s|\.\./dep|$PWD/$summ_pkg/dep|; s|\.\./\.\./\.\./\.\./\.\./base|$VUNA_BASE|" "$summ_pkg/root/vuna.toml" > "$summ_bad/vuna.toml"
+summ_bad_out=$(TMPDIR="$summ_cache" "$summ_vuna" check "$summ_bad" 2>&1)
+summ_bad_code=$?
+if [ "$summ_bad_code" -ne 0 ]; then ok; else bad "summary negative check exit" "non-zero" "$summ_bad_code"; fi
+check_contains "summary negative diagnostic" "$summ_bad_out" "TC_TypeMismatch"
+summ_bad_full=$(TMPDIR="$tmp/summary-bad-full" VUNA_ELAB_FULL=1 "$summ_vuna" check "$summ_bad" 2>&1)
+summ_bad_full_code=$?
+if [ "$summ_bad_full_code" -ne 0 ]; then ok; else bad "summary negative full-path exit" "non-zero" "$summ_bad_full_code"; fi
+check_eq "summary/full diagnostics identical" "$summ_bad_full" "$summ_bad_out"
+
+# 44e) 仓库自身：预热 base/compiler 缓存后 check . 走摘要路径且通过（Interp.vuna:71 回归）。
+repo_cache="$tmp/summary-repo-cache"
+mkdir -p "$repo_cache"
+if ! ( cd .. && TMPDIR="$repo_cache" "$summ_vuna" check base >/dev/null 2>&1 && TMPDIR="$repo_cache" "$summ_vuna" check compiler >/dev/null 2>&1 ); then
+  bad "summary repo dep check" "0" "base/compiler check failed"
+else
+  repo_summ=$( cd .. && TMPDIR="$repo_cache" "$summ_vuna" check . --debug-perf 2>&1 )
+  repo_summ_code=$?
+  check_eq "summary repo check exit" "0" "$repo_summ_code"
+  check_contains "summary repo path used" "$repo_summ" "cache-path=summary deps=2"
+fi
+
 if [ "$fail" -ne 0 ]; then
   printf '%s passed, %s failed\n' "$pass" "$fail"
   exit 1

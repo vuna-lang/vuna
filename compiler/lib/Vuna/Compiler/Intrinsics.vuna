@@ -391,6 +391,7 @@ allIntrinsics =
     Intrinsic "prim_print" (IFun IStr (IIO IInt)) OpNone (Just CapConsole) "dtp_print" True,
     Intrinsic "prim_readFile" (IFun IStr (IIO IStr)) OpNone (Just CapFs) "dtp_readFile" True,
     Intrinsic "prim_writeFile" (IFun IStr (IFun IStr (IIO IInt))) OpNone (Just CapFs) "dtp_writeFile" True,
+    Intrinsic "prim_writeFileAtomic" (IFun IStr (IFun IStr (IIO IInt))) OpNone (Just CapFs) "dtp_writeFileAtomic" True,
     Intrinsic "prim_readLine" (IIO IStr) OpNone (Just CapConsole) "(dtp_readLine ())" True,
     Intrinsic "prim_readBytes" (IFun IInt (IIO IStr)) OpNone (Just CapConsole) "dtp_readBytes" True,
     Intrinsic "prim_getArgs" (IIO (IList IStr)) OpNone (Just CapProcess) "(dtp_listOf (dtp_getArgs ()))" True,

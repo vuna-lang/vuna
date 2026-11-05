@@ -11,7 +11,10 @@ module Vuna.Compiler.Elab
   , Driver.ecOfProgram
   , Driver.elabProgram
   , Driver.elabProgramFull
+  , Driver.elabProgramFullWith
+  , Driver.elabProgramFullWithAux
   , Driver.elabProgramGoWith
+  , Driver.elabProgramGoWithAux
   , Driver.goalsOfProgram
   , InstName.derivedInstName
   , InstName.instanceName

@@ -89,7 +89,6 @@ module Vuna.Compiler.Core
   , substSolvedMetas
   , substSolvedMetasAt
   , substSolvedMetasAtTbl
-  , substSolvedMetasTbl
   , substVarAt
   , termHasUnsolvedMeta
   , typeLevelOf

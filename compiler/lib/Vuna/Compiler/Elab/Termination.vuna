@@ -1,4 +1,4 @@
-module Vuna.Compiler.Elab.Termination (checkTerminationDecls) where
+module Vuna.Compiler.Elab.Termination (checkTerminationDecls, checkTerminationDeclsWith) where
 
 -- Vuna.Compiler.Elab.Termination：DT 终止性检查入口（M16 → M25.2a → M25.2b → M25.2c）。
 -- 判据细节见 `.Measure`（size/R2/投影/关系/弱环）与 `.Scc`（size-change）。
@@ -378,12 +378,6 @@ checkComp (comp@([f])) defTbl ctors projs g facts =
   if memName f (adjOf f g) then checkStrictGroup comp defTbl ctors projs facts else Ok 0
 checkComp comp defTbl ctors projs g facts = checkStrictGroup comp defTbl ctors projs facts
 
-checkSccs : List (List String) -> HashMap (List (Pair (List Pat) Expr)) -> List String -> List (Pair String (List Int)) -> HashMap (List String) -> List (Pair String Int) -> Result Int
-checkSccs [] defTbl ctors projs g facts = Ok 0
-checkSccs (comp :: rest) defTbl ctors projs g facts =
-  andThen (checkComp comp defTbl ctors projs g facts)
-    (\n => andThen (checkSccs rest defTbl ctors projs g facts) (\m => Ok (n + m)))
-
 -- M34：worklist 不动点——首轮扫所有有出边的 caller，之后只重扫「新 facts 的 callee 的
 -- callers」；旧实现每轮全量扫描所有 defs（16 轮 × posWalk），是 check 的最大热点。
 computePosFactsWork : List String -> HashMap (List (Pair (List Pat) Expr)) -> HashMap (List String) -> Int -> List (Pair String Int) -> List String -> List (Pair String Int)
@@ -399,8 +393,19 @@ else
     [] => merged
     _ => computePosFactsWork names defTbl rgT (fuel - 1) merged nextWork
 
+-- 只报告 own 里定义的函数的终止性失败；其余（依赖包已在自己 check 里验过）只作为
+-- 分析上下文参与 SCT（跨包调用/投影/构造子关系需要它们的子句）。全量路径 own = 全部名字。
 checkTerminationDecls : List Decl -> Result Int
-checkTerminationDecls decls =
+checkTerminationDecls decls = checkTerminationDeclsWith (dfunNames decls) decls
+
+dfunNames : List Decl -> List String
+dfunNames [] = []
+dfunNames (d :: rest) = case d of
+  DFun name pats body sp => name :: dfunNames rest
+  _ => dfunNames rest
+
+checkTerminationDeclsWith : List String -> List Decl -> Result Int
+checkTerminationDeclsWith own decls =
   let
     defs = groupDefs decls
     defTbl = Base.HashMap.fromList defs
@@ -416,4 +421,15 @@ checkTerminationDecls decls =
     fuel = graphFuel g nodes
     post = postOrder gT g nodes
     comps = sccOf post fuel rgT (Base.HashMap.fromList []) []
-  in checkSccs (reverse comps) defTbl ctors projs gT facts
+  in checkSccsWith own (reverse comps) defTbl ctors projs gT facts
+
+anyOwn : List String -> List String -> Bool
+anyOwn own [] = False
+anyOwn own (n :: rest) = if memName n own then True else anyOwn own rest
+
+checkSccsWith : List String -> List (List String) -> HashMap (List (Pair (List Pat) Expr)) -> List String -> List (Pair String (List Int)) -> HashMap (List String) -> List (Pair String Int) -> Result Int
+checkSccsWith own [] defTbl ctors projs g facts = Ok 0
+checkSccsWith own (comp :: rest) defTbl ctors projs g facts =
+  if anyOwn own comp then andThen (checkComp comp defTbl ctors projs g facts)
+    (\n => andThen (checkSccsWith own rest defTbl ctors projs g facts) (\m => Ok (n + m)))
+  else checkSccsWith own rest defTbl ctors projs g facts

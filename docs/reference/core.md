@@ -32,7 +32,9 @@ data Term where
 - `Level` 不透明：内部是 `Level Int`（字段 `levelToInt`），外部只能经 `levelZero` / `levelSucc` /
   `levelMax` / `levelToInt` / `levelEq` / `levelLt` 访问，不得自行做 Int 算术。
 - `Sols` 携带解表（list 权威 + 哈希索引）、元变量创建深度索引与定义值缓存
-  （`defVals`）；缓存是可重建的，未命中回落 `force` 的 delta 展开，不影响语义。
+  （`defVals`）；缓存是可重建的，未命中回落 `force` 的 delta 展开，不影响语义。`Ec.deftbl`
+  的语义是「名字 → **定义体**」：签名项绝不能进 deftbl，否则 `force` 会把 primitive 类型
+  归约成 `Type`（接口摘要路径的 C37 根因，见 [compiler.md](compiler.md) §接口摘要）。
 
 ## 2. NbE
 
@@ -40,7 +42,8 @@ data Term where
   neutral；`applyClosure` 把实参压入闭包环境。
 - `force`：展开已解元变量，并按需 **delta 展开**有定义的全局；步数上限
   `defaultFuel = 512`，到限返回 stuck（不 panic）。`primReduce` 在 force 内做内建归约
-  （`IntrinsicOp` 分派）。定义值缓存 `Sols.defVals` 在安全前缀检查后写入。
+  （`IntrinsicOp` 分派）。定义值缓存 `Sols.defVals` 在安全前缀检查后写入。delta 只认
+  deftbl 里的定义体（签名表 `ecGlobalsTbl` 不参与展开）。
 - `quote` / `normalize`：值 → 项；深度正规化用于显示与终止性检查。
 - 类型级 `Vec a n` 是 `VNeutral (NGlobal "Vec" ...)`，因此两个族应用相等当且仅当参数
   定义性相等或可被元变量统一——这就是索引 unification 的用武之地。
@@ -62,8 +65,10 @@ data Term where
 3. **其它形状**（真正的高阶 / 非 pattern）直接报 `TC_CannotSolveHigherOrder`，不再做
    「头一致」的临时提取。
 
-元变量创建深度随 `Sols` 携带（`solsDepth`），求解点就地检查；已解元变量进项只经
-`Elab.Meta.zonkTerm`。`occurs check` 失败报 `TC_CannotSolveOccurs`。
+元变量创建深度随 `Sols` 携带（`solsDepth`），求解点就地检查；已解元变量进项只有两个入口：
+精化期 `Elab.Meta.zonkTerm`（深度感知）与序列化/摘要 `Core.Eval.substSolvedMetasAtTbl`
+（按出现点深度 quote；`quote 0` 会把 binder 下的解拍成负/错位索引）。`occurs check` 失败报
+`TC_CannotSolveOccurs`。
 
 ## 4. 精化规则（双向检查）
 

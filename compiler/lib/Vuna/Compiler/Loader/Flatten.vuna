@@ -30,8 +30,17 @@ import Vuna.Compiler.Packages.Pkg
 -- 本模块声明由调用方放在返回列表最前，查找时第一处匹配生效。
 -- M31.2：parse 错误带文件名（前端诊断无位置，加载器知道路径）。
 -- M34.5 第 4 步：AST 缓存。parse 结果按「路径 + 源内容」哈希复用——LSP 反复检查同一
--- 文件、workspace 多次 check 时省掉重复 parse。缓存目录随 `$TMPDIR` 清理；编译器版本
--- 变化时由 hash 前缀（`vuna-ast-cache 1`）与源码哈希自然失效。
+-- 文件、workspace 多次 check 时省掉重复 parse。缓存目录随 `$TMPDIR` 清理。
+--
+-- key 的**强度**必须够：内建 `strHash` 只有 10 bit（运行时 `land 1023`），初版把两路
+-- 10-bit + 长度拼起来，实测在测试套件里发生跨文件命中（其它文件的 AST 被当作
+-- `corpus/term/05_multi_clause.vuna` 的入口，报 `LD_ModuleHeaderInEntryFile`）。
+-- 这里用 5 条独立 lane 拼成 ~50 bit，并把 schema 版本拌进 key；payload 还带源文本做
+-- 回读校验（见下）：**改 `Frontend.Ast` 的 Marshal 布局时必须 bump `astCacheSchema`**
+-- （否则旧缓存会被按新布局 `prim_unmarshal`）。
+astCacheSchema : String
+astCacheSchema = "vuna-ast-cache 4"
+
 astCacheDir : String
 astCacheDir =
   let
@@ -39,9 +48,50 @@ astCacheDir =
   in (if base == "" then "/tmp" else base) ++ "/vuna-cache/ast"
 
 astKeyOf : String -> String -> String
-astKeyOf path src =
-  strFromInt
-    (strHash (path ++ "__" ++ src) * 1000003 + strHash ("m30:" ++ path ++ src) + strLength src)
+astKeyOf path src = strFromInt (astStrongHash (astCacheSchema ++ "\t" ++ path ++ "\t" ++ src))
+
+-- 5 条**独立** lane（不同乘子 + 不同素数模）拼成 ~50 bit。不能用
+-- `strHash (salt ++ ":" ++ s)` 这类「加盐前缀」：内建 strHash 是
+-- `h := (h*33 + c) land 1023` 的仿射迭代，换初值只会得到 h_k = A*k + const (mod 1024)，
+-- 五条 lane 彼此完全相关（有效熵仍只有 ~10 bit + 长度，实测测试套件里 7x 夹具读到了
+-- 15_private_implicit 的 AST，报出本不存在的 `module Priv not found`）。
+astStrongHash : String -> Int
+astStrongHash s =
+  let
+    cs = strUnpack s
+  in astLane cs 33 1021 0
+    + astLane cs 131 1019 7 * 1024
+    + astLane cs 257 1013 13 * 1048576
+    + astLane cs 65599 1009 29 * 1073741824
+    + astLane cs 16777619 997 61 * 1099511627776
+
+astLane : List Int -> Int -> Int -> Int -> Int
+astLane [] mult modulus acc = acc
+astLane (c :: rest) mult modulus acc =
+  let
+    v = acc * mult + c
+  in astLane rest mult modulus (v - v / modulus * modulus)
+
+-- 缓存**回读校验**：payload 带原始源文本，命中时逐字节比较——key 即使碰撞也不会把
+-- 别的文件的 AST 当成本文件；不匹配就重新 parse 并覆盖该条目（只损失这一条缓存）。
+data AstCacheEntry : Type where
+  AstCacheEntry : String -> SourceFile -> AstCacheEntry
+
+astCacheSource : AstCacheEntry -> String
+astCacheSource (AstCacheEntry src file) = src
+
+astCacheFile : AstCacheEntry -> SourceFile
+astCacheFile (AstCacheEntry src file) = file
+
+readAstCache : String -> AstCacheEntry
+readAstCache cpath = prim_unmarshal (runIO (prim_readFile cpath))
+
+storeAstCache : String -> String -> SourceFile -> SourceFile
+storeAstCache cpath src parsed =
+  let
+    _ = ensureDirPath astCacheDir
+    _ = runIO (prim_writeFileAtomic cpath (prim_marshal (AstCacheEntry src parsed)))
+  in parsed
 
 ensureDirPath : String -> Int
 ensureDirPath path = ensureDirPathFuel 256 path
@@ -59,14 +109,16 @@ parseFileWithPath : String -> String -> Result SourceFile
 parseFileWithPath path src =
   let
     cpath = astCacheDir ++ "/" ++ astKeyOf path src
-  in if runIO (prim_fileExists cpath) then Ok (prim_unmarshal (runIO (prim_readFile cpath)))
+  in if runIO (prim_fileExists cpath) then
+    let
+      entry = readAstCache cpath
+    in if astCacheSource entry == src then Ok (astCacheFile entry)
+    else case parseSource path src of
+      Err e => Err (path ++ ": " ++ e)
+      Ok parsed => Ok (storeAstCache cpath src parsed)
   else case parseSource path src of
     Err e => Err (path ++ ": " ++ e)
-    Ok src2 =>
-      let
-        _ = ensureDirPath astCacheDir
-        _ = runIO (prim_writeFile cpath (prim_marshal src2))
-      in Ok src2
+    Ok parsed => Ok (storeAstCache cpath src parsed)
 
 visibleFixitiesOf : List Module -> List Import -> List FixityDecl
 visibleFixitiesOf modules imports = concatMap (\imp => case findModule modules (importName imp) of

@@ -1,0 +1,23 @@
+module Dep (Box(..), Color(..), Painted(..), paint, unbox) where
+
+-- M34.5 接口摘要夹具（依赖包侧）：跨包类 / 实例 / 构造子 / 定义体。
+-- 依赖包的摘要必须足以让根包解析 `Painted`（类 + 实例）、`Box`/`MkBox`（族 + 构造子）
+-- 与 `unbox`（delta 展开来源）。
+import Base.Eq
+
+data Box : Type -> Type where
+  MkBox : {a : Type} -> a -> Box a
+
+unbox : {a : Type} -> Box a -> a
+unbox (MkBox x) = x
+
+trait Painted a where
+  paint : a -> String
+
+data Color : Type where
+  Red : Color
+  Blue : Color
+
+instance Painted Color where
+  paint Red = "red"
+  paint Blue = "blue"

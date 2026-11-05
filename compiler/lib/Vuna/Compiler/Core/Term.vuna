@@ -9,6 +9,8 @@ module Vuna.Compiler.Core.Term
   , VCaseAlt(..)
   , Value(..)
   , anyAltFree
+  , anyNegativeVarAlts
+  , anyNegativeVarArgs
   , anyPairFree
   , caseAltBinders
   , caseAltBody
@@ -25,6 +27,7 @@ module Vuna.Compiler.Core.Term
   , hasMeta
   , hasMetaAlts
   , hasMetaArgs
+  , hasNegativeVar
   , hasUnsolvedMetaClo
   , hasUnsolvedMetaList
   , hasUnsolvedMetaValue
@@ -510,6 +513,27 @@ anyPairFree d ((Pair a r) :: rest) = hasFreeTermVar d a || anyPairFree d rest
 anyAltFree : Int -> List CaseAlt -> Bool
 anyAltFree d [] = False
 anyAltFree d ((CaseAlt n bs b) :: rest) = hasFreeTermVar (d + length bs) b || anyAltFree d rest
+
+-- 负 de Bruijn 索引：quote 的越界产物（`varIndex` 对越界 level 返回 -1）。`hasFreeTermVar`
+-- 只查上界，负索引会被 `lookupEnv` 的 `i <= 0` 当成**最内层**变量（静默错位），所以
+-- 序列化/摘要校验必须单独拒绝它。
+hasNegativeVar : Term -> Bool
+hasNegativeVar (TVar n i) = i < 0
+hasNegativeVar (TPi n i r d c) = hasNegativeVar d || hasNegativeVar c
+hasNegativeVar (TLam n r b) = hasNegativeVar b
+hasNegativeVar (TApp f a r) = hasNegativeVar f || hasNegativeVar a
+hasNegativeVar (TCon c args) = anyNegativeVarArgs args
+hasNegativeVar (TCase s alts) = hasNegativeVar s || anyNegativeVarAlts alts
+hasNegativeVar (TIf c th el) = hasNegativeVar c || hasNegativeVar th || hasNegativeVar el
+hasNegativeVar _ = False
+
+anyNegativeVarArgs : List (Pair Term Rig) -> Bool
+anyNegativeVarArgs [] = False
+anyNegativeVarArgs ((Pair a r) :: rest) = hasNegativeVar a || anyNegativeVarArgs rest
+
+anyNegativeVarAlts : List CaseAlt -> Bool
+anyNegativeVarAlts [] = False
+anyNegativeVarAlts ((CaseAlt n bs b) :: rest) = hasNegativeVar b || anyNegativeVarAlts rest
 
 -- M20：值里是否还有未解元变量（`VMeta m` 未解，或解里仍有未解）。
 hasUnsolvedMetaValue : Sols -> Value -> Bool

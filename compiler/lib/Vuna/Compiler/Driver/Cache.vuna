@@ -1,115 +1,351 @@
 module Vuna.Compiler.Driver.Cache
   ( CachedProgram(..)
+  , cachedClasses
+  , cachedDatas
+  , cachedDefs
+  , cachedGlobals
+  , cachedInsts
   , cachedOfProgram
-  , programOfCached
+  , cachedProgramIssue
+  , cachedProgramValid
   , shiftCachedProgram
+  , summaryMetaSegment
   ) where
 
--- M34.5 / C32 序列化与接口摘要的载体。
+-- M34.5 / C37：接口摘要（依赖包 elab 复用）的载体——参考 Idris2 的 TTC：
+-- **只含闭合结果，不携带任何 elab 状态**（sols / next / dict goals / defVals）。
 --
--- `DtProgram` 的 Value 用 `quote 0` 转成闭项 Term；已解的 `TMeta` 尽量内联
--- （`substSolvedMetasTbl`，对含自由变量的开放解保守跳过）。**未内联的 `TMeta` 保留
--- 包内编号**，合并多个依赖包的摘要时由调用方用 `shiftCachedProgram` 做**偏移重编号**
--- （每个包一个 `pkgIndex << 30` 段）——这就是 per-module（包段）编号：编号 = 归属段 +
--- 包内序号，跨包合并不再冲突；精化器内部编号保持 0..N 不变。
+-- 写摘要（`cachedOfProgram`）：把 DtProgram 的项按**出现点深度**内联已解元变量
+-- （`substSolvedMetasAtTbl`）。深度 0 的 quote 会把 binder 下的解拍成错位/负索引
+-- （`lookupEnv` 对 `i <= 0` 取最内层变量 ⇒ 静默取错 binder），所以必须传真实深度。
 --
--- 恢复时 `eval []` 重建 Value（η 等价）；丢弃 goals（洞信息只服务 `vuna goal`）与
--- defvals（定义体求值共享缓存，恢复为空只会更慢、不影响语义）。
+-- 读摘要（`cachedProgramValid`）：签名面 / 类型 / 实例 / 类必须闭合且无 `TMeta`、无负
+-- 索引；def **body** 只允许保留**擦除位置**的未解 meta（精化器本来就不要求它们有解，
+-- 读侧按包段重编号）。其它情况一律**不可用**（调用方回退全量精化）。宁可慢，不静默漏检。
+--
+-- 字段都是「本包自己的声明」：datas（kind + 构造子类型）、defs（type + body，body 是
+-- delta 展开的唯一来源）、globals（签名面）、insts（tele / 约束 / 头）、classes。
+-- 依赖闭包由调用方逐包读取并在 `depStartOf` 去重合并。
 import Vuna.Compiler.Common
-import Vuna.Compiler.Elab
-import Vuna.Compiler.Elab.Types
-import Vuna.Compiler.Core
-import Base.HashMap
 import Base.IntMap
+import Vuna.Compiler.Core
+import Vuna.Compiler.Core.Term
+import Vuna.Compiler.Elab.Meta
+import Vuna.Compiler.Elab.Types
 
 record CachedProgram where
   cachedDatas : List DtData
   cachedDefs : List DtDef
-  cachedSols : List (Pair Int Term)
   cachedGlobals : List (Pair String Term)
   cachedInsts : List DtInst
   cachedClasses : List DtClass
-  cachedNext : Int
 
-fixTerm : IntMap Value -> Term -> Term
-fixTerm tbl t = substSolvedMetasTbl tbl t
+cachedDatas : CachedProgram -> List DtData
+cachedDatas (CachedProgram datas defs globals insts classes) = datas
+
+cachedDefs : CachedProgram -> List DtDef
+cachedDefs (CachedProgram datas defs globals insts classes) = defs
+
+cachedGlobals : CachedProgram -> List (Pair String Term)
+cachedGlobals (CachedProgram datas defs globals insts classes) = globals
+
+cachedInsts : CachedProgram -> List DtInst
+cachedInsts (CachedProgram datas defs globals insts classes) = insts
+
+cachedClasses : CachedProgram -> List DtClass
+cachedClasses (CachedProgram datas defs globals insts classes) = classes
+
+-- ---------------------------------------------------------------
+-- 写摘要：按出现点深度内联已解元变量
+-- ---------------------------------------------------------------
+fixTerm : IntMap Value -> Int -> Term -> Term
+fixTerm tbl depth t = substSolvedMetasAtTbl tbl depth t
 
 fixDef : IntMap Value -> DtDef -> DtDef
-fixDef tbl (DtDef n ty body sp) = DtDef n (fixTerm tbl ty) (fixTerm tbl body) sp
-fixDef tbl (DtAxiom n ty sp) = DtAxiom n (fixTerm tbl ty) sp
-fixDef tbl (DtExtern n ty c sp) = DtExtern n (fixTerm tbl ty) c sp
+fixDef tbl (DtDef n ty body sp) = DtDef n (fixTerm tbl 0 ty) (fixTerm tbl 0 body) sp
+fixDef tbl (DtAxiom n ty sp) = DtAxiom n (fixTerm tbl 0 ty) sp
+fixDef tbl (DtExtern n ty c sp) = DtExtern n (fixTerm tbl 0 ty) c sp
 
 fixCtor : IntMap Value -> DtCtor -> DtCtor
-fixCtor tbl (DtCtor n fam tele ty) = DtCtor n fam tele (fixTerm tbl ty)
+fixCtor tbl (DtCtor n fam tele ty) = DtCtor n fam tele (fixTerm tbl 0 ty)
 
 fixData : IntMap Value -> DtData -> DtData
-fixData tbl (DtData n ps ctors kind) = DtData n ps (map (fixCtor tbl) ctors) (fixTerm tbl kind)
+fixData tbl (DtData n ps ctors kind) = DtData n ps (map (fixCtor tbl) ctors) (fixTerm tbl 0 kind)
 
+-- 投影签名是闭合的 Pi 链（`{p} -> {d} -> <方法类型>`）；字段类型只精化在类参数 binder 之下
+-- （深度 1），自定义实例时由 `substInstParam` 把类参数换成头实参。
 fixClass : IntMap Value -> DtClass -> DtClass
 fixClass tbl (DtClass n ps projs tys) =
-  DtClass n ps (map (\p => Pair (firstOf p) (fixTerm tbl (secondOf p))) projs)
-    (map (fixTerm tbl) tys)
+  DtClass n ps (map (\p => Pair (firstOf p) (fixTerm tbl 0 (secondOf p))) projs)
+    (map (fixTerm tbl 1) tys)
+
+-- 实例 telescope：tele 第 i 项在 i 个 tele binder 之下；ctx 域与结果头在全部 tele binder 之下。
+fixTele : IntMap Value -> Int -> List (Pair String Term) -> List (Pair String Term)
+fixTele tbl depth [] = []
+fixTele tbl depth ((Pair n t) :: rest) =
+  Pair n (fixTerm tbl depth t) :: fixTele tbl (depth + 1) rest
 
 fixInst : IntMap Value -> DtInst -> DtInst
 fixInst tbl (DtInst n tele ctxE head) =
-  DtInst n (map (\p => Pair (firstOf p) (fixTerm tbl (secondOf p))) tele) (map (fixTerm tbl) ctxE)
-    (fixTerm tbl head)
+  let
+    nTele = length tele
+  in DtInst n (fixTele tbl 0 tele) (map (fixTerm tbl nTele) ctxE) (fixTerm tbl nTele head)
 
 cachedOfProgram : DtProgram -> CachedProgram
 cachedOfProgram prog =
   let
     tbl = Base.IntMap.fromList (dtProgSols prog)
-  in CachedProgram (map (fixData tbl) (dtProgDatas prog)) (map (fixDef tbl) (dtProgDefs prog)) []
-    (map (\p => Pair (firstOf p) (fixTerm tbl (secondOf p))) (dtProgGlobals prog))
-    (map (fixInst tbl) (dtProgInsts prog)) (map (fixClass tbl) (dtProgClasses prog)) prog.dtProgNext
+  in CachedProgram (map (fixData tbl) (dtProgDatas prog)) (map (fixDef tbl) (dtProgDefs prog))
+    (map (\p => Pair (firstOf p) (fixTerm tbl 0 (secondOf p))) (dtProgGlobals prog))
+    (map (fixInst tbl) (dtProgInsts prog)) (map (fixClass tbl) (dtProgClasses prog))
 
-programOfCached : CachedProgram -> DtProgram
-programOfCached (CachedProgram datas defs sols globals insts classes next) =
-  DtProgram datas defs [] (map (\p => Pair (firstOf p) (eval [] (secondOf p))) sols) globals insts
-    classes next (Base.HashMap.fromList []) []
+-- ---------------------------------------------------------------
+-- 读摘要前的校验：闭合 + 无 meta + 无负索引
+-- ---------------------------------------------------------------
+-- 摘要没有 sols：除 body 的擦除位置外，任何残留 `TMeta` 都不可重建；负索引在求值时
+-- 会被当成最内层变量；超出当前深度上界的自由变量说明 quote 深度算错。任一命中即拒绝。
+termValidAt : Int -> Term -> Bool
+termValidAt depth t =
+  length (termMetasAll t) == 0 && not (hasFreeTermVar depth t) && not (hasNegativeVar t)
 
--- 偏移重编号（per-module/包段编号）：给一个依赖包分配 `off` 段后，把它摘要里所有
--- `TMeta` 与 sols 键整体加上 off，跨包合并时编号不再冲突。
-shiftTermMetas : Int -> Term -> Term
-shiftTermMetas off (TMeta m) = TMeta (m + off)
-shiftTermMetas off (TPi n i r d c) = TPi n i r (shiftTermMetas off d) (shiftTermMetas off c)
-shiftTermMetas off (TLam n r b) = TLam n r (shiftTermMetas off b)
-shiftTermMetas off (TApp f a r) = TApp (shiftTermMetas off f) (shiftTermMetas off a) r
-shiftTermMetas off (TCon c args) =
-  TCon c (map (\p => Pair (shiftTermMetas off (firstOf p)) (secondOf p)) args)
-shiftTermMetas off (TCase sc alts) = TCase (shiftTermMetas off sc) (map (shiftAltMetas off) alts)
-shiftTermMetas off (TIf c t e) =
-  TIf (shiftTermMetas off c) (shiftTermMetas off t) (shiftTermMetas off e)
-shiftTermMetas off t = t
+ctorsValid : List DtCtor -> Bool
+ctorsValid [] = True
+ctorsValid (c :: rest) = termValidAt 0 (dtCtorType c) && ctorsValid rest
 
-shiftAltMetas : Int -> CaseAlt -> CaseAlt
-shiftAltMetas off (CaseAlt n bs b) = CaseAlt n bs (shiftTermMetas off b)
+datasValid : List DtData -> Bool
+datasValid [] = True
+datasValid (d :: rest) =
+  termValidAt 0 (dtDataKind d) && ctorsValid (dtDataCtors d) && datasValid rest
+
+defsValid : List DtDef -> Bool
+defsValid [] = True
+defsValid (d :: rest) = case dtDefBody d of
+  -- body 里**擦除位置**的未解 meta 允许保留（精化器本来就不要求它们有解）：读摘要时按
+  -- 包段重编号，消费方当作新的未解元变量（只能出现在不生成代码/不被比较的位置）。
+  Just body => termValidAt 0 (dtDefType d) && bodyValid body && defsValid rest
+  Nothing => termValidAt 0 (dtDefType d) && defsValid rest
+
+bodyValid : Term -> Bool
+bodyValid t = length (termMetasRuntime t) == 0 && not (hasFreeTermVar 0 t) && not (hasNegativeVar t)
+
+globalsValid : List (Pair String Term) -> Bool
+globalsValid [] = True
+globalsValid ((Pair n t) :: rest) = termValidAt 0 t && globalsValid rest
+
+teleValid : Int -> List (Pair String Term) -> Bool
+teleValid depth [] = True
+teleValid depth ((Pair n t) :: rest) = termValidAt depth t && teleValid (depth + 1) rest
+
+termsValidAt : Int -> List Term -> Bool
+termsValidAt depth [] = True
+termsValidAt depth (t :: rest) = termValidAt depth t && termsValidAt depth rest
+
+instsValid : List DtInst -> Bool
+instsValid [] = True
+instsValid (i :: rest) =
+  let
+    nTele = length i.dtInstTele
+  in teleValid 0 i.dtInstTele
+    && termsValidAt nTele i.dtInstCtx
+    && termValidAt nTele i.dtInstHead
+    && instsValid rest
+
+classesValid : List DtClass -> Bool
+classesValid [] = True
+classesValid (c :: rest) =
+  let
+    projs = map (\p => secondOf p) c.dtClassMethods
+  in termsValidAt 0 projs && termsValidAt 1 c.dtClassFieldTys && classesValid rest
+
+cachedProgramValid : CachedProgram -> Bool
+cachedProgramValid (CachedProgram datas defs globals insts classes) =
+  datasValid datas
+    && defsValid defs
+    && globalsValid globals
+    && instsValid insts
+    && classesValid classes
+
+-- ---------------------------------------------------------------
+-- 诊断（仅摘要被判无效时调用）：指出第一个不可用项，便于 --debug-perf 定位
+-- ---------------------------------------------------------------
+termIssueAt : Int -> Term -> String
+termIssueAt depth t =
+  if length (termMetasAll t) > 0 then "meta"
+  else if hasNegativeVar t then "negative-index" else if hasFreeTermVar depth t then "free-var" else ""
+
+dataIssue : DtData -> String
+dataIssue d =
+  let
+    kindIssue = termIssueAt 0 (dtDataKind d)
+  in if kindIssue == "" then ctorIssues (dtDataCtors d) else dtDataName d ++ " kind:" ++ kindIssue
+
+ctorIssues : List DtCtor -> String
+ctorIssues [] = ""
+ctorIssues (c :: rest) =
+  let
+    issue = termIssueAt 0 (dtCtorType c)
+  in if issue == "" then ctorIssues rest else dtCtorName c ++ " ctor:" ++ issue
+
+datasIssue : List DtData -> String
+datasIssue [] = ""
+datasIssue (d :: rest) =
+  let
+    issue = dataIssue d
+  in if issue == "" then datasIssue rest else issue
+
+bodyIssueAt : Term -> String
+bodyIssueAt t =
+  if length (termMetasRuntime t) > 0 then "meta"
+  else if hasNegativeVar t then "negative-index" else if hasFreeTermVar 0 t then "free-var" else ""
+
+defIssue : DtDef -> String
+defIssue d =
+  let
+    typeIssue = termIssueAt 0 (dtDefType d)
+  in if typeIssue == "" then case dtDefBody d of
+    Just body =>
+      let
+        bodyIssue = bodyIssueAt body
+      in if bodyIssue == "" then "" else dtDefName d ++ " body:" ++ bodyIssue
+    Nothing => ""
+  else dtDefName d ++ " type:" ++ typeIssue
+
+defsIssue : List DtDef -> String
+defsIssue [] = ""
+defsIssue (d :: rest) =
+  let
+    issue = defIssue d
+  in if issue == "" then defsIssue rest else issue
+
+globalsIssue : List (Pair String Term) -> String
+globalsIssue [] = ""
+globalsIssue ((Pair n t) :: rest) =
+  let
+    issue = termIssueAt 0 t
+  in if issue == "" then globalsIssue rest else n ++ ":" ++ issue
+
+instIssue : DtInst -> String
+instIssue i =
+  let
+    nTele = length i.dtInstTele
+    teleIssue = teleIssueGo 0 i.dtInstTele
+  in if teleIssue /= "" then dtInstName i ++ " tele:" ++ teleIssue
+  else
+    let
+      ctxIssue = ctxIssues nTele i.dtInstCtx
+    in if ctxIssue /= "" then dtInstName i ++ " ctx:" ++ ctxIssue
+    else
+      let
+        headIssue = termIssueAt nTele i.dtInstHead
+      in if headIssue == "" then "" else dtInstName i ++ " head:" ++ headIssue
+
+teleIssueGo : Int -> List (Pair String Term) -> String
+teleIssueGo depth [] = ""
+teleIssueGo depth ((Pair n t) :: rest) =
+  let
+    issue = termIssueAt depth t
+  in if issue == "" then teleIssueGo (depth + 1) rest else n ++ ":" ++ issue
+
+ctxIssues : Int -> List Term -> String
+ctxIssues depth [] = ""
+ctxIssues depth (t :: rest) =
+  let
+    issue = termIssueAt depth t
+  in if issue == "" then ctxIssues depth rest else issue
+
+instsIssue : List DtInst -> String
+instsIssue [] = ""
+instsIssue (i :: rest) =
+  let
+    issue = instIssue i
+  in if issue == "" then instsIssue rest else issue
+
+classIssue : DtClass -> String
+classIssue c =
+  let
+    projIssue = ctxIssues 0 (map (\p => secondOf p) c.dtClassMethods)
+  in if projIssue /= "" then dtClassName c ++ " proj:" ++ projIssue
+  else
+    let
+      fieldIssue = ctxIssues 1 c.dtClassFieldTys
+    in if fieldIssue == "" then "" else dtClassName c ++ " field:" ++ fieldIssue
+
+classesIssue : List DtClass -> String
+classesIssue [] = ""
+classesIssue (c :: rest) =
+  let
+    issue = classIssue c
+  in if issue == "" then classesIssue rest else issue
+
+cachedProgramIssue : CachedProgram -> String
+cachedProgramIssue (CachedProgram datas defs globals insts classes) =
+  let
+    datasI = datasIssue datas
+    defsI = defsIssue defs
+    globalsI = globalsIssue globals
+    instsI = instsIssue insts
+    classesI = classesIssue classes
+  in if datasI /= "" then "datas " ++ datasI
+  else if defsI /= "" then "defs " ++ defsI
+  else if globalsI /= "" then "globals " ++ globalsI
+  else if instsI /= "" then "insts " ++ instsI else if classesI /= "" then "classes " ++ classesI else ""
+
+-- ---------------------------------------------------------------
+-- 包段重编号：摘要里允许残留的「擦除位置未解 meta」
+-- ---------------------------------------------------------------
+-- 精化器（M23 决策）允许擦除位置留未解元变量；摘要无 sols，无法跨包共享这些解。
+-- 读摘要时给每个依赖包分配 `(idx+1) << 30` 段并整体移位：段 0 留给根包，不同摘要 /
+-- 根包之间编号互不冲突；消费方把它们当作**新的未解元变量**（只出现在不生成代码、
+-- 不参与运行时比较的擦除位置）。段宽 2^30 远大于单包元变量数。
+summaryMetaSegment : Int
+summaryMetaSegment = 1073741824
+
+-- 项内元变量整体移位（fuel 守卫：TCase 分支不是 Term 的结构子项，SCT 证不了终止）。
+shiftTerm : Int -> Term -> Term
+shiftTerm off t = shiftTermFuel 128 off t
+
+shiftTermFuel : Int -> Int -> Term -> Term
+shiftTermFuel fuel off t = if fuel <= 0 then t
+else case t of
+  TMeta m => TMeta (m + off)
+  TPi n i r d c => TPi n i r (shiftTermFuel (fuel - 1) off d) (shiftTermFuel (fuel - 1) off c)
+  TLam n r b => TLam n r (shiftTermFuel (fuel - 1) off b)
+  TApp f a r => TApp (shiftTermFuel (fuel - 1) off f) (shiftTermFuel (fuel - 1) off a) r
+  TCon c args =>
+    TCon c (map (\p => Pair (shiftTermFuel (fuel - 1) off (firstOf p)) (secondOf p)) args)
+  TCase s alts => TCase (shiftTermFuel (fuel - 1) off s) (map (shiftAltFuel (fuel - 1) off) alts)
+  TIf c th el =>
+    TIf (shiftTermFuel (fuel - 1) off c) (shiftTermFuel (fuel - 1) off th)
+      (shiftTermFuel (fuel - 1) off el)
+  _ => t
+
+shiftAltFuel : Int -> Int -> CaseAlt -> CaseAlt
+shiftAltFuel fuel off (CaseAlt n bs b) = CaseAlt n bs (shiftTermFuel fuel off b)
 
 shiftDef : Int -> DtDef -> DtDef
-shiftDef off (DtDef n ty body sp) = DtDef n (shiftTermMetas off ty) (shiftTermMetas off body) sp
-shiftDef off (DtAxiom n ty sp) = DtAxiom n (shiftTermMetas off ty) sp
-shiftDef off (DtExtern n ty c sp) = DtExtern n (shiftTermMetas off ty) c sp
+shiftDef off (DtDef n ty body sp) = DtDef n (shiftTerm off ty) (shiftTerm off body) sp
+shiftDef off (DtAxiom n ty sp) = DtAxiom n (shiftTerm off ty) sp
+shiftDef off (DtExtern n ty c sp) = DtExtern n (shiftTerm off ty) c sp
 
 shiftCtor : Int -> DtCtor -> DtCtor
-shiftCtor off (DtCtor n fam tele ty) = DtCtor n fam tele (shiftTermMetas off ty)
+shiftCtor off (DtCtor n fam tele ty) = DtCtor n fam tele (shiftTerm off ty)
 
 shiftData : Int -> DtData -> DtData
 shiftData off (DtData n ps ctors kind) =
-  DtData n ps (map (shiftCtor off) ctors) (shiftTermMetas off kind)
+  DtData n ps (map (shiftCtor off) ctors) (shiftTerm off kind)
 
 shiftClass : Int -> DtClass -> DtClass
 shiftClass off (DtClass n ps projs tys) =
-  DtClass n ps (map (\p => Pair (firstOf p) (shiftTermMetas off (secondOf p))) projs)
-    (map (shiftTermMetas off) tys)
+  DtClass n ps (map (\p => Pair (firstOf p) (shiftTerm off (secondOf p))) projs)
+    (map (shiftTerm off) tys)
 
 shiftInst : Int -> DtInst -> DtInst
 shiftInst off (DtInst n tele ctxE head) =
-  DtInst n (map (\p => Pair (firstOf p) (shiftTermMetas off (secondOf p))) tele)
-    (map (shiftTermMetas off) ctxE) (shiftTermMetas off head)
+  DtInst n (map (\p => Pair (firstOf p) (shiftTerm off (secondOf p))) tele)
+    (map (shiftTerm off) ctxE) (shiftTerm off head)
 
 shiftCachedProgram : Int -> CachedProgram -> CachedProgram
-shiftCachedProgram off (CachedProgram datas defs sols globals insts classes next) =
+shiftCachedProgram off (CachedProgram datas defs globals insts classes) =
   CachedProgram (map (shiftData off) datas) (map (shiftDef off) defs)
-    (map (\p => Pair (firstOf p + off) (shiftTermMetas off (secondOf p))) sols)
-    (map (\p => Pair (firstOf p) (shiftTermMetas off (secondOf p))) globals)
-    (map (shiftInst off) insts) (map (shiftClass off) classes) (next + off)
+    (map (\p => Pair (firstOf p) (shiftTerm off (secondOf p))) globals) (map (shiftInst off) insts)
+    (map (shiftClass off) classes)

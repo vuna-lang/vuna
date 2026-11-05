@@ -15,8 +15,11 @@ module Vuna.Compiler.Elab.Driver
   , elabBodies
   , elabProgram
   , elabProgramFull
+  , elabProgramFullWith
+  , elabProgramFullWithAux
   , elabProgramGo
   , elabProgramGoWith
+  , elabProgramGoWithAux
   , elabSigs
   , findDefWithMeta
   , findGoal
@@ -491,10 +494,26 @@ elabProgramFull decls =
 elabProgramGo : List Decl -> Result DtProgram
 elabProgramGo decls = elabProgramGoWith ecEmpty preludeGlobals decls
 
+-- 接口摘要路径的完整入口：与 elabProgramFull 同一条前置降级链（record / deriving），
+-- 但起始 Ec / globals 由依赖摘要注入。
+elabProgramFullWith : Ec -> List (Pair String Term) -> List Decl -> Result DtProgram
+elabProgramFullWith startEc startGlobals decls =
+  elabProgramFullWithAux startEc startGlobals [] decls
+
+-- termAux：只供终止性分析使用的「依赖包声明」（跨包投影/构造子/子句关系）；不参与精化。
+-- 依赖包自己的终止性已在它自己的 check 里验过（本路径只报告本包函数的失败）。
+elabProgramFullWithAux : Ec -> List (Pair String Term) -> List Decl -> List Decl -> Result DtProgram
+elabProgramFullWithAux startEc startGlobals termAux decls =
+  andThen (prepareDeclsWith termAux decls)
+    (\ds => andThen (expandDerivings ds) (\ds2 => andThen (prepareDecls termAux) (\ads => andThen (expandDerivings ads) (\ads2 => elabProgramGoWithAux startEc startGlobals ads2 ds2))))
+
 -- M34.5 接口摘要第一步：起始状态（依赖包的签名 globals + Ec 摘要）参数化，供
 -- 「只精化本包 decls、复用依赖包摘要」的调用方注入。行为与 elabProgramGo 完全一致。
 elabProgramGoWith : Ec -> List (Pair String Term) -> List Decl -> Result DtProgram
-elabProgramGoWith startEc startGlobals decls = andThen (collectSigs decls) (\sigs => let
+elabProgramGoWith startEc startGlobals decls = elabProgramGoWithAux startEc startGlobals [] decls
+
+elabProgramGoWithAux : Ec -> List (Pair String Term) -> List Decl -> List Decl -> Result DtProgram
+elabProgramGoWithAux startEc startGlobals termAux decls = andThen (collectSigs decls) (\sigs => let
   _ = stamp "collectSigs-done"
 in andThen (elabDatas (collectDataDecls decls []) startGlobals startEc) (\pd => case pd of
   Pair datas (Pair globals0 ec0) =>
@@ -504,12 +523,16 @@ in andThen (elabDatas (collectDataDecls decls []) startGlobals startEc) (\pd => 
       ec0b = ecPutCtorTbl ec0 (ctorTblOfDatas (ecDatas ec0))
       _ = stamp "datas-done"
     in andThen (elabTraits (collectTraitDecls decls []) globals0 ec0b) (\pt => case pt of
-      Pair classDatas (Pair projGlobals (Pair classes (Pair projSpans ec1))) =>
+      Pair classDatas (Pair projGlobals (Pair _ (Pair projSpans ec1))) =>
         let
           globals1 = append globals0 projGlobals
           datas1 = append datas classDatas
+          -- 接口摘要路径：起始 Ec 已带依赖包的类表；实例头/体必须看**全部**类，
+          -- 不能只看本包 `elabTraits` 新声明的那些（否则 `deriving (Eq)` 解析出的
+          -- `Base.Eq.Eq` 找不到）。全量路径下两者相同。
+          classesAll = ecClasses ec1
           _ = stamp "traits-done"
-        in andThen (checkInstanceHeads (collectInstDecls decls []) classes globals1 ec1) (\pih => case pih of
+        in andThen (checkInstanceHeads (collectInstDecls decls []) classesAll globals1 ec1) (\pih => case pih of
           Pair instHeads ec1b =>
             let
               globals2 = append globals1 instHeads
@@ -538,7 +561,7 @@ in andThen (elabDatas (collectDataDecls decls []) startGlobals startEc) (\pd => 
                       _ =
                         stamp
                           ("bodies-done g=" ++ strFromInt (length globals) ++ " sols=" ++ strFromInt (length (ecSols ec3a)) ++ " defs=" ++ strFromInt (length (ecDefs ec3a)) ++ " metas=" ++ strFromInt (ecNext ec3a) ++ " dgoals=" ++ strFromInt (length (ecDictGoals ec3a)) ++ " datas=" ++ strFromInt (length (ecDatas ec3a)) ++ " insts=" ++ strFromInt (length (ecInsts ec3a)) ++ " classes=" ++ strFromInt (length (ecClasses ec3a)))
-                    in andThen (elabInstanceBodies decls classes datas1 globals ec3) (\pi => case pi of
+                    in andThen (elabInstanceBodies decls classesAll datas1 globals ec3) (\pi => case pi of
                       Pair instDefs0 ec4a =>
                         let
                           ec4 = resolveDictGoalsFix globals ec4a 8
@@ -561,7 +584,7 @@ in andThen (elabDatas (collectDataDecls decls []) startGlobals startEc) (\pd => 
                                 Nothing => g
                               ) globals
                               _ = stamp "extradefs-done"
-                            in andThen (checkTerminationDecls decls) (\_ => let
+                            in andThen (checkTerminationDeclsWith (declFunNames decls) (append termAux decls)) (\_ => let
                               _ = stamp "termination-done"
                             in Ok
                               (DtProgram datas1 allDefs (ecGoals ec4) (ecSols ec4) globalsOut (ecInsts ec4) (ecClasses ec4) (ecNext ec4) (ecDefVals ec4) (Base.IntMap.toList (ecDepthTbl ec4)))

@@ -263,6 +263,24 @@ top_heap ≈ 1.9e5 / 5.8e6 / 7.3e6 words。`--alloc` 只报告、不设门槛（
 `prim_marshal`/`prim_unmarshal`（OCaml Marshal）落盘——过渡实现，规范的自描述序列化格式
 （C32）留后续。
 
+**M34.5 AST 缓存**：`Loader.Flatten.parseFileWithPath` 按「schema 版本 + 路径 + 源内容」复用
+parse 结果（`$TMPDIR/vuna-cache/ast`，LSP/workspace 重复检查省 parse）。key 用 5 条独立 lane 拼成 ~50 bit，payload 还带源文本做回读校验（内建 `strHash` 只有
+10 bit，初版两路 + 长度、以及「加盐前缀」的 5 路都会跨文件误命中；测试套件里曾因此读到
+别的文件的 AST）。改 `Frontend.Ast` 的 Marshal 布局必须 bump `astCacheSchema`。
+
+**M34.5 接口摘要路径（check 期模块化精化）**：依赖包缓存预热后，根包 `check` 只精化本包
+声明（依赖摘要闭合复用）。本机（M34.7 之后）读数：
+
+| benchmark | 全量精化 | 依赖摘要路径 |
+| --- | --- | --- |
+| check .（根包；依赖缓存已预热） | ~15.7 s | ~8.8 s |
+| check compiler（依赖 = base，已预热） | ~7.9 s | ~8.4 s |
+
+测量前提：必须先对依赖包跑一次 `check`（写摘要缓存），否则自动回退全量；`TMPDIR` 决定缓存
+位置（干净 TMPDIR = 冷 = 全量）。A/B 对拍用 `VUNA_ELAB_FULL=1` 强制全量。摘要只加速
+「依赖未变」的增量场景；冷 workspace / CI 仍是全量。正确性由 `test/run-tests.sh` 第 44 段
+（摘要路径命中 + 负例诊断与全量路径逐字节一致）守住。
+
 **M34.2 未解元变量扫描**：`unsolvedFrom` / `unsolvedFromRelevant` 的查找从 list（每次
 O(#sols)）改成 `IntMap` 索引（O(1)）——每次 check 结束的「全编号 x 全解表」扫描从 O(n²)
 降到 O(n)（check . 4.1s→3.6s、check compiler 2.5s→2.2s）。
@@ -276,6 +294,12 @@ O(#sols)）改成 `IntMap` 索引（O(1)）——每次 check 结束的「全编
 `vuna check <dir>` 子进程并行，退出码按失败汇总；子进程继承 stderr ⇒ 多包同时报错时输出
 可能交错。`check .` 冷 6.5s→4.1s（成员闭包与根包重叠）。
 
+**M34.5 缓存写的并发安全**：workspace 并行 check 的子进程共享 `$TMPDIR/vuna-cache`
+（AST 缓存按「路径 + 源内容」key 共用；check 摘要按包名分目录）。普通 `prim_writeFile` 先截断
+再写，另一个进程可能读到半截文件 ⇒ `Marshal.from_bytes` 崩溃。所有缓存写改走
+`prim_writeFileAtomic`（写 `<path>.<pid>.tmp` 后 `rename`）：读者只会看到完整旧/新内容。
+新增原语在 seed 里分两步落地（先只加原语并 rotate，再让源码使用），否则旧 seed 解析不到新名字。
+
 **剩余（M34 后续）**：LSP 增量与单文件级缓存（需接口摘要 + 只精化本包模块）、模块级并行
 codegen（C35 的全序 open 模型已解除：分层直接依赖 + 全限定跨单元引用已落地，并行构建由
 `build.sh` 的层内 `&` + `wait` 体现；codegen 本身仍进程内串行，作为后续项保留）、`check .`
@@ -283,7 +307,7 @@ codegen（C35 的全序 open 模型已解除：分层直接依赖 + 全限定跨
 
 **M34 退出标准状态**：`check .` ~8s→3.6s（热 23ms）✓；`vuna map` ~31s→0.54s ✓；单文件
 增量秒级以下 ✓；性能 CI 门槛（软对比 + 缓存有效性 + 分配统计）✓；LSP 编辑反馈——同内容
-重复请求秒回、编辑后仍全量精化（接口摘要未做，C32）△。
+重复请求秒回、编辑后仍全量精化（接口摘要已用于 `check`，LSP 侧接入是后续）△。
 
 ## 相关阅读
 
