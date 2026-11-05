@@ -64,19 +64,19 @@ else case us of
 
 -- 声明与实测是否相符；不符时给 TC 诊断。返回的 Int 只是占位（错误已短路）。
 checkBinderRig : Span -> String -> Rig -> Rig -> Result Int
-checkBinderRig sp name declared used = case declared of
-  Rig0 => if isRigZero used then Ok 0 else tcErr1 sp (ErasedBinderUsed name) name
-  Rig1 => case used of
-    Rig0 => tcErr1 sp (LinearUnused name) name
-    Rig1 => Ok 0
-    RigOmega => tcErr1 sp (LinearOverused name) name
-  RigOmega => Ok 0
+checkBinderRig sp name Rig0 used =
+  if isRigZero used then Ok 0 else tcErr1 sp (ErasedBinderUsed name) name
+checkBinderRig sp name Rig1 used = case used of
+  Rig0 => tcErr1 sp (LinearUnused name) name
+  Rig1 => Ok 0
+  RigOmega => tcErr1 sp (LinearOverused name) name
+checkBinderRig sp name RigOmega used = Ok 0
 
 -- 进入一个 binder：body usage 的头部就是它；检查后 drop。
 checkLamBinder : Span -> String -> Rig -> List Rig -> Result (List Rig)
-checkLamBinder sp name rig us = case us of
-  [] => Err "DT: internal: usage vector lost lambda binder"
-  used :: rest => andThen (checkBinderRig sp name rig used) (\_ => Ok rest)
+checkLamBinder sp name rig [] = Err "DT: internal: usage vector lost lambda binder"
+checkLamBinder sp name rig (used :: rest) =
+  andThen (checkBinderRig sp name rig used) (\_ => Ok rest)
 
 -- case 分支：binders 是 telescope 顺序（第一个字段最外），body usage 的前 k 项按
 -- 逆序对应它们（index 0 = 最后一个字段）。检查完整体 drop。
@@ -135,18 +135,17 @@ checkAltsGo sp env [] acc = Ok (case acc of
   Just u => u
   Nothing => uZeroOf (natToInt (length env))
 )
-checkAltsGo sp env (alt :: rest) acc = case alt of
-  CaseAlt cname binders body =>
-    let
-      env2 = append (reverse binders) env
-      k = natToInt (length binders)
-    in andThen (checkTerm sp env2 body) (\u => andThen (checkAltBinders sp binders u) (\outer => checkAltsGo sp env rest (Just (case acc of
-      Just prev => uJoin prev outer
-      Nothing => outer
-    )
-    )
-    )
-    )
+checkAltsGo sp env ((CaseAlt cname binders body) :: rest) acc =
+  let
+    env2 = append (reverse binders) env
+    k = natToInt (length binders)
+  in andThen (checkTerm sp env2 body) (\u => andThen (checkAltBinders sp binders u) (\outer => checkAltsGo sp env rest (Just (case acc of
+    Just prev => uJoin prev outer
+    Nothing => outer
+  )
+  )
+  )
+  )
 
 -- `Rig` 没有 Eq 实例；这里用显式模式匹配判断「0 实参」。
 isRigZero : Rig -> Bool

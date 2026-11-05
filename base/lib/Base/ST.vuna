@@ -79,66 +79,52 @@ linear record ArrayWrite r a where
 
 -- 唯一执行入口：region 由显式类型 binder 提供（库外不可命名）；实现把它实例化为 Int。
 runST : ((r : Type) -> ST r a) -> a
-runST body = case body Int of
-  MkST io => runIO io
+runST body = runIO (stIOOf (body Int))
+
+-- 内部：消费 ST 动作，取出 IO thunk。线性 binder 让 `ST` 值只被消费一次。
+stIOOf : (1 m : ST r a) -> IO a
+stIOOf (MkST io) = io
 
 -- 非线性结果值的 continuation（`a` 不要求恰好一次）。
 bindST : (1 m : ST r a) -> (k : a -> ST r b) -> ST r b
-bindST m k = case m of
-  MkST io => MkST (io >>= (\a => case k a of
-    MkST o => o
-  )
-  )
+bindST (MkST io) k = MkST (io >>= (\a => stIOOf (k a)))
 
 -- 线性结果值的 continuation：`k` 的参数 binder 是 1，才能把线性值传进去。
 bindST1 : (1 m : ST r a) -> (k : (1 x : a) -> ST r b) -> ST r b
-bindST1 m k = case m of
-  MkST io => MkST (prim_bindIO1 io (\x => case k x of
-    MkST o => o
-  )
-  )
+bindST1 (MkST io) k = MkST (prim_bindIO1 io (\x => stIOOf (k x)))
 
 pureST : a -> ST r a
 pureST x = MkST (pure x)
 
 fmapST : (a -> b) -> (1 m : ST r a) -> ST r b
-fmapST f m = case m of
-  MkST io => MkST (fmap f io)
+fmapST f (MkST io) = MkST (fmap f io)
 
 newRef : a -> ST r (Ref r a)
 newRef x = MkST (fmap (\slot => Ref slot) (prim_newRef x))
 
 readRef : (1 h : Ref r a) -> ST r (RefPair r a)
-readRef h = case h of
-  Ref slot => MkST (fmap (\x => RefPair x (Ref slot)) (prim_readRef slot))
+readRef (Ref slot) = MkST (fmap (\x => RefPair x (Ref slot)) (prim_readRef slot))
 
 writeRef : (1 arg : RefWrite r a) -> ST r (Ref r a)
-writeRef arg = case arg of
-  RefWrite h v => case h of
-    Ref slot => MkST (fmap (\_ => Ref slot) (prim_writeRef slot v))
+writeRef (RefWrite (Ref slot) v) = MkST (fmap (\_ => Ref slot) (prim_writeRef slot v))
 
 -- 显式释放：线性句柄必须被消费；没有 drop 就会编译失败。
 freeRef : (1 h : Ref r a) -> ST r Int
-freeRef h = case h of
-  Ref _ => MkST (pure 0)
+freeRef (Ref _) = MkST (pure 0)
 
 newArray : Nat -> a -> ST r (SArray r a)
 newArray n v = MkST (fmap (\slot => SArray slot) (prim_newMArray (natToInt n) v))
 
 readArray : (1 arg : ArrayRead r a) -> ST r (ArrayPair r a)
-readArray arg = case arg of
-  ArrayRead arr i => case arr of
-    SArray slot => MkST (fmap (\x => ArrayPair x (SArray slot)) (prim_readMArray slot (natToInt i)))
+readArray (ArrayRead (SArray slot) i) =
+  MkST (fmap (\x => ArrayPair x (SArray slot)) (prim_readMArray slot (natToInt i)))
 
 writeArray : (1 arg : ArrayWrite r a) -> ST r (SArray r a)
-writeArray arg = case arg of
-  ArrayWrite arr i v => case arr of
-    SArray slot => MkST (fmap (\_ => SArray slot) (prim_writeMArray slot (natToInt i) v))
+writeArray (ArrayWrite (SArray slot) i v) =
+  MkST (fmap (\_ => SArray slot) (prim_writeMArray slot (natToInt i) v))
 
 lengthArray : (1 arr : SArray r a) -> ST r Nat
-lengthArray arr = case arr of
-  SArray slot => MkST (fmap natFromInt (prim_mArrayLength slot))
+lengthArray (SArray slot) = MkST (fmap natFromInt (prim_mArrayLength slot))
 
 freeArray : (1 arr : SArray r a) -> ST r Int
-freeArray arr = case arr of
-  SArray _ => MkST (pure 0)
+freeArray (SArray _) = MkST (pure 0)
