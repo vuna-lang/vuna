@@ -35,14 +35,14 @@
 #   - 文档按主题重整：删除 history/dt-core/dt-parity/dt.md，新增 core/tooling/records-traits
 #     并把 DT 语义并入 type-system；合并 main 的 LSP/readBytes 文档后按实测复标定：
 #     coldstart 29731 / agents 104 / arch 167 / readme 163 / max_ref 279。
-coldstart_bytes 31675
+coldstart_bytes 31776
 agents_lines 108
-arch_lines 172
+arch_lines 173
 readme_lines 167
 #   - M24.5：dt-parity.md §6 重写（实测能力表 + 边界）到 203 行；Elab 新增 scrutinee 反射、
 #     不可达分支、inlineSolvedMetas（3348 → 3513）。按实测重标定 max_ref 208 / max_module 3530；
 #     入口文档（coldstart/agents/arch/readme）不变。
-max_ref_lines 317
+max_ref_lines 332
 max_module_lines 1208
 #   - M27：新增 `primitives.md` 与内建/原语/能力文档、`Vuna.Compiler.Intrinsics` 模块；
 #     按 `sh nix/context-budget.sh .` 实测收紧：coldstart 29055 / agents 104 / arch 156 /
@@ -115,3 +115,9 @@ max_module_lines 1208
 #     Loader 段加模板降级一条（arch 167 → 171）。`Elab/Trait.vuna` 的实例相干性检查拆到新模块
 #     `Elab/InstCoherence.vuna`（Trait 1208 → 1155，新增模块小于现有上限），max_module 保持 1208。
 #     属特性文档增长，按 `sh nix/context-budget.sh .` 实测复标定 coldstart 31675 / arch 172；其余指标不变。
+#   - M37（IO 升格效应化）：effects.md 重写为「IO 内建效应类型 + MonadIO/transformer +
+#     通用 Eff 边界」（158 → 174 行），primitives/stdlib/limits/language/type-system/
+#     compiler/architecture/debt/roadmap/AGENTS/README 同步；max_ref 317 → 332，
+#     architecture 172 → 173 行、coldstart 31675 → 31776 字节（特性文档增长）。
+#     `Codegen/Term.vuna` 删除 legacy 分支、新增 IO 代数/thunk 生成（1156 行，低于 1208）；
+#     按 `sh nix/context-budget.sh .` 实测复标定，未放宽 max_module_lines。

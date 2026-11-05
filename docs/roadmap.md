@@ -44,9 +44,11 @@ vuna 尚未发布任何版本：没有外部用户、下游生态与历史包袱
   负载 ≤2×）；codegen 内建内联 / 多参数 lambda 链 / 字符串批拼；`Array` / `IORef` / `MArray` /
   `Buffer` 与 IO 隔离的可变数据；受限 FFI（`extern` + 包根 `ffi/*.c`）；库级 `State` /
   `Reader` / `Error`。测量设施与基线在 `bench/`。
-- **效应与 ST（M35.1）**：`Base.State` / `Base.Reader` / `Base.Error` 是带 `Functor` / `Monad`
-  实例的纯函数效应 monad（`do` 可用）；`Base.ST` 提供 region 隔离的可变数据（`runST`
-  句柄不逃逸，运行时经 `runIO`）；通用签名索引效应受擦除后端限制，归 F3（[effects.md](reference/effects.md)）。
+- **效应（M35.1 / M37）**：`IO` 已升格为内建效应类型（`prim_pureIO` / `prim_bindIO` /
+  `prim_runIO`，main 钩子 `v_main 0`，无构造器）；`Base.State` / `Reader` / `Error` 是纯
+  函数效应 monad（`do` 可用）；`Base.ST` 改建在 `IO` 上（`runST` 一次 `runIO`）；
+  `Base.Effect.MonadIO` + `StateT` / `ReaderT` / `ErrorT` 提供 IO 基座效应栈；通用签名
+  索引效应（`Eff` / 能力行）受擦除后端限制，归 F3（[effects.md](reference/effects.md)）。
 - **质量门禁**：`nix flake check`（packages + seed-selfhost + tests + typecheck + lint + fmt +
   index + metrics + package + context-budget + vscode-ext）、原生测试、lint / fmt / metrics /
   文档预算。

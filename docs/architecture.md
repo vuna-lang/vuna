@@ -79,8 +79,8 @@ Elab/codegen 看不到模板）。fmt/lint/index/doc 只 parse，仍按 `EInterp
 
 **内建单一真源**：`Vuna.Compiler.Intrinsics` 是名字 / 签名 / arity / 归约 / 能力 / runtime /
 可见性的唯一真源；`Loader.Resolve`（arity、放行、能力）、`Elab.Prelude`（签名）、
-`Core.Eval`（归约）、`Codegen.Term`（runtime）都消费它。内置身份按声明 symbol 判定：
-`Bool` / `List` / `IO` 是 base 普通 data（`Base.Bool.Bool` / `Base.List.List` / `Base.IO.IO`），不按短名。
+`Core.Eval`（归约）、`Codegen.Term`（runtime）都消费它。内置身份按声明 symbol 判定：`IO` 是内建效应类型；`Bool` / `List` / `Nat` 是 base 普通
+data（`Base.Bool.Bool` / `Base.List.List` / `Base.Nat.Nat`），不按短名。
 
 擦除检查由 `Codegen.Assembly.checkDtProgram` 负责（判据 `Core.rigIsErased`）。`vuna interp`
 走同一精化链后由 `Driver.Dt.dtEvalFile` 求 `main`（纯求值：只展示 `Int`/`String`/`Bool`，
@@ -135,9 +135,10 @@ vuna.toml → Frontend.{Toml.parseToml, Manifest.parseManifest/validateManifest}
 - **TCB**：工具链永不进 seed（`compiler/app/Main.vuna` 闭包不含 `Vuna.*` 工具模块；
   `nix/tcb-forbidden.txt` 黑名单）；效应边界是 manifest 显式能力
   （`[capabilities].effects` ∈ console/fs/process/env/clock/unsafe），
-  `checkEffectsBuiltins` 按 `Intrinsics` 能力位检查；原语返回 `IO` 动作（只在 `main` 执行），
-  未声明能力的包只能经 `Base.IO`，`runIO` 需 `unsafe`；`base` 自身声明 `unsafe`（唯一
-  使用点是 `Base.ST` 的 region 内可变数据，见 [effects.md](reference/effects.md)）。
+  `checkEffectsBuiltins` 按 `Intrinsics` 能力位检查；原语返回 `IO` 动作（只在 `main` 执行，
+  M37 起钩子是 `v_main 0`），未声明能力的包只能经 `Base.IO`，`runIO`/`prim_runIO` 需
+  `unsafe`；`base` 自身声明 `unsafe`（`Base.IO.runIO` 别名与 `Base.ST.runST`，见
+  [effects.md](reference/effects.md)）。
 
 ## 4. LSP 与索引（工具链侧，不进 seed）
 
