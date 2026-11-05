@@ -333,6 +333,8 @@ refsInExprGo sMod e acc = case e of
   EVar n sp => Ref sMod n (spanStartLine sp) (spanStartCol sp) :: acc
   EInt n sp => acc
   EStr s sp => acc
+  -- M35：模板字面量：洞内表达式的引用照常收集（find-references 需要）。
+  EInterp multi parts sp => refsInInterpParts sMod parts acc
   ELam ps body sp => refsInExprGo sMod body acc
   EApp f args sp => refsInArgs sMod args (refsInExprGo sMod f acc)
   EPi n i dom cod sp => refsInExprGo sMod cod (refsInExprGo sMod dom acc)
@@ -358,6 +360,13 @@ refsInExprGo sMod e acc = case e of
   ESectR inner op sp =>
     refsInExprGo sMod inner (Ref sMod op (spanStartLine sp) (spanStartCol sp) :: acc)
   _ => acc
+
+-- M35：模板片段里的引用（洞内表达式递归；文本块无引用）。
+refsInInterpParts : String -> List InterpPart -> List Ref -> List Ref
+refsInInterpParts sMod parts acc = case parts of
+  [] => acc
+  IPText s :: rest => refsInInterpParts sMod rest acc
+  IPHole e :: rest => refsInInterpParts sMod rest (refsInExprGo sMod e acc)
 
 -- ---------------------------------------------------------------
 -- 全量构建
