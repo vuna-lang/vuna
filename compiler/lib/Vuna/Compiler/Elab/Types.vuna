@@ -80,6 +80,7 @@ module Vuna.Compiler.Elab.Types
   , ecNext
   , ecPutClausesTbl
   , ecPutCtorTbl
+  , ecPutDefTbl
   , ecPutDefVals
   , ecPutDictGoals
   , ecPutGlobalsTbl
@@ -594,3 +595,8 @@ solsToTbl sols = Base.IntMap.insertAll sols (Base.IntMap.fromList [])
 
 dtProgDepths : DtProgram -> List (Pair Int Int)
 dtProgDepths (DtProgram datas defs goals sols globals insts classes next defvals depths) = depths
+
+ecPutDefTbl : Ec -> HashMap Term -> Ec
+ecPutDefTbl (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl defvals) deftbl2 =
+  Ec next sols defs datas depths goals insts classes dgoals deftbl2 gtbl soltbl dptbl gcomp ctbl
+    ctortbl defvals

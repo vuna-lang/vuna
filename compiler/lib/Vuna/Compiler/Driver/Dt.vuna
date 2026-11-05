@@ -277,7 +277,8 @@ depStartOf progs =
     ec4 = ec3
     ec5 = ecPutNext ec4 0
     ec6 = ecPutGlobalsTbl ec5 (Base.HashMap.fromList globals)
-  in Pair ec6 globals
+    ec7 = ecPutDefTbl ec6 (Base.HashMap.fromList globals)
+  in Pair ec7 globals
 
 dedupDatas : List DtData -> List DtData
 dedupDatas [] = []
