@@ -68,6 +68,13 @@ let dtp_writeFile path contents =
       (fun () -> output_string ch contents);
     String.length contents
   with Sys_error msg -> failwith ("writeFile: " ^ msg)
+let dtp_writeFileAtomic path contents =
+  let tmp = path ^ "." ^ string_of_int (Unix.getpid ()) ^ ".tmp" in
+  let write () =
+    let ch = open_out_bin tmp in
+    Fun.protect ~finally:(fun () -> close_out_noerr ch) (fun () -> output_string ch contents) in
+  (try write (); Sys.rename tmp path; String.length contents
+   with e -> (try Sys.remove tmp with _ -> ()); raise e)
 let dtp_getArgs () =
   let argv = Sys.argv in
   let n = Array.length argv in
