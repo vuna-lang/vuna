@@ -73,11 +73,11 @@ linear data Token : Type where
 ## 5. 线性数据类型
 
 - `linear data` / `linear record` 的族名进入 `DtData.dtDataLinear`；`isLinearType` 查头，
-  且非线性的类型应用若任一类型实参线性也视为线性（保守结构传播）。
+  只看族头；不通过类型实参传播（避免把 `IO (Ref r a)` 误判为线性）。
 - 线性值不能进泛型容器（`Maybe Ref` 构造时字段 binder 是 ω，被 application-site 检查拒绝）；
   需要时使用专用线性记录。
-- 线性值的 case：`_` 丢弃报 `TC_LinearDiscardPattern`，as-pattern 别名报
-  `TC_LinearAsPattern`；变量模式正常绑定。
+- 线性值的 case：`_` 丢弃因分支 binder 用量为 0 报 `TC_LinearUnused`；as-pattern 别名
+  暂未单独区分（同样会落成未用/多次用）。变量模式正常绑定。
 - 本阶段**没有**依赖 multiplicity / multiplicity 多态 / 线性箭头；线性多态与泛型容器
   归后续（debt）。
 
@@ -103,12 +103,12 @@ linear data Token : Type where
 
 ## 8. 线性 ST 子集
 
-`Base.ST` 的 `ST`、`Ref`、`SArray` 都是线性记录：
+`Base.ST` 的 `Ref`、`SArray` 是线性记录（`ST` 动作本身沿用 IO 的可复制语义）：
 
 - `newRef`/`newArray` 返回线性 action/value；
 - `readRef`/`writeRef` 等按“消费并返回”的线程化风格（返回值放在线性结果记录里，例如
   `RefPair`/`RefWrite`），避免 curried λ 捕获句柄；
-- `bindST1` 供线性结果穿过 continuation；`runST` 只执行一次；
+- `bindST1` 供线性结果穿过 continuation（continuation 的参数 binder 为 1）；`runST` 执行一次；
 - 低层 `IORef`/`MArray`/`Buffer` 仍是非线性内建，但字段不导出，只能经线性包装使用。
 
 ## 9. 边界

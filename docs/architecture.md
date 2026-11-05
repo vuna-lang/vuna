@@ -2,7 +2,7 @@
 
 本文是 vuna 仓库的**子系统地图**：回答“改一个功能要在哪些模块动手、该跑哪段测试”。逐模块
 职责见 [compiler.md](reference/compiler.md)，Core / 精化器见 [core.md](reference/core.md)，
-语义见 [language.md](reference/language.md) / [type-system.md](reference/type-system.md)，
+语义见 [language.md](reference/language.md) / [type-system.md](reference/type-system.md) / [qtt.md](reference/qtt.md)，
 自举 / 内建原语能力见 [bootstrap.md](reference/bootstrap.md) / [primitives.md](reference/primitives.md)。
 
 ## 仓库分层

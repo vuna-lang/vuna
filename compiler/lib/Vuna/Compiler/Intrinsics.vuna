@@ -38,6 +38,7 @@ module Vuna.Compiler.Intrinsics
   , parseCapability
   , preludeTypeNames
   , preludeValueNames
+  , primBindIO1Name
   , primBindIOName
   , primPureIOName
   , primRunIOName
@@ -121,6 +122,8 @@ data IType : Type where
   -- `IO <arg>`：内建效应类型；效果原语返回 IO 动作（M37 起 IO 是内建类型）
   IIO : IType -> IType
   IFun : IType -> IType -> IType
+  -- M38：参数 binder 为 1 的函数（线性 continuation）；只给底层原语用。
+  IFun1 : IType -> IType -> IType
   -- M33 W3：内建类型构造子与签名里的类型变量。
   IVar : String -> IType
   IArray : IType -> IType
@@ -132,6 +135,7 @@ data IType : Type where
 
 arityOfType : IType -> Int
 arityOfType (IFun _ cod) = 1 + arityOfType cod
+arityOfType (IFun1 _ cod) = 1 + arityOfType cod
 arityOfType (IPi _ cod) = arityOfType cod
 arityOfType _ = 0
 
@@ -185,11 +189,18 @@ primPureIOName = "prim_pureIO"
 primBindIOName : String
 primBindIOName = "prim_bindIO"
 
+primBindIO1Name : String
+primBindIO1Name = "prim_bindIO1"
+
 primRunIOName : String
 primRunIOName = "prim_runIO"
 
 isIOAlgebraName : String -> Bool
-isIOAlgebraName name = name == primPureIOName || name == primBindIOName || name == primRunIOName
+isIOAlgebraName name =
+  name == primPureIOName
+    || name == primBindIOName
+    || name == primBindIO1Name
+    || name == primRunIOName
 
 -- prelude 类型层名字：primitive 类型 + 内建类型构造子 + 内建效应类型 IO
 -- （禁止重定义 + Loader 放行）。
@@ -301,6 +312,7 @@ intrinsicReturnsIO i = typeReturnsIO (intrinsicSignature i)
 typeReturnsIO : IType -> Bool
 typeReturnsIO (IIO _) = True
 typeReturnsIO (IFun _ cod) = typeReturnsIO cod
+typeReturnsIO (IFun1 _ cod) = typeReturnsIO cod
 typeReturnsIO (IPi _ cod) = typeReturnsIO cod
 typeReturnsIO _ = False
 
@@ -421,6 +433,7 @@ allIntrinsics =
     Intrinsic "arrayToList" (IPi "a" (IFun (IArray (IVar "a")) (IList (IVar "a")))) OpNone Nothing "(fun a -> dtp_listOf (Array.to_list a))" True,
     Intrinsic primPureIOName (IPi "a" (IFun (IVar "a") (IIO (IVar "a")))) OpNone Nothing "(fun x -> fun _ -> x)" True,
     Intrinsic primBindIOName (IPi "a" (IPi "b" (IFun (IIO (IVar "a")) (IFun (IFun (IVar "a") (IIO (IVar "b"))) (IIO (IVar "b")))))) OpNone Nothing "(fun io k -> fun w -> k (io w) w)" True,
+    Intrinsic primBindIO1Name (IPi "a" (IPi "b" (IFun1 (IIO (IVar "a")) (IFun1 (IFun1 (IVar "a") (IIO (IVar "b"))) (IIO (IVar "b")))))) OpNone Nothing "(fun io k -> fun w -> k (io w) w)" True,
     Intrinsic primRunIOName (IPi "a" (IFun (IIO (IVar "a")) (IVar "a"))) OpNone (Just CapUnsafe) "(fun io -> io 0)" True,
     Intrinsic "prim_newRef" (IPi "a" (IFun (IVar "a") (IIO (IRef (IVar "a"))))) OpNone Nothing "(fun x -> ref x)" True,
     Intrinsic "prim_readRef" (IPi "a" (IFun (IRef (IVar "a")) (IIO (IVar "a")))) OpNone Nothing "(fun r -> !r)" True,

@@ -114,6 +114,10 @@ data TcErr : Nat -> Type where
   ErasedBinderUsed : String -> TcErr (Succ Zero)
   MultiplicityImplicit : String -> TcErr (Succ Zero)
   MultiplicityTypeDomain : String -> TcErr (Succ Zero)
+  LinearTypeNeedsOne : String -> TcErr (Succ Zero)
+  LinearValueNeedsLinearBinder : String -> TcErr (Succ Zero)
+  LinearTopLevel : String -> TcErr (Succ Zero)
+  LinearCaptureEscapes : String -> TcErr (Succ Zero)
   -- arity 2
   AmbiguousInstance : String -> String -> TcErr (Succ (Succ Zero))
   AppliedNotType : String -> TcErr (Succ Zero)
@@ -186,6 +190,10 @@ tcCode (LinearOverused _) = "TC_LinearOverused"
 tcCode (ErasedBinderUsed _) = "TC_ErasedBinderUsed"
 tcCode (MultiplicityImplicit _) = "TC_MultiplicityImplicit"
 tcCode (MultiplicityTypeDomain _) = "TC_MultiplicityTypeDomain"
+tcCode (LinearTypeNeedsOne _) = "TC_LinearTypeNeedsOne"
+tcCode (LinearValueNeedsLinearBinder _) = "TC_LinearValueNeedsLinearBinder"
+tcCode (LinearTopLevel _) = "TC_LinearTopLevel"
+tcCode (LinearCaptureEscapes _) = "TC_LinearCaptureEscapes"
 tcCode (TypeMismatchCaseVars _) = "TC_TypeMismatchCaseVars"
 tcCode (DuplicateInstance _) = "TC_DuplicateInstance"
 tcCode (InstanceContextMissing _) = "TC_InstanceContextMissing"
@@ -334,6 +342,12 @@ tcTemplate (ErasedBinderUsed _) = "binder `<0>` has multiplicity 0, but it is us
 tcTemplate (MultiplicityImplicit _) = "implicit binder `<0>` must have multiplicity 0"
 tcTemplate (MultiplicityTypeDomain _) =
   "binder `<0>` has a type-level domain and must have multiplicity 0"
+tcTemplate (LinearTypeNeedsOne _) = "binder `<0>` has a linear type; its multiplicity must be 1"
+tcTemplate (LinearValueNeedsLinearBinder _) =
+  "linear value `<0>` can only be bound or passed at multiplicity 1"
+tcTemplate (LinearTopLevel _) = "top-level `<0>` has a linear type; linear values cannot be global"
+tcTemplate (LinearCaptureEscapes _) =
+  "lambda `<0>` captures a linear value from its context and may escape"
 
 -- ---------------------------------------------------------------
 -- 文档遍历源（同构 List；`gen-errors` 遍历渲染；不承载 arity——arity 在构造子类型里）
@@ -482,7 +496,11 @@ tcChunk11 =
     TcEntry (tcCode (LinearOverused "")) (tcTemplate (LinearOverused "")) "声明 1 的 binder 在运行时使用多于一次",
     TcEntry (tcCode (ErasedBinderUsed "")) (tcTemplate (ErasedBinderUsed "")) "声明 0 的 binder 在运行时被使用",
     TcEntry (tcCode (MultiplicityImplicit "")) (tcTemplate (MultiplicityImplicit "")) "隐式 binder 必须为 0",
-    TcEntry (tcCode (MultiplicityTypeDomain "")) (tcTemplate (MultiplicityTypeDomain "")) "类型层 binder 必须为 0"
+    TcEntry (tcCode (MultiplicityTypeDomain "")) (tcTemplate (MultiplicityTypeDomain "")) "类型层 binder 必须为 0",
+    TcEntry (tcCode (LinearTypeNeedsOne "")) (tcTemplate (LinearTypeNeedsOne "")) "线性类型的 binder 必须是 1",
+    TcEntry (tcCode (LinearValueNeedsLinearBinder "")) (tcTemplate (LinearValueNeedsLinearBinder "")) "线性值只能在 quantity 1 的 binder 使用",
+    TcEntry (tcCode (LinearTopLevel "")) (tcTemplate (LinearTopLevel "")) "顶层定义不能是线性类型",
+    TcEntry (tcCode (LinearCaptureEscapes "")) (tcTemplate (LinearCaptureEscapes "")) "λ 捕获线性值并可能逃逸"
   ]
 
 tcAll : List TcEntry

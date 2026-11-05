@@ -14,6 +14,7 @@ module Vuna.Compiler.Elab.Usage (checkDefUsage, checkProgramUsage, isTypeForming
 import Vuna.Compiler.Common
 import Vuna.Compiler.Core
 import Vuna.Compiler.Diagnostics
+import Vuna.Compiler.Elab.Meta
 import Vuna.Compiler.Elab.Types
 
 -- 类型级定义的判据：定义**类型** force 后以宇宙收尾（`Type` 或 `... -> Type` 的 Pi 链）。
@@ -109,7 +110,7 @@ checkTerm sp env t = case t of
   TCon c args => checkArgs sp env args
   TCase scrut alts =>
     andThen (checkTerm sp env scrut)
-      (\us => andThen (checkAlts sp env alts (uZeroOf (natToInt (length env)))) (\ua => Ok (uAdd us ua)))
+      (\us => andThen (checkAlts sp env alts) (\ua => Ok (uAdd us ua)))
   TIf c th el =>
     andThen (checkTerm sp env c)
       (\uc => andThen (checkTerm sp env th) (\ut => andThen (checkTerm sp env el) (\ue => Ok (uAdd uc (uJoin ut ue)))))
@@ -126,15 +127,26 @@ checkArgsGo sp env ((Pair arg rig) :: rest) acc =
   if isRigZero rig then checkArgsGo sp env rest acc
   else andThen (checkTerm sp env arg) (\ua => checkArgsGo sp env rest (uAdd acc (uScale rig ua)))
 
-checkAlts : Span -> List (Pair String Rig) -> List CaseAlt -> List Rig -> Result (List Rig)
-checkAlts sp env [] acc = Ok acc
-checkAlts sp env (alt :: rest) acc = case alt of
+checkAlts : Span -> List (Pair String Rig) -> List CaseAlt -> Result (List Rig)
+checkAlts sp env alts = checkAltsGo sp env alts Nothing
+
+checkAltsGo : Span -> List (Pair String Rig) -> List CaseAlt -> Maybe (List Rig) -> Result (List Rig)
+checkAltsGo sp env [] acc = Ok (case acc of
+  Just u => u
+  Nothing => uZeroOf (natToInt (length env))
+)
+checkAltsGo sp env (alt :: rest) acc = case alt of
   CaseAlt cname binders body =>
     let
       env2 = append (reverse binders) env
       k = natToInt (length binders)
-    in andThen (checkTerm sp env2 body)
-      (\u => andThen (checkAltBinders sp binders u) (\outer => checkAlts sp env rest (uJoin acc outer)))
+    in andThen (checkTerm sp env2 body) (\u => andThen (checkAltBinders sp binders u) (\outer => checkAltsGo sp env rest (Just (case acc of
+      Just prev => uJoin prev outer
+      Nothing => outer
+    )
+    )
+    )
+    )
 
 -- `Rig` 没有 Eq 实例；这里用显式模式匹配判断「0 实参」。
 isRigZero : Rig -> Bool
@@ -162,8 +174,14 @@ checkProgramUsage ec defs = checkProgramUsageGo ec defs 0
 checkProgramUsageGo : Ec -> List DtDef -> Int -> Result Int
 checkProgramUsageGo ec [] n = Ok n
 checkProgramUsageGo ec (d :: rest) n = if isTypeLevelDef ec d then checkProgramUsageGo ec rest n
+else if isLinearType ec (eval [] (dtDefType d)) then tcErr1 (defSpanOf d) (LinearTopLevel (dtDefName d)) (dtDefName d)
 else case dtDefBody d of
   Nothing => checkProgramUsageGo ec rest n
   Just body =>
     andThen (checkDefUsage (dtDefSpan d) (dtDefName d) body)
       (\_ => checkProgramUsageGo ec rest (n + 1))
+
+defSpanOf : DtDef -> Span
+defSpanOf d = case dtDefSpan d of
+  Just sp => sp
+  Nothing => Span "" 0 0 0 0

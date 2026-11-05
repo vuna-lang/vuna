@@ -76,6 +76,7 @@ module Vuna.Compiler.Frontend.Ast
   , fixitySpan
   , funArity
   , patSpan
+  , qtyIsZero
   , topNames
   , traitMethodName
   , traitMethodSpan
@@ -117,6 +118,10 @@ data InterpPart : Type where
 data Qty : Type where
   Q0 : Qty
   Q1 : Qty
+
+qtyIsZero : Qty -> Bool
+qtyIsZero Q0 = True
+qtyIsZero Q1 = False
 
 data Expr : Type where
   EVar : String -> Span -> Expr

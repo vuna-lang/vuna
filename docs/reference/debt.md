@@ -26,7 +26,7 @@
 | D12 | 证明 ergonomics 进阶未实现：absurd / 空族消去语法、`rewrite` / `with`；隐式模式与 `auto` 见 B09/D08 | `limits.md` 的证明 ergonomics 边界；`tooling.md` §6 | F4 |
 | D19 | 类型级部分应用不可用（如把 `Vec Int` 当类型参数传给 `Sigma Nat`） | `checkAppUnderTypeFuel` 报 `expected Nat, got Int` | F4 |
 | D21 | 完整 FFI 未做：受限 FFI（`Int` / `String` / `Bool` / `Array Int|String|Bool` 显式参数 + C 纯函数，包根 `ffi/*.c`）已落地（M33 W5）；仍无回调 / GC root / pin、无 C 头文件解析、无字符串双向可变共享 | [primitives.md](primitives.md) §10；[limits.md](limits.md) | 后续 / M35 |
-| D22 | 无 QTT / 线性 / 唯一性类型：ST / region 已落地（M35.1，`runST` + 逃逸检查），但句柄可复制 / 多次使用、「恰好一次」与一次性续延仍未类型化；ST 不声明 `Monad` 实例（显式 region binder 的字典提升顺序，见 [effects.md](effects.md) §4） | `base/lib/Base/ST.vuna`；[effects.md](effects.md) | 研究储备（QTT）/ F3 |
+| D22 | QTT 核心已落地（M38：quantity 0/1/ω、用量检查、`linear data`/`linear record`、`Ref`/`SArray` 线性化）；仍无依赖 multiplicity、multiplicity 多态、线性箭头/借用、一次性续延，`ST` 动作本身仍可复制（无线性箭头线程化动作内部值），因此动作复制可产生同一底层 IORef 的多个句柄 | `compiler/lib/Vuna/Compiler/Elab/Usage.vuna`、`base/lib/Base/ST.vuna`；[qtt.md](qtt.md)、[effects.md](effects.md) §4 | 后续：线性箭头/多态 / F3 |
 | D23 | `+ - * /` 只有 Int/Nat 的类型定向特化，没有通用 `Num`/`FromInteger` 类；用户自定义数值类型不能重载字面量与算术 | `Elab/Term/Impl.specializeArith*`；[operators.md](operators.md) | F4 / 后续 |
 | D24 | Nat 字面量在**编译期**展开成 Zero/Succ 链（无惰性 `TNat`），超大 Nat 字面量有编译期节点成本；`case n of 0 =>` 字面量模式未支持 | `Elab/Term/Impl.natLitTerm`；[limits.md](limits.md) | 后续 |
 | D25 | Int→Nat 全库迁移只覆盖 Base 公开度量与必要消费点；`compiler/` 内部 level/meta/fuel/span/arity 与工具链多数内部字节计数仍保留 Int（按 M34.7 边界），`Base.IO.print/writeFile` 返回值也仍 Int | `docs/reference/limits.md` 的 Nat/Int 边界；`lib/` 中剩余 `strLength` | 后续（按性能/语义逐点） |

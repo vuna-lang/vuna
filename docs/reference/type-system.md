@@ -4,7 +4,7 @@ vuna 只有一套类型检查器：依赖类型（DT）的双向精化 + NbE 定
 检查器，也没有「DT 子集」开关；所有命令（`check` / `compile` / `build` / `interp` /
 LSP / 测试夹具）都走它。本文是类型规则的语义页；语法与模块系统见
 [language.md](language.md)，记录 / trait / `do` 见 [records-traits.md](records-traits.md)，
-Core 表示与合一实现见 [core.md](core.md)，当前边界清单见 [limits.md](limits.md)。
+quantity/线性规则见 [qtt.md](qtt.md)；Core 表示与合一实现见 [core.md](core.md)，当前边界清单见 [limits.md](limits.md)。
 
 ## 宇宙与 kind
 

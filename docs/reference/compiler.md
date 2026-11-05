@@ -169,8 +169,8 @@ check pkg
 （`TBool`），`List`/`IO` 按完整符号生成普通变体；`case` 编译成 OCaml `match`、构造器直接
 构造变体。`Base.Nat.Nat` 同样不进运行时变体：零/后继、字面量与 `case` 降成 OCaml `int`
 与 `if`/`let`（`Codegen.Decl.runtimeDatas` 过滤族；`Codegen.Term` 折叠 Succ 链、降级 Nat case），
-算术走 `bi_nat*`。运行时表示只由 `Core.rigIsErased` 判定（隐式 binder 与 `Type` 域擦除，显式值 /
-显式索引保留），不做整程序使用分析。运行时前导代码（`bi_*`、`dtp_*`、IO 桥接等）在
+算术走 `bi_nat*`。运行时表示只由 `Core.rigIsErased` 判定（0 擦除，1/ω 保留）；
+`Elab.Usage` 另做整程序用量检查（QTT 0/1/ω，见 [qtt.md](qtt.md)），不依赖 multiplicity。运行时前导代码（`bi_*`、`dtp_*`、IO 桥接等）在
 `Codegen.Term.dtRuntime`，无条件依赖 Unix（`Unix.stat` / `gettimeofday` / `readlink`）——
 原语语义见 [primitives.md](primitives.md)。
 

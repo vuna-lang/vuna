@@ -314,7 +314,8 @@ ioAlgebraText st name = Ok (Pair (ioAlgebraIntrinsicText name) st)
 ioAlgebraIntrinsicText : String -> String
 ioAlgebraIntrinsicText name =
   if name == primPureIOName then "(fun x -> fun (_ : int) -> x)"
-  else if name == primBindIOName then "(fun io k -> fun (w : int) -> k (io w) w)" else "(fun io -> io 0)"
+  else if name == primBindIOName || name == primBindIO1Name then "(fun io k -> fun (w : int) -> k (io w) w)"
+  else "(fun io -> io 0)"
 
 -- 原语最多 2 个运行时参数（`prim_writeFile` / `prim_runIn`）；表比实际用到的长，
 -- `takeNames` 按 arity 截断（结构递归在表尾上，终止性检查可见）。

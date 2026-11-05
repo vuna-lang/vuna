@@ -39,7 +39,7 @@ import Vuna.Compiler.Packages.Pkg
 -- 回读校验（见下）：**改 `Frontend.Ast` 的 Marshal 布局时必须 bump `astCacheSchema`**
 -- （否则旧缓存会被按新布局 `prim_unmarshal`）。模板字面量（M36）新增 AST 构造子，schema 4 → 5。
 astCacheSchema : String
-astCacheSchema = "vuna-ast-cache 5"
+astCacheSchema = "vuna-ast-cache 6"
 
 astCacheDir : String
 astCacheDir =

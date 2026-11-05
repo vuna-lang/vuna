@@ -172,7 +172,8 @@
   -1 哨兵，也没有语言层诊断）；`Array.set` 先 `Array.copy`，原数组不变。
 - 可变数据的安全边界是 **IO 隔离**：`IORef` / `MArray` / `Buffer` 的句柄只能在 `IO` 动作里
   使用；`runIO` 是 main 外的逃逸口、需要 `unsafe`。**ST/region（M35.1）**：`Base.ST` 的
-  `Ref` / `SArray` 只在 `ST r` 里使用且不能逃出 `runST`；仍无线性 / 唯一性类型（句柄可复制、
+  `Ref` / `SArray` 只在 `ST r` 里使用且不能逃出 `runST`；M38 起它们是 linear record（句柄恰好一次），
+  `ST` 动作本身仍可复制；仍无依赖 multiplicity / 线性箭头（
   多用未禁止，见 [effects.md](effects.md)）。
 
 ## 7. 效果原语、IO 动作与能力（M31/M37）

@@ -471,7 +471,7 @@ dtEvalExprInInfo prog expr = case prog of
       ec0 =
         Ec next sols (reverse bodies) datas [] [] insts classes [] (Base.HashMap.fromList bodies)
           (Base.HashMap.fromList globals) (solsToTbl sols) (Base.IntMap.fromList []) True
-          (Base.HashMap.fromList []) (ctorTblOfDatas datas) defvals
+          (Base.HashMap.fromList []) (ctorTblOfDatas datas) defvals (datasHaveLinear datas)
     in andThen (inferE globals emptyCtx ec0 expr) (\p => case p of
       Pair term (Pair ty ec1) =>
         let

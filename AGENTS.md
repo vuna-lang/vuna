@@ -92,6 +92,7 @@ build，`dist/` 提交）；`nix/` = 构建图 + rotate/metrics/bench；`docs/` 
 - 子系统地图、改动定位：[`docs/architecture.md`](docs/architecture.md)
 - 语言与类型：[language.md](docs/reference/language.md)（语法/模块）、
   [type-system.md](docs/reference/type-system.md)（宇宙/索引族/依赖匹配/相等/擦除）、
+  [qtt.md](docs/reference/qtt.md)（quantity/用量检查/线性数据）、
   [records-traits.md](docs/reference/records-traits.md)（记录/trait/do）、
   [effects.md](docs/reference/effects.md)（IO 内建效应/效应栈）、
   [stdlib.md](docs/reference/stdlib.md)、[packages.md](docs/reference/packages.md)、

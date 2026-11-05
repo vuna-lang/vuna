@@ -90,6 +90,7 @@ ityToTermEnv env (IIO elem) = TApp (TGlobal ioFamilyName) (ityToTermEnv env elem
 -- cod 在 binder 下：env 加匿名占位，保证外层 IVar 的 de Bruijn 索引随 Pi 深度 shift。
 ityToTermEnv env (IFun a b) =
   TPi "_" False RigOmega (ityToTermEnv env a) (ityToTermEnv ("_" :: env) b)
+ityToTermEnv env (IFun1 a b) = TPi "_" False Rig1 (ityToTermEnv env a) (ityToTermEnv ("_" :: env) b)
 ityToTermEnv env (IVar name) = case indexOfName name env of
   Just i => TVar name i
   Nothing => TGlobal name

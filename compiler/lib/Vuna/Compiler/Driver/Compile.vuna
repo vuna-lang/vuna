@@ -320,7 +320,7 @@ runBuildScript dir out name =
 -- 典型的「依赖包全部缓存命中」场景：重复 `vuna check .` / 多包 workspace / LSP 重启。
 -- ---------------------------------------------------------------
 checkCacheSchema : String
-checkCacheSchema = "vuna-check-cache 6"
+checkCacheSchema = "vuna-check-cache 7"
 
 checkCacheDir : PackageContext -> String
 checkCacheDir ctx = cacheBase ++ "/" ++ hashText (textHash (contextPackageName ctx)) ++ "/check"
@@ -479,7 +479,7 @@ fullCheckLib ctx names path =
 -- C35：SplitFile 增加 splitDeps 字段（形状变了），schema 升到 2，旧缓存自然失效。
 -- ---------------------------------------------------------------
 splitCacheSchema : String
-splitCacheSchema = "vuna-split-cache 2"
+splitCacheSchema = "vuna-split-cache 3"
 
 splitCacheDir : PackageContext -> String
 splitCacheDir ctx = cacheBase ++ "/" ++ hashText (textHash (contextPackageName ctx)) ++ "/split"

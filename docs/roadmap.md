@@ -62,7 +62,8 @@ vuna 尚未发布任何版本：没有外部用户、下游生态与历史包袱
 
 **一套表面语言、一个类型检查器、一条 codegen、一个 seed，且检查器本身可信。**
 
-- **类型理论**：依赖类型 + 归纳族；严格分层宇宙；擦除由单一判据驱动，QTT 的完整变体留研究。
+- **类型理论**：依赖类型 + 归纳族；严格分层宇宙；擦除由单一判据驱动；QTT 核心（0/1/ω、用量检查、线性数据）已落地，
+  依赖 multiplicity / 线性箭头留后续。
 - **路径**：单文件只是包内 ad-hoc 入口，与包内模块走同一装配 / codegen；不存在第二套加载
   语义。
 - **可信性**：不存在「跳过检查但不告知」的通道；任何放行都是显式、可审计、有诊断的。
@@ -193,10 +194,10 @@ registry（没有外部用户时 registry 没有意义）。
 
 ## 研究储备（不排期，不占编号）
 
-- QTT 的完整变体（依赖 multiplicity、资源安全）。
+- QTT 的完整变体（依赖 multiplicity、线性箭头/多态、一次性续延）。
 - 宇宙多态 / 累积性的更强形式。
 - CoC 补完：非直谓 Prop、完整依赖消除的进阶形态。
-- 线性 / 唯一性类型的进阶形态（M33 只取可变数据 / ST 所需子集；完整 QTT 见上）。
+- 线性 / 唯一性类型的进阶形态（M38 已取 ST 所需子集；依赖 multiplicity 与线性箭头见上）。
 - 证明自动化 / tactics / reflection、`rewrite` / `with` 的进阶形态。
 - 效应行多态（若 F3 未采用）。
 
@@ -217,6 +218,6 @@ registry（没有外部用户时 registry 没有意义）。
 
 - 债务与缺陷逐条登记：[debt.md](reference/debt.md)
 - 子系统地图：[architecture.md](architecture.md)
-- 类型系统 / Core 实现：[type-system.md](reference/type-system.md)、[core.md](reference/core.md)
+- 类型系统 / Core 实现：[type-system.md](reference/type-system.md)、[core.md](reference/core.md)；QTT/线性：[qtt.md](reference/qtt.md)
 - 自举链：[bootstrap.md](reference/bootstrap.md)；测试与 CI：[testing.md](reference/testing.md)；
   已知边界：[limits.md](reference/limits.md)

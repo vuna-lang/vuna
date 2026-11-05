@@ -93,7 +93,9 @@ interp` 能直接归约；它们是「不需要 IO 的状态/环境/错误」。
 
 ## 4. `Base.ST`：IO 派生的 region 效应
 
-- `ST r a` = `record ST r a where stIO : IO a`；`r` 是 region 索引（类型级、擦除）。
+- `ST r a` = 单构造子 data（运行时 `IO a` 的 thunk）；`r` 是 region 索引（类型级、擦除）。
+- `Ref`/`SArray` 自 M38 起是 **linear record**：读/写/释放消费句柄并返回新句柄；
+  线性结果用 `bindST1` 线程化（QTT 规则见 [qtt.md](qtt.md)）。
 - `Ref r a` / `SArray r a` 是 region 句柄，字段不导出，只能由 ST 动作创建。
 - 安全规则不变：`runST : ((r : Type) -> ST r a) -> a`；region 由调用方显式 binder 进入，
   库外不可命名；句柄不能逃逸（负例 `test/corpus/dt_err/56_st_escape.vuna`）。
@@ -101,7 +103,8 @@ interp` 能直接归约；它们是「不需要 IO 的状态/环境/错误」。
   `runIO`；region 内没有其它特权执行点。
 - 不声明 `Functor/Monad (ST r)`（region 的显式 binder 与字典提升顺序冲突，见 §2.2
   old note），region 多态代码用 `bindST` / `pureST` / `fmapST`。
-- 仍无 QTT/线性：句柄可复制、多次使用未在类型上禁止（D22）。
+- 当前边界：`ST` 动作本身沿用 IO 的可复制语义（无线性箭头在动作内部线程化线性值）；
+  `Ref`/`SArray` 的“恰好一次”已由 QTT 类型化（D22）。
 
 ## 5. 为什么没有通用 `Eff`（实测证据）
 
@@ -153,7 +156,7 @@ interp` 能直接归约；它们是「不需要 IO 的状态/环境/错误」。
 | debt | 内容 | 归属 |
 | --- | --- | --- |
 | D03 | 通用签名索引效应（用户自定义 op、行/重排、深 handler 组合）未实现 | F3 |
-| D22 | 无 QTT/线性：ST 句柄可复制、多次使用；ST 无 `Monad` 实例 | 研究储备 / F3 |
+| D22 | QTT 核心已落地（M38）；剩余：线性箭头/多态、一次性续延，`ST` 动作本身仍可复制；ST 无 `Monad` 实例 | 后续 / F3 |
 | D27 | 擦除依赖续延的运行时表示缺失（§5），三条路线见 §6 | F3 |
 | D28 | `base` 的 `unsafe` 授权没有机制约束使用点（`Base.IO.runIO` 别名 + `Base.ST.runST` + `Base.Debug.trace/traceShow` 的调试逃逸） | 后续收紧 |
 | B11/D32 | trait 单参数/无父类 ⇒ 无 `MonadState`/`MonadReader` 效应类；transformer 无任意 monad 泛化（隐式参数 kind 推断缺口） | F4 / M37 后续 |
@@ -162,12 +165,12 @@ interp` 能直接归约；它们是「不需要 IO 的状态/环境/错误」。
 
 - 语言级 `handle` / `perform` 语法、行多态、自动 lift、多射续延、用户自定义效应。
 - 类型级能力行（`IO [caps] a`）。
-- ST 的 QTT/线性语义；ST 的 `Monad` 实例。
+- ST 的线性箭头/动作线性语义（`Ref`/`SArray` 已是线性记录）；ST 的 `Monad` 实例。
 - 并发/async（M35.2）、网络/服务端框架（M35.3–M35.4）。
 
 ## 相关阅读
 
-- 当前边界（用户可见）：[limits.md](limits.md)；标准库模块：[stdlib.md](stdlib.md)
+- 当前边界（用户可见）：[limits.md](limits.md)；标准库模块：[stdlib.md](stdlib.md)；量化/线性规则：[qtt.md](qtt.md)
 - 原语与能力（`prim_*`、`runIO`、效果原语）：[primitives.md](primitives.md) §7
 - 记录 / trait / `do` 与 `Monad`：[records-traits.md](records-traits.md)
 - 类型系统（擦除判据、宇宙）：[type-system.md](type-system.md)；Core 实现：[core.md](core.md)

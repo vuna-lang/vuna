@@ -19,7 +19,7 @@
 | `Base.IORef` | IO 内的可变引用（`newRef` / `readRef` / `writeRef` / `modifyRef`，全部 `IO`） |
 | `Base.MArray` | IO 内的可变数组（`new` / `read` / `write` / `length`，全部 `IO`） |
 | `Base.Buffer` | 可变字符串缓冲（`new` / `add` / `contents` / `length`，全部 `IO`） |
-| `Base.ST` | region 隔离的局部可变数据（M35.1；M37 改建在 IO 上）：`ST r a`（包 `IO a`）+ `runST`（显式 region binder，句柄不逃逸）+ `Ref r a` / `SArray r a` + 显式组合子 `bindST` / `pureST` / `fmapST`；不声明 `Functor`/`Monad` 实例，`runST` 入口执行一次 `runIO` |
+| `Base.ST` | region 隔离的局部可变数据（M35.1；M37 改建在 IO 上）：`ST r a`（包 `IO a`）+ `runST`（显式 region binder，句柄不逃逸）+ `Ref r a` / `SArray r a` + 显式组合子 `bindST` / `bindST1` / `pureST` / `fmapST`；`Ref`/`SArray` 为 linear record（消费式 API，结果记录 `RefPair` 等），`bindST1` 线程化线性结果；不声明 `Functor`/`Monad` 实例，`runST` 入口执行一次 `runIO` |
 | `Base.State` / `Base.Reader` / `Base.Error` | 库级效应 monad（M35.1）：纯函数表示 + `Functor`/`Monad` 实例（`do` 可用）；`State` 是 `s -> Pair a s`、`Reader` 是 `e -> a`、`Error` 是泛型 `Ok`/`Err` 和；handler 是 `runState` / `evalState` / `execState`、`runReader` / `ask` / `local`、`runError` / `throwError` / `catchError`；M33 的手写组合子（`bindState` 等）已删除。通用签名索引效应（通用 `Eff`）未实现，见 [effects.md](effects.md) |
 | `Base.Nat` | 非负整数（`Zero` / `Succ`）；运行时是 OCaml `int`。`plus` / `minus` / `mult` / `div` / `toInt` / `fromInt` / `fromIntMaybe` / `pred` / `isZero` + `Eq` / `Ord` / `Show` 实例 |
 | `Base.Vec` | `Vec(..)` 与 `substTemplate` / `vhead` / `vlen` / `vtail` |
@@ -174,8 +174,8 @@ module Base.ErrorT (ErrorT, throwError, catchError, runErrorT) where
 - **容器与可变数据（M33 W3 / M35.1 ST）**：不可变 `Base.Array`、IO 内 `IORef` / `MArray` /
   `Buffer`、ST 内 `Base.ST` 的 `Ref` / `SArray` 已落地；`Array.get` / `MArray.read` 越界是
   宿主 `Invalid_argument`；`Array.set` 返回新数组；IO 句柄只经 `IO` 动作使用，ST 句柄
-  只经 `ST r` 使用且不能逃出 `runST`（见 [effects.md](effects.md)）；**仍无 QTT / 线性**：
-  ST 句柄可复制、多次使用未在类型上禁止；
+  只经 `ST r` 使用且不能逃出 `runST`（见 [effects.md](effects.md)）；M38 起
+  `Ref`/`SArray` 是 linear record（恰好一次、不可复制），ST 动作本身仍可复制；
 - **库级效应（M35.1）**：`State` / `Reader` / `Error` 是带 `Functor`/`Monad` 实例的纯函数
   monad（**不进入 `Prelude` / `Base` 门面**，显式 import）；`do` 可用；`Base.ST` 的 region
   隔离与「不声明 `Monad` 实例」的原因见 [effects.md](effects.md)；通用签名索引效应

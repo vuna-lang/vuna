@@ -143,7 +143,7 @@ elabTrait globals ec ds = case ds of
             tele = teleOfType ctorTy
             dd =
               DtData dname tele [DtCtor cname dname tele ctorTy]
-                (TPi pname True Rig0 pKind (TType levelZero))
+                (TPi pname True Rig0 pKind (TType levelZero)) False
             projs = methodProjections tname pname pKind methodsP fieldTys
             projSpans = map (\m => Pair (traitMethodName m) (traitMethodSpan m)) methods
             projBodies = projectionDefs tname pname methodsP fieldTys (length methods)
@@ -1063,8 +1063,9 @@ else case body of
         v = freshVarValue etaName lvl
         ctx2 = ctxBindValue etaName dom ctx
         body2 = EApp body [EVar etaName sp] sp
-      in andThen (checkBodyAtEndFuel (fuel - 1) globals ctx2 ec body2 (applyClosure clo v) sp) (\p => case p of
-        Pair inner ec1 => Ok (Pair (TLam etaName rig inner) ec1)
+      in andThen (rigForLinearDomain ec sp etaName rig dom) (\etaRig => andThen (checkBodyAtEndFuel (fuel - 1) globals ctx2 ec body2 (applyClosure clo v) sp) (\p => case p of
+        Pair inner ec1 => Ok (Pair (TLam etaName etaRig inner) ec1)
+      )
       )
     _ => checkE globals ctx ec body expected
 
@@ -1089,9 +1090,9 @@ else
     lvl = ctxDepth ctx
     v = freshVarValue pname lvl
     ctx2 = ctxBindValue pname dom ctx
-    erasure = rig
-  in andThen (checkBindersFuel (fuel - 1) globals ctx2 ec pats body (applyClosure clo v) sp) (\p => case p of
+  in andThen (rigForLinearDomain ec sp pname rig dom) (\erasure => andThen (checkBindersFuel (fuel - 1) globals ctx2 ec pats body (applyClosure clo v) sp) (\p => case p of
     Pair inner ec1 => Ok (Pair (TLam pname erasure inner) ec1)
+  )
   )
 
 -- ---------------------------------------------------------------

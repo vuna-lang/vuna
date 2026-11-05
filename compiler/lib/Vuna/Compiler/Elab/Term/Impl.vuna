@@ -119,7 +119,7 @@ else
       let
         -- 变量兜底要把变量作为分支 binder 记下来：Core 求值器与 codegen 都按 binder
         -- 绑定 scrutinee（旧实现丢 binder，体里引用变量会变成自由变量）。
-        binds = if pname == "_" then [] else [Pair pname (binderRig False scrutTy)]
+        binds = if pname == "_" then [] else [Pair pname (rigOfLinearValue ec scrutTy)]
       in Ok (Pair (reverse (CaseAlt "" binds bodyTerm :: acc)) ec2)
   )
 
@@ -359,17 +359,22 @@ else andThen (checkTypeFuel (fuel - 1) globals ctx ec dom) (\pd => case pd of
     let
       domVal = evalCtx ctx domTerm
       isTypeDom = isTypeDomain domVal
+      isLinDom = isLinearType ec domVal
       lvl = ctxDepth ctx
       ctx2 = ctxBind name domTerm ctx
       badQty = case qty of
         Just _ => implicit || isTypeDom
         Nothing => False
+      badLinQty = case qty of
+        Just q => qtyIsZero q && isLinDom
+        Nothing => False
     in if badQty then if implicit then tcErr1 sp (MultiplicityImplicit name) name
     else tcErr1 sp (MultiplicityTypeDomain name) name
+    else if badLinQty then tcErr1 sp (LinearTypeNeedsOne name) name
     else andThen (checkTypeFuel (fuel - 1) globals ctx2 ec1 cod) (\pc => case pc of
       Pair codTerm (Pair codSort ec2) =>
         Ok
-          (Pair (TPi name implicit (rigOfQty implicit isTypeDom qty) domTerm codTerm) (Pair (VType (levelMax domSort codSort)) ec2))
+          (Pair (TPi name implicit (if isLinDom then Rig1 else rigOfQty implicit isTypeDom qty) domTerm codTerm) (Pair (VType (levelMax domSort codSort)) ec2))
     )
 )
 
@@ -468,10 +473,12 @@ else
     else tcErr0 sp ImplicitParamKind
     else case args of
       [] => Ok (Pair [] (Pair forced ec))
-      a :: rest => andThen (checkEFuel (fuel - 1) globals ctx ec a dom) (\p => case p of
+      a :: rest => andThen (rigForLinearDomain ec sp name rig dom) (\argRig => andThen (checkEFuel (fuel - 1) globals ctx ec a dom) (\p => case p of
         Pair aTerm ec1 => andThen (inferArgsGo (fuel - 1) globals ctx ec1 (applyClosure clo (evalCtx ctx aTerm)) rest sp) (\q => case q of
-          Pair argTerms (Pair resTy ec2) => Ok (Pair (Pair aTerm rig :: argTerms) (Pair resTy ec2))
+          Pair argTerms (Pair resTy ec2) =>
+            Ok (Pair (Pair aTerm argRig :: argTerms) (Pair resTy ec2))
         )
+      )
       )
     _ => case args of
       [] => Ok (Pair [] (Pair forced ec))
@@ -758,7 +765,7 @@ else case firstOf bind of
     in andThen (inferEFuel (fuel - 1) globals ctx ec value) (\pv => case pv of
       Pair valueTerm (Pair valueTy ec1) =>
         let
-          rig = binderRig False valueTy
+          rig = rigOfLinearValue ec valueTy
           ctx2 = ctxBindValue name valueTy ctx
         in andThen (checkLetGoFuel (fuel - 1) globals ctx2 ec1 rest body rec_ expected sp) (\pb => case pb of
           Pair bodyTerm ec2 => Ok (Pair (TApp (TLam name rig bodyTerm) valueTerm rig) ec2)
@@ -770,7 +777,7 @@ else case firstOf bind of
     in andThen (inferEFuel (fuel - 1) globals ctx ec value) (\pv => case pv of
       Pair valueTerm (Pair valueTy ec1) =>
         let
-          rig = binderRig False valueTy
+          rig = rigOfLinearValue ec valueTy
         in andThen (checkLetGoFuel (fuel - 1) globals ctx ec1 rest body rec_ expected sp) (\pb => case pb of
           -- 通配 let 的体是在**不 bind 名字**的上下文里检查的，但落项时仍套一层 TLam "_"：
           -- 体的 de Bruijn 索引必须整体 shift 1，否则所有外层引用都会指向错 binder。
@@ -804,7 +811,7 @@ inferLetBoundFuel fuel globals ctx ec name value rest body rec_ sp = if fuel <= 
 else andThen (inferEFuel (fuel - 1) globals ctx ec value) (\pv => case pv of
   Pair valueTerm (Pair valueTy ec1) =>
     let
-      rig = binderRig False valueTy
+      rig = rigOfLinearValue ec valueTy
       ctx2 = ctxBindValue name valueTy ctx
     in andThen (inferLetFuel (fuel - 1) globals ctx2 ec1 rest body rec_ sp) (\pb => case pb of
       Pair bodyTerm (Pair bodyTy ec2) =>
@@ -817,7 +824,7 @@ inferLetIgnoredFuel fuel globals ctx ec value rest body rec_ sp = if fuel <= 0 t
 else andThen (inferEFuel (fuel - 1) globals ctx ec value) (\pv => case pv of
   Pair valueTerm (Pair valueTy ec1) =>
     let
-      rig = binderRig False valueTy
+      rig = rigOfLinearValue ec valueTy
     in andThen (inferLetFuel (fuel - 1) globals ctx ec1 rest body rec_ sp) (\pb => case pb of
       Pair bodyTerm (Pair bodyTy ec2) =>
         Ok (Pair (TApp (TLam "_" rig (shift 0 1 bodyTerm)) valueTerm rig) (Pair bodyTy ec2))
@@ -849,13 +856,15 @@ else
         v = freshVarValue pname lvl
         ctx2 = ctxBindValue name dom ctx
         expected2 = applyClosure clo v
+      in andThen (rigForLinearDomain ec sp name rig dom) (\lamRig => andThen (checkLamFuel (fuel - 1) globals ctx2 ec rest body expected2 sp) (\p => case p of
         -- M18.5：lambda 形参与定义参数同一条规则——隐式 binder 恒擦除（隐式实参由
         -- 精化器插入，运行时不传），显式 binder 只有域是宇宙才擦除。
-        -- 之前无条件写 True：形参在运行时被使用时硬报错，未被使用时静默少生成一层
-        -- `fun`（能 check 不能 compile）。见 docs/reference/limits.md 的擦除边界。
-        lamRig = rig
-      in andThen (checkLamFuel (fuel - 1) globals ctx2 ec rest body expected2 sp) (\p => case p of
-        Pair inner ec1 => Ok (Pair (TLam name lamRig inner) ec1)
+        -- M38：线性域的 binder 必须是 1；捕获外层线性值的 λ 不能逃逸。
+        Pair inner ec1 =>
+          if ctxHasLinear ec ctx then if termHasOuterLinear ec ctx2 inner then tcErr1 sp (LinearCaptureEscapes name) name
+          else Ok (Pair (TLam name lamRig inner) ec1)
+          else Ok (Pair (TLam name lamRig inner) ec1)
+      )
       )
     _ => tcErr0 sp LambdaTooManyParams
 

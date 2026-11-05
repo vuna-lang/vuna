@@ -1,31 +1,20 @@
--- M35.1：Base.ST 的 region 内可变数据（真实 IORef / MArray 表示）。
+-- M35.1：Base.ST 的 region 内可变数据（真实 IORef 表示）。
+-- M38 起 Ref 是 linear record：读/写/释放都消费句柄并返回新句柄；线性结果用 bindST1。
 -- ST 动作经 Base.IO.runIO 执行 → interp 不归约（带 .nointerp），只 compile + 运行。
--- region 多态代码用显式组合子 bindST/pureST（不声明 Functor/Monad 实例，见 Base.ST）。
 import Base.ST
 import Base.Int
-import Base.Nat
 
 prog : (r : Type) -> ST r Int
 prog r =
-  bindST (newRef 41) (\ref =>
-    bindST (writeRef ref 42) (\_ =>
-      bindST (newArray 2 0) (\arr =>
-        bindST (writeArray arr 0 10) (\_ =>
-          bindST (writeArray arr 1 20) (\_ =>
-            bindST (readRef ref) (\a =>
-              bindST (readArray arr 0) (\b =>
-                bindST (readArray arr 1) (\c =>
-                  bindST (lengthArray arr) (\n =>
-                    pureST (a + b + c + natToInt n)
-                  )
-                )
-              )
-            )
-          )
-        )
-      )
-    )
-  )
+  bindST1 (newRef 41) (\ref =>
+    bindST1 (readRef ref) (\rp =>
+      case rp of
+        RefPair a ref2 =>
+          bindST1 (writeRef (RefWrite ref2 42)) (\ref3 =>
+            bindST1 (readRef ref3) (\rp2 =>
+              case rp2 of
+                RefPair b ref4 =>
+                  bindST (freeRef ref4) (\_ => pureST (a + b))))))
 
 main : Int
 main = runST prog

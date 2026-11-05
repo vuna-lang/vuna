@@ -179,8 +179,11 @@
 - **ST / region（M35.1；M37 改建在 IO 上）**：`Base.ST` 提供 `ST r a`（包 `IO a`）+
   `runST`（`{a} -> ((r : Type) -> ST r a) -> a`）与 `Ref r a` / `SArray r a` 句柄；区域由
   显式类型 binder 引入、库外不可命名，句柄不能逃出 `runST`（负例 `dt_err/56`）。
-  `runST` 入口执行一次 `runIO`（真实 `IORef` / `MArray`），因此 ST 动作**不进 interp**。**仍无 QTT / 线性**：句柄可复制、多次使用未在类型上禁止，「恰好一次」
-  与一次性续延未表达；ST 不声明 `Monad` 实例（字典提升顺序）。细节见 [effects.md](effects.md)。
+  `runST` 入口执行一次 `runIO`（真实 `IORef` / `MArray`），因此 ST 动作**不进 interp**。
+  **M38 起** `Ref` / `SArray` 是 linear record（恰好一次、不可复制），线性结果用
+  `bindST1` 线程化；`ST` 动作本身仍沿用 IO 的可复制语义（无线性箭头在动作内部线程化
+  线性值），一次性续延未表达；ST 不声明 `Monad` 实例（字典提升顺序）。细节见
+  [qtt.md](qtt.md) / [effects.md](effects.md)。
 - **哈希容器**：桶是 `Array (Array (List ...))`（`Array.get` O(1)，`insert` copy-on-write）；
   `empty` 已移除、统一写 `fromList []`（见 stdlib.md 的弱类型变量说明）。
 - **没有泛型 `Hashable`**：`HashMap` / `HashSet` 只覆盖 `String`，`IntMap` 只覆盖 `Int`；
