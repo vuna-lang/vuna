@@ -253,6 +253,9 @@ dtCheckPackageWithDeps ctx entry deps = andThen (dtLoadParts ctx entry) (\parts 
   start = depStartOf deps
   _ = note ("summ-List=" ++ globalTextOf "List" (secondOf start))
   _ = note ("summ-Pair=" ++ globalTextOf "Pair" (secondOf start))
+  _ = note ("summ-getenv=" ++ globalTextOf "prim_getenv" (secondOf start))
+  _ = note ("summ-runIO=" ++ globalTextOf "runIO" (secondOf start))
+  _ = note ("summ-IO=" ++ globalTextOf "IO" (secondOf start))
 in andThen (elabProgramGoWith (firstOf start) (secondOf start) decls)
   (\prog => andThen (checkDtProgram (Pair (dtProgDatas prog) (dtProgDefs prog))) (\_ => Ok (Pair [] prog)))
 )
