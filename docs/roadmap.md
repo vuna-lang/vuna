@@ -101,9 +101,8 @@ M34.1 基准/软门槛/分配统计（C34 关闭、C33 部分）；M34.2 热点�
 （`termHasAnyMeta` 快速路径；`Ec`/`Sols` 已是 O(1) cons 与增量 delta）；M34.5 的 check/build 级
 elab 缓存（`$TMPDIR/vuna-cache`，冷/热：check . 6.5s→25ms、build --no-compile 2.8s→21ms）；M34.6 读数
 随基准。M34.4 workspace 并行 check 完成（`prim_spawn`/`prim_wait`；check . 冷 6.5s→4.1s；根包串行 + 成员并行）；
-LSP 诊断帧进程内缓存（同 uri+内容重复请求命中，编辑后仍全量精化）。剩余：M34.3 的 hash-consing；M34.4 模块级并行 codegen
-（受 C35 的全序 open 模型限制，需先做精确 per-module open）、LSP 增量（接口摘要）；M34.5 的
-接口摘要 + 规范序列化（C32）。
+LSP 诊断帧进程内缓存（同 uri+内容重复请求命中，编辑后仍全量精化）。剩余：M34.3 的 hash-consing；M34.4 模块级并行 codegen（C35）；LSP 增量与 M34.5 接口摘要
+（C37：跨包元变量编号空间需要 per-module 编号或摘要含完全解出的 Term）；规范序列化格式（C32）。
 
 ### M35：并发 / 服务端
 
