@@ -37,9 +37,9 @@ import Vuna.Compiler.Packages.Pkg
 -- `corpus/term/05_multi_clause.vuna` 的入口，报 `LD_ModuleHeaderInEntryFile`）。
 -- 这里用 5 条独立 lane 拼成 ~50 bit，并把 schema 版本拌进 key；payload 还带源文本做
 -- 回读校验（见下）：**改 `Frontend.Ast` 的 Marshal 布局时必须 bump `astCacheSchema`**
--- （否则旧缓存会被按新布局 `prim_unmarshal`）。
+-- （否则旧缓存会被按新布局 `prim_unmarshal`）。模板字面量（M36）新增 AST 构造子，schema 4 → 5。
 astCacheSchema : String
-astCacheSchema = "vuna-ast-cache 4"
+astCacheSchema = "vuna-ast-cache 5"
 
 astCacheDir : String
 astCacheDir =
