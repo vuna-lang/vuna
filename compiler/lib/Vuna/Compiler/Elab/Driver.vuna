@@ -729,3 +729,32 @@ goalsOfProgram decls =
 elabProgram : List Decl -> Result (Pair (List DtData) (List DtDef))
 elabProgram decls =
   andThen (elabProgramFull decls) (\prog => Ok (Pair (dtProgDatas prog) (dtProgDefs prog)))
+
+-- M34.5 接口摘要：从依赖包的缓存 DtProgram 重建精化起始状态（datas / insts / classes /
+-- sols / next / globals 表）。`elabProgramGoWith` 用它作为 startEc / startGlobals，
+-- 调用方只传本包 decls（依赖包的 body 不再重精化）。
+-- 注意：调用方需对 datas/insts/classes 去重（依赖闭包里同一个包会被多个包共享）。
+ecOfProgram : DtProgram -> Pair Ec (List (Pair String Term))
+ecOfProgram prog =
+  let
+    ec0 = ecEmpty
+    ec1 = addDatasEc ec0 (dtProgDatas prog)
+    ec2 = addInstsEc ec1 (dtProgInsts prog)
+    ec3 = addClassesEc ec2 (dtProgClasses prog)
+    ec4 = ecPutCtorTbl ec3 (ctorTblOfDatas (dtProgDatas prog))
+    ec5 = ecPutSols ec4 (dtProgSols prog)
+    ec6 = ecPutNext ec5 (dtProgNext prog)
+    ec7 = ecPutGlobalsTbl ec6 (Base.HashMap.fromList (dtProgGlobals prog))
+  in Pair ec7 (dtProgGlobals prog)
+
+addDatasEc : Ec -> List DtData -> Ec
+addDatasEc ec [] = ec
+addDatasEc ec (d :: rest) = addDatasEc (ecAddData ec d) rest
+
+addInstsEc : Ec -> List DtInst -> Ec
+addInstsEc ec [] = ec
+addInstsEc ec (i :: rest) = addInstsEc (ecAddInst ec i) rest
+
+addClassesEc : Ec -> List DtClass -> Ec
+addClassesEc ec [] = ec
+addClassesEc ec (c :: rest) = addClassesEc (ecAddClass ec c) rest

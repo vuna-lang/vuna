@@ -81,6 +81,7 @@ module Vuna.Compiler.Elab.Types
   , ecPutDefVals
   , ecPutDictGoals
   , ecPutGlobalsTbl
+  , ecPutNext
   , ecPutSols
   , ecSetGlobalsComplete
   , ecSolTbl
@@ -252,6 +253,11 @@ data Ec : Type where
   Ec : Int -> List (Pair Int Value) -> List (Pair String Term) -> List DtData -> List (Pair Int Int) -> List DtGoal -> List DtInst -> List DtClass -> List DtDictGoal -> HashMap Term -> HashMap Term -> IntMap Value -> IntMap Int -> Bool -> HashMap (List (Pair (List Pat) Expr)) -> HashMap DtCtor -> HashMap Value -> Ec
 
 ecNext : Ec -> Int
+
+ecPutNext : Ec -> Int -> Ec
+ecPutNext (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl defvals) n =
+  Ec n sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl
+    defvals
 
 ecClausesTbl : Ec -> HashMap (List (Pair (List Pat) Expr))
 ecClausesTbl (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl defvals) =

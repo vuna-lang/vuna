@@ -586,3 +586,23 @@ let v_Vuna_dCompiler_dElab_dDriver_dgoalInfoOf = (fun sols g -> (C_Vuna_dCompile
 let v_Vuna_dCompiler_dElab_dDriver_dgoalsOfProgram = (fun decls -> ((v_Base_dResult_dandThen (v_Vuna_dCompiler_dElab_dDriver_delabProgramFull decls)) (fun prog -> (C_Base_dResult_dResult_Base_dResult_dOk (((v_Base_dList_dmap (v_Vuna_dCompiler_dElab_dDriver_dgoalInfoOf (v_Vuna_dCompiler_dElab_dTypes_ddtProgSols prog))) (v_Vuna_dCompiler_dElab_dTypes_ddtProgGoals prog)))))))
 
 let v_Vuna_dCompiler_dElab_dDriver_delabProgram = (fun decls -> ((v_Base_dResult_dandThen (v_Vuna_dCompiler_dElab_dDriver_delabProgramFull decls)) (fun prog -> (C_Base_dResult_dResult_Base_dResult_dOk ((C_Base_dPair_dPair_Base_dPair_dPair ((v_Vuna_dCompiler_dElab_dTypes_ddtProgDatas prog), (v_Vuna_dCompiler_dElab_dTypes_ddtProgDefs prog))))))))
+
+let rec v_Vuna_dCompiler_dElab_dDriver_daddDatasEc = (fun mc0 mc1 -> (match mc1 with
+  | C_Base_dList_dList_Base_dList_dCons (dtb__288, dtb__289) -> ((v_Vuna_dCompiler_dElab_dDriver_daddDatasEc ((v_Vuna_dCompiler_dElab_dTypes_decAddData mc0) dtb__288)) dtb__289)
+  | C_Base_dList_dList_Base_dList_dNil -> mc0
+  | _ -> failwith "DT: impossible branch"
+))
+
+let rec v_Vuna_dCompiler_dElab_dDriver_daddInstsEc = (fun mc0 mc1 -> (match mc1 with
+  | C_Base_dList_dList_Base_dList_dCons (dtb__290, dtb__291) -> ((v_Vuna_dCompiler_dElab_dDriver_daddInstsEc ((v_Vuna_dCompiler_dElab_dTypes_decAddInst mc0) dtb__290)) dtb__291)
+  | C_Base_dList_dList_Base_dList_dNil -> mc0
+  | _ -> failwith "DT: impossible branch"
+))
+
+let rec v_Vuna_dCompiler_dElab_dDriver_daddClassesEc = (fun mc0 mc1 -> (match mc1 with
+  | C_Base_dList_dList_Base_dList_dCons (dtb__292, dtb__293) -> ((v_Vuna_dCompiler_dElab_dDriver_daddClassesEc ((v_Vuna_dCompiler_dElab_dTypes_decAddClass mc0) dtb__292)) dtb__293)
+  | C_Base_dList_dList_Base_dList_dNil -> mc0
+  | _ -> failwith "DT: impossible branch"
+))
+
+let v_Vuna_dCompiler_dElab_dDriver_decOfProgram = (fun prog -> ((fun ec0 -> ((fun ec1 -> ((fun ec2 -> ((fun ec3 -> ((fun ec4 -> ((fun ec5 -> ((fun ec6 -> ((fun ec7 -> (C_Base_dPair_dPair_Base_dPair_dPair (ec7, (v_Vuna_dCompiler_dElab_dTypes_ddtProgGlobals prog)))) ((v_Vuna_dCompiler_dElab_dTypes_decPutGlobalsTbl ec6) (v_Base_dHashMap_dfromList (v_Vuna_dCompiler_dElab_dTypes_ddtProgGlobals prog))))) ((v_Vuna_dCompiler_dElab_dTypes_decPutNext ec5) (v_Vuna_dCompiler_dElab_dTypes_ddtProgNext prog)))) ((v_Vuna_dCompiler_dElab_dTypes_decPutSols ec4) (v_Vuna_dCompiler_dElab_dTypes_ddtProgSols prog)))) ((v_Vuna_dCompiler_dElab_dTypes_decPutCtorTbl ec3) (v_Vuna_dCompiler_dElab_dTypes_dctorTblOfDatas (v_Vuna_dCompiler_dElab_dTypes_ddtProgDatas prog))))) ((v_Vuna_dCompiler_dElab_dDriver_daddClassesEc ec2) (v_Vuna_dCompiler_dElab_dTypes_ddtProgClasses prog)))) ((v_Vuna_dCompiler_dElab_dDriver_daddInstsEc ec1) (v_Vuna_dCompiler_dElab_dTypes_ddtProgInsts prog)))) ((v_Vuna_dCompiler_dElab_dDriver_daddDatasEc ec0) (v_Vuna_dCompiler_dElab_dTypes_ddtProgDatas prog)))) v_Vuna_dCompiler_dElab_dTypes_decEmpty))
