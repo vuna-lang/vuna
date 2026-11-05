@@ -55,6 +55,7 @@ import Vuna.Compiler.Elab.Records
 import Vuna.Compiler.Elab.Term
 import Vuna.Compiler.Elab.Termination
 import Vuna.Compiler.Elab.Trait
+import Vuna.Compiler.Elab.Usage
 import Vuna.Compiler.Elab.Types
 import Vuna.Compiler.Intrinsics
 import Vuna.Compiler.Frontend.Ast
@@ -588,10 +589,11 @@ in andThen (elabDatas (collectDataDecls decls []) startGlobals startEc) (\pd => 
                                   Nothing => g
                                 ) globals
                                 _ = stamp "extradefs-done"
-                              in andThen (checkTerminationDeclsWith (declFunNames decls) (append termAux decls)) (\_ => let
+                              in andThen (checkProgramUsage ec4 allDefs) (\_ => andThen (checkTerminationDeclsWith (declFunNames decls) (append termAux decls)) (\_ => let
                                 _ = stamp "termination-done"
                               in Ok
                                 (DtProgram datas1 allDefs (ecGoals ec4) (ecSols ec4) globalsOut (ecInsts ec4) (ecClasses ec4) (ecNext ec4) (ecDefVals ec4) (Base.IntMap.toList (ecDepthTbl ec4)))
+                              )
                               )
                     )
                 )

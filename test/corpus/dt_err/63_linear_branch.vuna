@@ -1,0 +1,6 @@
+-- M38：线性值只在一条路径上被消费（另一条路径丢弃）⇒ join = ω，报 overused。
+f : Bool -> (1 x : Int) -> Int
+f b x = if b then x else 0
+
+main : Int
+main = f True 1

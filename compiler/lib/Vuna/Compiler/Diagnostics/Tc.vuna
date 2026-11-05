@@ -108,6 +108,12 @@ data TcErr : Nat -> Type where
   UnknownNamedInstance : String -> TcErr (Succ Zero)
   UnsolvedHole : String -> TcErr (Succ Zero)
   UnsolvedMetavarInfer : String -> TcErr (Succ Zero)
+  -- M38（QTT）：用量检查。
+  LinearUnused : String -> TcErr (Succ Zero)
+  LinearOverused : String -> TcErr (Succ Zero)
+  ErasedBinderUsed : String -> TcErr (Succ Zero)
+  MultiplicityImplicit : String -> TcErr (Succ Zero)
+  MultiplicityTypeDomain : String -> TcErr (Succ Zero)
   -- arity 2
   AmbiguousInstance : String -> String -> TcErr (Succ (Succ Zero))
   AppliedNotType : String -> TcErr (Succ Zero)
@@ -175,6 +181,11 @@ tcCode (CannotRedefineBuiltin _) = "TC_CannotRedefineBuiltin"
 tcCode (CannotSolveMetavar _) = "TC_CannotSolveMetavar"
 tcCode (CannotSolveHigherOrder _) = "TC_CannotSolveHigherOrder"
 tcCode (CannotSolveOccurs _) = "TC_CannotSolveOccurs"
+tcCode (LinearUnused _) = "TC_LinearUnused"
+tcCode (LinearOverused _) = "TC_LinearOverused"
+tcCode (ErasedBinderUsed _) = "TC_ErasedBinderUsed"
+tcCode (MultiplicityImplicit _) = "TC_MultiplicityImplicit"
+tcCode (MultiplicityTypeDomain _) = "TC_MultiplicityTypeDomain"
 tcCode (TypeMismatchCaseVars _) = "TC_TypeMismatchCaseVars"
 tcCode (DuplicateInstance _) = "TC_DuplicateInstance"
 tcCode (InstanceContextMissing _) = "TC_InstanceContextMissing"
@@ -315,6 +326,14 @@ tcTemplate (TypeMismatch _ _) = "type mismatch: expected <0>, got <1>"
 tcTemplate (TypeMismatchCaseBranch _ _) = "type mismatch: case branch <0> vs <1>"
 tcTemplate (WhereNeedsSig _ _) =
   "where binding `<0>` needs a type signature (write `<1> : <type>` before the clause)"
+tcTemplate (LinearUnused _) =
+  "linear binder `<0>` must be used exactly once at runtime, but it is never used"
+tcTemplate (LinearOverused _) =
+  "linear binder `<0>` must be used exactly once at runtime, but it is used more than once"
+tcTemplate (ErasedBinderUsed _) = "binder `<0>` has multiplicity 0, but it is used at runtime"
+tcTemplate (MultiplicityImplicit _) = "implicit binder `<0>` must have multiplicity 0"
+tcTemplate (MultiplicityTypeDomain _) =
+  "binder `<0>` has a type-level domain and must have multiplicity 0"
 
 -- ---------------------------------------------------------------
 -- 文档遍历源（同构 List；`gen-errors` 遍历渲染；不承载 arity——arity 在构造子类型里）
@@ -457,10 +476,19 @@ tcChunk10 =
   [ TcEntry (tcCode (WhereNeedsSig "" "")) (tcTemplate (WhereNeedsSig "" "")) "where 绑定缺类型签名"
   ]
 
+tcChunk11 : List TcEntry
+tcChunk11 =
+  [ TcEntry (tcCode (LinearUnused "")) (tcTemplate (LinearUnused "")) "声明 1 的 binder 在运行时未使用",
+    TcEntry (tcCode (LinearOverused "")) (tcTemplate (LinearOverused "")) "声明 1 的 binder 在运行时使用多于一次",
+    TcEntry (tcCode (ErasedBinderUsed "")) (tcTemplate (ErasedBinderUsed "")) "声明 0 的 binder 在运行时被使用",
+    TcEntry (tcCode (MultiplicityImplicit "")) (tcTemplate (MultiplicityImplicit "")) "隐式 binder 必须为 0",
+    TcEntry (tcCode (MultiplicityTypeDomain "")) (tcTemplate (MultiplicityTypeDomain "")) "类型层 binder 必须为 0"
+  ]
+
 tcAll : List TcEntry
 tcAll =
   concatLists
-    [tcChunk0, tcChunk1, tcChunk2, tcChunk3, tcChunk4, tcChunk5, tcChunk6, tcChunk7, tcChunk8, tcChunk9, tcChunk10]
+    [tcChunk0, tcChunk1, tcChunk2, tcChunk3, tcChunk4, tcChunk5, tcChunk6, tcChunk7, tcChunk8, tcChunk9, tcChunk10, tcChunk11]
 
 -- ---------------------------------------------------------------
 -- throw：拼 `[CODE] 消息`（去掉旧 `DT: ` 前缀）；TC 的 Span 经 Common.showSpanLoc 拼在头部

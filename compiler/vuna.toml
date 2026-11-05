@@ -48,6 +48,7 @@ modules = [
   "Vuna.Compiler.Elab.Term.Support",
   "Vuna.Compiler.Elab.Data",
   "Vuna.Compiler.Elab.Trait",
+  "Vuna.Compiler.Elab.Usage",
   "Vuna.Compiler.Elab.InstName",
   "Vuna.Compiler.Elab.Driver",
   "Vuna.Compiler.Elab.Termination",

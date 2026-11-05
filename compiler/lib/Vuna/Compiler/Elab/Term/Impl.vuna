@@ -357,12 +357,19 @@ inferPiFuel fuel globals ctx ec name implicit qty dom cod sp = if fuel <= 0 then
 else andThen (checkTypeFuel (fuel - 1) globals ctx ec dom) (\pd => case pd of
   Pair domTerm (Pair domSort ec1) =>
     let
+      domVal = evalCtx ctx domTerm
+      isTypeDom = isTypeDomain domVal
       lvl = ctxDepth ctx
       ctx2 = ctxBind name domTerm ctx
-    in andThen (checkTypeFuel (fuel - 1) globals ctx2 ec1 cod) (\pc => case pc of
+      badQty = case qty of
+        Just _ => implicit || isTypeDom
+        Nothing => False
+    in if badQty then if implicit then tcErr1 sp (MultiplicityImplicit name) name
+    else tcErr1 sp (MultiplicityTypeDomain name) name
+    else andThen (checkTypeFuel (fuel - 1) globals ctx2 ec1 cod) (\pc => case pc of
       Pair codTerm (Pair codSort ec2) =>
         Ok
-          (Pair (TPi name implicit (rigOfQty implicit (isTypeDomain (evalCtx ctx domTerm)) qty) domTerm codTerm) (Pair (VType (levelMax domSort codSort)) ec2))
+          (Pair (TPi name implicit (rigOfQty implicit isTypeDom qty) domTerm codTerm) (Pair (VType (levelMax domSort codSort)) ec2))
     )
 )
 

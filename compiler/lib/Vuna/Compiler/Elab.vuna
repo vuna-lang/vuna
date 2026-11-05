@@ -45,6 +45,8 @@ module Vuna.Compiler.Elab
   , Types.dtProgDefs
   , Types.dtProgGoals
   , Types.dtProgSols
+  , Usage.checkProgramUsage
+  , Usage.isTypeForming
   ) where
 
 -- Vuna.Compiler.Elab：DT 精化器门面（双向检查 + 一阶元变量 + 类型级隐式插入 + M14 索引族）。
@@ -62,3 +64,4 @@ import Vuna.Compiler.Elab.Trait as Trait
 import Vuna.Compiler.Elab.InstName as InstName
 import Vuna.Compiler.Elab.Driver as Driver
 import Vuna.Compiler.Elab.Derive as Derive
+import Vuna.Compiler.Elab.Usage as Usage

@@ -1,0 +1,6 @@
+-- M38：隐式 binder 必须为 0。
+f : {1 x : Int} -> Int
+f = 0
+
+main : Int
+main = f

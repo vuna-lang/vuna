@@ -1,0 +1,169 @@
+module Vuna.Compiler.Elab.Usage (checkDefUsage, checkProgramUsage, isTypeForming) where
+
+-- Vuna.Compiler.Elab.Usage：M38 QTT 用量检查。
+--
+-- 精化完成后、组装 `DtProgram` 之前，对每个**运行时** `DtDef` 的 body 做一次结构遍历：
+-- 每个 binder 的运行时使用次数必须满足它声明的 Rig（0 恰好 0、1 恰好 1、ω 不限）。
+-- 类型位置（`TPi`）与擦除实参（Rig0 的 TApp/TCon 实参）不产生运行时用量；case 分支的
+-- 外层用量按 join 合并（线性值必须在每条路径上都被消费）。
+--
+-- Usage 是「与当前 context 对齐的用量向量」：index 0 = 最内层 binder。进入 λ / case
+-- 分支时向量头部就是新 binder；退出时检查并 drop。这样 de Bruijn 搬运由结构遍历本身完成。
+--
+-- 类型级定义的 body 是类型，不参与用量检查（由 `isTypeForming` 判定）。
+import Vuna.Compiler.Common
+import Vuna.Compiler.Core
+import Vuna.Compiler.Diagnostics
+import Vuna.Compiler.Elab.Types
+
+-- 类型级定义的判据：定义**类型** force 后以宇宙收尾（`Type` 或 `... -> Type` 的 Pi 链）。
+-- M38 从 Codegen/Erase 上移到 Elab，成为用量检查与 codegen 分区的共同真源。
+isTypeForming : Value -> Bool
+isTypeForming v = isTypeFormingFuel 128 v
+
+isTypeFormingFuel : Int -> Value -> Bool
+isTypeFormingFuel fuel v = if fuel <= 0 then False
+else case v of
+  VType l => True
+  VPi name implicit rig dom clo =>
+    isTypeFormingFuel (fuel - 1) (applyClosure clo (VNeutral (NVar name 0 [])))
+  _ => False
+
+-- ---------------------------------------------------------------
+-- 用量向量
+-- ---------------------------------------------------------------
+-- 与 context 等长；index 0 是最内层 binder。`Rig0` 表示该 binder 未被使用。
+uZeroOf : Int -> List Rig
+uZeroOf n = if n <= 0 then [] else Rig0 :: uZeroOf (n - 1)
+
+uVarAt : Int -> Int -> List Rig
+uVarAt depth i = if i < 0 || i >= depth then uZeroOf depth else uVarAtGo depth i
+
+uVarAtGo : Int -> Int -> List Rig
+uVarAtGo n i = if n <= 0 then [] else (if i == 0 then Rig1 else Rig0) :: uVarAtGo (n - 1) (i - 1)
+
+uAdd : List Rig -> List Rig -> List Rig
+uAdd [] ys = ys
+uAdd xs [] = xs
+uAdd (x :: xs) (y :: ys) = rigAdd x y :: uAdd xs ys
+
+uScale : Rig -> List Rig -> List Rig
+uScale rig us = map (\u => rigScale rig u) us
+
+uJoin : List Rig -> List Rig -> List Rig
+uJoin [] ys = ys
+uJoin xs [] = xs
+uJoin (x :: xs) (y :: ys) = rigJoin x y :: uJoin xs ys
+
+uDrop : Int -> List Rig -> List Rig
+uDrop n us = if n <= 0 then us
+else case us of
+  [] => []
+  _ :: rest => uDrop (n - 1) rest
+
+-- 声明与实测是否相符；不符时给 TC 诊断。返回的 Int 只是占位（错误已短路）。
+checkBinderRig : Span -> String -> Rig -> Rig -> Result Int
+checkBinderRig sp name declared used = case declared of
+  Rig0 => if isRigZero used then Ok 0 else tcErr1 sp (ErasedBinderUsed name) name
+  Rig1 => case used of
+    Rig0 => tcErr1 sp (LinearUnused name) name
+    Rig1 => Ok 0
+    RigOmega => tcErr1 sp (LinearOverused name) name
+  RigOmega => Ok 0
+
+-- 进入一个 binder：body usage 的头部就是它；检查后 drop。
+checkLamBinder : Span -> String -> Rig -> List Rig -> Result (List Rig)
+checkLamBinder sp name rig us = case us of
+  [] => Err "DT: internal: usage vector lost lambda binder"
+  used :: rest => andThen (checkBinderRig sp name rig used) (\_ => Ok rest)
+
+-- case 分支：binders 是 telescope 顺序（第一个字段最外），body usage 的前 k 项按
+-- 逆序对应它们（index 0 = 最后一个字段）。检查完整体 drop。
+checkAltBinders : Span -> List (Pair String Rig) -> List Rig -> Result (List Rig)
+checkAltBinders sp binders us = checkAltBindersGo sp (reverse binders) us
+
+checkAltBindersGo : Span -> List (Pair String Rig) -> List Rig -> Result (List Rig)
+checkAltBindersGo sp [] us = Ok us
+checkAltBindersGo sp ((Pair name rig) :: rest) us = case us of
+  [] => Err "DT: internal: usage vector lost case binder"
+  used :: more => andThen (checkBinderRig sp name rig used) (\_ => checkAltBindersGo sp rest more)
+
+-- ---------------------------------------------------------------
+-- 项遍历
+-- ---------------------------------------------------------------
+checkTerm : Span -> List (Pair String Rig) -> Term -> Result (List Rig)
+checkTerm sp env t = case t of
+  TVar name i => Ok (uVarAt (natToInt (length env)) i)
+  TMeta m => Ok (uZeroOf (natToInt (length env)))
+  TGlobal g => Ok (uZeroOf (natToInt (length env)))
+  TType l => Ok (uZeroOf (natToInt (length env)))
+  -- 类型：0-fragment，里面的 binder 不产生运行时用量。
+  TPi name implicit rig dom cod => Ok (uZeroOf (natToInt (length env)))
+  TLam name rig body =>
+    let
+      env2 = Pair name rig :: env
+    in andThen (checkTerm sp env2 body) (\u => checkLamBinder sp name rig u)
+  TApp f a rig =>
+    andThen (checkTerm sp env f)
+      (\uf => if isRigZero rig then Ok uf else andThen (checkTerm sp env a) (\ua => Ok (uAdd uf (uScale rig ua))))
+  TCon c args => checkArgs sp env args
+  TCase scrut alts =>
+    andThen (checkTerm sp env scrut)
+      (\us => andThen (checkAlts sp env alts (uZeroOf (natToInt (length env)))) (\ua => Ok (uAdd us ua)))
+  TIf c th el =>
+    andThen (checkTerm sp env c)
+      (\uc => andThen (checkTerm sp env th) (\ut => andThen (checkTerm sp env el) (\ue => Ok (uAdd uc (uJoin ut ue)))))
+  TInt n => Ok (uZeroOf (natToInt (length env)))
+  TStr s => Ok (uZeroOf (natToInt (length env)))
+  TBool b => Ok (uZeroOf (natToInt (length env)))
+
+checkArgs : Span -> List (Pair String Rig) -> List (Pair Term Rig) -> Result (List Rig)
+checkArgs sp env args = checkArgsGo sp env args (uZeroOf (natToInt (length env)))
+
+checkArgsGo : Span -> List (Pair String Rig) -> List (Pair Term Rig) -> List Rig -> Result (List Rig)
+checkArgsGo sp env [] acc = Ok acc
+checkArgsGo sp env ((Pair arg rig) :: rest) acc =
+  if isRigZero rig then checkArgsGo sp env rest acc
+  else andThen (checkTerm sp env arg) (\ua => checkArgsGo sp env rest (uAdd acc (uScale rig ua)))
+
+checkAlts : Span -> List (Pair String Rig) -> List CaseAlt -> List Rig -> Result (List Rig)
+checkAlts sp env [] acc = Ok acc
+checkAlts sp env (alt :: rest) acc = case alt of
+  CaseAlt cname binders body =>
+    let
+      env2 = append (reverse binders) env
+      k = natToInt (length binders)
+    in andThen (checkTerm sp env2 body)
+      (\u => andThen (checkAltBinders sp binders u) (\outer => checkAlts sp env rest (uJoin acc outer)))
+
+-- `Rig` 没有 Eq 实例；这里用显式模式匹配判断「0 实参」。
+isRigZero : Rig -> Bool
+isRigZero Rig0 = True
+isRigZero _ = False
+
+-- 顶层入口：body 是闭项；遍历后应无残留用量（有残留说明存在未绑定变量，作用域护栏会
+-- 在 codegen 侧再查；这里只保证不静默）。
+checkDefUsage : Maybe Span -> String -> Term -> Result Int
+checkDefUsage msp name body =
+  let
+    sp = case msp of
+      Just s => s
+      Nothing => Span "" 0 0 0 0
+  in andThen (checkTerm sp [] body) (\rest => Ok (natToInt (length rest)))
+
+isTypeLevelDef : Ec -> DtDef -> Bool
+isTypeLevelDef ec d =
+  isTypeForming (force (ecDefTbl ec) (ecSolsP ec) defaultFuel (eval [] (dtDefType d)))
+
+-- 程序级入口：只检查有体的运行时定义（类型级定义跳过）。
+checkProgramUsage : Ec -> List DtDef -> Result Int
+checkProgramUsage ec defs = checkProgramUsageGo ec defs 0
+
+checkProgramUsageGo : Ec -> List DtDef -> Int -> Result Int
+checkProgramUsageGo ec [] n = Ok n
+checkProgramUsageGo ec (d :: rest) n = if isTypeLevelDef ec d then checkProgramUsageGo ec rest n
+else case dtDefBody d of
+  Nothing => checkProgramUsageGo ec rest n
+  Just body =>
+    andThen (checkDefUsage (dtDefSpan d) (dtDefName d) body)
+      (\_ => checkProgramUsageGo ec rest (n + 1))

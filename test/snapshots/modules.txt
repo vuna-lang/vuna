@@ -84,6 +84,7 @@ Vuna.Compiler.Elab.Termination.Scc  compiler/lib/Vuna/Compiler/Elab/Termination/
 Vuna.Compiler.Elab.Termination  compiler/lib/Vuna/Compiler/Elab/Termination.vuna
 Vuna.Compiler.Elab.Trait  compiler/lib/Vuna/Compiler/Elab/Trait.vuna
 Vuna.Compiler.Elab.Types  compiler/lib/Vuna/Compiler/Elab/Types.vuna
+Vuna.Compiler.Elab.Usage  compiler/lib/Vuna/Compiler/Elab/Usage.vuna
 Vuna.Compiler.Elab  compiler/lib/Vuna/Compiler/Elab.vuna
 Vuna.Compiler.Frontend.Ast  compiler/lib/Vuna/Compiler/Frontend/Ast.vuna
 Vuna.Compiler.Frontend.Diagnostics  compiler/lib/Vuna/Compiler/Frontend/Diagnostics.vuna
@@ -182,6 +183,7 @@ Vuna.Compiler.Elab.Termination.Scc  ./lib/Vuna/Compiler/Elab/Termination/Scc.vun
 Vuna.Compiler.Elab.Termination  ./lib/Vuna/Compiler/Elab/Termination.vuna
 Vuna.Compiler.Elab.Trait  ./lib/Vuna/Compiler/Elab/Trait.vuna
 Vuna.Compiler.Elab.Types  ./lib/Vuna/Compiler/Elab/Types.vuna
+Vuna.Compiler.Elab.Usage  ./lib/Vuna/Compiler/Elab/Usage.vuna
 Vuna.Compiler.Elab  ./lib/Vuna/Compiler/Elab.vuna
 Vuna.Compiler.Frontend.Ast  ./lib/Vuna/Compiler/Frontend/Ast.vuna
 Vuna.Compiler.Frontend.Diagnostics  ./lib/Vuna/Compiler/Frontend/Diagnostics.vuna

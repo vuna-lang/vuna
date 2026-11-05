@@ -1,0 +1,6 @@
+-- M38：声明 1 但运行时未使用。
+f : (1 x : Int) -> Int
+f x = 0
+
+main : Int
+main = f 1
