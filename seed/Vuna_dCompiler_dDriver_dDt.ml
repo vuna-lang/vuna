@@ -195,10 +195,34 @@ let v_Vuna_dCompiler_dDriver_dDt_ddepStartOf = (fun progs -> ((fun datas -> ((fu
 
 let v_Vuna_dCompiler_dDriver_dDt_ddtCheckPackageWithDeps = (fun ctx entry deps -> ((v_Base_dResult_dandThen ((v_Vuna_dCompiler_dDriver_dDt_ddtLoadParts ctx) entry)) (fun parts -> ((fun pkgName -> ((fun ours -> ((fun decls -> ((fun start -> ((v_Base_dResult_dandThen (((v_Vuna_dCompiler_dElab_dDriver_delabProgramGoWith (v_Base_dPair_dfirstOf start)) (v_Base_dPair_dsecondOf start)) decls)) (fun prog -> ((v_Base_dResult_dandThen (v_Vuna_dCompiler_dCodegen_dAssembly_dcheckDtProgram (C_Base_dPair_dPair_Base_dPair_dPair ((v_Vuna_dCompiler_dElab_dTypes_ddtProgDatas prog), (v_Vuna_dCompiler_dElab_dTypes_ddtProgDefs prog))))) (fun _u -> (C_Base_dResult_dResult_Base_dResult_dOk ((C_Base_dPair_dPair_Base_dPair_dPair (C_Base_dList_dList_Base_dList_dNil, prog))))))))) (v_Vuna_dCompiler_dDriver_dDt_ddepStartOf deps))) ((v_Base_dList_dappend ((v_Base_dList_dconcatMap v_Vuna_dCompiler_dLoader_dModules_dmoduleDeclsOf) ours)) (v_Base_dPair_dfirstOf parts)))) ((v_Base_dList_dfilter (fun m -> ((v_Vuna_dCompiler_dLoader_dModules_dmodulePackageOf m) = pkgName))) (v_Base_dList_dreverse (v_Base_dPair_dsecondOf parts))))) (v_Vuna_dCompiler_dPackages_dPkg_dcontextPackageName ctx)))))
 
-let v_Vuna_dCompiler_dDriver_dDt_ddefMetaIds = (fun d -> ((fun tyIds -> ((fun bodyIds -> ((v_Base_dList_dappend tyIds) bodyIds)) (match (v_Vuna_dCompiler_dElab_dTypes_ddtDefBody d) with
-  | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__33) -> (v_Vuna_dCompiler_dElab_dMeta_dtermMetasAll dtb__33)
-  | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> C_Base_dList_dList_Base_dList_dNil
+let rec v_Vuna_dCompiler_dDriver_dDt_ddefsHaveMetas = (fun mc0 -> (match mc0 with
+  | C_Base_dList_dList_Base_dList_dCons (dtb__33, dtb__34) -> (if ((v_Base_dList_dlength (v_Vuna_dCompiler_dElab_dMeta_dtermMetasAll (v_Vuna_dCompiler_dElab_dTypes_ddtDefType dtb__33))) > 0) then true else (v_Vuna_dCompiler_dDriver_dDt_ddefsHaveMetas dtb__34))
+  | C_Base_dList_dList_Base_dList_dNil -> false
   | _ -> failwith "DT: impossible branch"
-))) (v_Vuna_dCompiler_dElab_dMeta_dtermMetasAll (v_Vuna_dCompiler_dElab_dTypes_ddtDefType d))))
+))
 
-let v_Vuna_dCompiler_dDriver_dDt_ddtProgramHasMetas = (fun prog -> (if ((v_Base_dList_dlength ((v_Base_dList_dconcatMap v_Vuna_dCompiler_dDriver_dDt_ddefMetaIds) (v_Vuna_dCompiler_dElab_dTypes_ddtProgDefs prog))) > 0) then true else ((v_Base_dList_dlength ((v_Base_dList_dconcatMap (fun g -> (v_Vuna_dCompiler_dElab_dMeta_dtermMetasAll (v_Base_dPair_dsecondOf g)))) (v_Vuna_dCompiler_dElab_dTypes_ddtProgGlobals prog))) > 0)))
+let rec v_Vuna_dCompiler_dDriver_dDt_dglobalsHaveMetas = (fun mc0 -> (match mc0 with
+  | C_Base_dList_dList_Base_dList_dCons (dtb__35, dtb__36) -> (if ((v_Base_dList_dlength (v_Vuna_dCompiler_dElab_dMeta_dtermMetasAll (v_Base_dPair_dsecondOf dtb__35))) > 0) then true else (v_Vuna_dCompiler_dDriver_dDt_dglobalsHaveMetas dtb__36))
+  | C_Base_dList_dList_Base_dList_dNil -> false
+  | _ -> failwith "DT: impossible branch"
+))
+
+let rec v_Vuna_dCompiler_dDriver_dDt_ddatasHaveMetas = (fun mc0 -> (match mc0 with
+  | C_Base_dList_dList_Base_dList_dCons (dtb__37, dtb__38) -> (if ((v_Base_dList_dlength ((v_Base_dList_dconcatMap (fun c -> (v_Vuna_dCompiler_dElab_dMeta_dtermMetasAll (v_Vuna_dCompiler_dElab_dTypes_ddtCtorType c)))) (v_Vuna_dCompiler_dElab_dTypes_ddtDataCtors dtb__37))) > 0) then true else (v_Vuna_dCompiler_dDriver_dDt_ddatasHaveMetas dtb__38))
+  | C_Base_dList_dList_Base_dList_dNil -> false
+  | _ -> failwith "DT: impossible branch"
+))
+
+let rec v_Vuna_dCompiler_dDriver_dDt_dinstsHaveMetas = (fun mc0 -> (match mc0 with
+  | C_Base_dList_dList_Base_dList_dCons (dtb__39, dtb__40) -> (if ((v_Base_dList_dlength ((v_Base_dList_dconcatMap v_Vuna_dCompiler_dElab_dMeta_dtermMetasAll) (v_Vuna_dCompiler_dElab_dTypes_ddtInstCtx dtb__39))) > 0) then true else (v_Vuna_dCompiler_dDriver_dDt_dinstsHaveMetas dtb__40))
+  | C_Base_dList_dList_Base_dList_dNil -> false
+  | _ -> failwith "DT: impossible branch"
+))
+
+let rec v_Vuna_dCompiler_dDriver_dDt_dclassesHaveMetas = (fun mc0 -> (match mc0 with
+  | C_Base_dList_dList_Base_dList_dCons (dtb__41, dtb__42) -> (if ((v_Base_dList_dlength ((v_Base_dList_dconcatMap v_Vuna_dCompiler_dElab_dMeta_dtermMetasAll) (v_Vuna_dCompiler_dElab_dTypes_ddtClassFieldTys dtb__41))) > 0) then true else (v_Vuna_dCompiler_dDriver_dDt_dclassesHaveMetas dtb__42))
+  | C_Base_dList_dList_Base_dList_dNil -> false
+  | _ -> failwith "DT: impossible branch"
+))
+
+let v_Vuna_dCompiler_dDriver_dDt_ddtProgramHasMetas = (fun prog -> (if (if (if (if (v_Vuna_dCompiler_dDriver_dDt_ddefsHaveMetas (v_Vuna_dCompiler_dElab_dTypes_ddtProgDefs prog)) then true else (v_Vuna_dCompiler_dDriver_dDt_dglobalsHaveMetas (v_Vuna_dCompiler_dElab_dTypes_ddtProgGlobals prog))) then true else (v_Vuna_dCompiler_dDriver_dDt_ddatasHaveMetas (v_Vuna_dCompiler_dElab_dTypes_ddtProgDatas prog))) then true else (v_Vuna_dCompiler_dDriver_dDt_dinstsHaveMetas (v_Vuna_dCompiler_dElab_dTypes_ddtProgInsts prog))) then true else (v_Vuna_dCompiler_dDriver_dDt_dclassesHaveMetas (v_Vuna_dCompiler_dElab_dTypes_ddtProgClasses prog))))

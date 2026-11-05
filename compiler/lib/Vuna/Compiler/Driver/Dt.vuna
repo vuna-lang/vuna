@@ -293,17 +293,39 @@ maxNext [] = 0
 maxNext (p :: rest) = if dtProgNext p > maxNext rest then dtProgNext p else maxNext rest
 
 -- M34.5 安全阀：摘要是否残留未替换的 TMeta。接口摘要路径只接受完全解出的摘要
--- （否则编号空间可能跨包冲突，静默漏检）。
+-- M34.5 安全阀：摘要的**签名面**是否残留未替换的 TMeta。接口摘要路径只接受签名完全
+-- 解出的摘要（否则编号空间可能跨包冲突，静默漏检）。body 的 TMeta 不参与：根包只看
+-- 依赖签名（codegen 只生成本包 body），解含自由变量的 body 元变量不影响类型检查。
 dtProgramHasMetas : DtProgram -> Bool
 dtProgramHasMetas prog =
-  length (concatMap defMetaIds (dtProgDefs prog)) > 0
-    || length (concatMap (\g => termMetasAll (secondOf g)) (dtProgGlobals prog)) > 0
+  defsHaveMetas (dtProgDefs prog)
+    || globalsHaveMetas (dtProgGlobals prog)
+    || datasHaveMetas (dtProgDatas prog)
+    || instsHaveMetas (dtProgInsts prog)
+    || classesHaveMetas (dtProgClasses prog)
 
-defMetaIds : DtDef -> List Int
-defMetaIds d =
-  let
-    tyIds = termMetasAll (dtDefType d)
-    bodyIds = case dtDefBody d of
-      Just b => termMetasAll b
-      Nothing => []
-  in append tyIds bodyIds
+defsHaveMetas : List DtDef -> Bool
+defsHaveMetas [] = False
+defsHaveMetas (d :: rest) =
+  if length (termMetasAll (dtDefType d)) > 0 then True else defsHaveMetas rest
+
+globalsHaveMetas : List (Pair String Term) -> Bool
+globalsHaveMetas [] = False
+globalsHaveMetas (g :: rest) =
+  if length (termMetasAll (secondOf g)) > 0 then True else globalsHaveMetas rest
+
+datasHaveMetas : List DtData -> Bool
+datasHaveMetas [] = False
+datasHaveMetas (d :: rest) =
+  if length (concatMap (\c => termMetasAll (dtCtorType c)) (dtDataCtors d)) > 0 then True
+  else datasHaveMetas rest
+
+instsHaveMetas : List DtInst -> Bool
+instsHaveMetas [] = False
+instsHaveMetas (i :: rest) =
+  if length (concatMap termMetasAll (dtInstCtx i)) > 0 then True else instsHaveMetas rest
+
+classesHaveMetas : List DtClass -> Bool
+classesHaveMetas [] = False
+classesHaveMetas (c :: rest) =
+  if length (concatMap termMetasAll (dtClassFieldTys c)) > 0 then True else classesHaveMetas rest
