@@ -145,14 +145,18 @@ textHash : String -> Int
 textHash s = strHash s * 1000003 + strHash ("m30:" ++ s) + strLength s
 
 -- M34.5：编译器二进制指纹（缓存 key 必须含它：check/codegen 语义随编译器变化）。
+-- M38：用**可执行文件自身**的路径 + 大小 + mtime，而不是 `prim_getArgs` 的第一个用户参数。
+-- 旧实现把子命令名（如 `test`）当路径：只要 cwd 里恰好有同名文件/目录（包根的 `test/`
+-- 就是最常见的情况），`prim_readFile` 会去读目录并抛 `Failure("readFile: ...")`——
+-- `vuna test` 在包根直接崩溃即此。store 路径 + size + mtime 足以区分重新构建的编译器。
 compilerFingerprint : Int
 compilerFingerprint =
   let
-    argv = runIO prim_getArgs
-  in case argv of
-    [] => textHash vunaVersion
-    a :: rest =>
-      if runIO (prim_fileExists a) then textHash (runIO (prim_readFile a)) else textHash vunaVersion
+    exe = runIO prim_execPath
+    size = runIO (prim_fileSize exe)
+    mtime = runIO (prim_fileMtime exe)
+  in if size > 0 then textHash (exe ++ ":" ++ strFromInt size ++ ":" ++ strFromInt mtime)
+  else textHash vunaVersion
 
 -- M34.5：缓存根（TMPDIR 可写；Nix 构建的源树只读，缓存放临时目录 ⇒ 构建内不命中，
 -- 无害；本地开发同机 TMPDIR 持久 ⇒ 命中）。按包路径哈希隔离项目。
