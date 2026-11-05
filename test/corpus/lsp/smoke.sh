@@ -151,7 +151,7 @@ cat >"$pkg/lib/Dep.vuna" <<'VUNA'
 module Dep where
 
 depHelper : Int -> Int
-depHelper n = n + 1
+depHelper n = n
 
 data Box a : Type where
   Box : a -> Box a
@@ -219,7 +219,7 @@ cat >"$tmp/in.jsonl" <<JSONL
 {"jsonrpc":"2.0","method":"textDocument/didChange","params":{"textDocument":{"uri":"$main_uri","version":2},"contentChanges":[{"text":"$main_good"}]}}
 {"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"$linty_uri","languageId":"vuna","version":1,"text":"module Linty where\n\nnameArity : String -> Int\nnameArity name =\n  if name == \"+\" then 2\n  else if name == \"-\" then 2\n  else 0\n"}}}
 {"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"$fmt_uri","languageId":"vuna","version":1,"text":"x:Int\nx = 1\n"}}}
-{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"$dep_uri","languageId":"vuna","version":1,"text":"module Dep where\n\ndepHelper : Int -> Int\ndepHelper n = n + 1\n\ndata Box a : Type where\n  Box : a -> Box a\n\nrecord Point where\n  px : Int\n  py : Int\n\ntrait Shape a where\n  area : a -> Int\n"}}}
+{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"$dep_uri","languageId":"vuna","version":1,"text":"module Dep where\n\ndepHelper : Int -> Int\ndepHelper n = n\n\ndata Box a : Type where\n  Box : a -> Box a\n\nrecord Point where\n  px : Int\n  py : Int\n\ntrait Shape a where\n  area : a -> Int\n"}}}
 {"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"$spaced_uri","languageId":"vuna","version":1,"text":"module Spaced where\n\nvalue : Int\nvalue = 1\n"}}}
 {"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"$hole_uri","languageId":"vuna","version":1,"text":"id : (a : Type) -> a -> a\nid a x = x\n\nmain : Int\nmain = id _ 7\n"}}}
 {"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"$main2_uri","languageId":"vuna","version":1,"text":"module Main2 where\n\nimport Dep\n\nother : Int\nother = depHe\n"}}}
@@ -465,7 +465,7 @@ check_eq "交互式会话退出码 0" "0" "$?"
 # range 必须是光标 token（line 6, char 8..17），不能是定义位置。
 {
   printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"capabilities":{}}}'
-  printf '%s\n' '{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"'"$dep_uri"'","languageId":"vuna","version":1,"text":"module Dep where\n\ndepHelper : Int -> Int\ndepHelper n = n + 1\n\nuseIt : Int\nuseIt = depHelper 1\n"}}}'
+  printf '%s\n' '{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"'"$dep_uri"'","languageId":"vuna","version":1,"text":"module Dep where\n\ndepHelper : Int -> Int\ndepHelper n = n\n\nuseIt : Int\nuseIt = depHelper 1\n"}}}'
   printf '%s\n' '{"jsonrpc":"2.0","id":2,"method":"textDocument/hover","params":{"textDocument":{"uri":"'"$dep_uri"'"},"position":{"line":6,"character":10}}}'
   printf '%s\n' '{"jsonrpc":"2.0","id":3,"method":"shutdown","params":null}'
   printf '%s\n' '{"jsonrpc":"2.0","method":"exit","params":null}'
@@ -477,6 +477,39 @@ check_contains "符号 hover 带签名" "$symhover_out" 'Int -> Int'
 check_contains "hover range 落在光标 token（line 6, char 8..17）" "$symhover_out" \
   '"range":{"start":{"line":6,"character":8},"end":{"line":6,"character":17}}'
 
+
+# ---- 20) docstring hover：只显示 `-- |`，普通注释不显示，多行保留 ----
+mkdir -p "$tmp/docws/lib"
+printf '[package]\nname = "docws"\n' >"$tmp/docws/vuna.toml"
+cat >"$tmp/docws/lib/Doc.vuna" <<'VEOF'
+module Doc where
+
+-- | Helper docs.
+-- | second line.
+depHelper : Int -> Int
+depHelper n = n
+
+-- ordinary note
+other : Int
+other = 2
+
+useIt : Int
+useIt = depHelper 1
+VEOF
+doc_uri="file://$tmp/docws/lib/Doc.vuna"
+doc_open='{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"'"$doc_uri"'","languageId":"vuna","version":1,"text":"module Doc where\n\n-- | Helper docs.\n-- | second line.\ndepHelper : Int -> Int\ndepHelper n = n\n\n-- ordinary note\nother : Int\nother = 2\n\nuseIt : Int\nuseIt = depHelper 1\n"}}}'
+{
+  frame_line '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"capabilities":{}}}'
+  frame_line "$doc_open"
+  frame_line '{"jsonrpc":"2.0","id":2,"method":"textDocument/hover","params":{"textDocument":{"uri":"'"$doc_uri"'"},"position":{"line":12,"character":10}}}'
+  frame_line '{"jsonrpc":"2.0","id":3,"method":"shutdown","params":null}'
+  frame_line '{"jsonrpc":"2.0","method":"exit","params":null}'
+} | "$VUNA" lsp >"$tmp/dochover.out" 2>/dev/null
+dochover_out=$(tr -d '\r' <"$tmp/dochover.out")
+check_contains "doc hover 回 id 2" "$dochover_out" '"id":2'
+check_contains "doc hover 显示 docstring" "$dochover_out" "Helper docs"
+check_contains "doc hover 保留多行" "$dochover_out" "second line"
+check_not_contains "doc hover 不含普通注释" "$dochover_out" "ordinary note"
 printf 'lsp: %d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ] && echo "lsp smoke passed"
 [ "$fail" -eq 0 ]

@@ -1,0 +1,63 @@
+module Vuna.Doc.Types
+  ( DocBlock(..)
+  , DocTable(..)
+  , docBlockCol
+  , docBlockEndLine
+  , docBlockStartLine
+  , docBlockText
+  , docForDecl
+  , docForMember
+  , docTableDecls
+  , docTableMembers
+  , docTableModuleDoc
+  ) where
+
+-- Vuna.Doc.Types：docstring 提取的数据模型（工具链叶子；永不进 seed 闭包）。
+--
+-- `DocBlock` 是源码里一个**已识别**的 docstring 块（`-- |` 行块或 `{- | -}` 块），
+-- `DocTable` 是按模块整理好的查询表：模块文档、顶层名 -> doc、`parent\tmember` -> doc。
+-- 普通注释不会出现在这里（只有 Doc.Comments 识别出的 doc block 才会进入）。
+import Vuna.Compiler.Common
+
+record DocBlock where
+  docBlockText : String
+  docBlockStartLine : Int
+  docBlockEndLine : Int
+  docBlockCol : Int
+
+docBlockText : DocBlock -> String
+docBlockText (DocBlock text start end col) = text
+
+docBlockStartLine : DocBlock -> Int
+docBlockStartLine (DocBlock text start end col) = start
+
+docBlockEndLine : DocBlock -> Int
+docBlockEndLine (DocBlock text start end col) = end
+
+docBlockCol : DocBlock -> Int
+docBlockCol (DocBlock text start end col) = col
+
+record DocTable where
+  docTableModuleDoc : String
+  docTableDecls : List (Pair String String)
+  docTableMembers : List (Pair String String)
+
+docTableModuleDoc : DocTable -> String
+docTableModuleDoc (DocTable mdoc decls members0) = mdoc
+
+docTableDecls : DocTable -> List (Pair String String)
+docTableDecls (DocTable mdoc decls members0) = decls
+
+docTableMembers : DocTable -> List (Pair String String)
+docTableMembers (DocTable mdoc decls members0) = members0
+
+-- 查询：顶层名 / `parent\tmember`。没有 doc 时返回空串（调用方据此渲染「无文档」）。
+docForDecl : DocTable -> String -> String
+docForDecl table name = lookupPair name (docTableDecls table)
+
+docForMember : DocTable -> String -> String -> String
+docForMember table parent name = lookupPair (parent ++ "\t" ++ name) (docTableMembers table)
+
+lookupPair : String -> List (Pair String String) -> String
+lookupPair key [] = ""
+lookupPair key ((Pair k v) :: rest) = if k == key then v else lookupPair key rest

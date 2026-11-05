@@ -1,0 +1,123 @@
+module Vuna.Doc.Prose (htmlEscape, renderProse) where
+
+-- Vuna.Doc.Prose：docstring 的受限 Markdown -> HTML（生成期完成；客户端不解析 Markdown）。
+--
+-- 支持：段落（空行分隔）、行内代码（反引号）、fenced code（```）、
+-- `[text](url)` 链接、`[Module.name]` 交叉引用。其余文本 HTML 转义后原样输出；
+-- 链接只允许 http/https/#/相对路径，避免 `javascript:` 进入生成物。
+import Vuna.Compiler.Common
+
+-- ---------------------------------------------------------------
+-- 转义
+-- ---------------------------------------------------------------
+htmlEscape : String -> String
+htmlEscape s = htmlEscapeChars (strUnpack s) ""
+
+htmlEscapeChars : List Int -> String -> String
+htmlEscapeChars [] acc = acc
+htmlEscapeChars (c :: rest) acc = htmlEscapeChars rest (acc ++ htmlEscapeChar c)
+
+htmlEscapeChar : Int -> String
+htmlEscapeChar 38 = "&amp;"
+htmlEscapeChar 60 = "&lt;"
+htmlEscapeChar 62 = "&gt;"
+htmlEscapeChar 34 = "&quot;"
+htmlEscapeChar 39 = "&#39;"
+htmlEscapeChar c = strPack [c]
+
+-- ---------------------------------------------------------------
+-- 入口
+-- ---------------------------------------------------------------
+renderProse : List (Pair String String) -> String -> String
+renderProse links text =
+  join "\n" (filterNonEmpty (renderFenceParts links (split "```" text) False))
+
+renderFenceParts : List (Pair String String) -> List String -> Bool -> List String
+renderFenceParts links [] isCode = []
+renderFenceParts links (part :: rest) isCode = if isCode then
+  let
+    code = stripLanguageTag part
+    html = "<pre><code>" ++ htmlEscape code ++ "</code></pre>"
+  in html :: renderFenceParts links rest False
+else append (renderParagraphs links part) (renderFenceParts links rest True)
+
+stripLanguageTag : String -> String
+stripLanguageTag part = case lines part of
+  first :: rest =>
+    if trim first == "" then trimRight (join "\n" rest)
+    else if isLanguageTag first then trimRight (join "\n" rest) else trimRight part
+  [] => ""
+
+isLanguageTag : String -> Bool
+isLanguageTag s = not (contains " " s) && strLength s <= 16
+
+renderParagraphs : List (Pair String String) -> String -> List String
+renderParagraphs links text =
+  map (\para => "<p>" ++ join "<br>" (map (renderInline links) para) ++ "</p>")
+    (paragraphs (lines text))
+
+paragraphs : List String -> List (List String)
+paragraphs [] = []
+paragraphs lines0 = paragraphsGo lines0 [] []
+
+paragraphsGo : List String -> List String -> List (List String) -> List (List String)
+paragraphsGo [] current acc =
+  if length current == 0 then reverse acc else reverse (reverse current :: acc)
+paragraphsGo (l :: rest) current acc =
+  if trim l == "" then if length current == 0 then paragraphsGo rest [] acc
+  else paragraphsGo rest [] (reverse current :: acc)
+  else paragraphsGo rest (l :: current) acc
+
+filterNonEmpty : List String -> List String
+filterNonEmpty [] = []
+filterNonEmpty (s :: rest) = if s == "" then filterNonEmpty rest else s :: filterNonEmpty rest
+
+-- ---------------------------------------------------------------
+-- 行内（fuel 递减，保证终止性可证）
+-- ---------------------------------------------------------------
+renderInline : List (Pair String String) -> String -> String
+renderInline links s = renderInlineGo (strLength s + 1) links (strUnpack s) ""
+
+renderInlineGo : Int -> List (Pair String String) -> List Int -> String -> String
+renderInlineGo fuel links [] acc = acc
+renderInlineGo fuel links (c :: rest) acc = if fuel <= 0 then acc
+else if c == 96 then case takeUntil 96 rest [] of
+  Nothing => renderInlineGo (fuel - 1) links rest (acc ++ "&#96;")
+  Just (Pair code rest2) =>
+    renderInlineGo (fuel - 1) links rest2
+      (acc ++ "<code>" ++ htmlEscape (strPack code) ++ "</code>")
+else if c == 91 then case takeUntil 93 rest [] of
+  Nothing => renderInlineGo (fuel - 1) links rest (acc ++ "&#91;")
+  Just (Pair label rest2) => case rest2 of
+    40 :: rest3 => case takeUntil 41 rest3 [] of
+      Nothing => renderInlineGo (fuel - 1) links rest (acc ++ "&#91;")
+      Just (Pair url rest4) =>
+        let
+          labelText = strPack label
+          urlText = strPack url
+        in if safeUrl urlText then renderInlineGo (fuel - 1) links rest4
+          (acc ++ "<a href=\"" ++ htmlEscape urlText ++ "\">" ++ htmlEscape labelText ++ "</a>")
+        else renderInlineGo (fuel - 1) links rest (acc ++ "&#91;")
+    _ => case lookupLink links (strPack label) of
+      Nothing => renderInlineGo (fuel - 1) links rest (acc ++ "&#91;")
+      Just anchor =>
+        renderInlineGo (fuel - 1) links rest2
+          (acc ++ "<a href=\"#" ++ htmlEscape anchor ++ "\">" ++ htmlEscape (strPack label) ++ "</a>")
+else renderInlineGo (fuel - 1) links rest (acc ++ htmlEscapeChar c)
+
+takeUntil : Int -> List Int -> List Int -> Maybe (Pair (List Int) (List Int))
+takeUntil sep [] acc = Nothing
+takeUntil sep (c :: rest) acc =
+  if c == sep then Just (Pair (reverse acc) rest) else takeUntil sep rest (c :: acc)
+
+lookupLink : List (Pair String String) -> String -> Maybe String
+lookupLink [] name = Nothing
+lookupLink ((Pair key anchor) :: rest) name =
+  if key == name then Just anchor else lookupLink rest name
+
+safeUrl : String -> Bool
+safeUrl url =
+  startsWith "http://" url
+    || startsWith "https://" url
+    || startsWith "#" url
+    || not (contains ":" url)

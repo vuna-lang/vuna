@@ -1,0 +1,32 @@
+-- | Module docs line one.
+-- | Module docs line two.
+module Demo.Docs where
+
+-- | Id function.
+id : a -> a
+id x = x
+
+-- 普通注释，不是 docstring。
+{- | A box with members.
+    Second line of block doc. -}
+data Box a : Type where
+  -- | Empty box.
+  Empty : Box a
+  -- | Full box.
+  Full : a -> Box a
+
+-- | A point.
+record Point where
+  -- | X coordinate.
+  px : Int
+  -- | Y coordinate.
+  py : Int
+
+-- | A shape.
+trait Shape a where
+  -- | Area.
+  area : a -> Int
+
+-- | Private helper (skipped by doc).
+_hidden : Int
+_hidden = 0

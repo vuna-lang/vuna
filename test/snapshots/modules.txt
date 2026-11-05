@@ -3,6 +3,12 @@
 ## root（工具链 + 产品 CLI）
 Vuna.Cli.Args  ./lib/Vuna/Cli/Args.vuna
 Vuna.Cli  ./lib/Vuna/Cli.vuna
+Vuna.Doc.Comments  ./lib/Vuna/Doc/Comments.vuna
+Vuna.Doc.Html  ./lib/Vuna/Doc/Html.vuna
+Vuna.Doc.Model  ./lib/Vuna/Doc/Model.vuna
+Vuna.Doc.Prose  ./lib/Vuna/Doc/Prose.vuna
+Vuna.Doc.Run  ./lib/Vuna/Doc/Run.vuna
+Vuna.Doc.Types  ./lib/Vuna/Doc/Types.vuna
 Vuna.Doc  ./lib/Vuna/Doc.vuna
 Vuna.Files  ./lib/Vuna/Files.vuna
 Vuna.FixityEnv  ./lib/Vuna/FixityEnv.vuna
@@ -28,6 +34,11 @@ Vuna.Lsp.Protocol  ./lib/Vuna/Lsp/Protocol.vuna
 Vuna.Lsp.Query  ./lib/Vuna/Lsp/Query.vuna
 Vuna.Lsp  ./lib/Vuna/Lsp.vuna
 Vuna.Repl  ./lib/Vuna/Repl.vuna
+Vuna.Search.Query  ./lib/Vuna/Search/Query.vuna
+Vuna.Search.Run  ./lib/Vuna/Search/Run.vuna
+Vuna.Search.Types  ./lib/Vuna/Search/Types.vuna
+Vuna.Search  ./lib/Vuna/Search.vuna
+Vuna.Sig  ./lib/Vuna/Sig.vuna
 Vuna.TestRunner  ./lib/Vuna/TestRunner.vuna
 app.Main  ./app/Main.vuna
 Vuna.Compiler.Codegen.Assembly  compiler/lib/Vuna/Compiler/Codegen/Assembly.vuna

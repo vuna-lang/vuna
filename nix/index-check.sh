@@ -50,13 +50,13 @@ else
 fi
 
 # 2) 缓存：第二次调用应命中（不重建）。用 manifest 的 mtime 不变来验证。
-#    M30：缓存格式 v2 首行必须是 `vuna-index 2`。
+#    M30：缓存格式 v3 首行必须是 `vuna-index 3`。
 if [ -f .local/index/manifest.txt ]; then
   first=$(sed -n '1p' .local/index/manifest.txt)
-  if [ "$first" = "vuna-index 2" ]; then
-    note "ok: index cache v2 header"
+  if [ "$first" = "vuna-index 3" ]; then
+    note "ok: index cache v3 header"
   else
-    bad "index cache header is not vuna-index 2: $first"
+    bad "index cache header is not vuna-index 3: $first"
   fi
 else
   bad "index cache manifest.txt not written"

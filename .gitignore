@@ -51,7 +51,7 @@ _scratch/
 .vscode/
 
 # vuna 生成物（package / 工具链输出）
-docs/api.md
+docs/api.html
 # 由 `vuna gen-errors` 生成的错误码文档（生成物，勿提交）
 docs/.generated/
 examples/**/Main.ml

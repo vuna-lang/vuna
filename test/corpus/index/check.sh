@@ -1,10 +1,10 @@
 #!/bin/sh
-# test/corpus/index/check.sh：Vuna.Index 缓存 v2 自检（M30 · C11/D13）。
+# test/corpus/index/check.sh：Vuna.Index 缓存 v3 自检（M30 · C11/D13）。
 #
 # 用法: sh corpus/index/check.sh <vuna>
 #
 # 在一个临时 workspace 里验证（不依赖仓库自身缓存，避免并行测试互相干扰）：
-#   1) manifest v2 首行 `vuna-index 2`，条目 path<TAB>bytes<TAB>hash（3 字段）；
+#   1) manifest v3 首行 `vuna-index 3`，条目 path<TAB>bytes<TAB>hash（3 字段）；
 #   2) refs.txt 记录引用位置（module<TAB>name<TAB>line<TAB>col，4 字段）；
 #   3) 第二次 map 命中缓存：manifest 内容与 mtime 都不变，无 cache.lock 残留；
 #   4) 同 size + 同 mtime 的内容变更必须使缓存失效（内容哈希，而非 mtime+size）；
@@ -48,9 +48,14 @@ EOF
 cat >"$ws/lib/Demo/A.vuna" <<'EOF'
 module Demo.A (one) where
 
--- doc for one
+-- | doc for one
 one : Int
 one = 1
+
+-- | first doc line
+-- | second doc line
+two : Int
+two = 2
 EOF
 cat >"$ws/lib/Demo/B.vuna" <<'EOF'
 module Demo.B (two) where
@@ -67,18 +72,23 @@ EOF
 manifest="$ws/.local/index/manifest.txt"
 refscache="$ws/.local/index/refs.txt"
 
-# 1) 首次构建：v2 格式 + 无锁残留。
+# 1) 首次构建：v3 格式 + 无锁残留。
 ( cd "$ws" && "$VUNA" map >/dev/null 2>&1 )
 check_eq "index first map exit" "0" "$?"
-check_eq "index manifest v2 header" "vuna-index 2" "$(head -1 "$manifest" 2>/dev/null)"
+check_eq "index manifest v3 header" "vuna-index 3" "$(head -1 "$manifest" 2>/dev/null)"
 check_eq "index manifest 3 fields" "3" "$(grep 'Demo/A.vuna' "$manifest" 2>/dev/null | awk -F'\t' '{print NF}')"
 case "$(grep 'Demo/A.vuna' "$manifest" 2>/dev/null | awk -F'\t' '{print $3}')" in
   [0-9]*-[0-9]*) ok ;;
-  *) bad "index manifest hash is not the v2 combined hash" ;;
+  *) bad "index manifest hash is not the v3 combined hash" ;;
 esac
 if [ -e "$ws/.local/index/cache.lock" ]; then bad "index lock leaked after first map"; else ok; fi
 check_eq "index refs 4 fields" "4" "$(grep -m1 '^Demo.B	' "$refscache" 2>/dev/null | awk -F'\t' '{print NF}')"
 check_contains "index refs record position" "$(cat "$refscache" 2>/dev/null)" "Demo.B	one	9	"
+symbols="$ws/.local/index/symbols.txt"
+check_eq "index symbols 8 fields" "8" "$(awk -F'\t' '$1=="Demo.A" && $2=="one" {print NF; exit}' "$symbols" 2>/dev/null)"
+check_contains "index docstring survives cache" "$(cat "$symbols" 2>/dev/null)" "first doc line"
+api_out=$(cd "$ws" && "$VUNA" api Demo.A 2>&1)
+check_contains "api multi-line doc from cache" "$api_out" "second doc line"
 
 # 2) 第二次 map 命中缓存：manifest 内容/mtime 不变。
 before=$(cat "$manifest")

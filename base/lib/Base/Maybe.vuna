@@ -1,3 +1,4 @@
+-- | 可选值类型：`Nothing` 表示无值，`Just x` 表示有值。
 module Base.Maybe (Maybe(..), fromMaybe, isJust, isNothing, mapJust, maybe) where
 
 -- Base.Maybe：可选值类型与消除/映射函数（不依赖 List）。
@@ -6,26 +7,34 @@ module Base.Maybe (Maybe(..), fromMaybe, isJust, isNothing, mapJust, maybe) wher
 import Base.Bool
 import Base.Monad
 
+-- | 可选值。
 data Maybe a : Type where
+  -- | 无值。
   Nothing : Maybe a
+  -- | 有值。
   Just : a -> Maybe a
 
+-- | 有值则返回该值，否则返回默认值。
 fromMaybe : a -> Maybe a -> a
 fromMaybe d Nothing = d
 fromMaybe d (Just x) = x
 
+-- | 是否 `Just`。
 isJust : Maybe a -> Bool
 isJust Nothing = False
 isJust (Just _) = True
 
+-- | 是否 `Nothing`。
 isNothing : Maybe a -> Bool
 isNothing Nothing = True
 isNothing (Just _) = False
 
+-- | 折叠 `Maybe`：默认值与 `Just` 分支函数。
 maybe : b -> (a -> b) -> Maybe a -> b
 maybe d f Nothing = d
 maybe d f (Just x) = f x
 
+-- | 映射 `Just` 内的值；`Nothing` 保持 `Nothing`。
 mapJust : (a -> b) -> Maybe a -> Maybe b
 mapJust f Nothing = Nothing
 mapJust f (Just x) = Just (f x)

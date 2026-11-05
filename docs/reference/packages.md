@@ -52,8 +52,9 @@
   - `vuna repl`：REPL，定义累积、表达式经 DT 求值（支持 import/记录/trait/do；顶层定义必须
     先写签名；与 CLI 同一包上下文）；未闭合括号 / 尾随 `=` / `where` / `do` 等自动续行；
     `IO` 表达式经临时包 compile + 运行执行（每次约 1–2s，需要 `ocamlopt`）；
-  - `vuna doc [DIR] [OUT]`：扫描 `lib/` 生成 Markdown API 文档（默认 `DIR/docs/api.md`，
-    仓库的 `docs/api.md` 是生成物、gitignored）；目录是含 `[export]` 的包时只输出导出模块；
+  - `vuna doc [--check] [--package NAME] [DIR [OUT]]`：扫描 `lib/` 生成**单文件交互 HTML**
+    API 文档（默认 `DIR/docs/api.html`，gitignored；workspace 根含所有成员包）；`--check`
+    报告缺失 docstring 的顶层导出项；docstring / 搜索框 / 类型检索见 [api-docs.md](api-docs.md)；
   - `vuna map [--modules]` / `vuna map --find <Module.name>` / `vuna map --impact
     <Module.name>` / `vuna api <Module.name>`：`Vuna.Index` 的源码符号索引，用于定位定义、
     引用者与建议测试标签；索引缓存在 `.local/index/`（gitignored），按**内容哈希**判定
@@ -167,9 +168,10 @@ modules = [
 | `vuna test [DIR]` | 纯测试走核心求值；`main : IO ...` 走 compile+运行（退出码 0 通过） |
 | `vuna fmt [--check] [PATH]...` | 格式化 |
 | `vuna repl` | 交互式 REPL（多行；IO 表达式经 compile+运行） |
-| `vuna doc [DIR [OUT]]` | 生成 Markdown API 文档（尊重 `[export]`） |
+| `vuna doc [--check] [--package NAME] [DIR [OUT]]` | 单文件交互 HTML API 文档（docstring；尊重 `[export]`） |
+| `vuna search [--type|--name|--doc] ... <query...>` | 名称 / docstring / 类型检索（Hoogle 式打分；`--json`） |
 | `vuna map [--modules]` / `--find` / `--impact` | 源码符号索引（内容哈希缓存；定义、引用位置、建议测试） |
-| `vuna api <Module.name>` | 某模块的签名面（含注释与行号） |
+| `vuna api <Module.name>` | 某模块的签名面（含 docstring 与行号） |
 | `vuna gen-errors [ROOT]` | 生成错误码文档（默认 `docs/.generated/errors.md`） |
 | `vuna version`, `vuna --version` | 版本 |
 | `vuna help`, `vuna -h` | 用法 |

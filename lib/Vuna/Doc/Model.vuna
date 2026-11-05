@@ -1,0 +1,249 @@
+module Vuna.Doc.Model
+  ( DocBook(..)
+  , DocItem(..)
+  , DocModule(..)
+  , bookModules
+  , buildModules
+  , itemDoc
+  , itemKind
+  , itemLine
+  , itemMembers
+  , itemName
+  , itemSignature
+  , moduleDoc
+  , moduleItems
+  , moduleName
+  , modulePackage
+  , modulePath
+  ) where
+
+-- Vuna.Doc.Model：把源码解析成文档模型（工具链；永不进 seed 闭包）。
+--
+-- 输入是一组源文件路径与包名；输出 `DocBook`（模块 -> 条目/成员 + docstring）。
+-- 不跑类型检查：签名 / 类型 / data 形状都来自 parse 级 AST；docstring 来自
+-- `Vuna.Doc.Comments`。`[export]` 过滤与输出格式在 `Vuna.Doc.Run` / `Html`。
+import Vuna.Cli.Args
+import Vuna.Compiler.Common
+import Vuna.Compiler.Frontend.Ast
+import Vuna.Compiler.Frontend.Lexer
+import Vuna.Compiler.Frontend.Parser
+import Vuna.Compiler.Loader.Fixity
+import Vuna.Doc.Comments
+import Vuna.Doc.Types
+import Vuna.FixityEnv
+import Vuna.Sig
+
+-- ---------------------------------------------------------------
+-- 数据模型
+-- ---------------------------------------------------------------
+record DocItem where
+  itemName : String
+  itemKind : String
+  itemSignature : String
+  itemDoc : String
+  itemLine : Int
+  itemMembers : List DocItem
+
+itemName : DocItem -> String
+itemName (DocItem name kind sig doc line members) = name
+
+itemKind : DocItem -> String
+itemKind (DocItem name kind sig doc line members) = kind
+
+itemSignature : DocItem -> String
+itemSignature (DocItem name kind sig doc line members) = sig
+
+itemDoc : DocItem -> String
+itemDoc (DocItem name kind sig doc line members) = doc
+
+itemLine : DocItem -> Int
+itemLine (DocItem name kind sig doc line members) = line
+
+itemMembers : DocItem -> List DocItem
+itemMembers (DocItem name kind sig doc line members) = members
+
+record DocModule where
+  modulePackage : String
+  moduleName : String
+  modulePath : String
+  moduleDoc : String
+  moduleItems : List DocItem
+
+modulePackage : DocModule -> String
+modulePackage (DocModule pkg name path doc items) = pkg
+
+moduleName : DocModule -> String
+moduleName (DocModule pkg name path doc items) = name
+
+modulePath : DocModule -> String
+modulePath (DocModule pkg name path doc items) = path
+
+moduleDoc : DocModule -> String
+moduleDoc (DocModule pkg name path doc items) = doc
+
+moduleItems : DocModule -> List DocItem
+moduleItems (DocModule pkg name path doc items) = items
+
+record DocBook where
+  bookModules : List DocModule
+
+bookModules : DocBook -> List DocModule
+bookModules (DocBook modules) = modules
+
+-- ---------------------------------------------------------------
+-- 构建
+-- ---------------------------------------------------------------
+-- 包名 + 源文件列表 -> 模块列表（按输入文件顺序；调用方负责 [export] 过滤）。
+buildModules : String -> List String -> Result (List DocModule)
+buildModules pkg files = secondOf (buildModulesGo emptyFixityEnv pkg files [])
+
+buildModulesGo : FixityEnv -> String -> List String -> List DocModule -> Pair FixityEnv (Result (List DocModule))
+buildModulesGo env pkg [] acc = Pair env (Ok (reverse acc))
+buildModulesGo env pkg (path :: rest) acc = case buildModule env pkg path of
+  Pair env2 result => case result of
+    Err e => Pair env2 (Err e)
+    Ok module0 => buildModulesGo env2 pkg rest (module0 :: acc)
+
+buildModule : FixityEnv -> String -> String -> Pair FixityEnv (Result DocModule)
+buildModule env pkg path = case readText path of
+  Err e => Pair env (Err e)
+  Ok source =>
+    let
+      looked = fixitiesForFile env path source
+      env2 = firstOf looked
+    in case secondOf looked of
+      Err e => Pair env2 (Err (path ++ ": cannot load package fixity context: " ++ e))
+      Ok programFixities => case parseSource path source of
+        Err e => Pair env2 (Err (path ++ ": " ++ e))
+        Ok (SourceFile hdr imports fx decls0) => case reorderProgram (tableOfKeepOps (append programFixities fx)) decls0 of
+          Err e => Pair env2 (Err (path ++ ": " ++ e))
+          Ok decls =>
+            let
+              comments = case lexComments source of
+                Err e => []
+                Ok cs => cs
+              table = docTableOf hdr decls comments
+            in Pair env2
+              (Ok (DocModule pkg (moduleNameOfPath path hdr) path (docTableModuleDoc table) (itemsOfDecls table decls)))
+
+moduleNameOfPath : String -> Maybe ModDecl -> String
+moduleNameOfPath path (Just (ModDecl name hasList items sp)) = name
+moduleNameOfPath path Nothing = stripVunaSuffix (baseName path)
+
+stripVunaSuffix : String -> String
+stripVunaSuffix name =
+  if endsWith ".vuna" name then substring 0 (byteLength name - 5) name else name
+
+-- ---------------------------------------------------------------
+-- 条目
+-- ---------------------------------------------------------------
+itemsOfDecls : DocTable -> List Decl -> List DocItem
+itemsOfDecls table decls = dedupeItems (concatMap (itemsOfDecl table decls) decls)
+
+itemsOfDecl : DocTable -> List Decl -> Decl -> List DocItem
+itemsOfDecl table decls (DSig name ctx ty sp) =
+  if isPrivate name then []
+  else [ DocItem name "fun" (name ++ " : " ++ renderTypeInCtx ctx ty) (docForDecl table name) (spanStartLine sp) []
+  ]
+itemsOfDecl table decls (DFun name pats body sp) =
+  if isPrivate name || hasSig name decls then []
+  else [ DocItem name "fun" (name ++ " : " ++ renderType (EVar name sp)) (docForDecl table name) (spanStartLine sp) []
+  ]
+itemsOfDecl table decls (DData name params kind ctors derivings sp) =
+  if isPrivate name then []
+  else [ DocItem name "data" (dataSignature name params kind ctors derivings) (docForDecl table name) (spanStartLine sp) (ctorItems table name ctors)
+  ]
+itemsOfDecl table decls (DRecord name params fields derivings sp) =
+  if isPrivate name then []
+  else [ DocItem name "record" (recordSignature name params fields derivings) (docForDecl table name) (spanStartLine sp) (fieldItems table name fields)
+  ]
+itemsOfDecl table decls (DTrait name params methods sp) =
+  if isPrivate name then []
+  else [ DocItem name "trait" (traitSignature name params methods) (docForDecl table name) (spanStartLine sp) (methodItems table name methods)
+  ]
+itemsOfDecl table decls (DAxiom name ty sp) =
+  if isPrivate name then []
+  else [ DocItem name "axiom" ("axiom " ++ name ++ " : " ++ renderType ty) (docForDecl table name) (spanStartLine sp) []
+  ]
+itemsOfDecl table decls (DExtern name cName ty sp) =
+  if isPrivate name then []
+  else [ DocItem name "extern" ("extern " ++ name ++ " : " ++ renderType ty) (docForDecl table name) (spanStartLine sp) []
+  ]
+itemsOfDecl table decls (DInstance ctxE head methods sp) = []
+
+-- 无签名函数不应出现在文档里（顶层签名是语言要求）；这里仅在签名缺失时用一个
+-- 占位签名，避免 doc 静默丢条目（`vuna check` 会先报缺签名）。
+hasSig : String -> List Decl -> Bool
+hasSig name [] = False
+hasSig name (d :: rest) = case d of
+  DSig n ctx ty sp => if n == name then True else hasSig name rest
+  _ => hasSig name rest
+
+dedupeItems : List DocItem -> List DocItem
+dedupeItems items = dedupeItemsGo items []
+
+dedupeItemsGo : List DocItem -> List String -> List DocItem
+dedupeItemsGo [] seen = []
+dedupeItemsGo (i :: rest) seen =
+  if memName (itemName i) seen then dedupeItemsGo rest seen
+  else i :: dedupeItemsGo rest (itemName i :: seen)
+
+isPrivate : String -> Bool
+isPrivate name = case strUnpack name of
+  c :: rest => c == 95
+  [] => False
+
+-- ---------------------------------------------------------------
+-- 签名块
+-- ---------------------------------------------------------------
+paramSuffix : List String -> String
+paramSuffix [] = ""
+paramSuffix params = " " ++ join " " params
+
+derivingLines : List String -> List String
+derivingLines [] = []
+derivingLines derivings = ["deriving (" ++ join ", " derivings ++ ")"]
+
+dataSignature : String -> List String -> Expr -> List Ctor -> List String -> String
+dataSignature name params kind ctors derivings =
+  join "\n"
+    (("data " ++ name ++ paramSuffix params ++ " : " ++ renderType kind ++ " where") :: append (map ctorLine ctors) (derivingLines derivings))
+
+recordSignature : String -> List String -> List Field -> List String -> String
+recordSignature name params fields derivings =
+  join "\n"
+    (("record " ++ name ++ paramSuffix params ++ " where") :: append (map fieldLine fields) (derivingLines derivings))
+
+traitSignature : String -> List String -> List TraitMethod -> String
+traitSignature name params methods =
+  join "\n" (("trait " ++ name ++ paramSuffix params ++ " where") :: map methodLine methods)
+
+ctorLine : Ctor -> String
+ctorLine (Ctor name ty arity sp) = "  " ++ name ++ " : " ++ renderType ty
+
+fieldLine : Field -> String
+fieldLine (Field name ty sp) = "  " ++ name ++ " : " ++ renderType ty
+
+methodLine : TraitMethod -> String
+methodLine m = "  " ++ traitMethodName m ++ " : " ++ renderType m.traitMethodType
+
+-- ---------------------------------------------------------------
+-- 成员条目
+-- ---------------------------------------------------------------
+ctorItems : DocTable -> String -> List Ctor -> List DocItem
+ctorItems table parent ctors =
+  map
+    (\c => DocItem (ctorName c) "ctor" (ctorName c ++ " : " ++ renderType (ctorType c)) (docForMember table parent (ctorName c)) (spanStartLine (ctorSpan c)) [])
+    ctors
+
+fieldItems : DocTable -> String -> List Field -> List DocItem
+fieldItems table parent fields =
+  map
+    (\f => DocItem (fieldName f) "field" (fieldName f ++ " : " ++ renderType (fieldType f)) (docForMember table parent (fieldName f)) (spanStartLine (fieldSpan f)) [])
+    fields
+
+methodItems : DocTable -> String -> List TraitMethod -> List DocItem
+methodItems table parent methods =
+  map
+    (\m => DocItem (traitMethodName m) "method" (traitMethodName m ++ " : " ++ renderType m.traitMethodType) (docForMember table parent (traitMethodName m)) (spanStartLine (traitMethodSpan m)) [])
+    methods

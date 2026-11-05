@@ -1,0 +1,192 @@
+module Vuna.Doc.Run (runDoc) where
+
+-- Vuna.Doc.Run：`vuna doc` 的参数解析、包发现、[export] 过滤、HTML 写出与 --check。
+--
+-- 用法：
+--   vuna doc [--check] [--package NAME] [DIR [OUT]]
+-- 默认 OUT：DIR=. -> docs/api.html，其他 DIR -> DIR/docs/api.html。
+-- `--check` 不写文件，只报告缺失 docstring 的顶层导出项（退出 1）。
+import Vuna.Cli.Args
+import Vuna.Compiler.Common
+import Vuna.Compiler.Packages.Pkg
+import Vuna.Doc.Html
+import Vuna.Doc.Model
+import Vuna.Files
+import Base.IO
+
+runDoc : List String -> Int
+runDoc args = case parseToolArgs "vuna doc" [BoolFlag "check", ValueFlag "package"] args of
+  Err e => docError e
+  Ok parsed => case parsed.positionals of
+    [] => docRun "." (docDefaultOut ".") (flagSet parsed "check") (flagValue parsed "package")
+    [dir] => docRun dir (docDefaultOut dir) (flagSet parsed "check") (flagValue parsed "package")
+    [dir, out] =>
+      if flagSet parsed "check" then docError "--check does not take an OUT argument"
+      else docRun dir out False (flagValue parsed "package")
+    _ => docError "usage: vuna doc [--check] [--package NAME] [DIR [OUT]]"
+
+docDefaultOut : String -> String
+docDefaultOut dir = if dir == "." then "docs/api.html" else dir ++ "/docs/api.html"
+
+record DocScope where
+  scopeDir : String
+  scopeName : String
+  scopeExports : Maybe (List String)
+
+scopeDir : DocScope -> String
+scopeDir (DocScope dir name exports) = dir
+
+scopeName : DocScope -> String
+scopeName (DocScope dir name exports) = name
+
+scopeExports : DocScope -> Maybe (List String)
+scopeExports (DocScope dir name exports) = exports
+
+docRun : String -> String -> Bool -> Maybe String -> Int
+docRun dir out check pkgFilter = case requireDirectory dir of
+  Err e => docError e
+  Ok _ => case scopesFor dir pkgFilter of
+    Err e => docError e
+    Ok [] => docError ("no such package: " ++ maybeText pkgFilter)
+    Ok scopes => case filesForScopes scopes of
+      Err e => docError e
+      Ok files => if length (filesOf files) == 0 then docError ("no vuna sources found under " ++ dir ++ "; pass a package or source directory")
+      else case buildBook scopes files of
+        Err e => docError e
+        Ok book => if check then runCheck book else writeHtml out book
+
+-- 每个 scope 的源文件（与 scope 一一对应；顺序稳定）。
+filesForScopes : List DocScope -> Result (List (Pair DocScope (List String)))
+filesForScopes scopes = traverseScopes scopes []
+
+traverseScopes : List DocScope -> List (Pair DocScope (List String)) -> Result (List (Pair DocScope (List String)))
+traverseScopes [] acc = Ok (reverse acc)
+traverseScopes (s :: rest) acc = traverseScopes rest (Pair s (scopeSourceFiles s) :: acc)
+
+scopeSourceFiles : DocScope -> List String
+scopeSourceFiles s =
+  let
+    root = scopeDir s ++ "/lib"
+  in if pathExistsDir root then collectVunaFiles root
+  else if pathExistsDir (scopeDir s) then collectVunaFiles (scopeDir s) else []
+
+-- 所有 scope 的源文件汇总（只用于空检查；真正构建按 scope 分组）。
+filesOf : List (Pair DocScope (List String)) -> List String
+filesOf pairs = concatMap secondOf pairs
+
+buildBook : List DocScope -> List (Pair DocScope (List String)) -> Result DocBook
+buildBook scopes files = buildBookGo scopes files []
+
+buildBookGo : List DocScope -> List (Pair DocScope (List String)) -> List DocModule -> Result DocBook
+buildBookGo [] files acc = Ok (DocBook (reverse acc))
+buildBookGo (scope :: restScopes) files acc = case lookupScopeFiles scope files of
+  Nothing => buildBookGo restScopes files acc
+  Just paths => case buildModules (scopeName scope) paths of
+    Err e => Err e
+    Ok modules0 => case selectModules (scopeExports scope) modules0 of
+      Err e => Err e
+      Ok modules1 => buildBookGo restScopes files (append modules1 acc)
+
+lookupScopeFiles : DocScope -> List (Pair DocScope (List String)) -> Maybe (List String)
+lookupScopeFiles scope [] = Nothing
+lookupScopeFiles scope ((Pair s paths) :: rest) =
+  if scopeName s == scopeName scope && scopeDir s == scopeDir scope then Just paths
+  else lookupScopeFiles scope rest
+
+-- `[export].modules`：按 manifest 顺序输出；缺模块是配置错误（exit 2）。
+selectModules : Maybe (List String) -> List DocModule -> Result (List DocModule)
+selectModules Nothing modules0 = Ok modules0
+selectModules (Just names) modules0 = selectModulesGo names modules0 []
+
+selectModulesGo : List String -> List DocModule -> List DocModule -> Result (List DocModule)
+selectModulesGo [] modules0 acc = Ok (reverse acc)
+selectModulesGo (name :: rest) modules0 acc = case findDocModule name modules0 of
+  Nothing => Err ("exported module not found in sources: " ++ name ++ " (from [export].modules)")
+  Just m => selectModulesGo rest modules0 (m :: acc)
+
+findDocModule : String -> List DocModule -> Maybe DocModule
+findDocModule name [] = Nothing
+findDocModule name (m :: rest) = if moduleName m == name then Just m else findDocModule name rest
+
+-- ---------------------------------------------------------------
+-- 包发现
+-- ---------------------------------------------------------------
+scopesFor : String -> Maybe String -> Result (List DocScope)
+scopesFor dir pkgFilter = if runIO (prim_fileExists (dir ++ "/vuna.toml")) then case workspacePackages dir of
+  Err e => Err e
+  Ok packages =>
+    let
+      scopes = mapToScopes packages
+    in Ok (filterScopes pkgFilter scopes)
+else Ok (filterScopes pkgFilter [DocScope dir "" Nothing])
+
+mapToScopes : List Package -> List DocScope
+mapToScopes [] = []
+mapToScopes (p :: rest) =
+  DocScope (packageDir p) (packageName p) (packageExports p) :: mapToScopes rest
+
+filterScopes : Maybe String -> List DocScope -> List DocScope
+filterScopes Nothing scopes = scopes
+filterScopes (Just name) scopes = filter (\s => scopeName s == name) scopes
+
+-- ---------------------------------------------------------------
+-- --check
+-- ---------------------------------------------------------------
+runCheck : DocBook -> Int
+runCheck book =
+  let
+    missing = missingDocs book
+  in if length missing == 0 then
+    let
+      _ =
+        runIO
+          (prim_print ("docstrings ok (" ++ strFromInt (length (bookModules book)) ++ " modules)\n"))
+    in 0
+  else
+    let
+      _ = printMissing missing
+      _ = runIO (prim_print (strFromInt (length missing) ++ " missing docstring(s)\n"))
+    in 1
+
+printMissing : List String -> Int
+printMissing [] = 0
+printMissing (line :: rest) =
+  let
+    _ = runIO (prim_print (line ++ "\n"))
+  in printMissing rest
+
+missingDocs : DocBook -> List String
+missingDocs book = concatMap missingInModule (bookModules book)
+
+missingInModule : DocModule -> List String
+missingInModule m = concatMap (missingInItem m) (moduleItems m)
+
+missingInItem : DocModule -> DocItem -> List String
+missingInItem m item =
+  if itemDoc item == "" then [ "missing docstring: " ++ moduleName m ++ "." ++ itemName item ++ " (" ++ modulePath m ++ ":" ++ strFromInt (itemLine item) ++ ")"
+  ]
+  else []
+
+-- ---------------------------------------------------------------
+-- 写出
+-- ---------------------------------------------------------------
+writeHtml : String -> DocBook -> Int
+writeHtml out book =
+  let
+    content = renderPage book
+    _ = ensureDirPath (parentOf out)
+    _ = runIO (prim_writeFile out content)
+    _ =
+      runIO
+        (prim_print ("wrote " ++ out ++ " (" ++ strFromInt (length (bookModules book)) ++ " modules)\n"))
+  in 0
+
+docError : String -> Int
+docError e =
+  let
+    _ = runIO (prim_print ("error: " ++ e ++ "\n"))
+  in 2
+
+maybeText : Maybe String -> String
+maybeText Nothing = "(none)"
+maybeText (Just s) = s

@@ -33,6 +33,9 @@
 | D26 | `Base.IO` 仍是 `data IO a where MkIO : ...`：canonical 构造子身份写死在 `Intrinsics.ioMkIoCtor`，改名为 record 需要「先放宽接受 MkIO/IO 两种 → rotation → 再改 Base.IO → rotation」两阶段过渡；字段访问收益小，本轮未做 | `base/lib/Base/IO.vuna`；`Elab.Term.Impl`/`Intrinsics.ioMkIoCtor` | 后续 |
 | D27 | 擦除依赖续延的运行时表示缺失：签名索引 `Eff`（CPS 版）的续延域 `res op` 在 OCaml 里不可命名（codegen 渲染成 `unit`，与真实续延类型冲突）；数据版 free monad 的 `bind` 触发终止性检查；Type-1 行编码 codegen 损坏。三条路线：QTT（不解决该表示轴）/ 后端不透明擦除值 / 运行时类型码 | [effects.md](effects.md) §3、§6 | F3 |
 | D28 | `base` 声明了 `unsafe`（唯一使用点是 `Base.ST.runST` 经 `runIO`），但没有机制约束「仅 `Base.ST` 使用」；收紧需要 per-module 能力或 QTT 线性 | `base/vuna.toml`；`base/lib/Base/ST.vuna` | 后续（F3 / QTT） |
+| D29 | 类型检索是 parse 级：不做实例/隐式参数/依赖相等/类型别名展开；语义级（DT 精化后比较）只保留内部 `TypeMode.Semantic` 接口，CLI 不暴露 `--semantic` | `lib/Vuna/Search/Query.vuna`；[api-docs.md](api-docs.md) §3.2 | 后续（性能/精度权衡） |
+| D30 | docstring 覆盖未全仓化：当前仅试点 `base/` 部分模块；`vuna doc --check` 为 opt-in，未接 `nix flake check`；`-- ^` 尾随 doc、成员级 `--check`、多页/HTML 站点未做 | `lib/Vuna/Doc/*`；`docs/reference/api-docs.md` | 后续（按模块迁移） |
+| D31 | 类型名解析是语法级：短名歧义回退源码短名；不按 import 闭包把类型名规范化为 canonical 身份 | `Vuna.Search.Query.typeNameMap` / `canonName` | 后续（与 Loader 共享名字解析） |
 
 ## 工具、构建与验证
 

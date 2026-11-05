@@ -26,8 +26,8 @@ grep -q "1 passed, 0 failed" "$OUT/test.log"
 
 # 格式化检查与文档生成。
 "$VUNA" fmt --check examples/multi
-"$VUNA" doc examples/multi/greet "$OUT/api.md"
-grep -q "## Greet" "$OUT/api.md"
+"$VUNA" doc examples/multi/greet "$OUT/api.html"
+grep -q "Greet" "$OUT/api.html"
 
 # 仓库自身（根包）也走 DT build（.output/bin/<包名> 仍须可用）。
 rm -rf .output

@@ -1,0 +1,315 @@
+module Vuna.Doc.Comments (docTableOf) where
+
+-- Vuna.Doc.Comments：从 `lexComments` 的原始注释里识别 docstring 并关联到声明。
+--
+-- 识别（只有这两种是 docstring，普通注释永远不进入文档）：
+--   * 行块：首行 `-- | ...`；同列、行号连续的 `--` / `-- |` 续行；空行结束。
+--   * 块：`{- | ... -}` / `{-| ... -}`；剥离首部 `|`，按最小公共缩进 dedent。
+--
+-- 关联：doc block 归到第一个「行号更大、列相同、行距 <= 2 行、中间没有其他注释」
+-- 的目标（模块头 / 顶层声明 / 构造子 / 字段 / trait 方法）。孤儿 doc 忽略。
+-- `DSig` 与 `DFun` 同名：doc 写在签名前或首子句前都归到该名字（先出现者优先）。
+import Vuna.Compiler.Common
+import Vuna.Compiler.Frontend.Ast
+import Vuna.Compiler.Frontend.Lexer
+import Vuna.Doc.Types
+
+-- ---------------------------------------------------------------
+-- 目标
+-- ---------------------------------------------------------------
+-- kind：module / decl / member；member 的 parent 是所属 data/record/trait 名。
+record DocTarget where
+  targetLine : Int
+  targetCol : Int
+  targetKind : String
+  targetName : String
+  targetParent : String
+
+targetLine : DocTarget -> Int
+targetLine (DocTarget line col kind name parent) = line
+
+targetCol : DocTarget -> Int
+targetCol (DocTarget line col kind name parent) = col
+
+targetKind : DocTarget -> String
+targetKind (DocTarget line col kind name parent) = kind
+
+targetName : DocTarget -> String
+targetName (DocTarget line col kind name parent) = name
+
+targetParent : DocTarget -> String
+targetParent (DocTarget line col kind name parent) = parent
+
+targetKey : DocTarget -> String
+targetKey t =
+  targetKind t
+    ++ "\t"
+    ++ targetParent t
+    ++ "\t"
+    ++ targetName t
+    ++ "\t"
+    ++ strFromInt (targetLine t)
+    ++ "\t"
+    ++ strFromInt (targetCol t)
+
+moduleTargets : Maybe ModDecl -> List DocTarget
+moduleTargets Nothing = []
+moduleTargets (Just (ModDecl name hasList items sp)) =
+  [DocTarget (spanStartLine sp) (spanStartCol sp) "module" name ""]
+
+targetsOfDecls : List Decl -> List DocTarget
+targetsOfDecls [] = []
+targetsOfDecls (d :: rest) = append (targetsOfDecl d) (targetsOfDecls rest)
+
+targetsOfDecl : Decl -> List DocTarget
+targetsOfDecl (DData name params kind ctors derivings sp) =
+  DocTarget (spanStartLine sp) (spanStartCol sp) "decl" name "" :: ctorTargets name ctors
+targetsOfDecl (DRecord name params fields derivings sp) =
+  DocTarget (spanStartLine sp) (spanStartCol sp) "decl" name "" :: fieldTargets name fields
+targetsOfDecl (DTrait name params methods sp) =
+  DocTarget (spanStartLine sp) (spanStartCol sp) "decl" name "" :: methodTargets name methods
+targetsOfDecl (DSig name ctx ty sp) =
+  [DocTarget (spanStartLine sp) (spanStartCol sp) "decl" name ""]
+targetsOfDecl (DFun name pats body sp) =
+  [DocTarget (spanStartLine sp) (spanStartCol sp) "decl" name ""]
+targetsOfDecl (DAxiom name ty sp) = [DocTarget (spanStartLine sp) (spanStartCol sp) "decl" name ""]
+targetsOfDecl (DExtern name cName ty sp) =
+  [DocTarget (spanStartLine sp) (spanStartCol sp) "decl" name ""]
+targetsOfDecl (DInstance ctxE head methods sp) = []
+
+ctorTargets : String -> List Ctor -> List DocTarget
+ctorTargets parent [] = []
+ctorTargets parent (c :: rest) =
+  DocTarget (spanStartLine (ctorSpan c)) (spanStartCol (ctorSpan c)) "member" (ctorName c) parent
+    :: ctorTargets parent rest
+
+fieldTargets : String -> List Field -> List DocTarget
+fieldTargets parent [] = []
+fieldTargets parent (f :: rest) =
+  DocTarget (spanStartLine (fieldSpan f)) (spanStartCol (fieldSpan f)) "member" (fieldName f) parent
+    :: fieldTargets parent rest
+
+methodTargets : String -> List TraitMethod -> List DocTarget
+methodTargets parent [] = []
+methodTargets parent (m :: rest) =
+  DocTarget (spanStartLine (traitMethodSpan m)) (spanStartCol (traitMethodSpan m)) "member" (traitMethodName m) parent
+    :: methodTargets parent rest
+
+-- ---------------------------------------------------------------
+-- 识别 doc block
+-- ---------------------------------------------------------------
+record OpenLineBlock where
+  openLines : List String
+  openStartLine : Int
+  openEndLine : Int
+  openCol : Int
+
+docBlocksOf : List Comment -> List DocBlock
+docBlocksOf comments = reverse (docBlocksGo comments Nothing [])
+
+docBlocksGo : List Comment -> Maybe OpenLineBlock -> List DocBlock -> List DocBlock
+docBlocksGo [] open acc = closeOpenBlock open acc
+docBlocksGo (c :: rest) open acc = case c.commentKind of
+  CLine => case docLineBody c.commentText of
+    Just body => case open of
+      Just ob =>
+        if spanStartLine (commentSpan c) == openEndLine ob + 1 && spanStartCol (commentSpan c) == openCol ob then docBlocksGo rest (Just (appendOpenLine ob body)) acc
+        else docBlocksGo rest (Just (newOpenBlock body c)) (closeOpenBlock open acc)
+      Nothing => docBlocksGo rest (Just (newOpenBlock body c)) acc
+    Nothing => case open of
+      Just ob =>
+        if spanStartLine (commentSpan c) == openEndLine ob + 1 && spanStartCol (commentSpan c) == openCol ob then docBlocksGo rest (Just (appendOpenLine ob (stripOneSpace c.commentText))) acc
+        else docBlocksGo rest Nothing (closeOpenBlock open acc)
+      Nothing => docBlocksGo rest Nothing acc
+  CBlock => case docBlockBody c.commentText of
+    Just body =>
+      docBlocksGo rest Nothing
+        (DocBlock body (spanStartLine (commentSpan c)) (spanStartLine (commentSpan c)) (spanStartCol (commentSpan c)) :: closeOpenBlock open acc)
+    Nothing => docBlocksGo rest Nothing (closeOpenBlock open acc)
+
+newOpenBlock : String -> Comment -> OpenLineBlock
+newOpenBlock body c =
+  OpenLineBlock [body] (spanStartLine (commentSpan c)) (spanStartLine (commentSpan c))
+    (spanStartCol (commentSpan c))
+
+appendOpenLine : OpenLineBlock -> String -> OpenLineBlock
+appendOpenLine ob body =
+  OpenLineBlock (append ob.openLines [body]) ob.openStartLine (ob.openEndLine + 1) ob.openCol
+
+closeOpenBlock : Maybe OpenLineBlock -> List DocBlock -> List DocBlock
+closeOpenBlock Nothing acc = acc
+closeOpenBlock (Just ob) acc =
+  DocBlock (trimRight (join "\n" ob.openLines)) ob.openStartLine ob.openEndLine ob.openCol :: acc
+
+-- `-- | body`：commentText 是 `--` 之后，可能是 ` | body`。
+docLineBody : String -> Maybe String
+docLineBody text =
+  let
+    t = trimLeft text
+  in if startsWith "|" t then Just (stripOneSpace (dropFirstChar t)) else Nothing
+
+-- 行块续行：`-- body` 的 commentText 去一个前导空格（保留更深缩进给代码块）。
+stripOneSpace : String -> String
+stripOneSpace s = case strUnpack s of
+  32 :: rest => strPack rest
+  _ => s
+
+dropFirstChar : String -> String
+dropFirstChar s = case strUnpack s of
+  c :: rest => strPack rest
+  [] => s
+
+-- `{- | body -}`：text 是 `{-` 与 `-}` 之间的原文。
+docBlockBody : String -> Maybe String
+docBlockBody text =
+  let
+    t = trimLeft text
+  in if startsWith "|" t then Just (dedent (dropFirstChar t)) else Nothing
+
+-- 去掉首尾空行，再按非空行的最小前导空格 dedent（块注释常整体缩进在 record/trait 内）。
+dedent : String -> String
+dedent text =
+  let
+    ls0 = dropTrailingEmpty (dropLeadingEmpty (lines text))
+    indent = minIndent ls0
+  in trimRight (join "\n" (map (dropLeadingSpaces indent) ls0))
+
+dropLeadingEmpty : List String -> List String
+dropLeadingEmpty [] = []
+dropLeadingEmpty (l :: rest) = if trim l == "" then dropLeadingEmpty rest else l :: rest
+
+dropTrailingEmpty : List String -> List String
+dropTrailingEmpty ls = reverse (dropLeadingEmpty (reverse ls))
+
+minIndent : List String -> Int
+minIndent ls = minIndentGo ls 1000000
+
+minIndentGo : List String -> Int -> Int
+minIndentGo [] acc = if acc == 1000000 then 0 else acc
+minIndentGo (l :: rest) acc = if trim l == "" then minIndentGo rest acc
+else
+  let
+    n = leadingSpaces l
+  in if n < acc then minIndentGo rest n else minIndentGo rest acc
+
+leadingSpaces : String -> Int
+leadingSpaces s = leadingSpacesChars (strUnpack s) 0
+
+leadingSpacesChars : List Int -> Int -> Int
+leadingSpacesChars [] acc = acc
+leadingSpacesChars (32 :: rest) acc = leadingSpacesChars rest (acc + 1)
+leadingSpacesChars (9 :: rest) acc = leadingSpacesChars rest (acc + 1)
+leadingSpacesChars _ acc = acc
+
+dropLeadingSpaces : Int -> String -> String
+dropLeadingSpaces n s = strPack (dropLeadingSpacesChars n (strUnpack s))
+
+dropLeadingSpacesChars : Int -> List Int -> List Int
+dropLeadingSpacesChars n [] = []
+dropLeadingSpacesChars n chars = if n <= 0 then chars
+else case chars of
+  c :: rest => if c == 32 || c == 9 then dropLeadingSpacesChars (n - 1) rest else chars
+  [] => []
+
+-- ---------------------------------------------------------------
+-- 关联
+-- ---------------------------------------------------------------
+record Assign where
+  assignUsed : List Int
+  assignDecls : List (Pair String String)
+  assignMembers : List (Pair String String)
+  assignModuleDoc : String
+
+openLines : OpenLineBlock -> List String
+openLines (OpenLineBlock ls start end col) = ls
+
+openStartLine : OpenLineBlock -> Int
+openStartLine (OpenLineBlock ls start end col) = start
+
+openEndLine : OpenLineBlock -> Int
+openEndLine (OpenLineBlock ls start end col) = end
+
+openCol : OpenLineBlock -> Int
+openCol (OpenLineBlock ls start end col) = col
+
+assignUsed : Assign -> List Int
+assignUsed (Assign used decls members mdoc) = used
+
+assignDecls : Assign -> List (Pair String String)
+assignDecls (Assign used decls members mdoc) = decls
+
+assignMembers : Assign -> List (Pair String String)
+assignMembers (Assign used decls members mdoc) = members
+
+assignModuleDoc : Assign -> String
+assignModuleDoc (Assign used decls members mdoc) = mdoc
+
+assignBlocks : List Comment -> List (Pair Int DocTarget) -> List DocBlock -> Assign
+assignBlocks comments targets blocks = assignBlocksGo comments targets blocks (Assign [] [] [] "")
+
+assignBlocksGo : List Comment -> List (Pair Int DocTarget) -> List DocBlock -> Assign -> Assign
+assignBlocksGo comments targets [] acc = acc
+assignBlocksGo comments targets (b :: rest) acc = case pickTarget comments targets acc.assignUsed b of
+  Nothing => assignBlocksGo comments targets rest acc
+  Just (Pair idx t) =>
+    let
+      acc2 = case targetKind t of
+        "module" =>
+          if acc.assignModuleDoc == "" then Assign acc.assignUsed acc.assignDecls acc.assignMembers b.docBlockText
+          else acc
+        "member" =>
+          Assign acc.assignUsed acc.assignDecls
+            (insertDoc (targetParent t ++ "\t" ++ targetName t) b.docBlockText acc.assignMembers)
+            acc.assignModuleDoc
+        _ =>
+          Assign acc.assignUsed (insertDoc (targetName t) b.docBlockText acc.assignDecls)
+            acc.assignMembers acc.assignModuleDoc
+    in assignBlocksGo comments targets rest
+      (Assign (idx :: acc2.assignUsed) acc2.assignDecls acc2.assignMembers acc2.assignModuleDoc)
+
+pickTarget : List Comment -> List (Pair Int DocTarget) -> List Int -> DocBlock -> Maybe (Pair Int DocTarget)
+pickTarget comments [] used b = Nothing
+pickTarget comments ((Pair idx t) :: rest) used b =
+  if memInt idx used then pickTarget comments rest used b
+  else if targetLine t > b.docBlockEndLine && targetCol t == b.docBlockCol && targetLine t - b.docBlockEndLine <= 2 && not (commentStartsBetween comments b.docBlockEndLine (targetLine t)) then Just (Pair idx t)
+  else pickTarget comments rest used b
+
+memInt : Int -> List Int -> Bool
+memInt n [] = False
+memInt n (x :: rest) = if x == n then True else memInt n rest
+
+-- doc block 结束行与目标行之间若还有别的注释（普通注释也阻断关联），不关联。
+commentStartsBetween : List Comment -> Int -> Int -> Bool
+commentStartsBetween [] start end = False
+commentStartsBetween (c :: rest) start end =
+  let
+    line = spanStartLine (commentSpan c)
+  in if line > start && line < end then True else commentStartsBetween rest start end
+
+insertDoc : String -> String -> List (Pair String String) -> List (Pair String String)
+insertDoc key doc entries = case lookupDoc key entries of
+  Nothing => Pair key doc :: entries
+  Just old => if old == "" && doc /= "" then Pair key doc :: removeDoc key entries else entries
+
+lookupDoc : String -> List (Pair String String) -> Maybe String
+lookupDoc key [] = Nothing
+lookupDoc key ((Pair k v) :: rest) = if k == key then Just v else lookupDoc key rest
+
+removeDoc : String -> List (Pair String String) -> List (Pair String String)
+removeDoc key [] = []
+removeDoc key ((Pair k v) :: rest) = if k == key then rest else Pair k v :: removeDoc key rest
+
+-- ---------------------------------------------------------------
+-- 入口
+-- ---------------------------------------------------------------
+docTableOf : Maybe ModDecl -> List Decl -> List Comment -> DocTable
+docTableOf hdr decls comments =
+  let
+    blocks = docBlocksOf comments
+    targets = indexTargets (append (moduleTargets hdr) (targetsOfDecls decls)) 0 []
+    assigned = assignBlocks comments targets blocks
+  in DocTable assigned.assignModuleDoc (reverse assigned.assignDecls) (reverse assigned.assignMembers)
+
+indexTargets : List DocTarget -> Int -> List (Pair Int DocTarget) -> List (Pair Int DocTarget)
+indexTargets [] n acc = reverse acc
+indexTargets (t :: rest) n acc = indexTargets rest (n + 1) (Pair n t :: acc)

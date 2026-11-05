@@ -22,7 +22,7 @@ compiler/lib/Vuna/Compiler/   （55 个模块：54 个导出 + 内部 Debug；�
 ├─ Codegen.vuna + Codegen/    Decl Erase Term Assembly Split  擦除检查 + OCaml 生成
 └─ Driver/                    Split Dt Compile CompilerCli     输出模型 / facade / 编译入口 / CLI
 根包 vuna（模块根 lib/，入口 app/Main.vuna）：Cli/Interp/Fmt/Lint/Index（门面+子模块）、
-  Repl/Doc/Lsp/Json/TestRunner/Files
+  Repl/Doc（+子模块）/Search（+子模块）/Sig/Lsp/Json/TestRunner/Files
 依赖图：vuna → vuna-compiler → vuna-base（根包也直接依赖 base）
 ```
 
@@ -123,8 +123,9 @@ vuna.toml → Frontend.{Toml.parseToml, Manifest.parseManifest/validateManifest}
 
 - `Vuna.Cli.runCli` 分发；`Vuna.Interp.interpretFile/interpretExpr`（`PackageContext` 入参，
   实际 `Driver.Dt.dtEvalFile`）、`Vuna.Repl.runRepl`、`Vuna.TestRunner.runTests`、
-  `Vuna.Doc.runDoc`、`Vuna.Files.collectVunaFiles`；fmt/lint 见 `Fmt.formatSourceWith` /
-  `Lint.runLint`。
+  `Vuna.Doc.runDoc`（docstring -> 单文件 HTML；`Vuna.Doc.{Comments,Model,Prose,Html,Run}`）、
+  `Vuna.Search.runSearch`、`Vuna.Files.collectVunaFiles`；fmt/lint 见 `Fmt.formatSourceWith` /
+  `Lint.runLint`；API 文档与检索见 [api-docs.md](reference/api-docs.md)。
 - 进程执行只在 `Driver.CompilerCli.runIn`（`prim_runIn`，需要 `process`；工具链经 `runIO`）。
 - **TCB**：工具链永不进 seed（`compiler/app/Main.vuna` 闭包不含 `Vuna.*` 工具模块；
   `nix/tcb-forbidden.txt` 黑名单）；效应边界是 manifest 显式能力
@@ -138,8 +139,8 @@ vuna.toml → Frontend.{Toml.parseToml, Manifest.parseManifest/validateManifest}
 - `Vuna.Lsp.runLsp`：JSON-RPC over stdio；帧按字节读（body 后无换行，见
   [tooling.md](reference/tooling.md) §2）；诊断走 `Pkg.contextForFile` + DT 精化；hover = 洞目标 +
   Index 符号；另有 formatting / documentSymbol / definition / references / completion / lint 诊断。
-- `Vuna.Index`：parse 级索引（`vuna map` / `vuna api`，缓存 `.local/index/`，内容哈希判定
-  新鲜度）。
+- `Vuna.Index`：parse 级索引 v3（`vuna map` / `vuna api`，`symDoc` / `symType`，缓存
+  `.local/index/`，内容哈希判定新鲜度）；`Vuna.Search` 消费它做名称/doc/类型检索。
 
 ## 5. 自举链：seed → vuna-seed → vuna-compiler → vuna
 

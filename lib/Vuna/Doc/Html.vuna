@@ -1,0 +1,200 @@
+module Vuna.Doc.Html (renderPage) where
+
+-- Vuna.Doc.Html：DocBook -> 自包含单 HTML（工具链；永不进 seed 闭包）。
+--
+-- 无外部 CSS/JS/CDN；搜索数据以 JSON 内嵌，客户端 JS 做名称/签名/doc 子串检索。
+-- 类型检索走 CLI（`vuna search --type`）；页面遇到 `->` / `=>` 时提示命令。
+-- 所有源码文本先 HTML 转义；JSON 中的 `<` 写成 `\u003c`，避免提前闭合 script。
+-- 输出不含时间戳/随机数，同一 DocBook 逐字节可复现。
+import Vuna.Compiler.Common
+import Vuna.Doc.Model
+import Vuna.Doc.Prose
+import Vuna.Json
+
+concat2 : String -> String -> String
+concat2 a b = a ++ b
+
+-- ---------------------------------------------------------------
+-- 锚点 / 交叉引用
+-- ---------------------------------------------------------------
+slug : String -> String
+slug s = slugChars (strUnpack s) ""
+
+slugChars : List Int -> String -> String
+slugChars [] acc = acc
+slugChars (c :: rest) acc =
+  if c >= 65 && c <= 90 then slugChars rest (concat2 acc (strPack [c + 32]))
+  else if c >= 97 && c <= 122 || c >= 48 && c <= 57 then slugChars rest (concat2 acc (strPack [c]))
+  else if c == 32 || c == 45 then slugChars rest (concat2 acc "-") else slugChars rest acc
+
+moduleAnchor : DocModule -> String
+moduleAnchor m = slug (moduleName m)
+
+itemAnchor : String -> DocItem -> String
+itemAnchor modName item = slug (concat2 modName (concat2 "." (itemName item)))
+
+memberAnchor : String -> String -> DocItem -> String
+memberAnchor modName parent member =
+  slug (concat2 modName (concat2 "." (concat2 parent (concat2 "." (itemName member)))))
+
+-- 交叉引用表：只用全名（Doc.Prose 的 `[Module.name]`）。短名在消歧前不自动加，
+-- 避免把 `[map]` 链到错误模块。
+linkMap : DocBook -> List (Pair String String)
+linkMap book = concatMap moduleLinks (bookModules book)
+
+moduleLinks : DocModule -> List (Pair String String)
+moduleLinks m =
+  Pair (moduleName m) (moduleAnchor m) :: concatMap (itemLinks (moduleName m)) (moduleItems m)
+
+itemLinks : String -> DocItem -> List (Pair String String)
+itemLinks modName item =
+  Pair (concat2 modName (concat2 "." (itemName item))) (itemAnchor modName item)
+    :: map (memberLink modName (itemName item)) (itemMembers item)
+
+memberLink : String -> String -> DocItem -> Pair String String
+memberLink modName parent member =
+  Pair (concat2 modName (concat2 "." (concat2 parent (concat2 "." (itemName member)))))
+    (memberAnchor modName parent member)
+
+-- ---------------------------------------------------------------
+-- 页面
+-- ---------------------------------------------------------------
+renderPage : DocBook -> String
+renderPage book =
+  strConcatMany
+    ["<!doctype html>\n<html lang='zh-CN'>\n<head>\n", "<meta charset='utf-8'>\n", "<meta name='viewport' content='width=device-width, initial-scale=1'>\n", "<title>vuna API</title>\n<style>\n", css, "</style>\n</head>\n<body>\n", sidebar book, "<main>\n", header book, "<div id='results' hidden></div>\n<div id='doc-content'>\n", strConcatMany (map (renderModule (linkMap book)) (bookModules book)), "</div>\n</main>\n", "<script type='application/json' id='vuna-index'>", scriptSafe (renderJson (JArr (searchEntries book))), "</script>\n<script>\n", js, "\n</script>\n</body>\n</html>\n"]
+
+sidebar : DocBook -> String
+sidebar book =
+  strConcatMany
+    ["<aside class='sidebar'>\n<p class='brand'>vuna API</p>\n", "<input id='search' type='search' placeholder='Search symbols / docs…  (/ to focus)' autocomplete='off'>\n", filterControls book, "<nav>\n", strConcatMany (map (tocPackage book) (packageNames book)), "</nav>\n</aside>"]
+
+header : DocBook -> String
+header book =
+  strConcatMany
+    ["<header class='top'>\n<h1>vuna API</h1>\n<p class='meta'>", strFromInt (length (packageNames book)), " packages · ", strFromInt (length (bookModules book)), " modules · ", strFromInt (symbolCount book), " symbols</p>\n", "<p class='hint'>Type search: <code>vuna search --type \"a -> a\"</code></p>\n</header>"]
+
+filterControls : DocBook -> String
+filterControls book =
+  strConcatMany
+    ["<div class='filters'>\n<select id='pkg-filter'><option value=''>All packages</option>", strConcatMany (map packageOption (packageNames book)), "</select>\n<select id='kind-filter'><option value=''>All kinds</option>", "<option value='fun'>fun</option><option value='data'>data</option><option value='record'>record</option>", "<option value='trait'>trait</option><option value='ctor'>ctor</option><option value='field'>field</option>", "<option value='method'>method</option><option value='axiom'>axiom</option><option value='extern'>extern</option>", "<option value='module'>module</option></select>\n</div>"]
+
+packageOption : String -> String
+packageOption pkg =
+  strConcatMany
+    ["<option value='", htmlEscape pkg, "'>", htmlEscape (displayPackage pkg), "</option>"]
+
+tocPackage : DocBook -> String -> String
+tocPackage book pkg =
+  strConcatMany
+    ["<div class='toc-pkg'>\n<h2>", htmlEscape (displayPackage pkg), "</h2>\n<ul>\n", strConcatMany (map moduleTocItem (filter (packageModule pkg) (bookModules book))), "</ul>\n</div>\n"]
+
+packageModule : String -> DocModule -> Bool
+packageModule pkg m = modulePackage m == pkg
+
+moduleTocItem : DocModule -> String
+moduleTocItem m =
+  strConcatMany ["<li><a href='#", moduleAnchor m, "'>", htmlEscape (moduleName m), "</a></li>\n"]
+
+renderModule : List (Pair String String) -> DocModule -> String
+renderModule links m =
+  strConcatMany
+    ["<section class='module' id='", moduleAnchor m, "'>\n<h2>", htmlEscape (moduleName m), "<span class='pkg'>", htmlEscape (displayPackage (modulePackage m)), "</span></h2>\n", renderDoc links (moduleDoc m), strConcatMany (map (renderItem links (moduleName m)) (moduleItems m)), "</section>\n"]
+
+renderItem : List (Pair String String) -> String -> DocItem -> String
+renderItem links modName item =
+  strConcatMany
+    ["<article class='item' id='", itemAnchor modName item, "'>\n<h3>", htmlEscape (itemName item), " <span class='kind'>", htmlEscape (itemKind item), "</span> <span class='loc'>line ", strFromInt (itemLine item), "</span></h3>\n", renderSignature (itemSignature item), renderDoc links (itemDoc item), strConcatMany (map (renderMember links modName (itemName item)) (itemMembers item)), "</article>\n"]
+
+renderMember : List (Pair String String) -> String -> String -> DocItem -> String
+renderMember links modName parent member =
+  strConcatMany
+    ["<div class='member' id='", memberAnchor modName parent member, "'>\n<h4>", htmlEscape (itemName member), " <span class='kind'>", htmlEscape (itemKind member), "</span></h4>\n", renderSignature (itemSignature member), renderDoc links (itemDoc member), "</div>\n"]
+
+renderSignature : String -> String
+renderSignature sig =
+  if sig == "" then ""
+  else strConcatMany ["<pre class='sig'><code>", htmlEscape sig, "</code></pre>\n"]
+
+renderDoc : List (Pair String String) -> String -> String
+renderDoc links doc =
+  if doc == "" then "" else strConcatMany ["<div class='doc'>", renderProse links doc, "</div>\n"]
+
+-- ---------------------------------------------------------------
+-- 搜索数据
+-- ---------------------------------------------------------------
+searchEntries : DocBook -> List Json
+searchEntries book = concatMap moduleEntries (bookModules book)
+
+moduleEntries : DocModule -> List Json
+moduleEntries m =
+  entryJson (moduleName m) (moduleName m) (modulePackage m) "module" "" (moduleDoc m) (moduleAnchor m)
+    :: concatMap (itemEntries m) (moduleItems m)
+
+itemEntries : DocModule -> DocItem -> List Json
+itemEntries m item =
+  entryJson (concat2 (moduleName m) (concat2 "." (itemName item))) (moduleName m) (modulePackage m) (itemKind item) (itemSignature item) (itemDoc item) (itemAnchor (moduleName m) item)
+    :: map (memberEntry m item) (itemMembers item)
+
+memberEntry : DocModule -> DocItem -> DocItem -> Json
+memberEntry m parent member =
+  entryJson (concat2 (moduleName m) (concat2 "." (itemName member))) (moduleName m)
+    (modulePackage m) (itemKind member) (itemSignature member) (itemDoc member)
+    (memberAnchor (moduleName m) (itemName parent) member)
+
+entryJson : String -> String -> String -> String -> String -> String -> String -> Json
+entryJson name modName pkg kind sig doc anchor =
+  JObj
+    [Pair "n" (JStr name), Pair "m" (JStr modName), Pair "p" (JStr pkg), Pair "k" (JStr kind), Pair "s" (JStr sig), Pair "d" (JStr doc), Pair "a" (JStr anchor)]
+
+scriptSafe : String -> String
+scriptSafe s = scriptSafeChars (strUnpack s) ""
+
+scriptSafeChars : List Int -> String -> String
+scriptSafeChars [] acc = acc
+scriptSafeChars (c :: rest) acc =
+  if c == 60 then scriptSafeChars rest (concat2 acc "\\u003c")
+  else scriptSafeChars rest (concat2 acc (strPack [c]))
+
+-- ---------------------------------------------------------------
+-- 统计 / 包
+-- ---------------------------------------------------------------
+packageNames : DocBook -> List String
+packageNames book = distinctStrings (map modulePackage (bookModules book))
+
+distinctStrings : List String -> List String
+distinctStrings xs = reverse (distinctGo xs [])
+
+distinctGo : List String -> List String -> List String
+distinctGo [] acc = acc
+distinctGo (x :: rest) acc =
+  if memName x acc then distinctGo rest acc else distinctGo rest (x :: acc)
+
+displayPackage : String -> String
+displayPackage pkg = if pkg == "" then "(no package)" else pkg
+
+symbolCount : DocBook -> Int
+symbolCount book = sumCounts (map moduleSymbolCount (bookModules book))
+
+moduleSymbolCount : DocModule -> Int
+moduleSymbolCount m = sumCounts (map itemSymbolCount (moduleItems m))
+
+itemSymbolCount : DocItem -> Int
+itemSymbolCount i = 1 + length (itemMembers i)
+
+sumCounts : List Int -> Int
+sumCounts [] = 0
+sumCounts (n :: rest) = n + sumCounts rest
+
+-- ---------------------------------------------------------------
+-- 静态资源（内联）
+-- ---------------------------------------------------------------
+css : String
+css =
+  strConcatMany
+    [":root{--bg:#fff;--fg:#1f2328;--muted:#59636e;--line:#d0d7de;--accent:#0969da;--code:#f6f8fa;--hit:#fff8c5}\n", "@media (prefers-color-scheme: dark){:root{--bg:#0d1117;--fg:#e6edf3;--muted:#9198a1;--line:#30363d;--accent:#58a6ff;--code:#161b22;--hit:#3b2e00}}\n", "*{box-sizing:border-box}body{margin:0;font:15px/1.55 -apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;background:var(--bg);color:var(--fg);display:grid;grid-template-columns:300px 1fr;min-height:100vh}\n", "a{color:var(--accent);text-decoration:none}a:hover{text-decoration:underline}code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.92em}\n", ".sidebar{position:sticky;top:0;height:100vh;overflow:auto;border-right:1px solid var(--line);padding:16px 14px}\n", ".brand{font-weight:700;font-size:17px;margin:0 0 10px}#search{width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--fg);font:inherit}\n", ".filters{display:flex;gap:6px;margin:8px 0 12px}.filters select{flex:1;min-width:0;padding:5px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--fg);font:inherit}\n", ".toc-pkg h2{font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);margin:18px 0 6px}.toc-pkg ul{list-style:none;margin:0;padding:0}.toc-pkg li{margin:3px 0;overflow-wrap:anywhere}\n", "main{padding:24px 32px 80px;min-width:0}.top h1{margin:0 0 4px;font-size:28px}.meta,.hint{color:var(--muted);margin:0}.hint{font-size:13px}\n", ".module{border-top:1px solid var(--line);margin-top:28px;padding-top:8px}.module h2{font-size:22px;margin:12px 0 6px;overflow-wrap:anywhere}.module h2 .pkg{font-size:12px;color:var(--muted);margin-left:8px}\n", ".item{margin:20px 0 20px 12px;padding-left:14px;border-left:3px solid var(--line)}.item h3{margin:0 0 6px;font-size:17px;overflow-wrap:anywhere}.item h4{margin:14px 0 4px;font-size:15px;overflow-wrap:anywhere}\n", ".member{margin:12px 0 12px 12px;padding-left:10px;border-left:2px dashed var(--line)}.kind{font-size:11px;font-weight:400;color:var(--muted);border:1px solid var(--line);border-radius:10px;padding:0 6px;vertical-align:middle}\n", ".loc{font-size:11px;color:var(--muted);font-weight:400;float:right}pre.sig{background:var(--code);border:1px solid var(--line);border-radius:6px;padding:10px 12px;overflow:auto;margin:6px 0}\n", ".doc p{margin:8px 0}.doc code{background:var(--code);padding:1px 4px;border-radius:4px}#results{padding:12px 0 4px}#results .count{color:var(--muted);margin:0 0 8px}#results .hint{background:var(--hit);padding:8px 10px;border-radius:6px}\n", ".hit{display:block;padding:8px 10px;border:1px solid var(--line);border-radius:6px;margin:6px 0;color:var(--fg)}.hit:hover{text-decoration:none;border-color:var(--accent)}.hit .hn{font-weight:600}.hit code{display:block;color:var(--muted);white-space:pre-wrap;overflow-wrap:anywhere}.hit .hd{display:block;color:var(--muted);font-size:13px}\n", "@media (max-width:820px){body{display:block}.sidebar{position:static;height:auto;border-right:0;border-bottom:1px solid var(--line)}main{padding:18px 16px 60px}}\n"]
+
+js : String
+js =
+  strConcatMany
+    ["(function(){\n", "var data=JSON.parse(document.getElementById('vuna-index').textContent);\n", "var input=document.getElementById('search');var box=document.getElementById('results');var content=document.getElementById('doc-content');\n", "var pkg=document.getElementById('pkg-filter');var kind=document.getElementById('kind-filter');\n", "function score(e,q){var n=e.n.toLowerCase(),s=(e.s||'').toLowerCase(),d=(e.d||'').toLowerCase(),m=e.m.toLowerCase(),v=0;\n", "if(n===q)v=1000;else if(n.slice(-(q.length+1))==='.'+q)v=900;else if(n.indexOf(q)===0)v=700;else if(n.indexOf(q)>=0)v=500;else if(m.indexOf(q)>=0)v=250;\n", "if(d.indexOf(q)>=0)v+=150;if(s.indexOf(q)>=0)v+=80;return v;}\n", "function active(e){return (pkg.value===''||e.p===pkg.value)&&(kind.value===''||e.k===kind.value);}\n", "function hitNode(e){var a=document.createElement('a');a.className='hit';a.href='#'+e.a;\n", "var n=document.createElement('span');n.className='hn';n.textContent=e.n;a.appendChild(n);\n", "if(e.s){var c=document.createElement('code');c.textContent=e.s;a.appendChild(c);}\n", "if(e.d){var d=document.createElement('span');d.className='hd';d.textContent=e.d.slice(0,160);a.appendChild(d);}\n", "a.addEventListener('click',function(){input.value='';render();});return a;}\n", "function render(){var q=input.value.trim().toLowerCase();\n", "if(!q){box.hidden=true;box.textContent='';content.hidden=false;return;}\n", "content.hidden=true;var hits=[];for(var i=0;i<data.length;i++){var e=data[i];if(!active(e))continue;var v=score(e,q);if(v>0)hits.push([v,e]);}\n", "hits.sort(function(a,b){return b[0]-a[0]||(a[1].n<b[1].n?-1:a[1].n>b[1].n?1:0);});\n", "box.hidden=false;box.textContent='';var head=document.createElement('p');head.className='count';head.textContent=hits.length+' result(s)';box.appendChild(head);\n", "if(q.indexOf('->')>=0||q.indexOf('=>')>=0){var h=document.createElement('p');h.className='hint';h.textContent='Type search: run vuna search --type <query>';box.appendChild(h);}\n", "for(var j=0;j<hits.length&&j<40;j++)box.appendChild(hitNode(hits[j][1]));\n", "if(hits.length===0){var p2=document.createElement('p');p2.className='count';p2.textContent='no results';box.appendChild(p2);}}\n", "input.addEventListener('input',render);pkg.addEventListener('change',render);kind.addEventListener('change',render);\n", "document.addEventListener('keydown',function(e){if(e.key==='/'&&document.activeElement!==input){e.preventDefault();input.focus();}if(e.key==='Escape'){input.value='';render();}});\n", "render();})();\n"]

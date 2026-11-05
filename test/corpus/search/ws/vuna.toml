@@ -1,0 +1,5 @@
+[package]
+name = "search-ws"
+
+[dependencies]
+vuna-base = "../../../../base"

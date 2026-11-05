@@ -88,6 +88,12 @@ compiler/lib/Vuna/Compiler/Version.vuna: vunaVersion
 lib/Vuna/Cli.vuna: runCli
 lib/Vuna/Cli/Args.vuna: ArgErr(..), ArgSpec(..), Parsed(..), argErrText, ensureDirPath, flagSet, flagValue, parentOf, parseToolArgs, readText, requireDirectory, requireExists
 lib/Vuna/Doc.vuna: runDoc
+lib/Vuna/Doc/Comments.vuna: docTableOf
+lib/Vuna/Doc/Html.vuna: renderPage
+lib/Vuna/Doc/Model.vuna: DocBook(..), DocItem(..), DocModule(..), bookModules, buildModules, itemDoc, itemKind, itemLine, itemMembers, itemName, itemSignature, moduleDoc, moduleItems, moduleName, modulePackage, modulePath
+lib/Vuna/Doc/Prose.vuna: htmlEscape, renderProse
+lib/Vuna/Doc/Run.vuna: runDoc
+lib/Vuna/Doc/Types.vuna: DocBlock(..), DocTable(..), docBlockCol, docBlockEndLine, docBlockStartLine, docBlockText, docForDecl, docForMember, docTableDecls, docTableMembers, docTableModuleDoc
 lib/Vuna/Files.vuna: collectSourceFiles, collectVunaFiles, pathExistsDir, pathExistsFile
 lib/Vuna/FixityEnv.vuna: FixityEnv, emptyFixityEnv, fixitiesForFile
 lib/Vuna/Fmt.vuna: formatSourceWith
@@ -96,11 +102,11 @@ lib/Vuna/Fmt/Decl.vuna: filterSections, joinSections, renderSourceSections
 lib/Vuna/Fmt/Expr.vuna: inlineExpr, inlinePrec, parenWrapInd, renderBindingValue, renderExpr, renderPat, renderPatAtom, renderTypeExpr
 lib/Vuna/Fmt/Util.vuna: appendBefore, appendLast, concatStrings, dummySpan, firstLine, fitsLine, isNilList, joinComma, joinLines, joinSpace, lastLineOf, mapMaybeStrings, maxWidth, prefixFirst, restLines, spaces, strWidth
 lib/Vuna/GenErrors.vuna: runGenErrors
-lib/Vuna/Index.vuna: Index(..), ModuleInfo(..), Ref(..), Sym(..), buildIndex, findReferences, findSymbol, impactOf, indexModules, listAllSymbols, loadOrBuild, modBytes, modDecls, modName, modPackage, modPath, refModule, refName, referencesAt, renderApi, renderModules, renderOverview, symCol, symFullName, symKind, symLine, symModule, symName, symSig, symbolAt
+lib/Vuna/Index.vuna: Index(..), ModuleInfo(..), Ref(..), Sym(..), buildIndex, findReferences, findSymbol, impactOf, indexModules, listAllSymbols, loadOrBuild, modBytes, modDecls, modName, modPackage, modPath, refModule, refName, referencesAt, renderApi, renderModules, renderOverview, symCol, symDoc, symFullName, symKind, symLine, symModule, symName, symSig, symType, symbolAt
 lib/Vuna/Index/Query.vuna: findReferences, findSymbol, impactOf, listAllSymbols, referencesAt, symbolAt
 lib/Vuna/Index/Render.vuna: renderApi, renderModules, renderOverview
 lib/Vuna/Index/Scan.vuna: buildIndex, loadOrBuild
-lib/Vuna/Index/Types.vuna: Index(..), ModuleInfo(..), Ref(..), Sym(..), distinct, indexModules, modBytes, modDecls, modName, modPackage, modPath, refModule, refName, symCol, symFullName, symKind, symLine, symModule, symName, symSig
+lib/Vuna/Index/Types.vuna: Index(..), ModuleInfo(..), Ref(..), Sym(..), distinct, indexModules, modBytes, modDecls, modName, modPackage, modPath, refModule, refName, symCol, symDoc, symFullName, symKind, symLine, symModule, symName, symSig, symType
 lib/Vuna/Interp.vuna: evalExprInfo, interpretExpr, interpretFile, runEffectProgram
 lib/Vuna/Json.vuna: Json(..), jsonAsArr, jsonAsBool, jsonAsInt, jsonAsObj, jsonAsStr, jsonBoolOr, jsonGet, jsonGetIn, jsonIntOr, jsonObjSingle, jsonStrOr, parseJson, renderJson
 lib/Vuna/Lint.vuna: runLint
@@ -112,4 +118,9 @@ lib/Vuna/Lsp/Diagnostics.vuna: contextForDoc, publishDiagnosticsFor
 lib/Vuna/Lsp/Protocol.vuna: allDigits, clampInt, contentLengthOf, decodeUri, digitsToInt, dirOfPath, fileNameOf, flushLogLines, isEmptyList, lastElem, lastSegment, lineText, logLine, lspRange, notify, nthCode, parentDir, pathToUri, qualPrefixLen, readChunk, responseErr, responseOk, sendFrame, spanRange, splitHeaderBlock, stripTrailingDots, tokenAtCursor, wordPrefixLen
 lib/Vuna/Lsp/Query.vuna: completionItems, definitionResult, documentSymbols, formattingEdits, holeHoverAt, referencesResult, symbolHoverResult, workspaceRoot, workspaceSymbols
 lib/Vuna/Repl.vuna: runRepl
+lib/Vuna/Search.vuna: runSearch
+lib/Vuna/Search/Query.vuna: searchNameDoc, searchType, typeNameMap
+lib/Vuna/Search/Run.vuna: runSearch
+lib/Vuna/Search/Types.vuna: SearchHit(..), hitDoc, hitKind, hitLine, hitMatch, hitModule, hitName, hitScore, hitSignature
+lib/Vuna/Sig.vuna: renderType, renderTypeInCtx
 lib/Vuna/TestRunner.vuna: runTests

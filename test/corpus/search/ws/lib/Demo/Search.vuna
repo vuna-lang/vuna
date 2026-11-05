@@ -1,0 +1,29 @@
+-- | Demo search module.
+module Demo.Search where
+
+-- | Identity.
+id : a -> a
+id x = x
+
+-- | Increment an Int.
+inc : Int -> Int
+inc n = n
+
+-- | Length of a list.
+length : List a -> Nat
+length xs = 0
+
+-- | Pair constructor helper.
+pair : Int -> String -> Pair Int String
+pair a b = Pair a b
+
+-- | Equality test helper.
+showLike : Eq a => a -> a -> Bool
+showLike a b = True
+
+-- | Just-like constructor.
+data Maybe2 a : Type where
+  -- | Nothing-like.
+  Nothing2 : Maybe2 a
+  -- | Just-like.
+  Just2 : a -> Maybe2 a

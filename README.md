@@ -43,7 +43,7 @@ nix run .#vuna-run-tests                            # 原生测试（= sh test/r
 nix run .#vuna-run-tests -- --list                  # 列出章节（--only <章节> 只跑某段）
 ./result/bin/vuna fmt --check examples/multi   # 格式化检查（也可逐个给文件/目录）
 ./result/bin/vuna lint compiler/lib/Vuna/Compiler/Elab/Term.vuna   # 风格检查（必须给路径）
-./result/bin/vuna doc                          # 生成 docs/api.md（gitignored）
+./result/bin/vuna doc                          # 生成 docs/api.html（gitignored）
 ```
 
 自己新建包：`vuna.toml` + `app/Main.vuna`，入口 `main : IO a`，效果 API 来自 `Base.IO`。
@@ -74,7 +74,8 @@ vuna interp <file.vuna>                   # 精化后核心求值（纯；不执
 vuna test [DIR]                           # 运行 test/*.vuna（DT 核心求值，main : String 空串通过）
 vuna fmt [--check] [PATH]...
 vuna repl
-vuna doc [DIR [OUT]]                      # 默认 DIR/docs/api.md
+vuna doc [--check] [--package NAME] [DIR [OUT]]  # 默认 DIR/docs/api.html
+vuna search [--type|--name|--doc] [--module PFX] [--limit N] [--json] <query...>
 vuna map [...] | vuna api <Module.name>  # 模块总览 / 定位符号 / 改动影响面 / 签名面
 vuna help, -h
 ```
@@ -147,7 +148,8 @@ manifest，不向上找。命令语义与包格式
 | [docs/reference/primitives.md](docs/reference/primitives.md) | 内建/原语唯一声明面、Int/String/IO 语义、效应能力（`[capabilities]`） |
 | [docs/reference/packages.md](docs/reference/packages.md) | `vuna.toml` 包格式、workspace / 依赖 DAG、工具链命令一览 |
 | [docs/reference/core.md](docs/reference/core.md) | Core TT / NbE / 合一 / 精化器 / 擦除 / codegen 护栏的实现参考 |
-| [docs/reference/tooling.md](docs/reference/tooling.md) | 工具链：`vuna goal`、LSP、`vuna doc`、错误码体系与代表性错误索引 |
+| [docs/reference/api-docs.md](docs/reference/api-docs.md) | API 文档：docstring、单文件 HTML、`vuna search` / 类型检索 |
+| [docs/reference/tooling.md](docs/reference/tooling.md) | 工具链：`vuna goal`、LSP、`vuna doc`（单文件 HTML）、错误码体系与代表性错误索引 |
 | [docs/reference/compiler.md](docs/reference/compiler.md) | 编译器模块职责、codegen 表示与输出模型、接口摘要（TTC 式模块化精化）、夹具指标 |
 | [docs/reference/bootstrap.md](docs/reference/bootstrap.md) | 种子策略、rotation 流程、fixed point、TCB 边界 |
 | [docs/reference/testing.md](docs/reference/testing.md) | 测试体系、corpus 分类、nix checks 清单、性能基准 |

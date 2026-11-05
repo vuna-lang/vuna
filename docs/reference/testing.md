@@ -10,8 +10,9 @@ vuna 原生测试按编号章节组织（**43 个章节**：编号到 44，无�
 后端。精确 checks 数随夹具增删变化，以运行输出为准。测试覆盖：
 
 - `corpus/cli/check.sh`：CLI 错误矩阵（参数 / 路径 / workspace / 包目录）；
-- `corpus/index/check.sh`：Index v2（内容哈希缓存、原子写、refs 位置）；
-- `corpus/doc/01_export`：`vuna doc` 尊重 `[export]`；
+- `corpus/index/check.sh`：Index v3（内容哈希缓存、原子写、doc/type 字段、refs 位置）；
+- `corpus/doc/check.sh`：`vuna doc` 单文件 HTML、docstring 提取、`--check`、确定性；
+- `corpus/search/check.sh`：`vuna search` 名称/doc/类型检索、JSON、退出码；
 - `corpus/packages/{09_workspace_member_error, 10_workspace_build}`：workspace check/build；
 - `corpus/test-m30/`：REPL / effect test；
 - LSP smoke：`corpus/lsp/smoke.sh`；

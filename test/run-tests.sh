@@ -693,9 +693,11 @@ for file in corpus/run/01_arithmetic.vuna corpus/run/03_data_case.vuna corpus/fm
 done
 
 # 31) doc / repl 冒烟（M23：Repl 已切 DT，顶层定义必须先输签名行；裸表达式可直接求值）
-"$VUNA" doc corpus/packages/01_workspace "$tmp/api.md" >/dev/null 2>&1
+"$VUNA" doc corpus/packages/01_workspace "$tmp/api.html" >/dev/null 2>&1
 check_eq "vuna doc exit" "0" "$?"
-check_contains "vuna doc content" "$(cat "$tmp/api.md" 2>/dev/null)" "## Vuna.Hello"
+check_contains "vuna doc content" "$(cat "$tmp/api.html" 2>/dev/null)" "Vuna.Hello"
+sh corpus/doc/check.sh "$VUNA" >"$tmp/doc_check.log" 2>&1
+if [ "$?" -eq 0 ]; then ok; else bad "doc check" "exit 0" "$(tail -5 "$tmp/doc_check.log")"; fi
 repl_out=$(printf 'x : Int\nx = 1 + 1\nx + 40\n:q\n' | "$VUNA" repl 2>&1)
 check_contains "vuna repl eval" "$repl_out" "42"
 printf ':q\n' | "$VUNA" repl >/dev/null 2>&1
@@ -1206,14 +1208,16 @@ case "$help26" in
   *) ok ;;
 esac
 
-# 40) M30 工具链回归：CLI 错误矩阵 + Index v2 自检 + doc [export]
-#     两个 check.sh 是独立 POSIX 脚本（内部 mktemp 隔离，不碰仓库缓存）。
+# 40) M30 工具链回归：CLI 错误矩阵 + Index v3 自检 + doc [export] + search
+#     三个 check.sh 是独立 POSIX 脚本（内部 mktemp 隔离，不碰仓库缓存）。
 sh corpus/cli/check.sh "$VUNA" >"$tmp/cli_m30.log" 2>&1
 if [ "$?" -eq 0 ]; then ok; else bad "cli m30" "exit 0" "$(tail -8 "$tmp/cli_m30.log")"; fi
 sh corpus/index/check.sh "$VUNA" >"$tmp/index_m30.log" 2>&1
 if [ "$?" -eq 0 ]; then ok; else bad "index m30" "exit 0" "$(tail -8 "$tmp/index_m30.log")"; fi
+sh corpus/search/check.sh "$VUNA" >"$tmp/search_check.log" 2>&1
+if [ "$?" -eq 0 ]; then ok; else bad "search check" "exit 0" "$(tail -5 "$tmp/search_check.log")"; fi
 
-doc_m30_out="$tmp/doc-m30/api.md"
+doc_m30_out="$tmp/doc-m30/api.html"
 doc_m30=$("$VUNA" doc corpus/doc/01_export "$doc_m30_out" 2>&1)
 doc_m30_code=$?
 if [ "$doc_m30_code" -ne 0 ]; then
@@ -1222,7 +1226,7 @@ elif [ ! -f "$doc_m30_out" ]; then
   bad "doc m30 output" "writes $doc_m30_out" "missing"
 else
   doc_m30_text=$(cat "$doc_m30_out")
-  check_contains "doc [export] includes Visible" "$doc_m30_text" "## Visible"
+  check_contains "doc [export] includes Visible" "$doc_m30_text" "id='visible'"
   case "$doc_m30_text" in
     *"## Hidden"*) bad "doc [export] excludes Hidden" "absent" "Hidden still documented" ;;
     *) ok ;;

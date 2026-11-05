@@ -54,7 +54,7 @@ Content-Length: <字节数>\r\n
 | `initialized` | 通知，无响应 |
 | `textDocument/didOpen` / `didChange` / `didClose` | 内存维护打开文档表（Full 同步） |
 | `textDocument/publishDiagnostics` | 包上下文解析 / DT 精化 / 覆盖性诊断 + lint 诊断 |
-| `textDocument/hover` | DT 洞 `_` 的目标类型与上下文（文本里没有独立 `_` 时跳过精化）；否则标识符签名 / 文档注释。`range` 落在**光标 token** 上（不是符号定义位置）——客户端用它判断 hover 何时失效 |
+| `textDocument/hover` | DT 洞 `_` 的目标类型与上下文（文本里没有独立 `_` 时跳过精化）；否则标识符签名 + `-- |` docstring（多行保留）。普通注释不进入 hover。`range` 落在**光标 token** 上（不是符号定义位置）——客户端用它判断 hover 何时失效 |
 | `textDocument/formatting` | `Vuna.Fmt.formatSourceWith` 全文替换 TextEdit（fixity 取程序级可见闭包）（解析失败返回空） |
 | `textDocument/documentSymbol` | AST 声明树（data/record/trait 带子节点） |
 | `textDocument/definition` / `references` | Index：token → 符号 → 定义位置；references 用 `Ref` 的精确行 / 列 |
@@ -96,17 +96,20 @@ shutdown/exit 退出码，以及**交互式帧读取**（第 18 项：body 后�
 
 ## 3. `vuna doc`
 
-`vuna doc` 渲染声明面：
+`vuna doc` 生成**单文件交互 HTML**（docstring + 搜索框 + TOC）：
 
-- `trait Pretty a where` 渲染为 `trait Pretty a where` 与其方法签名；
-- 隐式 Pi 渲染成 `{a : Type} -> ...`（`Vuna.Doc` 的 `EPi` 分支按 `implicit` 决定花括号）；
-- 尊重 `[export].modules`：目录是含 `[export]` 的包时只输出导出模块。
+- 默认输出 `DIR/docs/api.html`（`DIR=.` 时 `docs/api.html`）；父目录逐级创建；
+- workspace 根渲染所有成员包，单包目录只渲染该包；尊重每包的 `[export].modules`；
+- `--check` 报告缺失 docstring 的顶层导出项（exit 1，不写文件）；
+- docstring 语法、HTML 搜索框、类型检索与边界见 [api-docs.md](api-docs.md)。
 
 ```console
-$ vuna doc <dir> <out.md>
+$ vuna doc <dir> [out.html]
+$ vuna doc --check <dir>
+$ vuna search --type "a -> a"
 ```
 
-输出文件的**父目录必须已存在**（`doc` 不创建目录）。
+旧的 `docs/api.md` Markdown 工作流已删除；生成物改为 `docs/api.html`（gitignored）。
 
 ## 4. 错误码体系
 

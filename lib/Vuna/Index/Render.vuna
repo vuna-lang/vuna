@@ -47,4 +47,4 @@ apiRow s =
     ++ symSig s
     ++ "  -- line "
     ++ strFromInt (symLine s)
-    ++ (if s.symDoc == "" then "" else "\n      " ++ s.symDoc)
+    ++ (if s.symDoc == "" then "" else "\n" ++ join "\n" (map (\l => "      " ++ l) (lines s.symDoc)))

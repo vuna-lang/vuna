@@ -1,0 +1,54 @@
+module Vuna.Sig (renderType, renderTypeInCtx) where
+
+-- Vuna.Sig：语法级类型打印（工具链共用；永不进 seed 闭包）。
+--
+-- 单一真源：`vuna api` 的签名、`vuna doc` 的 HTML、`vuna search` 的类型索引都
+-- 从同一套打印器取文本。历史上有两份（`Vuna.Doc` 与 `Vuna.Index.Scan`），对
+-- `EBacktick` / section 的处理已经漂移；这里合并并补全显式分支。
+--
+-- 输出是**可回读**的：`vuna search --type` 会把它存进索引的 `symType` 再用
+-- parser 读回来。括号策略保持旧输出（应用参数加括号、箭头右结合）不变。
+import Vuna.Compiler.Common
+import Vuna.Compiler.Frontend.Ast
+
+renderType : Expr -> String
+renderType (EVar name sp) = name
+renderType (ty@(EApp (EVar arrow _) ([a, b]) _)) =
+  if arrow == "->" then renderTypeArg a ++ " -> " ++ renderType b else renderTypePlain ty
+renderType (EInfix "->" a b sp) = renderTypeArg a ++ " -> " ++ renderType b
+renderType (EPi name implicit dom cod sp) =
+  let
+    binder =
+      if implicit then "{" ++ name ++ " : " ++ renderType dom ++ "}"
+      else "(" ++ name ++ " : " ++ renderType dom ++ ")"
+  in binder ++ " -> " ++ renderType cod
+renderType ty = renderTypePlain ty
+
+-- 签名约束前缀（`C a, D b => τ`）；空 ctx 与旧输出逐字一致。
+renderTypeInCtx : List Expr -> Expr -> String
+renderTypeInCtx [] ty = renderType ty
+renderTypeInCtx ctx ty = join ", " (map renderType ctx) ++ " => " ++ renderType ty
+
+renderTypePlain : Expr -> String
+renderTypePlain (EApp f args sp) = renderTypeAtom f ++ " " ++ join " " (map renderTypeArg args)
+renderTypePlain (EInt n sp) = strFromInt n
+renderTypePlain (EStr s sp) = "\"" ++ s ++ "\""
+renderTypePlain (EInfix op l r sp) = renderTypeArg l ++ " " ++ op ++ " " ++ renderTypeArg r
+-- 类型位置也可能出现反引号中缀 / section（keep 模式下保留原形）；显式渲染，
+-- 不落到 `_` 静默丢表达式。
+renderTypePlain (EBacktick nm l r sp) = renderTypeArg l ++ " `" ++ nm ++ "` " ++ renderTypeArg r
+renderTypePlain (ESectOp op sp) = "(" ++ op ++ ")"
+renderTypePlain (ESectL op e sp) = "(" ++ op ++ " " ++ renderType e ++ ")"
+renderTypePlain (ESectR e op sp) = "(" ++ renderType e ++ " " ++ op ++ ")"
+renderTypePlain _ = "_"
+
+renderTypeArg : Expr -> String
+renderTypeArg (EVar name sp) = name
+renderTypeArg (ty@(EApp (EVar arrow _) ([a, b]) _)) =
+  if arrow == "->" then "(" ++ renderType ty ++ ")" else "(" ++ renderType ty ++ ")"
+renderTypeArg (ty@(EInfix "->" a b sp)) = "(" ++ renderType ty ++ ")"
+renderTypeArg ty = "(" ++ renderType ty ++ ")"
+
+renderTypeAtom : Expr -> String
+renderTypeAtom (EVar name sp) = name
+renderTypeAtom ty = "(" ++ renderType ty ++ ")"

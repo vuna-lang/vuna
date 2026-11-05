@@ -1,3 +1,4 @@
+-- | 布尔类型与逻辑辅助函数。
 module Base.Bool (Bool(..), and, bool, not, or, xor) where
 
 -- Base.Bool：布尔类型与逻辑辅助函数。无依赖模块。
@@ -5,21 +6,29 @@ module Base.Bool (Bool(..), and, bool, not, or, xor) where
 infixl 3 &&
 infixl 2 ||
 
+-- | 布尔：`False` / `True`。
 data Bool : Type where
+  -- | 假。
   False : Bool
+  -- | 真。
   True : Bool
 
+-- | 逻辑非。
 not : Bool -> Bool
 not b = if b then False else True
 
+-- | 逻辑与（非短路版本；短路内建是 `&&`）。
 and : Bool -> Bool -> Bool
 and a b = if a then b else False
 
+-- | 逻辑或（非短路版本；短路内建是 `||`）。
 or : Bool -> Bool -> Bool
 or a b = if a then True else b
 
+-- | 逻辑异或。
 xor : Bool -> Bool -> Bool
 xor a b = if a then not b else b
 
+-- | 布尔消除：先假分支、再真分支。
 bool : a -> a -> Bool -> a
 bool ifFalse ifTrue b = if b then ifTrue else ifFalse
