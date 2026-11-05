@@ -64,10 +64,8 @@ module Vuna.Compiler.Elab.Trait
   , zipMethodFields
   ) where
 
--- Vuna.Compiler.Elab.Trait：trait/instance 声明与派生：类参数 kind、方法投影、实例头检查（重复/命名）、实例方法体、
--- 字典提升（liftFreeDictGoals）、实例体与 trait 声明的批量调度，以及定义参数模式绑定与
--- `elabFunDef`（实例方法体复用同一套模式矩阵降级）。
--- 拆自 M24 的单一 `Elab.vuna`（按真实调用图切；门面仍是 `Vuna.Compiler.Elab`）。
+-- Vuna.Compiler.Elab.Trait：trait/instance 声明与派生：类参数 kind、方法投影、实例头检查、
+-- 实例方法体、字典提升、实例体批量调度、定义参数模式绑定与 `elabFunDef`；拆自 M24 的 `Elab.vuna`。
 import Vuna.Compiler.Common
 import Base.HashMap
 import Vuna.Compiler.Debug
