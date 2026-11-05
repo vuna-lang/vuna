@@ -20,6 +20,7 @@ module Vuna.Compiler.Driver.Compile
 import Vuna.Compiler.Common
 import Vuna.Compiler.Packages.Pkg
 import Vuna.Compiler.Driver.Dt
+import Vuna.Compiler.Driver.Cache
 import Vuna.Compiler.Driver.Split
 import Vuna.Compiler.Version
 import Base.IO
@@ -308,7 +309,7 @@ runBuildScript dir out name =
 -- 典型的「依赖包全部缓存命中」场景：重复 `vuna check .` / 多包 workspace / LSP 重启。
 -- ---------------------------------------------------------------
 checkCacheSchema : String
-checkCacheSchema = "vuna-check-cache 1"
+checkCacheSchema = "vuna-check-cache 2"
 
 checkCacheDir : PackageContext -> String
 checkCacheDir ctx = cacheBase ++ "/" ++ hashText (textHash (contextDir ctx)) ++ "/check"
@@ -352,10 +353,10 @@ checkCachedExe ctx entry =
     key = checkCacheKeyExe ctx entry
     path = checkCachePath ctx key
   in if runIO (prim_fileExists path) then Ok []
-  else andThen (dtCheck ctx entry) (\r => let
+  else andThen (dtCheckWithProgram ctx entry) (\r => let
     _ = ensureDirPath (checkCacheDir ctx)
-    _ = runIO (prim_writeFile path ("ok " ++ key))
-  in Ok r
+    _ = runIO (prim_writeFile path (prim_marshal (cachedOfProgram (secondOf r))))
+  in Ok (firstOf r)
   )
 
 checkCachedLib : PackageContext -> List String -> Result (List String)
@@ -364,10 +365,10 @@ checkCachedLib ctx names =
     key = checkCacheKeyLib ctx names
     path = checkCachePath ctx key
   in if runIO (prim_fileExists path) then Ok []
-  else andThen (dtCheckLibrary ctx names) (\r => let
+  else andThen (dtCheckLibraryWithProgram ctx names) (\r => let
     _ = ensureDirPath (checkCacheDir ctx)
-    _ = runIO (prim_writeFile path ("ok " ++ key))
-  in Ok r
+    _ = runIO (prim_writeFile path (prim_marshal (cachedOfProgram (secondOf r))))
+  in Ok (firstOf r)
   )
 
 -- ---------------------------------------------------------------

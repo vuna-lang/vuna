@@ -1,0 +1,28 @@
+module Vuna.Compiler.Driver.Cache (CachedProgram(..), cachedOfProgram, programOfCached) where
+
+-- M34.5 / C32 第一步：`DtProgram` 的可序列化纯数据形态。
+--
+-- `Value` 用 `quote 0` 转成闭项 `Term`（quote 覆盖全部 Value 构造子：Pi/Lam/中性/构造子/
+-- 字符内建），恢复时 `eval []` 重建（η 等价）。丢弃 `goals`（洞信息只服务 `vuna goal`，
+-- 不属于检查缓存）与 `defvals`（定义体求值结果的共享缓存，恢复为空只会更慢、不影响语义）。
+--
+-- 用途：依赖包的 elab 摘要（接口摘要）缓存；check/build 磁盘缓存的 program 载体。
+import Vuna.Compiler.Common
+import Vuna.Compiler.Elab
+import Vuna.Compiler.Elab.Types
+import Vuna.Compiler.Core
+import Base.HashMap
+
+data CachedProgram : Type where
+  CachedProgram : List DtData -> List DtDef -> List (Pair Int Term) -> List (Pair String Term) -> List DtInst -> List DtClass -> Int -> CachedProgram
+
+cachedOfProgram : DtProgram -> CachedProgram
+cachedOfProgram prog =
+  CachedProgram (dtProgDatas prog) (dtProgDefs prog)
+    (map (\p => Pair (firstOf p) (quote 0 (secondOf p))) (dtProgSols prog)) (dtProgGlobals prog)
+    (dtProgInsts prog) (dtProgClasses prog) (dtProgNext prog)
+
+programOfCached : CachedProgram -> DtProgram
+programOfCached (CachedProgram datas defs sols globals insts classes next) =
+  DtProgram datas defs [] (map (\p => Pair (firstOf p) (eval [] (secondOf p))) sols) globals insts
+    classes next (Base.HashMap.fromList [])

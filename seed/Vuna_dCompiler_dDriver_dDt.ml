@@ -77,6 +77,12 @@ let v_Vuna_dCompiler_dDriver_dDt_ddtLoadModules = (fun ctx names -> ((fun _u -> 
 
 let v_Vuna_dCompiler_dDriver_dDt_ddtCheckDecls = (fun loaded -> ((v_Base_dResult_dandThen loaded) (fun decls -> ((fun _u -> ((v_Base_dResult_dandThen (v_Vuna_dCompiler_dElab_dDriver_delabProgram decls)) (fun program -> ((fun _u -> ((v_Base_dResult_dandThen (v_Vuna_dCompiler_dCodegen_dAssembly_dcheckDtProgram program)) (fun _u -> ((fun _u -> (C_Base_dResult_dResult_Base_dResult_dOk (C_Base_dList_dList_Base_dList_dNil))) (v_Vuna_dCompiler_dDebug_dstamp "codegen-check-done"))))) (v_Vuna_dCompiler_dDebug_dstamp "elab-done"))))) (v_Vuna_dCompiler_dDebug_dstamp "decls-ready")))))
 
+let v_Vuna_dCompiler_dDriver_dDt_ddtCheckDeclsWithProgram = (fun loaded -> ((v_Base_dResult_dandThen loaded) (fun decls -> ((v_Base_dResult_dandThen (v_Vuna_dCompiler_dElab_dDriver_delabProgramFull decls)) (fun program -> ((fun _u -> ((v_Base_dResult_dandThen (v_Vuna_dCompiler_dCodegen_dAssembly_dcheckDtProgram (C_Base_dPair_dPair_Base_dPair_dPair ((v_Vuna_dCompiler_dElab_dTypes_ddtProgDatas program), (v_Vuna_dCompiler_dElab_dTypes_ddtProgDefs program))))) (fun _u -> ((fun _u -> (C_Base_dResult_dResult_Base_dResult_dOk ((C_Base_dPair_dPair_Base_dPair_dPair (C_Base_dList_dList_Base_dList_dNil, program))))) (v_Vuna_dCompiler_dDebug_dstamp "codegen-check-done"))))) (v_Vuna_dCompiler_dDebug_dstamp "elab-done")))))))
+
+let v_Vuna_dCompiler_dDriver_dDt_ddtCheckWithProgram = (fun ctx entry -> (v_Vuna_dCompiler_dDriver_dDt_ddtCheckDeclsWithProgram ((v_Vuna_dCompiler_dDriver_dDt_ddtLoad ctx) entry)))
+
+let v_Vuna_dCompiler_dDriver_dDt_ddtCheckLibraryWithProgram = (fun ctx names -> (v_Vuna_dCompiler_dDriver_dDt_ddtCheckDeclsWithProgram ((v_Vuna_dCompiler_dDriver_dDt_ddtLoadModules ctx) names)))
+
 let v_Vuna_dCompiler_dDriver_dDt_ddtCheck = (fun ctx entry -> (v_Vuna_dCompiler_dDriver_dDt_ddtCheckDecls ((v_Vuna_dCompiler_dDriver_dDt_ddtLoad ctx) entry)))
 
 let v_Vuna_dCompiler_dDriver_dDt_ddtCheckLibrary = (fun ctx names -> (v_Vuna_dCompiler_dDriver_dDt_ddtCheckDecls ((v_Vuna_dCompiler_dDriver_dDt_ddtLoadModules ctx) names)))

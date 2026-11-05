@@ -70,6 +70,7 @@ open Vuna_dCompiler_dDriver_dSplit
 open Vuna_dCompiler_dCodegen_dSplit
 open Vuna_dCompiler_dCodegen
 open Vuna_dCompiler_dDriver_dDt
+open Vuna_dCompiler_dDriver_dCache
 open Vuna_dCompiler_dVersion
 open Vuna_dCompiler_dDriver_dCompile
 let v_Vuna_dCompiler_dDriver_dCompilerCli_dcompilerUsageLines = (fun prog -> (String.concat "" ["  "; prog; " compile [--no-print] (<entry.vuna> | <package-dir>) <out-dir>\n"; "  "; prog; " check (<entry.vuna> | <package-dir>)\n"; "  "; prog; " build [--no-compile] [--out DIR] [--package NAME] [DIR]\n"; "  --no-print                    compile \231\148\159\230\136\144\231\154\132\231\168\139\229\186\143\228\184\141\230\137\147\229\141\176 main \231\187\147\230\158\156\239\188\136\233\187\152\232\174\164\230\137\147\229\141\176\239\188\137\n"; "  "; prog; " version, --version          \230\152\190\231\164\186\231\137\136\230\156\172\n"; "  "; prog; " help, -h\n"]))

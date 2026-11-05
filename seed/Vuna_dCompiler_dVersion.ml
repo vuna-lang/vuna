@@ -70,4 +70,5 @@ open Vuna_dCompiler_dDriver_dSplit
 open Vuna_dCompiler_dCodegen_dSplit
 open Vuna_dCompiler_dCodegen
 open Vuna_dCompiler_dDriver_dDt
+open Vuna_dCompiler_dDriver_dCache
 let v_Vuna_dCompiler_dVersion_dvunaVersion = "0.1.0"

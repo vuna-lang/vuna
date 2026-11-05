@@ -70,6 +70,7 @@ open Vuna_dCompiler_dDriver_dSplit
 open Vuna_dCompiler_dCodegen_dSplit
 open Vuna_dCompiler_dCodegen
 open Vuna_dCompiler_dDriver_dDt
+open Vuna_dCompiler_dDriver_dCache
 open Vuna_dCompiler_dVersion
 open Vuna_dCompiler_dDriver_dCompile
 open Vuna_dCompiler_dDriver_dCompilerCli

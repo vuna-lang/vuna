@@ -1,0 +1,80 @@
+open Vuna_runtime
+open Base_dPair
+open Base_dBool
+open Base_dMonad
+open Base_dMaybe
+open Base_dEq
+open Base_dOrd
+open Base_dInt
+open Base_dList
+open Base_dResult
+open Base_dString
+open Base_dShow
+open Prelude
+open Vuna_dCompiler_dCommon
+open Vuna_dCompiler_dFrontend_dToml
+open Vuna_dCompiler_dFrontend_dManifest
+open Base_dIO
+open Vuna_dCompiler_dPackages_dPkg
+open Base_dArray
+open Base_dHashMap
+open Vuna_dCompiler_dDebug
+open Base_dNat
+open Base_dVec
+open Vuna_dCompiler_dDiagnostics_dCommon
+open Vuna_dCompiler_dDiagnostics_dCg
+open Vuna_dCompiler_dDiagnostics_dTc
+open Vuna_dCompiler_dDiagnostics
+open Vuna_dCompiler_dFrontend_dAst
+open Vuna_dCompiler_dFrontend_dDiagnostics
+open Vuna_dCompiler_dFrontend_dLexer
+open Vuna_dCompiler_dFrontend_dParser_dSupport
+open Vuna_dCompiler_dFrontend_dParser
+open Vuna_dCompiler_dLoader_dDiagnostics
+open Vuna_dCompiler_dLoader_dFixity
+open Vuna_dCompiler_dLoader_dModules
+open Vuna_dCompiler_dIntrinsics
+open Vuna_dCompiler_dLoader_dResolve
+open Vuna_dCompiler_dLoader_dFlatten
+open Vuna_dCompiler_dLoader
+open Base_dIntMap
+open Vuna_dCompiler_dCore_dTerm
+open Vuna_dCompiler_dCore_dEval
+open Vuna_dCompiler_dCore_dConv
+open Vuna_dCompiler_dCore
+open Vuna_dCompiler_dElab_dTypes
+open Vuna_dCompiler_dElab_dPrelude
+open Vuna_dCompiler_dElab_dSig
+open Vuna_dCompiler_dElab_dMeta
+open Vuna_dCompiler_dElab_dCase
+open Vuna_dCompiler_dElab_dDict
+open Vuna_dCompiler_dElab_dMatch
+open Vuna_dCompiler_dElab_dTerm_dSupport
+open Vuna_dCompiler_dElab_dTerm_dImpl
+open Vuna_dCompiler_dElab_dTerm
+open Vuna_dCompiler_dElab_dData
+open Vuna_dCompiler_dElab_dInstName
+open Vuna_dCompiler_dElab_dTrait
+open Vuna_dCompiler_dElab_dDerive
+open Vuna_dCompiler_dElab_dRecords
+open Vuna_dCompiler_dElab_dTermination_dMeasure
+open Vuna_dCompiler_dElab_dTermination_dScc
+open Vuna_dCompiler_dElab_dTermination
+open Vuna_dCompiler_dElab_dDriver
+open Vuna_dCompiler_dElab
+open Vuna_dCompiler_dCodegen_dDecl
+open Vuna_dCompiler_dCodegen_dErase
+open Vuna_dCompiler_dCodegen_dTerm
+open Vuna_dCompiler_dCodegen_dAssembly
+open Vuna_dCompiler_dDriver_dSplit
+open Vuna_dCompiler_dCodegen_dSplit
+open Vuna_dCompiler_dCodegen
+open Vuna_dCompiler_dDriver_dDt
+type t_Vuna_dCompiler_dDriver_dCache_dCachedProgram = C_Vuna_dCompiler_dDriver_dCache_dCachedProgram_Vuna_dCompiler_dDriver_dCache_dCachedProgram of (t_Vuna_dCompiler_dElab_dTypes_dDtData t_Base_dList_dList) * (t_Vuna_dCompiler_dElab_dTypes_dDtDef t_Base_dList_dList) * ((int, t_Vuna_dCompiler_dCore_dTerm_dTerm) t_Base_dPair_dPair t_Base_dList_dList) * ((string, t_Vuna_dCompiler_dCore_dTerm_dTerm) t_Base_dPair_dPair t_Base_dList_dList) * (t_Vuna_dCompiler_dElab_dTypes_dDtInst t_Base_dList_dList) * (t_Vuna_dCompiler_dElab_dTypes_dDtClass t_Base_dList_dList) * (int)
+
+let v_Vuna_dCompiler_dDriver_dCache_dcachedOfProgram = (fun prog -> (C_Vuna_dCompiler_dDriver_dCache_dCachedProgram_Vuna_dCompiler_dDriver_dCache_dCachedProgram ((v_Vuna_dCompiler_dElab_dTypes_ddtProgDatas prog), (v_Vuna_dCompiler_dElab_dTypes_ddtProgDefs prog), ((v_Base_dList_dmap (fun p -> (C_Base_dPair_dPair_Base_dPair_dPair ((v_Base_dPair_dfirstOf p), ((v_Vuna_dCompiler_dCore_dEval_dquote 0) (v_Base_dPair_dsecondOf p)))))) (v_Vuna_dCompiler_dElab_dTypes_ddtProgSols prog)), (v_Vuna_dCompiler_dElab_dTypes_ddtProgGlobals prog), (v_Vuna_dCompiler_dElab_dTypes_ddtProgInsts prog), (v_Vuna_dCompiler_dElab_dTypes_ddtProgClasses prog), (v_Vuna_dCompiler_dElab_dTypes_ddtProgNext prog))))
+
+let v_Vuna_dCompiler_dDriver_dCache_dprogramOfCached = (fun mc0 -> (match mc0 with
+  | C_Vuna_dCompiler_dDriver_dCache_dCachedProgram_Vuna_dCompiler_dDriver_dCache_dCachedProgram (dtb__0, dtb__1, dtb__2, dtb__3, dtb__4, dtb__5, dtb__6) -> (C_Vuna_dCompiler_dElab_dTypes_dDtProgram_Vuna_dCompiler_dElab_dTypes_dDtProgram (dtb__0, dtb__1, C_Base_dList_dList_Base_dList_dNil, ((v_Base_dList_dmap (fun p -> (C_Base_dPair_dPair_Base_dPair_dPair ((v_Base_dPair_dfirstOf p), ((v_Vuna_dCompiler_dCore_dEval_deval C_Base_dList_dList_Base_dList_dNil) (v_Base_dPair_dsecondOf p)))))) dtb__2), dtb__3, dtb__4, dtb__5, dtb__6, (v_Base_dHashMap_dfromList C_Base_dList_dList_Base_dList_dNil)))
+  | _ -> failwith "DT: impossible branch"
+))

@@ -1,7 +1,9 @@
 module Vuna.Compiler.Driver.Dt
   ( dtCheck
   , dtCheckLibrary
+  , dtCheckLibraryWithProgram
   , dtCheckSource
+  , dtCheckWithProgram
   , dtEvalExpr
   , dtEvalExprInfo
   , dtEvalFile
@@ -74,6 +76,23 @@ in andThen (elabProgram decls) (\program => let
 in andThen (checkDtProgram program) (\_ => let
   _ = stamp "codegen-check-done"
 in Ok []
+)
+)
+)
+
+-- M34.5：与 dtCheck 同一条精化路径，但把 DtProgram 一并返回（检查缓存写 ElabSummary 用）。
+dtCheckWithProgram : PackageContext -> String -> Result (Pair (List String) DtProgram)
+dtCheckWithProgram ctx entry = dtCheckDeclsWithProgram (dtLoad ctx entry)
+
+dtCheckLibraryWithProgram : PackageContext -> List String -> Result (Pair (List String) DtProgram)
+dtCheckLibraryWithProgram ctx names = dtCheckDeclsWithProgram (dtLoadModules ctx names)
+
+dtCheckDeclsWithProgram : Result (List Decl) -> Result (Pair (List String) DtProgram)
+dtCheckDeclsWithProgram loaded = andThen loaded (\decls => andThen (elabProgramFull decls) (\program => let
+  _ = stamp "elab-done"
+in andThen (checkDtProgram (Pair (dtProgDatas program) (dtProgDefs program))) (\_ => let
+  _ = stamp "codegen-check-done"
+in Ok (Pair [] program)
 )
 )
 )
