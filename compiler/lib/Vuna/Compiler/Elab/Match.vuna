@@ -261,8 +261,9 @@ renameExpr oldName newName e = case e of
   EStr s sp => EStr s sp
   ELam names body sp => ELam names (renameExprUnless oldName newName names body) sp
   EApp fn args sp => EApp (renameExpr oldName newName fn) (map (renameExpr oldName newName) args) sp
-  EPi nm implicit dom cod sp =>
-    EPi nm implicit (renameExpr oldName newName dom) (renameExprUnless oldName newName [nm] cod) sp
+  EPi nm implicit qty dom cod sp =>
+    EPi nm implicit qty (renameExpr oldName newName dom) (renameExprUnless oldName newName [nm] cod)
+      sp
   ELet binds body rec_ sp =>
     ELet (map (renameBind oldName newName) binds)
       (renameExprUnless oldName newName (bindNames binds) body) rec_ sp

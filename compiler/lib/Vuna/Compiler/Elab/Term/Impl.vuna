@@ -312,7 +312,8 @@ else case expr of
     _ => inferVarRef globals ctx ec name sp
   EInt n sp => Ok (Pair (TInt n) (Pair (VNeutral (NGlobal "Int" [])) ec))
   EStr s sp => Ok (Pair (TStr s) (Pair (VNeutral (NGlobal "String" [])) ec))
-  EPi name implicit dom cod sp => inferPiFuel (fuel - 1) globals ctx ec name implicit dom cod sp
+  EPi name implicit qty dom cod sp =>
+    inferPiFuel (fuel - 1) globals ctx ec name implicit qty dom cod sp
   EApp fn args sp => inferAppFuel (fuel - 1) globals ctx ec fn args sp
   ELam names body sp => tcErr0 sp LambdaNoSignature
   EIf c t e sp => andThen (checkCondBoolFuel (fuel - 1) globals ctx ec c sp) (\pc => case pc of
@@ -351,8 +352,8 @@ else andThen (checkTypeFuel (fuel - 1) globals ctx ec ty) (\pt => case pt of
     )
 )
 
-inferPiFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> String -> Bool -> Expr -> Expr -> Span -> Result (Pair Term (Pair Value Ec))
-inferPiFuel fuel globals ctx ec name implicit dom cod sp = if fuel <= 0 then Err "DT: internal: inference fuel exhausted"
+inferPiFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> String -> Bool -> Maybe Qty -> Expr -> Expr -> Span -> Result (Pair Term (Pair Value Ec))
+inferPiFuel fuel globals ctx ec name implicit qty dom cod sp = if fuel <= 0 then Err "DT: internal: inference fuel exhausted"
 else andThen (checkTypeFuel (fuel - 1) globals ctx ec dom) (\pd => case pd of
   Pair domTerm (Pair domSort ec1) =>
     let
@@ -370,7 +371,7 @@ inferAppFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Expr -> List Expr 
 inferAppFuel fuel globals ctx ec fn args sp = if fuel <= 0 then Err "DT: internal: inference fuel exhausted"
 else case fn of
   EVar "->" _ => case args of
-    [a, b] => inferPiFuel (fuel - 1) globals ctx ec "_" False a b sp
+    [a, b] => inferPiFuel (fuel - 1) globals ctx ec "_" False Nothing a b sp
     _ => tcErr0 sp InvalidArrowType
   EVar "Type" tsp => case args of
     [EInt n nsp] =>
@@ -646,7 +647,7 @@ else case expr of
   EApp (EVar "->" _) args sp => checkByInferFuel (fuel - 1) globals ctx ec expr expected
   EApp (EVar "Type" _) args sp => checkByInferFuel (fuel - 1) globals ctx ec expr expected
   EApp fn args sp => checkAppFuel (fuel - 1) globals ctx ec fn args expected sp
-  EPi name implicit dom cod sp => checkByInferFuel (fuel - 1) globals ctx ec expr expected
+  EPi name implicit qty dom cod sp => checkByInferFuel (fuel - 1) globals ctx ec expr expected
   EIf c t e sp => checkByInferFuel (fuel - 1) globals ctx ec expr expected
   ECase scrut alts csp => checkCaseFuel (fuel - 1) globals ctx ec scrut alts expected csp
   ELet binds body rec_ sp => checkLetFuel (fuel - 1) globals ctx ec binds body rec_ expected sp
@@ -690,9 +691,9 @@ expandLocalFuns ec (ELam names body sp) =
 expandLocalFuns ec (EApp fn args sp) =
   andThen (expandLocalFuns ec fn)
     (\fn2 => andThen (traverse (expandLocalFuns ec) args) (\args2 => Ok (EApp fn2 args2 sp)))
-expandLocalFuns ec (EPi name implicit dom cod sp) =
+expandLocalFuns ec (EPi name implicit qty dom cod sp) =
   andThen (expandLocalFuns ec dom)
-    (\dom2 => andThen (expandLocalFuns ec cod) (\cod2 => Ok (EPi name implicit dom2 cod2 sp)))
+    (\dom2 => andThen (expandLocalFuns ec cod) (\cod2 => Ok (EPi name implicit qty dom2 cod2 sp)))
 expandLocalFuns ec (ELet binds body rec_ sp) =
   andThen (traverse (expandBind ec) binds)
     (\binds2 => andThen (expandLocalFuns ec body) (\body2 => Ok (ELet binds2 body2 rec_ sp)))

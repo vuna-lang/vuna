@@ -344,7 +344,7 @@ else case e of
       Nothing => Nothing
       Just ss => Just ("[" ++ joinComma ss ++ "]")
     Nothing => inlineAppGo (fuel - 1) env minPrec fn args
-  EPi name implicit dom cod sp => inlinePiGo (fuel - 1) env minPrec name implicit dom cod
+  EPi name implicit qty dom cod sp => inlinePiGo (fuel - 1) env minPrec qty name implicit dom cod
   ELet binds body rec_ sp => Nothing
   ECase scrut alts sp => Nothing
   EIf c t el sp => case inlinePrecGo (fuel - 1) env 0 c of
@@ -402,8 +402,8 @@ else case fields of
       Just ss => Just ((fname ++ " = " ++ v) :: ss)
 
 -- DT（M13）命名 Pi：`(x : A) -> B` 与隐式 `{x : A} -> B`；`->` 右结合。
-inlinePiGo : Int -> List FixityDecl -> Int -> String -> Bool -> Expr -> Expr -> Maybe String
-inlinePiGo fuel env minPrec name implicit dom cod = if fuel <= 0 then Nothing
+inlinePiGo : Int -> List FixityDecl -> Int -> Maybe Qty -> String -> Bool -> Expr -> Expr -> Maybe String
+inlinePiGo fuel env minPrec qty name implicit dom cod = if fuel <= 0 then Nothing
 else case inlinePrecGo (fuel - 1) env 0 dom of
   Nothing => Nothing
   Just d => case inlinePrecGo (fuel - 1) env 1 cod of
@@ -411,15 +411,24 @@ else case inlinePrecGo (fuel - 1) env 0 dom of
     Just c =>
       let
         binder =
-          if implicit then "{" ++ name ++ " : " ++ d ++ "}" else "(" ++ name ++ " : " ++ d ++ ")"
+          if implicit then "{" ++ qtyPrefix qty ++ name ++ " : " ++ d ++ "}"
+          else "(" ++ qtyPrefix qty ++ name ++ " : " ++ d ++ ")"
       in Just (wrapPrec (minPrec > 1) (binder ++ " -> " ++ c))
 
+-- M38：quantity 前缀（`0 ` / `1 `）；缺省不打印。
+qtyPrefix : Maybe Qty -> String
+qtyPrefix Nothing = ""
+qtyPrefix (Just Q0) = "0 "
+qtyPrefix (Just Q1) = "1 "
+
 -- 域/余域含块结构时的兜底布局（DT 类型一般走 inlinePiGo；这里只保证不丢字符）。
-renderPiBlockGo : Int -> List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Bool -> String -> Expr -> Expr -> List String
-renderPiBlockGo fuel env at lineInd implicit name dom cod = if fuel <= 0 then []
+renderPiBlockGo : Int -> List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Maybe Qty -> Bool -> String -> Expr -> Expr -> List String
+renderPiBlockGo fuel env at lineInd qty implicit name dom cod = if fuel <= 0 then []
 else
   let
-    openTxt = if implicit then "{" ++ name ++ " : " else "(" ++ name ++ " : "
+    openTxt =
+      if implicit then "{" ++ qtyPrefix qty ++ name ++ " : "
+      else "(" ++ qtyPrefix qty ++ name ++ " : "
     closeTxt = if implicit then "}" else ")"
     domLines =
       appendLast (" " ++ closeTxt ++ " ->")
@@ -568,7 +577,8 @@ else case e of
   ELet binds body rec_ sp => renderLetGo (fuel - 1) env at lineInd binds body
   EIf c t el sp => renderIfGo (fuel - 1) env at lineInd c t el
   EApp fn args sp => renderAppBlockGo (fuel - 1) env at lineInd fn args
-  EPi name implicit dom cod sp => renderPiBlockGo (fuel - 1) env at lineInd implicit name dom cod
+  EPi name implicit qty dom cod sp =>
+    renderPiBlockGo (fuel - 1) env at lineInd qty implicit name dom cod
   ELam ps body sp =>
     prefixFirst ("\\" ++ joinComma ps ++ " => ") (renderExprGo (fuel - 1) env at lineInd body)
   EField base f sp => appendLast ("." ++ f) (renderAtomExprGo (fuel - 1) env at lineInd base)

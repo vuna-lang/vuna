@@ -19,6 +19,10 @@ import Vuna.Fmt.Util
 import Base.Sort
 
 -- ---------------------------------------------------------------
+-- M38：线性声明前缀。
+linearPrefix : Bool -> String
+linearPrefix lin = if lin then "linear " else ""
+
 -- 声明渲染
 -- ---------------------------------------------------------------
 renderDeclAt : List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Decl -> List String
@@ -26,15 +30,15 @@ renderDeclAt env at lineInd decl =
   attachAt at (declSpan decl) lineInd (renderDeclBody env at lineInd decl)
 
 renderDeclBody : List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Decl -> List String
-renderDeclBody env at lineInd (DData name params kind ctors derivings sp) =
-  renderDataDecl env at name params kind ctors derivings
+renderDeclBody env at lineInd (DData name params kind ctors derivings lin sp) =
+  renderDataDecl env at (linearPrefix lin) name params kind ctors derivings
 renderDeclBody env at lineInd (DAxiom name ty sp) = renderSigLine env at lineInd "axiom " name [] ty
 renderDeclBody env at lineInd (DExtern name cName ty sp) =
   renderSigLine env at lineInd ("extern " ++ name ++ " " ++ strShow cName) "" [] ty
 renderDeclBody env at lineInd (DSig name ctx ty sp) = renderSigLine env at lineInd "" name ctx ty
 renderDeclBody env at lineInd (DFun name pats body sp) = renderClause env at lineInd name pats body
-renderDeclBody env at lineInd (DRecord name params fields derivings sp) =
-  renderRecordDecl env at name params fields derivings
+renderDeclBody env at lineInd (DRecord name params fields derivings lin sp) =
+  renderRecordDecl env at (linearPrefix lin) name params fields derivings
 renderDeclBody env at lineInd (DTrait name params methods sp) =
   renderTraitDecl env at name params methods
 renderDeclBody env at lineInd (DInstance ctxE head methods sp) =
@@ -46,11 +50,12 @@ renderSigLine env at lineInd prefix name ctx ty =
   prefixFirst (spaces lineInd ++ prefix ++ name ++ " : " ++ renderInstanceCtx env ctx)
     (renderTypeExpr env at lineInd ty)
 
-renderDataDecl : List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> String -> List String -> Expr -> List Ctor -> List String -> List String
-renderDataDecl env at name params kind ctors derivings =
+renderDataDecl : List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> String -> String -> List String -> Expr -> List Ctor -> List String -> List String
+renderDataDecl env at prefix name params kind ctors derivings =
   let
     header =
-      "data "
+      prefix
+        ++ "data "
         ++ name
         ++ joinSpace params
         ++ " : "
@@ -67,10 +72,10 @@ renderDerivings : List String -> List String
 renderDerivings [] = []
 renderDerivings names = ["deriving (" ++ joinComma names ++ ")"]
 
-renderRecordDecl : List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> String -> List String -> List Field -> List String -> List String
-renderRecordDecl env at name params fields derivings =
+renderRecordDecl : List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> String -> String -> List String -> List Field -> List String -> List String
+renderRecordDecl env at prefix name params fields derivings =
   let
-    header = "record " ++ name ++ joinSpace params ++ " where"
+    header = prefix ++ "record " ++ name ++ joinSpace params ++ " where"
     fieldLines = concatMap (\f => renderRecordField env at f) fields
   in append [header] (append fieldLines (renderDerivings derivings))
 

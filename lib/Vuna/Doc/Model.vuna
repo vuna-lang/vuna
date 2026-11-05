@@ -149,11 +149,11 @@ itemsOfDecl table decls (DFun name pats body sp) =
   if isPrivate name || hasSig name decls then []
   else [ DocItem name "fun" (name ++ " : " ++ renderType (EVar name sp)) (docForDecl table name) (spanStartLine sp) []
   ]
-itemsOfDecl table decls (DData name params kind ctors derivings sp) =
+itemsOfDecl table decls (DData name params kind ctors derivings lin sp) =
   if isPrivate name then []
   else [ DocItem name "data" (dataSignature name params kind ctors derivings) (docForDecl table name) (spanStartLine sp) (ctorItems table name ctors)
   ]
-itemsOfDecl table decls (DRecord name params fields derivings sp) =
+itemsOfDecl table decls (DRecord name params fields derivings lin sp) =
   if isPrivate name then []
   else [ DocItem name "record" (recordSignature name params fields derivings) (docForDecl table name) (spanStartLine sp) (fieldItems table name fields)
   ]

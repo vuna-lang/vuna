@@ -46,7 +46,7 @@ exprMaxAppArity pname (EApp (EVar f fsp) args sp) =
 exprMaxAppArity pname (EApp fn args sp) =
   maxIntList (exprMaxAppArity pname fn :: map (exprMaxAppArity pname) args)
 exprMaxAppArity pname (ELam names body sp) = exprMaxAppArity pname body
-exprMaxAppArity pname (EPi n implicit dom cod sp) =
+exprMaxAppArity pname (EPi n implicit _ dom cod sp) =
   maxIntList [exprMaxAppArity pname dom, exprMaxAppArity pname cod]
 exprMaxAppArity pname (ELet binds body rec_ sp) =
   maxIntList (exprMaxAppArity pname body :: map (\b => exprMaxAppArity pname (secondOf b)) binds)
@@ -91,7 +91,7 @@ keepOut inScope (n :: rest) = if inScope n then keepOut inScope rest else n :: k
 
 quantify : List String -> Expr -> Span -> Expr
 quantify [] e sp = e
-quantify (n :: rest) e sp = EPi n True (EVar "Type" sp) (quantify rest e sp) sp
+quantify (n :: rest) e sp = EPi n True Nothing (EVar "Type" sp) (quantify rest e sp) sp
 
 -- 顶层签名的自由名按**用法**给 kind：名字在签名里被应用了 k 个实参 ⇒ `Type -> ... -> Type`
 -- （`bindPair : m a -> m b -> m (Pair a b)` 的 `m`）。旧实现一律绑 `Type`，于是 `m a`
@@ -100,14 +100,16 @@ quantify (n :: rest) e sp = EPi n True (EVar "Type" sp) (quantify rest e sp) sp
 quantifyTopKinds : List String -> Expr -> Expr -> Span -> Expr
 quantifyTopKinds [] sigExpr e sp = e
 quantifyTopKinds (n :: rest) sigExpr e sp =
-  EPi n True (kindArrowExpr (exprMaxAppArity n sigExpr) sp) (quantifyTopKinds rest sigExpr e sp) sp
+  EPi n True Nothing (kindArrowExpr (exprMaxAppArity n sigExpr) sp)
+    (quantifyTopKinds rest sigExpr e sp) sp
 
 kindArrowExpr : Int -> Span -> Expr
 kindArrowExpr k sp =
-  if k <= 0 then EVar "Type" sp else EPi "_" False (EVar "Type" sp) (kindArrowExpr (k - 1) sp) sp
+  if k <= 0 then EVar "Type" sp
+  else EPi "_" False Nothing (EVar "Type" sp) (kindArrowExpr (k - 1) sp) sp
 
 piBoundNames : Expr -> List String
-piBoundNames (EPi n implicit dom cod sp) = n :: piBoundNames cod
+piBoundNames (EPi n implicit _ dom cod sp) = n :: piBoundNames cod
 piBoundNames _ = []
 
 lowerVarNames : Expr -> List String
@@ -117,7 +119,7 @@ exprLowerVars : Expr -> List String
 exprLowerVars (EVar n sp) = if isLowerIdent n then [n] else []
 exprLowerVars (EApp fn args sp) = append (exprLowerVars fn) (concatMap exprLowerVars args)
 exprLowerVars (ELam names body sp) = exprLowerVars body
-exprLowerVars (EPi n implicit dom cod sp) = append (exprLowerVars dom) (exprLowerVars cod)
+exprLowerVars (EPi n implicit _ dom cod sp) = append (exprLowerVars dom) (exprLowerVars cod)
 exprLowerVars (EIf c t f sp) = append (exprLowerVars c) (append (exprLowerVars t) (exprLowerVars f))
 exprLowerVars (ELet binds body rec_ sp) =
   append (concatMap (\b => exprLowerVars (secondOf b)) binds) (exprLowerVars body)

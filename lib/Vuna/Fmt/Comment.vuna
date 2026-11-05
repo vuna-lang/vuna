@@ -251,12 +251,12 @@ modDeclItemAnchors : ModDecl -> List Span
 modDeclItemAnchors (ModDecl _ _ items _) = map exportItemSpan items
 
 declAnchors : Decl -> List Span
-declAnchors (DData name params kind ctors derivings sp) = sp :: map ctorSpan ctors
+declAnchors (DData name params kind ctors derivings lin sp) = sp :: map ctorSpan ctors
 declAnchors (DAxiom name ty sp) = [sp]
 declAnchors (DExtern name cName ty sp) = [sp]
 declAnchors (DSig name ctx ty sp) = [sp]
 declAnchors (DFun name pats body sp) = sp :: exprAnchors body
-declAnchors (DRecord name params fields derivings sp) = sp :: map fieldSpan fields
+declAnchors (DRecord name params fields derivings lin sp) = sp :: map fieldSpan fields
 declAnchors (DTrait name params methods sp) = sp :: map traitMethodAnchor methods
 declAnchors (DInstance ctxE head methods sp) = sp :: concatMap declAnchors methods
 
@@ -286,7 +286,7 @@ exprAnchors e = case e of
   EStr s sp => []
   ELam ps body sp => exprAnchors body
   EApp fn args sp => append (exprAnchors fn) (concatMap exprAnchors args)
-  EPi name implicit dom cod sp => append (exprAnchors dom) (exprAnchors cod)
+  EPi name implicit _ dom cod sp => append (exprAnchors dom) (exprAnchors cod)
   ELet binds body rec_ sp =>
     append (append (map bindingAnchor binds) (concatMap bindingValueAnchors binds))
       (exprAnchors body)

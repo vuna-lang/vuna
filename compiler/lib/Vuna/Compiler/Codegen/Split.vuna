@@ -52,16 +52,16 @@ splitDeclNames (d :: rest) = case d of
   DSig name ctx ty sp => name :: splitDeclNames rest
   DExtern name cName ty sp => name :: splitDeclNames rest
   DFun name pats body sp => name :: splitDeclNames rest
-  DData name params kind ctors derivings sp => name :: splitDeclNames rest
-  DRecord name params fields derivings sp => name :: splitDeclNames rest
+  DData name params kind ctors derivings lin sp => name :: splitDeclNames rest
+  DRecord name params fields derivings lin sp => name :: splitDeclNames rest
   DTrait name params methods sp => name :: splitDeclNames rest
   _ => splitDeclNames rest
 
 splitDataNames : List Decl -> List String
 splitDataNames [] = []
 splitDataNames (d :: rest) = case d of
-  DData name params kind ctors derivings sp => name :: splitDataNames rest
-  DRecord name params fields derivings sp => name :: splitDataNames rest
+  DData name params kind ctors derivings lin sp => name :: splitDataNames rest
+  DRecord name params fields derivings lin sp => name :: splitDataNames rest
   _ => splitDataNames rest
 
 headClassName : Expr -> Maybe String
@@ -77,9 +77,9 @@ splitInstanceOwnerOf : String -> Decl -> List (Pair String String)
 splitInstanceOwnerOf owner (DInstance ctxE headExpr methods sp) = case headClassName headExpr of
   Just c => [Pair (instanceName c headExpr) owner]
   Nothing => []
-splitInstanceOwnerOf owner (DData dname params kind ctors derivings sp) =
+splitInstanceOwnerOf owner (DData dname params kind ctors derivings lin sp) =
   splitDerivedOwners owner dname params derivings
-splitInstanceOwnerOf owner (DRecord dname params fields derivings sp) =
+splitInstanceOwnerOf owner (DRecord dname params fields derivings lin sp) =
   splitDerivedOwners owner dname params derivings
 splitInstanceOwnerOf owner _ = []
 
@@ -293,8 +293,8 @@ entryDeclIdentities [] = []
 entryDeclIdentities (d :: rest) = case d of
   DSig name ctx ty sp => name :: entryDeclIdentities rest
   DExtern name cName ty sp => name :: entryDeclIdentities rest
-  DData name params kind ctors derivings sp => name :: entryDeclIdentities rest
-  DRecord name params fields derivings sp => name :: entryDeclIdentities rest
+  DData name params kind ctors derivings lin sp => name :: entryDeclIdentities rest
+  DRecord name params fields derivings lin sp => name :: entryDeclIdentities rest
   DTrait name params methods sp => name :: entryDeclIdentities rest
   _ => entryDeclIdentities rest
 

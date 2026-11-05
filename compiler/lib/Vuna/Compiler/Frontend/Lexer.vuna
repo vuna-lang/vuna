@@ -115,6 +115,7 @@ isKeyword s =
     || s == "then"
     || s == "else"
     || s == "where"
+    || s == "linear"
     || s == "Type"
     || s == "import"
     || s == "module"

@@ -391,20 +391,20 @@ dedupeNamesGo (x :: rest) seen acc =
 -- documentSymbol：AST 声明树
 -- ---------------------------------------------------------------
 declNameOf : Decl -> String
-declNameOf (DData name params kind ctors derivings sp) = name
+declNameOf (DData name params kind ctors derivings lin sp) = name
 declNameOf (DAxiom name ty sp) = name
 declNameOf (DExtern name cName ty sp) = name
 declNameOf (DSig name ctx ty sp) = name
 declNameOf (DFun name pats body sp) = name
-declNameOf (DRecord name params fields derivings sp) = name
+declNameOf (DRecord name params fields derivings lin sp) = name
 declNameOf (DTrait name params methods sp) = name
 declNameOf (DInstance ctxE head methods sp) = "instance"
 
 -- LSP SymbolKind：Function=12、Field=8、Interface=11、Constant=14、
 -- EnumMember=22、Struct=23、Method=6。
 declSymbolKind : Decl -> Int
-declSymbolKind (DData name params kind ctors derivings sp) = 23
-declSymbolKind (DRecord name params fields derivings sp) = 23
+declSymbolKind (DData name params kind ctors derivings lin sp) = 23
+declSymbolKind (DRecord name params fields derivings lin sp) = 23
 declSymbolKind (DTrait name params methods sp) = 11
 declSymbolKind (DAxiom name ty sp) = 14
 declSymbolKind (DExtern name cName ty sp) = 14
@@ -434,9 +434,9 @@ methodSymbolJson lines m =
     (nameSelRange lines (traitMethodSpan m) (traitMethodName m)) []
 
 declChildrenJson : List String -> Decl -> List Json
-declChildrenJson lines (DData name params kind ctors derivings sp) =
+declChildrenJson lines (DData name params kind ctors derivings lin sp) =
   map (ctorSymbolJson lines) ctors
-declChildrenJson lines (DRecord name params fields derivings sp) =
+declChildrenJson lines (DRecord name params fields derivings lin sp) =
   map (fieldSymbolJson lines) fields
 declChildrenJson lines (DTrait name params methods sp) = map (methodSymbolJson lines) methods
 declChildrenJson lines _ = []

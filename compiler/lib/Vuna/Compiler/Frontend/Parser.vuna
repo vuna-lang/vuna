@@ -132,10 +132,11 @@ expectOpName st = case peekTok st of
 
 parseDecl : PState -> Int -> Result (Pair Decl PState)
 parseDecl st blockCol = case peekTok st of
-  PTok (TKw "data") p => parseData st blockCol p
+  PTok (TKw "data") p => parseData False st blockCol p
+  PTok (TKw "linear") p => parseLinearDecl st blockCol p
   PTok (TKw "axiom") p => parseAxiom st blockCol p
   PTok (TKw "extern") p => parseExtern st blockCol p
-  PTok (TKw "record") p => parseRecord st blockCol p
+  PTok (TKw "record") p => parseRecord False st blockCol p
   PTok (TKw "trait") p => parseTrait st blockCol p
   PTok (TKw "instance") p => parseInstance st blockCol p
   PTok (TIdent name) p =>
@@ -336,16 +337,24 @@ parseClausePatterns fuel st blockCol =
     (\pat, st1 => step (parseClausePatterns (fuel - 1) st1 blockCol) (\rest, st2 => Ok (Pair (pat :: rest) st2)))
   else Ok (Pair [] st)
 
-parseData : PState -> Int -> Pos -> Result (Pair Decl PState)
-parseData st blockCol kwPos =
+-- M38：`lin data ...` / `lin record ...`。kwPos 指向 `linear`，声明 span 从这里开始。
+parseLinearDecl : PState -> Int -> Pos -> Result (Pair Decl PState)
+parseLinearDecl st blockCol kwPos = step (expectKw st "linear") (\_, st1 => case peekTok st1 of
+  PTok (TKw "data") _ => parseData True st1 blockCol kwPos
+  PTok (TKw "record") _ => parseRecord True st1 blockCol kwPos
+  _ => psErr1 (ExpectedToken "data/record") "data/record"
+)
+
+parseData : Bool -> PState -> Int -> Pos -> Result (Pair Decl PState)
+parseData lin st blockCol kwPos =
   step (expectKw st "data")
-    (\_, st1 => step (expectIdent st1) (\name, st2 => step (parseParams (stateFuel st2) st2) (\params, st3 => step (expectSym st3 ":") (\_, st4 => step (parseExpr (stateFuel st4) st4 blockCol 0) (\ty, st5 => step (expectKw st5 "where") (\_, st6 => step (parseCtors st6 blockCol) (\ctors, st7 => step (parseDeriving st7) (\derivings, st8 => Ok (Pair (DData name params ty ctors derivings (Span (fileOf st) (posLine kwPos) (posCol kwPos) (posLine (lastPos st8)) (posCol (lastPos st8)))) st8)))))))))
+    (\_, st1 => step (expectIdent st1) (\name, st2 => step (parseParams (stateFuel st2) st2) (\params, st3 => step (expectSym st3 ":") (\_, st4 => step (parseExpr (stateFuel st4) st4 blockCol 0) (\ty, st5 => step (expectKw st5 "where") (\_, st6 => step (parseCtors st6 blockCol) (\ctors, st7 => step (parseDeriving st7) (\derivings, st8 => Ok (Pair (DData name params ty ctors derivings lin (Span (fileOf st) (posLine kwPos) (posCol kwPos) (posLine (lastPos st8)) (posCol (lastPos st8)))) st8)))))))))
 
 -- 记录声明（M10.5）：`record Name params where` + 缩进字段 `f : Ty`，可跟 deriving。
-parseRecord : PState -> Int -> Pos -> Result (Pair Decl PState)
-parseRecord st blockCol kwPos =
+parseRecord : Bool -> PState -> Int -> Pos -> Result (Pair Decl PState)
+parseRecord lin st blockCol kwPos =
   step (expectKw st "record")
-    (\_, st1 => step (expectIdent st1) (\name, st2 => step (parseParams (stateFuel st2) st2) (\params, st3 => step (expectKw st3 "where") (\_, st4 => step (parseFields st4 blockCol) (\fields, st5 => step (parseDeriving st5) (\derivings, st6 => Ok (Pair (DRecord name params fields derivings (Span (fileOf st) (posLine kwPos) (posCol kwPos) (posLine (lastPos st6)) (posCol (lastPos st6)))) st6)))))))
+    (\_, st1 => step (expectIdent st1) (\name, st2 => step (parseParams (stateFuel st2) st2) (\params, st3 => step (expectKw st3 "where") (\_, st4 => step (parseFields st4 blockCol) (\fields, st5 => step (parseDeriving st5) (\derivings, st6 => Ok (Pair (DRecord name params fields derivings lin (Span (fileOf st) (posLine kwPos) (posCol kwPos) (posLine (lastPos st6)) (posCol (lastPos st6)))) st6)))))))
 
 parseFields : PState -> Int -> Result (Pair (List Field) PState)
 parseFields st blockCol = if isEof st then Ok (Pair [] st)
@@ -556,8 +565,8 @@ else case peekTok st of
   PTok (TStr s) p => Ok (Pair (EStr s (spanOf st (advance st))) (advance st))
   PTok (TTmpl multi parts endP) p => parseTemplateAtom (fuel - 1) st multi parts endP
   PTok (TKw "Type") p => Ok (Pair (EVar "Type" (spanOf st (advance st))) (advance st))
-  PTok (TSym "(") p => case binderHeadName (advance st) of
-    Just name => parsePiBinder (fuel - 1) st blockCol name False "(" ")"
+  PTok (TSym "(") p => case binderHead (advance st) of
+    Just qn => parsePiBinder (fuel - 1) st blockCol (firstOf qn) (secondOf qn) False "(" ")"
     -- M31.3：`(+)` / `(+ e)` section。`(e op)` 由 parseInfix 的右 section 分支处理。
     Nothing => case sectionOpAt st of
       Just op => parseSectionAtom (fuel - 1) st blockCol op
@@ -565,8 +574,8 @@ else case peekTok st of
         step (parseExpr (fuel - 1) (advance st) blockCol 0)
           (\inner, st1 => step (expectSym st1 ")") (\_, st2 => Ok (Pair (EParen inner (spanOf st st2)) st2)))
   PTok (TSym "[") p => parseListExpr (fuel - 1) st blockCol
-  PTok (TSym "{") p => case binderHeadName (advance st) of
-    Just name => parsePiBinder (fuel - 1) st blockCol name True "{" "}"
+  PTok (TSym "{") p => case binderHead (advance st) of
+    Just qn => parsePiBinder (fuel - 1) st blockCol (firstOf qn) (secondOf qn) True "{" "}"
     Nothing =>
       step (expectSym st "{")
         (\_, st1 => step (parseExpr (fuel - 1) st1 blockCol 0) (\base, st2 => step (expectSym st2 "|") (\_, st3 => step (parseRecordAssignments (fuel - 1) st3 blockCol) (\fields, st4 => Ok (Pair (ERecUpdate base fields (spanOf st st4)) st4)))))
@@ -632,14 +641,22 @@ parseSectionAtom fuel st blockCol op =
   else step (expectSym st "(")
     (\_, st1 => step (expectSym st1 op) (\_, st2 => if atSym st2 ")" then Ok (Pair (ESectOp op (spanOf st (advance st2))) (advance st2)) else step (parseExpr (fuel - 1) st2 blockCol 0) (\rhs, st3 => step (expectSym st3 ")") (\_, st4 => Ok (Pair (ESectL op rhs (spanOf st st4)) st4)))))
 
--- DT（M13）Pi binder：`(x : A) -> B` 或 `{x : A} -> B`。
--- 进入时已在开括号处；binder 名先由 lookahead 确认，再要求 `->`。
-parsePiBinder : Int -> PState -> Int -> String -> Bool -> String -> String -> Result (Pair Expr PState)
-parsePiBinder fuel st blockCol name implicit openSym closeSym =
+-- M38：Pi binder：`(x : A) -> B`、`{x : A} -> B`，以及带 quantity 的 `(0 x : A)` / `(1 x : A)`。
+-- 进入时已在开括号处；binder 头（可选 quantity + 名 + `:`）先由 lookahead 确认，再要求 `->`。
+parsePiBinder : Int -> PState -> Int -> Maybe Qty -> String -> Bool -> String -> String -> Result (Pair Expr PState)
+parsePiBinder fuel st blockCol qty name implicit openSym closeSym =
   if fuel <= 0 then Err "DT: parser fuel exhausted (internal: parser made no progress)"
   else if containsDot name then psErr0 PiBinderNameNotSimple
   else step (expectSym st openSym)
-    (\_, st1 => step (expectIdent st1) (\name2, st2 => step (expectSym st2 ":") (\_, st3 => step (parseExpr (fuel - 1) st3 blockCol 0) (\dom, st4 => step (expectSym st4 closeSym) (\_, st5 => step (expectSym st5 "->") (\_, st6 => step (parseExpr (fuel - 1) st6 blockCol 1) (\cod, st7 => Ok (Pair (EPi name2 implicit dom cod (spanOf st st7)) st7))))))))
+    (\_, st1 => step (consumeQty st1 qty) (\_, st2 => step (expectIdent st2) (\name2, st3 => step (expectSym st3 ":") (\_, st4 => step (parseExpr (fuel - 1) st4 blockCol 0) (\dom, st5 => step (expectSym st5 closeSym) (\_, st6 => step (expectSym st6 "->") (\_, st7 => step (parseExpr (fuel - 1) st7 blockCol 1) (\cod, st8 => Ok (Pair (EPi name2 implicit qty dom cod (spanOf st st8)) st8)))))))))
+
+-- 消费 binder 前缀里的 quantity token（lookahead 已确认；这里只做机械前进）。
+consumeQty : PState -> Maybe Qty -> Result (Pair Int PState)
+consumeQty st Nothing = Ok (Pair 0 st)
+consumeQty st (Just q) = case peekTok st of
+  PTok (TInt 0) _ => Ok (Pair 0 (advance st))
+  PTok (TInt 1) _ => Ok (Pair 0 (advance st))
+  _ => psErr0 ExpectedIdentifier
 
 -- `{ f = e, ... }`：构造与更新的公共字段列表（进入时已在 `{` 之后）。
 parseRecordAssignments : Int -> PState -> Int -> Result (Pair (List (Pair String Expr)) PState)

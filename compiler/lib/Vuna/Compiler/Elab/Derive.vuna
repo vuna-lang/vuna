@@ -47,7 +47,7 @@ expandDerivings decls = andThen (collectDerivings decls) (\insts => Ok (append d
 collectDerivings : List Decl -> Result (List Decl)
 collectDerivings [] = Ok []
 collectDerivings (d :: rest) = case d of
-  DData name params kind ctors derivings sp =>
+  DData name params kind ctors derivings lin sp =>
     if length derivings == 0 then collectDerivings rest
     else andThen (derivingsFor name params ctors derivings sp)
       (\insts => andThen (collectDerivings rest) (\more => Ok (append insts more)))
@@ -78,7 +78,7 @@ anyCtorMentions p ((Ctor cn ty ar cnsp) :: rest) = exprMentionsName p ty || anyC
 exprMentionsName : String -> Expr -> Bool
 exprMentionsName p (EVar n sp) = n == p
 exprMentionsName p (EApp fn args sp) = exprMentionsName p fn || anyExprMentions p args
-exprMentionsName p (EPi n i dom cod sp) = exprMentionsName p dom || exprMentionsName p cod
+exprMentionsName p (EPi n i _ dom cod sp) = exprMentionsName p dom || exprMentionsName p cod
 exprMentionsName p (EAnn v ty sp) = exprMentionsName p v || exprMentionsName p ty
 exprMentionsName p _ = False
 

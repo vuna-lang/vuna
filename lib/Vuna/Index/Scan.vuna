@@ -194,10 +194,10 @@ symbolsOfDecl sMod decls table d =
     line = declLine d
     col = declCol d
   in case d of
-    DData name params kind ctors derivings sp =>
+    DData name params kind ctors derivings lin sp =>
       Sym sMod name "data" ("data " ++ name ++ paramSuffix params) "" (docForDecl table name) line col
         :: ctorSymbols sMod name ctors table
-    DRecord name params fields derivings sp =>
+    DRecord name params fields derivings lin sp =>
       Sym sMod name "record" ("record " ++ name ++ paramSuffix params) "" (docForDecl table name) line col
         :: fieldSymbols sMod name fields table
     DTrait name params methods sp =>
@@ -276,8 +276,8 @@ refsInDeclsGo sMod (d :: rest) acc = refsInDeclsGo sMod rest (refsInDecl sMod d 
 
 refsInDecl : String -> Decl -> List Ref -> List Ref
 refsInDecl sMod (DFun name pats body sp) acc = refsInExprGo sMod body acc
-refsInDecl sMod (DData name params kind ctors derivings sp) acc = refsInCtors sMod ctors acc
-refsInDecl sMod (DRecord name params fields derivings sp) acc = refsInFieldTypes sMod fields acc
+refsInDecl sMod (DData name params kind ctors derivings lin sp) acc = refsInCtors sMod ctors acc
+refsInDecl sMod (DRecord name params fields derivings lin sp) acc = refsInFieldTypes sMod fields acc
 refsInDecl sMod (DTrait name params methods sp) acc = refsInMethods sMod methods acc
 refsInDecl sMod (DInstance ctxE head methods sp) acc =
   refsInDeclsGo sMod methods (refsInExprGo sMod head acc)
@@ -337,7 +337,7 @@ refsInExprGo sMod e acc = case e of
   EInterp multi parts sp => refsInInterpParts sMod parts acc
   ELam ps body sp => refsInExprGo sMod body acc
   EApp f args sp => refsInArgs sMod args (refsInExprGo sMod f acc)
-  EPi n i dom cod sp => refsInExprGo sMod cod (refsInExprGo sMod dom acc)
+  EPi n i _ dom cod sp => refsInExprGo sMod cod (refsInExprGo sMod dom acc)
   ELet binds body isRec sp => refsInBinds sMod binds (refsInExprGo sMod body acc)
   ECase scrut alts sp => refsInBinds sMod alts (refsInExprGo sMod scrut acc)
   -- A2：where/let 多 clause 局部函数：只看各 clause 的 body（与 refsInBind 一致，不看模式）。

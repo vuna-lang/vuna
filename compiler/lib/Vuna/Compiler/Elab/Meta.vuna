@@ -283,8 +283,9 @@ collectSigsInto banned preludeBanned seen acc (d :: rest) = case d of
   DAxiom name ty sp => collectSigOne banned preludeBanned seen acc name [] ty sp rest
   DExtern name cName ty sp => collectSigOne banned preludeBanned seen acc name [] ty sp rest
   DFun name pats body sp => collectSigsInto banned preludeBanned seen acc rest
-  DData name params kind ctors derivings sp => collectSigsInto banned preludeBanned seen acc rest
-  DRecord name params fields derivings sp => errAt sp "DT: internal: record was not desugared"
+  DData name params kind ctors derivings lin sp =>
+    collectSigsInto banned preludeBanned seen acc rest
+  DRecord name params fields derivings lin sp => errAt sp "DT: internal: record was not desugared"
   DTrait name params methods sp => collectSigsInto banned preludeBanned seen acc rest
   DInstance ctxE head methods sp => collectSigsInto banned preludeBanned seen acc rest
 
@@ -301,14 +302,14 @@ collectSigOne banned preludeBanned seen acc name ctx ty sp rest =
 collectDataDecls : List Decl -> List (Pair Decl Span) -> List (Pair Decl Span)
 collectDataDecls [] acc = reverse acc
 collectDataDecls (d :: rest) acc = case d of
-  DData dname params kind ctors derivings sp => collectDataDecls rest (Pair d sp :: acc)
+  DData dname params kind ctors derivings lin sp => collectDataDecls rest (Pair d sp :: acc)
   _ => collectDataDecls rest acc
 
 -- 绑到实际族上。
 dataNamesOf : List Decl -> List String
 dataNamesOf [] = []
 dataNamesOf (d :: rest) = case d of
-  DData dname params kind ctors derivings sp => dname :: dataNamesOf rest
+  DData dname params kind ctors derivings lin sp => dname :: dataNamesOf rest
   _ => dataNamesOf rest
 
 nonEmpty : List a -> Bool
@@ -501,7 +502,7 @@ hasOutOfScopeVarAlts ((CaseAlt n bs b) :: rest) = hasOutOfScopeVar b || hasOutOf
 -- 族的 kind 里的参数个数，补成隐式 `EPi`。
 prependFamParams : Term -> Expr -> Span -> Expr
 prependFamParams (TPi n implicit rigB dom cod) tyExpr sp =
-  EPi n True (EVar "Type" sp) (prependFamParams cod tyExpr sp) sp
+  EPi n True Nothing (EVar "Type" sp) (prependFamParams cod tyExpr sp) sp
 prependFamParams _ tyExpr sp = tyExpr
 
 -- 剥掉外层 Pi（`resultSpine` 需要看返回类型）。
@@ -852,7 +853,7 @@ foldAppTerms fn ((Pair arg erased) :: rest) = foldAppTerms (TApp fn arg erased) 
 -- 运行时类型参数表与构造子 telescope 对不上）。record 降级生成的构造子类型用
 -- 匿名显式 `EPi "_" False` 写字段，因此仍要走 `prependFamParams`。
 hasFamParams : Expr -> Bool
-hasFamParams (EPi n implicit dom cod sp) = n /= "_"
+hasFamParams (EPi n implicit _ dom cod sp) = n /= "_"
 hasFamParams _ = False
 
 -- 模块限定名的最后一段（`Base.Monad.fmap` → `fmap`）。

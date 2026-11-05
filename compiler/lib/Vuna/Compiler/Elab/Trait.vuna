@@ -388,7 +388,7 @@ instanceTeleOf banned combined exprs =
 exprFreeLower : Expr -> List String
 exprFreeLower (EVar n sp) = if isLowerStart n then [n] else []
 exprFreeLower (EApp fn args sp) = append (exprFreeLower fn) (concatMap exprFreeLower args)
-exprFreeLower (EPi n i dom cod sp) = append (exprFreeLower dom) (exprFreeLower cod)
+exprFreeLower (EPi n i _ dom cod sp) = append (exprFreeLower dom) (exprFreeLower cod)
 exprFreeLower (EAnn v ty sp) = append (exprFreeLower v) (exprFreeLower ty)
 exprFreeLower _ = []
 

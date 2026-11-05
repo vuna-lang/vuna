@@ -243,8 +243,8 @@ maxArityOf (n :: rest) defTbl =
 ctorNamesOf : List Decl -> List String
 ctorNamesOf [] = []
 ctorNamesOf (d :: rest) = case d of
-  DData name params kind ctors derivings sp => append (map ctorNameOf ctors) (ctorNamesOf rest)
-  DRecord name params fields derivings sp => name :: ctorNamesOf rest
+  DData name params kind ctors derivings lin sp => append (map ctorNameOf ctors) (ctorNamesOf rest)
+  DRecord name params fields derivings lin sp => name :: ctorNamesOf rest
   _ => ctorNamesOf rest
 
 ctorNameOf : Ctor -> String
@@ -410,7 +410,7 @@ posWalk names caller sizes facts region (ELam ns b sp) st =
 posWalk names caller sizes facts region (ELet binds body rec_ sp) st =
   posWalk names caller sizes facts region body
     (posWalkBinds names caller sizes facts region binds st)
-posWalk names caller sizes facts region (EPi n implicit dom cod sp) st =
+posWalk names caller sizes facts region (EPi n implicit _ dom cod sp) st =
   posWalk names caller sizes facts region cod (posWalk names caller sizes facts region dom st)
 posWalk names caller sizes facts region (EField base f sp) st =
   posWalk names caller sizes facts region base st

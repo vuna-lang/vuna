@@ -237,7 +237,7 @@
           "name": "storage.type.vuna"
         },
         {
-          "match": "\\b(data|record|trait|instance|deriving|axiom)\\b",
+          "match": "\\b(data|record|trait|instance|deriving|axiom|linear)\\b",
           "name": "keyword.declaration.vuna"
         },
         {

@@ -148,8 +148,8 @@ elabCatchAll a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 =
 checkE : List (Pair String Term) -> Ctx -> Ec -> Expr -> Value -> Result (Pair Term Ec)
 checkE a1 a2 a3 a4 a5 = checkEFuel 256 a1 a2 a3 a4 a5
 
-inferPi : List (Pair String Term) -> Ctx -> Ec -> String -> Bool -> Expr -> Expr -> Span -> Result (Pair Term (Pair Value Ec))
-inferPi a1 a2 a3 a4 a5 a6 a7 a8 = inferPiFuel 256 a1 a2 a3 a4 a5 a6 a7 a8
+inferPi : List (Pair String Term) -> Ctx -> Ec -> String -> Bool -> Maybe Qty -> Expr -> Expr -> Span -> Result (Pair Term (Pair Value Ec))
+inferPi a1 a2 a3 a4 a5 a6 a7 a8 a9 = inferPiFuel 256 a1 a2 a3 a4 a5 a6 a7 a8 a9
 
 inferAnn : List (Pair String Term) -> Ctx -> Ec -> Expr -> Expr -> Span -> Result (Pair Term (Pair Value Ec))
 inferAnn a1 a2 a3 a4 a5 a6 = inferAnnFuel 256 a1 a2 a3 a4 a5 a6

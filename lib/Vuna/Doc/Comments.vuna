@@ -62,9 +62,9 @@ targetsOfDecls [] = []
 targetsOfDecls (d :: rest) = append (targetsOfDecl d) (targetsOfDecls rest)
 
 targetsOfDecl : Decl -> List DocTarget
-targetsOfDecl (DData name params kind ctors derivings sp) =
+targetsOfDecl (DData name params kind ctors derivings lin sp) =
   DocTarget (spanStartLine sp) (spanStartCol sp) "decl" name "" :: ctorTargets name ctors
-targetsOfDecl (DRecord name params fields derivings sp) =
+targetsOfDecl (DRecord name params fields derivings lin sp) =
   DocTarget (spanStartLine sp) (spanStartCol sp) "decl" name "" :: fieldTargets name fields
 targetsOfDecl (DTrait name params methods sp) =
   DocTarget (spanStartLine sp) (spanStartCol sp) "decl" name "" :: methodTargets name methods

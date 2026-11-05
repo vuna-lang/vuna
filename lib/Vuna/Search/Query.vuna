@@ -167,7 +167,7 @@ normExpr names st (EApp f args sp) =
           [ta, tb] => Pair (firstOf pargs) (Just (TArr ta tb))
           _ => Pair (firstOf pargs) (Just (TApp tf targs))
         else Pair (firstOf pargs) (Just (TApp tf targs))
-normExpr names st (EPi name implicit dom cod sp) = if implicit then
+normExpr names st (EPi name implicit _ dom cod sp) = if implicit then
   let
     id = normNext st
     st2 = bindVar name id st
