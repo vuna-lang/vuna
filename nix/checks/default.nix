@@ -137,6 +137,22 @@ in
     script = ./vuna-metrics.sh;
   };
 
+  # M34.6：elab 缓存有效性（冷/热 `check .` 比例断言；缓存退化即失败）。
+  vuna-compiler-perf = mkCheck {
+    name = "vuna-compiler-perf";
+    srcs = [
+      ../../lib
+      ../../compiler
+      ../../base
+      ../../app
+      ../../vuna.toml
+    ];
+    env = {
+      VUNA = "${vuna}/bin/vuna";
+    };
+    script = ./compiler-perf.sh;
+  };
+
   vuna-typecheck = mkCheck {
     name = "vuna-typecheck";
     srcs = [

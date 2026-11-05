@@ -3,6 +3,7 @@ module Vuna.Compiler.Elab.Termination.Scc (sctCheck, tryFuelThread) where
 -- Vuna.Compiler.Elab.Termination.Scc（M25.2c 拆分）：size-change termination 引擎——
 -- 参数级 size-change 图、传递闭包、幂等图严格边判定（SCT 定理）。
 import Vuna.Compiler.Common
+import Base.HashMap
 import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Elab.Termination.Measure
 
@@ -27,7 +28,7 @@ siteSizes (MkSite c g args sizes region) = sizes
 siteRegion : Site -> List String
 siteRegion (MkSite c g args sizes region) = region
 
-siteCollectList : Int -> List String -> List String -> List (Pair String (List Int)) -> String -> List (Pair String Int) -> List (Pair String (Pair Int (Pair Int (List Int)))) -> List String -> List Expr -> List Site -> List Site
+siteCollectList : Int -> List String -> List String -> List (Pair String (List Int)) -> String -> HashMap (List Int) -> List (Pair String (Pair Int (Pair Int (List Int)))) -> List String -> List Expr -> List Site -> List Site
 siteCollectList fuel comp ctors projs caller facts sizes region [] acc =
   if fuel <= 0 then acc else acc
 siteCollectList fuel comp ctors projs caller facts sizes region (a :: rest) acc =
@@ -35,7 +36,7 @@ siteCollectList fuel comp ctors projs caller facts sizes region (a :: rest) acc 
   else siteCollectList (fuel - 1) comp ctors projs caller facts sizes region rest
     (siteWalkC (fuel - 1) comp ctors projs caller facts sizes region a acc)
 
-siteCollectFields : Int -> List String -> List String -> List (Pair String (List Int)) -> String -> List (Pair String Int) -> List (Pair String (Pair Int (Pair Int (List Int)))) -> List String -> List (Pair String Expr) -> List Site -> List Site
+siteCollectFields : Int -> List String -> List String -> List (Pair String (List Int)) -> String -> HashMap (List Int) -> List (Pair String (Pair Int (Pair Int (List Int)))) -> List String -> List (Pair String Expr) -> List Site -> List Site
 siteCollectFields fuel comp ctors projs caller facts sizes region [] acc =
   if fuel <= 0 then acc else acc
 siteCollectFields fuel comp ctors projs caller facts sizes region ((Pair fn fe) :: rest) acc =
@@ -43,7 +44,7 @@ siteCollectFields fuel comp ctors projs caller facts sizes region ((Pair fn fe) 
   else siteCollectFields (fuel - 1) comp ctors projs caller facts sizes region rest
     (siteWalkC (fuel - 1) comp ctors projs caller facts sizes region fe acc)
 
-siteCollectAlts : Int -> List String -> List String -> List (Pair String (List Int)) -> String -> List (Pair String Int) -> List (Pair String (Pair Int (Pair Int (List Int)))) -> List String -> Expr -> List (Pair Pat Expr) -> List Site -> List Site
+siteCollectAlts : Int -> List String -> List String -> List (Pair String (List Int)) -> String -> HashMap (List Int) -> List (Pair String (Pair Int (Pair Int (List Int)))) -> List String -> Expr -> List (Pair Pat Expr) -> List Site -> List Site
 siteCollectAlts fuel comp ctors projs caller facts sizes region scrut [] acc =
   if fuel <= 0 then acc else acc
 siteCollectAlts fuel comp ctors projs caller facts sizes region scrut ((Pair pat body) :: rest) acc =
@@ -51,7 +52,7 @@ siteCollectAlts fuel comp ctors projs caller facts sizes region scrut ((Pair pat
   else siteCollectAlts (fuel - 1) comp ctors projs caller facts sizes region scrut rest
     (siteWalkC (fuel - 1) comp ctors projs caller facts (extendSizesStrict sizes scrut pat) region body acc)
 
-siteCollectBinds : Int -> List String -> List String -> List (Pair String (List Int)) -> String -> List (Pair String Int) -> List (Pair String (Pair Int (Pair Int (List Int)))) -> List String -> List (Pair Pat Expr) -> List Site -> List Site
+siteCollectBinds : Int -> List String -> List String -> List (Pair String (List Int)) -> String -> HashMap (List Int) -> List (Pair String (Pair Int (Pair Int (List Int)))) -> List String -> List (Pair Pat Expr) -> List Site -> List Site
 siteCollectBinds fuel comp ctors projs caller facts sizes region [] acc =
   if fuel <= 0 then acc else acc
 siteCollectBinds fuel comp ctors projs caller facts sizes region ((Pair pat val) :: rest) acc =
@@ -59,7 +60,7 @@ siteCollectBinds fuel comp ctors projs caller facts sizes region ((Pair pat val)
   else siteCollectBinds (fuel - 1) comp ctors projs caller facts sizes region rest
     (siteWalkC (fuel - 1) comp ctors projs caller facts sizes region val acc)
 
-siteCollectStmts : Int -> List String -> List String -> List (Pair String (List Int)) -> String -> List (Pair String Int) -> List (Pair String (Pair Int (Pair Int (List Int)))) -> List String -> List DoStmt -> List Site -> List Site
+siteCollectStmts : Int -> List String -> List String -> List (Pair String (List Int)) -> String -> HashMap (List Int) -> List (Pair String (Pair Int (Pair Int (List Int)))) -> List String -> List DoStmt -> List Site -> List Site
 siteCollectStmts fuel comp ctors projs caller facts sizes region [] acc =
   if fuel <= 0 then acc else acc
 siteCollectStmts fuel comp ctors projs caller facts sizes region (s :: rest) acc = if fuel <= 0 then acc
@@ -71,7 +72,7 @@ else case s of
     siteCollectStmts (fuel - 1) comp ctors projs caller facts sizes region rest
       (siteWalkC (fuel - 1) comp ctors projs caller facts sizes region e acc)
 
-siteWalkC : Int -> List String -> List String -> List (Pair String (List Int)) -> String -> List (Pair String Int) -> List (Pair String (Pair Int (Pair Int (List Int)))) -> List String -> Expr -> List Site -> List Site
+siteWalkC : Int -> List String -> List String -> List (Pair String (List Int)) -> String -> HashMap (List Int) -> List (Pair String (Pair Int (Pair Int (List Int)))) -> List String -> Expr -> List Site -> List Site
 siteWalkC fuel comp ctors projs caller facts sizes region e acc = if fuel <= 0 then acc
 else case e of
   EApp fn args sp => siteWalkEApp (fuel - 1) comp ctors projs caller facts sizes region fn args acc
@@ -118,7 +119,7 @@ localClauseBinds [] = []
 localClauseBinds ((Pair pats body) :: rest) =
   Pair (PWild (exprSpan body)) body :: localClauseBinds rest
 
-siteWalkEApp : Int -> List String -> List String -> List (Pair String (List Int)) -> String -> List (Pair String Int) -> List (Pair String (Pair Int (Pair Int (List Int)))) -> List String -> Expr -> List Expr -> List Site -> List Site
+siteWalkEApp : Int -> List String -> List String -> List (Pair String (List Int)) -> String -> HashMap (List Int) -> List (Pair String (Pair Int (Pair Int (List Int)))) -> List String -> Expr -> List Expr -> List Site -> List Site
 siteWalkEApp fuel comp ctors projs caller facts sizes region fn args acc = if fuel <= 0 then acc
 else case groupHead comp fn of
   Just callee =>
@@ -133,7 +134,7 @@ else case groupHead comp fn of
       siteCollectList (fuel - 1) comp ctors projs caller facts sizes region args
         (siteWalkC (fuel - 1) comp ctors projs caller facts sizes region fn acc)
 
-siteWalkEAppMap : Int -> List String -> List String -> List (Pair String (List Int)) -> String -> List (Pair String Int) -> List (Pair String (Pair Int (Pair Int (List Int)))) -> List String -> Expr -> List Expr -> List Site -> List Site
+siteWalkEAppMap : Int -> List String -> List String -> List (Pair String (List Int)) -> String -> HashMap (List Int) -> List (Pair String (Pair Int (Pair Int (List Int)))) -> List String -> Expr -> List Expr -> List Site -> List Site
 siteWalkEAppMap fuel comp ctors projs caller facts sizes region fn args acc = if fuel <= 0 then acc
 else case args of
   [ELam ([v]) body lamsp, lst] =>
@@ -153,7 +154,7 @@ else case args of
     _ => siteCollectList (fuel - 1) comp ctors projs caller facts sizes region args acc
   _ => siteCollectList (fuel - 1) comp ctors projs caller facts sizes region args acc
 
-siteWalkMapPartialInline : Int -> List String -> List String -> List (Pair String (List Int)) -> String -> List (Pair String Int) -> List (Pair String (Pair Int (Pair Int (List Int)))) -> List String -> String -> List Expr -> Expr -> Span -> List Site -> List Site
+siteWalkMapPartialInline : Int -> List String -> List String -> List (Pair String (List Int)) -> String -> HashMap (List Int) -> List (Pair String (Pair Int (Pair Int (List Int)))) -> List String -> String -> List Expr -> Expr -> Span -> List Site -> List Site
 siteWalkMapPartialInline fuel comp ctors projs caller facts sizes region g pargs lst cbsp acc = if fuel <= 0 then acc
 else
   let
@@ -163,20 +164,20 @@ else
     acc2 = siteCollectList (fuel - 1) comp ctors projs caller facts sizes region pargs acc1
   in MkSite caller g fullArgs elems region :: acc2
 
-siteCollectClauses : List String -> List String -> List (Pair String (List Int)) -> List (Pair String Int) -> String -> List (Pair (List Pat) Expr) -> List Site -> List Site
+siteCollectClauses : List String -> List String -> List (Pair String (List Int)) -> HashMap (List Int) -> String -> List (Pair (List Pat) Expr) -> List Site -> List Site
 siteCollectClauses comp ctors projs facts caller [] acc = acc
 siteCollectClauses comp ctors projs facts caller (cl :: rest) acc =
   siteCollectClauses comp ctors projs facts caller rest
     (siteWalkC 100000 comp ctors projs caller facts (strSizeEntries (firstOf cl)) [] (secondOf cl) acc)
 
-siteCollect : List String -> List String -> List (Pair String (List Int)) -> List (Pair String (List (Pair (List Pat) Expr))) -> List (Pair String Int) -> List Site
-siteCollect comp ctors projs defs facts = siteCollectGo comp ctors projs defs facts comp []
+siteCollect : List String -> List String -> List (Pair String (List Int)) -> HashMap (List (Pair (List Pat) Expr)) -> HashMap (List Int) -> List Site
+siteCollect comp ctors projs defTbl facts = siteCollectGo comp ctors projs defTbl facts comp []
 
-siteCollectGo : List String -> List String -> List (Pair String (List Int)) -> List (Pair String (List (Pair (List Pat) Expr))) -> List (Pair String Int) -> List String -> List Site -> List Site
-siteCollectGo comp ctors projs defs facts [] acc = acc
-siteCollectGo comp ctors projs defs facts (f :: rest) acc =
-  siteCollectGo comp ctors projs defs facts rest
-    (siteCollectClauses comp ctors projs facts f (clausesOfDef f defs) acc)
+siteCollectGo : List String -> List String -> List (Pair String (List Int)) -> HashMap (List (Pair (List Pat) Expr)) -> HashMap (List Int) -> List String -> List Site -> List Site
+siteCollectGo comp ctors projs defTbl facts [] acc = acc
+siteCollectGo comp ctors projs defTbl facts (f :: rest) acc =
+  siteCollectGo comp ctors projs defTbl facts rest
+    (siteCollectClauses comp ctors projs facts f (clausesOfDefTbl f defTbl) acc)
 
 edgeFrom : ScEdge -> Int
 edgeFrom (MkScEdge i j strict) = i
@@ -343,32 +344,32 @@ else case closureStep table of
 -- ---------------------------------------------------------------
 -- 从调用点构造图
 -- ---------------------------------------------------------------
-siteEdgeAt : Int -> Int -> Site -> List String -> List (Pair String (List Int)) -> List (Pair String Int) -> List ScEdge
+siteEdgeAt : Int -> Int -> Site -> List String -> List (Pair String (List Int)) -> HashMap (List Int) -> List ScEdge
 siteEdgeAt i j s ctors projs facts = case nthExpr (siteArgs s) j of
   Nothing => []
   Just a => case relOfArg i a (siteSizes s) ctors projs (siteCaller s) facts (siteRegion s) of
     Nothing => []
     Just m => [MkScEdge i j (scIsStrict m)]
 
-siteEdgesJ : Int -> Int -> Site -> List String -> List (Pair String (List Int)) -> List (Pair String Int) -> List ScEdge
+siteEdgesJ : Int -> Int -> Site -> List String -> List (Pair String (List Int)) -> HashMap (List Int) -> List ScEdge
 siteEdgesJ i count s ctors projs facts =
   if count <= 0 then []
   else append (siteEdgeAt i (count - 1) s ctors projs facts)
     (siteEdgesJ i (count - 1) s ctors projs facts)
 
-siteEdgesI : Int -> Site -> List String -> List (Pair String (List Int)) -> List (Pair String Int) -> List ScEdge
+siteEdgesI : Int -> Site -> List String -> List (Pair String (List Int)) -> HashMap (List Int) -> List ScEdge
 siteEdgesI i s ctors projs facts =
   if i <= 0 then siteEdgesJ 0 (length (siteArgs s)) s ctors projs facts
   else append (siteEdgesJ i (length (siteArgs s)) s ctors projs facts)
     (siteEdgesI (i - 1) s ctors projs facts)
 
-siteEdgesOf : List String -> List (Pair String (List Int)) -> List (Pair String Int) -> Site -> List ScEdge
+siteEdgesOf : List String -> List (Pair String (List Int)) -> HashMap (List Int) -> Site -> List ScEdge
 siteEdgesOf ctors projs facts s = siteEdgesI (maxBaseOf (siteSizes s)) s ctors projs facts
 
-initialTable : List Site -> List String -> List (Pair String (List Int)) -> List (Pair String Int) -> List (Pair (Pair String String) (List (List ScEdge)))
+initialTable : List Site -> List String -> List (Pair String (List Int)) -> HashMap (List Int) -> List (Pair (Pair String String) (List (List ScEdge)))
 initialTable sites ctors projs facts = initialTableGo sites ctors projs facts []
 
-initialTableGo : List Site -> List String -> List (Pair String (List Int)) -> List (Pair String Int) -> List (Pair (Pair String String) (List (List ScEdge))) -> List (Pair (Pair String String) (List (List ScEdge)))
+initialTableGo : List Site -> List String -> List (Pair String (List Int)) -> HashMap (List Int) -> List (Pair (Pair String String) (List (List ScEdge))) -> List (Pair (Pair String String) (List (List ScEdge)))
 initialTableGo [] ctors projs facts acc = acc
 initialTableGo (s :: rest) ctors projs facts acc =
   initialTableGo rest ctors projs facts
@@ -418,10 +419,10 @@ sctBadText ((Pair (Pair f g) gs) :: rest) =
 sctDiag : List (Pair (Pair String String) (List (List ScEdge))) -> String
 sctDiag table = joinComma (dedup (sctBadText table))
 
-sctCheck : List String -> List (Pair String (List (Pair (List Pat) Expr))) -> List String -> List (Pair String (List Int)) -> List (Pair String Int) -> String -> Result Int
-sctCheck comp defs ctors projs facts msg =
+sctCheck : List String -> HashMap (List (Pair (List Pat) Expr)) -> List String -> List (Pair String (List Int)) -> HashMap (List Int) -> String -> Result Int
+sctCheck comp defTbl ctors projs facts msg =
   let
-    sites = siteCollect comp ctors projs defs facts
+    sites = siteCollect comp ctors projs defTbl facts
     table0 = initialTable sites ctors projs facts
   in case closureLoop table0 240 of
     Pair table1 ok1 =>
@@ -442,8 +443,8 @@ firstParamName (p :: rest) = case p of
   PVar n sp => Just n
   _ => Nothing
 
-firstParamOf : String -> List (Pair String (List (Pair (List Pat) Expr))) -> String
-firstParamOf name defs = case clausesOfDef name defs of
+firstParamOf : String -> HashMap (List (Pair (List Pat) Expr)) -> String
+firstParamOf name defTbl = case clausesOfDefTbl name defTbl of
   [] => ""
   cl :: rest => case firstParamName (firstOf cl) of
     Just n => n
@@ -468,31 +469,31 @@ siteFuelStrict callerFuel site = case nthExpr (siteArgs site) 0 of
     else Nothing
     _ => Nothing
 
-fuelEdgesOf : List String -> List (Pair String (List (Pair (List Pat) Expr))) -> List Site -> List (Pair (Pair String String) Int)
-fuelEdgesOf comp defs sites = fuelEdgesGo comp defs sites True []
+fuelEdgesOf : List String -> HashMap (List (Pair (List Pat) Expr)) -> List Site -> List (Pair (Pair String String) Int)
+fuelEdgesOf comp defTbl sites = fuelEdgesGo comp defTbl sites True []
 
-fuelEdgesGo : List String -> List (Pair String (List (Pair (List Pat) Expr))) -> List Site -> Bool -> List (Pair (Pair String String) Int) -> List (Pair (Pair String String) Int)
-fuelEdgesGo comp defs [] ok acc = acc
-fuelEdgesGo comp defs (s :: rest) ok acc = case siteFuelStrict (firstParamOf (siteCaller s) defs) s of
-  Nothing => fuelEdgesGo comp defs rest False acc
+fuelEdgesGo : List String -> HashMap (List (Pair (List Pat) Expr)) -> List Site -> Bool -> List (Pair (Pair String String) Int) -> List (Pair (Pair String String) Int)
+fuelEdgesGo comp defTbl [] ok acc = acc
+fuelEdgesGo comp defTbl (s :: rest) ok acc = case siteFuelStrict (firstParamOf (siteCaller s) defTbl) s of
+  Nothing => fuelEdgesGo comp defTbl rest False acc
   Just strict =>
-    fuelEdgesGo comp defs rest ok
+    fuelEdgesGo comp defTbl rest ok
       (Pair (Pair (siteCaller s) (siteCallee s)) (if strict then 1 else 0) :: acc)
 
-fuelMembersGuarded : List String -> List (Pair String (List (Pair (List Pat) Expr))) -> Bool
-fuelMembersGuarded [] defs = True
-fuelMembersGuarded (f :: rest) defs = case clausesOfDef f defs of
+fuelMembersGuarded : List String -> HashMap (List (Pair (List Pat) Expr)) -> Bool
+fuelMembersGuarded [] defTbl = True
+fuelMembersGuarded (f :: rest) defTbl = case clausesOfDefTbl f defTbl of
   [] => False
   cl :: cls => case firstParamName (firstOf cl) of
     Nothing => False
-    Just p0 => if hasFuelGuard p0 (secondOf cl) then fuelMembersGuarded rest defs else False
+    Just p0 => if hasFuelGuard p0 (secondOf cl) then fuelMembersGuarded rest defTbl else False
 
-tryFuelThread : List String -> List (Pair String (List (Pair (List Pat) Expr))) -> List String -> List (Pair String (List Int)) -> List (Pair String Int) -> String -> Result Int
-tryFuelThread comp defs ctors projs facts msg =
+tryFuelThread : List String -> HashMap (List (Pair (List Pat) Expr)) -> List String -> List (Pair String (List Int)) -> HashMap (List Int) -> String -> Result Int
+tryFuelThread comp defTbl ctors projs facts msg =
   let
-    sites = siteCollect comp ctors projs defs facts
-    edges = fuelEdgesOf comp defs sites
+    sites = siteCollect comp ctors projs defTbl facts
+    edges = fuelEdgesOf comp defTbl sites
     strictCount = length (filterModes (map secondOf edges))
-  in if strictCount > 0 then if fuelMembersGuarded comp defs then if hasWeakCycle comp edges then Err msg else Ok 0
+  in if strictCount > 0 then if fuelMembersGuarded comp defTbl then if hasWeakCycle comp edges then Err msg else Ok 0
   else Err msg
   else Err msg

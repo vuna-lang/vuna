@@ -86,7 +86,7 @@ let v_Vuna_dCompiler_dElab_dMeta_dconvEc = (fun ec depth expected actual -> (mat
   | _ -> failwith "DT: impossible branch"
 ))
 
-let rec v_Vuna_dCompiler_dElab_dMeta_dunsolvedFromGo = (fun remaining stop sols -> (if (remaining <= 0) then C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing else ((fun i -> (match ((v_Vuna_dCompiler_dCore_dTerm_dmetaLookupList i) sols) with
+let rec v_Vuna_dCompiler_dElab_dMeta_dunsolvedFromGo = (fun remaining stop sols -> (if (remaining <= 0) then C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing else ((fun i -> (match ((v_Vuna_dCompiler_dCore_dTerm_dmetaLookup i) sols) with
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__12) -> (((v_Vuna_dCompiler_dElab_dMeta_dunsolvedFromGo (remaining - 1)) stop) sols)
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (i))
   | _ -> failwith "DT: impossible branch"
@@ -153,9 +153,9 @@ let v_Vuna_dCompiler_dElab_dMeta_dglobalsLookup = (fun name globals ec -> (match
   | _ -> failwith "DT: impossible branch"
 ))
 
-let rec v_Vuna_dCompiler_dElab_dMeta_dmemSig = (fun d6254 mc0 mc1 -> (match mc0 with
+let rec v_Vuna_dCompiler_dElab_dMeta_dmemSig = (fun d6283 mc0 mc1 -> (match mc0 with
   | C_Base_dList_dList_Base_dList_dCons (dtb__72, dtb__73) -> (match dtb__72 with
-  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__74, dtb__75) -> (if (((v_Base_dEq_deq d6254) dtb__74) mc1) then true else (((v_Vuna_dCompiler_dElab_dMeta_dmemSig d6254) dtb__73) mc1))
+  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__74, dtb__75) -> (if (((v_Base_dEq_deq d6283) dtb__74) mc1) then true else (((v_Vuna_dCompiler_dElab_dMeta_dmemSig d6283) dtb__73) mc1))
   | _ -> failwith "DT: impossible branch"
 )
   | C_Base_dList_dList_Base_dList_dNil -> false

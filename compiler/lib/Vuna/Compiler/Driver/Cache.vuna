@@ -1,0 +1,111 @@
+module Vuna.Compiler.Driver.Cache
+  ( CachedProgram(..)
+  , cachedOfProgram
+  , programOfCached
+  , shiftCachedProgram
+  ) where
+
+-- M34.5 / C32 序列化与接口摘要的载体。
+--
+-- `DtProgram` 的 Value 用 `quote 0` 转成闭项 Term；已解的 `TMeta` 尽量内联
+-- （`substSolvedMetasTbl`，对含自由变量的开放解保守跳过）。**未内联的 `TMeta` 保留
+-- 包内编号**，合并多个依赖包的摘要时由调用方用 `shiftCachedProgram` 做**偏移重编号**
+-- （每个包一个 `pkgIndex << 30` 段）——这就是 per-module（包段）编号：编号 = 归属段 +
+-- 包内序号，跨包合并不再冲突；精化器内部编号保持 0..N 不变。
+--
+-- 恢复时 `eval []` 重建 Value（η 等价）；丢弃 goals（洞信息只服务 `vuna goal`）与
+-- defvals（定义体求值共享缓存，恢复为空只会更慢、不影响语义）。
+import Vuna.Compiler.Common
+import Vuna.Compiler.Elab
+import Vuna.Compiler.Elab.Types
+import Vuna.Compiler.Core
+import Base.HashMap
+import Base.IntMap
+
+data CachedProgram : Type where
+  CachedProgram : List DtData -> List DtDef -> List (Pair Int Term) -> List (Pair String Term) -> List DtInst -> List DtClass -> Int -> CachedProgram
+
+fixTerm : IntMap Value -> Term -> Term
+fixTerm tbl t = substSolvedMetasTbl tbl t
+
+fixDef : IntMap Value -> DtDef -> DtDef
+fixDef tbl (DtDef n ty body sp) = DtDef n (fixTerm tbl ty) (fixTerm tbl body) sp
+fixDef tbl (DtAxiom n ty sp) = DtAxiom n (fixTerm tbl ty) sp
+fixDef tbl (DtExtern n ty c sp) = DtExtern n (fixTerm tbl ty) c sp
+
+fixCtor : IntMap Value -> DtCtor -> DtCtor
+fixCtor tbl (DtCtor n fam tele ty) = DtCtor n fam tele (fixTerm tbl ty)
+
+fixData : IntMap Value -> DtData -> DtData
+fixData tbl (DtData n ps ctors kind) = DtData n ps (map (fixCtor tbl) ctors) (fixTerm tbl kind)
+
+fixClass : IntMap Value -> DtClass -> DtClass
+fixClass tbl (DtClass n ps projs tys) =
+  DtClass n ps (map (\p => Pair (firstOf p) (fixTerm tbl (secondOf p))) projs)
+    (map (fixTerm tbl) tys)
+
+fixInst : IntMap Value -> DtInst -> DtInst
+fixInst tbl (DtInst n tele ctxE head) =
+  DtInst n (map (\p => Pair (firstOf p) (fixTerm tbl (secondOf p))) tele) (map (fixTerm tbl) ctxE)
+    (fixTerm tbl head)
+
+cachedOfProgram : DtProgram -> CachedProgram
+cachedOfProgram prog =
+  let
+    tbl = Base.IntMap.fromList (dtProgSols prog)
+  in CachedProgram (map (fixData tbl) (dtProgDatas prog)) (map (fixDef tbl) (dtProgDefs prog))
+    (map (\p => Pair (firstOf p) (fixTerm tbl (quote 0 (secondOf p)))) (dtProgSols prog))
+    (map (\p => Pair (firstOf p) (fixTerm tbl (secondOf p))) (dtProgGlobals prog))
+    (map (fixInst tbl) (dtProgInsts prog)) (map (fixClass tbl) (dtProgClasses prog))
+    (dtProgNext prog)
+
+programOfCached : CachedProgram -> DtProgram
+programOfCached (CachedProgram datas defs sols globals insts classes next) =
+  DtProgram datas defs [] (map (\p => Pair (firstOf p) (eval [] (secondOf p))) sols) globals insts
+    classes next (Base.HashMap.fromList []) []
+
+-- 偏移重编号（per-module/包段编号）：给一个依赖包分配 `off` 段后，把它摘要里所有
+-- `TMeta` 与 sols 键整体加上 off，跨包合并时编号不再冲突。
+shiftTermMetas : Int -> Term -> Term
+shiftTermMetas off (TMeta m) = TMeta (m + off)
+shiftTermMetas off (TPi n i r d c) = TPi n i r (shiftTermMetas off d) (shiftTermMetas off c)
+shiftTermMetas off (TLam n r b) = TLam n r (shiftTermMetas off b)
+shiftTermMetas off (TApp f a r) = TApp (shiftTermMetas off f) (shiftTermMetas off a) r
+shiftTermMetas off (TCon c args) =
+  TCon c (map (\p => Pair (shiftTermMetas off (firstOf p)) (secondOf p)) args)
+shiftTermMetas off (TCase sc alts) = TCase (shiftTermMetas off sc) (map (shiftAltMetas off) alts)
+shiftTermMetas off (TIf c t e) =
+  TIf (shiftTermMetas off c) (shiftTermMetas off t) (shiftTermMetas off e)
+shiftTermMetas off t = t
+
+shiftAltMetas : Int -> CaseAlt -> CaseAlt
+shiftAltMetas off (CaseAlt n bs b) = CaseAlt n bs (shiftTermMetas off b)
+
+shiftDef : Int -> DtDef -> DtDef
+shiftDef off (DtDef n ty body sp) = DtDef n (shiftTermMetas off ty) (shiftTermMetas off body) sp
+shiftDef off (DtAxiom n ty sp) = DtAxiom n (shiftTermMetas off ty) sp
+shiftDef off (DtExtern n ty c sp) = DtExtern n (shiftTermMetas off ty) c sp
+
+shiftCtor : Int -> DtCtor -> DtCtor
+shiftCtor off (DtCtor n fam tele ty) = DtCtor n fam tele (shiftTermMetas off ty)
+
+shiftData : Int -> DtData -> DtData
+shiftData off (DtData n ps ctors kind) =
+  DtData n ps (map (shiftCtor off) ctors) (shiftTermMetas off kind)
+
+shiftClass : Int -> DtClass -> DtClass
+shiftClass off (DtClass n ps projs tys) =
+  DtClass n ps (map (\p => Pair (firstOf p) (shiftTermMetas off (secondOf p))) projs)
+    (map (shiftTermMetas off) tys)
+
+shiftInst : Int -> DtInst -> DtInst
+shiftInst off (DtInst n tele ctxE head) =
+  DtInst n (map (\p => Pair (firstOf p) (shiftTermMetas off (secondOf p))) tele)
+    (map (shiftTermMetas off) ctxE) (shiftTermMetas off head)
+
+shiftCachedProgram : Int -> CachedProgram -> CachedProgram
+shiftCachedProgram off (CachedProgram datas defs sols globals insts classes next) =
+  CachedProgram (map (shiftData off) datas) (map (shiftDef off) defs)
+    (map (\p => Pair (firstOf p + off) (shiftTermMetas off (secondOf p))) sols)
+    (map (\p => Pair (firstOf p) (shiftTermMetas off (secondOf p))) globals)
+    (map (shiftInst off) insts) (map (shiftClass off) classes) (next + off)

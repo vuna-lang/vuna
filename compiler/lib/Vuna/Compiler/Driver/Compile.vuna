@@ -20,18 +20,22 @@ module Vuna.Compiler.Driver.Compile
 import Vuna.Compiler.Common
 import Vuna.Compiler.Packages.Pkg
 import Vuna.Compiler.Driver.Dt
+import Vuna.Compiler.Debug
+import Vuna.Compiler.Elab
+import Vuna.Compiler.Driver.Cache
 import Vuna.Compiler.Driver.Split
 import Vuna.Compiler.Version
 import Base.IO
 
 -- 包级 check：可执行包检查 app/Main.vuna；库包检查 [export].modules。
+-- M34.5：结果走磁盘缓存（key = 闭包源哈希 + 依赖哈希 + manifest + 版本）。
 checkPackage : Package -> Result (List String)
-checkPackage pkg = if runIO (prim_fileExists (packageEntry pkg)) then dtCheck (packageContext pkg) (packageEntry pkg)
+checkPackage pkg = if runIO (prim_fileExists (packageEntry pkg)) then checkCachedExe (packageContext pkg) (packageEntry pkg)
 else case packageExports pkg of
   Nothing =>
     Err
       ("check: library package " ++ packageName pkg ++ " has no app/Main.vuna (executable) and no [export].modules (library)")
-  Just names => dtCheckLibrary (packageContext pkg) names
+  Just names => checkCachedLib (packageContext pkg) names
 
 -- 逐级创建目录（prim_makeDir 只建一层；`--out a/b` 的父目录可能不存在）。
 -- 递归沿 `parentOfPath` 上升，不是结构下降，用显式 fuel 守卫（路径深度上限）。
@@ -70,16 +74,29 @@ parentOfPath path =
 -- outDir 在 codegen 成功后才创建（精化失败不留产物）。
 -- M33 W5：包根 `ffi/*.c` 复制到 `OUTDIR/ffi/` 并写进 build.sh（受限 FFI 的 C 实现）。
 compileToDir : PackageContext -> String -> Bool -> String -> Result Int
-compileToDir ctx entry printResult outDir = andThen (dtSplitProject ctx entry printResult) (\files => let
-  _ = ensureDirPath outDir
-in andThen (writeSplitFilesIfChanged outDir files) (\n => let
-  order = splitCompileOrder (splitInitFiles files)
-  cFiles = copyFfiFiles (contextDir ctx) outDir
-in let
-  _ = runIO (prim_writeFile (outDir ++ "/build.sh") (buildScript order cFiles))
-in Ok n
-)
-)
+compileToDir ctx entry printResult outDir =
+  let
+    key = splitCacheKey ctx entry printResult
+    path = splitCachePath ctx key
+  in case readSplitCache path of
+    Just files => writeCompiled ctx outDir files
+    Nothing => andThen (dtSplitProject ctx entry printResult) (\files => andThen (writeCompiled ctx outDir files) (\n => let
+      _ = writeSplitCache ctx path files
+    in Ok n
+    )
+    )
+
+-- 把（缓存的或新生成的）split 文件写入 outDir 并写 build.sh。
+writeCompiled : PackageContext -> String -> List SplitFile -> Result Int
+writeCompiled ctx outDir files =
+  let
+    _ = ensureDirPath outDir
+  in andThen (writeSplitFilesIfChanged outDir files) (\n => let
+    order = splitCompileOrder (splitInitFiles files)
+    cFiles = copyFfiFiles (contextDir ctx) outDir
+    _ = runIO (prim_writeFile (outDir ++ "/build.sh") (buildScript order cFiles))
+  in Ok n
+  )
 
 -- 包根 `ffi/*.c` → OUTDIR/ffi/<name>.c；返回写进 build.sh 的相对路径列表。
 -- 没有 ffi/ 目录时返回 []（旧包行为不变）。
@@ -122,6 +139,24 @@ metaFileName = "build-meta.json"
 -- 内容哈希：两个 30-bit 值 + 长度组合（与 Index 缓存同一思路；避免单哈希冲突）。
 textHash : String -> Int
 textHash s = strHash s * 1000003 + strHash ("m30:" ++ s) + strLength s
+
+-- M34.5：编译器二进制指纹（缓存 key 必须含它：check/codegen 语义随编译器变化）。
+compilerFingerprint : Int
+compilerFingerprint =
+  let
+    argv = runIO prim_getArgs
+  in case argv of
+    [] => textHash vunaVersion
+    a :: rest =>
+      if runIO (prim_fileExists a) then textHash (runIO (prim_readFile a)) else textHash vunaVersion
+
+-- M34.5：缓存根（TMPDIR 可写；Nix 构建的源树只读，缓存放临时目录 ⇒ 构建内不命中，
+-- 无害；本地开发同机 TMPDIR 持久 ⇒ 命中）。按包路径哈希隔离项目。
+cacheBase : String
+cacheBase =
+  let
+    tmp = runIO (prim_getenv "TMPDIR")
+  in (if tmp == "" then "/tmp" else tmp) ++ "/vuna-cache"
 
 -- 目录遍历（模块根内的 .vuna；与 Vuna.Files 的跳过规则一致，但 compiler 包不能
 -- import 根包工具链）。fuel 守卫目录图（符号链接环）。
@@ -219,6 +254,7 @@ buildMetaText ctx entry linked =
   let
     sources = contextSources ctx entry
     deps = dependencyHashes ctx
+    manifestHash = textHash (runIO (prim_readFile (contextDir ctx ++ "/vuna.toml")))
     entryName = lastSegment entry
     linkedText = if linked then "true" else "false"
   in "{\"schema\":"
@@ -233,6 +269,8 @@ buildMetaText ctx entry linked =
     ++ linkedText
     ++ ",\"closure\":"
     ++ strFromInt (closureHashOf sources 0)
+    ++ ",\"manifest\":"
+    ++ strFromInt manifestHash
     ++ ",\"sources\":["
     ++ joinJsonList (map metaPairText sources)
     ++ "],\"dependencies\":["
@@ -263,3 +301,163 @@ runBuildScript dir out name =
   in if code == 0 then Ok 0
   else Err
     ("build: " ++ name ++ ": `sh build.sh " ++ out ++ "` failed in " ++ dir ++ " (exit " ++ strFromInt code ++ ")")
+
+-- ---------------------------------------------------------------
+-- M34.5：check 结果磁盘缓存（elab 级缓存的 check 结果版）
+--
+-- key = 闭包源哈希 + 依赖包哈希 + manifest 哈希 + schema/版本；命中直接返回成功
+-- （check 只区分成功/失败；失败不写缓存，避免把瞬时错误固化）。缓存放包根
+-- `.local/check-cache/`（gitignored），Nix 构建的干净源树里不存在 ⇒ CI 不命中。
+-- 典型的「依赖包全部缓存命中」场景：重复 `vuna check .` / 多包 workspace / LSP 重启。
+-- ---------------------------------------------------------------
+checkCacheSchema : String
+checkCacheSchema = "vuna-check-cache 4"
+
+checkCacheDir : PackageContext -> String
+checkCacheDir ctx = cacheBase ++ "/" ++ hashText (textHash (contextPackageName ctx)) ++ "/check"
+
+checkCachePath : PackageContext -> String -> String
+checkCachePath ctx key = checkCacheDir ctx ++ "/" ++ key
+
+hashText : Int -> String
+hashText n = strFromInt (n - n / 1000000007 * 1000000007)
+
+checkCacheKeyExe : PackageContext -> String -> String
+checkCacheKeyExe ctx entry =
+  let
+    srcHash = closureHashOf (contextSources ctx entry) 0
+    depsHash = closureHashOf (dependencyHashes ctx) 0
+    manHash = textHash (runIO (prim_readFile (contextDir ctx ++ "/vuna.toml")))
+    verHash = textHash (checkCacheSchema ++ vunaVersion) + compilerFingerprint
+  in hashText srcHash ++ "-" ++ hashText depsHash ++ "-" ++ hashText manHash ++ "-" ++ hashText verHash
+
+checkCacheKeyLib : PackageContext -> List String -> String
+checkCacheKeyLib ctx names =
+  let
+    srcHash = closureHashOf (concatMap rootSources (contextRoots ctx)) 0
+    depsHash = closureHashOf (dependencyHashes ctx) 0
+    manHash = textHash (runIO (prim_readFile (contextDir ctx ++ "/vuna.toml")))
+    namesHash = textHash (join "\t" names)
+    verHash = textHash (checkCacheSchema ++ vunaVersion) + compilerFingerprint
+  in hashText srcHash
+    ++ "-"
+    ++ hashText depsHash
+    ++ "-"
+    ++ hashText manHash
+    ++ "-"
+    ++ hashText namesHash
+    ++ "-"
+    ++ hashText verHash
+
+checkCachedExe : PackageContext -> String -> Result (List String)
+checkCachedExe ctx entry =
+  let
+    key = checkCacheKeyExe ctx entry
+    path = checkCachePath ctx key
+  in if runIO (prim_fileExists path) then Ok [] else noteAndCheck ctx entry path
+
+-- M34.5 接口摘要路径的安全阀：只有全部直接依赖的缓存摘要都命中、且签名面无残留
+-- TMeta 才返回；否则回退全量精化（静默漏检不可接受）。每个依赖包分配一个
+-- `idx << 30` 的编号段（per-module/包段编号），跨包合并的 TMeta/sols 不再冲突。
+depProgramsOf : PackageContext -> Maybe (List DtProgram)
+depProgramsOf ctx = case contextPackage ctx of
+  Nothing => Nothing
+  Just pkg => depProgramsOfGo 0 (packageDependencies pkg) []
+
+metaSegment : Int
+metaSegment = 1073741824
+
+depProgramsOfGo : Int -> List Package -> List DtProgram -> Maybe (List DtProgram)
+depProgramsOfGo _ [] acc = Just (reverse acc)
+depProgramsOfGo idx (d :: rest) acc = case readProgramCache d of
+  Just cached =>
+    let
+      prog = programOfCached (shiftCachedProgram (idx * metaSegment) cached)
+    in if dtProgramHasMetas prog then
+      let
+        _ = noteInt "cache-dep-metas" idx
+      in Nothing
+    else
+      let
+        _ = noteInt "cache-dep-ok" idx
+      in depProgramsOfGo (idx + 1) rest (prog :: acc)
+  Nothing =>
+    let
+      _ = noteInt "cache-dep-miss" idx
+    in Nothing
+
+readProgramCache : Package -> Maybe CachedProgram
+readProgramCache dep =
+  let
+    dctx = packageContext dep
+    -- 与 checkPackage 的判定顺序一致：先看 app/Main.vuna（可执行），再看 [export].modules（库）。
+    key = if runIO (prim_fileExists (packageEntry dep)) then checkCacheKeyExe dctx (packageEntry dep)
+    else case packageExports dep of
+      Just names => checkCacheKeyLib dctx names
+      Nothing => ""
+    path = checkCachePath dctx key
+  in if runIO (prim_fileExists path) then Just (prim_unmarshal (runIO (prim_readFile path)))
+  else Nothing
+
+checkAndCache : PackageContext -> String -> String -> Result (Pair (List String) DtProgram) -> Result (List String)
+checkAndCache ctx entry path checked = andThen checked (\r => let
+  _ = ensureDirPath (checkCacheDir ctx)
+  _ = runIO (prim_writeFile path (prim_marshal (cachedOfProgram (secondOf r))))
+in Ok (firstOf r)
+)
+
+checkCachedLib : PackageContext -> List String -> Result (List String)
+checkCachedLib ctx names =
+  let
+    key = checkCacheKeyLib ctx names
+    path = checkCachePath ctx key
+  in if runIO (prim_fileExists path) then Ok []
+  else andThen (dtCheckLibraryWithProgram ctx names) (\r => let
+    _ = ensureDirPath (checkCacheDir ctx)
+    _ = runIO (prim_writeFile path (prim_marshal (cachedOfProgram (secondOf r))))
+  in Ok (firstOf r)
+  )
+
+-- ---------------------------------------------------------------
+-- M34.5：elab + codegen 产物缓存（`List SplitFile` 是纯数据，可 Marshal）
+--
+-- key = 闭包源哈希 + 依赖哈希 + schema/版本 + 编译器二进制指纹 + printResult；
+-- 命中直接写文件（省 load/resolve/elab/codegen）。`ffi/*.c` 每次重新复制（C 源小）。
+-- 缓存放包根 `.local/split-cache/`（gitignored）。
+-- ---------------------------------------------------------------
+splitCacheSchema : String
+splitCacheSchema = "vuna-split-cache 1"
+
+splitCacheDir : PackageContext -> String
+splitCacheDir ctx = cacheBase ++ "/" ++ hashText (textHash (contextPackageName ctx)) ++ "/split"
+
+splitCachePath : PackageContext -> String -> String
+splitCachePath ctx key = splitCacheDir ctx ++ "/" ++ key
+
+splitCacheKey : PackageContext -> String -> Bool -> String
+splitCacheKey ctx entry printResult =
+  let
+    srcHash = closureHashOf (contextSources ctx entry) 0
+    depsHash = closureHashOf (dependencyHashes ctx) 0
+    verHash = textHash (splitCacheSchema ++ vunaVersion) + compilerFingerprint
+    prHash = if printResult then 1 else 0
+  in hashText srcHash ++ "-" ++ hashText depsHash ++ "-" ++ hashText (verHash + prHash)
+
+readSplitCache : String -> Maybe (List SplitFile)
+readSplitCache path =
+  if runIO (prim_fileExists path) then Just (prim_unmarshal (runIO (prim_readFile path)))
+  else Nothing
+
+writeSplitCache : PackageContext -> String -> List SplitFile -> Int
+writeSplitCache ctx path files =
+  let
+    _ = ensureDirPath (splitCacheDir ctx)
+  in runIO (prim_writeFile path (prim_marshal files))
+
+-- M34.5：接口摘要路径暂不启用（诊断结论见 C37：依赖签名在摘要重建后仍出现
+-- FixityEnv.vuna 的 TypeMismatch，说明还有未建模的精化状态）。全量路径 + 诊断 note。
+noteAndCheck : PackageContext -> String -> String -> Result (List String)
+noteAndCheck ctx entry path =
+  let
+    _ = note "cache-path-full"
+  in checkAndCache ctx entry path (dtCheckWithProgram ctx entry)

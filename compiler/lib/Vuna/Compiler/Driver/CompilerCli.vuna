@@ -224,9 +224,33 @@ checkPkgDir dir = case workspacePackages dir of
 
 -- M30：workspace 是检查单元——根包 + [workspace].members 逐个检查，成员错误不再被
 -- 根 check 忽略。错误带 `[包名]` 前缀；全部跑完再汇总退出码。
+-- M34.4：多包 workspace 并行（成员包各一个 `vuna check <dir>` 子进程；根包在当前进程
+-- 串行）。根包目录就是 workspace 根，spawn 它会再展开整个 workspace ⇒ 递归，所以按
+-- `workspacePackages <dir>` 是否返回多包区分根 / 成员；单包目录的子进程只查自己。
+-- 子进程继承 stdout/stderr（错误可能交错），退出码按失败汇总。
 checkPackages : List Package -> Int -> Int
 checkPackages [] code = code
-checkPackages (pkg :: rest) code =
+checkPackages ([pkg]) code = checkPackageSeq pkg code
+checkPackages pkgs code =
+  let
+    members = filter (\pkg => not (isWorkspaceRoot pkg)) pkgs
+    roots = filter (\pkg => isWorkspaceRoot pkg) pkgs
+    started = map (\pkg => Pair pkg (runIO (prim_spawn ["check", packageDir pkg]))) members
+    code1 = checkRootsSeq roots code
+    codes = map (\pr => runIO (prim_wait (secondOf pr))) started
+  in countFailures code1 codes
+
+isWorkspaceRoot : Package -> Bool
+isWorkspaceRoot pkg = case workspacePackages (packageDir pkg) of
+  Ok ps => length ps > 1
+  Err e => False
+
+checkRootsSeq : List Package -> Int -> Int
+checkRootsSeq [] code = code
+checkRootsSeq (pkg :: rest) code = checkRootsSeq rest (checkPackageSeq pkg code)
+
+checkPackageSeq : Package -> Int -> Int
+checkPackageSeq pkg code =
   let
     c = case checkPackage pkg of
       Err e =>
@@ -234,8 +258,11 @@ checkPackages (pkg :: rest) code =
           _ = runIO (prim_print ("error: [" ++ packageName pkg ++ "] " ++ e ++ "\n"))
         in 1
       Ok warnings => printWarnings warnings
-    next = if c > code then c else code
-  in checkPackages rest next
+  in if c > code then c else code
+
+countFailures : Int -> List Int -> Int
+countFailures acc [] = acc
+countFailures acc (c :: rest) = if c == 0 then countFailures acc rest else countFailures 1 rest
 
 checkFileEntry : String -> Int
 checkFileEntry path = case contextForFile path of

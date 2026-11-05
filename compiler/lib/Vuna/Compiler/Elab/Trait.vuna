@@ -12,7 +12,7 @@ module Vuna.Compiler.Elab.Trait
   , constraintPartsOf
   , ctorResultType
   , defBodyOf
-  , defTypeOrDefault
+  , defTypeOrDefaultTbl
   , elabConstraintDomains
   , elabFunDef
   , elabInstance
@@ -64,10 +64,8 @@ module Vuna.Compiler.Elab.Trait
   , zipMethodFields
   ) where
 
--- Vuna.Compiler.Elab.Trait：trait/instance 声明与派生：类参数 kind、方法投影、实例头检查（重复/命名）、实例方法体、
--- 字典提升（liftFreeDictGoals）、实例体与 trait 声明的批量调度，以及定义参数模式绑定与
--- `elabFunDef`（实例方法体复用同一套模式矩阵降级）。
--- 拆自 M24 的单一 `Elab.vuna`（按真实调用图切；门面仍是 `Vuna.Compiler.Elab`）。
+-- Vuna.Compiler.Elab.Trait：trait/instance 声明与派生：类参数 kind、方法投影、实例头检查、
+-- 实例方法体、字典提升、实例体批量调度、定义参数模式绑定与 `elabFunDef`；拆自 M24 的 `Elab.vuna`。
 import Vuna.Compiler.Common
 import Base.HashMap
 import Vuna.Compiler.Debug
@@ -142,7 +140,9 @@ elabTrait globals ec ds = case ds of
             dapp = foldAppTerms (TGlobal dname) [Pair (TVar pname 0) Rig0]
             ctorTy = TPi pname True Rig0 pKind (foldPiFieldTys fieldTys dapp)
             tele = teleOfType ctorTy
-            dd = DtData dname tele [DtCtor cname dname tele ctorTy]
+            dd =
+              DtData dname tele [DtCtor cname dname tele ctorTy]
+                (TPi pname True Rig0 pKind (TType levelZero))
             projs = methodProjections tname pname pKind methodsP fieldTys
             projSpans = map (\m => Pair (traitMethodName m) (traitMethodSpan m)) methods
             projBodies = projectionDefs tname pname methodsP fieldTys (length methods)
@@ -996,7 +996,7 @@ elabInstanceBodiesGo (d :: rest) allDecls classes datas globals ec acc = andThen
 instanceDefsOf : Ec -> Ec -> Maybe Span -> List (Pair String Term) -> List DtDef
 instanceDefsOf ecBefore ecAfter srcSpan gs =
   map
-    (\g => DtDef (firstOf g) (defTypeOrDefault gs (firstOf g)) (substDictTerm ecAfter (defBodyOf (ecDefTbl ecAfter) (firstOf g))) srcSpan)
+    (\g => DtDef (firstOf g) (defTypeOrDefaultTbl (Base.HashMap.fromList gs) (firstOf g)) (substDictTerm ecAfter (defBodyOf (ecDefTbl ecAfter) (firstOf g))) srcSpan)
     gs
 
 defBodyOf : HashMap Term -> String -> Term
@@ -1034,22 +1034,22 @@ elabInstancesGo (d :: rest) classes datas globals ec acc = andThen (elabInstance
 -- 找不到的生成项给 `Nothing`，诊断保持无位置）。
 extraDefsOf : List (Pair String Term) -> Ec -> List (Pair String Span) -> List DtDef -> List DtDef
 extraDefsOf globals ec srcSpans sourceDefs =
-  extraDefsGo globals (Base.HashMap.ofNames (map dtDefName sourceDefs)) srcSpans (ecDefs ec) []
+  extraDefsGo (ecGlobalsTbl ec) (Base.HashMap.ofNames (map dtDefName sourceDefs)) srcSpans
+    (ecDefs ec) []
 
-extraDefsGo : List (Pair String Term) -> HashMap Bool -> List (Pair String Span) -> List (Pair String Term) -> List DtDef -> List DtDef
-extraDefsGo globals sourceNames srcSpans [] acc = reverse acc
-extraDefsGo globals sourceNames srcSpans (d :: rest) acc =
-  if Base.HashMap.member (firstOf d) sourceNames then extraDefsGo globals sourceNames srcSpans rest acc
-  else extraDefsGo globals sourceNames srcSpans rest
-    (DtDef (firstOf d) (defTypeOrDefault globals (firstOf d)) (secondOf d) (spanOfName (firstOf d) srcSpans) :: acc)
+extraDefsGo : HashMap Term -> HashMap Bool -> List (Pair String Span) -> List (Pair String Term) -> List DtDef -> List DtDef
+extraDefsGo globalsTbl sourceNames srcSpans [] acc = reverse acc
+extraDefsGo globalsTbl sourceNames srcSpans (d :: rest) acc =
+  if Base.HashMap.member (firstOf d) sourceNames then extraDefsGo globalsTbl sourceNames srcSpans rest acc
+  else extraDefsGo globalsTbl sourceNames srcSpans rest
+    (DtDef (firstOf d) (defTypeOrDefaultTbl globalsTbl (firstOf d)) (secondOf d) (spanOfName (firstOf d) srcSpans) :: acc)
 
--- 名字→span 表的线性查找（生成定义数量小，不做哈希表）。
 spanOfName : String -> List (Pair String Span) -> Maybe Span
 spanOfName name [] = Nothing
 spanOfName name ((Pair n sp) :: rest) = if n == name then Just sp else spanOfName name rest
 
-defTypeOrDefault : List (Pair String Term) -> String -> Term
-defTypeOrDefault globals name = case globalLookup name globals of
+defTypeOrDefaultTbl : HashMap Term -> String -> Term
+defTypeOrDefaultTbl tbl name = case Base.HashMap.lookup name tbl of
   Just ty => ty
   Nothing => TGlobal "Int"
 

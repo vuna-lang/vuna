@@ -1,12 +1,16 @@
 module Vuna.Compiler.Driver.Dt
   ( dtCheck
   , dtCheckLibrary
+  , dtCheckLibraryWithProgram
+  , dtCheckPackageWithDeps
   , dtCheckSource
+  , dtCheckWithProgram
   , dtEvalExpr
   , dtEvalExprInfo
   , dtEvalFile
   , dtGoalsSource
   , dtMainKind
+  , dtProgramHasMetas
   , dtSplitProject
   ) where
 
@@ -29,6 +33,9 @@ import Vuna.Compiler.Packages.Pkg
 import Vuna.Compiler.Loader
 import Vuna.Compiler.Core
 import Vuna.Compiler.Elab
+import Vuna.Compiler.Elab.Types
+import Vuna.Compiler.Elab.Prelude
+import Vuna.Compiler.Elab.Meta
 import Vuna.Compiler.Intrinsics
 import Vuna.Compiler.Codegen
 import Vuna.Compiler.Driver.Split
@@ -74,6 +81,23 @@ in andThen (elabProgram decls) (\program => let
 in andThen (checkDtProgram program) (\_ => let
   _ = stamp "codegen-check-done"
 in Ok []
+)
+)
+)
+
+-- M34.5：与 dtCheck 同一条精化路径，但把 DtProgram 一并返回（检查缓存写 ElabSummary 用）。
+dtCheckWithProgram : PackageContext -> String -> Result (Pair (List String) DtProgram)
+dtCheckWithProgram ctx entry = dtCheckDeclsWithProgram (dtLoad ctx entry)
+
+dtCheckLibraryWithProgram : PackageContext -> List String -> Result (Pair (List String) DtProgram)
+dtCheckLibraryWithProgram ctx names = dtCheckDeclsWithProgram (dtLoadModules ctx names)
+
+dtCheckDeclsWithProgram : Result (List Decl) -> Result (Pair (List String) DtProgram)
+dtCheckDeclsWithProgram loaded = andThen loaded (\decls => andThen (elabProgramFull decls) (\program => let
+  _ = stamp "elab-done"
+in andThen (checkDtProgram (Pair (dtProgDatas program) (dtProgDefs program))) (\_ => let
+  _ = stamp "codegen-check-done"
+in Ok (Pair [] program)
 )
 )
 )
@@ -214,3 +238,111 @@ in andThen (elabProgramFull allDecls)
   (\program => generateDtSplitProgram (map (\m => Pair (moduleNameOf m) (moduleDeclsOf m)) modules) entryDecls program printResult)
 )
 )
+
+-- M34.5 接口摘要：加载 + resolve 项目并保留模块归属（本包 decls 过滤用）。
+dtLoadParts : PackageContext -> String -> Result (Pair (List Decl) (List Module))
+dtLoadParts ctx entry = andThen (loadProject ctx entry) (\project => resolveProject project)
+
+-- 只精化本包模块：依赖包的 DtProgram（缓存摘要）重建起始 Ec / globals，跳过依赖包 body。
+-- 安全阀在调用方：摘要必须已完全解出（无残留 TMeta）且缓存命中，否则回退全量路径。
+dtCheckPackageWithDeps : PackageContext -> String -> List DtProgram -> Result (Pair (List String) DtProgram)
+dtCheckPackageWithDeps ctx entry deps = andThen (dtLoadParts ctx entry) (\parts => let
+  pkgName = contextPackageName ctx
+  ours = filter (\m => modulePackageOf m == pkgName) (reverse (secondOf parts))
+  decls = append (concatMap moduleDeclsOf ours) (firstOf parts)
+  start = depStartOf deps
+  _ = note ("summ-List=" ++ globalTextOf "List" (secondOf start))
+  _ = note
+  _ = note
+  _ = note ("summ-Pair=" ++ globalTextOf "Pair" (secondOf start))
+  _ = note ("summ-getenv=" ++ globalTextOf "prim_getenv" (secondOf start))
+  _ = note ("summ-runIO=" ++ globalTextOf "Base.IO.runIO" (secondOf start))
+  _ = note ("summ-IO=" ++ globalTextOf "Base.IO.IO" (secondOf start))
+in andThen (elabProgramGoWith (firstOf start) (secondOf start) decls)
+  (\prog => andThen (checkDtProgram (Pair (dtProgDatas prog) (dtProgDefs prog))) (\_ => Ok (Pair [] prog)))
+)
+
+depStartOf : List DtProgram -> Pair Ec (List (Pair String Term))
+depStartOf progs =
+  let
+    datas = dedupDatas (concatMap dtProgDatas progs)
+    globals =
+      append preludeGlobals
+        (append (map (\d => Pair (dtDataName d) (dtDataKind d)) datas) (dedupGlobals (concatMap dtProgGlobals progs)))
+    sols = concatMap dtProgSols progs
+    ec0 = ecEmpty
+    ec1 = addDatasEc ec0 datas
+    ec2 = addInstsEc ec1 (dedupInsts (concatMap dtProgInsts progs))
+    ec3 = addClassesEc ec2 (dedupClasses (concatMap dtProgClasses progs))
+    ec4 = ecPutSols ec3 sols
+    ec5 = ecPutNext ec4 0
+    ec6 = ecPutGlobalsTbl ec5 (Base.HashMap.fromList globals)
+  in Pair ec6 globals
+
+dedupDatas : List DtData -> List DtData
+dedupDatas [] = []
+dedupDatas (d :: rest) =
+  if memName (dtDataName d) (map dtDataName rest) then dedupDatas rest else d :: dedupDatas rest
+
+dedupInsts : List DtInst -> List DtInst
+dedupInsts [] = []
+dedupInsts (i :: rest) =
+  if memName (dtInstName i) (map dtInstName rest) then dedupInsts rest else i :: dedupInsts rest
+
+dedupClasses : List DtClass -> List DtClass
+dedupClasses [] = []
+dedupClasses (c :: rest) =
+  if memName (dtClassName c) (map dtClassName rest) then dedupClasses rest
+  else c :: dedupClasses rest
+
+dedupGlobals : List (Pair String Term) -> List (Pair String Term)
+dedupGlobals [] = []
+dedupGlobals (g :: rest) =
+  if memName (firstOf g) (map firstOf rest) then dedupGlobals rest else g :: dedupGlobals rest
+
+maxNext : List DtProgram -> Int
+maxNext [] = 0
+maxNext (p :: rest) = if dtProgNext p > maxNext rest then dtProgNext p else maxNext rest
+
+-- M34.5 安全阀：摘要是否残留未替换的 TMeta。接口摘要路径只接受完全解出的摘要
+-- M34.5 安全阀：摘要的**签名面**是否残留未替换的 TMeta。接口摘要路径只接受签名完全
+-- 解出的摘要（否则编号空间可能跨包冲突，静默漏检）。body 的 TMeta 不参与：根包只看
+-- 依赖签名（codegen 只生成本包 body），解含自由变量的 body 元变量不影响类型检查。
+dtProgramHasMetas : DtProgram -> Bool
+dtProgramHasMetas prog =
+  defsHaveMetas (dtProgDefs prog)
+    || globalsHaveMetas (dtProgGlobals prog)
+    || datasHaveMetas (dtProgDatas prog)
+    || instsHaveMetas (dtProgInsts prog)
+    || classesHaveMetas (dtProgClasses prog)
+
+defsHaveMetas : List DtDef -> Bool
+defsHaveMetas [] = False
+defsHaveMetas (d :: rest) =
+  if length (termMetasAll (dtDefType d)) > 0 then True else defsHaveMetas rest
+
+globalsHaveMetas : List (Pair String Term) -> Bool
+globalsHaveMetas [] = False
+globalsHaveMetas (g :: rest) =
+  if length (termMetasAll (secondOf g)) > 0 then True else globalsHaveMetas rest
+
+datasHaveMetas : List DtData -> Bool
+datasHaveMetas [] = False
+datasHaveMetas (d :: rest) =
+  if length (concatMap (\c => termMetasAll (dtCtorType c)) (dtDataCtors d)) > 0 then True
+  else datasHaveMetas rest
+
+instsHaveMetas : List DtInst -> Bool
+instsHaveMetas [] = False
+instsHaveMetas (i :: rest) =
+  if length (concatMap termMetasAll (dtInstCtx i)) > 0 then True else instsHaveMetas rest
+
+classesHaveMetas : List DtClass -> Bool
+classesHaveMetas [] = False
+classesHaveMetas (c :: rest) =
+  if length (concatMap termMetasAll (dtClassFieldTys c)) > 0 then True else classesHaveMetas rest
+
+-- M34.5 诊断（--debug-perf）：打印 globals 里某个名字的签名文本（摘要/全量对比用）。
+globalTextOf : String -> List (Pair String Term) -> String
+globalTextOf name [] = "MISSING"
+globalTextOf name ((Pair n t) :: rest) = if n == name then showTerm t else globalTextOf name rest

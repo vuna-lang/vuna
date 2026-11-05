@@ -46,6 +46,7 @@ Vuna.Compiler.Diagnostics.Cg  compiler/lib/Vuna/Compiler/Diagnostics/Cg.vuna
 Vuna.Compiler.Diagnostics.Common  compiler/lib/Vuna/Compiler/Diagnostics/Common.vuna
 Vuna.Compiler.Diagnostics.Tc  compiler/lib/Vuna/Compiler/Diagnostics/Tc.vuna
 Vuna.Compiler.Diagnostics  compiler/lib/Vuna/Compiler/Diagnostics.vuna
+Vuna.Compiler.Driver.Cache  compiler/lib/Vuna/Compiler/Driver/Cache.vuna
 Vuna.Compiler.Driver.Compile  compiler/lib/Vuna/Compiler/Driver/Compile.vuna
 Vuna.Compiler.Driver.CompilerCli  compiler/lib/Vuna/Compiler/Driver/CompilerCli.vuna
 Vuna.Compiler.Driver.Dt  compiler/lib/Vuna/Compiler/Driver/Dt.vuna
@@ -134,6 +135,7 @@ Vuna.Compiler.Diagnostics.Cg  ./lib/Vuna/Compiler/Diagnostics/Cg.vuna
 Vuna.Compiler.Diagnostics.Common  ./lib/Vuna/Compiler/Diagnostics/Common.vuna
 Vuna.Compiler.Diagnostics.Tc  ./lib/Vuna/Compiler/Diagnostics/Tc.vuna
 Vuna.Compiler.Diagnostics  ./lib/Vuna/Compiler/Diagnostics.vuna
+Vuna.Compiler.Driver.Cache  ./lib/Vuna/Compiler/Driver/Cache.vuna
 Vuna.Compiler.Driver.Compile  ./lib/Vuna/Compiler/Driver/Compile.vuna
 Vuna.Compiler.Driver.CompilerCli  ./lib/Vuna/Compiler/Driver/CompilerCli.vuna
 Vuna.Compiler.Driver.Dt  ./lib/Vuna/Compiler/Driver/Dt.vuna

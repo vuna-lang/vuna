@@ -13,6 +13,7 @@ module Vuna.Compiler.Loader.Resolve
 -- 导出表计算、加载流程与 flatten 在 `Loader.Flatten`。
 import Vuna.Compiler.Frontend.Diagnostics
 import Vuna.Compiler.Common
+import Base.HashMap
 import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Frontend.Lexer
 import Vuna.Compiler.Loader.Modules
@@ -107,7 +108,11 @@ valueNamesOf decls = concatMap declValueNames decls
 -- 从声明列表算出三个命名空间（Loader 入口与 Flatten 的分离编译入口共用）。
 namespacesOf : List Decl -> Namespaces
 namespacesOf decls =
-  Namespaces { nsValues = valueNamesOf decls, nsCtors = ctorsOf decls, nsTypes = typeNamesOf decls }
+  let
+    vals = valueNamesOf decls
+    cts = ctorsOf decls
+    tys = typeNamesOf decls
+  in Namespaces { nsValues = vals, nsCtors = cts, nsTypes = tys, nsValueSet = Base.HashMap.ofNames vals, nsCtorSet = Base.HashMap.ofNames cts, nsTypeSet = Base.HashMap.ofNames tys }
 
 resolveQualified : List Module -> String -> List Import -> String -> Result String
 resolveQualified modules label imports name = case splitLastDot (splitOnDot name) of
@@ -145,7 +150,7 @@ resolveDottedExpr modules label prefix ns imports scope name sp = case splitOnDo
   else andThen (resolveQualifiedPath modules label imports (splitOnDot name) (length (splitOnDot name)) sp) (\q => case q of
     Just e => Ok e
     Nothing =>
-      if memName head (nsValues ns) then Ok (foldFieldChain (EVar (mangle prefix head) sp) rest sp)
+      if Base.HashMap.member head (nsValueSet ns) then Ok (foldFieldChain (EVar (mangle prefix head) sp) rest sp)
       else if isBuiltinName head then Ok (foldFieldChain (EVar head sp) rest sp)
       else if startsUpperName head then Err (label ++ ": module " ++ head ++ " is not imported")
       else andThen (resolveGlobal modules label prefix ns imports scope head)
@@ -186,15 +191,15 @@ else case findImportPrefix imports (joinDots (takeSegs (n - 1) segs)) of
 -- 都没命中才把本模块类型名 mangle 成项（类型当值）。
 resolveGlobal : List Module -> String -> String -> Namespaces -> List Import -> List String -> String -> Result String
 resolveGlobal modules label prefix ns imports scope name = if memName name scope then Ok name
-else if memName name (nsValues ns) then Ok (mangle prefix name)
-else if memName name (nsCtors ns) then Ok (mangle prefix name)
+else if Base.HashMap.member name (nsValueSet ns) then Ok (mangle prefix name)
+else if Base.HashMap.member name (nsCtorSet ns) then Ok (mangle prefix name)
 else if containsDot name then resolveQualified modules label imports name
 else if isBuiltinName name then Ok name
 else if isDtPreludeName name then Ok name
 else andThen (modulesExportingValue modules imports name) (\pairs => case pairs of
   [] => andThen (modulesExportingCtor modules imports name) (\cpairs => case cpairs of
     [] =>
-      if memName name (nsTypes ns) then Ok (mangle prefix name)
+      if Base.HashMap.member name (nsTypeSet ns) then Ok (mangle prefix name)
       else Err
         (label ++ ": unbound variable " ++ name ++ suggest name (append (nsValues ns) (append (nsCtors ns) (append (nsTypes ns) scope))) ++ traitImportHint name)
     _ => andThen (unifyEntryPairs label "name" name cpairs) (\p => Ok (entryTarget (secondOf p)))
@@ -205,7 +210,7 @@ else andThen (modulesExportingValue modules imports name) (\pairs => case pairs 
 -- 构造子位置（模式、record 构造、以及类型位置的索引构造子退化）：只查构造子命名空间。
 resolveCtor : List Module -> String -> String -> Namespaces -> List Import -> String -> Result String
 resolveCtor modules label prefix ns imports name = if containsDot name then resolveQualifiedCtor modules label imports name
-else if memName name (nsCtors ns) then Ok (mangle prefix name)
+else if Base.HashMap.member name (nsCtorSet ns) then Ok (mangle prefix name)
 else if isIntrinsicName name then Ok name
 else andThen (modulesExportingCtor modules imports name) (\pairs => case pairs of
   [] => Err (label ++ ": unknown constructor " ++ name ++ suggest name (nsCtors ns))
@@ -435,11 +440,11 @@ startsUpperName name = case strUnpack name of
 --   2. 非小写名找不到类型时，退化为**索引构造子**（本地构造子 + 跨模块 import 的构造子），
 --      最后才是本模块的值定义（大写类型层 def，少见）。
 resolveTypeName : List Module -> String -> String -> Namespaces -> List Import -> String -> Result String
-resolveTypeName modules label prefix ns imports name = if memName name (nsTypes ns) then Ok (mangle prefix name)
+resolveTypeName modules label prefix ns imports name = if Base.HashMap.member name (nsTypeSet ns) then Ok (mangle prefix name)
 else if isIntrinsicTypeName name then Ok name
 else if name == "Type" || name == "->" then Ok name
-else if isLowerTypeName name then if memName name (nsValues ns) then Ok (mangle prefix name)
-else if memName name (nsCtors ns) then Ok (mangle prefix name) else Ok name
+else if isLowerTypeName name then if Base.HashMap.member name (nsValueSet ns) then Ok (mangle prefix name)
+else if Base.HashMap.member name (nsCtorSet ns) then Ok (mangle prefix name) else Ok name
 else if containsDot name then case splitLastDot (splitOnDot name) of
   Pair revPrefix base =>
     let
@@ -459,7 +464,7 @@ else andThen (modulesExportingType modules imports name) (\pairs => case pairs o
   -- 故退化到 `resolveCtor`（认 `"ctor"` entry；本地构造子也在 `nsCtors` 里）。
   [] => case resolveCtor modules label prefix ns imports name of
     Ok c => Ok c
-    Err e => if memName name (nsValues ns) then Ok (mangle prefix name) else Err e
+    Err e => if Base.HashMap.member name (nsValueSet ns) then Ok (mangle prefix name) else Err e
   _ => andThen (unifyEntryPairs label "type" name pairs) (\p => Ok (entryTarget (secondOf p)))
 )
 

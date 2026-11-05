@@ -87,6 +87,7 @@ module Vuna.Compiler.Elab.Meta
 -- 拆自 M24 的单一 `Elab.vuna`（按真实调用图切；门面仍是 `Vuna.Compiler.Elab`）。
 import Vuna.Compiler.Common
 import Base.HashMap
+import Base.IntMap
 import Vuna.Compiler.Debug
 import Vuna.Compiler.Core
 import Vuna.Compiler.Diagnostics
@@ -177,15 +178,15 @@ convEc ec depth expected actual = case conv (ecDefTbl ec) (ecSolsP ec) depth exp
   Ok sols2 => Ok (ecPutSols ec (solsList sols2))
 
 -- 未解元变量：返回第一个未解的编号。
-unsolvedFrom : Int -> Int -> List (Pair Int Value) -> Maybe Int
+unsolvedFrom : Int -> Int -> IntMap Value -> Maybe Int
 unsolvedFrom i stop sols = unsolvedFromGo (stop - i) stop sols
 
-unsolvedFromGo : Int -> Int -> List (Pair Int Value) -> Maybe Int
+unsolvedFromGo : Int -> Int -> IntMap Value -> Maybe Int
 unsolvedFromGo remaining stop sols = if remaining <= 0 then Nothing
 else
   let
     i = stop - remaining
-  in case metaLookupList i sols of
+  in case metaLookup i sols of
     Just _ => unsolvedFromGo (remaining - 1) stop sols
     Nothing => Just i
 

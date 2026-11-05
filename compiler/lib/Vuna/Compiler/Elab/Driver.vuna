@@ -1,5 +1,8 @@
 module Vuna.Compiler.Elab.Driver
   ( DtGoalInfo(..)
+  , addClassesEc
+  , addDatasEc
+  , addInstsEc
   , anyAltHasMeta
   , anyArgHasMeta
   , checkAllDefined
@@ -11,10 +14,12 @@ module Vuna.Compiler.Elab.Driver
   , dtGoalInfoCtx
   , dtGoalInfoGoal
   , dtGoalInfoSpan
+  , ecOfProgram
   , elabBodies
   , elabProgram
   , elabProgramFull
   , elabProgramGo
+  , elabProgramGoWith
   , elabSigs
   , findDefWithMeta
   , findGoal
@@ -24,6 +29,7 @@ module Vuna.Compiler.Elab.Driver
   , metaOwnerHint
   , resolveDictGoalsFix
   , rezonkDefs
+  , termHasAnyMeta
   , termHasMeta
   , unsolvedFromRelevant
   , unsolvedMessage
@@ -54,22 +60,22 @@ import Vuna.Compiler.Intrinsics
 import Vuna.Compiler.Frontend.Ast
 
 unsolvedMeta : Ec -> Maybe Int
-unsolvedMeta ec = unsolvedFromRelevant 0 (ecNext ec) (ecSols ec) (relevantMetas ec) (ecGoals ec)
+unsolvedMeta ec = unsolvedFromRelevant 0 (ecNext ec) (ecSolTbl ec) (relevantMetas ec) (ecGoals ec)
 
 -- M23：只把「运行时相关位置」出现的元变量当未解错误。HM 生成的签名会把某些类型参数隐式
 -- 量化（f : t1 -> List (Pair t1 t2) -> ...），调用点传 Nil 这类多态值时不约束 t2，
 -- 于是留一个只出现在擦除位置的元变量——它对运行时没有意义（codegen 不生成该实参），
 -- 不应算错误。洞（有 goal 的元变量）永远算未解。
-unsolvedFromRelevant : Int -> Int -> List (Pair Int Value) -> List Int -> List DtGoal -> Maybe Int
+unsolvedFromRelevant : Int -> Int -> IntMap Value -> List Int -> List DtGoal -> Maybe Int
 unsolvedFromRelevant i stop sols relevant goals =
   unsolvedFromRelevantGo (stop - i) stop sols relevant goals
 
-unsolvedFromRelevantGo : Int -> Int -> List (Pair Int Value) -> List Int -> List DtGoal -> Maybe Int
+unsolvedFromRelevantGo : Int -> Int -> IntMap Value -> List Int -> List DtGoal -> Maybe Int
 unsolvedFromRelevantGo remaining stop sols relevant goals = if remaining <= 0 then Nothing
 else
   let
     i = stop - remaining
-  in case metaLookupList i sols of
+  in case metaLookup i sols of
     Just _ => unsolvedFromRelevantGo (remaining - 1) stop sols relevant goals
     Nothing =>
       if memMetaId i relevant || isJust (findGoal i goals) then Just i
@@ -374,7 +380,8 @@ elabBodies future (d :: rest) globals doneDefs acc ec = case d of
             liftedTy = firstOf lifted
             liftedBody = firstOf (secondOf lifted)
             liftedEc = secondOf (secondOf lifted)
-            cleanTerm = substDictTerm liftedEc liftedBody
+            cleanTerm =
+              if termHasAnyMeta liftedBody then substDictTerm liftedEc liftedBody else liftedBody
             -- 正文检查读的是哈希索引：只插表，不逐定义重建 globals list
             -- （replaceGlobalType 是 O(#globals)/定义 ⇒ 整程序 O(n²)；该 list 只在
             -- 签名阶段与最终 DtProgram 里用，正文阶段以表为准）。
@@ -471,7 +478,7 @@ dtEvalExprIn prog expr = andThen (dtEvalExprInInfo prog expr) (\p => Ok (firstOf
 -- M30 · REPL：同时返回值文本与 zonk 后的类型文本（类型决定是否走效果执行）。
 dtEvalExprInInfo : DtProgram -> Expr -> Result (Pair String String)
 dtEvalExprInInfo prog expr = case prog of
-  DtProgram datas defs goals sols globals insts classes next defvals =>
+  DtProgram datas defs goals sols globals insts classes next defvals depths =>
     let
       -- M28：axiom 无体，不进 delta 展开 / 求值环境（只剩 globals 里的类型）。
       bodies = defBodyPairs defs
@@ -487,7 +494,7 @@ dtEvalExprInInfo prog expr = case prog of
           sols2 = ecSols ec2
           tyText =
             showTerm (quote 0 (force (Base.HashMap.fromList bodies) (ecSolsP ec2) defaultFuel ty))
-        in case unsolvedFrom next (ecNext ec2) sols2 of
+        in case unsolvedFrom next (ecNext ec2) (ecSolTbl ec2) of
           Just m => tcErr1 (exprSpan expr) (UnsolvedMetavarInfer (strFromInt m)) (strFromInt m)
           Nothing => case normalize (Base.HashMap.fromList bodies) (ecSolsP ec2) defaultFuel (eval [] term) of
             VInt n => Ok (Pair (strFromInt n) tyText)
@@ -501,9 +508,14 @@ elabProgramFull decls =
   andThen (prepareDecls decls) (\ds => andThen (expandDerivings ds) (\ds2 => elabProgramGo ds2))
 
 elabProgramGo : List Decl -> Result DtProgram
-elabProgramGo decls = andThen (collectSigs decls) (\sigs => let
+elabProgramGo decls = elabProgramGoWith ecEmpty preludeGlobals decls
+
+-- M34.5 接口摘要第一步：起始状态（依赖包的签名 globals + Ec 摘要）参数化，供
+-- 「只精化本包 decls、复用依赖包摘要」的调用方注入。行为与 elabProgramGo 完全一致。
+elabProgramGoWith : Ec -> List (Pair String Term) -> List Decl -> Result DtProgram
+elabProgramGoWith startEc startGlobals decls = andThen (collectSigs decls) (\sigs => let
   _ = stamp "collectSigs-done"
-in andThen (elabDatas (collectDataDecls decls []) preludeGlobals ecEmpty) (\pd => case pd of
+in andThen (elabDatas (collectDataDecls decls []) startGlobals startEc) (\pd => case pd of
   Pair datas (Pair globals0 ec0) =>
     let
       -- M30（D18）：data 精化完成后一次性建构造子索引（之后 ecAddData 增量维护）；
@@ -571,7 +583,7 @@ in andThen (elabDatas (collectDataDecls decls []) preludeGlobals ecEmpty) (\pd =
                             in andThen (checkTerminationDecls decls) (\_ => let
                               _ = stamp "termination-done"
                             in Ok
-                              (DtProgram datas1 allDefs (ecGoals ec4) (ecSols ec4) globalsOut (ecInsts ec4) (ecClasses ec4) (ecNext ec4) (ecDefVals ec4))
+                              (DtProgram datas1 allDefs (ecGoals ec4) (ecSols ec4) globalsOut (ecInsts ec4) (ecClasses ec4) (ecNext ec4) (ecDefVals ec4) (Base.IntMap.toList (ecDepthTbl ec4)))
                             )
                     )
                 )
@@ -585,7 +597,9 @@ in andThen (elabDatas (collectDataDecls decls []) preludeGlobals ecEmpty) (\pd =
 -- 用当前解重新 zonk 定义体（延迟字典元变量 → 实例项）；axiom 无体，原样保留。
 rezonkDefs : Ec -> List DtDef -> List DtDef
 rezonkDefs ec defs = map (\d => case dtDefBody d of
-  Just body => DtDef (dtDefName d) (dtDefType d) (substDictTerm ec body) (dtDefSpan d)
+  Just body =>
+    if termHasAnyMeta body then DtDef (dtDefName d) (dtDefType d) (substDictTerm ec body) (dtDefSpan d)
+    else d
   Nothing => d
 ) defs
 
@@ -647,6 +661,31 @@ anyAltHasMeta : Int -> List CaseAlt -> Bool
 anyAltHasMeta m [] = False
 anyAltHasMeta m (alt :: rest) = termHasMeta m (caseAltBody alt) || anyAltHasMeta m rest
 
+-- M34：是否存在**任意**未解 meta（只读，不分配）。rezonkDefs / cleanTerm 用它跳过
+-- 「本来就无 TMeta」的定义体，避免对全部定义体重建 Term（分配削减）。
+termHasAnyMeta : Term -> Bool
+termHasAnyMeta (TMeta k) = True
+termHasAnyMeta (TVar n i) = False
+termHasAnyMeta (TGlobal n) = False
+termHasAnyMeta (TType l) = False
+termHasAnyMeta (TPi n implicit rig dom cod) = termHasAnyMeta dom || termHasAnyMeta cod
+termHasAnyMeta (TLam n rig body) = termHasAnyMeta body
+termHasAnyMeta (TApp f a rig) = termHasAnyMeta f || termHasAnyMeta a
+termHasAnyMeta (TCon c args) = anyArgHasAnyMeta args
+termHasAnyMeta (TCase scrut alts) = termHasAnyMeta scrut || anyAltHasAnyMeta alts
+termHasAnyMeta (TInt n) = False
+termHasAnyMeta (TStr s) = False
+termHasAnyMeta (TBool b) = False
+termHasAnyMeta (TIf c th el) = termHasAnyMeta c || termHasAnyMeta th || termHasAnyMeta el
+
+anyArgHasAnyMeta : List (Pair Term Rig) -> Bool
+anyArgHasAnyMeta [] = False
+anyArgHasAnyMeta ((Pair a rig) :: rest) = termHasAnyMeta a || anyArgHasAnyMeta rest
+
+anyAltHasAnyMeta : List CaseAlt -> Bool
+anyAltHasAnyMeta [] = False
+anyAltHasAnyMeta (alt :: rest) = termHasAnyMeta (caseAltBody alt) || anyAltHasAnyMeta rest
+
 -- 洞目标里的类型是 level 形态，show 时深度取快照上下文的长度。
 ctxDepthOf : DtGoal -> Int
 ctxDepthOf g = length (dtGoalCtx g)
@@ -695,3 +734,32 @@ goalsOfProgram decls =
 elabProgram : List Decl -> Result (Pair (List DtData) (List DtDef))
 elabProgram decls =
   andThen (elabProgramFull decls) (\prog => Ok (Pair (dtProgDatas prog) (dtProgDefs prog)))
+
+-- M34.5 接口摘要：从依赖包的缓存 DtProgram 重建精化起始状态（datas / insts / classes /
+-- sols / next / globals 表）。`elabProgramGoWith` 用它作为 startEc / startGlobals，
+-- 调用方只传本包 decls（依赖包的 body 不再重精化）。
+-- 注意：调用方需对 datas/insts/classes 去重（依赖闭包里同一个包会被多个包共享）。
+ecOfProgram : DtProgram -> Pair Ec (List (Pair String Term))
+ecOfProgram prog =
+  let
+    ec0 = ecEmpty
+    ec1 = addDatasEc ec0 (dtProgDatas prog)
+    ec2 = addInstsEc ec1 (dtProgInsts prog)
+    ec3 = addClassesEc ec2 (dtProgClasses prog)
+    ec4 = ecPutCtorTbl ec3 (ctorTblOfDatas (dtProgDatas prog))
+    ec5 = ecPutSols ec4 (dtProgSols prog)
+    ec6 = ecPutNext ec5 (dtProgNext prog)
+    ec7 = ecPutGlobalsTbl ec6 (Base.HashMap.fromList (dtProgGlobals prog))
+  in Pair ec7 (dtProgGlobals prog)
+
+addDatasEc : Ec -> List DtData -> Ec
+addDatasEc ec [] = ec
+addDatasEc ec (d :: rest) = addDatasEc (ecAddData ec d) rest
+
+addInstsEc : Ec -> List DtInst -> Ec
+addInstsEc ec [] = ec
+addInstsEc ec (i :: rest) = addInstsEc (ecAddInst ec i) rest
+
+addClassesEc : Ec -> List DtClass -> Ec
+addClassesEc ec [] = ec
+addClassesEc ec (c :: rest) = addClassesEc (ecAddClass ec c) rest

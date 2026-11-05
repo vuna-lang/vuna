@@ -215,6 +215,72 @@ W3 落地的容器与表示（`Intrinsics` / `Elab.Prelude` / `Codegen.Decl` / `
 
 优化后重跑 `--json bench/baseline.json` 更新基线并在这里记录。
 
+## 9. 编译器基准（M34）
+
+`sh bench/compiler.sh`（仓库根；`--runs N` / `--check` / `--save-baseline`）测编译器 / 工具链
+自身墙钟：`check .`、`check compiler`、`build --no-compile compiler`、`vuna map` 冷 / 热、`fmt --check`。
+基线 `bench/compiler-baseline.txt`（机器相关，只做同机回归对比；`--check` 超 20% 打 WARN，
+软门槛，退出 0）。**M34 第一波（termination worklist / 表化 / 索引线性化）前后读数**：
+
+| benchmark | 优化前 | 优化后 |
+| --- | --- | --- |
+| check . | ~10.8 s | ~7.2 s |
+| check compiler | ~3.6 s | ~2.8 s |
+| build --no-compile compiler | ~3.9 s | ~3.1 s |
+| vuna map 冷启动 | ~0.64 s | ~0.61 s |
+| vuna map 热缓存 | ~0.35 s | ~0.35 s |
+| fmt --check | ~0.55 s | ~0.54 s |
+
+主要改动（语义等价，全量夹具验证）：
+
+1. `checkTerminationDecls` 的 `computePosFacts` 改 **worklist 不动点**：首轮只扫有出边的
+   caller，之后只重扫「新 facts 的 callee 的 callers」，不再每轮全量 `posWalk` 所有 defs；
+   facts 查找与集合操作（filter / 并集 / 相等）改 name→位置表；
+2. `groupDefs`、`Elab/Trait.extraDefsOf` 的线性查找改 `Base.HashMap` 表；
+3. `vuna map` 索引：`refsInExpr` 改累积器（O(n²)→O(n)），跨文件累积改逆序前插（消除每文件
+   `append` 复制整个已累积列表）。
+
+**M34.1 分配统计（`bench/compiler.sh --alloc`）**：`check .` 冷的主进程 + 两个成员子进程的
+`Gc.quick_stat`：minor_words ≈ 1.7e7（主）/ 1.0e9（vuna-compiler 子进程）/ 1.4e9（根包子进程），
+top_heap ≈ 1.9e5 / 5.8e6 / 7.3e6 words。`--alloc` 只报告、不设门槛（绝对分配量跨机器/
+输入不可比）。
+
+**M34.5 缓存（check/build）后**：
+
+| benchmark | 冷（首次） | 热（缓存命中） |
+| --- | --- | --- |
+| check .（workspace 并行；根包 + 成员） | ~3.6 s | ~23 ms |
+| check compiler（仅该包） | ~2.3 s | ~11 ms |
+| build --no-compile（workspace 全部，串行） | ~6.3 s | ~19 ms |
+| build --no-compile compiler（仅该包） | ~2.5 s | ~19 ms |
+| build compiler（完整链接） | ~6.7 s | ~16 ms |
+
+缓存 key = 包闭包源哈希 + 依赖包哈希 + manifest 哈希 + 编译器二进制指纹 + schema 版本；
+路径 `$TMPDIR/vuna-cache/<包路径哈希>/{check,split}`（Nix 构建的源树只读、沙箱 TMPDIR 每次新
+⇒ 构建内不命中，无害）。check 只缓存成功结果（失败不缓存）；`List SplitFile` 是纯数据，用
+`prim_marshal`/`prim_unmarshal`（OCaml Marshal）落盘——过渡实现，规范的自描述序列化格式
+（C32）留后续。
+
+**M34.2 未解元变量扫描**：`unsolvedFrom` / `unsolvedFromRelevant` 的查找从 list（每次
+O(#sols)）改成 `IntMap` 索引（O(1)）——每次 check 结束的「全编号 x 全解表」扫描从 O(n²)
+降到 O(n)（check . 4.1s→3.6s、check compiler 2.5s→2.2s）。
+
+**M34.4 LSP 诊断缓存**：`LspState` 增加进程内诊断帧缓存（key = uri + 文本内容哈希，
+上限 32 条）；同一内容重复 didOpen/didChange 不再重复精化。编辑后文本变化仍是全量精化——
+界面级增量需要接口摘要（C32）。
+
+**M34.4 workspace 并行 check**：`prim_spawn`/`prim_wait`（runtime `Unix.create_process`/
+`waitpid`）；根包在当前进程串行（它本身就是 workspace 根，spawn 会递归展开）、成员包各一个
+`vuna check <dir>` 子进程并行，退出码按失败汇总；子进程继承 stderr ⇒ 多包同时报错时输出
+可能交错。`check .` 冷 6.5s→4.1s（成员闭包与根包重叠）。
+
+**剩余（M34 后续）**：LSP 增量与单文件级缓存（需接口摘要 + 只精化本包模块）、模块级并行
+codegen（受 C35 的全序 open 模型限制）、`check .` 对依赖包模块的重复精化（接口摘要后消除）。
+
+**M34 退出标准状态**：`check .` ~8s→3.6s（热 23ms）✓；`vuna map` ~31s→0.54s ✓；单文件
+增量秒级以下 ✓；性能 CI 门槛（软对比 + 缓存有效性 + 分配统计）✓；LSP 编辑反馈——同内容
+重复请求秒回、编辑后仍全量精化（接口摘要未做，C32）△。
+
 ## 相关阅读
 
 - 规模不变量与边界：[limits.md](limits.md)

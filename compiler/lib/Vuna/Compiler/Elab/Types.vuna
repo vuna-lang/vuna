@@ -28,6 +28,7 @@ module Vuna.Compiler.Elab.Types
   , dtCtorTelescope
   , dtCtorType
   , dtDataCtors
+  , dtDataKind
   , dtDataName
   , dtDataParams
   , dtDefBody
@@ -48,6 +49,7 @@ module Vuna.Compiler.Elab.Types
   , dtProgDatas
   , dtProgDefVals
   , dtProgDefs
+  , dtProgDepths
   , dtProgGlobals
   , dtProgGoals
   , dtProgInsts
@@ -81,6 +83,7 @@ module Vuna.Compiler.Elab.Types
   , ecPutDefVals
   , ecPutDictGoals
   , ecPutGlobalsTbl
+  , ecPutNext
   , ecPutSols
   , ecSetGlobalsComplete
   , ecSolTbl
@@ -174,16 +177,19 @@ dtCtorType (DtCtor name family tele ty) = ty
 
 -- M14：一个归纳族（索引族）。params 来自 kind 的 Pi binder（域是宇宙的擦除）。
 data DtData : Type where
-  DtData : String -> List (Pair String Rig) -> List DtCtor -> DtData
+  DtData : String -> List (Pair String Rig) -> List DtCtor -> Term -> DtData
 
 dtDataName : DtData -> String
-dtDataName (DtData name params ctors) = name
+dtDataName (DtData name params ctors kind) = name
 
 dtDataParams : DtData -> List (Pair String Rig)
-dtDataParams (DtData name params ctors) = params
+dtDataParams (DtData name params ctors kind) = params
 
 dtDataCtors : DtData -> List DtCtor
-dtDataCtors (DtData name params ctors) = ctors
+dtDataCtors (DtData name params ctors kind) = ctors
+
+dtDataKind : DtData -> Term
+dtDataKind (DtData name params ctors kind) = kind
 
 -- M15：一个洞的目标。编号、位置、目标类型（level 形态）、绑定时上下文快照。
 data DtGoal : Type where
@@ -252,6 +258,11 @@ data Ec : Type where
   Ec : Int -> List (Pair Int Value) -> List (Pair String Term) -> List DtData -> List (Pair Int Int) -> List DtGoal -> List DtInst -> List DtClass -> List DtDictGoal -> HashMap Term -> HashMap Term -> IntMap Value -> IntMap Int -> Bool -> HashMap (List (Pair (List Pat) Expr)) -> HashMap DtCtor -> HashMap Value -> Ec
 
 ecNext : Ec -> Int
+
+ecPutNext : Ec -> Int -> Ec
+ecPutNext (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl defvals) n =
+  Ec n sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl
+    defvals
 
 ecClausesTbl : Ec -> HashMap (List (Pair (List Pat) Expr))
 ecClausesTbl (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl defvals) =
@@ -547,36 +558,39 @@ forceVal ec v = force (ecDefTbl ec) (ecSolsP ec) defaultFuel v
 -- 与程序相同的环境里精化一条表达式（`dtEvalExprIn`），这些状态不属于「定义」但对
 -- 精化是必需的。
 data DtProgram : Type where
-  DtProgram : List DtData -> List DtDef -> List DtGoal -> List (Pair Int Value) -> List (Pair String Term) -> List DtInst -> List DtClass -> Int -> HashMap Value -> DtProgram
+  DtProgram : List DtData -> List DtDef -> List DtGoal -> List (Pair Int Value) -> List (Pair String Term) -> List DtInst -> List DtClass -> Int -> HashMap Value -> List (Pair Int Int) -> DtProgram
 
 dtProgDatas : DtProgram -> List DtData
-dtProgDatas (DtProgram datas defs goals sols globals insts classes next defvals) = datas
+dtProgDatas (DtProgram datas defs goals sols globals insts classes next defvals depths) = datas
 
 dtProgDefs : DtProgram -> List DtDef
-dtProgDefs (DtProgram datas defs goals sols globals insts classes next defvals) = defs
+dtProgDefs (DtProgram datas defs goals sols globals insts classes next defvals depths) = defs
 
 -- M30（D18）：定义体求值结果的共享缓存（`Ec.ecDefVals` 的收尾快照）；「没有」= `(Base.HashMap.fromList [])`。
 dtProgDefVals : DtProgram -> HashMap Value
-dtProgDefVals (DtProgram datas defs goals sols globals insts classes next defvals) = defvals
+dtProgDefVals (DtProgram datas defs goals sols globals insts classes next defvals depths) = defvals
 
 dtProgGoals : DtProgram -> List DtGoal
-dtProgGoals (DtProgram datas defs goals sols globals insts classes next defvals) = goals
+dtProgGoals (DtProgram datas defs goals sols globals insts classes next defvals depths) = goals
 
 dtProgSols : DtProgram -> List (Pair Int Value)
-dtProgSols (DtProgram datas defs goals sols globals insts classes next defvals) = sols
+dtProgSols (DtProgram datas defs goals sols globals insts classes next defvals depths) = sols
 
 dtProgGlobals : DtProgram -> List (Pair String Term)
-dtProgGlobals (DtProgram datas defs goals sols globals insts classes next defvals) = globals
+dtProgGlobals (DtProgram datas defs goals sols globals insts classes next defvals depths) = globals
 
 dtProgInsts : DtProgram -> List DtInst
-dtProgInsts (DtProgram datas defs goals sols globals insts classes next defvals) = insts
+dtProgInsts (DtProgram datas defs goals sols globals insts classes next defvals depths) = insts
 
 dtProgClasses : DtProgram -> List DtClass
-dtProgClasses (DtProgram datas defs goals sols globals insts classes next defvals) = classes
+dtProgClasses (DtProgram datas defs goals sols globals insts classes next defvals depths) = classes
 
 dtProgNext : DtProgram -> Int
-dtProgNext (DtProgram datas defs goals sols globals insts classes next defvals) = next
+dtProgNext (DtProgram datas defs goals sols globals insts classes next defvals depths) = next
 
 -- 解表 → 索引（键 = 元变量编号的十进制串）。解表里每个元变量最多一条解，顺序无关。
 solsToTbl : List (Pair Int Value) -> IntMap Value
 solsToTbl sols = Base.IntMap.insertAll sols (Base.IntMap.fromList [])
+
+dtProgDepths : DtProgram -> List (Pair Int Int)
+dtProgDepths (DtProgram datas defs goals sols globals insts classes next defvals depths) = depths

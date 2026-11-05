@@ -104,9 +104,17 @@ let dtp_substring start len s =
   let st = if start < 0 then 0 else if start > n then n else start in
   let ln = if len < 0 then 0 else if st + len > n then n - st else len in
   String.sub s st ln
+let dtp_marshal (v : 'a) : string = Marshal.to_string v []
+let dtp_unmarshal (s : string) : 'a = Marshal.from_string s 0
 let dtp_exit n = exit n
 let dtp_runIn dir args =
   let quote s = Filename.quote s in
   let cmd = String.concat " " (List.map quote args) in
   let old = Sys.getcwd () in
   Fun.protect ~finally:(fun () -> Sys.chdir old) (fun () -> Sys.chdir dir; Sys.command cmd)
+let dtp_spawn (args : string list) : int =
+  let prog = Sys.executable_name in
+  Unix.create_process prog (Array.of_list (prog :: args)) Unix.stdin Unix.stdout Unix.stderr
+let dtp_wait (pid : int) : int =
+  let (_, st) = Unix.waitpid [] pid in
+  match st with Unix.WEXITED c -> c | _ -> 1

@@ -228,12 +228,12 @@ let rec v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteCollectClauses = (fun mc0 
 ))
 
 let rec v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteCollectGo = (fun mc0 mc1 mc2 mc3 mc4 mc5 mc6 -> (match mc5 with
-  | C_Base_dList_dList_Base_dList_dCons (dtb__132, dtb__133) -> (((((((v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteCollectGo mc0) mc1) mc2) mc3) mc4) dtb__133) (((((((v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteCollectClauses mc0) mc1) mc2) mc4) dtb__132) ((v_Vuna_dCompiler_dElab_dTermination_dMeasure_dclausesOfDef dtb__132) mc3)) mc6))
+  | C_Base_dList_dList_Base_dList_dCons (dtb__132, dtb__133) -> (((((((v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteCollectGo mc0) mc1) mc2) mc3) mc4) dtb__133) (((((((v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteCollectClauses mc0) mc1) mc2) mc4) dtb__132) ((v_Vuna_dCompiler_dElab_dTermination_dMeasure_dclausesOfDefTbl dtb__132) mc3)) mc6))
   | C_Base_dList_dList_Base_dList_dNil -> mc6
   | _ -> failwith "DT: impossible branch"
 ))
 
-let v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteCollect = (fun comp ctors projs defs facts -> (((((((v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteCollectGo comp) ctors) projs) defs) facts) comp) C_Base_dList_dList_Base_dList_dNil))
+let v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteCollect = (fun comp ctors projs defTbl facts -> (((((((v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteCollectGo comp) ctors) projs) defTbl) facts) comp) C_Base_dList_dList_Base_dList_dNil))
 
 let v_Vuna_dCompiler_dElab_dTermination_dScc_dedgeFrom = (fun mc0 -> (match mc0 with
   | C_Vuna_dCompiler_dElab_dTermination_dScc_dScEdge_Vuna_dCompiler_dElab_dTermination_dScc_dMkScEdge (dtb__134, dtb__135, dtb__136) -> dtb__134
@@ -541,10 +541,10 @@ let rec v_Vuna_dCompiler_dElab_dTermination_dScc_dsctBadText = (fun mc0 -> (matc
 
 let v_Vuna_dCompiler_dElab_dTermination_dScc_dsctDiag = (fun table -> (v_Vuna_dCompiler_dElab_dTermination_dMeasure_djoinComma (v_Vuna_dCompiler_dElab_dTermination_dMeasure_ddedup (v_Vuna_dCompiler_dElab_dTermination_dScc_dsctBadText table))))
 
-let v_Vuna_dCompiler_dElab_dTermination_dScc_dsctCheck = (fun comp defs ctors projs facts msg -> ((fun sites -> ((fun table0 -> (match ((v_Vuna_dCompiler_dElab_dTermination_dScc_dclosureLoop table0) 240) with
+let v_Vuna_dCompiler_dElab_dTermination_dScc_dsctCheck = (fun comp defTbl ctors projs facts msg -> ((fun sites -> ((fun table0 -> (match ((v_Vuna_dCompiler_dElab_dTermination_dScc_dclosureLoop table0) 240) with
   | C_Base_dPair_dPair_Base_dPair_dPair (dtb__247, dtb__248) -> (if dtb__248 then (if (v_Vuna_dCompiler_dElab_dTermination_dScc_dsctCheckTable dtb__247) then (C_Base_dResult_dResult_Base_dResult_dOk (0)) else (C_Base_dResult_dResult_Base_dResult_dErr ((String.concat "" [msg; " [SCT \230\151\160\228\184\139\233\153\141\231\142\175: "; (v_Vuna_dCompiler_dElab_dTermination_dScc_dsctDiag dtb__247); "]"])))) else (C_Base_dResult_dResult_Base_dResult_dErr (msg)))
   | _ -> failwith "DT: impossible branch"
-)) ((((v_Vuna_dCompiler_dElab_dTermination_dScc_dinitialTable sites) ctors) projs) facts))) (((((v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteCollect comp) ctors) projs) defs) facts)))
+)) ((((v_Vuna_dCompiler_dElab_dTermination_dScc_dinitialTable sites) ctors) projs) facts))) (((((v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteCollect comp) ctors) projs) defTbl) facts)))
 
 let v_Vuna_dCompiler_dElab_dTermination_dScc_dfirstParamName = (fun mc0 -> (match mc0 with
   | C_Base_dList_dList_Base_dList_dCons (dtb__249, dtb__250) -> (match dtb__249 with
@@ -555,7 +555,7 @@ let v_Vuna_dCompiler_dElab_dTermination_dScc_dfirstParamName = (fun mc0 -> (matc
   | _ -> failwith "DT: impossible branch"
 ))
 
-let v_Vuna_dCompiler_dElab_dTermination_dScc_dfirstParamOf = (fun name defs -> (match ((v_Vuna_dCompiler_dElab_dTermination_dMeasure_dclausesOfDef name) defs) with
+let v_Vuna_dCompiler_dElab_dTermination_dScc_dfirstParamOf = (fun name defTbl -> (match ((v_Vuna_dCompiler_dElab_dTermination_dMeasure_dclausesOfDefTbl name) defTbl) with
   | C_Base_dList_dList_Base_dList_dNil -> ""
   | C_Base_dList_dList_Base_dList_dCons (dtb__253, dtb__254) -> (match (v_Vuna_dCompiler_dElab_dTermination_dScc_dfirstParamName (v_Base_dPair_dfirstOf dtb__253)) with
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__255) -> dtb__255
@@ -612,10 +612,10 @@ let rec v_Vuna_dCompiler_dElab_dTermination_dScc_dfuelEdgesGo = (fun mc0 mc1 mc2
   | _ -> failwith "DT: impossible branch"
 ))
 
-let v_Vuna_dCompiler_dElab_dTermination_dScc_dfuelEdgesOf = (fun comp defs sites -> (((((v_Vuna_dCompiler_dElab_dTermination_dScc_dfuelEdgesGo comp) defs) sites) true) C_Base_dList_dList_Base_dList_dNil))
+let v_Vuna_dCompiler_dElab_dTermination_dScc_dfuelEdgesOf = (fun comp defTbl sites -> (((((v_Vuna_dCompiler_dElab_dTermination_dScc_dfuelEdgesGo comp) defTbl) sites) true) C_Base_dList_dList_Base_dList_dNil))
 
 let rec v_Vuna_dCompiler_dElab_dTermination_dScc_dfuelMembersGuarded = (fun mc0 mc1 -> (match mc0 with
-  | C_Base_dList_dList_Base_dList_dCons (dtb__280, dtb__281) -> (match ((v_Vuna_dCompiler_dElab_dTermination_dMeasure_dclausesOfDef dtb__280) mc1) with
+  | C_Base_dList_dList_Base_dList_dCons (dtb__280, dtb__281) -> (match ((v_Vuna_dCompiler_dElab_dTermination_dMeasure_dclausesOfDefTbl dtb__280) mc1) with
   | C_Base_dList_dList_Base_dList_dNil -> false
   | C_Base_dList_dList_Base_dList_dCons (dtb__282, dtb__283) -> (match (v_Vuna_dCompiler_dElab_dTermination_dScc_dfirstParamName (v_Base_dPair_dfirstOf dtb__282)) with
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> false
@@ -628,4 +628,4 @@ let rec v_Vuna_dCompiler_dElab_dTermination_dScc_dfuelMembersGuarded = (fun mc0 
   | _ -> failwith "DT: impossible branch"
 ))
 
-let v_Vuna_dCompiler_dElab_dTermination_dScc_dtryFuelThread = (fun comp defs ctors projs facts msg -> ((fun sites -> ((fun edges -> ((fun strictCount -> (if (strictCount > 0) then (if ((v_Vuna_dCompiler_dElab_dTermination_dScc_dfuelMembersGuarded comp) defs) then (if ((v_Vuna_dCompiler_dElab_dTermination_dMeasure_dhasWeakCycle comp) edges) then (C_Base_dResult_dResult_Base_dResult_dErr (msg)) else (C_Base_dResult_dResult_Base_dResult_dOk (0))) else (C_Base_dResult_dResult_Base_dResult_dErr (msg))) else (C_Base_dResult_dResult_Base_dResult_dErr (msg)))) (v_Base_dList_dlength (v_Vuna_dCompiler_dElab_dTermination_dMeasure_dfilterModes ((v_Base_dList_dmap v_Base_dPair_dsecondOf) edges))))) (((v_Vuna_dCompiler_dElab_dTermination_dScc_dfuelEdgesOf comp) defs) sites))) (((((v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteCollect comp) ctors) projs) defs) facts)))
+let v_Vuna_dCompiler_dElab_dTermination_dScc_dtryFuelThread = (fun comp defTbl ctors projs facts msg -> ((fun sites -> ((fun edges -> ((fun strictCount -> (if (strictCount > 0) then (if ((v_Vuna_dCompiler_dElab_dTermination_dScc_dfuelMembersGuarded comp) defTbl) then (if ((v_Vuna_dCompiler_dElab_dTermination_dMeasure_dhasWeakCycle comp) edges) then (C_Base_dResult_dResult_Base_dResult_dErr (msg)) else (C_Base_dResult_dResult_Base_dResult_dOk (0))) else (C_Base_dResult_dResult_Base_dResult_dErr (msg))) else (C_Base_dResult_dResult_Base_dResult_dErr (msg)))) (v_Base_dList_dlength (v_Vuna_dCompiler_dElab_dTermination_dMeasure_dfilterModes ((v_Base_dList_dmap v_Base_dPair_dsecondOf) edges))))) (((v_Vuna_dCompiler_dElab_dTermination_dScc_dfuelEdgesOf comp) defTbl) sites))) (((((v_Vuna_dCompiler_dElab_dTermination_dScc_dsiteCollect comp) ctors) projs) defTbl) facts)))

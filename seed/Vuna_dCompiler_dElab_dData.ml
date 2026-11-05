@@ -216,7 +216,7 @@ let rec v_Vuna_dCompiler_dElab_dData_delabDataBodies = (fun decls heads globals 
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__107) -> (if ((v_Vuna_dCompiler_dElab_dData_dsameCtorSet dtb__107) ((v_Base_dList_dmap v_Vuna_dCompiler_dElab_dTypes_ddtCtorName) dtb__105)) then (((((v_Vuna_dCompiler_dElab_dData_delabDataBodies dtb__93) heads) ((v_Base_dList_dappend globals) (v_Vuna_dCompiler_dElab_dMeta_dctorGlobals dtb__105))) ((v_Vuna_dCompiler_dElab_dTypes_decAddData dtb__106) dd)) (C_Base_dList_dList_Base_dList_dCons (dd, acc))) else (((v_Vuna_dCompiler_dDiagnostics_dTc_dtcErr1 dtb__101) (C_Vuna_dCompiler_dDiagnostics_dTc_dTcErr_Vuna_dCompiler_dDiagnostics_dTc_dCannotRedefineBuiltin (dtb__96))) dtb__96))
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> (((((v_Vuna_dCompiler_dElab_dData_delabDataBodies dtb__93) heads) ((v_Base_dList_dappend globals) (v_Vuna_dCompiler_dElab_dMeta_dctorGlobals dtb__105))) ((v_Vuna_dCompiler_dElab_dTypes_decAddData dtb__106) dd)) (C_Base_dList_dList_Base_dList_dCons (dd, acc)))
   | _ -> failwith "DT: impossible branch"
-)) (C_Vuna_dCompiler_dElab_dTypes_dDtData_Vuna_dCompiler_dElab_dTypes_dDtData (dtb__96, tele, dtb__105)))
+)) (C_Vuna_dCompiler_dElab_dTypes_dDtData_Vuna_dCompiler_dElab_dTypes_dDtData (dtb__96, tele, dtb__105, dtb__103)))
   | _ -> failwith "DT: impossible branch"
 )))) (match (v_Vuna_dCompiler_dElab_dData_dkindResultLevel dtb__103) with
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__108) -> dtb__108

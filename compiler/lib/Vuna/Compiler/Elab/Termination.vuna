@@ -5,6 +5,7 @@ module Vuna.Compiler.Elab.Termination (checkTerminationDecls) where
 import Vuna.Compiler.Common
 import Base.HashMap
 import Vuna.Compiler.Diagnostics
+import Vuna.Compiler.Debug
 import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Elab.Termination.Measure
 import Vuna.Compiler.Elab.Termination.Scc
@@ -161,7 +162,7 @@ else if Base.HashMap.member n assigned then sccOf rest (fuel - 1) rg assigned co
 else case collectComp [n] (fuel - 1) rg assigned [] of
   Pair assigned2 comp => sccOf rest (fuel - 1) rg assigned2 (comp :: comps)
 
-strWalk : Int -> List String -> List String -> List (Pair String (List Int)) -> Int -> List (Pair String (Pair Int (Pair Int (List Int)))) -> String -> List (Pair String Int) -> List String -> Expr -> Pair Bool (List (Pair (Pair String String) Int)) -> Pair Bool (List (Pair (Pair String String) Int))
+strWalk : Int -> List String -> List String -> List (Pair String (List Int)) -> Int -> List (Pair String (Pair Int (Pair Int (List Int)))) -> String -> HashMap (List Int) -> List String -> Expr -> Pair Bool (List (Pair (Pair String String) Int)) -> Pair Bool (List (Pair (Pair String String) Int))
 strWalk fuel comp ctors projs p sizes caller facts region e acc = if fuel <= 0 then acc
 else case e of
   EApp fn args sp => strWalkEApp (fuel - 1) comp ctors projs p sizes caller facts region fn args acc
@@ -208,7 +209,7 @@ localClauseBinds [] = []
 localClauseBinds ((Pair pats body) :: rest) =
   Pair (PWild (exprSpan body)) body :: localClauseBinds rest
 
-strWalkEApp : Int -> List String -> List String -> List (Pair String (List Int)) -> Int -> List (Pair String (Pair Int (Pair Int (List Int)))) -> String -> List (Pair String Int) -> List String -> Expr -> List Expr -> Pair Bool (List (Pair (Pair String String) Int)) -> Pair Bool (List (Pair (Pair String String) Int))
+strWalkEApp : Int -> List String -> List String -> List (Pair String (List Int)) -> Int -> List (Pair String (Pair Int (Pair Int (List Int)))) -> String -> HashMap (List Int) -> List String -> Expr -> List Expr -> Pair Bool (List (Pair (Pair String String) Int)) -> Pair Bool (List (Pair (Pair String String) Int))
 strWalkEApp fuel comp ctors projs p sizes caller facts region fn args acc = if fuel <= 0 then acc
 else case groupHead comp fn of
   Just callee => case argRel p args sizes ctors projs caller facts region of
@@ -223,7 +224,7 @@ else case groupHead comp fn of
       else strWalkApp (fuel - 1) comp ctors projs p sizes caller facts region fn args acc
     _ => strWalkApp (fuel - 1) comp ctors projs p sizes caller facts region fn args acc
 
-strWalkEAppMap : Int -> List String -> List String -> List (Pair String (List Int)) -> Int -> List (Pair String (Pair Int (Pair Int (List Int)))) -> String -> List (Pair String Int) -> List String -> Expr -> List Expr -> Pair Bool (List (Pair (Pair String String) Int)) -> Pair Bool (List (Pair (Pair String String) Int))
+strWalkEAppMap : Int -> List String -> List String -> List (Pair String (List Int)) -> Int -> List (Pair String (Pair Int (Pair Int (List Int)))) -> String -> HashMap (List Int) -> List String -> Expr -> List Expr -> Pair Bool (List (Pair (Pair String String) Int)) -> Pair Bool (List (Pair (Pair String String) Int))
 strWalkEAppMap fuel comp ctors projs p sizes caller facts region fn args acc = if fuel <= 0 then acc
 else case args of
   [ELam ([v]) body lamsp, lst] =>
@@ -243,7 +244,7 @@ else case args of
     _ => strWalkArgs (fuel - 1) comp ctors projs p sizes caller facts region args acc
   _ => strWalkArgs (fuel - 1) comp ctors projs p sizes caller facts region args acc
 
-strWalkMapPartialInline : Int -> List String -> List String -> List (Pair String (List Int)) -> Int -> List (Pair String (Pair Int (Pair Int (List Int)))) -> String -> List (Pair String Int) -> List String -> String -> List Expr -> Expr -> Span -> Pair Bool (List (Pair (Pair String String) Int)) -> Pair Bool (List (Pair (Pair String String) Int))
+strWalkMapPartialInline : Int -> List String -> List String -> List (Pair String (List Int)) -> Int -> List (Pair String (Pair Int (Pair Int (List Int)))) -> String -> HashMap (List Int) -> List String -> String -> List Expr -> Expr -> Span -> Pair Bool (List (Pair (Pair String String) Int)) -> Pair Bool (List (Pair (Pair String String) Int))
 strWalkMapPartialInline fuel comp ctors projs p sizes caller facts region g pargs lst cbsp acc = if fuel <= 0 then acc
 else
   let
@@ -255,13 +256,13 @@ else
     Nothing => markInvalid acc2
     Just rel => addEdgeMode caller g rel acc2
 
-strWalkApp : Int -> List String -> List String -> List (Pair String (List Int)) -> Int -> List (Pair String (Pair Int (Pair Int (List Int)))) -> String -> List (Pair String Int) -> List String -> Expr -> List Expr -> Pair Bool (List (Pair (Pair String String) Int)) -> Pair Bool (List (Pair (Pair String String) Int))
+strWalkApp : Int -> List String -> List String -> List (Pair String (List Int)) -> Int -> List (Pair String (Pair Int (Pair Int (List Int)))) -> String -> HashMap (List Int) -> List String -> Expr -> List Expr -> Pair Bool (List (Pair (Pair String String) Int)) -> Pair Bool (List (Pair (Pair String String) Int))
 strWalkApp fuel comp ctors projs p sizes caller facts region fn args acc =
   if fuel <= 0 then acc
   else strWalkArgs (fuel - 1) comp ctors projs p sizes caller facts region args
     (strWalk (fuel - 1) comp ctors projs p sizes caller facts region fn acc)
 
-strWalkArgs : Int -> List String -> List String -> List (Pair String (List Int)) -> Int -> List (Pair String (Pair Int (Pair Int (List Int)))) -> String -> List (Pair String Int) -> List String -> List Expr -> Pair Bool (List (Pair (Pair String String) Int)) -> Pair Bool (List (Pair (Pair String String) Int))
+strWalkArgs : Int -> List String -> List String -> List (Pair String (List Int)) -> Int -> List (Pair String (Pair Int (Pair Int (List Int)))) -> String -> HashMap (List Int) -> List String -> List Expr -> Pair Bool (List (Pair (Pair String String) Int)) -> Pair Bool (List (Pair (Pair String String) Int))
 strWalkArgs fuel comp ctors projs p sizes caller facts region [] acc =
   if fuel <= 0 then acc else acc
 strWalkArgs fuel comp ctors projs p sizes caller facts region (a :: rest) acc =
@@ -269,7 +270,7 @@ strWalkArgs fuel comp ctors projs p sizes caller facts region (a :: rest) acc =
   else strWalkArgs (fuel - 1) comp ctors projs p sizes caller facts region rest
     (strWalk (fuel - 1) comp ctors projs p sizes caller facts region a acc)
 
-strWalkAlts : Int -> List String -> List String -> List (Pair String (List Int)) -> Int -> List (Pair String (Pair Int (Pair Int (List Int)))) -> String -> List (Pair String Int) -> List String -> Expr -> List (Pair Pat Expr) -> Pair Bool (List (Pair (Pair String String) Int)) -> Pair Bool (List (Pair (Pair String String) Int))
+strWalkAlts : Int -> List String -> List String -> List (Pair String (List Int)) -> Int -> List (Pair String (Pair Int (Pair Int (List Int)))) -> String -> HashMap (List Int) -> List String -> Expr -> List (Pair Pat Expr) -> Pair Bool (List (Pair (Pair String String) Int)) -> Pair Bool (List (Pair (Pair String String) Int))
 strWalkAlts fuel comp ctors projs p sizes caller facts region scrut [] acc =
   if fuel <= 0 then acc else acc
 strWalkAlts fuel comp ctors projs p sizes caller facts region scrut ((Pair pat body) :: rest) acc =
@@ -277,7 +278,7 @@ strWalkAlts fuel comp ctors projs p sizes caller facts region scrut ((Pair pat b
   else strWalkAlts (fuel - 1) comp ctors projs p sizes caller facts region scrut rest
     (strWalk (fuel - 1) comp ctors projs p (extendSizesStrict sizes scrut pat) caller facts region body acc)
 
-strWalkBinds : Int -> List String -> List String -> List (Pair String (List Int)) -> Int -> List (Pair String (Pair Int (Pair Int (List Int)))) -> String -> List (Pair String Int) -> List String -> List (Pair Pat Expr) -> Pair Bool (List (Pair (Pair String String) Int)) -> Pair Bool (List (Pair (Pair String String) Int))
+strWalkBinds : Int -> List String -> List String -> List (Pair String (List Int)) -> Int -> List (Pair String (Pair Int (Pair Int (List Int)))) -> String -> HashMap (List Int) -> List String -> List (Pair Pat Expr) -> Pair Bool (List (Pair (Pair String String) Int)) -> Pair Bool (List (Pair (Pair String String) Int))
 strWalkBinds fuel comp ctors projs p sizes caller facts region [] acc =
   if fuel <= 0 then acc else acc
 strWalkBinds fuel comp ctors projs p sizes caller facts region ((Pair pat val) :: rest) acc =
@@ -285,7 +286,7 @@ strWalkBinds fuel comp ctors projs p sizes caller facts region ((Pair pat val) :
   else strWalkBinds (fuel - 1) comp ctors projs p sizes caller facts region rest
     (strWalk (fuel - 1) comp ctors projs p sizes caller facts region val acc)
 
-strWalkFields : Int -> List String -> List String -> List (Pair String (List Int)) -> Int -> List (Pair String (Pair Int (Pair Int (List Int)))) -> String -> List (Pair String Int) -> List String -> List (Pair String Expr) -> Pair Bool (List (Pair (Pair String String) Int)) -> Pair Bool (List (Pair (Pair String String) Int))
+strWalkFields : Int -> List String -> List String -> List (Pair String (List Int)) -> Int -> List (Pair String (Pair Int (Pair Int (List Int)))) -> String -> HashMap (List Int) -> List String -> List (Pair String Expr) -> Pair Bool (List (Pair (Pair String String) Int)) -> Pair Bool (List (Pair (Pair String String) Int))
 strWalkFields fuel comp ctors projs p sizes caller facts region [] acc =
   if fuel <= 0 then acc else acc
 strWalkFields fuel comp ctors projs p sizes caller facts region ((Pair fn fe) :: rest) acc =
@@ -293,7 +294,7 @@ strWalkFields fuel comp ctors projs p sizes caller facts region ((Pair fn fe) ::
   else strWalkFields (fuel - 1) comp ctors projs p sizes caller facts region rest
     (strWalk (fuel - 1) comp ctors projs p sizes caller facts region fe acc)
 
-strWalkStmts : Int -> List String -> List String -> List (Pair String (List Int)) -> Int -> List (Pair String (Pair Int (Pair Int (List Int)))) -> String -> List (Pair String Int) -> List String -> List DoStmt -> Pair Bool (List (Pair (Pair String String) Int)) -> Pair Bool (List (Pair (Pair String String) Int))
+strWalkStmts : Int -> List String -> List String -> List (Pair String (List Int)) -> Int -> List (Pair String (Pair Int (Pair Int (List Int)))) -> String -> HashMap (List Int) -> List String -> List DoStmt -> Pair Bool (List (Pair (Pair String String) Int)) -> Pair Bool (List (Pair (Pair String String) Int))
 strWalkStmts fuel comp ctors projs p sizes caller facts region [] acc =
   if fuel <= 0 then acc else acc
 strWalkStmts fuel comp ctors projs p sizes caller facts region (s :: rest) acc = if fuel <= 0 then acc
@@ -305,7 +306,7 @@ else case s of
     strWalkStmts (fuel - 1) comp ctors projs p sizes caller facts region rest
       (strWalk (fuel - 1) comp ctors projs p sizes caller facts region e acc)
 
-strClause : List String -> List String -> List (Pair String (List Int)) -> Int -> String -> List (Pair String Int) -> Pair (List Pat) Expr -> Pair Bool (List (Pair (Pair String String) Int))
+strClause : List String -> List String -> List (Pair String (List Int)) -> Int -> String -> HashMap (List Int) -> Pair (List Pat) Expr -> Pair Bool (List (Pair (Pair String String) Int))
 strClause comp ctors projs p caller facts clause =
   strWalk 100000 comp ctors projs p (strSizeEntries (firstOf clause)) caller facts []
     (secondOf clause) (Pair True [])
@@ -325,7 +326,7 @@ cannotProveMsg comp =
     desc = groupMessage comp
   in tcMsg (CannotProveTermination desc) (VCons desc VNil)
 
-collectClauses : List (Pair (List Pat) Expr) -> List String -> List String -> List (Pair String (List Int)) -> Int -> String -> List (Pair String Int) -> Pair Bool (List (Pair (Pair String String) Int)) -> Result (Pair Bool (List (Pair (Pair String String) Int)))
+collectClauses : List (Pair (List Pat) Expr) -> List String -> List String -> List (Pair String (List Int)) -> Int -> String -> HashMap (List Int) -> Pair Bool (List (Pair (Pair String String) Int)) -> Result (Pair Bool (List (Pair (Pair String String) Int)))
 collectClauses [] comp ctors projs p caller facts acc = Ok acc
 collectClauses (cl :: rest) comp ctors projs p caller facts acc = case firstOf acc of
   False => Ok acc
@@ -334,64 +335,85 @@ collectClauses (cl :: rest) comp ctors projs p caller facts acc = case firstOf a
       if valid then collectClauses rest comp ctors projs p caller facts (Pair True (append (secondOf acc) edges))
       else Ok (Pair False (secondOf acc))
 
-collectMeasure : List String -> List (Pair String (List (Pair (List Pat) Expr))) -> List String -> List (Pair String (List Int)) -> Int -> List (Pair String Int) -> List String -> Pair Bool (List (Pair (Pair String String) Int)) -> Result (Pair Bool (List (Pair (Pair String String) Int)))
-collectMeasure comp defs ctors projs p facts [] acc = Ok acc
-collectMeasure comp defs ctors projs p facts (n :: rest) acc =
-  andThen (collectClauses (clausesOfDef n defs) comp ctors projs p n facts acc)
-    (\acc2 => collectMeasure comp defs ctors projs p facts rest acc2)
+collectMeasure : List String -> HashMap (List (Pair (List Pat) Expr)) -> List String -> List (Pair String (List Int)) -> Int -> HashMap (List Int) -> List String -> Pair Bool (List (Pair (Pair String String) Int)) -> Result (Pair Bool (List (Pair (Pair String String) Int)))
+collectMeasure comp defTbl ctors projs p facts [] acc = Ok acc
+collectMeasure comp defTbl ctors projs p facts (n :: rest) acc =
+  andThen (collectClauses (clausesOfDefTbl n defTbl) comp ctors projs p n facts acc)
+    (\acc2 => collectMeasure comp defTbl ctors projs p facts rest acc2)
 
 -- 同一对 (caller, callee) 的所有调用点都非零 ⇒ 该边严格。
-tryMeasure : List String -> List (Pair String (List (Pair (List Pat) Expr))) -> List String -> List (Pair String (List Int)) -> List (Pair String Int) -> Int -> Int -> Result Int
-tryMeasure comp defs ctors projs facts p maxP =
-  tryMeasureGo comp defs ctors projs facts (maxP - p) maxP
+tryMeasure : List String -> HashMap (List (Pair (List Pat) Expr)) -> List String -> List (Pair String (List Int)) -> HashMap (List Int) -> Int -> Int -> Result Int
+tryMeasure comp defTbl ctors projs facts p maxP =
+  tryMeasureGo comp defTbl ctors projs facts (maxP - p) maxP
 
-tryMeasureGo : List String -> List (Pair String (List (Pair (List Pat) Expr))) -> List String -> List (Pair String (List Int)) -> List (Pair String Int) -> Int -> Int -> Result Int
-tryMeasureGo comp defs ctors projs facts remaining maxP = if remaining <= 0 then Err (cannotProveMsg comp)
+tryMeasureGo : List String -> HashMap (List (Pair (List Pat) Expr)) -> List String -> List (Pair String (List Int)) -> HashMap (List Int) -> Int -> Int -> Result Int
+tryMeasureGo comp defTbl ctors projs facts remaining maxP = if remaining <= 0 then Err (cannotProveMsg comp)
 else
   let
     p = maxP - remaining
-  in case collectMeasure comp defs ctors projs p facts comp (Pair True []) of
+  in case collectMeasure comp defTbl ctors projs p facts comp (Pair True []) of
     Err e => Err e
     Ok (Pair valid edges) => if valid then
       let
         modes = filterModes (map secondOf edges)
-      in if notEmpty modes then if allSame modes then if hasWeakCycle comp edges then tryMeasureGo comp defs ctors projs facts (remaining - 1) maxP
+      in if notEmpty modes then if allSame modes then if hasWeakCycle comp edges then tryMeasureGo comp defTbl ctors projs facts (remaining - 1) maxP
       else Ok 0
-      else tryMeasureGo comp defs ctors projs facts (remaining - 1) maxP
-      else tryMeasureGo comp defs ctors projs facts (remaining - 1) maxP
-    else tryMeasureGo comp defs ctors projs facts (remaining - 1) maxP
+      else tryMeasureGo comp defTbl ctors projs facts (remaining - 1) maxP
+      else tryMeasureGo comp defTbl ctors projs facts (remaining - 1) maxP
+    else tryMeasureGo comp defTbl ctors projs facts (remaining - 1) maxP
 
-checkStrictGroup : List String -> List (Pair String (List (Pair (List Pat) Expr))) -> List String -> List (Pair String (List Int)) -> List (Pair String Int) -> Result Int
-checkStrictGroup comp defs ctors projs facts = case tryMeasure comp defs ctors projs facts 0 (maxArityOf comp defs) of
-  Ok n => Ok n
-  Err e => case tryFuelThread comp defs ctors projs facts e of
+checkStrictGroup : List String -> HashMap (List (Pair (List Pat) Expr)) -> List String -> List (Pair String (List Int)) -> List (Pair String Int) -> Result Int
+checkStrictGroup comp defTbl ctors projs facts =
+  let
+    factsTbl = posTblOf facts
+  in case tryMeasure comp defTbl ctors projs factsTbl 0 (maxArityOf comp defTbl) of
     Ok n => Ok n
-    Err e2 => sctCheck comp defs ctors projs facts e2
+    Err e => case tryFuelThread comp defTbl ctors projs factsTbl e of
+      Ok n => Ok n
+      Err e2 => sctCheck comp defTbl ctors projs factsTbl e2
 
-checkComp : List String -> List (Pair String (List (Pair (List Pat) Expr))) -> List String -> List (Pair String (List Int)) -> HashMap (List String) -> List (Pair String Int) -> Result Int
-checkComp [] defs ctors projs g facts = Ok 0
-checkComp (comp@([f])) defs ctors projs g facts =
-  if memName f (adjOf f g) then checkStrictGroup comp defs ctors projs facts else Ok 0
-checkComp comp defs ctors projs g facts = checkStrictGroup comp defs ctors projs facts
+checkComp : List String -> HashMap (List (Pair (List Pat) Expr)) -> List String -> List (Pair String (List Int)) -> HashMap (List String) -> List (Pair String Int) -> Result Int
+checkComp [] defTbl ctors projs g facts = Ok 0
+checkComp (comp@([f])) defTbl ctors projs g facts =
+  if memName f (adjOf f g) then checkStrictGroup comp defTbl ctors projs facts else Ok 0
+checkComp comp defTbl ctors projs g facts = checkStrictGroup comp defTbl ctors projs facts
 
-checkSccs : List (List String) -> List (Pair String (List (Pair (List Pat) Expr))) -> List String -> List (Pair String (List Int)) -> HashMap (List String) -> List (Pair String Int) -> Result Int
-checkSccs [] defs ctors projs g facts = Ok 0
-checkSccs (comp :: rest) defs ctors projs g facts =
-  andThen (checkComp comp defs ctors projs g facts)
-    (\n => andThen (checkSccs rest defs ctors projs g facts) (\m => Ok (n + m)))
+checkSccs : List (List String) -> HashMap (List (Pair (List Pat) Expr)) -> List String -> List (Pair String (List Int)) -> HashMap (List String) -> List (Pair String Int) -> Result Int
+checkSccs [] defTbl ctors projs g facts = Ok 0
+checkSccs (comp :: rest) defTbl ctors projs g facts =
+  andThen (checkComp comp defTbl ctors projs g facts)
+    (\n => andThen (checkSccs rest defTbl ctors projs g facts) (\m => Ok (n + m)))
+
+-- M34：worklist 不动点——首轮扫所有有出边的 caller，之后只重扫「新 facts 的 callee 的
+-- callers」；旧实现每轮全量扫描所有 defs（16 轮 × posWalk），是 check 的最大热点。
+computePosFactsWork : List String -> HashMap (List (Pair (List Pat) Expr)) -> HashMap (List String) -> Int -> List (Pair String Int) -> List String -> List (Pair String Int)
+computePosFactsWork names defTbl rgT fuel facts work = if fuel <= 0 then facts
+else
+  let
+    scan = posScanNames names defTbl (posTblOf facts) work (Pair [] [])
+    fresh = posFilterTbl (firstOf scan) (posTblOf (secondOf scan))
+    newFacts = posFilterTbl fresh (posTblOf facts)
+    merged = posUnionTbl facts fresh
+    nextWork = dedup (concatMap (\n => adjOf n rgT) (map firstOf newFacts))
+  in case nextWork of
+    [] => merged
+    _ => computePosFactsWork names defTbl rgT (fuel - 1) merged nextWork
 
 checkTerminationDecls : List Decl -> Result Int
 checkTerminationDecls decls =
   let
     defs = groupDefs decls
+    defTbl = Base.HashMap.fromList defs
     ctors = ctorNamesOf decls
     projs = projectionsOf defs
-    facts = computePosFacts defs 16 []
     g = callGraph defs
     gT = adjTblOf g
     nodes = defNames defs
     rgT = reverseAdjOf g
+    callerNames = filter (\n => notEmpty (adjOf n gT)) nodes
+    facts = computePosFactsWork nodes defTbl rgT 16 [] callerNames
+    _ = stamp "term-facts"
     fuel = graphFuel g nodes
     post = postOrder gT g nodes
     comps = sccOf post fuel rgT (Base.HashMap.fromList []) []
-  in checkSccs (reverse comps) defs ctors projs gT facts
+  in checkSccs (reverse comps) defTbl ctors projs gT facts
