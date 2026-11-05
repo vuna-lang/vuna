@@ -273,7 +273,7 @@ and v_Vuna_dCompiler_dCore_dConv_dconvBothFuel = (fun fuel defs sols depth a b -
   | _ -> ((((v_Vuna_dCompiler_dCore_dConv_dmismatchAt depth) defs) a) b)
 )
   | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVApp (dtb__146, dtb__147) -> (match b with
-  | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVApp (dtb__148, dtb__149) -> ((v_Base_dResult_dandThen ((((((v_Vuna_dCompiler_dCore_dConv_dconvFuel (fuel - 1)) defs) sols) depth) dtb__146) dtb__148)) (fun sols2 -> ((((((v_Vuna_dCompiler_dCore_dConv_dconvFuel (fuel - 1)) defs) sols2) depth) dtb__147) dtb__149)))
+  | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVApp (dtb__148, dtb__149) -> ((fun _u -> ((v_Base_dResult_dandThen ((((((v_Vuna_dCompiler_dCore_dConv_dconvFuel (fuel - 1)) defs) sols) depth) dtb__146) dtb__148)) (fun sols2 -> ((((((v_Vuna_dCompiler_dCore_dConv_dconvFuel (fuel - 1)) defs) sols2) depth) dtb__147) dtb__149)))) (if v_Vuna_dCompiler_dDebug_ddebugOn then (v_Vuna_dCompiler_dDebug_dnote (String.concat "" ["vapp: "; (v_Vuna_dCompiler_dCore_dEval_dshowValue a); " <> "; (v_Vuna_dCompiler_dCore_dEval_dshowValue b); " | x="; (v_Vuna_dCompiler_dCore_dEval_dshowValue dtb__147); " x2="; (v_Vuna_dCompiler_dCore_dEval_dshowValue dtb__149)])) else 0))
   | _ -> ((((v_Vuna_dCompiler_dCore_dConv_dmismatchAt depth) defs) a) b)
 )
   | C_Vuna_dCompiler_dCore_dTerm_dValue_Vuna_dCompiler_dCore_dTerm_dVCase (dtb__150, dtb__151) -> (match b with

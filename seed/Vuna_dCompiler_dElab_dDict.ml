@@ -297,13 +297,13 @@ let v_Vuna_dCompiler_dElab_dDict_disRigidDictArg = (fun ec dom -> (match ((v_Vun
 
 let v_Vuna_dCompiler_dElab_dDict_drigidSearchFast = (fun ec dom -> (if ((v_Vuna_dCompiler_dElab_dDict_disRigidDictArg ec) dom) then (v_Vuna_dCompiler_dElab_dDict_dallInstancesMono (v_Vuna_dCompiler_dElab_dTypes_decInsts ec)) else false))
 
-let rec v_Vuna_dCompiler_dElab_dDict_dsearchInstFuel = (fun globals ctx fuel ec dom sp -> (if (fuel <= 0) then (((v_Vuna_dCompiler_dElab_dDict_dmissingInstance ec) dom) sp) else (match ((((v_Vuna_dCompiler_dElab_dDict_dlocalDictLookup ctx) 0) dom) ec) with
+let rec v_Vuna_dCompiler_dElab_dDict_dsearchInstFuel = (fun globals ctx fuel ec dom sp -> (if (fuel <= 0) then (((v_Vuna_dCompiler_dElab_dDict_dmissingInstance ec) dom) sp) else ((fun _u -> (match ((((v_Vuna_dCompiler_dElab_dDict_dlocalDictLookup ctx) 0) dom) ec) with
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__113) -> (C_Base_dResult_dResult_Base_dResult_dOk (dtb__113))
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> (if ((v_Vuna_dCompiler_dElab_dDict_drigidSearchFast ec) dom) then (((v_Vuna_dCompiler_dElab_dDict_dmissingInstance ec) dom) sp) else ((fun nd_uscrut7 -> (match nd_uscrut7 with
   | C_Base_dPair_dPair_Base_dPair_dPair (dtb__114, dtb__115) -> (match dtb__114 with
   | C_Base_dList_dList_Base_dList_dCons (dtb__116, dtb__117) -> (match dtb__117 with
   | C_Base_dList_dList_Base_dList_dNil -> (C_Base_dResult_dResult_Base_dResult_dOk ((C_Base_dPair_dPair_Base_dPair_dPair ((v_Vuna_dCompiler_dElab_dDict_dinstMatchTerm dtb__116), dtb__115))))
-  | _ -> ((fun sd -> ((fun names -> ((((v_Vuna_dCompiler_dDiagnostics_dTc_dtcErr2 sp) (C_Vuna_dCompiler_dDiagnostics_dTc_dTcErr_Vuna_dCompiler_dDiagnostics_dTc_dAmbiguousInstance (sd, names))) sd) names)) (v_Vuna_dCompiler_dElab_dDict_djoinInstNames ((v_Base_dList_dmap v_Vuna_dCompiler_dElab_dDict_dinstMatchInst) dtb__114)))) (v_Vuna_dCompiler_dCore_dEval_dshowValue dom))
+  | _ -> ((fun _u -> ((fun sd -> ((fun names -> ((((v_Vuna_dCompiler_dDiagnostics_dTc_dtcErr2 sp) (C_Vuna_dCompiler_dDiagnostics_dTc_dTcErr_Vuna_dCompiler_dDiagnostics_dTc_dAmbiguousInstance (sd, names))) sd) names)) (v_Vuna_dCompiler_dElab_dDict_djoinInstNames ((v_Base_dList_dmap v_Vuna_dCompiler_dElab_dDict_dinstMatchInst) dtb__114)))) (v_Vuna_dCompiler_dCore_dEval_dshowValue dom))) (if v_Vuna_dCompiler_dDebug_ddebugOn then (v_Vuna_dCompiler_dDebug_dnote (String.concat "" ["search-ambig: dom="; (v_Vuna_dCompiler_dCore_dEval_dshowValue dom); " cands="; ((v_Base_dString_djoin ",") ((v_Base_dList_dmap (fun x -> (v_Vuna_dCompiler_dElab_dTypes_ddtInstName (v_Vuna_dCompiler_dElab_dDict_dinstMatchInst x)))) dtb__114))])) else 0))
 )
   | C_Base_dList_dList_Base_dList_dNil -> (((v_Vuna_dCompiler_dElab_dDict_dmissingInstance dtb__115) dom) sp)
   | _ -> failwith "DT: impossible branch"
@@ -311,7 +311,7 @@ let rec v_Vuna_dCompiler_dElab_dDict_dsearchInstFuel = (fun globals ctx fuel ec 
   | _ -> failwith "DT: impossible branch"
 )) ((((((((v_Vuna_dCompiler_dElab_dDict_dmatchInstances globals) ctx) fuel) ec) dom) sp) (v_Vuna_dCompiler_dElab_dTypes_decInsts ec)) C_Base_dList_dList_Base_dList_dNil)))
   | _ -> failwith "DT: impossible branch"
-)))
+)) (if v_Vuna_dCompiler_dDebug_ddebugOn then (v_Vuna_dCompiler_dDebug_dnote (String.concat "" ["search: dom="; (v_Vuna_dCompiler_dCore_dEval_dshowValue dom); " rigid="; (if ((v_Vuna_dCompiler_dElab_dDict_drigidSearchFast ec) dom) then "T" else "F"); " insts="; (bi_strFromInt (v_Base_dList_dlength (v_Vuna_dCompiler_dElab_dTypes_decInsts ec)))])) else 0))))
 and v_Vuna_dCompiler_dElab_dDict_dmatchInstances = (fun mc0 mc1 mc2 mc3 mc4 mc5 mc6 mc7 -> (match mc6 with
   | C_Base_dList_dList_Base_dList_dCons (dtb__118, dtb__119) -> ((fun nd_uscrut11 -> (match nd_uscrut11 with
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> ((((((((v_Vuna_dCompiler_dElab_dDict_dmatchInstances mc0) mc1) mc2) mc3) mc4) mc5) dtb__119) mc7)
@@ -326,7 +326,7 @@ and v_Vuna_dCompiler_dElab_dDict_dmatchInstances = (fun mc0 mc1 mc2 mc3 mc4 mc5 
 ))
 and v_Vuna_dCompiler_dElab_dDict_dtryMatchInst = (fun globals ctx fuel ec inst dom sp -> (if (fuel <= 0) then C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing else (match (((v_Vuna_dCompiler_dElab_dDict_dallocTeleMetas ctx) ec) (v_Vuna_dCompiler_dElab_dTypes_ddtInstTele inst)) with
   | C_Base_dPair_dPair_Base_dPair_dPair (dtb__123, dtb__124) -> ((fun _u -> ((fun hd -> (match (((((v_Vuna_dCompiler_dCore_dConv_dconv (v_Vuna_dCompiler_dElab_dTypes_decDefTbl dtb__124)) (v_Vuna_dCompiler_dElab_dTypes_decSolsP dtb__124)) 0) dom) hd) with
-  | C_Base_dResult_dResult_Base_dResult_dErr (dtb__125) -> C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing
+  | C_Base_dResult_dResult_Base_dResult_dErr (dtb__125) -> ((fun _u -> C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing) (if v_Vuna_dCompiler_dDebug_ddebugOn then (v_Vuna_dCompiler_dDebug_dnote (String.concat "" ["inst-conv-err: "; (v_Vuna_dCompiler_dElab_dTypes_ddtInstName inst); " dom="; (v_Vuna_dCompiler_dCore_dEval_dshowValue dom); " hd="; (v_Vuna_dCompiler_dCore_dEval_dshowValue hd)])) else 0))
   | C_Base_dResult_dResult_Base_dResult_dOk (dtb__126) -> ((fun ec2 -> (match ((v_Vuna_dCompiler_dElab_dDict_dsolveTeleMetas ec2) dtb__123) with
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__127) -> ((fun teleArgs -> ((fun env2 -> ((fun ctxVals -> ((fun nd_uscrut20 -> (match nd_uscrut20 with
