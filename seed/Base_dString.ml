@@ -6,11 +6,15 @@ open Base_dMaybe
 open Base_dEq
 open Base_dOrd
 open Base_dInt
+open Base_dShow
+open Base_dNat
 open Base_dList
 open Base_dResult
 let v_Eq_uString = (C_Dict_uBase_dEq_dEq_MkDict_uBase_dEq_dEq ((fun x y -> (x = y)), (fun x y -> (x <> y))))
 
 let v_Ord_uString = (C_Dict_uBase_dOrd_dOrd_MkDict_uBase_dOrd_dOrd ((fun x y -> (x < y)), (fun x y -> (x <= y)), (fun x y -> (x > y)), (fun x y -> (x >= y))))
+
+let v_Base_dString_dbyteLength = (fun s -> (bi_natFromInt (bi_strLength s)))
 
 let rec v_Base_dString_d_uinterleave = (fun mc0 mc1 -> (match mc1 with
   | C_Base_dList_dList_Base_dList_dCons (dtb__0, dtb__1) -> (match dtb__1 with

@@ -6,10 +6,11 @@ open Base_dMaybe
 open Base_dEq
 open Base_dOrd
 open Base_dInt
+open Base_dShow
+open Base_dNat
 open Base_dList
 open Base_dResult
 open Base_dString
-open Base_dShow
 open Prelude
 open Vuna_dCompiler_dCommon
 open Vuna_dCompiler_dFrontend_dToml
@@ -19,7 +20,6 @@ open Vuna_dCompiler_dPackages_dPkg
 open Base_dArray
 open Base_dHashMap
 open Vuna_dCompiler_dDebug
-open Base_dNat
 open Base_dVec
 open Vuna_dCompiler_dDiagnostics_dCommon
 open Vuna_dCompiler_dDiagnostics_dCg
@@ -71,12 +71,12 @@ let rec v_Base_dIntMap_d_udedupGo = (fun mc0 mc1 -> (match mc0 with
 let v_Base_dIntMap_d_udedupBucket = (fun xs -> ((v_Base_dIntMap_d_udedupGo xs) C_Base_dList_dList_Base_dList_dNil))
 
 let v_Base_dIntMap_dinsert = (fun mc0 mc1 mc2 -> (match mc2 with
-  | C_Base_dIntMap_dIntMap_Base_dIntMap_dMkIntMap (dtb__12) -> ((fun base -> ((fun b -> ((fun oi -> ((fun ii -> ((fun outer -> ((fun inner -> (C_Base_dIntMap_dIntMap_Base_dIntMap_dMkIntMap ((((v_Base_dArray_dset base) oi) (((v_Base_dArray_dset outer) ii) (C_Base_dList_dList_Base_dList_dCons ((C_Base_dPair_dPair_Base_dPair_dPair (mc0, mc1)), inner))))))) ((v_Base_dArray_dget outer) ii))) ((v_Base_dArray_dget base) oi))) (b - (oi * 32)))) (if 32 = 0 then failwith "division by zero" else b / 32))) (v_Base_dIntMap_d_uhashInt mc0))) (if ((v_Base_dArray_dlength dtb__12) = 0) then ((v_Base_dArray_dmake 32) ((v_Base_dArray_dmake 32) C_Base_dList_dList_Base_dList_dNil)) else dtb__12))
+  | C_Base_dIntMap_dIntMap_Base_dIntMap_dMkIntMap (dtb__12) -> ((fun base -> ((fun b -> ((fun qi -> ((fun oi -> ((fun ii -> ((fun outer -> ((fun inner -> (C_Base_dIntMap_dIntMap_Base_dIntMap_dMkIntMap ((((v_Base_dArray_dset base) oi) (((v_Base_dArray_dset outer) ii) (C_Base_dList_dList_Base_dList_dCons ((C_Base_dPair_dPair_Base_dPair_dPair (mc0, mc1)), inner))))))) ((v_Base_dArray_dget outer) ii))) ((v_Base_dArray_dget base) oi))) (bi_natFromInt (b - (qi * 32))))) (bi_natFromInt qi))) (if 32 = 0 then failwith "division by zero" else b / 32))) (v_Base_dIntMap_d_uhashInt mc0))) (if ((v_Base_dArray_dlength dtb__12) = 0) then ((v_Base_dArray_dmake 32) ((v_Base_dArray_dmake 32) C_Base_dList_dList_Base_dList_dNil)) else dtb__12))
   | _ -> failwith "DT: impossible branch"
 ))
 
 let v_Base_dIntMap_dlookup = (fun mc0 mc1 -> (match mc1 with
-  | C_Base_dIntMap_dIntMap_Base_dIntMap_dMkIntMap (dtb__13) -> (if ((v_Base_dArray_dlength dtb__13) = 0) then C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing else ((fun b -> ((fun oi -> ((fun ii -> ((v_Base_dIntMap_d_ulookupAssoc mc0) ((v_Base_dArray_dget ((v_Base_dArray_dget dtb__13) oi)) ii))) (b - (oi * 32)))) (if 32 = 0 then failwith "division by zero" else b / 32))) (v_Base_dIntMap_d_uhashInt mc0)))
+  | C_Base_dIntMap_dIntMap_Base_dIntMap_dMkIntMap (dtb__13) -> (if ((v_Base_dArray_dlength dtb__13) = 0) then C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing else ((fun b -> ((fun qi -> ((fun oi -> ((fun ii -> ((v_Base_dIntMap_d_ulookupAssoc mc0) ((v_Base_dArray_dget ((v_Base_dArray_dget dtb__13) oi)) ii))) (bi_natFromInt (b - (qi * 32))))) (bi_natFromInt qi))) (if 32 = 0 then failwith "division by zero" else b / 32))) (v_Base_dIntMap_d_uhashInt mc0)))
   | _ -> failwith "DT: impossible branch"
 ))
 

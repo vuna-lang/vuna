@@ -292,16 +292,16 @@ ioPrintResult tyText = case ioInnerType (trim tyText) of
 ioInnerType : String -> Maybe String
 ioInnerType t =
   if startsWith "(Base.IO.IO " t then Just
-    (stripTrailingParen (trim (substring (strLength "(Base.IO.IO ") (strLength t - strLength "(Base.IO.IO ") t)))
+    (stripTrailingParen (trim (substring (byteLength "(Base.IO.IO ") (byteLength t - byteLength "(Base.IO.IO ") t)))
   else if startsWith "Base.IO.IO " t then Just
-    (stripTrailingParen (trim (substring (strLength "Base.IO.IO ") (strLength t - strLength "Base.IO.IO ") t)))
-  else if startsWith "(IO " t then Just (stripTrailingParen (trim (substring 4 (strLength t - 4) t)))
+    (stripTrailingParen (trim (substring (byteLength "Base.IO.IO ") (byteLength t - byteLength "Base.IO.IO ") t)))
+  else if startsWith "(IO " t then Just (stripTrailingParen (trim (substring 4 (byteLength t - 4) t)))
   else Nothing
 
 -- 只保留实参本身：外层 TApp 的渲染是 `(IO a)`，去掉结尾的 `)` 即可
 -- （实参本身是 TApp 时会剩下 `(Base.Pair Int Int)`，保留原样）。
 stripTrailingParen : String -> String
-stripTrailingParen s = if endsWith ")" s then trim (substring 0 (strLength s - 1) s) else s
+stripTrailingParen s = if endsWith ")" s then trim (substring 0 (byteLength s - 1) s) else s
 
 -- ---------------------------------------------------------------
 -- 续行判定

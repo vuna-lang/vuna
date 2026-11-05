@@ -32,6 +32,14 @@ let bi_ge_generic (a : 'a) (b : 'a) = compare a b >= 0
 let bi_concat a b = a ^ b
 let bi_and a b = a && b
 let bi_or a b = a || b
+let bi_natSucc (n : int) = if n >= max_int then max_int else n + 1
+let bi_natAdd (a : int) (b : int) = if a > max_int - b then max_int else a + b
+let bi_natSub (a : int) (b : int) = if a <= b then 0 else a - b
+let bi_natMul (a : int) (b : int) =
+  if a <= 0 || b <= 0 then 0 else if a > max_int / b then max_int else a * b
+let bi_natDiv (a : int) (b : int) = if b = 0 then failwith "division by zero" else a / b
+let bi_natToInt (n : int) = n
+let bi_natFromInt (n : int) = if n <= 0 then 0 else n
 let dt_show_bool b = if b then "True" else "False"
 let dt_show_string s =
   let buf = Buffer.create 16 in

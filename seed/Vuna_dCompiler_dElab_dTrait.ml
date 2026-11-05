@@ -6,10 +6,11 @@ open Base_dMaybe
 open Base_dEq
 open Base_dOrd
 open Base_dInt
+open Base_dShow
+open Base_dNat
 open Base_dList
 open Base_dResult
 open Base_dString
-open Base_dShow
 open Prelude
 open Vuna_dCompiler_dCommon
 open Vuna_dCompiler_dFrontend_dToml
@@ -19,7 +20,6 @@ open Vuna_dCompiler_dPackages_dPkg
 open Base_dArray
 open Base_dHashMap
 open Vuna_dCompiler_dDebug
-open Base_dNat
 open Base_dVec
 open Vuna_dCompiler_dDiagnostics_dCommon
 open Vuna_dCompiler_dDiagnostics_dCg
@@ -936,7 +936,7 @@ let v_Vuna_dCompiler_dElab_dTrait_delabInstance = (fun instDecls allDecls global
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
-)) q)))) (nTele + nCtx))) (v_Base_dList_dlength (v_Vuna_dCompiler_dElab_dTrait_dinstSigTele dtb__429)))) (v_Base_dList_dlength (v_Vuna_dCompiler_dElab_dTrait_dinstSigCtx dtb__429)))) (v_Vuna_dCompiler_dElab_dTrait_dinstBodyCtx dtb__429))
+)) q)))) (bi_natAdd nTele nCtx))) (v_Base_dList_dlength (v_Vuna_dCompiler_dElab_dTrait_dinstSigTele dtb__429)))) (v_Base_dList_dlength (v_Vuna_dCompiler_dElab_dTrait_dinstSigCtx dtb__429)))) (v_Vuna_dCompiler_dElab_dTrait_dinstBodyCtx dtb__429))
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"

@@ -60,6 +60,13 @@ dtRuntime =
     ++ "let bi_concat a b = a ^ b\n"
     ++ "let bi_and a b = a && b\n"
     ++ "let bi_or a b = a || b\n"
+    ++ "let bi_natSucc (n : int) = if n >= max_int then max_int else n + 1\n"
+    ++ "let bi_natAdd (a : int) (b : int) = if a > max_int - b then max_int else a + b\n"
+    ++ "let bi_natSub (a : int) (b : int) = if a <= b then 0 else a - b\n"
+    ++ "let bi_natMul (a : int) (b : int) =\n  if a <= 0 || b <= 0 then 0 else if a > max_int / b then max_int else a * b\n"
+    ++ "let bi_natDiv (a : int) (b : int) = if b = 0 then failwith \"division by zero\" else a / b\n"
+    ++ "let bi_natToInt (n : int) = n\n"
+    ++ "let bi_natFromInt (n : int) = if n <= 0 then 0 else n\n"
     ++ "let dt_show_bool b = if b then \"True\" else \"False\"\n"
     ++ "let dt_show_string s =\n"
     ++ "  let buf = Buffer.create 16 in\n"
@@ -190,7 +197,9 @@ findListFamilyData (d :: rest) =
 -- 零参 user 构造子作为普通值引用时，OCaml 里就是裸构造子；只有 datas 表知道它是
 -- 构造子，所以生成入口先查构造子表，再回落到 Intrinsics/值名。
 genGlobalRef : GenSt -> String -> Result (Pair String GenSt)
-genGlobalRef st name = case lookupPair name (gsCtors st) of
+genGlobalRef st name = if name == natZeroCtor then Ok (Pair "0" st)
+else if name == natSuccCtor then Ok (Pair "bi_natSucc" st)
+else case lookupPair name (gsCtors st) of
   Just family => Ok (Pair (ctorOcamlName family name) st)
   Nothing => case findIntrinsic name of
     Just i =>
@@ -443,6 +452,12 @@ inlineOpArity "bi_lt_generic" = 2
 inlineOpArity "bi_le_generic" = 2
 inlineOpArity "bi_gt_generic" = 2
 inlineOpArity "bi_ge_generic" = 2
+inlineOpArity "natToInt" = 1
+inlineOpArity "natFromInt" = 1
+inlineOpArity "natAdd" = 2
+inlineOpArity "natSub" = 2
+inlineOpArity "natMul" = 2
+inlineOpArity "natDiv" = 2
 inlineOpArity _ = 0
 
 inlineText : String -> List String -> Maybe String
@@ -466,6 +481,13 @@ inlineText "bi_lt_generic" ([a, b]) = Just ("(" ++ a ++ " < " ++ b ++ ")")
 inlineText "bi_le_generic" ([a, b]) = Just ("(" ++ a ++ " <= " ++ b ++ ")")
 inlineText "bi_gt_generic" ([a, b]) = Just ("(" ++ a ++ " > " ++ b ++ ")")
 inlineText "bi_ge_generic" ([a, b]) = Just ("(" ++ a ++ " >= " ++ b ++ ")")
+-- Nat 转换恒等/单分支，直接内联；算术用 runtime helper（饱和/截断逻辑只写一份）。
+inlineText "natToInt" ([a]) = Just a
+inlineText "natFromInt" ([a]) = Just ("(bi_natFromInt " ++ a ++ ")")
+inlineText "natAdd" ([a, b]) = Just ("(bi_natAdd " ++ a ++ " " ++ b ++ ")")
+inlineText "natSub" ([a, b]) = Just ("(bi_natSub " ++ a ++ " " ++ b ++ ")")
+inlineText "natMul" ([a, b]) = Just ("(bi_natMul " ++ a ++ " " ++ b ++ ")")
+inlineText "natDiv" ([a, b]) = Just ("(bi_natDiv " ++ a ++ " " ++ b ++ ")")
 inlineText _ _ = Nothing
 
 inlineArityMatches : String -> List (Pair Term Rig) -> Bool
@@ -593,8 +615,44 @@ else andThen (genTermFuel (fuel - 1) st binders arg) (\p => case p of
   )
 )
 
+-- Nat 构造子链的常量折叠：字面量在 Elab 里展开成 Zero/Succ 链，codegen 折回整数。
+natChainNext : Int -> Int
+natChainNext n = if n >= 4611686018427387903 then 4611686018427387903 else n + 1
+
+natChainValue : Term -> Maybe Int
+natChainValue (TCon c args) = if c == natZeroCtor then case args of
+  [] => Just 0
+  _ => Nothing
+else if c == natSuccCtor then case args of
+  [Pair a _] => case natChainValue a of
+    Just n => Just (natChainNext n)
+    Nothing => Nothing
+  _ => Nothing
+else Nothing
+natChainValue _ = Nothing
+
 genConAppFuel : Int -> GenSt -> List (Pair String Rig) -> String -> List (Pair Term Rig) -> Result (Pair String GenSt)
 genConAppFuel fuel st binders c args = if fuel <= 0 then Err "DT: internal: codegen fuel exhausted"
+else case natChainValue (TCon c args) of
+  Just n => Ok (Pair (strFromInt n) st)
+  Nothing => genConAppNonChainFuel fuel st binders c args
+
+genConAppNonChainFuel : Int -> GenSt -> List (Pair String Rig) -> String -> List (Pair Term Rig) -> Result (Pair String GenSt)
+genConAppNonChainFuel fuel st binders c args = if fuel <= 0 then Err "DT: internal: codegen fuel exhausted"
+else if c == natZeroCtor then case alignCtorArgs c [] args of
+  Err e => Err e
+  Ok runtimeArgs => case runtimeArgs of
+    [] => Ok (Pair "0" st)
+    _ => Err "DT: internal: Nat Zero applied to arguments"
+else if c == natSuccCtor then case alignCtorArgs c [True] args of
+  Err e => Err e
+  Ok runtimeArgs => andThen (genConArgsFuel (fuel - 1) st binders runtimeArgs) (\p => case p of
+    Pair texts st2 => case texts of
+      argText :: rest => case rest of
+        [] => Ok (Pair ("(bi_natSucc " ++ argText ++ ")") st2)
+        _ => Err "DT: internal: Nat Succ must have exactly one runtime argument"
+      [] => Err "DT: internal: Nat Succ must have exactly one runtime argument"
+  )
 else case lookupPair c (gsCtors st) of
   Nothing => Err ("DT: internal: unknown constructor " ++ c)
   Just family => case lookupPair c (gsCtorShapes st) of
@@ -646,8 +704,103 @@ else andThen (genArmFuel (fuel - 1) st binders alt) (\p => case p of
   )
 )
 
+-- ---------------------------------------------------------------
+-- Nat case 降级：Nat 运行时是 int，不能生成变体 match。
+-- 只处理规范形（分支全是 Nat 构造子；嵌套模式已由 Elab.Match 降级成嵌套 case）。
+-- ---------------------------------------------------------------
+isNatCtorName : String -> Bool
+isNatCtorName name = name == natZeroCtor || name == natSuccCtor
+
+natCaseApplies : List CaseAlt -> Bool
+natCaseApplies [] = False
+natCaseApplies alts = natCaseAllCtors alts && natCaseHasCtor alts
+
+natCaseAllCtors : List CaseAlt -> Bool
+natCaseAllCtors [] = True
+natCaseAllCtors (alt :: rest) = case caseAltName alt of
+  "" => natCaseAllCtors rest
+  name => if isNatCtorName name then natCaseAllCtors rest else False
+
+natCaseHasCtor : List CaseAlt -> Bool
+natCaseHasCtor [] = False
+natCaseHasCtor (alt :: rest) = case caseAltName alt of
+  "" => natCaseHasCtor rest
+  _ => True
+
+findAltBy : String -> List CaseAlt -> Maybe CaseAlt
+findAltBy name [] = Nothing
+findAltBy name (alt :: rest) = if caseAltName alt == name then Just alt else findAltBy name rest
+
+findCatchAllAlt : List CaseAlt -> Maybe CaseAlt
+findCatchAllAlt [] = Nothing
+findCatchAllAlt (alt :: rest) = if caseAltName alt == "" then Just alt else findCatchAllAlt rest
+
+-- Nat 分支体：按其 telescope binder 生成；Succ 的唯一 binder 绑定到 (sc - 1)，
+-- 兜底变量绑定到 sc。bindExpr = Nothing 表示该分支不应有保留 binder（Zero）。
+genNatAltBodyFuel : Int -> GenSt -> List (Pair String Rig) -> CaseAlt -> Maybe String -> Result (Pair String GenSt)
+genNatAltBodyFuel fuel st outer alt bindExpr = if fuel <= 0 then Err "DT: internal: codegen fuel exhausted"
+else
+  let
+    bound = altEnv st outer (caseAltBinders alt)
+  in andThen (genTermFuel (fuel - 1) (aeSt bound) (aeEnv bound) (caseAltBody alt)) (\p => case p of
+    Pair body st2 => case aePats bound of
+      [] => Ok (Pair body st2)
+      nm :: rest => case rest of
+        [] => case bindExpr of
+          Just expr => Ok (Pair ("(let " ++ nm ++ " = " ++ expr ++ " in " ++ body ++ ")") st2)
+          Nothing => Err "DT: internal: Nat case arm has a binder but no runtime binding"
+        _ => Err "DT: internal: Nat case arm has more than one runtime binder"
+  )
+
+genNatCaseFuel : Int -> GenSt -> List (Pair String Rig) -> Term -> List CaseAlt -> Result (Pair String GenSt)
+genNatCaseFuel fuel st binders scrut alts = if fuel <= 0 then Err "DT: internal: codegen fuel exhausted"
+else andThen (genTermFuel (fuel - 1) st binders scrut) (\p => case p of
+  Pair scrutText st1 =>
+    let
+      fresh = gsNext st1
+      sc = "dtnat__" ++ strFromInt fresh
+      st2 = gsPutNext st1 (fresh + 1)
+      zeroAlt = findAltBy natZeroCtor alts
+      succAlt = findAltBy natSuccCtor alts
+      catchAlt = findCatchAllAlt alts
+      predExpr = "(" ++ sc ++ " - 1)"
+    in natCaseBranchesFuel (fuel - 1) st2 binders zeroAlt succAlt catchAlt sc scrutText predExpr
+)
+
+-- 组装：true/else 两支取 Zero/Succ；缺的一支用兜底（绑定 scrutinee）或 failwith。
+natCaseBranchesFuel : Int -> GenSt -> List (Pair String Rig) -> Maybe CaseAlt -> Maybe CaseAlt -> Maybe CaseAlt -> String -> String -> String -> Result (Pair String GenSt)
+natCaseBranchesFuel fuel st binders zeroAlt succAlt catchAlt sc scrutText predExpr = if fuel <= 0 then Err "DT: internal: codegen fuel exhausted"
+else
+  let
+    impossible = "(failwith \"DT: impossible branch\")"
+  in andThen (natAltTextFuel (fuel - 1) st binders zeroAlt Nothing) (\pz => case pz of
+    Pair zeroText st1 => andThen (natAltTextFuel (fuel - 1) st1 binders succAlt (Just predExpr)) (\ps => case ps of
+      Pair succText st2 => andThen (natAltTextFuel (fuel - 1) st2 binders catchAlt (Just sc)) (\pc => case pc of
+        Pair catchText st3 =>
+          let
+            trueText = case zeroAlt of
+              Just _ => zeroText
+              Nothing => case catchAlt of
+                Just _ => catchText
+                Nothing => impossible
+            falseText = case succAlt of
+              Just _ => succText
+              Nothing => case catchAlt of
+                Just _ => catchText
+                Nothing => impossible
+          in Ok
+            (Pair ("(let " ++ sc ++ " = " ++ scrutText ++ " in (if " ++ sc ++ " = 0 then " ++ trueText ++ " else " ++ falseText ++ "))") st3)
+      )
+    )
+  )
+
+natAltTextFuel : Int -> GenSt -> List (Pair String Rig) -> Maybe CaseAlt -> Maybe String -> Result (Pair String GenSt)
+natAltTextFuel fuel st binders Nothing bindExpr = Ok (Pair "" st)
+natAltTextFuel fuel st binders (Just a) bindExpr = genNatAltBodyFuel fuel st binders a bindExpr
+
 genCaseFuel : Int -> GenSt -> List (Pair String Rig) -> Term -> List CaseAlt -> Result (Pair String GenSt)
 genCaseFuel fuel st binders scrut alts = if fuel <= 0 then Err "DT: internal: codegen fuel exhausted"
+else if natCaseApplies alts then genNatCaseFuel (fuel - 1) st binders scrut alts
 else andThen (genTermFuel (fuel - 1) st binders scrut) (\p => case p of
   Pair scrutText st1 => andThen (genArmsFuel (fuel - 1) st1 binders alts) (\q => case q of
     Pair arms st2 =>
@@ -798,6 +951,7 @@ firstCtorOf d = case dtDataCtors d of
 mainShowForName : String -> Result (Pair String String)
 mainShowForName g =
   if g == intTypeName then Ok (Pair "string_of_int" "int")
+  else if g == natTypeName then Ok (Pair "string_of_int" "int")
   else if g == strTypeName then Ok (Pair "dt_show_string" "string")
   else if g == boolTypeName then Ok (Pair "dt_show_bool" "bool") else mainShowErr
 

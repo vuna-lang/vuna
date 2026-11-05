@@ -2,6 +2,7 @@
 -- （纯核心求值器不跑效果），运行时效果见 corpus/dt_io/。
 import Base.IO
 import Base.List
+import Base.Nat
 
 readProbe : IO String
 readProbe = readFile "x"
@@ -33,7 +34,7 @@ mtimeProbe = fileTimeProbe
 fileTimeProbe : IO Int
 fileTimeProbe = fileMtime "x"
 
-sizeProbe : IO Int
+sizeProbe : IO Nat
 sizeProbe = fileSize "x"
 
 argsProbe : IO (List String)

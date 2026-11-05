@@ -30,7 +30,7 @@ vtail a xs = case xs of
   VCons y ys => ys
 
 -- 长度（`n` 是 Rig0 索引，这里走运行时计数，与 `List.length` 同义）。
-vlen : (a : Type) -> {n : Nat} -> Vec a n -> Int
+vlen : (a : Type) -> {n : Nat} -> Vec a n -> Nat
 vlen a xs = case xs of
   VNil => 0
   VCons y ys => 1 + vlen a ys

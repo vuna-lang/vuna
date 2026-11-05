@@ -35,6 +35,11 @@ vuna 尚未发布任何版本：没有外部用户、下游生态与历史包袱
   `MArray` / `Buffer`（M33 W3）。编译器查找表（defs / globals / ctor / clause / defVals）用
   `HashMap`，元变量解表与创建深度表用 `IntMap`（`metaLookup` 走索引，不再线性扫 /
   不再 `strFromInt`）。
+- **Nat 零开销表示（M34.7）**：`Base.Nat` 保持归纳族语义，运行时是 OCaml `int`（无变体 /
+  无分配）；期望类型处的字面量编译期展开、codegen 折回整数；`Zero`/`Succ` 与 `case` 降成
+  整数与 `if`；`+ - * /` 在 Nat 上下文特化到 `bi_nat*`（饱和/截断），`Nat → Int` 隐式提升，
+  反向显式 `fromInt`。Base 公开度量（List/Array/MArray/Buffer/String/IO/Map/Vec）迁到 Nat；
+  低层原语、位置/fuel/level/meta/哈希等仍 Int（见 [limits.md](reference/limits.md)）。
 - **系统编程能力（M33）**：生成程序基准 `nix run .#vuna-perf`（vuna vs 手写 OCaml，典型
   负载 ≤2×）；codegen 内建内联 / 多参数 lambda 链 / 字符串批拼；`Array` / `IORef` / `MArray` /
   `Buffer` 与 IO 隔离的可变数据；受限 FFI（`extern` + 包根 `ffi/*.c`）；库级 `State` /

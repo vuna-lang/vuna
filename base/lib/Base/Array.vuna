@@ -6,9 +6,9 @@ module Base.Array (fromList, get, length, make, set, toList) where
 -- 原数组不变。`get` / `set` 越界是宿主 `Invalid_argument`（与 `strAt` 的 -1 哨兵语义
 -- 不同，见 docs/reference/limits.md）。
 --
--- 与 Base.List 的 `length` / `get` 同名：同文件混用多个容器时写完整限定名
--- `Base.Array.length` / `Base.Array.get`（与 Map/HashMap 的约定一致）。
+-- 尺寸/下标是 **Nat**；底层原语仍是 Int（低层 runtime 接口），这里的转换是恒等/单分支。
 import Base.List
+import Base.Nat
 
 fromList : List a -> Array a
 fromList xs = arrayFromList xs
@@ -16,14 +16,14 @@ fromList xs = arrayFromList xs
 toList : Array a -> List a
 toList a = arrayToList a
 
-length : Array a -> Int
-length a = arrayLength a
+length : Array a -> Nat
+length a = natFromInt (arrayLength a)
 
-get : Array a -> Int -> a
-get a i = arrayGet a i
+get : Array a -> Nat -> a
+get a i = arrayGet a (natToInt i)
 
-set : Array a -> Int -> a -> Array a
-set a i v = arraySet a i v
+set : Array a -> Nat -> a -> Array a
+set a i v = arraySet a (natToInt i) v
 
-make : Int -> a -> Array a
-make n v = arrayMake n v
+make : Nat -> a -> Array a
+make n v = arrayMake (natToInt n) v

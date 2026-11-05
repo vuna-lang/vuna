@@ -128,7 +128,7 @@ escapeChunk 12 = "\\f"
 escapeChunk c = if c < 32 then "\\u" ++ pad4 (hexLower c) else strPack [c]
 
 pad4 : String -> String
-pad4 s = repeat (4 - strLength s) "0" ++ s
+pad4 s = repeat (4 - byteLength s) "0" ++ s
 
 hexLower : Int -> String
 hexLower n = strPack [hexDigit (n / 16), hexDigit (n - n / 16 * 16)]

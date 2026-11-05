@@ -59,14 +59,14 @@ listHead xs = case xs of
   [] => Zero
   y :: ys => y
 
-natToInt : Nat -> Int
-natToInt n = case n of
+toIntNat : Nat -> Int
+toIntNat n = case n of
   Zero => 0
-  Succ k => 1 + natToInt k
+  Succ k => 1 + toIntNat k
 
 main : Int
 main =
-  natToInt (apply Succ (Succ Zero))
-    + natToInt letSucc
-    + natToInt proofUse
-    + natToInt (listHead built)
+  toIntNat (apply Succ (Succ Zero))
+    + toIntNat letSucc
+    + toIntNat proofUse
+    + toIntNat (listHead built)

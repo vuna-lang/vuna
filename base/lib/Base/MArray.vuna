@@ -4,18 +4,20 @@ module Base.MArray (length, new, read, write) where
 -- `'a array`（与不可变 `Array` 同一表示，靠类型区分可变性）。
 --
 -- 所有操作都是 IO 动作；`read` / `write` 越界是宿主 `Invalid_argument`。
+-- 尺寸/下标是 **Nat**；底层原语仍是 Int（低层 runtime 接口）。
 -- 没有线性 / 唯一性类型前，安全边界是「只在 IO 内使用」（`runIO` 逃逸需 `unsafe`）。
 import Base.Monad
 import Base.IO
+import Base.Nat
 
-new : Int -> a -> IO (MArray a)
-new n v = prim_newMArray n v
+new : Nat -> a -> IO (MArray a)
+new n v = prim_newMArray (natToInt n) v
 
-length : MArray a -> IO Int
-length a = prim_mArrayLength a
+length : MArray a -> IO Nat
+length a = fmap natFromInt (prim_mArrayLength a)
 
-read : MArray a -> Int -> IO a
-read a i = prim_readMArray a i
+read : MArray a -> Nat -> IO a
+read a i = prim_readMArray a (natToInt i)
 
-write : MArray a -> Int -> a -> IO Int
-write a i v = prim_writeMArray a i v
+write : MArray a -> Nat -> a -> IO Int
+write a i v = prim_writeMArray a (natToInt i) v

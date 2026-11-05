@@ -432,8 +432,8 @@ frameBody fuel pending afterHeaders len state =
 decodeFrame : Int -> Int -> String -> LspState -> Int
 decodeFrame fuel len afterHeaders state =
   let
-    body = substring 0 len afterHeaders
-    rest = substring len (strLength afterHeaders - len) afterHeaders
+    body = substring 0 (natFromInt len) afterHeaders
+    rest = substring (natFromInt len) (natFromInt (strLength afterHeaders - len)) afterHeaders
   in case parseJson body of
     Err e => lspLoop (fuel - 1) rest (logTo ("malformed frame: " ++ e) state)
     Ok msg =>

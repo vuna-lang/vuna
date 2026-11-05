@@ -17,6 +17,7 @@ import Base.Eq
 import Base.Int
 import Base.List
 import Base.Maybe
+import Base.Nat
 import Base.Ord
 import Base.Pair
 
@@ -55,8 +56,9 @@ insert key v (MkIntMap outers) =
     base =
       if Base.Array.length outers == 0 then Base.Array.make 32 (Base.Array.make 32 []) else outers
     b = _hashInt key
-    oi = b / 32
-    ii = b - oi * 32
+    qi = b / 32
+    oi = natFromInt qi
+    ii = natFromInt (b - qi * 32)
     outer = Base.Array.get base oi
     inner = Base.Array.get outer ii
   in MkIntMap (Base.Array.set base oi (Base.Array.set outer ii (Pair key v :: inner)))
@@ -66,8 +68,9 @@ lookup key (MkIntMap outers) = if Base.Array.length outers == 0 then Nothing
 else
   let
     b = _hashInt key
-    oi = b / 32
-    ii = b - oi * 32
+    qi = b / 32
+    oi = natFromInt qi
+    ii = natFromInt (b - qi * 32)
   in _lookupAssoc key (Base.Array.get (Base.Array.get outers oi) ii)
 
 member : Int -> IntMap a -> Bool
@@ -91,5 +94,5 @@ toList (MkIntMap outers) =
   concatMap (\outer => concatMap (\inner => _dedupBucket inner) (Base.Array.toList outer))
     (Base.Array.toList outers)
 
-size : IntMap a -> Int
+size : IntMap a -> Nat
 size t = Base.List.length (toList t)

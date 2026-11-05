@@ -6,10 +6,11 @@ open Base_dMaybe
 open Base_dEq
 open Base_dOrd
 open Base_dInt
+open Base_dShow
+open Base_dNat
 open Base_dList
 open Base_dResult
 open Base_dString
-open Base_dShow
 open Prelude
 open Vuna_dCompiler_dCommon
 open Vuna_dCompiler_dFrontend_dToml
@@ -19,7 +20,6 @@ open Vuna_dCompiler_dPackages_dPkg
 open Base_dArray
 open Base_dHashMap
 open Vuna_dCompiler_dDebug
-open Base_dNat
 open Base_dVec
 open Vuna_dCompiler_dDiagnostics_dCommon
 open Vuna_dCompiler_dDiagnostics_dCg
@@ -107,13 +107,13 @@ let v_Vuna_dCompiler_dDriver_dCompile_dskipMetaDir = (fun name -> (if (if (if (i
 let rec v_Vuna_dCompiler_dDriver_dCompile_dcollectVunaMeta = (fun fuel dir -> (if (fuel <= 0) then C_Base_dList_dList_Base_dList_dNil else (if (if (v_Base_dIO_drunIO ((fun dtio_0 -> C_Base_dIO_dIO_Base_dIO_dMkIO (fun _ -> dtp_fileExists dtio_0)) dir)) then (v_Base_dIO_drunIO ((fun dtio_0 -> C_Base_dIO_dIO_Base_dIO_dMkIO (fun _ -> dtp_isDirectory dtio_0)) dir)) else false) then ((v_Base_dList_dconcatMap ((v_Vuna_dCompiler_dDriver_dCompile_dwalkVunaMeta (fuel - 1)) dir)) (v_Base_dIO_drunIO ((fun dtio_0 -> C_Base_dIO_dIO_Base_dIO_dMkIO (fun _ -> (fun p -> dtp_listOf (dtp_readDir p)) dtio_0)) dir))) else C_Base_dList_dList_Base_dList_dNil)))
 and v_Vuna_dCompiler_dDriver_dCompile_dwalkVunaMeta = (fun fuel dir name -> (if (fuel <= 0) then C_Base_dList_dList_Base_dList_dNil else (if (name = ".") then C_Base_dList_dList_Base_dList_dNil else (if (name = "..") then C_Base_dList_dList_Base_dList_dNil else (if (v_Vuna_dCompiler_dDriver_dCompile_dskipMetaDir name) then C_Base_dList_dList_Base_dList_dNil else ((fun path -> (if (if (v_Base_dIO_drunIO ((fun dtio_0 -> C_Base_dIO_dIO_Base_dIO_dMkIO (fun _ -> dtp_fileExists dtio_0)) path)) then (v_Base_dIO_drunIO ((fun dtio_0 -> C_Base_dIO_dIO_Base_dIO_dMkIO (fun _ -> dtp_isDirectory dtio_0)) path)) else false) then ((v_Vuna_dCompiler_dDriver_dCompile_dcollectVunaMeta (fuel - 1)) path) else (if ((v_Base_dString_dendsWith ".vuna") name) then (C_Base_dList_dList_Base_dList_dCons (path, C_Base_dList_dList_Base_dList_dNil)) else C_Base_dList_dList_Base_dList_dNil))) (String.concat "" [dir; "/"; name])))))))
 
-let v_Vuna_dCompiler_dDriver_dCompile_ddropPrefixMeta = (fun prefix s -> (if ((v_Base_dString_dstartsWith prefix) s) then (((v_Base_dString_dsubstring (bi_strLength prefix)) ((bi_strLength s) - (bi_strLength prefix))) s) else s))
+let v_Vuna_dCompiler_dDriver_dCompile_ddropPrefixMeta = (fun prefix s -> (if ((v_Base_dString_dstartsWith prefix) s) then (((v_Base_dString_dsubstring (v_Base_dString_dbyteLength prefix)) (bi_natSub (v_Base_dString_dbyteLength s) (v_Base_dString_dbyteLength prefix))) s) else s))
 
 let v_Vuna_dCompiler_dDriver_dCompile_dslashToDot = (fun c -> (if (c = 47) then 46 else c))
 
 let v_Vuna_dCompiler_dDriver_dCompile_dslashesToDots = (fun s -> (dtp_pack ((v_Base_dList_dmap v_Vuna_dCompiler_dDriver_dCompile_dslashToDot) (dtp_unpack s))))
 
-let v_Vuna_dCompiler_dDriver_dCompile_dmoduleNameOfPath = (fun rootPath path -> ((fun rel0 -> ((fun rel -> (v_Vuna_dCompiler_dDriver_dCompile_dslashesToDots rel)) (if ((v_Base_dString_dendsWith ".vuna") rel0) then (((v_Base_dString_dsubstring 0) ((bi_strLength rel0) - 5)) rel0) else rel0))) ((v_Vuna_dCompiler_dDriver_dCompile_ddropPrefixMeta (rootPath ^ "/")) path)))
+let v_Vuna_dCompiler_dDriver_dCompile_dmoduleNameOfPath = (fun rootPath path -> ((fun rel0 -> ((fun rel -> (v_Vuna_dCompiler_dDriver_dCompile_dslashesToDots rel)) (if ((v_Base_dString_dendsWith ".vuna") rel0) then (((v_Base_dString_dsubstring 0) (bi_natSub (v_Base_dString_dbyteLength rel0) 5)) rel0) else rel0))) ((v_Vuna_dCompiler_dDriver_dCompile_ddropPrefixMeta (rootPath ^ "/")) path)))
 
 let v_Vuna_dCompiler_dDriver_dCompile_drootSources = (fun root -> ((v_Base_dList_dmap (fun p -> (C_Base_dPair_dPair_Base_dPair_dPair (((v_Vuna_dCompiler_dDriver_dCompile_dmoduleNameOfPath (v_Vuna_dCompiler_dPackages_dPkg_drootDir root)) p), (v_Vuna_dCompiler_dDriver_dCompile_dtextHash (v_Base_dIO_drunIO ((fun dtio_0 -> C_Base_dIO_dIO_Base_dIO_dMkIO (fun _ -> dtp_readFile dtio_0)) p))))))) ((v_Vuna_dCompiler_dDriver_dCompile_dcollectVunaMeta 1048576) (v_Vuna_dCompiler_dPackages_dPkg_drootDir root))))
 

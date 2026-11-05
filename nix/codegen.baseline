@@ -10,9 +10,12 @@
 # M33 codegen 优化后重标定：内建内联消除了 `bi_eq_int`（eqint 3 → 0）、`++` 链展开为
 #       `String.concat ""`（strcat 0 → 1）、多参数 lambda 链与内联让产物变小（bytes
 #       5087 → 4820、maxline 758 → 623、longlines 7 → 6）。
+# M35 Nat 表示：Base.List 依赖 Base.Nat，split 产物每个单元多一行 `open Base_dNat`；
+#       firstTwo 的 length 由 Nat 度量经隐式提升回到 Int（共享同一 int 表示）。
+#       按实测 bytes 4820 → 4880、lines 138 → 142。
 files =4
-bytes =4820
-lines =138
+bytes =4880
+lines =142
 maxline =623
 longlines =6
 letrec =1

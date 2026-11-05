@@ -6,10 +6,11 @@ open Base_dMaybe
 open Base_dEq
 open Base_dOrd
 open Base_dInt
+open Base_dShow
+open Base_dNat
 open Base_dList
 open Base_dResult
 open Base_dString
-open Base_dShow
 open Prelude
 open Vuna_dCompiler_dCommon
 open Vuna_dCompiler_dFrontend_dToml
@@ -19,7 +20,6 @@ open Vuna_dCompiler_dPackages_dPkg
 open Base_dArray
 open Base_dHashMap
 open Vuna_dCompiler_dDebug
-open Base_dNat
 open Base_dVec
 open Vuna_dCompiler_dDiagnostics_dCommon
 open Vuna_dCompiler_dDiagnostics_dCg
@@ -83,6 +83,7 @@ let rec v_Vuna_dCompiler_dElab_dPrelude_dityToTermEnv = (fun mc0 mc1 -> (match m
   | C_Vuna_dCompiler_dIntrinsics_dIType_Vuna_dCompiler_dIntrinsics_dIFun (dtb__12, dtb__13) -> (C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTPi ("_", false, C_Vuna_dCompiler_dCore_dTerm_dRig_Vuna_dCompiler_dCore_dTerm_dRig1, ((v_Vuna_dCompiler_dElab_dPrelude_dityToTermEnv mc0) dtb__12), ((v_Vuna_dCompiler_dElab_dPrelude_dityToTermEnv (C_Base_dList_dList_Base_dList_dCons ("_", mc0))) dtb__13)))
   | C_Vuna_dCompiler_dIntrinsics_dIType_Vuna_dCompiler_dIntrinsics_dIIO (dtb__14) -> (C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTApp ((C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTGlobal (v_Vuna_dCompiler_dIntrinsics_dioFamilyName)), ((v_Vuna_dCompiler_dElab_dPrelude_dityToTermEnv mc0) dtb__14), C_Vuna_dCompiler_dCore_dTerm_dRig_Vuna_dCompiler_dCore_dTerm_dRig1))
   | C_Vuna_dCompiler_dIntrinsics_dIType_Vuna_dCompiler_dIntrinsics_dIList (dtb__15) -> (C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTApp ((C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTGlobal (v_Vuna_dCompiler_dIntrinsics_dlistFamilyName)), ((v_Vuna_dCompiler_dElab_dPrelude_dityToTermEnv mc0) dtb__15), C_Vuna_dCompiler_dCore_dTerm_dRig_Vuna_dCompiler_dCore_dTerm_dRig1))
+  | C_Vuna_dCompiler_dIntrinsics_dIType_Vuna_dCompiler_dIntrinsics_dINat -> (C_Vuna_dCompiler_dCore_dTerm_dTerm_Vuna_dCompiler_dCore_dTerm_dTGlobal (v_Vuna_dCompiler_dIntrinsics_dnatTypeName))
   | C_Vuna_dCompiler_dIntrinsics_dIType_Vuna_dCompiler_dIntrinsics_dIBool -> v_Vuna_dCompiler_dElab_dPrelude_dboolTy
   | C_Vuna_dCompiler_dIntrinsics_dIType_Vuna_dCompiler_dIntrinsics_dIStr -> v_Vuna_dCompiler_dElab_dPrelude_dstrTy
   | C_Vuna_dCompiler_dIntrinsics_dIType_Vuna_dCompiler_dIntrinsics_dIInt -> v_Vuna_dCompiler_dElab_dPrelude_dintTy

@@ -83,6 +83,7 @@ ityToTermEnv env ITy = TType levelZero
 ityToTermEnv env IInt = intTy
 ityToTermEnv env IStr = strTy
 ityToTermEnv env IBool = boolTy
+ityToTermEnv env INat = TGlobal natTypeName
 ityToTermEnv env (IList elem) = TApp (TGlobal listFamilyName) (ityToTermEnv env elem) Rig1
 -- M31：效果原语的返回类型是 canonical `Base.IO.IO a`（与 main 钩子同一族身份）。
 ityToTermEnv env (IIO elem) = TApp (TGlobal ioFamilyName) (ityToTermEnv env elem) Rig1

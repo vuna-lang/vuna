@@ -6,10 +6,11 @@ open Base_dMaybe
 open Base_dEq
 open Base_dOrd
 open Base_dInt
+open Base_dShow
+open Base_dNat
 open Base_dList
 open Base_dResult
 open Base_dString
-open Base_dShow
 open Prelude
 open Vuna_dCompiler_dCommon
 open Vuna_dCompiler_dFrontend_dToml
@@ -50,6 +51,8 @@ let v_Base_dIO_dwriteFile = (fun _uarity0 _uarity1 -> (((fun dtio_0 dtio_1 -> C_
 
 let v_Base_dIO_dreadLine = (C_Base_dIO_dIO_Base_dIO_dMkIO (fun _ -> (dtp_readLine ())))
 
+let v_Base_dIO_dreadBytes = (fun n -> ((fun dtio_0 -> C_Base_dIO_dIO_Base_dIO_dMkIO (fun _ -> dtp_readBytes dtio_0)) n))
+
 let v_Base_dIO_dreadDir = (fun _uarity0 -> ((fun dtio_0 -> C_Base_dIO_dIO_Base_dIO_dMkIO (fun _ -> (fun p -> dtp_listOf (dtp_readDir p)) dtio_0)) _uarity0))
 
 let v_Base_dIO_disDirectory = (fun _uarity0 -> ((fun dtio_0 -> C_Base_dIO_dIO_Base_dIO_dMkIO (fun _ -> dtp_isDirectory dtio_0)) _uarity0))
@@ -62,7 +65,7 @@ let v_Base_dIO_dfileExists = (fun _uarity0 -> ((fun dtio_0 -> C_Base_dIO_dIO_Bas
 
 let v_Base_dIO_dfileMtime = (fun _uarity0 -> ((fun dtio_0 -> C_Base_dIO_dIO_Base_dIO_dMkIO (fun _ -> dtp_fileMtime dtio_0)) _uarity0))
 
-let v_Base_dIO_dfileSize = (fun _uarity0 -> ((fun dtio_0 -> C_Base_dIO_dIO_Base_dIO_dMkIO (fun _ -> dtp_fileSize dtio_0)) _uarity0))
+let v_Base_dIO_dfileSize = (fun path -> (((v_Base_dMonad_dfmap v_Functor_uBase_dIO_dIO) bi_natFromInt) ((fun dtio_0 -> C_Base_dIO_dIO_Base_dIO_dMkIO (fun _ -> dtp_fileSize dtio_0)) path)))
 
 let v_Base_dIO_dgetArgs = (C_Base_dIO_dIO_Base_dIO_dMkIO (fun _ -> (dtp_listOf (dtp_getArgs ()))))
 

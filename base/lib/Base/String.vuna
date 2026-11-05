@@ -1,5 +1,6 @@
 module Base.String
-  ( contains
+  ( byteLength
+  , contains
   , endsWith
   , join
   , lines
@@ -38,9 +39,14 @@ import Base.Ord
 -- `+` / `-` / `*` / `/` 的 fixity 声明在 Base.Int；base 模块不自动注入 Prelude，
 -- 本模块的算术运算符需要它的声明进入 import 闭包。
 import Base.Int
+import Base.Nat
 
 -- `++` 的 fixity 声明（字符串拼接是内建值）。
 infixr 5 ++
+
+-- 字节长度（UTF-8 字节数）是度量 → Nat；strLength 仍是低层 Int 原语。
+byteLength : String -> Nat
+byteLength s = natFromInt (strLength s)
 
 split : String -> String -> List String
 split sep text =
@@ -102,13 +108,13 @@ endsWith suffix text =
   in if ls > lt then False else _startsWithChars (strUnpack suffix) (drop (lt - ls) (strUnpack text))
 
 -- M33 W4：`repeat` 改成一次 `strConcatMany`（原来 `s ++ repeat (n-1) s` 是 O(n²) 拷贝）。
-repeat : Int -> String -> String
-repeat n s = strConcatMany (map (\_ => s) (range 0 n))
+repeat : Nat -> String -> String
+repeat n s = strConcatMany (map (\_ => s) (range 0 (natToInt n)))
 
 -- M33 W4：`substring` 直接用 `strSubstring` 原语（runtime `String.sub` + clamp），
 -- 不再走 `strUnpack`/`take`/`drop`/`strPack` 的 List 桥接。
-substring : Int -> Int -> String -> String
-substring start len s = strSubstring start len s
+substring : Nat -> Nat -> String -> String
+substring start len s = strSubstring (natToInt start) (natToInt len) s
 
 _isSpace : Int -> Bool
 _isSpace c = c == 32 || c == 9 || c == 10 || c == 13

@@ -346,6 +346,7 @@ renderTypeArgGlobal : Int -> List Int -> List (Pair String (List Int)) -> List D
 renderTypeArgGlobal fuel levels table datas g sp = case renderTypeIntrinsic g (map (\x => renderTypeArgFuel (fuel - 1) levels table datas x) sp) of
   Just t => t
   Nothing => if g == intTypeName then "int"
+  else if g == natTypeName then "int"
   else if g == strTypeName then "string"
   else if g == boolTypeName then "bool"
   else case findDtData g datas of
@@ -394,6 +395,7 @@ renderFieldTy levels table datas lvl (VNeutral n) slot = case n of
   NGlobal g sp => case renderTypeIntrinsic g (map (\x => renderTypeArg levels table datas x) sp) of
     Just t => Pair t slot
     Nothing => if g == intTypeName then Pair "int" slot
+    else if g == natTypeName then Pair "int" slot
     else if g == strTypeName then Pair "string" slot
     else if g == boolTypeName then Pair "bool" slot
     else case findDtData g datas of
@@ -482,8 +484,15 @@ ctorBodyText cs = joinWith " | " cs
 isBoolFamilyName : String -> Bool
 isBoolFamilyName name = name == boolTypeName
 
+-- Nat 同 Bool：canonical 族的运行时表示不是变体（Nat = 非负 OCaml int），不生成声明。
+isNatFamilyName : String -> Bool
+isNatFamilyName name = name == natTypeName
+
 runtimeDatas : List DtData -> List DtData
-runtimeDatas datas = filter (\d => if isBoolFamilyName (dtDataName d) then False else True) datas
+runtimeDatas datas =
+  filter
+    (\d => if isBoolFamilyName (dtDataName d) then False else if isNatFamilyName (dtDataName d) then False else True)
+    datas
 
 -- 类型声明：`allDatas` 用于族间参数推断（跨模块字段类型照旧渲染成全局类型名），
 -- `subset` 是实际写进本文件的族。

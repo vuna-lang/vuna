@@ -6,6 +6,7 @@ Base_dInt.ml
 Base_dList.ml
 Base_dMaybe.ml
 Base_dMonad.ml
+Base_dNat.ml
 Base_dOrd.ml
 Base_dPair.ml
 Base_dResult.ml
@@ -37,6 +38,7 @@ let v_Ord_uInt
 == Base_dList.ml
 let v_Base_dList_dconcatMap
 let v_Base_dList_dflatMap
+let v_Base_dList_dlength
 let v_Base_dList_drange
 let v_Base_dList_dreverse
 let v_Functor_uBase_dList_dList
@@ -55,6 +57,20 @@ let v_Monad_uBase_dMaybe_dMaybe
 let v_Base_dMonad_dbind
 let v_Base_dMonad_dfmap
 let v_Base_dMonad_dpure
+
+== Base_dNat.ml
+let v_Base_dNat_ddiv
+let v_Base_dNat_dfromInt
+let v_Base_dNat_dfromIntMaybe
+let v_Base_dNat_disZero
+let v_Base_dNat_dminus
+let v_Base_dNat_dmult
+let v_Base_dNat_dplus
+let v_Base_dNat_dpred
+let v_Base_dNat_dtoInt
+let v_Eq_uBase_dNat_dNat
+let v_Ord_uBase_dNat_dNat
+let v_Show_uBase_dNat_dNat
 
 == Base_dOrd.ml
 let v_Base_dOrd_dge
@@ -82,6 +98,7 @@ let v_Show_uString
 
 == Base_dString.ml
 let v_Base_dString_d_uisSpace
+let v_Base_dString_dbyteLength
 let v_Base_dString_dcontains
 let v_Base_dString_dendsWith
 let v_Base_dString_djoin

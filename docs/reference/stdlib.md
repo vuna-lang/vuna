@@ -9,18 +9,18 @@
 | 模块 | 内容 |
 | --- | --- |
 | `Base.Pair` / `Base.Bool` / `Base.List` / `Base.Maybe` / `Base.Result` | 核心代数数据类型与常用 helper（append/reverse/map/filter/foldl/foldr/traverse/andThen/step/...） |
-| `Base.String` | split/join/lines/unlines/trim/contains/startsWith/endsWith/repeat/substring |
+| `Base.String` | split/join/lines/unlines/trim/contains/startsWith/endsWith/repeat/substring；`byteLength : String -> Nat` |
 | `Base.Sort` | 稳定归并排序 `mergeSort` / `sortBy` |
 | `Base.Map` | 关联表实现的抽象 Map（empty/insert/lookup/remove/keys/values/size/...）；小表用 |
 | `Base.HashMap` | `String` 键、值泛型的持久哈希映射（1024 桶；empty/insert/insertAll/lookup/member/fromList/toList/size/ofNames、公开 `hashStr`）；大表、构造后频繁查找 |
 | `Base.HashSet` | `String` 集合（内部 `HashMap Bool`；empty/insert/member/fromList/toList/size） |
 | `Base.IntMap` | `Int` 键、值泛型的持久哈希映射（同 1024 桶结构；整数键免字符串编码） |
-| `Base.Array` | 不可变数组（内建类型构造子 `Array`；`fromList` / `toList` / `length` / `get` / `set` / `make`，`set` 返回新数组） |
+| `Base.Array` | 不可变数组（内建类型构造子 `Array`；`fromList` / `toList` / `length` / `get` / `set` / `make`，长度与下标是 `Nat`；`set` 返回新数组） |
 | `Base.IORef` | IO 内的可变引用（`newRef` / `readRef` / `writeRef` / `modifyRef`，全部 `IO`） |
 | `Base.MArray` | IO 内的可变数组（`new` / `read` / `write` / `length`，全部 `IO`） |
 | `Base.Buffer` | 可变字符串缓冲（`new` / `add` / `contents` / `length`，全部 `IO`） |
 | `Base.State` / `Base.Reader` / `Base.Error` | 库级效应（M33 W6）：纯函数表示，手写 `bind` / `map` / `pure` 组合子；`State` 是 `s -> Pair a s`、`Reader` 是 `e -> a`、`Error` 是泛型 `Ok`/`Err` 和；暂不声明 trait 实例（等 F4 的 trait 能力） |
-| `Base.Nat` | `Nat(..)`（`Zero` / `Succ`）；DT 夹具与错误码表使用 |
+| `Base.Nat` | 非负整数（`Zero` / `Succ`）；运行时是 OCaml `int`。`plus` / `minus` / `mult` / `div` / `toInt` / `fromInt` / `fromIntMaybe` / `pred` / `isZero` + `Eq` / `Ord` / `Show` 实例 |
 | `Base.Vec` | `Vec(..)` 与 `substTemplate` / `vhead` / `vlen` / `vtail` |
 | `Base.Monad` | `Functor` / `Monad` trait |
 | `Base.Show` | `Show` trait（`show : a -> String`）+ `Int` / `String` / `Bool` 实例 |
@@ -28,7 +28,7 @@
 | `Base.Ord` | `Ord` trait（`lt` / `le` / `gt` / `ge : a -> a -> Bool`）+ `Bool` 实例 |
 | `Base.Int` | `Int` 的 `Eq` / `Ord` 实例宿主（`Int` 是 primitive 类型；实例跟类型模块走） |
 | `Base.IO` | 抽象 `IO a` 与 IO 组合子（实例 + print/readFile/writeFile/getArgs/exit，直接别名到 IO 化的 `prim_*` 动作）+ 特权执行入口 `runIO : IO a -> a`（要求 `unsafe` 能力） |
-| `Base` | 包门面：整模块重导出核心模块（不含 `Nat` / `Vec`；`import Base` 即可用） |
+| `Base` | 包门面：整模块重导出核心模块（含 `Base.Nat`，不含 `Vec`；`import Base` 即可用） |
 | `Prelude` | 顶层模块（`base/lib/Prelude.vuna`）：重导出 `Base.Pair` / `Bool` / `Eq` / `Ord` / `Show` / `List` / `Maybe` / `Result` / `String` / `Monad`，**包上下文内所有源文件（含无 manifest 的 ad-hoc 单文件）自动导入**；显式 `import` 时不再重复注入；刻意不含 `Base.IO`（效果 API 需显式 import，效果面不进入自动注入） |
 
 跨包使用时只可见 `base/vuna.toml` `[export]` 列出的模块；抽象类型（`Map`、`HashMap`、
@@ -44,7 +44,7 @@
 module Base (module Base.Pair, module Base.Bool, module Base.List, module Base.Maybe,
              module Base.Result, module Base.String, module Base.Sort, module Base.Map,
              module Base.Monad, module Base.IO, module Base.Show, module Base.Eq,
-             module Base.Ord) where
+             module Base.Ord, module Base.Nat) where
 module Base.Bool (Bool(..), not, and, or, xor, bool) where
 module Base.Show (Show(..)) where
 module Base.Eq (Eq(..)) where
@@ -56,14 +56,15 @@ module Base.Maybe (Maybe(..), fromMaybe, isJust, isNothing, maybe, mapJust) wher
 module Base.Pair (Pair(..), firstOf, secondOf) where
 module Base.Result (Result(..), traverse, andThen, step, mapResult, mapError, withDefault) where
 module Base.String (split, join, lines, unlines, trim, trimLeft, trimRight, contains,
-                    startsWith, endsWith, repeat, substring) where
+                    startsWith, endsWith, repeat, substring, byteLength) where
 module Base.Sort (mergeSort, sortBy) where
 module Base.Map (Map, empty, insert, lookup, remove, keys, values, size, fromList, toList) where
 module Base.HashMap (HashMap, empty, fromList, hashStr, insert, insertAll, lookup, member,
                      ofNames, size, toList) where
 module Base.HashSet (HashSet, empty, fromList, insert, member, size, toList) where
 module Base.IntMap (IntMap, empty, fromList, insert, insertAll, lookup, member, size, toList) where
-module Base.Nat (Nat(..)) where
+module Base.Nat (Nat(..), plus, minus, mult, div, toInt, fromInt, fromIntMaybe,
+                 pred, isZero) where
 module Base.Vec (Vec(..), substTemplate, vhead, vlen, vtail) where
 module Base.Monad (Functor(..), Monad(..)) where
 module Base.IO (IO, print, println, readFile, writeFile, readLine, readDir, ...) where
@@ -71,6 +72,21 @@ module Base.IO (IO, print, println, readFile, writeFile, readLine, readDir, ...)
 
 `Base.IO` 完整导出见 `base/lib/Base/IO.vuna` 的模块头；`Prelude` 的导出列表见
 `base/lib/Prelude.vuna`。
+
+## 度量与 Nat（M34.7）
+
+- **公开度量用 Nat**：`List.length`、`Array.length/get/set/make`、`MArray.new/read/write/length`、
+  `Buffer.add/length`、`String.byteLength/substring/repeat`、`IO.fileSize/readBytes`、
+  `Map.size`、`HashMap.size`、`IntMap.size`、`Vec.vlen`。
+- **低层原语仍是 Int**：`strLength` / `arrayLength` / `prim_*Length` 等保持 Int 签名；
+  Base 在边界用 `natFromInt` / `natToInt`（运行时恒等或单分支）转换。这样避免了
+  seed 阶段改 intrinsic 签名的自举死锁。
+- **有符号 / 算法内部量保留 Int**：源码位置/span、行/列、fuel/终止性度量、de Bruijn
+  level、meta id、哈希、退出码/状态、时间、`-1` 哨兵、`List.take/drop/range` 的计数参数。
+- `String.byteLength` 而非 `String.length`：`Base` / `Prelude` 同时重导出 `Base.List`，
+  同名 `length` 会触发 `duplicate export` 硬错误。
+- `Nat` 可隐式提升为 `Int`（`natToInt`）；反向必须显式 `fromInt`/`fromIntMaybe`。
+  算术与模式匹配规则见 [primitives.md](primitives.md) / [operators.md](operators.md)。
 
 ## 标准库与自举的关系
 
@@ -145,7 +161,7 @@ module Base.IO (IO, print, println, readFile, writeFile, readLine, readDir, ...)
   可变句柄只经 `IO` 动作使用（`runIO` 逃逸需要 `unsafe`）；没有线性 / 唯一性类型与 ST；
 - **库级效应（M33 W6）**：`State` / `Reader` / `Error` 是纯函数库，**不进入 `Prelude` /
   `Base` 门面**（显式 import）；没有 trait 实例（trait 单参数 / 类型级部分应用限制），
-  `bind` / `map` / `pure` 组合子手写；没有语言级效应系统 / 并发（M35）；
+  `bind` / `map` / `pure` 组合子手写；没有语言级效应系统 / 并发（M34.7）；
 - `Result` 暂无 `Functor` / `Monad` 实例；
 - 抽象类型（`Map`、`IO`）跨包不可构造、不可模式匹配，只能经 API 使用。
 

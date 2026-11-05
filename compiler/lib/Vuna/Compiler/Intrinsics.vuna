@@ -29,6 +29,9 @@ module Vuna.Compiler.Intrinsics
   , listConsCtor
   , listFamilyName
   , listNilCtor
+  , natSuccCtor
+  , natTypeName
+  , natZeroCtor
   , needsListBridge
   , parseCapability
   , preludeTypeNames
@@ -106,6 +109,8 @@ data IType : Type where
   IInt : IType
   IStr : IType
   IBool : IType
+  -- `Base.Nat.Nat`：canonical 归纳族，运行时表示是 OCaml `int`（见 Codegen）。
+  INat : IType
   -- `Base.List.List <arg>`：族身份固定为 base 的普通 data 声明
   IList : IType -> IType
   -- `Base.IO.IO <arg>`：效果原语返回的 IO 动作（M31 起效果原语类型化）
@@ -199,6 +204,13 @@ data IntrinsicOp : Type where
   OpStrAt : IntrinsicOp
   OpStrSubstring : IntrinsicOp
   OpStrShow : IntrinsicOp
+  -- Nat 的纯原语：饱和/截断语义与生成 runtime 的 bi_nat* 一致。
+  OpNatAdd : IntrinsicOp
+  OpNatSub : IntrinsicOp
+  OpNatMul : IntrinsicOp
+  OpNatDiv : IntrinsicOp
+  OpNatToInt : IntrinsicOp
+  OpNatFromInt : IntrinsicOp
 
 -- ---------------------------------------------------------------
 -- 内建声明
@@ -248,7 +260,8 @@ canonicalCtorsFor : String -> Maybe (List String)
 canonicalCtorsFor name =
   if name == boolTypeName then Just [boolTrueCtor, boolFalseCtor]
   else if name == listFamilyName then Just [listNilCtor, listConsCtor]
-  else if name == ioFamilyName then Just [ioMkIoCtor] else Nothing
+  else if name == ioFamilyName then Just [ioMkIoCtor]
+  else if name == natTypeName then Just [natZeroCtor, natSuccCtor] else Nothing
 
 intrinsicArity : Intrinsic -> Int
 intrinsicArity i = arityOfType (intrinsicSignature i)
@@ -289,6 +302,17 @@ boolTrueCtor = "Base.Bool.True"
 boolFalseCtor : String
 boolFalseCtor = "Base.Bool.False"
 
+-- Nat 是 base 里的普通 data 声明（`Base.Nat`），身份 = 完整符号；运行时表示固定为
+-- OCaml `int`（Zero=0、Succ n=n+1 饱和），所以**不生成**变体类型（见 Codegen.Decl）。
+natTypeName : String
+natTypeName = "Base.Nat.Nat"
+
+natZeroCtor : String
+natZeroCtor = "Base.Nat.Zero"
+
+natSuccCtor : String
+natSuccCtor = "Base.Nat.Succ"
+
 -- 类型位置的放行面：primitive 类型名 + 内建类型构造子（M33 W3）。
 isIntrinsicTypeName : String -> Bool
 isIntrinsicTypeName name = memName name preludeTypeNames
@@ -319,6 +343,8 @@ allIntrinsics : List Intrinsic
 -- M33 W4：字节切片（clamp 语义与 Base.String.substring 一致），避免 List 桥接。
 -- M34.5：编译器内部缓存原语（Marshal 纯数据；含闭包会在运行期失败）。
 -- M34.4：异步子进程（workspace 并行 check）。spawn 返回 pid，wait 返回退出码。
+-- Nat 度量/算术：运行时表示是 OCaml int（Zero=0、Succ 饱和 +1）。
+-- 语义：add/mul 饱和到 max_int，sub 截断到 0，div 除零与 Int 同文案失败。
 allIntrinsics =
   [ MkIntrinsic "+" (IFun IInt (IFun IInt IInt)) OpAdd Nothing "bi_add" True,
     MkIntrinsic "-" (IFun IInt (IFun IInt IInt)) OpSub Nothing "bi_sub" True,
@@ -340,6 +366,12 @@ allIntrinsics =
     MkIntrinsic "prim_marshal" (IPi "a" (IFun (IVar "a") IStr)) OpNone Nothing "dtp_marshal" True,
     MkIntrinsic "prim_unmarshal" (IPi "a" (IFun IStr (IVar "a"))) OpNone Nothing "dtp_unmarshal" True,
     MkIntrinsic "strShow" (IFun IStr IStr) OpStrShow Nothing "dt_show_string" True,
+    MkIntrinsic "natAdd" (IFun INat (IFun INat INat)) OpNatAdd Nothing "bi_natAdd" True,
+    MkIntrinsic "natSub" (IFun INat (IFun INat INat)) OpNatSub Nothing "bi_natSub" True,
+    MkIntrinsic "natMul" (IFun INat (IFun INat INat)) OpNatMul Nothing "bi_natMul" True,
+    MkIntrinsic "natDiv" (IFun INat (IFun INat INat)) OpNatDiv Nothing "bi_natDiv" True,
+    MkIntrinsic "natToInt" (IFun INat IInt) OpNatToInt Nothing "bi_natToInt" True,
+    MkIntrinsic "natFromInt" (IFun IInt INat) OpNatFromInt Nothing "bi_natFromInt" True,
     MkIntrinsic "arrayLength" (IPi "a" (IFun (IArray (IVar "a")) IInt)) OpNone Nothing "Array.length" True,
     MkIntrinsic "arrayEmpty" (IPi "a" (IArray (IVar "a"))) OpNone Nothing "[||]" True,
     MkIntrinsic "arrayGet" (IPi "a" (IFun (IArray (IVar "a")) (IFun IInt (IVar "a")))) OpNone Nothing "Array.get" True,

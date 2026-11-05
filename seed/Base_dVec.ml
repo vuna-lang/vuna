@@ -6,10 +6,11 @@ open Base_dMaybe
 open Base_dEq
 open Base_dOrd
 open Base_dInt
+open Base_dShow
+open Base_dNat
 open Base_dList
 open Base_dResult
 open Base_dString
-open Base_dShow
 open Prelude
 open Vuna_dCompiler_dCommon
 open Vuna_dCompiler_dFrontend_dToml
@@ -19,7 +20,6 @@ open Vuna_dCompiler_dPackages_dPkg
 open Base_dArray
 open Base_dHashMap
 open Vuna_dCompiler_dDebug
-open Base_dNat
 type 'a0 t_Base_dVec_dVec = C_Base_dVec_dVec_Base_dVec_dVNil | C_Base_dVec_dVec_Base_dVec_dVCons of ('a0) * ('a0 t_Base_dVec_dVec)
 
 let v_Base_dVec_dvhead = (fun xs -> (match xs with
@@ -34,7 +34,7 @@ let v_Base_dVec_dvtail = (fun xs -> (match xs with
 
 let rec v_Base_dVec_dvlen = (fun xs -> (match xs with
   | C_Base_dVec_dVec_Base_dVec_dVNil -> 0
-  | C_Base_dVec_dVec_Base_dVec_dVCons (dtb__4, dtb__5) -> (1 + (v_Base_dVec_dvlen dtb__5))
+  | C_Base_dVec_dVec_Base_dVec_dVCons (dtb__4, dtb__5) -> (bi_natAdd 1 (v_Base_dVec_dvlen dtb__5))
   | _ -> failwith "DT: impossible branch"
 ))
 

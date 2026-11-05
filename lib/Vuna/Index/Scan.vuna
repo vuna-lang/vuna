@@ -70,7 +70,8 @@ parseIntGo (c :: rest) acc =
 
 dropPrefix : String -> String -> String
 dropPrefix prefix s =
-  if startsWith prefix s then substring (strLength prefix) (strLength s - strLength prefix) s else s
+  if startsWith prefix s then substring (byteLength prefix) (byteLength s - byteLength prefix) s
+  else s
 
 takeLast : Int -> List a -> List a
 takeLast n xs =
@@ -286,7 +287,7 @@ segmentModule dir path =
   let
     rel = dropPrefix (dir ++ "/lib/") path
     rel2 = if rel == path then dropPrefix (dir ++ "/") path else rel
-    stripped = if endsWith ".vuna" rel2 then substring 0 (strLength rel2 - 5) rel2 else rel2
+    stripped = if endsWith ".vuna" rel2 then substring 0 (byteLength rel2 - 5) rel2 else rel2
   in joinDots (splitChars 47 (strUnpack stripped) [] [])
 
 -- ---------------------------------------------------------------

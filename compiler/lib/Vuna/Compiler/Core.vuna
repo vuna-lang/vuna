@@ -66,6 +66,7 @@ module Vuna.Compiler.Core
   , levelZero
   , metaLookup
   , metaLookupList
+  , natValueToInt
   , normalize
   , quote
   , rigIsErased

@@ -9,7 +9,7 @@ Core 表示与合一实现见 [core.md](core.md)，当前边界清单见 [limits
 ## 宇宙与 kind
 
 - **严格分层、非累积**：`Type i : Type (i+1)`；Pi formation 取 `max(i, j)`；
-  `Type i` 与 `Type j`（`i ≠ j`）**不相等**；没有 subtyping / cumulativity，
+  `Type i` 与 `Type j`（`i ≠ j`）**不相等**；没有一般 subtyping / cumulativity（唯一的隐式提升是 M34.7 的 Nat → Int，见下），
   `Type : Type` 被拒绝。唯一的层级流动是显式写更小的宇宙：`Type 0` 可以赋给
   `Type 1` 的签名（因为 `Type 0` 的类型就是 `Type 1`），反过来不行。
 - **data kind**：`data F : <kind>` 的 kind 必须是「Pi 链 → `Type l`」，`l ≥ 0`；
@@ -24,6 +24,14 @@ Core 表示与合一实现见 [core.md](core.md)，当前边界清单见 [limits
   `expected Type, got Type`——拒绝正确，显示待补（见 [limits.md](limits.md)）。
 - 实现：`Elab/Meta.kindWellFormed`（kind 形状 / 层级）、`Elab/Data.elabCtor` +
   `checkCtorFieldSorts`（字段层级）。
+
+## Nat → Int 隐式提升（M34.7）
+
+- `Nat` 是 `Int` 的数值子集；精化器只在**检查点**（函数实参、返回、构造子字段、`if`
+  分支汇合、`==`/比较、算术特化）把 `Nat` 项包装成 `natToInt` 当 `Int` 用。运行时
+  `natToInt` 恒等，类型规则仍是定义性相等（`Nat` 与 `Int` 不相等，包装后的项才是 `Int`）。
+- 反向没有隐式：`Int → Nat` 必须显式 `Base.Nat.fromInt`（负数 clamp 0）或 `fromIntMaybe`。
+- 这与宇宙/一般子类型无关：`Vec Nat` 与 `Vec Int` 仍不相等。
 
 ## data 与索引归纳族
 

@@ -6,10 +6,11 @@ open Base_dMaybe
 open Base_dEq
 open Base_dOrd
 open Base_dInt
+open Base_dShow
+open Base_dNat
 open Base_dList
 open Base_dResult
 open Base_dString
-open Base_dShow
 open Prelude
 open Vuna_dCompiler_dCommon
 open Vuna_dCompiler_dFrontend_dToml
@@ -55,9 +56,9 @@ let v_Vuna_dCompiler_dFrontend_dManifest_datLine = (fun path line msg -> (if (pa
 
 let v_Vuna_dCompiler_dFrontend_dManifest_dmanifestErr = (fun path msg -> (if (path = "") then msg else (String.concat "" [path; ": "; msg])))
 
-let rec v_Vuna_dCompiler_dFrontend_dManifest_dsameSection = (fun d316 mc0 mc1 -> (match mc0 with
+let rec v_Vuna_dCompiler_dFrontend_dManifest_dsameSection = (fun d319 mc0 mc1 -> (match mc0 with
   | C_Base_dList_dList_Base_dList_dCons (dtb__36, dtb__37) -> (match mc1 with
-  | C_Base_dList_dList_Base_dList_dCons (dtb__38, dtb__39) -> (if (((v_Base_dEq_deq d316) dtb__36) dtb__38) then (((v_Vuna_dCompiler_dFrontend_dManifest_dsameSection d316) dtb__37) dtb__39) else false)
+  | C_Base_dList_dList_Base_dList_dCons (dtb__38, dtb__39) -> (if (((v_Base_dEq_deq d319) dtb__36) dtb__38) then (((v_Vuna_dCompiler_dFrontend_dManifest_dsameSection d319) dtb__37) dtb__39) else false)
   | _ -> false
 )
   | C_Base_dList_dList_Base_dList_dNil -> (match mc1 with

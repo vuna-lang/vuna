@@ -42,7 +42,7 @@ readme_lines 164
 #   - M24.5：dt-parity.md §6 重写（实测能力表 + 边界）到 203 行；Elab 新增 scrutinee 反射、
 #     不可达分支、inlineSolvedMetas（3348 → 3513）。按实测重标定 max_ref 208 / max_module 3530；
 #     入口文档（coldstart/agents/arch/readme）不变。
-max_ref_lines 295
+max_ref_lines 310
 max_module_lines 1195
 #   - M27：新增 `primitives.md` 与内建/原语/能力文档、`Vuna.Compiler.Intrinsics` 模块；
 #     按 `sh nix/context-budget.sh .` 实测收紧：coldstart 29055 / agents 104 / arch 156 /
@@ -86,3 +86,7 @@ max_module_lines 1195
 #     细节落在 records-traits.md 的新小节），按 `sh nix/context-budget.sh .` 实测
 #     max_ref_lines 289 → 295；其余指标不变（max_module_lines 保持 1195：Elab/Trait 的
 #     新增实现已就地压到 1195，没有放宽模块行数预算）。
+#   - M34.7（Nat 零开销表示与度量迁移）：primitives.md 增加 Nat 身份/运行时表示/字面量/
+#     intrinsic/提升（+16 行），type-system/operators/stdlib/limits 同步；按
+#     `sh nix/context-budget.sh .` 实测 max_ref_lines 295 → 306，预算按特性增长标定到 310。
+#     入口文档（coldstart/agents/arch/readme）与 max_module_lines 均不变。

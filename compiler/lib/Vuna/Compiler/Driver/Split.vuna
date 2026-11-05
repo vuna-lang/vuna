@@ -58,7 +58,7 @@ splitCompileOrder (name :: rest) =
   if endsWith ".ml" name then stripMl name :: splitCompileOrder rest else splitCompileOrder rest
 
 stripMl : String -> String
-stripMl name = substring 0 (strLength name - 3) name
+stripMl name = substring 0 (byteLength name - 3) name
 
 -- 构建脚本；names 是编译单元（无扩展名）顺序，最后 Link 到 "$OUT"。
 -- M33 W5：cFiles 是包根 `ffi/*.c` 复制到 OUTDIR 后的相对路径（如 `ffi/add.c`），

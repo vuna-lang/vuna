@@ -6,10 +6,11 @@ open Base_dMaybe
 open Base_dEq
 open Base_dOrd
 open Base_dInt
+open Base_dShow
+open Base_dNat
 open Base_dList
 open Base_dResult
 open Base_dString
-open Base_dShow
 open Prelude
 open Vuna_dCompiler_dCommon
 open Vuna_dCompiler_dFrontend_dToml
@@ -19,7 +20,6 @@ open Vuna_dCompiler_dPackages_dPkg
 open Base_dArray
 open Base_dHashMap
 open Vuna_dCompiler_dDebug
-open Base_dNat
 open Base_dVec
 open Vuna_dCompiler_dDiagnostics_dCommon
 open Vuna_dCompiler_dDiagnostics_dCg
@@ -96,7 +96,7 @@ let rec v_Vuna_dCompiler_dDriver_dSplit_dwriteSplitFilesIfChanged = (fun mc0 mc1
   | _ -> failwith "DT: impossible branch"
 ))
 
-let v_Vuna_dCompiler_dDriver_dSplit_dstripMl = (fun name -> (((v_Base_dString_dsubstring 0) ((bi_strLength name) - 3)) name))
+let v_Vuna_dCompiler_dDriver_dSplit_dstripMl = (fun name -> (((v_Base_dString_dsubstring 0) (bi_natSub (v_Base_dString_dbyteLength name) 3)) name))
 
 let rec v_Vuna_dCompiler_dDriver_dSplit_dsplitCompileOrder = (fun mc0 -> (match mc0 with
   | C_Base_dList_dList_Base_dList_dCons (dtb__10, dtb__11) -> (if ((v_Base_dString_dendsWith ".ml") dtb__10) then (C_Base_dList_dList_Base_dList_dCons ((v_Vuna_dCompiler_dDriver_dSplit_dstripMl dtb__10), (v_Vuna_dCompiler_dDriver_dSplit_dsplitCompileOrder dtb__11))) else (v_Vuna_dCompiler_dDriver_dSplit_dsplitCompileOrder dtb__11))

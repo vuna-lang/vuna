@@ -781,6 +781,21 @@ for file in corpus/dt/*.vuna; do
   fi
 done
 
+# M34.7：Nat 零开销表示断言——产物里不得出现 Nat 变体类型/构造子，算术走 bi_nat*。
+nat_repr_dir="$tmp/nat-repr"
+rm -rf "$nat_repr_dir"
+if nat_repr_out=$("$VUNA" compile corpus/dt/73_nat_repr.vuna "$nat_repr_dir" 2>&1); then
+  ok
+  if grep -qE 't_Base_dNat_dNat|C_Base_dNat_dNat' "$nat_repr_dir"/*.ml 2>/dev/null; then
+    bad "nat runtime representation" "no Nat variant type/constructor" "$(grep -hE 't_Base_dNat_dNat|C_Base_dNat_dNat' "$nat_repr_dir"/*.ml | head -2)"
+  else
+    ok
+  fi
+  if grep -q 'bi_natAdd' "$nat_repr_dir/Main.ml"; then ok; else bad "nat runtime representation" "bi_natAdd in Main.ml" "missing"; fi
+else
+  bad "nat runtime representation compile" "exit 0" "$nat_repr_out"
+fi
+
 # DT 错误：check 与 compile 都失败、含片段、不写输出目录
 for file in corpus/dt_err/*.vuna; do
   fragment=$(cat "${file%.vuna}.err")

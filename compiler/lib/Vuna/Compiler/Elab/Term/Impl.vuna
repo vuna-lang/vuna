@@ -318,7 +318,9 @@ else case expr of
     Pair cTerm ec1 => andThen (inferEFuel (fuel - 1) globals ctx ec1 t) (\pt => case pt of
       Pair tTerm (Pair tTy ec2) => andThen (inferEFuel (fuel - 1) globals ctx ec2 e) (\pe => case pe of
         Pair eTerm (Pair eTy ec3) =>
-          andThen (convEc ec3 (ctxDepth ctx) tTy eTy)
+          if isIntTy ec3 tTy && isNatTy ec3 eTy then Ok (Pair (TIf cTerm tTerm (natToIntTerm eTerm)) (Pair tTy ec3))
+          else if isNatTy ec3 tTy && isIntTy ec3 eTy then Ok (Pair (TIf cTerm (natToIntTerm tTerm) eTerm) (Pair intTyValue ec3))
+          else andThen (convEc ec3 (ctxDepth ctx) tTy eTy)
             (\ec4 => Ok (Pair (TIf cTerm tTerm eTerm) (Pair tTy ec4)))
       )
     )
@@ -516,6 +518,114 @@ else case args of
         Err e => constrainDictDomGoKFuel (fuel - 1) globals ec1 ctx argTy argKind rest sp
       else constrainDictDomGoKFuel (fuel - 1) globals ec1 ctx argTy argKind rest sp
 
+-- ---------------------------------------------------------------
+-- Nat 字面量 / 算术特化 / Nat→Int 隐式提升
+-- ---------------------------------------------------------------
+-- Nat 的类型层表示仍是 Zero/Succ 链；字面量在**期望类型为 canonical Nat**时展开成链，
+-- codegen 再把链折回 OCaml int。`natToInt` 提升是精化期唯一允许的隐式方向。
+natLitTermGo : Int -> Term -> Term
+natLitTermGo n acc = if n <= 0 then acc else natLitTermGo (n - 1) (TCon natSuccCtor [Pair acc Rig1])
+
+natLitTerm : Int -> Term
+natLitTerm n = natLitTermGo n (TCon natZeroCtor [])
+
+natLitResult : Span -> Int -> Result Term
+natLitResult sp n = if n < 0 then tcErr0 sp NatLiteralOutOfRange else Ok (natLitTerm n)
+
+natToIntTerm : Term -> Term
+natToIntTerm t = TApp (TGlobal "natToInt") t Rig1
+
+intTyValue : Value
+intTyValue = VNeutral (NGlobal intTypeName [])
+
+natTyValue : Value
+natTyValue = VNeutral (NGlobal natTypeName [])
+
+isIntTy : Ec -> Value -> Bool
+isIntTy ec v = case forceVal ec v of
+  VNeutral (NGlobal g []) => g == intTypeName
+  _ => False
+
+isNatTy : Ec -> Value -> Bool
+isNatTy ec v = case forceVal ec v of
+  VNeutral (NGlobal g []) => g == natTypeName
+  _ => False
+
+-- 只在「期望 Int、实际 Nat」时插入 natToInt；反向没有隐式提升。
+coerceTerm : Ec -> Value -> Value -> Term -> Maybe Term
+coerceTerm ec expected actual term =
+  if isIntTy ec expected && isNatTy ec actual then Just (natToIntTerm term) else Nothing
+
+-- 比较运算符：Nat 值直接按 Int 比较（运行时就是 int），混合时把 Nat 一侧提升。
+coerceNatOperands : Ec -> Value -> Value -> Term -> Term -> Maybe (Pair (Pair Value Value) (Pair Term Term))
+coerceNatOperands ec aTy bTy aTerm bTerm =
+  if isNatTy ec aTy && isNatTy ec bTy then Just (Pair (Pair intTyValue intTyValue) (Pair (natToIntTerm aTerm) (natToIntTerm bTerm)))
+  else if isNatTy ec aTy && isIntTy ec bTy then Just (Pair (Pair intTyValue bTy) (Pair (natToIntTerm aTerm) bTerm))
+  else if isIntTy ec aTy && isNatTy ec bTy then Just (Pair (Pair aTy intTyValue) (Pair aTerm (natToIntTerm bTerm)))
+  else Nothing
+
+isArithOpName : String -> Bool
+isArithOpName name = name == "+" || name == "-" || name == "*" || name == "/"
+
+arithNatName : String -> String
+arithNatName "+" = "natAdd"
+arithNatName "-" = "natSub"
+arithNatName "*" = "natMul"
+arithNatName _ = "natDiv"
+
+intApp2 : String -> Term -> Term -> Term
+intApp2 name a b = TApp (TApp (TGlobal name) a Rig1) b Rig1
+
+natApp2 : String -> Term -> Term -> Term
+natApp2 name a b = TApp (TApp (TGlobal (arithNatName name)) a Rig1) b Rig1
+
+isEIntExpr : Expr -> Maybe Int
+isEIntExpr (EInt n sp) = Just n
+isEIntExpr _ = Nothing
+
+-- check 模式的算术：期望类型直接决定结果域；期望 Nat 时实参也按 Nat 检查（字面量因此
+-- 能写字面量），期望 Int 时 Nat 实参经隐式提升。
+specializeArithCheckFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> String -> List Expr -> Value -> Span -> Result (Maybe (Pair Term Ec))
+specializeArithCheckFuel fuel globals ctx ec name args expected sp = if fuel <= 0 then Err "DT: internal: inference fuel exhausted"
+else if isArithOpName name then case args of
+  [a, b] => if isNatTy ec expected then andThen (checkEFuel (fuel - 1) globals ctx ec a natTyValue) (\pa => case pa of
+    Pair aTerm ec1 => andThen (checkEFuel (fuel - 1) globals ctx ec1 b natTyValue) (\pb => case pb of
+      Pair bTerm ec2 => Ok (Just (Pair (natApp2 name aTerm bTerm) ec2))
+    )
+  )
+  else if isIntTy ec expected then andThen (checkEFuel (fuel - 1) globals ctx ec a intTyValue) (\pa => case pa of
+    Pair aTerm ec1 => andThen (checkEFuel (fuel - 1) globals ctx ec1 b intTyValue) (\pb => case pb of
+      Pair bTerm ec2 => Ok (Just (Pair (intApp2 name aTerm bTerm) ec2))
+    )
+  )
+  else Ok Nothing
+  _ => Ok Nothing
+else Ok Nothing
+
+-- infer 模式的算术：两侧都 Nat（或 Nat + 整数字面量）→ Nat；任一真正 Int → Int（Nat 提升）。
+specializeArithAppFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> String -> List Expr -> Span -> Result (Maybe (Pair Term (Pair Value Ec)))
+specializeArithAppFuel fuel globals ctx ec name args sp = if fuel <= 0 then Err "DT: internal: inference fuel exhausted"
+else if isArithOpName name then case args of
+  [a, b] => andThen (inferEFuel (fuel - 1) globals ctx ec a) (\pa => case pa of
+    Pair aTerm (Pair aTy ec1) => andThen (inferEFuel (fuel - 1) globals ctx ec1 b) (\pb => case pb of
+      Pair bTerm (Pair bTy ec2) => if isNatTy ec2 aTy && isNatTy ec2 bTy then Ok (Just (Pair (natApp2 name aTerm bTerm) (Pair natTyValue ec2)))
+      else if isIntTy ec2 aTy && isIntTy ec2 bTy then Ok (Just (Pair (intApp2 name aTerm bTerm) (Pair intTyValue ec2)))
+      else if isNatTy ec2 aTy && isIntTy ec2 bTy then case isEIntExpr b of
+        Just n =>
+          andThen (natLitResult (exprSpan b) n)
+            (\bNat => Ok (Just (Pair (natApp2 name aTerm bNat) (Pair natTyValue ec2))))
+        Nothing => Ok (Just (Pair (intApp2 name (natToIntTerm aTerm) bTerm) (Pair intTyValue ec2)))
+      else if isIntTy ec2 aTy && isNatTy ec2 bTy then case isEIntExpr a of
+        Just n =>
+          andThen (natLitResult (exprSpan a) n)
+            (\aNat => Ok (Just (Pair (natApp2 name aNat bTerm) (Pair natTyValue ec2))))
+        Nothing => Ok (Just (Pair (intApp2 name aTerm (natToIntTerm bTerm)) (Pair intTyValue ec2)))
+      else Ok Nothing
+    )
+  )
+  _ => Ok Nothing
+else Ok Nothing
+
 checkEFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Expr -> Value -> Result (Pair Term Ec)
 checkEFuel fuel globals ctx ec expr expected = if fuel <= 0 then Err "DT: internal: inference fuel exhausted"
 else case expr of
@@ -525,7 +635,11 @@ else case expr of
     in case pmeta of
       Pair metaTerm ec1 => Ok (Pair metaTerm ec1)
   else checkAppFuel (fuel - 1) globals ctx ec (EVar name sp) [] expected sp
-  EInt n sp => checkByInferFuel (fuel - 1) globals ctx ec expr expected
+  EInt n sp => case forceVal ec expected of
+    VNeutral (NGlobal g []) =>
+      if g == natTypeName then andThen (natLitResult sp n) (\t => Ok (Pair t ec))
+      else checkByInferFuel (fuel - 1) globals ctx ec expr expected
+    _ => checkByInferFuel (fuel - 1) globals ctx ec expr expected
   EStr s sp => checkByInferFuel (fuel - 1) globals ctx ec expr expected
   ELam names body sp => checkLamFuel (fuel - 1) globals ctx ec names body expected sp
   EApp (EVar "->" _) args sp => checkByInferFuel (fuel - 1) globals ctx ec expr expected
@@ -705,9 +819,11 @@ checkByInferFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Expr -> Value 
 checkByInferFuel fuel globals ctx ec expr expected = if fuel <= 0 then Err "DT: internal: inference fuel exhausted"
 else case inferEFuel (fuel - 1) globals ctx ec expr of
   Err e => Err e
-  Ok (Pair term (Pair actual ec1)) => case convEc ec1 (ctxDepth ctx) expected actual of
-    Err e => Err (showSpanLoc (exprSpan expr) ++ ": " ++ e)
-    Ok ec2 => Ok (Pair term (resolveDictGoals globals ec2))
+  Ok (Pair term (Pair actual ec1)) => case coerceTerm ec1 expected actual term of
+    Just coerced => Ok (Pair coerced (resolveDictGoals globals ec1))
+    Nothing => case convEc ec1 (ctxDepth ctx) expected actual of
+      Err e => Err (showSpanLoc (exprSpan expr) ++ ": " ++ e)
+      Ok ec2 => Ok (Pair term (resolveDictGoals globals ec2))
 
 checkLamFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> List String -> Expr -> Value -> Span -> Result (Pair Term Ec)
 checkLamFuel fuel globals ctx ec [] body expected sp =
@@ -820,9 +936,13 @@ specializeEqAppFuel fuel globals ctx ec name args sp = if fuel <= 0 then Err "DT
 else if isEqMethod ec name then case args of
   [a, b] => andThen (inferEFuel (fuel - 1) globals ctx ec a) (\pa => case pa of
     Pair aTerm (Pair aTy ec1) => andThen (inferEFuel (fuel - 1) globals ctx ec1 b) (\pb => case pb of
-      Pair bTerm (Pair bTy ec2) =>
-        andThen (convEc ec2 (ctxDepth ctx) aTy bTy)
-          (\ec3 => specializeEqTy globals ctx name aTerm bTerm sp aTy ec3)
+      Pair bTerm (Pair bTy ec2) => case coerceNatOperands ec2 aTy bTy aTerm bTerm of
+        Just p =>
+          specializeEqTy globals ctx name (firstOf (secondOf p)) (secondOf (secondOf p)) sp
+            (firstOf (firstOf p)) ec2
+        Nothing =>
+          andThen (convEc ec2 (ctxDepth ctx) aTy bTy)
+            (\ec3 => specializeEqTy globals ctx name aTerm bTerm sp aTy ec3)
     )
   )
   _ => Ok Nothing
@@ -833,9 +953,13 @@ specializeCmpAppFuel fuel globals ctx ec name args sp = if fuel <= 0 then Err "D
 else if isCmpMethod ec name then case args of
   [a, b] => andThen (inferEFuel (fuel - 1) globals ctx ec a) (\pa => case pa of
     Pair aTerm (Pair aTy ec1) => andThen (inferEFuel (fuel - 1) globals ctx ec1 b) (\pb => case pb of
-      Pair bTerm (Pair bTy ec2) =>
-        andThen (convEc ec2 (ctxDepth ctx) aTy bTy)
-          (\ec3 => specializeCmpTy globals ctx name aTerm bTerm sp aTy ec3)
+      Pair bTerm (Pair bTy ec2) => case coerceNatOperands ec2 aTy bTy aTerm bTerm of
+        Just p =>
+          specializeCmpTy globals ctx name (firstOf (secondOf p)) (secondOf (secondOf p)) sp
+            (firstOf (firstOf p)) ec2
+        Nothing =>
+          andThen (convEc ec2 (ctxDepth ctx) aTy bTy)
+            (\ec3 => specializeCmpTy globals ctx name aTerm bTerm sp aTy ec3)
     )
   )
   _ => Ok Nothing
@@ -848,7 +972,10 @@ else andThen (specializeEqAppFuel (fuel - 1) globals ctx ec name args sp) (\r =>
   Just pair => Ok (Just pair)
   Nothing => andThen (specializeCmpAppFuel (fuel - 1) globals ctx ec name args sp) (\r2 => case r2 of
     Just pair => Ok (Just pair)
-    Nothing => specializeBoolAppFuel (fuel - 1) globals ctx ec name args sp
+    Nothing => andThen (specializeBoolAppFuel (fuel - 1) globals ctx ec name args sp) (\r3 => case r3 of
+      Just pair => Ok (Just pair)
+      Nothing => specializeArithAppFuel (fuel - 1) globals ctx ec name args sp
+    )
   )
 )
 
@@ -876,10 +1003,14 @@ else Ok Nothing
 checkAppGeneralFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Expr -> List Expr -> Value -> Span -> Result (Pair Term Ec)
 checkAppGeneralFuel fuel globals ctx ec fn args expected sp = if fuel <= 0 then Err "DT: internal: inference fuel exhausted"
 else case fn of
-  EVar name vsp => andThen (specializeOpAppFuel (fuel - 1) globals ctx ec name args sp) (\mspec => case mspec of
-    Just (Pair term (Pair termTy ec1)) =>
-      andThen (convEc ec1 (ctxDepth ctx) expected termTy) (\ec2 => Ok (Pair term ec2))
-    Nothing => checkByInferFuel (fuel - 1) globals ctx ec (EApp fn args sp) expected
+  EVar name vsp => andThen (specializeArithCheckFuel (fuel - 1) globals ctx ec name args expected sp) (\arith => case arith of
+    Just (Pair term ec2) => Ok (Pair term ec2)
+    Nothing => andThen (specializeOpAppFuel (fuel - 1) globals ctx ec name args sp) (\mspec => case mspec of
+      Just (Pair term (Pair termTy ec1)) => case coerceTerm ec1 expected termTy term of
+        Just coerced => Ok (Pair coerced ec1)
+        Nothing => andThen (convEc ec1 (ctxDepth ctx) expected termTy) (\ec2 => Ok (Pair term ec2))
+      Nothing => checkByInferFuel (fuel - 1) globals ctx ec (EApp fn args sp) expected
+    )
   )
   _ => checkByInferFuel (fuel - 1) globals ctx ec (EApp fn args sp) expected
 
@@ -892,7 +1023,12 @@ checkAppCtorFuel fuel globals ctx ec name args expected sp = if fuel <= 0 then E
 else case dtCtorLookupEc ec name of
   Nothing => tcErr1 sp (UnknownName name) name
   Just ctor => andThen (inferArgsFuel (fuel - 1) globals ctx ec (eval [] (dtCtorType ctor)) args sp) (\pa => case pa of
-    Pair argTerms (Pair resTy ec1) => case convEc ec1 (ctxDepth ctx) expected resTy of
-      Ok ec2 => Ok (Pair (ctorAppTerm (ecDatas ec2) (TGlobal name) argTerms) ec2)
-      Err e => tcErr2 sp (CtorError name e) name e
+    Pair argTerms (Pair resTy ec1) =>
+      let
+        ctorTerm = ctorAppTerm (ecDatas ec1) (TGlobal name) argTerms
+      in case coerceTerm ec1 expected resTy ctorTerm of
+        Just coerced => Ok (Pair coerced ec1)
+        Nothing => case convEc ec1 (ctxDepth ctx) expected resTy of
+          Ok ec2 => Ok (Pair (ctorAppTerm (ecDatas ec2) (TGlobal name) argTerms) ec2)
+          Err e => tcErr2 sp (CtorError name e) name e
   )

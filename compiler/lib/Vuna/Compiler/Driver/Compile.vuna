@@ -192,7 +192,8 @@ else case name of
 
 dropPrefixMeta : String -> String -> String
 dropPrefixMeta prefix s =
-  if startsWith prefix s then substring (strLength prefix) (strLength s - strLength prefix) s else s
+  if startsWith prefix s then substring (byteLength prefix) (byteLength s - byteLength prefix) s
+  else s
 
 slashesToDots : String -> String
 slashesToDots s = strPack (map slashToDot (strUnpack s))
@@ -204,7 +205,7 @@ moduleNameOfPath : String -> String -> String
 moduleNameOfPath rootPath path =
   let
     rel0 = dropPrefixMeta (rootPath ++ "/") path
-    rel = if endsWith ".vuna" rel0 then substring 0 (strLength rel0 - 5) rel0 else rel0
+    rel = if endsWith ".vuna" rel0 then substring 0 (byteLength rel0 - 5) rel0 else rel0
   in slashesToDots rel
 
 rootSources : Root -> List (Pair String Int)

@@ -11,6 +11,7 @@ module Base.IO
   , makeDir
   , print
   , println
+  , readBytes
   , readDir
   , readFile
   , readLine
@@ -38,6 +39,7 @@ import Base.Bool
 import Base.Monad
 -- `++` 的 fixity 声明在 Base.String；base 模块不自动注入 Prelude，println 需要它。
 import Base.String
+import Base.Nat
 
 data IO a : Type where
   MkIO : (Int -> a) -> IO a
@@ -74,6 +76,10 @@ writeFile = prim_writeFile
 readLine : IO String
 readLine = prim_readLine
 
+-- 字节级读取（LSP 帧）：最多读 n 字节；n 是度量 → Nat。
+readBytes : Nat -> IO String
+readBytes n = prim_readBytes (natToInt n)
+
 readDir : String -> IO (List String)
 readDir = prim_readDir
 
@@ -94,8 +100,8 @@ fileExists = prim_fileExists
 fileMtime : String -> IO Int
 fileMtime = prim_fileMtime
 
-fileSize : String -> IO Int
-fileSize = prim_fileSize
+fileSize : String -> IO Nat
+fileSize path = fmap natFromInt (prim_fileSize path)
 
 getArgs : IO (List String)
 getArgs = prim_getArgs

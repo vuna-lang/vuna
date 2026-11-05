@@ -305,7 +305,7 @@ clausesFor decls name = collectClauses decls name
 funArity : String -> List Decl -> Maybe Int
 funArity name decls = case clausesFor decls name of
   [] => Nothing
-  (Pair pats body) :: _ => Just (length pats)
+  (Pair pats body) :: _ => Just (natToInt (length pats))
 
 ctorName : Ctor -> String
 ctorName (Ctor name ty arity _) = name
@@ -332,7 +332,7 @@ ctorArity name (d :: rest) = case d of
     Just arity => Just arity
     Nothing => ctorArity name rest
   DRecord dname params fields derivings sp =>
-    if name == dname then Just (length fields) else ctorArity name rest
+    if name == dname then Just (natToInt (length fields)) else ctorArity name rest
   _ => ctorArity name rest
 
 declNames : Decl -> List String

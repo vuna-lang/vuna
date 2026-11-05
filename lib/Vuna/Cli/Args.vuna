@@ -117,8 +117,8 @@ isFlagLike arg = startsWith "-" arg && arg /= "-"
 
 flagNameOf : String -> String
 flagNameOf arg =
-  if startsWith "--" arg then substring 2 (strLength arg - 2) arg
-  else substring 1 (strLength arg - 1) arg
+  if startsWith "--" arg then substring 2 (byteLength arg - 2) arg
+  else substring 1 (byteLength arg - 1) arg
 
 parseFlag : List ArgSpec -> String -> List String -> List String -> List (Pair String String) -> List String -> ParseOut
 parseFlag specs raw rest flags values items =

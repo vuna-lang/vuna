@@ -172,6 +172,7 @@ dtMainKind ctx entry = andThen (dtLoad ctx entry) (\decls => andThen (elabProgra
 mainKindForName : String -> Result String
 mainKindForName g =
   if g == intTypeName then Ok "Int"
+  else if g == natTypeName then Ok "Nat"
   else if g == strTypeName then Ok "String" else if g == boolTypeName then Ok "Bool" else Ok "Other"
 
 -- 合成定义的唯一名字：只在 `dtEvalExpr` 内部出现，摘除时按名字识别。
@@ -207,6 +208,9 @@ evalDtMain program = case findMainDef (dtProgDefs program) of
       VInt n => Ok (strFromInt n)
       VStr s => Ok (showValue mainVal)
       VBool b => Ok (showValue mainVal)
+      VCon c args => case natValueToInt mainVal of
+        Just n => Ok (strFromInt n)
+        Nothing => cgErr0 MainNotValue
       _ => cgErr0 MainNotValue
 
 -- main 的类型是不是 base 的 canonical `IO a`（完整符号 `Base.IO.IO`，M27）。

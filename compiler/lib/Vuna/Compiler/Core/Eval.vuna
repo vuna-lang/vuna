@@ -8,6 +8,7 @@ module Vuna.Compiler.Core.Eval
   , argValsAt
   , asBool
   , asInt
+  , asNat
   , asStr
   , boolPrim2
   , catchAllEnv
@@ -26,6 +27,8 @@ module Vuna.Compiler.Core.Eval
   , intPrim2
   , intPrim2Div
   , lookupEnv
+  , natValue
+  , natValueToInt
   , normalize
   , normalizeCase
   , normalizeIf
@@ -223,6 +226,48 @@ asInt : Value -> Maybe Int
 asInt (VInt n) = Just n
 asInt _ = Nothing
 
+-- Nat 在核心里的表示仍是归纳构造子链（类型层要能归纳/合一）；只有 codegen 把它降成
+-- OCaml int。interp 的 Nat 原语把链折成 Int 计算、再重建链，因此与产物语义一致。
+natMax : Int
+natMax = 4611686018427387903
+
+natClamp : Int -> Int
+natClamp n = if n <= 0 then 0 else if n >= natMax then natMax else n
+
+natSatAdd : Int -> Int -> Int
+natSatAdd a b = if a > natMax - b then natMax else a + b
+
+natSatMul : Int -> Int -> Int
+natSatMul a b = if a <= 0 || b <= 0 then 0 else if a > natMax / b then natMax else a * b
+
+natTruncSub : Int -> Int -> Int
+natTruncSub a b = if a <= b then 0 else a - b
+
+natValueGo : Int -> Value -> Value
+natValueGo n acc = if n <= 0 then acc else natValueGo (n - 1) (VCon natSuccCtor [acc])
+
+natValue : Int -> Value
+natValue n = natValueGo (natClamp n) (VCon natZeroCtor [])
+
+natValueToInt : Value -> Maybe Int
+natValueToInt (VInt n) = Just n
+natValueToInt (VCon c args) = natCtorInt c args
+natValueToInt _ = Nothing
+
+natCtorInt : String -> List Value -> Maybe Int
+natCtorInt c args = if c == natZeroCtor then case args of
+  [] => Just 0
+  _ => Nothing
+else if c == natSuccCtor then case args of
+  [arg] => case natValueToInt arg of
+    Just n => Just (natSatAdd n 1)
+    Nothing => Nothing
+  _ => Nothing
+else Nothing
+
+asNat : Value -> Maybe Int
+asNat v = natValueToInt v
+
 asStr : Value -> Maybe String
 asStr (VStr s) = Just s
 asStr _ = Nothing
@@ -276,6 +321,28 @@ intPrim1 ([a]) f = case asInt a of
   Just x => Just (f x)
   Nothing => Nothing
 intPrim1 sp f = Nothing
+
+natPrim1 : List Value -> (Int -> Value) -> Maybe Value
+natPrim1 ([a]) f = case asNat a of
+  Just x => Just (f x)
+  Nothing => Nothing
+natPrim1 sp f = Nothing
+
+natPrim2 : List Value -> (Int -> Int -> Value) -> Maybe Value
+natPrim2 ([a, b]) f = case asNat a of
+  Just x => case asNat b of
+    Just y => Just (f x y)
+    Nothing => Nothing
+  Nothing => Nothing
+natPrim2 sp f = Nothing
+
+natPrim2Div : List Value -> Maybe Value
+natPrim2Div ([a, b]) = case asNat a of
+  Just x => case asNat b of
+    Just y => if y <= 0 then Nothing else Just (natValue (x / y))
+    Nothing => Nothing
+  Nothing => Nothing
+natPrim2Div sp = Nothing
 
 strPrim1 : List Value -> (String -> Value) -> Maybe Value
 strPrim1 ([a]) f = case asStr a of
@@ -349,6 +416,13 @@ else case findIntrinsic g of
     OpStrAt => atPrim sp
     OpStrSubstring => substringPrim sp
     OpStrShow => strPrim1 sp (\s => VStr (showCoreString s))
+    -- Nat 原语：与 runtime bi_nat* 同一套饱和/截断/除零语义。
+    OpNatAdd => natPrim2 sp (\a, b => natValue (natSatAdd a b))
+    OpNatSub => natPrim2 sp (\a, b => natValue (natTruncSub a b))
+    OpNatMul => natPrim2 sp (\a, b => natValue (natSatMul a b))
+    OpNatDiv => natPrim2Div sp
+    OpNatToInt => natPrim1 sp (\n => VInt n)
+    OpNatFromInt => intPrim1 sp (\n => natValue (natClamp n))
     -- interp 边界（显式分类，见 docs/reference/primitives.md）：List 桥接依赖 base 的
     -- `Base.List.List` 构造子表示，核心求值器无法安全构造；除零/运行期失败同理。
     OpStrUnpack => Nothing
@@ -621,6 +695,10 @@ showValueAt depth v = case v of
     NGlobal g sp => if isNilList sp then g else showTerm (quote depth v)
     NVar name lvl sp => if isNilList sp then name else showTerm (quote depth v)
   VMeta m sp => if isNilList sp then "?" ++ strFromInt m else showTerm (quote depth v)
+  -- canonical Nat 链显示成十进制（诊断/REPL 与产物 `main : Nat` 一致）。
+  VCon c args => case natCtorInt c args of
+    Just n => strFromInt n
+    Nothing => showTerm (quote depth v)
   _ => showTerm (quote depth v)
 
 showValue : Value -> String

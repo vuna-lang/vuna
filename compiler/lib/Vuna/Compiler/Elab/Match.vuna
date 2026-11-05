@@ -46,7 +46,7 @@ multiToCaseExpr table clauses name = buildColumnExpr table clauses [name] 200
 
 arityOf : List (Pair (List Pat) Expr) -> Maybe Int
 arityOf [] = Nothing
-arityOf ((Pair pats body) :: rest) = Just (length pats)
+arityOf ((Pair pats body) :: rest) = Just (natToInt (length pats))
 
 paramNames : Int -> List String
 paramNames n = paramNamesGo (n - 0) n []

@@ -6,10 +6,11 @@ open Base_dMaybe
 open Base_dEq
 open Base_dOrd
 open Base_dInt
+open Base_dShow
+open Base_dNat
 open Base_dList
 open Base_dResult
 open Base_dString
-open Base_dShow
 open Prelude
 open Vuna_dCompiler_dCommon
 open Vuna_dCompiler_dFrontend_dToml
@@ -20,7 +21,7 @@ let v_Base_dArray_dfromList = (fun xs -> ((fun xs -> Array.of_list (dtp_ocamlOf 
 
 let v_Base_dArray_dtoList = (fun a -> ((fun a -> dtp_listOf (Array.to_list a)) a))
 
-let v_Base_dArray_dlength = (fun a -> (Array.length a))
+let v_Base_dArray_dlength = (fun a -> (bi_natFromInt (Array.length a)))
 
 let v_Base_dArray_dget = (fun a i -> ((Array.get a) i))
 

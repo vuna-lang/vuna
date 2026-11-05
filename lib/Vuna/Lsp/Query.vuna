@@ -88,7 +88,7 @@ else case remaining of
   ln :: rest =>
     let
       from0 = clampInt 0 (if isFirst then firstCol - 1 else 0) (strLength ln)
-      tailPart = substring from0 (strLength ln - from0) ln
+      tailPart = substring (natFromInt from0) (natFromInt (strLength ln - from0)) ln
     in case findSubstring name tailPart of
       hit =>
         if hit >= 0 then Just (Pair lineNo (hit + from0 + 1))
@@ -535,7 +535,7 @@ qualifiedCompletions ln chars prefixStart prefix (Just idx) =
     beforeDotChars = take (prefixStart - 1) chars
     modLen = qualPrefixLen (reverse beforeDotChars)
     modStart = length beforeDotChars - modLen
-    modPrefix = substring modStart modLen ln
+    modPrefix = substring (natFromInt modStart) (natFromInt modLen) ln
     fullPrefix = modPrefix ++ "."
     hits =
       filter (\s => startsWith fullPrefix (symFullName s) && startsWith prefix (symName s))
@@ -552,7 +552,7 @@ completionItems text line0 col0 midx =
     prefixLen = wordPrefixLen left
     prefixStart = p0 - prefixLen
     afterDot = prefixStart > 0 && nthCode chars (prefixStart - 1) == 46
-    prefix = substring prefixStart prefixLen ln
+    prefix = substring (natFromInt prefixStart) (natFromInt prefixLen) ln
   in if afterDot then qualifiedCompletions ln chars prefixStart prefix midx
   else finishCompls
     (append (hasPrefix prefix keywordCompls) (append (hasPrefix prefix (bufferCompls text)) (hasPrefix prefix (indexCompls midx))))

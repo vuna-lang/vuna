@@ -106,7 +106,8 @@ moduleHeaderLine path (Just (ModDecl name hasList items sp)) = "## " ++ name
 moduleHeaderLine path Nothing = "## " ++ stripVunaSuffix (baseName path)
 
 stripVunaSuffix : String -> String
-stripVunaSuffix name = if endsWith ".vuna" name then substring 0 (strLength name - 5) name else name
+stripVunaSuffix name =
+  if endsWith ".vuna" name then substring 0 (byteLength name - 5) name else name
 
 -- [export].modules 过滤：按 manifest 顺序输出；缺失模块是配置错误（exit 2）。
 selectSections : Maybe (List String) -> List (Pair String String) -> Result (List String)

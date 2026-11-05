@@ -1,0 +1,11 @@
+-- 只有 Nat→Int 隐式提升；Int→Nat 必须显式 fromInt，不得隐式通过。
+import Base.Nat
+
+natId : Nat -> Nat
+natId n = n
+
+bad : Int -> Nat
+bad i = natId i
+
+main : Int
+main = 0

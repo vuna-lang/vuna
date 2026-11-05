@@ -41,7 +41,7 @@ maxIntList (x :: rest) = if x >= maxIntList rest then x else maxIntList rest
 
 exprMaxAppArity : String -> Expr -> Int
 exprMaxAppArity pname (EApp (EVar f fsp) args sp) =
-  if f == pname then maxIntList (length args :: map (exprMaxAppArity pname) args)
+  if f == pname then maxIntList (natToInt (length args) :: map (exprMaxAppArity pname) args)
   else maxIntList (map (exprMaxAppArity pname) args)
 exprMaxAppArity pname (EApp fn args sp) =
   maxIntList (exprMaxAppArity pname fn :: map (exprMaxAppArity pname) args)
