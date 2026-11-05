@@ -302,11 +302,11 @@ and v_Vuna_dCompiler_dCore_dConv_dconvNeutralFuel = (fun fuel defs sols depth n1
 and v_Vuna_dCompiler_dCore_dConv_dconvSpinesFuel = (fun mc0 mc1 mc2 mc3 mc4 mc5 mc6 mc7 -> (match mc4 with
   | C_Base_dList_dList_Base_dList_dCons (dtb__170, dtb__171) -> (match mc5 with
   | C_Base_dList_dList_Base_dList_dCons (dtb__172, dtb__173) -> (if (mc0 <= 0) then (C_Base_dResult_dResult_Base_dResult_dErr ("DT: internal: conv fuel exhausted")) else ((v_Base_dResult_dandThen ((((((v_Vuna_dCompiler_dCore_dConv_dconvFuel (mc0 - 1)) mc1) mc2) mc3) dtb__170) dtb__172)) (fun sols2 -> ((((((((v_Vuna_dCompiler_dCore_dConv_dconvSpinesFuel (mc0 - 1)) mc1) sols2) mc3) dtb__171) dtb__173) mc6) mc7))))
-  | _ -> (if (mc0 <= 0) then (C_Base_dResult_dResult_Base_dResult_dErr ("DT: internal: conv fuel exhausted")) else ((((v_Vuna_dCompiler_dCore_dConv_dmismatchAt mc3) mc1) mc6) mc7))
+  | _ -> (if (mc0 <= 0) then (C_Base_dResult_dResult_Base_dResult_dErr ("DT: internal: conv fuel exhausted")) else ((fun _u -> ((((v_Vuna_dCompiler_dCore_dConv_dmismatchAt mc3) mc1) mc6) mc7)) (v_Vuna_dCompiler_dDebug_dnote (String.concat "" ["spines: "; (v_Vuna_dCompiler_dCore_dEval_dshowValue mc6); " <> "; (v_Vuna_dCompiler_dCore_dEval_dshowValue mc7)]))))
 )
   | C_Base_dList_dList_Base_dList_dNil -> (match mc5 with
   | C_Base_dList_dList_Base_dList_dNil -> (if (mc0 <= 0) then (C_Base_dResult_dResult_Base_dResult_dErr ("DT: internal: conv fuel exhausted")) else (C_Base_dResult_dResult_Base_dResult_dOk (mc2)))
-  | _ -> (if (mc0 <= 0) then (C_Base_dResult_dResult_Base_dResult_dErr ("DT: internal: conv fuel exhausted")) else ((((v_Vuna_dCompiler_dCore_dConv_dmismatchAt mc3) mc1) mc6) mc7))
+  | _ -> (if (mc0 <= 0) then (C_Base_dResult_dResult_Base_dResult_dErr ("DT: internal: conv fuel exhausted")) else ((fun _u -> ((((v_Vuna_dCompiler_dCore_dConv_dmismatchAt mc3) mc1) mc6) mc7)) (v_Vuna_dCompiler_dDebug_dnote (String.concat "" ["spines: "; (v_Vuna_dCompiler_dCore_dEval_dshowValue mc6); " <> "; (v_Vuna_dCompiler_dCore_dEval_dshowValue mc7)]))))
 )
   | _ -> failwith "DT: impossible branch"
 ))

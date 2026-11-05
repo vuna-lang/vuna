@@ -176,8 +176,11 @@ convSpinesFuel fuel defs sols depth (a :: xs) (b :: ys) v1 v2 =
   if fuel <= 0 then Err "DT: internal: conv fuel exhausted"
   else andThen (convFuel (fuel - 1) defs sols depth a b)
     (\sols2 => convSpinesFuel (fuel - 1) defs sols2 depth xs ys v1 v2)
-convSpinesFuel fuel defs sols depth _ _ v1 v2 =
-  if fuel <= 0 then Err "DT: internal: conv fuel exhausted" else mismatchAt depth defs v1 v2
+convSpinesFuel fuel defs sols depth _ _ v1 v2 = if fuel <= 0 then Err "DT: internal: conv fuel exhausted"
+else
+  let
+    _ = note ("spines: " ++ showValue v1 ++ " <> " ++ showValue v2)
+  in mismatchAt depth defs v1 v2
 
 convValueListsFuel : Int -> HashMap Term -> Sols -> Int -> List Value -> List Value -> Result Sols
 convValueListsFuel fuel defs sols depth [] [] =
