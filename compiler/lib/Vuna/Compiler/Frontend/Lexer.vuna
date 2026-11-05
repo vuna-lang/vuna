@@ -207,9 +207,8 @@ decodeEscape 36 = Just 36
 decodeEscape other = Nothing
 
 dropOpeningNewline : Chars -> Chars
-dropOpeningNewline cs = case cs of
-  Chars (c :: rest) p => if c == 10 then Chars rest (advanceChar c p) else cs
-  Chars [] p => cs
+dropOpeningNewline (cs@(Chars (c :: rest) p)) = if c == 10 then Chars rest (advanceChar c p) else cs
+dropOpeningNewline (cs@(Chars [] p)) = cs
 
 flushText : List Int -> List TmplPart -> List TmplPart
 flushText [] parts = parts
@@ -274,10 +273,9 @@ else case skipTrivia (fuel - 1) cs of
 
 -- 洞的深度更新：`{` 加深、`}` 变浅；其它 token 不变。
 depthAfter : Int -> Tok -> Int
-depthAfter depth t = case t of
-  TSym "{" => depth + 1
-  TSym "}" => if depth > 0 then depth - 1 else 0
-  _ => depth
+depthAfter depth (TSym "{") = depth + 1
+depthAfter depth (TSym "}") = if depth > 0 then depth - 1 else 0
+depthAfter depth _ = depth
 
 -- 消费一个 token（调用方保证已 skipTrivia 且输入非空）。
 lexOneToken : Int -> Chars -> Result (Pair PTok Chars)
@@ -398,17 +396,16 @@ commentSpanOf startP endP = Span "" (posLine startP) (posCol startP) (posLine en
 
 -- 跳过整段字符串字面量（开引号在 `c`/`p`，`rest` 为其后）。
 skipStringLiteral : Int -> Int -> List Int -> Pos -> Result Chars
-skipStringLiteral fuel c rest p = case rest of
-  c2 :: rest3 => case rest3 of
-    c3 :: rest4 => if c2 == 34 && c3 == 34 then
-      let
-        bodyStart = advanceChar c3 (advanceChar c2 (advanceChar c p))
-      in case scanTemplateText (fuel - 1) True (dropOpeningNewline (Chars rest4 bodyStart)) [] [] of
-        Err e => Err e
-        Ok (Pair parts (Pair cs2 endP)) => Ok cs2
-    else skipSingleStringLiteral fuel (Chars rest (advanceChar c p))
-    [] => skipSingleStringLiteral fuel (Chars rest (advanceChar c p))
+skipStringLiteral fuel c (rest@(c2 :: rest3)) p = case rest3 of
+  c3 :: rest4 => if c2 == 34 && c3 == 34 then
+    let
+      bodyStart = advanceChar c3 (advanceChar c2 (advanceChar c p))
+    in case scanTemplateText (fuel - 1) True (dropOpeningNewline (Chars rest4 bodyStart)) [] [] of
+      Err e => Err e
+      Ok (Pair parts (Pair cs2 endP)) => Ok cs2
+  else skipSingleStringLiteral fuel (Chars rest (advanceChar c p))
   [] => skipSingleStringLiteral fuel (Chars rest (advanceChar c p))
+skipStringLiteral fuel c (rest@[]) p = skipSingleStringLiteral fuel (Chars rest (advanceChar c p))
 
 skipSingleStringLiteral : Int -> Chars -> Result Chars
 skipSingleStringLiteral fuel body = case scanTemplateText (fuel - 1) False body [] [] of

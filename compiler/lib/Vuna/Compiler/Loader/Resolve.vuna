@@ -343,12 +343,11 @@ lowerTemplate sp parts = case templateChunks sp parts of
   first :: rest => concatLeft sp first rest
 
 templateChunks : Span -> List InterpPart -> List Expr
-templateChunks sp parts = case parts of
-  [] => []
-  (IPText s) :: rest =>
-    if s == "" then templateChunks sp rest else EStr s sp :: templateChunks sp rest
-  (IPHole e) :: rest =>
-    EApp (EVar interpMethodName (exprSpan e)) [e] (exprSpan e) :: templateChunks sp rest
+templateChunks sp [] = []
+templateChunks sp ((IPText s) :: rest) =
+  if s == "" then templateChunks sp rest else EStr s sp :: templateChunks sp rest
+templateChunks sp ((IPHole e) :: rest) =
+  EApp (EVar interpMethodName (exprSpan e)) [e] (exprSpan e) :: templateChunks sp rest
 
 concatLeft : Span -> Expr -> List Expr -> Expr
 concatLeft sp acc [] = acc

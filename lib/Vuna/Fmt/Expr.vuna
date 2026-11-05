@@ -84,9 +84,9 @@ interpClose multi = if multi then "\"\"\"" else "\""
 
 -- 块布局洞的续行缩进（`lineInd + 2`）；不递归调用格式化器，SCT 组之外。
 joinHoleLines : Int -> List String -> String
-joinHoleLines lineInd lines = case lines of
-  [] => ""
-  first :: rest => first ++ concatStrings (map (\l => "\n" ++ spaces (lineInd + 2) ++ l) rest)
+joinHoleLines lineInd [] = ""
+joinHoleLines lineInd (first :: rest) =
+  first ++ concatStrings (map (\l => "\n" ++ spaces (lineInd + 2) ++ l) rest)
 
 -- 单个模板片段的字符串（M36）：文本块转义；洞单行可渲则 `${...}`，否则：
 --   * 单行渲染用哨兵 `interpBlockMarker` 表示「这个字面量必须走块布局」；

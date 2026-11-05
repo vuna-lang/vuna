@@ -363,10 +363,10 @@ refsInExprGo sMod e acc = case e of
 
 -- M36：模板片段里的引用（洞内表达式递归；文本块无引用）。
 refsInInterpParts : String -> List InterpPart -> List Ref -> List Ref
-refsInInterpParts sMod parts acc = case parts of
-  [] => acc
-  (IPText s) :: rest => refsInInterpParts sMod rest acc
-  (IPHole e) :: rest => refsInInterpParts sMod rest (refsInExprGo sMod e acc)
+refsInInterpParts sMod [] acc = acc
+refsInInterpParts sMod ((IPText s) :: rest) acc = refsInInterpParts sMod rest acc
+refsInInterpParts sMod ((IPHole e) :: rest) acc =
+  refsInInterpParts sMod rest (refsInExprGo sMod e acc)
 
 -- ---------------------------------------------------------------
 -- 全量构建
