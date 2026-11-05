@@ -1,0 +1,4 @@
+-- M37 / C1：IO 是内建效应类型，verbatim 代数原语可直接用，**不需要 import Base.IO**。
+-- `prim_bindIO` 把两个 IO 动作串起来；`prim_exit 0` 让 golden 只含业务输出。
+main : IO Int
+main = prim_bindIO (prim_print "hi\n") (\_ => prim_exit 0)

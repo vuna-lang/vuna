@@ -484,11 +484,15 @@ startsUpperName name = case strUnpack name of
 --      最后才是本模块的值定义（大写类型层 def，少见）。
 resolveTypeName : List Module -> String -> String -> Namespaces -> List Import -> String -> Result String
 resolveTypeName modules label prefix ns imports name = if Base.HashMap.member name ns.nsTypeSet then Ok (mangle prefix name)
+else if name == ioTypeName then Ok ioFamilyName
 else if isIntrinsicTypeName name then Ok name
 else if name == "Type" || name == "->" then Ok name
 else if isLowerTypeName name then if Base.HashMap.member name ns.nsValueSet then Ok (mangle prefix name)
 else if Base.HashMap.member name ns.nsCtorSet then Ok (mangle prefix name) else Ok name
 else if containsDot name then case splitLastDot (splitOnDot name) of
+  -- C1 过渡：`IO` 是内建效应类型名，canonical 身份仍是 base 的 `Base.IO.IO`
+  -- （本地 `data IO` 仍按上面的 nsTypeSet 优先 mangle）。C2 起 ioFamilyName = "IO"，
+  -- 这一分支删除。
   Pair revPrefix base =>
     let
       typePrefix = joinDots revPrefix

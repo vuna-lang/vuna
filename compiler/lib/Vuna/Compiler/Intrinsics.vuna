@@ -23,7 +23,9 @@ module Vuna.Compiler.Intrinsics
   , intrinsicSignature
   , intrinsicVisible
   , ioFamilyName
+  , ioTypeName
   , isEffectfulIntrinsic
+  , isIOAlgebraName
   , isIntrinsicName
   , isIntrinsicTypeName
   , listConsCtor
@@ -36,6 +38,9 @@ module Vuna.Compiler.Intrinsics
   , parseCapability
   , preludeTypeNames
   , preludeValueNames
+  , primBindIOName
+  , primPureIOName
+  , primRunIOName
   , strTypeName
   , typeIntrinsicArities
   , typeIntrinsicArityOf
@@ -167,9 +172,29 @@ typeIntrinsicArityOfRest name (t :: rest) =
 typeIntrinsicCtorNames : List String
 typeIntrinsicCtorNames = map typeIntrinsicCtorName typeIntrinsicArities
 
--- prelude 类型层名字：primitive 类型 + 内建类型构造子（禁止重定义 + Loader 放行）。
+-- IO 的**源级名字**：`IO` 是编译器内建效应类型（不是 base 的 data），恒可见。
+-- C1 过渡期 canonical 身份仍是 `Base.IO.IO`（base 仍声明 data IO）；C2 起
+-- `ioFamilyName = ioTypeName`。`ioTypeName` 始终进 prelude 类型名名单（禁止重定义）。
+ioTypeName : String
+ioTypeName = "IO"
+
+-- IO 代数（构造/绑定/执行）的内建名；codegen 需要按名字生成 thunk 组合子。
+primPureIOName : String
+primPureIOName = "prim_pureIO"
+
+primBindIOName : String
+primBindIOName = "prim_bindIO"
+
+primRunIOName : String
+primRunIOName = "prim_runIO"
+
+isIOAlgebraName : String -> Bool
+isIOAlgebraName name = name == primPureIOName || name == primBindIOName || name == primRunIOName
+
+-- prelude 类型层名字：primitive 类型 + 内建类型构造子 + 内建效应类型 IO
+-- （禁止重定义 + Loader 放行）。
 preludeTypeNames : List String
-preludeTypeNames = append typeIntrinsicNames typeIntrinsicCtorNames
+preludeTypeNames = append typeIntrinsicNames (append typeIntrinsicCtorNames [ioTypeName])
 
 -- ---------------------------------------------------------------
 -- interp 归约标签（Core.Eval 按它归约；OpNone = 不在 interp 归约）
@@ -267,7 +292,9 @@ intrinsicArity : Intrinsic -> Int
 intrinsicArity i = arityOfType (intrinsicSignature i)
 
 -- 签名尾部是 `IIO _`：该内建返回 IO 动作，codegen 必须把 runtime 表达式包成
--- `MkIO (fun _ -> …)` 值（M31；零参原语因此成为真正的值而不是每次求值的表达式）。
+-- thunk（C2 内建模式：`fun args -> fun _ -> rt args`；C1 legacy 模式：`MkIO (fun _ -> …)`）。
+-- 零参原语因此是真正的值而不是每次求值的表达式。IO 代数原语（pure/bind）的 runtime
+-- 本身就是动作值，codegen 走 `isIOAlgebraName` 特判，不套通用包装。
 intrinsicReturnsIO : Intrinsic -> Bool
 intrinsicReturnsIO i = typeReturnsIO (intrinsicSignature i)
 
@@ -353,6 +380,9 @@ allIntrinsics : List Intrinsic
 -- M34.4：异步子进程（workspace 并行 check）。spawn 返回 pid，wait 返回退出码。
 -- Nat 度量/算术：运行时表示是 OCaml int（Zero=0、Succ 饱和 +1）。
 -- 语义：add/mul 饱和到 max_int，sub 截断到 0，div 除零与 Int 同文案失败。
+-- IO 代数（M37 / C1 过渡）：`IO` 是编译器内建效应类型，构造/绑定/执行是内建原语。
+-- 这里的 runtime 文本是**内建模式**（IO = 裸 thunk `int -> 'a`）的实现；
+-- C1 的 legacy 模式（base 仍声明 data IO + MkIO）由 Codegen.Term.ioAlgebraText 覆盖。
 allIntrinsics =
   [ Intrinsic "+" (IFun IInt (IFun IInt IInt)) OpAdd Nothing "bi_add" True,
     Intrinsic "-" (IFun IInt (IFun IInt IInt)) OpSub Nothing "bi_sub" True,
@@ -387,6 +417,9 @@ allIntrinsics =
     Intrinsic "arrayMake" (IPi "a" (IFun IInt (IFun (IVar "a") (IArray (IVar "a"))))) OpNone Nothing "Array.make" True,
     Intrinsic "arrayFromList" (IPi "a" (IFun (IList (IVar "a")) (IArray (IVar "a")))) OpNone Nothing "(fun xs -> Array.of_list (dtp_ocamlOf xs))" True,
     Intrinsic "arrayToList" (IPi "a" (IFun (IArray (IVar "a")) (IList (IVar "a")))) OpNone Nothing "(fun a -> dtp_listOf (Array.to_list a))" True,
+    Intrinsic primPureIOName (IPi "a" (IFun (IVar "a") (IIO (IVar "a")))) OpNone Nothing "(fun x -> fun _ -> x)" True,
+    Intrinsic primBindIOName (IPi "a" (IPi "b" (IFun (IIO (IVar "a")) (IFun (IFun (IVar "a") (IIO (IVar "b"))) (IIO (IVar "b")))))) OpNone Nothing "(fun io k -> fun w -> k (io w) w)" True,
+    Intrinsic primRunIOName (IPi "a" (IFun (IIO (IVar "a")) (IVar "a"))) OpNone (Just CapUnsafe) "(fun io -> io 0)" True,
     Intrinsic "prim_newRef" (IPi "a" (IFun (IVar "a") (IIO (IRef (IVar "a"))))) OpNone Nothing "(fun x -> ref x)" True,
     Intrinsic "prim_readRef" (IPi "a" (IFun (IRef (IVar "a")) (IIO (IVar "a")))) OpNone Nothing "(fun r -> !r)" True,
     Intrinsic "prim_writeRef" (IPi "a" (IFun (IRef (IVar "a")) (IFun (IVar "a") (IIO IInt)))) OpNone Nothing "(fun r v -> r := v; 0)" True,

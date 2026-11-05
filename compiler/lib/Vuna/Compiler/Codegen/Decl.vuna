@@ -461,7 +461,12 @@ renderTypeArgGlobal qc fuel levels table datas g sp = case renderTypeIntrinsic g
     Just gd =>
       familyTyText qc g
         (renderFamilyArgsFuel qc (fuel - 1) levels table datas (lookupUsed table g) sp)
-    Nothing => "unit"
+    -- C1 过渡：base 不再声明 data IO 时（C2 起恒如此），IO 是内建效应类型：
+    -- 运行时表示是裸 thunk `int -> 'a`。
+    Nothing => if g == ioFamilyName then case map (\x => renderTypeArgFuel qc (fuel - 1) levels table datas x) sp of
+      [a] => "(int -> " ++ a ++ ")"
+      _ => "unit"
+    else "unit"
 
 -- M33 W3：内建类型构造子的 OCaml 类型渲染。参数文本已由调用方递归渲染。
 -- 名字表与 arity 的唯一真源在 Intrinsics；这里只放「名字 → OCaml 类型模板」。
@@ -511,7 +516,11 @@ renderFieldTy qc levels table datas lvl (VNeutral n) slot = case n of
       Just gd =>
         Pair (familyTyText qc g (renderFamilyArgs qc levels table datas (lookupUsed table g) sp))
           slot
-      Nothing => Pair (typeParamName slot) (slot + 1)
+      -- 内建 IO（无 base data）：裸 thunk 表示，见 renderTypeArgGlobal 的同一规则。
+      Nothing => if g == ioFamilyName then case map (\x => renderTypeArg qc levels table datas x) sp of
+        [a] => Pair ("(int -> " ++ a ++ ")") slot
+        _ => Pair (typeParamName slot) (slot + 1)
+      else Pair (typeParamName slot) (slot + 1)
 renderFieldTy qc levels table datas lvl _ slot = Pair (typeParamName slot) (slot + 1)
 
 -- 构造子字段形状的**唯一真源**（M24.6 第一级）：从 telescope 的 rig 算出 keep flags
