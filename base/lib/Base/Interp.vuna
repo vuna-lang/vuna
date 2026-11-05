@@ -10,8 +10,8 @@ module Base.Interp (Interp(..)) where
 --   * `String` 的**具体实例**覆盖 blanket：插值原样输出（不走 `strShow`，不加引号）；
 --   * 用户可为自己类型写 `instance Interp T` 覆盖 blanket 的展示。
 --
--- 覆盖规则依赖编译器的实例解析：blanket（头实参是裸类参数）是 fallback，
--- 具体实例优先（见 docs/reference/records-traits.md）。具体实例之间仍禁止重叠。
+-- 覆盖规则依赖编译器的实例解析：blanket（头实参是裸类参数）是 fallback，具体实例优先
+-- （见 docs/reference/records-traits.md）。具体实例之间仍禁止重叠。
 --
 -- 刻意**不**提供 `deriving (Interp)`：需要默认展示用 `deriving (Show)`，需要自定义
 -- 就手写 `instance Interp T`。

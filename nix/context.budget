@@ -35,9 +35,9 @@
 #   - 文档按主题重整：删除 history/dt-core/dt-parity/dt.md，新增 core/tooling/records-traits
 #     并把 DT 语义并入 type-system；合并 main 的 LSP/readBytes 文档后按实测复标定：
 #     coldstart 29731 / agents 104 / arch 167 / readme 163 / max_ref 279。
-coldstart_bytes 31325
+coldstart_bytes 31675
 agents_lines 108
-arch_lines 167
+arch_lines 172
 readme_lines 167
 #   - M24.5：dt-parity.md §6 重写（实测能力表 + 边界）到 203 行；Elab 新增 scrutinee 反射、
 #     不可达分支、inlineSolvedMetas（3348 → 3513）。按实测重标定 max_ref 208 / max_module 3530；
@@ -114,4 +114,4 @@ max_module_lines 1208
 #     language/stdlib/primitives/records-traits/limits/architecture 同步接进导航，architecture 的
 #     Loader 段加模板降级一条（arch 167 → 171）。`Elab/Trait.vuna` 的实例相干性检查拆到新模块
 #     `Elab/InstCoherence.vuna`（Trait 1208 → 1155，新增模块小于现有上限），max_module 保持 1208。
-#     属特性文档增长，按 `sh nix/context-budget.sh .` 实测复标定 coldstart / arch 见下。
+#     属特性文档增长，按 `sh nix/context-budget.sh .` 实测复标定 coldstart 31675 / arch 172；其余指标不变。
