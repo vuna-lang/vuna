@@ -495,7 +495,19 @@ etaRight : HashMap Term -> Sols -> Int -> String -> Closure -> Value -> Result S
 etaRight a1 a2 a3 a4 a5 a6 = etaRightFuel 64 a1 a2 a3 a4 a5 a6
 
 solveMeta : HashMap Term -> Sols -> Int -> Int -> List Value -> Value -> Result Sols
-solveMeta a1 a2 a3 a4 a5 a6 = solveMetaFuel 64 a1 a2 a3 a4 a5 a6
+solveMeta a1 a2 a3 a4 a5 a6 =
+  let
+    _ = if a4 == 0 then note ("solve0: " ++ (showTerm (quote a3 a6) ++ (" sp=" ++ (strFromInt (length a5) ++ (" solved=" ++ (case solsLookup a4 a2 of
+      Just t => "yes"
+      Nothing => "no"
+    )
+    )
+    )
+    )
+    )
+    )
+    else 0
+  in solveMetaFuel 64 a1 a2 a3 a4 a5 a6
 
 sigText : Pair String Term -> String
 sigText p = firstOf p ++ ":" ++ showTerm (secondOf p)

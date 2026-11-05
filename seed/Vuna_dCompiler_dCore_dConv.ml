@@ -393,4 +393,8 @@ let v_Vuna_dCompiler_dCore_dConv_detaLeft = (fun a1 a2 a3 a4 a5 a6 -> (((((((v_V
 
 let v_Vuna_dCompiler_dCore_dConv_detaRight = (fun a1 a2 a3 a4 a5 a6 -> (((((((v_Vuna_dCompiler_dCore_dConv_detaRightFuel 64) a1) a2) a3) a4) a5) a6))
 
-let v_Vuna_dCompiler_dCore_dConv_dsolveMeta = (fun a1 a2 a3 a4 a5 a6 -> (((((((v_Vuna_dCompiler_dCore_dConv_dsolveMetaFuel 64) a1) a2) a3) a4) a5) a6))
+let v_Vuna_dCompiler_dCore_dConv_dsolveMeta = (fun a1 a2 a3 a4 a5 a6 -> ((fun _u -> (((((((v_Vuna_dCompiler_dCore_dConv_dsolveMetaFuel 64) a1) a2) a3) a4) a5) a6)) (if (a4 = 0) then (v_Vuna_dCompiler_dDebug_dnote (String.concat "" ["solve0: "; (v_Vuna_dCompiler_dCore_dTerm_dshowTerm ((v_Vuna_dCompiler_dCore_dEval_dquote a3) a6)); " sp="; (bi_strFromInt (v_Base_dList_dlength a5)); " solved="; (match ((v_Vuna_dCompiler_dCore_dTerm_dsolsLookup a4) a2) with
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__200) -> "yes"
+  | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> "no"
+  | _ -> failwith "DT: impossible branch"
+)])) else 0)))
