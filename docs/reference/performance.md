@@ -255,6 +255,10 @@ W3 落地的容器与表示（`Intrinsics` / `Elab.Prelude` / `Codegen.Decl` / `
 `prim_marshal`/`prim_unmarshal`（OCaml Marshal）落盘——过渡实现，规范的自描述序列化格式
 （C32）留后续。
 
+**M34.4 LSP 诊断缓存**：`LspState` 增加进程内诊断帧缓存（key = uri + 文本内容哈希，
+上限 32 条）；同一内容重复 didOpen/didChange 不再重复精化。编辑后文本变化仍是全量精化——
+界面级增量需要接口摘要（C32）。
+
 **M34.4 workspace 并行 check**：`prim_spawn`/`prim_wait`（runtime `Unix.create_process`/
 `waitpid`）；根包在当前进程串行（它本身就是 workspace 根，spawn 会递归展开）、成员包各一个
 `vuna check <dir>` 子进程并行，退出码按失败汇总；子进程继承 stderr ⇒ 多包同时报错时输出

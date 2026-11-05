@@ -15,7 +15,7 @@ module Vuna.Lsp (runLsp, runLspTool) where
 --
 -- 服务器状态：打开的文档表、惰性 Index（一次构建并缓存）、日志缓冲。
 -- 已知边界：
---   - didChange 跑一次完整 DT 精化，大文件逐个按键变更可能较慢（客户端可降级为保存时检查）；
+--   - didChange 跑一次完整 DT 精化（同 uri + 内容重复请求命中进程内诊断帧缓存），大文件逐个按键变更可能较慢（客户端可降级为保存时检查）；
 --   - 编辑**未保存的依赖模块**时，精化仍从磁盘读依赖（LSP 只覆盖当前文档）；
 --   - Index 只反映磁盘内容、不随 didChange 刷新；构建失败则相关方法退化返回空结果；
 --   - 首次索引查找可能触发 `.local/index/` 全量重建（仓库级秒级），期间请求排队；
@@ -83,49 +83,63 @@ docRemove uri (x :: rest) = if docUri x == uri then docRemove uri rest else x ::
 -- ---------------------------------------------------------------
 -- docs：打开的文档（按 uri 去重）；shutdownReq：是否收到 shutdown；
 -- index：惰性构建的索引（Nothing = 尚未成功构建）；indexTried：是否尝试过构建；
--- rootHint：第一个打开的文档 uri（workspace/symbol 没有 textDocument，用它推断工作区根；
--- 多根 workspace 未支持，取首个文档）；logs：待写 stderr 的日志（逆序累积）。
 data LspState : Type where
-  LspState : List Doc -> Bool -> Maybe Index -> Bool -> Maybe String -> List String -> LspState
+  LspState : List Doc -> Bool -> Maybe Index -> Bool -> Maybe String -> List String -> List (Pair Int Json) -> LspState
 
 stateDocs : LspState -> List Doc
-stateDocs (LspState docs shutdownReq index tried rootHint logs) = docs
+stateDocs (LspState docs shutdownReq index tried rootHint logs diagCache) = docs
 
 stateShutdown : LspState -> Bool
-stateShutdown (LspState docs shutdownReq index tried rootHint logs) = shutdownReq
+stateShutdown (LspState docs shutdownReq index tried rootHint logs diagCache) = shutdownReq
 
 stateIndex : LspState -> Maybe Index
-stateIndex (LspState docs shutdownReq index tried rootHint logs) = index
+stateIndex (LspState docs shutdownReq index tried rootHint logs diagCache) = index
 
 stateIndexTried : LspState -> Bool
-stateIndexTried (LspState docs shutdownReq index tried rootHint logs) = tried
+stateIndexTried (LspState docs shutdownReq index tried rootHint logs diagCache) = tried
 
 stateRootHint : LspState -> Maybe String
-stateRootHint (LspState docs shutdownReq index tried rootHint logs) = rootHint
+stateRootHint (LspState docs shutdownReq index tried rootHint logs diagCache) = rootHint
 
 stateLogs : LspState -> List String
-stateLogs (LspState docs shutdownReq index tried rootHint logs) = logs
+stateLogs (LspState docs shutdownReq index tried rootHint logs diagCache) = logs
+
+stateDiagCache : LspState -> List (Pair Int Json)
+stateDiagCache (LspState docs shutdownReq index tried rootHint logs diagCache) = diagCache
 
 setDocs : List Doc -> LspState -> LspState
-setDocs docs (LspState _ s idx tried hint logs) = LspState docs s idx tried hint logs
+setDocs docs (LspState _ s idx tried hint logs dc) = LspState docs s idx tried hint logs dc
 
 setShutdown : Bool -> LspState -> LspState
-setShutdown s (LspState docs _ idx tried hint logs) = LspState docs s idx tried hint logs
+setShutdown s (LspState docs _ idx tried hint logs dc) = LspState docs s idx tried hint logs dc
 
 setIndex : Maybe Index -> LspState -> LspState
-setIndex idx (LspState docs s _ tried hint logs) = LspState docs s idx tried hint logs
+setIndex idx (LspState docs s _ tried hint logs dc) = LspState docs s idx tried hint logs dc
 
 setIndexTried : Bool -> LspState -> LspState
-setIndexTried tried (LspState docs s idx _ hint logs) = LspState docs s idx tried hint logs
+setIndexTried tried (LspState docs s idx _ hint logs dc) = LspState docs s idx tried hint logs dc
 
 setRootHintIfEmpty : String -> LspState -> LspState
-setRootHintIfEmpty hint (LspState docs s idx tried (existing@(Just prev)) logs) =
-  LspState docs s idx tried existing logs
-setRootHintIfEmpty hint (LspState docs s idx tried Nothing logs) =
-  LspState docs s idx tried (Just hint) logs
+setRootHintIfEmpty hint (LspState docs s idx tried (existing@(Just prev)) logs dc) =
+  LspState docs s idx tried existing logs dc
+setRootHintIfEmpty hint (LspState docs s idx tried Nothing logs dc) =
+  LspState docs s idx tried (Just hint) logs dc
+
+setDiagCache : List (Pair Int Json) -> LspState -> LspState
+setDiagCache dc (LspState docs s idx tried hint logs _) = LspState docs s idx tried hint logs dc
+
+-- M34.4：LSP 进程内诊断帧缓存（上限 32 条，前插）。
+pushDiag : Int -> Json -> LspState -> LspState
+pushDiag key frame (LspState docs s idx tried hint logs dc) =
+  LspState docs s idx tried hint logs (truncateCache 32 (Pair key frame :: dc))
+
+truncateCache : Int -> List a -> List a
+truncateCache n [] = []
+truncateCache n (x :: rest) = if n <= 0 then [] else x :: truncateCache (n - 1) rest
 
 logTo : String -> LspState -> LspState
-logTo line (LspState docs s idx tried hint logs) = LspState docs s idx tried hint (line :: logs)
+logTo line (LspState docs s idx tried hint logs dc) =
+  LspState docs s idx tried hint (line :: logs) dc
 
 -- 退出时一次写出（内存累积的日志，见 Protocol.flushLogLines）。
 flushLogs : LspState -> Int
@@ -206,7 +220,8 @@ initializeResult msg =
   responseOk (idOf msg)
     (JObj [Pair "capabilities" serverCapabilities, Pair "serverInfo" (JObj [Pair "name" (JStr lspServerName), Pair "version" (JStr lspServerVersion)])])
 
--- didOpen：登记文档并推诊断。
+-- didOpen：登记文档并推诊断（M34.4：同一 uri + 文本内容的诊断帧进程内缓存，重复请求
+-- 不重复精化）。
 handleDidOpen : Json -> LspState -> Pair Bool (Pair LspState (List Json))
 handleDidOpen msg state =
   let
@@ -215,8 +230,8 @@ handleDidOpen msg state =
     version = versionOfParams params
     text = textOfParams params
     docs = docSet (Doc uri version text) (stateDocs state)
-  in Pair False
-    (Pair (setRootHintIfEmpty uri (setDocs docs state)) [publishDiagnosticsFor uri version text])
+    pair = diagnoseCached uri version text state
+  in Pair False (Pair (setRootHintIfEmpty uri (setDocs docs (firstOf pair))) [secondOf pair])
 
 -- didChange（Full 同步）：覆盖全文并重推诊断。
 handleDidChange : Json -> LspState -> Pair Bool (Pair LspState (List Json))
@@ -232,7 +247,25 @@ handleDidChange msg state =
       Just v => v
     text = changedText params
     docs = docSet (Doc uri version text) (stateDocs state)
-  in Pair False (Pair (setDocs docs state) [publishDiagnosticsFor uri version text])
+    pair = diagnoseCached uri version text state
+  in Pair False (Pair (setDocs docs (firstOf pair)) [secondOf pair])
+
+-- M34.4：诊断帧缓存查询（key = uri + 文本内容哈希；未命中才跑完整精化并写缓存）。
+diagnoseCached : String -> Int -> String -> LspState -> Pair LspState Json
+diagnoseCached uri version text state =
+  let
+    key = strHash uri * 1000003 + strHash text
+  in case lookupDiag key (stateDiagCache state) of
+    Just frame => Pair state frame
+    Nothing =>
+      let
+        frame = publishDiagnosticsFor uri version text
+        state1 = pushDiag key frame state
+      in Pair state1 frame
+
+lookupDiag : Int -> List (Pair Int Json) -> Maybe Json
+lookupDiag key [] = Nothing
+lookupDiag key ((Pair k v) :: rest) = if k == key then Just v else lookupDiag key rest
 
 -- didClose：移除文档并清空诊断。
 handleDidClose : Json -> LspState -> Pair Bool (Pair LspState (List Json))
@@ -445,7 +478,8 @@ lspFuelBound = 1073741824
 -- A05：零参顶层定义在模块初始化时求值，所以「动作」必须函数化。
 -- runLsp 是读 stdin 的 LSP 帧循环：若留成零参值，任何子命令启动都会跑它。
 runLsp : Int -> Int
-runLsp _ = lspLoop lspFuelBound "" (logTo "starting" (LspState [] False Nothing False Nothing []))
+runLsp _ =
+  lspLoop lspFuelBound "" (logTo "starting" (LspState [] False Nothing False Nothing [] []))
 
 -- CLI 入口：与其它工具命令一致，返回退出码（由 Vuna.Cli 插入分发）。
 runLspTool : List String -> Int
