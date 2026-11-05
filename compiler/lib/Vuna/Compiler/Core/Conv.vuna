@@ -467,7 +467,7 @@ conv a1 a2 a3 a4 a5 =
   let
     _ =
       note
-        ("conv-in: " ++ showTerm (quote a3 a4) ++ " <> " ++ showTerm (quote a3 a5) ++ " @" ++ strFromInt a3)
+        ("conv-in: " ++ showTerm (quote a3 a4) ++ " <> " ++ showTerm (quote a3 a5) ++ " |v: " ++ showValueAt a3 a4 ++ " <> " ++ showValueAt a3 a5 ++ " @" ++ strFromInt a3)
   in convFuel 64 a1 a2 a3 a4 a5
 
 convBoth : HashMap Term -> Sols -> Int -> Value -> Value -> Result Sols
