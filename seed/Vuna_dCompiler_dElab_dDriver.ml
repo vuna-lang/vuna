@@ -509,9 +509,9 @@ let v_Vuna_dCompiler_dElab_dDriver_dunsolvedMessage = (fun ec m -> (match ((v_Vu
   | _ -> failwith "DT: impossible branch"
 ))
 
-let v_Vuna_dCompiler_dElab_dDriver_delabProgramGo = (fun decls -> ((v_Base_dResult_dandThen (v_Vuna_dCompiler_dElab_dMeta_dcollectSigs decls)) (fun sigs -> ((fun _u -> ((v_Base_dResult_dandThen (((v_Vuna_dCompiler_dElab_dData_delabDatas ((v_Vuna_dCompiler_dElab_dMeta_dcollectDataDecls decls) C_Base_dList_dList_Base_dList_dNil)) v_Vuna_dCompiler_dElab_dPrelude_dpreludeGlobals) v_Vuna_dCompiler_dElab_dTypes_decEmpty)) (fun pd -> ((fun nd_uscrut3 -> (match nd_uscrut3 with
+let v_Vuna_dCompiler_dElab_dDriver_delabProgramGoWith = (fun startEc startGlobals decls -> ((v_Base_dResult_dandThen (v_Vuna_dCompiler_dElab_dMeta_dcollectSigs decls)) (fun sigs -> ((fun _u -> ((v_Base_dResult_dandThen (((v_Vuna_dCompiler_dElab_dData_delabDatas ((v_Vuna_dCompiler_dElab_dMeta_dcollectDataDecls decls) C_Base_dList_dList_Base_dList_dNil)) startGlobals) startEc)) (fun pd -> ((fun nd_uscrut5 -> (match nd_uscrut5 with
   | C_Base_dPair_dPair_Base_dPair_dPair (dtb__253, dtb__254) -> (match dtb__254 with
-  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__255, dtb__256) -> ((fun ec0b -> ((fun _u -> ((v_Base_dResult_dandThen (((v_Vuna_dCompiler_dElab_dTrait_delabTraits ((v_Vuna_dCompiler_dElab_dMeta_dcollectTraitDecls decls) C_Base_dList_dList_Base_dList_dNil)) dtb__255) ec0b)) (fun pt -> ((fun nd_uscrut14 -> (match nd_uscrut14 with
+  | C_Base_dPair_dPair_Base_dPair_dPair (dtb__255, dtb__256) -> ((fun ec0b -> ((fun _u -> ((v_Base_dResult_dandThen (((v_Vuna_dCompiler_dElab_dTrait_delabTraits ((v_Vuna_dCompiler_dElab_dMeta_dcollectTraitDecls decls) C_Base_dList_dList_Base_dList_dNil)) dtb__255) ec0b)) (fun pt -> ((fun nd_uscrut16 -> (match nd_uscrut16 with
   | C_Base_dPair_dPair_Base_dPair_dPair (dtb__257, dtb__258) -> (match dtb__258 with
   | C_Base_dPair_dPair_Base_dPair_dPair (dtb__259, dtb__260) -> (match dtb__260 with
   | C_Base_dPair_dPair_Base_dPair_dPair (dtb__261, dtb__262) -> (match dtb__262 with
@@ -548,6 +548,8 @@ let v_Vuna_dCompiler_dElab_dDriver_delabProgramGo = (fun decls -> ((v_Base_dResu
 )
   | _ -> failwith "DT: impossible branch"
 )) pd)))) (v_Vuna_dCompiler_dDebug_dstamp "collectSigs-done")))))
+
+let v_Vuna_dCompiler_dElab_dDriver_delabProgramGo = (fun decls -> (((v_Vuna_dCompiler_dElab_dDriver_delabProgramGoWith v_Vuna_dCompiler_dElab_dTypes_decEmpty) v_Vuna_dCompiler_dElab_dPrelude_dpreludeGlobals) decls))
 
 let v_Vuna_dCompiler_dElab_dDriver_delabProgramFull = (fun decls -> ((v_Base_dResult_dandThen (v_Vuna_dCompiler_dElab_dRecords_dprepareDecls decls)) (fun ds -> ((v_Base_dResult_dandThen (v_Vuna_dCompiler_dElab_dDerive_dexpandDerivings ds)) (fun ds2 -> (v_Vuna_dCompiler_dElab_dDriver_delabProgramGo ds2))))))
 

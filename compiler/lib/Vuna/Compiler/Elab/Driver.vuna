@@ -503,9 +503,14 @@ elabProgramFull decls =
   andThen (prepareDecls decls) (\ds => andThen (expandDerivings ds) (\ds2 => elabProgramGo ds2))
 
 elabProgramGo : List Decl -> Result DtProgram
-elabProgramGo decls = andThen (collectSigs decls) (\sigs => let
+elabProgramGo decls = elabProgramGoWith ecEmpty preludeGlobals decls
+
+-- M34.5 接口摘要第一步：起始状态（依赖包的签名 globals + Ec 摘要）参数化，供
+-- 「只精化本包 decls、复用依赖包摘要」的调用方注入。行为与 elabProgramGo 完全一致。
+elabProgramGoWith : Ec -> List (Pair String Term) -> List Decl -> Result DtProgram
+elabProgramGoWith startEc startGlobals decls = andThen (collectSigs decls) (\sigs => let
   _ = stamp "collectSigs-done"
-in andThen (elabDatas (collectDataDecls decls []) preludeGlobals ecEmpty) (\pd => case pd of
+in andThen (elabDatas (collectDataDecls decls []) startGlobals startEc) (\pd => case pd of
   Pair datas (Pair globals0 ec0) =>
     let
       -- M30（D18）：data 精化完成后一次性建构造子索引（之后 ecAddData 增量维护）；
