@@ -53,8 +53,7 @@ cachedOfProgram : DtProgram -> CachedProgram
 cachedOfProgram prog =
   let
     tbl = Base.IntMap.fromList (dtProgSols prog)
-  in CachedProgram (map (fixData tbl) (dtProgDatas prog)) (map (fixDef tbl) (dtProgDefs prog))
-    (map (\p => Pair (firstOf p) (fixTerm tbl (quote 0 (secondOf p)))) (dtProgSols prog))
+  in CachedProgram (map (fixData tbl) (dtProgDatas prog)) (map (fixDef tbl) (dtProgDefs prog)) []
     (map (\p => Pair (firstOf p) (fixTerm tbl (secondOf p))) (dtProgGlobals prog))
     (map (fixInst tbl) (dtProgInsts prog)) (map (fixClass tbl) (dtProgClasses prog))
     (dtProgNext prog)

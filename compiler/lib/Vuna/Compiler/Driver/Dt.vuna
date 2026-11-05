@@ -274,7 +274,7 @@ depStartOf progs =
     ec1 = addDatasEc ec0 datas
     ec2 = addInstsEc ec1 (dedupInsts (concatMap dtProgInsts progs))
     ec3 = addClassesEc ec2 (dedupClasses (concatMap dtProgClasses progs))
-    ec4 = ecPutSols ec3 sols
+    ec4 = ec3
     ec5 = ecPutNext ec4 0
     ec6 = ecPutGlobalsTbl ec5 (Base.HashMap.fromList globals)
   in Pair ec6 globals
