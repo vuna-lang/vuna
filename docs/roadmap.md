@@ -109,6 +109,8 @@ LSP 诊断帧进程内缓存（同 uri+内容重复请求命中，编辑后仍�
 路径冲突）；M34.4 模块级并行 codegen（C35：codegen open 全序 + 构造子名非模块限定）；
 规范序列化格式（C32）。
 
+**TTC 模块化精化收尾（2026-11）**：AST 缓存已落地（`Loader/Flatten.parseFileWithPath`，key = 路径 + 源内容哈希，`$TMPDIR/vuna-cache/ast`）。接口摘要（第 1 步）已修 4 层缺陷，摘要路径 779–955 ms，但 `Eq Type` 歧义未定位（详见 debt C37）。第 3 步被 C35 阻塞；第 2 步需模块级签名隔离。
+
 ### M35：并发 / 服务端
 
 1. **效应系统 / 代数效应**：effect rows 或等价设计、handler、与 ST / 可变数据整合；
