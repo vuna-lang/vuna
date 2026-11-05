@@ -532,3 +532,8 @@ let v_Vuna_dCompiler_dElab_dTypes_ddtProgDepths = (fun mc0 -> (match mc0 with
   | C_Vuna_dCompiler_dElab_dTypes_dDtProgram_Vuna_dCompiler_dElab_dTypes_dDtProgram (dtb__842, dtb__843, dtb__844, dtb__845, dtb__846, dtb__847, dtb__848, dtb__849, dtb__850, dtb__851) -> dtb__851
   | _ -> failwith "DT: impossible branch"
 ))
+
+let v_Vuna_dCompiler_dElab_dTypes_decPutDefTbl = (fun mc0 mc1 -> (match mc0 with
+  | C_Vuna_dCompiler_dElab_dTypes_dEc_Vuna_dCompiler_dElab_dTypes_dEc (dtb__852, dtb__853, dtb__854, dtb__855, dtb__856, dtb__857, dtb__858, dtb__859, dtb__860, dtb__861, dtb__862, dtb__863, dtb__864, dtb__865, dtb__866, dtb__867, dtb__868) -> (C_Vuna_dCompiler_dElab_dTypes_dEc_Vuna_dCompiler_dElab_dTypes_dEc (dtb__852, dtb__853, dtb__854, dtb__855, dtb__856, dtb__857, dtb__858, dtb__859, dtb__860, mc1, dtb__862, dtb__863, dtb__864, dtb__865, dtb__866, dtb__867, dtb__868))
+  | _ -> failwith "DT: impossible branch"
+))
