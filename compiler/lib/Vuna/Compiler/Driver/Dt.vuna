@@ -251,6 +251,8 @@ dtCheckPackageWithDeps ctx entry deps = andThen (dtLoadParts ctx entry) (\parts 
   ours = filter (\m => modulePackageOf m == pkgName) (reverse (secondOf parts))
   decls = append (concatMap moduleDeclsOf ours) (firstOf parts)
   start = depStartOf deps
+  _ = note ("summ-List=" ++ globalTextOf "List" (secondOf start))
+  _ = note ("summ-Pair=" ++ globalTextOf "Pair" (secondOf start))
 in andThen (elabProgramGoWith (firstOf start) (secondOf start) decls)
   (\prog => andThen (checkDtProgram (Pair (dtProgDatas prog) (dtProgDefs prog))) (\_ => Ok (Pair [] prog)))
 )
@@ -332,3 +334,8 @@ classesHaveMetas : List DtClass -> Bool
 classesHaveMetas [] = False
 classesHaveMetas (c :: rest) =
   if length (concatMap termMetasAll (dtClassFieldTys c)) > 0 then True else classesHaveMetas rest
+
+-- M34.5 诊断（--debug-perf）：打印 globals 里某个名字的签名文本（摘要/全量对比用）。
+globalTextOf : String -> List (Pair String Term) -> String
+globalTextOf name [] = "MISSING"
+globalTextOf name ((Pair n t) :: rest) = if n == name then showTerm t else globalTextOf name rest
