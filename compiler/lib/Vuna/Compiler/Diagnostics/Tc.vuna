@@ -97,6 +97,8 @@ data TcErr : Nat -> Type where
   InstanceUnknownMethod : String -> TcErr (Succ Zero)
   NeedsTwoArgs : String -> TcErr (Succ Zero)
   NoInstanceFound : String -> TcErr (Succ Zero)
+  -- M35：模板字符串插值（`${e}` → `Base.Interp.interp e`）找不到 `Interp`/`Show` 实例。
+  InterpNoInstance : String -> TcErr (Succ Zero)
   NotExhaustive : String -> TcErr (Succ Zero)
   RedundantCtorBranch : String -> TcErr (Succ Zero)
   RedundantLiteralBranch : String -> TcErr (Succ Zero)
@@ -186,6 +188,7 @@ tcCode (InstanceNotTrait _) = "TC_InstanceNotTrait"
 tcCode (InstanceUnknownMethod _) = "TC_InstanceUnknownMethod"
 tcCode (NeedsTwoArgs _) = "TC_NeedsTwoArgs"
 tcCode (NoInstanceFound _) = "TC_NoInstanceFound"
+tcCode (InterpNoInstance _) = "TC_InterpNoInstance"
 tcCode (NotExhaustive _) = "TC_NotExhaustive"
 tcCode (RedundantCtorBranch _) = "TC_RedundantCtorBranch"
 tcCode (RedundantLiteralBranch _) = "TC_RedundantLiteralBranch"
@@ -284,6 +287,8 @@ tcTemplate (InstanceNotTrait _) = "instance <0> is not an instance of a trait"
 tcTemplate (InstanceUnknownMethod _) = "instance has unknown method <0>"
 tcTemplate (NeedsTwoArgs _) = "`<0>` needs exactly two arguments"
 tcTemplate (NoInstanceFound _) = "no instance found for <0>"
+tcTemplate (InterpNoInstance _) =
+  "template interpolation needs an `Interp` or `Show` instance for <0> (add `deriving (Show)`, define `instance Interp <0>`, or convert explicitly with `show`/`strFromInt`)"
 tcTemplate (NotExhaustive _) = "case is not exhaustive: missing <0>"
 tcTemplate (RedundantCtorBranch cname) =
   "redundant constructor branch: `" ++ cname ++ "` is already covered by an earlier branch"
@@ -415,6 +420,7 @@ tcChunk7 =
   [ TcEntry (tcCode (InstanceUnknownMethod "")) (tcTemplate (InstanceUnknownMethod "")) "instance 含未知方法",
     TcEntry (tcCode (NeedsTwoArgs "")) (tcTemplate (NeedsTwoArgs "")) "需要恰好两个实参",
     TcEntry (tcCode (NoInstanceFound "")) (tcTemplate (NoInstanceFound "")) "找不到 instance",
+    TcEntry (tcCode (InterpNoInstance "")) (tcTemplate (InterpNoInstance "")) "插值缺少 Interp/Show 实例",
     TcEntry (tcCode (NotExhaustive "")) (tcTemplate (NotExhaustive "")) "case 漏写可达分支",
     TcEntry (tcCode (RedundantCtorBranch "")) (tcTemplate (RedundantCtorBranch "")) "重复的构造子分支（不可达）",
     TcEntry (tcCode (RedundantLiteralBranch "")) (tcTemplate (RedundantLiteralBranch "")) "重复的字面量分支（不可达）",

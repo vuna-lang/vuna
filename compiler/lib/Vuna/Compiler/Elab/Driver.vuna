@@ -478,11 +478,13 @@ dtEvalExprInInfo prog expr = case prog of
           sols2 = ecSols ec2
           tyText =
             showTerm (quote 0 (force (Base.HashMap.fromList bodies) (ecSolsP ec2) defaultFuel ty))
-        in case unsolvedFrom next (ecNext ec2) (ecSolTbl ec2) of
-          Just m => tcErr1 (exprSpan expr) (UnsolvedMetavarInfer (strFromInt m)) (strFromInt m)
-          Nothing => case normalize (Base.HashMap.fromList bodies) (ecSolsP ec2) defaultFuel (eval [] term) of
-            VInt n => Ok (Pair (strFromInt n) tyText)
-            v => Ok (Pair (showValue v) tyText)
+        in case firstUnsolvedInterpGoal ec2 of
+          Just td => tcErr1NoLoc (InterpNoInstance td) td
+          Nothing => case unsolvedFrom next (ecNext ec2) (ecSolTbl ec2) of
+            Just m => tcErr1 (exprSpan expr) (UnsolvedMetavarInfer (strFromInt m)) (strFromInt m)
+            Nothing => case normalize (Base.HashMap.fromList bodies) (ecSolsP ec2) defaultFuel (eval [] term) of
+              VInt n => Ok (Pair (strFromInt n) tyText)
+              v => Ok (Pair (showValue v) tyText)
     )
 
 -- 精化入口。M19：先做 record 降级（`Elab.Records.prepareDecls`）——record 是纯记法。
@@ -567,24 +569,26 @@ in andThen (elabDatas (collectDataDecls decls []) startGlobals startEc) (\pd => 
                           ec4 = resolveDictGoalsFix globals ec4a 8
                           instDefs = rezonkDefs ec4 instDefs0
                           _ = stamp "instbodies-done"
-                        in case unsolvedMeta ec4 of
-                          Just m => Err (unsolvedMessage ec4 m)
-                          Nothing =>
-                            let
-                              extra = extraDefsOf globals ec4 projSpans (append instDefs defs)
-                              allDefs = rezonkDefs ec4 (append instDefs (append extra defs))
-                              -- bodies 阶段不再逐定义重建 globals（O(n²)）；这里用最终
-                              -- 定义集一次性把签名类型换成提升后的类型（O(n)）。
-                              defsTblOut =
-                                Base.HashMap.insertAll
-                                  (map (\x => Pair (dtDefName x) (dtDefType x)) allDefs)
-                                  (Base.HashMap.fromList [])
-                              globalsOut = map (\g => case Base.HashMap.lookup (firstOf g) defsTblOut of
-                                Just ty => Pair (firstOf g) ty
-                                Nothing => g
-                              ) globals
-                              _ = stamp "extradefs-done"
-                            in andThen (checkTerminationDeclsWith (declFunNames decls) (append termAux decls)) (\_ => let
+                        in case firstUnsolvedInterpGoal ec4 of
+                          Just td => tcErr1NoLoc (InterpNoInstance td) td
+                          Nothing => case unsolvedMeta ec4 of
+                            Just m => Err (unsolvedMessage ec4 m)
+                            Nothing =>
+                              let
+                                extra = extraDefsOf globals ec4 projSpans (append instDefs defs)
+                                allDefs = rezonkDefs ec4 (append instDefs (append extra defs))
+                                -- bodies 阶段不再逐定义重建 globals（O(n²)）；这里用最终
+                                -- 定义集一次性把签名类型换成提升后的类型（O(n)）。
+                                defsTblOut =
+                                  Base.HashMap.insertAll
+                                    (map (\x => Pair (dtDefName x) (dtDefType x)) allDefs)
+                                    (Base.HashMap.fromList [])
+                                globalsOut = map (\g => case Base.HashMap.lookup (firstOf g) defsTblOut of
+                                  Just ty => Pair (firstOf g) ty
+                                  Nothing => g
+                                ) globals
+                                _ = stamp "extradefs-done"
+                              in andThen (checkTerminationDeclsWith (declFunNames decls) (append termAux decls)) (\_ => let
                               _ = stamp "termination-done"
                             in Ok
                               (DtProgram datas1 allDefs (ecGoals ec4) (ecSols ec4) globalsOut (ecInsts ec4) (ecClasses ec4) (ecNext ec4) (ecDefVals ec4) (Base.IntMap.toList (ecDepthTbl ec4)))

@@ -5,6 +5,8 @@ module Vuna.Compiler.Elab.Dict
   , dictArgKind
   , dictArgUnsolvedMeta
   , dictClassArg
+  , valueDictFamily
+  , firstUnsolvedInterpGoal
   , isCmpMethod
   , isDictDomain
   , isEqMethod
@@ -67,6 +69,11 @@ instMatchInst : InstMatch -> DtInst
 instMatchInst (InstMatch i t) = i
 
 -- 递归深度上限（实例 ctx 链）；`fuel` 在每个递归层减 1。
+--
+-- M35 blanket 实例（头实参是裸类参数，见 `Elab.Meta.isBlanketInst`）是 fallback：
+-- 搜索分两阶段——先只试**具体**实例；一个都没命中时才试 blanket。这样具体实例
+-- 优先（`Interp String` 覆盖 blanket `Show a => Interp a`），且 blanket 的 ctx 求解
+-- 不会污染具体候选的元变量解。
 searchInstFuel : List (Pair String Term) -> Ctx -> Int -> Ec -> Value -> Span -> Result (Pair Term Ec)
 searchInstFuel globals ctx fuel ec dom sp = if fuel <= 0 then missingInstance ec dom sp
 else
@@ -78,24 +85,69 @@ else
   in case localDictLookup ctx 0 dom ec of
     Just pair => Ok pair
     Nothing => if rigidSearchFast ec dom then missingInstance ec dom sp
-    else case matchInstances globals ctx fuel ec dom sp (ecInsts ec) [] of
-      Pair [] ec1 => missingInstance ec1 dom sp
-      Pair ([m]) ec1 => Ok (Pair m.instMatchTerm ec1)
-      Pair ms ec1 =>
-        let
-          _ =
-            if debugOn then note
-              ("search-ambig: dom=" ++ showValue dom ++ " cands=" ++ join "," (map (\x => dtInstName (instMatchInst x)) ms))
-            else 0
-          sd = showValue dom
-          names = joinInstNames (map instMatchInst ms)
-        in tcErr2 sp (AmbiguousInstance sd names) sd names
+    else case matchInstances globals ctx fuel ec dom sp (specificInstances (ecInsts ec)) [] of
+      Pair [] ec1 => case matchInstances globals ctx fuel ec1 dom sp (blanketInstances (ecInsts ec)) [] of
+        Pair matches ec2 => finishInstanceSearch dom sp matches ec2
+      Pair matches ec1 => finishInstanceSearch dom sp matches ec1
+
+specificInstances : List DtInst -> List DtInst
+specificInstances [] = []
+specificInstances (i :: rest) =
+  if isBlanketInst i then specificInstances rest else i :: specificInstances rest
+
+blanketInstances : List DtInst -> List DtInst
+blanketInstances [] = []
+blanketInstances (i :: rest) =
+  if isBlanketInst i then i :: blanketInstances rest else blanketInstances rest
+
+finishInstanceSearch : Value -> Span -> List InstMatch -> Ec -> Result (Pair Term Ec)
+finishInstanceSearch dom sp [] ec = missingInstance ec dom sp
+finishInstanceSearch dom sp [m] ec = Ok (Pair m.instMatchTerm ec)
+finishInstanceSearch dom sp matches ec =
+  let
+    _ =
+      if debugOn then note
+        ("search-ambig: dom=" ++ showValue dom ++ " cands=" ++ join "," (map (\x => dtInstName (instMatchInst x)) matches))
+      else 0
+    sd = showValue dom
+    names = joinInstNames (map instMatchInst matches)
+  in tcErr2 sp (AmbiguousInstance sd names) sd names
 
 missingInstance : Ec -> Value -> Span -> Result a
 missingInstance ec dom sp =
   let
-    sd = showValue dom
-  in tcErr1 sp (NoInstanceFound sd) sd
+    forced = forceVal ec dom
+    sd = showValue forced
+  in if valueDictFamily forced == dictTypeName interpTypeName then
+    let
+      td = case dictClassArg ec forced of
+        Just argTy => showResolvedValue ec argTy
+        Nothing => sd
+    in tcErr1 sp (InterpNoInstance td) td
+  else tcErr1 sp (NoInstanceFound sd) sd
+
+-- 诊断用：把值按当前解渲染成类型文本。`showValue` 不解元变量，会把已解出的类型显示成
+-- `?N`（插值缺实例时最需要的是真实类型名，例如 `Foo`）。
+showResolvedValue : Ec -> Value -> String
+showResolvedValue ec v = showTerm (zonkTerm ec 0 (quote 0 (forceVal ec v)))
+
+-- M35：未解字典目标里第一个插值目标（诊断用）——`Elab.Driver` 在报“未解元变量”之前
+-- 先命中它，给出可操作的 `TC_InterpNoInstance`（类型参数已确定的那些）。
+firstUnsolvedInterpGoal : Ec -> Maybe String
+firstUnsolvedInterpGoal ec = firstUnsolvedInterpGoalGo ec (ecDictGoals ec)
+
+firstUnsolvedInterpGoalGo : Ec -> List DtDictGoal -> Maybe String
+firstUnsolvedInterpGoalGo ec [] = Nothing
+firstUnsolvedInterpGoalGo ec (g :: rest) = case metaLookup g.dtDictGoalMeta (ecSolTbl ec) of
+  Just _ => firstUnsolvedInterpGoalGo ec rest
+  Nothing =>
+    let
+      forced = forceVal ec g.dtDictGoalDom
+    in if valueDictFamily forced == dictTypeName interpTypeName then Just
+      (case dictClassArg ec forced of
+        Just argTy => showResolvedValue ec argTy
+        Nothing => showResolvedValue ec forced)
+    else firstUnsolvedInterpGoalGo ec rest
 
 -- 局部上下文查找：ctxItems 最近的 binder 在前，其 de Bruijn index 就是下标 i。
 localDictLookup : Ctx -> Int -> Value -> Ec -> Maybe (Pair Term Ec)
@@ -113,15 +165,36 @@ localDictLookupGo ctx i dom ec ((Pair name ty) :: rest) =
     Err e => localDictLookupGo ctx (i + 1) dom ec rest
   else localDictLookupGo ctx (i + 1) dom ec rest
 
--- 刚性类参数快路径：只有当所有实例都是单态（tele/ctx 均空）时才可确定匹配不上。
+-- 刚性类参数快路径：只有当**同一字典族**的实例都是单态（tele/ctx 均空）时才可确定
+-- 匹配不上。M35 起按类过滤：blanket 实例（如 `Interp`）只让它自己的类退回全量搜索，
+-- 其余类（Eq/Ord/...）仍走快路径（自检热路径）。
 rigidSearchFast : Ec -> Value -> Bool
-rigidSearchFast ec dom = isRigidDictArg ec dom && allInstancesMono (ecInsts ec)
+rigidSearchFast ec dom =
+  isRigidDictArg ec dom && allInstancesMonoFor (valueDictFamily (forceVal ec dom)) (ecInsts ec)
 
-allInstancesMono : List DtInst -> Bool
-allInstancesMono [] = True
-allInstancesMono (i :: rest) = case i.dtInstTele of
+-- 字典/实例头的族名（`Dict_<类>`）；非字典形态返回空串。
+valueDictFamily : Value -> String
+valueDictFamily (VNeutral n) = case n of
+  NGlobal g sp => g
+  _ => ""
+valueDictFamily _ = ""
+
+instFamilyNameOf : DtInst -> String
+instFamilyNameOf i = case i.dtInstHead of
+  TApp (TGlobal g) arg rig => g
+  _ => ""
+
+allInstancesMonoFor : String -> List DtInst -> Bool
+allInstancesMonoFor family [] = True
+allInstancesMonoFor family (i :: rest) =
+  if instFamilyNameOf i == family then
+    if isMonoInst i then allInstancesMonoFor family rest else False
+  else allInstancesMonoFor family rest
+
+isMonoInst : DtInst -> Bool
+isMonoInst i = case i.dtInstTele of
   [] => case i.dtInstCtx of
-    [] => allInstancesMono rest
+    [] => True
     _ => False
   _ => False
 
