@@ -88,6 +88,7 @@ build，`dist/` 提交）；`nix/` = 构建图 + rotate/metrics/bench；`docs/` 
 - 语言与类型：[language.md](docs/reference/language.md)（语法/模块）、
   [type-system.md](docs/reference/type-system.md)（宇宙/索引族/依赖匹配/相等/擦除）、
   [records-traits.md](docs/reference/records-traits.md)（记录/trait/do）、
+  [effects.md](docs/reference/effects.md)（效应 monad/ST）、
   [stdlib.md](docs/reference/stdlib.md)、[packages.md](docs/reference/packages.md)、
   [primitives.md](docs/reference/primitives.md)（内建/原语/能力）、
   [operators.md](docs/reference/operators.md)（运算符=方法别名、实例落点规则）

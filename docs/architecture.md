@@ -130,7 +130,8 @@ vuna.toml → Frontend.{Toml.parseToml, Manifest.parseManifest/validateManifest}
   `nix/tcb-forbidden.txt` 黑名单）；效应边界是 manifest 显式能力
   （`[capabilities].effects` ∈ console/fs/process/env/clock/unsafe），
   `checkEffectsBuiltins` 按 `Intrinsics` 能力位检查；原语返回 `IO` 动作（只在 `main` 执行），
-  未声明能力的包只能经 `Base.IO`，`runIO` 需 `unsafe`。
+  未声明能力的包只能经 `Base.IO`，`runIO` 需 `unsafe`；`base` 自身声明 `unsafe`（唯一
+  使用点是 `Base.ST` 的 region 内可变数据，见 [effects.md](reference/effects.md)）。
 
 ## 4. LSP 与索引（工具链侧，不进 seed）
 
@@ -159,6 +160,7 @@ sh s1/build.sh）→ stage1 →（build --no-compile --out s2 compiler）→ dif
 | 你改了什么 | 最小验证 |
 | --- | --- |
 | `lib/` / `base/` | 第 14–16、26–27、30–32 段 + `vuna check .` |
+| `base/` 的效应 monad / `Base.ST` | 第 27 段 + `dt` / `dt_base` / `dt_err` 夹具 + `vuna check .`（见 [effects.md](reference/effects.md)） |
 | `compiler/`（语法 / 类型 / 精化 / 擦除） | 全量测试 + `flake check`（至少 seed-selfhost） |
 | split 输出 / `vuna.toml` | 第 28–29、33–34、38–39 段 + `checks.vuna-package` |
 | Nix | `nix flake check` + `nix build .#vuna` |

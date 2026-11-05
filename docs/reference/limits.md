@@ -170,8 +170,12 @@
   copy-on-write（`Array.copy` + `Array.set`），原数组不变；越界是宿主 `Invalid_argument`。
 - **IO 内可变数据**：`IORef` / `MArray` / `Buffer` 的操作全部是 `IO` 动作，只能经
   `Base.IORef` / `Base.MArray` / `Base.Buffer` 使用；`runIO` 是 main 外唯一执行入口、需要
-  `unsafe`。**没有线性 / 唯一性类型与 ST / region**：类型上无法表达「句柄不逃逸」，
-  可变句柄的安全边界目前是 IO 隔离 + `unsafe` 的显式放行（D22 部分关闭）。
+  `unsafe`。
+- **ST / region（M35.1）**：`Base.ST` 提供 `ST r a` + `runST`（`{a} -> ((r : Type) -> ST r a) -> a`）
+  与 `Ref r a` / `SArray r a` 句柄；区域由显式类型 binder 引入、库外不可命名，句柄不能逃出
+  `runST`（负例 `dt_err/56`）。运行时经 `runIO` 跑真实 `IORef` / `MArray`，因此 ST 动作
+  **不进 interp**。**仍无 QTT / 线性**：句柄可复制、多次使用未在类型上禁止，「恰好一次」
+  与一次性续延未表达；ST 不声明 `Monad` 实例（字典提升顺序）。细节见 [effects.md](effects.md)。
 - **哈希容器**：桶是 `Array (Array (List ...))`（`Array.get` O(1)，`insert` copy-on-write）；
   `empty` 已移除、统一写 `fromList []`（见 stdlib.md 的弱类型变量说明）。
 - **没有泛型 `Hashable`**：`HashMap` / `HashSet` 只覆盖 `String`，`IntMap` 只覆盖 `Int`；
@@ -221,9 +225,14 @@
   `vuna test` 的入口文件同样受限。
 - `vuna interp` 只做**纯**核心求值：任何 `main : IO a` 一律报错并提示 `compile` + 运行
   产物；纯 `main : Int/String/Bool` 的结果展示仍保留为调试约定（`String` 走 `strShow`
-  转义）。IO 组合统一用 `Functor` / `Monad` trait（`fmap` / `bind` / `pure`、`>>=`、
-  `do`），不导出 `bindIO` / `pureIO` / `fmapIO`；`Base.IO` API 直接别名到 IO 化的
-  `prim_*` 原语（M31）。`IO` 仍是库层 thunk 表示，不是完整的 effect 类型系统（归 F3）。
+  转义）。IO / ST 组合统一用 `Functor` / `Monad` trait（`fmap` / `bind` / `pure`、`>>=`、
+  `do`；`Base.ST` 用显式 `bindST` / `pureST`），不导出 `bindIO` / `pureIO` / `fmapIO`；
+  `Base.IO` API 直接别名到 IO 化的 `prim_*` 原语（M31）。`IO` 仍是库层 thunk 表示，不是
+  完整的 effect 类型系统（归 F3，见 [effects.md](effects.md)）。
+- **`base` 的 `unsafe`（M35.1）**：`vuna.toml` 的 `[capabilities].effects` 增了 `unsafe`，
+  唯一使用点是 `Base.ST` 的 `runST`（经 `runIO` 执行 region 内动作）；用户包调用
+  `Base.ST.runST` 不需要自己的能力，但 base 内部其它模块获得了 `runIO` 权限（信任点，
+  debt D27）。
 - IO 失败（如读缺失文件）在产物里抛宿主异常，但入口文件缺失返回普通错误；CLI 用
   `prim_exit` 返回非 0 退出码（compile 错误 1、lint 有 finding 1、用法 / 解析 / IO 错误 2）。
 

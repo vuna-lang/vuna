@@ -109,6 +109,7 @@ Base.Ord  base/lib/Base/Ord.vuna
 Base.Pair  base/lib/Base/Pair.vuna
 Base.Reader  base/lib/Base/Reader.vuna
 Base.Result  base/lib/Base/Result.vuna
+Base.ST  base/lib/Base/ST.vuna
 Base.Show  base/lib/Base/Show.vuna
 Base.Sort  base/lib/Base/Sort.vuna
 Base.State  base/lib/Base/State.vuna
@@ -201,6 +202,7 @@ Base.Ord  ./lib/Base/Ord.vuna
 Base.Pair  ./lib/Base/Pair.vuna
 Base.Reader  ./lib/Base/Reader.vuna
 Base.Result  ./lib/Base/Result.vuna
+Base.ST  ./lib/Base/ST.vuna
 Base.Show  ./lib/Base/Show.vuna
 Base.Sort  ./lib/Base/Sort.vuna
 Base.State  ./lib/Base/State.vuna

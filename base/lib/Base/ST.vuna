@@ -1,0 +1,90 @@
+module Base.ST
+  ( Ref
+  , SArray
+  , ST
+  , bindST
+  , fmapST
+  , lengthArray
+  , newArray
+  , newRef
+  , pureST
+  , readArray
+  , readRef
+  , runST
+  , writeArray
+  , writeRef
+  ) where
+
+-- Base.ST：region 隔离的局部可变数据（M35.1）。
+--
+-- `ST r a` 的 `r` 是 **region 索引**（类型级、擦除）；`Ref r a` / `SArray r a` 是
+-- region 句柄，字段不导出、只能由 ST 动作创建。
+--
+-- 安全边界（不引入线性类型）：
+--   `runST : ((r : Type) -> ST r a) -> a`
+--   * region 由调用方以**显式**类型 binder 传入，`r` 在库外不可命名；
+--   * `a` 在进入 region 之前由期望类型确定；`Ref r a` 作为结果要求 `a ≡ Ref r a`，
+--     与刚性 `r` 冲突 → 句柄不能逃逸（负例 test/corpus/dt_err/56_st_escape.vuna）。
+--   运行时只是 `Int -> a` 世界令牌 thunk；没有 QTT/线性类型，所以「一个句柄只用一次」
+--   仍未在类型上强制（见 debt D22）。
+--
+-- 执行：操作经 `Base.IO.runIO` 跑真实的 IORef / MArray，`runST` 立即求值 thunk。
+-- `base` 因此声明能力 `unsafe`——这是 base 唯一的 `runIO` 使用点（信任点，见 limits.md）。
+--
+-- **不声明 `Functor/Monad (ST r)` 实例**（实测）：region 以显式类型 binder 穿过
+-- `runST`，而字典提升会把字典 binder 插到显式参数之前（`{r} {d}`），在
+-- `runST prog` 处留下 unsolved metavar。region 多态代码用 `bindST` / `pureST` /
+-- `fmapST`；`do` 保留给 State / Reader / Error。
+import Base.IO
+import Base.Int
+import Base.Nat
+
+record Ref r a where
+  refSlot : IORef a
+
+record SArray r a where
+  arraySlot : MArray a
+
+record ST r a where
+  stWorld : Int -> a
+
+-- 唯一执行入口：region 由显式 binder 提供（库外不可命名）；实现把它实例化为 Int。
+runST : ((r : Type) -> ST r a) -> a
+runST body = case body Int of
+  ST f => f 0
+
+-- 显式组合子（见上：不声明 Functor/Monad 实例）。
+bindST : ST r a -> (a -> ST r b) -> ST r b
+bindST m k = ST (\w => case m of
+  ST g => case k (g w) of
+    ST h => h w
+)
+
+pureST : a -> ST r a
+pureST x = ST (\_ => x)
+
+fmapST : (a -> b) -> ST r a -> ST r b
+fmapST f m = ST (\w => case m of
+  ST g => f (g w)
+)
+
+newRef : a -> ST r (Ref r a)
+newRef x = ST (\_ => Ref (runIO (prim_newRef x)))
+
+readRef : Ref r a -> ST r a
+readRef ref = ST (\_ => runIO (prim_readRef ref.refSlot))
+
+writeRef : Ref r a -> a -> ST r Int
+writeRef ref v = ST (\_ => runIO (prim_writeRef ref.refSlot v))
+
+newArray : Nat -> a -> ST r (SArray r a)
+newArray n v = ST (\_ => SArray (runIO (prim_newMArray (natToInt n) v)))
+
+readArray : SArray r a -> Nat -> ST r a
+readArray arr i = ST (\_ => runIO (prim_readMArray arr.arraySlot (natToInt i)))
+
+writeArray : SArray r a -> Nat -> a -> ST r Int
+writeArray arr i v = ST (\_ => runIO (prim_writeMArray arr.arraySlot (natToInt i) v))
+
+lengthArray : SArray r a -> ST r Nat
+lengthArray arr = ST (\_ => natFromInt (runIO (prim_mArrayLength arr.arraySlot)))

@@ -1,8 +1,9 @@
-module Base.Reader (Reader, ask, bindReader, local, mapReader, pureReader, runReader) where
+module Base.Reader (Reader, ask, local, runReader) where
 
--- Base.Reader：库级 Reader 效应（M33 W6）。表示是 `e -> a` 的纯函数；
--- 组合子手写（trait 单参数 / 类型级部分应用限制，暂不声明 Functor/Monad 实例）。
-import Base.Pair
+-- Base.Reader：库级 Reader monad（M33 W6 落地；M35.1 补 Functor/Monad 实例，`do` 可用）。
+--
+-- 表示是 `e -> a` 的纯函数：handler 就是 `runReader`；`local` 在局部改写环境。
+import Base.Monad
 
 record Reader e a where
   readerRun : e -> a
@@ -10,17 +11,15 @@ record Reader e a where
 runReader : Reader e a -> e -> a
 runReader (Reader f) e = f e
 
-pureReader : a -> Reader e a
-pureReader a = Reader (\e => a)
+instance Functor (Reader e) where
+  fmap f r = Reader (\e => f (r.readerRun e))
 
-mapReader : (a -> b) -> Reader e a -> Reader e b
-mapReader f r = Reader (\e => f (runReader r e))
-
-bindReader : Reader e a -> (a -> Reader e b) -> Reader e b
-bindReader r k = Reader (\e => runReader (k (runReader r e)) e)
+instance Monad (Reader e) where
+  bind r k = Reader (\e => (k (r.readerRun e)).readerRun e)
+  pure a = Reader (\e => a)
 
 ask : Reader e e
 ask = Reader (\e => e)
 
 local : (e -> e) -> Reader e a -> Reader e a
-local f r = Reader (\e => runReader r (f e))
+local f r = Reader (\e => r.readerRun (f e))

@@ -323,7 +323,11 @@ elabInstanceSig classes globals defined ec0 sp headExpr ctxE = case instanceHead
       )
       _ => tcErr0 sp InstanceHeadNotApp
 
--- 参数化/带 ctx 实例的 head 类型化（在 teleCtx 下 checkType 头实参与 ctx 实参）。
+-- 参数化/带 ctx 实例的 head 类型化（在 teleCtx 下按**类参数 kind** 检查头实参与 ctx 实参）。
+-- M35.1：head 实参不再是「必须是类型」——`Monad (State s)` / `Monad (ST r)` 这类
+-- 类参数 kind 为 `Type -> Type` 的实例头，旧路径用 `checkType` 会报
+-- `expected a type, but this expression has type Type -> Type`。
+-- 改为从字典族的参数取 kind、用 `checkE` 在 kind 上检查（与 ctx 实参的 `dictArgKind` 同一来源）。
 elabInstanceConstrained : List DtClass -> List (Pair String Term) -> List String -> Ec -> Span -> DtClass -> Expr -> List (Pair String Expr) -> Result (Pair InstSigInfo Ec)
 elabInstanceConstrained classes globals defined ec0 sp cls argExpr ctxParts =
   let
@@ -332,13 +336,16 @@ elabInstanceConstrained classes globals defined ec0 sp cls argExpr ctxParts =
     combined = EApp (EVar "#inst" sp) (argExpr :: ctxArgs) sp
     tele = instanceTeleOf banned combined (argExpr :: ctxArgs)
     teleCtx0 = instanceTeleCtx tele
-  in andThen (checkType globals teleCtx0 ec0 argExpr) (\q => case q of
-    Pair argTerm (Pair sortLvl ec1) => andThen (elabConstraintDomains classes globals teleCtx0 ctxParts sp ec1) (\r => case r of
-      Pair ctxTys ec2 =>
-        Ok
-          (Pair (InstSigInfo (dtClassName cls) tele ctxTys argTerm (ctorResultType cls argTerm)) ec2)
+    kindMaybe = dictArgKind ec0 (VNeutral (NGlobal (dictTypeName (dtClassName cls)) []))
+  in case kindMaybe of
+    Nothing => tcErr0 sp InstanceHeadNotApp
+    Just kindVal => andThen (checkTypeAtKind globals teleCtx0 ec0 argExpr kindVal sp) (\q => case q of
+      Pair argTerm ec1 => andThen (elabConstraintDomains classes globals teleCtx0 ctxParts sp ec1) (\r => case r of
+        Pair ctxTys ec2 =>
+          Ok
+            (Pair (InstSigInfo (dtClassName cls) tele ctxTys argTerm (ctorResultType cls argTerm)) ec2)
+      )
     )
-  )
 
 -- 单态实例头的类型项（`instance Eq (Box Int)` 的头实参是复合类型）。
 -- 只做语法 → 核心项的机械转换（EVar → TGlobal、应用落成 Rig0 TApp）；

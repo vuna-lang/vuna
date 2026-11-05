@@ -125,13 +125,15 @@ modules = [
   "Base.Map",
   "Base.Monad",
   "Base.IO",
+  "Base.ST",
   "Prelude"
 ]
 ```
 
 （`vuna-base` 不在 `[dependencies]` 里依赖别的包；上例的 `[dependencies]` 段从略。
-`vuna-base` 的 `[capabilities] effects` 只列 `["console", "fs", "process"]`：`Base.IO`
-封装了这些能力对应的 `prim_*`。）
+`vuna-base` 的 `[capabilities] effects` 列 `["console", "fs", "process", "unsafe"]`：
+`Base.IO` 封装了前三个能力对应的 `prim_*`；`unsafe` 的唯一使用点是 `Base.ST.runST`
+（region 内动作经 `runIO` 执行，见 [effects.md](effects.md)）。）
 
 `[export]` 的每个名字都是模块全名；`[dependencies]` 的值是相对该包目录的路径（lexical
 规范化，不做 realpath）。manifest 只被解析与校验（`Vuna.Compiler.Frontend.Manifest`），

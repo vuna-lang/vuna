@@ -1,9 +1,14 @@
--- M33 W6：库级 Error 效应（泛型错误类型，interp 可归约）。
+-- M35.1：Base.Error 的 Monad/do + catchError 路径（interp 可归约）。
 import Base.Error
 import Base.Int
 
 safeDiv : Int -> Int -> Error String Int
-safeDiv a b = if b == 0 then Base.Error.throwError "div0" else Base.Error.pureError (a / b)
+safeDiv a b = if b == 0 then throwError "div0" else pure (a / b)
+
+guard : Error String Int
+guard = do
+  v <- safeDiv 84 0
+  pure v
 
 main : Int
-main = Base.Error.runError (safeDiv 84 2) (\_ => 0) (\v => v)
+main = runError (catchError guard (\_ => pure 42)) (\_ => 0) (\v => v)

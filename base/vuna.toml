@@ -25,6 +25,7 @@ modules = [
   "Base.IntMap",
   "Base.Array",
   "Base.IORef",
+  "Base.ST",
   "Base.MArray",
   "Base.Buffer",
   "Base.State",
@@ -37,4 +38,4 @@ modules = [
 
 # M27：效应能力声明（Base.IO 包装 prim_*）。
 [capabilities]
-effects = ["console", "fs", "process"]
+effects = ["console", "fs", "process", "unsafe"]

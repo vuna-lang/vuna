@@ -20,6 +20,7 @@ module Vuna.Compiler.Elab.Term.Impl
   , checkLitAltsFuel
   , checkLitBoundVarFuel
   , checkLitCaseFuel
+  , checkTypeAtKind
   , checkTypeFuel
   , checkTypeInferFuel
   , constrainDictDomFuel
@@ -927,6 +928,37 @@ else case globalsLookup name globals ec of
       Nothing => tcErr1 sp (AppliedNotType name) name
   )
 
+-- M35.1：实例头实参按**类参数 kind** 精化，并强制走**类型命名空间**。
+-- 不能直接用 checkE：值位置优先查构造子，而 record 的构造子与类型同名（M23），
+-- `instance Monad (State s)` 里的 `State` 会被解析成构造子再按值应用（kind 错位，
+-- 报 `constructor State: expected Type -> Type, got State ?0 ?1`）。
+-- 期望 kind 是宇宙时沿用 checkType（旧「头实参必须是类型」语义 + 宇宙检查）；
+-- 是箭头 kind 时以「类型名 + 实参」在类型的 kind 上应用实参（同 checkTypeFuel 的
+-- EApp 分支），再用 conv 把结果 kind 与期望 kind 对齐。
+checkTypeAtKind : List (Pair String Term) -> Ctx -> Ec -> Expr -> Value -> Span -> Result (Pair Term Ec)
+checkTypeAtKind globals ctx ec expr expected sp = case forceVal ec expected of
+  VType _ =>
+    andThen (checkTypeFuel 256 globals ctx ec expr)
+      (\p => Ok (Pair (firstOf p) (secondOf (secondOf p))))
+  _ => case expr of
+    EVar name _ => if isTypeName globals ec name then case globalsLookup name globals ec of
+      Nothing => tcErr1 sp (UnknownName name) name
+      Just kindTerm =>
+        andThen (convEc ec (ctxDepth ctx) expected (eval [] kindTerm))
+          (\ec1 => Ok (Pair (TGlobal name) ec1))
+    else checkEFuel 256 globals ctx ec expr expected
+    EApp (EVar name _) args _ => if isTypeName globals ec name then case globalsLookup name globals ec of
+      Nothing => tcErr1 sp (UnknownName name) name
+      Just kindTerm => andThen (inferArgsFuel 256 globals ctx ec (eval [] kindTerm) args sp) (\pa => case pa of
+        Pair argTerms (Pair resTy ec1) => case convEc ec1 (ctxDepth ctx) expected resTy of
+          Ok ec2 => Ok (Pair (foldAppTerms (TGlobal name) argTerms) ec2)
+          Err e =>
+            tcErr2 sp (TypeMismatch (showValue expected) (showValue resTy)) (showValue expected)
+              (showValue resTy)
+      )
+    else checkEFuel 256 globals ctx ec expr expected
+    _ => checkEFuel 256 globals ctx ec expr expected
+
 -- M19：`==` / `/=` 的饱和应用按实参类型特化。
 -- 返回 `Nothing` 表示「不是泛化比较运算符的饱和应用」，调用方走常规路径。
 -- 特化后的项是 `bi_eq_int a b` / `bi_eq_str a b` 这类具体运行时函数应用，
@@ -1018,17 +1050,105 @@ else case fn of
 -- 用 `dtCtorLookup` 取**构造子类型**（不是 `globalLookup`）：名字与族同名的构造子
 -- （如 `data Pair a b where Pair : a -> b -> Pair a b`）的 `globalLookup` 会命中族 kind
 -- （`Type -> Type -> Type`）而不是构造子类型，导致隐式族参数丢失。
+-- M35.1：检查方向构造子应用的**族参数反推**（只对恒等结果索引的构造子生效）。
+--
+-- 旧路径先 `inferArgsFuel`（隐式族参数插元变量）再与期望类型统一。对字段类型依赖
+-- 族参数的构造子（CPS `Eff` 的 `(a -> ans) -> ((op : f) -> (res op -> ans) -> ans) -> ans`），
+-- 检查字段 lambda 时 `res`/`a` 还是元变量，`alg op k` 会要求解 `?a ≡ res op` 这类
+-- flex-flex 约束（`res` 在 λ 内才绑定）→
+-- `cannot solve metavariable (solution would escape its scope)`。
+-- 这里先把期望类型 `F r1..rk` 的实参喂进 telescope 的前 k 个隐式族 binder，检查字段时
+-- 索引已经是具体值。
+--
+-- 只对**恒等结果索引**生效：结果 `F x1..xk` 的 xi 必须就是第 i 个 binder 本身（如 `Eff`）。
+-- `Vec a (Succ n)` 这类非恒等索引的 binder 不等于结果索引，喂进去会造出错误索引
+-- （曾把 `VCons` 的 n 喂成结果长度，导致 `VNil` 期望 1 得到 0）。
+-- 构造子类型末尾的族应用 `F r1..rk` 的实参（跳过 Pi 链）。
+ctorResultArgs : Term -> List Term
+ctorResultArgs (TPi _ _ _ _ cod) = ctorResultArgs cod
+ctorResultArgs ty = secondOf (ctorSpineOfType ty)
+
+ctorSpineOfType : Term -> Pair String (List Term)
+ctorSpineOfType (TApp f a _) = case ctorSpineOfType f of
+  Pair h args => Pair h (append args [a])
+ctorSpineOfType (TGlobal g) = Pair g []
+ctorSpineOfType _ = Pair "" []
+
+dropPis : Term -> Term
+dropPis (TPi _ _ _ _ cod) = dropPis cod
+dropPis t = t
+
+identityArgs : Int -> Int -> List Term -> Bool
+identityArgs i k [] = True
+identityArgs i k (a :: rest) = case a of
+  TVar _ idx => if idx == k - 1 - i then identityArgs (i + 1) k rest else False
+  _ => False
+
+-- 恒等结果索引：`F x1..xk` 且 xi 就是第 i 个族 binder（de Bruijn index = teleLen-1-i）。
+ctorIdentitySpine : String -> DtCtor -> Bool
+ctorIdentitySpine fam ctor =
+  let
+    k = length (dtCtorTelescope ctor)
+    args = ctorResultArgs (dtCtorType ctor)
+  in case ctorSpineOfType (dropPis (dtCtorType ctor)) of
+    Pair h _ =>
+      if h == fam then if length args > 0 then if length args < k then identityArgs 0 k args else False else False
+      else False
+
+-- 取 telescope 前 n 个 binder 的 rig（族参数部分）。
+takeRigs : Int -> List (Pair String Rig) -> List Rig
+takeRigs n bs = takeRigsGo n bs
+
+takeRigsGo : Int -> List (Pair String Rig) -> List Rig
+takeRigsGo n [] = []
+takeRigsGo n (b :: bs) = if n <= 0 then [] else secondOf b :: takeRigsGo (n - 1) bs
+
+ctorFamilyArgs : Ec -> Ctx -> DtCtor -> Value -> Maybe (Pair (List (Pair Term Rig)) (Pair Value Ec))
+ctorFamilyArgs ec ctx ctor expected =
+  let
+    fam = dtCtorFamily ctor
+  in if ctorIdentitySpine fam ctor then case forceVal ec expected of
+    VNeutral (NGlobal gfam spine) =>
+      let
+        arity = length (ctorResultArgs (dtCtorType ctor))
+      in if gfam == fam then if length spine == arity then ctorFamilyArgsGo ec (eval [] (dtCtorType ctor)) spine (takeRigs arity (dtCtorTelescope ctor))
+        (ctxDepth ctx) []
+      else Nothing
+      else Nothing
+    _ => Nothing
+  else Nothing
+
+ctorFamilyArgsGo : Ec -> Value -> List Value -> List Rig -> Int -> List (Pair Term Rig) -> Maybe (Pair (List (Pair Term Rig)) (Pair Value Ec))
+ctorFamilyArgsGo ec ty [] rigs depth acc = Just (Pair (reverse acc) (Pair ty ec))
+ctorFamilyArgsGo ec ty (v :: vs) [] depth acc = Nothing
+ctorFamilyArgsGo ec ty (v :: vs) (r :: rs) depth acc = case forceVal ec ty of
+  VPi _ implicit _ dom clo =>
+    if implicit then ctorFamilyArgsGo ec (applyClosure clo v) vs rs depth (Pair (quote depth v) r :: acc)
+    else Nothing
+  _ => Nothing
+
 checkAppCtorFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> String -> List Expr -> Value -> Span -> Result (Pair Term Ec)
 checkAppCtorFuel fuel globals ctx ec name args expected sp = if fuel <= 0 then Err "DT: internal: inference fuel exhausted"
 else case dtCtorLookupEc ec name of
   Nothing => tcErr1 sp (UnknownName name) name
-  Just ctor => andThen (inferArgsFuel (fuel - 1) globals ctx ec (eval [] (dtCtorType ctor)) args sp) (\pa => case pa of
-    Pair argTerms (Pair resTy ec1) =>
-      let
-        ctorTerm = ctorAppTerm (ecDatas ec1) (TGlobal name) argTerms
-      in case coerceTerm ec1 expected resTy ctorTerm of
-        Just coerced => Ok (Pair coerced ec1)
-        Nothing => case convEc ec1 (ctxDepth ctx) expected resTy of
-          Ok ec2 => Ok (Pair (ctorAppTerm (ecDatas ec2) (TGlobal name) argTerms) ec2)
-          Err e => tcErr2 sp (CtorError name e) name e
-  )
+  Just ctor => case ctorFamilyArgs ec ctx ctor expected of
+    Just (Pair seedArgs (Pair ty2 ec0)) => andThen (inferArgsFuel (fuel - 1) globals ctx ec0 ty2 args sp) (\pa => case pa of
+      Pair argTerms (Pair resTy ec1) =>
+        let
+          allArgs = append seedArgs argTerms
+        in case coerceTerm ec1 expected resTy (ctorAppTerm (ecDatas ec1) (TGlobal name) allArgs) of
+          Just coerced => Ok (Pair coerced ec1)
+          Nothing => case convEc ec1 (ctxDepth ctx) expected resTy of
+            Ok ec2 => Ok (Pair (ctorAppTerm (ecDatas ec2) (TGlobal name) allArgs) ec2)
+            Err e => tcErr2 sp (CtorError name e) name e
+    )
+    Nothing => andThen (inferArgsFuel (fuel - 1) globals ctx ec (eval [] (dtCtorType ctor)) args sp) (\pa => case pa of
+      Pair argTerms (Pair resTy ec1) =>
+        let
+          ctorTerm = ctorAppTerm (ecDatas ec1) (TGlobal name) argTerms
+        in case coerceTerm ec1 expected resTy ctorTerm of
+          Just coerced => Ok (Pair coerced ec1)
+          Nothing => case convEc ec1 (ctxDepth ctx) expected resTy of
+            Ok ec2 => Ok (Pair (ctorAppTerm (ecDatas ec2) (TGlobal name) argTerms) ec2)
+            Err e => tcErr2 sp (CtorError name e) name e
+    )

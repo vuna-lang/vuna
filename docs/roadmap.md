@@ -44,6 +44,9 @@ vuna 尚未发布任何版本：没有外部用户、下游生态与历史包袱
   负载 ≤2×）；codegen 内建内联 / 多参数 lambda 链 / 字符串批拼；`Array` / `IORef` / `MArray` /
   `Buffer` 与 IO 隔离的可变数据；受限 FFI（`extern` + 包根 `ffi/*.c`）；库级 `State` /
   `Reader` / `Error`。测量设施与基线在 `bench/`。
+- **效应与 ST（M35.1）**：`Base.State` / `Base.Reader` / `Base.Error` 是带 `Functor` / `Monad`
+  实例的纯函数效应 monad（`do` 可用）；`Base.ST` 提供 region 隔离的可变数据（`runST`
+  句柄不逃逸，运行时经 `runIO`）；通用签名索引效应受擦除后端限制，归 F3（[effects.md](reference/effects.md)）。
 - **质量门禁**：`nix flake check`（packages + seed-selfhost + tests + typecheck + lint + fmt +
   index + metrics + package + context-budget + vscode-ext）、原生测试、lint / fmt / metrics /
   文档预算。
@@ -119,7 +122,13 @@ LSP 诊断帧进程内缓存（同 uri+内容重复请求命中，编辑后仍�
 
 ### M35：并发 / 服务端
 
-1. **效应系统 / 代数效应**：effect rows 或等价设计、handler、与 ST / 可变数据整合；
+1. **效应系统 / 代数效应（M35.1，设计/参考页 [effects.md](reference/effects.md)）**：
+   **已落地（2026-11）**：参数化效应 monad + `do`（`Base.State` / `Base.Reader` /
+   `Base.Error`）、`Base.ST` region 隔离可变数据（句柄不逃逸 + 负例夹具）、三处前置编译器
+   修复（构造子族参数反推、实例头按类参数 kind、刚性类参数的泛型实例搜索）。
+   **剩余（F3）**：通用签名索引效应（用户自定义 op + 深 handler + 行/重排）被擦除后端
+   挡住——擦除依赖的续延域在 OCaml 里没有表示（D27）；三条路线（QTT / 不透明擦除值 /
+   运行时类型码）先在 F3 决策。**明确不做**：语言级 `handle` / `perform`、行多态、自动 lift；
 2. **结构化并发 / async**：调度器、取消 / 超时、结构化作用域、内存模型；先库级
    （线程池 / 事件循环 + IO），再语言级；
 3. **网络 / 系统库与完整 FFI**：socket / 文件 / 进程、异步 IO、回调 / GC 交互；
@@ -127,7 +136,8 @@ LSP 诊断帧进程内缓存（同 uri+内容重复请求命中，编辑后仍�
 
 **依赖**：M33 的运行时 / 受限 FFI / 库级效应已落地；M34 的确定性与缓存。
 **退出标准**：并发 echo / HTTP 基准；取消 / 超时语义正确；无数据竞争（类型层或运行时检测）。
-**映射 debt**：D03（关闭）、D02（运行时决策）、D04（生态，可选）。
+**映射 debt**：M35.1 收窄 D03 / D22 并新增 D27 / D28；M35 整体 → D02（运行时决策）、
+D04（生态，可选）。
 
 **明确排除**：不自研后端 / GC / LLVM / native；OCaml 后端长期保留（D02 的该分支关闭）。
 Wasm / JS 暂缓，不排期；若未来需要单独立项。性能轨道不改变「单一 DT 路径」、seed 不变量

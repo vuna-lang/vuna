@@ -164,8 +164,9 @@
 - 越界行为：`arrayGet` / `MArray.read` 越界是宿主 `Invalid_argument`（不是 `strAt` 的
   -1 哨兵，也没有语言层诊断）；`Array.set` 先 `Array.copy`，原数组不变。
 - 可变数据的安全边界是 **IO 隔离**：`IORef` / `MArray` / `Buffer` 的句柄只能在 `IO` 动作里
-  使用；`runIO` 是 main 外的逃逸口、需要 `unsafe`。**没有线性 / 唯一性类型与 ST/region**
-  （见 [limits.md](limits.md)）。
+  使用；`runIO` 是 main 外的逃逸口、需要 `unsafe`。**ST/region（M35.1）**：`Base.ST` 的
+  `Ref` / `SArray` 只在 `ST r` 里使用且不能逃出 `runST`；仍无线性 / 唯一性类型（句柄可复制、
+  多用未禁止，见 [effects.md](effects.md)）。
 
 ## 7. 效果原语、IO 动作与能力（M31）
 
@@ -207,7 +208,9 @@
   （`Loader.Resolve.checkEffectsBuiltins`）。
 - **这是权限声明，不是检查豁免**：能力不改变类型检查、擦除或 codegen 语义，只决定能否在
   源码里直接引用效果原语 / `runIO`；没有按包名字符串判定的 allowlist。
-- `Base.IO` 自身声明 `["console", "fs", "process"]`（只做别名，不调用 `runIO`）；编译器与
+- `Base.IO` 自身声明 `["console", "fs", "process"]`（只做别名，不调用 `runIO`）；`base` 另声明
+  `unsafe`（M35.1，唯一使用点是 `Base.ST` 经 `runIO` 执行 region 内动作，见
+  [effects.md](effects.md)）；编译器与
   产品 CLI 声明全部六个能力（含 `unsafe`）。
 
 ## 8. 生成 runtime 的契约

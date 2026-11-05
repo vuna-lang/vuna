@@ -1,0 +1,27 @@
+data Pair a b : Type where
+  MkPair : a -> b -> Pair a b
+
+data State : Type -> Type -> Type where
+  MkState : {s : Type} -> {a : Type} -> (s -> Pair a s) -> State s a
+
+runState : {s : Type} -> {a : Type} -> State s a -> s -> Pair a s
+runState st s = case st of
+  MkState f => f s
+
+instance Monad (State s) where
+  bind st k = MkState (\s => case runState st s of
+    MkPair a s2 => runState (k a) s2
+  )
+  pure x = MkState (\s => MkPair x s)
+
+get : {s : Type} -> State s s
+get = MkState (\s => MkPair s s)
+
+prog : State Int Int
+prog = do
+  x <- get
+  pure (x + 1)
+
+main : Int
+main = case runState prog 41 of
+  MkPair a s => a + s

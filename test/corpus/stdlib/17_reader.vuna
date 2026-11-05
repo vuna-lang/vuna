@@ -1,6 +1,9 @@
--- M33 W6：库级 Reader 效应（纯函数表示，interp 可归约）。
+-- M35.1：Base.Reader 的 Functor/Monad 路径（纯函数表示，interp 可归约）。
 import Base.Reader
 import Base.Int
 
+scaled : Reader Int Int
+scaled = fmap (\n => n * 2) ask
+
 main : Int
-main = Base.Reader.runReader (Base.Reader.mapReader (\n => n * 2) Base.Reader.ask) 21
+main = runReader scaled 21

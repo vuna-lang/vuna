@@ -158,8 +158,10 @@ describe x y = if x == y then show x else show x ++ "/" ++ show y
   类型构造器本身（`instance Monad Maybe`），kind 不符（如 `instance Monad Int`）在
   声明期报错。
 - **`IO`** 是 `base/lib/Base/IO.vuna` 的抽象类型（构造器私有）；组合统一用
-  `Functor` / `Monad` trait 的 `fmap` / `bind` / `pure`、`>>=` 与 `do`，**没有公开的
-  `runIO` / `unsafeRunIO`**：IO 动作只能由运行时在 `main` 处执行。
+  `Functor` / `Monad` trait 的 `fmap` / `bind` / `pure`、`>>=` 与 `do`。IO 动作只在 `main`
+  执行；`Base.IO.runIO` 是唯一的 main 外入口、需要能力 `unsafe`（工具链与 `Base.ST` 用）。
+  参数化效应 monad（`Base.State` / `Base.Reader` / `Base.Error`）与 ST 见
+  [effects.md](effects.md)。
 - 效果 API 直接返回 IO：`print` / `println` / `readFile` / `writeFile` / `readLine` /
   `readDir` / `isDirectory` / `makeDir` / `removeFile` / `fileExists` / `getArgs` /
   `exit`（例如 `getArgs : IO (List String)`、`print : String -> IO Int`）；内部用

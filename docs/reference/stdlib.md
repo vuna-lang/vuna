@@ -19,7 +19,8 @@
 | `Base.IORef` | IO 内的可变引用（`newRef` / `readRef` / `writeRef` / `modifyRef`，全部 `IO`） |
 | `Base.MArray` | IO 内的可变数组（`new` / `read` / `write` / `length`，全部 `IO`） |
 | `Base.Buffer` | 可变字符串缓冲（`new` / `add` / `contents` / `length`，全部 `IO`） |
-| `Base.State` / `Base.Reader` / `Base.Error` | 库级效应（M33 W6）：纯函数表示，手写 `bind` / `map` / `pure` 组合子；`State` 是 `s -> Pair a s`、`Reader` 是 `e -> a`、`Error` 是泛型 `Ok`/`Err` 和；暂不声明 trait 实例（等 F4 的 trait 能力） |
+| `Base.ST` | region 隔离的局部可变数据（M35.1）：`ST r a` + `runST`（显式 region binder，句柄不逃逸）+ `Ref r a` / `SArray r a`（包 `IORef` / `MArray`）+ 显式组合子 `bindST` / `pureST` / `fmapST`；不声明 `Functor`/`Monad` 实例，运行时经 `Base.IO.runIO` |
+| `Base.State` / `Base.Reader` / `Base.Error` | 库级效应 monad（M35.1）：纯函数表示 + `Functor`/`Monad` 实例（`do` 可用）；`State` 是 `s -> Pair a s`、`Reader` 是 `e -> a`、`Error` 是泛型 `Ok`/`Err` 和；handler 是 `runState` / `evalState` / `execState`、`runReader` / `ask` / `local`、`runError` / `throwError` / `catchError`；M33 的手写组合子（`bindState` 等）已删除。通用签名索引效应（通用 `Eff`）未实现，见 [effects.md](effects.md) |
 | `Base.Nat` | 非负整数（`Zero` / `Succ`）；运行时是 OCaml `int`。`plus` / `minus` / `mult` / `div` / `toInt` / `fromInt` / `fromIntMaybe` / `pred` / `isZero` + `Eq` / `Ord` / `Show` 实例 |
 | `Base.Vec` | `Vec(..)` 与 `substTemplate` / `vhead` / `vlen` / `vtail` |
 | `Base.Monad` | `Functor` / `Monad` trait |
@@ -156,17 +157,22 @@ module Base.IO (IO, print, println, readFile, writeFile, readLine, readDir, ...)
 - 键只覆盖 `String`（`HashMap`/`HashSet`）与 `Int`（`IntMap`）：没有泛型 `Hashable`
   trait（trait 仅单参数、无 `deriving Hash`），也没有有序持久容器（TreeMap/TreeSet）；
   需要有序时用 `Base.Sort`，大表查找用哈希容器；
-- **容器与可变数据（M33 W3）**：不可变 `Base.Array`、IO 内 `IORef` / `MArray` / `Buffer`
-  已落地；`Array.get` / `MArray.read` 越界是宿主 `Invalid_argument`；`Array.set` 返回新数组；
-  可变句柄只经 `IO` 动作使用（`runIO` 逃逸需要 `unsafe`）；没有线性 / 唯一性类型与 ST；
-- **库级效应（M33 W6）**：`State` / `Reader` / `Error` 是纯函数库，**不进入 `Prelude` /
-  `Base` 门面**（显式 import）；没有 trait 实例（trait 单参数 / 类型级部分应用限制），
-  `bind` / `map` / `pure` 组合子手写；没有语言级效应系统 / 并发（M34.7）；
+- **容器与可变数据（M33 W3 / M35.1 ST）**：不可变 `Base.Array`、IO 内 `IORef` / `MArray` /
+  `Buffer`、ST 内 `Base.ST` 的 `Ref` / `SArray` 已落地；`Array.get` / `MArray.read` 越界是
+  宿主 `Invalid_argument`；`Array.set` 返回新数组；IO 句柄只经 `IO` 动作使用，ST 句柄
+  只经 `ST r` 使用且不能逃出 `runST`（见 [effects.md](effects.md)）；**仍无 QTT / 线性**：
+  ST 句柄可复制、多次使用未在类型上禁止；
+- **库级效应（M35.1）**：`State` / `Reader` / `Error` 是带 `Functor`/`Monad` 实例的纯函数
+  monad（**不进入 `Prelude` / `Base` 门面**，显式 import）；`do` 可用；`Base.ST` 的 region
+  隔离与「不声明 `Monad` 实例」的原因见 [effects.md](effects.md)；通用签名索引效应
+  （用户自定义 op + 深 handler + 行/重排）未实现（debt D03 / D26）；没有语言级并发 / async
+  （M35.2）；
 - `Result` 暂无 `Functor` / `Monad` 实例；
 - 抽象类型（`Map`、`IO`）跨包不可构造、不可模式匹配，只能经 API 使用。
 
 ## 相关阅读
 
 - 记录、trait、do/Monad 语义：[records-traits.md](records-traits.md)
+- 效应 monad / ST / 通用 Eff 的边界：[effects.md](effects.md)
 - 包与 workspace 机制、工具链命令：[packages.md](packages.md)
 - 编译器门面与 seed 闭包：[compiler.md](compiler.md)、[bootstrap.md](bootstrap.md)
