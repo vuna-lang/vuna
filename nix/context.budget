@@ -110,3 +110,8 @@ max_module_lines 1208
 #   - API 文档 + 检索：AGENTS/README 增加 `vuna doc`（单文件 HTML）、`vuna search`
 #     与 docstring 导航行；与 main 的 effects/接口摘要文档合并后按 `sh nix/context-budget.sh .`
 #     实测复标定 coldstart 31325 / agents 108 / readme 167（arch 167、max_ref 317、max_module 1208）。
+#   - M36（模板字符串 / 多行字面量）：新增 docs/reference/templates.md（69 行），
+#     language/stdlib/primitives/records-traits/limits/architecture 同步接进导航，architecture 的
+#     Loader 段加模板降级一条（arch 167 → 171）。`Elab/Trait.vuna` 的实例相干性检查拆到新模块
+#     `Elab/InstCoherence.vuna`（Trait 1208 → 1155，新增模块小于现有上限），max_module 保持 1208。
+#     属特性文档增长，按 `sh nix/context-budget.sh .` 实测复标定 coldstart / arch 见下。

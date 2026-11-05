@@ -21,7 +21,6 @@ import Base.Show
 trait Interp a where
   interp : a -> String
 
-
 -- blanket：`Show a` ⇒ 免费插值（默认 = show）。
 instance Show a => Interp a where
   interp x = show x

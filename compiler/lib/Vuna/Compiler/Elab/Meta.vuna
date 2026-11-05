@@ -595,7 +595,7 @@ findClassByShortName short [] = Nothing
 findClassByShortName short (c :: rest) =
   if baseNameOf (dtClassName c) == short then Just c else findClassByShortName short rest
 
--- M35：blanket 实例（fallback 实例）判定——头是 `Dict_C x`，且 `x` 是本实例自己的
+-- M36：blanket 实例（fallback 实例）判定——头是 `Dict_C x`，且 `x` 是本实例自己的
 -- **裸 tele 变量**（例如 `instance Show a => Interp a`）。`n` 是 tele 长度，head 在该
 -- n 个 binder 之下，所以合法索引是 0..n-1。
 --

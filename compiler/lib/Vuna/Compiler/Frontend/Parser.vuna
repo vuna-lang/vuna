@@ -572,26 +572,26 @@ else case peekTok st of
         (\_, st1 => step (parseExpr (fuel - 1) st1 blockCol 0) (\base, st2 => step (expectSym st2 "|") (\_, st3 => step (parseRecordAssignments (fuel - 1) st3 blockCol) (\fields, st4 => Ok (Pair (ERecUpdate base fields (spanOf st st4)) st4)))))
   _ => psErr0 ExpectedExpression
 
--- M35：模板字符串原子。文本块直接成为 `IPText`；插值洞用**洞内 token** 现场解析
+-- M36：模板字符串原子。文本块直接成为 `IPText`；插值洞用**洞内 token** 现场解析
 -- （token 位置由 lexer 原位给出，仍是绝对源码位置），再组装成 `EInterp`。
 -- 字面量结束位置写入 `lastPos`：多行字面量之后的布局判定与 decl span 都依赖它。
 parseTemplateAtom : Int -> PState -> Bool -> List TmplPart -> Pos -> Result (Pair Expr PState)
-parseTemplateAtom fuel st multi parts endP =
-  if fuel <= 0 then Err "DT: parser fuel exhausted (internal: parser made no progress)"
-  else andThen (parseTemplateParts (fuel - 1) (fileOf st) parts)
-    (\ps => let
-      advanced = advance st
-      st2 = PState (fileOf st) advanced.toksOf endP advanced.toksLeft
-    in Ok (Pair (EInterp multi ps (spanOf st st2)) st2)
-    )
+parseTemplateAtom fuel st multi parts endP = if fuel <= 0 then Err "DT: parser fuel exhausted (internal: parser made no progress)"
+else andThen (parseTemplateParts (fuel - 1) (fileOf st) parts) (\ps => let
+  advanced = advance st
+  st2 = PState (fileOf st) advanced.toksOf endP advanced.toksLeft
+in Ok (Pair (EInterp multi ps (spanOf st st2)) st2)
+)
 
 parseTemplateParts : Int -> String -> List TmplPart -> Result (List InterpPart)
 parseTemplateParts fuel file parts = if fuel <= 0 then Err "DT: parser fuel exhausted (internal: parser made no progress)"
 else case parts of
   [] => Ok []
-  TPText s :: rest => andThen (parseTemplateParts (fuel - 1) file rest) (\ps => Ok (IPText s :: ps))
-  TPHole toks :: rest =>
-    andThen (parseTemplateHole (toksFuel toks) file toks) (\e => andThen (parseTemplateParts (fuel - 1) file rest) (\ps => Ok (IPHole e :: ps)))
+  (TPText s) :: rest =>
+    andThen (parseTemplateParts (fuel - 1) file rest) (\ps => Ok (IPText s :: ps))
+  (TPHole toks) :: rest =>
+    andThen (parseTemplateHole (toksFuel toks) file toks)
+      (\e => andThen (parseTemplateParts (fuel - 1) file rest) (\ps => Ok (IPHole e :: ps)))
 
 -- 一个插值洞：空 token → `TemplateHoleEmpty`；否则必须恰好解析成一个表达式。
 -- 前端诊断本来无位置，这里补上 `line:col:`（Loader 再补文件名），洞内错误才可定位。
@@ -605,8 +605,9 @@ else case toks of
       sub = PState file toks pos (length toks)
     in case parseExpr (fuel - 1) sub 0 0 of
       Err e => Err (holePosPrefix pos ++ e)
-      Ok (Pair e st2) => if isEof st2 then Ok e
-      else Err (holePosPrefix pos ++ "[PS_ExpectedEndOfExpr] expected end of expression")
+      Ok (Pair e st2) =>
+        if isEof st2 then Ok e
+        else Err (holePosPrefix pos ++ "[PS_ExpectedEndOfExpr] expected end of expression")
 
 holePosPrefix : Pos -> String
 holePosPrefix (Pos line col) = strFromInt line ++ ":" ++ strFromInt col ++ ": "
@@ -618,10 +619,10 @@ toksFuel toks = 128 * length toks + 1024
 -- 洞内 token 全是文本块时拼成字符串（多行字面量在**模式**里只允许这种形态）。
 textPartsOf : List TmplPart -> Maybe String
 textPartsOf [] = Just ""
-textPartsOf (TPText s :: rest) = case textPartsOf rest of
+textPartsOf ((TPText s) :: rest) = case textPartsOf rest of
   Nothing => Nothing
   Just t => Just (s ++ t)
-textPartsOf (TPHole toks :: rest) = Nothing
+textPartsOf ((TPHole toks) :: rest) = Nothing
 
 -- M31.3：section 的 op 值 / 左 section 形态：`(op)` 与 `(op e)`。
 -- 进入时已在 `(`，op 已由 sectionOpAt 确认（TSym 且非保留名）。
@@ -868,12 +869,13 @@ else case peekTok st of
     else Ok (Pair (PVar name (spanOf st (advance st))) (advance st))
   PTok (TInt n) p => Ok (Pair (PInt n (spanOf st (advance st))) (advance st))
   PTok (TStr s) p => Ok (Pair (PStr s (spanOf st (advance st))) (advance st))
-  -- M35：多行字面量模式只允许**无洞**（等价于普通字符串字面量模式）；带洞不支持。
+  -- M36：多行字面量模式只允许**无洞**（等价于普通字符串字面量模式）；带洞不支持。
   PTok (TTmpl multi parts endP) p => case textPartsOf parts of
-    Just s => let
-      advanced = advance st
-      st2 = PState (fileOf st) advanced.toksOf endP advanced.toksLeft
-    in Ok (Pair (PStr s (spanOf st st2)) st2)
+    Just s =>
+      let
+        advanced = advance st
+        st2 = PState (fileOf st) advanced.toksOf endP advanced.toksLeft
+      in Ok (Pair (PStr s (spanOf st st2)) st2)
     Nothing => psErr0 TemplateInPattern
   PTok (TSym "(") p =>
     step (parsePatternSingle (fuel - 1) (advance st) blockCol)

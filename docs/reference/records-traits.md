@@ -67,6 +67,10 @@ main = pretty Red ++ "/" ++ show Red
 - **实例按 head 全局唯一**：同一 head 的重复 / 重叠实例报 `duplicate instance` /
   `overlapping instance`（含 `deriving` 生成的实例）。**没有命名实例**：不存在
   `instance C T as name` 或 `@name` 选择，相干性只靠「同一 head 唯一」。
+- **blanket 实例是 fallback（M36）**：head 实参是裸类参数（全部 tele 都是类参数）的实例
+  是兜底，例如 base 的 `instance Show a => Interp a`；搜索分两阶段——具体实例先匹配，匹配
+  不到才试 blanket。**具体实例覆盖 blanket**（`instance Interp String` 赢过 blanket），
+  具体实例之间仍禁止重叠；两个 blanket 仍报 `TC_DuplicateInstance`（见 [templates.md](templates.md)）。
 - **实例落点**：实例跟类型模块走；trait 签名直接依赖该类型、放类型模块会成 import 环时
   例外（`Bool` 是 `Eq` / `Ord` 方法的返回类型，实例随 trait 留在 `Base.Eq` /
   `Base.Ord`，放 `Base.Bool` 会成环）。**不再有「孤儿实例被拒」的表述**——实现从未强制

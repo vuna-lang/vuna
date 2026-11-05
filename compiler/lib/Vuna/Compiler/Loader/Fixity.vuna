@@ -196,7 +196,7 @@ reorderExpr t (EDo stmts sp) =
   andThen (traverse (\v => reorderDoStmt t v) stmts) (\ss => Ok (EDo ss sp))
 reorderExpr t (EAnn inner ty sp) =
   andThen (reorderExpr t inner) (\i2 => andThen (reorderExpr t ty) (\t2 => Ok (EAnn i2 t2 sp)))
--- M35：模板字面量是 parser 的**保留语法**（fmt/lint/index/doc 要看原形），重排只递归洞内
+-- M36：模板字面量是 parser 的**保留语法**（fmt/lint/index/doc 要看原形），重排只递归洞内
 -- 表达式；降级为 `interp` 调用发生在 `Loader.Resolve`（rename 之后）。
 reorderExpr t (EInterp multi parts sp) =
   andThen (reorderInterpParts t parts) (\ps => Ok (EInterp multi ps sp))
@@ -208,7 +208,8 @@ reorderInterpParts t [] = Ok []
 reorderInterpParts t (p :: rest) = case p of
   IPText s => andThen (reorderInterpParts t rest) (\ps => Ok (IPText s :: ps))
   IPHole e =>
-    andThen (reorderExpr t e) (\e2 => andThen (reorderInterpParts t rest) (\ps => Ok (IPHole e2 :: ps)))
+    andThen (reorderExpr t e)
+      (\e2 => andThen (reorderInterpParts t rest) (\ps => Ok (IPHole e2 :: ps)))
 
 reorderBinds : FixityTable -> List (Pair Pat Expr) -> Result (List (Pair Pat Expr))
 reorderBinds t binds = traverse (\v => reorderBind t v) binds

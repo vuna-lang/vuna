@@ -60,6 +60,11 @@ import 子模块并选择性重导出（对外名字面不变），实现只在�
 （`->` 由 `syntaxFixityDecls` 恒可见；未知符号运算符报错）；fmt / LSP / lint 用
 `fixitiesForSource(In)` 取程序级闭包。详见 [operators.md](reference/operators.md)。
 
+**模板字符串**：lexer 产出 `TTmpl`（洞内 token 原位保留），parser 组成 `EInterp`；
+`Loader.Resolve` 在名字解析后**降级**成 `Base.Interp.interp` 调用 + `++` 链（纯语法糖，
+Elab/codegen 看不到模板）。fmt/lint/index/doc 只 parse，仍按 `EInterp` 处理。详见
+[templates.md](reference/templates.md)。
+
 **擦除 / 合一 / 定义形式**：擦除只有单一判据链（`Elab.Meta.isTypeDomain` →
 `binderRig` → `Core.rigOfBinder`，读取侧统一 `Core.rigIsErased`）；元变量求解在
 `Core.Conv.solveMeta`（created-depth 随 `Sols` 就地检查，非空 spine 走 Miller pattern）；

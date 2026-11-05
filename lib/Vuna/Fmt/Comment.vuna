@@ -308,7 +308,7 @@ exprAnchors e = case e of
   ESectOp op sp => []
   ESectL op inner sp => exprAnchors inner
   ESectR inner op sp => exprAnchors inner
-  -- M35：模板字面量：洞内表达式的注释锚点照常收集（注释仍在字面量内，但会被提升到
+  -- M36：模板字面量：洞内表达式的注释锚点照常收集（注释仍在字面量内，但会被提升到
   -- 外层条目——注释在 `${...}` 里不进 AST，见 Lexer 的说明）。
   EInterp multi parts sp => concatMap interpPartAnchors parts
 

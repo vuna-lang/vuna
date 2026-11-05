@@ -1,0 +1,5 @@
+main : String
+main = """
+line1 ${interp 1}
+  line2 "q"
+"""

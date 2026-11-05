@@ -1,0 +1,5 @@
+label : Interp a => a -> String
+label x = "v=${x}"
+
+main : String
+main = label 7 ++ " " ++ label "hi" ++ " " ++ label True

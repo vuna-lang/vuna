@@ -38,7 +38,7 @@ import Base.Vec
 data LexDiag : Nat -> Type where
   UnterminatedBlockComment : LexDiag Zero
   UnterminatedString : LexDiag Zero
-  -- M35：模板字符串的插值洞没有闭合（缺 `}`）。
+  -- M36：模板字符串的插值洞没有闭合（缺 `}`）。
   UnterminatedInterpolation : LexDiag Zero
   UnknownEscape : LexDiag Zero
   UnexpectedCharacter : LexDiag Zero
@@ -79,7 +79,7 @@ data PsDiag : Nat -> Type where
   ExpectedPattern : PsDiag Zero
   ExpectedRecordFieldPattern : PsDiag Zero
   ExpectedTopLevelDecl : PsDiag Zero
-  -- M35：模板字符串的两个语法边界（空洞 / 模式里带洞）。
+  -- M36：模板字符串的两个语法边界（空洞 / 模式里带洞）。
   TemplateHoleEmpty : PsDiag Zero
   TemplateInPattern : PsDiag Zero
   ExprNotIndented : PsDiag Zero

@@ -911,7 +911,6 @@ checkInstanceHeadsGo ((d@(Pair decl dsp)) :: rest) classes globals ec acc insts 
   )
   _ => checkInstanceHeadsGo rest classes globals ec acc insts seen
 
-
 -- 实例方法体（在顶层定义之后精化）。
 -- M30（B20）：入口收**全量已 resolve 声明**（Driver 传入，`List Decl`），内部自己筛出
 -- 实例列表；全量声明同时用于「实例缺方法」诊断反查 trait 方法签名 span（`traitMethodSpanOf`）。

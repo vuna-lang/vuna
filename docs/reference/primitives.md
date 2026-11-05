@@ -89,8 +89,9 @@
 - `++`：按字节拼接（runtime `bi_concat` = OCaml `^`）。
 - 比较：`==` / `/=` 按字节相等（`bi_eq_str` / `bi_neq_str`）；`<` `<=` `>` `>=` 走泛型
   `compare`（OCaml 字符串字节序）。
-- 源码字面量转义（`Lexer.scanString` / `scanEscape`）：`\n` `\t` `\r` `\"` `\\` `\'`；
-  其它 `\x` 报 `UnknownEscape`；字符串字面量不能跨行。
+- 源码字面量转义（`Lexer.lexStringToken` / `decodeEscape`）：`\n` `\t` `\r` `\"` `\\` `\'`、
+  M36 新增 `\$`（字面 `${`）；其它 `\x` 报 `UnknownEscape`；单行字面量不能跨行，多行用
+  `"""..."""`（构造与边界见 [templates.md](templates.md)）。
 - 展示 / 转义统一走 `strShow`（§5），没有第二套实现。
 
 ## 5. Show 与 main 展示

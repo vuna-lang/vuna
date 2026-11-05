@@ -25,12 +25,13 @@
 | `Base.Vec` | `Vec(..)` 与 `substTemplate` / `vhead` / `vlen` / `vtail` |
 | `Base.Monad` | `Functor` / `Monad` trait |
 | `Base.Show` | `Show` trait（`show : a -> String`）+ `Int` / `String` / `Bool` 实例 |
+| `Base.Interp` | 模板插值的转换 trait（M36）：`Interp a` + blanket `Show a => Interp a`（默认 = `show`）+ 具体 `Interp String`（原样输出）；插值降级与规则见 [templates.md](templates.md) |
 | `Base.Eq` | `Eq` trait（`eq` / `neq : a -> a -> Bool`）+ `Bool` 实例（Bool 是 `Eq` 返回类型，实例随 trait） |
 | `Base.Ord` | `Ord` trait（`lt` / `le` / `gt` / `ge : a -> a -> Bool`）+ `Bool` 实例 |
 | `Base.Int` | `Int` 的 `Eq` / `Ord` 实例宿主（`Int` 是 primitive 类型；实例跟类型模块走） |
 | `Base.IO` | 抽象 `IO a` 与 IO 组合子（实例 + print/readFile/writeFile/getArgs/exit，直接别名到 IO 化的 `prim_*` 动作）+ 特权执行入口 `runIO : IO a -> a`（要求 `unsafe` 能力） |
 | `Base` | 包门面：整模块重导出核心模块（含 `Base.Nat`，不含 `Vec`；`import Base` 即可用） |
-| `Prelude` | 顶层模块（`base/lib/Prelude.vuna`）：重导出 `Base.Pair` / `Bool` / `Eq` / `Ord` / `Show` / `List` / `Maybe` / `Result` / `String` / `Monad`，**包上下文内所有源文件（含无 manifest 的 ad-hoc 单文件）自动导入**；显式 `import` 时不再重复注入；刻意不含 `Base.IO`（效果 API 需显式 import，效果面不进入自动注入） |
+| `Prelude` | 顶层模块（`base/lib/Prelude.vuna`）：重导出 `Base.Pair` / `Bool` / `Eq` / `Ord` / `Show` / `Interp` / `List` / `Maybe` / `Result` / `String` / `Monad`，**包上下文内所有源文件（含无 manifest 的 ad-hoc 单文件）自动导入**；显式 `import` 时不再重复注入；刻意不含 `Base.IO`（效果 API 需显式 import，效果面不进入自动注入） |
 
 跨包使用时只可见 `base/vuna.toml` `[export]` 列出的模块；抽象类型（`Map`、`HashMap`、
 `HashSet`、`IntMap`、`IO`）的构造器保持私有。`Map` / `Sort` / `HashMap` / `HashSet` /
@@ -44,10 +45,11 @@
 ```vuna
 module Base (module Base.Pair, module Base.Bool, module Base.List, module Base.Maybe,
              module Base.Result, module Base.String, module Base.Sort, module Base.Map,
-             module Base.Monad, module Base.IO, module Base.Show, module Base.Eq,
+             module Base.Monad, module Base.IO, module Base.Show, module Base.Eq, module Base.Interp,
              module Base.Ord, module Base.Nat) where
 module Base.Bool (Bool(..), not, and, or, xor, bool) where
 module Base.Show (Show(..)) where
+module Base.Interp (Interp(..)) where
 module Base.Eq (Eq(..)) where
 module Base.Ord (Ord(..)) where
 module Base.Int where

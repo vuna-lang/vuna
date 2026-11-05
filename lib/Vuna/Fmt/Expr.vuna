@@ -33,10 +33,10 @@ escapeChar 13 = strPack [92, 114]
 escapeChar c = strPack [c]
 
 renderStr : String -> String
-renderStr s = strPack [34] ++ concatStrings (map escapeChar (strUnpack s)) ++ strPack [34]
+renderStr s = "\"" ++ renderTemplateText False s ++ "\""
 
 -- ---------------------------------------------------------------
--- 模板 / 多行字面量（M35）
+-- 模板 / 多行字面量（M36）
 --
 -- 规范形：
 --   * 单行形式（`multi = False`、以及普通 `EStr`）：`"..."`，换行/制表转义；
@@ -46,27 +46,26 @@ renderStr s = strPack [34] ++ concatStrings (map escapeChar (strUnpack s)) ++ st
 -- 洞内表达式照常格式化；非单行可渲的洞（case/do/let）换到多行布局（换行只出现在
 -- `${...}` 内部，仍属于代码，不影响字面量文本）。
 -- ---------------------------------------------------------------
-
 -- 文本块编码（`multi` 决定换行/制表是否原样）。
 renderTemplateText : Bool -> String -> String
 renderTemplateText multi s = strPack (reverse (renderTemplateTextGo multi (strUnpack s) []))
 
 renderTemplateTextGo : Bool -> List Int -> List Int -> List Int
 renderTemplateTextGo multi [] acc = acc
-renderTemplateTextGo multi (c :: rest) acc =
-  if c == 92 then renderTemplateTextGo multi rest (92 :: 92 :: acc)
-  else if c == 34 then renderTemplateTextGo multi rest (34 :: 92 :: acc)
-  else if c == 10 then
-    if multi then renderTemplateTextGo multi rest (10 :: acc)
-    else renderTemplateTextGo multi rest (110 :: 92 :: acc)
-  else if c == 9 then
-    if multi then renderTemplateTextGo multi rest (9 :: acc)
-    else renderTemplateTextGo multi rest (116 :: 92 :: acc)
-  else if c == 36 then case rest of
-    c2 :: rest2 => if c2 == 123 then renderTemplateTextGo multi rest2 (123 :: 36 :: 92 :: acc)
+renderTemplateTextGo multi (c :: rest) acc = if c == 92 then renderTemplateTextGo multi rest (92 :: 92 :: acc)
+else if c == 34 then renderTemplateTextGo multi rest (34 :: 92 :: acc)
+else if c == 10 then if multi then renderTemplateTextGo multi rest (10 :: acc)
+else renderTemplateTextGo multi rest (110 :: 92 :: acc)
+else if c == 9 then if multi then renderTemplateTextGo multi rest (9 :: acc)
+else renderTemplateTextGo multi rest (116 :: 92 :: acc)
+else if c == 13 then if multi then renderTemplateTextGo multi rest (13 :: acc)
+else renderTemplateTextGo multi rest (114 :: 92 :: acc)
+else if c == 36 then case rest of
+  c2 :: rest2 =>
+    if c2 == 123 then renderTemplateTextGo multi rest2 (123 :: 36 :: 92 :: acc)
     else renderTemplateTextGo multi rest (36 :: acc)
-    [] => renderTemplateTextGo multi rest (36 :: acc)
-  else renderTemplateTextGo multi rest (c :: acc)
+  [] => renderTemplateTextGo multi rest (36 :: acc)
+else renderTemplateTextGo multi rest (c :: acc)
 
 startsWithNewline : String -> Bool
 startsWithNewline s = case strUnpack s of
@@ -75,11 +74,10 @@ startsWithNewline s = case strUnpack s of
 
 -- 开引号（多行形式：首块以换行开头时补一个换行，与 lexer 的「丢首个换行」互逆）。
 interpOpen : Bool -> List InterpPart -> String
-interpOpen multi parts = if multi then
-  case parts of
-    IPText s :: rest => if startsWithNewline s then "\"\"\"\n" else "\"\"\""
-    _ => "\"\"\""
-  else "\""
+interpOpen multi parts = if multi then case parts of
+  (IPText s) :: rest => if startsWithNewline s then "\"\"\"\n" else "\"\"\""
+  _ => "\"\"\""
+else "\""
 
 interpClose : Bool -> String
 interpClose multi = if multi then "\"\"\"" else "\""
@@ -90,16 +88,16 @@ joinHoleLines lineInd lines = case lines of
   [] => ""
   first :: rest => first ++ concatStrings (map (\l => "\n" ++ spaces (lineInd + 2) ++ l) rest)
 
--- 单个模板片段的字符串（M35）：文本块转义；洞单行可渲则 `${...}`，否则：
+-- 单个模板片段的字符串（M36）：文本块转义；洞单行可渲则 `${...}`，否则：
 --   * 单行渲染用哨兵 `interpBlockMarker` 表示「这个字面量必须走块布局」；
--- 模板片段逐个渲染成字符串（M35），拼接交给调用方。
+-- 模板片段逐个渲染成字符串（M36），拼接交给调用方。
 -- 自递归只在 `parts` 上、fuel 严格递减；洞的递归仍走格式化器的递归组。
 interpPiecesInline : Int -> List FixityDecl -> Bool -> List InterpPart -> List String
 interpPiecesInline fuel env multi parts = if fuel <= 0 then []
 else case parts of
   [] => []
-  IPText s :: rest => renderTemplateText multi s :: interpPiecesInline (fuel - 1) env multi rest
-  IPHole e :: rest => case inlinePrecGo (fuel - 1) env 0 e of
+  (IPText s) :: rest => renderTemplateText multi s :: interpPiecesInline (fuel - 1) env multi rest
+  (IPHole e) :: rest => case inlinePrecGo (fuel - 1) env 0 e of
     Just s => ("$" ++ "{" ++ s ++ "}") :: interpPiecesInline (fuel - 1) env multi rest
     Nothing => interpBlockMarker :: interpPiecesInline (fuel - 1) env multi rest
 
@@ -107,12 +105,14 @@ interpPiecesBlock : Int -> List FixityDecl -> Int -> Bool -> List InterpPart -> 
 interpPiecesBlock fuel env lineInd multi parts = if fuel <= 0 then []
 else case parts of
   [] => []
-  IPText s :: rest => renderTemplateText multi s :: interpPiecesBlock (fuel - 1) env lineInd multi rest
-  IPHole e :: rest => case inlinePrecGo (fuel - 1) env 0 e of
+  (IPText s) :: rest =>
+    renderTemplateText multi s :: interpPiecesBlock (fuel - 1) env lineInd multi rest
+  (IPHole e) :: rest => case inlinePrecGo (fuel - 1) env 0 e of
     Just s => ("$" ++ "{" ++ s ++ "}") :: interpPiecesBlock (fuel - 1) env lineInd multi rest
     Nothing =>
       ("$" ++ "{" ++ joinHoleLines lineInd (renderExprGo (fuel - 1) env [] lineInd e) ++ "}")
         :: interpPiecesBlock (fuel - 1) env lineInd multi rest
+
 -- 按换行切行（内容换行是字面量内容，不参与外层布局）。
 splitOnNewline : String -> List String
 splitOnNewline s = splitOnNewlineGo (strUnpack s) []
@@ -329,14 +329,13 @@ else case e of
     else if isSymbolName name then Just ("(" ++ name ++ ")") else Just name
   EInt n sp => Just (strFromInt n)
   EStr s sp => Just (renderStr s)
-  -- M35：模板字面量。文本块转义；洞优先单行内联，洞需要块布局时放弃（交给块渲染）。
+  -- M36：模板字面量。文本块转义；洞优先单行内联，洞需要块布局时放弃（交给块渲染）。
   EInterp multi parts sp =>
     let
       body = concatStrings (interpPiecesInline (fuel - 1) env multi parts)
       text = interpOpen multi parts ++ body ++ interpClose multi
     in if contains interpBlockMarker text then Nothing
-    else if contains "\n" text then Nothing
-    else Just text
+    else if contains "\n" text then Nothing else Just text
   ELam ps body sp => case inlinePrecGo (fuel - 1) env 0 body of
     Nothing => Nothing
     Just b => Just (wrapPrec (minPrec > 0) ("\\" ++ joinComma ps ++ " => " ++ b))
@@ -582,7 +581,7 @@ else case e of
   EVar name sp => if isSymbolName name then ["(" ++ name ++ ")"] else [name]
   EInt n sp => [strFromInt n]
   EStr s sp => [renderStr s]
-  -- M35：模板字面量（块布局）。文本块转义；洞可单行则单行，否则块渲染 + 缩进。
+  -- M36：模板字面量（块布局）。文本块转义；洞可单行则单行，否则块渲染 + 缩进。
   EInterp multi parts sp =>
     let
       body = concatStrings (interpPiecesBlock (fuel - 1) env lineInd multi parts)

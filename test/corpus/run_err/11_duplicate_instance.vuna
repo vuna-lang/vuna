@@ -1,0 +1,14 @@
+trait Pretty a where
+  pretty : a -> String
+
+data Color : Type where
+  Red : Color
+
+instance Pretty Color where
+  pretty c = "red"
+
+instance Pretty Color where
+  pretty c = "red2"
+
+main : String
+main = pretty Red

@@ -589,10 +589,10 @@ in andThen (elabDatas (collectDataDecls decls []) startGlobals startEc) (\pd => 
                                 ) globals
                                 _ = stamp "extradefs-done"
                               in andThen (checkTerminationDeclsWith (declFunNames decls) (append termAux decls)) (\_ => let
-                              _ = stamp "termination-done"
-                            in Ok
-                              (DtProgram datas1 allDefs (ecGoals ec4) (ecSols ec4) globalsOut (ecInsts ec4) (ecClasses ec4) (ecNext ec4) (ecDefVals ec4) (Base.IntMap.toList (ecDepthTbl ec4)))
-                            )
+                                _ = stamp "termination-done"
+                              in Ok
+                                (DtProgram datas1 allDefs (ecGoals ec4) (ecSols ec4) globalsOut (ecInsts ec4) (ecClasses ec4) (ecNext ec4) (ecDefVals ec4) (Base.IntMap.toList (ecDepthTbl ec4)))
+                              )
                     )
                 )
                 )

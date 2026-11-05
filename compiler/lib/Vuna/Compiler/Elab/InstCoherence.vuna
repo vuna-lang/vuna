@@ -16,7 +16,7 @@ module Vuna.Compiler.Elab.InstCoherence
 --      （blanket fallback）需要独立落点；
 --   2. coherence 规则本身是一个完整主题，独立模块便于与 `Elab/Dict` 的实例搜索对照阅读。
 --
--- **blanket 实例**（M35）：头实参是裸类参数的实例，例如
+-- **blanket 实例**（M36）：头实参是裸类参数的实例，例如
 --
 --   instance Show a => Interp a where interp x = show x
 --
@@ -56,12 +56,11 @@ anyInstanceExact ec n head (i :: rest) =
 anyInstanceOverlap : Ec -> Bool -> List (Pair String Term) -> Term -> List DtInst -> Pair (Maybe InstClash) Ec
 anyInstanceOverlap ec newBlanket [] head [] = Pair Nothing ec
 anyInstanceOverlap ec newBlanket (t :: ts) head [] = Pair Nothing ec
-anyInstanceOverlap ec newBlanket tele head (i :: rest) =
-  if instanceExactQuiet ec (length tele) head i then anyInstanceOverlap ec newBlanket tele head rest
-  else if newBlanket || isBlanketInstHead (length i.dtInstTele) i.dtInstHead then anyInstanceOverlap ec newBlanket tele head rest
-  else case headsOverlap ec tele head i.dtInstTele i.dtInstHead of
-    Pair True ec1 => Pair (Just ClashOverlap) ec1
-    Pair False ec1 => anyInstanceOverlap ec newBlanket tele head rest
+anyInstanceOverlap ec newBlanket tele head (i :: rest) = if instanceExactQuiet ec (length tele) head i then anyInstanceOverlap ec newBlanket tele head rest
+else if newBlanket || isBlanketInstHead (length i.dtInstTele) i.dtInstHead then anyInstanceOverlap ec newBlanket tele head rest
+else case headsOverlap ec tele head i.dtInstTele i.dtInstHead of
+  Pair True ec1 => Pair (Just ClashOverlap) ec1
+  Pair False ec1 => anyInstanceOverlap ec newBlanket tele head rest
 
 instanceExactQuiet : Ec -> Int -> Term -> DtInst -> Bool
 instanceExactQuiet ec n head inst =

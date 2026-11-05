@@ -97,7 +97,7 @@ data TcErr : Nat -> Type where
   InstanceUnknownMethod : String -> TcErr (Succ Zero)
   NeedsTwoArgs : String -> TcErr (Succ Zero)
   NoInstanceFound : String -> TcErr (Succ Zero)
-  -- M35：模板字符串插值（`${e}` → `Base.Interp.interp e`）找不到 `Interp`/`Show` 实例。
+  -- M36：模板字符串插值（`${e}` → `Base.Interp.interp e`）找不到 `Interp`/`Show` 实例。
   InterpNoInstance : String -> TcErr (Succ Zero)
   NotExhaustive : String -> TcErr (Succ Zero)
   RedundantCtorBranch : String -> TcErr (Succ Zero)

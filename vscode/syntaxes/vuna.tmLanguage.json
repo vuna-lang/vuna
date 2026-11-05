@@ -49,13 +49,36 @@
     "strings": {
       "patterns": [
         {
+          "begin": "\"\"\"",
+          "end": "\"\"\"",
+          "name": "string.quoted.triple.vuna",
+          "patterns": [
+            {
+              "match": "\\\\(?:n|t|r|\"|'|\\$|\\\\)",
+              "name": "constant.character.escape.vuna"
+            },
+            {
+              "begin": "\\$\\{",
+              "end": "\\}",
+              "name": "meta.interpolation.vuna",
+              "patterns": [{ "include": "$self" }]
+            }
+          ]
+        },
+        {
           "begin": "\"",
           "end": "\"|$",
           "name": "string.quoted.double.vuna",
           "patterns": [
             {
-              "match": "\\\\(?:n|t|r|\"|'|\\\\)",
+              "match": "\\\\(?:n|t|r|\"|'|\\$|\\\\)",
               "name": "constant.character.escape.vuna"
+            },
+            {
+              "begin": "\\$\\{",
+              "end": "\\}",
+              "name": "meta.interpolation.vuna",
+              "patterns": [{ "include": "$self" }]
             }
           ]
         }

@@ -333,7 +333,7 @@ ioFamilyName = "Base.IO.IO"
 ioMkIoCtor : String
 ioMkIoCtor = "Base.IO.MkIO"
 
--- M35：模板字符串插值的 trait 与方法（canonical 名）。编译器把 `${e}` 降级成对
+-- M36：模板字符串插值的 trait 与方法（canonical 名）。编译器把 `${e}` 降级成对
 -- `interp` 方法投影的调用（`Loader.Resolve`），转换语义完全由 base 里的实例决定。
 interpTypeName : String
 interpTypeName = "Base.Interp.Interp"

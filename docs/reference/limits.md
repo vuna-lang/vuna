@@ -152,6 +152,9 @@
 - **字面量**：期望类型是 Nat 时，字面量在**编译期**展开成 `Zero`/`Succ` 链（类型层可合一），
   codegen 再折回整数字面量；超大 Nat 字面量有编译期节点成本（暂不做惰性 `TNat`）。
   超出 63 位报 `TC_NatLiteralOutOfRange`。Nat 字面量模式（`case n of 0 =>`）尚不支持。
+- **模板插值（M36）**：`${e}` 要求 `Interp`/`Show` 实例（缺则 `TC_InterpNoInstance`）；
+  不支持 `deriving (Interp)`、不支持模式里的插值（`PS_TemplateInPattern`）；`${...}` 里的
+  注释不进 AST、fmt 会丢弃。规则与边界见 [templates.md](templates.md)。
 - **提升**：只允许 `Nat → Int`（精化期插 `natToInt`，运行时恒等）；`Int → Nat` 必须显式
   `Base.Nat.fromInt`（负数 clamp 0，有损）或 `fromIntMaybe`。混合算术结果由操作数决定：
   两侧 Nat（或 Nat + 字面量）→ Nat；出现真正 Int → Int。
@@ -243,7 +246,9 @@
   注释只作前置注释。`where` 块的绑定签名行按源码顺序保留、幂等。`infix*` 声明被打印在
   imports 之后、源码顺序、每条一行；fixity 是**程序级**属性，CLI / LSP 用
   `Loader.Flatten.fixitiesForSource` 取可见闭包；取不到（上下文 / 依赖加载失败）时 fmt 报错、
-  不格式化该文件；未知符号运算符同样报错（不静默按默认优先级重排）。
+  不格式化该文件；未知符号运算符同样报错（不静默按默认优先级重排）。模板字面量按
+  [templates.md](templates.md) 的规范形重写：`"""` 内容逐字（不 dedent），`\$` 自动补齐，
+  `${...}` 里的注释会被丢弃（词法不进 AST）。
 - REPL 支持多行续行（括号 / 字符串 / 注释 / 尾 token），但每个提交项仍是一个完整表达式或
   一条定义；顶层定义必须**先写签名**（DT 签名必填）；依赖只支持本地路径（registry / 锁文件
   未做）；`Map` 是关联表实现的抽象类型（无平衡树）；`HashMap` / `HashSet` / `IntMap` 是

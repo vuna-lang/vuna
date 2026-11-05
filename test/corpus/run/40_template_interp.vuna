@@ -1,0 +1,12 @@
+data Color : Type where
+  Red : Color
+  Blue : Color
+deriving (Show)
+
+instance Interp Color where
+  interp c = case c of
+    Red => "red"
+    Blue => "blue"
+
+main : String
+main = "base=${interp 42} s=${interp "hi"} b=${interp True} c=${interp Red}"

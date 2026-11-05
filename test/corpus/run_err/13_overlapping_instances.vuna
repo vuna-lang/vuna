@@ -1,0 +1,11 @@
+trait Pretty a where
+  pretty : a -> String
+
+instance Pretty (List Int) where
+  pretty xs = "ints"
+
+instance Pretty (List a) where
+  pretty xs = "any"
+
+main : String
+main = pretty [1]

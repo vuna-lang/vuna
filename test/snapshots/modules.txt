@@ -67,6 +67,7 @@ Vuna.Compiler.Elab.Data  compiler/lib/Vuna/Compiler/Elab/Data.vuna
 Vuna.Compiler.Elab.Derive  compiler/lib/Vuna/Compiler/Elab/Derive.vuna
 Vuna.Compiler.Elab.Dict  compiler/lib/Vuna/Compiler/Elab/Dict.vuna
 Vuna.Compiler.Elab.Driver  compiler/lib/Vuna/Compiler/Elab/Driver.vuna
+Vuna.Compiler.Elab.InstCoherence  compiler/lib/Vuna/Compiler/Elab/InstCoherence.vuna
 Vuna.Compiler.Elab.InstName  compiler/lib/Vuna/Compiler/Elab/InstName.vuna
 Vuna.Compiler.Elab.Match  compiler/lib/Vuna/Compiler/Elab/Match.vuna
 Vuna.Compiler.Elab.Meta  compiler/lib/Vuna/Compiler/Elab/Meta.vuna
@@ -110,6 +111,7 @@ Base.IO  base/lib/Base/IO.vuna
 Base.IORef  base/lib/Base/IORef.vuna
 Base.Int  base/lib/Base/Int.vuna
 Base.IntMap  base/lib/Base/IntMap.vuna
+Base.Interp  base/lib/Base/Interp.vuna
 Base.List  base/lib/Base/List.vuna
 Base.MArray  base/lib/Base/MArray.vuna
 Base.Map  base/lib/Base/Map.vuna
@@ -157,6 +159,7 @@ Vuna.Compiler.Elab.Data  ./lib/Vuna/Compiler/Elab/Data.vuna
 Vuna.Compiler.Elab.Derive  ./lib/Vuna/Compiler/Elab/Derive.vuna
 Vuna.Compiler.Elab.Dict  ./lib/Vuna/Compiler/Elab/Dict.vuna
 Vuna.Compiler.Elab.Driver  ./lib/Vuna/Compiler/Elab/Driver.vuna
+Vuna.Compiler.Elab.InstCoherence  ./lib/Vuna/Compiler/Elab/InstCoherence.vuna
 Vuna.Compiler.Elab.InstName  ./lib/Vuna/Compiler/Elab/InstName.vuna
 Vuna.Compiler.Elab.Match  ./lib/Vuna/Compiler/Elab/Match.vuna
 Vuna.Compiler.Elab.Meta  ./lib/Vuna/Compiler/Elab/Meta.vuna
@@ -203,6 +206,7 @@ Base.IO  ./lib/Base/IO.vuna
 Base.IORef  ./lib/Base/IORef.vuna
 Base.Int  ./lib/Base/Int.vuna
 Base.IntMap  ./lib/Base/IntMap.vuna
+Base.Interp  ./lib/Base/Interp.vuna
 Base.List  ./lib/Base/List.vuna
 Base.MArray  ./lib/Base/MArray.vuna
 Base.Map  ./lib/Base/Map.vuna

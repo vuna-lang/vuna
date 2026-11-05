@@ -148,7 +148,7 @@ data Expr : Type where
   -- 绑定到随后的 `g ... = ...` 子句），Elab 精化时据此把 where 组按签名递归提升；
   -- 普通表达式位置不产生它，Fmt 在非 where 位置把它当透明括号渲染。
   EAnn : Expr -> Expr -> Span -> Expr
-  -- M35：模板字符串字面量。`multi` = 是否 `"""` 形式（Fmt 用它保留书写形式；单行
+  -- M36：模板字符串字面量。`multi` = 是否 `"""` 形式（Fmt 用它保留书写形式；单行
   -- 字面量保持单行转义形式）。`Loader.Resolve` 把它降级成 `Base.Interp.interp`
   -- 调用 + `++` 链；Fmt / Lint / Index / Doc 在 parse 后处理它。
   EInterp : Bool -> List InterpPart -> Span -> Expr

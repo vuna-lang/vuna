@@ -288,15 +288,15 @@ renameExpr oldName newName e = case e of
   ESectR lhs op sp => ESectR (renameExpr oldName newName lhs) op sp
   EParen inner sp => EParen (renameExpr oldName newName inner) sp
   EAnn value ty sp => EAnn (renameExpr oldName newName value) (renameExpr oldName newName ty) sp
-  -- M35：模板字面量在 Elab 之前已被 Loader 降级（正常不存在）；保持结构递归，
+  -- M36：模板字面量在 Elab 之前已被 Loader 降级（正常不存在）；保持结构递归，
   -- 不静默丢洞内子表达式。
   EInterp multi parts sp => EInterp multi (renameInterpParts oldName newName parts) sp
 
 renameInterpParts : String -> String -> List InterpPart -> List InterpPart
 renameInterpParts oldName newName [] = []
-renameInterpParts oldName newName (IPText s :: rest) =
+renameInterpParts oldName newName ((IPText s) :: rest) =
   IPText s :: renameInterpParts oldName newName rest
-renameInterpParts oldName newName (IPHole e :: rest) =
+renameInterpParts oldName newName ((IPHole e) :: rest) =
   IPHole (renameExpr oldName newName e) :: renameInterpParts oldName newName rest
 
 renameExprUnless : String -> String -> List String -> Expr -> Expr

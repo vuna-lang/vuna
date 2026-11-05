@@ -24,7 +24,7 @@ module Vuna.Compiler.Frontend.Lexer
 
 -- vuna 源码 lexer：字符游标、token 与 pos。
 --
--- M35：字符串字面量支持**模板插值**（`"hi ${name}"`）与**多行**（`"""..."""`）。
+-- M36：字符串字面量支持**模板插值**（`"hi ${name}"`）与**多行**（`"""..."""`）。
 -- 扫描把字面量切成 `TmplPart`：
 --   * `TPText`：文本块（转义已解）；
 --   * `TPHole`：插值洞，存**洞内 token 列表**（由 `lexHoleTokens` 原位词法得到，
@@ -34,7 +34,7 @@ module Vuna.Compiler.Frontend.Lexer
 import Vuna.Compiler.Common
 import Vuna.Compiler.Frontend.Diagnostics
 
--- 模板字面量的片段（M35）：文本块或插值洞（洞内 token 列表）。
+-- 模板字面量的片段（M36）：文本块或插值洞（洞内 token 列表）。
 data TmplPart : Type where
   TPText : String -> TmplPart
   TPHole : List PTok -> TmplPart
@@ -146,7 +146,8 @@ skipBlockComment depth (Chars (c :: rest) p) = case rest of
     else skipBlockComment (depth - 1) (Chars rest2 (advanceChar c2 (advanceChar c p)))
     else skipBlockComment depth (Chars rest (advanceChar c p))
   [] => skipBlockComment depth (Chars rest (advanceChar c p))
--- 跳过 trivia。fuel 按字符/注释段递减（M35 起所有扫描器都不再回传 fuel：
+
+-- 跳过 trivia。fuel 按字符/注释段递减（M36 起所有扫描器都不再回传 fuel：
 -- 主循环与各扫描器各自持有一个够用的显式 fuel，终止性走「守卫 Int + 严格递减」）。
 skipTrivia : Int -> Chars -> Result Chars
 skipTrivia fuel cs = if fuel <= 0 then Err "DT: lexer fuel exhausted (internal: lexer made no progress)"
@@ -184,7 +185,7 @@ collectOp (Chars (c :: rest) p) acc =
   else Pair (strPack (reverse acc)) (Chars (c :: rest) p)
 
 -- ---------------------------------------------------------------
--- 字符串 / 模板字面量（M35）
+-- 字符串 / 模板字面量（M36）
 --
 -- 单行 `"..."`：转义 `\n \t \r \" \\ \' \$`；`${expr}` 插值；原始换行是
 -- `LX_UnterminatedString`（与旧行为一致）。
@@ -194,8 +195,7 @@ collectOp (Chars (c :: rest) p) acc =
 -- 洞内 token 由同一套词法（`lexHoleTokens` → `lexOneToken`）原位产出，位置天然是绝对
 -- 源码位置；洞里的注释随 `skipTrivia` 跳过（不进入 AST，fmt 会丢失它们——已知边界）。
 -- ---------------------------------------------------------------
-
--- 转义字符 → 实际码点（`\$` 是 M35 新增：用来写一个字面 `${`）。
+-- 转义字符 → 实际码点（`\$` 是 M36 新增：用来写一个字面 `${`）。
 decodeEscape : Int -> Maybe Int
 decodeEscape 110 = Just 10
 decodeEscape 116 = Just 9
@@ -218,46 +218,46 @@ flushText acc parts = TPText (strPack (reverse acc)) :: parts
 -- 扫描模板正文。`multi` = 是否 `"""`；入口位置在**开引号之后**。
 -- 返回：(parts（正序）、(字面量之后的 Chars, 结束引号位置))。
 scanTemplateText : Int -> Bool -> Chars -> List Int -> List TmplPart -> Result (Pair (List TmplPart) (Pair Chars Pos))
+-- 单行结束 `"`；单行不允许原始换行
 scanTemplateText fuel multi cs acc parts = if fuel <= 0 then Err "DT: lexer fuel exhausted (internal: lexer made no progress)"
 else case cs of
   Chars [] p => lexErr0 UnterminatedString
-  Chars (c :: rest) p =>
+  Chars (c :: rest) p => if c == 36 then case rest of
     -- 插值洞：`${`
-    if c == 36 then case rest of
-      c2 :: rest2 =>
-        if c2 == 123 then
-          let
-            holeStart = advanceChar c2 (advanceChar c p)
-          in case lexHoleTokens (fuel - 1) 0 (Chars rest2 holeStart) [] of
-            Err e => Err e
-            Ok (Pair toks cs2) => case cs2 of
-              Chars (125 :: rest3) p3 => scanTemplateText (fuel - 1) multi (Chars rest3 (advanceChar 125 p3)) []
-                (TPHole toks :: flushText acc parts)
-              _ => lexErr0 UnterminatedInterpolation
-        else scanTemplateText (fuel - 1) multi (Chars rest (advanceChar c p)) (c :: acc) parts
-      [] => scanTemplateText (fuel - 1) multi (Chars rest (advanceChar c p)) (c :: acc) parts
-    -- 转义
-    else if c == 92 then case rest of
-      e :: rest2 => case decodeEscape e of
-        Nothing => lexErr0 UnknownEscape
-        Just d => scanTemplateText (fuel - 1) multi (Chars rest2 (advanceChar e (advanceChar c p))) (d :: acc) parts
-      [] => lexErr0 UnterminatedString
-    -- 多行结束 `"""`
-    else if multi && c == 34 then case rest of
-      c2 :: rest3 => case rest3 of
-        c3 :: rest4 =>
-          if c2 == 34 && c3 == 34 then
-            let
-              pos2 = advanceChar c2 (advanceChar c p)
-              pos3 = advanceChar c3 pos2
-            in Ok (Pair (reverse (flushText acc parts)) (Pair (Chars rest4 (advanceChar c3 pos3)) pos3))
-          else scanTemplateText (fuel - 1) multi (Chars rest (advanceChar c p)) (c :: acc) parts
-        [] => lexErr0 UnterminatedString
-      [] => lexErr0 UnterminatedString
-    -- 单行结束 `"`；单行不允许原始换行
-    else if not multi && c == 34 then Ok (Pair (reverse (flushText acc parts)) (Pair (Chars rest (advanceChar c p)) p))
-    else if not multi && c == 10 then lexErr0 UnterminatedString
+    c2 :: rest2 => if c2 == 123 then
+      let
+        holeStart = advanceChar c2 (advanceChar c p)
+      in case lexHoleTokens (fuel - 1) 0 (Chars rest2 holeStart) [] of
+        Err e => Err e
+        Ok (Pair toks cs2) => case cs2 of
+          Chars (125 :: rest3) p3 =>
+            scanTemplateText (fuel - 1) multi (Chars rest3 (advanceChar 125 p3)) []
+              (TPHole toks :: flushText acc parts)
+          _ => lexErr0 UnterminatedInterpolation
     else scanTemplateText (fuel - 1) multi (Chars rest (advanceChar c p)) (c :: acc) parts
+    [] => scanTemplateText (fuel - 1) multi (Chars rest (advanceChar c p)) (c :: acc) parts
+  else if c == 92 then case rest of
+    -- 转义
+    e :: rest2 => case decodeEscape e of
+      Nothing => lexErr0 UnknownEscape
+      Just d =>
+        scanTemplateText (fuel - 1) multi (Chars rest2 (advanceChar e (advanceChar c p))) (d :: acc)
+          parts
+    [] => lexErr0 UnterminatedString
+  else if multi && c == 34 then case rest of
+    -- 多行结束 `"""`
+    c2 :: rest3 => case rest3 of
+      c3 :: rest4 => if c2 == 34 && c3 == 34 then
+        let
+          pos2 = advanceChar c2 (advanceChar c p)
+          pos3 = advanceChar c3 pos2
+        in Ok (Pair (reverse (flushText acc parts)) (Pair (Chars rest4 (advanceChar c3 pos3)) pos3))
+      else scanTemplateText (fuel - 1) multi (Chars rest (advanceChar c p)) (c :: acc) parts
+      [] => lexErr0 UnterminatedString
+    [] => lexErr0 UnterminatedString
+  else if not multi && c == 34 then Ok (Pair (reverse (flushText acc parts)) (Pair (Chars rest (advanceChar c p)) p))
+  else if not multi && c == 10 then lexErr0 UnterminatedString
+  else scanTemplateText (fuel - 1) multi (Chars rest (advanceChar c p)) (c :: acc) parts
 
 -- 洞内 token 扫描：从 `${` 之后开始，`{`/`}` 计深度，深度 0 的 `}` 不消费。
 -- 内部字符串/注释由 token 词法（`lexOneToken` / `skipTrivia`）整体跳过。
@@ -267,11 +267,10 @@ else case skipTrivia (fuel - 1) cs of
   Err e => Err e
   Ok cs2 => case cs2 of
     Chars [] p => lexErr0 UnterminatedInterpolation
-    Chars (c :: rest) p =>
-      if c == 125 && depth == 0 then Ok (Pair (reverse acc) cs2)
-      else case lexOneToken (fuel - 1) cs2 of
-        Err e => Err e
-        Ok (Pair tok cs3) => lexHoleTokens (fuel - 1) (depthAfter depth tok.ptokTok) cs3 (tok :: acc)
+    Chars (c :: rest) p => if c == 125 && depth == 0 then Ok (Pair (reverse acc) cs2)
+    else case lexOneToken (fuel - 1) cs2 of
+      Err e => Err e
+      Ok (Pair tok cs3) => lexHoleTokens (fuel - 1) (depthAfter depth tok.ptokTok) cs3 (tok :: acc)
 
 -- 洞的深度更新：`{` 加深、`}` 变浅；其它 token 不变。
 depthAfter : Int -> Tok -> Int
@@ -285,21 +284,18 @@ lexOneToken : Int -> Chars -> Result (Pair PTok Chars)
 lexOneToken fuel cs = if fuel <= 0 then Err "DT: lexer fuel exhausted (internal: lexer made no progress)"
 else case cs of
   Chars [] p => Err "DT: internal: lexOneToken on empty input"
-  Chars (c :: rest) p =>
-    if isIdentStart c then case collectIdent (Chars rest (advanceChar c p)) [c] of
-      Pair name cs2 => Ok (Pair (PTok (classifyIdent name) p) cs2)
-    else if isDigit c then case collectInt (Chars rest (advanceChar c p)) (c - 48) of
-      Pair n cs2 => Ok (Pair (PTok (TInt n) p) cs2)
-    else if c == 34 then lexStringToken (fuel - 1) c rest p
-    else if c == 40 || c == 41 || c == 91 || c == 93 || c == 44 || c == 123 || c == 125 then
-      Ok (Pair (PTok (TSym (strPack [c])) p) (Chars rest (advanceChar c p)))
-    else if c == 96 then
-      -- M31.3：反引号中缀的定界符。`96` 不在 isOpChar 里（否则会与相邻符号粘成一个 token），
-      -- 单独识别成 `TSym "`"`，由 parser 配对消费。
-      Ok (Pair (PTok (TSym "`") p) (Chars rest (advanceChar c p)))
-    else if isOpChar c then case collectOp (Chars rest (advanceChar c p)) [c] of
-      Pair op cs2 => Ok (Pair (PTok (TSym op) p) cs2)
-    else lexErr0 UnexpectedCharacter
+  Chars (c :: rest) p => if isIdentStart c then case collectIdent (Chars rest (advanceChar c p)) [c] of
+    Pair name cs2 => Ok (Pair (PTok (classifyIdent name) p) cs2)
+  else if isDigit c then case collectInt (Chars rest (advanceChar c p)) (c - 48) of
+    Pair n cs2 => Ok (Pair (PTok (TInt n) p) cs2)
+  else if c == 34 then lexStringToken (fuel - 1) c rest p
+  else if c == 40 || c == 41 || c == 91 || c == 93 || c == 44 || c == 123 || c == 125 then Ok (Pair (PTok (TSym (strPack [c])) p) (Chars rest (advanceChar c p)))
+  else if c == 96 then Ok (Pair (PTok (TSym "`") p) (Chars rest (advanceChar c p)))
+  else if isOpChar c then case collectOp (Chars rest (advanceChar c p)) [c] of
+    -- M31.3：反引号中缀的定界符。`96` 不在 isOpChar 里（否则会与相邻符号粘成一个 token），
+    -- 单独识别成 `TSym "`"`，由 parser 配对消费。
+    Pair op cs2 => Ok (Pair (PTok (TSym op) p) cs2)
+  else lexErr0 UnexpectedCharacter
 
 -- `"..."` / `"""..."""`：判定形式后走模板扫描，再决定 token 形态。
 -- 单行且无洞 → `TStr`（保持旧 token 形态）；其余（多行 / 含洞）→ `TTmpl`。
@@ -307,14 +303,13 @@ lexStringToken : Int -> Int -> List Int -> Pos -> Result (Pair PTok Chars)
 lexStringToken fuel c rest p = if fuel <= 0 then Err "DT: lexer fuel exhausted (internal: lexer made no progress)"
 else case rest of
   c2 :: rest3 => case rest3 of
-    c3 :: rest4 =>
-      if c2 == 34 && c3 == 34 then
-        let
-          bodyStart = advanceChar c3 (advanceChar c2 (advanceChar c p))
-        in case scanTemplateText (fuel - 1) True (dropOpeningNewline (Chars rest4 bodyStart)) [] [] of
-          Err e => Err e
-          Ok (Pair parts (Pair cs2 endP)) => Ok (Pair (PTok (TTmpl True parts endP) p) cs2)
-      else lexSingleStringToken (fuel - 1) (Chars rest (advanceChar c p)) p
+    c3 :: rest4 => if c2 == 34 && c3 == 34 then
+      let
+        bodyStart = advanceChar c3 (advanceChar c2 (advanceChar c p))
+      in case scanTemplateText (fuel - 1) True (dropOpeningNewline (Chars rest4 bodyStart)) [] [] of
+        Err e => Err e
+        Ok (Pair parts (Pair cs2 endP)) => Ok (Pair (PTok (TTmpl True parts endP) p) cs2)
+    else lexSingleStringToken (fuel - 1) (Chars rest (advanceChar c p)) p
     [] => lexSingleStringToken (fuel - 1) (Chars rest (advanceChar c p)) p
   [] => lexSingleStringToken (fuel - 1) (Chars rest (advanceChar c p)) p
 
@@ -343,7 +338,7 @@ else case skipTrivia fuel cs of
 lexSource : String -> Result (List PTok)
 lexSource source = lexChars (sourceFuel source) (Chars (strUnpack source) (Pos 1 1))
 
--- 显式 fuel 的初值（M35）。
+-- 显式 fuel 的初值（M36）。
 --
 -- **上界说明**：主循环每个 token 扣 1，token 数 T ≤ len；token 内部的模板/洞扫描
 -- 每个字符扣 1，且单个 token 的字符数 ≤ len，扫描起点处的存量 fuel 远大于它；
@@ -405,14 +400,13 @@ commentSpanOf startP endP = Span "" (posLine startP) (posCol startP) (posLine en
 skipStringLiteral : Int -> Int -> List Int -> Pos -> Result Chars
 skipStringLiteral fuel c rest p = case rest of
   c2 :: rest3 => case rest3 of
-    c3 :: rest4 =>
-      if c2 == 34 && c3 == 34 then
-        let
-          bodyStart = advanceChar c3 (advanceChar c2 (advanceChar c p))
-        in case scanTemplateText (fuel - 1) True (dropOpeningNewline (Chars rest4 bodyStart)) [] [] of
-          Err e => Err e
-          Ok (Pair parts (Pair cs2 endP)) => Ok cs2
-      else skipSingleStringLiteral fuel (Chars rest (advanceChar c p))
+    c3 :: rest4 => if c2 == 34 && c3 == 34 then
+      let
+        bodyStart = advanceChar c3 (advanceChar c2 (advanceChar c p))
+      in case scanTemplateText (fuel - 1) True (dropOpeningNewline (Chars rest4 bodyStart)) [] [] of
+        Err e => Err e
+        Ok (Pair parts (Pair cs2 endP)) => Ok cs2
+    else skipSingleStringLiteral fuel (Chars rest (advanceChar c p))
     [] => skipSingleStringLiteral fuel (Chars rest (advanceChar c p))
   [] => skipSingleStringLiteral fuel (Chars rest (advanceChar c p))
 
