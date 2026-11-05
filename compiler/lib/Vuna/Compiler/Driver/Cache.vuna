@@ -1,28 +1,55 @@
 module Vuna.Compiler.Driver.Cache (CachedProgram(..), cachedOfProgram, programOfCached) where
 
--- M34.5 / C32 第一步：`DtProgram` 的可序列化纯数据形态。
+-- M34.5 / C32 序列化与接口摘要的载体。
 --
--- `Value` 用 `quote 0` 转成闭项 `Term`（quote 覆盖全部 Value 构造子：Pi/Lam/中性/构造子/
--- 字符内建），恢复时 `eval []` 重建（η 等价）。丢弃 `goals`（洞信息只服务 `vuna goal`，
--- 不属于检查缓存）与 `defvals`（定义体求值结果的共享缓存，恢复为空只会更慢、不影响语义）。
---
--- 用途：依赖包的 elab 摘要（接口摘要）缓存；check/build 磁盘缓存的 program 载体。
+-- `DtProgram` 的 Value 用 `quote 0` 转成闭项 Term；同时用解表把 Term 里已解的 `TMeta`
+-- 全部替换（`substSolvedMetasTbl`，对含自由变量的解保守跳过），使摘要尽量**自包含**——
+-- 跨包合并时不再依赖各自的元变量编号空间（C37 的缓解；残留的开放解仍可能带 TMeta）。
+-- 恢复时 `eval []` 重建 Value（η 等价）；丢弃 goals（洞信息只服务 `vuna goal`）与
+-- defvals（定义体求值共享缓存，恢复为空只会更慢、不影响语义）。
 import Vuna.Compiler.Common
 import Vuna.Compiler.Elab
 import Vuna.Compiler.Elab.Types
 import Vuna.Compiler.Core
 import Base.HashMap
+import Base.IntMap
 
 data CachedProgram : Type where
-  CachedProgram : List DtData -> List DtDef -> List (Pair Int Term) -> List (Pair String Term) -> List DtInst -> List DtClass -> Int -> CachedProgram
+  CachedProgram : List DtData -> List DtDef -> List (Pair String Term) -> List DtInst -> List DtClass -> Int -> CachedProgram
+
+fixTerm : IntMap Value -> Term -> Term
+fixTerm tbl t = substSolvedMetasTbl tbl t
+
+fixDef : IntMap Value -> DtDef -> DtDef
+fixDef tbl (DtDef n ty body sp) = DtDef n (fixTerm tbl ty) (fixTerm tbl body) sp
+fixDef tbl (DtAxiom n ty sp) = DtAxiom n (fixTerm tbl ty) sp
+fixDef tbl (DtExtern n ty c sp) = DtExtern n (fixTerm tbl ty) c sp
+
+fixCtor : IntMap Value -> DtCtor -> DtCtor
+fixCtor tbl (DtCtor n fam tele ty) = DtCtor n fam tele (fixTerm tbl ty)
+
+fixData : IntMap Value -> DtData -> DtData
+fixData tbl (DtData n ps ctors) = DtData n ps (map (fixCtor tbl) ctors)
+
+fixClass : IntMap Value -> DtClass -> DtClass
+fixClass tbl (DtClass n ps projs tys) =
+  DtClass n ps (map (\p => Pair (firstOf p) (fixTerm tbl (secondOf p))) projs)
+    (map (fixTerm tbl) tys)
+
+fixInst : IntMap Value -> DtInst -> DtInst
+fixInst tbl (DtInst n tele ctxE head) =
+  DtInst n (map (\p => Pair (firstOf p) (fixTerm tbl (secondOf p))) tele) (map (fixTerm tbl) ctxE)
+    (fixTerm tbl head)
 
 cachedOfProgram : DtProgram -> CachedProgram
 cachedOfProgram prog =
-  CachedProgram (dtProgDatas prog) (dtProgDefs prog)
-    (map (\p => Pair (firstOf p) (quote 0 (secondOf p))) (dtProgSols prog)) (dtProgGlobals prog)
-    (dtProgInsts prog) (dtProgClasses prog) (dtProgNext prog)
+  let
+    tbl = Base.IntMap.fromList (dtProgSols prog)
+  in CachedProgram (map (fixData tbl) (dtProgDatas prog)) (map (fixDef tbl) (dtProgDefs prog))
+    (map (\p => Pair (firstOf p) (fixTerm tbl (secondOf p))) (dtProgGlobals prog))
+    (map (fixInst tbl) (dtProgInsts prog)) (map (fixClass tbl) (dtProgClasses prog))
+    (dtProgNext prog)
 
 programOfCached : CachedProgram -> DtProgram
-programOfCached (CachedProgram datas defs sols globals insts classes next) =
-  DtProgram datas defs [] (map (\p => Pair (firstOf p) (eval [] (secondOf p))) sols) globals insts
-    classes next (Base.HashMap.fromList [])
+programOfCached (CachedProgram datas defs globals insts classes next) =
+  DtProgram datas defs [] [] globals insts classes next (Base.HashMap.fromList [])

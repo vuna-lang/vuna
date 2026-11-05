@@ -70,11 +70,40 @@ open Vuna_dCompiler_dDriver_dSplit
 open Vuna_dCompiler_dCodegen_dSplit
 open Vuna_dCompiler_dCodegen
 open Vuna_dCompiler_dDriver_dDt
-type t_Vuna_dCompiler_dDriver_dCache_dCachedProgram = C_Vuna_dCompiler_dDriver_dCache_dCachedProgram_Vuna_dCompiler_dDriver_dCache_dCachedProgram of (t_Vuna_dCompiler_dElab_dTypes_dDtData t_Base_dList_dList) * (t_Vuna_dCompiler_dElab_dTypes_dDtDef t_Base_dList_dList) * ((int, t_Vuna_dCompiler_dCore_dTerm_dTerm) t_Base_dPair_dPair t_Base_dList_dList) * ((string, t_Vuna_dCompiler_dCore_dTerm_dTerm) t_Base_dPair_dPair t_Base_dList_dList) * (t_Vuna_dCompiler_dElab_dTypes_dDtInst t_Base_dList_dList) * (t_Vuna_dCompiler_dElab_dTypes_dDtClass t_Base_dList_dList) * (int)
+type t_Vuna_dCompiler_dDriver_dCache_dCachedProgram = C_Vuna_dCompiler_dDriver_dCache_dCachedProgram_Vuna_dCompiler_dDriver_dCache_dCachedProgram of (t_Vuna_dCompiler_dElab_dTypes_dDtData t_Base_dList_dList) * (t_Vuna_dCompiler_dElab_dTypes_dDtDef t_Base_dList_dList) * ((string, t_Vuna_dCompiler_dCore_dTerm_dTerm) t_Base_dPair_dPair t_Base_dList_dList) * (t_Vuna_dCompiler_dElab_dTypes_dDtInst t_Base_dList_dList) * (t_Vuna_dCompiler_dElab_dTypes_dDtClass t_Base_dList_dList) * (int)
 
-let v_Vuna_dCompiler_dDriver_dCache_dcachedOfProgram = (fun prog -> (C_Vuna_dCompiler_dDriver_dCache_dCachedProgram_Vuna_dCompiler_dDriver_dCache_dCachedProgram ((v_Vuna_dCompiler_dElab_dTypes_ddtProgDatas prog), (v_Vuna_dCompiler_dElab_dTypes_ddtProgDefs prog), ((v_Base_dList_dmap (fun p -> (C_Base_dPair_dPair_Base_dPair_dPair ((v_Base_dPair_dfirstOf p), ((v_Vuna_dCompiler_dCore_dEval_dquote 0) (v_Base_dPair_dsecondOf p)))))) (v_Vuna_dCompiler_dElab_dTypes_ddtProgSols prog)), (v_Vuna_dCompiler_dElab_dTypes_ddtProgGlobals prog), (v_Vuna_dCompiler_dElab_dTypes_ddtProgInsts prog), (v_Vuna_dCompiler_dElab_dTypes_ddtProgClasses prog), (v_Vuna_dCompiler_dElab_dTypes_ddtProgNext prog))))
+let v_Vuna_dCompiler_dDriver_dCache_dfixTerm = (fun tbl t -> ((v_Vuna_dCompiler_dCore_dEval_dsubstSolvedMetasTbl tbl) t))
+
+let v_Vuna_dCompiler_dDriver_dCache_dfixDef = (fun mc0 mc1 -> (match mc1 with
+  | C_Vuna_dCompiler_dElab_dTypes_dDtDef_Vuna_dCompiler_dElab_dTypes_dDtExtern (dtb__0, dtb__1, dtb__2, dtb__3) -> (C_Vuna_dCompiler_dElab_dTypes_dDtDef_Vuna_dCompiler_dElab_dTypes_dDtExtern (dtb__0, ((v_Vuna_dCompiler_dDriver_dCache_dfixTerm mc0) dtb__1), dtb__2, dtb__3))
+  | C_Vuna_dCompiler_dElab_dTypes_dDtDef_Vuna_dCompiler_dElab_dTypes_dDtAxiom (dtb__4, dtb__5, dtb__6) -> (C_Vuna_dCompiler_dElab_dTypes_dDtDef_Vuna_dCompiler_dElab_dTypes_dDtAxiom (dtb__4, ((v_Vuna_dCompiler_dDriver_dCache_dfixTerm mc0) dtb__5), dtb__6))
+  | C_Vuna_dCompiler_dElab_dTypes_dDtDef_Vuna_dCompiler_dElab_dTypes_dDtDef (dtb__7, dtb__8, dtb__9, dtb__10) -> (C_Vuna_dCompiler_dElab_dTypes_dDtDef_Vuna_dCompiler_dElab_dTypes_dDtDef (dtb__7, ((v_Vuna_dCompiler_dDriver_dCache_dfixTerm mc0) dtb__8), ((v_Vuna_dCompiler_dDriver_dCache_dfixTerm mc0) dtb__9), dtb__10))
+  | _ -> failwith "DT: impossible branch"
+))
+
+let v_Vuna_dCompiler_dDriver_dCache_dfixCtor = (fun mc0 mc1 -> (match mc1 with
+  | C_Vuna_dCompiler_dElab_dTypes_dDtCtor_Vuna_dCompiler_dElab_dTypes_dDtCtor (dtb__11, dtb__12, dtb__13, dtb__14) -> (C_Vuna_dCompiler_dElab_dTypes_dDtCtor_Vuna_dCompiler_dElab_dTypes_dDtCtor (dtb__11, dtb__12, dtb__13, ((v_Vuna_dCompiler_dDriver_dCache_dfixTerm mc0) dtb__14)))
+  | _ -> failwith "DT: impossible branch"
+))
+
+let v_Vuna_dCompiler_dDriver_dCache_dfixData = (fun mc0 mc1 -> (match mc1 with
+  | C_Vuna_dCompiler_dElab_dTypes_dDtData_Vuna_dCompiler_dElab_dTypes_dDtData (dtb__15, dtb__16, dtb__17) -> (C_Vuna_dCompiler_dElab_dTypes_dDtData_Vuna_dCompiler_dElab_dTypes_dDtData (dtb__15, dtb__16, ((v_Base_dList_dmap (v_Vuna_dCompiler_dDriver_dCache_dfixCtor mc0)) dtb__17)))
+  | _ -> failwith "DT: impossible branch"
+))
+
+let v_Vuna_dCompiler_dDriver_dCache_dfixClass = (fun mc0 mc1 -> (match mc1 with
+  | C_Vuna_dCompiler_dElab_dTypes_dDtClass_Vuna_dCompiler_dElab_dTypes_dDtClass (dtb__18, dtb__19, dtb__20, dtb__21) -> (C_Vuna_dCompiler_dElab_dTypes_dDtClass_Vuna_dCompiler_dElab_dTypes_dDtClass (dtb__18, dtb__19, ((v_Base_dList_dmap (fun p -> (C_Base_dPair_dPair_Base_dPair_dPair ((v_Base_dPair_dfirstOf p), ((v_Vuna_dCompiler_dDriver_dCache_dfixTerm mc0) (v_Base_dPair_dsecondOf p)))))) dtb__20), ((v_Base_dList_dmap (v_Vuna_dCompiler_dDriver_dCache_dfixTerm mc0)) dtb__21)))
+  | _ -> failwith "DT: impossible branch"
+))
+
+let v_Vuna_dCompiler_dDriver_dCache_dfixInst = (fun mc0 mc1 -> (match mc1 with
+  | C_Vuna_dCompiler_dElab_dTypes_dDtInst_Vuna_dCompiler_dElab_dTypes_dDtInst (dtb__22, dtb__23, dtb__24, dtb__25) -> (C_Vuna_dCompiler_dElab_dTypes_dDtInst_Vuna_dCompiler_dElab_dTypes_dDtInst (dtb__22, ((v_Base_dList_dmap (fun p -> (C_Base_dPair_dPair_Base_dPair_dPair ((v_Base_dPair_dfirstOf p), ((v_Vuna_dCompiler_dDriver_dCache_dfixTerm mc0) (v_Base_dPair_dsecondOf p)))))) dtb__23), ((v_Base_dList_dmap (v_Vuna_dCompiler_dDriver_dCache_dfixTerm mc0)) dtb__24), ((v_Vuna_dCompiler_dDriver_dCache_dfixTerm mc0) dtb__25)))
+  | _ -> failwith "DT: impossible branch"
+))
+
+let v_Vuna_dCompiler_dDriver_dCache_dcachedOfProgram = (fun prog -> ((fun tbl -> (C_Vuna_dCompiler_dDriver_dCache_dCachedProgram_Vuna_dCompiler_dDriver_dCache_dCachedProgram (((v_Base_dList_dmap (v_Vuna_dCompiler_dDriver_dCache_dfixData tbl)) (v_Vuna_dCompiler_dElab_dTypes_ddtProgDatas prog)), ((v_Base_dList_dmap (v_Vuna_dCompiler_dDriver_dCache_dfixDef tbl)) (v_Vuna_dCompiler_dElab_dTypes_ddtProgDefs prog)), ((v_Base_dList_dmap (fun p -> (C_Base_dPair_dPair_Base_dPair_dPair ((v_Base_dPair_dfirstOf p), ((v_Vuna_dCompiler_dDriver_dCache_dfixTerm tbl) (v_Base_dPair_dsecondOf p)))))) (v_Vuna_dCompiler_dElab_dTypes_ddtProgGlobals prog)), ((v_Base_dList_dmap (v_Vuna_dCompiler_dDriver_dCache_dfixInst tbl)) (v_Vuna_dCompiler_dElab_dTypes_ddtProgInsts prog)), ((v_Base_dList_dmap (v_Vuna_dCompiler_dDriver_dCache_dfixClass tbl)) (v_Vuna_dCompiler_dElab_dTypes_ddtProgClasses prog)), (v_Vuna_dCompiler_dElab_dTypes_ddtProgNext prog)))) (v_Base_dIntMap_dfromList (v_Vuna_dCompiler_dElab_dTypes_ddtProgSols prog))))
 
 let v_Vuna_dCompiler_dDriver_dCache_dprogramOfCached = (fun mc0 -> (match mc0 with
-  | C_Vuna_dCompiler_dDriver_dCache_dCachedProgram_Vuna_dCompiler_dDriver_dCache_dCachedProgram (dtb__0, dtb__1, dtb__2, dtb__3, dtb__4, dtb__5, dtb__6) -> (C_Vuna_dCompiler_dElab_dTypes_dDtProgram_Vuna_dCompiler_dElab_dTypes_dDtProgram (dtb__0, dtb__1, C_Base_dList_dList_Base_dList_dNil, ((v_Base_dList_dmap (fun p -> (C_Base_dPair_dPair_Base_dPair_dPair ((v_Base_dPair_dfirstOf p), ((v_Vuna_dCompiler_dCore_dEval_deval C_Base_dList_dList_Base_dList_dNil) (v_Base_dPair_dsecondOf p)))))) dtb__2), dtb__3, dtb__4, dtb__5, dtb__6, (v_Base_dHashMap_dfromList C_Base_dList_dList_Base_dList_dNil)))
+  | C_Vuna_dCompiler_dDriver_dCache_dCachedProgram_Vuna_dCompiler_dDriver_dCache_dCachedProgram (dtb__26, dtb__27, dtb__28, dtb__29, dtb__30, dtb__31) -> (C_Vuna_dCompiler_dElab_dTypes_dDtProgram_Vuna_dCompiler_dElab_dTypes_dDtProgram (dtb__26, dtb__27, C_Base_dList_dList_Base_dList_dNil, C_Base_dList_dList_Base_dList_dNil, dtb__28, dtb__29, dtb__30, dtb__31, (v_Base_dHashMap_dfromList C_Base_dList_dList_Base_dList_dNil)))
   | _ -> failwith "DT: impossible branch"
 ))

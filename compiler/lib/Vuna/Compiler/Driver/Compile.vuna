@@ -309,7 +309,7 @@ runBuildScript dir out name =
 -- 典型的「依赖包全部缓存命中」场景：重复 `vuna check .` / 多包 workspace / LSP 重启。
 -- ---------------------------------------------------------------
 checkCacheSchema : String
-checkCacheSchema = "vuna-check-cache 2"
+checkCacheSchema = "vuna-check-cache 3"
 
 checkCacheDir : PackageContext -> String
 checkCacheDir ctx = cacheBase ++ "/" ++ hashText (textHash (contextDir ctx)) ++ "/check"
