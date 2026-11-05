@@ -192,8 +192,7 @@ splitReplExpr decls = case reverse decls of
 --   - `main : IO a`：**一律报错**。核心求值器是纯的、不执行效果；即使动作结果不依赖
 --     效果（`do prim_print "hi"; pure 7`），效果也会被静默丢弃——误导用户。所以不做
 --     「尝试归约、卡住才报错」这种不可靠的判定。效果程序只走 compile + 运行
---     （夹具用 `.nointerp` 标记）。IO 的识别按 main 的**类型**（族名 `IO`，含
---     `Base.IO.IO` 这类模块前缀）。
+--     （夹具用 `.nointerp` 标记）。IO 的识别按 main 的**类型**（M37 起是内建类型名 `IO`）。
 evalDtMain : DtProgram -> Result String
 evalDtMain program = case findMainDef (dtProgDefs program) of
   Nothing => cgErr0 NoMain
@@ -213,7 +212,7 @@ evalDtMain program = case findMainDef (dtProgDefs program) of
         Nothing => cgErr0 MainNotValue
       _ => cgErr0 MainNotValue
 
--- main 的类型是不是 base 的 canonical `IO a`（完整符号 `Base.IO.IO`，M27）。
+-- main 的类型是不是内建 `IO a`（M37：canonical 身份就是源级名 `IO`）。
 isIOType : Term -> Bool
 isIOType (TApp fn _ _) = isIOType fn
 isIOType (TGlobal g) = g == ioFamilyName

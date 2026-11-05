@@ -777,12 +777,13 @@ else
 fi
 
 # C35：跨单元引用必须是 OCaml 限定名 `Unit.name`（旧模型靠 open 链写裸名）。
-# Main.ml 引用 Vuna.Hello / Dep 的值与 Base.IO 的构造子，三者定义单元不同，正好覆盖
+# Main.ml 引用 Vuna.Hello / Dep 的值与 Dep 的构造子，三者定义单元不同，正好覆盖
 # 值 / 构造子两类跨单元引用；同时断言产物里存在 `Module.C_ctor` 形态（旧产物为零）。
+# M37：IO 升格后没有构造子，main 钩子是 `v_main 0`（不再 match MkIO）。
 main_ml=$split_dir/Main.ml
 check_contains "package split qualified value (Vuna.Hello)" "$(cat "$main_ml")" "Vuna_dHello.v_Vuna_dHello_dhello"
 check_contains "package split qualified value (Dep)" "$(cat "$main_ml")" "Dep.v_Dep_ddepText"
-check_contains "package split qualified constructor (Base.IO)" "$(cat "$main_ml")" "Base_dIO.C_Base_dIO_dIO_Base_dIO_dMkIO"
+check_contains "package split qualified constructor (Dep)" "$(cat "$main_ml")" "Dep.C_Dep_dDepTag_Dep_dDepTagA"
 split_qual_ctors=$(grep -hoE '[A-Z][A-Za-z0-9_]*\.C_[A-Za-z0-9_]+' "$split_dir"/*.ml 2>/dev/null | sed -n '1,3p')
 if [ -n "$split_qual_ctors" ]; then
   ok
@@ -794,11 +795,12 @@ if grep -qE '(^|[^A-Za-z0-9_.])v_Vuna_dHello_dhello' "$main_ml"; then
 else
   ok
 fi
-if grep -qE '(^|[^A-Za-z0-9_.])C_Base_dIO_dIO_Base_dIO_dMkIO' "$main_ml"; then
-  bad "package split no bare cross-unit constructor" "无未限定 C_Base_dIO_dIO_Base_dIO_dMkIO" "$(grep -nE '(^|[^A-Za-z0-9_.])C_Base_dIO_dIO_Base_dIO_dMkIO' "$main_ml" | sed -n '1p')"
+if grep -qE '(^|[^A-Za-z0-9_.])C_Dep_dDepTag_Dep_dDepTagA' "$main_ml"; then
+  bad "package split no bare cross-unit constructor" "无未限定 C_Dep_dDepTag_Dep_dDepTagA" "$(grep -nE '(^|[^A-Za-z0-9_.])C_Dep_dDepTag_Dep_dDepTagA' "$main_ml" | sed -n 1p)"
 else
   ok
 fi
+check_contains "package split main hook (IO intrinsic)" "$(cat "$main_ml")" "v_main 0"
 
 # C35：build.sh 增量路径按**直接依赖**分层。01_workspace 里 Vuna.Hello 不 import 任何
 # 模块（只定义 String 常量），其 compile_mod 行只应列 Vuna_runtime；旧模型会列全部前序

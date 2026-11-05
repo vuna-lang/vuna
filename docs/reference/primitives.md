@@ -30,25 +30,30 @@
   `Base.Ord` 方法（`eq` / `neq` / `lt` / `le` / `gt` / `ge`）的解析期别名；Int/String 上的
   `bi_eq_int` / `bi_eq_str` / `bi_*_int` / `bi_*_generic` 是这两个类的**内建实例实现**
   （不是运算符的独立语义）。详见 [operators.md](operators.md)。
-- **`Bool` / `List` / `IO` 是 base 的普通 `data` 声明**，身份是完整符号而不是短名：
+- **`IO` 是语言内建效应类型**（M37），`Bool` / `List` / `Nat` 是 base 的普通 `data` 声明：
+  内建类型按名字恒可见；base 的族身份是完整符号而不是短名：
 
   | 声明 | canonical 符号 | 来源 | 常量 |
   | --- | --- | --- | --- |
   | `Bool` | `Base.Bool.Bool` | `base/lib/Base/Bool.vuna` | `Intrinsics.boolTypeName` |
   | `True` / `False` | `Base.Bool.True` / `Base.Bool.False` | 同上 | `boolTrueCtor` / `boolFalseCtor` |
   | `List` | `Base.List.List`（`Cons` / `Nil` 同理） | `Base.List` | `listFamilyName` / `listConsCtor` / `listNilCtor` |
-  | `IO` | `Base.IO.IO` | `Base.IO` | `ioFamilyName` |
   | `Nat` | `Base.Nat.Nat`（`Zero` / `Succ` 同理） | `Base.Nat` | `natTypeName` / `natZeroCtor` / `natSuccCtor` |
+
+- `IO`：kind `Type -> Type`，运行时裸 thunk `int -> 'a`，没有构造器；canonical 身份就是
+  源级名 `IO`（`Intrinsics.ioTypeName` / `ioFamilyName`）。`MkIO` 已删除。
 
 - `True` / `False` 精化为核心 `TBool`，codegen 的运行时表示是 OCaml `bool`：canonical Bool
   族**不生成变体声明**（`Codegen.Decl.runtimeDatas` 按 `boolTypeName` 过滤）。
 - **没有短名 / `lastName` 判定，也没有「全局构造子放行」**：`True` / `False` / `Cons` /
   `Nil` 与其他构造子一样经 import 的导出表解析（`Prelude` 自动注入 `Base.Bool` /
   `Base.List`，所以裸名可用）。类型位置按 `resolveTypeName` 判定：`Int` / `String` /
-  `Type` / `->` 是内建，其余（含 `Bool`）查导出表。
-- 用户写的 `data Bool` / `data List` / `data IO` 是**普通 data**、不与 canonical 冲突：
-  模块内名字被 mangle 成 `<Module>.Bool`；入口文件（不做 mangle）里声明 `data Bool` 时
-  族名就是 `Bool`，与 `Base.Bool.Bool` 是两个族。`if` / 字面量 `case` 等只认 canonical。
+  `IO` / `Type` / `->` 是内建，其余（含 `Bool`）查导出表。
+- 用户写的 `data Bool` / `data List` 是**普通 data**、不与 canonical 冲突：模块内名字被
+  mangle 成 `<Module>.Bool`；入口文件（不做 mangle）里声明 `data Bool` 时族名就是
+  `Bool`，与 `Base.Bool.Bool` 是两个族。**`IO` 例外**：它是内建类型名，ad-hoc 入口再写
+  `data IO` 报 `TC_CannotRedefineBuiltin`；模块内 `data IO` 仍按 mangle 成为
+  `<Module>.IO`（与 `data Bool` 同规则）。`if` / 字面量 `case` 等只认 canonical。
 
 ## 3. Int
 
@@ -157,8 +162,9 @@
 | `prim_newMArray` / `prim_readMArray` / `prim_writeMArray` / `prim_mArrayLength` | `Int -> a -> IO (MArray a)` / `MArray a -> Int -> IO a` / `MArray a -> Int -> a -> IO Int` / `MArray a -> IO Int` | `Array.make` / `Array.get` / `Array.set` / `Array.length` |
 | `prim_newBuffer` / `prim_bufferAdd` / `prim_bufferContents` / `prim_bufferLength` | `IO Buffer` / `Buffer -> String -> IO Int` / `Buffer -> IO String` / `Buffer -> IO Int` | `Buffer.create` / `add_string` / `contents` / `length` |
 
-- 效果原语的 runtime 表达仍是「立即算完的 OCaml 表达式」，由 `ioPrimLam` 按 arity 包成
-  `MkIO (fun _ -> ...)`；零参 `prim_newBuffer` 是动作**值**。
+- 效果原语的 runtime 表达仍是「立即算完的 OCaml 表达式」，由 `ioPrimThunkText` 按 arity
+  包成 thunk（`fun args -> fun (_ : int) -> rt args`；零参 `fun (_ : int) -> rt`）。
+  零参 `prim_newBuffer` 是动作**值**。
 - `arrayFromList` / `arrayToList` 依赖 canonical `Base.List.List` 桥接（`needsListBridge`），
   没有 List 族的程序使用时报 `ListBridgeRequired`。
 - **interp 不归约**全部容器原语（`OpNone`）：夹具带 `.nointerp`，只 compile + 运行。
@@ -169,9 +175,21 @@
   `Ref` / `SArray` 只在 `ST r` 里使用且不能逃出 `runST`；仍无线性 / 唯一性类型（句柄可复制、
   多用未禁止，见 [effects.md](effects.md)）。
 
-## 7. 效果原语、IO 动作与能力（M31）
+## 7. 效果原语、IO 动作与能力（M31/M37）
 
-**类型**：全部效果原语返回 `IO` 动作，而不是「立刻算完的值」：`prim_print : String -> IO Int`、
+**IO 类型**：`IO` 是语言内建效应类型（kind `Type -> Type`，运行时裸 thunk
+`int -> 'a`，无构造器，见 §2）。它的代数也是内建原语：
+
+| 原语 | 签名 | 说明 |
+| --- | --- | --- |
+| `prim_pureIO` | `{a : Type} -> a -> IO a` | 构造动作 |
+| `prim_bindIO` | `{a b : Type} -> IO a -> (a -> IO b) -> IO b` | 串行绑定 |
+| `prim_runIO` | `{a : Type} -> IO a -> a` | main 外唯一执行入口；能力 `unsafe` |
+
+`Base.IO` 把 `runIO` / `print` / … 暴露为别名，并提供 `Functor` / `Monad IO` 实例；
+`IO` 类型本身恒可见（不需要 import）。
+
+**效果原语类型**：全部效果原语返回 `IO` 动作，而不是「立刻算完的值」：`prim_print : String -> IO Int`、
 `prim_readFile : String -> IO String`、`prim_readLine : IO String`、
 `prim_readDir : String -> IO (List String)`、`prim_isDirectory` / `prim_fileExists : String -> IO Bool`、
 `prim_makeDir` / `prim_removeFile` / `prim_fileMtime` / `prim_fileSize : String -> IO Int`、
@@ -184,10 +202,12 @@
 **名字面**：效果原语只保留 `prim_*` 名。用户有两条合法用法：
 
 1. `import Base.IO`，使用返回 `IO` 动作的 API（`print` / `readFile` / …——它们是 `prim_*` 的**别名**）；
-2. 在 `vuna.toml` 声明所需能力后**直接**调用 `prim_*`，同样得到 `IO` 动作。
+2. 在 `vuna.toml` 声明所需能力后**直接**调用 `prim_*`，同样得到 `IO` 动作。IO 升格后
+   不再要求 `import Base.IO`（类型是内建的），只是没有别名与实例可用。
 
-**执行入口**：动作只在 `main` 处由运行时执行。`Base.IO.runIO : IO a -> a` 是唯一的
-「main 之外执行」入口，要求能力 `unsafe`（工具链特权）：未声明时报
+**执行入口**：动作只在 `main` 处由运行时执行；`main : IO a` 的产物钩子是 `v_main 0`。
+`Base.IO.runIO : IO a -> a`（= `prim_runIO`）是唯一的「main 之外执行」入口，要求能力
+`unsafe`（工具链特权）：未声明时报
 `` `runIO` executes IO outside main; requires capability `unsafe` ... ``；`runIO` 每次调用
 都重新执行动作（动作值可复用、效果不缓存）。
 
@@ -198,7 +218,7 @@
 | `process` | `prim_getArgs`、`prim_exit`、`prim_runIn`、`prim_spawn`、`prim_wait` |
 | `env` | `prim_getenv`、`prim_getcwd`、`prim_execPath` |
 | `clock` | `timeUs` |
-| `unsafe` | `Base.IO.runIO`（无 intrinsic：在 main 之外执行 IO 动作） |
+| `unsafe` | `prim_runIO`（= `Base.IO.runIO`：在 main 之外执行 IO 动作） |
 
 - 声明面：manifest `[capabilities] effects = ["console", "fs", ...]`，按**包**声明
   （`Frontend.Manifest.manifestCapabilities`）；无 manifest 的 ad-hoc 文件没有能力。
@@ -210,9 +230,8 @@
 - **这是权限声明，不是检查豁免**：能力不改变类型检查、擦除或 codegen 语义，只决定能否在
   源码里直接引用效果原语 / `runIO`；没有按包名字符串判定的 allowlist。
 - `Base.IO` 自身声明 `["console", "fs", "process"]`（只做别名，不调用 `runIO`）；`base` 另声明
-  `unsafe`（M35.1，唯一使用点是 `Base.ST` 经 `runIO` 执行 region 内动作，见
-  [effects.md](effects.md)）；编译器与
-  产品 CLI 声明全部六个能力（含 `unsafe`）。
+  `unsafe`（`Base.IO.runIO` 的别名定义与 `Base.ST.runST` 的 `runIO` 使用点，见
+  [effects.md](effects.md)）；编译器与产品 CLI 声明全部六个能力（含 `unsafe`）。
 
 ## 8. 生成 runtime 的契约
 
@@ -246,12 +265,14 @@
 | `prim_wait` | 等待子进程并返回退出码（signal/stopped 归 1） |
 
 效果原语的 runtime 表（`dtp_*`）仍是**立即执行**的 OCaml 函数；生成器
-（`Codegen.Term.ioPrimText`）按 `Intrinsic` 的 arity 把它们包成动作值，例如
-`prim_getcwd` → `MkIO (fun _ -> dtp_getcwd ())`、`prim_print` →
-`fun s -> MkIO (fun _ -> dtp_print s)`。`MkIO` 只在 canonical `Base.IO.IO` 声明存在时可用；
-用了 `prim_*` 却没 `import Base.IO` 报 `CG_EffectPrimRequiresIO`。因此零参原语
-（`prim_getArgs` / `prim_readLine` / `prim_getcwd` / `prim_execPath` / `timeUs`）是动作**值**：
-引用不执行、不重新求值；需要快照 / 执行时显式 `let t = runIO timeUs` 或在 `do` 里 `<-`。
+（`Codegen.Term.ioPrimText`）按 `Intrinsic` 的 arity 把它们包成 **thunk 动作值**，例如
+`prim_getcwd` → `(fun (_ : int) -> dtp_getcwd ())`、`prim_print` →
+`(fun s -> fun (_ : int) -> dtp_print s)`。IO 代数原语（`prim_pureIO` / `prim_bindIO`）
+由 `ioAlgebraText` 单独生成（runtime 本身就是动作值）；`prim_runIO` →
+`(fun io -> io 0)`。世界令牌标注 `int` 是必须的（否则 OCaml 值限制留下弱类型变量）。
+因此零参原语（`prim_getArgs` / `prim_readLine` / `prim_getcwd` / `prim_execPath` /
+`timeUs`）是动作**值**：引用不执行、不重新求值；需要快照 / 执行时显式
+`let t = runIO timeUs` 或在 `do` 里 `<-`。
 
 ## 9. interp 归约边界
 

@@ -1,6 +1,5 @@
 module Base.IO
   ( Functor(..)
-  , IO
   , Monad(..)
   , exit
   , fileExists
@@ -20,20 +19,17 @@ module Base.IO
   , writeFile
   ) where
 
--- Base.IO：抽象 IO 动作与效果 API（M11-C / M12.6 / M31）。
--- 表示是「世界令牌 Int -> a」的挂起函数（thunk）；构造器 MkIO 私有。
+-- Base.IO：IO 的公开 API 与 Functor/Monad 实例。
 --
--- M31：效果原语 `prim_*` 本身已经是 IO 动作（`String -> IO String` 等），所以下面
--- 的 print / readFile / … 都是**别名**，不再有 `MkIO (\w => prim_*)` 包装。
+-- M37 起 IO 是**编译器内建效应类型**：kind `Type -> Type`，运行时表示是裸 thunk
+-- `int -> 'a`，没有构造器（`MkIO` 已删除）。本模块不再声明 `data IO`，只提供：
+--   1. 效果 API：print / readFile / …（M31 起就是 IO 化的 `prim_*` 的别名）；
+--   2. `runIO : IO a -> a`：**唯一**的 main 外执行入口（`prim_runIO`，需能力
+--      `unsafe`；能力门控在 `Loader.Resolve`）。IO 动作只在 main 由运行时执行，
+--      `runIO` 每次调用都重新执行动作（动作值可复用、效果不缓存）；
+--   3. `Functor` / `Monad` 实例：构造/绑定走内建代数 `prim_pureIO` / `prim_bindIO`。
 --
--- 执行入口只有两个：
---   1. `main : IO a`：运行时在入口用世界令牌 0 执行一次；
---   2. `runIO : IO a -> a`：**特权**逃逸口。只有 manifest `[capabilities] effects`
---      声明了 "unsafe" 的包才能在源码里引用它（`Loader.Resolve.checkEffectsBuiltins`）。
---      工具链（vuna / vuna-compiler）用它把宿主效果放在 main 之外执行；普通包不应
---      使用——`runIO` 会破坏「IO 只在 main 执行」的保证。
---
--- `runIO` 每次调用都重新执行动作（动作值可以复用，效果不缓存）。
+-- `IO` 类型本身恒可见（内建，无需 import）；`import Base.IO` 是为了 API 与实例。
 import Base.List
 import Base.Bool
 import Base.Monad
@@ -41,24 +37,9 @@ import Base.Monad
 import Base.String
 import Base.Nat
 
-data IO a : Type where
-  MkIO : (Int -> a) -> IO a
-
--- 特权执行入口：`MkIO f` 拿到世界令牌 0 立即执行；能力门控在 Loader.Resolve。
+-- 特权执行入口：`prim_runIO` 拿到世界令牌 0 立即执行；能力门控在 Loader.Resolve。
 runIO : IO a -> a
-runIO (MkIO f) = f 0
-
--- 内部构造器（不导出）：Functor/Monad 实例的实现细节。
-ioPure : a -> IO a
-ioPure x = MkIO (\w => x)
-
-ioBind : IO a -> (a -> IO b) -> IO b
-ioBind (MkIO f) k = MkIO (\w => case k (f w) of
-  MkIO g => g w
-)
-
-ioFmap : (a -> b) -> IO a -> IO b
-ioFmap f (MkIO g) = MkIO (\w => f (g w))
+runIO = prim_runIO
 
 -- 效果 API：直接别名到 IO 化的原语（M31）。
 print : String -> IO Int
@@ -109,9 +90,10 @@ getArgs = prim_getArgs
 exit : Int -> IO Int
 exit = prim_exit
 
+-- IO 代数：内建原语就是 thunk 构造/绑定，实例只做转接（没有第二套实现）。
 instance Functor IO where
-  fmap f io = ioFmap f io
+  fmap f io = prim_bindIO io (\x => prim_pureIO (f x))
 
 instance Monad IO where
-  bind io k = ioBind io k
-  pure x = ioPure x
+  bind io k = prim_bindIO io k
+  pure x = prim_pureIO x

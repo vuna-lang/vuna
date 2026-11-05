@@ -96,7 +96,7 @@ let v_Vuna_dCompiler_dPackages_dPkg_dnormalizeDir = (fun path -> (if ((Base_dStr
   | dtb__64 -> (Vuna_dCompiler_dCommon.v_Vuna_dCompiler_dCommon_djoinSlashes (Base_dList.v_Base_dList_dreverse dtb__64))
 )))
 
-let v_Vuna_dCompiler_dPackages_dPkg_dabsolutePath = (fun path -> (if ((Base_dString.v_Base_dString_dstartsWith "/") path) then (v_Vuna_dCompiler_dPackages_dPkg_dnormalizeDir path) else (v_Vuna_dCompiler_dPackages_dPkg_dnormalizeDir (String.concat "" [(Base_dIO.v_Base_dIO_drunIO (Base_dIO.C_Base_dIO_dIO_Base_dIO_dMkIO (fun _ -> (dtp_getcwd ())))); "/"; path]))))
+let v_Vuna_dCompiler_dPackages_dPkg_dabsolutePath = (fun path -> (if ((Base_dString.v_Base_dString_dstartsWith "/") path) then (v_Vuna_dCompiler_dPackages_dPkg_dnormalizeDir path) else (v_Vuna_dCompiler_dPackages_dPkg_dnormalizeDir (String.concat "" [(Base_dIO.v_Base_dIO_drunIO (fun (_ : int) -> (dtp_getcwd ()))); "/"; path]))))
 
 let v_Vuna_dCompiler_dPackages_dPkg_djoinPath = (fun base rel -> (if ((Base_dString.v_Base_dString_dstartsWith "/") rel) then (v_Vuna_dCompiler_dPackages_dPkg_dnormalizeDir rel) else (v_Vuna_dCompiler_dPackages_dPkg_dnormalizeDir (String.concat "" [base; "/"; rel]))))
 
@@ -109,7 +109,7 @@ let rec v_Vuna_dCompiler_dPackages_dPkg_djoinPathsText = (fun mc0 -> (match mc0 
   | _ -> failwith "DT: impossible branch"
 ))
 
-let v_Vuna_dCompiler_dPackages_dPkg_dloadManifestAt = (fun path -> (if (Base_dIO.v_Base_dIO_drunIO ((fun dtio_0 -> Base_dIO.C_Base_dIO_dIO_Base_dIO_dMkIO (fun _ -> dtp_fileExists dtio_0)) path)) then (match ((Vuna_dCompiler_dFrontend_dManifest.v_Vuna_dCompiler_dFrontend_dManifest_dparseManifest path) (Base_dIO.v_Base_dIO_drunIO ((fun dtio_0 -> Base_dIO.C_Base_dIO_dIO_Base_dIO_dMkIO (fun _ -> dtp_readFile dtio_0)) path))) with
+let v_Vuna_dCompiler_dPackages_dPkg_dloadManifestAt = (fun path -> (if (Base_dIO.v_Base_dIO_drunIO ((fun dtio_0 -> fun (_ : int) -> dtp_fileExists dtio_0) path)) then (match ((Vuna_dCompiler_dFrontend_dManifest.v_Vuna_dCompiler_dFrontend_dManifest_dparseManifest path) (Base_dIO.v_Base_dIO_drunIO ((fun dtio_0 -> fun (_ : int) -> dtp_readFile dtio_0) path))) with
   | Base_dResult.C_Base_dResult_dResult_Base_dResult_dErr (dtb__67) -> (Base_dResult.C_Base_dResult_dResult_Base_dResult_dErr (("pkg: " ^ dtb__67)))
   | Base_dResult.C_Base_dResult_dResult_Base_dResult_dOk (dtb__68) -> (match (Vuna_dCompiler_dFrontend_dManifest.v_Vuna_dCompiler_dFrontend_dManifest_dvalidateManifest dtb__68) with
   | Base_dResult.C_Base_dResult_dResult_Base_dResult_dErr (dtb__69) -> (Base_dResult.C_Base_dResult_dResult_Base_dResult_dErr (("pkg: " ^ dtb__69)))
@@ -304,7 +304,7 @@ let v_Vuna_dCompiler_dPackages_dPkg_dpackageContext = (fun package -> (C_Vuna_dC
   | _ -> failwith "DT: impossible branch"
 ))))
 
-let rec v_Vuna_dCompiler_dPackages_dPkg_dfindManifestUpMaybe = (fun fuel dir -> (if (fuel <= 0) then Base_dMaybe.C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing else (if (Base_dIO.v_Base_dIO_drunIO ((fun dtio_0 -> Base_dIO.C_Base_dIO_dIO_Base_dIO_dMkIO (fun _ -> dtp_fileExists dtio_0)) (dir ^ "/vuna.toml"))) then (Base_dMaybe.C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dir)) else (((v_Vuna_dCompiler_dPackages_dPkg_dfindManifestUpMaybeStep (fuel - 1)) dir) (Vuna_dCompiler_dFrontend_dManifest.v_Vuna_dCompiler_dFrontend_dManifest_dmanifestDir dir)))))
+let rec v_Vuna_dCompiler_dPackages_dPkg_dfindManifestUpMaybe = (fun fuel dir -> (if (fuel <= 0) then Base_dMaybe.C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing else (if (Base_dIO.v_Base_dIO_drunIO ((fun dtio_0 -> fun (_ : int) -> dtp_fileExists dtio_0) (dir ^ "/vuna.toml"))) then (Base_dMaybe.C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dir)) else (((v_Vuna_dCompiler_dPackages_dPkg_dfindManifestUpMaybeStep (fuel - 1)) dir) (Vuna_dCompiler_dFrontend_dManifest.v_Vuna_dCompiler_dFrontend_dManifest_dmanifestDir dir)))))
 and v_Vuna_dCompiler_dPackages_dPkg_dfindManifestUpMaybeStep = (fun fuel dir parent -> (if (fuel <= 0) then Base_dMaybe.C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing else (if (parent = dir) then Base_dMaybe.C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing else ((v_Vuna_dCompiler_dPackages_dPkg_dfindManifestUpMaybe (fuel - 1)) parent))))
 
 let v_Vuna_dCompiler_dPackages_dPkg_dfindManifestDirMaybe = (fun startDir -> ((fun start -> ((v_Vuna_dCompiler_dPackages_dPkg_dfindManifestUpMaybe ((2 * (bi_strLength start)) + 4)) start)) (v_Vuna_dCompiler_dPackages_dPkg_dnormalizeDir startDir)))
@@ -315,7 +315,7 @@ let v_Vuna_dCompiler_dPackages_dPkg_dfindManifestDir = (fun startDir -> (match (
   | _ -> failwith "DT: impossible branch"
 ))
 
-let v_Vuna_dCompiler_dPackages_dPkg_dhasManifest = (fun dir -> (Base_dIO.v_Base_dIO_drunIO ((fun dtio_0 -> Base_dIO.C_Base_dIO_dIO_Base_dIO_dMkIO (fun _ -> dtp_fileExists dtio_0)) (dir ^ "/vuna.toml"))))
+let v_Vuna_dCompiler_dPackages_dPkg_dhasManifest = (fun dir -> (Base_dIO.v_Base_dIO_drunIO ((fun dtio_0 -> fun (_ : int) -> dtp_fileExists dtio_0) (dir ^ "/vuna.toml"))))
 
 let v_Vuna_dCompiler_dPackages_dPkg_dbaseCandidates = (fun exeDir -> (Base_dList.C_Base_dList_dList_Base_dList_dCons (((v_Vuna_dCompiler_dPackages_dPkg_djoinPath exeDir) "base"), (Base_dList.C_Base_dList_dList_Base_dList_dCons (((v_Vuna_dCompiler_dPackages_dPkg_djoinPath exeDir) "../base"), (Base_dList.C_Base_dList_dList_Base_dList_dCons (((v_Vuna_dCompiler_dPackages_dPkg_djoinPath exeDir) "../../base"), (Base_dList.C_Base_dList_dList_Base_dList_dCons (((v_Vuna_dCompiler_dPackages_dPkg_djoinPath exeDir) "../../../base"), Base_dList.C_Base_dList_dList_Base_dList_dNil)))))))))
 
@@ -327,7 +327,7 @@ let rec v_Vuna_dCompiler_dPackages_dPkg_dfirstExistingBase = (fun mc0 mc1 -> (ma
   | _ -> failwith "DT: impossible branch"
 ))
 
-let v_Vuna_dCompiler_dPackages_dPkg_dlocateBase = (fun _u -> ((fun env -> (if (env = "") then ((fun candidates -> ((v_Vuna_dCompiler_dPackages_dPkg_dfirstExistingBase candidates) candidates)) (v_Vuna_dCompiler_dPackages_dPkg_dbaseCandidates (Vuna_dCompiler_dFrontend_dManifest.v_Vuna_dCompiler_dFrontend_dManifest_dmanifestDir (v_Vuna_dCompiler_dPackages_dPkg_dabsolutePath (Base_dIO.v_Base_dIO_drunIO (Base_dIO.C_Base_dIO_dIO_Base_dIO_dMkIO (fun _ -> (dtp_execPath ())))))))) else ((fun dir -> (if (v_Vuna_dCompiler_dPackages_dPkg_dhasManifest dir) then (Base_dResult.C_Base_dResult_dResult_Base_dResult_dOk (dir)) else (v_Vuna_dCompiler_dPackages_dPkg_dbaseNotFound (Base_dList.C_Base_dList_dList_Base_dList_dCons (dir, Base_dList.C_Base_dList_dList_Base_dList_dNil))))) (v_Vuna_dCompiler_dPackages_dPkg_dabsolutePath env)))) (Base_dIO.v_Base_dIO_drunIO ((fun dtio_0 -> Base_dIO.C_Base_dIO_dIO_Base_dIO_dMkIO (fun _ -> dtp_getenv dtio_0)) "VUNA_BASE"))))
+let v_Vuna_dCompiler_dPackages_dPkg_dlocateBase = (fun _u -> ((fun env -> (if (env = "") then ((fun candidates -> ((v_Vuna_dCompiler_dPackages_dPkg_dfirstExistingBase candidates) candidates)) (v_Vuna_dCompiler_dPackages_dPkg_dbaseCandidates (Vuna_dCompiler_dFrontend_dManifest.v_Vuna_dCompiler_dFrontend_dManifest_dmanifestDir (v_Vuna_dCompiler_dPackages_dPkg_dabsolutePath (Base_dIO.v_Base_dIO_drunIO (fun (_ : int) -> (dtp_execPath ()))))))) else ((fun dir -> (if (v_Vuna_dCompiler_dPackages_dPkg_dhasManifest dir) then (Base_dResult.C_Base_dResult_dResult_Base_dResult_dOk (dir)) else (v_Vuna_dCompiler_dPackages_dPkg_dbaseNotFound (Base_dList.C_Base_dList_dList_Base_dList_dCons (dir, Base_dList.C_Base_dList_dList_Base_dList_dNil))))) (v_Vuna_dCompiler_dPackages_dPkg_dabsolutePath env)))) (Base_dIO.v_Base_dIO_drunIO ((fun dtio_0 -> fun (_ : int) -> dtp_getenv dtio_0) "VUNA_BASE"))))
 
 let v_Vuna_dCompiler_dPackages_dPkg_dbaseOnlyContext = (fun base -> ((Base_dResult.v_Base_dResult_dandThen (v_Vuna_dCompiler_dPackages_dPkg_dloadPackage base)) (fun package -> (Base_dResult.C_Base_dResult_dResult_Base_dResult_dOk ((C_Vuna_dCompiler_dPackages_dPkg_dPackageContext_Vuna_dCompiler_dPackages_dPkg_dPackageContext ("", Base_dMaybe.C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing, (Base_dList.C_Base_dList_dList_Base_dList_dCons ((v_Vuna_dCompiler_dPackages_dPkg_ddependencyRootOf package), Base_dList.C_Base_dList_dList_Base_dList_dNil)), "", Base_dList.C_Base_dList_dList_Base_dList_dNil)))))))
 

@@ -219,75 +219,37 @@ else case lookupPair name st.gsCtors of
         p = genValueRef st name
       in Ok (Pair (firstOf p) (secondOf p))
 
--- M31：效果原语的 runtime 是「立刻算完的表达式」；IO 化后必须包成 `MkIO` 动作值，
--- 由 main 钩子或 `runIO` 执行。构造子从 datas 表（gsCtors 的族反查）取，缺失时报
--- `CG_EffectPrimRequiresIO`（用了 prim_* 却没 import Base.IO）；构造子按 IO 族的
--- 归属单元限定（C35，跨单元引用不再依赖 open 链）。
--- `prim_getArgs` / `prim_readDir` 一类返回 `List` 的 effect 原语，其 runtime 文本里
--- 内嵌 List 桥接 helper 调用（`dtp_listOf`），同样要按声明 List 族的单元限定。
+-- M37：效果原语的 runtime 是「立刻算完的表达式」；IO 是内建效应类型（运行时 = 裸
+-- thunk `int -> 'a`），所以按 arity 包成 `fun args -> fun _ -> rt args`，由 main 钩子
+-- 或 `runIO` 执行。`prim_getArgs` / `prim_readDir` 一类返回 `List` 的原语，其 runtime
+-- 文本里内嵌 List 桥接 helper 调用（`dtp_listOf`），仍要按声明 List 族的单元限定。
 ioPrimText : GenSt -> String -> Intrinsic -> Result (Pair String GenSt)
-ioPrimText st name i = case ioCtorNameOf st of
-  -- 内建模式（C2 起唯一模式）：IO 是裸 thunk `int -> 'a`，runtime 表达式按 arity
-  -- 包成 `fun args -> fun _ -> rt args`；零参是动作值 `fun _ -> rt`。
-  Nothing => Ok (Pair (ioPrimThunkText i.intrinsicRuntime (intrinsicArity i)) st)
-  Just (Pair family ctor) =>
-    let
-      p = genCtorRef st family ctor
-      rt =
-        if needsListBridge i then genBridgeRef (secondOf p) i.intrinsicRuntime
-        else Pair i.intrinsicRuntime (secondOf p)
-    in Ok (Pair (ioPrimLam (firstOf p) (firstOf rt) (intrinsicArity i)) (secondOf rt))
+ioPrimText st name i = if needsListBridge i then
+  let
+    rt = genBridgeRef st i.intrinsicRuntime
+  in Ok (Pair (ioPrimThunkText (firstOf rt) (intrinsicArity i)) (secondOf rt))
+else Ok (Pair (ioPrimThunkText i.intrinsicRuntime (intrinsicArity i)) st)
 
--- 内建模式的 thunk 包装：`prim_print` → `(fun s -> fun _ -> dtp_print s)`；
--- 零参 `prim_getArgs` → `(fun _ -> (dtp_listOf (dtp_getArgs ())))`。
+-- 内建模式的 thunk 包装：`prim_print` → `(fun s -> fun (_ : int) -> dtp_print s)`；
+-- 零参 `prim_getArgs` → `(fun (_ : int) -> (dtp_listOf (dtp_getArgs ())))`。
+-- token 必须标注 `int`：否则 OCaml 把世界令牌推成弱类型变量（`'_weak -> a`），
+-- 部分应用的动作值（`readFile "x"`）会因值限制报 non-generalizable。
 ioPrimThunkText : String -> Int -> String
 ioPrimThunkText rt arity =
   let
     argText = joinWith " " (takeNames arity ioParamNames)
-  in if arity == 0 then "(fun _ -> " ++ rt ++ ")"
-  else "(fun " ++ argText ++ " -> fun _ -> " ++ rt ++ " " ++ argText ++ ")"
+  in if arity == 0 then "(fun (_ : int) -> " ++ rt ++ ")"
+  else "(fun " ++ argText ++ " -> fun (_ : int) -> " ++ rt ++ " " ++ argText ++ ")"
 
--- IO 代数原语（`prim_pureIO` / `prim_bindIO` / `prim_runIO`）的 runtime：
--- 它们**本身**产生 IO 动作，不能套通用 eager 包装，因此按模式单独生成。
+-- IO 代数原语（`prim_pureIO` / `prim_bindIO` / `prim_runIO`）的 runtime：它们**本身**
+-- 产生 IO 动作（thunk 值），不能套通用的 eager 包装，因此单独生成。
 ioAlgebraText : GenSt -> String -> Result (Pair String GenSt)
-ioAlgebraText st name = case ioCtorNameOf st of
-  Nothing => Ok (Pair (ioAlgebraIntrinsicText name) st)
-  Just (Pair family ctor) =>
-    let
-      p = genCtorRef st family ctor
-    in Ok (Pair (ioAlgebraLegacyText (firstOf p) name) (secondOf p))
+ioAlgebraText st name = Ok (Pair (ioAlgebraIntrinsicText name) st)
 
 ioAlgebraIntrinsicText : String -> String
 ioAlgebraIntrinsicText name =
-  if name == primPureIOName then "(fun x -> fun _ -> x)"
-  else if name == primBindIOName then "(fun io k -> fun w -> k (io w) w)" else "(fun io -> io 0)"
-
-ioAlgebraLegacyText : String -> String -> String
-ioAlgebraLegacyText c name =
-  if name == primPureIOName then "(fun x -> " ++ c ++ " (fun _ -> x))"
-  else if name == primBindIOName then "(fun io k -> "
-    ++ c
-    ++ " (fun w -> match io with "
-    ++ c
-    ++ " f -> match k (f w) with "
-    ++ c
-    ++ " g -> g w))"
-  else "(fun io -> match io with " ++ c ++ " f -> f 0)"
-
-ioCtorNameOf : GenSt -> Maybe (Pair String String)
-ioCtorNameOf st = ioCtorNameGo st.gsCtors
-
-ioCtorNameGo : List (Pair String String) -> Maybe (Pair String String)
-ioCtorNameGo [] = Nothing
-ioCtorNameGo ((Pair ctor family) :: rest) =
-  if family == ioFamilyName then Just (Pair family ctor) else ioCtorNameGo rest
-
-ioPrimLam : String -> String -> Int -> String
-ioPrimLam ctor rt arity = if arity == 0 then "(" ++ ctor ++ " (fun _ -> " ++ rt ++ "))"
-else
-  let
-    argText = joinWith " " (takeNames arity ioParamNames)
-  in "(fun " ++ argText ++ " -> " ++ ctor ++ " (fun _ -> " ++ rt ++ " " ++ argText ++ "))"
+  if name == primPureIOName then "(fun x -> fun (_ : int) -> x)"
+  else if name == primBindIOName then "(fun io k -> fun (w : int) -> k (io w) w)" else "(fun io -> io 0)"
 
 -- 原语最多 2 个运行时参数（`prim_writeFile` / `prim_runIn`）；表比实际用到的长，
 -- `takeNames` 按 arity 截断（结构递归在表尾上，终止性检查可见）。
@@ -1053,16 +1015,6 @@ ioResultTy (TApp fn arg _) = case fn of
   _ => Nothing
 ioResultTy _ = Nothing
 
--- 找 canonical IO 族的（族名, 构造子名），用于生成 `match main with C_IO_MkIO f -> f 0`。
-ioCtorOf : List DtData -> Maybe (Pair String String)
-ioCtorOf [] = Nothing
-ioCtorOf (d :: rest) = if dtDataName d == ioFamilyName then firstCtorOf d else ioCtorOf rest
-
-firstCtorOf : DtData -> Maybe (Pair String String)
-firstCtorOf d = case dtDataCtors d of
-  c :: _ => Just (Pair (dtDataName d) (dtCtorName c))
-  [] => Nothing
-
 mainShowForName : String -> Result (Pair String String)
 mainShowForName g =
   if g == intTypeName then Ok (Pair "string_of_int" "int")
@@ -1074,7 +1026,7 @@ mainShowErr : Result (Pair String String)
 mainShowErr = cgErr0 MainReturnType
 
 -- main 钩子：`mainExpr` 是运行时求 main 值的表达式（普通 main 直接是 `v_main`；
--- main : IO a 则是 `match v_main with C_IO_MkIO f -> f 0`），按类型 `tyTerm` 选展示函数。
+-- main : IO a 则是 `v_main 0`），按类型 `tyTerm` 选展示函数。
 genDtHook : String -> List (Pair String Term) -> Term -> String -> Bool -> Result String
 genDtHook bodyText table tyTerm mainExpr printResult = andThen (mainShow table tyTerm) (\showPair => case showPair of
   Pair showFn kind =>
@@ -1085,17 +1037,9 @@ genDtHook bodyText table tyTerm mainExpr printResult = andThen (mainShow table t
     in Ok (bodyText ++ "\n" ++ hook)
 )
 
--- `match v_main with C_IO_MkIO f -> f 0`（找不到 IO 构造子时回退为原样引用）。
--- IO 构造子按 IO 族的归属单元限定（C35）：返回 (文本, 依赖单元或 "")。
+-- `main : IO a` 的执行：IO = 裸 thunk，直接对世界令牌 0 应用（无构造子 / 无跨单元依赖）。
 ioRunText : QualCtx -> Pair (List DtData) (List DtDef) -> String -> Pair String String
-ioRunText qc program mainRef = case ioCtorOf (firstOf program) of
-  -- C1 过渡：base 仍声明 data IO 时沿用 `match main with MkIO f -> f 0`。
-  Just (Pair family ctor) =>
-    let
-      p = qualCtorText qc family ctor
-    in Pair ("match " ++ mainRef ++ " with " ++ firstOf p ++ " f -> f 0") (secondOf p)
-  -- 内建模式（C2 起唯一模式）：IO = 裸 thunk，直接对世界令牌 0 应用。
-  Nothing => Pair (mainRef ++ " 0") ""
+ioRunText qc program mainRef = Pair (mainRef ++ " 0") ""
 
 genTerm : GenSt -> List (Pair String Rig) -> Term -> Result (Pair String GenSt)
 genTerm a1 a2 a3 = genTermFuel 512 a1 a2 a3

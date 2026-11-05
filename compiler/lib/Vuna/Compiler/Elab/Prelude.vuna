@@ -85,7 +85,7 @@ ityToTermEnv env IStr = strTy
 ityToTermEnv env IBool = boolTy
 ityToTermEnv env INat = TGlobal natTypeName
 ityToTermEnv env (IList elem) = TApp (TGlobal listFamilyName) (ityToTermEnv env elem) Rig1
--- M31：效果原语的返回类型是 canonical `Base.IO.IO a`（与 main 钩子同一族身份）。
+-- M37：效果原语的返回类型是内建 `IO a`（与 main 钩子同一族身份）。
 ityToTermEnv env (IIO elem) = TApp (TGlobal ioFamilyName) (ityToTermEnv env elem) Rig1
 -- cod 在 binder 下：env 加匿名占位，保证外层 IVar 的 de Bruijn 索引随 Pi 深度 shift。
 ityToTermEnv env (IFun a b) = TPi "_" False Rig1 (ityToTermEnv env a) (ityToTermEnv ("_" :: env) b)
@@ -109,14 +109,12 @@ typeCtorKindTerm arity =
   else TPi "_" False Rig0 (TType levelZero) (typeCtorKindTerm (arity - 1))
 
 -- IO 的 kind：`Type -> Type`，binder 是 **Rig1**（参数在运行时表示 `int -> a` 里被用到；
--- 与 data 声明的前置参数 `prependParams` 的 rig 一致，C1 过渡期与 legacy `data IO a` 的
--- kind 可互换；`IIO` 的应用也显式写 Rig1）。
+-- `IIO` 的应用也显式写 Rig1）。
 ioKindTerm : Term
 ioKindTerm = TPi "a" False Rig1 (TType levelZero) (TType levelZero)
 
--- C1：canonical 名仍是 `Base.IO.IO`，但 base 的 data 声明可以缺席（C2）；
--- 无论 datas 是否声明它，类型位置都要求这个名字可用。重复条目与 data 的 kind 相同，
--- 后写覆盖/线性回落均可互换。
+-- IO 是内建效应类型（不是 base 的 data），类型位置必须始终可用；
+-- prelude 全局提供它的 kind（与其它内建类型同一机制）。
 preludeTypeGlobals : List (Pair String Term)
 preludeTypeGlobals =
   append

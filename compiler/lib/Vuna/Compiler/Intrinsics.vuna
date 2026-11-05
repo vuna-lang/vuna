@@ -61,11 +61,11 @@ module Vuna.Compiler.Intrinsics
 --   - `Codegen.Term`：全局名 → runtime 表达式；
 --   - `Core.Eval`：按 IntrinsicOp 归约。
 --
--- 身份规则（M27）：内置实体按**声明的 symbol**判定，不按短名/lastName：
---   - Int / String 是语言 primitive 类型；Bool 是 base 的普通 data，canonical
---     `Base.Bool.Bool`（`True`/`False` 精化成 `TBool`）；
---   - List / IO 是 base 里的普通 data 声明，身份 = 完整限定名
---     `Base.List.List` / `Base.IO.IO`（见 `Loader`/`Codegen` 的常量）；
+-- 身份规则（M27/M37）：内置实体按**声明的 symbol**判定，不按短名/lastName：
+--   - Int / String 是语言 primitive 类型；IO 是语言内建效应类型（M37 升格，
+--     `ioTypeName`，运行时是裸 thunk，无构造子）；
+--   - Bool / List / Nat 是 base 的普通 data，身份 = 完整限定名
+--     `Base.Bool.Bool` / `Base.List.List` / `Base.Nat.Nat`（见 `Loader`/`Codegen` 的常量）；
 --   - 隐藏的内部 runtime 名（`bi_*`）只供 codegen 映射，不对用户源码可见。
 import Vuna.Compiler.Common
 import Base.HashMap
@@ -118,7 +118,7 @@ data IType : Type where
   INat : IType
   -- `Base.List.List <arg>`：族身份固定为 base 的普通 data 声明
   IList : IType -> IType
-  -- `Base.IO.IO <arg>`：效果原语返回的 IO 动作（M31 起效果原语类型化）
+  -- `IO <arg>`：内建效应类型；效果原语返回 IO 动作（M37 起 IO 是内建类型）
   IIO : IType -> IType
   IFun : IType -> IType -> IType
   -- M33 W3：内建类型构造子与签名里的类型变量。
@@ -173,8 +173,8 @@ typeIntrinsicCtorNames : List String
 typeIntrinsicCtorNames = map typeIntrinsicCtorName typeIntrinsicArities
 
 -- IO 的**源级名字**：`IO` 是编译器内建效应类型（不是 base 的 data），恒可见。
--- C1 过渡期 canonical 身份仍是 `Base.IO.IO`（base 仍声明 data IO）；C2 起
--- `ioFamilyName = ioTypeName`。`ioTypeName` 始终进 prelude 类型名名单（禁止重定义）。
+-- 源级名字，恒进 prelude 类型名名单（禁止 ad-hoc 重定义 + Loader 放行）；
+-- canonical 身份就是它（没有 base data）。
 ioTypeName : String
 ioTypeName = "IO"
 
@@ -280,12 +280,12 @@ needsListBridge i = case i.intrinsicRuntime of
   "(fun a -> dtp_listOf (Array.to_list a))" => True
   _ => False
 
--- canonical 族必须由 vuna-base 以固定的构造子集合声明；其它同名声明是非法伪造。
+-- canonical 族（base 的 data 声明）必须由 vuna-base 以固定的构造子集合声明；
+-- 其它同名声明是非法伪造。IO 不在其中：它是编译器内建效应类型（没有构造子）。
 canonicalCtorsFor : String -> Maybe (List String)
 canonicalCtorsFor name =
   if name == boolTypeName then Just [boolTrueCtor, boolFalseCtor]
   else if name == listFamilyName then Just [listNilCtor, listConsCtor]
-  else if name == ioFamilyName then Just [ioMkIoCtor]
   else if name == natTypeName then Just [natZeroCtor, natSuccCtor] else Nothing
 
 intrinsicArity : Intrinsic -> Int
@@ -354,11 +354,11 @@ listNilCtor = "Base.List.Nil"
 listConsCtor : String
 listConsCtor = "Base.List.Cons"
 
+-- `IO` 是编译器内建效应类型（与 Int/String 同级的类型构造子，kind `Type -> Type`）：
+-- 运行时表示是裸 thunk `int -> 'a`，没有构造子；`Base.IO` 只导出 API 与实例。
+-- 身份 = 源级名字 `IO`（M37 IO 升格；此前是 base 的普通 data `Base.IO.IO`）。
 ioFamilyName : String
-ioFamilyName = "Base.IO.IO"
-
-ioMkIoCtor : String
-ioMkIoCtor = "Base.IO.MkIO"
+ioFamilyName = ioTypeName
 
 -- M36：模板字符串插值的 trait 与方法（canonical 名）。编译器把 `${e}` 降级成对
 -- `interp` 方法投影的调用（`Loader.Resolve`），转换语义完全由 base 里的实例决定。
@@ -382,7 +382,6 @@ allIntrinsics : List Intrinsic
 -- 语义：add/mul 饱和到 max_int，sub 截断到 0，div 除零与 Int 同文案失败。
 -- IO 代数（M37 / C1 过渡）：`IO` 是编译器内建效应类型，构造/绑定/执行是内建原语。
 -- 这里的 runtime 文本是**内建模式**（IO = 裸 thunk `int -> 'a`）的实现；
--- C1 的 legacy 模式（base 仍声明 data IO + MkIO）由 Codegen.Term.ioAlgebraText 覆盖。
 allIntrinsics =
   [ Intrinsic "+" (IFun IInt (IFun IInt IInt)) OpAdd Nothing "bi_add" True,
     Intrinsic "-" (IFun IInt (IFun IInt IInt)) OpSub Nothing "bi_sub" True,

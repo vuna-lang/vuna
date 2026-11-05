@@ -15,7 +15,7 @@ module Base.ST
   , writeRef
   ) where
 
--- Base.ST：region 隔离的局部可变数据（M35.1）。
+-- Base.ST：region 隔离的局部可变数据（M35.1；M37 起改建在 IO 上）。
 --
 -- `ST r a` 的 `r` 是 **region 索引**（类型级、擦除）；`Ref r a` / `SArray r a` 是
 -- region 句柄，字段不导出、只能由 ST 动作创建。
@@ -25,16 +25,16 @@ module Base.ST
 --   * region 由调用方以**显式**类型 binder 传入，`r` 在库外不可命名；
 --   * `a` 在进入 region 之前由期望类型确定；`Ref r a` 作为结果要求 `a ≡ Ref r a`，
 --     与刚性 `r` 冲突 → 句柄不能逃逸（负例 test/corpus/dt_err/56_st_escape.vuna）。
---   运行时只是 `Int -> a` 世界令牌 thunk；没有 QTT/线性类型，所以「一个句柄只用一次」
---   仍未在类型上强制（见 debt D22）。
+--   没有 QTT/线性类型，所以「一个句柄只用一次」仍未在类型上强制（见 debt D22）。
 --
--- 执行：操作经 `Base.IO.runIO` 跑真实的 IORef / MArray，`runST` 立即求值 thunk。
--- `base` 因此声明能力 `unsafe`——这是 base 唯一的 `runIO` 使用点（信任点，见 limits.md）。
+-- 执行：M37 起 `ST r a` 就是包着 `IO a` 的 record；操作直接构造 IO 动作，`runST`
+-- 在入口用一次 `runIO` 执行。因此 base 的 `runIO` 使用点只有 `runST` 与
+-- `Base.IO.runIO` 的别名（信任点，见 limits.md）。
 --
 -- **不声明 `Functor/Monad (ST r)` 实例**（实测）：region 以显式类型 binder 穿过
 -- `runST`，而字典提升会把字典 binder 插到显式参数之前（`{r} {d}`），在
 -- `runST prog` 处留下 unsolved metavar。region 多态代码用 `bindST` / `pureST` /
--- `fmapST`；`do` 保留给 State / Reader / Error。
+-- `fmapST`；`do` 保留给 State / Reader / Error（以及 M37 的 transformer）。
 import Base.IO
 import Base.Int
 import Base.Nat
@@ -45,46 +45,43 @@ record Ref r a where
 record SArray r a where
   arraySlot : MArray a
 
+-- ST 动作 = 带 region 索引的 IO 动作；执行入口是唯一的 `runST`。
 record ST r a where
-  stWorld : Int -> a
+  stIO : IO a
 
 -- 唯一执行入口：region 由显式 binder 提供（库外不可命名）；实现把它实例化为 Int。
+-- IO 动作只在这里执行一次（`runIO`），region 内不再有特权执行点。
 runST : ((r : Type) -> ST r a) -> a
 runST body = case body Int of
-  ST f => f 0
+  ST io => runIO io
 
 -- 显式组合子（见上：不声明 Functor/Monad 实例）。
 bindST : ST r a -> (a -> ST r b) -> ST r b
-bindST m k = ST (\w => case m of
-  ST g => case k (g w) of
-    ST h => h w
-)
+bindST m k = ST (m.stIO >>= (\a => (k a).stIO))
 
 pureST : a -> ST r a
-pureST x = ST (\_ => x)
+pureST x = ST (pure x)
 
 fmapST : (a -> b) -> ST r a -> ST r b
-fmapST f m = ST (\w => case m of
-  ST g => f (g w)
-)
+fmapST f m = ST (fmap f m.stIO)
 
 newRef : a -> ST r (Ref r a)
-newRef x = ST (\_ => Ref (runIO (prim_newRef x)))
+newRef x = ST (fmap (\slot => Ref slot) (prim_newRef x))
 
 readRef : Ref r a -> ST r a
-readRef ref = ST (\_ => runIO (prim_readRef ref.refSlot))
+readRef ref = ST (prim_readRef ref.refSlot)
 
 writeRef : Ref r a -> a -> ST r Int
-writeRef ref v = ST (\_ => runIO (prim_writeRef ref.refSlot v))
+writeRef ref v = ST (prim_writeRef ref.refSlot v)
 
 newArray : Nat -> a -> ST r (SArray r a)
-newArray n v = ST (\_ => SArray (runIO (prim_newMArray (natToInt n) v)))
+newArray n v = ST (fmap (\slot => SArray slot) (prim_newMArray (natToInt n) v))
 
 readArray : SArray r a -> Nat -> ST r a
-readArray arr i = ST (\_ => runIO (prim_readMArray arr.arraySlot (natToInt i)))
+readArray arr i = ST (prim_readMArray arr.arraySlot (natToInt i))
 
 writeArray : SArray r a -> Nat -> a -> ST r Int
-writeArray arr i v = ST (\_ => runIO (prim_writeMArray arr.arraySlot (natToInt i) v))
+writeArray arr i v = ST (prim_writeMArray arr.arraySlot (natToInt i) v)
 
 lengthArray : SArray r a -> ST r Nat
-lengthArray arr = ST (\_ => natFromInt (runIO (prim_mArrayLength arr.arraySlot)))
+lengthArray arr = ST (fmap natFromInt (prim_mArrayLength arr.arraySlot))

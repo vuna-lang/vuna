@@ -32,7 +32,11 @@ modules = [
   "Base.State",
   "Base.Reader",
   "Base.Error",
+  "Base.Effect",
+  "Base.ErrorT",
   "Base.Monad",
+  "Base.ReaderT",
+  "Base.StateT",
   "Base.IO",
   "Prelude"
 ]

@@ -1,4 +1,4 @@
-module Base.Error (Error, catchError, runError, throwError) where
+module Base.Error (Error, catchError, ok, runError, throwError) where
 
 -- Base.Error：库级 Error monad（M33 W6 落地；M35.1 补 Functor/Monad 实例，`do` 可用）。
 --
@@ -16,6 +16,10 @@ runError (MkErr e) onErr onOk = onErr e
 
 throwError : e -> Error e a
 throwError e = MkErr e
+
+-- 成功构造（`ErrorT` 等组合子需要在不暴露构造器的前提下重建 Ok）。
+ok : a -> Error e a
+ok a = MkOk a
 
 instance Functor (Error e) where
   fmap f (MkOk a) = MkOk (f a)

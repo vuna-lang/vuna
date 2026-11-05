@@ -1,0 +1,32 @@
+module Base.ReaderT (ReaderT, ask, local, runReaderT) where
+
+-- Base.ReaderT：IO 之上的 Reader 效应（M37 效应栈）。
+--
+-- `ReaderT e a` = `e -> IO a`：环境只读，handler 是 `runReaderT`；`local` 局部改写
+-- 环境。`MonadIO (ReaderT e)` 让 IO 动作经 `liftIO` 进入本层。
+-- 边界同 StateT：固定以 IO 为基座（record 参数的 kind 限制）。
+import Base.Effect
+import Base.IO
+import Base.Monad
+
+record ReaderT e a where
+  readerTRun : e -> IO a
+
+runReaderT : ReaderT e a -> e -> IO a
+runReaderT r e = r.readerTRun e
+
+ask : ReaderT e e
+ask = ReaderT (\e => pure e)
+
+local : (e -> e) -> ReaderT e a -> ReaderT e a
+local f r = ReaderT (\e => r.readerTRun (f e))
+
+instance Functor (ReaderT e) where
+  fmap f r = ReaderT (\e => r.readerTRun e >>= (\a => pure (f a)))
+
+instance Monad (ReaderT e) where
+  bind r k = ReaderT (\e => r.readerTRun e >>= (\a => (k a).readerTRun e))
+  pure a = ReaderT (\_ => pure a)
+
+instance MonadIO (ReaderT e) where
+  liftIO io = ReaderT (\_ => io)

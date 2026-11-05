@@ -1,0 +1,18 @@
+-- M37：ErrorT 效应栈（IO 之上）。`throwError` 被 `catchError` 恢复；
+-- `runErrorT` 返回 IO 动作，handler 用 `runError` 观察结果（构造器不导出）。
+import Base.Effect
+import Base.Error
+import Base.ErrorT
+import Base.IO
+
+prog : ErrorT String Int
+prog = do
+  liftIO (print "error\n")
+  Base.ErrorT.throwError "boom"
+
+main : IO Int
+main = do
+  _ <-
+    runErrorT (Base.ErrorT.catchError prog (\e => pure 7))
+      >>= (\r => runError r (\e => print ("caught " ++ e ++ "\n")) (\a => print ("ok " ++ strFromInt a ++ "\n")))
+  exit 0

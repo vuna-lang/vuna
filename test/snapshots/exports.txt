@@ -1,13 +1,15 @@
 # M26 导出面快照（module X (...) where 的项，排序规范化；无 header => (implicit)）
-base/lib/Base.vuna: module Base.Bool, module Base.Eq, module Base.IO, module Base.Interp, module Base.List, module Base.Map, module Base.Maybe, module Base.Monad, module Base.Nat, module Base.Ord, module Base.Pair, module Base.Result, module Base.Show, module Base.Sort, module Base.String
+base/lib/Base.vuna: module Base.Bool, module Base.Effect, module Base.Eq, module Base.IO, module Base.Interp, module Base.List, module Base.Map, module Base.Maybe, module Base.Monad, module Base.Nat, module Base.Ord, module Base.Pair, module Base.Result, module Base.Show, module Base.Sort, module Base.String
 base/lib/Base/Array.vuna: fromList, get, length, make, set, toList
 base/lib/Base/Bool.vuna: Bool(..), and, bool, not, or, xor
 base/lib/Base/Buffer.vuna: add, contents, length, new
+base/lib/Base/Effect.vuna: MonadIO(..)
 base/lib/Base/Eq.vuna: Eq(..)
-base/lib/Base/Error.vuna: Error, catchError, runError, throwError
+base/lib/Base/Error.vuna: Error, catchError, ok, runError, throwError
+base/lib/Base/ErrorT.vuna: ErrorT, catchError, runErrorT, throwError
 base/lib/Base/HashMap.vuna: HashMap, fromList, hashStr, insert, insertAll, lookup, member, ofNames, size, toList
 base/lib/Base/HashSet.vuna: HashSet, empty, fromList, insert, member, size, toList
-base/lib/Base/IO.vuna: Functor(..), IO, Monad(..), exit, fileExists, fileMtime, fileSize, getArgs, isDirectory, makeDir, print, println, readBytes, readDir, readFile, readLine, removeFile, runIO, writeFile
+base/lib/Base/IO.vuna: Functor(..), Monad(..), exit, fileExists, fileMtime, fileSize, getArgs, isDirectory, makeDir, print, println, readBytes, readDir, readFile, readLine, removeFile, runIO, writeFile
 base/lib/Base/IORef.vuna: modifyRef, newRef, readRef, writeRef
 base/lib/Base/Int.vuna: 
 base/lib/Base/IntMap.vuna: IntMap, fromList, insert, insertAll, lookup, member, size, toList
@@ -21,11 +23,13 @@ base/lib/Base/Nat.vuna: Nat(..), div, fromInt, fromIntMaybe, isZero, minus, mult
 base/lib/Base/Ord.vuna: Ord(..)
 base/lib/Base/Pair.vuna: Pair(..), firstOf, secondOf
 base/lib/Base/Reader.vuna: Reader, ask, local, runReader
+base/lib/Base/ReaderT.vuna: ReaderT, ask, local, runReaderT
 base/lib/Base/Result.vuna: Result(..), andThen, mapError, mapResult, step, traverse, withDefault
 base/lib/Base/ST.vuna: Ref, SArray, ST, bindST, fmapST, lengthArray, newArray, newRef, pureST, readArray, readRef, runST, writeArray, writeRef
 base/lib/Base/Show.vuna: Show(..)
 base/lib/Base/Sort.vuna: mergeSort, sortBy
 base/lib/Base/State.vuna: State, evalState, execState, get, modify, put, runState
+base/lib/Base/StateT.vuna: StateT, evalStateT, execStateT, get, modify, put, runStateT
 base/lib/Base/String.vuna: byteLength, contains, endsWith, join, lines, repeat, split, startsWith, substring, trim, trimLeft, trimRight, unlines
 base/lib/Base/Vec.vuna: Vec(..), substTemplate, vhead, vlen, vtail
 base/lib/Prelude.vuna: module Base.Bool, module Base.Eq, module Base.Interp, module Base.List, module Base.Maybe, module Base.Monad, module Base.Ord, module Base.Pair, module Base.Result, module Base.Show, module Base.String

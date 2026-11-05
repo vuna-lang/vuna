@@ -1,4 +1,8 @@
-module Dep (depText) where
+module Dep (DepTag(..), depText) where
 
 depText : String
 depText = "dep"
+
+-- C35/M37：跨单元构造子引用的夹具（旧断言借用 Base.IO.MkIO；IO 升格后没有构造子）。
+data DepTag : Type where
+  DepTagA : DepTag
