@@ -119,7 +119,7 @@ buildScript graph cFiles =
     ++ "# 同层单元互不依赖：多单元层用后台任务并行编译，层间用 wait 串行。\n"
     ++ "set -eu\n"
     ++ "cd \"$(dirname \"$0\")\"\n"
-    ++ "OUT=${1:-program}\n"
+    ++ "OUT=$" ++ "{1:-program}\n"
     ++ "FLAGS=\"-g -w -a+39 -warn-error +39\"\n"
     ++ "MODULES=\""
     ++ spaceJoin (graphUnits graph)
@@ -129,7 +129,7 @@ buildScript graph cFiles =
     ++ "\"\n"
     ++ "C_OBJS=\"\"\n"
     ++ "if [ -n \"$C_MODULES\" ]; then\n"
-    ++ "  for c in $C_MODULES; do ocamlopt -I +unix -c \"$c\"; b=${c##*/}; C_OBJS=\"$C_OBJS ${b%.c}.o\"; done\n"
+    ++ "  for c in $C_MODULES; do ocamlopt -I +unix -c \"$c\"; b=$" ++ "{c##*/}; C_OBJS=\"$C_OBJS $" ++ "{b%.c}.o\"; done\n"
     ++ "fi\n"
     ++ "hash_of() {\n"
     ++ "  for f in \"$@\"; do\n"

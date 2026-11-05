@@ -38,18 +38,22 @@ import Base.Vec
 data LexDiag : Nat -> Type where
   UnterminatedBlockComment : LexDiag Zero
   UnterminatedString : LexDiag Zero
+  -- M35：模板字符串的插值洞没有闭合（缺 `}`）。
+  UnterminatedInterpolation : LexDiag Zero
   UnknownEscape : LexDiag Zero
   UnexpectedCharacter : LexDiag Zero
 
 lexCode : {n : Nat} -> LexDiag n -> String
 lexCode UnterminatedBlockComment = "LX_UnterminatedBlockComment"
 lexCode UnterminatedString = "LX_UnterminatedString"
+lexCode UnterminatedInterpolation = "LX_UnterminatedInterpolation"
 lexCode UnknownEscape = "LX_UnknownEscape"
 lexCode UnexpectedCharacter = "LX_UnexpectedCharacter"
 
 lexTemplate : {n : Nat} -> LexDiag n -> String
 lexTemplate UnterminatedBlockComment = "unterminated block comment"
 lexTemplate UnterminatedString = "unterminated string literal"
+lexTemplate UnterminatedInterpolation = "unterminated string interpolation (missing closing '}')"
 lexTemplate UnknownEscape = "unknown escape sequence"
 lexTemplate UnexpectedCharacter = "unexpected character"
 
@@ -75,6 +79,9 @@ data PsDiag : Nat -> Type where
   ExpectedPattern : PsDiag Zero
   ExpectedRecordFieldPattern : PsDiag Zero
   ExpectedTopLevelDecl : PsDiag Zero
+  -- M35：模板字符串的两个语法边界（空洞 / 模式里带洞）。
+  TemplateHoleEmpty : PsDiag Zero
+  TemplateInPattern : PsDiag Zero
   ExprNotIndented : PsDiag Zero
   LetBindingNotIndented : PsDiag Zero
   PiBinderNameNotSimple : PsDiag Zero
@@ -122,6 +129,8 @@ psCode ExpectedLetBinding = "PS_ExpectedLetBinding"
 psCode ExpectedPattern = "PS_ExpectedPattern"
 psCode ExpectedRecordFieldPattern = "PS_ExpectedRecordFieldPattern"
 psCode ExpectedTopLevelDecl = "PS_ExpectedTopLevelDecl"
+psCode TemplateHoleEmpty = "PS_TemplateHoleEmpty"
+psCode TemplateInPattern = "PS_TemplateInPattern"
 psCode ExprNotIndented = "PS_ExprNotIndented"
 psCode LetBindingNotIndented = "PS_LetBindingNotIndented"
 psCode PiBinderNameNotSimple = "PS_PiBinderNameNotSimple"
@@ -163,6 +172,8 @@ psTemplate ExpectedLetBinding = "expected a let binding"
 psTemplate ExpectedPattern = "expected pattern"
 psTemplate ExpectedRecordFieldPattern = "expected a record field pattern"
 psTemplate ExpectedTopLevelDecl = "expected a top-level declaration"
+psTemplate TemplateHoleEmpty = "string interpolation $" ++ "{...} needs an expression"
+psTemplate TemplateInPattern = "string interpolation is not supported in patterns"
 psTemplate ExprNotIndented = "expression is not indented enough"
 psTemplate LetBindingNotIndented = "let binding is not indented enough"
 psTemplate PiBinderNameNotSimple = "pi binder name must be a simple identifier"
@@ -205,6 +216,7 @@ lexAll : List LexEntry
 lexAll =
   [ LexEntry (lexCode UnterminatedBlockComment) (lexTemplate UnterminatedBlockComment) "块注释未闭合",
     LexEntry (lexCode UnterminatedString) (lexTemplate UnterminatedString) "字符串字面量未闭合",
+    LexEntry (lexCode UnterminatedInterpolation) (lexTemplate UnterminatedInterpolation) "模板插值洞未闭合",
     LexEntry (lexCode UnknownEscape) (lexTemplate UnknownEscape) "未知转义序列",
     LexEntry (lexCode UnexpectedCharacter) (lexTemplate UnexpectedCharacter) "无法识别的字符"
   ]
@@ -228,6 +240,8 @@ psAll =
     PsEntry (psCode ExpectedPattern) (psTemplate ExpectedPattern) "期望模式",
     PsEntry (psCode ExpectedRecordFieldPattern) (psTemplate ExpectedRecordFieldPattern) "期望 record 字段模式",
     PsEntry (psCode ExpectedTopLevelDecl) (psTemplate ExpectedTopLevelDecl) "期望顶层声明",
+    PsEntry (psCode TemplateHoleEmpty) (psTemplate TemplateHoleEmpty) "插值洞缺少表达式",
+    PsEntry (psCode TemplateInPattern) (psTemplate TemplateInPattern) "模式里不支持模板插值",
     PsEntry (psCode ExprNotIndented) (psTemplate ExprNotIndented) "表达式缩进不足",
     PsEntry (psCode LetBindingNotIndented) (psTemplate LetBindingNotIndented) "let 绑定缩进不足",
     PsEntry (psCode PiBinderNameNotSimple) (psTemplate PiBinderNameNotSimple) "pi binder 名必须是简单标识符",
