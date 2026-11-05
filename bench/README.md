@@ -64,6 +64,7 @@ W2 的三项 codegen 改进（内建饱和内联、多参数 lambda 链、`++` �
 array 基准；W4 的 `strSubstring` + `repeat` 批拼把 string_ops 拉到 1.0x——全部基准进入
 2× 手写 OCaml 内（M33 退出标准）。分配 / GC 统计由生成 runtime 的 `VN_PERF_STATS=1` 输出，
 `bench/run.sh` 采集进 JSON 的 `vuna.gc` 字段。
+
 ## 编译器基准（M34）
 
 `bench/compiler.sh` 测编译器 / 工具链自身墙钟：`check .`、`check compiler`、`build --no-compile`
