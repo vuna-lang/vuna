@@ -109,6 +109,8 @@ dtPrimRuntime =
     ++ "let dtp_unmarshal (s : string) : 'a = Marshal.from_string s 0\n"
     ++ "let dtp_exit n = exit n\n"
     ++ "let dtp_runIn dir args =\n  let quote s = Filename.quote s in\n  let cmd = String.concat \" \" (List.map quote args) in\n  let old = Sys.getcwd () in\n  Fun.protect ~finally:(fun () -> Sys.chdir old) (fun () -> Sys.chdir dir; Sys.command cmd)\n"
+    ++ "let dtp_spawn (args : string list) : int =\n  let prog = Sys.executable_name in\n  Unix.create_process prog (Array.of_list (prog :: args)) Unix.stdin Unix.stdout Unix.stderr\n"
+    ++ "let dtp_wait (pid : int) : int =\n  let (_, st) = Unix.waitpid [] pid in\n  match st with Unix.WEXITED c -> c | _ -> 1\n"
 
 -- M19：`==` / `/=` 的跨类型特化（精化期已按实参类型重写成 `bi_eq_int` / `bi_eq_str`
 -- 这类名字），以及 str* 内建。codegen 只做名字映射、不感知类型——M18.6 的

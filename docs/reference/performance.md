@@ -244,7 +244,7 @@ W3 落地的容器与表示（`Intrinsics` / `Elab.Prelude` / `Codegen.Decl` / `
 
 | benchmark | 冷（首次） | 热（缓存命中） |
 | --- | --- | --- |
-| check . | ~6.8 s | ~25 ms |
+| check .（workspace 并行） | ~4.1 s | ~25 ms |
 | check compiler | ~2.8 s | ~11 ms |
 | build --no-compile compiler | ~2.9 s | ~18 ms |
 | build compiler（完整链接） | ~6.7 s | ~16 ms |
@@ -255,9 +255,13 @@ W3 落地的容器与表示（`Intrinsics` / `Elab.Prelude` / `Codegen.Decl` / `
 `prim_marshal`/`prim_unmarshal`（OCaml Marshal）落盘——过渡实现，规范的自描述序列化格式
 （C32）留后续。
 
-**剩余（M34 后续）**：LSP 增量与单文件级缓存（需接口摘要 + 只精化本包模块）、workspace
-并行 `check`（需进程原语）、模块级并行 codegen（受 C35 的全序 open 模型限制）、`check .`
-对依赖包模块的重复精化（接口摘要后消除）。
+**M34.4 workspace 并行 check**：`prim_spawn`/`prim_wait`（runtime `Unix.create_process`/
+`waitpid`）；根包在当前进程串行（它本身就是 workspace 根，spawn 会递归展开）、成员包各一个
+`vuna check <dir>` 子进程并行，退出码按失败汇总；子进程继承 stderr ⇒ 多包同时报错时输出
+可能交错。`check .` 冷 6.5s→4.1s（成员闭包与根包重叠）。
+
+**剩余（M34 后续）**：LSP 增量与单文件级缓存（需接口摘要 + 只精化本包模块）、模块级并行
+codegen（受 C35 的全序 open 模型限制）、`check .` 对依赖包模块的重复精化（接口摘要后消除）。
 
 ## 相关阅读
 

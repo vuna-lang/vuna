@@ -159,7 +159,8 @@
 `prim_makeDir` / `prim_removeFile` / `prim_fileMtime` / `prim_fileSize : String -> IO Int`、
 `prim_getArgs : IO (List String)`、`prim_getenv : String -> IO String`、
 `prim_getcwd` / `prim_execPath : IO String`、`prim_exit : Int -> IO Int`（执行即退出、不返回）、
-`prim_runIn : String -> List String -> IO Int`、`prim_readBytes : Int -> IO String`、
+`prim_runIn : String -> List String -> IO Int`、`prim_spawn : List String -> IO Int`、
+`prim_wait : Int -> IO Int`、`prim_readBytes : Int -> IO String`、
 `timeUs : IO Int`。零参原语因此是**真正的值**（动作值）：引用不执行、也不重新求值。
 
 **名字面**：效果原语只保留 `prim_*` 名。用户有两条合法用法：
@@ -176,7 +177,7 @@
 | --- | --- |
 | `console` | `prim_print`、`prim_readLine`、`prim_readBytes` |
 | `fs` | `prim_readFile`、`prim_writeFile`、`prim_readDir`、`prim_isDirectory`、`prim_makeDir`、`prim_removeFile`、`prim_fileExists`、`prim_fileMtime`、`prim_fileSize` |
-| `process` | `prim_getArgs`、`prim_exit`、`prim_runIn` |
+| `process` | `prim_getArgs`、`prim_exit`、`prim_runIn`、`prim_spawn`、`prim_wait` |
 | `env` | `prim_getenv`、`prim_getcwd`、`prim_execPath` |
 | `clock` | `timeUs` |
 | `unsafe` | `Base.IO.runIO`（无 intrinsic：在 main 之外执行 IO 动作） |
@@ -220,6 +221,8 @@
 | `prim_getArgs` | 排除 `argv[0]` 的其余参数 |
 | `prim_exit` | 立即退出进程（原语类型 `Int -> IO Int`，执行即退出、**不返回**） |
 | `prim_runIn` | 在给定目录执行 `sh` 命令并返回退出码，执行后恢复原 cwd |
+| `prim_spawn` | 异步启动子进程（argv 列表，继承 stdin/stdout/stderr），返回 pid |
+| `prim_wait` | 等待子进程并返回退出码（signal/stopped 归 1） |
 
 效果原语的 runtime 表（`dtp_*`）仍是**立即执行**的 OCaml 函数；生成器
 （`Codegen.Term.ioPrimText`）按 `Intrinsic` 的 arity 把它们包成动作值，例如

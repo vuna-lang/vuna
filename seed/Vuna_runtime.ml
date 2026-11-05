@@ -112,3 +112,9 @@ let dtp_runIn dir args =
   let cmd = String.concat " " (List.map quote args) in
   let old = Sys.getcwd () in
   Fun.protect ~finally:(fun () -> Sys.chdir old) (fun () -> Sys.chdir dir; Sys.command cmd)
+let dtp_spawn (args : string list) : int =
+  let prog = Sys.executable_name in
+  Unix.create_process prog (Array.of_list (prog :: args)) Unix.stdin Unix.stdout Unix.stderr
+let dtp_wait (pid : int) : int =
+  let (_, st) = Unix.waitpid [] pid in
+  match st with Unix.WEXITED c -> c | _ -> 1

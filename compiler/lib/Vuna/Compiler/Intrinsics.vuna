@@ -238,6 +238,7 @@ needsListBridge i = case intrinsicRuntime i of
   "(fun p -> dtp_listOf (dtp_readDir p))" => True
   "(dtp_listOf (dtp_getArgs ()))" => True
   "(fun dir args -> dtp_runIn dir (dtp_ocamlOf args))" => True
+  "(fun args -> dtp_spawn (dtp_ocamlOf args))" => True
   "(fun xs -> Array.of_list (dtp_ocamlOf xs))" => True
   "(fun a -> dtp_listOf (Array.to_list a))" => True
   _ => False
@@ -317,6 +318,7 @@ allIntrinsics : List Intrinsic
 -- 空数组字面量：non-expansive 的 OCaml `[||]`，让 `HashMap` 的空表这类零参多态值可泛化。
 -- M33 W4：字节切片（clamp 语义与 Base.String.substring 一致），避免 List 桥接。
 -- M34.5：编译器内部缓存原语（Marshal 纯数据；含闭包会在运行期失败）。
+-- M34.4：异步子进程（workspace 并行 check）。spawn 返回 pid，wait 返回退出码。
 allIntrinsics =
   [ MkIntrinsic "+" (IFun IInt (IFun IInt IInt)) OpAdd Nothing "bi_add" True,
     MkIntrinsic "-" (IFun IInt (IFun IInt IInt)) OpSub Nothing "bi_sub" True,
@@ -371,6 +373,8 @@ allIntrinsics =
     MkIntrinsic "prim_fileSize" (IFun IStr (IIO IInt)) OpNone (Just CapFs) "dtp_fileSize" True,
     MkIntrinsic "prim_exit" (IFun IInt (IIO IInt)) OpNone (Just CapProcess) "dtp_exit" True,
     MkIntrinsic "prim_runIn" (IFun IStr (IFun (IList IStr) (IIO IInt))) OpNone (Just CapProcess) "(fun dir args -> dtp_runIn dir (dtp_ocamlOf args))" True,
+    MkIntrinsic "prim_spawn" (IFun (IList IStr) (IIO IInt)) OpNone (Just CapProcess) "(fun args -> dtp_spawn (dtp_ocamlOf args))" True,
+    MkIntrinsic "prim_wait" (IFun IInt (IIO IInt)) OpNone (Just CapProcess) "dtp_wait" True,
     MkIntrinsic "prim_getenv" (IFun IStr (IIO IStr)) OpNone (Just CapEnv) "dtp_getenv" True,
     MkIntrinsic "prim_getcwd" (IIO IStr) OpNone (Just CapEnv) "(dtp_getcwd ())" True,
     MkIntrinsic "prim_execPath" (IIO IStr) OpNone (Just CapEnv) "(dtp_execPath ())" True,
