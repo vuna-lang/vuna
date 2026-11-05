@@ -26,6 +26,7 @@ import Base.HashMap
 import Vuna.Compiler.Core
 import Vuna.Compiler.Core.Term
 import Vuna.Compiler.Diagnostics
+import Vuna.Compiler.Debug
 import Vuna.Compiler.Elab.Meta
 import Vuna.Compiler.Elab.Prelude
 import Vuna.Compiler.Elab.Sig
@@ -129,6 +130,10 @@ tryMatchInst globals ctx fuel ec inst dom sp = if fuel <= 0 then Nothing
 else case allocTeleMetas ctx ec (dtInstTele inst) of
   Pair metas ec1 =>
     let
+      _ =
+        if debugOn then note
+          ("inst-try: " ++ dtInstName inst ++ " head=" ++ showTerm (dtInstHead inst) ++ " tele=" ++ strFromInt (length (dtInstTele inst)))
+        else 0
       hd = eval (map (\m => VMeta m []) metas) (dtInstHead inst)
     in case conv (ecDefTbl ec1) (ecSolsP ec1) 0 dom hd of
       Err e => Nothing
