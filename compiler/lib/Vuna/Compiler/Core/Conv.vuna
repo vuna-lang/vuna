@@ -463,7 +463,12 @@ solveMetaNew : HashMap Term -> Sols -> Int -> Int -> Value -> Result Sols
 solveMetaNew defs sols depth m rhs = solveMetaEmpty sols depth m rhs
 
 conv : HashMap Term -> Sols -> Int -> Value -> Value -> Result Sols
-conv a1 a2 a3 a4 a5 = convFuel 64 a1 a2 a3 a4 a5
+conv a1 a2 a3 a4 a5 =
+  let
+    _ =
+      note
+        ("conv-in: " ++ showTerm (quote a3 a4) ++ " <> " ++ showTerm (quote a3 a5) ++ " @" ++ strFromInt a3)
+  in convFuel 64 a1 a2 a3 a4 a5
 
 convBoth : HashMap Term -> Sols -> Int -> Value -> Value -> Result Sols
 convBoth a1 a2 a3 a4 a5 = convBothFuel 64 a1 a2 a3 a4 a5
