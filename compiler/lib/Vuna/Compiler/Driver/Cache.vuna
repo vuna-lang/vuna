@@ -62,7 +62,7 @@ cachedOfProgram prog =
 programOfCached : CachedProgram -> DtProgram
 programOfCached (CachedProgram datas defs sols globals insts classes next) =
   DtProgram datas defs [] (map (\p => Pair (firstOf p) (eval [] (secondOf p))) sols) globals insts
-    classes next (Base.HashMap.fromList [])
+    classes next (Base.HashMap.fromList []) []
 
 -- 偏移重编号（per-module/包段编号）：给一个依赖包分配 `off` 段后，把它摘要里所有
 -- `TMeta` 与 sols 键整体加上 off，跨包合并时编号不再冲突。

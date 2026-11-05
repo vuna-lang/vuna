@@ -478,7 +478,7 @@ dtEvalExprIn prog expr = andThen (dtEvalExprInInfo prog expr) (\p => Ok (firstOf
 -- M30 · REPL：同时返回值文本与 zonk 后的类型文本（类型决定是否走效果执行）。
 dtEvalExprInInfo : DtProgram -> Expr -> Result (Pair String String)
 dtEvalExprInInfo prog expr = case prog of
-  DtProgram datas defs goals sols globals insts classes next defvals =>
+  DtProgram datas defs goals sols globals insts classes next defvals depths =>
     let
       -- M28：axiom 无体，不进 delta 展开 / 求值环境（只剩 globals 里的类型）。
       bodies = defBodyPairs defs
@@ -583,7 +583,7 @@ in andThen (elabDatas (collectDataDecls decls []) startGlobals startEc) (\pd => 
                             in andThen (checkTerminationDecls decls) (\_ => let
                               _ = stamp "termination-done"
                             in Ok
-                              (DtProgram datas1 allDefs (ecGoals ec4) (ecSols ec4) globalsOut (ecInsts ec4) (ecClasses ec4) (ecNext ec4) (ecDefVals ec4))
+                              (DtProgram datas1 allDefs (ecGoals ec4) (ecSols ec4) globalsOut (ecInsts ec4) (ecClasses ec4) (ecNext ec4) (ecDefVals ec4) (Base.IntMap.toList (ecDepthTbl ec4)))
                             )
                     )
                 )
