@@ -29,12 +29,12 @@ let v_Vuna_dCompiler_dDriver_dCompilerCli_dremovedFlag = (fun prog flag -> (matc
   | _ -> failwith "DT: impossible branch"
 ))
 
-let v_Vuna_dCompiler_dDriver_dCompilerCli_dprintErrText = (fun e -> ((fun _u -> 1) (Base_dIO.v_Base_dIO_drunIO ((fun dtio_0 -> fun (_ : int) -> dtp_print dtio_0) e))))
+let v_Vuna_dCompiler_dDriver_dCompilerCli_dprintErrText = (fun e -> ((fun _u -> 1) (Base_dIO.v_Base_dIO_drunIO ((fun dtio_0 -> fun (_ : int) -> dtp_print dtio_0) (Vuna_dCompiler_dDriver_dDiagRender.v_Vuna_dCompiler_dDriver_dDiagRender_drenderCliDiagnostic e)))))
 
 let v_Vuna_dCompiler_dDriver_dCompilerCli_dprintErr = (fun e -> (v_Vuna_dCompiler_dDriver_dCompilerCli_dprintErrText (String.concat "" ["error: "; e; "\n"])))
 
 let rec v_Vuna_dCompiler_dDriver_dCompilerCli_dprintWarnings = (fun mc0 -> (match mc0 with
-  | Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__3, dtb__4) -> ((fun _u -> (v_Vuna_dCompiler_dDriver_dCompilerCli_dprintWarnings dtb__4)) (Base_dIO.v_Base_dIO_drunIO ((fun dtio_0 -> fun (_ : int) -> dtp_print dtio_0) (dtb__3 ^ "\n"))))
+  | Base_dList.C_Base_dList_dList_Base_dList_dCons (dtb__3, dtb__4) -> ((fun _u -> (v_Vuna_dCompiler_dDriver_dCompilerCli_dprintWarnings dtb__4)) (Base_dIO.v_Base_dIO_drunIO ((fun dtio_0 -> fun (_ : int) -> dtp_print dtio_0) (Vuna_dCompiler_dDriver_dDiagRender.v_Vuna_dCompiler_dDriver_dDiagRender_drenderCliDiagnostic (dtb__3 ^ "\n")))))
   | Base_dList.C_Base_dList_dList_Base_dList_dNil -> 0
   | _ -> failwith "DT: impossible branch"
 ))
@@ -106,7 +106,7 @@ let v_Vuna_dCompiler_dDriver_dCompilerCli_disWorkspaceRoot = (fun pkg -> (match 
 ))
 
 let v_Vuna_dCompiler_dDriver_dCompilerCli_dcheckPackageSeq = (fun pkg code -> ((fun c -> (if (c > code) then c else code)) (match (Vuna_dCompiler_dDriver_dCompile.v_Vuna_dCompiler_dDriver_dCompile_dcheckPackage pkg) with
-  | Base_dResult.C_Base_dResult_dResult_Base_dResult_dErr (dtb__22) -> ((fun _u -> 1) (Base_dIO.v_Base_dIO_drunIO ((fun dtio_0 -> fun (_ : int) -> dtp_print dtio_0) (String.concat "" ["error: ["; (Vuna_dCompiler_dPackages_dPkg.v_Vuna_dCompiler_dPackages_dPkg_dpackageName pkg); "] "; dtb__22; "\n"]))))
+  | Base_dResult.C_Base_dResult_dResult_Base_dResult_dErr (dtb__22) -> ((fun _u -> 1) (Base_dIO.v_Base_dIO_drunIO ((fun dtio_0 -> fun (_ : int) -> dtp_print dtio_0) (((Vuna_dCompiler_dDriver_dDiagRender.v_Vuna_dCompiler_dDriver_dDiagRender_drenderWithPrefix (String.concat "" ["error: ["; (Vuna_dCompiler_dPackages_dPkg.v_Vuna_dCompiler_dPackages_dPkg_dpackageName pkg); "] "])) dtb__22) ^ "\n"))))
   | Base_dResult.C_Base_dResult_dResult_Base_dResult_dOk (dtb__23) -> (v_Vuna_dCompiler_dDriver_dCompilerCli_dprintWarnings dtb__23)
   | _ -> failwith "DT: impossible branch"
 )))
