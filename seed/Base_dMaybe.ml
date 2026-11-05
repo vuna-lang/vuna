@@ -1,16 +1,13 @@
 open Vuna_runtime
-open Base_dPair
-open Base_dBool
-open Base_dMonad
 type 'a0 t_Base_dMaybe_dMaybe = C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust of ('a0)
 
-let v_Functor_uBase_dMaybe_dMaybe = (C_Dict_uBase_dMonad_dFunctor_MkDict_uBase_dMonad_dFunctor ((fun f m -> (match m with
+let v_Functor_uBase_dMaybe_dMaybe = (Base_dMonad.C_Dict_uBase_dMonad_dFunctor_MkDict_uBase_dMonad_dFunctor ((fun f m -> (match m with
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__0) -> (C_Base_dMaybe_dMaybe_Base_dMaybe_dJust ((f dtb__0)))
   | _ -> failwith "DT: impossible branch"
 ))))
 
-let v_Monad_uBase_dMaybe_dMaybe = (C_Dict_uBase_dMonad_dMonad_MkDict_uBase_dMonad_dMonad ((fun m f -> (match m with
+let v_Monad_uBase_dMaybe_dMaybe = (Base_dMonad.C_Dict_uBase_dMonad_dMonad_MkDict_uBase_dMonad_dMonad ((fun m f -> (match m with
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing -> C_Base_dMaybe_dMaybe_Base_dMaybe_dNothing
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__1) -> (f dtb__1)
   | _ -> failwith "DT: impossible branch"
