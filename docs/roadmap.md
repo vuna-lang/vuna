@@ -96,7 +96,8 @@ M33（语言能写高性能系统程序）已收尾，历史在 git；剩下两�
 **映射 debt**：C30、C31、C32、C33、E01、E04、E06。
 
 **进度（M34）**：M34.1 基准/软门槛（C34 关闭、C33 部分）；M34.2 热点（termination worklist、
-`groupDefs`/`extraDefsOf`/`Namespaces` 表化、`vuna map` 索引 O(n²)→O(n)、C30）；M34.3 部分
+`groupDefs`/`extraDefsOf`/`Namespaces` 表化、`vuna map` 索引 O(n²)→O(n)、
+`unsolvedFrom` 的 list→IntMap（全解表扫描 O(n²)→O(n)）、C30）；M34.3 部分
 （`termHasAnyMeta` 快速路径；`Ec`/`Sols` 已是 O(1) cons 与增量 delta）；M34.5 的 check/build 级
 elab 缓存（`$TMPDIR/vuna-cache`，冷/热：check . 6.5s→25ms、build --no-compile 2.8s→21ms）；M34.6 读数
 随基准。M34.4 workspace 并行 check 完成（`prim_spawn`/`prim_wait`；check . 冷 6.5s→4.1s；根包串行 + 成员并行）；

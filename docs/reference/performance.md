@@ -244,7 +244,7 @@ W3 落地的容器与表示（`Intrinsics` / `Elab.Prelude` / `Codegen.Decl` / `
 
 | benchmark | 冷（首次） | 热（缓存命中） |
 | --- | --- | --- |
-| check .（workspace 并行） | ~4.1 s | ~25 ms |
+| check .（workspace 并行） | ~3.6 s | ~23 ms |
 | check compiler | ~2.8 s | ~11 ms |
 | build --no-compile compiler | ~2.9 s | ~18 ms |
 | build compiler（完整链接） | ~6.7 s | ~16 ms |
@@ -254,6 +254,10 @@ W3 落地的容器与表示（`Intrinsics` / `Elab.Prelude` / `Codegen.Decl` / `
 ⇒ 构建内不命中，无害）。check 只缓存成功结果（失败不缓存）；`List SplitFile` 是纯数据，用
 `prim_marshal`/`prim_unmarshal`（OCaml Marshal）落盘——过渡实现，规范的自描述序列化格式
 （C32）留后续。
+
+**M34.2 未解元变量扫描**：`unsolvedFrom` / `unsolvedFromRelevant` 的查找从 list（每次
+O(#sols)）改成 `IntMap` 索引（O(1)）——每次 check 结束的「全编号 x 全解表」扫描从 O(n²)
+降到 O(n)（check . 4.1s→3.6s、check compiler 2.5s→2.2s）。
 
 **M34.4 LSP 诊断缓存**：`LspState` 增加进程内诊断帧缓存（key = uri + 文本内容哈希，
 上限 32 条）；同一内容重复 didOpen/didChange 不再重复精化。编辑后文本变化仍是全量精化——

@@ -55,22 +55,22 @@ import Vuna.Compiler.Intrinsics
 import Vuna.Compiler.Frontend.Ast
 
 unsolvedMeta : Ec -> Maybe Int
-unsolvedMeta ec = unsolvedFromRelevant 0 (ecNext ec) (ecSols ec) (relevantMetas ec) (ecGoals ec)
+unsolvedMeta ec = unsolvedFromRelevant 0 (ecNext ec) (ecSolTbl ec) (relevantMetas ec) (ecGoals ec)
 
 -- M23：只把「运行时相关位置」出现的元变量当未解错误。HM 生成的签名会把某些类型参数隐式
 -- 量化（f : t1 -> List (Pair t1 t2) -> ...），调用点传 Nil 这类多态值时不约束 t2，
 -- 于是留一个只出现在擦除位置的元变量——它对运行时没有意义（codegen 不生成该实参），
 -- 不应算错误。洞（有 goal 的元变量）永远算未解。
-unsolvedFromRelevant : Int -> Int -> List (Pair Int Value) -> List Int -> List DtGoal -> Maybe Int
+unsolvedFromRelevant : Int -> Int -> IntMap Value -> List Int -> List DtGoal -> Maybe Int
 unsolvedFromRelevant i stop sols relevant goals =
   unsolvedFromRelevantGo (stop - i) stop sols relevant goals
 
-unsolvedFromRelevantGo : Int -> Int -> List (Pair Int Value) -> List Int -> List DtGoal -> Maybe Int
+unsolvedFromRelevantGo : Int -> Int -> IntMap Value -> List Int -> List DtGoal -> Maybe Int
 unsolvedFromRelevantGo remaining stop sols relevant goals = if remaining <= 0 then Nothing
 else
   let
     i = stop - remaining
-  in case metaLookupList i sols of
+  in case metaLookup i sols of
     Just _ => unsolvedFromRelevantGo (remaining - 1) stop sols relevant goals
     Nothing =>
       if memMetaId i relevant || isJust (findGoal i goals) then Just i
@@ -489,7 +489,7 @@ dtEvalExprInInfo prog expr = case prog of
           sols2 = ecSols ec2
           tyText =
             showTerm (quote 0 (force (Base.HashMap.fromList bodies) (ecSolsP ec2) defaultFuel ty))
-        in case unsolvedFrom next (ecNext ec2) sols2 of
+        in case unsolvedFrom next (ecNext ec2) (ecSolTbl ec2) of
           Just m => tcErr1 (exprSpan expr) (UnsolvedMetavarInfer (strFromInt m)) (strFromInt m)
           Nothing => case normalize (Base.HashMap.fromList bodies) (ecSolsP ec2) defaultFuel (eval [] term) of
             VInt n => Ok (Pair (strFromInt n) tyText)
