@@ -47,9 +47,11 @@ Vuna 语言的 VS Code 支持：TextMate 语法高亮、语言配置、代码片
 | `Vuna: Lint File` | 运行 `vuna lint <file>`，输出到 **Vuna** 通道，并把 `[LN_*]` 诊断发布到 Problems |
 | `Vuna: Check File` | 运行 `vuna check <file>`（注意：`check` 的入口语义是「入口文件或包目录」，模块文件带 `module` 头会报 `LD_ModuleHeaderInEntryFile`） |
 | `Vuna: Build Package` | 在终端运行 `vuna build <pkg>`，`<pkg>` 是从当前文件向上找到的最近 `vuna.toml` 所在目录 |
+| `Vuna: Run Package` | 在终端运行 `vuna run <pkg>`（增量 build + 执行 `.output/bin/<pkg>`；无参数透传，需要参数时在终端自行加 `-- ...`） |
+| `Vuna: Run Tests` | 在终端运行 `vuna test <pkg>`；当前文件在包的 `test/` 下时附加 `--filter <文件名>` 只跑该测试文件 |
 | `Vuna: Show Version` | 显示服务器路径、版本、`VUNA_BASE` 与 trace 设置，并写入 **Vuna** 通道 |
 
-所有命令都在命令面板可用；`.vuna` 编辑器右键菜单包含 format/lint/check/build。
+所有命令都在命令面板可用；`.vuna` 编辑器右键菜单包含 format/lint/check/build/run，资源管理器右键菜单包含 build/run/tests。
 
 ## 开发与构建
 

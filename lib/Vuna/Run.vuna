@@ -1,0 +1,139 @@
+module Vuna.Run (runRun) where
+
+-- Vuna.Run：`vuna run` —— 构建并运行包的可执行入口（M38；工具链，永不进 seed 闭包）。
+--
+-- 参数模型：`vuna run [--no-build] [--package NAME] [DIR] [-- ARG]...`。
+-- 按**第一个** `--` 切分：前段是 vuna 自己的参数，后段原样透传给被运行的程序
+-- （参数与子进程退出码都不改）。DIR 默认 "."，可以是包目录，也可以是 workspace 根。
+--
+-- 目标包选择：
+--   1. `--package NAME` 显式选择（找不到 = 输入错误 exit 2）；
+--   2. workspace 根且根包可执行（有 `app/Main.vuna`）→ 根包；
+--   3. 否则恰好一个可执行成员 → 用它；
+--   4. 否则列出候选并 exit 2（不猜）。
+--
+-- 构建走 in-process `runCompilerCliFor "vuna" (["build", DIR] ++ 包选择)`（`--no-build`
+-- 跳过）；执行走 `prim_runIn <包目录> <.output/bin/<包名> :: 透传参数>`，子进程退出码
+-- 原样返回。目标没有可执行入口 / 构建被跳过导致产物缺失都是输入错误（exit 2）。
+import Vuna.Compiler.Common
+import Vuna.Compiler.Packages.Pkg
+import Vuna.Compiler.Driver.CompilerCli
+import Vuna.Cli.Args
+import Vuna.Files
+import Base.IO
+
+-- 按第一个 `--` 切分：前段是自身参数，后段原样透传。
+splitPassthrough : List String -> Pair (List String) (List String)
+splitPassthrough [] = Pair [] []
+splitPassthrough ("--" :: rest) = Pair [] rest
+splitPassthrough (arg :: rest) = case splitPassthrough rest of
+  Pair own pass => Pair (arg :: own) pass
+
+runRun : List String -> Int
+runRun args =
+  let
+    parts = splitPassthrough args
+    own = firstOf parts
+    passthrough = secondOf parts
+  in case parseToolArgs "vuna run" [BoolFlag "no-build", ValueFlag "package"] own of
+    Err e => runError e
+    Ok parsed => case parsed.positionals of
+      [] => runGo parsed passthrough "."
+      [dir] => runGo parsed passthrough dir
+      _ => runError "usage: vuna run [--no-build] [--package NAME] [DIR] [-- ARG]..."
+
+runGo : Parsed -> List String -> String -> Int
+runGo parsed passthrough dir = case requireDirectory dir of
+  Err e => runError e
+  Ok _ => case loadPackage dir of
+    Err e => runFailure e
+    Ok rootPkg => case selectTarget parsed dir rootPkg of
+      Err e => runError e
+      Ok target => runTarget parsed passthrough dir target
+
+-- 目标包选择；workspace 成员列表来自 `workspacePackages`（与 build 同一真源）。
+selectTarget : Parsed -> String -> Package -> Result Package
+selectTarget parsed dir rootPkg = case rootPkg.packageManifest.manifestMembers of
+  [] => case flagValue parsed "package" of
+    Nothing => Ok rootPkg
+    Just name =>
+      if packageName rootPkg == name then Ok rootPkg
+      else Err
+        ("no such package: " ++ name ++ " (only package at " ++ dir ++ " is " ++ packageLabel rootPkg ++ ")")
+  _ => case workspacePackages dir of
+    Err e => Err e
+    Ok pkgs => case flagValue parsed "package" of
+      Just name => case findPackageByName name pkgs of
+        Nothing => Err ("no such package in workspace: " ++ name)
+        Just target => Ok target
+      Nothing => case rootExecutable rootPkg of
+        Just target => Ok target
+        Nothing => case filter isExecutable pkgs of
+          [only] => Ok only
+          [] =>
+            Err
+              ("no executable package in workspace " ++ dir ++ " (packages need app/Main.vuna): " ++ packageLabels pkgs)
+          many =>
+            Err
+              ("multiple executable packages in workspace " ++ dir ++ ": " ++ packageLabels many ++ "; choose one with --package")
+
+rootExecutable : Package -> Maybe Package
+rootExecutable pkg = if isExecutable pkg then Just pkg else Nothing
+
+isExecutable : Package -> Bool
+isExecutable pkg = pathExistsFile (packageEntry pkg)
+
+packageLabel : Package -> String
+packageLabel pkg =
+  let
+    name = packageName pkg
+  in if name == "" then packageDir pkg else name
+
+packageLabels : List Package -> String
+packageLabels pkgs = join ", " (map packageLabel pkgs)
+
+findPackageByName : String -> List Package -> Maybe Package
+findPackageByName name [] = Nothing
+findPackageByName name (pkg :: rest) =
+  if packageName pkg == name then Just pkg else findPackageByName name rest
+
+-- 构建（in-process，与 `vuna build` 完全同一条路径）后执行目标产物。
+runTarget : Parsed -> List String -> String -> Package -> Int
+runTarget parsed passthrough dir target =
+  let
+    pkgFlag = case flagValue parsed "package" of
+      Nothing => []
+      Just name => ["--package", name]
+  in if not (isExecutable target) then runError ("package " ++ packageLabel target ++ " has no executable entry (app/Main.vuna)")
+  else
+    let
+      buildCode =
+        if flagSet parsed "no-build" then 0
+        else runCompilerCliFor "vuna" (append ["build", dir] pkgFlag)
+    in if buildCode /= 0 then buildCode else execTarget passthrough target
+
+-- 执行：cwd 切到包目录，bin 用**相对包目录**的路径（`prim_runIn` 先 chdir 再执行，
+-- 传 `packageDir ++ "/.output/bin/..."` 会在相对 DIR 下被拼成两遍；见 M38 验证记录）。
+execTarget : List String -> Package -> Int
+execTarget passthrough target =
+  let
+    pkgDir = packageDir target
+    relBin = ".output/bin/" ++ packageName target
+  in if pathExistsFile (pkgDir ++ "/" ++ relBin) then runIO (prim_runIn pkgDir (relBin :: passthrough))
+  else runError
+    ("binary not found: " ++ pkgDir ++ "/" ++ relBin ++ " (build the package first, or drop --no-build)")
+
+-- ---------------------------------------------------------------
+-- 统一错误出口（2 = 用法/输入，1 = 被检查代码的语义失败）
+-- ---------------------------------------------------------------
+runError : String -> Int
+runError e =
+  let
+    _ = runIO (prim_print ("error: " ++ e ++ "\n"))
+  in 2
+
+runFailure : String -> Int
+runFailure e =
+  let
+    _ = runIO (prim_print ("error: " ++ e ++ "\n"))
+  in 1

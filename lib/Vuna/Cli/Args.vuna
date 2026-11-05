@@ -6,6 +6,7 @@ module Vuna.Cli.Args
   , ensureDirPath
   , flagSet
   , flagValue
+  , flagValues
   , parentOf
   , parseToolArgs
   , readText
@@ -20,7 +21,8 @@ module Vuna.Cli.Args
 -- 落在依赖图的叶子上，因此本模块只依赖编译器包（removed flag 真源）与 Base。
 --
 -- 参数模型：
---   - 每个工具命令显式声明允许的 flag 表（`BoolFlag` 开关 / `ValueFlag` 取值）；
+--   - 每个工具命令显式声明允许的 flag 表（`BoolFlag` 开关 / `ValueFlag` 取值 /
+--     `MultiValueFlag` 可重复取值）；
 --   - 位置参数保持用户给的顺序；`--` 之后一律当位置参数；
 --   - 未知 flag / 重复 flag / 缺值都是可读错误，由调用方统一打印并 exit 2；
 --   - `--with-comments` 这类只属于工具命令的已删 flag 在工具侧 hint 表里；
@@ -36,14 +38,17 @@ import Base.IO
 -- ---------------------------------------------------------------
 -- 参数说明表
 -- ---------------------------------------------------------------
--- BoolFlag：开关（如 `--check`）；ValueFlag：需要紧跟一个值（如 `--find <Module.name>`）。
+-- BoolFlag：开关（如 `--check`）；ValueFlag：需要紧跟一个值（如 `--find <Module.name>`）；
+-- MultiValueFlag：可重复取值（如 `--filter a --filter b`），用于筛选类参数。
 data ArgSpec : Type where
   BoolFlag : String -> ArgSpec
   ValueFlag : String -> ArgSpec
+  MultiValueFlag : String -> ArgSpec
 
 specName : ArgSpec -> String
 specName (BoolFlag name) = name
 specName (ValueFlag name) = name
+specName (MultiValueFlag name) = name
 
 specOf : String -> List ArgSpec -> Maybe ArgSpec
 specOf name [] = Nothing
@@ -73,6 +78,16 @@ flagSet parsed name = memName name parsed.flagNames
 -- 某取值 flag 的值（名字不带 `--`）。
 flagValue : Parsed -> String -> Maybe String
 flagValue parsed name = lookupValue name parsed.valuesOf
+
+-- 某可重复取值 flag 的全部值（按用户给出的顺序；未出现 = 空列表）。
+-- MultiValueFlag 的重复出现是合法的，因此这里收集的是列表而不是单值。
+flagValues : Parsed -> String -> List String
+flagValues parsed name = lookupValues name parsed.valuesOf
+
+lookupValues : String -> List (Pair String String) -> List String
+lookupValues name [] = []
+lookupValues name ((Pair key value) :: rest) =
+  if key == name then value :: lookupValues name rest else lookupValues name rest
 
 lookupValue : String -> List (Pair String String) -> Maybe String
 lookupValue name [] = Nothing
@@ -124,6 +139,11 @@ parseFlag specs raw rest flags values items =
         else parseGo False specs rest (name :: flags) values items
       ValueFlag _ => if hasValue name values then PErr (DuplicateFlag raw)
       else case rest of
+        [] => PErr (MissingValue raw)
+        value :: more =>
+          if isFlagLike value then PErr (MissingValue raw)
+          else parseGo False specs more flags (Pair name value :: values) items
+      MultiValueFlag _ => case rest of
         [] => PErr (MissingValue raw)
         value :: more =>
           if isFlagLike value then PErr (MissingValue raw)

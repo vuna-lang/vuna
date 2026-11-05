@@ -1,5 +1,6 @@
 module Vuna.Lsp.Query
-  ( completionItems
+  ( codeActionsFor
+  , completionItems
   , definitionResult
   , documentSymbols
   , formattingEdits
@@ -19,6 +20,7 @@ module Vuna.Lsp.Query
 --   hover             先 DT 洞目标（包上下文；无独立 `_` 时跳过精化），未命中再
 --                     Index 标识符签名/注释；range 落在光标 token 上（不是定义位置）；
 --   formatting        `Vuna.Fmt.formatSourceWith`（程序级 fixity）成功且内容变化 ⇒ 全文 TextEdit；
+--   codeAction        lint finding（可自动修复）→ quick fix TextEdit；另加全文档 fix all；
 --   documentSymbol    AST 声明树（data/record/trait 带子节点）；selectionRange 精确落名字；
 --   definition        位置 token（支持 `Mod.name`）→ Index 符号 → Location；Index 不可用时
 --                     同文件缓冲兜底；
@@ -36,6 +38,8 @@ import Vuna.Compiler.Packages.Pkg
 import Vuna.Fmt
 import Vuna.Index
 import Vuna.Json
+import Vuna.Lint.Fix
+import Vuna.Lint.Rules
 import Vuna.Lsp.Diagnostics
 import Vuna.Lsp.Protocol
 
@@ -48,6 +52,10 @@ maxWorkspaceSymbols = 200
 
 maxReferences : Int
 maxReferences = 500
+
+-- codeAction 结果上限：同屏 quick fix 不需要无限长。
+maxCodeActions : Int
+maxCodeActions = 20
 
 -- 全文范围（格式化用）：0:0 到最后一行的行尾。
 fullRange : String -> Json
@@ -245,6 +253,67 @@ formattingFixities uri text =
     path = decodeUri uri
   in if path == "" then Err "empty document uri"
   else secondOf (fixitiesForFile emptyFixityEnv path text)
+
+-- ---------------------------------------------------------------
+-- codeAction：lint finding → quick fix（M38 P1c）
+-- ---------------------------------------------------------------
+-- 与诊断同源：程序级 fixity（`Vuna.FixityEnv`）→ `Vuna.Lint.Rules.lintSourceWith`；
+-- 只取**可自动修复**（`findingEdit = Just`）且编辑行范围与请求 range（1-based 行闭区间）
+-- 相交的 finding。Edit 的行范围是 1-based 闭区间**整行替换**：
+--   LSP range = (editStart - 1, 0) .. (editStop, 0)（末端取下一行行首，不吞掉下一行）；
+--   newText = `joinLines editLines`。
+-- 另加一条 "fix all lint findings"：`Vuna.Lint.Fix.fixLoop` 跑到收敛（与 CLI `--fix`
+-- 同一条路径），发整文档替换编辑。请求 range 附近没有可修复 finding 时返回空数组，
+-- 避免每一行都冒出全文档 fix。总条数上限 20（fix all 占最后一格）。
+codeActionsFor : String -> String -> Int -> Int -> List Json
+codeActionsFor uri text reqStart reqEnd = case contextForDoc uri of
+  Err e => []
+  Ok (Pair label _) => case fixitiesForFile emptyFixityEnv label text of
+    Pair _ (Err e) => []
+    Pair _ (Ok programFixities) => case lintSourceWith programFixities text of
+      Err e => []
+      Ok findings =>
+        let
+          fixable = filter (editTouches reqStart reqEnd) findings
+        in if isEmptyList fixable then []
+        else
+          let
+            singles = mapMaybe (findingQuickFix uri) fixable
+            fixAll = fixAllActions uri programFixities text findings
+          in if isEmptyList fixAll then take maxCodeActions singles
+          else append (take (maxCodeActions - 1) singles) fixAll
+
+-- 请求 range（1-based 行闭区间）与 Edit 的行范围（1-based 闭区间）是否相交。
+editTouches : Int -> Int -> Finding -> Bool
+editTouches reqStart reqEnd f = case f.findingEdit of
+  Nothing => False
+  Just e => e.editStart <= reqEnd && e.editEnd >= reqStart
+
+-- Edit 的行范围是 1-based 闭区间整行替换 → LSP 0-based 半开 range（末端 = 下一行行首）。
+editLspRange : Edit -> Json
+editLspRange e = lspRange e.editStart 1 (e.editEnd + 1) 1
+
+textEditJson : Json -> String -> Json
+textEditJson range newText = JObj [Pair "range" range, Pair "newText" (JStr newText)]
+
+-- 单条 quick fix：title 带规则短名，diagnostics 只带 code（客户端按 code 关联到已有诊断），
+-- edit.changes 按 uri 分组。
+findingQuickFix : String -> Finding -> Maybe Json
+findingQuickFix uri f = case f.findingEdit of
+  Nothing => Nothing
+  Just e =>
+    Just
+      (JObj [Pair "title" (JStr ("fix: " ++ f.findingRule)), Pair "kind" (JStr "quickfix"), Pair "diagnostics" (JArr [JObj [Pair "code" (JStr f.findingCode)]]), Pair "edit" (JObj [Pair "changes" (JObj [Pair uri (JArr [textEditJson (editLspRange e) (joinLines e.editLines)])])])])
+
+-- 全文档 fix：fixLoop 把全部可修复 finding 迭代应用（8 轮，与 CLI `--fix` 一致）；
+-- 有改动才发整文档替换编辑，否则不产生动作。
+fixAllActions : String -> List FixityDecl -> String -> List Finding -> List Json
+fixAllActions uri programFixities text findings = case fixLoop programFixities text findings 8 0 of
+  Err e => []
+  Ok (Pair count newText) =>
+    if count == 0 || newText == text then []
+    else [ JObj [Pair "title" (JStr "fix all lint findings"), Pair "kind" (JStr "quickfix"), Pair "edit" (JObj [Pair "changes" (JObj [Pair uri (JArr [textEditJson (fullRange text) newText])])])]
+    ]
 
 -- Index：惰性加载（首次 definition/references/completion/workspaceSymbol 时）
 -- ---------------------------------------------------------------

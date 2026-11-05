@@ -26,13 +26,23 @@ module Vuna.Repl (runRepl) where
 --   - 限制：程序里已经有 `main` 时拒绝效果执行（避免与合成入口重复定义）；临时包只能
 --     依赖上下文的依赖包，当前包自己的 lib 模块在 IO 表达式里不可 import。
 --
+-- M38（P1b）：调试命令。
+--   - `:type EXPR` 只打印 zonk 后的类型文本（不求值、不执行效果）；
+--   - `:load FILE` 用文件源码整体替换 imports/defs 缓冲；文件含 `module ... where`
+--     头时拒绝（模块文件由 Loader 按模块加载，不能灌进 REPL 缓冲）并提示改用 :browse；
+--     `:reload` 重读上次 :load 的文件。失败时状态不变；
+--   - `:browse MODULE` 惰性构建 `Vuna.Index`（首次 :browse 才 `loadOrBuild`，之后复用
+--     `stateBrowseIndex` 缓存）后按 `vuna api` 的 `renderApi` 打印模块接口面；非 workspace 明确报错。
+--
 -- 实现结构：**只有 `replLoop` 递归**（显式 fuel：C28 记录的交互主循环不是全函数，
 -- 用 1G 行守卫防不可达死循环），其余步骤函数都返回新状态（`ReplState` / `ReplOutcome`），
 -- 不自我递归——这样「空行提交 pending 后再处理下一行」不会把后续输入吞进嵌套循环。
+import Vuna.Cli.Args
 import Vuna.Compiler.Common
 import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Packages.Pkg
 import Vuna.Compiler.Frontend.Parser
+import Vuna.Index
 import Vuna.Interp
 import Base.IO
 
@@ -53,9 +63,13 @@ replMaxPendingLines = 64
 replHelp : String
 replHelp =
   "命令：\n"
-    ++ "  :help    显示帮助\n"
-    ++ "  :reset   清空已输入的定义与 import\n"
-    ++ "  :quit    退出（同 Ctrl-D）\n"
+    ++ "  :help           显示帮助\n"
+    ++ "  :type EXPR      显示表达式类型（不求值，也不执行效果）\n"
+    ++ "  :load FILE      加载定义文件（整段源码进缓冲；不支持 `module ... where` 模块文件）\n"
+    ++ "  :reload         重新读取上次 :load 的文件\n"
+    ++ "  :browse MODULE  显示模块接口（复用 `vuna api`；首次会构建源码索引）\n"
+    ++ "  :reset          清空已输入的定义、import 与 :load 的文件\n"
+    ++ "  :quit           退出（同 Ctrl-D）\n"
     ++ "其他输入按 vuna 源码处理：`import ...` 与定义会被累积，表达式会立即求值。\n"
     ++ "DT 顶层签名必填，定义请先输入签名行（如 `x : Int`）再输入定义行。\n"
     ++ "多行输入：未闭合的括号/字符串/块注释或行尾是 `=` `->` `|` `,` `where` `do` 等\n"
@@ -67,14 +81,39 @@ replHelp =
 replFuelBound : Int
 replFuelBound = 1073741824
 
--- REPL 的累积状态：imports 缓冲、定义缓冲、待续输入（空串 = 没有待续输入）。
+-- REPL 的累积状态：imports 缓冲、定义缓冲、待续输入（空串 = 没有待续输入）、
+-- :load 的文件路径（空串 = 未加载）与 :browse 的索引缓存（首次 :browse 才构建）。
 record ReplState where
   stateImports : String
   stateDefs : String
   statePending : String
+  stateLoadedFile : String
+  stateBrowseIndex : Maybe Index
 
 replState : String -> String -> String -> ReplState
-replState imports defs pending = ReplState imports defs pending
+replState imports defs pending = ReplState imports defs pending "" Nothing
+
+-- 只替换 pending：imports / defs / :load 文件 / 索引缓存都保持（求值、追定义后清续行）。
+withPending : ReplState -> String -> ReplState
+withPending st pending =
+  ReplState st.stateImports st.stateDefs pending st.stateLoadedFile st.stateBrowseIndex
+
+-- 替换 imports / defs 并清 pending（import 接受、定义追加）；:load 文件与索引缓存保持。
+withBuffers : ReplState -> String -> String -> ReplState
+withBuffers st imports defs = ReplState imports defs "" st.stateLoadedFile st.stateBrowseIndex
+
+-- :load 成功后的状态：imports 缓冲清空（文件自带的 import 已在源码里）、整段源码进 defs、
+-- 记录路径；pending 清空、索引缓存保留。
+withLoadedSource : ReplState -> String -> String -> ReplState
+withLoadedSource st path source =
+  ReplState "" (ensureTrailingNewline source) "" path st.stateBrowseIndex
+
+-- :reset：清空定义 / import / 待续输入与 :load 的文件；索引缓存保留（它只是源码快照缓存）。
+resetBuffers : ReplState -> ReplState
+resetBuffers st = ReplState "" "" "" "" st.stateBrowseIndex
+
+ensureTrailingNewline : String -> String
+ensureTrailingNewline s = if s == "" || endsWith "\n" s then s else s ++ "\n"
 
 -- 一步的结果：继续（带新状态）或退出（退出码）。
 data ReplOutcome : Type where
@@ -134,24 +173,157 @@ submitPending : PackageContext -> ReplState -> ReplOutcome
 submitPending ctx st = if needsMore st.statePending then
   let
     _ = runIO (prim_print "错误: 输入不完整，已丢弃当前输入\n")
-  in ReplContinue (replState st.stateImports st.stateDefs "")
+  in ReplContinue (withPending st "")
 else submitText ctx st (trim st.statePending)
 
--- 完整的一行输入：命令优先；否则按「还需要续行 / import / 定义或表达式」处理。
+-- 完整的一行输入：冒号命令优先（在续行判定之前，否则 `:type f (` 会被当成未闭合源码），
+-- 否则按「还需要续行 / import / 定义或表达式」处理。
 lineStep : PackageContext -> ReplState -> String -> ReplOutcome
 lineStep ctx st ":q" = ReplExit 0
 lineStep ctx st ":quit" = ReplExit 0
 lineStep ctx st ":reset" =
   let
     _ = runIO (prim_print "已清空\n")
-  in ReplContinue (replState "" "" "")
+  in ReplContinue (resetBuffers st)
 lineStep ctx st ":help" =
   let
     _ = runIO (prim_print replHelp)
   in ReplContinue st
 lineStep ctx st line =
-  if needsMore line then ReplContinue (replState st.stateImports st.stateDefs (line ++ "\n"))
+  if startsWith ":" line then commandStep ctx st line
+  else if needsMore line then ReplContinue (withPending st (line ++ "\n"))
   else if startsWith "import " line then addImport ctx st line else submitText ctx st line
+
+-- 冒号命令分发（`:help` / `:q` / `:reset` 等无参命令已在上面的子句处理）。
+-- 未知命令给可操作提示，而不是落到 parse error。
+commandStep : PackageContext -> ReplState -> String -> ReplOutcome
+commandStep ctx st cmd = case commandArg cmd ":type" of
+  Just expr => typeStep ctx st expr
+  Nothing => case commandArg cmd ":load" of
+    Just path => loadStep st path
+    Nothing => case commandArg cmd ":reload" of
+      Just arg => reloadStep st arg
+      Nothing => case commandArg cmd ":browse" of
+        Just modName => browseStep st modName
+        Nothing =>
+          let
+            _ =
+              runIO
+                (prim_print ("错误: 未知命令 `" ++ cmd ++ "`（输入 :help 查看可用命令）\n"))
+          in ReplContinue st
+
+-- 命令参数：`cmd == name` → Just ""（缺参数）；`name` 后跟空格 → Just（trim 后的剩余）；
+-- 其它 → Nothing（不是该命令）。按字节长度切前缀，不做 token 化。
+commandArg : String -> String -> Maybe String
+commandArg cmd name =
+  if cmd == name then Just ""
+  else if startsWith (name ++ " ") cmd then Just (trim (substring (byteLength (name ++ " ")) (byteLength cmd - byteLength (name ++ " ")) cmd))
+  else Nothing
+
+commandUsage : ReplState -> String -> ReplOutcome
+commandUsage st usage =
+  let
+    _ = runIO (prim_print ("用法: " ++ usage ++ "\n"))
+  in ReplContinue st
+
+-- 当前缓冲拼成的程序（imports 在前、定义在后）。
+bufferProgram : ReplState -> String
+bufferProgram st = st.stateImports ++ "\n" ++ st.stateDefs
+
+-- `:type EXPR`：只打印 zonk 后的类型文本（不求值、不执行效果）。先 parseExpressionSource
+-- 拿到与 evalText 一致的干净解析错误；精化错误走既有 `错误:` 出口。
+typeStep : PackageContext -> ReplState -> String -> ReplOutcome
+typeStep ctx st exprText = if exprText == "" then commandUsage st ":type <表达式>"
+else case parseExpressionSource exprText of
+  Err e =>
+    let
+      _ = runIO (prim_print ("错误: " ++ e ++ "\n"))
+    in ReplContinue st
+  Ok _ => case evalExprInfo ctx (bufferProgram st) exprText of
+    Err e =>
+      let
+        _ = runIO (prim_print ("错误: " ++ e ++ "\n"))
+      in ReplContinue st
+    Ok info =>
+      let
+        _ = runIO (prim_print (exprText ++ " : " ++ trim (secondOf info) ++ "\n"))
+      in ReplContinue st
+
+-- `:load FILE`：用文件源码整体替换 imports/defs 缓冲（成功才替换，失败状态不变）。
+-- 只接受无 `module ... where` 头的入口式源码：模块文件由 Loader 按模块加载，不能直接
+-- 灌进 REPL 缓冲，因此拒绝并提示改用 `:browse`。
+loadStep : ReplState -> String -> ReplOutcome
+loadStep st path = loadFileStep st "已加载" path
+
+-- `:reload`：重读上次 :load 的文件；没有加载过就提示先 :load。
+reloadStep : ReplState -> String -> ReplOutcome
+reloadStep st arg = if arg /= "" then commandUsage st ":reload"
+else if st.stateLoadedFile == "" then
+  let
+    _ = runIO (prim_print "错误: 还没有 :load 任何文件（先 :load <FILE>）\n")
+  in ReplContinue st
+else loadFileStep st "已重新加载" st.stateLoadedFile
+
+loadFileStep : ReplState -> String -> String -> ReplOutcome
+loadFileStep st verb path = if path == "" then commandUsage st ":load <FILE>"
+else case readText path of
+  Err e =>
+    let
+      _ = runIO (prim_print ("错误: " ++ e ++ "\n"))
+    in ReplContinue st
+  Ok source => case parseSource path source of
+    Err e =>
+      let
+        _ = runIO (prim_print ("错误: " ++ e ++ "\n"))
+      in ReplContinue st
+    Ok (SourceFile hdr imp fx decls) => case hdr of
+      Just md =>
+        let
+          _ =
+            runIO
+              (prim_print ("错误: " ++ path ++ " 是模块文件（含 `module ... where` 头），REPL 不能加载模块；请去掉 module 头后用 :load，或用 :browse <模块名> 查看模块接口\n"))
+        in ReplContinue st
+      Nothing =>
+        let
+          _ =
+            runIO
+              (prim_print (verb ++ " " ++ path ++ "（" ++ strFromInt (length decls) ++ " 个定义）\n"))
+        in ReplContinue (withLoadedSource st path source)
+
+-- `:browse MODULE`：复用 vuna api 的 Index + renderApi。索引只在首次 :browse 时构建
+-- （`loadOrBuild "."`，结果缓存进 stateBrowseIndex）；非 workspace 明确报错且状态不变。
+browseStep : ReplState -> String -> ReplOutcome
+browseStep st modName = if modName == "" then commandUsage st ":browse <Module.name>"
+else case st.stateBrowseIndex of
+  Just index => browseRender st index modName
+  Nothing => case findManifestDirMaybe "." of
+    Nothing =>
+      let
+        _ =
+          runIO
+            (prim_print "错误: 当前目录不在 vuna workspace 内（向上找不到 vuna.toml）；:browse 需要在包或 workspace 根运行\n")
+      in ReplContinue st
+    Just _ => case loadOrBuild "." of
+      Err e =>
+        let
+          _ = runIO (prim_print ("错误: " ++ e ++ "\n"))
+        in ReplContinue st
+      Ok index => browseRender (withIndexCache st index) index modName
+
+withIndexCache : ReplState -> Index -> ReplState
+withIndexCache st index =
+  ReplState st.stateImports st.stateDefs st.statePending st.stateLoadedFile (Just index)
+
+browseRender : ReplState -> Index -> String -> ReplOutcome
+browseRender st index modName = case renderApi index modName of
+  Err e =>
+    let
+      _ = runIO (prim_print ("错误: " ++ e ++ "\n"))
+    in ReplContinue st
+  Ok text =>
+    let
+      _ = runIO (prim_print (text ++ "\n"))
+    in ReplContinue st
 
 -- 续行状态：把新行（保留缩进）追加到 pending；`:q`/`:quit` 仍可直接退出。
 -- 缩进行（offside 块的成员）即使结构上「完整」也继续等，直到出现去缩进行或空行，
@@ -166,9 +338,9 @@ else
       _ =
         runIO
           (prim_print ("错误: 续行超过 " ++ strFromInt replMaxPendingLines ++ " 行，已丢弃当前输入\n"))
-    in ReplContinue (replState st.stateImports st.stateDefs "")
-  else if needsMore pending2 then ReplContinue (replState st.stateImports st.stateDefs pending2)
-  else if startsIndented raw then ReplContinue (replState st.stateImports st.stateDefs pending2)
+    in ReplContinue (withPending st "")
+  else if needsMore pending2 then ReplContinue (withPending st pending2)
+  else if startsIndented raw then ReplContinue (withPending st pending2)
   else submitText ctx st (trim pending2)
 
 startsIndented : String -> Bool
@@ -184,14 +356,14 @@ addImport ctx st line =
       let
         _ = runIO (prim_print ("parse error: " ++ e ++ "\n"))
       in ReplContinue st
-    Ok _ => ReplContinue (replState imports2 st.stateDefs "")
+    Ok _ => ReplContinue (withBuffers st imports2 st.stateDefs)
 
 -- 定义还是表达式：整段能解析成顶层声明就追加到定义缓冲，否则按表达式求值。
 submitText : PackageContext -> ReplState -> String -> ReplOutcome
 submitText ctx st text = case parseSource replTempFile (st.stateImports ++ st.stateDefs ++ text ++ "\n") of
   Ok (SourceFile hdr imp fx decls) => case hdr of
     Just md => evalText ctx st text
-    Nothing => ReplContinue (replState st.stateImports (st.stateDefs ++ text ++ "\n") "")
+    Nothing => ReplContinue (withBuffers st st.stateImports (st.stateDefs ++ text ++ "\n"))
   Err e => evalText ctx st text
 
 -- 表达式求值：类型是 IO a 时走临时包编译+运行，否则核心求值后打印值。
@@ -200,26 +372,23 @@ evalText ctx st text = case parseExpressionSource text of
   Err e =>
     let
       _ = runIO (prim_print ("错误: " ++ e ++ "\n"))
-    in ReplContinue (replState st.stateImports st.stateDefs "")
-  Ok _ =>
-    let
-      program = st.stateImports ++ "\n" ++ st.stateDefs
-    in case evalExprInfo ctx program text of
-      Err e =>
+    in ReplContinue (withPending st "")
+  Ok _ => case evalExprInfo ctx (bufferProgram st) text of
+    Err e =>
+      let
+        _ = runIO (prim_print ("错误: " ++ e ++ "\n"))
+      in ReplContinue (withPending st "")
+    Ok info =>
+      let
+        tyText = secondOf info
+      in if isIOTypeText tyText then
         let
-          _ = runIO (prim_print ("错误: " ++ e ++ "\n"))
-        in ReplContinue (replState st.stateImports st.stateDefs "")
-      Ok info =>
+          _ = evalIO ctx st text tyText
+        in ReplContinue (withPending st "")
+      else
         let
-          tyText = secondOf info
-        in if isIOTypeText tyText then
-          let
-            _ = evalIO ctx st text tyText
-          in ReplContinue (replState st.stateImports st.stateDefs "")
-        else
-          let
-            _ = runIO (prim_print (firstOf info ++ "\n"))
-          in ReplContinue (replState st.stateImports st.stateDefs "")
+          _ = runIO (prim_print (firstOf info ++ "\n"))
+        in ReplContinue (withPending st "")
 
 -- IO 表达式：合成 `main : <类型>` + `main = <表达式>`，临时编译并运行。
 -- 返回进程退出码（0 成功；非 0 只打印退出码，不改变 REPL 状态）；错误已打印。

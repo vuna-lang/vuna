@@ -82,6 +82,16 @@
         "category": "Vuna"
       },
       {
+        "command": "vuna.runPackage",
+        "title": "Run Package",
+        "category": "Vuna"
+      },
+      {
+        "command": "vuna.runTests",
+        "title": "Run Tests",
+        "category": "Vuna"
+      },
+      {
         "command": "vuna.showVersion",
         "title": "Show Version",
         "category": "Vuna"
@@ -109,6 +119,14 @@
           "when": "editorLangId == vuna || resourceLangId == vuna"
         },
         {
+          "command": "vuna.runPackage",
+          "when": "editorLangId == vuna || resourceLangId == vuna"
+        },
+        {
+          "command": "vuna.runTests",
+          "when": "editorLangId == vuna || resourceLangId == vuna"
+        },
+        {
           "command": "vuna.showVersion"
         }
       ],
@@ -132,6 +150,16 @@
           "command": "vuna.buildPackage",
           "when": "editorLangId == vuna",
           "group": "1_vuna@4"
+        },
+        {
+          "command": "vuna.runPackage",
+          "when": "editorLangId == vuna",
+          "group": "1_vuna@5"
+        },
+        {
+          "command": "vuna.runTests",
+          "when": "editorLangId == vuna",
+          "group": "1_vuna@6"
         }
       ],
       "explorer/context": [
@@ -139,6 +167,16 @@
           "command": "vuna.buildPackage",
           "when": "resourceLangId == vuna",
           "group": "1_vuna@1"
+        },
+        {
+          "command": "vuna.runPackage",
+          "when": "resourceLangId == vuna",
+          "group": "1_vuna@2"
+        },
+        {
+          "command": "vuna.runTests",
+          "when": "resourceLangId == vuna",
+          "group": "1_vuna@3"
         }
       ]
     },

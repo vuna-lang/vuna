@@ -1,4 +1,4 @@
-module Vuna.TestRunner (runTests) where
+module Vuna.TestRunner (TestOpts(..), runTests) where
 
 -- Vuna.TestRunner：包内测试运行器（M11.5；M30 起支持效果测试与 workspace 聚合）。
 --
@@ -17,6 +17,12 @@ module Vuna.TestRunner (runTests) where
 -- M30：`vuna test <workspace-root>` 对 workspace 里每个包各跑自己的 `test/`（根包 +
 -- `[workspace].members`），按包名分组汇总，任一失败总退出码 1；单包（只含自己的
 -- 目录，或它是 workspace 成员被直接指定）行为不变。
+-- M38：选项收进 `TestOpts`（默认值 = M30 行为，输出逐字不变）：
+--   - `--filter PAT`（可重复，多值 OR）：对 `<包名>/<文件名>` 与 `<文件名>` 做子串匹配，
+--     未匹配的包整组跳过；
+--   - `--list`：只列分组（workspace）与文件名，不执行，exit 0（单包缺 `test/` 仍 exit 2）；
+--   - `--verbose`：`ok` / `FAIL` 行尾追加 ` (Nms)`，末尾打印总耗时；
+--   - `--fail-fast`：首个失败即停止（跨包生效），已跑部分的汇总照常打印。
 import Vuna.Compiler.Common
 import Vuna.Compiler.Packages.Pkg
 import Vuna.Compiler.Driver.Dt
@@ -24,23 +30,58 @@ import Vuna.Files
 import Vuna.Interp
 import Base.IO
 
-runTests : Package -> Int
-runTests pkg = case workspacePackages (packageDir pkg) of
+-- `vuna test` 的选项；默认构造值（空过滤 + 全 False）等价于 M30 的固定行为。
+record TestOpts where
+  testFilter : List String
+  testListOnly : Bool
+  testVerbose : Bool
+  testFailFast : Bool
+
+-- 单测结果。打印集中在 runTestFiles（逐测耗时只有调用方知道），这里只带诊断文案。
+data TestOutcome : Type where
+  TestPassed : TestOutcome
+  TestFailed : String -> TestOutcome
+
+-- 汇总记账：stopped = fail-fast 已经触发（不再跑后续文件/包）。
+record Tally where
+  tallyPass : Int
+  tallyFail : Int
+  tallyStopped : Bool
+
+runTests : TestOpts -> Package -> Int
+runTests opts pkg =
+  let
+    start = runIO timeUs
+    code = runTestsGo opts pkg
+    _ =
+      if opts.testVerbose then runIO (prim_print ("total: " ++ strFromInt (elapsedMs start) ++ "ms\n"))
+      else 0
+  in code
+
+runTestsGo : TestOpts -> Package -> Int
+runTestsGo opts pkg = case workspacePackages (packageDir pkg) of
   Err e =>
     let
       _ = runIO (prim_print ("error: " ++ e ++ "\n"))
     in 2
-  Ok pkgs => if length pkgs <= 1 then runPackageTests pkg else runWorkspaceTests pkgs
+  Ok pkgs => if length pkgs <= 1 then runPackageTests opts pkg else runWorkspaceTests opts pkgs
 
 -- ---------------------------------------------------------------
 -- 单包（行为与 M11.5 一致：没有 test/ 是输入错误，退出码 2）
 -- ---------------------------------------------------------------
-runPackageTests : Package -> Int
-runPackageTests pkg =
+runPackageTests : TestOpts -> Package -> Int
+runPackageTests opts pkg =
   let
     testDir = packageDir pkg ++ "/test"
-  in if pathExistsDir testDir then case runTestFiles (packageContext pkg) testDir (testFiles (runIO (prim_readDir testDir))) 0 0 of
-    Pair _ fail => if fail == 0 then 0 else 1
+  in if pathExistsDir testDir then
+    let
+      files = filteredTestFiles opts (packageName pkg) testDir
+    in if opts.testListOnly then
+      let
+        _ = map (\file => runIO (prim_print (file ++ "\n"))) files
+      in 0
+    else case runTestFiles opts (packageContext pkg) testDir files 0 0 of
+      Tally _ fail _ => if fail == 0 then 0 else 1
   else
     let
       _ = runIO (prim_print ("error: test directory not found: " ++ testDir ++ "\n"))
@@ -48,34 +89,62 @@ runPackageTests pkg =
 
 -- ---------------------------------------------------------------
 -- workspace 聚合：每个包一组，缺 test/ 的包跳过（不是错误：库成员常常没有测试）。
+-- --list 模式只列「分组 + 文件」，不打印包数/汇总行（纯清单，exit 0）。
 -- ---------------------------------------------------------------
-runWorkspaceTests : List Package -> Int
-runWorkspaceTests pkgs =
+runWorkspaceTests : TestOpts -> List Package -> Int
+runWorkspaceTests opts pkgs = if opts.testListOnly then runWorkspaceList opts pkgs
+else
   let
     _ = runIO (prim_print ("workspace: " ++ strFromInt (length pkgs) ++ " package(s)\n"))
-  in runWorkspaceGo pkgs 0 0
+  in runWorkspaceGo opts pkgs 0 0
 
-runWorkspaceGo : List Package -> Int -> Int -> Int
-runWorkspaceGo pkgs pass fail = case pkgs of
-  [] =>
+runWorkspaceList : TestOpts -> List Package -> Int
+runWorkspaceList opts [] = 0
+runWorkspaceList opts (pkg :: rest) =
+  let
+    label = workspacePackageLabel pkg
+    testDir = packageDir pkg ++ "/test"
+  in if not (pathExistsDir testDir) then runWorkspaceList opts rest
+  else
     let
-      _ =
-        runIO
-          (prim_print ("\nworkspace: " ++ strFromInt pass ++ " passed, " ++ strFromInt fail ++ " failed\n"))
-    in if fail == 0 then 0 else 1
-  pkg :: rest =>
-    let
-      name = workspacePackageLabel pkg
-      testDir = packageDir pkg ++ "/test"
-    in if pathExistsDir testDir then
-      let
-        _ = runIO (prim_print ("-- " ++ name ++ " --\n"))
-      in case runTestFiles (packageContext pkg) testDir (testFiles (runIO (prim_readDir testDir))) 0 0 of
-        Pair p f => runWorkspaceGo rest (pass + p) (fail + f)
+      files = filteredTestFiles opts (packageName pkg) testDir
+    in if filterActive opts && length files == 0 then runWorkspaceList opts rest
     else
       let
-        _ = runIO (prim_print ("-- " ++ name ++ " -- (no test directory)\n"))
-      in runWorkspaceGo rest pass fail
+        _ = runIO (prim_print ("-- " ++ label ++ " --\n"))
+        _ = map (\file => runIO (prim_print (file ++ "\n"))) files
+      in runWorkspaceList opts rest
+
+runWorkspaceGo : TestOpts -> List Package -> Int -> Int -> Int
+runWorkspaceGo opts [] pass fail = workspaceFinish pass fail
+runWorkspaceGo opts (pkg :: rest) pass fail =
+  let
+    label = workspacePackageLabel pkg
+    testDir = packageDir pkg ++ "/test"
+  in if pathExistsDir testDir then
+    let
+      files = filteredTestFiles opts (packageName pkg) testDir
+    in if filterActive opts && length files == 0 then runWorkspaceGo opts rest pass fail
+    else
+      let
+        _ = runIO (prim_print ("-- " ++ label ++ " --\n"))
+      in case runTestFiles opts (packageContext pkg) testDir files 0 0 of
+        Tally p f stopped =>
+          if stopped then workspaceFinish (pass + p) (fail + f)
+          else runWorkspaceGo opts rest (pass + p) (fail + f)
+  else
+    let
+      _ = runIO (prim_print ("-- " ++ label ++ " -- (no test directory)\n"))
+    in runWorkspaceGo opts rest pass fail
+
+-- workspace 总汇总 + 退出码（0 全通过 / 1 有失败）。
+workspaceFinish : Int -> Int -> Int
+workspaceFinish pass fail =
+  let
+    _ =
+      runIO
+        (prim_print ("\nworkspace: " ++ strFromInt pass ++ " passed, " ++ strFromInt fail ++ " failed\n"))
+  in if fail == 0 then 0 else 1
 
 -- 包名可能为空（只用于展示，不参与语义）。
 workspacePackageLabel : Package -> String
@@ -85,29 +154,78 @@ workspacePackageLabel pkg =
   in if name == "" then packageDir pkg else name
 
 -- ---------------------------------------------------------------
--- 逐文件执行；返回 (passed, failed)
+-- 测试文件选择（--filter / --list 共用）
 -- ---------------------------------------------------------------
 testFiles : List String -> List String
 testFiles [] = []
 testFiles (name :: rest) = if endsWith ".vuna" name then name :: testFiles rest else testFiles rest
 
-runTestFiles : PackageContext -> String -> List String -> Int -> Int -> Pair Int Int
-runTestFiles ctx dir [] pass fail =
+filterActive : TestOpts -> Bool
+filterActive opts = case opts.testFilter of
+  [] => False
+  _ => True
+
+filteredTestFiles : TestOpts -> String -> String -> List String
+filteredTestFiles opts pkgName dir =
+  filter (\file => matchesFilter opts.testFilter pkgName file)
+    (testFiles (runIO (prim_readDir dir)))
+
+-- 多值 OR：无过滤 = 全部匹配；有过滤 = 任一 PAT 命中 `<包名>/<文件名>` 或 `<文件名>`
+-- 即匹配。注意「无过滤」与「OR 的终止」必须是两个不同的基例：若把 `[] => True`
+-- 直接当递归终止，OR 永远为真（--filter zzz 会匹配所有文件）。
+matchesFilter : List String -> String -> String -> Bool
+matchesFilter [] pkgName file = True
+matchesFilter (pat :: rest) pkgName file =
+  contains pat (pkgName ++ "/" ++ file) || contains pat file || matchesAnyFilter rest pkgName file
+
+matchesAnyFilter : List String -> String -> String -> Bool
+matchesAnyFilter [] pkgName file = False
+matchesAnyFilter (pat :: rest) pkgName file =
+  contains pat (pkgName ++ "/" ++ file) || contains pat file || matchesAnyFilter rest pkgName file
+
+-- ---------------------------------------------------------------
+-- 逐文件执行；返回 Tally
+-- ---------------------------------------------------------------
+runTestFiles : TestOpts -> PackageContext -> String -> List String -> Int -> Int -> Tally
+runTestFiles opts ctx dir [] pass fail =
   let
     _ =
       runIO (prim_print ("\n" ++ strFromInt pass ++ " passed, " ++ strFromInt fail ++ " failed\n"))
-  in Pair pass fail
-runTestFiles ctx dir (name :: rest) pass fail =
+  in Tally pass fail False
+runTestFiles opts ctx dir (name :: rest) pass fail =
   let
     path = dir ++ "/" ++ name
-    ok = runOneTest ctx path name
-  in if ok then runTestFiles ctx dir rest (pass + 1) fail
-  else runTestFiles ctx dir rest pass (fail + 1)
+    t0 = runIO timeUs
+    outcome = runOneTest ctx path name
+    us = runIO timeUs - t0
+    _ = printOutcome opts name outcome us
+  in case outcome of
+    TestPassed => runTestFiles opts ctx dir rest (pass + 1) fail
+    TestFailed _ => if opts.testFailFast then
+      let
+        _ =
+          runIO
+            (prim_print ("\n" ++ strFromInt pass ++ " passed, " ++ strFromInt (fail + 1) ++ " failed\n"))
+      in Tally pass (fail + 1) True
+    else runTestFiles opts ctx dir rest pass (fail + 1)
+
+-- 单测结果行：默认与 M30 逐字一致；--verbose 时行尾追加耗时。
+printOutcome : TestOpts -> String -> TestOutcome -> Int -> Int
+printOutcome opts name TestPassed us =
+  runIO (prim_print ("ok   " ++ name ++ timingText opts us ++ "\n"))
+printOutcome opts name (TestFailed message) us =
+  runIO (prim_print ("FAIL " ++ name ++ ": " ++ message ++ timingText opts us ++ "\n"))
+
+timingText : TestOpts -> Int -> String
+timingText opts us = if opts.testVerbose then " (" ++ strFromInt (us / 1000) ++ "ms)" else ""
+
+elapsedMs : Int -> Int
+elapsedMs start = (runIO timeUs - start) / 1000
 
 -- 单个测试：按 main 的返回类别选执行路径。
-runOneTest : PackageContext -> String -> String -> Bool
+runOneTest : PackageContext -> String -> String -> TestOutcome
 runOneTest ctx path name = case dtMainKind ctx path of
-  Err e => testFail name e
+  Err e => TestFailed e
   Ok kind => case kind of
     "IO" => runIOTest ctx path name
     "String" => pureTest name (interpretFile ctx path) "\"\""
@@ -115,42 +233,21 @@ runOneTest ctx path name = case dtMainKind ctx path of
     "Nat" => pureTest name (interpretFile ctx path) "0"
     "Bool" => pureTest name (interpretFile ctx path) "True"
     _ =>
-      testFail name
+      TestFailed
         ("unsupported test main type: " ++ kind ++ " (expected `main : String` (empty = pass), `main : Int`/`Nat` (0 = pass), `main : Bool` (True = pass) or `main : IO a` (exit code 0 = pass))")
 
 -- 纯测试：`interpretFile` 的核心求值结果与期望值逐字比较。
-pureTest : String -> String -> String -> Bool
-pureTest name output expected = if output == expected then testOk name
-else
-  let
-    _ =
-      runIO
-        (prim_print ("FAIL " ++ name ++ ": expected " ++ expected ++ ", got " ++ output ++ "\n"))
-  in False
+pureTest : String -> String -> String -> TestOutcome
+pureTest name output expected =
+  if output == expected then TestPassed
+  else TestFailed ("expected " ++ expected ++ ", got " ++ output)
 
 -- 效果测试：临时包编译 + 运行，退出码 0 通过；编译/链接失败按 FAIL 记录诊断。
-runIOTest : PackageContext -> String -> String -> Bool
+runIOTest : PackageContext -> String -> String -> TestOutcome
 runIOTest ctx path name =
   let
     source = runIO (prim_readFile path)
   in case runEffectProgram ctx source False of
-    Err e => testFail name e
-    Ok 0 => testOk name
-    Ok code =>
-      let
-        _ =
-          runIO
-            (prim_print ("FAIL " ++ name ++ ": effect program exited with code " ++ strFromInt code ++ "\n"))
-      in False
-
-testOk : String -> Bool
-testOk name =
-  let
-    _ = runIO (prim_print ("ok   " ++ name ++ "\n"))
-  in True
-
-testFail : String -> String -> Bool
-testFail name message =
-  let
-    _ = runIO (prim_print ("FAIL " ++ name ++ ": " ++ message ++ "\n"))
-  in False
+    Err e => TestFailed e
+    Ok 0 => TestPassed
+    Ok code => TestFailed ("effect program exited with code " ++ strFromInt code)

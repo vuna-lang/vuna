@@ -9,7 +9,8 @@
 # A. 协议/生命周期（M17 起保留的全部断言）
 #   1. initialize            → capabilities 全套（textDocumentSync Full / hover /
 #                              completion(trigger ".") / definition / references /
-#                              documentSymbol / formatting / workspaceSymbol）
+#                              documentSymbol / formatting / workspaceSymbol /
+#                              codeAction(codeActionKinds=["quickfix"])）
 #   2. didOpen（有类型错误） → publishDiagnostics severity=1，range 0-based
 #   3. didChange（改成正确） → 同 uri 的 diagnostics 变成空数组
 #   4. hover（未解洞 `_`）   → 返回目标类型 Type
@@ -33,6 +34,13 @@
 #  18. 交互式帧读取：body 后没有换行时 initialize 也必须立刻有响应
 #      （回归点：读取层曾按行读 body → initialize 互等死锁）
 #  19. 符号 hover：返回签名，且 range 落在**光标 token**（不是符号定义位置）
+#
+# D. M38 P1c：lint quick fix（textDocument/codeAction）
+#  20. docstring hover（只显示 `-- |`，普通注释不显示，多行保留）
+#  21. 触发 LN_LiteralIfChain 的文本 + 光标 range → CodeAction：kind=quickfix、
+#      title 带规则短名、diagnostics.code 关联、0-based 整行替换 range、newText 是
+#      case 形式、全文档 "fix all lint findings"；context.only 不含 quickfix 或
+#      range 与可修复 finding 不相交时回空数组。
 #
 # 只依赖 POSIX sh / awk / sed 与传入的 vuna 可执行文件。
 set -u
@@ -300,6 +308,7 @@ check_contains "initialize 声明 referencesProvider" "$init" '"referencesProvid
 check_contains "initialize 声明 documentSymbolProvider" "$init" '"documentSymbolProvider":true'
 check_contains "initialize 声明 documentFormattingProvider" "$init" '"documentFormattingProvider":true'
 check_contains "initialize 声明 workspaceSymbolProvider" "$init" '"workspaceSymbolProvider":true'
+check_contains "initialize 声明 codeActionProvider(codeActionKinds=[quickfix])" "$init" '"codeActionProvider":{"codeActionKinds":["quickfix"]}'
 
 # ---- 2) 含 import 的模块类型错误诊断（不再跳过）+ 0-based 范围 ----
 diag_open=$(frame_at 2)
@@ -510,6 +519,39 @@ check_contains "doc hover 回 id 2" "$dochover_out" '"id":2'
 check_contains "doc hover 显示 docstring" "$dochover_out" "Helper docs"
 check_contains "doc hover 保留多行" "$dochover_out" "second line"
 check_not_contains "doc hover 不含普通注释" "$dochover_out" "ordinary note"
+
+# ---- 21) codeAction：lint quick fix（M38 P1c）----
+# Linty.vuna 的 literal-if-chain：Edit 行范围 1-based 5..7（整行替换）。
+# 请求 range 用 LSP 的 0-based 4..6，与 Edit 相交 → 1 条单条 quickfix + 1 条 fix all。
+# 断言 0-based 整行替换 range = (4,0)..(7,0)（末端是下一行行首，不吞第 8 行）。
+ca_open='{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"'"$linty_uri"'","languageId":"vuna","version":1,"text":"module Linty where\n\nnameArity : String -> Int\nnameArity name =\n  if name == \"+\" then 2\n  else if name == \"-\" then 2\n  else 0\n"}}}'
+ca_req='{"jsonrpc":"2.0","id":2,"method":"textDocument/codeAction","params":{"textDocument":{"uri":"'"$linty_uri"'"},"range":{"start":{"line":4,"character":0},"end":{"line":6,"character":0}},"context":{"diagnostics":[]}}}'
+ca_only='{"jsonrpc":"2.0","id":3,"method":"textDocument/codeAction","params":{"textDocument":{"uri":"'"$linty_uri"'"},"range":{"start":{"line":4,"character":0},"end":{"line":6,"character":0}},"context":{"diagnostics":[],"only":["source.organizeImports"]}}}'
+ca_outside='{"jsonrpc":"2.0","id":4,"method":"textDocument/codeAction","params":{"textDocument":{"uri":"'"$linty_uri"'"},"range":{"start":{"line":0,"character":0},"end":{"line":0,"character":0}},"context":{"diagnostics":[]}}}'
+{
+  frame_line '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"capabilities":{}}}'
+  frame_line "$ca_open"
+  frame_line "$ca_req"
+  frame_line "$ca_only"
+  frame_line "$ca_outside"
+  frame_line '{"jsonrpc":"2.0","id":5,"method":"shutdown","params":null}'
+  frame_line '{"jsonrpc":"2.0","method":"exit","params":null}'
+} | "$VUNA" lsp >"$tmp/codeaction.out" 2>/dev/null
+ca_code=$?
+ca_out=$(tr -d '\r' <"$tmp/codeaction.out")
+check_eq "codeAction 会话退出码 0" "0" "$ca_code"
+check_contains "codeAction 回 id 2" "$ca_out" '"id":2'
+check_contains "codeAction kind=quickfix" "$ca_out" '"kind":"quickfix"'
+check_contains "codeAction title 带规则短名" "$ca_out" '"title":"fix: literal-if-chain"'
+check_contains "codeAction 关联诊断 code" "$ca_out" '"diagnostics":[{"code":"LN_LiteralIfChain"}]'
+check_contains "codeAction 编辑按 uri 分组" "$ca_out" '"changes":{"'"$linty_uri"'":[{'
+check_contains "codeAction 是 0-based 整行替换 range（4..7）" "$ca_out" \
+  '"range":{"start":{"line":4,"character":0},"end":{"line":7,"character":0}}'
+check_contains "codeAction newText 改写为 case" "$ca_out" 'case name of'
+check_contains "codeAction 含全文档 fix all" "$ca_out" '"title":"fix all lint findings"'
+check_contains "context.only 不含 quickfix → 空数组" "$ca_out" '"id":3,"result":[]'
+check_contains "range 无相交可修复 finding → 空数组" "$ca_out" '"id":4,"result":[]'
+
 printf 'lsp: %d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ] && echo "lsp smoke passed"
 [ "$fail" -eq 0 ]
