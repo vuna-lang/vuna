@@ -51,12 +51,12 @@
 | `Elab.Records` | `record` 的语法降级：记录 → 单构造器 `data`、字段访问/更新（纯 Ast→Ast） | `desugarRecords`、`RecordInfo` |
 | `Elab.Derive` | `deriving` 的实例生成（展开成等价 `instance`，交给既有实例精化） | `expandDerivings` |
 | `Codegen`（门面） | DT 擦除 codegen 的稳定入口；重导出 `Codegen.Assembly` 与 `Codegen.Split` | `checkDtProgram`、`generateDtSplitProgram` |
-| `Codegen.Decl` | OCaml 名字编码（sanitize/前缀/保留字）+ 变体类型声明；构造子字段形状 keep flags 的实际消费点；内置身份按完整符号（canonical Bool 族不进运行时变体） | `ctorOcamlName`、`genTypeDecls`、`ctorKeepFlags` |
+| `Codegen.Decl` | OCaml 名字编码（sanitize/前缀/保留字）+ 跨单元引用限定（`Unit.name`）+ 变体类型声明；构造子字段形状 keep flags 的实际消费点；内置身份按完整符号（canonical Bool 族不进运行时变体） | `ctorOcamlName`、`qualValueText`、`qualCtorText`、`qualTypeText`、`genTypeDecls`、`ctorKeepFlags` |
 | `Codegen.Erase` | 擦除检查、de Bruijn 作用域/名字护栏、依赖分析与 SCC 分组；axiom 强制进类型级分区，运行时使用报 `CG_AxiomAtRuntime` | `checkAllErasure`、`checkAllDefScopes`、`ensureUniqueOcamlNames`、`checkNoAxiomRuntime` |
 | `Codegen.Term` | 项 → OCaml（擦除驱动）+ DT 运行时前缀（`bi_*`、`dtp_*`、IO 桥接）；全局名 → runtime 映射消费 `Intrinsics` | `dtRuntime`、`genDtHook`、`genGroups` |
 | `Codegen.Assembly` | 同一份 `DtProgram` 的装配与检查入口 | `prepareDtProgram`、`genUnitText`、`mainHook`、`checkDtProgram` |
-| `Codegen.Split` | **唯一** codegen 生成器：逐模块 split 的声明归属表与分文件装配 | `generateDtSplitProgram` |
-| `Driver.Split` | 输出文件模型与构建脚本生成：`SplitFile`、依赖序、按内容哈希增量的 `build.sh` | `SplitFile`、`buildScript`、`writeSplitFiles`、`writeSplitFilesIfChanged` |
+| `Codegen.Split` | **唯一** codegen 生成器：逐模块 split 的声明归属表、每单元直接依赖与分文件装配 | `generateDtSplitProgram` |
+| `Driver.Split` | 输出文件模型与构建脚本生成：`SplitFile`（文件名 + 文本 + 直接依赖）、依赖图分层、按内容哈希增量的 `build.sh` | `SplitFile`、`splitGraph`、`splitLayers`、`buildScript`、`writeSplitFiles`、`writeSplitFilesIfChanged` |
 | `Driver.Dt` | DT 路径 facade（供 `Compile` / `CompilerCli` / `Interp` / LSP 使用）：单一 `PackageContext` 加载形状；内存源码检查/洞目标、`dtMainKind`、`dtEvalExprInfo` | `dtCheck`、`dtCheckLibrary`、`dtCheckSource`、`dtGoalsSource`、`dtSplitProject`、`dtEvalFile`、`dtMainKind` |
 | `Driver.Compile` | 编译入口：`PackageContext` 检查/编译、目录式 codegen、构建脚本执行；build meta（确定性/依赖闭包哈希/同哈希跳过）与递归建目录 | `checkPackage`、`compileToDir`、`buildMetaText`、`metaUpToDate`、`writeBuildMeta` |
 | `Driver.CompilerCli` | 编译器自己的 CLI（`vuna-compiler`）；含受限进程执行入口 `runIn`；workspace check/build 单元、`build --package`、`version` | `runCompilerCli`、`compilerUsageLines`、`runIn` |
@@ -100,8 +100,8 @@
   classes / insts）；
 - `Codegen.Assembly` 对同一 `DtProgram` 装配运行时 / 模块 / `Main` 的 unit 计划与文本
   （`prepareDtProgram` / `genUnitText` / `mainHook`）；
-- `Codegen.Split.generateDtSplitProgram` 按 loader 模块序切成逐模块 `SplitFile`
-  （**唯一输出模型**；`compile` 与 `build` 都走它）。
+- `Codegen.Split.generateDtSplitProgram` 按 loader 模块序与声明归属切成逐模块 `SplitFile`
+  （含每单元的直接依赖；**唯一输出模型**；`compile` 与 `build` 都走它）。
 
 `check` 只做精化 + 擦除检查并返回警告，不生成代码；包级检查：有 `app/Main.vuna` 的可执行包
 检查该入口，库包以 `[export].modules` 为根。
@@ -121,8 +121,9 @@
 
 只用 OCaml 标准库 + Unix（运行时前导代码），不依赖解释循环。代码质量要点：
 
-- **依赖分组**：用 Kosaraju SCC 求函数依赖分量（`Codegen.Erase.groupRuntimeDefs`），
-  自/互递归分量才用 `let rec ... and ...`，非自递归单函数用 `let`；
+- **依赖分组**（函数级 SCC，与模块间依赖无关）：用 Kosaraju SCC 求函数依赖分量
+  （`Codegen.Erase.groupRuntimeDefs`），自/互递归分量才用 `let rec ... and ...`，非自递归
+  单函数用 `let`；
 - **比较运算符特化**：精化期按实参类型把 `==` `/=` `<` `<=` `>` `>=` 重写为
   `bi_eq_int` / `bi_eq_str` 等单态 helper；其它类型走 `Eq`/`Ord` 字典参数；
 - **短路**：`a && b` / `a || b` 在精化期降成 `TIf`，左侧能决定结果时不求值右侧；
@@ -134,21 +135,32 @@
 
 编译产物为 OCaml 源码后由 `ocamlopt` 编译链接：`vuna compile` 只产源码目录，由调用方执行
 生成的 `build.sh` 编译；`vuna build` 在 codegen 后直接执行 `build.sh`
-（`Driver.Split.buildScript`，flags `-g -w -a+39 -warn-error +39`），做模块级增量构建并
-链接出 `DIR/bin/<包名>`。
+（`Driver.Split.buildScript`，flags `-g -w -a+39 -warn-error +39`），按直接依赖分层构建
+（层内并行）、每模块精确增量并链接出 `DIR/bin/<包名>`。
 
 ### 输出模型（唯一：逐模块 split）
 
 `Codegen.Split.generateDtSplitProgram`（包级入口 `Driver.Dt.dtSplitProject`）接收 loader 的
-模块序（依赖在前）、entry decls 与完整 `DtProgram`，产出 `List SplitFile`：
+模块序（依赖在前）、entry decls 与完整 `DtProgram`，产出 `List SplitFile`；每个 `SplitFile`
+= 文件名 + 文本 + **直接依赖单元列表**（含 `Vuna_runtime`、不含自身；runtime 单元依赖为空，
+其余依赖只记实际引用到的单元，不是「所有前序单元」）：
 
 1. `Vuna_runtime.ml`：`dtRuntime`；
 2. 每个源码模块一个 `<Module>.ml`（OCaml 编译单元名 = 模块名点转 `_d`，如
-   `Vuna_dCompiler_dFrontend_dParser.ml`；依赖序，文件头 `open` runtime 与更早模块）；
-   `List` 桥接放在声明 `List` 族的模块文件里；
+   `Vuna_dCompiler_dFrontend_dParser.ml`；拓扑序）。文件头**只** `open Vuna_runtime`，
+   没有 open 链；跨单元引用（值 `v_*` / 构造子 `C_*` / 类型 `t_*`）一律渲染成 OCaml
+   限定名 `Unit.name`（`Unit` = 定义该名字的编译单元，如
+   `Base_dList.C_Base_dList_dList_Cons`），同单元内仍是裸名；`List` 桥接放在声明 `List`
+   族的模块文件里；
 3. `Main.ml`：entry decls 的 datas + defs + `main` 钩子（入口文件里的 `data` 也必须发进来）；
 4. `build.sh`：不在生成器内，由 `Driver.Compile.compileToDir` 用 `Driver.Split.buildScript`
-   写盘（干净构建 / 增量构建）；`vuna build` 随后执行它。
+   写盘；`vuna build` 随后执行它。
+
+`build.sh` 两条路径都按 `SplitFile` 的直接依赖工作：干净构建（无 `.cmx`）一次 `ocamlopt`
+编译全部源码；增量构建按依赖分层（`depth(u) = 1 + max(depth(dep))`，同层单元互不依赖），
+单单元层前台、多单元层 `&` + `wait` 并行，每单元 stamp 只含自身 `.ml/.mli` 与**直接依赖**
+的 `.stamp` 内容哈希——改一个单元只重编它的（直接/传递）依赖者。链接顺序 = 拓扑序
+（依赖在前）。依赖图是精确 DAG，旧的「全序 open 链 / 文件顺序即依赖顺序」模型已不存在。
 
 文件划分只由源码顺序与名字决定，不依赖时间 / 环境（确定性）；无法归属的 `DtDef` /
 `DtData` 报清晰错误，不静默丢弃。生成链的护栏（构造子字段形状单一真源、

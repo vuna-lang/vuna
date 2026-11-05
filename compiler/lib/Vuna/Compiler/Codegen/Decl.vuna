@@ -1,5 +1,6 @@
 module Vuna.Compiler.Codegen.Decl
-  ( boolText
+  ( QualCtx(..)
+  , boolText
   , ctorKeepFlags
   , ctorOcamlName
   , ctorShapeOf
@@ -7,11 +8,19 @@ module Vuna.Compiler.Codegen.Decl
   , genTypeDeclsOf
   , genTypeDeclsWith
   , joinWith
+  , noQual
   , ocamlBinderName
   , ocamlString
+  , qualCtorText
+  , qualOf
+  , qualTypeText
+  , qualValueText
   , runtimeDatas
   , sanitizeName
+  , typeDepsOf
   , typeName
+  , unitOfTbl
+  , unitTblOf
   , usedTableOf
   , valueName
   ) where
@@ -25,6 +34,7 @@ module Vuna.Compiler.Codegen.Decl
 -- 类型参数分配规则与字段渲染必须共用同一份「用到哪些族参数」表（不动点计算），
 -- 否则声明与实参位置会漂移；详见 genTypeDeclsOf 上方的注释。
 import Vuna.Compiler.Common
+import Base.HashMap
 import Vuna.Compiler.Core
 import Vuna.Compiler.Elab
 import Vuna.Compiler.Intrinsics
@@ -76,6 +86,104 @@ typeName name = "t_" ++ sanitizeName name
 
 ctorOcamlName : String -> String -> String
 ctorOcamlName family ctor = "C_" ++ sanitizeName family ++ "_" ++ sanitizeName ctor
+
+-- ---------------------------------------------------------------
+-- 跨单元引用限定（C35）
+-- ---------------------------------------------------------------
+--
+-- split 产物里每个单元只 `open Vuna_runtime`（运行时 helper 是唯一共享前缀），
+-- 其余跨单元引用（值 `v_*` / 构造子 `C_*` / 类型 `t_*`）一律渲染成 OCaml 限定名
+-- `Unit.name`；同单元引用仍是裸名（`let rec` 组与类型声明内部不写自限定）。
+-- `Unit` = `sanitizeName` 后的编译单元名，必须已编译 —— 每单元只依赖**实际引用**
+-- 到的单元（见 `typeDepsOf` 与 `Codegen.Term` 的 dep 累积），依赖图因此是精确
+-- DAG 而不是「所有前序单元」的全序。
+--
+-- `QualCtx` 只承载「名字 → 归属单元」这两张表与当前单元；`noQual` 是 check 路径
+-- （单文件装配、文本丢弃）用的空表，所有引用都回落成裸名。
+record QualCtx where
+  qcUnit : String
+  qcDefs : HashMap String
+  qcDatas : HashMap String
+
+noQual : QualCtx
+noQual = QualCtx "" (Base.HashMap.fromList []) (Base.HashMap.fromList [])
+
+unitTblOf : List (Pair String String) -> HashMap String
+unitTblOf pairs = Base.HashMap.insertAll pairs (Base.HashMap.fromList [])
+
+unitOfTbl : HashMap String -> String -> String
+unitOfTbl tbl name = case Base.HashMap.lookup name tbl of
+  Just u => u
+  Nothing => ""
+
+qualOf : String -> List (Pair String String) -> List (Pair String String) -> QualCtx
+qualOf unit defs datas = QualCtx unit (unitTblOf defs) (unitTblOf datas)
+
+-- 跨单元引用前缀：同单元 / 未知归属（内建名由调用方先处理）→ 裸名 + 无依赖。
+qualPrefix : QualCtx -> String -> String -> Pair String String
+qualPrefix qc owner text =
+  if owner == "" || owner == qc.qcUnit then Pair text "" else Pair (owner ++ "." ++ text) owner
+
+-- (OCaml 文本, 依赖单元或 "")
+qualValueText : QualCtx -> String -> Pair String String
+qualValueText qc name = qualPrefix qc (unitOfTbl qc.qcDefs name) (valueName name)
+
+qualCtorText : QualCtx -> String -> String -> Pair String String
+qualCtorText qc family ctor =
+  qualPrefix qc (unitOfTbl qc.qcDatas family) (ctorOcamlName family ctor)
+
+qualTypeText : QualCtx -> String -> Pair String String
+qualTypeText qc name = qualPrefix qc (unitOfTbl qc.qcDatas name) (typeName name)
+
+-- 类型声明的跨单元依赖：ctor 类型项里出现的族名（`renderFieldTy` 只把 `allDatas`
+-- 里的 runtime 族渲染成 `t_*`，其余全局名退化成不透明类型参数，因此这里按
+-- `qcDatas` 过滤即可）。显式 Pi 字段与普通字段都在同一个类型项里，不用分别扫。
+termGlobalNames : List String -> Term -> List String
+termGlobalNames acc (TGlobal name) = addUniqueName name acc
+termGlobalNames acc (TVar name i) = acc
+termGlobalNames acc (TMeta m) = acc
+termGlobalNames acc (TType l) = acc
+termGlobalNames acc (TPi name implicit rig dom cod) = termGlobalNames (termGlobalNames acc dom) cod
+termGlobalNames acc (TLam name rig body) = termGlobalNames acc body
+termGlobalNames acc (TApp f a rig) = termGlobalNames (termGlobalNames acc f) a
+termGlobalNames acc (TCon c args) = termGlobalNamesInArgs acc args
+termGlobalNames acc (TCase scrut alts) = termGlobalNamesInAlts (termGlobalNames acc scrut) alts
+termGlobalNames acc (TInt n) = acc
+termGlobalNames acc (TStr s) = acc
+termGlobalNames acc (TBool b) = acc
+termGlobalNames acc (TIf c th el) = termGlobalNames (termGlobalNames (termGlobalNames acc c) th) el
+
+termGlobalNamesInArgs : List String -> List (Pair Term Rig) -> List String
+termGlobalNamesInArgs acc [] = acc
+termGlobalNamesInArgs acc (p :: rest) = termGlobalNamesInArgs (termGlobalNames acc (firstOf p)) rest
+
+termGlobalNamesInAlts : List String -> List CaseAlt -> List String
+termGlobalNamesInAlts acc [] = acc
+termGlobalNamesInAlts acc (a :: rest) =
+  termGlobalNamesInAlts (termGlobalNames acc (caseAltBody a)) rest
+
+addUniqueName : String -> List String -> List String
+addUniqueName name [] = [name]
+addUniqueName name (x :: rest) = if x == name then x :: rest else x :: addUniqueName name rest
+
+dataTypeGlobalNames : DtData -> List String
+dataTypeGlobalNames d = dataTypeGlobalNamesGo [] (dtDataCtors d)
+
+dataTypeGlobalNamesGo : List String -> List DtCtor -> List String
+dataTypeGlobalNamesGo acc [] = acc
+dataTypeGlobalNamesGo acc (c :: rest) =
+  dataTypeGlobalNamesGo (termGlobalNames acc (dtCtorType c)) rest
+
+typeDepsOf : QualCtx -> List DtData -> List String
+typeDepsOf qc datas = typeDepsOfGo qc (concatMap dataTypeGlobalNames datas) []
+
+typeDepsOfGo : QualCtx -> List String -> List String -> List String
+typeDepsOfGo qc [] acc = reverse acc
+typeDepsOfGo qc (n :: rest) acc =
+  let
+    owner = unitOfTbl qc.qcDatas n
+  in if owner == "" || owner == qc.qcUnit then typeDepsOfGo qc rest acc
+  else if memName owner acc then typeDepsOfGo qc rest acc else typeDepsOfGo qc rest (owner :: acc)
 
 -- M24.6：lambda binder 是唯一直接写裸标识符的地方（值/类型/构造子名都有 v_/t_/C_ 前缀，
 -- 不会撞 OCaml 保留字）。vuna 允许 `method` / `type` 一类标识符，OCaml 不允许，这里统一
@@ -308,42 +416,42 @@ else
     next = map (\d => Pair (dtDataName d) (dataUsedLevels d table datas)) datas
   in if sameLevelTable next table then next else usedTableFixFuel (fuel - 1) datas next
 
--- 字段/类型实参渲染。
-familyTyText : String -> List String -> String
-familyTyText name [] = typeName name
-familyTyText name ([a]) = a ++ " " ++ typeName name
-familyTyText name args = "(" ++ joinWith ", " args ++ ") " ++ typeName name
+-- 字段/类型实参渲染（族名走 `qualTypeText`：跨单元时带 `Unit.` 前缀）。
+familyTyText : QualCtx -> String -> List String -> String
+familyTyText qc name [] = firstOf (qualTypeText qc name)
+familyTyText qc name ([a]) = a ++ " " ++ firstOf (qualTypeText qc name)
+familyTyText qc name args = "(" ++ joinWith ", " args ++ ") " ++ firstOf (qualTypeText qc name)
 
-renderFamilyArgs : List Int -> List (Pair String (List Int)) -> List DtData -> List Int -> List Value -> List String
-renderFamilyArgs levels table datas usedPats args =
-  renderFamilyArgsFuel 256 levels table datas usedPats args
+renderFamilyArgs : QualCtx -> List Int -> List (Pair String (List Int)) -> List DtData -> List Int -> List Value -> List String
+renderFamilyArgs qc levels table datas usedPats args =
+  renderFamilyArgsFuel qc 256 levels table datas usedPats args
 
-renderFamilyArgsFuel : Int -> List Int -> List (Pair String (List Int)) -> List DtData -> List Int -> List Value -> List String
-renderFamilyArgsFuel fuel levels table datas usedPats args = if fuel <= 0 then []
+renderFamilyArgsFuel : QualCtx -> Int -> List Int -> List (Pair String (List Int)) -> List DtData -> List Int -> List Value -> List String
+renderFamilyArgsFuel qc fuel levels table datas usedPats args = if fuel <= 0 then []
 else case usedPats of
   [] => []
   i :: rest => case nthValue args i of
     Just arg =>
-      renderTypeArgFuel (fuel - 1) levels table datas arg
-        :: renderFamilyArgsFuel (fuel - 1) levels table datas rest args
-    Nothing => renderFamilyArgsFuel (fuel - 1) levels table datas rest args
+      renderTypeArgFuel qc (fuel - 1) levels table datas arg
+        :: renderFamilyArgsFuel qc (fuel - 1) levels table datas rest args
+    Nothing => renderFamilyArgsFuel qc (fuel - 1) levels table datas rest args
 
-renderTypeArg : List Int -> List (Pair String (List Int)) -> List DtData -> Value -> String
-renderTypeArg levels table datas v = renderTypeArgFuel 256 levels table datas v
+renderTypeArg : QualCtx -> List Int -> List (Pair String (List Int)) -> List DtData -> Value -> String
+renderTypeArg qc levels table datas v = renderTypeArgFuel qc 256 levels table datas v
 
-renderTypeArgFuel : Int -> List Int -> List (Pair String (List Int)) -> List DtData -> Value -> String
-renderTypeArgFuel fuel levels table datas v = if fuel <= 0 then "unit"
+renderTypeArgFuel : QualCtx -> Int -> List Int -> List (Pair String (List Int)) -> List DtData -> Value -> String
+renderTypeArgFuel qc fuel levels table datas v = if fuel <= 0 then "unit"
 else case v of
   VNeutral n => case n of
     NVar name lvl sp => case levelSlot levels lvl of
       Just s => typeParamName s
       Nothing => "unit"
-    NGlobal g sp => renderTypeArgGlobal fuel levels table datas g sp
+    NGlobal g sp => renderTypeArgGlobal qc fuel levels table datas g sp
   _ => "unit"
 
 -- 全局类型头：内建类型构造子优先，其次 primitive 类型，最后程序里的 data 族。
-renderTypeArgGlobal : Int -> List Int -> List (Pair String (List Int)) -> List DtData -> String -> List Value -> String
-renderTypeArgGlobal fuel levels table datas g sp = case renderTypeIntrinsic g (map (\x => renderTypeArgFuel (fuel - 1) levels table datas x) sp) of
+renderTypeArgGlobal : QualCtx -> Int -> List Int -> List (Pair String (List Int)) -> List DtData -> String -> List Value -> String
+renderTypeArgGlobal qc fuel levels table datas g sp = case renderTypeIntrinsic g (map (\x => renderTypeArgFuel qc (fuel - 1) levels table datas x) sp) of
   Just t => t
   Nothing => if g == intTypeName then "int"
   else if g == natTypeName then "int"
@@ -351,7 +459,8 @@ renderTypeArgGlobal fuel levels table datas g sp = case renderTypeIntrinsic g (m
   else if g == boolTypeName then "bool"
   else case findDtData g datas of
     Just gd =>
-      familyTyText g (renderFamilyArgsFuel (fuel - 1) levels table datas (lookupUsed table g) sp)
+      familyTyText qc g
+        (renderFamilyArgsFuel qc (fuel - 1) levels table datas (lookupUsed table g) sp)
     Nothing => "unit"
 
 -- M33 W3：内建类型构造子的 OCaml 类型渲染。参数文本已由调用方递归渲染。
@@ -367,32 +476,32 @@ renderTypeIntrinsic _ _ = Nothing
 -- 显式 Pi 字段（`(Int -> a)` 这类）**结构化渲染**：它把族参数（IO 的结果类型）带进
 -- OCaml 类型，顶层值就不会留下弱类型变量。带隐式量词的 Pi（trait 方法签名，如
 -- `bind : m a -> (a -> m b) -> m b`）整体不透明——方法级多态没法用 OCaml 类型表达。
-renderPiTy : List Int -> List (Pair String (List Int)) -> List DtData -> Int -> Value -> String
-renderPiTy levels table datas lvl v = renderPiTyFuel 256 levels table datas lvl v
+renderPiTy : QualCtx -> List Int -> List (Pair String (List Int)) -> List DtData -> Int -> Value -> String
+renderPiTy qc levels table datas lvl v = renderPiTyFuel qc 256 levels table datas lvl v
 
-renderPiTyFuel : Int -> List Int -> List (Pair String (List Int)) -> List DtData -> Int -> Value -> String
-renderPiTyFuel fuel levels table datas lvl v = if fuel <= 0 then renderTypeArg levels table datas v
+renderPiTyFuel : QualCtx -> Int -> List Int -> List (Pair String (List Int)) -> List DtData -> Int -> Value -> String
+renderPiTyFuel qc fuel levels table datas lvl v = if fuel <= 0 then renderTypeArg qc levels table datas v
 else case v of
   VPi name implicit rig dom clo =>
     let
       next = applyClosure clo (VNeutral (NVar name lvl []))
-    in if rigIsErased rig then renderPiTyFuel (fuel - 1) levels table datas (lvl + 1) next
+    in if rigIsErased rig then renderPiTyFuel qc (fuel - 1) levels table datas (lvl + 1) next
     else "("
-      ++ renderPiTyFuel (fuel - 1) levels table datas lvl dom
+      ++ renderPiTyFuel qc (fuel - 1) levels table datas lvl dom
       ++ ") -> "
-      ++ renderPiTyFuel (fuel - 1) levels table datas (lvl + 1) next
-  _ => renderTypeArg levels table datas v
+      ++ renderPiTyFuel qc (fuel - 1) levels table datas (lvl + 1) next
+  _ => renderTypeArg qc levels table datas v
 
 -- 单个字段的 OCaml 类型 + 下一个不透明参数槽。
-renderFieldTy : List Int -> List (Pair String (List Int)) -> List DtData -> Int -> Value -> Int -> Pair String Int
-renderFieldTy levels table datas lvl (dom@(VPi name implicit rig d clo)) slot =
+renderFieldTy : QualCtx -> List Int -> List (Pair String (List Int)) -> List DtData -> Int -> Value -> Int -> Pair String Int
+renderFieldTy qc levels table datas lvl (dom@(VPi name implicit rig d clo)) slot =
   if implicit then Pair (typeParamName slot) (slot + 1)
-  else Pair (renderPiTy levels table datas lvl dom) slot
-renderFieldTy levels table datas lvl (VNeutral n) slot = case n of
+  else Pair (renderPiTy qc levels table datas lvl dom) slot
+renderFieldTy qc levels table datas lvl (VNeutral n) slot = case n of
   NVar name lvl2 sp => case levelSlot levels lvl2 of
     Just s => Pair (typeParamName s) slot
     Nothing => Pair (typeParamName slot) (slot + 1)
-  NGlobal g sp => case renderTypeIntrinsic g (map (\x => renderTypeArg levels table datas x) sp) of
+  NGlobal g sp => case renderTypeIntrinsic g (map (\x => renderTypeArg qc levels table datas x) sp) of
     Just t => Pair t slot
     Nothing => if g == intTypeName then Pair "int" slot
     else if g == natTypeName then Pair "int" slot
@@ -400,9 +509,10 @@ renderFieldTy levels table datas lvl (VNeutral n) slot = case n of
     else if g == boolTypeName then Pair "bool" slot
     else case findDtData g datas of
       Just gd =>
-        Pair (familyTyText g (renderFamilyArgs levels table datas (lookupUsed table g) sp)) slot
+        Pair (familyTyText qc g (renderFamilyArgs qc levels table datas (lookupUsed table g) sp))
+          slot
       Nothing => Pair (typeParamName slot) (slot + 1)
-renderFieldTy levels table datas lvl _ slot = Pair (typeParamName slot) (slot + 1)
+renderFieldTy qc levels table datas lvl _ slot = Pair (typeParamName slot) (slot + 1)
 
 -- 构造子字段形状的**唯一真源**（M24.6 第一级）：从 telescope 的 rig 算出 keep flags
 -- （True = 该 binder 进运行时表示）。类型声明、构造子应用、case 分支绑定三处都消费
@@ -419,31 +529,31 @@ ctorShapeOf [] = []
 ctorShapeOf (d :: rest) =
   append (map (\c => Pair (dtCtorName c) (ctorKeepFlags c)) (dtDataCtors d)) (ctorShapeOf rest)
 
-ctorFieldTexts : List Int -> List (Pair String (List Int)) -> List DtData -> List Bool -> List (Pair String Rig) -> Int -> Value -> Int -> Result (Pair (List String) Int)
-ctorFieldTexts levels table datas keepFlags [] lvl v slot = Ok (Pair [] slot)
-ctorFieldTexts levels table datas [] (_ :: _) lvl v slot =
+ctorFieldTexts : QualCtx -> List Int -> List (Pair String (List Int)) -> List DtData -> List Bool -> List (Pair String Rig) -> Int -> Value -> Int -> Result (Pair (List String) Int)
+ctorFieldTexts qc levels table datas keepFlags [] lvl v slot = Ok (Pair [] slot)
+ctorFieldTexts qc levels table datas [] (_ :: _) lvl v slot =
   Err "DT: internal: constructor shape has more binders than its telescope"
-ctorFieldTexts levels table datas (keep :: flags) ((Pair name rig) :: rest) lvl v slot = if flagMatchesRig keep rig then case v of
+ctorFieldTexts qc levels table datas (keep :: flags) ((Pair name rig) :: rest) lvl v slot = if flagMatchesRig keep rig then case v of
   VPi pname implicit _ dom clo =>
     let
       next = applyClosure clo (VNeutral (NVar pname lvl []))
-    in if keep then case renderFieldTy levels table datas lvl dom slot of
-      Pair text slot2 => andThen (ctorFieldTexts levels table datas flags rest (lvl + 1) next slot2) (\p => case p of
+    in if keep then case renderFieldTy qc levels table datas lvl dom slot of
+      Pair text slot2 => andThen (ctorFieldTexts qc levels table datas flags rest (lvl + 1) next slot2) (\p => case p of
         Pair texts slot3 => Ok (Pair (text :: texts) slot3)
       )
-    else ctorFieldTexts levels table datas flags rest (lvl + 1) next slot
+    else ctorFieldTexts qc levels table datas flags rest (lvl + 1) next slot
   _ => Err "DT: internal: constructor telescope does not match its type"
 else Err "DT: internal: constructor keep flag disagrees with telescope rig"
 
-ctorArityNeed : List Int -> List (Pair String (List Int)) -> List DtData -> DtCtor -> Result Int
-ctorArityNeed levels table datas c =
+ctorArityNeed : QualCtx -> List Int -> List (Pair String (List Int)) -> List DtData -> DtCtor -> Result Int
+ctorArityNeed qc levels table datas c =
   andThen
-    (ctorFieldTexts levels table datas (ctorKeepFlags c) (dtCtorTelescope c) 0 (eval [] (dtCtorType c)) (length levels))
+    (ctorFieldTexts qc levels table datas (ctorKeepFlags c) (dtCtorTelescope c) 0 (eval [] (dtCtorType c)) (length levels))
     (\p => Ok (secondOf p - length levels))
 
-dataArityNeed : List Int -> List (Pair String (List Int)) -> List DtData -> List DtCtor -> Result Int
-dataArityNeed levels table datas ctors =
-  andThen (traverse (ctorArityNeed levels table datas) ctors)
+dataArityNeed : QualCtx -> List Int -> List (Pair String (List Int)) -> List DtData -> List DtCtor -> Result Int
+dataArityNeed qc levels table datas ctors =
+  andThen (traverse (ctorArityNeed qc levels table datas) ctors)
     (\ns => Ok (length levels + maxIntList ns))
 
 maxIntList : List Int -> Int
@@ -462,18 +572,18 @@ parenList (t :: rest) = append [parenOne t] (parenList rest)
 parenOne : String -> String
 parenOne t = "(" ++ t ++ ")"
 
-genCtorDecl : List Int -> List (Pair String (List Int)) -> List DtData -> DtCtor -> Result String
-genCtorDecl levels table datas c =
+genCtorDecl : QualCtx -> List Int -> List (Pair String (List Int)) -> List DtData -> DtCtor -> Result String
+genCtorDecl qc levels table datas c =
   andThen
-    (ctorFieldTexts levels table datas (ctorKeepFlags c) (dtCtorTelescope c) 0 (eval [] (dtCtorType c)) (length levels))
+    (ctorFieldTexts qc levels table datas (ctorKeepFlags c) (dtCtorTelescope c) 0 (eval [] (dtCtorType c)) (length levels))
     (\p => Ok (ctorDeclText (ctorOcamlName (dtCtorFamily c) (dtCtorName c)) (firstOf p)))
 
-genDataDecl : List (Pair String (List Int)) -> List DtData -> DtData -> Result String
-genDataDecl table datas d =
+genDataDecl : QualCtx -> List (Pair String (List Int)) -> List DtData -> DtData -> Result String
+genDataDecl qc table datas d =
   let
     levels = lookupUsed table (dtDataName d)
-  in andThen (dataArityNeed levels table datas (dtDataCtors d))
-    (\arity => andThen (traverse (genCtorDecl levels table datas) (dtDataCtors d)) (\cs => Ok (typeParamDecl arity ++ typeName (dtDataName d) ++ " = " ++ ctorBodyText cs)))
+  in andThen (dataArityNeed qc levels table datas (dtDataCtors d))
+    (\arity => andThen (traverse (genCtorDecl qc levels table datas) (dtDataCtors d)) (\cs => Ok (typeParamDecl arity ++ typeName (dtDataName d) ++ " = " ++ ctorBodyText cs)))
 
 ctorBodyText : List String -> String
 ctorBodyText [] = "|"
@@ -499,13 +609,13 @@ runtimeDatas datas =
 usedTableOf : List DtData -> List (Pair String (List Int))
 usedTableOf datas = usedTableFix datas (map (\d => Pair (dtDataName d) []) datas)
 
-genTypeDeclsOf : List DtData -> List DtData -> Result String
-genTypeDeclsOf allDatas subset = genTypeDeclsWith (usedTableOf allDatas) allDatas subset
+genTypeDeclsOf : QualCtx -> List DtData -> List DtData -> Result String
+genTypeDeclsOf qc allDatas subset = genTypeDeclsWith qc (usedTableOf allDatas) allDatas subset
 
-genTypeDeclsWith : List (Pair String (List Int)) -> List DtData -> List DtData -> Result String
-genTypeDeclsWith table allDatas [] = Ok ""
-genTypeDeclsWith table allDatas subset =
-  andThen (traverse (genDataDecl table allDatas) subset)
+genTypeDeclsWith : QualCtx -> List (Pair String (List Int)) -> List DtData -> List DtData -> Result String
+genTypeDeclsWith qc table allDatas [] = Ok ""
+genTypeDeclsWith qc table allDatas subset =
+  andThen (traverse (genDataDecl qc table allDatas) subset)
     (\parts => Ok ("type " ++ joinWith "\nand " parts ++ "\n\n"))
 
 collectUsedSpine : List Int -> List (Pair String (List Int)) -> List DtData -> Int -> List Value -> List Int

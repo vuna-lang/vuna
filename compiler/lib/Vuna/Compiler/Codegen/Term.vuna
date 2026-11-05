@@ -200,30 +200,47 @@ genGlobalRef : GenSt -> String -> Result (Pair String GenSt)
 genGlobalRef st name = if name == natZeroCtor then Ok (Pair "0" st)
 else if name == natSuccCtor then Ok (Pair "bi_natSucc" st)
 else case lookupPair name st.gsCtors of
-  Just family => Ok (Pair (ctorOcamlName family name) st)
+  Just family =>
+    let
+      p = genCtorRef st family name
+    in Ok (Pair (firstOf p) (secondOf p))
   Nothing => case findIntrinsic name of
-    Just i =>
-      if intrinsicReturnsIO i then andThen (ioPrimText st name i) (\text => Ok (Pair text st))
-      else if needsListBridge i then if memName listFamilyName st.gsFamilies then Ok (Pair i.intrinsicRuntime st)
-      else cgErr1 (ListBridgeRequired name) name
-      else Ok (Pair i.intrinsicRuntime st)
-    Nothing => Ok (Pair (valueName name) st)
+    Just i => if intrinsicReturnsIO i then ioPrimText st name i
+    else if needsListBridge i then if memName listFamilyName st.gsFamilies then
+      let
+        p = genBridgeRef st i.intrinsicRuntime
+      in Ok (Pair (firstOf p) (secondOf p))
+    else cgErr1 (ListBridgeRequired name) name
+    else Ok (Pair i.intrinsicRuntime st)
+    Nothing =>
+      let
+        p = genValueRef st name
+      in Ok (Pair (firstOf p) (secondOf p))
 
 -- M31：效果原语的 runtime 是「立刻算完的表达式」；IO 化后必须包成 `MkIO` 动作值，
 -- 由 main 钩子或 `runIO` 执行。构造子从 datas 表（gsCtors 的族反查）取，缺失时报
--- `CG_EffectPrimRequiresIO`（用了 prim_* 却没 import Base.IO）。
-ioPrimText : GenSt -> String -> Intrinsic -> Result String
+-- `CG_EffectPrimRequiresIO`（用了 prim_* 却没 import Base.IO）；构造子按 IO 族的
+-- 归属单元限定（C35，跨单元引用不再依赖 open 链）。
+-- `prim_getArgs` / `prim_readDir` 一类返回 `List` 的 effect 原语，其 runtime 文本里
+-- 内嵌 List 桥接 helper 调用（`dtp_listOf`），同样要按声明 List 族的单元限定。
+ioPrimText : GenSt -> String -> Intrinsic -> Result (Pair String GenSt)
 ioPrimText st name i = case ioCtorNameOf st of
   Nothing => cgErr1 (EffectPrimRequiresIO name) name
-  Just ctor => Ok (ioPrimLam ctor i.intrinsicRuntime (intrinsicArity i))
+  Just (Pair family ctor) =>
+    let
+      p = genCtorRef st family ctor
+      rt =
+        if needsListBridge i then genBridgeRef (secondOf p) i.intrinsicRuntime
+        else Pair i.intrinsicRuntime (secondOf p)
+    in Ok (Pair (ioPrimLam (firstOf p) (firstOf rt) (intrinsicArity i)) (secondOf rt))
 
-ioCtorNameOf : GenSt -> Maybe String
+ioCtorNameOf : GenSt -> Maybe (Pair String String)
 ioCtorNameOf st = ioCtorNameGo st.gsCtors
 
-ioCtorNameGo : List (Pair String String) -> Maybe String
+ioCtorNameGo : List (Pair String String) -> Maybe (Pair String String)
 ioCtorNameGo [] = Nothing
 ioCtorNameGo ((Pair ctor family) :: rest) =
-  if family == ioFamilyName then Just (ctorOcamlName family ctor) else ioCtorNameGo rest
+  if family == ioFamilyName then Just (Pair family ctor) else ioCtorNameGo rest
 
 ioPrimLam : String -> String -> Int -> String
 ioPrimLam ctor rt arity = if arity == 0 then "(" ++ ctor ++ " (fun _ -> " ++ rt ++ "))"
@@ -246,7 +263,8 @@ else case names of
 -- 项 → OCaml
 -- ---------------------------------------------------------------
 --
--- 生成状态：族名表、构造子 → 族表、构造子形状表、fresh 变量计数。
+-- 生成状态：族名表、构造子 → 族表、构造子形状表、fresh 变量计数，外加 C35 的
+-- 跨单元限定上下文（`gsQual`）与已引用的依赖单元（`gsDeps`，生成期单调累积）。
 -- binder 环境是「最近绑定在前」的 (OCaml 变量名, 是否擦除)，TVar 靠 index 解析。
 -- M24.6：`gsCtorShapes` 是构造子字段形状的唯一真源，构造子应用与 case 分支都按它
 -- 校验/生成（见 `ctorKeepFlags`）。
@@ -255,13 +273,15 @@ record GenSt where
   gsCtors : List (Pair String String)
   gsCtorShapes : List (Pair String (List Bool))
   gsNext : Int
+  gsQual : QualCtx
+  gsDeps : List String
 
 -- 程序声明的族名表（`strUnpack` / `strPack` 的映射要看有没有 List 族）。
 gsNext : GenSt -> Int
-gsNext (GenSt families ctors shapes next) = next
+gsNext (GenSt families ctors shapes next qual deps) = next
 
 gsPutNext : GenSt -> Int -> GenSt
-gsPutNext (GenSt families ctors shapes next) n = GenSt families ctors shapes n
+gsPutNext (GenSt families ctors shapes next qual deps) n = GenSt families ctors shapes n qual deps
 
 ctorTableOfData : DtData -> List (Pair String String)
 ctorTableOfData d = map (\c => Pair (dtCtorName c) (dtCtorFamily c)) (dtDataCtors d)
@@ -270,8 +290,63 @@ ctorTableOf : List DtData -> List (Pair String String)
 ctorTableOf [] = []
 ctorTableOf (d :: rest) = append (ctorTableOfData d) (ctorTableOf rest)
 
-mkGenSt : List DtData -> GenSt
-mkGenSt datas = GenSt (map dtDataName datas) (ctorTableOf datas) (ctorShapeOf datas) 0
+mkGenSt : QualCtx -> List DtData -> GenSt
+mkGenSt qc datas = GenSt (map dtDataName datas) (ctorTableOf datas) (ctorShapeOf datas) 0 qc []
+
+-- ---------------------------------------------------------------
+-- C35：跨单元引用限定与依赖累积
+-- ---------------------------------------------------------------
+--
+-- 每个单元只 `open Vuna_runtime`；值 / 构造子引用跨单元时渲染成 `Unit.name`，并把
+-- 归属单元记进 `gsDeps`（同单元引用裸名、不计）。依赖清单只在**实际引用**时产生，
+-- 因此分文件的编译依赖是精确 DAG，而不是「所有前序单元」的全序。
+gsAddDep : GenSt -> String -> GenSt
+gsAddDep st unit =
+  if unit == "" || memName unit st.gsDeps then st
+  else GenSt st.gsFamilies st.gsCtors st.gsCtorShapes st.gsNext st.gsQual (unit :: st.gsDeps)
+
+genValueRef : GenSt -> String -> Pair String GenSt
+genValueRef st name =
+  let
+    p = qualValueText st.gsQual name
+  in Pair (firstOf p) (gsAddDep st (secondOf p))
+
+genCtorRef : GenSt -> String -> String -> Pair String GenSt
+genCtorRef st family ctor =
+  let
+    p = qualCtorText st.gsQual family ctor
+  in Pair (firstOf p) (gsAddDep st (secondOf p))
+
+-- List 桥接 helper（`dtp_unpack` / `dtp_pack` / `dtp_listOf` / `dtp_ocamlOf` /
+-- `dtp_concatMany` / `dtp_substTemplate`）由 `Codegen.Term.dtListBridge` 生成在
+-- **声明 List 族的单元**里；其它单元引用这些 intrinsic runtime 文本时必须按该单元
+-- 限定（C35），否则会依赖已删除的 open 链。表必须覆盖 `Intrinsics` 里所有
+-- `needsListBridge` 的 runtime 文本引用到的 helper。
+bridgeHelperNames : List String
+bridgeHelperNames =
+  ["dtp_unpack", "dtp_pack", "dtp_listOf", "dtp_ocamlOf", "dtp_concatMany", "dtp_substTemplate"]
+
+bridgeUnitOf : GenSt -> String
+bridgeUnitOf st = unitOfTbl st.gsQual.qcDatas listFamilyName
+
+replaceAll : String -> String -> String -> String
+replaceAll old new text = join new (split old text)
+
+qualifyBridgeNames : String -> List String -> String -> String
+qualifyBridgeNames unit [] text = text
+qualifyBridgeNames unit (n :: rest) text =
+  qualifyBridgeNames unit rest (replaceAll n (unit ++ "." ++ n) text)
+
+qualifyBridgeText : String -> String -> String
+qualifyBridgeText unit text =
+  if unit == "" then text else qualifyBridgeNames unit bridgeHelperNames text
+
+-- (桥接文本, 依赖单元)
+genBridgeRef : GenSt -> String -> Pair String GenSt
+genBridgeRef st text =
+  let
+    unit = bridgeUnitOf st
+  in Pair (qualifyBridgeText unit text) (gsAddDep st unit)
 
 -- 运行时参数个数为 0 的定义（无 TLam 或只有擦除 TLam）。A05 后零参定义就是普通值
 -- 绑定（`let v_x = body`，模块初始化时求值），这里只用于递归值守卫的判据。
@@ -655,7 +730,10 @@ else case lookupPair c st.gsCtors of
   Just family => case lookupPair c st.gsCtorShapes of
     Nothing => Err ("DT: internal: no shape for constructor " ++ c)
     Just flags => andThen (alignCtorArgs c flags args) (\runtimeArgs => andThen (genConArgsFuel (fuel - 1) st binders runtimeArgs) (\p => case p of
-      Pair argTexts st2 => Ok (Pair (conAppText (ctorOcamlName family c) argTexts) st2)
+      Pair argTexts st2 =>
+        let
+          r = genCtorRef st2 family c
+        in Ok (Pair (conAppText (firstOf r) argTexts) (secondOf r))
     )
     )
 
@@ -685,9 +763,9 @@ else case lookupPair (caseAltName alt) st.gsCtors of
     Just flags => andThen (altEnvChecked st (caseAltName alt) outer (caseAltBinders alt) flags) (\bound => andThen (genTermFuel (fuel - 1) (aeSt bound) (aeEnv bound) (caseAltBody alt)) (\p => case p of
       Pair b st2 =>
         let
-          cname = ctorOcamlName family (caseAltName alt)
-          patText = armPatternText cname (aePats bound)
-        in Ok (Pair ("  | " ++ patText ++ " -> " ++ b ++ "\n") st2)
+          r = genCtorRef st2 family (caseAltName alt)
+          patText = armPatternText (firstOf r) (aePats bound)
+        in Ok (Pair ("  | " ++ patText ++ " -> " ++ b ++ "\n") (secondOf r))
     )
     )
 
@@ -968,11 +1046,14 @@ genDtHook bodyText table tyTerm mainExpr printResult = andThen (mainShow table t
 )
 
 -- `match v_main with C_IO_MkIO f -> f 0`（找不到 IO 构造子时回退为原样引用）。
-ioRunText : Pair (List DtData) (List DtDef) -> String -> String
-ioRunText program mainRef = case ioCtorOf (firstOf program) of
+-- IO 构造子按 IO 族的归属单元限定（C35）：返回 (文本, 依赖单元或 "")。
+ioRunText : QualCtx -> Pair (List DtData) (List DtDef) -> String -> Pair String String
+ioRunText qc program mainRef = case ioCtorOf (firstOf program) of
   Just (Pair family ctor) =>
-    "match " ++ mainRef ++ " with " ++ ctorOcamlName family ctor ++ " f -> f 0"
-  Nothing => mainRef
+    let
+      p = qualCtorText qc family ctor
+    in Pair ("match " ++ mainRef ++ " with " ++ firstOf p ++ " f -> f 0") (secondOf p)
+  Nothing => Pair mainRef ""
 
 genTerm : GenSt -> List (Pair String Rig) -> Term -> Result (Pair String GenSt)
 genTerm a1 a2 a3 = genTermFuel 512 a1 a2 a3

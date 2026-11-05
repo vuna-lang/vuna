@@ -17,6 +17,10 @@ module Vuna.Compiler.Driver.Compile
 -- M30：`build` 在链接成功后写 `build-meta.json`（源/依赖闭包内容哈希 + compiler 版本），
 -- 同哈希直接跳过；`compile` / `build --no-compile` 不写 meta（seed rotation 与快照
 -- 只认 .ml/build.sh 的确定性产物）。
+-- C35：codegen 改为全限定跨单元引用后，每个模块只 `open` / 依赖它真正引用的前序单元；
+-- `writeCompiled` 把 SplitFile 的直接依赖传给 `buildScript`，生成的 build.sh 按 vuna
+-- 预先算好的层**分层并行**编译 + 精确增量（每单元 stamp 只含直接依赖），依赖图不再
+-- 退化为全序链。
 import Vuna.Compiler.Common
 import Vuna.Compiler.Packages.Pkg
 import Vuna.Compiler.Driver.Dt
@@ -92,9 +96,9 @@ writeCompiled ctx outDir files =
   let
     _ = ensureDirPath outDir
   in andThen (writeSplitFilesIfChanged outDir files) (\n => let
-    order = splitCompileOrder (splitInitFiles files)
+    graph = splitGraph files
     cFiles = copyFfiFiles (contextDir ctx) outDir
-    _ = runIO (prim_writeFile (outDir ++ "/build.sh") (buildScript order cFiles))
+    _ = runIO (prim_writeFile (outDir ++ "/build.sh") (buildScript graph cFiles))
   in Ok n
   )
 
@@ -425,9 +429,10 @@ checkCachedLib ctx names =
 -- key = 闭包源哈希 + 依赖哈希 + schema/版本 + 编译器二进制指纹 + printResult；
 -- 命中直接写文件（省 load/resolve/elab/codegen）。`ffi/*.c` 每次重新复制（C 源小）。
 -- 缓存放包根 `.local/split-cache/`（gitignored）。
+-- C35：SplitFile 增加 splitDeps 字段（形状变了），schema 升到 2，旧缓存自然失效。
 -- ---------------------------------------------------------------
 splitCacheSchema : String
-splitCacheSchema = "vuna-split-cache 1"
+splitCacheSchema = "vuna-split-cache 2"
 
 splitCacheDir : PackageContext -> String
 splitCacheDir ctx = cacheBase ++ "/" ++ hashText (textHash (contextPackageName ctx)) ++ "/split"

@@ -13,11 +13,16 @@
 # M35 Nat 表示：Base.List 依赖 Base.Nat，split 产物每个单元多一行 `open Base_dNat`；
 #       firstTwo 的 length 由 Nat 度量经隐式提升回到 Int（共享同一 int 表示）。
 #       按实测 bytes 4820 → 4880、lines 138 → 142。
+# C35 split 依赖模型（无 open 链 + 跨单元全限定）：每个单元不再 `open` 所有前序单元，
+#       lines 大幅下降（142 → 82）；跨单元引用变成 `Unit.name` 全限定，长行变长
+#       （maxline 623 → 810、longlines 6 → 8）。ctorcount 口径同步扩到 `Unit.C_`
+#       形态（nix/metrics.sh），值仍是 20——匹配臂数量不变。
+#       按实测 bytes 4880 → 4295。
 files =4
-bytes =4880
-lines =142
-maxline =623
-longlines =6
+bytes =4295
+lines =82
+maxline =810
+longlines =8
 letrec =1
 strcat =1
 eqint =0

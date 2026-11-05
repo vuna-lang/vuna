@@ -111,10 +111,11 @@ LSP 诊断帧进程内缓存（同 uri+内容重复请求命中，编辑后仍�
 自由变量过滤（`freeVarTerm` + dropped 安全阀）；剩 1 层（`runIO` 隐式 `a` 的求解路径，
 `Interp.vuna:70` 的 `b <> String`）未定位，作为独立后续阶段（跨包 elab 状态复用需要完整
 的作用域/实例化语义恢复）。其余剩余：M34.3 的 hash-consing（需全局 intern 表，与纯精化
-路径冲突）；M34.4 模块级并行 codegen（C35：codegen open 全序 + 构造子名非模块限定）；
+路径冲突）；M34.4 模块级并行 codegen（C35 已关闭：分层直接依赖 + 全限定跨单元引用已落地，
+构建侧分层并行已在 `build.sh` 层内 `&` + `wait`；codegen 进程内仍串行，作为后续项保留）；
 规范序列化格式（C32）。
 
-**TTC 模块化精化收尾（2026-11）**：AST 缓存已落地（`Loader/Flatten.parseFileWithPath`，key = 路径 + 源内容哈希，`$TMPDIR/vuna-cache/ast`）。接口摘要（第 1 步）已修 4 层缺陷，摘要路径 779–955 ms，但 `Eq Type` 歧义未定位（详见 debt C37）。第 3 步被 C35 阻塞；第 2 步需模块级签名隔离。
+**TTC 模块化精化收尾（2026-11）**：AST 缓存已落地（`Loader/Flatten.parseFileWithPath`，key = 路径 + 源内容哈希，`$TMPDIR/vuna-cache/ast`）。接口摘要（第 1 步）已修 4 层缺陷，摘要路径 779–955 ms，但 `Eq Type` 歧义未定位（详见 debt C37）。第 3 步的依赖模型前提已就绪（C35 关闭：直接依赖 + 全限定引用，`build.sh` 分层并行）；第 2 步需模块级签名隔离。
 
 ### M35：并发 / 服务端
 

@@ -1,38 +1,42 @@
 module Vuna.Compiler.Driver.Split
   ( SplitFile(..)
   , buildScript
-  , splitCompileOrder
-  , splitInitFiles
+  , splitGraph
+  , splitLayers
   , writeSplitFiles
   , writeSplitFilesIfChanged
   ) where
 
--- Vuna.Compiler.Driver.Split：分离编译（M12）的输出文件模型与构建脚本生成。
+-- Vuna.Compiler.Driver.Split：分离编译的输出文件模型与构建脚本生成。
 --
--- Codegen.Split.generateDtSplitProgram 产出 `List SplitFile`（相对文件名 + 内容）；
--- 本模块负责落盘并生成增量构建脚本：
---   - 编译顺序由 generateSplitProgram 给定（Vuna_runtime → 依赖拓扑序模块 → Main）；
---   - 每模块 .ml/.mli 变化、或任一更早模块的 .cmi 比本模块 .cmx 新 → 只重编本模块
---     （模块 open 链让所有更早模块都是依赖，保守但正确）；
---   - 最后链接成可执行文件。
+-- Codegen.Split.generateDtSplitProgram 产出 `List SplitFile`（相对文件名 + 内容 +
+-- 该单元的直接依赖单元名）；本模块负责落盘并生成**分层并行**的增量构建脚本：
+--   - C35：跨单元引用改为全限定 OCaml 名字后，每个单元只依赖它真正引用的前序单元，
+--     依赖图不再退化为「open 全部前序」的全序链；
+--   - 分层由 vuna 侧预先算好（splitLayers：depth(u) = 1 + max(depth(dep))，无依赖
+--     depth = 0）：同层单元互不依赖，脚本逐层编译、层内多单元用后台任务并行；
+--   - 增量判据 = 本单元 .ml/.mli + **直接依赖** 的 .stamp 内容哈希（M30/D15：同输入
+--     同产物，不依赖 mtime），改一个单元只重编它的直接/传递依赖者；
+--   - 最后按依赖拓扑序链接成可执行文件。
 -- 构建脚本只用 POSIX sh + ocamlopt，可在 Nix 沙箱内复现。
 import Vuna.Compiler.Common
+import Base.HashMap
 import Base.IO
 
 record SplitFile where
   splitName : String
   splitText : String
+  splitDeps : List String
 
 splitName : SplitFile -> String
-splitName (SplitFile name text) = name
+splitName (SplitFile name text deps) = name
 
 splitText : SplitFile -> String
-splitText (SplitFile name text) = text
+splitText (SplitFile name text deps) = text
 
--- 先结束条目（.mli/.ml 文件名列表），供 CLI/脚本使用。
-splitInitFiles : List SplitFile -> List String
-splitInitFiles [] = []
-splitInitFiles (f :: rest) = splitName f :: splitInitFiles rest
+-- 该输出文件所在编译单元的直接依赖（单元名 = 模块名 sanitize 后，无扩展名）。
+splitDeps : SplitFile -> List String
+splitDeps (SplitFile name text deps) = deps
 
 writeSplitFiles : String -> List SplitFile -> Result Int
 writeSplitFiles dir [] = Ok 0
@@ -52,33 +56,73 @@ writeSplitFilesIfChanged dir (f :: rest) = andThen (writeSplitFilesIfChanged dir
 in Ok (n + 1)
 )
 
--- 编译单元顺序：按输出顺序取 .ml（跳过 .mli 与 Vuna_runtime.ml 之后不重复）。
-splitCompileOrder : List String -> List String
-splitCompileOrder [] = []
-splitCompileOrder (name :: rest) =
-  if endsWith ".ml" name then stripMl name :: splitCompileOrder rest else splitCompileOrder rest
+-- 编译单元依赖图：按输出顺序取 .ml（跳过 .mli），unit = 文件名去掉 ".ml"；
+-- deps 原样保留（已是直接依赖单元名，保持顺序、不去重）。
+splitGraph : List SplitFile -> List (Pair String (List String))
+splitGraph [] = []
+splitGraph (f :: rest) =
+  let
+    name = splitName f
+  in if endsWith ".ml" name then Pair (stripMl name) (splitDeps f) :: splitGraph rest
+  else splitGraph rest
 
 stripMl : String -> String
 stripMl name = substring 0 (byteLength name - 3) name
 
--- 构建脚本；names 是编译单元（无扩展名）顺序，最后 Link 到 "$OUT"。
+-- 按直接依赖分层。graph 是拓扑序（依赖在前），一遍扫描即可算出所有层的 depth：
+--   depth(unit) = 1 + max(depth(dep))；无依赖 depth = 0；dep 不在 graph 里按 depth 0 计。
+-- 层内保持 graph 顺序（确定），层间按 depth 升序。
+splitLayers : List (Pair String (List String)) -> List (List (Pair String (List String)))
+splitLayers [] = []
+splitLayers graph =
+  let
+    depths = splitDepths graph (Base.HashMap.fromList [])
+    maxD = graphMaxDepth graph depths 0
+  in map (\d => filter (\q => depthOfUnit depths (firstOf q) == d) graph) (range 0 (maxD + 1))
+
+-- 扫描 graph 建 depth 表；依赖都已在前（拓扑序），因此一遍就够。
+splitDepths : List (Pair String (List String)) -> HashMap Int -> HashMap Int
+splitDepths [] depths = depths
+splitDepths ((Pair unit deps) :: rest) depths =
+  splitDepths rest (Base.HashMap.insert unit (depthOfDeps depths deps) depths)
+
+-- depth(unit) = 1 + max(depth(dep))；空依赖 = 0。
+depthOfDeps : HashMap Int -> List String -> Int
+depthOfDeps depths [] = 0
+depthOfDeps depths (dep :: rest) = maxInt (depthOfUnit depths dep + 1) (depthOfDeps depths rest)
+
+depthOfUnit : HashMap Int -> String -> Int
+depthOfUnit depths unit = case Base.HashMap.lookup unit depths of
+  Just d => d
+  Nothing => 0
+
+graphMaxDepth : List (Pair String (List String)) -> HashMap Int -> Int -> Int
+graphMaxDepth [] depths acc = acc
+graphMaxDepth ((Pair unit deps) :: rest) depths acc =
+  graphMaxDepth rest depths (maxInt acc (depthOfUnit depths unit))
+
+maxInt : Int -> Int -> Int
+maxInt a b = if a > b then a else b
+
+-- 构建脚本；graph 是 (单元名, 直接依赖单元名) 的拓扑序（依赖在前，链接顺序即 graph 顺序）。
 -- M33 W5：cFiles 是包根 `ffi/*.c` 复制到 OUTDIR 后的相对路径（如 `ffi/add.c`），
--- 由 ocamlopt 编译成 .o 并参与链接；空列表时行为与旧版完全一致。
+-- 由 ocamlopt 编译成 .o 并参与链接；空列表时行为与旧版一致。
 -- 干净构建（没有 .cmx，例如 Nix 构建 seed / stage1）走一次 ocamlopt 调用，
--- 避免几十次进程启动；已有 .cmx 时按**内容哈希**（.ml/.mli + 依赖 .cmi/.cmx）增量编译，
--- 不再用 mtime（M30/D15：同输入同产物，不受复制/checkout 时间影响）。
-buildScript : List String -> List String -> String
-buildScript names cFiles =
+-- 避免几十次进程启动；已有 .cmx 时按**内容哈希**（.ml/.mli + 直接依赖 .stamp）
+-- 逐层增量编译：单单元层前台调用，多单元层 `&` 并行 + 逐个 `wait` 收尾。
+buildScript : List (Pair String (List String)) -> List String -> String
+buildScript graph cFiles =
   "#!/bin/sh\n"
-    ++ "# 由 vuna 生成：分离编译构建脚本（M30：按内容哈希增量）。用法: ./build.sh [OUT]\n"
+    ++ "# 由 vuna 生成：分离编译构建脚本（C35：按直接依赖分层并行 + 内容哈希增量）。用法: ./build.sh [OUT]\n"
     ++ "# 干净构建：一次 ocamlopt 编译全部 .mli/.ml 并链接；\n"
-    ++ "# 增量构建：每个模块的 .ml/.mli 与依赖 .cmi/.cmx 内容哈希写 $base.stamp，命中即跳过。\n"
+    ++ "# 增量构建：每单元 .ml/.mli 与直接依赖 .stamp 的内容哈希写 $base.stamp，命中即跳过；\n"
+    ++ "# 同层单元互不依赖：多单元层用后台任务并行编译，层间用 wait 串行。\n"
     ++ "set -eu\n"
     ++ "cd \"$(dirname \"$0\")\"\n"
     ++ "OUT=${1:-program}\n"
     ++ "FLAGS=\"-g -w -a+39 -warn-error +39\"\n"
     ++ "MODULES=\""
-    ++ spaceJoin names
+    ++ spaceJoin (graphUnits graph)
     ++ "\"\n"
     ++ "C_MODULES=\""
     ++ spaceJoin cFiles
@@ -110,7 +154,7 @@ buildScript names cFiles =
     ++ "    SOURCES=\"$SOURCES $m.ml\"\n"
     ++ "  done\n"
     ++ "  ocamlopt $FLAGS -I +unix -o \"$OUT\" unix.cmxa $SOURCES $C_OBJS\n"
-    ++ stampWrites names []
+    ++ stampWrites graph
     ++ "  echo \"built $OUT\"\n"
     ++ "  exit 0\n"
     ++ "fi\n"
@@ -124,23 +168,50 @@ buildScript names cFiles =
     ++ "  ocamlopt $FLAGS -I +unix -c \"$base.ml\"\n"
     ++ "  printf '%s' \"$want\" > \"$base.stamp\"\n"
     ++ "}\n"
-    ++ compileCalls names []
+    ++ layerScripts (splitLayers graph)
     ++ "ocamlopt $FLAGS -I +unix -o \"$OUT\" unix.cmxa "
-    ++ joinCmxs names
+    ++ joinCmxs (graphUnits graph)
     ++ " $C_OBJS\n"
     ++ "echo \"built $OUT\"\n"
 
--- 干净构建成功后写每个模块的 stamp（与增量路径的 stamp 公式一致）。
-stampWrites : List String -> List String -> String
-stampWrites [] prev = ""
-stampWrites (name :: rest) prev =
-  "  stamp_want "
-    ++ name
-    ++ depsSuffix prev
-    ++ " > \""
-    ++ name
+-- 干净构建成功后按 graph 顺序写每单元 stamp（只含直接依赖的 .stamp，与增量公式一致；
+-- 依赖在前，因此依赖的 stamp 先写好）。用 `printf '%s' "$(...)"` 而不是直接重定向，
+-- 让 stamp 的**字节**与增量路径（`printf '%s' "$want"`）完全相同——否则干净构建后
+-- 第一次增量重编会因多一个换行而重算依赖链。
+stampWrites : List (Pair String (List String)) -> String
+stampWrites [] = ""
+stampWrites (m :: rest) =
+  "  printf '%s' \"$(stamp_want "
+    ++ firstOf m
+    ++ depsSuffix (secondOf m)
+    ++ ")\" > \""
+    ++ firstOf m
     ++ ".stamp\"\n"
-    ++ stampWrites rest (name :: prev)
+    ++ stampWrites rest
+
+graphUnits : List (Pair String (List String)) -> List String
+graphUnits [] = []
+graphUnits (m :: rest) = firstOf m :: graphUnits rest
+
+-- 逐层生成调用：单单元层前台执行；多单元层并行执行并收集 $!，最后逐个 wait。
+layerScripts : List (List (Pair String (List String))) -> String
+layerScripts [] = ""
+layerScripts (layer :: rest) = layerCalls layer ++ layerScripts rest
+
+layerCalls : List (Pair String (List String)) -> String
+layerCalls [] = ""
+layerCalls ([m]) = "compile_mod " ++ firstOf m ++ depsSuffix (secondOf m) ++ "\n"
+layerCalls layer =
+  "pids=\"\"\n" ++ bgCalls layer ++ "for p in $pids; do wait \"$p\" || exit 1; done\n"
+
+bgCalls : List (Pair String (List String)) -> String
+bgCalls [] = ""
+bgCalls (m :: rest) =
+  "compile_mod "
+    ++ firstOf m
+    ++ depsSuffix (secondOf m)
+    ++ " &\npids=\"$pids $!\"\n"
+    ++ bgCalls rest
 
 spaceJoin : List String -> String
 spaceJoin [] = ""
@@ -149,11 +220,6 @@ spaceJoin (name :: rest) = name ++ " " ++ spaceJoin rest
 depsSuffix : List String -> String
 depsSuffix [] = ""
 depsSuffix (dep :: rest) = " " ++ dep ++ depsSuffix rest
-
-compileCalls : List String -> List String -> String
-compileCalls [] prev = ""
-compileCalls (name :: rest) prev =
-  "compile_mod " ++ name ++ depsSuffix prev ++ "\n" ++ compileCalls rest (name :: prev)
 
 joinCmxs : List String -> String
 joinCmxs [] = ""
