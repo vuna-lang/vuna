@@ -232,13 +232,14 @@ defTableOf (d :: rest) = case dtDefBody d of
 -- M26：唯一 codegen 入口 = 逐模块 split（`compile` / `build` / seed rotation 共用）。
 -- 与单文件路径共用同一次精化，生成器把 datas/defs 按声明归属切到各模块文件；
 -- 模块列表按依赖序（Loader 的 modules 是依赖者在前的反序，这里 reverse）。
+-- M38：把模块根目录与包目录交给生成器，用于 dt_def_locs 的 span 路径归一。
 dtSplitProject : PackageContext -> String -> Bool -> Result (List SplitFile)
 dtSplitProject ctx entry printResult = andThen (loadProject ctx entry) (\project => andThen (resolveProject project) (\parts => let
   entryDecls = firstOf parts
   modules = reverse (secondOf parts)
   allDecls = append (concatMap moduleDeclsOf modules) entryDecls
 in andThen (elabProgramFull allDecls)
-  (\program => generateDtSplitProgram (map (\m => Pair (moduleNameOf m) (moduleDeclsOf m)) modules) entryDecls program printResult)
+  (\program => generateDtSplitProgram (map (\m => Pair (moduleNameOf m) (moduleDeclsOf m)) modules) entryDecls program printResult (map rootDir (contextRoots ctx)) (contextDir ctx))
 )
 )
 

@@ -30,6 +30,12 @@ splitNoSpan = Span "" 0 0 0 0
 entryOwner : String
 entryOwner = "Main"
 
+-- M38：入口单元在定义求值**之前**就开启回栈记录。零参 `main` 是普通值绑定，
+-- 它在模块初始化期求值（早于 main 钩子的 try）；初始化异常被 `mainInitWrap`
+-- 捕获后，报告器要靠当时已开启的回栈才能打印 vuna 位置帧。
+mainInitPrologue : String
+mainInitPrologue = "let () = Printexc.record_backtrace true\n"
+
 splitUnitOfModule : String -> String
 splitUnitOfModule modName = sanitizeName modName
 
@@ -255,7 +261,7 @@ splitMainFile ctx printResult =
     entryDatas = datasInUnit ctx.sgcDataOwnerT entryOwner ctx.sgcAllDatas
     qc = QualCtx entryUnit ctx.sgcDefUnitT ctx.sgcDataUnitT
   in andThen (groupRuntimeDefs entryDefs)
-    (\groups => andThen (genUnitParts ctx.sgcUsedTbl qc ctx.sgcAllDatas entryDatas groups) (\parts => andThen (mainHook qc (Pair ctx.sgcAllDatas ctx.sgcAllDefs) ctx.sgcAllDefs printResult) (\hook => andThen (unitDepsOf ctx.sgcOrdered entryUnit (append (unitPartsDeps parts) (secondOf hook))) (\deps => Ok (SplitFile "Main.ml" (genUnitText parts ++ firstOf hook) deps)))))
+    (\groups => andThen (genUnitParts ctx.sgcUsedTbl qc ctx.sgcAllDatas entryDatas groups) (\parts => andThen (mainHook qc (Pair ctx.sgcAllDatas ctx.sgcAllDefs) ctx.sgcAllDefs printResult) (\hook => andThen (unitDepsOf ctx.sgcOrdered entryUnit (append (unitPartsDeps parts) (secondOf hook))) (\deps => Ok (SplitFile "Main.ml" (mainInitPrologue ++ genUnitText parts ++ firstOf hook) deps)))))
 
 -- ---------------------------------------------------------------
 -- 生成前护栏（C08）：模块声明必须已 resolved、入口声明必须是裸名、归属必须全覆盖
@@ -325,24 +331,53 @@ checkResolvedModules meta modules entryDecls runtime datas =
   andThen (checkModuleDecls meta.smKnownModules modules)
     (\_ => andThen (checkEntryDecls entryDecls) (\_ => andThen (checkDefOwners meta runtime) (\_ => checkDataOwners meta datas)))
 
-generateDtSplitProgram : List (Pair String (List Decl)) -> List Decl -> DtProgram -> Bool -> Result (List SplitFile)
-generateDtSplitProgram modules entryDecls prog printResult =
+-- ---------------------------------------------------------------
+-- M38：定义位置表（Vuna_runtime.ml 的 dt_def_locs）的路径归一
+-- ---------------------------------------------------------------
+-- 定义 span 里的文件路径是解析时的原样：模块文件是 `<rootDir>/<模块路径>.vuna`
+-- 的绝对路径（rootDir 来自 PackageContext.contextRoots），入口可能是绝对
+-- `<contextDir>/app/Main.vuna`，也可能是调用方给的相对路径。位置表按
+-- 「模块根 → 包目录 → 前导 ./」的顺序尽量剥成短路径；都不匹配则保留原样。
+splitStripPrefix : String -> String -> String
+splitStripPrefix prefix path =
+  if prefix == "" then path
+  else if startsWith (prefix ++ "/") path then strSubstring (strLength (prefix ++ "/")) (strLength path - strLength (prefix ++ "/")) path
+  else path
+
+splitStripRoots : List String -> String -> String
+splitStripRoots [] path = path
+splitStripRoots (root :: rest) path =
+  if startsWith (root ++ "/") path then splitStripPrefix root path else splitStripRoots rest path
+
+splitStripDotSlash : String -> String
+splitStripDotSlash path =
+  if startsWith "./" path then strSubstring 2 (strLength path - 2) path else path
+
+splitLocPath : List String -> String -> String -> String
+splitLocPath roots contextDir path =
+  splitStripDotSlash (splitStripPrefix contextDir (splitStripRoots roots path))
+
+-- roots 是模块根目录（`PackageContext.contextRoots` 的 rootDir），contextDir 是包目录
+-- （`PackageContext.contextDir`）；生成位置表用它把 span 路径归一。
+generateDtSplitProgram : List (Pair String (List Decl)) -> List Decl -> DtProgram -> Bool -> List String -> String -> Result (List SplitFile)
+generateDtSplitProgram modules entryDecls prog printResult roots contextDir =
   let
     allDatas = runtimeDatas (dtProgDatas prog)
     allDefs = dtProgDefs prog
     meta = splitMetaOf modules entryDecls
+    runtimeText = dtRuntimeWith (dtDefLocTable (splitLocPath roots contextDir) allDefs)
   in andThen (prepareDtProgram (Pair (dtProgDatas prog) allDefs)) (\p => case p of
     Pair runtime groups =>
-      splitProgramFiles modules entryDecls printResult runtime allDatas allDefs meta
+      splitProgramFiles modules entryDecls printResult runtime allDatas allDefs meta runtimeText
   )
 
-splitProgramFiles : List (Pair String (List Decl)) -> List Decl -> Bool -> List DtDef -> List DtData -> List DtDef -> SplitMeta -> Result (List SplitFile)
-splitProgramFiles modules entryDecls printResult runtime allDatas allDefs meta =
+splitProgramFiles : List (Pair String (List Decl)) -> List Decl -> Bool -> List DtDef -> List DtData -> List DtDef -> SplitMeta -> String -> Result (List SplitFile)
+splitProgramFiles modules entryDecls printResult runtime allDatas allDefs meta runtimeText =
   andThen (checkResolvedModules meta modules entryDecls runtime allDatas)
-    (\_ => andThen (nameOwnerPairsOfDefs meta runtime) (\defPairs => andThen (nameOwnerPairsOfDatas meta allDatas) (\dataPairs => splitWithOwners modules printResult runtime allDatas allDefs defPairs dataPairs)))
+    (\_ => andThen (nameOwnerPairsOfDefs meta runtime) (\defPairs => andThen (nameOwnerPairsOfDatas meta allDatas) (\dataPairs => splitWithOwners modules printResult runtime allDatas allDefs defPairs dataPairs runtimeText)))
 
-splitWithOwners : List (Pair String (List Decl)) -> Bool -> List DtDef -> List DtData -> List DtDef -> List (Pair String String) -> List (Pair String String) -> Result (List SplitFile)
-splitWithOwners modules printResult runtime allDatas allDefs defPairs dataPairs =
+splitWithOwners : List (Pair String (List Decl)) -> Bool -> List DtDef -> List DtData -> List DtDef -> List (Pair String String) -> List (Pair String String) -> String -> Result (List SplitFile)
+splitWithOwners modules printResult runtime allDatas allDefs defPairs dataPairs runtimeText =
   let
     defUnitT = unitTblOf (mapToUnit defPairs)
     dataUnitT = unitTblOf (mapToUnit dataPairs)
@@ -353,4 +388,4 @@ splitWithOwners modules printResult runtime allDatas allDefs defPairs dataPairs 
       SplitGenCtx (usedTableOf allDatas) allDatas runtime (ownerTblOf defPairs)
         (ownerTblOf dataPairs) defUnitT dataUnitT ordered
   in andThen (splitModuleFiles ctx modules)
-    (\moduleFiles => andThen (splitMainFile ctx printResult) (\mainFile => Ok (SplitFile "Vuna_runtime.ml" dtRuntime [] :: append moduleFiles [mainFile])))
+    (\moduleFiles => andThen (splitMainFile ctx printResult) (\mainFile => Ok (SplitFile "Vuna_runtime.ml" runtimeText [] :: append moduleFiles [mainFile])))

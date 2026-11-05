@@ -382,6 +382,9 @@ allIntrinsics : List Intrinsic
 -- 语义：add/mul 饱和到 max_int，sub 截断到 0，div 除零与 Int 同文案失败。
 -- IO 代数（M37 / C1 过渡）：`IO` 是编译器内建效应类型，构造/绑定/执行是内建原语。
 -- 这里的 runtime 文本是**内建模式**（IO = 裸 thunk `int -> 'a`）的实现；
+-- M38：运行时诊断原语。`prim_eprint` 写 stderr 并 flush（报告器/调试输出用）；
+-- `prim_fail` 抛 Failure（报告器把它渲染成 "vuna: runtime error: ..."）。两者先只
+-- 进 Intrinsics 表（base 源码在 seed rotation 之后才会使用它们）。
 allIntrinsics =
   [ Intrinsic "+" (IFun IInt (IFun IInt IInt)) OpAdd Nothing "bi_add" True,
     Intrinsic "-" (IFun IInt (IFun IInt IInt)) OpSub Nothing "bi_sub" True,
@@ -431,6 +434,8 @@ allIntrinsics =
     Intrinsic "prim_bufferContents" (IFun IBuf (IIO IStr)) OpNone Nothing "(fun b -> Buffer.contents b)" True,
     Intrinsic "prim_bufferLength" (IFun IBuf (IIO IInt)) OpNone Nothing "(fun b -> Buffer.length b)" True,
     Intrinsic "prim_print" (IFun IStr (IIO IInt)) OpNone (Just CapConsole) "dtp_print" True,
+    Intrinsic "prim_eprint" (IFun IStr (IIO IInt)) OpNone (Just CapConsole) "(fun s -> prerr_string s; flush stderr; String.length s)" True,
+    Intrinsic "prim_fail" (IPi "a" (IFun IStr (IVar "a"))) OpNone Nothing "(fun msg -> failwith msg)" True,
     Intrinsic "prim_readFile" (IFun IStr (IIO IStr)) OpNone (Just CapFs) "dtp_readFile" True,
     Intrinsic "prim_writeFile" (IFun IStr (IFun IStr (IIO IInt))) OpNone (Just CapFs) "dtp_writeFile" True,
     Intrinsic "prim_writeFileAtomic" (IFun IStr (IFun IStr (IIO IInt))) OpNone (Just CapFs) "dtp_writeFileAtomic" True,
