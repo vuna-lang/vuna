@@ -240,6 +240,11 @@ W3 落地的容器与表示（`Intrinsics` / `Elab.Prelude` / `Codegen.Decl` / `
 3. `vuna map` 索引：`refsInExpr` 改累积器（O(n²)→O(n)），跨文件累积改逆序前插（消除每文件
    `append` 复制整个已累积列表）。
 
+**M34.1 分配统计（`bench/compiler.sh --alloc`）**：`check .` 冷的主进程 + 两个成员子进程的
+`Gc.quick_stat`：minor_words ≈ 1.7e7（主）/ 1.0e9（vuna-compiler 子进程）/ 1.4e9（根包子进程），
+top_heap ≈ 1.9e5 / 5.8e6 / 7.3e6 words。`--alloc` 只报告、不设门槛（绝对分配量跨机器/
+输入不可比）。
+
 **M34.5 缓存（check/build）后**：
 
 | benchmark | 冷（首次） | 热（缓存命中） |
