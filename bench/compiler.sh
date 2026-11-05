@@ -22,6 +22,7 @@ RUNS=3
 WARMUP=1
 THRESHOLD=20
 CHECK=0
+ALLOC=0
 SAVE=0
 JSON_OUT=""
 ONLY=""
@@ -44,6 +45,7 @@ options:
   --compiler PATH        被测 vuna（默认 PATH 里的 vuna / $VUNA）
   --json FILE            写出 JSON 报告
   --check                与 bench/compiler-baseline.txt 对比，超过 --threshold% 打 WARN
+  --alloc                结束后跑一次冷 check . 并打印分配的 GC 统计（VN_PERF_STATS=1）
   --save-baseline        把本次中位数写回 bench/compiler-baseline.txt
   --threshold N          回退阈值，百分比（默认 20）
   -h, --help             显示帮助
@@ -67,6 +69,7 @@ while [ $# -gt 0 ]; do
     --json) [ $# -ge 2 ] || die "--json needs a value"; JSON_OUT=$2; shift 2 ;;
     --json=*) JSON_OUT=${1#*=}; shift ;;
     --check) CHECK=1; shift ;;
+    --alloc) ALLOC=1; shift ;;
     --save-baseline) SAVE=1; shift ;;
     --threshold) [ $# -ge 2 ] || die "--threshold needs a value"; THRESHOLD=$2; shift 2 ;;
     --threshold=*) THRESHOLD=${1#*=}; shift ;;
@@ -177,4 +180,10 @@ if [ "$CHECK" -eq 1 ]; then
     printf '%-18s %10s %10s %7s%%  %s\n' "$bname" "$cur" "$bms" "$delta" "$result"
   done < "$BASELINE"
   if [ "$bad" -eq 1 ]; then echo "COMPILER-PERF-WARN"; else echo "COMPILER-PERF-OK"; fi
+fi
+if [ "$ALLOC" -eq 1 ]; then
+  clear_check_cache
+  echo ""
+  echo "== 分配统计（check . 冷，VN_PERF_STATS=1；每个进程一行：主进程 + 并行成员子进程）=="
+  (cd "$ROOT" && VN_PERF_STATS=1 "$VUNA_BIN" check . 2>&1 >/dev/null | grep "^VN_PERF " || true)
 fi

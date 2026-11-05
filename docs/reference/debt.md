@@ -38,7 +38,7 @@
 | E04 | TCB 只有黑名单 + 闭包数量断言，没有完整 allowlist | `nix/tcb-check.sh` + `nix/seed-count.txt` | 待定 |
 | E06 | seed rotation 替换步骤非原子：校验通过后 `rm -rf seed && cp -r` | `nix/seed-rotate.sh` | 待定 |
 | C32 | 单文件 / LSP 级 elab 缓存与接口摘要未做；已有 check/build 级 elab 缓存（`Compile` 的 check 结果缓存 + `List SplitFile` 缓存），但序列化用 OCaml Marshal（非自描述，靠编译器二进制指纹失效） | `Driver/Compile`（`checkCacheKey*`/`splitCacheKey`）；[performance.md](performance.md) §9 | M34（后续规范化） |
-| C33 | 性能 CI 只有软对比（`bench/compiler.sh --check` 20% WARN）与缓存有效性门槛（`vuna-compiler-perf` 断言热 < 冷/2）；没有绝对性能回归门槛与分配统计报告 | `bench/compiler.sh`；`nix/checks/compiler-perf.sh`；[performance.md](performance.md) §9 | M34（部分落地） |
+| C33 | 性能 CI 只有软对比（`bench/compiler.sh --check` 20% WARN）与缓存有效性门槛（`vuna-compiler-perf` 断言热 < 冷/2）；分配统计报告已可用（`bench/compiler.sh --alloc`，VN_PERF_STATS），但没有绝对性能回归门槛 | `bench/compiler.sh`；`nix/checks/compiler-perf.sh`；[performance.md](performance.md) §9 | M34（部分落地） |
 | C35 | `Codegen.Split` 的每个模块文件 `open` **所有前序单元**（`genUnitParts` 的 `[runtimeUnit] ++ earlier`），依赖图退化为全序；且 dict/class 构造子名编码（`C_Dict_uBase_dMonad_dFunctor_MkDict_...`）不是 OCaml 模块限定名、跨模块引用依赖 open，精确 per-module open 需要 codegen 同时生成全限定构造子名；模块级并行 codegen / 编译需要这两步，否则分层并行不可能 | `Codegen/Split.splitModuleFiles` / `genUnitParts`；`Driver/Split.buildScript` | M34.4（后续） |
 | C36 | 泛型函数体内对 `Int` 的比较/算术（`<=` / `+` / `-`）走方法别名的隐式实例搜索，其隐式变量与函数泛型类型变量同名合并——泛型函数里混用「Int 辅助逻辑 + 泛型数据」时，`fuel <= 0` 会把泛型 `a` 统一成 `Int`（归并排序 `sortByFuel` 复现）；目前只能拆独立函数或显式类型规避，且数值递减的 SCT 判定被包裹函数阻断 | `Base/Sort.vuna` 注释；`Elab/Trait` 实例解糖 | M34.3（后续） |
 
