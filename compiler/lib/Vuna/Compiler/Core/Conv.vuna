@@ -213,6 +213,7 @@ mismatchAt depth a b =
   let
     sa = showValueAt depth a
     sb = showValueAt depth b
+    _ = note ("mismatch: " ++ sa ++ " <> " ++ sb)
   in tcErr2NoLoc (TypeMismatch sa sb) sa sb
 
 -- ---------------------------------------------------------------

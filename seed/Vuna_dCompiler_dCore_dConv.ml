@@ -85,7 +85,7 @@ let v_Vuna_dCompiler_dCore_dConv_dfastSame = (fun a b -> (match a with
   | _ -> false
 ))
 
-let v_Vuna_dCompiler_dCore_dConv_dmismatchAt = (fun depth a b -> ((fun sa -> ((fun sb -> (((v_Vuna_dCompiler_dDiagnostics_dTc_dtcErr2NoLoc (C_Vuna_dCompiler_dDiagnostics_dTc_dTcErr_Vuna_dCompiler_dDiagnostics_dTc_dTypeMismatch (sa, sb))) sa) sb)) ((v_Vuna_dCompiler_dCore_dEval_dshowValueAt depth) b))) ((v_Vuna_dCompiler_dCore_dEval_dshowValueAt depth) a)))
+let v_Vuna_dCompiler_dCore_dConv_dmismatchAt = (fun depth a b -> ((fun sa -> ((fun sb -> ((fun _u -> (((v_Vuna_dCompiler_dDiagnostics_dTc_dtcErr2NoLoc (C_Vuna_dCompiler_dDiagnostics_dTc_dTcErr_Vuna_dCompiler_dDiagnostics_dTc_dTypeMismatch (sa, sb))) sa) sb)) (v_Vuna_dCompiler_dDebug_dnote (String.concat "" ["mismatch: "; sa; " <> "; sb])))) ((v_Vuna_dCompiler_dCore_dEval_dshowValueAt depth) b))) ((v_Vuna_dCompiler_dCore_dEval_dshowValueAt depth) a)))
 
 let v_Vuna_dCompiler_dCore_dConv_dmetaCreatedDepth = (fun sols depth m -> (match ((v_Vuna_dCompiler_dCore_dTerm_dsolsDepth m) sols) with
   | C_Base_dMaybe_dMaybe_Base_dMaybe_dJust (dtb__24) -> dtb__24
