@@ -103,7 +103,7 @@ contextForDoc uri =
 checkDiagnostics : String -> PackageContext -> String -> List Diag
 checkDiagnostics label ctx text =
   let
-    checked = case depIfacesForTool ctx of
+    checked = case depIfacesForToolSource ctx label text of
       Just ifaces => dtCheckSourceWithIfaces ctx label text ifaces
       Nothing => dtCheckSource ctx label text
   in case checked of

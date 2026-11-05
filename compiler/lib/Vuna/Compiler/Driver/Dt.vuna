@@ -551,14 +551,14 @@ unitKeysGo : List Module -> List (Pair String String) -> List (Pair String Strin
 unitKeysGo [] acc = reverse acc
 unitKeysGo (m :: rest) acc = unitKeysGo rest (Pair (moduleNameOf m) (unitKeyOne acc m) :: acc)
 
-unitKeysOf : List Module -> List Decl -> List (Pair String String)
-unitKeysOf modules entryDecls =
+unitKeysOf : List Module -> List Decl -> Bool -> List (Pair String String)
+unitKeysOf modules entryDecls printResult =
   let
     modKeys = unitKeysGo modules []
     entryHash = hashTextStrong (prim_marshal entryDecls)
     entryKey =
       strFromInt
-        (hashTextStrong ("e|" ++ strFromInt entryHash ++ "|" ++ concatKeys (map pairKeyValue modKeys)))
+        (hashTextStrong ("e|" ++ strFromInt entryHash ++ "|" ++ (if printResult then "print" else "noprint") ++ "|" ++ concatKeys (map pairKeyValue modKeys)))
   in Pair "__entry__" entryKey :: modKeys
 
 unitCacheLookup : String -> List (Pair String String) -> String -> Maybe SplitFile
@@ -581,31 +581,34 @@ unitCacheStore dir keys name sf = case lookupPair name keys of
 unitCacheEnabled : Bool
 unitCacheEnabled = runIO (prim_getenv "VUNA_UNIT_CACHE") == "1"
 
-splitGenerateCached : PackageContext -> List Module -> List (Pair String (List Decl)) -> List Decl -> DtProgram -> Bool -> Result (List SplitFile)
-splitGenerateCached ctx modules moduleParts entryDecls prog printResult =
+splitGenerateCached : PackageContext -> String -> List Module -> List (Pair String (List Decl)) -> List Decl -> DtProgram -> Bool -> Result (List SplitFile)
+splitGenerateCached ctx entry modules moduleParts entryDecls prog printResult =
   let
     pkg = contextPackageName ctx
-    keys = unitKeysOf modules entryDecls
-    dir = unitCacheDir pkg
+    keys = unitKeysOf modules entryDecls printResult
+    base = unitCacheDir pkg
+    bucketKey = pkg ++ "|" ++ entry
+    dir = unitCacheEntryDir base bucketKey
+    _ = if unitCacheEnabled && pkg /= "" then unitCacheGc base dir else 0
     roots = map rootDir (contextRoots ctx)
     cdir = contextDir ctx
   in if pkg == "" || not unitCacheEnabled then generateDtSplitProgram moduleParts entryDecls prog printResult roots cdir
   else generateDtSplitProgramWith (unitCacheLookup dir keys) (unitCacheStore dir keys) moduleParts
     entryDecls prog printResult roots cdir
 
-dtGenerateIncremental : PackageContext -> Pair (List Decl) (List Module) -> CheckedPackage -> Bool -> Result (Pair (List SplitFile) CheckedPackage)
-dtGenerateIncremental ctx parts checked printResult =
+dtGenerateIncremental : PackageContext -> String -> Pair (List Decl) (List Module) -> CheckedPackage -> Bool -> Result (Pair (List SplitFile) CheckedPackage)
+dtGenerateIncremental ctx entry parts checked printResult =
   let
     modules = topoModules (secondOf parts)
     moduleParts = map (\m => Pair (moduleNameOf m) (moduleDeclsOf m)) modules
   in andThen
-    (splitGenerateCached ctx modules moduleParts (firstOf parts) checked.checkedProgram printResult)
+    (splitGenerateCached ctx entry modules moduleParts (firstOf parts) checked.checkedProgram printResult)
     (\files => Ok (Pair files checked))
 
 dtSplitProjectIncremental : PackageContext -> String -> Bool -> List ModuleIface -> List ModuleIface -> Result (Pair (List SplitFile) CheckedPackage)
 dtSplitProjectIncremental ctx entry printResult depIfaces cleanIfaces =
   andThen (dtLoadPartsIncremental ctx entry depIfaces cleanIfaces)
-    (\parts => andThen (dtIncrementalChecked ctx parts (materializedDeps (contextPackageName ctx) parts depIfaces) (materializedOwn (contextPackageName ctx) parts cleanIfaces)) (\checked => dtGenerateIncremental ctx parts checked printResult))
+    (\parts => andThen (dtIncrementalChecked ctx parts (materializedDeps (contextPackageName ctx) parts depIfaces) (materializedOwn (contextPackageName ctx) parts cleanIfaces)) (\checked => dtGenerateIncremental ctx entry parts checked printResult))
 
 moduleOfIface : ModuleIface -> Module
 moduleOfIface mi =
@@ -695,10 +698,10 @@ dtCheckLibraryPackageWithIfacesParts ctx names ifaces =
 dtSplitProjectWithIfaces : PackageContext -> String -> Bool -> List ModuleIface -> Result (Pair (List SplitFile) CheckedPackage)
 dtSplitProjectWithIfaces ctx entry printResult ifaces =
   andThen (dtLoadPartsWithIfaces ctx entry ifaces)
-    (\parts => dtSplitPartsOurs ctx parts (shiftedDepPrograms (materializedDeps (contextPackageName ctx) parts ifaces)) printResult)
+    (\parts => dtSplitPartsOurs ctx entry parts (shiftedDepPrograms (materializedDeps (contextPackageName ctx) parts ifaces)) printResult)
 
-dtSplitPartsOurs : PackageContext -> Pair (List Decl) (List Module) -> List CachedProgram -> Bool -> Result (Pair (List SplitFile) CheckedPackage)
-dtSplitPartsOurs ctx parts deps printResult =
+dtSplitPartsOurs : PackageContext -> String -> Pair (List Decl) (List Module) -> List CachedProgram -> Bool -> Result (Pair (List SplitFile) CheckedPackage)
+dtSplitPartsOurs ctx entry parts deps printResult =
   let
     pkgName = contextPackageName ctx
     modules = reverse (secondOf parts)
@@ -715,7 +718,7 @@ dtSplitPartsOurs ctx parts deps printResult =
         prog.dtProgDefVals prog.dtProgDepths
     moduleParts = map (\m => Pair (moduleNameOf m) (moduleDeclsOf m)) modules
     checked = CheckedPackage prog (secondOf parts) (firstOf parts) (cachedNamesOf deps)
-  in andThen (splitGenerateCached ctx modules moduleParts (firstOf parts) assembled printResult)
+  in andThen (splitGenerateCached ctx entry modules moduleParts (firstOf parts) assembled printResult)
     (\files => Ok (Pair files checked))
   )
 
@@ -726,5 +729,5 @@ dtSplitProjectParts ctx entry printResult = andThen (dtLoadParts ctx entry) (\pa
   modules = reverse (secondOf parts)
   allDecls = append (concatMap moduleDeclsOf modules) (firstOf parts)
 in andThen (elabProgramFull allDecls)
-  (\prog => andThen (splitGenerateCached ctx modules (map (\m => Pair (moduleNameOf m) (moduleDeclsOf m)) modules) (firstOf parts) prog printResult) (\files => Ok (Pair files (CheckedPackage prog (secondOf parts) (firstOf parts) []))))
+  (\prog => andThen (splitGenerateCached ctx entry modules (map (\m => Pair (moduleNameOf m) (moduleDeclsOf m)) modules) (firstOf parts) prog printResult) (\files => Ok (Pair files (CheckedPackage prog (secondOf parts) (firstOf parts) []))))
 )

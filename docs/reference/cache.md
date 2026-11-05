@@ -124,28 +124,35 @@ check 失败；`VUNA_DEBUG_PERF=1` 等价于 `--debug-perf`（给 `vuna-compiler
 A/B：`VUNA_ELAB_FULL=1` 强制全量；`check`/`compile` 的增量与全量结果对拍（诊断逐字节、
 manifest 逐字节、codegen 目录 `diff -r`）见测试 §44f。
 
-## LSP / REPL 消费接口（opt-in）
+## LSP / REPL 消费接口（opt-in，惰性闭包）
 
-`VUNA_IFACE_TOOL=1` 时 LSP 诊断链与 REPL 求值会把「本包依赖闭包的模块接口」作为预置
-模块交给 Loader（`dtCheckSourceWithIfaces` / `dtEvalExprInfoWithIfaces`），编辑/求值只
-精化当前源码与同包源码；接口缺失/失效自动退回原路径。**默认关闭**：当前实现每次请求会
-读+校验整个依赖闭包（本仓库 94 个模块 ≈2s/次），对小项目反而慢于按需 load；下一步做
-「只读 import 闭包需要的模块 + 会话内缓存」后再默认打开。测试 §44g 覆盖开启后的
-REPL 求值与 LSP smoke。
+`VUNA_IFACE_TOOL=1` 时 LSP 诊断链与 REPL 求值把「本次源码 import 闭包需要的模块接口」
+作为预置模块交给 Loader（`dtCheckSourceWithIfaces` / `dtEvalExprInfoWithIfaces`），编辑/
+求值只精化当前源码与同包源码；接口缺失/失效自动退回原路径。
+
+**惰性读（S7）**：manifest 现在自带每模块的直接 import 名（schema `vuna-iface 7`）。工具
+路径先只读依赖包的 manifest（校验 schema/编译器指纹/包名/源哈希），按 entry（含隐式
+Prelude）的 import 闭包算出需要哪些模块，再只 unmarshal 这些模块文件；仍按 `miDepHashes`
+链校验。实测本仓库 REPL 一次求值：94 个模块接口（≈2s）→ 14 个（≈25ms，冷启动后热读）。
+
+**默认关闭**：惰性读已解决「一次读全闭包」的慢，但跨请求没有会话内缓存（每次仍重读闭包
+内文件 + 校验 manifest/源哈希）；下一步加 LSP/REPL 会话内缓存（按文件保存失效）后再默认
+打开。测试 §44g 断言惰性闭包模块数 <60、REPL 求值正确、LSP smoke 全过。
 
 ## codegen 单元级缓存（S5，opt-in）
 
 `VUNA_UNIT_CACHE=1` 时，`build` 在包级 split 缓存未命中（包内一个模块变了）后不再重新
-生成所有单元：每个 `SplitFile` 按 **单元 key** 缓存在 `$TMPDIR/vuna-cache/<pkg>/split-units/`
-（自描述头 + Marshal；`Driver.PerfCache`）。key = 单元名 + 模块声明内容哈希 + 依赖单元
-key 的传递哈希链；依赖接口变化沿链使依赖者失效，无关模块变化不影响。生成结果规范化为
-**确定性拓扑序**（按深度分层、同层按名字哈希；每单元直接依赖也按同序 normalize），因此
-复用旧记录不会让 build.sh 的层/顺序漂移——增量与干净重建产物逐字节一致（测试 §44h）。
-实测 compiler 包改一个叶子模块：无缓存 14.6s vs 有 14.3s（elab 主导，codegen 只占 ~1–2%）。
+生成所有单元：每个 `SplitFile` 按 **单元 key** 缓存在 `$TMPDIR/vuna-cache/<pkg>/split-units/`。
+**按 entry 分桶（S7）**：目录为 `.../split-units/e-<entryId>/`（entryId = 包名 + 入口路径，
+不是内容哈希——入口内容变化仍复用同桶）；单元 key = 单元名 + 模块声明内容哈希 + 依赖
+单元 key 传递哈希链 + `printResult`。写/读前 GC 只保留当前 entry 桶（清掉旧桶与旧布局
+散落文件），同包不同入口交替构建不再互相污染。生成结果
+规范化为**确定性拓扑序**（深度分层 + 同层名字哈希，依赖同序 normalize），增量与干净重建
+产物逐字节一致（测试 §44h）；跨 entry 的桶切换/GC 见测试 §44j。
 
-**默认关闭**：单包增量收益有限；且缓存目录按包名隔离，共享 `TMPDIR` 下多个「同包、不同
-entry 的单文件编译」会共用单元缓存（entry key 含声明哈希，但清理/隔离策略未做）。下一步：
-按 entry 分桶 + 旧单元 GC 后再默认启用。
+实测 compiler 包改一个叶子模块：无缓存 14.6s vs 有 14.3s（elab 主导，codegen/序列化只占
+~1–2%）。**默认关闭**：单包增量收益有限；entry 隔离/GC 已做，下一步是默认启用前的收益
+评估（大文件/多包场景再测）。
 
 ## 依赖可见性收敛（S6）
 
@@ -161,14 +168,16 @@ load 之后按闭包过滤模块表：起点 = entry 的全部 imports（含隐�
 
 - **包内逐模块增量已落地（S4）**：干净模块复用、只精化脏模块；剩余是更细的
   headers / bodies 分阶段复用（当前仍以模块为单位）。
-- **codegen 单元级缓存已落地（S5，`VUNA_UNIT_CACHE=1`）**：整包 split 缓存未命中时按单元 key 复用已生成的
-  `SplitFile`；产物顺序规范化保证增量/全量一致（详见上）。
-- **LSP / REPL 消费接口已接好（`VUNA_IFACE_TOOL=1`，默认关）**：默认仍全量精化；
-  开启后单次请求读整个依赖闭包偏慢，惰性读闭包 + 会话缓存未做。
+- **codegen 单元级缓存已落地（S5/S7，`VUNA_UNIT_CACHE=1`）**：整包 split 缓存未命中时按
+  单元 key 复用已生成 `SplitFile`；按 entry 分桶 + GC，产物顺序规范化保证增量/全量一致
+  （详见上；默认启用待收益评估）。
+- **LSP / REPL 消费接口已接好（`VUNA_IFACE_TOOL=1`，默认关）**：惰性 import 闭包已做
+  （S7，manifest 自带 imports，只读需要的模块）；会话内缓存未做，故仍默认关。
 - **快判**：默认内容哈希；`VUNA_CACHE_MTIME=1` 提供 mtime+size 快路径（可选、非默认）。
 - **序列化**：接口文件带自描述头（magic|schema|compiler），读侧先校验头再 unmarshal，
-  错版本/损坏直接拒绝并回退；载荷仍是 OCaml Marshal（C32 的完整规范化格式只做了哈希侧
-  的顺序/残 meta 规范化，split 缓存也是裸 Marshal）。
+  错版本/损坏直接拒绝并回退；manifest 在 `vuna-iface 7` 起自带每模块 import 名（供
+  惰性闭包）；载荷仍是 OCaml Marshal（C32 的完整规范化格式只做了哈希侧的顺序/残 meta
+  规范化，split 缓存也是裸 Marshal）。
 - **依赖可见性已收敛（S6）**：摘要路径 load 后按 entry/本包 import 闭包过滤模块表，未 materialize 的依赖模块不提供实例/类，等价于全量路径（测试 §44i）；模块签名隔离另立项。
 - **擦除位残 meta** 仍靠包段重编号；彻底方案是精化收尾消 meta。
 - 接口多存 `miDecls`（见上），文件比 TTC 的「只存编译后定义」更接近源码体积；后续可换更

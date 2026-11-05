@@ -1,6 +1,7 @@
 module Vuna.Compiler.Loader.Flatten
   ( fixitiesForSource
   , fixitiesForSourceIn
+  , implicitPrelude
   , loadModuleSource
   , loadModuleSourceWithPreloaded
   , loadProject
@@ -9,6 +10,7 @@ module Vuna.Compiler.Loader.Flatten
   , loadProjectSource
   , loadProjectSourceWithPreloaded
   , loadProjectWithPreloaded
+  , parseFileWithPath
   , resolveProject
   , resolveProjectKeeping
   ) where

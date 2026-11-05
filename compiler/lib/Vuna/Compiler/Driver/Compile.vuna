@@ -5,6 +5,8 @@ module Vuna.Compiler.Driver.Compile
   , compileToDir
   , depIfacesForCheck
   , depIfacesForTool
+  , depIfacesForToolProgram
+  , depIfacesForToolSource
   , ensureDirPath
   , metaUpToDate
   , runBuildScript
@@ -31,6 +33,8 @@ import Vuna.Compiler.Elab
 import Vuna.Compiler.Driver.Cache
 import Vuna.Compiler.Driver.Iface
 import Vuna.Compiler.Driver.Split
+import Vuna.Compiler.Frontend.Ast
+import Vuna.Compiler.Loader
 import Vuna.Compiler.Version
 import Base.IO
 
@@ -512,6 +516,130 @@ depIfacesForCheck ctx = depIfacesOf ctx
 -- 工具链默认**不**读整个依赖闭包接口：一次性读+校验 94 个模块比按需 load 慢（小项目
 -- 会把单次 REPL 求值从 0.08s 拖到 2s）。用 `VUNA_IFACE_TOOL=1` 显式开启；后续做
 -- 「只读 import 闭包需要的那几个模块 + 会话内缓存」后再默认打开。
+-- M34.5（S7）：工具链**按需**读依赖接口。
+-- manifest 已携带每模块的直接 import 名与依赖哈希：先只读 manifest（小）并按 entry 的
+-- import 闭包算出需要哪些模块，再只 unmarshal 这些模块文件（不再一次读整包 N 个模块）。
+-- 任一校验失败返回 Nothing，调用方回退全量（与旧行为一致，只是少读盘/少 unmarshal）。
+toolDepManifests : PackageContext -> Maybe (List (Pair String PackageManifest))
+toolDepManifests ctx = case ctx.contextPackage of
+  Nothing => Nothing
+  Just pkg =>
+    toolManifestsGo (contextRoots ctx) (secondOf (collectDepPackages [] pkg.packageDependencies)) []
+
+toolManifestsGo : List Root -> List Package -> List (Pair String PackageManifest) -> Maybe (List (Pair String PackageManifest))
+toolManifestsGo roots [] acc = Just (reverse acc)
+toolManifestsGo roots (p :: rest) acc =
+  let
+    dir = depIfaceDirOf p
+  in case readManifest dir ifaceCompilerTag of
+    Nothing =>
+      let
+        _ = note ("iface-tool-manifest-miss " ++ packageName p)
+      in Nothing
+    Just mf => if pmSchemaOf mf == ifaceSchema && pmCompilerOf mf == ifaceCompilerTag && pmPackageOf mf == packageName p && manifestSourcesValid roots p mf then toolManifestsGo roots rest (Pair dir mf :: acc)
+    else
+      let
+        _ = note ("iface-tool-manifest-invalid " ++ packageName p)
+      in Nothing
+
+-- manifest 级来源校验：与 `depIfaceSourcesValid` 同判据，但只吃 manifest（不必读模块文件）。
+manifestSourcesValid : List Root -> Package -> PackageManifest -> Bool
+manifestSourcesValid roots p mf =
+  let
+    pkgRoots = filter (\r => rootName r == packageName p) roots
+    walked = sourcePathMapOfRoots pkgRoots
+    entries = pmModulesOf mf
+  in sameNameSet (map firstOf walked) (map meNameOfEntry entries) && allEntriesValid entries walked
+
+allEntriesValid : List ManifestEntry -> List (Pair String String) -> Bool
+allEntriesValid [] _ = True
+allEntriesValid (e :: rest) paths = case lookupPair (meNameOfEntry e) paths of
+  Just path => sourceInfoUnchanged path (meSourceOfEntry e) && allEntriesValid rest paths
+  Nothing => False
+
+toolEntryTable : List (Pair String PackageManifest) -> List (Pair String (Pair String ManifestEntry))
+toolEntryTable [] = []
+toolEntryTable ((Pair dir mf) :: rest) =
+  append (map (\e => Pair (meNameOfEntry e) (Pair dir e)) (pmModulesOf mf)) (toolEntryTable rest)
+
+toolFindEntry : List (Pair String (Pair String ManifestEntry)) -> String -> Maybe (Pair String (Pair String ManifestEntry))
+toolFindEntry [] _ = Nothing
+toolFindEntry (p :: rest) name = if firstOf p == name then Just p else toolFindEntry rest name
+
+-- entry import 闭包：沿 manifest 的 meImports + meDeps 传递扩展（不读模块文件）。
+toolClosure : List (Pair String (Pair String ManifestEntry)) -> List String -> List String
+toolClosure table starts = toolClosureGo 8192 table [] starts
+
+toolClosureGo : Int -> List (Pair String (Pair String ManifestEntry)) -> List String -> List String -> List String
+toolClosureGo fuel table visited [] = visited
+toolClosureGo fuel table visited (n :: rest) = if fuel <= 0 then visited
+else if memName n visited then toolClosureGo fuel table visited rest
+else case toolFindEntry table n of
+  Nothing => toolClosureGo (fuel - 1) table (n :: visited) rest
+  Just p =>
+    let
+      e = secondOf (secondOf p)
+    in toolClosureGo (fuel - 1) table (n :: visited)
+      (append rest (append (meImportsOfEntry e) (map firstOf (meDepsOfEntry e))))
+
+toolReadIfaces : List (Pair String (Pair String ManifestEntry)) -> List String -> Maybe (List ModuleIface)
+toolReadIfaces table needed = toolReadIfacesGo table needed []
+
+toolReadIfacesGo : List (Pair String (Pair String ManifestEntry)) -> List String -> List ModuleIface -> Maybe (List ModuleIface)
+toolReadIfacesGo [] _ acc = Just (reverse acc)
+toolReadIfacesGo (p :: rest) needed acc = if memName (firstOf p) needed then
+  let
+    d = secondOf p
+    dir = firstOf d
+    e = secondOf d
+  in case readModuleFile dir ifaceCompilerTag e of
+    Just m => toolReadIfacesGo rest needed (m :: acc)
+    Nothing => Nothing
+else toolReadIfacesGo rest needed acc
+
+-- 依赖接口哈希链（只针对读到的子集；闭包已沿 deps 扩到全部被引用模块）。
+toolChainValid : List ModuleIface -> Bool
+toolChainValid ifaces =
+  let
+    tbl = map (\m => Pair (miNameOf m) (miIfaceHashOf m)) ifaces
+  in depHashesAllOk tbl ifaces
+
+importNameStr : Import -> String
+importNameStr (Import n alias q sp) = n
+
+toolImportsOfSource : PackageContext -> String -> String -> List String
+toolImportsOfSource ctx label source = case parseFileWithPath label source of
+  Err _ => []
+  Ok (SourceFile hdr imports fixities decls) => case hdr of
+    Just (ModDecl dname _ _ _) => toolImportNamesOf ctx dname imports
+    Nothing => toolImportNamesOf ctx "" imports
+
+toolImportNamesOf : PackageContext -> String -> List Import -> List String
+toolImportNamesOf ctx current imports = case implicitPrelude (contextRoots ctx) (contextPackageName ctx) current imports of
+  Err _ => map importNameStr imports
+  Ok implicit => map importNameStr (append imports implicit)
+
+-- 工具链消费：`VUNA_IFACE_TOOL=1` 时按源码 import 闭包按需读接口；否则 Nothing。
+depIfacesForToolSource : PackageContext -> String -> String -> Maybe (List ModuleIface)
+depIfacesForToolSource ctx label source = if runIO (prim_getenv "VUNA_IFACE_TOOL") == "1" then case toolDepManifests ctx of
+  Nothing => Nothing
+  Just mans =>
+    let
+      table = toolEntryTable mans
+      needed = toolClosure table (toolImportsOfSource ctx label source)
+    in case toolReadIfaces table needed of
+      Nothing => Nothing
+      Just ifaces => if toolChainValid ifaces then
+        let
+          _ = note ("iface-tool-lazy modules=" ++ strFromInt (length ifaces))
+        in Just ifaces
+      else Nothing
+else Nothing
+
+-- REPL：program 是「imports + 定义」的源码，闭包同样从它的 import 算。
+depIfacesForToolProgram : PackageContext -> String -> Maybe (List ModuleIface)
+depIfacesForToolProgram ctx program = depIfacesForToolSource ctx "<repl>" program
+
 depIfacesForTool : PackageContext -> Maybe (List ModuleIface)
 depIfacesForTool ctx =
   if runIO (prim_getenv "VUNA_IFACE_TOOL") == "1" then depIfacesOf ctx else Nothing

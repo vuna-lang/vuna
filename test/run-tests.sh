@@ -1681,6 +1681,8 @@ fi
 repo_iface_repl=$( cd .. && TMPDIR="$repo_cache" VUNA_IFACE_TOOL=1 VUNA_DEBUG_PERF=1 sh -c 'printf "x : Int\nx = 1 + 1\nx + 40\n:q\n" | "$0" repl' "$summ_vuna" 2>&1 )
 check_contains "summary repl consumes dep ifaces" "$repo_iface_repl" "iface-source=repl modules="
 check_contains "summary repl iface eval" "$repo_iface_repl" "42"
+repo_iface_mods=$(printf %s "$repo_iface_repl" | grep -o "iface-tool-lazy modules=[0-9]*" | head -1 | sed "s/.*=//")
+if [ -n "$repo_iface_mods" ] && [ "$repo_iface_mods" -lt 60 ]; then ok; else bad "summary repl lazy iface closure" "<60 modules" "modules=$repo_iface_mods"; fi
 if ( cd .. && TMPDIR="$repo_cache" VUNA_IFACE_TOOL=1 sh test/corpus/lsp/smoke.sh "$summ_vuna" >/dev/null 2>&1 ); then
   ok
 else
@@ -1728,6 +1730,30 @@ if TMPDIR="$vis_cache" "$VUNA" check "$vis_base" >/dev/null 2>&1 && TMPDIR="$vis
   check_eq "summary vis root2 accepted (full)" "0" "$vis_root2_full_exit"
 else
   bad "summary vis fixture warmup" "0" "base/dep check failed"
+fi
+
+# 44j) 单元缓存按 entry 分桶 + GC（S7）：同一包上下文里不同入口文件各占一个桶；切换入口
+#      时旧桶被 GC 清掉，同一入口（路径不变、内容变了）重建仍能命中单元缓存。
+uj_pkg="$tmp/unit-entry-pkg"
+mkdir -p "$uj_pkg"
+printf '[package]\nname = "unit-entry-pkg"\n\n[dependencies]\nvuna-base = "%s"\n' "$VUNA_BASE" >"$uj_pkg/vuna.toml"
+printf 'main : Int\nmain = 1\n' >"$uj_pkg/A.vuna"
+printf 'main : Int\nmain = 2\n' >"$uj_pkg/B.vuna"
+uj_cache="$tmp/unit-cache-j"
+rm -rf "$uj_cache" "$tmp/unit-j1" "$tmp/unit-j2"
+if TMPDIR="$uj_cache" VUNA_UNIT_CACHE=1 "$summ_vuna" compile "$uj_pkg/A.vuna" "$tmp/unit-j1" >/dev/null 2>&1; then
+  printf '\n-- probe\n' >>"$uj_pkg/A.vuna"
+  uj_log=$(TMPDIR="$uj_cache" VUNA_UNIT_CACHE=1 VUNA_DEBUG_PERF=1 "$summ_vuna" compile "$uj_pkg/A.vuna" "$tmp/unit-j1" 2>&1)
+  uj_hits=$(printf %s "$uj_log" | grep -c "unit-cache-hit" || true)
+  if [ "$uj_hits" -ge 1 ]; then ok; else bad "summary unit cache same-entry hits" ">=1" "hits=$uj_hits"; fi
+  if TMPDIR="$uj_cache" VUNA_UNIT_CACHE=1 "$summ_vuna" compile "$uj_pkg/B.vuna" "$tmp/unit-j2" >/dev/null 2>&1; then
+    uj_buckets=$(find "$uj_cache"/vuna-cache -path "*split-units/e-*" -name "*.unit" 2>/dev/null | xargs -r -n1 dirname | sort -u | wc -l)
+    check_eq "summary unit cache one entry bucket" "1" "$uj_buckets"
+  else
+    bad "summary unit cache entry B compile" "0" "failed"
+  fi
+else
+  bad "summary unit cache entry A compile" "0" "failed"
 fi
 
 if [ "$fail" -ne 0 ]; then

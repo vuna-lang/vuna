@@ -1,5 +1,8 @@
 module Vuna.Compiler.Driver.PerfCache
   ( unitCacheDir
+  , unitCacheEntryDir
+  , unitCacheEntryKeyOf
+  , unitCacheGc
   , unitCacheRead
   , unitCacheTag
   , unitCacheWrite
@@ -72,6 +75,53 @@ unitNameSafe s = strPack (map charSafe (strUnpack s))
 
 charSafe : Int -> Int
 charSafe c = if c == 46 then 95 else c
+
+-- M34.5（S7）：单元缓存按 **entry 分桶**。同一包在不同工具/入口下共用包名 key 会让
+-- 不同入口的单元互相污染（entry key 已含声明哈希，但桶隔离才是清理与命中的边界）。
+-- 目录名带 entry key 的两个哈希；GC 只保留当前 entry 桶（旧 layout 的散落文件一并清）。
+unitCacheEntryDir : String -> String -> String
+unitCacheEntryDir base entryKey =
+  base
+    ++ "/e-"
+    ++ strFromInt (textHashOf ("entry:" ++ entryKey))
+    ++ "-"
+    ++ strFromInt (textHashOf ("entry2:" ++ entryKey))
+
+unitCacheEntryKeyOf : List (Pair String String) -> String
+unitCacheEntryKeyOf keys = case lookupPair "__entry__" keys of
+  Just k => k
+  Nothing => ""
+
+unitCacheGc : String -> String -> Int
+unitCacheGc base keepDir =
+  let
+    _ = ensureDirPath base
+  in gcEntries base keepDir (runIO (prim_readDir base))
+
+gcEntries : String -> String -> List String -> Int
+gcEntries base keepDir [] = 0
+gcEntries base keepDir (n :: rest) =
+  let
+    path = base ++ "/" ++ n
+  in if path == keepDir then gcEntries base keepDir rest
+  else if runIO (prim_isDirectory path) then
+    let
+      _ = dropDirFiles path
+    in gcEntries base keepDir rest
+  else
+    let
+      _ = runIO (prim_removeFile path)
+    in gcEntries base keepDir rest
+
+dropDirFiles : String -> Int
+dropDirFiles dir = dropFiles dir (runIO (prim_readDir dir))
+
+dropFiles : String -> List String -> Int
+dropFiles dir [] = 0
+dropFiles dir (f :: rest) =
+  let
+    _ = runIO (prim_removeFile (dir ++ "/" ++ f))
+  in dropFiles dir rest
 
 unitCacheRead : String -> String -> String -> Maybe SplitFile
 unitCacheRead dir name key =

@@ -2,6 +2,7 @@ module Vuna.Compiler.Loader
   ( ExportEntry(..)
   , Module(..)
   , Project(..)
+  , implicitPrelude
   , loadModuleSource
   , loadModuleSourceWithPreloaded
   , loadProject
@@ -14,6 +15,7 @@ module Vuna.Compiler.Loader
   , moduleDeclsOf
   , moduleNameOf
   , modulePackageOf
+  , parseFileWithPath
   , projectEntryAllImports
   , resolveProject
   , resolveProjectKeeping

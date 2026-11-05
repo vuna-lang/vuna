@@ -1,10 +1,18 @@
 module Vuna.Compiler.Driver.Iface
-  ( ModuleIface(..)
+  ( ManifestEntry(..)
+  , ModuleIface(..)
   , PackageIface(..)
+  , PackageManifest(..)
   , SourceInfo(..)
   , hashTextStrong
   , ifaceOfPackage
   , ifaceSchema
+  , meDepsOfEntry
+  , meFileOfEntry
+  , meIfaceHashOfEntry
+  , meImportsOfEntry
+  , meNameOfEntry
+  , meSourceOfEntry
   , miCachedOf
   , miCapabilitiesOf
   , miDeclsOf
@@ -19,6 +27,12 @@ module Vuna.Compiler.Driver.Iface
   , miSourceOf
   , moduleNamesOf
   , packageIfaceValid
+  , pmCompilerOf
+  , pmModulesOf
+  , pmPackageOf
+  , pmSchemaOf
+  , readManifest
+  , readModuleFile
   , readPackageIface
   , siHashOf
   , siMtimeOf
@@ -145,7 +159,7 @@ miDeclsOf m = m.miDecls
 
 -- 接口格式版本：Marshal 布局或字段语义变化必须 bump（旧缓存自然失效）。
 ifaceSchema : String
-ifaceSchema = "vuna-iface 6"
+ifaceSchema = "vuna-iface 7"
 
 -- ---------------------------------------------------------------
 -- 哈希：接口哈希必须比 `strHash`（10 bit）强得多
@@ -587,12 +601,47 @@ record ManifestEntry where
   meSource : SourceInfo
   meIfaceHash : Int
   meDeps : List (Pair String Int)
+  -- S7：直接 import 的模块名（含隐式 import）。manifest 自带 import 闭包，工具链可按需
+  -- 只读需要的模块接口（不必先读全包文件）。
+  meImports : List String
 
 record PackageManifest where
   pmSchema : String
   pmCompiler : String
   pmPackage : String
   pmModules : List ManifestEntry
+
+-- S7（manifest 访问器）：构造函数已导出；这里给 Compile 的按需读路径一套只读访问器，
+-- 避免跨模块直接依赖 record 投影语法。
+meNameOfEntry : ManifestEntry -> String
+meNameOfEntry (ManifestEntry n f s h d im) = n
+
+meFileOfEntry : ManifestEntry -> String
+meFileOfEntry (ManifestEntry n f s h d im) = f
+
+meSourceOfEntry : ManifestEntry -> SourceInfo
+meSourceOfEntry (ManifestEntry n f s h d im) = s
+
+meIfaceHashOfEntry : ManifestEntry -> Int
+meIfaceHashOfEntry (ManifestEntry n f s h d im) = h
+
+meDepsOfEntry : ManifestEntry -> List (Pair String Int)
+meDepsOfEntry (ManifestEntry n f s h d im) = d
+
+meImportsOfEntry : ManifestEntry -> List String
+meImportsOfEntry (ManifestEntry n f s h d im) = im
+
+pmSchemaOf : PackageManifest -> String
+pmSchemaOf (PackageManifest s c p ms) = s
+
+pmCompilerOf : PackageManifest -> String
+pmCompilerOf (PackageManifest s c p ms) = c
+
+pmPackageOf : PackageManifest -> String
+pmPackageOf (PackageManifest s c p ms) = p
+
+pmModulesOf : PackageManifest -> List ManifestEntry
+pmModulesOf (PackageManifest s c p ms) = ms
 
 manifestPathOf : String -> String
 manifestPathOf dir = dir ++ "/" ++ manifestFileName
@@ -642,6 +691,7 @@ manifestEntryOf : ModuleIface -> ManifestEntry
 manifestEntryOf m =
   ManifestEntry (miNameOf m) (ifaceFileNameOf (miNameOf m)) (miSourceOf m) (miIfaceHashOf m)
     (miDepHashesOf m)
+    (append (map importNameOf (miImportsOf m)) (map importNameOf (miImplicitImportsOf m)))
 
 oldEntryOf : List ManifestEntry -> String -> Maybe ManifestEntry
 oldEntryOf [] _ = Nothing
