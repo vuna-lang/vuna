@@ -3,13 +3,18 @@ module Vuna.Compiler.Elab
   , Data.indexErasureCandidates
   , Derive.instHead
   , Driver.DtGoalInfo
+  , Driver.addClassesEc
+  , Driver.addDatasEc
+  , Driver.addInstsEc
   , Driver.dtEvalExprIn
   , Driver.dtEvalExprInInfo
   , Driver.dtGoalInfoCtx
   , Driver.dtGoalInfoGoal
   , Driver.dtGoalInfoSpan
+  , Driver.ecOfProgram
   , Driver.elabProgram
   , Driver.elabProgramFull
+  , Driver.elabProgramGoWith
   , Driver.goalsOfProgram
   , InstName.derivedInstName
   , InstName.instanceName

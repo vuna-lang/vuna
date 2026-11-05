@@ -2,6 +2,7 @@ module Vuna.Compiler.Driver.Dt
   ( dtCheck
   , dtCheckLibrary
   , dtCheckLibraryWithProgram
+  , dtCheckPackageWithDeps
   , dtCheckSource
   , dtCheckWithProgram
   , dtEvalExpr
@@ -9,6 +10,7 @@ module Vuna.Compiler.Driver.Dt
   , dtEvalFile
   , dtGoalsSource
   , dtMainKind
+  , dtProgramHasMetas
   , dtSplitProject
   ) where
 
@@ -31,6 +33,8 @@ import Vuna.Compiler.Packages.Pkg
 import Vuna.Compiler.Loader
 import Vuna.Compiler.Core
 import Vuna.Compiler.Elab
+import Vuna.Compiler.Elab.Types
+import Vuna.Compiler.Elab.Meta
 import Vuna.Compiler.Intrinsics
 import Vuna.Compiler.Codegen
 import Vuna.Compiler.Driver.Split
@@ -233,3 +237,73 @@ in andThen (elabProgramFull allDecls)
   (\program => generateDtSplitProgram (map (\m => Pair (moduleNameOf m) (moduleDeclsOf m)) modules) entryDecls program printResult)
 )
 )
+
+-- M34.5 接口摘要：加载 + resolve 项目并保留模块归属（本包 decls 过滤用）。
+dtLoadParts : PackageContext -> String -> Result (Pair (List Decl) (List Module))
+dtLoadParts ctx entry = andThen (loadProject ctx entry) (\project => resolveProject project)
+
+-- 只精化本包模块：依赖包的 DtProgram（缓存摘要）重建起始 Ec / globals，跳过依赖包 body。
+-- 安全阀在调用方：摘要必须已完全解出（无残留 TMeta）且缓存命中，否则回退全量路径。
+dtCheckPackageWithDeps : PackageContext -> String -> List DtProgram -> Result (Pair (List String) DtProgram)
+dtCheckPackageWithDeps ctx entry deps = andThen (dtLoadParts ctx entry) (\parts => let
+  pkgName = contextPackageName ctx
+  ours = filter (\m => modulePackageOf m == pkgName) (reverse (secondOf parts))
+  decls = append (concatMap moduleDeclsOf ours) (firstOf parts)
+  start = depStartOf deps
+in andThen (elabProgramGoWith (firstOf start) (secondOf start) decls)
+  (\prog => andThen (checkDtProgram (Pair (dtProgDatas prog) (dtProgDefs prog))) (\_ => Ok (Pair [] prog)))
+)
+
+depStartOf : List DtProgram -> Pair Ec (List (Pair String Term))
+depStartOf progs =
+  let
+    datas = dedupDatas (concatMap dtProgDatas progs)
+    globals = dedupGlobals (concatMap dtProgGlobals progs)
+    ec0 = ecEmpty
+    ec1 = addDatasEc ec0 datas
+    ec2 = addInstsEc ec1 (dedupInsts (concatMap dtProgInsts progs))
+    ec3 = addClassesEc ec2 (dedupClasses (concatMap dtProgClasses progs))
+    ec4 = ecPutNext ec3 (maxNext progs)
+    ec5 = ecPutGlobalsTbl ec4 (Base.HashMap.fromList globals)
+  in Pair ec5 globals
+
+dedupDatas : List DtData -> List DtData
+dedupDatas [] = []
+dedupDatas (d :: rest) =
+  if memName (dtDataName d) (map dtDataName rest) then dedupDatas rest else d :: dedupDatas rest
+
+dedupInsts : List DtInst -> List DtInst
+dedupInsts [] = []
+dedupInsts (i :: rest) =
+  if memName (dtInstName i) (map dtInstName rest) then dedupInsts rest else i :: dedupInsts rest
+
+dedupClasses : List DtClass -> List DtClass
+dedupClasses [] = []
+dedupClasses (c :: rest) =
+  if memName (dtClassName c) (map dtClassName rest) then dedupClasses rest
+  else c :: dedupClasses rest
+
+dedupGlobals : List (Pair String Term) -> List (Pair String Term)
+dedupGlobals [] = []
+dedupGlobals (g :: rest) =
+  if memName (firstOf g) (map firstOf rest) then dedupGlobals rest else g :: dedupGlobals rest
+
+maxNext : List DtProgram -> Int
+maxNext [] = 0
+maxNext (p :: rest) = if dtProgNext p > maxNext rest then dtProgNext p else maxNext rest
+
+-- M34.5 安全阀：摘要是否残留未替换的 TMeta。接口摘要路径只接受完全解出的摘要
+-- （否则编号空间可能跨包冲突，静默漏检）。
+dtProgramHasMetas : DtProgram -> Bool
+dtProgramHasMetas prog =
+  length (concatMap defMetaIds (dtProgDefs prog)) > 0
+    || length (concatMap (\g => termMetasAll (secondOf g)) (dtProgGlobals prog)) > 0
+
+defMetaIds : DtDef -> List Int
+defMetaIds d =
+  let
+    tyIds = termMetasAll (dtDefType d)
+    bodyIds = case dtDefBody d of
+      Just b => termMetasAll b
+      Nothing => []
+  in append tyIds bodyIds

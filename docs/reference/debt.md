@@ -41,7 +41,7 @@
 | C33 | 性能 CI 只有软对比（`bench/compiler.sh --check` 20% WARN）与缓存有效性门槛（`vuna-compiler-perf` 断言热 < 冷/2）；分配统计报告已可用（`bench/compiler.sh --alloc`，VN_PERF_STATS），但没有绝对性能回归门槛 | `bench/compiler.sh`；`nix/checks/compiler-perf.sh`；[performance.md](performance.md) §9 | M34（部分落地） |
 | C35 | `Codegen.Split` 的每个模块文件 `open` **所有前序单元**（`genUnitParts` 的 `[runtimeUnit] ++ earlier`），依赖图退化为全序；且 dict/class 构造子名编码（`C_Dict_uBase_dMonad_dFunctor_MkDict_...`）不是 OCaml 模块限定名、跨模块引用依赖 open，精确 per-module open 需要 codegen 同时生成全限定构造子名；模块级并行 codegen / 编译需要这两步，否则分层并行不可能 | `Codegen/Split.splitModuleFiles` / `genUnitParts`；`Driver/Split.buildScript` | M34.4（后续） |
 | C36 | 泛型函数体内对 `Int` 的比较/算术（`<=` / `+` / `-`）走方法别名的隐式实例搜索，其隐式变量与函数泛型类型变量同名合并——泛型函数里混用「Int 辅助逻辑 + 泛型数据」时，`fuel <= 0` 会把泛型 `a` 统一成 `Int`（归并排序 `sortByFuel` 复现）；目前只能拆独立函数或显式类型规避，且数值递减的 SCT 判定被包裹函数阻断 | `Base/Sort.vuna` 注释；`Elab/Trait` 实例解糖 | M34.3（后续） |
-| C37 | 接口摘要（依赖包 elab 复用）受**跨包元变量编号空间**限制：每个包的 `ecNext` / `sols` 从 0 独立编号，合并多个依赖包的摘要时编号重叠；`rezonk` 后的签名 / 体里是否残留 `TMeta` 取决于各包精化路径，无法用「合并 sols + 偏移」安全重建（静默漏检风险） | `Elab/Driver.ecOfProgram`；`Driver/Cache` | M34.5（后续：per-module 编号或摘要含完全解出的 Term） |
+| C37 | 接口摘要（依赖包 elab 复用）受**跨包元变量编号空间**限制：每个包的 `ecNext` / `sols` 从 0 独立编号，合并多个依赖包的摘要时编号重叠；`rezonk` 后的签名 / 体里是否残留 `TMeta` 取决于各包精化路径，无法用「合并 sols + 偏移」安全重建（静默漏检风险）。**实测**：`CachedProgram` 里仍有开放解残留的 `TMeta`（`substSolvedMetasTbl` 对含自由变量的解保守跳过），安全阀 `dtProgramHasMetas` 因此在 `check .` 上触发、接口摘要路径回退全量；robust 方案是摘要保留 `sols`/`next`、合并时逐包**偏移重编号**（Term 的 `TMeta` + sols 键 + next） | `Elab/Driver.ecOfProgram`；`Driver/Cache` | M34.5（后续：per-module 编号或摘要含完全解出的 Term） |
 
 ## 未来能力（F1–F4）
 

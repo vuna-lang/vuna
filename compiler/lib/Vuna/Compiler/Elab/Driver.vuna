@@ -1,5 +1,8 @@
 module Vuna.Compiler.Elab.Driver
   ( DtGoalInfo(..)
+  , addClassesEc
+  , addDatasEc
+  , addInstsEc
   , anyAltHasMeta
   , anyArgHasMeta
   , checkAllDefined
@@ -11,10 +14,12 @@ module Vuna.Compiler.Elab.Driver
   , dtGoalInfoCtx
   , dtGoalInfoGoal
   , dtGoalInfoSpan
+  , ecOfProgram
   , elabBodies
   , elabProgram
   , elabProgramFull
   , elabProgramGo
+  , elabProgramGoWith
   , elabSigs
   , findDefWithMeta
   , findGoal

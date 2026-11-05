@@ -20,6 +20,7 @@ module Vuna.Compiler.Driver.Compile
 import Vuna.Compiler.Common
 import Vuna.Compiler.Packages.Pkg
 import Vuna.Compiler.Driver.Dt
+import Vuna.Compiler.Elab
 import Vuna.Compiler.Driver.Cache
 import Vuna.Compiler.Driver.Split
 import Vuna.Compiler.Version
@@ -353,11 +354,38 @@ checkCachedExe ctx entry =
     key = checkCacheKeyExe ctx entry
     path = checkCachePath ctx key
   in if runIO (prim_fileExists path) then Ok []
-  else andThen (dtCheckWithProgram ctx entry) (\r => let
-    _ = ensureDirPath (checkCacheDir ctx)
-    _ = runIO (prim_writeFile path (prim_marshal (cachedOfProgram (secondOf r))))
-  in Ok (firstOf r)
-  )
+  else checkAndCache ctx entry path (dtCheckWithProgram ctx entry)
+
+-- M34.5 接口摘要路径的安全阀：只有全部直接依赖的缓存摘要都命中、且无残留 TMeta
+-- 才返回；否则回退全量精化（静默漏检不可接受）。
+depProgramsOf : PackageContext -> Maybe (List DtProgram)
+depProgramsOf ctx = case contextPackage ctx of
+  Nothing => Nothing
+  Just pkg => depProgramsOfGo (packageDependencies pkg) []
+
+depProgramsOfGo : List Package -> List DtProgram -> Maybe (List DtProgram)
+depProgramsOfGo [] acc = Just (reverse acc)
+depProgramsOfGo (d :: rest) acc = case readProgramCache d of
+  Just prog => if dtProgramHasMetas prog then Nothing else depProgramsOfGo rest (prog :: acc)
+  Nothing => Nothing
+
+readProgramCache : Package -> Maybe DtProgram
+readProgramCache dep =
+  let
+    dctx = packageContext dep
+    key = case packageExports dep of
+      Just names => checkCacheKeyLib dctx names
+      Nothing => checkCacheKeyExe dctx (packageEntry dep)
+    path = checkCachePath dctx key
+  in if runIO (prim_fileExists path) then Just (programOfCached (prim_unmarshal (runIO (prim_readFile path))))
+  else Nothing
+
+checkAndCache : PackageContext -> String -> String -> Result (Pair (List String) DtProgram) -> Result (List String)
+checkAndCache ctx entry path checked = andThen checked (\r => let
+  _ = ensureDirPath (checkCacheDir ctx)
+  _ = runIO (prim_writeFile path (prim_marshal (cachedOfProgram (secondOf r))))
+in Ok (firstOf r)
+)
 
 checkCachedLib : PackageContext -> List String -> Result (List String)
 checkCachedLib ctx names =
