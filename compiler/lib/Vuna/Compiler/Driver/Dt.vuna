@@ -266,19 +266,18 @@ depStartOf : List DtProgram -> Pair Ec (List (Pair String Term))
 depStartOf progs =
   let
     datas = dedupDatas (concatMap dtProgDatas progs)
-    globals =
-      append preludeGlobals
-        (append (map (\d => Pair (dtDataName d) (dtDataKind d)) datas) (dedupGlobals (concatMap dtProgGlobals progs)))
-    sols = concatMap dtProgSols progs
+    defGlobals =
+      filter (\p => memName (firstOf p) (map dtDataName datas) == False)
+        (append preludeValueGlobals (dedupGlobals (concatMap dtProgGlobals progs)))
+    globals = append defGlobals (map (\d => Pair (dtDataName d) (dtDataKind d)) datas)
     ec0 = ecEmpty
     ec1 = addDatasEc ec0 datas
     ec2 = addInstsEc ec1 (dedupInsts (concatMap dtProgInsts progs))
     ec3 = addClassesEc ec2 (dedupClasses (concatMap dtProgClasses progs))
-    ec4 = ec3
-    ec5 = ecPutNext ec4 0
-    ec6 = ecPutGlobalsTbl ec5 (Base.HashMap.fromList globals)
-    ec7 = ecPutDefTbl ec6 (Base.HashMap.fromList globals)
-  in Pair ec7 globals
+    ec4 = ecPutNext ec3 0
+    ec5 = ecPutGlobalsTbl ec4 (Base.HashMap.fromList globals)
+    ec6 = ecPutDefTbl ec5 (Base.HashMap.fromList defGlobals)
+  in Pair ec6 globals
 
 dedupDatas : List DtData -> List DtData
 dedupDatas [] = []

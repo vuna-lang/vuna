@@ -8,6 +8,7 @@ module Vuna.Compiler.Elab.Prelude
   , intTy
   , preludeGlobals
   , preludeNames
+  , preludeValueGlobals
   , prependParams
   , strTy
   ) where
