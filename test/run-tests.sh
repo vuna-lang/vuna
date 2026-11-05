@@ -1387,6 +1387,201 @@ else
   check_contains "summary repo path used" "$repo_summ" "cache-path=summary deps=2"
 fi
 
+# 45) M38 运行时错误报告：未捕获异常 → "vuna: runtime error: ..." + vuna 位置帧 + exit 2。
+#     `.err` 的既有断言（片段 "division by zero"）仍成立；这里额外锁定新格式，
+#     并确认不再泄漏 OCaml 的 `Fatal error: exception ...`。纯 main（模块初始化期求值）
+#     与 IO main（main 钩子 thunk 执行期）两条路径都覆盖。
+m38_rt="$tmp/m38-rt"
+mkdir -p "$m38_rt/app"
+printf '[package]\nname = "m38-rt"\n\n[dependencies]\nvuna-base = "%s"\n' "$VUNA_BASE" >"$m38_rt/vuna.toml"
+printf 'main : Int\nmain = 10 / 0\n' >"$m38_rt/app/Main.vuna"
+if ! "$VUNA" build "$m38_rt" >"$tmp/m38-rt-build.log" 2>&1; then
+  bad "m38 runtime build" "exit 0" "$(tail -3 "$tmp/m38-rt-build.log")"
+else
+  m38_rt_err=$("$m38_rt/.output/bin/m38-rt" 2>&1 >/dev/null)
+  m38_rt_code=$?
+  check_contains "m38 runtime error message" "$m38_rt_err" "vuna: runtime error: division by zero"
+  check_contains "m38 runtime error frame" "$m38_rt_err" "  at main ("
+  check_contains "m38 runtime error location" "$m38_rt_err" "app/Main.vuna:"
+  check_eq "m38 runtime error exit" "2" "$m38_rt_code"
+  case "$m38_rt_err" in
+    *"Fatal error"*) bad "m38 runtime error no Fatal" "no Fatal error" "$m38_rt_err" ;;
+    *) ok ;;
+  esac
+fi
+printf 'import Base.IO\n\nmain : IO Int\nmain = do\n  println "m38-start"\n  exit (10 / 0)\n' >"$m38_rt/app/Main.vuna"
+if ! "$VUNA" build "$m38_rt" >"$tmp/m38-rt-io-build.log" 2>&1; then
+  bad "m38 runtime io build" "exit 0" "$(tail -3 "$tmp/m38-rt-io-build.log")"
+else
+  m38_rt_io_out=$("$m38_rt/.output/bin/m38-rt" 2>"$tmp/m38-rt-io.err")
+  m38_rt_io_code=$?
+  m38_rt_io_err=$(cat "$tmp/m38-rt-io.err")
+  check_contains "m38 runtime io stdout" "$m38_rt_io_out" "m38-start"
+  check_contains "m38 runtime io frame" "$m38_rt_io_err" "  at main ("
+  check_eq "m38 runtime io exit" "2" "$m38_rt_io_code"
+fi
+
+# 46) M38 Base.Debug：trace/traceShow 走 stderr 且返回值不变；assert/todo 失败走
+#     运行时报告器（exit 2、帧指向 Base.Debug）。
+m38_dbg="$tmp/m38-dbg"
+mkdir -p "$m38_dbg/app"
+printf '[package]\nname = "m38-dbg"\n\n[dependencies]\nvuna-base = "%s"\n' "$VUNA_BASE" >"$m38_dbg/vuna.toml"
+printf 'import Base.Debug\n\nmain : Int\nmain = trace "m38-trace" (traceShow 42)\n' >"$m38_dbg/app/Main.vuna"
+if ! "$VUNA" build "$m38_dbg" >"$tmp/m38-dbg-build.log" 2>&1; then
+  bad "m38 debug build" "exit 0" "$(tail -3 "$tmp/m38-dbg-build.log")"
+else
+  m38_dbg_out=$("$m38_dbg/.output/bin/m38-dbg" 2>"$tmp/m38-dbg.err")
+  m38_dbg_code=$?
+  m38_dbg_err=$(cat "$tmp/m38-dbg.err")
+  check_eq "m38 debug trace stdout" "42" "$m38_dbg_out"
+  check_eq "m38 debug trace exit" "0" "$m38_dbg_code"
+  check_contains "m38 debug trace stderr" "$m38_dbg_err" "m38-trace"
+  check_contains "m38 debug traceshow stderr" "$m38_dbg_err" "42"
+fi
+printf 'import Base.Debug\n\nmain : Int\nmain = assert False "m38 assert" 7\n' >"$m38_dbg/app/Main.vuna"
+if ! "$VUNA" build "$m38_dbg" >"$tmp/m38-assert-build.log" 2>&1; then
+  bad "m38 assert build" "exit 0" "$(tail -3 "$tmp/m38-assert-build.log")"
+else
+  "$m38_dbg/.output/bin/m38-dbg" >/dev/null 2>"$tmp/m38-assert.err"
+  m38_assert_code=$?
+  m38_assert_err=$(cat "$tmp/m38-assert.err")
+  check_contains "m38 assert message" "$m38_assert_err" "assertion failed: m38 assert"
+  check_contains "m38 assert frame" "$m38_assert_err" "  at Base.Debug.assert ("
+  check_eq "m38 assert exit" "2" "$m38_assert_code"
+fi
+printf 'import Base.Debug\n\nmain : Int\nmain = todo "m38 todo"\n' >"$m38_dbg/app/Main.vuna"
+if ! "$VUNA" build "$m38_dbg" >"$tmp/m38-todo-build.log" 2>&1; then
+  bad "m38 todo build" "exit 0" "$(tail -3 "$tmp/m38-todo-build.log")"
+else
+  "$m38_dbg/.output/bin/m38-dbg" >/dev/null 2>"$tmp/m38-todo.err"
+  m38_todo_code=$?
+  if grep -q "TODO: m38 todo" "$tmp/m38-todo.err"; then ok; else bad "m38 todo message" "TODO: m38 todo" "$(cat "$tmp/m38-todo.err")"; fi
+  check_eq "m38 todo exit" "2" "$m38_todo_code"
+fi
+
+# 47) M38 vuna test 选项：--list / --filter（可重复）/ --verbose / --fail-fast；
+#     默认输出与退出码不变（第 42 段已锁默认输出，这里锁新开关的行为）。
+m38_tlist=$("$VUNA" test corpus/test-m30 --list 2>&1)
+check_contains "m38 test list root group" "$m38_tlist" "-- test-m30 --"
+check_contains "m38 test list file" "$m38_tlist" "PureInt.vuna"
+check_contains "m38 test list member group" "$m38_tlist" "-- test-m30-member --"
+m38_tfilter=$("$VUNA" test corpus/test-m30 --filter Pure 2>&1)
+check_contains "m38 test filter run" "$m38_tfilter" "workspace: 4 passed, 0 failed"
+case "$m38_tfilter" in
+  *"IoPass.vuna"*) bad "m38 test filter excludes" "IoPass.vuna not run" "$m38_tfilter" ;;
+  *) ok ;;
+esac
+m38_tmulti=$("$VUNA" test corpus/test-m30 --filter IoPass --filter member 2>&1)
+check_contains "m38 test filter repeated" "$m38_tmulti" "workspace: 2 passed, 0 failed"
+m38_tnone=$("$VUNA" test corpus/test-m30 --filter zzz-nomatch 2>&1)
+m38_tnone_code=$?
+check_contains "m38 test filter no match" "$m38_tnone" "workspace: 0 passed, 0 failed"
+check_eq "m38 test filter no match exit" "0" "$m38_tnone_code"
+m38_tverbose=$("$VUNA" test corpus/test-m30 --filter IoPass --verbose 2>&1)
+check_contains "m38 test verbose per-file ms" "$m38_tverbose" "ok   IoPass.vuna ("
+check_contains "m38 test verbose total" "$m38_tverbose" "total: "
+"$VUNA" test corpus/test-m30 --filter >/dev/null 2>&1
+check_eq "m38 test filter missing value" "2" "$?"
+# fail-fast：root 组失败、member 组通过；默认会跑到 member，fail-fast 不会。
+m38_ff="$tmp/m38-ff"
+mkdir -p "$m38_ff/app" "$m38_ff/test" "$m38_ff/member/app" "$m38_ff/member/test"
+printf '[package]\nname = "m38-ff"\n\n[workspace]\nmembers = ["member"]\n\n[dependencies]\nvuna-base = "%s"\n' "$VUNA_BASE" >"$m38_ff/vuna.toml"
+printf '[package]\nname = "m38-ff-member"\n\n[dependencies]\nvuna-base = "%s"\n' "$VUNA_BASE" >"$m38_ff/member/vuna.toml"
+printf 'main : Int\nmain = 0\n' >"$m38_ff/app/Main.vuna"
+printf 'main : Int\nmain = 0\n' >"$m38_ff/member/app/Main.vuna"
+printf 'main : Int\nmain = 1\n' >"$m38_ff/test/Fail.vuna"
+printf 'main : Int\nmain = 0\n' >"$m38_ff/member/test/Pass.vuna"
+m38_ff_all=$("$VUNA" test "$m38_ff" 2>&1)
+m38_ff_all_code=$?
+check_contains "m38 test fail-fast baseline member" "$m38_ff_all" "-- m38-ff-member --"
+check_contains "m38 test fail-fast baseline summary" "$m38_ff_all" "workspace: 1 passed, 1 failed"
+check_eq "m38 test fail-fast baseline exit" "1" "$m38_ff_all_code"
+m38_ff_stop=$("$VUNA" test "$m38_ff" --fail-fast 2>&1)
+m38_ff_stop_code=$?
+check_contains "m38 test fail-fast summary" "$m38_ff_stop" "workspace: 0 passed, 1 failed"
+check_eq "m38 test fail-fast exit" "1" "$m38_ff_stop_code"
+case "$m38_ff_stop" in
+  *"-- m38-ff-member --"*) bad "m38 test fail-fast stops" "member group skipped" "$m38_ff_stop" ;;
+  *) ok ;;
+esac
+
+# 48) M38 vuna run：增量 build + 执行 + 参数透传 + 退出码；--no-build / 缺 bin / 库包。
+"$VUNA" build corpus/packages/11_run_args >/dev/null 2>&1
+m38_run_out=$("$VUNA" run corpus/packages/11_run_args 2>&1)
+m38_run_code=$?
+check_contains "m38 run default output" "$m38_run_out" "no args"
+check_eq "m38 run exit" "0" "$m38_run_code"
+m38_run_args=$("$VUNA" run corpus/packages/11_run_args --no-build -- alpha beta 2>&1)
+check_eq "m38 run args passthrough" "alpha" "$m38_run_args"
+m38_run_exit="$tmp/m38-run-exit"
+mkdir -p "$m38_run_exit/app"
+printf '[package]\nname = "m38-run-exit"\n\n[dependencies]\nvuna-base = "%s"\n' "$VUNA_BASE" >"$m38_run_exit/vuna.toml"
+printf 'import Base.IO\n\nmain : IO Int\nmain = exit 7\n' >"$m38_run_exit/app/Main.vuna"
+if "$VUNA" build "$m38_run_exit" >"$tmp/m38-run-exit-build.log" 2>&1; then
+  "$VUNA" run "$m38_run_exit" --no-build >/dev/null 2>&1
+  check_eq "m38 run child exit passthrough" "7" "$?"
+else
+  bad "m38 run child exit build" "exit 0" "$(tail -3 "$tmp/m38-run-exit-build.log")"
+fi
+m38_run_nobin="$tmp/m38-run-nobin"
+mkdir -p "$m38_run_nobin/app"
+printf '[package]\nname = "m38-run-nobin"\n\n[dependencies]\nvuna-base = "%s"\n' "$VUNA_BASE" >"$m38_run_nobin/vuna.toml"
+printf 'main : Int\nmain = 0\n' >"$m38_run_nobin/app/Main.vuna"
+m38_run_nobin_out=$("$VUNA" run "$m38_run_nobin" --no-build 2>&1)
+m38_run_nobin_code=$?
+check_contains "m38 run missing binary" "$m38_run_nobin_out" "binary not found"
+check_eq "m38 run missing binary exit" "2" "$m38_run_nobin_code"
+m38_run_lib_out=$("$VUNA" run ../base 2>&1)
+m38_run_lib_code=$?
+check_contains "m38 run library package" "$m38_run_lib_out" "no executable entry"
+check_eq "m38 run library package exit" "2" "$m38_run_lib_code"
+
+# 49) M38 REPL 调试命令：:type / :load / :reload / :browse + 错误路径。
+m38_repl_ty=$(printf ':type 1 + 1\n:q\n' | "$VUNA" repl 2>&1)
+check_contains "m38 repl :type" "$m38_repl_ty" "1 + 1 : Int"
+m38_repl_ty_usage=$(printf ':type\n:q\n' | "$VUNA" repl 2>&1)
+check_contains "m38 repl :type usage" "$m38_repl_ty_usage" "用法: :type"
+m38_scratch="$tmp/m38-scratch.vuna"
+printf 'answer : Int\nanswer = 42\n' >"$m38_scratch"
+m38_repl_load=$(printf ':load %s\nanswer\n:reload\nanswer\n:q\n' "$m38_scratch" | "$VUNA" repl 2>&1)
+check_contains "m38 repl :load" "$m38_repl_load" "已加载"
+check_contains "m38 repl :reload" "$m38_repl_load" "已重新加载"
+check_contains "m38 repl loaded value" "$m38_repl_load" "42"
+m38_repl_mod=$(printf ':load %s/../lib/Vuna/Repl.vuna\n:q\n' "$VUNA_BASE" | "$VUNA" repl 2>&1)
+check_contains "m38 repl :load rejects module" "$m38_repl_mod" "是模块文件"
+m38_repl_noload=$(printf ':reload\n:q\n' | "$VUNA" repl 2>&1)
+check_contains "m38 repl :reload without load" "$m38_repl_noload" "还没有 :load"
+m38_repl_unknown=$(printf ':frobnicate\n:q\n' | "$VUNA" repl 2>&1)
+check_contains "m38 repl unknown command" "$m38_repl_unknown" "未知命令"
+m38_bws="$tmp/m38-browse"
+mkdir -p "$m38_bws/lib"
+printf '[package]\nname = "m38-browse"\n\n[dependencies]\nvuna-base = "%s"\n' "$VUNA_BASE" >"$m38_bws/vuna.toml"
+printf 'module Foo where\n\ngreeting : String\ngreeting = "hi"\n' >"$m38_bws/lib/Foo.vuna"
+m38_browse=$( ( cd "$m38_bws" && printf ':browse Foo\n:q\n' | "$VUNA" repl 2>&1 ) )
+check_contains "m38 repl :browse header" "$m38_browse" "## Foo"
+check_contains "m38 repl :browse symbol" "$m38_browse" "greeting : String"
+
+# 50) M38 CLI 诊断片段：`-->` + 源码行 + 插入符；无位置错误保持单行；退出码不变。
+m38_diag="$tmp/m38-diag-pkg"
+mkdir -p "$m38_diag/app"
+printf '[package]\nname = "m38-diag-pkg"\n\n[dependencies]\nvuna-base = "%s"\n' "$VUNA_BASE" >"$m38_diag/vuna.toml"
+printf 'main : Int\nmain = "boom"\n' >"$m38_diag/app/Main.vuna"
+m38_diag_out=$("$VUNA" check "$m38_diag" 2>&1)
+m38_diag_code=$?
+check_contains "m38 diag snippet arrow" "$m38_diag_out" "  --> "
+check_contains "m38 diag snippet location" "$m38_diag_out" "app/Main.vuna:2:8"
+check_contains "m38 diag snippet source line" "$m38_diag_out" 'main = "boom"'
+check_contains "m38 diag snippet caret" "$m38_diag_out" "^"
+check_eq "m38 diag snippet exit" "1" "$m38_diag_code"
+m38_noloc=$("$VUNA" check "$tmp/m38-no-such-entry.vuna" 2>&1)
+m38_noloc_code=$?
+check_contains "m38 diag no-location message" "$m38_noloc" "no such file"
+check_eq "m38 diag no-location exit" "1" "$m38_noloc_code"
+case "$m38_noloc" in
+  *"-->"*) bad "m38 diag no-location single line" "no snippet" "$m38_noloc" ;;
+  *) ok ;;
+esac
+
 if [ "$fail" -ne 0 ]; then
   printf '%s passed, %s failed\n' "$pass" "$fail"
   exit 1

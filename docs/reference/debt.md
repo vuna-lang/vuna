@@ -51,6 +51,12 @@
 | C36 | 泛型函数体内对 `Int` 的比较/算术（`<=` / `+` / `-`）走方法别名的隐式实例搜索，其隐式变量与函数泛型类型变量同名合并——泛型函数里混用「Int 辅助逻辑 + 泛型数据」时，`fuel <= 0` 会把泛型 `a` 统一成 `Int`（归并排序 `sortByFuel` 复现）；目前只能拆独立函数或显式类型规避，且数值递减的 SCT 判定被包裹函数阻断 | `Base/Sort.vuna` 注释；`Elab/Trait` 实例解糖 | M34.3（后续） |
 | C37 | 接口摘要（check 期包级 TTC 式模块化精化）**已落地**：摘要 = 闭合结果（datas + defs 含 body + globals + insts + classes），不含 `sols`/`next`；`deftbl` 只装定义体（历史根因：签名项进 deftbl 会让 `force` 把 `Int`/`String` 归约成 `Type`，报 `TC_AmbiguousInstance (Eq Type)`）；写侧按出现点深度 zonk，读侧 `cachedProgramValid` 校验。**开放项**：① 接口粒度是**包**不是模块——依赖包未被根包 import 的实例/类也会进视图（过近似），模块级接口与模块级签名隔离是后续（roadmap 第 2 步）；② codegen 模块级缓存：C35 的依赖模型前提已就绪（直接依赖 + 全限定跨单元引用 + 分层并行构建），模块级复用/缓存本身待做；③ 依赖 `defVals` 未序列化（摘要路径 delta 现算 body，只影响速度）；④ 擦除位置残留未解 meta 仍靠包段 `(idx+1)<<30` 重编号，彻底方案是精化收尾消除残 meta；⑤ LSP 尚未消费接口摘要（仍全量精化）。历史根因链（4 层修复 + 最终定位）见 git 历史 M34.5 提交 | `Driver/Cache`、`Driver/Dt.depStartOf`、`Driver/Compile`、`Elab/Driver.elabProgramFullWithAux`；[compiler.md](compiler.md) §接口摘要 | M34.5（模块级/后续） |
 
+| D33 | 运行时错误只有**定义级**位置：无表达式级 span、无局部变量值、无断点（无 DAP）；`ocamlopt` 内联会把抛错点归到调用者帧；非入口单元顶层初始化的异常不在捕获范围 | `Codegen/Term.dtDefLocTable`/`dtRuntimeWith`；[debugging.md](debugging.md) §2 | 后续（真正调试器另立项） |
+| D34 | `Base.Debug.trace/traceShow` 以 `unsafe` 的 `runIO`（`prim_eprint`）实现：纯代码里引入调试副作用，无类型/能力层约束 | `base/lib/Base/Debug.vuna`；[effects.md](effects.md) D28 | 后续（QTT / 正式 trace 效应） |
+| D35 | `vuna run` 只执行默认 `.output/bin/<包名>`（无 `--out`；workspace 多可执行包须显式 `--package`）；REPL 无行编辑历史 / 补全；`:browse` 首次可能触发索引重建 | `lib/Vuna/{Run,Repl}.vuna` | 后续 |
+| C38 | LSP codeAction 只有 lint quick fix：无 rename、无 case split、无 command 形式；`diagnostics` 只带 `code`（严格 LSP 还需 range/message） | `lib/Vuna/Lsp/Query.codeActionsFor`；[tooling.md](tooling.md) §2 | 后续 |
+| C39 | `vuna test` 仍串行（`nix/run-tests.sh` 的 `--jobs` 只并行章节）、无单测超时（沿 C23） | `lib/Vuna/TestRunner.vuna`；[testing.md](testing.md) | 后续 |
+
 ## 未来能力（F1–F4）
 
 | ID | 摘要 | 归属 |

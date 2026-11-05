@@ -5,7 +5,7 @@
 
 ## 原生测试：`test/run-tests.sh`
 
-vuna 原生测试按编号章节组织（**43 个章节**：编号到 44，无第 12 段；34a–34d 归在第 34
+vuna 原生测试按编号章节组织（**49 个章节**：编号到 50，无第 12 段；34a–34d 归在第 34
 段内）。用 `vuna` / `vuna-seed` 驱动，不依赖外部 vuna 实现，但需要 `ocamlopt` 作为 codegen
 后端。精确 checks 数随夹具增删变化，以运行输出为准。测试覆盖：
 
@@ -14,9 +14,13 @@ vuna 原生测试按编号章节组织（**43 个章节**：编号到 44，无�
 - `corpus/doc/check.sh`：`vuna doc` 单文件 HTML、docstring 提取、`--check`、确定性；
 - `corpus/search/check.sh`：`vuna search` 名称/doc/类型检索、JSON、退出码；
 - `corpus/packages/{09_workspace_member_error, 10_workspace_build}`：workspace check/build；
+- `corpus/packages/11_run_args`：`vuna run` 的构建+参数透传夹具；
 - `corpus/test-m30/`：REPL / effect test；
-- LSP smoke：`corpus/lsp/smoke.sh`；
-- 接口摘要（check 期模块化精化）：`corpus/packages/m34_summary/` + 仓库自身预热回归。
+- LSP smoke：`corpus/lsp/smoke.sh`（含 M38 codeAction quick fix）；
+- 接口摘要（check 期模块化精化）：`corpus/packages/m34_summary/` + 仓库自身预热回归；
+- **M38（§45–§50）**：运行时错误报告（`vuna: runtime error` + 位置帧 + exit 2）、
+  `Base.Debug`（trace/assert/todo）、`vuna test` 的 `--list/--filter/--verbose/--fail-fast`、
+  `vuna run`、REPL `:type/:load/:reload/:browse`、CLI 诊断源码片段。
 
 ```console
 sh test/run-tests.sh        # 需要 PATH 中有 vuna 与 vuna-seed

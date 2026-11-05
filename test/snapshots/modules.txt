@@ -34,6 +34,7 @@ Vuna.Lsp.Protocol  ./lib/Vuna/Lsp/Protocol.vuna
 Vuna.Lsp.Query  ./lib/Vuna/Lsp/Query.vuna
 Vuna.Lsp  ./lib/Vuna/Lsp.vuna
 Vuna.Repl  ./lib/Vuna/Repl.vuna
+Vuna.Run  ./lib/Vuna/Run.vuna
 Vuna.Search.Query  ./lib/Vuna/Search/Query.vuna
 Vuna.Search.Run  ./lib/Vuna/Search/Run.vuna
 Vuna.Search.Types  ./lib/Vuna/Search/Types.vuna
@@ -60,6 +61,7 @@ Vuna.Compiler.Diagnostics  compiler/lib/Vuna/Compiler/Diagnostics.vuna
 Vuna.Compiler.Driver.Cache  compiler/lib/Vuna/Compiler/Driver/Cache.vuna
 Vuna.Compiler.Driver.Compile  compiler/lib/Vuna/Compiler/Driver/Compile.vuna
 Vuna.Compiler.Driver.CompilerCli  compiler/lib/Vuna/Compiler/Driver/CompilerCli.vuna
+Vuna.Compiler.Driver.DiagRender  compiler/lib/Vuna/Compiler/Driver/DiagRender.vuna
 Vuna.Compiler.Driver.Dt  compiler/lib/Vuna/Compiler/Driver/Dt.vuna
 Vuna.Compiler.Driver.Split  compiler/lib/Vuna/Compiler/Driver/Split.vuna
 Vuna.Compiler.Elab.Case  compiler/lib/Vuna/Compiler/Elab/Case.vuna
@@ -103,6 +105,7 @@ app.Main  compiler/app/Main.vuna
 Base.Array  base/lib/Base/Array.vuna
 Base.Bool  base/lib/Base/Bool.vuna
 Base.Buffer  base/lib/Base/Buffer.vuna
+Base.Debug  base/lib/Base/Debug.vuna
 Base.Effect  base/lib/Base/Effect.vuna
 Base.Eq  base/lib/Base/Eq.vuna
 Base.Error  base/lib/Base/Error.vuna
@@ -156,6 +159,7 @@ Vuna.Compiler.Diagnostics  ./lib/Vuna/Compiler/Diagnostics.vuna
 Vuna.Compiler.Driver.Cache  ./lib/Vuna/Compiler/Driver/Cache.vuna
 Vuna.Compiler.Driver.Compile  ./lib/Vuna/Compiler/Driver/Compile.vuna
 Vuna.Compiler.Driver.CompilerCli  ./lib/Vuna/Compiler/Driver/CompilerCli.vuna
+Vuna.Compiler.Driver.DiagRender  ./lib/Vuna/Compiler/Driver/DiagRender.vuna
 Vuna.Compiler.Driver.Dt  ./lib/Vuna/Compiler/Driver/Dt.vuna
 Vuna.Compiler.Driver.Split  ./lib/Vuna/Compiler/Driver/Split.vuna
 Vuna.Compiler.Elab.Case  ./lib/Vuna/Compiler/Elab/Case.vuna
@@ -202,6 +206,7 @@ app.Main  ./app/Main.vuna
 Base.Array  ./lib/Base/Array.vuna
 Base.Bool  ./lib/Base/Bool.vuna
 Base.Buffer  ./lib/Base/Buffer.vuna
+Base.Debug  ./lib/Base/Debug.vuna
 Base.Effect  ./lib/Base/Effect.vuna
 Base.Eq  ./lib/Base/Eq.vuna
 Base.Error  ./lib/Base/Error.vuna

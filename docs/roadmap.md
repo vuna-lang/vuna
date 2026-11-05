@@ -27,8 +27,13 @@ vuna 尚未发布任何版本：没有外部用户、下游生态与历史包袱
 - **包与构建**：workspace 根即包；每文件唯一包上下文；声明式效应能力；逐模块 split 输出；
   确定性产物 + 依赖闭包哈希 + 按模块内容哈希增量。
 - **工具链**：CLI 统一参数 / 错误出口；LSP 走包上下文（诊断 / hover / 补全 / 定位 /
-  references / 格式化 / 符号）；REPL 多行 + IO compile+run；`vuna test` 纯 / 效果双路径；
-  VSCode 扩展。
+  references / 格式化 / 符号 / lint quick fix）；REPL 多行 + IO compile+run + `:type/:load/:reload/:browse`；
+  `vuna test` 纯 / 效果双路径 + `--list/--filter/--verbose/--fail-fast`；`vuna run` 增量构建并执行；
+  诊断源码片段；VSCode 扩展（build/run/tests）。
+- **调试支持（M38）**：运行时未捕获异常由生成代码统一报告为 `vuna: runtime error: ...` +
+  定义级位置帧 + exit 2（位置表随产物生成、路径归一）；`Base.Debug`（`trace`/`traceShow`/
+  `assert`/`todo`）与 `prim_eprint`/`prim_fail`；边界见 [debugging.md](reference/debugging.md)，
+  开放项见 debt D33–D35 / C38–C39。
 - **容器与查找表**：标准库有 `Base.HashMap` / `Base.HashSet` / `Base.IntMap`（1024 桶持久
   哈希表；M33 W3 起桶是 `Array (Array (List ...))`）、不可变 `Base.Array`（copy-on-write）
   与 IO 内 `Base.IORef` / `Base.MArray` / `Base.Buffer`；内建类型构造子 `Array` / `IORef` /
@@ -76,6 +81,10 @@ fixity 唯一来源、反引号中缀 / section / 用户符号名、fmt 程序�
 2× 手写 OCaml；线性类型 / ST 按计划裁剪，见 debt D22）。下一步是已排期的 **M34（编译器快）**，
 再往后 **M35（并发 / 服务端）**。新阶段必须映射到 debt 条目，并在「范围」里列明关闭哪些项；
 B / C / E 系列残留按需插入。
+
+**M38（开发与调试体验）已收尾**：`vuna test` 筛选/耗时、`vuna run`、REPL 调试命令、LSP
+lint quick fix、CLI 诊断源码片段、运行时错误报告（定义级帧）与 `Base.Debug`。新阶段仍须
+映射 debt 并列出关闭项；未排期项见 debt D33–D35 / C38–C39。
 
 ## 性能轨道（M34–M35）
 

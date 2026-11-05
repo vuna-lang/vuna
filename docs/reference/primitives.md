@@ -199,6 +199,14 @@
 `prim_wait : Int -> IO Int`、`prim_readBytes : Int -> IO String`、
 `timeUs : IO Int`。零参原语因此是**真正的值**（动作值）：引用不执行、也不重新求值。
 
+M38 新增两条调试/诊断原语（`Base.Debug` 的实现基础，见
+[debugging.md](debugging.md)）：
+
+- `prim_eprint : String -> IO Int`（能力 `console`）：写 stderr 并 flush，返回写入字节数；
+- `prim_fail : String -> a`（**无能力**、不在 `IO` 里）：抛 `Failure <msg>` 的底值，
+  由生成的运行时报告器渲染成 `vuna: runtime error: ...` 并 exit 2。用户代码经
+  `Base.Debug.assert` / `todo` 使用。
+
 **名字面**：效果原语只保留 `prim_*` 名。用户有两条合法用法：
 
 1. `import Base.IO`，使用返回 `IO` 动作的 API（`print` / `readFile` / …——它们是 `prim_*` 的**别名**）；

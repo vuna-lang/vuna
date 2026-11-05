@@ -8,6 +8,10 @@
 # M37（IO 升格）：效果原语从 `MkIO (fun _ -> …)` 变体改为裸 thunk
 #       （`fun args -> fun (_ : int) -> …`），夹具的 Effects 模块产物变短；
 #       按实测 bytes 4295 → 4242、longlines 8 → 7，其余指标不变。
+# M38（运行时错误报告）：Main.ml 首行加 `Printexc.record_backtrace` 序言、main 钩子
+#       包 try（入口零参 main 的初始化绑定也套报告器）；夹具 Main.ml 变长，按实测
+#       bytes 4242 → 4462、lines 82 → 86、maxline 810 → 882；runtime 的位置表按口径
+#       排除（不计入本基线）。
 #
 # 规则：本文件是精确基线（`=<expected>`），不是上限；不等即失败（双向捕获膨胀与
 #       优化丢失）。种子尺寸不在这里设阈值（见 docs/reference/compiler.md）。
@@ -23,9 +27,9 @@
 #       形态（nix/metrics.sh），值仍是 20——匹配臂数量不变。
 #       按实测 bytes 4880 → 4295。
 files =4
-bytes =4242
-lines =82
-maxline =810
+bytes =4462
+lines =86
+maxline =882
 longlines =7
 letrec =1
 strcat =1

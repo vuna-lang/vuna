@@ -71,6 +71,9 @@ vuna fmt --check <PATH>...           # 格式化检查（省略 PATH = workspace
 vuna doc [--check] [--package NAME] [DIR [OUT]]  # 生成单文件交互 HTML API 文档（默认 DIR/docs/api.html）
 vuna gen-errors [ROOT]               # 从枚举真源生成错误码文档（默认 ROOT/docs/.generated/errors.md）
 vuna interp <file.vuna>              # DT 精化 + 核心求值（纯；只展示 Int/String/Bool）
+vuna test [DIR] [--list|--filter PAT|--verbose|--fail-fast]  # 包内测试；默认输出不变
+vuna run [DIR] [--package NAME] [--no-build] [-- ARGS...]    # 增量 build + 执行入口（透传参数/退出码）
+vuna repl                            # :type / :load / :reload / :browse
 vuna build --no-compile --out <OUT> compiler   # 逐模块 DT codegen 到目录（= vuna compile compiler <OUT>；rotation 用 nix/seed-rotate.sh）
 vuna search [--type|--name|--doc] [--module PFX] [--limit N] [--json] <query...>  # 名称/docstring/类型检索
 vuna map [...] | vuna api <Module.name>  # 模块总览 / 定位符号 / 改动影响面 / 签名面
@@ -79,7 +82,7 @@ vuna map [...] | vuna api <Module.name>  # 模块总览 / 定位符号 / 改动�
 
 `compiler/` = 编译器包（`Vuna.Compiler.*`，入口 `app/Main.vuna`，**进 seed**）；`base/` =
 标准库 `vuna-base`（`Base.*` + `Prelude`，**进 seed**）；`lib/` = 根包工具链（Cli/Interp/
-Files/Fmt/Lint/Repl/Doc/Index/Lsp/TestRunner，**不进 seed**）；`app/` = 产品 CLI 入口；
+Files/Fmt/Lint/Repl/Run/Doc/Index/Lsp/TestRunner，**不进 seed**）；`app/` = 产品 CLI 入口；
 `seed/` = 提交入库的 OCaml 信任锚点（生成物，禁止手改、别读）；`test/` = `run-tests.sh` +
 `corpus/` 夹具 + `bench/` 生成程序基准；`vscode/` = VSCode 扩展（高亮 + LSP + lint/fmt/check/
 build，`dist/` 提交）；`nix/` = 构建图 + rotate/metrics/bench；`docs/` = 分层文档。
@@ -98,7 +101,8 @@ build，`dist/` 提交）；`nix/` = 构建图 + rotate/metrics/bench；`docs/` 
   [core.md](docs/reference/core.md)（Core TT / NbE / 精化器）
 - 工具链（`goal` / LSP / `doc` / `search` / 错误码；`vuna gen-errors` 生成
   `docs/.generated/errors.md`）：[tooling.md](docs/reference/tooling.md)；API 文档与检索：
-  [api-docs.md](docs/reference/api-docs.md)；lint：[lint.md](docs/reference/lint.md)
+  [api-docs.md](docs/reference/api-docs.md)；lint：[lint.md](docs/reference/lint.md)；
+  调试与运行时错误：[debugging.md](docs/reference/debugging.md)（片段/运行时报告/`Base.Debug`/`vuna run`/REPL）
 - 仓库探索（按场景选工具、探索后落盘）：技能 `.agents/skills/repo-navigation/SKILL.md`
 - 自举与种子：[bootstrap.md](docs/reference/bootstrap.md)；测试与 CI：[testing.md](docs/reference/testing.md)；
   已知边界：[limits.md](docs/reference/limits.md)；性能：[performance.md](docs/reference/performance.md)

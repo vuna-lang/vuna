@@ -30,6 +30,7 @@
 | `Base.Ord` | `Ord` trait（`lt` / `le` / `gt` / `ge : a -> a -> Bool`）+ `Bool` 实例 |
 | `Base.Int` | `Int` 的 `Eq` / `Ord` 实例宿主（`Int` 是 primitive 类型；实例跟类型模块走） |
 | `Base.IO` | `IO` 的公开 API 与实例（`IO` 本身是内建类型，不再由本模块声明）：print/readFile/writeFile/getArgs/exit 直接别名到 `prim_*`，`Functor`/`Monad IO` 经 `prim_pureIO`/`prim_bindIO`；`runIO : IO a -> a` = `prim_runIO`（要求 `unsafe` 能力） |
+| `Base.Debug` | 调试工具（M38，**显式 import**，不进 `Prelude`/`Base` 门面）：`trace` / `traceShow` 写 stderr 后返回原值，`assert` / `todo` 失败走 `prim_fail` → 运行时报告器；见 [debugging.md](debugging.md) |
 | `Base.Effect` | `MonadIO` trait（`liftIO : IO a -> m a`）+ `MonadIO IO` 实例 |
 | `Base.StateT` / `Base.ReaderT` / `Base.ErrorT` | IO 基座的效应栈（M37）：`StateT s a` = `s -> IO (Pair a s)`、`ReaderT e a` = `e -> IO a`、`ErrorT e a` = `IO (Error e a)`；各带 handler、`Functor`/`Monad`/`MonadIO` 实例；固定以 IO 为基座（泛化到任意 monad 需要隐式参数 kind 推断，见 debt） |
 | `Base` | 包门面：整模块重导出核心模块（含 `Base.Nat`，不含 `Vec`；`import Base` 即可用） |

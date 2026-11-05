@@ -50,7 +50,7 @@ Content-Length: <字节数>\r\n
 
 | 方法 | 行为 |
 | --- | --- |
-| `initialize` | capabilities：Full 同步、hover、completion（`.` 触发）、definition、references、documentSymbol、documentFormatting、workspaceSymbol；`serverInfo` |
+| `initialize` | capabilities：Full 同步、hover、completion（`.` 触发）、definition、references、documentSymbol、documentFormatting、workspaceSymbol、codeAction（只声明 `quickfix`）；`serverInfo` |
 | `initialized` | 通知，无响应 |
 | `textDocument/didOpen` / `didChange` / `didClose` | 内存维护打开文档表（Full 同步） |
 | `textDocument/publishDiagnostics` | 包上下文解析 / DT 精化 / 覆盖性诊断 + lint 诊断 |
@@ -59,7 +59,7 @@ Content-Length: <字节数>\r\n
 | `textDocument/documentSymbol` | AST 声明树（data/record/trait 带子节点） |
 | `textDocument/definition` / `references` | Index：token → 符号 → 定义位置；references 用 `Ref` 的精确行 / 列 |
 | `textDocument/completion` | 关键字 + 当前缓冲顶层符号 + Index 符号；`.` 后按模块过滤 |
-| `textDocument/codeAction` | 返回空动作列表（占位，尚无 code action） |
+| `textDocument/codeAction` | lint finding 的 **quick fix**（M38）：只对可自动修复（`findingEdit`）且行范围与请求 range 相交的 finding 生成 `{title:"fix: <rule>", kind:"quickfix", diagnostics:[{code}], edit:{changes}}`；另给 `fix all lint findings`（`Lint.Fix.fixLoop` 的整文档替换）；cap 20；`context.only` 不含 `quickfix` → 空数组 |
 | `workspace/symbol` | Index 符号过滤（有上限） |
 | `shutdown` / `exit` | 正常退出语义：收到 shutdown 后 exit 退 0，否则退 1 |
 
@@ -76,7 +76,7 @@ Content-Length: <字节数>\r\n
   去抖）；依赖的未保存改动读盘；Index 每进程一次、不随编辑刷新；首次索引查找可能触发
   `.local/index/` 全量重建（仓库级秒级，期间请求排队）；没有洞的文件 hover 不跑精化，
   含洞的文件每次 hover 会重跑一次整模块精化；多根 workspace 取首个文档；一次只发首个编译
-  错误。
+  错误；`codeAction` 每次重算 fixity + lint（无进程内缓存），只产出 `quickfix`。
 - URI：`file://` + `%XX` 解码；非 file / 不存在的路径用 cwd 包上下文，不崩溃。
 
 ### 编辑器冒烟
@@ -92,7 +92,9 @@ sh test/corpus/lsp/smoke.sh ./result/bin/vuna
 
 它校验：stdout 只含协议帧、每帧 `Content-Length` 与正文长度一致、诊断范围 0-based、
 shutdown/exit 退出码，以及**交互式帧读取**（第 18 项：body 后无换行时 `initialize` 也必须
-立刻响应）和**符号 hover 的 range 落点**（第 19 项）。`test/run-tests.sh` 的 LSP 段调用它。
+立刻响应）、**符号 hover 的 range 落点**（第 19 项）与 **codeAction quick fix**（第 21 项：
+`kind`/`title`/`newText`/0-based range、fix all、`context.only` 过滤）。`test/run-tests.sh`
+的 LSP 段调用它。
 
 ## 3. `vuna doc`
 
@@ -168,11 +170,34 @@ $ vuna search --type "a -> a"
 | `CG_AxiomAtRuntime` | codegen | 运行时使用 axiom |
 | `CG_MainReturnType` | codegen | `main` 返回类型不支持 |
 
-## 5. 尚未实现（工具链自身缺口）
+## 5. `vuna run` 与 REPL 调试命令
+
+`vuna run [DIR] [--package NAME] [--no-build] [-- ARGS...]`：in-process 走与 `vuna build`
+同一条增量构建，然后执行 `<包目录>/.output/bin/<包名>`；`--` 之后的参数原样透传，子进程
+退出码原样返回。目标包选择：`--package` → workspace 根包（可执行时）→ 唯一可执行成员 →
+否则列出候选并 exit 2；库包 / 缺产物 / 构建失败都给出可操作错误。实现入口
+`Vuna.Run.runRun`。
+
+REPL 的调试命令（`vuna repl`，实现入口 `Vuna.Repl.runRepl`）：
+
+| 命令 | 行为 |
+| --- | --- |
+| `:type EXPR` | 精化表达式并只打印 zonk 后的类型（不求值、不执行效果） |
+| `:load FILE` | 重置缓冲后加载入口式源码（文件不能带 `module ... where` 头）；失败时状态不变 |
+| `:reload` | 重读上次 `:load` 的文件（未 load 过给可操作提示） |
+| `:browse MODULE` | 惰性构建 `Vuna.Index` 后按 `vuna api` 打印模块接口（首次可能触发索引重建） |
+| `:reset` / `:quit` / `:help` | 原有语义（`:reset` 同时清 `:load` 记录与定义缓冲） |
+
+未知 `:命令` 给 `未知命令 ...（输入 :help）`，不落到 parse error。调试与运行时错误的整体
+工作流见 [debugging.md](debugging.md)。
+
+## 6. 尚未实现（工具链自身缺口）
 
 - **case splitting**：按洞的目标类型自动展开 `case` 分支（需要与编辑器协议配合）。
 - `rewrite` / `with` 等证明工程 ergonomics：研究储备，未排期。
 - **语义索引**：Index 仍是 parse 级（签名必填 ⇒ 语法索引即语义面，不另建语义索引）。
+- LSP 只有 lint quick fix：无 rename、无 case split、codeAction 不提供 command 形式
+  （见 [debt.md](debt.md) C38）。
 
 阶段与债务归属见 [roadmap.md](../roadmap.md) / [debt.md](debt.md)；测试入口见
 [testing.md](testing.md)。

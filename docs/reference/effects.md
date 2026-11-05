@@ -155,7 +155,7 @@ interp` 能直接归约；它们是「不需要 IO 的状态/环境/错误」。
 | D03 | 通用签名索引效应（用户自定义 op、行/重排、深 handler 组合）未实现 | F3 |
 | D22 | 无 QTT/线性：ST 句柄可复制、多次使用；ST 无 `Monad` 实例 | 研究储备 / F3 |
 | D27 | 擦除依赖续延的运行时表示缺失（§5），三条路线见 §6 | F3 |
-| D28 | `base` 的 `unsafe` 授权没有机制约束使用点（`Base.IO.runIO` 别名 + `Base.ST.runST`） | 后续收紧 |
+| D28 | `base` 的 `unsafe` 授权没有机制约束使用点（`Base.IO.runIO` 别名 + `Base.ST.runST` + `Base.Debug.trace/traceShow` 的调试逃逸） | 后续收紧 |
 | B11/D32 | trait 单参数/无父类 ⇒ 无 `MonadState`/`MonadReader` 效应类；transformer 无任意 monad 泛化（隐式参数 kind 推断缺口） | F4 / M37 后续 |
 
 ## 9. 非目标（本阶段明确不做）

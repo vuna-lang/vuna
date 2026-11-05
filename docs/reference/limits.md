@@ -230,6 +230,10 @@
   字符串判定的 allowlist。完整表见 [primitives.md](primitives.md)。`vuna interp` /
   `vuna test` 的入口文件同样受限。IO 升格后，声明了能力的包可以直接用 `prim_*` 而不
   `import Base.IO`（`IO` 类型恒可见）。
+- **运行时错误报告不是异常处理**（M38）：未捕获异常由生成的 main 钩子统一报告为
+  `vuna: runtime error: ...` + 定义级位置帧 + exit 2（见 [debugging.md](debugging.md)）；
+  语言没有 `try`/`catch`、没有 Effect handler，`Base.Debug.trace` 是调试专用逃逸
+  （用 base 的 `unsafe` `runIO`），不构成效应系统的一部分。
 - `vuna interp` 只做**纯**核心求值：任何 `main : IO a` 一律报错并提示 `compile` + 运行
   产物；纯 `main : Int/String/Bool` 的结果展示仍保留为调试约定（`String` 走 `strShow`
   转义）。IO 组合统一用 `Functor` / `Monad` trait（`fmap` / `bind` / `pure`、`>>=`、
